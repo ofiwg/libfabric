@@ -37,6 +37,7 @@
 
 #include "ofi_hmem.h"
 #include "ofi.h"
+#include "ofi_mem.h"
 
 #if HAVE_CUDA
 
@@ -52,13 +53,24 @@
  * Convenience higher-order macros for enumerating CUDA driver/runtime and
  * NVML API function names
  */
+
+#if HAVE_CUDA_DMABUF
+#define CUDA_DRIVER_DMABUF_FUNCS_DEF(_) \
+  _(cuMemGetHandleForAddressRange)
+#else
+#define CUDA_DRIVER_DMABUF_FUNCS_DEF(_)
+#endif
+
 #define CUDA_DRIVER_FUNCS_DEF(_)	\
 	_(cuGetErrorName)		\
 	_(cuGetErrorString)		\
 	_(cuPointerGetAttribute)	\
 	_(cuPointerSetAttribute)	\
 	_(cuDeviceCanAccessPeer)	\
-	_(cuMemGetAddressRange)
+	_(cuMemGetAddressRange)		\
+	_(cuDeviceGetAttribute)		\
+	_(cuDeviceGet)			\
+	CUDA_DRIVER_DMABUF_FUNCS_DEF(_)
 
 #define CUDA_RUNTIME_FUNCS_DEF(_)	\
 	_(cudaMemcpy)			\
@@ -86,6 +98,7 @@ static struct {
 	bool  p2p_access_supported;
 	bool  use_gdrcopy;
 	bool  use_ipc;
+	bool  dmabuf_supported;
 	void *driver_handle;
 	void *runtime_handle;
 	void *nvml_handle;
@@ -94,6 +107,7 @@ static struct {
 	.p2p_access_supported = false,
 	.use_gdrcopy          = false,
 	.use_ipc              = false,
+	.dmabuf_supported     = false,
 	.driver_handle        = NULL,
 	.runtime_handle       = NULL,
 	.nvml_handle          = NULL
@@ -119,6 +133,15 @@ static struct {
 					  size_t* psize, CUdeviceptr dptr);
 	CUresult (*cuDeviceCanAccessPeer)(int *canAccessPeer,
 					  CUdevice srcDevice, CUdevice dstDevice);
+#if HAVE_CUDA_DMABUF
+	CUresult (*cuMemGetHandleForAddressRange)(void* handle,
+						  CUdeviceptr dptr, size_t size,
+						  CUmemRangeHandleType handleType,
+						  unsigned long long flags);
+#endif /* HAVE_CUDA_DMABUF */
+	CUresult (*cuDeviceGetAttribute)(int* pi,
+					 CUdevice_attribute attrib, CUdevice dev);
+	CUresult (*cuDeviceGet)(CUdevice* device, int ordinal);
 	cudaError_t (*cudaHostRegister)(void *ptr, size_t size,
 					unsigned int flags);
 	cudaError_t (*cudaHostUnregister)(void *ptr);
@@ -197,6 +220,16 @@ CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr)
 {
 	return cuda_ops.cuPointerGetAttribute(data, attribute, ptr);
+}
+
+#define CUDA_DRIVER_LOG_ERR(cu_result, cuda_api_name) 			\
+{									\
+	const char *cu_error_name;					\
+	const char *cu_error_str;					\
+	cuda_ops.cuGetErrorName(cu_result, &cu_error_name);		\
+	cuda_ops.cuGetErrorString(cu_result, &cu_error_str);		\
+	FI_WARN(&core_prov, FI_LOG_CORE, "%s failed: %s:%s\n",		\
+		cuda_api_name, cu_error_name, cu_error_str);		\
 }
 
 /**
@@ -613,6 +646,105 @@ static int cuda_hmem_detect_p2p_access_support(void)
 	return FI_SUCCESS;
 }
 
+/**
+ * @brief detect dmabuf support in the current platform
+ * This checks the dmabuf support in the current platform
+ * by querying the property of cuda device 0
+ *
+ * @return  FI_SUCCESS if dmabuf support check is successful
+ *         -FI_EIO upon CUDA API error
+ */
+static int cuda_hmem_detect_dmabuf_support(void)
+{
+#if HAVE_CUDA_DMABUF
+	CUresult cuda_ret;
+	CUdevice dev;
+	int is_supported = 0;
+
+	cuda_ret = cuda_ops.cuDeviceGet(&dev, 0);
+	if (cuda_ret != CUDA_SUCCESS) {
+		CUDA_DRIVER_LOG_ERR(cuda_ret, "cuDeviceGet");
+		return -FI_EIO;
+	}
+
+	cuda_ret = cuda_ops.cuDeviceGetAttribute(&is_supported,
+				CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, dev);
+	if (cuda_ret != CUDA_SUCCESS) {
+		CUDA_DRIVER_LOG_ERR(cuda_ret, "cuDeviceGetAttribute");
+		return -FI_EIO;
+	}
+
+	FI_INFO(&core_prov, FI_LOG_CORE,
+		"cuda dmabuf support status: %d\n", is_supported);
+
+	cuda_attr.dmabuf_supported = (is_supported == 1);
+#endif /* HAVE_CUDA_DMABUF */
+
+	return FI_SUCCESS;
+}
+
+/**
+ * @brief Get dmabuf fd and offset for a given cuda memory allocation
+ *
+ * @param addr the starting address of the cuda memory allocation
+ * @param size the length of the cuda memory allocation
+ * @param fd the fd of the dmabuf region
+ * @param offset the offset of the buf in the dmabuf region
+ * @return  FI_SUCCESS if dmabuf fd and offset are retrieved successfully
+ *         -FI_EOPNOTSUPP if dmabuf is not supported on the cuda device
+ *         -FI_EIO upon CUDA API error
+ */
+int cuda_get_dmabuf_fd(void *addr, uint64_t size, int *fd,
+		       uint64_t *offset)
+{
+#if HAVE_CUDA_DMABUF
+	CUdeviceptr aligned_ptr;
+	CUresult cuda_ret;
+	int ret;
+
+	size_t aligned_size;
+	size_t host_page_size = ofi_get_page_size();
+	void *base_addr;
+	size_t total_size;
+
+	if (!cuda_is_dmabuf_supported())
+		return -FI_EOPNOTSUPP;
+
+	ret = cuda_get_base_addr(addr, size, &base_addr, &total_size);
+	if (ret)
+		return ret;
+
+	aligned_ptr = (uintptr_t) ofi_get_page_start(base_addr, host_page_size);
+	aligned_size = (uintptr_t) ofi_get_page_end((void *) ((uintptr_t) base_addr + total_size),
+						    host_page_size) - (uintptr_t) aligned_ptr + 1;
+
+	cuda_ret = cuda_ops.cuMemGetHandleForAddressRange(
+						(void *)fd,
+						aligned_ptr, aligned_size,
+						CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
+						0);
+	if (cuda_ret != CUDA_SUCCESS) {
+		CUDA_DRIVER_LOG_ERR(cuda_ret, "cuMemGetHandleForAddressRange");
+		return -FI_EIO;
+	}
+
+	*offset = (uintptr_t) addr - (uintptr_t) aligned_ptr;
+
+	FI_INFO(&core_prov, FI_LOG_CORE,
+		"Get dma buf handle with fd: %d, offset: %lu"
+		", page aligned base address: %p"
+		", page aligned size: %lu, cuda allocation address %p"
+		", cuda allocation length: %lu\n",
+		*fd, *offset,
+		(void *) aligned_ptr, aligned_size,
+		(void *) addr, size);
+
+	return FI_SUCCESS;
+#else
+	return -FI_EOPNOTSUPP;
+#endif /* HAVE_CUDA_DMABUF */
+}
+
 int cuda_hmem_init(void)
 {
 	int ret;
@@ -632,6 +764,10 @@ int cuda_hmem_init(void)
 		goto dl_cleanup;
 
 	ret = cuda_hmem_detect_p2p_access_support();
+	if (ret != FI_SUCCESS)
+		goto dl_cleanup;
+
+	ret = cuda_hmem_detect_dmabuf_support();
 	if (ret != FI_SUCCESS)
 		goto dl_cleanup;
 
@@ -783,6 +919,11 @@ bool cuda_is_gdrcopy_enabled(void)
 	return cuda_attr.use_gdrcopy;
 }
 
+bool cuda_is_dmabuf_supported(void)
+{
+	return cuda_attr.dmabuf_supported;
+}
+
 #else
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -876,6 +1017,17 @@ int cuda_get_ipc_handle_size(size_t *size)
 bool cuda_is_gdrcopy_enabled(void)
 {
 	return false;
+}
+
+bool cuda_is_dmabuf_supported(void)
+{
+	return false;
+}
+
+int cuda_get_dmabuf_fd(void *addr, uint64_t size, int *fd,
+		       uint64_t *offset)
+{
+	return -FI_ENOSYS;
 }
 
 int cuda_set_sync_memops(void *ptr)
