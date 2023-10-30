@@ -331,7 +331,7 @@ ssize_t ofi_gdrcopy_from_cuda_iov(uint64_t handle, void *host,
 	                            host, len, GDRCOPY_FROM_DEVICE);
 }
 
-int cuda_gdrcopy_dev_register(void *buf, size_t len, uint64_t *handle)
+int cuda_gdrcopy_dev_register(const void *buf, size_t len, uint64_t *handle)
 {
 	int err;
 	uintptr_t regbgn, regend;
@@ -439,7 +439,7 @@ void cuda_gdrcopy_from_dev(uint64_t devhandle, void *hostptr,
 {
 }
 
-int cuda_gdrcopy_dev_register(void *buf, size_t len, uint64_t *handle)
+int cuda_gdrcopy_dev_register(const void *buf, size_t len, uint64_t *handle)
 {
 	return FI_SUCCESS;
 }
