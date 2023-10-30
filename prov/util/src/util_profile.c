@@ -277,7 +277,7 @@ int ofi_prof_add_event(struct util_profile *prof, uint32_t event_id,
 	int idx = ofi_prof_id2_idx(event_id, ofi_common_event_count);
 
 	if (!desc) {
-		if (idx >= ofi_common_event_count) {
+		if (idx < ofi_common_event_count) {
 			desc = &ofi_common_events[idx];
 		} else {
 			FI_WARN(prof->prov, FI_LOG_CORE,
