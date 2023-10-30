@@ -32,8 +32,10 @@
 /* dmabuf_peer_mem provider is built as DSO */
 #define HAVE_DMABUF_PEER_MEM_DL 0
 
+#ifndef HAVE_EFA
 /* efa provider is built */
 #define HAVE_EFA 0
+#endif /* HAVE_EFA */
 
 /* efa provider is built as DSO */
 #define HAVE_EFA_DL 0
