@@ -110,6 +110,7 @@ cleanup
 ./contrib/buildrpm/buildrpmLibfabric.sh \
     ${ENABLED_PROVIDERS} \
     ${DISABLED_PROVIDERS} \
+    -c "--enable-restricted-dl" \
     -omv \
     -P /opt/cray \
     -M /opt/cray/modulefiles \
