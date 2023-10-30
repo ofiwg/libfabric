@@ -714,7 +714,7 @@ rxm_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       (data_len <= rxm_ep->rxm_info->tx_attr->inject_size));
 
 	iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
-	if (iface == FI_HMEM_ZE)
+	if (iface == FI_HMEM_ZE || iface == FI_HMEM_SYNAPSEAI)
 		goto rndv_send;
 
 	if (data_len <= rxm_ep->eager_limit) {
