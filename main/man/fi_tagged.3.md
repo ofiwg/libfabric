@@ -86,10 +86,14 @@ ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
   connected endpoints.
 
 *src_addr*
-: Source address to receive from for connectionless transfers.  Applies
-  only to connectionless endpoints with the FI_DIRECTED_RECV capability
-  enabled, otherwise this field is ignored.  If set to FI_ADDR_UNSPEC,
-  any source address may match.
+: Applies only to connectionless endpoints configured with the FI_DIRECTED_RECV.
+  For all other endpoint configurations, src_addr is ignored. src_addr defines
+  the source address to receive from. By default, the src_addr is treated as a
+  source endpoint address (i.e. fi_addr_t returned from fi_av_insert /
+  fi_av_insertsvc / fi_av_remove). If the FI_AUTH_KEY flag is specified with
+  fi_trecvmsg, src_addr is treated as a source authorization key (i.e. fi_addr_t
+  returned from fi_av_insert_auth_key). If set to FI_ADDR_UNSPEC, any source
+  address may match.
 
 *msg*
 : Message descriptor for send and receive operations.
@@ -284,6 +288,12 @@ and/or fi_tsendmsg.
   The ordering of operations starting at the posting of the fenced
   operation (inclusive) to the posting of a subsequent fenced operation
   (exclusive) is controlled by the endpoint's ordering semantics.
+
+*FI_AUTH_KEY*
+: Only valid with domains configured with FI_AV_AUTH_KEY and connectionless
+  endpoints configured with FI_DIRECTED_RECV. When used with fi_trecvmsg, this
+  flag denotes that the src_addr is an authorization key fi_addr_t instead of
+  an endpoint fi_addr_t.
 
 The following flags may be used with fi_trecvmsg.
 

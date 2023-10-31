@@ -911,6 +911,8 @@ The length of the authorization key in bytes.  This field will be 0 if
 authorization keys are not available or used.  This field is ignored
 unless the fabric is opened with API version 1.5 or greater.
 
+If the domain is opened with FI_AV_AUTH_KEY, auth_key_size must be 0.
+
 ## auth_key - Authorization Key
 
 If supported by the fabric, an authorization key (a.k.a. job
@@ -922,6 +924,8 @@ that processes running in different jobs do not accidentally
 cross traffic.  The domain authorization key will be used if auth_key_size
 is set to 0.  This field is ignored unless the fabric is opened with API
 version 1.5 or greater.
+
+If the domain is opened with FI_AV_AUTH_KEY, auth_key is must be NULL.
 
 # TRANSMIT CONTEXT ATTRIBUTES
 

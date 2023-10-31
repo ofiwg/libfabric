@@ -274,8 +274,9 @@ additional optimizations.
 *FI_AV_USER_ID*
 : Requests that the provider support the association of a user specified
   identifier with each address vector (AV) address.  User identifiers are
-  returned with completion data in place of the AV address.  See [`fi_av`(3)]
-  (fi_av.3.html) for more details.
+  returned with completion data in place of the AV address.  See
+  [`fi_domain`(3)](fi_domain.3.html) and [`fi_av`(3)] (fi_av.3.html) for
+  more details.
 
 *FI_COLLECTIVE*
 : Requests support for collective operations.  Endpoints that support
@@ -466,7 +467,7 @@ would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_MULTICAST,
 FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_VARIABLE_MSG, FI_HMEM, FI_COLLECTIVE,
-FI_XPU
+FI_XPU, FI_AV_USER_ID
 
 Primary modifiers: FI_READ, FI_WRITE, FI_RECV, FI_SEND,
 FI_REMOTE_READ, FI_REMOTE_WRITE

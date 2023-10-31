@@ -214,6 +214,7 @@ struct fi_domain_attr {
 	size_t                max_err_data;
 	size_t                mr_cnt;
 	uint32_t              tclass;
+	size_t                max_ep_auth_key;
 };
 ```
 
@@ -703,6 +704,20 @@ that a single memory registration operation may reference.
 Domain level capabilities.  Domain capabilities indicate domain
 level features that are supported by the provider.
 
+The following are support primary capabilities:
+*FI_DIRECTED_RECV*
+: When the domain is configured with FI_DIRECTED_RECV and FI_AV_AUTH_KEY,
+  memory regions can be limited to specific authorization keys.
+
+*FI_AV_USER_ID*
+: Indicates that the domain supports the ability to open address vectors
+  with the FI_AV_USER_ID flag. If this domain capability is not set,
+  address vectors cannot be opened with FI_AV_USER_ID. Note that
+  FI_AV_USER_ID can still be supported through the AV insert calls without
+  this domain capability set. See [`fi_av`(3)](fi_av.3.html).
+
+The following are supported secondary capabilities:
+
 *FI_LOCAL_COMM*
 : At a conceptual level, this field indicates that the underlying device
   supports loopback communication.  More specifically, this field
@@ -724,8 +739,7 @@ level features that are supported by the provider.
   feature.
 
 See [`fi_getinfo`(3)](fi_getinfo.3.html) for a discussion on primary versus
-secondary capabilities.  All domain capabilities are considered secondary
-capabilities.
+secondary capabilities.
 
 ## mode
 
@@ -742,6 +756,9 @@ The default authorization key to associate with endpoint and memory
 registrations created within the domain. This field is ignored unless the
 fabric is opened with API version 1.5 or greater.
 
+If domain auth_key_size is set to the value FI_AV_AUTH_KEY, auth_key must be
+NULL.
+
 ## Default authorization key length (auth_key_size)
 
 The length in bytes of the default authorization key for the domain. If set to 0,
@@ -749,6 +766,11 @@ then no authorization key will be associated with endpoints and memory
 registrations created within the domain unless specified in the endpoint or
 memory registration attributes. This field is ignored unless the fabric is
 opened with API version 1.5 or greater.
+
+If the size is set to the value FI_AV_AUTH_KEY, all endpoints and memory
+regions will be configured to use authorization keys associated with the AV.
+Providers which support authorization keys and connectionless endpoint must
+support this option.
 
 ## Max Error Data Size (max_err_data)
 : The maximum amount of error data, in bytes, that may be returned as part of
@@ -771,6 +793,11 @@ provider to optimize any memory registration cache or lookup tables.
 This specifies the default traffic class that will be associated any endpoints
 created within the domain.  See [`fi_endpoint`(3)](fi_endpoint.3.html)
 for additional information.
+
+## Max Authorization Keys per Endpoint (max_ep_auth_key)
+
+: The maximum number of authorization keys which can be supported per connectionless
+  endpoint.
 
 # RETURN VALUE
 
