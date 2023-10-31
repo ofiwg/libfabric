@@ -166,6 +166,7 @@ Table: 1.2 A list of packet type IDs
 | 8               | `ATOMRSP`           | ATOMic ResSPonse          | non-REQ  | emulated write/fetch/compare atomic |
 | 9               | `HANDSHAKE`         | Handshake                 | non-REQ  | handshake                     |
 | 10              | `RECEIPT`           | Receipt                   | non-REQ  | delivery complete (DC)         |
+| 11              | `READ_NACK`         | Read Nack packet          | non-REQ  | Long read and runting read nack protocols         |
 | 64              | `EAGER_MSGRTM`      | Eager non-tagged Request To Message       | REQ  | eager message |
 | 65              | `EAGER_TAGRTM`      | Eager tagged Request To Message           | REQ  | eager message |
 | 66              | `MEDIUM_MSGRTM`     | Medium non-tagged Request To Message      | REQ  | medium message |
@@ -320,6 +321,7 @@ Table: 2.1 a list of extra features/requests
 | 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 |
 | 4  | runting read message protocol    | extra feature | libfabric 1.16.0 | Section 4.5 |
 | 5  | RDMA-Write based data transfer   | extra feature | libfabric 1.18.0 | Section 4.6 |
+| 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 |
 
 How does protocol v4 maintain backward compatibility when extra features/requests are introduced?
 
@@ -744,6 +746,8 @@ LONGCTS_RTM, CTS and CTSDATA.
 
 A LONGCTS_RTM packet, like any REQ packet, consists of 3 parts:
 LONGCTS RTM mandatory header, REQ optional header, and application data.
+A LONGCTS_RTM packet sent as part of the read nack protcol (Section 4.7)
+does not contain any application data.
 
 The format of the LONGCTS_RTM mandatory header is listed in table 3.5:
 
@@ -1489,6 +1493,49 @@ by the NIC hardware, the responder must still keep the progress engine running
 in order to support CQ entry generation in case the sender uses
 `FI_REMOTE_CQ_DATA`.
 
+
+### 4.7 Long read and runting read nack protocol
+
+Long read and runting read protocols in Libfabric 1.20 and above use a nack protocol
+when the receiver is unable to register a memory region for the RDMA read operation.
+Failure to register the memory region is typically because of a hardware limitation.
+
+Table: 4.2 Format of the READ_NACK packet
+
+| Name | Length (bytes) | Type | C language type | Notes |
+|---|---|---|---|---|
+| `type`           | 1 | integer | `uint8_t`  | part of base header |
+| `version`        | 1 | integer | `uint8_t`  | part of base header|
+| `flags`          | 2 | integer | `uint16_t` | part of base header |
+| `send_id`        | 4 | integer | `uint32_t` | ID of the send operation |
+| `recv_id`        | 4 | integer | `uint32_t` | ID of the receive operation |
+| `multiuse(connid/padding)`  | 4 | integer | `uint32_t` | `connid` if CONNID_HDR is set, otherwise `padding` |
+
+The nack protocols work as follows
+* Sender has decided to use the long read or runting read protocol
+* The receiver receives the RTM packet(s)
+   - One LONGREAD_RTM packet in case of long read protocol
+   - Multiple RUNTREAD_RTM packets in case of runting read protocol
+* The receiver attempts to register a memory region for the RDMA operation but fails
+* After all RTM packets have been processed, the receiver sends a READ_NACK packet to the sender 
+* The sender then switches to the long CTS protocol and sends a LONGCTS_RTM packet
+* The receiver sends a CTS packet and the data transfer continues as in the long CTS protocol
+
+The LONGCTS_RTM packet sent in the nack protocol does not contain any application data.
+This difference is because the LONGCTS_RTM packet does not have a `seg_offset` field.
+While the LONGREAD_RTM packet does not contain any application data, the RUNTREAD_RTM
+packets do. So if the LONGCTS_RTM data were to contain application data, it must have a
+non-zero `seg_offset` to account for the data sent in the RUNTREAD_RTM packets. Instead
+of introducing a `seg_offset` field to LONGCTS_RTM packet, the nack protcol simply
+doesn't send any data in the LONGCTS_RTM packet.
+
+The workflow for long read protocol is shown below
+
+![long-read fallback](message_longread_fallback.png)
+
+The workflow for runting read protocol is shown below
+
+![long-read fallback](message_runtread_fallback.png)
 
 ## 5. What's not covered?
 
