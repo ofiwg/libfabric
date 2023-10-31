@@ -895,6 +895,9 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
 	ep->extra_info[0] |= EFA_RDM_EXTRA_REQUEST_CONNID_HEADER;
 
 	ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RUNT;
+
+	/* READ_NACK feature introduced in libfabric 1.20 */
+	ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_READ_NACK;
 }
 
 /**
