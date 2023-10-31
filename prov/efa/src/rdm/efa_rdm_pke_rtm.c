@@ -137,7 +137,14 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 	if (txe->internal_flags & EFA_RDM_OPE_READ_NACK)
 		rtm_hdr->flags |= EFA_RDM_REQ_READ_NACK;
 
-	if (data_size == -1) {
+	/* If this RTM packet is sent after the runting read protocol has failed
+	because of a MR registration limit on the receiver, we don't want to
+	send any data with the RTM packet. This is because the runting read RTM
+	packets have already delivered some of the data and the long CTS RTM
+	packet does not have a seg_offset field */
+	if (txe->internal_flags & EFA_RDM_OPE_READ_NACK) {
+		data_size = 0;
+	} else if (data_size == -1) {
 		data_size = MIN(txe->total_len - segment_offset,
 				txe->ep->mtu_size - efa_rdm_pke_get_req_hdr_size(pkt_entry));
 
@@ -885,14 +892,17 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_pke *cur, *nxt;
+	struct efa_rdm_peer *peer;
 	int pkt_type;
 	ssize_t ret, err;
 	uint64_t msg_id;
 
 	ep = pkt_entry->ep;
 	rxe = pkt_entry->ope;
+	peer = rxe->peer;
 	pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 
+	ret = 0;
 	if (efa_rdm_pkt_type_is_runtread(pkt_type)) {
 		struct efa_rdm_runtread_rtm_base_hdr *runtread_rtm_hdr;
 
@@ -909,12 +919,22 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 				    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
 			err = efa_rdm_ope_post_remote_read_or_queue(rxe);
-			if (err)
-				return err;
+			if (err) {
+				if (err == -FI_ENOMR) {
+					if (efa_rdm_peer_support_read_nack(peer))
+						/* Only set the flag here. The NACK
+						 * packet is sent after all runting read
+						 * RTM packets have been received */
+						rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
+					else
+						ret = -FI_EAGAIN;
+				} else {
+					return err;
+				}
+			}
 		}
 	}
 
-	ret = 0;
 	cur = pkt_entry;
 	while (cur) {
 		assert(cur->payload);
@@ -924,9 +944,22 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 		 */
 		rxe->bytes_received += cur->payload_size;
 		rxe->bytes_received_via_mulreq += cur->payload_size;
-		if (efa_rdm_ope_mulreq_total_data_size(rxe, pkt_type) == rxe->bytes_received_via_mulreq) {
-			msg_id = efa_rdm_pke_get_rtm_msg_id(cur);
-			efa_rdm_rxe_map_remove(&ep->rxe_map, msg_id, cur->addr, rxe);
+		if (efa_rdm_ope_mulreq_total_data_size(rxe, pkt_type) ==
+		    rxe->bytes_received_via_mulreq) {
+			if (rxe->internal_flags & EFA_RDM_OPE_READ_NACK) {
+				EFA_WARN(FI_LOG_EP_CTRL,
+					 "Receiver sending long read NACK "
+					 "packet because memory registration "
+					 "limit was reached on the receiver\n");
+				err = efa_rdm_ope_post_send_or_queue(
+					rxe, EFA_RDM_READ_NACK_PKT);
+				if (err)
+					return err;
+			} else {
+				msg_id = efa_rdm_pke_get_rtm_msg_id(cur);
+				efa_rdm_rxe_map_remove(&ep->rxe_map, msg_id,
+						       cur->addr, rxe);
+			}
 		}
 
 		/* efa_rdm_pke_copy_data_to_ope() will release cur, so
