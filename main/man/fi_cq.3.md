@@ -414,6 +414,7 @@ struct fi_cq_err_entry {
 	int      prov_errno;  /* provider error code */
 	void    *err_data;    /*  error data */
 	size_t   err_data_size; /* size of err_data */
+	fi_addr_t src_addr; /* error source address */
 };
 ```
 
@@ -446,6 +447,12 @@ Notable completion error codes are given below.
   the fi_info addr_format field for the opened domain. This may be
   passed directly into an fi_av_insert call to add the source address
   to the address vector.
+
+  For API versions 1.20 and later, if the EP is configured with
+  FI_AV_AUTH_KEY, src_addr will be set to the fi_addr_t authorization key
+  handle or a user-define authorization key ID corresponding to the
+  incoming data transfer. Otherwise, the value will be set to
+  FI_ADDR_NOTAVAIL.
 
 ## fi_cq_signal
 
@@ -547,6 +554,10 @@ of these fields are the same for all CQ entry structure formats.
   subsequent read call against the CQ.  Applications must serialize access
   to the CQ when processing errors to ensure that the buffer referenced by
   err_data does not change.
+
+*src_addr*
+: Used to return source addressed related information for error events. How
+  this field is used is error event specific.
 
 # COMPLETION FLAGS
 

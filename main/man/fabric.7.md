@@ -389,6 +389,14 @@ call.
 
 ABI version starting with libfabric 1.14.  Added fi_log_ready for providers.
 
+## ABI 1.7
+
+ABI version starting with libfabric 1.20. Added new fields to the following
+attributes:
+
+*fi_domain_attr*
+: Added max_ep_auth_key
+
 # SEE ALSO
 
 [`fi_info`(1)](fi_info.1.html),
