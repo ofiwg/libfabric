@@ -559,11 +559,11 @@ dnl restricted DL open
 restricted_dl=0
 AC_ARG_ENABLE([restricted_dl],
               [AC_HELP_STRING([--enable-restricted-dl],
-                              [Restricts dlopen operations to providers which were available at compile-time])],
+                              [only look for dl providers under default location if FI_PROVIDER_PATH is not set])],
               [restricted_dl=1],
               [])
 AC_DEFINE_UNQUOTED([HAVE_RESTRICTED_DL], [$restricted_dl],
-  [Define to 1 to restrict dlopen operations to providers which were available at compile-time])
+  [Define to 1 to only look for dl providers under default location if FI_PROVIDER_PATH is not set])
 
 dnl Check support to intercept syscalls
 AC_CHECK_HEADERS_ONCE(elf.h sys/auxv.h)
