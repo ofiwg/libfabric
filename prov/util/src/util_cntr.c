@@ -387,10 +387,13 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 	} else {
 		ret = util_init_peer_cntr(cntr);
 		if (ret)
-			return ret;
+			goto errout_close_wait;
 	}
 
-	ofi_genlock_init(&cntr->ep_list_lock, OFI_LOCK_MUTEX);
+	ret = ofi_genlock_init(&cntr->ep_list_lock, OFI_LOCK_MUTEX);
+	if (ret)
+		goto errout_close_wait;
+
 	ofi_atomic_inc32(&cntr->domain->ref);
 
 	/* CNTR must be fully operational before adding to wait set */
@@ -400,9 +403,14 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 				  &cntr->cntr_fid.fid, 0);
 		if (ret) {
 			ofi_cntr_cleanup(cntr);
-			return ret;
+			goto errout_close_wait;
 		}
 	}
 
 	return 0;
+
+errout_close_wait:
+	if (wait && attr->wait_obj != FI_WAIT_SET)
+		fi_close(&wait->fid);
+	return ret;
 }
