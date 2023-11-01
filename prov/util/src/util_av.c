@@ -552,7 +552,11 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 	 */
 	av->context = context;
 	av->domain = domain;
-	ofi_genlock_init(&av->ep_list_lock, OFI_LOCK_MUTEX);
+
+	ret = ofi_genlock_init(&av->ep_list_lock, OFI_LOCK_MUTEX);
+	if (ret)
+		return ret;
+
 	dlist_init(&av->ep_list);
 	ofi_atomic_inc32(&domain->ref);
 	return 0;
