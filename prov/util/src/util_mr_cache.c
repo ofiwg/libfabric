@@ -389,7 +389,8 @@ hit:
 }
 
 struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
-				       const struct fi_mr_attr *attr)
+				       const struct fi_mr_attr *attr,
+				       uint64_t flags)
 {
 	struct ofi_mr_info info;
 	struct ofi_mr_entry *entry;
@@ -410,7 +411,7 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 	cache->search_cnt++;
 
 	info.peer_id = 0;
-	info.iov = *attr->mr_iov;
+	ofi_mr_info_get_iov_from_mr_attr(&info, attr, flags);
 	entry = ofi_mr_rbt_find(&cache->tree, &info);
 	if (!entry) {
 		goto unlock;
@@ -436,7 +437,7 @@ unlock:
 }
 
 int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
-		     struct ofi_mr_entry **entry)
+		     struct ofi_mr_entry **entry, uint64_t flags)
 {
 	int ret;
 
@@ -453,7 +454,7 @@ int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 	cache->uncached_size += attr->mr_iov->iov_len;
 	pthread_mutex_unlock(&mm_lock);
 
-	(*entry)->info.iov = *attr->mr_iov;
+	ofi_mr_info_get_iov_from_mr_attr(&(*entry)->info, attr, flags);
 	(*entry)->use_cnt = 1;
 	(*entry)->node = NULL;
 
