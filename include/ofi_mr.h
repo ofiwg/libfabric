@@ -311,6 +311,17 @@ void ofi_mr_get_iov_from_dmabuf(struct iovec *iov,
 	}
 }
 
+static inline
+void ofi_mr_info_get_iov_from_mr_attr(struct ofi_mr_info *info,
+				const struct fi_mr_attr *attr,
+				uint64_t flags)
+{
+	if (flags & FI_MR_DMABUF)
+		ofi_mr_get_iov_from_dmabuf(&info->iov, attr->dmabuf, 1);
+	else
+		info->iov = *attr->mr_iov;
+}
+
 void ofi_mr_update_attr(uint32_t user_version, uint64_t caps,
 			const struct fi_mr_attr *user_attr,
 			struct fi_mr_attr *cur_abi_attr,
@@ -428,9 +439,10 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache,
  *				with the cache.
  */
 struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
-				       const struct fi_mr_attr *attr);
+				       const struct fi_mr_attr *attr,
+				       uint64_t flags);
 int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
-		     struct ofi_mr_entry **entry);
+		     struct ofi_mr_entry **entry, uint64_t flags);
 void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry);
 
 

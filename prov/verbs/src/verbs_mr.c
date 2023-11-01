@@ -333,12 +333,12 @@ vrb_mr_cache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 	attr.iface = iface;
 	attr.device.reserved = device;
 	assert(attr.iov_count == 1);
-	info.iov = iov;
+	ofi_mr_info_get_iov_from_mr_attr(&info, &attr, flags);
 	info.iface = iface;
 	info.device = device;
 
 	ret = (flags & OFI_MR_NOCACHE) ?
-	      ofi_mr_cache_reg(&domain->cache, &attr, &entry) :
+	      ofi_mr_cache_reg(&domain->cache, &attr, &entry, flags) :
 	      ofi_mr_cache_search(&domain->cache, &info, &entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
