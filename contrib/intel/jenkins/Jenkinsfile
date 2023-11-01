@@ -603,16 +603,6 @@ pipeline {
             }
           }
         }
-        stage ('oneCCL-GPU') {
-          steps {
-            script {
-              dir (RUN_LOCATION) {
-                run_middleware([["verbs", "rxm"]], "oneCCL-GPU", "onecclgpu",
-                               "charmander", "2")
-              }
-            }
-          }
-        }
         stage ('oneCCL-GPU-v3') {
           agent { node { label 'ze' } }
           options { skipDefaultCheckout() }
