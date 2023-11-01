@@ -569,6 +569,8 @@ void ofi_hmem_set_iface_filter(const char* iface_filter_str, bool* filter)
 
 		entry = strtok(NULL, token);
 	}
+
+	free(iface_filter_str_copy);
 }
 
 void ofi_hmem_init(void)
