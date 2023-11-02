@@ -51,11 +51,13 @@
 #include <errno.h>
 #include <unistd.h>
 #include <limits.h>
+#include <sys/utsname.h>
 
 #include "rdma/opx/fi_opx_fabric.h"
 
 #define FI_OPX_EP_RX_UEPKT_BLOCKSIZE (256)
 #define FI_OPX_EP_RX_CTX_EXT_BLOCKSIZE (2048)
+#define FI_OPX_VER_CHECK_BUF_LEN (512)
 
 enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep) {
 #if defined(OFI_RELIABILITY_CONFIG_STATIC_NONE)
@@ -1901,6 +1903,87 @@ err:
 	return -FI_EINVAL;
 }
 
+void fi_opx_get_drv_ver(char *drv_ver)
+{
+    FILE *p;
+    p = popen("modinfo hfi1 | grep \"^version\" | xargs | cut -d \" \" -f2","r");
+    if (p == NULL) {
+        FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "popen: returned NULL");
+    } else {
+        fgets(drv_ver, FI_OPX_VER_CHECK_BUF_LEN , p);
+        pclose(p);
+    }
+}
+
+int fi_opx_get_srcver_modinfo(char *srcver_modinfo)
+{
+    FILE *p;
+    p = popen("modinfo hfi1 | grep srcversion | xargs |  cut -d \" \" -f2 | xargs","r");
+    if (p == NULL) {
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "popen: returned NULL");
+		return FI_EOTHER;
+    }
+	fgets(srcver_modinfo, FI_OPX_VER_CHECK_BUF_LEN , p);
+	pclose(p);
+	return FI_SUCCESS;
+}
+
+int fi_opx_get_srcver_sys(char *srcver_sys)
+{
+    FILE *p;
+    p = popen("cat /sys/module/hfi1/srcversion | xargs","r");
+    if( p == NULL){
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "popen: returned NULL");
+		return FI_EOTHER;
+    }
+	fgets(srcver_sys, FI_OPX_VER_CHECK_BUF_LEN , p);
+	pclose(p);
+	return FI_SUCCESS;
+}
+
+int fi_opx_is_tid_allowed()
+{
+	struct utsname uname_data;
+	char drv_ver[FI_OPX_VER_CHECK_BUF_LEN] = {0};
+	char srcver_modinfo[FI_OPX_VER_CHECK_BUF_LEN] = {0};
+	char srcver_sys[FI_OPX_VER_CHECK_BUF_LEN] = {0};
+
+	uname(&uname_data);
+	if (strverscmp(uname_data.release, "6.5") >= 0) {
+		return 1;
+	}
+
+	fi_opx_get_drv_ver(drv_ver);
+	if (drv_ver[0] == '\0') {
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,"Driver version is NULL. TID not supported\n");
+		return 0;
+	}
+
+	if (fi_opx_get_srcver_modinfo(srcver_modinfo) != FI_SUCCESS) {
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "Unable to get srcversion from modinfo");
+		return 0;
+	}
+
+	if (fi_opx_get_srcver_sys(srcver_sys) != FI_SUCCESS) {
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "Unable to get srcversion from system file");
+		return 0;
+	}
+
+	if (strcmp(srcver_modinfo, srcver_sys) != 0) {
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "srcversion doesn't match."
+				"srcver_modinfo = %s srcver_sys = %s\n", srcver_modinfo, srcver_sys);
+		return 0;
+	}
+
+	if (strverscmp(drv_ver, "10.14") >= 0) {
+		return 1;
+	}
+
+	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "TID not supported in driver version %s", drv_ver);
+
+	return 0;
+}
+
 int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 		struct fid_ep **ep, void *context)
 {
@@ -1996,7 +2079,19 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	/* enable/disable receive side (CTS) expected receive (TID) */
 	int expected_receive_enable; /* get bool takes an int */
 	if (fi_param_get_bool(fi_opx_global.prov, "expected_receive_enable", &expected_receive_enable) == FI_SUCCESS) {
+#ifdef OPX_DEV_OVERRIDE
 		opx_ep->use_expected_tid_rzv = expected_receive_enable;
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Override set for TID\n");
+#else
+		if (fi_opx_is_tid_allowed() == 0) {
+			if (expected_receive_enable == 1) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Expected receive (TID) cannot be enabled. Unsupported driver version\n");
+			}
+			opx_ep->use_expected_tid_rzv = 0;
+		} else {
+			opx_ep->use_expected_tid_rzv = expected_receive_enable;
+		}
+#endif
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "expected_receive_enable parm specified as %0X; opx_ep->use_expected_tid_rzv = set to %0hhX\n", expected_receive_enable, opx_ep->use_expected_tid_rzv);
 	} else {
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "expected_receive_enable parm not specified; disabled expected receive rendezvous\n");
