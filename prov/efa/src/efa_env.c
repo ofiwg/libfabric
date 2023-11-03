@@ -45,7 +45,6 @@ struct efa_env efa_env = {
 	.use_zcpy_rx = 1,
 	.zcpy_rx_seed = 0,
 	.shm_av_size = 256,
-	.shm_max_medium_size = 4096,
 	.recvwin_size = EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE,
 	.ooo_pool_chunk_size = 64,
 	.unexp_pool_chunk_size = 1024,
