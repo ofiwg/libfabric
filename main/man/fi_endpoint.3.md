@@ -522,7 +522,7 @@ The following option levels and option names and parameters are defined.
   request event. This option is read only.
 
 - *FI_OPT_MIN_MULTI_RECV - size_t*
-: Defines the minimum receive buffer space available when the receive
+: Defines the minimum receive buffer space available below which the receive
   buffer is released by the provider (see FI_MULTI_RECV).  Modifying this
   value is only guaranteed to set the minimum buffer space needed on
   receives posted after the value has been changed.  It is recommended

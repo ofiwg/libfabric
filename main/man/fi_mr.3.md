@@ -236,10 +236,9 @@ The following apply to memory registration.
   prior to initiating any RMA or atomic operation.
 
   For memory regions that are registered using FI_MR_DMABUF, the starting
-  'virtual address' of the DMA-buf region is equal to the offset field
-  of struct fi_mr_dmabuf that was specified through the registration call.
-  That is, a DMA-buf region starts at 'virtual address' 0, with offset
-  being used as the starting address of the registration.
+  'virtual address' of the DMA-buf region is obtained by adding the offset
+  field to the base_addr field of struct fi_mr_dmabuf that was specified
+  through the registration call.
 
 *FI_MR_ALLOCATED*
 : When set, all registered memory regions must be backed by physical
