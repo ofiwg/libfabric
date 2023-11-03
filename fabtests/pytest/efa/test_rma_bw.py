@@ -32,3 +32,19 @@ def test_rma_bw_range_no_inject(cmdline_args, operation_type, completion_semanti
     # rma_bw test with data verification takes longer to finish
     timeout = max(540, cmdline_args.timeout)
     efa_run_client_server_test(cmdline_args, command, "short", completion_semantic, "host_to_host", inject_message_size, timeout=timeout)
+
+
+# This test is run in serial mode because it takes a lot of memory
+@pytest.mark.serial
+@pytest.mark.functional
+# TODO Add "writedata", "write" back in when EFA firmware bug is fixed
+@pytest.mark.parametrize("operation_type", ["read"])
+def test_rma_bw_1G(cmdline_args, operation_type, completion_semantic, memory_type):
+    # Default window size is 64 resulting in 128GB being registered, which
+    # exceeds max number of registered host pages
+    timeout = max(540, cmdline_args.timeout)
+    command = "fi_rma_bw -e rdm -W 1"
+    command = command + " -o " + operation_type
+    efa_run_client_server_test(cmdline_args, command, "short",
+                               completion_semantic=completion_semantic, message_size=1073741824,
+                               memory_type=memory_type, warmup_iteration_type=0, timeout=timeout)
