@@ -48,7 +48,7 @@ static inline int sm2_select_proto(void **desc, size_t iov_count,
 		sm2_desc = (struct ofi_mr *) *desc;
 		iface = sm2_desc->iface;
 		if (iface == FI_HMEM_CUDA) {
-			if ((sm2_desc->flags & OFI_HMEM_DATA_GDRCOPY_HANDLE) &&
+			if ((sm2_desc->flags & OFI_HMEM_DATA_DEV_REG_HANDLE) &&
 			    (total_len <= SM2_MAX_GDRCOPY_SIZE)) {
 				assert(sm2_desc->hmem_data);
 				return sm2_proto_inject;
