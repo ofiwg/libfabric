@@ -21,6 +21,9 @@ jobs:
           - name: Check out the git repo
             uses: actions/checkout@v4
 
+          - name: Get the required packages
+            run: sudo apt install -y pandoc
+
           - name: Build the nroff man pages
             run: .github/workflows/nroff-elves.sh
             env:
