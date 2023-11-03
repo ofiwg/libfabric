@@ -44,7 +44,7 @@ for file in `ls man/*.md`; do
     perl config/md2nroff.pl --source=$file
 done
 
-for file in `ls fabtest/man/*.md`; do
+for file in `ls fabtests/man/*.md`; do
     perl config/md2nroff.pl --source=$file
 done
 
