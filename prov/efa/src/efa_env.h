@@ -56,7 +56,6 @@ struct efa_env {
 	int zcpy_rx_seed;
 	int enable_shm_transfer;
 	int shm_av_size;
-	int shm_max_medium_size;
 	int recvwin_size;
 	int ooo_pool_chunk_size;
 	int unexp_pool_chunk_size;

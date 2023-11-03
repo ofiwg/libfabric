@@ -647,14 +647,15 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 		 *    pkt_entry_size - maximum_header_size.
 		 */
 		if (efa_env.enable_shm_transfer)
-			min_pkt_size = MIN(device->rdm_info->ep_attr->max_msg_size, efa_env.shm_max_medium_size);
+			min_pkt_size = MIN(device->rdm_info->ep_attr->max_msg_size - efa_rdm_pkt_type_get_max_hdr_size(),
+					   SHM_MAX_INJECT_SIZE);
 		else
-			min_pkt_size = device->rdm_info->ep_attr->max_msg_size;
+			min_pkt_size = device->rdm_info->ep_attr->max_msg_size - efa_rdm_pkt_type_get_max_hdr_size();
 
 		if (min_pkt_size < efa_rdm_pkt_type_get_max_hdr_size()) {
 			prov_info_rdm->tx_attr->inject_size = 0;
 		} else {
-			prov_info_rdm->tx_attr->inject_size = min_pkt_size - efa_rdm_pkt_type_get_max_hdr_size();
+			prov_info_rdm->tx_attr->inject_size = min_pkt_size;
 		}
 
 		/*

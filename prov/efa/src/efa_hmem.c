@@ -69,7 +69,7 @@ static int efa_domain_hmem_info_init_protocol_thresholds(struct efa_domain *efa_
 	case FI_HMEM_SYSTEM:
 		/* We have not yet tested runting with system memory */
 		info->runt_size = 0;
-		info->max_intra_eager_size = efa_env.shm_max_medium_size;
+		info->max_intra_eager_size = SHM_MAX_INJECT_SIZE;
 		info->max_medium_msg_size = EFA_DEFAULT_INTER_MAX_MEDIUM_MESSAGE_SIZE;
 		info->min_read_msg_size = EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE;
 		info->min_read_write_size = EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE;

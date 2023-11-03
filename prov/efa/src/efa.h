@@ -84,6 +84,8 @@
 
 #define EFA_ABI_VER_MAX_LEN 8
 
+#define SHM_MAX_INJECT_SIZE 4096
+
 #define EFA_EP_TYPE_IS_RDM(_info) \
 	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM))
 
