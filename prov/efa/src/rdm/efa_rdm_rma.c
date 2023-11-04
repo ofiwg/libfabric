@@ -318,14 +318,6 @@ static inline
 bool efa_rdm_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, struct efa_rdm_peer *peer)
 {
 	/*
-	 * RDMA_WRITE does not support FI_INJECT, because device may
-	 * need to re-send data and FI_INJECT allows user to re-use
-	 * these buffers immediately.
-	 */
-	if (txe->fi_flags & FI_INJECT)
-		return false;
-
-	/*
 	 * Because EFA is unordered and EFA iov descriptions can be more
 	 * expressive than the IBV sge's, we only implement
 	 * FI_REMOTE_CQ_DATA using RDMA_WRITE_WITH_IMM when a single iov

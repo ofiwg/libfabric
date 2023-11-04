@@ -1451,6 +1451,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 {
 	int err;
 	int iov_idx = 0, rma_iov_idx = 0;
+	ssize_t copied;
 	size_t iov_offset = 0, rma_iov_offset = 0;
 	size_t write_once_len, max_write_once_len;
 	struct efa_rdm_ep *ep;
@@ -1485,7 +1486,9 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 		return err;
 	}
 
-	efa_rdm_ope_try_fill_desc(ope, 0, FI_WRITE);
+	if (!(ope->fi_flags & FI_INJECT))
+		efa_rdm_ope_try_fill_desc(ope, 0, FI_WRITE);
+
 	assert(ope->bytes_write_submitted < ope->bytes_write_total_len);
 	max_write_once_len = MIN(efa_env.efa_write_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
 
@@ -1517,7 +1520,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 		if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 			return -FI_EAGAIN;
 
-		if (!ope->desc[iov_idx]) {
+		if (!ope->desc[iov_idx] && !(ope->fi_flags & FI_INJECT)) {
 			/* efa_rdm_ope_try_fill_desc() did not fill the desc,
 			 * which means memory registration failed.
 			 * return -FI_EAGAIN here will cause user to run progress
@@ -1530,6 +1533,16 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
+
+		if (ope->fi_flags & FI_INJECT) {
+			assert(ope->iov_count == 1);
+			assert(ope->total_len <= ep->inject_size);
+			copied = ofi_copy_from_hmem_iov(pkt_entry->wiredata + sizeof(struct efa_rdm_rma_context_pkt),
+				ope->total_len, FI_HMEM_SYSTEM, 0, ope->iov, ope->iov_count, 0);
+			assert(copied == ope->total_len);
+			ope->desc[0] = fi_mr_desc(pkt_entry->mr);
+			ope->iov[0].iov_base = pkt_entry->wiredata + sizeof(struct efa_rdm_rma_context_pkt);
+		}
 
 		write_once_len = MIN(ope->iov[iov_idx].iov_len - iov_offset,
 				    ope->rma_iov[rma_iov_idx].len - rma_iov_offset);
