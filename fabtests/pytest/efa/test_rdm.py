@@ -16,6 +16,11 @@ def test_rdm_pingpong_range(cmdline_args, completion_semantic, memory_type, mess
     efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong", "short",
                                completion_semantic, memory_type, message_size)
 
+@pytest.mark.functional
+def test_rdm_pingpong_no_inject_range(cmdline_args, completion_semantic, inject_message_size):
+    efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong -j 0", "short",
+                               completion_semantic, "host_to_host", inject_message_size)
+
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
@@ -39,6 +44,11 @@ def test_rdm_tagged_bw(cmdline_args, iteration_type, completion_semantic, memory
 def test_rdm_tagged_bw_range(cmdline_args, completion_semantic, memory_type, message_size):
     efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw", "short",
                                completion_semantic, memory_type, message_size)
+
+@pytest.mark.functional
+def test_rdm_tagged_bw_no_inject_range(cmdline_args, completion_semantic, inject_message_size):
+    efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw -j 0", "short",
+                               completion_semantic, "host_to_host", inject_message_size)
 
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
