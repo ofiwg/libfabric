@@ -1458,7 +1458,6 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 
 	assert(ope->iov_count > 0);
 	assert(ope->rma_iov_count > 0);
-	efa_rdm_ope_try_fill_desc(ope, 0, FI_WRITE);
 	ep = ope->ep;
 	if (ope->bytes_write_total_len == 0) {
 		/* According to libfabric document
@@ -1473,8 +1472,12 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
+		/* Provide the registered bounce buffer and its desc to rdma-core.
+		 * The user provided buffer/desc will not be used for 0 byte writes.
+		 * This allows the user to pass NULL for buff/desc.
+		 */
 		efa_rdm_pke_init_write_context(
-			pkt_entry, ope, ope->iov[0].iov_base, 0, ope->desc[0],
+			pkt_entry, ope, pkt_entry->wiredata, 0, fi_mr_desc(pkt_entry->mr),
 			ope->rma_iov[0].addr, ope->rma_iov[0].key);
 		err = efa_rdm_pke_write(pkt_entry);
 		if (err)
@@ -1482,6 +1485,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 		return err;
 	}
 
+	efa_rdm_ope_try_fill_desc(ope, 0, FI_WRITE);
 	assert(ope->bytes_write_submitted < ope->bytes_write_total_len);
 	max_write_once_len = MIN(efa_env.efa_write_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
 
@@ -1589,10 +1593,10 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 
 /**
  * @brief post a local read request, queue it if necessary
- * 
+ *
  * a local read request is posted to copy data from a packet
  * entry to user posted receive buffer on device.
- * 
+ *
  * @param[in]		rxe	which has the receive buffer information
  * @param[in]		rx_data_offset	offset of data in the receive buffer
  * @param[in]		pkt_entry	which has the data
