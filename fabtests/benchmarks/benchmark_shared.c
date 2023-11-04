@@ -104,7 +104,7 @@ int pingpong(void)
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			if (opts.transfer_size < inject_size)
+			if (opts.transfer_size <= inject_size)
 				ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
 			else
 				ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
@@ -124,7 +124,7 @@ int pingpong(void)
 			if (ret)
 				return ret;
 
-			if (opts.transfer_size < inject_size)
+			if (opts.transfer_size <= inject_size)
 				ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
 			else
 				ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
@@ -347,7 +347,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 		}
 		switch (rma_op) {
 		case FT_RMA_WRITE:
-			if (opts.transfer_size < inject_size) {
+			if (opts.transfer_size <= inject_size) {
 				ret = ft_post_rma_inject(FT_RMA_WRITE, tx_buf + offset,
 						opts.transfer_size, remote);
 			} else {
@@ -368,7 +368,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 					rx_seq++;
 
 			} else {
-				if (opts.transfer_size < inject_size) {
+				if (opts.transfer_size <= inject_size) {
 					ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
 							tx_buf + offset,
 							opts.transfer_size,
