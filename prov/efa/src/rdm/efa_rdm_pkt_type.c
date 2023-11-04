@@ -4,6 +4,7 @@
 #include "efa_rdm_peer.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pkt_type.h"
+#include "efa_rdm_pke_nonreq.h"
 
 struct efa_rdm_pkt_type_req_info EFA_RDM_PKT_TYPE_REQ_INFO_VEC[] = {
 	/* rtm header */
@@ -136,6 +137,9 @@ size_t efa_rdm_pkt_type_get_max_hdr_size(void)
 		else
 			pkt_type += 1;
 	}
+
+	/* Non-emulated (real) rdma inject write requires a header */
+	max_hdr_size = MAX(max_hdr_size, sizeof(struct efa_rdm_rma_context_pkt));
 
 	return max_hdr_size;
 }
