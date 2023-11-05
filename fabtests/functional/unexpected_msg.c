@@ -58,9 +58,6 @@ static bool send_data = false;
 static int alloc_bufs(void)
 {
 	int ret;
-	uint64_t flags;
-	struct iovec iov;
-	struct fi_mr_attr mr_attr;
 
 	tx_size = MAX(opts.transfer_size, FT_MAX_CTRL_MSG) + ft_tx_prefix_size();
 	rx_size = MAX(opts.transfer_size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size();
@@ -85,21 +82,13 @@ static int alloc_bufs(void)
 	rx_buf = buf;
 	tx_buf = (char *) buf + rx_size * concurrent_msgs;
 
-	if (ft_need_mr_reg(fi)) {
-		iov.iov_base = buf;
-		iov.iov_len = buf_size;
+	ret = ft_reg_mr(fi, buf, buf_size, ft_info_to_mr_access(fi), FT_MR_KEY,
+		opts.iface, opts.device, &mr, &mr_desc);
 
-		ft_fill_mr_attr(&iov, NULL, 1, ft_info_to_mr_access(fi), FT_MR_KEY,
-				opts.iface, opts.device, &mr_attr, 0);
-
-		flags = (opts.iface) ? FI_HMEM_DEVICE_ONLY : 0;
-		ret = fi_mr_regattr(domain, &mr_attr, flags, &mr);
-		if (ret)
-			return ret;
-
-		mr_desc = fi_mr_desc(mr);
+	if (ret) {
+		FT_ERR("ft_reg_mr failed: %d\n", ret);
+		return ret;
 	}
-
 	return 0;
 }
 
