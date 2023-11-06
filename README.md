@@ -218,11 +218,12 @@ See the `fi_sockets(7)` man page for more details.
 ***
 
 The tcp provider is an optimized socket based provider that supports
-reliable connected endpoints.  It is intended to be used directly by
-apps that need MSG endpoint support, or in conjunction with the rxm
-provider for apps that need RDM endpoints.  The tcp provider targets
-replacing the sockets provider for applications using standard
-networking hardware.
+reliable connected endpoints.  The current version is the redesigned
+one previously called the net provider.  This version supports both
+MSG endpoints and RDM endpoints. It can also work in conjunction with
+the rxm provider for apps that need similar RDM behavior as the old
+tcp provider.  The tcp provider targets replacing the sockets provider
+for applications using standard networking hardware.
 
 See the `fi_tcp(7)` man page for more details.
 

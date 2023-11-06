@@ -6,7 +6,7 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v1.19.0, Fri Sep 1, 2023
+v1.20.0, Fri Nov 17, 2023
 ========================
 
 ## Core
@@ -35,6 +35,241 @@ v1.19.0, Fri Sep 1, 2023
 
 ## Fabtests
 
+v1.19.0, Fri Sep 1, 2023
+========================
+
+## Core
+
+- General code cleanup and restructuring
+- Add ofi_hmem_any_ipc_enabled()
+- ofi_consume_iov allows 0-byte consume
+- ofi_consume_iov consistency
+- ofi_indexer: return error code when iterating
+- getinfo: Add post filters for domain and fabric names
+- Filter loopback device if iface is specified
+- bsock: Fix error checking for -EAGAIN
+- windows/osd: Remove unneeded check to silence coverity
+- windows/osd: Move variable declaration to silence coverity
+- Introduce gdrcopy awareness to hmem copy
+- mr/cache: Fix fi_mr_info initialization
+- hmem_cuda: remove gdrcopy from cuda hmem copy path
+- iouring: Fix wrong indent in ofi_sockapi_accept_uring()
+- Implement ofi_sockctx_uring_poll_add()
+- hmem: introduce gdrcopy from/to cuda iov functions
+- hmem: Deprecate `FI_HMEM_CUDA_ENABLE_XFER`
+- hmem_cuda: Restrict CUDA IPC based on peer accessibility
+- hmem_cuda: Log number of CUDA devices detected
+- hmem_cuda: Refactor global variables
+- tostr: Remove the extra dir "shared/" from "include/" and "src/" .
+- hmem_ze: fix ZE is valid check
+- hmem_rocr: fix offset calculation
+- hmem_rocr: use ofi spinlock functions
+- hmem_rocr: minor fixes
+- hmem_neuron: convert warn to info for nrt_get_dmabuf_fd not found
+- hmem_neuron: check existance of neuron devices during initialization
+- tostr: Moved Windows functions in shared/ofi_str.c to windows/osd.h
+- tostr: Add helper functions ofi_tostr_size() and ofi_tostr_count().
+
+## EFA
+
+- Onboard Peer API, use shm provider as a peer provider
+- Uses util SRX framework in shared receive procedures.
+- Register shm MR with hmem_data, allow shm to use gdrcopy for cuda data movement
+- Finish the refactor for rxr squash.
+- Use rdma-core WR API for send requests
+- Check optlen in getopt call
+- Fix the rdma-read support check in RMA and MSG operations
+- Optimize ep lock usage
+- Use an internal fi_mr_attr for memory registration
+
+## Hooks
+
+- Init field in mr_attr to silence coverity
+- Add profiling hook provider
+- Rename cq hooking functions' names
+- Added trace for resource creation operations
+
+## OPX
+
+- Initialize ofi_mr_info
+- Fix dput credit check
+- Only allocate replay buffer if psn is valid
+- Support SHM Intra-node communication between single server HFI devices
+- Fix incorrect packet size in packet header when sending CTS packet
+- Added check to address Coverity scan defect
+- Add multi-entry caching to TID rendezvous
+- Fall back to default domain name for TID fabric
+- Properly handle multiple IOVs in fi_opx_tsendmsg
+- Fix OPX Rzv RTS receive operation SHM error (DAOS-related)
+- Fix non-tagged sends may incorrectly set FI_TAGGED in send completions
+- Add more info to reliability IOV buffer validation check
+- Move dput packet build functions to new inline include
+- Use fi_mr_attr in fi_opx_mr
+- Disable Pre-NAKing by default, throttle until all outstanding replays ACK'd
+- Fix reliability bug when NAKing the last PSN
+- Update HeaderQ Register more frequently
+- No rbuf_wrap needed for expected receive (TID)
+- Fixes for Coverity scan issues
+- Enhanced tag matching
+- Tune expected recv for unaligned buffers
+- Observability: Add finer logging granularity
+- Reduce RTS immediate data and fix packet estimate for odd TID lengths
+- Add additional sources for FI_OPX_UUID
+
+## Peer
+
+- Add cq_data to rx_entry, allow peer to modify on unexp
+- Introduce peer cntr API
+- Add foreach_unspec_addr API
+- Add size as an input of the get_tag op
+
+## PSM3
+
+- Sync with IEFS 11.5.0.0.172
+
+## SHM
+
+- Only poll IPC list when ROCR IPC is enabled
+- Allow for SAR and inject protocol to buffer more unexpected messages
+- Remove unused sar fields
+- Make SAR protocol handle 0 byte transfer
+- Load DSA dependency dynamically
+- Change recv entry freestack into bufpool
+- Remove shm signal
+- Use util peer cntr implementation
+- Make SHM default to domain level threading level
+- Replace internal shared receive implementation with util_srx
+- Lock entire progress loop
+- Fix ROCR data coherency
+- Add FI_LOCAL_COMM to shm attrs
+- Handle empty freestack
+- Fix bug in configure.m4 in atomics_happy assignment happy
+- Add memory barrier before update resp->status for SAR
+- Do not use inline/inject for read op
+- Allow shm to use gdrcopy
+- Refactor protocol selection code
+- Init map fi addrs to FI_ADDR_NOTAVAIL
+
+## TCP
+
+- General code cleanups
+- Restrict which EPs can be opened per domain
+- Increase CM error debug output
+- Avoid calling close() on an invalid socket after accept error
+- Mark the EP as disconnected before flushing the queues
+- Add assertion failures for xnet_{monitor,halt}_sock
+- Disable ofi_dynpoll_wait() for non-blocking progress
+- Move PEP pollin operations to io_uring
+- Move EP poll operations to io_uring
+- Early exit if ofi_bsock_flush() has operation in progress
+- Implement pollin sockctx in bsock
+- Add missing call to xnet_submit_uring()
+- Add return error to xnet_update_pollflag()
+- Remove the cancel sockctx from the EP structure
+- Move io_uring cqe from the stack to progress struct
+- Reduce stack size for epoll event array
+- handle NULL av in xnet_freeall_conns()
+
+## UCX
+
+- Publish FI_LOCAL_COMM and FI_REMOTE_COMM capabilities
+- Fix configure error with newer MOFED
+- Fix segfault in unsignalled completions
+
+## Util
+
+- Add FI_PEER support to util counter
+- Refactor the usage of cntrs
+- Change util_ep to be a genlock
+- Add util shared receive implementation
+- Update log message for invalid AV type message
+- Fix fi_mr_info initialization
+- Add peer ID to MR cache
+- Store hmem_data in ofi_mr_map
+- Split the cq progress and reading entries in ofi_cq_readfrom
+
+## Verbs
+
+- Add event lock to EQ to serialize closing ep
+- Remove saved_wc_list and use CQ directly
+- Consolidate peer_mem and dmabuf support check
+- Fix vrb_add_credits signature
+- Introduce new progress engine structure
+- Simplify (and correct) locking around progress operations
+- General code restructuring
+
+## Fabtests
+
+- Fix reading addressing options
+- Allow to change only the OOB address
+- Allow to use FI_ADDR_STR with -F
+- Fix bw buffer utilization
+- Separate RX and RMA counters
+- Fix tx counter with RMA
+- Add FI_CONTEXT mode to rdm_cntr_pingpong
+- Add HMEM support to fi_unexpected_msg test
+- Fix array OOB during fabtest list parsing
+- Enable shm tagged_peek test
+- Fix windows build warnings
+- Make tx_buf and rx_buf aligned to 64 bytes by default
+- Fix windows build warnings for sscanf
+- Use dummy ft_pin_core on macOS
+- Fix some header includes
+- sock_test: Do not use epoll if not available
+- recv_cancel: initialize error entry
+- Fix wrong size used to allocate tx_msg_buf
+- unexpected: change defaults to support tcp
+- unexpected: add unknown unexpected peer test
+- Enable a list of arbitrary message sizes
+- Enabled data validation for rma read & write
+- bw_rma operates on distinct buffer offsets
+- ft_post_rma issues reads from remote's tx_buf
+- General code cleanup and restructuring
+- rdm_tagged_peek: fix race condition synchronization
+- Add FI_LOCAL_COMM/FI_REMOTE_COMM presence check to fi_getinfo_test
+- Correct ft_exchange_keys in prefix-mode
+- Make rdm_tagged_peek test more general
+- Add unit test for fi_setopt
+
+v1.18.2, Fri Sep 1, 2023
+========================
+
+## Core
+
+- Check for CUDA devices with nvmlDeviceGetCount_v2() first
+- Try libnvidia-ml.so.1 if .so symlink missing
+- Fix ssize_t format specifiers
+
+## EFA
+
+- Remove rxr_rm_tx/rx_cq_check()
+- Report cntr completion for shm inject write
+
+## SHM
+
+- Change recv entry freestack into bufpool
+- Load DSA dependency dynamically
+
+## TCP
+
+- Fix missing iov truncation on saved message path
+- Add locking to trywait path for potential data race
+- Fix incorrect locking around MR operations
+
+## UCX
+
+- Updated ucx.exclude and Makefile.am
+
+## Verbs
+
+- Add additional checks to vrb_shutdown_qp_in_err
+- Prevent duplicate FI_SHUTDOWN events
+- Fix memory leak when creating EQ with unsupported wait object
+
+## Fabtests
+
+- Extend the test_unexpected_msg
+- Rename dmabuf-rdma tests to prefix with xe
 
 v1.18.1, Fri Jun 30, 2023
 =========================
