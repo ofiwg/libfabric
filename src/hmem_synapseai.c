@@ -108,20 +108,32 @@ int synapseai_init(void)
 
 	err = synapseai_dl_init();
 	if (err)
-		return -FI_ENODATA;
+		return err;
 
 	status = synapseai_ops.synInitialize();
-	if (status != synSuccess)
-		return -FI_ENODATA;
+	if (status != synSuccess) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"synInitialize failed: %d\n", status);
+		return -FI_EIO;
+	}
 
 	status = synapseai_ops.synDeviceGetCount(&device_count);
-	if (status != synSuccess || device_count == 0)
-		/*
-		 * TODO We should call destroy here to free resources allocated
-		 * in initialize, but the destroy call hangs on instances without
-		 * a habana device
-		 */
-		return -FI_ENODATA;
+
+	/*
+	 * TODO: Starting from here we should call synDestroy before
+	 * returning error to free the resources allocated in synInitialize,
+	 * but the destroy call hangs on instances without
+	 * a habana device
+	 */
+
+	if (status != synSuccess) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"synDeviceGetCount failed: %d\n", status);
+		return -FI_EIO;
+	}
+
+	if (device_count == 0)
+		return -FI_ENOSYS;
 
 	return FI_SUCCESS;
 }
