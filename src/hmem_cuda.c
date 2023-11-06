@@ -715,7 +715,7 @@ int cuda_get_dmabuf_fd(void *addr, uint64_t size, int *fd,
 		return ret;
 
 	aligned_ptr = (uintptr_t) ofi_get_page_start(base_addr, host_page_size);
-	aligned_size = (uintptr_t) ofi_get_page_end((void *) ((uintptr_t) base_addr + total_size),
+	aligned_size = (uintptr_t) ofi_get_page_end((void *) ((uintptr_t) base_addr + total_size - 1),
 						    host_page_size) - (uintptr_t) aligned_ptr + 1;
 
 	cuda_ret = cuda_ops.cuMemGetHandleForAddressRange(
