@@ -979,18 +979,6 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 	}
 }
 
-static inline
-struct fid_ep *get_coll_ep(struct rxm_ep *rxm_ep, uint64_t flags, int coll_op)
-{
-	if (flags & FI_PEER_TRANSFER)
-		return rxm_ep->util_coll_ep;
-
-	if (rxm_ep->offload_coll_mask & BIT(coll_op))
-		return rxm_ep->offload_coll_ep;
-
-	return rxm_ep->util_coll_ep;
-}
-
 static int rxm_ep_init_coll_req(struct rxm_ep *rxm_ep, int coll_op, uint64_t flags,
 				void *context, struct rxm_coll_buf **req,
 				struct fid_ep **coll_ep)
