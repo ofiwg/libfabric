@@ -372,7 +372,7 @@ AS_IF([test "$have_mm_atomics" -eq 1 -a "$ac_cv_type___int128" = "yes"],
           __atomic_exchange(&d, &s, &r, __ATOMIC_SEQ_CST);
           __atomic_compare_exchange(&d, &c, &s, 0, __ATOMIC_SEQ_CST,
 	  			    __ATOMIC_SEQ_CST);
-	 return 0;
+	 return !__atomic_is_lock_free(sizeof(d), NULL);
         ]])],
         [
             AC_MSG_RESULT(yes)
