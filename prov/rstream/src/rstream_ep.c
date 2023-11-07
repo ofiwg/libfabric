@@ -93,7 +93,7 @@ static int rstream_reg_mrs(struct fid_domain *domain,
 {
 	int ret;
 	uint64_t rx_meta_data_offset = 0;
-	uint32_t full_mr_size = lmr->tx.size + lmr->rx.size;
+	size_t full_mr_size = lmr->tx.size + lmr->rx.size;
 
 	if (RSTREAM_USING_IWARP)
 		rx_meta_data_offset = RSTREAM_IWARP_DATA_SIZE * lmr->rx.size;
