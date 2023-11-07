@@ -157,6 +157,8 @@ static int mr_regattr()
 	int testret = FAIL;
 	struct fid_mr *mr;
 	struct iovec *iov;
+	struct fi_mr_dmabuf *dmabuf = NULL;
+	uint64_t flags = 0;
 	struct fi_mr_attr attr = {0};
 	char *base;
 
@@ -165,6 +167,13 @@ static int mr_regattr()
 		perror("calloc");
 		ret = -FI_ENOMEM;
 		goto out;
+	}
+
+	dmabuf = calloc(fi->domain_attr->mr_iov_limit, sizeof(*dmabuf));
+	if (!dmabuf) {
+		perror("calloc for dmabuf");
+		ret = -FI_ENOMEM;
+		goto free_iov;
 	}
 
 	for (i = 0; i < test_cnt &&
@@ -178,22 +187,33 @@ static int mr_regattr()
 			base += iov[j].iov_len;
 		}
 
-		ft_fill_mr_attr(&iov[0], NULL, n, ft_info_to_mr_access(fi),
-				FT_MR_KEY, opts.iface, opts.device, &attr, 0);
-		ret = fi_mr_regattr(domain, &attr, 0, &mr);
+		if (opts.options & FT_OPT_REG_DMABUF_MR) {
+			ret = ft_get_dmabuf_from_iov(dmabuf, iov, n, opts.iface);
+			if (ret) {
+				FT_UNIT_STRERR(err_buf, "ft_get_dmabuf_from_iov failed", ret);
+				goto free_dmabuf;
+			}
+			flags |= FI_MR_DMABUF;
+		}
+
+		ft_fill_mr_attr(&iov[0], dmabuf, n, ft_info_to_mr_access(fi),
+				FT_MR_KEY, opts.iface, opts.device, &attr, flags);
+		ret = fi_mr_regattr(domain, &attr, flags, &mr);
 		if (ret) {
 			FT_UNIT_STRERR(err_buf, "fi_mr_regattr failed", ret);
-			goto free;
+			goto free_dmabuf;
 		}
 
 		ret = fi_close(&mr->fid);
 		if (ret) {
 			FT_UNIT_STRERR(err_buf, "fi_close failed", ret);
-			goto free;
+			goto free_dmabuf;
 		}
 	}
 	testret = PASS;
-free:
+free_dmabuf:
+	free(dmabuf);
+free_iov:
 	free(iov);
 out:
 	return TEST_RET_VAL(ret, testret);
@@ -208,15 +228,25 @@ static int mr_reg_free_then_alloc()
 	struct iovec iov;
 	struct fi_mr_attr attr = {0};
 	int numtry = 5;
+	uint64_t flags = 0;
+	struct fi_mr_dmabuf dmabuf = {0};
 
 	testret = FAIL;
 	for (i = 0; i < numtry; ++i) {
 		iov.iov_base = buf;
 		iov.iov_len = buf_size;
-		ft_fill_mr_attr(&iov, NULL, 1, ft_info_to_mr_access(fi),
-				FT_MR_KEY, opts.iface, opts.device, &attr, 0);
+		if (opts.options & FT_OPT_REG_DMABUF_MR) {
+			ret = ft_get_dmabuf_from_iov(&dmabuf, &iov, 1, opts.iface);
+			if (ret) {
+				FT_UNIT_STRERR(err_buf, "ft_get_dmabuf_from_iov failed", ret);
+				goto out;
+			}
+			flags |= FI_MR_DMABUF;
+		}
+		ft_fill_mr_attr(&iov, &dmabuf, 1, ft_info_to_mr_access(fi),
+				FT_MR_KEY, opts.iface, opts.device, &attr, flags);
 
-		ret = fi_mr_regattr(domain, &attr, 0, &mr);
+		ret = fi_mr_regattr(domain, &attr, flags, &mr);
 		if (ret) {
 			FT_UNIT_STRERR(err_buf, "fi_mr_reg failed", ret);
 			goto out;
