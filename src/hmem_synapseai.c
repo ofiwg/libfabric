@@ -173,7 +173,7 @@ int synapseai_host_unregister(void *ptr)
  * @param offset[out] the offset within the dma-buf object
  * @return int On success, return 0. On failure, return a negative error code.
  */
-int synapseai_get_dmabuf_fd(void *addr, uint64_t size, int *fd,
+int synapseai_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 			    uint64_t *offset)
 {
 	int ret;
@@ -233,7 +233,7 @@ int synapseai_host_unregister(void *ptr)
 	return -FI_ENOSYS;
 }
 
-int synapseai_get_dmabuf_fd(void *addr, uint64_t size, int *fd,
+int synapseai_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 			    uint64_t *offset)
 {
 	return -FI_ENOSYS;

@@ -80,7 +80,7 @@ static struct ibv_mr *vrb_reg_hmem_dmabuf(enum fi_hmem_iface iface,
 	if (failover_policy[iface] == ALWAYS)
 		goto failover;
 
-	err = ofi_hmem_get_dmabuf_fd(iface, (void *)buf, len, &fd, &offset);
+	err = ofi_hmem_get_dmabuf_fd(iface, buf, len, &fd, &offset);
 	if (err)
 		return NULL;
 

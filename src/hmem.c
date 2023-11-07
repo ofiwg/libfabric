@@ -761,8 +761,8 @@ int ofi_hmem_dev_reg_copy_from_hmem(enum fi_hmem_iface iface, uint64_t handle,
 	return hmem_ops[iface].dev_reg_copy_from_hmem(handle, dest, src, size);
 }
 
-int ofi_hmem_get_dmabuf_fd(enum fi_hmem_iface iface, void *addr, uint64_t size,
-			   int *fd, uint64_t *offset)
+int ofi_hmem_get_dmabuf_fd(enum fi_hmem_iface iface, const void *addr,
+			   uint64_t size, int *fd, uint64_t *offset)
 {
 	return hmem_ops[iface].get_dmabuf_fd(addr, size, fd, offset);
 }
