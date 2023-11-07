@@ -167,7 +167,7 @@ static inline void put_dmabuf_fd(int fd)
 static void get_mr_fd(struct dmabuf_peer_mem_mr *mr,
 		      size_t iov_count, const struct iovec *iov)
 {
-	int fd;
+	int fd = -1;
 	int err;
 	struct dmabuf_peer_mem_fabric *fab;
 
