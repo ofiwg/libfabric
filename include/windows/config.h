@@ -40,6 +40,9 @@
 /* efa provider is built as DSO */
 #define HAVE_EFA_DL 0
 
+/* Indicates if ibv_reg_dmabuf_mr verbs is available */
+#define HAVE_EFA_DMABUF_MR 0
+
 /* Define to 1 if host_clock_get_service is available. */
 /* #undef HAVE_HOST_GET_CLOCK_SERVICE */
 
