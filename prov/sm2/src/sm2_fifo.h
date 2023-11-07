@@ -150,8 +150,8 @@ static inline int64_t sm2_absptr_to_relptr(void *absptr, struct sm2_mmap *map)
 }
 
 struct sm2_fifo {
-	long int head;
-	long int tail;
+	uintptr_t head;
+	uintptr_t tail;
 };
 
 /* Initialize FIFO queue to empty state */
@@ -198,7 +198,7 @@ static inline struct sm2_xfer_entry *sm2_fifo_read(struct sm2_ep *ep)
 {
 	struct sm2_fifo *self_fifo = sm2_recv_queue(ep->self_region);
 	struct sm2_xfer_entry *xfer_entry;
-	long int prev_head;
+	uintptr_t prev_head;
 
 	assert(self_fifo->head != 0);
 	assert(self_fifo->tail != 0);
