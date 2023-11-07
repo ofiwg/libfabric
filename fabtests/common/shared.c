@@ -414,6 +414,41 @@ bool ft_need_mr_reg(struct fi_info *fi)
 		(opts.options & FT_OPT_USE_DEVICE));
 }
 
+/**
+ * @brief Update an array of fi_mr_dmabuf objects
+ * from an array of iov with the same iov count
+ *
+ * @param dmabuf ptr to the array of fi_mr_dmabuf objects
+ * @param iov ptr to the array of iov objects
+ * @param iov_count iov count
+ * @param iface hmem iface
+ * @return int FI_SUCCESS on success, negative integer upon
+ * error
+ */
+int ft_get_dmabuf_from_iov(struct fi_mr_dmabuf *dmabuf,
+			   struct iovec *iov, size_t iov_count,
+			   enum fi_hmem_iface iface)
+{
+	int ret, i;
+	int dmabuf_fd;
+	uint64_t dmabuf_offset;
+
+	for (i = 0; i < iov_count; i++) {
+		ret = ft_hmem_get_dmabuf_fd(iface,
+			iov[i].iov_base, iov[i].iov_len,
+			&dmabuf_fd, &dmabuf_offset);
+		if (ret)
+			return ret;
+
+		dmabuf[i].fd = dmabuf_fd;
+		dmabuf[i].offset = dmabuf_offset;
+		dmabuf[i].len = iov[i].iov_len;
+		dmabuf[i].base_addr = (void *)(
+			(uintptr_t) iov[i].iov_base - dmabuf_offset);
+	}
+	return FI_SUCCESS;
+}
+
 int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 	      uint64_t key, enum fi_hmem_iface iface, uint64_t device,
 	      struct fid_mr **mr, void **desc)
