@@ -522,7 +522,7 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 	struct fi_peer_rx_entry *rx_entry;
 	struct sm2_av *sm2_av;
 	fi_addr_t addr;
-	int ret;
+	int ret = 0;
 
 	/* TODO - Switch on protocol before switching on op to avoid messy
 	 * checks like this */

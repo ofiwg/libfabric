@@ -1690,7 +1690,7 @@ STATIC ssize_t psmx2_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 	cq_priv->domain->cq_lock_fn(&cq_priv->lock, 2);
 	if (cq_priv->pending_error) {
 		ofi_cq_err_memcpy(cq_priv->domain->fabric->util_fabric.fabric_fid.api_version,
-				  buf, &cq_priv->pending_error->cqe);
+				  buf, &cq_priv->pending_error->cqe.err);
 		free(cq_priv->pending_error);
 		cq_priv->pending_error = NULL;
 		psmx2_unlock(&cq_priv->lock, 2);
