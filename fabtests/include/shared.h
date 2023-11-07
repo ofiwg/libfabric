@@ -458,6 +458,9 @@ void ft_fill_mr_attr(struct iovec *iov, struct fi_mr_dmabuf *dmabuf,
 		     uint64_t key, enum fi_hmem_iface iface, uint64_t device,
 		     struct fi_mr_attr *attr, uint64_t flags);
 bool ft_need_mr_reg(struct fi_info *fi);
+int ft_get_dmabuf_from_iov(struct fi_mr_dmabuf *dmabuf,
+			   struct iovec *iov, size_t iov_count,
+			   enum fi_hmem_iface iface);
 int ft_reg_mr(struct fi_info *info, void *buf, size_t size, uint64_t access,
 	      uint64_t key, enum fi_hmem_iface iface, uint64_t device,
 	      struct fid_mr **mr, void **desc);
