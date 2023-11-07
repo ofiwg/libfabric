@@ -948,7 +948,8 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 		if (!buf) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"Error allocating buffer\n");
-			assert(0);
+			ofi_buf_free(cmd_ctx);
+			return -FI_ENOMEM;
 		}
 		cmd_ctx->sar_entry = NULL;
 		slist_init(&cmd_ctx->buf_list);
@@ -962,6 +963,12 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 
 		if (cmd->msg.hdr.size) {
 			sar_entry = ofi_buf_alloc(ep->pend_buf_pool);
+			if (!sar_entry) {
+				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+					"Error allocating sar entry\n");
+				ofi_buf_free(cmd_ctx);
+				return -FI_ENOMEM;
+			}
 
 			memcpy(&sar_entry->cmd, cmd, sizeof(*cmd));
 			sar_entry->cmd_ctx = cmd_ctx;
