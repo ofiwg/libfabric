@@ -1511,7 +1511,7 @@ struct fi_info *sock_fi_info(uint32_t version, enum fi_ep_type ep_type,
 	info->src_addrlen = 0;
 	info->dest_addrlen = 0;
 
-	info->src_addr = calloc(1, ofi_sizeofip(src_addr));
+	info->src_addr = calloc(1, ofi_sizeofaddr(src_addr));
 	if (!info->src_addr)
 		goto err;
 
@@ -1532,7 +1532,7 @@ struct fi_info *sock_fi_info(uint32_t version, enum fi_ep_type ep_type,
 		info->addr_format = FI_SOCKADDR_IN;
 
 	if (dest_addr) {
-		info->dest_addr = calloc(1, ofi_sizeofip(dest_addr));
+		info->dest_addr = calloc(1, ofi_sizeofaddr(dest_addr));
 		if (!info->dest_addr)
 			goto err;
 		info->dest_addrlen = ofi_sizeofaddr(dest_addr);
