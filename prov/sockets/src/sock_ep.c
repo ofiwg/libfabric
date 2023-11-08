@@ -1511,20 +1511,13 @@ struct fi_info *sock_fi_info(uint32_t version, enum fi_ep_type ep_type,
 	info->src_addrlen = 0;
 	info->dest_addrlen = 0;
 
+	assert(src_addr);
 	info->src_addr = calloc(1, ofi_sizeofaddr(src_addr));
 	if (!info->src_addr)
 		goto err;
 
 	info->mode = SOCK_MODE;
-
-	if (src_addr) {
-		memcpy(info->src_addr, src_addr, ofi_sizeofaddr(src_addr));
-	} else {
-		sock_get_src_addr_from_hostname(info->src_addr, NULL,
-			dest_addr ? ((struct sockaddr *) dest_addr)->sa_family :
-			ofi_get_sa_family(hints));
-	}
-
+	memcpy(info->src_addr, src_addr, ofi_sizeofaddr(src_addr));
 	info->src_addrlen = ofi_sizeofaddr(info->src_addr);
 	if (info->src_addrlen == sizeof(struct sockaddr_in6))
 		info->addr_format = FI_SOCKADDR_IN6;
