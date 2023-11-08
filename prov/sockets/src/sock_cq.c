@@ -734,7 +734,7 @@ int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
 			 size_t err_data_size)
 {
 	int ret;
-	struct fi_cq_err_entry err_entry;
+	struct fi_cq_err_entry err_entry = {0};
 
 	pthread_mutex_lock(&cq->lock);
 	if (ofi_rbavail(&cq->cqerr_rb) < sizeof(err_entry)) {
