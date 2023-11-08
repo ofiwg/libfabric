@@ -1417,8 +1417,10 @@ static void sock_set_fabric_attr(void *src_addr, const struct fi_fabric_attr *hi
 	if (!attr->name)
 		attr->name = strdup(sock_fab_name);
 
-	attr->prov_name = strdup(hint_attr->prov_name);
-	attr->api_version = hint_attr->api_version;
+	if (hint_attr) {
+		attr->prov_name = strdup(hint_attr->prov_name);
+		attr->api_version = hint_attr->api_version;
+	}
 }
 
 static void sock_set_domain_attr(uint32_t api_version, void *src_addr,
