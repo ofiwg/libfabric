@@ -26,9 +26,14 @@ def test_mr_hmem(cmdline_args, hmem_type):
 
     cmdline_args_copy = copy.copy(cmdline_args)
 
+    test_command = f"fi_mr_test -D {hmem_type}"
+
+    if cmdline_args.do_dmabuf_reg_for_hmem:
+        test_command += " -R"
+
     test = UnitTest(
         cmdline_args_copy,
-        f"fi_mr_test -D {hmem_type}",
+        test_command,
         failing_warn_msgs=["Unable to add MR to map"],
     )
     test.run()
