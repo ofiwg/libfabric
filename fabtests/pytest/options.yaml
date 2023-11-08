@@ -92,3 +92,7 @@ oob_address_exchange:
   type: boolean
   help: "out-of-band address exchange over the default port"
   shortform: -b
+do_dmabuf_reg_for_hmem:
+  type: boolean
+  help: "Register hmem memory via dmabuf"
+  longform: --do-dmabuf-reg-for-hmem

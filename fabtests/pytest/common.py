@@ -293,12 +293,10 @@ class ClientServerTest:
                  memory_type="host_to_host",
                  timeout=None,
                  warmup_iteration_type=None,
-                 completion_type="queue",
-                 do_dmabuf_reg_for_hmem=False):
+                 completion_type="queue"):
 
         self._cmdline_args = cmdline_args
         self._timeout = timeout or cmdline_args.timeout
-        self.do_dmabuf_reg_for_hmem = do_dmabuf_reg_for_hmem
         self._server_base_command, server_additonal_environment = self.prepare_base_command("server", executable, iteration_type,
                                                               completion_semantic, prefix_type,
                                                               datacheck_type, message_size,
@@ -400,7 +398,7 @@ class ClientServerTest:
 
         command += " -D " + host_memory_type
 
-        if self.do_dmabuf_reg_for_hmem:
+        if self._cmdline_args.do_dmabuf_reg_for_hmem:
             command += " -R"
 
         additional_environment = None
