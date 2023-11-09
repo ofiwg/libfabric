@@ -148,7 +148,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 	fprintf(stderr, "(%d) hfi->info.sdma.completion_queue == %p\n", pid, opx_ep->hfi->info.sdma.completion_queue);
 	volatile struct hfi1_sdma_comp_entry * entry = opx_ep->hfi->info.sdma.completion_queue;
 
-	fprintf(stderr, "(%d) we->header_vec.npkts=%hd, frag_size=%hd, cmp_idx=%hd, ctrl=%#04hX, status=%#0hX, errCode=%#0hX\n",
+	fprintf(stderr, "(%d) we->header_vec.npkts=%hd, frag_size=%hd, cmp_idx=%hd, ctrl=%#04hX, status=%#0X, errCode=%#0X\n",
 		pid,
 		we->header_vec.req_info.npkts,
 		we->header_vec.req_info.fragsize,
@@ -197,7 +197,7 @@ void fi_opx_hfi1_sdma_replay_handle_errors(struct fi_opx_ep *opx_ep, struct fi_o
 	volatile struct hfi1_sdma_comp_entry * entry = opx_ep->hfi->info.sdma.completion_queue;
 
 	for (int i = 0; i < we->num_packets; ++ i) {
-		fprintf(stderr, "(%d) packet[%u/%u], PBC: %#16.16lX, npkts=%hd, frag_size=%hd, cmp_idx=%hd, ctrl=%#04hX, status=%#0hX, errCode=%#0hX\n",
+		fprintf(stderr, "(%d) packet[%u/%u], PBC: %#16.16lX, npkts=%hd, frag_size=%hd, cmp_idx=%hd, ctrl=%#04hX, status=%#0X, errCode=%#0X\n",
 			pid,i,we->num_packets,
 			we->packets[i].header_vec.scb_qws[0],
 			we->packets[i].header_vec.req_info.npkts,
