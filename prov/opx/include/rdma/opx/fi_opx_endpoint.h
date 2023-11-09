@@ -2629,10 +2629,11 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 	}
 }
 
-static inline void fi_opx_ep_rx_poll (struct fid_ep *ep,
-				      const uint64_t caps,
-				      const enum ofi_reliability_kind reliability,
-				      const uint64_t hdrq_mask)
+static inline __attribute__((always_inline))
+void fi_opx_ep_rx_poll (struct fid_ep *ep,
+			const uint64_t caps,
+			const enum ofi_reliability_kind reliability,
+			const uint64_t hdrq_mask)
 {
 
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
