@@ -464,7 +464,7 @@ void * opx_shm_tx_next (struct opx_shm_tx *tx, uint8_t peer_hfi_unit, uint8_t pe
 		size_t seq = atomic_load_explicit(&(packet->sequence_.val), memory_order_acquire);
 		intptr_t dif = (intptr_t)seq - (intptr_t)*pos;
 		if (dif == 0) {
-			if(atomic_compare_exchange_weak(&tx_fifo->enqueue_pos_.val, pos, *pos + 1))
+			if(atomic_compare_exchange_weak(&tx_fifo->enqueue_pos_.val, (int64_t *)pos, *pos + 1))
 				break;
 		} else if (dif < 0) {
 			// queue is full. can't return a packet.
@@ -511,7 +511,7 @@ struct opx_shm_packet * opx_shm_rx_next (struct opx_shm_rx *rx, uint64_t * pos)
 		size_t seq = atomic_load_explicit(&(packet->sequence_.val), memory_order_acquire);
 		intptr_t dif = (intptr_t)seq - (intptr_t)(*pos + 1);
 		if (dif == 0) {
-			if (atomic_compare_exchange_weak(&rx_fifo->dequeue_pos_.val, pos, *pos + 1)) {
+			if (atomic_compare_exchange_weak(&rx_fifo->dequeue_pos_.val, (int64_t *)pos, *pos + 1)) {
 				break;
 			}
 		} else if (dif < 0) {
