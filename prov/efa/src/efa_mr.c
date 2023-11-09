@@ -540,10 +540,6 @@ struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
 static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr,
 					int access, const uint64_t flags)
 {
-	int dmabuf_fd;
-	uint64_t offset;
-	int ret;
-
 	if (flags & FI_MR_DMABUF)
 		return efa_mr_reg_ibv_dmabuf_mr(
 			efa_mr->domain->ibv_pd,
@@ -560,6 +556,10 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 	 */
 #if HAVE_SYNAPSEAI
 	if (efa_mr_is_synapseai(efa_mr)) {
+		int dmabuf_fd;
+		uint64_t offset;
+		int ret;
+
 		ret = synapseai_get_dmabuf_fd(mr_attr->mr_iov->iov_base,
 						(uint64_t) mr_attr->mr_iov->iov_len,
 						&dmabuf_fd, &offset);
@@ -576,6 +576,10 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 
 #if HAVE_NEURON
 	if (efa_mr_is_neuron(efa_mr)) {
+		int dmabuf_fd;
+		uint64_t offset;
+		int ret;
+
 		ret = neuron_get_dmabuf_fd(
 				mr_attr->mr_iov->iov_base,
 				mr_attr->mr_iov->iov_len,

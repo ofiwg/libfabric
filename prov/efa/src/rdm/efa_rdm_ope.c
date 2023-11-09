@@ -1541,6 +1541,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 			copied = ofi_copy_from_hmem_iov(pkt_entry->wiredata + sizeof(struct efa_rdm_rma_context_pkt),
 				ope->total_len, FI_HMEM_SYSTEM, 0, ope->iov, ope->iov_count, 0);
 			assert(copied == ope->total_len);
+			(void) copied; /* suppress compiler warning for non-debug build */
 			ope->desc[0] = fi_mr_desc(pkt_entry->mr);
 			ope->iov[0].iov_base = pkt_entry->wiredata + sizeof(struct efa_rdm_rma_context_pkt);
 		}
