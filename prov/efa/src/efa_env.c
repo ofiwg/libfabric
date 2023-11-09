@@ -103,15 +103,24 @@ void efa_env_param_get(void)
 	 * Therefore, its cap must be < INT_MAX/2 too.
 	 */
 	size_t max_rnr_backoff_wait_time_cap = INT_MAX/2 - 1;
+	char *abort_deprecated_env_vars[] = {"FI_EFA_MTU_SIZE", "FI_EFA_TX_IOV_LIMIT", "FI_EFA_RX_IOV_LIMIT"};
+	char *info_deprecated_env_vars[] = {"FI_EFA_SET_CUDA_SYNC_MEMOPS", "FI_EFA_SHM_MAX_MEDIUM_SIZE"};
+	int i;
 
-    char *deprecated_env_vars[] = {"FI_EFA_SHM_MAX_MEDIUM_SIZE", "FI_EFA_MTU_SIZE", "FI_EFA_TX_IOV_LIMIT", "FI_EFA_RX_IOV_LIMIT", "FI_EFA_SET_CUDA_SYNC_MEMOPS"};
-    for (int i = 0; i < sizeof(deprecated_env_vars) / sizeof(deprecated_env_vars[0]); i++) {
-	    if (getenv(deprecated_env_vars[i])) {
-	        fprintf(stderr,
-                "%s env variable detected! The use of this variable has been deprecated and as such execution cannot proceed.\n", deprecated_env_vars[i]);
-	        abort();
-	    };
-    }
+	for (i = 0; i < sizeof(abort_deprecated_env_vars) / sizeof(abort_deprecated_env_vars[0]); i++) {
+		if (getenv(abort_deprecated_env_vars[i])) {
+			fprintf(stderr, "%s env variable detected! The use of this variable has been deprecated "
+					"and as such execution cannot proceed.\n", abort_deprecated_env_vars[i]);
+			abort();
+		};
+	}
+
+	for (i = 0; i < sizeof(info_deprecated_env_vars) / sizeof(info_deprecated_env_vars[0]); i++) {
+		if (getenv(info_deprecated_env_vars[i])) {
+			EFA_INFO(FI_LOG_CORE, "%s env variable detected! The use of this variable "
+				 "has been deprecated\n", info_deprecated_env_vars[i]);
+		};
+	}
 
 	fi_param_get_int(&efa_prov, "tx_min_credits", &efa_env.tx_min_credits);
 	if (efa_env.tx_min_credits <= 0) {
