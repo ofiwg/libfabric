@@ -822,7 +822,7 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	if (fi_param_get_int(fi_opx_global.prov, "sdma_disable", &sdma_disable) == FI_SUCCESS) {
 		opx_ep->tx->use_sdma = !sdma_disable;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, 
-		"sdma_disable parm specified as %0hhX; opx_ep->tx->use_sdma set to %0hhX\n", sdma_disable, opx_ep->tx->use_sdma);
+		"sdma_disable parm specified as %0X; opx_ep->tx->use_sdma set to %0hhX\n", sdma_disable, opx_ep->tx->use_sdma);
 	} else {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "sdma_disable parm not specified; using SDMA\n");
 		opx_ep->tx->use_sdma = 1;
@@ -1926,7 +1926,7 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	int expected_receive_enable; /* get bool takes an int */
 	if (fi_param_get_bool(fi_opx_global.prov, "expected_receive_enable", &expected_receive_enable) == FI_SUCCESS) {
 		opx_ep->use_expected_tid_rzv = expected_receive_enable;
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "expected_receive_enable parm specified as %0hhX; opx_ep->use_expected_tid_rzv = set to %0hhX\n", expected_receive_enable, opx_ep->use_expected_tid_rzv);
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "expected_receive_enable parm specified as %0X; opx_ep->use_expected_tid_rzv = set to %0hhX\n", expected_receive_enable, opx_ep->use_expected_tid_rzv);
 	} else {
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "expected_receive_enable parm not specified; disabled expected receive rendezvous\n");
 		opx_ep->use_expected_tid_rzv = 0;
