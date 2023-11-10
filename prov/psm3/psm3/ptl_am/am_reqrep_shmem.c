@@ -3005,9 +3005,11 @@ amsh_init(psm2_ep_t ep, ptl_t *ptl_gen, ptl_ctl_t *ctl)
 				    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 				    (union psmi_envvar_val)
 				    CUDA_MEMHANDLE_CACHE_SIZE, &env_memcache_size);
+#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 			if ((err = am_cuda_memhandle_cache_alloc(&ptl->memhandle_cache,
 						 env_memcache_size.e_uint, &ep->mq->stats) != PSM2_OK))
 				goto fail;
+#endif
 		}
 	}
 #endif
@@ -3026,9 +3028,11 @@ amsh_init(psm2_ep_t ep, ptl_t *ptl_gen, ptl_ctl_t *ctl)
 				    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 				    (union psmi_envvar_val)
 				    ONEAPI_MEMHANDLE_CACHE_SIZE, &env_memcache_size);
+#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 			if ((err = am_ze_memhandle_cache_alloc(&ptl->memhandle_cache,
 						 env_memcache_size.e_uint, &ep->mq->stats) != PSM2_OK))
 				goto fail;
+#endif
 		}
 	}
 #endif
@@ -3151,8 +3155,10 @@ poll:
 	ptl->memhandle_cache = NULL;
 #endif
 #ifdef PSM_ONEAPI
+#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 	if (ptl->memhandle_cache)
 		am_ze_memhandle_cache_free(ptl->memhandle_cache);
+#endif
 	ptl->memhandle_cache = NULL;
 #endif
 	return PSM2_OK;
