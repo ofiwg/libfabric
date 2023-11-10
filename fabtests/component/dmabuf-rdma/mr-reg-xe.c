@@ -67,7 +67,7 @@ static struct ibv_context	*context;
 static struct ibv_pd		*pd;
 static struct ibv_mr		*mr;
 
-void		*buf;
+static void	*buf;
 static int	buf_fd;
 static size_t	buf_size = 65536;
 static int	buf_location = MALLOC;
