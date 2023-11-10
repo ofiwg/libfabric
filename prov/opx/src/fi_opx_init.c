@@ -612,7 +612,7 @@ struct fi_provider fi_opx_provider = {
 	.cleanup	= fi_opx_fini
 };
 
-#pragma GCC diagnostic ignored "=Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-function"
 /*
  * Use this dummy function to do any compile-time validation of data
  * structure sizes needed to ensure performance.
