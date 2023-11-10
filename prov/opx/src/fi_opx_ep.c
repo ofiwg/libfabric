@@ -1903,85 +1903,89 @@ err:
 	return -FI_EINVAL;
 }
 
-void fi_opx_get_drv_ver(char *drv_ver)
+int opx_get_drv_ver(char *drv_ver)
 {
-    FILE *p;
-    p = popen("modinfo hfi1 | grep \"^version\" | xargs | cut -d \" \" -f2","r");
-    if (p == NULL) {
-        FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "popen: returned NULL");
-    } else {
-        fgets(drv_ver, FI_OPX_VER_CHECK_BUF_LEN , p);
-        pclose(p);
-    }
+	FILE *p;
+	p = popen("modinfo hfi1 -F version", "r");
+	if (p == NULL) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"popen failed, unable to get hfi1 version\n");
+		return -FI_EIO;
+	} else {
+		fgets(drv_ver, FI_OPX_VER_CHECK_BUF_LEN , p);
+		pclose(p);
+	}
+	return FI_SUCCESS;
 }
 
-int fi_opx_get_srcver_modinfo(char *srcver_modinfo)
+int opx_get_srcver_modinfo(char *srcver_modinfo)
 {
-    FILE *p;
-    p = popen("modinfo hfi1 | grep srcversion | xargs |  cut -d \" \" -f2 | xargs","r");
-    if (p == NULL) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "popen: returned NULL");
-		return FI_EOTHER;
-    }
+	FILE *p;
+	p = popen("modinfo hfi1 -F srcversion", "r");
+	if (p == NULL) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"popen failed, unable to get hfi1 srcversion\n");
+		return -FI_EIO;
+	}
 	fgets(srcver_modinfo, FI_OPX_VER_CHECK_BUF_LEN , p);
 	pclose(p);
 	return FI_SUCCESS;
 }
 
-int fi_opx_get_srcver_sys(char *srcver_sys)
+int opx_get_srcver_sys(char *srcver_sys)
 {
-    FILE *p;
-    p = popen("cat /sys/module/hfi1/srcversion | xargs","r");
-    if( p == NULL){
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "popen: returned NULL");
-		return FI_EOTHER;
-    }
+	FILE *p;
+	p = popen("cat /sys/module/hfi1/srcversion | xargs","r");
+	if( p == NULL){
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"popen failed, unable to get /sys/module/hfi1/srcversion\n");
+		return -FI_EIO;
+	}
 	fgets(srcver_sys, FI_OPX_VER_CHECK_BUF_LEN , p);
 	pclose(p);
 	return FI_SUCCESS;
 }
 
-int fi_opx_is_tid_allowed()
+int opx_hfi_drv_version_check(char *min_version)
 {
-	struct utsname uname_data;
 	char drv_ver[FI_OPX_VER_CHECK_BUF_LEN] = {0};
 	char srcver_modinfo[FI_OPX_VER_CHECK_BUF_LEN] = {0};
 	char srcver_sys[FI_OPX_VER_CHECK_BUF_LEN] = {0};
 
-	uname(&uname_data);
-	if (strverscmp(uname_data.release, "6.5") >= 0) {
-		return 1;
-	}
-
-	fi_opx_get_drv_ver(drv_ver);
-	if (drv_ver[0] == '\0') {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,"Driver version is NULL. TID not supported\n");
+	if (opx_get_drv_ver(drv_ver) != FI_SUCCESS) {
 		return 0;
 	}
 
-	if (fi_opx_get_srcver_modinfo(srcver_modinfo) != FI_SUCCESS) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "Unable to get srcversion from modinfo");
+	if (opx_get_srcver_modinfo(srcver_modinfo) != FI_SUCCESS) {
 		return 0;
 	}
 
-	if (fi_opx_get_srcver_sys(srcver_sys) != FI_SUCCESS) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "Unable to get srcversion from system file");
+	if (opx_get_srcver_sys(srcver_sys) != FI_SUCCESS) {
 		return 0;
 	}
 
 	if (strcmp(srcver_modinfo, srcver_sys) != 0) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "srcversion doesn't match."
-				"srcver_modinfo = %s srcver_sys = %s\n", srcver_modinfo, srcver_sys);
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "hfi1 srcversion doesn't "
+			"match system. srcver_modinfo = %s srcver_sys = %s\n",
+			srcver_modinfo, srcver_sys);
 		return 0;
 	}
 
-	if (strverscmp(drv_ver, "10.14") >= 0) {
-		return 1;
+	if (strverscmp(drv_ver, min_version) < 0) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"hfi1 driver version %s is less than minimum required %s\n",
+			drv_ver, min_version);
+		return 0;
 	}
 
-	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "TID not supported in driver version %s", drv_ver);
+	return 1;
+}
 
-	return 0;
+int opx_is_tid_allowed()
+{
+	struct utsname uname_data;
+	return (!uname(&uname_data) && (strverscmp(uname_data.release, "6.5") >= 0)) ||
+		opx_hfi_drv_version_check("10.14");
 }
 
 int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
@@ -2083,20 +2087,34 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 		opx_ep->use_expected_tid_rzv = expected_receive_enable;
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Override set for TID\n");
 #else
-		if (fi_opx_is_tid_allowed() == 0) {
+		if (opx_is_tid_allowed() == 0) {
 			if (expected_receive_enable == 1) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Expected receive (TID) cannot be enabled. Unsupported driver version\n");
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"Expected receive (TID) cannot be enabled. Unsupported driver version\n");
 			}
 			opx_ep->use_expected_tid_rzv = 0;
 		} else {
 			opx_ep->use_expected_tid_rzv = expected_receive_enable;
 		}
 #endif
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "expected_receive_enable parm specified as %0X; opx_ep->use_expected_tid_rzv = set to %0hhX\n", expected_receive_enable, opx_ep->use_expected_tid_rzv);
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"expected_receive_enable parm specified as %0X; "
+			"opx_ep->use_expected_tid_rzv = set to %0hhX\n",
+			 expected_receive_enable, opx_ep->use_expected_tid_rzv);
 	} else {
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "expected_receive_enable parm not specified; disabled expected receive rendezvous\n");
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"expected_receive_enable parm not specified; disabled expected receive rendezvous\n");
 		opx_ep->use_expected_tid_rzv = 0;
 	}
+
+#if defined(OPX_HMEM) && !defined(OPX_DEV_OVERRIDE)
+	if (!opx_hfi_drv_version_check("10.14")) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_HMEM is enabled, but the installed HFI driver is not HMEM enabled!\n");
+		errno = FI_EOPNOTSUPP;
+		goto err;
+	}
+#endif
 
 	*ep = &opx_ep->ep_fid;
 

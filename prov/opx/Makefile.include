@@ -1,6 +1,6 @@
 #
 # Copyright (C) 2016 by Argonne National Laboratory.
-# Copyright (C) 2022 by Cornelis Networks.
+# Copyright (C) 2021-2023 by Cornelis Networks.
 #
 # This software is available to you under a choice of one of two
 # licenses.  You may choose to be licensed under the terms of the GNU
@@ -67,7 +67,7 @@ opx_files =									\
 		prov/opx/src/opa_proto.c					\
 		prov/opx/src/fi_opx_progress.c
 
-opx_CPPFLAGS =									\
+opx_CPPFLAGS +=									\
 		-I$(builddir)/prov/opx/include					\
 		-I$(srcdir)/prov/opx/include					\
 		-I$(srcdir)/prov/opx/include/linux-i386
