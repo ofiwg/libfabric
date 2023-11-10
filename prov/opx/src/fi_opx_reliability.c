@@ -206,6 +206,7 @@ void fi_opx_reliability_inc_throttle_maxo()
 	INC_PING_COUNT(THROTTLED_MAX_OUTSTANDING);
 }
 
+#if 0
 static inline
 void dump_backtrace () {
 
@@ -365,6 +366,7 @@ void fi_reliability_service_print_replay_ring (struct fi_opx_reliability_tx_repl
 
 	return;
 }
+#endif
 
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode (struct fid_ep *ep,
@@ -886,6 +888,7 @@ char last_ack[LAST_ACK_LEN] __attribute__((used));
 int last_ack_index;
 #endif
 
+#ifndef NDEBUG
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_reliability_iov_payload_check(
 		struct fi_opx_reliability_tx_replay *replay,
@@ -895,7 +898,6 @@ void fi_opx_hfi1_reliability_iov_payload_check(
 		const char *func,
 		const int line)
 {
-#ifndef NDEBUG
 	if (!replay->use_iov) {
 		return;
 	}
@@ -949,8 +951,8 @@ void fi_opx_hfi1_reliability_iov_payload_check(
 			break;
 		}
 	}
-#endif
 }
+#endif
 
 void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		struct fi_opx_reliability_service * service,
