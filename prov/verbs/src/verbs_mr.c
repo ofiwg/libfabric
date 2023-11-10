@@ -333,7 +333,7 @@ vrb_mr_cache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 	attr.iface = iface;
 	attr.device.reserved = device;
 	assert(attr.iov_count == 1);
-	ofi_mr_info_get_iov_from_mr_attr(&info, &attr, flags);
+	info.iov = iov;
 	info.iface = iface;
 	info.device = device;
 
@@ -355,6 +355,9 @@ vrb_mr_reg_iface(struct fid *fid, const void *buf, size_t len, uint64_t access,
 		 uint64_t device)
 {
 	struct vrb_domain *domain;
+
+	if (flags & FI_MR_DMABUF)
+		return -FI_EINVAL;
 
 	domain = container_of(fid, struct vrb_domain,
 			      util_domain.domain_fid.fid);
