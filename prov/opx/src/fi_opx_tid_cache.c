@@ -363,6 +363,7 @@ void opx_regen_tidpairs(struct fi_opx_ep *opx_ep,
 	OPX_TID_NPAIRS(tid_reuse_cache) = pair_idx + 1;
 	OPX_DEBUG_TIDS("Regen tidpairs", OPX_TID_NPAIRS(tid_reuse_cache),
 		       &OPX_TID_PAIR(tid_reuse_cache, 0));
+	(void) npages;
 }
 
 
@@ -498,6 +499,8 @@ int opx_register_tid_region(uint64_t tid_vaddr, uint64_t tid_length,
 			fprintf(stderr,
 				"## FAILED RECOVERY FLUSHES, npages %d, npages left %d, nflushes(%u) %u/%u\n",npages,(npages - opx_ep->mcache_flush_counter), ncounter, flush_counter, opx_ep->mcache_flush_counter);
 		}
+#else
+		(void) ncounter;
 #endif
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "npages %d, npages left %d, nflushes(%u) %u/%u\n",npages,(npages - opx_ep->mcache_flush_counter), ncounter, flush_counter, opx_ep->mcache_flush_counter);
 
