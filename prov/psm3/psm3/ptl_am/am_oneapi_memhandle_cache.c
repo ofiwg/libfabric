@@ -96,7 +96,7 @@ typedef struct {
 
 static psm2_error_t am_ze_memhandle_mpool_alloc(
 					am_ze_memhandle_cache_t cache, uint32_t memcache_size);
-static void am_ze_memhandle_delete(void *buf_ptr);
+void am_ze_memhandle_delete(void *buf_ptr);
 
 /*
  * Custom comparator
@@ -503,6 +503,7 @@ static inline psm2_error_t am_ze_prepare_fds_for_ipc_import(
 #endif /* PSM_HAVE_PIDFD */
 #endif /* defined(HAVE_DRM) || defined(HAVE_LIBDRM) */
 
+#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 static void *am_ze_import_ipc_buf(uint32_t fd, uint8_t alloc_type)
 {
 	ze_external_memory_import_fd_t import_desc = {};
@@ -543,6 +544,7 @@ static void *am_ze_import_ipc_buf(uint32_t fd, uint8_t alloc_type)
 
 	return ze_ipc_buf;
 }
+#endif /* defined(HAVE_DRM) || defined(HAVE_LIBDRM) */
 
 /*
  * The key used to search the cache is the senders buf address pointer and
@@ -651,7 +653,7 @@ am_ze_memhandle_acquire(am_ze_memhandle_cache_t cache,
 
 }
 
-static void am_ze_memhandle_delete(void *buf_ptr)
+void am_ze_memhandle_delete(void *buf_ptr)
 {
 #if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 	/* Release the reference to the buffer */
