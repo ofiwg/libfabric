@@ -719,7 +719,7 @@ void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 	we->header_vec.scb = we->packets[0].replay->scb;
 	we->header_vec.scb.hdr.qw[4] |= (last_packet_bytes << 32);
 
-	we->iovecs[0].iov_len = FI_OPX_HFI1_SDMA_HDR_SIZE;
+	we->iovecs[0].iov_len = OPX_SDMA_REQ_HDR_SIZE[set_meminfo];
 	we->iovecs[0].iov_base = req_info;
 
 	opx_ep->hfi->info.sdma.queued_entries[*fill_index] = &we->comp_entry;

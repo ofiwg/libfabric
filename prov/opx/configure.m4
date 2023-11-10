@@ -1,6 +1,6 @@
 dnl
 dnl Copyright (C) 2016 by Argonne National Laboratory.
-dnl Copyright (C) 2022 by Cornelis Networks.
+dnl Copyright (C) 2021-2023 by Cornelis Networks.
 dnl
 dnl This software is available to you under a choice of one of two
 dnl licenses.  You may choose to be licensed under the terms of the GNU
@@ -121,6 +121,12 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		    [],
 		    [opx_happy=0])
 
+		AC_CHECK_DECL([HAVE_ATOMICS],
+                             [],
+                             [cc_version=`$CC --version | head -n1`
+                              AC_MSG_WARN(["$cc_version" doesn't support native atomics.  Disabling OPX provider.])
+                              opx_happy=0])
+
 		AS_IF([test $opx_happy -eq 1],[
 			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
 				[[#include <rdma/hfi/hfi1_user.h>]],
@@ -135,13 +141,47 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				opx_happy=0
 				])
 		])
-		AC_CHECK_DECL([HAVE_ATOMICS],
-                             [],
-                             [cc_version=`$CC --version | head -n1`
-                              AC_MSG_WARN(["$cc_version" doesn't support native atomics.  Disabling OPX provider.])
-                              opx_happy=0])
+		AS_IF([test $opx_happy -eq 1 && test $have_cuda -eq 1],[
+			save_CPPFLAGS=$CPPFLAGS
+			CPPFLAGS="-I/usr/include/uapi"
+			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+				[[#include <rdma/hfi/hfi1_user.h>]],
+				[[
+					struct sdma_req_meminfo meminfo;
+				]])],
+				[AC_MSG_NOTICE([hfi1_user.h struct sdma_req_meminfo defined... yes])],
+				[
+				AC_MSG_NOTICE([hfi1_user.h struct sdma_req_meminfo defined... no])
+				opx_happy=0
+				])
+			CPPFLAGS=$save_CPPFLAGS
+			opx_hfi_version=$(modinfo hfi1 -F version)
+			opx_hfi_version_sorted=$(echo -e "10.14.0.0\n$opx_hfi_version" | sort -V | tail -n 1)
+			opx_hfi_srcversion=$(modinfo hfi1 -F srcversion)
+			opx_hfi_sys_srcversion=$(cat /sys/module/hfi1/srcversion)
+			AS_IF([test $opx_hfi_srcversion != $opx_hfi_sys_srcversion ||
+				test -z $opx_hfi_version ||
+				test $opx_hfi_version != $opx_hfi_version_sorted],[
+
+				opx_hfi_dev_override=$(echo $CPPFLAGS | grep -w "DOPX_DEV_OVERRIDE")
+				AS_IF([test "x$opx_hfi_dev_override" != "x"],[
+					AC_MSG_NOTICE([hfi1 driver version is CUDA-compatible... no, overridden])
+				],[
+					AC_MSG_NOTICE([hfi1 driver version is CUDA-compatible... no])
+					opx_happy=0
+				])
+
+			],
+				[AC_MSG_NOTICE([hfi1 driver version is CUDA-compatible... yes])
+			])
+			AS_IF([test $opx_happy -eq 1],[
+				AC_MSG_NOTICE([Appending OPX_HMEM to opx_CPPFLAGS])
+				opx_CPPFLAGS="-DOPX_HMEM -I/usr/include/uapi"
+			])
+		])
 	])
 
+	AC_SUBST(opx_CPPFLAGS)
 	AS_IF([test $opx_happy -eq 1], [$1], [$2])
 ])
 
