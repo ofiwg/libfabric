@@ -2359,7 +2359,7 @@ amsh_mq_rndv(ptl_t *ptl, psm2_mq_t mq, psm2_mq_req_t req,
 	// tx_rndv_bytes tabulated when get CTS
 
 #ifdef PSM_ONEAPI
-#ifndef PSM_HAVE_PIDFD
+#if !defined(PSM_HAVE_PIDFD) || !(defined(HAVE_DRM) || defined(HAVE_LIBDRM))
 fail:
 #endif
 #endif
