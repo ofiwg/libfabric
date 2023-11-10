@@ -612,6 +612,7 @@ struct fi_provider fi_opx_provider = {
 	.cleanup	= fi_opx_fini
 };
 
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
 /*
  * Use this dummy function to do any compile-time validation of data
