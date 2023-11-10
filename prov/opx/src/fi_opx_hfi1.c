@@ -409,6 +409,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			selectors++;
 		}
 
+		(void) selectors;
+
 		if (!use_default_logic) {
 			if (!matched) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "No HFI selectors matched.\n");
