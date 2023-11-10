@@ -152,10 +152,12 @@ static inline int ze_get_device_idx(uint64_t device)
 	return device & DEVICE_MASK;
 }
 
+#ifndef NDEBUG
 static inline int ze_get_driver_idx(uint64_t device)
 {
 	return device >> 16;
 }
+#endif
 
 #if ENABLE_ZE_DLOPEN
 
