@@ -99,7 +99,9 @@ static int rstream_reg_mrs(struct fid_domain *domain,
 		rx_meta_data_offset = RSTREAM_IWARP_DATA_SIZE * lmr->rx.size;
 
 	full_mr_size = full_mr_size + rx_meta_data_offset;
-	lmr->base_addr = malloc(full_mr_size);
+	lmr->base_addr = calloc(1,full_mr_size);
+	if (!lmr->base_addr)
+		return -FI_ENOMEM;
 
 	ret = fi_mr_reg(domain, lmr->base_addr, full_mr_size,
 		FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE,
