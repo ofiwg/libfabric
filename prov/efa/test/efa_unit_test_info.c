@@ -293,10 +293,10 @@ void test_use_device_rdma( const int env_val,
 	struct fid_ep *ep = NULL;
 	struct efa_rdm_ep *efa_rdm_ep;
 	bool rdma_capable_hw;
-	char env_str[8];
+	char env_str[16];
 
 	if (env_val >= 0) {
-		snprintf(env_str, 7, "%d", env_val);
+		snprintf(env_str, 15, "%d", env_val);
 		setenv("FI_EFA_USE_DEVICE_RDMA", env_str, 1);
 	} else {
 		unsetenv("FI_EFA_USE_DEVICE_RDMA");
