@@ -1001,6 +1001,8 @@ int efa_rdm_pke_init_longcts_rtm_common(struct efa_rdm_pke *pkt_entry,
 	struct efa_rdm_longcts_rtm_base_hdr *rtm_hdr;
 	int ret;
 
+	efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
+
 	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, pkt_type, txe, 0, -1);
 	if (ret)
 		return ret;
