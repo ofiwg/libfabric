@@ -353,7 +353,7 @@ static int ucx_getinfo(uint32_t version, const char *node,
 	if (status != FI_SUCCESS)
 		ucx_descriptor.enable_spawn = 0;
 
-	FI_WARN(&ucx_prov, FI_LOG_WARN,
+	FI_WARN(&ucx_prov, FI_LOG_CORE,
 		"UCX: spawn support %d \n", ucx_descriptor.enable_spawn);
 
 	status = util_getinfo(&ucx_util_prov, version, service, node, flags,
