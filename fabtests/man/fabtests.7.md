@@ -282,22 +282,22 @@ device memory, get dmabuf handle, and perform some device memory related
 operations. Run with the *-h* option to see all available options for
 each of the tests.
 
-*rdmabw-xe*
+*xe_rdmabwe*
 : This Verbs test measures the bandwidth of RDMA operations. It runs in
   client-server mode. It has options to choose buffer location, test type
   (write, read, send/recv), device unit(s), NIC unit(s), message size, and
   the number of iterations per message size.
 
-*fi-rdmabw-xe*
-: This test is similar to *rdmabw-xe*, but uses libfabric instead of Verbs.
+*fi_xe_rdmabw*
+: This test is similar to *xe_rdmabw*, but uses libfabric instead of Verbs.
 
-*mr-reg-xe*
+*xe_mr_reg*
 : This Verbs test tries to register a buffer with the RDMA NIC.
 
-*fi-mr-reg-xe*
-: This test is similar to *mr-reg-xe*, but uses libfabric instead of Verbs.
+*fi_xe_mr_reg*
+: This test is similar to *xe_mr_reg*, but uses libfabric instead of Verbs.
 
-*memcopy-xe*
+*xe_memcopy*
 : This test measures the performance of memory copy operations between
   buffers. It has options for buffer locations, as well as memory copying
   methods to use (memcpy, mmap + memcpy, copy with device command queue, etc).
