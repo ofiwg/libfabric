@@ -575,6 +575,7 @@ struct vrb_xrc_ep_conn_setup {
 
 enum vrb_ep_state {
 	VRB_IDLE,
+	VRB_RESOLVE_ADDR,
 	VRB_RESOLVE_ROUTE,
 	VRB_CONNECTING,
 	VRB_REQ_RCVD,
