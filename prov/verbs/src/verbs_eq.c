@@ -861,6 +861,62 @@ vrb_eq_xrc_disconnect_event(struct vrb_eq *eq,
 	}
 }
 
+static int
+vrb_eq_addr_resolved_event(struct vrb_ep *ep)
+{
+	struct vrb_recv_wr *wr;
+	struct slist_entry *entry;
+	struct ibv_qp_init_attr attr = { 0 };
+	int ret;
+
+	assert(ofi_genlock_held(&vrb_ep2_progress(ep)->ep_lock));
+	assert(ep->state == VRB_RESOLVE_ADDR);
+
+	if (ep->util_ep.type == FI_EP_MSG) {
+		vrb_msg_ep_get_qp_attr(ep, &attr);
+
+		if (rdma_create_qp(ep->id, vrb_ep2_domain(ep)->pd, &attr)) {
+			ep->state = VRB_DISCONNECTED;
+			ret = -errno;
+			VRB_WARN(FI_LOG_EP_CTRL,
+				 "rdma_create_qp failed: %d\n", -ret);
+			return ret;
+		}
+
+		/* Allow shared XRC INI QP not controlled by RDMA CM
+		 * to share same post functions as RC QP. */
+		ep->ibv_qp = ep->id->qp;
+	}
+
+	assert(ep->ibv_qp);
+	while (!slist_empty(&ep->prepost_wr_list)) {
+		entry = ep->prepost_wr_list.head;
+		wr = container_of(entry, struct vrb_recv_wr, entry);
+
+		ret = vrb_post_recv_internal(ep, &wr->wr);
+		if (ret) {
+			VRB_WARN(FI_LOG_EP_CTRL,
+			         "Failed to post receive buffers: %d\n", -ret);
+
+			return ret;
+		}
+		vrb_free_recv_wr(vrb_ep2_progress(ep), wr);
+		slist_remove_head(&ep->prepost_wr_list);
+	}
+
+	ep->state = VRB_RESOLVE_ROUTE;
+	if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
+		ep->state = VRB_DISCONNECTED;
+		ret = -errno;
+		VRB_WARN(FI_LOG_EP_CTRL,
+			"rdma_resolve_route failed: %d\n",
+			-ret);
+		return ret;
+	}
+
+	return -FI_EAGAIN;
+}
+
 static ssize_t
 vrb_eq_cm_process_event(struct vrb_eq *eq,
 	struct rdma_cm_event *cma_event, uint32_t *event,
@@ -879,6 +935,13 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 
 	assert(ofi_mutex_held(&eq->event_lock));
 	switch (cma_event->event) {
+	case RDMA_CM_EVENT_ADDR_RESOLVED:
+		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+		ret = vrb_eq_addr_resolved_event(ep);
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
+		goto ack;
+
 	case RDMA_CM_EVENT_ROUTE_RESOLVED:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
 		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
