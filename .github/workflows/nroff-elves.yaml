@@ -4,6 +4,7 @@ on:
     push:
         paths:
           - 'man/*.md'
+          - 'fabtests/man/*.md'
     workflow_dispatch:
 
 jobs:
