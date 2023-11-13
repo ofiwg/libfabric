@@ -1033,15 +1033,19 @@ static int vrb_ep_enable(struct fid_ep *ep_fid)
 			return -FI_EINVAL;
 		}
 
-		ret = rdma_create_qp(ep->id, domain->pd, &attr);
-		if (ret) {
-			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_create_qp");
-			return -errno;
-		}
+		/* Server-side QP creation, after RDMA_CM_EVENT_CONNECT_REQUEST
+		 * is recevied */
+		if (ep->id->verbs && ep->ibv_qp == NULL) {
+			ret = rdma_create_qp(ep->id, domain->pd, &attr);
+			if (ret) {
+				VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_create_qp");
+				return -errno;
+			}
 
-		/* Allow shared XRC INI QP not controlled by RDMA CM
-		 * to share same post functions as RC QP. */
-		ep->ibv_qp = ep->id->qp;
+			/* Allow shared XRC INI QP not controlled by RDMA CM
+			 * to share same post functions as RC QP. */
+			ep->ibv_qp = ep->id->qp;
+		}
 		break;
 	case FI_EP_DGRAM:
 		assert(domain);

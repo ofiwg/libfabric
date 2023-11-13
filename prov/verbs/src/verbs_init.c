@@ -338,29 +338,9 @@ int vrb_create_ep(struct vrb_ep *ep, enum rdma_port_space ps,
 		goto err1;
 	}
 
-	/* TODO convert this call to non-blocking (use event channel) as well:
-	 * This may likely be needed for better scaling when running large
-	 * MPI jobs.
-	 * Making this non-blocking would mean we can't create QP at EP enable
-	 * time. We need to wait for RDMA_CM_EVENT_ADDR_RESOLVED event before
-	 * creating the QP using rdma_create_qp. It would also require a SW
-	 * receive queue to store recvs posted by app after enabling the EP.
-	 */
-	if (rdma_resolve_addr(*id, rai->ai_src_addr, rai->ai_dst_addr,
-			      VERBS_RESOLVE_TIMEOUT)) {
-		ret = -errno;
-		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_resolve_addr");
-		ofi_straddr_log(&vrb_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
-				"src addr", rai->ai_src_addr);
-		ofi_straddr_log(&vrb_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
-				"dst addr", rai->ai_dst_addr);
-		goto err2;
-	}
 	rdma_freeaddrinfo(rai);
 	return 0;
 
-err2:
-	rdma_destroy_id(*id);
 err1:
 	rdma_freeaddrinfo(rai);
 	return ret;

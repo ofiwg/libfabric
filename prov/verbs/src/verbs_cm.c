@@ -199,11 +199,15 @@ vrb_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 
 	ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
 	assert(ep->state == VRB_IDLE);
-	ep->state = VRB_RESOLVE_ROUTE;
-	ret = rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT);
-	if (ret) {
+	ep->state = VRB_RESOLVE_ADDR;
+	if (rdma_resolve_addr(ep->id, ep->info_attr.src_addr,
+			      ep->info_attr.dest_addr, VERBS_RESOLVE_TIMEOUT)) {
 		ret = -errno;
-		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_resolve_route");
+		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_resolve_addr");
+		ofi_straddr_log(&vrb_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+				"src addr", ep->info_attr.src_addr);
+		ofi_straddr_log(&vrb_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+				"dst addr", ep->info_attr.dest_addr);
 		free(ep->cm_priv_data);
 		ep->cm_priv_data = NULL;
 		ep->state = VRB_IDLE;
