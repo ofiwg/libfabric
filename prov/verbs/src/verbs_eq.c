@@ -884,6 +884,14 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
 		assert(ep->state == VRB_RESOLVE_ROUTE);
 		ep->state = VRB_CONNECTING;
+
+		if (cma_event->id->route.addr.src_addr.sa_family != AF_IB) {
+			vrb_eq_skip_rdma_cm_hdr((const void **)&ep->conn_param.private_data,
+						(size_t *)&ep->conn_param.private_data_len);
+		} else {
+			vrb_msg_ep_prepare_rdma_cm_hdr(ep->cm_priv_data, ep->id);
+		}
+
 		if (rdma_connect(ep->id, &ep->conn_param)) {
 			ep->state = VRB_DISCONNECTED;
 			ret = -errno;
