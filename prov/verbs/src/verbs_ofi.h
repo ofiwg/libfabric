@@ -262,6 +262,7 @@ struct vrb_progress {
 	struct ofi_genlock	*active_lock;
 
 	struct ofi_bufpool	*ctx_pool;
+	struct ofi_bufpool	*recv_wr_pool;
 };
 
 int vrb_init_progress(struct vrb_progress *progress, struct fi_info *info);
@@ -933,6 +934,12 @@ do {								\
 	( wr->opcode == IBV_WR_SEND || wr->opcode == IBV_WR_SEND_WITH_IMM	\
 	|| wr->opcode == IBV_WR_RDMA_WRITE_WITH_IMM )
 
+struct vrb_recv_wr {
+	struct slist_entry	entry;
+	struct ibv_recv_wr	wr;
+	struct ibv_sge		sge[0];
+};
+
 void vrb_shutdown_ep(struct vrb_ep *ep);
 ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags);
 ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr);
@@ -989,6 +996,19 @@ vrb_free_ctx(struct vrb_progress *progress, struct vrb_context *ctx)
 {
 	assert(ofi_genlock_held(progress->active_lock));
 	ofi_buf_free(ctx);
+}
+
+static inline struct vrb_recv_wr *vrb_alloc_recv_wr(struct vrb_progress *progress)
+{
+	assert(ofi_genlock_held(progress->active_lock));
+	return ofi_buf_alloc(progress->recv_wr_pool);
+}
+
+static inline void
+vrb_free_recv_wr(struct vrb_progress *progress, struct vrb_recv_wr *wr)
+{
+	assert(ofi_genlock_held(progress->active_lock));
+	ofi_buf_free(wr);
 }
 
 #endif /* VERBS_OFI_H */
