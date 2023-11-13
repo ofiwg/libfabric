@@ -875,6 +875,7 @@ vrb_eq_addr_resolved_event(struct vrb_ep *ep)
 	if (ep->util_ep.type == FI_EP_MSG) {
 		vrb_msg_ep_get_qp_attr(ep, &attr);
 
+		/* Client-side QP creation */
 		if (rdma_create_qp(ep->id, vrb_ep2_domain(ep)->pd, &attr)) {
 			ep->state = VRB_DISCONNECTED;
 			ret = -errno;
