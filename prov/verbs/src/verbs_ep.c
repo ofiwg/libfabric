@@ -57,19 +57,18 @@ void vrb_add_credits(struct fid_ep *ep_fid, uint64_t credits)
 	ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 }
 
-ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
+int vrb_post_recv_internal(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 {
 	struct vrb_context *ctx;
 	struct ibv_recv_wr *bad_wr;
 	uint64_t credits_to_give;
 	int ret, err;
 
-	ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+	assert(ofi_genlock_held(&vrb_ep2_progress(ep)->ep_lock));
+
 	ctx = vrb_alloc_ctx(vrb_ep2_progress(ep));
-	if (!ctx) {
-		ret = -FI_EAGAIN;
-		goto unlock;
-	}
+	if (!ctx)
+		return -FI_EAGAIN;
 
 	ctx->ep = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
@@ -80,8 +79,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	wr->wr_id = (uintptr_t) ctx->user_ctx;
 	if (ret) {
 		vrb_free_ctx(vrb_ep2_progress(ep), ctx);
-		ret = -FI_EAGAIN;
-		goto unlock;
+		return -FI_EAGAIN;
 	}
 
 	slist_insert_tail(&ctx->entry, &ep->rq_list);
@@ -109,7 +107,45 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 			ep->rq_credits_avail += credits_to_give;
 	}
 
-unlock:
+	return ret;
+}
+
+static int vrb_prepost_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
+{
+	struct vrb_recv_wr *save_wr;
+	size_t i;
+
+	assert(ofi_genlock_held(&vrb_ep2_progress(ep)->ep_lock));
+
+	if (wr->next)
+		return -FI_EINVAL;
+
+	save_wr = vrb_alloc_recv_wr(vrb_ep2_progress(ep));
+	if (!save_wr)
+		return -FI_ENOMEM;
+
+	save_wr->wr.wr_id = wr->wr_id;
+	save_wr->wr.next = NULL;
+	save_wr->wr.num_sge = wr->num_sge;
+	for (i = 0; i < wr->num_sge; i++)
+		save_wr->sge[i] = wr->sg_list[i];
+	save_wr->wr.sg_list = save_wr->sge;
+	slist_insert_tail(&save_wr->entry, &ep->prepost_wr_list);
+	return 0;
+}
+
+ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
+{
+	int ret;
+
+	if (wr->num_sge > ep->info_attr.rx_iov_limit)
+		return -FI_EINVAL;
+
+	ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+	if (!ep->ibv_qp)
+		ret = vrb_prepost_recv(ep, wr);
+	else
+		ret = vrb_post_recv_internal(ep, wr);
 	ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 	return ret;
 }
@@ -437,6 +473,7 @@ vrb_alloc_init_ep(struct fi_info *info, struct vrb_domain *domain,
 
 	slist_init(&ep->sq_list);
 	slist_init(&ep->rq_list);
+	slist_init(&ep->prepost_wr_list);
 	ep->util_ep.ep_fid.msg = calloc(1, sizeof(*ep->util_ep.ep_fid.msg));
 	if (!ep->util_ep.ep_fid.msg)
 		goto err3;
@@ -505,6 +542,34 @@ static void vrb_flush_rq(struct vrb_ep *ep)
 		wc.wr_id = (uintptr_t) ctx->user_ctx;
 		wc.opcode = IBV_WC_RECV;
 		vrb_free_ctx(vrb_ep2_progress(ep), ctx);
+
+		if (wc.wr_id != VERBS_NO_COMP_FLAG)
+			vrb_report_wc(cq, &wc);
+	}
+}
+
+static void vrb_flush_prepost_wr(struct vrb_ep *ep)
+{
+	struct vrb_recv_wr *wr;
+	struct vrb_cq *cq;
+	struct slist_entry *entry;
+	struct ibv_wc wc = {0};
+
+	assert(ofi_genlock_held(vrb_ep2_progress(ep)->active_lock));
+	if (!ep->util_ep.rx_cq)
+		return;
+
+	cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
+	wc.status = IBV_WC_WR_FLUSH_ERR;
+	wc.vendor_err = FI_ECANCELED;
+
+	while (!slist_empty(&ep->prepost_wr_list)) {
+		entry = slist_remove_head(&ep->prepost_wr_list);
+		wr = container_of(entry, struct vrb_recv_wr, entry);
+
+		wc.wr_id = (uintptr_t) wr->wr.wr_id;
+		wc.opcode = IBV_WC_RECV;
+		vrb_free_recv_wr(vrb_ep2_progress(ep), wr);
 
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
 			vrb_report_wc(cq, &wc);
@@ -580,6 +645,7 @@ static int vrb_ep_close(fid_t fid)
 		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
 		vrb_cleanup_cq(ep);
 		vrb_flush_sq(ep);
+		vrb_flush_prepost_wr(ep);
 		vrb_flush_rq(ep);
 		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		break;
@@ -599,6 +665,7 @@ static int vrb_ep_close(fid_t fid)
 		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
 		vrb_cleanup_cq(ep);
 		vrb_flush_sq(ep);
+		vrb_flush_prepost_wr(ep);
 		vrb_flush_rq(ep);
 		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		break;
