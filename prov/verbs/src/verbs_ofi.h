@@ -783,6 +783,9 @@ void vrb_eq_remove_sidr_conn(struct vrb_xrc_ep *ep);
 
 void vrb_msg_ep_get_qp_attr(struct vrb_ep *ep,
 			       struct ibv_qp_init_attr *attr);
+void vrb_msg_ep_prepare_rdma_cm_hdr(void *priv_data,
+				    const struct rdma_cm_id *id);
+
 int vrb_process_xrc_connreq(struct vrb_ep *ep,
 			       struct vrb_connreq *connreq);
 

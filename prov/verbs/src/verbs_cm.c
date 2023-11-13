@@ -133,7 +133,7 @@ vrb_ep_prepare_rdma_cm_param(struct rdma_conn_param *conn_param,
 	conn_param->rnr_retry_count = 7;
 }
 
-static void
+void
 vrb_msg_ep_prepare_rdma_cm_hdr(void *priv_data,
 				const struct rdma_cm_id *id)
 {
@@ -159,8 +159,7 @@ vrb_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 	size_t priv_data_len;
 	struct vrb_cm_data_hdr *cm_hdr;
-	off_t rdma_cm_hdr_len = 0;
-	int ret;
+	int ret = 0;
 
 	if (OFI_UNLIKELY(paramlen > VERBS_CM_DATA_SIZE))
 		return -FI_EINVAL;
@@ -173,18 +172,12 @@ vrb_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 		}
 	}
 
-	if (ep->id->route.addr.src_addr.sa_family == AF_IB)
-		rdma_cm_hdr_len = sizeof(struct vrb_rdma_cm_hdr);
-
-	priv_data_len = sizeof(*cm_hdr) + paramlen + rdma_cm_hdr_len;
+	priv_data_len = sizeof(*cm_hdr) + paramlen + sizeof(struct vrb_rdma_cm_hdr);
 	ep->cm_priv_data = malloc(priv_data_len);
 	if (!ep->cm_priv_data)
 		return -FI_ENOMEM;
 
-	if (rdma_cm_hdr_len)
-		vrb_msg_ep_prepare_rdma_cm_hdr(ep->cm_priv_data, ep->id);
-
-	cm_hdr = (void *)((char *)ep->cm_priv_data + rdma_cm_hdr_len);
+	cm_hdr = (void *)((char *)ep->cm_priv_data + sizeof(struct vrb_rdma_cm_hdr));
 	vrb_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
 	vrb_ep_prepare_rdma_cm_param(&ep->conn_param, ep->cm_priv_data,
 					priv_data_len);
