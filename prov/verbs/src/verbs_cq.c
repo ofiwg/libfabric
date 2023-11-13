@@ -624,8 +624,17 @@ int vrb_init_progress(struct vrb_progress *progress, struct fi_info *info)
 	if (ret)
 		goto err1;
 
+	ret = ofi_bufpool_create(&progress->recv_wr_pool,
+				 sizeof(struct vrb_recv_wr) +
+				 info->rx_attr->iov_limit * sizeof(struct ibv_sge),
+				 16, 0, 1024, OFI_BUFPOOL_NO_TRACK);
+	if (ret)
+		goto err2;
+
 	return 0;
 
+err2:
+	ofi_bufpool_destroy(progress->ctx_pool);
 err1:
 	ofi_genlock_destroy(&progress->ep_lock);
 	return ret;
@@ -633,6 +642,7 @@ err1:
 
 void vrb_close_progress(struct vrb_progress *progress)
 {
+	ofi_bufpool_destroy(progress->recv_wr_pool);
 	ofi_bufpool_destroy(progress->ctx_pool);
 	ofi_genlock_destroy(&progress->ep_lock);
 }
