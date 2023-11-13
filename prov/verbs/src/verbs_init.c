@@ -295,17 +295,20 @@ int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
 		return 0;
 	}
 
-	ret = rdma_resolve_addr(*id, (*rai)->ai_src_addr,
-				(*rai)->ai_dst_addr, VERBS_RESOLVE_TIMEOUT);
-	if (ret) {
-		VRB_WARN_ERRNO(FI_LOG_FABRIC, "rdma_resolve_addr");
-		ofi_straddr_log(&vrb_prov, FI_LOG_INFO, FI_LOG_FABRIC,
-				"src addr", (*rai)->ai_src_addr);
-		ofi_straddr_log(&vrb_prov, FI_LOG_INFO, FI_LOG_FABRIC,
-				"dst addr", (*rai)->ai_dst_addr);
-		ret = -errno;
-		goto err2;
+	if (node || (hints && hints->dest_addr)) {
+		ret = rdma_resolve_addr(*id, (*rai)->ai_src_addr,
+					(*rai)->ai_dst_addr, VERBS_RESOLVE_TIMEOUT);
+		if (ret) {
+			VRB_WARN_ERRNO(FI_LOG_FABRIC, "rdma_resolve_addr");
+			ofi_straddr_log(&vrb_prov, FI_LOG_INFO, FI_LOG_FABRIC,
+					"src addr", (*rai)->ai_src_addr);
+			ofi_straddr_log(&vrb_prov, FI_LOG_INFO, FI_LOG_FABRIC,
+					"dst addr", (*rai)->ai_dst_addr);
+			ret = -errno;
+			goto err2;
+		}
 	}
+
 	return 0;
 err2:
 	if (rdma_destroy_id(*id))
