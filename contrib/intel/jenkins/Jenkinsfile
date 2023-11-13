@@ -7,7 +7,7 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def RELEASE=false
 @Field def BUILD_MODES=["reg", "dbg", "dl"]
 @Field def PYTHON_VERSION="3.9"
-@Field def TIMEOUT="3600"
+@Field def TIMEOUT="7200"
 
 def run_python(version, command, output=null) {
   if (output != null)

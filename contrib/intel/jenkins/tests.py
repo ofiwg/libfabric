@@ -450,6 +450,7 @@ class MPICH:
         else:
             cmd += f"export FI_PROVIDER={self.core_prov}; "
         cmd += "export I_MPI_FABRICS=ofi; "
+        cmd += "export HYDRA_LAUNCHER=fork;"
         cmd += "export MPIR_CVAR_CH4_OFI_ENABLE_ATOMICS=0; "
         cmd += "export MPIR_CVAR_CH4_OFI_CAPABILITY_SETS_DEBUG=0; "
         cmd += f"export LD_LIBRARY_PATH={self.mpich_dir}/lib:$LD_LIBRARY_PATH; "
@@ -688,23 +689,13 @@ class MpichTestSuite(Test):
         self.pwd = os.getcwd()
         self.weekly = weekly
         self.mpichtests_exclude = {
-        'tcp'   :   {   '.'        : [('spawn','dir')],
-                        'rma'      : [('win_shared_put_flush_load 3', 'test')],
-                    'threads'      : [('spawn','dir')],
-                    'threads/comm' : [('idup_nb 4','test'),
-                                      ('idup_comm_gen 4','test')],
-                    'errors'       : [('spawn','dir')]
-                },
-        'verbs' :   {   '.'        : [('spawn','dir')],
-                    'threads/comm' : [('idup_nb 4','test')],
-                    'threads'      : [('spawn','dir'), ('rma','dir')],
-                    'pt2pt'        : [('sendrecv3 2','test'),
-                                      ('sendrecv3 2 arg=-isendrecv','test')],
-                    'threads/pt2pt': [(f"mt_improbe_sendrecv_huge 2 "
-                                       f"arg=-iter=64 arg=-count=4194304 "
-                                       f"env=MPIR_CVAR_CH4_OFI_EAGER_MAX_MSG_SIZE"
-                                       f"=16384", 'test')]
-                }
+        'tcp'   :   { 'rma'      : [('win_shared_put_flush_load 3', 'test')]
+                    },
+        'verbs' :   { 'threads/comm' : [('idup_nb 4','test')],
+                      'spawn'        : [('concurrent_spawns 1', 'test')],
+                      'pt2pt'        : [('sendrecv3 2','test'),
+                                        ('sendrecv3 2 arg=-isendrecv','test')],
+                    }
         }
 
     def create_hostfile(self, file, hostlist):
