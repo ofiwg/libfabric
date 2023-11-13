@@ -593,6 +593,7 @@ struct vrb_ep {
 	uint64_t			saved_peer_rq_credits;
 	struct slist			sq_list;
 	struct slist			rq_list;
+	struct slist			prepost_wr_list;
 	/* Protected by recv CQ lock */
 	int64_t				rq_credits_avail;
 	int64_t				threshold;
@@ -943,6 +944,7 @@ struct vrb_recv_wr {
 void vrb_shutdown_ep(struct vrb_ep *ep);
 ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags);
 ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr);
+int vrb_post_recv_internal(struct vrb_ep *ep, struct ibv_recv_wr *wr);
 
 static inline ssize_t
 vrb_send_buf(struct vrb_ep *ep, struct ibv_send_wr *wr,
