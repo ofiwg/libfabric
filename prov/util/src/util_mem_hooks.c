@@ -220,8 +220,8 @@ static inline int ofi_write_patch(unsigned char *patch_data, void *address,
 	}
 
 	base = ofi_get_page_start(address, page_size);
-	bound = ofi_get_page_end(address, page_size);
-	length = (uintptr_t) bound - (uintptr_t) base;
+	bound = ofi_get_page_end( (void *) ((uintptr_t) address + data_size - 1), page_size);
+	length = (uintptr_t) bound - (uintptr_t) base + 1;
 
 	if (mprotect(base, length, PROT_EXEC|PROT_READ|PROT_WRITE)) {
 		FI_WARN(&core_prov, FI_LOG_MR,
