@@ -54,7 +54,7 @@ fi
 # Yes, we committed something.  Push the branch and make a PR.
 # Extract the PR number.
 git push --set-upstream origin $branch_name
-url=`hub pull-request -b gh-pages -m 'Update GH man pages'`
+url=`gh pr create --base gh-pages --title 'Update GH man pages' --body ''`
 pr_num=`echo $url | cut -d/ -f7`
 
 # Wait for the required "DCO" CI to complete
@@ -67,9 +67,9 @@ echo "Waiting up to $max_seconds seconds for DCO CI to complete..."
 while test $i -lt $i_max; do
     date
     set +e
-    status=`hub ci-status --format "%t %S%n" | egrep '^DCO' | awk '{ print $2 }'`
+    status=`gh pr checks | egrep '^DCO' | awk '{ print $2 }'`
     set -e
-    if test "$status" = "success"; then
+    if test "$status" = "pass"; then
         echo "DCO CI is complete!"
         break
     fi
@@ -79,12 +79,15 @@ done
 
 status=0
 if test $i -lt $i_max; then
-    # Sadly, there is no "hub" command to merge a PR.  So do it by
-    # hand.
-    curl \
-        -XPUT \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_num/merge
+    # rebase the commit onto the base branch
+    gh pr merge $pr_num -r
+
+    # command to do it by hand when "hub" was used which didn't have command
+    # to merge a PR. keep it here for reference.
+    #curl \
+    #    -XPUT \
+    #    -H "Authorization: token $GITHUB_TOKEN" \
+    #    https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_num/merge
 else
     echo "Sad panda; DCO CI didn't complete -- did not merge $url"
     status=1

@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'man/*.md'
+      - 'fabtests/man/*.md'
   workflow_dispatch:
 
 jobs:
@@ -21,7 +22,7 @@ jobs:
               echo "$GITHUB_DATA"
 
           - name: Check out the git repo
-            uses: actions/checkout@v2
+            uses: actions/checkout@v4
 
           - name: Update the man pages in branch gh-pages
             run: .github/workflows/gh-man.sh
