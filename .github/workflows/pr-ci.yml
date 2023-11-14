@@ -9,6 +9,7 @@ env:
     fakeroot
     gcc
     git
+    liblttng-ust-dev
     libnl-3-200 libnl-3-dev libnl-route-3-200 libnl-route-3-dev
     libnuma-dev
     libudev-dev
@@ -22,6 +23,8 @@ env:
     sparse
     valgrind
     wget
+  APT_REPOS: >-
+    ppa:lttng/ppa
   OFI_PROVIDER_FLAGS: >-
     --enable-efa=$PWD/rdma-core/build
     --enable-mrail
@@ -50,9 +53,10 @@ jobs:
     steps:
       - name: Install dependencies (Linux)
         run: |
+          sudo apt-add-repository ${{ env.APT_REPOS }}
           sudo apt-get update
           sudo apt-get install -y ${{ env.APT_PACKAGES }}
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build Check
         run: |
           set -x
@@ -60,7 +64,7 @@ jobs:
           pushd rdma-core; bash build.sh; popd
           export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
           ./autogen.sh
-          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} CC=${{ matrix.cc }}
+          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} CC=${{ matrix.cc }} --with-lttng
           make -j 2; make install
           DISTCHECK_CONFIGURE_FLAGS="${{ env.OFI_PROVIDER_FLAGS }}" make -j 2 distcheck
           $PWD/install/bin/fi_info -l
@@ -68,13 +72,14 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: config.log
+          name: ${{ matrix.os }}-${{ matrix.cc }}-config.log
           path: config.log
   hmem:
     runs-on: ubuntu-20.04
     steps:
       - name: Install dependencies (Linux)
         run: |
+          sudo apt-add-repository ${{ env.APT_REPOS }}
           sudo apt-get update
           sudo apt-get install -y ${{ env.APT_PACKAGES }}
       - name: Install CUDA
@@ -92,7 +97,7 @@ jobs:
           sudo apt-add-repository 'deb [arch=amd64] https://repositories.intel.com/graphics/ubuntu focal main'
           sudo apt-get update
           sudo apt-get install -y level-zero level-zero-dev
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: HMEM Checks
         run: |
           set -x
@@ -104,6 +109,7 @@ jobs:
           ./autogen.sh
           ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} \
                                             --with-cuda=/usr/local/cuda --with-ze \
+                                            --with-lttng \
                                             CC=${{ matrix.cc }}
           make -j 2; make install
           $PWD/install/bin/fi_info -l
@@ -112,7 +118,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: config.log
+          name: hmem-config.log
           path: config.log
   macos:
     runs-on: macos-12
@@ -121,7 +127,7 @@ jobs:
         run: |
            brew install automake
            brew install libtool
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build Check
         run: |
           ./autogen.sh
@@ -136,5 +142,5 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: config.log
+          name: macos-12-config.log
           path: config.log
