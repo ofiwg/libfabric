@@ -549,6 +549,7 @@ int ft_finalize_ep(struct fid_ep *ep);
 
 size_t ft_rx_prefix_size(void);
 size_t ft_tx_prefix_size(void);
+void ft_force_progress(void);
 int ft_progress(struct fid_cq *cq, uint64_t total, uint64_t *cq_cntr);
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, void *ctx);
 ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, void *ctx,

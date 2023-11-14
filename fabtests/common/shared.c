@@ -2058,7 +2058,7 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 		opts->iterations = size_to_count(opts->transfer_size);
 }
 
-static void ft_force_progress(void)
+void ft_force_progress(void)
 {
 	if (txcq)
 		fi_cq_read(txcq, NULL, 0);
