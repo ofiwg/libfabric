@@ -1533,9 +1533,12 @@ ssize_t vrb_post_srq(struct vrb_srx *srx, struct ibv_recv_wr *wr)
 	struct ibv_recv_wr *bad_wr;
 	int ret;
 
+	ofi_genlock_lock(vrb_srx2_progress(srx)->active_lock);
 	ctx = vrb_alloc_ctx(vrb_srx2_progress(srx));
-	if (!ctx)
-		return -FI_EAGAIN;
+	if (!ctx) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
 
 	ctx->srx = srx;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
@@ -1549,6 +1552,9 @@ ssize_t vrb_post_srq(struct vrb_srx *srx, struct ibv_recv_wr *wr)
 		vrb_free_ctx(vrb_srx2_progress(srx), ctx);
 		ret = FI_EAGAIN;
 	}
+
+unlock:
+	ofi_genlock_unlock(vrb_srx2_progress(srx)->active_lock);
 	return ret;
 }
 
