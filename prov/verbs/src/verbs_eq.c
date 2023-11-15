@@ -941,6 +941,11 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
 		ret = vrb_eq_addr_resolved_event(ep);
 		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
+		if (ret != -FI_EAGAIN) {
+			eq->err.err = -ret;
+			eq->err.prov_errno = ret;
+			goto err;
+		}
 		goto ack;
 
 	case RDMA_CM_EVENT_ROUTE_RESOLVED:
@@ -971,6 +976,11 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 			ret = -FI_EAGAIN;
 		}
 		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
+		if (ret != -FI_EAGAIN) {
+			eq->err.err = -ret;
+			eq->err.prov_errno = ret;
+			goto err;
+		}
 		goto ack;
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		*event = FI_CONNREQ;
