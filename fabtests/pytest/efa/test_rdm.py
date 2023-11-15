@@ -87,9 +87,9 @@ def test_rdm_tagged_peek(cmdline_args):
 # This test is run in serial mode because it takes a lot of memory
 @pytest.mark.serial
 @pytest.mark.functional
-def test_rdm_pingpong_1G(cmdline_args, completion_semantic, memory_type):
+def test_rdm_pingpong_1G(cmdline_args, completion_semantic):
     # Default window size is 64 resulting in 128GB being registered, which
     # exceeds max number of registered host pages
-    efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong -W 1", "short",
+    efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong -W 1", 2,
                                completion_semantic=completion_semantic, message_size=1073741824,
-                               memory_type=memory_type, warmup_iteration_type=0)
+                               memory_type="host_to_host", warmup_iteration_type=0)
