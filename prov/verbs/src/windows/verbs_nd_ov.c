@@ -127,8 +127,8 @@ void nd_get_connection_data(IND2Connector *connector, struct nd_cm_event *event)
 	       FI_LOG_EP_CTRL, "IND2Connector::GetPrivateData: hr=0x%08lx\n",
 	       hr);
 
-	event->event.param.conn.private_data_len = (uint8_t)len;
-	if (len) {
+	if (SUCCEEDED(hr) && len) {
+		event->event.param.conn.private_data_len = (uint8_t)len;
 		event->event.param.conn.private_data = malloc(len);
 		if (event->event.param.conn.private_data) {
 			hr = connector->lpVtbl->GetPrivateData(
@@ -140,6 +140,11 @@ void nd_get_connection_data(IND2Connector *connector, struct nd_cm_event *event)
 			       FI_LOG_EP_CTRL,
 			       "IND2Connector::GetPrivateData: hr=0x%08lx\n",
 			       hr);
+			if (FAILED(hr)) {
+				free(event->event.param.conn.private_data);
+				event->event.param.conn.private_data = NULL;
+				event->event.param.conn.private_data_len = 0;
+			}
 		} else {
 			event->event.param.conn.private_data_len = 0;
 			VRB_WARN(
@@ -147,6 +152,7 @@ void nd_get_connection_data(IND2Connector *connector, struct nd_cm_event *event)
 				"Failed to allocate memory for connection data.\n");
 		}
 	} else {
+		event->event.param.conn.private_data_len = 0;
 		event->event.param.conn.private_data = NULL;
 	}
 }
