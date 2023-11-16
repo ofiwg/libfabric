@@ -68,7 +68,8 @@
 
 /* upper and lower bounds for HFI port numbers */
 #define OPX_MIN_PORT 1
-#define OPX_MAX_PORT 1
+/* Be aware this is the JKR max. Current WFR code handles it. */
+#define OPX_MAX_PORT 2	// JKR max is 2, WFR is 1
 #ifndef OPX_NUM_PORTS_GEN1
 #define OPX_NUM_PORTS_GEN1 (OPX_MAX_PORT - OPX_MIN_PORT + 1)
 #endif

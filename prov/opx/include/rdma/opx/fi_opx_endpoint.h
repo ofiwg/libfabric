@@ -2512,8 +2512,7 @@ void fi_opx_ep_rx_process_header_non_eager(struct fid_ep *ep,
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"reliability exception with opcode %d, dropped\n", opcode);
 	} else {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"unimplemented opcode (%u); abort\n", opcode);
+		fprintf(stderr, "unimplemented opcode (%#x); abort\n", opcode);
 		abort();
 	}
 }
@@ -3671,13 +3670,14 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 
 	const uint64_t bth_rx = ((uint64_t)addr.hfi1_rx) << 56;
 	const uint64_t lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(dest_addr);
+	const uint64_t pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid);
 
 	/* Write the first packet */
 	uint32_t first_packet_psn;
 
 	uint8_t *buf_bytes_ptr = (uint8_t *) buf;
 	ssize_t rc = fi_opx_hfi1_tx_send_mp_egr_first (opx_ep, (void **) &buf_bytes_ptr, len, desc,
-						opx_ep->hmem_copy_buf, bth_rx, lrh_dlid,
+						opx_ep->hmem_copy_buf, pbc_dlid, bth_rx, lrh_dlid,
 						addr, tag, data, lock_required,
 						caps, reliability, &first_packet_psn);
 
@@ -3696,7 +3696,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 	/* Write all the full nth packets */
 	while (payload_remaining >= FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE) {
 		rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *)buf_bytes_ptr, payload_offset,
-							first_packet_psn, bth_rx, lrh_dlid, addr,
+							first_packet_psn, pbc_dlid, bth_rx, lrh_dlid, addr,
 							lock_required, reliability);
 
 		if (rc != FI_SUCCESS) {
@@ -3711,7 +3711,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 
 			do {
 				rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *)buf_bytes_ptr, payload_offset,
-								first_packet_psn, bth_rx, lrh_dlid, addr,
+								first_packet_psn, pbc_dlid, bth_rx, lrh_dlid, addr,
 								lock_required, reliability);
 				if (rc == -FI_EAGAIN) {
 					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
@@ -3730,7 +3730,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 	if (payload_remaining > 0) {
 		rc = fi_opx_hfi1_tx_send_mp_egr_last(opx_ep, (void *)buf_bytes_ptr, payload_offset,
 							payload_remaining,
-							first_packet_psn, bth_rx, lrh_dlid, addr,
+							first_packet_psn, pbc_dlid, bth_rx, lrh_dlid, addr,
 							lock_required, reliability);
 
 		if (rc != FI_SUCCESS) {
@@ -3745,7 +3745,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 
 			do {
 				rc = fi_opx_hfi1_tx_send_mp_egr_last(opx_ep, (void *)buf_bytes_ptr, payload_offset,
-								payload_remaining, first_packet_psn, bth_rx, lrh_dlid,
+								payload_remaining, first_packet_psn, pbc_dlid, bth_rx, lrh_dlid,
 								addr, lock_required, reliability);
 				if (rc == -FI_EAGAIN) {
 					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);

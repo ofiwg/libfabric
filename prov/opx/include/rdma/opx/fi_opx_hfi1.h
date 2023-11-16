@@ -49,12 +49,10 @@
 #include <uuid/uuid.h>
 
 #include "rdma/opx/opx_hfi1_sim.h"
+#include "rdma/opx/fi_opx_hfi1_version.h"
 
 // #define FI_OPX_TRACE 1
 
-
-#define FI_OPX_HFI1_RHF_EGRBFR_INDEX_SHIFT	(16)		/* a.k.a. "HFI_RHF_EGRBFR_INDEX_SHIFT" */
-#define FI_OPX_HFI1_RHF_EGRBFR_INDEX_MASK	(0x7FF)		/* a.k.a. "HFI_RHF_EGRBFR_INDEX_MASK" */
 #define FI_OPX_HFI1_PBC_VL_MASK			(0xf)		/* a.k.a. "HFI_PBC_VL_MASK" */
 #define FI_OPX_HFI1_PBC_VL_SHIFT		(12)		/* a.k.a. "HFI_PBC_VL_SHIFT" */
 #define FI_OPX_HFI1_PBC_CR_MASK			(0x1)		/* Force Credit return */
@@ -226,22 +224,6 @@ abort();
 	return 0;
 }
 
-//Register CceRevision from the hardware spec defines ChipRevMajor as 15:8 (LE)
-#define OPX_HFI1_CCE_CSR_CHIP_MINOR_MASK (0x000000FF)
-#define OPX_HFI1_CCE_CSR_CHIP_MINOR_SHIFT (0)
-#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_MASK (0x0000FF00)
-#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_SHIFT (8)
-#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_WFR (0x7)
-#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_JKR (0x8)
-#define OPX_HFI1_CCE_CSR_ARCH_MASK (0x00FF0000)
-#define OPX_HFI1_CCE_CSR_ARCH_SHIFT (16)
-#define OPX_HFI1_CCE_CSR_ARCH_WFR (0x2)
-#define OPX_HFI1_CCE_CSR_ARCH_JKR (0x3)
-#define OPX_HFI1_CCE_CSR_SW_INTERFACE_MASK (0xFF000000)
-#define OPX_HFI1_CCE_CSR_SW_INTERFACE_SHIFT (24)
-#define OPX_HFI1_CCE_CSR_SW_INTERFACE_WFR (0x3)
-#define OPX_HFI1_CCE_CSR_SW_INTERFACE_JKR (0x4)
-
 struct fi_opx_hfi1_txe_scb {
 
 	union {
@@ -363,12 +345,8 @@ struct fi_opx_hfi1_rxe_state {
 
 	struct {
 		uint64_t		head;
-		uint32_t		rhf_seq;
+		uint64_t		rhf_seq;
 	} __attribute__((__packed__)) hdrq;
-
-	struct {
-		uint32_t		countdown;
-	} __attribute__((__packed__)) egrq;
 
 } __attribute__((__packed__));
 
@@ -378,7 +356,6 @@ struct fi_opx_hfi1_rxe_static {
 	struct {
 		uint32_t *		base_addr;
 		uint32_t		rhf_off;
-		int32_t			rhf_notail;
 
 
 		uint32_t		elemsz;
@@ -390,7 +367,6 @@ struct fi_opx_hfi1_rxe_static {
 
 
 		volatile uint64_t *	head_register;
-		volatile uint64_t *	tail_register;
 
 	} hdrq;
 
@@ -401,11 +377,9 @@ struct fi_opx_hfi1_rxe_static {
 		uint32_t        size;
 
 		volatile uint64_t *	head_register;
-		volatile uint64_t *	tail_register;
 
 	} egrq;
 
-	volatile uint64_t *		uregbase;
 	uint8_t				id;		/* hfi receive context id [0..159] */
 };
 
@@ -579,5 +553,77 @@ void fi_opx_init_hfi_lookup();
 #else
 #define OPX_BUF_FREE(x) ofi_buf_free(x)
 #endif
+
+__OPX_FORCE_INLINE__
+void opx_print_context(struct fi_opx_hfi1_context *context)
+{
+	/* WARNING: Do not read PROT_WRITE memory (pio) */
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context state.pio.qw0                 %#lX\n",context->state.pio.qw0);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context state.pio.fill_counter        %#X \n",context->state.pio.fill_counter);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context state.pio.free_counter_shadow %#X \n",context->state.pio.free_counter_shadow);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context state.pio.scb_head_index      %#X \n",context->state.pio.scb_head_index);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context state.pio.credits_total       %#X \n",context->state.pio.credits_total);
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context state.sdma.qw0                %#lX\n",context->state.sdma.qw0);
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context state.rxe.hdrq.head           %#lX\n",context->state.rxe.hdrq.head);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context state.rxe.hdrq.rhf_seq        %#lX \n",context->state.rxe.hdrq.rhf_seq);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.pio.scb_sop_first pio_bufbase_sop        %p \n",context->info.pio.scb_sop_first);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.pio.scb_first pio_bufbase           %p \n",context->info.pio.scb_first);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.pio.free_counter_shadow  %p credits: %#lX\n", context->info.pio.credits_addr,
+	       context->info.pio.credits_addr ? * context->info.pio.credits_addr : 0UL);
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.available_counter   %#X\n",context->info.sdma.available_counter);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.fill_index          %#X\n",context->info.sdma.fill_index);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.done_index          %#X\n",context->info.sdma.done_index);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.queue_size          %#X\n",context->info.sdma.queue_size);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.completion_queue    %p errcode %#X status %#X\n",context->info.sdma.completion_queue,
+	       context->info.sdma.completion_queue->errcode,
+	       context->info.sdma.completion_queue->status);
+/*	Not printing                                Context info.sdma.queued_entries);          */
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.base_addr       %p \n",context->info.rxe.hdrq.base_addr);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.rhf_off         %#X\n",context->info.rxe.hdrq.rhf_off);
+/*	Not printing                                Context info.rxe.hdrq.rhf_notail            */
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.elemsz          %#X\n",context->info.rxe.hdrq.elemsz);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.elemlast        %#X\n",context->info.rxe.hdrq.elemlast);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.elemcnt         %#X\n",context->info.rxe.hdrq.elemcnt);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.rx_poll_mask    %#lX\n",context->info.rxe.hdrq.rx_poll_mask);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.rhf_base        %p \n",context->info.rxe.hdrq.rhf_base);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.head_register   %p \n",context->info.rxe.hdrq.head_register);
+/*	Not printing                                Context info.rxe.hdrq.tail_register         */
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.egrq.base_addr       %p \n",context->info.rxe.egrq.base_addr);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.egrq.elemsz          %#X\n",context->info.rxe.egrq.elemsz);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.egrq.size            %#X\n",context->info.rxe.egrq.size);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.egrq.head_register   %p \n",context->info.rxe.egrq.head_register);
+/*	Not printing                                Context info.rxe.egrq.tail_register         */
+/*	Not printing                                Context info.rxe.uregbase                   */
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.id                   %#X\n",context->info.rxe.id);
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context fd                            %#X \n",context->fd);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context lid                           %#X \n",context->lid);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ctrl                          %p  \n",context->ctrl);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context hfi_hfi1_type                 %#X \n",context->hfi_hfi1_type);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context hfi_unit                      %#X \n",context->hfi_unit);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context hfi_port                      %#X \n",context->hfi_port);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context gid_hi                        %#lX\n",context->gid_hi);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context gid_lo                        %#lX\n",context->gid_lo);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context mtu                           %#X \n",context->mtu);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context bthqp                         %#X \n",context->bthqp);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context jkey                          %#X \n",context->jkey);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context send_ctxt                     %#X \n",context->send_ctxt);
+	for (int s = 0; s < 32; ++ s) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context sl2sc[%d]                     %#X \n",s,context->sl2sc[32]);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context sc2vl[%d]                     %#X \n",s,context->sc2vl[32]);
+	}
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context sl                            %#lX \n",context->sl);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context sc                            %#lX \n",context->sc);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context vl                            %#lX \n",context->vl);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context pkey                          %#lX \n",context->pkey);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context runtime_flags                 %#lX \n",context->runtime_flags);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context daos_info.rank                %#X  \n",context->daos_info.rank);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context daos_info.rank_inst           %#X  \n",context->daos_info.rank_inst);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ref_cnt                       %#lX \n",context->ref_cnt);
+}
 
 #endif /* _FI_PROV_OPX_HFI1_H_ */

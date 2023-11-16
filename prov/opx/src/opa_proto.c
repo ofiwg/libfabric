@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(C) 2021-2023 Cornelis Networks.
+  Copyright(C) 2021-2024 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -23,7 +23,7 @@
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2022 Cornelis Networks.
+  Copyright(c) 2021-2024 Cornelis Networks.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -147,7 +147,24 @@ static int map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt)
 
 
 	/* 7. Map RXE per-context CSRs */
-	sz = HFI_MMAP_PGSIZE;
+	/* JKR sz is 8K. WFR sz is 4K. */
+	if(OPX_HFI1_WFR == opx_hfi1_check_hwversion(binfo->hw_version)){
+		sz = HFI_MMAP_PGSIZE;
+#ifndef OPX_WFR
+		_HFI_ERROR("Runtime HFI type (%u) found on non-WFR build\n",
+			   opx_hfi1_check_hwversion(binfo->hw_version));
+		abort();
+#endif
+	} else {
+		/* JKR prefers 8K page alignment for possible
+		   future work with 8K virtual memory pages */
+		sz = 2*HFI_MMAP_PGSIZE;
+#ifndef OPX_JKR
+		_HFI_ERROR("Runtime HFI type (%u) found on non-JKR build\n",
+			   opx_hfi1_check_hwversion(binfo->hw_version));
+		abort();
+#endif
+	}
 	HFI_MMAP_ERRCHECK(fd, binfo, user_regbase, sz, PROT_WRITE|PROT_READ);
 	arrsz[USER_REGBASE] = sz;
 	/* Set up addresses for optimized register writeback routines.
@@ -607,6 +624,45 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	spctrl->fd = fd;
 	spctrl->__hfi_pg_sz = __hfi_pg_sz;
 	spctrl->__hfi_unit = cinfo->unit;
+
+	/* Unofficial, undocumented port configuration */
+	int port = OPX_PORT_NUM_ANY; /* default */
+	if (getenv("HFI_PORT")) {
+		port = atoi(getenv("HFI_PORT"));
+		/* No WFR/JKR checks here.
+		 * That will happen below where invalid
+		 * port (lids) should fail to lowest
+		 * working port (likely 1).
+		 */
+	}
+	if ((port != OPX_PORT_NUM_ANY) &&
+	    (opx_hfi_get_port_lid(spctrl->__hfi_unit, port) <= 0)) {
+		_HFI_INFO("HFI_PORT %s not available.\n", getenv("HFI_PORT"));
+		port = OPX_PORT_NUM_ANY;
+	}
+	if (port == OPX_PORT_NUM_ANY) {
+		int p,rv;
+		for (p = OPX_MIN_PORT; p <= OPX_MAX_PORT; p++) {
+			_HFI_DBG("units %d, port %d, MIN %d, MAX %d\n", spctrl->__hfi_unit, p, OPX_MIN_PORT, OPX_MAX_PORT);
+			if ((rv=opx_hfi_get_port_lid(spctrl->__hfi_unit, p)) > 0) {
+				port = p;
+				break;
+			}
+			_HFI_DBG("rv %d\n", rv);
+		}
+	}
+	/* Both WFR and JKR should have port 1 unless
+	 * JKR specifically asked HFI_PORT=2
+	 */
+	if((port > OPX_MAX_PORT) | (port < OPX_MIN_PORT)) {
+		_HFI_ERROR("Active port not found\n");
+		abort();
+	}
+#ifdef OPX_JKR
+	assert(port == 1 || port == 2);
+#else
+	assert(port == 1);
+#endif
 	/*
 	 * driver should provide the port where the context is opened for, But
 	 * OPA driver does not have port interface to psm because there is only
@@ -615,7 +671,7 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	 * from driver and will be set accordingly.
 	 */
 	/* spctrl->__hfi_port = cinfo->port; */
-	spctrl->__hfi_port = 1;
+	spctrl->__hfi_port = port;
 	spctrl->__hfi_tidegrcnt = cinfo->egrtids;
 	spctrl->__hfi_tidexpcnt = cinfo->rcvtids - cinfo->egrtids;
 

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 by Cornelis Networks.
+ * Copyright (C) 2021-2024 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -108,11 +108,11 @@ enum opx_hfi1_type {
 };
 
 struct fi_opx_hfi_local_info {
-	uint8_t  hfi_unit;
-	uint16_t lid;
-	enum opx_hfi1_type type;
 	struct fi_opx_hfi_local_lookup *hfi_local_lookup_hashmap;
+	enum opx_hfi1_type type;
 	int sim_fd;                     // simulator fd
+	uint16_t lid;
+	uint8_t  hfi_unit;
 };
 
 #ifdef OPX_SIM
@@ -120,23 +120,23 @@ struct fi_opx_hfi_local_info {
 #define  OPX_SIM_ENABLED
 #warning OPX_SIM enabled
 
-#if (!defined(OPX_WFR) && !defined(OPX_JKR))
-#warning PICK ONE OPX_WFR or OPX_JKR
-#endif
-
 #else
 /* Build only "real" HFI1 support (default) */
 #undef  OPX_SIM_ENABLED
 #endif
 
 /* Build constant for JKR/WFR path optimization */
-#if defined(OPX_WFR)
+#if (defined(OPX_WFR) && defined(OPX_JKR))
+/* Both JKR and WFR runtime support (not constant) */
+#define OPX_HFI1_TYPE fi_opx_global.hfi_local_info.type
+#elif defined(OPX_WFR)
 #define OPX_HFI1_TYPE OPX_HFI1_WFR
 #elif defined(OPX_JKR)
 #define OPX_HFI1_TYPE OPX_HFI1_JKR
 #else
-/* Both JKR and WFR runtime support (not constant) */
-#define OPX_HFI1_TYPE fi_opx_global.hfi_local_info.type
+/* Currently default to WFR (only) */
+#define OPX_WFR
+#define OPX_HFI1_TYPE OPX_HFI1_WFR
 #endif
 
 struct fi_opx_hfi_local_lookup_key {

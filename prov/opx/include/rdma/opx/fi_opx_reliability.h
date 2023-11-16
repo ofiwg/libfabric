@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -155,7 +155,7 @@ struct fi_opx_reliability_service {
 		RbtHandle				flow;		/*  1 qw  =   8 bytes */
 		struct {
 
-			struct fi_opx_hfi1_rxe_state	state;		/*  2 qws =  16 bytes */
+			struct fi_opx_hfi1_rxe_state	state;		/*  2 qws  =  16 bytes */
 
 			struct {
 				uint32_t *		rhf_base;

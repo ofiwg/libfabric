@@ -442,9 +442,10 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode (struct fid_ep *ep,
 	volatile uint64_t * const scb =
 		FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
-	OPX_HFI1_BAR_STORE(&scb[0], model.qw0 | (0x1 << FI_OPX_HFI1_PBC_CR_SHIFT));
-	OPX_HFI1_BAR_STORE(&scb[1], model.hdr.qw[0] | lrh_dlid);
-	OPX_HFI1_BAR_STORE(&scb[2], model.hdr.qw[1] | bth_rx);
+    OPX_HFI1_BAR_STORE(&scb[0], (model.qw0 | OPX_PBC_CR(0x1) | 
+	                	OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid)));
+	OPX_HFI1_BAR_STORE(&scb[1], (model.hdr.qw[0] | lrh_dlid));
+	OPX_HFI1_BAR_STORE(&scb[2], (model.hdr.qw[1] | bth_rx));
 	OPX_HFI1_BAR_STORE(&scb[3], model.hdr.qw[2]);
 	OPX_HFI1_BAR_STORE(&scb[4], model.hdr.qw[3]);
 	OPX_HFI1_BAR_STORE(&scb[5], 0UL);
@@ -644,9 +645,10 @@ ssize_t fi_opx_hfi1_tx_reliability_inject (struct fid_ep *ep,
 					&opx_ep->reliability->service.tx.hfi1.ack_model :
 					&opx_ep->reliability->service.tx.hfi1.nack_model );
 
-	OPX_HFI1_BAR_STORE(&scb[0], model->qw0 | (0x1 << FI_OPX_HFI1_PBC_CR_SHIFT));
-	OPX_HFI1_BAR_STORE(&scb[1], model->hdr.qw[0] | lrh_dlid);
-	OPX_HFI1_BAR_STORE(&scb[2], model->hdr.qw[1] | bth_rx);
+	OPX_HFI1_BAR_STORE(&scb[0], (model->qw0 | OPX_PBC_CR(0x1) | 
+						OPX_PBC_JKR_LRH_DLID_TO_PBC_DLID(lrh_dlid)));
+	OPX_HFI1_BAR_STORE(&scb[1], (model->hdr.qw[0] | lrh_dlid));
+	OPX_HFI1_BAR_STORE(&scb[2], (model->hdr.qw[1] | bth_rx));
 	OPX_HFI1_BAR_STORE(&scb[3], model->hdr.qw[2]);
 	OPX_HFI1_BAR_STORE(&scb[4], model->hdr.qw[3]);
 	OPX_HFI1_BAR_STORE(&scb[5], psn_count_24);
@@ -2135,7 +2137,18 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 
 		service->reliability_kind = reliability_kind;
 
+		/*
+		 * open the hfi1 context, determines JKR or WFR
+		 */
 		service->context = fi_opx_hfi1_context_open(NULL, unique_job_key);
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Opened hfi %p, HFI type %#X/%#X, unit %#X, port %#X, ref_cnt %#lX,"
+			" rcv ctxt %#X, send ctxt %#X, \n",
+			service->context, service->context->hfi_hfi1_type, OPX_HFI1_TYPE,
+			service->context->hfi_unit, service->context->hfi_port,
+			service->context->ref_cnt,
+			service->context->ctrl->ctxt_info.ctxt,
+			service->context->ctrl->ctxt_info.send_ctxt);
 
 		assert (service->context != NULL);
 
@@ -2210,9 +2223,13 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 			3 +	/* bth */
 			9;	/* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 
-		service->tx.hfi1.ping_model.qw0 = (0 | pbc_dws |
-			((hfi1->vl & FI_OPX_HFI1_PBC_VL_MASK) << FI_OPX_HFI1_PBC_VL_SHIFT) |
-			(((hfi1->sc >> FI_OPX_HFI1_PBC_SC4_SHIFT) & FI_OPX_HFI1_PBC_SC4_MASK) << FI_OPX_HFI1_PBC_DCINFO_SHIFT));
+		service->tx.hfi1.ping_model.qw0 = OPX_PBC_LEN(pbc_dws) |
+			OPX_PBC_VL(hfi1->vl) |
+			OPX_PBC_SC(hfi1->sc) |
+			OPX_PBC_L2TYPE(OPX_PBC_JKR_L2TYPE_9B) |
+			OPX_PBC_L2COMPRESSED(0) |
+			OPX_PBC_PORTIDX(hfi1->hfi_port) |
+			OPX_PBC_SCTXT(hfi1->send_ctxt);
 
 		/* LRH */
 		service->tx.hfi1.ping_model.hdr.stl.lrh.flags =
@@ -2228,7 +2245,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 		service->tx.hfi1.ping_model.hdr.stl.bth.opcode = FI_OPX_HFI_BTH_OPCODE_UD;
 		service->tx.hfi1.ping_model.hdr.stl.bth.bth_1 = 0;
 		service->tx.hfi1.ping_model.hdr.stl.bth.pkey = htons(hfi1->pkey);
-		service->tx.hfi1.ping_model.hdr.stl.bth.ecn = 0;
+		service->tx.hfi1.ping_model.hdr.stl.bth.ecn = (uint8_t) (OPX_BTH_RC2(OPX_BTH_RC2_VAL) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT));
 		service->tx.hfi1.ping_model.hdr.stl.bth.qp = hfi1->bthqp;
 		service->tx.hfi1.ping_model.hdr.stl.bth.unused = 0;
 		service->tx.hfi1.ping_model.hdr.stl.bth.rx = 0;			/* set at runtime */

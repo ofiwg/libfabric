@@ -40,6 +40,7 @@
 #include "rdma/opx/fi_opx_hmem.h"
 #include "ofi_prov.h"
 #include "opa_service.h"
+#include "rdma/opx/fi_opx_hfi1_version.h"
 
 #include "rdma/opx/fi_opx_addr.h"
 
@@ -693,6 +694,8 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "auto_progress_interval_usec", FI_PARAM_INT, "Number of usec that the progress thread waits between polling, the value of 0 is default where the interval is 1 if progress affinity is set, or 1000 otherwise.");
 	fi_param_define(&fi_opx_provider, "pkey", FI_PARAM_INT, "Partition key.  Should be a 2 byte positive integer.  Default is 0x%x\n", FI_OPX_HFI1_DEFAULT_P_KEY);
 	fi_param_define(&fi_opx_provider, "sl", FI_PARAM_INT, "Service Level.  This will also determine Service Class and Virtual Lane.  Default is %d\n", FI_OPX_HFI1_SL_DEFAULT);
+	/* CN5000 only */
+	fi_param_define(&fi_opx_provider, "rate_control", FI_PARAM_INT,"Rate control (CN5000 only).  Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Default is %d\n", OPX_BTH_RC2_DEFAULT);
 	// fi_param_define(&fi_opx_provider, "varname", FI_PARAM_*, "help");
 
 	/* Track TID domains so cache can be cleared on exit */
