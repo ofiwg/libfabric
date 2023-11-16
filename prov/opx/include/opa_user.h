@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021 Cornelis Networks.
+  Copyright(c) 2021,2024 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -23,7 +23,7 @@
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021 Cornelis Networks.
+  Copyright(c) 2021,2024 Cornelis Networks.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -225,4 +225,60 @@ static __inline__ uint64_t nanosecs_to_cycles(uint64_t ns)
 }
 
 #include "opa_user_gen1.h"
+
+//Register CceRevision from the hardware spec defines ChipRevMajor as 15:8 (LE)
+#define OPX_HFI1_CCE_CSR_CHIP_MINOR_MASK (0x000000FF)
+#define OPX_HFI1_CCE_CSR_CHIP_MINOR_SHIFT (0)
+#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_MASK (0x0000FF00)
+#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_SHIFT (8)
+#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_WFR (0x7)
+#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_JKR (0x8)
+#define OPX_HFI1_CCE_CSR_ARCH_MASK (0x00FF0000)
+#define OPX_HFI1_CCE_CSR_ARCH_SHIFT (16)
+#define OPX_HFI1_CCE_CSR_ARCH_WFR (0x2)
+#define OPX_HFI1_CCE_CSR_ARCH_JKR (0x3)
+#define OPX_HFI1_CCE_CSR_SW_INTERFACE_MASK (0xFF000000)
+#define OPX_HFI1_CCE_CSR_SW_INTERFACE_SHIFT (24)
+#define OPX_HFI1_CCE_CSR_SW_INTERFACE_WFR (0x3)
+#define OPX_HFI1_CCE_CSR_SW_INTERFACE_JKR (0x4)
+
+static __inline__
+enum opx_hfi1_type opx_hfi1_check_hwversion (const uint32_t hw_version) {
+	assert(hw_version);
+	/* WFR example value: 3020710
+	** JKR example value: ???????
+	** WFR should be chip_major 7, JKR should be 8
+	*/
+
+	if ( (hw_version & OPX_HFI1_CCE_CSR_CHIP_MAJOR_MASK) ==
+		(OPX_HFI1_CCE_CSR_CHIP_MAJOR_WFR << OPX_HFI1_CCE_CSR_CHIP_MAJOR_SHIFT)) {
+		//Assert arch and software revisions are supported (WFR versions)
+		//Arch should be 2
+		assert ((hw_version & OPX_HFI1_CCE_CSR_ARCH_MASK) ==
+			(OPX_HFI1_CCE_CSR_ARCH_WFR << OPX_HFI1_CCE_CSR_ARCH_SHIFT ));
+		//Software Interface should be 3
+		assert ((hw_version & OPX_HFI1_CCE_CSR_SW_INTERFACE_MASK) ==
+			(OPX_HFI1_CCE_CSR_SW_INTERFACE_WFR << OPX_HFI1_CCE_CSR_SW_INTERFACE_SHIFT ));
+
+		return OPX_HFI1_WFR;
+
+	} // else hfi1 chip is JKR
+	if ( (hw_version & OPX_HFI1_CCE_CSR_CHIP_MAJOR_MASK) !=
+		(OPX_HFI1_CCE_CSR_CHIP_MAJOR_JKR << OPX_HFI1_CCE_CSR_CHIP_MAJOR_SHIFT)) {
+		fprintf(stderr, "opx_hfi1_check_hwversion(): hw_version is %x, chip_major is not WFR or JKR\n", hw_version);
+		fprintf(stderr, "opx_hfi1_check_hwversion(): Aborting due to unsupported hfi1 hardware\n");
+		abort();
+	}
+
+	//Assert arch and software revisions are supported (JKR versions)
+	//Arch should be 3
+	assert ((hw_version & OPX_HFI1_CCE_CSR_ARCH_MASK) ==
+		(OPX_HFI1_CCE_CSR_ARCH_JKR << OPX_HFI1_CCE_CSR_ARCH_SHIFT ));
+	//Software Interface should be 4
+	assert ((hw_version & OPX_HFI1_CCE_CSR_SW_INTERFACE_MASK) ==
+		(OPX_HFI1_CCE_CSR_SW_INTERFACE_JKR << OPX_HFI1_CCE_CSR_SW_INTERFACE_SHIFT ));
+
+	return OPX_HFI1_JKR;
+}
+
 #endif /* OPA_USER_H */

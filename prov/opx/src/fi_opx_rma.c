@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -168,11 +168,11 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	uint64_t niov = params->niov << 48;
 	uint64_t op64 = params->op << 40;
 	uint64_t dt64 = params->dt << 32;
-	uint64_t credit_return = (opx_ep->tx->force_credit_return & FI_OPX_HFI1_PBC_CR_MASK)
-				 << FI_OPX_HFI1_PBC_CR_SHIFT;
+	uint64_t credit_return = OPX_PBC_CR(opx_ep->tx->force_credit_return);
 	assert(FI_OPX_HFI_DPUT_OPCODE_GET == params->opcode); // double check packet type
 	fi_opx_set_scb(scb, tmp,
-			opx_ep->rx->tx.cts.qw0 | params->pbc_dws | credit_return,
+			opx_ep->rx->tx.cts.qw0 | OPX_PBC_LEN(params->pbc_dws) | credit_return |
+		                params->pbc_dlid,
 			opx_ep->rx->tx.cts.hdr.qw[0] | params->lrh_dlid | (params->lrh_dws << 32),
 			opx_ep->rx->tx.cts.hdr.qw[1] | params->bth_rx,
 			opx_ep->rx->tx.cts.hdr.qw[2] | psn,

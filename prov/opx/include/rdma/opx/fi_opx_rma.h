@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -87,6 +87,7 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->dest_rx = opx_target_addr.hfi1_rx;
 	params->bth_rx = params->dest_rx << 56;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_target_addr.fi);
+	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid);
 	params->pbc_dws = 2 + /* pbc */
 			 2 + /* lrh */
 			 3 + /* bth */
@@ -175,6 +176,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
 	params->work_elem.low_priority = false;
 	params->opx_ep = opx_ep;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_dst_addr.fi);
+	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid);
 	params->slid = opx_dst_addr.uid.lid;
 	params->origin_rs = opx_dst_addr.reliability_rx;
 	params->dt = dt == FI_VOID ? FI_VOID-1 : dt;

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -88,13 +88,14 @@ OPX_COMPILE_TIME_ASSERT((FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE
 
 unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep *opx_ep, volatile uint32_t *rhf_ptr,
 				       const uint32_t rhf_msb, const uint32_t rhf_lsb,
-				       const uint32_t rhf_seq, const uint64_t hdrq_offset);
+				       const uint64_t rhf_seq, const uint64_t hdrq_offset, const uint64_t rhf_rcvd);
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint64_t hdrq_offset)
 {
 	if (OFI_UNLIKELY((hdrq_offset & FI_OPX_HFI1_HDRQ_UPDATE_MASK) == FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS)) {
-		OPX_HFI1_BAR_STORE(opx_ep->rx->hdrq.head_register,(const uint64_t)(hdrq_offset - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS));
+		OPX_HFI1_BAR_STORE(opx_ep->rx->hdrq.head_register,
+				   (const uint64_t)(hdrq_offset - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS));
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "================== > Set HFI head register\n");
 	}
@@ -103,12 +104,11 @@ void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint6
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_handle_ud_eager_packet(struct fi_opx_ep *opx_ep,
 					const union fi_opx_hfi1_packet_hdr *const hdr,
-					const uint32_t rhf_msb, const uint32_t rhf_lsb)
+					const uint64_t rhf)
 {
 	/* "eager" packet - has payload */
-	const uint32_t egrbfr_index = (rhf_lsb >> FI_OPX_HFI1_RHF_EGRBFR_INDEX_SHIFT) &
-				      FI_OPX_HFI1_RHF_EGRBFR_INDEX_MASK;
-	const uint32_t egrbfr_offset = rhf_msb & 0x0FFFu;
+	const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf);
+	const uint32_t egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf);
 	const uint8_t *const __attribute__((unused)) payload =
 		(uint8_t *)((uintptr_t)opx_ep->rx->egrq.base_addr +
 			    (uintptr_t)egrbfr_index * (uintptr_t)opx_ep->rx->egrq.elemsz +
@@ -130,7 +130,8 @@ void fi_opx_hfi1_handle_ud_eager_packet(struct fi_opx_ep *opx_ep,
 
 	const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
 	if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-		OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,(const uint64_t)last_egrbfr_index);
+		OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,
+				   (const uint64_t)last_egrbfr_index);
 		opx_ep->rx->egrq.last_egrbfr_index = egrbfr_index;
 	}
 }
@@ -207,10 +208,10 @@ void fi_opx_hfi1_handle_ud_nack(struct fi_opx_ep *opx_ep,
 __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 				      const union fi_opx_hfi1_packet_hdr *const hdr,
-				      const uint32_t rhf_msb, const uint32_t rhf_lsb,
-				      const uint32_t rhf_seq, const uint64_t hdrq_offset)
+				      const uint64_t rhf_seq, const uint64_t hdrq_offset,
+				      const uint64_t rhf)
 {
-	if (OFI_LIKELY(!(rhf_lsb & 0x00008000u))) {
+	if (OFI_LIKELY(!OPX_RHF_IS_USE_EGR_BUF(rhf))) {
 		/* "header only" packet - no payload */
 		switch(hdr->ud.opcode) {
 			case FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING:
@@ -245,10 +246,10 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 				abort();
 		};
 	} else {
-		fi_opx_hfi1_handle_ud_eager_packet(opx_ep, hdr, rhf_msb, rhf_lsb);
+		fi_opx_hfi1_handle_ud_eager_packet(opx_ep, hdr, rhf);
 	}
 
-	opx_ep->rx->state.hdrq.rhf_seq = (rhf_seq < 0xD0000000u) * rhf_seq + 0x10000000u;
+	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq);
 	opx_ep->rx->state.hdrq.head =
 		hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
@@ -260,24 +261,23 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep,
 				  const union fi_opx_hfi1_packet_hdr *const hdr,
-				  const uint32_t rhf_lsb, const uint32_t rhf_seq,
-				  const uint64_t hdrq_offset)
+				  const uint64_t rhf_seq, const uint64_t hdrq_offset,
+				  const uint64_t rhf)
 {
 #ifdef OPX_RELIABILITY_TEST
 	/*
 	 * Error injection .. purposefully drop packet
 	 */
 	if (OFI_UNLIKELY(FI_OPX_RELIABILITY_RX_DROP_PACKET(&opx_ep->reliability->state, hdr))) {
-		opx_ep->rx->state.hdrq.rhf_seq = (rhf_seq < 0xD0000000u) * rhf_seq + 0x10000000u;
+		opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq);
 		opx_ep->rx->state.hdrq.head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-		if ((rhf_lsb & 0x00008000u) == 0x00008000u) { /* eager */
-			const uint32_t egrbfr_index =
-				(rhf_lsb >> FI_OPX_HFI1_RHF_EGRBFR_INDEX_SHIFT) &
-				FI_OPX_HFI1_RHF_EGRBFR_INDEX_MASK;
+		if (OPX_RHF_IS_USE_EGR_BUF(rhf)) { /* eager */
+			const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf);
 			const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
 			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-				OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,(const uint64_t)last_egrbfr_index);
+				OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,
+						   (const uint64_t)last_egrbfr_index);
 				opx_ep->rx->egrq.last_egrbfr_index = egrbfr_index;
 			}
 		}
@@ -293,9 +293,8 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep,
 __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 					const union fi_opx_hfi1_packet_hdr *const hdr,
-					const uint32_t rhf_msb, const uint32_t rhf_lsb,
-					const uint32_t rhf_seq, const uint64_t hdrq_offset,
-					uint8_t *origin_rx)
+					const uint64_t rhf_seq, const uint64_t hdrq_offset,
+					uint8_t *origin_rx, const uint64_t rhf)
 {
 	/*
 	 * Check for 'reliability' exceptions
@@ -305,17 +304,15 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 	const uint64_t psn = FI_OPX_HFI1_PACKET_PSN(hdr);
 	if (OFI_UNLIKELY(fi_opx_reliability_rx_check(&opx_ep->reliability->state, slid, origin_tx,
 						     psn, origin_rx) == FI_OPX_RELIABILITY_EXCEPTION)) {
-		if (!(rhf_lsb & 0x00008000u)) {
+		if (!OPX_RHF_IS_USE_EGR_BUF(rhf)) {
 			/* no payload */
 			fi_opx_reliability_rx_exception(&opx_ep->reliability->state, slid,
 							origin_tx, psn, &opx_ep->ep_fid, hdr, NULL);
 
 		} else {
 			/* has payload */
-			const uint32_t egrbfr_index =
-				(rhf_lsb >> FI_OPX_HFI1_RHF_EGRBFR_INDEX_SHIFT) &
-				FI_OPX_HFI1_RHF_EGRBFR_INDEX_MASK;
-			const uint32_t egrbfr_offset = rhf_msb & 0x0FFFu;
+			const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf);
+			const uint32_t egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf);
 			const uint8_t *const payload =
 				(uint8_t *)((uintptr_t)opx_ep->rx->egrq.base_addr +
 					    (uintptr_t)egrbfr_index *
@@ -329,12 +326,13 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 
 			const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
 			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-				OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,(const uint64_t)last_egrbfr_index);
+				OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,
+						   (const uint64_t)last_egrbfr_index);
 				opx_ep->rx->egrq.last_egrbfr_index = egrbfr_index;
 			}
 		}
 
-		opx_ep->rx->state.hdrq.rhf_seq = (rhf_seq < 0xD0000000u) * rhf_seq + 0x10000000u;
+		opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq);
 		opx_ep->rx->state.hdrq.head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
 		fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
@@ -347,16 +345,16 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 			       const union fi_opx_hfi1_packet_hdr *const hdr,
-			       const uint32_t rhf_msb, const uint32_t rhf_lsb,
-			       const uint32_t rhf_seq, const uint64_t hdrq_offset,
+			       const uint64_t rhf_seq, const uint64_t hdrq_offset,
 			       const int lock_required,
 			       const enum ofi_reliability_kind reliability,
-			       const uint8_t origin_rx)
+			       const uint8_t origin_rx,
+				   const uint64_t rhf)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "================ received a packet from the fabric\n");
 
-	if (!(rhf_lsb & 0x00008000u)) {
+	if (!OPX_RHF_IS_USE_EGR_BUF(rhf)) {
 		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)) {
 			/* "header only" packet - no payload */
 			fi_opx_ep_rx_process_header(&opx_ep->ep_fid, hdr, NULL, 0, FI_TAGGED,
@@ -378,9 +376,8 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 		}
 	} else {
 		/* "eager" packet - has payload */
-		const uint32_t egrbfr_index = (rhf_lsb >> FI_OPX_HFI1_RHF_EGRBFR_INDEX_SHIFT) &
-					      FI_OPX_HFI1_RHF_EGRBFR_INDEX_MASK;
-		const uint32_t egrbfr_offset = rhf_msb & 0x0FFFu;
+		const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf);
+		const uint32_t egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf);
 		const uint8_t *const payload =
 			(uint8_t *)((uintptr_t)opx_ep->rx->egrq.base_addr +
 				    (uintptr_t)egrbfr_index * (uintptr_t)opx_ep->rx->egrq.elemsz +
@@ -417,14 +414,15 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 		}
 		const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-			OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,(const uint64_t)last_egrbfr_index);
+			OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,
+					   (const uint64_t)last_egrbfr_index);
 			opx_ep->rx->egrq.last_egrbfr_index = egrbfr_index;
 		}
 
 		FLIGHT_RECORDER_PACKET_HDR(opx_ep->fr, FR_EVENT_HFI1_POLL_ONCE, hdr);
 	}
 
-	opx_ep->rx->state.hdrq.rhf_seq = (rhf_seq < 0xD0000000u) * rhf_seq + 0x10000000u;
+	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq);
 	opx_ep->rx->state.hdrq.head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
 	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
@@ -486,28 +484,22 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 
 	assert(local_hdrq_mask % FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS == 0);
 	volatile uint32_t *rhf_ptr = (uint32_t *)opx_ep->rx->hdrq.rhf_base + hdrq_offset;
-	const uint32_t rhf_lsb = rhf_ptr[0];
-	const uint32_t rhf_msb = rhf_ptr[1];
+	const uint64_t rhf_rcvd = *((uint64_t *)rhf_ptr);
 
-	/*
-	 * The RHF.RcvSeq field is located in bits [31:28] and values are in
-	 * the range of (1..13) inclusive. A new packet is available when the
-	 * expected sequence number in the next header queue element matches
-	 * the RHF.RcvSeq field.
-	 *
-	 * Instead of shifting and masking the RHF bits to read the sequence
-	 * number in the range of 1..13 (or, 0x1..0xD) use only a bit mask to
-	 * obtain the RHF sequence in the range of 0x10000000..0xD0000000.
-	 * In this scheme the expected sequence number is incremented by
-	 * 0x10000000 instead of 0x1.
+	const uint64_t rhf_seq = opx_ep->rx->state.hdrq.rhf_seq;
+	/* The software must look at the RHF.RcvSeq.
+	 * If it detects the next sequence number in the entry, the new header
+	 * was written into memory.  Otherwise, do not process RHF - no packet.
 	 */
-	const uint32_t rhf_seq = opx_ep->rx->state.hdrq.rhf_seq;
+	if (OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd)) {
+		const uint32_t rhf_msb = rhf_rcvd >> 32;
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "OPX_RHF_SEQ_MATCH = %d rhf_rcvd = %#lx rhf_seq = %#lx\n",
+			OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd), rhf_rcvd, rhf_seq);
 
-	if (OFI_UNLIKELY((rhf_msb & 0xFFE00000u) != 0)) {
-		return fi_opx_hfi1_handle_poll_error(opx_ep, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset);
-	}
-
-	if (rhf_seq == (rhf_lsb & 0xF0000000u)) {
+		if (OFI_UNLIKELY(OPX_IS_ERRORED_RHF(rhf_rcvd))) {
+			const uint32_t rhf_lsb  = rhf_rcvd & 0xFFFFFFFF;
+			return fi_opx_hfi1_handle_poll_error(opx_ep, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset, rhf_rcvd);
+		}
 		const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
 		uint32_t *pkt = (uint32_t *)rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS +
@@ -518,13 +510,14 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 
 		const uint8_t opcode = hdr->stl.bth.opcode;
 
+        
 		if (OFI_UNLIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_UD)) {
 			assert(reliability == OFI_RELIABILITY_KIND_ONLOAD);
 			/*
 			 * process "unreliable datagram" packets first - before all the
 			 * software reliability protocol checks.
 			 */
-			return fi_opx_hfi1_handle_ud_packet(opx_ep, hdr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset);
+			return fi_opx_hfi1_handle_ud_packet(opx_ep, hdr, rhf_seq, hdrq_offset, rhf_rcvd);
 		}
 
 		uint8_t origin_rx;
@@ -532,20 +525,19 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			* check for software reliability events
 			*/
 		/* This error inject call will compile out in optimized builds */
-		unsigned rc = fi_opx_hfi1_error_inject(opx_ep, hdr, rhf_lsb, rhf_seq, hdrq_offset);
+		unsigned rc = fi_opx_hfi1_error_inject(opx_ep, hdr, rhf_seq, hdrq_offset, rhf_rcvd);
 		if (OFI_UNLIKELY(rc != -1)) {
 			return rc;
 		}
-		rc = fi_opx_hfi1_handle_reliability(opx_ep, hdr, rhf_msb, rhf_lsb, rhf_seq,
-							hdrq_offset, &origin_rx);
+		rc = fi_opx_hfi1_handle_reliability(opx_ep, hdr,  rhf_seq,
+							hdrq_offset, &origin_rx, rhf_rcvd);
 		if (OFI_UNLIKELY(rc != -1)) {
 			return rc;
 		}
-		fi_opx_hfi1_handle_packet(opx_ep, opcode, hdr, rhf_msb, rhf_lsb, rhf_seq,
-					  hdrq_offset, lock_required, reliability, origin_rx);
+		fi_opx_hfi1_handle_packet(opx_ep, opcode, hdr, rhf_seq,
+					  hdrq_offset, lock_required, reliability, origin_rx, rhf_rcvd);
 		return 1; /* one packet was processed */
 	}
-
 	return 0;
 }
 

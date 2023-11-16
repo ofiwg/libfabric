@@ -156,7 +156,7 @@ struct fi_opx_hfi1_stl_packet_hdr {
 			uint8_t		opcode;	/* bth.hw[0] */
 			uint8_t		bth_1;	/* bth.hw[1] */
 			uint16_t	pkey;	/* bth.w[1]  - big-endian! */
-			uint8_t		ecn;	/* bth.hw[4] (FECN, BECN, and reserved) */
+			uint8_t		ecn;	/* bth.hw[4] (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
 			uint8_t		qp;	/* bth.hw[5] */
 			uint8_t		unused; /* bth.hw[6] -----> inject::message_length, send::xfer_bytes_tail */
 			uint8_t		rx;	/* bth.hw[7] */

@@ -837,7 +837,7 @@ void opx_hfi1_sdma_do_sdma_tid(struct fi_opx_ep *opx_ep,
 	req_info->comp_idx = *fill_index;
 	req_info->fragsize = fragsize;
 
-	we->header_vec.scb.qw0 = we->packets[0].replay->scb.qw0;  //PBC_dws
+	we->header_vec.scb.qw0 = we->packets[0].replay->scb.qw0;
 	we->header_vec.scb.hdr.qw[0] = we->packets[0].replay->scb.hdr.qw[0];
 	we->header_vec.scb.hdr.qw[1] = we->packets[0].replay->scb.hdr.qw[1];
 	we->header_vec.scb.hdr.qw[2] = we->packets[0].replay->scb.hdr.qw[2] | ((uint64_t)kdeth << 32);

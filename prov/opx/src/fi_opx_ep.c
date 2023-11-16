@@ -216,10 +216,13 @@ void fi_opx_ep_tx_model_init (struct fi_opx_hfi1_context * hfi,
 	memset(send, 0, sizeof(*send));
 	memset(inject, 0, sizeof(*inject));
 	memset(rendezvous, 0, sizeof(*rendezvous));
-	send->qw0 = (0 |
-		0 /* length_dws */ |
-		((hfi->vl & FI_OPX_HFI1_PBC_VL_MASK) << FI_OPX_HFI1_PBC_VL_SHIFT) |
-		(((hfi->sc >> FI_OPX_HFI1_PBC_SC4_SHIFT) & FI_OPX_HFI1_PBC_SC4_MASK) << FI_OPX_HFI1_PBC_DCINFO_SHIFT));
+	send->qw0 = OPX_PBC_LEN(0) /* length_dws */ |
+		OPX_PBC_VL(hfi->vl) |
+		OPX_PBC_SC(hfi->sc) |
+		OPX_PBC_L2TYPE(OPX_PBC_JKR_L2TYPE_9B) |
+		OPX_PBC_L2COMPRESSED(0) |
+		OPX_PBC_PORTIDX(hfi->hfi_port) |
+		OPX_PBC_SCTXT(hfi->send_ctxt);
 
 	/* LRH header */
 	send->hdr.stl.lrh.flags =
@@ -235,7 +238,7 @@ void fi_opx_ep_tx_model_init (struct fi_opx_hfi1_context * hfi,
 	send->hdr.stl.bth.opcode = 0;
 	send->hdr.stl.bth.bth_1 = 0;
 	send->hdr.stl.bth.pkey = htons(hfi->pkey);
-	send->hdr.stl.bth.ecn = 0;
+	send->hdr.stl.bth.ecn = (uint8_t)(OPX_BTH_RC2(OPX_BTH_RC2_VAL) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT));
 	send->hdr.stl.bth.qp = hfi->bthqp;
 	send->hdr.stl.bth.unused = 0;
 	send->hdr.stl.bth.rx = 0;		/* set at runtime */
@@ -270,10 +273,13 @@ void fi_opx_ep_tx_model_init (struct fi_opx_hfi1_context * hfi,
 		3 +	/* bth */
 		9;	/* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 
-	inject->qw0 = (0 |
-		inject_pbc_dws /* length_dws */ |
-		((hfi->vl & FI_OPX_HFI1_PBC_VL_MASK) << FI_OPX_HFI1_PBC_VL_SHIFT) |
-		(((hfi->sc >> FI_OPX_HFI1_PBC_SC4_SHIFT) & FI_OPX_HFI1_PBC_SC4_MASK) << FI_OPX_HFI1_PBC_DCINFO_SHIFT));
+	inject->qw0 = OPX_PBC_LEN(inject_pbc_dws) /* length_dws */ |
+		OPX_PBC_VL(hfi->vl) |
+		OPX_PBC_SC(hfi->sc) |
+		OPX_PBC_L2TYPE(OPX_PBC_JKR_L2TYPE_9B) |
+		OPX_PBC_L2COMPRESSED(0)|
+		OPX_PBC_PORTIDX(hfi->hfi_port) |
+		OPX_PBC_SCTXT(hfi->send_ctxt);
 
 	/* clone from send model, then adjust */
 	inject->hdr = send->hdr;
@@ -308,16 +314,24 @@ int fi_opx_stx_init (struct fi_opx_domain *opx_domain, struct fi_tx_attr *attr,
 
 
 	/*
-	 * open the hfi1 context
+	 * open the hfi1 context, determines JKR or WFR
 	 */
 	opx_stx->hfi = fi_opx_hfi1_context_open(NULL, opx_domain->unique_job_key);
 	if (!opx_stx->hfi)
 		return FI_EBUSY;
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"Opened hfi %p, HFI type %#X/%#X, unit %#X, port %#X, ref_cnt %#lX,"
+		" rcv ctxt %#X, send ctxt %#X, \n",
+		opx_stx->hfi, opx_stx->hfi->hfi_hfi1_type, OPX_HFI1_TYPE,
+		opx_stx->hfi->hfi_unit, opx_stx->hfi->hfi_port,
+		opx_stx->hfi->ref_cnt,
+		opx_stx->hfi->ctrl->ctxt_info.ctxt,
+		opx_stx->hfi->ctrl->ctxt_info.send_ctxt);
 
 	/*
 	 * initialize the reliability service
 	 */
-    fi_opx_reliability_client_init(&opx_stx->reliability_state,
+	fi_opx_reliability_client_init(&opx_stx->reliability_state,
                                      &opx_stx->reliability_service,
                                      opx_stx->hfi->info.rxe.id,		/* rx */
                                      opx_stx->hfi->send_ctxt,		/* tx */
@@ -970,10 +984,13 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 
 		memset(&opx_ep->rx->tx.cts, 0, sizeof(opx_ep->rx->tx.cts));
 		/* PBC data */
-		opx_ep->rx->tx.cts.qw0 = (0 |
-			0 /* length_dws */ |
-			((hfi1->vl & FI_OPX_HFI1_PBC_VL_MASK) << FI_OPX_HFI1_PBC_VL_SHIFT) |
-			(((hfi1->sc >> FI_OPX_HFI1_PBC_SC4_SHIFT) & FI_OPX_HFI1_PBC_SC4_MASK) << FI_OPX_HFI1_PBC_DCINFO_SHIFT));
+		opx_ep->rx->tx.cts.qw0 = OPX_PBC_LEN(0) /* length_dws */ |
+			OPX_PBC_VL(hfi1->vl) |
+			OPX_PBC_SC(hfi1->sc) |
+			OPX_PBC_L2TYPE(OPX_PBC_JKR_L2TYPE_9B) |
+			OPX_PBC_L2COMPRESSED(0) |
+			OPX_PBC_PORTIDX(hfi1->hfi_port) |
+			OPX_PBC_SCTXT(hfi1->send_ctxt);
 
 		/* LRH header */
 		opx_ep->rx->tx.cts.hdr.stl.lrh.flags =
@@ -989,7 +1006,7 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 		opx_ep->rx->tx.cts.hdr.stl.bth.opcode = FI_OPX_HFI_BTH_OPCODE_RZV_CTS;
 		opx_ep->rx->tx.cts.hdr.stl.bth.bth_1 = 0;
 		opx_ep->rx->tx.cts.hdr.stl.bth.pkey = htons(hfi1->pkey);
-		opx_ep->rx->tx.cts.hdr.stl.bth.ecn = 0;
+		opx_ep->rx->tx.cts.hdr.stl.bth.ecn = (uint8_t) (OPX_BTH_RC2(OPX_BTH_RC2_VAL) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT));
 		opx_ep->rx->tx.cts.hdr.stl.bth.qp = hfi1->bthqp;
 		opx_ep->rx->tx.cts.hdr.stl.bth.unused = 0;
 		opx_ep->rx->tx.cts.hdr.stl.bth.rx = 0;		/* set at runtime */
@@ -1236,12 +1253,23 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	if (do_init) {
 		if (opx_ep->hfi != NULL) {FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "hfi context already initialized\n"); abort(); }
 
+		/*
+		 * open the hfi1 context, determines JKR or WFR
+		 */
 		opx_ep->hfi = fi_opx_hfi1_context_open(&opx_ep->ep_fid, opx_domain->unique_job_key);
 		if (!opx_ep->hfi) {
 			errno = FI_EBUSY;
 			return -errno;
 		}
 		fi_opx_ref_inc(&opx_ep->hfi->ref_cnt, "HFI context");
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Opened hfi %p, HFI type %#X/%#X, unit %#X, port %#X, ref_cnt %#lX,"
+			" rcv ctxt %#X, send ctxt %#X, \n",
+			opx_ep->hfi, opx_ep->hfi->hfi_hfi1_type, OPX_HFI1_TYPE,
+			opx_ep->hfi->hfi_unit, opx_ep->hfi->hfi_port,
+			opx_ep->hfi->ref_cnt,
+			opx_ep->hfi->ctrl->ctxt_info.ctxt,
+			opx_ep->hfi->ctrl->ctxt_info.send_ctxt);
 
 		if (OPX_HFI1_TYPE == OPX_HFI1_JKR) {
 			OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is JKR (CN5000)\n");

@@ -486,6 +486,7 @@ int opx_hfi_get_port_lid(int unit, int port)
 {
 	int ret;
 	int64_t val;
+	_HFI_DBG("%s unit %d, port %d\n", __func__, unit, port);
 
 	if (opx_hfi_get_port_active(unit,port) != 1)
 		return -2;
@@ -517,6 +518,7 @@ int opx_hfi_get_port_gid(int unit, int port, uint64_t *hi, uint64_t *lo)
 {
 	int ret;
 	char *gid_str = NULL;
+	_HFI_DBG("%s unit %d, port %d\n", __func__, unit, port);
 
 	ret = opx_sysfs_port_read(unit, port, "gids/0", &gid_str);
 
@@ -610,6 +612,7 @@ int opx_hfi_get_port_sl2sc(int unit, int port, int sl)
 	int ret;
 	int64_t val;
 	char sl2scpath[16];
+	_HFI_DBG("%s unit %d, port %d\n", __func__, unit, port);
 
 	snprintf(sl2scpath, sizeof(sl2scpath), "sl2sc/%d", sl);
 	ret = opx_sysfs_port_read_s64(unit, port, sl2scpath, &val, 0);
@@ -632,6 +635,7 @@ int opx_hfi_get_port_sc2vl(int unit, int port, int sc)
 	int ret;
 	int64_t val;
 	char sc2vlpath[16];
+	_HFI_DBG("%s unit %d, port %d\n", __func__, unit, port);
 
 	snprintf(sc2vlpath, sizeof(sc2vlpath), "sc2vl/%d", sc);
 	ret = opx_sysfs_port_read_s64(unit, port, sc2vlpath, &val, 0);
@@ -654,6 +658,7 @@ int opx_hfi_get_port_vl2mtu(int unit, int port, int vl)
 	int ret;
 	int64_t val;
 	char vl2mtupath[16];
+	_HFI_DBG("%s unit %d, port %d\n", __func__, unit, port);
 
 	snprintf(vl2mtupath, sizeof(vl2mtupath), "vl2mtu/%d", vl);
 	ret = opx_sysfs_port_read_s64(unit, port, vl2mtupath, &val, 0);
