@@ -493,7 +493,7 @@ For a description of struct fi_atomic_attr, see
 *datatype_attr.count*
 : The maximum number of elements that may be used with the collective.
 
-*datatype.size*
+*datatype_attr.size*
 : The size of the datatype as supported by the provider.  Applications
   should validate the size of datatypes that differ based on the platform,
   such as FI_LONG_DOUBLE.
