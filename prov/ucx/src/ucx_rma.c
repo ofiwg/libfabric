@@ -247,7 +247,7 @@ static struct ucx_mr_rkey *ucx_get_rkey(struct ucx_ep *ep,
 		HASH_ADD(hh, domain->remote_keys, id, sizeof(rkey->id), rkey);
 		dlist_insert_before(&rkey->entry, &pkey->rkey_list);
 
-		FI_DBG(&ucx_prov,FI_LOG_DEBUG,
+		FI_DBG(&ucx_prov,FI_LOG_CORE,
 		       "UCX/RMA: added key {%" PRIu64 ":%" PRIu64 "}\n",
 		       rkey->id.owner_addr, rkey->id.key);
 	}
