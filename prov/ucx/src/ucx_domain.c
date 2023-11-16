@@ -87,7 +87,7 @@ static int ucx_dom_control(struct fid *fid, int command, void *arg)
 
 		dlist_foreach_container(&pkey->rkey_list, struct ucx_mr_rkey,
 					rkey, entry) {
-			FI_DBG(&ucx_prov,FI_LOG_DEBUG,
+			FI_DBG(&ucx_prov,FI_LOG_MR,
 			       "UCX/RMA: removed key {%" PRIu64 ":%" PRIu64 "}\n",
 			       rkey->id.owner_addr, rkey->id.key);
 			HASH_DEL(domain->remote_keys, rkey);
