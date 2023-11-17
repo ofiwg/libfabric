@@ -98,13 +98,18 @@ operating system support is available, etc.  This list is not exhaustive.
 : A provider which runs over the TCP/IP protocol and is available on
   multiple operating systems.  This provider enables develop of libfabric
   applications on most platforms.
-  See [`fi_tcp`(7)](fi_tcp.7.html) for more information
+  See [`fi_tcp`(7)](fi_tcp.7.html) for more information.
+
+*UCX*
+: A provider which runs over the UCX library which is currently supported
+  by Infiniband fabrics from NVIDIA.
+  See [`fi_ucx`(7)](fi_ucx.7.html) for more information.
 
 *UDP*
 : A provider which runs over the UDP/IP protocol and is available on
   multiple operating systems.  This provider enables develop of libfabric
   applications on most platforms.
-  See [`fi_udp`(7)](fi_udp.7.html) for more information
+  See [`fi_udp`(7)](fi_udp.7.html) for more information.
 
 *Verbs*
 : This provider targets RDMA NICs for both Linux and Windows platforms.
