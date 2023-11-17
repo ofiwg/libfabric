@@ -25,11 +25,11 @@ following diagram illustrates the architecture between the provider
 types.
 
 ```
----------------------------- libfabric API ----------------------------
+---------------------------- libfabric API ---------------------------- 
   [core]   provider|<- [hooking provider]
-[services]   API   |  --- libfabric API ---
+[services]   API   |  --- libfabric API --- 
                    |<- [utility provider]
-                   |  ---------------- libfabric API ------------------
+                   |  ---------------- libfabric API ------------------ 
                    |<-  [core provider] <-peer API-> [offload provider]
 
 ```
