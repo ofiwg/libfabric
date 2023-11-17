@@ -7,7 +7,7 @@ version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
 v1.20.0, Fri Nov 17, 2023
-========================
+=========================
 
 ## Core
 
@@ -184,6 +184,7 @@ v1.20.0, Fri Nov 17, 2023
 ## Util
 
 - General bug fixes
+- memhooks: Fix a bug when calculating mprotect region
 - Check the return value of ofi_genlock_init()
 - Update checks for FI_AV_AUTH_KEY
 - Define domain primary and secondary caps
@@ -209,6 +210,8 @@ v1.20.0, Fri Nov 17, 2023
 
 ## Verbs
 
+- Windows: Check error code from GetPrivateData
+- Add missing lock to protect SRX
 - Add synapseai dmabuf mr support
 - Bug fix for matching domain name with device name
 - Windows: Fetch rejected connection data
