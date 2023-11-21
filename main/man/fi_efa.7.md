@@ -234,6 +234,12 @@ These OFI runtime parameters apply only to the RDM endpoint.
 - When set to 0/false/no/off, libfabric will emulate all fi_rma operations instead of offloading them to the EFA network device. Libfabric will not use device RDMA to implement send/receive operations.
 - If not set, RDMA operations will occur when available based on RDMA device ID/version.
 
+*FI_EFA_USE_HUGE_PAGE*
+: Specify Whether EFA provider can use huge page memory for internal buffer.
+Using huge page memory has a small performance advantage, but can
+cause system to run out of huge page memory. By default, EFA provider
+will use huge page unless FI_EFA_FORK_SAFE is set to 1/on/true.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
