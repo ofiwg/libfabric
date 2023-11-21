@@ -143,6 +143,90 @@ int pingpong(void)
 	return 0;
 }
 
+int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
+{
+	int ret, i, inject_size;
+
+	inject_size = inject_size_set ?
+			hints->tx_attr->inject_size : fi->tx_attr->inject_size;
+
+	if (ft_check_opts(FT_OPT_ENABLE_HMEM))
+		inject_size = 0;
+
+	/* for FT_OPT_VERIFY_DATA, we cannot use inject, as we require
+	 * completions to indicate delivery has completed. */
+	if (ft_check_opts(FT_OPT_VERIFY_DATA))
+		inject_size = 0;
+
+	ret = ft_sync();
+	if (ret)
+		return ret;
+
+	if (opts.transfer_size == 0) {
+		FT_ERR("Zero-sized transfers not supported");
+		return EXIT_FAILURE;
+	}
+
+	/* Init rx_buf for test */
+	*(rx_buf + opts.transfer_size - 1) = (char)-1;
+
+	if (opts.dst_addr) {
+		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+
+			if (i == opts.warmup_iterations)
+				ft_start();
+
+			/* Init tx_buf for test */
+			*(tx_buf + opts.transfer_size - 1) = (char)i;
+
+			if (opts.transfer_size <= inject_size)
+				ret = ft_inject_rma(rma_op, remote, ep,
+						    remote_fi_addr,
+						    opts.transfer_size);
+			else
+				ret = ft_tx_rma(rma_op, remote, ep, remote_fi_addr,
+						opts.transfer_size, &tx_ctx);
+			if (ret)
+				return ret;
+
+			ret = ft_rx_rma(i, rma_op, ep, opts.transfer_size);
+			if (ret)
+				return ret;
+		}
+	} else {
+		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+			if (i == opts.warmup_iterations)
+				ft_start();
+
+			ret = ft_rx_rma(i, rma_op, ep, opts.transfer_size);
+			if (ret)
+				return ret;
+
+			/* Init tx_buf for test */
+			*(tx_buf + opts.transfer_size - 1) = (char)i;
+
+			if (opts.transfer_size <= inject_size)
+				ret = ft_inject_rma(rma_op, remote, ep,
+						remote_fi_addr,
+						opts.transfer_size);
+			else
+				ret = ft_tx_rma(rma_op, remote, ep, remote_fi_addr,
+						opts.transfer_size, &tx_ctx);
+			if (ret)
+				return ret;
+		}
+	}
+	ft_stop();
+
+	if (opts.machr)
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2,
+				opts.argc, opts.argv);
+	else
+		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
+
+	return 0;
+}
+
 static int bw_tx_comp()
 {
 	int ret;

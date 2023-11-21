@@ -191,6 +191,9 @@ given provider or system may achieve.
 *fi_rma_bw*
 : An RMA read and write bandwidth test for reliable (MSG and RDM) endpoints.
 
+*fi_rma_pingpong*
+: An RMA write and writedata latency test for reliable-datagram (RDM) endpoints.
+
 ## Unit
 
 These are simple one-sided unit tests that validate basic behavior of the API.

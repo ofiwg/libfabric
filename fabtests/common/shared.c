@@ -2170,6 +2170,26 @@ ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx)
 	return ret;
 }
 
+ssize_t ft_tx_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote,
+		  struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx)
+{
+	ssize_t ret;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+		/* Fill data. Last byte reserved for iteration number */
+		ret = ft_fill_buf((char *) tx_buf, size - 1);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_post_rma(rma_op, tx_buf, size, remote, ctx);
+	if (ret)
+		return ret;
+
+	ret = ft_get_tx_comp(tx_seq);
+	return ret;
+}
+
 ssize_t ft_post_inject_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
 			   void *op_buf, uint64_t op_tag)
 {
@@ -2203,6 +2223,25 @@ ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 	}
 
 	ret = ft_post_inject(ep, fi_addr, size);
+	if (ret)
+		return ret;
+
+	return ret;
+}
+
+ssize_t ft_inject_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote,
+		      struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
+{
+	ssize_t ret;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+		/* Fill data. Last byte reserved for iteration number */
+		ret = ft_fill_buf((char *) tx_buf, size - 1);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_post_rma_inject(rma_op, tx_buf, size, remote);
 	if (ret)
 		return ret;
 
@@ -2420,6 +2459,52 @@ ssize_t ft_rx(struct fid_ep *ep, size_t size)
 	 * message size is updated. The recvs posted are always for the next incoming
 	 * message */
 	ret = ft_post_rx(ep, rx_size, &rx_ctx);
+	return ret;
+}
+
+ssize_t ft_rx_rma(int iter, enum ft_rma_opcodes rma_op, struct fid_ep *ep,
+		  size_t size)
+{
+	ssize_t ret;
+
+	switch (rma_op) {
+	case FT_RMA_WRITE:
+		/* No completion at target. Poll the recv buf instead. */
+		ret = ft_rma_poll_buf(rx_buf, iter, size);
+		if (ret)
+			return ret;
+		break;
+	case FT_RMA_WRITEDATA:
+		/* Get recv-side write-imm completion */
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
+		break;
+	default:
+		FT_ERR("Unsupported RMA op type");
+		return EXIT_FAILURE;
+	}
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+		ret = ft_check_buf((char *) rx_buf, size - 1);
+		if (ret)
+			return ret;
+	}
+
+	/* TODO: verify CQ data, if available */
+
+	if (rma_op == FT_RMA_WRITEDATA) {
+		if (fi->rx_attr->mode & FI_RX_CQ_DATA) {
+			ret = ft_post_rx(ep, 0, &rx_ctx);
+		} else {
+			/* Just increment the seq # instead of
+			 * posting recv so that we wait for
+			 * remote write completion on the next
+			 * iteration */
+			rx_seq++;
+		}
+	}
+
 	return ret;
 }
 
@@ -3563,6 +3648,38 @@ int ft_check_buf(void *buf, size_t size)
 	}
 
 	return ret;
+}
+
+int ft_rma_poll_buf(void *buf, int iter, size_t size)
+{
+	volatile char *recv_data;
+	struct timespec a, b;
+
+	if (opts.iface != FI_HMEM_SYSTEM) {
+		FT_ERR("FI_HMEM not supported for write latency test");
+		return EXIT_FAILURE;
+	}
+
+	recv_data = (char *)buf + size - 1;
+
+	if (timeout >= 0)
+		clock_gettime(CLOCK_MONOTONIC, &a);
+
+	char expected_val = (char)iter;
+	while (*recv_data != expected_val) {
+
+		ft_force_progress();
+
+		if (timeout >= 0) {
+			clock_gettime(CLOCK_MONOTONIC, &b);
+			if ((b.tv_sec - a.tv_sec) > timeout) {
+				fprintf(stderr, "%ds timeout expired\n", timeout);
+				return -FI_ENODATA;
+			}
+		}
+	}
+
+	return 0;
 }
 
 uint64_t ft_init_cq_data(struct fi_info *info)

@@ -560,16 +560,22 @@ ssize_t ft_post_tx_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
 		       uint64_t data, void *ctx,
 		       void *op_buf, void *op_mr_desc, uint64_t op_tag);
 ssize_t ft_rx(struct fid_ep *ep, size_t size);
+ssize_t ft_rx_rma(int iter, enum ft_rma_opcodes rma_op, struct fid_ep *ep,
+		  size_t size);
 ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx);
+ssize_t ft_tx_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote,
+		  struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx);
 ssize_t ft_post_inject_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
 		       void *op_buf, uint64_t op_tag);
 ssize_t ft_post_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size);
 ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size);
+ssize_t ft_inject_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote,
+		      struct fid_ep *ep, fi_addr_t fi_addr, size_t size);
 ssize_t ft_post_rma(enum ft_rma_opcodes op, char *buf, size_t size,
 		struct fi_rma_iov *remote, void *context);
 ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, char *buf, size_t size,
 		struct fi_rma_iov *remote);
-
+int ft_rma_poll_buf(void *buf, int iter, size_t size);
 
 ssize_t ft_post_atomic(enum ft_atomic_opcodes opcode, struct fid_ep *ep,
 		       void *compare, void *compare_desc, void *result,
