@@ -193,6 +193,17 @@ vrb_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 	if (ep->srx)
 		ep->conn_param.srq = 1;
 
+	if (addr) {
+		free(ep->info_attr.dest_addr);
+		ep->info_attr.dest_addr = mem_dup(addr, ofi_sizeofaddr(addr));
+		if (!ep->info_attr.dest_addr) {
+			free(ep->cm_priv_data);
+			ep->cm_priv_data = NULL;
+			return -FI_ENOMEM;
+		}
+		ep->info_attr.dest_addrlen = ofi_sizeofaddr(addr);
+	}
+
 	ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
 	assert(ep->state == VRB_IDLE);
 	ep->state = VRB_RESOLVE_ROUTE;
