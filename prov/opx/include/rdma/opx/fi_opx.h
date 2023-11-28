@@ -101,11 +101,43 @@ struct fi_opx_daos_hfi_rank {
 	UT_hash_handle 	hh;         /* makes this structure hashable */
 };
 
+enum opx_hfi1_type {
+	OPX_HFI1_UNDEF		= 0,	// undefined
+	OPX_HFI1_WFR		= 4,	// Omni-path (all generations)
+	OPX_HFI1_JKR		= 5 	// CN5000 (initial generation)
+};
+
 struct fi_opx_hfi_local_info {
 	uint8_t  hfi_unit;
 	uint16_t lid;
+	enum opx_hfi1_type type;
 	struct fi_opx_hfi_local_lookup *hfi_local_lookup_hashmap;
+	int sim_fd;                     // simulator fd
 };
+
+#ifdef OPX_SIM
+/* Build L8SIM support */
+#define  OPX_SIM_ENABLED
+#warning OPX_SIM enabled
+
+#if (!defined(OPX_WFR) && !defined(OPX_JKR))
+#warning PICK ONE OPX_WFR or OPX_JKR
+#endif
+
+#else
+/* Build only "real" HFI1 support (default) */
+#undef  OPX_SIM_ENABLED
+#endif
+
+/* Build constant for JKR/WFR path optimization */
+#if defined(OPX_WFR)
+#define OPX_HFI1_TYPE OPX_HFI1_WFR
+#elif defined(OPX_JKR)
+#define OPX_HFI1_TYPE OPX_HFI1_JKR
+#else
+/* Both JKR and WFR runtime support (not constant) */
+#define OPX_HFI1_TYPE fi_opx_global.hfi_local_info.type
+#endif
 
 struct fi_opx_hfi_local_lookup_key {
 	uint16_t lid;

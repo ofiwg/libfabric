@@ -944,6 +944,12 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 	/* Initialize hash table used to lookup info on any HFI units on the node */
 	fi_opx_global.hfi_local_info.hfi_unit = (uint8_t)hfi1->hfi_unit;
 	fi_opx_global.hfi_local_info.lid = htons(hfi1->lid);
+	fi_opx_global.hfi_local_info.type = opx_ep->hfi->hfi_hfi1_type;
+	if(fi_opx_global.hfi_local_info.type != OPX_HFI1_TYPE) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Runtime HFI type (%u) doesn't match build type (%u)\n",
+			fi_opx_global.hfi_local_info.type, OPX_HFI1_TYPE);
+		abort();
+	}
 	fi_opx_init_hfi_lookup();
 
 	/*
@@ -1226,7 +1232,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		}
 		fi_opx_ref_inc(&opx_ep->hfi->ref_cnt, "HFI context");
 
-		if (opx_is_jkr(opx_ep->hfi)) {
+		if (OPX_HFI1_TYPE == OPX_HFI1_JKR) {
 			OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is JKR (CN5000)\n");
 		} else {
 			OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is WFR (Omni-path)\n");

@@ -108,14 +108,14 @@ void fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep,
 // faster than memcpy() for this amount of data.
 static inline void fi_opx_copy_scb(volatile uint64_t dest[8], uint64_t source[8])
 {
-	dest[0] = source[0];
-	dest[1] = source[1];
-	dest[2] = source[2];
-	dest[3] = source[3];
-	dest[4] = source[4];
-	dest[5] = source[5];
-	dest[6] = source[6];
-	dest[7] = source[7];
+	OPX_HFI1_BAR_STORE(&dest[0], source[0]);
+	OPX_HFI1_BAR_STORE(&dest[1], source[1]);
+	OPX_HFI1_BAR_STORE(&dest[2], source[2]);
+	OPX_HFI1_BAR_STORE(&dest[3], source[3]);
+	OPX_HFI1_BAR_STORE(&dest[4], source[4]);
+	OPX_HFI1_BAR_STORE(&dest[5], source[5]);
+	OPX_HFI1_BAR_STORE(&dest[6], source[6]);
+	OPX_HFI1_BAR_STORE(&dest[7], source[7]);
 }
 
 // Use this to fill out an SCB before the data is copied to local storage.
@@ -125,14 +125,14 @@ static inline void fi_opx_set_scb(volatile uint64_t scb[8], uint64_t local[8],
 	uint64_t d0, uint64_t d1, uint64_t d2, uint64_t d3,
 	uint64_t d4, uint64_t d5, uint64_t d6, uint64_t d7)
 {
-	scb[0]   = d0;
-	scb[1]   = d1;
-	scb[2]   = d2;
-	scb[3]   = d3;
-	scb[4]   = d4;
-	scb[5]   = d5;
-	scb[6]   = d6;
-	scb[7]   = d7;
+	OPX_HFI1_BAR_STORE(&scb[0], d0);
+	OPX_HFI1_BAR_STORE(&scb[1], d1);
+	OPX_HFI1_BAR_STORE(&scb[2], d2);
+	OPX_HFI1_BAR_STORE(&scb[3], d3);
+	OPX_HFI1_BAR_STORE(&scb[4], d4);
+	OPX_HFI1_BAR_STORE(&scb[5], d5);
+	OPX_HFI1_BAR_STORE(&scb[6], d6);
+	OPX_HFI1_BAR_STORE(&scb[7], d7);
 	local[0] = d0;
 	local[1] = d1;
 	local[2] = d2;
@@ -269,14 +269,14 @@ void fi_opx_set_scb_special(volatile uint64_t scb[8], uint64_t local[8],
 		break;
 	}
 
-	scb[0]   = d0;
-	scb[1]   = d1;
-	scb[2]   = d2;
-	scb[3]   = d3;
-	scb[4]   = d4;
-	scb[5]   = local[5];
-	scb[6]   = local[6];
-	scb[7]   = d7;
+	OPX_HFI1_BAR_STORE(&scb[0], d0);
+	OPX_HFI1_BAR_STORE(&scb[1], d1);
+	OPX_HFI1_BAR_STORE(&scb[2], d2);
+	OPX_HFI1_BAR_STORE(&scb[3], d3);
+	OPX_HFI1_BAR_STORE(&scb[4], d4);
+	OPX_HFI1_BAR_STORE(&scb[5], local[5]);
+	OPX_HFI1_BAR_STORE(&scb[6], local[6]);
+	OPX_HFI1_BAR_STORE(&scb[7], d7);
 
 	local[0] = d0;
 	local[1] = d1;
@@ -298,14 +298,14 @@ static inline void fi_opx_set_scb_special2(volatile uint64_t scb[8], uint64_t lo
 	local[6] = 0;
 	memcpy((void*)&local[6], buf, len);
 
-	scb[0]   = d0;
-	scb[1]   = d1;
-	scb[2]   = d2;
-	scb[3]   = d3;
-	scb[4]   = d4;
-	scb[5]   = d5;
-	scb[6]   = local[6];
-	scb[7]   = d7;
+	OPX_HFI1_BAR_STORE(&scb[0], d0);
+	OPX_HFI1_BAR_STORE(&scb[1], d1);
+	OPX_HFI1_BAR_STORE(&scb[2], d2);
+	OPX_HFI1_BAR_STORE(&scb[3], d3);
+	OPX_HFI1_BAR_STORE(&scb[4], d4);
+	OPX_HFI1_BAR_STORE(&scb[5], d5);
+	OPX_HFI1_BAR_STORE(&scb[6], local[6]);
+	OPX_HFI1_BAR_STORE(&scb[7], d7);
 	local[0] = d0;
 	local[1] = d1;
 	local[2] = d2;
@@ -1296,14 +1296,14 @@ ssize_t fi_opx_hfi1_tx_egr_write_full_payload_blocks(struct fi_opx_ep *opx_ep,
 
 	uint16_t i;
 	for (i=0; i<contiguous_full_blocks_to_write; ++i) {
-		scb_payload[0] = buf_qws[0];
-		scb_payload[1] = buf_qws[1];
-		scb_payload[2] = buf_qws[2];
-		scb_payload[3] = buf_qws[3];
-		scb_payload[4] = buf_qws[4];
-		scb_payload[5] = buf_qws[5];
-		scb_payload[6] = buf_qws[6];
-		scb_payload[7] = buf_qws[7];
+		OPX_HFI1_BAR_STORE(&scb_payload[0], buf_qws[0]);
+		OPX_HFI1_BAR_STORE(&scb_payload[1], buf_qws[1]);
+		OPX_HFI1_BAR_STORE(&scb_payload[2], buf_qws[2]);
+		OPX_HFI1_BAR_STORE(&scb_payload[3], buf_qws[3]);
+		OPX_HFI1_BAR_STORE(&scb_payload[4], buf_qws[4]);
+		OPX_HFI1_BAR_STORE(&scb_payload[5], buf_qws[5]);
+		OPX_HFI1_BAR_STORE(&scb_payload[6], buf_qws[6]);
+		OPX_HFI1_BAR_STORE(&scb_payload[7], buf_qws[7]);
 		scb_payload += 8;
 		buf_qws += 8;
 	}
@@ -1323,14 +1323,14 @@ ssize_t fi_opx_hfi1_tx_egr_write_full_payload_blocks(struct fi_opx_ep *opx_ep,
 
 		uint16_t i;
 		for (i=0; i<full_block_credits_needed; ++i) {
-			scb_payload[0] = buf_qws[0];
-			scb_payload[1] = buf_qws[1];
-			scb_payload[2] = buf_qws[2];
-			scb_payload[3] = buf_qws[3];
-			scb_payload[4] = buf_qws[4];
-			scb_payload[5] = buf_qws[5];
-			scb_payload[6] = buf_qws[6];
-			scb_payload[7] = buf_qws[7];
+			OPX_HFI1_BAR_STORE(&scb_payload[0], buf_qws[0]);
+			OPX_HFI1_BAR_STORE(&scb_payload[1], buf_qws[1]);
+			OPX_HFI1_BAR_STORE(&scb_payload[2], buf_qws[2]);
+			OPX_HFI1_BAR_STORE(&scb_payload[3], buf_qws[3]);
+			OPX_HFI1_BAR_STORE(&scb_payload[4], buf_qws[4]);
+			OPX_HFI1_BAR_STORE(&scb_payload[5], buf_qws[5]);
+			OPX_HFI1_BAR_STORE(&scb_payload[6], buf_qws[6]);
+			OPX_HFI1_BAR_STORE(&scb_payload[7], buf_qws[7]);
 			scb_payload += 8;
 			buf_qws += 8;
 		}
@@ -1354,11 +1354,11 @@ ssize_t fi_opx_hfi1_tx_egr_write_payload_tail(struct fi_opx_ep *opx_ep,
 
 	unsigned i = 0;
 	for (; i<payload_qws_tail; ++i) {
-		scb_payload[i] = buf_qws[i];
+		OPX_HFI1_BAR_STORE(&scb_payload[i], buf_qws[i]);
 	}
 
 	for (; i<8; ++i) {
-		scb_payload[i] = 0;
+		OPX_HFI1_BAR_STORE(&scb_payload[i], 0UL);
 	}
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(*pio_state);
 
