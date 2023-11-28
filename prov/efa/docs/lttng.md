@@ -73,6 +73,11 @@ Babeltrace2 provides the simplest method for analyzing tracing data collected by
 LTTng. Current installation instructions can also be found
 [here](https://babeltrace.org/#bt2-get).
 
+#### Prerequisites
+
+* [GLib](https://developer.gnome.org/glib/) >= 2.28
+* [elfutils](https://sourceware.org/elfutils/) >= 0.154
+
 ```
 wget https://www.efficios.com/files/babeltrace/babeltrace2-2.0.3.tar.bz2
 tar -xf babeltrace2-2.0.3.tar.bz2
