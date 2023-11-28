@@ -12,6 +12,9 @@ The LTTng integration in the EFA provider source code requires LTTng-UST 2.13 or
 
 ### Prerequisites
 
+> [!NOTE]  
+> The visibility package babeltrace2 requires glibc >= 2.28 (AL2 has glibc 2.26)
+
 If these are missing, they should be fine to install via `yum` or other equivalent:
 
 * [libuuid](https://sourceforge.net/projects/libuuid/)
