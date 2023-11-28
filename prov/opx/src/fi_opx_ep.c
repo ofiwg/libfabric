@@ -1585,6 +1585,7 @@ int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx * rx,
 			ext->err_entry.err = FI_ECANCELED;
 			ext->err_entry.prov_errno = 0;
 			ext->err_entry.err_data = NULL;
+			ext->err_entry.err_data_size = 0;
 
 			if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
 			fi_opx_context_slist_insert_tail((union fi_opx_context*)ext, rx->cq_err_ptr);
@@ -2113,6 +2114,7 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		ext->err_entry.err = FI_ENOMSG;
 		ext->err_entry.prov_errno = 0;
 		ext->err_entry.err_data = NULL;
+		ext->err_entry.err_data_size = 0;
 		ext->opx_context.byte_counter = 0;
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "no match found on unexpected queue posting error\n");
