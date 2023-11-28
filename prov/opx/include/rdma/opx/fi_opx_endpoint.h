@@ -3080,6 +3080,7 @@ int fi_opx_ep_cancel_context(struct fi_opx_ep * opx_ep,
 		ext->err_entry.err = FI_ECANCELED;
 		ext->err_entry.prov_errno = 0;
 		ext->err_entry.err_data = NULL;
+		ext->err_entry.err_data_size = 0;
 
 		/* post an 'error' completion event for the canceled receive */
 		if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
