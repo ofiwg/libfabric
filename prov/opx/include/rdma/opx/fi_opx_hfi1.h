@@ -48,6 +48,8 @@
 #include <rdma/hfi/hfi1_user.h>
 #include <uuid/uuid.h>
 
+#include "rdma/opx/opx_hfi1_sim.h"
+
 // #define FI_OPX_TRACE 1
 
 
@@ -225,11 +227,6 @@ abort();
 #define OPX_HFI1_CCE_CSR_SW_INTERFACE_WFR (0x3)
 #define OPX_HFI1_CCE_CSR_SW_INTERFACE_JKR (0x4)
 
-enum opx_hfi1_type {
-	OPX_HFI1_WFR		= 4,	//Omni-path (all generations)
-	OPX_HFI1_JKR		= 5 	//CN5000 (initial generation)
-};
-
 struct fi_opx_hfi1_txe_scb {
 
 	union {
@@ -359,6 +356,7 @@ struct fi_opx_hfi1_rxe_state {
 	} __attribute__((__packed__)) egrq;
 
 } __attribute__((__packed__));
+
 
 struct fi_opx_hfi1_rxe_static {
 
@@ -510,6 +508,7 @@ void fi_opx_consume_credits(union fi_opx_hfi1_pio_state *pio_state, size_t count
 #define FI_OPX_HFI1_CONSUME_CREDITS(pio_state, count) fi_opx_consume_credits(&pio_state, count)
 #define FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state) FI_OPX_HFI1_CONSUME_CREDITS(pio_state, 1);
 
+
 __OPX_FORCE_INLINE__
 struct fi_opx_hfi_local_lookup * fi_opx_hfi1_get_lid_local(uint16_t hfi_lid)
 {
@@ -548,15 +547,6 @@ int init_hfi1_rxe_state (struct fi_opx_hfi1_context * context,
 		struct fi_opx_hfi1_rxe_state * rxe_state);
 
 void fi_opx_init_hfi_lookup();
-
-__OPX_FORCE_INLINE__
-unsigned opx_is_jkr(const struct fi_opx_hfi1_context * hfi1_context) {
-	assert(hfi1_context);
-	assert (hfi1_context->hfi_hfi1_type == OPX_HFI1_JKR ||
-			hfi1_context->hfi_hfi1_type == OPX_HFI1_WFR);
-
-	return hfi1_context->hfi_hfi1_type == OPX_HFI1_JKR;
-}
 
 /*
  * Shared memory transport

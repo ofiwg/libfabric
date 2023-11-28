@@ -750,10 +750,9 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->jkey = base_info->jkey;
 	context->send_ctxt = ctxt_info->send_ctxt;
 
-	context->info.pio.scb_sop_first =
-		(volatile uint64_t *)(ptrdiff_t)base_info->pio_bufbase_sop; // tx->pio_bufbase_sop
-	context->info.pio.scb_first =
-		(volatile uint64_t *)(ptrdiff_t)base_info->pio_bufbase; // tx->pio_bufbase
+	OPX_OPEN_BAR(context->hfi_unit);
+	context->info.pio.scb_sop_first = OPX_HFI1_INIT_PIO_SOP(context->send_ctxt, (volatile uint64_t *)(ptrdiff_t)base_info->pio_bufbase_sop);
+	context->info.pio.scb_first = OPX_HFI1_INIT_PIO(context->send_ctxt, (volatile uint64_t *)(ptrdiff_t)base_info->pio_bufbase);
 	context->info.pio.credits_addr = (volatile uint64_t *)(ptrdiff_t)base_info->sc_credits_addr;
 
 	const uint64_t credit_return = *(context->info.pio.credits_addr);
@@ -798,13 +797,25 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->info.rxe.hdrq.rhf_off = (ctxt_info->rcvhdrq_entsize - 8) >> BYTE2DWORD_SHIFT;
 
 	/* hardware registers */
-	volatile uint64_t *uregbase = (volatile uint64_t *)(uintptr_t)base_info->user_regbase;
+	volatile uint64_t *uregbase = OPX_HFI1_INIT_UREGS(ctrl->ctxt_info.ctxt, (volatile uint64_t *)(uintptr_t)base_info->user_regbase);
 	context->info.rxe.hdrq.head_register = (volatile uint64_t *)&uregbase[ur_rcvhdrhead];
-	context->info.rxe.hdrq.tail_register = (volatile uint64_t *)&uregbase[ur_rcvhdrtail];
 	context->info.rxe.egrq.head_register = (volatile uint64_t *)&uregbase[ur_rcvegrindexhead];
-	context->info.rxe.egrq.tail_register = (volatile uint64_t *)&uregbase[ur_rcvegrindextail];
-	context->info.rxe.uregbase = uregbase;
-
+	/* Unused registers */
+/*	context->info.rxe.hdrq.tail_register = (volatile uint64_t *)&uregbase[ur_rcvhdrtail];      */
+/*	context->info.rxe.egrq.tail_register = (volatile uint64_t *)&uregbase[ur_rcvegrindextail]; */
+/*	context->info.rxe.uregbase = uregbase; */
+#ifndef NDEBUG
+	uint64_t debug_value = OPX_HFI1_BAR_LOAD(&uregbase[ur_rcvhdrtail]);
+	FI_DBG(fi_opx_global.prov, FI_LOG_CORE, "&uregbase[ur_rcvhdrtail]       %p = %#16.16lX \n",&uregbase[ur_rcvhdrtail], debug_value);
+	debug_value = OPX_HFI1_BAR_LOAD(&uregbase[ur_rcvhdrhead]);
+	FI_DBG(fi_opx_global.prov, FI_LOG_CORE, "&uregbase[ur_rcvhdrhead]       %p = %#16.16lX \n",&uregbase[ur_rcvhdrtail], debug_value);
+	debug_value = OPX_HFI1_BAR_LOAD(&uregbase[ur_rcvegrindextail]);
+	FI_DBG(fi_opx_global.prov, FI_LOG_CORE, "&uregbase[ur_rcvegrindextail]  %p = %#16.16lX \n",&uregbase[ur_rcvhdrtail], debug_value);
+	debug_value = OPX_HFI1_BAR_LOAD(&uregbase[ur_rcvegrindexhead]);
+	FI_DBG(fi_opx_global.prov, FI_LOG_CORE, "&uregbase[ur_rcvegrindexhead]  %p = %#16.16lX \n",&uregbase[ur_rcvhdrtail], debug_value);
+	debug_value = OPX_HFI1_BAR_LOAD(&uregbase[ur_rcvegroffsettail]);
+	FI_DBG(fi_opx_global.prov, FI_LOG_CORE, "&uregbase[ur_rcvegroffsettail] %p = %#16.16lX \n",&uregbase[ur_rcvhdrtail], debug_value);
+#endif
 	context->runtime_flags = ctxt_info->runtime_flags;
 
 	if (context->runtime_flags & HFI1_CAP_DMA_RTAIL) {
@@ -3278,7 +3289,7 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
 				const uint32_t last_egrbfr_index =
 					opx_ep->rx->egrq.last_egrbfr_index;
 				if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-					*opx_ep->rx->egrq.head_register = last_egrbfr_index;
+					OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,(const uint64_t)last_egrbfr_index);
 					opx_ep->rx->egrq.last_egrbfr_index = egrbfr_index;
 				}
 			}

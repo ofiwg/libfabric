@@ -442,14 +442,15 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode (struct fid_ep *ep,
 	volatile uint64_t * const scb =
 		FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
-	scb[0] = model.qw0 | (0x1 << FI_OPX_HFI1_PBC_CR_SHIFT);
-	scb[1] = model.hdr.qw[0] | lrh_dlid;
-	scb[2] = model.hdr.qw[1] | bth_rx;
-	scb[3] = model.hdr.qw[2];
-	scb[4] = model.hdr.qw[3];
-	scb[5] = 0;
-	scb[6] = 0;
-	scb[7] = key;
+	OPX_HFI1_BAR_STORE(&scb[0], model.qw0 | (0x1 << FI_OPX_HFI1_PBC_CR_SHIFT));
+	OPX_HFI1_BAR_STORE(&scb[1], model.hdr.qw[0] | lrh_dlid);
+	OPX_HFI1_BAR_STORE(&scb[2], model.hdr.qw[1] | bth_rx);
+	OPX_HFI1_BAR_STORE(&scb[3], model.hdr.qw[2]);
+	OPX_HFI1_BAR_STORE(&scb[4], model.hdr.qw[3]);
+	OPX_HFI1_BAR_STORE(&scb[5], 0UL);
+	OPX_HFI1_BAR_STORE(&scb[6], 0UL);
+	OPX_HFI1_BAR_STORE(&scb[7], key);
+	
 
 	/* consume one credit for the packet header */
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -643,23 +644,14 @@ ssize_t fi_opx_hfi1_tx_reliability_inject (struct fid_ep *ep,
 					&opx_ep->reliability->service.tx.hfi1.ack_model :
 					&opx_ep->reliability->service.tx.hfi1.nack_model );
 
-	//uint64_t tmp[8];
-	//tmp[0] =
-		scb[0] = model->qw0 | (0x1 << FI_OPX_HFI1_PBC_CR_SHIFT);
-	//tmp[1] =
-		scb[1] = model->hdr.qw[0] | lrh_dlid;
-	//tmp[2] =
-		scb[2] = model->hdr.qw[1] | bth_rx;
-	//tmp[3] =
-		scb[3] = model->hdr.qw[2];
-	//tmp[4] =
-		scb[4] = model->hdr.qw[3];
-	//tmp[5] =
-		scb[5] = psn_count_24;
-	//tmp[6] =
-		scb[6] = psn_start_24;
-	//tmp[7] =
-		scb[7] = key;					/* service.key */
+	OPX_HFI1_BAR_STORE(&scb[0], model->qw0 | (0x1 << FI_OPX_HFI1_PBC_CR_SHIFT));
+	OPX_HFI1_BAR_STORE(&scb[1], model->hdr.qw[0] | lrh_dlid);
+	OPX_HFI1_BAR_STORE(&scb[2], model->hdr.qw[1] | bth_rx);
+	OPX_HFI1_BAR_STORE(&scb[3], model->hdr.qw[2]);
+	OPX_HFI1_BAR_STORE(&scb[4], model->hdr.qw[3]);
+	OPX_HFI1_BAR_STORE(&scb[5], psn_count_24);
+	OPX_HFI1_BAR_STORE(&scb[6], psn_start_24);
+	OPX_HFI1_BAR_STORE(&scb[7], key); /* service.key */
 
 	//fi_opx_hfi1_dump_stl_packet_hdr((struct fi_opx_hfi1_stl_packet_hdr *)&tmp[1], __func__, __LINE__);
 
@@ -1506,14 +1498,15 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 	volatile uint64_t * const scb =
 		FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.hfi1.pio_scb_sop_first, pio_state);
 
-	scb[0] = replay->scb.qw0;
-	scb[1] = replay->scb.hdr.qw[0];
-	scb[2] = replay->scb.hdr.qw[1];
-	scb[3] = replay->scb.hdr.qw[2];
-	scb[4] = replay->scb.hdr.qw[3];
-	scb[5] = replay->scb.hdr.qw[4];
-	scb[6] = replay->scb.hdr.qw[5];
-	scb[7] = replay->scb.hdr.qw[6];
+	OPX_HFI1_BAR_STORE(&scb[0], replay->scb.qw0);
+	OPX_HFI1_BAR_STORE(&scb[1], replay->scb.hdr.qw[0]);
+	OPX_HFI1_BAR_STORE(&scb[2], replay->scb.hdr.qw[1]);
+	OPX_HFI1_BAR_STORE(&scb[3], replay->scb.hdr.qw[2]);
+	OPX_HFI1_BAR_STORE(&scb[4], replay->scb.hdr.qw[3]);
+	OPX_HFI1_BAR_STORE(&scb[5], replay->scb.hdr.qw[4]);
+	OPX_HFI1_BAR_STORE(&scb[6], replay->scb.hdr.qw[5]);
+	OPX_HFI1_BAR_STORE(&scb[7], replay->scb.hdr.qw[6]);
+	
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR((service->tx.hfi1.pio_credits_addr));
 
@@ -1573,14 +1566,14 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 		uint16_t i;
 		for (i=0; i<contiguous_full_blocks_to_write; ++i) {
 
-			scb_payload[0] = buf_qws[0];
-			scb_payload[1] = buf_qws[1];
-			scb_payload[2] = buf_qws[2];
-			scb_payload[3] = buf_qws[3];
-			scb_payload[4] = buf_qws[4];
-			scb_payload[5] = buf_qws[5];
-			scb_payload[6] = buf_qws[6];
-			scb_payload[7] = buf_qws[7];
+			OPX_HFI1_BAR_STORE(&scb_payload[0],  buf_qws[0]);
+			OPX_HFI1_BAR_STORE(&scb_payload[1],  buf_qws[1]);
+			OPX_HFI1_BAR_STORE(&scb_payload[2],  buf_qws[2]);
+			OPX_HFI1_BAR_STORE(&scb_payload[3],  buf_qws[3]);
+			OPX_HFI1_BAR_STORE(&scb_payload[4],  buf_qws[4]);
+			OPX_HFI1_BAR_STORE(&scb_payload[5],  buf_qws[5]);
+			OPX_HFI1_BAR_STORE(&scb_payload[6],  buf_qws[6]);
+			OPX_HFI1_BAR_STORE(&scb_payload[7],  buf_qws[7]);
 
 			scb_payload += 8;
 			buf_qws += 8;
