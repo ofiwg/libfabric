@@ -82,7 +82,7 @@ static struct ibv_mr *vrb_reg_hmem_dmabuf(enum fi_hmem_iface iface,
 
 	err = ofi_hmem_get_dmabuf_fd(iface, buf, len, &fd, &offset);
 	if (err)
-		return NULL;
+		goto failover;
 
 	mr = ibv_reg_dmabuf_mr(pd, offset, len, (uint64_t)buf/* iova */,
 			       fd, vrb_access);
