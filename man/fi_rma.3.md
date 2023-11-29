@@ -220,10 +220,10 @@ The following list of flags are usable with fi_readmsg and/or
 fi_writemsg.
 
 *FI_REMOTE_CQ_DATA*
-: Applies to fi_writemsg and fi_writedata.  Indicates
-  that remote CQ data is available and should be sent as part of the
-  request.  See fi_getinfo for additional details on
-  FI_REMOTE_CQ_DATA.
+: Applies to fi_writemsg.  Indicates that remote CQ data is available
+  and should be sent as part of the request.  See fi_getinfo for
+  additional details on FI_REMOTE_CQ_DATA.  This flag is implicitly
+  set for fi_writedata and fi_inject_writedata.
 
 *FI_COMPLETION*
 : Indicates that a completion entry should be generated for the
