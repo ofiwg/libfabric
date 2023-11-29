@@ -188,8 +188,7 @@ struct fi_opx_reliability_service {
 	/* == CACHE LINE == */
 	int				is_backoff_enabled;
 	enum ofi_reliability_kind	reliability_kind;	/* 4 bytes */
-	uint16_t			nack_threshold;
-	uint16_t			unused[2];
+	uint16_t			unused[3];
 	uint8_t				fifo_max;
 	uint8_t				hfi1_max;
 	RbtHandle			handshake_init;		/*  1 qw  =   8 bytes */

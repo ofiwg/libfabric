@@ -2337,24 +2337,6 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 
 	service->usec_next = fi_opx_timer_next_event_usec(&service->tx.timer, &service->tx.timestamp, service->usec_max);
 
-	int nack_threshold;
-	rc = fi_param_get_int(fi_opx_global.prov, "reliability_service_nack_threshold", &nack_threshold);
-	if (rc == FI_SUCCESS) {
-		if (nack_threshold > 0 && nack_threshold <= 32767) {
-			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_NACK_THRESHOLD set to %d\n", nack_threshold);
-		} else {
-			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"Invalid value %d specified for FI_OPX_RELIABILITY_SERVICE_NACK_THRESHOLD. Valid values are 1-32767. Using default value of 1\n",
-				nack_threshold);
-			nack_threshold = 1;
-		}
-	} else {
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"FI_OPX_RELIABILITY_SERVICE_NACK_THRESHOLD not specified, using default value of 1\n");
-		nack_threshold = 1;
-	}
-	service->nack_threshold = nack_threshold;
-
 	/*
 	 * Maximum number of commands to process from atomic fifo before
 	 * stopping to do something else
