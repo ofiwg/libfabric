@@ -40,6 +40,9 @@
 
 #if HAVE_ROCR
 
+#include <stdio.h>
+#include <sys/utsname.h>
+
 #define HSA_MAX_SIGNALS 512
 #define HSA_MAX_STREAMS (HSA_MAX_SIGNALS / MAX_NUM_ASYNC_OP)
 #define D2H_THRESHOLD 16384
@@ -122,6 +125,10 @@ struct hsa_ops {
 	hsa_status_t (*hsa_iterate_agents)(
 		hsa_status_t (*callback)(hsa_agent_t agent, void *data),
 		void *data);
+	hsa_status_t (*hsa_system_get_info)(hsa_system_info_t attribute, 
+					    void* value);
+	hsa_status_t (*hsa_amd_portable_export_dmabuf)(const void* ptr, size_t size, 
+						       int* dmabuf, uint64_t* offset);
 };
 
 #if ENABLE_ROCR_DLOPEN
@@ -172,6 +179,8 @@ static struct hsa_ops hsa_ops = {
 	.hsa_signal_create = hsa_signal_create,
 	.hsa_signal_destroy = hsa_signal_destroy,
 	.hsa_iterate_agents = hsa_iterate_agents,
+	.hsa_amd_portable_export_dmabuf = hsa_amd_portable_export_dmabuf,
+	.hsa_system_get_info = hsa_system_get_info,
 };
 
 #endif /* ENABLE_ROCR_DLOPEN */
@@ -881,6 +890,9 @@ int rocr_hmem_init(void)
 		"Threshold for switching to hsa memcpy for device-to-host"
 		"  copies. (Default 16384");
 
+	fi_param_define(NULL, "hmem_rocr_use_dmabuf", FI_PARAM_INT,
+			"Use dma-buf for sharing buffer with hardware. (default:0)");
+
 	ret = rocr_hmem_dl_init();
 	if (ret != FI_SUCCESS)
 		return ret;
@@ -1054,6 +1066,97 @@ int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 	return FI_SUCCESS;
 }
 
+static bool rocr_is_dmabuf_supported(void)
+{
+	hsa_status_t hsa_ret;
+	bool use_dmabuf = false, dmabuf_support = false, dmabuf_kernel = false;
+
+	fi_param_get_int(NULL, "hmem_rocr_use_dmabuf", &use_dmabuf);
+	if (!use_dmabuf) goto out;
+
+	// HSA_AMD_SYSTEM_INFO_DMABUF_SUPPORTED = 0x204, we use the number instead of var name
+	// for backward compatibility reasons.
+	hsa_ret = hsa_ops.hsa_system_get_info((hsa_system_info_t) 0x204, &dmabuf_support);
+	if (hsa_ret != HSA_STATUS_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to retrieve system info (dmabuf): %s\n",
+			ofi_hsa_status_to_string(hsa_ret));
+		return -FI_EIO;
+	}
+
+#if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
+	{
+		const char kernel_opt1[] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
+		const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
+		bool found_opt1 = false, found_opt2 = false;
+		FILE *fp;
+		struct utsname utsname;
+		char kernel_conf_file[128];
+		char buf[256];
+
+		if (uname(&utsname) == -1) {
+			FI_INFO(&core_prov, FI_LOG_CORE,
+				"DMABUF support: Could not get kernel name\n");
+			goto out;
+		}
+
+		snprintf(kernel_conf_file, sizeof(kernel_conf_file),
+			"/boot/config-%s", utsname.release);
+		fp = fopen(kernel_conf_file, "r");
+
+		if (fp == NULL) {
+			FI_INFO(&core_prov, FI_LOG_CORE,
+				"DMABUF support: could not open kernel conf file %s error\n",
+				kernel_conf_file);
+			goto out;
+		}
+
+		while (fgets(buf, sizeof(buf), fp) != NULL) {
+			if (strstr(buf, kernel_opt1) != NULL) {
+				found_opt1 = true;
+			}
+			if (strstr(buf, kernel_opt2) != NULL) {
+				found_opt2 = true;
+			}
+			if (found_opt1 && found_opt2) {
+				dmabuf_kernel = true;
+				break;
+			}
+		}
+		fclose(fp);
+	}
+#endif
+out:
+	return dmabuf_support && dmabuf_kernel;
+}
+
+int rocr_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *dmabuf_fd,
+			     uint64_t *offset)
+{
+	static bool supported = false, checked = false;
+	hsa_status_t hsa_ret;
+
+	if (!checked) {
+		supported = rocr_is_dmabuf_supported();
+		checked = true;
+	}
+	if (!supported)
+		return -FI_EOPNOTSUPP;
+
+#if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
+	// maybe need base addr calculation here? empirically the hsa call here does it internally
+	hsa_ret = hsa_ops.hsa_amd_portable_export_dmabuf(addr, size, dmabuf_fd, offset);
+	if (hsa_ret != HSA_STATUS_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to export dmabuf handle: %s\n",
+			ofi_hsa_status_to_string(hsa_ret));
+		return -FI_EIO;
+	}
+#endif
+
+	return FI_SUCCESS;
+}
+
 #else
 
 int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
@@ -1170,6 +1273,12 @@ int rocr_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
 
 int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 				size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *dmabuf_fd,
+			     uint64_t *offset)
 {
 	return -FI_ENOSYS;
 }
