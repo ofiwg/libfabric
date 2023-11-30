@@ -219,10 +219,10 @@ The following list of flags are usable with fi_recvmsg and/or
 fi_sendmsg.
 
 *FI_REMOTE_CQ_DATA*
-: Applies to fi_sendmsg and fi_senddata.  Indicates
-  that remote CQ data is available and should be sent as part of the
-  request.  See fi_getinfo for additional details on
-  FI_REMOTE_CQ_DATA.
+: Applies to fi_sendmsg.  Indicates that remote CQ data is available
+  and should be sent as part of the request.  See fi_getinfo for
+  additional details on FI_REMOTE_CQ_DATA.  This flag is implicitly
+  set for fi_senddata and fi_injectdata.
 
 *FI_CLAIM*
 : Applies to posted receive operations for endpoints configured
