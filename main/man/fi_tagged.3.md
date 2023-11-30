@@ -238,10 +238,10 @@ fi_endpoint).  The following list of flags are usable with fi_trecvmsg
 and/or fi_tsendmsg.
 
 *FI_REMOTE_CQ_DATA*
-: Applies to fi_tsendmsg and fi_tsenddata.  Indicates
-  that remote CQ data is available and should be sent as part of the
-  request.  See fi_getinfo for additional details on
-  FI_REMOTE_CQ_DATA.
+: Applies to fi_tsendmsg.  Indicates that remote CQ data is available
+  and should be sent as part of the request.  See fi_getinfo for
+  additional details on FI_REMOTE_CQ_DATA.  This flag is implicitly
+  set for fi_tsenddata and fi_tinjectdata.
 
 *FI_COMPLETION*
 : Indicates that a completion entry should be generated for the
