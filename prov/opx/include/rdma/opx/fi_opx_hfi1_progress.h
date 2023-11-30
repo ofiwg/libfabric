@@ -47,21 +47,44 @@
  * increment the hdrq offset by the entry size (0x20) after processing each
  * packet.
  *
- * An update mask of 0x7FF will have us update the register every 64th entry.
- * An update mask of 0x3FF will have us update the register every 32nd entry.
+ * Update masks are defined below to update the HQR every 32nd, 64th, 128th,
+ * 512th, or 1024th entry. By default, the HQR will be updated every 64th entry.
  *
- * Cursory testing shows updating every 32 entries outperforms updating every
- * 64th entry, but leaving the mask for 64 declared for easy switching/testing.
+ * To use an update frequency other than the default, specify the desired mask at
+ * compile time. For example, adding
+ *
+ * 	-DFI_OPX_HFI1_HDRQ_UPDATE_MASK=FI_OPX_HFI1_HDRQ_UPDATE_MASK_128
+ *
+ * to CPPFLAGS would cause the HQR to be updated every 128th entry.
  */
-#define FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS	(0x20ul)
-
-#define FI_OPX_HFI1_HDRQ_UPDATE_MASK_64	(0x7FFul)
-#define FI_OPX_HFI1_HDRQ_UPDATE_MASK_32	(0x3FFul)
-
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "uthash.h"
 #include "fi_opx_reliability.h"
 #include "rdma/opx/fi_opx_flight_recorder.h"
+
+#define FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS	(0x20ul)
+
+#define FI_OPX_HFI1_HDRQ_UPDATE_MASK_1024	(0x7FFFul)
+#define FI_OPX_HFI1_HDRQ_UPDATE_MASK_512	(0x3FFFul)
+#define FI_OPX_HFI1_HDRQ_UPDATE_MASK_256	(0x1FFFul)
+#define FI_OPX_HFI1_HDRQ_UPDATE_MASK_128	(0xFFFul)
+#define FI_OPX_HFI1_HDRQ_UPDATE_MASK_64		(0x7FFul)
+#define FI_OPX_HFI1_HDRQ_UPDATE_MASK_32		(0x3FFul)
+
+#ifndef FI_OPX_HFI1_HDRQ_UPDATE_MASK
+#define FI_OPX_HFI1_HDRQ_UPDATE_MASK	FI_OPX_HFI1_HDRQ_UPDATE_MASK_32
+#endif
+
+OPX_COMPILE_TIME_ASSERT((FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE_MASK_32) ||
+			(FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE_MASK_64) ||
+			(FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE_MASK_128) ||
+			(FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE_MASK_256) ||
+			(FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE_MASK_512) ||
+			(FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE_MASK_1024),
+			"FI_OPX_HFI1_HDRQ_UPDATE_MASK must be one of FI_OPX_HFI1_HDRQ_UPDATE_MASK_32, "
+			"FI_OPX_HFI1_HDRQ_UPDATE_MASK_64, FI_OPX_HFI1_HDRQ_UPDATE_MASK_128, "
+			"FI_OPX_HFI1_HDRQ_UPDATE_MASK_256, FI_OPX_HFI1_HDRQ_UPDATE_MASK_512, "
+			"or FI_OPX_HFI1_HDRQ_UPDATE_MASK_1024");
 
 unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep *opx_ep, volatile uint32_t *rhf_ptr,
 				       const uint32_t rhf_msb, const uint32_t rhf_lsb,
@@ -70,7 +93,7 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep *opx_ep, volatile uint32
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint64_t hdrq_offset)
 {
-	if (OFI_UNLIKELY((hdrq_offset & FI_OPX_HFI1_HDRQ_UPDATE_MASK_32) == FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS)) {
+	if (OFI_UNLIKELY((hdrq_offset & FI_OPX_HFI1_HDRQ_UPDATE_MASK) == FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS)) {
 		OPX_HFI1_BAR_STORE(opx_ep->rx->hdrq.head_register,(const uint64_t)(hdrq_offset - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS));
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "================== > Set HFI head register\n");
