@@ -540,6 +540,13 @@ vrb_eq_xrc_connreq_event(struct vrb_eq *eq, struct fi_eq_cm_entry *entry,
 send_reject:
 	if (rdma_reject(connreq->id, *priv_data, *priv_datalen))
 		VRB_WARN(FI_LOG_EP_CTRL, "rdma_reject %d\n", -errno);
+	if (rdma_destroy_id(connreq->id))
+		VRB_WARN(FI_LOG_EP_CTRL, "rdma_destroy_id %d\n", -errno);
+
+	ep->base_ep.info_attr.handle = NULL;
+	ep->tgt_id = NULL;
+	ep->recip_req_received = 0;
+	connreq->id = NULL;
 
 	return -FI_EAGAIN;
 }

@@ -296,6 +296,9 @@ vrb_msg_xrc_ep_reject(struct vrb_connreq *connreq,
 			       connreq->xrc.conn_tag, connreq->xrc.port, 0, 0);
 	ret = rdma_reject(connreq->id, cm_data,
 			  (uint8_t) paramlen) ? -errno : 0;
+	if (rdma_destroy_id(connreq->id))
+		VRB_WARN_ERR(FI_LOG_EP_CTRL, "rdma_destroy_id", -errno);
+	connreq->id = NULL;
 	free(cm_data);
 	return ret;
 }
@@ -324,6 +327,9 @@ vrb_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 	} else if (connreq->id) {
 		ret = rdma_reject(connreq->id, cm_hdr,
 			(uint8_t)(sizeof(*cm_hdr) + paramlen)) ? -errno : 0;
+		if (rdma_destroy_id(connreq->id))
+			VRB_WARN_ERR(FI_LOG_EP_CTRL, "rdma_destroy_id", -errno);
+		connreq->id = NULL;
 	} else {
 		ret = -FI_EBUSY;
 	}
