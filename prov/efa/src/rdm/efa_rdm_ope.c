@@ -354,8 +354,6 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe, struct fi_rma_iov *r
 static inline
 void efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
-	int iface;
-	struct efa_hmem_info *hmem_info;
 	struct efa_rdm_peer *peer;
 
 	assert(txe->type == EFA_RDM_TXE);
@@ -365,11 +363,10 @@ void efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 
 	peer = efa_rdm_ep_get_peer(ep, txe->addr);
 
-	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
-	hmem_info = &efa_rdm_ep_domain(ep)->hmem_info[iface];
-
 	assert(peer);
-	txe->bytes_runt = MIN(hmem_info->runt_size - peer->num_runt_bytes_in_flight, txe->total_len);
+	txe->bytes_runt = efa_rdm_peer_get_runt_size(peer, ep, txe);
+
+	assert(txe->bytes_runt);
 }
 
 /**
@@ -481,7 +478,7 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
 	size_t total_pkt_entry_data_size; /* total number of bytes send via packet entry's payload */
 	size_t single_pkt_entry_data_size;
 	size_t single_pkt_entry_max_data_size;
-	int i, memory_alignment = 8, remainder;
+	int i, memory_alignment, remainder, iface;
 	int available_tx_pkts;
 
 	ep = ope->ep;
@@ -520,11 +517,8 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
 		single_pkt_entry_max_data_size = efa_rdm_txe_max_req_data_capacity(ep, ope, pkt_type);
 		assert(single_pkt_entry_max_data_size);
 
-		if (ep->sendrecv_in_order_aligned_128_bytes) {
-			memory_alignment = EFA_RDM_IN_ORDER_ALIGNMENT;
-		} else if (efa_mr_is_cuda(ope->desc[0])) {
-			memory_alignment = EFA_RDM_CUDA_MEMORY_ALIGNMENT;
-		}
+		iface = ope->desc[0] ? ((struct efa_mr*) ope->desc[0])->peer.iface : FI_HMEM_SYSTEM;
+		memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
 
 		*pkt_entry_cnt = (total_pkt_entry_data_size - 1) / single_pkt_entry_max_data_size + 1;
 		if (*pkt_entry_cnt > available_tx_pkts)
@@ -537,6 +531,8 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
 
 		/* each packet must be aligned */
 		single_pkt_entry_data_size = single_pkt_entry_data_size & ~(memory_alignment - 1);
+		assert(single_pkt_entry_data_size);
+
 		*pkt_entry_cnt = total_pkt_entry_data_size / single_pkt_entry_data_size;
 		for (i = 0; i < *pkt_entry_cnt; ++i)
 			pkt_entry_data_size_vec[i] = single_pkt_entry_data_size;
