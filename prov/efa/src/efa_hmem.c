@@ -97,6 +97,9 @@ static int efa_domain_hmem_info_init_protocol_thresholds(struct efa_domain *efa_
 		fi_param_get_size_t(&efa_prov, "runt_size", &info->runt_size);
 		fi_param_get_size_t(&efa_prov, "inter_min_read_message_size", &info->min_read_msg_size);
 		fi_param_get_size_t(&efa_prov, "inter_min_read_write_size", &info->min_read_write_size);
+		/* Always turn SHM off for Neuron by default, but let user override if they choose */
+		efa_env.enable_shm_transfer = false;
+		fi_param_get_int(&efa_prov, "enable_shm_transfer", &efa_env.enable_shm_transfer);
 		break;
 	case FI_HMEM_SYNAPSEAI:
 		info->runt_size = 0;
@@ -104,6 +107,9 @@ static int efa_domain_hmem_info_init_protocol_thresholds(struct efa_domain *efa_
 		info->max_medium_msg_size = 0;
 		info->min_read_msg_size = 1;
 		info->min_read_write_size = 1;
+		/* Always turn SHM off for SynapseAI by default, but let user override if they choose  */
+		efa_env.enable_shm_transfer = false;
+		fi_param_get_int(&efa_prov, "enable_shm_transfer", &efa_env.enable_shm_transfer);
 		break;
 	default:
 		break;

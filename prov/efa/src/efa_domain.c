@@ -162,16 +162,17 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	else
 		EFA_INFO(FI_LOG_CORE, "EFA will not use SHM for intranode communication because FI_EFA_ENABLE_SHM_TRANSFER=0\n");
 
+	efa_domain->fabric->shm_fabric = NULL;
 	if (efa_domain->shm_info) {
 		err = fi_fabric(efa_domain->shm_info->fabric_attr,
 				&efa_domain->fabric->shm_fabric,
 				efa_domain->fabric->util_fabric.fabric_fid.fid.context);
 		if (err)
 			return err;
-	} else {
-		efa_domain->fabric->shm_fabric = NULL;
 	}
 
+
+	efa_domain->shm_domain = NULL;
 	if (efa_domain->fabric->shm_fabric) {
 		err = fi_domain(efa_domain->fabric->shm_fabric, efa_domain->shm_info,
 				&efa_domain->shm_domain, NULL);
@@ -291,6 +292,13 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
 	}
 
+	err = efa_domain_hmem_info_init_all(efa_domain);
+	if (err) {
+		ret = err;
+		EFA_WARN(FI_LOG_DOMAIN, "Failed to check hmem support status. err: %d\n", ret);
+		goto err_free;
+	}
+
 	efa_domain->util_domain.domain_fid.fid.ops = &efa_ops_domain_fid;
 	if (EFA_EP_TYPE_IS_RDM(info)) {
 		err = efa_domain_init_rdm(efa_domain, info);
@@ -310,13 +318,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (err) {
 		ret = err;
 		EFA_WARN(FI_LOG_DOMAIN, "Failed to initialize fork support. err: %d\n", ret);
-		goto err_free;
-	}
-
-	err = efa_domain_hmem_info_init_all(efa_domain);
-	if (err) {
-		ret = err;
-		EFA_WARN(FI_LOG_DOMAIN, "Failed to check hmem support status. err: %d\n", ret);
 		goto err_free;
 	}
 
