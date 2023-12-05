@@ -302,6 +302,8 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 				    struct dlist_entry *pkts);
 
+size_t efa_rdm_ep_get_memory_alignment(struct efa_rdm_ep *ep, enum fi_hmem_iface iface);
+
 static inline
 struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
 {

@@ -141,5 +141,14 @@ void test_efa_rdm_ope_post_write_0_byte();
 void test_efa_rdm_msg_send_to_local_peer_with_null_desc();
 void test_efa_fork_support_request_initialize_when_ibv_fork_support_is_needed();
 void test_efa_fork_support_request_initialize_when_ibv_fork_support_is_unneeded();
+void test_efa_rdm_peer_get_runt_size_no_enough_runt();
+void test_efa_rdm_peer_get_runt_size_cuda_memory_smaller_than_alignment();
+void test_efa_rdm_peer_get_runt_size_cuda_memory_exceeding_total_len();
+void test_efa_rdm_peer_get_runt_size_cuda_memory_normal();
+void test_efa_rdm_peer_get_runt_size_host_memory_smaller_than_alignment();
+void test_efa_rdm_peer_get_runt_size_host_memory_exceeding_total_len();
+void test_efa_rdm_peer_get_runt_size_host_memory_normal();
+void test_efa_rdm_peer_select_readbase_rtm_no_runt();
+void test_efa_rdm_peer_select_readbase_rtm_do_runt();
 
 #endif
