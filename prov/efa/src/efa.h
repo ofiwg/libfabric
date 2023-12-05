@@ -107,6 +107,11 @@
 #define EFA_DEFAULT_INTRA_MAX_GDRCOPY_FROM_DEV_SIZE (3072)
 
 /*
+ * The default memory alignment
+ */
+#define EFA_RDM_DEFAULT_MEMORY_ALIGNMENT (8)
+
+/*
  * The CUDA memory alignment
  */
 #define EFA_RDM_CUDA_MEMORY_ALIGNMENT (64)
