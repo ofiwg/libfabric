@@ -119,6 +119,7 @@ void test_info_check_hmem_cuda_support_on_api_lt_1_18();
 void test_info_check_hmem_cuda_support_on_api_ge_1_18();
 void test_info_check_no_hmem_support_when_not_requested();
 void test_efa_hmem_info_update_neuron();
+void test_efa_hmem_neuron_no_shm();
 void test_efa_use_device_rdma_env1_opt1();
 void test_efa_use_device_rdma_env0_opt0();
 void test_efa_use_device_rdma_env1_opt0();

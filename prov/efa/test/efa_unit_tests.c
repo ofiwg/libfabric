@@ -133,6 +133,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_msg_send_to_local_peer_with_null_desc, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_fork_support_request_initialize_when_ibv_fork_support_is_needed, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_fork_support_request_initialize_when_ibv_fork_support_is_unneeded, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hmem_neuron_no_shm, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown), // Needs to be last b/c this will shut down shm on neuron
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);
