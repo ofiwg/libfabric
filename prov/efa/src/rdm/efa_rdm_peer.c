@@ -255,20 +255,56 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 }
 
 /**
+ * @brief Get the runt size for a given peer and ope
+ *
+ * @param peer rdm peer
+ * @param ep efa rdm ep
+ * @param ope efa rdm ope
+ * @return size_t the number of bytes that can be runt
+ */
+size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer,
+				  struct efa_rdm_ep *ep, struct efa_rdm_ope *ope)
+{
+	struct efa_hmem_info *hmem_info;
+	size_t runt_size;
+	size_t memory_alignment;
+	int iface;
+
+	hmem_info = efa_rdm_ep_domain(ep)->hmem_info;
+	iface = ope->desc[0] ? ((struct efa_mr*) ope->desc[0])->peer.iface : FI_HMEM_SYSTEM;
+
+	if (hmem_info[iface].runt_size < peer->num_runt_bytes_in_flight)
+		return 0;
+
+	runt_size = MIN(hmem_info[iface].runt_size - peer->num_runt_bytes_in_flight, ope->total_len);
+	memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
+	/*
+	 * runt size must be aligned because:
+	 * 1. For LL128 protocol, the size to be copied on the receiver side must be 128-multiple,
+	 * 128 is the alignment in this case.
+	 * 2. For non-LL128 protocol, using aligned runt size has optimal performance for data copy.
+	 * Note the returned value can be 0. In that case we will not use runting read protocol.
+	 */
+	return (runt_size & ~(memory_alignment - 1));
+}
+
+/**
  * @brief Determine which Read based protocol to use for a given peer
  *
  * @param[in] peer		rdm peer
- * @param[in] op		operation type
- * @param[in] flags		the flags that the application used to call fi_* functions
- * @param[in] hmem_info	configured protocol limits
+ * @param[in] ep		efa rdm ep
+ * @param[in] efa_rdm_ope	efa rdm ope
  * @return The read-based protocol to use based on inputs.
  */
-int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, int op, uint64_t fi_flags, struct efa_hmem_info *hmem_info)
+int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer,
+				     struct efa_rdm_ep *ep, struct efa_rdm_ope *ope)
 {
+	int op = ope->op;
+
 	assert(op == ofi_op_tagged || op == ofi_op_msg);
 	if (peer->num_read_msg_in_flight == 0 &&
-	    hmem_info->runt_size > peer->num_runt_bytes_in_flight &&
-	    !(fi_flags & FI_DELIVERY_COMPLETE)) {
+	    efa_rdm_peer_get_runt_size(peer, ep, ope) > 0 &&
+	    !(ope->fi_flags & FI_DELIVERY_COMPLETE)) {
 		return (op == ofi_op_tagged) ? EFA_RDM_RUNTREAD_TAGRTM_PKT
 					     : EFA_RDM_RUNTREAD_MSGRTM_PKT;
 	} else {
