@@ -37,16 +37,12 @@ class Test:
             self.client = hosts[1]
 
         self.nw_interface = cloudbees_config.interface_map[self.fabric]
-        self.libfab_installpath = f'{cloudbees_config.install_dir}/'\
-                                  f'{self.jobname}/{self.buildno}/{self.hw}/'\
-                                  f'{self.ofi_build_mode}'
+        self.custom_workspace = os.environ['CUSTOM_WORKSPACE']
+        self.libfab_installpath = f'{self.custom_workspace}/'\
+                                  f'{self.hw}/{self.ofi_build_mode}'
 
-        self.middlewares_path = f'{cloudbees_config.install_dir}/'\
-                                   f'{self.jobname}/{self.buildno}/'\
-                                   'middlewares'
-        self.ci_logdir_path = f'{cloudbees_config.install_dir}/'\
-                                   f'{self.jobname}/{self.buildno}/'\
-                                   'log_dir'
+        self.middlewares_path = f'{self.custom_workspace}/middlewares'
+        self.ci_logdir_path = f'{self.custom_workspace}/log_dir'
         self.env = user_env
 
         self.mpi = ''
