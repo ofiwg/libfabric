@@ -309,11 +309,10 @@ pipeline {
   }
   environment {
       JOB_CADENCE = 'PR'
-      LOG_DIR = "${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/log_dir"
       WITH_ENV="'PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH'"
-      DELETE_LOCATION="${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}"
       RUN_LOCATION="${env.WORKSPACE}/${SCRIPT_LOCATION}/"
       CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+      LOG_DIR = "${env.CUSTOM_WORKSPACE}/log_dir"
   }
   stages {
     stage ('checkout') {
@@ -777,7 +776,6 @@ pipeline {
     }
     aborted {
       node ('daos_head') {
-        dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
       }
       node ('ze') {
         dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
@@ -786,16 +784,13 @@ pipeline {
     }
     cleanup {
       node ('daos_head') {
-        dir ("${DELETE_LOCATION}") { deleteDir() }
         dir("${env.WORKSPACE}") { deleteDir() }
         dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
       node ('ze') {
-        dir("${DELETE_LOCATION}") { deleteDir() }
         dir("${env.WORKSPACE}") { deleteDir() }
         dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
-      dir("${DELETE_LOCATION}") { deleteDir() }
       dir("${env.WORKSPACE}") { deleteDir() }
       dir("${env.WORKSPACE}@tmp") { deleteDir() }
     }
