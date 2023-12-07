@@ -155,6 +155,7 @@ if __name__ == "__main__":
 	jobname = os.environ['JOB_NAME']
 	buildno = os.environ['BUILD_NUMBER']
 	workspace = os.environ['WORKSPACE']
+	custom_workspace = os.environ['CUSTOM_WORKSPACE']
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--build_item', help="build libfabric or fabtests", \
@@ -184,9 +185,7 @@ if __name__ == "__main__":
 	else:
 		ofi_build_mode = 'reg'
 
-	install_path = f'{cloudbees_config.install_dir}/{jobname}/{buildno}'
-	libfab_install_path = f'{cloudbees_config.install_dir}/{jobname}/'\
-						  f'{buildno}/{build_hw}/{ofi_build_mode}'
+	libfab_install_path = f'{custom_workspace}/{build_hw}/{ofi_build_mode}'
 
 	p = re.compile('mpi*')
 
@@ -198,11 +197,11 @@ if __name__ == "__main__":
 	elif (build_item == 'fabtests'):
 		build_fabtests(libfab_install_path, ofi_build_mode)
 	elif (build_item == 'builddir'):
-		copy_build_dir(install_path)
+		copy_build_dir(custom_workspace)
 	elif (build_item == 'logdir'):
-		log_dir(install_path, release)
+		log_dir(custom_workspace, release)
 	elif(build_item == 'mpich'):
-		build_mpich(install_path, libfab_install_path, build_hw)
-		build_mpich_osu(install_path, libfab_install_path, build_hw)
+		build_mpich(custom_workspace, libfab_install_path, build_hw)
+		build_mpich_osu(custom_workspace, libfab_install_path, build_hw)
 
 	os.chdir(curr_dir)
