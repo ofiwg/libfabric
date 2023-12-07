@@ -12,7 +12,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 
 # add jenkins config location to PATH
-sys.path.append(f"{os.environ['WORKSPACE']}/ci_resources/configs/{os.environ['CLUSTER']}")
+sys.path.append(f"{os.environ['CUSTOM_WORKSPACE']}/ci_resources/configs/{os.environ['CLUSTER']}")
 
 import cloudbees_config
 import argparse
@@ -769,7 +769,8 @@ class DmabufSummarizer(Summarizer):
                 self.check_line(line)
 
 def get_release_num():
-    file_name = f'{os.environ["WORKSPACE"]}/source/release_num.txt'
+    file_name = f'{os.environ["CUSTOM_WORKSPACE"]}/source/libfabric/'\
+                'release_num.txt'
     if os.path.exists(file_name):
         with open(file_name) as f:
             num = f.readline()
@@ -932,6 +933,7 @@ if __name__ == "__main__":
     jobname = os.environ['JOB_NAME']
     buildno = os.environ['BUILD_NUMBER']
     workspace = os.environ['WORKSPACE']
+    custom_workspace = os.environ['CUSTOM_WORKSPACE']
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--summary_item', help="functional test to summarize",
@@ -956,7 +958,7 @@ if __name__ == "__main__":
     send_mail = args.send_mail
 
     mpi_list = ['impi', 'mpich', 'ompi']
-    log_dir = f'{cloudbees_config.install_dir}/{jobname}/{buildno}/log_dir'
+    log_dir = f'{custom_workspace}/log_dir'
     if (not os.path.exists(log_dir)):
         os.makedirs(log_dir)
 
@@ -992,7 +994,7 @@ if __name__ == "__main__":
             err += summarize_items(summary_item, logger, log_dir, mode)
 
     if (release):
-        shutil.copyfile(f'{full_file_name}', f'{workspace}/{output_name}')
+        shutil.copyfile(f'{full_file_name}', f'{custom_workspace}/{output_name}')
 
     if (send_mail):
         SendEmail(sender = os.environ['SENDER'],
