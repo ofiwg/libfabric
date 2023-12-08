@@ -695,6 +695,10 @@ class MpichTestSuite(Test):
                       'spawn'        : [('concurrent_spawns 1', 'test')],
                       'pt2pt'        : [('sendrecv3 2','test'),
                                         ('sendrecv3 2 arg=-isendrecv','test')],
+                      'threads/pt2pt': [(f"mt_improbe_sendrecv_huge 2 "
+                                       f"arg=-iter=64 arg=-count=4194304 "
+                                       f"env=MPIR_CVAR_CH4_OFI_EAGER_MAX_MSG_SIZE"
+                                       f"=16384", 'test')]
                     }
         }
 
