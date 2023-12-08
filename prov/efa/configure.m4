@@ -74,7 +74,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_ibv_is_fork_initialized=0
 	efa_support_data_in_order_aligned_128_byte=0
 	efadv_support_extended_cq=0
-	hav_efa_dmabuf_mr=0
+	have_efa_dmabuf_mr=0
 
 	dnl $have_neuron is defined at top-level configure.ac
 	AM_CONDITIONAL([HAVE_NEURON], [ test x"$have_neuron" = x1 ])
