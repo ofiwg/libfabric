@@ -86,7 +86,7 @@ int lnx_ep_close(struct fid *fid)
 	ep = container_of(fid, struct lnx_ep, le_ep.ep_fid.fid);
 	fabric = ep->le_domain->ld_fabric;
 
-	/* close all the open core domains */
+	/* close all the open core endpoints */
 	dlist_foreach_container(&fabric->local_prov_table,
 				struct local_prov,
 				entry, lpv_entry) {
@@ -717,14 +717,26 @@ static int lnx_match_common(uint64_t tag1, uint64_t tag2, uint64_t ignore,
 	peer_ops = cep->lpe_srx.peer_ops;
 	lp = cep->lpe_parent;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+	//for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+	for (i = 0; i < 1; i++) {
 		struct lnx_peer_prov *lpp;
 
+		/* TODO: ***LOOPS ARE BAD THEY ADD A LOT OF OVERHEAD */
+		lpp = peer->lp_provs[1];
+		if (lpp->lpp_prov == lp) {
+			struct lnx_local2peer_map *lpm = lpp->lpp_map[0];
+			if (!lpm)
+				continue;
+			fi_addr_t peer_addr = lpm->peer_addrs[0];
+			if (lnx_addr_match(peer_addr, cep_addr,
+					   peer_ops, match_info))
+				return true;
+		}
+		/* we found the peer provider matching our local provider 
 		lpp = peer->lp_provs[i];
 		if (!lpp)
 			continue;
 
-		/* we found the peer provider matching our local provider */
 		if (lpp->lpp_prov == lp) {
 			for (j = 0; j < LNX_MAX_LOCAL_EPS; j++) {
 				struct lnx_local2peer_map *lpm = lpp->lpp_map[j];
@@ -738,6 +750,7 @@ static int lnx_match_common(uint64_t tag1, uint64_t tag2, uint64_t ignore,
 				}
 			}
 		}
+		*/
 	}
 
 	return false;
