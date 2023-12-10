@@ -114,6 +114,9 @@ lnx_mr_regattrs_all(struct local_prov *prov, const struct fi_mr_attr *attr,
 
 	desc->prov = prov;
 
+	/* TODO: This is another issue here because MR registration can happen
+	 * quiet often
+	 */
 	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 		ep = prov->lpv_prov_eps[i];
 		if (!ep)
@@ -196,6 +199,9 @@ static int lnx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	mem_desc = mr->mem_desc;
 
+	/* TODO: This is another issue here because MR registration can happen
+	 * quiet often
+	 */
 	for (i = 0; i < mem_desc->desc_count; i++) {
 		desc = &mem_desc->desc[i];
 		for (j = 0; j < LNX_MAX_LOCAL_EPS; j++) {
@@ -232,6 +238,9 @@ static int lnx_mr_control(struct fid *fid, int command, void *arg)
 
 	mem_desc = mr->mem_desc;
 
+	/* TODO: This is another issue here because MR registration can happen
+	 * quiet often
+	 */
 	for (i = 0; i < mem_desc->desc_count; i++) {
 		desc = &mem_desc->desc[i];
 		cmr = desc->core_mr;
