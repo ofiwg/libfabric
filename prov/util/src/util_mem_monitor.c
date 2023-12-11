@@ -61,6 +61,8 @@ static struct ofi_uffd uffd = {
 	.monitor.start = ofi_uffd_start,
 	.monitor.stop = ofi_uffd_stop,
 	.monitor.name = "uffd",
+	.fd = -1,
+	.exit_pipe = { -1, -1 },
 };
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 
@@ -594,14 +596,17 @@ static void ofi_uffd_pagefault_handler(struct uffd_msg *msg);
 static void *ofi_uffd_handler(void *arg)
 {
 	struct uffd_msg msg;
-	struct pollfd fds;
+	struct pollfd fds[2];
 	int ret;
 
-	fds.fd = uffd.fd;
-	fds.events = POLLIN;
+	fds[0].fd     = uffd.fd;
+	fds[0].events = POLLIN;
+	fds[1].fd     = uffd.exit_pipe[0];
+	fds[1].events = POLLIN;
+
 	for (;;) {
-		ret = poll(&fds, 1, -1);
-		if (ret != 1)
+		ret = poll(fds, 2, -1);
+		if (ret < 0 || fds[1].revents)
 			break;
 
 		pthread_rwlock_rdlock(&mm_list_rwlock);
@@ -832,24 +837,45 @@ static bool ofi_uffd_valid(struct ofi_mem_monitor *monitor,
 	return true;
 }
 
+static void ofi_uffd_close_fd(struct ofi_uffd *monitor)
+{
+	close(monitor->fd);
+	monitor->fd = -1;
+}
+
+static void ofi_uffd_close_pipe(struct ofi_uffd *monitor)
+{
+	close(monitor->exit_pipe[0]);
+	close(monitor->exit_pipe[1]);
+	monitor->exit_pipe[0] = -1;
+	monitor->exit_pipe[1] = -1;
+}
+
 static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 {
 	struct uffdio_api api;
 	int ret;
 
-	uffd.monitor.subscribe = ofi_uffd_subscribe;
-	uffd.monitor.unsubscribe = ofi_uffd_unsubscribe;
-	uffd.monitor.valid = ofi_uffd_valid;
+	if (uffd.fd >= 0)
+		return 0;
 
 	if (!num_page_sizes)
 		return -FI_ENODATA;
+
+	ret = pipe(uffd.exit_pipe);
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"uffd/pipe: %s\n", strerror(errno));
+		return -errno;
+	}
 
 	uffd.fd = syscall(__NR_userfaultfd,
 			  O_CLOEXEC | O_NONBLOCK | UFFD_USER_MODE_ONLY);
 	if (uffd.fd < 0) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"syscall/userfaultfd %s\n", strerror(errno));
-		return -errno;
+		ret = -errno;
+		goto close_pipe;
 	}
 
 	api.api = UFFD_API;
@@ -860,13 +886,13 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"ioctl/uffdio: %s\n", strerror(errno));
 		ret = -errno;
-		goto closefd;
+		goto close_fd;
 	}
 
 	if (api.api != UFFD_API) {
 		FI_WARN(&core_prov, FI_LOG_MR, "uffd features not supported\n");
 		ret = -FI_ENOSYS;
-		goto closefd;
+		goto close_fd;
 	}
 
 	ret = pthread_create(&uffd.thread, NULL, ofi_uffd_handler, &uffd);
@@ -874,20 +900,56 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"failed to create handler thread %s\n", strerror(ret));
 		ret = -ret;
-		goto closefd;
+		goto close_fd;
 	}
+
+	uffd.monitor.subscribe = ofi_uffd_subscribe;
+	uffd.monitor.unsubscribe = ofi_uffd_unsubscribe;
+	uffd.monitor.valid = ofi_uffd_valid;
+
+	FI_INFO(&core_prov, FI_LOG_MR,
+		"Memory monitor uffd started.\n");
+
 	return 0;
 
-closefd:
-	close(uffd.fd);
+close_fd:
+
+	ofi_uffd_close_fd(&uffd);
+
+close_pipe:
+
+	ofi_uffd_close_pipe(&uffd);
+
+	FI_WARN(&core_prov, FI_LOG_MR,
+		"Memory monitor uffd failed to start: %s.\n",
+		strerror(-ret));
+
 	return ret;
 }
 
 static void ofi_uffd_stop(struct ofi_mem_monitor *monitor)
 {
-	pthread_cancel(uffd.thread);
+	ssize_t   num_written;
+
+	if (uffd.fd < 0)
+		return;
+
+	/* tell the thread to exit with the exit_pipe */
+
+	num_written = write(uffd.exit_pipe[1], "X", 1);
+	if (num_written != 1) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"uffd/close: unable to write to exit pipe: %s",
+			strerror(errno));
+	}
+
 	pthread_join(uffd.thread, NULL);
-	close(uffd.fd);
+
+	ofi_uffd_close_fd(&uffd);
+	ofi_uffd_close_pipe(&uffd);
+
+	FI_INFO(&core_prov, FI_LOG_MR,
+		"Memory monitor uffd stopped.\n");
 }
 
 #else /* HAVE_UFFD_MONITOR */

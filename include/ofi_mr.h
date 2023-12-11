@@ -231,6 +231,7 @@ struct ofi_uffd {
 	struct ofi_mem_monitor		monitor;
 	pthread_t			thread;
 	int				fd;
+	int                             exit_pipe[2];
 };
 
 extern struct ofi_mem_monitor *uffd_monitor;
