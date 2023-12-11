@@ -598,6 +598,53 @@ AC_ARG_ENABLE([restricted_dl],
 AC_DEFINE_UNQUOTED([HAVE_RESTRICTED_DL], [$restricted_dl],
   [Define to 1 to only look for dl providers under default location if FI_PROVIDER_PATH is not set])
 
+dnl Check kdreg2 support
+kdreg2_enabled=1
+have_kdreg2=0
+have_kdreg2_include_path=0
+
+AC_ARG_ENABLE([kdreg2],
+              [AC_HELP_STRING([--disable-kdreg2],
+                              [Determine whether kdreg2 memory monitor is disabled.])],
+              [AS_IF([test "$enable_kdreg2" = "no"], [kdreg2_enabled=0])],
+              [])
+
+AS_IF([test $kdreg2_enabled -ne 0 ],
+      [AC_CHECK_HEADER([linux/kdreg2.h], [have_kdreg2=1], [], [])
+
+       AC_ARG_WITH([kdreg2],
+		   [AS_HELP_STRING([--with-kdreg2=DIR],
+				   [Enable KDREG2 memory monitor.
+				    Optional=<Path to kdreg2.h header file>.])],
+		   [AS_CASE(["$with_kdreg2"],
+			    ["no"], [kdreg2_enabled=0],
+			    ["yes"], [],
+			    [""], [],
+			    [CPPFLAGS="$CPPFLAGS -I$with_kdreg2"
+			     AC_CHECK_HEADER([kdreg2.h],
+					     [have_kdreg2=1
+					      have_kdreg2_include_path=1],
+					     [have_kdreg2=0],
+					     [])])
+		    	     AS_IF([test $have_kdreg2 -eq 0 ],
+			           [AC_MSG_ERROR([KDREG2 header not found in $with_kdreg2.  Cannot enable KDREG2 memory monitor.])])
+		   ])
+       ])
+
+AS_IF([test $kdreg2_enabled -eq 0],
+      [AC_MSG_NOTICE([kdreg2 monitor disabled])],
+      [AS_IF([test $have_kdreg2 -ne 0],
+             [AC_MSG_NOTICE([kdreg2 present and enabled])])])
+
+AC_DEFINE_UNQUOTED(HAVE_KDREG2, [$have_kdreg2],
+	[Define to 1 if kdreg2.h is available.])
+
+AC_DEFINE_UNQUOTED(HAVE_KDREG2_INCLUDE_PATH, [$have_kdreg2_include_path],
+	[Define to 1 if kdreg2.h path is not <linux/kdreg2.h>.])
+
+AC_DEFINE_UNQUOTED(HAVE_KDREG2_MONITOR, [$have_kdreg2],
+	[Define to 1 to enable kdreg2 memory monitor])
+
 dnl Check support to intercept syscalls
 AC_CHECK_HEADERS_ONCE(elf.h sys/auxv.h)
 
@@ -888,16 +935,18 @@ AC_DEFINE_UNQUOTED(ENABLE_UFFD_MONITOR, [$enable_uffd],
 default_monitor=""
 bad_default="0"
 AC_ARG_WITH([default-monitor],
-	[AS_HELP_STRING([--with-default-monitor=<memhooks|uffd|disabled>],
+	[AS_HELP_STRING([--with-default-monitor=<memhooks|uffd|kdreg2|disabled>],
 			[Select the default memory monitor.])],
 	[AS_CASE([$with_default_monitor],
 		[memhooks],[default_monitor=memhooks],
 		[uffd],[default_monitor=uffd],
+		[kdreg2],[default_monitor=kdreg2]
 		[disabled], [default_monitor=disabled],
 		[AC_MSG_ERROR([Unknown monitor specified: $with_default_monitor.  Choices are memhooks, uffd, or disabled.])])
 	 AS_CASE([$default_monitor],
 		[memhooks], [AS_IF([test "$enable_memhooks" != "1"], [bad_default=1])],
 		[uffd], [AS_IF([test "$enable_uffd" != "1"], [bad_default=1])],
+		[kdreg2], [AS_IF([test "$kdreg2_enabled" != "1"], [bad_default=1])],
 		[])
 	 AS_IF([test "$bad_default" != "0"],
 		[AC_MSG_ERROR(["Default memory monitor is not available: $default_monitor."])])

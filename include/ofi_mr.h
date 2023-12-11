@@ -2,7 +2,7 @@
  * Copyright (c) 2017-2019 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2019-2021 Amazon.com, Inc. or its affiliates.
  *                         All rights reserved.
- * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * (C) Copyright 2020-2023 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -40,6 +40,8 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+struct ofi_mr;
+
 #include <inttypes.h>
 #include <stdbool.h>
 
@@ -48,6 +50,15 @@
 #include <ofi_lock.h>
 #include <ofi_list.h>
 #include <ofi_tree.h>
+#include <ofi_hmem.h>
+
+#if HAVE_KDREG2_MONITOR
+#if HAVE_KDREG2_INCLUDE_PATH
+#include "kdreg2.h"
+#else
+#include <linux/kdreg2.h>
+#endif
+#endif
 
 int ofi_open_mr_cache(uint32_t version, void *attr, size_t attr_len,
 		      uint64_t flags, struct fid **fid, void *context);
@@ -128,6 +139,12 @@ struct ofi_mr_cache;
 union ofi_mr_hmem_info {
 	uint64_t cuda_id;
 	uint64_t ze_id;
+#if HAVE_KDREG2_MONITOR
+	struct {
+		kdreg2_cookie_t cookie;
+		struct kdreg2_monitoring_params monitoring_params;
+	} kdreg2;
+#endif
 };
 
 struct ofi_mr_entry {
@@ -227,6 +244,23 @@ struct ofi_memhooks {
 };
 
 extern struct ofi_mem_monitor *memhooks_monitor;
+
+/*
+ * Kdreg2 monitor
+ */
+
+struct kdreg2_status_data;
+
+struct ofi_kdreg2 {
+	struct ofi_mem_monitor          monitor;
+	pthread_t                       thread;
+	int                             fd;
+	int                             exit_pipe[2];
+	const struct kdreg2_status_data *status_data;
+	ofi_atomic64_t                  next_cookie;
+};
+
+extern struct ofi_mem_monitor *kdreg2_monitor;
 
 extern struct ofi_mem_monitor *cuda_monitor;
 extern struct ofi_mem_monitor *cuda_ipc_monitor;
@@ -368,7 +402,7 @@ struct ofi_mr_cache {
 	struct ofi_rbmap		tree;
 	struct dlist_entry		lru_list;
 	struct dlist_entry		dead_region_list;
-	pthread_mutex_t 		lock;
+	pthread_mutex_t			lock;
 
 	size_t				cached_cnt;
 	size_t				cached_size;
