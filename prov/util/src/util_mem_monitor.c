@@ -194,6 +194,7 @@ static void initialize_monitor_list()
 		ze_monitor,
 		ze_ipc_monitor,
 		import_monitor,
+		kdreg2_monitor,
 	};
 
 	monitor_list_size = ARRAY_SIZE(monitors);
@@ -228,6 +229,13 @@ static void set_default_monitor(const char *monitor)
 		default_monitor = memhooks_monitor;
 #else
 		FI_WARN(&core_prov, FI_LOG_MR, "memhooks monitor not available\n");
+		default_monitor = NULL;
+#endif
+	} else if (!strcmp(monitor, "kdreg2")) {
+#if HAVE_KDREG2_MONITOR
+		default_monitor = kdreg2_monitor;
+#else
+		FI_WARN(&core_prov, FI_LOG_MR, "kdreg2 monitor not available\n");
 		default_monitor = NULL;
 #endif
 	} else if (!strcmp(monitor, "disabled")) {
@@ -269,9 +277,10 @@ void ofi_monitors_init(void)
 			"Define a default memory registration monitor."
 			" The monitor checks for virtual to physical memory"
 			" address changes.  Options are: userfaultfd, memhooks"
-			" and disabled.  Userfaultfd is a Linux kernel feature."
-			" Memhooks operates by intercepting memory allocation"
-			" and free calls."
+			" kdreg2, and disabled.  Userfaultfd is a Linux kernel"
+			" feature. Memhooks operates by intercepting memory"
+			" allocation and free calls. kdreg2 is a supplied as a"
+			" loadable Linux kernel module."
 #if defined(HAVE_MR_CACHE_MONITOR_DEFAULT)
 			" " HAVE_MR_CACHE_MONITOR_DEFAULT
 #else
@@ -313,6 +322,8 @@ void ofi_monitors_init(void)
 		default_monitor = memhooks_monitor;
 #elif HAVE_UFFD_MONITOR
 		default_monitor = uffd_monitor;
+#elif HAVE_KDREG2_MONITOR
+		default_monitor = kdreg2_monitor;
 #else
 		default_monitor = NULL;
 #endif
