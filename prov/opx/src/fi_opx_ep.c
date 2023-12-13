@@ -1918,10 +1918,17 @@ int opx_get_drv_ver(char *drv_ver)
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"popen failed, unable to get hfi1 version\n");
 		return -FI_EIO;
-	} else {
-		fgets(drv_ver, FI_OPX_VER_CHECK_BUF_LEN , p);
-		pclose(p);
 	}
+
+	char *fgets_res = fgets(drv_ver, FI_OPX_VER_CHECK_BUF_LEN, p);
+	pclose(p);
+
+	if (fgets_res == NULL) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"fgets failed, unable to get hfi1 version\n");
+		return -FI_EIO;
+	}
+
 	return FI_SUCCESS;
 }
 
@@ -1934,8 +1941,16 @@ int opx_get_srcver_modinfo(char *srcver_modinfo)
 			"popen failed, unable to get hfi1 srcversion\n");
 		return -FI_EIO;
 	}
-	fgets(srcver_modinfo, FI_OPX_VER_CHECK_BUF_LEN , p);
+
+	char *fgets_res = fgets(srcver_modinfo, FI_OPX_VER_CHECK_BUF_LEN, p);
 	pclose(p);
+
+	if (fgets_res == NULL) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"fgets failed, unable to get hfi1 srcversion\n");
+		return -FI_EIO;
+	}
+
 	return FI_SUCCESS;
 }
 
@@ -1948,8 +1963,16 @@ int opx_get_srcver_sys(char *srcver_sys)
 			"popen failed, unable to get /sys/module/hfi1/srcversion\n");
 		return -FI_EIO;
 	}
-	fgets(srcver_sys, FI_OPX_VER_CHECK_BUF_LEN , p);
+
+	char *fgets_res = fgets(srcver_sys, FI_OPX_VER_CHECK_BUF_LEN, p);
 	pclose(p);
+
+	if (fgets_res == NULL) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"fgets failed, unable to get /sys/module/hfi1/srcversion\n");
+		return -FI_EIO;
+	}
+
 	return FI_SUCCESS;
 }
 
