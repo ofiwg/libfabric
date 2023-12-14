@@ -2990,7 +2990,7 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 	}
 }
 
-static inline __attribute__((always_inline))
+static inline
 void fi_opx_ep_rx_poll (struct fid_ep *ep,
 			const uint64_t caps,
 			const enum ofi_reliability_kind reliability,
