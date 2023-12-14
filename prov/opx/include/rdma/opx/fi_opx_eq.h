@@ -389,9 +389,8 @@ static ssize_t fi_opx_cq_poll_noinline (struct fi_opx_cq *opx_cq,
 	return num_entries;
 }
 
-static inline void __attribute__((always_inline)) fi_opx_ep_rx_poll (struct fid_ep *ep, const uint64_t caps, const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask);
-
 __OPX_FORCE_INLINE__
+__attribute__ ((flatten))
 ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
 		fi_addr_t *src_addr, const enum fi_cq_format format,
 		const int lock_required,
