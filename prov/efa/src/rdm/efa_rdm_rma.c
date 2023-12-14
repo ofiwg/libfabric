@@ -173,8 +173,10 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 
 	/*
 	 * A handshake is required to choose the correct protocol (whether to use device read).
+	 * For local read (read from self ep), such handshake is not needed because we only
+	 * need to check the local ep's capabilities.
 	 */
-	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+	if (!(peer->is_self) && !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		err = efa_rdm_ep_trigger_handshake(efa_rdm_ep, txe->addr);
 		err = err ? err : -FI_EAGAIN;
 		goto out;
