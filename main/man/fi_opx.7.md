@@ -112,15 +112,19 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   This variable can be set with FI_OPX_UUID=${RANDOM} 
   The default UUID is 00112233445566778899aabbccddeeff.
 
+*FI_OPX_FORCE_CPUAFFINITY*
+: Boolean (0/1, on/off, true/false, yes/no). Causes the thread to bind 
+  itself to the cpu core it is running on. Defaults to "No"
+
 *FI_OPX_RELIABILITY_SERVICE_USEC_MAX*
-: This setting controls how frequently the reliability/replay function
-  will issue PING requests to a remote connection. Reducing this value
-  may improve performance at the expense of increased traffic on the OPX 
-  fabric.
+: Integer. This setting controls how frequently the reliability/replay
+  function will issue PING requests to a remote connection. Reducing this 
+  value may improve performance at the expense of increased traffic on the 
+  OPX fabric.
   Default setting is 500.
 
 *FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE*
-: This setting controls how frequently a receiving rank will send ACKs
+: Integer. This setting controls how frequently a receiving rank will send ACKs
   for packets it has received without being prompted through a PING request.
   A non-zero value N tells the receiving rank to send an ACK for the
   last N packets every Nth packet. Used in conjunction with an increased
@@ -129,18 +133,14 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Valid values are 0 (disabled) and powers of 2 in the range of 1-32,768, inclusive.
 
   Default setting is 64.
-
-*FI_OPX_PROG_AFFINITY*
-: This sets the affinity to be used for any progress threads. Set as a colon-separated 
-  triplet as start:end:stride, where stride controls the interval between selected cores.
-  For example, 1:5:2 will have cores 1, 3, and 5 as valid cores for progress threads. Default is
-  1:4:1.
-
-*FI_OPX_AUTO_PROGRESS_INTERVAL_USEC*
-: This setting controls the time (in usecs) between polls for auto progress threads. Default is 1.
+  
+*FI_OPX_SELINUX*
+: Boolean (0/1, on/off, true/false, yes/no). Set to true if you're running a 
+  security-enhanced Linux. This enables updating the Jkey used based on system 
+  settings. Defaults to "No"
 
 *FI_OPX_HFI_SELECT*
-: Controls how OPX chooses which HFI to use when opening a context.
+: String. Controls how OPX chooses which HFI to use when opening a context.
   Has two forms:
   - `<hfi-unit>` Force OPX provider to use `hfi-unit`.
   - `<selector1>[,<selector2>[,...,<selectorN>]]` Select HFI based on first matching `selector`
@@ -190,6 +190,32 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   - `FI_OPX_HFI_SELECT=numa:0:0-3,default` callers local to NUMA nodes 0 thru 3 (including 0 and 3) will use HFI 0, and all else will use default selection logic.
   - `FI_OPX_HFI_SELECT=core:1:0,fixed:0` callers local to CPU core 0 will use HFI 1, and all others will use HFI 0.
   - `FI_OPX_HFI_SELECT=default,core:1:0` all callers will use default HFI selection logic.
+
+*FI_OPX_DELIVERY_COMPLETION_THRESHOLD*
+: Integer. The minimum message length in bytes to force delivery completion.
+  Value must be between 16385 and 2147483646. Defaults to 16385.
+
+*FI_OPX_SDMA_DISABLE*
+: Integer. Disables SDMA offload hardware. Default is 0
+
+*FI_OPX_EXPECTED_RECEIVE_ENABLE*
+: Boolean (0/1, on/off, true/false, yes/no). Enables expected receive rendezvous using Token ID (TID).
+  Defaults to "No". This feature is not currently supported.
+
+*FI_OPX_PROG_AFFINITY*
+: String. This sets the affinity to be used for any progress threads. Set as a colon-separated
+  triplet as `start:end:stride`, where stride controls the interval between selected cores.
+  For example, `1:5:2` will have cores 1, 3, and 5 as valid cores for progress threads. Default is
+  `1:4:1`.
+
+*FI_OPX_AUTO_PROGRESS_INTERVAL_USEC*
+: Integer, This setting controls the time (in usecs) between polls for auto progress threads. Default is 1.
+
+*FI_OPX_PKEY*
+: Integer. Partition key, a 2 byte positive integer. Default is 0x8001
+
+*FI_OPX_SL*
+: Integer. Service Level. This will also determine Service Class and Virtual Lane.  Default is 0
 
 # SEE ALSO
 
