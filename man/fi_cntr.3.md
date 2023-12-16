@@ -121,7 +121,16 @@ struct fi_cntr_attr {
   and/or receives -- which are counted may be restricted using control
   flags when binding the counter and the endpoint.  Counters increment
   on all successful completions, separately from whether the operation
-  generates an entry in an event queue.
+  generates an entry in an event queue.  This includes truncated messages.
+
+- *FI_CNTR_EVENTS_BYTES*
+: The counter increments by the manipulated length for every successful 
+  completion that occurs on an associated bound endpoint.  The type of 
+  completions -- sends and/or receives -- which are counted may be 
+  restricted using control flags when binding the counter and the 
+  endpoint.  Counters increment on all successful completions, 
+  separately from whether the operation generates an entry in an 
+  event queue.  This includes truncated messages.
 
 *wait_obj*
 : Counters may be associated with a specific wait object.  Wait

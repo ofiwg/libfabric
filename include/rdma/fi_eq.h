@@ -285,7 +285,9 @@ struct fid_cq {
  */
 
 enum fi_cntr_events {
-	FI_CNTR_EVENTS_COMP
+	FI_CNTR_EVENTS_COMP,
+	FI_CNTR_EVENTS_BYTES	/* Increment counting events by MLENGTH */
+
 };
 
 struct fi_cntr_attr {
