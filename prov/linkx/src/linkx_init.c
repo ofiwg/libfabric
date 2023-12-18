@@ -230,7 +230,7 @@ lnx_get_cache_entry_by_prov(char *prov_name, bool remove)
 		if (info && info->fabric_attr) {
 			if (!strcmp(prov_name,
 						info->fabric_attr->prov_name)) {
-				/* this will be freed lnx_cleanup_eps() */
+				/* this will be freed lnx_free_eps() */
 				if (remove)
 					lnx_fi_info_cache[i].cache_info = NULL;
 				FI_INFO(&lnx_prov, FI_LOG_CORE, "Found %s\n",
@@ -255,7 +255,7 @@ lnx_get_cache_entry_by_dom(char *domain_name)
 		if (info && info->domain_attr) {
 			if (!strcmp(domain_name,
 						info->domain_attr->name)) {
-				/* this will be freed lnx_cleanup_eps() */
+				/* this will be freed lnx_free_eps() */
 				lnx_fi_info_cache[i].cache_info = NULL;
 				FI_INFO(&lnx_prov, FI_LOG_CORE, "Found %s\n",
 						info->domain_attr->name);
@@ -504,25 +504,18 @@ lnx_get_local_prov(struct dlist_entry *prov_table, char *prov_name)
 static int
 lnx_add_ep_to_prov(struct local_prov *prov, struct local_prov_ep *ep)
 {
-	int i;
+	dlist_insert_tail(&ep->entry, &prov->lpv_prov_eps);
+	ep->lpe_parent = prov;
+	prov->lpv_ep_count++;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		if (prov->lpv_prov_eps[i])
-			continue;
-		prov->lpv_prov_eps[i] = ep;
-		ep->lpe_parent = prov;
-		prov->lpv_ep_count++;
-		return 0;
-	}
-
-	return -FI_ENOENT;
+	return FI_SUCCESS;
 }
 
 static int
 lnx_setup_core_prov(struct fi_info *info, struct dlist_entry *prov_table,
 		    struct local_prov **shm_prov, void *context)
 {
-	int rc;
+	int rc = -FI_EINVAL;
 	struct local_prov_ep *entry = NULL;
 	struct local_prov *lprov, *new_lprov = NULL;
 
@@ -533,6 +526,8 @@ lnx_setup_core_prov(struct fi_info *info, struct dlist_entry *prov_table,
 	new_lprov = calloc(sizeof(*new_lprov), 1);
 	if (!new_lprov)
 		goto free_entry;
+
+	dlist_init(&new_lprov->lpv_prov_eps);
 
 	rc = fi_fabric(info->fabric_attr, &entry->lpe_fabric, context);
 	if (rc)
@@ -558,6 +553,7 @@ lnx_setup_core_prov(struct fi_info *info, struct dlist_entry *prov_table,
 		entry->lpe_local = true;
 	}
 
+	dlist_init(&entry->entry);
 	rc = lnx_add_ep_to_prov(lprov, entry);
 	if (rc)
 		goto free_all;
@@ -675,19 +671,16 @@ void lnx_fini(void)
 	ofi_bufpool_destroy(global_recv_bp);
 }
 
-static int lnx_free_ep(struct local_prov *prov, int idx)
+static int lnx_free_ep(struct local_prov *prov, struct local_prov_ep *ep)
 {
 	int rc;
-	struct local_prov_ep *ep;
 
-	if (!prov || !prov->lpv_prov_eps[idx])
+	if (!prov || !ep)
 		return FI_SUCCESS;
 
-	ep = prov->lpv_prov_eps[idx];
 	rc = fi_close(&ep->lpe_fabric->fid);
 	fi_freeinfo(ep->lpe_fi_info);
 	free(ep);
-	prov->lpv_prov_eps[idx] = NULL;
 	prov->lpv_ep_count--;
 
 	if (prov->lpv_ep_count == 0)
@@ -696,13 +689,16 @@ static int lnx_free_ep(struct local_prov *prov, int idx)
 	return rc;
 }
 
-static int lnx_cleanup_eps(struct local_prov *prov)
+static int lnx_free_eps(struct local_prov *prov)
 {
-	int i;
 	int rc, frc = 0;
+	struct dlist_entry *tmp;
+	struct local_prov_ep *ep;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		rc = lnx_free_ep(prov, i)
+	dlist_foreach_container_safe(&prov->lpv_prov_eps,
+		struct local_prov_ep, ep, entry, tmp) {
+		dlist_remove(&ep->entry);
+		rc = lnx_free_ep(prov, ep);
 		if (rc)
 			frc = rc;
 	}
@@ -766,7 +762,7 @@ int lnx_fabric_close(struct fid *fid)
 	dlist_foreach_container_safe(&lnx_fab->local_prov_table,
 				     struct local_prov, entry, lpv_entry, tmp) {
 		dlist_remove(&entry->lpv_entry);
-		rc = lnx_cleanup_eps(entry);
+		rc = lnx_free_eps(entry);
 		if (rc)
 			FI_WARN(&lnx_prov, FI_LOG_CORE,
 				"Failed to close provider %s\n",

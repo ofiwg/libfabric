@@ -186,14 +186,11 @@ static int lnx_peer_remove(struct lnx_peer_table *tbl, int idx)
 
 static int lnx_cleanup_avs(struct local_prov *prov)
 {
-	int i;
 	int rc, frc = 0;
 	struct local_prov_ep *ep;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		ep = prov->lpv_prov_eps[i];
-		if (!ep)
-			continue;
+	dlist_foreach_container(&prov->lpv_prov_eps,
+		struct local_prov_ep, ep, entry) {
 		rc = fi_close(&ep->lpe_av->fid);
 		if (rc)
 			frc = rc;
@@ -406,15 +403,15 @@ static int lnx_peer_map_addrs(struct dlist_entry *prov_table,
 			      struct lnx_peer *lp, struct lnx_addresses *la,
 			      uint64_t flags, void *context)
 {
-	int i, k, rc;
+	int i, j, rc;
 	struct lnx_peer_prov *lpp;
 	struct lnx_address_prov *lap;
+	struct local_prov_ep *lpe;
+	struct dlist_entry *eps;
 
 	lap = &la->la_addr_prov[0];
 
 	for (i = 0; i < la->la_prov_count; i++) {
-		int num_eps;
-
 		if (lap->lap_addr_count > LNX_MAX_LOCAL_EPS)
 			return -FI_EPROTO;
 
@@ -425,21 +422,10 @@ static int lnx_peer_map_addrs(struct dlist_entry *prov_table,
 
 		lpp->lpp_flags = flags;
 
-		/* insert these addresses in all our local endpoints for this
-		 * provider
-		 */
-		if (lp->lp_local)
-			num_eps = 1;
-		else
-			num_eps = LNX_MAX_LOCAL_EPS;
-
-		for (k = 0; k < num_eps; k++) {
-			struct local_prov_ep *lpe;
+		eps = &lpp->lpp_prov->lpv_prov_eps;
+		dlist_foreach_container(eps, struct local_prov_ep, lpe,
+					entry) {
 			struct lnx_local2peer_map *lpm;
-
-			lpe = lpp->lpp_prov->lpv_prov_eps[k];
-			if (!lpe)
-				continue;
 
 			/* if this is a remote peer, don't insert the shm address
 			 * since we will never talk to that peer over shm
@@ -452,7 +438,7 @@ static int lnx_peer_map_addrs(struct dlist_entry *prov_table,
 			if (!lpm)
 				return -FI_ENOMEM;
 
-			lpp->lpp_map[k] = lpm;
+			lpp->lpp_map[0] = lpm;
 
 			lpm->local_ep = lpe;
 			lpm->addr_count = lap->lap_addr_count;
@@ -600,15 +586,12 @@ static void lnx_get_core_av_attr(struct local_prov_ep *ep,
 static int lnx_open_avs(struct local_prov *prov, struct fi_av_attr *attr,
 			void *context)
 {
-	int i;
 	int rc = 0;
 	struct local_prov_ep *ep;
 	struct fi_av_attr core_attr;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		ep = prov->lpv_prov_eps[i];
-		if (!ep)
-			continue;
+	dlist_foreach_container(&prov->lpv_prov_eps,
+		struct local_prov_ep, ep, entry) {
 		lnx_get_core_av_attr(ep, &core_attr);
 		if (ep->lpe_local)
 			core_attr.count = ep->lpe_fi_info->domain_attr->ep_cnt;

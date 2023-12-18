@@ -57,16 +57,13 @@ extern struct fi_ops_atomic lnx_atomic_ops;
 
 static void lnx_init_ctx(struct fid_ep *ctx, size_t fclass);
 
-static int lnx_cleanup_eps(struct local_prov *prov)
+static int lnx_close_ceps(struct local_prov *prov)
 {
-	int i;
 	int rc, frc = 0;
 	struct local_prov_ep *ep;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		ep = prov->lpv_prov_eps[i];
-		if (!ep)
-			continue;
+	dlist_foreach_container(&prov->lpv_prov_eps,
+		struct local_prov_ep, ep, entry) {
 		rc = fi_close(&ep->lpe_ep->fid);
 		if (rc)
 			frc = rc;
@@ -90,7 +87,7 @@ int lnx_ep_close(struct fid *fid)
 	dlist_foreach_container(&fabric->local_prov_table,
 				struct local_prov,
 				entry, lpv_entry) {
-		lnx_cleanup_eps(entry);
+		lnx_close_ceps(entry);
 		if (rc)
 			FI_WARN(&lnx_prov, FI_LOG_CORE,
 				"Failed to close endpoint for %s\n",
@@ -105,7 +102,7 @@ int lnx_ep_close(struct fid *fid)
 
 static int lnx_enable_core_eps(struct lnx_ep *lep)
 {
-	int rc, i;
+	int rc;
 	struct local_prov *entry;
 	struct local_prov_ep *ep;
 	int srq_support = 1;
@@ -115,11 +112,8 @@ static int lnx_enable_core_eps(struct lnx_ep *lep)
 
 	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 				entry, lpv_entry) {
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
-
+		dlist_foreach_container(&entry->lpv_prov_eps,
+			struct local_prov_ep, ep, entry) {
 			if (srq_support) {
 				/* bind the shared receive context */
 				rc = fi_ep_bind(ep->lpe_ep,
@@ -167,7 +161,7 @@ static int lnx_ep_control(struct fid *fid, int command, void *arg)
 
 int lnx_cq_bind_core_prov(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	int rc, i;
+	int rc;
 	struct lnx_ep *lep;
 	/* LINKx CQ */
 	struct util_cq *cq;
@@ -183,18 +177,11 @@ int lnx_cq_bind_core_prov(struct fid *fid, struct fid *bfid, uint64_t flags)
 	if (rc)
 		return rc;
 
-	rc = fid_list_insert(&cq->ep_list, &cq->ep_list_lock, fid);
-	if (rc)
-		return rc;
-
 	/* bind the core providers to their respective CQs */
 	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 				entry, lpv_entry) {
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
-
+		dlist_foreach_container(&entry->lpv_prov_eps,
+			struct local_prov_ep, ep, entry) {
 			rc = fi_ep_bind(ep->lpe_ep,
 					&ep->lpe_cq.lpc_core_cq->fid, flags);
 			if (rc)
@@ -209,15 +196,12 @@ static int lnx_ep_bind_core_prov(struct lnx_fabric *fabric, uint64_t flags)
 {
 	struct local_prov *entry;
 	struct local_prov_ep *ep;
-	int i, rc;
+	int rc;
 
 	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 				entry, lpv_entry) {
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
-
+		dlist_foreach_container(&entry->lpv_prov_eps,
+			struct local_prov_ep, ep, entry) {
 			rc = fi_ep_bind(ep->lpe_ep, &ep->lpe_av->fid, flags);
 			if (rc)
 				return rc;
@@ -292,9 +276,10 @@ int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
 	char hostname[FI_NAME_MAX];
 	size_t prov_addrlen;
 	size_t addrlen_list[LNX_MAX_LOCAL_EPS];
-	int rc, i, j = 0;
+	int rc, j = 0;
 	struct lnx_ep *lnx_ep;
 	struct lnx_fabric *fabric;
+	struct local_prov_ep *ep;
 
 	lnx_ep = container_of(fid, struct lnx_ep, le_ep.ep_fid.fid);
 	fabric = lnx_ep->le_domain->ld_fabric;
@@ -317,11 +302,8 @@ int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
 		size += sizeof(struct lnx_address_prov);
 		prov_addrlen = 0;
 
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			struct local_prov_ep *ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
-
+		dlist_foreach_container(&entry->lpv_prov_eps,
+			struct local_prov_ep, ep, entry) {
 			rc = fi_getname(&ep->lpe_ep->fid, (void*)ep_addr, &prov_addrlen);
 			if (rc == -FI_ETOOSMALL) {
 				size += prov_addrlen * entry->lpv_ep_count;
@@ -351,11 +333,8 @@ int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
 		lap->lap_addr_count = entry->lpv_ep_count;
 		lap->lap_addr_size = addrlen_list[j];
 
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			struct local_prov_ep *ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
-
+		dlist_foreach_container(&entry->lpv_prov_eps,
+			struct local_prov_ep, ep, entry) {
 			tmp = (char*)lap + sizeof(*lap);
 
 			rc = fi_getname(&ep->lpe_ep->fid, (void*)tmp, &addrlen_list[j]);
@@ -380,7 +359,7 @@ int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
 
 static ssize_t lnx_ep_cancel(fid_t fid, void *context)
 {
-	int rc = 0, i;
+	int rc = 0;
 	struct lnx_ep *lep;
 	struct lnx_ctx *ctx;
 	struct local_prov_ep *ep;
@@ -398,17 +377,16 @@ static ssize_t lnx_ep_cancel(fid_t fid, void *context)
 	case FI_CLASS_TX_CTX:
 		/* can't cancel a transmit */
 		return -FI_ENOENT;
+	default:
+		return -FI_EINVAL;
 	}
 
 	fabric = lep->le_domain->ld_fabric;
 
 	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 				entry, lpv_entry) {
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
-
+		dlist_foreach_container(&entry->lpv_prov_eps,
+			struct local_prov_ep, ep, entry) {
 			rc = fi_cancel(&ep->lpe_ep->fid, context);
 			if (rc == -FI_ENOSYS) {
 				FI_WARN(&lnx_prov, FI_LOG_CORE,
@@ -428,7 +406,7 @@ static ssize_t lnx_ep_cancel(fid_t fid, void *context)
 static int lnx_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 			  size_t optlen)
 {
-	int rc = 0, i;
+	int rc = 0;
 	struct lnx_ep *lep;
 	struct local_prov_ep *ep;
 	struct local_prov *entry;
@@ -439,11 +417,8 @@ static int lnx_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 
 	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 				entry, lpv_entry) {
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
-
+		dlist_foreach_container(&entry->lpv_prov_eps,
+			struct local_prov_ep, ep, entry) {
 			rc = fi_setopt(&ep->lpe_ep->fid, level, optname,
 				       optval, optlen);
 			if (rc == -FI_ENOSYS) {
@@ -465,7 +440,7 @@ static int lnx_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 static int lnx_ep_txc(struct fid_ep *fid, int index, struct fi_tx_attr *attr,
 		      struct fid_ep **tx_ep, void *context)
 {
-	int rc = 0, i;
+	int rc = 0;
 	struct lnx_ep *lep;
 	struct lnx_ctx *ctx;
 	struct local_prov_ep *ep;
@@ -481,11 +456,8 @@ static int lnx_ep_txc(struct fid_ep *fid, int index, struct fi_tx_attr *attr,
 
 	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 				entry, lpv_entry) {
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
-
+		dlist_foreach_container(&entry->lpv_prov_eps,
+			struct local_prov_ep, ep, entry) {
 			if (index >= ep->lpe_fi_info->ep_attr->tx_ctx_cnt)
 				continue;
 
@@ -517,7 +489,7 @@ static int lnx_ep_txc(struct fid_ep *fid, int index, struct fi_tx_attr *attr,
 static int lnx_ep_rxc(struct fid_ep *fid, int index, struct fi_rx_attr *attr,
 			  struct fid_ep **rx_ep, void *context)
 {
-	int rc = 0, i;
+	int rc = 0;
 	struct lnx_ep *lep;
 	struct lnx_ctx *ctx;
 	struct local_prov_ep *ep;
@@ -533,11 +505,8 @@ static int lnx_ep_rxc(struct fid_ep *fid, int index, struct fi_rx_attr *attr,
 
 	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 				entry, lpv_entry) {
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
-
+		dlist_foreach_container(&entry->lpv_prov_eps,
+			struct local_prov_ep, ep, entry) {
 			if (index >= ep->lpe_fi_info->ep_attr->rx_ctx_cnt)
 				continue;
 
@@ -602,16 +571,13 @@ struct fi_ops_cm lnx_cm_ops = {
 static int lnx_open_eps(struct local_prov *prov, struct fi_info *info,
 			void *context, size_t fclass, struct lnx_ep *lep)
 {
-	int i;
 	int rc = 0;
 	struct local_prov_ep *ep;
+	struct dlist_entry *tmp;
 	struct ofi_bufpool_attr bp_attrs = {};
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		ep = prov->lpv_prov_eps[i];
-		if (!ep)
-			continue;
-
+	dlist_foreach_container_safe(&prov->lpv_prov_eps,
+		struct local_prov_ep, ep, entry, tmp) {
 		if (fclass == FI_CLASS_EP) {
 			rc = fi_endpoint(ep->lpe_domain, ep->lpe_fi_info,
 					 &ep->lpe_ep, context);
@@ -939,7 +905,6 @@ static void lnx_close_ep_ctx(struct local_prov_ep *ep, size_t fclass)
 
 static int lnx_ctx_close(struct fid *fid)
 {
-	int i;
 	struct lnx_ep *lep;
 	struct lnx_ctx *ctx;
 	struct local_prov_ep *ep;
@@ -957,13 +922,9 @@ static int lnx_ctx_close(struct fid *fid)
 
 	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 				entry, lpv_entry) {
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
-
+		dlist_foreach_container(&entry->lpv_prov_eps,
+			struct local_prov_ep, ep, entry)
 			lnx_close_ep_ctx(ep, fid->fclass);
-		}
 	}
 
 	return FI_SUCCESS;
@@ -993,7 +954,7 @@ static int lnx_ctx_bind_cq(struct local_prov_ep *ep, size_t fclass,
 static int
 lnx_ctx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	int i, rc;
+	int rc;
 	struct lnx_ep *lep;
 	struct lnx_ctx *ctx;
 	struct local_prov_ep *ep;
@@ -1011,11 +972,8 @@ lnx_ctx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 				entry, lpv_entry) {
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
-
+		dlist_foreach_container(&entry->lpv_prov_eps,
+			struct local_prov_ep, ep, entry) {
 			if (bfid->fclass == FI_CLASS_CQ)
 				/* bind the context to the shared cq */
 				rc = lnx_ctx_bind_cq(ep, fid->fclass,
@@ -1056,7 +1014,7 @@ lnx_enable_ctx_eps(struct local_prov_ep *ep, size_t fclass)
 static int
 lnx_ctx_control(struct fid *fid, int command, void *arg)
 {
-	int rc, i;
+	int rc;
 	struct lnx_ep *lep;
 	struct lnx_ctx *ctx;
 	struct local_prov_ep *ep;
@@ -1078,11 +1036,8 @@ lnx_ctx_control(struct fid *fid, int command, void *arg)
 			return -FI_ENOAV;
 		dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 					entry, lpv_entry) {
-			for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-				ep = entry->lpv_prov_eps[i];
-				if (!ep)
-					continue;
-
+			dlist_foreach_container(&entry->lpv_prov_eps,
+				struct local_prov_ep, ep, entry) {
 				rc = lnx_enable_ctx_eps(ep, fid->fclass);
 				if (rc)
 					return rc;

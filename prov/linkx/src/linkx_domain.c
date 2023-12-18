@@ -65,12 +65,12 @@ static struct fi_ops_domain lnx_domain_ops = {
 
 static int lnx_cleanup_domains(struct local_prov *prov)
 {
-	int i, rc, frc = 0;
+	int rc, frc = 0;
 	struct local_prov_ep *ep;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		ep = prov->lpv_prov_eps[i];
-		if (!ep)
+	dlist_foreach_container(&prov->lpv_prov_eps,
+				struct local_prov_ep, ep, entry) {
+		if (!ep->lpe_domain)
 			continue;
 		rc = fi_close(&ep->lpe_domain->fid);
 		if (rc)
@@ -109,7 +109,7 @@ static int
 lnx_mr_regattrs_all(struct local_prov *prov, const struct fi_mr_attr *attr,
 		    uint64_t flags, struct lnx_mem_desc_prov *desc)
 {
-	int i, rc = 0;
+	int rc = 0;
 	struct local_prov_ep *ep;
 
 	desc->prov = prov;
@@ -117,10 +117,8 @@ lnx_mr_regattrs_all(struct local_prov *prov, const struct fi_mr_attr *attr,
 	/* TODO: This is another issue here because MR registration can happen
 	 * quiet often
 	 */
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		ep = prov->lpv_prov_eps[i];
-		if (!ep)
-			continue;
+	dlist_foreach_container(&prov->lpv_prov_eps,
+				struct local_prov_ep, ep, entry) {
 		rc = fi_mr_regattr(ep->lpe_domain, attr,
 				flags, &desc->core_mr);
 
@@ -190,7 +188,8 @@ int lnx_mr_close(struct fid *fid)
 
 static int lnx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	int i, j, rc, frc = 0;
+	int i, rc, frc = 0;
+	struct local_prov_ep *ep;
 	struct fid_mr *mr, *cmr;
 	struct lnx_mem_desc *mem_desc;
 	struct lnx_mem_desc_prov *desc;
@@ -204,18 +203,16 @@ static int lnx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	 */
 	for (i = 0; i < mem_desc->desc_count; i++) {
 		desc = &mem_desc->desc[i];
-		for (j = 0; j < LNX_MAX_LOCAL_EPS; j++) {
-			struct local_prov_ep *ep;
-			cmr = desc->core_mr;
-			if (!cmr)
-				continue;
-			ep = desc->prov->lpv_prov_eps[j];
-			if (!ep)
-				break;
+		cmr = desc->core_mr;
+		if (!cmr)
+			continue;
+		dlist_foreach_container(&desc->prov->lpv_prov_eps,
+					struct local_prov_ep, ep, entry) {
 			rc = fi_mr_bind(cmr, &ep->lpe_ep->fid, flags);
 			if (rc) {
-				FI_WARN(&lnx_prov, FI_LOG_CORE, "%s lnx_mr_bind() failed: %d\n",
-					mem_desc->desc[j].prov->lpv_prov_name, rc);
+				FI_WARN(&lnx_prov, FI_LOG_CORE,
+					"%s lnx_mr_bind() failed: %d\n",
+					mem_desc->desc[i].prov->lpv_prov_name, rc);
 				frc = rc;
 			}
 		}
@@ -435,10 +432,11 @@ static int lnx_open_core_domains(struct local_prov *prov,
 				void *context, struct lnx_domain *lnx_domain,
 				struct fi_info *info)
 {
-	int i, rc;
+	int rc;
 	struct local_prov_ep *ep;
 	struct fi_rx_attr attr;
 	struct fi_peer_srx_context peer_srx;
+	struct dlist_entry *tmp;
 	int srq_support = 1;
 
 	fi_param_get_bool(&lnx_prov, "srq_support", &srq_support);
@@ -452,11 +450,8 @@ static int lnx_open_core_domains(struct local_prov *prov,
 	else
 		lnx_domain->ld_srx_supported = false;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		ep = prov->lpv_prov_eps[i];
-		if (!ep)
-			continue;
-
+	dlist_foreach_container_safe(&prov->lpv_prov_eps,
+		struct local_prov_ep, ep, entry, tmp) {
 		/* the fi_info we setup when we created the fabric might not
 		 * necessarily be the correct one. It'll have the same fabric
 		 * information, since the fabric information is common among all

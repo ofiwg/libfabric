@@ -82,6 +82,7 @@ struct lnx_peer_srq {
 };
 
 struct local_prov_ep {
+	struct dlist_entry entry;
 	bool lpe_local;
 	char lpe_fabric_name[FI_NAME_MAX];
 	struct fid_fabric *lpe_fabric;
@@ -211,7 +212,7 @@ struct local_prov {
 	struct dlist_entry lpv_entry;
 	char lpv_prov_name[FI_NAME_MAX];
 	int lpv_ep_count;
-	struct local_prov_ep *lpv_prov_eps[LNX_MAX_LOCAL_EPS];
+	struct dlist_entry lpv_prov_eps;
 };
 
 struct lnx_address_prov {
@@ -439,7 +440,9 @@ int lnx_select_send_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 	 * pathway
 	 */
 	if (desc && desc->desc[idx].core_mr) {
-		*cep = desc->desc[idx].prov->lpv_prov_eps[0];
+		*cep = dlist_first_entry_or_null(
+				&desc->desc[idx].prov->lpv_prov_eps,
+				struct local_prov_ep, entry);
 		if (mem_desc)
 			*mem_desc = fi_mr_desc(desc->desc[idx].core_mr);
 		if (rkey)

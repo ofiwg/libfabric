@@ -79,13 +79,11 @@ ssize_t lnx_peer_cq_writeerr(struct fid_peer_cq *cq,
 
 static int lnx_cleanup_cqs(struct local_prov *prov)
 {
-	int i, rc, frc = 0;
+	int rc, frc = 0;
 	struct local_prov_ep *ep;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		ep = prov->lpv_prov_eps[i];
-		if (!ep)
-			continue;
+	dlist_foreach_container(&prov->lpv_prov_eps,
+				struct local_prov_ep, ep, entry) {
 		rc = fi_close(&ep->lpe_cq.lpc_core_cq->fid);
 		if (rc)
 			frc = rc;
@@ -140,7 +138,6 @@ static struct fi_ops lnx_cq_fi_ops = {
 
 static void lnx_cq_progress(struct util_cq *cq)
 {
-	int i;
 	struct lnx_cq *lnx_cq;
 	struct local_prov_ep *ep;
 	struct local_prov *entry;
@@ -163,7 +160,7 @@ static void lnx_cq_progress(struct util_cq *cq)
 
 static int lnx_cq_open_core_prov(struct lnx_cq *cq, struct fi_cq_attr *attr)
 {
-	int rc, i;
+	int rc;
 	struct local_prov_ep *ep;
 	struct local_prov *entry;
 	struct dlist_entry *prov_table =
@@ -175,13 +172,10 @@ static int lnx_cq_open_core_prov(struct lnx_cq *cq, struct fi_cq_attr *attr)
 	/* create all the core provider endpoints */
 	dlist_foreach_container(prov_table, struct local_prov,
 				entry, lpv_entry) {
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+		dlist_foreach_container(&entry->lpv_prov_eps,
+					struct local_prov_ep, ep, entry) {
 			struct fid_cq *core_cq;
 			struct fi_peer_cq_context cq_ctxt;
-
-			ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
 
 			ep->lpe_cq.lpc_shared_cq = cq;
 			ep->lpe_cq.lpc_cq.owner_ops = &lnx_cq_write;
