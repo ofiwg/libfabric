@@ -149,12 +149,9 @@ static void lnx_cq_progress(struct util_cq *cq)
 	/* Kick the core provider endpoints to progress */
 	dlist_foreach_container(prov_table, struct local_prov,
 				entry, lpv_entry) {
-		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-			ep = entry->lpv_prov_eps[i];
-			if (!ep)
-				continue;
+		dlist_foreach_container(&entry->lpv_prov_eps,
+					struct local_prov_ep, ep, entry)
 			fi_cq_read(ep->lpe_cq.lpc_core_cq, NULL, 0);
-		}
 	}
 }
 
