@@ -60,21 +60,19 @@
 
 static void lnx_free_peer(struct lnx_peer *lp)
 {
-	int i;
-	struct dlist_entry *tmp;
+	struct lnx_peer_prov *lpp;
+	struct dlist_entry *tmp, *tmp2;
 	struct lnx_local2peer_map *lpm;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		struct lnx_peer_prov *lpp = lp->lp_provs[i];
-		if (!lpp)
-			continue;
+	dlist_foreach_container_safe(&lp->lp_provs,
+		struct lnx_peer_prov, lpp, entry, tmp) {
 		dlist_foreach_container_safe(&lpp->lpp_map,
-			struct lnx_local2peer_map, lpm, entry, tmp) {
+			struct lnx_local2peer_map, lpm, entry, tmp2) {
 			dlist_remove(&lpm->entry);
 			free(lpm);
 		}
+		dlist_remove(&lpp->entry);
 		free(lpp);
-		lp->lp_provs[i] = NULL;
 	}
 
 	free(lp);
@@ -84,14 +82,13 @@ static void lnx_free_peer(struct lnx_peer *lp)
 static void lnx_print_peer(int idx, struct lnx_peer *lp)
 {
 	int i, k;
+	struct lnx_peer_prov *lpp;
 	struct lnx_local2peer_map *lpm;
 
 	FI_DBG(&lnx_prov, "%d: lnx_peer[%d] is %s\n", getpid(), idx,
 			(lp->lp_local) ? "local" : "remote");
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		struct lnx_peer_prov *lpp = lp->lp_provs[i];
-		if (!lpp)
-			continue;
+	dlist_foreach_container(&lp->lp_provs,
+			struct lnx_peer_prov, lpp, entry) {
 		FI_DBG(&lnx_prov, "%d: peer[%d] provider %s\n", getpid(), i,
 				lpp->lpp_prov_name);
 		dlist_foreach_container(&lpp->lpp_map,
@@ -131,16 +128,12 @@ static int lnx_peer_insert(struct lnx_peer_table *tbl,
 
 static int lnx_peer_av_remove(struct lnx_peer *lp)
 {
-	int i;
 	int rc, frc = 0;
+	struct lnx_peer_prov *lpp;
+	struct lnx_local2peer_map *lpm;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		struct lnx_peer_prov *lpp = lp->lp_provs[i];
-		struct lnx_local2peer_map *lpm;
-
-		if (!lpp)
-			continue;
-
+	dlist_foreach_container(&lp->lp_provs,
+			struct lnx_peer_prov, lpp, entry) {
 		/* if this is a remote peer then we didn't insert its shm address
 		 * into our local shm endpoint, so no need to remove it
 		 */
@@ -241,49 +234,25 @@ static int lnx_get_or_create_peer_prov(struct dlist_entry *prov_table,
 				       struct lnx_peer *lp, char *prov_name,
 				       struct lnx_peer_prov **lpp)
 {
-	int i;
+	bool shm = false;
 	struct local_prov *entry;
 	struct lnx_peer_prov *peer_prov;
-	bool shm = false;
 
-	/* shm provider should always be in index 0.
-	 * We can't have more than one shm provider so if slot 0 is already
-	 * busy, then fail.
-	 */
 	if (!strcmp(prov_name, "shm")) {
-		if (lp->lp_provs[0])
+		if (lp->lp_shm_prov)
 			return -FI_ENOENT;
 		shm = true;
+		goto insert_prov;
 	}
 
 	/* check if we already have a peer provider */
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		peer_prov = lp->lp_provs[i];
-		if (!peer_prov)
-			continue;
-
-		/* it's enough to check slot 0 if this is the shm provider */
-		if (shm)
-			break;
-
+	dlist_foreach_container(&lp->lp_provs,
+			struct lnx_peer_prov, peer_prov, entry) {
 		if (!strncasecmp(peer_prov->lpp_prov_name, prov_name, FI_NAME_MAX)) {
 			*lpp = peer_prov;
 			return 0;
 		}
 	}
-
-	/* reserve slot 0 for shm provider */
-	i = 0;
-	if (shm)
-		goto insert_prov;
-
-	for (i = 1; i < LNX_MAX_LOCAL_EPS; i++) {
-		if (!lp->lp_provs[i])
-			break;
-	}
-
-	if (i == LNX_MAX_LOCAL_EPS)
-		return -FI_EPROTO;
 
 insert_prov:
 	dlist_foreach_container(prov_table, struct local_prov,
@@ -293,13 +262,17 @@ insert_prov:
 			if (!peer_prov)
 				return -FI_ENOMEM;
 
+			dlist_init(&peer_prov->entry);
 			dlist_init(&peer_prov->lpp_map);
 
 			strncpy(peer_prov->lpp_prov_name, prov_name, FI_NAME_MAX);
 
 			peer_prov->lpp_prov = entry;
 
-			lp->lp_provs[i] = peer_prov;
+			if (shm)
+				lp->lp_shm_prov = peer_prov;
+			else
+				dlist_insert_tail(&peer_prov->entry, &lp->lp_provs);
 
 			*lpp = peer_prov;
 			return 0;
@@ -496,6 +469,8 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		lp = calloc(sizeof(*lp), 1);
 		if (!lp)
 			return -FI_ENOMEM;
+
+		dlist_init(&lp->lp_provs);
 
 		rc = is_local_addr(&peer_tbl->lpt_domain->ld_fabric->shm_prov,
 				   la);

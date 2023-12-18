@@ -689,7 +689,8 @@ static int lnx_match_common(uint64_t tag1, uint64_t tag2, uint64_t ignore,
 		struct lnx_peer_prov *lpp;
 
 		/* TODO: ***LOOPS ARE BAD THEY ADD A LOT OF OVERHEAD */
-		lpp = peer->lp_provs[1];
+		lpp = dlist_first_entry_or_null(
+			&peer->lp_provs, struct lnx_peer_prov, entry);
 		if (lpp->lpp_prov == lp) {
 			dlist_foreach_container(&lpp->lpp_map,
 						struct lnx_local2peer_map,

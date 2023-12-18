@@ -243,6 +243,8 @@ struct lnx_local2peer_map {
 };
 
 struct lnx_peer_prov {
+	struct dlist_entry entry;
+
 	/* provider name */
 	char lpp_prov_name[FI_NAME_MAX];
 
@@ -281,7 +283,8 @@ struct lnx_peer {
 	 * might be more complicated due to the differences in provider
 	 * capabilities.
 	 */
-	struct lnx_peer_prov *lp_provs[LNX_MAX_LOCAL_EPS];
+	struct lnx_peer_prov *lp_shm_prov;
+	struct dlist_entry lp_provs;
 };
 
 struct lnx_peer_table {
@@ -421,16 +424,22 @@ int lnx_select_send_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 {
 	int idx = 0;
 	int rc;
+	struct lnx_peer_prov *prov;
 	struct lnx_local2peer_map *lpm;
 	struct fi_mr_attr core_attr;
 	uint64_t flags;
 	struct fid_mr *mr = NULL;
 
-	if (!lp->lp_local)
+	if (lp->lp_local) {
+		prov = lp->lp_shm_prov;
+	} else {
+		prov = dlist_first_entry_or_null(
+			&lp->lp_provs, struct lnx_peer_prov, entry);
 		idx = 1;
+	}
 
 	/* TODO when we support multi-rail we can have multiple maps */
-	lpm = dlist_first_entry_or_null(&lp->lp_provs[idx]->lpp_map,
+	lpm = dlist_first_entry_or_null(&prov->lpp_map,
 					struct lnx_local2peer_map, entry);
 	*addr = lpm->peer_addrs[0];
 
