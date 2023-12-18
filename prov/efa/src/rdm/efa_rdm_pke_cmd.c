@@ -407,7 +407,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 	case EFA_RDM_TXE:
 		txe = pkt_entry->ope;
 		if (efa_rdm_pke_get_base_hdr(pkt_entry)->type == EFA_RDM_HANDSHAKE_PKT) {
-			if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
+			if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
 				/*
 				 * handshake should always be queued for RNR
 				 */
@@ -415,11 +415,12 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 				peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
 				dlist_insert_tail(&peer->handshake_queued_entry,
 						  &ep->handshake_queued_peer_list);
-			} else if (prov_errno != FI_EFA_REMOTE_ERROR_BAD_DEST_QPN) {
-				/* If prov_errno is FI_EFA_REMOTE_ERROR_BAD_DEST_QPN  the peer has
-				 * been destroyed. Which is normal, as peer does not always need a
-				 * handshake packet to perform its duty. (For example, if a peer
-				 * just want to sent 1 message to the ep, it does not need
+			} else if (prov_errno != EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN) {
+				/*
+				 * If prov_errno is EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN
+				 * the peer has been destroyed. Which is normal, as peer does not
+				 * always need a handshake packet to perform its duty. (For example,
+				 * if a peer just want to sent 1 message to the ep, it does not need
 				 * handshake.) In this case, it is safe to ignore this error
 				 * completion. In all other cases, we write an eq entry because
 				 * there is no application operation associated with handshake.
@@ -446,7 +447,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 			break;
 		}
 
-		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
+		if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
 			if (ep->handle_resource_management == FI_RM_DISABLED) {
 				/*
 				 * Write an error to the application for RNR when resource
@@ -458,7 +459,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 				 */
 				if (!(txe->internal_flags & EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY)) {
 					txe->internal_flags |= EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY;
-					efa_rdm_txe_handle_error(pkt_entry->ope, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
+					efa_rdm_txe_handle_error(pkt_entry->ope, FI_ENORX, prov_errno);
 				}
 
 				efa_rdm_pke_release_tx(pkt_entry);
@@ -484,7 +485,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 		break;
 	case EFA_RDM_RXE:
 		rxe = pkt_entry->ope;
-		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
+		if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
 			/*
 			 * This packet is associated with a recv operation, (such packets
 			 * include CTS and EOR) thus should always be queued for RNR. This
