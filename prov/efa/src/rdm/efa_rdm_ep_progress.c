@@ -450,7 +450,8 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 	struct efa_av *efa_av;
 	struct efa_rdm_pke *pkt_entry;
-	ssize_t err, opcode;
+	ssize_t err;
+	int opcode;
 	size_t i = 0;
 	int prov_errno;
 
@@ -465,25 +466,26 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 	while (!err) {
 		pkt_entry = (void *)(uintptr_t)ep->ibv_cq_ex->wr_id;
 		efa_rdm_tracepoint(poll_cq, (size_t) ep->ibv_cq_ex->wr_id);
+		opcode = ibv_wc_read_opcode(ep->ibv_cq_ex);
 		if (ep->ibv_cq_ex->status) {
 			prov_errno = ibv_wc_read_vendor_err(ep->ibv_cq_ex);
-			opcode = ibv_wc_read_opcode(ep->ibv_cq_ex);
-			if (opcode == IBV_WC_SEND || opcode == IBV_WC_RDMA_WRITE) {
-#if ENABLE_DEBUG
-			if (opcode == IBV_WC_SEND)
-				ep->failed_send_comps++;
-			else
-				ep->failed_write_comps++;
-#endif
+			switch (opcode) {
+			case IBV_WC_SEND: /* fall through */
+			case IBV_WC_RDMA_WRITE: /* fall through */
+			case IBV_WC_RDMA_READ:
 				efa_rdm_pke_handle_tx_error(pkt_entry, FI_EIO, prov_errno);
-			} else {
-				assert(opcode == IBV_WC_RECV);
+				break;
+			case IBV_WC_RECV: /* fall through */
+			case IBV_WC_RECV_RDMA_WITH_IMM:
 				efa_rdm_pke_handle_rx_error(pkt_entry, FI_EIO, prov_errno);
+				break;
+			default:
+				EFA_WARN(FI_LOG_EP_CTRL, "Unhandled op code %d\n", opcode);
+				assert(0 && "Unhandled op code");
 			}
 			break;
 		}
-
-		switch (ibv_wc_read_opcode(ep->ibv_cq_ex)) {
+		switch (opcode) {
 		case IBV_WC_SEND:
 #if ENABLE_DEBUG
 			ep->send_comps++;
