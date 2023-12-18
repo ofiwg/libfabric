@@ -492,8 +492,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 #if ENABLE_DEBUG
 	efa_rdm_ep->efa_total_posted_tx_ops = 0;
 	efa_rdm_ep->send_comps = 0;
-	efa_rdm_ep->failed_send_comps = 0;
-	efa_rdm_ep->failed_write_comps = 0;
 	efa_rdm_ep->recv_comps = 0;
 #endif
 
