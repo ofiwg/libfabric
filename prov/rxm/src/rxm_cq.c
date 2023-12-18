@@ -613,6 +613,7 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 			mr = rx_buf->recv_entry->rxm_iov.desc[i];
 			rx_buf->recv_entry->rxm_iov.desc[i] =
 				fi_mr_desc(mr->msg_mr);
+			rx_buf->mr[i] = mr->msg_mr;
 		}
 	}
 
