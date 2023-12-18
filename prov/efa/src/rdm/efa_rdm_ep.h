@@ -189,8 +189,6 @@ struct efa_rdm_ep {
 
 	size_t efa_total_posted_tx_ops;
 	size_t send_comps;
-	size_t failed_send_comps;
-	size_t failed_write_comps;
 	size_t recv_comps;
 #endif
 	/* track allocated rx_entries and tx_entries for endpoint cleanup */
