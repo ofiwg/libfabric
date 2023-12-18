@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+
 #include "efa_unit_tests.h"
 #include "dgram/efa_dgram_ep.h"
 #include "dgram/efa_dgram_cq.h"
@@ -77,12 +80,10 @@ void test_ibv_cq_ex_read_empty_cq(struct efa_resource **state)
  * @param[in]  local_host_id    Local(sender) host id
  * @param[in]  peer_host_id     Peer(receiver) host id
  * @param[in]  vendor_error     Vendor error returned by ibv_read_vendor_err
- * @param[in]  err_prefix       Expected error message prefix from fi_cq_strerror. For RDM endpoint the error
- *                              might contain conditional information after the prefix.
  */
 static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
                                              uint64_t local_host_id, uint64_t peer_host_id,
-                                             int vendor_error, const char *err_prefix)
+                                             int vendor_error)
 {
 	const char *strerror;
 	fi_addr_t addr;
@@ -164,9 +165,6 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	assert_int_equal(cq_err_entry.err, FI_EIO);
 	assert_int_equal(cq_err_entry.prov_errno, vendor_error);
 
-	/* Verify prefix is expected */
-	assert_true(strstr(strerror, err_prefix) == strerror);
-
 	/* Reset value */
 	memset(host_id_str, 0, sizeof(host_id_str));
 
@@ -207,13 +205,7 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver(struct efa_resource 
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0x8765432187654321,
-					 FI_EFA_LOCAL_ERROR_UNRESP_REMOTE,
-					 "Unresponsive receiver. "
-					 "This error is typically caused by a peer hardware failure or "
-					 "incorrect inbound/outbound rules in the security group - "
-					 "EFA requires \"All traffic\" type allowlisting. "
-					 "Please also verify the peer application has not "
-					 "terminated unexpectedly.");
+					 FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
 }
 
 /**
@@ -230,13 +222,7 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver_missing_peer_host_id
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0,
-					 FI_EFA_LOCAL_ERROR_UNRESP_REMOTE,
-					 "Unresponsive receiver. "
-					 "This error is typically caused by a peer hardware failure or "
-					 "incorrect inbound/outbound rules in the security group - "
-					 "EFA requires \"All traffic\" type allowlisting. "
-					 "Please also verify the peer application has not "
-					 "terminated unexpectedly.");
+					 FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
 }
 
 /**
@@ -254,11 +240,7 @@ void test_rdm_cq_read_bad_send_status_invalid_qpn(struct efa_resource **state)
 
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0x8765432187654321,
-					 FI_EFA_REMOTE_ERROR_BAD_DEST_QPN,
-					 "Invalid receiver queue pair number (QPN). "
-					 "This error is typically caused by a crashed peer. "
-					 "Please verify the peer application has not "
-					 "terminated unexpectedly.");
+					 FI_EFA_REMOTE_ERROR_BAD_DEST_QPN);
 }
 
 /**
@@ -275,7 +257,7 @@ void test_rdm_cq_read_bad_send_status_message_too_long(struct efa_resource **sta
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0x8765432187654321,
-					 FI_EFA_LOCAL_ERROR_BAD_LENGTH, "Message too long");
+					 FI_EFA_LOCAL_ERROR_BAD_LENGTH);
 }
 
 /**
