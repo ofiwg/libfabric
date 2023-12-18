@@ -655,9 +655,11 @@ static int lnx_match_common(uint64_t tag1, uint64_t tag2, uint64_t ignore,
 {
 	struct fi_ops_srx_peer *peer_ops;
 	struct lnx_local2peer_map *lpm;
+	struct lnx_peer_prov *lpp;
 	struct local_prov *lp;
+	fi_addr_t peer_addr;
 	bool tmatch;
-	int i, j, k;
+	int i;
 
 	/* if a request has no address specified it'll match against any
 	 * rx_entry with a matching tag
@@ -684,42 +686,39 @@ static int lnx_match_common(uint64_t tag1, uint64_t tag2, uint64_t ignore,
 	peer_ops = cep->lpe_srx.peer_ops;
 	lp = cep->lpe_parent;
 
-	//for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-	for (i = 0; i < 1; i++) {
-		struct lnx_peer_prov *lpp;
-
-		/* TODO: ***LOOPS ARE BAD THEY ADD A LOT OF OVERHEAD */
-		lpp = dlist_first_entry_or_null(
-			&peer->lp_provs, struct lnx_peer_prov, entry);
+	/* check if we already have a peer provider.
+	 * A peer can receive messages from multiple providers, we need to
+	 * find the provider which maps to the provider we're currently
+	 * checking. The map looked up can have multiple addresses which
+	 * we can receive from, so we need to check which one of those is
+	 * the correct match.
+	 *
+	 * Note: we're trying to make this loop as efficient as possible,
+	 * because it's executed on the message matching path, which is
+	 * heavily hit.
+	 *
+	 * The theory is in most use cases:
+	 *   - There will be only two providers to check
+	 *   - Each provider will have 1 endpoint, and therefore only one map
+	 *   - Each peer will only have 1 address.
+	 *
+	 */
+	dlist_foreach_container(&peer->lp_provs,
+			struct lnx_peer_prov, lpp, entry) {
 		if (lpp->lpp_prov == lp) {
 			dlist_foreach_container(&lpp->lpp_map,
 						struct lnx_local2peer_map,
 						lpm, entry) {
-				fi_addr_t peer_addr = lpm->peer_addrs[0];
-				if (lnx_addr_match(peer_addr, cep_addr,
-						peer_ops, match_info))
-					return true;
-			}
-		}
-		/* we found the peer provider matching our local provider 
-		lpp = peer->lp_provs[i];
-		if (!lpp)
-			continue;
-
-		if (lpp->lpp_prov == lp) {
-			for (j = 0; j < LNX_MAX_LOCAL_EPS; j++) {
-				struct lnx_local2peer_map *lpm = lpp->lpp_map[j];
-				if (!lpm)
-					continue;
-				for (k = 0; k < lpm->addr_count; k++) {
-					fi_addr_t peer_addr = lpm->peer_addrs[k];
+				for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+					peer_addr = lpm->peer_addrs[i];
+					if (peer_addr == FI_ADDR_NOTAVAIL)
+						break;
 					if (lnx_addr_match(peer_addr, cep_addr,
-									   peer_ops, match_info))
+							peer_ops, match_info))
 						return true;
 				}
 			}
 		}
-		*/
 	}
 
 	return false;
