@@ -654,6 +654,7 @@ static int lnx_match_common(uint64_t tag1, uint64_t tag2, uint64_t ignore,
 		struct local_prov_ep *cep, struct fi_peer_match *match_info)
 {
 	struct fi_ops_srx_peer *peer_ops;
+	struct lnx_local2peer_map *lpm;
 	struct local_prov *lp;
 	bool tmatch;
 	int i, j, k;
@@ -690,13 +691,14 @@ static int lnx_match_common(uint64_t tag1, uint64_t tag2, uint64_t ignore,
 		/* TODO: ***LOOPS ARE BAD THEY ADD A LOT OF OVERHEAD */
 		lpp = peer->lp_provs[1];
 		if (lpp->lpp_prov == lp) {
-			struct lnx_local2peer_map *lpm = lpp->lpp_map[0];
-			if (!lpm)
-				continue;
-			fi_addr_t peer_addr = lpm->peer_addrs[0];
-			if (lnx_addr_match(peer_addr, cep_addr,
-					   peer_ops, match_info))
-				return true;
+			dlist_foreach_container(&lpp->lpp_map,
+						struct lnx_local2peer_map,
+						lpm, entry) {
+				fi_addr_t peer_addr = lpm->peer_addrs[0];
+				if (lnx_addr_match(peer_addr, cep_addr,
+						peer_ops, match_info))
+					return true;
+			}
 		}
 		/* we found the peer provider matching our local provider 
 		lpp = peer->lp_provs[i];

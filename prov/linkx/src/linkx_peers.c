@@ -60,18 +60,18 @@
 
 static void lnx_free_peer(struct lnx_peer *lp)
 {
-	int i, j;
+	int i;
+	struct dlist_entry *tmp;
+	struct lnx_local2peer_map *lpm;
 
 	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 		struct lnx_peer_prov *lpp = lp->lp_provs[i];
 		if (!lpp)
 			continue;
-		for (j = 0; j < LNX_MAX_LOCAL_EPS; j++) {
-			struct lnx_local2peer_map *lpm = lpp->lpp_map[j];
-			if (!lpm)
-				continue;
+		dlist_foreach_container_safe(&lpp->lpp_map,
+			struct lnx_local2peer_map, lpm, entry, tmp) {
+			dlist_remove(&lpm->entry);
 			free(lpm);
-			lpp->lpp_map[j] = NULL;
 		}
 		free(lpp);
 		lp->lp_provs[i] = NULL;
@@ -83,7 +83,9 @@ static void lnx_free_peer(struct lnx_peer *lp)
 #if ENABLE_DEBUG
 static void lnx_print_peer(int idx, struct lnx_peer *lp)
 {
-	int i, j, k;
+	int i, k;
+	struct lnx_local2peer_map *lpm;
+
 	FI_DBG(&lnx_prov, "%d: lnx_peer[%d] is %s\n", getpid(), idx,
 			(lp->lp_local) ? "local" : "remote");
 	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
@@ -92,10 +94,8 @@ static void lnx_print_peer(int idx, struct lnx_peer *lp)
 			continue;
 		FI_DBG(&lnx_prov, "%d: peer[%d] provider %s\n", getpid(), i,
 				lpp->lpp_prov_name);
-		for (j =0; j< LNX_MAX_LOCAL_EPS; j++) {
-			struct lnx_local2peer_map *lpm = lpp->lpp_map[j];
-			if (!lpm)
-				continue;
+		dlist_foreach_container(&lpp->lpp_map,
+			struct lnx_local2peer_map, lpm, entry) {
 			FI_DBG(&lnx_prov, "   %d: peer has %d mapped addrs\n",
 					getpid(), lpm->addr_count);
 			for (k = 0; k < lpm->addr_count; k++)
@@ -137,7 +137,6 @@ static int lnx_peer_av_remove(struct lnx_peer *lp)
 	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 		struct lnx_peer_prov *lpp = lp->lp_provs[i];
 		struct lnx_local2peer_map *lpm;
-		int j;
 
 		if (!lpp)
 			continue;
@@ -150,12 +149,8 @@ static int lnx_peer_av_remove(struct lnx_peer *lp)
 			continue;
 
 		/* remove these address from all local providers */
-		for (j = 0; j < LNX_MAX_LOCAL_EPS; j++) {
-			lpm = lpp->lpp_map[j];
-
-			if (!lpm)
-				continue;
-
+		dlist_foreach_container(&lpp->lpp_map,
+			struct lnx_local2peer_map, lpm, entry) {
 			if (lpm->addr_count > 0) {
 				rc = fi_av_remove(lpm->local_ep->lpe_av, lpm->peer_addrs,
 						  lpm->addr_count, lpp->lpp_flags);
@@ -298,6 +293,8 @@ insert_prov:
 			if (!peer_prov)
 				return -FI_ENOMEM;
 
+			dlist_init(&peer_prov->lpp_map);
+
 			strncpy(peer_prov->lpp_prov_name, prov_name, FI_NAME_MAX);
 
 			peer_prov->lpp_prov = entry;
@@ -438,7 +435,8 @@ static int lnx_peer_map_addrs(struct dlist_entry *prov_table,
 			if (!lpm)
 				return -FI_ENOMEM;
 
-			lpp->lpp_map[0] = lpm;
+			dlist_init(&lpm->entry);
+			dlist_insert_tail(&lpm->entry, &lpp->lpp_map);
 
 			lpm->local_ep = lpe;
 			lpm->addr_count = lap->lap_addr_count;

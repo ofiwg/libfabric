@@ -236,6 +236,7 @@ struct lnx_addresses {
 };
 
 struct lnx_local2peer_map {
+	struct dlist_entry entry;
 	struct local_prov_ep *local_ep;
 	int addr_count;
 	fi_addr_t peer_addrs[LNX_MAX_LOCAL_EPS];
@@ -261,7 +262,7 @@ struct lnx_peer_prov {
 	 * on any of the addresses which are given to us. It's an N:N
 	 * relationship
 	 */
-	struct lnx_local2peer_map *lpp_map[LNX_MAX_LOCAL_EPS];
+	struct dlist_entry lpp_map;
 };
 
 struct lnx_peer {
@@ -429,7 +430,8 @@ int lnx_select_send_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 		idx = 1;
 
 	/* TODO when we support multi-rail we can have multiple maps */
-	lpm = lp->lp_provs[idx]->lpp_map[0];
+	lpm = dlist_first_entry_or_null(&lp->lp_provs[idx]->lpp_map,
+					struct lnx_local2peer_map, entry);
 	*addr = lpm->peer_addrs[0];
 
 	/* TODO this will need to be expanded to handle Multi-Rail. For now
