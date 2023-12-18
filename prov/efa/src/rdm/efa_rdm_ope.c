@@ -1,35 +1,5 @@
-/*
- * Copyright (c) 2022 Amazon.com, Inc. or its affiliates.
- * All rights reserved.
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include <assert.h>
 #include "efa.h"
@@ -642,8 +612,12 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		err_entry.err_data_size = 0;
 	}
 
-	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n", err_entry.err,
-	         efa_strerror(err_entry.prov_errno, err_entry.err_data), err_entry.prov_errno);
+	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n",
+		err_entry.err,
+		err_entry.err_data
+			? (const char *) err_entry.err_data
+			: efa_strerror(err_entry.prov_errno),
+		 err_entry.prov_errno);
 	/*
 	 * TODO: We can't free the rxe as we may receive additional
 	 * packets for this entry. Add ref counting so the rxe can safely
@@ -732,8 +706,12 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		err_entry.err_data_size = 0;
 	}
 
-	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n", err_entry.err,
-	         efa_strerror(err_entry.prov_errno, err_entry.err_data), err_entry.prov_errno);
+	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n",
+		err_entry.err,
+		err_entry.err_data
+			? (const char *) err_entry.err_data
+			: efa_strerror(err_entry.prov_errno),
+		err_entry.prov_errno);
 
 	/*
 	 * TODO: We can't free the txe as we may receive a control packet
