@@ -205,7 +205,7 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver(struct efa_resource 
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0x8765432187654321,
-					 FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
+					 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 }
 
 /**
@@ -222,7 +222,7 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver_missing_peer_host_id
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0,
-					 FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
+					 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 }
 
 /**
@@ -240,7 +240,7 @@ void test_rdm_cq_read_bad_send_status_invalid_qpn(struct efa_resource **state)
 
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0x8765432187654321,
-					 FI_EFA_REMOTE_ERROR_BAD_DEST_QPN);
+					 EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN);
 }
 
 /**
@@ -257,7 +257,7 @@ void test_rdm_cq_read_bad_send_status_message_too_long(struct efa_resource **sta
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0x8765432187654321,
-					 FI_EFA_LOCAL_ERROR_BAD_LENGTH);
+					 EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH);
 }
 
 /**
@@ -312,7 +312,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	 * therefore use will_return_always()
 	 */
 	will_return_always(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
-	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
+	will_return(efa_mock_ibv_read_vendor_err_return_mock, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 	efa_rdm_ep->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
 	efa_rdm_ep->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
@@ -323,7 +323,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
 	assert_int_equal(ret, 1);
 	assert_int_equal(cq_err_entry.err, FI_EIO);
-	assert_int_equal(cq_err_entry.prov_errno, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
+	assert_int_equal(cq_err_entry.prov_errno, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 	free(cq_err_entry.err_data);
 }
 
@@ -350,7 +350,7 @@ void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
 	efa_rdm_ep->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
 
 	will_return(efa_mock_ibv_start_poll_return_mock, EFAULT);
-	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
+	will_return(efa_mock_ibv_read_vendor_err_return_mock, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 	/* TODO:
@@ -362,7 +362,7 @@ void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
 	ret = fi_eq_readerr(resource->eq, &eq_err_entry, 0);
 	assert_int_equal(ret, sizeof(eq_err_entry));
 	assert_int_not_equal(eq_err_entry.err, FI_ENOENT);
-	assert_int_equal(eq_err_entry.prov_errno, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
+	assert_int_equal(eq_err_entry.prov_errno, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 }
 
 #if HAVE_EFADV_CQ_EX
