@@ -1,35 +1,5 @@
-/*
- * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
- * All rights reserved.
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa.h"
 #include "efa_av.h"
@@ -417,7 +387,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 	EFA_DBG(FI_LOG_CQ, "Packet send error: %s (%d)\n",
-	        efa_strerror(prov_errno, NULL), prov_errno);
+	        efa_strerror(prov_errno), prov_errno);
 
 	ep = pkt_entry->ep;
 	efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
@@ -694,7 +664,7 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 	ep = pkt_entry->ep;
 
 	EFA_DBG(FI_LOG_CQ, "Packet receive error: %s (%d)\n",
-	        efa_strerror(prov_errno, NULL), prov_errno);
+	        efa_strerror(prov_errno), prov_errno);
 
 	if (pkt_entry->ope->type == EFA_RDM_TXE) {
 		efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);

@@ -1,38 +1,5 @@
-/*
- * Copyright (c) 2022 Amazon.com, Inc. or its affiliates. All rights reserved.
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_errno.h"
 
@@ -110,25 +77,19 @@ static const char *efa_errno_str(enum efa_errno err)
 }
 
 /**
- * @brief   Convert EFA error into a printable string
- * @details Given a non-negative EFA-specific error code, this function returns
- *          a pointer to a static string that corresponds to it. This text is
- *          suitable for printing in debug/warning/error messages.
- *          If an optional enriched error message string is provided, it will
- *          override the default message and be returned instead.
- * @param[in]  err           An EFA-specific error code
- * @param[in]  enriched_err  An enriched error message. It should be obtained
- *                           from a prior fi_cq_readerr call.
- * @return     An error message with helpful debugging information specific to
- *             the error code
+ * @brief Convert an EFA error code into a short, printable string
+ *
+ * Given a non-negative EFA-specific error code, this function returns a pointer
+ * to a null-terminated string that corresponds to it; suitable for
+ * interpolation in logging messages.
+ *
+ * @param[in]	err    An EFA-specific error code
+ * @return	Null-terminated string with static storage duration (caller does
+ *		not free).
  */
-const char *efa_strerror(enum efa_errno err, const char *enriched_err)
+const char *efa_strerror(enum efa_errno err)
 {
-	if (enriched_err) {
-		return enriched_err;
-	}
-
 	return err >= FI_EFA_ERRNO_OFFSET
-	        ? efa_errno_str(err)
-	        : efa_io_comp_status_str(err);
+		? efa_errno_str(err)
+		: efa_io_comp_status_str(err);
 }
