@@ -523,10 +523,7 @@ struct fi_opx_ep {
 	bool					is_rx_cq_bound;
 	bool					use_expected_tid_rzv;
 	uint8_t				        unused_cacheline5[3];
-
-	uint32_t				unused_cacheline5_u32[1];
-	uint32_t				mcache_flush_counter;
-	uint32_t				unused_cacheline5b;
+	uint32_t				unused_cacheline5_u32[3];
 
 	ofi_spin_t				lock; /* lock size varies based on ENABLE_DEBUG*/
 

@@ -100,7 +100,7 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 
 		slist_remove_head(&params->sdma_reqs);
 		we->next = NULL;
-		fi_opx_hfi1_sdma_return_we(params->opx_ep, we);
+		fi_opx_hfi1_sdma_return_we(opx_ep, we);
 		we = (struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
 	}
 
