@@ -45,9 +45,10 @@ int efa_rdm_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma
 
 struct efa_rdm_ope *
 efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
-		       const struct fi_msg_rma *msg_rma,
-		       uint32_t op,
-		       uint64_t flags)
+		      struct efa_rdm_peer *peer,
+		      const struct fi_msg_rma *msg_rma,
+		      uint32_t op,
+		      uint64_t flags)
 {
 	struct efa_rdm_ope *txe;
 	struct fi_msg msg;
@@ -64,7 +65,7 @@ efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	msg.iov_count = msg_rma->iov_count;
 	msg.data = msg_rma->data;
 	msg.desc = msg_rma->desc;
-	efa_rdm_txe_construct(txe, efa_rdm_ep, &msg, op, flags);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, op, flags);
 
 	assert(msg_rma->rma_iov_count > 0);
 	assert(msg_rma->rma_iov);
@@ -164,7 +165,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 		goto out;
 	}
 
-	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, msg, ofi_op_read_req, flags);
+	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, peer, msg, ofi_op_read_req, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		err = -FI_EAGAIN;
@@ -488,7 +489,7 @@ ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 		goto out;
 	}
 
-	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, msg, ofi_op_write, flags);
+	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, peer, msg, ofi_op_write, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		err = -FI_EAGAIN;

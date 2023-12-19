@@ -61,7 +61,7 @@ enum efa_rdm_ope_state {
 
 /**
  * @brief basic information of an atomic operation
- * used by all 3 types of atomic operations: fetch, compare and write  
+ * used by all 3 types of atomic operations: fetch, compare and write
  */
 struct efa_rdm_atomic_hdr {
 	/* atomic_op is different from tx_op */
@@ -96,7 +96,7 @@ enum efa_rdm_cuda_copy_method {
 
 /**
  * @brief EFA RDM operation entry (ope)
- * 
+ *
  */
 struct efa_rdm_ope {
 	enum efa_rdm_ope_type type;
@@ -216,9 +216,10 @@ struct efa_rdm_ope {
 };
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
-			    struct efa_rdm_ep *ep,
-			    const struct fi_msg *msg,
-			    uint32_t op, uint64_t flags);
+			   struct efa_rdm_ep *ep,
+		      	   struct efa_rdm_peer *peer,
+			   const struct fi_msg *msg,
+			   uint32_t op, uint64_t flags);
 
 void efa_rdm_txe_release(struct efa_rdm_ope *txe);
 
@@ -231,7 +232,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 
 /**
  * @brief indicate an ope's receive has been cancel
- * 
+ *
  * @todo: In future we will send RECV_CANCEL signal to sender,
  * to stop transmitting large message, this flag is also
  * used for fi_discard which has similar behavior.
@@ -246,7 +247,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 
 /**
  * @brief flag to tell if an ope encouter RNR when sending packets
- * 
+ *
  * If an ope has this flag, it is on the ope_queued_rnr_list
  * of the endpoint.
  */
@@ -254,7 +255,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 
 /**
  * @brief Flag to indicate an rxe has an EOR in flight
- * 
+ *
  * In flag means the EOR has been sent or queued, and has not got send completion.
  * hence the rxe cannot be released
  */
@@ -262,7 +263,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 
 /**
  * @brief flag to indicate a txe has already written an cq error entry for RNR
- * 
+ *
  * This flag is used to prevent writing multiple cq error entries
  * for the same txe
  */
@@ -278,15 +279,15 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 
 /**
  * @brief flag to indicate an ope does not need to report completion to user
- * 
+ *
  * This flag is used to by emulated injection and #efa_rdm_ep_trigger_handshake
  */
 #define EFA_RDM_TXE_NO_COMPLETION	BIT_ULL(60)
 /**
  * @brief flag to indicate an ope does not need to increase counter
- * 
+ *
  * This flag is used to implement #efa_rdm_ep_trigger_handshake
- * 
+ *
  */
 #define EFA_RDM_TXE_NO_COUNTER		BIT_ULL(61)
 
