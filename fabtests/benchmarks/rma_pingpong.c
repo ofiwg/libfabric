@@ -128,6 +128,11 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	if (opts.iface != FI_HMEM_SYSTEM && opts.rma_op == FT_RMA_WRITE) {
+		FT_ERR("rma_pingpong write test does not support HMEM");
+		return EXIT_FAILURE;
+	}
+
 	/* data validation on read and write ops requires delivery_complete semantics. */
 	if (opts.rma_op != FT_RMA_WRITEDATA && ft_check_opts(FT_OPT_VERIFY_DATA))
 		hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
