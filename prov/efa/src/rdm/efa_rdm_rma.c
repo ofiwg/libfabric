@@ -601,6 +601,10 @@ ssize_t efa_rdm_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	if (err)
 		return err;
 
+	err = efa_rdm_attempt_to_sync_memops(efa_rdm_ep, (void *)buf, desc);
+	if (err)
+		return err;
+
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->shm_ep) {
