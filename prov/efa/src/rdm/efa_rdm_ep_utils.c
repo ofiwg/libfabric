@@ -63,8 +63,8 @@ const char *efa_rdm_ep_raw_addr_str(struct efa_rdm_ep *ep, char *buf, size_t *bu
 
 /**
  * @brief return peer's raw address in #efa_ep_addr
- * 
- * @param[in] ep		end point 
+ *
+ * @param[in] ep		end point
  * @param[in] addr 		libfabric address
  * @returns
  * If peer exists, return peer's raw addrress as pointer to #efa_ep_addr;
@@ -102,8 +102,8 @@ int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr)
 
 /**
  * @brief return peer's raw address in a reable string
- * 
- * @param[in] ep		end point 
+ *
+ * @param[in] ep		end point
  * @param[in] addr 		libfabric address
  * @param[out] buf		a buffer tat to be used to store string
  * @param[in,out] buflen	length of `buf` as input. length of the string as output.
@@ -117,8 +117,8 @@ const char *efa_rdm_ep_get_peer_raw_addr_str(struct efa_rdm_ep *ep, fi_addr_t ad
 
 /**
  * @brief get pointer to efa_rdm_peer structure for a given libfabric address
- * 
- * @param[in]		ep		endpoint 
+ *
+ * @param[in]		ep		endpoint
  * @param[in]		addr 		libfabric address
  * @returns if peer exists, return pointer to #efa_rdm_peer;
  *          otherwise, return NULL.
@@ -275,10 +275,11 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 
 /* create a new txe */
 struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
-					   const struct fi_msg *msg,
-					   uint32_t op,
-					   uint64_t tag,
-					   uint64_t flags)
+					 struct efa_rdm_peer *peer,
+					 const struct fi_msg *msg,
+					 uint32_t op,
+					 uint64_t tag,
+					 uint64_t flags)
 {
 	struct efa_rdm_ope *txe;
 
@@ -288,7 +289,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 		return NULL;
 	}
 
-	efa_rdm_txe_construct(txe, efa_rdm_ep, msg, op, flags);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, msg, op, flags);
 	if (op == ofi_op_tagged) {
 		txe->cq_entry.tag = tag;
 		txe->tag = tag;

@@ -187,7 +187,7 @@ ssize_t efa_rdm_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 		goto out;
 	}
 
-	txe = efa_rdm_ep_alloc_txe(efa_rdm_ep, msg, op, tag, flags);
+	txe = efa_rdm_ep_alloc_txe(efa_rdm_ep, peer, msg, op, tag, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		efa_rdm_ep_progress_internal(efa_rdm_ep);
