@@ -67,9 +67,10 @@ static void efa_rdm_atomic_init_shm_msg(struct efa_rdm_ep *ep, struct fi_msg_ato
 static
 struct efa_rdm_ope *
 efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
-			  const struct fi_msg_atomic *msg_atomic,
-			  const struct efa_rdm_atomic_ex *atomic_ex,
-			  uint32_t op, uint64_t flags)
+		      	 struct efa_rdm_peer *peer,
+			 const struct fi_msg_atomic *msg_atomic,
+			 const struct efa_rdm_atomic_ex *atomic_ex,
+			 uint32_t op, uint64_t flags)
 {
 	struct efa_rdm_ope *txe;
 	struct fi_msg msg;
@@ -96,7 +97,7 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	msg.iov_count = msg_atomic->iov_count;
 	msg.data = msg_atomic->data;
 	msg.desc = msg_atomic->desc;
-	efa_rdm_txe_construct(txe, efa_rdm_ep, &msg, op, flags);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, op, flags);
 
 	assert(msg_atomic->rma_iov_count > 0);
 	assert(msg_atomic->rma_iov);
@@ -149,7 +150,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 		goto out;
 	}
 
-	txe = efa_rdm_atomic_alloc_txe(efa_rdm_ep, msg, atomic_ex, op, flags);
+	txe = efa_rdm_atomic_alloc_txe(efa_rdm_ep, peer, msg, atomic_ex, op, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		efa_rdm_ep_progress_internal(efa_rdm_ep);

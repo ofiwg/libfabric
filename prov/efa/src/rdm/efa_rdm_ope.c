@@ -43,9 +43,10 @@
 #include "efa_rdm_pkt_type.h"
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
-			    struct efa_rdm_ep *ep,
-			    const struct fi_msg *msg,
-			    uint32_t op, uint64_t flags)
+			   struct efa_rdm_ep *ep,
+			   struct efa_rdm_peer *peer,
+			   const struct fi_msg *msg,
+			   uint32_t op, uint64_t flags)
 {
 	uint64_t tx_op_flags;
 
@@ -55,7 +56,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->tx_id = ofi_buf_index(txe);
 	txe->state = EFA_RDM_TXE_REQ;
 	txe->addr = msg->addr;
-	txe->peer = efa_rdm_ep_get_peer(ep, txe->addr);
+	txe->peer = peer;
 	/* peer would be NULL for local read operation */
 	if (txe->peer) {
 		dlist_insert_tail(&txe->peer_entry, &txe->peer->txe_list);
@@ -1677,9 +1678,10 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 	msg_rma.rma_iov_count = 1;
 
 	txe = efa_rdm_rma_alloc_txe(rxe->ep,
-					  &msg_rma,
-					  ofi_op_read_req,
-					  0 /* flags*/);
+				    efa_rdm_ep_get_peer(rxe->ep, msg_rma.addr),
+				    &msg_rma,
+				    ofi_op_read_req,
+				    0 /* flags*/);
 	if (!txe) {
 		return -FI_ENOBUFS;
 	}
