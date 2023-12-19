@@ -120,8 +120,8 @@ static struct fid_ep *lnx_get_core_ep(struct local_prov_ep *cep, int idx,
 
 static void
 lnx_init_rx_entry(struct lnx_rx_entry *entry, struct iovec *iov, void **desc,
-			size_t count, fi_addr_t addr, uint64_t tag,
-			uint64_t ignore, void *context, uint64_t flags)
+		  size_t count, fi_addr_t addr, uint64_t tag,
+		  uint64_t ignore, void *context, uint64_t flags)
 {
 	memcpy(&entry->rx_iov, iov, sizeof(*iov) * count);
 	if (desc)
@@ -166,7 +166,7 @@ get_rx_entry(struct local_prov_ep *cep, struct iovec *iov, void **desc,
 			rx_entry->rx_global = true;
 		rx_entry->rx_cep = cep;
 		lnx_init_rx_entry(rx_entry, iov, desc, count, addr, tag,
-						  ignore, context, flags);
+				  ignore, context, flags);
 	}
 
 	return rx_entry;
@@ -179,7 +179,7 @@ lnx_remove_first_match(struct lnx_queue *q, struct lnx_match_attr *match)
 
 	ofi_spin_lock(&q->lq_qlock);
 	rx_entry = (struct lnx_rx_entry *) dlist_remove_first_match(
-						&q->lq_queue, q->lq_match_func, match);
+			&q->lq_queue, q->lq_match_func, match);
 	ofi_spin_unlock(&q->lq_qlock);
 
 	return rx_entry;
@@ -190,7 +190,7 @@ lnx_insert_rx_entry(struct lnx_queue *q, struct lnx_rx_entry *entry)
 {
 	ofi_spin_lock(&q->lq_qlock);
 	dlist_insert_tail((struct dlist_entry *)(&entry->rx_entry),
-						&q->lq_queue);
+			  &q->lq_queue);
 	ofi_spin_unlock(&q->lq_qlock);
 }
 
@@ -198,6 +198,10 @@ int lnx_queue_tag(struct fi_peer_rx_entry *entry)
 {
 	struct lnx_rx_entry *rx_entry = (struct lnx_rx_entry *)entry;
 	struct lnx_peer_srq *lnx_srq = (struct lnx_peer_srq*)entry->owner_context;
+
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+		"addr = %lx tag = %lx ignore = 0 found\n",
+		entry->addr, entry->tag);
 
 	lnx_insert_rx_entry(&lnx_srq->lps_trecv.lqp_unexq, rx_entry);
 
@@ -213,8 +217,6 @@ int lnx_get_tag(struct fid_peer_srx *srx, struct fi_peer_match *match,
 	struct lnx_ep *lep;
 	struct lnx_rx_entry *rx_entry;
 	int rc = 0;
-
-/* TODO: we're comparing the core provider address against the linkx address, which could be different. We need to pay more attention to this */
 
 	/* get the endpoint */
 	cep = container_of(srx, struct local_prov_ep, lpe_srx);
@@ -244,18 +246,21 @@ int lnx_get_tag(struct fid_peer_srx *srx, struct fi_peer_match *match,
 	 *     around and tell us to queue it. Return -FI_ENOENT.
 	 */
 	rx_entry = lnx_remove_first_match(&lnx_srq->lps_trecv.lqp_recvq,
-									  &match_attr);
+					  &match_attr);
 	if (rx_entry) {
-		FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = 0 found\n",
-				getpid(), addr, tag);
+		FI_DBG(&lnx_prov, FI_LOG_CORE,
+		       "addr = %lx tag = %lx ignore = 0 found\n",
+		       addr, tag);
+
 		goto assign;
 	}
 
-	FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = 0 not found\n",
-			getpid(), addr, tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "addr = %lx tag = %lx ignore = 0 not found\n",
+	       addr, tag);
 
 	rx_entry = get_rx_entry(cep, NULL, NULL, 0, addr, tag, 0, NULL,
-							lnx_ep_rx_flags(lep));
+				lnx_ep_rx_flags(lep));
 	if (!rx_entry) {
 		rc = -FI_ENOMEM;
 		goto out;
@@ -315,14 +320,16 @@ static int lnx_process_recv(struct lnx_ep *lep, struct local_prov_ep *cep,
 	rx_entry = lnx_remove_first_match(&lnx_srq->lps_trecv.lqp_unexq,
 					  &match_attr);
 	if (!rx_entry) {
-		FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = %lx not found\n",
-				getpid(), addr, tag, ignore);
+		FI_DBG(&lnx_prov, FI_LOG_CORE,
+		       "addr=%lx tag=%lx ignore=%lx buf=%p len=%lx not found\n",
+		       addr, tag, ignore, iov->iov_base, iov->iov_len);
 
 		goto nomatch;
 	}
 
-	FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = %lx found\n",
-			getpid(), addr, tag, ignore);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "addr=%lx tag=%lx ignore=%lx buf=%p len=%lx found\n",
+	       addr, tag, ignore, iov->iov_base, iov->iov_len);
 
 	/* if you found an unexpected message then use the core endpoint
 	 * identified there */
@@ -342,16 +349,18 @@ static int lnx_process_recv(struct lnx_ep *lep, struct local_prov_ep *cep,
 		/* this is telling me that more messages can match the same
 		 * rx_entry. So keep it on the queue
 		 */
-		FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = %lx start_tag() in progress\n",
-				getpid(), addr, tag, ignore);
+		FI_DBG(&lnx_prov, FI_LOG_CORE,
+		       "addr = %lx tag = %lx ignore = %lx start_tag() in progress\n",
+		       addr, tag, ignore);
 
 		goto insert_recvq;
 	} else if (rc) {
 		FI_WARN(&lnx_prov, FI_LOG_CORE, "start tag failed with %d\n", rc);
 	}
 
-	FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = %lx start_tag() success\n",
-			getpid(), addr, tag, ignore);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "addr = %lx tag = %lx ignore = %lx start_tag() success\n",
+	       addr, tag, ignore);
 
 	return 0;
 
@@ -564,8 +573,9 @@ ssize_t lnx_tsend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	if (rc)
 		return rc;
 
-	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
-			getpid(), core_addr, tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "sending to %lx tag %lx buf %p len %ld\n",
+	       core_addr, tag, buf, len);
 
 	rc = fi_tsend(cep->lpe_ep, buf, len, mem_desc, core_addr, tag, context);
 
@@ -594,8 +604,8 @@ ssize_t lnx_tsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	if (rc)
 		return rc;
 
-	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
-			getpid(), core_addr, tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "sending to %lx tag %lx\n", core_addr, tag);
 
 	rc = fi_tsendv(cep->lpe_ep, iov, &mem_desc, count, core_addr, tag, context);
 
@@ -631,8 +641,8 @@ ssize_t lnx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	core_msg.desc = mem_desc;
 	core_msg.addr = core_addr;
 
-	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
-			getpid(), core_msg.addr, core_msg.tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "sending to %lx tag %lx\n", core_msg.addr, core_msg.tag);
 
 	rc = fi_tsendmsg(cep->lpe_ep, &core_msg, flags);
 
@@ -659,8 +669,9 @@ ssize_t lnx_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	if (rc)
 		return rc;
 
-	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
-			getpid(), core_addr, tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "sending to %lx tag %lx buf %p len %ld\n",
+	       core_addr, tag, buf, len);
 
 	rc = fi_tinject(cep->lpe_ep, buf, len, core_addr, tag);
 
@@ -689,8 +700,9 @@ ssize_t lnx_tsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc
 	if (rc)
 		return rc;
 
-	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
-			getpid(), core_addr, tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "sending to %lx tag %lx buf %p len %ld\n",
+	       core_addr, tag, buf, len);
 
 	rc = fi_tsenddata(cep->lpe_ep, buf, len, mem_desc,
 			  data, core_addr, tag, context);
@@ -714,12 +726,13 @@ ssize_t lnx_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], NULL, &cep,
-				&core_addr, NULL, 0, NULL, NULL);
+				     &core_addr, NULL, 0, NULL, NULL);
 	if (rc)
 		return rc;
 
-	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
-			getpid(), core_addr, tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "sending to %lx tag %lx buf %p len %ld\n",
+	       core_addr, tag, buf, len);
 
 	rc = fi_tinjectdata(cep->lpe_ep, buf, len, data, core_addr, tag);
 
@@ -748,12 +761,13 @@ lnx_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[src_addr], desc, &cep,
-				&core_addr, &iov, 1, &mem_desc, &rkey);
+				     &core_addr, &iov, 1, &mem_desc, &rkey);
 	if (rc)
 		goto out;
 
-	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
-			getpid(), core_addr, tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "rma read from %lx key %lx buf %p len %ld\n",
+	       core_addr, key, buf, len);
 
 	core_ep = lnx_get_core_ep(cep, ctx->ctx_idx, ep->fid.fclass);
 
@@ -762,49 +776,6 @@ lnx_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 out:
 	return rc;
-/*
-	int rc;
-	struct lnx_ep *lep;
-	struct local_prov_ep *cep = NULL;
-	fi_addr_t core_addr = FI_ADDR_UNSPEC;
-	struct lnx_peer_table *peer_tbl;
-	void *mem_desc;
-	struct iovec iov = {.iov_base = buf, .iov_len = len};
-	struct lnx_peer *lp;
-
-	lep = lnx_get_lep(ep);
-	if (!lep)
-		return -FI_ENOSYS;
-
-	peer_tbl = lep->le_peer_tbl;
-
-	lnx_get_core_desc(desc, &mem_desc);
-
-	lp = lnx_get_peer(peer_tbl->lpt_entries, src_addr);
-
-	rc = lnx_process_recv(lep, &iov, &mem_desc, src_addr, 1, lp,
-			     (uint64_t) -1, (uint64_t) -1, context, 0,
-			     false);
-	if (rc == -FI_ENOSYS)
-		goto do_recv;
-	else if (rc)
-		FI_WARN(&lnx_prov, FI_LOG_CORE, "lnx_process_recv failed with %d\n", rc);
-
-	return rc;
-
-do_recv:
-	if (lp) {
-		rc = lnx_select_recv_pathway(lp, desc, &cep, &core_addr, &iov, 1, &mem_desc);
-		if (rc)
-			return rc;
-
-		rc = fi_read(cep->lpe_ep, buf, len, mem_desc, core_addr,
-			     addr, key, context);
-		return rc;
-	}
-
-	return rc;
-*/
 }
 
 static inline ssize_t
@@ -833,8 +804,9 @@ lnx_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	if (rc)
 		goto out;
 
-	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
-			getpid(), core_addr, tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "rma write to %lx key %lx buf %p len %ld\n",
+	       core_addr, key, buf, len);
 
 	core_ep = lnx_get_core_ep(cep, ctx->ctx_idx, ep->fid.fclass);
 
@@ -874,8 +846,8 @@ lnx_atomic_write(struct fid_ep *ep,
 	if (rc)
 		goto out;
 
-	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
-			getpid(), core_addr, tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "sending to %lx\n", core_addr);
 
 	core_ep = lnx_get_core_ep(cep, ctx->ctx_idx, ep->fid.fclass);
 
@@ -917,8 +889,8 @@ lnx_atomic_readwrite(struct fid_ep *ep,
 	if (rc)
 		goto out;
 
-	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
-			getpid(), core_addr, tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "sending to %lx\n", core_addr);
 
 	core_ep = lnx_get_core_ep(cep, ctx->ctx_idx, ep->fid.fclass);
 
@@ -962,8 +934,8 @@ lnx_atomic_compwrite(struct fid_ep *ep,
 	if (rc)
 		goto out;
 
-	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
-			getpid(), core_addr, tag);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "sending to %lx\n", core_addr);
 
 	core_ep = lnx_get_core_ep(cep, ctx->ctx_idx, ep->fid.fclass);
 

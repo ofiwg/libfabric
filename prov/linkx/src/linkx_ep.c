@@ -694,6 +694,10 @@ static int lnx_match_common(uint64_t tag1, uint64_t tag2, uint64_t ignore,
 	 */
 	tmatch = match_tag(tag1, tag2, ignore);
 
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "tag1=%lx tag2=%lx ignore=%lx cep_addr=%lx lnx_addr=%lx tmatch=%d\n",
+	       tag1, tag2, ignore, cep_addr, lnx_addr, tmatch);
+
 	/* if we're requested to receive from any peer, then tag maching is
 	 * enough. None tagged message will match irregardless.
 	 */

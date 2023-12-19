@@ -81,23 +81,27 @@ static void lnx_free_peer(struct lnx_peer *lp)
 #if ENABLE_DEBUG
 static void lnx_print_peer(int idx, struct lnx_peer *lp)
 {
-	int i, k;
+	int k;
 	struct lnx_peer_prov *lpp;
 	struct lnx_local2peer_map *lpm;
 
-	FI_DBG(&lnx_prov, "%d: lnx_peer[%d] is %s\n", getpid(), idx,
-			(lp->lp_local) ? "local" : "remote");
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "%d: lnx_peer[%d] is %s\n", getpid(), idx,
+	       (lp->lp_local) ? "local" : "remote");
 	dlist_foreach_container(&lp->lp_provs,
 			struct lnx_peer_prov, lpp, entry) {
-		FI_DBG(&lnx_prov, "%d: peer[%d] provider %s\n", getpid(), i,
-				lpp->lpp_prov_name);
+		FI_DBG(&lnx_prov, FI_LOG_CORE,
+		       "%d: peer[%p] provider %s\n", getpid(), lpp,
+		       lpp->lpp_prov_name);
 		dlist_foreach_container(&lpp->lpp_map,
 			struct lnx_local2peer_map, lpm, entry) {
-			FI_DBG(&lnx_prov, "   %d: peer has %d mapped addrs\n",
-					getpid(), lpm->addr_count);
+			FI_DBG(&lnx_prov, FI_LOG_CORE,
+			       "   %d: peer has %d mapped addrs\n",
+			       getpid(), lpm->addr_count);
 			for (k = 0; k < lpm->addr_count; k++)
-				FI_DBG(&lnx_prov, "        %d: addr = %lu\n",
-						getpid(), lpm->peer_addrs[k]);
+				FI_DBG(&lnx_prov, FI_LOG_CORE,
+				       "        %d: addr = %lu\n",
+				       getpid(), lpm->peer_addrs[k]);
 		}
 	}
 }
