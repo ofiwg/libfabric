@@ -449,10 +449,13 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	int i, rc, idx;
+	int disable_shm = 0;
 	struct lnx_peer *lp;
 	struct dlist_entry *prov_table;
 	struct lnx_peer_table *peer_tbl;
 	struct lnx_addresses *addrs = (struct lnx_addresses *)addr;
+
+	fi_param_get_bool(&lnx_prov, "disable_shm", &disable_shm);
 
 	peer_tbl = container_of(av, struct lnx_peer_table, lpt_av.av_fid.fid);
 	prov_table = &peer_tbl->lpt_domain->ld_fabric->local_prov_table;
@@ -475,7 +478,7 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		rc = is_local_addr(&peer_tbl->lpt_domain->ld_fabric->shm_prov,
 				   la);
 		if (!rc) {
-			lp->lp_local = true;
+			lp->lp_local = !disable_shm;
 		} else if (rc == -FI_EOPNOTSUPP) {
 			lp->lp_local = false;
 		} else if (rc) {

@@ -789,6 +789,9 @@ LNX_INI
 	struct ofi_bufpool_attr bp_attrs = {};
 	int ret;
 
+	fi_param_define(&lnx_prov, "disable_shm", FI_PARAM_BOOL,
+			"Turn off SHM support. Defaults to 0");
+
 	fi_param_define(&lnx_prov, "srq_support", FI_PARAM_BOOL,
 			"Turns shared receive queue support on and off. By default it is on. "
 			"When SRQ is turned on some Hardware offload capability will not "
