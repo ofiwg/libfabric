@@ -138,7 +138,6 @@ fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qp
 	struct efa_prv_reverse_av_key prv_key;
 	uint32_t *connid;
 
-	memset(&cur_key, 0, sizeof(cur_key));
 	cur_key.ahn = ahn;
 	cur_key.qpn = qpn;
 
@@ -167,7 +166,6 @@ fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qp
 		return cur_entry->conn->fi_addr;
 
 	/* the packet is from a previous peer, look for its address from the prv_reverse_av */
-	memset(&prv_key, 0, sizeof(prv_key));
 	prv_key.ahn = ahn;
 	prv_key.qpn = qpn;
 	prv_key.connid = *connid;
