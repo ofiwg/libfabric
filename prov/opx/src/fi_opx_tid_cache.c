@@ -477,31 +477,10 @@ int opx_register_tid_region(uint64_t tid_vaddr, uint64_t tid_length,
 			   for the recovery calculations below */
 			length_chunk = 0;
 		}
-		/* flush the cache to recover resources until
-		 * we've flushed <npages> tids or no more to flush.
-		   This assumes worst case 1 page tids. */
-		int npages = (tid_length - (uint64_t)length_chunk) /
-			       OPX_HFI1_TID_PAGESIZE;
-		uint32_t flush_counter = opx_ep->mcache_flush_counter = 0;
-		uint32_t ncounter = 0;
-		do {
-			flush_counter = opx_ep->mcache_flush_counter;
-			pthread_mutex_unlock(&opx_ep->tid_domain->tid_cache->lock);
-			opx_tid_cache_flush(opx_ep->tid_domain->tid_cache, true);
-			pthread_mutex_lock(&opx_ep->tid_domain->tid_cache->lock);
-			FI_DBG(fi_opx_global.prov, FI_LOG_MR,"npages %d, flush_counter %u/%u\n",
-			       npages, flush_counter, opx_ep->mcache_flush_counter);
-			ncounter++;
-		} while (((npages - opx_ep->mcache_flush_counter) > 0) && (flush_counter != opx_ep->mcache_flush_counter));
-#ifdef OPX_IOCTL_DEBUG
-		if ((npages - (int)opx_ep->mcache_flush_counter) > 0) {
-			fprintf(stderr,
-				"## FAILED RECOVERY FLUSHES, npages %d, npages left %d, nflushes(%u) %u/%u\n",npages,(npages - opx_ep->mcache_flush_counter), ncounter, flush_counter, opx_ep->mcache_flush_counter);
-		}
-#else
-		(void) ncounter;
-#endif
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "npages %d, npages left %d, nflushes(%u) %u/%u\n",npages,(npages - opx_ep->mcache_flush_counter), ncounter, flush_counter, opx_ep->mcache_flush_counter);
+		/* flush the cache to recover resources  */
+		pthread_mutex_unlock(&opx_ep->tid_domain->tid_cache->lock);
+		opx_tid_cache_flush_all(opx_ep->tid_domain->tid_cache, true, true);
+		pthread_mutex_lock(&opx_ep->tid_domain->tid_cache->lock);
 
 		/* Attempt one recovery ioctl()*/
 		uint32_t new_length_chunk = (OPX_HFI1_TID_PAGESIZE * tidcnt) - length_chunk;
@@ -685,9 +664,6 @@ void opx_tid_cache_delete_region(struct ofi_mr_cache *cache,
 		FI_DBG(cache->domain->prov, FI_LOG_MR,
 		       "ENTRY cache %p, entry %p, data %p, iov_base %p, iov_len %zu\n",
 		       cache, entry, opx_mr, iov_base, iov_len);
-
-		/* count the tid's flushed */
-		opx_ep->mcache_flush_counter += OPX_TID_NPAIRS(tid_reuse_cache);
 		opx_deregister_tid_region(opx_ep, tid_reuse_cache);
 	} else {
 		FI_DBG(cache->domain->prov, FI_LOG_MR,
@@ -737,7 +713,7 @@ int opx_tid_dec_use_cnt(struct ofi_mr_entry *entry)
 }
 
 
-/* Copied from util_mr_cache_full */
+/* Copied from ofi_mr_cache_full */
 __OPX_FORCE_INLINE__
 bool opx_tid_cache_full(struct ofi_mr_cache *cache)
 {
@@ -1031,10 +1007,7 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache,
 	       OPX_TID_LENGTH(tid_info));
 
 	if (opx_tid_cache_full(cache)) {
-		pthread_mutex_unlock(&mm_lock);
-		opx_tid_cache_flush(cache, 1);
-		/* re-acquire mm_lock */
-		pthread_mutex_lock(&mm_lock);
+		opx_tid_cache_flush_all(cache, true, true);
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "CACHE FULL flushed\n");
 	}
 	if (opx_tid_cache_full(cache)) {
@@ -1250,7 +1223,7 @@ int opx_return_offset_for_new_cache_entry(
 __OPX_FORCE_INLINE__
 int opx_tid_cache_close_region(struct ofi_mr_cache *tid_cache,
 			       struct ofi_mr_entry *entry,
-			       bool force)
+			       bool invalidate)
 {
 	/* TODO ... fix? */
 	OPX_DEBUG_ENTRY2(entry, OPX_ENTRY_FOUND);
@@ -1274,7 +1247,7 @@ int opx_tid_cache_close_region(struct ofi_mr_cache *tid_cache,
 	struct opx_tid_mr *opx_mr = (struct opx_tid_mr *)entry->data;
 	struct opx_mr_tid_info *const tid_info = &opx_mr->tid_info;
 
-	if(force) {
+	if(invalidate) {
 		/* Invalidate and deregister it.
 		 * Any ongoing RDMA will fail.
 		 * Any new RDMA will not use it and will fallback.
@@ -1293,9 +1266,6 @@ int opx_tid_cache_close_region(struct ofi_mr_cache *tid_cache,
 		/* drop mm_lock */
 		pthread_mutex_unlock(&mm_lock);
 
-		/* count the tid's flushed */
-		opx_ep->mcache_flush_counter += OPX_TID_NPAIRS(tid_info);
-
 		/* Hold the cache->lock across de-registering the TIDs  */
 		pthread_mutex_lock(&tid_cache->lock);
 		opx_deregister_tid_region(opx_ep, tid_info);
@@ -1309,8 +1279,8 @@ int opx_tid_cache_close_region(struct ofi_mr_cache *tid_cache,
 
 	if (use_cnt == 0) {
 		OPX_DEBUG_UCNT(entry);
-		FI_DBG(tid_cache->domain->prov, FI_LOG_MR, "force %u, invalid %u, node %p, (%p/%p) insert lru [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
-		       force, OPX_TID_IS_INVALID(tid_info), entry->node,
+		FI_DBG(tid_cache->domain->prov, FI_LOG_MR, "invalidate %u, invalid %u, node %p, (%p/%p) insert lru [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
+		       invalidate, OPX_TID_IS_INVALID(tid_info), entry->node,
 		       entry, entry->data,
 		       entry->info.iov.iov_base,
 		       (char*)entry->info.iov.iov_base + entry->info.iov.iov_len,
@@ -1508,9 +1478,9 @@ int opx_tid_cache_setup(struct ofi_mr_cache **cache,
 	return 0;
 }
 
-/* De-register (lazy, unless force is true) a memory region on TID rendezvous completion */
+/* De-register (lazy, unless invalidate is true) a memory region on TID rendezvous completion */
 void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
-			    const int64_t tid_length, bool force)
+			    const int64_t tid_length, bool invalidate)
 {
 	struct opx_tid_domain *tid_domain = opx_ep->domain->tid_domain;
 	struct ofi_mr_cache *tid_cache = tid_domain->tid_cache;
@@ -1588,7 +1558,7 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
 					       (uint64_t)info.iov.iov_base));
 		ncache_entries++;
 		/* Force the invalidation and put it on the dead list */
-		opx_tid_cache_close_region(tid_cache, entry, force);
+		opx_tid_cache_close_region(tid_cache, entry, invalidate);
 		/* increment past found region for next find */
 		remaining_length -= adj;
 		info.iov.iov_base = (char *)info.iov.iov_base + adj;
@@ -1598,14 +1568,12 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
 		       (char *)(info.iov.iov_base) + remaining_length,
 		       remaining_length, remaining_length);
 	}
+	/* Flush the dead list, don't flush the lru list (false) */
+	opx_tid_cache_flush(tid_cache, false);
 	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
 	       "OPX_DEBUG_EXIT %u entries closed\n",
 	       ncache_entries);
 	pthread_mutex_unlock(&mm_lock);
-	if (force) {
-		/* Flush the dead list, don't flush the lru list (false) */
-		opx_tid_cache_flush(tid_cache, false);
-	}
 }
 
 /* opx_process_entry()
@@ -1897,6 +1865,8 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 	 * - multple entries
 	 */
 	if (find == OPX_ENTRY_NOT_FOUND) {
+		/* Flush the dead list, don't flush the lru list (false) */
+		opx_tid_cache_flush(tid_cache, false);
 		/* No entry found, create it. */
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_ENTRY_NOT_FOUND\n");
 		opx_tid_cache_crte(tid_cache, &find_info, &entry, opx_ep);
@@ -2024,6 +1994,7 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 		uint32_t ntidpairs = 0;
 		/* This loop handles the more complicated
 		   combinations of holes and overlap */
+		bool once = true;
 		while (remaining_length) {
 			/* process previos find results */
 			find = opx_process_entry(opx_ep, find,
@@ -2055,6 +2026,11 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 				return -FI_EPERM;
 			}
 			if (find == OPX_ENTRY_NOT_FOUND) {
+				/* Flush the dead list, don't flush the lru list (false) */
+				if(once) {
+					once = false;
+					opx_tid_cache_flush(tid_cache, false);
+				}
 				FI_DBG(fi_opx_global.prov, FI_LOG_MR,
 				       "NEXT OPX_ENTRY_NOT_FOUND TIDs "
 				       "remaining vaddr [%#lx - %#lx] length %lu/%#lX, "
@@ -2361,14 +2337,13 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 	return 0;
 }
 
-bool opx_tid_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
+void opx_tid_cache_flush_all(struct ofi_mr_cache *cache,const bool flush_lru,const bool flush_all)
 {
 	struct dlist_entry free_list;
 	struct ofi_mr_entry *entry;
-	bool entries_freed;
 
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "OPX_DEBUG_ENTRY (%u)\n",
-	       flush_lru);
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "OPX_DEBUG_ENTRY (%u/%u)\n",
+	       flush_lru, flush_all);
 
 	dlist_init(&free_list);
 
@@ -2410,12 +2385,14 @@ bool opx_tid_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 		}
 	}
 #endif
+	/* Always free the dead list */
 	dlist_splice_tail(&free_list, &cache->dead_region_list);
 
 	/* lru is a list of regions that are still active, optionally
 	 * free one, or more if the cache is full.
 	 */
-	while (flush_lru && !dlist_empty(&cache->lru_list)) {
+	bool flush_once = flush_lru;
+	while ((flush_all || flush_once) && !dlist_empty(&cache->lru_list)) {
 		dlist_pop_front(&cache->lru_list, struct ofi_mr_entry, entry,
 				list_entry);
 		FI_DBG(cache->domain->prov, FI_LOG_MR,
@@ -2431,12 +2408,10 @@ bool opx_tid_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 		opx_mr_uncache_entry_storage(cache, entry);
 		dlist_insert_tail(&entry->list_entry, &free_list);
 
-		flush_lru = opx_tid_cache_full(cache);
+		flush_once = opx_tid_cache_full(cache);
 	}
 
 	pthread_mutex_unlock(&mm_lock);
-
-	entries_freed = !dlist_empty(&free_list);
 
 	/* Free dead and selected lru entries */
 	while (!dlist_empty(&free_list)) {
@@ -2453,7 +2428,7 @@ bool opx_tid_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 		opx_cache_free_entry(cache, entry);
 	}
 
-	return entries_freed;
+	return ;
 }
 
 /* Copied from opx_tid_cache_flush
@@ -2609,8 +2584,7 @@ void opx_tid_cache_cleanup(struct ofi_mr_cache *cache)
 		cache->notify_cnt);
 
 	/* Try the nice flush */
-	while (opx_tid_cache_flush(cache, true))
-		;
+	opx_tid_cache_flush_all(cache, true, true);
 
 	/* Try forcing it (fini abnormal exit) for all eps (NULL) */
 	opx_tid_cache_purge_ep(cache, NULL);

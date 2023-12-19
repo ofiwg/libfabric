@@ -56,8 +56,26 @@ void opx_tid_cache_delete_abort();
 #define OPX_ENTRY_NOT_FOUND 2
 #define OPX_ENTRY_IN_USE 3
 
-/* Flush cache entries internal entry point */
-bool opx_tid_cache_flush(struct ofi_mr_cache *cache, bool flush_lru);
+/* Flush cache entries */
+void opx_tid_cache_flush_all(struct ofi_mr_cache *cache,const bool flush_lru,const bool flush_all);
+
+__OPX_FORCE_INLINE__
+void opx_tid_cache_flush(struct ofi_mr_cache *cache, const bool flush_lru)
+{
+	/* Nothing to do, early exit */
+	if (dlist_empty(&cache->dead_region_list) &&
+	    (!flush_lru ||
+	     dlist_empty(&cache->lru_list))) return;
+
+	pthread_mutex_unlock(&mm_lock);
+
+	/* Flush dead list or lru (one-time) */
+	opx_tid_cache_flush_all(cache, flush_lru, false);/* one time */
+
+	pthread_mutex_lock(&mm_lock);
+	return;
+
+}
 
 /* Purge all entries for the specified endpoint */
 void opx_tid_cache_purge_ep(struct ofi_mr_cache *cache, struct fi_opx_ep *opx_ep);
@@ -68,7 +86,7 @@ void opx_tid_cache_cleanup(struct ofi_mr_cache *cache);
 /* De-register (lazy, unless force is true) a memory region on TID rendezvous completion */
 void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
 			    const int64_t tid_length,
-			    bool force);
+			    bool invalidate);
 
 /* forward declaration of parameter structure */
 struct fi_opx_hfi1_rx_rzv_rts_params;
