@@ -175,8 +175,9 @@ int xpmem_copy(struct iovec *local, unsigned long local_cnt,
 		iov.iov_base = (void *) ofi_get_page_start(remote[i].iov_base,
 							   page_size);
 		iov.iov_len =
-			(uintptr_t) ofi_get_page_end(remote[i].iov_base +
-					remote[i].iov_len, page_size) -
+			(uintptr_t) ofi_get_page_end(
+					(void*)((uintptr_t)remote[i].iov_base +
+					remote[i].iov_len), page_size) -
 					(uintptr_t)iov.iov_base;
 
 		ret = ofi_xpmem_cache_search(xpmem_cache, &iov, pid, &mr_entry,
