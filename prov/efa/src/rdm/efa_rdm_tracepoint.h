@@ -24,9 +24,9 @@
 
 #else
 
-#define efa_rdm_tracepoint(...)	while (0) {}
-#define efa_rdm_tracef(...)	while (0) {}
-#define efa_rdm_tracelog(...)	while (0) {}
+#define efa_rdm_tracepoint(...)	do {} while (0)
+#define efa_rdm_tracef(...)	do {} while (0)
+#define efa_rdm_tracelog(...)	do {} while (0)
 
 #endif /* HAVE_LTTNG */
 
