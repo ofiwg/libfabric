@@ -47,8 +47,9 @@ extern struct fi_ops_rma efa_rdm_rma_ops;
 
 struct efa_rdm_ope *
 efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
-		       const struct fi_msg_rma *msg_rma,
-		       uint32_t op,
-		       uint64_t flags);
+		      struct efa_rdm_peer *peer,
+		      const struct fi_msg_rma *msg_rma,
+		      uint32_t op,
+		      uint64_t flags);
 
 #endif
