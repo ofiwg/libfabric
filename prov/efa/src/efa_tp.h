@@ -42,9 +42,9 @@ static inline void efa_tracepoint_wr_id_post_recv(const void *wr_id)
 
 #else
 
-#define efa_tracepoint(...)	while (0) {}
-#define efa_tracef(...)	while (0) {}
-#define efa_tracelog(...)	while (0) {}
+#define efa_tracepoint(...)	do {} while(0)
+#define efa_tracef(...)	do {} while(0)
+#define efa_tracelog(...)	do {} while(0)
 
 #endif /* HAVE_LTTNG */
 
