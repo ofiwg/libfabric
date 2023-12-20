@@ -34,6 +34,9 @@
 #include <numa.h>
 #include <inttypes.h>
 #include <sys/sysinfo.h>
+#include <sys/file.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "rdma/fabric.h" // only for 'fi_addr_t' ... which is a typedef to uint64_t
 #include "rdma/opx/fi_opx_hfi1.h"
@@ -315,13 +318,21 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	const int hfi_count = opx_hfi_get_num_units();
 	int hfi_candidates[FI_OPX_MAX_HFIS];
 	int hfi_distances[FI_OPX_MAX_HFIS];
+	int hfi_freectxs[FI_OPX_MAX_HFIS];
 	int hfi_candidates_count = 0;
 	int hfi_candidate_index = -1;
 	struct _hfi_ctrl *ctrl = NULL;
 	bool use_default_logic = true;
+	int dirfd = -1;
 
 	struct fi_opx_hfi1_context_internal *internal =
 		calloc(1, sizeof(struct fi_opx_hfi1_context_internal));
+	if (!internal)
+	{
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+				"Error: Memory allocation failure for fi_opx_hfi_context_internal.\n");
+		return NULL;
+	}
 
 	struct fi_opx_hfi1_context *context = &internal->context;
 
@@ -538,34 +549,59 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			}
 
 		} else {
+
+			// Lock on the opx class directory path so that HFI selection based on distance and
+			// number of free credits available is atomic. This is to avoid the situation where several
+			// processes go to read the number of free contexts available in each HFI at the same time
+			// and choose the same HFi with the smallest load as well as closest to the corresponding process.
+			// If the processes of selection and then context openning is atomic here, this situation is avoided
+			// and hfi selection should be evenly balanced.
+			if ((dirfd = open(OPX_CLASS_DIR_PATH, O_RDONLY)) == -1) {
+				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+					"Failed to open %s: %s for flock use.\n", OPX_CLASS_DIR_PATH, strerror(errno));
+				free(internal);
+				return NULL;
+			}
+
+			if (flock(dirfd, LOCK_EX) == -1) {
+				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+					"Flock exclusive lock failure: %s\n", strerror(errno));
+				close(dirfd);
+				free(internal);
+				return NULL;
+			}
+
 			// The system has multiple HFIs. Sort them by distance from
-			// this process.
-			int hfi_n, hfi_d;
+			// this process. HFIs with same distance are sorted by number of
+			// free contexts available.
+			int hfi_n, hfi_d, hfi_f;
 			for (int i = 0; i < hfi_count; i++) {
 				if (opx_hfi_get_unit_active(i) > 0) {
 					hfi_n = opx_hfi_sysfs_unit_read_node_s64(i);
 					hfi_d = numa_distance(hfi_n, numa_node_id);
+					hfi_f = opx_hfi_get_num_free_contexts(i);
 					FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
-						"HFI unit %d in numa node %d has a distance of %d from this pid.\n",
-						i, hfi_n, hfi_d);
+						"HFI unit %d in numa node %d has a distance of %d from this pid with"
+						" %d free contexts available.\n", i, hfi_n, hfi_d, hfi_f);
 					hfi_candidates[hfi_candidates_count] = i;
 					hfi_distances[hfi_candidates_count] = hfi_d;
+					hfi_freectxs[hfi_candidates_count] = hfi_f;
 					int j = hfi_candidates_count;
-					// Bubble the new HFI up till the list is sorted.
-					// Yes, this is lame but the practical matter is that
-					// there will never be so many HFIs on a single system
-					// that a real insertion sort is justified. Also, doing it
-					// this way results in a deterministic result - HFIs will
-					// be implicitly sorted by their unit number as well as
-					// by distance ensuring that all processes in a NUMA node
-					// will see the HFIs in the same order.
-					while (j > 0 && hfi_distances[j - 1] > hfi_distances[j]) {
+					// Bubble the new HFI up till the list is sorted by distance
+					// and then by number of free contexts. Yes, this is lame but
+					// the practical matter is that there will never be so many HFIs 
+					// on a single system that a real insertion sort is justified.
+					while (j > 0 && ((hfi_distances[j - 1] > hfi_distances[j]) ||
+						( (hfi_distances[j - 1] == hfi_distances[j]) && (hfi_freectxs[j - 1] < hfi_freectxs[j])))){
 						int t1 = hfi_distances[j - 1];
 						int t2 = hfi_candidates[j - 1];
+						int t3 = hfi_freectxs[j - 1];
 						hfi_distances[j - 1] = hfi_distances[j];
 						hfi_candidates[j - 1] = hfi_candidates[j];
+						hfi_freectxs[j - 1] = hfi_freectxs[j];
 						hfi_distances[j] = t1;
 						hfi_candidates[j] = t2;
+						hfi_freectxs[j] = t3;
 						j--;
 					}
 					hfi_candidates_count++;
@@ -573,11 +609,11 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			}
 		}
 
-		// At this point we have a list of HFIs, sorted by distance from this
-		// pid (and by unit # as an implied key).  Pick from the closest HFIs
-		// based on the modulo of the pid. If we fail to open that HFI, try
-		// another one at the same distance. If that fails, we will try HFIs
-		// that are further away.
+		// At this point we have a list of HFIs, sorted by distance from this pid (and by unit # as an implied key).
+		// HFIs that have the same distance are sorted by number of free contexts available. 
+		// Pick the closest HFI that has the smallest load (largest number of free contexts).
+		// If we fail to open that HFI, try another one at the same distance but potentially 
+		// under a heavier load. If that fails, we will try HFIs that are further away.
 		int lower = 0;
 		int higher = 0;
 		do {
@@ -589,16 +625,13 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				higher++;
 			}
 
-			// Use the modulo of the pid to select an HFI. The intent
-			// is to use HFIs evenly rather than have many pids open
-			// the 1st HFi then have many select the next HFI, etc...
+			// Select the hfi that is under the smallest load. All
+			// hfis from [lower, higher) are sorted by number of free contexts
+			// available with lower having the most contexts free.
 			int range = higher - lower;
-			hfi_candidate_index = getpid() % range + lower;
+			hfi_candidate_index = lower;
 			hfi_unit_number = hfi_candidates[hfi_candidate_index];
 
-			// Try to open the HFI. If we fail, try the other HFIs
-			// at that distance until we run out of HFIs at that
-			// distance.
 			fd = opx_open_hfi_and_context(&ctrl, internal, unique_job_key,
 				hfi_unit_number);
 			int t = range;
@@ -615,6 +648,20 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			// try HFIs that are further away.
 			lower = higher;
 		} while (fd < 0 && lower < hfi_candidates_count);
+
+		if (dirfd != -1) {
+			if (flock(dirfd, LOCK_UN) == -1) {
+				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Flock unlock failure: %s\n", strerror(errno));
+				close(dirfd);
+				
+				if (fd >=0) {
+					opx_hfi_context_close(fd);
+				}
+				free(internal);
+				return NULL;
+			}
+			close(dirfd);
+		}
 
 		if (fd < 0) {
 			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,

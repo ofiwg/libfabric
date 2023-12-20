@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2022 Cornelis Networks.
+  Copyright(c) 2021-2023 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -425,43 +425,23 @@ int opx_hfi_get_unit_active(int unit)
 	return (rv>0);
 }
 
-/* get the number of contexts from the unit id. */
+/* Get the number of free contexts from the unit id. */
 /* Returns 0 if no unit or no match. */
-int opx_hfi_get_num_contexts(int unit_id)
+int opx_hfi_get_num_free_contexts(int unit_id)
 {
-	int n = 0;
-	int units;
 	int64_t val;
 	uint32_t p = OPX_MIN_PORT;
 
-	units = opx_hfi_get_num_units();
+	for (; p <= OPX_MAX_PORT; p++)
+		if (opx_hfi_get_port_lid(unit_id, p) > 0)
+			break;
 
-	if_pf(units <=  0)
-		return 0;
-
-	if (unit_id == OPX_UNIT_ID_ANY) {
-		uint32_t u;
-
-		for (u = 0; u < units; u++) {
-			for (p = OPX_MIN_PORT; p <= OPX_MAX_PORT; p++)
-				if (opx_hfi_get_port_lid(u, p) > 0)
-					break;
-
-			if (p <= OPX_MAX_PORT &&
-			    !opx_sysfs_unit_read_s64(u, "nctxts", &val, 0))
-				n += (uint32_t) val;
-		}
-	} else {
-		for (; p <= OPX_MAX_PORT; p++)
-			if (opx_hfi_get_port_lid(unit_id, p) > 0)
-				break;
-
-		if (p <= OPX_MAX_PORT &&
-		    !opx_sysfs_unit_read_s64(unit_id, "nctxts", &val, 0))
-			n += (uint32_t) val;
+	if (p <= OPX_MAX_PORT &&
+			!opx_sysfs_unit_read_s64(unit_id, "nfreectxts", &val, 0)) {
+		return (uint32_t) val;
 	}
 
-	return n;
+	return 0;
 }
 
 /* Given a unit number and port number, returns 1 if the unit and port are active.
