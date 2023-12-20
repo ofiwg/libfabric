@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021 Cornelis Networks.
+  Copyright(c) 2021-2023 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -93,6 +93,7 @@
 /* base name of path (without unit #) for opa driver */
 #define OPX_DEVICE_PATH "/dev/hfi1"
 #define OPX_CLASS_PATH "/sys/class/infiniband/hfi1"
+#define OPX_CLASS_DIR_PATH "/sys/class/infiniband"
 
 /* Commands used to communicate with driver. */
 enum OPX_HFI_CMD {
@@ -187,8 +188,9 @@ int opx_hfi_get_num_units();
    returns -1 when an error occurred. */
 int opx_hfi_get_unit_active(int unit);
 
-/* get the number of contexts from the unit id. */
-int opx_hfi_get_num_contexts(int unit);
+/* Get the number of free contexts from the unit id. */
+/* Returns 0 if no unit or no match. */
+int opx_hfi_get_num_free_contexts(int unit);
 
 /* Open hfi device file, return -1 on error. */
 int opx_hfi_context_open(int unit, int port, uint64_t open_timeout);
