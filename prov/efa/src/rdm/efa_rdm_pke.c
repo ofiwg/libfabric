@@ -487,16 +487,17 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 		     uint64_t remote_buf, size_t remote_key)
 {
 	struct efa_rdm_ep *ep;
-	struct efa_rdm_peer *peer;
 	struct efa_qp *qp;
 	struct efa_conn *conn;
 	struct ibv_sge sge;
+	struct efa_rdm_ope *txe;
 	int err = 0;
 
 	ep = pkt_entry->ep;
 	assert(ep);
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-	if (peer == NULL)
+	txe = pkt_entry->ope;
+
+	if (txe->peer == NULL)
 		pkt_entry->flags |= EFA_RDM_PKE_LOCAL_READ;
 
 	qp = ep->base_ep.qp;
@@ -509,7 +510,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 	sge.lkey = ((struct efa_mr *)desc)->ibv_mr->lkey;
 
 	ibv_wr_set_sge_list(qp->ibv_qp_ex, 1, &sge);
-	if (peer == NULL) {
+	if (txe->peer == NULL) {
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah,
 				   qp->qp_num, qp->qkey);
 	} else {
@@ -545,7 +546,6 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
-	struct efa_rdm_peer *peer;
 	struct efa_qp *qp;
 	struct efa_conn *conn;
 	struct ibv_sge sge;
@@ -561,7 +561,6 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 
 	ep = pkt_entry->ep;
 	assert(ep);
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	txe = pkt_entry->ope;
 
 	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
@@ -573,7 +572,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 
 	assert(((struct efa_mr *)desc)->ibv_mr);
 
-	self_comm = (peer == NULL);
+	self_comm = (txe->peer == NULL);
 	if (self_comm)
 		pkt_entry->flags |= EFA_RDM_PKE_LOCAL_WRITE;
 
