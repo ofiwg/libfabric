@@ -422,18 +422,14 @@ size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type)
  */
 size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int pkt_type)
 {
-	struct efa_rdm_peer *peer;
 	uint16_t header_flags = 0;
 	int max_data_offset;
 
 	assert(pkt_type >= EFA_RDM_REQ_PKT_BEGIN);
 
-	peer = efa_rdm_ep_get_peer(ep, txe->addr);
-	assert(peer);
-
-	if (efa_rdm_peer_need_raw_addr_hdr(peer))
+	if (efa_rdm_peer_need_raw_addr_hdr(txe->peer))
 		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
-	else if (efa_rdm_peer_need_connid(peer))
+	else if (efa_rdm_peer_need_connid(txe->peer))
 		header_flags |= EFA_RDM_PKT_CONNID_HDR;
 
 	if (txe->fi_flags & FI_REMOTE_CQ_DATA)
@@ -1704,7 +1700,6 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *pkt_entry_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
-	struct efa_rdm_peer *peer;
 	ssize_t err;
 	size_t segment_offset;
 	int pkt_entry_cnt, pkt_entry_data_size_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
@@ -1746,9 +1741,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 		goto handle_err;
 	}
 
-	peer = efa_rdm_ep_get_peer(ep, ope->addr);
-	assert(peer);
-	peer->flags |= EFA_RDM_PEER_REQ_SENT;
+	ope->peer->flags |= EFA_RDM_PEER_REQ_SENT;
 	for (i = 0; i < pkt_entry_cnt; ++i)
 		efa_rdm_pke_handle_sent(pkt_entry_vec[i]);
 	return 0;

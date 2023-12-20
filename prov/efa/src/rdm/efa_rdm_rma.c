@@ -353,25 +353,21 @@ bool efa_rdm_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_o
 ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
 	ssize_t err;
-	struct efa_rdm_peer *peer;
 	bool delivery_complete_requested;
 	int ctrl_type, iface;
 	size_t max_eager_rtw_data_size;
-
-	peer = efa_rdm_ep_get_peer(ep, txe->addr);
-	assert(peer);
 
 	/*
 	 * A handshake is required to choose the correct protocol (whether to use device write/read).
 	 * For local write (writing it self), this handshake is not required because we only need to
 	 * check one-side capability
 	 */
-	if (!(peer->is_self) && !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		err = efa_rdm_ep_trigger_handshake(ep, txe->addr);
 		return err ? err : -FI_EAGAIN;
 	}
 
-	if (efa_rdm_rma_should_write_using_rdma(ep, txe, peer)) {
+	if (efa_rdm_rma_should_write_using_rdma(ep, txe, txe->peer)) {
 		efa_rdm_ope_prepare_to_post_write(txe);
 		return efa_rdm_ope_post_remote_write(txe);
 	}
@@ -397,9 +393,9 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		if (OFI_UNLIKELY(err))
 			return err;
 
-		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+		if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 			return -FI_EAGAIN;
-		else if (!efa_rdm_peer_support_delivery_complete(peer))
+		else if (!efa_rdm_peer_support_delivery_complete(txe->peer))
 			return -FI_EOPNOTSUPP;
 
 		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_DC_EAGER_RTW_PKT);
@@ -410,7 +406,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
 
 	if (txe->total_len >= efa_rdm_ep_domain(ep)->hmem_info[iface].min_read_write_size &&
-		efa_rdm_interop_rdma_read(ep, peer) &&
+		efa_rdm_interop_rdma_read(ep, txe->peer) &&
 		(txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(ep)))) {
 		err = efa_rdm_ope_post_send(txe, EFA_RDM_LONGREAD_RTW_PKT);
 		if (err != -FI_ENOMEM)
