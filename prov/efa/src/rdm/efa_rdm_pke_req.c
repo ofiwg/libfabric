@@ -56,7 +56,6 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 {
 	char *opt_hdr;
 	struct efa_rdm_ep *ep;
-	struct efa_rdm_peer *peer;
 	struct efa_rdm_base_hdr *base_hdr;
 
 	/* init the base header */
@@ -66,17 +65,15 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 	base_hdr->flags = 0;
 
 	ep = txe->ep;
-	peer = efa_rdm_ep_get_peer(ep, txe->addr);
-	assert(peer);
 
-	if (efa_rdm_peer_need_raw_addr_hdr(peer)) {
+	if (efa_rdm_peer_need_raw_addr_hdr(txe->peer)) {
 		/*
 		 * This is the first communication with this peer on this
 		 * endpoint, so send the core's address for this EP in the REQ
 		 * so the remote side can insert it into its address vector.
 		 */
 		base_hdr->flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
-	} else if (efa_rdm_peer_need_connid(peer)) {
+	} else if (efa_rdm_peer_need_connid(txe->peer)) {
 		/*
 		 * After receiving handshake packet, we will know the peer's capability.
 		 *
@@ -257,7 +254,7 @@ uint32_t efa_rdm_pke_get_req_rma_iov_count(struct efa_rdm_pke *pkt_entry)
 
 /**
  * @brief get the base header size of a REQ packet
- * 
+ *
  * @return
  * a integer that is > 0.
  */
