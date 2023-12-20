@@ -60,16 +60,12 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 	int tagged;
 	int eager_rtm, medium_rtm, longcts_rtm, readbase_rtm, iface;
 	size_t eager_rtm_max_data_size;
-	struct efa_rdm_peer *peer;
 	struct efa_hmem_info *hmem_info;
 	bool delivery_complete_requested;
 
 	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
 	tagged = (txe->op == ofi_op_tagged);
 	assert(tagged == 0 || tagged == 1);
-
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, txe->addr);
-	assert(peer);
 
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
 	hmem_info = efa_rdm_ep_domain(efa_rdm_ep)->hmem_info;
@@ -90,10 +86,10 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 
 	eager_rtm_max_data_size = efa_rdm_txe_max_req_data_capacity(efa_rdm_ep, txe, eager_rtm);
 
-	readbase_rtm = efa_rdm_peer_select_readbase_rtm(peer, efa_rdm_ep, txe);
+	readbase_rtm = efa_rdm_peer_select_readbase_rtm(txe->peer, efa_rdm_ep, txe);
 
 	if (txe->total_len >= hmem_info[iface].min_read_msg_size &&
-		efa_rdm_interop_rdma_read(efa_rdm_ep, peer) &&
+		efa_rdm_interop_rdma_read(efa_rdm_ep, txe->peer) &&
 		(txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(efa_rdm_ep))))
 		return readbase_rtm;
 
@@ -121,10 +117,8 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 {
 	ssize_t err;
 	int rtm_type;
-	struct efa_rdm_peer *peer;
 
-	peer = efa_rdm_ep_get_peer(ep, txe->addr);
-	assert(peer);
+	assert(txe->peer);
 
 	/*
 	 * A handshake is required for hmem (non-system) ifaces
@@ -132,7 +126,7 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 	 * on both sides.
 	 */
 	if (efa_mr_is_hmem(txe->desc[0]) &&
-	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+	    !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		err = efa_rdm_ep_trigger_handshake(ep, txe->addr);
 		return err ? err : -FI_EAGAIN;
 	}
@@ -150,24 +144,23 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 	 *
 	 * Check handshake packet from peer to verify support status.
 	 */
-	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+	if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		err = efa_rdm_ep_trigger_handshake(ep, txe->addr);
 		return err ? err : -FI_EAGAIN;
 	}
 
-	if (!efa_rdm_pkt_type_is_supported_by_peer(rtm_type, peer))
+	if (!efa_rdm_pkt_type_is_supported_by_peer(rtm_type, txe->peer))
 		return -FI_EOPNOTSUPP;
 
 	return efa_rdm_ope_post_send(txe, rtm_type);
 }
 
-ssize_t efa_rdm_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
+ssize_t efa_rdm_msg_generic_send(struct fid_ep *ep, struct efa_rdm_peer *peer, const struct fi_msg *msg,
 			     uint64_t tag, uint32_t op, uint64_t flags)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	ssize_t err, ret, use_p2p;
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_peer *peer;
 	struct util_srx_ctx *srx_ctx;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
@@ -178,9 +171,6 @@ ssize_t efa_rdm_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
 	ofi_genlock_lock(srx_ctx->lock);
-
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
-	assert(peer);
 
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
@@ -270,7 +260,7 @@ ssize_t efa_rdm_msg_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		return ret;
 	}
 
-	return efa_rdm_msg_generic_send(ep, msg, 0, ofi_op_msg, flags);
+	return efa_rdm_msg_generic_send(ep, peer, msg, 0, ofi_op_msg, flags);
 }
 
 static
@@ -361,7 +351,7 @@ ssize_t efa_rdm_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	iov.iov_len = len;
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, dest_addr, context, data);
-	return efa_rdm_msg_generic_send(ep, &msg, 0, ofi_op_msg,
+	return efa_rdm_msg_generic_send(ep, peer, &msg, 0, ofi_op_msg,
 				    efa_rdm_tx_flags(efa_rdm_ep) | FI_REMOTE_CQ_DATA);
 }
 
@@ -391,7 +381,7 @@ ssize_t efa_rdm_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 
 	efa_rdm_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
 
-	return efa_rdm_msg_generic_send(ep, &msg, 0, ofi_op_msg,
+	return efa_rdm_msg_generic_send(ep, peer, &msg, 0, ofi_op_msg,
 				    efa_rdm_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION | FI_INJECT);
 }
 
@@ -422,7 +412,7 @@ ssize_t efa_rdm_msg_injectdata(struct fid_ep *ep, const void *buf,
 
 	efa_rdm_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, data);
 
-	return efa_rdm_msg_generic_send(ep, &msg, 0, ofi_op_msg,
+	return efa_rdm_msg_generic_send(ep, peer, &msg, 0, ofi_op_msg,
 				    efa_rdm_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION |
 				    FI_REMOTE_CQ_DATA | FI_INJECT);
 }
@@ -469,7 +459,7 @@ ssize_t efa_rdm_msg_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *
 	}
 
 	efa_rdm_msg_construct(&msg, tmsg->msg_iov, tmsg->desc, tmsg->iov_count, tmsg->addr, tmsg->context, tmsg->data);
-	return efa_rdm_msg_generic_send(ep_fid, &msg, tmsg->tag, ofi_op_tagged, flags);
+	return efa_rdm_msg_generic_send(ep_fid, peer, &msg, tmsg->tag, ofi_op_tagged, flags);
 }
 
 static
@@ -568,7 +558,7 @@ ssize_t efa_rdm_msg_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len
 	iov.iov_len = len;
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, dest_addr, context, data);
-	return efa_rdm_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
+	return efa_rdm_msg_generic_send(ep_fid, peer, &msg, tag, ofi_op_tagged,
 				    efa_rdm_tx_flags(efa_rdm_ep) | FI_REMOTE_CQ_DATA);
 }
 
@@ -598,7 +588,7 @@ ssize_t efa_rdm_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	efa_rdm_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
 
-	return efa_rdm_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
+	return efa_rdm_msg_generic_send(ep_fid, peer, &msg, tag, ofi_op_tagged,
 				    efa_rdm_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION | FI_INJECT);
 }
 
@@ -628,7 +618,7 @@ ssize_t efa_rdm_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t l
 
 	efa_rdm_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, data);
 
-	return efa_rdm_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
+	return efa_rdm_msg_generic_send(ep_fid, peer, &msg, tag, ofi_op_tagged,
 				    efa_rdm_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION |
 				    FI_REMOTE_CQ_DATA | FI_INJECT);
 }
