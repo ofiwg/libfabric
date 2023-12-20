@@ -325,26 +325,26 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
  */
 void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_rdm_peer *peer;
-	struct efa_rdm_ope *ope;
+	struct efa_rdm_ope *ope = pkt_entry->ope;
 
-	ope = pkt_entry->ope;
-	/*
-	 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
-	 * and the RMA is a local read toward the endpoint itself
-	 */
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-	if (peer)
-		dlist_insert_tail(&pkt_entry->entry,
-				  &peer->outstanding_tx_pkts);
+	if (ope) {
+		ope->efa_outstanding_tx_ops++;
+
+		/*
+		 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
+		 * and the RMA is a local read toward the endpoint itself
+		 */
+		if (ope->peer) {
+			dlist_insert_tail(&pkt_entry->entry,
+				  &ope->peer->outstanding_tx_pkts);
+			ope->peer->efa_outstanding_tx_ops++;
+		}
+
+	}
 
 	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	ep->efa_outstanding_tx_ops++;
-	if (peer)
-		peer->efa_outstanding_tx_ops++;
 
-	if (ope)
-		ope->efa_outstanding_tx_ops++;
 #if ENABLE_DEBUG
 	ep->efa_total_posted_tx_ops++;
 #endif
