@@ -649,17 +649,39 @@ static bool lnx_addr_match(fi_addr_t addr1, fi_addr_t addr2,
 	return (addr1 == addr2);
 }
 
+static inline bool
+lnx_search_addr_match(fi_addr_t cep_addr, struct lnx_peer_prov *lpp,
+		      struct fi_ops_srx_peer *peer_ops,
+		      struct fi_peer_match *match_info)
+{
+	struct lnx_local2peer_map *lpm;
+	fi_addr_t peer_addr;
+	int i;
+
+	dlist_foreach_container(&lpp->lpp_map,
+				struct lnx_local2peer_map,
+				lpm, entry) {
+		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+			peer_addr = lpm->peer_addrs[i];
+			if (peer_addr == FI_ADDR_NOTAVAIL)
+				break;
+			if (lnx_addr_match(peer_addr, cep_addr,
+					peer_ops, match_info))
+				return true;
+		}
+	}
+
+	return false;
+}
+
 static int lnx_match_common(uint64_t tag1, uint64_t tag2, uint64_t ignore,
 		fi_addr_t cep_addr, fi_addr_t lnx_addr, struct lnx_peer *peer,
 		struct local_prov_ep *cep, struct fi_peer_match *match_info)
 {
 	struct fi_ops_srx_peer *peer_ops;
-	struct lnx_local2peer_map *lpm;
 	struct lnx_peer_prov *lpp;
 	struct local_prov *lp;
-	fi_addr_t peer_addr;
 	bool tmatch;
-	int i;
 
 	/* if a request has no address specified it'll match against any
 	 * rx_entry with a matching tag
@@ -686,6 +708,13 @@ static int lnx_match_common(uint64_t tag1, uint64_t tag2, uint64_t ignore,
 	peer_ops = cep->lpe_srx.peer_ops;
 	lp = cep->lpe_parent;
 
+	/* if this is a shm core provider, then only go through linkx
+	 * shm provider
+	 */
+	if (cep->lpe_local)
+		return lnx_search_addr_match(cep_addr, peer->lp_shm_prov,
+					     peer_ops, match_info);
+
 	/* check if we already have a peer provider.
 	 * A peer can receive messages from multiple providers, we need to
 	 * find the provider which maps to the provider we're currently
@@ -705,20 +734,9 @@ static int lnx_match_common(uint64_t tag1, uint64_t tag2, uint64_t ignore,
 	 */
 	dlist_foreach_container(&peer->lp_provs,
 			struct lnx_peer_prov, lpp, entry) {
-		if (lpp->lpp_prov == lp) {
-			dlist_foreach_container(&lpp->lpp_map,
-						struct lnx_local2peer_map,
-						lpm, entry) {
-				for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-					peer_addr = lpm->peer_addrs[i];
-					if (peer_addr == FI_ADDR_NOTAVAIL)
-						break;
-					if (lnx_addr_match(peer_addr, cep_addr,
-							peer_ops, match_info))
-						return true;
-				}
-			}
-		}
+		if (lpp->lpp_prov == lp)
+			return lnx_search_addr_match(cep_addr, lpp,
+					peer_ops, match_info);
 	}
 
 	return false;
