@@ -47,23 +47,6 @@ OPX_COMPILE_TIME_ASSERT((sizeof(struct fi_opx_hmem_info) & 0x7) == 0,
 			"sizeof(fi_opx_hmem_info) should be a multiple of 8");
 
 __OPX_FORCE_INLINE__
-unsigned fi_opx_hmem_is_managed(const void *ptr, const enum fi_hmem_iface iface)
-{
-#if defined(OPX_HMEM) && HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		unsigned is_hmem_managed;
-		CUresult __attribute__((unused)) cu_result =
-			ofi_cuPointerGetAttribute(&is_hmem_managed,
-						CU_POINTER_ATTRIBUTE_IS_MANAGED,
-						(CUdeviceptr)ptr);
-		assert(cu_result == CUDA_SUCCESS);
-		return is_hmem_managed;
-	}
-#endif
-	return 0;
-}
-
-__OPX_FORCE_INLINE__
 enum fi_hmem_iface fi_opx_hmem_get_iface(const void *ptr,
 					 const struct fi_opx_mr *desc,
 					 uint64_t *device)
@@ -83,16 +66,44 @@ enum fi_hmem_iface fi_opx_hmem_get_iface(const void *ptr,
 		return desc->attr.iface;
 	}
 
-	enum fi_hmem_iface iface = ofi_get_hmem_iface(ptr, device, NULL);
-	if (iface == FI_HMEM_CUDA && fi_opx_hmem_is_managed(ptr, iface)) {
-		*device = 0ul;
-		return FI_HMEM_SYSTEM;
-	}
-	return iface;
-#else
+	#if HAVE_CUDA
+		unsigned mem_type;
+		unsigned is_managed;
+		unsigned device_ordinal;
+
+		/* Each pointer in 'data' needs to have the same array index
+		   as the corresponding attribute in 'cuda_attributes' */
+		void *data[] = {&mem_type, &is_managed, &device_ordinal};
+
+		enum CUpointer_attribute_enum cuda_attributes[] = {
+			CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+			CU_POINTER_ATTRIBUTE_IS_MANAGED,
+			CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL
+		};
+
+		CUresult cuda_rc = cuPointerGetAttributes(ARRAY_SIZE(cuda_attributes),
+							  cuda_attributes, data,
+							  (CUdeviceptr) ptr);
+
+		if (cuda_rc == CUDA_SUCCESS) {
+
+			if (mem_type == CU_MEMORYTYPE_DEVICE && !is_managed) {
+				*device = device_ordinal;
+				return FI_HMEM_CUDA;
+			}
+		} else if (cuda_rc != CUDA_ERROR_INVALID_CONTEXT) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Bad return code %hu from cuPointerGetAttributes()",
+				cuda_rc);
+		}
+	#else
+		enum fi_hmem_iface iface = ofi_get_hmem_iface(ptr, device, NULL);
+		return iface;
+	#endif
+#endif
+
 	*device = 0ul;
 	return FI_HMEM_SYSTEM;
-#endif
 }
 
 __OPX_FORCE_INLINE__
