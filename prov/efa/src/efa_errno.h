@@ -132,5 +132,6 @@ enum efa_errno {
 #undef EFA_PROV_ERRNO_ENUM
 
 const char *efa_strerror(enum efa_errno);
+void efa_show_help(enum efa_errno);
 
 #endif

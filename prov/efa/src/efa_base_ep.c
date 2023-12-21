@@ -369,6 +369,7 @@ void efa_base_ep_write_eq_error(struct efa_base_ep *ep, ssize_t err, ssize_t pro
 
 	EFA_WARN(FI_LOG_EQ, "Writing error to EQ: err: %s (%zd) prov_errno: %s (%zd)\n",
 	         fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
+	efa_show_help(prov_errno);
 	if (ep->util_ep.eq) {
 		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.err = err;
