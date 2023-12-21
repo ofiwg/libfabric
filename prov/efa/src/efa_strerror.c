@@ -69,12 +69,20 @@ void efa_show_help(enum efa_errno err) {
 		"typically encountered when the peer process is no longer present";
 		break;
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE:
-		help = "This error is detected locally; "
-		"typically caused by a peer hardware failure or "
-		"incorrect inbound/outbound rules in the security group - "
-		"EFA requires \"All traffic\" type allowlisting. "
-		"Please also verify the peer application has not "
-		"terminated unexpectedly.";
+		help = "This error is detected locally. "
+		"The connection status is unknown or was never established via "
+		"handshake. This typically indicates one or more misconfigured "
+		"EC2 instances; most often due to incorrect inbound/outbound "
+		"security group rules and/or instances placed in different "
+		"subnets. Refer to the public AWS documentation for EFA for "
+		"up-to-date configuration requirements. This error can also be "
+		"encountered when a peer process is no longer present.";
+		break;
+	case FI_EFA_ERR_ESTABLISHED_RECV_UNRESP:
+		help = "This error is detected locally. "
+		"The connection was previously established via handshake, "
+		"which indicates the error is likely due to the peer process no "
+		"longer being present.";
 		break;
 	default:
 		return;
