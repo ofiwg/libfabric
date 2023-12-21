@@ -67,7 +67,7 @@
 	_(10,	REMOTE_ERROR_RNR,		Receiver not ready)				\
 	_(11,	REMOTE_ERROR_BAD_LENGTH,	Receiver scatter-gather list (SGL) too short)	\
 	_(12,	REMOTE_ERROR_BAD_STATUS,	Unexpected status received from remote)		\
-	_(13,	LOCAL_ERROR_UNRESP_REMOTE,	Unresponsive receiver)
+	_(13,	LOCAL_ERROR_UNRESP_REMOTE,	Unresponsive receiver (connection never established or unknown))
 
 /**
  * @brief EFA provider proprietary error codes
@@ -100,7 +100,8 @@
 	_(4120,	WRITE_RECV_COMP,		Failure to write receive completion)		\
 	_(4121,	DGRAM_CQ_READ,			Error reading from DGRAM CQ)			\
 	_(4122,	SHM_INTERNAL_ERROR,		SHM internal error)				\
-	_(4123,	WRITE_SHM_CQ_ENTRY,		Failure to write CQ entry for SHM operation)
+	_(4123,	WRITE_SHM_CQ_ENTRY,		Failure to write CQ entry for SHM operation)	\
+	_(4124, ESTABLISHED_RECV_UNRESP,	Unresponsive receiver (connection previously established))
 
 /** @} */
 
