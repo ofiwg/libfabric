@@ -180,20 +180,14 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 		hmem_iface = fi_opx_hmem_get_iface(iov->iov_base, NULL, &hmem_device);
 	}
 
-	if (hmem_iface == FI_HMEM_CUDA) {
-		if (fi_opx_hmem_is_managed(iov->iov_base, FI_HMEM_CUDA)) {
-			opx_mr->attr.iface = FI_HMEM_SYSTEM;
-			opx_mr->attr.device.reserved = 0ul;
-		} else {
-			opx_mr->attr.iface = FI_HMEM_CUDA;
+	opx_mr->attr.iface = (enum fi_hmem_iface) hmem_iface;
+	switch (hmem_iface) {
+		case FI_HMEM_CUDA:
+		case FI_HMEM_ZE:
 			opx_mr->attr.device.cuda = (int) hmem_device;
-		}
-	} else if (hmem_iface == FI_HMEM_ZE) {
-		opx_mr->attr.iface = FI_HMEM_ZE;
-		opx_mr->attr.device.ze = (int) hmem_device;
-	} else {
-		opx_mr->attr.iface = (enum fi_hmem_iface) hmem_iface;
-		opx_mr->attr.device.reserved = hmem_device;
+			break;
+		default:
+			opx_mr->attr.device.reserved = hmem_device;
 	}
 #else
 	opx_mr->attr.iface = FI_HMEM_SYSTEM;
