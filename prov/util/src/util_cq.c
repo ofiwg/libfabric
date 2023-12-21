@@ -737,7 +737,7 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		goto destroy1;
 
 	/* TODO Figure out how to optimize this lock for rdm and msg endpoints */
-	ret = ofi_genlock_init(&cq->ep_list_lock, OFI_LOCK_MUTEX);
+	ret = ofi_genlock_init(&cq->ep_list_lock, OFI_LOCK_SPINLOCK);
 	if (ret)
 		return ret;
 
