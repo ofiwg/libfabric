@@ -618,6 +618,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 			? (const char *) err_entry.err_data
 			: efa_strerror(err_entry.prov_errno),
 		 err_entry.prov_errno);
+	efa_show_help(err_entry.prov_errno);
 	/*
 	 * TODO: We can't free the rxe as we may receive additional
 	 * packets for this entry. Add ref counting so the rxe can safely
@@ -712,6 +713,8 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 			? (const char *) err_entry.err_data
 			: efa_strerror(err_entry.prov_errno),
 		err_entry.prov_errno);
+
+	efa_show_help(err_entry.prov_errno);
 
 	/*
 	 * TODO: We can't free the txe as we may receive a control packet
