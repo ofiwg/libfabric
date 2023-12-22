@@ -97,7 +97,7 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 	if (cq->shm_cq) {
 		fi_cq_read(cq->shm_cq, NULL, 0);
 
-		/* 
+		/*
 		 * fi_cq_read(cq->shm_cq, NULL, 0) will progress shm ep and write
 		 * completion to efa. Use ofi_cq_read_entries to get the number of
 		 * shm completions without progressing efa ep again.
@@ -126,6 +126,30 @@ static struct fi_ops_cq efa_rdm_cq_ops = {
 	.signal = fi_no_cq_signal,
 	.strerror = efa_rdm_cq_strerror,
 };
+
+/**
+ * @brief If user specifies FI_THREAD_DOMAIN, do not get the EP_LIST_LOCK
+ * 	  before locking the CQ. This change deviates from the libfabric API
+ *        because the API requires all endpoints to offer a FI_THREAD_SAFE
+ *        control interface. This cq progress fcn makes the control interface
+ *        of the CQ at the same thread safeness level of the EP it is bound too.
+ *
+ * @param[in]		cq		Pointer to CQ to progress
+
+ * @relates efa_rdm_cq
+ */
+void efa_thread_domain_cq_progress(struct util_cq *cq)
+{
+	struct util_ep *ep;
+	struct fid_list_entry *fid_entry;
+	struct dlist_entry *item;
+
+	dlist_foreach(&cq->ep_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
+		ep->progress(ep);
+	}
+}
 
 /**
  * @brief create a CQ for EFA RDM provider
@@ -161,8 +185,12 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	/* Override user cq size if it's less than recommended cq size */
 	attr->size = MAX(efa_domain->rdm_cq_size, attr->size);
 
-	ret = ofi_cq_init(&efa_prov, domain, attr, &cq->util_cq,
-			  &ofi_cq_progress, context);
+	if (efa_domain->info->domain_attr->threading == FI_THREAD_DOMAIN)
+		ret = ofi_cq_init(&efa_prov, domain, attr, &cq->util_cq,
+				  &efa_thread_domain_cq_progress, context);
+	else
+		ret = ofi_cq_init(&efa_prov, domain, attr, &cq->util_cq,
+				  &ofi_cq_progress, context);
 
 	if (ret)
 		goto free;

@@ -89,6 +89,11 @@ requires peer to peer transaction support between the EFA and the FI_HMEM
 device. Therefore, the FI_HMEM_P2P_DISABLED option is not supported by the EFA
 provider for AWS Neuron or Habana SynapseAI.
 
+*FI_THREAD_DOMAIN*
+: In order to gain additional performance, if the user requests FI_THREAD_DOMAIN,
+  the control interface to the domain is also set at FI_THREAD_DOMAIN. This differs from the Libfabric API
+  which guarantees all control interfaces are always FI_THREAD_SAFE.
+
 # PROVIDER SPECIFIC ENDPOINT LEVEL OPTION
 
 *FI_OPT_EFA_RNR_RETRY*
