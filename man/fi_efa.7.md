@@ -226,7 +226,7 @@ These OFI runtime parameters apply only to the RDM endpoint.
 : The minimum message size in bytes for inter EFA read message protocol. If instance support RDMA read, messages whose size is larger than this value will be sent by read message protocol. (Default 1048576).
 
 *FI_EFA_INTER_MIN_READ_WRITE_SIZE*
-: The mimimum message size for inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536).
+: The mimimum message size for emulated inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536). If the firmware supports RDMA write, device RDMA write will always be used.
 
 *FI_EFA_USE_DEVICE_RDMA*
 : Specify whether to require or ignore RDMA features of the EFA device.
