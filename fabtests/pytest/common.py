@@ -3,6 +3,7 @@ import time
 import json
 import errno
 import os
+import re
 import subprocess
 import functools
 from subprocess import Popen, TimeoutExpired, run
@@ -27,10 +28,11 @@ def is_ssh_connection_error(exception):
 def has_ssh_connection_err_msg(output):
     err_msgs = ["Connection closed by remote host",
                 "Connection reset by peer",
-                "Connection refused"]
+                "Connection refused",
+                r"ssh_dispatch_run_fatal: .* incorrect signature"]
 
     for msg in err_msgs:
-        if output.find(msg) != -1:
+        if len(re.findall(msg, output)) > 0:
             return True
 
     return False
