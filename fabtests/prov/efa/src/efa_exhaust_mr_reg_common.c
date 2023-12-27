@@ -2,23 +2,35 @@
 
 #include "efa_exhaust_mr_reg_common.h"
 
-int ft_efa_setup_ibv_pd(struct ibv_pd **pd)
-{
+int ft_efa_open_ibv_device(struct ibv_context **ctx) {
 	int num_dev = 0;
 	struct ibv_device **dev_list;
-	struct ibv_context *ctx;
 
 	dev_list = ibv_get_device_list(&num_dev);
 	if (num_dev < 1) {
 		FT_ERR("No ibv devices found");
 		ibv_free_device_list(dev_list);
-		return EXIT_FAILURE;
+		return -1;
 	} else if (num_dev > 1) {
 		FT_WARN("More than 1 ibv devices found! This test will only "
 			"exhaust MRs on the first device");
 	}
-	ctx = ibv_open_device(dev_list[0]);
+	*ctx = ibv_open_device(dev_list[0]);
 	ibv_free_device_list(dev_list);
+	return 0;
+}
+
+int ft_efa_get_max_mr(struct ibv_context *ctx) {
+	int ret;
+	struct ibv_device_attr dev_attr = {0};
+	ret = ibv_query_device(ctx, &dev_attr);
+	if (ret)
+		FT_ERR("ibv_query_device failed with %d\n", ret);
+	return dev_attr.max_mr;
+}
+
+int ft_efa_setup_ibv_pd(struct ibv_context *ctx, struct ibv_pd **pd)
+{
 	*pd = ibv_alloc_pd(ctx);
 	if (!*pd) {
 		FT_ERR("alloc_pd failed with error %d\n", errno);
