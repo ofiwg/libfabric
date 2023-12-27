@@ -20,6 +20,10 @@ int ft_efa_open_ibv_device(struct ibv_context **ctx) {
 	return 0;
 }
 
+int ft_efa_close_ibv_device(struct ibv_context *ctx) {
+	return ibv_close_device(ctx);
+}
+
 int ft_efa_get_max_mr(struct ibv_context *ctx) {
 	int ret;
 	struct ibv_device_attr dev_attr = {0};
