@@ -917,22 +917,19 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
  *     else add to posted recv list
  */
 static inline
-ssize_t efa_rdm_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
+ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg,
 			     uint64_t tag, uint64_t ignore, uint32_t op,
 			     uint64_t flags)
 {
 	ssize_t ret = 0;
-	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_ope *rxe;
 	struct util_srx_ctx *srx_ctx;
 
-	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
 
-	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
+	assert(msg->iov_count <= ep->rx_iov_limit);
 
-	assert(msg->iov_count <= efa_rdm_ep->rx_iov_limit);
-
-	efa_perfset_start(efa_rdm_ep, perf_efa_recv);
+	efa_perfset_start(ep, perf_efa_recv);
 
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s: iov_len: %lu tag: %lx ignore: %lx op: %x flags: %lx\n",
@@ -941,35 +938,35 @@ ssize_t efa_rdm_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 
 	efa_rdm_tracepoint(recv_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
-	ret = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
+	ret = efa_rdm_attempt_to_sync_memops_iov(ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
 	if (ret)
 		return ret;
 
-	if (efa_rdm_ep->use_zcpy_rx) {
+	if (ep->use_zcpy_rx) {
 		ofi_genlock_lock(srx_ctx->lock);
-		rxe = efa_rdm_msg_alloc_rxe(efa_rdm_ep, msg, op, flags, tag, ignore);
+		rxe = efa_rdm_msg_alloc_rxe(ep, msg, op, flags, tag, ignore);
 		if (OFI_UNLIKELY(!rxe)) {
 			ret = -FI_EAGAIN;
-			efa_rdm_ep_progress_internal(efa_rdm_ep);
+			efa_rdm_ep_progress_internal(ep);
 			ofi_genlock_unlock(srx_ctx->lock);
 			goto out;
 		}
 
-		ret = efa_rdm_ep_post_user_recv_buf(efa_rdm_ep, rxe, flags);
+		ret = efa_rdm_ep_post_user_recv_buf(ep, rxe, flags);
 		if (ret == -FI_EAGAIN)
-			efa_rdm_ep_progress_internal(efa_rdm_ep);
+			efa_rdm_ep_progress_internal(ep);
 		ofi_genlock_unlock(srx_ctx->lock);
 	} else if (op == ofi_op_tagged) {
-		ret = util_srx_generic_trecv(efa_rdm_ep->peer_srx_ep, msg->msg_iov, msg->desc,
+		ret = util_srx_generic_trecv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
 					     msg->iov_count, msg->addr, msg->context,
 					     tag, ignore, flags);
 	} else {
-		ret = util_srx_generic_recv(efa_rdm_ep->peer_srx_ep, msg->msg_iov, msg->desc,
+		ret = util_srx_generic_recv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
 				            msg->iov_count, msg->addr, msg->context, flags);
 	}
 
 out:
-	efa_perfset_end(efa_rdm_ep, perf_efa_recv);
+	efa_perfset_end(ep, perf_efa_recv);
 	return ret;
 }
 
@@ -990,7 +987,7 @@ ssize_t efa_rdm_msg_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	 * when application binds rx cq with FI_SELECTIVE_COMPLETION,
 	 * and does not have FI_COMPLETION in the flags of fi_recvmsg.
 	 */
-	return efa_rdm_msg_generic_recv(ep_fid, msg, 0, 0, ofi_op_msg, flags | ep->base_ep.util_ep.rx_msg_flags);
+	return efa_rdm_msg_generic_recv(ep, msg, 0, 0, ofi_op_msg, flags | ep->base_ep.util_ep.rx_msg_flags);
 }
 
 static
@@ -1007,7 +1004,7 @@ ssize_t efa_rdm_msg_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	iov.iov_len = len;
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, src_addr, context, 0);
-	return efa_rdm_msg_generic_recv(ep_fid, &msg, 0, 0, ofi_op_msg,
+	return efa_rdm_msg_generic_recv(ep, &msg, 0, 0, ofi_op_msg,
 					efa_rdm_rx_flags(ep) | ep->base_ep.util_ep.rx_msg_flags);
 }
 
@@ -1022,7 +1019,7 @@ ssize_t efa_rdm_msg_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
 	efa_rdm_msg_construct(&msg, iov, desc, count, src_addr, context, 0);
-	return efa_rdm_msg_generic_recv(ep_fid, &msg, 0, 0, ofi_op_msg,
+	return efa_rdm_msg_generic_recv(ep, &msg, 0, 0, ofi_op_msg,
 					efa_rdm_rx_flags(ep) | ep->base_ep.util_ep.rx_msg_flags);
 }
 
@@ -1044,7 +1041,7 @@ ssize_t efa_rdm_msg_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *de
 	iov.iov_len = len;
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, src_addr, context, 0);
-	return efa_rdm_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, efa_rdm_rx_flags(ep));
+	return efa_rdm_msg_generic_recv(ep, &msg, tag, ignore, ofi_op_tagged, efa_rdm_rx_flags(ep));
 }
 
 static
@@ -1058,7 +1055,7 @@ ssize_t efa_rdm_msg_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
 	efa_rdm_msg_construct(&msg, iov, desc, count, src_addr, context, 0);
-	return efa_rdm_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, efa_rdm_rx_flags(ep));
+	return efa_rdm_msg_generic_recv(ep, &msg, tag, ignore, ofi_op_tagged, efa_rdm_rx_flags(ep));
 }
 
 static
@@ -1078,7 +1075,7 @@ ssize_t efa_rdm_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *
 	 */
 
 	efa_rdm_msg_construct(&msg, tmsg->msg_iov, tmsg->desc, tmsg->iov_count, tmsg->addr, tmsg->context, tmsg->data);
-	return efa_rdm_msg_generic_recv(ep_fid, &msg, tmsg->tag, tmsg->ignore,
+	return efa_rdm_msg_generic_recv(ep, &msg, tmsg->tag, tmsg->ignore,
 				   ofi_op_tagged, flags | ep->base_ep.util_ep.rx_msg_flags);
 }
 
