@@ -10,7 +10,7 @@
 #include "benchmarks/benchmark_shared.h"
 #include "efa_exhaust_mr_reg_common.h"
 
-static int run(void)
+static int run(int (*pingpong_func)(void))
 {
 	int i, ret = 0;
 
@@ -20,18 +20,18 @@ static int run(void)
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = pingpong();
+			ret = pingpong_func();
 			if (ret)
 				return ret;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = pingpong();
+		ret = pingpong_func();
 		if (ret)
 			return ret;
 	}
 
-	return ft_finalize();
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -110,8 +110,14 @@ int main(int argc, char **argv)
 
 	ft_sync();
 	printf("Running pingpong test\n");
-	ret = run();
+	ret = run(pingpong);
+	if (ret)
+		goto out;
 
+	printf("Running unexpected pingpong test\n");
+	ret = run(ft_efa_unexpected_pingpong);
+
+out:
 	if (opts.dst_addr) {
 		printf("Deregistering MRs on client\n");
 		err = ft_efa_deregister_mr_reg(mr_reg_vec, registered);
@@ -120,6 +126,10 @@ int main(int argc, char **argv)
 		ft_efa_destroy_ibv_pd(pd);
 	}
 
+	free(buffers);
+	free(mr_reg_vec);
+
+	ft_finalize();
 	ft_free_res();
 
 	return ft_exit_code(ret);
