@@ -40,7 +40,7 @@ int main(int argc, char **argv)
 	size_t registered;
 	void **buffers = NULL;
 	struct ibv_mr **mr_reg_vec = NULL;
-	struct ibv_context *ibv_ctx;
+	struct ibv_context *ibv_ctx = NULL;
 	struct ibv_pd *pd;
 
 	opts = INIT_OPTS;
@@ -135,6 +135,7 @@ out:
 		if (err)
 			FT_PRINTERR("ibv mr dereg", -err);
 		ft_efa_destroy_ibv_pd(pd);
+		ft_efa_close_ibv_device(ibv_ctx);
 	}
 
 	free(buffers);
