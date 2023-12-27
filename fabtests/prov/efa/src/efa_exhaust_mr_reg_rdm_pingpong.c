@@ -36,10 +36,11 @@ static int run(int (*pingpong_func)(void))
 
 int main(int argc, char **argv)
 {
-	int op, ret, err;
+	int op, ret, err, mr_reg_limit;
 	size_t registered;
-	void *buffers[EFA_MR_REG_LIMIT];
-	struct ibv_mr *mr_reg_vec[EFA_MR_REG_LIMIT];
+	void **buffers = NULL;
+	struct ibv_mr **mr_reg_vec = NULL;
+	struct ibv_context *ibv_ctx;
 	struct ibv_pd *pd;
 
 	opts = INIT_OPTS;
@@ -91,18 +92,28 @@ int main(int argc, char **argv)
 
 	ft_sync();
 	if (opts.dst_addr) {
-		err = ft_efa_alloc_bufs(buffers, EFA_MR_REG_BUF_SIZE,
-					EFA_MR_REG_LIMIT);
-		if (err)
-			FT_PRINTERR("alloc bufs", -err);
+		ret = ft_efa_open_ibv_device(&ibv_ctx);
+		if (ret)
+			FT_PRINTERR("ibv_open_device", -1);
 
-		err = ft_efa_setup_ibv_pd(&pd);
+		mr_reg_limit = ft_efa_get_max_mr(ibv_ctx);
+		printf("Memory registration limit on device %d\n", mr_reg_limit);
+
+		buffers = malloc(sizeof(void *) * mr_reg_limit);
+		mr_reg_vec = malloc(sizeof(struct ibv_reg_mr *) * mr_reg_limit);
+
+		err = ft_efa_setup_ibv_pd(ibv_ctx, &pd);
 		if (err)
 			FT_PRINTERR("ibv protection domain", -err);
 
 		printf("Exhausting MRs on client\n");
+		err = ft_efa_alloc_bufs(buffers, EFA_MR_REG_BUF_SIZE,
+					mr_reg_limit);
+		if (err)
+			FT_PRINTERR("alloc bufs", -err);
+
 		err = ft_efa_register_mr_reg(pd, buffers, EFA_MR_REG_BUF_SIZE,
-					     mr_reg_vec, EFA_MR_REG_LIMIT,
+					     mr_reg_vec, mr_reg_limit,
 					     &registered);
 		if (err)
 			FT_PRINTERR("ibv mr reg", -err);
