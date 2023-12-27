@@ -91,3 +91,48 @@ int ft_efa_alloc_bufs(void **buffers, size_t buf_size, size_t count) {
 	}
 	return FI_SUCCESS;
 }
+
+int ft_efa_unexpected_pingpong(void)
+{
+	int ret, i;
+
+	opts.options |= FT_OPT_OOB_CTRL;
+
+	ret = ft_sync();
+	if (ret)
+		return ret;
+
+	for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+		if (i == opts.warmup_iterations)
+			ft_start();
+
+		ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, NO_CQ_DATA, &tx_ctx);
+		if (ret)
+			return ret;
+
+		ft_sync();
+
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
+
+		ret = ft_post_rx(ep, rx_size, &rx_ctx);
+		if (ret)
+			return ret;
+
+		ret = ft_get_tx_comp(tx_seq);
+		if (ret)
+			return ret;
+	}
+
+	ft_stop();
+
+	if (opts.machr)
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
+			     2, opts.argc, opts.argv);
+	else
+		show_perf(NULL, opts.transfer_size, opts.iterations, &start,
+			  &end, 2);
+
+	return 0;
+}
