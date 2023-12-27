@@ -923,8 +923,6 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	struct efa_rdm_ope *rxe;
 	struct util_srx_ctx *srx_ctx;
 
-	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
-
 	assert(msg->iov_count <= ep->rx_iov_limit);
 
 	efa_perfset_start(ep, perf_efa_recv);
@@ -941,6 +939,7 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		return ret;
 
 	if (ep->use_zcpy_rx) {
+		srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
 		ofi_genlock_lock(srx_ctx->lock);
 		rxe = efa_rdm_msg_alloc_rxe(ep, msg, op, flags, tag, ignore);
 		if (OFI_UNLIKELY(!rxe)) {
