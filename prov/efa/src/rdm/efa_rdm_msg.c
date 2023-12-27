@@ -916,7 +916,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
  *     create a rxe and verify in unexpected message list
  *     else add to posted recv list
  */
-static
+static inline
 ssize_t efa_rdm_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 			     uint64_t tag, uint64_t ignore, uint32_t op,
 			     uint64_t flags)
@@ -997,7 +997,7 @@ static
 ssize_t efa_rdm_msg_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 		     void *desc, fi_addr_t src_addr, void *context)
 {
-	struct fi_msg msg = {0};
+	struct fi_msg msg;
 	struct iovec iov;
 	struct efa_rdm_ep *ep;
 
@@ -1007,7 +1007,8 @@ ssize_t efa_rdm_msg_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	iov.iov_len = len;
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, src_addr, context, 0);
-	return efa_rdm_msg_recvmsg(ep_fid, &msg, efa_rdm_rx_flags(ep));
+	return efa_rdm_msg_generic_recv(ep_fid, &msg, 0, 0, ofi_op_msg,
+					efa_rdm_rx_flags(ep) | ep->base_ep.util_ep.rx_msg_flags);
 }
 
 static
@@ -1015,13 +1016,14 @@ ssize_t efa_rdm_msg_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 		      void **desc, size_t count, fi_addr_t src_addr,
 		      void *context)
 {
-	struct fi_msg msg = {0};
+	struct fi_msg msg;
 	struct efa_rdm_ep *ep;
 
 	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
 	efa_rdm_msg_construct(&msg, iov, desc, count, src_addr, context, 0);
-	return efa_rdm_msg_recvmsg(ep_fid, &msg, efa_rdm_rx_flags(ep));
+	return efa_rdm_msg_generic_recv(ep_fid, &msg, 0, 0, ofi_op_msg,
+					efa_rdm_rx_flags(ep) | ep->base_ep.util_ep.rx_msg_flags);
 }
 
 /**
@@ -1032,7 +1034,7 @@ ssize_t efa_rdm_msg_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *de
 		      fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
 		      void *context)
 {
-	struct fi_msg msg = {0};
+	struct fi_msg msg;
 	struct iovec iov;
 	struct efa_rdm_ep *ep;
 
@@ -1050,7 +1052,7 @@ ssize_t efa_rdm_msg_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
 		       void **desc, size_t count, fi_addr_t src_addr,
 		       uint64_t tag, uint64_t ignore, void *context)
 {
-	struct fi_msg msg = {0};
+	struct fi_msg msg;
 	struct efa_rdm_ep *ep;
 
 	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
@@ -1063,7 +1065,7 @@ static
 ssize_t efa_rdm_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *tmsg,
 			 uint64_t flags)
 {
-	struct fi_msg msg = {0};
+	struct fi_msg msg;
 	struct efa_rdm_ep *ep;
 
 	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
