@@ -155,12 +155,16 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
 		EFA_WARN(FI_LOG_EP_CTRL, "RX entries exhausted\n");
 		return NULL;
 	}
-	memset(rxe, 0, sizeof(struct efa_rdm_ope));
 
 	rxe->ep = ep;
 	dlist_insert_tail(&rxe->ep_entry, &ep->rxe_list);
 	rxe->type = EFA_RDM_RXE;
+	rxe->internal_flags = 0;
+	rxe->fi_flags = 0;
 	rxe->rx_id = ofi_buf_index(rxe);
+	rxe->iov_count = 0;
+	memset(rxe->mr, 0, sizeof(*rxe->mr) * EFA_RDM_IOV_LIMIT);
+
 	dlist_init(&rxe->queued_pkts);
 
 	rxe->state = EFA_RDM_RXE_INIT;
@@ -178,12 +182,21 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
 		rxe->peer = NULL;
 	}
 
-	rxe->bytes_runt = 0;
+	rxe->bytes_received = 0;
 	rxe->bytes_received_via_mulreq = 0;
+	rxe->bytes_copied = 0;
+	rxe->bytes_queued_blocking_copy = 0;
+	rxe->bytes_acked = 0;
+	rxe->bytes_sent = 0;
+	rxe->bytes_runt = 0;
 	rxe->cuda_copy_method = EFA_RDM_CUDA_COPY_UNSPEC;
 	rxe->efa_outstanding_tx_ops = 0;
+	rxe->window = 0;
 	rxe->op = op;
 	rxe->peer_rxe = NULL;
+	rxe->unexp_pkt = NULL;
+	rxe->atomrsp_data = NULL;
+	rxe->bytes_read_total_len = 0;
 
 	switch (op) {
 	case ofi_op_tagged:
