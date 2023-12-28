@@ -57,7 +57,7 @@
  * @details
  * A RTM packet is sent/received for an user's message, this function
  * return the total length of that message
- * 
+ *
  * @param[in]	pkt_entry	RTM packet entry
  *
  * @returns
@@ -113,7 +113,7 @@ size_t efa_rdm_pke_get_rtm_msg_length(struct efa_rdm_pke *pkt_entry)
  * @param[in]		segmment_offset data offset in respect of user buffer
  * @param[in]		data_size	user data size. If it is -1, the function
  * 					will select data size based on maximum
- * 					data capacity of packet entry. 
+ * 					data capacity of packet entry.
  * @returns
  * 0 on success
  * negative libfabric error code for failure.
@@ -206,7 +206,7 @@ void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
  *
  * @param[in,out]	pkt_entry	RTM packet entry
  * @param[in,out]	rxe		RX entry that matches the RTM
- * 
+ *
  * @returns
  * 0 on success
  * negative libfabric error code on failure
@@ -397,7 +397,7 @@ ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
  * @details
  * The RTM or RTA passed to this function is ordered
  * by msg_id in the packet header
- * 
+ *
  * @param[in,out]	pkt_entry	received RTM or RTA packet entry
  */
 ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry)
@@ -492,31 +492,30 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 
 	peer = efa_rdm_ep_get_peer(pkt_entry->ep, pkt_entry->addr);
 	assert(peer);
+
 	msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
 	ret = efa_rdm_peer_reorder_msg(peer, pkt_entry->ep, pkt_entry);
 	if (ret == 1) {
 		/* Packet was queued */
 		return;
-	}
+	} else if (OFI_UNLIKELY(ret < 0)) {
+		if (OFI_UNLIKELY(ret == -FI_EALREADY)) {
+			/* Packet with same msg_id has been processed before */
+			EFA_WARN(FI_LOG_EP_CTRL,
+				"Invalid msg_id: %" PRIu32
+				" robuf->exp_msg_id: %" PRIu32 "\n",
+			       msg_id, peer->robuf.exp_msg_id);
+			efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_PKT_ALREADY_PROCESSED);
+			efa_rdm_pke_release_rx(pkt_entry);
+			return;
+		}
 
-	if (OFI_UNLIKELY(ret == -FI_EALREADY)) {
-		/* Packet with same msg_id has been processed before */
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Invalid msg_id: %" PRIu32
-			" robuf->exp_msg_id: %" PRIu32 "\n",
-		       msg_id, peer->robuf.exp_msg_id);
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_PKT_ALREADY_PROCESSED);
-		efa_rdm_pke_release_rx(pkt_entry);
-		return;
-	}
+		if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
+			/* running out of memory while copy packet */
+			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_OOM);
+			return;
+		}
 
-	if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
-		/* running out of memory while copy packet */
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_OOM);
-		return;
-	}
-
-	if (OFI_UNLIKELY(ret < 0)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unknown error %d processing REQ packet msg_id: %"
 			PRIu32 "\n", ret, msg_id);
@@ -548,7 +547,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 
 /**
  * @brief initialzie a EFA_RDM_EAGER_MSGRTM pacekt entry
- * 
+ *
  * @param[in,out]	pkt_entry	EFA_RDM_EAGER_MSGRTM to be initialized
  * @param[in]		txe		TX entry
  */
@@ -590,7 +589,7 @@ ssize_t efa_rdm_pke_init_eager_tagrtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief initialzie a EFA_RDM_DC_EAGER_MSGRTM pacekt entry
- * 
+ *
  * @param[in,out]	pkt_entry	EFA_RDM_DC_EAGER_MSGRTM to be initialized
  * @param[in]		txe		TX entry
  */
@@ -612,7 +611,7 @@ ssize_t efa_rdm_pke_init_dc_eager_msgrtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief initialize a EFA_RDM_DC_EAGER_TAGRTM pacekt entry
- * 
+ *
  * @param[in,out]	pkt_entry	EFA_RDM_DC_EAGER_TAGRTM to be initialized
  * @param[in]		txe		TX entry
  */
@@ -659,7 +658,7 @@ void efa_rdm_pke_handle_eager_rtm_send_completion(struct efa_rdm_pke *pkt_entry)
  *
  * @details
  * This function applies to all 4 types of EAGER RTM.
- * 
+ *
  * @param[in]	pkt_entry	packet entry
  * @return	On success, return 0
  * 		On failure, return libfabric error code
@@ -716,7 +715,7 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
 
 /**
  * @brief initialize a EFA_RDM_MEDIUM_MSGRTM packet
- * 
+ *
  * @param[in,out]	pkt_entry	EFA_RDM_MEDIUM_MSGRTM packet entry
  * @param[in]		txe		TX entry
  * @param[in]		segment_offset	data offset in repect of user buffer
@@ -746,7 +745,7 @@ ssize_t efa_rdm_pke_init_medium_msgrtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief initialize a EFA_RDM_MEDIUM_TAGRTM packet
- * 
+ *
  * @param[in,out]	pkt_entry	EFA_RDM_MEDIUM_TAGRTM packet entry
  * @param[in]		txe		TX entry
  * @param[in]		segment_offset	data offset in repect of user buffer
@@ -780,7 +779,7 @@ ssize_t efa_rdm_pke_init_medium_tagrtm(struct efa_rdm_pke *pkt_entry,
  *
  * @details
  * DC means delivery complete
- * 
+ *
  * @param[in,out]	pkt_entry	EFA_RDM_DC_MEDIUM_MSGRTM packet entry
  * @param[in]		txe		TX entry
  * @param[in]		segment_offset	data offset in repect of user buffer
@@ -812,7 +811,7 @@ ssize_t efa_rdm_pke_init_dc_medium_msgrtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief initialize a EFA_RDM_DC_MEDIUM_TAGRTM packet
- * 
+ *
  * @param[in,out]	pkt_entry	EFA_RDM_DC_MEDIUM_TAGRTM packet entry
  * @param[in]		txe		TX entry
  * @param[in]		segment_offset	data offset in repect of user buffer
@@ -884,7 +883,7 @@ void efa_rdm_pke_handle_medium_rtm_send_completion(struct efa_rdm_pke *pkt_entry
  * @details
  * This function applies to all 4 types of MEDIUM
  * RTM and 2 types of RUNTREAD RTM.
- * 
+ *
  * @param[in,out]	pkt_entry	packet entry
  */
 ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
@@ -985,7 +984,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
  *
  * @details
  * This function is used by all 4 types of LONGCTS RTM
- * 
+ *
  * @param[in,out]	pkt_entry	LONGCTS RTM packet entry
  * @param[in]		pkt_type	packe type, must be one of:
  *					EFA_RDM_LONGCTS_MSGRTM_PKT,
@@ -1014,7 +1013,7 @@ int efa_rdm_pke_init_longcts_rtm_common(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief initialize a EFA_RDM_LONGCTS_MSGRTM packet
- * 
+ *
  * @param[in,out]	pkt_entry	EFA_RDM_LONGCTS_MSGRTM packet entry
  * @param[in]		txe		TX entry
  */
@@ -1028,7 +1027,7 @@ ssize_t efa_rdm_pke_init_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief initialize a EFA_RDM_LONGCTS_TAGRTM packet
- * 
+ *
  * @param[in,out]	pkt_entry	EFA_RDM_LONGCTS_TAGRTM packet entry
  * @param[in]		txe		TX entry
  */
@@ -1052,7 +1051,7 @@ ssize_t efa_rdm_pke_init_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief initialize a EFA_RDM_DC_LONGCTS_MSGRTM packet
- * 
+ *
  * @param[in,out]	pkt_entry	EFA_RDM_DC_LONGCTS_TAGRTM packet entry
  * @param[in]		txe		TX entry
  */
@@ -1067,7 +1066,7 @@ ssize_t efa_rdm_pke_init_dc_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief initialize a EFA_RDM_DC_LONGCTS_TAGRTM packet
- * 
+ *
  * @param[in,out]	pkt_entry	EFA_RDM_DC_MEDIUM_TAGRTM packet entry
  * @param[in]		txe		TX entry
  */
@@ -1127,11 +1126,11 @@ void efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_rdm_pke *pkt_entr
 
 /**
  * @brief initialize a longread RTM packet
- * 
+ *
  * @details
  * This function applies to both tagged and non-tagged version
  * of LONGREAD RTM. Note that there is no DC longread RTM, because
- * LONGREAD protocol ensures DC by nature 
+ * LONGREAD protocol ensures DC by nature
  */
 ssize_t efa_rdm_pke_init_longread_rtm(struct efa_rdm_pke *pkt_entry,
 				      int pkt_type,
@@ -1164,7 +1163,7 @@ ssize_t efa_rdm_pke_init_longread_rtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief initialize a EFA_RDM_LONGREAD_RTA_MSGRTM
- * 
+ *
  */
 ssize_t efa_rdm_pke_init_longread_msgrtm(struct efa_rdm_pke *pkt_entry,
 					 struct efa_rdm_ope *txe)
@@ -1174,7 +1173,7 @@ ssize_t efa_rdm_pke_init_longread_msgrtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief initialize a EFA_RDM_LONGREAD_RTA_TAGRTM
- * 
+ *
  */
 ssize_t efa_rdm_pke_init_longread_tagrtm(struct efa_rdm_pke *pkt_entry,
 					 struct efa_rdm_ope *txe)
@@ -1194,7 +1193,7 @@ ssize_t efa_rdm_pke_init_longread_tagrtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief handle the event that a longread RTM has been sent
- * 
+ *
  * @details
  * this function applies to both tagged and non-tagged
  * longread RTM
@@ -1212,7 +1211,7 @@ void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry)
 
 /**
  * @brief process a matched longread RTM
- * 
+ *
  * @details
  * this function applies to both tagged and non-tagged
  * longread RTM
@@ -1269,7 +1268,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
  * @brief fill in the efa_rdm_runtread_rtm_base_hdr and data of a RUNTREAD packet
  *
  * only thing left that need to be set is tag
- * 
+ *
  * @param[out]		pkt_entry	pkt_entry to be initialzied
  * @param[in]		pkt_type	EFA_RDM_RUNREAD_MSGRTM or EFA_RDM_RUNTREAD_TAGRTM
  * @param[in]		txe		contains information of the send operation
@@ -1316,7 +1315,7 @@ ssize_t efa_rdm_pke_init_runtread_rtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief initialize a EFA_RDM_RUNTREAD_MSGRTM packet
- * 
+ *
  * @param[out]		pkt_entry	pkt_entry to be initialzied
  * @param[in]		txe		contains information of the send operation
  * @param[in]		segment_offset	data offset in repect of user buffer
@@ -1366,7 +1365,7 @@ ssize_t efa_rdm_pke_init_runtread_tagrtm(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief handle the event that a runtread RTM has been sent
- * 
+ *
  * This function applies to both RUNTREAD_MSGRTM and RUNTREAD_TAGRTM.
  *
  * @param[in,out]	pkt_entry	packet entry
@@ -1393,7 +1392,7 @@ void efa_rdm_pke_handle_runtread_rtm_sent(struct efa_rdm_pke *pkt_entry)
 
 /**
  * @brief handle the event that the send of a runtread RTM has been completed
- * 
+ *
  * This function applies to both RUNTREAD_MSGRTM and RUNTREAD_TAGRTM
  * There is no DC version of RUNTREAD. If user requested DC,
  * LONGREAD RTM will be used.
