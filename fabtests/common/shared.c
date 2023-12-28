@@ -1430,7 +1430,8 @@ int ft_enable_ep_recv(void)
 
 	if (!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) &&
 	    (fi->caps & (FI_MSG | FI_TAGGED))) {
-		/* Initial receive will get remote address for unconnected EPs */
+		/* Initial receive will get remote address for unconnected EPs*/
+		/* The corresponding send for this receive is posted in ft_finalize_ep */
 		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 		if (ret)
 			return ret;
@@ -3086,6 +3087,7 @@ int ft_finalize_ep(struct fid_ep *ep)
 			FI_TRANSMIT_COMPLETE);
 	}
 
+	/* The receive corresponding to this send is posted in ft_enable_ep_recv */
 	ret = ft_get_tx_comp(tx_seq);
 	if (ret)
 		return ret;
