@@ -398,7 +398,9 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	assert(pkt_entry_cnt);
 	ep = pkt_entry_vec[0]->ep;
 	assert(ep);
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry_vec[0]->addr);
+
+	assert(pkt_entry_vec[0]->ope);
+	peer = pkt_entry_vec[0]->ope->peer;
 	assert(peer);
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
