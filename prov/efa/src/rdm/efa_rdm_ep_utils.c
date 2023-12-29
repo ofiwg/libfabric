@@ -342,11 +342,13 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
 	struct efa_rdm_ope *ope;
 
 	ope = pkt_entry->ope;
+	assert(ope);
+
 	/*
 	 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
 	 * and the RMA is a local read toward the endpoint itself
 	 */
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+	peer = ope->peer;
 	if (peer)
 		dlist_insert_tail(&pkt_entry->entry,
 				  &peer->outstanding_tx_pkts);
