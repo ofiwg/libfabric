@@ -557,16 +557,12 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
  * return negative libfabric error code for error. Possible errors include:
  * -FI_EAGAIN	temporarily out of resource to send packet
  */
-ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep,
-				     fi_addr_t addr)
+ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
 {
-	struct efa_rdm_peer *peer;
 	struct efa_rdm_ope *txe;
 	ssize_t err;
 
-	peer = efa_rdm_ep_get_peer(ep, addr);
 	assert(peer);
-
 	if ((peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) ||
 	    (peer->flags & EFA_RDM_PEER_REQ_SENT))
 		return 0;
@@ -580,8 +576,8 @@ ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep,
 
 	txe->ep = ep;
 	txe->total_len = 0;
-	txe->addr = addr;
-	txe->peer = efa_rdm_ep_get_peer(ep, txe->addr);
+	txe->addr = peer->efa_fiaddr;
+	txe->peer = peer;
 	assert(txe->peer);
 	dlist_insert_tail(&txe->peer_entry, &txe->peer->txe_list);
 	txe->msg_id = -1;
