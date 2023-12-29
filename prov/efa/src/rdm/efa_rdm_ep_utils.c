@@ -560,6 +560,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
 {
 	struct efa_rdm_ope *txe;
+	struct fi_msg msg = {0};
 	ssize_t err;
 
 	assert(peer);
@@ -567,37 +568,20 @@ ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer 
 	    (peer->flags & EFA_RDM_PEER_REQ_SENT))
 		return 0;
 
-	/* TODO: use efa_rdm_ep_alloc_txe to allocate txe */
-	txe = ofi_buf_alloc(ep->ope_pool);
+	msg.addr = peer->efa_fiaddr;
+
+	txe = efa_rdm_ep_alloc_txe(ep, peer, &msg, ofi_op_write, 0, 0);
+
 	if (OFI_UNLIKELY(!txe)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return -FI_EAGAIN;
 	}
 
-	txe->ep = ep;
-	txe->total_len = 0;
-	txe->addr = peer->efa_fiaddr;
-	txe->peer = peer;
-	assert(txe->peer);
-	dlist_insert_tail(&txe->peer_entry, &txe->peer->txe_list);
-	txe->msg_id = -1;
-	txe->cq_entry.flags = FI_RMA | FI_WRITE;
-	txe->cq_entry.buf = NULL;
-	dlist_init(&txe->queued_pkts);
-
-	txe->type = EFA_RDM_TXE;
-	txe->op = ofi_op_write;
-	txe->state = EFA_RDM_TXE_REQ;
-
-	txe->bytes_acked = 0;
-	txe->bytes_sent = 0;
-	txe->window = 0;
-	txe->rma_iov_count = 0;
-	txe->iov_count = 0;
+	/* efa_rdm_ep_alloc_txe() joins ep->base_ep.util_ep.tx_op_flags and passed in flags,
+	 * reset to desired flags (remove things like FI_DELIVERY_COMPLETE, and FI_COMPLETION)
+	 */
 	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
-	txe->internal_flags = 0;
-
-	dlist_insert_tail(&txe->ep_entry, &ep->txe_list);
+	txe->msg_id = -1;
 
 	err = efa_rdm_ope_post_send(txe, EFA_RDM_EAGER_RTW_PKT);
 
