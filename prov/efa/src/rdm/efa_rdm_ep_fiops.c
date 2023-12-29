@@ -114,7 +114,7 @@ void efa_rdm_pke_pool_mr_dereg_handler(struct ofi_bufpool_region *region)
 
 /**
  * @brief creates a packet entry pool.
- * 
+ *
  * The pool is allowed to grow if
  * max_cnt is 0 and is fixed size otherwise.
  *
@@ -903,7 +903,7 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
  * This function will do this cleanup as best effort. When there is failure
  * to clean up shm resource, it will still move forward by setting the resource
  * pointer to NULL so it won't be used later.
- * 
+ *
  * @param efa_rdm_ep pointer to efa_rdm_ep.
  */
 static void efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
@@ -1050,7 +1050,7 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 
 		ep_addr_strlen = sizeof(ep_addr_str);
 		efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &ep_addr_strlen);
-		EFA_WARN(FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
+		EFA_INFO(FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
 			fi_tostr("1", FI_TYPE_VERSION), ep_addr_str);
 
 		efa_rdm_ep_update_shm(ep);
