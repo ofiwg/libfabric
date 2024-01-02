@@ -127,7 +127,7 @@ void nd_get_connection_data(IND2Connector *connector, struct nd_cm_event *event)
 	       FI_LOG_EP_CTRL, "IND2Connector::GetPrivateData: hr=0x%08lx\n",
 	       hr);
 
-	if (SUCCEEDED(hr) && len) {
+	if ((SUCCEEDED(hr) || hr == ND_BUFFER_OVERFLOW) && len) {
 		event->event.param.conn.private_data_len = (uint8_t)len;
 		event->event.param.conn.private_data = malloc(len);
 		if (event->event.param.conn.private_data) {
