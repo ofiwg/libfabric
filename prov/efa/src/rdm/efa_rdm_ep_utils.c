@@ -586,14 +586,35 @@ ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer 
  */
 ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
 {
+	struct efa_rdm_ope *txe;
+	struct fi_msg msg = {0};
 	struct efa_rdm_pke *pkt_entry;
 	fi_addr_t addr;
 	ssize_t ret;
 
 	addr = peer->efa_fiaddr;
-	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
-	if (OFI_UNLIKELY(!pkt_entry))
+	msg.addr = addr;
+
+	/* ofi_op_write is ignored in handshake path */
+	txe = efa_rdm_ep_alloc_txe(ep, peer, &msg, ofi_op_write, 0, 0);
+
+	if (OFI_UNLIKELY(!txe)) {
+		EFA_WARN(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return -FI_EAGAIN;
+	}
+
+	/* efa_rdm_ep_alloc_txe() joins ep->base_ep.util_ep.tx_op_flags and passed in flags,
+	 * reset to desired flags (remove things like FI_DELIVERY_COMPLETE, and FI_COMPLETION)
+	 */
+	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	if (OFI_UNLIKELY(!pkt_entry)) {
+		EFA_WARN(FI_LOG_EP_CTRL, "PKE entries exhausted.\n");
+		return -FI_EAGAIN;
+	}
+
+	pkt_entry->ope = txe;
 
 	efa_rdm_pke_init_handshake(pkt_entry, addr);
 
