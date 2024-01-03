@@ -433,48 +433,49 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 		return;
 	}
 
-	if (!pkt_entry->ope) {
-		/* only handshake packet is not associated with any TX/RX operation */
-		assert(efa_rdm_pke_get_base_hdr(pkt_entry)->type == EFA_RDM_HANDSHAKE_PKT);
-		efa_rdm_pke_release_tx(pkt_entry);
-		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
-			/*
-			 * handshake should always be queued for RNR
-			 */
-			assert(!(peer->flags & EFA_RDM_PEER_HANDSHAKE_QUEUED));
-			peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
-			dlist_insert_tail(&peer->handshake_queued_entry,
-					  &ep->handshake_queued_peer_list);
-		} else if (prov_errno != FI_EFA_REMOTE_ERROR_BAD_DEST_QPN) {
-			/* If prov_errno is FI_EFA_REMOTE_ERROR_BAD_DEST_QPN  the peer has
-			 * been destroyed. Which is normal, as peer does not always need a
-			 * handshake packet to perform its duty. (For example, if a peer
-			 * just want to sent 1 message to the ep, it does not need
-			 * handshake.) In this case, it is safe to ignore this error
-			 * completion. In all other cases, we write an eq entry because
-			 * there is no application operation associated with handshake.
-			 */
-			char ep_addr_str[OFI_ADDRSTRLEN], peer_addr_str[OFI_ADDRSTRLEN];
-			size_t buflen=0;
-
-			memset(&ep_addr_str, 0, sizeof(ep_addr_str));
-			memset(&peer_addr_str, 0, sizeof(peer_addr_str));
-			buflen = sizeof(ep_addr_str);
-			efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &buflen);
-			buflen = sizeof(peer_addr_str);
-			efa_rdm_ep_get_peer_raw_addr_str(ep, pkt_entry->addr, peer_addr_str, &buflen);
-			EFA_WARN(FI_LOG_CQ,
-				"While sending a handshake packet, an error occurred."
-				"  Our address: %s, peer address: %s\n",
-				ep_addr_str, peer_addr_str);
-			efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
-		}
-		return;
-	}
-
 	switch (pkt_entry->ope->type) {
 	case EFA_RDM_TXE:
 		txe = pkt_entry->ope;
+		if (efa_rdm_pke_get_base_hdr(pkt_entry)->type == EFA_RDM_HANDSHAKE_PKT) {
+			if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
+				/*
+				 * handshake should always be queued for RNR
+				 */
+				assert(!(peer->flags & EFA_RDM_PEER_HANDSHAKE_QUEUED));
+				peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
+				dlist_insert_tail(&peer->handshake_queued_entry,
+						  &ep->handshake_queued_peer_list);
+			} else if (prov_errno != FI_EFA_REMOTE_ERROR_BAD_DEST_QPN) {
+				/* If prov_errno is FI_EFA_REMOTE_ERROR_BAD_DEST_QPN  the peer has
+				 * been destroyed. Which is normal, as peer does not always need a
+				 * handshake packet to perform its duty. (For example, if a peer
+				 * just want to sent 1 message to the ep, it does not need
+				 * handshake.) In this case, it is safe to ignore this error
+				 * completion. In all other cases, we write an eq entry because
+				 * there is no application operation associated with handshake.
+				 */
+				char ep_addr_str[OFI_ADDRSTRLEN], peer_addr_str[OFI_ADDRSTRLEN];
+				size_t buflen=0;
+
+				memset(&ep_addr_str, 0, sizeof(ep_addr_str));
+				memset(&peer_addr_str, 0, sizeof(peer_addr_str));
+				buflen = sizeof(ep_addr_str);
+				efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &buflen);
+				buflen = sizeof(peer_addr_str);
+				efa_rdm_ep_get_peer_raw_addr_str(ep, pkt_entry->addr, peer_addr_str, &buflen);
+				EFA_WARN(FI_LOG_CQ,
+					"While sending a handshake packet, an error occurred."
+					"  Our address: %s, peer address: %s\n",
+					ep_addr_str, peer_addr_str);
+				efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
+			}
+
+			efa_rdm_pke_release_tx(pkt_entry);
+			efa_rdm_txe_release(txe);
+
+			break;
+		}
+
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
 			if (ep->handle_resource_management == FI_RM_DISABLED) {
 				/*
@@ -575,6 +576,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 
 	switch (efa_rdm_pke_get_base_hdr(pkt_entry)->type) {
 	case EFA_RDM_HANDSHAKE_PKT:
+		efa_rdm_txe_release(pkt_entry->ope);
 		break;
 	case EFA_RDM_CTS_PKT:
 		break;
@@ -693,22 +695,6 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 
 	EFA_DBG(FI_LOG_CQ, "Packet receive error: %s (%d)\n",
 	        efa_strerror(prov_errno, NULL), prov_errno);
-
-	if (!pkt_entry->ope) {
-		char ep_addr_str[OFI_ADDRSTRLEN];
-		size_t buflen=0;
-
-		memset(&ep_addr_str, 0, sizeof(ep_addr_str));
-		buflen = sizeof(ep_addr_str);
-		efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &buflen);
-		EFA_WARN(FI_LOG_CQ,
-			"Packet receive error from non TX/RX packet.  Our address: %s\n",
-			ep_addr_str);
-
-		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
-		efa_rdm_pke_release_rx(pkt_entry);
-		return;
-	}
 
 	if (pkt_entry->ope->type == EFA_RDM_TXE) {
 		efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
