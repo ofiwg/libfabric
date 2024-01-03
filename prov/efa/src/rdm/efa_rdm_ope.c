@@ -69,6 +69,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->bytes_sent = 0;
 	txe->window = 0;
 	txe->iov_count = msg->iov_count;
+	txe->rma_iov_count = 0;
 	txe->msg_id = 0;
 	txe->efa_outstanding_tx_ops = 0;
 	dlist_init(&txe->queued_pkts);
