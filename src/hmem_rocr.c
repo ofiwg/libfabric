@@ -127,8 +127,10 @@ struct hsa_ops {
 		void *data);
 	hsa_status_t (*hsa_system_get_info)(hsa_system_info_t attribute, 
 					    void* value);
+#if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
 	hsa_status_t (*hsa_amd_portable_export_dmabuf)(const void* ptr, size_t size, 
 						       int* dmabuf, uint64_t* offset);
+#endif
 };
 
 #if ENABLE_ROCR_DLOPEN
@@ -179,7 +181,9 @@ static struct hsa_ops hsa_ops = {
 	.hsa_signal_create = hsa_signal_create,
 	.hsa_signal_destroy = hsa_signal_destroy,
 	.hsa_iterate_agents = hsa_iterate_agents,
+#if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
 	.hsa_amd_portable_export_dmabuf = hsa_amd_portable_export_dmabuf,
+#endif
 	.hsa_system_get_info = hsa_system_get_info,
 };
 
@@ -605,7 +609,7 @@ bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 						 (void *) &hsa_dev_type);
 		if (hsa_ret == HSA_STATUS_SUCCESS) {
 			if (hsa_dev_type == HSA_DEVICE_TYPE_GPU) {
-				//TODO get device pointer/id
+				/* TODO get device pointer/id */
 				if (flags)
 					*flags = FI_HMEM_DEVICE_ONLY;
 				return true;
@@ -1069,13 +1073,15 @@ int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 static bool rocr_is_dmabuf_supported(void)
 {
 	hsa_status_t hsa_ret;
-	bool use_dmabuf = false, dmabuf_support = false, dmabuf_kernel = false;
+	int use_dmabuf = 0;
+	bool dmabuf_support = false, dmabuf_kernel = false;
 
 	fi_param_get_int(NULL, "hmem_rocr_use_dmabuf", &use_dmabuf);
-	if (!use_dmabuf) goto out;
+	if (!use_dmabuf)
+		goto out;
 
-	// HSA_AMD_SYSTEM_INFO_DMABUF_SUPPORTED = 0x204, we use the number instead of var name
-	// for backward compatibility reasons.
+	/* HSA_AMD_SYSTEM_INFO_DMABUF_SUPPORTED = 0x204, we use the number
+	 * instead of var name for backward compatibility reasons. */
 	hsa_ret = hsa_ops.hsa_system_get_info((hsa_system_info_t) 0x204, &dmabuf_support);
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
@@ -1112,12 +1118,10 @@ static bool rocr_is_dmabuf_supported(void)
 		}
 
 		while (fgets(buf, sizeof(buf), fp) != NULL) {
-			if (strstr(buf, kernel_opt1) != NULL) {
+			if (strstr(buf, kernel_opt1) != NULL)
 				found_opt1 = true;
-			}
-			if (strstr(buf, kernel_opt2) != NULL) {
+			if (strstr(buf, kernel_opt2) != NULL)
 				found_opt2 = true;
-			}
 			if (found_opt1 && found_opt2) {
 				dmabuf_kernel = true;
 				break;
@@ -1134,7 +1138,6 @@ int rocr_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *dmabuf_fd,
 			     uint64_t *offset)
 {
 	static bool supported = false, checked = false;
-	hsa_status_t hsa_ret;
 
 	if (!checked) {
 		supported = rocr_is_dmabuf_supported();
@@ -1144,7 +1147,11 @@ int rocr_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *dmabuf_fd,
 		return -FI_EOPNOTSUPP;
 
 #if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
-	// maybe need base addr calculation here? empirically the hsa call here does it internally
+	hsa_status_t hsa_ret;
+
+	/* maybe need base addr calculation here? empirically the hsa call
+	 * here does it internally
+	 */
 	hsa_ret = hsa_ops.hsa_amd_portable_export_dmabuf(addr, size, dmabuf_fd, offset);
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
