@@ -26,7 +26,7 @@ def is_ssh_connection_error(exception):
 
 
 def has_ssh_connection_err_msg(output):
-    err_msgs = ["Connection closed by remote host",
+    err_msgs = ["Connection closed",
                 "Connection reset by peer",
                 "Connection refused",
                 r"ssh_dispatch_run_fatal: .* incorrect signature"]
