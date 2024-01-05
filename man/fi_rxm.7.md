@@ -122,8 +122,8 @@ FI_ORDER_SAW can not be supported.
 The ofi_rxm provider checks for the following environment variables.
 
 *FI_OFI_RXM_BUFFER_SIZE*
-: Defines the transmit buffer size / inject size. Messages of size less than this
-  would be transmitted via an eager protocol and those above would be transmitted
+: Defines the transmit buffer size / inject size. Messages of size less than or equal to this
+  would be transmitted via an eager protocol and messages greater in size would be transmitted
   via a rendezvous or SAR (Segmentation And Reassembly) protocol. Transmit data
   would be copied up to this size (default: ~16k).
 
