@@ -119,6 +119,9 @@ int fi_query_collective(struct fid_domain *domain,
 *buf*
 : Local data buffer that specifies first operand of collective operation
 
+*count*
+: The number of elements referenced, where each element is the indicated datatype.
+
 *datatype*
 : Datatype associated with atomic operands
 
