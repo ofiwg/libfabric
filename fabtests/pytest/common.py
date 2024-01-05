@@ -29,6 +29,7 @@ def has_ssh_connection_err_msg(output):
     err_msgs = ["Connection closed",
                 "Connection reset by peer",
                 "Connection refused",
+                "Permission denied",
                 r"ssh_dispatch_run_fatal: .* incorrect signature"]
 
     for msg in err_msgs:
