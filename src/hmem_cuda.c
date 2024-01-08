@@ -590,8 +590,8 @@ static int cuda_hmem_detect_p2p_access_support(void)
 				"Failed to detect support for peer-to-peer "
 				"access between CUDA devices via "
 				"cuDeviceCanAccessPeer(): %s:%s\n",
-				ofi_cudaGetErrorName(cuda_ret),
-				ofi_cudaGetErrorString(cuda_ret));
+				ofi_cudaGetErrorName((cudaError_t)cuda_ret),
+				ofi_cudaGetErrorString((cudaError_t)cuda_ret));
 			return -FI_EIO;
 		}
 		FI_INFO(&core_prov, FI_LOG_CORE,
