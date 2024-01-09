@@ -536,6 +536,7 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 			    struct util_av *av, void *context)
 {
 	int ret;
+	enum ofi_lock_type ep_list_lock_type;
 
 	ret = util_verify_av_attr(domain, attr);
 	if (ret)
@@ -553,7 +554,10 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 	av->context = context;
 	av->domain = domain;
 
-	ret = ofi_genlock_init(&av->ep_list_lock, OFI_LOCK_MUTEX);
+
+	ep_list_lock_type = ofi_progress_lock_type(av->domain->threading,
+						   av->domain->control_progress);
+	ret = ofi_genlock_init(&av->ep_list_lock, ep_list_lock_type);
 	if (ret)
 		return ret;
 
