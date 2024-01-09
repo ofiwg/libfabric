@@ -2,6 +2,7 @@
 [<img alt="libfabric Coverity scan build status" src="https://scan.coverity.com/projects/4274/badge.svg"/>](https://scan.coverity.com/projects/4274)
 [<img alt="libfabric main branch AppVeyor CI status" src="https://ci.appveyor.com/api/projects/status/github/ofiwg/libfabric?svg=true"/>](https://ci.appveyor.com/api/projects/status/github/ofiwg/libfabric)
 [![libfabric release version](https://img.shields.io/github/release/ofiwg/libfabric.svg)](https://github.com/ofiwg/libfabric/releases/latest)
+[![openssf scorecard](https://api.securityscorecards.dev/projects/github.com/ofiwg/libfabric/badge)](https://securityscorecards.dev/viewer/?uri=github.com/ofiwg/libfabric)
 
 # libfabric
 
