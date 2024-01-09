@@ -1370,6 +1370,13 @@ static inline void ofi_cq_err_memcpy(uint32_t api_version,
 	}
 }
 
+static inline enum ofi_lock_type
+ofi_progress_lock_type(enum fi_threading threading, enum fi_progress control)
+{
+	return (threading == FI_THREAD_DOMAIN || threading == FI_THREAD_COMPLETION) &&
+		control == FI_PROGRESS_CONTROL_UNIFIED ? OFI_LOCK_NOOP : OFI_LOCK_MUTEX;
+}
+
 #ifdef __cplusplus
 }
 #endif

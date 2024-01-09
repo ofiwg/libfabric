@@ -336,6 +336,7 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 	int ret;
 	struct fi_wait_attr wait_attr;
 	struct fid_wait *wait;
+	enum ofi_lock_type ep_list_lock_type;
 
 	assert(progress);
 	ret = ofi_check_cntr_attr(prov, attr);
@@ -390,7 +391,9 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 			goto errout_close_wait;
 	}
 
-	ret = ofi_genlock_init(&cntr->ep_list_lock, OFI_LOCK_MUTEX);
+	ep_list_lock_type = ofi_progress_lock_type(cntr->domain->threading,
+						   cntr->domain->control_progress);
+	ret = ofi_genlock_init(&cntr->ep_list_lock, ep_list_lock_type);
 	if (ret)
 		goto errout_close_wait;
 

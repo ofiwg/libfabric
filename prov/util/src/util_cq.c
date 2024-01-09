@@ -708,7 +708,8 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 {
 	struct fi_wait_attr wait_attr;
 	struct fid_wait *wait;
-	enum ofi_lock_type lock_type;
+	enum ofi_lock_type cq_lock_type;
+	enum ofi_lock_type ep_list_lock_type;
 	int ret;
 
 	assert(progress);
@@ -728,16 +729,17 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 
 	if (cq->domain->threading == FI_THREAD_COMPLETION ||
 	    cq->domain->threading == FI_THREAD_DOMAIN)
-		lock_type = OFI_LOCK_NOOP;
+		cq_lock_type = OFI_LOCK_NOOP;
 	else
-		lock_type = cq->domain->lock.lock_type;
+		cq_lock_type = cq->domain->lock.lock_type;
 
-	ret = ofi_genlock_init(&cq->cq_lock, lock_type);
+	ret = ofi_genlock_init(&cq->cq_lock, cq_lock_type);
 	if (ret)
 		return ret;
 
-	/* TODO Figure out how to optimize this lock for rdm and msg endpoints */
-	ret = ofi_genlock_init(&cq->ep_list_lock, OFI_LOCK_MUTEX);
+	ep_list_lock_type = ofi_progress_lock_type(cq->domain->threading,
+						   cq->domain->control_progress);
+	ret = ofi_genlock_init(&cq->ep_list_lock, ep_list_lock_type);
 	if (ret)
 		goto destroy1;
 
