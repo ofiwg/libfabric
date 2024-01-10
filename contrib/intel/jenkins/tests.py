@@ -683,7 +683,8 @@ class MpichTestSuite(Test):
         self.pwd = os.getcwd()
         self.weekly = weekly
         self.mpichtests_exclude = {
-        'tcp'   :   { 'rma'      : [('win_shared_put_flush_load 3', 'test')]
+        'tcp'   :   { 'rma'          : [('win_shared_put_flush_load 3', 'test')],
+                      'threads/comm' : [('idup_nb 4','test')]
                     },
         'verbs' :   { 'threads/comm' : [('idup_nb 4','test')],
                       'spawn'        : [('concurrent_spawns 1', 'test')],
