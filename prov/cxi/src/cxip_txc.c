@@ -693,3 +693,41 @@ int cxip_txc_emit_dma_amo(struct cxip_txc *txc, uint16_t vni,
 
 	return FI_SUCCESS;
 }
+
+int cxip_txc_emit_idc_msg(struct cxip_txc *txc, uint16_t vni,
+			  enum cxi_traffic_class tc,
+			  enum cxi_traffic_class_type tc_type,
+			  const struct c_cstate_cmd *c_state,
+			  const struct c_idc_msg_hdr *msg, const void *buf,
+			  size_t len, uint64_t flags)
+{
+	int ret;
+
+	if (!cxip_txc_can_emit_op(txc, c_state->event_success_disable))
+		return -FI_EAGAIN;
+
+	/* Ensure correct traffic class is used. */
+	ret = cxip_txq_cp_set(txc->tx_cmdq, vni, tc, tc_type);
+	if (ret) {
+		TXC_WARN(txc, "Failed to set traffic class: %d:%s\n", ret,
+			 fi_strerror(-ret));
+		return ret;
+	}
+
+	ret = cxip_cmdq_emit_idc_msg(txc->tx_cmdq, c_state, msg, buf, len,
+				     flags);
+	if (ret) {
+		TXC_WARN(txc, "Failed to emit idc_msg command: %d:%s\n", ret,
+			 fi_strerror(-ret));
+		return ret;
+	}
+
+	/* Kick the command queue. */
+	cxip_txq_ring(txc->tx_cmdq, !!(flags & FI_MORE),
+		      ofi_atomic_get32(&txc->otx_reqs));
+
+	if (!c_state->event_success_disable)
+		ofi_atomic_inc32(&txc->otx_reqs);
+
+	return FI_SUCCESS;
+}
