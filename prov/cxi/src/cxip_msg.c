@@ -4981,10 +4981,8 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	uint8_t idx_ext;
 	union cxip_match_bits mb;
 	ssize_t ret;
-	struct cxip_cmdq *cmdq =
-		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
-	bool trig = req->triggered;
 	struct c_full_dma_cmd cmd = {};
+	uint16_t vni;
 
 	/* Calculate DFA */
 	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
@@ -4993,6 +4991,11 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	ret = cxip_set_eager_mb(req, &mb);
 	if (ret)
 		goto err;
+
+	if (txc->ep_obj->av_auth_key)
+		vni = req->send.caddr.vni;
+	else
+		vni = txc->ep_obj->auth_key.vni;
 
 	req->cb = cxip_send_eager_cb;
 
@@ -5023,57 +5026,20 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		cmd.ct = req->send.cntr->ct->ctn;
 	}
 
-	/* Issue Eager Put command */
-	if (trig) {
-		const struct c_ct_cmd ct_cmd = {
-			.trig_ct = req->trig_cntr->ct->ctn,
-			.threshold = req->trig_thresh,
-		};
-
-		/* Triggered command queue is domain resource, lock. */
-		ofi_genlock_lock(&txc->domain->trig_cmdq_lock);
-		ret = cxip_send_prep_cmdq(cmdq, req, req->send.tclass);
-		if (ret) {
-			ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
-			goto err;
-		}
-
-		/* Clear the triggered flag to prevent retrying of
-		 * operation, due to flow control, from using the
-		 * triggered path.
-		 */
-		req->triggered = false;
-
-		ret = cxi_cq_emit_trig_full_dma(cmdq->dev_cmdq, &ct_cmd,
-						&cmd);
-		if (ret) {
-			ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
-			goto err_enqueue;
-		}
-		cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
-			      ofi_atomic_get32(&req->send.txc->otx_reqs));
-		ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
-
+	ret = cxip_txc_emit_dma(txc, vni, cxip_ofi_to_cxi_tc(req->send.tclass),
+				CXI_TC_TYPE_DEFAULT, req->triggered ?
+				req->trig_cntr : NULL, req->trig_thresh,
+				&cmd, req->send.flags);
+	if (ret) {
+		TXC_DBG(txc, "Failed to write DMA command: %ld\n", ret);
+		goto err_enqueue;
 	} else {
-		ret = cxip_send_prep_cmdq(cmdq, req, req->send.tclass);
-		if (ret)
-			goto err;
-
-		ret = cxi_cq_emit_dma(cmdq->dev_cmdq, &cmd);
-		if (ret)
-			goto err_enqueue;
-
-		cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
-			      ofi_atomic_get32(&req->send.txc->otx_reqs));
+		req->triggered = false;
 	}
-
-	ofi_atomic_inc32(&req->send.txc->otx_reqs);
 
 	return FI_SUCCESS;
 
 err_enqueue:
-	TXC_DBG(txc, "Failed to write DMA command: %ld\n", ret);
-	ret = -FI_EAGAIN;
 
 	if (mb.match_comp)
 		cxip_tx_id_free(txc, req->send.tx_id);
