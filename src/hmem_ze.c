@@ -811,8 +811,15 @@ int ze_hmem_init(void)
 
 	count = 0;
 	ze_ret = ofi_zeDeviceGet(driver, &count, NULL);
-	if (ze_ret || count > ZE_MAX_DEVICES)
+	if (ze_ret)
 		goto err;
+
+	if (count > ZE_MAX_DEVICES) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"The number of ZE devices (%d) exceeds the limit (%d). Only (%d) will be used.\n",
+			count, ZE_MAX_DEVICES, ZE_MAX_DEVICES);
+		count = ZE_MAX_DEVICES;
+	}
 
 	ze_ret = ofi_zeDeviceGet(driver, &count, devices);
 	if (ze_ret)
