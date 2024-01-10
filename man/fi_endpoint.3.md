@@ -478,7 +478,8 @@ Endpoint protocol operations may be retrieved using fi_getopt or set
 using fi_setopt.  Applications specify the level that a desired option
 exists, identify the option, and provide input/output buffers to get
 or set the option.  fi_setopt provides an application a way to adjust
-low-level protocol and implementation specific details of an endpoint.
+low-level protocol and implementation specific details of an endpoint,
+and must be called before the endpoint is enabled (fi_enable).
 
 The following option levels and option names and parameters are defined.
 
