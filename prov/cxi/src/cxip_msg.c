@@ -4878,10 +4878,15 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 	uint8_t idx_ext;
 	union cxip_match_bits mb;
 	ssize_t ret;
-	struct cxip_cmdq *cmdq = txc->tx_cmdq;
 	const void *buf;
 	struct c_cstate_cmd cstate_cmd = {};
 	struct c_idc_msg_hdr idc_cmd;
+	uint16_t vni;
+
+	if (txc->ep_obj->av_auth_key)
+		vni = req->send.caddr.vni;
+	else
+		vni = txc->ep_obj->auth_key.vni;
 
 	assert(req->send.len > 0);
 
@@ -4937,30 +4942,14 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 	idc_cmd.header_data = req->send.data;
 	idc_cmd.user_ptr = (uint64_t)req;
 
-	/* Submit command */
-	ret = cxip_send_prep_cmdq(cmdq, req, req->send.tclass);
-	if (ret)
-		goto err_cleanup;
-
-	ret = cxip_cmdq_emit_c_state(cmdq, &cstate_cmd);
+	ret = cxip_txc_emit_idc_msg(txc, vni,
+				    cxip_ofi_to_cxi_tc(req->send.tclass),
+				    CXI_TC_TYPE_DEFAULT, &cstate_cmd, &idc_cmd,
+				    buf, req->send.len, req->send.flags);
 	if (ret) {
-		TXC_DBG(txc, "Failed to issue C_STATE command: %ld\n", ret);
+		TXC_DBG(txc, "Failed to write IDC command: %ld\n", ret);
 		goto err_cleanup;
 	}
-
-	ret = cxi_cq_emit_idc_msg(cmdq->dev_cmdq, &idc_cmd, buf, req->send.len);
-	if (ret) {
-		TXC_DBG(txc, "Failed to write IDC: %ld\n", ret);
-
-		/* Return error according to Domain Resource Management */
-		ret = -FI_EAGAIN;
-		goto err_cleanup;
-	}
-
-	cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
-		      ofi_atomic_get32(&req->send.txc->otx_reqs));
-
-	ofi_atomic_inc32(&req->send.txc->otx_reqs);
 
 	return FI_SUCCESS;
 
