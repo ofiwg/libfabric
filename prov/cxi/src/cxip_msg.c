@@ -4627,12 +4627,16 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	int rdzv_id;
 	int lac = req->send.send_md->md->lac;
 	int ret;
-	struct cxip_cmdq *cmdq =
-		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
+	uint16_t vni;
 
 	/* Zero length rendezvous not supported. */
 	assert(req->send.send_md);
 	assert(req->send.len);
+
+	if (txc->ep_obj->av_auth_key)
+		vni = req->send.caddr.vni;
+	else
+		vni = txc->ep_obj->auth_key.vni;
 
 	/* Allocate rendezvous ID */
 	rdzv_id = cxip_rdzv_id_alloc(txc, req);
@@ -4712,60 +4716,23 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	cmd.match_bits = put_mb.raw;
 	cmd.rendezvous_id = rdzv_id;
 
-	if (req->triggered) {
-		const struct c_ct_cmd ct_cmd = {
-			.trig_ct = req->trig_cntr->ct->ctn,
-			.threshold = req->trig_thresh,
-		};
-
-		/* Triggered command queue is domain resource, lock. */
-		ofi_genlock_lock(&txc->domain->trig_cmdq_lock);
-
-		ret = cxip_send_prep_cmdq(cmdq, req, req->send.tclass);
-		if (ret) {
-			ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
-			goto err_free_rdzv_id;
-		}
-
-		/* Clear the triggered flag to prevent retrying of operation,
-		 * due to flow control, from using the triggered path.
-		 */
-		req->triggered = false;
-
-		ret = cxi_cq_emit_trig_full_dma(cmdq->dev_cmdq, &ct_cmd,
-						&cmd);
-		if (ret) {
-			ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
-			goto err_enqueue;
-		}
-
-		cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
-			      ofi_atomic_get32(&req->send.txc->otx_reqs));
-		ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
-	} else {
-
-		ret = cxip_send_prep_cmdq(cmdq, req, req->send.tclass);
-		if (ret)
-			goto err_free_rdzv_id;
-
-		ret = cxi_cq_emit_dma(cmdq->dev_cmdq, &cmd);
-		if (ret)
-			goto err_enqueue;
-
-		cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
-			      ofi_atomic_get32(&req->send.txc->otx_reqs));
+	ret = cxip_txc_emit_dma(txc, vni, cxip_ofi_to_cxi_tc(req->send.tclass),
+				CXI_TC_TYPE_DEFAULT, req->triggered ?
+				req->trig_cntr : NULL, req->trig_thresh,
+				&cmd, req->send.flags);
+	if (ret) {
+		TXC_DBG(txc, "Failed to write DMA command: %d\n", ret);
+		goto err_free_rdzv_id;
 	}
 
-	ofi_atomic_inc32(&req->send.txc->otx_reqs);
+	req->triggered = false;
 
 	return FI_SUCCESS;
 
-err_enqueue:
-	TXC_DBG(txc, "Failed to enqueue Put: %d, return -FI_EAGAIN\n", ret);
 err_free_rdzv_id:
 	cxip_rdzv_id_free(txc, rdzv_id);
 
-	return -FI_EAGAIN;
+	return ret;
 }
 
 /*
