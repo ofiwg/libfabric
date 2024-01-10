@@ -4740,7 +4740,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 		}
 
 		cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
-			      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
+			      ofi_atomic_get32(&req->send.txc->otx_reqs));
 		ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
 	} else {
 
@@ -4753,8 +4753,10 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 			goto err_enqueue;
 
 		cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
-			      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
+			      ofi_atomic_get32(&req->send.txc->otx_reqs));
 	}
+
+	ofi_atomic_inc32(&req->send.txc->otx_reqs);
 
 	return FI_SUCCESS;
 
@@ -4956,7 +4958,9 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 	}
 
 	cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
-		      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
+		      ofi_atomic_get32(&req->send.txc->otx_reqs));
+
+	ofi_atomic_inc32(&req->send.txc->otx_reqs);
 
 	return FI_SUCCESS;
 
@@ -5047,7 +5051,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 			goto err_enqueue;
 		}
 		cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
-			      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
+			      ofi_atomic_get32(&req->send.txc->otx_reqs));
 		ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
 
 	} else {
@@ -5060,8 +5064,10 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 			goto err_enqueue;
 
 		cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
-			      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
+			      ofi_atomic_get32(&req->send.txc->otx_reqs));
 	}
+
+	ofi_atomic_inc32(&req->send.txc->otx_reqs);
 
 	return FI_SUCCESS;
 
@@ -5304,6 +5310,13 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid)
 
 	dlist_foreach_container_safe(&peer->msg_queue, struct cxip_req,
 				     req, send.txc_entry, tmp) {
+
+		/* Since messaging does not have events disabled, need to return
+		 * a TXC credit for replay. _cxip_send_req() will take the
+		 * credit again.
+		 */
+		ofi_atomic_dec32(&txc->otx_reqs);
+
 		/* -FI_EAGAIN can be return if the command queue is full. Loop
 		 * until this goes through.
 		 */
@@ -5555,7 +5568,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	}
 
 	/* Restrict outstanding success event requests to queue size */
-	if (ofi_atomic_inc32(&txc->otx_reqs) > txc->attr.size) {
+	if (ofi_atomic_get32(&txc->otx_reqs) >= txc->attr.size) {
 		ret = -FI_EAGAIN;
 		goto err_req_free;
 	}
@@ -5636,7 +5649,6 @@ err_req_dequeue:
 err_req_buf_fini:
 	cxip_send_buf_fini(req);
 err_req_free:
-	ofi_atomic_dec32(&txc->otx_reqs);
 	cxip_evtq_req_free(req);
 unlock:
 	ofi_genlock_unlock(&txc->ep_obj->lock);
