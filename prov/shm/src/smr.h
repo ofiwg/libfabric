@@ -194,6 +194,7 @@ enum smr_cmap_state {
 	SMR_CMAP_FAILED,
 };
 
+#define ZE_MAX_DEVICES 32
 struct smr_cmap_entry {
 	enum smr_cmap_state	state;
 	int			device_fds[ZE_MAX_DEVICES];
