@@ -134,18 +134,7 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 
 	ret = fi_getinfo(FI_VERSION(1, 19), NULL, NULL,
 	                 OFI_GETINFO_HIDDEN, shm_hints, shm_info);
-
-	/*
-	* The getinfo call could fail because the API version is too new
-	* So we retry with an older version
-	*/
-	if (ret == -FI_ENOSYS) {
-		ret = fi_getinfo(FI_VERSION(1, 8), NULL, NULL,
-		                 OFI_GETINFO_HIDDEN, shm_hints, shm_info);
-	}
-
 	fi_freeinfo(shm_hints);
-
 	if (ret) {
 		EFA_WARN(FI_LOG_CORE, "Disabling EFA shared memory support; failed to get shm provider's info: %s\n",
 			fi_strerror(-ret));
