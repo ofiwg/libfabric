@@ -580,3 +580,33 @@ int cxip_rxc_emit_dma(struct cxip_rxc *rxc, uint16_t vni,
 
 	return FI_SUCCESS;
 }
+
+int cxip_rxc_emit_idc_msg(struct cxip_rxc *rxc, uint16_t vni,
+			  enum cxi_traffic_class tc,
+			  enum cxi_traffic_class_type tc_type,
+			  const struct c_cstate_cmd *c_state,
+			  const struct c_idc_msg_hdr *msg, const void *buf,
+			  size_t len, uint64_t flags)
+{
+	int ret;
+
+	/* Ensure correct traffic class is used. */
+	ret = cxip_cmdq_cp_set(rxc->tx_cmdq, vni, tc, tc_type);
+	if (ret) {
+		RXC_WARN(rxc, "Failed to set traffic class: %d:%s\n", ret,
+			 fi_strerror(-ret));
+		return ret;
+	}
+
+	ret = cxip_cmdq_emit_idc_msg(rxc->tx_cmdq, c_state, msg, buf, len,
+				     flags);
+	if (ret) {
+		RXC_WARN(rxc, "Failed to emit idc_msg command: %d:%s\n", ret,
+			 fi_strerror(-ret));
+		return ret;
+	}
+
+	cxip_txq_ring(rxc->tx_cmdq, 0, 1);
+
+	return FI_SUCCESS;
+}
