@@ -734,12 +734,12 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 
 	ret = ofi_genlock_init(&cq->cq_lock, lock_type);
 	if (ret)
-		goto destroy1;
+		return ret;
 
 	/* TODO Figure out how to optimize this lock for rdm and msg endpoints */
 	ret = ofi_genlock_init(&cq->ep_list_lock, OFI_LOCK_MUTEX);
 	if (ret)
-		return ret;
+		goto destroy1;
 
 	cq->flags = attr->flags;
 	cq->cq_fid.fid.fclass = FI_CLASS_CQ;
@@ -798,9 +798,9 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 cleanup:
 	util_peer_cq_cleanup(cq);
 destroy2:
-	ofi_genlock_destroy(&cq->cq_lock);
-destroy1:
 	ofi_genlock_destroy(&cq->ep_list_lock);
+destroy1:
+	ofi_genlock_destroy(&cq->cq_lock);
 	return ret;
 }
 
