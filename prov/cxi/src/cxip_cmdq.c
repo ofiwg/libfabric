@@ -125,9 +125,9 @@ err_unlock:
 	return ret;
 }
 
-int cxip_txq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
-		    enum cxi_traffic_class tc,
-		    enum cxi_traffic_class_type tc_type)
+int cxip_cmdq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
+		     enum cxi_traffic_class tc,
+		     enum cxi_traffic_class_type tc_type)
 {
 	struct cxi_cp *cp;
 	int ret;
