@@ -2800,6 +2800,11 @@ void cxip_rxc_disable(struct cxip_rxc *rxc);
 void cxip_rxc_struct_init(struct cxip_rxc *rxc, const struct fi_rx_attr *attr,
 			  void *context);
 
+int cxip_rxc_emit_dma(struct cxip_rxc *rxc, uint16_t vni,
+		      enum cxi_traffic_class tc,
+		      enum cxi_traffic_class_type tc_type,
+		      struct c_full_dma_cmd *dma, uint64_t flags);
+
 int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
 
