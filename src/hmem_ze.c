@@ -773,7 +773,7 @@ int ze_hmem_init(void)
 	fi_param_define(NULL, "hmem_ze_copy_engine", FI_PARAM_STRING,
                         "Specify GPU engine used for copy operation: <group>, "
 			"<group>.<index> (default: 1st copy-only engine)");
-        fi_param_get_str(NULL, "log_level", &enginestr);
+        fi_param_get_str(NULL, "hmem_ze_copy_engine", &enginestr);
 	if (enginestr)
 		sscanf(enginestr, "%d.%d", &ordinal, &index);
 
