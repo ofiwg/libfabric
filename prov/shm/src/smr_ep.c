@@ -321,8 +321,7 @@ static int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
 	if (ret)
 		return ret;
 
-	ret = ze_hmem_get_shared_handle(ep->sock_info->my_fds[device],
-			base, &pend->fd,
+	ret = ze_hmem_get_shared_handle(device, base, &pend->fd,
 			(void **) &cmd->msg.data.ipc_info.ipc_handle);
 	if (ret)
 		return ret;
