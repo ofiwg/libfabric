@@ -2711,9 +2711,9 @@ int cxip_alloc_lni(struct cxip_if *iface, uint32_t svc_id,
 void cxip_free_lni(struct cxip_lni *lni);
 const char *cxi_tc_str(enum cxi_traffic_class tc);
 enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass);
-int cxip_txq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
-		    enum cxi_traffic_class tc,
-		    enum cxi_traffic_class_type tc_type);
+int cxip_cmdq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
+		     enum cxi_traffic_class tc,
+		     enum cxi_traffic_class_type tc_type);
 void cxip_if_init(void);
 void cxip_if_fini(void);
 

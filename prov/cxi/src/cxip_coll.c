@@ -668,8 +668,8 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 		cmd.full_dma.request_len = buflen;
 
 		/* this uses cached values, returns -FI_EAGAIN if queue full */
-		ret = cxip_txq_cp_set(cmdq, ep_obj->auth_key.vni,
-				      mc_obj->tc, mc_obj->tc_type);
+		ret = cxip_cmdq_cp_set(cmdq, ep_obj->auth_key.vni,
+				       mc_obj->tc, mc_obj->tc_type);
 		if (ret)
 			goto err;
 
@@ -686,8 +686,8 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 			ep_obj->src_addr.pid, ep_obj->src_addr.nic);
 
 		/* this uses cached values, returns -FI_EAGAIN if queue full */
-		ret = cxip_txq_cp_set(cmdq, ep_obj->auth_key.vni,
-				      mc_obj->tc, mc_obj->tc_type);
+		ret = cxip_cmdq_cp_set(cmdq, ep_obj->auth_key.vni,
+				       mc_obj->tc, mc_obj->tc_type);
 		if (ret)
 			goto err;
 
@@ -2734,8 +2734,8 @@ static int _initialize_mc(void *ptr)
 	}
 	/* Set this now to instantiate cmdq CP */
 	cmdq = ep_obj->coll.tx_cmdq;
-	ret = cxip_txq_cp_set(cmdq, ep_obj->auth_key.vni,
-			      mc_obj->tc, mc_obj->tc_type);
+	ret = cxip_cmdq_cp_set(cmdq, ep_obj->auth_key.vni,
+			       mc_obj->tc, mc_obj->tc_type);
 	if (ret) {
 		TRACE_JOIN("%s: cxip_txq_cp_set() = %d\n", __func__, ret);
 		goto fail;
