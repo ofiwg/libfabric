@@ -977,9 +977,13 @@ static void *smr_start_listener(void *args)
 	struct sockaddr_un sockaddr;
 	struct ofi_epollfds_event events[SMR_MAX_PEERS + 1];
 	int i, ret, poll_fds, sock = -1;
-	int peer_fds[ZE_MAX_DEVICES];
+	int *peer_fds = NULL;
 	socklen_t len = sizeof(sockaddr);
 	int64_t id, peer_id;
+
+	peer_fds = calloc(ep->sock_info->nfds, sizeof(*peer_fds));
+	if (!peer_fds)
+		goto out;
 
 	ep->region->flags |= SMR_FLAG_IPC_SOCK;
 	while (1) {
@@ -1011,6 +1015,13 @@ static void *smr_start_listener(void *args)
 			ret = smr_recvmsg_fd(sock, &id, peer_fds,
 					     ep->sock_info->nfds);
 			if (!ret) {
+				if (!ep->sock_info->peers[id].device_fds) {
+					ep->sock_info->peers[id].device_fds =
+						calloc(ep->sock_info->nfds,
+							sizeof(*ep->sock_info->peers[id].device_fds));
+					if (!ep->sock_info->peers[id].device_fds)
+						goto out;
+				}
 				memcpy(ep->sock_info->peers[id].device_fds,
 				       peer_fds, sizeof(*peer_fds) *
 				       ep->sock_info->nfds);
@@ -1029,6 +1040,7 @@ static void *smr_start_listener(void *args)
 		}
 	}
 out:
+	free(peer_fds);
 	close(ep->sock_info->listen_sock);
 	unlink(ep->sock_info->name);
 	return NULL;
@@ -1072,7 +1084,6 @@ void smr_ep_exchange_fds(struct smr_ep *ep, int64_t id)
 	char *name1, *name2;
 	int ret = -1, sock = -1;
 	int64_t peer_id;
-	int peer_fds[ZE_MAX_DEVICES];
 
 	if (peer_smr->pid == ep->region->pid ||
 	    !(peer_smr->flags & SMR_FLAG_IPC_SOCK))
@@ -1122,12 +1133,17 @@ void smr_ep_exchange_fds(struct smr_ep *ep, int64_t id)
 	if (ret)
 		goto cleanup;
 
-	ret = smr_recvmsg_fd(sock, &id, peer_fds, ep->sock_info->nfds);
+	if (!ep->sock_info->peers[id].device_fds) {
+		ep->sock_info->peers[id].device_fds =
+			calloc(ep->sock_info->nfds,
+			       sizeof(*ep->sock_info->peers[id].device_fds));
+		if (!ep->sock_info->peers[id].device_fds)
+			goto cleanup;
+	}
+	ret = smr_recvmsg_fd(sock, &id, ep->sock_info->peers[id].device_fds,
+			     ep->sock_info->nfds);
 	if (ret)
 		goto cleanup;
-
-	memcpy(ep->sock_info->peers[id].device_fds, peer_fds,
-	       sizeof(*peer_fds) * ep->sock_info->nfds);
 
 cleanup:
 	close(sock);
@@ -1135,6 +1151,19 @@ cleanup:
 out:
 	ep->sock_info->peers[id].state = ret ?
 		SMR_CMAP_FAILED : SMR_CMAP_SUCCESS;
+}
+
+static void smr_free_sock_info(struct smr_ep *ep)
+{
+	int i, j;
+
+	for (i = 0; i < SMR_MAX_PEERS; i++) {
+		for (j = 0; j < ep->sock_info->nfds; j++)
+			close(ep->sock_info->peers[i].device_fds[j]);
+		free(ep->sock_info->peers[i].device_fds);
+	}
+	free(ep->sock_info);
+	ep->sock_info = NULL;
 }
 
 static void smr_init_ipc_socket(struct smr_ep *ep)
@@ -1205,8 +1234,7 @@ close:
 	close(ep->sock_info->listen_sock);
 	unlink(sockaddr.sun_path);
 free:
-	free(ep->sock_info);
-	ep->sock_info = NULL;
+	smr_free_sock_info(ep);
 err_out:
 	FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "Unable to initialize IPC socket."
 		"Defaulting to SAR for device transfers\n");
