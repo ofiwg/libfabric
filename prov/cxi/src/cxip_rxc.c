@@ -553,3 +553,30 @@ void cxip_rxc_disable(struct cxip_rxc *rxc)
 			CXIP_WARN("rxc_msg_fini returned: %d\n", ret);
 	}
 }
+
+int cxip_rxc_emit_dma(struct cxip_rxc *rxc, uint16_t vni,
+		      enum cxi_traffic_class tc,
+		      enum cxi_traffic_class_type tc_type,
+		      struct c_full_dma_cmd *dma, uint64_t flags)
+{
+	int ret;
+
+	/* Ensure correct traffic class is used. */
+	ret = cxip_cmdq_cp_set(rxc->tx_cmdq, vni, tc, tc_type);
+	if (ret) {
+		RXC_WARN(rxc, "Failed to set traffic class: %d:%s\n", ret,
+			 fi_strerror(-ret));
+		return ret;
+	}
+
+	ret = cxip_cmdq_emit_dma(rxc->tx_cmdq, dma, flags);
+	if (ret) {
+		RXC_WARN(rxc, "Failed to emit dma command: %d:%s\n", ret,
+			 fi_strerror(-ret));
+		return ret;
+	}
+
+	cxip_txq_ring(rxc->tx_cmdq, 0, 1);
+
+	return FI_SUCCESS;
+}
