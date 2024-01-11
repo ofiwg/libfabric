@@ -536,9 +536,8 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 	struct smr_region *peer_smr;
 	struct smr_resp *resp;
 	void *base, *ptr;
-	uint64_t ipc_device;
 	int64_t id;
-	int ret, fd, ipc_fd;
+	int ret, ipc_fd;
 	ssize_t hmem_copy_ret;
 	struct ofi_mr_entry *mr_entry;
 	struct smr_domain *domain;
@@ -553,11 +552,10 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 	//TODO disable IPC if more than 1 interface is initialized
 	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ZE) {
 		id = cmd->msg.hdr.id;
-		ipc_device = cmd->msg.data.ipc_info.device;
-		fd = ep->sock_info->peers[id].device_fds[ipc_device];
-		ret = ze_hmem_open_shared_handle(fd,
+		ret = ze_hmem_open_shared_handle(cmd->msg.data.ipc_info.device,
+				ep->sock_info->peers[id].device_fds,
 				(void **) &cmd->msg.data.ipc_info.ipc_handle,
-				&ipc_fd, ipc_device, &base);
+				&ipc_fd, &base);
 	} else {
 		ret = ofi_ipc_cache_search(domain->ipc_cache,
 					   cmd->msg.hdr.id,
