@@ -787,16 +787,13 @@ static int issue_rdzv_get(struct cxip_req *req)
 		(uint64_t)cmd.local_addr, cmd.request_len,
 		(uint64_t)cmd.remote_offset);
 
-	/* Issue Rendezvous Get command */
-	ret = cxi_cq_emit_dma(rxc->tx_cmdq->dev_cmdq, &cmd);
-	if (ret) {
-		RXC_DBG(rxc, "Failed to queue GET command: %d\n", ret);
-		return -FI_EAGAIN;
-	}
+	ret = cxip_rxc_emit_dma(rxc, req->recv.vni,
+				cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
+				CXI_TC_TYPE_DEFAULT, &cmd, 0);
+	if (ret)
+		RXC_WARN(rxc, "Failed to issue rendezvous get: %d\n", ret);
 
-	cxi_cq_ring(rxc->tx_cmdq->dev_cmdq);
-
-	return FI_SUCCESS;
+	return ret;
 }
 
 /*
