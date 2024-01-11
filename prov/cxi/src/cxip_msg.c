@@ -835,47 +835,33 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 		.le_type = CXIP_LE_TYPE_ZBP,
 	};
 	union cxip_match_bits event_mb;
-	union c_cmdu cmd = {};
 	int ret;
+	struct c_cstate_cmd c_state = {};
+	struct c_idc_msg_hdr idc_msg = {};
 
 	event_mb.raw = event->tgt_long.match_bits;
 	mb.tx_id = event_mb.tx_id;
 
 	cxi_build_dfa(nic, pid, rxc->pid_bits, pid_idx, &dfa, &idx_ext);
 
-	cmd.c_state.event_send_disable = 1;
-	cmd.c_state.index_ext = idx_ext;
-	cmd.c_state.eq = cxip_evtq_eqn(&rxc->ep_obj->txc.tx_evtq);
+	c_state.event_send_disable = 1;
+	c_state.index_ext = idx_ext;
+	c_state.eq = cxip_evtq_eqn(&rxc->ep_obj->txc.tx_evtq);
 
-	ret = cxip_cmdq_emit_c_state(rxc->tx_cmdq, &cmd.c_state);
-	if (ret) {
-		RXC_DBG(rxc, "Failed to issue C_STATE command: %d\n", ret);
-		return ret;
-	}
-
-	memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));
-	cmd.idc_msg.dfa = dfa;
-	cmd.idc_msg.match_bits = mb.raw;
-
-	cmd.idc_msg.user_ptr = (uint64_t)req;
-
-	ret = cxi_cq_emit_idc_msg(rxc->tx_cmdq->dev_cmdq, &cmd.idc_msg,
-				  NULL, 0);
-	if (ret) {
-		RXC_DBG(rxc, "Failed to write IDC: %d\n", ret);
-
-		/* Return error according to Domain Resource Management
-		 */
-		return -FI_EAGAIN;
-	}
+	idc_msg.dfa = dfa;
+	idc_msg.match_bits = mb.raw;
+	idc_msg.user_ptr = (uint64_t)req;
 
 	req->cb = cxip_notify_match_cb;
 
-	cxi_cq_ring(rxc->tx_cmdq->dev_cmdq);
+	ret = cxip_rxc_emit_idc_msg(rxc, event->tgt_long.vni,
+				    cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
+				    CXI_TC_TYPE_DEFAULT, &c_state, &idc_msg,
+				    NULL, 0, 0);
 
 	RXC_DBG(rxc, "Queued match completion message: %p\n", req);
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 /*
