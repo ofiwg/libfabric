@@ -325,6 +325,10 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	bool use_default_logic = true;
 	int dirfd = -1;
 
+	memset(hfi_candidates, 0, sizeof(*hfi_candidates) * FI_OPX_MAX_HFIS);
+	memset(hfi_distances, 0, sizeof(*hfi_distances) * FI_OPX_MAX_HFIS);
+	memset(hfi_freectxs, 0, sizeof(*hfi_freectxs) * FI_OPX_MAX_HFIS);
+
 	struct fi_opx_hfi1_context_internal *internal =
 		calloc(1, sizeof(struct fi_opx_hfi1_context_internal));
 	if (!internal)
