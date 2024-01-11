@@ -4574,39 +4574,6 @@ int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
-static inline int cxip_send_prep_cmdq(struct cxip_cmdq *cmdq,
-				      struct cxip_req *req,
-				      uint32_t tclass)
-{
-	struct cxip_txc *txc = req->send.txc;
-	int ret;
-	uint16_t vni;
-
-	if (!req->triggered) {
-		if (txc->ep_obj->av_auth_key)
-			vni = req->send.caddr.vni;
-		else
-			vni = txc->ep_obj->auth_key.vni;
-
-		ret = cxip_txq_cp_set(cmdq, vni,
-				      cxip_ofi_to_cxi_tc(txc->tclass),
-				      CXI_TC_TYPE_DEFAULT);
-		if (ret != FI_SUCCESS)
-			return ret;
-	}
-
-	if (req->send.flags & FI_FENCE) {
-		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
-		if (ret) {
-			TXC_DBG(txc, "Failed to issue CQ_FENCE command: %d\n",
-				ret);
-			return -FI_EAGAIN;
-		}
-	}
-
-	return FI_SUCCESS;
-}
-
 /*
  * _cxip_send_rdzv_put() - Initiate a send rendezvous put operation.
  *
