@@ -214,10 +214,10 @@ bool ze_hmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int ze_hmem_get_handle(void *dev_buf, size_t size, void **handle);
 int ze_hmem_open_handle(void **handle, size_t size, uint64_t device,
 			void **ipc_ptr);
-int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
+int ze_hmem_get_shared_handle(uint64_t device, void *dev_buf, int *ze_fd,
 			      void **handle);
-int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
-			       uint64_t device, void **ipc_ptr);
+int ze_hmem_open_shared_handle(uint64_t device, int *peer_fds, void **handle,
+			       int *ze_fd, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr);
 bool ze_hmem_p2p_enabled(void);
 int ze_hmem_get_ipc_handle_size(size_t *size);
