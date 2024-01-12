@@ -25,6 +25,7 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 	uint32_t pid_bits = req->ep_obj->domain->iface->dev->info.pid_bits;
 	uint32_t nic_addr;
 	uint32_t pid;
+	uint16_t vni;
 	union cxip_match_bits mb = {
 		.raw = event->tgt_long.match_bits,
 	};
@@ -39,16 +40,17 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 
 		nic_addr = CXI_MATCH_ID_EP(pid_bits, init);
 		pid = CXI_MATCH_ID_PID(pid_bits, init);
+		vni = event->tgt_long.vni;
 
 		switch (mb.ctrl_msg_type) {
 		case CXIP_CTRL_MSG_FC_NOTIFY:
 			ret = cxip_fc_process_drops(req->ep_obj, nic_addr, pid,
-						    mb.drops);
+						    vni, mb.drops);
 			assert(ret == FI_SUCCESS);
 
 			break;
 		case CXIP_CTRL_MSG_FC_RESUME:
-			ret = cxip_fc_resume(req->ep_obj, nic_addr, pid);
+			ret = cxip_fc_resume(req->ep_obj, nic_addr, pid, vni);
 			assert(ret == FI_SUCCESS);
 
 			break;
@@ -115,6 +117,13 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	idc_msg.dfa = dfa;
 	idc_msg.match_bits = req->send.mb.raw;
 	idc_msg.user_ptr = (uint64_t)req;
+
+	ret = cxip_cmdq_cp_set(txq, req->send.vni, CXI_TC_BEST_EFFORT,
+			       CXI_TC_TYPE_DEFAULT);
+	if (ret) {
+		CXIP_DBG("Failed to set cp: %d\n", ret);
+		goto err_return_credit;
+	}
 
 	ret = cxip_cmdq_emit_idc_msg(txq, &c_state, &idc_msg, NULL, 0, 0);
 	if (ret) {

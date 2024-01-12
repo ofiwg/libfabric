@@ -2189,9 +2189,9 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		switch (cxi_event_rc(event)) {
 		case C_RC_OK:
 			RXC_DBG(rxc,
-				"FC_RESUME to %#x:%u successfully sent: retry_count=%u\n",
+				"FC_RESUME to %#x:%u:%u successfully sent: retry_count=%u\n",
 				fc_drops->nic_addr, fc_drops->pid,
-				fc_drops->retry_count);
+				fc_drops->vni, fc_drops->retry_count);
 			free(fc_drops);
 			break;
 
@@ -2203,9 +2203,9 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		case C_RC_ENTRY_NOT_FOUND:
 			fc_drops->retry_count++;
 			RXC_WARN(rxc,
-				 "%#x:%u dropped FC message: retry_delay_usecs=%d retry_count=%u\n",
+				 "%#x:%u:%u dropped FC message: retry_delay_usecs=%d retry_count=%u\n",
 				 fc_drops->nic_addr, fc_drops->pid,
-				 cxip_env.fc_retry_usec_delay,
+				 fc_drops->vni, cxip_env.fc_retry_usec_delay,
 				 fc_drops->retry_count);
 			usleep(cxip_env.fc_retry_usec_delay);
 			ret = cxip_ctrl_msg_send(req);
@@ -2235,7 +2235,7 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
  * Endpoint peer must count all drops before re-enabling its RX queue.
  */
 int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint32_t nic_addr,
-			  uint32_t pid, uint16_t drops)
+			  uint32_t pid, uint16_t vni, uint16_t drops)
 {
 	struct cxip_rxc *rxc = &ep_obj->rxc;
 	struct cxip_fc_drops *fc_drops;
@@ -2253,10 +2253,12 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint32_t nic_addr,
 	fc_drops->rxc = rxc;
 	fc_drops->nic_addr = nic_addr;
 	fc_drops->pid = pid;
+	fc_drops->vni = vni;
 	fc_drops->drops = drops;
 
 	fc_drops->req.send.nic_addr = nic_addr;
 	fc_drops->req.send.pid = pid;
+	fc_drops->req.send.vni = vni;
 	fc_drops->req.send.mb.drops = drops;
 
 	fc_drops->req.send.mb.ctrl_le_type = CXIP_CTRL_LE_TYPE_CTRL_MSG;
@@ -4973,7 +4975,7 @@ static struct cxip_fc_peer *cxip_fc_peer_lookup(struct cxip_txc *txc,
 
 	dlist_foreach_container(&txc->fc_peers, struct cxip_fc_peer,
 				peer, txc_entry) {
-		if (CXIP_ADDR_EQUAL(peer->caddr, caddr))
+		if (CXIP_ADDR_VNI_EQUAL(peer->caddr, caddr))
 			return peer;
 	}
 
@@ -5008,8 +5010,9 @@ static int cxip_fc_peer_put(struct cxip_fc_peer *peer)
 		peer->pending_acks++;
 
 		TXC_DBG(peer->txc,
-			"Notified disabled peer NIC: %#x PID: %u dropped: %u\n",
-			peer->caddr.nic, peer->caddr.pid, peer->dropped);
+			"Notified disabled peer NIC: %#x PID: %u VNI: %u dropped: %u\n",
+			peer->caddr.nic, peer->caddr.pid, peer->caddr.vni,
+			peer->dropped);
 	}
 
 	return FI_SUCCESS;
@@ -5040,9 +5043,9 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		switch (cxi_event_rc(event)) {
 		case C_RC_OK:
 			TXC_DBG(txc,
-				"FC_NOTIFY to %#x:%u successfully sent: retry_count=%u\n",
+				"FC_NOTIFY to %#x:%u:%u successfully sent: retry_count=%u\n",
 				peer->caddr.nic, peer->caddr.pid,
-				peer->retry_count);
+				peer->caddr.vni, peer->retry_count);
 
 			/* Peer flow control structure can only be freed if
 			 * replay is complete and all acks accounted for.
@@ -5061,9 +5064,9 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		case C_RC_ENTRY_NOT_FOUND:
 			peer->retry_count++;
 			TXC_WARN(txc,
-				 "%#x:%u dropped FC message: retry_delay_usecs=%d retry_count=%u\n",
+				 "%#x:%u:%u dropped FC message: retry_delay_usecs=%d retry_count=%u\n",
 				 peer->caddr.nic, peer->caddr.pid,
-				 cxip_env.fc_retry_usec_delay,
+				 peer->caddr.vni, cxip_env.fc_retry_usec_delay,
 				 peer->retry_count);
 			usleep(cxip_env.fc_retry_usec_delay);
 			return cxip_ctrl_msg_send(req);
@@ -5109,6 +5112,7 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
 
 	p->req.send.nic_addr = caddr.nic;
 	p->req.send.pid = caddr.pid;
+	p->req.send.vni = caddr.vni;
 	/* TODO: remove */
 	p->req.send.mb.txc_id = 0;
 	p->req.send.mb.rxc_id = 0;
@@ -5121,7 +5125,7 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
 	/* Queue all Sends to the FC'ed peer */
 	dlist_foreach_container_safe(&txc->msg_queue, struct cxip_req,
 				     req, send.txc_entry, tmp) {
-		if (CXIP_ADDR_EQUAL(req->send.caddr, caddr)) {
+		if (CXIP_ADDR_VNI_EQUAL(req->send.caddr, caddr)) {
 			dlist_remove(&req->send.txc_entry);
 			dlist_insert_tail(&req->send.txc_entry, &p->msg_queue);
 			p->pending++;
@@ -5141,13 +5145,15 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
  *
  * Replay all dropped Sends in order.
  */
-int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid)
+int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid,
+		   uint16_t vni)
 {
 	struct cxip_txc *txc = &ep_obj->txc;
 	struct cxip_fc_peer *peer;
 	struct cxip_addr caddr = {
 		.nic = nic_addr,
 		.pid = pid,
+		.vni = vni,
 	};
 	struct cxip_req *req;
 	struct dlist_entry *tmp;
@@ -5217,8 +5223,9 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
 			return ret;
 
 		TXC_DBG(txc,
-			"Disabled peer detected, NIC: %#x PID: %u pending: %u\n",
-			peer->caddr.nic, peer->caddr.pid, peer->pending);
+			"Disabled peer detected, NIC: %#x PID: %u VNI: %u pending: %u\n",
+			peer->caddr.nic, peer->caddr.pid, peer->caddr.vni,
+			peer->pending);
 	}
 
 	/* Account for the dropped message. */
@@ -5228,9 +5235,9 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
 		peer->dropped--;
 	else
 		TXC_DBG(txc,
-			"Send dropped, req: %p NIC: %#x PID: %u pending: %u dropped: %u\n",
-			req, peer->caddr.nic, peer->caddr.pid, peer->pending,
-			peer->dropped);
+			"Send dropped, req: %p NIC: %#x PID: %u VNI: %u pending: %u dropped: %u\n",
+			req, peer->caddr.nic, peer->caddr.pid, peer->caddr.vni,
+			peer->pending, peer->dropped);
 
 	return ret;
 }
