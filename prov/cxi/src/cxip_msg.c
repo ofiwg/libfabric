@@ -4574,16 +4574,10 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	int rdzv_id;
 	int lac = req->send.send_md->md->lac;
 	int ret;
-	uint16_t vni;
 
 	/* Zero length rendezvous not supported. */
 	assert(req->send.send_md);
 	assert(req->send.len);
-
-	if (txc->ep_obj->av_auth_key)
-		vni = req->send.caddr.vni;
-	else
-		vni = txc->ep_obj->auth_key.vni;
 
 	/* Allocate rendezvous ID */
 	rdzv_id = cxip_rdzv_id_alloc(txc, req);
@@ -4663,7 +4657,8 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	cmd.match_bits = put_mb.raw;
 	cmd.rendezvous_id = rdzv_id;
 
-	ret = cxip_txc_emit_dma(txc, vni, cxip_ofi_to_cxi_tc(req->send.tclass),
+	ret = cxip_txc_emit_dma(txc, req->send.caddr.vni,
+				cxip_ofi_to_cxi_tc(req->send.tclass),
 				CXI_TC_TYPE_DEFAULT, req->triggered ?
 				req->trig_cntr : NULL, req->trig_thresh,
 				&cmd, req->send.flags);
@@ -4795,12 +4790,6 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 	const void *buf;
 	struct c_cstate_cmd cstate_cmd = {};
 	struct c_idc_msg_hdr idc_cmd;
-	uint16_t vni;
-
-	if (txc->ep_obj->av_auth_key)
-		vni = req->send.caddr.vni;
-	else
-		vni = txc->ep_obj->auth_key.vni;
 
 	assert(req->send.len > 0);
 
@@ -4856,7 +4845,7 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 	idc_cmd.header_data = req->send.data;
 	idc_cmd.user_ptr = (uint64_t)req;
 
-	ret = cxip_txc_emit_idc_msg(txc, vni,
+	ret = cxip_txc_emit_idc_msg(txc, req->send.caddr.vni,
 				    cxip_ofi_to_cxi_tc(req->send.tclass),
 				    CXI_TC_TYPE_DEFAULT, &cstate_cmd, &idc_cmd,
 				    buf, req->send.len, req->send.flags);
@@ -4885,7 +4874,6 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	union cxip_match_bits mb;
 	ssize_t ret;
 	struct c_full_dma_cmd cmd = {};
-	uint16_t vni;
 
 	/* Calculate DFA */
 	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
@@ -4894,11 +4882,6 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	ret = cxip_set_eager_mb(req, &mb);
 	if (ret)
 		goto err;
-
-	if (txc->ep_obj->av_auth_key)
-		vni = req->send.caddr.vni;
-	else
-		vni = txc->ep_obj->auth_key.vni;
 
 	req->cb = cxip_send_eager_cb;
 
@@ -4929,7 +4912,8 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		cmd.ct = req->send.cntr->ct->ctn;
 	}
 
-	ret = cxip_txc_emit_dma(txc, vni, cxip_ofi_to_cxi_tc(req->send.tclass),
+	ret = cxip_txc_emit_dma(txc, req->send.caddr.vni,
+				cxip_ofi_to_cxi_tc(req->send.tclass),
 				CXI_TC_TYPE_DEFAULT, req->triggered ?
 				req->trig_cntr : NULL, req->trig_thresh,
 				&cmd, req->send.flags);
@@ -5481,6 +5465,9 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		TXC_WARN(txc, "Failed to look up FI addr: %d\n", ret);
 		goto err_req_buf_fini;
 	}
+
+	if (!txc->ep_obj->av_auth_key)
+		caddr.vni = txc->ep_obj->auth_key.vni;
 
 	req->send.caddr = caddr;
 	req->send.dest_addr = dest_addr;
