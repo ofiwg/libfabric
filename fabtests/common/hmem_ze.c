@@ -84,7 +84,7 @@ static void *libze_handle;
 struct libze_ops libze_ops;
 int init_libze_ops(void)
 {
-	libze_handle = dlopen("libze_loader.so", RTLD_NOW);
+	libze_handle = dlopen("libze_loader.so.1", RTLD_NOW);
 	if (!libze_handle) {
 		FT_ERR("Failed to dlopen libze_loader.so\n");
 		goto err_out;
