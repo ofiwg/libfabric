@@ -1567,19 +1567,16 @@ static int cxip_rdzv_done_notify(struct cxip_req *req)
 	cmd.initiator = match_id;
 	cmd.match_bits = mb.raw;
 
-	ret = cxi_cq_emit_dma(rxc->tx_cmdq->dev_cmdq, &cmd);
-	if (ret != FI_SUCCESS) {
-		RXC_DBG(rxc, "Faile to write notify IDC: %d %s\n",
-			ret, fi_strerror(-ret));
-		return -FI_EAGAIN;
-	}
-
-	cxi_cq_ring(rxc->tx_cmdq->dev_cmdq);
-
 	RXC_DBG(rxc, "RDZV done notify send RDZV ID: %d\n",
 		req->recv.rdzv_id);
 
-	return FI_SUCCESS;
+	ret = cxip_rxc_emit_dma(rxc, req->recv.vni,
+				cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
+				CXI_TC_TYPE_DEFAULT, &cmd, 0);
+	if (ret)
+		RXC_WARN(rxc, "Failed to issue rdvz done: %d\n", ret);
+
+	return ret;
 }
 
 static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
