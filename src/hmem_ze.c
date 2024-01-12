@@ -778,6 +778,9 @@ int ze_hmem_init(void)
 	int ordinal = -1;
 	int index = 0;
 
+	if (hmem_ops[FI_HMEM_ZE].initialized)
+		return FI_SUCCESS;
+
 	fi_param_define(NULL, "hmem_ze_copy_engine", FI_PARAM_STRING,
                         "Specify GPU engine used for copy operation: <group>, "
 			"<group>.<index> (default: 1st copy-only engine)");
