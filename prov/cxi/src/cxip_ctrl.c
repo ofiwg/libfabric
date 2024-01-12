@@ -88,21 +88,10 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	uint32_t pid_bits;
-	union c_cmdu cmd = {};
+	struct c_cstate_cmd c_state = {};
+	struct c_idc_msg_hdr idc_msg = {};
 	uint32_t match_id;
 	int ret;
-
-	txq = req->ep_obj->ctrl_txq;
-	pid_bits = req->ep_obj->domain->iface->dev->info.pid_bits;
-	cxi_build_dfa(req->send.nic_addr, req->send.pid, pid_bits,
-		      CXIP_PTL_IDX_CTRL, &dfa, &idx_ext);
-	match_id = CXI_MATCH_ID(pid_bits, req->ep_obj->src_addr.pid,
-				req->ep_obj->src_addr.nic);
-
-	cmd.c_state.event_send_disable = 1;
-	cmd.c_state.index_ext = idx_ext;
-	cmd.c_state.eq = req->ep_obj->ctrl_tx_evtq->eqn;
-	cmd.c_state.initiator = match_id;
 
 	if (!req->ep_obj->ctrl_tx_credits) {
 		CXIP_WARN("Control TX credits exhausted\n");
@@ -111,24 +100,25 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 
 	req->ep_obj->ctrl_tx_credits--;
 
-	ret = cxip_cmdq_emit_c_state(txq, &cmd.c_state);
-	if (ret) {
-		CXIP_DBG("Failed to issue C_STATE command: %d\n", ret);
-		goto err_return_credit;
-	}
+	txq = req->ep_obj->ctrl_txq;
+	pid_bits = req->ep_obj->domain->iface->dev->info.pid_bits;
+	cxi_build_dfa(req->send.nic_addr, req->send.pid, pid_bits,
+		      CXIP_PTL_IDX_CTRL, &dfa, &idx_ext);
+	match_id = CXI_MATCH_ID(pid_bits, req->ep_obj->src_addr.pid,
+				req->ep_obj->src_addr.nic);
 
-	memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));
-	cmd.idc_msg.dfa = dfa;
-	cmd.idc_msg.match_bits = req->send.mb.raw;
-	cmd.idc_msg.user_ptr = (uint64_t)req;
+	c_state.event_send_disable = 1;
+	c_state.index_ext = idx_ext;
+	c_state.eq = req->ep_obj->ctrl_tx_evtq->eqn;
+	c_state.initiator = match_id;
 
-	ret = cxi_cq_emit_idc_msg(txq->dev_cmdq, &cmd.idc_msg, NULL, 0);
+	idc_msg.dfa = dfa;
+	idc_msg.match_bits = req->send.mb.raw;
+	idc_msg.user_ptr = (uint64_t)req;
+
+	ret = cxip_cmdq_emit_idc_msg(txq, &c_state, &idc_msg, NULL, 0, 0);
 	if (ret) {
 		CXIP_DBG("Failed to write IDC: %d\n", ret);
-
-		/* Return error according to Domain Resource Management
-		 */
-		ret = -FI_EAGAIN;
 		goto err_return_credit;
 	}
 
