@@ -514,7 +514,7 @@ bool ze_hmem_p2p_enabled(void)
 static int ze_hmem_dl_init(void)
 {
 #if ENABLE_ZE_DLOPEN
-	libze_handle = dlopen("libze_loader.so", RTLD_NOW);
+	libze_handle = dlopen("libze_loader.so.1", RTLD_NOW);
 	if (!libze_handle) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to dlopen libze_loader.so\n");
