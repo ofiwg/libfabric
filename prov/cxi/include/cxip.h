@@ -336,6 +336,7 @@ struct cxip_addr {
 };
 
 #define CXIP_ADDR_EQUAL(a, b) ((a).nic == (b).nic && (a).pid == (b).pid)
+#define CXIP_ADDR_VNI_EQUAL(a, b) (CXIP_ADDR_EQUAL(a, b) && (a).vni == (b).vni)
 
 /*
  * A PID contains "pid_granule" logical endpoints. The PID granule is set per
@@ -1223,6 +1224,7 @@ struct cxip_ctrl_req_mr {
 struct cxip_ctrl_send {
 	uint32_t nic_addr;
 	uint32_t pid;
+	uint16_t vni;
 	union cxip_match_bits mb;
 };
 
@@ -1266,6 +1268,7 @@ struct cxip_fc_drops {
 	struct cxip_ctrl_req req;
 	uint32_t nic_addr;
 	uint32_t pid;
+	uint16_t vni;
 	uint16_t drops;
 	unsigned int retry_count;
 };
@@ -2782,12 +2785,13 @@ int cxip_recv_ux_sw_matcher(struct cxip_ux_send *ux);
 int cxip_recv_req_sw_matcher(struct cxip_req *req);
 int cxip_recv_cancel(struct cxip_req *req);
 int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint32_t nic_addr,
-			  uint32_t pid, uint16_t drops);
+			  uint32_t pid, uint16_t vni, uint16_t drops);
 void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event);
 void cxip_rxc_req_fini(struct cxip_rxc *rxc);
 int cxip_rxc_oflow_init(struct cxip_rxc *rxc);
 void cxip_rxc_oflow_fini(struct cxip_rxc *rxc);
-int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid);
+int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid,
+		   uint16_t vni);
 
 void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
 			  void *context);
