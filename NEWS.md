@@ -6,6 +6,111 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v1.19.1, Mon Jan 22, 2024
+=========================
+
+## Core
+
+- hmem/ze: Change the library name passed to dlopen
+- hmem/ze: map device id to physical device
+- hmem/ze: skip duplicate initialization
+- hmem/ze: dynamically allocate device resources based on number of devices
+- hmem/ze: fix hmem_ze_copy_engine variable look up
+- hmem/ze: Increase ZE_MAX_DEVICES to 32
+- man: Fix typo in fi_getinfo man page
+- Fix compiler warning when compiling with ICX
+- man: Fix fi_rxm.7 and fi_collective.3 man pages
+- man: Fix the fi_provider.7 man page for the man page converter
+- hmem/synapseai: Refine the error handling and warning
+- configure.ac Fix `--with-lttng` causing `yes/` to populate {CPP,LD}FLAGS
+- hmem: Only initalize synapseai if device exists
+- hmem/ze: fix incorrect device id in copy function
+- configure.ac: Fix `with_synaposeai` typo
+
+## EFA
+
+- Fix the ibv cq error handling.
+- Don't do handshake for local read
+- Don't do handshake for local fi_write
+- Make runt_size aligned
+- Add pingpong test after exhausting MRs
+- Introduce utilities to exhaust MRs on EFA device
+- Add read nack protocol docs
+- Receiver send NACK if runt read fails with ENOMR
+- Sender switch to long CTS protocol if runt read fails with ENOMR
+- Receiver send NACK if long read fails with ENOMR
+- Update efa_rdm_rxe_map_remove to accept msg_id and addr
+- Sender switch to long CTS protocol if long read fails with ENOMR
+- Introduce new READ_NACK feature
+- Do not abort on all deprecated env vars
+- Allocate pke_vec, recv_wr_vec, sge_vec from heap
+- Close shm resource when it is disabled in ep
+- Disable RUNTING for Neuron
+- Move cuda-sync-memops from MR to EP
+- Do not insert shm av inside efa progress engine
+- Fix coverity warning in efa_mr_reg_impl
+- Fix typos in packet macros
+- Adjust posted receive size to pkt_size
+- RDMA write with immediate data completion bugfix
+- Do not create SHM peer when SHM is disabled
+- Use correct threading model for shm
+- Restrict RDMA read to compatible EFA devices
+- Add EFA device version to handshake
+- Cleanup/fix some unit test code
+- Touch up RDM protocol header, doc
+- Fix efa device name matching
+- Add missing locks in efa_cntr_wait.
+- Fix the efa_env_initialize() call sequence.
+- Fix a compilation warning
+- Handle RNRs from RDMA writedata
+- Add writedata RNR fabtest
+- Correct typo in RMA context type
+
+## RXM
+
+- Fix data error with FI_OFI_RXM_USE_RNDV_WRITE=1
+
+## SHM
+
+- Allocate peer device fds dynamically
+- Add memory barrier before updating resp for atomic
+- Use peer cntr inc ops in smr_progress_cmd
+- Only increment tx cntr when inject rma succeeded.
+
+## TCP
+
+- Pass through rdm_ep flags to msg eps.
+- Derive cq flags from op and msg flags
+- Set FI_MULTI_RECV for last completed RX slice
+
+## UCX
+
+- Initialize ep_flush to 1
+
+## Util
+
+- memhooks: Fix a bug when calculating mprotect region
+
+## Verbs
+
+- Windows: Resolve regression in user data retrieval
+- Windows: Check error code from GetPrivateData
+- Bug fix for matching domain name with device name
+
+## Fabtests
+
+- efa: Close ibv device after use
+- efa: Get device MR limit from ibv_query_device
+- efa: Add simple unexpected test to MR exhaustion test
+- pytest: Add a new ssh connection error pattern
+- Make ft_force_progress non-static
+- memcopy-xe: Fix data verification error for device buffer
+- dmabuf: Increase the number of NICs that can be tested
+- cq_data: Relax CQ data validation to cq_data_size
+- dmabuf: Handle partial read scenario for fi_xe_rdmabw test
+- pytest/efa: Add cuda memory marker
+
+
 v1.19.0, Fri Sep 1, 2023
 ========================
 
