@@ -6,6 +6,74 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+
+v1.18.3, Mon Jan 22, 2024
+=========================
+
+## Core
+
+- hmem/ze: Change the library name passed to dlopen
+- hmem/ze: map device id to physical device
+- hmem/ze: skip duplicate initialization
+- hmem/ze: dynamically allocate device resources based on number of devices
+- hmem/ze: fix hmem_ze_copy_engine variable look up
+- hmem/ze: Increase ZE_MAX_DEVICES to 32
+- man: Fix typo in fi_getinfo man page
+- man: Fix fi_rxm.7 and fi_collective.3 man pages
+- man: Fix the fi_provider.7 man page for the man page converter
+- configure.ac Fix `--with-lttng` causing `yes/` to populate {CPP,LD}FLAGS
+- hmem/ze: fix incorrect device id in copy function
+- configure.ac: Fix `with_synaposeai` typo
+
+## EFA
+
+- Fix efa device name matching
+- Add writedata RNR fabtest
+- Handle RNRs from RDMA writedata
+
+## RXM
+
+- Fix data error with FI_OFI_RXM_USE_RNDV_WRITE=1
+
+## SHM
+
+- Allocate peer device fds dynamically
+
+## TCP
+
+- Pass through rdm_ep flags to msg eps.
+- Derive cq flags from op and msg flags
+- Set FI_MULTI_RECV for last completed RX slice
+
+## UCX
+
+- Initialize ep_flush to 1
+
+## Util
+
+- memhooks: Fix a bug when calculating mprotect region
+
+## Verbs
+
+- Windows: Resolve regression in user data retrieval
+- Windows: Check error code from GetPrivateData
+- Bug fix for matching domain name with device name
+
+## Fabtests
+
+- rdm_tagged_peek: Fix race condition synchronization
+- Make rdm_tagged_peek test more general
+- Split cq_read and cq_readerr in ft_spin_for_comp
+- sock_test: Do not use epoll if not available
+- Use dummy ft_pin_core on macOS
+- Avoid using memset function name
+- Fix some header includes
+- memcopy-xe: Fix data verification error for device buffer
+- dmabuf: Increase the number of NICs that can be tested
+- dmabuf: Handle partial read scenario for fi_xe_rdmabw test
+- pytest/efa: add cuda memory marker
+
+
 v1.18.2, Fri Sep 1, 2023
 ========================
 
