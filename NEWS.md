@@ -6,6 +6,67 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v1.20.1, Mon Jan 22, 2024
+=========================
+
+## Core
+- hmem/ze: Change the library name passed to dlopen
+- hmem/ze: map device id to physical device
+- hmem/ze: skip duplicate initialization
+- hmem/ze: dynamically allocate device resources based on number of devices
+- hmem/ze: fix hmem_ze_copy_engine variable look up
+- hmem/ze: Increase ZE_MAX_DEVICES to 32
+- man: Fix typo in fi_getinfo man page
+- Fix compiler warning when compiling with ICX
+- man: Fix fi_rxm.7 and fi_collective.3 man pages
+- man: Update EFA docs for FI_EFA_INTER_MIN_READ_WRITE_SIZE
+
+## EFA
+- efa_rdm_ep_record_tx_op_submitted() rm peer lookup
+- Remove peer lookup from efa_rdm_pke_sendv()
+- Make handshake response use txe
+- test: Only close SHM if SHM peer is Created
+- Handshake code allocs txe via efa util
+- Initialize txe.rma_iov_count to 0
+- Switch fi_addr to efa_rdm_peer in trigger_handshake
+- Downgrade EFA Endpoint Creation WARN to INFO
+- Init srx_ctx before use
+- Clean up generic_send path
+- Pass in efa_rdm_ep to efa_rdm_msg_generic_recv()
+- Make recv path slightly more efficient
+- re-org rma write to avoid duplicate checks
+- Add missing sync_memops call to writedata
+- use peer pointer from txe in read, write and send
+- Pass in peer pointer to txe
+- Get rid of noop instruction from empty #define
+- Remove noop memset
+- Fix the ibv cq error handling.
+- Don't do handshake for local read
+- Fix a typo in configure.m4
+- Make runt_size aligned
+
+## OPX
+- Initialize cq error data size
+
+## RXM
+- Fix data error with FI_OFI_RXM_USE_RNDV_WRITE=1
+
+## SHM
+- Allocate peer device fds dynamically
+
+## Util
+- Fix bug in util_cq startup error case
+- util_mem_hooks: add missing parantheses
+
+## Verbs
+- Windows: Resolve regression in user data retrieval
+
+## Fabtests
+- efa: Close ibv device after use
+- efa: Get device MR limit from ibv_query_device
+- efa: Add simple unexpected test to MR exhaustion test
+- pytest: add a new ssh connection error pattern
+
 v1.20.0, Fri Nov 17, 2023
 =========================
 
