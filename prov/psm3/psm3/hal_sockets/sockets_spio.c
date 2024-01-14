@@ -648,13 +648,13 @@ psm3_sockets_tcp_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *f
 			    	// that is at flow level. Below memecpy uses msg.msg_iov that already has data
 			    	// copied from device for GPU.
 				if (res < msg.msg_iov[0].iov_len) {
-					memcpy(flow->partial_conn_msg, msg.msg_iov[0].iov_base + res,
+					memcpy(flow->partial_conn_msg, (uint8_t *)msg.msg_iov[0].iov_base + res,
 						msg.msg_iov[0].iov_len - res);
 					memcpy(flow->partial_conn_msg + msg.msg_iov[0].iov_len - res,
 						msg.msg_iov[1].iov_base, msg.msg_iov[1].iov_len);
 				} else {
 					memcpy(flow->partial_conn_msg,
-						msg.msg_iov[1].iov_base + msg.msg_iov[1].iov_len - flow->conn_msg_remainder,
+						(uint8_t *)msg.msg_iov[1].iov_base + msg.msg_iov[1].iov_len - flow->conn_msg_remainder,
 						flow->conn_msg_remainder);
 				}
 				_HFI_VDBG("New partial conn msg send: opcode=%x send=%ld remainder=%d fd=%d\n",
