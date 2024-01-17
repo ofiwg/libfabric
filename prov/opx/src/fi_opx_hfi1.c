@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2023 by Cornelis Networks.
+ * Copyright (C) 2021-2024 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1868,7 +1868,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	assert ((opx_ep->tx->pio_max_eager_tx_bytes & 0x3fu) == 0);
 	unsigned i;
 	const void* sbuf_start = (opx_mr == NULL) ? 0 : opx_mr->iov.iov_base;
-	const bool delivery_completion = params->delivery_completion;
+	const bool sdma_no_bounce_buf = params->sdma_no_bounce_buf;
 
 	/* Note that lrh_dlid is just the version of params->slid shifted so
 	   that it can be OR'd into the correct position in the packet header */
@@ -1886,8 +1886,8 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH &&
 			params->payload_bytes_for_iovec == 0));
 
-	assert((opcode == FI_OPX_HFI_DPUT_OPCODE_PUT && params->delivery_completion) ||
-		(opcode == FI_OPX_HFI_DPUT_OPCODE_GET && params->delivery_completion) ||
+	assert((opcode == FI_OPX_HFI_DPUT_OPCODE_PUT && params->sdma_no_bounce_buf) ||
+		(opcode == FI_OPX_HFI_DPUT_OPCODE_GET && params->sdma_no_bounce_buf) ||
 		(opcode != FI_OPX_HFI_DPUT_OPCODE_PUT && opcode != FI_OPX_HFI_DPUT_OPCODE_GET));
 
 	uint64_t max_eager_bytes = opx_ep->tx->pio_max_eager_tx_bytes;
@@ -1977,7 +1977,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			 * which will still be set correctly.
 			 */
 			bool need_padding = (packet_count == 1 && (sdma_we_bytes & 0x3ul));
-			params->sdma_we->use_bounce_buf = (!delivery_completion ||
+			params->sdma_we->use_bounce_buf = (!sdma_no_bounce_buf ||
 				opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
 				opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH ||
 				need_padding);
@@ -2096,7 +2096,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	// been copied to bounce buffer(s), so at this point, it should be safe
 	// for the user to alter the send buffer even though the send may still
 	// be in progress.
-	if (!params->delivery_completion) {
+	if (!params->sdma_no_bounce_buf) {
 		assert(params->origin_byte_counter);
 		*params->origin_byte_counter = 0;
 		params->origin_byte_counter = NULL;
@@ -2127,7 +2127,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 	const uint64_t bth_rx = ((uint64_t)u8_rx) << 56;
 	unsigned i;
 	const void* sbuf_start = (opx_mr == NULL) ? 0 : opx_mr->iov.iov_base;
-	const bool delivery_completion = params->delivery_completion;
+	const bool sdma_no_bounce_buf = params->sdma_no_bounce_buf;
 	assert(params->ntidpairs != 0);
 
 	/* Note that lrh_dlid is just the version of params->slid shifted so
@@ -2285,7 +2285,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 			 * are used when not DC or fetch, not for "padding".
 			 */
 			assert(!(packet_count == 1 && (bytes_to_send & 0x3ul)));
-			params->sdma_we->use_bounce_buf = !delivery_completion;
+			params->sdma_we->use_bounce_buf = !sdma_no_bounce_buf;
 
 			uint8_t *sbuf_tmp;
 			if (params->sdma_we->use_bounce_buf) {
@@ -2472,7 +2472,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 	// been copied to bounce buffer(s), so at this point, it should be safe
 	// for the user to alter the send buffer even though the send may still
 	// be in progress.
-	if (!params->delivery_completion) {
+	if (!params->sdma_no_bounce_buf) {
 		assert(params->origin_byte_counter);
 		*params->origin_byte_counter = 0;
 		params->origin_byte_counter = NULL;
@@ -2528,7 +2528,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->cc = NULL;
 	params->user_cc = NULL;
 	params->payload_bytes_for_iovec = 0;
-	params->delivery_completion = false;
+	params->sdma_no_bounce_buf = false;
 
 	params->target_byte_counter_vaddr = target_byte_counter_vaddr;
 	params->rma_request_vaddr = rma_request_vaddr;

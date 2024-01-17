@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -397,7 +397,7 @@ struct fi_opx_hfi1_dput_params {
 	uint16_t sdma_reqs_used;
 
 	bool is_intranode;
-	bool delivery_completion;
+	bool sdma_no_bounce_buf;
 	bool use_expected_opcode;
 	uint8_t u8_rx;
 	uint8_t dt;

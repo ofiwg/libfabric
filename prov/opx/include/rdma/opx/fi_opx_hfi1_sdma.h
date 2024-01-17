@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2023 by Cornelis Networks.
+ * Copyright (C) 2022-2024 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -212,14 +212,14 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
 		return;
 	}
 
-	params->delivery_completion = (length >= opx_ep->tx->dcomp_threshold) ||
-				      (is_hmem) ||
-				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_GET) ||
-				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_PUT) ||
-				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH) ||
-				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH);
+	params->sdma_no_bounce_buf = (length >= opx_ep->tx->sdma_bounce_buf_threshold) ||
+                            	(is_hmem) ||
+                            	(params->opcode == FI_OPX_HFI_DPUT_OPCODE_GET) ||
+                            	(params->opcode == FI_OPX_HFI_DPUT_OPCODE_PUT) ||
+                            	(params->opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH) ||
+                            	(params->opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH);
 
-	if (!params->delivery_completion) {
+	if (!params->sdma_no_bounce_buf) {
 		assert(params->origin_byte_counter);
 	}
 	params->user_cc = params->cc;

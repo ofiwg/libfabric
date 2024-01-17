@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2023 by Cornelis Networks.
+ * Copyright (C) 2022-2024 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -107,7 +107,7 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 	assert(slist_empty(&params->sdma_reqs));
 
 	if (!params->work_elem.complete) {
-		assert(params->delivery_completion);
+		assert(params->sdma_no_bounce_buf);
 		FI_OPX_DEBUG_COUNTERS_INC(work->dput.opx_ep->debug_counters.sdma.eagain_pending_dc);
 		return -FI_EAGAIN;
 	}
@@ -115,7 +115,7 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 	if (params->origin_byte_counter) {
 		// If we're not doing delivery_competion, then origin_byte_counter
 		// should have already been zero'd and NULL'd at the end of do_dput_sdma(...)
-		assert(params->delivery_completion);
+		assert(params->sdma_no_bounce_buf);
 		*params->origin_byte_counter = 0;
 		params->origin_byte_counter = NULL;
 	}

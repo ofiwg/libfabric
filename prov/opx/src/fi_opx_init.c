@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -678,7 +678,8 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "reliability_service_pre_ack_rate", FI_PARAM_INT, "The number of packets to receive from a particular sender before preemptively acknowledging them without waiting for a ping. Valid values are powers of 2 in the range of 0-32,768, where 0 indicates no preemptive acking. Defaults to 64.");
 	fi_param_define(&fi_opx_provider, "selinux", FI_PARAM_BOOL, "Set to true if you're running a security-enhanced Linux. This enables updating the Jkey used based on system settings. Defaults to \"No\"");
 	fi_param_define(&fi_opx_provider, "hfi_select", FI_PARAM_STRING, "Overrides the normal algorithm used to choose which HFI a process will use. See the documentation for more information.");
-	fi_param_define(&fi_opx_provider, "delivery_completion_threshold", FI_PARAM_INT, "The minimum message length in bytes to force delivery completion.  Value must be between %d and %d. Defaults to %d.", OPX_MIN_DCOMP_THRESHOLD, OPX_MAX_DCOMP_THRESHOLD, OPX_DEFAULT_DCOMP_THRESHOLD);
+	fi_param_define(&fi_opx_provider, "delivery_completion_threshold", FI_PARAM_INT, "Will be deprecated. Please use FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD");
+	fi_param_define(&fi_opx_provider, "sdma_bounce_buf_threshold", FI_PARAM_INT, "The maximum message length in bytes that will be copied to the SDMA bounce buffer. For messages larger than this threshold, the send will not be completed until receiver has ACKed. Value must be between %d and %d. Defaults to %d.", OPX_SDMA_BOUNCE_BUF_MIN, OPX_SDMA_BOUNCE_BUF_MAX, OPX_SDMA_BOUNCE_BUF_THRESHOLD);
  	fi_param_define(&fi_opx_provider, "sdma_disable", FI_PARAM_INT, "Disables SDMA offload hardware. Default is 0");
 	fi_param_define(&fi_opx_provider, "expected_receive_enable", FI_PARAM_BOOL, "Enables expected receive rendezvous using Token ID (TID). Defaults to \"No\". This feature is not currently supported.");
 	fi_param_define(&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
