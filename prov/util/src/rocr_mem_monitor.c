@@ -402,6 +402,7 @@ static struct ofi_mem_monitor rocr_mm = {
 	.subscribe = rocr_mm_subscribe,
 	.unsubscribe = rocr_mm_unsubscribe,
 	.valid = rocr_mm_valid,
+	.name = "rocr",
 };
 
 struct ofi_mem_monitor *rocr_monitor = &rocr_mm;
