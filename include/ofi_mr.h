@@ -171,6 +171,7 @@ struct ofi_mem_monitor {
 	 */
 	bool (*valid)(struct ofi_mem_monitor *notifier,
 		      const struct ofi_mr_info *info, struct ofi_mr_entry *entry);
+	const char *name;
 };
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor);

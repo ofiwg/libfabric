@@ -63,6 +63,7 @@ static struct ofi_mem_monitor cuda_ipc_monitor_ = {
 	.subscribe = ofi_monitor_subscribe_no_op,
 	.unsubscribe = ofi_monitor_unsubscribe_no_op,
 	.valid = cuda_ipc_monitor_valid,
+	.name = "cuda_ipc",
 };
 
 struct ofi_mem_monitor *cuda_ipc_monitor = &cuda_ipc_monitor_;
