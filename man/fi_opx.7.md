@@ -192,8 +192,12 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   - `FI_OPX_HFI_SELECT=default,core:1:0` all callers will use default HFI selection logic.
 
 *FI_OPX_DELIVERY_COMPLETION_THRESHOLD*
-: Integer. The minimum message length in bytes to force delivery completion.
-  Value must be between 16385 and 2147483646. Defaults to 16385.
+: Integer. Will be deprecated. Please use FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD.
+
+*FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD*
+: Integer. The maximum message length in bytes that will be copied to the SDMA bounce buffer.
+  For messages larger than this threshold, the send will not be completed until receiver
+  has ACKed. Value must be between 16385 and 2147483646. Defaults to 16385.
 
 *FI_OPX_SDMA_DISABLE*
 : Integer. Disables SDMA offload hardware. Default is 0

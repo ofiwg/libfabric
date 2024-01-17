@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2022 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -93,10 +93,9 @@ struct fi_opx_node {
 #define OPX_DEFAULT_JOB_KEY_STR "00112233445566778899aabbccddeeff"
 
 #define OPX_DEFAULT_PROG_AFFINITY_STR "0:3:1"
-
-#define OPX_MIN_DCOMP_THRESHOLD FI_OPX_SDMA_MIN_LENGTH
-#define OPX_DEFAULT_DCOMP_THRESHOLD FI_OPX_SDMA_DC_MIN
-#define OPX_MAX_DCOMP_THRESHOLD (INT_MAX - 1)
+#define OPX_SDMA_BOUNCE_BUF_MIN FI_OPX_SDMA_MIN_LENGTH
+#define OPX_SDMA_BOUNCE_BUF_THRESHOLD FI_OPX_SDMA_DC_MIN
+#define OPX_SDMA_BOUNCE_BUF_MAX (INT_MAX - 1)
 
 struct fi_opx_domain {
 	struct fid_domain	domain_fid;

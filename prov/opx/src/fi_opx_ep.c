@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -819,25 +819,28 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 
 	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Set pio_flow_eager_tx_bytes to %d \n", opx_ep->tx->pio_flow_eager_tx_bytes);
 
-	/* Set delivery completion max threshold.  Any messages larger than this value in bytes will not be copied to 
+	/* Set SDMA bounce buffer threshold.  Any messages larger than this value in bytes will not be copied to 
 	 * replay bounce buffers.  Instead, hold the sender's large message buffer until we get all ACKs back from the Rx 
 	 * side of the message.  Since no copy of the message is made, it will need to be used to handle NAKs.
 	 */
-	int l_dcomp_threshold;
-	ssize_t rc = fi_param_get_int(fi_opx_global.prov, "delivery_completion_threshold", &l_dcomp_threshold);
+	int l_sdma_bounce_buf_threshold;
+	ssize_t rc = fi_param_get_int(fi_opx_global.prov, "sdma_bounce_buf_threshold", &l_sdma_bounce_buf_threshold);
 	if (rc != FI_SUCCESS) {
-		opx_ep->tx->dcomp_threshold = OPX_DEFAULT_DCOMP_THRESHOLD;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_DELIVERY_COMPLETION_THRESHOLD not set.  Using default setting of %d\n",
-		opx_ep->tx->dcomp_threshold);
-	} else if (l_dcomp_threshold < OPX_MIN_DCOMP_THRESHOLD || l_dcomp_threshold > (OPX_MAX_DCOMP_THRESHOLD)) {
-		opx_ep->tx->dcomp_threshold = OPX_DEFAULT_DCOMP_THRESHOLD;
+		rc = fi_param_get_int(fi_opx_global.prov, "delivery_completion_threshold", &l_sdma_bounce_buf_threshold);
+	}
+	if (rc != FI_SUCCESS) {
+		opx_ep->tx->sdma_bounce_buf_threshold = OPX_SDMA_BOUNCE_BUF_THRESHOLD;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD not set.  Using default setting of %d\n",
+		opx_ep->tx->sdma_bounce_buf_threshold);
+	} else if (l_sdma_bounce_buf_threshold < OPX_SDMA_BOUNCE_BUF_MIN || l_sdma_bounce_buf_threshold > (OPX_SDMA_BOUNCE_BUF_MAX)) {
+		opx_ep->tx->sdma_bounce_buf_threshold = OPX_SDMA_BOUNCE_BUF_THRESHOLD;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"Error: FI_OPX_DELIVERY_COMPLETION_THRESHOLD was set but is outside of MIN/MAX thresholds.  Using default setting of %d\n", 
-			opx_ep->tx->dcomp_threshold);
+			"Error: FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD was set but is outside of MIN/MAX thresholds.  Using default setting of %d\n",
+			opx_ep->tx->sdma_bounce_buf_threshold);
 	} else {
-		opx_ep->tx->dcomp_threshold = l_dcomp_threshold;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_DELIVERY_COMPLETION_THRESHOLD was specified.  Set to %d\n", 
-			opx_ep->tx->dcomp_threshold);
+		opx_ep->tx->sdma_bounce_buf_threshold = l_sdma_bounce_buf_threshold;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD was specified.  Set to %d\n",
+			opx_ep->tx->sdma_bounce_buf_threshold);
 	}
 
 	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager max message length is %d, chunk-size is %d.\n", 

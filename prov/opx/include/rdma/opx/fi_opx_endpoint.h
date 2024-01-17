@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -240,7 +240,7 @@ struct fi_opx_ep_tx {
 
 	volatile union fi_opx_hfi1_pio_state	*pio_state;			/* 1 qw = 8 bytes */
 	volatile uint64_t *			pio_scb_sop_first;
-	uint32_t				dcomp_threshold;            /* const; messages over this size will always force delivery completition */
+	uint32_t				sdma_bounce_buf_threshold;
 	uint16_t 				pio_max_eager_tx_bytes;
 	uint16_t 				pio_flow_eager_tx_bytes;
 
