@@ -340,6 +340,9 @@ pipeline {
           dir ("${CUSTOM_WORKSPACE}/ucx/libfabric") {
             checkout scm
           }
+          dir ("${CUSTOM_WORKSPACE}/iouring/libfabric") {
+            checkout scm
+          }
           dir (CUSTOM_WORKSPACE) {
             checkout_external_resources()
           }
@@ -420,6 +423,13 @@ pipeline {
           steps {
             script {
               slurm_build(BUILD_MODES, "totodile", "ucx", "ucx")
+            }
+          }
+        }
+        stage ('build-iouring') {
+          steps {
+            script {
+              slurm_build(BUILD_MODES, "ivysaur", "iouring", "ivysaur")
             }
           }
         }
@@ -520,6 +530,16 @@ pipeline {
             script {
               dir (RUN_LOCATION) {
                 run_fabtests("tcp", "grass", "bulbasaur", "2", "tcp")
+              }
+            }
+          }
+        }
+        stage('tcp-iouring') {
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                run_fabtests("tcp-iouring", "ivysaur", "ivysaur", "2",
+                             "tcp", null, "FI_TCP_IO_URING=1")
               }
             }
           }
