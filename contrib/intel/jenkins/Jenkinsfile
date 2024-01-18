@@ -776,6 +776,7 @@ pipeline {
     }
     aborted {
       node ('daos_head') {
+        dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
       }
       node ('ze') {
         dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
