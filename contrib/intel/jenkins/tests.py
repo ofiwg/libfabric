@@ -659,9 +659,13 @@ class OSUtests(Test):
                           'one-sided':  (2, 1),
                           'startup':    (2, 1)
                      }
-        self.osu_src = f'{self.middlewares_path}/{mpitype}/osu/libexec/'\
+        if mpitype == 'mpich' and hw in ['water', 'grass']:
+            self.mpitype = f'{mpitype}_{hw}'
+        else:
+            self.mpitype = mpitype
+
+        self.osu_src = f'{self.middlewares_path}/{self.mpitype}/osu/libexec/'\
                        'osu-micro-benchmarks/mpi/'
-        self.mpi_type = mpitype
 
     @property
     def execute_condn(self):
