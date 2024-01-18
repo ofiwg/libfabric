@@ -878,11 +878,11 @@ def summarize_items(summary_item, logger, log_dir, mode):
 
     if summary_item == 'v3' or summary_item == 'all':
         test_types = ['h2d', 'd2d', 'xd2d']
-        for type in test_types:
+        for t in test_types:
             ret = FabtestsSummarizer(
                 logger, log_dir, 'shm',
-                f'ze_v3_shm_{type}_{mode}',
-                f"ze v3 shm {type} {mode}"
+                f'ze_v3_shm_{t}_fabtests_{mode}',
+                f"ze v3 shm {t} fabtests {mode}"
             ).summarize()
             err += ret if ret else 0
 

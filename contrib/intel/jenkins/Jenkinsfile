@@ -44,6 +44,7 @@ def run_fabtests(stage_name, hw, partition, node_num, prov, util=null,
 
   if (way) {
     opts = "${opts} --way ${way}"
+    stage_name = "${stage_name}_${way}"
     modes = ["reg"]
   }
 
