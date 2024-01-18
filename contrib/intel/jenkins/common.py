@@ -139,6 +139,10 @@ providers = {
                     'enable'     : ['shm'],
                     'disable'    : []
                   },
+    'ivysaur': {
+                    'enable'    : ['tcp'],
+                    'disable'   : []
+                  },
     'electric'  : {
                     'enable'     : ['shm'],
                     'disable'    : []

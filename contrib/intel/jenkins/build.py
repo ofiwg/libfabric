@@ -163,7 +163,7 @@ if __name__ == "__main__":
 								 'mpich'])
 	parser.add_argument('--build_hw', help="HW type for build",
 						choices=['water', 'grass', 'fire', 'electric', 'ucx',
-								 'daos', 'gpu'])
+								 'daos', 'gpu', 'ivysaur'])
 	parser.add_argument('--ofi_build_mode', help="select buildmode libfabric "\
 						"build mode", choices=['reg', 'dbg', 'dl'])
 	parser.add_argument('--build_loc', help="build location for libfabric "\

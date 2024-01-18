@@ -111,13 +111,16 @@ class Fabtest(Test):
         path = self.libfab_installpath
         efile_path = f'{path}/share/fabtests/test_configs'
 
-        prov = self.util_prov if self.util_prov else self.core_prov
-        efile_old = f'{efile_path}/{prov}/{prov}.exclude'
-
-        if self.util_prov:
-            efile = f'{efile_path}/{self.util_prov}/{self.core_prov}/exclude'
+        if self.hw == 'ivysaur':
+            efile = f'{efile_path}/{self.core_prov}/io_uring.exclude'
         else:
-            efile = f'{efile_path}/{self.core_prov}/exclude'
+            prov = self.util_prov if self.util_prov else self.core_prov
+            efile_old = f'{efile_path}/{prov}/{prov}.exclude'
+
+            if self.util_prov:
+                efile = f'{efile_path}/{self.util_prov}/{self.core_prov}/exclude'
+            else:
+                efile = f'{efile_path}/{self.core_prov}/exclude'
 
         if os.path.isfile(efile):
             return efile
