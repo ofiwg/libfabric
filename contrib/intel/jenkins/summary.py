@@ -783,8 +783,9 @@ def summarize_items(summary_item, logger, log_dir, mode):
     err = 0
     mpi_list = ['impi', 'mpich', 'ompi']
     logger.log(f"Summarizing {mode} build mode:")
+    provs = common.prov_list + [('tcp-iouring', None)]
     if summary_item == 'fabtests' or summary_item == 'all':
-        for prov,util in common.prov_list:
+        for prov,util in provs:
             if util:
                 prov = f'{prov}-{util}'
             ret = FabtestsSummarizer(
