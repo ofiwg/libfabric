@@ -970,6 +970,7 @@ void ofi_nd_send_ack(nd_cq_entry *entry, struct nd_ep *ep)
 			&ep->domain->msgfooter);
 		if (!ack_entry->prefix) {
 			hr = ND_NO_MEMORY;
+			LeaveCriticalSection(&ep->send_op.send_lock);
 			goto fn_fail;
 		}
 
