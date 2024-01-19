@@ -2690,19 +2690,20 @@ void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * st
 	}
 
 
-	/* TODO - delete rbtree and flows, but first have to notify
-	 * reliability service of the tear-down */
-	/*if (state->flow_rbtree_resynch) {
+	if (state->flow_rbtree_resynch) {
 		rbtDelete(state->flow_rbtree_resynch);
+		state->flow_rbtree_resynch = NULL;
 	}
 
 	if (state->rx_flow_rbtree) {
 		rbtDelete(state->rx_flow_rbtree);
+		state->rx_flow_rbtree = NULL;
 	}
 
 	if(state->tx_flow_rbtree) {
 		rbtDelete(state->tx_flow_rbtree);
-	}*/
+		state->tx_flow_rbtree = NULL;
+	}
 }
 
 __OPX_FORCE_INLINE__
