@@ -66,12 +66,17 @@ v1.19.1, Mon Jan 22, 2024
 - Add writedata RNR fabtest
 - Correct typo in RMA context type
 
+## NetDir
+
+- Add missing unlock in error path of nd_send_ack()
+
 ## RXM
 
 - Fix data error with FI_OFI_RXM_USE_RNDV_WRITE=1
 
 ## SHM
 
+- Fix coverity issue about resource leak
 - Allocate peer device fds dynamically
 - Add memory barrier before updating resp for atomic
 - Use peer cntr inc ops in smr_progress_cmd
@@ -89,6 +94,8 @@ v1.19.1, Mon Jan 22, 2024
 
 ## Util
 
+- Fix coverity issue about missing lock
+- Implement timeout in util_wait_yield_run()
 - memhooks: Fix a bug when calculating mprotect region
 
 ## Verbs
