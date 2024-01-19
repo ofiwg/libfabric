@@ -31,12 +31,18 @@ v1.18.3, Mon Jan 22, 2024
 - Add writedata RNR fabtest
 - Handle RNRs from RDMA writedata
 
+## NetDir
+
+- Add missing unlock in error path of nd_send_ack()
+- Release lock prior to returning from nd_send_ack
+
 ## RXM
 
 - Fix data error with FI_OFI_RXM_USE_RNDV_WRITE=1
 
 ## SHM
 
+- Fix coverity issue about resource leak
 - Allocate peer device fds dynamically
 
 ## TCP
@@ -51,6 +57,8 @@ v1.18.3, Mon Jan 22, 2024
 
 ## Util
 
+- Fix coverity issue about missing lock
+- Implement timeout in util_wait_yield_run()
 - memhooks: Fix a bug when calculating mprotect region
 
 ## Verbs
