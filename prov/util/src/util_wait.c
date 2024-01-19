@@ -599,7 +599,16 @@ static int util_wait_yield_run(struct fid_wait *wait_fid, int timeout)
 	wait = container_of(wait_fid, struct util_wait_yield, util_wait.wait_fid);
 	endtime = ofi_timeout_time(timeout);
 
-	while (!wait->signal) {
+	while (1) {
+		int signaled;
+
+		ofi_mutex_lock(&wait->signal_lock);
+		signaled = wait->signal;
+		ofi_mutex_unlock(&wait->signal_lock);
+
+		if (signaled)
+			break;
+
 		if (ofi_adjust_timeout(endtime, &timeout))
 			return -FI_ETIMEDOUT;
 		ofi_mutex_lock(&wait->util_wait.lock);
