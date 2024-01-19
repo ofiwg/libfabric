@@ -127,16 +127,19 @@ void cxip_trace_init(void)
 	if (getenv("CXIP_TRC_TEST_CODE"))
 		cxip_trace_set(CXIP_TRC_TEST_CODE);
 
+	cxip_trace_filename = NULL;
+	cxip_trace_fid = NULL;
 	if (!fname)
 		fname = "trace";
-	if (fname) {
-		asprintf(&cxip_trace_filename, "./%s%d",
-			 fname, cxip_trace_rank);
+	if (asprintf(&cxip_trace_filename, "./%s%d",
+			fname, cxip_trace_rank) > 0) {
 		cxip_trace_fid = fopen(cxip_trace_filename,
 				       cxip_trace_append ? "a" : "w");
 		if (!cxip_trace_fid) {
 			fprintf(stderr, "open(%s) failed: %s\n",
 				cxip_trace_filename, strerror(errno));
+			free(cxip_trace_filename);
+			cxip_trace_filename = NULL;
 		}
 		if (cxip_trace_linebuf && cxip_trace_fid)
 			setlinebuf(cxip_trace_fid);
@@ -159,6 +162,10 @@ void cxip_trace_close(void)
 		cxip_trace_flush();
 		fclose(cxip_trace_fid);
 		cxip_trace_fid = NULL;
+		if (cxip_trace_filename) {
+			free(cxip_trace_filename);
+			cxip_trace_filename = NULL;
+		}
 		cxip_trace_initialized = false;
 	}
 }
