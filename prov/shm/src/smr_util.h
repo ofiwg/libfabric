@@ -226,9 +226,6 @@ struct smr_region {
 	uint8_t		cma_cap_peer;
 	uint8_t		cma_cap_self;
 	uint32_t	max_sar_buf_per_peer;
-	uint8_t		xpmem_cap_self;
-	struct xpmem_pinfo xpmem_self;
-	struct xpmem_pinfo xpmem_peer;
 	void		*base_addr;
 	pthread_spinlock_t	lock; /* lock for shm access
 				 if both ep->tx_lock and this lock need to
@@ -247,6 +244,10 @@ struct smr_region {
 	size_t		peer_data_offset;
 	size_t		name_offset;
 	size_t		sock_name_offset;
+
+	uint8_t		xpmem_cap_self;
+	struct xpmem_pinfo xpmem_self;
+	struct xpmem_pinfo xpmem_peer;
 };
 
 struct smr_resp {
