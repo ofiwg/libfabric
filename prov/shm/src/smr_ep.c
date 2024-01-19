@@ -1018,8 +1018,10 @@ static void *smr_start_listener(void *args)
 					ep->sock_info->peers[id].device_fds =
 						calloc(ep->sock_info->nfds,
 							sizeof(*ep->sock_info->peers[id].device_fds));
-					if (!ep->sock_info->peers[id].device_fds)
+					if (!ep->sock_info->peers[id].device_fds) {
+						close(sock);
 						goto out;
+					}
 				}
 				memcpy(ep->sock_info->peers[id].device_fds,
 				       peer_fds, sizeof(*peer_fds) *
