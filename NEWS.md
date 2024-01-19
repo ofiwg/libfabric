@@ -10,6 +10,7 @@ v1.20.1, Mon Jan 22, 2024
 =========================
 
 ## Core
+
 - hmem/ze: Change the library name passed to dlopen
 - hmem/ze: map device id to physical device
 - hmem/ze: skip duplicate initialization
@@ -22,6 +23,7 @@ v1.20.1, Mon Jan 22, 2024
 - man: Update EFA docs for FI_EFA_INTER_MIN_READ_WRITE_SIZE
 
 ## EFA
+
 - efa_rdm_ep_record_tx_op_submitted() rm peer lookup
 - Remove peer lookup from efa_rdm_pke_sendv()
 - Make handshake response use txe
@@ -45,23 +47,37 @@ v1.20.1, Mon Jan 22, 2024
 - Fix a typo in configure.m4
 - Make runt_size aligned
 
+## NetDir
+
+- Add missing unlock in error path of nd_send_ack()
+
 ## OPX
+
 - Initialize cq error data size
 
 ## RXM
+
 - Fix data error with FI_OFI_RXM_USE_RNDV_WRITE=1
 
 ## SHM
+
+- Fix coverity issue about resource leak
+- Adjust the order of smr_region fields.
 - Allocate peer device fds dynamically
 
 ## Util
+
+- Fix coverity issue about missing lock
+- Implement timeout in util_wait_yield_run()
 - Fix bug in util_cq startup error case
 - util_mem_hooks: add missing parantheses
 
 ## Verbs
+
 - Windows: Resolve regression in user data retrieval
 
 ## Fabtests
+
 - efa: Close ibv device after use
 - efa: Get device MR limit from ibv_query_device
 - efa: Add simple unexpected test to MR exhaustion test
