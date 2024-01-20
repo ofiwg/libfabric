@@ -215,6 +215,7 @@ struct efa_rdm_ep {
 	int	hmem_p2p_opt; /* what to do for hmem transfers */
 	struct fid_ep *peer_srx_ep; /* support sharing receive context with peer providers */
 	bool cuda_api_permitted; /**< whether end point is permitted to call CUDA API */
+	bool shm_permitted; /* Whether the endpoint is allowed to use shared memory for intra-node communication */
 
 	/* use_device_rdma:
 	   Can be set via fi_setopt in API >= 1.18.

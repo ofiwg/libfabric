@@ -205,6 +205,12 @@ These OFI runtime parameters apply only to the RDM endpoint.
   [`ptrace protection`](https://wiki.ubuntu.com/SecurityTeam/Roadmap/KernelHardening#ptrace_Protection)
   is turned on. You can turn it off to enable shm transfer.
 
+  FI_EFA_ENABLE_SHM_TRANSFER is parsed during the fi_domain call and is related to the FI_OPT_SHARED_MEMORY_PERMITTED endpoint option.
+  If FI_EFA_ENABLE_SHM_TRANSFER is set to true, the FI_OPT_SHARED_MEMORY_PERMITTED endpoint
+  option overrides FI_EFA_ENABLE_SHM_TRANSFER. If FI_EFA_ENABLE_SHM_TRANSFER is set to false,
+  but the FI_OPT_SHARED_MEMORY_PERMITTED is set to true, the FI_OPT_SHARED_MEMORY_PERMITTED
+  setopt call will fail with -FI_EINVAL.
+
 *FI_EFA_SHM_AV_SIZE*
 : Defines the maximum number of entries in SHM provider's address vector.
 
