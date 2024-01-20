@@ -581,3 +581,24 @@ void test_efa_rdm_ep_getopt_oversized_optlen(struct efa_resource **state)
 {
 	test_efa_rdm_ep_getopt(state, 16, FI_SUCCESS);
 }
+
+void test_efa_rdm_ep_setopt_shared_memory_permitted(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	bool optval = false;
+
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
+				   FI_OPT_SHARED_MEMORY_PERMITTED, &optval,
+				   sizeof(optval)),
+			 0);
+
+	assert_int_equal(fi_enable(resource->ep), 0);
+
+	assert_null(ep->shm_ep);
+}

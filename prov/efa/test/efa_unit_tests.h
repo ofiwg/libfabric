@@ -102,6 +102,7 @@ void test_efa_rdm_ep_dc_atomic_error_handling();
 void test_efa_rdm_ep_send_with_shm_no_copy();
 void test_efa_rdm_ep_rma_without_caps();
 void test_efa_rdm_ep_atomic_without_caps();
+void test_efa_rdm_ep_setopt_shared_memory_permitted();
 void test_dgram_cq_read_empty_cq();
 void test_ibv_cq_ex_read_empty_cq();
 void test_ibv_cq_ex_read_failed_poll();
