@@ -233,6 +233,9 @@ struct fi_opx_debug_counters {
 		uint64_t	multi_recv_eager;
 		uint64_t	multi_recv_rzv_noncontig;
 		uint64_t	multi_recv_rzv_contig;
+
+		uint64_t	rhf_error;
+
 	} recv;
 
 	struct {
@@ -385,6 +388,7 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters)
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_eager);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_rzv_noncontig);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_rzv_contig);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.rhf_error);
 	#endif
 
 	#ifdef OPX_DEBUG_COUNTERS_RELIABILITY

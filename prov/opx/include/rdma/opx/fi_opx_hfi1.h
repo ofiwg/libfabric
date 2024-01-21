@@ -568,9 +568,9 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context state.rxe.hdrq.head           %#lX\n",context->state.rxe.hdrq.head);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context state.rxe.hdrq.rhf_seq        %#lX \n",context->state.rxe.hdrq.rhf_seq);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.pio.scb_sop_first pio_bufbase_sop        %p \n",context->info.pio.scb_sop_first);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.pio.scb_first pio_bufbase           %p \n",context->info.pio.scb_first);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.pio.free_counter_shadow  %p credits: %#lX\n", context->info.pio.credits_addr,
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.pio.scb_sop_first pio_bufbase_sop %p \n",context->info.pio.scb_sop_first);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.pio.scb_first pio_bufbase         %p \n",context->info.pio.scb_first);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.pio.free_counter_shadow           %p credits: %#lX\n",context->info.pio.credits_addr,
 	       context->info.pio.credits_addr ? * context->info.pio.credits_addr : 0UL);
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.available_counter   %#X\n",context->info.sdma.available_counter);

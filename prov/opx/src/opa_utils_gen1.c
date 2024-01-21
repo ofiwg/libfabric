@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021 Cornelis Networks.
+  Copyright(c) 2021-2024 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -23,7 +23,7 @@
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021 Cornelis Networks.
+  Copyright(c) 2021-2024 Cornelis Networks.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -103,7 +103,7 @@ int opx_hfi_set_pkey(struct _hfi_ctrl *ctrl, uint16_t pkey)
 	cmd.len = 0;
 	cmd.addr = (uint64_t) pkey;
 
-	_HFI_VDBG("Setting context pkey to 0x%04x.\n", pkey);
+	_HFI_VDBG("Setting context pkey to 0x%04x on fd %d.\n", pkey, ctrl->fd);
 	if (opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd)) == -1) {
 		_HFI_INFO("Setting context pkey to 0x%04x failed: %s\n",
 			  pkey, strerror(errno));

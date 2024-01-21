@@ -490,10 +490,10 @@ int opx_hfi_get_port_lid(int unit, int port)
 
 	if (opx_hfi_get_port_active(unit,port) != 1)
 		return -2;
+
 	ret = opx_sysfs_port_read_s64(unit, port, "lid", &val, 0);
 	_HFI_VDBG("opx_hfi_get_port_lid: ret %d, unit %d port %d val=%ld\n", ret, unit,
 		  port, val);
-
 	if (ret == -1) {
 		if (errno == ENODEV)
 			/* this is "normal" for port != 1, on single port chips */

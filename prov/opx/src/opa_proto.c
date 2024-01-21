@@ -434,8 +434,8 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	cinfo = &spctrl->ctxt_info;
 	binfo = &spctrl->base_info;
 
-	_HFI_PDBG("CONTEXT INIT uinfo: ver %x, alg %d, subc_cnt %d, subc_id %d\n",
-		  uinfo->userversion, uinfo->hfi1_alg,
+	_HFI_PDBG("CONTEXT INIT uinfo: ver %#x, pad %d, alg %d, subc_cnt %d, subc_id %d\n",
+		  uinfo->userversion, uinfo->pad, uinfo->hfi1_alg,
 		  uinfo->subctxt_cnt, uinfo->subctxt_id);
 
 	/* 1. ask driver to assign context to current process */
@@ -460,6 +460,9 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 		uinfo_new.subctxt_cnt = uinfo->subctxt_cnt;
 		uinfo_new.subctxt_id  = uinfo->subctxt_id;
 		memcpy(uinfo_new.uuid,uinfo->uuid,sizeof(uinfo_new.uuid));
+		_HFI_PDBG("CONTEXT INIT uinfo_new: ver %#x, pad %d, subc_cnt %d, subc_id %d\n",
+			  uinfo_new.userversion, uinfo_new.pad,
+			  uinfo_new.subctxt_cnt, uinfo_new.subctxt_id);
 	}
 	else
 	{
@@ -497,6 +500,9 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 		memcpy(uinfo->uuid,uinfo_new.uuid,sizeof(uinfo_new.uuid));
 	}
 #endif
+	_HFI_PDBG("CONTEXT INIT output uinfo: ver %#x, pad %d, alg %d, subc_cnt %d, subc_id %d\n",
+		  uinfo->userversion, uinfo->pad, uinfo->hfi1_alg,
+		  uinfo->subctxt_cnt, uinfo->subctxt_id);
 
 	/* 2. get context info from driver */
 	c.type = OPX_HFI_CMD_CTXT_INFO;
@@ -634,14 +640,16 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 		 * port (lids) should fail to lowest
 		 * working port (likely 1).
 		 */
+		_HFI_INFO("HFI_PORT %d/%s requested.\n", port, getenv("HFI_PORT"));
 	}
-	if ((port != OPX_PORT_NUM_ANY) &&
-	    (opx_hfi_get_port_lid(spctrl->__hfi_unit, port) <= 0)) {
-		_HFI_INFO("HFI_PORT %s not available.\n", getenv("HFI_PORT"));
-		port = OPX_PORT_NUM_ANY;
-	}
+#ifdef OPX_PRE_CN5000
+	/* The port index is already in the "pad" */
+	port = uinfo->pad + 1;
+	_HFI_DBG("OPX_PRE_CN5000 pad/port index %d, port %d\n", uinfo->pad, port);
+#endif
 	if (port == OPX_PORT_NUM_ANY) {
 		int p,rv;
+		/* Use first working port */
 		for (p = OPX_MIN_PORT; p <= OPX_MAX_PORT; p++) {
 			_HFI_DBG("units %d, port %d, MIN %d, MAX %d\n", spctrl->__hfi_unit, p, OPX_MIN_PORT, OPX_MAX_PORT);
 			if ((rv=opx_hfi_get_port_lid(spctrl->__hfi_unit, p)) > 0) {
@@ -651,18 +659,11 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 			_HFI_DBG("rv %d\n", rv);
 		}
 	}
-	/* Both WFR and JKR should have port 1 unless
-	 * JKR specifically asked HFI_PORT=2
-	 */
 	if((port > OPX_MAX_PORT) | (port < OPX_MIN_PORT)) {
 		_HFI_ERROR("Active port not found\n");
 		abort();
 	}
-#ifdef OPX_JKR
-	assert(port == 1 || port == 2);
-#else
-	assert(port == 1);
-#endif
+
 	/*
 	 * driver should provide the port where the context is opened for, But
 	 * OPA driver does not have port interface to psm because there is only
