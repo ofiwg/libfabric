@@ -128,12 +128,47 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl,
 	int fd;
 
 	fd = opx_hfi_context_open(hfi_unit_number, 0, 0);
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "opx_hfi_context_open fd %d.\n",fd);
 	if (fd < 0) {
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to open HFI unit %d.\n",
 			hfi_unit_number);
 		fd = -1;
 	} else {
 		memset(&internal->user_info, 0, sizeof(internal->user_info));
+#ifdef OPX_PRE_CN5000
+		/* The environment variable is the "port" (PSM2 legacy)
+		 * A "port index" is always the "port" number - 1
+		 */
+		int port_index = OPX_PORT_NUM_ANY - 1;
+		if (getenv("HFI_PORT")) {
+			/* calculate port index from requested port */
+			port_index = atoi(getenv("HFI_PORT")) - 1;
+			assert((port_index == -1) || (port_index == 0) || (port_index == 1));
+		}
+		if (port_index == (OPX_PORT_NUM_ANY - 1)) {
+			/* Rudimentary attempt at load balancing across ports */
+			const pid_t pid = getpid();
+			/* Spread port index from pid (even 0, odd 1) */
+			port_index = (pid & (pid_t) 0x1);
+			/* check if port is usable and swap if it's down,
+			   assuming here that at least one port is working */
+			if (opx_hfi_get_port_lid(hfi_unit_number, (port_index + 1)) <= 0) {
+				 FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+					 "OPX_PRE_CN5000 port index %d failed, use %d,  pid %d\n",
+					 port_index, port_index ? 0 : 1,  getpid());
+				port_index = port_index ? 0 : 1 ;
+			}
+		}
+		/* Whatever we got from user or ANY better work now. */
+		assert(opx_hfi_get_port_lid(hfi_unit_number, (port_index + 1)) > 0);
+
+		/* Use ioctl pad field to request a port index on the context. */
+		internal->user_info.pad = port_index;
+		FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC,
+			     "OPX_PRE_CN5000 userinfo pad/port index %d, internal->context.hfi_port %u, pid %d\n",
+			     internal->user_info.pad, internal->context.hfi_port, getpid());
+#endif
+
 		internal->user_info.userversion =
 			HFI1_USER_SWMINOR |
 			(opx_hfi_get_user_major_version() << HFI1_SWMAJOR_SHIFT);
@@ -143,7 +178,7 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl,
 		internal->user_info.subctxt_cnt = 0;
 
 		memcpy(internal->user_info.uuid, unique_job_key,
-			sizeof(internal->user_info.uuid));
+		       sizeof(internal->user_info.uuid));
 
 		*ctrl = opx_hfi_userinit(fd, &internal->user_info);
 		if (!*ctrl) {
@@ -210,7 +245,9 @@ void fi_opx_init_hfi_lookup()
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Single HFI 0 found. No need for HFI hashmap.\n");
 		return;
 	}
-
+	/* Will need to fix opx_hfi_get_port_lid below to handle multiple ports on
+	 * multiple hfi-units.  For now, multiple ports are considered remote.
+	 */
 	for (hfi_unit = 0; hfi_unit < hfi_units; hfi_unit++) {
 		int lid = opx_hfi_get_port_lid(hfi_unit, OPX_MIN_PORT);
 
@@ -662,6 +699,9 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 
 	int lid = 0;
 	lid = opx_hfi_get_port_lid(ctrl->__hfi_unit, ctrl->__hfi_port);
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,"lid = %d ctrl->__hfi_unit %u, ctrl->__hfi_port %u\n",
+		lid, ctrl->__hfi_unit, ctrl->__hfi_port);
+
 	assert(lid > 0);
 
 	uint64_t gid_hi, gid_lo;
@@ -734,7 +774,6 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			goto ctxt_open_err;
 		}
 		rc = opx_hfi_set_pkey(ctrl, user_pkey);
-
 		if (rc) {
 			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set.  This pkey is likely not registered/valid.\n",
 				user_pkey);
@@ -3311,6 +3350,7 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
 		"%s:%s():%d drop this packet and allow reliability protocol to retry, psn = %u\n",
 		__FILE__, __func__, __LINE__, FI_OPX_HFI1_PACKET_PSN(hdr));
 #endif
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.recv.rhf_error);
 
 	if (OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd)) {
 		/* "consume" this egrq element */

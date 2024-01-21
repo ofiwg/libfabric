@@ -52,7 +52,7 @@
 */
 
 /* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
-/* Copyright (c) 2021 Cornelis Networks.                      */
+/* Copyright (c) 2021-2024 Cornelis Networks.                      */
 
 /* This file contains a simple sysfs interface used by the low level
    hfi protocol code. */
