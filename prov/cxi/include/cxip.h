@@ -2771,6 +2771,19 @@ void cxip_cmdq_free(struct cxip_cmdq *cmdq);
 int cxip_cmdq_emit_c_state(struct cxip_cmdq *cmdq,
 			   const struct c_cstate_cmd *cmd);
 
+static inline bool cxip_cmdq_empty(struct cxip_cmdq *cmdq)
+{
+	return cxi_cq_empty(cmdq->dev_cmdq);
+}
+
+static inline bool cxip_cmdq_match(struct cxip_cmdq *cmdq, uint16_t vni,
+				   enum cxi_traffic_class tc,
+				   enum cxi_traffic_class_type tc_type)
+{
+	return (cmdq->cur_cp->vni == vni) && (cmdq->cur_cp->tc == tc) &&
+		(cmdq->cur_cp->tc_type == tc_type);
+}
+
 int cxip_evtq_init(struct cxip_evtq *evtq, struct cxip_cq *cq,
 		   size_t num_events, size_t num_fc_events);
 void cxip_evtq_fini(struct cxip_evtq *eq);
