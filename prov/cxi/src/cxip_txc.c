@@ -528,6 +528,18 @@ int cxip_txc_emit_idc_put(struct cxip_txc *txc, uint16_t vni,
 	if (!cxip_txc_can_emit_op(txc, c_state->event_success_disable))
 		return -FI_EAGAIN;
 
+	if (txc->ep_obj->av_auth_key) {
+		ret = cxip_domain_emit_idc_put(txc->domain, vni, tc, c_state,
+					       put, buf, len, flags);
+		if (ret)
+			TXC_WARN(txc, "Failed to emit domain idc put: %d\n",
+				 ret);
+		else if (!c_state->event_success_disable)
+			ofi_atomic_inc32(&txc->otx_reqs);
+
+		return ret;
+	}
+
 	/* Ensure correct traffic class is used. */
 	ret = cxip_cmdq_cp_set(txc->tx_cmdq, vni, tc, tc_type);
 	if (ret) {
