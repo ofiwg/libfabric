@@ -80,6 +80,75 @@ err_free_mem:
 	return ret;
 }
 
+/* Hardware only allows for 16 different command profiles per RGID. Since each
+ * domain maps to a single RGID, this means effectively limits the number of
+ * TX command queue per domain to be 16. Since one TX command queue is
+ * reserved for triggered commands, real number is 15.
+ */
+#define MAX_DOM_TX_CMDQ 15U
+
+static int cxip_domain_find_cmdq(struct cxip_domain *dom,
+				 uint16_t vni,
+				 enum cxi_traffic_class tc,
+				 struct cxip_domain_cmdq **dom_cmdq)
+{
+	struct cxip_domain_cmdq *cmdq;
+	int ret;
+
+	/* Prefer existing command queues. */
+	dlist_foreach_container(&dom->cmdq_list, struct cxip_domain_cmdq, cmdq,
+				entry) {
+		if (cxip_cmdq_match(cmdq->cmdq, vni, tc,
+				    CXI_TC_TYPE_DEFAULT)) {
+			*dom_cmdq = cmdq;
+			return FI_SUCCESS;
+		}
+	}
+
+	/* Prefer reusing an empty command queue instead of allocating a new
+	 * one.
+	 */
+	dlist_foreach_container(&dom->cmdq_list, struct cxip_domain_cmdq, cmdq,
+				entry) {
+		if (cxip_cmdq_empty(cmdq->cmdq)) {
+
+			/* TODO: This needs to use new direct CP profile feature
+			 * which disables sharing of communication profile
+			 * across TX command queues.
+			 */
+			ret = cxip_cmdq_cp_set(cmdq->cmdq, vni, tc,
+					       CXI_TC_TYPE_DEFAULT);
+			if (ret) {
+				CXIP_WARN("Failed to change communication profile: %d\n",
+					  ret);
+				return ret;
+			}
+
+			*dom_cmdq = cmdq;
+			return FI_SUCCESS;
+		}
+	}
+
+	/* Last resort is allocating a new transmit command queue. If limit has
+	 * been reached, only option is to change communication profile for
+	 * existing TX cmdq.
+	 */
+	if (dom->cmdq_cnt == MAX_DOM_TX_CMDQ) {
+		CXIP_WARN("At domain command queue max\n");
+		return -FI_EAGAIN;
+	}
+
+	ret = cxip_domain_cmdq_alloc(dom, vni, tc, &cmdq);
+	if (ret) {
+		CXIP_WARN("Failed to allocate domain command queue: %d\n", ret);
+		return ret;
+	}
+
+	*dom_cmdq = cmdq;
+
+	return FI_SUCCESS;
+}
+
 /*
  * cxip_domain_req_alloc() - Allocate a domain control buffer ID
  */
