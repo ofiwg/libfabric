@@ -149,6 +149,41 @@ static int cxip_domain_find_cmdq(struct cxip_domain *dom,
 	return FI_SUCCESS;
 }
 
+int cxip_domain_emit_idc_put(struct cxip_domain *dom, uint16_t vni,
+			     enum cxi_traffic_class tc,
+			     const struct c_cstate_cmd *c_state,
+			     const struct c_idc_put_cmd *put, const void *buf,
+			     size_t len, uint64_t flags)
+{
+	int ret;
+	struct cxip_domain_cmdq *cmdq;
+
+	ofi_genlock_lock(&dom->cmdq_lock);
+
+	ret = cxip_domain_find_cmdq(dom, vni, tc, &cmdq);
+	if (ret) {
+		CXIP_WARN("Failed to find command queue: %d\n", ret);
+		goto out_unlock;
+	}
+
+	ret = cxip_cmdq_emit_idc_put(cmdq->cmdq, c_state, put, buf, len, flags);
+	if (ret) {
+		CXIP_WARN("Failed to emit idc_put: %d\n", ret);
+		goto out_unlock;
+	}
+
+	cxi_cq_ring(cmdq->cmdq->dev_cmdq);
+
+	ofi_genlock_unlock(&dom->cmdq_lock);
+
+	return FI_SUCCESS;
+
+out_unlock:
+	ofi_genlock_unlock(&dom->cmdq_lock);
+
+	return ret;
+}
+
 /*
  * cxip_domain_req_alloc() - Allocate a domain control buffer ID
  */
