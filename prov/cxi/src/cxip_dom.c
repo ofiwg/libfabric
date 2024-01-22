@@ -20,6 +20,66 @@
 
 extern struct fi_ops_mr cxip_dom_mr_ops;
 
+static void cxip_domain_cmdq_free(struct cxip_domain *dom)
+{
+	struct cxip_domain_cmdq *cmdq;
+
+	while ((cmdq = dlist_first_entry_or_null(&dom->cmdq_list,
+						 struct cxip_domain_cmdq,
+						 entry))) {
+
+		cxip_cmdq_free(cmdq->cmdq);
+		dlist_remove(&cmdq->entry);
+		dom->cmdq_cnt--;
+		free(cmdq);
+	}
+}
+
+static int cxip_domain_cmdq_alloc(struct cxip_domain *dom,
+				  uint16_t vni,
+				  enum cxi_traffic_class tc,
+				  struct cxip_domain_cmdq **dom_cmdq)
+{
+	struct cxip_domain_cmdq *cmdq;
+	struct cxi_cq_alloc_opts cq_opts = {
+		.flags = CXI_CQ_IS_TX,
+	};
+	int ret;
+
+	cmdq = calloc(1, sizeof(*cmdq));
+	if (!cmdq) {
+		CXIP_WARN("Failed to allocate cmdq memory\n");
+		return -FI_ENOMEM;
+	}
+
+	/* Domain managed transmit command queues require being updated on
+	 * empty to be able to safely change communication profile VNI.
+	 */
+	cq_opts.policy = CXI_CQ_UPDATE_HIGH_FREQ_EMPTY;
+
+	/* An IDC command can use up to 4x 64 byte slots. */
+	cq_opts.count = 4 * dom->tx_size;
+
+	ret = cxip_cmdq_alloc(dom->lni, NULL, &cq_opts, vni, tc,
+			      CXI_TC_TYPE_DEFAULT, &cmdq->cmdq);
+	if (ret) {
+		CXIP_WARN("Failed to allocate cmdq: %d\n", ret);
+		goto err_free_mem;
+	}
+
+	dlist_insert_head(&cmdq->entry, &dom->cmdq_list);
+	dom->cmdq_cnt++;
+
+	*dom_cmdq = cmdq;
+
+	return FI_SUCCESS;
+
+err_free_mem:
+	free(cmdq);
+
+	return ret;
+}
+
 /*
  * cxip_domain_req_alloc() - Allocate a domain control buffer ID
  */
@@ -261,6 +321,7 @@ static int cxip_dom_close(struct fid *fid)
 		cxip_telemetry_free(dom->telemetry);
 	}
 
+	cxip_domain_cmdq_free(dom);
 	cxip_domain_disable(dom);
 
 	assert(dlist_empty(&dom->cmdq_list));
@@ -1491,6 +1552,19 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	dlist_init(&cxi_domain->cmdq_list);
 	cxi_domain->cmdq_cnt = 0;
+
+	/* Align domain TX command size based on EP TX size attribute. In
+	 * addition, support ENV vars to override size.
+	 */
+	cxi_domain->tx_size = 0;
+	if (info->tx_attr)
+		cxi_domain->tx_size = info->tx_attr->size;
+
+	if (!info->tx_attr) {
+		cxi_domain->tx_size = cxip_env.default_tx_size;
+		cxi_domain->tx_size =
+			MAX(cxip_env.default_cq_size, cxi_domain->tx_size);
+	}
 
 	if (cxi_domain->util_domain.threading == FI_THREAD_DOMAIN)
 		ofi_genlock_init(&cxi_domain->cmdq_lock, OFI_LOCK_NONE);

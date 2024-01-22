@@ -938,6 +938,7 @@ struct cxip_domain {
 	struct dlist_entry cmdq_list;
 	unsigned int cmdq_cnt;
 	struct ofi_genlock cmdq_lock;
+	size_t tx_size;
 };
 
 static inline bool cxip_domain_mr_cache_enabled(struct cxip_domain *dom)
