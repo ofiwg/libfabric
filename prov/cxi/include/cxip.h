@@ -817,6 +817,11 @@ struct cxip_telemetry_entry {
 	unsigned long value;
 };
 
+struct cxip_domain_cmdq {
+	struct dlist_entry entry;
+	struct cxip_cmdq *cmdq;
+};
+
 /*
  * CXI Provider Domain object
  */
@@ -926,6 +931,13 @@ struct cxip_domain {
 
 	/* Domain has been configured with FI_AV_USER_ID. */
 	bool av_user_id;
+
+	/* Domain level TX command queues used when number of authorization
+	 * keys exceeds LCID limit.
+	 */
+	struct dlist_entry cmdq_list;
+	unsigned int cmdq_cnt;
+	struct ofi_genlock cmdq_lock;
 };
 
 static inline bool cxip_domain_mr_cache_enabled(struct cxip_domain *dom)

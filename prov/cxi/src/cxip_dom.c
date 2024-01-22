@@ -263,11 +263,15 @@ static int cxip_dom_close(struct fid *fid)
 
 	cxip_domain_disable(dom);
 
+	assert(dlist_empty(&dom->cmdq_list));
+	assert(dom->cmdq_cnt == 0);
+
 	ofi_spin_destroy(&dom->lock);
 	ofi_spin_destroy(&dom->ctrl_id_lock);
 	ofi_idx_reset(&dom->req_ids);
 	ofi_idx_reset(&dom->mr_ids);
 	ofi_domain_close(&dom->util_domain);
+	ofi_genlock_destroy(&dom->cmdq_lock);
 	free(dom);
 
 	return 0;
@@ -1484,6 +1488,14 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	cxi_domain->util_domain.domain_fid.fid.ops = &cxip_dom_fi_ops;
 	cxi_domain->util_domain.domain_fid.ops = &cxip_dom_ops;
 	cxi_domain->util_domain.domain_fid.mr = &cxip_dom_mr_ops;
+
+	dlist_init(&cxi_domain->cmdq_list);
+	cxi_domain->cmdq_cnt = 0;
+
+	if (cxi_domain->util_domain.threading == FI_THREAD_DOMAIN)
+		ofi_genlock_init(&cxi_domain->cmdq_lock, OFI_LOCK_NONE);
+	else
+		ofi_genlock_init(&cxi_domain->cmdq_lock, OFI_LOCK_MUTEX);
 
 	dlist_init(&cxi_domain->txc_list);
 	dlist_init(&cxi_domain->cntr_list);
