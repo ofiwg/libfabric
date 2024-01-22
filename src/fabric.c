@@ -445,7 +445,7 @@ static struct fi_provider *ofi_get_hook(const char *name)
 static void ofi_ordered_provs_init(void)
 {
 	char *ordered_prov_names[] = {
-		"efa", "psm2", "opx", "verbs",
+		"efa", "psm2", "opx", "verbs", "cxi",
 		"netdir", "psm3", "ucx", "ofi_rxm", "ofi_rxd", "shm",
 
 		/* Initialize the socket based providers last of the
@@ -545,6 +545,7 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	    !strcasecmp(provider->name, "efa") ||
 	    !strcasecmp(provider->name, "psm3") ||
 	    !strcasecmp(provider->name, "ucx") ||
+	    !strcasecmp(provider->name, "cxi") ||
 	    ofi_is_util_prov(provider))
 		ofi_prov_ctx(provider)->disable_layering = true;
 
@@ -898,6 +899,7 @@ void fi_ini(void)
 
 	ofi_register_provider(PSM3_INIT, NULL);
 	ofi_register_provider(PSM2_INIT, NULL);
+	ofi_register_provider(CXI_INIT, NULL);
 	ofi_register_provider(SHM_INIT, NULL);
 	ofi_register_provider(SM2_INIT, NULL);
 

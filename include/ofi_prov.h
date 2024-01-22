@@ -48,6 +48,17 @@
  * not built: no-op call for ctor
 */
 
+#if (HAVE_CXI) && (HAVE_CXI_DL)
+#  define CXI_INI FI_EXT_INI
+#  define CXI_INIT NULL
+#elif (HAVE_CXI)
+#  define CXI_INI INI_SIG(fi_cxi_ini)
+#  define CXI_INIT fi_cxi_ini()
+CXI_INI ;
+#else
+#  define CXI_INIT NULL
+#endif
+
 /* If HAVE_EFA is defined on Windows, then the VisualStudio project configures
  * MSBuild to include the efa related files and exclude the verbs related files.
  * With the verbs related files excluded from the build, we need only ensure
