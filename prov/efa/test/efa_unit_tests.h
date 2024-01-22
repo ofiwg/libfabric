@@ -30,9 +30,12 @@ struct efa_resource {
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type);
 
 void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type);
+void efa_unit_test_resource_construct_ep_not_enabled(
+	struct efa_resource *resource, enum fi_ep_type ep_type);
 void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 						 enum fi_ep_type ep_type,
-						 struct fi_info* hints);
+						 struct fi_info *hints,
+						 bool enable_ep);
 
 void efa_unit_test_resource_destruct(struct efa_resource *resource);
 
