@@ -958,6 +958,11 @@ int cxip_domain_emit_dma_amo(struct cxip_domain *dom, uint16_t vni,
 			     enum cxi_traffic_class tc,
 			     struct c_dma_amo_cmd *amo, uint64_t flags,
 			     bool fetching, bool flush);
+int cxip_domain_emit_idc_msg(struct cxip_domain *dom, uint16_t vni,
+			     enum cxi_traffic_class tc,
+			     const struct c_cstate_cmd *c_state,
+			     const struct c_idc_msg_hdr *msg, const void *buf,
+			     size_t len, uint64_t flags);
 
 static inline bool cxip_domain_mr_cache_enabled(struct cxip_domain *dom)
 {
