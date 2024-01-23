@@ -184,6 +184,39 @@ out_unlock:
 	return ret;
 }
 
+int cxip_domain_emit_dma(struct cxip_domain *dom, uint16_t vni,
+			 enum cxi_traffic_class tc, struct c_full_dma_cmd *dma,
+			 uint64_t flags)
+{
+	int ret;
+	struct cxip_domain_cmdq *cmdq;
+
+	ofi_genlock_lock(&dom->cmdq_lock);
+
+	ret = cxip_domain_find_cmdq(dom, vni, tc, &cmdq);
+	if (ret) {
+		CXIP_WARN("Failed to find command queue: %d\n", ret);
+		goto out_unlock;
+	}
+
+	ret = cxip_cmdq_emit_dma(cmdq->cmdq, dma, flags);
+	if (ret) {
+		CXIP_WARN("Failed to emit dma: %d\n", ret);
+		goto out_unlock;
+	}
+
+	cxi_cq_ring(cmdq->cmdq->dev_cmdq);
+
+	ofi_genlock_unlock(&dom->cmdq_lock);
+
+	return FI_SUCCESS;
+
+out_unlock:
+	ofi_genlock_unlock(&dom->cmdq_lock);
+
+	return ret;
+}
+
 /*
  * cxip_domain_req_alloc() - Allocate a domain control buffer ID
  */
