@@ -153,6 +153,86 @@ block being written in order, it will also guarantee data to be
 delivered to the target buffer only once.
 If endpoint is not able to support this feature, it will return
 -FI_EOPNOTSUPP for the call to fi_setopt().
+.SH PROVIDER SPECIFIC DOMAIN OPS
+.PP
+The efa provider exports extensions for operations that are not provided
+by the standard libfabric interface.
+These extensions are available via the \[lq]\f[C]fi_ext_efa.h\f[R]\[rq]
+header file.
+.SS Domain Operation Extension
+.PP
+Domain operation extension is obtained by calling \f[C]fi_open_ops\f[R]
+(see \f[C]fi_domain(3)\f[R])
+.IP
+.nf
+\f[C]
+int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
+    void **ops, void *context);
+\f[R]
+.fi
+.PP
+and requesting \f[C]FI_EFA_DOMAIN_OPS\f[R] in \f[C]name\f[R].
+\f[C]fi_open_ops\f[R] returns \f[C]ops\f[R] as the pointer to the
+function table \f[C]fi_efa_ops_domain\f[R] defined as follows:
+.IP
+.nf
+\f[C]
+struct fi_efa_ops_domain {
+    int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
+};
+\f[R]
+.fi
+.PP
+It contains the following operations
+.SS query_mr
+.PP
+This op query an existing memory registration as input, and outputs the
+efa specific mr attribute which is defined as follows
+.IP
+.nf
+\f[C]
+struct fi_efa_mr_attr {
+    uint16_t ic_id_validity;
+    uint16_t recv_ic_id;
+    uint16_t rdma_read_ic_id;
+    uint16_t rdma_recv_ic_id;
+};
+\f[R]
+.fi
+.TP
+\f[I]ic_id_validity\f[R]
+Validity mask of interconnect id fields.
+Currently the following bits are supported in the mask:
+.RS
+.PP
+FI_EFA_MR_ATTR_RECV_IC_ID: recv_ic_id has a valid value.
+.PP
+FI_EFA_MR_ATTR_RDMA_READ_IC_ID: rdma_read_ic_id has a valid value.
+.PP
+FI_EFA_MR_ATTR_RDMA_RECV_IC_ID: rdma_recv_ic_id has a valid value.
+.RE
+.TP
+\f[I]recv_ic_id\f[R]
+Physical interconnect used by the device to reach the MR for receive
+operation.
+It is only valid when \f[C]ic_id_validity\f[R] has the
+\f[C]FI_EFA_MR_ATTR_RECV_IC_ID\f[R] bit.
+.TP
+\f[I]rdma_read_ic_id\f[R]
+Physical interconnect used by the device to reach the MR for RDMA read
+operation.
+It is only valid when \f[C]ic_id_validity\f[R] has the
+\f[C]FI_EFA_MR_ATTR_RDMA_READ_IC_ID\f[R] bit.
+.TP
+\f[I]rdma_recv_ic_id\f[R]
+Physical interconnect used by the device to reach the MR for RDMA write
+receive.
+It is only valid when \f[C]ic_id_validity\f[R] has the
+\f[C]FI_EFA_MR_ATTR_RDMA_RECV_IC_ID\f[R] bit.
+.SS Return value
+.PP
+\f[B]query_mr()\f[R] returns 0 on success, or the value of errno on
+failure (which indicates the failure reason).
 .SH RUNTIME PARAMETERS
 .TP
 \f[I]FI_EFA_TX_SIZE\f[R]
