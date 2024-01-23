@@ -598,6 +598,15 @@ int cxip_rxc_emit_idc_msg(struct cxip_rxc *rxc, uint16_t vni,
 {
 	int ret;
 
+	if (rxc->ep_obj->av_auth_key) {
+		ret = cxip_domain_emit_idc_msg(rxc->domain, vni, tc, c_state,
+					       msg, buf, len, flags);
+		if (ret)
+			RXC_WARN(rxc, "Failed to emit domain idc msg: %d\n",
+				 ret);
+		return ret;
+	}
+
 	/* Ensure correct traffic class is used. */
 	ret = cxip_cmdq_cp_set(rxc->tx_cmdq, vni, tc, tc_type);
 	if (ret) {
