@@ -134,6 +134,69 @@ provider for AWS Neuron or Habana SynapseAI.
   delivered to the target buffer only once. If endpoint is not able to support
   this feature, it will return -FI_EOPNOTSUPP for the call to fi_setopt().
 
+# PROVIDER SPECIFIC DOMAIN OPS
+The efa provider exports extensions for operations
+that are not provided by the standard libfabric interface. These extensions
+are available via the "`fi_ext_efa.h`" header file.
+
+## Domain Operation Extension
+
+Domain operation extension is obtained by calling `fi_open_ops`
+(see [`fi_domain(3)`](fi_domain.3.html))
+```c
+int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
+    void **ops, void *context);
+```
+and requesting `FI_EFA_DOMAIN_OPS` in `name`. `fi_open_ops` returns `ops` as
+the pointer to the function table `fi_efa_ops_domain` defined as follows:
+
+```c
+struct fi_efa_ops_domain {
+	int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
+};
+```
+
+It contains the following operations
+
+### query_mr
+This op query an existing memory registration as input, and outputs the efa
+specific mr attribute which is defined as follows
+
+```c
+struct fi_efa_mr_attr {
+    uint16_t ic_id_validity;
+    uint16_t recv_ic_id;
+    uint16_t rdma_read_ic_id;
+    uint16_t rdma_recv_ic_id;
+};
+```
+
+*ic_id_validity*
+:	Validity mask of interconnect id fields. Currently the following bits are supported in the mask:
+
+	FI_EFA_MR_ATTR_RECV_IC_ID:
+		recv_ic_id has a valid value.
+
+	FI_EFA_MR_ATTR_RDMA_READ_IC_ID:
+		rdma_read_ic_id has a valid value.
+
+	FI_EFA_MR_ATTR_RDMA_RECV_IC_ID:
+		rdma_recv_ic_id has a valid value.
+
+*recv_ic_id*
+:	Physical interconnect used by the device to reach the MR for receive operation. It is only valid when `ic_id_validity` has the `FI_EFA_MR_ATTR_RECV_IC_ID` bit.
+
+*rdma_read_ic_id*
+:	Physical interconnect used by the device to reach the MR for RDMA read operation. It is only valid when `ic_id_validity` has the `FI_EFA_MR_ATTR_RDMA_READ_IC_ID` bit.
+
+*rdma_recv_ic_id*
+:	Physical interconnect used by the device to reach the MR for RDMA write receive. It is only valid when `ic_id_validity` has the `FI_EFA_MR_ATTR_RDMA_RECV_IC_ID` bit.
+
+#### Return value
+**query_mr()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+
 # RUNTIME PARAMETERS
 
 *FI_EFA_TX_SIZE*
