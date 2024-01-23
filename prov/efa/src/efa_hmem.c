@@ -156,16 +156,15 @@ static int efa_domain_hmem_info_init_cuda(struct efa_domain *efa_domain)
 		return 0;
 	}
 
-	info->initialized = true;
-
 	cuda_ret = ofi_cudaMalloc(&ptr, len);
 	if (cuda_ret != cudaSuccess) {
 		EFA_WARN(FI_LOG_DOMAIN,
 			 "Failed to allocate CUDA buffer: %s\n",
 			 ofi_cudaGetErrorString(cuda_ret));
-		return -FI_ENOMEM;
+		return 0;
 	}
 
+	info->initialized = true;
 	info->p2p_disabled_by_user = false;
 
 	/* If user is using libfabric API 1.18 or later, by default EFA provider is permitted to
