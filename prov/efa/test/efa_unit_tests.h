@@ -150,5 +150,7 @@ void test_efa_rdm_peer_get_runt_size_host_memory_exceeding_total_len();
 void test_efa_rdm_peer_get_runt_size_host_memory_normal();
 void test_efa_rdm_peer_select_readbase_rtm_no_runt();
 void test_efa_rdm_peer_select_readbase_rtm_do_runt();
+void test_efa_domain_open_ops_wrong_name();
+void test_efa_domain_open_ops_mr_query();
 
 #endif

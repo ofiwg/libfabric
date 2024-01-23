@@ -94,6 +94,7 @@ _efa_headers = \
 	prov/efa/src/efa_tp.h \
 	prov/efa/src/efa_prov.h \
 	prov/efa/src/efa_env.h \
+	prov/efa/src/fi_ext_efa.h \
 	prov/efa/src/dgram/efa_dgram_ep.h \
 	prov/efa/src/dgram/efa_dgram_cq.h \
 	prov/efa/src/rdm/efa_rdm_peer.h	\
@@ -132,6 +133,7 @@ nodist_prov_efa_test_efa_unit_test_SOURCES = \
 	prov/efa/test/efa_unit_tests.c \
 	prov/efa/test/efa_unit_test_mocks.c \
 	prov/efa/test/efa_unit_test_common.c \
+	prov/efa/test/efa_unit_test_domain.c \
 	prov/efa/test/efa_unit_test_ep.c \
 	prov/efa/test/efa_unit_test_av.c \
 	prov/efa/test/efa_unit_test_cq.c \
@@ -164,6 +166,10 @@ if HAVE_NEURON
 prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=neuron_alloc
 endif HAVE_NEURON
 
+if HAVE_EFADV_QUERY_MR
+prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=efadv_query_mr
+endif HAVE_EFADV_QUERY_MR
+
 prov_efa_test_efa_unit_test_LIBS = $(efa_LIBS) $(linkback)
 
 endif ENABLE_EFA_UNIT_TEST
@@ -172,6 +178,9 @@ efa_CPPFLAGS += \
 	-I$(top_srcdir)/prov/efa/src/ \
 	-I$(top_srcdir)/prov/efa/src/dgram/ \
 	-I$(top_srcdir)/prov/efa/src/rdm/
+
+rdmainclude_HEADERS += \
+	prov/efa/src/fi_ext_efa.h
 
 if HAVE_EFA_DL
 pkglib_LTLIBRARIES += libefa-fi.la

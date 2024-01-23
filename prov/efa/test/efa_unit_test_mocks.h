@@ -102,6 +102,10 @@ struct efa_unit_test_mocks
 					  size_t hmem_iov_count, uint64_t hmem_iov_offset);
 
 	enum ibv_fork_status (*ibv_is_fork_initialized)(void);
+
+#if HAVE_EFADV_QUERY_MR
+	int (*efadv_query_mr)(struct ibv_mr *ibv_mr, struct efadv_mr_attr *attr, uint32_t inlen);
+#endif
 };
 
 struct ibv_cq_ex *efa_mock_create_cq_ex_return_null(struct ibv_context *context, struct ibv_cq_init_attr_ex *init_attr);
@@ -132,6 +136,14 @@ struct ibv_cq_ex *efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null(struct
 #if HAVE_NEURON
 void *__real_neuron_alloc(void **handle, size_t size);
 void *efa_mock_neuron_alloc_return_null(void **handle, size_t size);
+#endif
+
+#if HAVE_EFADV_QUERY_MR
+int __real_efadv_query_mr(struct ibv_mr *ibv_mr, struct efadv_mr_attr *attr, uint32_t inlen);
+int efa_mock_efadv_query_mr_recv_ic_id_0(struct ibv_mr *ibv_mr, struct efadv_mr_attr *attr, uint32_t inlen);
+int efa_mock_efadv_query_mr_rdma_read_ic_id_1(struct ibv_mr *ibv_mr, struct efadv_mr_attr *attr, uint32_t inlen);
+int efa_mock_efadv_query_mr_rdma_recv_ic_id_2(struct ibv_mr *ibv_mr, struct efadv_mr_attr *attr, uint32_t inlen);
+int efa_mock_efadv_query_mr_recv_and_rdma_read_ic_id_0_1(struct ibv_mr *ibv_mr, struct efadv_mr_attr *attr, uint32_t inlen);
 #endif
 
 enum ibv_fork_status __real_ibv_is_fork_initialized(void);
