@@ -946,6 +946,9 @@ int cxip_domain_emit_idc_put(struct cxip_domain *dom, uint16_t vni,
 			     const struct c_cstate_cmd *c_state,
 			     const struct c_idc_put_cmd *put, const void *buf,
 			     size_t len, uint64_t flags);
+int cxip_domain_emit_dma(struct cxip_domain *dom, uint16_t vni,
+			 enum cxi_traffic_class tc, struct c_full_dma_cmd *dma,
+			 uint64_t flags);
 
 static inline bool cxip_domain_mr_cache_enabled(struct cxip_domain *dom)
 {
