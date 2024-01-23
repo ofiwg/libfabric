@@ -118,20 +118,32 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	idc_msg.match_bits = req->send.mb.raw;
 	idc_msg.user_ptr = (uint64_t)req;
 
-	ret = cxip_cmdq_cp_set(txq, req->send.vni, CXI_TC_BEST_EFFORT,
-			       CXI_TC_TYPE_DEFAULT);
-	if (ret) {
-		CXIP_DBG("Failed to set cp: %d\n", ret);
-		goto err_return_credit;
-	}
+	if (req->ep_obj->av_auth_key) {
+		ret = cxip_domain_emit_idc_msg(req->ep_obj->domain,
+					       req->send.vni,
+					       CXI_TC_BEST_EFFORT, &c_state,
+					       &idc_msg, NULL, 0, 0);
+		if (ret) {
+			CXIP_DBG("Failed to write domain IDC: %d\n", ret);
+			goto err_return_credit;
+		}
+	} else {
+		ret = cxip_cmdq_cp_set(txq, req->send.vni, CXI_TC_BEST_EFFORT,
+				       CXI_TC_TYPE_DEFAULT);
+		if (ret) {
+			CXIP_DBG("Failed to set cp: %d\n", ret);
+			goto err_return_credit;
+		}
 
-	ret = cxip_cmdq_emit_idc_msg(txq, &c_state, &idc_msg, NULL, 0, 0);
-	if (ret) {
-		CXIP_DBG("Failed to write IDC: %d\n", ret);
-		goto err_return_credit;
-	}
+		ret = cxip_cmdq_emit_idc_msg(txq, &c_state, &idc_msg, NULL, 0,
+					     0);
+		if (ret) {
+			CXIP_DBG("Failed to write IDC: %d\n", ret);
+			goto err_return_credit;
+		}
 
-	cxi_cq_ring(txq->dev_cmdq);
+		cxi_cq_ring(txq->dev_cmdq);
+	}
 
 	CXIP_DBG("Queued control message: %p\n", req);
 
