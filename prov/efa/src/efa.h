@@ -81,6 +81,7 @@
 #include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_peer.h"
 #include "rdm/efa_rdm_util.h"
+#include "fi_ext_efa.h"
 
 #define EFA_ABI_VER_MAX_LEN 8
 
