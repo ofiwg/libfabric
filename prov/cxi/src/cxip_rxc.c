@@ -561,6 +561,14 @@ int cxip_rxc_emit_dma(struct cxip_rxc *rxc, uint16_t vni,
 {
 	int ret;
 
+	if (rxc->ep_obj->av_auth_key) {
+		ret = cxip_domain_emit_dma(rxc->domain, vni, tc, dma, flags);
+		if (ret)
+			TXC_WARN(rxc, "Failed to emit domain dma command: %d\n",
+				 ret);
+		return ret;
+	}
+
 	/* Ensure correct traffic class is used. */
 	ret = cxip_cmdq_cp_set(rxc->tx_cmdq, vni, tc, tc_type);
 	if (ret) {
