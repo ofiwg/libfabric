@@ -704,6 +704,18 @@ int cxip_txc_emit_dma_amo(struct cxip_txc *txc, uint16_t vni,
 		return ret;
 	}
 
+	if (txc->ep_obj->av_auth_key) {
+		ret = cxip_domain_emit_dma_amo(txc->domain, vni, tc, amo, flags,
+					       fetching, flush);
+		if (ret)
+			TXC_WARN(txc, "Failed to emit domain amo: %d\n",
+				 ret);
+		else if (!amo->event_success_disable)
+			ofi_atomic_inc32(&txc->otx_reqs);
+
+		return ret;
+	}
+
 	/* Ensure correct traffic class is used. */
 	ret = cxip_cmdq_cp_set(txc->tx_cmdq, vni, tc, tc_type);
 	if (ret) {
