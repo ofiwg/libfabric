@@ -67,6 +67,7 @@
 #include <ofi_epoll.h>
 #include <ofi_proto.h>
 #include <ofi_bitmask.h>
+#include <ofi_rcu.h>
 
 #include "rbtree.h"
 #include "uthash.h"
@@ -503,8 +504,10 @@ struct util_cq {
 	struct util_domain	*domain;
 	struct util_wait	*wait;
 	ofi_atomic32_t		ref;
-	struct dlist_entry	ep_list;
-	struct ofi_genlock	ep_list_lock;
+
+	ofi_mutex_t		cntrl_iface_lock;
+	struct ofi_rcu_list	*ep_list;
+
 	struct ofi_genlock	cq_lock;
 	uint64_t		flags;
 
@@ -524,6 +527,7 @@ struct util_cq {
 	fi_addr_t		*src;
 	struct slist		aux_queue;
 	fi_cq_read_func		read_entry;
+	bool			progressing_cq;
 };
 
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,

@@ -53,13 +53,17 @@ rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 {
 	struct util_cq *cq;
 	struct rxm_ep *rxm_ep;
-	struct fid_list_entry *fid_entry;
+	const char *error = NULL;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
-	fid_entry = container_of(cq->ep_list.next, struct fid_list_entry, entry);
-	rxm_ep = container_of(fid_entry->fid, struct rxm_ep, util_ep.ep_fid);
-
-	return fi_cq_strerror(rxm_ep->msg_cq, prov_errno, err_data, buf, len);
+	ofi_mutex_lock(&cq->cntrl_iface_lock);
+	if (!cq->ep_list->num_items)
+		goto out;
+	rxm_ep = container_of(cq->ep_list->items[0], struct rxm_ep, util_ep);
+	error = fi_cq_strerror(rxm_ep->msg_cq, prov_errno, err_data, buf, len);
+out:
+	ofi_mutex_unlock(&cq->cntrl_iface_lock);
+	return error;
 }
 
 static struct rxm_rx_buf *

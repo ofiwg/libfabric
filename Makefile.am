@@ -203,6 +203,7 @@ src_libfabric_la_SOURCES =			\
 	include/uthash.h			\
 	include/ofi_prov.h			\
 	include/ofi_profile.h       \
+	include/ofi_rcu.h			\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\
