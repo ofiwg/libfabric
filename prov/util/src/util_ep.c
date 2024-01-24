@@ -283,6 +283,9 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 void ofi_endpoint_clean_resources(struct util_ep *util_ep) {
 	int i;
 
+	if (!util_ep)
+		return;
+
 	/* Do not clean EP resources until all CQ's have unbound */
 	if (ofi_atomic_get32(&util_ep->cq_ref))
 		return;
@@ -336,19 +339,19 @@ int ofi_endpoint_close(struct util_ep *util_ep)
 		}
 
 		if (util_ep->rx_cq) {
-			ofi_mutex_lock(&util_ep->tx_cq->cntrl_iface_lock);
+			ofi_mutex_lock(&util_ep->rx_cq->cntrl_iface_lock);
 
-        		tmp_ep_list = array_list_remove_item(util_ep, util_ep->tx_cq);
+			tmp_ep_list = array_list_remove_item(util_ep, util_ep->rx_cq);
 			ep_list_to_delete_insert(&util_ep->rx_cq->ep_list_to_delete, tmp_ep_list, util_ep);
 
 			ofi_atomic_dec32(&util_ep->rx_cq->ref);
 			ofi_atomic_dec32(&util_ep->cq_ref);
 
-			ofi_mutex_unlock(&util_ep->tx_cq->cntrl_iface_lock);
+			ofi_mutex_unlock(&util_ep->rx_cq->cntrl_iface_lock);
 		}
 	} else {
-        	ofi_endpoint_clean_resources(util_ep);
+		ofi_endpoint_clean_resources(util_ep);
 	}
 
-    return FI_SUCCESS;
+	return FI_SUCCESS;
 }
