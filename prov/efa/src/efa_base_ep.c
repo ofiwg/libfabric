@@ -86,19 +86,21 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 {
 	int err;
 
-	fi_freeinfo(base_ep->info);
-
-	if (base_ep->self_ah)
-		ibv_destroy_ah(base_ep->self_ah);
-
-	err = efa_base_ep_destruct_qp(base_ep);
-
+	/* We need to free the util_ep first to avoid race conditions
+	 * with other threads progressing the cq. */
 	if (base_ep->util_ep_initialized) {
 		err = ofi_endpoint_close(&base_ep->util_ep);
 		if (err)
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close util EP\n");
 		base_ep->util_ep_initialized = false;
 	}
+
+	fi_freeinfo(base_ep->info);
+
+	if (base_ep->self_ah)
+		ibv_destroy_ah(base_ep->self_ah);
+
+	err = efa_base_ep_destruct_qp(base_ep);
 
 	if (base_ep->efa_recv_wr_vec)
 		free(base_ep->efa_recv_wr_vec);
@@ -384,7 +386,7 @@ bool efa_base_ep_support_op_in_order_aligned_128_bytes(struct efa_base_ep *base_
  * Therefore it is really the last resort to report an error.
  * If the base_ep is not binded to an EQ, or write to EQ failed,
  * this function will print the error message to console, then abort()
- * 
+ *
  * @param[in,out] ep	base endpoint
  * @param[in] err	OFI error code
  * @param[in] prov_errno	provider error code
