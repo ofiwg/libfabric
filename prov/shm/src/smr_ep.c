@@ -879,9 +879,9 @@ static int smr_ep_bind_cq(struct smr_ep *ep, struct util_cq *cq, uint64_t flags)
 			return ret;
 	}
 
-	ret = fid_list_insert2(&cq->ep_list,
-			      &cq->ep_list_lock,
-			      &ep->util_ep.ep_fid.fid);
+	// ret = fid_list_insert2(&cq->ep_list,
+	// 		      &cq->ep_list_lock,
+	// 		      &ep->util_ep.ep_fid.fid);
 
 	return ret;
 }
