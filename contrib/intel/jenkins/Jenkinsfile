@@ -705,7 +705,7 @@ pipeline {
               dir (RUN_LOCATION) {
                 def providers = [["shm", null]]
                 def directions = ["h2d", "d2d", "xd2d"]
-                def base_cmd = "python3.9 runtests.py --device=ze"
+                def base_cmd = "python3.9 runtests.py --device=ze --build_hw=gpu"
                 def prefix = "${env.LOG_DIR}/ze_v3_"
                 def suffix = "_reg"
                 for (prov in providers) {
