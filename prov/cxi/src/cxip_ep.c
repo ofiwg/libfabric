@@ -1163,6 +1163,11 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	if (!ep_obj)
 		return -FI_ENOMEM;
 
+	ep_obj->protocol = hints->ep_attr->protocol;
+	/* If user is still using CXI_COMPAT point to right protocol */
+	if (ep_obj->protocol == FI_PROTO_OPX)
+		ep_obj->protocol = FI_PROTO_CXI;
+
 	txc = &ep_obj->txc;
 	rxc = &ep_obj->rxc;
 

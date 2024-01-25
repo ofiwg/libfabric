@@ -2175,6 +2175,11 @@ struct cxip_ep_obj {
 
 	bool enabled;
 
+	/* Endpoint protocol implmentation.
+	 * FI_PROTO_CXI - Portals SAS protocol
+	 */
+	uint32_t protocol;
+
 	struct cxil_wait_obj *ctrl_wait;
 	struct cxi_eq *ctrl_tgt_evtq;
 	struct cxi_eq *ctrl_tx_evtq;
