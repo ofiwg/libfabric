@@ -95,10 +95,10 @@ def multinodetest(hw, core, hosts, mode, user_env, log_file, util):
               .format(runmultinodetest.testname))
     print("-------------------------------------------------------------------")
 
-def ze_fabtests(core, hosts, mode, way, user_env, log_file, util):
+def ze_fabtests(hw, core, hosts, mode, way, user_env, log_file, util):
 
-    runzefabtests = tests.ZeFabtests(jobname=jbname,buildno=bno,
-                                     testname="ze test", core_prov=core,
+    runzefabtests = tests.ZeFabtests(jobname=jbname, buildno=bno,
+                                     testname="ze test", core_prov=core, hw=hw,
                                      fabric=fab, hosts=hosts,
                                      ofi_build_mode=mode, user_env=user_env,
                                      log_file=log_file, util_prov=util)

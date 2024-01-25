@@ -154,7 +154,7 @@ if(args_core):
             run.dmabuftests(build_hw, args_core, hosts, ofi_build_mode,
                             user_env, log_file, args_util)
     else:
-        run.ze_fabtests(args_core, hosts, ofi_build_mode, way, user_env, log_file,
-                        args_util)
+        run.ze_fabtests(build_hw, args_core, hosts, ofi_build_mode, way,
+                        user_env, log_file, args_util)
 else:
     print("Error : Specify a core provider to run tests")

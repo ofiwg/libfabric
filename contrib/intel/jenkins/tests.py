@@ -355,10 +355,10 @@ class MultinodeTests(Test):
         os.chdir(curdir)
 
 class ZeFabtests(Test):
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, core_prov, hw, fabric,
                  hosts, ofi_build_mode, user_env, log_file, util_prov=None):
 
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, hw, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, log_file, None, util_prov)
 
         self.fabtestpath = f'{self.libfab_installpath}/bin'
