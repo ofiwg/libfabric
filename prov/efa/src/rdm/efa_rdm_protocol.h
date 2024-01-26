@@ -233,7 +233,7 @@ struct efa_rdm_readrsp_hdr {
 	uint64_t seg_length;
 };
 
-EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_ctsdata_hdr, sizeof (struct efa_rdm_ctsdata_hdr));
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_readrsp_hdr, 24);
 
 struct efa_rdm_readrsp_pkt {
 	struct efa_rdm_readrsp_hdr hdr;
