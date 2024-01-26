@@ -733,7 +733,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	cmd.event_send_disable = 1;
 
 	/* Must deliver to TX event queue */
-	cmd.eq = cxip_evtq_eqn(&rxc->ep_obj->txc.tx_evtq);
+	cmd.eq = cxip_evtq_eqn(&rxc->ep_obj->txc->tx_evtq);
 
 	if (req->recv.rdzv_proto == CXIP_RDZV_PROTO_ALT_READ) {
 		pid_idx = CXIP_PTL_IDX_RDZV_RESTRICTED(req->recv.rdzv_lac);
@@ -846,7 +846,7 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 
 	c_state.event_send_disable = 1;
 	c_state.index_ext = idx_ext;
-	c_state.eq = cxip_evtq_eqn(&rxc->ep_obj->txc.tx_evtq);
+	c_state.eq = cxip_evtq_eqn(&rxc->ep_obj->txc->tx_evtq);
 
 	idc_msg.dfa = dfa;
 	idc_msg.match_bits = mb.raw;
@@ -1562,7 +1562,7 @@ static int cxip_rdzv_done_notify(struct cxip_req *req)
 	cmd.index_ext = idx_ext;
 	cmd.event_send_disable = 1;
 	cmd.dfa = dfa;
-	cmd.eq = cxip_evtq_eqn(&rxc->ep_obj->txc.tx_evtq);
+	cmd.eq = cxip_evtq_eqn(&rxc->ep_obj->txc->tx_evtq);
 	cmd.user_ptr = (uint64_t)req;
 	cmd.initiator = match_id;
 	cmd.match_bits = mb.raw;
@@ -2237,7 +2237,7 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint32_t nic_addr,
 			  uint32_t pid, uint16_t vni, uint16_t drops)
 {
-	struct cxip_rxc *rxc = &ep_obj->rxc;
+	struct cxip_rxc *rxc = ep_obj->rxc;
 	struct cxip_fc_drops *fc_drops;
 	int ret __attribute__((unused));
 
@@ -3615,7 +3615,7 @@ int cxip_build_ux_entry_info(struct cxip_ep *ep,
 			     struct fi_cq_tagged_entry *entry, size_t count,
 			     fi_addr_t *src_addr, size_t *ux_count)
 {
-	struct cxip_rxc *rxc = &ep->ep_obj->rxc;
+	struct cxip_rxc *rxc = ep->ep_obj->rxc;
 	struct cxip_ux_dump_state *ux_dump;
 	struct cxip_ux_send *ux_send;
 	struct dlist_entry *tmp;
@@ -5148,7 +5148,7 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
 int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid,
 		   uint16_t vni)
 {
-	struct cxip_txc *txc = &ep_obj->txc;
+	struct cxip_txc *txc = ep_obj->txc;
 	struct cxip_fc_peer *peer;
 	struct cxip_addr caddr = {
 		.nic = nic_addr,
@@ -5528,7 +5528,7 @@ static ssize_t cxip_trecv(struct fid_ep *fid_ep, void *buf, size_t len,
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	return cxip_recv_common(&ep->ep_obj->rxc, buf, len, desc, src_addr,
+	return cxip_recv_common(ep->ep_obj->rxc, buf, len, desc, src_addr,
 				tag, ignore, context, ep->rx_attr.op_flags,
 				true, NULL);
 }
@@ -5551,11 +5551,11 @@ static ssize_t cxip_trecvv(struct fid_ep *fid_ep, const struct iovec *iov,
 		buf = iov[0].iov_base;
 		mr_desc = desc ? desc[0] : NULL;
 	} else {
-		RXC_WARN(&ep->ep_obj->rxc, "Invalid IOV\n");
+		RXC_WARN(ep->ep_obj->rxc, "Invalid IOV\n");
 		return -FI_EINVAL;
 	}
 
-	return cxip_recv_common(&ep->ep_obj->rxc, buf, len, mr_desc, src_addr,
+	return cxip_recv_common(ep->ep_obj->rxc, buf, len, mr_desc, src_addr,
 				tag, ignore, context, ep->rx_attr.op_flags,
 				true, NULL);
 }
@@ -5573,14 +5573,14 @@ static ssize_t cxip_trecvmsg(struct fid_ep *fid_ep,
 		return -FI_EBADFLAGS;
 
 	if (!msg) {
-		RXC_WARN(&ep->ep_obj->rxc, "NULL msg not supported\n");
+		RXC_WARN(ep->ep_obj->rxc, "NULL msg not supported\n");
 		return -FI_EINVAL;
 	}
 
 	/* If selective completion is not requested, always generate
 	 * completions.
 	 */
-	if (!ep->ep_obj->rxc.selective_completion)
+	if (!ep->ep_obj->rxc->selective_completion)
 		flags |= FI_COMPLETION;
 
 	if (!(flags & FI_PEEK)) {
@@ -5593,17 +5593,17 @@ static ssize_t cxip_trecvmsg(struct fid_ep *fid_ep,
 			buf = msg->msg_iov[0].iov_base;
 			mr_desc = msg->desc ? msg->desc[0] : NULL;
 		} else {
-			RXC_WARN(&ep->ep_obj->rxc, "Invalid IOV\n");
+			RXC_WARN(ep->ep_obj->rxc, "Invalid IOV\n");
 			return -FI_EINVAL;
 		}
 
-		return cxip_recv_common(&ep->ep_obj->rxc, buf, len, mr_desc,
+		return cxip_recv_common(ep->ep_obj->rxc, buf, len, mr_desc,
 					msg->addr, msg->tag, msg->ignore,
 					msg->context, flags, true, NULL);
 	}
 
 	/* FI_PEEK does not post a recv or return message payload */
-	return cxip_recv_common(&ep->ep_obj->rxc, NULL, 0UL, NULL, msg->addr,
+	return cxip_recv_common(ep->ep_obj->rxc, NULL, 0UL, NULL, msg->addr,
 				msg->tag, msg->ignore, msg->context, flags,
 				true, NULL);
 }
@@ -5614,7 +5614,7 @@ static ssize_t cxip_tsend(struct fid_ep *fid_ep, const void *buf, size_t len,
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
+	return cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
 				desc, 0, dest_addr, tag, context,
 				ep->tx_attr.op_flags, true, false, 0,
 				NULL, NULL);
@@ -5638,11 +5638,11 @@ static ssize_t cxip_tsendv(struct fid_ep *fid_ep, const struct iovec *iov,
 		buf = iov[0].iov_base;
 		mr_desc = desc ? desc[0] : NULL;
 	} else {
-		TXC_WARN(&ep->ep_obj->txc, "Invalid IOV\n");
+		TXC_WARN(ep->ep_obj->txc, "Invalid IOV\n");
 		return -FI_EINVAL;
 	}
 
-	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
+	return cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
 				mr_desc, 0, dest_addr, tag, context,
 				ep->tx_attr.op_flags, true, false, 0, NULL,
 				NULL);
@@ -5652,13 +5652,13 @@ static ssize_t cxip_tsendmsg(struct fid_ep *fid_ep,
 			     const struct fi_msg_tagged *msg, uint64_t flags)
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
-	struct cxip_txc *txc = &ep->ep_obj->txc;
+	struct cxip_txc *txc = ep->ep_obj->txc;
 	size_t len;
 	const void *buf;
 	void *mr_desc;
 
 	if (!msg) {
-		TXC_WARN(&ep->ep_obj->txc, "NULL msg not supported\n");
+		TXC_WARN(ep->ep_obj->txc, "NULL msg not supported\n");
 		return -FI_EINVAL;
 	}
 
@@ -5671,7 +5671,7 @@ static ssize_t cxip_tsendmsg(struct fid_ep *fid_ep,
 		buf = msg->msg_iov[0].iov_base;
 		mr_desc = msg->desc ? msg->desc[0] : NULL;
 	} else {
-		TXC_WARN(&ep->ep_obj->txc, "Invalid IOV\n");
+		TXC_WARN(ep->ep_obj->txc, "Invalid IOV\n");
 		return -FI_EINVAL;
 	}
 
@@ -5697,7 +5697,7 @@ static ssize_t cxip_tinject(struct fid_ep *fid_ep, const void *buf, size_t len,
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
+	return cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
 				NULL, 0, dest_addr, tag, NULL, FI_INJECT,
 				true, false, 0, NULL, NULL);
 }
@@ -5708,7 +5708,7 @@ static ssize_t cxip_tsenddata(struct fid_ep *fid_ep, const void *buf,
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
+	return cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
 				desc, data, dest_addr, tag, context,
 				ep->tx_attr.op_flags | FI_REMOTE_CQ_DATA,
 				true, false, 0, NULL, NULL);
@@ -5720,7 +5720,7 @@ static ssize_t cxip_tinjectdata(struct fid_ep *fid_ep, const void *buf,
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf,
+	return cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf,
 				len, NULL, data, dest_addr, tag, NULL,
 				FI_INJECT | FI_REMOTE_CQ_DATA,
 				true, false, 0, NULL, NULL);
@@ -5783,7 +5783,7 @@ static ssize_t cxip_recv(struct fid_ep *fid_ep, void *buf, size_t len,
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	return cxip_recv_common(&ep->ep_obj->rxc, buf, len, desc, src_addr, 0,
+	return cxip_recv_common(ep->ep_obj->rxc, buf, len, desc, src_addr, 0,
 				0, context, ep->rx_attr.op_flags, false, NULL);
 }
 
@@ -5805,11 +5805,11 @@ static ssize_t cxip_recvv(struct fid_ep *fid_ep, const struct iovec *iov,
 		buf = iov[0].iov_base;
 		mr_desc = desc ? desc[0] : NULL;
 	} else {
-		RXC_WARN(&ep->ep_obj->rxc, "Invalid IOV\n");
+		RXC_WARN(ep->ep_obj->rxc, "Invalid IOV\n");
 		return -FI_EINVAL;
 	}
 
-	return cxip_recv_common(&ep->ep_obj->rxc, buf, len, mr_desc, src_addr,
+	return cxip_recv_common(ep->ep_obj->rxc, buf, len, mr_desc, src_addr,
 				0, 0, context, ep->rx_attr.op_flags, false,
 				NULL);
 }
@@ -5818,7 +5818,7 @@ static ssize_t cxip_recvmsg(struct fid_ep *fid_ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
-	struct cxip_rxc *rxc = &ep->ep_obj->rxc;
+	struct cxip_rxc *rxc = ep->ep_obj->rxc;
 	size_t len;
 	void *buf;
 	void *mr_desc;
@@ -5840,7 +5840,7 @@ static ssize_t cxip_recvmsg(struct fid_ep *fid_ep, const struct fi_msg *msg,
 		buf = msg->msg_iov[0].iov_base;
 		mr_desc = msg->desc ? msg->desc[0] : NULL;
 	} else {
-		RXC_WARN(&ep->ep_obj->rxc, "Invalid IOV\n");
+		RXC_WARN(ep->ep_obj->rxc, "Invalid IOV\n");
 		return -FI_EINVAL;
 	}
 
@@ -5859,7 +5859,7 @@ static ssize_t cxip_send(struct fid_ep *fid_ep, const void *buf, size_t len,
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass,
+	return cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass,
 				buf, len, desc, 0, dest_addr, 0, context,
 				ep->tx_attr.op_flags, false, false, 0,
 				NULL, NULL);
@@ -5883,11 +5883,11 @@ static ssize_t cxip_sendv(struct fid_ep *fid_ep, const struct iovec *iov,
 		buf = iov[0].iov_base;
 		mr_desc = desc ? desc[0] : NULL;
 	} else {
-		TXC_WARN(&ep->ep_obj->txc, "Invalid IOV\n");
+		TXC_WARN(ep->ep_obj->txc, "Invalid IOV\n");
 		return -FI_EINVAL;
 	}
 
-	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass,
+	return cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass,
 				buf, len, mr_desc, 0, dest_addr, 0, context,
 				ep->tx_attr.op_flags, false, false, 0,
 				NULL, NULL);
@@ -5897,13 +5897,13 @@ static ssize_t cxip_sendmsg(struct fid_ep *fid_ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
-	struct cxip_txc *txc = &ep->ep_obj->txc;
+	struct cxip_txc *txc = ep->ep_obj->txc;
 	size_t len;
 	const void *buf;
 	void *mr_desc;
 
 	if (!msg) {
-		TXC_WARN(&ep->ep_obj->txc, "NULL msg not supported\n");
+		TXC_WARN(ep->ep_obj->txc, "NULL msg not supported\n");
 		return -FI_EINVAL;
 	}
 
@@ -5916,7 +5916,7 @@ static ssize_t cxip_sendmsg(struct fid_ep *fid_ep, const struct fi_msg *msg,
 		buf = msg->msg_iov[0].iov_base;
 		mr_desc = msg->desc ? msg->desc[0] : NULL;
 	} else {
-		TXC_WARN(&ep->ep_obj->txc, "Invalid IOV\n");
+		TXC_WARN(ep->ep_obj->txc, "Invalid IOV\n");
 		return -FI_EINVAL;
 	}
 
@@ -5942,7 +5942,7 @@ static ssize_t cxip_inject(struct fid_ep *fid_ep, const void *buf, size_t len,
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf,
+	return cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf,
 				len, NULL, 0, dest_addr, 0, NULL, FI_INJECT,
 				false, false, 0, NULL, NULL);
 }
@@ -5953,7 +5953,7 @@ static ssize_t cxip_senddata(struct fid_ep *fid_ep, const void *buf, size_t len,
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf,
+	return cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf,
 				len, desc, data, dest_addr, 0, context,
 				ep->tx_attr.op_flags | FI_REMOTE_CQ_DATA,
 				false, false, 0, NULL, NULL);
@@ -5964,7 +5964,7 @@ static ssize_t cxip_injectdata(struct fid_ep *fid_ep, const void *buf,
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf,
+	return cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf,
 				len, NULL, data, dest_addr, 0, NULL,
 				FI_INJECT | FI_REMOTE_CQ_DATA,
 				false, false, 0, NULL, NULL);
