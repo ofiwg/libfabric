@@ -105,3 +105,56 @@ fi_multinode -C msg
 
 # fi_multinode -C rma fails with no output
 fi_multinode -C rma
+
+# fi_rdm_tagged_bw -v -U fails with
+# fi_rdm_tagged_bw: prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rdm_tagged_bw -v -U
+
+# fi_poll fails with
+# fi_poll: prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_poll
+
+# fi_rma_bw -e rdm -o write -U fails with
+# prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rma_bw -e rdm -o write -U
+
+# fi_rma_bw -e rdm -o writedata -U fails with
+# prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rma_bw -e rdm -o writedata -U
+
+# fi_rma_bw -e rdm -o writedata fails with
+# fi_rma_bw: prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rma_bw -e rdm -o writedata
+
+# fi_rdm_cntr_pingpong fails with
+# fi_cntr_wait(): common/shared.c:2481, ret=-4 (Interrupted system call)
+# fi_rdm_cntr_pingpong: prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rdm_cntr_pingpong
+
+# fi_rdm_tagged_bw -U fails with
+# fi_rdm_tagged_bw: prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rdm_tagged_bw
+
+# fi_rdm_tagged_pingpong -v -U fails with
+# fi_rdm_tagged_pingpong: prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rdm_tagged_pingpong -v -U
+
+# fi_rdm_tagged_pingpong fails with
+# fi_rdm_tagged_pingpong: prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rdm_tagged_pingpong
+
+# fi_rdm_pingpong fails with
+# fi_rdm_pingpong: prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rdm_pingpong
+
+# fi_rdm_pingpong -U fails with
+# fi_rdm_pingpong: prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rdm_pingpong -U
+
+# fi_rdm_pingpong -v fails with
+# fi_rdm_pingpong: prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rdm_pingpong -v
+
+# fi_rdm_pingpong -v -U fails with
+# fi_rdm_pingpong: prov/tcp/src/xnet_progress.c:1680: xnet_close_progress: Assertion `slist_empty(&progress->event_list)' failed.
+fi_rdm_pingpong -v -U
