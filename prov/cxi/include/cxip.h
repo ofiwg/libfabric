@@ -2227,8 +2227,11 @@ struct cxip_ep_obj {
 	/* ASIC version associated with EP/Domain */
 	enum cassini_version asic_ver;
 
-	struct cxip_txc txc;
-	struct cxip_rxc rxc;
+	/* TXC/RXC are set to EP protocol specific classes that
+	 * share a common base implementation.
+	 */
+	struct cxip_txc *txc;
+	struct cxip_rxc *rxc;
 
 	/* Information that might be owned by an EP (or a SEP
 	 * when implemented). Should ultimately be a pointer

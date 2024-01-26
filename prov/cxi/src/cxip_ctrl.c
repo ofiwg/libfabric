@@ -511,10 +511,10 @@ err:
  */
 static bool cxip_ctrl_wait_required(struct cxip_ep_obj *ep_obj)
 {
-	if (ep_obj->rxc.recv_cq && ep_obj->rxc.recv_cq->priv_wait)
+	if (ep_obj->rxc->recv_cq && ep_obj->rxc->recv_cq->priv_wait)
 		return true;
 
-	if (ep_obj->txc.send_cq && ep_obj->txc.send_cq->priv_wait)
+	if (ep_obj->txc->send_cq && ep_obj->txc->send_cq->priv_wait)
 		return true;
 
 	return false;
@@ -529,16 +529,17 @@ void cxip_ep_ctrl_del_wait(struct cxip_ep_obj *ep_obj)
 
 	wait_fd = cxil_get_wait_obj_fd(ep_obj->ctrl.wait);
 
-	if (ep_obj->txc.send_cq) {
-		ofi_wait_del_fd(ep_obj->txc.send_cq->util_cq.wait, wait_fd);
+	if (ep_obj->txc->send_cq) {
+		ofi_wait_del_fd(ep_obj->txc->send_cq->util_cq.wait, wait_fd);
 		CXIP_DBG("Deleted control HW EQ FD: %d from CQ: %p\n",
-			 wait_fd, ep_obj->txc.send_cq);
+			 wait_fd, ep_obj->txc->send_cq);
 	}
 
-	if (ep_obj->rxc.recv_cq && ep_obj->rxc.recv_cq != ep_obj->txc.send_cq) {
-		ofi_wait_del_fd(ep_obj->rxc.recv_cq->util_cq.wait, wait_fd);
+	if (ep_obj->rxc->recv_cq &&
+	    ep_obj->rxc->recv_cq != ep_obj->txc->send_cq) {
+		ofi_wait_del_fd(ep_obj->rxc->recv_cq->util_cq.wait, wait_fd);
 		CXIP_DBG("Deleted control HW EQ FD: %d from CQ %p\n",
-			 wait_fd, ep_obj->rxc.recv_cq);
+			 wait_fd, ep_obj->rxc->recv_cq);
 	}
 }
 
@@ -566,7 +567,7 @@ int cxip_ep_ctrl_add_wait(struct cxip_ep_obj *ep_obj)
 		goto err;
 	}
 
-	cq = ep_obj->txc.send_cq;
+	cq = ep_obj->txc->send_cq;
 	if (cq) {
 		ret = ofi_wait_add_fd(cq->util_cq.wait, wait_fd,
 				      POLLIN, cxip_ep_ctrl_trywait, ep_obj,
@@ -578,8 +579,8 @@ int cxip_ep_ctrl_add_wait(struct cxip_ep_obj *ep_obj)
 		}
 	}
 
-	if (ep_obj->rxc.recv_cq && ep_obj->rxc.recv_cq != cq) {
-		cq = ep_obj->rxc.recv_cq;
+	if (ep_obj->rxc->recv_cq && ep_obj->rxc->recv_cq != cq) {
+		cq = ep_obj->rxc->recv_cq;
 
 		ret = ofi_wait_add_fd(cq->util_cq.wait, wait_fd,
 				      POLLIN, cxip_ep_ctrl_trywait, ep_obj,
@@ -597,8 +598,8 @@ int cxip_ep_ctrl_add_wait(struct cxip_ep_obj *ep_obj)
 	return FI_SUCCESS;
 
 err_add_fd:
-	if (ep_obj->txc.send_cq)
-		ofi_wait_del_fd(ep_obj->txc.send_cq->util_cq.wait, wait_fd);
+	if (ep_obj->txc->send_cq)
+		ofi_wait_del_fd(ep_obj->txc->send_cq->util_cq.wait, wait_fd);
 err:
 	cxil_destroy_wait_obj(ep_obj->ctrl.wait);
 	ep_obj->ctrl.wait = NULL;

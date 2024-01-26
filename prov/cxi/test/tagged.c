@@ -315,7 +315,7 @@ Test(tagged, fail_alt_read_rdzv)
 	/* Force error on allocation of hardware resources required
 	 * by alt_read rendezvous protocol.
 	 */
-	ep->ep_obj->txc.force_err |= CXIP_TXC_FORCE_ERR_ALT_READ_PROTO_ALLOC;
+	ep->ep_obj->txc->force_err |= CXIP_TXC_FORCE_ERR_ALT_READ_PROTO_ALLOC;
 
 	ret = cxit_dom_read_cntr(C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
 				 &start_pkt_cnt, NULL, true);
@@ -4249,7 +4249,7 @@ Test(tagged, recv_more)
 	struct cxip_ep *ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 
 	/* FI_MORE has no meaning if receives are not offloaded */
-	if (!ep->ep_obj->rxc.msg_offload) {
+	if (!ep->ep_obj->rxc->msg_offload) {
 		cr_assert(1);
 		return;
 	}
