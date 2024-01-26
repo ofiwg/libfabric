@@ -1471,6 +1471,9 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 {
 	struct ofi_prov *prov;
 	const char *top_name;
+#ifdef HAVE_LIBDL
+	Dl_info dl_info;
+#endif
 	int ret;
 
 	if (!attr || !attr->prov_name || !attr->name)
@@ -1499,6 +1502,16 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 			attr->name);
 
 		ofi_hook_install(*fabric, fabric, prov->provider);
+
+#ifdef HAVE_LIBDL
+		if (dladdr(prov->provider->fabric, &dl_info))
+			FI_INFO(&core_prov, FI_LOG_CORE,
+				"Using %s provider %u.%u, path:%s\n",
+				prov->prov_name,
+				FI_MAJOR(prov->provider->fi_version),
+				FI_MINOR(prov->provider->fi_version),
+				dl_info.dli_fname);
+#endif
 	}
 
 	return ret;
