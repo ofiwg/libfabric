@@ -1371,7 +1371,7 @@ static ssize_t cxip_ep_atomic_write(struct fid_ep *fid_ep, const void *buf,
 		.context = context
 	};
 
-	return cxip_amo_common(CXIP_RQ_AMO, &ep->ep_obj->txc,
+	return cxip_amo_common(CXIP_RQ_AMO, ep->ep_obj->txc,
 			       ep->tx_attr.tclass, &msg, NULL, NULL, 0,
 			       NULL, NULL, 0, ep->tx_attr.op_flags, false,
 			       0, NULL, NULL);
@@ -1402,7 +1402,7 @@ static ssize_t cxip_ep_atomic_writev(struct fid_ep *fid_ep,
 		.context = context
 	};
 
-	return cxip_amo_common(CXIP_RQ_AMO, &ep->ep_obj->txc,
+	return cxip_amo_common(CXIP_RQ_AMO, ep->ep_obj->txc,
 			       ep->tx_attr.tclass, &msg, NULL, NULL, 0, NULL,
 			       NULL, 0, ep->tx_attr.op_flags, false, 0,
 			       NULL, NULL);
@@ -1413,7 +1413,7 @@ static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *fid_ep,
 				       uint64_t flags)
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
-	struct cxip_txc *txc = &ep->ep_obj->txc;
+	struct cxip_txc *txc = ep->ep_obj->txc;
 
 	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS |
 		      FI_CXI_UNRELIABLE |
@@ -1461,7 +1461,7 @@ static ssize_t cxip_ep_atomic_inject(struct fid_ep *fid_ep, const void *buf,
 		.context = NULL
 	};
 
-	return cxip_amo_common(CXIP_RQ_AMO, &ep->ep_obj->txc,
+	return cxip_amo_common(CXIP_RQ_AMO, ep->ep_obj->txc,
 			       ep->tx_attr.tclass, &msg, NULL, NULL, 0, NULL,
 			       NULL, 0, FI_INJECT, false, 0, NULL, NULL);
 }
@@ -1499,7 +1499,7 @@ static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *fid_ep, const void *buf,
 		.context = context
 	};
 
-	return cxip_amo_common(CXIP_RQ_AMO_FETCH, &ep->ep_obj->txc,
+	return cxip_amo_common(CXIP_RQ_AMO_FETCH, ep->ep_obj->txc,
 			       ep->tx_attr.tclass, &msg, NULL, NULL, 0,
 			       &resultv, &result_desc, 1, ep->tx_attr.op_flags,
 			       false, 0, NULL, NULL);
@@ -1534,7 +1534,7 @@ static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *fid_ep,
 		.context = context
 	};
 
-	return cxip_amo_common(CXIP_RQ_AMO_FETCH, &ep->ep_obj->txc,
+	return cxip_amo_common(CXIP_RQ_AMO_FETCH, ep->ep_obj->txc,
 			       ep->tx_attr.tclass, &msg, NULL, NULL, 0, resultv,
 			       result_desc, result_count, ep->tx_attr.op_flags,
 			       false, 0, NULL, NULL);
@@ -1547,7 +1547,7 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *fid_ep,
 					   size_t result_count, uint64_t flags)
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
-	struct cxip_txc *txc = &ep->ep_obj->txc;
+	struct cxip_txc *txc = ep->ep_obj->txc;
 	enum cxip_amo_req_type req_type;
 
 	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS |
@@ -1612,7 +1612,7 @@ static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *fid_ep, const void *buf,
 		.context = context
 	};
 
-	return cxip_amo_common(CXIP_RQ_AMO_SWAP, &ep->ep_obj->txc,
+	return cxip_amo_common(CXIP_RQ_AMO_SWAP, ep->ep_obj->txc,
 			       ep->tx_attr.tclass, &msg, &comparev,
 			       &result_desc, 1, &resultv, &result_desc, 1,
 			       ep->tx_attr.op_flags, false, 0, NULL, NULL);
@@ -1650,7 +1650,7 @@ static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *fid_ep,
 		.context = context
 	};
 
-	return cxip_amo_common(CXIP_RQ_AMO_SWAP, &ep->ep_obj->txc,
+	return cxip_amo_common(CXIP_RQ_AMO_SWAP, ep->ep_obj->txc,
 			       ep->tx_attr.tclass, &msg, comparev, compare_desc,
 			       compare_count, resultv, result_desc,
 			       result_count, ep->tx_attr.op_flags, false, 0,
@@ -1666,7 +1666,7 @@ cxip_ep_atomic_compwritemsg(struct fid_ep *fid_ep,
 			    uint64_t flags)
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
-	struct cxip_txc *txc = &ep->ep_obj->txc;
+	struct cxip_txc *txc = ep->ep_obj->txc;
 
 	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS |
 		      FI_CXI_UNRELIABLE | FI_CXI_WEAK_FENCE))

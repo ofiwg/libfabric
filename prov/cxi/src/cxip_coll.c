@@ -3764,8 +3764,8 @@ int cxip_coll_enable(struct cxip_ep *ep)
 	}
 
 	/* A read-only or write-only endpoint is legal */
-	if (!(ofi_recv_allowed(ep_obj->rxc.attr.caps) &&
-	      ofi_send_allowed(ep_obj->txc.attr.caps))) {
+	if (!(ofi_recv_allowed(ep_obj->rxc->attr.caps) &&
+	      ofi_send_allowed(ep_obj->txc->attr.caps))) {
 		CXIP_INFO("EP not recv/send, collectives not enabled\n");
 		return FI_SUCCESS;
 	}
@@ -3781,12 +3781,12 @@ int cxip_coll_enable(struct cxip_ep *ep)
 		return -FI_EINVAL;
 
 	/* Bind all STD EP objects to the coll object */
-	ep_obj->coll.rx_cmdq = ep_obj->rxc.rx_cmdq;
-	ep_obj->coll.tx_cmdq = ep_obj->txc.tx_cmdq;
-	ep_obj->coll.rx_cntr = ep_obj->rxc.recv_cntr;
-	ep_obj->coll.tx_cntr = ep_obj->txc.send_cntr;
-	ep_obj->coll.rx_evtq = &ep_obj->rxc.rx_evtq;
-	ep_obj->coll.tx_evtq = &ep_obj->txc.tx_evtq;
+	ep_obj->coll.rx_cmdq = ep_obj->rxc->rx_cmdq;
+	ep_obj->coll.tx_cmdq = ep_obj->txc->tx_cmdq;
+	ep_obj->coll.rx_cntr = ep_obj->rxc->recv_cntr;
+	ep_obj->coll.tx_cntr = ep_obj->txc->send_cntr;
+	ep_obj->coll.rx_evtq = &ep_obj->rxc->rx_evtq;
+	ep_obj->coll.tx_evtq = &ep_obj->txc->tx_evtq;
 	ep_obj->coll.eq = ep_obj->eq;
 
 	ep->ep.collective = &cxip_collective_ops;
