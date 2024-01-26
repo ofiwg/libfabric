@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -821,9 +821,14 @@ union fi_opx_hfi1_packet_payload {
 			uint64_t		unused[2];
 
 			/* ==== CACHE LINE 1 ==== */
-
-			uint8_t		immediate_byte[8];
-			uint64_t	immediate_qw[7];
+			union {
+				struct {
+					uint8_t		immediate_byte[8];
+					uint64_t	immediate_qw[7];
+				};
+				
+				union cacheline	cache_line_1;
+			};
 
 			/* ==== CACHE LINE 2-127 ==== */
 
@@ -833,11 +838,11 @@ union fi_opx_hfi1_packet_payload {
 		struct {
 			/* ==== CACHE LINE 0 ==== */
 
-			uintptr_t	origin_byte_counter_vaddr;
-			struct fi_opx_hmem_iov iov[2];
+			uintptr_t		origin_byte_counter_vaddr;
+			struct fi_opx_hmem_iov	iov[2];
 
 			/* ==== CACHE LINE 1-127 (for 8k mtu) ==== */
-			struct fi_opx_hmem_iov iov_ext[FI_OPX_MAX_HMEM_IOV - 2];
+			struct fi_opx_hmem_iov	iov_ext[FI_OPX_MAX_HMEM_IOV - 2];
 			size_t			unused;
 
 		} noncontiguous;
