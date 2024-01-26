@@ -163,13 +163,15 @@ static inline
 bool efa_rdm_interop_rdma_read(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
 {
 	bool rdma_read_support = efa_both_support_rdma_read(ep, peer);
-	uint32_t ep_dev_ver = efa_rdm_ep_domain(ep)->device->ibv_attr.vendor_part_id,
-		 peer_dev_ver = peer->device_version;
+	uint32_t ep_dev_ver, peer_dev_ver;
 
-	if (ep_dev_ver == 0xEFA0) {
-		return rdma_read_support && peer_dev_ver == 0xEFA0;
-	}
-	return rdma_read_support && peer_dev_ver != 0xEFA0;
+	if (!rdma_read_support)
+		return false;
+
+	ep_dev_ver = efa_rdm_ep_domain(ep)->device->ibv_attr.vendor_part_id;
+	peer_dev_ver = peer->device_version;
+
+	return (ep_dev_ver == 0xEFA0) ? (peer_dev_ver == 0xEFA0) : (peer_dev_ver != 0xEFA0);
 }
 
 /**
