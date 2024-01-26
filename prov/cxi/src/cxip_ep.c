@@ -1234,11 +1234,11 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	ofi_atomic_initialize32(&ep_obj->tgq_ref, 0);
 
 	for (i = 0; i < CXIP_NUM_CACHED_KEY_LE; i++) {
-		ofi_atomic_initialize32(&ep_obj->std_mr_cache[i].ref, 0);
-		ofi_atomic_initialize32(&ep_obj->opt_mr_cache[i].ref, 0);
+		ofi_atomic_initialize32(&ep_obj->ctrl.std_mr_cache[i].ref, 0);
+		ofi_atomic_initialize32(&ep_obj->ctrl.opt_mr_cache[i].ref, 0);
 	}
 
-	dlist_init(&ep_obj->mr_list);
+	dlist_init(&ep_obj->ctrl.mr_list);
 	ep_obj->ep_attr.tx_ctx_cnt = 1;
 	ep_obj->ep_attr.rx_ctx_cnt = 1;
 	txc->ep_obj = ep_obj;
