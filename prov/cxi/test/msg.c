@@ -2160,7 +2160,7 @@ Test(hybrid_preemptive, unexpected_msg_preemptive)
 		cr_assert(ret == FI_SUCCESS);
 	}
 
-	while (cxip_ep->ep_obj->rxc.state != RXC_ENABLED_SOFTWARE)
+	while (cxip_ep->ep_obj->rxc->state != RXC_ENABLED_SOFTWARE)
 		fi_cq_read(cxit_rx_cq, NULL, 0);
 
 	cr_assert(ret == FI_SUCCESS);

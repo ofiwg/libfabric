@@ -180,8 +180,8 @@ void cxip_ep_progress(struct fid *fid)
 	if (ep_obj->enabled) {
 
 		ofi_genlock_lock(&ep_obj->lock);
-		cxip_evtq_progress(&ep_obj->rxc.rx_evtq);
-		cxip_evtq_progress(&ep_obj->txc.tx_evtq);
+		cxip_evtq_progress(&ep_obj->rxc->rx_evtq);
+		cxip_evtq_progress(&ep_obj->txc->tx_evtq);
 		cxip_ep_ctrl_progress_locked(ep_obj);
 		ofi_genlock_unlock(&ep_obj->lock);
 	}
@@ -197,9 +197,11 @@ int cxip_ep_peek(struct fid *fid)
 	struct cxip_ep *ep = container_of(fid, struct cxip_ep, ep.fid);
 	struct cxip_ep_obj *ep_obj = ep->ep_obj;
 
-	if (ep_obj->txc.tx_evtq.eq && cxi_eq_peek_event(ep_obj->txc.tx_evtq.eq))
+	if (ep_obj->txc->tx_evtq.eq &&
+	    cxi_eq_peek_event(ep_obj->txc->tx_evtq.eq))
 		return -FI_EAGAIN;
-	if (ep_obj->rxc.rx_evtq.eq && cxi_eq_peek_event(ep_obj->rxc.rx_evtq.eq))
+	if (ep_obj->rxc->rx_evtq.eq &&
+	    cxi_eq_peek_event(ep_obj->rxc->rx_evtq.eq))
 		return -FI_EAGAIN;
 
 	return FI_SUCCESS;
@@ -222,7 +224,7 @@ size_t cxip_ep_get_unexp_msgs(struct fid_ep *fid_ep,
 	if (!ux_count)
 		return -FI_EINVAL;
 
-	if (ep->ep_obj->rxc.state == RXC_DISABLED)
+	if (ep->ep_obj->rxc->state == RXC_DISABLED)
 		return -FI_EOPBADSTATE;
 
 	if (!ofi_recv_allowed(ep->rx_attr.caps)) {
@@ -233,15 +235,15 @@ size_t cxip_ep_get_unexp_msgs(struct fid_ep *fid_ep,
 	/* If in flow control, let that complete since
 	 * on-loading could be in progress.
 	 */
-	if (ep->ep_obj->rxc.state != RXC_ENABLED &&
-	    ep->ep_obj->rxc.state != RXC_ENABLED_SOFTWARE) {
-		cxip_cq_progress(ep->ep_obj->rxc.recv_cq);
+	if (ep->ep_obj->rxc->state != RXC_ENABLED &&
+	    ep->ep_obj->rxc->state != RXC_ENABLED_SOFTWARE) {
+		cxip_cq_progress(ep->ep_obj->rxc->recv_cq);
 		return -FI_EAGAIN;
 	}
 
 	ofi_genlock_lock(&ep->ep_obj->lock);
-	if (cxip_evtq_saturated(&ep->ep_obj->rxc.rx_evtq)) {
-		RXC_DBG(&ep->ep_obj->rxc, "Target HW EQ saturated\n");
+	if (cxip_evtq_saturated(&ep->ep_obj->rxc->rx_evtq)) {
+		RXC_DBG(ep->ep_obj->rxc, "Target HW EQ saturated\n");
 		ofi_genlock_unlock(&ep->ep_obj->lock);
 
 		return -FI_EAGAIN;
@@ -261,7 +263,7 @@ size_t cxip_ep_get_unexp_msgs(struct fid_ep *fid_ep,
 void cxip_ep_flush_trig_reqs(struct cxip_ep_obj *ep_obj)
 {
 	ofi_genlock_lock(&ep_obj->lock);
-	cxip_evtq_flush_trig_reqs(&ep_obj->txc.tx_evtq);
+	cxip_evtq_flush_trig_reqs(&ep_obj->txc->tx_evtq);
 	ofi_genlock_unlock(&ep_obj->lock);
 }
 
@@ -270,7 +272,7 @@ void cxip_ep_flush_trig_reqs(struct cxip_ep_obj *ep_obj)
  */
 void cxip_txc_close(struct cxip_ep *ep)
 {
-	struct cxip_txc *txc = &ep->ep_obj->txc;
+	struct cxip_txc *txc = ep->ep_obj->txc;
 
 	if (txc->send_cq) {
 		ofi_genlock_lock(&txc->send_cq->ep_list_lock);
@@ -313,7 +315,7 @@ void cxip_txc_close(struct cxip_ep *ep)
  */
 void cxip_rxc_close(struct cxip_ep *ep)
 {
-	struct cxip_rxc *rxc = &ep->ep_obj->rxc;
+	struct cxip_rxc *rxc = ep->ep_obj->rxc;
 
 	if (rxc->recv_cq) {
 		/* EP FID may not be found in the list if recv_cq == send_cq,
@@ -438,7 +440,7 @@ ssize_t cxip_ep_cancel(fid_t fid, void *context)
 	if (!ofi_recv_allowed(ep->ep_obj->caps))
 		return -FI_ENOENT;
 
-	return cxip_rxc_cancel(&ep->ep_obj->rxc, context);
+	return cxip_rxc_cancel(ep->ep_obj->rxc, context);
 }
 
 /*
@@ -514,13 +516,13 @@ static int cxip_ep_enable(struct fid_ep *fid_ep)
 		 ep_obj->auth_key.vni,
 		 ep_obj->src_addr.pid);
 
-	ret = cxip_txc_enable(&ep_obj->txc);
+	ret = cxip_txc_enable(ep_obj->txc);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_txc_enable returned: %d\n", ret);
 		goto unlock;
 	}
 
-	ret = cxip_rxc_enable(&ep_obj->rxc);
+	ret = cxip_rxc_enable(ep_obj->rxc);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_rxc_enable returned: %d\n", ret);
 		goto unlock;
@@ -642,6 +644,9 @@ int cxip_free_endpoint(struct cxip_ep *ep)
 
 	ofi_atomic_dec32(&ep_obj->domain->ref);
 	ofi_genlock_destroy(&ep_obj->lock);
+
+	free(ep_obj->txc);
+	free(ep_obj->rxc);
 	free(ep_obj);
 	ep->ep_obj = NULL;
 
@@ -703,7 +708,7 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 	}
 
 	if (flags & FI_TRANSMIT) {
-		txc = &ep->ep_obj->txc;
+		txc = ep->ep_obj->txc;
 		if (txc->send_cq) {
 			CXIP_WARN("SEND CQ previously bound\n");
 			return -FI_EINVAL;
@@ -734,7 +739,7 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 	}
 
 	if (flags & FI_RECV) {
-		rxc = &ep->ep_obj->rxc;
+		rxc = ep->ep_obj->rxc;
 		if (rxc->recv_cq) {
 			CXIP_WARN("RECV CQ previously bound\n");
 			return -FI_EINVAL;
@@ -782,10 +787,10 @@ static int cxip_ep_bind_cntr(struct cxip_ep *ep, struct cxip_cntr *cntr,
 	if (!(flags & CXIP_EP_CNTR_FLAGS))
 		return FI_SUCCESS;
 
-	if ((flags & FI_SEND && ep->ep_obj->txc.send_cntr) ||
-	    (flags & FI_READ && ep->ep_obj->txc.read_cntr) ||
-	    (flags & FI_WRITE && ep->ep_obj->txc.write_cntr) ||
-	    (flags & FI_RECV && ep->ep_obj->rxc.recv_cntr)) {
+	if ((flags & FI_SEND && ep->ep_obj->txc->send_cntr) ||
+	    (flags & FI_READ && ep->ep_obj->txc->read_cntr) ||
+	    (flags & FI_WRITE && ep->ep_obj->txc->write_cntr) ||
+	    (flags & FI_RECV && ep->ep_obj->rxc->recv_cntr)) {
 		CXIP_WARN("EP previously bound to counter\n");
 		return -FI_EINVAL;
 	}
@@ -798,19 +803,19 @@ static int cxip_ep_bind_cntr(struct cxip_ep *ep, struct cxip_cntr *cntr,
 	}
 
 	if (flags & FI_SEND) {
-		ep->ep_obj->txc.send_cntr = cntr;
+		ep->ep_obj->txc->send_cntr = cntr;
 		ofi_atomic_inc32(&cntr->ref);
 	}
 	if (flags & FI_READ) {
-		ep->ep_obj->txc.read_cntr = cntr;
+		ep->ep_obj->txc->read_cntr = cntr;
 		ofi_atomic_inc32(&cntr->ref);
 	}
 	if (flags & FI_WRITE) {
-		ep->ep_obj->txc.write_cntr = cntr;
+		ep->ep_obj->txc->write_cntr = cntr;
 		ofi_atomic_inc32(&cntr->ref);
 	}
 	if (flags & FI_RECV) {
-		ep->ep_obj->rxc.recv_cntr = cntr;
+		ep->ep_obj->rxc->recv_cntr = cntr;
 		ofi_atomic_inc32(&cntr->ref);
 	}
 
@@ -1041,7 +1046,7 @@ int cxip_ep_getopt_priv(struct cxip_ep *ep, int level, int optname,
 		if (*optlen < sizeof(size_t))
 			return -FI_ETOOSMALL;
 
-		*(size_t *)optval = ep->ep_obj->rxc.min_multi_recv;
+		*(size_t *)optval = ep->ep_obj->rxc->min_multi_recv;
 		*optlen = sizeof(size_t);
 		break;
 
@@ -1083,7 +1088,7 @@ int cxip_ep_setopt_priv(struct cxip_ep *ep, int level, int optname,
 				  CXIP_EP_MAX_MULTI_RECV);
 			return -FI_EINVAL;
 		}
-		ep->ep_obj->rxc.min_multi_recv = min_multi_recv;
+		ep->ep_obj->rxc->min_multi_recv = min_multi_recv;
 		break;
 
 	default:
@@ -1168,8 +1173,20 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	if (ep_obj->protocol == FI_PROTO_OPX)
 		ep_obj->protocol = FI_PROTO_CXI;
 
-	txc = &ep_obj->txc;
-	rxc = &ep_obj->rxc;
+	ep_obj->txc = calloc(1, sizeof(*ep_obj->txc));
+	if (!ep_obj->txc) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	ep_obj->rxc = calloc(1, sizeof(*ep_obj->rxc));
+	if (!ep_obj->rxc) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	txc = ep_obj->txc;
+	rxc = ep_obj->rxc;
 
 	/* For faster access */
 	ep_obj->asic_ver = cxip_dom->iface->info->cassini_version;
@@ -1208,12 +1225,12 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	}
 
 	if (cxip_set_tclass(ep_obj->tx_attr.tclass,
-			    cxip_dom->tclass, &ep_obj->txc.tclass)) {
+			    cxip_dom->tclass, &ep_obj->txc->tclass)) {
 		CXIP_WARN("Invalid tclass\n");
 		ret = -FI_EINVAL;
 		goto err;
 	}
-	ep_obj->tx_attr.tclass = ep_obj->txc.tclass;
+	ep_obj->tx_attr.tclass = ep_obj->txc->tclass;
 
 	/* Initialize object */
 	ofi_atomic_initialize32(&ep_obj->ref, 0);
@@ -1259,6 +1276,9 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	return FI_SUCCESS;
 
 err:
+	/* free handles null check */
+	free(ep_obj->txc);
+	free(ep_obj->rxc);
 	free(ep_obj);
 
 	return ret;
@@ -1310,7 +1330,7 @@ int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
 	*fid_ep = &ep->ep;
 
 	cxip_coll_init(ep->ep_obj);
-	cxip_domain_add_txc(ep->ep_obj->domain, &ep->ep_obj->txc);
+	cxip_domain_add_txc(ep->ep_obj->domain, ep->ep_obj->txc);
 
 	return FI_SUCCESS;
 }
