@@ -629,7 +629,7 @@ static int cxip_dom_dwq_op_send(struct cxip_domain *dom, struct fi_op_msg *msg,
 	buf = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_base : NULL;
 	len = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_len : 0;
 
-	ret = cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
+	ret = cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
 			       NULL, msg->msg.data, msg->msg.addr, 0,
 			       msg->msg.context, msg->flags, false, true,
 			       trig_thresh, trig_cntr, comp_cntr);
@@ -670,7 +670,7 @@ static int cxip_dom_dwq_op_tsend(struct cxip_domain *dom,
 	buf = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_base : NULL;
 	len = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_len : 0;
 
-	ret = cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
+	ret = cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
 			       NULL, tagged->msg.data, tagged->msg.addr,
 			       tagged->msg.tag, tagged->msg.context,
 			       tagged->flags, true, true, trig_thresh,
@@ -707,7 +707,7 @@ static int cxip_dom_dwq_op_rma(struct cxip_domain *dom, struct fi_op_rma *rma,
 	buf = rma->msg.iov_count ? rma->msg.msg_iov[0].iov_base : NULL;
 	len = rma->msg.iov_count ? rma->msg.msg_iov[0].iov_len : 0;
 
-	ret = cxip_rma_common(op, &ep->ep_obj->txc, buf, len, NULL,
+	ret = cxip_rma_common(op, ep->ep_obj->txc, buf, len, NULL,
 			      rma->msg.addr, rma->msg.rma_iov[0].addr,
 			      rma->msg.rma_iov[0].key, rma->msg.data,
 			      rma->flags, ep->tx_attr.tclass,
@@ -729,7 +729,7 @@ static int cxip_dom_dwq_op_atomic(struct cxip_domain *dom,
 				  uint64_t trig_thresh)
 {
 	struct cxip_ep *ep = container_of(amo->ep, struct cxip_ep, ep);
-	struct cxip_txc *txc = &ep->ep_obj->txc;
+	struct cxip_txc *txc = ep->ep_obj->txc;
 	int ret;
 
 	if (!amo)
@@ -759,7 +759,7 @@ static int cxip_dom_dwq_op_fetch_atomic(struct cxip_domain *dom,
 					uint64_t trig_thresh)
 {
 	struct cxip_ep *ep = container_of(fetch_amo->ep, struct cxip_ep, ep);
-	struct cxip_txc *txc = &ep->ep_obj->txc;
+	struct cxip_txc *txc = ep->ep_obj->txc;
 	int ret;
 
 	if (!fetch_amo)
@@ -792,7 +792,7 @@ static int cxip_dom_dwq_op_comp_atomic(struct cxip_domain *dom,
 				       uint64_t trig_thresh)
 {
 	struct cxip_ep *ep = container_of(comp_amo->ep, struct cxip_ep, ep);
-	struct cxip_txc *txc = &ep->ep_obj->txc;
+	struct cxip_txc *txc = ep->ep_obj->txc;
 	int ret;
 
 	if (!comp_amo)
@@ -880,7 +880,7 @@ static int cxip_dom_dwq_op_recv(struct cxip_domain *dom, struct fi_op_msg *msg,
 	buf = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_base : NULL;
 	len = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_len : 0;
 
-	return cxip_recv_common(&ep->ep_obj->rxc, buf, len, NULL, msg->msg.addr,
+	return cxip_recv_common(ep->ep_obj->rxc, buf, len, NULL, msg->msg.addr,
 				0, 0, msg->msg.context, msg->flags, false,
 				comp_cntr);
 }
@@ -902,7 +902,7 @@ static int cxip_dom_dwq_op_trecv(struct cxip_domain *dom,
 	buf = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_base : NULL;
 	len = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_len : 0;
 
-	return cxip_recv_common(&ep->ep_obj->rxc, buf, len, tagged->msg.desc,
+	return cxip_recv_common(ep->ep_obj->rxc, buf, len, tagged->msg.desc,
 				tagged->msg.addr, tagged->msg.tag,
 				tagged->msg.ignore, tagged->msg.context,
 				tagged->flags, true, comp_cntr);
