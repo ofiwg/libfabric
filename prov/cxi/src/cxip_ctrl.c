@@ -95,14 +95,14 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	uint32_t match_id;
 	int ret;
 
-	if (!req->ep_obj->ctrl_tx_credits) {
+	if (!req->ep_obj->ctrl.tx_credits) {
 		CXIP_WARN("Control TX credits exhausted\n");
 		return -FI_EAGAIN;
 	}
 
-	req->ep_obj->ctrl_tx_credits--;
+	req->ep_obj->ctrl.tx_credits--;
 
-	txq = req->ep_obj->ctrl_txq;
+	txq = req->ep_obj->ctrl.txq;
 	pid_bits = req->ep_obj->domain->iface->dev->info.pid_bits;
 	cxi_build_dfa(req->send.nic_addr, req->send.pid, pid_bits,
 		      CXIP_PTL_IDX_CTRL, &dfa, &idx_ext);
@@ -111,7 +111,7 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 
 	c_state.event_send_disable = 1;
 	c_state.index_ext = idx_ext;
-	c_state.eq = req->ep_obj->ctrl_tx_evtq->eqn;
+	c_state.eq = req->ep_obj->ctrl.tx_evtq->eqn;
 	c_state.initiator = match_id;
 
 	idc_msg.dfa = dfa;
@@ -150,7 +150,7 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	return FI_SUCCESS;
 
 err_return_credit:
-	req->ep_obj->ctrl_tx_credits++;
+	req->ep_obj->ctrl.tx_credits++;
 
 	return ret;
 }
@@ -172,40 +172,40 @@ int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 		.raw = ~0,
 	};
 
-	ret = cxip_domain_ctrl_id_alloc(ep_obj->domain, &ep_obj->ctrl_msg_req);
+	ret = cxip_domain_ctrl_id_alloc(ep_obj->domain, &ep_obj->ctrl.msg_req);
 	if (ret) {
 		CXIP_WARN("Failed to allocate MR buffer ID: %d\n", ret);
 		return -FI_ENOSPC;
 	}
-	ep_obj->ctrl_msg_req.ep_obj = ep_obj;
-	ep_obj->ctrl_msg_req.cb = cxip_ctrl_msg_cb;
+	ep_obj->ctrl.msg_req.ep_obj = ep_obj;
+	ep_obj->ctrl.msg_req.cb = cxip_ctrl_msg_cb;
 
 	le_flags = C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
 		   C_LE_OP_PUT;
 
 	ib.ctrl_le_type = 0;
 
-	ret = cxip_pte_append(ep_obj->ctrl_pte, 0, 0, 0,
-			      C_PTL_LIST_PRIORITY, ep_obj->ctrl_msg_req.req_id,
+	ret = cxip_pte_append(ep_obj->ctrl.pte, 0, 0, 0,
+			      C_PTL_LIST_PRIORITY, ep_obj->ctrl.msg_req.req_id,
 			      mb.raw, ib.raw, CXI_MATCH_ID_ANY, 0, le_flags,
-			      NULL, ep_obj->ctrl_tgq, true);
+			      NULL, ep_obj->ctrl.tgq, true);
 	if (ret) {
 		CXIP_DBG("Failed to write Append command: %d\n", ret);
 		goto err_free_id;
 	}
 
 	/* Wait for link EQ event */
-	while (!(event = cxi_eq_get_event(ep_obj->ctrl_tgt_evtq)))
+	while (!(event = cxi_eq_get_event(ep_obj->ctrl.tgt_evtq)))
 		sched_yield();
 
 	if (event->hdr.event_type != C_EVENT_LINK ||
-	    event->tgt_long.buffer_id != ep_obj->ctrl_msg_req.req_id) {
+	    event->tgt_long.buffer_id != ep_obj->ctrl.msg_req.req_id) {
 		/* This is a device malfunction */
 		CXIP_WARN("Invalid Link EQE %u %u %u %u\n",
 			  event->hdr.event_type,
 			  event->tgt_long.return_code,
 			  event->tgt_long.buffer_id,
-			  ep_obj->ctrl_msg_req.req_id);
+			  ep_obj->ctrl.msg_req.req_id);
 		ret = -FI_EIO;
 		goto err_free_id;
 	}
@@ -217,14 +217,14 @@ int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 		goto err_free_id;
 	}
 
-	cxi_eq_ack_events(ep_obj->ctrl_tgt_evtq);
+	cxi_eq_ack_events(ep_obj->ctrl.tgt_evtq);
 
 	CXIP_DBG("Control messaging initialized: %p\n", ep_obj);
 
 	return FI_SUCCESS;
 
 err_free_id:
-	cxip_domain_ctrl_id_free(ep_obj->domain, &ep_obj->ctrl_msg_req);
+	cxip_domain_ctrl_id_free(ep_obj->domain, &ep_obj->ctrl.msg_req);
 
 	return ret;
 }
@@ -236,7 +236,7 @@ err_free_id:
  */
 void cxip_ctrl_msg_fini(struct cxip_ep_obj *ep_obj)
 {
-	cxip_domain_ctrl_id_free(ep_obj->domain, &ep_obj->ctrl_msg_req);
+	cxip_domain_ctrl_id_free(ep_obj->domain, &ep_obj->ctrl.msg_req);
 
 	CXIP_DBG("Control messaging finalized: %p\n", ep_obj);
 }
@@ -324,7 +324,7 @@ static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
 static void cxip_ep_return_ctrl_tx_credits(struct cxip_ep_obj *ep_obj,
 					   unsigned int credits)
 {
-	ep_obj->ctrl_tx_credits += credits;
+	ep_obj->ctrl.tx_credits += credits;
 }
 
 void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
@@ -369,12 +369,12 @@ void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
 
 void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tx_evtq, true, false);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tx_evtq, true, false);
 }
 
 void cxip_ep_tx_ctrl_progress_locked(struct cxip_ep_obj *ep_obj)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tx_evtq, true, true);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tx_evtq, true, true);
 }
 
 /*
@@ -382,7 +382,7 @@ void cxip_ep_tx_ctrl_progress_locked(struct cxip_ep_obj *ep_obj)
  */
 void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tgt_evtq, false, false);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq, false, false);
 	cxip_ep_tx_ctrl_progress(ep_obj);
 }
 
@@ -391,7 +391,7 @@ void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj)
  */
 void cxip_ep_ctrl_progress_locked(struct cxip_ep_obj *ep_obj)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tgt_evtq, false, true);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq, false, true);
 	cxip_ep_tx_ctrl_progress_locked(ep_obj);
 }
 
@@ -400,7 +400,7 @@ void cxip_ep_ctrl_progress_locked(struct cxip_ep_obj *ep_obj)
  */
 void cxip_ep_tgt_ctrl_progress(struct cxip_ep_obj *ep_obj)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tgt_evtq, false, false);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq, false, false);
 }
 
 /*
@@ -409,7 +409,7 @@ void cxip_ep_tgt_ctrl_progress(struct cxip_ep_obj *ep_obj)
  */
 void cxip_ep_tgt_ctrl_progress_locked(struct cxip_ep_obj *ep_obj)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tgt_evtq, false, true);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq, false, true);
 }
 
 /*
@@ -419,20 +419,20 @@ int cxip_ep_ctrl_trywait(void *arg)
 {
 	struct cxip_ep_obj *ep_obj = (struct cxip_ep_obj *)arg;
 
-	if (!ep_obj->ctrl_wait) {
+	if (!ep_obj->ctrl.wait) {
 		CXIP_WARN("No CXI ep_obj wait object\n");
 		return -FI_EINVAL;
 	}
 
-	if (cxi_eq_peek_event(ep_obj->ctrl_tgt_evtq) ||
-	    cxi_eq_peek_event(ep_obj->ctrl_tx_evtq))
+	if (cxi_eq_peek_event(ep_obj->ctrl.tgt_evtq) ||
+	    cxi_eq_peek_event(ep_obj->ctrl.tx_evtq))
 		return -FI_EAGAIN;
 
 	ofi_genlock_lock(&ep_obj->lock);
-	cxil_clear_wait_obj(ep_obj->ctrl_wait);
+	cxil_clear_wait_obj(ep_obj->ctrl.wait);
 
-	if (cxi_eq_peek_event(ep_obj->ctrl_tgt_evtq) ||
-	    cxi_eq_peek_event(ep_obj->ctrl_tx_evtq)) {
+	if (cxi_eq_peek_event(ep_obj->ctrl.tgt_evtq) ||
+	    cxi_eq_peek_event(ep_obj->ctrl.tx_evtq)) {
 		ofi_genlock_unlock(&ep_obj->lock);
 
 		return -FI_EAGAIN;
@@ -488,9 +488,9 @@ static int cxip_ep_ctrl_eq_alloc(struct cxip_ep_obj *ep_obj, size_t len,
 	eq_attr.queue = *eq_buf;
 	eq_attr.queue_len = len;
 
-	/* ep_obj->ctrl_wait will be NULL if not required */
+	/* ep_obj->ctrl.wait will be NULL if not required */
 	ret = cxil_alloc_evtq(ep_obj->domain->lni->lni, *eq_md, &eq_attr,
-			      ep_obj->ctrl_wait, NULL, eq);
+			      ep_obj->ctrl.wait, NULL, eq);
 	if (ret)
 		goto err_free_eq_md;
 
@@ -527,7 +527,7 @@ void cxip_ep_ctrl_del_wait(struct cxip_ep_obj *ep_obj)
 {
 	int wait_fd;
 
-	wait_fd = cxil_get_wait_obj_fd(ep_obj->ctrl_wait);
+	wait_fd = cxil_get_wait_obj_fd(ep_obj->ctrl.wait);
 
 	if (ep_obj->txc.send_cq) {
 		ofi_wait_del_fd(ep_obj->txc.send_cq->util_cq.wait, wait_fd);
@@ -552,13 +552,13 @@ int cxip_ep_ctrl_add_wait(struct cxip_ep_obj *ep_obj)
 	int ret;
 
 	ret = cxil_alloc_wait_obj(ep_obj->domain->lni->lni,
-				  &ep_obj->ctrl_wait);
+				  &ep_obj->ctrl.wait);
 	if (ret) {
 		CXIP_WARN("Control wait object allocation failed: %d\n", ret);
 		return -FI_ENOMEM;
 	}
 
-	wait_fd = cxil_get_wait_obj_fd(ep_obj->ctrl_wait);
+	wait_fd = cxil_get_wait_obj_fd(ep_obj->ctrl.wait);
 	ret = fi_fd_nonblock(wait_fd);
 	if (ret) {
 		CXIP_WARN("Unable to set control wait non-blocking: %d, %s\n",
@@ -600,8 +600,8 @@ err_add_fd:
 	if (ep_obj->txc.send_cq)
 		ofi_wait_del_fd(ep_obj->txc.send_cq->util_cq.wait, wait_fd);
 err:
-	cxil_destroy_wait_obj(ep_obj->ctrl_wait);
-	ep_obj->ctrl_wait = NULL;
+	cxil_destroy_wait_obj(ep_obj->ctrl.wait);
+	ep_obj->ctrl.wait = NULL;
 
 	return ret;
 }
@@ -635,7 +635,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	 */
 	if (cxip_ctrl_wait_required(ep_obj)) {
 		ret = cxil_alloc_wait_obj(ep_obj->domain->lni->lni,
-					  &ep_obj->ctrl_wait);
+					  &ep_obj->ctrl.wait);
 		if (ret) {
 			CXIP_WARN("EP ctrl wait object alloc failed: %d\n",
 				  ret);
@@ -644,18 +644,18 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	}
 
 	ret = cxip_ep_ctrl_eq_alloc(ep_obj, 4 * s_page_size,
-				    &ep_obj->ctrl_tx_evtq_buf,
-				    &ep_obj->ctrl_tx_evtq_buf_md,
-				    &ep_obj->ctrl_tx_evtq);
+				    &ep_obj->ctrl.tx_evtq_buf,
+				    &ep_obj->ctrl.tx_evtq_buf_md,
+				    &ep_obj->ctrl.tx_evtq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate TX EQ resources, ret: %d\n", ret);
 		goto err;
 	}
 
 	ret = cxip_ep_ctrl_eq_alloc(ep_obj, rx_eq_size,
-				    &ep_obj->ctrl_tgt_evtq_buf,
-				    &ep_obj->ctrl_tgt_evtq_buf_md,
-				    &ep_obj->ctrl_tgt_evtq);
+				    &ep_obj->ctrl.tgt_evtq_buf,
+				    &ep_obj->ctrl.tgt_evtq_buf_md,
+				    &ep_obj->ctrl.tgt_evtq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate TGT EQ resources, ret: %d\n",
 			  ret);
@@ -663,7 +663,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	}
 
 	ret = cxip_ep_cmdq(ep_obj, true, ep_obj->domain->tclass,
-			   ep_obj->ctrl_tx_evtq, &ep_obj->ctrl_txq);
+			   ep_obj->ctrl.tx_evtq, &ep_obj->ctrl.txq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control TXQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
@@ -671,34 +671,34 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	}
 
 	ret = cxip_ep_cmdq(ep_obj, false, ep_obj->domain->tclass,
-			   ep_obj->ctrl_tgt_evtq, &ep_obj->ctrl_tgq);
+			   ep_obj->ctrl.tgt_evtq, &ep_obj->ctrl.tgq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control TGQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto free_txq;
 	}
 
-	ret = cxip_pte_alloc_nomap(ep_obj->ptable, ep_obj->ctrl_tgt_evtq,
-				   &pt_opts, NULL, NULL, &ep_obj->ctrl_pte);
+	ret = cxip_pte_alloc_nomap(ep_obj->ptable, ep_obj->ctrl.tgt_evtq,
+				   &pt_opts, NULL, NULL, &ep_obj->ctrl.pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control PTE: %d\n", ret);
 		goto free_tgq;
 	}
 
 	/* CXIP_PTL_IDX_WRITE_MR_STD is shared with CXIP_PTL_IDX_CTRL. */
-	ret = cxip_pte_map(ep_obj->ctrl_pte, CXIP_PTL_IDX_WRITE_MR_STD, false);
+	ret = cxip_pte_map(ep_obj->ctrl.pte, CXIP_PTL_IDX_WRITE_MR_STD, false);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to map write PTE: %d\n", ret);
 		goto free_pte;
 	}
 
-	ret = cxip_pte_map(ep_obj->ctrl_pte, CXIP_PTL_IDX_READ_MR_STD, false);
+	ret = cxip_pte_map(ep_obj->ctrl.pte, CXIP_PTL_IDX_READ_MR_STD, false);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to map read PTE: %d\n", ret);
 		goto free_pte;
 	}
 
-	ret = cxip_pte_set_state(ep_obj->ctrl_pte, ep_obj->ctrl_tgq,
+	ret = cxip_pte_set_state(ep_obj->ctrl.pte, ep_obj->ctrl.tgq,
 				 C_PTLTE_ENABLED, 0);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
@@ -707,7 +707,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	}
 
 	/* Wait for Enable event */
-	while (!(event = cxi_eq_get_event(ep_obj->ctrl_tgt_evtq)))
+	while (!(event = cxi_eq_get_event(ep_obj->ctrl.tgt_evtq)))
 		sched_yield();
 
 	switch (event->hdr.event_type) {
@@ -715,7 +715,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		if (event->tgt_long.return_code != C_RC_OK ||
 		    event->tgt_long.initiator.state_change.ptlte_state !=
 		    C_PTLTE_ENABLED ||
-		    event->tgt_long.ptlte_index != ep_obj->ctrl_pte->pte->ptn)
+		    event->tgt_long.ptlte_index != ep_obj->ctrl.pte->pte->ptn)
 			CXIP_FATAL("Invalid PtlTE enable event\n");
 		break;
 	case C_EVENT_COMMAND_FAILURE:
@@ -729,7 +729,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		CXIP_FATAL("Invalid event type: %d\n", event->hdr.event_type);
 	}
 
-	cxi_eq_ack_events(ep_obj->ctrl_tgt_evtq);
+	cxi_eq_ack_events(ep_obj->ctrl.tgt_evtq);
 
 	ret = cxip_ctrl_msg_init(ep_obj);
 	if (ret != FI_SUCCESS)
@@ -741,30 +741,30 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	 * 3. One slot for EQ overrun detection.
 	 * 4. TODO: Determine why an additional slot needs to be reserved.
 	 */
-	ep_obj->ctrl_tx_credits =
-		ep_obj->ctrl_tx_evtq->byte_size / C_EE_CFG_ECB_SIZE - 4;
+	ep_obj->ctrl.tx_credits =
+		ep_obj->ctrl.tx_evtq->byte_size / C_EE_CFG_ECB_SIZE - 4;
 
 	CXIP_DBG("EP control initialized: %p\n", ep_obj);
 
 	return FI_SUCCESS;
 
 free_pte:
-	cxip_pte_free(ep_obj->ctrl_pte);
+	cxip_pte_free(ep_obj->ctrl.pte);
 free_tgq:
 	cxip_ep_cmdq_put(ep_obj, false);
 free_txq:
 	cxip_ep_cmdq_put(ep_obj, true);
 free_tgt_evtq:
-	cxip_eq_ctrl_eq_free(ep_obj->ctrl_tgt_evtq_buf,
-			     ep_obj->ctrl_tgt_evtq_buf_md,
-			     ep_obj->ctrl_tgt_evtq);
+	cxip_eq_ctrl_eq_free(ep_obj->ctrl.tgt_evtq_buf,
+			     ep_obj->ctrl.tgt_evtq_buf_md,
+			     ep_obj->ctrl.tgt_evtq);
 free_tx_evtq:
-	cxip_eq_ctrl_eq_free(ep_obj->ctrl_tx_evtq_buf,
-			     ep_obj->ctrl_tx_evtq_buf_md, ep_obj->ctrl_tx_evtq);
+	cxip_eq_ctrl_eq_free(ep_obj->ctrl.tx_evtq_buf,
+			     ep_obj->ctrl.tx_evtq_buf_md, ep_obj->ctrl.tx_evtq);
 err:
-	if (ep_obj->ctrl_wait) {
-		cxil_destroy_wait_obj(ep_obj->ctrl_wait);
-		ep_obj->ctrl_wait = NULL;
+	if (ep_obj->ctrl.wait) {
+		cxil_destroy_wait_obj(ep_obj->ctrl.wait);
+		ep_obj->ctrl.wait = NULL;
 	}
 
 	return ret;
@@ -779,19 +779,19 @@ void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 {
 	cxip_ctrl_mr_cache_flush(ep_obj);
 	cxip_ctrl_msg_fini(ep_obj);
-	cxip_pte_free(ep_obj->ctrl_pte);
+	cxip_pte_free(ep_obj->ctrl.pte);
 	cxip_ep_cmdq_put(ep_obj, false);
 	cxip_ep_cmdq_put(ep_obj, true);
 
-	cxip_eq_ctrl_eq_free(ep_obj->ctrl_tgt_evtq_buf,
-			     ep_obj->ctrl_tgt_evtq_buf_md,
-			     ep_obj->ctrl_tgt_evtq);
-	cxip_eq_ctrl_eq_free(ep_obj->ctrl_tx_evtq_buf,
-			     ep_obj->ctrl_tx_evtq_buf_md, ep_obj->ctrl_tx_evtq);
+	cxip_eq_ctrl_eq_free(ep_obj->ctrl.tgt_evtq_buf,
+			     ep_obj->ctrl.tgt_evtq_buf_md,
+			     ep_obj->ctrl.tgt_evtq);
+	cxip_eq_ctrl_eq_free(ep_obj->ctrl.tx_evtq_buf,
+			     ep_obj->ctrl.tx_evtq_buf_md, ep_obj->ctrl.tx_evtq);
 
-	if (ep_obj->ctrl_wait) {
-		cxil_destroy_wait_obj(ep_obj->ctrl_wait);
-		ep_obj->ctrl_wait = NULL;
+	if (ep_obj->ctrl.wait) {
+		cxil_destroy_wait_obj(ep_obj->ctrl.wait);
+		ep_obj->ctrl.wait = NULL;
 
 		CXIP_DBG("Deleted control EQ wait object\n");
 	}
