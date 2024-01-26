@@ -2905,15 +2905,14 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 #endif
 	/* Expected tid needs to send a leading data block and a trailing
 	 * data block for alignment. Limit this to SDMA (8K+) for now  */
-	const bool use_immediate_blocks = len > FI_OPX_SDMA_MIN_LENGTH ? (opx_ep->use_expected_tid_rzv ?  1 : 0) : 0;
+	const uint64_t immediate_block_count = (len > FI_OPX_SDMA_MIN_LENGTH  && opx_ep->use_expected_tid_rzv) ?  1 : 0;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "use_immediate_blocks %u *origin_byte_counter_value %#lX, origin_byte_counter_vaddr %p, "
+		     "immediate_block_count %#lX *origin_byte_counter_value %#lX, origin_byte_counter_vaddr %p, "
 		     "*origin_byte_counter_vaddr %lu/%#lX, len %lu/%#lX\n",
-		     use_immediate_blocks, *origin_byte_counter_value, (uint64_t*)origin_byte_counter_vaddr,
+		     immediate_block_count, *origin_byte_counter_value, (uint64_t*)origin_byte_counter_vaddr,
 		     origin_byte_counter_vaddr ? *(uint64_t*)origin_byte_counter_vaddr : -1UL,
 		     origin_byte_counter_vaddr ? *(uint64_t*)origin_byte_counter_vaddr : -1UL, len, len );
 
-	const uint64_t immediate_block_count  = use_immediate_blocks ? 1 : 0;
 	const uint64_t immediate_end_block_count = immediate_block_count;
 
 	assert((immediate_block_count + immediate_end_block_count) <= max_immediate_block_count);
@@ -2923,6 +2922,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	const uint64_t immediate_byte_count = len & 0x0007ul;
 	const uint64_t immediate_qw_count = (len >> 3) & 0x0007ul;
+	const uint64_t immediate_fragment = (((len & 0x003Ful) + 63) >> 6);
 	/* Immediate total does not include trailing block */
 	const uint64_t immediate_total = immediate_byte_count +
 		immediate_qw_count * sizeof(uint64_t) +
@@ -2955,7 +2955,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	const uint64_t payload_blocks_total =
 		1 +				/* rzv metadata */
-		1 +				/* immediate data tail */
+		immediate_fragment +
 		immediate_block_count +
 		immediate_end_block_count;
 
@@ -3046,11 +3046,10 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 			for (i=0; i<immediate_qw_count; ++i) {
 				payload->rendezvous.contiguous.immediate_qw[i] = sbuf_qw[i];
 			}
-
 			sbuf_qw += immediate_qw_count;
 
-			memcpy((void*)payload->rendezvous.contiguous.immediate_block,
-				(const void *)sbuf_qw, immediate_block_count * 64); /* immediate_end_block_count */
+			memcpy((void*)(&payload->rendezvous.contiguous.cache_line_1 + immediate_fragment),
+				(const void *)sbuf_qw, immediate_block_count << 6); /* immediate_end_block_count */
 		}
 
 		opx_shm_tx_advance(&opx_ep->tx->shm, (void*)hdr, pos);
@@ -3203,34 +3202,34 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	/* This would lead to more efficient packing on both sides at the expense of              */
 	/* wasting space of a common 0 byte immediate                                             */
 	/* tmp_payload_t represents the second cache line of the rts packet                       */
-	/* fi_opx_hfi1_packet_payload -> rendezvous -> contiguous                               */
+	/* fi_opx_hfi1_packet_payload -> rendezvous -> contiguous                                 */
 	struct tmp_payload_t {
 		uint8_t		immediate_byte[8];
 		uint64_t	immediate_qw[7];
 	} __attribute__((packed));
 
-	struct tmp_payload_t *tmp_payload = (void*)tmp;
-	if (immediate_byte_count > 0) {
-		memcpy((void*)tmp_payload->immediate_byte, (const void*)sbuf, immediate_byte_count);
-		sbuf += immediate_byte_count;
-	}
+	uint64_t * sbuf_qw = (uint64_t *)(sbuf + immediate_byte_count);
+	if (immediate_fragment) {
+		struct tmp_payload_t *tmp_payload = (void*)tmp;
+		if (immediate_byte_count > 0) {
+			memcpy((void*)tmp_payload->immediate_byte, (const void*)sbuf, immediate_byte_count);
+		}
 
-	uint64_t * sbuf_qw = (uint64_t *)sbuf;
-	int i=0;
-	for (i=0; i<immediate_qw_count; ++i) {
-		tmp_payload->immediate_qw[i] = sbuf_qw[i];
-	}
-	fi_opx_copy_scb(scb_payload, tmp);
-	sbuf_qw += immediate_qw_count;
+		for (int i=0; i<immediate_qw_count; ++i) {
+			tmp_payload->immediate_qw[i] = sbuf_qw[i];
+		}
+		fi_opx_copy_scb(scb_payload, tmp);
+		sbuf_qw += immediate_qw_count;
 
-	fi_opx_copy_scb(replay_payload, tmp);
-	replay_payload += 8;
+		fi_opx_copy_scb(replay_payload, tmp);
+		replay_payload += 8;
 
-	/* consume one credit for the rendezvous payload immediate data */
-	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+		/* consume one credit for the rendezvous payload immediate data */
+		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 #ifndef NDEBUG
-	++credits_consumed;
+		++credits_consumed;
 #endif
+	}
 
 	if(immediate_block_count) {
 #ifndef NDEBUG
@@ -3257,6 +3256,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 #endif
 
 	}
+
 	if(immediate_end_block_count) {
 		char* sbuf_end = (char *)buf + len - (immediate_end_block_count << 6);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"IMMEDIATE SEND RZV buf %p, buf end %p, sbuf immediate end block %p\n",(char *)buf, (char *)buf+len, sbuf_end);

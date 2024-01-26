@@ -1535,6 +1535,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				};
 				const uint64_t immediate_byte_count = immediate_info.byte_count;
 				const uint64_t immediate_qw_count = immediate_info.qw_count;
+				const uint64_t immediate_fragment = ((immediate_byte_count + immediate_qw_count + 63) >> 6);
 				const uint64_t immediate_block_count = immediate_info.block_count;
 				const uint64_t immediate_total = immediate_byte_count +
 								immediate_qw_count * sizeof(uint64_t) +
@@ -1592,7 +1593,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				}
 
 				if (immediate_block_count) {
-					const union cacheline * const immediate_block = p->rendezvous.contiguous.immediate_block;
+					const union cacheline * const immediate_block = &p->rendezvous.contiguous.cache_line_1 + immediate_fragment;
 					union cacheline * rbuf_block = (union cacheline *)rbuf;
 					for (i=0; i<immediate_block_count; ++i) {
 						rbuf_block[i] = immediate_block[i];
@@ -1602,7 +1603,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				/* up to 1 block of immediate end data after the immediate blocks
 					Copy this to the end of rbuf */
 				if (immediate_end_block_count) {
-					const union cacheline * const immediate_block = p->rendezvous.contiguous.immediate_block;
+					const union cacheline * const immediate_block = &p->rendezvous.contiguous.cache_line_1 + immediate_fragment;
 					uint8_t *rbuf_start = (uint8_t *)recv_buf;
 					rbuf_start += xfer_len - (immediate_end_block_count << 6);
 					memcpy(rbuf_start, immediate_block[immediate_block_count].qw,
@@ -1663,6 +1664,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				};
 				const uint64_t immediate_byte_count = immediate_info.byte_count;
 				const uint64_t immediate_qw_count = immediate_info.qw_count;
+				const uint64_t immediate_fragment = ((immediate_byte_count + immediate_qw_count + 63) >> 6);
 				const uint64_t immediate_block_count = immediate_info.block_count;
 				const uint64_t immediate_total = immediate_byte_count +
 								immediate_qw_count * sizeof(uint64_t) +
@@ -1721,7 +1723,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				}
 
 				if (immediate_block_count) {
-					const union cacheline * const immediate_block = p->rendezvous.contiguous.immediate_block;
+					const union cacheline * const immediate_block = &p->rendezvous.contiguous.cache_line_1 + immediate_fragment;
 					union cacheline * rbuf_block = (union cacheline *)rbuf;
 					for (i=0; i<immediate_block_count; ++i) {
 						rbuf_block[i] = immediate_block[i];
@@ -1740,7 +1742,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				/* up to 1 block of immediate end data after the immediate blocks
 					Copy this to the end of rbuf */
 				if (immediate_end_block_count) {
-					const union cacheline * const immediate_block = p->rendezvous.contiguous.immediate_block;
+					const union cacheline * const immediate_block = &p->rendezvous.contiguous.cache_line_1 + immediate_fragment;
 					uint8_t *rbuf_start = (uint8_t *)recv_buf;
 					rbuf_start += xfer_len - (immediate_end_block_count << 6);
 					if (!is_hmem) {
