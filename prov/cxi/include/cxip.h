@@ -2150,6 +2150,47 @@ int cxip_txc_emit_idc_msg(struct cxip_txc *txc, uint16_t vni,
 void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc);
 
 /*
+ * Endpoint Control Object
+ *
+ * Groups control MR and messaging structures that can be exclusively used
+ * for a standard EP or globally shared in a SEP by all RX/TX context.
+ */
+struct cxip_ctrl {
+	/* wait object is required to wake up CQ waiters
+	 * when control progress is required.
+	 */
+	struct cxil_wait_obj *wait;
+
+	struct cxi_eq *tgt_evtq;
+	struct cxi_eq *tx_evtq;
+
+	/* TX command queue is used to initiate side-band messaging
+	 * and is TX credit based.
+	 */
+	struct cxip_cmdq *txq;
+	unsigned int tx_credits;
+
+	/* Target command queue is used for appending RX side-band
+	 * messaging control LE and managing standard MR LE.
+	 */
+	struct cxip_cmdq *tgq;
+	struct cxip_pte *pte;
+	struct cxip_ctrl_req msg_req;
+
+	/* FI_MR_PROV_KEY caching, protected with ep_obj->lock */
+	struct cxip_mr_lac_cache std_mr_cache[CXIP_NUM_CACHED_KEY_LE];
+	struct cxip_mr_lac_cache opt_mr_cache[CXIP_NUM_CACHED_KEY_LE];
+
+	struct dlist_entry mr_list;
+
+	/* Event queue buffers */
+	void *tgt_evtq_buf;
+	struct cxi_md *tgt_evtq_buf_md;
+	void *tx_evtq_buf;
+	struct cxi_md *tx_evtq_buf_md;
+};
+
+/*
  * Base Endpoint Object
  *
  * Support structure, libfabric fi_endpoint implementation.
@@ -2175,14 +2216,10 @@ struct cxip_ep_obj {
 
 	bool enabled;
 
-	/* Endpoint protocol implmentation.
+	/* Endpoint protocol implementation.
 	 * FI_PROTO_CXI - Portals SAS protocol
 	 */
 	uint32_t protocol;
-
-	struct cxil_wait_obj *ctrl_wait;
-	struct cxi_eq *ctrl_tgt_evtq;
-	struct cxi_eq *ctrl_tx_evtq;
 
 	struct cxip_addr src_addr;
 	fi_addr_t fi_addr;
@@ -2193,6 +2230,12 @@ struct cxip_ep_obj {
 	struct cxip_txc txc;
 	struct cxip_rxc rxc;
 
+	/* Information that might be owned by an EP (or a SEP
+	 * when implemented). Should ultimately be a pointer
+	 * to a base/specialization.
+	 */
+	struct cxip_ctrl ctrl;
+
 	/* Command queues. Each EP has 1 transmit and 1 target
 	 * command queue that can be shared. An optional 2nd transmit
 	 * command queue may be created for RX initiated rgets.
@@ -2202,15 +2245,6 @@ struct cxip_ep_obj {
 	struct cxip_cmdq *tgq;
 	ofi_atomic32_t tgq_ref;
 	struct cxip_cmdq *rx_txq;
-
-	/* Portals flow-control recovery messaging uses a credit
-	 * scheme to avoid over-running the associated event queue.
-	 */
-	struct cxip_cmdq *ctrl_txq;
-	struct cxip_cmdq *ctrl_tgq;
-	unsigned int ctrl_tx_credits;
-	struct cxip_pte *ctrl_pte;
-	struct cxip_ctrl_req ctrl_msg_req;
 
 	/* Libfabric software EQ resource */
 	struct cxip_eq *eq;
@@ -2225,17 +2259,6 @@ struct cxip_ep_obj {
 	/* Collectives support */
 	struct cxip_ep_coll_obj coll;
 	struct cxip_ep_zbcoll_obj zbcoll;
-
-	/* Flow control recovery event queue buffers */
-	void *ctrl_tgt_evtq_buf;
-	struct cxi_md *ctrl_tgt_evtq_buf_md;
-	void *ctrl_tx_evtq_buf;
-	struct cxi_md *ctrl_tx_evtq_buf_md;
-
-	/* FI_MR_PROV_KEY caching, protected with ep_obj->lock */
-	struct cxip_mr_lac_cache std_mr_cache[CXIP_NUM_CACHED_KEY_LE];
-	struct cxip_mr_lac_cache opt_mr_cache[CXIP_NUM_CACHED_KEY_LE];
-	struct dlist_entry mr_list;
 
 	size_t txq_size;
 	size_t tgq_size;
