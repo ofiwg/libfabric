@@ -1,5 +1,6 @@
 from efa.efa_common import efa_run_client_server_test
 import pytest
+import copy
 
 
 @pytest.mark.parametrize("operation_type", ["read", "writedata", "write"])
@@ -13,6 +14,16 @@ def test_rma_bw(cmdline_args, iteration_type, operation_type, completion_semanti
     timeout = max(540, cmdline_args.timeout)
     efa_run_client_server_test(cmdline_args, command, iteration_type, completion_semantic, memory_type, "all", timeout=timeout)
 
+@pytest.mark.parametrize("operation_type", ["read", "writedata", "write"])
+def test_rma_bw_small_tx(cmdline_args, operation_type, completion_semantic, memory_type):
+    cmdline_args_copy = copy.copy(cmdline_args)
+    cmdline_args_copy.append_environ("FI_EFA_TX_SIZE=64")
+    # Use a window size larger than tx size
+    command = "fi_rma_bw -e rdm -W 128"
+    command = command + " -o " + operation_type
+    # rma_bw test with data verification takes longer to finish
+    timeout = max(540, cmdline_args_copy.timeout)
+    efa_run_client_server_test(cmdline_args_copy, command, "short", completion_semantic, memory_type, "all", timeout=timeout)
 
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["read", "writedata", "write"])

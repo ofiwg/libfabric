@@ -2,6 +2,7 @@ from default.test_rdm import test_rdm, test_rdm_bw_functional
 from efa.efa_common import efa_run_client_server_test
 
 import pytest
+import copy
 
 
 @pytest.mark.parametrize("iteration_type",
@@ -55,6 +56,14 @@ def test_rdm_tagged_bw_range(cmdline_args, completion_semantic, memory_type, mes
 def test_rdm_tagged_bw_no_inject_range(cmdline_args, completion_semantic, inject_message_size):
     efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw -j 0", "short",
                                completion_semantic, "host_to_host", inject_message_size)
+
+@pytest.mark.functional
+def test_rdm_tagged_bw_small_tx(cmdline_args, completion_semantic, memory_type, completion_type):
+    cmdline_args_copy = copy.copy(cmdline_args)
+    cmdline_args_copy.append_environ("FI_EFA_TX_SIZE=64")
+    # Use a window size larger than tx size
+    efa_run_client_server_test(cmdline_args_copy, "fi_rdm_tagged_bw -W 128", "short",
+                               completion_semantic, memory_type, "all", completion_type=completion_type)
 
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
