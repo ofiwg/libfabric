@@ -882,7 +882,10 @@ int ft_init(void)
 		return ret;
 	}
 
-	return ft_hmem_init(opts.iface);
+	ret = ft_hmem_init(opts.iface);
+	if (ret)
+		FT_PRINTERR("ft_hmem_init", ret);
+	return ret;
 }
 
 int ft_sock_setup(int sock)
