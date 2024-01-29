@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2023 Cornelis Networks.
+ * Copyright (C) 2022-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -96,6 +96,8 @@ struct fi_opx_hfi1_rx_rzv_rts_params;
  * returns non-zero on failure (fallback to Eager rendezvous)
  */
 int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
-			 const uint64_t tid_vaddr, const uint64_t tid_length);
+			 const uint64_t tid_vaddr, const uint64_t tid_length,
+			 const enum fi_hmem_iface tid_iface,
+			 const uint64_t tid_device);
 
 #endif /* _FI_PROV_OPX_TID_CACHE_H_ */
