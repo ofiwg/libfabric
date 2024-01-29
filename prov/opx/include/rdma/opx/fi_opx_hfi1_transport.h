@@ -429,9 +429,13 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	uintptr_t origin_byte_counter_vaddr;
 	struct fi_opx_rzv_completion* rzv_comp;
 	uintptr_t dst_vaddr; /* bumped past immediate data */
-	uint64_t immediate_data;
-	uint64_t immediate_end_block_count;
+	uint64_t tid_pending_vaddr;
+	uint64_t tid_pending_tid_vaddr;
+	int64_t tid_pending_length;
+	int64_t tid_pending_tid_length;
+	int64_t tid_pending_alignment_adjustment;
 
+	uint32_t tid_setup_retries;
 	uint32_t ntidpairs;
 	uint32_t tid_offset;
 	uint32_t u32_extended_rx;
@@ -442,13 +446,13 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	uint16_t origin_rx;
 
 	uint8_t opcode;
-	uint8_t fallback_opcode;
 	uint8_t u8_rx;
 	uint8_t	target_hfi_unit;
+
 	/* Either FI_OPX_MAX_DPUT_IOV iov's or
 	   1 iov and FI_OPX_MAX_DPUT_TIDPAIRS tidpairs */
 	union {
-		union fi_opx_hfi1_dput_iov src_iov[FI_OPX_MAX_DPUT_IOV];
+		union fi_opx_hfi1_dput_iov dput_iov[FI_OPX_MAX_DPUT_IOV];
 		struct {
 			union fi_opx_hfi1_dput_iov reserved;/* skip 1 iov */
 			uint32_t tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];

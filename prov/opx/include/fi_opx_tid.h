@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2023 Cornelis Networks.
+ * Copyright (C) 2022-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -111,20 +111,11 @@
    ctx->__hfi_tidexpcnt)  */
 #define OPX_MAX_TID_COUNT 2048
 
-#define OPX_TID_VADDR(tid_reuse_cache) (tid_reuse_cache->tid_vaddr)
-#define OPX_TID_LENGTH(tid_reuse_cache) (tid_reuse_cache->tid_length)
-#define OPX_TID_NINFO(tid_reuse_cache) (tid_reuse_cache->ninfo)
-#define OPX_TID_INFO(tid_reuse_cache, idx) (tid_reuse_cache->info[idx])
-#define OPX_TID_NPAIRS(tid_reuse_cache) (tid_reuse_cache->npairs)
-#define OPX_TID_PAIR(tid_reuse_cache, idx) (tid_reuse_cache->pairs[idx])
-#define OPX_TID_IS_INVALID(tid_reuse_cache) (tid_reuse_cache->invalid)
-#define OPX_TID_INVALID(tid_reuse_cache) (tid_reuse_cache->invalid = 1)
-#define OPX_TID_VALID(tid_reuse_cache) (tid_reuse_cache->invalid = 0)
 #define OPX_TID_NPAGES(tid_reuse_cache, npages)                                      \
 	do {                                                                         \
 		npages = 0;                                                          \
-		const uint32_t *tids = &OPX_TID_INFO(tid_reuse_cache, 0);            \
-		const uint32_t ntids = OPX_TID_NINFO(tid_reuse_cache);               \
+		const uint32_t *tids = &tid_reuse_cache->info[0];                    \
+		const uint32_t ntids = tid_reuse_cache->ninfo;                       \
 		for (int i = 0; i < ntids; ++i) {                                    \
 			npages += (int)FI_OPX_EXP_TID_GET(tids[i], LEN);             \
 			FI_DBG(fi_opx_global.prov, FI_LOG_MR,                        \
@@ -211,10 +202,10 @@ static inline void OPX_TID_CACHE_DEBUG_FPRINTF(const char *format, ...)
 				__func__, __LINE__,                            \
 				string,                                        \
 				tid_vaddr, tid_vaddr + tid_length, tid_length, \
-				OPX_TID_VADDR(tid_reuse_cache),                \
-				OPX_TID_VADDR(tid_reuse_cache) +               \
-					OPX_TID_LENGTH(tid_reuse_cache),       \
-				OPX_TID_LENGTH(tid_reuse_cache), count);       \
+				tid_reuse_cache->tid_vaddr,                    \
+				tid_reuse_cache->tid_vaddr +                   \
+					tid_reuse_cache->tid_length,           \
+				tid_reuse_cache->tid_length, count);           \
 			last_vaddr = tid_vaddr;                                \
 			last_length = tid_length;                              \
 			count = 0;                                             \
@@ -226,10 +217,10 @@ static inline void OPX_TID_CACHE_DEBUG_FPRINTF(const char *format, ...)
 		       "tid   vaddr [%#lx - %#lx] length %lu\n",               \
 		       string, tid_vaddr,                                      \
 		       tid_vaddr + tid_length, tid_length,                     \
-		       OPX_TID_VADDR(tid_reuse_cache),                         \
-		       OPX_TID_VADDR(tid_reuse_cache) +                        \
-			       OPX_TID_LENGTH(tid_reuse_cache),                \
-		       OPX_TID_LENGTH(tid_reuse_cache));                       \
+		       tid_reuse_cache->tid_vaddr,                             \
+		       tid_reuse_cache->tid_vaddr +                            \
+			       tid_reuse_cache->tid_length,                    \
+		       tid_reuse_cache->tid_length);                           \
 	} while (0)
 #else
 /* noisier regular debug logging */
@@ -240,10 +231,10 @@ static inline void OPX_TID_CACHE_DEBUG_FPRINTF(const char *format, ...)
 	       "tid   vaddr [%#lx - %#lx] length %lu\n",             \
 	       string, tid_vaddr,                                    \
 	       tid_vaddr + tid_length, tid_length,                   \
-	       OPX_TID_VADDR(tid_reuse_cache),                       \
-	       OPX_TID_VADDR(tid_reuse_cache) +                      \
-		       OPX_TID_LENGTH(tid_reuse_cache),              \
-	       OPX_TID_LENGTH(tid_reuse_cache));
+	       tid_reuse_cache->tid_vaddr,                           \
+	       tid_reuse_cache->tid_vaddr +                          \
+		       tid_reuse_cache->tid_length,                  \
+	       tid_reuse_cache->tid_length);
 #endif
 
 /* Special debug for expected receive data ONLY */
@@ -253,8 +244,8 @@ static inline void OPX_TID_CACHE_DEBUG_FPRINTF(const char *format, ...)
 		static int count = 0;                                                 \
 		static uint64_t last_vaddr = 0UL;                                     \
 		static int32_t last_length = 0;                                       \
-		if ((last_vaddr != OPX_TID_VADDR(tid_reuse_cache)) ||                 \
-		    (last_length != OPX_TID_LENGTH(tid_reuse_cache))) {               \
+		if ((last_vaddr != tid_reuse_cache->tid_vaddr) ||                     \
+		    (last_length != tid_reuse_cache->tid_length)) {                   \
 			fprintf(stderr,                                               \
 				"## %s:%u OPX_TID_CACHE_VERBOSE_DEBUG %s TIDs "       \
 				"input vaddr [%#lx - %#lx] length %lu, "              \
@@ -262,13 +253,13 @@ static inline void OPX_TID_CACHE_DEBUG_FPRINTF(const char *format, ...)
 				"last count %u\n",                                    \
 				__func__, __LINE__,                                   \
 				string,                                               \
-				OPX_TID_VADDR(tid_reuse_cache),                       \
-				OPX_TID_VADDR(tid_reuse_cache) +                      \
-					OPX_TID_LENGTH(tid_reuse_cache),              \
-				OPX_TID_LENGTH(tid_reuse_cache), last_vaddr,          \
+				tid_reuse_cache->tid_vaddr,                           \
+				tid_reuse_cache->tid_vaddr +                          \
+					tid_reuse_cache->tid_length,                  \
+				tid_reuse_cache->tid_length, last_vaddr,              \
 				last_vaddr + last_length, last_length, count);        \
-			last_vaddr = OPX_TID_VADDR(tid_reuse_cache);                  \
-			last_length = OPX_TID_LENGTH(tid_reuse_cache);                \
+			last_vaddr = tid_reuse_cache->tid_vaddr;                      \
+			last_length = tid_reuse_cache->tid_length;                    \
 			count = 0;                                                    \
 		}                                                                     \
 		++count;                                                              \
@@ -279,10 +270,10 @@ static inline void OPX_TID_CACHE_DEBUG_FPRINTF(const char *format, ...)
 	       "OPX_TID_CACHE_VERBOSE_DEBUG %s TIDs "       \
 	       "tid   vaddr [%#lx - %#lx] length %lu\n",    \
 	       string,                                      \
-	       OPX_TID_VADDR(tid_reuse_cache),              \
-	       OPX_TID_VADDR(tid_reuse_cache) +             \
-		       OPX_TID_LENGTH(tid_reuse_cache),     \
-	       OPX_TID_LENGTH(tid_reuse_cache))
+	       tid_reuse_cache->tid_vaddr,                  \
+	       tid_reuse_cache->tid_vaddr +                 \
+		       tid_reuse_cache->tid_length,         \
+	       tid_reuse_cache->tid_length)
 #endif
 
 #endif /* _FI_PROV_OPX_TID_H_ */

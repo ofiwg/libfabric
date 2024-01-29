@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -169,12 +169,22 @@ struct fi_opx_debug_counters {
 	} sdma;
 
 	struct {
-		uint64_t	total_requests;
 		uint64_t	tid_updates;
 		uint64_t	tid_resource_limit;
+		uint64_t	tid_resource_limit_length_chunk_short;
+		uint64_t	tid_resource_limit_length_chunk_long;
+		uint64_t	tid_resource_limit_tidcnt_chunk_zero;
 		uint64_t	tid_invalidate_needed;
-		uint64_t	tid_replays;
-		uint64_t	rts_fallback_eager;
+		uint64_t	tid_rcv_pkts;
+		uint64_t	tid_rcv_pkts_replays;
+		uint64_t	rts_tid_ineligible;
+		uint64_t	rts_tid_eligible;
+		uint64_t	rts_fallback_eager_immediate;
+		uint64_t	rts_fallback_eager_misaligned_thrsh;
+		uint64_t	rts_fallback_eager_reg_rzv;
+		uint64_t	rts_tid_setup_retries;
+		uint64_t	rts_tid_setup_retry_success;
+		uint64_t	rts_tid_setup_success;
 		uint64_t	tid_buckets[4];
 		uint64_t	first_tidpair_minlen;
 		uint64_t	first_tidpair_maxlen;
@@ -245,6 +255,9 @@ struct fi_opx_debug_counters {
 		uint64_t				rma_atomic_fetch_intranode;
 		uint64_t				rma_atomic_cmp_fetch_hfi;
 		uint64_t				rma_atomic_cmp_fetch_intranode;
+
+		uint64_t				tid_update;
+		uint64_t				tid_recv;
 	} hmem;
 };
 
@@ -331,12 +344,31 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters)
 	#endif
 
 	#ifdef OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.total_requests);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_updates);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_resource_limit);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_resource_limit_length_chunk_short);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_resource_limit_tidcnt_chunk_zero);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_invalidate_needed);
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_replays);
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_fallback_eager);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_rcv_pkts);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_rcv_pkts_replays);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_ineligible);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_eligible);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_fallback_eager_immediate);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_fallback_eager_misaligned_thrsh);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_fallback_eager_reg_rzv);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_setup_retries);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_setup_retry_success);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_setup_success);
+		uint64_t rts_sum = counters->expected_receive.rts_fallback_eager_immediate +
+				   counters->expected_receive.rts_fallback_eager_misaligned_thrsh +
+				   counters->expected_receive.rts_fallback_eager_reg_rzv +
+				   counters->expected_receive.rts_tid_setup_success;
+		if (rts_sum != counters->expected_receive.rts_tid_eligible) {
+			fprintf(stderr,
+				"(%d) ### WARN: rts_tid_eligible (%lu) != SUM(rts_tid_setup_success + rts_fallback*) (%lu)! Accounting error?\n\n",
+				pid,
+				counters->expected_receive.rts_tid_eligible, rts_sum);
+		}
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, expected_receive.tid_buckets, 4);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.first_tidpair_minlen);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.first_tidpair_maxlen);
@@ -433,6 +465,9 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters)
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.rma_atomic_fetch_hfi);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.rma_atomic_cmp_fetch_intranode);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.rma_atomic_cmp_fetch_hfi);
+
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.tid_update);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.tid_recv);
 	#endif
 }
 

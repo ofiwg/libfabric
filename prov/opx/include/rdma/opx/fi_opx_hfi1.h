@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -203,6 +203,21 @@ static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX, "FI_OP
 //Version 1, SDMA replays - EAGER opcode (1)(byte 0), 2 iovectors (byte 1)
 #define FI_OPX_HFI1_SDMA_REQ_HEADER_REPLAY_EAGER_FIXEDBITS	(0x0211)
 
+#ifndef OPX_RTS_TID_SETUP_MAX_TRIES
+#define OPX_RTS_TID_SETUP_MAX_TRIES	(1)
+#endif
+
+/*
+ * Minimum page sizes to use for different memory types.
+ * The array is indexed by the values defined in
+ * enum fi_hmem_iface. Some values are not supported.
+ */
+static const uint64_t OPX_TID_PAGE_SIZE[4] = {
+	PAGE_SIZE,	/* FI_HMEM_SYSTEM */
+	64 * 1024,	/* FI_HMEM_CUDA   */
+	PAGE_SIZE,	/* FI_HMEM_ROCR   */
+	PAGE_SIZE	/* FI_HMEM_ZE     */
+};
 
 static inline
 uint32_t fi_opx_addr_calculate_base_rx (const uint32_t process_id, const uint32_t processes_per_node) {

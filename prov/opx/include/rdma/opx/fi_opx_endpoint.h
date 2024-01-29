@@ -2136,6 +2136,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 	break;
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_TID:
 	{
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_rcv_pkts);
 		struct fi_opx_rzv_completion * rzv_comp = (struct fi_opx_rzv_completion *)(hdr->dput.target.rzv.completion_vaddr);
 		union fi_opx_context *target_context = rzv_comp->context;
 		assert(target_context);
@@ -2182,7 +2183,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			} else {
 				memcpy(rbuf_qws, sbuf_qws, bytes);
 			}
-			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_replays);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_rcv_pkts_replays);
 		}
 #ifndef NDEBUG
 		else { /* Debug, tracking where the TID wrote even though we don't memcpy here */

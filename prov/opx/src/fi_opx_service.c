@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2023 Cornelis Networks.
+  Copyright(c) 2021-2024 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -23,7 +23,7 @@
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2022 Cornelis Networks.
+  Copyright(c) 2021-2024 Cornelis Networks.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -345,8 +345,8 @@ int _hfi_cmd_ioctl(int fd, struct hfi1_cmd *cmd, size_t count)
         [OPX_HFI_CMD_CTXT_RESET]       = {HFI1_IOCTL_CTXT_RESET    , 1},
         [OPX_HFI_CMD_TID_INVAL_READ]   = {HFI1_IOCTL_TID_INVAL_READ, 0},
         [OPX_HFI_CMD_GET_VERS]         = {HFI1_IOCTL_GET_VERS      , 1},
-#ifdef PSM_CUDA
-	[OPX_HFI_CMD_TID_UPDATE_V2]	= {HFI1_IOCTL_TID_UPDATE_V2 , 0},
+#ifdef OPX_HMEM
+	[OPX_HFI_CMD_TID_UPDATE_V3]	= {HFI1_IOCTL_TID_UPDATE_V3 , 0},
 #endif
     };
         _HFI_INFO("command OPX_HFI_CMD %#X, HFI1_IOCTL %#X\n",cmd->type, cmdTypeToIoctlNum[cmd->type].ioctlCmd);

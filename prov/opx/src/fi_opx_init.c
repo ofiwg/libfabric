@@ -645,6 +645,8 @@ static void do_static_assert_tests()
 				"sizeof(fi_opx_context_ext) should be a multiple of 32") ;
 	OPX_COMPILE_TIME_ASSERT((sizeof(struct fi_opx_hmem_info) >> 3) == OPX_HMEM_SIZE_QWS,
 				"sizeof(fi_opx_hmem_info) >> 3 != OPX_HMEM_SIZE_QWS") ;
+	OPX_COMPILE_TIME_ASSERT(OPX_HFI1_TID_PAGESIZE == 4096,
+				"OPX_HFI1_TID_PAGESIZE must be 4K!");
 }
 #pragma GCC diagnostic pop
 

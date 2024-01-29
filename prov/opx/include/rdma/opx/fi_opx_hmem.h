@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 by Cornelis Networks.
+ * Copyright (C) 2023-2024 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,6 +33,7 @@
 #define _FI_PROV_OPX_HMEM_H_
 
 #include <assert.h>
+#include <rdma/hfi/hfi1_user.h>
 #include "rdma/opx/fi_opx_compiler.h"
 #include "rdma/opx/fi_opx_rma_ops.h"
 #include "ofi_hmem.h"
@@ -126,6 +127,15 @@ unsigned fi_opx_hmem_iov_init(const void *buf,
 	return 0;
 #endif
 }
+
+static const unsigned OPX_HMEM_KERN_MEM_TYPE[4] = {
+	#ifdef OPX_HMEM
+		HFI1_MEMINFO_TYPE_SYSTEM,
+		HFI1_MEMINFO_TYPE_NVIDIA,
+		2, /* HFI1_MEMINFO_TYPE_AMD */
+		1 /* HFI1_MEMINFO_TYPE_DMABUF */
+	#endif
+};
 
 #ifdef OPX_HMEM
 #define OPX_HMEM_COPY_FROM(dst, src, len, src_iface, src_device)			\
