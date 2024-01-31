@@ -3275,41 +3275,48 @@ static inline bool cxip_trace_true(int mod)
 		abort();					\
 	} while (0)
 
+#define TXC_BASE(txc) ((struct cxip_txc *)(void *)(txc))
 #define TXC_DBG(txc, fmt, ...) \
 	_CXIP_DBG(FI_LOG_EP_DATA, "TXC (%#x:%u): " fmt "", \
-		  (txc)->ep_obj->src_addr.nic, (txc)->ep_obj->src_addr.pid, \
-		  ##__VA_ARGS__)
+		  TXC_BASE(txc)->ep_obj->src_addr.nic, \
+		  TXC_BASE(txc)->ep_obj->src_addr.pid, ##__VA_ARGS__)
 #define TXC_WARN(txc, fmt, ...) \
 	_CXIP_WARN(FI_LOG_EP_DATA, "TXC (%#x:%u): " fmt "", \
-		   (txc)->ep_obj->src_addr.nic, (txc)->ep_obj->src_addr.pid, \
-		   ##__VA_ARGS__)
+		   TXC_BASE(txc)->ep_obj->src_addr.nic, \
+		   TXC_BASE(txc)->ep_obj->src_addr.pid, ##__VA_ARGS__)
 #define TXC_WARN_RET(txc, ret, fmt, ...) \
 	TXC_WARN(txc, "%d:%s: " fmt "", ret, fi_strerror(-ret), ##__VA_ARGS__)
 #define TXC_FATAL(txc, fmt, ...) \
-	CXIP_FATAL("TXC (%#x:%u):: " fmt "", (txc)->ep_obj->src_addr.nic, \
-		   (txc)->ep_obj->src_addr.pid, ##__VA_ARGS__)
+	CXIP_FATAL("TXC (%#x:%u):: " fmt "", \
+		   TXC_BASE(txc)->ep_obj->src_addr.nic, \
+		   TXC_BASE(txc)->ep_obj->src_addr.pid, ##__VA_ARGS__)
 
+#define RXC_BASE(rxc) ((struct cxip_rxc *)(void *)(rxc))
 #define RXC_DBG(rxc, fmt, ...) \
 	_CXIP_DBG(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
-		  (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
-		  (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
+		  RXC_BASE(rxc)->ep_obj->src_addr.nic, \
+		  RXC_BASE(rxc)->ep_obj->src_addr.pid, \
+		  RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_INFO(rxc, fmt, ...) \
 	_CXIP_INFO(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
-		   (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
-		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
+		   RXC_BASE(rxc)->ep_obj->src_addr.nic, \
+		   RXC_BASE(rxc)->ep_obj->src_addr.pid, \
+		   RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_WARN(rxc, fmt, ...) \
 	_CXIP_WARN(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
-		   (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
-		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
+		   RXC_BASE(rxc)->ep_obj->src_addr.nic, \
+		   RXC_BASE(rxc)->ep_obj->src_addr.pid, \
+		   RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_WARN_ONCE(rxc, fmt, ...) \
 	_CXIP_WARN_ONCE(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
-		   (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
-		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
+		   RXC_BASE(rxc)->ep_obj->src_addr.nic, \
+		   RXC_BASE(rxc)->ep_obj->src_addr.pid, \
+		   RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_FATAL(rxc, fmt, ...) \
 	CXIP_FATAL("RXC (%#x:%u) PtlTE %u:[Fatal] " fmt "", \
-		   (rxc)->ep_obj->src_addr.nic, \
-		   (rxc)->ep_obj->src_addr.pid, \
-		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
+		   RXC_BASE(rxc)->ep_obj->src_addr.nic, \
+		   RXC_BASE(rxc)->ep_obj->src_addr.pid, \
+		   RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 
 #define DOM_INFO(dom, fmt, ...) \
 	_CXIP_INFO(FI_LOG_DOMAIN, "DOM (cxi%u:%u:%u:%u:%#x): " fmt "", \
