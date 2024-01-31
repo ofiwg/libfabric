@@ -1075,7 +1075,11 @@ struct cxip_ux_dump_state {
 struct cxip_req_recv {
 	/* Receive parameters */
 	struct dlist_entry rxc_entry;
-	struct cxip_rxc *rxc;		// receive context
+	union {
+		struct cxip_rxc *rxc;
+		struct cxip_rxc_hpc *rxc_hpc;
+	};
+
 	struct cxip_cntr *cntr;
 	void *recv_buf;			// local receive buffer
 	struct cxip_md *recv_md;	// local receive MD
@@ -1166,7 +1170,7 @@ struct cxip_req_rdzv_src {
 };
 
 struct cxip_req_search {
-	struct cxip_rxc *rxc;
+	struct cxip_rxc_hpc *rxc;
 	bool complete;
 	int puts_pending;
 };
@@ -1300,7 +1304,7 @@ struct cxip_fc_peer {
 
 struct cxip_fc_drops {
 	struct dlist_entry rxc_entry;
-	struct cxip_rxc *rxc;
+	struct cxip_rxc_hpc *rxc;
 	struct cxip_ctrl_req req;
 	uint32_t nic_addr;
 	uint32_t pid;
@@ -1755,61 +1759,93 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
  */
 #define CXIP_DONE_NOTIFY_RETRY_DELAY_US 100
 /*
- * Endpoint object receive context
+ * Receive context base object
  */
 struct cxip_rxc {
 	void *context;
-	struct cxip_cq *recv_cq;
-	struct cxip_cntr *recv_cntr;
-
-	struct cxip_ep_obj *ep_obj;	// parent EP object
-	struct cxip_domain *domain;	// parent domain
-	uint8_t pid_bits;
+	uint32_t protocol;
 
 	struct fi_rx_attr attr;
 	bool selective_completion;
+	bool hmem;
 	bool sw_ep_only;
+	bool msg_offload;
+	uint8_t pid_bits;		// Zero without SEP
 
+	enum cxip_rxc_state state;
+
+	/* Reverse link to EP object that owns this context */
+	struct cxip_ep_obj *ep_obj;
+
+	struct cxip_cq *recv_cq;
+	struct cxip_cntr *recv_cntr;
+	struct cxip_domain *domain;
+
+	/* RXC receive portal table, event queue and hardware
+	 * command queue.
+	 */
 	struct cxip_evtq rx_evtq;
-	struct cxip_pte *rx_pte;	// HW RX Queue
-	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting receive buffers
-	struct cxip_cmdq *tx_cmdq;	// TX CMDQ for Message Gets
+	struct cxip_pte *rx_pte;
+	struct cxip_cmdq *rx_cmdq;
+	ofi_atomic32_t orx_reqs;
 
-	/* Number of unexpected list entries in HW. */
-	ofi_atomic32_t orx_hw_ule_cnt;
-	ofi_atomic32_t orx_reqs;	// outstanding receive requests
-	ofi_atomic32_t orx_tx_reqs;	// outstanding RX initiated TX requests
+	/* If FI_MULTI_RECV is supported, minimum receive size required
+	 * for buffers posted.
+	 */
+	size_t min_multi_recv;
+
+	/* If TX events are required by specialization, the maximum
+	 * credits that can be used.
+	 */
 	int32_t max_tx;
+
+	struct cxip_msg_counters cntrs;
+};
+
+/* Receive context specialization for supporting HPC messaging
+ * that requires SAS implemented in a Portals environment.
+ */
+struct cxip_rxc_hpc {
+	/* Must be first */
+	struct cxip_rxc base;
+
+	int max_eager_size;
+	uint64_t rget_align_mask;
 	unsigned int recv_appends;
 
 	/* Window when FI_CLAIM mutual exclusive access is required */
 	bool hw_claim_in_progress;
 
-	size_t min_multi_recv;
-	int max_eager_size;
+	int sw_ux_list_len;
+	int sw_pending_ux_list_len;
 
-	/* Flow control/software state change metrics */
-	int num_fc_eq_full;
-	int num_fc_no_match;
-	int num_fc_unexp;
-	int num_fc_append_fail;
-	int num_fc_req_full;
-	int num_sc_nic_hw2sw_append_fail;
-	int num_sc_nic_hw2sw_unexp;
+	/* Number of unexpected list entries in HW. */
+	ofi_atomic32_t orx_hw_ule_cnt;
+
+	/* RX context transmit queue, required for rendezvous
+	 * gets.
+	 */
+	struct cxip_cmdq *tx_cmdq;
+	ofi_atomic32_t orx_tx_reqs;
+
+	/* Software receive queue. User posted requests are queued here instead
+	 * of on hardware if the RXC is in software endpoint mode.
+	 */
+	struct dlist_entry sw_recv_queue;
+
+	/* Defer events to wait for both put and put overflow */
+	struct def_event_ht deferred_events;
 
 	/* Unexpected message handling */
 	struct cxip_ptelist_bufpool *req_list_bufpool;
 	struct cxip_ptelist_bufpool *oflow_list_bufpool;
 
-	/* Defer events to wait for both put and put overflow */
-	struct def_event_ht deferred_events;
+	enum cxip_rxc_state prev_state;
+	enum cxip_rxc_state new_state;
+	enum c_sc_reason fc_reason;
 
-	struct dlist_entry fc_drops;
-	struct dlist_entry replay_queue;
-	struct dlist_entry sw_ux_list;
-	struct dlist_entry sw_pending_ux_list;
-	int sw_ux_list_len;
-	int sw_pending_ux_list_len;
+	/* RXC drop count used for FC accounting. */
+	int drop_count;
 
 	/* Array of 8-byte of unexpected headers remote offsets. */
 	uint64_t *ule_offsets;
@@ -1820,24 +1856,19 @@ struct cxip_rxc {
 	 */
 	unsigned int cur_ule_offsets;
 
-	/* Software receive queue. User posted requests are queued here instead
-	 * of on hardware if the RXC is in software endpoint mode.
-	 */
-	struct dlist_entry sw_recv_queue;
+	struct dlist_entry fc_drops;
+	struct dlist_entry replay_queue;
+	struct dlist_entry sw_ux_list;
+	struct dlist_entry sw_pending_ux_list;
 
-	enum cxip_rxc_state state;
-	enum cxip_rxc_state prev_state;
-	enum cxip_rxc_state new_state;
-	enum c_sc_reason fc_reason;
-
-	bool msg_offload;
-	uint64_t rget_align_mask;
-
-	/* RXC drop count used for FC accounting. */
-	int drop_count;
-	bool hmem;
-
-	struct cxip_msg_counters cntrs;
+	/* Flow control/software state change metrics */
+	int num_fc_eq_full;
+	int num_fc_no_match;
+	int num_fc_unexp;
+	int num_fc_append_fail;
+	int num_fc_req_full;
+	int num_sc_nic_hw2sw_append_fail;
+	int num_sc_nic_hw2sw_unexp;
 };
 
 static inline void cxip_copy_to_md(struct cxip_md *md, void *dest,
@@ -1906,7 +1937,7 @@ struct cxip_ptelist_bufpool_attr {
 
 struct cxip_ptelist_bufpool {
 	struct cxip_ptelist_bufpool_attr attr;
-	struct cxip_rxc *rxc;
+	struct cxip_rxc_hpc *rxc;
 	size_t buf_alignment;
 
 	/* Ordered list of buffers emitted to hardware */
@@ -1941,7 +1972,7 @@ struct cxip_ptelist_buf {
 	struct cxip_ptelist_bufpool *pool;
 
 	/* RX context the request buffer is posted on. */
-	struct cxip_rxc *rxc;
+	struct cxip_rxc_hpc *rxc;
 	enum cxip_le_type le_type;
 	struct dlist_entry buf_entry;
 	struct cxip_req *req;
@@ -1972,7 +2003,7 @@ struct cxip_ptelist_buf {
 	char *data;
 };
 
-int cxip_ptelist_bufpool_init(struct cxip_rxc *rxc,
+int cxip_ptelist_bufpool_init(struct cxip_rxc_hpc *rxc,
 			      struct cxip_ptelist_bufpool **pool,
 			      struct cxip_ptelist_bufpool_attr *attr);
 void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool);
@@ -1989,15 +2020,15 @@ void cxip_ptelist_buf_consumed(struct cxip_ptelist_buf *buf);
  * cxip_req_bufpool_init() - Initialize PtlTE request list buffer management
  * object.
  */
-int cxip_req_bufpool_init(struct cxip_rxc *rxc);
-void cxip_req_bufpool_fini(struct cxip_rxc *rxc);
+int cxip_req_bufpool_init(struct cxip_rxc_hpc *rxc);
+void cxip_req_bufpool_fini(struct cxip_rxc_hpc *rxc);
 
 /*
  * cxip_oflow_bufpool_init() - Initialize PtlTE overflow list buffer management
  * object.
  */
-int cxip_oflow_bufpool_init(struct cxip_rxc *rxc);
-void cxip_oflow_bufpool_fini(struct cxip_rxc *rxc);
+int cxip_oflow_bufpool_init(struct cxip_rxc_hpc *rxc);
+void cxip_oflow_bufpool_fini(struct cxip_rxc_hpc *rxc);
 
 void _cxip_req_buf_ux_free(struct cxip_ux_send *ux, bool repost);
 void cxip_req_buf_ux_free(struct cxip_ux_send *ux);
@@ -2210,24 +2241,20 @@ struct cxip_ep_obj {
 	uint16_t *vnis;
 	size_t vni_count;
 
-	bool enabled;
-
-	/* Endpoint protocol implementation.
-	 * FI_PROTO_CXI - Portals SAS protocol
-	 */
-	uint32_t protocol;
-
 	struct cxip_addr src_addr;
 	fi_addr_t fi_addr;
 
-	/* ASIC version associated with EP/Domain */
-	enum cassini_version asic_ver;
+	bool enabled;
 
-	/* TXC/RXC are set to EP protocol specific classes that
-	 * share a common base implementation.
+	/* Endpoint protocol implementations.
+	 * FI_PROTO_CXI - Portals SAS protocol
 	 */
+	uint32_t protocol;
 	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
+
+	/* ASIC version associated with EP/Domain */
+	enum cassini_version asic_ver;
 
 	/* Information that might be owned by an EP (or a SEP
 	 * when implemented). Should ultimately be a pointer
@@ -2874,17 +2901,19 @@ void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
 int cxip_txc_enable(struct cxip_txc *txc);
 void cxip_txc_disable(struct cxip_txc *txc);
 struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
-int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count);
+int cxip_rxc_msg_enable(struct cxip_rxc_hpc *rxc, uint32_t drop_count);
+
+struct cxip_rxc *cxip_rxc_calloc(uint32_t protocol);
 int cxip_rxc_enable(struct cxip_rxc *rxc);
 void cxip_rxc_disable(struct cxip_rxc *rxc);
 void cxip_rxc_struct_init(struct cxip_rxc *rxc, const struct fi_rx_attr *attr,
 			  void *context);
 
-int cxip_rxc_emit_dma(struct cxip_rxc *rxc, uint16_t vni,
+int cxip_rxc_emit_dma(struct cxip_rxc_hpc *rxc, uint16_t vni,
 		      enum cxi_traffic_class tc,
 		      enum cxi_traffic_class_type tc_type,
 		      struct c_full_dma_cmd *dma, uint64_t flags);
-int cxip_rxc_emit_idc_msg(struct cxip_rxc *rxc, uint16_t vni,
+int cxip_rxc_emit_idc_msg(struct cxip_rxc_hpc *rxc, uint16_t vni,
 			  enum cxi_traffic_class tc,
 			  enum cxi_traffic_class_type tc_type,
 			  const struct c_cstate_cmd *c_state,
@@ -3305,9 +3334,9 @@ static inline bool cxip_trace_true(int mod)
 		   RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_WARN_ONCE(rxc, fmt, ...) \
 	_CXIP_WARN_ONCE(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
-		   RXC_BASE(rxc)->ep_obj->src_addr.nic, \
-		   RXC_BASE(rxc)->ep_obj->src_addr.pid, \
-		   RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
+			RXC_BASE(rxc)->ep_obj->src_addr.nic, \
+			RXC_BASE(rxc)->ep_obj->src_addr.pid, \
+			RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_FATAL(rxc, fmt, ...) \
 	CXIP_FATAL("RXC (%#x:%u) PtlTE %u:[Fatal] " fmt "", \
 		   RXC_BASE(rxc)->ep_obj->src_addr.nic, \
