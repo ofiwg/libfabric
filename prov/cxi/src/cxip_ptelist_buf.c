@@ -20,11 +20,11 @@ cxip_ptelist_to_str(struct cxip_ptelist_bufpool *pool)
 
 static int cxip_ptelist_unlink_buf(struct cxip_ptelist_buf *buf)
 {
-	struct cxip_rxc *rxc = buf->rxc;
+	struct cxip_rxc_hpc *rxc = buf->rxc;
 	int ret;
 
-	ret = cxip_pte_unlink(rxc->rx_pte, buf->pool->attr.list_type,
-			      buf->req->req_id, rxc->rx_cmdq);
+	ret = cxip_pte_unlink(rxc->base.rx_pte, buf->pool->attr.list_type,
+			      buf->req->req_id, rxc->base.rx_cmdq);
 	if (ret)
 		RXC_DBG(rxc, "Failed to write command %d %s\n",
 			ret, fi_strerror(-ret));
@@ -35,7 +35,7 @@ static int cxip_ptelist_unlink_buf(struct cxip_ptelist_buf *buf)
 static int cxip_ptelist_link_buf(struct cxip_ptelist_buf *buf,
 				 bool seq_restart)
 {
-	struct cxip_rxc *rxc = buf->rxc;
+	struct cxip_rxc_hpc *rxc = buf->rxc;
 	uint32_t le_flags = C_LE_MANAGE_LOCAL | C_LE_NO_TRUNCATE |
 		C_LE_UNRESTRICTED_BODY_RO | C_LE_OP_PUT |
 		C_LE_UNRESTRICTED_END_RO | C_LE_EVENT_UNLINK_DISABLE;
@@ -72,14 +72,14 @@ static int cxip_ptelist_link_buf(struct cxip_ptelist_buf *buf,
 	buf->cur_offset = 0;
 
 	/* Take a request buffer reference for the link. */
-	ret = cxip_pte_append(rxc->rx_pte,
+	ret = cxip_pte_append(rxc->base.rx_pte,
 			      CXI_VA_TO_IOVA(buf->md->md, buf->data),
 			      buf->pool->attr.buf_size, buf->md->md->lac,
 			      buf->pool->attr.list_type,
 			      buf->req->req_id, mb.raw,
 			      ib.raw, CXI_MATCH_ID_ANY,
 			      buf->pool->attr.min_space_avail,
-			      le_flags, NULL, rxc->rx_cmdq, true);
+			      le_flags, NULL, rxc->base.rx_cmdq, true);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to write %s append %d %s\n",
 			 cxip_ptelist_to_str(buf->pool),
@@ -110,7 +110,7 @@ static int cxip_ptelist_link_buf(struct cxip_ptelist_buf *buf,
 static struct cxip_ptelist_buf*
 cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 {
-	struct cxip_rxc *rxc = pool->rxc;
+	struct cxip_rxc_hpc *rxc = pool->rxc;
 	struct cxip_ptelist_buf *buf;
 	int ret;
 
@@ -122,7 +122,7 @@ cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 	if (!buf->data)
 		goto err_free_buf;
 
-	if (rxc->hmem && !cxip_env.disable_host_register) {
+	if (rxc->base.hmem && !cxip_env.disable_host_register) {
 		ret = ofi_hmem_host_register(buf->data, pool->attr.buf_size);
 		if (ret) {
 			RXC_WARN(rxc,
@@ -132,12 +132,12 @@ cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 		}
 	}
 
-	ret = cxip_map(rxc->domain, buf->data, pool->attr.buf_size,
+	ret = cxip_map(rxc->base.domain, buf->data, pool->attr.buf_size,
 		       OFI_MR_NOCACHE, &buf->md);
 	if (ret)
 		goto err_unreg_buf;
 
-	buf->req = cxip_evtq_req_alloc(&rxc->rx_evtq, true, buf);
+	buf->req = cxip_evtq_req_alloc(&rxc->base.rx_evtq, true, buf);
 	if (!buf->req)
 		goto err_unmap_buf;
 
@@ -165,7 +165,7 @@ cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 err_unmap_buf:
 	cxip_unmap(buf->md);
 err_unreg_buf:
-	if (rxc->hmem && !cxip_env.disable_host_register)
+	if (rxc->base.hmem && !cxip_env.disable_host_register)
 		ofi_hmem_host_unregister(buf);
 err_free_data_buf:
 	free(buf->data);
@@ -179,7 +179,7 @@ static void cxip_ptelist_buf_free(struct cxip_ptelist_buf *buf)
 {
 	struct cxip_ux_send *ux;
 	struct dlist_entry *tmp;
-	struct cxip_rxc *rxc = buf->rxc;
+	struct cxip_rxc_hpc *rxc = buf->rxc;
 
 	/* Sanity check making sure the buffer was properly removed before
 	 * freeing.
@@ -201,7 +201,7 @@ static void cxip_ptelist_buf_free(struct cxip_ptelist_buf *buf)
 			  ofi_atomic_get32(&buf->refcount));
 	cxip_evtq_req_free(buf->req);
 	cxip_unmap(buf->md);
-	if (rxc->hmem && !cxip_env.disable_host_register)
+	if (rxc->base.hmem && !cxip_env.disable_host_register)
 		ofi_hmem_host_unregister(buf->data);
 
 	ofi_atomic_dec32(&buf->pool->bufs_allocated);
@@ -228,7 +228,7 @@ static void cxip_ptelist_buf_dlist_free(struct dlist_entry *head)
 void cxip_ptelist_buf_link_err(struct cxip_ptelist_buf *buf,
 			       int rc_link_error)
 {
-	struct cxip_rxc *rxc = buf->pool->rxc;
+	struct cxip_rxc_hpc *rxc = buf->pool->rxc;
 
 	RXC_WARN(rxc, "%s buffer %p link error %s\n",
 		 cxip_ptelist_to_str(buf->pool),
@@ -258,7 +258,7 @@ void cxip_ptelist_buf_unlink(struct cxip_ptelist_buf *buf)
 	RXC_DBG(pool->rxc, "%s buffer unlink\n", cxip_ptelist_to_str(pool));
 }
 
-int cxip_ptelist_bufpool_init(struct cxip_rxc *rxc,
+int cxip_ptelist_bufpool_init(struct cxip_rxc_hpc *rxc,
 			      struct cxip_ptelist_bufpool **pool,
 			      struct cxip_ptelist_bufpool_attr *attr)
 {
@@ -331,11 +331,11 @@ err_free_bufs:
 
 void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool)
 {
-	struct cxip_rxc *rxc = pool->rxc;
+	struct cxip_rxc_hpc *rxc = pool->rxc;
 	struct cxip_ptelist_buf *buf;
 	int ret;
 
-	assert(rxc->rx_pte->state == C_PTLTE_DISABLED);
+	assert(rxc->base.rx_pte->state == C_PTLTE_DISABLED);
 
 	RXC_INFO(rxc, "Number of %s buffers allocated %d\n",
 		 cxip_ptelist_to_str(pool),
@@ -349,13 +349,13 @@ void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool)
 		ret = cxip_ptelist_unlink_buf(buf);
 		if (ret != FI_SUCCESS)
 			CXIP_FATAL("PtlTE %d failed to unlink %s buf %d %s\n",
-				   rxc->rx_pte->pte->ptn,
+				   rxc->base.rx_pte->pte->ptn,
 				   cxip_ptelist_to_str(pool), ret,
 				   fi_strerror(-ret));
 	}
 
 	do {
-		cxip_evtq_progress(&rxc->rx_evtq);
+		cxip_evtq_progress(&rxc->base.rx_evtq);
 	} while (ofi_atomic_get32(&pool->bufs_linked));
 
 	cxip_ptelist_buf_dlist_free(&pool->active_bufs);
@@ -377,12 +377,13 @@ void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool)
 int cxip_ptelist_buf_replenish(struct cxip_ptelist_bufpool *pool,
 			       bool seq_restart)
 {
-	struct cxip_rxc *rxc = pool->rxc;
+	struct cxip_rxc_hpc *rxc = pool->rxc;
 	struct cxip_ptelist_buf *buf;
 	int bufs_added = 0;
 	int ret = FI_SUCCESS;
 
-	if (rxc->msg_offload && pool->attr.list_type == C_PTL_LIST_REQUEST)
+	if (rxc->base.msg_offload &&
+	    pool->attr.list_type == C_PTL_LIST_REQUEST)
 		return FI_SUCCESS;
 
 	while (ofi_atomic_get32(&pool->bufs_linked) < pool->attr.min_posted) {
@@ -474,11 +475,12 @@ void cxip_ptelist_buf_put(struct cxip_ptelist_buf *buf, bool repost)
 		 * in hardware RX match mode.
 		 */
 		if (buf->pool->attr.list_type == C_PTL_LIST_OVERFLOW &&
-		    (!buf->rxc->msg_offload || buf->rxc->state != RXC_ENABLED))
+		    (!buf->rxc->base.msg_offload ||
+		     buf->rxc->base.state != RXC_ENABLED))
 			goto free_buf;
 
 		if (buf->pool->attr.list_type == C_PTL_LIST_REQUEST &&
-		    buf->rxc->state != RXC_ENABLED_SOFTWARE)
+		    buf->rxc->base.state != RXC_ENABLED_SOFTWARE)
 			goto skip_repost;
 
 		/* Limit immediate repost if already sufficient */
