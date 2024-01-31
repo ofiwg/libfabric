@@ -1062,7 +1062,7 @@ class DMABUFTest(Test):
                                             else 0
 
         if util_prov:
-            self.prov = f'{self.core_prov}\;{self.util_prov}'
+            self.prov = f"{self.core_prov}\;{self.util_prov}"
         else:
             self.prov = self.core_prov
 
@@ -1073,27 +1073,63 @@ class DMABUFTest(Test):
             'MLX5_SCATTER_TO_CQE'     : '0'
         }
 
-        self.tests = {
-                'H2H'   : [
-                            'write',
-                            'read',
-                            'send'
-                        ],
-                'H2D'   : [
-                            'write',
-                            'read',
-                            'send'
-                        ],
-                'D2H'   : [
-                            'write',
-                            'read',
-                            'send'
-                        ],
-                'D2D'   : [
-                            'write',
-                            'read',
-                            'send'
-                        ]
+        self.single_node_combinations = {
+                'H2H'   : {
+                            '-m malloc' : ['-m malloc']
+                        },
+                'H2D'   : {
+                            '-m malloc' : [
+                                            '-m device -d 0',
+                                            '-m device -d 1'
+                                          ]
+                        },
+                'D2H'   : {
+                            '-m device -d 0' : ['-m malloc'],
+                            '-m device -d 1' : ['-m malloc']
+                        },
+                'D2D'   : {
+                            '-m device -d 0' : [
+                                                '-m device -d 1',
+                                                '-m device -d 2',
+                                                '-m device -d 3'
+                                               ],
+                            '-m device -d 1' : [
+                                                '-m device -d 2',
+                                                '-m device -d 3'
+                                               ]
+                        }
+        }
+
+        self.double_node_combinations = {
+                'H2H'   : {
+                            '-m malloc' : ['-m malloc']
+                        },
+                'H2D'   : {
+                            '-m malloc' : [
+                                            '-m device -d 0',
+                                            '-m device -d 1',
+                                            '-m device -d 2'
+                                          ]
+                        },
+                'D2H'   : {
+                            '-m device -d 0' : ['-m malloc'],
+                            '-m device -d 1' : ['-m malloc'],
+                            '-m device -d 2' : ['-m malloc'],
+                            '-m device -d 3' : ['-m malloc']
+                        },
+                'D2D'   : {
+                            '-m device -d 0' : [
+                                                '-m device -d 0',
+                                                '-m device -d 1',
+                                                '-m device -d 2',
+                                                '-m device -d 3'
+                                               ],
+                            '-m device -d 1' : [
+                                                '-m device -d 1',
+                                                '-m device -d 2',
+                                                '-m device -d 3'
+                                               ]
+                        }
         }
 
     @property
@@ -1112,27 +1148,29 @@ class DMABUFTest(Test):
     def execute_cmd(self, test_type):
         os.chdir(self.DMABUFtestpath)
         base_cmd = ''
+        operations = ['write', 'read', 'send']
         log_prefix = f"{os.environ['LOG_DIR']}/dmabuf_{self.n}"
-        if 'H2H' in test_type or 'D2H' in test_type:
-            base_cmd = f"{self.cmd} -m malloc -p {self.core_prov}"
+        if self.n == '1':
+            self.tests = self.single_node_combinations
         else:
-            base_cmd = f"{self.cmd} -m device -d 0 -p {self.core_prov}"
+            self.tests = self.double_node_combinations
+        for operation in operations:
+            for key,value in self.tests[test_type].items():
+                for values in value:
+                    server_command = f"{self.cmd} {values} -p {self.core_prov}"
+                    if 'send' in operation:
+                        server_command += f" -t {operation}"
+                    base_cmd = f"-t {operation} -p {self.core_prov} {self.server}"
+                    client_command = f"{self.cmd} {key} {base_cmd}"
+                    RC = common.ClientServerTest(
+                            f"ssh {self.server} {self.dmabuf_env()} {server_command}", \
+                            f"ssh {self.client} {self.dmabuf_env()} {client_command}", \
+                            f"{log_prefix}_server.log", f"{log_prefix}_client.log", \
+                            self.timeout
+                        ).run()
 
-        for test in self.tests[test_type]:
-            client_command = f"{base_cmd} -t {test} {self.server}"
-            if 'send' in test:
-                server_command = f"{base_cmd} -t {test} "
-            else:
-                server_command = f"{base_cmd} "
-            RC = common.ClientServerTest(
-                    f"ssh {self.server} {self.dmabuf_env()} {server_command}",
-                    f"ssh {self.client} {self.dmabuf_env()} {client_command}",
-                    f"{log_prefix}_server.log", f"{log_prefix}_client.log",
-                    self.timeout
-                 ).run()
-
-            if RC == (0, 0):
-                print("------------------ TEST COMPLETED -------------------")
-            else:
-                print("------------------ TEST FAILED -------------------")
-                sys.exit(f"Exiting with returncode: {RC}")
+                    if RC == (0, 0):
+                        print("-------------- TEST COMPLETED ---------------")
+                    else:
+                        print("-------------- TEST FAILED ---------------")
+                        sys.exit(f"Exiting with returncode: {RC}")
