@@ -436,7 +436,6 @@ free_fc_peers:
 void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
 			  void *context)
 {
-	dlist_init(&txc->ep_list);
 	ofi_atomic_initialize32(&txc->otx_reqs, 0);
 	dlist_init(&txc->msg_queue);
 	dlist_init(&txc->fc_peers);
