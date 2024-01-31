@@ -41,7 +41,7 @@
 
 static int cxip_recv_cb(struct cxip_req *req, const union c_event *event);
 static void cxip_ux_onload_complete(struct cxip_req *req);
-static int cxip_ux_onload(struct cxip_rxc *rxc);
+static int cxip_ux_onload(struct cxip_rxc_hpc *rxc);
 static int cxip_recv_req_queue(struct cxip_req *req, bool restart_seq);
 static int cxip_recv_req_dropped(struct cxip_req *req);
 static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq);
@@ -49,7 +49,7 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq);
 static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req);
 static int cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req);
 
-static void cxip_fc_progress_ctrl(struct cxip_rxc *rxc);
+static void cxip_fc_progress_ctrl(struct cxip_rxc_hpc *rxc);
 static void cxip_send_buf_fini(struct cxip_req *req);
 
 /*
@@ -69,7 +69,7 @@ static void cxip_send_buf_fini(struct cxip_req *req);
  * Caller must hold ep_obj->lock.
  */
 static struct cxip_deferred_event *
-match_put_event(struct cxip_rxc *rxc, struct cxip_req *req,
+match_put_event(struct cxip_rxc_hpc *rxc, struct cxip_req *req,
 		const union c_event *event, bool *matched)
 {
 	union cxip_def_event_key key = {};
@@ -129,7 +129,7 @@ match_put_event(struct cxip_rxc *rxc, struct cxip_req *req,
  *
  * Caller must hold ep_obj->lock.
  */
-static void free_put_event(struct cxip_rxc *rxc,
+static void free_put_event(struct cxip_rxc_hpc *rxc,
 			   struct cxip_deferred_event *def_ev)
 {
 	dlist_remove(&def_ev->rxc_entry);
@@ -716,8 +716,8 @@ static int issue_rdzv_get(struct cxip_req *req)
 	uint64_t rem_offset;
 	uint32_t align_bytes;
 	uint32_t mlen;
-	struct cxip_rxc *rxc = req->recv.rxc;
-	uint32_t pid_idx = rxc->domain->iface->dev->info.rdzv_get_idx;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
+	uint32_t pid_idx = rxc->base.domain->iface->dev->info.rdzv_get_idx;
 	uint8_t idx_ext;
 	union cxip_match_bits mb = {};
 	int ret;
@@ -733,14 +733,14 @@ static int issue_rdzv_get(struct cxip_req *req)
 	cmd.event_send_disable = 1;
 
 	/* Must deliver to TX event queue */
-	cmd.eq = cxip_evtq_eqn(&rxc->ep_obj->txc->tx_evtq);
+	cmd.eq = cxip_evtq_eqn(&rxc->base.ep_obj->txc->tx_evtq);
 
 	if (req->recv.rdzv_proto == CXIP_RDZV_PROTO_ALT_READ) {
 		pid_idx = CXIP_PTL_IDX_RDZV_RESTRICTED(req->recv.rdzv_lac);
 		cmd.restricted = 1;
 		req->recv.done_notify = true;
 	} else {
-		pid_idx = rxc->domain->iface->dev->info.rdzv_get_idx;
+		pid_idx = rxc->base.domain->iface->dev->info.rdzv_get_idx;
 		mb.rdzv_lac = req->recv.rdzv_lac;
 		mb.rdzv_id_lo = req->recv.rdzv_id;
 		mb.rdzv_id_hi = req->recv.rdzv_id >> CXIP_RDZV_ID_CMD_WIDTH;
@@ -748,8 +748,8 @@ static int issue_rdzv_get(struct cxip_req *req)
 	cmd.match_bits = mb.raw;
 
 	cmd.user_ptr = (uint64_t)req;
-	cxi_build_dfa(req->recv.rget_nic, req->recv.rget_pid, rxc->pid_bits,
-		      pid_idx, &dfa, &idx_ext);
+	cxi_build_dfa(req->recv.rget_nic, req->recv.rget_pid,
+		      rxc->base.pid_bits, pid_idx, &dfa, &idx_ext);
 	cmd.dfa = dfa;
 	cmd.index_ext = idx_ext;
 
@@ -824,11 +824,11 @@ cxip_notify_match_cb(struct cxip_req *req, const union c_event *event)
  */
 static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
-	uint32_t pid_idx = rxc->domain->iface->dev->info.rdzv_get_idx;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
+	uint32_t pid_idx = rxc->base.domain->iface->dev->info.rdzv_get_idx;
 	uint32_t init = event->tgt_long.initiator.initiator.process;
-	uint32_t nic = CXI_MATCH_ID_EP(rxc->pid_bits, init);
-	uint32_t pid = CXI_MATCH_ID_PID(rxc->pid_bits, init);
+	uint32_t nic = CXI_MATCH_ID_EP(rxc->base.pid_bits, init);
+	uint32_t pid = CXI_MATCH_ID_PID(rxc->base.pid_bits, init);
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	union cxip_match_bits mb = {
@@ -842,11 +842,11 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 	event_mb.raw = event->tgt_long.match_bits;
 	mb.tx_id = event_mb.tx_id;
 
-	cxi_build_dfa(nic, pid, rxc->pid_bits, pid_idx, &dfa, &idx_ext);
+	cxi_build_dfa(nic, pid, rxc->base.pid_bits, pid_idx, &dfa, &idx_ext);
 
 	c_state.event_send_disable = 1;
 	c_state.index_ext = idx_ext;
-	c_state.eq = cxip_evtq_eqn(&rxc->ep_obj->txc->tx_evtq);
+	c_state.eq = cxip_evtq_eqn(&rxc->base.ep_obj->txc->tx_evtq);
 
 	idc_msg.dfa = dfa;
 	idc_msg.match_bits = mb.raw;
@@ -1115,7 +1115,7 @@ static void recv_req_peek_complete(struct cxip_req *req,
 }
 
 /* Caller must hold ep_obj->lock. */
-static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
+static int cxip_oflow_process_put_event(struct cxip_rxc_hpc *rxc,
 					struct cxip_req *req,
 					const union c_event *event)
 {
@@ -1167,34 +1167,34 @@ done:
 }
 
 /* Caller must hold ep_obj->lock */
-static int cxip_recv_pending_ptlte_disable(struct cxip_rxc *rxc,
+static int cxip_recv_pending_ptlte_disable(struct cxip_rxc_hpc *rxc,
 					   bool check_fc)
 {
 	int ret;
 
-	assert(rxc->state == RXC_ENABLED ||
-	       rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
-	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
-	       rxc->state == RXC_FLOW_CONTROL ||
-	       rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED ||
-	       rxc->state == RXC_PENDING_PTLTE_DISABLE);
+	assert(rxc->base.state == RXC_ENABLED ||
+	       rxc->base.state == RXC_ONLOAD_FLOW_CONTROL ||
+	       rxc->base.state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
+	       rxc->base.state == RXC_FLOW_CONTROL ||
+	       rxc->base.state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED ||
+	       rxc->base.state == RXC_PENDING_PTLTE_DISABLE);
 
 	/* Having flow control triggered while in flow control is a sign of LE
 	 * exhaustion. Software endpoint mode is required to scale past hardware
 	 * LE limit.
 	 */
-	if (check_fc && rxc->state == RXC_FLOW_CONTROL)
+	if (check_fc && rxc->base.state == RXC_FLOW_CONTROL)
 		RXC_FATAL(rxc, FC_SW_LE_MSG_FATAL);
 
-	if (rxc->state != RXC_ENABLED)
+	if (rxc->base.state != RXC_ENABLED)
 		return FI_SUCCESS;
 
 	RXC_DBG(rxc, "Manual request PTLTE_DISABLED\n");
 
-	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, C_PTLTE_DISABLED,
-				 0);
+	ret = cxip_pte_set_state(rxc->base.rx_pte, rxc->base.rx_cmdq,
+				 C_PTLTE_DISABLED, 0);
 	if (ret == FI_SUCCESS)
-		rxc->state = RXC_PENDING_PTLTE_DISABLE;
+		rxc->base.state = RXC_PENDING_PTLTE_DISABLE;
 
 	return ret;
 }
@@ -1215,11 +1215,11 @@ static int cxip_recv_pending_ptlte_disable(struct cxip_rxc *rxc,
  * Caller should hold ep_obj->lock.
  */
 static inline bool
-cxip_rxp_check_le_usage_hybrid_preempt(struct cxip_rxc *rxc,
+cxip_rxp_check_le_usage_hybrid_preempt(struct cxip_rxc_hpc *rxc,
 				       const union c_event *event)
 {
 	if (event->tgt_long.lpe_stat_1 > (event->tgt_long.lpe_stat_2 >> 1) &&
-	    rxc->state == RXC_ENABLED) {
+	    rxc->base.state == RXC_ENABLED) {
 		if (cxip_recv_pending_ptlte_disable(rxc, false))
 			RXC_WARN(rxc, "Force FC failed\n");
 		return true;
@@ -1227,7 +1227,7 @@ cxip_rxp_check_le_usage_hybrid_preempt(struct cxip_rxc *rxc,
 	return false;
 }
 
-static int cxip_rxc_check_ule_hybrid_preempt(struct cxip_rxc *rxc)
+static int cxip_rxc_check_ule_hybrid_preempt(struct cxip_rxc_hpc *rxc)
 {
 	int ret;
 	int count;
@@ -1236,12 +1236,13 @@ static int cxip_rxc_check_ule_hybrid_preempt(struct cxip_rxc *rxc)
 	    cxip_env.hybrid_unexpected_msg_preemptive == 1) {
 		count = ofi_atomic_get32(&rxc->orx_hw_ule_cnt);
 
-		if (rxc->state == RXC_ENABLED && count > rxc->attr.size) {
+		if (rxc->base.state == RXC_ENABLED &&
+		    count > rxc->base.attr.size) {
 			ret = cxip_recv_pending_ptlte_disable(rxc, false);
 			if (ret == FI_SUCCESS) {
 				RXC_WARN(rxc,
 					 "Transitioning to SW EP due to too many unexpected messages: posted_count=%u request_size=%lu\n",
-					 ret, rxc->attr.size);
+					 ret, rxc->base.attr.size);
 			} else {
 				assert(ret == -FI_EAGAIN);
 				RXC_WARN(rxc,
@@ -1294,7 +1295,7 @@ static int cxip_rxc_check_ule_hybrid_preempt(struct cxip_rxc *rxc)
 static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_ptelist_buf *oflow_buf = req->req_ctx;
-	struct cxip_rxc *rxc = oflow_buf->rxc;
+	struct cxip_rxc_hpc *rxc = oflow_buf->rxc;
 	int ret = FI_SUCCESS;
 
 	switch (event->hdr.event_type) {
@@ -1478,7 +1479,7 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
  *
  * Must be called with the RX PtlTE disabled.
  */
-void cxip_oflow_bufpool_fini(struct cxip_rxc *rxc)
+void cxip_oflow_bufpool_fini(struct cxip_rxc_hpc *rxc)
 {
 	struct cxip_deferred_event *def_ev = NULL;
 	struct cxip_ptelist_buf *oflow_buf;
@@ -1514,7 +1515,7 @@ void cxip_oflow_bufpool_fini(struct cxip_rxc *rxc)
 	cxip_ptelist_bufpool_fini(rxc->oflow_list_bufpool);
 }
 
-int cxip_oflow_bufpool_init(struct cxip_rxc *rxc)
+int cxip_oflow_bufpool_init(struct cxip_rxc_hpc *rxc)
 {
 	struct cxip_ptelist_bufpool_attr attr = {
 		.list_type = C_PTL_LIST_OVERFLOW,
@@ -1538,7 +1539,7 @@ int cxip_oflow_bufpool_init(struct cxip_rxc *rxc)
  */
 static int cxip_rdzv_done_notify(struct cxip_req *req)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 	union c_fab_addr dfa;
 	uint32_t pid_idx = CXIP_PTL_IDX_RDZV_DEST;
 	uint32_t match_id;
@@ -1552,17 +1553,18 @@ static int cxip_rdzv_done_notify(struct cxip_req *req)
 	mb.rdzv_done = 1;
 	mb.le_type = CXIP_LE_TYPE_ZBP;
 
-	cxi_build_dfa(req->recv.rget_nic, req->recv.rget_pid, rxc->pid_bits,
-		      pid_idx, &dfa, &idx_ext);
-	match_id = CXI_MATCH_ID(rxc->pid_bits, rxc->ep_obj->src_addr.pid,
-				rxc->ep_obj->src_addr.nic);
+	cxi_build_dfa(req->recv.rget_nic, req->recv.rget_pid,
+		      rxc->base.pid_bits, pid_idx, &dfa, &idx_ext);
+	match_id = CXI_MATCH_ID(rxc->base.pid_bits,
+				rxc->base.ep_obj->src_addr.pid,
+				rxc->base.ep_obj->src_addr.nic);
 
 	cmd.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.command.opcode = C_CMD_PUT;
 	cmd.index_ext = idx_ext;
 	cmd.event_send_disable = 1;
 	cmd.dfa = dfa;
-	cmd.eq = cxip_evtq_eqn(&rxc->ep_obj->txc->tx_evtq);
+	cmd.eq = cxip_evtq_eqn(&rxc->base.ep_obj->txc->tx_evtq);
 	cmd.user_ptr = (uint64_t)req;
 	cmd.initiator = match_id;
 	cmd.match_bits = mb.raw;
@@ -1581,11 +1583,13 @@ static int cxip_rdzv_done_notify(struct cxip_req *req)
 
 static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 	struct cxip_deferred_event *def_ev;
 	int event_rc;
 	int ret;
 	bool matched;
+
+	assert(rxc->base.protocol == FI_PROTO_CXI);
 
 	switch (event->hdr.event_type) {
 	/* When errors happen, send events can occur before the put/get event.
@@ -1719,7 +1723,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 		if (!event->tgt_long.get_issued) {
 			if (ofi_atomic_inc32(&rxc->orx_tx_reqs) >
-			    rxc->max_tx || issue_rdzv_get(req)) {
+			    rxc->base.max_tx || issue_rdzv_get(req)) {
 
 				/* Could not issue get */
 				ofi_atomic_dec32(&rxc->orx_tx_reqs);
@@ -1752,8 +1756,8 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		 * before completing the target operation.
 		 */
 		if (req->recv.done_notify) {
-			if (ofi_atomic_inc32(&rxc->orx_tx_reqs) > rxc->max_tx ||
-			    cxip_rdzv_done_notify(req)) {
+			if (ofi_atomic_inc32(&rxc->orx_tx_reqs) >
+			    rxc->base.max_tx || cxip_rdzv_done_notify(req)) {
 
 				/* Could not issue notify, will be retried */
 				ofi_atomic_dec32(&rxc->orx_tx_reqs);
@@ -1769,8 +1773,9 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 		/* If RGet initiated by software return the TX credit */
 		if (!event->init_short.rendezvous) {
-			ofi_atomic_dec32(&rxc->orx_tx_reqs);
-			assert(ofi_atomic_get32(&rxc->orx_tx_reqs) >= 0);
+			ofi_atomic_dec32(&req->recv.rxc_hpc->orx_tx_reqs);
+			assert(ofi_atomic_get32(&req->recv.rxc_hpc->orx_tx_reqs)
+			       >= 0);
 		}
 
 		return FI_SUCCESS;
@@ -1799,7 +1804,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		 * side completion so that a failure will not go undetected.
 		 */
 		req->recv.rc = event_rc;
-		ofi_atomic_dec32(&req->recv.rxc->orx_tx_reqs);
+		ofi_atomic_dec32(&req->recv.rxc_hpc->orx_tx_reqs);
 		rdzv_recv_req_event(req, event->hdr.event_type);
 
 		return FI_SUCCESS;
@@ -1855,7 +1860,7 @@ static void cxip_rxc_record_req_stat(struct cxip_rxc *rxc, enum c_ptl_list list,
 static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 	struct cxip_deferred_event *def_ev;
 	bool rdzv = false;
 	bool matched;
@@ -1889,7 +1894,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		/* If endpoint has been disabled and an append fails, free the
 		 * user request without reporting any event.
 		 */
-		if (rxc->state == RXC_DISABLED) {
+		if (rxc->base.state == RXC_DISABLED) {
 			cxip_recv_req_free(req);
 			return FI_SUCCESS;
 		}
@@ -1941,19 +1946,19 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		return FI_SUCCESS;
 
 	case C_EVENT_PUT_OVERFLOW:
-		cxip_rxc_record_req_stat(rxc, C_PTL_LIST_OVERFLOW,
+		cxip_rxc_record_req_stat(&rxc->base, C_PTL_LIST_OVERFLOW,
 					 event->tgt_long.rlength, req);
 
 		/* ULE freed. Update RXC state to signal that the RXC should
 		 * be reenabled.
 		 */
 		/* TODO: this is not atomic, there must be a better way */
-		if (rxc->state == RXC_ONLOAD_FLOW_CONTROL)
-			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+		if (rxc->base.state == RXC_ONLOAD_FLOW_CONTROL)
+			rxc->base.state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
 		break;
 
 	case C_EVENT_PUT:
-		cxip_rxc_record_req_stat(rxc, C_PTL_LIST_PRIORITY,
+		cxip_rxc_record_req_stat(&rxc->base, C_PTL_LIST_PRIORITY,
 					 event->tgt_long.rlength, req);
 		break;
 	default:
@@ -2136,7 +2141,7 @@ int cxip_recv_cancel(struct cxip_req *req)
  *
  * Caller must hold ep_obj->lock.
  */
-int cxip_recv_reenable(struct cxip_rxc *rxc)
+int cxip_recv_reenable(struct cxip_rxc_hpc *rxc)
 {
 	struct cxi_pte_status pte_status = {};
 	int ret __attribute__((unused));
@@ -2146,7 +2151,7 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 		return -FI_EAGAIN;
 	}
 
-	ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
+	ret = cxil_pte_status(rxc->base.rx_pte->pte, &pte_status);
 	assert(!ret);
 
 	if (rxc->drop_count != pte_status.drop_count) {
@@ -2180,8 +2185,8 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 {
 	struct cxip_fc_drops *fc_drops = container_of(req,
-			struct cxip_fc_drops, req);
-	struct cxip_rxc *rxc = fc_drops->rxc;
+						struct cxip_fc_drops, req);
+	struct cxip_rxc_hpc *rxc = fc_drops->rxc;
 	int ret = FI_SUCCESS;
 
 	switch (event->hdr.event_type) {
@@ -2237,7 +2242,8 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint32_t nic_addr,
 			  uint32_t pid, uint16_t vni, uint16_t drops)
 {
-	struct cxip_rxc *rxc = ep_obj->rxc;
+	struct cxip_rxc_hpc *rxc = container_of(ep_obj->rxc,
+						struct cxip_rxc_hpc, base);
 	struct cxip_fc_drops *fc_drops;
 	int ret __attribute__((unused));
 
@@ -2264,7 +2270,7 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint32_t nic_addr,
 	fc_drops->req.send.mb.ctrl_le_type = CXIP_CTRL_LE_TYPE_CTRL_MSG;
 	fc_drops->req.send.mb.ctrl_msg_type = CXIP_CTRL_MSG_FC_RESUME;
 	fc_drops->req.cb = cxip_fc_resume_cb;
-	fc_drops->req.ep_obj = rxc->ep_obj;
+	fc_drops->req.ep_obj = rxc->base.ep_obj;
 
 	dlist_insert_tail(&fc_drops->rxc_entry, &rxc->fc_drops);
 
@@ -2276,7 +2282,7 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint32_t nic_addr,
 	/* Wait until search and delete completes before attempting to
 	 * re-enable.
 	 */
-	if (rxc->state == RXC_FLOW_CONTROL) {
+	if (rxc->base.state == RXC_FLOW_CONTROL) {
 		ret = cxip_recv_reenable(rxc);
 		assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
 
@@ -2288,7 +2294,7 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint32_t nic_addr,
 		if (rxc->new_state == RXC_ENABLED_SOFTWARE &&
 		    ret == FI_SUCCESS) {
 			cxip_fc_progress_ctrl(rxc);
-			rxc->state = RXC_ENABLED_SOFTWARE;
+			rxc->base.state = RXC_ENABLED_SOFTWARE;
 			RXC_WARN(rxc, "Now in RXC_ENABLED_SOFTWARE\n");
 		}
 	}
@@ -2305,7 +2311,7 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint32_t nic_addr,
  *
  * Caller must hold ep_obj->lock.
  */
-static int cxip_recv_replay(struct cxip_rxc *rxc)
+static int cxip_recv_replay(struct cxip_rxc_hpc *rxc)
 {
 	struct cxip_req *req;
 	struct dlist_entry *tmp;
@@ -2350,7 +2356,7 @@ static int cxip_recv_replay(struct cxip_rxc *rxc)
  *
  * Caller must hold ep_obj->lock.
  */
-int cxip_recv_resume(struct cxip_rxc *rxc)
+int cxip_recv_resume(struct cxip_rxc_hpc *rxc)
 {
 	struct cxip_fc_drops *fc_drops;
 	struct dlist_entry *tmp;
@@ -2375,19 +2381,19 @@ int cxip_recv_resume(struct cxip_rxc *rxc)
  *
  * Caller must hold ep_obj->lock.
  */
-static void cxip_fc_progress_ctrl(struct cxip_rxc *rxc)
+static void cxip_fc_progress_ctrl(struct cxip_rxc_hpc *rxc)
 {
 	int ret __attribute__((unused));
 
-	assert(rxc->state == RXC_FLOW_CONTROL);
+	assert(rxc->base.state == RXC_FLOW_CONTROL);
 
 	/* Successful transition from disabled occurred, reset
 	 * drop count.
 	 */
-	rxc->drop_count = rxc->ep_obj->asic_ver < CASSINI_2_0 ? -1 : 0;
+	rxc->drop_count = rxc->base.ep_obj->asic_ver < CASSINI_2_0 ? -1 : 0;
 
 	while ((ret = cxip_recv_resume(rxc)) == -FI_EAGAIN)
-		cxip_ep_tx_ctrl_progress_locked(rxc->ep_obj);
+		cxip_ep_tx_ctrl_progress_locked(rxc->base.ep_obj);
 
 	assert(ret == FI_SUCCESS);
 }
@@ -2398,7 +2404,7 @@ static void cxip_fc_progress_ctrl(struct cxip_rxc *rxc)
  * PTE transitioned from enabled to software managed. Onloading
  * was done and appends that failed need to be replayed.
  */
-static void cxip_post_ux_onload_sw(struct cxip_rxc *rxc)
+static void cxip_post_ux_onload_sw(struct cxip_rxc_hpc *rxc)
 {
 	int ret;
 
@@ -2418,12 +2424,12 @@ static void cxip_post_ux_onload_sw(struct cxip_rxc *rxc)
 	ret = cxip_recv_replay(rxc);
 	assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
 
-	if (rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED) {
+	if (rxc->base.state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED) {
 		/* Transition from enabled to software managed is complete.
 		 * Allow posting of receive operations.
 		 */
 		RXC_WARN(rxc, "Now in RXC_ENABLED_SOFTWARE\n");
-		rxc->state = RXC_ENABLED_SOFTWARE;
+		rxc->base.state = RXC_ENABLED_SOFTWARE;
 	}
 }
 
@@ -2432,7 +2438,7 @@ static void cxip_post_ux_onload_sw(struct cxip_rxc *rxc)
  *
  * PTE transitioned to disabled and UX onload has completed.
  */
-static void cxip_post_ux_onload_fc(struct cxip_rxc *rxc)
+static void cxip_post_ux_onload_fc(struct cxip_rxc_hpc *rxc)
 {
 	int ret;
 
@@ -2441,7 +2447,7 @@ static void cxip_post_ux_onload_fc(struct cxip_rxc *rxc)
 	 */
 	if (rxc->new_state == RXC_ENABLED_SOFTWARE) {
 		RXC_DBG(rxc, "Transitioning to SW EP\n");
-		rxc->msg_offload = 0;
+		rxc->base.msg_offload = 0;
 	}
 
 	if (rxc->fc_reason == C_SC_FC_EQ_FULL)
@@ -2463,18 +2469,18 @@ replay:
 	 * can now be replayed.
 	 */
 	if (rxc->new_state == RXC_ENABLED)
-		rxc->msg_offload = 1;
+		rxc->base.msg_offload = 1;
 
 	ret = cxip_recv_replay(rxc);
 	RXC_DBG(rxc, "Replay of failed receives ret: %d %s\n",
 		ret, fi_strerror(-ret));
 	assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
 
-	if (rxc->state != RXC_ONLOAD_FLOW_CONTROL_REENABLE &&
+	if (rxc->base.state != RXC_ONLOAD_FLOW_CONTROL_REENABLE &&
 	    rxc->new_state != RXC_ENABLED_SOFTWARE)
 		RXC_FATAL(rxc, FC_SW_ONLOAD_MSG_FATAL);
 
-	rxc->state = RXC_FLOW_CONTROL;
+	rxc->base.state = RXC_FLOW_CONTROL;
 	ret = cxip_recv_reenable(rxc);
 	assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
 	RXC_WARN(rxc, "Now in RXC_FLOW_CONTROL\n");
@@ -2486,7 +2492,7 @@ replay:
 	 */
 	if (rxc->new_state == RXC_ENABLED_SOFTWARE && ret == FI_SUCCESS) {
 		cxip_fc_progress_ctrl(rxc);
-		rxc->state = RXC_ENABLED_SOFTWARE;
+		rxc->base.state = RXC_ENABLED_SOFTWARE;
 		RXC_WARN(rxc, "Now in RXC_ENABLED_SOFTWARE\n");
 	}
 }
@@ -2498,10 +2504,10 @@ replay:
  */
 static void cxip_ux_onload_complete(struct cxip_req *req)
 {
-	struct cxip_rxc *rxc = req->search.rxc;
+	struct cxip_rxc_hpc *rxc = req->search.rxc;
 
-	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
-	       rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
+	assert(rxc->base.state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
+	       rxc->base.state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
 
 	free(rxc->ule_offsets);
 	rxc->ule_offsets = 0;
@@ -2522,12 +2528,12 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 	RXC_WARN(rxc, "Software UX list updated, %d SW UX entries\n",
 		 rxc->sw_ux_list_len);
 
-	if (rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED)
+	if (rxc->base.state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED)
 		cxip_post_ux_onload_sw(rxc);
 	else
 		cxip_post_ux_onload_fc(rxc);
 
-	ofi_atomic_dec32(&rxc->orx_reqs);
+	ofi_atomic_dec32(&rxc->base.orx_reqs);
 	cxip_evtq_req_free(req);
 }
 
@@ -2538,7 +2544,8 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
  * will be made. This is intended to be used with FI_CLAIM processing,
  * where the PtlTE is enabled.
  */
-static int cxip_get_ule_offsets(struct cxip_rxc *rxc, uint64_t **ule_offsets,
+static int cxip_get_ule_offsets(struct cxip_rxc_hpc *rxc,
+				uint64_t **ule_offsets,
 				unsigned int *num_ule_offsets, bool snapshot)
 {
 	struct cxi_pte_status pte_status = {
@@ -2563,7 +2570,7 @@ static int cxip_get_ule_offsets(struct cxip_rxc *rxc, uint64_t **ule_offsets,
 		}
 
 		pte_status.ule_offsets = (void *)*ule_offsets;
-		ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
+		ret = cxil_pte_status(rxc->base.rx_pte->pte, &pte_status);
 		assert(!ret);
 	} while (cur_ule_count < pte_status.ule_count &&
 		 !(snapshot && ++calls > 1));
@@ -2582,14 +2589,14 @@ err:
  */
 static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 {
-	struct cxip_rxc *rxc = req->search.rxc;
+	struct cxip_rxc_hpc *rxc = req->search.rxc;
 	struct cxip_deferred_event *def_ev;
 	struct cxip_ux_send *ux_send;
 	bool matched;
 
-	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
-	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
-	       rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
+	assert(rxc->base.state == RXC_ONLOAD_FLOW_CONTROL ||
+	       rxc->base.state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
+	       rxc->base.state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_PUT_OVERFLOW:
@@ -2629,8 +2636,8 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		/* For flow control transition if a ULE is freed, then
 		 * set state so that re-enable will be attempted.
 		 */
-		if (rxc->state == RXC_ONLOAD_FLOW_CONTROL)
-			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+		if (rxc->base.state == RXC_ONLOAD_FLOW_CONTROL)
+			rxc->base.state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
 
 		/* Fixup event with the expected remote offset for an RGet. */
 		if (event->tgt_long.rlength) {
@@ -2650,14 +2657,15 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		break;
 	case C_EVENT_SEARCH:
 		if (rxc->new_state == RXC_ENABLED_SOFTWARE &&
-		    rxc->state == RXC_ONLOAD_FLOW_CONTROL)
-			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+		    rxc->base.state == RXC_ONLOAD_FLOW_CONTROL)
+			rxc->base.state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
 
-		if (rxc->state == RXC_ONLOAD_FLOW_CONTROL)
+		if (rxc->base.state == RXC_ONLOAD_FLOW_CONTROL)
 			RXC_FATAL(rxc, FC_SW_ONLOAD_MSG_FATAL);
 
 		req->search.complete = true;
-		rxc->rx_evtq.ack_batch_size = rxc->rx_evtq.cq->ack_batch_size;
+		rxc->base.rx_evtq.ack_batch_size =
+				rxc->base.rx_evtq.cq->ack_batch_size;
 
 		RXC_DBG(rxc, "UX Onload Search done\n");
 
@@ -2680,15 +2688,15 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
  *
  * Caller must hold ep_obj->lock.
  */
-static int cxip_ux_onload(struct cxip_rxc *rxc)
+static int cxip_ux_onload(struct cxip_rxc_hpc *rxc)
 {
 	struct cxip_req *req;
 	union c_cmdu cmd = {};
 	int ret;
 
-	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
-	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
-	       rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
+	assert(rxc->base.state == RXC_ONLOAD_FLOW_CONTROL ||
+	       rxc->base.state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
+	       rxc->base.state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
 
 	RXC_DBG(rxc, "Initiate hardware UX list onload\n");
 
@@ -2706,13 +2714,13 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	}
 
 	/* Populate request */
-	req = cxip_evtq_req_alloc(&rxc->rx_evtq, 1, NULL);
+	req = cxip_evtq_req_alloc(&rxc->base.rx_evtq, 1, NULL);
 	if (!req) {
 		RXC_DBG(rxc, "Failed to allocate request\n");
 		ret = -FI_EAGAIN;
 		goto err_free_onload_offset;
 	}
-	ofi_atomic_inc32(&rxc->orx_reqs);
+	ofi_atomic_inc32(&rxc->base.orx_reqs);
 
 	req->cb = cxip_ux_onload_cb;
 	req->type = CXIP_REQ_SEARCH;
@@ -2720,25 +2728,25 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 
 	cmd.command.opcode = C_CMD_TGT_SEARCH_AND_DELETE;
 	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
-	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.ptlte_index = rxc->base.rx_pte->pte->ptn;
 	cmd.target.buffer_id = req->req_id;
 	cmd.target.length = -1U;
 	cmd.target.ignore_bits = -1UL;
 	cmd.target.match_id = CXI_MATCH_ID_ANY;
 
-	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	ret = cxi_cq_emit_target(rxc->base.rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
 		ret = -FI_EAGAIN;
 		goto err_dec_free_cq_req;
 	}
 
-	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+	cxi_cq_ring(rxc->base.rx_cmdq->dev_cmdq);
 
 	return FI_SUCCESS;
 
 err_dec_free_cq_req:
-	ofi_atomic_dec32(&rxc->orx_reqs);
+	ofi_atomic_dec32(&rxc->base.orx_reqs);
 	cxip_evtq_req_free(req);
 err_free_onload_offset:
 	free(rxc->ule_offsets);
@@ -2751,19 +2759,19 @@ err:
 static int cxip_flush_appends_cb(struct cxip_req *req,
 				 const union c_event *event)
 {
-	struct cxip_rxc *rxc = req->req_ctx;
+	struct cxip_rxc_hpc *rxc = req->req_ctx;
 	int ret;
 
-	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
-	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
-	       rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
+	assert(rxc->base.state == RXC_ONLOAD_FLOW_CONTROL ||
+	       rxc->base.state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
+	       rxc->base.state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
 
 	assert(event->hdr.event_type == C_EVENT_SEARCH);
 	assert(cxi_event_rc(event) == C_RC_NO_MATCH);
 
 	ret = cxip_ux_onload(rxc);
 	if (ret == FI_SUCCESS) {
-		ofi_atomic_dec32(&rxc->orx_reqs);
+		ofi_atomic_dec32(&rxc->base.orx_reqs);
 		cxip_evtq_req_free(req);
 	}
 
@@ -2782,26 +2790,26 @@ static int cxip_flush_appends_cb(struct cxip_req *req,
  *
  * Caller must hold ep_obj->lock.
  */
-static int cxip_flush_appends(struct cxip_rxc *rxc)
+static int cxip_flush_appends(struct cxip_rxc_hpc *rxc)
 {
 	struct cxip_req *req;
 	union c_cmdu cmd = {};
 	int ret;
 
-	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
-	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
-	       rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
+	assert(rxc->base.state == RXC_ONLOAD_FLOW_CONTROL ||
+	       rxc->base.state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
+	       rxc->base.state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
 
 	/* Populate request */
-	req = cxip_evtq_req_alloc(&rxc->rx_evtq, 1, rxc);
+	req = cxip_evtq_req_alloc(&rxc->base.rx_evtq, 1, rxc);
 	if (!req) {
 		RXC_DBG(rxc, "Failed to allocate request\n");
 		ret = -FI_EAGAIN;
 		goto err;
 	}
-	ofi_atomic_inc32(&rxc->orx_reqs);
+	ofi_atomic_inc32(&rxc->base.orx_reqs);
 
-	rxc->rx_evtq.ack_batch_size = 1;
+	rxc->base.rx_evtq.ack_batch_size = 1;
 
 	req->cb = cxip_flush_appends_cb;
 	req->type = CXIP_REQ_SEARCH;
@@ -2809,24 +2817,24 @@ static int cxip_flush_appends(struct cxip_rxc *rxc)
 	/* Search command which should match nothing. */
 	cmd.command.opcode = C_CMD_TGT_SEARCH;
 	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
-	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.ptlte_index = rxc->base.rx_pte->pte->ptn;
 	cmd.target.buffer_id = req->req_id;
 	cmd.target.match_bits = -1UL;
 	cmd.target.length = 0;
 
-	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	ret = cxi_cq_emit_target(rxc->base.rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
 		ret = -FI_EAGAIN;
 		goto err_dec_free_cq_req;
 	}
 
-	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+	cxi_cq_ring(rxc->base.rx_cmdq->dev_cmdq);
 
 	return FI_SUCCESS;
 
 err_dec_free_cq_req:
-	ofi_atomic_dec32(&rxc->orx_reqs);
+	ofi_atomic_dec32(&rxc->base.orx_reqs);
 	cxip_evtq_req_free(req);
 err:
 	return ret;
@@ -2837,27 +2845,27 @@ err:
  */
 void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 {
-	struct cxip_rxc *rxc = (struct cxip_rxc *)pte->ctx;
+	struct cxip_rxc_hpc *rxc = (struct cxip_rxc_hpc *)pte->ctx;
 	int fc_reason = cxip_fc_reason(event);
 	int ret __attribute__((unused));
 
 	switch (pte->state) {
 	case C_PTLTE_ENABLED:
-		assert(rxc->state == RXC_FLOW_CONTROL ||
-		       rxc->state == RXC_DISABLED ||
-		       rxc->state == RXC_PENDING_PTLTE_HARDWARE);
+		assert(rxc->base.state == RXC_FLOW_CONTROL ||
+		       rxc->base.state == RXC_DISABLED ||
+		       rxc->base.state == RXC_PENDING_PTLTE_HARDWARE);
 
 		/* Queue any flow control resume messages */
-		if (rxc->state == RXC_FLOW_CONTROL) {
+		if (rxc->base.state == RXC_FLOW_CONTROL) {
 			cxip_fc_progress_ctrl(rxc);
 			RXC_WARN(rxc, "Now in RXC_ENABLED\n");
 		}
 
-		rxc->state = RXC_ENABLED;
+		rxc->base.state = RXC_ENABLED;
 		break;
 
 	case C_PTLTE_DISABLED:
-		if (rxc->state == RXC_DISABLED)
+		if (rxc->base.state == RXC_DISABLED)
 			break;
 
 		if (fc_reason == C_SC_DIS_UNCOR)
@@ -2868,10 +2876,11 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		 * drop message.
 		 */
 		if (cxi_event_rc(event) == C_RC_NO_MATCH) {
-			assert(rxc->state == RXC_FLOW_CONTROL ||
-			       rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
-			       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
-			       rxc->state ==
+			assert(rxc->base.state == RXC_FLOW_CONTROL ||
+			       rxc->base.state == RXC_ONLOAD_FLOW_CONTROL ||
+			       rxc->base.state ==
+			       RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
+			       rxc->base.state ==
 			       RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
 			RXC_WARN(rxc, FC_DROP_COUNT_MSG);
 			break;
@@ -2886,17 +2895,17 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		 * SW managed EP must be re-enabled on onload complete.
 		 * The request list will have been replenished.
 		 */
-		if (rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED) {
+		if (rxc->base.state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED) {
 			RXC_WARN(rxc,
 				 "Flow control during HW to SW transition\n");
-			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+			rxc->base.state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
 			break;
 		}
 
 		/* Check for flow control during flow control */
-		if (rxc->state != RXC_ENABLED &&
-		    rxc->state != RXC_ENABLED_SOFTWARE &&
-		    rxc->state != RXC_PENDING_PTLTE_DISABLE) {
+		if (rxc->base.state != RXC_ENABLED &&
+		    rxc->base.state != RXC_ENABLED_SOFTWARE &&
+		    rxc->base.state != RXC_PENDING_PTLTE_DISABLE) {
 
 			/* There is race between SW disable on priority list
 			 * and HW initiated LE flow control which can be
@@ -2911,9 +2920,9 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		 * flow control should re-enable in the previous
 		 * hardware/software managed state.
 		 */
-		rxc->prev_state = rxc->state;
-		rxc->new_state = rxc->state;
-		rxc->state = RXC_ONLOAD_FLOW_CONTROL;
+		rxc->prev_state = rxc->base.state;
+		rxc->new_state = rxc->base.state;
+		rxc->base.state = RXC_ONLOAD_FLOW_CONTROL;
 
 		RXC_DBG(rxc, "Flow control detected, H/W: %d reason: %d\n",
 			event->tgt_long.initiator.state_change.sc_nic_auto,
@@ -2927,7 +2936,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			 * from an hardware enabled PTE state.
 			 */
 			RXC_WARN(rxc, "SW initiated flow control\n");
-			if (rxc->ep_obj->asic_ver < CASSINI_2_0)
+			if (rxc->base.ep_obj->asic_ver < CASSINI_2_0)
 				rxc->drop_count++;
 
 			/* If running in hybrid mode, resume operation as a
@@ -2944,7 +2953,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			 * to re-enable.
 			 */
 			RXC_WARN(rxc, "Flow control EQ full\n");
-			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+			rxc->base.state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
 			rxc->num_fc_eq_full++;
 			break;
 
@@ -2956,7 +2965,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			RXC_WARN(rxc, FC_OFLOW_NO_MATCH_MSG,
 				 cxip_env.oflow_buf_size);
 
-			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+			rxc->base.state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
 			rxc->num_fc_no_match++;
 			break;
 
@@ -2975,7 +2984,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			 * LE resources are recovered.
 			 */
 			RXC_WARN(rxc, FC_REQ_FULL_MSG, cxip_env.req_buf_size);
-			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+			rxc->base.state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
 			rxc->num_fc_req_full++;
 			break;
 
@@ -3002,7 +3011,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		 * disable the PtlTE after hardware started a HW to SW
 		 * transition; just wait for the disable event.
 		 */
-		if (rxc->state == RXC_PENDING_PTLTE_DISABLE)
+		if (rxc->base.state == RXC_PENDING_PTLTE_DISABLE)
 			break;
 
 		RXC_DBG(rxc, "SW Managed: nic auto: %d, reason: %d\n",
@@ -3020,12 +3029,12 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		}
 
 		/* Sanity check */
-		if (rxc->state == RXC_FLOW_CONTROL)
+		if (rxc->base.state == RXC_FLOW_CONTROL)
 			RXC_FATAL(rxc, "FC to SW EP should be synchronous\n");
 
-		assert(rxc->state == RXC_DISABLED ||
-		       rxc->state == RXC_ENABLED ||
-		       rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
+		assert(rxc->base.state == RXC_DISABLED ||
+		       rxc->base.state == RXC_ENABLED ||
+		       rxc->base.state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
 
 		/* Hardware should only generate PTE software managed events
 		 * in two cases:
@@ -3038,10 +3047,10 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			 * state transition can only happen if the RXC has
 			 * been disabled; it is safe to ignore this change.
 			 */
-			assert(rxc->state == RXC_DISABLED);
+			assert(rxc->base.state == RXC_DISABLED);
 			if (!cxip_env.msg_offload) {
 				RXC_WARN(rxc, "Software managed EP enabled\n");
-				rxc->state = RXC_ENABLED_SOFTWARE;
+				rxc->base.state = RXC_ENABLED_SOFTWARE;
 			}
 			break;
 
@@ -3058,7 +3067,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 				 "NIC transition to SW EP, c_sc_reason: %d\n",
 				 fc_reason);
 			rxc->fc_reason = fc_reason;
-			rxc->prev_state = rxc->state;
+			rxc->prev_state = rxc->base.state;
 			rxc->new_state = RXC_ENABLED_SOFTWARE;
 
 			if (rxc->fc_reason == C_SC_SM_UNEXPECTED_FAIL)
@@ -3066,8 +3075,8 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			else if (rxc->fc_reason == C_SC_SM_APPEND_FAIL)
 				rxc->num_sc_nic_hw2sw_append_fail++;
 
-			rxc->msg_offload = 0;
-			rxc->state = RXC_PENDING_PTLTE_SOFTWARE_MANAGED;
+			rxc->base.msg_offload = 0;
+			rxc->base.state = RXC_PENDING_PTLTE_SOFTWARE_MANAGED;
 			do {
 				/* Flush and kick-off onloading of UX list */
 				ret = cxip_flush_appends(rxc);
@@ -3116,7 +3125,7 @@ static bool init_match(struct cxip_rxc *rxc, uint32_t init, uint32_t match_id)
 static int cxip_claim_onload_cb(struct cxip_req *req,
 				const union c_event *evt)
 {
-	struct cxip_rxc *rxc = req->req_ctx;
+	struct cxip_rxc_hpc *rxc = req->req_ctx;
 	struct cxip_deferred_event *def_ev;
 	struct cxip_ux_send *ux_send;
 	bool matched = false;
@@ -3202,13 +3211,13 @@ static int cxip_claim_onload_cb(struct cxip_req *req,
  */
 static int cxip_claim_ux_onload(struct cxip_req *req)
 {
-	struct cxip_rxc *rxc = req->req_ctx;
+	struct cxip_rxc_hpc *rxc = req->req_ctx;
 	int ret = FI_SUCCESS;
 	union c_cmdu cmd = {};
 	union cxip_match_bits mb = {};
 	union cxip_match_bits ib = {};
 
-	if (rxc->state != RXC_ENABLED) {
+	if (rxc->base.state != RXC_ENABLED) {
 		RXC_DBG(rxc, "FC inprogress, fail claim req %p\n", req);
 		goto err;
 	}
@@ -3229,7 +3238,7 @@ static int cxip_claim_ux_onload(struct cxip_req *req)
 	cmd.command.opcode = C_CMD_TGT_SEARCH_AND_DELETE;
 
 	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
-	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.ptlte_index = rxc->base.rx_pte->pte->ptn;
 	cmd.target.buffer_id = req->req_id;
 	cmd.target.length = -1U;
 	cmd.target.ignore_bits = ib.raw;
@@ -3238,7 +3247,7 @@ static int cxip_claim_ux_onload(struct cxip_req *req)
 	/* Delete first match */
 	cmd.target.use_once = 1;
 
-	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	ret = cxi_cq_emit_target(rxc->base.rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		/* This condition should clear */
 		RXC_WARN(rxc,
@@ -3246,7 +3255,7 @@ static int cxip_claim_ux_onload(struct cxip_req *req)
 		return -FI_EAGAIN;
 	}
 
-	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+	cxi_cq_ring(rxc->base.rx_cmdq->dev_cmdq);
 
 	/* Hardware handles the race between subsequent priority list
 	 * appends to the search and delete command. Re-enable.
@@ -3271,7 +3280,7 @@ err:
 static int cxip_hw_claim_offset_cb(struct cxip_req *req,
 				   const union c_event *evt)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 	union cxip_match_bits ux_mb;
 	uint32_t ux_init;
 	int ret;
@@ -3304,7 +3313,8 @@ static int cxip_hw_claim_offset_cb(struct cxip_req *req,
 			    && !tag_match(ux_mb.tag, req->recv.tag,
 					  req->recv.ignore))
 				break;
-			if (!init_match(rxc, ux_init, req->recv.match_id))
+			if (!init_match(&rxc->base, ux_init,
+					req->recv.match_id))
 				break;
 
 			/* Matched, update to ignore any future events */
@@ -3366,11 +3376,11 @@ err_not_found:
  */
 static int cxip_initiate_hw_claim(struct cxip_req *req)
 {
-	struct cxip_rxc *rxc = req->req_ctx;
+	struct cxip_rxc_hpc *rxc = req->req_ctx;
 	union c_cmdu cmd = {};
 	int ret = FI_SUCCESS;
 
-	if (rxc->state != RXC_ENABLED) {
+	if (rxc->base.state != RXC_ENABLED) {
 		RXC_DBG(rxc, "FC inprogress, unable to claim req %p\n", req);
 		goto err;
 	}
@@ -3398,19 +3408,19 @@ static int cxip_initiate_hw_claim(struct cxip_req *req)
 
 	cmd.command.opcode = C_CMD_TGT_SEARCH;
 	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
-	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.ptlte_index = rxc->base.rx_pte->pte->ptn;
 	cmd.target.buffer_id = req->req_id;
 	cmd.target.length = -1U;
 	cmd.target.ignore_bits = -1UL;
 	cmd.target.match_id = CXI_MATCH_ID_ANY;
 
-	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	ret = cxi_cq_emit_target(rxc->base.rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
 		goto err_free_offsets;
 	}
 
-	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+	cxi_cq_ring(rxc->base.rx_cmdq->dev_cmdq);
 
 	RXC_DBG(rxc, "Search for remote offsets initiated, req %p\n", req);
 
@@ -3432,7 +3442,7 @@ err:
  */
 static int cxip_ux_peek_cb(struct cxip_req *req, const union c_event *event)
 {
-	struct cxip_rxc *rxc = req->req_ctx;
+	struct cxip_rxc_hpc *rxc = req->req_ctx;
 
 	assert(req->recv.flags & FI_PEEK);
 
@@ -3473,12 +3483,13 @@ static int cxip_ux_peek_cb(struct cxip_req *req, const union c_event *event)
  */
 static int cxip_ux_peek(struct cxip_req *req)
 {
-	struct cxip_rxc *rxc = req->req_ctx;
+	struct cxip_rxc_hpc *rxc = req->req_ctx;
 	union c_cmdu cmd = {};
 	union cxip_match_bits mb = {};
 	union cxip_match_bits ib = {};
 	int ret;
 
+	assert(rxc->base.protocol == FI_PROTO_CXI);
 	assert(req->recv.flags & FI_PEEK);
 
 	req->cb = cxip_ux_peek_cb;
@@ -3494,7 +3505,7 @@ static int cxip_ux_peek(struct cxip_req *req)
 
 	cmd.command.opcode = C_CMD_TGT_SEARCH;
 	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
-	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.ptlte_index = rxc->base.rx_pte->pte->ptn;
 	cmd.target.buffer_id = req->req_id;
 	cmd.target.length = -1U;
 	cmd.target.ignore_bits = ib.raw;
@@ -3503,7 +3514,7 @@ static int cxip_ux_peek(struct cxip_req *req)
 	/* First match only */
 	cmd.target.use_once = 1;
 
-	if (cxip_evtq_saturated(&rxc->rx_evtq)) {
+	if (cxip_evtq_saturated(&rxc->base.rx_evtq)) {
 		RXC_DBG(rxc, "Target HW EQ saturated\n");
 		return -FI_EAGAIN;
 	}
@@ -3511,13 +3522,13 @@ static int cxip_ux_peek(struct cxip_req *req)
 	RXC_DBG(rxc, "Peek UX search req: %p mb.raw: 0x%" PRIx64 " match_id: 0x%x ignore: 0x%" PRIx64 "\n",
 		req, mb.raw, req->recv.match_id, req->recv.ignore);
 
-	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	ret = cxi_cq_emit_target(rxc->base.rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
 		return -FI_EAGAIN;
 	}
 
-	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+	cxi_cq_ring(rxc->base.rx_cmdq->dev_cmdq);
 
 	/* If FI_CLAIM, we disable priority list appends so the
 	 * search acts as a flush of outstanding appends.
@@ -3585,7 +3596,7 @@ static void cxip_set_ux_dump_entry(struct cxip_req *req,
 static int cxip_unexp_msg_dump_cb(struct cxip_req *req,
 				  const union c_event *evt)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 
 	if (evt->hdr.event_type != C_EVENT_SEARCH)
 		RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT,
@@ -3615,7 +3626,8 @@ int cxip_build_ux_entry_info(struct cxip_ep *ep,
 			     struct fi_cq_tagged_entry *entry, size_t count,
 			     fi_addr_t *src_addr, size_t *ux_count)
 {
-	struct cxip_rxc *rxc = ep->ep_obj->rxc;
+	struct cxip_rxc_hpc *rxc = container_of(ep->ep_obj->rxc,
+						struct cxip_rxc_hpc, base);
 	struct cxip_ux_dump_state *ux_dump;
 	struct cxip_ux_send *ux_send;
 	struct dlist_entry *tmp;
@@ -3624,7 +3636,7 @@ int cxip_build_ux_entry_info(struct cxip_ep *ep,
 	int ret_count;
 	int ret;
 
-	ret = cxip_recv_req_alloc(rxc, NULL, 0, &req);
+	ret = cxip_recv_req_alloc(&rxc->base, NULL, 0, &req);
 	if (ret)
 		return ret;
 
@@ -3645,7 +3657,7 @@ int cxip_build_ux_entry_info(struct cxip_ep *ep,
 				     ux_send, rxc_entry, tmp)
 		cxip_set_ux_dump_entry(req, &ux_send->put_ev);
 
-	if (!rxc->msg_offload)
+	if (!rxc->base.msg_offload)
 		goto done;
 
 	/* Read H/W UX list processing the request events synchronously
@@ -3654,28 +3666,28 @@ int cxip_build_ux_entry_info(struct cxip_ep *ep,
 	req->cb = cxip_unexp_msg_dump_cb;
 	cmd.command.opcode = C_CMD_TGT_SEARCH;
 	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
-	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.ptlte_index = rxc->base.rx_pte->pte->ptn;
 	cmd.target.buffer_id = req->req_id;
 	cmd.target.length = -1U;
 	cmd.target.ignore_bits = -1UL;
 	cmd.target.match_id = CXI_MATCH_ID_ANY;
 
-	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	ret = cxi_cq_emit_target(rxc->base.rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to write ULE Search command: %d\n", ret);
 		ret_count = ret;
 		goto done;
 	}
-	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+	cxi_cq_ring(rxc->base.rx_cmdq->dev_cmdq);
 
 	RXC_DBG(rxc, "Search for ULE dump initiated, req %p\n", req);
 	do {
-		cxip_evtq_progress(&rxc->rx_evtq);
+		cxip_evtq_progress(&rxc->base.rx_evtq);
 		sched_yield();
 	} while (!ux_dump->done);
 
 	RXC_DBG(rxc, "Search ULE dump done, req %p, count %ld\n",
-		req, ux_dump->ret_count);
+		 req, ux_dump->ret_count);
 done:
 	ret_count = ux_dump->ret_count;
 	*ux_count = ux_dump->ux_count;
@@ -3701,7 +3713,7 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 	uint32_t ev_init;
 	uint32_t ev_rdzv_id;
 	struct cxip_req *rdzv_req;
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 
 	assert(req->type == CXIP_REQ_RECV);
 
@@ -3718,7 +3730,7 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 		/* Make sure we can issue the RGet; if not we stall
 		 * and TX event queue progress will free up credits.
 		 */
-		if (ofi_atomic_inc32(&rxc->orx_tx_reqs) > rxc->max_tx) {
+		if (ofi_atomic_inc32(&rxc->orx_tx_reqs) > rxc->base.max_tx) {
 			ofi_atomic_dec32(&rxc->orx_tx_reqs);
 			return -FI_EAGAIN;
 		}
@@ -3796,7 +3808,7 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 	return ret;
 }
 
-static bool cxip_match_recv_sw(struct cxip_rxc *rxc, struct cxip_req *req,
+static bool cxip_match_recv_sw(struct cxip_rxc_hpc *rxc, struct cxip_req *req,
 			       struct cxip_ux_send *ux, bool claimed)
 {
 	union cxip_match_bits ux_mb;
@@ -3815,13 +3827,13 @@ static bool cxip_match_recv_sw(struct cxip_rxc *rxc, struct cxip_req *req,
 	    !tag_match(ux_mb.tag, req->recv.tag, req->recv.ignore))
 		return false;
 
-	if (!init_match(rxc, ux_init, req->recv.match_id))
+	if (!init_match(&rxc->base, ux_init, req->recv.match_id))
 		return false;
 
 	return true;
 }
 
-static int cxip_recv_sw_matcher(struct cxip_rxc *rxc, struct cxip_req *req,
+static int cxip_recv_sw_matcher(struct cxip_rxc_hpc *rxc, struct cxip_req *req,
 				struct cxip_ux_send *ux, bool claimed)
 {
 	int ret;
@@ -3848,7 +3860,7 @@ static int cxip_recv_sw_matcher(struct cxip_rxc *rxc, struct cxip_req *req,
 
 	RXC_DBG(rxc,
 		"Software match, req: %p ux_send: %p (sw_ux_list_len: %u)\n",
-		req, ux, req->recv.rxc->sw_ux_list_len);
+		req, ux, req->recv.rxc_hpc->sw_ux_list_len);
 
 	return ret;
 }
@@ -3862,7 +3874,7 @@ static int cxip_recv_sw_matcher(struct cxip_rxc *rxc, struct cxip_req *req,
 int cxip_recv_ux_sw_matcher(struct cxip_ux_send *ux)
 {
 	struct cxip_ptelist_buf *rbuf = ux->req->req_ctx;
-	struct cxip_rxc *rxc = rbuf->rxc;
+	struct cxip_rxc_hpc *rxc = rbuf->rxc;
 	struct cxip_req *req;
 	struct dlist_entry *tmp;
 	int ret;
@@ -3897,7 +3909,7 @@ int cxip_recv_ux_sw_matcher(struct cxip_ux_send *ux)
  */
 int cxip_recv_req_sw_matcher(struct cxip_req *req)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 	struct cxip_ux_send *ux_send;
 	struct dlist_entry *tmp;
 	int ret;
@@ -3935,7 +3947,7 @@ int cxip_recv_req_sw_matcher(struct cxip_req *req)
  */
 static int cxip_recv_req_dropped(struct cxip_req *req)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 	int ret __attribute__((unused));
 
 	assert(dlist_empty(&req->recv.rxc_entry));
@@ -3957,13 +3969,13 @@ static int cxip_recv_req_dropped(struct cxip_req *req)
  */
 static int cxip_recv_req_peek(struct cxip_req *req, bool check_rxc_state)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 	struct cxip_ux_send *ux_send;
 	struct dlist_entry *tmp;
 	int ret;
 
-	if (check_rxc_state && rxc->state != RXC_ENABLED &&
-	    rxc->state != RXC_ENABLED_SOFTWARE)
+	if (check_rxc_state && rxc->base.state != RXC_ENABLED &&
+	    rxc->base.state != RXC_ENABLED_SOFTWARE)
 		return -FI_EAGAIN;
 
 	/* Attempt to match the onloaded UX list first */
@@ -3979,7 +3991,7 @@ static int cxip_recv_req_peek(struct cxip_req *req, bool check_rxc_state)
 		}
 	}
 
-	if (rxc->msg_offload) {
+	if (rxc->base.msg_offload) {
 		/* Must serialize H/W FI_CLAIM due to getting remote offsets */
 		if (rxc->hw_claim_in_progress)
 			return -FI_EAGAIN;
@@ -4004,7 +4016,7 @@ static int cxip_recv_req_peek(struct cxip_req *req, bool check_rxc_state)
  */
 static int cxip_recv_req_queue(struct cxip_req *req, bool restart_seq)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 	int ret;
 
 	/* Try to match against onloaded Sends first. */
@@ -4016,7 +4028,7 @@ static int cxip_recv_req_queue(struct cxip_req *req, bool restart_seq)
 	else if (ret != -FI_ENOMSG)
 		RXC_FATAL(rxc, "SW matching failed: %d\n", ret);
 
-	if (rxc->msg_offload) {
+	if (rxc->base.msg_offload) {
 		/* Can not append to priority list if claimng UX */
 		if (rxc->hw_claim_in_progress)
 			goto err_dequeue_req;
@@ -4038,17 +4050,17 @@ err_dequeue_req:
 	return -FI_EAGAIN;
 }
 
-static int cxip_rxc_check_recv_count_hybrid_preempt(struct cxip_rxc *rxc)
+static int cxip_rxc_check_recv_count_hybrid_preempt(struct cxip_rxc_hpc *rxc)
 {
 	int ret;
 	int count;
 
 	if (cxip_env.rx_match_mode == CXIP_PTLTE_HYBRID_MODE &&
 	    cxip_env.hybrid_posted_recv_preemptive == 1) {
-		count = ofi_atomic_get32(&rxc->orx_reqs);
+		count = ofi_atomic_get32(&rxc->base.orx_reqs);
 
-		if (count > rxc->attr.size) {
-			assert(rxc->state == RXC_ENABLED);
+		if (count > rxc->base.attr.size) {
+			assert(rxc->base.state == RXC_ENABLED);
 
 			/* On success, need to return -FI_EAGAIN which will
 			 * propagate back to the user. In addition, RXC state
@@ -4058,7 +4070,7 @@ static int cxip_rxc_check_recv_count_hybrid_preempt(struct cxip_rxc *rxc)
 			if (ret == FI_SUCCESS) {
 				RXC_WARN(rxc,
 					 "Transitioning to SW EP due to too many posted recvs: posted_count=%u request_size=%lu\n",
-					 ret, rxc->attr.size);
+					 ret, rxc->base.attr.size);
 				return -FI_EAGAIN;
 			}
 
@@ -4076,7 +4088,7 @@ static int cxip_rxc_check_recv_count_hybrid_preempt(struct cxip_rxc *rxc)
  */
 static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 	uint32_t le_flags = 0;
 	union cxip_match_bits mb = {};
 	union cxip_match_bits ib = {
@@ -4132,13 +4144,14 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 	req->recv.hw_offloaded = true;
 
 	/* Issue Append command */
-	ret = cxip_pte_append(rxc->rx_pte, recv_iova,
+	ret = cxip_pte_append(rxc->base.rx_pte, recv_iova,
 			      req->recv.ulen - req->recv.start_offset,
 			      recv_md ? recv_md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, req->recv.match_id,
-			      req->recv.multi_recv ? rxc->min_multi_recv : 0,
-			      le_flags, NULL, rxc->rx_cmdq,
+			      req->recv.multi_recv ?
+			      rxc->base.min_multi_recv : 0,
+			      le_flags, NULL, rxc->base.rx_cmdq,
 			      !(req->recv.flags & FI_MORE));
 	if (ret != FI_SUCCESS) {
 		RXC_WARN(rxc, "Failed to write Append command: %d\n", ret);
@@ -4157,11 +4170,15 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 			 uint64_t ignore, void *context, uint64_t flags,
 			 bool tagged, struct cxip_cntr *comp_cntr)
 {
+	struct cxip_rxc_hpc *rxc_hpc = container_of(rxc, struct cxip_rxc_hpc,
+						    base);
 	int ret;
 	struct cxip_req *req;
 	struct cxip_addr caddr;
 	struct cxip_ux_send *ux_msg;
 	uint32_t match_id;
+
+	assert(rxc_hpc->base.protocol == FI_PROTO_CXI);
 
 	if (len && !buf)
 		return -FI_EINVAL;
@@ -4291,7 +4308,7 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	}
 
 	RXC_DBG(rxc, "FI_CLAIM invoke sw matcher %p\n", ux_msg);
-	ret = cxip_recv_sw_matcher(rxc, req, ux_msg, true);
+	ret = cxip_recv_sw_matcher(rxc_hpc, req, ux_msg, true);
 	if (ret == FI_SUCCESS || ret == -FI_EINPROGRESS) {
 		ofi_genlock_unlock(&rxc->ep_obj->lock);
 
@@ -4307,7 +4324,7 @@ err:
 }
 
 /*
- * cxip_txc_fi_addr() - Return the FI address of the TXC.
+ * _txc_fi_addr() - Return the FI address of the TXC.
  */
 static fi_addr_t _txc_fi_addr(struct cxip_txc *txc)
 {

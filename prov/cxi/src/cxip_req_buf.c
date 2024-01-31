@@ -87,7 +87,7 @@ static struct cxip_ux_send *cxip_req_buf_ux_alloc(struct cxip_ptelist_buf *buf,
 static int cxip_req_buf_process_ux(struct cxip_ptelist_buf *buf,
 				   struct cxip_ux_send *ux)
 {
-	struct cxip_rxc *rxc = buf->rxc;
+	struct cxip_rxc_hpc *rxc = buf->rxc;
 	size_t header_length;
 	uint64_t remote_offset;
 	int ret;
@@ -139,8 +139,8 @@ static int cxip_req_buf_process_ux(struct cxip_ptelist_buf *buf,
 		 * will be appended to software UX message list following
 		 * completion of the on-loading.
 		 */
-		if (rxc->state != RXC_ENABLED_SOFTWARE &&
-		    rxc->state != RXC_FLOW_CONTROL) {
+		if (rxc->base.state != RXC_ENABLED_SOFTWARE &&
+		    rxc->base.state != RXC_FLOW_CONTROL) {
 			rxc->sw_ux_list_len--;
 			dlist_insert_tail(&ux->rxc_entry,
 					  &rxc->sw_pending_ux_list);
@@ -220,7 +220,7 @@ static int cxip_req_buf_process_put_event(struct cxip_ptelist_buf *buf,
 {
 	struct cxip_ux_send *ux;
 	int ret = FI_SUCCESS;
-	struct cxip_rxc *rxc = buf->rxc;
+	struct cxip_rxc_hpc *rxc = buf->rxc;
 	struct cxip_ptelist_bufpool *pool = buf->pool;
 
 	assert(event->tgt_long.mlength >= CXIP_REQ_BUF_HEADER_MIN_SIZE);
@@ -298,7 +298,7 @@ static int cxip_req_buf_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
-int cxip_req_bufpool_init(struct cxip_rxc *rxc)
+int cxip_req_bufpool_init(struct cxip_rxc_hpc *rxc)
 {
 	struct cxip_ptelist_bufpool_attr attr = {
 		.list_type = C_PTL_LIST_REQUEST,
@@ -315,7 +315,7 @@ int cxip_req_bufpool_init(struct cxip_rxc *rxc)
 	return cxip_ptelist_bufpool_init(rxc, &rxc->req_list_bufpool, &attr);
 }
 
-void cxip_req_bufpool_fini(struct cxip_rxc *rxc)
+void cxip_req_bufpool_fini(struct cxip_rxc_hpc *rxc)
 {
 	return cxip_ptelist_bufpool_fini(rxc->req_list_bufpool);
 }

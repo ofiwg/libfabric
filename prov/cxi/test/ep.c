@@ -1293,6 +1293,7 @@ TestSuite(ep_caps, .timeout = CXIT_DEFAULT_TIMEOUT);
 void verify_ep_msg_cap(uint64_t flags)
 {
 	struct cxip_ep *ep;
+	struct cxip_rxc_hpc *rxc_hpc = NULL;
 	int ret;
 
 	cxit_setup_ep();
@@ -1316,6 +1317,10 @@ void verify_ep_msg_cap(uint64_t flags)
 
 	ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
+	if (ep->ep_obj->rxc->protocol == FI_PROTO_CXI)
+		rxc_hpc = container_of(ep->ep_obj->rxc, struct cxip_rxc_hpc,
+				       base);
+
 	/* Requires knowledge of implementation */
 	if (flags & FI_SEND) {
 		cr_assert(ep->ep_obj->txc->enabled, "TX Enabled");
@@ -1329,12 +1334,14 @@ void verify_ep_msg_cap(uint64_t flags)
 		cr_assert(ep->ep_obj->rxc->recv_cq != NULL, "Receive CQ");
 		cr_assert(ep->ep_obj->rxc->rx_evtq.eq != NULL, "RX H/W EQ");
 		cr_assert(ep->ep_obj->rxc->rx_cmdq != NULL, "RX TGT CMDQ");
-		cr_assert(ep->ep_obj->rxc->tx_cmdq != NULL, "RX TX CMDQ");
+		if (rxc_hpc)
+			cr_assert(rxc_hpc->tx_cmdq != NULL, "RX TX CMDQ");
 	} else {
 		cr_assert(ep->ep_obj->rxc->state == RXC_ENABLED, "R/X enabled");
 		cr_assert(ep->ep_obj->rxc->rx_evtq.eq == NULL, "RX H/W EQ");
 		cr_assert(ep->ep_obj->rxc->rx_cmdq == NULL, "RX TGT CMDQ");
-		cr_assert(ep->ep_obj->rxc->tx_cmdq == NULL, "RX TX CMDQ");
+		if (rxc_hpc)
+			cr_assert(rxc_hpc->tx_cmdq == NULL, "RX TX CMDQ");
 	}
 
 	cxit_teardown_rma();
