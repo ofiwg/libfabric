@@ -3376,6 +3376,7 @@ void ft_parse_opts_list(char* optarg)
 {
 	int i, ret;
 	char *token;
+	char *saveptr;
 
 	optarg += 2; // remove 'l:'
 	test_cnt = 1;
@@ -3388,7 +3389,7 @@ void ft_parse_opts_list(char* optarg)
 		exit(EXIT_FAILURE);
 	}
 
-	token = strtok(optarg, ",");
+	token = strtok_r(optarg, ",", &saveptr);
 	test_cnt = 0;
 	while (token != NULL) {
 		ret = sscanf(token, "%zu", &user_test_sizes[test_cnt].size);
@@ -3397,7 +3398,7 @@ void ft_parse_opts_list(char* optarg)
 			exit(EXIT_FAILURE);
 		}
 		test_cnt++;
-		token = strtok(NULL, ",");
+		token = strtok_r(NULL, ",", &saveptr);
 	}
 	test_size = user_test_sizes;
 }
