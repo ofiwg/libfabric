@@ -37,7 +37,7 @@ static int cxip_rdzv_pte_wait_append(struct cxip_rdzv_pte *pte,
 
 	/* Poll until the LE is linked or a failure occurs. */
 	do {
-		cxip_evtq_progress(&pte->txc->tx_evtq);
+		cxip_evtq_progress(&pte->txc->base.tx_evtq);
 		sched_yield();
 	} while (!cxip_rdzv_pte_append_done(pte, expected_count));
 
@@ -86,7 +86,7 @@ int cxip_rdzv_pte_src_req_alloc(struct cxip_rdzv_match_pte *pte, int lac)
 	le_flags = C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
 		C_LE_OP_GET | C_LE_EVENT_UNLINK_DISABLE;
 
-	req = cxip_evtq_req_alloc(&base->txc->tx_evtq, 1, base);
+	req = cxip_evtq_req_alloc(&base->txc->base.tx_evtq, 1, base);
 	if (!req) {
 		ret = -FI_EAGAIN;
 		CXIP_WARN("Failed to allocate %d rendezvous source request: %d:%s\n",
@@ -151,7 +151,7 @@ static int cxip_rdzv_pte_zbp_req_alloc(struct cxip_rdzv_match_pte *pte)
 	int ret;
 	int expected_success_count;
 
-	pte->zbp_req = cxip_evtq_req_alloc(&base->txc->tx_evtq, 1, pte);
+	pte->zbp_req = cxip_evtq_req_alloc(&base->txc->base.tx_evtq, 1, pte);
 	if (!pte->zbp_req) {
 		ret = -FI_ENOMEM;
 		CXIP_WARN("Failed to allocate zero byte put request: %d:%s\n",
@@ -196,7 +196,7 @@ static void cxip_rdzv_pte_free(struct cxip_rdzv_pte *pte)
 	/* Flush the CQ to ensure any events referencing the rendezvous requests
 	 * are processed.
 	 */
-	cxip_evtq_progress(&pte->txc->tx_evtq);
+	cxip_evtq_progress(&pte->txc->base.tx_evtq);
 }
 
 void cxip_rdzv_match_pte_free(struct cxip_rdzv_match_pte *pte)
@@ -218,7 +218,7 @@ void cxip_rdzv_nomatch_pte_free(struct cxip_rdzv_nomatch_pte *pte)
 	free(pte);
 }
 
-static int cxip_rdzv_base_pte_alloc(struct cxip_txc *txc,
+static int cxip_rdzv_base_pte_alloc(struct cxip_txc_hpc *txc,
 				    uint32_t write_pid_idx, bool write,
 				    uint32_t read_pid_idx, bool read,
 				    bool matching,
@@ -233,11 +233,12 @@ static int cxip_rdzv_base_pte_alloc(struct cxip_txc *txc,
 	ofi_atomic_initialize32(&base_pte->le_linked_success_count, 0);
 	ofi_atomic_initialize32(&base_pte->le_linked_failure_count, 0);
 
-	if (matching && txc->ep_obj->av->symmetric)
+	if (matching && txc->base.ep_obj->av->symmetric)
 		pt_opts.use_logical = 1;
 
 	/* Reserve the Rendezvous Send PTE */
-	ret = cxip_pte_alloc_nomap(txc->ep_obj->ptable, txc->tx_evtq.eq,
+	ret = cxip_pte_alloc_nomap(txc->base.ep_obj->ptable,
+				   txc->base.tx_evtq.eq,
 				   &pt_opts, cxip_rdzv_pte_cb, txc,
 				   &base_pte->pte);
 	if (ret != FI_SUCCESS) {
@@ -281,12 +282,12 @@ err_free_rdzv_pte:
 }
 
 /* ep_obj->lock should be held by caller */
-int cxip_rdzv_match_pte_alloc(struct cxip_txc *txc,
+int cxip_rdzv_match_pte_alloc(struct cxip_txc_hpc *txc,
 			      struct cxip_rdzv_match_pte **rdzv_pte)
 {
 	int ret;
 	struct cxip_rdzv_match_pte *match_pte;
-	uint32_t pid_idx = txc->domain->iface->dev->info.rdzv_get_idx;
+	uint32_t pid_idx = txc->base.domain->iface->dev->info.rdzv_get_idx;
 	struct cxip_rdzv_pte *base;
 
 	match_pte = calloc(1, sizeof(*match_pte));
@@ -325,7 +326,7 @@ err_free_rdzv_pte_mem:
 }
 
 /* ep_obj->lock should be held by caller */
-int cxip_rdzv_nomatch_pte_alloc(struct cxip_txc *txc, int lac,
+int cxip_rdzv_nomatch_pte_alloc(struct cxip_txc_hpc *txc, int lac,
 				struct cxip_rdzv_nomatch_pte **rdzv_pte)
 {
 	int ret;
@@ -359,7 +360,7 @@ int cxip_rdzv_nomatch_pte_alloc(struct cxip_txc *txc, int lac,
 	/* Non-matching specific initialization */
 	base = &nomatch_pte->base_pte;
 
-	nomatch_pte->le_req = cxip_evtq_req_alloc(&txc->tx_evtq, 1,
+	nomatch_pte->le_req = cxip_evtq_req_alloc(&txc->base.tx_evtq, 1,
 						  nomatch_pte);
 	if (!nomatch_pte->le_req) {
 		ret = -FI_EAGAIN;
