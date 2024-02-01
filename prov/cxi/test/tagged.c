@@ -304,6 +304,8 @@ Test(tagged, fail_alt_read_rdzv)
 	int ret;
 	struct cxip_ep *ep = container_of(&cxit_ep->fid,
 					  struct cxip_ep, ep.fid);
+	struct cxip_txc_hpc *txc = container_of(ep->ep_obj->txc,
+						struct cxip_txc_hpc, base);
 
 	/* If not testing alt_read protocol skip */
 	rdzv_proto = getenv("FI_CXI_RDZV_PROTO");
@@ -315,7 +317,7 @@ Test(tagged, fail_alt_read_rdzv)
 	/* Force error on allocation of hardware resources required
 	 * by alt_read rendezvous protocol.
 	 */
-	ep->ep_obj->txc->force_err |= CXIP_TXC_FORCE_ERR_ALT_READ_PROTO_ALLOC;
+	txc->force_err |= CXIP_TXC_FORCE_ERR_ALT_READ_PROTO_ALLOC;
 
 	ret = cxit_dom_read_cntr(C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
 				 &start_pkt_cnt, NULL, true);

@@ -1173,7 +1173,7 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	if (ep_obj->protocol == FI_PROTO_OPX)
 		ep_obj->protocol = FI_PROTO_CXI;
 
-	ep_obj->txc = calloc(1, sizeof(*ep_obj->txc));
+	ep_obj->txc = cxip_txc_calloc(ep_obj->protocol);
 	if (!ep_obj->txc) {
 		ret = -FI_ENOMEM;
 		goto err;
