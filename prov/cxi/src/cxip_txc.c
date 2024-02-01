@@ -112,7 +112,7 @@ int cxip_txc_ibuf_create(struct cxip_txc *txc)
  *
  * Caller must hold txc->ep_obj.lock
  */
-int cxip_tx_id_alloc(struct cxip_txc *txc, void *ctx)
+int cxip_tx_id_alloc(struct cxip_txc_hpc *txc, void *ctx)
 {
 	int id;
 
@@ -135,7 +135,7 @@ int cxip_tx_id_alloc(struct cxip_txc *txc, void *ctx)
  *
  * Caller must hold txc->ep_obj.lock
  */
-int cxip_tx_id_free(struct cxip_txc *txc, int id)
+int cxip_tx_id_free(struct cxip_txc_hpc *txc, int id)
 {
 	if (id < 0 || id >= CXIP_TX_IDS)
 		return -FI_EINVAL;
@@ -147,7 +147,7 @@ int cxip_tx_id_free(struct cxip_txc *txc, int id)
 }
 
 /* Caller must hold txc->ep_obj.lock */
-void *cxip_tx_id_lookup(struct cxip_txc *txc, int id)
+void *cxip_tx_id_lookup(struct cxip_txc_hpc *txc, int id)
 {
 	return ofi_idx_lookup(&txc->tx_ids, id);
 }
@@ -160,7 +160,7 @@ void *cxip_tx_id_lookup(struct cxip_txc *txc, int id)
  *
  * Caller must hold txc->ep_obj->lock.
  */
-int cxip_rdzv_id_alloc(struct cxip_txc *txc, struct cxip_req *req)
+int cxip_rdzv_id_alloc(struct cxip_txc_hpc *txc, struct cxip_req *req)
 {
 	struct indexer *rdzv_ids;
 	int max_rdzv_id;
@@ -202,7 +202,7 @@ int cxip_rdzv_id_alloc(struct cxip_txc *txc, struct cxip_req *req)
  *
  * Caller must hold txc->ep_obj->lock.
  */
-int cxip_rdzv_id_free(struct cxip_txc *txc, int id)
+int cxip_rdzv_id_free(struct cxip_txc_hpc *txc, int id)
 {
 	if (id < 0 || id >= CXIP_RDZV_IDS)
 		return -FI_EINVAL;
@@ -221,7 +221,7 @@ int cxip_rdzv_id_free(struct cxip_txc *txc, int id)
 }
 
 /* Caller must hold txc->ep_obj->lock. */
-void *cxip_rdzv_id_lookup(struct cxip_txc *txc, int id)
+void *cxip_rdzv_id_lookup(struct cxip_txc_hpc *txc, int id)
 {
 
 	if (id >= CXIP_RDZV_IDS_MULTI_RECV) {
@@ -238,13 +238,13 @@ void *cxip_rdzv_id_lookup(struct cxip_txc *txc, int id)
  *
  * Caller must hold ep_obj->lock
  */
-static int txc_msg_init(struct cxip_txc *txc)
+static int txc_msg_init(struct cxip_txc_hpc *txc)
 {
 	int ret;
 
 	/* Allocate TGQ for posting source data */
-	ret = cxip_ep_cmdq(txc->ep_obj, false, FI_TC_UNSPEC,
-			   txc->tx_evtq.eq, &txc->rx_cmdq);
+	ret = cxip_ep_cmdq(txc->base.ep_obj, false, FI_TC_UNSPEC,
+			   txc->base.tx_evtq.eq, &txc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TGQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
@@ -264,7 +264,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 	return FI_SUCCESS;
 
 err_put_rx_cmdq:
-	cxip_ep_cmdq_put(txc->ep_obj, false);
+	cxip_ep_cmdq_put(txc->base.ep_obj, false);
 
 	return ret;
 }
@@ -277,7 +277,7 @@ err_put_rx_cmdq:
  *
  * Caller must hold txc->ep_obj->lock.
  */
-static int txc_msg_fini(struct cxip_txc *txc)
+static int txc_msg_fini(struct cxip_txc_hpc *txc)
 {
 	int i;
 
@@ -288,7 +288,7 @@ static int txc_msg_fini(struct cxip_txc *txc)
 			cxip_rdzv_nomatch_pte_free(txc->rdzv_nomatch_pte[i]);
 	}
 
-	cxip_ep_cmdq_put(txc->ep_obj, false);
+	cxip_ep_cmdq_put(txc->base.ep_obj, false);
 
 	return FI_SUCCESS;
 }
@@ -324,20 +324,24 @@ static size_t cxip_txc_get_num_events(struct cxip_txc *txc)
  * Called via fi_enable(). The context could be used in a standard endpoint or
  * a scalable endpoint.
  */
-int cxip_txc_enable(struct cxip_txc *txc)
+int cxip_txc_enable(struct cxip_txc *txc_base)
 {
+	struct cxip_txc_hpc *txc = container_of(txc_base,
+						struct cxip_txc_hpc, base);
 	int ret = FI_SUCCESS;
 	size_t num_events;
 
-	if (txc->enabled)
+	assert(txc->base.protocol == FI_PROTO_CXI);
+
+	if (txc->base.enabled)
 		return FI_SUCCESS;
 
-	if (!txc->send_cq) {
+	if (!txc->base.send_cq) {
 		CXIP_WARN("Undefined send CQ\n");
 		return -FI_ENOCQ;
 	}
 
-	ret = cxip_txc_ibuf_create(txc);
+	ret = cxip_txc_ibuf_create(&txc->base);
 	if (ret) {
 		CXIP_WARN("Failed to create inject bufpool %d\n", ret);
 		return ret;
@@ -348,16 +352,17 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	memset(&txc->msg_rdzv_ids, 0, sizeof(txc->msg_rdzv_ids));
 	memset(&txc->tx_ids, 0, sizeof(txc->tx_ids));
 
-	num_events = cxip_txc_get_num_events(txc);
-	ret = cxip_evtq_init(&txc->tx_evtq, txc->send_cq, num_events, 0);
+	num_events = cxip_txc_get_num_events(&txc->base);
+	ret = cxip_evtq_init(&txc->base.tx_evtq, txc->base.send_cq,
+			     num_events, 0);
 	if (ret) {
 		CXIP_WARN("Failed to initialize TX event queue: %d, %s\n",
 			  ret, fi_strerror(-ret));
 		goto destroy_ibuf;
 	}
 
-	ret = cxip_ep_cmdq(txc->ep_obj, true, txc->tclass,
-			   txc->tx_evtq.eq, &txc->tx_cmdq);
+	ret = cxip_ep_cmdq(txc->base.ep_obj, true, txc->base.tclass,
+			   txc->base.tx_evtq.eq, &txc->base.tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
@@ -365,7 +370,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		goto destroy_evtq;
 	}
 
-	if (ofi_send_allowed(txc->attr.caps)) {
+	if (ofi_send_allowed(txc->base.attr.caps)) {
 		ret = txc_msg_init(txc);
 		if (ret != FI_SUCCESS) {
 			CXIP_WARN("Unable to init TX CTX, ret: %d\n", ret);
@@ -373,20 +378,20 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		}
 	}
 
-	txc->pid_bits = txc->domain->iface->dev->info.pid_bits;
-	txc->enabled = true;
+	txc->base.pid_bits = txc->base.domain->iface->dev->info.pid_bits;
+	txc->base.enabled = true;
 
 	return FI_SUCCESS;
 
 put_tx_cmdq:
-	cxip_ep_cmdq_put(txc->ep_obj, true);
+	cxip_ep_cmdq_put(txc->base.ep_obj, true);
 destroy_evtq:
-	cxip_evtq_fini(&txc->tx_evtq);
+	cxip_evtq_fini(&txc->base.tx_evtq);
 destroy_ibuf:
 	ofi_idx_reset(&txc->tx_ids);
 	ofi_idx_reset(&txc->rdzv_ids);
 	ofi_idx_reset(&txc->msg_rdzv_ids);
-	ofi_bufpool_destroy(txc->ibuf_pool);
+	ofi_bufpool_destroy(txc->base.ibuf_pool);
 
 	return ret;
 }
@@ -399,23 +404,23 @@ destroy_ibuf:
  * the TX CQ. If events go missing, resources will be leaked until the
  * Completion Queue is freed.
  */
-static void txc_cleanup(struct cxip_txc *txc)
+static void txc_cleanup(struct cxip_txc_hpc *txc)
 {
 	uint64_t start;
 	struct cxip_fc_peer *fc_peer;
 	struct dlist_entry *tmp;
 
-	if (!ofi_atomic_get32(&txc->otx_reqs))
+	if (!ofi_atomic_get32(&txc->base.otx_reqs))
 		goto free_fc_peers;
 
-	cxip_evtq_req_discard(&txc->tx_evtq, txc);
+	cxip_evtq_req_discard(&txc->base.tx_evtq, txc);
 
 	start = ofi_gettime_ms();
-	while (ofi_atomic_get32(&txc->otx_reqs)) {
+	while (ofi_atomic_get32(&txc->base.otx_reqs)) {
 		sched_yield();
 
-		cxip_evtq_progress(&txc->tx_evtq);
-		cxip_ep_ctrl_progress_locked(txc->ep_obj);
+		cxip_evtq_progress(&txc->base.tx_evtq);
+		cxip_ep_ctrl_progress_locked(txc->base.ep_obj);
 
 		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
 			CXIP_WARN("Timeout waiting for outstanding requests.\n");
@@ -423,7 +428,7 @@ static void txc_cleanup(struct cxip_txc *txc)
 		}
 	}
 
-	assert(ofi_atomic_get32(&txc->otx_reqs) == 0);
+	assert(ofi_atomic_get32(&txc->base.otx_reqs) == 0);
 
 free_fc_peers:
 	dlist_foreach_container_safe(&txc->fc_peers, struct cxip_fc_peer,
@@ -433,18 +438,24 @@ free_fc_peers:
 	}
 }
 
-void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
-			  void *context)
+void cxip_txc_struct_init(struct cxip_txc *txc_base,
+			  const struct fi_tx_attr *attr, void *context)
 {
-	ofi_atomic_initialize32(&txc->otx_reqs, 0);
-	dlist_init(&txc->msg_queue);
-	dlist_init(&txc->fc_peers);
+	struct cxip_txc_hpc *txc = container_of(txc_base, struct cxip_txc_hpc,
+						base);
 
-	txc->context = context;
-	txc->attr = *attr;
+	assert(txc->base.protocol == FI_PROTO_CXI);
+
+	dlist_init(&txc->base.msg_queue);
+	dlist_init(&txc->base.dom_entry);
+	txc->base.context = context;
+	txc->base.attr = *attr;
+	txc->base.hmem = !!(attr->caps & FI_HMEM);
+	ofi_atomic_initialize32(&txc->base.otx_reqs, 0);
+
+	dlist_init(&txc->fc_peers);
 	txc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
 	txc->rdzv_eager_size = cxip_env.rdzv_eager_size;
-	txc->hmem = !!(attr->caps & FI_HMEM);
 }
 
 /*
@@ -453,30 +464,34 @@ void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
  * Free hardware resources allocated when the context was enabled. Called via
  * fi_close().
  */
-void cxip_txc_disable(struct cxip_txc *txc)
+void cxip_txc_disable(struct cxip_txc *txc_base)
 {
+	struct cxip_txc_hpc *txc = container_of(txc_base,
+						struct cxip_txc_hpc, base);
 	int ret;
 
-	if (!txc->enabled)
+	assert(txc->base.protocol == FI_PROTO_CXI);
+
+	if (!txc->base.enabled)
 		return;
 
-	txc->enabled = false;
+	txc->base.enabled = false;
 	txc_cleanup(txc);
 
 	ofi_idx_reset(&txc->tx_ids);
 	ofi_idx_reset(&txc->rdzv_ids);
 	ofi_idx_reset(&txc->msg_rdzv_ids);
-	ofi_bufpool_destroy(txc->ibuf_pool);
+	ofi_bufpool_destroy(txc->base.ibuf_pool);
 
-	if (ofi_send_allowed(txc->attr.caps)) {
+	if (ofi_send_allowed(txc->base.attr.caps)) {
 		ret = txc_msg_fini(txc);
 		if (ret)
 			CXIP_WARN("Unable to destroy TX CTX, ret: %d\n",
 				       ret);
 	}
 
-	cxip_ep_cmdq_put(txc->ep_obj, true);
-	cxip_evtq_fini(&txc->tx_evtq);
+	cxip_ep_cmdq_put(txc->base.ep_obj, true);
+	cxip_evtq_fini(&txc->base.tx_evtq);
 }
 
 /* Caller must hold ep_obj->lock. */
@@ -788,4 +803,21 @@ int cxip_txc_emit_idc_msg(struct cxip_txc *txc, uint16_t vni,
 		ofi_atomic_inc32(&txc->otx_reqs);
 
 	return FI_SUCCESS;
+}
+
+struct cxip_txc *cxip_txc_calloc(uint32_t protocol)
+{
+	struct cxip_txc_hpc *txc_hpc;
+
+	if (protocol == FI_PROTO_CXI) {
+		txc_hpc = calloc(1, sizeof(*txc_hpc));
+
+		if (txc_hpc) {
+			txc_hpc->base.protocol = protocol;
+
+			return &txc_hpc->base;
+		}
+	}
+
+	return NULL;
 }
