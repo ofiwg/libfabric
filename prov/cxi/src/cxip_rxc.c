@@ -22,6 +22,8 @@
 		      " request full: %d unexpected: %d, NIC HW2SW unexp: %d"\
 		      " NIC HW2SW append fail: %d\n"
 
+extern struct cxip_rxc_ops hpc_rxc_ops;
+
 /*
  * cxip_rxc_msg_enable() - Enable RXC messaging.
  *
@@ -643,19 +645,55 @@ int cxip_rxc_emit_idc_msg(struct cxip_rxc_hpc *rxc, uint16_t vni,
 	return FI_SUCCESS;
 }
 
-struct cxip_rxc *cxip_rxc_calloc(uint32_t protocol)
+struct cxip_rxc *cxip_rxc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 {
-	struct cxip_rxc_hpc *rxc_hpc;
+	struct cxip_rxc *rxc = NULL;
 
-	if (protocol == FI_PROTO_CXI) {
+	if (ep_obj->protocol == FI_PROTO_CXI) {
+		struct cxip_rxc_hpc *rxc_hpc;
+
 		rxc_hpc = calloc(1, sizeof(*rxc_hpc));
-
 		if (rxc_hpc) {
-			rxc_hpc->base.protocol = protocol;
+			rxc_hpc->base.protocol = ep_obj->protocol;
+			rxc_hpc->base.ops = hpc_rxc_ops;
 
-			return &rxc_hpc->base;
+			rxc = &rxc_hpc->base;
 		}
 	}
 
-	return NULL;
+	if (!rxc)
+		return NULL;
+
+	/* Base initialization */
+	rxc->context = context;
+	rxc->ep_obj = ep_obj;
+	rxc->domain = ep_obj->domain;
+	rxc->min_multi_recv = CXIP_EP_MIN_MULTI_RECV;
+	rxc->state = RXC_DISABLED;
+	rxc->msg_offload = cxip_env.msg_offload;
+	rxc->max_tx = cxip_env.sw_rx_tx_init_max;
+	rxc->attr = ep_obj->rx_attr;
+	rxc->hmem = !!(rxc->attr.caps & FI_HMEM);
+
+	rxc->sw_ep_only = cxip_env.rx_match_mode ==
+					CXIP_PTLTE_SOFTWARE_MODE;
+	cxip_msg_counters_init(&rxc->cntrs);
+
+	/* Derived initialization/overrides */
+	rxc->ops.init_struct(rxc, ep_obj);
+
+	return rxc;
+}
+
+void cxip_rxc_free(struct cxip_rxc *rxc)
+{
+	if (!rxc)
+		return;
+
+	/* Derived structure free */
+	rxc->ops.fini_struct(rxc);
+
+	/* Any base stuff */
+
+	free(rxc);
 }

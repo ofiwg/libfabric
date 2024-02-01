@@ -4163,6 +4163,36 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 	return FI_SUCCESS;
 }
 
+static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
+				     struct cxip_ep_obj *ep_obj)
+{
+	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
+						base);
+	int i;
+
+	ofi_atomic_initialize32(&rxc->orx_hw_ule_cnt, 0);
+	ofi_atomic_initialize32(&rxc->base.orx_reqs, 0);
+	ofi_atomic_initialize32(&rxc->orx_tx_reqs, 0);
+
+	for (i = 0; i < CXIP_DEF_EVENT_HT_BUCKETS; i++)
+		dlist_init(&rxc->deferred_events.bh[i]);
+
+	dlist_init(&rxc->fc_drops);
+	dlist_init(&rxc->replay_queue);
+	dlist_init(&rxc->sw_ux_list);
+	dlist_init(&rxc->sw_recv_queue);
+	dlist_init(&rxc->sw_pending_ux_list);
+
+	rxc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
+	rxc->drop_count = rxc->base.ep_obj->asic_ver < CASSINI_2_0 ? -1 : 0;
+	rxc->rget_align_mask = cxip_env.rdzv_aligned_sw_rget ?
+					cxip_env.cacheline_size - 1 : 0;
+}
+
+static void cxip_rxc_hpc_fini_struct(struct cxip_rxc *rxc)
+{
+}
+
 /*
  * cxip_recv_common() - Common message receive function. Used for tagged and
  * untagged sends of all sizes.
@@ -5405,6 +5435,21 @@ err_buf_fini:
 	return ret;
 }
 
+static void cxip_txc_hpc_init_struct(struct cxip_txc *txc_base,
+				     struct cxip_ep_obj *ep_obj)
+{
+	struct cxip_txc_hpc *txc = container_of(txc_base, struct cxip_txc_hpc,
+						base);
+
+	dlist_init(&txc->fc_peers);
+	txc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
+	txc->rdzv_eager_size = cxip_env.rdzv_eager_size;
+}
+
+static void cxip_txc_hpc_fini_struct(struct cxip_txc *txc)
+{
+}
+
 /*
  * cxip_send_common() - Common message send function. Used for tagged and
  * untagged sends of all sizes. This includes triggered operations.
@@ -6041,4 +6086,14 @@ struct fi_ops_msg cxip_ep_msg_no_rx_ops = {
 	.inject = cxip_inject,
 	.senddata = cxip_senddata,
 	.injectdata = cxip_injectdata,
+};
+
+struct cxip_rxc_ops hpc_rxc_ops = {
+	.init_struct = cxip_rxc_hpc_init_struct,
+	.fini_struct = cxip_rxc_hpc_fini_struct,
+};
+
+struct cxip_txc_ops hpc_txc_ops = {
+	.init_struct = cxip_txc_hpc_init_struct,
+	.fini_struct = cxip_txc_hpc_fini_struct,
 };
