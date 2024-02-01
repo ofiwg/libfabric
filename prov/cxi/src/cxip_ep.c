@@ -1128,6 +1128,7 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 {
 	int ret;
 	struct cxip_ep_obj *ep_obj;
+	uint32_t txc_tclass;
 	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
 	uint32_t nic;
@@ -1168,36 +1169,45 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	if (!ep_obj)
 		return -FI_ENOMEM;
 
+	/* Save EP attributes from hints */
 	ep_obj->protocol = hints->ep_attr->protocol;
 	/* If user is still using CXI_COMPAT point to right protocol */
 	if (ep_obj->protocol == FI_PROTO_OPX)
 		ep_obj->protocol = FI_PROTO_CXI;
-
-	ep_obj->txc = cxip_txc_calloc(ep_obj->protocol);
-	if (!ep_obj->txc) {
-		ret = -FI_ENOMEM;
-		goto err;
-	}
-
-	ep_obj->rxc = cxip_rxc_calloc(ep_obj->protocol);
-	if (!ep_obj->rxc) {
-		ret = -FI_ENOMEM;
-		goto err;
-	}
-
-	txc = ep_obj->txc;
-	rxc = ep_obj->rxc;
-
-	/* For faster access */
-	ep_obj->asic_ver = cxip_dom->iface->info->cassini_version;
-
-	/* Save EP attributes from hints */
 	ep_obj->caps = hints->caps;
 	ep_obj->ep_attr = *hints->ep_attr;
 	ep_obj->txq_size = hints->tx_attr->size;
 	ep_obj->tgq_size = hints->rx_attr->size;
 	ep_obj->tx_attr = *hints->tx_attr;
 	ep_obj->rx_attr = *hints->rx_attr;
+
+	ep_obj->asic_ver = cxip_dom->iface->info->cassini_version;
+
+	ofi_atomic_initialize32(&ep_obj->ref, 0);
+
+	/* Allow FI_THREAD_DOMAIN optimizaiton */
+	if (cxip_dom->util_domain.threading == FI_THREAD_DOMAIN ||
+	    cxip_dom->util_domain.threading == FI_THREAD_COMPLETION)
+		ofi_genlock_init(&ep_obj->lock, OFI_LOCK_NONE);
+	else
+		ofi_genlock_init(&ep_obj->lock, OFI_LOCK_SPINLOCK);
+
+	ep_obj->domain = cxip_dom;
+	ep_obj->src_addr.nic = nic;
+	ep_obj->src_addr.pid = pid;
+	ep_obj->fi_addr = FI_ADDR_NOTAVAIL;
+
+	ofi_atomic_initialize32(&ep_obj->txq_ref, 0);
+	ofi_atomic_initialize32(&ep_obj->tgq_ref, 0);
+
+	for (i = 0; i < CXIP_NUM_CACHED_KEY_LE; i++) {
+		ofi_atomic_initialize32(&ep_obj->ctrl.std_mr_cache[i].ref, 0);
+		ofi_atomic_initialize32(&ep_obj->ctrl.opt_mr_cache[i].ref, 0);
+	}
+
+	dlist_init(&ep_obj->ctrl.mr_list);
+	ep_obj->ep_attr.tx_ctx_cnt = 1;
+	ep_obj->ep_attr.rx_ctx_cnt = 1;
 
 	if (hints->ep_attr->auth_key) {
 		/* Auth key size is verified in ofi_prov_check_info(). */
@@ -1225,41 +1235,32 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	}
 
 	if (cxip_set_tclass(ep_obj->tx_attr.tclass,
-			    cxip_dom->tclass, &ep_obj->txc->tclass)) {
+			    cxip_dom->tclass, &txc_tclass)) {
 		CXIP_WARN("Invalid tclass\n");
 		ret = -FI_EINVAL;
 		goto err;
 	}
-	ep_obj->tx_attr.tclass = ep_obj->txc->tclass;
 
-	/* Initialize object */
-	ofi_atomic_initialize32(&ep_obj->ref, 0);
+	ep_obj->tx_attr.tclass = txc_tclass;
 
-	/* Allow FI_THREAD_DOMAIN optimizaiton */
-	if (cxip_dom->util_domain.threading == FI_THREAD_DOMAIN ||
-	    cxip_dom->util_domain.threading == FI_THREAD_COMPLETION)
-		ofi_genlock_init(&ep_obj->lock, OFI_LOCK_NONE);
-	else
-		ofi_genlock_init(&ep_obj->lock, OFI_LOCK_SPINLOCK);
-
-	ep_obj->domain = cxip_dom;
-	ep_obj->src_addr.nic = nic;
-	ep_obj->src_addr.pid = pid;
-	ep_obj->fi_addr = FI_ADDR_NOTAVAIL;
-
-	ofi_atomic_initialize32(&ep_obj->txq_ref, 0);
-	ofi_atomic_initialize32(&ep_obj->tgq_ref, 0);
-
-	for (i = 0; i < CXIP_NUM_CACHED_KEY_LE; i++) {
-		ofi_atomic_initialize32(&ep_obj->ctrl.std_mr_cache[i].ref, 0);
-		ofi_atomic_initialize32(&ep_obj->ctrl.opt_mr_cache[i].ref, 0);
+	ep_obj->txc = cxip_txc_calloc(ep_obj->protocol);
+	if (!ep_obj->txc) {
+		ret = -FI_ENOMEM;
+		goto err;
 	}
 
-	dlist_init(&ep_obj->ctrl.mr_list);
-	ep_obj->ep_attr.tx_ctx_cnt = 1;
-	ep_obj->ep_attr.rx_ctx_cnt = 1;
+	ep_obj->rxc = cxip_rxc_calloc(ep_obj->protocol);
+	if (!ep_obj->rxc) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	txc = ep_obj->txc;
+	rxc = ep_obj->rxc;
 	txc->ep_obj = ep_obj;
 	rxc->ep_obj = ep_obj;
+
+	txc->tclass = ep_obj->tx_attr.tclass;
 
 	cxip_txc_struct_init(txc, &ep_obj->tx_attr, context);
 	cxip_rxc_struct_init(rxc, &ep_obj->rx_attr, context);
