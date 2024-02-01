@@ -46,8 +46,10 @@ static int cxip_recv_req_queue(struct cxip_req *req, bool restart_seq);
 static int cxip_recv_req_dropped(struct cxip_req *req);
 static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq);
 
-static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req);
-static int cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req);
+static int cxip_send_req_dropped(struct cxip_txc_hpc *txc,
+				 struct cxip_req *req);
+static int cxip_send_req_dequeue(struct cxip_txc_hpc *txc,
+				 struct cxip_req *req);
 
 static void cxip_fc_progress_ctrl(struct cxip_rxc_hpc *rxc);
 static void cxip_send_buf_fini(struct cxip_req *req);
@@ -1390,7 +1392,7 @@ static void rdzv_send_req_event(struct cxip_req *req);
 int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rdzv_pte *rdzv_pte = req->req_ctx;
-	struct cxip_txc *txc = rdzv_pte->txc;
+	struct cxip_txc_hpc *txc = rdzv_pte->txc;
 	struct cxip_req *put_req;
 	union cxip_match_bits mb;
 	int event_rc = cxi_event_rc(event);
@@ -1446,7 +1448,7 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 			TXC_DBG(txc, "ZBP received: %p rc: %s\n", put_req,
 				cxi_rc_to_str(event_rc));
 
-		ret = cxip_send_req_dequeue(put_req->send.txc, put_req);
+		ret = cxip_send_req_dequeue(put_req->send.txc_hpc, put_req);
 		if (ret != FI_SUCCESS)
 			return ret;
 
@@ -4419,7 +4421,7 @@ static void report_send_completion(struct cxip_req *req, bool sw_cntr)
  */
 static void rdzv_send_req_complete(struct cxip_req *req)
 {
-	cxip_rdzv_id_free(req->send.txc, req->send.rdzv_id);
+	cxip_rdzv_id_free(req->send.txc_hpc, req->send.rdzv_id);
 
 	cxip_send_buf_fini(req);
 
@@ -4453,7 +4455,7 @@ static int cxip_send_rdzv_put_cb(struct cxip_req *req,
 {
 	int event_rc;
 	int ret;
-	struct cxip_txc *txc = req->send.txc;
+	struct cxip_txc_hpc *txc = req->send.txc_hpc;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
@@ -4469,10 +4471,9 @@ static int cxip_send_rdzv_put_cb(struct cxip_req *req,
 		 * free the request (it will be used to replay the Send).
 		 */
 		if (event_rc == C_RC_PT_DISABLED) {
-			ret = cxip_send_req_dropped(req->send.txc, req);
+			ret = cxip_send_req_dropped(txc, req);
 			if (ret == FI_SUCCESS)
-				cxip_rdzv_id_free(req->send.txc,
-						  req->send.rdzv_id);
+				cxip_rdzv_id_free(txc, req->send.rdzv_id);
 			else
 				ret = -FI_EAGAIN;
 
@@ -4484,7 +4485,7 @@ static int cxip_send_rdzv_put_cb(struct cxip_req *req,
 		 * allows flow-control recovery to be performed before
 		 * outstanding long Send operations have completed.
 		 */
-		ret = cxip_send_req_dequeue(req->send.txc, req);
+		ret = cxip_send_req_dequeue(txc, req);
 		if (ret != FI_SUCCESS)
 			return ret;
 
@@ -4528,7 +4529,7 @@ static int cxip_send_rdzv_put_cb(struct cxip_req *req,
 int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rdzv_pte *rdzv_pte = req->req_ctx;
-	struct cxip_txc *txc = rdzv_pte->txc;
+	struct cxip_txc_hpc *txc = rdzv_pte->txc;
 	struct cxip_req *get_req;
 	union cxip_match_bits mb;
 	int event_rc = cxi_event_rc(event);
@@ -4585,7 +4586,7 @@ int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event)
  */
 static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 {
-	struct cxip_txc *txc = req->send.txc;
+	struct cxip_txc_hpc *txc = req->send.txc_hpc;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	struct c_full_dma_cmd cmd = {};
@@ -4604,8 +4605,8 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 		return -FI_EAGAIN;
 
 	/* Calculate DFA */
-	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
-		      CXIP_PTL_IDX_RXQ, &dfa, &idx_ext);
+	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid,
+		      txc->base.pid_bits, CXIP_PTL_IDX_RXQ, &dfa, &idx_ext);
 
 	/* Allocate a source request for the given LAC. This makes the source
 	 * memory accessible for rendezvous.
@@ -4660,9 +4661,9 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	cmd.dfa = dfa;
 	cmd.local_addr = CXI_VA_TO_IOVA(req->send.send_md->md, req->send.buf);
 	cmd.request_len = req->send.len;
-	cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
+	cmd.eq = cxip_evtq_eqn(&txc->base.tx_evtq);
 	cmd.user_ptr = (uint64_t)req;
-	cmd.initiator = cxip_msg_match_id(txc);
+	cmd.initiator = cxip_msg_match_id(&txc->base);
 	cmd.header_data = req->send.data;
 	cmd.remote_offset =
 		CXI_VA_TO_IOVA(req->send.send_md->md, req->send.buf);
@@ -4676,7 +4677,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	cmd.match_bits = put_mb.raw;
 	cmd.rendezvous_id = rdzv_id;
 
-	ret = cxip_txc_emit_dma(txc, req->send.caddr.vni,
+	ret = cxip_txc_emit_dma(&txc->base, req->send.caddr.vni,
 				cxip_ofi_to_cxi_tc(req->send.tclass),
 				CXI_TC_TYPE_DEFAULT, req->triggered ?
 				req->trig_cntr : NULL, req->trig_thresh,
@@ -4726,17 +4727,17 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 	 */
 	if (req->send.rc == C_RC_PT_DISABLED) {
 
-		ret = cxip_send_req_dropped(req->send.txc, req);
+		ret = cxip_send_req_dropped(req->send.txc_hpc, req);
 		if (ret != FI_SUCCESS)
 			return -FI_EAGAIN;
 
 		if (match_complete)
-			cxip_tx_id_free(req->send.txc, req->send.tx_id);
+			cxip_tx_id_free(req->send.txc_hpc, req->send.tx_id);
 
 		return FI_SUCCESS;
 	}
 
-	ret = cxip_send_req_dequeue(req->send.txc, req);
+	ret = cxip_send_req_dequeue(req->send.txc_hpc, req);
 	if (ret != FI_SUCCESS)
 		return ret;
 
@@ -4755,7 +4756,7 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 		}
 
 		TXC_DBG(req->send.txc, "Match complete with Ack: %p\n", req);
-		cxip_tx_id_free(req->send.txc, req->send.tx_id);
+		cxip_tx_id_free(req->send.txc_hpc, req->send.tx_id);
 	}
 
 	/* If MATCH_COMPLETE was requested, software must manage counters. */
@@ -4781,7 +4782,7 @@ static inline int cxip_set_eager_mb(struct cxip_req *req,
 	/* Allocate a TX ID if match completion guarantees are required */
 	if (req->send.flags & FI_MATCH_COMPLETE) {
 
-		tx_id = cxip_tx_id_alloc(req->send.txc, req);
+		tx_id = cxip_tx_id_alloc(req->send.txc_hpc, req);
 		if (tx_id < 0) {
 			TXC_DBG(req->send.txc,
 				"Failed to allocate TX ID: %d\n", tx_id);
@@ -4877,7 +4878,7 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 
 err_cleanup:
 	if (mb.match_comp)
-		cxip_tx_id_free(txc, req->send.tx_id);
+		cxip_tx_id_free(req->send.txc_hpc, req->send.tx_id);
 err:
 	return ret;
 }
@@ -4948,7 +4949,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 err_enqueue:
 
 	if (mb.match_comp)
-		cxip_tx_id_free(txc, req->send.tx_id);
+		cxip_tx_id_free(req->send.txc_hpc, req->send.tx_id);
 err:
 	return ret;
 }
@@ -4972,7 +4973,7 @@ static ssize_t _cxip_send_req(struct cxip_req *req)
 	    ((req->send.flags & FI_INJECT) || cxip_send_eager_idc(req)))
 		return _cxip_send_eager_idc(req);
 
-	if (req->send.len <= req->send.txc->max_eager_size)
+	if (req->send.len <= req->send.txc_hpc->max_eager_size)
 		return _cxip_send_eager(req);
 
 	return _cxip_send_rdzv_put(req);
@@ -4985,7 +4986,7 @@ static ssize_t _cxip_send_req(struct cxip_req *req)
  *
  * Caller must hold ep_obj->lock.
  */
-static struct cxip_fc_peer *cxip_fc_peer_lookup(struct cxip_txc *txc,
+static struct cxip_fc_peer *cxip_fc_peer_lookup(struct cxip_txc_hpc *txc,
 						struct cxip_addr caddr)
 {
 	struct cxip_fc_peer *peer;
@@ -5053,7 +5054,7 @@ static void cxip_fc_peer_fini(struct cxip_fc_peer *peer)
 int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 {
 	struct cxip_fc_peer *peer = container_of(req, struct cxip_fc_peer, req);
-	struct cxip_txc *txc = peer->txc;
+	struct cxip_txc_hpc *txc = peer->txc;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
@@ -5109,7 +5110,7 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
  *
  * Caller must hold ep_obj->lock.
  */
-static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
+static int cxip_fc_peer_init(struct cxip_txc_hpc *txc, struct cxip_addr caddr,
 			     struct cxip_fc_peer **peer)
 {
 	struct cxip_fc_peer *p;
@@ -5137,10 +5138,10 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
 	p->req.send.mb.ctrl_le_type = CXIP_CTRL_LE_TYPE_CTRL_MSG;
 	p->req.send.mb.ctrl_msg_type = CXIP_CTRL_MSG_FC_NOTIFY;
 	p->req.cb = cxip_fc_notify_cb;
-	p->req.ep_obj = txc->ep_obj;
+	p->req.ep_obj = txc->base.ep_obj;
 
 	/* Queue all Sends to the FC'ed peer */
-	dlist_foreach_container_safe(&txc->msg_queue, struct cxip_req,
+	dlist_foreach_container_safe(&txc->base.msg_queue, struct cxip_req,
 				     req, send.txc_entry, tmp) {
 		if (CXIP_ADDR_VNI_EQUAL(req->send.caddr, caddr)) {
 			dlist_remove(&req->send.txc_entry);
@@ -5165,7 +5166,8 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
 int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid,
 		   uint16_t vni)
 {
-	struct cxip_txc *txc = ep_obj->txc;
+	struct cxip_txc_hpc *txc = container_of(ep_obj->txc,
+						struct cxip_txc_hpc, base);
 	struct cxip_fc_peer *peer;
 	struct cxip_addr caddr = {
 		.nic = nic_addr,
@@ -5191,7 +5193,7 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid,
 		 * a TXC credit for replay. _cxip_send_req() will take the
 		 * credit again.
 		 */
-		ofi_atomic_dec32(&txc->otx_reqs);
+		ofi_atomic_dec32(&txc->base.otx_reqs);
 
 		/* -FI_EAGAIN can be return if the command queue is full. Loop
 		 * until this goes through.
@@ -5204,7 +5206,7 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid,
 		/* Move request back to the message queue. */
 		dlist_remove(&req->send.txc_entry);
 		req->send.fc_peer = NULL;
-		dlist_insert_tail(&req->send.txc_entry, &txc->msg_queue);
+		dlist_insert_tail(&req->send.txc_entry, &txc->base.msg_queue);
 
 		TXC_DBG(txc, "Replayed %p\n", req);
 	}
@@ -5227,7 +5229,7 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid,
  * outstanding Sends targeting the disabled peer. When all outstanding Sends
  * are completed, recovery will be performed.
  */
-static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
+static int cxip_send_req_dropped(struct cxip_txc_hpc *txc, struct cxip_req *req)
 {
 	struct cxip_fc_peer *peer;
 	int ret;
@@ -5265,7 +5267,7 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
  * Place the Send request in an ordered SW queue. Return error if the target
  * peer is disabled.
  */
-static int cxip_send_req_queue(struct cxip_txc *txc, struct cxip_req *req)
+static int cxip_send_req_queue(struct cxip_txc_hpc *txc, struct cxip_req *req)
 {
 	struct cxip_fc_peer *peer;
 
@@ -5275,13 +5277,13 @@ static int cxip_send_req_queue(struct cxip_txc *txc, struct cxip_req *req)
 			/* Peer is disabled. Progress control EQs so future
 			 * cxip_send_req_queue() may succeed.
 			 */
-			cxip_ep_ctrl_progress_locked(txc->ep_obj);
+			cxip_ep_ctrl_progress_locked(txc->base.ep_obj);
 
 			return -FI_EAGAIN;
 		}
 	}
 
-	dlist_insert_tail(&req->send.txc_entry, &txc->msg_queue);
+	dlist_insert_tail(&req->send.txc_entry, &txc->base.msg_queue);
 
 	return FI_SUCCESS;
 }
@@ -5292,7 +5294,7 @@ static int cxip_send_req_queue(struct cxip_txc *txc, struct cxip_req *req)
  * Remove the Send requst from the ordered message queue. Update peer
  * flow-control state, if necessary.
  */
-static int cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req)
+static int cxip_send_req_dequeue(struct cxip_txc_hpc *txc, struct cxip_req *req)
 {
 	int ret;
 
@@ -5418,6 +5420,8 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	struct cxip_addr caddr;
 	int ret;
 
+	assert(txc->protocol == FI_PROTO_CXI);
+
 	if (len && !buf)
 		return -FI_EINVAL;
 
@@ -5503,7 +5507,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	}
 
 	/* Check if target peer is disabled */
-	ret = cxip_send_req_queue(req->send.txc, req);
+	ret = cxip_send_req_queue(req->send.txc_hpc, req);
 	if (ret != FI_SUCCESS) {
 		TXC_DBG(txc, "Target peer disabled\n");
 		goto err_req_buf_fini;
@@ -5525,7 +5529,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	return FI_SUCCESS;
 
 err_req_dequeue:
-	cxip_send_req_dequeue(req->send.txc, req);
+	cxip_send_req_dequeue(req->send.txc_hpc, req);
 err_req_buf_fini:
 	cxip_send_buf_fini(req);
 err_req_free:

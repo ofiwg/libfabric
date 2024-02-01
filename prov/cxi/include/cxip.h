@@ -1137,7 +1137,10 @@ struct cxip_req_recv {
 
 struct cxip_req_send {
 	/* Send parameters */
-	struct cxip_txc *txc;
+	union {
+		struct cxip_txc *txc;
+		struct cxip_txc_hpc *txc_hpc;
+	};
 	struct cxip_cntr *cntr;
 	const void *buf;		// local send buffer
 	size_t len;			// request length
@@ -1291,7 +1294,7 @@ struct cxip_mr_lac_cache {
 
 struct cxip_fc_peer {
 	struct dlist_entry txc_entry;
-	struct cxip_txc *txc;
+	struct cxip_txc_hpc *txc;
 	struct cxip_ctrl_req req;
 	struct cxip_addr caddr;
 	struct dlist_entry msg_queue;
@@ -2043,7 +2046,7 @@ void cxip_req_buf_ux_free(struct cxip_ux_send *ux);
 
 /* Base rendezvous PtlTE object */
 struct cxip_rdzv_pte {
-	struct cxip_txc *txc;
+	struct cxip_txc_hpc *txc;
 	struct cxip_pte *pte;
 
 	/* Count of the number of buffers successfully linked on this PtlTE. */
@@ -2088,9 +2091,10 @@ struct cxip_rdzv_nomatch_pte {
  */
 struct cxip_txc {
 	void *context;
+
+	uint32_t protocol;
 	bool enabled;
 	bool hrp_war_req;		// Non-fetching 32-bit HRP
-
 	bool hmem;
 
 	struct cxip_cq *send_cq;
@@ -2115,33 +2119,43 @@ struct cxip_txc {
 	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
 	ofi_atomic32_t otx_reqs;	// outstanding transmit requests
 
+	/* Queue of TX messages in flight for the context */
+	struct dlist_entry msg_queue;
+
 	struct cxip_req *rma_write_selective_completion_req;
 	struct cxip_req *rma_read_selective_completion_req;
 	struct cxip_req *amo_selective_completion_req;
 	struct cxip_req *amo_fetch_selective_completion_req;
 
-	/* Rendezvous related structures */
+	struct dlist_entry dom_entry;
+};
+
+/* Default HPC SAS TXC specialization */
+struct cxip_txc_hpc {
+	/* Must remain first */
+	struct cxip_txc base;
+
+	int max_eager_size;
+	int rdzv_eager_size;
+
+	/* Rendezvous messaging support */
 	struct cxip_rdzv_match_pte *rdzv_pte;
 	struct cxip_rdzv_nomatch_pte *rdzv_nomatch_pte[RDZV_NO_MATCH_PTES];
 	struct indexer rdzv_ids;
 	struct indexer msg_rdzv_ids;
 	enum cxip_rdzv_proto rdzv_proto;
 
-	/* Match complete IDs */
-	struct indexer tx_ids;
-
-	int max_eager_size;
-	int rdzv_eager_size;
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 
 #if ENABLE_DEBUG
 	uint64_t force_err;
 #endif
 	/* Flow Control recovery */
-	struct dlist_entry msg_queue;
 	struct dlist_entry fc_peers;
 
-	struct dlist_entry dom_entry;
+	/* Match complete IDs */
+	struct indexer tx_ids;
+
 };
 
 int cxip_txc_emit_idc_put(struct cxip_txc *txc, uint16_t vni,
@@ -2783,9 +2797,9 @@ struct cxip_fid_list {
 	struct fid *fid;
 };
 
-int cxip_rdzv_match_pte_alloc(struct cxip_txc *txc,
+int cxip_rdzv_match_pte_alloc(struct cxip_txc_hpc *txc,
 			      struct cxip_rdzv_match_pte **rdzv_pte);
-int cxip_rdzv_nomatch_pte_alloc(struct cxip_txc *txc, int lac,
+int cxip_rdzv_nomatch_pte_alloc(struct cxip_txc_hpc *txc, int lac,
 				struct cxip_rdzv_nomatch_pte **rdzv_pte);
 int cxip_rdzv_pte_src_req_alloc(struct cxip_rdzv_match_pte *pte, int lac);
 void cxip_rdzv_match_pte_free(struct cxip_rdzv_match_pte *pte);
@@ -2874,12 +2888,12 @@ int cxip_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
 
-int cxip_tx_id_alloc(struct cxip_txc *txc, void *ctx);
-int cxip_tx_id_free(struct cxip_txc *txc, int id);
-void *cxip_tx_id_lookup(struct cxip_txc *txc, int id);
-int cxip_rdzv_id_alloc(struct cxip_txc *txc, struct cxip_req *req);
-int cxip_rdzv_id_free(struct cxip_txc *txc, int id);
-void *cxip_rdzv_id_lookup(struct cxip_txc *txc, int id);
+int cxip_tx_id_alloc(struct cxip_txc_hpc *txc, void *ctx);
+int cxip_tx_id_free(struct cxip_txc_hpc *txc, int id);
+void *cxip_tx_id_lookup(struct cxip_txc_hpc *txc, int id);
+int cxip_rdzv_id_alloc(struct cxip_txc_hpc *txc, struct cxip_req *req);
+int cxip_rdzv_id_free(struct cxip_txc_hpc *txc, int id);
+void *cxip_rdzv_id_lookup(struct cxip_txc_hpc *txc, int id);
 int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, bool transmit, uint32_t tclass,
 		 struct cxi_eq *evtq, struct cxip_cmdq **cmdq);
 void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj, bool transmit);
@@ -2898,6 +2912,7 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid,
 
 void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
 			  void *context);
+struct cxip_txc *cxip_txc_calloc(uint32_t protocol);
 int cxip_txc_enable(struct cxip_txc *txc);
 void cxip_txc_disable(struct cxip_txc *txc);
 struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
