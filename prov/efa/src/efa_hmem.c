@@ -89,7 +89,7 @@ static int efa_domain_hmem_info_init_protocol_thresholds(struct efa_domain *efa_
 		fi_param_get_size_t(&efa_prov, "inter_min_read_write_size", &info->min_read_write_size);
 		break;
 	case FI_HMEM_NEURON:
-		info->runt_size = 0;
+		info->runt_size = EFA_NEURON_RUNT_SIZE;
 		info->max_intra_eager_size = 0;
 		info->max_medium_msg_size = 0;
 		info->min_read_msg_size = efa_max_eager_msg_size_with_largest_header(efa_domain) + 1;
