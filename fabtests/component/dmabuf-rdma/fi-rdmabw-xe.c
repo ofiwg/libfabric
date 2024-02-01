@@ -515,19 +515,20 @@ static void init_ofi(int sockfd, char *server_name, int port, int test_type)
 	int err;
 	size_t len;
 	char *domain_name;
+	char *saveptr;
 
 	EXIT_ON_NULL((context_pool = init_context_pool(TX_DEPTH + 1)));
 
 	num_nics = 0;
 	if (domain_names) {
-		domain_name = strtok(domain_names, ",");
+		domain_name = strtok_r(domain_names, ",", &saveptr);
 		while (domain_name && num_nics < MAX_NICS) {
 			err = init_nic(num_nics, domain_name, server_name,
 				       port, test_type);
 			if (err)
 				return;
 			num_nics++;
-			domain_name = strtok(NULL, ",");
+			domain_name = strtok_r(NULL, ",", &saveptr);
 		}
 	} else {
 		err = init_nic(num_nics, NULL, server_name, port, test_type);
@@ -1104,11 +1105,12 @@ static inline int string_to_location(char *s, int default_loc)
 void parse_buf_location(char *string, int *loc1, int *loc2, int default_loc)
 {
 	char *s;
+	char *saveptr;
 
-	s = strtok(string, ":");
+	s = strtok_r(string, ":", &saveptr);
 	if (s) {
 		*loc1 = string_to_location(s, default_loc);
-		s = strtok(NULL, ":");
+		s = strtok_r(NULL, ":", &saveptr);
 		if (s)
 			*loc2 = string_to_location(s, default_loc);
 		else
