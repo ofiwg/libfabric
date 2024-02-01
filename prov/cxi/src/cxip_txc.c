@@ -20,6 +20,8 @@
 /* 8 Rendezvous, 2 RMA and 2 Atomic + 4 extra */
 #define CXIP_INTERNAL_TX_REQS	16
 
+extern struct cxip_txc_ops hpc_txc_ops;
+
 struct cxip_md *cxip_txc_ibuf_md(void *ibuf)
 {
 	return ofi_buf_hdr(ibuf)->region->context;
@@ -351,8 +353,8 @@ int cxip_txc_enable(struct cxip_txc *txc_base)
 	memset(&txc->rdzv_ids, 0, sizeof(txc->rdzv_ids));
 	memset(&txc->msg_rdzv_ids, 0, sizeof(txc->msg_rdzv_ids));
 	memset(&txc->tx_ids, 0, sizeof(txc->tx_ids));
-
 	num_events = cxip_txc_get_num_events(&txc->base);
+
 	ret = cxip_evtq_init(&txc->base.tx_evtq, txc->base.send_cq,
 			     num_events, 0);
 	if (ret) {
@@ -805,19 +807,53 @@ int cxip_txc_emit_idc_msg(struct cxip_txc *txc, uint16_t vni,
 	return FI_SUCCESS;
 }
 
-struct cxip_txc *cxip_txc_calloc(uint32_t protocol)
+struct cxip_txc *cxip_txc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 {
-	struct cxip_txc_hpc *txc_hpc;
+	struct cxip_txc *txc = NULL;
 
-	if (protocol == FI_PROTO_CXI) {
+	if (ep_obj->protocol == FI_PROTO_CXI) {
+		struct cxip_txc_hpc *txc_hpc;
+
 		txc_hpc = calloc(1, sizeof(*txc_hpc));
-
 		if (txc_hpc) {
-			txc_hpc->base.protocol = protocol;
+			txc_hpc->base.protocol = ep_obj->protocol;
+			txc_hpc->base.ops = hpc_txc_ops;
 
-			return &txc_hpc->base;
+			txc = &txc_hpc->base;
 		}
 	}
 
-	return NULL;
+	if (!txc)
+		return NULL;
+
+	/* Common structure initialization */
+	txc->context = context;
+	txc->ep_obj = ep_obj;
+	txc->domain = ep_obj->domain;
+	txc->tclass = ep_obj->tx_attr.tclass;
+	txc->hrp_war_req = ep_obj->asic_ver < CASSINI_2_0;
+	txc->attr = ep_obj->tx_attr;
+	txc->hmem = !!(txc->attr.caps & FI_HMEM);
+
+	dlist_init(&txc->msg_queue);
+	dlist_init(&txc->dom_entry);
+	ofi_atomic_initialize32(&txc->otx_reqs, 0);
+
+	/* Derived initialization/overrides */
+	txc->ops.init_struct(txc, ep_obj);
+
+	return txc;
+}
+
+void cxip_txc_free(struct cxip_txc *txc)
+{
+	if (!txc)
+		return;
+
+	/* Derived structure free */
+	txc->ops.fini_struct(txc);
+
+	/* Any base stuff */
+
+	free(txc);
 }
