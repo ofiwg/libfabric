@@ -393,6 +393,7 @@ static int ze_hmem_init_fds(void)
 	char *str;
 	uint16_t domain_id;
 	uint8_t pci_id;
+	char *saveptr;
 
 	dir = opendir(dev_dir);
 	if (dir == NULL)
@@ -411,10 +412,10 @@ static int ze_hmem_init_fds(void)
 		dev_fds[num_pci_devices] = open(dev_name, O_RDWR);
 		if (dev_fds[num_pci_devices] == -1)
 			goto err;
-		str = strtok(ent->d_name, "-");
-		str = strtok(NULL, ":");
+		str = strtok_r(ent->d_name, "-", &saveptr);
+		str = strtok_r(NULL, ":", &saveptr);
 		domain_id = (uint16_t) strtol(str, NULL, 16);
-		str = strtok(NULL, ":");
+		str = strtok_r(NULL, ":", &saveptr);
 		pci_id = (uint8_t) strtol(str, NULL, 16);
 		for (i = 0; i < num_devices; i++) {
 			if (dev_info[i].uuid.id[8] == pci_id &&

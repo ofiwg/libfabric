@@ -598,13 +598,14 @@ void ofi_hmem_set_iface_filter(const char* iface_filter_str, bool* filter)
 		"synapseai"
 	};
 	char *iface_filter_str_copy = strdup(iface_filter_str);
+	char *saveptr;
 
 	memset(filter, false, sizeof(bool) * ARRAY_SIZE(hmem_ops));
 
 	/* always enable system hmem interface */
 	filter[FI_HMEM_SYSTEM] = true;
 
-	entry = strtok(iface_filter_str_copy, token);
+	entry = strtok_r(iface_filter_str_copy, token, &saveptr);
 	while (entry != NULL) {
 		for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
 			if (!strcasecmp(iface_labels[iface], entry)) {
@@ -619,7 +620,7 @@ void ofi_hmem_set_iface_filter(const char* iface_filter_str, bool* filter)
 					entry);
 		}
 
-		entry = strtok(NULL, token);
+		entry = strtok_r(NULL, token, &saveptr);
 	}
 
 	free(iface_filter_str_copy);

@@ -617,6 +617,11 @@ static inline char* strsep(char **stringp, const char *delim)
 	return ptr;
 }
 
+static inline char *strtok_r(char *str, const char *delimiters, char **saveptr)
+{
+	return strtok_s(str, delimiters, saveptr);
+}
+
 #define _SC_PAGESIZE	30
 
 static long int sysconf(int name)

@@ -137,6 +137,7 @@ int xe_init(char *gpu_dev_nums, int enable_multi_gpu)
 	char *gpu_dev_num;
 	char *s;
 	int dev_num, subdev_num;
+	char *saveptr;
 
 	EXIT_ON_ERROR(init_libze_ops());
 	EXIT_ON_ERROR(libze_ops.zeInit(ZE_INIT_FLAG_GPU_ONLY));
@@ -150,7 +151,7 @@ int xe_init(char *gpu_dev_nums, int enable_multi_gpu)
 
 	num_gpus = 0;
 	if (gpu_dev_nums) {
-		gpu_dev_num = strtok(gpu_dev_nums, ",");
+		gpu_dev_num = strtok_r(gpu_dev_nums, ",", &saveptr);
 		while (gpu_dev_num && num_gpus < MAX_GPUS) {
 			dev_num = 0;
 			subdev_num = -1;
@@ -158,7 +159,7 @@ int xe_init(char *gpu_dev_nums, int enable_multi_gpu)
 			s = strchr(gpu_dev_num, '.');
 			if (s)
 				subdev_num = atoi(s + 1);
-			gpu_dev_num = strtok(NULL, ",");
+			gpu_dev_num = strtok_r(NULL, ",", &saveptr);
 
 			if (init_gpu(num_gpus, dev_num, subdev_num) < 0)
 				continue;
