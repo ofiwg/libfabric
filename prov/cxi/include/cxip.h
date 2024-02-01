@@ -1761,6 +1761,15 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
  * cannot be delivered due to EQ full, delay before retrying.
  */
 #define CXIP_DONE_NOTIFY_RETRY_DELAY_US 100
+
+/* RXC specialization API support */
+struct cxip_rxc_ops {
+	void (*init_struct)(struct cxip_rxc *rxc, struct cxip_ep_obj *ep_obj);
+	void (*fini_struct)(struct cxip_rxc *rxc);
+	int (*msg_init)(struct cxip_rxc *rxc);
+	int (*msg_fini)(struct cxip_rxc *rxc);
+};
+
 /*
  * Receive context base object
  */
@@ -1782,6 +1791,9 @@ struct cxip_rxc {
 
 	struct cxip_cq *recv_cq;
 	struct cxip_cntr *recv_cntr;
+
+	struct cxip_rxc_ops ops;
+
 	struct cxip_domain *domain;
 
 	/* RXC receive portal table, event queue and hardware
@@ -2086,6 +2098,14 @@ struct cxip_rdzv_nomatch_pte {
 #define	CXIP_TXC_FORCE_ERR_ALT_READ_PROTO_ALLOC (1 << 0)
 #endif
 
+/* TXC specialization API support */
+struct cxip_txc_ops {
+	void (*init_struct)(struct cxip_txc *txc, struct cxip_ep_obj *ep_obj);
+	void (*fini_struct)(struct cxip_txc *txc);
+	int (*msg_init)(struct cxip_txc *txc);
+	int (*msg_fini)(struct cxip_txc *txc);
+};
+
 /*
  * Endpoint object transmit context
  */
@@ -2101,6 +2121,8 @@ struct cxip_txc {
 	struct cxip_cntr *send_cntr;
 	struct cxip_cntr *read_cntr;
 	struct cxip_cntr *write_cntr;
+
+	struct cxip_txc_ops ops;
 
 	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_domain *domain;	// parent domain
@@ -2912,13 +2934,15 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid,
 
 void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
 			  void *context);
-struct cxip_txc *cxip_txc_calloc(uint32_t protocol);
+struct cxip_txc *cxip_txc_calloc(struct cxip_ep_obj *ep_obj, void *context);
+void cxip_txc_free(struct cxip_txc *txc);
 int cxip_txc_enable(struct cxip_txc *txc);
 void cxip_txc_disable(struct cxip_txc *txc);
 struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
 int cxip_rxc_msg_enable(struct cxip_rxc_hpc *rxc, uint32_t drop_count);
 
-struct cxip_rxc *cxip_rxc_calloc(uint32_t protocol);
+struct cxip_rxc *cxip_rxc_calloc(struct cxip_ep_obj *ep_obj, void *context);
+void cxip_rxc_free(struct cxip_rxc *rxc);
 int cxip_rxc_enable(struct cxip_rxc *rxc);
 void cxip_rxc_disable(struct cxip_rxc *rxc);
 void cxip_rxc_struct_init(struct cxip_rxc *rxc, const struct fi_rx_attr *attr,

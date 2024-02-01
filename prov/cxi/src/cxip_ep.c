@@ -645,8 +645,8 @@ int cxip_free_endpoint(struct cxip_ep *ep)
 	ofi_atomic_dec32(&ep_obj->domain->ref);
 	ofi_genlock_destroy(&ep_obj->lock);
 
-	free(ep_obj->txc);
-	free(ep_obj->rxc);
+	cxip_txc_free(ep_obj->txc);
+	cxip_rxc_free(ep_obj->rxc);
 	free(ep_obj);
 	ep->ep_obj = NULL;
 
@@ -1129,8 +1129,6 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	int ret;
 	struct cxip_ep_obj *ep_obj;
 	uint32_t txc_tclass;
-	struct cxip_txc *txc;
-	struct cxip_rxc *rxc;
 	uint32_t nic;
 	uint32_t pid;
 	int i;
@@ -1243,43 +1241,27 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 
 	ep_obj->tx_attr.tclass = txc_tclass;
 
-	ep_obj->txc = cxip_txc_calloc(ep_obj->protocol);
+	ep_obj->txc = cxip_txc_calloc(ep_obj, context);
 	if (!ep_obj->txc) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
-	ep_obj->rxc = cxip_rxc_calloc(ep_obj->protocol);
+	ep_obj->rxc = cxip_rxc_calloc(ep_obj, context);
 	if (!ep_obj->rxc) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
-	txc = ep_obj->txc;
-	rxc = ep_obj->rxc;
-	txc->ep_obj = ep_obj;
-	rxc->ep_obj = ep_obj;
-
-	txc->tclass = ep_obj->tx_attr.tclass;
-
-	cxip_txc_struct_init(txc, &ep_obj->tx_attr, context);
-	cxip_rxc_struct_init(rxc, &ep_obj->rx_attr, context);
-
-	txc->domain = cxip_dom;
-	txc->hrp_war_req = txc->ep_obj->asic_ver < CASSINI_2_0;
-
-	rxc->domain = cxip_dom;
-	rxc->min_multi_recv = CXIP_EP_MIN_MULTI_RECV;
 	ofi_atomic_inc32(&cxip_dom->ref);
-
 	*ep_base_obj = ep_obj;
 
 	return FI_SUCCESS;
 
 err:
-	/* free handles null check */
-	free(ep_obj->txc);
-	free(ep_obj->rxc);
+	/* handles null check */
+	cxip_txc_free(ep_obj->txc);
+	cxip_rxc_free(ep_obj->rxc);
 	free(ep_obj);
 
 	return ret;
