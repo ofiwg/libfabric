@@ -19,6 +19,9 @@
 
 #include "cxip.h"
 
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
+
 #define FC_SW_LE_MSG_FATAL "LE exhaustion during flow control, "\
 	"FI_CXI_RX_MATCH_MODE=[hybrid|software] is required\n"
 #define FC_SW_ONLOAD_MSG_FATAL "LE resources not recovered during "\
@@ -4170,8 +4173,9 @@ static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 						base);
 	int i;
 
+	rxc->base.recv_ptl_idx = CXIP_PTL_IDX_RXQ;
+
 	ofi_atomic_initialize32(&rxc->orx_hw_ule_cnt, 0);
-	ofi_atomic_initialize32(&rxc->base.orx_reqs, 0);
 	ofi_atomic_initialize32(&rxc->orx_tx_reqs, 0);
 
 	for (i = 0; i < CXIP_DEF_EVENT_HT_BUCKETS; i++)
@@ -4191,6 +4195,150 @@ static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 
 static void cxip_rxc_hpc_fini_struct(struct cxip_rxc *rxc)
 {
+}
+
+static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
+{
+	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
+						base);
+	struct cxi_pt_alloc_opts pt_opts = {
+		.use_long_event = 1,
+		.is_matching = 1,
+		.en_flowctrl = 1,
+		.lossless = cxip_env.msg_lossless,
+	};
+	struct cxi_cq_alloc_opts cq_opts = {};
+	enum c_ptlte_state state;
+	int ret;
+
+	/* For FI_TC_UNSPEC, reuse the TX context command queue if possible. If
+	 * a specific traffic class is requested, allocate a new command queue.
+	 * This is done to prevent performance issues with reusing the TX
+	 * context command queue and changing the communication profile.
+	 */
+	if (cxip_env.rget_tc == FI_TC_UNSPEC) {
+		ret = cxip_ep_cmdq(rxc->base.ep_obj, true, FI_TC_UNSPEC,
+				   rxc->base.rx_evtq.eq, &rxc->tx_cmdq);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
+			return -FI_EDOMAIN;
+		}
+	} else {
+		cq_opts.count = rxc->base.ep_obj->txq_size * 4;
+		cq_opts.flags = CXI_CQ_IS_TX;
+		cq_opts.policy = cxip_env.cq_policy;
+
+		ret = cxip_cmdq_alloc(rxc->base.ep_obj->domain->lni,
+				      rxc->base.rx_evtq.eq, &cq_opts,
+				      rxc->base.ep_obj->auth_key.vni,
+				      cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
+				      CXI_TC_TYPE_DEFAULT, &rxc->tx_cmdq);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Unable to allocate CMDQ, ret: %d\n", ret);
+			return -FI_ENOSPC;
+		}
+	}
+
+	/* If applications AVs are symmetric, use logical FI addresses for
+	 * matching. Otherwise, physical addresses will be used.
+	 */
+	if (rxc->base.ep_obj->av->symmetric) {
+		CXIP_DBG("Using logical PTE matching\n");
+		pt_opts.use_logical = 1;
+	}
+
+	ret = cxip_pte_alloc(rxc->base.ep_obj->ptable,
+			     rxc->base.rx_evtq.eq, rxc->base.recv_ptl_idx,
+			     false, &pt_opts, cxip_recv_pte_cb, rxc,
+			     &rxc->base.rx_pte);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to allocate RX PTE: %d\n", ret);
+		goto put_tx_cmdq;
+	}
+
+	/* One slot must be reserved to support hardware generated state change
+	 * events.
+	 */
+	ret = cxip_evtq_adjust_reserved_fc_event_slots(&rxc->base.rx_evtq,
+						       RXC_RESERVED_FC_SLOTS);
+	if (ret) {
+		CXIP_WARN("Unable to adjust RX reserved event slots: %d\n",
+			  ret);
+		goto free_pte;
+	}
+
+	/* If starting in or able to transition to software managed
+	 * PtlTE, append request list entries first.
+	 */
+	if (cxip_software_pte_allowed()) {
+		ret = cxip_req_bufpool_init(rxc);
+		if (ret != FI_SUCCESS)
+			goto free_slots;
+	}
+
+	if (rxc->base.msg_offload) {
+		state = C_PTLTE_ENABLED;
+		ret = cxip_oflow_bufpool_init(rxc);
+		if (ret != FI_SUCCESS)
+			goto free_req_buf;
+	} else {
+		state = C_PTLTE_SOFTWARE_MANAGED;
+	}
+
+	/* Start accepting Puts. */
+	ret = cxip_pte_set_state(rxc->base.rx_pte, rxc->base.rx_cmdq, state, 0);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("cxip_pte_set_state returned: %d\n", ret);
+		goto free_oflow_buf;
+	}
+
+	/* Wait for PTE state change */
+	do {
+		sched_yield();
+		cxip_evtq_progress(&rxc->base.rx_evtq);
+	} while (rxc->base.rx_pte->state != state);
+
+	rxc->base.pid_bits = rxc->base.domain->iface->dev->info.pid_bits;
+	CXIP_DBG("RXC HPC messaging enabled: %p, pid_bits: %d\n",
+		 rxc, rxc->base.pid_bits);
+
+	return FI_SUCCESS;
+
+free_oflow_buf:
+	if (rxc->base.msg_offload)
+		cxip_oflow_bufpool_fini(rxc);
+free_req_buf:
+	if (cxip_software_pte_allowed())
+		cxip_req_bufpool_fini(rxc);
+free_slots:
+	cxip_evtq_adjust_reserved_fc_event_slots(&rxc->base.rx_evtq,
+						 -1 * RXC_RESERVED_FC_SLOTS);
+free_pte:
+	cxip_pte_free(rxc->base.rx_pte);
+
+put_tx_cmdq:
+	if (cxip_env.rget_tc == FI_TC_UNSPEC)
+		cxip_ep_cmdq_put(rxc->base.ep_obj, true);
+	else
+		cxip_cmdq_free(rxc->tx_cmdq);
+
+	return ret;
+}
+
+static int cxip_rxc_hpc_msg_fini(struct cxip_rxc *rxc_base)
+{
+	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
+						base);
+
+	if (cxip_env.rget_tc == FI_TC_UNSPEC)
+		cxip_ep_cmdq_put(rxc->base.ep_obj, true);
+	else
+		cxip_cmdq_free(rxc->tx_cmdq);
+
+	cxip_evtq_adjust_reserved_fc_event_slots(&rxc->base.rx_evtq,
+						 -1 * RXC_RESERVED_FC_SLOTS);
+
+	return FI_SUCCESS;
 }
 
 /*
@@ -5441,6 +5589,7 @@ static void cxip_txc_hpc_init_struct(struct cxip_txc *txc_base,
 	struct cxip_txc_hpc *txc = container_of(txc_base, struct cxip_txc_hpc,
 						base);
 
+	txc->base.recv_ptl_idx = CXIP_PTL_IDX_RXQ;
 	dlist_init(&txc->fc_peers);
 	txc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
 	txc->rdzv_eager_size = cxip_env.rdzv_eager_size;
@@ -5448,6 +5597,65 @@ static void cxip_txc_hpc_init_struct(struct cxip_txc *txc_base,
 
 static void cxip_txc_hpc_fini_struct(struct cxip_txc *txc)
 {
+}
+
+static int cxip_txc_hpc_msg_init(struct cxip_txc *txc_base)
+{
+	struct cxip_txc_hpc *txc = container_of(txc_base, struct cxip_txc_hpc,
+						base);
+	int ret;
+
+	/* Protected with ep_obj->lock */
+	memset(&txc->rdzv_ids, 0, sizeof(txc->rdzv_ids));
+	memset(&txc->msg_rdzv_ids, 0, sizeof(txc->msg_rdzv_ids));
+	memset(&txc->tx_ids, 0, sizeof(txc->tx_ids));
+
+	/* Allocate TGQ for posting source data */
+	ret = cxip_ep_cmdq(txc->base.ep_obj, false, FI_TC_UNSPEC,
+			   txc->base.tx_evtq.eq, &txc->rx_cmdq);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Unable to allocate TGQ, ret: %d\n", ret);
+		return -FI_EDOMAIN;
+	}
+
+	ret = cxip_rdzv_match_pte_alloc(txc, &txc->rdzv_pte);
+	if (ret) {
+		CXIP_WARN("Failed to allocate rendezvous PtlTE: %d:%s\n",
+			  ret, fi_strerror(-ret));
+		goto err_put_rx_cmdq;
+	}
+
+	txc->rdzv_proto = cxip_env.rdzv_proto;
+	CXIP_DBG("TXC RDZV PtlTE enabled: %p proto: %s\n",
+		 txc, cxip_rdzv_proto_to_str(txc->rdzv_proto));
+
+	return FI_SUCCESS;
+
+err_put_rx_cmdq:
+	cxip_ep_cmdq_put(txc->base.ep_obj, false);
+
+	return ret;
+}
+
+static int cxip_txc_hpc_msg_fini(struct cxip_txc *txc_base)
+{
+	struct cxip_txc_hpc *txc = container_of(txc_base, struct cxip_txc_hpc,
+						base);
+	int i;
+
+	ofi_idx_reset(&txc->rdzv_ids);
+	ofi_idx_reset(&txc->rdzv_ids);
+	ofi_idx_reset(&txc->msg_rdzv_ids);
+
+	cxip_rdzv_match_pte_free(txc->rdzv_pte);
+
+	for (i = 0; i < RDZV_NO_MATCH_PTES; i++) {
+		if (txc->rdzv_nomatch_pte[i])
+			cxip_rdzv_nomatch_pte_free(txc->rdzv_nomatch_pte[i]);
+	}
+	cxip_ep_cmdq_put(txc->base.ep_obj, false);
+
+	return FI_SUCCESS;
 }
 
 /*
@@ -6091,9 +6299,13 @@ struct fi_ops_msg cxip_ep_msg_no_rx_ops = {
 struct cxip_rxc_ops hpc_rxc_ops = {
 	.init_struct = cxip_rxc_hpc_init_struct,
 	.fini_struct = cxip_rxc_hpc_fini_struct,
+	.msg_init = cxip_rxc_hpc_msg_init,
+	.msg_fini = cxip_rxc_hpc_msg_fini,
 };
 
 struct cxip_txc_ops hpc_txc_ops = {
 	.init_struct = cxip_txc_hpc_init_struct,
 	.fini_struct = cxip_txc_hpc_fini_struct,
+	.msg_init = cxip_txc_hpc_msg_init,
+	.msg_fini = cxip_txc_hpc_msg_fini,
 };
