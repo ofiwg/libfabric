@@ -240,33 +240,14 @@ void *cxip_rdzv_id_lookup(struct cxip_txc_hpc *txc, int id)
  *
  * Caller must hold ep_obj->lock
  */
-static int txc_msg_init(struct cxip_txc_hpc *txc)
+static int txc_msg_init(struct cxip_txc *txc)
 {
-	int ret;
+	int ret = FI_SUCCESS;
 
-	/* Allocate TGQ for posting source data */
-	ret = cxip_ep_cmdq(txc->base.ep_obj, false, FI_TC_UNSPEC,
-			   txc->base.tx_evtq.eq, &txc->rx_cmdq);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Unable to allocate TGQ, ret: %d\n", ret);
-		return -FI_EDOMAIN;
-	}
+	/* Any common initialization should be added here */
 
-	ret = cxip_rdzv_match_pte_alloc(txc, &txc->rdzv_pte);
-	if (ret) {
-		CXIP_WARN("Failed to allocate rendezvous PtlTE: %d:%s\n", ret,
-			  fi_strerror(-ret));
-		goto err_put_rx_cmdq;
-	}
-	txc->rdzv_proto = cxip_env.rdzv_proto;
-
-	CXIP_DBG("TXC RDZV PtlTE enabled: %p proto: %s\n",
-		 txc, cxip_rdzv_proto_to_str(txc->rdzv_proto));
-
-	return FI_SUCCESS;
-
-err_put_rx_cmdq:
-	cxip_ep_cmdq_put(txc->base.ep_obj, false);
+	/* Derived TXC message initialization */
+	ret = txc->ops.msg_init(txc);
 
 	return ret;
 }
@@ -279,20 +260,16 @@ err_put_rx_cmdq:
  *
  * Caller must hold txc->ep_obj->lock.
  */
-static int txc_msg_fini(struct cxip_txc_hpc *txc)
+static int txc_msg_fini(struct cxip_txc *txc)
 {
-	int i;
+	int ret;
 
-	cxip_rdzv_match_pte_free(txc->rdzv_pte);
+	/* Any common cleanup should be added here */
 
-	for (i = 0; i < RDZV_NO_MATCH_PTES; i++) {
-		if (txc->rdzv_nomatch_pte[i])
-			cxip_rdzv_nomatch_pte_free(txc->rdzv_nomatch_pte[i]);
-	}
+	/* Derived TXC message cleanup */
+	ret = txc->ops.msg_fini(txc);
 
-	cxip_ep_cmdq_put(txc->base.ep_obj, false);
-
-	return FI_SUCCESS;
+	return ret;
 }
 
 static size_t cxip_txc_get_num_events(struct cxip_txc *txc)
@@ -326,45 +303,36 @@ static size_t cxip_txc_get_num_events(struct cxip_txc *txc)
  * Called via fi_enable(). The context could be used in a standard endpoint or
  * a scalable endpoint.
  */
-int cxip_txc_enable(struct cxip_txc *txc_base)
+int cxip_txc_enable(struct cxip_txc *txc)
 {
-	struct cxip_txc_hpc *txc = container_of(txc_base,
-						struct cxip_txc_hpc, base);
 	int ret = FI_SUCCESS;
 	size_t num_events;
 
-	assert(txc->base.protocol == FI_PROTO_CXI);
-
-	if (txc->base.enabled)
+	if (txc->enabled)
 		return FI_SUCCESS;
 
-	if (!txc->base.send_cq) {
+	if (!txc->send_cq) {
 		CXIP_WARN("Undefined send CQ\n");
 		return -FI_ENOCQ;
 	}
 
-	ret = cxip_txc_ibuf_create(&txc->base);
+	ret = cxip_txc_ibuf_create(txc);
 	if (ret) {
 		CXIP_WARN("Failed to create inject bufpool %d\n", ret);
 		return ret;
 	}
 
-	/* Protected with ep_obj->lock */
-	memset(&txc->rdzv_ids, 0, sizeof(txc->rdzv_ids));
-	memset(&txc->msg_rdzv_ids, 0, sizeof(txc->msg_rdzv_ids));
-	memset(&txc->tx_ids, 0, sizeof(txc->tx_ids));
-	num_events = cxip_txc_get_num_events(&txc->base);
+	num_events = cxip_txc_get_num_events(txc);
 
-	ret = cxip_evtq_init(&txc->base.tx_evtq, txc->base.send_cq,
-			     num_events, 0);
+	ret = cxip_evtq_init(&txc->tx_evtq, txc->send_cq, num_events, 0);
 	if (ret) {
 		CXIP_WARN("Failed to initialize TX event queue: %d, %s\n",
 			  ret, fi_strerror(-ret));
 		goto destroy_ibuf;
 	}
 
-	ret = cxip_ep_cmdq(txc->base.ep_obj, true, txc->base.tclass,
-			   txc->base.tx_evtq.eq, &txc->base.tx_cmdq);
+	ret = cxip_ep_cmdq(txc->ep_obj, true, txc->tclass, txc->tx_evtq.eq,
+			   &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
@@ -372,7 +340,7 @@ int cxip_txc_enable(struct cxip_txc *txc_base)
 		goto destroy_evtq;
 	}
 
-	if (ofi_send_allowed(txc->base.attr.caps)) {
+	if (ofi_send_allowed(txc->attr.caps)) {
 		ret = txc_msg_init(txc);
 		if (ret != FI_SUCCESS) {
 			CXIP_WARN("Unable to init TX CTX, ret: %d\n", ret);
@@ -380,20 +348,17 @@ int cxip_txc_enable(struct cxip_txc *txc_base)
 		}
 	}
 
-	txc->base.pid_bits = txc->base.domain->iface->dev->info.pid_bits;
-	txc->base.enabled = true;
+	txc->pid_bits = txc->domain->iface->dev->info.pid_bits;
+	txc->enabled = true;
 
 	return FI_SUCCESS;
 
 put_tx_cmdq:
-	cxip_ep_cmdq_put(txc->base.ep_obj, true);
+	cxip_ep_cmdq_put(txc->ep_obj, true);
 destroy_evtq:
-	cxip_evtq_fini(&txc->base.tx_evtq);
+	cxip_evtq_fini(&txc->tx_evtq);
 destroy_ibuf:
-	ofi_idx_reset(&txc->tx_ids);
-	ofi_idx_reset(&txc->rdzv_ids);
-	ofi_idx_reset(&txc->msg_rdzv_ids);
-	ofi_bufpool_destroy(txc->base.ibuf_pool);
+	ofi_bufpool_destroy(txc->ibuf_pool);
 
 	return ret;
 }
@@ -406,11 +371,15 @@ destroy_ibuf:
  * the TX CQ. If events go missing, resources will be leaked until the
  * Completion Queue is freed.
  */
-static void txc_cleanup(struct cxip_txc_hpc *txc)
+static void txc_cleanup(struct cxip_txc *txc_base)
 {
+	struct cxip_txc_hpc *txc = container_of(txc_base, struct cxip_txc_hpc,
+						base);
 	uint64_t start;
 	struct cxip_fc_peer *fc_peer;
 	struct dlist_entry *tmp;
+
+	/* TODO - Break into base and defauilt */
 
 	if (!ofi_atomic_get32(&txc->base.otx_reqs))
 		goto free_fc_peers;
@@ -432,6 +401,7 @@ static void txc_cleanup(struct cxip_txc_hpc *txc)
 
 	assert(ofi_atomic_get32(&txc->base.otx_reqs) == 0);
 
+	/* TODO - move into txc->ops.cleanup */
 free_fc_peers:
 	dlist_foreach_container_safe(&txc->fc_peers, struct cxip_fc_peer,
 				     fc_peer, txc_entry, tmp) {
@@ -440,60 +410,33 @@ free_fc_peers:
 	}
 }
 
-void cxip_txc_struct_init(struct cxip_txc *txc_base,
-			  const struct fi_tx_attr *attr, void *context)
-{
-	struct cxip_txc_hpc *txc = container_of(txc_base, struct cxip_txc_hpc,
-						base);
-
-	assert(txc->base.protocol == FI_PROTO_CXI);
-
-	dlist_init(&txc->base.msg_queue);
-	dlist_init(&txc->base.dom_entry);
-	txc->base.context = context;
-	txc->base.attr = *attr;
-	txc->base.hmem = !!(attr->caps & FI_HMEM);
-	ofi_atomic_initialize32(&txc->base.otx_reqs, 0);
-
-	dlist_init(&txc->fc_peers);
-	txc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
-	txc->rdzv_eager_size = cxip_env.rdzv_eager_size;
-}
-
 /*
  * cxip_txc_disable() - Disable a TX context for a base endpoint object.
  *
  * Free hardware resources allocated when the context was enabled. Called via
  * fi_close().
  */
-void cxip_txc_disable(struct cxip_txc *txc_base)
+void cxip_txc_disable(struct cxip_txc *txc)
 {
-	struct cxip_txc_hpc *txc = container_of(txc_base,
-						struct cxip_txc_hpc, base);
 	int ret;
 
-	assert(txc->base.protocol == FI_PROTO_CXI);
-
-	if (!txc->base.enabled)
+	if (!txc->enabled)
 		return;
 
-	txc->base.enabled = false;
+	txc->enabled = false;
 	txc_cleanup(txc);
 
-	ofi_idx_reset(&txc->tx_ids);
-	ofi_idx_reset(&txc->rdzv_ids);
-	ofi_idx_reset(&txc->msg_rdzv_ids);
-	ofi_bufpool_destroy(txc->base.ibuf_pool);
+	ofi_bufpool_destroy(txc->ibuf_pool);
 
-	if (ofi_send_allowed(txc->base.attr.caps)) {
+	if (ofi_send_allowed(txc->attr.caps)) {
 		ret = txc_msg_fini(txc);
 		if (ret)
 			CXIP_WARN("Unable to destroy TX CTX, ret: %d\n",
 				       ret);
 	}
 
-	cxip_ep_cmdq_put(txc->base.ep_obj, true);
-	cxip_evtq_fini(&txc->base.tx_evtq);
+	cxip_ep_cmdq_put(txc->ep_obj, true);
+	cxip_evtq_fini(&txc->tx_evtq);
 }
 
 /* Caller must hold ep_obj->lock. */

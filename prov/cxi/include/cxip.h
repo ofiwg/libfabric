@@ -1762,6 +1762,8 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
  */
 #define CXIP_DONE_NOTIFY_RETRY_DELAY_US 100
 
+#define RXC_RESERVED_FC_SLOTS 1
+
 /* RXC specialization API support */
 struct cxip_rxc_ops {
 	void (*init_struct)(struct cxip_rxc *rxc, struct cxip_ep_obj *ep_obj);
@@ -1783,6 +1785,7 @@ struct cxip_rxc {
 	bool sw_ep_only;
 	bool msg_offload;
 	uint8_t pid_bits;		// Zero without SEP
+	uint8_t recv_ptl_idx;
 
 	enum cxip_rxc_state state;
 
@@ -2127,6 +2130,7 @@ struct cxip_txc {
 	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_domain *domain;	// parent domain
 	uint8_t pid_bits;
+	uint8_t recv_ptl_idx;
 
 	struct fi_tx_attr attr;		// attributes
 	bool selective_completion;
