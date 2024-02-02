@@ -61,26 +61,59 @@ int cxip_rxc_msg_enable(struct cxip_rxc_hpc *rxc, uint32_t drop_count)
  *
  * Caller must hold rxc->ep_obj->lock.
  */
-static int rxc_msg_disable(struct cxip_rxc_hpc *rxc)
+static int rxc_msg_disable(struct cxip_rxc *rxc)
 {
 	int ret;
 
-	if (rxc->base.state != RXC_ENABLED &&
-	    rxc->base.state != RXC_ENABLED_SOFTWARE)
+	if (rxc->state != RXC_ENABLED &&
+	    rxc->state != RXC_ENABLED_SOFTWARE)
 		RXC_FATAL(rxc, "RXC in bad state to be disabled: state=%d\n",
-			  rxc->base.state);
+			  rxc->state);
 
-	rxc->base.state = RXC_DISABLED;
+	rxc->state = RXC_DISABLED;
 
-	ret = cxip_pte_set_state_wait(rxc->base.rx_pte, rxc->base.rx_cmdq,
-				      &rxc->base.rx_evtq, C_PTLTE_DISABLED, 0);
+	ret = cxip_pte_set_state_wait(rxc->rx_pte, rxc->rx_cmdq, &rxc->rx_evtq,
+				      C_PTLTE_DISABLED, 0);
 	if (ret == FI_SUCCESS)
 		CXIP_DBG("RXC PtlTE disabled: %p\n", rxc);
 
 	return ret;
 }
 
-#define RXC_RESERVED_FC_SLOTS 1
+static size_t cxip_rxc_get_num_events(struct cxip_rxc *rxc)
+{
+	size_t num_events;
+
+	/* Hardware will ensure incoming RDMA operations have event queue space.
+	 * It is the responsibility of software to ensure that any SW initiated
+	 * target commands which may generate an event (e.g. append with failure
+	 * or search) have enough space in the EQ. This can be done in two ways.
+	 *
+	 * 1. Continually increase EQ buffer size until EQ overflows go away.
+	 * This option is not ideal since many application variables are in play
+	 * which impact number of events needed.
+	 *
+	 * 2. Use hybrid endpoint mode to preemptively transition to software
+	 * endpoint when event queue space may be under pressure. When in
+	 * software endpoint mode, software should not be issuing commands, like
+	 * append and search/search & delete, which could result in events being
+	 * generated.
+	 *
+	 * For both cases, RXC size will be used to size number of events. To
+	 * accommodate a stream of unexpected puts and append failures, RXC size
+	 * is added again. With correct credit control for hybrid endpoint to
+	 * preemptively transition to software endpoint, 2* RXC size should be
+	 * enough to prevent EQ overflow. For all other cases, EQ size needs to
+	 * be increased.
+	 */
+
+	num_events = rxc->attr.size * 2;
+
+	/* Add 1 more event for software initiated state change. */
+	num_events++;
+
+	return num_events;
+}
 
 /*
  * rxc_msg_init() - Initialize an RX context for messaging.
@@ -90,93 +123,40 @@ static int rxc_msg_disable(struct cxip_rxc_hpc *rxc)
  *
  * Caller must hold ep_obj->lock.
  */
-static int rxc_msg_init(struct cxip_rxc_hpc *rxc)
+static int rxc_msg_init(struct cxip_rxc *rxc)
 {
-	struct cxi_pt_alloc_opts pt_opts = {
-		.use_long_event = 1,
-		.is_matching = 1,
-		.en_flowctrl = 1,
-		.lossless = cxip_env.msg_lossless,
-	};
-	struct cxi_cq_alloc_opts cq_opts = {};
+	size_t num_events;
 	int ret;
 
-	ret = cxip_ep_cmdq(rxc->base.ep_obj, false, FI_TC_UNSPEC,
-			   rxc->base.rx_evtq.eq, &rxc->base.rx_cmdq);
+	/* Base message initialization */
+	num_events = cxip_rxc_get_num_events(rxc);
+	ret = cxip_evtq_init(&rxc->rx_evtq, rxc->recv_cq, num_events, 1);
+	if (ret) {
+		CXIP_WARN("Failed to initialize RXC event queue: %d, %s\n",
+			  ret, fi_strerror(-ret));
+		return ret;
+	}
+
+	ret = cxip_ep_cmdq(rxc->ep_obj, false, FI_TC_UNSPEC, rxc->rx_evtq.eq,
+			   &rxc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate RX CMDQ, ret: %d\n", ret);
-		return -FI_EDOMAIN;
+		goto free_evtq;
 	}
 
-	/* For FI_TC_UNSPEC, reuse the TX context command queue if possible. If
-	 * a specific traffic class is requested, allocate a new command queue.
-	 * This is done to prevent performance issues with reusing the TX
-	 * context command queue and changing the communication profile.
-	 */
-	if (cxip_env.rget_tc == FI_TC_UNSPEC) {
-		ret = cxip_ep_cmdq(rxc->base.ep_obj, true, FI_TC_UNSPEC,
-				   rxc->base.rx_evtq.eq, &rxc->tx_cmdq);
-		if (ret != FI_SUCCESS) {
-			CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
-			ret = -FI_EDOMAIN;
-			goto put_rx_cmdq;
-		}
-	} else {
-		cq_opts.count = rxc->base.ep_obj->txq_size * 4;
-		cq_opts.flags = CXI_CQ_IS_TX;
-		cq_opts.policy = cxip_env.cq_policy;
-
-		ret = cxip_cmdq_alloc(rxc->base.ep_obj->domain->lni,
-				      rxc->base.rx_evtq.eq, &cq_opts,
-				      rxc->base.ep_obj->auth_key.vni,
-				      cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
-				      CXI_TC_TYPE_DEFAULT, &rxc->tx_cmdq);
-		if (ret != FI_SUCCESS) {
-			CXIP_WARN("Unable to allocate CMDQ, ret: %d\n", ret);
-			ret = -FI_ENOSPC;
-			goto put_rx_cmdq;
-		}
-	}
-
-	/* If applications AVs are symmetric, use logical FI addresses for
-	 * matching. Otherwise, physical addresses will be used.
-	 */
-	if (rxc->base.ep_obj->av->symmetric) {
-		CXIP_DBG("Using logical PTE matching\n");
-		pt_opts.use_logical = 1;
-	}
-
-	ret = cxip_pte_alloc(rxc->base.ep_obj->ptable,
-			     rxc->base.rx_evtq.eq, CXIP_PTL_IDX_RXQ, false,
-			     &pt_opts, cxip_recv_pte_cb, rxc,
-			     &rxc->base.rx_pte);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to allocate RX PTE: %d\n", ret);
-		goto put_tx_cmdq;
-	}
-
-	/* One slot must be reserved to support hardware generated state change
-	 * events.
-	 */
-	ret = cxip_evtq_adjust_reserved_fc_event_slots(&rxc->base.rx_evtq,
-						       RXC_RESERVED_FC_SLOTS);
+	/* Derived messaging initialization/overrides */
+	ret = rxc->ops.msg_init(rxc);
 	if (ret) {
-		CXIP_WARN("Unable to adjust RX reserved event slots: %d\n",
-			  ret);
-		goto free_pte;
+		CXIP_WARN("RXC derived initialization failed %d\n", ret);
+		goto put_rx_cmdq;
 	}
 
 	return FI_SUCCESS;
 
-free_pte:
-	cxip_pte_free(rxc->base.rx_pte);
-put_tx_cmdq:
-	if (cxip_env.rget_tc == FI_TC_UNSPEC)
-		cxip_ep_cmdq_put(rxc->base.ep_obj, true);
-	else
-		cxip_cmdq_free(rxc->tx_cmdq);
 put_rx_cmdq:
-	cxip_ep_cmdq_put(rxc->base.ep_obj, false);
+	cxip_ep_cmdq_put(rxc->ep_obj, false);
+free_evtq:
+	cxip_evtq_fini(&rxc->rx_evtq);
 
 	return ret;
 }
@@ -189,29 +169,25 @@ put_rx_cmdq:
  *
  * Caller must hold ep_obj->lock.
  */
-static int rxc_msg_fini(struct cxip_rxc_hpc *rxc)
+static int rxc_msg_fini(struct cxip_rxc *rxc)
 {
-	int ret __attribute__((unused));
+	int ret;
 
-	cxip_pte_free(rxc->base.rx_pte);
+	ret = rxc->ops.msg_fini(rxc);
+	if (ret)
+		return ret;
 
-	cxip_ep_cmdq_put(rxc->base.ep_obj, false);
-
-	if (cxip_env.rget_tc == FI_TC_UNSPEC)
-		cxip_ep_cmdq_put(rxc->base.ep_obj, true);
-	else
-		cxip_cmdq_free(rxc->tx_cmdq);
-
-	cxip_evtq_adjust_reserved_fc_event_slots(&rxc->base.rx_evtq,
-						 -1 * RXC_RESERVED_FC_SLOTS);
-
-	cxip_evtq_fini(&rxc->base.rx_evtq);
+	cxip_pte_free(rxc->rx_pte);
+	cxip_ep_cmdq_put(rxc->ep_obj, false);
+	cxip_evtq_fini(&rxc->rx_evtq);
 
 	return FI_SUCCESS;
 }
 
-static void cxip_rxc_free_ux_entries(struct cxip_rxc_hpc *rxc)
+static void cxip_rxc_free_ux_entries(struct cxip_rxc *rxc_base)
 {
+	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
+						base);
 	struct cxip_ux_send *ux_send;
 	struct dlist_entry *tmp;
 
@@ -252,141 +228,36 @@ static void cxip_rxc_free_ux_entries(struct cxip_rxc_hpc *rxc)
 	assert(rxc->sw_pending_ux_list_len == 0);
 }
 
-static size_t cxip_rxc_get_num_events(struct cxip_rxc *rxc)
-{
-	size_t num_events;
-
-	/* Hardware will ensure incoming RDMA operations have event queue space.
-	 * It is the responsibility of software to ensure that any SW initiated
-	 * target commands which may generate an event (e.g. append with failure
-	 * or search) have enough space in the EQ. This can be done in two ways.
-	 *
-	 * 1. Continually increase EQ buffer size until EQ overflows go away.
-	 * This option is not ideal since many application variables are in play
-	 * which impact number of events needed.
-	 *
-	 * 2. Use hybrid endpoint mode to preemptively transition to software
-	 * endpoint when event queue space may be under pressure. When in
-	 * software endpoint mode, software should not be issuing commands, like
-	 * append and search/search & delete, which could result in events being
-	 * generated.
-	 *
-	 * For both cases, RXC size will be used to size number of events. To
-	 * accommodate a stream of unexpected puts and append failures, RXC size
-	 * is added again. With correct credit control for hybrid endpoint to
-	 * preemptively transition to software endpoint, 2* RXC size should be
-	 * enough to prevent EQ overflow. For all other cases, EQ size needs to
-	 * be increased.
-	 */
-
-	num_events = rxc->attr.size * 2;
-
-	/* Add 1 more event for software initiated state change. */
-	num_events++;
-
-	return num_events;
-}
-
 /*
  * cxip_rxc_enable() - Enable an RX context for use.
  *
  * Called via fi_enable(). The context could be used in a standard endpoint or
  * a scalable endpoint.
  */
-int cxip_rxc_enable(struct cxip_rxc *rxc_base)
+int cxip_rxc_enable(struct cxip_rxc *rxc)
 {
-	struct cxip_rxc_hpc *rxc = container_of(rxc_base,
-						struct cxip_rxc_hpc, base);
 	int ret;
-	int tmp;
-	size_t num_events;
-	enum c_ptlte_state state;
 
-	assert(rxc->base.protocol == FI_PROTO_CXI);
-
-	if (rxc->base.state != RXC_DISABLED)
+	if (rxc->state != RXC_DISABLED)
 		return FI_SUCCESS;
 
-	if (!ofi_recv_allowed(rxc->base.attr.caps)) {
-		rxc->base.state = RXC_ENABLED;
+	if (!ofi_recv_allowed(rxc->attr.caps)) {
+		rxc->state = RXC_ENABLED;
 		return FI_SUCCESS;
 	}
 
-	if (!rxc->base.recv_cq) {
+	if (!rxc->recv_cq) {
 		CXIP_WARN("Undefined recv CQ\n");
 		return -FI_ENOCQ;
-	}
-
-	num_events = cxip_rxc_get_num_events(&rxc->base);
-	ret = cxip_evtq_init(&rxc->base.rx_evtq, rxc->base.recv_cq,
-			     num_events, 1);
-	if (ret) {
-		CXIP_WARN("Failed to initialize RXC event queue: %d, %s\n",
-			  ret, fi_strerror(-ret));
-		return ret;
 	}
 
 	ret = rxc_msg_init(rxc);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("rxc_msg_init returned: %d\n", ret);
-		ret = -FI_EDOMAIN;
-		goto evtq_fini;
+		return -FI_EDOMAIN;
 	}
-
-	/* If starting in or able to transition to software managed
-	 * PtlTE, append request list entries first.
-	 */
-	if (cxip_software_pte_allowed()) {
-		ret = cxip_req_bufpool_init(rxc);
-		if (ret != FI_SUCCESS)
-			goto err_msg_fini;
-	}
-
-	if (rxc->base.msg_offload) {
-		state = C_PTLTE_ENABLED;
-		ret = cxip_oflow_bufpool_init(rxc);
-		if (ret != FI_SUCCESS)
-			goto err_req_buf_fini;
-	} else {
-		state = C_PTLTE_SOFTWARE_MANAGED;
-	}
-
-	/* Start accepting Puts. */
-	ret = cxip_pte_set_state(rxc->base.rx_pte, rxc->base.rx_cmdq, state, 0);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("cxip_pte_set_state returned: %d\n", ret);
-		goto err_oflow_buf_fini;
-	}
-
-	/* Wait for PTE state change */
-	do {
-		sched_yield();
-		cxip_evtq_progress(&rxc->base.rx_evtq);
-	} while (rxc->base.rx_pte->state != state);
-
-	rxc->base.pid_bits = rxc->base.domain->iface->dev->info.pid_bits;
-	CXIP_DBG("RXC messaging enabled: %p, pid_bits: %d\n",
-		 rxc, rxc->base.pid_bits);
 
 	return FI_SUCCESS;
-
-err_oflow_buf_fini:
-	if (rxc->base.msg_offload)
-		cxip_oflow_bufpool_fini(rxc);
-
-err_req_buf_fini:
-	if (cxip_software_pte_allowed())
-		cxip_req_bufpool_fini(rxc);
-
-err_msg_fini:
-	tmp = rxc_msg_fini(rxc);
-	if (tmp != FI_SUCCESS)
-		CXIP_WARN("rxc_msg_fini returned: %d\n", tmp);
-
-evtq_fini:
-	cxip_evtq_fini(&rxc->base.rx_evtq);
-
-	return ret;
 }
 
 /*
@@ -397,8 +268,10 @@ evtq_fini:
  * the RX CQ. If events go missing, resources will be leaked until the
  * Completion Queue is freed.
  */
-static void rxc_cleanup(struct cxip_rxc_hpc *rxc)
+static void rxc_cleanup(struct cxip_rxc *rxc_base)
 {
+	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
+						base);
 	int ret;
 	uint64_t start;
 	int canceled = 0;
@@ -486,82 +359,30 @@ static void cxip_rxc_dump_counters(struct cxip_rxc *rxc)
 	}
 }
 
-void cxip_rxc_struct_init(struct cxip_rxc *rxc_base,
-			  const struct fi_rx_attr *attr, void *context)
-{
-	struct cxip_rxc_hpc *rxc = container_of(rxc_base,
-						struct cxip_rxc_hpc, base);
-	int i;
-
-	assert(rxc->base.protocol == FI_PROTO_CXI);
-
-	ofi_atomic_initialize32(&rxc->orx_hw_ule_cnt, 0);
-	ofi_atomic_initialize32(&rxc->base.orx_reqs, 0);
-	ofi_atomic_initialize32(&rxc->orx_tx_reqs, 0);
-	rxc->base.max_tx = cxip_env.sw_rx_tx_init_max;
-
-	rxc->base.context = context;
-	rxc->base.attr = *attr;
-
-	for (i = 0; i < CXIP_DEF_EVENT_HT_BUCKETS; i++)
-		dlist_init(&rxc->deferred_events.bh[i]);
-
-	dlist_init(&rxc->fc_drops);
-	dlist_init(&rxc->replay_queue);
-	dlist_init(&rxc->sw_ux_list);
-	dlist_init(&rxc->sw_recv_queue);
-	dlist_init(&rxc->sw_pending_ux_list);
-
-	rxc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
-	rxc->drop_count = rxc->base.ep_obj->asic_ver < CASSINI_2_0 ? -1 : 0;
-
-	/* TODO make configurable */
-	rxc->base.min_multi_recv = CXIP_EP_MIN_MULTI_RECV;
-	rxc->base.state = RXC_DISABLED;
-	rxc->base.msg_offload = cxip_env.msg_offload;
-	rxc->base.hmem = !!(attr->caps & FI_HMEM);
-	rxc->base.sw_ep_only = cxip_env.rx_match_mode ==
-					CXIP_PTLTE_SOFTWARE_MODE;
-	rxc->rget_align_mask = cxip_env.rdzv_aligned_sw_rget ?
-					cxip_env.cacheline_size - 1 : 0;
-
-	cxip_msg_counters_init(&rxc->base.cntrs);
-}
-
 /*
  * cxip_rxc_disable() - Disable the RX context of an base endpoint object.
  *
  * Free hardware resources allocated when the context was enabled. Called via
  * fi_close().
  */
-void cxip_rxc_disable(struct cxip_rxc *rxc_base)
+void cxip_rxc_disable(struct cxip_rxc *rxc)
 {
-	struct cxip_rxc_hpc *rxc = container_of(rxc_base,
-						struct cxip_rxc_hpc, base);
 	int ret;
 
-	assert(rxc->base.protocol == FI_PROTO_CXI);
+	cxip_rxc_dump_counters(rxc);
 
-	cxip_rxc_dump_counters(&rxc->base);
-
-	if (rxc->base.state == RXC_DISABLED)
+	if (rxc->state == RXC_DISABLED)
 		return;
 
-	if (ofi_recv_allowed(rxc->base.attr.caps)) {
+	if (ofi_recv_allowed(rxc->attr.caps)) {
 		/* Stop accepting Puts. */
 		ret = rxc_msg_disable(rxc);
 		if (ret != FI_SUCCESS)
 			CXIP_WARN("rxc_msg_disable returned: %d\n", ret);
 
+		/* TODO abstract these two into protocol */
 		cxip_rxc_free_ux_entries(rxc);
-
 		rxc_cleanup(rxc);
-
-		if (cxip_software_pte_allowed())
-			cxip_req_bufpool_fini(rxc);
-
-		if (cxip_env.msg_offload)
-			cxip_oflow_bufpool_fini(rxc);
 
 		/* Free hardware resources. */
 		ret = rxc_msg_fini(rxc);
@@ -674,6 +495,7 @@ struct cxip_rxc *cxip_rxc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 	rxc->max_tx = cxip_env.sw_rx_tx_init_max;
 	rxc->attr = ep_obj->rx_attr;
 	rxc->hmem = !!(rxc->attr.caps & FI_HMEM);
+	ofi_atomic_initialize32(&rxc->orx_reqs, 0);
 
 	rxc->sw_ep_only = cxip_env.rx_match_mode ==
 					CXIP_PTLTE_SOFTWARE_MODE;
