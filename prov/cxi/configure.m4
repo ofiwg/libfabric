@@ -131,7 +131,6 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 				cxitest_LDFLAGS="-L$with_criterion/lib64 -Wl,-rpath=$(realpath $with_criterion/lib64)"
 				cxitest_LIBS="-lcriterion"
 				have_criterion=true])
-			AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])
 
 			AS_IF([test "$have_ze" = "1" && test "$with_ze" != "" && test x"$with_ze" != x"yes"],
 					[cxitest_CPPFLAGS="$cxitest_CPPFLAGS -I$with_ze/include"
@@ -149,5 +148,6 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 		],
 		[cxi_happy=0])
 
+	AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])
 	AS_IF([test $cxi_happy -eq 1], [$1], [$2])
 ])
