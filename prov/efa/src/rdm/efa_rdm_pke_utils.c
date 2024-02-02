@@ -120,13 +120,13 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 		return 0;
 	}
 
-	if (iov_mr && FI_HMEM_CUDA == iov_mr->peer.iface &&
-	    (iov_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
+	if (iov_mr && (iov_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
 		assert(iov_mr->peer.hmem_data);
-		copied = ofi_gdrcopy_from_cuda_iov((uint64_t)iov_mr->peer.hmem_data,
-						   pke->wiredata + payload_offset,
-		                                   ope->iov, ope->iov_count,
-		                                   segment_offset, data_size);
+		copied = ofi_dev_reg_copy_from_hmem_iov(pke->wiredata + payload_offset,
+							data_size, iov_mr->peer.iface,
+							(uint64_t)iov_mr->peer.hmem_data,
+							ope->iov, ope->iov_count,
+							segment_offset);
 	} else {
 		copied = ofi_copy_from_hmem_iov(pke->wiredata + payload_offset,
 						data_size,
@@ -179,13 +179,14 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 		desc = rxe->desc[0];
 		assert(desc && desc->peer.iface != FI_HMEM_SYSTEM);
 
-		if (FI_HMEM_CUDA == desc->peer.iface &&
-		    (desc->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
+		if (desc->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
 			assert(desc->peer.hmem_data);
-			bytes_copied[i] = ofi_gdrcopy_to_cuda_iov((uint64_t)desc->peer.hmem_data,
-								  rxe->iov, rxe->iov_count,
-								  segment_offset + ep->msg_prefix_size,
-			                                          data, pkt_entry->payload_size);
+			bytes_copied[i] = ofi_dev_reg_copy_to_hmem_iov(
+								desc->peer.iface,
+								(uint64_t)desc->peer.hmem_data,
+								rxe->iov, rxe->iov_count,
+								segment_offset + ep->msg_prefix_size,
+								data, pkt_entry->payload_size);
 		} else {
 			bytes_copied[i] = ofi_copy_to_hmem_iov(desc->peer.iface,
 			                                       desc->peer.device.reserved,
@@ -353,10 +354,10 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 		 */
 		if (rxe->bytes_copied + pke->payload_size == rxe->total_len) {
 			assert(desc->peer.hmem_data);
-			ofi_gdrcopy_to_cuda_iov((uint64_t)desc->peer.hmem_data,
-			                        rxe->iov, rxe->iov_count,
-			                        segment_offset + ep->msg_prefix_size,
-			                        pke->payload, pke->payload_size);
+			ofi_dev_reg_copy_to_hmem_iov(FI_HMEM_CUDA, (uint64_t)desc->peer.hmem_data,
+			                             rxe->iov, rxe->iov_count,
+			                             segment_offset + ep->msg_prefix_size,
+			                             pke->payload, pke->payload_size);
 			efa_rdm_pke_handle_data_copied(pke);
 			return 0;
 		}

@@ -293,44 +293,6 @@ void cuda_gdrcopy_from_dev(uint64_t handle, void *hostptr,
 			  GDRCOPY_FROM_DEVICE);
 }
 
-static ssize_t cuda_gdrcopy_iov_buf(uint64_t handle,
-                                    const struct iovec *iov, size_t iov_count,
-                                    uint64_t iov_offset, void *buf,
-                                    size_t size, enum gdrcopy_dir dir)
-{
-	uint64_t done = 0, len;
-	char *dev_buf;
-	size_t i;
-
-	for (i = 0; i < iov_count && size; i++) {
-		len = ofi_iov_bytes_to_copy(&iov[i], &size, &iov_offset, &dev_buf);
-
-		if (!len)
-			continue;
-
-		cuda_gdrcopy_impl(handle, dev_buf, (void *)((char *)buf + done), len, dir);
-
-		done += len;
-	}
-	return done;
-}
-
-ssize_t ofi_gdrcopy_to_cuda_iov(uint64_t handle, const struct iovec *iov,
-                                size_t iov_count, uint64_t iov_offset,
-                                const void *host, size_t len)
-{
-	return cuda_gdrcopy_iov_buf(handle, iov, iov_count, iov_offset,
-	                           (void *) host, len, GDRCOPY_TO_DEVICE);
-}
-
-ssize_t ofi_gdrcopy_from_cuda_iov(uint64_t handle, void *host,
-                                  const struct iovec *iov, size_t iov_count,
-                                  uint64_t iov_offset, size_t len)
-{
-	return cuda_gdrcopy_iov_buf(handle, iov, iov_count, iov_offset,
-	                            host, len, GDRCOPY_FROM_DEVICE);
-}
-
 int cuda_gdrcopy_dev_register(const void *buf, size_t len, uint64_t *handle)
 {
 	int err;
