@@ -195,12 +195,6 @@ void cuda_gdrcopy_to_dev(uint64_t handle, void *dev,
 			 const void *host, size_t size);
 void cuda_gdrcopy_from_dev(uint64_t handle, void *host,
 			   const void *dev, size_t size);
-ssize_t ofi_gdrcopy_to_cuda_iov(uint64_t handle, const struct iovec *iov,
-                                size_t iov_count, uint64_t iov_offset,
-                                const void *host, size_t len);
-ssize_t ofi_gdrcopy_from_cuda_iov(uint64_t handle, void *host,
-                                  const struct iovec *iov, size_t iov_count,
-                                  uint64_t iov_offset, size_t len);
 int cuda_gdrcopy_hmem_init(void);
 int cuda_gdrcopy_hmem_cleanup(void);
 int cuda_gdrcopy_dev_register(const void *buf, size_t len, uint64_t *handle);
@@ -385,6 +379,16 @@ ssize_t ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
 			     const struct iovec *hmem_iov,
 			     size_t hmem_iov_count, uint64_t hmem_iov_offset,
 			     const void *src, size_t size);
+
+ssize_t ofi_dev_reg_copy_from_hmem_iov(void *dest, size_t size,
+				       enum fi_hmem_iface hmem_iface, uint64_t handle,
+				       const struct iovec *hmem_iov,
+				       size_t hmem_iov_count, uint64_t hmem_iov_offset);
+
+ssize_t ofi_dev_reg_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t handle,
+				     const struct iovec *hmem_iov,
+				     size_t hmem_iov_count, uint64_t hmem_iov_offset,
+				     const void *src, size_t size);
 
 static inline int ofi_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device,
 				   void *dest, const void *src, size_t size)
