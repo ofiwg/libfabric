@@ -21,7 +21,11 @@
 
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 
+#define CXIP_SC_STATS "FC/SC stats - EQ full: %d append fail: %d no match: %d"\
+	" request full: %d unexpected: %d, NIC HW2SW unexp: %d"\
+	" NIC HW2SW append fail: %d\n"
 #define FC_SW_LE_MSG_FATAL "LE exhaustion during flow control, "\
 	"FI_CXI_RX_MATCH_MODE=[hybrid|software] is required\n"
 #define FC_SW_ONLOAD_MSG_FATAL "LE resources not recovered during "\
@@ -4173,8 +4177,8 @@ static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 						base);
 	int i;
 
+	assert(rxc->base.protocol == FI_PROTO_CXI);
 	rxc->base.recv_ptl_idx = CXIP_PTL_IDX_RXQ;
-
 	ofi_atomic_initialize32(&rxc->orx_hw_ule_cnt, 0);
 	ofi_atomic_initialize32(&rxc->orx_tx_reqs, 0);
 
@@ -4195,6 +4199,7 @@ static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 
 static void cxip_rxc_hpc_fini_struct(struct cxip_rxc *rxc)
 {
+	/* place holder */
 }
 
 static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
@@ -4210,6 +4215,8 @@ static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
 	struct cxi_cq_alloc_opts cq_opts = {};
 	enum c_ptlte_state state;
 	int ret;
+
+	assert(rxc->base.protocol == FI_PROTO_CXI);
 
 	/* For FI_TC_UNSPEC, reuse the TX context command queue if possible. If
 	 * a specific traffic class is requested, allocate a new command queue.
@@ -4330,6 +4337,8 @@ static int cxip_rxc_hpc_msg_fini(struct cxip_rxc *rxc_base)
 	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
 						base);
 
+	assert(rxc->base.protocol == FI_PROTO_CXI);
+
 	if (cxip_env.rget_tc == FI_TC_UNSPEC)
 		cxip_ep_cmdq_put(rxc->base.ep_obj, true);
 	else
@@ -4339,6 +4348,79 @@ static int cxip_rxc_hpc_msg_fini(struct cxip_rxc *rxc_base)
 						 -1 * RXC_RESERVED_FC_SLOTS);
 
 	return FI_SUCCESS;
+}
+
+static void cxip_rxc_hpc_cleanup(struct cxip_rxc *rxc_base)
+{
+	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
+						base);
+	struct cxip_fc_drops *fc_drops;
+	struct cxip_ux_send *ux_send;
+	struct dlist_entry *tmp;
+
+	assert(rxc->base.protocol == FI_PROTO_CXI);
+
+	/* TODO: Manage freeing of UX entries better. This code is redundant
+	 * with the freeing in cxip_recv_sw_matcher().
+	 */
+	dlist_foreach_container_safe(&rxc->sw_ux_list, struct cxip_ux_send,
+				     ux_send, rxc_entry, tmp) {
+		dlist_remove(&ux_send->rxc_entry);
+		if (ux_send->req && ux_send->req->type == CXIP_REQ_RBUF)
+			cxip_req_buf_ux_free(ux_send);
+		else
+			free(ux_send);
+
+		rxc->sw_ux_list_len--;
+	}
+
+	if (rxc->sw_ux_list_len != 0)
+		CXIP_WARN("sw_ux_list_len %d != 0\n", rxc->sw_ux_list_len);
+	assert(rxc->sw_ux_list_len == 0);
+
+	/* Free any pending UX entries waiting from the request list */
+	dlist_foreach_container_safe(&rxc->sw_pending_ux_list,
+				     struct cxip_ux_send, ux_send,
+				     rxc_entry, tmp) {
+		dlist_remove(&ux_send->rxc_entry);
+		if (ux_send->req->type == CXIP_REQ_RBUF)
+			cxip_req_buf_ux_free(ux_send);
+		else
+			free(ux_send);
+
+		rxc->sw_pending_ux_list_len--;
+	}
+
+	if (rxc->sw_pending_ux_list_len != 0)
+		CXIP_WARN("sw_pending_ux_list_len %d != 0\n",
+			  rxc->sw_pending_ux_list_len);
+	assert(rxc->sw_pending_ux_list_len == 0);
+
+	/* Cancel Receives */
+	cxip_rxc_recv_req_cleanup(&rxc->base);
+
+	/* Cleanup drops */
+	dlist_foreach_container_safe(&rxc->fc_drops,
+				     struct cxip_fc_drops, fc_drops,
+				     rxc_entry, tmp) {
+		dlist_remove(&fc_drops->rxc_entry);
+		free(fc_drops);
+	}
+
+	if (rxc->num_fc_eq_full || rxc->num_fc_no_match ||
+	    rxc->num_fc_req_full || rxc->num_fc_unexp ||
+	    rxc->num_fc_append_fail || rxc->num_sc_nic_hw2sw_unexp ||
+	    rxc->num_sc_nic_hw2sw_append_fail)
+		CXIP_INFO(CXIP_SC_STATS, rxc->num_fc_eq_full,
+			  rxc->num_fc_append_fail, rxc->num_fc_no_match,
+			  rxc->num_fc_req_full, rxc->num_fc_unexp,
+			  rxc->num_sc_nic_hw2sw_unexp,
+			  rxc->num_sc_nic_hw2sw_append_fail);
+
+	if (cxip_software_pte_allowed())
+		cxip_req_bufpool_fini(rxc);
+	if (cxip_env.msg_offload)
+		cxip_oflow_bufpool_fini(rxc);
 }
 
 /*
@@ -5589,6 +5671,7 @@ static void cxip_txc_hpc_init_struct(struct cxip_txc *txc_base,
 	struct cxip_txc_hpc *txc = container_of(txc_base, struct cxip_txc_hpc,
 						base);
 
+	assert(txc->base.protocol == FI_PROTO_CXI);
 	txc->base.recv_ptl_idx = CXIP_PTL_IDX_RXQ;
 	dlist_init(&txc->fc_peers);
 	txc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
@@ -5604,6 +5687,8 @@ static int cxip_txc_hpc_msg_init(struct cxip_txc *txc_base)
 	struct cxip_txc_hpc *txc = container_of(txc_base, struct cxip_txc_hpc,
 						base);
 	int ret;
+
+	assert(txc->base.protocol == FI_PROTO_CXI);
 
 	/* Protected with ep_obj->lock */
 	memset(&txc->rdzv_ids, 0, sizeof(txc->rdzv_ids));
@@ -5643,6 +5728,7 @@ static int cxip_txc_hpc_msg_fini(struct cxip_txc *txc_base)
 						base);
 	int i;
 
+	assert(txc->base.protocol == FI_PROTO_CXI);
 	ofi_idx_reset(&txc->rdzv_ids);
 	ofi_idx_reset(&txc->rdzv_ids);
 	ofi_idx_reset(&txc->msg_rdzv_ids);
@@ -5656,6 +5742,21 @@ static int cxip_txc_hpc_msg_fini(struct cxip_txc *txc_base)
 	cxip_ep_cmdq_put(txc->base.ep_obj, false);
 
 	return FI_SUCCESS;
+}
+
+static void cxip_txc_hpc_cleanup(struct cxip_txc *txc_base)
+{
+	struct cxip_txc_hpc *txc = container_of(txc_base, struct cxip_txc_hpc,
+						base);
+	struct cxip_fc_peer *fc_peer;
+	struct dlist_entry *tmp;
+
+	assert(txc->base.protocol == FI_PROTO_CXI);
+	dlist_foreach_container_safe(&txc->fc_peers, struct cxip_fc_peer,
+				     fc_peer, txc_entry, tmp) {
+		dlist_remove(&fc_peer->txc_entry);
+		free(fc_peer);
+	}
 }
 
 /*
@@ -6299,6 +6400,7 @@ struct fi_ops_msg cxip_ep_msg_no_rx_ops = {
 struct cxip_rxc_ops hpc_rxc_ops = {
 	.init_struct = cxip_rxc_hpc_init_struct,
 	.fini_struct = cxip_rxc_hpc_fini_struct,
+	.cleanup = cxip_rxc_hpc_cleanup,
 	.msg_init = cxip_rxc_hpc_msg_init,
 	.msg_fini = cxip_rxc_hpc_msg_fini,
 };
@@ -6306,6 +6408,7 @@ struct cxip_rxc_ops hpc_rxc_ops = {
 struct cxip_txc_ops hpc_txc_ops = {
 	.init_struct = cxip_txc_hpc_init_struct,
 	.fini_struct = cxip_txc_hpc_fini_struct,
+	.cleanup = cxip_txc_hpc_cleanup,
 	.msg_init = cxip_txc_hpc_msg_init,
 	.msg_fini = cxip_txc_hpc_msg_fini,
 };
