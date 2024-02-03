@@ -1766,6 +1766,7 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
 
 /* RXC specialization API support */
 struct cxip_rxc_ops {
+	void (*progress)(struct cxip_rxc *rxc);
 	void (*init_struct)(struct cxip_rxc *rxc, struct cxip_ep_obj *ep_obj);
 	void (*fini_struct)(struct cxip_rxc *rxc);
 	void (*cleanup)(struct cxip_rxc *rxc);
@@ -2104,6 +2105,7 @@ struct cxip_rdzv_nomatch_pte {
 
 /* TXC specialization API support */
 struct cxip_txc_ops {
+	void (*progress)(struct cxip_txc *txc);
 	void (*init_struct)(struct cxip_txc *txc, struct cxip_ep_obj *ep_obj);
 	void (*fini_struct)(struct cxip_txc *txc);
 	void (*cleanup)(struct cxip_txc *txc);
