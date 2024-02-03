@@ -608,6 +608,7 @@ static int cxip_dom_dwq_op_send(struct cxip_domain *dom, struct fi_op_msg *msg,
 				uint64_t trig_thresh)
 {
 	struct cxip_ep *ep = container_of(msg->ep, struct cxip_ep, ep);
+	struct cxip_txc *txc = ep->ep_obj->txc;
 	const void *buf;
 	size_t len;
 	int ret;
@@ -629,10 +630,10 @@ static int cxip_dom_dwq_op_send(struct cxip_domain *dom, struct fi_op_msg *msg,
 	buf = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_base : NULL;
 	len = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_len : 0;
 
-	ret = cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
-			       NULL, msg->msg.data, msg->msg.addr, 0,
-			       msg->msg.context, msg->flags, false, true,
-			       trig_thresh, trig_cntr, comp_cntr);
+	ret = txc->ops.send_common(txc, ep->tx_attr.tclass, buf, len, NULL,
+				   msg->msg.data, msg->msg.addr, 0,
+				   msg->msg.context, msg->flags, false, true,
+				   trig_thresh, trig_cntr, comp_cntr);
 	if (ret)
 		CXIP_DBG("Failed to emit message triggered op, ret=%d\n", ret);
 	else
@@ -649,6 +650,7 @@ static int cxip_dom_dwq_op_tsend(struct cxip_domain *dom,
 				 uint64_t trig_thresh)
 {
 	struct cxip_ep *ep = container_of(tagged->ep, struct cxip_ep, ep);
+	struct cxip_txc *txc = ep->ep_obj->txc;
 	const void *buf;
 	size_t len;
 	int ret;
@@ -670,11 +672,11 @@ static int cxip_dom_dwq_op_tsend(struct cxip_domain *dom,
 	buf = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_base : NULL;
 	len = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_len : 0;
 
-	ret = cxip_send_common(ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
-			       NULL, tagged->msg.data, tagged->msg.addr,
-			       tagged->msg.tag, tagged->msg.context,
-			       tagged->flags, true, true, trig_thresh,
-			       trig_cntr, comp_cntr);
+	ret = txc->ops.send_common(txc, ep->tx_attr.tclass, buf, len, NULL,
+				   tagged->msg.data, tagged->msg.addr,
+				   tagged->msg.tag, tagged->msg.context,
+				   tagged->flags, true, true, trig_thresh,
+				   trig_cntr, comp_cntr);
 	if (ret)
 		CXIP_DBG("Failed to emit tagged msg triggered op, ret=%d\n",
 			 ret);
@@ -870,6 +872,7 @@ static int cxip_dom_dwq_op_recv(struct cxip_domain *dom, struct fi_op_msg *msg,
 				uint64_t trig_thresh)
 {
 	struct cxip_ep *ep = container_of(msg->ep, struct cxip_ep, ep);
+	struct cxip_rxc *rxc = ep->ep_obj->rxc;
 	void *buf;
 	size_t len;
 
@@ -880,9 +883,9 @@ static int cxip_dom_dwq_op_recv(struct cxip_domain *dom, struct fi_op_msg *msg,
 	buf = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_base : NULL;
 	len = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_len : 0;
 
-	return cxip_recv_common(ep->ep_obj->rxc, buf, len, NULL, msg->msg.addr,
-				0, 0, msg->msg.context, msg->flags, false,
-				comp_cntr);
+	return rxc->ops.recv_common(rxc, buf, len, NULL, msg->msg.addr, 0, 0,
+				    msg->msg.context, msg->flags, false,
+				    comp_cntr);
 }
 
 static int cxip_dom_dwq_op_trecv(struct cxip_domain *dom,
@@ -892,6 +895,7 @@ static int cxip_dom_dwq_op_trecv(struct cxip_domain *dom,
 				 uint64_t trig_thresh)
 {
 	struct cxip_ep *ep = container_of(tagged->ep, struct cxip_ep, ep);
+	struct cxip_rxc *rxc = ep->ep_obj->rxc;
 	void *buf;
 	size_t len;
 
@@ -902,10 +906,10 @@ static int cxip_dom_dwq_op_trecv(struct cxip_domain *dom,
 	buf = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_base : NULL;
 	len = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_len : 0;
 
-	return cxip_recv_common(ep->ep_obj->rxc, buf, len, tagged->msg.desc,
-				tagged->msg.addr, tagged->msg.tag,
-				tagged->msg.ignore, tagged->msg.context,
-				tagged->flags, true, comp_cntr);
+	return rxc->ops.recv_common(rxc, buf, len, tagged->msg.desc,
+				    tagged->msg.addr, tagged->msg.tag,
+				    tagged->msg.ignore, tagged->msg.context,
+				    tagged->flags, true, comp_cntr);
 }
 
 /* Must hold domain lock. */
