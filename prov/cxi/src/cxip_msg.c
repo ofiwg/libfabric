@@ -4175,6 +4175,12 @@ static void cxip_rxc_hpc_progress(struct cxip_rxc *rxc)
 	cxip_evtq_progress(&rxc->rx_evtq);
 }
 
+static int cxip_rxc_hpc_cancel_msg_recv(struct cxip_req *req)
+{
+	/* Perform default */
+	return cxip_recv_cancel(req);
+}
+
 static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 				     struct cxip_ep_obj *ep_obj)
 {
@@ -5675,6 +5681,12 @@ static void cxip_txc_hpc_progress(struct cxip_txc *txc)
 	cxip_evtq_progress(&txc->tx_evtq);
 }
 
+static int cxip_txc_hpc_cancel_msg_send(struct cxip_req *req)
+{
+	/* Once command is submitted for HPC we do not cancel */
+	return -FI_ENOENT;
+}
+
 static void cxip_txc_hpc_init_struct(struct cxip_txc *txc_base,
 				     struct cxip_ep_obj *ep_obj)
 {
@@ -6409,6 +6421,7 @@ struct fi_ops_msg cxip_ep_msg_no_rx_ops = {
 
 struct cxip_rxc_ops hpc_rxc_ops = {
 	.progress = cxip_rxc_hpc_progress,
+	.cancel_msg_recv = cxip_rxc_hpc_cancel_msg_recv,
 	.init_struct = cxip_rxc_hpc_init_struct,
 	.fini_struct = cxip_rxc_hpc_fini_struct,
 	.cleanup = cxip_rxc_hpc_cleanup,
@@ -6418,6 +6431,7 @@ struct cxip_rxc_ops hpc_rxc_ops = {
 
 struct cxip_txc_ops hpc_txc_ops = {
 	.progress = cxip_txc_hpc_progress,
+	.cancel_msg_send = cxip_txc_hpc_cancel_msg_send,
 	.init_struct = cxip_txc_hpc_init_struct,
 	.fini_struct = cxip_txc_hpc_fini_struct,
 	.cleanup = cxip_txc_hpc_cleanup,
