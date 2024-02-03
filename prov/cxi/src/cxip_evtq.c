@@ -76,7 +76,7 @@ int cxip_evtq_req_cancel(struct cxip_evtq *evtq, void *req_ctx,
 		    !req->recv.canceled &&
 		    !req->recv.parent &&
 		    (!match || (void *)req->context == op_ctx)) {
-			ret = cxip_recv_cancel(req);
+			ret = req->recv.rxc->ops.cancel_msg_recv(req);
 			break;
 		}
 	}

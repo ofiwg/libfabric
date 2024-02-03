@@ -424,12 +424,49 @@ ssize_t cxip_rxc_cancel(struct cxip_rxc *rxc, void *context)
 	return cxip_evtq_req_cancel(&rxc->rx_evtq, rxc, context, true);
 }
 
+/**
+ * Cancel TX operation
+ *
+ * Support TX/RX context cancel().
+ *
+ * Searches the TX queue for a pending async operation with the specified
+ * 'context', and request it be canceled.
+ *
+ * @param rxc : TX context to search
+ * @param context : user context pointer to search for
+ *
+ * @return ssize_t : 0 on success, -errno on failure
+ */
+ssize_t cxip_txc_cancel(struct cxip_txc *txc, void *context)
+{
+	struct cxip_req *req;
+	struct dlist_entry *tmp;
+
+	if (!txc->enabled)
+		return -FI_EOPBADSTATE;
+
+	if (!context)
+		return -FI_ENOENT;
+
+	/* Only messaging may be canceled at this time */
+	dlist_foreach_container_safe(&txc->msg_queue, struct cxip_req, req,
+				     send.txc_entry, tmp) {
+		if (req->type != CXIP_REQ_SEND ||
+		    req->context != (uint64_t)context)
+			continue;
+		return txc->ops.cancel_msg_send(req);
+	}
+
+	return -FI_ENOENT;
+}
+
 /*
  * cxip_ep_cancel() - Cancel TX/RX operation for EP.
  */
 ssize_t cxip_ep_cancel(fid_t fid, void *context)
 {
 	struct cxip_ep *ep = container_of(fid, struct cxip_ep, ep.fid);
+	ssize_t ret;
 
 	/* TODO: Remove this since it requires malicious programming to
 	 * create this condition.
@@ -440,7 +477,11 @@ ssize_t cxip_ep_cancel(fid_t fid, void *context)
 	if (!ofi_recv_allowed(ep->ep_obj->caps))
 		return -FI_ENOENT;
 
-	return cxip_rxc_cancel(ep->ep_obj->rxc, context);
+	ret = cxip_rxc_cancel(ep->ep_obj->rxc, context);
+	if (ret != -FI_ENOENT)
+		return ret;
+
+	return cxip_txc_cancel(ep->ep_obj->txc, context);
 }
 
 /*
