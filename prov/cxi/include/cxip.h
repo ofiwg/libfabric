@@ -1766,6 +1766,10 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
 
 /* RXC specialization API support */
 struct cxip_rxc_ops {
+	ssize_t (*recv_common)(struct cxip_rxc *rxc, void *buf, size_t len,
+			       void *desc, fi_addr_t src_add, uint64_t tag,
+			       uint64_t ignore, void *context, uint64_t flags,
+			       bool tagged, struct cxip_cntr *comp_cntr);
 	void (*progress)(struct cxip_rxc *rxc);
 	int (*cancel_msg_recv)(struct cxip_req *req);
 	int (*ctrl_msg_cb)(struct cxip_ctrl_req *req,
@@ -2108,6 +2112,13 @@ struct cxip_rdzv_nomatch_pte {
 
 /* TXC specialization API support */
 struct cxip_txc_ops {
+	ssize_t (*send_common)(struct cxip_txc *txc, uint32_t tclass,
+			       const void *buf, size_t len, void *desc,
+			       uint64_t data, fi_addr_t dest_addr, uint64_t tag,
+			       void *context, uint64_t flags, bool tagged,
+			       bool triggered, uint64_t trig_thresh,
+			       struct cxip_cntr *trig_cntr,
+			       struct cxip_cntr *comp_cntr);
 	void (*progress)(struct cxip_txc *txc);
 	int (*cancel_msg_send)(struct cxip_req *req);
 	void (*init_struct)(struct cxip_txc *txc, struct cxip_ep_obj *ep_obj);
@@ -3117,19 +3128,6 @@ static inline void cxip_txq_ring(struct cxip_cmdq *cmdq, bool more,
 		}
 	}
 }
-
-ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass,
-			 const void *buf, size_t len,
-			 void *desc, uint64_t data, fi_addr_t dest_addr,
-			 uint64_t tag, void *context, uint64_t flags,
-			 bool tagged, bool triggered, uint64_t trig_thresh,
-			 struct cxip_cntr *trig_cntr,
-			 struct cxip_cntr *comp_cntr);
-
-ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
-			 void *desc, fi_addr_t src_addr, uint64_t tag,
-			 uint64_t ignore, void *context, uint64_t flags,
-			 bool tagged, struct cxip_cntr *comp_cntr);
 
 ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			const void *buf, size_t len, void *desc,
