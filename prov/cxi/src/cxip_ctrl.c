@@ -25,12 +25,19 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 	uint32_t pid_bits = req->ep_obj->domain->iface->dev->info.pid_bits;
 	uint32_t nic_addr;
 	uint32_t pid;
-	uint16_t vni;
 	union cxip_match_bits mb = {
 		.raw = event->tgt_long.match_bits,
 	};
 	uint32_t init = event->tgt_long.initiator.initiator.process;
-	int ret __attribute__((unused));
+	int ret;
+
+	/* Check to see if event processing is implemented or overridden
+	 * int the protocol. A return of -FI_ENOSYS indicated the event
+	 * was not consumed.
+	 */
+	ret = req->ep_obj->rxc->ops.ctrl_msg_cb(req, event);
+	if (ret != -FI_ENOSYS)
+		goto done;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_MATCH:
@@ -40,30 +47,16 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 
 		nic_addr = CXI_MATCH_ID_EP(pid_bits, init);
 		pid = CXI_MATCH_ID_PID(pid_bits, init);
-		vni = event->tgt_long.vni;
 
-		switch (mb.ctrl_msg_type) {
-		case CXIP_CTRL_MSG_FC_NOTIFY:
-			ret = cxip_fc_process_drops(req->ep_obj, nic_addr, pid,
-						    vni, mb.drops);
-			assert(ret == FI_SUCCESS);
-
-			break;
-		case CXIP_CTRL_MSG_FC_RESUME:
-			ret = cxip_fc_resume(req->ep_obj, nic_addr, pid, vni);
-			assert(ret == FI_SUCCESS);
-
-			break;
-		case CXIP_CTRL_MSG_ZB_DATA:
+		/* Messages not handled by the protocol */
+		if (mb.ctrl_msg_type == CXIP_CTRL_MSG_ZB_DATA) {
 			ret = cxip_zbcoll_recv_cb(req->ep_obj, nic_addr, pid,
 						  mb.raw);
 			assert(ret == FI_SUCCESS);
-			break;
-		default:
+		} else {
 			CXIP_FATAL("Unexpected msg type: %d\n",
 				   mb.ctrl_msg_type);
 		}
-
 		break;
 	default:
 		CXIP_FATAL(CXIP_UNEXPECTED_EVENT,
@@ -71,6 +64,7 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 			   cxi_rc_to_str(cxi_event_rc(event)));
 	}
 
+done:
 	CXIP_DBG("got event: %s rc: %s (req: %p)\n",
 		 cxi_event_to_str(event),
 		 cxi_rc_to_str(cxi_event_rc(event)),
