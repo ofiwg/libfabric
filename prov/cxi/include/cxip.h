@@ -1768,6 +1768,7 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
 struct cxip_rxc_ops {
 	void (*init_struct)(struct cxip_rxc *rxc, struct cxip_ep_obj *ep_obj);
 	void (*fini_struct)(struct cxip_rxc *rxc);
+	void (*cleanup)(struct cxip_rxc *rxc);
 	int (*msg_init)(struct cxip_rxc *rxc);
 	int (*msg_fini)(struct cxip_rxc *rxc);
 };
@@ -2105,6 +2106,7 @@ struct cxip_rdzv_nomatch_pte {
 struct cxip_txc_ops {
 	void (*init_struct)(struct cxip_txc *txc, struct cxip_ep_obj *ep_obj);
 	void (*fini_struct)(struct cxip_txc *txc);
+	void (*cleanup)(struct cxip_txc *txc);
 	int (*msg_init)(struct cxip_txc *txc);
 	int (*msg_fini)(struct cxip_txc *txc);
 };
@@ -2951,6 +2953,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc);
 void cxip_rxc_disable(struct cxip_rxc *rxc);
 void cxip_rxc_struct_init(struct cxip_rxc *rxc, const struct fi_rx_attr *attr,
 			  void *context);
+void cxip_rxc_recv_req_cleanup(struct cxip_rxc *rxc);
 
 int cxip_rxc_emit_dma(struct cxip_rxc_hpc *rxc, uint16_t vni,
 		      enum cxi_traffic_class tc,

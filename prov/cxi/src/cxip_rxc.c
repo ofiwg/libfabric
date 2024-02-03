@@ -18,10 +18,6 @@
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-#define CXIP_SC_STATS "FC/SC stats - EQ full: %d append fail: %d no match: %d"\
-		      " request full: %d unexpected: %d, NIC HW2SW unexp: %d"\
-		      " NIC HW2SW append fail: %d\n"
-
 extern struct cxip_rxc_ops hpc_rxc_ops;
 
 /*
@@ -184,50 +180,6 @@ static int rxc_msg_fini(struct cxip_rxc *rxc)
 	return FI_SUCCESS;
 }
 
-static void cxip_rxc_free_ux_entries(struct cxip_rxc *rxc_base)
-{
-	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
-						base);
-	struct cxip_ux_send *ux_send;
-	struct dlist_entry *tmp;
-
-	/* TODO: Manage freeing of UX entries better. This code is redundant
-	 * with the freeing in cxip_recv_sw_matcher().
-	 */
-	dlist_foreach_container_safe(&rxc->sw_ux_list, struct cxip_ux_send,
-				     ux_send, rxc_entry, tmp) {
-		dlist_remove(&ux_send->rxc_entry);
-		if (ux_send->req && ux_send->req->type == CXIP_REQ_RBUF)
-			cxip_req_buf_ux_free(ux_send);
-		else
-			free(ux_send);
-
-		rxc->sw_ux_list_len--;
-	}
-
-	if (rxc->sw_ux_list_len != 0)
-		CXIP_WARN("sw_ux_list_len %d != 0\n", rxc->sw_ux_list_len);
-	assert(rxc->sw_ux_list_len == 0);
-
-	/* Free any pending UX entries waiting from the request list */
-	dlist_foreach_container_safe(&rxc->sw_pending_ux_list,
-				     struct cxip_ux_send, ux_send,
-				     rxc_entry, tmp) {
-		dlist_remove(&ux_send->rxc_entry);
-		if (ux_send->req->type == CXIP_REQ_RBUF)
-			cxip_req_buf_ux_free(ux_send);
-		else
-			free(ux_send);
-
-		rxc->sw_pending_ux_list_len--;
-	}
-
-	if (rxc->sw_pending_ux_list_len != 0)
-		CXIP_WARN("sw_pending_ux_list_len %d != 0\n",
-			  rxc->sw_pending_ux_list_len);
-	assert(rxc->sw_pending_ux_list_len == 0);
-}
-
 /*
  * cxip_rxc_enable() - Enable an RX context for use.
  *
@@ -261,30 +213,26 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 }
 
 /*
- * rxc_cleanup() - Attempt to free outstanding requests.
+ * cxip_rxc_recv_req_cleanup() - Attempt to free outstanding requests.
  *
  * Outstanding commands may be dropped when the RX Command Queue is freed.
  * This leads to missing events. Attempt to gather all events before freeing
  * the RX CQ. If events go missing, resources will be leaked until the
  * Completion Queue is freed.
  */
-static void rxc_cleanup(struct cxip_rxc *rxc_base)
+void cxip_rxc_recv_req_cleanup(struct cxip_rxc *rxc)
 {
-	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
-						base);
 	int ret;
 	uint64_t start;
 	int canceled = 0;
-	struct cxip_fc_drops *fc_drops;
-	struct dlist_entry *tmp;
 
-	if (!ofi_atomic_get32(&rxc->base.orx_reqs))
+	if (!ofi_atomic_get32(&rxc->orx_reqs))
 		return;
 
-	cxip_evtq_req_discard(&rxc->base.rx_evtq, rxc);
+	cxip_evtq_req_discard(&rxc->rx_evtq, rxc);
 
 	do {
-		ret = cxip_evtq_req_cancel(&rxc->base.rx_evtq, rxc, 0, false);
+		ret = cxip_evtq_req_cancel(&rxc->rx_evtq, rxc, 0, false);
 		if (ret == FI_SUCCESS)
 			canceled++;
 	} while (ret == FI_SUCCESS);
@@ -293,31 +241,15 @@ static void rxc_cleanup(struct cxip_rxc *rxc_base)
 		CXIP_DBG("Canceled %d Receives: %p\n", canceled, rxc);
 
 	start = ofi_gettime_ms();
-	while (ofi_atomic_get32(&rxc->base.orx_reqs)) {
+	while (ofi_atomic_get32(&rxc->orx_reqs)) {
 		sched_yield();
-		cxip_evtq_progress(&rxc->base.rx_evtq);
+		cxip_evtq_progress(&rxc->rx_evtq);
 
 		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
 			CXIP_WARN("Timeout waiting for outstanding requests.\n");
 			break;
 		}
 	}
-
-	dlist_foreach_container_safe(&rxc->fc_drops, struct cxip_fc_drops,
-				     fc_drops, rxc_entry, tmp) {
-		dlist_remove(&fc_drops->rxc_entry);
-		free(fc_drops);
-	}
-
-	if (rxc->num_fc_eq_full || rxc->num_fc_no_match ||
-	    rxc->num_fc_req_full || rxc->num_fc_unexp ||
-	    rxc->num_fc_append_fail || rxc->num_sc_nic_hw2sw_unexp ||
-	    rxc->num_sc_nic_hw2sw_append_fail)
-		CXIP_INFO(CXIP_SC_STATS, rxc->num_fc_eq_full,
-			  rxc->num_fc_append_fail, rxc->num_fc_no_match,
-			  rxc->num_fc_req_full, rxc->num_fc_unexp,
-			  rxc->num_sc_nic_hw2sw_unexp,
-			  rxc->num_sc_nic_hw2sw_append_fail);
 }
 
 static void cxip_rxc_dump_counters(struct cxip_rxc *rxc)
@@ -380,9 +312,8 @@ void cxip_rxc_disable(struct cxip_rxc *rxc)
 		if (ret != FI_SUCCESS)
 			CXIP_WARN("rxc_msg_disable returned: %d\n", ret);
 
-		/* TODO abstract these two into protocol */
-		cxip_rxc_free_ux_entries(rxc);
-		rxc_cleanup(rxc);
+		/* Protocol cleanup must call cxip_rxc_recv_req_cleanup() */
+		rxc->ops.cleanup(rxc);
 
 		/* Free hardware resources. */
 		ret = rxc_msg_fini(rxc);
