@@ -1768,6 +1768,8 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
 struct cxip_rxc_ops {
 	void (*progress)(struct cxip_rxc *rxc);
 	int (*cancel_msg_recv)(struct cxip_req *req);
+	int (*ctrl_msg_cb)(struct cxip_ctrl_req *req,
+			   const union c_event *event);
 	void (*init_struct)(struct cxip_rxc *rxc, struct cxip_ep_obj *ep_obj);
 	void (*fini_struct)(struct cxip_rxc *rxc);
 	void (*cleanup)(struct cxip_rxc *rxc);
