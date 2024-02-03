@@ -4170,6 +4170,11 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 	return FI_SUCCESS;
 }
 
+static void cxip_rxc_hpc_progress(struct cxip_rxc *rxc)
+{
+	cxip_evtq_progress(&rxc->rx_evtq);
+}
+
 static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 				     struct cxip_ep_obj *ep_obj)
 {
@@ -5665,6 +5670,11 @@ err_buf_fini:
 	return ret;
 }
 
+static void cxip_txc_hpc_progress(struct cxip_txc *txc)
+{
+	cxip_evtq_progress(&txc->tx_evtq);
+}
+
 static void cxip_txc_hpc_init_struct(struct cxip_txc *txc_base,
 				     struct cxip_ep_obj *ep_obj)
 {
@@ -6398,6 +6408,7 @@ struct fi_ops_msg cxip_ep_msg_no_rx_ops = {
 };
 
 struct cxip_rxc_ops hpc_rxc_ops = {
+	.progress = cxip_rxc_hpc_progress,
 	.init_struct = cxip_rxc_hpc_init_struct,
 	.fini_struct = cxip_rxc_hpc_fini_struct,
 	.cleanup = cxip_rxc_hpc_cleanup,
@@ -6406,6 +6417,7 @@ struct cxip_rxc_ops hpc_rxc_ops = {
 };
 
 struct cxip_txc_ops hpc_txc_ops = {
+	.progress = cxip_txc_hpc_progress,
 	.init_struct = cxip_txc_hpc_init_struct,
 	.fini_struct = cxip_txc_hpc_fini_struct,
 	.cleanup = cxip_txc_hpc_cleanup,

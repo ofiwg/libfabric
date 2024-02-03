@@ -180,8 +180,8 @@ void cxip_ep_progress(struct fid *fid)
 	if (ep_obj->enabled) {
 
 		ofi_genlock_lock(&ep_obj->lock);
-		cxip_evtq_progress(&ep_obj->rxc->rx_evtq);
-		cxip_evtq_progress(&ep_obj->txc->tx_evtq);
+		ep_obj->rxc->ops.progress(ep_obj->rxc);
+		ep_obj->txc->ops.progress(ep_obj->txc);
 		cxip_ep_ctrl_progress_locked(ep_obj);
 		ofi_genlock_unlock(&ep_obj->lock);
 	}
