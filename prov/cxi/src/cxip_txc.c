@@ -371,27 +371,21 @@ destroy_ibuf:
  * the TX CQ. If events go missing, resources will be leaked until the
  * Completion Queue is freed.
  */
-static void txc_cleanup(struct cxip_txc *txc_base)
+static void txc_cleanup(struct cxip_txc *txc)
 {
-	struct cxip_txc_hpc *txc = container_of(txc_base, struct cxip_txc_hpc,
-						base);
 	uint64_t start;
-	struct cxip_fc_peer *fc_peer;
-	struct dlist_entry *tmp;
 
-	/* TODO - Break into base and defauilt */
+	if (!ofi_atomic_get32(&txc->otx_reqs))
+		goto proto_cleanup;
 
-	if (!ofi_atomic_get32(&txc->base.otx_reqs))
-		goto free_fc_peers;
-
-	cxip_evtq_req_discard(&txc->base.tx_evtq, txc);
+	cxip_evtq_req_discard(&txc->tx_evtq, txc);
 
 	start = ofi_gettime_ms();
-	while (ofi_atomic_get32(&txc->base.otx_reqs)) {
+	while (ofi_atomic_get32(&txc->otx_reqs)) {
 		sched_yield();
 
-		cxip_evtq_progress(&txc->base.tx_evtq);
-		cxip_ep_ctrl_progress_locked(txc->base.ep_obj);
+		cxip_evtq_progress(&txc->tx_evtq);
+		cxip_ep_ctrl_progress_locked(txc->ep_obj);
 
 		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
 			CXIP_WARN("Timeout waiting for outstanding requests.\n");
@@ -399,15 +393,12 @@ static void txc_cleanup(struct cxip_txc *txc_base)
 		}
 	}
 
-	assert(ofi_atomic_get32(&txc->base.otx_reqs) == 0);
+	assert(ofi_atomic_get32(&txc->otx_reqs) == 0);
 
-	/* TODO - move into txc->ops.cleanup */
-free_fc_peers:
-	dlist_foreach_container_safe(&txc->fc_peers, struct cxip_fc_peer,
-				     fc_peer, txc_entry, tmp) {
-		dlist_remove(&fc_peer->txc_entry);
-		free(fc_peer);
-	}
+proto_cleanup:
+	txc->ops.cleanup(txc);
+
+	ofi_bufpool_destroy(txc->ibuf_pool);
 }
 
 /*
@@ -425,8 +416,6 @@ void cxip_txc_disable(struct cxip_txc *txc)
 
 	txc->enabled = false;
 	txc_cleanup(txc);
-
-	ofi_bufpool_destroy(txc->ibuf_pool);
 
 	if (ofi_send_allowed(txc->attr.caps)) {
 		ret = txc_msg_fini(txc);
