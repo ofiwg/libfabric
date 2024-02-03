@@ -4181,6 +4181,51 @@ static int cxip_rxc_hpc_cancel_msg_recv(struct cxip_req *req)
 	return cxip_recv_cancel(req);
 }
 
+/* Handle any control messaging callbacks specific to protocol */
+static int cxip_rxc_hpc_ctrl_msg_cb(struct cxip_ctrl_req *req,
+				    const union c_event *event)
+{
+	uint32_t pid_bits = req->ep_obj->domain->iface->dev->info.pid_bits;
+	union cxip_match_bits mb = {
+		.raw = event->tgt_long.match_bits,
+	};
+	uint32_t init = event->tgt_long.initiator.initiator.process;
+	uint32_t nic_addr;
+	uint32_t pid;
+	uint16_t vni;
+	int ret;
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_PUT:
+		assert(cxi_event_rc(event) == C_RC_OK);
+
+		nic_addr = CXI_MATCH_ID_EP(pid_bits, init);
+		pid = CXI_MATCH_ID_PID(pid_bits, init);
+		vni = event->tgt_long.vni;
+
+		switch (mb.ctrl_msg_type) {
+		case CXIP_CTRL_MSG_FC_NOTIFY:
+			ret = cxip_fc_process_drops(req->ep_obj, nic_addr, pid,
+						    vni, mb.drops);
+			assert(ret == FI_SUCCESS);
+			break;
+		case CXIP_CTRL_MSG_FC_RESUME:
+			ret = cxip_fc_resume(req->ep_obj, nic_addr, pid, vni);
+			assert(ret == FI_SUCCESS);
+			break;
+		default:
+			ret = -FI_ENOSYS;
+			break;
+		}
+		break;
+	default:
+		ret = -FI_ENOSYS;
+		break;
+	}
+
+	return ret;
+}
+
 static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 				     struct cxip_ep_obj *ep_obj)
 {
@@ -6422,6 +6467,7 @@ struct fi_ops_msg cxip_ep_msg_no_rx_ops = {
 struct cxip_rxc_ops hpc_rxc_ops = {
 	.progress = cxip_rxc_hpc_progress,
 	.cancel_msg_recv = cxip_rxc_hpc_cancel_msg_recv,
+	.ctrl_msg_cb = cxip_rxc_hpc_ctrl_msg_cb,
 	.init_struct = cxip_rxc_hpc_init_struct,
 	.fini_struct = cxip_rxc_hpc_fini_struct,
 	.cleanup = cxip_rxc_hpc_cleanup,
