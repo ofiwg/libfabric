@@ -19,6 +19,7 @@
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 extern struct cxip_rxc_ops hpc_rxc_ops;
+extern struct cxip_rxc_ops cs_rxc_ops;
 
 /*
  * cxip_rxc_msg_enable() - Enable RXC messaging.
@@ -401,22 +402,30 @@ struct cxip_rxc *cxip_rxc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 {
 	struct cxip_rxc *rxc = NULL;
 
-	if (ep_obj->protocol == FI_PROTO_CXI) {
-		struct cxip_rxc_hpc *rxc_hpc;
-
-		rxc_hpc = calloc(1, sizeof(*rxc_hpc));
-		if (rxc_hpc) {
-			rxc_hpc->base.protocol = ep_obj->protocol;
-			rxc_hpc->base.ops = hpc_rxc_ops;
-
-			rxc = &rxc_hpc->base;
-		}
+	switch (ep_obj->protocol) {
+	case FI_PROTO_CXI:
+		rxc = calloc(1, sizeof(struct cxip_rxc_hpc));
+		if (rxc)
+			rxc->ops = hpc_rxc_ops;
+		break;
+	case FI_PROTO_CXI_CS:
+		rxc = calloc(1, sizeof(struct cxip_rxc_cs));
+		if (rxc)
+			rxc->ops = cs_rxc_ops;
+		break;
+	default:
+		CXIP_WARN("Unsupported EP protocol requested %d\n",
+			  ep_obj->protocol);
+		return NULL;
 	}
 
-	if (!rxc)
+	if (!rxc) {
+		CXIP_WARN("Memory allocation failure\n");
 		return NULL;
+	}
 
 	/* Base initialization */
+	rxc->protocol = ep_obj->protocol;
 	rxc->context = context;
 	rxc->ep_obj = ep_obj;
 	rxc->domain = ep_obj->domain;
