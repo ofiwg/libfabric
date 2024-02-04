@@ -1078,6 +1078,7 @@ struct cxip_req_recv {
 	union {
 		struct cxip_rxc *rxc;
 		struct cxip_rxc_hpc *rxc_hpc;
+		struct cxip_rxc_cs *rxc_cs;
 	};
 
 	struct cxip_cntr *cntr;
@@ -1900,6 +1901,14 @@ struct cxip_rxc_hpc {
 	int num_sc_nic_hw2sw_unexp;
 };
 
+/* Receive context specialization for supporting client/server
+ * messaging.
+ */
+struct cxip_rxc_cs {
+	/* Must be first */
+	struct cxip_rxc base;
+};
+
 static inline void cxip_copy_to_md(struct cxip_md *md, void *dest,
 				   const void *src, size_t size)
 {
@@ -2203,6 +2212,14 @@ struct cxip_txc_hpc {
 	/* Match complete IDs */
 	struct indexer tx_ids;
 
+};
+
+/* Client/server derived TXC, does not support SAS ordering
+ * or remotely buffered unexpected messages.
+ */
+struct cxip_txc_cs {
+	/* Must remain first */
+	struct cxip_txc base;
 };
 
 int cxip_txc_emit_idc_put(struct cxip_txc *txc, uint16_t vni,
