@@ -1816,6 +1816,9 @@ struct cxip_rxc {
 	struct cxip_cmdq *rx_cmdq;
 	ofi_atomic32_t orx_reqs;
 
+	/* Receive append error replay queue */
+	struct dlist_entry replay_queue;
+
 	/* If FI_MULTI_RECV is supported, minimum receive size required
 	 * for buffers posted.
 	 */
@@ -1825,6 +1828,7 @@ struct cxip_rxc {
 	 * credits that can be used.
 	 */
 	int32_t max_tx;
+	unsigned int recv_appends;
 
 	struct cxip_msg_counters cntrs;
 };
@@ -1838,7 +1842,6 @@ struct cxip_rxc_hpc {
 
 	int max_eager_size;
 	uint64_t rget_align_mask;
-	unsigned int recv_appends;
 
 	/* Window when FI_CLAIM mutual exclusive access is required */
 	bool hw_claim_in_progress;
@@ -1884,7 +1887,6 @@ struct cxip_rxc_hpc {
 	unsigned int cur_ule_offsets;
 
 	struct dlist_entry fc_drops;
-	struct dlist_entry replay_queue;
 	struct dlist_entry sw_ux_list;
 	struct dlist_entry sw_pending_ux_list;
 
@@ -3513,6 +3515,40 @@ cxip_txc_copy_from_hmem(struct cxip_txc *txc, struct cxip_md *hmem_md,
 
 	return FI_SUCCESS;
 }
+
+fi_addr_t cxip_recv_req_src_addr(struct cxip_req *req);
+int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
+			struct cxip_req **cxip_req,
+			int (*recv_cb)(struct cxip_req *req,
+				       const union c_event *event));
+void cxip_recv_req_free(struct cxip_req *req);
+void cxip_recv_req_report(struct cxip_req *req);
+void cxip_recv_req_tgt_event(struct cxip_req *req, const union c_event *event);
+void cxip_recv_req_peek_complete(struct cxip_req *req,
+				 struct cxip_ux_send *ux_send);
+struct cxip_req *cxip_mrecv_req_dup(struct cxip_req *mrecv_req);
+/* XXXX TODO: Remove */
+/* Defines the posted receive interval for checking LE allocation if
+ * in hybrid RX match mode and preemptive transitions to software
+ * managed EP are requested.
+ */
+#define CXIP_HYBRID_RECV_CHECK_INTERVAL (64-1)
+#define FC_SW_LE_MSG_FATAL "LE exhaustion during flow control, "\
+	"FI_CXI_RX_MATCH_MODE=[hybrid|software] is required\n"
+int cxip_recv_pending_ptlte_disable(struct cxip_rxc *rxc, bool check_fc);
+int cxip_flush_appends(struct cxip_rxc_hpc *rxc,
+		       int (*flush_cb)(struct cxip_req *req,
+				       const union c_event *event));
+int cxip_recv_req_dropped(struct cxip_req *req);
+void cxip_rxc_record_req_stat(struct cxip_rxc *rxc, enum c_ptl_list list,
+			      size_t rlength, struct cxip_req *req);
+bool tag_match(uint64_t init_mb, uint64_t mb, uint64_t ib);
+bool init_match(struct cxip_rxc *rxc, uint32_t init, uint32_t match_id);
+uint32_t cxip_msg_match_id(struct cxip_txc *txc);
+void cxip_report_send_completion(struct cxip_req *req, bool sw_cntr);
+bool cxip_send_eager_idc(struct cxip_req *req);
+void cxip_send_buf_fini(struct cxip_req *req);
+int cxip_send_buf_init(struct cxip_req *req);
 
 size_t cxip_ep_get_unexp_msgs(struct fid_ep *fid_ep,
 			      struct fi_cq_tagged_entry *entry, size_t count,
