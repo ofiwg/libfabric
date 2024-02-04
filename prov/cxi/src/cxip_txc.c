@@ -21,6 +21,7 @@
 #define CXIP_INTERNAL_TX_REQS	16
 
 extern struct cxip_txc_ops hpc_txc_ops;
+extern struct cxip_txc_ops cs_txc_ops;
 
 struct cxip_md *cxip_txc_ibuf_md(void *ibuf)
 {
@@ -743,22 +744,30 @@ struct cxip_txc *cxip_txc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 {
 	struct cxip_txc *txc = NULL;
 
-	if (ep_obj->protocol == FI_PROTO_CXI) {
-		struct cxip_txc_hpc *txc_hpc;
-
-		txc_hpc = calloc(1, sizeof(*txc_hpc));
-		if (txc_hpc) {
-			txc_hpc->base.protocol = ep_obj->protocol;
-			txc_hpc->base.ops = hpc_txc_ops;
-
-			txc = &txc_hpc->base;
-		}
+	switch (ep_obj->protocol) {
+	case FI_PROTO_CXI:
+		txc = calloc(1, sizeof(struct cxip_txc_hpc));
+		if (txc)
+			txc->ops = hpc_txc_ops;
+		break;
+	case FI_PROTO_CXI_CS:
+		txc = calloc(1, sizeof(struct cxip_txc_cs));
+		if (txc)
+			txc->ops = cs_txc_ops;
+		break;
+	default:
+		CXIP_WARN("Unsupported EP protocol requested %d\n",
+			  ep_obj->protocol);
+		return NULL;
 	}
 
-	if (!txc)
+	if (!txc) {
+		CXIP_WARN("Memory allocation failure\n");
 		return NULL;
+	}
 
 	/* Common structure initialization */
+	txc->protocol = ep_obj->protocol;
 	txc->context = context;
 	txc->ep_obj = ep_obj;
 	txc->domain = ep_obj->domain;
