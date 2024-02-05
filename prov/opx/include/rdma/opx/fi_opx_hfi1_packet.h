@@ -43,7 +43,12 @@
 #include "rdma/fabric.h"	/* only for 'fi_addr_t' ... which is a typedef to uint64_t */
 #include "rdma/opx/fi_opx_addr.h"
 
-
+#if defined(__riscv) && defined(__riscv_xlen) && (__riscv_xlen == 64)
+#ifndef PAGE_SIZE
+/* 4K pages default */
+#define PAGE_SIZE 4096
+#endif
+#endif
 
 #define FI_OPX_ADDR_SEP_RX_MAX			(4)
 #define FI_OPX_HFI1_PACKET_MTU			(8192)

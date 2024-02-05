@@ -49,7 +49,7 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 	dnl and is not supported for non-x86 processors.
 	AS_IF([test "x$macos" = "x1"],[opx_happy=0],
 		[test "x$freebsd" = "x1"],[opx_happy=0],
-		[test x$host_cpu != xx86_64],[opx_happy=0],
+		[test x$host_cpu != xx86_64 && test x$host_cpu != xriscv && test x$host_cpu != xriscv64],[opx_happy=0],
 		[test x"$enable_opx" != x"no"],[
 
 		AC_MSG_CHECKING([for opx provider])
