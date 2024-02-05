@@ -458,7 +458,7 @@ void cxit_init(void)
 	fi_freeinfo(hints);
 }
 
-struct fi_info *cxit_allocinfo(void)
+struct fi_info *cxit_allocinfo_common(uint32_t proto)
 {
 	struct fi_info *info;
 	char *odp_env;
@@ -482,11 +482,25 @@ struct fi_info *cxit_allocinfo(void)
 	}
 
 	/* If remote ODP is enabled then test with ODP */
-	odp_env = getenv("CXIP_TEST_ODP");
+	odp_env = getenv("FI_CXI_ODP");
 	if (odp_env && strtol(odp_env, NULL, 10))
 		info->domain_attr->mr_mode &= ~FI_MR_ALLOCATED;
 
+	/* If a EP protocol was specified indicate to use it */
+	if (proto)
+		info->ep_attr->protocol = proto;
+
 	return info;
+}
+
+struct fi_info *cxit_allocinfo(void)
+{
+	return cxit_allocinfo_common(0);
+}
+
+struct fi_info *cxit_allocinfo_proto(uint32_t proto)
+{
+	return cxit_allocinfo_common(proto);
 }
 
 void cxit_setup_getinfo(void)
@@ -495,6 +509,14 @@ void cxit_setup_getinfo(void)
 
 	if (!cxit_fi_hints)
 		cxit_fi_hints = cxit_allocinfo();
+}
+
+void cxit_setup_getinfo_proto(uint32_t proto)
+{
+	cxit_init();
+
+	if (!cxit_fi_hints)
+		cxit_fi_hints = cxit_allocinfo_proto(proto);
 }
 
 void cxit_teardown_getinfo(void)
