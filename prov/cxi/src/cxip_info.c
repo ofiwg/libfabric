@@ -478,7 +478,7 @@ static int cxip_info_init(void)
 		for (ndx = 0; ndx < ARRAY_SIZE(cxip_infos); ndx++) {
 			ret = cxip_info_alloc(nic_if, ndx, &fi);
 			if (ret == -FI_ENODATA)
-				continue;;
+				continue;
 			if (ret != FI_SUCCESS) {
 				cxip_put_if(nic_if);
 				goto free_info;
@@ -489,6 +489,38 @@ static int cxip_info_init(void)
 			*fi_list = fi;
 			fi_list = &(fi->next);
 		}
+
+		/* Initialize the client/server equivalents here, just
+		 * modifying the default entries to be suitable for client
+		 * server. NOTE: FI_PROTO_CXI_CS protocol does not exist
+		 * when only old compatibility constants are used.
+		 */
+		for (ndx = 0; ndx < ARRAY_SIZE(cxip_infos); ndx++) {
+			ret = cxip_info_alloc(nic_if, ndx, &fi);
+			if (ret == -FI_ENODATA)
+				continue;
+			if (ret != FI_SUCCESS) {
+				cxip_put_if(nic_if);
+				goto free_info;
+			}
+
+			fi->caps |= FI_DIRECTED_RECV;
+			fi->ep_attr->protocol = FI_PROTO_CXI_CS;
+			fi->tx_attr->msg_order = CXIP_MSG_ORDER & ~FI_ORDER_SAS;
+			fi->tx_attr->caps |= FI_DIRECTED_RECV;
+			/* Support IDC but not FI_INJECT */
+			fi->tx_attr->inject_size = 0;
+			fi->rx_attr->msg_order = CXIP_MSG_ORDER & ~FI_ORDER_SAS;
+			fi->rx_attr->caps |= FI_DIRECTED_RECV;
+			fi->rx_attr->total_buffered_recv = 0;
+
+			CXIP_DBG("%s client/server info created\n",
+				 nic_if->info->device_name);
+			*fi_list = fi;
+			fi_list = &(fi->next);
+		}
+
+		cxip_put_if(nic_if);
 	}
 
 	return FI_SUCCESS;
@@ -1553,6 +1585,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	struct cxip_if *iface;
 	bool copy_dest = NULL;
 	struct fi_info *temp_hints = NULL;
+	uint32_t proto;
 
 	if (flags & FI_SOURCE) {
 		if (!node && !service) {
@@ -1621,9 +1654,9 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
-	/* Remove any info that did match based on mr_mode requirements.
-	 * Note that mr_mode FI_MR_ENDPOINT is only required if target
-	 * RMA/ATOMIC access is required.
+	/* Remove any info that did not match based on EP protocol or mr_mode
+	 * requirements. Note that mr_mode FI_MR_ENDPOINT is only required
+	 * if target RMA/ATOMIC access is required.
 	 */
 	if (hints) {
 		fi_ptr = *info;
@@ -1631,8 +1664,24 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		fi_prev_ptr = NULL;
 
 		while (fi_ptr) {
-			if (fi_ptr->caps & (FI_ATOMIC | FI_RMA) &&
-			    !fi_ptr->domain_attr->mr_mode) {
+			/* If hints protocol is not specified, default to use
+			 * protocol FI_PROTO_CXI/FI_PROTO_CXI_COMPAT. This
+			 * requires that FI_PROTO_CXI_CS be explicitly
+			 * requested if hints are passed to be used.
+			 */
+			if (!hints->ep_attr->protocol) {
+				/* TODO: Only FI_ADDR_CXI will be supported
+				 * upstream.
+				 */
+				proto = fi_ptr->addr_format == FI_ADDR_CXI ?
+						FI_PROTO_CXI : FI_PROTO_OPX;
+			} else {
+				proto = hints->ep_attr->protocol;
+			}
+
+			if ((fi_ptr->caps & (FI_ATOMIC | FI_RMA) &&
+			     !fi_ptr->domain_attr->mr_mode) ||
+			    proto != fi_ptr->ep_attr->protocol) {
 				/* discard entry */
 				if (fi_prev_ptr)
 					fi_prev_ptr->next = fi_ptr->next;
