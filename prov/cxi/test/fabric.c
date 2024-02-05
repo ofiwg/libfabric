@@ -379,12 +379,13 @@ Test(getinfo, invalid_fi_directed_recv_with_multiple_auth_keys_per_ep)
 
 TestSuite(getinfo_infos, .timeout = CXIT_DEFAULT_TIMEOUT);
 
-#define MAX_INFOS	16
+#define MAX_INFOS	24
 #define FI_ADDR_CXI_COMPAT FI_ADDR_OPX
 
 struct info_check {
 	int mr_mode;
 	uint32_t format;
+	uint32_t protocol;
 	size_t max_ep_auth_key;
 };
 
@@ -397,8 +398,11 @@ Test(getinfo_infos, nohints)
 	char *dom_name;
 	char *odp;
 	char *compat;
+	int compat_val;
 	struct info_check infos[MAX_INFOS];
 	size_t max_ep_auth_key;
+	uint32_t proto;
+	uint32_t format;
 
 	cxit_init();
 	cr_assert(!cxit_fi_hints, "hints not NULL");
@@ -411,37 +415,61 @@ Test(getinfo_infos, nohints)
 		infos[i].mr_mode = -1;
 	}
 
+	odp = getenv("FI_CXI_ODP");
+	compat = getenv("FI_CXI_COMPAT");
+	compat_val = !compat ? 1 : strtol(compat, NULL, 10);
+
 	/* By default when no hints are specified, each interface
-	 * should have 4 fi_info.
+	 * should can have 8 HPC fi_info and 8 CS fi_info.
 	 */
-	for (i = 0; i < 2; i++) {
-		if (i < 1)
+	for (i = 0; i < 4; i++) {
+		if (i == 0 || i == 2)
 			max_ep_auth_key = 1;
 		else
 			max_ep_auth_key = 4;
 
+		/* Set protocol based on compatibility. Note FI_PROTO_CXI_CS
+		 * does not exist if only old address format/protocol values
+		 * are used.
+		 */
+		if (i < 2)
+			proto = compat_val == 2 ? FI_PROTO_OPX : FI_PROTO_CXI;
+		else
+			proto = FI_PROTO_CXI_CS;
+
+		format = FI_ADDR_CXI;
+		if (compat_val == 2) {
+			/* CS not valid with only old constants */
+			if (proto == FI_PROTO_CXI_CS)
+				continue;
+			format = FI_ADDR_CXI_COMPAT;
+		}
+
 		infos[info_per_if].mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED |
 					FI_MR_PROV_KEY;
-		infos[info_per_if].format = FI_ADDR_CXI;
+		infos[info_per_if].format = format;
 		infos[info_per_if].max_ep_auth_key = max_ep_auth_key;
+		infos[info_per_if].protocol = proto;
 		info_per_if++;
 
 		infos[info_per_if].mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED;
-		infos[info_per_if].format = FI_ADDR_CXI;
+		infos[info_per_if].format = format;
 		infos[info_per_if].max_ep_auth_key = max_ep_auth_key;
+		infos[info_per_if].protocol = proto;
 		info_per_if++;
 
 		/* Add ODP versions if enabled */
-		odp = getenv("FI_CXI_ODP");
 		if (odp && strtol(odp, NULL, 10)) {
-			infos[info_per_if].format = FI_ADDR_CXI;
+			infos[info_per_if].format = format;
 			infos[info_per_if].mr_mode = FI_MR_ENDPOINT | FI_MR_PROV_KEY;
 			infos[info_per_if].max_ep_auth_key = max_ep_auth_key;
+			infos[info_per_if].protocol = proto;
 			info_per_if++;
 
-			infos[info_per_if].format = FI_ADDR_CXI;
+			infos[info_per_if].format = format;
 			infos[info_per_if].mr_mode = FI_MR_ENDPOINT;
 			infos[info_per_if].max_ep_auth_key = max_ep_auth_key;
+			infos[info_per_if].protocol = proto;
 			info_per_if++;
 		}
 	}
@@ -449,18 +477,25 @@ Test(getinfo_infos, nohints)
 	/* If we are supporting compatibility with old constants,
 	 * then fi_info are repeated with compatibility constants.
 	 */
-	compat = getenv("FI_CXI_COMPAT");
 	if (!compat || strtol(compat, NULL, 10) == 1) {
 		for (i = 0; i < info_per_if; i++) {
+			/* FI_PROTO_CXI_CS does not require compat */
+			if (infos[i].protocol == FI_PROTO_CXI_CS) {
+				info_per_if = info_per_if + i;
+				goto done;
+			}
+
 			infos[info_per_if + i].mr_mode =
 				infos[i].mr_mode;
 			infos[info_per_if + i].format =
 				FI_ADDR_CXI_COMPAT;
 			infos[info_per_if + i].max_ep_auth_key =
 				infos[i].max_ep_auth_key;
+			infos[info_per_if + 1].protocol = FI_PROTO_OPX;
 		}
 		info_per_if += i;
 	}
+done:
 	cr_assert(info_per_if <= MAX_INFOS, "Too many infos");
 
 	fi_ptr = cxit_fi;
@@ -507,7 +542,7 @@ Test(getinfo_infos, nohints)
 	cxit_destroy_fabric_info();
 }
 
-Test(getinfo_infos, hints)
+void getinfo_infos_hints(uint32_t proto)
 {
 	int num_info;
 	int i;
@@ -515,27 +550,64 @@ Test(getinfo_infos, hints)
 	struct fi_info *fi_ptr;
 	char *dom_name;
 	char *compat;
-	struct info_check infos[2];
+	int compat_val;
+	char *odp;
+	int odp_val;
+	struct info_check infos[3];
 
-	cxit_setup_fabric();
+	compat = getenv("FI_CXI_COMPAT");
+	compat_val = !compat ? 1 : strtol(compat, NULL, 10);
+	odp = getenv("FI_CXI_ODP");
+	odp_val = !odp ? 0 : strtol(odp, NULL, 10);
+
+	/* When only old compatibility constants are used,
+	 * FI_PROTO_CXI or FI_PROTO_CXI_CS are not valid.
+	 */
+	if (compat_val >= 2 &&
+	    (proto == FI_PROTO_CXI_CS || proto == FI_PROTO_CXI)) {
+		cr_assert(true);
+		return;
+	}
+
+	cr_assert(cxit_fi_hints == NULL, "hints not null");
+	cxit_setup_getinfo_proto(proto);
+	cr_assert(cxit_fi_hints != NULL, "hints still null");
+	cr_assert(cxit_fi_hints->ep_attr->protocol == proto,
+		  "hints proto %d expected %d failure",
+		  cxit_fi_hints->ep_attr->protocol, proto);
+
+	cxit_create_fabric_info();
 	cr_assert(cxit_fi != NULL);
-	cr_assert(cxit_fi_hints != NULL);
 
-	for (i = 0; i < 2; i++) {
+	for (i = 0; i < 3; i++) {
 		infos[i].format = 0;
+		infos[i].protocol = 0;
 		infos[i].mr_mode = -1;
 	}
 
-	infos[0].format = FI_ADDR_CXI;
-	infos[0].mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED;
-	if (cxit_prov_key)
-		infos[0].mr_mode |= FI_MR_PROV_KEY;
-	info_per_if++;
+	/* We have address format FI_ADDR_CXI */
+	if (compat_val < 2) {
+		infos[info_per_if].mr_mode = FI_MR_ENDPOINT;
+		if (!odp_val)
+			infos[info_per_if].mr_mode |= FI_MR_ALLOCATED;
+		if (cxit_prov_key)
+			infos[info_per_if].mr_mode |= FI_MR_PROV_KEY;
 
-	compat = getenv("FI_CXI_COMPAT");
-	if (!compat || strtol(compat, NULL, 10) == 1) {
-		infos[1].format = FI_ADDR_CXI_COMPAT;
-		infos[1].mr_mode = infos[0].mr_mode;
+		infos[info_per_if].format = FI_ADDR_CXI;
+		infos[info_per_if].protocol = proto;
+		info_per_if++;
+	}
+
+	/* Add compat if required */
+	if (compat_val != 0 && !proto) {
+		infos[info_per_if].mr_mode = FI_MR_ENDPOINT;
+		if (!odp_val)
+			infos[info_per_if].mr_mode |= FI_MR_ALLOCATED;
+		if (cxit_prov_key)
+			infos[info_per_if].mr_mode |= FI_MR_PROV_KEY;
+
+		infos[info_per_if].format = FI_ADDR_CXI_COMPAT;
+		infos[info_per_if].protocol = FI_PROTO_OPX;
 		info_per_if++;
 	}
 
@@ -556,9 +628,8 @@ Test(getinfo_infos, hints)
 				break;
 
 			num_info++;
-			cr_assert(num_info <= 2, "too many fi_info %d",
+			cr_assert(num_info <= 3, "too many fi_info %d",
 				  num_info);
-
 			cr_assert(infos[num_info - 1].mr_mode ==
 				  fi_ptr->domain_attr->mr_mode,
 				  "expected MR mode %x got %x",
@@ -579,6 +650,21 @@ Test(getinfo_infos, hints)
 			  num_info, info_per_if);
 	}
 	cxit_teardown_fabric();
+}
+
+Test(getinfo_infos, hints_default_proto)
+{
+	getinfo_infos_hints(0);
+}
+
+Test(getinfo_infos, hints_proto_hpc)
+{
+	getinfo_infos_hints(FI_PROTO_CXI);
+}
+
+Test(getinfo_infos, hints_proto_cs)
+{
+	getinfo_infos_hints(FI_PROTO_CXI_CS);
 }
 
 Test(getinfo_infos, hints_no_rma)
