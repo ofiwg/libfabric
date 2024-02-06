@@ -1642,44 +1642,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		/* Data was delivered directly to the user buffer. Complete the
 		 * request.
 		 */
-		if (req->recv.multi_recv) {
-			if (event->tgt_long.auto_unlinked) {
-				uintptr_t mrecv_head;
-
-				/* For C_EVENT_PUT, need to calculate how much
-				 * of the multi-recv buffer was consumed while
-				 * factoring in any truncation.
-				 */
-				mrecv_head =
-					CXI_IOVA_TO_VA(req->recv.recv_md->md,
-						       event->tgt_long.start);
-
-				req->recv.auto_unlinked = true;
-				req->recv.mrecv_unlink_bytes =
-					mrecv_head -
-					(uintptr_t)req->recv.recv_buf +
-					event->tgt_long.mlength;
-			}
-
-			req = cxip_mrecv_req_dup(req);
-			if (!req)
-				return -FI_EAGAIN;
-			cxip_recv_req_tgt_event(req, event);
-
-			req->buf = (uint64_t)(CXI_IOVA_TO_VA(
-					req->recv.recv_md->md,
-					event->tgt_long.start));
-			req->data_len = event->tgt_long.mlength;
-
-			cxip_recv_req_report(req);
-			cxip_evtq_req_free(req);
-		} else {
-			req->data_len = event->tgt_long.mlength;
-			cxip_recv_req_tgt_event(req, event);
-			cxip_recv_req_report(req);
-			cxip_recv_req_free(req);
-		}
-		return FI_SUCCESS;
+		return cxip_complete_put(req, event);
 
 	case C_EVENT_REPLY:
 		/* Long-send Get completed. Complete the request. */
