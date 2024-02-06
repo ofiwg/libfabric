@@ -97,8 +97,8 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 			cxi_LIBS="$cxi_LIBS $libcurl_LIBS"
 
 			# Add on json if installed in non-default location.
-			if test "$with_json" != "" && test "$with_json" != "no"; then
-				FI_CHECK_PREFIX_DIR([$with_json], [json])
+			if test "$with_json_c" != "" && test "$with_json_c" != "no"; then
+				FI_CHECK_PREFIX_DIR([$with_json_c], [json])
 			else
 				json_PREFIX=""
 				json_LIBDIR=""
