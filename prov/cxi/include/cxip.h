@@ -3567,6 +3567,7 @@ void cxip_recv_req_tgt_event(struct cxip_req *req, const union c_event *event);
 void cxip_recv_req_peek_complete(struct cxip_req *req,
 				 struct cxip_ux_send *ux_send);
 struct cxip_req *cxip_mrecv_req_dup(struct cxip_req *mrecv_req);
+int cxip_complete_put(struct cxip_req *req, const union c_event *event);
 /* XXXX TODO: Remove */
 /* Defines the posted receive interval for checking LE allocation if
  * in hybrid RX match mode and preemptive transitions to software
