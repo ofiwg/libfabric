@@ -392,6 +392,51 @@ void cxip_recv_req_peek_complete(struct cxip_req *req,
 	cxip_recv_req_free(req);
 }
 
+/*
+ * cxip_complete_put() - Common C_EVENT_PUT success event processing
+ *
+ * Data is delivered directly to user buffer.
+ */
+int cxip_complete_put(struct cxip_req *req, const union c_event *event)
+{
+	if (req->recv.multi_recv) {
+		if (event->tgt_long.auto_unlinked) {
+			uintptr_t mrecv_head;
+
+			/* For C_EVENT_PUT, need to calculate how much of the
+			 * multi-recv buffer was consumed while factoring in
+			 * any truncation.
+			 */
+			mrecv_head = CXI_IOVA_TO_VA(req->recv.recv_md->md,
+						    event->tgt_long.start);
+
+			req->recv.auto_unlinked = true;
+			req->recv.mrecv_unlink_bytes = mrecv_head -
+						(uintptr_t)req->recv.recv_buf +
+						event->tgt_long.mlength;
+		}
+
+		req = cxip_mrecv_req_dup(req);
+		if (!req)
+			return -FI_EAGAIN;
+
+		cxip_recv_req_tgt_event(req, event);
+		req->buf = (uint64_t)(CXI_IOVA_TO_VA(req->recv.recv_md->md,
+						     event->tgt_long.start));
+		req->data_len = event->tgt_long.mlength;
+
+		cxip_recv_req_report(req);
+		cxip_evtq_req_free(req);
+	} else {
+		req->data_len = event->tgt_long.mlength;
+		cxip_recv_req_tgt_event(req, event);
+		cxip_recv_req_report(req);
+		cxip_recv_req_free(req);
+	}
+
+	return FI_SUCCESS;
+}
+
 /* Caller must hold ep_obj->lock */
 int cxip_recv_pending_ptlte_disable(struct cxip_rxc *rxc,
 				    bool check_fc)
