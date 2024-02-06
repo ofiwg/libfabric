@@ -503,6 +503,10 @@ static bool cxip_rma_is_idc(struct cxip_txc *txc, uint64_t key, size_t len,
 {
 	size_t max_idc_size = unr ? CXIP_INJECT_SIZE : C_MAX_IDC_PAYLOAD_RES;
 
+	/* DISABLE_NON_INJECT_MSG_IDC disables the IDC
+	 */
+	if (cxip_env.disable_non_inject_msg_idc)
+		return false;
 	/* IDC commands are not supported for unoptimized MR since the IDC
 	 * small message format does not support remote offset which is needed
 	 * for RMA commands.
