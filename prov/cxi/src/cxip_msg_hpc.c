@@ -3912,7 +3912,6 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 						    base);
 	int ret;
 	struct cxip_req *req;
-	struct cxip_addr caddr;
 	struct cxip_ux_send *ux_msg;
 	uint32_t match_id;
 
@@ -3940,30 +3939,11 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 		flags &= ~FI_MULTI_RECV;
 	}
 
-	/* If FI_DIRECTED_RECV and a src_addr is specified, encode the address
-	 * in the LE for matching. If application AVs are symmetric, use
-	 * logical FI address for matching. Otherwise, use physical address.
-	 */
-	if (rxc->attr.caps & FI_DIRECTED_RECV &&
-	    src_addr != FI_ADDR_UNSPEC) {
-		if (rxc->ep_obj->av->symmetric) {
-			/* PID is not used for matching */
-			match_id = CXI_MATCH_ID(rxc->pid_bits, C_PID_ANY,
-						src_addr);
-		} else {
-			ret = cxip_av_lookup_addr(rxc->ep_obj->av, src_addr,
-						  &caddr);
-			if (ret != FI_SUCCESS) {
-				RXC_WARN(rxc, "Failed to look up FI addr: %d\n",
-					 ret);
-				return -FI_EINVAL;
-			}
-
-			match_id = CXI_MATCH_ID(rxc->pid_bits, caddr.pid,
-						caddr.nic);
-		}
-	} else {
-		match_id = CXI_MATCH_ID_ANY;
+	ret = cxip_set_recv_match_id(rxc, src_addr, &match_id);
+	if (ret) {
+		RXC_WARN(rxc, "Error setting match_id: %d %s\n",
+			 ret, fi_strerror(-ret));
+		return ret;
 	}
 
 	ofi_genlock_lock(&rxc->ep_obj->lock);
