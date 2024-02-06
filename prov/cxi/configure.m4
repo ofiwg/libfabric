@@ -44,14 +44,6 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 
 	AS_IF([test x"$enable_cxi" != x"no"],
 		[
-			AC_CHECK_HEADER(cxi_prov_hw.h,
-				[],
-				[cxi_happy=0])
-
-			AC_CHECK_HEADER(uapi/misc/cxi.h,
-				[],
-				[cxi_happy=0])
-
 			FI_CHECK_PACKAGE([libcxi],
 				[libcxi/libcxi.h],
 				[cxi],
