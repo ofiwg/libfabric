@@ -58,10 +58,12 @@ def test_rdm_tagged_bw_no_inject_range(cmdline_args, completion_semantic, inject
                                completion_semantic, "host_to_host", inject_message_size)
 
 @pytest.mark.functional
-def test_rdm_tagged_bw_small_tx(cmdline_args, completion_semantic, memory_type, completion_type):
+@pytest.mark.parametrize("env_vars", [["FI_EFA_TX_SIZE=64"], ["FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=64", "FI_EFA_RX_SIZE=64"]])
+def test_rdm_tagged_bw_small_tx_rx(cmdline_args, completion_semantic, memory_type, completion_type, env_vars):
     cmdline_args_copy = copy.copy(cmdline_args)
-    cmdline_args_copy.append_environ("FI_EFA_TX_SIZE=64")
-    # Use a window size larger than tx size
+    for env_var in env_vars:
+        cmdline_args_copy.append_environ(env_var)
+    # Use a window size larger than tx/rx size
     efa_run_client_server_test(cmdline_args_copy, "fi_rdm_tagged_bw -W 128", "short",
                                completion_semantic, memory_type, "all", completion_type=completion_type)
 

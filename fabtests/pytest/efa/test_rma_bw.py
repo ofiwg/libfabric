@@ -15,10 +15,12 @@ def test_rma_bw(cmdline_args, iteration_type, operation_type, completion_semanti
     efa_run_client_server_test(cmdline_args, command, iteration_type, completion_semantic, memory_type, "all", timeout=timeout)
 
 @pytest.mark.parametrize("operation_type", ["read", "writedata", "write"])
-def test_rma_bw_small_tx(cmdline_args, operation_type, completion_semantic, memory_type):
+@pytest.mark.parametrize("env_vars", [["FI_EFA_TX_SIZE=64"], ["FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=64", "FI_EFA_RX_SIZE=64"]])
+def test_rma_bw_small_tx_rx(cmdline_args, operation_type, completion_semantic, memory_type, env_vars):
     cmdline_args_copy = copy.copy(cmdline_args)
-    cmdline_args_copy.append_environ("FI_EFA_TX_SIZE=64")
-    # Use a window size larger than tx size
+    for env_var in env_vars:
+        cmdline_args_copy.append_environ(env_var)
+    # Use a window size larger than tx/rx size
     command = "fi_rma_bw -e rdm -W 128"
     command = command + " -o " + operation_type
     # rma_bw test with data verification takes longer to finish
