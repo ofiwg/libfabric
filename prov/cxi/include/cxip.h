@@ -253,6 +253,7 @@ struct cxip_environment {
 	size_t rdzv_get_min;
 	size_t rdzv_eager_size;
 	int rdzv_aligned_sw_rget;
+	int rnr_max_timeout_us;
 	int disable_non_inject_msg_idc;
 	int disable_host_register;
 	size_t oflow_buf_size;
@@ -370,6 +371,7 @@ struct cxip_addr {
  * be within the logical endpoint range 128 - 255.
  */
 #define CXIP_PTL_IDX_RXQ				0
+#define CXIP_PTL_IDX_RNR_RXQ				1
 #define CXIP_PTL_IDX_WRITE_MR_OPT_BASE			17
 #define CXIP_PTL_IDX_READ_MR_OPT_BASE			128
 #define CXIP_PTL_IDX_MR_OPT_CNT				100
@@ -1141,6 +1143,7 @@ struct cxip_req_send {
 	union {
 		struct cxip_txc *txc;
 		struct cxip_txc_hpc *txc_hpc;
+		struct cxip_txc_cs *txc_cs;
 	};
 	struct cxip_cntr *cntr;
 	const void *buf;		// local send buffer
@@ -1164,6 +1167,11 @@ struct cxip_req_send {
 	};
 	int rc;				// DMA return code
 	int rdzv_send_events;		// Processed event count
+	uint64_t max_rnr_time;
+	uint64_t retry_rnr_time;
+	struct dlist_entry rnr_entry;
+	int retries;
+	bool canceled;
 };
 
 struct cxip_req_rdzv_src {
@@ -2217,9 +2225,24 @@ struct cxip_txc_hpc {
 /* Client/server derived TXC, does not support SAS ordering
  * or remotely buffered unexpected messages.
  */
+#define CXIP_RNR_TIMEOUT_US	500000
+#define CXIP_NUM_RNR_WAIT_QUEUE	5
+
 struct cxip_txc_cs {
 	/* Must remain first */
 	struct cxip_txc base;
+
+	uint64_t max_retry_wait_us;	/* Maximum time to retry any request */
+	ofi_atomic32_t time_wait_reqs;	/* Number of RNR time wait reqs */
+	uint64_t next_retry_wait_us;	/* Time of next retry in all queues */
+
+	/* There are CXIP_NUM_RNR_WAIT_QUEUE queues where each queue has
+	 * a specified time wait value and where the last queue is has the
+	 * maximum time wait value before retrying (and is used for all
+	 * subsequent retries). This implementation allows each queue to
+	 * be maintained in retry order with a simple append of the request.
+	 */
+	struct dlist_entry time_wait_queue[CXIP_NUM_RNR_WAIT_QUEUE];
 };
 
 int cxip_txc_emit_idc_put(struct cxip_txc *txc, uint16_t vni,
