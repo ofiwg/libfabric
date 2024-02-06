@@ -663,6 +663,12 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 	struct efa_rdm_ep *ep;
 
 	ep = pkt_entry->ep;
+	/*
+	 * we should still decrement the efa_rx_pkts_posted
+	 * when getting a failed rx completion.
+	 */
+	assert(ep->efa_rx_pkts_posted > 0);
+	ep->efa_rx_pkts_posted--;
 
 	EFA_DBG(FI_LOG_CQ, "Packet receive error: %s (%d)\n",
 	        efa_strerror(prov_errno), prov_errno);

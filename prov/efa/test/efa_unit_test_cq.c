@@ -284,7 +284,18 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
+	/*
+	 * The rx pkt entry should only be allocated and posted by the progress engine.
+	 * However, to mock a receive completion, we have to allocate an rx entry
+	 * and modify it out of band. The proess engine grow the rx pool in the first
+	 * call and set efa_rdm_ep->efa_rx_pkts_posted as the rx pool size. Here we
+	 * follow the progress engine to set the efa_rx_pkts_posted counter manually
+	 * TODO: modify the rx pkt as part of the ibv cq poll mock so we don't have to
+	 * allocate pkt entry and hack the pkt counters.
+	 */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
 
 	/* create a fake peer */
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -295,10 +306,6 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	assert_int_equal(numaddr, 1);
 
 	pkt_entry->ope = efa_rdm_ep_alloc_rxe(efa_rdm_ep, peer_addr, ofi_op_msg);
-
-	/* A receive completion requires efa rx pkts are posted */
-	efa_rdm_ep->efa_rx_pkts_posted++;
-	assert_non_null(pkt_entry);
 
 	efa_rdm_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
 	efa_rdm_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
@@ -425,10 +432,19 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	assert_non_null(peer);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
 
-	/* Setup packet entry */
+	/*
+	 * The rx pkt entry should only be allocated and posted by the progress engine.
+	 * However, to mock a receive completion, we have to allocate an rx entry
+	 * and modify it out of band. The proess engine grow the rx pool in the first
+	 * call and set efa_rdm_ep->efa_rx_pkts_posted as the rx pool size. Here we
+	 * follow the progress engine to set the efa_rx_pkts_posted counter manually
+	 * TODO: modify the rx pkt as part of the ibv cq poll mock so we don't have to
+	 * allocate pkt entry and hack the pkt counters.
+	 */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
-	/* A receive completion requires efa rx pkts are posted */
-	efa_rdm_ep->efa_rx_pkts_posted++;
+	assert_non_null(pkt_entry);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+
 	pkt_attr.msg_id = 0;
 	pkt_attr.connid = raw_addr.qkey;
 	/* Packet type must be in [EFA_RDM_REQ_PKT_BEGIN, EFA_RDM_EXTRA_REQ_PKT_END) */

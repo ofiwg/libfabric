@@ -180,8 +180,9 @@ void efa_rdm_ep_progress_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 			ep->efa_rx_pkts_to_post = 0;
 		}
 	} else {
-		if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0) {
-			/* Both efa_rx_pkts_posted and efa_rx_pkts_to_post equal to 0 means
+		if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0 && ep->efa_rx_pkts_held == 0) {
+			/* All of efa_rx_pkts_posted, efa_rx_pkts_to_post and
+			 * efa_rx_pkts_held equal to 0 means
 			 * this is the first call of the progress engine on this endpoint.
 			 *
 			 * In this case, we explictly allocate the 1st chunk of memory
@@ -219,6 +220,8 @@ void efa_rdm_ep_progress_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 
 			ep->efa_rx_pkts_to_post = efa_rdm_ep_get_rx_pool_size(ep);
 		}
+		/* only valid for non-zero copy */
+		assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted + ep->efa_rx_pkts_held == efa_rdm_ep_get_rx_pool_size(ep));
 	}
 
 	err = efa_rdm_ep_bulk_post_internal_rx_pkts(ep);
