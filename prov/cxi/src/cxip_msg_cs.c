@@ -23,6 +23,55 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 
+static void cxip_rnr_recv_pte_cb(struct cxip_pte *pte,
+				 const union c_event *event)
+{
+	struct cxip_rxc *rxc = (struct cxip_rxc *)pte->ctx;
+	uint32_t state;
+
+	assert(rxc->protocol == FI_PROTO_CXI_CS);
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_STATE_CHANGE:
+		if (cxi_event_rc(event) != C_RC_OK ||
+		    event->tgt_long.ptlte_index != rxc->rx_pte->pte->ptn)
+			CXIP_FATAL("Failed receive PtlTE state change, %s\n",
+				   cxi_rc_to_str(cxi_event_rc(event)));
+
+		state = event->tgt_long.initiator.state_change.ptlte_state;
+
+		switch (state) {
+		case C_PTLTE_ENABLED:
+			assert(rxc->state == RXC_DISABLED);
+			rxc->state = RXC_ENABLED;
+			RXC_DBG(rxc, "Receive PtlTE enabled\n");
+			break;
+		case C_PTLTE_DISABLED:
+			/* Set to disabled before issuing command */
+			assert(rxc->state == RXC_DISABLED);
+			rxc->state = RXC_DISABLED;
+			RXC_DBG(rxc, "Receive PtlTE disabled\n");
+			break;
+		default:
+			CXIP_FATAL("Unexpected receive PtlTE state %d\n",
+				   state);
+		}
+		break;
+
+	case C_EVENT_COMMAND_FAILURE:
+		CXIP_FATAL("Command failure: cq=%u target=%u fail_loc=%u "
+			   "cmd_type=%u cmd_size=%u opcode=%u\n",
+			   event->cmd_fail.cq_id, event->cmd_fail.is_target,
+			   event->cmd_fail.fail_loc,
+			   event->cmd_fail.fail_command.cmd_type,
+			   event->cmd_fail.fail_command.cmd_size,
+			   event->cmd_fail.fail_command.opcode);
+		break;
+	default:
+		CXIP_FATAL("Invalid event type: %s\n", cxi_event_to_str(event));
+	}
+}
+
 static void cxip_rxc_cs_progress(struct cxip_rxc *rxc)
 {
 	cxip_evtq_progress(&rxc->rx_evtq);
@@ -59,10 +108,52 @@ static void cxip_rxc_cs_fini_struct(struct cxip_rxc *rxc)
 	/* Placeholder */
 }
 
-static int cxip_rxc_cs_msg_init(struct cxip_rxc *rxc_base)
+static int cxip_rxc_cs_msg_init(struct cxip_rxc *rxc)
 {
-	/* Placeholder */
+	struct cxi_pt_alloc_opts pt_opts = {
+		.use_long_event = 1,
+		.is_matching = 1,
+		.lossless = cxip_env.msg_lossless,
+	};
+	int ret;
+
+	assert(rxc->protocol == FI_PROTO_CXI_CS);
+
+	/* If applications AVs are symmetric, use logical FI addresses for
+	 * matching. Otherwise, physical addresses will be used.
+	 */
+	if (rxc->ep_obj->av->symmetric) {
+		CXIP_DBG("Using logical PTE matching\n");
+		pt_opts.use_logical = 1;
+	}
+
+	ret = cxip_pte_alloc(rxc->ep_obj->ptable,
+			     rxc->rx_evtq.eq, rxc->recv_ptl_idx, false,
+			     &pt_opts, cxip_rnr_recv_pte_cb, rxc, &rxc->rx_pte);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to allocate RX PTE: %d\n", ret);
+		return ret;
+	}
+
+	/* Start accepting Puts. */
+	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, C_PTLTE_ENABLED, 0);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("cxip_pte_set_state returned: %d\n", ret);
+		goto free_pte;
+	}
+
+	/* Wait for PTE state change */
+	do {
+		sched_yield();
+		cxip_evtq_progress(&rxc->rx_evtq);
+	} while (rxc->rx_pte->state != C_PTLTE_ENABLED);
+
 	return FI_SUCCESS;
+
+free_pte:
+	cxip_pte_free(rxc->rx_pte);
+
+	return ret;
 }
 
 static int cxip_rxc_cs_msg_fini(struct cxip_rxc *rxc_base)
