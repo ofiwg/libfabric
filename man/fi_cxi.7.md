@@ -229,6 +229,18 @@ CXI integrated launcher and CXI authorization key aware libfabric user:
 7. Application processes select from the list of available service IDs and VNIs
    to form an authorization key to use for Endpoint allocation.
 
+## Endpoint Protocols
+
+The provider supports multiple endpoint protocols. The default protocol is
+FI_PROTO_CXI and fully supports the messaging requirements of parallel
+applicaitons.
+
+The FI_PROTO_CXI_CS endpoint protocol is an optional protocol that targets
+client/server environments where send-after-send ordering is not required and
+messaging is generally to pre-posted buffers; FI_MULTI_RECV is recommended.
+It utilizes a receiver-not-ready implementation where
+*FI_CXI_RNR_MAX_TIMEOUT_US* can be tuned to control the maximum retry duration.
+
 ## Address Vectors
 
 The CXI provider supports both *FI_AV_TABLE* and *FI_AV_MAP* with the same
@@ -1076,6 +1088,12 @@ The CXI provider checks for the following environment variables:
 
 *FI_CXI_DEFAULT_VNI*
 :   Default VNI value used only for service IDs where the VNI is not restricted.
+
+*FI_CXI_RNR_MAX_TIMEOUT_US*
+:   When using the endpoint FI_PROTO_CXI_CS protocol, this setting is used to
+    control the maximum time from the original posting of the message that the
+    message should be retried. A value of 0 will return an error completion
+    on the first RNR ack status.
 
 *FI_CXI_EQ_ACK_BATCH_SIZE*
 :   Number of EQ events to process before writing an acknowledgement to HW.

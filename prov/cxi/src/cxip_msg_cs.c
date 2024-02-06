@@ -45,7 +45,13 @@ static int cxip_rxc_cs_ctrl_msg_cb(struct cxip_ctrl_req *req,
 static void cxip_rxc_cs_init_struct(struct cxip_rxc *rxc_base,
 				    struct cxip_ep_obj *ep_obj)
 {
-	/* Placeholder */
+	struct cxip_rxc_cs *rxc = container_of(rxc_base, struct cxip_rxc_cs,
+					       base);
+
+	assert(rxc->base.protocol == FI_PROTO_CXI_CS);
+
+	/* Overrides */
+	rxc->base.recv_ptl_idx = CXIP_PTL_IDX_RNR_RXQ;
 }
 
 static void cxip_rxc_cs_fini_struct(struct cxip_rxc *rxc)
@@ -101,7 +107,19 @@ static int cxip_txc_cs_cancel_msg_send(struct cxip_req *req)
 static void cxip_txc_cs_init_struct(struct cxip_txc *txc_base,
 				    struct cxip_ep_obj *ep_obj)
 {
-	/* Placeholder */
+	struct cxip_txc_cs *txc = container_of(txc_base, struct cxip_txc_cs,
+					       base);
+	int i;
+
+	assert(txc->base.protocol == FI_PROTO_CXI_CS);
+
+	txc->base.recv_ptl_idx = CXIP_PTL_IDX_RNR_RXQ;
+	ofi_atomic_initialize32(&txc->time_wait_reqs, 0);
+	txc->max_retry_wait_us = cxip_env.rnr_max_timeout_us;
+	txc->next_retry_wait_us = UINT64_MAX;
+
+	for (i = 0; i < CXIP_NUM_RNR_WAIT_QUEUE; i++)
+		dlist_init(&txc->time_wait_queue[i]);
 }
 
 static void cxip_txc_cs_fini_struct(struct cxip_txc *txc)
