@@ -617,6 +617,7 @@ struct cxip_environment cxip_env = {
 	.rdzv_get_min = 2049, /* Avoid single packet Gets */
 	.rdzv_eager_size = CXIP_RDZV_THRESHOLD,
 	.rdzv_aligned_sw_rget = 1,
+	.rnr_max_timeout_us = CXIP_RNR_TIMEOUT_US,
 	.disable_non_inject_msg_idc = 0,
 	.disable_host_register = 0,
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
@@ -702,6 +703,17 @@ static void cxip_env_init(void)
 			cxip_env.rdzv_aligned_sw_rget);
 	fi_param_get_bool(&cxip_prov, "rdzv_aligned_sw_rget",
 			  &cxip_env.rdzv_aligned_sw_rget);
+
+	fi_param_define(&cxip_prov, "rnr_max_timeout_us", FI_PARAM_INT,
+			"Maximum RNR time micro-seconds (default: %d).",
+			cxip_env.rnr_max_timeout_us);
+	fi_param_get_int(&cxip_prov, "rnr_max_timeout_us",
+			 &cxip_env.rnr_max_timeout_us);
+	if (cxip_env.rnr_max_timeout_us < 0) {
+		cxip_env.rnr_max_timeout_us = CXIP_RNR_TIMEOUT_US;
+		CXIP_INFO("Invalid RNR timeout, using (%d us)\n",
+			  cxip_env.rnr_max_timeout_us);
+	}
 
 	fi_param_define(&cxip_prov, "enable_trig_op_limit", FI_PARAM_BOOL,
 			"Enable enforcement of triggered operation limit. "
