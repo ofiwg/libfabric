@@ -175,6 +175,12 @@ struct efa_rdm_ep {
 	 */
 	size_t efa_rx_pkts_to_post;
 
+	/*
+	 * Number of RX packets that are held (not released) by progress engine
+	 * due to queued hmem copy or local read.
+	 */
+	size_t efa_rx_pkts_held;
+
 	/* number of outstanding tx ops on efa device */
 	size_t efa_outstanding_tx_ops;
 

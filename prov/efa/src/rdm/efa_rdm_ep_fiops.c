@@ -498,6 +498,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	efa_rdm_ep->efa_rx_pkts_posted = 0;
 	efa_rdm_ep->efa_rx_pkts_to_post = 0;
+	efa_rdm_ep->efa_rx_pkts_held = 0;
 	efa_rdm_ep->efa_outstanding_tx_ops = 0;
 
 	assert(!efa_rdm_ep->ibv_cq_ex);
