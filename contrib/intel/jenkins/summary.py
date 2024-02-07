@@ -396,17 +396,32 @@ class OnecclSummarizer(Summarizer):
         self.exists = os.path.exists(self.file_path)
         self.name = 'no_test'
 
+    def read_file(self):
+        with open(self.file_path, 'r') as log_file:
+            self.fast_forward(log_file)
+            for line in log_file:
+                self.check_line(line)
+
     def check_name(self, line):
-        #lines look like path/run_oneccl.sh ..... -test examples ..... test_name
-        if " -test" in line:
-            tokens = line.split()
-            self.name = f"{tokens[tokens.index('-test') + 1]} " \
-                   f"{tokens[len(tokens) - 1]}"
+        #OneCCL GPU tests:
+        if "bash -c" in line and "./run.sh" not in line:
+            tokens = line.split('./')[1]
+            self.name = tokens.split()[0]
+        #OneCCL CPU tests:
+        if "Running" in line and "CCL_LOG_LEVEL=debug" not in line:
+            if './' in line:
+                tokens = line.split('./')[1]
+                self.name = tokens.split()[0]
 
     def check_pass(self, line):
-        if 'passed' in line or "all done" in line:
+        if '[0] PASSED' in line or "All done" in line:
             self.passes += 1
-            self.passed_tests.append(self.name)
+            self.passed_tests.append(f"{self.name}: 1")
+        if '[0] [  PASSED  ]' in line:
+            token = line.split()
+            no_of_tests = f"{token[token.index('tests.') - 1]} "
+            self.passes += int(no_of_tests)
+            self.passed_tests.append(f"{self.name}: {no_of_tests}")
 
     def check_fail(self, line):
         if 'failed' in line or "exiting with" in line:
