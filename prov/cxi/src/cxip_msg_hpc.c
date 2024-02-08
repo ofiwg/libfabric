@@ -3936,7 +3936,6 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 				 tag, ignore, CXIP_TAG_MASK);
 			return -FI_EINVAL;
 		}
-		flags &= ~FI_MULTI_RECV;
 	}
 
 	ret = cxip_set_recv_match_id(rxc, src_addr, &match_id);
