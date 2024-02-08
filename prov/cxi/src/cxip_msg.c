@@ -803,9 +803,10 @@ static ssize_t cxip_trecv(struct fid_ep *fid_ep, void *buf, size_t len,
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 	struct cxip_rxc *rxc = ep->ep_obj->rxc;
+	uint64_t flags = ep->rx_attr.op_flags & ~FI_MULTI_RECV;
 
 	return rxc->ops.recv_common(rxc, buf, len, desc, src_addr, tag, ignore,
-				    context, ep->rx_attr.op_flags, true, NULL);
+				    context, flags, true, NULL);
 }
 
 static ssize_t cxip_trecvv(struct fid_ep *fid_ep, const struct iovec *iov,
@@ -813,6 +814,7 @@ static ssize_t cxip_trecvv(struct fid_ep *fid_ep, const struct iovec *iov,
 			   uint64_t tag, uint64_t ignore, void *context)
 {
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
+	uint64_t flags = ep->rx_attr.op_flags & ~FI_MULTI_RECV;
 	struct cxip_rxc *rxc = ep->ep_obj->rxc;
 	size_t len;
 	void *buf;
@@ -832,8 +834,7 @@ static ssize_t cxip_trecvv(struct fid_ep *fid_ep, const struct iovec *iov,
 	}
 
 	return rxc->ops.recv_common(rxc, buf, len, mr_desc, src_addr, tag,
-				    ignore, context, ep->rx_attr.op_flags, true,
-				    NULL);
+				    ignore, context, flags, true, NULL);
 }
 
 static ssize_t cxip_trecvmsg(struct fid_ep *fid_ep,
@@ -853,6 +854,8 @@ static ssize_t cxip_trecvmsg(struct fid_ep *fid_ep,
 		RXC_WARN(rxc, "NULL msg not supported\n");
 		return -FI_EINVAL;
 	}
+
+	flags &= ~FI_MULTI_RECV;
 
 	/* If selective completion is not requested, always generate
 	 * completions.
