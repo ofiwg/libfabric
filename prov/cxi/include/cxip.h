@@ -542,6 +542,10 @@ bool cxip_generic_is_valid_mr_key(uint64_t key);
 				  CXIP_RDZV_ID_HIGH_WIDTH)
 #define CXIP_TAG_MASK		((1UL << CXIP_TAG_WIDTH) - 1)
 
+#define CXIP_CS_TAG_WIDTH	40
+#define CXIP_VNI_WIDTH		16
+#define CXIP_CS_TAG_MASK	((1UL << CXIP_CS_TAG_WIDTH) - 1)
+
 /* Define several types of LEs */
 enum cxip_le_type {
 	CXIP_LE_TYPE_RX = 0,	/* RX data LE */
@@ -589,6 +593,14 @@ union cxip_match_bits {
 	};
 	struct {
 		uint64_t rdzv_id_lo : CXIP_RDZV_ID_CMD_WIDTH;
+	};
+	/* Client/Server messaging match bits */
+	struct {
+		uint64_t cs_tag	    : CXIP_CS_TAG_WIDTH; /* User tag value */
+		uint64_t cs_rsvd    : 6;		 /* Unused, set to 0 */
+		uint64_t cs_cq_data : 1;		 /* Header data valid */
+		uint64_t cs_tagged  : 1;		 /* Tagged API */
+		uint64_t cs_vni	    : CXIP_VNI_WIDTH;	 /* Source VNI */
 	};
 	/* Control LE match bit format for notify/resume */
 	struct {
