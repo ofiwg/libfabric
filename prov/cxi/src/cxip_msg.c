@@ -57,7 +57,7 @@ fi_addr_t cxip_recv_req_src_addr(struct cxip_req *req)
  * Caller must hold ep->ep_obj->lock.
  */
 int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
-			struct cxip_req **cxip_req,
+			struct cxip_md *md, struct cxip_req **cxip_req,
 			int (*recv_cb)(struct cxip_req *req,
 				       const union c_event *event))
 {
@@ -78,11 +78,19 @@ int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
 	}
 
 	if (len) {
-		ret = cxip_map(dom, (void *)buf, len, 0, &recv_md);
-		if (ret) {
-			RXC_WARN(rxc, "Map of recv buffer failed: %d, %s\n",
-				 ret, fi_strerror(-ret));
-			goto err_free_request;
+		/* If hybrid descriptor not passed, map for dma */
+		if (!md) {
+			ret = cxip_map(dom, (void *)buf, len, 0, &recv_md);
+			if (ret) {
+				RXC_WARN(rxc,
+					 "Map of recv buffer failed: %d, %s\n",
+					 ret, fi_strerror(-ret));
+				goto err_free_request;
+			}
+			req->recv.hybrid_md = false;
+		} else {
+			req->recv.hybrid_md = true;
+			recv_md = md;
 		}
 	}
 
@@ -117,7 +125,7 @@ void cxip_recv_req_free(struct cxip_req *req)
 
 	ofi_atomic_dec32(&rxc->orx_reqs);
 
-	if (req->recv.recv_md)
+	if (req->recv.recv_md && !req->recv.hybrid_md)
 		cxip_unmap(req->recv.recv_md);
 
 	cxip_evtq_req_free(req);
