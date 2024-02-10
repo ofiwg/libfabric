@@ -1098,6 +1098,7 @@ struct cxip_req_recv {
 	struct cxip_cntr *cntr;
 	void *recv_buf;			// local receive buffer
 	struct cxip_md *recv_md;	// local receive MD
+	bool hybrid_md;			// True if MD was provided
 	uint32_t ulen;			// User buffer length
 	bool tagged;
 	uint64_t tag;
@@ -3608,7 +3609,7 @@ int cxip_set_recv_match_id(struct cxip_rxc *rxc, fi_addr_t src_addr,
 
 fi_addr_t cxip_recv_req_src_addr(struct cxip_req *req);
 int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
-			struct cxip_req **cxip_req,
+			struct cxip_md *md, struct cxip_req **cxip_req,
 			int (*recv_cb)(struct cxip_req *req,
 				       const union c_event *event));
 void cxip_recv_req_free(struct cxip_req *req);

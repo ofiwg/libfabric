@@ -3085,7 +3085,8 @@ int cxip_build_ux_entry_info(struct cxip_ep *ep,
 	int ret_count;
 	int ret;
 
-	ret = cxip_recv_req_alloc(&rxc->base, NULL, 0, &req, cxip_recv_cb);
+	ret = cxip_recv_req_alloc(&rxc->base, NULL, 0, NULL,
+				  &req, cxip_recv_cb);
 	if (ret)
 		return ret;
 
@@ -4018,7 +4019,7 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 	}
 
 	ofi_genlock_lock(&rxc->ep_obj->lock);
-	ret = cxip_recv_req_alloc(rxc, buf, len, &req, cxip_recv_cb);
+	ret = cxip_recv_req_alloc(rxc, buf, len, NULL, &req, cxip_recv_cb);
 	if (ret)
 		goto err;
 
