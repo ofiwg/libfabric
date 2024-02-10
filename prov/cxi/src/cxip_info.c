@@ -506,6 +506,8 @@ static int cxip_info_init(void)
 
 			fi->caps |= FI_DIRECTED_RECV;
 			fi->ep_attr->protocol = FI_PROTO_CXI_CS;
+			fi->ep_attr->mem_tag_format = FI_TAG_GENERIC >>
+					(64 - CXIP_CS_TAG_WIDTH);
 			fi->tx_attr->msg_order = CXIP_MSG_ORDER & ~FI_ORDER_SAS;
 			fi->tx_attr->caps |= FI_DIRECTED_RECV;
 			/* Support IDC but not FI_INJECT */
