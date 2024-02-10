@@ -57,7 +57,7 @@ jobs:
           set -x
           git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
           pushd rdma-core; bash build.sh; popd
-          export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
+          export LD_LIBRARY_PATH="$PWD/${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
 
           # We use a compiler extension that supports broader complex type
           # definitions than what's defined in C99 standard (which only defines
