@@ -349,7 +349,6 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		}
 	}
 
-	txc->pid_bits = txc->domain->iface->dev->info.pid_bits;
 	txc->enabled = true;
 
 	return FI_SUCCESS;
@@ -775,6 +774,7 @@ struct cxip_txc *cxip_txc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 	txc->hrp_war_req = ep_obj->asic_ver < CASSINI_2_0;
 	txc->attr = ep_obj->tx_attr;
 	txc->hmem = !!(txc->attr.caps & FI_HMEM);
+	txc->pid_bits = txc->domain->iface->dev->info.pid_bits;
 
 	dlist_init(&txc->msg_queue);
 	dlist_init(&txc->dom_entry);
