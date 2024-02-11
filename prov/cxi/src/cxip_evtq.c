@@ -289,6 +289,15 @@ static struct cxip_req *cxip_evtq_event_req(struct cxip_evtq *evtq,
 	case C_EVENT_PUT_OVERFLOW:
 	case C_EVENT_RENDEZVOUS:
 	case C_EVENT_SEARCH:
+		/* RNR C_RC_ENTRY_NOT_FOUND generates an event on the
+		 * target, this can be safely ignored as the source
+		 * handles the retry logic.
+		 */
+		if (event->tgt_long.buffer_id == 0) {
+			req = NULL;
+			break;
+		}
+
 		req = cxip_evtq_req_find(evtq, event->tgt_long.buffer_id);
 		if (req)
 			break;

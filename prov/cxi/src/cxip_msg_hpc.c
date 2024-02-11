@@ -1852,8 +1852,7 @@ static int cxip_recv_replay(struct cxip_rxc_hpc *rxc)
 	bool restart_seq = true;
 	int ret;
 
-	dlist_foreach_container_safe(&rxc->base.replay_queue,
-				     struct cxip_req, req,
+	dlist_foreach_container_safe(&rxc->replay_queue, struct cxip_req, req,
 				     recv.rxc_entry, tmp) {
 		dlist_remove_init(&req->recv.rxc_entry);
 
@@ -3650,6 +3649,7 @@ static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
 	int ret;
 
 	assert(rxc->base.protocol == FI_PROTO_CXI);
+	dlist_init(&rxc->replay_queue);
 
 	/* For FI_TC_UNSPEC, reuse the TX context command queue if possible. If
 	 * a specific traffic class is requested, allocate a new command queue.
@@ -3738,7 +3738,6 @@ static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
 		cxip_evtq_progress(&rxc->base.rx_evtq);
 	} while (rxc->base.rx_pte->state != state);
 
-	rxc->base.pid_bits = rxc->base.domain->iface->dev->info.pid_bits;
 	CXIP_DBG("RXC HPC messaging enabled: %p, pid_bits: %d\n",
 		 rxc, rxc->base.pid_bits);
 
@@ -3987,6 +3986,7 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 	struct cxip_req *req;
 	struct cxip_ux_send *ux_msg;
 	uint32_t match_id;
+	uint16_t vni;
 
 	assert(rxc_hpc->base.protocol == FI_PROTO_CXI);
 
@@ -4011,7 +4011,8 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 		}
 	}
 
-	ret = cxip_set_recv_match_id(rxc, src_addr, &match_id);
+	ret = cxip_set_recv_match_id(rxc, src_addr, rxc->ep_obj->av_auth_key &&
+				     (flags & FI_AUTH_KEY), &match_id, &vni);
 	if (ret) {
 		RXC_WARN(rxc, "Error setting match_id: %d %s\n",
 			 ret, fi_strerror(-ret));
