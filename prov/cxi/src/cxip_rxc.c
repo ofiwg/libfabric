@@ -435,7 +435,7 @@ struct cxip_rxc *cxip_rxc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 	rxc->max_tx = cxip_env.sw_rx_tx_init_max;
 	rxc->attr = ep_obj->rx_attr;
 	rxc->hmem = !!(rxc->attr.caps & FI_HMEM);
-	dlist_init(&rxc->replay_queue);
+	rxc->pid_bits = ep_obj->domain->iface->dev->info.pid_bits;
 	ofi_atomic_initialize32(&rxc->orx_reqs, 0);
 
 	rxc->sw_ep_only = cxip_env.rx_match_mode ==

@@ -533,9 +533,11 @@ err:
  */
 int cxip_recv_req_dropped(struct cxip_req *req)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_rxc_hpc *rxc = req->recv.rxc_hpc;
 
+	assert(rxc->base.protocol == FI_PROTO_CXI);
 	assert(dlist_empty(&req->recv.rxc_entry));
+
 	dlist_insert_tail(&req->recv.rxc_entry, &rxc->replay_queue);
 
 	RXC_DBG(rxc, "Receive dropped: %p\n", req);

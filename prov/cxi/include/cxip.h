@@ -1840,9 +1840,6 @@ struct cxip_rxc {
 	struct cxip_cmdq *rx_cmdq;
 	ofi_atomic32_t orx_reqs;
 
-	/* Receive append error replay queue */
-	struct dlist_entry replay_queue;
-
 	/* If FI_MULTI_RECV is supported, minimum receive size required
 	 * for buffers posted.
 	 */
@@ -1911,6 +1908,7 @@ struct cxip_rxc_hpc {
 	unsigned int cur_ule_offsets;
 
 	struct dlist_entry fc_drops;
+	struct dlist_entry replay_queue;
 	struct dlist_entry sw_ux_list;
 	struct dlist_entry sw_pending_ux_list;
 
@@ -3573,7 +3571,7 @@ cxip_txc_copy_from_hmem(struct cxip_txc *txc, struct cxip_md *hmem_md,
 
 static inline
 int cxip_set_recv_match_id(struct cxip_rxc *rxc, fi_addr_t src_addr,
-			   uint32_t *match_id)
+			   bool auth_key, uint32_t *match_id, uint16_t *vni)
 {
 	struct cxip_addr caddr;
 	int ret;
@@ -3588,6 +3586,7 @@ int cxip_set_recv_match_id(struct cxip_rxc *rxc, fi_addr_t src_addr,
 			/* PID is not used for matching */
 			*match_id = CXI_MATCH_ID(rxc->pid_bits,
 						C_PID_ANY, src_addr);
+			*vni = rxc->ep_obj->auth_key.vni;
 		} else {
 			ret = cxip_av_lookup_addr(rxc->ep_obj->av, src_addr,
 						  &caddr);
@@ -3599,9 +3598,14 @@ int cxip_set_recv_match_id(struct cxip_rxc *rxc, fi_addr_t src_addr,
 
 			*match_id = CXI_MATCH_ID(rxc->pid_bits, caddr.pid,
 						 caddr.nic);
+			if (auth_key)
+				*vni = caddr.vni;
+			else
+				*vni = rxc->ep_obj->auth_key.vni;
 		}
 	} else {
 		*match_id = CXI_MATCH_ID_ANY;
+		*vni = 0;
 	}
 
 	return FI_SUCCESS;
