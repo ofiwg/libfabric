@@ -77,6 +77,47 @@ static void cxip_rxc_cs_progress(struct cxip_rxc *rxc)
 	cxip_evtq_progress(&rxc->rx_evtq);
 }
 
+static void cxip_rxc_cs_recv_req_tgt_event(struct cxip_req *req,
+					   const union c_event *event)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+	union cxip_match_bits mb = {
+		.raw = event->tgt_long.match_bits
+	};
+	uint32_t init = event->tgt_long.initiator.initiator.process;
+
+	assert(rxc->protocol == FI_PROTO_CXI_CS);
+	assert(event->hdr.event_type == C_EVENT_PUT);
+
+	req->tag = mb.cs_tag;
+	req->recv.initiator = init;
+
+	if (mb.cs_cq_data)
+		req->flags |= FI_REMOTE_CQ_DATA;
+
+	req->recv.src_offset = event->tgt_long.remote_offset;
+
+	/* Only need one event to set remaining fields. */
+	if (req->recv.tgt_event)
+		return;
+
+	req->recv.tgt_event = true;
+
+	/* VNI is needed to support FI_AV_AUTH_KEY. */
+	req->recv.vni = event->tgt_long.vni;
+
+	/* rlen is used to detect truncation. */
+	req->recv.rlen = event->tgt_long.rlength;
+
+	/* RC is used when generating completion events. */
+	req->recv.rc = cxi_tgt_event_rc(event);
+
+	/* Header data is provided in all completion events. */
+	req->data = event->tgt_long.header_data;
+
+	/* data_len must be set uniquely for each protocol! */
+}
+
 static int cxip_rxc_cs_cancel_msg_recv(struct cxip_req *req)
 {
 	/* Perform default */
@@ -253,6 +294,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 struct cxip_rxc_ops cs_rxc_ops = {
 	.recv_common = cxip_recv_common,
 	.progress = cxip_rxc_cs_progress,
+	.recv_req_tgt_event = cxip_rxc_cs_recv_req_tgt_event,
 	.cancel_msg_recv = cxip_rxc_cs_cancel_msg_recv,
 	.ctrl_msg_cb = cxip_rxc_cs_ctrl_msg_cb,
 	.init_struct = cxip_rxc_cs_init_struct,
