@@ -266,81 +266,6 @@ void cxip_recv_req_report(struct cxip_req *req)
 }
 
 /*
- * recv_req_tgt_event() - Update common receive request fields
- *
- * Populate a receive request with information found in all receive event
- * types.
- */
-void cxip_recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
-{
-	struct cxip_rxc *rxc = req->recv.rxc;
-	union cxip_match_bits mb = {
-		.raw = event->tgt_long.match_bits
-	};
-	uint32_t init = event->tgt_long.initiator.initiator.process;
-
-	assert(event->hdr.event_type == C_EVENT_PUT ||
-	       event->hdr.event_type == C_EVENT_PUT_OVERFLOW ||
-	       event->hdr.event_type == C_EVENT_RENDEZVOUS ||
-	       event->hdr.event_type == C_EVENT_SEARCH);
-
-	/* Rendezvous events contain the wrong match bits and do not provide
-	 * initiator context for symmetric AVs.
-	 */
-	if (event->hdr.event_type != C_EVENT_RENDEZVOUS) {
-		req->tag = mb.tag;
-		req->recv.initiator = init;
-
-		if (mb.cq_data)
-			req->flags |= FI_REMOTE_CQ_DATA;
-	}
-
-	/* remote_offset is not provided in Overflow events. */
-	if (event->hdr.event_type != C_EVENT_PUT_OVERFLOW)
-		req->recv.src_offset = event->tgt_long.remote_offset;
-
-	/* For rendezvous, initiator is the RGet DFA. */
-	if (event->hdr.event_type == C_EVENT_RENDEZVOUS) {
-		init = cxi_dfa_to_init(init, rxc->pid_bits);
-		req->recv.rget_nic = CXI_MATCH_ID_EP(rxc->pid_bits, init);
-		req->recv.rget_pid = CXI_MATCH_ID_PID(rxc->pid_bits, init);
-	}
-
-	/* Only need one event to set remaining fields. */
-	if (req->recv.tgt_event)
-		return;
-	req->recv.tgt_event = true;
-
-	/* VNI is needed to support FI_AV_AUTH_KEY. */
-	req->recv.vni = event->tgt_long.vni;
-
-	/* rlen is used to detect truncation. */
-	req->recv.rlen = event->tgt_long.rlength;
-
-	/* RC is used when generating completion events. */
-	req->recv.rc = cxi_tgt_event_rc(event);
-
-	/* Header data is provided in all completion events. */
-	req->data = event->tgt_long.header_data;
-
-	/* rdzv_id is used to correlate Put and Put Overflow events when using
-	 * offloaded RPut. Otherwise, Overflow buffer start address is used to
-	 * correlate events.
-	 */
-	if (event->tgt_long.rendezvous)
-		req->recv.rdzv_id = (mb.rdzv_id_hi << CXIP_RDZV_ID_CMD_WIDTH) |
-				    event->tgt_long.rendezvous_id;
-	else
-		req->recv.oflow_start = event->tgt_long.start;
-
-	req->recv.rdzv_lac = mb.rdzv_lac;
-	req->recv.rdzv_proto = mb.rdzv_proto;
-	req->recv.rdzv_mlen = event->tgt_long.mlength;
-
-	/* data_len must be set uniquely for each protocol! */
-}
-
-/*
  * mrecv_req_dup() - Create a new request using an event targeting a
  * multi-recv buffer.
  *
@@ -420,7 +345,7 @@ int cxip_complete_put(struct cxip_req *req, const union c_event *event)
 		if (!req)
 			return -FI_EAGAIN;
 
-		cxip_recv_req_tgt_event(req, event);
+		req->recv.rxc->ops.recv_req_tgt_event(req, event);
 		req->buf = (uint64_t)(CXI_IOVA_TO_VA(req->recv.recv_md->md,
 						     event->tgt_long.start));
 		req->data_len = event->tgt_long.mlength;
@@ -429,7 +354,7 @@ int cxip_complete_put(struct cxip_req *req, const union c_event *event)
 		cxip_evtq_req_free(req);
 	} else {
 		req->data_len = event->tgt_long.mlength;
-		cxip_recv_req_tgt_event(req, event);
+		req->recv.rxc->ops.recv_req_tgt_event(req, event);
 		cxip_recv_req_report(req);
 		cxip_recv_req_free(req);
 	}

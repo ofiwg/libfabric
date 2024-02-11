@@ -46,6 +46,8 @@ static int cxip_recv_req_queue(struct cxip_req *req, bool restart_seq);
 static int cxip_send_req_dropped(struct cxip_txc_hpc *txc,
 				 struct cxip_req *req);
 static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq);
+static void cxip_rxc_hpc_recv_req_tgt_event(struct cxip_req *,
+					    const union c_event *event);
 static int cxip_send_req_dequeue(struct cxip_txc_hpc *txc,
 				 struct cxip_req *req);
 
@@ -620,7 +622,7 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 			match_req->data_len = match_req->recv.ulen;
 	}
 
-	cxip_recv_req_tgt_event(match_req, put_event);
+	cxip_rxc_hpc_recv_req_tgt_event(match_req, put_event);
 	buf = oflow_req->req_ctx;
 	oflow_va = (void *)CXI_IOVA_TO_VA(buf->md->md,
 					  put_event->tgt_long.start);
@@ -705,7 +707,7 @@ static int cxip_ux_send_zb(struct cxip_req *match_req,
 				mrecv_start;
 	}
 
-	cxip_recv_req_tgt_event(match_req, oflow_event);
+	cxip_rxc_hpc_recv_req_tgt_event(match_req, oflow_event);
 
 	match_req->data_len = 0;
 
@@ -774,7 +776,7 @@ static int cxip_oflow_process_put_event(struct cxip_rxc_hpc *rxc,
 		def_ev->ux_send->put_ev = *event;
 
 		if (def_ev->ux_send->claimed) {
-			cxip_recv_req_tgt_event(save_req,
+			cxip_rxc_hpc_recv_req_tgt_event(save_req,
 						&def_ev->ux_send->put_ev);
 			cxip_recv_req_peek_complete(save_req, def_ev->ux_send);
 			RXC_DBG(rxc, "FI_CLAIM put complete: %p, ux_send %p\n",
@@ -1288,7 +1290,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			 */
 		}
 
-		cxip_recv_req_tgt_event(req, event);
+		cxip_rxc_hpc_recv_req_tgt_event(req, event);
 
 		/* Count the rendezvous event. */
 		rdzv_recv_req_event(req, event->hdr.event_type);
@@ -1322,7 +1324,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 					    event->tgt_long.rlength);
 		}
 
-		cxip_recv_req_tgt_event(req, event);
+		cxip_rxc_hpc_recv_req_tgt_event(req, event);
 
 		if (!event->tgt_long.get_issued) {
 			if (ofi_atomic_inc32(&rxc->orx_tx_reqs) >
@@ -2639,7 +2641,7 @@ static int cxip_claim_onload_cb(struct cxip_req *req,
 	rxc->sw_ux_list_len++;
 
 	RXC_DBG(rxc, "FI_CLAIM Onload req: %p ux_send %p\n", req, ux_send);
-	cxip_recv_req_tgt_event(req, &ux_send->put_ev);
+	cxip_rxc_hpc_recv_req_tgt_event(req, &ux_send->put_ev);
 
 	/* Put was already received, return FI_CLAIM completion */
 	if (matched) {
@@ -2905,7 +2907,7 @@ static int cxip_ux_peek_cb(struct cxip_req *req, const union c_event *event)
 			}
 
 			/* FI_PEEK only was found */
-			cxip_recv_req_tgt_event(req, event);
+			cxip_rxc_hpc_recv_req_tgt_event(req, event);
 		} else {
 			RXC_DBG(rxc, "Peek UX search req: %p no match\n", req);
 		}
@@ -3015,7 +3017,7 @@ static void cxip_set_ux_dump_entry(struct cxip_req *req,
 
 		req->recv.tgt_event = false;
 		req->flags = 0;
-		cxip_recv_req_tgt_event(req, evt);
+		cxip_rxc_hpc_recv_req_tgt_event(req, evt);
 
 		if (cq_entry) {
 			/* Need to add FI_TAGGED or FI_MSG directly */
@@ -3410,7 +3412,7 @@ static int cxip_recv_req_peek(struct cxip_req *req, bool check_rxc_state)
 			if (req->recv.flags & FI_CLAIM)
 				ux_send->claimed = true;
 
-			cxip_recv_req_tgt_event(req, &ux_send->put_ev);
+			cxip_rxc_hpc_recv_req_tgt_event(req, &ux_send->put_ev);
 			cxip_recv_req_peek_complete(req, ux_send);
 			return FI_SUCCESS;
 		}
@@ -3478,6 +3480,76 @@ err_dequeue_req:
 static void cxip_rxc_hpc_progress(struct cxip_rxc *rxc)
 {
 	cxip_evtq_progress(&rxc->rx_evtq);
+}
+
+static void cxip_rxc_hpc_recv_req_tgt_event(struct cxip_req *req,
+					    const union c_event *event)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+	union cxip_match_bits mb = {
+		.raw = event->tgt_long.match_bits
+	};
+	uint32_t init = event->tgt_long.initiator.initiator.process;
+
+	assert(event->hdr.event_type == C_EVENT_PUT ||
+	       event->hdr.event_type == C_EVENT_PUT_OVERFLOW ||
+	       event->hdr.event_type == C_EVENT_RENDEZVOUS ||
+	       event->hdr.event_type == C_EVENT_SEARCH);
+
+	/* Rendezvous events contain the wrong match bits and do not provide
+	 * initiator context for symmetric AVs.
+	 */
+	if (event->hdr.event_type != C_EVENT_RENDEZVOUS) {
+		req->tag = mb.tag;
+		req->recv.initiator = init;
+
+		if (mb.cq_data)
+			req->flags |= FI_REMOTE_CQ_DATA;
+	}
+
+	/* remote_offset is not provided in Overflow events. */
+	if (event->hdr.event_type != C_EVENT_PUT_OVERFLOW)
+		req->recv.src_offset = event->tgt_long.remote_offset;
+
+	/* For rendezvous, initiator is the RGet DFA. */
+	if (event->hdr.event_type == C_EVENT_RENDEZVOUS) {
+		init = cxi_dfa_to_init(init, rxc->pid_bits);
+		req->recv.rget_nic = CXI_MATCH_ID_EP(rxc->pid_bits, init);
+		req->recv.rget_pid = CXI_MATCH_ID_PID(rxc->pid_bits, init);
+	}
+
+	/* Only need one event to set remaining fields. */
+	if (req->recv.tgt_event)
+		return;
+	req->recv.tgt_event = true;
+
+	/* VNI is needed to support FI_AV_AUTH_KEY. */
+	req->recv.vni = event->tgt_long.vni;
+
+	/* rlen is used to detect truncation. */
+	req->recv.rlen = event->tgt_long.rlength;
+
+	/* RC is used when generating completion events. */
+	req->recv.rc = cxi_tgt_event_rc(event);
+
+	/* Header data is provided in all completion events. */
+	req->data = event->tgt_long.header_data;
+
+	/* rdzv_id is used to correlate Put and Put Overflow events when using
+	 * offloaded RPut. Otherwise, Overflow buffer start address is used to
+	 * correlate events.
+	 */
+	if (event->tgt_long.rendezvous)
+		req->recv.rdzv_id = (mb.rdzv_id_hi << CXIP_RDZV_ID_CMD_WIDTH) |
+				    event->tgt_long.rendezvous_id;
+	else
+		req->recv.oflow_start = event->tgt_long.start;
+
+	req->recv.rdzv_lac = mb.rdzv_lac;
+	req->recv.rdzv_proto = mb.rdzv_proto;
+	req->recv.rdzv_mlen = event->tgt_long.mlength;
+
+	/* data_len must be set uniquely for each protocol! */
 }
 
 static int cxip_rxc_hpc_cancel_msg_recv(struct cxip_req *req)
@@ -5179,6 +5251,7 @@ unlock:
 struct cxip_rxc_ops hpc_rxc_ops = {
 	.recv_common = cxip_recv_common,
 	.progress = cxip_rxc_hpc_progress,
+	.recv_req_tgt_event = cxip_rxc_hpc_recv_req_tgt_event,
 	.cancel_msg_recv = cxip_rxc_hpc_cancel_msg_recv,
 	.ctrl_msg_cb = cxip_rxc_hpc_ctrl_msg_cb,
 	.init_struct = cxip_rxc_hpc_init_struct,

@@ -1792,6 +1792,8 @@ struct cxip_rxc_ops {
 			       uint64_t ignore, void *context, uint64_t flags,
 			       bool tagged, struct cxip_cntr *comp_cntr);
 	void (*progress)(struct cxip_rxc *rxc);
+	void (*recv_req_tgt_event)(struct cxip_req *req,
+				   const union c_event *event);
 	int (*cancel_msg_recv)(struct cxip_req *req);
 	int (*ctrl_msg_cb)(struct cxip_ctrl_req *req,
 			   const union c_event *event);
@@ -3611,7 +3613,6 @@ int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
 				       const union c_event *event));
 void cxip_recv_req_free(struct cxip_req *req);
 void cxip_recv_req_report(struct cxip_req *req);
-void cxip_recv_req_tgt_event(struct cxip_req *req, const union c_event *event);
 void cxip_recv_req_peek_complete(struct cxip_req *req,
 				 struct cxip_ux_send *ux_send);
 struct cxip_req *cxip_mrecv_req_dup(struct cxip_req *mrecv_req);
