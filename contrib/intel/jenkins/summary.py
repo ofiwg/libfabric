@@ -417,7 +417,9 @@ class OnecclSummarizer(Summarizer):
         if '[0] PASSED' in line or "All done" in line:
             self.passes += 1
             self.passed_tests.append(f"{self.name}: 1")
-        if '[0] [  PASSED  ]' in line:
+        if ("[0] [  PASSED  ]" in line and "tests." in line) or \
+            ("tests." in line and "[1] [  PASSED  ]" not in line and \
+            "[0] [  PASSED  ]" not in line):
             token = line.split()
             no_of_tests = f"{token[token.index('tests.') - 1]} "
             self.passes += int(no_of_tests)
