@@ -1,8 +1,8 @@
 name: Nightly Coverity Scan
 on:
   schedule:
-  # Every night, at midnight
-  - cron: '0 0 * * *'
+  # UTC time, 'minute hour day-of-month month day-of-week'
+  - cron: '0 1 * * *'
 env:
   APT_PACKAGES: >-
     abi-compliance-checker
