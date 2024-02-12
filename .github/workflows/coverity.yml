@@ -76,7 +76,7 @@ jobs:
           ./autogen.sh
           ./configure --with-libfabric=$PWD/../install CC=clang
           popd
-          cov-build --dir cov-int bash -c "make && make -C fabtests LDFLAGS=-L${{ env.RDMA_CORE_PATH }}/lib"
+          cov-build --dir cov-int bash -c "make && make -C fabtests LDFLAGS=-L$PWD/${{ env.RDMA_CORE_PATH }}/lib"
       - name: Submit results
         run: |
           tar czvf libfabric.tgz cov-int
