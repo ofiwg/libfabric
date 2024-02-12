@@ -615,7 +615,14 @@ void cxip_report_send_completion(struct cxip_req *req, bool sw_cntr)
 					 ret);
 		}
 	} else {
-		ret_err = proverr2errno(req->send.rc);
+		if (req->send.canceled) {
+			ret_err = FI_ECANCELED;
+			TXC_DBG(txc, "Request canceled: %p (err: %d)\n",
+				req, ret_err);
+		} else {
+			ret_err = proverr2errno(req->send.rc);
+		}
+
 		TXC_WARN(txc, "Request dest_addr: %ld caddr.nic: %#X caddr.pid: %u error: %p (err: %d, %s)\n",
 			 req->send.dest_addr, req->send.caddr.nic,
 			 req->send.caddr.pid, req, ret_err,
