@@ -14,11 +14,8 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
-TestSuite(msg, .init = cxit_setup_msg, .fini = cxit_teardown_msg,
-	  .timeout = CXIT_DEFAULT_TIMEOUT);
-
-/* Test basic send/recv */
-Test(msg, ping)
+/* Test basic send/recv - expected or unexpected*/
+static void ping(bool ux)
 {
 	int i, ret;
 	uint8_t *recv_buf,
@@ -40,13 +37,25 @@ Test(msg, ping)
 	for (i = 0; i < send_len; i++)
 		send_buf[i] = i + 0xa0;
 
-	/* Post RX buffer */
-	ret = fi_recv(cxit_ep, recv_buf, recv_len, NULL, FI_ADDR_UNSPEC, NULL);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
-
+	/* Post RX if not testing unexpected behavior */
+	if (!ux) {
+		ret = fi_recv(cxit_ep, recv_buf, recv_len, NULL,
+			      FI_ADDR_UNSPEC, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+	}
 	/* Send 64 bytes to self */
 	ret = fi_send(cxit_ep, send_buf, send_len, NULL, cxit_ep_fi_addr, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
+
+	/* Post RX if testing unexpected behavior */
+	if (ux) {
+		/* Make sure RX progress has occurred */
+		fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+
+		/* Post RX buffer */
+		ret = fi_recv(cxit_ep, recv_buf, recv_len, NULL,
+			      FI_ADDR_UNSPEC, NULL);
+	}
 
 	/* Wait for async event indicating data has been received */
 	do {
@@ -88,9 +97,8 @@ Test(msg, ping)
 	free(send_buf);
 	free(recv_buf);
 }
-
 /* Test basic send/recv with data */
-Test(msg, pingdata)
+static void pingdata(void)
 {
 	int i, ret;
 	uint8_t *recv_buf,
@@ -161,6 +169,194 @@ Test(msg, pingdata)
 
 	free(send_buf);
 	free(recv_buf);
+}
+
+
+static void vping(void)
+{
+	int i, ret;
+	uint8_t *recv_buf,
+		*send_buf;
+	int recv_len = 64;
+	int send_len = 64;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	int err = 0;
+	fi_addr_t from;
+	struct iovec riovec;
+	struct iovec siovec;
+
+	recv_buf = aligned_alloc(s_page_size, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	send_buf = aligned_alloc(s_page_size, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Post RX buffer */
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = recv_len;
+	ret = fi_recvv(cxit_ep, &riovec, NULL, 1, FI_ADDR_UNSPEC, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+
+	/* Send 64 bytes to self */
+	siovec.iov_base = send_buf;
+	siovec.iov_len = send_len;
+	ret = fi_sendv(cxit_ep, &siovec, NULL, 1, cxit_ep_fi_addr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	/* Validate RX event fields */
+	cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
+	cr_assert(rx_cqe.flags == (FI_MSG | FI_RECV),
+		  "RX CQE flags mismatch");
+	cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
+	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
+	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
+	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	/* Validate TX event fields */
+	cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
+	cr_assert(tx_cqe.flags == (FI_MSG | FI_SEND),
+		  "TX CQE flags mismatch");
+	cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
+	cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
+	cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
+	cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
+
+	/* Validate sent data */
+	for (i = 0; i < send_len; i++) {
+		cr_expect_eq(recv_buf[i], send_buf[i],
+			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+			  i, send_buf[i], recv_buf[i], err++);
+	}
+	cr_assert_eq(err, 0, "Data errors seen\n");
+
+	free(send_buf);
+	free(recv_buf);
+}
+
+/* Test basic sendmsg/recvmsg */
+static void msgping(void)
+{
+	int i, ret;
+	uint8_t *recv_buf,
+		*send_buf;
+	int recv_len = 64;
+	int send_len = 64;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	int err = 0;
+	fi_addr_t from;
+	struct fi_msg rmsg = {};
+	struct fi_msg smsg = {};
+	struct iovec riovec;
+	struct iovec siovec;
+
+	recv_buf = aligned_alloc(s_page_size, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	send_buf = aligned_alloc(s_page_size, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Post RX buffer */
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = recv_len;
+	rmsg.msg_iov = &riovec;
+	rmsg.iov_count = 1;
+	rmsg.addr = FI_ADDR_UNSPEC;
+	rmsg.context = NULL;
+
+	ret = fi_recvmsg(cxit_ep, &rmsg, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+
+	/* Send 64 bytes to self */
+	siovec.iov_base = send_buf;
+	siovec.iov_len = send_len;
+	smsg.msg_iov = &siovec;
+	smsg.iov_count = 1;
+	smsg.addr = cxit_ep_fi_addr;
+	smsg.context = NULL;
+
+	ret = fi_sendmsg(cxit_ep, &smsg, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	/* Validate RX event fields */
+	cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
+	cr_assert(rx_cqe.flags == (FI_MSG | FI_RECV),
+		  "RX CQE flags mismatch");
+	cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
+	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
+	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
+	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	/* Validate TX event fields */
+	cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
+	cr_assert(tx_cqe.flags == (FI_MSG | FI_SEND),
+		  "TX CQE flags mismatch");
+	cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
+	cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
+	cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
+	cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
+
+	/* Validate sent data */
+	for (i = 0; i < send_len; i++) {
+		cr_expect_eq(recv_buf[i], send_buf[i],
+			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+			  i, send_buf[i], recv_buf[i], err++);
+	}
+	cr_assert_eq(err, 0, "Data errors seen\n");
+
+	free(send_buf);
+	free(recv_buf);
+}
+
+TestSuite(msg, .init = cxit_setup_msg, .fini = cxit_teardown_msg,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
+
+/* Test basic send/recv */
+Test(msg, ping)
+{
+	ping(false);
+}
+
+Test(msg, ping_retry)
+{
+	ping(true);
+}
+
+/* Test basic send/recv with data */
+Test(msg, pingdata)
+{
+	pingdata();
 }
 
 /* Test basic inject send */
@@ -282,169 +478,13 @@ Test(msg, injectdata_ping)
 /* Test basic sendv/recvv */
 Test(msg, vping)
 {
-	int i, ret;
-	uint8_t *recv_buf,
-		*send_buf;
-	int recv_len = 64;
-	int send_len = 64;
-	struct fi_cq_tagged_entry tx_cqe,
-				  rx_cqe;
-	int err = 0;
-	fi_addr_t from;
-	struct iovec riovec;
-	struct iovec siovec;
-
-	recv_buf = aligned_alloc(s_page_size, recv_len);
-	cr_assert(recv_buf);
-	memset(recv_buf, 0, recv_len);
-
-	send_buf = aligned_alloc(s_page_size, send_len);
-	cr_assert(send_buf);
-
-	for (i = 0; i < send_len; i++)
-		send_buf[i] = i + 0xa0;
-
-	/* Post RX buffer */
-	riovec.iov_base = recv_buf;
-	riovec.iov_len = recv_len;
-	ret = fi_recvv(cxit_ep, &riovec, NULL, 1, FI_ADDR_UNSPEC, NULL);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
-
-	/* Send 64 bytes to self */
-	siovec.iov_base = send_buf;
-	siovec.iov_len = send_len;
-	ret = fi_sendv(cxit_ep, &siovec, NULL, 1, cxit_ep_fi_addr, NULL);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
-
-	/* Wait for async event indicating data has been received */
-	do {
-		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
-	} while (ret == -FI_EAGAIN);
-	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
-
-	/* Validate RX event fields */
-	cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
-	cr_assert(rx_cqe.flags == (FI_MSG | FI_RECV),
-		  "RX CQE flags mismatch");
-	cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
-	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
-	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
-	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
-	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
-
-	/* Wait for async event indicating data has been sent */
-	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
-
-	/* Validate TX event fields */
-	cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
-	cr_assert(tx_cqe.flags == (FI_MSG | FI_SEND),
-		  "TX CQE flags mismatch");
-	cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
-	cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
-	cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
-	cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
-
-	/* Validate sent data */
-	for (i = 0; i < send_len; i++) {
-		cr_expect_eq(recv_buf[i], send_buf[i],
-			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
-			  i, send_buf[i], recv_buf[i], err++);
-	}
-	cr_assert_eq(err, 0, "Data errors seen\n");
-
-	free(send_buf);
-	free(recv_buf);
+	vping();
 }
 
 /* Test basic sendmsg/recvmsg */
 Test(msg, msgping)
 {
-	int i, ret;
-	uint8_t *recv_buf,
-		*send_buf;
-	int recv_len = 64;
-	int send_len = 64;
-	struct fi_cq_tagged_entry tx_cqe,
-				  rx_cqe;
-	int err = 0;
-	fi_addr_t from;
-	struct fi_msg rmsg = {};
-	struct fi_msg smsg = {};
-	struct iovec riovec;
-	struct iovec siovec;
-
-	recv_buf = aligned_alloc(s_page_size, recv_len);
-	cr_assert(recv_buf);
-	memset(recv_buf, 0, recv_len);
-
-	send_buf = aligned_alloc(s_page_size, send_len);
-	cr_assert(send_buf);
-
-	for (i = 0; i < send_len; i++)
-		send_buf[i] = i + 0xa0;
-
-	/* Post RX buffer */
-	riovec.iov_base = recv_buf;
-	riovec.iov_len = recv_len;
-	rmsg.msg_iov = &riovec;
-	rmsg.iov_count = 1;
-	rmsg.addr = FI_ADDR_UNSPEC;
-	rmsg.context = NULL;
-
-	ret = fi_recvmsg(cxit_ep, &rmsg, 0);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
-
-	/* Send 64 bytes to self */
-	siovec.iov_base = send_buf;
-	siovec.iov_len = send_len;
-	smsg.msg_iov = &siovec;
-	smsg.iov_count = 1;
-	smsg.addr = cxit_ep_fi_addr;
-	smsg.context = NULL;
-
-	ret = fi_sendmsg(cxit_ep, &smsg, 0);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
-
-	/* Wait for async event indicating data has been received */
-	do {
-		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
-	} while (ret == -FI_EAGAIN);
-	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
-
-	/* Validate RX event fields */
-	cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
-	cr_assert(rx_cqe.flags == (FI_MSG | FI_RECV),
-		  "RX CQE flags mismatch");
-	cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
-	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
-	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
-	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
-	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
-
-	/* Wait for async event indicating data has been sent */
-	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
-
-	/* Validate TX event fields */
-	cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
-	cr_assert(tx_cqe.flags == (FI_MSG | FI_SEND),
-		  "TX CQE flags mismatch");
-	cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
-	cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
-	cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
-	cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
-
-	/* Validate sent data */
-	for (i = 0; i < send_len; i++) {
-		cr_expect_eq(recv_buf[i], send_buf[i],
-			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
-			  i, send_buf[i], recv_buf[i], err++);
-	}
-	cr_assert_eq(err, 0, "Data errors seen\n");
-
-	free(send_buf);
-	free(recv_buf);
+	msgping();
 }
 
 /* Test basic sendmsg/recvmsg with two EP bound to same CQ */
@@ -774,7 +814,7 @@ Test(msg, inject_msgping)
 }
 
 /* Test send/recv sizes small to large */
-Test(msg, sizes)
+static void sizes(void)
 {
 	int i, j, ret;
 	uint8_t *recv_buf,
@@ -865,6 +905,12 @@ Test(msg, sizes)
 
 	free(send_buf);
 	free(recv_buf);
+}
+
+/* Test send/recv sizes small to large */
+Test(msg, sizes)
+{
+	sizes();
 }
 
 /* Test send/recv sizes large to small (this exercises MR caching) */
@@ -1922,7 +1968,7 @@ Test(msg, fc_no_eq_space_expected_multi_recv_onload_ules, .timeout = 10)
 	test_fc_multi_recv(1, false);
 }
 
-Test(msg, zero_byte_send_recv_iov)
+static void zero_byte_send_recv_iov(void)
 {
 	int ret;
 	struct fi_cq_tagged_entry cqe;
@@ -1944,7 +1990,12 @@ Test(msg, zero_byte_send_recv_iov)
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 }
 
-Test(msg, zero_byte_send_recv_msg)
+Test(msg, zero_byte_send_recv_iov)
+{
+	zero_byte_send_recv_iov();
+}
+
+static void zero_byte_send_recv_msg(void)
 {
 	int ret;
 	struct fi_cq_tagged_entry cqe;
@@ -1970,6 +2021,11 @@ Test(msg, zero_byte_send_recv_msg)
 		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
 	} while (ret == -FI_EAGAIN);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+}
+
+Test(msg, zero_byte_send_recv_msg)
+{
+	zero_byte_send_recv_msg();
 }
 
 /* Verify that FI_AV_USER_ID is returned from fi_cq_readfrom(). */
@@ -2008,6 +2064,360 @@ Test(msg, av_user_id)
 	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 }
+/* Note: the FI_PROTO_CXI_CS message test suite uses cs_msg
+ * so that it will not be included in flow-control and software
+ * EP tests, which it does not support.
+ */
+TestSuite(cs_msg, .init = cxit_setup_cs_msg_ep,
+	  .fini = cxit_teardown_msg, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(cs_msg, ping)
+{
+	ping(false);
+}
+
+Test(cs_msg, ping_retry)
+{
+	ping(true);
+}
+
+Test(cs_msg, ping_retry_b2b)
+{
+	/* unexpected, RNR retries */
+	ping(true);
+	ping(true);
+	/*expected, no RNR retries */
+	ping(false);
+	/* unexpected, RNR retries */
+	ping(true);
+}
+
+Test(cs_msg, pingdata)
+{
+	pingdata();
+}
+
+Test(cs_msg, vping)
+{
+	vping();
+}
+
+Test(cs_msg, msgping)
+{
+	msgping();
+}
+
+Test(cs_msg, sizes)
+{
+	sizes();
+}
+
+Test(cs_msg, zero_byte_send_recv_iov)
+{
+	zero_byte_send_recv_iov();
+}
+
+Test(cs_msg, zero_byte_send_recv_msg)
+{
+	zero_byte_send_recv_msg();
+}
+/* CS - expected messages only */
+static struct msg_multi_recv_params cs_params[] = {
+	/* expected eager */
+	{.send_len = SHORT_SEND_LEN,
+	 .recv_len = SHORT_SENDS * SHORT_SEND_LEN,
+	 .ux = false},
+
+	/* exp long */
+	{.send_len = LONG_SEND_LEN,
+	 .recv_len = LONG_SENDS*LONG_SEND_LEN,
+	 .ux = false},
+
+	/* exp overflow */
+	{.send_len = LONG_SEND_LEN,
+	 .recv_len = LONG_SENDS*LONG_SEND_LEN + (LONG_SEND_LEN - LONG_OLEN),
+	 .ux = false,
+	 .sends = LONG_SENDS+1,
+	 .olen = LONG_OLEN},
+
+	/* exp overflow */
+	{.send_len = LONG_SEND_LEN,
+	 .recv_len = LONG_SENDS*LONG_SEND_LEN + (LONG_SEND_LEN - SHORT_OLEN),
+	 .ux = false,
+	 .sends = LONG_SENDS+1,
+	 .olen = SHORT_OLEN},
+};
+
+ParameterizedTestParameters(cs_msg, multi_recv)
+{
+	size_t param_sz;
+
+	param_sz = ARRAY_SIZE(cs_params);
+	return cr_make_param_array(struct msg_multi_recv_params, cs_params,
+				   param_sz);
+}
+
+/* Test multi-recv messaging */
+ParameterizedTest(struct msg_multi_recv_params *param, cs_msg, multi_recv)
+{
+	void *recv_buf;
+	void *send_buf;
+
+
+	recv_buf = aligned_alloc(s_page_size, param->recv_len);
+	cr_assert(recv_buf);
+
+	send_buf = aligned_alloc(s_page_size, param->send_len);
+	cr_assert(send_buf);
+
+	do_multi_recv(send_buf, param->send_len, recv_buf,
+		      param->recv_len, param->ux, param->sends,
+		      param->olen);
+
+	free(send_buf);
+	free(recv_buf);
+}
+
+Test(cs_msg, timeout)
+{
+	int i, ret;
+	uint8_t *send_buf;
+	int send_len = 64;
+	struct fi_cq_tagged_entry tx_cqe;
+	struct fi_cq_err_entry err_cqe = {};
+
+	send_buf = aligned_alloc(s_page_size, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Send 64 bytes to self, no receive posted */
+	ret = fi_send(cxit_ep, send_buf, send_len, NULL, cxit_ep_fi_addr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, -FI_EAVAIL, "fi_cq_read unexpected status %d", ret);
+
+	/* Read the error data */
+	ret = fi_cq_readerr(cxit_tx_cq, &err_cqe, 0);
+	cr_assert_eq(ret, 1);
+
+	cr_assert(err_cqe.err == FI_EIO,
+		  "Invalid Error TX CQE err %d", err_cqe.err);
+	cr_assert(err_cqe.prov_errno == C_RC_ENTRY_NOT_FOUND,
+		  "Invalid Error TX CQE prov_errno %d", err_cqe.prov_errno);
+
+	free(send_buf);
+}
+
+Test(cs_msg, cs_cancel)
+{
+	int i, ret;
+	uint8_t *send_buf1;
+	uint8_t *send_buf2;
+	uint8_t *recv_buf;
+	int send_len = 64;
+	struct fi_context ctxt[2];
+	struct fi_cq_tagged_entry tx_cqe;
+	struct fi_cq_tagged_entry rx_cqe;
+	struct fi_cq_err_entry err_cqe = {};
+	send_buf1 = aligned_alloc(s_page_size, send_len);
+	cr_assert(send_buf1);
+	send_buf2 = aligned_alloc(s_page_size, send_len);
+	cr_assert(send_buf2);
+	recv_buf = aligned_alloc(s_page_size, send_len);
+	cr_assert(recv_buf);
+
+	for (i = 0; i < send_len; i++) {
+		send_buf1[i] = i + 0xa0;
+		send_buf2[i] = i + 0x05;
+	}
+
+	/* Post two sends of 64 bytes each using a unique context */
+	ret = fi_send(cxit_ep, send_buf1, send_len, NULL, cxit_ep_fi_addr,
+		      &ctxt[0]);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_send one failed %d", ret);
+
+	ret = fi_send(cxit_ep, send_buf2, send_len, NULL,
+		      cxit_ep_fi_addr, &ctxt[1]);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_send two failed %d", ret);
+
+	/* Cancel the first send */
+	ret = fi_cancel(&cxit_ep->fid, &ctxt[0]);
+	cr_assert_eq(ret, FI_SUCCESS, "Request not found %d", ret);
+
+	/* Give time for a retry to complete */
+	usleep(100);
+
+	/* Read the canceled TX completion status */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, -FI_EAVAIL, "fi_cq_read unexpected status %d", ret);
+
+	/* Read the error data */
+	ret = fi_cq_readerr(cxit_tx_cq, &err_cqe, 0);
+	cr_assert_eq(ret, 1);
+
+	cr_assert(err_cqe.err == FI_ECANCELED,
+		  "Invalid Error TX CQE err %d", err_cqe.err);
+	cr_assert(err_cqe.prov_errno == C_RC_ENTRY_NOT_FOUND,
+		  "Invalid Error TX CQE prov_errno %d", err_cqe.prov_errno);
+
+	/* Post a receive, the second request should land */
+	ret = fi_recv(cxit_ep, recv_buf, send_len, NULL,
+		      FI_ADDR_UNSPEC, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+
+	/* Wait for async event indicating data has been sent */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected status %d", ret);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected status %d", ret);
+
+	/* Second TX data should have landed */
+	cr_expect_arr_eq(recv_buf, send_buf2, send_len);
+
+	free(send_buf1);
+	free(send_buf2);
+	free(recv_buf);
+}
+
+/* Test many CS retries in flight */
+Test(cs_msg, multi_recv_retries)
+{
+	int i, j, ret;
+	int err = 0;
+	fi_addr_t from;
+	struct fi_msg rmsg = {};
+	struct fi_msg smsg = {};
+	struct iovec riovec;
+	struct iovec siovec;
+	uint64_t rxe_flags;
+	int bytes_sent = 0;
+	uint8_t *recv_buf;
+	uint8_t *send_buf;
+	size_t send_len = 8*1024;
+	int sends = 10;
+	size_t recv_len = send_len * 5 + 64 * 5;
+	int sent = 0;
+	int recved = 0;
+	struct fi_cq_tagged_entry tx_cqe[sends];
+	struct fi_cq_tagged_entry rx_cqe[sends];
+
+	recv_buf = aligned_alloc(s_page_size, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	send_buf = aligned_alloc(s_page_size, send_len);
+	cr_assert(send_buf);
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Post all TX before posting a buffer, these
+	 * will all go into the CS retry flow as they
+	 * are unexpected.
+	 */
+	siovec.iov_base = send_buf;
+	siovec.iov_len = send_len;
+	smsg.msg_iov = &siovec;
+	smsg.iov_count = 1;
+	smsg.addr = cxit_ep_fi_addr;
+	smsg.context = NULL;
+
+	for (i = 0; i < sends; i++) {
+		/* Interleave long and short sends. They will complete in a
+		 * different order than they were sent or received.
+		 */
+		if (i % 2)
+			siovec.iov_len = 64;
+		else
+			siovec.iov_len = 8*1024;
+
+		ret = fi_sendmsg(cxit_ep, &smsg, 0);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d",
+			     ret);
+	}
+
+	/* Post an RX multi-recv buffer to receive all the sends */
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = recv_len;
+	rmsg.msg_iov = &riovec;
+	rmsg.iov_count = 1;
+	rmsg.addr = FI_ADDR_UNSPEC;
+	rmsg.context = NULL;
+
+	/* Force more RNR Acks and retries */
+	usleep(100);
+	ret = fi_cq_read(cxit_tx_cq, &tx_cqe[0], 0);
+	usleep(100);
+
+	/* Start accepting sends */
+	ret = fi_recvmsg(cxit_ep, &rmsg, FI_MULTI_RECV);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+
+	for (i = 0; i < sends; i++) {
+		/* Gather both events, ensure progress on both sides. */
+		do {
+			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe[recved], 1,
+					     &from);
+			if (ret == 1) {
+				recved++;
+			} else {
+				cr_assert_eq(ret, -FI_EAGAIN,
+					     "fi_cq_read unexpected value %d",
+					     ret);
+			}
+
+			ret = fi_cq_read(cxit_tx_cq, &tx_cqe[sent], 1);
+			if (ret == 1) {
+				sent++;
+			} else {
+				cr_assert_eq(ret, -FI_EAGAIN,
+					     "fi_cq_read unexpected value %d",
+					     ret);
+			}
+		} while (!(sent == sends && recved == sends));
+	}
+
+	/* All TX and RX completions have been received */
+
+	for (i = 0; i < sends; i++) {
+		bytes_sent += rx_cqe[i].len;
+		rxe_flags = FI_MSG | FI_RECV;
+		if (bytes_sent > (recv_len - CXIP_EP_MIN_MULTI_RECV))
+			rxe_flags |= FI_MULTI_RECV;
+
+		cr_assert(rx_cqe[i].flags == rxe_flags, "CQE flags mismatch");
+		cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+		validate_tx_event(&tx_cqe[i], FI_MSG | FI_SEND, NULL);
+
+		/* Validate sent data */
+		uint8_t *rbuf = rx_cqe[i].buf;
+
+		for (j = 0; j < rx_cqe[i].len; j++) {
+			cr_expect_eq(rbuf[j], send_buf[j],
+				  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+				  j, send_buf[j], recv_buf[j], err++);
+		}
+		cr_assert_eq(err, 0, "Data errors seen\n");
+	}
+
+	free(send_buf);
+	free(recv_buf);
+}
+
 
 /* Verify that FI_AV_USER_ID is returned from fi_cq_readfrom(). */
 Test(msg, av_user_id_domain_cap)
