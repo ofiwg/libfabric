@@ -26,6 +26,8 @@
 #define APPEND_LE_FATAL "Recieve LE resources exhuasted. Requires use " \
 	" of FI_PROTO_CXI endpoint protocol\n"
 
+static int cxip_cs_send_cb(struct cxip_req *req, const union c_event *event);
+
 static void cxip_rnr_recv_pte_cb(struct cxip_pte *pte,
 				 const union c_event *event)
 {
@@ -433,15 +435,212 @@ err:
 	return ret;
 }
 
-static void cxip_txc_cs_progress(struct cxip_txc *txc)
+/* Caller must hold ep_obj->lock */
+static ssize_t cxip_cs_msg_send(struct cxip_req *req)
 {
-	/* Placeholder - must process RNR */
+	struct cxip_txc *txc = req->send.txc;
+	union cxip_match_bits mb = {
+		.cs_vni = req->send.caddr.vni,
+		.cs_tag = req->send.tag,
+		.cs_cq_data = !!(req->send.flags & FI_REMOTE_CQ_DATA),
+	};
+	struct c_full_dma_cmd cmd = {};
+	union c_fab_addr dfa;
+	uint8_t idx_ext;
+	ssize_t ret;
+
+	/* Calculate DFA */
+	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
+		      txc->recv_ptl_idx, &dfa, &idx_ext);
+
+	req->cb = cxip_cs_send_cb;
+
+	cmd.command.cmd_type = C_CMD_TYPE_DMA;
+	cmd.command.opcode = C_CMD_PUT;
+	cmd.index_ext = idx_ext;
+	cmd.event_send_disable = 1;
+	cmd.dfa = dfa;
+	cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
+	cmd.user_ptr = (uint64_t)req;
+	cmd.initiator = cxip_msg_match_id(txc);
+	cmd.match_bits = mb.raw;
+	cmd.header_data = req->send.data;
+
+	/* Triggered ops could result in 0 length DMA */
+	if (req->send.send_md) {
+		cmd.lac = req->send.send_md->md->lac;
+		cmd.local_addr = CXI_VA_TO_IOVA(req->send.send_md->md,
+						req->send.buf);
+		cmd.request_len = req->send.len;
+	}
+
+	if (req->send.cntr) {
+		cmd.event_ct_ack = 1;
+		cmd.ct = req->send.cntr->ct->ctn;
+	}
+
+	ret = cxip_txc_emit_dma(txc, req->send.caddr.vni,
+				cxip_ofi_to_cxi_tc(req->send.tclass),
+				CXI_TC_TYPE_DEFAULT,
+				req->triggered ?  req->trig_cntr : NULL,
+				req->trig_thresh, &cmd, req->send.flags);
+	if (ret) {
+		TXC_DBG(txc, "Failed to write DMA command: %ld\n", ret);
+		return ret;
+	}
+#if 0
+	TXC_WARN(txc, "Send DMA command submitted for req %p\n", req);
+#endif
+	return FI_SUCCESS;
+}
+
+/* Queue RNR retry. There are CXIP_NUM_RNR_WAIT_QUEUE, each
+ * has a consistent time wait for that queue (smaller to larger).
+ * Therefore, appends to tail will keep each queue in retry time
+ * order.
+ *
+ * Caller must hold ep_obj->lock
+ */
+static int cxip_rnr_queue_retry(struct cxip_txc_cs *txc, struct cxip_req *req)
+{
+	uint64_t cur_time;
+	uint64_t retry_time;
+	int index;
+
+	cur_time = ofi_gettime_us();
+
+	index = req->send.retries < CXIP_NUM_RNR_WAIT_QUEUE ?
+			req->send.retries : CXIP_NUM_RNR_WAIT_QUEUE - 1;
+
+	/* 1us, 11us, 81us 271us, 641us (max) */
+	retry_time = cur_time + 1 + (index * index * index) * 10;
+#if 0
+	TXC_WARN(txc, "retry_time %ld req->send.max_rnr_time %ld\n",
+		 retry_time, req->send.max_rnr_time);
+#endif
+	if (retry_time > req->send.max_rnr_time)
+		return -FI_ETIMEDOUT;
+
+	/* Insert and update next timeout */
+	req->send.retry_rnr_time = retry_time;
+
+	dlist_insert_tail(&req->send.rnr_entry, &txc->time_wait_queue[index]);
+	if (retry_time < txc->next_retry_wait_us)
+		txc->next_retry_wait_us = retry_time;
+
+	req->send.retries++;
+	ofi_atomic_inc32(&txc->time_wait_reqs);
+#if 0
+	TXC_WARN(txc, "Entry added to txc->time_wait_queue[%d]\n", index);
+	TXC_WARN(txc,
+		 "txc->next_retry_wait_us %ld, req->send.retry_rnr_time %ld\n",
+		 txc->next_retry_wait_us, req->send.retry_rnr_time);
+#endif
+
+	return FI_SUCCESS;
+}
+
+static int cxip_process_rnr_time_wait(struct cxip_txc_cs *txc)
+{
+	struct cxip_req *req;
+	struct dlist_entry *tmp;
+	uint64_t cur_time;
+	uint64_t next_time;
+	int index;
+	int ret;
+
+#if 0
+	TXC_WARN(txc, "Process RNR timewait, wait_reqs %d "
+		 "txc->next_retry_wait_us %ld\n",
+		 ofi_atomic_get32(&txc->time_wait_reqs),
+		 txc->next_retry_wait_us);
+#endif
+	if (!ofi_atomic_get32(&txc->time_wait_reqs))
+		return FI_SUCCESS;
+
+	cur_time = ofi_gettime_us();
+	if (cur_time < txc->next_retry_wait_us)
+		return FI_SUCCESS;
+
+	ret = FI_SUCCESS;
+	for (index = 0; index < CXIP_NUM_RNR_WAIT_QUEUE; index++) {
+		dlist_foreach_container_safe(&txc->time_wait_queue[index],
+					     struct cxip_req, req,
+					     send.rnr_entry, tmp) {
+#if 0
+			TXC_WARN(txc, "req %p, req->send.retry_rnr_time "
+				 "%ld cur_time %ld\n", req,
+				 req->send.retry_rnr_time, cur_time);
+#endif
+			if (req->send.retry_rnr_time <= cur_time) {
+
+				/* Do not retry if TX canceled */
+				if (req->send.canceled) {
+					dlist_remove_init(&req->send.rnr_entry);
+					ofi_atomic_dec32(&txc->time_wait_reqs);
+					cxip_send_buf_fini(req);
+					cxip_report_send_completion(req, true);
+					ofi_atomic_dec32(&txc->base.otx_reqs);
+					cxip_evtq_req_free(req);
+
+					continue;
+				}
+
+				/* Must TX return credit, will take it back if
+				 * we could not send.
+				 */
+				ofi_atomic_dec32(&txc->base.otx_reqs);
+				ret = cxip_cs_msg_send(req);
+				if (ret != FI_SUCCESS) {
+					ofi_atomic_inc32(&txc->base.otx_reqs);
+					goto reset_min_time_wait;
+				}
+
+				dlist_remove_init(&req->send.rnr_entry);
+				ofi_atomic_dec32(&txc->time_wait_reqs);
+			} else {
+				break;
+			}
+		}
+	}
+
+reset_min_time_wait:
+	next_time = UINT64_MAX;
+
+	for (index = 0; index < CXIP_NUM_RNR_WAIT_QUEUE; index++) {
+		req = dlist_first_entry_or_null(&txc->time_wait_queue[index],
+						struct cxip_req,
+						send.rnr_entry);
+		if (req && req->send.retry_rnr_time < next_time)
+			next_time = req->send.retry_rnr_time;
+	}
+#if 0
+	TXC_WARN(txc, "Set txc->next_retry_wait_us to %ld\n", next_time);
+#endif
+	txc->next_retry_wait_us = next_time;
+
+	return ret;
+}
+
+static void cxip_txc_cs_progress(struct cxip_txc *txc_base)
+{
+	struct cxip_txc_cs *txc = container_of(txc_base, struct cxip_txc_cs,
+					       base);
+
+	assert(txc->base.protocol == FI_PROTO_CXI_CS);
+
+	cxip_evtq_progress(&txc->base.tx_evtq);
+	cxip_process_rnr_time_wait(txc);
 }
 
 static int cxip_txc_cs_cancel_msg_send(struct cxip_req *req)
 {
-	/* Placeholder CS can cancel transmits */
-	return -FI_ENOENT;
+	if (req->type != CXIP_REQ_SEND)
+		return -FI_ENOENT;
+
+	req->send.canceled = true;
+
+	return FI_SUCCESS;
 }
 
 static void cxip_txc_cs_init_struct(struct cxip_txc *txc_base,
@@ -484,6 +683,72 @@ static void cxip_txc_cs_cleanup(struct cxip_txc *txc_base)
 	/* Placeholder */
 }
 
+static void cxip_cs_send_req_dequeue(struct cxip_req *req)
+{
+	/* TODO: Place holder for anything additional */
+
+	dlist_remove(&req->send.txc_entry);
+}
+
+static int cxip_cs_send_cb(struct cxip_req *req, const union c_event *event)
+{
+	struct cxip_txc_cs *txc = req->send.txc_cs;
+	int rc = cxi_event_rc(event);
+	int ret;
+
+#if 0
+	TXC_WARN(txc, "Event %s RC %s received\n",
+		 cxi_event_to_str(event),
+		 cxi_rc_to_str(rc));
+#endif
+
+	/* Handle at TX FI_MSG/FI_TAGGED message events */
+	if (event->hdr.event_type != C_EVENT_ACK) {
+		TXC_WARN(req->send.txc, CXIP_UNEXPECTED_EVENT,
+			 cxi_event_to_str(event),
+			 cxi_rc_to_str(rc));
+		return FI_SUCCESS;
+	}
+
+	req->send.rc = rc;
+
+	/* Handle RNR acks */
+	if (rc == C_RC_ENTRY_NOT_FOUND &&
+	    txc->base.enabled && !req->send.canceled) {
+
+		ret  = cxip_rnr_queue_retry(txc, req);
+
+		if (ret == FI_SUCCESS)
+			return ret;
+
+		TXC_WARN(&txc->base, "req %p RNR max timeout buf: %p len: %lu, "
+			 "dest_addr: 0x%lX nic: %#x pid: %d tag(%c) 0x%lx "
+			 "retries %u TX outstanding %u\n", req, req->send.buf,
+			 req->send.len, req->send.dest_addr,
+			 req->send.caddr.nic, req->send.caddr.pid,
+			 req->send.tagged ? '*' : '-',
+			 req->send.tag, req->send.retries,
+			 ofi_atomic_get32(&txc->base.otx_reqs));
+	}
+
+	cxip_cs_send_req_dequeue(req);
+	cxip_send_buf_fini(req);
+
+	/* If status is good, then the request completed before it could
+	 * be canceled. If canceled, indicate software update of the
+	 * error count is required.
+	 */
+	if (rc == C_RC_OK)
+		req->send.canceled = false;
+
+	cxip_report_send_completion(req, req->send.canceled);
+
+	ofi_atomic_dec32(&txc->base.otx_reqs);
+	cxip_evtq_req_free(req);
+
+	return FI_SUCCESS;
+}
+
 /*
  * cxip_send_common() - Common message send function. Used for tagged and
  * untagged sends of all sizes. This includes triggered operations.
@@ -495,8 +760,154 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		 bool triggered, uint64_t trig_thresh,
 		 struct cxip_cntr *trig_cntr, struct cxip_cntr *comp_cntr)
 {
-	/* Placeholder */
-	return -FI_ENOSYS;
+	struct cxip_txc_cs *txc_cs = container_of(txc, struct cxip_txc_cs,
+						  base);
+	struct cxip_req *req;
+	struct cxip_addr caddr;
+	int ret;
+
+	assert(txc->protocol == FI_PROTO_CXI_CS);
+
+#if ENABLE_DEBUG
+	if (len && !buf) {
+		TXC_WARN(txc, "Length %ld but source buffer NULL\n", len);
+		return -FI_EINVAL;
+	}
+#endif
+	/* TODO: This check should not be required in other than debug builds,
+	 * to do that we would need to return -FI_EFAULT, so leaving here for
+	 * now.
+	 */
+	if (len > CXIP_EP_MAX_MSG_SZ)
+		return -FI_EMSGSIZE;
+
+	/* TODO: Move to tagged sends */
+	if (tagged && tag & ~CXIP_TAG_MASK) {
+		TXC_WARN(txc, "Invalid tag: %#018lx (%#018lx)\n",
+			 tag, CXIP_TAG_MASK);
+		return -FI_EINVAL;
+	}
+#if 0 /* No inject support */
+	/* TODO: move to inject/sendmsg */
+	if (flags & FI_INJECT && len > CXIP_INJECT_SIZE) {
+		TXC_WARN(txc, "Invalid inject length: %lu\n", len);
+		return -FI_EMSGSIZE;
+	}
+#endif
+	ofi_genlock_lock(&txc->ep_obj->lock);
+	/* If RNR list is not empty, check if the first retry entry time
+	 * wait has expired, and if so force progress to initiate any
+	 * read retry/retries.
+	 */
+	if (txc_cs->next_retry_wait_us != UINT64_MAX &&
+	    ofi_atomic_get32(&txc_cs->time_wait_reqs)) {
+		if (ofi_gettime_us() >= txc_cs->next_retry_wait_us) {
+			ret = -FI_EAGAIN;
+			goto unlock;
+		}
+	}
+
+	req = cxip_evtq_req_alloc(&txc->tx_evtq, false, txc);
+	if (!req) {
+		TXC_DBG(txc, "Failed to allocate request, return -FI_EAGAIN\n");
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
+
+	/* Restrict outstanding success event requests to queue size */
+	if (ofi_atomic_get32(&txc->otx_reqs) > txc->attr.size) {
+		ret = -FI_EAGAIN;
+		goto free_req;
+	}
+
+	req->triggered = triggered;
+	req->trig_thresh = trig_thresh;
+	req->trig_cntr = trig_cntr;
+
+	/* Save Send parameters to replay */
+	req->type = CXIP_REQ_SEND;
+	req->send.txc = txc;
+	req->send.tclass = tclass;
+	req->send.cntr = triggered ? comp_cntr : txc->send_cntr;
+	req->send.buf = buf;
+	req->send.len = len;
+	req->send.data = data;
+	req->send.flags = flags;
+	/* Set completion parameters */
+	req->context = (uint64_t)context;
+	req->flags = FI_SEND | (flags & (FI_COMPLETION | FI_MATCH_COMPLETE));
+	if (tagged) {
+		req->send.tagged = tagged;
+		req->send.tag = tag;
+		req->flags |= FI_TAGGED;
+	} else {
+		req->flags |= FI_MSG;
+	}
+
+	if (req->send.len) {
+		ret = cxip_map(txc->domain, req->send.buf, req->send.len,
+			       0, &req->send.send_md);
+		if (ret) {
+			TXC_WARN(txc, "Local buffer map failed: %d %s\n",
+				 ret, fi_strerror(-ret));
+			goto free_req;
+		}
+	}
+
+	/* Look up target CXI address */
+	ret = cxip_av_lookup_addr(txc->ep_obj->av, dest_addr, &caddr);
+	if (ret != FI_SUCCESS) {
+		TXC_WARN(txc, "Failed to look up FI addr: %d %s\n",
+			 ret, fi_strerror(-ret));
+		goto free_map;
+	}
+
+	if (!txc->ep_obj->av_auth_key)
+		caddr.vni = txc->ep_obj->auth_key.vni;
+
+	req->send.caddr = caddr;
+	req->send.dest_addr = dest_addr;
+
+	if (cxip_evtq_saturated(&txc->tx_evtq)) {
+		TXC_DBG(txc, "TX HW EQ saturated\n");
+		ret = -FI_EAGAIN;
+		goto free_map;
+	}
+
+	/* Enqueue on the TXC. TODO: Consider if we should examine
+	 * the RNR retry list and push back if a RNR is outstanding
+	 * to a peer.
+	 */
+	dlist_insert_tail(&req->send.txc_entry, &txc->msg_queue);
+	req->send.max_rnr_time = ofi_gettime_us() + txc_cs->max_retry_wait_us;
+
+	/* Try Send */
+	ret = cxip_cs_msg_send(req);
+	if (ret != FI_SUCCESS)
+		goto req_dequeue;
+
+	ofi_genlock_unlock(&txc->ep_obj->lock);
+
+	TXC_DBG(txc,
+		"req: %p buf: %p len: %lu dest_addr: 0x%lX nic: %d "
+		"pid: %d tag(%c): 0x%lx context %#lx\n",
+		req, req->send.buf, req->send.len, dest_addr, caddr.nic,
+		caddr.pid, req->send.tagged ? '*' : '-', req->send.tag,
+		req->context);
+
+	return FI_SUCCESS;
+
+req_dequeue:
+	cxip_cs_send_req_dequeue(req);
+free_map:
+	if (req->send.send_md)
+		cxip_unmap(req->send.send_md);
+free_req:
+	cxip_evtq_req_free(req);
+unlock:
+	ofi_genlock_unlock(&txc->ep_obj->lock);
+
+	return ret;
 }
 
 struct cxip_rxc_ops cs_rxc_ops = {
