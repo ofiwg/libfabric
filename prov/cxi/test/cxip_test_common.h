@@ -68,6 +68,8 @@ void cxit_destroy_av(void);
 void cxit_bind_av(void);
 
 void cxit_setup_rma_disable_fi_rma_event(void);
+void cxit_setup_enabled_cs_msg_ep(void);
+void cxit_setup_cs_msg_ep(void);
 struct fi_info *cxit_allocinfo(void);
 struct fi_info *cxit_allocinfo_proto(uint32_t proto);
 void cxit_setup_getinfo(void);
