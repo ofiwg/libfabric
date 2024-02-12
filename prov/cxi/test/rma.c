@@ -123,8 +123,7 @@ Test(rma, zero_byte_readmsg)
 	mr_destroy(&mem_window);
 }
 
-/* Test fi_write simple case. Test IDC sizes to multi-packe sizes. */
-Test(rma, simple_write)
+static void simple_write(void)
 {
 	int ret;
 	uint8_t *send_buf;
@@ -159,6 +158,12 @@ Test(rma, simple_write)
 
 	mr_destroy(&mem_window);
 	free(send_buf);
+}
+
+/* Test fi_write simple case. Test IDC sizes to multi-packe sizes. */
+Test(rma, simple_write)
+{
+	simple_write();
 }
 
 /* Test compatibility of client/provider keys */
@@ -803,8 +808,7 @@ Test(rma, simple_inject_write)
 	free(send_buf);
 }
 
-/* Test fi_read simple case */
-Test(rma, simple_read)
+static void simple_read(void)
 {
 	int ret;
 	uint8_t *local;
@@ -843,6 +847,12 @@ Test(rma, simple_read)
 
 	mr_destroy(&remote);
 	free(local);
+}
+
+/* Test fi_read simple case */
+Test(rma, simple_read)
+{
+	simple_read();
 }
 
 /* Test fi_readv simple case */
@@ -2233,4 +2243,21 @@ done:
 	free(tgt_buf);
 	free(src_buf);
 	free(src_buf2);
+}
+
+/* Note: the FI_PROTO_CXI_CS should not alter the standard RMA
+ * and Atomic functions. Perform a limited set of writes and reads to
+ * verify this.
+ */
+TestSuite(cs_rma, .init = cxit_setup_cs_msg_ep,
+	  .fini = cxit_teardown_msg, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(cs_rma, simple_write)
+{
+	simple_write();
+}
+
+Test(cs_rma, simple_read)
+{
+	simple_read();
 }
