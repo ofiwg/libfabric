@@ -133,7 +133,7 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->u32_extended_rx =
 		fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, params->dest_rx);
 
-	int rc = fi_opx_do_readv_internal(work);
+	int rc = params->work_elem.work_fn(work);
 	if(rc == FI_SUCCESS) {
 		OPX_BUF_FREE(work);
 		return;
