@@ -9,7 +9,6 @@
 #include <ofi_iov.h>
 #include "efa.h"
 #include "efa_av.h"
-#include "efa_cq.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
 #include "efa_rdm_atomic.h"
@@ -681,42 +680,3 @@ size_t efa_rdm_ep_get_memory_alignment(struct efa_rdm_ep *ep, enum fi_hmem_iface
 	return memory_alignment;
 }
 
-/**
- * @brief Get the vendor error code for an endpoint's CQ
- *
- * This function is essentially a wrapper for `ibv_wc_read_vendor_err()`; making
- * a best-effort attempt to promote the error code to a proprietary EFA
- * provider error code.
- *
- * @param[in]	ep	EFA RDM endpoint
- * @return	EFA-specific error code
- * @sa		#EFA_PROV_ERRNOS
- *
- * @todo Currently, this only checks for unresponsive receiver
- * (#EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE) and attempts to promote it to
- * #FI_EFA_ERR_ESTABLISHED_RECV_UNRESP. This should be expanded to handle other
- * RDMA Core error codes (#EFA_IO_COMP_STATUSES) for the sake of more accurate
- * error reporting
- */
-int efa_rdm_ep_get_prov_errno(struct efa_rdm_ep *ep) {
-	uint32_t vendor_err = ibv_wc_read_vendor_err(ep->ibv_cq_ex);
-	struct efa_rdm_pke *pkt_entry = (void *) (uintptr_t) ep->ibv_cq_ex->wr_id;
-	struct efa_rdm_peer *peer;
-
-	if (OFI_LIKELY(pkt_entry && pkt_entry->addr))
-		peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-	else
-		return vendor_err;
-
-	switch (vendor_err) {
-	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE: {
-		if (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)
-			vendor_err = FI_EFA_ERR_ESTABLISHED_RECV_UNRESP;
-		break;
-	}
-	default:
-		break;
-	}
-
-	return vendor_err;
-}

@@ -2,7 +2,6 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa.h"
-#include "efa_cq.h"
 #include "efa_av.h"
 #include "efa_rdm_ep.h"
 #include "efa_rdm_cq.h"
@@ -14,6 +13,46 @@
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_pke_req.h"
 #include "efa_cntr.h"
+
+static
+void efa_rdm_ep_construct_ibv_qp_init_attr_ex(struct efa_rdm_ep *ep,
+					struct ibv_qp_init_attr_ex *attr_ex,
+					struct ibv_cq_ex *tx_cq,
+					struct ibv_cq_ex *rx_cq)
+{
+	attr_ex->cap.max_send_wr = ep->base_ep.domain->device->rdm_info->tx_attr->size;
+	attr_ex->cap.max_send_sge = ep->base_ep.domain->device->rdm_info->tx_attr->iov_limit;
+	attr_ex->cap.max_recv_wr = ep->base_ep.domain->device->rdm_info->rx_attr->size;
+	attr_ex->cap.max_recv_sge = ep->base_ep.domain->device->rdm_info->rx_attr->iov_limit;
+	attr_ex->cap.max_inline_data = ep->base_ep.domain->device->efa_attr.inline_buf_size;
+	attr_ex->qp_type = IBV_QPT_DRIVER;
+	attr_ex->comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+	attr_ex->send_ops_flags = IBV_QP_EX_WITH_SEND;
+	if (efa_device_support_rdma_read())
+		attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+	if (efa_device_support_rdma_write()) {
+		attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
+		attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
+	}
+	attr_ex->pd = efa_rdm_ep_domain(ep)->ibv_pd;
+	attr_ex->qp_context = ep;
+	attr_ex->sq_sig_all = 1;
+
+	attr_ex->send_cq = ibv_cq_ex_to_cq(tx_cq);
+	attr_ex->recv_cq = ibv_cq_ex_to_cq(rx_cq);
+}
+
+static inline
+struct efa_rdm_cq *efa_rdm_ep_get_tx_rdm_cq(struct efa_rdm_ep *ep)
+{
+	return ep->base_ep.util_ep.tx_cq ? container_of(ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, util_cq) : NULL;
+}
+
+static inline
+struct efa_rdm_cq *efa_rdm_ep_get_rx_rdm_cq(struct efa_rdm_ep *ep)
+{
+	return ep->base_ep.util_ep.rx_cq ? container_of(ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, util_cq) : NULL;
+}
 
 /**
  * @brief set the "efa_qp" field in the efa_rdm_ep->efa_base_ep
@@ -27,30 +66,34 @@ static
 int efa_rdm_ep_create_base_ep_ibv_qp(struct efa_rdm_ep *ep)
 {
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
+	struct efa_rdm_cq *tx_rdm_cq, *rx_rdm_cq;
+	struct ibv_cq_ex *tx_ibv_cq, *rx_ibv_cq;
 
-	attr_ex.cap.max_send_wr = ep->base_ep.domain->device->rdm_info->tx_attr->size;
-	attr_ex.cap.max_send_sge = ep->base_ep.domain->device->rdm_info->tx_attr->iov_limit;
-	attr_ex.send_cq = ibv_cq_ex_to_cq(ep->ibv_cq_ex);
+	tx_rdm_cq = efa_rdm_ep_get_tx_rdm_cq(ep);
+	rx_rdm_cq = efa_rdm_ep_get_rx_rdm_cq(ep);
 
-	attr_ex.cap.max_recv_wr = ep->base_ep.domain->device->rdm_info->rx_attr->size;
-	attr_ex.cap.max_recv_sge = ep->base_ep.domain->device->rdm_info->rx_attr->iov_limit;
-	attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->ibv_cq_ex);
-
-	attr_ex.cap.max_inline_data = ep->base_ep.domain->device->efa_attr.inline_buf_size;
-
-	attr_ex.qp_type = IBV_QPT_DRIVER;
-	attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
-	attr_ex.send_ops_flags = IBV_QP_EX_WITH_SEND;
-	if (efa_device_support_rdma_read())
-		attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
-	if (efa_device_support_rdma_write()) {
-		attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
-		attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
+	if (!tx_rdm_cq && !rx_rdm_cq) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Endpoint is not bound to a send or receive completion queue\n");
+		return -FI_ENOCQ;
 	}
-	attr_ex.pd = efa_rdm_ep_domain(ep)->ibv_pd;
 
-	attr_ex.qp_context = ep;
-	attr_ex.sq_sig_all = 1;
+	if (!tx_rdm_cq && ofi_needs_tx(ep->base_ep.info->caps)) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Endpoint is not bound to a send completion queue when it has transmit capabilities enabled (FI_SEND).\n");
+		return -FI_ENOCQ;
+	}
+
+	if (!rx_rdm_cq && ofi_needs_rx(ep->base_ep.info->caps)) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Endpoint is not bound to a receive completion queue when it has receive capabilities enabled. (FI_RECV)\n");
+		return -FI_ENOCQ;
+	}
+
+	tx_ibv_cq = tx_rdm_cq ? tx_rdm_cq->ibv_cq.ibv_cq_ex : rx_rdm_cq->ibv_cq.ibv_cq_ex;
+	rx_ibv_cq = rx_rdm_cq ? rx_rdm_cq->ibv_cq.ibv_cq_ex : tx_rdm_cq->ibv_cq.ibv_cq_ex;
+
+	efa_rdm_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, tx_ibv_cq, rx_ibv_cq);
 
 	return efa_base_ep_create_qp(&ep->base_ep, &attr_ex);
 }
@@ -471,11 +514,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->efa_rx_pkts_held = 0;
 	efa_rdm_ep->efa_outstanding_tx_ops = 0;
 
-	assert(!efa_rdm_ep->ibv_cq_ex);
-
-	ret = efa_cq_ibv_cq_ex_open(&cq_attr, efa_domain->device->ibv_ctx,
-				    &efa_rdm_ep->ibv_cq_ex, &efa_rdm_ep->ibv_cq_ex_type);
-
 	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", strerror(errno));
 		goto err_close_shm_ep;
@@ -483,7 +521,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	ret = efa_rdm_ep_create_buffer_pools(efa_rdm_ep);
 	if (ret)
-		goto err_close_core_cq;
+		goto err_close_shm_ep;
 
 	efa_rdm_ep_init_linked_lists(efa_rdm_ep);
 
@@ -509,15 +547,11 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = false;
 	efa_rdm_ep->write_in_order_aligned_128_bytes = false;
 
-	ret = efa_rdm_ep_create_base_ep_ibv_qp(efa_rdm_ep);
-	if (ret)
-		goto err_close_core_cq;
-
 	efa_rdm_ep->pke_vec = calloc(sizeof(struct efa_rdm_pke *), EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV);
 	if (!efa_rdm_ep->pke_vec) {
 		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for efa_rdm_ep->pke_vec!\n");
 		ret = -FI_ENOMEM;
-		goto err_close_core_cq;
+		goto err_close_shm_ep;
 	}
 
 	*ep = &efa_rdm_ep->base_ep.util_ep.ep_fid;
@@ -530,11 +564,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	(*ep)->cm = &efa_rdm_ep_cm_ops;
 	return 0;
 
-err_close_core_cq:
-	retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(efa_rdm_ep->ibv_cq_ex));
-	if (retv)
-		EFA_WARN(FI_LOG_CQ, "Unable to close cq: %s\n",
-			fi_strerror(-retv));
 err_close_shm_ep:
 	if (efa_rdm_ep->shm_ep) {
 		retv = fi_close(&efa_rdm_ep->shm_ep->fid);
@@ -767,16 +796,74 @@ static inline
 void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 {
 	struct util_srx_ctx *srx_ctx;
+	struct efa_rdm_cq *tx_cq, *rx_cq;
 	/* peer srx should be initialized when ep is enabled */
 	assert(efa_rdm_ep->peer_srx_ep);
 	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
 	ofi_genlock_lock(srx_ctx->lock);
 
+	tx_cq = efa_rdm_ep_get_tx_rdm_cq(efa_rdm_ep);
+	rx_cq = efa_rdm_ep_get_rx_rdm_cq(efa_rdm_ep);
+
 	while (efa_rdm_ep_has_unfinished_send(efa_rdm_ep)) {
+		/* poll cq until empty */
+		if (tx_cq)
+			efa_rdm_cq_poll_ibv_cq(-1, &tx_cq->ibv_cq);
+		if (rx_cq)
+			efa_rdm_cq_poll_ibv_cq(-1, &rx_cq->ibv_cq);
 		efa_rdm_ep_progress_internal(efa_rdm_ep);
 	}
 
 	ofi_genlock_unlock(srx_ctx->lock);
+}
+
+static inline
+void efa_rdm_ep_remove_cntr_ibv_cq_poll_list(struct efa_rdm_ep *ep)
+{
+	int i;
+	struct efa_cntr *efa_cntr;
+	struct util_cntr *util_cntr;
+	struct efa_rdm_cq *tx_cq, *rx_cq;
+
+	tx_cq = efa_rdm_ep_get_tx_rdm_cq(ep);
+	rx_cq = efa_rdm_ep_get_rx_rdm_cq(ep);
+
+	for (i = 0; i< CNTR_CNT; i++) {
+		util_cntr = ep->base_ep.util_ep.cntrs[i];
+		if (util_cntr) {
+			efa_cntr = container_of(util_cntr, struct efa_cntr, util_cntr);
+			if (tx_cq && !ofi_atomic_get32(&tx_cq->util_cq.ref))
+				efa_ibv_cq_poll_list_remove(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &tx_cq->ibv_cq);
+
+			if (rx_cq && !ofi_atomic_get32(&rx_cq->util_cq.ref))
+				efa_ibv_cq_poll_list_remove(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &rx_cq->ibv_cq);
+		}
+	}
+}
+
+static inline
+void efa_rdm_ep_remove_cq_ibv_cq_poll_list(struct efa_rdm_ep *ep)
+{
+	struct efa_rdm_cq *tx_cq, *rx_cq;
+
+	tx_cq = efa_rdm_ep_get_tx_rdm_cq(ep);
+	rx_cq = efa_rdm_ep_get_rx_rdm_cq(ep);
+
+	/* Remove the cross referencing of the CQs.
+	 * It must happen after ofi_endpoint_close
+	 * so we have cq's reference counters updated.
+	 */
+	if (tx_cq && !ofi_atomic_get32(&tx_cq->util_cq.ref)) {
+		efa_ibv_cq_poll_list_remove(&tx_cq->ibv_cq_poll_list, &tx_cq->util_cq.ep_list_lock, &tx_cq->ibv_cq);
+		if (rx_cq)
+			efa_ibv_cq_poll_list_remove(&rx_cq->ibv_cq_poll_list, &rx_cq->util_cq.ep_list_lock, &tx_cq->ibv_cq);
+	}
+
+	if (rx_cq && !ofi_atomic_get32(&rx_cq->util_cq.ref)) {
+		efa_ibv_cq_poll_list_remove(&rx_cq->ibv_cq_poll_list, &rx_cq->util_cq.ep_list_lock, &rx_cq->ibv_cq);
+		if (tx_cq)
+			efa_ibv_cq_poll_list_remove(&tx_cq->ibv_cq_poll_list, &tx_cq->util_cq.ep_list_lock, &rx_cq->ibv_cq);
+	}
 }
 
 /**
@@ -793,15 +880,29 @@ static int efa_rdm_ep_close(struct fid *fid)
 	if (efa_rdm_ep->base_ep.efa_qp_enabled)
 		efa_rdm_ep_wait_send(efa_rdm_ep);
 
+	/*
+	 * util_srx_close will clean all efa_rdm_rxes that are
+	 * associated with peer_rx_entries in unexp msg/tag lists.
+	 * It also decrements the ref count of rx cq. So it must
+	 * be called before we clean up the ibv cq poll list which
+	 * relies on the correct ref count of tx/rx cq.
+	 */
+	if (efa_rdm_ep->peer_srx_ep) {
+		util_srx_close(&efa_rdm_ep->peer_srx_ep->fid);
+		efa_rdm_ep->peer_srx_ep = NULL;
+	}
+
+	/* We need to free the util_ep first to avoid race conditions
+	 * with other threads progressing the cq. */
+	efa_base_ep_close_util_ep(&efa_rdm_ep->base_ep);
+
+	efa_rdm_ep_remove_cntr_ibv_cq_poll_list(efa_rdm_ep);
+
+	efa_rdm_ep_remove_cq_ibv_cq_poll_list(efa_rdm_ep);
+
 	ret = efa_base_ep_destruct(&efa_rdm_ep->base_ep);
 	if (ret) {
 		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
-		retv = ret;
-	}
-
-	ret = -ibv_destroy_cq(ibv_cq_ex_to_cq(efa_rdm_ep->ibv_cq_ex));
-	if (ret) {
-		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close ibv_cq_ex\n");
 		retv = ret;
 	}
 
@@ -813,14 +914,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 		}
 	}
 
-	/*
-	 * util_srx_close will clean all efa_rdm_rxes that are
-	 * associated with peer_rx_entries in unexp msg/tag lists.
-	 */
-	if (efa_rdm_ep->peer_srx_ep) {
-		util_srx_close(&efa_rdm_ep->peer_srx_ep->fid);
-		efa_rdm_ep->peer_srx_ep = NULL;
-	}
 	efa_rdm_ep_destroy_buffer_pools(efa_rdm_ep);
 
 	if (efa_rdm_ep->pke_vec)
@@ -982,6 +1075,71 @@ void efa_rdm_ep_update_shm(struct efa_rdm_ep *ep)
 		efa_rdm_ep_close_shm_resources(ep);
 }
 
+static inline
+int efa_rdm_ep_insert_cntr_ibv_cq_poll_list(struct efa_rdm_ep *ep)
+{
+	int i, ret;
+	struct efa_cntr *efa_cntr;
+	struct util_cntr *util_cntr;
+	struct efa_rdm_cq *tx_cq, *rx_cq;
+	tx_cq = efa_rdm_ep_get_tx_rdm_cq(ep);
+	rx_cq = efa_rdm_ep_get_rx_rdm_cq(ep);
+
+	for (i = 0; i < CNTR_CNT; i++) {
+		util_cntr = ep->base_ep.util_ep.cntrs[i];
+		if (util_cntr) {
+			efa_cntr = container_of(util_cntr, struct efa_cntr, util_cntr);
+			if (tx_cq) {
+				ret = efa_ibv_cq_poll_list_insert(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &tx_cq->ibv_cq);
+				if (ret)
+					return ret;
+			}
+			if (rx_cq) {
+				ret = efa_ibv_cq_poll_list_insert(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &rx_cq->ibv_cq);
+				if (ret)
+					return ret;
+			}
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+static inline
+int efa_rdm_ep_insert_cq_ibv_cq_poll_list(struct efa_rdm_ep *ep)
+{
+	int ret;
+	struct efa_rdm_cq *tx_cq, *rx_cq;
+	/* cross referencing */
+	tx_cq = efa_rdm_ep_get_tx_rdm_cq(ep);
+	rx_cq = efa_rdm_ep_get_rx_rdm_cq(ep);
+
+	if (tx_cq) {
+		ret = efa_ibv_cq_poll_list_insert(&tx_cq->ibv_cq_poll_list, &tx_cq->util_cq.ep_list_lock, &tx_cq->ibv_cq);
+		if (ret)
+			return ret;
+
+		if (rx_cq) {
+			ret = efa_ibv_cq_poll_list_insert(&tx_cq->ibv_cq_poll_list, &tx_cq->util_cq.ep_list_lock, &rx_cq->ibv_cq);
+			if (ret)
+				return ret;
+		}
+	}
+
+	if (rx_cq) {
+		ret = efa_ibv_cq_poll_list_insert(&rx_cq->ibv_cq_poll_list, &rx_cq->util_cq.ep_list_lock, &rx_cq->ibv_cq);
+		if (ret)
+			return ret;
+
+		if (tx_cq) {
+			ret = efa_ibv_cq_poll_list_insert(&rx_cq->ibv_cq_poll_list, &rx_cq->util_cq.ep_list_lock, &tx_cq->ibv_cq);
+			if (ret)
+				return ret;
+		}
+	}
+
+	return FI_SUCCESS;
+}
 
 /**
  * @brief implement the fi_enable() API for EFA RDM endpoint
@@ -1003,15 +1161,29 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 	switch (command) {
 	case FI_ENABLE:
 		ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-		ret = efa_base_ep_enable(&ep->base_ep);
-		if (ret)
-			return ret;
 
 		/*
 		 * efa uses util SRX no matter shm is enabled, so we need to initialize
 		 * it anyway.
 		 */
 		ret = efa_rdm_peer_srx_construct(ep);
+		if (ret)
+			return ret;
+
+		ret = efa_rdm_ep_create_base_ep_ibv_qp(ep);
+		if (ret)
+			return ret;
+
+		/* efa_base_ep_enable destroys qp in the error path */
+		ret = efa_base_ep_enable(&ep->base_ep);
+		if (ret)
+			return ret;
+
+		ret = efa_rdm_ep_insert_cq_ibv_cq_poll_list(ep);
+		if (ret)
+			return ret;
+
+		ret = efa_rdm_ep_insert_cntr_ibv_cq_poll_list(ep);
 		if (ret)
 			return ret;
 
@@ -1041,23 +1213,22 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
                         ret = fi_srx_context(efa_rdm_ep_domain(ep)->shm_domain,
 					     &peer_srx_attr, &peer_srx_ep, &peer_srx_context);
                         if (ret)
-                                goto out;
+                                goto err_unlock_and_destroy_qp;
 			shm_ep_name_len = EFA_SHM_NAME_MAX;
 			ret = efa_shm_ep_name_construct(shm_ep_name, &shm_ep_name_len, &ep->base_ep.src_addr);
 			if (ret < 0)
-				goto out;
+				goto err_unlock_and_destroy_qp;
 			fi_setname(&ep->shm_ep->fid, shm_ep_name, shm_ep_name_len);
 
 			/* Bind srx to shm ep */
 			ret = fi_ep_bind(ep->shm_ep, &ep->peer_srx_ep->fid, 0);
 			if (ret)
-				goto out;
+				goto err_unlock_and_destroy_qp;
 
 			ret = fi_enable(ep->shm_ep);
 			if (ret)
-				goto out;
+				goto err_unlock_and_destroy_qp;
 		}
-out:
 		ofi_genlock_unlock(srx_ctx->lock);
 		break;
 	default:
@@ -1065,6 +1236,11 @@ out:
 		break;
 	}
 
+	return ret;
+
+err_unlock_and_destroy_qp:
+	ofi_genlock_unlock(srx_ctx->lock);
+	efa_base_ep_destruct_qp(&ep->base_ep);
 	return ret;
 }
 
@@ -1247,49 +1423,57 @@ static int efa_rdm_ep_set_use_device_rdma(struct efa_rdm_ep *ep, bool use_device
 }
 
 /**
- * @brief set sendrecv_in_order_aligned_128_bytes flag in efa_rdm_ep
- * called by efa_rdm_ep_setopt
- * @param[in,out]	ep					endpoint
- * @param[in]		sendrecv_in_order_aligned_128_bytes	whether to enable in_order send/recv
- *								for each 128 bytes aligned buffer
- * @return		0 on success, -FI_EOPNOTSUPP if the option cannot be supported
- * @related efa_rdm_ep
+ * @brief check the in order aligned 128 bytes support for a given ibv_wr_op code
+ *
+ * @param ep efa_rdm_ep
+ * @param op_code ibv wr op code
+ * @return int 0 if in order aligned 128 bytes is supported, -FI_EOPNOTSUPP if
+ * it is not supported. Other negative integer for other errors.
  */
 static
-int efa_rdm_ep_set_sendrecv_in_order_aligned_128_bytes(struct efa_rdm_ep *ep,
-						   bool sendrecv_in_order_aligned_128_bytes)
+int efa_rdm_ep_check_qp_in_order_aligned_128_bytes(struct efa_rdm_ep *ep,
+						   enum ibv_wr_opcode op_code)
 {
-	/*
-	 * RDMA read is used to copy data from host bounce buffer to the
-	 * application buffer on device
-	 */
-	if (sendrecv_in_order_aligned_128_bytes &&
-	    !efa_base_ep_support_op_in_order_aligned_128_bytes(&ep->base_ep, IBV_WR_RDMA_READ))
-		return -FI_EOPNOTSUPP;
+	struct efa_qp *qp = NULL;
+	struct ibv_qp_init_attr_ex attr_ex = {0};
+	int ret, retv;
+	struct ibv_cq_ex *ibv_cq_ex = NULL;
+	enum ibv_cq_ex_type ibv_cq_ex_type;
+	struct fi_cq_attr cq_attr = {0};
 
-	ep->sendrecv_in_order_aligned_128_bytes = sendrecv_in_order_aligned_128_bytes;
-	return 0;
-}
+	ret = efa_cq_ibv_cq_ex_open(&cq_attr, efa_rdm_ep_domain(ep)->device->ibv_ctx, &ibv_cq_ex, &ibv_cq_ex_type);
+	if (ret) {
+		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %d\n", ret);
+		ret = -FI_EINVAL;
+		goto out;
+	}
 
-/**
- * @brief set write_in_order_aligned_128_bytes flag in efa_rdm_ep
- * called by efa_rdm_ep_set_opt
- * @param[in,out]	ep					endpoint
- * @param[in]		write_in_order_aligned_128_bytes	whether to enable RDMA in order write
- *								for each 128 bytes aligned buffer.
- * @return		0 on success, -FI_EOPNOTSUPP if the option cannot be supported.
- * @related efa_rdm_ep
- */
-static
-int efa_rdm_ep_set_write_in_order_aligned_128_bytes(struct efa_rdm_ep *ep,
-						bool write_in_order_aligned_128_bytes)
-{
-	if (write_in_order_aligned_128_bytes &&
-	    !efa_base_ep_support_op_in_order_aligned_128_bytes(&ep->base_ep, IBV_WR_RDMA_WRITE))
-		return -FI_EOPNOTSUPP;
+	/* Create a dummy qp for query only */
+	efa_rdm_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, ibv_cq_ex, ibv_cq_ex);
 
-	ep->write_in_order_aligned_128_bytes = write_in_order_aligned_128_bytes;
-	return 0;
+	ret = efa_qp_create(&qp, &attr_ex);
+	if (ret)
+		goto out;
+
+	if (!efa_qp_support_op_in_order_aligned_128_bytes(qp, op_code))
+		ret = -FI_EOPNOTSUPP;
+
+out:
+	if (qp) {
+		retv = ibv_destroy_qp(qp->ibv_qp);
+		if (retv)
+			EFA_WARN(FI_LOG_EP_CTRL, "destroy ibv qp failed! err: %s\n",
+				fi_strerror(-retv));
+		free(qp);
+	}
+
+	if (ibv_cq_ex) {
+		retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(ibv_cq_ex));
+		if (retv)
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close ibv cq: %s\n",
+				fi_strerror(-retv));
+	}
+	return ret;
 }
 
 /**
@@ -1384,16 +1568,26 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
-		ret = efa_rdm_ep_set_sendrecv_in_order_aligned_128_bytes(efa_rdm_ep, *(bool *)optval);
-		if (ret)
-			return ret;
+		/*
+		 * RDMA read is used to copy data from host bounce buffer to the
+		 * application buffer on device
+		 */
+		if (*(bool *)optval) {
+			ret = efa_rdm_ep_check_qp_in_order_aligned_128_bytes(efa_rdm_ep, IBV_WR_RDMA_READ);
+			if (ret)
+				return ret;
+		}
+		efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = *(bool *)optval;
 		break;
 	case FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
-		ret = efa_rdm_ep_set_write_in_order_aligned_128_bytes(efa_rdm_ep, *(bool *)optval);
-		if (ret)
-			return ret;
+		if (*(bool *)optval) {
+			ret = efa_rdm_ep_check_qp_in_order_aligned_128_bytes(efa_rdm_ep, IBV_WR_RDMA_WRITE);
+			if (ret)
+				return ret;
+		}
+		efa_rdm_ep->write_in_order_aligned_128_bytes = *(bool *)optval;
 		break;
 	default:
 		EFA_WARN(FI_LOG_EP_CTRL,

@@ -11,6 +11,7 @@
 struct efa_cntr {
 	struct util_cntr util_cntr;
 	struct fid_cntr *shm_cntr;
+	struct dlist_entry ibv_cq_poll_list;
 };
 
 int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
