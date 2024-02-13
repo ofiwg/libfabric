@@ -435,35 +435,30 @@ err:
 	return ret;
 }
 
-/* Caller must hold ep_obj->lock */
-static ssize_t cxip_cs_msg_send(struct cxip_req *req)
+static inline bool cxip_cs_req_uses_idc(struct cxip_req *req)
+{
+	/* TODO: Consider supporting HMEM and IDC by mapping memory */
+	return  !req->send.txc->hmem && req->send.len &&
+		req->send.len <= CXIP_INJECT_SIZE &&
+		!req->triggered && !cxip_env.disable_non_inject_msg_idc;
+}
+
+static inline ssize_t cxip_cs_send_dma(struct cxip_req *req,
+				       union cxip_match_bits *mb,
+				       union c_fab_addr *dfa, uint8_t idx_ext)
 {
 	struct cxip_txc *txc = req->send.txc;
-	union cxip_match_bits mb = {
-		.cs_vni = req->send.caddr.vni,
-		.cs_tag = req->send.tag,
-		.cs_cq_data = !!(req->send.flags & FI_REMOTE_CQ_DATA),
-	};
 	struct c_full_dma_cmd cmd = {};
-	union c_fab_addr dfa;
-	uint8_t idx_ext;
-	ssize_t ret;
-
-	/* Calculate DFA */
-	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
-		      txc->recv_ptl_idx, &dfa, &idx_ext);
-
-	req->cb = cxip_cs_send_cb;
 
 	cmd.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.command.opcode = C_CMD_PUT;
 	cmd.index_ext = idx_ext;
 	cmd.event_send_disable = 1;
-	cmd.dfa = dfa;
+	cmd.dfa = *dfa;
 	cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 	cmd.user_ptr = (uint64_t)req;
 	cmd.initiator = cxip_msg_match_id(txc);
-	cmd.match_bits = mb.raw;
+	cmd.match_bits = mb->raw;
 	cmd.header_data = req->send.data;
 
 	/* Triggered ops could result in 0 length DMA */
@@ -479,18 +474,79 @@ static ssize_t cxip_cs_msg_send(struct cxip_req *req)
 		cmd.ct = req->send.cntr->ct->ctn;
 	}
 
-	ret = cxip_txc_emit_dma(txc, req->send.caddr.vni,
-				cxip_ofi_to_cxi_tc(req->send.tclass),
-				CXI_TC_TYPE_DEFAULT,
-				req->triggered ?  req->trig_cntr : NULL,
-				req->trig_thresh, &cmd, req->send.flags);
+	return cxip_txc_emit_dma(txc, req->send.caddr.vni,
+				 cxip_ofi_to_cxi_tc(req->send.tclass),
+				 CXI_TC_TYPE_DEFAULT,
+				 req->triggered ?  req->trig_cntr : NULL,
+				 req->trig_thresh, &cmd, req->send.flags);
+}
+
+static inline ssize_t cxip_cs_send_idc(struct cxip_req *req,
+				       union cxip_match_bits *mb,
+				       union c_fab_addr *dfa, uint8_t idx_ext)
+{
+	struct cxip_txc *txc = req->send.txc;
+	struct c_cstate_cmd cstate_cmd = {};
+	struct c_idc_msg_hdr idc_cmd;
+
+	assert(req->send.len > 0);
+	assert(!txc->hmem);
+
+	cstate_cmd.event_send_disable = 1;
+	cstate_cmd.index_ext = idx_ext;
+	cstate_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
+	cstate_cmd.initiator = cxip_msg_match_id(txc);
+
+	if (req->send.cntr) {
+		cstate_cmd.event_ct_ack = 1;
+		cstate_cmd.ct = req->send.cntr->ct->ctn;
+	}
+
+	/* Note: IDC command completely filled in */
+	idc_cmd.unused_0 = 0;
+	idc_cmd.dfa = *dfa;
+	idc_cmd.match_bits = mb->raw;
+	idc_cmd.header_data = req->send.data;
+	idc_cmd.user_ptr = (uint64_t)req;
+
+	return cxip_txc_emit_idc_msg(txc, req->send.caddr.vni,
+				     cxip_ofi_to_cxi_tc(req->send.tclass),
+				     CXI_TC_TYPE_DEFAULT, &cstate_cmd, &idc_cmd,
+				     req->send.buf, req->send.len,
+				     req->send.flags);
+}
+
+/* Caller must hold ep_obj->lock */
+static ssize_t cxip_cs_msg_send(struct cxip_req *req)
+{
+	struct cxip_txc *txc = req->send.txc;
+	union cxip_match_bits mb = {
+		.cs_vni = req->send.caddr.vni,
+		.cs_tag = req->send.tag,
+		.cs_cq_data = !!(req->send.flags & FI_REMOTE_CQ_DATA),
+	};
+	union c_fab_addr dfa;
+	uint8_t idx_ext;
+	ssize_t ret;
+	bool idc = req->send.send_md || !req->send.len;
+
+	/* Calculate DFA */
+	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
+		      txc->recv_ptl_idx, &dfa, &idx_ext);
+
+	if (req->send.send_md || !req->send.len)
+		ret = cxip_cs_send_dma(req, &mb, &dfa, idx_ext);
+	else
+		ret = cxip_cs_send_idc(req, &mb, &dfa, idx_ext);
 	if (ret) {
-		TXC_DBG(txc, "Failed to write DMA command: %ld\n", ret);
+		TXC_WARN(txc, "Failed to write %s command: %ld\n",
+			 idc ? "IDC" : "DMA", ret);
 		return ret;
 	}
-#if 0
-	TXC_WARN(txc, "Send DMA command submitted for req %p\n", req);
-#endif
+
+	TXC_DBG(txc, "Send %s command submitted for req %p\n",
+		idc ? "IDC" : "DMA", req);
+
 	return FI_SUCCESS;
 }
 
@@ -765,6 +821,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	struct cxip_req *req;
 	struct cxip_addr caddr;
 	int ret;
+	bool idc;
 
 	assert(txc->protocol == FI_PROTO_CXI_CS);
 
@@ -844,7 +901,10 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		req->flags |= FI_MSG;
 	}
 
-	if (req->send.len) {
+	req->cb = cxip_cs_send_cb;
+	idc = cxip_cs_req_uses_idc(req);
+
+	if (req->send.len && !idc) {
 		ret = cxip_map(txc->domain, req->send.buf, req->send.len,
 			       0, &req->send.send_md);
 		if (ret) {
