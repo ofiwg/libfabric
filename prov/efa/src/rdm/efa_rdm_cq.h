@@ -4,11 +4,14 @@
 #ifndef EFA_RDM_CQ_H
 #define EFA_RDM_CQ_H
 
+#include "efa_cq.h"
 #include <ofi_util.h>
 
 struct efa_rdm_cq {
 	struct util_cq util_cq;
 	struct fid_cq *shm_cq;
+	struct efa_ibv_cq ibv_cq;
+	struct dlist_entry ibv_cq_poll_list;
 };
 
 /*

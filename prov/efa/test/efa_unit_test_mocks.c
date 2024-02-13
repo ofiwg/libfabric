@@ -198,6 +198,9 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 #if HAVE_EFADV_QUERY_MR
 	.efadv_query_mr = __real_efadv_query_mr,
 #endif
+#if HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES
+	.ibv_query_qp_data_in_order = __real_ibv_query_qp_data_in_order,
+#endif
 };
 
 struct ibv_ah *__wrap_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
@@ -352,3 +355,20 @@ int efa_mock_efadv_query_mr_recv_and_rdma_read_ic_id_0_1(struct ibv_mr *ibv_mr, 
 }
 
 #endif /* HAVE_EFADV_QUERY_MR */
+
+#if HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES
+int __wrap_ibv_query_qp_data_in_order(struct ibv_qp *qp, enum ibv_wr_opcode op, uint32_t flags)
+{
+	return g_efa_unit_test_mocks.ibv_query_qp_data_in_order(qp, op, flags);
+}
+
+int efa_mock_ibv_query_qp_data_in_order_return_0(struct ibv_qp *qp, enum ibv_wr_opcode op, uint32_t flags)
+{
+	return 0;
+}
+
+int efa_mock_ibv_query_qp_data_in_order_return_in_order_aligned_128_bytes(struct ibv_qp *qp, enum ibv_wr_opcode op, uint32_t flags)
+{
+	return IBV_QUERY_QP_DATA_IN_ORDER_ALIGNED_128_BYTES;
+}
+#endif

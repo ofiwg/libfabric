@@ -12,11 +12,6 @@
 
 #define EFA_RDM_ERROR_MSG_BUFFER_LENGTH 1024
 
-enum ibv_cq_ex_type {
-	IBV_CQ,
-	EFADV_CQ
-};
-
 /** @brief Information of a queued copy.
  *
  * This struct is used when receiving buffer is on device.
@@ -49,10 +44,6 @@ struct efa_rdm_ep {
 
 	/* per-version extra feature/request flag */
 	uint64_t extra_info[EFA_RDM_MAX_NUM_EXINFO];
-
-	struct ibv_cq_ex *ibv_cq_ex;
-
-	enum ibv_cq_ex_type ibv_cq_ex_type;
 
 	/* shm provider fid */
 	struct fid_ep *shm_ep;
@@ -279,8 +270,6 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 				    struct dlist_entry *pkts);
 
 size_t efa_rdm_ep_get_memory_alignment(struct efa_rdm_ep *ep, enum fi_hmem_iface iface);
-
-int efa_rdm_ep_get_prov_errno(struct efa_rdm_ep *ep);
 
 static inline
 struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
