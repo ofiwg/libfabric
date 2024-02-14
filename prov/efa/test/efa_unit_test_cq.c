@@ -274,11 +274,8 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_rdm_pke *pkt_entry;
 	struct fi_cq_data_entry cq_entry;
-	struct fi_cq_err_entry cq_err_entry = {0};
-	struct efa_ep_addr raw_addr = {0};
-	size_t raw_addr_len = sizeof(struct efa_ep_addr);
-	fi_addr_t peer_addr;
-	int ret, err, numaddr, err_data_size = 1024;
+	struct fi_eq_err_entry eq_err_entry;
+	int ret;
 
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
@@ -297,16 +294,6 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
 
-	/* create a fake peer */
-	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
-	assert_int_equal(err, 0);
-	raw_addr.qpn = 1;
-	raw_addr.qkey = 0x1234;
-	numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
-	assert_int_equal(numaddr, 1);
-
-	pkt_entry->ope = efa_rdm_ep_alloc_rxe(efa_rdm_ep, peer_addr, ofi_op_msg);
-
 	efa_rdm_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
 	efa_rdm_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
 	efa_rdm_ep->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
@@ -322,16 +309,16 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	will_return(efa_mock_ibv_read_vendor_err_return_mock, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 	efa_rdm_ep->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
 	efa_rdm_ep->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
+	/* the recv error will not populate to application cq because it's an EFA internal error and
+	 * and not related to any application recv. Currently we can only read the error from eq.
+	 */
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
-	assert_int_equal(ret, -FI_EAVAIL);
+	assert_int_equal(ret, -FI_EAGAIN);
 
-	cq_err_entry.err_data = malloc(err_data_size);
-	cq_err_entry.err_data_size = err_data_size;
-	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
-	assert_int_equal(ret, 1);
-	assert_int_equal(cq_err_entry.err, FI_EIO);
-	assert_int_equal(cq_err_entry.prov_errno, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
-	free(cq_err_entry.err_data);
+	ret = fi_eq_readerr(resource->eq, &eq_err_entry, 0);
+	assert_int_equal(ret, sizeof(eq_err_entry));
+	assert_int_equal(eq_err_entry.err, FI_EIO);
+	assert_int_equal(eq_err_entry.prov_errno, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 }
 
 /**
