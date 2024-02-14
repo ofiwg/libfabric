@@ -214,6 +214,7 @@ struct util_domain {
 	struct ofi_mr_map	mr_map;
 	enum fi_threading	threading;
 	enum fi_progress	data_progress;
+	enum fi_progress	control_progress;
 };
 
 int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
