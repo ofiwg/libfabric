@@ -79,13 +79,15 @@ static int cq_open_close_simultaneous(void)
 		return -FI_ENOMEM;
 
 	ret = 0;
-	for (opened = 0; opened < count && !ret; opened++) {
+	for (opened = 0; opened < count; opened++) {
 		ret = create_cq(&cq_array[opened], 0, 0, FI_CQ_FORMAT_UNSPEC,
 				FI_WAIT_UNSPEC);
 		if (ret) {
 			ret = create_cq(&cq_array[opened], 0, 0,
 					FI_CQ_FORMAT_UNSPEC, FI_WAIT_NONE);
 		}
+		if (ret)
+			break;
 	}
 	if (ret) {
 		FT_WARN("fi_cq_open failed after %d (cq_cnt: %zu): %s",
