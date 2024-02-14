@@ -667,6 +667,26 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 	EFA_DBG(FI_LOG_CQ, "Packet receive error: %s (%d)\n",
 	        efa_strerror(prov_errno), prov_errno);
 
+	/*
+	 * pkes posted by efa_rdm_ep_bulk_post_internal_rx_pkts
+	 * are not associated with ope before being progressed
+	 */
+	if (!pkt_entry->ope) {
+		char ep_addr_str[OFI_ADDRSTRLEN];
+		size_t buflen=0;
+
+		memset(&ep_addr_str, 0, sizeof(ep_addr_str));
+		buflen = sizeof(ep_addr_str);
+		efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &buflen);
+		EFA_WARN(FI_LOG_CQ,
+			"Packet receive error from non TX/RX packet.  Our address: %s\n",
+			ep_addr_str);
+
+		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
 	if (pkt_entry->ope->type == EFA_RDM_TXE) {
 		efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
 	} else if (pkt_entry->ope->type == EFA_RDM_RXE) {
