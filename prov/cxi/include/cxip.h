@@ -1165,6 +1165,7 @@ struct cxip_req_send {
 	struct cxip_addr caddr;
 	fi_addr_t dest_addr;
 	bool tagged;
+	bool hybrid_md;
 	uint32_t tclass;
 	uint64_t tag;
 	uint64_t data;
