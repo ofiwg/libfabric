@@ -652,6 +652,14 @@ static int fi_opx_close_ep(fid_t fid)
 		opx_ep->hfi = NULL;
 	}
 
+	if (opx_ep->hmem_copy_buf) {
+#if HAVE_CUDA
+		cudaFreeHost(opx_ep->hmem_copy_buf);
+#else
+		free(opx_ep->hmem_copy_buf);
+#endif
+		opx_ep->hmem_copy_buf = NULL;
+	}
 	void *mem = opx_ep->mem;
 	free(mem);
 	//opx_ep (the object passed in as fid) is now unusable
@@ -1380,6 +1388,32 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 				FI_WARN(fi_opx_global.prov, FI_LOG_AV, "Too many ep tx contexts (max = %u)\n", ep_tx_max); abort();
 			}
 		}
+#ifdef OPX_HMEM
+	#if HAVE_CUDA
+		opx_ep->hmem_copy_buf = NULL;
+		cudaError_t cuda_rc = cudaHostAlloc((void **) &opx_ep->hmem_copy_buf,
+						FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES,
+						cudaHostAllocDefault);
+		if (cuda_rc != cudaSuccess) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_CORE,
+				"Failed allocating HMEM bounce buf with cudaHostAlloc(), returned cudaError %d.\n",
+				cuda_rc);
+			errno = FI_ENOMEM;
+			goto err;
+		}
+		assert(opx_ep->hmem_copy_buf);
+	#else
+		opx_ep->hmem_copy_buf = malloc(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES);
+		if (opx_ep->hmem_copy_buf == NULL) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_CORE,
+				"Failed allocating HMEM bounce buf with malloc().\n");
+			errno = FI_ENOMEM;
+			goto err;
+		}
+	#endif
+#else
+		opx_ep->hmem_copy_buf = NULL;
+#endif
 	}
 
 	// Apply the saved info objects from the fi_getinfo call
