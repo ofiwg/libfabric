@@ -470,7 +470,9 @@ static int rpc_read_req(struct rpc_ctrl *ctrl)
 	if (!ctrl->buf)
 		return -FI_ENOMEM;
 
-	ft_fill_buf(&ctrl->buf[ctrl->offset], ctrl->size);
+	ret = ft_fill_buf(&ctrl->buf[ctrl->offset], ctrl->size);
+	if (ret)
+		goto free;
 
 	ret = rpc_reg_buf(ctrl, size, FI_REMOTE_READ);
 	if (ret)
