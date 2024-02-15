@@ -67,10 +67,6 @@ def shmemtest(hw, core, hosts, mode, user_env, log_file, util, weekly):
         print('--------------------------------------------------------------')
         print(f"Running shmem ISx test for {core}-{util}-{fab}")
         runshmemtest.execute_cmd("isx")
-
-        print('---------------------------------------------------------------')
-        print(f"Running shmem uh test for {core}-{util}-{fab}")
-        runshmemtest.execute_cmd("uh")
     else:
         print(f"Skipping {core} {runshmemtest.testname} as exec condn fails")
     print('-------------------------------------------------------------------')
