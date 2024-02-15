@@ -651,7 +651,7 @@ bool cxip_send_eager_idc(struct cxip_req *req)
 
 void cxip_send_buf_fini(struct cxip_req *req)
 {
-	if (req->send.send_md)
+	if (req->send.send_md && !req->send.hybrid_md)
 		cxip_unmap(req->send.send_md);
 	if (req->send.ibuf)
 		cxip_txc_ibuf_free(req->send.txc, req->send.ibuf);
