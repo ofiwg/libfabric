@@ -48,7 +48,6 @@ def fabtests(hw, core, hosts, mode, user_env, log_file, util, way):
     print('-------------------------------------------------------------------')
 
 def shmemtest(hw, core, hosts, mode, user_env, log_file, util, weekly):
-
     runshmemtest = tests.ShmemTest(jobname=jbname,buildno=bno,
                                    testname="shmem test", hw=hw, core_prov=core,
                                    fabric=fab, hosts=hosts,
@@ -58,9 +57,10 @@ def shmemtest(hw, core, hosts, mode, user_env, log_file, util, weekly):
 
     print('-------------------------------------------------------------------')
     if (runshmemtest.execute_condn):
-#        skip unit because it is failing shmem_team_split_2d
-#        print(f"Running shmem unit test for {core}-{util}-{fab}")
-#        runshmemtest.execute_cmd("unit")
+        print(f"Running shmem SOS test for {core}-{util}-{fab}")
+        runshmemtest.execute_cmd("sos")
+
+        print('--------------------------------------------------------------')
         print(f"Running shmem PRK test for {core}-{util}-{fab}")
         runshmemtest.execute_cmd("prk")
 
