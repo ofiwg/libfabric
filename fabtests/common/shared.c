@@ -3933,9 +3933,19 @@ int ft_sock_sync(int value)
 			FT_PRINTERR("ft_sock_send", ret);
 			return ret;
 		}
-		ft_sock_recv(sock, &result, sizeof result);
+
+		ret = ft_sock_recv(sock, &result, sizeof result);
+		if (ret) {
+			FT_PRINTERR("ft_sock_recv", ret);
+			return ret;
+		}
 	} else {
-		ft_sock_recv(sock, &result, sizeof result);
+		ret = ft_sock_recv(sock, &result, sizeof result);
+		if (ret) {
+			FT_PRINTERR("ft_sock_recv", ret);
+			return ret;
+		}
+
 		ret = ft_sock_send(sock, &value,  sizeof value);
 		if (ret) {
 			FT_PRINTERR("ft_sock_send", ret);
