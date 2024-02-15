@@ -54,10 +54,18 @@ static char **recv_bufs;
 static struct fi_context *recv_ctx;
 static struct fi_context *send_ctx;
 static struct fid_cq **txcqs, **rxcqs;
+static struct fid_av **avs;
 static struct fid_mr *data_mr = NULL;
 static void *data_desc = NULL;
 static fi_addr_t *remote_addr;
+static bool shared_cq = false;
+static bool shared_av = false;
 int num_eps = 3;
+
+enum {
+	LONG_OPT_SHARED_AV,
+	LONG_OPT_SHARED_CQ,
+};
 
 static void free_ep_res()
 {
@@ -68,6 +76,7 @@ static void free_ep_res()
 		FT_CLOSE_FID(eps[i]);
 		FT_CLOSE_FID(txcqs[i]);
 		FT_CLOSE_FID(rxcqs[i]);
+		FT_CLOSE_FID(avs[i]);
 	}
 
 	free(txcqs);
@@ -79,6 +88,7 @@ static void free_ep_res()
 	free(recv_ctx);
 	free(remote_addr);
 	free(eps);
+	free(avs);
 }
 
 static int alloc_multi_ep_res()
@@ -95,6 +105,7 @@ static int alloc_multi_ep_res()
 	data_bufs = calloc(num_eps * 2, opts.transfer_size);
 	txcqs = calloc(num_eps, sizeof(*txcqs));
 	rxcqs = calloc(num_eps, sizeof(*rxcqs));
+	avs = calloc(num_eps, sizeof(*avs));
 
 	if (!eps || !remote_addr || !send_bufs || !recv_bufs ||
 	    !send_ctx || !recv_ctx || !data_bufs || !txcqs || !rxcqs)
@@ -119,13 +130,16 @@ static int alloc_multi_ep_res()
 
 static int ep_post_rx(int idx)
 {
-	int ret;
+	int ret, cq_read_idx = idx;
+
+	if (shared_cq)
+		cq_read_idx = 0;
 
 	do {
 		ret = fi_recv(eps[idx], recv_bufs[idx], opts.transfer_size,
 			      data_desc, FI_ADDR_UNSPEC, &recv_ctx[idx]);
 		if (ret == -FI_EAGAIN)
-			(void) fi_cq_read(rxcqs[idx], NULL, 0);
+			(void) fi_cq_read(rxcqs[cq_read_idx], NULL, 0);
 
 	} while (ret == -FI_EAGAIN);
 
@@ -134,7 +148,10 @@ static int ep_post_rx(int idx)
 
 static int ep_post_tx(int idx)
 {
-	int ret;
+	int ret, cq_read_idx = idx;
+
+	if (shared_cq)
+		cq_read_idx = 0;
 
 	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
 		ret = ft_fill_buf(send_bufs[idx], opts.transfer_size);
@@ -146,7 +163,7 @@ static int ep_post_tx(int idx)
 		ret = fi_send(eps[idx], send_bufs[idx], opts.transfer_size,
 			      data_desc, remote_addr[idx], &send_ctx[idx]);
 		if (ret == -FI_EAGAIN)
-			(void) fi_cq_read(txcqs[idx], NULL, 0);
+			(void) fi_cq_read(txcqs[cq_read_idx], NULL, 0);
 
 	} while (ret == -FI_EAGAIN);
 
@@ -155,7 +172,7 @@ static int ep_post_tx(int idx)
 
 static int do_transfers(void)
 {
-	int i, ret;
+	int i, ret, cq_read_idx;
 	uint64_t cur;
 
 	for (i = 0; i < num_eps; i++) {
@@ -177,13 +194,17 @@ static int do_transfers(void)
 
 	printf("Wait for all messages from peer\n");
 	for (i = 0; i < num_eps; i++) {
+		if (shared_cq)
+			cq_read_idx = 0;
+		else
+			cq_read_idx = i;
 		cur = 0;
-		ret = ft_get_cq_comp(txcqs[i], &cur, 1, -1);
+		ret = ft_get_cq_comp(txcqs[cq_read_idx], &cur, 1, -1);
 		if (ret < 0)
 			return ret;
 
 		cur = 0;
-		ret = ft_get_cq_comp(rxcqs[i], &cur, 1, -1);
+		ret = ft_get_cq_comp(rxcqs[cq_read_idx], &cur, 1, -1);
 		if (ret < 0)
 			return ret;
 	}
@@ -207,7 +228,13 @@ static int do_transfers(void)
 
 static int setup_client_ep(int idx)
 {
-	int ret;
+	int ret, av_bind_idx = idx, cq_bind_idx = idx;
+
+	if (shared_cq)
+		cq_bind_idx = 0;
+
+	if (shared_av)
+		av_bind_idx = 0;
 
 	ret = fi_endpoint(domain, fi, &eps[idx], NULL);
 	if (ret) {
@@ -215,11 +242,11 @@ static int setup_client_ep(int idx)
 		return ret;
 	}
 
-	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL, &av);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL, &avs[idx]);
 	if (ret)
 		return ret;
 
-	ret = ft_enable_ep(eps[idx], eq, av, txcqs[idx], rxcqs[idx],
+	ret = ft_enable_ep(eps[idx], eq, avs[av_bind_idx], txcqs[cq_bind_idx], rxcqs[cq_bind_idx],
 			   NULL, NULL, NULL);
 	if (ret)
 		return ret;
@@ -233,7 +260,13 @@ static int setup_client_ep(int idx)
 
 static int setup_server_ep(int idx)
 {
-	int ret;
+	int ret, av_bind_idx = idx, cq_bind_idx = idx;
+
+	if (shared_cq)
+		cq_bind_idx = 0;
+
+	if (shared_av)
+		av_bind_idx = 0;
 
 	ret = ft_retrieve_conn_req(eq, &fi);
 	if (ret)
@@ -245,11 +278,11 @@ static int setup_server_ep(int idx)
 		goto failed_accept;
 	}
 
-	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL, &av);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL, &avs[idx]);
 	if (ret)
 		return ret;
 
-	ret = ft_enable_ep(eps[idx], eq, av, txcqs[idx], rxcqs[idx],
+	ret = ft_enable_ep(eps[idx], eq, avs[av_bind_idx], txcqs[cq_bind_idx], rxcqs[cq_bind_idx],
 			   NULL, NULL, NULL);
 	if (ret)
 		goto failed_accept;
@@ -288,7 +321,7 @@ static int setup_av_ep(int idx)
 		return ret;
 	}
 
-	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL, &av);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL, &avs[idx]);
 	if (ret)
 		return ret;
 
@@ -297,14 +330,20 @@ static int setup_av_ep(int idx)
 
 static int enable_ep(int idx)
 {
-	int ret;
+	int ret, av_bind_idx = idx, cq_bind_idx = idx;
 
-	ret = ft_enable_ep(eps[idx], eq, av, txcqs[idx], rxcqs[idx],
+	if (shared_cq)
+		cq_bind_idx = 0;
+
+	if (shared_av)
+		av_bind_idx = 0;
+
+	ret = ft_enable_ep(eps[idx], eq, avs[av_bind_idx], txcqs[cq_bind_idx], rxcqs[cq_bind_idx],
 			   NULL, NULL, NULL);
 	if (ret)
 		return ret;
 
-	ret = ft_init_av_addr(av, eps[idx], &remote_addr[idx]);
+	ret = ft_init_av_addr(avs[av_bind_idx], eps[idx], &remote_addr[idx]);
 	if (ret)
 		return ret;
 
@@ -378,7 +417,15 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "c:vh" ADDR_OPTS INFO_OPTS)) != -1) {
+	int lopt_idx = 0;
+	struct option long_opts[] = {
+		{"shared-av", no_argument, NULL, LONG_OPT_SHARED_AV},
+		{"shared-cq", no_argument, NULL, LONG_OPT_SHARED_CQ},
+		{0, 0, 0, 0}
+	};
+
+	while ((op = getopt_long(argc, argv, "c:vh" ADDR_OPTS INFO_OPTS,
+				 long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
@@ -390,12 +437,24 @@ int main(int argc, char **argv)
 		case 'v':
 			opts.options |= FT_OPT_VERIFY_DATA;
 			break;
+		case LONG_OPT_SHARED_AV:
+			shared_av = true;
+			break;
+		case LONG_OPT_SHARED_CQ:
+			shared_cq = true;
+			break;
 		case '?':
 		case 'h':
 			ft_usage(argv[0], "Multi endpoint test");
 			FT_PRINT_OPTS_USAGE("-c <int>",
 				"number of endpoints to create and test (def 3)");
 			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
+			FT_PRINT_OPTS_USAGE("--shared-cq",
+				"Share tx/rx cq among endpoints. \n"
+				"By default each ep has its own tx/rx cq");
+			FT_PRINT_OPTS_USAGE("--shared-av",
+				"Share the av among endpoints. \n"
+				"By default each ep has its own av");
 			return EXIT_FAILURE;
 		}
 	}
