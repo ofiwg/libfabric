@@ -430,11 +430,6 @@ class ShmemSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
         super().__init__(logger, log_dir, prov, file_name, stage_name)
         self.shmem_type = {
-            'uh'    : { 'func'      : self.check_uh,
-                        'keyphrase' : 'summary',
-                        'passes'    : 0,
-                        'fails'     : 0
-                      },
             'isx'   : { 'func'      : self.check_isx,
                         'keyphrase' : 'scaling',
                         'passes'    : 0,
@@ -450,41 +445,6 @@ class ShmemSummarizer(Summarizer):
         self.keyphrase = self.shmem_type[self.test_type]['keyphrase']
         self.name = 'no_test'
         self.previous = ''
-
-    def check_uh(self, line, log_file):
-        # (test_002) Running test_shmem_atomics.x: Test all atomics... OK
-        # (test_003) Running test_shmem_barrier.x: Tests barrier ... Failed
-        if "running test_" in line:
-            tokens = line.split()
-            for token in tokens:
-                if 'test_shmem' in token:
-                    name = '_'.join(token.split('_')[2:]).strip('.x:')
-                    self.name = f"UH {name}"
-                    break
-            if tokens[len(tokens) - 1] == 'ok':
-                self.shmem_type[self.test_type]['passes'] += 1
-                self.passed_tests.append(self.name)
-            else:
-                self.shmem_type[self.test_type]['fails'] += 1
-                self.failed_tests.append(self.name)
-        # Summary
-        # x/z Passed.
-        # y/z Failed.
-        if self.keyphrase in line: #double check
-            passed = log_file.readline().lower()
-            failed = log_file.readline().lower()
-            token = int(passed.split()[1].split('/')[0])
-            if self.shmem_type[self.test_type]['passes'] != token:
-                self.logger.log(
-                    f"passes {self.shmem_type[self.test_type]['passes']} do " \
-                    f"not match log reported passes {token}"
-                )
-            token = int(failed.split()[1].split('/')[0])
-            if self.shmem_type[self.test_type]['fails'] != int(token):
-                self.logger.log(
-                    f"fails {self.shmem_type[self.test_type]['fails']} does "\
-                    f"not match log fails {token}"
-                )
 
     def check_prk(self, line, log_file=None):
         if "parallel research kernels" in self.previous:
