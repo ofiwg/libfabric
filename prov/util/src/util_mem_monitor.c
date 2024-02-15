@@ -163,7 +163,9 @@ out:
 void ofi_monitor_init(struct ofi_mem_monitor *monitor)
 {
 	dlist_init(&monitor->list);
+	pthread_mutex_lock(&mm_state_lock);
 	monitor->state = FI_MM_STATE_IDLE;
+	pthread_mutex_unlock(&mm_state_lock);
 }
 
 void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor)
