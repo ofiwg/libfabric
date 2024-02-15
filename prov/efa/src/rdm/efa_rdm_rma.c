@@ -330,16 +330,6 @@ bool efa_rdm_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_o
 	    (txe->iov_count > 1 || txe->rma_iov_count > 1))
 		return false;
 
-	/*
-	 * For local write, handshake is not required and
-	 * we just need to check the local ep caps
-	 */
-	if (peer->is_self)
-		return efa_rdm_ep_support_rdma_write(ep);
-
-	/* Check for hardware support of RDMA write.
-	   A handshake should have been made before the check. */
-	assert(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
 	return efa_both_support_rdma_write(ep, peer);
 }
 
