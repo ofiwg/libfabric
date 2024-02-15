@@ -150,8 +150,10 @@ def copy_build_dir(install_path):
 	if (os.path.exists(middlewares_path) != True):
 		os.makedirs(f'{install_path}/middlewares')
 
-	shutil.copytree(f'{cloudbees_config.build_dir}/shmem',
-					f'{middlewares_path}/shmem')
+	shutil.copytree(f'{cloudbees_config.build_dir}/shmem_grass',
+					f'{middlewares_path}/shmem_grass')
+	shutil.copytree(f'{cloudbees_config.build_dir}/shmem_water',
+					f'{middlewares_path}/shmem_water')
 	shutil.copytree(f'{cloudbees_config.build_dir}/oneccl',
 					f'{middlewares_path}/oneccl')
 	shutil.copytree(f'{cloudbees_config.build_dir}/mpich_water',
