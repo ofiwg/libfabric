@@ -858,10 +858,8 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	 */
 	if (txc_cs->next_retry_wait_us != UINT64_MAX &&
 	    ofi_atomic_get32(&txc_cs->time_wait_reqs)) {
-		if (ofi_gettime_us() >= txc_cs->next_retry_wait_us) {
-			ret = -FI_EAGAIN;
-			goto unlock;
-		}
+		if (ofi_gettime_us() >= txc_cs->next_retry_wait_us)
+			cxip_txc_cs_progress(txc);
 	}
 
 	req = cxip_evtq_req_alloc(&txc->tx_evtq, false, txc);
