@@ -637,7 +637,7 @@ void ofi_create_filter(struct ofi_filter *filter, const char *raw_filter)
 }
 
 #ifdef HAVE_LIBDL
-static void ofi_reg_dl_prov(const char *lib)
+static void ofi_reg_dl_prov(const char *lib, bool lib_known_to_exist)
 {
 	void *dlhandle;
 	struct fi_provider* (*inif)(void);
@@ -646,8 +646,13 @@ static void ofi_reg_dl_prov(const char *lib)
 
 	dlhandle = dlopen(lib, RTLD_NOW);
 	if (dlhandle == NULL) {
-		FI_DBG(&core_prov, FI_LOG_CORE,
-			"dlopen(%s): %s\n", lib, dlerror());
+		if (lib_known_to_exist) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"dlopen(%s): %s\n", lib, dlerror());
+		} else {
+			FI_DBG(&core_prov, FI_LOG_CORE,
+				"dlopen(%s): %s\n", lib, dlerror());
+		}
 		return;
 	}
 
@@ -676,7 +681,7 @@ static void ofi_ini_dir(const char *dir)
 			       "asprintf failed to allocate memory\n");
 			goto libdl_done;
 		}
-		ofi_reg_dl_prov(lib);
+		ofi_reg_dl_prov(lib, true);
 
 		free(liblist[n]);
 		free(lib);
@@ -717,7 +722,7 @@ static void ofi_find_prov_libs(void)
 			continue;
 		}
 
-		ofi_reg_dl_prov(lib);
+		ofi_reg_dl_prov(lib, false);
 		free(lib);
 	}
 }
