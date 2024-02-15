@@ -228,7 +228,7 @@ class ShmemTest(Test):
         self.prk_first_arr_dim = 1000
         self.prk_second_arr_dim = 1000
         if self.util_prov:
-            self.prov = f'{self.core_prov};{self.util_prov}'
+            self.prov = f'{self.core_prov}\\;{self.util_prov}'
         else:
             self.prov = self.core_prov
 

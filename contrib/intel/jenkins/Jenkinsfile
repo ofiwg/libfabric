@@ -653,13 +653,22 @@ pipeline {
             }
           }
         }
-        stage('SHMEM') {
+        stage('SHMEM_grass') {
           steps {
             script {
               dir (RUN_LOCATION) {
-                run_middleware([["verbs", null], ["tcp", null],
-                                ["sockets", null]], "SHMEM", "shmem",
-                                "water", "squirtle,totodile", "2")
+                run_middleware([["tcp", null]], "SHMEM", "shmem",
+                                "grass", "grass", "2")
+              }
+            }
+          }
+        }
+        stage('SHMEM_water') {
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                run_middleware([["verbs", "rxm"], ["sockets", null]], "SHMEM",
+                                "shmem", "water", "squirtle,totodile", "2")
               }
             }
           }
