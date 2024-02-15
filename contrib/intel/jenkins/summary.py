@@ -969,15 +969,6 @@ def summarize_items(summary_item, logger, log_dir, mode):
     return err
 
 if __name__ == "__main__":
-#read Jenkins environment variables
-    # In Jenkins,  JOB_NAME  = 'ofi_libfabric/master' vs BRANCH_NAME = 'master'
-    # job name is better to use to distinguish between builds of different
-    # jobs but with same branch name.
-    jobname = os.environ['JOB_NAME']
-    buildno = os.environ['BUILD_NUMBER']
-    workspace = os.environ['WORKSPACE']
-    custom_workspace = os.environ['CUSTOM_WORKSPACE']
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--summary_item', help="functional test to summarize",
                          choices=['fabtests', 'imb', 'osu', 'mpichtestsuite',
@@ -1001,6 +992,7 @@ if __name__ == "__main__":
     send_mail = args.send_mail
 
     mpi_list = ['impi', 'mpich', 'ompi']
+    custom_workspace = os.environ['CUSTOM_WORKSPACE']
     log_dir = f'{custom_workspace}/log_dir'
     if (not os.path.exists(log_dir)):
         os.makedirs(log_dir)
