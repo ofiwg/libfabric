@@ -3925,13 +3925,22 @@ int ft_sock_recv(int fd, void *msg, size_t len)
 int ft_sock_sync(int value)
 {
 	int result = -FI_EOTHER;
+	int ret;
 
 	if (listen_sock < 0) {
-		ft_sock_send(sock, &value,  sizeof value);
+		ret = ft_sock_send(sock, &value,  sizeof value);
+		if (ret) {
+			FT_PRINTERR("ft_sock_send", ret);
+			return ret;
+		}
 		ft_sock_recv(sock, &result, sizeof result);
 	} else {
 		ft_sock_recv(sock, &result, sizeof result);
-		ft_sock_send(sock, &value,  sizeof value);
+		ret = ft_sock_send(sock, &value,  sizeof value);
+		if (ret) {
+			FT_PRINTERR("ft_sock_send", ret);
+			return ret;
+		}
 	}
 
 	return result;
