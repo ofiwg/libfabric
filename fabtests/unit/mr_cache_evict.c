@@ -636,19 +636,19 @@ static int mr_cache_test(enum alloc_type type)
 
 cleanup:
 	if (realloc_mr)
-		fi_close(&realloc_mr->fid);
+		FT_CLOSE_FID(realloc_mr);
 
 	if (cached_mr)
-		fi_close(&cached_mr->fid);
+		FT_CLOSE_FID(cached_mr);
 
 	if (mr)
-		fi_close(&mr->fid);
+		FT_CLOSE_FID(mr);
 
 	if (buf)
 		mem_free(buf, type);
 
 	if (prime_mr)
-		fi_close(&prime_mr->fid);
+		FT_CLOSE_FID(prime_mr);
 
 	if (prime_buf) {
 		switch (iface) {
