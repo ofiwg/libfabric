@@ -136,8 +136,11 @@ static int ep_post_tx(int idx)
 {
 	int ret;
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA))
-		ft_fill_buf(send_bufs[idx], opts.transfer_size);
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_fill_buf(send_bufs[idx], opts.transfer_size);
+		if (ret)
+			return ret;
+	}
 
 	do {
 		ret = fi_send(eps[idx], send_bufs[idx], opts.transfer_size,
