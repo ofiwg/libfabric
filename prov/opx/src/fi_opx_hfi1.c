@@ -2957,11 +2957,9 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		}
 
 #ifdef OPX_HMEM
-		uint8_t hmem_immediate_data[FI_OPX_HFI1_PACKET_MTU];
 		uint64_t src_device_id;
 		enum fi_hmem_iface src_iface = fi_opx_hmem_get_iface(buf, desc, &src_device_id);
 #else
-		uint8_t *const hmem_immediate_data = NULL;
 		const uint64_t src_device_id = 0;
 		const enum fi_hmem_iface src_iface = FI_HMEM_SYSTEM;
 #endif
@@ -3003,8 +3001,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		if (immediate_total) {
 			uint8_t *sbuf;
 			if (src_iface != FI_HMEM_SYSTEM) {
-				ofi_copy_from_hmem(src_iface, src_device_id, hmem_immediate_data, buf, immediate_total);
-				sbuf = hmem_immediate_data;
+				ofi_copy_from_hmem(src_iface, src_device_id, opx_ep->hmem_copy_buf, buf, immediate_total);
+				sbuf = opx_ep->hmem_copy_buf;
 			} else {
 				sbuf = (uint8_t *) buf;
 			}
@@ -3082,11 +3080,9 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	}
 
 #ifdef OPX_HMEM
-	uint8_t hmem_immediate_data[FI_OPX_HFI1_PACKET_MTU];
 	uint64_t src_device_id;
 	enum fi_hmem_iface src_iface = fi_opx_hmem_get_iface(buf, desc, &src_device_id);
 #else
-	uint8_t *const hmem_immediate_data = NULL;
 	const uint64_t src_device_id = 0;
 	const enum fi_hmem_iface src_iface = FI_HMEM_SYSTEM;
 #endif
@@ -3159,8 +3155,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	uint8_t *sbuf;
 	if (src_iface != FI_HMEM_SYSTEM && immediate_total) {
-		ofi_copy_from_hmem(src_iface, src_device_id, hmem_immediate_data, buf, immediate_total);
-		sbuf = hmem_immediate_data;
+		ofi_copy_from_hmem(src_iface, src_device_id, opx_ep->hmem_copy_buf, buf, immediate_total);
+		sbuf = opx_ep->hmem_copy_buf;
 	} else {
 		sbuf = (uint8_t *) buf;
 	}

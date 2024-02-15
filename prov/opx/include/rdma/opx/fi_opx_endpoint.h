@@ -486,11 +486,7 @@ struct fi_opx_ep {
 
 	/* == CACHE LINE 3 == */
 	struct fi_opx_hfi1_context		*hfi;
-	struct {
-		volatile uint64_t		enabled;
-		volatile uint64_t		active;
-		pthread_t			thread;
-	} async;
+	uint8_t					*hmem_copy_buf;
 
 	int					sep_index;
 	enum fi_opx_ep_state			state;
@@ -499,7 +495,7 @@ struct fi_opx_ep {
 	uint32_t				av_type;
 	uint32_t				mr_mode;
 	enum fi_ep_type				type;
-	uint64_t				unused_cacheline3[1];/* Fix from rebasing */
+	uint64_t				unused_cacheline3[3];
 
 	/* == CACHE LINE 4 == */
 	// Only used for initialization
@@ -952,13 +948,6 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "\n");
 
-#ifdef OPX_HMEM
-	uint8_t hmem_buf[FI_OPX_HFI1_PACKET_MTU];
-#else
-	assert(!is_hmem);
-	uint8_t *const hmem_buf = NULL;
-#endif
-
 	const uint64_t recv_len = context->len;
 	/*
 	 * The context buffer pointer has already been set to the appropriate
@@ -1174,7 +1163,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			const size_t xfer_bytes_tail = hdr->send.xfer_bytes_tail;
 
 			if (is_hmem) {
-				recv_buf = (void *) hmem_buf;
+				recv_buf = (void *) opx_ep->hmem_copy_buf;
 			}
 
 			if (xfer_bytes_tail) {
@@ -1197,7 +1186,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
-						context->buf, hmem_buf, send_len);
+						context->buf, opx_ep->hmem_copy_buf, send_len);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(is_intranode, opx_ep->debug_counters.hmem.intranode
 							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_EAGER)
 								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -1301,7 +1290,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			/* For the first MP-Eager packet, we expect all tail bytes in the packet
 			   header to be used, as well as a full payload chunk */
 
-			uint64_t * recv_buf_qw = is_hmem ? (uint64_t *) hmem_buf : (uint64_t *) recv_buf;
+			uint64_t * recv_buf_qw = is_hmem ? (uint64_t *) opx_ep->hmem_copy_buf : (uint64_t *) recv_buf;
 
 			/* Tail size is 16 bytes for an eager first packet */
 			recv_buf_qw[0] = hdr->mp_eager_first.xfer_tail[0];
@@ -1326,7 +1315,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
-						recv_buf, hmem_buf, packet_payload_len);
+						recv_buf, opx_ep->hmem_copy_buf, packet_payload_len);
 
 				/* MP Eager sends are never intranode */
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
@@ -1426,7 +1415,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 #endif
 
 			const size_t xfer_bytes_tail = hdr->mp_eager_nth.xfer_bytes_tail;
-			recv_buf = is_hmem ? (void *) hmem_buf
+			recv_buf = is_hmem ? (void *) opx_ep->hmem_copy_buf
 					   : (void*)((uint8_t*) recv_buf + hdr->mp_eager_nth.payload_offset);
 
 			/* We'll never *not* have some bytes in the tail */
@@ -1458,7 +1447,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
-						recv_buf, hmem_buf, send_len);
+						recv_buf, opx_ep->hmem_copy_buf, send_len);
 			}
 			/* fi_opx_hfi1_dump_packet_hdr((union fi_opx_hfi1_packet_hdr *)hdr, __func__, __LINE__); */
 
@@ -1701,7 +1690,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				 * copy the immediate payload data
 				 */
 				if (is_hmem) {
-					rbuf = hmem_buf;
+					rbuf = opx_ep->hmem_copy_buf;
 				}
 				unsigned i;
 
@@ -1731,11 +1720,11 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				}
 
 				if (is_hmem) {
-					uint64_t immediate_total = (rbuf - hmem_buf) +
+					uint64_t immediate_total = (rbuf - opx_ep->hmem_copy_buf) +
 								   (immediate_block_count * sizeof(union cacheline));
 					if (immediate_total) {
 						ofi_copy_to_hmem(rbuf_iface, rbuf_device,
-							recv_buf, hmem_buf, immediate_total);
+							recv_buf, opx_ep->hmem_copy_buf, immediate_total);
 					}
 				}
 
@@ -3683,18 +3672,12 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 	const uint64_t bth_rx = ((uint64_t)addr.hfi1_rx) << 56;
 	const uint64_t lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(dest_addr);
 
-#ifdef OPX_HMEM
-	uint8_t hmem_bounce_buf[FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES];
-#else
-	uint8_t *hmem_bounce_buf = NULL;
-#endif
-
 	/* Write the first packet */
 	uint32_t first_packet_psn;
 
 	uint8_t *buf_bytes_ptr = (uint8_t *) buf;
 	ssize_t rc = fi_opx_hfi1_tx_send_mp_egr_first (opx_ep, (void **) &buf_bytes_ptr, len, desc,
-						hmem_bounce_buf, bth_rx, lrh_dlid,
+						opx_ep->hmem_copy_buf, bth_rx, lrh_dlid,
 						addr, tag, data, lock_required,
 						caps, reliability, &first_packet_psn);
 
