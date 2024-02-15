@@ -342,6 +342,7 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 		 struct cxip_cntr *comp_cntr)
 {
 	struct cxip_req *req = NULL;
+	struct cxip_mr *mr = rxc->domain->hybrid_mr_desc ? desc : NULL;
 	int ret;
 	uint32_t match_id;
 	uint16_t vni;
@@ -378,9 +379,9 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 		return ret;
 	}
 
-	/* TODO: implement hybrid MD */
 	ofi_genlock_lock(&rxc->ep_obj->lock);
-	ret = cxip_recv_req_alloc(rxc, buf, len, NULL, &req, cxip_cs_recv_cb);
+	ret = cxip_recv_req_alloc(rxc, buf, len, mr ? mr->md : NULL,
+				  &req, cxip_cs_recv_cb);
 	if (ret)
 		goto err;
 
@@ -528,7 +529,7 @@ static ssize_t cxip_cs_msg_send(struct cxip_req *req)
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	ssize_t ret;
-	bool idc = req->send.send_md || !req->send.len;
+	bool idc = !req->send.send_md || !req->send.len;
 
 	/* Calculate DFA */
 	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
@@ -818,6 +819,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 {
 	struct cxip_txc_cs *txc_cs = container_of(txc, struct cxip_txc_cs,
 						  base);
+	struct cxip_mr *mr = txc->domain->hybrid_mr_desc ? desc : NULL;
 	struct cxip_req *req;
 	struct cxip_addr caddr;
 	int ret;
@@ -903,12 +905,18 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	idc = cxip_cs_req_uses_idc(req);
 
 	if (req->send.len && !idc) {
-		ret = cxip_map(txc->domain, req->send.buf, req->send.len,
-			       0, &req->send.send_md);
-		if (ret) {
-			TXC_WARN(txc, "Local buffer map failed: %d %s\n",
-				 ret, fi_strerror(-ret));
-			goto free_req;
+		if (!mr) {
+			ret = cxip_map(txc->domain, req->send.buf,
+				       req->send.len, 0, &req->send.send_md);
+			if (ret) {
+				TXC_WARN(txc,
+					 "Local buffer map failed: %d %s\n",
+					 ret, fi_strerror(-ret));
+				goto free_req;
+			}
+		} else {
+			req->send.send_md = mr->md;
+			req->send.hybrid_md = true;
 		}
 	}
 
@@ -958,7 +966,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 req_dequeue:
 	cxip_cs_send_req_dequeue(req);
 free_map:
-	if (req->send.send_md)
+	if (req->send.send_md && !req->send.hybrid_md)
 		cxip_unmap(req->send.send_md);
 free_req:
 	cxip_evtq_req_free(req);
