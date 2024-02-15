@@ -235,7 +235,6 @@ class ShmemTest(Test):
 
         self.test_dir = {
             'sos'  : 'SOS/test',
-            'uh'    : 'tests-uh',
             'isx'   : 'ISx/SHMEM',
             'prk'   : 'PRK/SHMEM'
         }
@@ -318,9 +317,6 @@ class ShmemTest(Test):
 
                     cmd_list.append(f"{test_dir_path}/{f_name}")
 
-        elif self.shmem_testname == 'uh':
-            cmd_list.append(f'{self.shmem_dir}/{self.test_dir[self.shmem_testname]}/bin '\
-                       f'{self.make[self.shmem_testname]}')
         elif self.shmem_testname == 'isx':
             exec_path = f'{self.shmem_dir}/{self.test_dir[self.shmem_testname]}/bin'
             cmd_list.append(f"{exec_path}/isx.strong {self.isx_shmem_kernel_max} " \
