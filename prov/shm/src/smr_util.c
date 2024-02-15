@@ -572,15 +572,15 @@ void smr_map_del(struct smr_map *map, int64_t id)
 {
 	struct dlist_entry *entry;
 
-	if (id >= SMR_MAX_PEERS || id < 0 || map->peers[id].peer.id < 0)
-		return;
-
 	pthread_mutex_lock(&ep_list_lock);
 	entry = dlist_find_first_match(&ep_name_list, smr_match_name,
 				       smr_no_prefix(map->peers[id].peer.name));
 	pthread_mutex_unlock(&ep_list_lock);
 
 	ofi_spin_lock(&map->lock);
+	if (id >= SMR_MAX_PEERS || id < 0 || map->peers[id].peer.id < 0)
+		goto unlock;
+
 	if (!entry) {
 		if (map->flags & SMR_FLAG_HMEM_ENABLED)
 			(void) ofi_hmem_host_unregister(map->peers[id].region);
@@ -594,6 +594,7 @@ void smr_map_del(struct smr_map *map, int64_t id)
 	map->peers[id].peer.id = -1;
 	map->num_peers--;
 
+unlock:
 	ofi_spin_unlock(&map->lock);
 }
 
