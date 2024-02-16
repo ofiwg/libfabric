@@ -56,6 +56,7 @@ enum {
 	FI_OPT_CXI_GET_OPTIMIZED_MRS,			/* bool */
 	FI_OPT_CXI_SET_PROV_KEY_CACHE,			/* bool */
 	FI_OPT_CXI_GET_PROV_KEY_CACHE,			/* bool */
+	FI_OPT_CXI_SET_RNR_MAX_RETRY_TIME,		/* uint64_t */
 };
 
 /*
