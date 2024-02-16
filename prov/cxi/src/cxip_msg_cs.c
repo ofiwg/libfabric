@@ -587,8 +587,9 @@ static int cxip_rnr_queue_retry(struct cxip_txc_cs *txc, struct cxip_req *req)
 
 	req->send.retries++;
 	ofi_atomic_inc32(&txc->time_wait_reqs);
+
+	TXC_DBG(txc, "Entry added to txc->time_wait_queue[%d]\n", index);
 #if 0
-	TXC_WARN(txc, "Entry added to txc->time_wait_queue[%d]\n", index);
 	TXC_WARN(txc,
 		 "txc->next_retry_wait_us %ld, req->send.retry_rnr_time %ld\n",
 		 txc->next_retry_wait_us, req->send.retry_rnr_time);
@@ -653,6 +654,7 @@ static int cxip_process_rnr_time_wait(struct cxip_txc_cs *txc)
 					goto reset_min_time_wait;
 				}
 
+				txc->total_retries++;
 				dlist_remove_init(&req->send.rnr_entry);
 				ofi_atomic_dec32(&txc->time_wait_reqs);
 			} else {
@@ -731,7 +733,14 @@ static int cxip_txc_cs_msg_init(struct cxip_txc *txc_base)
 
 static int cxip_txc_cs_msg_fini(struct cxip_txc *txc_base)
 {
-	/* Placeholder */
+	struct cxip_txc_cs *txc = container_of(txc_base, struct cxip_txc_cs,
+					       base);
+
+	assert(txc->base.protocol == FI_PROTO_CXI_CS);
+
+	TXC_INFO(txc, "Total received RNR nacks %ld, TX retries %ld\n",
+		 txc->total_rnr_nacks, txc->total_retries);
+
 	return FI_SUCCESS;
 }
 
@@ -773,6 +782,7 @@ static int cxip_cs_send_cb(struct cxip_req *req, const union c_event *event)
 	if (rc == C_RC_ENTRY_NOT_FOUND &&
 	    txc->base.enabled && !req->send.canceled) {
 
+		txc->total_rnr_nacks++;
 		ret  = cxip_rnr_queue_retry(txc, req);
 
 		if (ret == FI_SUCCESS)
