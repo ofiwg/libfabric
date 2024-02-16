@@ -2249,6 +2249,8 @@ struct cxip_txc_cs {
 	uint64_t max_retry_wait_us;	/* Maximum time to retry any request */
 	ofi_atomic32_t time_wait_reqs;	/* Number of RNR time wait reqs */
 	uint64_t next_retry_wait_us;	/* Time of next retry in all queues */
+	uint64_t total_retries;
+	uint64_t total_rnr_nacks;
 
 	/* There are CXIP_NUM_RNR_WAIT_QUEUE queues where each queue has
 	 * a specified time wait value and where the last queue is has the
@@ -3411,6 +3413,10 @@ static inline bool cxip_trace_true(int mod)
 	_CXIP_DBG(FI_LOG_EP_DATA, "TXC (%#x:%u): " fmt "", \
 		  TXC_BASE(txc)->ep_obj->src_addr.nic, \
 		  TXC_BASE(txc)->ep_obj->src_addr.pid, ##__VA_ARGS__)
+#define TXC_INFO(txc, fmt, ...) \
+	_CXIP_INFO(FI_LOG_EP_DATA, "TXC (%#x:%u): " fmt "", \
+		   TXC_BASE(txc)->ep_obj->src_addr.nic, \
+		   TXC_BASE(txc)->ep_obj->src_addr.pid, ##__VA_ARGS__)
 #define TXC_WARN(txc, fmt, ...) \
 	_CXIP_WARN(FI_LOG_EP_DATA, "TXC (%#x:%u): " fmt "", \
 		   TXC_BASE(txc)->ep_obj->src_addr.nic, \
