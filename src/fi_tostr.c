@@ -140,6 +140,7 @@ static void ofi_tostr_progress(char *buf, size_t len, enum fi_progress progress)
 	CASEENUMSTRN(FI_PROGRESS_UNSPEC, len);
 	CASEENUMSTRN(FI_PROGRESS_AUTO, len);
 	CASEENUMSTRN(FI_PROGRESS_MANUAL, len);
+	CASEENUMSTRN(FI_PROGRESS_CONTROL_UNIFIED, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
