@@ -989,7 +989,8 @@ static void complete_rpc(struct rpc_resp *resp)
 	}
 
 	if (resp->mr)
-		fi_close(&resp->mr->fid);
+		FT_CLOSE_FID(resp->mr);
+
 	(void) ft_check_buf(resp + 1, resp->hdr.size);
 	free(resp);
 }
