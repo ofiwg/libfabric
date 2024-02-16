@@ -454,8 +454,10 @@ static int fi_progress_level(enum fi_progress progress_model)
 		return 1;
 	case FI_PROGRESS_MANUAL:
 		return 2;
-	case FI_PROGRESS_UNSPEC:
+	case FI_PROGRESS_CONTROL_UNIFIED:
 		return 3;
+	case FI_PROGRESS_UNSPEC:
+		return 4;
 	default:
 		return -1;
 	}
@@ -572,7 +574,8 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 		return -FI_ENODATA;
 	}
 
-	if (fi_progress_level(user_attr->data_progress) <
+	if (user_attr->data_progress == FI_PROGRESS_CONTROL_UNIFIED ||
+	    fi_progress_level(user_attr->data_progress) <
 	    fi_progress_level(prov_attr->data_progress)) {
 		FI_INFO(prov, FI_LOG_CORE, "Invalid data progress model\n");
 		return -FI_ENODATA;

@@ -256,7 +256,8 @@ enum fi_mr_mode {
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
 	FI_PROGRESS_AUTO,
-	FI_PROGRESS_MANUAL
+	FI_PROGRESS_MANUAL,
+	FI_PROGRESS_CONTROL_UNIFIED,
 };
 
 enum fi_threading {
