@@ -2577,3 +2577,174 @@ Test(hybrid_preemptive, unexpected_msg_preemptive)
 
 	cxit_teardown_msg();
 }
+
+static void msg_hybrid_mr_desc_test_runner(bool multirecv,
+					   bool cq_events)
+{
+	struct mem_region send_window;
+	struct mem_region recv_window;
+	uint64_t send_key = 0x2;
+	uint64_t recv_key = 0x1;
+	int iters = 10;
+	int send_len = 1024;
+	int recv_len = multirecv ? iters * send_len + 20 : send_len;
+	int recv_msg_len = send_len;
+	int send_win_len = send_len * iters;
+	int recv_win_len = multirecv ? recv_len : recv_len * iters;
+	uint64_t recv_flags = cq_events ? FI_COMPLETION : 0;
+	uint64_t send_flags = cq_events ? FI_COMPLETION | FI_TRANSMIT_COMPLETE :
+					  FI_TRANSMIT_COMPLETE;
+	struct iovec riovec;
+	struct iovec siovec;
+	struct fi_msg msg = {};
+	struct fi_cq_tagged_entry cqe;
+	int ret;
+	int i;
+	void *send_desc[1];
+	void *recv_desc[1];
+
+	ret = mr_create(send_win_len, FI_READ | FI_WRITE, 0xa, &send_key,
+			&send_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	send_desc[0] = fi_mr_desc(send_window.mr);
+	cr_assert(send_desc[0] != NULL);
+
+	ret = mr_create(recv_win_len, FI_READ | FI_WRITE, 0x3, &recv_key,
+			&recv_window);
+	cr_assert(ret == FI_SUCCESS);
+	recv_desc[0] = fi_mr_desc(recv_window.mr);
+	cr_assert(recv_desc[0] != NULL);
+
+	msg.iov_count = 1;
+	msg.addr = FI_ADDR_UNSPEC;
+	msg.context = NULL;
+	msg.desc = recv_desc;
+	msg.msg_iov = &riovec;
+
+	/* Always pre-post receives */
+	if (multirecv) {
+		riovec.iov_base = recv_window.mem;
+		riovec.iov_len = recv_win_len;
+		recv_flags |= FI_MULTI_RECV;
+		ret = fi_recvmsg(cxit_ep, &msg, recv_flags);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+	} else {
+		for (i = 0; i < iters; i++) {
+			riovec.iov_base = recv_window.mem + recv_len * i;
+			riovec.iov_len = recv_len;
+			ret = fi_recvmsg(cxit_ep, &msg, recv_flags);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+		}
+	}
+
+	/* TODO: If not completion set MAX RNR time to 0 */
+
+	/* Send messages */
+	msg.addr = cxit_ep_fi_addr;
+	msg.iov_count = 1;
+	msg.context = NULL;
+	msg.desc = send_desc;
+	msg.msg_iov = &siovec;
+	for (i = 0; i < iters; i++) {
+		siovec.iov_base = send_window.mem + send_len * i;
+		siovec.iov_len = send_len;
+		ret = fi_sendmsg(cxit_ep, &msg, send_flags);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_sendmsg failed %d", ret);
+	}
+
+	/* Await Send completions or counter updates */
+	if (cq_events) {
+		for (i = 0; i < iters; i++) {
+			ret = cxit_await_completion(cxit_tx_cq, &cqe);
+			cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+			validate_tx_event(&cqe, FI_MSG | FI_SEND, NULL);
+		}
+	} else {
+		ret = fi_cntr_wait(cxit_send_cntr, iters, 1000);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* Make sure only expected completions were generated */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	/* Await Receive completions or counter updates */
+	if (cq_events) {
+		for (i = 0; i < iters; i++) {
+			ret = cxit_await_completion(cxit_rx_cq, &cqe);
+			cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+			recv_flags = FI_MSG | FI_RECV;
+			if (multirecv) {
+				/* We've sized so last message will unlink */
+				if (i == iters - 1)
+					recv_flags |= FI_MULTI_RECV;
+				validate_rx_event(&cqe, NULL, recv_msg_len,
+						  recv_flags,
+						  recv_window.mem +
+						  recv_msg_len * i, 0, 0);
+			} else {
+				validate_rx_event(&cqe, NULL, recv_msg_len,
+						  recv_flags, NULL, 0, 0);
+			}
+		}
+	} else {
+		ret = fi_cntr_wait(cxit_recv_cntr, iters, 1000);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* Make sure only expected completions were generated */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	for (i = 0; i < send_win_len; i++)
+		cr_assert_eq(send_window.mem[i], recv_window.mem[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     send_window.mem[i], recv_window.mem[i]);
+
+	mr_destroy(&send_window);
+	mr_destroy(&recv_window);
+}
+
+TestSuite(cs_msg_hybrid_mr_desc, .init = cxit_setup_rma_cs_hybrid_mr_desc,
+	  .fini = cxit_teardown_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(cs_msg_hybrid_mr_desc, non_multirecv_comp)
+{
+	msg_hybrid_mr_desc_test_runner(false, true);
+}
+
+Test(cs_msg_hybrid_mr_desc, multirecv_comp)
+{
+	msg_hybrid_mr_desc_test_runner(true, true);
+}
+
+/* Verify non-descriptor traffic works */
+Test(cs_msg_hybrid_mr_desc, sizes_comp)
+{
+	uint64_t flags;
+	int ret;
+
+	/* Turn on completions notifications */
+	flags = FI_SEND;
+	ret = fi_control(&cxit_ep->fid, FI_GETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_GETOPSFLAG TX ret %d",
+		     ret);
+	flags |= FI_SEND | FI_COMPLETION | FI_TRANSMIT_COMPLETE;
+	ret = fi_control(&cxit_ep->fid, FI_SETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_SETOPSFLAG TX ret %d",
+		     ret);
+
+	flags = FI_RECV;
+	ret = fi_control(&cxit_ep->fid, FI_GETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_GETOPSFLAG RX ret %d",
+		     ret);
+	flags |= FI_RECV | FI_COMPLETION;
+	ret = fi_control(&cxit_ep->fid, FI_SETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_SETOPSFLAG RX ret %d",
+		     ret);
+
+	sizes();
+}

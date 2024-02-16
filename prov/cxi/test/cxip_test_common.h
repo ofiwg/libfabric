@@ -92,6 +92,7 @@ void cxit_setup_enabled_ep_fd(void);
 void cxit_setup_rma(void);
 void cxit_setup_rma_fd(void);
 void cxit_setup_rma_hybrid_mr_desc(void);
+void cxit_setup_rma_cs_hybrid_mr_desc(void);
 void cxit_setup_rma_mr_events(void);
 #define cxit_setup_tagged cxit_setup_rma
 #define cxit_setup_msg cxit_setup_rma
