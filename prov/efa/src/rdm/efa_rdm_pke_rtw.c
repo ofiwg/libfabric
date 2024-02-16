@@ -1,35 +1,6 @@
-/*
- * Copyright (c) Amazon.com, Inc. or its affiliates.
- * All rights reserved.
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+
 #include "ofi_iov.h"
 #include "ofi_proto.h"
 #include "efa_errno.h"
@@ -52,7 +23,7 @@
  * @param[in,out]	pkt_entry	RTW packet entry
  * @param[in]		txe		TX entry that has RMA write information
  * @param[in]		rma_iov		the "rma_iov" field in RTW packet header
- * 
+ *
  * @returns
  * 0 on success
  * negative libfabric error code on error.
@@ -81,7 +52,7 @@ ssize_t efa_rdm_pke_init_rtw_common(struct efa_rdm_pke *pkt_entry,
  * @brief allcoate an RX entry for a incoming RTW packet
  *
  * The RX entry will be allocated from endpoint's OP entry
- * pool 
+ * pool
  * @param[in]	pkt_entry	received RTW packet
  *
  * @return
@@ -209,9 +180,9 @@ void efa_rdm_pke_proc_eager_rtw(struct efa_rdm_pke *pkt_entry,
  * @brief handle the event that an EFA_RDM_EAGER_RTW packet has been received
  *
  * Calls #efa_rdm_pke_proc_eager_rtw()
- * 
+ *
  * @param[in,out]	pkt_entry	received EFA_RDM_EAGER_RTW packet
- * 
+ *
  */
 void efa_rdm_pke_handle_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 {
@@ -242,7 +213,7 @@ void efa_rdm_pke_handle_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
  * @brief initialize a EFA_RDM_DC_EAGER_RTW_PKT packet
  *
  * DC means delivery complete
- * 
+ *
  * @param[in,out]	pkt_entry	packet entry to be initialized
  * @param[in]		txe		TX entry that has RMA write information
  * @returns
@@ -272,9 +243,9 @@ ssize_t efa_rdm_pke_init_dc_eager_rtw(struct efa_rdm_pke *pkt_entry,
  *
  * DC means delivery complete
  * Calls #efa_rdm_pke_proc_eager_rtw()
- * 
+ *
  * @param[in,out]	pkt_entry	received EFA_RDM_DC_EAGER_RTW packet
- * 
+ *
  */
 void efa_rdm_pke_handle_dc_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 {
@@ -303,7 +274,7 @@ void efa_rdm_pke_handle_dc_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 
 /**
  * @brief initialize the the header of a LONGCTS RTW packet
- * 
+ *
  * This function applies to both EFA_RDM_LONGCTS_RTW_PKT and
  * EFA_RDM_DC_LONGCTS_RTW_PKT
  */
@@ -325,7 +296,7 @@ void efa_rdm_pke_init_longcts_rtw_hdr(struct efa_rdm_pke *pkt_entry,
 /**
  * @brief initialize a EFA_RDM_LONGCTS_RTW packet
  *
- * 
+ *
  * @param[in,out]	pkt_entry	packet entry to be initialized
  * @param[in]		txe		TX entry that has RMA write information
  * @returns
@@ -370,7 +341,7 @@ void efa_rdm_pke_handle_longcts_rtw_sent(struct efa_rdm_pke *pkt_entry)
  * @brief handle the "send completion" event of a LONGCTS RTW packet
  *
  * Apply to both EFA_RDM_LONGCTS_RTW and EFA_RDM_DC_LONGCTS_RTW
- * 
+ *
  * @param[in]	pkt_entry	LONGCTS RTW packet entry
  */
 void efa_rdm_pke_handle_longcts_rtw_send_completion(struct efa_rdm_pke *pkt_entry)
@@ -387,7 +358,7 @@ void efa_rdm_pke_handle_longcts_rtw_send_completion(struct efa_rdm_pke *pkt_entr
  * @brief handle the event that a LONGCTS RTW packet has been received
  *
  * applies to both EFA_RDM_LONGCTS_RTW_PKT and EFA_RDM_DC_LONGCTS_RTW_PKT
- * 
+ *
  * @param[in]	pkt_entry	received LONGCTS RTW paket entry
  */
 void efa_rdm_pke_handle_longcts_rtw_recv(struct efa_rdm_pke *pkt_entry)
@@ -536,7 +507,7 @@ ssize_t efa_rdm_pke_init_longread_rtw(struct efa_rdm_pke *pkt_entry,
 
 /**
  * @brief handle the event that a EFA_RDM_LONGREAD_RTA_PKE has been received
- * 
+ *
  * @param[in]		pkt_entry	received EFA_RDM_LONGREAD_RTA_PKT packet entry
  */
 void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)

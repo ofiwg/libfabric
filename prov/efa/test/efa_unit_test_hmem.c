@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+
 #include "efa_unit_tests.h"
 
 
@@ -8,7 +11,7 @@
  * when HAVE_NEURON=1, will still return 0 but leave
  * efa_hmem_info[FI_HMEM_NEURON].initialized and
  * efa_hmem_info[FI_HMEM_NEURON].p2p_supported_by_device as false.
- * 
+ *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
 void test_efa_hmem_info_update_neuron(struct efa_resource **state)

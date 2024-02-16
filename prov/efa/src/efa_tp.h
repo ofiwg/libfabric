@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+
 #ifndef _EFA_TP_H
 #define _EFA_TP_H
 

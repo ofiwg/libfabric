@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+
 #include "efa_unit_tests.h"
 
 /**
@@ -5,7 +8,7 @@
  * This test calls fi_av_insert() twice with the same raw address,
  * and verifies that returned fi_addr is the same and
  * ibv_create_ah only gets called once.
- * 
+ *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
 void test_av_insert_duplicate_raw_addr(struct efa_resource **state)
@@ -40,7 +43,7 @@ void test_av_insert_duplicate_raw_addr(struct efa_resource **state)
  * This test calls fi_av_insert() twice with two difference raw address with same GID,
  * and verifies that returned fi_addr is different and ibv_create_ah only gets called once.
  * this is because libfabric EFA provider has a cache for address handle (AH).
- * 
+ *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
 void test_av_insert_duplicate_gid(struct efa_resource **state)

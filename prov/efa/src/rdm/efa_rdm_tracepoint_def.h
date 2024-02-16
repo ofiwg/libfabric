@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+
 #undef LTTNG_UST_TRACEPOINT_PROVIDER
 #define LTTNG_UST_TRACEPOINT_PROVIDER EFA_RDM_TP_PROV
 
@@ -21,7 +24,7 @@
 #define X_ENTRY_FIELDS \
 	lttng_ust_field_integer(int, msg_id, msg_id) \
 	lttng_ust_field_integer_hex(size_t, ctx, ctx) \
-	lttng_ust_field_integer(int, total_len, total_len) 
+	lttng_ust_field_integer(int, total_len, total_len)
 
 LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_RDM_TP_PROV, x_entry,
 	LTTNG_UST_TP_ARGS(X_ENTRY_ARGS),
