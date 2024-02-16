@@ -1111,7 +1111,11 @@ static void start_rpc(struct rpc_hdr *req)
 		goto free;
 
 	resp->hdr = *req;
-	ft_fill_buf(resp + 1, resp->hdr.size);
+	ret = ft_fill_buf(resp + 1, resp->hdr.size);
+	if (ret) {
+		free(resp);
+		goto free;
+	}
 
 	start = ft_gettime_ms();
 	do {
