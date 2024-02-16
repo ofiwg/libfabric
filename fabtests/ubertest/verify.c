@@ -119,7 +119,11 @@ int ft_sync_fill_bufs(size_t size)
 		if (ret)
 			return ret;
 
-		ft_hmem_copy_from(opts.iface, opts.device, ft_tx_ctrl.cpy_buf, ft_tx_ctrl.buf, size);
+		ret = ft_hmem_copy_from(opts.iface, opts.device,
+					ft_tx_ctrl.cpy_buf,
+					ft_tx_ctrl.buf, size);
+		if (ret)
+			return ret;
 	}
 
 	ft_sock_sync(0);
