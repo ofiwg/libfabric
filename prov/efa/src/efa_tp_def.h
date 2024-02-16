@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+
 #undef LTTNG_UST_TRACEPOINT_PROVIDER
 #define LTTNG_UST_TRACEPOINT_PROVIDER EFA_TP_PROV
 

@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+
 #ifndef EFA_UNIT_TEST_RDMA_CORE_MOCKS_H
 #define EFA_UNIT_TEST_RDMA_CORE_MOCKS_H
 
