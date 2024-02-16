@@ -124,7 +124,7 @@ struct fi_cntr_attr {
   generates an entry in an event queue.
 
 - *FI_CNTR_EVENTS_BYTES*
-: The counter increments by the the transer size for every successful 
+: The counter increments by the the tranfser size for every successful 
   completion that occurs on an associated bound endpoint.  The type of 
   completions -- sends and/or receives -- which are counted may be 
   restricted using control flags when binding the counter and the 
