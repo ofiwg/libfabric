@@ -436,12 +436,49 @@ err:
 	return ret;
 }
 
-static inline bool cxip_cs_req_uses_idc(struct cxip_req *req)
+static inline bool cxip_cs_req_uses_idc(struct cxip_txc_cs *txc,
+					ssize_t len, bool triggered)
+
 {
 	/* TODO: Consider supporting HMEM and IDC by mapping memory */
-	return  !req->send.txc->hmem && req->send.len &&
-		req->send.len <= CXIP_INJECT_SIZE &&
-		!req->triggered && !cxip_env.disable_non_inject_msg_idc;
+	return  !txc->base.hmem && len && len <= CXIP_INJECT_SIZE &&
+		!triggered && !cxip_env.disable_non_inject_msg_idc;
+}
+
+static inline bool cxip_cs_tx_success_disable(struct cxip_txc_cs *txc,
+					      struct cxip_mr *mr,
+					      bool idc, uint64_t flags)
+{
+	/* Success events can be avoided if we do not require local
+	 * memory registration, RNR retries will not be done, and
+	 * a user completion is not requested,
+	 */
+	return (mr || idc) && !txc->max_retry_wait_us &&
+		!(flags & FI_COMPLETION);
+}
+
+static int cxip_cs_send_selective_comp_cb(struct cxip_req *req,
+					  const union c_event *event)
+{
+	int event_rc;
+	int ret_err;
+
+	/* When errors happen, send events can occur before the put/get
+	 * event. These events should just be dropped.
+	 */
+	if (event->hdr.event_type == C_EVENT_SEND) {
+		CXIP_WARN("Unexpected %s event: rc=%s\n",
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
+		return FI_SUCCESS;
+	}
+
+	event_rc = cxi_init_event_rc(event);
+	ret_err = proverr2errno(event_rc);
+
+	return cxip_cq_req_error(req, 0, ret_err,
+				 cxi_event_rc(event), NULL, 0,
+				 FI_ADDR_UNSPEC);
 }
 
 static inline ssize_t cxip_cs_send_dma(struct cxip_req *req,
@@ -461,6 +498,7 @@ static inline ssize_t cxip_cs_send_dma(struct cxip_req *req,
 	cmd.initiator = cxip_msg_match_id(txc);
 	cmd.match_bits = mb->raw;
 	cmd.header_data = req->send.data;
+	cmd.event_success_disable = req->send.success_disable;
 
 	/* Triggered ops could result in 0 length DMA */
 	if (req->send.send_md) {
@@ -497,6 +535,7 @@ static inline ssize_t cxip_cs_send_idc(struct cxip_req *req,
 	cstate_cmd.index_ext = idx_ext;
 	cstate_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 	cstate_cmd.initiator = cxip_msg_match_id(txc);
+	cstate_cmd.event_success_disable = req->send.success_disable;
 
 	if (req->send.cntr) {
 		cstate_cmd.event_ct_ack = 1;
@@ -727,7 +766,47 @@ static void cxip_txc_cs_fini_struct(struct cxip_txc *txc)
 
 static int cxip_txc_cs_msg_init(struct cxip_txc *txc_base)
 {
-	/* Placeholder */
+	struct cxip_txc_cs *txc = container_of(txc_base, struct cxip_txc_cs,
+					       base);
+	struct cxip_req *req;
+
+	assert(txc->base.protocol == FI_PROTO_CXI_CS);
+
+	if (txc->base.domain->hybrid_mr_desc) {
+		TXC_WARN(txc, "selective_comp setup\n");
+		req = cxip_evtq_req_alloc(&txc->base.tx_evtq, 0, &txc->base);
+		if (!req) {
+			TXC_WARN(txc, "FI_MSG hybrid req alloc failed\n");
+			return -FI_ENOMEM;
+		}
+		req->type = CXIP_REQ_SEND;
+		req->cb = cxip_cs_send_selective_comp_cb;
+		req->context = (uint64_t)txc->base.context;
+		req->flags = FI_MSG | FI_SEND;
+		req->addr = FI_ADDR_UNSPEC;
+		req->send.success_disable = true;
+		req->send.txc_cs = txc;
+		txc->req_selective_comp_msg = req;
+
+		req = cxip_evtq_req_alloc(&txc->base.tx_evtq, 0, &txc->base);
+		if (!req) {
+			TXC_WARN(txc, "FI_TAGGED hybrid req alloc failed\n");
+			cxip_evtq_req_free(txc->req_selective_comp_msg);
+			txc->req_selective_comp_msg = NULL;
+			return -FI_ENOMEM;
+		}
+		req->type = CXIP_REQ_SEND;
+		req->cb = cxip_cs_send_selective_comp_cb;
+		req->context = (uint64_t)txc->base.context;
+		req->flags = FI_TAGGED | FI_SEND;
+		req->addr = FI_ADDR_UNSPEC;
+		req->send.success_disable = true;
+		req->send.txc_cs = txc;
+		txc->req_selective_comp_tag = req;
+
+		txc->hybrid_mr_desc = true;
+	}
+
 	return FI_SUCCESS;
 }
 
@@ -737,6 +816,11 @@ static int cxip_txc_cs_msg_fini(struct cxip_txc *txc_base)
 					       base);
 
 	assert(txc->base.protocol == FI_PROTO_CXI_CS);
+
+	if (txc->req_selective_comp_msg)
+		cxip_evtq_req_free(txc->req_selective_comp_msg);
+	if (txc->req_selective_comp_tag)
+		cxip_evtq_req_free(txc->req_selective_comp_tag);
 
 	TXC_INFO(txc, "Total received RNR nacks %ld, TX retries %ld\n",
 		 txc->total_rnr_nacks, txc->total_retries);
@@ -830,7 +914,8 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	struct cxip_txc_cs *txc_cs = container_of(txc, struct cxip_txc_cs,
 						  base);
 	struct cxip_mr *mr = txc->domain->hybrid_mr_desc ? desc : NULL;
-	struct cxip_req *req;
+	struct cxip_req *req = NULL;
+	struct cxip_req *send_req;
 	struct cxip_addr caddr;
 	int ret;
 	bool idc;
@@ -874,11 +959,33 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 			cxip_txc_cs_progress(txc);
 	}
 
-	req = cxip_evtq_req_alloc(&txc->tx_evtq, false, txc);
-	if (!req) {
-		TXC_DBG(txc, "Failed to allocate request, return -FI_EAGAIN\n");
-		ret = -FI_EAGAIN;
-		goto unlock;
+	idc = cxip_cs_req_uses_idc(txc_cs, len, triggered);
+
+	if (cxip_cs_tx_success_disable(txc_cs, mr, idc, flags)) {
+		/* This request cannot be retried, we use the common request
+		 * to pass parameters to the send function. This is done
+		 * with exclusive access to the request.
+		 */
+		send_req = tagged ? txc_cs->req_selective_comp_tag :
+				    txc_cs->req_selective_comp_msg;
+		send_req->send.send_md = NULL;
+		send_req->send.hybrid_md = false;
+	} else {
+		req = cxip_evtq_req_alloc(&txc->tx_evtq, false, txc);
+		if (!req) {
+			TXC_DBG(txc,
+				"Failed to allocate request, ret -FI_EAGAIN\n");
+			ret = -FI_EAGAIN;
+			goto unlock;
+		}
+		send_req = req;
+		send_req->cb = cxip_cs_send_cb;
+		send_req->type = CXIP_REQ_SEND;
+		send_req->send.txc = txc;
+		send_req->context = (uint64_t)context;
+		send_req->flags = FI_SEND |
+				  (flags & (FI_COMPLETION | FI_MATCH_COMPLETE));
+		send_req->send.success_disable = false;
 	}
 
 	/* Restrict outstanding success event requests to queue size */
@@ -887,37 +994,31 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		goto free_req;
 	}
 
-	req->triggered = triggered;
-	req->trig_thresh = trig_thresh;
-	req->trig_cntr = trig_cntr;
+	send_req->triggered = triggered;
+	send_req->trig_thresh = trig_thresh;
+	send_req->trig_cntr = trig_cntr;
 
 	/* Save Send parameters to replay */
-	req->type = CXIP_REQ_SEND;
-	req->send.txc = txc;
-	req->send.tclass = tclass;
-	req->send.cntr = triggered ? comp_cntr : txc->send_cntr;
-	req->send.buf = buf;
-	req->send.len = len;
-	req->send.data = data;
-	req->send.flags = flags;
+	send_req->send.tclass = tclass;
+	send_req->send.cntr = triggered ? comp_cntr : txc->send_cntr;
+	send_req->send.buf = buf;
+	send_req->send.len = len;
+	send_req->send.data = data;
+	send_req->send.flags = flags;
 	/* Set completion parameters */
-	req->context = (uint64_t)context;
-	req->flags = FI_SEND | (flags & (FI_COMPLETION | FI_MATCH_COMPLETE));
 	if (tagged) {
-		req->send.tagged = tagged;
-		req->send.tag = tag;
-		req->flags |= FI_TAGGED;
+		send_req->send.tagged = tagged;
+		send_req->send.tag = tag;
+		send_req->flags |= FI_TAGGED;
 	} else {
-		req->flags |= FI_MSG;
+		send_req->flags |= FI_MSG;
 	}
 
-	req->cb = cxip_cs_send_cb;
-	idc = cxip_cs_req_uses_idc(req);
-
-	if (req->send.len && !idc) {
+	if (send_req->send.len && !idc) {
 		if (!mr) {
-			ret = cxip_map(txc->domain, req->send.buf,
-				       req->send.len, 0, &req->send.send_md);
+			ret = cxip_map(txc->domain, send_req->send.buf,
+				       send_req->send.len, 0,
+				       &send_req->send.send_md);
 			if (ret) {
 				TXC_WARN(txc,
 					 "Local buffer map failed: %d %s\n",
@@ -925,8 +1026,8 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 				goto free_req;
 			}
 		} else {
-			req->send.send_md = mr->md;
-			req->send.hybrid_md = true;
+			send_req->send.send_md = mr->md;
+			send_req->send.hybrid_md = true;
 		}
 	}
 
@@ -941,8 +1042,8 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	if (!txc->ep_obj->av_auth_key)
 		caddr.vni = txc->ep_obj->auth_key.vni;
 
-	req->send.caddr = caddr;
-	req->send.dest_addr = dest_addr;
+	send_req->send.caddr = caddr;
+	send_req->send.dest_addr = dest_addr;
 
 	if (cxip_evtq_saturated(&txc->tx_evtq)) {
 		TXC_DBG(txc, "TX HW EQ saturated\n");
@@ -950,36 +1051,32 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		goto free_map;
 	}
 
-	/* Enqueue on the TXC. TODO: Consider if we should examine
-	 * the RNR retry list and push back if a RNR is outstanding
-	 * to a peer.
-	 */
-	dlist_insert_tail(&req->send.txc_entry, &txc->msg_queue);
-	req->send.max_rnr_time = ofi_gettime_us() + txc_cs->max_retry_wait_us;
+	dlist_insert_tail(&send_req->send.txc_entry, &txc->msg_queue);
+	send_req->send.max_rnr_time = ofi_gettime_us() +
+				      txc_cs->max_retry_wait_us;
 
-	/* Try Send */
-	ret = cxip_cs_msg_send(req);
+	ret = cxip_cs_msg_send(send_req);
 	if (ret != FI_SUCCESS)
 		goto req_dequeue;
-
-	ofi_genlock_unlock(&txc->ep_obj->lock);
 
 	TXC_DBG(txc,
 		"req: %p buf: %p len: %lu dest_addr: 0x%lX nic: %d "
 		"pid: %d tag(%c): 0x%lx context %#lx\n",
-		req, req->send.buf, req->send.len, dest_addr, caddr.nic,
-		caddr.pid, req->send.tagged ? '*' : '-', req->send.tag,
-		req->context);
+		send_req, send_req->send.buf, send_req->send.len, dest_addr,
+		caddr.nic, caddr.pid, send_req->send.tagged ? '*' : '-',
+		send_req->send.tag, send_req->context);
+	ofi_genlock_unlock(&txc->ep_obj->lock);
 
 	return FI_SUCCESS;
 
 req_dequeue:
-	cxip_cs_send_req_dequeue(req);
+	cxip_cs_send_req_dequeue(send_req);
 free_map:
-	if (req->send.send_md && !req->send.hybrid_md)
-		cxip_unmap(req->send.send_md);
+	if (send_req->send.send_md && !send_req->send.hybrid_md)
+		cxip_unmap(send_req->send.send_md);
 free_req:
-	cxip_evtq_req_free(req);
+	if (req)
+		cxip_evtq_req_free(req);
 unlock:
 	ofi_genlock_unlock(&txc->ep_obj->lock);
 
