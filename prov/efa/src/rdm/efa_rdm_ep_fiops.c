@@ -252,6 +252,17 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (ret)
 		goto err_free;
 
+	ret = ofi_bufpool_create(&ep->peer_map_entry_pool,
+				 sizeof(struct efa_rdm_peer_map_entry),
+				 EFA_RDM_BUFPOOL_ALIGNMENT,
+				 0, /* allowed for grow */
+				 /* Don't use track of buffer, because user can
+				  * close ep without removing peers from avs */
+				 EFA_MIN_AV_SIZE, OFI_BUFPOOL_NO_TRACK);
+
+		if (ret)
+			return ret;
+
 	ret = ofi_bufpool_create(&ep->rx_atomrsp_pool, ep->mtu_size,
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
@@ -268,6 +279,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		goto err_free;
 
 	efa_rdm_rxe_map_construct(&ep->rxe_map);
+	efa_rdm_peer_map_construct(&ep->peer_map);
 	return 0;
 
 err_free:
@@ -276,6 +288,9 @@ err_free:
 
 	if (ep->map_entry_pool)
 		ofi_bufpool_destroy(ep->map_entry_pool);
+
+	if (ep->peer_map_entry_pool)
+		ofi_bufpool_destroy(ep->peer_map_entry_pool);
 
 	if (ep->ope_pool)
 		ofi_bufpool_destroy(ep->ope_pool);
@@ -744,6 +759,9 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 
 	if (efa_rdm_ep->map_entry_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->map_entry_pool);
+
+	if (efa_rdm_ep->peer_map_entry_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->peer_map_entry_pool);
 
 	if (efa_rdm_ep->rx_readcopy_pkt_pool) {
 		EFA_INFO(FI_LOG_EP_CTRL, "current usage of read copy packet pool is %d\n",

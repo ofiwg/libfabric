@@ -39,6 +39,10 @@ struct efa_rdm_ep_queued_copy {
 #define EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND (4096)
 #define EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV (8192)
 
+struct efa_rdm_peer_map {
+	struct efa_rdm_peer_map_entry *head;
+};
+
 struct efa_rdm_ep {
 	struct efa_base_ep base_ep;
 
@@ -208,6 +212,10 @@ struct efa_rdm_ep {
 	bool write_in_order_aligned_128_bytes; /**< whether to support in order write of each aligned 128 bytes memory region */
 	char err_msg[EFA_RDM_ERROR_MSG_BUFFER_LENGTH]; /* A large enough buffer to store CQ/EQ error data used by e.g. fi_cq_readerr */
 	struct efa_rdm_pke **pke_vec;
+	/* data structure to maintain peer_map */
+	struct ofi_bufpool *peer_map_entry_pool;
+	/** a map between fi_addr_t to efa_rdm_peer */
+	struct efa_rdm_peer_map peer_map;
 };
 
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);

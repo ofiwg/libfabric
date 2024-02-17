@@ -56,6 +56,11 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	peer->host_id = peer->is_self ? ep->host_id : 0;	/* Peer host id is exchanged via handshake */
 	peer->num_read_msg_in_flight = 0;
 	peer->num_runt_bytes_in_flight = 0;
+	if (conn->shm_fiaddr != FI_ADDR_NOTAVAIL) {
+		peer->shm_fiaddr = conn->shm_fiaddr;
+		peer->is_local = 1;
+	}
+
 	ofi_recvwin_buf_alloc(&peer->robuf, efa_env.recvwin_size);
 	dlist_init(&peer->outstanding_tx_pkts);
 	dlist_init(&peer->txe_list);
@@ -311,4 +316,43 @@ int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer,
 		return (op == ofi_op_tagged) ? EFA_RDM_LONGREAD_TAGRTM_PKT
 					     : EFA_RDM_LONGREAD_MSGRTM_PKT;
 	}
+}
+
+struct efa_rdm_peer *efa_rdm_peer_map_insert(struct efa_rdm_peer_map *peer_map, fi_addr_t addr, struct efa_rdm_ep *ep)
+{
+	struct efa_rdm_peer_map_entry *entry;
+	struct efa_rdm_peer *peer;
+
+	entry = ofi_buf_alloc(ep->peer_map_entry_pool);
+	if (OFI_UNLIKELY(!entry)) {
+		EFA_WARN(FI_LOG_CQ,
+			"Map entries for medium size message exhausted.\n");
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_PEER_MAP_ENTRY_POOL_EXHAUSTED);
+		return NULL;
+	}
+
+	entry->key = addr;
+	peer = &entry->efa_rdm_peer;
+
+	HASH_ADD(hh, peer_map->head, key, sizeof(addr), entry);
+
+	return peer;
+}
+
+struct efa_rdm_peer *efa_rdm_peer_map_lookup(struct efa_rdm_peer_map *peer_map, fi_addr_t addr)
+{
+	struct efa_rdm_peer_map_entry *entry = NULL;
+
+	HASH_FIND(hh, peer_map->head, &addr, sizeof(addr), entry);
+	return entry ? &entry->efa_rdm_peer : NULL;
+}
+
+void efa_rdm_peer_map_remove(struct efa_rdm_peer_map *peer_map, fi_addr_t addr, struct efa_rdm_peer *peer)
+{
+	struct efa_rdm_peer_map_entry *entry;
+
+	HASH_FIND(hh, peer_map->head, &addr, sizeof(addr), entry);
+	assert(&entry->efa_rdm_peer == peer);
+	HASH_DEL(peer_map->head, entry);
+	ofi_buf_free(entry);
 }
