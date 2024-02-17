@@ -1166,6 +1166,7 @@ struct cxip_req_send {
 	fi_addr_t dest_addr;
 	bool tagged;
 	bool hybrid_md;
+	bool success_disable;
 	uint32_t tclass;
 	uint64_t tag;
 	uint64_t data;
@@ -2251,6 +2252,11 @@ struct cxip_txc_cs {
 	uint64_t next_retry_wait_us;	/* Time of next retry in all queues */
 	uint64_t total_retries;
 	uint64_t total_rnr_nacks;
+	bool hybrid_mr_desc;
+
+	/* Used when success events are not required */
+	struct cxip_req *req_selective_comp_msg;
+	struct cxip_req *req_selective_comp_tag;
 
 	/* There are CXIP_NUM_RNR_WAIT_QUEUE queues where each queue has
 	 * a specified time wait value and where the last queue is has the
