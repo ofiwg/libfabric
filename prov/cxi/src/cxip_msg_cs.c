@@ -80,7 +80,8 @@ static void cxip_rnr_recv_pte_cb(struct cxip_pte *pte,
 /*
  * cxip_cs_recv_req() - Submit Receive request to hardware.
  */
-static ssize_t cxip_cs_recv_req(struct cxip_req *req, bool restart_seq)
+static ssize_t cxip_cs_recv_req(struct cxip_req *req, struct cxip_cntr *cntr,
+				bool restart_seq)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	uint32_t le_flags = 0;
@@ -112,6 +113,8 @@ static ssize_t cxip_cs_recv_req(struct cxip_req *req, bool restart_seq)
 		    C_LE_MANAGE_LOCAL | C_LE_UNRESTRICTED_BODY_RO |
 		    C_LE_UNRESTRICTED_END_RO | C_LE_OP_PUT;
 
+	if (cntr)
+		le_flags |= C_LE_EVENT_CT_COMM;
 	if (!req->recv.multi_recv)
 		le_flags |= C_LE_USE_ONCE;
 	if (restart_seq)
@@ -132,7 +135,7 @@ static ssize_t cxip_cs_recv_req(struct cxip_req *req, bool restart_seq)
 			      mb.raw, ib.raw, req->recv.match_id,
 			      req->recv.multi_recv ?
 			      rxc->min_multi_recv : 0,
-			      le_flags, NULL, rxc->rx_cmdq,
+			      le_flags, cntr, rxc->rx_cmdq,
 			      !(req->recv.flags & FI_MORE));
 	if (ret != FI_SUCCESS) {
 		RXC_WARN(rxc, "Failed to write Append command: %d\n", ret);
@@ -343,6 +346,7 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 {
 	struct cxip_req *req = NULL;
 	struct cxip_mr *mr = rxc->domain->hybrid_mr_desc ? desc : NULL;
+	struct cxip_cntr *cntr;
 	int ret;
 	uint32_t match_id;
 	uint16_t vni;
@@ -388,7 +392,7 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 	req->flags = ((tagged ? FI_TAGGED : FI_MSG) | FI_RECV |
 		       (flags & FI_COMPLETION));
 	req->context = (uint64_t)context;
-	req->recv.cntr = comp_cntr ? comp_cntr : rxc->recv_cntr;
+	cntr = comp_cntr ? comp_cntr : rxc->recv_cntr;
 	req->recv.match_id = match_id;
 	req->recv.vni = vni;
 	req->recv.tag = tag;
@@ -398,7 +402,7 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 	req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
 
 	if (!(req->recv.flags & (FI_PEEK | FI_CLAIM))) {
-		ret = cxip_cs_recv_req(req, false);
+		ret = cxip_cs_recv_req(req, cntr, false);
 		if (ret) {
 			RXC_WARN(rxc, "Receive append failed: %d %s\n",
 				 ret, fi_strerror(-ret));
