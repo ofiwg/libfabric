@@ -141,6 +141,14 @@ static inline int recv_req_event_success(struct cxip_rxc *rxc,
 	fi_addr_t src_addr;
 	struct cxip_addr *addr;
 
+	/* If this is a  FI_MULTI_RECV mandatory completion not associated
+	 * with a receive completion then source information is not required.
+	 */
+	if (req->recv.multi_recv && !(req->flags & FI_RECV)) {
+		req->flags |= FI_MULTI_RECV;
+		return cxip_cq_req_complete(req);
+	}
+
 	if (req->recv.rxc->attr.caps & FI_SOURCE) {
 		src_addr = cxip_recv_req_src_addr(req);
 		if (src_addr != FI_ADDR_NOTAVAIL ||
@@ -176,7 +184,9 @@ void cxip_recv_req_report(struct cxip_req *req)
 {
 	int ret;
 	int err;
-	int success_event = (req->flags & FI_COMPLETION);
+	int success_event = (req->flags & FI_COMPLETION) ||
+			    (req->flags & FI_MULTI_RECV &&
+			     !(req->flags & FI_COMPLETION));
 	struct cxip_rxc *rxc = req->recv.rxc;
 	ssize_t truncated = req->recv.rlen - req->data_len;
 
@@ -222,6 +232,9 @@ void cxip_recv_req_report(struct cxip_req *req)
 	if (req->recv.rc == C_RC_OK && !truncated) {
 		RXC_DBG(rxc, "Request success: %p\n", req);
 
+		/* Completion requested or mandatory FI_MULTI_RECV
+		 * buffer un-link completion
+		 */
 		if (success_event) {
 			ret = recv_req_event_success(rxc, req);
 			if (ret != FI_SUCCESS)
@@ -335,6 +348,27 @@ int cxip_complete_put(struct cxip_req *req, const union c_event *event)
 	if (req->recv.multi_recv) {
 		if (event->tgt_long.auto_unlinked) {
 			uintptr_t mrecv_head;
+
+			/* Special C_EVENT_PUT case when FI_MULTI_RECV was
+			 * requested, but FI_COMPLETION was not specified.
+			 * Must generate an FI_MULTI_RECV completion associated
+			 * with only the un-link of the buffer.
+			 */
+			if (!(req->flags & FI_COMPLETION)) {
+				req->recv.auto_unlinked = true;
+				req->recv.rxc->ops.recv_req_tgt_event(req,
+								      event);
+				req->flags = FI_MULTI_RECV;
+				req->recv.rlen = 0;
+				req->data_len = 0;
+				req->tag = 0;
+				req->buf = (uint64_t)NULL;
+
+				cxip_recv_req_report(req);
+				cxip_recv_req_free(req);
+
+				return FI_SUCCESS;
+			}
 
 			/* For C_EVENT_PUT, need to calculate how much of the
 			 * multi-recv buffer was consumed while factoring in
