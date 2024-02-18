@@ -77,6 +77,35 @@ static void cxip_rnr_recv_pte_cb(struct cxip_pte *pte,
 	}
 }
 
+static int cxip_cs_recv_selective_comp_cb(struct cxip_req *req,
+					  const union c_event *event)
+{
+	int event_rc;
+	int ret_err;
+
+	/* When errors happen, send events can occur before the put/get
+	 * event. These events should just be dropped.
+	 */
+	if (event->hdr.event_type == C_EVENT_SEND) {
+		CXIP_WARN("Unexpected %s event: rc=%s\n",
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
+		return FI_SUCCESS;
+	}
+
+	if (req->recv.tagged)
+		req->flags = FI_RECV | FI_TAGGED;
+	else
+		req->flags = FI_RECV | FI_MSG;
+
+	event_rc = cxi_init_event_rc(event);
+	ret_err = proverr2errno(event_rc);
+
+	return cxip_cq_req_error(req, 0, ret_err,
+				 cxi_event_rc(event), NULL, 0,
+				 FI_ADDR_UNSPEC);
+}
+
 /*
  * cxip_cs_recv_req() - Submit Receive request to hardware.
  */
@@ -84,7 +113,7 @@ static ssize_t cxip_cs_recv_req(struct cxip_req *req, struct cxip_cntr *cntr,
 				bool restart_seq)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
-	uint32_t le_flags = 0;
+	uint32_t le_flags;
 	union cxip_match_bits mb = {};
 	union cxip_match_bits ib = {
 		.cs_cq_data = 1,
@@ -109,10 +138,16 @@ static ssize_t cxip_cs_recv_req(struct cxip_req *req, struct cxip_cntr *cntr,
 	 * events can be used by the initiator for protocol data. The behavior
 	 * of use_once is not impacted by manage_local.
 	 */
-	le_flags |= C_LE_EVENT_LINK_DISABLE | C_LE_EVENT_UNLINK_DISABLE |
-		    C_LE_MANAGE_LOCAL | C_LE_UNRESTRICTED_BODY_RO |
-		    C_LE_UNRESTRICTED_END_RO | C_LE_OP_PUT;
+	le_flags = C_LE_EVENT_LINK_DISABLE | C_LE_EVENT_UNLINK_DISABLE |
+		   C_LE_MANAGE_LOCAL | C_LE_UNRESTRICTED_BODY_RO |
+		   C_LE_UNRESTRICTED_END_RO | C_LE_OP_PUT;
 
+	if (req->recv.success_disable)
+		le_flags |= C_LE_EVENT_SUCCESS_DISABLE;
+
+	/* TODO: Use cntr->attr.events to include FI_CNTR_EVENTS_COMP or
+	 * FI_CNTR_EVENTS_BYTES
+	 */
 	if (cntr)
 		le_flags |= C_LE_EVENT_CT_COMM;
 	if (!req->recv.multi_recv)
@@ -169,8 +204,6 @@ static int cxip_cs_recv_cb(struct cxip_req *req, const union c_event *event)
 		break;
 
 	case C_EVENT_UNLINK:
-		assert(!event->tgt_long.auto_unlinked);
-
 		/* If request is for FI_MULTI_RECV and success events are being
 		 * taken (completions required) then cxip_recv_req_report()
 		 * will handle making sure the unlink is not reported prior to
@@ -278,9 +311,51 @@ static int cxip_rxc_cs_msg_init(struct cxip_rxc *rxc_base)
 		.is_matching = 1,
 		.lossless = cxip_env.msg_lossless,
 	};
+	struct cxip_req *req;
 	int ret;
 
 	assert(rxc->base.protocol == FI_PROTO_CXI_CS);
+
+	if (rxc->base.domain->hybrid_mr_desc) {
+		ret = cxip_recv_req_alloc(&rxc->base, NULL, 0, NULL, &req,
+					  cxip_cs_recv_selective_comp_cb);
+		if (ret) {
+			CXIP_WARN("FI_MSG hybrid req alloc failed\n");
+			return -FI_ENOMEM;
+		}
+		req->context = (uint64_t)rxc->base.context;
+		req->flags = FI_MSG | FI_RECV;
+		req->recv.success_disable = true;
+		rxc->req_selective_comp_msg = req;
+
+		/* Will not be used */
+		dlist_init(&req->recv.children);
+		dlist_init(&req->recv.rxc_entry);
+
+		/* Selective does not count toward outstanding RX operations */
+		ofi_atomic_dec32(&rxc->base.orx_reqs);
+
+		ret = cxip_recv_req_alloc(&rxc->base, NULL, 0, NULL, &req,
+					  cxip_cs_recv_selective_comp_cb);
+		if (ret) {
+			CXIP_WARN("FI_MSG hybrid req alloc failed\n");
+			ret = -FI_ENOMEM;
+			goto free_req_msg;
+		}
+		req->context = (uint64_t)rxc->base.context;
+		req->recv.tagged = true;
+		req->flags = FI_TAGGED | FI_RECV;
+		req->recv.success_disable = true;
+		rxc->req_selective_comp_tag = req;
+
+		/* Will not be used */
+		dlist_init(&req->recv.children);
+		dlist_init(&req->recv.rxc_entry);
+
+		/* Selective does not count toward outstanding RX operations */
+		ofi_atomic_dec32(&rxc->base.orx_reqs);
+		rxc->hybrid_mr_desc = true;
+	}
 
 	/* If applications AVs are symmetric, use logical FI addresses for
 	 * matching. Otherwise, physical addresses will be used.
@@ -296,7 +371,7 @@ static int cxip_rxc_cs_msg_init(struct cxip_rxc *rxc_base)
 			     &rxc->base.rx_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate RX PTE: %d\n", ret);
-		return ret;
+		goto free_req_tag;
 	}
 
 	/* Start accepting Puts. */
@@ -317,20 +392,44 @@ static int cxip_rxc_cs_msg_init(struct cxip_rxc *rxc_base)
 
 free_pte:
 	cxip_pte_free(rxc->base.rx_pte);
+free_req_tag:
+	if (rxc->req_selective_comp_tag) {
+		ofi_atomic_inc32(&rxc->base.orx_reqs);
+		cxip_recv_req_free(rxc->req_selective_comp_tag);
+	}
+free_req_msg:
+	if (rxc->req_selective_comp_msg) {
+		ofi_atomic_inc32(&rxc->base.orx_reqs);
+		cxip_recv_req_free(rxc->req_selective_comp_msg);
+	}
 
 	return ret;
 }
 
 static int cxip_rxc_cs_msg_fini(struct cxip_rxc *rxc_base)
 {
-	assert(rxc_base->protocol == FI_PROTO_CXI_CS);
+	struct cxip_rxc_cs *rxc = container_of(rxc_base, struct cxip_rxc_cs,
+					       base);
+
+	assert(rxc->base.protocol == FI_PROTO_CXI_CS);
+
+	/* Must add selective completion requests RX reference counts
+	 * back before freeing.
+	 */
+	if (rxc->req_selective_comp_msg) {
+		ofi_atomic_inc32(&rxc->base.orx_reqs);
+		cxip_recv_req_free(rxc->req_selective_comp_msg);
+	}
+	if (rxc->req_selective_comp_tag) {
+		ofi_atomic_inc32(&rxc->base.orx_reqs);
+		cxip_recv_req_free(rxc->req_selective_comp_tag);
+	}
 
 	return FI_SUCCESS;
 }
 
 static void cxip_rxc_cs_cleanup(struct cxip_rxc *rxc_base)
 {
-	/* Cancel Receives */
 	cxip_rxc_recv_req_cleanup(rxc_base);
 }
 
@@ -344,14 +443,17 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 		 void *context, uint64_t flags, bool tagged,
 		 struct cxip_cntr *comp_cntr)
 {
+	struct cxip_rxc_cs *rxc_cs = container_of(rxc, struct cxip_rxc_cs,
+						  base);
 	struct cxip_req *req = NULL;
-	struct cxip_mr *mr = rxc->domain->hybrid_mr_desc ? desc : NULL;
+	struct cxip_req *recv_req;
+	struct cxip_mr *mr = rxc_cs->hybrid_mr_desc ? desc : NULL;
 	struct cxip_cntr *cntr;
 	int ret;
 	uint32_t match_id;
 	uint16_t vni;
 
-	assert(rxc->protocol == FI_PROTO_CXI_CS);
+	assert(rxc_cs->base.protocol == FI_PROTO_CXI_CS);
 
 #if ENABLE_DEBUG
 	if (len && !buf) {
@@ -384,25 +486,51 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 	}
 
 	ofi_genlock_lock(&rxc->ep_obj->lock);
-	ret = cxip_recv_req_alloc(rxc, buf, len, mr ? mr->md : NULL,
-				  &req, cxip_cs_recv_cb);
-	if (ret)
-		goto err;
 
-	req->flags = ((tagged ? FI_TAGGED : FI_MSG) | FI_RECV |
-		       (flags & FI_COMPLETION));
-	req->context = (uint64_t)context;
+	if (mr && !(flags & (FI_COMPLETION | FI_MULTI_RECV |
+			     FI_PEEK | FI_CLAIM))) {
+		recv_req = tagged ? rxc_cs->req_selective_comp_tag :
+				    rxc_cs->req_selective_comp_msg;
+		assert(recv_req != NULL);
+
+		recv_req->recv.recv_md = mr->md;
+		recv_req->recv.hybrid_md = true;
+		recv_req->recv.recv_buf = buf;
+		recv_req->recv.ulen = len;
+	} else {
+		ret = cxip_recv_req_alloc(rxc, buf, len, mr ? mr->md : NULL,
+					  &req, cxip_cs_recv_cb);
+		if (ret)
+			goto err;
+
+		recv_req = req;
+		recv_req->context = (uint64_t)context;
+		recv_req->flags = ((tagged ? FI_TAGGED : FI_MSG) | FI_RECV |
+				   (flags & FI_COMPLETION));
+		recv_req->recv.tagged = tagged;
+
+		/* Can still disable success events if multi-recv and
+		 * completions are not requested since final mandatory unlink
+		 * will cleanup resources. However, if buffer will be auto-
+		 * unlinked take internal completions to handle the
+		 * accounting to ensure all data has landed.
+		 */
+		if (flags & FI_MULTI_RECV && !(flags & FI_COMPLETION) &&
+		    !rxc->min_multi_recv)
+			recv_req->recv.success_disable = true;
+		else
+			recv_req->recv.success_disable = false;
+	}
 	cntr = comp_cntr ? comp_cntr : rxc->recv_cntr;
-	req->recv.match_id = match_id;
-	req->recv.vni = vni;
-	req->recv.tag = tag;
-	req->recv.ignore = ignore;
-	req->recv.flags = flags;
-	req->recv.tagged = tagged;
-	req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
+	recv_req->recv.match_id = match_id;
+	recv_req->recv.vni = vni;
+	recv_req->recv.tag = tag;
+	recv_req->recv.ignore = ignore;
+	recv_req->recv.flags = flags;
+	recv_req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
 
-	if (!(req->recv.flags & (FI_PEEK | FI_CLAIM))) {
-		ret = cxip_cs_recv_req(req, cntr, false);
+	if (!(recv_req->recv.flags & (FI_PEEK | FI_CLAIM))) {
+		ret = cxip_cs_recv_req(recv_req, cntr, false);
 		if (ret) {
 			RXC_WARN(rxc, "Receive append failed: %d %s\n",
 				 ret, fi_strerror(-ret));
@@ -413,16 +541,16 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 		RXC_DBG(rxc,
 			"req: %p buf: %p len: %lu src_addr: %ld tag(%c):"
 			" 0x%lx ignore: 0x%lx context: %p\n",
-			req, buf, len, src_addr, tagged ? '*' : '-', tag,
+			recv_req, buf, len, src_addr, tagged ? '*' : '-', tag,
 			ignore, context);
 
 		return FI_SUCCESS;
 	}
 
 	/* No buffered unexpected messages, so FI_PEEK always fails */
-	if (req->recv.flags & FI_PEEK) {
-		req->recv.rc = C_RC_NO_MATCH;
-		cxip_recv_req_peek_complete(req, NULL);
+	if (recv_req->recv.flags & FI_PEEK) {
+		recv_req->recv.rc = C_RC_NO_MATCH;
+		cxip_recv_req_peek_complete(recv_req, NULL);
 		ofi_genlock_unlock(&rxc->ep_obj->lock);
 
 		return FI_SUCCESS;
@@ -433,7 +561,8 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 	ret = -FI_EINVAL;
 
 free_req:
-	cxip_recv_req_free(req);
+	if (req)
+		cxip_recv_req_free(req);
 err:
 	ofi_genlock_unlock(&rxc->ep_obj->lock);
 
@@ -476,6 +605,11 @@ static int cxip_cs_send_selective_comp_cb(struct cxip_req *req,
 			  cxi_rc_to_str(cxi_event_rc(event)));
 		return FI_SUCCESS;
 	}
+
+	if (req->send.tagged)
+		req->flags = FI_SEND | FI_TAGGED;
+	else
+		req->flags = FI_SEND | FI_MSG;
 
 	event_rc = cxi_init_event_rc(event);
 	ret_err = proverr2errno(event_rc);
@@ -777,7 +911,6 @@ static int cxip_txc_cs_msg_init(struct cxip_txc *txc_base)
 	assert(txc->base.protocol == FI_PROTO_CXI_CS);
 
 	if (txc->base.domain->hybrid_mr_desc) {
-		TXC_WARN(txc, "selective_comp setup\n");
 		req = cxip_evtq_req_alloc(&txc->base.tx_evtq, 0, &txc->base);
 		if (!req) {
 			TXC_WARN(txc, "FI_MSG hybrid req alloc failed\n");
@@ -931,6 +1064,10 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		TXC_WARN(txc, "Length %ld but source buffer NULL\n", len);
 		return -FI_EINVAL;
 	}
+	if (flags & FI_INJECT) {
+		TXC_WARN(txc, "FI_INJECT not supported\n");
+		return -FI_EINVAL;
+	}
 #endif
 	/* TODO: This check should not be required in other than debug builds,
 	 * to do that we would need to return -FI_EFAULT, so leaving here for
@@ -940,18 +1077,12 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		return -FI_EMSGSIZE;
 
 	/* TODO: Move to tagged sends */
-	if (tagged && tag & ~CXIP_TAG_MASK) {
+	if (tagged && tag & ~CXIP_CS_TAG_MASK) {
 		TXC_WARN(txc, "Invalid tag: %#018lx (%#018lx)\n",
-			 tag, CXIP_TAG_MASK);
+			 tag, CXIP_CS_TAG_MASK);
 		return -FI_EINVAL;
 	}
-#if 0 /* No inject support */
-	/* TODO: move to inject/sendmsg */
-	if (flags & FI_INJECT && len > CXIP_INJECT_SIZE) {
-		TXC_WARN(txc, "Invalid inject length: %lu\n", len);
-		return -FI_EMSGSIZE;
-	}
-#endif
+
 	ofi_genlock_lock(&txc->ep_obj->lock);
 	/* If RNR list is not empty, check if the first retry entry time
 	 * wait has expired, and if so force progress to initiate any
