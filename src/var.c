@@ -191,6 +191,7 @@ int DEFAULT_SYMVER_PRE(fi_param_define)(const struct fi_provider *provider,
 {
 	int i, ret;
 	struct fi_param_entry *v;
+	struct dlist_entry *entry;
 	char *tmp_str;
 	va_list vargs;
 
@@ -216,6 +217,14 @@ int DEFAULT_SYMVER_PRE(fi_param_define)(const struct fi_provider *provider,
 	v->name = strdup(param_name);
 	v->type = type;
 
+	entry = dlist_find_first_match(&param_list,param_match_name, v);
+
+        if (entry) {
+          FI_INFO(provider, FI_LOG_CORE,
+                "%s variable alredy exist\n",param_name);
+          fi_free_param(v);
+          return FI_SUCCESS;
+        }
 	va_start(vargs, help_string_fmt);
 	ret = vasprintf(&v->help_string, help_string_fmt, vargs);
 	va_end(vargs);
