@@ -1099,6 +1099,7 @@ struct cxip_req_recv {
 	void *recv_buf;			// local receive buffer
 	struct cxip_md *recv_md;	// local receive MD
 	bool hybrid_md;			// True if MD was provided
+	bool success_disable;
 	uint32_t ulen;			// User buffer length
 	bool tagged;
 	uint64_t tag;
@@ -1930,6 +1931,11 @@ struct cxip_rxc_hpc {
 struct cxip_rxc_cs {
 	/* Must be first */
 	struct cxip_rxc base;
+
+	bool hybrid_mr_desc;
+	/* Used when success events are not required */
+	struct cxip_req *req_selective_comp_msg;
+	struct cxip_req *req_selective_comp_tag;
 };
 
 static inline void cxip_copy_to_md(struct cxip_md *md, void *dest,
