@@ -2594,6 +2594,7 @@ static void msg_hybrid_mr_desc_test_runner(bool multirecv,
 	uint64_t recv_flags = cq_events ? FI_COMPLETION : 0;
 	uint64_t send_flags = cq_events ? FI_COMPLETION | FI_TRANSMIT_COMPLETE :
 					  FI_TRANSMIT_COMPLETE;
+	uint64_t max_rnr_wait_us = 0;
 	struct iovec riovec;
 	struct iovec siovec;
 	struct fi_msg msg = {};
@@ -2638,7 +2639,15 @@ static void msg_hybrid_mr_desc_test_runner(bool multirecv,
 		}
 	}
 
-	/* TODO: If not completion set MAX RNR time to 0 */
+	/* If not using completions to avoid internal completion
+	 * set MAX RNR time to 0
+	 */
+	if (!cq_events) {
+		ret = fi_set_val(&cxit_ep->fid,
+				 FI_OPT_CXI_SET_RNR_MAX_RETRY_TIME,
+				(void *) &max_rnr_wait_us);
+		cr_assert(ret == FI_SUCCESS, "Set max RNR = 0 failed %d", ret);
+	}
 
 	/* Send messages */
 	msg.addr = cxit_ep_fi_addr;
@@ -2646,6 +2655,7 @@ static void msg_hybrid_mr_desc_test_runner(bool multirecv,
 	msg.context = NULL;
 	msg.desc = send_desc;
 	msg.msg_iov = &siovec;
+
 	for (i = 0; i < iters; i++) {
 		siovec.iov_base = send_window.mem + send_len * i;
 		siovec.iov_len = send_len;
@@ -2692,11 +2702,26 @@ static void msg_hybrid_mr_desc_test_runner(bool multirecv,
 		}
 	} else {
 		ret = fi_cntr_wait(cxit_recv_cntr, iters, 1000);
-		cr_assert(ret == FI_SUCCESS);
+		cr_assert(ret == FI_SUCCESS, "Recv cntr wait returned %d", ret);
+
+		/* With FI_MULTI_RECV, a single completion associated with
+		 * the buffer un-link should be reported.
+		 */
+		if (multirecv) {
+			ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+			cr_assert(ret == 1);
+			cr_assert(cqe.flags & FI_MULTI_RECV,
+				  "No FI_MULTI_RECV, flags 0x%lX", cqe.flags);
+			cr_assert(!(cqe.flags & FI_RECV), "FI_RECV flag set");
+			cr_assert(cqe.buf == NULL,
+				  "Unexpected cqe.buf value %p", cqe.buf);
+			cr_assert(cqe.len == 0,
+				  "Unexpected cqe.len value %ld", cqe.len);
+		}
 	}
 
 	/* Make sure only expected completions were generated */
-	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
 	cr_assert(ret == -FI_EAGAIN);
 
 	for (i = 0; i < send_win_len; i++)
@@ -2719,6 +2744,16 @@ Test(cs_msg_hybrid_mr_desc, non_multirecv_comp)
 Test(cs_msg_hybrid_mr_desc, multirecv_comp)
 {
 	msg_hybrid_mr_desc_test_runner(true, true);
+}
+
+Test(cs_msg_hybrid_mr_desc, non_multirecv_non_comp)
+{
+	msg_hybrid_mr_desc_test_runner(false, false);
+}
+
+Test(cs_msg_hybrid_mr_desc, multirecv_non_comp)
+{
+	msg_hybrid_mr_desc_test_runner(true, false);
 }
 
 /* Verify non-descriptor traffic works */
