@@ -2783,3 +2783,186 @@ Test(cs_msg_hybrid_mr_desc, sizes_comp)
 
 	sizes();
 }
+
+static void msg_hybrid_append_test_runner(bool recv_truncation,
+					  bool byte_counts,
+					  bool cq_events)
+{
+	struct mem_region send_window;
+	struct mem_region recv_window;
+	uint64_t send_key = 0x2;
+	uint64_t recv_key = 0x1;
+	int iters = 10;
+	int send_len = 1024;
+	int recv_len = recv_truncation ? (iters - 2) * send_len :
+					 iters * send_len;
+	int send_win_len = send_len * iters;
+	int recv_win_len = recv_len;
+	uint64_t recv_flags = cq_events ? FI_COMPLETION : 0;
+	uint64_t send_flags = cq_events ? FI_COMPLETION | FI_TRANSMIT_COMPLETE :
+					  FI_TRANSMIT_COMPLETE;
+	uint64_t recv_cnt;
+	uint64_t max_rnr_wait_us = 0;
+	size_t min_multi_recv = 0;
+	size_t opt_len = sizeof(size_t);
+	struct iovec riovec;
+	struct iovec siovec;
+	struct fi_msg msg = {};
+	struct fi_context ctxt[1];
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry err_cqe = {};
+	int ret;
+	int i;
+	void *send_desc[1];
+	void *recv_desc[1];
+
+	ret = mr_create(send_win_len, FI_READ | FI_WRITE, 0xa, &send_key,
+			&send_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	send_desc[0] = fi_mr_desc(send_window.mr);
+	cr_assert(send_desc[0] != NULL);
+
+	ret = mr_create(recv_win_len, FI_READ | FI_WRITE, 0x3, &recv_key,
+			&recv_window);
+	cr_assert(ret == FI_SUCCESS);
+	recv_desc[0] = fi_mr_desc(recv_window.mr);
+	cr_assert(recv_desc[0] != NULL);
+
+	/* Update min_multi_recv to ensure append buffer does not unlink */
+	ret = fi_setopt(&cxit_ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			&min_multi_recv, opt_len);
+	cr_assert(ret == FI_SUCCESS);
+
+	msg.iov_count = 1;
+	msg.addr = FI_ADDR_UNSPEC;
+	msg.context = &ctxt[0];
+	msg.desc = recv_desc;
+	msg.msg_iov = &riovec;
+	riovec.iov_base = recv_window.mem;
+	riovec.iov_len = recv_win_len;
+	recv_flags |= FI_MULTI_RECV;
+	ret = fi_recvmsg(cxit_ep, &msg, recv_flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+
+	/* Set MAX RNR time to 0 so that message will not be retried */
+	ret = fi_set_val(&cxit_ep->fid,
+			 FI_OPT_CXI_SET_RNR_MAX_RETRY_TIME,
+			 (void *) &max_rnr_wait_us);
+	cr_assert(ret == FI_SUCCESS, "Set max RNR = 0 failed %d", ret);
+
+	/* Send messages */
+	msg.addr = cxit_ep_fi_addr;
+	msg.iov_count = 1;
+	msg.context = NULL;
+	msg.desc = send_desc;
+	msg.msg_iov = &siovec;
+
+	for (i = 0; i < iters; i++) {
+		siovec.iov_base = send_window.mem + send_len * i;
+		siovec.iov_len = send_len;
+		ret = fi_sendmsg(cxit_ep, &msg, send_flags);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_sendmsg failed %d", ret);
+	}
+
+	/* Await Send completions or counter updates */
+	if (cq_events) {
+		for (i = 0; i < iters; i++) {
+			ret = cxit_await_completion(cxit_tx_cq, &cqe);
+			cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+			validate_tx_event(&cqe, FI_MSG | FI_SEND, NULL);
+		}
+	} else {
+		ret = fi_cntr_wait(cxit_send_cntr, iters, 1000);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* Make sure only expected completions were generated */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	/* Await Receive completions or counter updates */
+	if (cq_events) {
+		for (i = 0; i < iters; i++) {
+			ret = cxit_await_completion(cxit_rx_cq, &cqe);
+			cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+			recv_flags = FI_MSG | FI_RECV;
+
+			/* We've sized so last message will unlink */
+			if (i == iters - 1)
+				recv_flags |= FI_MULTI_RECV;
+			/* TODO: handle truncation completions here */
+			validate_rx_event(&cqe, NULL, send_len,
+					  recv_flags,
+					  recv_window.mem +
+					  send_len, 0, 0);
+		}
+	} else {
+		ret = fi_cntr_wait(cxit_recv_cntr, iters, 1000);
+		cr_assert(ret == FI_SUCCESS, "Recv cntr wait returned %d", ret);
+
+		/* Verify that the truncated messages updated the success
+		 * event count. TODO: Later these will be byte counts.
+		 */
+		if (recv_truncation & !byte_counts) {
+			recv_cnt = fi_cntr_read(cxit_recv_cntr);
+			cr_assert(recv_cnt == iters,
+				  "Truncation receive count %ld is wrong",
+				  recv_cnt);
+		}
+	}
+
+	/* Verify no completions have been written */
+	ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	/* Cancel append FI_MULIT_RECV buffer */
+	ret = fi_cancel(&cxit_ep->fid, &ctxt[0]);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cancel failed %d", ret);
+
+	/* Get cancelled entry */
+	do {
+		ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == -FI_EAVAIL, "Did not get cancel status\n");
+
+	ret = fi_cq_readerr(cxit_rx_cq, &err_cqe, 0);
+	cr_assert_eq(ret, 1, "Did not get cancel error CQE\n");
+
+	cr_assert(err_cqe.op_context == &ctxt[0],
+		  "Error CQE coontext mismatch\n");
+	cr_assert(err_cqe.flags == (FI_MSG | FI_RECV | FI_MULTI_RECV),
+		  "Error CQE flags mismatch\n");
+	cr_assert(err_cqe.err == FI_ECANCELED,
+		  "Error CQE error code mismatch\n");
+	cr_assert(err_cqe.prov_errno == 0,
+		  "Error CQE provider error code mismatch\n");
+
+	/* Make sure only expected completions were generated */
+	ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	for (i = 0; i < recv_win_len; i++)
+		cr_assert_eq(send_window.mem[i], recv_window.mem[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     send_window.mem[i], recv_window.mem[i]);
+
+	mr_destroy(&send_window);
+	mr_destroy(&recv_window);
+}
+
+TestSuite(cs_msg_append_hybrid_mr_desc,
+	  .init = cxit_setup_rma_cs_hybrid_mr_desc,
+	  .fini = cxit_teardown_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(cs_msg_append_hybrid_mr_desc, no_trunc_count_events_non_comp)
+{
+	msg_hybrid_append_test_runner(false, false, false);
+}
+
+Test(cs_msg_append_hybrid_mr_desc, trunc_count_events_non_comp)
+{
+	msg_hybrid_append_test_runner(true, false, false);
+}
