@@ -2788,6 +2788,8 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 					  bool byte_counts,
 					  bool cq_events)
 {
+	struct cxip_ep *cxip_ep = container_of(&cxit_ep->fid, struct cxip_ep,
+					       ep.fid);
 	struct mem_region send_window;
 	struct mem_region recv_window;
 	uint64_t send_key = 0x2;
@@ -2868,11 +2870,19 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 
 	/* Await Send completions or counter updates */
 	if (cq_events) {
+		int write_len = 0;
+		uint64_t flags = FI_MSG | FI_SEND;
+
 		for (i = 0; i < iters; i++) {
 			ret = cxit_await_completion(cxit_tx_cq, &cqe);
 			cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-			validate_tx_event(&cqe, FI_MSG | FI_SEND, NULL);
+			write_len += send_len;
+			if (cxip_ep->ep_obj->txc->trunc_ok) {
+				if (write_len > trunc_byte_len)
+					flags |= FI_CXI_TRUNC;
+			}
+			validate_tx_event(&cqe, flags, NULL);
 		}
 
 		/* Validate that only non-truncated counts were updated */
@@ -2893,17 +2903,28 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 
 	/* Await Receive completions or counter updates */
 	if (cq_events) {
+		int received_len = 0;
+		int expected_len;
+
 		for (i = 0; i < iters; i++) {
+
 			ret = cxit_await_completion(cxit_rx_cq, &cqe);
 			cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
 			recv_flags = FI_MSG | FI_RECV;
 
-			/* TODO: handle truncation completions here */
-			validate_rx_event(&cqe, &ctxt[0], send_len,
+			if (trunc_byte_len - received_len >= send_len) {
+				expected_len = send_len;
+			} else {
+				expected_len = trunc_byte_len - received_len;
+				recv_flags |= FI_CXI_TRUNC;
+			}
+
+			validate_rx_event(&cqe, &ctxt[0], expected_len,
 					  recv_flags,
 					  recv_window.mem +
-					  send_len * i, 0, 0);
+					  received_len, 0, 0);
+			received_len += expected_len;
 		}
 
 		/* Validate that only bytes received were updated */
@@ -2987,17 +3008,18 @@ Test(cs_msg_append_hybrid_mr_desc, trunc_count_events_non_comp)
 	msg_hybrid_append_test_runner(true, false, false);
 }
 
-/*
- * This test requires truncation as a success be implemented so that
- * the RX completion will be reported as a success completion instead
- * of an error. Will enable once this portion of the code is done.
- */
-#if 0
 Test(cs_msg_append_hybrid_mr_desc, trunc_count_events_comp)
 {
+	struct cxip_ep *cxip_ep = container_of(&cxit_ep->fid, struct cxip_ep,
+					       ep.fid);
+
+	/* This test requires that experimental truncation a success
+	 * is enabled.
+	 */
+	cxip_ep->ep_obj->rxc->trunc_ok = true;
+
 	msg_hybrid_append_test_runner(true, false, true);
 }
-#endif
 
 TestSuite(cs_msg_append_hybrid_mr_desc_byte_cntr,
 	  .init = cxit_setup_rma_cs_hybrid_mr_desc_byte_cntr,
@@ -3018,17 +3040,15 @@ Test(cs_msg_append_hybrid_mr_desc_byte_cntr, trunc_count_bytes_non_comp)
 	msg_hybrid_append_test_runner(true, true, false);
 }
 
-/*
- * This test requires truncation as a success be implemented so that
- * the RX completion will be reported as a success completion instead
- * of an error. Will enable once this portion of the code is done.
- */
-#if 0
 Test(cs_msg_append_hybrid_mr_desc_byte_cntr, trunc_count_bytes_comp)
 {
 	struct cxip_ep *cxip_ep = container_of(&cxit_ep->fid, struct cxip_ep,
 					       ep.fid);
 
+	/* This test requires that experimental truncation a success
+	 * is enabled.
+	 */
+	cxip_ep->ep_obj->rxc->trunc_ok = true;
+
 	msg_hybrid_append_test_runner(true, true, true);
 }
-#endif
