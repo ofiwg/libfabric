@@ -68,6 +68,13 @@ enum {
 #define FI_CXI_CNTR_EVENTS_BYTES	1	/* FI_CNTR_EVENTS_BYTES */
 
 /*
+ * TODO: Set this to the upstream value prior to releasing software.
+ * This flag returned in a completion and indicates that the message was
+ * truncated and that the length indicates the truncated message length.
+ */
+#define FI_CXI_TRUNC		(1ULL << 56)
+
+/*
  * Execute a given libfabric atomic memory operation as a PCIe operation as
  * compared to a NIC operation.
  *
