@@ -637,6 +637,7 @@ struct cxip_environment cxip_env = {
 	.req_buf_min_posted = CXIP_REQ_BUF_MIN_POSTED,
 	.req_buf_max_cached = CXIP_REQ_BUF_MAX_CACHED,
 	.msg_offload = 1,
+	.trunc_ok = false,
 	.msg_lossless = 0,
 	.sw_rx_tx_init_max = CXIP_SW_RX_TX_INIT_MAX_DEFAULT,
 	.hybrid_preemptive = 0,
@@ -1283,6 +1284,11 @@ static void cxip_env_init(void)
 		}
 		param_str = NULL;
 	}
+
+	fi_param_define(&cxip_prov, "trunc_ok", FI_PARAM_BOOL,
+			"Enables experimental truncation as a success (%d).",
+			cxip_env.trunc_ok);
+	fi_param_get_bool(&cxip_prov, "trunc_ok", &cxip_env.trunc_ok);
 
 	fi_param_define(&cxip_prov, "rdzv_proto", FI_PARAM_STRING,
 			"Sets preferred rendezvous protocol [default | alt_read] (default %s).",

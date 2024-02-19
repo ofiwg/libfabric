@@ -229,13 +229,16 @@ void cxip_recv_req_report(struct cxip_req *req)
 		}
 	}
 
-	if (req->recv.rc == C_RC_OK && !truncated) {
+	if (req->recv.rc == C_RC_OK && (!truncated || rxc->trunc_ok)) {
 		RXC_DBG(rxc, "Request success: %p\n", req);
 
 		/* Completion requested or mandatory FI_MULTI_RECV
 		 * buffer un-link completion
 		 */
 		if (success_event) {
+			if (truncated)
+				req->flags |= FI_CXI_TRUNC;
+
 			ret = recv_req_event_success(rxc, req);
 			if (ret != FI_SUCCESS)
 				RXC_WARN(rxc,
@@ -629,7 +632,7 @@ void cxip_report_send_completion(struct cxip_req *req, bool sw_cntr)
 	int success_event = (req->flags & FI_COMPLETION);
 	struct cxip_txc *txc = req->send.txc;
 
-	req->flags &= (FI_MSG | FI_TAGGED | FI_SEND);
+	req->flags &= (FI_MSG | FI_TAGGED | FI_SEND | FI_CXI_TRUNC);
 
 	if (req->send.rc == C_RC_OK) {
 		TXC_DBG(txc, "Request success: %p\n", req);
