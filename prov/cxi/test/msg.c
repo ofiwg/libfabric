@@ -2796,6 +2796,7 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 	int send_len = 1024;
 	int recv_len = recv_truncation ? (iters - 2) * send_len :
 					 iters * send_len;
+	int trunc_byte_len = recv_len;
 	int send_win_len = send_len * iters;
 	int recv_win_len = recv_len;
 	uint64_t recv_flags = cq_events ? FI_COMPLETION : 0;
@@ -2873,9 +2874,17 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 
 			validate_tx_event(&cqe, FI_MSG | FI_SEND, NULL);
 		}
+
+		/* Validate that only non-truncated counts were updated */
+		ret = fi_cntr_wait(cxit_send_cntr,
+				   byte_counts ? trunc_byte_len : iters, 1000);
+		cr_assert(ret == FI_SUCCESS, "Bad count %ld",
+			  fi_cntr_read(cxit_send_cntr));
 	} else {
-		ret = fi_cntr_wait(cxit_send_cntr, iters, 1000);
-		cr_assert(ret == FI_SUCCESS);
+		ret = fi_cntr_wait(cxit_send_cntr,
+				   byte_counts ? trunc_byte_len : iters, 1000);
+		cr_assert(ret == FI_SUCCESS, "Bad count %ld",
+			  fi_cntr_read(cxit_send_cntr));
 	}
 
 	/* Make sure only expected completions were generated */
@@ -2890,21 +2899,27 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 
 			recv_flags = FI_MSG | FI_RECV;
 
-			/* We've sized so last message will unlink */
-			if (i == iters - 1)
-				recv_flags |= FI_MULTI_RECV;
 			/* TODO: handle truncation completions here */
-			validate_rx_event(&cqe, NULL, send_len,
+			validate_rx_event(&cqe, &ctxt[0], send_len,
 					  recv_flags,
 					  recv_window.mem +
-					  send_len, 0, 0);
+					  send_len * i, 0, 0);
 		}
+
+		/* Validate that only bytes received were updated */
+		ret = fi_cntr_wait(cxit_recv_cntr, byte_counts ?
+				   trunc_byte_len : iters, 1000);
+		cr_assert(ret == FI_SUCCESS, "Bad return %d count %ld",
+			  ret, fi_cntr_read(cxit_recv_cntr));
+
 	} else {
-		ret = fi_cntr_wait(cxit_recv_cntr, iters, 1000);
-		cr_assert(ret == FI_SUCCESS, "Recv cntr wait returned %d", ret);
+		ret = fi_cntr_wait(cxit_recv_cntr, byte_counts ?
+				   trunc_byte_len : iters, 1000);
+		cr_assert(ret == FI_SUCCESS, "Bad return %d count %ld",
+			  ret, fi_cntr_read(cxit_recv_cntr));
 
 		/* Verify that the truncated messages updated the success
-		 * event count. TODO: Later these will be byte counts.
+		 * event count.
 		 */
 		if (recv_truncation & !byte_counts) {
 			recv_cnt = fi_cntr_read(cxit_recv_cntr);
@@ -2962,7 +2977,58 @@ Test(cs_msg_append_hybrid_mr_desc, no_trunc_count_events_non_comp)
 	msg_hybrid_append_test_runner(false, false, false);
 }
 
+Test(cs_msg_append_hybrid_mr_desc, no_trunc_count_events_comp)
+{
+	msg_hybrid_append_test_runner(false, false, true);
+}
+
 Test(cs_msg_append_hybrid_mr_desc, trunc_count_events_non_comp)
 {
 	msg_hybrid_append_test_runner(true, false, false);
 }
+
+/*
+ * This test requires truncation as a success be implemented so that
+ * the RX completion will be reported as a success completion instead
+ * of an error. Will enable once this portion of the code is done.
+ */
+#if 0
+Test(cs_msg_append_hybrid_mr_desc, trunc_count_events_comp)
+{
+	msg_hybrid_append_test_runner(true, false, true);
+}
+#endif
+
+TestSuite(cs_msg_append_hybrid_mr_desc_byte_cntr,
+	  .init = cxit_setup_rma_cs_hybrid_mr_desc_byte_cntr,
+	  .fini = cxit_teardown_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(cs_msg_append_hybrid_mr_desc_byte_cntr, no_trunc_count_bytes_non_comp)
+{
+	msg_hybrid_append_test_runner(false, true, false);
+}
+
+Test(cs_msg_append_hybrid_mr_desc_byte_cntr, no_trunc_count_bytes_comp)
+{
+	msg_hybrid_append_test_runner(false, true, true);
+}
+
+Test(cs_msg_append_hybrid_mr_desc_byte_cntr, trunc_count_bytes_non_comp)
+{
+	msg_hybrid_append_test_runner(true, true, false);
+}
+
+/*
+ * This test requires truncation as a success be implemented so that
+ * the RX completion will be reported as a success completion instead
+ * of an error. Will enable once this portion of the code is done.
+ */
+#if 0
+Test(cs_msg_append_hybrid_mr_desc_byte_cntr, trunc_count_bytes_comp)
+{
+	struct cxip_ep *cxip_ep = container_of(&cxit_ep->fid, struct cxip_ep,
+					       ep.fid);
+
+	msg_hybrid_append_test_runner(true, true, true);
+}
+#endif
