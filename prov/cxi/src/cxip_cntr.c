@@ -794,7 +794,8 @@ static int cxip_cntr_verify_attr(struct fi_cntr_attr *attr)
 	if (!attr)
 		return FI_SUCCESS;
 
-	if (attr->events != FI_CNTR_EVENTS_COMP)
+	if (attr->events != FI_CNTR_EVENTS_COMP &&
+	    attr->events != FI_CXI_CNTR_EVENTS_BYTES)
 		return -FI_ENOSYS;
 
 	switch (attr->wait_obj) {
