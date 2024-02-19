@@ -60,6 +60,14 @@ enum {
 };
 
 /*
+ * Defines for compatibility between main branch features and release
+ * branches back porting of features required for use. Any value
+ * included here should map exactly to the value established in the
+ * main branch (enum or define) and this CXI equivalent will exist forever.
+ */
+#define FI_CXI_CNTR_EVENTS_BYTES	1	/* FI_CNTR_EVENTS_BYTES */
+
+/*
  * Execute a given libfabric atomic memory operation as a PCIe operation as
  * compared to a NIC operation.
  *
