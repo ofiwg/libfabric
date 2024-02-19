@@ -296,6 +296,9 @@ static void cxip_rxc_cs_init_struct(struct cxip_rxc *rxc_base,
 
 	assert(rxc->base.protocol == FI_PROTO_CXI_CS);
 
+	/* Supports treating truncation as success */
+	rxc->base.trunc_ok = cxip_env.trunc_ok;
+
 	/* Overrides */
 	rxc->base.recv_ptl_idx = CXIP_PTL_IDX_RNR_RXQ;
 }
@@ -897,6 +900,9 @@ static void cxip_txc_cs_init_struct(struct cxip_txc *txc_base,
 
 	assert(txc->base.protocol == FI_PROTO_CXI_CS);
 
+	/* Supports treating truncation as success */
+	txc->base.trunc_ok = cxip_env.trunc_ok;
+
 	txc->base.recv_ptl_idx = CXIP_PTL_IDX_RNR_RXQ;
 	ofi_atomic_initialize32(&txc->time_wait_reqs, 0);
 	txc->max_retry_wait_us = cxip_env.rnr_max_timeout_us;
@@ -1035,8 +1041,16 @@ static int cxip_cs_send_cb(struct cxip_req *req, const union c_event *event)
 	 * be canceled. If canceled, indicate software update of the
 	 * error count is required.
 	 */
-	if (rc == C_RC_OK)
+	if (rc == C_RC_OK) {
 		req->send.canceled = false;
+
+		/* Report truncation if requested */
+		if (txc->base.trunc_ok) {
+			req->data_len = event->init_short.mlength;
+			if (req->send.len > req->data_len)
+				req->flags |= FI_CXI_TRUNC;
+		}
+	}
 
 	cxip_report_send_completion(req, req->send.canceled);
 
