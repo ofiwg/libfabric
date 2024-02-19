@@ -145,11 +145,14 @@ static ssize_t cxip_cs_recv_req(struct cxip_req *req, struct cxip_cntr *cntr,
 	if (req->recv.success_disable)
 		le_flags |= C_LE_EVENT_SUCCESS_DISABLE;
 
-	/* TODO: Use cntr->attr.events to include FI_CNTR_EVENTS_COMP or
-	 * FI_CNTR_EVENTS_BYTES
-	 */
-	if (cntr)
+	/* Note: FI_CXI_CNTR_EVENTS_BYTES == FI_CNTR_EVENTS_BYTES */
+	if (cntr) {
 		le_flags |= C_LE_EVENT_CT_COMM;
+
+		if (cntr->attr.events == FI_CXI_CNTR_EVENTS_BYTES)
+			le_flags |= C_LE_EVENT_CT_BYTES;
+	}
+
 	if (!req->recv.multi_recv)
 		le_flags |= C_LE_USE_ONCE;
 	if (restart_seq)
@@ -647,6 +650,9 @@ static inline ssize_t cxip_cs_send_dma(struct cxip_req *req,
 	}
 
 	if (req->send.cntr) {
+		if (req->send.cntr->attr.events == FI_CXI_CNTR_EVENTS_BYTES)
+			cmd.event_ct_bytes = 1;
+
 		cmd.event_ct_ack = 1;
 		cmd.ct = req->send.cntr->ct->ctn;
 	}
@@ -676,6 +682,9 @@ static inline ssize_t cxip_cs_send_idc(struct cxip_req *req,
 	cstate_cmd.event_success_disable = req->send.success_disable;
 
 	if (req->send.cntr) {
+		if (req->send.cntr->attr.events == FI_CXI_CNTR_EVENTS_BYTES)
+			cstate_cmd.event_ct_bytes = 1;
+
 		cstate_cmd.event_ct_ack = 1;
 		cstate_cmd.ct = req->send.cntr->ct->ctn;
 	}
