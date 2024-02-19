@@ -247,6 +247,7 @@ struct cxip_environment {
 	int fork_safe_requested;
 	enum cxip_ep_ptle_mode rx_match_mode;
 	int msg_offload;
+	int trunc_ok;
 	int hybrid_preemptive;
 	int hybrid_recv_preemptive;
 	size_t rdzv_threshold;
@@ -1818,6 +1819,7 @@ struct cxip_rxc {
 	struct fi_rx_attr attr;
 	bool selective_completion;
 	bool hmem;
+	bool trunc_ok;
 	bool sw_ep_only;
 	bool msg_offload;
 	uint8_t pid_bits;		// Zero without SEP
@@ -2178,6 +2180,7 @@ struct cxip_txc {
 	bool enabled;
 	bool hrp_war_req;		// Non-fetching 32-bit HRP
 	bool hmem;
+	bool trunc_ok;
 
 	struct cxip_cq *send_cq;
 	struct cxip_cntr *send_cntr;
