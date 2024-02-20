@@ -612,6 +612,8 @@ struct cxip_environment cxip_env = {
 	.force_odp = false,
 	.ats = false,
 	.iotlb = true,
+	.disable_dmabuf_cuda = false,
+	.disable_dmabuf_rocr = false,
 	.ats_mlock_mode = CXIP_ATS_MLOCK_ALL,
 	.fork_safe_requested = false,
 	.rx_match_mode = CXIP_PTLTE_DEFAULT_MODE,
@@ -766,6 +768,18 @@ static void cxip_env_init(void)
 	fi_param_define(&cxip_prov, "iotlb", FI_PARAM_BOOL,
 			"Enables the NIC IOTLB (default %d).", cxip_env.iotlb);
 	fi_param_get_bool(&cxip_prov, "iotlb", &cxip_env.iotlb);
+
+	fi_param_define(&cxip_prov, "disable_dmabuf_cuda", FI_PARAM_BOOL,
+			"Disables the DMABUF interface for CUDA (default %d).",
+			cxip_env.disable_dmabuf_cuda);
+	fi_param_get_bool(&cxip_prov, "disable_dmabuf_cuda",
+			  &cxip_env.disable_dmabuf_cuda);
+
+	fi_param_define(&cxip_prov, "disable_dmabuf_rocr", FI_PARAM_BOOL,
+			"Disables the DMABUF interface for ROCR (default %d).",
+			cxip_env.disable_dmabuf_rocr);
+	fi_param_get_bool(&cxip_prov, "disable_dmabuf_rocr",
+			  &cxip_env.disable_dmabuf_rocr);
 
 	fi_param_define(&cxip_prov, "ats_mlock_mode", FI_PARAM_STRING,
 			"Sets ATS mlock mode (off | all).");

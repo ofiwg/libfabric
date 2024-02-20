@@ -241,6 +241,8 @@ struct cxip_environment {
 	int force_odp;
 	int ats;
 	int iotlb;
+	int disable_dmabuf_cuda;
+	int disable_dmabuf_rocr;
 	enum cxip_ats_mlock_mode ats_mlock_mode;
 
 	/* Messaging */
