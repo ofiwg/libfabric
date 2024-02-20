@@ -403,7 +403,7 @@ static int multi_barrier(void)
 	if (pm_job.my_rank == 0) {
 		for (i = 1; i < pm_job.num_ranks; i++) {
 			do {
-				fi_cq_read(txcq, NULL, 0);
+				(void) fi_cq_read(txcq, NULL, 0);
 				msg.addr = pm_job.fi_addrs[i];
 				ret = fi_sendmsg(ep, &msg, FI_DELIVERY_COMPLETE);
 			} while (ret == -FI_EAGAIN);
