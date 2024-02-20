@@ -295,7 +295,7 @@ static int init_fabric(void)
 
 	av_attr.count = ep_cnt;
 
-	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr, NULL);
+	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr, NULL, &av);
 	if (ret)
 		return ret;
 
@@ -350,7 +350,7 @@ static int client_connect(void)
 	if (ret)
 		return ret;
 
-	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr, NULL);
+	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr, NULL, &av);
 	if (ret)
 		return ret;
 
@@ -436,7 +436,7 @@ static int server_connect(void)
 					goto err;
 
 				ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr,
-						      &rxcntr, NULL);
+						      &rxcntr, NULL, &av);
 				if (ret)
 					goto err;
 			}

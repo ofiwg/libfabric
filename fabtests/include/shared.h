@@ -432,7 +432,8 @@ int ft_connect_ep(struct fid_ep *ep,
 int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
 		    struct fid_cq **new_rxcq, struct fid_cntr **new_txcntr,
 		    struct fid_cntr **new_rxcntr,
-		    struct fid_cntr **new_rma_cntr);
+		    struct fid_cntr **new_rma_cntr,
+		    struct fid_av **new_av);
 int ft_alloc_msgs(void);
 int ft_alloc_host_tx_buf(size_t size);
 void ft_free_host_tx_buf(void);
