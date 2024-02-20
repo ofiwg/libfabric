@@ -455,7 +455,7 @@ static int rpc_reg_buf(struct rpc_ctrl *ctrl, size_t size, uint64_t access)
 	return FI_SUCCESS;
 
 close:
-	fi_close(&ctrl->mr->fid);
+	FT_CLOSE_FID(ctrl->mr);
 	return ret;
 }
 
@@ -494,7 +494,7 @@ static int rpc_read_req(struct rpc_ctrl *ctrl)
 	return 0;
 
 close:
-	fi_close(&ctrl->mr->fid);
+	FT_CLOSE_FID(ctrl->mr);
 free:
 	free(ctrl->buf);
 	return ret;
@@ -515,7 +515,7 @@ static int rpc_read_resp(struct rpc_ctrl *ctrl)
 	ret = ft_check_buf(&req->buf[req->offset], req->size);
 
 close:
-	fi_close(&req->mr->fid);
+	FT_CLOSE_FID(req->mr);
 	free(req->buf);
 	return ret;
 }
@@ -551,7 +551,7 @@ static int rpc_write_req(struct rpc_ctrl *ctrl)
 	return 0;
 
 close:
-	fi_close(&ctrl->mr->fid);
+	FT_CLOSE_FID(ctrl->mr);
 free:
 	free(ctrl->buf);
 	return ret;
@@ -572,7 +572,7 @@ static int rpc_write_resp(struct rpc_ctrl *ctrl)
 	ret = ft_check_buf(&req->buf[req->offset], req->size);
 
 close:
-	fi_close(&req->mr->fid);
+	FT_CLOSE_FID(req->mr);
 	free(req->buf);
 	return ret;
 }

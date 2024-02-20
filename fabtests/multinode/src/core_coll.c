@@ -185,7 +185,7 @@ static int coll_teardown(void)
 
 	ret = fi_close(&coll_mc->fid);
 	if (ret)
-		fi_close(&av_set->fid);
+		FT_CLOSE_FID(av_set);
 	else
 		ret = fi_close(&av_set->fid);
 	return ret;

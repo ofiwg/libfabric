@@ -470,7 +470,9 @@ static int run_server(void)
 	if (ret)
 		return ret;
 
-	send(fds[0], &c, 1, 0);
+	ret = send(fds[0], &c, 1, 0);
+	if (ret < 0)
+		return -errno;
 	return 0;
 }
 
