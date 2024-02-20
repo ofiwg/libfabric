@@ -74,6 +74,7 @@ static void format_simple_msg_tagged(struct fi_msg_tagged *msg, struct iovec *io
 	msg->addr = remote_fi_addr;
 	msg->data = 0;
 	msg->tag = tag;
+	msg->ignore = 0;
 
 	iov->iov_base = src;
 	iov->iov_len = size;
@@ -89,6 +90,7 @@ static void format_simple_msg_rma(struct fi_msg_rma *msg, struct iovec *iov,
 	msg->iov_count = 1;
 	msg->addr = remote_fi_addr;
 	msg->rma_iov_count = 1;
+	msg->data = 0;
 
 	iov->iov_base = src;
 	iov->iov_len = size;

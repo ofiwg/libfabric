@@ -2914,7 +2914,7 @@ void eq_readerr(struct fid_eq *eq, const char *eq_str)
 
 int ft_sync()
 {
-	char buf;
+	char buf = 'a';
 	int ret;
 
 	if (opts.dst_addr) {

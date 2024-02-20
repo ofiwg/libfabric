@@ -149,7 +149,7 @@ int pm_allgather(void *my_item, void *items, int item_size)
 
 void pm_barrier(void)
 {
-	char ch;
+	char ch = 'a';
 	char *chs = alloca(pm_job.num_ranks);
 
 	pm_allgather(&ch, chs, 1);
