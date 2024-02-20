@@ -2064,9 +2064,9 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 void ft_force_progress(void)
 {
 	if (txcq)
-		fi_cq_read(txcq, NULL, 0);
+		(void) fi_cq_read(txcq, NULL, 0);
 	if (rxcq)
-		fi_cq_read(rxcq, NULL, 0);
+		(void) fi_cq_read(rxcq, NULL, 0);
 }
 
 int ft_progress(struct fid_cq *cq, uint64_t total, uint64_t *cq_cntr)

@@ -187,7 +187,7 @@ static int rpc_inject(struct rpc_hdr *hdr, fi_addr_t addr)
 
 	start = ft_gettime_ms();
 	do {
-		fi_cq_read(txcq, NULL, 0);
+		(void) fi_cq_read(txcq, NULL, 0);
 		ret = (int) fi_inject(ep, hdr, sizeof(*hdr), addr);
 	} while ((ret == -FI_EAGAIN) && (ft_gettime_ms() - start < rpc_timeout));
 
@@ -205,7 +205,7 @@ static int rpc_send(struct rpc_hdr *hdr, size_t size, fi_addr_t addr)
 
 	start = ft_gettime_ms();
 	do {
-		fi_cq_read(txcq, NULL, 0);
+		(void) fi_cq_read(txcq, NULL, 0);
 		ret = (int) fi_send(ep, hdr, size, NULL, addr, hdr);
 	} while ((ret == -FI_EAGAIN) && (ft_gettime_ms() - start < rpc_timeout));
 
@@ -236,7 +236,7 @@ static int rpc_deliver(struct rpc_hdr *hdr, size_t size, fi_addr_t addr)
 
 	start = ft_gettime_ms();
 	do {
-		fi_cq_read(txcq, NULL, 0);
+		(void) fi_cq_read(txcq, NULL, 0);
 		ret = (int) fi_sendmsg(ep, &msg, FI_DELIVERY_COMPLETE);
 	} while ((ret == -FI_EAGAIN) && (ft_gettime_ms() - start < rpc_timeout));
 
