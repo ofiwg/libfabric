@@ -749,7 +749,8 @@ int ft_open_fabric_res(void)
 int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
 		    struct fid_cq **new_rxcq, struct fid_cntr **new_txcntr,
 		    struct fid_cntr **new_rxcntr,
-		    struct fid_cntr **new_rma_cntr)
+		    struct fid_cntr **new_rma_cntr,
+		    struct fid_av **new_av)
 {
 	int ret;
 
@@ -834,7 +835,7 @@ int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
 		}
 	}
 
-	if (!av && (fi->ep_attr->type == FI_EP_RDM || fi->ep_attr->type == FI_EP_DGRAM)) {
+	if (!*new_av && (fi->ep_attr->type == FI_EP_RDM || fi->ep_attr->type == FI_EP_DGRAM)) {
 		if (fi->domain_attr->av_type != FI_AV_UNSPEC)
 			av_attr.type = fi->domain_attr->av_type;
 
@@ -842,7 +843,7 @@ int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
 			av_attr.name = opts.av_name;
 		}
 		av_attr.count = opts.av_size;
-		ret = fi_av_open(domain, &av_attr, &av, NULL);
+		ret = fi_av_open(domain, &av_attr, new_av, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_av_open", ret);
 			return ret;
@@ -854,7 +855,7 @@ int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
 int ft_alloc_active_res(struct fi_info *fi)
 {
 	int ret;
-	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr, &rma_cntr);
+	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr, &rma_cntr, &av);
 	if (ret)
 		return ret;
 

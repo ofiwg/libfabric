@@ -215,7 +215,7 @@ static int setup_client_ep(int idx)
 		return ret;
 	}
 
-	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL, &av);
 	if (ret)
 		return ret;
 
@@ -245,7 +245,7 @@ static int setup_server_ep(int idx)
 		goto failed_accept;
 	}
 
-	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL, &av);
 	if (ret)
 		return ret;
 
@@ -288,7 +288,7 @@ static int setup_av_ep(int idx)
 		return ret;
 	}
 
-	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL, &av);
 	if (ret)
 		return ret;
 
