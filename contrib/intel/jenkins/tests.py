@@ -854,9 +854,12 @@ class OneCCLTests(Test):
 
     def export_env(self):
         environ = f"source {cloudbees_config.oneapi_root}/setvars.sh; "
-        environ += f"source {self.oneccl_path}/build/_install/env/vars.sh; "
+        environ += f"source {self.oneccl_path}/build/_install/env/setvars.sh; "
         if self.core_prov == 'psm3':
             self.oneccl_environ['PSM3_MULTI_EP'] = '1'
+
+        if self.core_prov == 'shm':
+            self.oneccl_environ['CCL_ATL_SHM'] = '1'
 
         for key, val in self.oneccl_environ.items():
             environ += f"export {key}={val}; "
@@ -994,8 +997,16 @@ class OneCCLTestsGPU(Test):
             else:
                 gpu_selector = 'default'
 
-            command = f"bash -c \'{self.export_env()} {self.cmd()} "\
-                      f"{self.options()} ./{test} "
+            if self.core_prov == 'psm3':
+                command = f"bash -c \'{self.export_env()} export PSM3_MULTI_EP=1; {self.cmd()} "\
+                          f"{self.options()} ./{test} "
+            elif self.core_prov == 'shm':
+                command = f"bash -c \'{self.export_env()} export CCL_ATL_SHM=1; {self.cmd()} "\
+                          f"{self.options()} ./{test} "
+            else:
+                command = f"bash -c \'{self.export_env()} {self.cmd()} "\
+                          f"{self.options()} ./{test} "
+
             if 'examples' in oneccl_test_gpu:
                 command += f"gpu {gpu_selector}"
             command += "\'"
