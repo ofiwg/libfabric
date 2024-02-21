@@ -408,7 +408,7 @@ struct cxip_rxc *cxip_rxc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 		if (rxc)
 			rxc->ops = hpc_rxc_ops;
 		break;
-	case FI_PROTO_CXI_CS:
+	case FI_PROTO_CXI_RNR:
 		rxc = calloc(1, sizeof(struct cxip_rxc_cs));
 		if (rxc)
 			rxc->ops = cs_rxc_ops;
