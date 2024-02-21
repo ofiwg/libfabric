@@ -4,6 +4,7 @@
  * Copyright (c) 2019-2021 Amazon.com, Inc. or its affiliates.
  *                         All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * Copyright (C) 2024 Cornelis Networks. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -410,7 +411,7 @@ err:
 
 void ofi_monitors_del_cache(struct ofi_mr_cache *cache)
 {
-	struct ofi_mem_monitor *stop_list[OFI_HMEM_MAX];
+	struct ofi_mem_monitor *update_list[OFI_HMEM_MAX];
 	struct ofi_mem_monitor *monitor;
 	enum fi_hmem_iface iface;
 	int ret;
@@ -427,7 +428,7 @@ void ofi_monitors_del_cache(struct ofi_mr_cache *cache)
 	} while (ret);
 
 	for (iface = 0; iface < OFI_HMEM_MAX; iface++) {
-		stop_list[iface] = NULL;
+		update_list[iface] = NULL;
 		monitor = cache->monitors[iface];
 		if (!monitor)
 			continue;
@@ -436,12 +437,14 @@ void ofi_monitors_del_cache(struct ofi_mr_cache *cache)
 
 		if (dlist_empty(&monitor->list)) {
 			pthread_mutex_lock(&mm_state_lock);
-			stop_list[iface] = monitor;
 			/* See comment above ofi_monitors_update for details */
-			if (monitor->state == FI_MM_STATE_RUNNING)
+			if (monitor->state == FI_MM_STATE_RUNNING) {
 				monitor->state = FI_MM_STATE_STOPPING;
-			else if (monitor->state == FI_MM_STATE_STARTING)
+				update_list[iface] = monitor;
+			} else if (monitor->state == FI_MM_STATE_STARTING) {
 				monitor->state = FI_MM_STATE_RUNNING;
+				update_list[iface] = monitor;
+			}
 			pthread_mutex_unlock(&mm_state_lock);
 		}
 
@@ -451,7 +454,7 @@ void ofi_monitors_del_cache(struct ofi_mr_cache *cache)
 	pthread_rwlock_unlock(&mm_list_rwlock);
 
 
-	ofi_monitors_update(stop_list);
+	ofi_monitors_update(update_list);
 	return;
 }
 
@@ -853,6 +856,9 @@ static void ofi_import_monitor_notify(struct fid_mem_monitor *monitor,
 
 static int ofi_close_import(struct fid *fid)
 {
+	pthread_mutex_lock(&mm_state_lock);
+	impmon.monitor.state = FI_MM_STATE_IDLE;
+	pthread_mutex_unlock(&mm_state_lock);
 	impmon.impfid = NULL;
 	return 0;
 }
