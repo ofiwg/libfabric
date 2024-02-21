@@ -492,7 +492,7 @@ static int cxip_info_init(void)
 
 		/* Initialize the client/server equivalents here, just
 		 * modifying the default entries to be suitable for client
-		 * server. NOTE: FI_PROTO_CXI_CS protocol does not exist
+		 * server. NOTE: FI_PROTO_CXI_RNR protocol does not exist
 		 * when only old compatibility constants are used.
 		 */
 		for (ndx = 0; ndx < ARRAY_SIZE(cxip_infos); ndx++) {
@@ -505,7 +505,7 @@ static int cxip_info_init(void)
 			}
 
 			fi->caps |= FI_DIRECTED_RECV;
-			fi->ep_attr->protocol = FI_PROTO_CXI_CS;
+			fi->ep_attr->protocol = FI_PROTO_CXI_RNR;
 			fi->ep_attr->mem_tag_format = FI_TAG_GENERIC >>
 					(64 - CXIP_CS_TAG_WIDTH);
 			fi->tx_attr->msg_order = CXIP_MSG_ORDER & ~FI_ORDER_SAS;
@@ -1686,7 +1686,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		while (fi_ptr) {
 			/* If hints protocol is not specified, default to use
 			 * protocol FI_PROTO_CXI/FI_PROTO_CXI_COMPAT. This
-			 * requires that FI_PROTO_CXI_CS be explicitly
+			 * requires that FI_PROTO_CXI_RNR be explicitly
 			 * requested if hints are passed to be used.
 			 */
 			if (!hints->ep_attr->protocol) {

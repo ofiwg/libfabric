@@ -992,8 +992,8 @@ static inline int cxip_ep_set_val(struct cxip_ep *cxi_ep,
 	case FI_OPT_CXI_SET_RNR_MAX_RETRY_TIME:
 		req_rnr_max_time = (uint64_t *) val->val;
 
-		if (cxi_ep->ep_obj->protocol != FI_PROTO_CXI_CS) {
-			CXIP_WARN("Not FI_PROTO_CXI_CS EP\n");
+		if (cxi_ep->ep_obj->protocol != FI_PROTO_CXI_RNR) {
+			CXIP_WARN("Not FI_PROTO_CXI_RNR EP\n");
 			return -FI_EINVAL;
 		}
 

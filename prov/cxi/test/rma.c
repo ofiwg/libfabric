@@ -2245,7 +2245,7 @@ done:
 	free(src_buf2);
 }
 
-/* Note: the FI_PROTO_CXI_CS should not alter the standard RMA
+/* Note: the FI_PROTO_CXI_RNR should not alter the standard RMA
  * and Atomic functions. Perform a limited set of writes and reads to
  * verify this.
  */

@@ -601,7 +601,7 @@ void cxit_setup_enabled_cs_msg_ep(void)
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 
 	/* Indicate we want to use the CS protocol */
-	cxit_fi_hints->ep_attr->protocol = FI_PROTO_CXI_CS;
+	cxit_fi_hints->ep_attr->protocol = FI_PROTO_CXI_RNR;
 
 	cxit_setup_ep();
 
@@ -973,7 +973,7 @@ void cxit_setup_enabled_cs_ep_hybrid_mr_desc(void)
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 
 	/* Indicate we want to use the CS protocol */
-	cxit_fi_hints->ep_attr->protocol = FI_PROTO_CXI_CS;
+	cxit_fi_hints->ep_attr->protocol = FI_PROTO_CXI_RNR;
 	cxit_fi_hints->domain_attr->mr_mode = FI_MR_PROV_KEY | FI_MR_ALLOCATED |
 					      FI_MR_ENDPOINT;
 
@@ -1021,7 +1021,7 @@ void cxit_setup_enabled_cs_ep_hybrid_mr_desc_byte_cntr(void)
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 
 	/* Indicate we want to use the CS protocol */
-	cxit_fi_hints->ep_attr->protocol = FI_PROTO_CXI_CS;
+	cxit_fi_hints->ep_attr->protocol = FI_PROTO_CXI_RNR;
 	cxit_fi_hints->domain_attr->mr_mode = FI_MR_PROV_KEY | FI_MR_ALLOCATED |
 					      FI_MR_ENDPOINT;
 
