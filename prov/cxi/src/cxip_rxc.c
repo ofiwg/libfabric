@@ -19,7 +19,7 @@
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 extern struct cxip_rxc_ops hpc_rxc_ops;
-extern struct cxip_rxc_ops cs_rxc_ops;
+extern struct cxip_rxc_ops rnr_rxc_ops;
 
 /*
  * cxip_rxc_msg_enable() - Enable RXC messaging.
@@ -409,9 +409,9 @@ struct cxip_rxc *cxip_rxc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 			rxc->ops = hpc_rxc_ops;
 		break;
 	case FI_PROTO_CXI_RNR:
-		rxc = calloc(1, sizeof(struct cxip_rxc_cs));
+		rxc = calloc(1, sizeof(struct cxip_rxc_rnr));
 		if (rxc)
-			rxc->ops = cs_rxc_ops;
+			rxc->ops = rnr_rxc_ops;
 		break;
 	default:
 		CXIP_WARN("Unsupported EP protocol requested %d\n",

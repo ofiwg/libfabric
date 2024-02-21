@@ -587,7 +587,7 @@ void cxit_teardown_ep(void)
 	cxit_teardown_domain();
 }
 
-void cxit_setup_enabled_cs_msg_ep(void)
+void cxit_setup_enabled_rnr_msg_ep(void)
 {
 	int ret;
 	size_t addrlen = sizeof(cxit_ep_addr);
@@ -835,12 +835,12 @@ void cxit_setup_rma_mr_events(void)
 	fi_control(&cxit_domain->fid, FI_OPT_CXI_SET_PROV_KEY_CACHE, &disable);
 }
 
-void cxit_setup_cs_msg_ep(void)
+void cxit_setup_rnr_msg_ep(void)
 {
 	int ret;
 	struct cxip_addr fake_addr = {.nic = 0xad, .pid = 0xbc};
 
-	cxit_setup_enabled_cs_msg_ep();
+	cxit_setup_enabled_rnr_msg_ep();
 
 	/* Insert local address into AV to prepare to send to self */
 	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
@@ -959,7 +959,7 @@ void cxit_setup_rma_hybrid_mr_desc(void)
 	cr_assert(ret == 1);
 }
 
-void cxit_setup_enabled_cs_ep_hybrid_mr_desc(void)
+void cxit_setup_enabled_rnr_ep_hybrid_mr_desc(void)
 {
 	int ret;
 	size_t addrlen = sizeof(cxit_ep_addr);
@@ -1007,7 +1007,7 @@ void cxit_setup_enabled_cs_ep_hybrid_mr_desc(void)
 	cr_assert(addrlen == sizeof(cxit_ep_addr));
 }
 
-void cxit_setup_enabled_cs_ep_hybrid_mr_desc_byte_cntr(void)
+void cxit_setup_enabled_rnr_ep_hybrid_mr_desc_byte_cntr(void)
 {
 	int ret;
 	size_t addrlen = sizeof(cxit_ep_addr);
@@ -1055,12 +1055,12 @@ void cxit_setup_enabled_cs_ep_hybrid_mr_desc_byte_cntr(void)
 	cr_assert(addrlen == sizeof(cxit_ep_addr));
 }
 
-void cxit_setup_rma_cs_hybrid_mr_desc(void)
+void cxit_setup_rma_rnr_hybrid_mr_desc(void)
 {
 	int ret;
 	struct cxip_addr fake_addr = {.nic = 0xad, .pid = 0xbc};
 
-	cxit_setup_enabled_cs_ep_hybrid_mr_desc();
+	cxit_setup_enabled_rnr_ep_hybrid_mr_desc();
 
 	/* Insert local address into AV to prepare to send to self */
 	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
@@ -1072,12 +1072,12 @@ void cxit_setup_rma_cs_hybrid_mr_desc(void)
 	cr_assert(ret == 1);
 }
 
-void cxit_setup_rma_cs_hybrid_mr_desc_byte_cntr(void)
+void cxit_setup_rma_rnr_hybrid_mr_desc_byte_cntr(void)
 {
 	int ret;
 	struct cxip_addr fake_addr = {.nic = 0xad, .pid = 0xbc};
 
-	cxit_setup_enabled_cs_ep_hybrid_mr_desc_byte_cntr();
+	cxit_setup_enabled_rnr_ep_hybrid_mr_desc_byte_cntr();
 
 	/* Insert local address into AV to prepare to send to self */
 	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
