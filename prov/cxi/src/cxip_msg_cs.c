@@ -26,7 +26,7 @@
 #define APPEND_LE_FATAL "Recieve LE resources exhuasted. Requires use " \
 	" of FI_PROTO_CXI endpoint protocol\n"
 
-static int cxip_cs_send_cb(struct cxip_req *req, const union c_event *event);
+static int cxip_rnr_send_cb(struct cxip_req *req, const union c_event *event);
 
 static void cxip_rnr_recv_pte_cb(struct cxip_pte *pte,
 				 const union c_event *event)
@@ -77,8 +77,8 @@ static void cxip_rnr_recv_pte_cb(struct cxip_pte *pte,
 	}
 }
 
-static int cxip_cs_recv_selective_comp_cb(struct cxip_req *req,
-					  const union c_event *event)
+static int cxip_rnr_recv_selective_comp_cb(struct cxip_req *req,
+					   const union c_event *event)
 {
 	int event_rc;
 	int ret_err;
@@ -107,16 +107,16 @@ static int cxip_cs_recv_selective_comp_cb(struct cxip_req *req,
 }
 
 /*
- * cxip_cs_recv_req() - Submit Receive request to hardware.
+ * cxip_rnr_recv_req() - Submit Receive request to hardware.
  */
-static ssize_t cxip_cs_recv_req(struct cxip_req *req, struct cxip_cntr *cntr,
-				bool restart_seq)
+static ssize_t cxip_rnr_recv_req(struct cxip_req *req, struct cxip_cntr *cntr,
+				 bool restart_seq)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	uint32_t le_flags;
 	union cxip_match_bits mb = {};
 	union cxip_match_bits ib = {
-		.cs_cq_data = 1,
+		.rnr_cq_data = 1,
 	};
 	int ret;
 	struct cxip_md *recv_md = req->recv.recv_md;
@@ -124,14 +124,14 @@ static ssize_t cxip_cs_recv_req(struct cxip_req *req, struct cxip_cntr *cntr,
 
 	if (req->recv.tagged) {
 		mb.tagged = 1;
-		mb.cs_tag = req->recv.tag;
-		ib.cs_tag = req->recv.ignore;
+		mb.rnr_tag = req->recv.tag;
+		ib.rnr_tag = req->recv.ignore;
 	}
 
 	if (req->recv.match_id == CXI_MATCH_ID_ANY)
-		ib.cs_vni = ~0;
+		ib.rnr_vni = ~0;
 	else
-		mb.cs_vni = req->recv.vni;
+		mb.rnr_vni = req->recv.vni;
 
 	/* Always set manage_local in Receive LEs. This makes Cassini ignore
 	 * initiator remote_offset in all Puts. With this, remote_offset in Put
@@ -184,15 +184,15 @@ static ssize_t cxip_cs_recv_req(struct cxip_req *req, struct cxip_cntr *cntr,
 }
 
 /*
- * cxip_cs_recv_cb() - Process user receive buffer events.
+ * cxip_rnr_recv_cb() - Process user receive buffer events.
  *
  * For the CS protocol a receive buffer is described by an LE linked to
  * the Priority List. Local unexpected message buffering and rendezvous
  * messaging are not enabled.
  */
-static int cxip_cs_recv_cb(struct cxip_req *req, const union c_event *event)
+static int cxip_rnr_recv_cb(struct cxip_req *req, const union c_event *event)
 {
-	struct cxip_rxc_cs *rxc = req->recv.rxc_cs;
+	struct cxip_rxc_rnr *rxc = req->recv.rxc_rnr;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
@@ -229,13 +229,13 @@ static int cxip_cs_recv_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
-static void cxip_rxc_cs_progress(struct cxip_rxc *rxc)
+static void cxip_rxc_rnr_progress(struct cxip_rxc *rxc)
 {
 	cxip_evtq_progress(&rxc->rx_evtq);
 }
 
-static void cxip_rxc_cs_recv_req_tgt_event(struct cxip_req *req,
-					   const union c_event *event)
+static void cxip_rxc_rnr_recv_req_tgt_event(struct cxip_req *req,
+					    const union c_event *event)
 {
 	union cxip_match_bits mb = {
 		.raw = event->tgt_long.match_bits
@@ -245,10 +245,10 @@ static void cxip_rxc_cs_recv_req_tgt_event(struct cxip_req *req,
 	assert(req->recv.rxc->protocol == FI_PROTO_CXI_RNR);
 	assert(event->hdr.event_type == C_EVENT_PUT);
 
-	req->tag = mb.cs_tag;
+	req->tag = mb.rnr_tag;
 	req->recv.initiator = init;
 
-	if (mb.cs_cq_data)
+	if (mb.rnr_cq_data)
 		req->flags |= FI_REMOTE_CQ_DATA;
 
 	req->recv.src_offset = event->tgt_long.remote_offset;
@@ -274,25 +274,25 @@ static void cxip_rxc_cs_recv_req_tgt_event(struct cxip_req *req,
 	/* data_len must be set uniquely for each protocol! */
 }
 
-static int cxip_rxc_cs_cancel_msg_recv(struct cxip_req *req)
+static int cxip_rxc_rnr_cancel_msg_recv(struct cxip_req *req)
 {
 	/* Perform default */
 	return cxip_recv_cancel(req);
 }
 
 /* Handle any control messaging callbacks specific to protocol */
-static int cxip_rxc_cs_ctrl_msg_cb(struct cxip_ctrl_req *req,
+static int cxip_rxc_rnr_ctrl_msg_cb(struct cxip_ctrl_req *req,
 				    const union c_event *event)
 {
 	/* Placeholder */
 	return -FI_ENOSYS;
 }
 
-static void cxip_rxc_cs_init_struct(struct cxip_rxc *rxc_base,
-				    struct cxip_ep_obj *ep_obj)
+static void cxip_rxc_rnr_init_struct(struct cxip_rxc *rxc_base,
+				     struct cxip_ep_obj *ep_obj)
 {
-	struct cxip_rxc_cs *rxc = container_of(rxc_base, struct cxip_rxc_cs,
-					       base);
+	struct cxip_rxc_rnr *rxc = container_of(rxc_base, struct cxip_rxc_rnr,
+						base);
 
 	assert(rxc->base.protocol == FI_PROTO_CXI_RNR);
 
@@ -303,15 +303,15 @@ static void cxip_rxc_cs_init_struct(struct cxip_rxc *rxc_base,
 	rxc->base.recv_ptl_idx = CXIP_PTL_IDX_RNR_RXQ;
 }
 
-static void cxip_rxc_cs_fini_struct(struct cxip_rxc *rxc)
+static void cxip_rxc_rnr_fini_struct(struct cxip_rxc *rxc)
 {
 	/* Placeholder */
 }
 
-static int cxip_rxc_cs_msg_init(struct cxip_rxc *rxc_base)
+static int cxip_rxc_rnr_msg_init(struct cxip_rxc *rxc_base)
 {
-	struct cxip_rxc_cs *rxc = container_of(rxc_base, struct cxip_rxc_cs,
-					       base);
+	struct cxip_rxc_rnr *rxc = container_of(rxc_base, struct cxip_rxc_rnr,
+						base);
 	struct cxi_pt_alloc_opts pt_opts = {
 		.use_long_event = 1,
 		.is_matching = 1,
@@ -324,7 +324,7 @@ static int cxip_rxc_cs_msg_init(struct cxip_rxc *rxc_base)
 
 	if (rxc->base.domain->hybrid_mr_desc) {
 		ret = cxip_recv_req_alloc(&rxc->base, NULL, 0, NULL, &req,
-					  cxip_cs_recv_selective_comp_cb);
+					  cxip_rnr_recv_selective_comp_cb);
 		if (ret) {
 			CXIP_WARN("FI_MSG hybrid req alloc failed\n");
 			return -FI_ENOMEM;
@@ -342,7 +342,7 @@ static int cxip_rxc_cs_msg_init(struct cxip_rxc *rxc_base)
 		ofi_atomic_dec32(&rxc->base.orx_reqs);
 
 		ret = cxip_recv_req_alloc(&rxc->base, NULL, 0, NULL, &req,
-					  cxip_cs_recv_selective_comp_cb);
+					  cxip_rnr_recv_selective_comp_cb);
 		if (ret) {
 			CXIP_WARN("FI_MSG hybrid req alloc failed\n");
 			ret = -FI_ENOMEM;
@@ -412,9 +412,9 @@ free_req_msg:
 	return ret;
 }
 
-static int cxip_rxc_cs_msg_fini(struct cxip_rxc *rxc_base)
+static int cxip_rxc_rnr_msg_fini(struct cxip_rxc *rxc_base)
 {
-	struct cxip_rxc_cs *rxc = container_of(rxc_base, struct cxip_rxc_cs,
+	struct cxip_rxc_rnr *rxc = container_of(rxc_base, struct cxip_rxc_rnr,
 					       base);
 
 	assert(rxc->base.protocol == FI_PROTO_CXI_RNR);
@@ -434,7 +434,7 @@ static int cxip_rxc_cs_msg_fini(struct cxip_rxc *rxc_base)
 	return FI_SUCCESS;
 }
 
-static void cxip_rxc_cs_cleanup(struct cxip_rxc *rxc_base)
+static void cxip_rxc_rnr_cleanup(struct cxip_rxc *rxc_base)
 {
 	cxip_rxc_recv_req_cleanup(rxc_base);
 }
@@ -449,17 +449,17 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 		 void *context, uint64_t flags, bool tagged,
 		 struct cxip_cntr *comp_cntr)
 {
-	struct cxip_rxc_cs *rxc_cs = container_of(rxc, struct cxip_rxc_cs,
-						  base);
+	struct cxip_rxc_rnr *rxc_rnr = container_of(rxc, struct cxip_rxc_rnr,
+						    base);
 	struct cxip_req *req = NULL;
 	struct cxip_req *recv_req;
-	struct cxip_mr *mr = rxc_cs->hybrid_mr_desc ? desc : NULL;
+	struct cxip_mr *mr = rxc_rnr->hybrid_mr_desc ? desc : NULL;
 	struct cxip_cntr *cntr;
 	int ret;
 	uint32_t match_id;
 	uint16_t vni;
 
-	assert(rxc_cs->base.protocol == FI_PROTO_CXI_RNR);
+	assert(rxc_rnr->base.protocol == FI_PROTO_CXI_RNR);
 
 #if ENABLE_DEBUG
 	if (len && !buf) {
@@ -495,8 +495,8 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 
 	if (mr && !(flags & (FI_COMPLETION | FI_MULTI_RECV |
 			     FI_PEEK | FI_CLAIM))) {
-		recv_req = tagged ? rxc_cs->req_selective_comp_tag :
-				    rxc_cs->req_selective_comp_msg;
+		recv_req = tagged ? rxc_rnr->req_selective_comp_tag :
+				    rxc_rnr->req_selective_comp_msg;
 		assert(recv_req != NULL);
 
 		recv_req->recv.recv_md = mr->md;
@@ -505,7 +505,7 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 		recv_req->recv.ulen = len;
 	} else {
 		ret = cxip_recv_req_alloc(rxc, buf, len, mr ? mr->md : NULL,
-					  &req, cxip_cs_recv_cb);
+					  &req, cxip_rnr_recv_cb);
 		if (ret)
 			goto err;
 
@@ -536,7 +536,7 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 	recv_req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
 
 	if (!(recv_req->recv.flags & (FI_PEEK | FI_CLAIM))) {
-		ret = cxip_cs_recv_req(recv_req, cntr, false);
+		ret = cxip_rnr_recv_req(recv_req, cntr, false);
 		if (ret) {
 			RXC_WARN(rxc, "Receive append failed: %d %s\n",
 				 ret, fi_strerror(-ret));
@@ -575,8 +575,8 @@ err:
 	return ret;
 }
 
-static inline bool cxip_cs_req_uses_idc(struct cxip_txc_cs *txc,
-					ssize_t len, bool triggered)
+static inline bool cxip_rnr_req_uses_idc(struct cxip_txc_rnr *txc,
+					 ssize_t len, bool triggered)
 
 {
 	/* TODO: Consider supporting HMEM and IDC by mapping memory */
@@ -584,9 +584,9 @@ static inline bool cxip_cs_req_uses_idc(struct cxip_txc_cs *txc,
 		!triggered && !cxip_env.disable_non_inject_msg_idc;
 }
 
-static inline bool cxip_cs_tx_success_disable(struct cxip_txc_cs *txc,
-					      struct cxip_mr *mr,
-					      bool idc, uint64_t flags)
+static inline bool cxip_rnr_tx_success_disable(struct cxip_txc_rnr *txc,
+					       struct cxip_mr *mr,
+					       bool idc, uint64_t flags)
 {
 	/* Success events can be avoided if we do not require local
 	 * memory registration, RNR retries will not be done, and
@@ -596,8 +596,8 @@ static inline bool cxip_cs_tx_success_disable(struct cxip_txc_cs *txc,
 		!(flags & FI_COMPLETION);
 }
 
-static int cxip_cs_send_selective_comp_cb(struct cxip_req *req,
-					  const union c_event *event)
+static int cxip_rnr_send_selective_comp_cb(struct cxip_req *req,
+					   const union c_event *event)
 {
 	int event_rc;
 	int ret_err;
@@ -625,9 +625,9 @@ static int cxip_cs_send_selective_comp_cb(struct cxip_req *req,
 				 FI_ADDR_UNSPEC);
 }
 
-static inline ssize_t cxip_cs_send_dma(struct cxip_req *req,
-				       union cxip_match_bits *mb,
-				       union c_fab_addr *dfa, uint8_t idx_ext)
+static inline ssize_t cxip_rnr_send_dma(struct cxip_req *req,
+					union cxip_match_bits *mb,
+					union c_fab_addr *dfa, uint8_t idx_ext)
 {
 	struct cxip_txc *txc = req->send.txc;
 	struct c_full_dma_cmd cmd = {};
@@ -667,9 +667,9 @@ static inline ssize_t cxip_cs_send_dma(struct cxip_req *req,
 				 req->trig_thresh, &cmd, req->send.flags);
 }
 
-static inline ssize_t cxip_cs_send_idc(struct cxip_req *req,
-				       union cxip_match_bits *mb,
-				       union c_fab_addr *dfa, uint8_t idx_ext)
+static inline ssize_t cxip_rnr_send_idc(struct cxip_req *req,
+					union cxip_match_bits *mb,
+					union c_fab_addr *dfa, uint8_t idx_ext)
 {
 	struct cxip_txc *txc = req->send.txc;
 	struct c_cstate_cmd cstate_cmd = {};
@@ -707,13 +707,13 @@ static inline ssize_t cxip_cs_send_idc(struct cxip_req *req,
 }
 
 /* Caller must hold ep_obj->lock */
-static ssize_t cxip_cs_msg_send(struct cxip_req *req)
+static ssize_t cxip_rnr_msg_send(struct cxip_req *req)
 {
 	struct cxip_txc *txc = req->send.txc;
 	union cxip_match_bits mb = {
-		.cs_vni = req->send.caddr.vni,
-		.cs_tag = req->send.tag,
-		.cs_cq_data = !!(req->send.flags & FI_REMOTE_CQ_DATA),
+		.rnr_vni = req->send.caddr.vni,
+		.rnr_tag = req->send.tag,
+		.rnr_cq_data = !!(req->send.flags & FI_REMOTE_CQ_DATA),
 	};
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
@@ -725,9 +725,9 @@ static ssize_t cxip_cs_msg_send(struct cxip_req *req)
 		      txc->recv_ptl_idx, &dfa, &idx_ext);
 
 	if (req->send.send_md || !req->send.len)
-		ret = cxip_cs_send_dma(req, &mb, &dfa, idx_ext);
+		ret = cxip_rnr_send_dma(req, &mb, &dfa, idx_ext);
 	else
-		ret = cxip_cs_send_idc(req, &mb, &dfa, idx_ext);
+		ret = cxip_rnr_send_idc(req, &mb, &dfa, idx_ext);
 	if (ret) {
 		TXC_WARN(txc, "Failed to write %s command: %ld\n",
 			 idc ? "IDC" : "DMA", ret);
@@ -747,7 +747,7 @@ static ssize_t cxip_cs_msg_send(struct cxip_req *req)
  *
  * Caller must hold ep_obj->lock
  */
-static int cxip_rnr_queue_retry(struct cxip_txc_cs *txc, struct cxip_req *req)
+static int cxip_rnr_queue_retry(struct cxip_txc_rnr *txc, struct cxip_req *req)
 {
 	uint64_t cur_time;
 	uint64_t retry_time;
@@ -787,7 +787,7 @@ static int cxip_rnr_queue_retry(struct cxip_txc_cs *txc, struct cxip_req *req)
 	return FI_SUCCESS;
 }
 
-static int cxip_process_rnr_time_wait(struct cxip_txc_cs *txc)
+static int cxip_process_rnr_time_wait(struct cxip_txc_rnr *txc)
 {
 	struct cxip_req *req;
 	struct dlist_entry *tmp;
@@ -837,7 +837,7 @@ static int cxip_process_rnr_time_wait(struct cxip_txc_cs *txc)
 				 * we could not send.
 				 */
 				ofi_atomic_dec32(&txc->base.otx_reqs);
-				ret = cxip_cs_msg_send(req);
+				ret = cxip_rnr_msg_send(req);
 				if (ret != FI_SUCCESS) {
 					ofi_atomic_inc32(&txc->base.otx_reqs);
 					goto reset_min_time_wait;
@@ -870,10 +870,10 @@ reset_min_time_wait:
 	return ret;
 }
 
-static void cxip_txc_cs_progress(struct cxip_txc *txc_base)
+static void cxip_txc_rnr_progress(struct cxip_txc *txc_base)
 {
-	struct cxip_txc_cs *txc = container_of(txc_base, struct cxip_txc_cs,
-					       base);
+	struct cxip_txc_rnr *txc = container_of(txc_base, struct cxip_txc_rnr,
+						base);
 
 	assert(txc->base.protocol == FI_PROTO_CXI_RNR);
 
@@ -881,7 +881,7 @@ static void cxip_txc_cs_progress(struct cxip_txc *txc_base)
 	cxip_process_rnr_time_wait(txc);
 }
 
-static int cxip_txc_cs_cancel_msg_send(struct cxip_req *req)
+static int cxip_txc_rnr_cancel_msg_send(struct cxip_req *req)
 {
 	if (req->type != CXIP_REQ_SEND)
 		return -FI_ENOENT;
@@ -891,11 +891,11 @@ static int cxip_txc_cs_cancel_msg_send(struct cxip_req *req)
 	return FI_SUCCESS;
 }
 
-static void cxip_txc_cs_init_struct(struct cxip_txc *txc_base,
-				    struct cxip_ep_obj *ep_obj)
+static void cxip_txc_rnr_init_struct(struct cxip_txc *txc_base,
+				     struct cxip_ep_obj *ep_obj)
 {
-	struct cxip_txc_cs *txc = container_of(txc_base, struct cxip_txc_cs,
-					       base);
+	struct cxip_txc_rnr *txc = container_of(txc_base, struct cxip_txc_rnr,
+						base);
 	int i;
 
 	assert(txc->base.protocol == FI_PROTO_CXI_RNR);
@@ -912,15 +912,15 @@ static void cxip_txc_cs_init_struct(struct cxip_txc *txc_base,
 		dlist_init(&txc->time_wait_queue[i]);
 }
 
-static void cxip_txc_cs_fini_struct(struct cxip_txc *txc)
+static void cxip_txc_rnr_fini_struct(struct cxip_txc *txc)
 {
 	/* Placeholder */
 }
 
-static int cxip_txc_cs_msg_init(struct cxip_txc *txc_base)
+static int cxip_txc_rnr_msg_init(struct cxip_txc *txc_base)
 {
-	struct cxip_txc_cs *txc = container_of(txc_base, struct cxip_txc_cs,
-					       base);
+	struct cxip_txc_rnr *txc = container_of(txc_base, struct cxip_txc_rnr,
+						base);
 	struct cxip_req *req;
 
 	assert(txc->base.protocol == FI_PROTO_CXI_RNR);
@@ -932,12 +932,12 @@ static int cxip_txc_cs_msg_init(struct cxip_txc *txc_base)
 			return -FI_ENOMEM;
 		}
 		req->type = CXIP_REQ_SEND;
-		req->cb = cxip_cs_send_selective_comp_cb;
+		req->cb = cxip_rnr_send_selective_comp_cb;
 		req->context = (uint64_t)txc->base.context;
 		req->flags = FI_MSG | FI_SEND;
 		req->addr = FI_ADDR_UNSPEC;
 		req->send.success_disable = true;
-		req->send.txc_cs = txc;
+		req->send.txc_rnr = txc;
 		txc->req_selective_comp_msg = req;
 
 		req = cxip_evtq_req_alloc(&txc->base.tx_evtq, 0, &txc->base);
@@ -948,12 +948,12 @@ static int cxip_txc_cs_msg_init(struct cxip_txc *txc_base)
 			return -FI_ENOMEM;
 		}
 		req->type = CXIP_REQ_SEND;
-		req->cb = cxip_cs_send_selective_comp_cb;
+		req->cb = cxip_rnr_send_selective_comp_cb;
 		req->context = (uint64_t)txc->base.context;
 		req->flags = FI_TAGGED | FI_SEND;
 		req->addr = FI_ADDR_UNSPEC;
 		req->send.success_disable = true;
-		req->send.txc_cs = txc;
+		req->send.txc_rnr = txc;
 		txc->req_selective_comp_tag = req;
 
 		txc->hybrid_mr_desc = true;
@@ -962,10 +962,10 @@ static int cxip_txc_cs_msg_init(struct cxip_txc *txc_base)
 	return FI_SUCCESS;
 }
 
-static int cxip_txc_cs_msg_fini(struct cxip_txc *txc_base)
+static int cxip_txc_rnr_msg_fini(struct cxip_txc *txc_base)
 {
-	struct cxip_txc_cs *txc = container_of(txc_base, struct cxip_txc_cs,
-					       base);
+	struct cxip_txc_rnr *txc = container_of(txc_base, struct cxip_txc_rnr,
+						base);
 
 	assert(txc->base.protocol == FI_PROTO_CXI_RNR);
 
@@ -980,21 +980,21 @@ static int cxip_txc_cs_msg_fini(struct cxip_txc *txc_base)
 	return FI_SUCCESS;
 }
 
-static void cxip_txc_cs_cleanup(struct cxip_txc *txc_base)
+static void cxip_txc_rnr_cleanup(struct cxip_txc *txc_base)
 {
 	/* Placeholder */
 }
 
-static void cxip_cs_send_req_dequeue(struct cxip_req *req)
+static void cxip_rnr_send_req_dequeue(struct cxip_req *req)
 {
 	/* TODO: Place holder for anything additional */
 
 	dlist_remove(&req->send.txc_entry);
 }
 
-static int cxip_cs_send_cb(struct cxip_req *req, const union c_event *event)
+static int cxip_rnr_send_cb(struct cxip_req *req, const union c_event *event)
 {
-	struct cxip_txc_cs *txc = req->send.txc_cs;
+	struct cxip_txc_rnr *txc = req->send.txc_rnr;
 	int rc = cxi_event_rc(event);
 	int ret;
 
@@ -1034,7 +1034,7 @@ static int cxip_cs_send_cb(struct cxip_req *req, const union c_event *event)
 			 ofi_atomic_get32(&txc->base.otx_reqs));
 	}
 
-	cxip_cs_send_req_dequeue(req);
+	cxip_rnr_send_req_dequeue(req);
 	cxip_send_buf_fini(req);
 
 	/* If status is good, then the request completed before it could
@@ -1071,8 +1071,8 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		 bool triggered, uint64_t trig_thresh,
 		 struct cxip_cntr *trig_cntr, struct cxip_cntr *comp_cntr)
 {
-	struct cxip_txc_cs *txc_cs = container_of(txc, struct cxip_txc_cs,
-						  base);
+	struct cxip_txc_rnr *txc_rnr = container_of(txc, struct cxip_txc_rnr,
+						    base);
 	struct cxip_mr *mr = txc->domain->hybrid_mr_desc ? desc : NULL;
 	struct cxip_req *req = NULL;
 	struct cxip_req *send_req;
@@ -1111,21 +1111,21 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	 * wait has expired, and if so force progress to initiate any
 	 * read retry/retries.
 	 */
-	if (txc_cs->next_retry_wait_us != UINT64_MAX &&
-	    ofi_atomic_get32(&txc_cs->time_wait_reqs)) {
-		if (ofi_gettime_us() >= txc_cs->next_retry_wait_us)
-			cxip_txc_cs_progress(txc);
+	if (txc_rnr->next_retry_wait_us != UINT64_MAX &&
+	    ofi_atomic_get32(&txc_rnr->time_wait_reqs)) {
+		if (ofi_gettime_us() >= txc_rnr->next_retry_wait_us)
+			cxip_txc_rnr_progress(txc);
 	}
 
-	idc = cxip_cs_req_uses_idc(txc_cs, len, triggered);
+	idc = cxip_rnr_req_uses_idc(txc_rnr, len, triggered);
 
-	if (cxip_cs_tx_success_disable(txc_cs, mr, idc, flags)) {
+	if (cxip_rnr_tx_success_disable(txc_rnr, mr, idc, flags)) {
 		/* This request cannot be retried, we use the common request
 		 * to pass parameters to the send function. This is done
 		 * with exclusive access to the request.
 		 */
-		send_req = tagged ? txc_cs->req_selective_comp_tag :
-				    txc_cs->req_selective_comp_msg;
+		send_req = tagged ? txc_rnr->req_selective_comp_tag :
+				    txc_rnr->req_selective_comp_msg;
 		send_req->send.send_md = NULL;
 		send_req->send.hybrid_md = false;
 	} else {
@@ -1137,7 +1137,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 			goto unlock;
 		}
 		send_req = req;
-		send_req->cb = cxip_cs_send_cb;
+		send_req->cb = cxip_rnr_send_cb;
 		send_req->type = CXIP_REQ_SEND;
 		send_req->send.txc = txc;
 		send_req->context = (uint64_t)context;
@@ -1211,9 +1211,9 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 
 	dlist_insert_tail(&send_req->send.txc_entry, &txc->msg_queue);
 	send_req->send.max_rnr_time = ofi_gettime_us() +
-				      txc_cs->max_retry_wait_us;
+				      txc_rnr->max_retry_wait_us;
 
-	ret = cxip_cs_msg_send(send_req);
+	ret = cxip_rnr_msg_send(send_req);
 	if (ret != FI_SUCCESS)
 		goto req_dequeue;
 
@@ -1228,7 +1228,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	return FI_SUCCESS;
 
 req_dequeue:
-	cxip_cs_send_req_dequeue(send_req);
+	cxip_rnr_send_req_dequeue(send_req);
 free_map:
 	if (send_req->send.send_md && !send_req->send.hybrid_md)
 		cxip_unmap(send_req->send.send_md);
@@ -1241,26 +1241,26 @@ unlock:
 	return ret;
 }
 
-struct cxip_rxc_ops cs_rxc_ops = {
+struct cxip_rxc_ops rnr_rxc_ops = {
 	.recv_common = cxip_recv_common,
-	.progress = cxip_rxc_cs_progress,
-	.recv_req_tgt_event = cxip_rxc_cs_recv_req_tgt_event,
-	.cancel_msg_recv = cxip_rxc_cs_cancel_msg_recv,
-	.ctrl_msg_cb = cxip_rxc_cs_ctrl_msg_cb,
-	.init_struct = cxip_rxc_cs_init_struct,
-	.fini_struct = cxip_rxc_cs_fini_struct,
-	.cleanup = cxip_rxc_cs_cleanup,
-	.msg_init = cxip_rxc_cs_msg_init,
-	.msg_fini = cxip_rxc_cs_msg_fini,
+	.progress = cxip_rxc_rnr_progress,
+	.recv_req_tgt_event = cxip_rxc_rnr_recv_req_tgt_event,
+	.cancel_msg_recv = cxip_rxc_rnr_cancel_msg_recv,
+	.ctrl_msg_cb = cxip_rxc_rnr_ctrl_msg_cb,
+	.init_struct = cxip_rxc_rnr_init_struct,
+	.fini_struct = cxip_rxc_rnr_fini_struct,
+	.cleanup = cxip_rxc_rnr_cleanup,
+	.msg_init = cxip_rxc_rnr_msg_init,
+	.msg_fini = cxip_rxc_rnr_msg_fini,
 };
 
-struct cxip_txc_ops cs_txc_ops = {
+struct cxip_txc_ops rnr_txc_ops = {
 	.send_common = cxip_send_common,
-	.progress = cxip_txc_cs_progress,
-	.cancel_msg_send = cxip_txc_cs_cancel_msg_send,
-	.init_struct = cxip_txc_cs_init_struct,
-	.fini_struct = cxip_txc_cs_fini_struct,
-	.cleanup = cxip_txc_cs_cleanup,
-	.msg_init = cxip_txc_cs_msg_init,
-	.msg_fini = cxip_txc_cs_msg_fini,
+	.progress = cxip_txc_rnr_progress,
+	.cancel_msg_send = cxip_txc_rnr_cancel_msg_send,
+	.init_struct = cxip_txc_rnr_init_struct,
+	.fini_struct = cxip_txc_rnr_fini_struct,
+	.cleanup = cxip_txc_rnr_cleanup,
+	.msg_init = cxip_txc_rnr_msg_init,
+	.msg_fini = cxip_txc_rnr_msg_fini,
 };

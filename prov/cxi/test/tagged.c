@@ -5800,34 +5800,34 @@ Test(tagged_tx_size, force_progress)
 	free(recv_buf);
 }
 
-/* Note: the FI_PROTO_CXI_RNR tagged message test suite uses cs_tagged
+/* Note: the FI_PROTO_CXI_RNR tagged message test suite uses rnr_tagged
  * so that it will not be included in flow-control and software EP tests,
  * which it does not support.
  */
-TestSuite(cs_tagged, .init = cxit_setup_cs_msg_ep,
+TestSuite(rnr_tagged, .init = cxit_setup_rnr_msg_ep,
 	  .fini = cxit_teardown_msg, .timeout = CXIT_DEFAULT_TIMEOUT);
 
-Test(cs_tagged, ping)
+Test(rnr_tagged, ping)
 {
 	ping();
 }
 
-Test(cs_tagged, pingdata)
+Test(rnr_tagged, pingdata)
 {
 	pingdata();
 }
 
-Test(cs_tagged, vping)
+Test(rnr_tagged, vping)
 {
 	vping();
 }
 
-Test(cs_tagged, msgping)
+Test(rnr_tagged, msgping)
 {
 	msgping();
 }
 
-Test(cs_tagged, peek)
+Test(rnr_tagged, peek)
 {
 	int ret;
 	ssize_t len = 4096;
@@ -5894,13 +5894,13 @@ Test(cs_tagged, peek)
  * used to verify that a RNR for a specific tagged message will not
  * keep other tagged messages from matching.
  */
-struct cs_multitudes_params {
+struct rnr_multitudes_params {
 	size_t length;
 	size_t num_ios;
 	bool last_to_first;
 };
 
-void do_cs_multitudes(struct cs_multitudes_params *param)
+void do_rnr_multitudes(struct rnr_multitudes_params *param)
 {
 	int ret;
 	size_t rx_io;
@@ -6028,11 +6028,11 @@ void do_cs_multitudes(struct cs_multitudes_params *param)
 }
 
 
-ParameterizedTestParameters(cs_tagged, cs_multitudes)
+ParameterizedTestParameters(rnr_tagged, rnr_multitudes)
 {
 	size_t param_sz;
 
-	static struct cs_multitudes_params cs_params[] = {
+	static struct rnr_multitudes_params rnr_params[] = {
 		{.length = 1024,
 		 .num_ios = 10,
 		 .last_to_first = false},
@@ -6047,13 +6047,13 @@ ParameterizedTestParameters(cs_tagged, cs_multitudes)
 		 .last_to_first = true},
 	};
 
-	param_sz = ARRAY_SIZE(cs_params);
-	return cr_make_param_array(struct cs_multitudes_params, cs_params,
+	param_sz = ARRAY_SIZE(rnr_params);
+	return cr_make_param_array(struct rnr_multitudes_params, rnr_params,
 				   param_sz);
 }
 
-ParameterizedTest(struct cs_multitudes_params *param, cs_tagged,
-		  cs_multitudes, .timeout = 60)
+ParameterizedTest(struct rnr_multitudes_params *param, rnr_tagged,
+		  rnr_multitudes, .timeout = 60)
 {
-	do_cs_multitudes(param);
+	do_rnr_multitudes(param);
 }

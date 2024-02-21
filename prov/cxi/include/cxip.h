@@ -597,11 +597,11 @@ union cxip_match_bits {
 	};
 	/* Client/Server messaging match bits */
 	struct {
-		uint64_t cs_tag	    : CXIP_CS_TAG_WIDTH; /* User tag value */
-		uint64_t cs_rsvd    : 6;		 /* Unused, set to 0 */
-		uint64_t cs_cq_data : 1;		 /* Header data valid */
-		uint64_t cs_tagged  : 1;		 /* Tagged API */
-		uint64_t cs_vni	    : CXIP_VNI_WIDTH;	 /* Source VNI */
+		uint64_t rnr_tag     : CXIP_CS_TAG_WIDTH; /* User tag value */
+		uint64_t rnr_rsvd    : 6;		 /* Unused, set to 0 */
+		uint64_t rnr_cq_data : 1;		 /* Header data valid */
+		uint64_t rnr_tagged  : 1;		 /* Tagged API */
+		uint64_t rnr_vni     : CXIP_VNI_WIDTH;	 /* Source VNI */
 	};
 	/* Control LE match bit format for notify/resume */
 	struct {
@@ -1093,7 +1093,7 @@ struct cxip_req_recv {
 	union {
 		struct cxip_rxc *rxc;
 		struct cxip_rxc_hpc *rxc_hpc;
-		struct cxip_rxc_cs *rxc_cs;
+		struct cxip_rxc_rnr *rxc_rnr;
 	};
 
 	struct cxip_cntr *cntr;
@@ -1158,7 +1158,7 @@ struct cxip_req_send {
 	union {
 		struct cxip_txc *txc;
 		struct cxip_txc_hpc *txc_hpc;
-		struct cxip_txc_cs *txc_cs;
+		struct cxip_txc_rnr *txc_rnr;
 	};
 	struct cxip_cntr *cntr;
 	const void *buf;		// local send buffer
@@ -1930,7 +1930,7 @@ struct cxip_rxc_hpc {
 /* Receive context specialization for supporting client/server
  * messaging.
  */
-struct cxip_rxc_cs {
+struct cxip_rxc_rnr {
 	/* Must be first */
 	struct cxip_rxc base;
 
@@ -2252,7 +2252,7 @@ struct cxip_txc_hpc {
 #define CXIP_RNR_TIMEOUT_US	500000
 #define CXIP_NUM_RNR_WAIT_QUEUE	5
 
-struct cxip_txc_cs {
+struct cxip_txc_rnr {
 	/* Must remain first */
 	struct cxip_txc base;
 

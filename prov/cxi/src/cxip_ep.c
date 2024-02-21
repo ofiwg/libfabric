@@ -959,7 +959,7 @@ int cxip_set_tclass(uint32_t desired_tc, uint32_t default_tc, uint32_t *new_tc)
 static inline int cxip_ep_set_val(struct cxip_ep *cxi_ep,
 				  struct fi_fid_var *val)
 {
-	struct cxip_txc_cs *txc_cs;
+	struct cxip_txc_rnr *txc_rnr;
 	uint64_t *req_order;
 	uint64_t *req_rnr_max_time;
 	uint32_t *req_tclass;
@@ -997,11 +997,11 @@ static inline int cxip_ep_set_val(struct cxip_ep *cxi_ep,
 			return -FI_EINVAL;
 		}
 
-		txc_cs = container_of(cxi_ep->ep_obj->txc, struct cxip_txc_cs,
-				      base);
-		txc_cs->max_retry_wait_us = *req_rnr_max_time;
+		txc_rnr = container_of(cxi_ep->ep_obj->txc, struct cxip_txc_rnr,
+				       base);
+		txc_rnr->max_retry_wait_us = *req_rnr_max_time;
 		CXIP_DBG("RNR maximum timeout set to %ld usec\n",
-			 txc_cs->max_retry_wait_us);
+			 txc_rnr->max_retry_wait_us);
 		break;
 	default:
 		return -FI_EINVAL;
