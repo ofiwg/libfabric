@@ -34,7 +34,7 @@ static void cxip_rnr_recv_pte_cb(struct cxip_pte *pte,
 	struct cxip_rxc *rxc = (struct cxip_rxc *)pte->ctx;
 	uint32_t state;
 
-	assert(rxc->protocol == FI_PROTO_CXI_CS);
+	assert(rxc->protocol == FI_PROTO_CXI_RNR);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_STATE_CHANGE:
@@ -242,7 +242,7 @@ static void cxip_rxc_cs_recv_req_tgt_event(struct cxip_req *req,
 	};
 	uint32_t init = event->tgt_long.initiator.initiator.process;
 
-	assert(req->recv.rxc->protocol == FI_PROTO_CXI_CS);
+	assert(req->recv.rxc->protocol == FI_PROTO_CXI_RNR);
 	assert(event->hdr.event_type == C_EVENT_PUT);
 
 	req->tag = mb.cs_tag;
@@ -294,7 +294,7 @@ static void cxip_rxc_cs_init_struct(struct cxip_rxc *rxc_base,
 	struct cxip_rxc_cs *rxc = container_of(rxc_base, struct cxip_rxc_cs,
 					       base);
 
-	assert(rxc->base.protocol == FI_PROTO_CXI_CS);
+	assert(rxc->base.protocol == FI_PROTO_CXI_RNR);
 
 	/* Supports treating truncation as success */
 	rxc->base.trunc_ok = cxip_env.trunc_ok;
@@ -320,7 +320,7 @@ static int cxip_rxc_cs_msg_init(struct cxip_rxc *rxc_base)
 	struct cxip_req *req;
 	int ret;
 
-	assert(rxc->base.protocol == FI_PROTO_CXI_CS);
+	assert(rxc->base.protocol == FI_PROTO_CXI_RNR);
 
 	if (rxc->base.domain->hybrid_mr_desc) {
 		ret = cxip_recv_req_alloc(&rxc->base, NULL, 0, NULL, &req,
@@ -417,7 +417,7 @@ static int cxip_rxc_cs_msg_fini(struct cxip_rxc *rxc_base)
 	struct cxip_rxc_cs *rxc = container_of(rxc_base, struct cxip_rxc_cs,
 					       base);
 
-	assert(rxc->base.protocol == FI_PROTO_CXI_CS);
+	assert(rxc->base.protocol == FI_PROTO_CXI_RNR);
 
 	/* Must add selective completion requests RX reference counts
 	 * back before freeing.
@@ -459,7 +459,7 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 	uint32_t match_id;
 	uint16_t vni;
 
-	assert(rxc_cs->base.protocol == FI_PROTO_CXI_CS);
+	assert(rxc_cs->base.protocol == FI_PROTO_CXI_RNR);
 
 #if ENABLE_DEBUG
 	if (len && !buf) {
@@ -875,7 +875,7 @@ static void cxip_txc_cs_progress(struct cxip_txc *txc_base)
 	struct cxip_txc_cs *txc = container_of(txc_base, struct cxip_txc_cs,
 					       base);
 
-	assert(txc->base.protocol == FI_PROTO_CXI_CS);
+	assert(txc->base.protocol == FI_PROTO_CXI_RNR);
 
 	cxip_evtq_progress(&txc->base.tx_evtq);
 	cxip_process_rnr_time_wait(txc);
@@ -898,7 +898,7 @@ static void cxip_txc_cs_init_struct(struct cxip_txc *txc_base,
 					       base);
 	int i;
 
-	assert(txc->base.protocol == FI_PROTO_CXI_CS);
+	assert(txc->base.protocol == FI_PROTO_CXI_RNR);
 
 	/* Supports treating truncation as success */
 	txc->base.trunc_ok = cxip_env.trunc_ok;
@@ -923,7 +923,7 @@ static int cxip_txc_cs_msg_init(struct cxip_txc *txc_base)
 					       base);
 	struct cxip_req *req;
 
-	assert(txc->base.protocol == FI_PROTO_CXI_CS);
+	assert(txc->base.protocol == FI_PROTO_CXI_RNR);
 
 	if (txc->base.domain->hybrid_mr_desc) {
 		req = cxip_evtq_req_alloc(&txc->base.tx_evtq, 0, &txc->base);
@@ -967,7 +967,7 @@ static int cxip_txc_cs_msg_fini(struct cxip_txc *txc_base)
 	struct cxip_txc_cs *txc = container_of(txc_base, struct cxip_txc_cs,
 					       base);
 
-	assert(txc->base.protocol == FI_PROTO_CXI_CS);
+	assert(txc->base.protocol == FI_PROTO_CXI_RNR);
 
 	if (txc->req_selective_comp_msg)
 		cxip_evtq_req_free(txc->req_selective_comp_msg);
@@ -1080,7 +1080,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	int ret;
 	bool idc;
 
-	assert(txc->protocol == FI_PROTO_CXI_CS);
+	assert(txc->protocol == FI_PROTO_CXI_RNR);
 
 #if ENABLE_DEBUG
 	if (len && !buf) {
