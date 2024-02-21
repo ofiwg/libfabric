@@ -749,7 +749,7 @@ struct cxip_txc *cxip_txc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 		if (txc)
 			txc->ops = hpc_txc_ops;
 		break;
-	case FI_PROTO_CXI_CS:
+	case FI_PROTO_CXI_RNR:
 		txc = calloc(1, sizeof(struct cxip_txc_cs));
 		if (txc)
 			txc->ops = cs_txc_ops;

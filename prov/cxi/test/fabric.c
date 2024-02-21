@@ -428,19 +428,19 @@ Test(getinfo_infos, nohints)
 		else
 			max_ep_auth_key = 4;
 
-		/* Set protocol based on compatibility. Note FI_PROTO_CXI_CS
+		/* Set protocol based on compatibility. Note FI_PROTO_CXI_RNR
 		 * does not exist if only old address format/protocol values
 		 * are used.
 		 */
 		if (i < 2)
 			proto = compat_val == 2 ? FI_PROTO_OPX : FI_PROTO_CXI;
 		else
-			proto = FI_PROTO_CXI_CS;
+			proto = FI_PROTO_CXI_RNR;
 
 		format = FI_ADDR_CXI;
 		if (compat_val == 2) {
 			/* CS not valid with only old constants */
-			if (proto == FI_PROTO_CXI_CS)
+			if (proto == FI_PROTO_CXI_RNR)
 				continue;
 			format = FI_ADDR_CXI_COMPAT;
 		}
@@ -479,8 +479,8 @@ Test(getinfo_infos, nohints)
 	 */
 	if (!compat || strtol(compat, NULL, 10) == 1) {
 		for (i = 0; i < info_per_if; i++) {
-			/* FI_PROTO_CXI_CS does not require compat */
-			if (infos[i].protocol == FI_PROTO_CXI_CS) {
+			/* FI_PROTO_CXI_RNR does not require compat */
+			if (infos[i].protocol == FI_PROTO_CXI_RNR) {
 				info_per_if = info_per_if + i;
 				goto done;
 			}
@@ -561,10 +561,10 @@ void getinfo_infos_hints(uint32_t proto)
 	odp_val = !odp ? 0 : strtol(odp, NULL, 10);
 
 	/* When only old compatibility constants are used,
-	 * FI_PROTO_CXI or FI_PROTO_CXI_CS are not valid.
+	 * FI_PROTO_CXI or FI_PROTO_CXI_RNR are not valid.
 	 */
 	if (compat_val >= 2 &&
-	    (proto == FI_PROTO_CXI_CS || proto == FI_PROTO_CXI)) {
+	    (proto == FI_PROTO_CXI_RNR || proto == FI_PROTO_CXI)) {
 		cr_assert(true);
 		return;
 	}
@@ -664,7 +664,7 @@ Test(getinfo_infos, hints_proto_hpc)
 
 Test(getinfo_infos, hints_proto_cs)
 {
-	getinfo_infos_hints(FI_PROTO_CXI_CS);
+	getinfo_infos_hints(FI_PROTO_CXI_RNR);
 }
 
 Test(getinfo_infos, hints_no_rma)

@@ -235,7 +235,7 @@ The provider supports multiple endpoint protocols. The default protocol is
 FI_PROTO_CXI and fully supports the messaging requirements of parallel
 applicaitons.
 
-The FI_PROTO_CXI_CS endpoint protocol is an optional protocol that targets
+The FI_PROTO_CXI_RNR endpoint protocol is an optional protocol that targets
 client/server environments where send-after-send ordering is not required and
 messaging is generally to pre-posted buffers; FI_MULTI_RECV is recommended.
 It utilizes a receiver-not-ready implementation where
@@ -1090,7 +1090,7 @@ The CXI provider checks for the following environment variables:
 :   Default VNI value used only for service IDs where the VNI is not restricted.
 
 *FI_CXI_RNR_MAX_TIMEOUT_US*
-:   When using the endpoint FI_PROTO_CXI_CS protocol, this setting is used to
+:   When using the endpoint FI_PROTO_CXI_RNR protocol, this setting is used to
     control the maximum time from the original posting of the message that the
     message should be retried. A value of 0 will return an error completion
     on the first RNR ack status.

@@ -2064,7 +2064,7 @@ Test(msg, av_user_id)
 	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 }
-/* Note: the FI_PROTO_CXI_CS message test suite uses cs_msg
+/* Note: the FI_PROTO_CXI_RNR message test suite uses cs_msg
  * so that it will not be included in flow-control and software
  * EP tests, which it does not support.
  */
