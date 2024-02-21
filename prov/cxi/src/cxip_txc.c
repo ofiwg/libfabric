@@ -21,7 +21,7 @@
 #define CXIP_INTERNAL_TX_REQS	16
 
 extern struct cxip_txc_ops hpc_txc_ops;
-extern struct cxip_txc_ops cs_txc_ops;
+extern struct cxip_txc_ops rnr_txc_ops;
 
 struct cxip_md *cxip_txc_ibuf_md(void *ibuf)
 {
@@ -750,9 +750,9 @@ struct cxip_txc *cxip_txc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 			txc->ops = hpc_txc_ops;
 		break;
 	case FI_PROTO_CXI_RNR:
-		txc = calloc(1, sizeof(struct cxip_txc_cs));
+		txc = calloc(1, sizeof(struct cxip_txc_rnr));
 		if (txc)
-			txc->ops = cs_txc_ops;
+			txc->ops = rnr_txc_ops;
 		break;
 	default:
 		CXIP_WARN("Unsupported EP protocol requested %d\n",
