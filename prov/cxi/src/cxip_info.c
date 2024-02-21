@@ -490,9 +490,9 @@ static int cxip_info_init(void)
 			fi_list = &(fi->next);
 		}
 
-		/* Initialize the client/server equivalents here, just
-		 * modifying the default entries to be suitable for client
-		 * server. NOTE: FI_PROTO_CXI_RNR protocol does not exist
+		/* Initialize the RNR protocol equivalents here, just
+		 * modifying the default entries to be suitable for
+		 * RNR. NOTE: FI_PROTO_CXI_RNR protocol does not exist
 		 * when only old compatibility constants are used.
 		 */
 		for (ndx = 0; ndx < ARRAY_SIZE(cxip_infos); ndx++) {
@@ -516,7 +516,7 @@ static int cxip_info_init(void)
 			fi->rx_attr->caps |= FI_DIRECTED_RECV;
 			fi->rx_attr->total_buffered_recv = 0;
 
-			CXIP_DBG("%s client/server info created\n",
+			CXIP_DBG("%s RNR info created\n",
 				 nic_if->info->device_name);
 			*fi_list = fi;
 			fi_list = &(fi->next);
