@@ -5800,7 +5800,7 @@ Test(tagged_tx_size, force_progress)
 	free(recv_buf);
 }
 
-/* Note: the FI_PROTO_CXI_CS tagged message test suite uses cs_tagged
+/* Note: the FI_PROTO_CXI_RNR tagged message test suite uses cs_tagged
  * so that it will not be included in flow-control and software EP tests,
  * which it does not support.
  */

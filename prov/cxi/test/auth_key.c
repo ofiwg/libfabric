@@ -1308,7 +1308,7 @@ Test(auth_key, max_ep_auth_key_null_hints)
 	while (tmp) {
 		/* The first and second fi_info are for FI_PROTO_CXI and have a
 		 * max_ep_auth_key == 1. The fourth and fifth fi_info are for
-		 * FI_PROTO_CXI_CS and have a max_ep_auth_key == 1.
+		 * FI_PROTO_CXI_RNR and have a max_ep_auth_key == 1.
 		 */
 		if (i < 2 || (i > 3 && i < 6))
 			expected_ep_auth_key = 1;
