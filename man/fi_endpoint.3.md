@@ -753,6 +753,15 @@ protocol value set to one.
 : Protocol for intra-node communication using shared memory segments
   used by the sm2 provider
 
+*FI_PROTO_CXI*
+: Reliable-datagram protocol optimized for HPC applications
+  used by cxi provider.
+
+*FI_PROTO_CXI_RNR*
+: A version of the FI_PROTO_CXI protocol that implements an RNR
+  protocol which can be used when messaging is primarily expected
+  and FI_ORDER_SAS ordering is not required.
+
 *FI_PROTO_UNSPEC*
 : The protocol is not specified.  This is usually provided as input,
   with other attributes of the socket or the provider selecting the
