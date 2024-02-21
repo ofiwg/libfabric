@@ -2249,15 +2249,15 @@ done:
  * and Atomic functions. Perform a limited set of writes and reads to
  * verify this.
  */
-TestSuite(cs_rma, .init = cxit_setup_cs_msg_ep,
+TestSuite(rnr_rma, .init = cxit_setup_rnr_msg_ep,
 	  .fini = cxit_teardown_msg, .timeout = CXIT_DEFAULT_TIMEOUT);
 
-Test(cs_rma, simple_write)
+Test(rnr_rma, simple_write)
 {
 	simple_write();
 }
 
-Test(cs_rma, simple_read)
+Test(rnr_rma, simple_read)
 {
 	simple_read();
 }

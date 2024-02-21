@@ -2064,24 +2064,24 @@ Test(msg, av_user_id)
 	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 }
-/* Note: the FI_PROTO_CXI_RNR message test suite uses cs_msg
+/* Note: the FI_PROTO_CXI_RNR message test suite uses rnr_msg
  * so that it will not be included in flow-control and software
  * EP tests, which it does not support.
  */
-TestSuite(cs_msg, .init = cxit_setup_cs_msg_ep,
+TestSuite(rnr_msg, .init = cxit_setup_rnr_msg_ep,
 	  .fini = cxit_teardown_msg, .timeout = CXIT_DEFAULT_TIMEOUT);
 
-Test(cs_msg, ping)
+Test(rnr_msg, ping)
 {
 	ping(false);
 }
 
-Test(cs_msg, ping_retry)
+Test(rnr_msg, ping_retry)
 {
 	ping(true);
 }
 
-Test(cs_msg, ping_retry_b2b)
+Test(rnr_msg, ping_retry_b2b)
 {
 	/* unexpected, RNR retries */
 	ping(true);
@@ -2092,37 +2092,37 @@ Test(cs_msg, ping_retry_b2b)
 	ping(true);
 }
 
-Test(cs_msg, pingdata)
+Test(rnr_msg, pingdata)
 {
 	pingdata();
 }
 
-Test(cs_msg, vping)
+Test(rnr_msg, vping)
 {
 	vping();
 }
 
-Test(cs_msg, msgping)
+Test(rnr_msg, msgping)
 {
 	msgping();
 }
 
-Test(cs_msg, sizes)
+Test(rnr_msg, sizes)
 {
 	sizes();
 }
 
-Test(cs_msg, zero_byte_send_recv_iov)
+Test(rnr_msg, zero_byte_send_recv_iov)
 {
 	zero_byte_send_recv_iov();
 }
 
-Test(cs_msg, zero_byte_send_recv_msg)
+Test(rnr_msg, zero_byte_send_recv_msg)
 {
 	zero_byte_send_recv_msg();
 }
 /* CS - expected messages only */
-static struct msg_multi_recv_params cs_params[] = {
+static struct msg_multi_recv_params rnr_params[] = {
 	/* expected eager */
 	{.send_len = SHORT_SEND_LEN,
 	 .recv_len = SHORT_SENDS * SHORT_SEND_LEN,
@@ -2148,17 +2148,17 @@ static struct msg_multi_recv_params cs_params[] = {
 	 .olen = SHORT_OLEN},
 };
 
-ParameterizedTestParameters(cs_msg, multi_recv)
+ParameterizedTestParameters(rnr_msg, multi_recv)
 {
 	size_t param_sz;
 
-	param_sz = ARRAY_SIZE(cs_params);
-	return cr_make_param_array(struct msg_multi_recv_params, cs_params,
+	param_sz = ARRAY_SIZE(rnr_params);
+	return cr_make_param_array(struct msg_multi_recv_params, rnr_params,
 				   param_sz);
 }
 
 /* Test multi-recv messaging */
-ParameterizedTest(struct msg_multi_recv_params *param, cs_msg, multi_recv)
+ParameterizedTest(struct msg_multi_recv_params *param, rnr_msg, multi_recv)
 {
 	void *recv_buf;
 	void *send_buf;
@@ -2178,7 +2178,7 @@ ParameterizedTest(struct msg_multi_recv_params *param, cs_msg, multi_recv)
 	free(recv_buf);
 }
 
-Test(cs_msg, timeout)
+Test(rnr_msg, timeout)
 {
 	int i, ret;
 	uint8_t *send_buf;
@@ -2214,7 +2214,7 @@ Test(cs_msg, timeout)
 	free(send_buf);
 }
 
-Test(cs_msg, cs_cancel)
+Test(rnr_msg, rnr_cancel)
 {
 	int i, ret;
 	uint8_t *send_buf1;
@@ -2294,7 +2294,7 @@ Test(cs_msg, cs_cancel)
 }
 
 /* Test many CS retries in flight */
-Test(cs_msg, multi_recv_retries)
+Test(rnr_msg, multi_recv_retries)
 {
 	int i, j, ret;
 	int err = 0;
@@ -2733,31 +2733,31 @@ static void msg_hybrid_mr_desc_test_runner(bool multirecv,
 	mr_destroy(&recv_window);
 }
 
-TestSuite(cs_msg_hybrid_mr_desc, .init = cxit_setup_rma_cs_hybrid_mr_desc,
+TestSuite(rnr_msg_hybrid_mr_desc, .init = cxit_setup_rma_rnr_hybrid_mr_desc,
 	  .fini = cxit_teardown_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
 
-Test(cs_msg_hybrid_mr_desc, non_multirecv_comp)
+Test(rnr_msg_hybrid_mr_desc, non_multirecv_comp)
 {
 	msg_hybrid_mr_desc_test_runner(false, true);
 }
 
-Test(cs_msg_hybrid_mr_desc, multirecv_comp)
+Test(rnr_msg_hybrid_mr_desc, multirecv_comp)
 {
 	msg_hybrid_mr_desc_test_runner(true, true);
 }
 
-Test(cs_msg_hybrid_mr_desc, non_multirecv_non_comp)
+Test(rnr_msg_hybrid_mr_desc, non_multirecv_non_comp)
 {
 	msg_hybrid_mr_desc_test_runner(false, false);
 }
 
-Test(cs_msg_hybrid_mr_desc, multirecv_non_comp)
+Test(rnr_msg_hybrid_mr_desc, multirecv_non_comp)
 {
 	msg_hybrid_mr_desc_test_runner(true, false);
 }
 
 /* Verify non-descriptor traffic works */
-Test(cs_msg_hybrid_mr_desc, sizes_comp)
+Test(rnr_msg_hybrid_mr_desc, sizes_comp)
 {
 	uint64_t flags;
 	int ret;
@@ -2989,26 +2989,26 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 	mr_destroy(&recv_window);
 }
 
-TestSuite(cs_msg_append_hybrid_mr_desc,
-	  .init = cxit_setup_rma_cs_hybrid_mr_desc,
+TestSuite(rnr_msg_append_hybrid_mr_desc,
+	  .init = cxit_setup_rma_rnr_hybrid_mr_desc,
 	  .fini = cxit_teardown_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
 
-Test(cs_msg_append_hybrid_mr_desc, no_trunc_count_events_non_comp)
+Test(rnr_msg_append_hybrid_mr_desc, no_trunc_count_events_non_comp)
 {
 	msg_hybrid_append_test_runner(false, false, false);
 }
 
-Test(cs_msg_append_hybrid_mr_desc, no_trunc_count_events_comp)
+Test(rnr_msg_append_hybrid_mr_desc, no_trunc_count_events_comp)
 {
 	msg_hybrid_append_test_runner(false, false, true);
 }
 
-Test(cs_msg_append_hybrid_mr_desc, trunc_count_events_non_comp)
+Test(rnr_msg_append_hybrid_mr_desc, trunc_count_events_non_comp)
 {
 	msg_hybrid_append_test_runner(true, false, false);
 }
 
-Test(cs_msg_append_hybrid_mr_desc, trunc_count_events_comp)
+Test(rnr_msg_append_hybrid_mr_desc, trunc_count_events_comp)
 {
 	struct cxip_ep *cxip_ep = container_of(&cxit_ep->fid, struct cxip_ep,
 					       ep.fid);
@@ -3021,26 +3021,26 @@ Test(cs_msg_append_hybrid_mr_desc, trunc_count_events_comp)
 	msg_hybrid_append_test_runner(true, false, true);
 }
 
-TestSuite(cs_msg_append_hybrid_mr_desc_byte_cntr,
-	  .init = cxit_setup_rma_cs_hybrid_mr_desc_byte_cntr,
+TestSuite(rnr_msg_append_hybrid_mr_desc_byte_cntr,
+	  .init = cxit_setup_rma_rnr_hybrid_mr_desc_byte_cntr,
 	  .fini = cxit_teardown_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
 
-Test(cs_msg_append_hybrid_mr_desc_byte_cntr, no_trunc_count_bytes_non_comp)
+Test(rnr_msg_append_hybrid_mr_desc_byte_cntr, no_trunc_count_bytes_non_comp)
 {
 	msg_hybrid_append_test_runner(false, true, false);
 }
 
-Test(cs_msg_append_hybrid_mr_desc_byte_cntr, no_trunc_count_bytes_comp)
+Test(rnr_msg_append_hybrid_mr_desc_byte_cntr, no_trunc_count_bytes_comp)
 {
 	msg_hybrid_append_test_runner(false, true, true);
 }
 
-Test(cs_msg_append_hybrid_mr_desc_byte_cntr, trunc_count_bytes_non_comp)
+Test(rnr_msg_append_hybrid_mr_desc_byte_cntr, trunc_count_bytes_non_comp)
 {
 	msg_hybrid_append_test_runner(true, true, false);
 }
 
-Test(cs_msg_append_hybrid_mr_desc_byte_cntr, trunc_count_bytes_comp)
+Test(rnr_msg_append_hybrid_mr_desc_byte_cntr, trunc_count_bytes_comp)
 {
 	struct cxip_ep *cxip_ep = container_of(&cxit_ep->fid, struct cxip_ep,
 					       ep.fid);
