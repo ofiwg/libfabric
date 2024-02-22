@@ -123,6 +123,26 @@ struct fi_cntr_attr {
   on all successful completions, separately from whether the operation
   generates an entry in an event queue.
 
+- *FI_CNTR_EVENTS_BYTES*
+: The counter is incremented by the number of user bytes,
+  excluding any CQ data, transferred in a transport message
+  upon reaching the specified completion semantic.
+  For initiator side counters, the count reflects the size of the
+  requested transfer and is updated after the message reaches
+  the desired completion level (FI_INJECT_COMPLETE,
+  FI_TRANSMIT_COMPLETE, etc.).  For send and write operations,
+  the count reflects the number of bytes transferred to the peer.
+  For read operations, the count reflects the number of bytes
+  returned in a read response.  Operations which may both
+  write and read data, such as atomics, behave as read operations
+  at the initiator, but writes at the target.  For target side
+  counters, the count reflects the size of received user data
+  and is incremented subject to target side completion semantics.
+  In most cases, this indicates FI_DELIVERY_COMPLETE, but may
+  differ when accessing device memory (HMEM).  On error, the 
+  tranfer size is not applied to the error field, that field is 
+  increment by 1.  The FI_COLLECTIVE transfer type is not supported.
+
 *wait_obj*
 : Counters may be associated with a specific wait object.  Wait
   objects allow applications to block until the wait object is
