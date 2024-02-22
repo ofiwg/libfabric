@@ -429,94 +429,20 @@ class OnecclSummarizer(Summarizer):
 class ShmemSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
         super().__init__(logger, log_dir, prov, file_name, stage_name)
-        self.shmem_type = {
-            'isx'   : { 'func'      : self.check_isx,
-                        'keyphrase' : 'scaling',
-                        'passes'    : 0,
-                        'fails'     : 0
-                      },
-            'prk'   : { 'func'      : self.check_prk,
-                        'keyphrase' : 'solution',
-                        'passes'    : 0,
-                        'fails'     : 0
-                      }
-        }
-        self.test_type = 'prk'
-        self.keyphrase = self.shmem_type[self.test_type]['keyphrase']
         self.name = 'no_test'
-        self.previous = ''
 
-    def check_prk(self, line, log_file=None):
-        if "parallel research kernels" in self.previous:
+    def check_name(self, line):
+        line = line.strip()
+        if "running " in line:
             tokens = line.split(' ')
-            name = tokens[tokens.index('shmem') + 1]
-            self.name = f"PRK {name}"
-        if self.keyphrase in line:
-            self.shmem_type[self.test_type]['passes'] += 1
+            self.name = ' '.join(tokens[1:])
+
+    def check_pass(self, line):
+        line = line.strip()
+        if "pass!" in line:
+            self.passes += 1
             self.passed_tests.append(self.name)
-        if 'error:' in line or "exiting with" in line:
-            self.shmem_type[self.test_type]['fails'] += 1
-            p = self.shmem_type[self.test_type]['passes']
-            f = self.shmem_type[self.test_type]['fails']
-            self.failed_tests.append(f"{self.prov} {p + f} {self.name}")
-        if 'test(s)' in line:
-            token = line.split()[0]
-            if self.fails != int(token):
-                self.logger.log(
-                    f"fails {self.fails} does not match log reported fails " \
-                    f"{token}"
-                )
 
-        self.previous = line
-
-    def check_isx(self, line, log_file=None):
-        if self.keyphrase in line:
-            self.shmem_type[self.test_type]['passes'] += 1
-            tokens = line.split(' ')
-            name = tokens[tokens.index(f"{self.keyphrase}!\n") - 1]
-            self.name = f"ISx {name}"
-            self.passed_tests.append(self.name)
-        if ('failed' in line and 'test(s)' not in line) or \
-            "exiting with" in line:
-            self.shmem_type[self.test_type]['fails'] += 1
-            p = self.shmem_type[self.test_type]['passes']
-            f = self.shmem_type[self.test_type]['fails']
-            self.failed_tests.append(f"{self.prov} {p + f} {self.name}")
-        if 'test(s)' in line:
-            token = line.split()[0]
-            if int(token) != self.shmem_type[self.test_type]['fails']:
-                self.logger.log(
-                    f"fails {self.shmem_type[self.test_type]['fails']} does " \
-                    f"not match log reported fails {int(token)}"
-                )
-
-    def check_fails(self, line):
-        if "exiting with" in line:
-            self.shmem_type[self.test_type]['fails'] += 1
-            p = self.shmem_type[self.test_type]['passes']
-            f = self.shmem_type[self.test_type]['fails']
-            self.failed_tests.append(f"{self.prov} {p + f}")
-
-    def check_test_type(self, line):
-        if "running shmem" in line:
-            self.test_type = line.split(' ')[2].lower()
-            self.keyphrase = self.shmem_type[self.test_type]['keyphrase']
-
-    def check_line(self, line, log_file):
-        self.check_test_type(line)
-        if self.test_type is not None:
-            self.shmem_type[self.test_type]['func'](line, log_file)
-            self.check_fails(line)
-
-    def read_file(self):
-        with open(self.file_path, 'r') as log_file:
-            super().fast_forward(log_file)
-            for line in log_file:
-                self.check_line(line.lower(), log_file)
-
-        for key in self.shmem_type.keys():
-            self.passes += self.shmem_type[key]['passes']
-            self.fails += self.shmem_type[key]['fails']
 
 class MpichTestSuiteSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, mpi, file_name, stage_name):
@@ -856,7 +782,7 @@ def summarize_items(summary_item, logger, log_dir, mode):
         err += ret if ret else 0
 
     if summary_item == 'shmem' or summary_item == 'all':
-        for prov in ['tcp', 'verbs', 'sockets']:
+        for prov in ['tcp', 'verbs-rxm', 'sockets']:
             ret= ShmemSummarizer(
                 logger, log_dir, prov,
                 f'SHMEM_{prov}_shmem_{mode}',
