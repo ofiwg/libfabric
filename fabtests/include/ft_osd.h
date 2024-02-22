@@ -34,15 +34,15 @@
 #define _FT_OSD_H_
 
 #ifdef __APPLE__
-#include <osx/osd.h>
-#include <unix/osd.h>
+#include "osx/osd.h"
+#include "unix/osd.h"
 #elif defined __FreeBSD__
-#include <freebsd/osd.h>
-#include <unix/osd.h>
+#include "freebsd/osd.h"
+#include "unix/osd.h"
 #elif defined _WIN32
-#include <windows/osd.h>
+#include "windows/osd.h"
 #else
-#include <unix/osd.h>
+#include "unix/osd.h"
 #endif
 
 #define OFI_DATATYPE_CNT	(FI_UINT128 + 1)
