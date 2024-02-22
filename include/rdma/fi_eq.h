@@ -285,7 +285,8 @@ struct fid_cq {
  */
 
 enum fi_cntr_events {
-	FI_CNTR_EVENTS_COMP
+	FI_CNTR_EVENTS_COMP,
+	FI_CNTR_EVENTS_BYTES	/* count bytes not completeion events */
 };
 
 struct fi_cntr_attr {

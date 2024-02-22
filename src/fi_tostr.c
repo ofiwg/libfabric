@@ -905,6 +905,7 @@ ofi_tostr_cntr_events(char *buf, size_t len, enum fi_cntr_events events)
 {
 	switch (events) {
 	CASEENUMSTRN(FI_CNTR_EVENTS_COMP, len);
+	CASEENUMSTRN(FI_CNTR_EVENTS_BYTES, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
