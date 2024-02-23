@@ -15,7 +15,7 @@ ulimit -l unlimited
 
 modprobe ptp
 modprobe iommu_v2 || modprobe amd_iommu_v2
-insmod $DBS_DIR/slingshot_base_link/sbl.ko
+insmod $DBS_DIR/slingshot_base_link/cxi-sbl.ko
 insmod $DBS_DIR/sl-driver/knl/cxi-sl.ko
 insmod $DBS_DIR/cxi-driver/cxi/cxi-core.ko disable_default_svc=0
 insmod $DBS_DIR/cxi-driver/cxi/cxi-user.ko
