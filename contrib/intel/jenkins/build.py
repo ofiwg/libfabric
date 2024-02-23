@@ -12,7 +12,7 @@ import common
 import re
 import shutil
 
-def build_libfabric(libfab_install_path, mode, hw_type, gpu=False):
+def build_libfabric(libfab_install_path, mode, hw_type, gpu=False, cuda=False):
 
 	if (os.path.exists(libfab_install_path) != True):
 		os.makedirs(libfab_install_path)
@@ -37,6 +37,9 @@ def build_libfabric(libfab_install_path, mode, hw_type, gpu=False):
 	if (gpu):
 		config_cmd.append('--enable-ze-dlopen')
 
+	if (cuda):
+		config_cmd.append(f'--with-cuda={os.environ["CUDA_INSTALL"]}')
+
 	common.run_command(['./autogen.sh'])
 	common.run_command(shlex.split(" ".join(config_cmd)))
 	common.run_command(['make','clean'])
@@ -44,7 +47,7 @@ def build_libfabric(libfab_install_path, mode, hw_type, gpu=False):
 	common.run_command(['make','install'])
 
 
-def build_fabtests(libfab_install_path, mode):
+def build_fabtests(libfab_install_path, mode, cuda=False):
 	if (mode == 'dbg'):
 		config_cmd = ['./configure', '--enable-debug',
 					  f'--prefix={libfab_install_path}',
@@ -163,7 +166,8 @@ if __name__ == "__main__":
 								 'mpich'])
 	parser.add_argument('--build_hw', help="HW type for build",
 						choices=['water', 'grass', 'fire', 'electric', 'ucx',
-								 'daos', 'gpu', 'ivysaur'])
+								 'daos', 'gpu', 'ivysaur', 'cyndaquil',
+								 'quilava'])
 	parser.add_argument('--ofi_build_mode', help="select buildmode libfabric "\
 						"build mode", choices=['reg', 'dbg', 'dl'])
 	parser.add_argument('--build_loc', help="build location for libfabric "\
@@ -172,6 +176,7 @@ if __name__ == "__main__":
 						"release and will be checked into a git tree.",
 						action='store_true')
 	parser.add_argument('--gpu', help="Enable ZE dlopen", action='store_true')
+	parser.add_argument('--cuda', help="Enable cuda", action='store_true')
 
 	args = parser.parse_args()
 	build_item = args.build_item
@@ -179,6 +184,7 @@ if __name__ == "__main__":
 	build_loc = args.build_loc
 	release = args.release
 	gpu = args.gpu
+	cuda = args.cuda
 
 	if (args.ofi_build_mode):
 		ofi_build_mode = args.ofi_build_mode
@@ -193,9 +199,10 @@ if __name__ == "__main__":
 	os.chdir(build_loc)
 
 	if (build_item == 'libfabric'):
-		build_libfabric(libfab_install_path, ofi_build_mode, build_hw, gpu)
+		build_libfabric(libfab_install_path, ofi_build_mode, build_hw, gpu,
+						cuda)
 	elif (build_item == 'fabtests'):
-		build_fabtests(libfab_install_path, ofi_build_mode)
+		build_fabtests(libfab_install_path, ofi_build_mode, cuda)
 	elif (build_item == 'builddir'):
 		copy_build_dir(custom_workspace)
 	elif (build_item == 'logdir'):

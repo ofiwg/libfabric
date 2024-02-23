@@ -155,11 +155,11 @@ class Fabtest(Test):
             opts += "-t all "
 
         if (self.way == 'h2d'):
-            opts += "-C \"-H\" -L \"-D ze\" "
+            opts += f"-C \"-H\" -L \"-D {self.hw}\" "
         elif (self.way == 'd2d'):
-            opts += "-C \"-D ze\" -L \"-D ze\" "
+            opts += f"-C \"-D {self.hw}\" -L \"-D {self.hw}\" "
         elif (self.way == 'xd2d'):
-            opts += "-C \"-D ze\" -L \"-D ze -i 1\" "
+            opts += f"-C \"-D {self.hw}\" -L \"-D {self.hw} -i 1\" "
 
         if (self.core_prov == 'sockets' and self.ofi_build_mode == 'reg'):
             complex_test_file = f'{self.libfab_installpath}/share/fabtests/'\
