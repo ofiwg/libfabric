@@ -944,6 +944,17 @@ def summarize_items(summary_item, logger, log_dir, mode):
                 ).summarize()
                 err += ret if ret else 0
 
+    if summary_item == 'cuda' or summary_item == 'all':
+        test_types = ['h2d', 'd2d', 'xd2d']
+        for v in range(1, 3):
+            for t in test_types:
+                ret = FabtestsSummarizer(
+                    logger, log_dir, 'shm',
+                    f'cuda_v{v}_shm_{t}_fabtests_{mode}',
+                    f"cuda v{v} shm {t} fabtests {mode}"
+                ).summarize()
+            err += ret if ret else 0
+
     return err
 
 if __name__ == "__main__":
