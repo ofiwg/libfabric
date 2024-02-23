@@ -333,6 +333,9 @@ pipeline {
           dir ("${CUSTOM_WORKSPACE}/ucx/libfabric") {
             checkout scm
           }
+          dir ("${CUSTOM_WORKSPACE}/cuda/libfabric") {
+            checkout scm
+          }
           dir ("${CUSTOM_WORKSPACE}/iouring/libfabric") {
             checkout scm
           }
@@ -416,6 +419,16 @@ pipeline {
           steps {
             script {
               slurm_build(BUILD_MODES, "totodile", "ucx", "ucx")
+            }
+          }
+        }
+        stage ('build-cuda') {
+          steps {
+            script {
+              slurm_build(BUILD_MODES, "cyndaquil", "cuda", "cyndaquil",
+                          "--cuda")
+              slurm_build(BUILD_MODES, "quilava", "cuda", "quilava",
+                          "--cuda")
             }
           }
         }
@@ -714,6 +727,34 @@ pipeline {
                             "${cmd}")
                 slurm_batch("fabrics-ci", "2", "${dmabuf_output}_2_reg",
                             "${cmd}")
+              }
+            }
+          }
+        }
+        stage ('cuda-shm-v1') {
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                run_fabtests("cuda_v1_shm", "cyndaquil", "cyndaquil", "1",
+                             "shm", null, null, "h2d")
+                run_fabtests("cuda_v1_shm", "cyndaquil", "cyndaquil", "1",
+                             "shm", null, null, "d2d")
+                run_fabtests("cuda_v1_shm", "cyndaquil", "cyndaquil", "1",
+                             "shm", null, null, "xd2d")
+              }
+            }
+          }
+        }
+        stage ('cuda-shm-v2') {
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                run_fabtests("cuda_v2_shm", "quilava", "quilava", "1", "shm",
+                             null, null, "h2d")
+                run_fabtests("cuda_v2_shm", "quilava", "quilava", "1", "shm",
+                             null, null, "d2d")
+                run_fabtests("cuda_v2_shm", "quilava ", "quilava", "1", "shm",
+                             null, null, "xd2d")
               }
             }
           }
