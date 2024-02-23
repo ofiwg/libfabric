@@ -139,6 +139,14 @@ providers = {
                     'enable'     : ['shm'],
                     'disable'    : []
                   },
+    'cyndaquil' : {
+                    'enable'     : ['shm'],
+                    'disable'    : []
+                  },
+    'quilava'   : {
+                    'enable'     : ['shm'],
+                    'disable'    : []
+                  },
     'ivysaur': {
                     'enable'    : ['tcp'],
                     'disable'   : []
