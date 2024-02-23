@@ -18,7 +18,7 @@ class ParseDict(argparse.Action):
 parser = argparse.ArgumentParser()
 parser.add_argument('--build_hw', help="HW type for build",
                     choices=['water', 'grass', 'fire', 'electric', 'daos',\
-                                'gpu', 'ucx', 'ivysaur'])
+                             'gpu', 'ucx', 'ivysaur', 'cyndaquil', 'quilava'])
 parser.add_argument('--prov', help="core provider", choices=['verbs', \
                      'tcp', 'udp', 'sockets', 'shm', 'psm3', 'ucx'])
 parser.add_argument('--util', help="utility provider", choices=['rxd', 'rxm'])
