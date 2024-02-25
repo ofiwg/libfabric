@@ -172,9 +172,86 @@ static int hook_domain_ops_open(struct fid *fid, const char *name,
 	return 0;
 }
 
+static char *op2str(enum hook_op op)
+{
+	switch (op) {
+	case FI_HOOK_TRECV:
+		return "TAGGED_RECV";
+	case FI_HOOK_TSEND:
+		return "TAGGED_SEND";
+	case FI_HOOK_RECV:
+		return "MSG_RECV";
+	case FI_HOOK_SEND:
+		return "MSG_SEND";
+	case FI_HOOK_RMA_WRITE:
+		return "RMA_WRITE";
+	case FI_HOOK_RMA_READ:
+		return "RMA_READ";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+static void write2csv(struct ofi_rbnode *node, void *context)
+{
+	struct hook_db_record *rec;
+	FILE *f = context;
+
+	rec = node->data;
+
+	if (!rec)
+		return;
+
+	fprintf(f, "%ld, %s, %ld, %ld\n",
+		rec->key.addr, op2str(rec->key.op), rec->key.len, rec->count);
+}
+
+static void hook_write_db2csv(struct ofi_rbmap *map)
+{
+	char fname[64];
+	FILE *f;
+
+	sprintf(fname, "/tmp/%d.hook_out", getpid());
+
+	f = fopen(fname, "w");
+
+	if (f) {
+		fprintf(f, "addr, operation, data_len, count\n");
+		ofi_rbmap_iterate(map, map->root, f, write2csv);
+		fclose(f);
+	}
+}
+
+int hook_domain_close(struct fid *fid)
+{
+	struct fid *hfid;
+	struct hook_prov_ctx *prov_ctx;
+	int ret;
+	struct hook_domain *dom;
+
+	dom = container_of(fid, struct hook_domain, domain.fid);
+
+	hook_write_db2csv(&dom->trace_map);
+
+	hfid = hook_to_hfid(fid);
+	if (!hfid)
+		return -FI_EINVAL;
+
+	prov_ctx = hook_to_prov_ctx(fid);
+	if (!prov_ctx)
+		return -FI_EINVAL;
+
+	hook_fini_fid(prov_ctx, fid);
+
+	ret = hfid->ops->close(hfid);
+	if (!ret)
+		free(fid);
+	return ret;
+}
+
 struct fi_ops hook_domain_fid_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = hook_close,
+	.close = hook_domain_close,
 	.bind = hook_bind,
 	.control = hook_control,
 	.ops_open = hook_domain_ops_open,
@@ -211,6 +288,66 @@ struct fi_ops_domain hook_domain_ops = {
 	.query_collective = hook_query_collective,
 };
 
+static struct hook_db_record *
+hook_alloc_rec(struct hook_domain *dom, struct hook_db_record_key *key)
+{
+	struct hook_db_record *rec;
+
+	rec = ofi_ibuf_alloc(dom->trace_pool);
+	if (!rec)
+		return NULL;
+
+	memcpy(&rec->key, key, sizeof(*key));
+
+	if (ofi_rbmap_insert(&dom->trace_map, &rec->key, rec, &rec->node)) {
+		ofi_ibuf_free(rec);
+		rec = NULL;
+	}
+
+	return rec;
+}
+
+static struct hook_db_record *
+hook_update_db_record(struct hook_domain *dom, struct hook_db_record_key *key)
+{
+	struct hook_db_record *rec;
+	struct ofi_rbnode *node;
+
+	node = ofi_rbmap_find(&dom->trace_map, (void *) key);
+	if (node) {
+		rec = node->data;
+		rec->count++;
+	} else {
+		rec = hook_alloc_rec(dom, key);
+		if (rec)
+			rec->count++;
+	}
+
+	return rec;
+}
+
+void hook_db_insert(struct hook_ep *ep, size_t len, fi_addr_t addr, enum hook_op op)
+{
+	struct hook_db_record *rec;
+	struct hook_db_record_key key;
+
+	key.addr = addr;
+	key.op = op;
+	key.len = len;
+
+	rec = hook_update_db_record(ep->domain, &key);
+
+	if (!rec)
+		FI_WARN(ep->domain->fabric->hprov, FI_LOG_EP_DATA,
+			"Failed to insert op %d addr %lx size %ld\n",
+			op, addr, len);
+}
+
+static int hook_addr_compare(struct ofi_rbmap *map, void *key, void *data)
+{
+	return memcmp(&((struct hook_db_record *) data)->key, key,
+		      sizeof(struct hook_db_record_key));
+}
 
 int hook_domain_init(struct fid_fabric *fabric, struct fi_info *info,
 		     struct fid_domain **domain, void *context,
@@ -226,9 +363,19 @@ int hook_domain_init(struct fid_fabric *fabric, struct fi_info *info,
 	dom->domain.ops = &hook_domain_ops;
 	dom->domain.mr = &hook_mr_ops;
 
-	ret = fi_domain(fab->hfabric, info, &dom->hdomain, &dom->domain.fid);
+	ret = ofi_bufpool_create(&dom->trace_pool, sizeof(struct hook_db_record),
+				 0, 0, 0, OFI_BUFPOOL_INDEXED |
+				 OFI_BUFPOOL_NO_TRACK);
 	if (ret)
 		return ret;
+
+	ofi_rbmap_init(&dom->trace_map, hook_addr_compare);
+
+	ret = fi_domain(fab->hfabric, info, &dom->hdomain, &dom->domain.fid);
+	if (ret) {
+		ofi_bufpool_destroy(dom->trace_pool);
+		return ret;
+	}
 
 	*domain = &dom->domain;
 

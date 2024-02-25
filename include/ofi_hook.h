@@ -45,6 +45,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 
+#include <ofi_tree.h>
 #include <ofi.h>
 #include <rdma/providers/fi_prov.h>
 
@@ -159,12 +160,39 @@ static inline struct fi_provider *hook_to_hprov(const struct fid *fid)
 }
 
 struct ofi_ops_flow_ctrl;
+struct hook_ep;
+
+enum hook_op {
+	FI_HOOK_TRECV = 1,
+	FI_HOOK_TSEND,
+	FI_HOOK_RECV,
+	FI_HOOK_SEND,
+	FI_HOOK_RMA_WRITE,
+	FI_HOOK_RMA_READ,
+};
+
+struct hook_db_record_key {
+	fi_addr_t addr;
+	enum hook_op op;
+	size_t len;
+};
+
+struct hook_db_record {
+	struct ofi_rbnode *node;
+	struct hook_db_record_key key;
+	size_t count;
+};
+
+void hook_db_insert(struct hook_ep *ep, size_t len, fi_addr_t addr, enum hook_op op);
 
 struct hook_domain {
 	struct fid_domain domain;
 	struct fid_domain *hdomain;
 	struct hook_fabric *fabric;
 	struct ofi_ops_flow_ctrl *base_ops_flow_ctrl;
+	struct ofi_bufpool *trace_pool;
+	struct ofi_rbmap trace_map;
+
 	ssize_t (*base_credit_handler)(struct fid_ep *ep_fid, uint64_t credits);
 };
 

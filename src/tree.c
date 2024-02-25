@@ -93,6 +93,19 @@ ofi_rbmap_create(int (*compare)(struct ofi_rbmap *map, void *key, void *data))
 	return map;
 }
 
+void ofi_rbmap_iterate(struct ofi_rbmap *map,
+	struct ofi_rbnode *node, void *context,
+	void (*handle_node)(struct ofi_rbnode *node, void *context))
+{
+	if (node == &map->sentinel)
+		return;
+
+	handle_node(node, context);
+
+	ofi_rbmap_iterate(map, node->left, context, handle_node);
+	ofi_rbmap_iterate(map, node->right, context, handle_node);
+}
+
 static void ofi_delete_tree(struct ofi_rbmap *map, struct ofi_rbnode *node)
 {
 	if (node == &map->sentinel)

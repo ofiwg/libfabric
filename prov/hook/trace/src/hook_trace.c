@@ -218,6 +218,22 @@ static void hook_trace_prof_init(void *context)
 				"addr", addr);	\
 	}
 
+#define TRACE_EP_MSG(ret, ep, buf, len, addr, data, flags, context, op) \
+	if (!(ret)) { \
+		hook_db_insert(ep, len, addr, op); \
+	}
+
+#define TRACE_EP_RMA(ret, ep, buf, len, addr, raddr, data, flags, key, context, op) \
+	if (!(ret)) { \
+		hook_db_insert(ep, len, addr, op); \
+	}
+
+#define TRACE_EP_TAGGED(ret, ep, buf, len, addr, data, flags, tag, ignore, context, op) \
+	if (!(ret)) { \
+		hook_db_insert(ep, len, addr, op); \
+	}
+
+/*
 #define TRACE_EP_MSG(ret, ep, buf, len, addr, data, flags, context) \
 	if (!(ret)) { \
 		FI_TRACE((ep)->domain->fabric->hprov, FI_LOG_EP_DATA, \
@@ -244,7 +260,7 @@ static void hook_trace_prof_init(void *context)
 			buf, len, addr, (uint64_t)data, (uint64_t)flags, \
 			(uint64_t)tag, (uint64_t)ignore, context); \
 	}
-
+*/
 #define TRACE_MR_ATTR(ret, buf, size, dom, mr, len, flags, attr)    \
 	if (!(ret)) { \
 		FI_TRACE(dom->fabric->hprov, FI_LOG_DOMAIN, \
@@ -615,7 +631,8 @@ trace_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	ssize_t ret;
 
 	ret = fi_recv(myep->hep, buf, len, desc, src_addr, context);
-	TRACE_EP_MSG(ret, myep, buf, len, src_addr, 0, 0, context);
+	TRACE_EP_MSG(ret, myep, buf, len, src_addr, 0, 0, context,
+		     FI_HOOK_RECV);
 
 	return ret;
 }
@@ -629,7 +646,7 @@ trace_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 	ret = fi_recvv(myep->hep, iov, desc, count, src_addr, context);
 	TRACE_EP_MSG(ret, myep, IOV_BASE(iov, count), IOV_LEN(iov, count),
-		     src_addr, 0, 0, context);
+		     src_addr, 0, 0, context, FI_HOOK_RECV);
 
 	return ret;
 }
@@ -644,7 +661,7 @@ trace_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 	TRACE_EP_MSG(ret, myep, IOV_BASE(msg->msg_iov, msg->iov_count),
 		     IOV_LEN(msg->msg_iov, msg->iov_count), msg->addr,
 		     flags & FI_REMOTE_CQ_DATA ? msg->data : 0,
-		     flags, msg->context);
+		     flags, msg->context, FI_HOOK_RECV);
 
 	return ret;
 }
@@ -657,7 +674,8 @@ trace_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	ssize_t ret;
 
 	ret = fi_send(myep->hep, buf, len, desc, dest_addr, context);
-	TRACE_EP_MSG(ret, myep, buf, len, dest_addr, 0, 0, context);
+	TRACE_EP_MSG(ret, myep, buf, len, dest_addr, 0, 0, context,
+		     FI_HOOK_SEND);
 
 	return ret;
 }
@@ -671,7 +689,7 @@ trace_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 	ret = fi_sendv(myep->hep, iov, desc, count, dest_addr, context);
 	TRACE_EP_MSG(ret, myep, IOV_BASE(iov, count), IOV_LEN(iov, count),
-		     dest_addr, 0, 0, context);
+		     dest_addr, 0, 0, context, FI_HOOK_SEND);
 
 	return ret;
 }
@@ -685,7 +703,8 @@ trace_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 	ret = fi_sendmsg(myep->hep, msg, flags);
 	TRACE_EP_MSG(ret, myep, IOV_BASE(msg->msg_iov, msg->iov_count),
 		     IOV_LEN(msg->msg_iov, msg->iov_count), msg->addr,
-		     MSG_DATA(msg->data, flags), flags, msg->context);
+		     MSG_DATA(msg->data, flags), flags, msg->context,
+		     FI_HOOK_SEND);
 
 	return ret;
 }
@@ -698,7 +717,8 @@ trace_inject(struct fid_ep *ep, const void *buf, size_t len,
 	ssize_t ret;
 
 	ret = fi_inject(myep->hep, buf, len, dest_addr);
-	TRACE_EP_MSG(ret, myep, buf, len, dest_addr, 0, 0, NULL);
+	TRACE_EP_MSG(ret, myep, buf, len, dest_addr, 0, 0, NULL,
+		     FI_HOOK_SEND);
 
 	return ret;
 }
@@ -711,7 +731,8 @@ trace_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	ssize_t ret;
 
 	ret = fi_senddata(myep->hep, buf, len, desc, data, dest_addr, context);
-	TRACE_EP_MSG(ret, myep, buf, len, dest_addr, data, 0, context);
+	TRACE_EP_MSG(ret, myep, buf, len, dest_addr, data, 0, context,
+		     FI_HOOK_SEND);
 
 	return ret;
 }
@@ -724,7 +745,8 @@ trace_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	ssize_t ret;
 
 	ret = fi_injectdata(myep->hep, buf, len, data, dest_addr);
-	TRACE_EP_MSG(ret, myep, buf, len, dest_addr, data, 0,  NULL);
+	TRACE_EP_MSG(ret, myep, buf, len, dest_addr, data, 0,  NULL,
+		     FI_HOOK_SEND);
 
 	return ret;
 }
@@ -751,7 +773,8 @@ trace_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	ssize_t ret;
 
 	ret = fi_read(myep->hep, buf, len, desc, src_addr, addr, key, context);
-	TRACE_EP_RMA(ret, myep, buf, len, src_addr, addr, 0, 0, key, context);
+	TRACE_EP_RMA(ret, myep, buf, len, src_addr, addr, 0, 0, key, context,
+		     FI_HOOK_RMA_READ);
 
 	return ret;
 }
@@ -767,7 +790,7 @@ trace_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	ret = fi_readv(myep->hep, iov, desc, count, src_addr,
 		       addr, key, context);
 	TRACE_EP_RMA(ret, myep, IOV_BASE(iov, count), IOV_LEN(iov, count),
-		     src_addr, addr, 0, 0, key, context);
+		     src_addr, addr, 0, 0, key, context, FI_HOOK_RMA_READ);
 
 	return ret;
 }
@@ -784,7 +807,7 @@ trace_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
 		     msg->rma_iov_count ? msg->rma_iov[0].addr : 0,
 		     MSG_DATA(msg->data, flags), flags,
 		     msg->rma_iov_count ? msg->rma_iov[0].key : 0,
-		     msg->context);
+		     msg->context, FI_HOOK_RMA_READ);
 
 	return ret;
 }
@@ -798,7 +821,8 @@ trace_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 
 	ret = fi_write(myep->hep, buf, len, desc, dest_addr,
 		       addr, key, context);
-	TRACE_EP_RMA(ret, myep, buf, len, dest_addr, addr, 0, 0, key, context);
+	TRACE_EP_RMA(ret, myep, buf, len, dest_addr, addr, 0, 0, key, context,
+		     FI_HOOK_RMA_WRITE);
 
 	return ret;
 }
@@ -814,7 +838,7 @@ trace_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	ret = fi_writev(myep->hep, iov, desc, count, dest_addr,
 			addr, key, context);
 	TRACE_EP_RMA(ret, myep, IOV_BASE(iov, count), IOV_LEN(iov, count),
-		     dest_addr, addr, 0, 0, key, context);
+		     dest_addr, addr, 0, 0, key, context, FI_HOOK_RMA_WRITE);
 
 	return ret;
 }
@@ -831,7 +855,7 @@ trace_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
 		     msg->rma_iov_count ? msg->rma_iov[0].addr : 0,
 		     MSG_DATA(msg->data, flags), flags,
 		     msg->rma_iov_count ? msg->rma_iov[0].key : 0,
-		     msg->context);
+		     msg->context, FI_HOOK_RMA_WRITE);
 
 	return ret;
 }
@@ -844,7 +868,8 @@ trace_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 	ssize_t ret;
 
 	ret = fi_inject_write(myep->hep, buf, len, dest_addr, addr, key);
-	TRACE_EP_RMA(ret, myep, buf, len, dest_addr, addr, 0, 0, key, NULL);
+	TRACE_EP_RMA(ret, myep, buf, len, dest_addr, addr, 0, 0, key, NULL,
+		     FI_HOOK_RMA_WRITE);
 
 	return ret;
 }
@@ -859,7 +884,8 @@ trace_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 
 	ret = fi_writedata(myep->hep, buf, len, desc, data,
 			   dest_addr, addr, key, context);
-	TRACE_EP_RMA(ret, myep, buf, len, dest_addr, addr, data, 0, key, context);
+	TRACE_EP_RMA(ret, myep, buf, len, dest_addr, addr, data, 0, key, context,
+		     FI_HOOK_RMA_WRITE);
 
 	return ret;
 }
@@ -874,7 +900,8 @@ trace_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 
 	ret = fi_inject_writedata(myep->hep, buf, len, data, dest_addr,
 				  addr, key);
-	TRACE_EP_RMA(ret, myep, buf, len, dest_addr, addr, data, 0, key, NULL);
+	TRACE_EP_RMA(ret, myep, buf, len, dest_addr, addr, data, 0, key, NULL,
+		     FI_HOOK_RMA_WRITE);
 
 	return ret;
 }
@@ -892,7 +919,6 @@ static struct fi_ops_rma trace_rma_ops = {
 	.injectdata = trace_inject_writedata,
 };
 
-
 static ssize_t
 trace_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	    fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
@@ -903,7 +929,8 @@ trace_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	ret = fi_trecv(myep->hep, buf, len, desc, src_addr,
 		       tag, ignore, context);
-	TRACE_EP_TAGGED(ret, myep, buf, len, src_addr, 0, 0, tag, ignore, context);
+	TRACE_EP_TAGGED(ret, myep, buf, len, src_addr, 0, 0, tag, ignore, context,
+			FI_HOOK_TRECV);
 
 	return ret;
 }
@@ -919,7 +946,7 @@ trace_trecvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	ret = fi_trecvv(myep->hep, iov, desc, count, src_addr,
 			tag, ignore, context);
 	TRACE_EP_TAGGED(ret, myep, IOV_BASE(iov, count), IOV_LEN(iov, count),
-			src_addr, 0, 0, tag, ignore, context);
+			src_addr, 0, 0, tag, ignore, context, FI_HOOK_TRECV);
 
 	return ret;
 }
@@ -935,7 +962,8 @@ trace_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	TRACE_EP_TAGGED(ret, myep, IOV_BASE(msg->msg_iov, msg->iov_count),
 			IOV_LEN(msg->msg_iov, msg->iov_count), msg->addr,
 			MSG_DATA(msg->data, flags), flags,
-			msg->tag, msg->ignore, msg->context);
+			msg->tag, msg->ignore, msg->context,
+			FI_HOOK_TRECV);
 
 	return ret;
 }
@@ -948,7 +976,8 @@ trace_tsend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	ssize_t ret;
 
 	ret = fi_tsend(myep->hep, buf, len, desc, dest_addr, tag, context);
-	TRACE_EP_TAGGED(ret, myep, buf, len, dest_addr, 0, 0, tag, 0, context);
+	TRACE_EP_TAGGED(ret, myep, buf, len, dest_addr, 0, 0, tag, 0, context,
+			FI_HOOK_TSEND);
 
 	return ret;
 }
@@ -962,7 +991,7 @@ trace_tsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 	ret = fi_tsendv(myep->hep, iov, desc, count, dest_addr, tag, context);
 	TRACE_EP_TAGGED(ret, myep, IOV_BASE(iov, count), IOV_LEN(iov, count),
-			dest_addr, 0, 0, tag, 0, context);
+			dest_addr, 0, 0, tag, 0, context, FI_HOOK_TSEND);
 
 	return ret;
 }
@@ -978,7 +1007,7 @@ trace_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	TRACE_EP_TAGGED(ret, myep, IOV_BASE(msg->msg_iov, msg->iov_count),
 			IOV_LEN(msg->msg_iov, msg->iov_count), msg->addr,
 			MSG_DATA(msg->data, flags), flags,
-			msg->tag, 0, msg->context);
+			msg->tag, 0, msg->context, FI_HOOK_TSEND);
 
 	return ret;
 }
@@ -991,7 +1020,8 @@ trace_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	ssize_t ret;
 
 	ret = fi_tinject(myep->hep, buf, len, dest_addr, tag);
-	TRACE_EP_TAGGED(ret, myep, buf, len, dest_addr, 0, 0, tag, 0, NULL);
+	TRACE_EP_TAGGED(ret, myep, buf, len, dest_addr, 0, 0, tag, 0, NULL,
+			FI_HOOK_TSEND);
 
 	return ret;
 }
@@ -1006,7 +1036,8 @@ trace_tsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 
 	ret = fi_tsenddata(myep->hep, buf, len, desc, data,
 			   dest_addr, tag, context);
-	TRACE_EP_TAGGED(ret, myep, buf, len, dest_addr, data, 0, tag, 0, context);
+	TRACE_EP_TAGGED(ret, myep, buf, len, dest_addr, data, 0, tag, 0, context,
+			FI_HOOK_TSEND);
 
 	return ret;
 }
@@ -1019,7 +1050,8 @@ trace_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	ssize_t ret;
 
 	ret = fi_tinjectdata(myep->hep, buf, len, data, dest_addr, tag);
-	TRACE_EP_TAGGED(ret, myep, buf, len, dest_addr, data, 0, tag, 0, NULL);
+	TRACE_EP_TAGGED(ret, myep, buf, len, dest_addr, data, 0, tag, 0, NULL,
+			FI_HOOK_TSEND);
 
 	return ret;
 }
