@@ -372,9 +372,9 @@ struct fi_opx_work_elem {
 	struct slist_entry slist_entry;
 	int (*work_fn)(union fi_opx_hfi1_deferred_work * work_state);
 	void (*completion_action)(union fi_opx_hfi1_deferred_work * work_state);
-	uint8_t unused[6];
+	enum opx_work_type work_type;
+	uint8_t unused[3];
 	bool complete;
-	bool low_priority;
 	union fi_opx_hfi1_packet_payload *payload_copy;
 };
 

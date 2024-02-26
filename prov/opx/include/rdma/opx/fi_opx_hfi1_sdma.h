@@ -200,6 +200,8 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
 				const uint64_t is_hmem)
 {
 	if (!fi_opx_hfi1_sdma_use_sdma(opx_ep, length, params->opcode, is_hmem, params->is_intranode)) {
+		params->work_elem.work_fn = fi_opx_hfi1_do_dput;
+		params->work_elem.work_type = params->is_intranode ? OPX_WORK_TYPE_SHM : OPX_WORK_TYPE_PIO;
 		return;
 	}
 
@@ -235,6 +237,7 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
 	} else {
 		params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma;
 	}
+	params->work_elem.work_type = OPX_WORK_TYPE_SDMA;
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.total_requests);
 }
 

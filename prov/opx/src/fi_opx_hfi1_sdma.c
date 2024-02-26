@@ -76,7 +76,7 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 
-	assert(params->work_elem.low_priority);
+	assert(params->work_elem.work_type == OPX_WORK_TYPE_LAST);
 
 	fi_opx_hfi1_sdma_poll_completion(opx_ep);
 

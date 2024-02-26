@@ -140,11 +140,9 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
 
 	params->work_elem.slist_entry.next = NULL;
-	params->work_elem.work_fn = fi_opx_hfi1_do_dput;
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy = NULL;
 	params->work_elem.complete = false;
-	params->work_elem.low_priority = false;
 	params->opx_ep = opx_ep;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_dst_addr.fi);
 	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid);
@@ -206,7 +204,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 		return;
 	}
 	assert(rc == -FI_EAGAIN);
-	if (params->work_elem.low_priority) {
+	if (params->work_elem.work_type == OPX_WORK_TYPE_LAST) {
 		slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
 		return;
 	}
@@ -237,7 +235,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
-	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
 }
 
 __OPX_FORCE_INLINE__
