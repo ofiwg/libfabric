@@ -190,6 +190,14 @@ enum fi_opx_ep_state {
 	FI_OPX_EP_INITITALIZED_ENABLED
 };
 
+enum opx_work_type {
+	OPX_WORK_TYPE_SDMA = 0,
+	OPX_WORK_TYPE_PIO,
+	OPX_WORK_TYPE_SHM,
+	OPX_WORK_TYPE_TID_SETUP,
+	OPX_WORK_TYPE_LAST
+};
+
 struct fi_opx_stx {
 
 	/* == CACHE LINE 0,1,2 == */
@@ -273,18 +281,17 @@ struct fi_opx_ep_tx {
 
 	/* == CACHE LINE 5 == */
 
-	struct slist				work_pending;
-	struct slist				work_pending_completion;
-	uint64_t				unused_cacheline5[4];
+	struct slist				work_pending[OPX_WORK_TYPE_LAST];
 
 	/* == CACHE LINE 6 == */
 
+	struct slist				work_pending_completion;
 	struct ofi_bufpool			*work_pending_pool;
 	struct ofi_bufpool			*rma_payload_pool;
 	struct ofi_bufpool			*rma_request_pool;
 	struct ofi_bufpool			*sdma_work_pool;
 	struct ofi_bufpool			*sdma_replay_work_pool;
-	uint64_t				unused_cacheline6[3];
+	uint64_t				unused_cacheline6;
 
 	/* == CACHE LINE 7, ... == */
 	int64_t					ref_cnt;
@@ -302,8 +309,8 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, av_addr) == (FI_OPX_CACHE_
 			"Offset of fi_opx_ep_tx->av_addr should start at cacheline 4!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_CACHE_LINE_SIZE * 5),
 			"Offset of fi_opx_ep_tx->work_pending should start at cacheline 5!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_pool) == (FI_OPX_CACHE_LINE_SIZE * 6),
-			"Offset of fi_opx_ep_tx->work_pending_pool should start at cacheline 6!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) == (FI_OPX_CACHE_LINE_SIZE * 6),
+			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 6!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, ref_cnt) == (FI_OPX_CACHE_LINE_SIZE * 7),
 			"Offset of fi_opx_ep_tx->ref_cnt should start at cacheline 7!");
 
@@ -2950,33 +2957,37 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 		}
 	}
 
-	const uintptr_t work_pending = (const uintptr_t)opx_ep->tx->work_pending.head;
-	if (work_pending) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== POLL WORK PENDING <start \n");
-		union fi_opx_hfi1_deferred_work *work = (union fi_opx_hfi1_deferred_work *)slist_remove_head(&opx_ep->tx->work_pending);
-		work->work_elem.slist_entry.next = NULL;
-		int rc = work->work_elem.work_fn(work);
-		if(rc == FI_SUCCESS) {
-			if(work->work_elem.completion_action) {
-				work->work_elem.completion_action(work);
-			}
-			if(work->work_elem.payload_copy) {
-				OPX_BUF_FREE(work->work_elem.payload_copy);
-			}
-			OPX_BUF_FREE(work);
-		} else {
-			assert(work->work_elem.slist_entry.next == NULL);
-			if (work->work_elem.low_priority) {
-				/* Move this to the pending completion queue,
-				   since there's nothing left to do but wait */
-				slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
+        for (enum opx_work_type work_type = OPX_WORK_TYPE_SDMA; work_type < OPX_WORK_TYPE_LAST; ++work_type) {
+		const uintptr_t work_pending = (const uintptr_t)opx_ep->tx->work_pending[work_type].head;
+		if (work_pending) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"===================================== POLL WORK PENDING type %d <start \n", work_type);
+			union fi_opx_hfi1_deferred_work *work = (union fi_opx_hfi1_deferred_work *)
+								slist_remove_head(&opx_ep->tx->work_pending[work_type]);
+			work->work_elem.slist_entry.next = NULL;
+			int rc = work->work_elem.work_fn(work);
+			if(rc == FI_SUCCESS) {
+				if(work->work_elem.completion_action) {
+					work->work_elem.completion_action(work);
+				}
+				if(work->work_elem.payload_copy) {
+					OPX_BUF_FREE(work->work_elem.payload_copy);
+				}
+				OPX_BUF_FREE(work);
 			} else {
-				slist_insert_head(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+				assert(work->work_elem.slist_entry.next == NULL);
+				if (work->work_elem.work_type == OPX_WORK_TYPE_LAST) {
+					/* Move this to the pending completion queue,
+					   since there's nothing left to do but wait */
+					slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
+				} else {
+					slist_insert_head(&work->work_elem.slist_entry,
+							  &opx_ep->tx->work_pending[work->work_elem.work_type]);
+				}
 			}
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"===================================== POLL WORK PENDING type %d %u done>\n", work_type, rc);
 		}
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== POLL WORK PENDING %u done>\n",rc);
 	}
 }
 

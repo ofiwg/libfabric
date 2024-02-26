@@ -1222,6 +1222,7 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 		FI_OPX_DEBUG_COUNTERS_INC(params->opx_ep->debug_counters
 			.expected_receive.rts_fallback_eager_reg_rzv);
 		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
+		params->work_elem.work_type = OPX_WORK_TYPE_PIO;
 		return opx_hfi1_rx_rzv_rts_send_cts(work);
 	}
 
@@ -1280,6 +1281,7 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 		params->opx_ep->debug_counters.expected_receive.rts_tid_setup_retry_success);
 
 	params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
+	params->work_elem.work_type = OPX_WORK_TYPE_PIO;
 	return opx_hfi1_rx_rzv_rts_send_cts(work);
 }
 
@@ -1331,6 +1333,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	if (is_intranode) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_intranode %u\n",is_intranode );
 		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_intranode;
+		params->work_elem.work_type = OPX_WORK_TYPE_SHM;
 		if (hfi1_hdr->stl.lrh.slid == opx_ep->rx->self.uid.lid) {
 			params->target_hfi_unit = opx_ep->rx->self.hfi1_unit;
 		} else {
@@ -1344,12 +1347,12 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 			opx_ep->use_expected_tid_rzv, niov, params->opcode);
 
 		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
+		params->work_elem.work_type = OPX_WORK_TYPE_PIO;
 		params->target_hfi_unit = 0xFF;
 	}
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy = NULL;
 	params->work_elem.complete = false;
-	params->work_elem.low_priority = false;
 	params->lrh_dlid = (hfi1_hdr->stl.lrh.qw[0] & 0xFFFF000000000000ul) >> 32;
 	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid);
 	params->slid = hfi1_hdr->stl.lrh.slid;
@@ -1382,6 +1385,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 					is_hmem, is_intranode,
 					dst_iface, opcode)) {
 		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_tid_setup;
+		params->work_elem.work_type = OPX_WORK_TYPE_TID_SETUP;
 	}
 
 	int rc = params->work_elem.work_fn(work);
@@ -1393,7 +1397,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	assert(rc == -FI_EAGAIN);
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
-	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 }
 
@@ -1454,7 +1458,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy = NULL;
 	params->work_elem.complete = false;
-	params->work_elem.low_priority = false;
+	params->work_elem.work_type = OPX_WORK_TYPE_SHM;
 
 	params->lrh_dlid = (hdr->stl.lrh.qw[0] & 0xFFFF000000000000ul) >> 32;
 	params->bth_rx = (uint64_t)u8_rx << 56;
@@ -1479,7 +1483,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 	assert(rc == -FI_EAGAIN);
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
-	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[OPX_WORK_TYPE_SHM]);
 }
 
 int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
@@ -2009,7 +2013,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 		*params->origin_byte_counter = 0;
 		params->origin_byte_counter = NULL;
 	}
-	params->work_elem.low_priority = true;
+	params->work_elem.work_type = OPX_WORK_TYPE_LAST;
 	params->work_elem.work_fn = fi_opx_hfi1_dput_sdma_pending_completion;
 
 	return fi_opx_hfi1_dput_sdma_pending_completion(work);
@@ -2429,7 +2433,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 		*params->origin_byte_counter = 0;
 		params->origin_byte_counter = NULL;
 	}
-	params->work_elem.low_priority = true;
+	params->work_elem.work_type = OPX_WORK_TYPE_LAST;
 	params->work_elem.work_fn = fi_opx_hfi1_dput_sdma_pending_completion;
 
 	return fi_opx_hfi1_dput_sdma_pending_completion(work);
@@ -2461,11 +2465,9 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
 
 	params->work_elem.slist_entry.next = NULL;
-	params->work_elem.work_fn = fi_opx_hfi1_do_dput;
 	params->work_elem.completion_action = completion_action;
 	params->work_elem.payload_copy = NULL;
 	params->work_elem.complete = false;
-	params->work_elem.low_priority = false;
 	params->opx_ep = opx_ep;
 	params->opx_mr = opx_mr;
 	params->lrh_dlid = (hfi1_hdr->stl.lrh.qw[0] & 0xFFFF000000000000ul) >> 32;
@@ -2542,7 +2544,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 
 
 	// We can't/shouldn't start this work until any pending work is finished.
-	if (slist_empty(&opx_ep->tx->work_pending)) {
+	if (slist_empty(&opx_ep->tx->work_pending[params->work_elem.work_type])) {
 		int rc = params->work_elem.work_fn(work);
 		if(rc == FI_SUCCESS) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2552,7 +2554,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 			return NULL;
 		}
 		assert(rc == -FI_EAGAIN);
-		if (params->work_elem.low_priority) {
+		if (params->work_elem.work_type == OPX_WORK_TYPE_LAST) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== CTS FI_EAGAIN queued low priority %u\n", params->work_elem.complete);
 			slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
@@ -2571,7 +2573,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 		memcpy(params->work_elem.payload_copy, payload, payload_bytes_to_copy);
 	}
 	assert(work->work_elem.slist_entry.next == NULL);
-	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
 	return work;
 }
 

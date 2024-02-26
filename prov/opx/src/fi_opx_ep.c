@@ -885,7 +885,10 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 		opx_ep->tx->use_sdma = 1;
 	}
 
-	slist_init(&opx_ep->tx->work_pending);
+	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_SHM]);
+	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_PIO]);
+	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_SDMA]);
+	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_TID_SETUP]);
 	slist_init(&opx_ep->tx->work_pending_completion);
 	ofi_bufpool_create(&opx_ep->tx->work_pending_pool,
 					   sizeof(union fi_opx_hfi1_deferred_work),
