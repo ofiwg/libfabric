@@ -54,7 +54,7 @@
 extern "C" {
 #endif
 
-#define SMR_VERSION	6
+#define SMR_VERSION	7
 
 #define SMR_FLAG_ATOMIC	(1 << 0)
 #define SMR_FLAG_DEBUG	(1 << 1)
@@ -225,8 +225,10 @@ struct smr_region {
 	int		pid;
 	uint8_t		cma_cap_peer;
 	uint8_t		cma_cap_self;
-	uint32_t	max_sar_buf_per_peer;
 	uint8_t		xpmem_cap_self;
+	uint8_t		resv2;
+
+	uint32_t	max_sar_buf_per_peer;
 	struct xpmem_pinfo xpmem_self;
 	struct xpmem_pinfo xpmem_peer;
 	void		*base_addr;
