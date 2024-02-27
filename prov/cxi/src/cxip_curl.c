@@ -292,6 +292,7 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,
 				 strlen(handle->request));
 	}
+	curl_easy_setopt(curl, CURLOPT_STDERR, stderr);
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, handle->recv);
