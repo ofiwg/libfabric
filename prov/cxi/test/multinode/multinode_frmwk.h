@@ -19,13 +19,20 @@ union nicaddr {
 #define	NICSIZE	(sizeof(union nicaddr))
 
 /* These are initialized by frmwk_init() */
-extern int frmwk_nics_per_rank;
-extern int frmwk_numranks;
-extern int frmwk_numnics;
-extern int frmwk_rank;
-
-/* This is initialized by frmwk_populate_av() */
-extern union nicaddr *frmwk_nics;
+extern int frmwk_nics_per_rank;		/* PMI_NUM_HSNS (defaults to 1) */
+extern int frmwk_numranks;		/* PMI_SIZE */
+extern const char *frmwk_unique;	/* PMI_SHARED_SECRET */
+extern int frmwk_rank;			/* PMI_RANK */
+extern int frmwk_hwcoll_addrs_per_job;	/* FI_CXI_HWCOLL_ADDRS_PER_JOB */
+extern int frmwk_hwcoll_min_nodes;	/* FI_CXI_HWCOLL_MIN_NODES */
+extern const char *frmwk_jobid;		/* FI_CXI_COLL_JOB_ID */
+extern const char *frmwk_jobstep;	/* FI_CXI_COLL_JOB_STEP_ID */
+extern const char *frmwk_mcast_token;	/* FI_CXI_COLL_MCAST_TOKEN */
+extern const char *frmwk_fabric_mgr_url;/* FI_CXI_COLL_FABRIC_MGR_URL */
+extern const char *frmwk_nodename;	/* SLURMD_NODENAME */
+extern const char frmwk_node0[32];	/* SLURMD_NODELIST (first name) */
+extern union nicaddr *frmwk_nics;	/* array of NIC addresses  */
+extern int frmwk_numnics;		/* number of NIC addresses */
 
 extern char *cxit_node;
 extern char *cxit_service;
