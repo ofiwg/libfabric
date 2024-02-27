@@ -2746,7 +2746,6 @@ static int _initialize_mc(void *ptr)
 	}
 
 	/* define the traffic class */
-	// TODO revisit for LOW_LATENCY
 	if (is_netsim(ep_obj)) {
 		/* NETSIM RANK model */
 		mc_obj->tc = CXI_TC_BEST_EFFORT;
@@ -2757,7 +2756,7 @@ static int _initialize_mc(void *ptr)
 		mc_obj->tc_type = CXI_TC_TYPE_DEFAULT;
 	} else if (is_hw_root(mc_obj)) {
 		/* MULTICAST model, hw_root */
-		mc_obj->tc = CXI_TC_BEST_EFFORT;
+		mc_obj->tc = CXI_TC_LOW_LATENCY;
 		mc_obj->tc_type = CXI_TC_TYPE_DEFAULT;
 	} else {
 		/* MULTICAST model, leaves */
