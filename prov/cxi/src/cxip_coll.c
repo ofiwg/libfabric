@@ -99,21 +99,21 @@
 struct cxip_coll_cookie {
 	uint32_t mcast_id:13;
 	uint32_t red_id:3;
-	uint32_t magic: 15;
-	uint32_t retry: 1;
+	uint32_t magic: 16;
 } __attribute__((__packed__));           /* size  4b */
 
 /* Packed header bits and cookie from above */
 struct cxip_coll_hdr {
-        uint64_t seqno:10;
-        uint64_t arm:1;
-        uint64_t op:6;
-        uint64_t redcnt:20;
-        uint64_t resno:10;
-        uint64_t red_rc:4;
-        uint64_t repsum_m:8;
-        uint64_t repsum_ovflid:2;
-        uint64_t pad:3;
+	uint64_t seqno:10;
+	uint64_t arm:1;
+	uint64_t op:6;
+	uint64_t redcnt:20;
+	uint64_t resno:10;
+	uint64_t red_rc:4;
+	uint64_t repsum_m:8;
+	uint64_t repsum_ovflid:2;
+	uint64_t retry:1;
+	uint64_t pad:2;
         struct cxip_coll_cookie cookie;
 } __attribute__((__packed__));		/* size 12b */
 
@@ -260,6 +260,7 @@ void _dump_red_pkt(struct red_pkt *pkt, char *dir)
 	TRACE_PKT("---------------\n");
 	TRACE_PKT("Reduction packet (%s):\n", dir);
 	TRACE_PKT("  seqno        = %d\n", pkt->hdr.seqno);
+	TRACE_PKT("  retry        = %d\n", pkt->hdr.retry);
 	TRACE_PKT("  arm          = %d\n", pkt->hdr.arm);
 	TRACE_PKT("  op           = %d\n", pkt->hdr.op);
 	TRACE_PKT("  redcnt       = %d\n", pkt->hdr.redcnt);
@@ -271,7 +272,6 @@ void _dump_red_pkt(struct red_pkt *pkt, char *dir)
 	TRACE_PKT("   .mcast_id   = %08x\n", pkt->hdr.cookie.mcast_id);
 	TRACE_PKT("   .red_id     = %08x\n", pkt->hdr.cookie.red_id);
 	TRACE_PKT("   .magic      = %08x\n", pkt->hdr.cookie.magic);
-	TRACE_PKT("   .retry      = %08x\n", pkt->hdr.cookie.retry);
 	for (i = 0; i < 4; i++)
 		TRACE_PKT("  ival[%d]     = %016lx\n", i, data[i]);
 	TRACE_PKT("---------------\n");
@@ -1637,7 +1637,7 @@ bool is_hw_root(struct cxip_coll_mc *mc_obj)
 
 /* Simulated unicast send of multiple packets as root node to leaf nodes */
 static inline
-ssize_t _send_pkt_as_root(struct cxip_coll_reduction *reduction, bool retry)
+ssize_t _send_pkt_as_root(struct cxip_coll_reduction *reduction)
 {
 	int i, ret, err;
 
@@ -1661,7 +1661,7 @@ ssize_t _send_pkt_as_root(struct cxip_coll_reduction *reduction, bool retry)
 
 /* Simulated unicast send of single packet as leaf node to root node */
 static inline
-ssize_t _send_pkt_as_leaf(struct cxip_coll_reduction *reduction, bool retry)
+ssize_t _send_pkt_as_leaf(struct cxip_coll_reduction *reduction)
 {
 	int ret;
 
@@ -1674,27 +1674,30 @@ ssize_t _send_pkt_as_leaf(struct cxip_coll_reduction *reduction, bool retry)
 
 /* Multicast send of single packet from root or leaf node */
 static inline
-ssize_t _send_pkt_mc(struct cxip_coll_reduction *reduction, bool retry)
+ssize_t _send_pkt_mc(struct cxip_coll_reduction *reduction)
 {
-	return cxip_coll_send(reduction, 0,
-			      reduction->tx_msg,
-			      sizeof(struct red_pkt),
-			      reduction->mc_obj->reduction_md);
+	int ret;
+
+	ret = cxip_coll_send(reduction, 0, reduction->tx_msg,
+			     sizeof(struct red_pkt),
+			     reduction->mc_obj->reduction_md);
+	TRACE_DEBUG("mcast: send=%d ret=%d\n", 1, ret);
+	return ret;
 }
 
 /* Send packet from root or leaf node as appropriate */
 static inline
-ssize_t _send_pkt(struct cxip_coll_reduction *reduction, bool retry)
+ssize_t _send_pkt(struct cxip_coll_reduction *reduction)
 {
 	int ret;
 
 	if (reduction->mc_obj->av_set_obj->comm_key.keytype ==
 	    COMM_KEY_MULTICAST) {
-		ret = _send_pkt_mc(reduction, retry);
+		ret = _send_pkt_mc(reduction);
 	} else if (is_hw_root(reduction->mc_obj)) {
-		ret = _send_pkt_as_root(reduction, retry);
+		ret = _send_pkt_as_root(reduction);
 	} else {
-		ret = _send_pkt_as_leaf(reduction, retry);
+		ret = _send_pkt_as_leaf(reduction);
 	}
 	return ret;
 }
@@ -1711,11 +1714,11 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 
 	memset(&pkt->hdr, 0, sizeof(pkt->hdr));
 	pkt->hdr.arm = arm;
+	pkt->hdr.retry = retry;
 	pkt->hdr.seqno = reduction->seqno;
 	pkt->hdr.resno = reduction->resno;
 	pkt->hdr.cookie.mcast_id = reduction->mc_obj->mcast_addr;
 	pkt->hdr.cookie.red_id = reduction->red_id;
-	pkt->hdr.cookie.retry = retry;
 	pkt->hdr.cookie.magic = MAGIC;
 
 	if (coll_data) {
@@ -1741,7 +1744,7 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 
 	/* -FI_EAGAIN means HW queue is full, should self-clear */
 	do {
-		ret = _send_pkt(reduction, retry);
+		ret = _send_pkt(reduction);
 	} while (ret == -FI_EAGAIN);
 	/* any other error is a serious config/hardware issue */
 	if (ret)
@@ -2020,7 +2023,7 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 		_tsset(reduction);
 		reduction->seqno = pkt->hdr.seqno;
 		reduction->resno = pkt->hdr.seqno;
-		if (pkt->hdr.cookie.retry)
+		if (pkt->hdr.retry)
 			reduction->pktsent = false;
 	}
 
