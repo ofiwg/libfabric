@@ -2496,7 +2496,8 @@ static void _close_pte(struct cxip_coll_pte *coll_pte)
 }
 
 /* pid_idx == CXIP_PTL_IDX_COLL+rank for NETSIM
- * pid_idx == CXIP_PTL_IDX_COLL for all other cases
+ * pid_idx == CXIP_PTL_IDX_COLL for UNICAST
+ * pid_idx == multicast for MULTICAST
  */
 static int _acquire_pte(struct cxip_ep_obj *ep_obj, int pid_idx,
 			 bool is_mcast, struct cxip_coll_pte **coll_pte_ret)
@@ -2599,24 +2600,42 @@ static struct fi_ops mc_ops = {
  * Utility routine to set up the collective framework in response to calls to
  * fi_join_collective().
  *
- * If jstate->is_rank is true, this is a NETSIM model, which opens a PTE for
- * each call to fi_join_collective() that is bound to the multicast object
- * created by that call. This allows simulated multicast traffic through the
- * NETSIM loopback port by using different pte_idx values for each PTE to
- * disambiguate traffic intended for different simulated hardware endpoints.
- * This model does not support multiple MC objects at an endpoint: there is
- * exactly one MC address. Progressing the single endpoint will progress all
- * of the simulated MC objects. Extending this model to support multiple MC
- * objects is not a priority at this time.
+ * This currently supports three different collectives transport models.
  *
- * If jstate->is_rank is false, this is a multinode model. The first call to
- * fi_join_collective() creates a single PTE which is bound to the EP, and
- * creates the first multicast object for that endpoint. Every subsequent
- * join will create an additional multicast object that shares the PTE for
- * that endpoint. Multiple NICs on the node are represented by separate EP
- * objects, which are functionally distinct: all endpoints must be progressed
- * independently, and if any endpoint is not progressed, it will stall the
- * collective.
+ * If jstate->is_rank is true, this is a NETSIM model. This is an early
+ * testing model, and is retained for regression testing of the code for code
+ * merge. The model requires a PTE for each simulated endpoint in the tree,
+ * since the endpoint can only send to itself: there is a single domain (and
+ * simulated NIC) under NETSIM. The pid_index is used to simulate multiple
+ * "multicast" target endpoints. Setup creates multiple PTEs, one for each
+ * simulated endpoint, each using a different pid_index. The NETSIM tests run
+ * in isolated test processes, so pid_index values should not conflict with
+ * other traffic.
+ *
+ * If jstate->is_rank is false, and jstate->is_mcast is also false, this is the
+ * UNICAST model. This is a test model developed to parallelize development
+ * during a period of time when fabric multicast was unavailable, to allow a
+ * full multi-node simulation of collectives, and may be deprecated as multicast
+ * capability matures. This model requires only a single PTE per domain (NIC).
+ * Sends are serialized through each endpoint, but receives can race and become
+ * disordered as they pass through the fabric, as will occur in production. The
+ * pid_index is set to the reserved value of CXIP_PTL_IDX_COLL, which should not
+ * be used by any other traffic on a given NIC, allowing this model to be used
+ * concurrently with other traffic.
+ *
+ * If jstate->is_rank is false and jstate->is_mcast is true, this is the
+ * production MULTICAST model. This supports multiple multicast trees, and
+ * requires a PTE for each tree, since the pid_index is used to encode the
+ * multicast address.
+ *
+ * Normal PTE setup populates the address portion of the PTE from the domains
+ * that have been defined, each domain representing a NIC, and the pid_index
+ * sets only the lower pid_width bits of the PTE address to differentiate
+ * different traffic streams. However, when a PTE is created with is_mcast=true,
+ * the driver code sets the entire PTE address. This calling code must encode
+ * the multicast address by bit-shifting it out of the pid_width range. The
+ * lower bits are arbitrary, since this PTE cannot receive any other traffic,
+ * and are set to CXIP_PTL_IDX_COLL for consistency.
  *
  * Caller must hold ep_obj->lock.
  */
@@ -2628,6 +2647,8 @@ static int _initialize_mc(void *ptr)
 	struct cxip_coll_mc *mc_obj;
 	struct cxip_coll_pte *coll_pte;
 	struct cxip_cmdq *cmdq;
+	union cxi_pte_map_offset pid_mcast;
+	int pid_idx;
 	int red_id;
 	int ret;
 
@@ -2637,24 +2658,32 @@ static int _initialize_mc(void *ptr)
 	if (!mc_obj)
 		return -FI_ENOMEM;
 
-	/* COMM_KEY_RANK model needs a distinct PTE for every MC object.
-	 * All other models share a single PTE for all MCs using an EP.
-	 */
-	coll_pte = ep_obj->coll.coll_pte;
-	if (!coll_pte) {
-		TRACE_DEBUG("acqiring PTE\n");
-		ret = _acquire_pte(ep_obj, jstate->pid_idx, jstate->is_mcast,
-				   &coll_pte);
-		if (ret) {
-			TRACE_DEBUG("acquiring PTE failed %d\n", ret);
-			free(mc_obj);
-			return ret;
-		}
-		if (!jstate->is_rank) {
-			TRACE_DEBUG("assigned PTE to ep_obj\n");
-			ep_obj->coll.coll_pte = coll_pte;
-		}
-		/* else leave ep_obj->coll.coll_pte == NULL */
+	TRACE_DEBUG("acquiring PTE\n");
+	if (jstate->is_rank) {
+		// NETSIM
+		// pid_idx = simulated collective rank
+		pid_idx = CXIP_PTL_IDX_COLL + jstate->simrank;
+		ret = _acquire_pte(ep_obj, pid_idx, false, &coll_pte);
+		// suppress attempt to set multiple times in idm
+		coll_pte->mc_obj = mc_obj;
+	} else if (!jstate->is_mcast) {
+		// UNICAST
+		// pid_idx = simulated collective tree
+		pid_idx = CXIP_PTL_IDX_COLL;
+		ret = _acquire_pte(ep_obj, pid_idx, false, &coll_pte);
+	} else {
+		// MULTICAST
+		// pid_idx = bit-shifted multicast address
+		memset(&pid_mcast, 0, sizeof(pid_mcast));
+		pid_mcast.mcast_id = jstate->bcast_data.mcast_addr;
+		pid_mcast.mcast_pte_index = 0;
+		pid_idx = *((int *)&pid_mcast);
+		ret = _acquire_pte(ep_obj, pid_idx, true, &coll_pte);
+	}
+	if (ret) {
+		TRACE_DEBUG("acquiring PTE failed %d\n", ret);
+		free(mc_obj);
+		return ret;
 	}
 	/* copy coll_pte to mc_obj */
 	mc_obj->coll_pte = coll_pte;
