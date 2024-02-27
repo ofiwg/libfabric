@@ -80,14 +80,20 @@
 #define	CLOSE_OBJ(obj)	do {if (obj) fi_close(&obj->fid); } while (0)
 
 /* Taken from SLURM environment variables */
-int frmwk_numranks;		/* PMI_SIZE */
-int frmwk_rank;			/* PMI_RANK */
-int frmwk_nics_per_rank;	/* PMI_NUM_HSNS (defaults to 1) */
-int frmwk_numnics;
-const char *frmwk_unique;	/* PMI_SHARED_SECRET */
-const char *frmwk_nodename;	/* SLURMD_NODENAME */
-const char frmwk_node0[32];	/* SLURMD_NODELIST (first name) */
-union nicaddr *frmwk_nics;	/* array of NIC addresses plus rank and hsn */
+int frmwk_nics_per_rank;		/* PMI_NUM_HSNS (defaults to 1) */
+int frmwk_numranks;			/* PMI_SIZE */
+const char *frmwk_unique;		/* PMI_SHARED_SECRET */
+int frmwk_rank;				/* PMI_RANK */
+int frmwk_hwcoll_addrs_per_job;		/* FI_CXI_HWCOLL_ADDRS_PER_JOB */
+int frmwk_hwcoll_min_nodes;		/* FI_CXI_HWCOLL_MIN_NODES */
+const char *frmwk_jobid;		/* FI_CXI_COLL_JOB_ID */
+const char *frmwk_jobstep;		/* FI_CXI_COLL_JOB_STEP_ID */
+const char *frmwk_mcast_token;		/* FI_CXI_COLL_MCAST_TOKEN */
+const char *frmwk_fabric_mgr_url;	/* FI_CXI_COLL_FABRIC_MGR_URL */
+const char *frmwk_nodename;		/* SLURMD_NODENAME */
+const char frmwk_node0[32];		/* SLURMD_NODELIST (first name) */
+union nicaddr *frmwk_nics;		/* array of NIC addresses  */
+int frmwk_numnics;			/* number of NIC addresses */
 
 int _frmwk_init;
 
@@ -270,7 +276,7 @@ int frmwk_log(const char *fmt, ...)
  */
 #define	FAIL(cond, msg, label) \
 	if (cond) { \
-		printf("FAIL socket %s=%d\n", msg, cond); \
+		fprintf(stderr, "FAIL socket %s=%d\n", msg, cond); \
 		goto label; \
 	}
 
@@ -692,8 +698,8 @@ fail:
  * frmwk_populate_av() has successfully completed.
  *
  * @param ret : error code
- * @param fmt : printf format
- * @param ... : printf parameters
+ * @param fmt : fprintf format
+ * @param ... : fprintf parameters
  * @return int value of ret
  */
 int frmwk_errmsg(int ret, const char *fmt, ...)
@@ -836,26 +842,55 @@ void frmwk_init(bool quiet)
 	char *s, *d;
 	int ret = -1;
 
-	/* Values are provided by the WLM */
+	/* Values are provided by the WLM
+	 * Expected format "prefix[n1-n2,m1-m2,...],..."
+	 * newton9-node-01,newton9-node-02,...
+	 * newton9-node-[01-04,11-14],newton9-extra-[101-104]...
+	 * We only want the first, e.g. newton9-node-01
+	 */
 	s = getenv("SLURM_NODELIST");
 	d = (char *)frmwk_node0;
-	while (s && *s && *s != '-' && *s != ',') {
-		if (*s == '[')
+	while (s && *s && *s != ',') {
+		if (*s == '[') {
 			s++;
-		else
-			*d++ = *s++;
+			while (*s != '-' && *s != ']')
+				*d++ = *s++;
+			break;
+		}
+		*d++ = *s++;
 	}
 	*d = 0;
 	frmwk_nodename = getenv("SLURMD_NODENAME");
 	frmwk_numranks = getenv_int("PMI_SIZE");
 	frmwk_rank = getenv_int("PMI_RANK");
-	frmwk_unique = getenv("PMI_SHARED_SECRET");
-	if (frmwk_numranks < 1 || frmwk_rank < 0 || !frmwk_unique) {
+	frmwk_jobid = getenv("FI_CXI_COLL_JOB_ID");
+	frmwk_jobstep = getenv("FI_CXI_COLL_JOB_STEP_ID");
+	frmwk_mcast_token = getenv("FI_CXI_COLL_MCAST_TOKEN");
+	frmwk_fabric_mgr_url = getenv("FI_CXI_COLL_FABRIC_MGR_URL");
+	frmwk_hwcoll_min_nodes = getenv_int("FI_CXI_HWCOLL_MIN_NODES");
+	frmwk_hwcoll_addrs_per_job = getenv_int(
+					"FI_CXI_HWCOLL_ADDRS_PER_JOB");
+	if (!frmwk_nodename ||
+	    frmwk_numranks < 1 ||
+	    frmwk_rank < 0 ||
+	    !frmwk_jobid ||
+	    !frmwk_jobstep ||
+	    frmwk_hwcoll_min_nodes < 1 ||
+	    frmwk_hwcoll_addrs_per_job < 1) {
 		if (quiet)
 			goto fail;
-		fprintf(stderr, "invalid PMI_SIZE=%d\n", frmwk_numranks);
-		fprintf(stderr, "invalid PMI_RANK=%d\n", frmwk_rank);
-		fprintf(stderr, "invalid PMI_SHARED_SECRET=%s\n", frmwk_unique);
+		fprintf(stderr, "frmwk_nodename=%s\n", frmwk_nodename);
+		fprintf(stderr, "frmwk_numranks=%d\n", frmwk_numranks);
+		fprintf(stderr, "frmwk_rank=%d\n", frmwk_rank);
+		fprintf(stderr, "frmwk_jobid=%s\n", frmwk_jobid);
+		fprintf(stderr, "frmwk_jobstep=%s\n", frmwk_jobstep);
+		fprintf(stderr, "frmwk_mcast_token=%s\n", frmwk_mcast_token);
+		fprintf(stderr, "frmwk_fabric_mgr_url=%s\n",
+			frmwk_fabric_mgr_url);
+		fprintf(stderr, "frmwk_hwcoll_min_nodes=%d\n",
+			frmwk_hwcoll_min_nodes);
+		fprintf(stderr, "frmwk_hwcoll_addrs_per_job=%d\n",
+			frmwk_hwcoll_addrs_per_job);
 		fprintf(stderr, "Must be run under compatible WLM\n");
 		goto fail;
 	}
@@ -864,14 +899,6 @@ void frmwk_init(bool quiet)
 	frmwk_nics_per_rank = getenv_int("PMI_NUM_HSNS");
 	if (frmwk_nics_per_rank < 1)
 		frmwk_nics_per_rank = 1;
-
-	/* Re-export these as libfabric equivalents */
-	setenv("FI_CXI_COLL_JOB_ID", frmwk_unique, 1);
-	setenv("FI_CXI_COLL_JOB_STEP_ID", "0", 1);
-	setenv("FI_CXI_COLL_MCAST_TOKEN", "aaaaaa", 1);
-	setenv("FI_CXI_HWCOLL_MIN_NODES", "4", 1);
-	setenv("FI_CXI_HWCOLL_ADDRS_PER_JOB", "4", 1);
-	setenv("FI_CXI_COLL_FABRIC_MGR_URL", "what?", 1);
 
 	ret = 0;
 fail:
@@ -882,7 +909,6 @@ void frmwk_term(void)
 {
 	free(frmwk_nics);
 	frmwk_nics = NULL;
-	frmwk_unique = NULL;
 	frmwk_nics_per_rank = 0;
 	frmwk_numranks = 0;
 	frmwk_rank = 0;
