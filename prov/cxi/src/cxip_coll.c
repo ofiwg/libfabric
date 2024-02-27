@@ -2899,8 +2899,6 @@ static void _start_curl(void *ptr)
 {
 	struct cxip_curl_mcast_usrptr *curl_usrptr;
 	struct cxip_join_state *jstate = ptr;
-	static const char *json_fmt =
-		"{'macs':[%s],'jobID':'%s','jobStepID':'%s','timeout':%ld}";
 	struct cxip_addr caddr;
 	char *jsonreq, *mac, *url, *p;
 	int i, ret;
@@ -2963,10 +2961,14 @@ static void _start_curl(void *ptr)
 	*(--p) = 0;
 
 	/* generate the CURL JSON request */
-	ret = asprintf(&jsonreq, json_fmt, mac,
+	ret = asprintf(&jsonreq,
+			"{'macs':[%s],'vni': %d,'timeout':%ld,'jobID':'%s',"
+			"'jobStepID':'%s'}",
+			mac,
+			jstate->ep_obj->auth_key.vni,
+			cxip_env.coll_timeout_usec,
 			cxip_env.coll_job_id,
-			cxip_env.coll_job_step_id,
-			cxip_env.coll_timeout_usec);
+			cxip_env.coll_job_step_id);
 	if (ret < 0) {
 		TRACE_JOIN("Creating JSON request = %d\n", ret);
 		ret = -FI_ENOMEM;
