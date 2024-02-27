@@ -2808,6 +2808,7 @@ struct cxip_coll_mc {
 	int next_red_id;			// next available red_id
 	int max_red_id;				// limit total concurrency
 	int seqno;				// rolling seqno for packets
+	bool is_multicast;			// true if multicast address
 	bool arm_disable;			// arm-disable for testing
 	bool is_joined;				// true if joined
 	bool rx_discard;			// true to discard RX events
