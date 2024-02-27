@@ -548,6 +548,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 
 	/* Send address */
 	switch (av_set_obj->comm_key.keytype) {
+	case COMM_KEY_NONE:
 	case COMM_KEY_MULTICAST:
 		/* - destination == multicast ID
 		 * - idx_ext == 0
