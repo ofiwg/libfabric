@@ -970,7 +970,7 @@ int main(int argc, char **argv)
 	}
 
 	frmwk_init(false);
-	if (frmwk_check_env(4))
+	if (frmwk_check_env(2))
 		return -1;
 
 	ret = frmwk_init_libfabric();
@@ -1280,7 +1280,7 @@ int main(int argc, char **argv)
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus\n",
+		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus/op\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
 		frmwk_barrier();
 	}
@@ -1307,7 +1307,7 @@ int main(int argc, char **argv)
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus\n",
+		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus/op\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
 		frmwk_barrier();
 	}
@@ -1335,7 +1335,7 @@ int main(int argc, char **argv)
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus\n",
+		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus/op\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
 		frmwk_barrier();
 	}
@@ -1363,7 +1363,7 @@ int main(int argc, char **argv)
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus\n",
+		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus/op\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
 		frmwk_barrier();
 	}
