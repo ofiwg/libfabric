@@ -2931,8 +2931,7 @@ static void _start_curl(void *ptr)
 		goto quit;
 	}
 
-	ret = asprintf(&url, "%s/fabric/collectives/multicast",
-		       cxip_env.coll_fabric_mgr_url);
+	ret = asprintf(&url, "%s", cxip_env.coll_fabric_mgr_url);
 	if (ret < 0) {
 		TRACE_JOIN("Failed to construct CURL address\n");
 		ret = -FI_ENOMEM;
