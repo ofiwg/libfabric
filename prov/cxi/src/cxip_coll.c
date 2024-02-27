@@ -1691,8 +1691,7 @@ ssize_t _send_pkt(struct cxip_coll_reduction *reduction)
 {
 	int ret;
 
-	if (reduction->mc_obj->av_set_obj->comm_key.keytype ==
-	    COMM_KEY_MULTICAST) {
+	if (reduction->mc_obj->is_multicast) {
 		ret = _send_pkt_mc(reduction);
 	} else if (is_hw_root(reduction->mc_obj)) {
 		ret = _send_pkt_as_root(reduction);
@@ -2698,6 +2697,17 @@ static int _initialize_mc(void *ptr)
 	/* link av_set_obj to mc_obj (one to one) */
 	av_set_obj->mc_obj = mc_obj;
 	mc_obj->av_set_obj = av_set_obj;
+
+	/* define whether this is multicast */
+	switch (av_set_obj->comm_key.keytype) {
+	case COMM_KEY_NONE:
+	case COMM_KEY_MULTICAST:
+		mc_obj->is_multicast = true;
+		break;
+	default:
+		mc_obj->is_multicast = false;
+		break;
+	}
 
 	/* initialize remainder of mc_obj */
 	mc_obj->mc_fid.fid.fclass = FI_CLASS_MC;
