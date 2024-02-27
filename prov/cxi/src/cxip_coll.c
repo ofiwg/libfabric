@@ -2857,7 +2857,7 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 	struct cxip_addr caddr;
 	const char *hwrootstr;
 	int mcaddr, hwroot;
-	uint32_t b2, b1, b0, n;
+	uint32_t octet[6], n;
 	int i, ret;
 
 	/* Creation process is done */
@@ -2876,10 +2876,17 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 		if (cxip_json_string("hwRoot", json_obj, &hwrootstr))
 			break;
 
-		n = sscanf(hwrootstr, "%x:%x:%x", &b2, &b1, &b0);
-		if (n < 3 || b2 > 0xf || b1 > 0xff || b2 > 0xff)
+		memset(octet, 0, sizeof(octet));
+		hwroot = 0;
+		n = sscanf(hwrootstr, "%x:%x:%x:%x:%x:%x",
+			   &octet[5], &octet[4], &octet[3],
+			   &octet[2], &octet[1], &octet[0]);
+		if (n < 3) {
+			TRACE_CURL("bad hwroot address = %s\n", hwrootstr);
 			break;
-		hwroot = (b2 << 16) + (b1 << 8) + b0;
+		}
+		for (i = 0; i < n; i++)
+			hwroot |= octet[i] << (8*i);
 
 		TRACE_CURL("mcastID=%d hwRoot='%s'=%x\n", mcaddr, hwrootstr,
 			   hwroot);
