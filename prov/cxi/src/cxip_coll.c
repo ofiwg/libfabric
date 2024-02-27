@@ -2448,7 +2448,6 @@ struct cxip_join_state {
 	int mynode_idx;			// index within the fi_addr[] list
 	int mynode_fiaddr;		// fi_addr of this node
 	int simrank;			// simulated rank of NIC
-	int pid_idx;			// pid_idx used by ptl_te
 	int prov_errno;			// collective provider error
 	int sched_state;		// scheduled operation
 	int join_idx;			// unique join index for diagnostics
@@ -3584,7 +3583,6 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		jstate->mynode_fiaddr =
 			av_set_obj->fi_addr_ary[jstate->mynode_idx];
 		jstate->simrank = ZB_NOSIM;
-		jstate->pid_idx = CXIP_PTL_IDX_COLL;
 		jstate->bcast_data.hwroot_idx = 0;
 		jstate->bcast_data.mcast_addr = 0;
 		jstate->bcast_data.valid = false;
@@ -3606,7 +3604,6 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		jstate->mynode_fiaddr =
 			av_set_obj->fi_addr_ary[jstate->mynode_idx];
 		jstate->simrank = ZB_NOSIM;
-		jstate->pid_idx = CXIP_PTL_IDX_COLL;
 		jstate->bcast_data.hwroot_idx =
 			av_set_obj->comm_key.mcast.hwroot_idx;
 		jstate->bcast_data.mcast_addr =
@@ -3630,7 +3627,6 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		jstate->mynode_fiaddr =
 			av_set_obj->fi_addr_ary[jstate->mynode_idx];
 		jstate->simrank = ZB_NOSIM;
-		jstate->pid_idx = CXIP_PTL_IDX_COLL;
 		jstate->bcast_data.hwroot_idx =
 			av_set_obj->comm_key.ucast.hwroot_idx;
 		jstate->bcast_data.mcast_addr =
@@ -3648,7 +3644,6 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		jstate->mynode_idx = av_set_obj->comm_key.rank.rank;
 		jstate->mynode_fiaddr = (fi_addr_t)jstate->mynode_idx;
 		jstate->simrank = jstate->mynode_idx;
-		jstate->pid_idx = CXIP_PTL_IDX_COLL + jstate->simrank;
 		jstate->bcast_data.hwroot_idx = 0;
 		jstate->bcast_data.mcast_addr = ep_obj->src_addr.nic;
 		jstate->bcast_data.valid = true;
