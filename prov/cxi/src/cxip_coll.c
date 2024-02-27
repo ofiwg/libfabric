@@ -537,6 +537,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		       int av_set_idx, union c_fab_addr *dfa,
 		       uint8_t *index_ext, bool *is_mcast)
 {
+	struct cxip_coll_mc *mc;
 	struct cxip_ep_obj *ep_obj;
 	struct cxip_av_set *av_set_obj;
 	struct cxip_addr dest_caddr;
@@ -545,8 +546,13 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 	int idx_ext;
 	int ret;
 
-	ep_obj = reduction->mc_obj->ep_obj;
-	av_set_obj = reduction->mc_obj->av_set_obj;
+	/* cxi_build_mcast_dfa() found in:
+	    cassini-headers/src/csrdef/cassini_user_defs.h
+	    cassini-headers/include/cxi_prov_hw.h
+	*/
+	mc = reduction->mc_obj;
+	ep_obj = mc->ep_obj;
+	av_set_obj = mc->av_set_obj;
 
 	/* Send address */
 	switch (av_set_obj->comm_key.keytype) {
@@ -554,7 +560,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 	case COMM_KEY_MULTICAST:
 		/* - destination == multicast ID
 		 * - idx_ext == 0
-		 * - dfa == multicast destination
+		 * - dfa == multicast address
 		 * - index_ext == 0
 		 */
 		if (is_netsim(ep_obj)) {
@@ -562,16 +568,18 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 			return -FI_EINVAL;
 		}
 		idx_ext = 0;
-		cxi_build_mcast_dfa(av_set_obj->comm_key.mcast.mcast_addr,
-				    reduction->red_id, idx_ext,
-				    dfa, index_ext);
+		cxi_build_mcast_dfa(mc->mcast_addr,	// mcast_id
+				    reduction->red_id,	// red_id
+				    idx_ext,		// idx_ext
+				    dfa,		// return dfa
+				    index_ext);		// return idx_ext
 		*is_mcast = true;
 		break;
 	case COMM_KEY_UNICAST:
 		/* - destination == remote node in av_set_obj
 		 * - idx_ext == CXIP_PTL_IDX_COLL
 		 * - dfa = remote nic
-		 * - index_ext == CXIP_PTL_IDX_COLL
+		 * - index_ext == idx_ext
 		 */
 		if (av_set_idx >= av_set_obj->fi_addr_cnt) {
 			CXIP_WARN("av_set_idx out-of-range\n");
@@ -581,9 +589,14 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		ret = cxip_av_lookup_addr(ep_obj->av, dest_addr, &dest_caddr);
 		if (ret != FI_SUCCESS)
 			return ret;
+		idx_ext = CXIP_PTL_IDX_COLL;
 		pid_bits = ep_obj->domain->iface->dev->info.pid_bits;
-		cxi_build_dfa(dest_caddr.nic, dest_caddr.pid, pid_bits,
-			      CXIP_PTL_IDX_COLL, dfa, index_ext);
+		cxi_build_dfa(dest_caddr.nic,		// dest NIC
+			      dest_caddr.pid,		// dest PID
+			      pid_bits,			// pid width
+			      idx_ext,			// idx_ext
+			      dfa,			// return dfa
+			      index_ext);		// return idx_ext
 		*is_mcast = false;
 		break;
 	case COMM_KEY_RANK:
@@ -599,8 +612,12 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		dest_caddr = ep_obj->src_addr;
 		pid_bits = ep_obj->domain->iface->dev->info.pid_bits;
 		idx_ext = CXIP_PTL_IDX_COLL + av_set_idx;
-		cxi_build_dfa(dest_caddr.nic, dest_caddr.pid, pid_bits,
-			      idx_ext, dfa, index_ext);
+		cxi_build_dfa(dest_caddr.nic,		// dest NIC
+			      dest_caddr.pid,		// dest PID
+			      pid_bits,			// pid width
+			      idx_ext,			// idx_ext
+			      dfa,			// return dfa
+			      index_ext);		// return idx_ext
 		*is_mcast = false;
 		break;
 	default:
