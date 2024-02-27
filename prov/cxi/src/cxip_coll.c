@@ -1899,6 +1899,8 @@ bool _is_red_timed_out(struct cxip_coll_reduction *reduction)
 {
 	struct timespec tsnow;
 
+	if (reduction->mc_obj->retry_disable)
+		return false;
 	if (_is_red_first_time(reduction)) {
 		TRACE_DEBUG("=== root first time, retry\n");
 		return true;
