@@ -229,6 +229,8 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	struct cxip_curl_handle *handle;
 	struct curl_slist *headers;
 	char *token;
+	char *verify_peer_str;
+	int verify_peer;
 	CURLMcode mres;
 	CURL *curl;
 	int running;
@@ -299,6 +301,13 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)handle);
 	curl_easy_setopt(curl, CURLOPT_VERBOSE, (long)verbose);
 	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, cxip_curl_opname(op));
+
+	verify_peer_str = getenv("CURLOPT_SSL_VERIFYPEER");
+	if (verify_peer_str)
+		verify_peer = atoi(verify_peer_str);
+	else
+		verify_peer = 0;
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, verify_peer);
 
 	curl_multi_add_handle(cxip_curlm, curl);
 	mres = curl_multi_perform(cxip_curlm, &running);
