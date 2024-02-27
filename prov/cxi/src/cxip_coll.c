@@ -3091,6 +3091,9 @@ quit:
  * If the return code is anything else, the join operation fails.
  */
 
+/* suppress repeated BUSY log messages */
+static long suppress_busy_log;
+
 /* append a jstate to the zbcoll scheduler */
 static void _append_sched(struct cxip_zbcoll_obj *zb, void *usrptr)
 {
@@ -3141,23 +3144,29 @@ static void _start_bcast(void *ptr)
 	struct cxip_join_state *jstate = ptr;
 	struct cxip_zbcoll_obj *zb = jstate->zb;
 
-	TRACE_JOIN("%s: entry\n", __func__);
+	if (!suppress_busy_log)
+		TRACE_JOIN("%s: entry\n", __func__);
 
 	/* error will indicate that the multicast request fails */
 	jstate->prov_errno = C_RC_INVALID_DFA_FORMAT;
 	/* rank 0 always does the work here */
 	if (jstate->mynode_idx == 0) {
+		if (!suppress_busy_log)
+			TRACE_JOIN("%s: rank 0\n", __func__);
 		if (jstate->create_mcast) {
 			/* first call (only) initiates CURL request */
 			if (!jstate->creating_mcast) {
+				TRACE_JOIN("%s create mcast\n", __func__);
 				jstate->creating_mcast = true;
 				_start_curl(jstate);
 			}
 			/* every retry call checks to see if CURL is complete */
 			if (!jstate->finished_mcast) {
 				zb->error = -FI_EAGAIN;
+				suppress_busy_log++;
 				goto quit;
 			}
+			suppress_busy_log = 0;
 			/* bcast_data.valid is set by curl callback */
 		} else {
 			/* static bcast data is presumed correct */
@@ -3365,10 +3374,6 @@ static void _progress_sched(struct cxip_join_state *jstate)
 	struct cxip_zbcoll_obj *zb = jstate->zb;
 	enum state_code *codes;
 
-	TRACE_JOIN("entry jstate[%d,%d]=%s, error=%d\n",
-		   jstate->join_idx, jstate->mynode_idx,
-		   state_name[jstate->sched_state], zb->error);
-
 	/* acquire the success/again/fail state codes for current state */
 	codes = progress_state[jstate->sched_state];
 	switch (zb->error) {
@@ -3376,12 +3381,15 @@ static void _progress_sched(struct cxip_join_state *jstate)
 		/* last operation succeeded */
 		TRACE_JOIN("%s: success\n", __func__);
 		jstate->sched_state = codes[0];
+		suppress_busy_log = 0;
 		break;
 	case -FI_EBUSY:
 	case -FI_EAGAIN:
 		/* last operation needs a retry */
-		TRACE_JOIN("%s: busy retry\n", __func__);
+		if (!suppress_busy_log)
+			TRACE_JOIN("%s: busy retry\n", __func__);
 		jstate->sched_state = codes[1];
+		suppress_busy_log++;
 		break;
 	default:
 		/* last operation failed */
@@ -3389,9 +3397,10 @@ static void _progress_sched(struct cxip_join_state *jstate)
 		jstate->sched_state = codes[2];
 		break;
 	}
-	TRACE_JOIN("----> jstate[%d,%d]=%s\n",
-		   jstate->join_idx, jstate->mynode_idx,
-		   state_name[jstate->sched_state]);
+	if (!suppress_busy_log)
+		TRACE_JOIN("----> jstate[%d,%d]=%s\n",
+			jstate->join_idx, jstate->mynode_idx,
+			state_name[jstate->sched_state]);
 
 	/* execute the new state function */
 	state_func[jstate->sched_state](jstate);
