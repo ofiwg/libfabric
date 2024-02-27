@@ -31,6 +31,8 @@
 
 #define	TRACE_PKT(fmt, ...)	CXIP_TRACE(CXIP_TRC_COLL_PKT, fmt, \
 					   ##__VA_ARGS__)
+#define	TRACE_CURL(fmt, ...)	CXIP_TRACE(CXIP_TRC_CURL, fmt, \
+					   ##__VA_ARGS__)
 #define	TRACE_JOIN(fmt, ...)	CXIP_TRACE(CXIP_TRC_COLL_JOIN, fmt, \
 					   ##__VA_ARGS__)
 #define	TRACE_DEBUG(fmt, ...)	CXIP_TRACE(CXIP_TRC_COLL_DEBUG, fmt, \
@@ -2842,14 +2844,14 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 	int i, ret;
 
 	/* Creation process is done */
-	TRACE_JOIN("CURL COMPLETED!\n");
+	TRACE_CURL("CURL COMPLETED!\n");
 	jstate->finished_mcast = true;
 
 	switch (handle->status) {
 	case 200:
 	case 201:
 		/* CURL succeeded, parse response */
-		TRACE_JOIN("CURL PARSE RESPONSE:\n%s\n", handle->response);
+		TRACE_CURL("CURL PARSE RESPONSE:\n%s\n", handle->response);
 		if (!(json_obj = json_tokener_parse(handle->response)))
 			break;
 		if (cxip_json_int("mcastID", json_obj, &mcaddr))
@@ -2862,7 +2864,7 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 			break;
 		hwroot = (b2 << 16) + (b1 << 8) + b0;
 
-		TRACE_JOIN("mcastID=%d hwRoot='%s'=%x\n", mcaddr, hwrootstr,
+		TRACE_CURL("mcastID=%d hwRoot='%s'=%x\n", mcaddr, hwrootstr,
 			   hwroot);
 		for (i = 0; i < jstate->av_set_obj->fi_addr_cnt; i++) {
 			ret = cxip_av_lookup_addr(
@@ -2875,9 +2877,9 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 			if (hwroot == caddr.nic)
 				break;
 		}
-		TRACE_JOIN("final index=%d\n", i);
+		TRACE_CURL("final index=%d\n", i);
 		if (i >= jstate->av_set_obj->fi_addr_cnt) {
-			TRACE_JOIN("multicast HWroot not found in av_set\n");
+			TRACE_CURL("multicast HWroot not found in av_set\n");
 			jstate->prov_errno = CXIP_PROV_ERRNO_HWROOT_INVALID;
 			break;
 		}
@@ -2887,21 +2889,21 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 		jstate->bcast_data.mcast_addr = (uint32_t)mcaddr;
 		jstate->is_mcast = true;
 		/* This succeeded */
-		TRACE_JOIN("curl: mcaddr   =%08x\n",
+		TRACE_CURL("curl: mcaddr   =%08x\n",
 			   jstate->bcast_data.mcast_addr);
-		TRACE_JOIN("curl: hwrootidx=%d\n",
+		TRACE_CURL("curl: hwrootidx=%d\n",
 			   jstate->bcast_data.hwroot_idx);
 		break;
 	default:
-		TRACE_JOIN("ERRMSK SET CURL error %ld!\n", handle->status);
+		TRACE_CURL("ERRMSK SET CURL error %ld!\n", handle->status);
 		if (handle->response)
-			TRACE_JOIN("ERROR RESPONSE:\n%s\n", handle->response);
+			TRACE_CURL("ERROR RESPONSE:\n%s\n", handle->response);
 		// TODO finer error differentiation from CURL errors
 		jstate->prov_errno = CXIP_PROV_ERRNO_CURL;
 		break;
 	}
 	free(curl_usrptr);
-	TRACE_JOIN("CURL COMPLETED!\n");
+	TRACE_CURL("CURL COMPLETED!\n");
 	jstate->finished_mcast = true;
 }
 
@@ -2923,14 +2925,14 @@ static void _start_curl(void *ptr)
 	url = NULL;
 
 	/* acquire the environment variables needed */
-	TRACE_JOIN("jobid   = %s\n", cxip_env.coll_job_id);
-	TRACE_JOIN("stepid  = %s\n", cxip_env.coll_job_step_id);
-	TRACE_JOIN("fmurl   = %s\n", cxip_env.coll_fabric_mgr_url);
-	TRACE_JOIN("token   = %s\n", cxip_env.coll_mcast_token);
-	TRACE_JOIN("maxadrs = %ld\n", cxip_env.hwcoll_addrs_per_job);
-	TRACE_JOIN("minnodes= %ld\n", cxip_env.hwcoll_min_nodes);
-	TRACE_JOIN("retry   = %ld\n", cxip_env.coll_retry_usec);
-	TRACE_JOIN("tmout   = %ld\n", cxip_env.coll_timeout_usec);
+	TRACE_CURL("jobid   = %s\n", cxip_env.coll_job_id);
+	TRACE_CURL("stepid  = %s\n", cxip_env.coll_job_step_id);
+	TRACE_CURL("fmurl   = %s\n", cxip_env.coll_fabric_mgr_url);
+	TRACE_CURL("token   = %s\n", cxip_env.coll_mcast_token);
+	TRACE_CURL("maxadrs = %ld\n", cxip_env.hwcoll_addrs_per_job);
+	TRACE_CURL("minnodes= %ld\n", cxip_env.hwcoll_min_nodes);
+	TRACE_CURL("retry   = %ld\n", cxip_env.coll_retry_usec);
+	TRACE_CURL("tmout   = %ld\n", cxip_env.coll_timeout_usec);
 
 	/* Generic error for any preliminary failures */
 	jstate->prov_errno = CXIP_PROV_ERRNO_CURL;
