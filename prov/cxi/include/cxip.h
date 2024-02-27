@@ -2810,6 +2810,7 @@ struct cxip_coll_mc {
 	int seqno;				// rolling seqno for packets
 	bool is_multicast;			// true if multicast address
 	bool arm_disable;			// arm-disable for testing
+	bool retry_disable;			// retry-disable for testing
 	bool is_joined;				// true if joined
 	bool rx_discard;			// true to discard RX events
 	enum cxi_traffic_class tc;		// traffic class
