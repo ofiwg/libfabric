@@ -810,7 +810,7 @@ out:
 	 * At the moment, only invalid_dom does this and the domain name
 	 * is the only application owned memory. Free the application owned
 	 * memory so that fi_freeinfo only frees memory that it owns. */
-	if (init) {
+	if (init && !!test_hints) {
 		free(test_hints->domain_attr->name);
 		test_hints->domain_attr->name = NULL;
 	}
