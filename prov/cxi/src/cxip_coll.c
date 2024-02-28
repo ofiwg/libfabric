@@ -2655,7 +2655,7 @@ static struct fi_ops mc_ops = {
  * the driver code sets the entire PTE address. This calling code must encode
  * the multicast address by bit-shifting it out of the pid_width range. The
  * lower bits are arbitrary, since this PTE cannot receive any other traffic,
- * and are set to CXIP_PTL_IDX_COLL for consistency.
+ * and are set to zero.
  *
  * Caller must hold ep_obj->lock.
  */
