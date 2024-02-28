@@ -160,8 +160,10 @@ int multi_timer_gather(struct multi_timer *all_timer,
 			recv_timer = calloc(timer_count, sizeof(*recv_timer));
 			ret = socket_recv(pm_job.clients[i-1], recv_timer,
 					sizeof(*recv_timer) * timer_count, 0);
-			if (ret < 0)
+			if (ret < 0) {
+				free(recv_timer);
 				return ret;
+			}
 			for (j = 0; j < timer_count; j++)
 				all_timer[i * timer_count + j] = recv_timer[j];
 
@@ -171,7 +173,6 @@ int multi_timer_gather(struct multi_timer *all_timer,
 		ret = socket_send(pm_job.sock, timers,
 				sizeof(*recv_timer) * timer_count, 0);
 	}
-
 
 	return ret;
 }
