@@ -517,7 +517,7 @@ static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
 
 	if (opts.options & FT_OPT_ALLOC_MULT_MR) {
 		*mr_bufs = calloc(opts.window_size, sizeof(**mr_bufs));
-		if (!mr_bufs)
+		if (!*mr_bufs)
 			return -FI_ENOMEM;
 	}
 

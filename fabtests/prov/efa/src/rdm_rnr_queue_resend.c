@@ -84,13 +84,13 @@ static int alloc_atomic_res(struct fi_info *fi, void **result, void **compare,
 	int mr_local = !!(fi->domain_attr->mr_mode & FI_MR_LOCAL);
 
 	*result = malloc(buf_size);
-	if (!result) {
+	if (!*result) {
 		perror("malloc");
 		return -1;
 	}
 
 	*compare = malloc(buf_size);
-	if (!compare) {
+	if (!*compare) {
 		perror("malloc");
 		return -1;
 	}
