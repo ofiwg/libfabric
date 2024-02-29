@@ -117,7 +117,7 @@ if(args_core):
 
         if (run_test == 'all' or run_test == 'shmem'):
             run.shmemtest(build_hw, args_core, hosts, ofi_build_mode, user_env,
-                        log_file, args_util)
+                        log_file, args_util, weekly)
 
         if (run_test == 'all' or run_test == 'oneccl'):
             run.oneccltest(build_hw, args_core, hosts, ofi_build_mode, user_env,
