@@ -167,7 +167,6 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 	txe = efa_rdm_ep_alloc_txe(ep, peer, msg, op, tag, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
-		efa_rdm_ep_progress_internal(ep);
 		goto out;
 	}
 
@@ -196,7 +195,6 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 
 	err = efa_rdm_msg_post_rtm(ep, txe, use_p2p);
 	if (OFI_UNLIKELY(err)) {
-		efa_rdm_ep_progress_internal(ep);
 		efa_rdm_txe_release(txe);
 		peer->next_msg_id--;
 	}
@@ -933,14 +931,11 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		rxe = efa_rdm_msg_alloc_rxe(ep, msg, op, flags, tag, ignore);
 		if (OFI_UNLIKELY(!rxe)) {
 			ret = -FI_EAGAIN;
-			efa_rdm_ep_progress_internal(ep);
 			ofi_genlock_unlock(srx_ctx->lock);
 			goto out;
 		}
 
 		ret = efa_rdm_ep_post_user_recv_buf(ep, rxe, flags);
-		if (ret == -FI_EAGAIN)
-			efa_rdm_ep_progress_internal(ep);
 		ofi_genlock_unlock(srx_ctx->lock);
 	} else if (op == ofi_op_tagged) {
 		ret = util_srx_generic_trecv(ep->peer_srx_ep, msg->msg_iov, msg->desc,

@@ -123,7 +123,6 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 	txe = efa_rdm_atomic_alloc_txe(efa_rdm_ep, peer, msg, atomic_ex, op, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
-		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		goto out;
 	}
 
@@ -176,7 +175,6 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 	}
 
 	if (OFI_UNLIKELY(err)) {
-		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		efa_rdm_txe_release(txe);
 		peer->next_msg_id--;
 	}
