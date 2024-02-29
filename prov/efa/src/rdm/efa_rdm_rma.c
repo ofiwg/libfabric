@@ -167,7 +167,6 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 
 	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, peer, msg, ofi_op_read_req, flags);
 	if (OFI_UNLIKELY(!txe)) {
-		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		err = -FI_EAGAIN;
 		goto out;
 	}
@@ -209,13 +208,10 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 		if (OFI_UNLIKELY(err)) {
 			if (err == -FI_ENOBUFS)
 				err = -FI_EAGAIN;
-			efa_rdm_ep_progress_internal(efa_rdm_ep);
 			goto out;
 		}
 	} else {
 		err = efa_rdm_rma_post_efa_emulated_read(efa_rdm_ep, txe);
-		if (OFI_UNLIKELY(err))
-			efa_rdm_ep_progress_internal(efa_rdm_ep);
 	}
 
 out:
@@ -440,14 +436,12 @@ static inline ssize_t efa_rdm_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep,
 
 	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, peer, msg, ofi_op_write, flags);
 	if (OFI_UNLIKELY(!txe)) {
-		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		err = -FI_EAGAIN;
 		goto out;
 	}
 
 	err = efa_rdm_rma_post_write(efa_rdm_ep, txe);
 	if (OFI_UNLIKELY(err)) {
-		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		efa_rdm_txe_release(txe);
 	}
 out:
