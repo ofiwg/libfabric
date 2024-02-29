@@ -695,11 +695,16 @@ static int test_caps_regression(char *node, char *service, uint64_t flags,
 	struct fi_info *fi;
 	int ret;
 
+	if (!hints) {
+		printf("invalid test case: hints may not be null");
+		return -FI_EINVAL;
+	}
+
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, NULL, info);
 	if (ret)
 		return ret;
 
-	if (!hints || !hints->fabric_attr || !hints->fabric_attr->prov_name) {
+	if (!hints->fabric_attr || !hints->fabric_attr->prov_name) {
 		fi = *info;
 	} else {
 		for (fi = *info; fi; fi = fi->next) {
