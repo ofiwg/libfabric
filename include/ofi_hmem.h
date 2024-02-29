@@ -62,6 +62,9 @@ CUresult ofi_cuGetErrorName(CUresult error, const char** pStr);
 CUresult ofi_cuGetErrorString(CUresult error, const char** pStr);
 CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr);
+CUresult ofi_cuPointerGetAttributes(unsigned int num_attributes,
+				    CUpointer_attribute *attributes,
+				    void **data, CUdeviceptr ptr);
 CUresult ofi_cuDeviceCanAccessPeer(int *canAccessPeer, CUdevice srcDevice,
 				   CUdevice dstDevice);
 cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags);

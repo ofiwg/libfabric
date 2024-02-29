@@ -65,6 +65,7 @@
 	_(cuGetErrorName)		\
 	_(cuGetErrorString)		\
 	_(cuPointerGetAttribute)	\
+	_(cuPointerGetAttributes)	\
 	_(cuPointerSetAttribute)	\
 	_(cuDeviceCanAccessPeer)	\
 	_(cuMemGetAddressRange)		\
@@ -125,6 +126,10 @@ static struct {
 	CUresult (*cuGetErrorString)(CUresult error, const char** pStr);
 	CUresult (*cuPointerGetAttribute)(void *data,
 					  CUpointer_attribute attribute,
+					  CUdeviceptr ptr);
+	CUresult (*cuPointerGetAttributes)(unsigned int num_attributes,
+					  CUpointer_attribute *attributes,
+					  void **data,
 					  CUdeviceptr ptr);
 	CUresult (*cuPointerSetAttribute)(const void *data,
 					  CUpointer_attribute attribute,
@@ -220,6 +225,14 @@ CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr)
 {
 	return cuda_ops.cuPointerGetAttribute(data, attribute, ptr);
+}
+
+CUresult ofi_cuPointerGetAttributes(unsigned int num_attributes,
+				    CUpointer_attribute *attributes,
+				    void **data, CUdeviceptr ptr)
+{
+	return cuda_ops.cuPointerGetAttributes(num_attributes, attributes,
+					       data, ptr);
 }
 
 #define CUDA_DRIVER_LOG_ERR(cu_result, cuda_api_name) 			\
@@ -815,26 +828,33 @@ int cuda_hmem_cleanup(void)
 bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 {
 	CUresult cuda_ret;
-	unsigned int data;
+	unsigned int mem_type;
+	unsigned int is_managed;
+	uint64_t device_ord;
 
-	cuda_ret = ofi_cuPointerGetAttribute(&data,
-					     CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
-					     (CUdeviceptr)addr);
+	/* Each pointer in 'data' needs to have the same array index
+		as the corresponding attribute in 'cuda_attributes' */
+	void *data[] = {&mem_type, &is_managed, &device_ord};
+
+	CUpointer_attribute cuda_attributes[] = {
+		CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+		CU_POINTER_ATTRIBUTE_IS_MANAGED,
+		CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL
+	};
+
+	cuda_ret = ofi_cuPointerGetAttributes(ARRAY_SIZE(cuda_attributes),
+					      cuda_attributes, data,
+					      (CUdeviceptr) addr);
+
 	switch (cuda_ret) {
 	case CUDA_SUCCESS:
-		if (data == CU_MEMORYTYPE_DEVICE) {
-			if (flags)
+		if (mem_type == CU_MEMORYTYPE_DEVICE) {
+			if (flags && !is_managed)
 				*flags = FI_HMEM_DEVICE_ONLY;
 
-			if (device) {
-				*device = 0;
-				cuda_ret = ofi_cuPointerGetAttribute(
-						(int *) device,
-						CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
-						(CUdeviceptr) addr);
-				if (cuda_ret)
-					break;
-			}
+			if (device)
+				*device = device_ord;
+
 			return true;
 		}
 		break;
