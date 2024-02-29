@@ -111,6 +111,36 @@ def build_mpich_osu(install_path, libfab_installpath, hw_type):
 		os.environ['PATH'] = path
 		os.environ['LD_LIBRARY_PATH'] = ld_library_path
 
+def build_shmem(install_path, libfab_installpath, hw_type):
+	shmem_build = f'{install_path}/middlewares/shmem_{hw_type}'
+	shmem_build_dir = f'{shmem_build}/SOS'
+	cwd = os.getcwd()
+	if (os.path.exists(shmem_build_dir)):
+		os.chdir(shmem_build_dir)
+
+		command = "bash -c \'"
+		command += "./autogen.sh; "
+		command += "./configure "
+		command += f"--prefix={shmem_build} "
+		command += "--disable-fortran "
+		command += "--enable-pmi-simple "
+		command += "--enable-hard-polling "
+		command += "--enable-manual-progress "
+		if hw_type == 'water':
+			command += "--enable-ofi-mr=basic "
+
+		command += f"--with-ofi={libfab_installpath}; "
+
+		command += "make clean; "
+		command += "make -j; "
+		command += "make check TESTS=; "
+		command += "make install"
+		command += "\'"
+
+		common.run_command(shlex.split(command))
+
+	os.chdir(cwd)
+
 
 def copy_build_dir(install_path):
 	middlewares_path = f'{install_path}/middlewares'
@@ -160,7 +190,7 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--build_item', help="build libfabric or fabtests", \
 						choices=['libfabric', 'fabtests', 'builddir', 'logdir',\
-								 'mpich'])
+								 'mpich', 'shmem'])
 	parser.add_argument('--build_hw', help="HW type for build",
 						choices=['water', 'grass', 'fire', 'electric', 'ucx',
 								 'daos', 'gpu', 'ivysaur'])
@@ -203,5 +233,7 @@ if __name__ == "__main__":
 	elif(build_item == 'mpich'):
 		build_mpich(custom_workspace, libfab_install_path, build_hw)
 		build_mpich_osu(custom_workspace, libfab_install_path, build_hw)
+	elif (build_item == 'shmem'):
+		build_shmem(custom_workspace, libfab_install_path, build_hw)
 
 	os.chdir(curr_dir)
