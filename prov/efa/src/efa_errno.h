@@ -60,16 +60,17 @@
 	_(1,	FLUSHED,			Flushed during queue pair destroy)		\
 	_(2,	LOCAL_ERROR_QP_INTERNAL_ERROR,	Internal queue pair error)			\
 	_(3,	LOCAL_ERROR_INVALID_OP_TYPE,	Invalid operation type)				\
-	_(4,	LOCAL_ERROR_INVALID_AH,		Invalid address handle)				\
+	_(4,	LOCAL_ERROR_INVALID_AH,		Invalid address handle (local))			\
 	_(5,	LOCAL_ERROR_INVALID_LKEY,	Invalid local key (LKEY))			\
 	_(6,	LOCAL_ERROR_BAD_LENGTH,		Message too long)				\
-	_(7,	REMOTE_ERROR_BAD_ADDRESS,	Destination ENI is down or does not run EFA)	\
+	_(7,	REMOTE_ERROR_BAD_ADDRESS,	RKEY not registered or does not match remote IOVA)	\
 	_(8,	REMOTE_ERROR_ABORT,		Receiver connection aborted)			\
 	_(9,	REMOTE_ERROR_BAD_DEST_QPN,	Invalid receiver queue pair number (QPN))	\
 	_(10,	REMOTE_ERROR_RNR,		Receiver not ready)				\
 	_(11,	REMOTE_ERROR_BAD_LENGTH,	Receiver scatter-gather list (SGL) too short)	\
 	_(12,	REMOTE_ERROR_BAD_STATUS,	Unexpected status received from remote)		\
-	_(13,	LOCAL_ERROR_UNRESP_REMOTE,	Unresponsive receiver (connection never established or unknown))
+	_(13,	LOCAL_ERROR_UNRESP_REMOTE,	Unresponsive receiver (connection never established or unknown))	\
+	_(14,	REMOTE_ERROR_UNKNOWN_PEER,	Invalid address handle on remote)
 
 /**
  * @brief EFA provider proprietary error codes
@@ -163,6 +164,7 @@ static inline int to_fi_errno(enum efa_errno err) {
 	case FI_EFA_ERR_ESTABLISHED_RECV_UNRESP:
 		return FI_ECONNABORTED;
 	case EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN:
+	case EFA_IO_COMP_STATUS_REMOTE_ERROR_UNKNOWN_PEER:
 		return FI_ENOTCONN;
 	case EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR:
 		return FI_ENORX;
