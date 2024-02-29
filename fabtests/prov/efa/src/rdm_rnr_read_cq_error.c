@@ -60,7 +60,12 @@ static int rnr_read_cq_error(void)
 	for (i = 0; i < total_send; i++) {
 		do {
 			ret = fi_send(ep, tx_buf, 32, mr_desc, remote_fi_addr, &tx_ctx);
-			if (ret < 0 && ret != -FI_EAGAIN) {
+			if (ret == -FI_EAGAIN) {
+				fi_cq_read(txcq, NULL, 0);
+				continue;
+			}
+
+			if (ret < 0) {
 				FT_PRINTERR("fi_send", -ret);
 				return ret;
 			}
