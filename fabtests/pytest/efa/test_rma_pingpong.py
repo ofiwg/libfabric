@@ -1,4 +1,5 @@
 from efa.efa_common import efa_run_client_server_test
+from common import perf_progress_model_cli
 import pytest
 
 
@@ -10,7 +11,7 @@ def test_rma_pingpong(cmdline_args, iteration_type, operation_type, completion_s
     if memory_type != "host_to_host" and operation_type == "write":
         pytest.skip("no hmem memory support for pingpong_rma write test")
     command = "fi_rma_pingpong -e rdm"
-    command = command + " -o " + operation_type
+    command = command + " -o " + operation_type + " " + perf_progress_model_cli
     # rma_pingpong test with data verification takes longer to finish
     timeout = max(540, cmdline_args.timeout)
     efa_run_client_server_test(cmdline_args, command, iteration_type, completion_semantic, memory_type, "all", timeout=timeout)

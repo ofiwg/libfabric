@@ -1,5 +1,6 @@
 from default.test_rdm import test_rdm, test_rdm_bw_functional
 from efa.efa_common import efa_run_client_server_test
+from common import perf_progress_model_cli
 
 import pytest
 import copy
@@ -9,7 +10,8 @@ import copy
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_pingpong(cmdline_args, iteration_type, completion_semantic, memory_type, completion_type):
-    efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong", iteration_type,
+    command = "fi_rdm_pingpong"  + " " + perf_progress_model_cli
+    efa_run_client_server_test(cmdline_args, command, iteration_type,
                                completion_semantic, memory_type, "all", completion_type=completion_type)
 
 @pytest.mark.functional
@@ -32,7 +34,8 @@ def test_rdm_pingpong_no_inject_range(cmdline_args, completion_semantic, inject_
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_tagged_pingpong(cmdline_args, iteration_type, completion_semantic, memory_type, completion_type):
-    efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_pingpong", iteration_type,
+    command = "fi_rdm_tagged_pingpong"  + " " + perf_progress_model_cli
+    efa_run_client_server_test(cmdline_args, command, iteration_type,
                                completion_semantic, memory_type, "all", completion_type=completion_type)
 
 @pytest.mark.functional
@@ -44,7 +47,8 @@ def test_rdm_tagged_pingpong_range(cmdline_args, completion_semantic, memory_typ
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_tagged_bw(cmdline_args, iteration_type, completion_semantic, memory_type, completion_type):
-    efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw", iteration_type,
+    command = "fi_rdm_tagged_bw"  + " " + perf_progress_model_cli
+    efa_run_client_server_test(cmdline_args, command, iteration_type,
                                completion_semantic, memory_type, "all", completion_type=completion_type)
 
 @pytest.mark.functional
@@ -82,6 +86,7 @@ def test_rdm_atomic(cmdline_args, iteration_type, completion_semantic, memory_ty
     # the issue is tracked in:  https://github.com/ofiwg/libfabric/issues/7002
     # to mitigate the issue, set the maximum timeout of fi_rdm_atomic to 1800 seconds.
     cmdline_args_copy = copy(cmdline_args)
+    command = "fi_rdm_atomic"  + " " + perf_progress_model_cli
     test = ClientServerTest(cmdline_args_copy, "fi_rdm_atomic", iteration_type, completion_semantic,
                             memory_type=memory_type, timeout=1800)
     test.run()
