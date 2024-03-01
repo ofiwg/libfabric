@@ -388,27 +388,18 @@ static struct fi_ops_mr lnx_mr_ops = {
 
 static int lnx_setup_core_domain(struct local_prov_ep *ep, struct fi_info *info)
 {
-	struct fi_info *cache;
-	char prov[FI_NAME_MAX];
-	int rc;
+	struct fi_info *fi, *itr;
 
-	/* The initial SHM setup is correct no need to adjust it here */
-	if (ep->lpe_local)
-		return FI_SUCCESS;
+	fi = lnx_get_link_by_dom(info->domain_attr->name);
+	if (!fi)
+		return -FI_ENODATA;
 
-	rc = lnx_parse_prov_name(info->domain_attr->name, NULL, prov);
-	if (rc)
-		return rc;
+	for (itr = fi; itr; itr = itr->next) {
+		if (!strcmp(itr->fabric_attr->name, ep->lpe_fabric_name))
+			break;
+	}
 
-	cache = lnx_get_cache_entry_by_dom(prov);
-
-	/* check if we already have the right info */
-	if (!cache || strcmp(cache->domain_attr->name, prov))
-		return FI_SUCCESS;
-
-	fi_freeinfo(ep->lpe_fi_info);
-
-	ep->lpe_fi_info = cache;
+	ep->lpe_fi_info = fi_dupinfo(itr);
 
 	return FI_SUCCESS;
 }

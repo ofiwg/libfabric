@@ -356,8 +356,7 @@ extern struct fi_provider lnx_prov;
 extern struct ofi_bufpool *global_recv_bp;
 extern ofi_spin_t global_bplock;
 
-struct fi_info *lnx_get_cache_entry_by_dom(char *domain_name);
-int lnx_parse_prov_name(char *name, char *shm, char *prov);
+struct fi_info *lnx_get_link_by_dom(char *domain_name);
 
 int lnx_getinfo(uint32_t version, const char *node, const char *service,
 				uint64_t flags, const struct fi_info *hints,
