@@ -61,7 +61,7 @@ static int rnr_read_cq_error(void)
 		do {
 			ret = fi_send(ep, tx_buf, 32, mr_desc, remote_fi_addr, &tx_ctx);
 			if (ret == -FI_EAGAIN) {
-				fi_cq_read(txcq, NULL, 0);
+				(void) fi_cq_read(txcq, NULL, 0);
 				continue;
 			}
 
