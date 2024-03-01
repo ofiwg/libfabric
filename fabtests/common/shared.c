@@ -4156,6 +4156,10 @@ void ft_longopts_usage()
 	FT_PRINT_OPTS_USAGE("--debug-assert",
 		"Replace asserts with while loops to force process to\n"
 		"spin until a debugger can be attached.");
+	FT_PRINT_OPTS_USAGE("--data-progress <progress_model>",
+		"manual, or auto");
+	FT_PRINT_OPTS_USAGE("--control-progress <progress_model>",
+		"manual, auto, or unified");
 }
 
 int debug_assert;
@@ -4165,8 +4169,24 @@ struct option long_opts[] = {
 	{"pin-core", required_argument, NULL, LONG_OPT_PIN_CORE},
 	{"timeout", required_argument, NULL, LONG_OPT_TIMEOUT},
 	{"debug-assert", no_argument, &debug_assert, LONG_OPT_DEBUG_ASSERT},
+	{"data-progress", required_argument, NULL, LONG_OPT_DATA_PROGRESS},
+	{"control-progress", required_argument, NULL, LONG_OPT_CONTROL_PROGRESS},
 	{NULL, 0, NULL, 0},
 };
+
+int ft_parse_progress_model_string(char* progress_str)
+{
+	int ret = -1;
+
+	if (!strcasecmp("manual", progress_str))
+		ret = FI_PROGRESS_MANUAL;
+	else if (!strcasecmp("auto", progress_str))
+		ret = FI_PROGRESS_AUTO;
+	else if (!strcasecmp("unified", progress_str))
+		ret = FI_PROGRESS_CONTROL_UNIFIED;
+
+	return ret;
+}
 
 int ft_parse_long_opts(int op, char *optarg)
 {
@@ -4177,6 +4197,16 @@ int ft_parse_long_opts(int op, char *optarg)
 		timeout = atoi(optarg);
 		return 0;
 	case LONG_OPT_DEBUG_ASSERT:
+		return 0;
+	case LONG_OPT_DATA_PROGRESS:
+		hints->domain_attr->data_progress = ft_parse_progress_model_string(optarg);
+		if (hints->domain_attr->data_progress == -1)
+			return EXIT_FAILURE;
+		return 0;
+	case LONG_OPT_CONTROL_PROGRESS:
+		hints->domain_attr->control_progress = ft_parse_progress_model_string(optarg);
+		if (hints->domain_attr->control_progress == -1)
+			return EXIT_FAILURE;
 		return 0;
 	default:
 		return EXIT_FAILURE;
