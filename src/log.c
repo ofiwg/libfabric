@@ -254,17 +254,17 @@ static int ofi_log_ready(const struct fi_provider *prov,
 			 enum fi_log_level level, enum fi_log_subsys subsys,
 			 uint64_t flags, uint64_t *showtime)
 {
-    uint64_t cur;
+	uint64_t cur;
 
-    if (log_fid.ops->enabled(prov, level, subsys, flags)) {
-	    cur = ofi_gettime_ms();
-	    if (cur >= *showtime) {
-		    *showtime = cur + (uint64_t) log_interval;
-		    return true;
-	    }
-    }
+	if (log_fid.ops->enabled(prov, level, subsys, flags)) {
+		cur = ofi_gettime_ms();
+		if (cur >= *showtime) {
+			*showtime = cur + (uint64_t) log_interval;
+			return true;
+		}
+	}
 
-    return false;
+	return false;
 }
 
 int ofi_open_log(uint32_t version, void *attr, size_t attr_len,
@@ -323,11 +323,15 @@ int DEFAULT_SYMVER_PRE(fi_log_enabled)(const struct fi_provider *prov,
 		enum fi_log_subsys subsys)
 {
 	uint64_t flags = 0;
+	int ret = 0;
 
 	if (ofi_prov_ctx(prov)->disable_logging)
 		flags |= FI_LOG_PROV_FILTERED;
 
-	return log_fid.ops->enabled(prov, level, subsys, flags);
+	pthread_mutex_lock(&common_locks.ini_lock);
+	ret = log_fid.ops->enabled(prov, level, subsys, flags);
+	pthread_mutex_unlock(&common_locks.ini_lock);
+	return ret;
 }
 DEFAULT_SYMVER(fi_log_enabled_, fi_log_enabled, FABRIC_1.0);
 
@@ -337,11 +341,15 @@ int DEFAULT_SYMVER_PRE(fi_log_ready)(const struct fi_provider *prov,
 		uint64_t *showtime)
 {
 	uint64_t flags = 0;
+	int ret = 0;
 
 	if (ofi_prov_ctx(prov)->disable_logging)
 		flags |= FI_LOG_PROV_FILTERED;
-
-	return log_fid.ops->ready(prov, level, subsys, flags, showtime);
+	
+	pthread_mutex_lock(&common_locks.ini_lock);
+	ret = log_fid.ops->ready(prov, level, subsys, flags, showtime);
+	pthread_mutex_unlock(&common_locks.ini_lock);
+	return ret;
 }
 DEFAULT_SYMVER(fi_log_ready_, fi_log_ready, FABRIC_1.6);
 
@@ -358,6 +366,8 @@ void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_leve
 	vsnprintf(msg + size, sizeof(msg) - size, fmt, vargs);
 	va_end(vargs);
 
+	pthread_mutex_lock(&common_locks.ini_lock);
 	log_fid.ops->log(prov, level, subsys, func, line, msg);
+	pthread_mutex_unlock(&common_locks.ini_lock);
 }
 DEFAULT_SYMVER(fi_log_, fi_log, FABRIC_1.0);
