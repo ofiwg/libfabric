@@ -77,37 +77,42 @@
 
 int global_expected_rnr_error = 1;
 
-static int alloc_atomic_res(struct fi_info *fi, void **result, void **compare,
-			    struct fid_mr **mr_result, struct fid_mr **mr_compare)
+/* global atomic resources */
+void *result = NULL;
+void *compare = NULL;
+struct fid_mr *mr_result = NULL;
+struct fid_mr *mr_compare = NULL;
+
+static int alloc_atomic_res()
 {
 	int ret;
 	int mr_local = !!(fi->domain_attr->mr_mode & FI_MR_LOCAL);
 
-	*result = malloc(buf_size);
-	if (!*result) {
+	result = malloc(buf_size);
+	if (!result) {
 		perror("malloc");
 		return -1;
 	}
 
-	*compare = malloc(buf_size);
-	if (!*compare) {
+	compare = malloc(buf_size);
+	if (!compare) {
 		perror("malloc");
 		return -1;
 	}
 
 	// registers local data buffer that stores results
-	ret = fi_mr_reg(domain, *result, buf_size,
+	ret = fi_mr_reg(domain, result, buf_size,
 			(mr_local ? FI_READ : 0) | FI_REMOTE_WRITE, 0,
-			0, 0, mr_result, NULL);
+			0, 0, &mr_result, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", -ret);
 		return ret;
 	}
 
 	// registers local data buffer that contains comparison data
-	ret = fi_mr_reg(domain, *compare, buf_size,
+	ret = fi_mr_reg(domain, compare, buf_size,
 			(mr_local ? FI_WRITE : 0)  | FI_REMOTE_READ, 0,
-			0, 0, mr_compare, NULL);
+			0, 0, &mr_compare, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
@@ -116,11 +121,17 @@ static int alloc_atomic_res(struct fi_info *fi, void **result, void **compare,
 	return 0;
 }
 
-static void free_atomic_res(void *result, void *compare,
-			    struct fid_mr *mr_result, struct fid_mr *mr_compare)
+static void free_atomic_res()
 {
-	FT_CLOSE_FID(mr_result);
-	FT_CLOSE_FID(mr_compare);
+	if (mr_result) {
+		FT_CLOSE_FID(mr_result);
+		mr_result = NULL;
+	}
+	if (mr_compare) {
+		FT_CLOSE_FID(mr_compare);
+		mr_compare = NULL;
+	}
+
 	if (result) {
 		free(result);
 		result = NULL;
@@ -194,23 +205,12 @@ static int trigger_rnr_queue_resend(enum fi_op atomic_op, void *result, void *co
 static int rnr_queue_resend_test(int req_pkt, enum fi_op atomic_op)
 {
 	int ret, i;
-	void *result = NULL;
-	void *compare = NULL;
-	struct fid_mr *mr_result = NULL;
-	struct fid_mr *mr_compare = NULL;
 
 	/*
 	 * The handshake procedure between server and client will happen in
 	 * either ft_sync() or ft_exchange_key(), which is before the real
 	 * RNR triggering procedure.
 	 */
-	if (atomic_op) {
-		ret = alloc_atomic_res(fi, &result, &compare, &mr_result, &mr_compare);
-		if (ret) {
-			FT_PRINTERR("alloc_ep_res_atomic()", -ret);
-			return ret;
-		}
-	}
 	if (opts.rma_op || atomic_op) {
 		ret = ft_exchange_keys(&remote);
 		if (ret) {
@@ -259,7 +259,7 @@ static int rnr_queue_resend_test(int req_pkt, enum fi_op atomic_op)
 		if (req_pkt) {
 			ret = trigger_rnr_queue_resend(atomic_op, result, compare, mr_result, mr_compare);
 			if (ret)
-				goto out;
+				return ret;
 		} else if (!opts.rma_op && !atomic_op) {
 			for (i = 0; i < global_expected_rnr_error; i++) {
 				ret = ft_rx(ep, opts.transfer_size);
@@ -286,7 +286,7 @@ static int rnr_queue_resend_test(int req_pkt, enum fi_op atomic_op)
 			sleep(3);
 			ret = trigger_rnr_queue_resend(atomic_op, result, compare, mr_result, mr_compare);
 			if (ret)
-				goto out;
+				return ret;
 		}
 		printf("Sleeping 3 seconds to trigger RNR on the client side\n");
 		sleep(3);
@@ -314,10 +314,6 @@ static int rnr_queue_resend_test(int req_pkt, enum fi_op atomic_op)
 		return ret;
 	}
 
-out:
-	if (atomic_op)
-		free_atomic_res(result, compare, mr_result, mr_compare);
-
 	return ret;
 }
 
@@ -329,23 +325,31 @@ static int run(int req_pkt, enum fi_op atomic_op)
 	ret = ft_efa_rnr_init_fabric();
 	if (ret) {
 		FT_PRINTERR("ft_efa_rnr_init_fabric", -ret);
-		return ret;
+		goto out;
+	}
+
+	ret = alloc_atomic_res();
+	if (ret) {
+		FT_PRINTERR("alloc_atomic_res()", -ret);
+		goto out;
 	}
 
 	ret = rnr_queue_resend_test(req_pkt, atomic_op);
 	if (ret) {
 		FT_PRINTERR("rnr_queue_resend_test", -ret);
-		return ret;
+		goto out;
 	}
 
 	ret = ft_close_oob();
 	if (ret) {
 		FT_PRINTERR("ft_close_oob", -ret);
-		return ret;
+		goto out;
 	}
-	ft_free_res();
 
-	return 0;
+out:
+	free_atomic_res();
+	ft_free_res();
+	return ret;
 }
 
 static void print_opts_usage(char *name, char *desc)
