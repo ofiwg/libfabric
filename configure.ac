@@ -426,14 +426,16 @@ AC_ARG_ENABLE([xpmem],
 			      PATH: enable xpmem and use xpmem installed under PATH)])],
 	      )
 
-FI_CHECK_PACKAGE([xpmem],
-		 [xpmem.h],
-		 [xpmem],
-		 [xpmem_make],
-		 [],
-		 [$enable_xpmem],
-		 [$enable_xpmem/lib64],
-		 [xpmem_happy=1])
+AS_IF([test x"$enable_xpmem" != x"no"],
+      [FI_CHECK_PACKAGE([xpmem],
+                        [xpmem.h],
+                        [xpmem],
+                        [xpmem_make],
+                        [],
+                        [$enable_xpmem],
+                        [],
+                        [xpmem_happy=1])
+      ])
 
 AS_IF([test x"$enable_xpmem" != x"no" && test -n "$enable_xpmem" && test "$xpmem_happy" = "0" ],
 	[AC_MSG_ERROR([XPMEM support requested but XPMEM runtime not available.])])
