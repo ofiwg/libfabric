@@ -674,7 +674,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
 
 		if (iface != FI_HMEM_SYSTEM) {
-			ofi_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
+			opx_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
 			buf = opx_ep->hmem_copy_buf;
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.intranode
 							.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -738,7 +738,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
 
 	if (iface != FI_HMEM_SYSTEM) {
-		ofi_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
+		opx_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
 		buf = opx_ep->hmem_copy_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
 						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -947,7 +947,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 		if (iface != FI_HMEM_SYSTEM) {
 			unsigned iov_total_len = 0;
 			for (int i = 0; i < niov; ++i) {
-				ofi_copy_from_hmem(iface, hmem_device, &opx_ep->hmem_copy_buf[iov_total_len],
+				opx_copy_from_hmem(iface, hmem_device, &opx_ep->hmem_copy_buf[iov_total_len],
 						   iov[i].iov_base, iov[i].iov_len);
 				iov_total_len += iov[i].iov_len;
 			}
@@ -1052,7 +1052,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 	if (iface != FI_HMEM_SYSTEM) {
 		unsigned iov_total_len = 0;
 		for (int i = 0; i < niov; ++i) {
-			ofi_copy_from_hmem(iface, hmem_device, &opx_ep->hmem_copy_buf[iov_total_len],
+			opx_copy_from_hmem(iface, hmem_device, &opx_ep->hmem_copy_buf[iov_total_len],
 						iov[i].iov_base, iov[i].iov_len);
 			iov_total_len += iov[i].iov_len;
 		}
@@ -1181,7 +1181,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
 
 	if (iface != FI_HMEM_SYSTEM) {
-		ofi_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
+		opx_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
 		buf = opx_ep->hmem_copy_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.intranode
 						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -1497,7 +1497,7 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
 
 	if (iface != FI_HMEM_SYSTEM) {
-		ofi_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
+		opx_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
 		buf = opx_ep->hmem_copy_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
 						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -1730,7 +1730,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first (struct fi_opx_ep *opx_ep,
 	   buffer for this first MP Eager packet as well as all subsequent
 	   MP Eager Nth packets. */
 	if (iface != FI_HMEM_SYSTEM) {
-		ofi_copy_from_hmem(iface, hmem_device, hmem_bounce_buf, *buf, payload_bytes_total);
+		opx_copy_from_hmem(iface, hmem_device, hmem_bounce_buf, *buf, payload_bytes_total);
 		*buf = hmem_bounce_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
 						.kind[FI_OPX_KIND_TAG]

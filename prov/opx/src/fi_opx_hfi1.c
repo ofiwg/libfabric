@@ -2983,7 +2983,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		if (immediate_total) {
 			uint8_t *sbuf;
 			if (src_iface != FI_HMEM_SYSTEM) {
-				ofi_copy_from_hmem(src_iface, src_device_id, opx_ep->hmem_copy_buf, buf, immediate_total);
+				opx_copy_from_hmem(src_iface, src_device_id, opx_ep->hmem_copy_buf, buf, immediate_total);
 				sbuf = opx_ep->hmem_copy_buf;
 			} else {
 				sbuf = (uint8_t *) buf;
@@ -3137,7 +3137,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	uint8_t *sbuf;
 	if (src_iface != FI_HMEM_SYSTEM && immediate_total) {
-		ofi_copy_from_hmem(src_iface, src_device_id, opx_ep->hmem_copy_buf, buf, immediate_total);
+		opx_copy_from_hmem(src_iface, src_device_id, opx_ep->hmem_copy_buf, buf, immediate_total);
 		sbuf = opx_ep->hmem_copy_buf;
 	} else {
 		sbuf = (uint8_t *) buf;
