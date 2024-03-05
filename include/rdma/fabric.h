@@ -785,6 +785,12 @@ struct fi_param {
 int fi_getparams(struct fi_param **params, int *count);
 void fi_freeparams(struct fi_param *params);
 
+/* Dummy definitions for removed flags/caps/types. For compiling old fabtests */
+#define FI_VARIABLE_MSG		0ULL
+#define FI_NOTIFY_FLAGS_ONLY	0ULL
+#define FI_RESTRICTED_COMP	0ULL
+#define FI_EP_SOCK_STREAM	FI_EP_UNSPEC
+
 #ifdef FABRIC_DIRECT
 #include <rdma/fi_direct.h>
 #endif	/* FABRIC_DIRECT */
