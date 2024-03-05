@@ -238,10 +238,13 @@ The name of the access domain.
 
 The threading model specifies the level of serialization required of
 an application when using the libfabric data transfer interfaces.
-Control interfaces are always considered thread safe, and may be
-accessed by multiple threads.  Applications which can guarantee
-serialization in their access of provider allocated resources and
-interfaces enables a provider to eliminate lower-level locks.
+Control interfaces are always considered thread safe unless the
+control progress model is FI_PROGRESS_CONTROL_UNIFIED. A thread safe
+control interface allows multiple threads to progress the control
+interface, and (depending on threading model selected) one or more
+threads to progress the data interfaces at the same time. Applications
+which can guarantee serialization in their access of provider allocated
+resources and interfaces enable a provider to eliminate lower-level locks.
 
 *FI_THREAD_COMPLETION*
 : The completion threading model is intended for providers that make use
@@ -331,7 +334,7 @@ Progress frequently requires action being taken at both the transmitting
 and receiving sides of an operation.  This is often a requirement for
 reliable transfers, as a result of retry and acknowledgement processing.
 
-To balance between performance and ease of use, two progress models
+To balance between performance and ease of use, the following progress models
 are defined.
 
 *FI_PROGRESS_AUTO*
@@ -374,6 +377,14 @@ are defined.
   that acts purely as the target of RMA or atomic operations that uses
   manual progress may still need application assistance to process
   received operations.
+
+*FI_PROGRESS_CONTROL_UNIFIED*
+: This progress model indicates that the user will synchronize progressing the
+  data and control operations themselves (i.e. this allows the control interface
+  to NOT be thread safe). It is only valid for control progress (not data progress).
+  Setting control=FI_PROGRESS_CONTROL_UNIFIED, data=FI_PROGRESS_MANUAL, and
+  threading=FI_THREAD_DOMAIN/FI_THREAD_COMPLETION allows Libfabric to remove all
+  locking in the critical data progress path.
 
 *FI_PROGRESS_UNSPEC*
 : This value indicates that no progress model has been defined.  It
