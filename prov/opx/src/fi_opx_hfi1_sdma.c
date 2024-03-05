@@ -187,7 +187,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 			fprintf(stderr, "(%d) First 8 bytes of %p == %#16.16lX\n", pid, we->iovecs[i].iov_base, *((uint64_t *) we->iovecs[i].iov_base));
 		} else {
 			uint64_t first_qw;
-			ofi_copy_from_hmem(we->hmem.iface, we->hmem.device, &first_qw, we->iovecs[i].iov_base, sizeof(uint64_t));
+			opx_copy_from_hmem(we->hmem.iface, we->hmem.device, &first_qw, we->iovecs[i].iov_base, sizeof(uint64_t));
 			fprintf(stderr, "(%d) First 8 bytes of %p == %#16.16lX\n", pid, we->iovecs[i].iov_base, first_qw);
 		}
 		if (i == 2) { /* assume tid iov */
@@ -283,7 +283,7 @@ void fi_opx_hfi1_sdma_replay_handle_errors(struct fi_opx_ep *opx_ep,
 			assert(replay->iov->iov_len == we->iovecs[payload_idx].iov_len);
 			uint64_t first_qw;
 			if (meminfo_set) {
-				ofi_copy_from_hmem(replay->hmem_iface, replay->hmem_device,
+				opx_copy_from_hmem(replay->hmem_iface, replay->hmem_device,
 						   &first_qw, replay->iov->iov_base, sizeof(uint64_t));
 			} else {
 				first_qw = *((uint64_t *) replay->iov->iov_base);

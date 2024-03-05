@@ -108,6 +108,28 @@ enum fi_hmem_iface fi_opx_hmem_get_iface(const void *ptr,
 }
 
 __OPX_FORCE_INLINE__
+int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device,
+		     void *dest, const void *src, size_t len)
+{
+#if HAVE_CUDA
+	return (int) cudaMemcpy(dest, src, len, cudaMemcpyHostToDevice);
+#else
+	return ofi_copy_to_hmem(iface, device, dest, src, len);
+#endif
+}
+
+__OPX_FORCE_INLINE__
+int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device,
+		       void *dest, const void *src, size_t len)
+{
+#if HAVE_CUDA
+	return (int) cudaMemcpy(dest, src, len, cudaMemcpyDeviceToHost);
+#else
+	return ofi_copy_from_hmem(iface, device, dest, src, len);
+#endif
+}
+
+__OPX_FORCE_INLINE__
 unsigned fi_opx_hmem_iov_init(const void *buf,
 				const size_t len,
 				const void *desc,
@@ -143,7 +165,7 @@ static const unsigned OPX_HMEM_KERN_MEM_TYPE[4] = {
 		if (src_iface == FI_HMEM_SYSTEM) {					\
 			memcpy(dst, src, len);						\
 		} else {								\
-			ofi_copy_from_hmem(src_iface, src_device, dst, src, len);	\
+			opx_copy_from_hmem(src_iface, src_device, dst, src, len);	\
 		}									\
 	} while (0)
 
@@ -152,7 +174,7 @@ static const unsigned OPX_HMEM_KERN_MEM_TYPE[4] = {
 		if (dst_iface == FI_HMEM_SYSTEM) {					\
 			memcpy(dst, src, len);						\
 		} else {								\
-			ofi_copy_to_hmem(dst_iface, dst_device, dst, src, len);		\
+			opx_copy_to_hmem(dst_iface, dst_device, dst, src, len);		\
 		}									\
 	} while (0)
 
@@ -162,9 +184,9 @@ static const unsigned OPX_HMEM_KERN_MEM_TYPE[4] = {
 			fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);		\
 		} else {								\
 			uint8_t hmem_buf[FI_OPX_HFI1_PACKET_MTU];			\
-			ofi_copy_from_hmem(dst_iface, dst_device, hmem_buf, dst, len);	\
+			opx_copy_from_hmem(dst_iface, dst_device, hmem_buf, dst, len);	\
 			fi_opx_rx_atomic_dispatch(src, hmem_buf, len, dt, op);		\
-			ofi_copy_to_hmem(dst_iface, dst_device, dst, hmem_buf, len);	\
+			opx_copy_to_hmem(dst_iface, dst_device, dst, hmem_buf, len);	\
 		}									\
 	} while (0)
 

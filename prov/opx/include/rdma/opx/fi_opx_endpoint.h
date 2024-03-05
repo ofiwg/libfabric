@@ -1007,7 +1007,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			if (is_hmem && send_len) {
 				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
-				ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
+				opx_copy_to_hmem(hmem_info->iface, hmem_info->device,
 						recv_buf, hdr->inject.app_data_u8, send_len);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(is_intranode, opx_ep->debug_counters.hmem.intranode
 							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT)
@@ -1192,7 +1192,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				assert(is_context_ext);
 				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
-				ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
+				opx_copy_to_hmem(hmem_info->iface, hmem_info->device,
 						context->buf, opx_ep->hmem_copy_buf, send_len);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(is_intranode, opx_ep->debug_counters.hmem.intranode
 							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_EAGER)
@@ -1321,7 +1321,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			if (is_hmem) {
 				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
-				ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
+				opx_copy_to_hmem(hmem_info->iface, hmem_info->device,
 						recv_buf, opx_ep->hmem_copy_buf, packet_payload_len);
 
 				/* MP Eager sends are never intranode */
@@ -1453,7 +1453,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				recv_buf = (void*)((uint8_t*) context->buf + hdr->mp_eager_nth.payload_offset);
 				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
-				ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
+				opx_copy_to_hmem(hmem_info->iface, hmem_info->device,
 						recv_buf, opx_ep->hmem_copy_buf, send_len);
 			}
 			/* fi_opx_hfi1_dump_packet_hdr((union fi_opx_hfi1_packet_hdr *)hdr, __func__, __LINE__); */
@@ -1730,7 +1730,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 					uint64_t immediate_total = (rbuf - opx_ep->hmem_copy_buf) +
 								   (immediate_block_count * sizeof(union cacheline));
 					if (immediate_total) {
-						ofi_copy_to_hmem(rbuf_iface, rbuf_device,
+						opx_copy_to_hmem(rbuf_iface, rbuf_device,
 							recv_buf, opx_ep->hmem_copy_buf, immediate_total);
 					}
 				}
@@ -1746,7 +1746,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 							immediate_block[immediate_block_count].qw,
 							(immediate_end_block_count << 6));
 					} else {
-						ofi_copy_to_hmem(rbuf_iface, rbuf_device, rbuf_start,
+						opx_copy_to_hmem(rbuf_iface, rbuf_device, rbuf_start,
 							immediate_block[immediate_block_count].qw,
 							(immediate_end_block_count << 6));
 					}
@@ -2110,7 +2110,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 			assert(hmem_info->iface > FI_HMEM_SYSTEM);
 
-			ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
+			opx_copy_to_hmem(hmem_info->iface, hmem_info->device,
 					rbuf_qws, sbuf_qws, bytes);
 		} else
 #endif
@@ -2176,7 +2176,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				assert(hmem_info->iface > FI_HMEM_SYSTEM);
 
-				ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
+				opx_copy_to_hmem(hmem_info->iface, hmem_info->device,
 						rbuf_qws, sbuf_qws, bytes);
 			} else {
 				memcpy(rbuf_qws, sbuf_qws, bytes);
