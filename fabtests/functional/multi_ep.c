@@ -74,6 +74,9 @@ static void free_ep_res()
 	FT_CLOSE_FID(data_mr);
 	for (i = 0; i < num_eps; i++) {
 		FT_CLOSE_FID(eps[i]);
+	}
+
+	for (i = 0; i < num_eps; i++) {
 		FT_CLOSE_FID(txcqs[i]);
 		FT_CLOSE_FID(rxcqs[i]);
 		FT_CLOSE_FID(avs[i]);
