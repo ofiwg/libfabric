@@ -551,22 +551,6 @@ The following option levels and option names and parameters are defined.
 : The FI_HMEM_DISABLE_P2P environment variable discussed in
   [`fi_mr`(3)](fi_mr.3.html) takes precedence over this setopt option.
 
-- *FI_OPT_XPU_TRIGGER - struct fi_trigger_xpu \**
-: This option only applies to the fi_getopt() call.  It is used to query
-  the maximum number of variables required to support XPU
-  triggered operations, along with the size of each variable.
-
-  The user provides a filled out struct fi_trigger_xpu on input.  The iface
-  and device fields should reference an HMEM domain.  If the provider does not
-  support XPU triggered operations from the given device, fi_getopt() will
-  return -FI_EOPNOTSUPP.  On input, var should reference an array of
-  struct fi_trigger_var data structures, with count set to the size of the
-  referenced array.  If count is 0, the var field will be ignored, and the
-  provider will return the number of fi_trigger_var structures needed.  If
-  count is > 0, the provider will set count to the needed value, and for
-  each fi_trigger_var available, set the datatype and count of the variable
-  used for the trigger.
-
 - *FI_OPT_CUDA_API_PERMITTED - bool \**
 : This option only applies to the fi_setopt call. It is used to control
   endpoint's behavior in making calls to CUDA API. By default, an endpoint
@@ -661,20 +645,6 @@ desired.  Supported types are:
 : Reliable datagram message.  Provides a reliable, connectionless data
   transfer service with flow control that maintains message
   boundaries.
-
-*FI_EP_SOCK_DGRAM*
-: A connectionless, unreliable datagram endpoint with UDP socket-like
-  semantics.  FI_EP_SOCK_DGRAM is most useful for applications designed
-  around using UDP sockets.  See the SOCKET ENDPOINT section for additional
-  details and restrictions that apply to datagram socket endpoints.
-
-*FI_EP_SOCK_STREAM*
-: Data streaming endpoint with TCP socket-like semantics.  Provides
-  a reliable, connection-oriented data transfer service that does
-  not maintain message boundaries.  FI_EP_SOCK_STREAM is most useful for
-  applications designed around using TCP sockets.  See the SOCKET
-  ENDPOINT section for additional details and restrictions that apply
-  to stream endpoints.
 
 *FI_EP_UNSPEC*
 : The type of endpoint is not specified.  This is usually provided as
@@ -1278,7 +1248,7 @@ capability bits from the fi_info structure will be used.
 
 The following capabilities apply to the receive attributes: FI_MSG,
 FI_RMA, FI_TAGGED, FI_ATOMIC, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_RECV,
-FI_HMEM, FI_TRIGGER, FI_RMA_PMEM, FI_DIRECTED_RECV, FI_VARIABLE_MSG,
+FI_HMEM, FI_TRIGGER, FI_RMA_PMEM, FI_DIRECTED_RECV,
 FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SOURCE_ERR, FI_COLLECTIVE,
 and FI_XPU.
 
