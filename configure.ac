@@ -432,7 +432,7 @@ FI_CHECK_PACKAGE([xpmem],
 		 [xpmem_make],
 		 [],
 		 [$enable_xpmem],
-		 [$enable_xpmem/lib64],
+		 [],
 		 [xpmem_happy=1])
 
 AS_IF([test x"$enable_xpmem" != x"no" && test -n "$enable_xpmem" && test "$xpmem_happy" = "0" ],
