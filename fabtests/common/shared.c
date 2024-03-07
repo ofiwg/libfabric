@@ -2768,13 +2768,12 @@ int ft_get_tx_comp(uint64_t total)
 int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		size_t size, void *ctx, int flags)
 {
-	int ret;
 	struct fi_msg msg;
 	struct fi_msg_tagged tagged_msg;
 	struct iovec msg_iov;
 
 	msg_iov.iov_base = tx_buf;
-	msg_iov.iov_len = size;
+	msg_iov.iov_len = size + ft_tx_prefix_size();
 
 	if (hints->caps & FI_TAGGED) {
 		tagged_msg.msg_iov = &msg_iov;
@@ -2786,11 +2785,9 @@ int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		tagged_msg.tag = ft_tag ? ft_tag : tx_seq;
 		tagged_msg.ignore = 0;
 
-		ret = fi_tsendmsg(ep, &tagged_msg, flags);
-		if (ret) {
-			FT_PRINTERR("fi_tsendmsg", ret);
-			return ret;
-		}
+		FT_POST(fi_tsendmsg, ft_progress, txcq, tx_seq,
+			&tx_cq_cntr, "tsendmsg", ep, &tagged_msg,
+			flags);
 	} else {
 		msg.msg_iov = &msg_iov;
 		msg.desc = &mr_desc;
@@ -2799,15 +2796,14 @@ int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		msg.data = NO_CQ_DATA;
 		msg.context = ctx;
 
-		ret = fi_sendmsg(ep, &msg, flags);
-		if (ret) {
-			FT_PRINTERR("fi_sendmsg", ret);
-			return ret;
-		}
+		FT_POST(fi_sendmsg, ft_progress, txcq, tx_seq,
+			&tx_cq_cntr, "sendmsg", ep, &msg,
+			flags);
 	}
 
 	return 0;
 }
+
 
 int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 	       size_t size, void *ctx, int flags)
@@ -3053,42 +3049,12 @@ int ft_wait_child(void)
 
 int ft_finalize_ep(struct fid_ep *ep)
 {
-	struct iovec iov;
 	int ret;
 	struct fi_context ctx;
 
-	iov.iov_base = tx_buf;
-	iov.iov_len = 4 + ft_tx_prefix_size();
-
-	if (hints->caps & FI_TAGGED) {
-		struct fi_msg_tagged tmsg;
-
-		memset(&tmsg, 0, sizeof tmsg);
-		tmsg.msg_iov = &iov;
-		tmsg.desc = &mr_desc;
-		tmsg.iov_count = 1;
-		tmsg.addr = remote_fi_addr;
-		tmsg.tag = tx_seq;
-		tmsg.ignore = 0;
-		tmsg.context = &ctx;
-
-		FT_POST(fi_tsendmsg, ft_progress, txcq, tx_seq,
-			&tx_cq_cntr, "tsendmsg", ep, &tmsg,
-			FI_TRANSMIT_COMPLETE);
-	} else {
-		struct fi_msg msg;
-
-		memset(&msg, 0, sizeof msg);
-		msg.msg_iov = &iov;
-		msg.desc = &mr_desc;
-		msg.iov_count = 1;
-		msg.addr = remote_fi_addr;
-		msg.context = &ctx;
-
-		FT_POST(fi_sendmsg, ft_progress, txcq, tx_seq,
-			&tx_cq_cntr, "sendmsg", ep, &msg,
-			FI_TRANSMIT_COMPLETE);
-	}
+	ret = ft_sendmsg(ep, remote_fi_addr, 4, &ctx, FI_TRANSMIT_COMPLETE);
+	if (ret)
+		return ret;
 
 	ret = ft_get_tx_comp(tx_seq);
 	if (ret)
