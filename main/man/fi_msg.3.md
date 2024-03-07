@@ -226,7 +226,7 @@ fi_sendmsg.
 
 *FI_CLAIM*
 : Applies to posted receive operations for endpoints configured
-  for FI_BUFFERED_RECV or FI_VARIABLE_MSG.  This flag is used to
+  for FI_BUFFERED_RECV.  This flag is used to
   retrieve a message that was buffered by the provider.  See the
   Buffered Receives section for details.
 
@@ -238,7 +238,7 @@ fi_sendmsg.
 
 *FI_DISCARD*
 : Applies to posted receive operations for endpoints configured
-  for FI_BUFFERED_RECV or FI_VARIABLE_MSG.  This flag is used to
+  for FI_BUFFERED_RECV.  This flag is used to
   free a message that was buffered by the provider.  See the
   Buffered Receives section for details.
 
@@ -398,30 +398,6 @@ The handling of buffered receives follows all message ordering
 restrictions assigned to an endpoint.  For example, completions
 may indicate the order in which received messages arrived at the
 receiver based on the endpoint attributes.
-
-# Variable Length Messages
-
-Variable length messages, or simply variable messages, are transfers
-where the size of the message is unknown to the receiver prior to the
-message being sent.  It indicates that the recipient of a message does
-not know the amount of data to expect prior to the message arriving.
-It is most commonly used when the size of message transfers varies
-greatly, with very large messages interspersed with much smaller
-messages, making receive side message buffering difficult to manage.
-Variable messages are not subject to max message length
-restrictions (i.e. struct fi_ep_attr::max_msg_size limits), and may
-be up to the maximum value of size_t (e.g. SIZE_MAX) in length.
-
-Variable length messages support requests that the provider allocate and
-manage the network message buffers.  As a result, the application
-requirements and provider behavior is identical as those defined
-for supporting the FI_BUFFERED_RECV mode bit.  See the Buffered
-Receive section above for details.  The main difference is that buffered
-receives are limited by the fi_ep_attr::max_msg_size threshold, whereas
-variable length messages are not.
-
-Support for variable messages is indicated through the FI_VARIABLE_MSG
-capability bit.
 
 # NOTES
 
