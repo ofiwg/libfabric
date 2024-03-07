@@ -52,23 +52,9 @@ static int send_msg(int sendmsg, size_t size)
 	}
 
 	if (sendmsg) {
-		while(1) {
-			ret = ft_sendmsg(ep, remote_fi_addr, size,
-					 &tx_ctx, flag);
-			if (!ret)
-				break;
-
-			if (ret != -FI_EAGAIN) {
-				FT_PRINTERR("ft_sendmsg", ret);
-				return ret;
-			}
-
-			ret = ft_progress(txcq, tx_seq, &tx_cq_cntr);
-			if (ret && ret != -FI_EAGAIN) {
-				FT_ERR("Failed to get send completion");
-				return ret;
-			}
-		}
+		ret = ft_sendmsg(ep, remote_fi_addr, size, &tx_ctx, flag);
+		if (ret)
+			return ret;
 	} else {
 		ret = ft_post_tx(ep, remote_fi_addr, size, NO_CQ_DATA, &tx_ctx);
 		if (ret) {
