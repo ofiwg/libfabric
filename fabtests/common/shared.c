@@ -2765,6 +2765,24 @@ int ft_get_tx_comp(uint64_t total)
 	return ret;
 }
 
+int ft_tx_msg(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx, uint64_t flags)
+{
+	int ret;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+		ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_sendmsg(ep, fi_addr, size, ctx, flags);
+	if (ret)
+		return ret;
+
+	ret = ft_get_tx_comp(tx_seq);
+	return ret;
+}
+
 int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		size_t size, void *ctx, int flags)
 {
@@ -2911,7 +2929,7 @@ int ft_sync()
 
 	if (opts.dst_addr) {
 		if (!(opts.options & FT_OPT_OOB_SYNC)) {
-			ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+			ret = ft_tx_msg(ep, remote_fi_addr, 1, &tx_ctx, FI_DELIVERY_COMPLETE);
 			if (ret)
 				return ret;
 
@@ -2931,7 +2949,9 @@ int ft_sync()
 			if (ret)
 				return ret;
 
-			ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+			ret = ft_tx_msg(ep, remote_fi_addr, 1, &tx_ctx, FI_DELIVERY_COMPLETE);
+			if (ret)
+				return ret;
 		} else {
 			ret = ft_sock_recv(oob_sock, &buf, 1);
 			if (ret)
