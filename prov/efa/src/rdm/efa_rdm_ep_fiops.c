@@ -436,9 +436,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	cq_attr.size = MAX(efa_rdm_ep->rx_size + efa_rdm_ep->tx_size,
 			   efa_env.cq_size);
 
-	if (info->tx_attr->op_flags & FI_DELIVERY_COMPLETE)
-		EFA_INFO(FI_LOG_CQ, "FI_DELIVERY_COMPLETE unsupported\n");
-
 	assert(info->tx_attr->msg_order == info->rx_attr->msg_order);
 	efa_rdm_ep->msg_order = info->rx_attr->msg_order;
 	efa_rdm_ep->max_msg_size = info->ep_attr->max_msg_size;
