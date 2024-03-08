@@ -312,6 +312,7 @@ pipeline {
       WITH_ENV="'PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH'"
       RUN_LOCATION="${env.WORKSPACE}/${SCRIPT_LOCATION}/"
       CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+      DELETE_LOCATION="${env.CUSTOM_WORKSPACE}/middlewares"
       LOG_DIR = "${env.CUSTOM_WORKSPACE}/log_dir"
   }
   stages {
