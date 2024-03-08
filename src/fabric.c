@@ -65,11 +65,13 @@ struct ofi_prov {
 	struct fi_provider	*provider;
 	void			*dlhandle;
 	bool			hidden;
+	bool			preload;
 };
 
 enum ofi_prov_order {
 	OFI_PROV_ORDER_VERSION,
 	OFI_PROV_ORDER_REGISTER,
+	OFI_PROV_ORDER_PRELOAD,
 };
 
 struct ofi_info_match {
@@ -109,6 +111,7 @@ ofi_init_prov(struct ofi_prov *prov, struct fi_provider *provider,
 {
 	prov->provider = provider;
 	prov->dlhandle = dlhandle;
+	prov->preload = (prov_order == OFI_PROV_ORDER_PRELOAD);
 }
 
 static void ofi_cleanup_prov(struct fi_provider *provider, void *dlhandle)
@@ -143,7 +146,8 @@ static void ofi_insert_prov(struct ofi_prov *prov)
 		    !strcasecmp(prov->prov_name, cur->prov_name)) {
 			if ((prov_order == OFI_PROV_ORDER_VERSION) &&
 			    FI_VERSION_LT(cur->provider->version,
-					  prov->provider->version)) {
+					  prov->provider->version) &&
+			    !cur->preload) {
 				cur->hidden = true;
 				prov->next = cur;
 				if (prev)
@@ -707,6 +711,10 @@ static void ofi_find_prov_libs(void)
 		if (!prov->prov_name)
 			continue;
 
+		/* skip preloaded providers */
+		if (prov->provider)
+			continue;
+
 		if (ofi_has_util_prefix(prov->prov_name)) {
 			short_prov_name = prov->prov_name + strlen(OFI_UTIL_PREFIX);
 		} else if (ofi_has_offload_prefix(prov->prov_name)) {
@@ -727,6 +735,53 @@ static void ofi_find_prov_libs(void)
 	}
 }
 
+static void ofi_preload_dl_prov(void)
+{
+	char **provs;
+	char *preload = NULL;
+	enum ofi_prov_order saved_prov_order;
+	int i;
+
+	fi_param_define(NULL, "provider_preload", FI_PARAM_STRING,
+			"Preload providers and set them as prefered ones "
+			"regardless of version. Providers are specified "
+			"similar to prov1:prov2:prov3. Each provider must "
+			"be a full path. (default: NONE)");
+
+	fi_param_get_str(NULL, "provider_preload", &preload);
+
+	if (!preload || !strlen(preload))
+		return;
+
+	provs = ofi_split_and_alloc(preload, ":", NULL);
+
+	saved_prov_order = prov_order;
+	prov_order = OFI_PROV_ORDER_PRELOAD;
+	for (i = 0; provs[i]; i++) {
+		if (provs[i][0] != '/') {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"invalid format for preload provider: \"%s\"\n",
+				provs[i]);
+			continue;
+		}
+
+		if (access(provs[i], F_OK) != 0) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"preload provider not found: \"%s\"\n",
+				provs[i]);
+			continue;
+		}
+
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"preloading provider: \"%s\"\n", provs[i]);
+
+		ofi_reg_dl_prov(provs[i], true);
+	}
+	prov_order = saved_prov_order;
+
+	ofi_free_string_array(provs);
+}
+
 static void ofi_load_dl_prov(void)
 {
 	char **dirs;
@@ -739,6 +794,8 @@ static void ofi_load_dl_prov(void)
 	if (!dlhandle)
 		return;
 	dlclose(dlhandle);
+
+	ofi_preload_dl_prov();
 
 	fi_param_define(NULL, "provider_path", FI_PARAM_STRING,
 			"Search for providers in specific path.  Path is "
