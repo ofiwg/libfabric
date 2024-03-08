@@ -2826,11 +2826,9 @@ int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		tagged_msg.tag = ft_tag ? ft_tag : tx_seq;
 		tagged_msg.ignore = 0;
 
-		ret = fi_trecvmsg(ep, &tagged_msg, flags);
-		if (ret) {
-			FT_PRINTERR("fi_trecvmsg", ret);
-			return ret;
-		}
+		FT_POST(fi_trecvmsg, ft_progress, rxcq, rx_seq,
+			&rx_cq_cntr, "trecvmsg", ep, &tagged_msg,
+			flags);
 	} else {
 		msg.msg_iov = &msg_iov;
 		msg.desc = &mr_desc;
@@ -2839,11 +2837,9 @@ int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		msg.data = NO_CQ_DATA;
 		msg.context = ctx;
 
-		ret = fi_recvmsg(ep, &msg, flags);
-		if (ret) {
-			FT_PRINTERR("fi_recvmsg", ret);
-			return ret;
-		}
+		FT_POST(fi_recvmsg, ft_progress, rxcq, rx_seq,
+			&rx_cq_cntr, "recvmsg", ep, &msg,
+			flags);
 	}
 
 	return 0;
