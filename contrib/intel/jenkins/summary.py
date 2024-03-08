@@ -771,7 +771,7 @@ def summarize_items(summary_item, logger, log_dir, mode):
             err += ret if ret else 0
 
     if summary_item == 'oneccl' or summary_item == 'all':
-        for prov in ['tcp-rxm', 'verbs-rxm']:
+        for prov in ['tcp', 'verbs', 'psm3', 'shm']:
             ret = OnecclSummarizer(
                 logger, log_dir, 'oneCCL',
                 f'oneCCL_{prov}_oneccl_{mode}',
@@ -803,13 +803,13 @@ def summarize_items(summary_item, logger, log_dir, mode):
                 f"ze v3 shm {t} fabtests {mode}"
             ).summarize()
             err += ret if ret else 0
-
-        ret = OnecclSummarizer(
-                logger, log_dir, 'oneCCL-GPU',
-                f'oneCCL-GPU-v3_verbs-rxm_onecclgpu_{mode}',
-                f'oneCCL-GPU-v3 verbs-rxm {mode}'
-        ).summarize()
-        err += ret if ret else 0
+        for prov in ['tcp', 'verbs', 'psm3']:
+            ret = OnecclSummarizer(
+                    logger, log_dir, 'oneCCL-GPU',
+                    f'oneCCL-GPU-v3_{prov}_onecclgpu_{mode}',
+                    f'oneCCL-GPU-v3 {prov} {mode}'
+            ).summarize()
+            err += ret if ret else 0
 
     if summary_item == 'dsa' or summary_item == 'all':
         for prov in ['shm']:
