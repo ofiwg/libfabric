@@ -281,6 +281,9 @@ do						\
 #define be64toh ntohll
 #define strncasecmp _strnicmp
 
+#define access(path, mode) _access(path, mode)
+#define F_OK 0
+
 typedef int pid_t;
 #define getpid (int)GetCurrentProcessId
 

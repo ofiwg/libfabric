@@ -65,6 +65,7 @@ struct ofi_prov {
 	struct fi_provider	*provider;
 	void			*dlhandle;
 	bool			hidden;
+	bool			preferred;
 };
 
 enum ofi_prov_order {
@@ -79,6 +80,7 @@ struct ofi_info_match {
 
 static struct ofi_prov *prov_head, *prov_tail;
 static enum ofi_prov_order prov_order = OFI_PROV_ORDER_VERSION;
+static bool prov_preferred = false;
 int ofi_init = 0;
 extern struct ofi_common_locks common_locks;
 
@@ -109,6 +111,7 @@ ofi_init_prov(struct ofi_prov *prov, struct fi_provider *provider,
 {
 	prov->provider = provider;
 	prov->dlhandle = dlhandle;
+	prov->preferred = prov_preferred;
 }
 
 static void ofi_cleanup_prov(struct fi_provider *provider, void *dlhandle)
@@ -134,6 +137,19 @@ static void ofi_free_prov(struct ofi_prov *prov)
 	free(prov);
 }
 
+static inline bool ofi_hide_cur_prov(struct ofi_prov *cur,
+				     struct ofi_prov *new)
+{
+	if (cur->preferred)
+		return false;
+
+	if (new->preferred)
+		return true;
+
+	return (prov_order == OFI_PROV_ORDER_VERSION &&
+		FI_VERSION_LT(cur->provider->version, new->provider->version));
+}
+
 static void ofi_insert_prov(struct ofi_prov *prov)
 {
 	struct ofi_prov *cur, *prev;
@@ -141,9 +157,7 @@ static void ofi_insert_prov(struct ofi_prov *prov)
 	for (prev = NULL, cur = prov_head; cur; prev = cur, cur = cur->next) {
 		if ((strlen(prov->prov_name) == strlen(cur->prov_name)) &&
 		    !strcasecmp(prov->prov_name, cur->prov_name)) {
-			if ((prov_order == OFI_PROV_ORDER_VERSION) &&
-			    FI_VERSION_LT(cur->provider->version,
-					  prov->provider->version)) {
+			if (ofi_hide_cur_prov(cur, prov)) {
 				cur->hidden = true;
 				prov->next = cur;
 				if (prev)
@@ -727,6 +741,33 @@ static void ofi_find_prov_libs(void)
 	}
 }
 
+static void ofi_load_preferred_dl_prov(const char *path)
+{
+	if (!path || !strlen(path))
+		return;
+
+	if (path[0] != '/') {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"invalid format for preferred provider: \"%s\"\n",
+			path);
+		return;
+	}
+
+	if (access(path, F_OK) != 0) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"preferred provider not found: \"%s\"\n",
+			path);
+		return;
+	}
+
+	FI_INFO(&core_prov, FI_LOG_CORE,
+		"loading preferred provider: \"%s\"\n", path);
+
+	prov_preferred = true;
+	ofi_reg_dl_prov(path, true);
+	prov_preferred = false;
+}
+
 static void ofi_load_dl_prov(void)
 {
 	char **dirs;
@@ -745,6 +786,11 @@ static void ofi_load_dl_prov(void)
 			"specified similar to dir1:dir2:dir3.  If the path "
 			"starts with @, loaded providers are given preference "
 			"based on discovery order, rather than version. "
+			"Optionally any of the dir can be replaced with + "
+			"followed by the full path to a provider library, "
+			"which specifies a preferred provider.  If registered "
+			"successfully, a preferred provider has priority over "
+			"other providers with the same name. "
 			"(default: " PROVDLDIR ")");
 
 	fi_param_get_str(NULL, "provider_path", &provdir);
@@ -771,10 +817,32 @@ static void ofi_load_dl_prov(void)
 	}
 
 	if (dirs) {
-		for (i = 0; dirs[i]; i++)
-			ofi_ini_dir(dirs[i]);
+		int num_dirs = 0;
+
+		for (i = 0; dirs[i]; i++) {
+			if (dirs[i][0] == '+') {
+				ofi_load_preferred_dl_prov(dirs[i]+1);
+			} else {
+				ofi_ini_dir(dirs[i]);
+				num_dirs++;
+			}
+		}
 
 		ofi_free_string_array(dirs);
+
+		if (num_dirs)
+			return;
+
+		/*
+		 * When FI_PROVIDER_PATH contains only preferred providers, go
+		 * back to search under the default path.
+		 */
+		dirs = ofi_split_and_alloc(PROVDLDIR, ":", NULL);
+		if (dirs) {
+			for (i = 0; dirs[i]; i++)
+				ofi_ini_dir(dirs[i]);
+			ofi_free_string_array(dirs);
+		}
 	}
 }
 
