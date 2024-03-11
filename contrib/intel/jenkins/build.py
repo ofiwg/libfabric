@@ -36,6 +36,8 @@ def build_libfabric(libfab_install_path, mode, hw_type, gpu=False, cuda=False):
 
 	if (gpu):
 		config_cmd.append('--enable-ze-dlopen')
+	else:
+		config_cmd.append('--with-ze=no')
 
 	if (cuda):
 		config_cmd.append(f'--with-cuda={os.environ["CUDA_INSTALL"]}')
