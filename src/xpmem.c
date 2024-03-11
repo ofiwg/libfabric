@@ -164,7 +164,7 @@ int xpmem_copy(struct iovec *local, unsigned long local_cnt,
 {
 	int ret, i;
 	struct iovec iov;
-	uint64_t offset, copy_len;
+	uint64_t offset, copy_len, delta;
 	void *mapped_addr;
 	struct ofi_mr_entry *mr_entry;
 	long page_size = ofi_get_page_size();
@@ -178,16 +178,19 @@ int xpmem_copy(struct iovec *local, unsigned long local_cnt,
 			(uintptr_t) ofi_get_page_end(remote[i].iov_base +
 					remote[i].iov_len, page_size) -
 					(uintptr_t)iov.iov_base;
-		offset = (uintptr_t)((uintptr_t) remote[i].iov_base -
-				     (uintptr_t) iov.iov_base);
 
 		ret = ofi_xpmem_cache_search(xpmem_cache, &iov, pid, &mr_entry,
 					     (struct xpmem_client *)user_data);
 		if (ret)
 			return ret;
 
+		delta = (uintptr_t) iov.iov_base -
+			(uintptr_t) mr_entry->info.iov.iov_base;
+		offset = (uintptr_t)((uintptr_t) remote[i].iov_base -
+				     (uintptr_t) iov.iov_base);
+
 		mapped_addr = (char*) (uintptr_t)mr_entry->info.mapped_addr +
-				offset;
+				offset + delta;
 
 		copy_len = (local[i].iov_len <= iov.iov_len - offset) ?
 				local[i].iov_len : iov.iov_len - offset;
