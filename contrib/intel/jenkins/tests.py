@@ -44,6 +44,7 @@ class Test:
         self.middlewares_path = f'{self.custom_workspace}/middlewares'
         self.ci_logdir_path = f'{self.custom_workspace}/log_dir'
         self.env = user_env
+        self.way = way
 
         self.mpi = ''
         if (self.mpi_type == 'impi'):

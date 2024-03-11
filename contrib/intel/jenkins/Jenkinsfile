@@ -35,13 +35,20 @@ def run_fabtests(stage_name, hw, partition, node_num, prov, util=null,
                  user_env=null, way=null) {
   def command = "python3.9 ${RUN_LOCATION}/runtests.py --build_hw=${hw}"
   def opts = "--prov=${prov} --test=fabtests"
+  def modes = BUILD_MODES
   if (util)
     opts = "${opts} --util=${util}"
 
   if (user_env)
     opts = "${opts} --user_env ${user_env}"
 
-  for (mode in BUILD_MODES) {
+  if (way) {
+    opts = "${opts} --way ${way}"
+    stage_name = "${stage_name}_${way}"
+    modes = ["reg"]
+  }
+
+  for (mode in modes) {
     echo "Running $stage_name fabtests $mode"
     slurm_batch("${partition}", "${node_num}",
                 "${env.LOG_DIR}/${stage_name}_fabtests_${mode}",
