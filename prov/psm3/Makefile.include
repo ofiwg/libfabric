@@ -220,6 +220,8 @@ prov_psm3_psm3_libpsm3i_la_SOURCES = \
 	prov/psm3/psm3/psm_mq_recv.c \
 	prov/psm3/psm3/psm_mq_utils.c \
 	prov/psm3/psm3/psm_netutils.h \
+	prov/psm3/psm3/psm_nic_select.c \
+	prov/psm3/psm3/psm_nic_select.h \
 	prov/psm3/psm3/psm_oneapi_ze.c \
 	prov/psm3/psm3/psm_perf.c \
 	prov/psm3/psm3/psm_perf.h \

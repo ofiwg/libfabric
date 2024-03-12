@@ -452,6 +452,8 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		 (protoexp_flags & IPS_PROTOEXP_FLAG_ENABLED)) {
 		struct psmi_rlimit_mpool rlim = GPU_HOSTBUFFER_LIMITS;
 		uint32_t maxsz, chunksz, max_elements;
+		uint32_t pool_num_obj_max_total;
+		uint32_t small_pool_num_obj_max_total;
 
 		if ((err = psm3_parse_mpool_env(proto->mq, 1,
 						&rlim, &maxsz, &chunksz)))
@@ -459,10 +461,12 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 
 		/* the maxsz is the amount in MB, not the number of entries,
 		 * since the element size depends on the window size */
-		max_elements = (maxsz*1024*1024) / proto->mq->hfi_base_window_rv;
+		max_elements = (maxsz*1024*1024) / psm3_mq_max_window_rv(proto->mq, 1);
 		/* mpool requires max_elements to be power of 2. round down. */
 		max_elements = 1 << (31 - __builtin_clz(max_elements));
-		proto->gpu_hostbuf_send_cfg.bufsz = proto->mq->hfi_base_window_rv;
+		/* need at least 3 buffers */
+		max_elements = max(4, max_elements);
+		proto->gpu_hostbuf_send_cfg.bufsz = psm3_mq_max_window_rv(proto->mq, 1);
 		proto->gpu_hostbuf_pool_send =
 			psm3_mpool_create_for_gpu(sizeof(struct ips_gpu_hostbuf),
 						  chunksz, max_elements, 0,
@@ -476,6 +480,8 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 						"Couldn't allocate GPU host send buffer pool");
 			goto fail;
 		}
+		psm3_mpool_get_obj_info(proto->gpu_hostbuf_pool_send,
+					NULL, &pool_num_obj_max_total);
 
 		/* use the same number of elements for the small pool */
 		proto->gpu_hostbuf_small_send_cfg.bufsz = GPU_SMALLHOSTBUF_SZ;
@@ -492,6 +498,8 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 						"Couldn't allocate GPU host small send buffer pool");
 			goto fail;
 		}
+		psm3_mpool_get_obj_info(proto->gpu_hostbuf_pool_small_send,
+					NULL, &small_pool_num_obj_max_total);
 
 		/* Configure the amount of prefetching */
 		union psmi_envvar_val env_prefetch_limit;
@@ -502,6 +510,12 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 			    (union psmi_envvar_val)GPU_WINDOW_PREFETCH_DEFAULT,
 			    &env_prefetch_limit);
 		proto->gpu_prefetch_limit = env_prefetch_limit.e_uint;
+		_HFI_DBG("GPU Send Copy Pipeline: %u of %u bytes (small), %u of %u bytes, prefetch %u\n",
+			small_pool_num_obj_max_total,
+			proto->gpu_hostbuf_small_send_cfg.bufsz,
+			pool_num_obj_max_total,
+			proto->gpu_hostbuf_send_cfg.bufsz,
+			proto->gpu_prefetch_limit);
 	}
 #endif /* PSM_CUDA || PSM_ONEAPI */
 
@@ -530,7 +544,8 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		// but can survive if it's smaller as we will delay transfer til avail
 		if (protoexp_flags & IPS_PROTOEXP_FLAG_ENABLED) {
 			cache_pri_entries =  HFI_TF_NFLOWS + proto->ep->hfi_num_send_rdma;
-			cache_pri_size  = (uint64_t)cache_pri_entries * proto->mq->hfi_base_window_rv;
+			cache_pri_size  = (uint64_t)cache_pri_entries *
+					psm3_mq_max_window_rv(proto->mq, 0);
 			if (MR_CACHE_USER_CACHING(proto->ep->mr_cache_mode)) {
 				// we attempt to cache, so can benefit from more than inflight
 				// make enough room to have a good number of entries
@@ -578,7 +593,7 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 				default_cache_entries = max(default_cache_entries,
 								((uint64_t)env_mr_cache_size_mb.e_uint
 									* (1024*1024))
-										/ max( proto->mq->hfi_base_window_rv/2,
+										/ max(psm3_mq_max_window_rv(proto->mq, 0)/2,
 												proto->mq->hfi_thresh_rv));
 			} else {
 				// only send DMA, size based on smaller MRs
@@ -2292,10 +2307,10 @@ ips_proto_register_stats(struct ips_proto *proto)
 				   "RDMA rendezvous message bytes received direct into a GPU buffer",
 				   &proto->strat_stats.rndv_rdma_gdr_recv_bytes),
 		PSMI_STATS_DECLU64("rndv_rdma_hbuf_recv",
-				   "RDMA rendezvous messages received into via pipelined GPU copy",
+				   "RDMA rendezvous messages received into a GPU buffer via pipelined GPU copy",
 				   &proto->strat_stats.rndv_rdma_hbuf_recv),
 		PSMI_STATS_DECLU64("rndv_rdma_hbuf_recv_bytes",
-				   "RDMA rendezvous message bytes received into via pipelined GPU copy",
+				   "RDMA rendezvous message bytes received into a GPU buffer via pipelined GPU copy",
 				   &proto->strat_stats.rndv_rdma_hbuf_recv_bytes),
 #endif
 		PSMI_STATS_DECLU64("rndv_rdma_cpu_send",
@@ -2312,10 +2327,10 @@ ips_proto_register_stats(struct ips_proto *proto)
 				   "RDMA rendezvous message bytes sent from a GPU buffer via send RDMA",
 				   &proto->strat_stats.rndv_rdma_gdr_send_bytes),
 		PSMI_STATS_DECLU64("rndv_rdma_hbuf_send",
-				   "RDMA rendezvous messages sent from a GPU buffer into via pipelined GPU copy",
+				   "RDMA rendezvous messages sent from a GPU buffer via pipelined GPU copy",
 				   &proto->strat_stats.rndv_rdma_hbuf_send),
 		PSMI_STATS_DECLU64("rndv_rdma_hbuf_send_bytes",
-				   "RDMA rendezvous message bytes sent from a GPU buffer into via pipelined GPU copy",
+				   "RDMA rendezvous message bytes sent from a GPU buffer via pipelined GPU copy",
 				   &proto->strat_stats.rndv_rdma_hbuf_send_bytes),
 #endif
 	};

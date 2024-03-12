@@ -202,6 +202,14 @@ extern void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len);
 		} \
 	} while (0)
 
+#define _HFI_ENV_ERROR(fmt, ...) \
+	do { \
+		_Pragma_unlikely \
+		if (unlikely(psm3_dbgmask&__HFI_INFO)) {  \
+			printf("%s: env " fmt, psm3_mylabel, ##__VA_ARGS__); \
+		} \
+	} while (0)
+
 #define __HFI_PKTDBG_ON unlikely(psm3_dbgmask & __HFI_PKTDBG)
 
 #define __HFI_DBG_WHICH(which, fmt, ...) \
@@ -218,8 +226,7 @@ extern void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len);
 	do { \
 		_Pragma_unlikely \
 		if (unlikely(psm3_dbgmask&(which))) { \
-			PSM3_GETTIME \
-			fprintf(psm3_dbgout, PSM3_TIME_FMT "%s: " fmt, PSM3_TIME_ARG, psm3_mylabel, \
+			fprintf(psm3_dbgout, "%s: " fmt, psm3_mylabel, \
 			       ##__VA_ARGS__); \
 		} \
 	} while (0)
@@ -290,6 +297,8 @@ extern void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len);
 	} while (0)
 
 #define _HFI_INFO(fmt, ...)
+
+#define _HFI_ENV_ERROR(fmt, ...)
 
 #define __HFI_PKTDBG_ON 0
 

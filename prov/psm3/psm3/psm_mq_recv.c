@@ -199,11 +199,13 @@ psm3_mq_req_copy(psm2_mq_req_t req,
 	}
 	if (msgptr != buf) {
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+		// for loopback HAL, invalid to call psm3_mq_get_window_rv()
+		// however, for loopback HAL, gdr copy is disabled
 		if (use_gdrcopy)
 			psm3_mq_req_gpu_copy((uint64_t)req->req_data.buf,
 					     req->req_data.recv_msglen,
 					     (uint64_t)msgptr, msglen_this,
-					     req->mq->hfi_base_window_rv, buf,
+					     psm3_mq_get_window_rv(req), buf,
 					     ep);
 		else
 #endif

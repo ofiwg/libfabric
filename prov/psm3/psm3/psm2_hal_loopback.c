@@ -209,8 +209,10 @@ static int psm3_hfp_loopback_get_port_lid(int unit, int port, int addr_index)
 // also prior to the EP being opened
 static void psm3_hfp_loopback_mq_init_defaults(struct psm2_mq *mq)
 {
-	/* these are only used by ptl_ips */
-	mq->hfi_base_window_rv =  (~(uint32_t)0); // no rendezvous
+	mq->ips_cpu_window_rv_str =  NULL; // no rendezvous
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	mq->ips_gpu_window_rv_str =  NULL; // no rendezvous
+#endif
 	mq->hfi_thresh_rv = (~(uint32_t)0); // disable rendezvous
 	mq->hfi_thresh_tiny = PSM_MQ_NIC_MAX_TINY;
 	// RDMA and MR cache N/A, leave ep->rdmamode, ep->mr_cache_mode and

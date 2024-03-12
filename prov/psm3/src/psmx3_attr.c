@@ -272,15 +272,85 @@ static uint64_t psmx3_check_fi_hmem_cap(void) {
 	int gpu = 0;
 	unsigned int gpudirect = 0;
 #ifdef PSM_CUDA
-	(void)psm3_parse_str_int(psm3_env_get("PSM3_CUDA"), &gpu);
+	(void)psm3_parse_str_int(psm3_env_get("PSM3_CUDA"), &gpu, INT_MIN, INT_MAX);
 #else /* PSM_ONEAPI */
-	(void)psm3_parse_str_int(psm3_env_get("PSM3_ONEAPI_ZE"), &gpu);
+	(void)psm3_parse_str_int(psm3_env_get("PSM3_ONEAPI_ZE"), &gpu,
+							INT_MIN, INT_MAX);
 #endif
-	(void)psm3_parse_str_uint(psm3_env_get("PSM3_GPUDIRECT"), &gpudirect);
+	(void)psm3_parse_str_uint(psm3_env_get("PSM3_GPUDIRECT"), &gpudirect,
+							0, UINT_MAX);
 	if ((gpu || gpudirect) && !ofi_hmem_p2p_disabled())
 		return FI_HMEM;
 #endif /* PSM_CUDA || PSM_ONEAPI */
 	return 0;
+}
+
+static uint64_t get_max_inject_size(void) {
+	unsigned int thresh_rv;
+	unsigned int temp;
+	int have_shm = 1;
+	int have_nic = 1;
+	int devid_enabled[PTL_MAX_INIT];
+
+	// check PSM3_DEVICES to determine if PSM3 shm enabled
+	if ((PSM2_OK == psm3_parse_devices(devid_enabled))) {
+		have_shm = psm3_device_is_enabled(devid_enabled, PTL_DEVID_AMSH);
+		have_nic = psm3_device_is_enabled(devid_enabled, PTL_DEVID_IPS);
+	}
+
+	// figure out the smallest rendezvous threshold (GPU vs CPU ips vs shm)
+	// If middleware above is not using PSM3 for shm but leaves it in
+	// PSM3_DEVICES, this could be more restrictive than necessary,
+	// but it's safe.  Note that PSM3_DEVICES can't be set per EP open.
+	// Also not yet sure which HAL will be selected so must pick most
+	// conservative ips (NIC) config
+	thresh_rv = 65536;	// default in odd case of PSM3_DEVICES=self
+
+	if (have_nic) {
+		temp = PSM_MQ_NIC_RNDV_THRESH;
+		psm3_parse_str_uint(psm3_env_get("PSM3_MQ_RNDV_NIC_THRESH"), &temp,
+							0, UINT_MAX);
+		if (thresh_rv > temp)
+			thresh_rv = temp;
+	}
+
+	if (have_shm) {
+		temp = MQ_SHM_THRESH_RNDV;
+		psm3_parse_str_uint(psm3_env_get("PSM3_MQ_RNDV_SHM_THRESH"), &temp,
+							0, UINT_MAX);
+		if (thresh_rv > temp)
+			thresh_rv = temp;
+	}
+
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	if (psmx3_prov_info.caps & FI_HMEM) {
+		if (have_nic) {
+			// GPU ips rendezvous threshold
+			// sockets HAL avoids rendezvous, so this may be overly restrictive
+			temp = GPU_THRESH_RNDV;
+			// PSM3_CUDA_THRESH_RNDV depricated, use PSM3_GPU_THRESH_RNDV if set
+			psm3_parse_str_uint(psm3_env_get("PSM3_CUDA_THRESH_RNDV"), &temp,
+								0, UINT_MAX);
+			psm3_parse_str_uint(psm3_env_get("PSM3_GPU_THRESH_RNDV"), &temp,
+								0, UINT_MAX);
+			if (thresh_rv > temp)
+				thresh_rv = temp;
+		}
+
+		if (have_shm) {
+			// GPU shm rendezvous threshold
+			temp = MQ_SHM_GPU_THRESH_RNDV;
+			psm3_parse_str_uint(psm3_env_get("PSM3_MQ_RNDV_SHM_GPU_THRESH"), &temp,
+								0, UINT_MAX);
+			if (thresh_rv > temp)
+				thresh_rv = temp;
+		}
+	}
+#endif
+
+	// messages <= thresh_rv guaranteed to use eager, so thresh_rv
+	// is the max allowed inject_size.
+	return thresh_rv;
 }
 
 /*
@@ -496,6 +566,8 @@ void psmx3_update_prov_info(struct fi_info *info,
 			    struct psmx3_ep_name *dest_addr)
 {
 	struct fi_info *p;
+	unsigned int max_inject_size;
+	unsigned int inject_size;
 
 	for (p = info; p; p = p->next) {
 		psmx3_dup_addr(p->addr_format, src_addr,
@@ -505,6 +577,15 @@ void psmx3_update_prov_info(struct fi_info *info,
 	}
 
 	psmx3_expand_default_unit(info);
+
+	max_inject_size = get_max_inject_size();
+	if (psmx3_env.inject_size > max_inject_size)
+		inject_size = max_inject_size;
+	else
+		inject_size = psmx3_env.inject_size;
+	PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
+		"Using inject_size=%u based on FI_PSM3_INJECT_SIZE=%u with max %u\n",
+		inject_size, psmx3_env.inject_size, max_inject_size);
 
 	for (p = info; p; p = p->next) {
 		int unit = ((struct psmx3_ep_name *)p->src_addr)->unit;
@@ -539,7 +620,7 @@ void psmx3_update_prov_info(struct fi_info *info,
 			int addr_index = psmx3_domain_info.addr_index[unit];
 
 			args[0].unit = unit_id;
-			args[1].port = port;
+			args[1].port = port == PSMX3_DEFAULT_PORT ? 1 : port;
 			args[2].addr_index = addr_index;
 			args[3].length = sizeof(unit_name);
 
@@ -571,7 +652,7 @@ void psmx3_update_prov_info(struct fi_info *info,
 			int addr_index = psmx3_domain_info.addr_index[unit];
 
 			args[0].unit = unit_id;
-			args[1].port = port;
+			args[1].port = port == PSMX3_DEFAULT_PORT ? 1 : port;
 			args[2].addr_index = addr_index;
 			args[3].length = sizeof(fabric_name);
 
@@ -591,7 +672,7 @@ void psmx3_update_prov_info(struct fi_info *info,
 			}
 		}
 
-		p->tx_attr->inject_size = psmx3_env.inject_size;
+		p->tx_attr->inject_size = inject_size;
 	}
 }
 

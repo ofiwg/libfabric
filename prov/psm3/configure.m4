@@ -371,6 +371,28 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
                   ])
         ])
 
+        AS_IF([test "x$enable_psm3_hwloc" != "xno"],
+              [
+                FI_CHECK_PACKAGE([psm3_hwloc],
+                                 [hwloc.h],
+                                 [hwloc],
+                                 [hwloc_topology_init],
+                                 [],
+                                 [$psm3_PREFIX],
+                                 [$psm3_LIBDIR],
+                                 [psm3_hwloc_found=1],
+                                 [psm3_hwloc_found=0])
+                AS_IF([test $psm3_hwloc_found -ne 1 && test "x$enable_psm3_hwloc" == "xyes"],
+                      [
+                        psm3_happy=0
+                        AC_MSG_ERROR([hwloc Support requested but hwloc headers and/or library not found.])
+                      ])
+                AS_IF([test "$psm3_hwloc_found" -eq 1],
+                      [
+                        psm3_CPPFLAGS="$psm3_CPPFLAGS -DPSM_USE_HWLOC"
+                      ])
+               ])
+
         AS_IF([test $psm3_happy -eq 1], [
             AC_CONFIG_FILES([prov/psm3/psm3/psm2_hal_inlines_i.h \
                  prov/psm3/psm3/psm2_hal_inlines_d.h \
@@ -381,9 +403,9 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
      AS_IF([test $psm3_happy -eq 1], [$1], [$2])
 
      psm3_ARCH_CFLAGS="$PSM3_ARCH_CFLAGS"
-     psm3_CPPFLAGS="$psm3_CPPFLAGS $psm3_rt_CPPFLAGS $psm3_dl_CPPFLAGS $psm3_numa_CPPFLAGS $psm3_ibv_CPPFLAGS $psm3_uuid_CPPFLAGS"
-     psm3_LDFLAGS="$psm3_LDFLAGS $psm3_rt_LDFLAGS $psm3_dl_LDFLAGS $psm3_numa_LDFLAGS $psm3_ibv_LDFLAGS $psm3_uuid_LDFLAGS"
-     psm3_LIBS="$psm3_LIBS $psm3_rt_LIBS $psm3_dl_LIBS $psm3_numa_LIBS $psm3_ibv_LIBS $psm3_uuid_LIBS"
+     psm3_CPPFLAGS="$psm3_CPPFLAGS $psm3_rt_CPPFLAGS $psm3_dl_CPPFLAGS $psm3_numa_CPPFLAGS $psm3_ibv_CPPFLAGS $psm3_uuid_CPPFLAGS $psm3_hwloc_CPPFLAGS"
+     psm3_LDFLAGS="$psm3_LDFLAGS $psm3_rt_LDFLAGS $psm3_dl_LDFLAGS $psm3_numa_LDFLAGS $psm3_ibv_LDFLAGS $psm3_uuid_LDFLAGS $psm3_hwloc_LDFLAGS"
+     psm3_LIBS="$psm3_LIBS $psm3_rt_LIBS $psm3_dl_LIBS $psm3_numa_LIBS $psm3_ibv_LIBS $psm3_uuid_LIBS $psm3_hwloc_LIBS"
      AC_SUBST(psm3_CFLAGS)
      AC_SUBST(psm3_ARCH_CFLAGS)
      AC_SUBST(psm3_CPPFLAGS)
@@ -448,4 +470,9 @@ AC_ARG_ENABLE([psm3-umr-cache],
         [Enable support for Userspace Memory Region (UMR) Caching @<:@default=check@:>@])],
     [],
     [enable_psm3_umr_cache=check])
+AC_ARG_ENABLE([psm3-hwloc],
+    [AS_HELP_STRING([--enable-psm3-hwloc],
+        [Enable PSM3 use of hwloc for NIC affinity selections @<:@default=check@:>@])],
+    [],
+    [enable_psm3_hwloc=check])
 dnl vim: set ts=4 sw=4 tw=0 et :

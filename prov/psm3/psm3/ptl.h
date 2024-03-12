@@ -68,14 +68,6 @@
 #include <psm2_am.h>
 #include <psm_help.h>
 
-/* We currently have 3 PTLs, 0 is reserved. */
-#define PTL_DEVID_IPS  1
-#define PTL_DEVID_AMSH 2
-#define PTL_DEVID_SELF 3
-
-/* We can currently initialize up to 3 PTLs */
-#define PTL_MAX_INIT	3
-
 /* struct ptl is an incomplete type, and it serves as a generic or opaque
    container.  It should remain an incomplete type in the entire psm
    source base. concrete ptl types need to have a suffix such as ptl_self,

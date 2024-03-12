@@ -173,7 +173,8 @@ extern "C" {
  *   @li If and when possible, receive buffers should be posted as early as
  *       possible and ideally before calling into the progress engine.
  *   @li Use of rendezvous messaging that can be controlled with
- *       @ref PSM2_MQ_RNDV_HFI_SZ and @ref PSM2_MQ_RNDV_SHM_SZ options.  These
+ *       @ref PSM2_MQ_RNDV_HFI_SZ, @ref PSM2_MQ_RNDV_SHM_SZ and
+ *       PSM2_MQ_GPU_RNDV_SHM_SZ options.  These
  *       options default to values determined to make effective use of
  *       bandwidth and are hence not advisable for all communication message
  *       sizes, but rendezvous messages inherently prevent unexpected
@@ -477,6 +478,7 @@ struct psm2_mq_req_user {
  * @param[in] option Index of option to retrieve.  Possible values are:
  *            @li @ref PSM2_MQ_RNDV_HFI_SZ
  *            @li @ref PSM2_MQ_RNDV_SHM_SZ
+ *            @li @ref PSM2_MQ_GPU_RNDV_SHM_SZ
  *            @li @ref PSM2_MQ_MAX_SYSBUF_MBYTES
  *
  * @param[in] value Pointer to storage that can be used to store the value of
@@ -498,6 +500,7 @@ psm2_error_t psm3_mq_getopt(psm2_mq_t mq, int option, void *value);
  * @param[in] option Index of option to retrieve.  Possible values are:
  *            @li @ref PSM2_MQ_RNDV_HFI_SZ
  *            @li @ref PSM2_MQ_RNDV_SHM_SZ
+ *            @li @ref PSM2_MQ_GPU_RNDV_SHM_SZ
  *            @li @ref PSM2_MQ_MAX_SYSBUF_MBYTES
  *
  * @param[in] value Pointer to storage that contains the value to be updated
@@ -519,6 +522,9 @@ psm2_error_t psm3_mq_setopt(psm2_mq_t mq, int option, const void *value);
 
 #define PSM2_MQ_FLAG_SENDSYNC	0x01
 				/**< MQ Send Force synchronous send */
+#define PSM2_MQ_FLAG_INJECT	0x02
+				/**< MQ Send Force bounce buffer for */
+				/* FI_INJECT/fi_inject behavior */
 
 #define PSM2_MQ_REQINVALID	((psm2_mq_req_t)(NULL))
 				/**< MQ request completion value */
@@ -710,6 +716,9 @@ psm3_mq_imrecv(psm2_mq_t mq, uint32_t flags, void *buf, uint32_t len,
  *            synchronously, meaning that the message will not be sent until
  *            the receiver acknowledges that it has matched the send with a
  *            receive buffer.
+ *            @li PSM2_MQ_FLAG_INJECT tells PSM to consume the send buffer
+ *            immediately to comply with FI_INJECT/fi_inject behavior,
+ *            cannot be used in conjunction with PSM2_MQ_FLAG_SENDSYNC.
  * @param[in] stag Message Send Tag
  * @param[in] buf Source buffer pointer
  * @param[in] len Length of message starting at @c buf.
@@ -742,6 +751,9 @@ psm3_mq_send(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
  *            synchronously, meaning that the message will not be sent until
  *            the receiver acknowledges that it has matched the send with a
  *            receive buffer.
+ *            @li PSM2_MQ_FLAG_INJECT tells PSM to consume the send buffer
+ *            immediately to comply with FI_INJECT/fi_inject behavior,
+ *            cannot be used in conjunction with PSM2_MQ_FLAG_SENDSYNC.
  * @param[in] stag Message Send Tag
  * @param[in] buf Source buffer pointer
  * @param[in] len Length of message starting at @c buf.
@@ -776,6 +788,9 @@ psm3_mq_send2(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags,
  *            synchronously, meaning that the message will not be sent until
  *            the receiver acknowledges that it has matched the send with a
  *            receive buffer.
+ *            @li PSM2_MQ_FLAG_INJECT tells PSM to consume the send buffer
+ *            immediately to comply with FI_INJECT/fi_inject behavior,
+ *            cannot be used in conjunction with PSM2_MQ_FLAG_SENDSYNC.
  * @param[in] stag Message Send Tag
  * @param[in] buf Source buffer pointer
  * @param[in] len Length of message starting at @c buf.
@@ -841,6 +856,9 @@ psm3_mq_isend(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
  *            synchronously, meaning that the message will not be sent until
  *            the receiver acknowledges that it has matched the send with a
  *            receive buffer.
+ *            @li PSM2_MQ_FLAG_INJECT tells PSM to consume the send buffer
+ *            immediately to comply with FI_INJECT/fi_inject behavior,
+ *            cannot be used in conjunction with PSM2_MQ_FLAG_SENDSYNC.
  * @param[in] stag Message Send Tag, array of three 32-bit values.
  * @param[in] buf Source buffer pointer
  * @param[in] len Length of message starting at @c buf.

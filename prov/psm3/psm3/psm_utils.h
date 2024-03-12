@@ -528,7 +528,7 @@ void psm3_parse_multi_ep();
  *		pri_reg_mr - priority register MR failure (ENOMEM)
  *		gdrmmap - GPU gdrcopy pin and mmap failure
  */
-extern unsigned psm3_faultinj_enabled; /* use macro to test */
+extern int psm3_faultinj_enabled; /* use macro to test */
 extern int psm3_faultinj_verbose; /* use IS_FAULT macro to test */
 extern int psm3_faultinj_sec_rail;/* faults only on secondary rails or EPs */
 

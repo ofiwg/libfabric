@@ -87,7 +87,7 @@ extern char global_rdpmc_slot_name[RDPMC_PERF_MAX_SLOT_NUMBER][RDPMC_PERF_MAX_SL
 extern unsigned int global_rdpmc_type;
 extern unsigned int global_rdpmc_config;
 
-extern unsigned long long rdpmc_read(struct rdpmc_ctx *ctx);
+extern unsigned long long psm3_rdpmc_read(struct rdpmc_ctx *ctx);
 
 #define RDPMC_PERF_INIT() \
 {                         \
@@ -111,12 +111,12 @@ extern unsigned long long rdpmc_read(struct rdpmc_ctx *ctx);
 
 #define RDPMC_PERF_BEGIN(slot_number) \
 {                                     \
-    global_rdpmc_begin[(slot_number)] = rdpmc_read(&global_rdpmc_ctx); \
+    global_rdpmc_begin[(slot_number)] = psm3_rdpmc_read(&global_rdpmc_ctx); \
 }
 
 #define RDPMC_PERF_END(slot_number) \
 {                        \
-    global_rdpmc_summ[(slot_number)] += (rdpmc_read(&global_rdpmc_ctx) - global_rdpmc_begin[(slot_number)]); \
+    global_rdpmc_summ[(slot_number)] += (psm3_rdpmc_read(&global_rdpmc_ctx) - global_rdpmc_begin[(slot_number)]); \
     global_rdpmc_number[(slot_number)]++;                                                                    \
 }
 

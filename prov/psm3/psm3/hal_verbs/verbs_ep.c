@@ -113,7 +113,7 @@ psm3_ep_open_verbs(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid_t
 	// make sure all fields are empty.
 	memset(&ep->verbs_ep,0,sizeof(ep->verbs_ep));
 
-	ep->verbs_ep.qkey = *(uint32_t*)job_key;	// use 1st 32 bits of job_key
+	ep->verbs_ep.qkey = (*(uint32_t*)job_key) & 0x7FFFFFFF; // use 1st 31 bits of job_key (MSB is reserved)
 
 	if (_HFI_PRDBG_ON) {
 		char uuid_str[64];
@@ -180,12 +180,48 @@ psm3_ep_open_verbs(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid_t
 					ep->dev_name, strerror(errno));
 		goto fail;
 	}
-	// this gets done by psm3_verbs_poll_type
-	//if (ibv_req_notify_cq(ep->verbs_ep.recv_cq, 0)) {
-	//	_HFI_ERROR("Can't request RQ events from %s: %s\n",
-	//					ep->dev_name, strerror(errno));
-	//	goto fail;
-	//}
+
+#ifdef USE_RC
+	if (IPS_PROTOEXP_FLAG_USER_RC_QP(ep->rdmamode)) {
+		// SRQ improves scalability
+		struct ibv_device_attr dev_attr;
+		union psmi_envvar_val envvar_val;
+
+		// get RDMA capabilities of device
+		if (ibv_query_device(ep->verbs_ep.context, &dev_attr)) {
+			_HFI_ERROR("Unable to query device %s: %s\n", ep->dev_name,
+						strerror(errno));
+			goto fail;
+		}
+		_HFI_DBG("max_srq=%d\n", dev_attr.max_srq);
+		if (dev_attr.max_srq) {
+			psm3_getenv("PSM3_USE_SRQ",
+				"If device supports SRQ, use it [1=yes, 0=no) [1]",
+				PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
+				(union psmi_envvar_val)1, &envvar_val);
+			if (envvar_val.e_uint) {
+				struct ibv_srq_init_attr attr = { 0 };
+				attr.srq_context = ep;	// our own pointer
+				attr.attr.max_wr = ep->verbs_ep.hfi_num_recv_wqes;
+				attr.attr.max_sge = 1;
+
+				ep->verbs_ep.srq = ibv_create_srq(ep->verbs_ep.pd, &attr);
+				if (ep->verbs_ep.srq == NULL) {
+					_HFI_ERROR( "Unable to create SRQ on %s: %s\n",
+						ep->dev_name, strerror(errno));
+					if (errno == ENOMEM) {
+						_HFI_ERROR( "Requested SRQ size might be too big. Try reducing TX depth and/or inline size.\n");
+						_HFI_ERROR( "Requested RX depth was %u .\n",
+								ep->verbs_ep.hfi_num_recv_wqes);
+					}
+					goto fail;
+				}
+				_HFI_DBG("created SRQ\n");
+				ep->addl_nic_info = " SRQ";
+			}
+		}
+	}
+#endif /* USE_RC */
 
 	// TBD - should we pick an EQ number
 	// we use ep as the cq_context (would be in callbacks if any)
@@ -194,13 +230,20 @@ psm3_ep_open_verbs(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid_t
 	// so CQ only needs a little headroom to be safe (1000)
 	// HFI_TF_NFLOWS (32) limits receiver side concurrent tidflows (aka inbound
 	// RDMA w/immed).
-	// For USER RC Eager we can have num_recv_wqes/FRACTION per QP
-	// in which case theoretical need could be huge.  We add 4000 as a
+	// For USER RC Eager without SRQ we can have num_recv_wqes/FRACTION per
+	// QP in which case theoretical need could be huge.  We add 4000 as a
 	// swag to cover most cases and user can always tune higher as needed
+	// For USER RC Eager with SRQ worse case is num_recv_wqes so we
+	// add that to allow up to num_recv_wqes on UD QP and SRQ each and keep
+	// the HFI_TF_NFLOWS+1000 as headroom.
 	if (! ep->verbs_ep.hfi_num_recv_cqes) {
 		ep->verbs_ep.hfi_num_recv_cqes = ep->verbs_ep.hfi_num_recv_wqes+HFI_TF_NFLOWS+1000;
-		if ((ep->rdmamode&IPS_PROTOEXP_FLAG_RDMA_MASK) == IPS_PROTOEXP_FLAG_RDMA_USER_RC)
-			ep->verbs_ep.hfi_num_recv_cqes += 4000;
+		if ((ep->rdmamode&IPS_PROTOEXP_FLAG_RDMA_MASK) == IPS_PROTOEXP_FLAG_RDMA_USER_RC) {
+			if (ep->verbs_ep.srq)
+				ep->verbs_ep.hfi_num_recv_cqes += ep->verbs_ep.hfi_num_recv_wqes;
+			else
+				ep->verbs_ep.hfi_num_recv_cqes += 4000;
+		}
 	}
 	ep->verbs_ep.recv_cq = ibv_create_cq(ep->verbs_ep.context,
 						 ep->verbs_ep.hfi_num_recv_cqes,
@@ -211,12 +254,16 @@ psm3_ep_open_verbs(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid_t
 					strerror(errno));
 		goto fail;
 	}
+	// this gets done by psm3_verbs_poll_type
+	//if (ibv_req_notify_cq(ep->verbs_ep.recv_cq, 0)) {
+	//	_HFI_ERROR("Can't request RQ events from %s: %s\n",
+	//					ep->dev_name, strerror(errno));
+	//	goto fail;
+	//}
 
 	ep->verbs_ep.qp = ud_qp_create(ep);
-	if (! ep->verbs_ep.qp) {
-		_HFI_ERROR( "Unable to create UD QP on %s\n", ep->dev_name);
+	if (! ep->verbs_ep.qp)
 		goto fail;
-	}
 
 	psmi_assert_always (ep->verbs_ep.context);
 
@@ -306,7 +353,8 @@ psm3_verbs_parse_params(psm2_ep_t ep)
 	psm3_getenv("PSM3_NUM_RECV_CQES",
 			"Number of recv CQEs to allocate\n"
 			"(0 will calculate as PSM3_NUM_RECV_WQES+1032 for PSM3_RDMA=0-2\n"
-			"and 4000 more than that for PSM3_RDMA=3]) [0]",
+			"for PSM3_RDMA=3 with SRQ, allow an additional PSM3_NUM_RECV_WQES\n"
+			"for PSM3_RDMA=3 without SRQ, allow an additional 4000) [0]",
 			PSMI_ENVVAR_LEVEL_USER,
 			PSMI_ENVVAR_TYPE_UINT,
 			(union psmi_envvar_val)0, &envvar_val);
@@ -343,11 +391,12 @@ psm3_verbs_parse_params(psm2_ep_t ep)
 	 * otherwise ignored
 	 */
 	// RV defaults are sufficient for default PSM parameters
-	// but if user adjusts ep->hfi_num_send_rdma or mq->hfi_base_window_rv
+	// but if user adjusts ep->hfi_num_send_rdma or mq->ips_cpu_window_rv
 	// they also need to increase the cache size.  psm3_verbs_alloc_mr_cache
 	// will verify cache size is sufficient.
 	// min size is (HFI_TF_NFLOWS + ep->hfi_num_send_rdma) *
-	// chunk size (mq->hfi_base_window_rv after psm3_mq_initialize_params)
+	// chunk size (psm3_mq_max_window_rv(mq, 0) after
+	// psm3_mq_initialize_params)
 	// for OPA native, actual window_rv may be smaller, but for UD it
 	// is not reduced
 	psm3_getenv("PSM3_RV_MR_CACHE_SIZE",
@@ -358,12 +407,14 @@ psm3_verbs_parse_params(psm2_ep_t ep)
 			(union psmi_envvar_val)0, &envvar_val);
 	ep->rv_mr_cache_size = envvar_val.e_uint;
 	// TBD - we could check cache_size >= minimum based on:
-	// 		(HFI_TF_NFLOWS + ep->hfi_num_send_rdma) * mq->hfi_base_window_rv 
+	// 		(HFI_TF_NFLOWS + ep->hfi_num_send_rdma)
+	//		* psm3_mq_max_window_rv(mq, 0)
 	// and automatically increase with warning if not?
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	ep->rv_gpu_cache_size = psmi_parse_gpudirect_rv_gpu_cache_size(0);
 	// TBD - we could check gpu_cache_size >= minimum based on:
-	// 		(HFI_TF_NFLOWS + ep->hfi_num_send_rdma) * mq->hfi_base_window_rv 
+	// 		(HFI_TF_NFLOWS + ep->hfi_num_send_rdma)
+	//		* psm3_mq_max_window_rv(mq, 1)
 	// and automatically increase with warning if not?
 #endif
 
@@ -464,7 +515,7 @@ psm3_verbs_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 	ep->verbs_ep.send_reap_thresh = min(ep->verbs_ep.hfi_send_reap_thresh, ep->verbs_ep.send_pool.send_total/2);
 	_HFI_PRDBG("reaping when %u posted.\n", ep->verbs_ep.send_reap_thresh);
 
-	if (PSM2_OK != psm_verbs_alloc_recv_pool(ep, ep->verbs_ep.qp, &ep->verbs_ep.recv_pool, 
+	if (PSM2_OK != psm_verbs_alloc_recv_pool(ep, 0, ep->verbs_ep.qp, &ep->verbs_ep.recv_pool,
 				min(ep->verbs_ep.hfi_num_recv_wqes, ep->verbs_ep.qp_cap.max_recv_wr),
 				// want to end up with multiple of cache line (64)
 				// ep->mtu+MAX_PSM_HEADERS will be power of 2 verbs MTU
@@ -474,6 +525,25 @@ psm3_verbs_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 		_HFI_ERROR( "Unable to allocate UD recv buffer pool\n");
 		goto fail;
 	}
+#ifdef USE_RC
+	if (ep->verbs_ep.srq) {
+		if (PSM2_OK != psm_verbs_alloc_recv_pool(ep, 1, ep->verbs_ep.srq, &ep->verbs_ep.srq_recv_pool,
+					ep->verbs_ep.hfi_num_recv_wqes,
+					 (proto->ep->rdmamode == IPS_PROTOEXP_FLAG_RDMA_USER)? 0
+					// want to end up with multiple of cache line (64)
+					// ep->mtu+MAX_PSM_HEADERS will be power of 2 verbs MTU
+					// be conservative (+BUFFER_HEADROOM)
+					: (ep->mtu + MAX_PSM_HEADER + BUFFER_HEADROOM)
+			)) {
+			_HFI_ERROR( "Unable to allocate SRQ recv buffer pool\n");
+			goto fail;
+		}
+		if (PSM2_OK != psm3_ep_verbs_prepost_recv(&ep->verbs_ep.srq_recv_pool)) {
+			_HFI_ERROR( "Unable to prepost recv buffers on SRQ for %s port %u\n", ep->dev_name, ep->portnum);
+			goto fail;
+		}
+	}
+#endif /* USE_RC */
 
 	// no send segmentation, max_segs will constrain
 	ep->chunk_max_segs = 1;
@@ -515,6 +585,9 @@ psm3_verbs_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 	return PSM2_OK;
 
 fail:
+#ifdef USE_RC
+	psm_verbs_free_recv_pool(&ep->verbs_ep.srq_recv_pool);
+#endif
 	psm_verbs_free_send_pool(&ep->verbs_ep.send_pool);
 	psm_verbs_free_recv_pool(&ep->verbs_ep.recv_pool);
 	return PSM2_INTERNAL_ERR;
@@ -757,6 +830,13 @@ void psm3_ep_free_verbs(psm2_ep_t ep)
 		ep->rv = NULL;
 	}
 #endif
+#ifdef USE_RC
+	if (ep->verbs_ep.srq) {
+		ibv_destroy_srq(ep->verbs_ep.srq);
+		ep->verbs_ep.srq = NULL;
+	}
+	psm_verbs_free_recv_pool(&ep->verbs_ep.srq_recv_pool);
+#endif
 	if (ep->verbs_ep.pd) {
 		ibv_dealloc_pd(ep->verbs_ep.pd);
 		ep->verbs_ep.pd = NULL;
@@ -796,6 +876,16 @@ psm2_error_t psm_verbs_alloc_send_pool(psm2_ep_t ep, struct ibv_pd *pd,
 			_HFI_ERROR( "can't alloc send buffers");
 			goto fail;
 		}
+#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
+		// By registering memory with Cuda, we make
+		// cuMemcpy run faster for copies from
+		// GPU to the send buffer.
+		if (PSMI_IS_GPU_ENABLED && check_have_cuda_ctxt())
+			PSMI_CUDA_CALL(cuMemHostRegister,
+				pool->send_buffers,
+				pool->send_total*pool->send_buffer_size,
+				CU_MEMHOSTALLOC_PORTABLE);
+#endif
 #if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
 		// By registering memory with Level Zero, we make
 		// zeCommandListAppendMemoryCopy run faster for copies from
@@ -860,13 +950,22 @@ extern psm2_error_t psm_verbs_init_send_allocator(
 // which are tracked in other structures but still part of the ep's memory stats
 // For RC QPs receiving only RDMA Write with immediate, no buffer space is
 // needed.  Caller will specify recv_buffer_size==0 with a recv_total.
-psm2_error_t psm_verbs_alloc_recv_pool(psm2_ep_t ep, struct ibv_qp *qp,
-			psm3_verbs_recv_pool_t pool,
+psm2_error_t psm_verbs_alloc_recv_pool(psm2_ep_t ep, uint32_t for_srq,
+			void *qp_srq, psm3_verbs_recv_pool_t pool,
 			uint32_t recv_total, uint32_t recv_buffer_size)
 {
 	memset(pool,0,sizeof(*pool));
 
-	pool->qp = qp;	// save a reference
+#ifdef USE_RC
+	pool->for_srq = for_srq;
+	if (for_srq)
+		pool->srq = (struct ibv_srq *)qp_srq;	// save a reference
+	else
+#endif
+		pool->qp = (struct ibv_qp *)qp_srq;	// save a reference
+#ifndef USE_RC
+	psmi_assert(! for_srq);
+#endif
 	pool->ep = ep;
 	pool->recv_total = recv_total;
 
@@ -878,7 +977,11 @@ psm2_error_t psm_verbs_alloc_recv_pool(psm2_ep_t ep, struct ibv_qp *qp,
 			// allocate recv buffers
 			pool->recv_buffer_size = recv_buffer_size;
 			// beginning of UD QP Recv Buf always consumed with space for IB GRH
-			if (qp->qp_type == IBV_QPT_UD) {
+			if (
+#ifdef USE_RC
+				! pool->for_srq &&
+#endif
+				pool->qp->qp_type == IBV_QPT_UD) {
 				// round up UD_ADDITION (40) to multiple of 64 for better
 				// cache alignment of buffers
 				pool->recv_buffer_size += ROUNDUP(UD_ADDITION, 64);
@@ -892,6 +995,16 @@ psm2_error_t psm_verbs_alloc_recv_pool(psm2_ep_t ep, struct ibv_qp *qp,
 				_HFI_ERROR( "can't alloc recv buffers");
 				goto fail;
 			}
+#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
+			// By registering memory with Cuda, we make
+			// cuMemcpy run faster for copies from
+			// recv buffer to GPU
+			if (PSMI_IS_GPU_ENABLED && check_have_cuda_ctxt())
+				PSMI_CUDA_CALL(cuMemHostRegister,
+					pool->recv_buffers,
+					pool->recv_total*pool->recv_buffer_size,
+					CU_MEMHOSTALLOC_PORTABLE);
+#endif
 #if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
 			// By registering memory with Level Zero, we make
 			// zeCommandListAppendMemoryCopy run faster for copies from
@@ -921,7 +1034,11 @@ psm2_error_t psm_verbs_alloc_recv_pool(psm2_ep_t ep, struct ibv_qp *qp,
 			// UD doesn't support RDMA, so we just need local NIC to be able to
 			// access our buffers with kernel bypass (IBV_ACCESS_LOCAL_WRITE)
 			pool->recv_buffer_mr = ibv_reg_mr(
-							qp->pd, pool->recv_buffers,
+#ifdef USE_RC
+							for_srq?pool->srq->pd:
+#endif
+								pool->qp->pd,
+							pool->recv_buffers,
 							pool->recv_total*pool->recv_buffer_size,
 							IBV_ACCESS_LOCAL_WRITE);
 			if (! pool->recv_buffer_mr) {
@@ -932,7 +1049,7 @@ psm2_error_t psm_verbs_alloc_recv_pool(psm2_ep_t ep, struct ibv_qp *qp,
 		} else {
 #ifdef USE_RC
 			// we want a pool for RDMA Write w/immediate recv.  No buffers
-			psmi_assert(qp->qp_type != IBV_QPT_UD);
+			psmi_assert(for_srq || pool->qp->qp_type != IBV_QPT_UD);
 			// we use exactly 1 rbuf so wr_id can lead us to pool and qp
 			pool->recv_bufs = (struct verbs_rbuf *)psmi_calloc(ep, NETWORK_BUFFERS,
 							 sizeof(struct verbs_rbuf), 1);
@@ -989,10 +1106,37 @@ void psm_verbs_free_send_pool(psm3_verbs_send_pool_t pool)
 		pool->send_bufs = NULL;
 	}
 	if (pool->send_buffers) {
+#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
+		if (PSMI_IS_GPU_ENABLED && cu_ctxt) {
+			/* ignore NOT_REGISTERED in case cuda initialized late */
+			/* ignore other errors as context could be destroyed before this */
+			CUresult cudaerr;
+			//PSMI_CUDA_CALL_EXCEPT(CUDA_ERROR_HOST_MEMORY_NOT_REGISTERED,
+			//		cuMemHostUnregister, pool->send_buffers);
+			psmi_count_cuMemHostUnregister++;
+			cudaerr = psmi_cuMemHostUnregister(pool->send_buffers);
+			if (cudaerr) {
+				const char *pStr = NULL;
+				psmi_count_cuGetErrorString++;
+				psmi_cuGetErrorString(cudaerr, &pStr);
+				_HFI_DBG("CUDA failure: cuMemHostUnregister returned %d: %s\n",
+						cudaerr, pStr?pStr:"Unknown");
+			}
+
+		}
+#endif
 #if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
-		if (PSMI_IS_GPU_ENABLED)
-			PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer,
-					 ze_driver, pool->send_buffers);
+		if (PSMI_IS_GPU_ENABLED) {
+			ze_result_t result;
+			//PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer,
+			//		 ze_driver, pool->send_buffers);
+			psmi_count_zexDriverReleaseImportedPointer++;
+			result = psmi_zexDriverReleaseImportedPointer(ze_driver,
+					pool->send_buffers);
+			if (result != ZE_RESULT_SUCCESS) {
+				_HFI_DBG("OneAPI Level Zero failure: zexDriverReleaseImportedPointer returned %d: %s\n", result, psmi_oneapi_ze_result_to_string(result));
+			}
+		}
 #endif
 		psmi_free(pool->send_buffers);
 		pool->send_buffers = NULL;
@@ -1014,10 +1158,36 @@ void psm_verbs_free_recv_pool(psm3_verbs_recv_pool_t pool)
 	}
 #endif
 	if (pool->recv_buffers) {
+#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
+		if (PSMI_IS_GPU_ENABLED && cu_ctxt) {
+			/* ignore NOT_REGISTERED in case cuda initialized late */
+			/* ignore other errors as context could be destroyed before this */
+			CUresult cudaerr;
+			//PSMI_CUDA_CALL_EXCEPT(CUDA_ERROR_HOST_MEMORY_NOT_REGISTERED,
+			//		cuMemHostUnregister, pool->recv_buffers);
+			psmi_count_cuMemHostUnregister++;
+			cudaerr = psmi_cuMemHostUnregister(pool->recv_buffers);
+			if (cudaerr) {
+				const char *pStr = NULL;
+				psmi_count_cuGetErrorString++;
+				psmi_cuGetErrorString(cudaerr, &pStr);
+				_HFI_DBG("CUDA failure: cuMemHostUnregister returned %d: %s\n",
+						cudaerr, pStr?pStr:"Unknown");
+			}
+		}
+#endif
 #if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
-		if (PSMI_IS_GPU_ENABLED)
-			PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer,
-					 ze_driver, pool->recv_buffers);
+		if (PSMI_IS_GPU_ENABLED) {
+			ze_result_t result;
+			//PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer,
+			//		 ze_driver, pool->recv_buffers);
+			psmi_count_zexDriverReleaseImportedPointer++;
+			result = psmi_zexDriverReleaseImportedPointer(ze_driver,
+					pool->recv_buffers);
+			if (result != ZE_RESULT_SUCCESS) {
+				_HFI_DBG("OneAPI Level Zero failure: zexDriverReleaseImportedPointer returned %d: %s\n", result, psmi_oneapi_ze_result_to_string(result));
+			}
+		}
 #endif
 		psmi_free(pool->recv_buffers);
 		pool->recv_buffers = NULL;
@@ -1181,27 +1351,44 @@ psm2_error_t psm3_ep_verbs_post_recv(
 			PSM3_FAULTINJ_STATIC_DECL(fi_rq_lkey, "rq_lkey",
 					"post UD "
 #ifdef USE_RC
-					"or RC "
+					"or RC or SRQ "
 #endif
 					"RQ WQE with bad lkey",
 					0, IPS_FAULTINJ_RQ_LKEY);
-			if_pf(PSM3_FAULTINJ_IS_FAULT(fi_rq_lkey, pool->ep, " QP %u", pool->qp->qp_num))
+			// SRQ has no number but need consistency in fmt and number of args
+			if_pf(PSM3_FAULTINJ_IS_FAULT(fi_rq_lkey, pool->ep,
+#ifdef USE_RC
+				 "%s %u", pool->for_srq?"SRQ":"QP", pool->for_srq?0:pool->qp->qp_num))
+#else
+				 " QP %u", pool->qp->qp_num))
+#endif
 				wr->sg_list->lkey = 55;
 		} else
 			wr->sg_list->lkey = pool->recv_buffer_mr->lkey;
 #endif // PSM_FI
 		if_pf (++pool->next_recv_wqe >= VERBS_RECV_QP_COALLESCE) {
 			// we have a batch ready to post
-			if_pf (ibv_post_recv(pool->qp, pool->recv_wr_list, &bad_wr)) {
-				_HFI_ERROR("failed to post RQ on %s port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
-				return PSM2_INTERNAL_ERR;
+#ifdef USE_RC
+			if (pool->for_srq) {
+				if_pf (ibv_post_srq_recv(pool->srq, pool->recv_wr_list, &bad_wr)) {
+					_HFI_ERROR("failed to post SRQ on %s port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
+					return PSM2_INTERNAL_ERR;
+				}
+				//_HFI_VDBG("posted SRQ, including buffer %u\n", index);
+			} else
+#endif
+			{
+				if_pf (ibv_post_recv(pool->qp, pool->recv_wr_list, &bad_wr)) {
+					_HFI_ERROR("failed to post RQ on %s port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
+					return PSM2_INTERNAL_ERR;
+				}
+				//_HFI_VDBG("posted RQ, including buffer %u\n", index);
 			}
-			//_HFI_VDBG("posted RQ, including buffer %u\n", index);
 			pool->next_recv_wqe = 0;
 		} else {
 			//_HFI_VDBG("preped RQE, buffer %u\n", index);
 		}
-#else
+#else /* VERBS_RECV_QP_COALLESCE > 1 */
 		list.addr = (uintptr_t)rbuf_to_buffer(buf);
 		list.length = pool->recv_buffer_size;
 		list.lkey = pool->recv_buffer_mr->lkey;
@@ -1210,11 +1397,17 @@ psm2_error_t psm3_ep_verbs_post_recv(
 			PSM3_FAULTINJ_STATIC_DECL(fi_rq_lkey, "rq_lkey",
 					"post UD "
 #ifdef USE_RC
-					"or RC "
+					"or RC or SRQ"
 #endif
 					"RQ WQE with bad lkey",
 					0, IPS_FAULTINJ_RQ_LKEY);
-			if_pf(PSM3_FAULTINJ_IS_FAULT(fi_rq_lkey, pool->ep, " QP %u", pool->qp->qp_num))
+			// SRQ has no number but need consistency in fmt and number of args
+			if_pf(PSM3_FAULTINJ_IS_FAULT(fi_rq_lkey, pool->ep,
+#ifdef USE_RC
+				 "%s %u", pool->for_srq?"SRQ":"QP", pool->for_srq?0:pool->qp->qp_num))
+#else
+				 " QP %u", pool->qp->qp_num))
+#endif
 				list.lkey = 55;
 		}
 #endif // PSM_FI
@@ -1223,12 +1416,23 @@ psm2_error_t psm3_ep_verbs_post_recv(
 		wr.sg_list = &list;
 		wr.num_sge = 1;	// size of sg_list
 
-		if_pf (ibv_post_recv(pool->qp, &wr, &bad_wr)) {
-			_HFI_ERROR("failed to post RQ on %s port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
-			return PSM2_INTERNAL_ERR;
-		}
-		//_HFI_VDBG("posted RQ, buffer %u\n", index);
+#ifdef USE_RC
+		if (pool->for_srq) {
+			if_pf (ibv_post_srq_recv(pool->srq, &wr, &bad_wr)) {
+				_HFI_ERROR("failed to post SRQ on %s port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
+				return PSM2_INTERNAL_ERR;
+			}
+			//_HFI_VDBG("posted SRQ, buffer %u\n", index);
+		} else
 #endif
+		{
+			if_pf (ibv_post_recv(pool->qp, &wr, &bad_wr)) {
+				_HFI_ERROR("failed to post RQ on %s port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
+				return PSM2_INTERNAL_ERR;
+			}
+			//_HFI_VDBG("posted RQ, buffer %u\n", index);
+		}
+#endif /* VERBS_RECV_QP_COALLESCE > 1 */
 #ifdef USE_RC
 	} else {
 #if VERBS_RECV_QP_COALLESCE > 1
@@ -1238,27 +1442,43 @@ psm2_error_t psm3_ep_verbs_post_recv(
 		wr->wr_id = (uintptr_t)buf;	// we'll get this back in completion
 		if_pf (++pool->next_recv_wqe >= VERBS_RECV_QP_COALLESCE) {
 			// we have a batch ready to post
-			if_pf (ibv_post_recv(pool->qp, pool->recv_wr_list, &bad_wr)) {
-				_HFI_ERROR("failed to post RQ on %s on port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
-				return PSM2_INTERNAL_ERR;
+			if (pool->for_srq) {
+				if_pf (ibv_post_srq_recv(pool->srq, pool->recv_wr_list, &bad_wr)) {
+					_HFI_ERROR("failed to post SRQ on %s port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
+					return PSM2_INTERNAL_ERR;
+				}
+				//_HFI_VDBG("posted SRQ\n");
+			} else {
+				if_pf (ibv_post_recv(pool->qp, pool->recv_wr_list, &bad_wr)) {
+					_HFI_ERROR("failed to post RQ on %s on port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
+					return PSM2_INTERNAL_ERR;
+				}
+				//_HFI_VDBG("posted RQ\n");
 			}
-			//_HFI_VDBG("posted RQ\n");
 			pool->next_recv_wqe = 0;
 		} else {
 			//_HFI_VDBG("preped RQE\n");
 		}
-#else
+#else /* VERBS_RECV_QP_COALLESCE > 1 */
 		wr.next = NULL;	// just post 1
 		wr.wr_id = (uintptr_t)buf;	// we'll get this back in completion
 		wr.sg_list = NULL;
 		wr.num_sge = 0;	// size of sg_list
 
-		if_pf (ibv_post_recv(pool->qp, &wr, &bad_wr)) {
-			_HFI_ERROR("failed to post RQ on %s on port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
-			return PSM2_INTERNAL_ERR;
+		if (pool->for_srq) {
+			if_pf (ibv_post_srq_recv(pool->srq, &wr, &bad_wr)) {
+				_HFI_ERROR("failed to post SRQ on %s port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
+				return PSM2_INTERNAL_ERR;
+			}
+			//_HFI_VDBG("posted SRQ\n");
+		} else {
+			if_pf (ibv_post_recv(pool->qp, &wr, &bad_wr)) {
+				_HFI_ERROR("failed to post RQ on %s on port %u: %s", pool->ep->dev_name, pool->ep->portnum, strerror(errno));
+				return PSM2_INTERNAL_ERR;
+			}
+			//_HFI_VDBG("posted RQ\n");
 		}
-		//_HFI_VDBG("posted RQ\n");
-#endif
+#endif /* VERBS_RECV_QP_COALLESCE > 1 */
 #endif // USE_RC
 	}
 	return PSM2_OK;
@@ -2333,12 +2553,15 @@ static struct ibv_qp* ud_qp_create(psm2_ep_t ep)
 	attr.qp_type = IBV_QPT_UD;
 
 	qp = ibv_create_qp(ep->verbs_ep.pd, &attr);
-	if (qp == NULL && errno == ENOMEM) {
+	if (qp == NULL) {
 		_HFI_ERROR( "Unable to create UD QP on %s: %s\n",
 					ep->dev_name, strerror(errno));
-		_HFI_ERROR( "Requested QP size might be too big. Try reducing TX depth and/or inline size.\n");
-		_HFI_ERROR( "Requested TX depth was %u and RX depth was %u .\n",
+		if (errno == ENOMEM) {
+			_HFI_ERROR( "Requested QP size might be too big. Try reducing TX depth and/or inline size.\n");
+			_HFI_ERROR( "Requested TX depth was %u and RX depth was %u .\n",
 					ep->verbs_ep.hfi_num_send_wqes+1, ep->verbs_ep.hfi_num_recv_wqes);
+		}
+		return NULL;
 	}
 
 	// attr reports what we got, double check and react in case
@@ -2437,7 +2660,7 @@ struct ibv_qp* rc_qp_create(psm2_ep_t ep, void *context, struct ibv_qp_cap *cap)
 	attr.qp_context = context;
 	attr.send_cq = ep->verbs_ep.send_cq;
 	attr.recv_cq = ep->verbs_ep.recv_cq;
-	attr.srq = NULL;
+	attr.srq = ep->verbs_ep.srq;
 	// one extra WQE to be safe in case verbs needs a spare WQE
 	if ((ep->rdmamode&IPS_PROTOEXP_FLAG_RDMA_MASK) == IPS_PROTOEXP_FLAG_RDMA_USER_RC) {
 		// need to be prepared in case all sends posted to same RC QP, so
@@ -2445,10 +2668,9 @@ struct ibv_qp* rc_qp_create(psm2_ep_t ep, void *context, struct ibv_qp_cap *cap)
 		attr.cap.max_send_wr  = ep->verbs_ep.hfi_num_send_wqes+ep->hfi_num_send_rdma+1;
 		attr.cap.max_send_sge = 2;
 		// inline data helps latency and message rate for small sends
-		// Later we may explore use of
-		// send SGEs pointing to application buffers, somewhat like WFR send DMA
 		attr.cap.max_inline_data = ep->hfi_imm_size;
-		attr.cap.max_recv_wr  = ep->verbs_ep.hfi_num_recv_wqes/VERBS_RECV_QP_FRACTION;// TBD
+		attr.cap.max_recv_wr  = ep->verbs_ep.srq?0
+				:(ep->verbs_ep.hfi_num_recv_wqes/VERBS_RECV_QP_FRACTION);// TBD
 		attr.cap.max_recv_sge = 1;
 	} else {
 		// only RDMA Write w/immediate
@@ -2456,7 +2678,7 @@ struct ibv_qp* rc_qp_create(psm2_ep_t ep, void *context, struct ibv_qp_cap *cap)
 		attr.cap.max_send_sge = 1;
 		attr.cap.max_inline_data = 0;
 		// incoming Write w/immediate consumes a RQ WQE but no buffer needed
-		attr.cap.max_recv_wr  = HFI_TF_NFLOWS+1;
+		attr.cap.max_recv_wr  = ep->verbs_ep.srq?0:(HFI_TF_NFLOWS+1);
 		attr.cap.max_recv_sge = 0;
 	}
 
@@ -2467,9 +2689,16 @@ struct ibv_qp* rc_qp_create(psm2_ep_t ep, void *context, struct ibv_qp_cap *cap)
 		_HFI_ERROR( "Unable to create RC QP on %s: %s\n",
 					ep->dev_name, strerror(errno));
 		_HFI_ERROR( "Requested QP size might be too big. Try reducing TX depth and/or inline size.\n");
-		_HFI_ERROR( "Requested TX depth was %u and RX depth was %u .\n",
-					ep->verbs_ep.hfi_num_send_wqes+1,
-					ep->verbs_ep.hfi_num_recv_wqes/VERBS_RECV_QP_FRACTION);
+		if ((ep->rdmamode&IPS_PROTOEXP_FLAG_RDMA_MASK) == IPS_PROTOEXP_FLAG_RDMA_USER_RC) {
+			_HFI_ERROR( "Requested TX depth was %u and RX depth was %u .\n",
+				ep->verbs_ep.hfi_num_send_wqes+ep->hfi_num_send_rdma+1,
+				ep->verbs_ep.srq?0
+					:(ep->verbs_ep.hfi_num_recv_wqes/VERBS_RECV_QP_FRACTION));
+		} else {
+			_HFI_ERROR( "Requested TX depth was %u and RX depth was %u .\n",
+				ep->hfi_num_send_rdma+1,
+				ep->verbs_ep.srq?0:(HFI_TF_NFLOWS+1));
+		}
 		return NULL;
 	}
 
@@ -2492,7 +2721,8 @@ struct ibv_qp* rc_qp_create(psm2_ep_t ep, void *context, struct ibv_qp_cap *cap)
 			_HFI_PRDBG( "Limited to %d SQ SGEs\n",
 				attr.cap.max_send_sge);
 		}
-		if (ep->verbs_ep.hfi_num_recv_wqes/VERBS_RECV_QP_FRACTION > attr.cap.max_recv_wr) {
+		if (! ep->verbs_ep.srq
+		    && ep->verbs_ep.hfi_num_recv_wqes/VERBS_RECV_QP_FRACTION > attr.cap.max_recv_wr) {
 			_HFI_PRDBG( "Limited to %d RQ WQEs, requested %u\n",
 				attr.cap.max_recv_wr, ep->verbs_ep.hfi_num_recv_wqes/VERBS_RECV_QP_FRACTION);
 		} else {
@@ -2514,7 +2744,8 @@ struct ibv_qp* rc_qp_create(psm2_ep_t ep, void *context, struct ibv_qp_cap *cap)
 			_HFI_PRDBG( "Limited to %d SQ SGEs\n",
 				attr.cap.max_send_sge);
 		}
-		if (HFI_TF_NFLOWS+1 > attr.cap.max_recv_wr) {
+		if (! ep->verbs_ep.srq
+		    && HFI_TF_NFLOWS+1 > attr.cap.max_recv_wr) {
 			_HFI_PRDBG( "Limited to %d RQ WQEs, requested %u\n",
 				attr.cap.max_recv_wr, HFI_TF_NFLOWS+1);
 		} else {
@@ -2848,7 +3079,7 @@ psm3_dump_verbs_qp(struct ibv_qp *qp)
 	printf("QP %p (%u), type %u state %u PkeyIndx %u Port %u draining %u\n",
 			qp, qp->qp_num, qp->qp_type, attr.qp_state, attr.pkey_index,
 			attr.port_num, attr.sq_draining);
-	printf("  send: wr %u sge %u inline %u recv: wr %u sqe %u\n",
+	printf("  send: wr %u sge %u inline %u recv: wr %u sge %u\n",
 			attr.cap.max_send_wr, attr.cap.max_send_sge, attr.cap.max_inline_data,
 			attr.cap.max_recv_wr, attr.cap.max_recv_sge);
 	printf("  context %p send_cq %p recv_cq %p srq %p sg_sig_all %u\n",
@@ -2906,6 +3137,7 @@ static enum psm3_ibv_rate verbs_get_rate(uint8_t width, uint8_t speed)
 		case 16: return PSM3_IBV_RATE_14_GBPS;
 		case 32: return PSM3_IBV_RATE_25_GBPS;
 		case 64: return PSM3_IBV_RATE_50_GBPS;
+		case 128: return PSM3_IBV_RATE_100_GBPS;
 		default:
 				_HFI_ERROR( "unknown link speed 0x%x\n", speed);
 				return PSM3_IBV_RATE_100_GBPS;
@@ -2919,6 +3151,7 @@ static enum psm3_ibv_rate verbs_get_rate(uint8_t width, uint8_t speed)
 		case 16: return PSM3_IBV_RATE_56_GBPS;
 		case 32: return PSM3_IBV_RATE_100_GBPS;
 		case 64: return PSM3_IBV_RATE_200_GBPS;
+		case 128: return PSM3_IBV_RATE_400_GBPS;
 		default:
 				_HFI_ERROR( "unknown link speed 0x%x\n", speed);
 				return PSM3_IBV_RATE_100_GBPS;
@@ -2932,6 +3165,7 @@ static enum psm3_ibv_rate verbs_get_rate(uint8_t width, uint8_t speed)
 		case 16: return PSM3_IBV_RATE_112_GBPS;
 		case 32: return PSM3_IBV_RATE_200_GBPS;
 		case 64: return PSM3_IBV_RATE_400_GBPS;
+		case 128: return PSM3_IBV_RATE_800_GBPS;
 		default:
 				_HFI_ERROR( "unknown link speed 0x%x\n", speed);
 				return PSM3_IBV_RATE_100_GBPS;
@@ -2945,6 +3179,7 @@ static enum psm3_ibv_rate verbs_get_rate(uint8_t width, uint8_t speed)
 		case 16: return PSM3_IBV_RATE_168_GBPS;
 		case 32: return PSM3_IBV_RATE_300_GBPS;
 		case 64: return PSM3_IBV_RATE_600_GBPS;
+		case 128: return PSM3_IBV_RATE_1200_GBPS;
 		default:
 				_HFI_ERROR( "unknown link speed 0x%x\n", speed);
 				return PSM3_IBV_RATE_100_GBPS;
@@ -2958,6 +3193,7 @@ static enum psm3_ibv_rate verbs_get_rate(uint8_t width, uint8_t speed)
 		case 16: return PSM3_IBV_RATE_28_GBPS;
 		case 32: return PSM3_IBV_RATE_50_GBPS;
 		case 64: return PSM3_IBV_RATE_100_GBPS;
+		case 128: return PSM3_IBV_RATE_200_GBPS;
 		default:
 				_HFI_ERROR( "unknown link speed 0x%x\n", speed);
 				return PSM3_IBV_RATE_100_GBPS;

@@ -82,7 +82,8 @@ static void init_mallopt_disable_mmap(void)
 {
 	// since this occurs before psm3_init, we can't use psm3_env_get
 	// default to NO (0)
-	if (psm3_parse_str_yesno(getenv("PSM3_DISABLE_MMAP_MALLOC")) > 0) {
+	int disable = 0;
+	if (!psm3_parse_str_yesno(getenv("PSM3_DISABLE_MMAP_MALLOC"), &disable)  && disable) {
 		if (mallopt(M_MMAP_MAX, 0) && mallopt(M_TRIM_THRESHOLD, -1)) {
 			psm3_malloc_no_mmap = 1;
 		}
