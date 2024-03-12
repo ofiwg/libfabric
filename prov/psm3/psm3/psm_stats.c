@@ -641,30 +641,54 @@ psm2_error_t
 psm3_stats_initialize(void)
 {
 	union psmi_envvar_val env_stats_freq;
+	union psmi_envvar_val env_stats_prefix;
 	union psmi_envvar_val env_stats_help;
 	union psmi_envvar_val env_statsmask;
-	int got_stats_freq;
-	int got_stats_help;
-	int got_statsmask;
+	int noenv_stats_freq;	// env var not specified, used default
+	int noenv_stats_prefix;	// env var not specified, used default
+	int noenv_stats_help;	// env var not specified, used default
+	int noenv_statsmask;	// env var not specified, used default
 
 	psmi_assert(! perf_stats_initialized);
 
-	got_stats_freq = psm3_getenv("PSM3_PRINT_STATS",
-			"Prints performance stats every n seconds to file "
-			"./psm3-perf-stat-[hostname]-pid-[pid] when set to -1 stats are "
-			"printed only once on 1st ep close",
-			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
-			(union psmi_envvar_val) 0, &env_stats_freq);
-	print_stats_freq = env_stats_freq.e_uint;
+	noenv_stats_freq = (0 < psm3_getenv_range("PSM3_PRINT_STATS",
+			"Prints performance stats every n seconds",
+			"  0 - disable output\n"
+			"  -1 - only output once at end of job on 1st ep close\n"
+			"  >=1 - output every n seconds\n"
+			"  val: - limit output to rank 0 (for val of -1 or >=1)\n"
+			"  val:pattern - limit output to processes whose label matches\n    "
+#ifdef FNM_EXTMATCH
+                                "extended "
+#endif
+                                "glob pattern (for val of -1 or >=1)\n"
+			"Output goes to file ${PSM3_PRNT_STATS_PREFIX}psm3-perf-stat-[hostname]-pid-[pid]",
+			PSMI_ENVVAR_LEVEL_USER|PSMI_ENVVAR_FLAG_NOABBREV,
+			PSMI_ENVVAR_TYPE_STR_VAL_PAT_INT,
+			(union psmi_envvar_val)"0",
+			(union psmi_envvar_val)-1, (union psmi_envvar_val)INT_MAX,
+                        NULL, NULL, &env_stats_freq));
+	(void)psm3_parse_val_pattern_int(env_stats_freq.e_str, 0,
+			&print_stats_freq,
+			PSMI_ENVVAR_FLAG_NOABBREV, -1, INT_MAX);
 
-	got_stats_help = psm3_getenv("PSM3_PRINT_STATS_HELP",
+	noenv_stats_prefix = (0 < psm3_getenv_range("PSM3_PRINT_STATS_PREFIX",
+			"Prefix for filename for performance stats output",
+			"May be used to add a prefix possibly including directory for output",
+			PSMI_ENVVAR_LEVEL_USER|PSMI_ENVVAR_FLAG_NOABBREV,
+			PSMI_ENVVAR_TYPE_STR,
+			(union psmi_envvar_val)"./",
+			(union psmi_envvar_val)NULL, (union psmi_envvar_val)NULL,
+                        NULL, NULL, &env_stats_prefix));
+
+	noenv_stats_help = (0 < psm3_getenv("PSM3_PRINT_STATS_HELP",
 			"Prints performance stats help text on rank 0 to file "
-			"./psm3-perf-stat-help-[hostname]-pid-[pid]",
+			"${PSM3_PRINT_STATS_PREFIX}psm3-perf-stat-help-[hostname]-pid-[pid]",
 			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
-			(union psmi_envvar_val) 0, &env_stats_help);
+			(union psmi_envvar_val) 0, &env_stats_help));
 	print_stats_help = env_stats_help.e_uint && (psm3_get_myrank() == 0);
 
-	got_statsmask = psm3_getenv("PSM3_PRINT_STATSMASK",
+	noenv_statsmask = (0 < psm3_getenv("PSM3_PRINT_STATSMASK",
 			"Mask of statistic types to print: "
 			"MQ=1, RCVTHREAD=0x100, IPS=0x200"
 #if   defined(PSM_HAVE_REG_MR)
@@ -681,21 +705,21 @@ psm3_stats_initialize(void)
 #endif
 			".  0x100000 causes zero values to also be shown",
 			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
-			(union psmi_envvar_val) PSMI_STATSTYPE_ALL, &env_statsmask);
+			(union psmi_envvar_val) PSMI_STATSTYPE_ALL, &env_statsmask));
 	print_statsmask = env_statsmask.e_uint;
 
 	stats_start = time(NULL);
 
 	snprintf(perf_file_name, sizeof(perf_file_name),
-			"./psm3-perf-stat-%s-pid-%d",
-			psm3_gethostname(), getpid());
+			"%spsm3-perf-stat-%s-pid-%d",
+			env_stats_prefix.e_str, psm3_gethostname(), getpid());
 
 	if (print_stats_help) {
 		// a few optons, such as CUDA, ONEAPI_ZE, RDMA affect what is
 		// included in help, so use a unique filename per job
 		snprintf(perf_help_file_name, sizeof(perf_help_file_name),
-				"./psm3-perf-stat-help-%s-pid-%d",
-				psm3_gethostname(), getpid());
+				"%spsm3-perf-stat-help-%s-pid-%d",
+				env_stats_prefix.e_str, psm3_gethostname(), getpid());
 		perf_help_fd = fopen(perf_help_file_name, "w");
 		if (!perf_help_fd)
 			_HFI_ERROR("Failed to create fd for performance logging help: %s: %s\n",
@@ -706,13 +730,19 @@ psm3_stats_initialize(void)
 	print_job_info_help();
 	print_basic_job_info();
 
-	if (got_stats_freq)
+	// if got a valid value or an invalid value, psm3_getenv will have
+	// stashed it and print_basic_job_info will have put in stats file
+	// otherwise we want to always report the STATS variable settings
+	if (noenv_stats_freq)
 		psm3_stats_print_env_val("PSM3_PRINT_STATS",
 								PSMI_ENVVAR_TYPE_UINT, env_stats_freq);
-	if (got_stats_help)
+	if (noenv_stats_prefix)
+		psm3_stats_print_env_val("PSM3_PRINT_STATS_PREFIX",
+								PSMI_ENVVAR_TYPE_STR, env_stats_prefix);
+	if (noenv_stats_help)
 		psm3_stats_print_env_val("PSM3_PRINT_STATS_HELP",
 								PSMI_ENVVAR_TYPE_UINT, env_stats_help);
-	if (got_statsmask)
+	if (noenv_statsmask)
 		psm3_stats_print_env_val("PSM3_PRINT_STATSMASK",
 								PSMI_ENVVAR_TYPE_UINT_FLAGS, env_statsmask);
 

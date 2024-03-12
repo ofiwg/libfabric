@@ -185,7 +185,7 @@ struct psm3_sockets_ep {
 	int active_skip_polls_offset; // tailored for internal use. it's inactive_skip_polls - active_skip_polls
 	struct msghdr snd_msg; // struct used for sendmsg
 	/* fields specific to UDP */
-	int udp_gso;	// is GSO enabled for UDP
+	unsigned udp_gso;	// is GSO enabled for UDP, max chunk_size
 	uint8_t *sbuf_udp_gso;	// buffer to compose UDP GSO packet sequence
 	int udp_gso_zerocopy;	// is UDP GSO Zero copy option enabled
 	int udp_gro; // will be used later

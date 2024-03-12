@@ -185,6 +185,8 @@ psm3_libpsm3i_la_SOURCES = \
 	psm3/psm_mq_recv.c \
 	psm3/psm_mq_utils.c \
 	psm3/psm_netutils.h \
+	psm3/psm_nic_select.c \
+	psm3/psm_nic_select.h \
 	psm3/psm_oneapi_ze.c \
 	psm3/psm_perf.c \
 	psm3/psm_perf.h \
@@ -196,13 +198,13 @@ psm3_libpsm3i_la_SOURCES = \
 	psm3/psm_sysbuf.h \
 	psm3/psm_timer.c \
 	psm3/psm_timer.h \
+	psm3/psm_uffd.c \
+	psm3/psm_uffd.h \
 	psm3/psm_user.h \
 	psm3/psm_utils.c \
 	psm3/psm_utils.h \
 	psm3/psm_verbs_mr.c \
 	psm3/psm_verbs_mr.h \
-	psm3/psm_verbs_umrc.c \
-	psm3/psm_verbs_umrc.h \
 	psm3/psmi_wrappers.c \
 	psm3/psmi_wrappers.h \
 	psm3/psm2.h \

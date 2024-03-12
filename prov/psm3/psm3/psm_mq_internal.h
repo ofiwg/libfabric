@@ -85,6 +85,11 @@ struct psm2_mq_perf_data
 	int perf_print_stats;
 };
 
+struct psm3_mq_window_rv_entry {
+	uint32_t window_rv;
+	uint32_t limit;
+};
+
 #ifdef LEARN_HASH_SELECTOR
 // When transition back to nohash mode, should the prior
 // learned table_sel be retained for use next time transition to hash mode.
@@ -175,9 +180,15 @@ struct psm2_mq {
 	uint32_t hfi_thresh_tiny;
 	uint32_t hfi_thresh_rv;
 	uint32_t shm_thresh_rv;
-	uint32_t hfi_base_window_rv;	/**> this is a base rndv window size,
-					     will be further trimmed down per-connection based
-					     on the peer's MTU */
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	uint32_t shm_gpu_thresh_rv;
+#endif
+	const char *ips_cpu_window_rv_str;	// default input to parser
+	struct psm3_mq_window_rv_entry *ips_cpu_window_rv;
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	const char *ips_gpu_window_rv_str;	// default input to parser
+	struct psm3_mq_window_rv_entry *ips_gpu_window_rv;
+#endif
 	uint32_t hash_thresh;
 	int memmode;
 
@@ -313,6 +324,7 @@ struct psm2_mq_req {
 	mq_rts_callback_fn_t rts_callback;
 	psm2_epaddr_t rts_peer;
 	uintptr_t rts_sbuf;
+	uint32_t window_rv;	// window size chosen by receiver or GPU send prefetcher
 
 #ifdef PSM_HAVE_REG_MR
 	psm3_verbs_mr_t	mr;	// local registered memory for app buffer
@@ -752,6 +764,9 @@ psm2_mq_req_t psm3_mq_req_match(psm2_mq_t mq, psm2_epaddr_t src, psm2_mq_tag_t *
 psm2_error_t psm3_mq_malloc(psm2_mq_t *mqo);
 psm2_error_t psm3_mq_initialize_params(psm2_mq_t mq);
 psm2_error_t psm3_mq_initstats(psm2_mq_t mq, psm2_epid_t epid);
+extern uint32_t psm3_mq_max_window_rv(psm2_mq_t mq, int gpu);
+uint32_t psm3_mq_get_window_rv(psm2_mq_req_t req);
+
 
 psm2_error_t MOCKABLE(psm3_mq_free)(psm2_mq_t mq);
 MOCK_DCL_EPILOGUE(psm3_mq_free);

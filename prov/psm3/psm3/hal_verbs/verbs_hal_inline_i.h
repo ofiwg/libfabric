@@ -287,29 +287,33 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_ips_ipsaddr_set_req_params(
 			//ipsaddr->verbs.rc_qp = NULL;
 		} else {
 			// we got a REQ or a REP, we can move to RTR
-			// if we are only doing RDMA, we don't need any buffers, but we need a
-			// pool object for RQ coallesce, so we create a pool with 0 size buffers
-			if (PSM2_OK != psm_verbs_alloc_recv_pool(proto->ep, ipsaddr->verbs.rc_qp, &ipsaddr->verbs.recv_pool,
-					min(proto->ep->verbs_ep.hfi_num_recv_wqes/VERBS_RECV_QP_FRACTION, ipsaddr->verbs.rc_qp_max_recv_wr),
-				  (proto->ep->rdmamode == IPS_PROTOEXP_FLAG_RDMA_USER)? 0
-					// want to end up with multiple of cache line (64)
-					// pr_mtu is negotiated max PSM payload, not including hdrs
-					// pr_mtu+MAX_PSM_HEADERS will be power of 2 verbs MTU
-					// be conservative (+BUFFER_HEADROOM)
-					: ipsaddr->pathgrp->pg_path[0][IPS_PATH_LOW_PRIORITY]->pr_mtu
-							+ MAX_PSM_HEADER + BUFFER_HEADROOM
-			)) {
-				_HFI_ERROR("failed to alloc RC recv buffers\n");
-				return PSM2_INTERNAL_ERR;
+			if (! proto->ep->verbs_ep.srq) {
+				// if we are only doing RDMA, we don't need any buffers, but we need a
+				// pool object for RQ coallesce, so we create a pool with 0 size buffers
+				if (PSM2_OK != psm_verbs_alloc_recv_pool(proto->ep, 0, ipsaddr->verbs.rc_qp, &ipsaddr->verbs.recv_pool,
+						min(proto->ep->verbs_ep.hfi_num_recv_wqes/VERBS_RECV_QP_FRACTION, ipsaddr->verbs.rc_qp_max_recv_wr),
+					  (proto->ep->rdmamode == IPS_PROTOEXP_FLAG_RDMA_USER)? 0
+						// want to end up with multiple of cache line (64)
+						// pr_mtu is negotiated max PSM payload, not including hdrs
+						// pr_mtu+MAX_PSM_HEADERS will be power of 2 verbs MTU
+						// be conservative (+BUFFER_HEADROOM)
+						: ipsaddr->pathgrp->pg_path[0][IPS_PATH_LOW_PRIORITY]->pr_mtu
+								+ MAX_PSM_HEADER + BUFFER_HEADROOM
+				)) {
+					_HFI_ERROR("failed to alloc RC recv buffers\n");
+					return PSM2_INTERNAL_ERR;
+				}
 			}
 
 			if (modify_rc_qp_to_init(proto->ep, ipsaddr->verbs.rc_qp)) {
 				_HFI_ERROR("qp_to_init failed\n");
 				return PSM2_INTERNAL_ERR;
 			}
-			if (PSM2_OK != psm3_ep_verbs_prepost_recv(&ipsaddr->verbs.recv_pool)) {
-				_HFI_ERROR("prepost failed\n");
-				return PSM2_INTERNAL_ERR;
+			if (! proto->ep->verbs_ep.srq) {
+				if (PSM2_OK != psm3_ep_verbs_prepost_recv(&ipsaddr->verbs.recv_pool)) {
+					_HFI_ERROR("prepost failed\n");
+					return PSM2_INTERNAL_ERR;
+				}
 			}
 			// RC QP MTU will be set to min of req->verbs.qp_attr and pr_mtu
 			// TBD - we already factored in req vs pr to update pr no need

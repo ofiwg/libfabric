@@ -88,6 +88,9 @@
 #endif
 
 int psm3_shm_mq_rv_thresh = PSMI_MQ_RV_THRESH_NO_KASSIST;
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+int psm3_shm_mq_gpu_rv_thresh = PSMI_MQ_GPU_RV_THRESH;
+#endif
 
 // qcounts and qelemsz tunable via amsh_fifo_getconfig();
 static amsh_qinfo_t amsh_qcounts = {
@@ -371,6 +374,16 @@ psm2_error_t psm3_shm_create(ptl_t *ptl_gen)
 	}
 
 	memset((void *) mapptr, 0, segsz); /* touch all of my pages */
+#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
+	if (PSMI_IS_GPU_ENABLED && check_have_cuda_ctxt())
+		PSMI_CUDA_CALL(cuMemHostRegister, mapptr, segsz,
+				CU_MEMHOSTALLOC_PORTABLE);
+#endif
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+	if (PSMI_IS_GPU_ENABLED)
+		PSMI_ONEAPI_ZE_CALL(zexDriverImportExternalPointer, ze_driver,
+                                    mapptr, segsz);
+#endif
 
 	/* Our own ep's info for ptl_am resides at the start of the
 	   shm object.  Other processes need some of this info to
@@ -418,6 +431,37 @@ psm2_error_t psm3_epdir_extend(ptl_t *ptl_gen)
 psm2_error_t psm3_do_unmap(uintptr_t shmbase)
 {
 	psm2_error_t err = PSM2_OK;
+#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
+	if (PSMI_IS_GPU_ENABLED && cu_ctxt) {
+		/* ignore NOT_REGISTERED in case cuda initialized late */
+		/* ignore other errors as context could be destroyed before this */
+		CUresult cudaerr;
+		//PSMI_CUDA_CALL_EXCEPT(CUDA_ERROR_HOST_MEMORY_NOT_REGISTERED,
+		//		cuMemHostUnregister, (void*)shmbase);
+		psmi_count_cuMemHostUnregister++;
+		cudaerr = psmi_cuMemHostUnregister((void*)shmbase);
+		if (cudaerr) {
+			const char *pStr = NULL;
+			psmi_count_cuGetErrorString++;
+			psmi_cuGetErrorString(cudaerr, &pStr);
+			_HFI_DBG("CUDA failure: cuMemHostUnregister returned %d: %s\n",
+					cudaerr, pStr?pStr:"Unknown");
+		}
+	}
+#endif
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+        if (PSMI_IS_GPU_ENABLED) {
+			ze_result_t result;
+			//PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer, ze_driver,
+			//	    (void *)shmbase);
+			psmi_count_zexDriverReleaseImportedPointer++;
+			result = psmi_zexDriverReleaseImportedPointer(ze_driver,
+					    (void *)shmbase);
+			if (result != ZE_RESULT_SUCCESS) {
+				_HFI_DBG("OneAPI Level Zero failure: zexDriverReleaseImportedPointer returned %d: %s\n", result, psmi_oneapi_ze_result_to_string(result));
+			}
+		}
+#endif
 	if (munmap((void *)shmbase, am_ctl_sizeof_block())) {
 		err =
 		    psm3_handle_error(NULL, PSM2_SHMEM_SEGMENT_ERR,
@@ -550,6 +594,16 @@ psm2_error_t psm3_shm_map_remote(ptl_t *ptl_gen, psm2_epid_t epid, uint16_t *shm
 
 	// read every page in segment so faulted into our address space
 	psm3_touch_mmap(dest_mapptr, segsz);
+#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
+	if (PSMI_IS_GPU_ENABLED && check_have_cuda_ctxt())
+		PSMI_CUDA_CALL(cuMemHostRegister, dest_mapptr, segsz,
+				CU_MEMHOSTALLOC_PORTABLE);
+#endif
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+	if (PSMI_IS_GPU_ENABLED)
+		PSMI_ONEAPI_ZE_CALL(zexDriverImportExternalPointer, ze_driver,
+				    dest_mapptr, segsz);
+#endif
 
 	shmidx = -1;
 	if ((ptl->max_ep_idx + 1) == ptl->am_ep_size) {
@@ -711,6 +765,37 @@ psm2_error_t psm3_shm_detach(ptl_t *ptl_gen)
 	shm_unlink(ptl->amsh_keyname);
 	psmi_free(ptl->amsh_keyname);
 
+#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
+	if (PSMI_IS_GPU_ENABLED && cu_ctxt) {
+		/* ignore NOT_REGISTERED in case cuda initialized late */
+		/* ignore other errors as context could be destroyed before this */
+		CUresult cudaerr;
+		//PSMI_CUDA_CALL_EXCEPT(CUDA_ERROR_HOST_MEMORY_NOT_REGISTERED,
+		//		cuMemHostUnregister, (void*)shmbase);
+		psmi_count_cuMemHostUnregister++;
+		cudaerr = psmi_cuMemHostUnregister((void*)shmbase);
+		if (cudaerr) {
+			const char *pStr = NULL;
+			psmi_count_cuGetErrorString++;
+			psmi_cuGetErrorString(cudaerr, &pStr);
+			_HFI_DBG("CUDA failure: cuMemHostUnregister returned %d: %s\n",
+					cudaerr, pStr?pStr:"Unknown");
+		}
+	}
+#endif
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+	if (PSMI_IS_GPU_ENABLED) {
+		ze_result_t result;
+		//PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer, ze_driver,
+		//		    (void *)shmbase);
+		psmi_count_zexDriverReleaseImportedPointer++;
+		result = psmi_zexDriverReleaseImportedPointer(ze_driver,
+				    (void *)shmbase);
+		if (result != ZE_RESULT_SUCCESS) {
+			_HFI_DBG("OneAPI Level Zero failure: zexDriverReleaseImportedPointer returned %d: %s\n", result, psmi_oneapi_ze_result_to_string(result));
+		}
+	}
+#endif
 	if (munmap((void *)shmbase, am_ctl_sizeof_block())) {
 		err =
 		    psm3_handle_error(NULL, PSM2_SHMEM_SEGMENT_ERR,
@@ -2382,7 +2467,8 @@ amsh_mq_send_inner_eager(psm2_mq_t mq, psm2_mq_req_t req, psm2_epaddr_t epaddr,
 	args[2].u32w1 = tag->tag[2];
 	args[2].u32w0 = 0;
 
-	if (!flags_user && len <= AMLONG_MTU) {
+	psmi_assert(!(flags_user & PSM2_MQ_FLAG_SENDSYNC));// needs rndv
+	if (len <= AMLONG_MTU) {
 		if (len <= 32)
 			args[0].u32w0 = MQ_MSG_TINY;
 		else
@@ -2445,26 +2531,29 @@ amsh_mq_send_inner(psm2_mq_t mq, psm2_mq_req_t req, psm2_epaddr_t epaddr,
 	if (PSM3_IS_BUFFER_GPU_MEM(ubuf, len)) {
 		gpu_mem = 1;
 
-		/* All sends from a gpu buffer use the rendezvous protocol if p2p is supported */
-		if (ep_supports_p2p) {
+		/* SENDSYNC gets priority, assume not used for MPI_isend w/INJECT */
+		/* otherwise use eager for INJECT as caller is waiting */
+		if ((flags_user & (PSM2_MQ_FLAG_SENDSYNC|PSM2_MQ_FLAG_INJECT))
+				== PSM2_MQ_FLAG_INJECT)
+			goto do_eager;
+
+		/* larger sends from a gpu buffer use the rendezvous protocol if p2p is supported */
+		if (ep_supports_p2p && len > mq->shm_gpu_thresh_rv) {
 			goto do_rendezvous;
 		}
-
-		/*
-		 * Use eager messages if P2P is unsupported between endpoints.
-		 * Potentially use rendezvous with blocking requests only.
-		 */
-		if (!is_blocking)
-			goto do_eager;
-	}
+	} else
 #endif
+	/* SENDSYNC gets priority, assume not used for MPI_isend w/INJECT */
+	/* otherwise use eager for INJECT as caller is waiting */
+	if ((flags_user & (PSM2_MQ_FLAG_SENDSYNC|PSM2_MQ_FLAG_INJECT))
+				== PSM2_MQ_FLAG_INJECT)
+		goto do_eager;
+
 	if (flags_user & PSM2_MQ_FLAG_SENDSYNC)
 		goto do_rendezvous;
 
 	if (len <= mq->shm_thresh_rv)
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 do_eager:
-#endif
 		return amsh_mq_send_inner_eager(mq, req, epaddr, args, flags_user,
 						flags_internal, tag, ubuf, len);
 do_rendezvous:
@@ -2600,17 +2689,31 @@ int psm3_get_kassist_mode()
 		return PSMI_KASSIST_OFF;
 #endif
 
-#if !defined(PSM_CUDA) && !defined(PSM_ONEAPI)
 	union psmi_envvar_val env_kassist;
 	const char *PSM3_KASSIST_MODE_HELP = "PSM Shared memory kernel assist mode "
 			 "(cma-put, cma-get, none)";
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	// GPU limits KASSIST choices to cma-get or none
+	const char *PSM3_KASSIST_MODE_GPU_HELP = "PSM Shared memory kernel assist mode "
+			 "(cma-get, none)";
+#endif
 
-	if (!psm3_getenv("PSM3_KASSIST_MODE", PSM3_KASSIST_MODE_HELP,
+	if (!psm3_getenv("PSM3_KASSIST_MODE",
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+			 PSMI_IS_GPU_ENABLED?
+				PSM3_KASSIST_MODE_GPU_HELP:PSM3_KASSIST_MODE_HELP,
+#else
+			 PSM3_KASSIST_MODE_HELP,
+#endif
 			 PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_STR,
 			 (union psmi_envvar_val)
 			 PSMI_KASSIST_MODE_DEFAULT_STRING, &env_kassist)) {
 		char *s = env_kassist.e_str;
-		if (strcasecmp(s, "cma-put") == 0)
+		if (
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+			! PSMI_IS_GPU_ENABLED &&
+#endif
+			strcasecmp(s, "cma-put") == 0)
 			mode = PSMI_KASSIST_CMA_PUT;
 		else if (strcasecmp(s, "cma-get") == 0)
 			mode = PSMI_KASSIST_CMA_GET;
@@ -2622,7 +2725,6 @@ int psm3_get_kassist_mode()
 			mode = PSMI_KASSIST_CMA_GET;
 		}
 	}
-#endif
 	return mode;
 }
 
@@ -3005,11 +3107,9 @@ amsh_init(psm2_ep_t ep, ptl_t *ptl_gen, ptl_ctl_t *ctl)
 				    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 				    (union psmi_envvar_val)
 				    CUDA_MEMHANDLE_CACHE_SIZE, &env_memcache_size);
-#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 			if ((err = am_cuda_memhandle_cache_alloc(&ptl->memhandle_cache,
 						 env_memcache_size.e_uint, &ep->mq->stats) != PSM2_OK))
 				goto fail;
-#endif
 		}
 	}
 #endif
@@ -3160,6 +3260,10 @@ poll:
 		am_ze_memhandle_cache_free(ptl->memhandle_cache);
 #endif
 	ptl->memhandle_cache = NULL;
+#endif
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	if (PSMI_IS_GPU_ENABLED && ptl->gpu_bounce_buf)
+		PSM3_GPU_HOST_FREE(ptl->gpu_bounce_buf);
 #endif
 	return PSM2_OK;
 fail:

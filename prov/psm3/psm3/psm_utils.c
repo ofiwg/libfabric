@@ -2550,14 +2550,12 @@ unsigned psmi_parse_gpudirect_rdma_send_limit(int force)
 
 	/* Default send threshold for Gpu-direct set to UINT_MAX
  	 * (always use GPUDIRECT) */
-	psm3_getenv("PSM3_GPUDIRECT_RDMA_SEND_LIMIT",
-		    "GPUDirect RDMA feature on send side will be switched off for messages larger than limit.",
+	psm3_getenv_range("PSM3_GPUDIRECT_RDMA_SEND_LIMIT",
+		    "GPUDirect RDMA feature on send side will be switched off for messages larger than limit.", NULL,
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
-#ifdef PSM_ONEAPI
-		    (union psmi_envvar_val)(1024*1024), &envval);
-#else
-		    (union psmi_envvar_val)UINT_MAX, &envval);
-#endif
+		    (union psmi_envvar_val)UINT_MAX,
+		    (union psmi_envvar_val)0, (union psmi_envvar_val)UINT_MAX, 
+		    NULL, NULL, &envval);
 
 	saved = envval.e_uint;
 done:
@@ -2584,10 +2582,16 @@ unsigned psmi_parse_gpudirect_rdma_recv_limit(int force)
 
 	/* Default receive threshold for Gpu-direct set to UINT_MAX
  	 * (always use GPUDIRECT) */
-	psm3_getenv("PSM3_GPUDIRECT_RDMA_RECV_LIMIT",
-		    "GPUDirect RDMA feature on receive side will be switched off for messages larger than limit.",
+	psm3_getenv_range("PSM3_GPUDIRECT_RDMA_RECV_LIMIT",
+		    "GPUDirect RDMA feature on receive side will be switched off for messages larger than limit.", NULL,
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
-		    (union psmi_envvar_val)UINT_MAX, &envval);
+#ifdef PSM_CUDA
+		    (union psmi_envvar_val)UINT_MAX,
+#elif defined(PSM_ONEAPI)
+		    (union psmi_envvar_val)1,
+#endif
+		    (union psmi_envvar_val)0, (union psmi_envvar_val)UINT_MAX, 
+		    NULL, NULL, &envval);
 
 	saved = envval.e_uint;
 done:
@@ -2611,10 +2615,11 @@ unsigned psmi_parse_gpudirect_rv_gpu_cache_size(int reload)
 
 	// RV defaults are sufficient for default PSM parameters
 	// but for HALs with RDMA, if user adjusts ep->hfi_num_send_rdma or
-	// mq->hfi_base_window_rv they also need to increase the cache size.
+	// mq->ips_gpu_window_rv they also need to increase the cache size.
 	// psm3_verbs_alloc_mr_cache will verify cache size is sufficient.
 	// min size is (HFI_TF_NFLOWS + ep->hfi_num_send_rdma) *
-	// chunk size (mq->hfi_base_window_rv after psmi_mq_initialize_params)
+	// chunk size (psm3_mq_max_window_rv(mq, 1) after
+	// psmi_mq_initialize_params)
 	if (PSMI_IS_GPU_ENABLED && psmi_parse_gpudirect() ) {
 		psm3_getenv("PSM3_RV_GPU_CACHE_SIZE",
 				"kernel space GPU cache size"
@@ -2665,23 +2670,28 @@ int psm3_parse_identify(void)
 {
 	union psmi_envvar_val myenv;
 	static int have_value;
-	static unsigned saved_identify;
+	static int saved_identify;
 
 	// only parse once so doesn't appear in PSM3_VERBOSE_ENV multiple times
 	if (have_value)
 		return saved_identify;
 
-	psm3_getenv("PSM3_IDENTIFY", "Identify PSM version being run "
-				"(0 - disable, 1 - enable, 1: - limit output to rank 0, "
-				"1:pattern - limit output "
-				"to processes whose label matches "
+	psm3_getenv_range("PSM3_IDENTIFY", "Identify PSM version being run",
+				"  0 - disable\n"
+				"  1 - enable\n"
+				"  1: - limit output to rank 0\n"
+				"  1:pattern - limit output to processes whose label matches\n    "
 #ifdef FNM_EXTMATCH
 				"extended "
 #endif
 				"glob pattern)",
-				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR_VAL_PAT,
-				(union psmi_envvar_val)"0", &myenv);
-	(void)psm3_parse_val_pattern(myenv.e_str, 0, &saved_identify);
+				PSMI_ENVVAR_LEVEL_USER|PSMI_ENVVAR_FLAG_NOABBREV,
+				PSMI_ENVVAR_TYPE_STR_VAL_PAT_INT,
+				(union psmi_envvar_val)"0",
+				(union psmi_envvar_val)0, (union psmi_envvar_val)1,
+				NULL, NULL, &myenv);
+	(void)psm3_parse_val_pattern_int(myenv.e_str, 0, &saved_identify,
+			PSMI_ENVVAR_FLAG_NOABBREV, 0, 1);
 	have_value = 1;
 
 	return saved_identify;
@@ -2891,11 +2901,12 @@ void psm3_print_ep_identify(psm2_ep_t ep)
 
 	(void)psmi_hal_get_port_speed(ep->unit_id, ep->portnum, &link_speed);
 	psmi_hal_get_node_id(ep->unit_id, &node_id);
-	psm3_print_identify("%s %s NIC %u (%s) Port %u %"PRIu64" Mbps NUMA %d %s%s\n",
+	psm3_print_identify("%s %s NIC %u (%s) Port %u %"PRIu64" Mbps NUMA %d %s%s%s\n",
 		psm3_get_mylabel(), psm3_ident_tag,
 		ep->unit_id,  ep->dev_name,
 		ep->portnum, link_speed/(1000*1000),
 		node_id, psm3_epid_fmt_addr(ep->epid, 0),
+		ep->addl_nic_info?ep->addl_nic_info:"",
 		(! psm3_ep_device_is_enabled(ep, PTL_DEVID_AMSH)
 		 && (((struct ptl_ips *)(ep->ptl_ips.ptl))->proto.flags
 		 	& IPS_PROTO_FLAG_LOOPBACK))?" loopback":"");
@@ -3011,7 +3022,7 @@ void psm3_parse_multi_ep()
 
 #ifdef PSM_FI
 
-unsigned psm3_faultinj_enabled = 0;
+int psm3_faultinj_enabled = 0;
 int psm3_faultinj_verbose = 0;
 char *psm3_faultinj_outfile = NULL;
 int psm3_faultinj_sec_rail = 0;
@@ -3025,21 +3036,25 @@ void psm3_parse_faultinj()
 {
 	union psmi_envvar_val env_fi;
 
-	psm3_getenv("PSM3_FI", "PSM Fault Injection "
-				"(0 - disable, 1 - enable, "
-				"2 - enable but default each injector to 0 rate "
-				"#: - limit to rank 0, "
-				"#:pattern - limit "
-				"to processes whose label matches "
+	psm3_getenv_range("PSM3_FI", "PSM Fault Injection",
+				"  0 - disable\n"
+				"  1 - enable\n"
+				"  2 - enable but default each injector to 0 rate\n"
+				"  #: - limit to rank 0\n"
+				"  #:pattern - limit to processes whose label matches\n    "
 #ifdef FNM_EXTMATCH
 				"extended "
 #endif
-				"glob pattern) "
-				"mode 2 can be useful to generate full stats help "
-				"when PSM3_PRINT_STATS_HELP enabled",
-		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_STR_VAL_PAT,
-		    (union psmi_envvar_val)"0", &env_fi);
-	(void)psm3_parse_val_pattern(env_fi.e_str, 0, &psm3_faultinj_enabled);
+				"glob pattern\n"
+				"mode 2 can be useful to generate help for all injectors\n"
+				"when PSM3_PRINT_STATS_HELP=1 or PSM3_VERBOSE_ENV=3:",
+		    PSMI_ENVVAR_LEVEL_HIDDEN|PSMI_ENVVAR_FLAG_NOABBREV,
+		    PSMI_ENVVAR_TYPE_STR_VAL_PAT_INT,
+		    (union psmi_envvar_val)"0",
+		    (union psmi_envvar_val)0, (union psmi_envvar_val)2,
+		    NULL, NULL, &env_fi);
+	(void)psm3_parse_val_pattern_int(env_fi.e_str, 0,
+		 &psm3_faultinj_enabled, PSMI_ENVVAR_FLAG_NOABBREV, 0, 2);
 
 	if (psm3_faultinj_enabled) {
 		char *def = NULL;
@@ -3143,6 +3158,52 @@ void psm3_faultinj_fini()
 	return;
 }
 
+/* parse fault injection controls
+ * format is num:denom:initial_seed
+ * denom must be >= num and > 0
+ * Either field can be omitted in which case default (input fvals) is used
+ * for given field.
+ * 0 - successfully parsed, fvals updated
+ * -1 - str empty, fvals unchanged
+ * -2 - syntax error, fvals may have been changed
+ */
+static int parse_faultinj_control(const char *str,
+                size_t errstr_size, char errstr[],
+                int fvals[3])
+{
+	psmi_assert(fvals);
+	int ret = psm3_parse_str_tuples(str, 3, fvals);
+	if (ret < 0)
+		return ret;
+	if (! fvals[1]) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " denom must be non-zero");
+		return -2;
+	}
+	if (fvals[0] < 0 || fvals[1] < 0) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " Negative values for num and denom not allowed");
+		return -2;
+	}
+	if (fvals[0] > fvals[1]) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " num (%d) must be <= denom (%d)", fvals[0], fvals[1]);
+		return -2;
+	}
+	return 0;
+}
+
+static int parse_check_faultinj_control(int type,
+				const union psmi_envvar_val val, void *ptr,
+				size_t errstr_size, char errstr[])
+{
+	// parser will set fvals to result, use a copy to protect input of defaults
+	int fvals[3] = { ((int*)ptr)[0], ((int*)ptr)[1], ((int*)ptr)[2] };
+	psmi_assert(type == PSMI_ENVVAR_TYPE_STR_TUPLES);
+	return parse_faultinj_control(val.e_str, errstr_size, errstr, fvals);
+}
+
+
 /*
  * Intended to be used only once, not in the critical path
  */
@@ -3186,27 +3247,34 @@ struct psm3_faultinj_spec *psm3_faultinj_getspec(const char *spec_name,
 	 * error condition.
 	 */
 	{
-		int fvals[3] = { num, denom, (int)getpid() };
+		int fvals[3] = { fi->num, fi->denom, fi->initial_seed };
 		union psmi_envvar_val env_fi;
 		char fvals_str[128];
 		char fname[128];
 		char fdesc[300];
+		int ret;
 
 		snprintf(fvals_str, sizeof(fvals_str), "%d:%d:%d",
 				fi->num, fi->denom, fi->initial_seed);
 		snprintf(fname, sizeof(fname), "PSM3_FI_%s", spec_name);
-		snprintf(fdesc, sizeof(fdesc), "Fault Injection - %s <%s>",
-			 help, fvals_str);
+		snprintf(fdesc, sizeof(fdesc), "Fault Injection - %s", help);
 
-		if (!psm3_getenv(fname, fdesc, PSMI_ENVVAR_LEVEL_HIDDEN,
-				 PSMI_ENVVAR_TYPE_STR_TUPLES,
-				 (union psmi_envvar_val)fvals_str, &env_fi)) {
+		ret = psm3_getenv_range(fname, fdesc,
+				"Specified as num:denom:seed, where num/denom is approx probability\nand seed seeds the random number generator",
+				PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_STR_TUPLES,
+				(union psmi_envvar_val)fvals_str,
+				(union psmi_envvar_val)NULL, (union psmi_envvar_val)NULL,
+				parse_check_faultinj_control, fvals, &env_fi);
+		if (ret == 0) {
 			/* not using default values */
-			(void)psm3_parse_str_tuples(env_fi.e_str, 3, fvals);
+			if (parse_faultinj_control(env_fi.e_str, 0, NULL, fvals) < 0) {
+				// already checked, shouldn't get parse errors nor empty strings
+				psmi_assert(0);
+			}
 			fi->num = fvals[0];
 			fi->denom = fvals[1];
 			fi->initial_seed = fvals[2];
-		} else if (psm3_faultinj_enabled == 2) {
+		} else if (ret == 1 && psm3_faultinj_enabled == 2) {
 			// default unspecified injectors to off
 			fi->num = 0;
 		}

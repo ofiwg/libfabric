@@ -54,6 +54,7 @@
 /* Copyright (c) 2003-2016 Intel Corporation. All rights reserved. */
 
 #include "psm_user.h"
+#include "psm2_hal.h"
 #include "psm_mq_internal.h"
 #include "psm_am_internal.h"
 #include "cmarw.h"
@@ -162,19 +163,32 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 		 * resides on the GPU
 		 */
 		if (req->is_buf_gpu_mem) {
-			void* gpu_ipc_bounce_buf = psmi_malloc(PSMI_EP_NONE, UNDEFINED, req->req_data.recv_msglen);
-			size_t nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,
-					gpu_ipc_bounce_buf, req->req_data.recv_msglen);
-			psmi_assert_always(nbytes == req->req_data.recv_msglen);
-			PSM3_GPU_MEMCPY_HTOD(req->req_data.buf, gpu_ipc_bounce_buf,
-				req->req_data.recv_msglen);
+			size_t cnt = 0;
+			if (!ptl->gpu_bounce_buf)
+				PSM3_GPU_HOST_ALLOC(&ptl->gpu_bounce_buf, AMSH_GPU_BOUNCE_BUF_SZ);
+			while (cnt < req->req_data.recv_msglen) {
+				size_t nbytes = min(req->req_data.recv_msglen-cnt,
+									AMSH_GPU_BOUNCE_BUF_SZ);
+				size_t res = psm3_cma_get(pid, (void *)(req->rts_sbuf+cnt),
+										ptl->gpu_bounce_buf, nbytes);
+				void *buf;
+				psmi_assert_always(nbytes == res);
+				if (PSMI_USE_GDR_COPY_RECV(nbytes)
+					&& NULL != (buf = psmi_hal_gdr_convert_gpu_to_host_addr(
+									(unsigned long)req->req_data.buf+cnt,
+									nbytes, 1, ptl->ep)))
+					psm3_mq_mtucpy_host_mem(buf, ptl->gpu_bounce_buf, nbytes);
+				else
+					PSM3_GPU_MEMCPY_HTOD(req->req_data.buf+cnt,
+										 ptl->gpu_bounce_buf, nbytes);
+				cnt+= nbytes;
+			}
 			/* Cuda library has recent optimizations where they do
 			 * not guarantee synchronus nature for Host to Device
 			 * copies for msg sizes less than 64k. The event record
 			 * and synchronize calls are to guarentee completion.
 			 */
 			PSM3_GPU_SYNCHRONIZE_MEMCPY();
-			psmi_free(gpu_ipc_bounce_buf);
 		} else {
 			/* cma can be done in handler context or not. */
 			size_t nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,

@@ -123,6 +123,7 @@ struct psm2_ep {
 	uint16_t network_pkey_index;  /**> Pkey index */
 	int did_syslog;
 	const char *dev_name;	/* just for logging */
+	const char *addl_nic_info;	/* just for logging */
 	psm2_uuid_t uuid;
 	uint16_t jkey;
 	uint64_t service_id;	/* OPA service ID */
@@ -271,8 +272,6 @@ struct psm2_epaddr {
 	PSMI_PROFILE_UNBLOCK();						\
 } while (0)
 
-psm2_error_t psm3_parse_devices(int devices[PTL_MAX_INIT]);
-int psm3_device_is_enabled(const int devices[PTL_MAX_INIT], int devid);
 int psm3_ep_device_is_enabled(const psm2_ep_t ep, int devid);
 
 #ifdef PSM_HAVE_RNDV_MOD
