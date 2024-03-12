@@ -96,7 +96,7 @@ typedef struct {
 
 static psm2_error_t am_ze_memhandle_mpool_alloc(
 					am_ze_memhandle_cache_t cache, uint32_t memcache_size);
-void am_ze_memhandle_delete(void *buf_ptr);
+static void am_ze_memhandle_delete(void *buf_ptr);
 
 /*
  * Custom comparator
@@ -653,9 +653,9 @@ am_ze_memhandle_acquire(am_ze_memhandle_cache_t cache,
 
 }
 
+#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 void am_ze_memhandle_delete(void *buf_ptr)
 {
-#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 	/* Release the reference to the buffer */
 	PSMI_ONEAPI_ZE_CALL(zeMemFree, ze_context, buf_ptr);
 
@@ -679,8 +679,8 @@ void am_ze_memhandle_delete(void *buf_ptr)
 	 * GEM_CLOSE.
 	 */
 #endif
-#endif /* HAVE_DRM or HAVE_LIBDRM */
 }
+#endif /* HAVE_DRM or HAVE_LIBDRM */
 
 void
 am_ze_memhandle_release(am_ze_memhandle_cache_t cache,

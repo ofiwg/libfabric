@@ -159,11 +159,16 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 	}
 
 	if (!is_aux) {
-		psm3_getenv("PSM3_UDP_GSO",
-				"Enable UDP GSO Segmentation Offload (0 disables GSO)",
-				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
-				(union psmi_envvar_val)1, &env_gso);
-		ep->sockets_ep.udp_gso = env_gso.e_int;
+		psm3_getenv_range("PSM3_UDP_GSO",
+				"Enable UDP GSO Segmentation Offload",
+				"(0 disables GSO, 1 sets max chunk to 65536, >1 specifies max chunk)",
+				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
+				(union psmi_envvar_val)UINT16_MAX,
+				(union psmi_envvar_val)0, (union psmi_envvar_val)UINT16_MAX,
+				NULL, NULL, &env_gso);
+		ep->sockets_ep.udp_gso = env_gso.e_uint;
+		if (ep->sockets_ep.udp_gso == 1)
+			ep->sockets_ep.udp_gso = UINT16_MAX;
 		if (ep->sockets_ep.udp_gso) {
 			int gso;
 			socklen_t optlen = sizeof(gso);
@@ -553,6 +558,57 @@ fail:
 	return PSM2_INTERNAL_ERR;
 }
 
+/* parse TCP port range for PSM3_TCP_PORT_RANGE
+ * format is low:high
+ * low must be <= high and each must be < UINT16_MAX.
+ * Either field can be omitted in which case default (input tvals) is used
+ * for given field.
+ * 0 - successfully parsed, tvals updated
+ * -1 - str empty, tvals unchanged
+ * -2 - syntax error, tvals may have been changed
+ */
+static int parse_tcp_port_range(const char *str,
+				size_t errstr_size, char errstr[],
+				int tvals[2])
+{
+	psmi_assert(tvals);
+	int ret = psm3_parse_str_tuples(str, 2, tvals);
+	if (ret < 0)
+		return ret;
+	if (tvals[0] > UINT16_MAX || tvals[1] > UINT16_MAX) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " Max allowed is %u", UINT16_MAX);
+		return -2;
+	}
+	if (tvals[0] < 0 || tvals[1] < 0) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " Negative values not allowed");
+		return -2;
+	}
+	if ((tvals[0] == TCP_PORT_AUTODETECT && tvals[1] != TCP_PORT_AUTODETECT)
+		|| (tvals[0] != TCP_PORT_AUTODETECT && tvals[1] == TCP_PORT_AUTODETECT)) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " low of %d only allowed with high of %d", TCP_PORT_AUTODETECT, TCP_PORT_AUTODETECT);
+		return -2;
+	}
+	if (tvals[0] > tvals[1]) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " low (%d) > high (%d)", tvals[0], tvals[1]);
+		return -2;
+	}
+	return 0;
+}
+
+static int parse_check_tcp_port_range(int type,
+				const union psmi_envvar_val val, void *ptr,
+				size_t errstr_size, char errstr[])
+{
+	// parser will set tvals to result, use a copy to protect input of defaults
+	int tvals[2] = { ((int*)ptr)[0], ((int*)ptr)[1] };
+	psmi_assert(type == PSMI_ENVVAR_TYPE_STR_TUPLES);
+	return parse_tcp_port_range(val.e_str, errstr_size, errstr, tvals);
+}
+
 static __inline__
 psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd,
 	psm3_sockaddr_in_t *addr,
@@ -567,12 +623,16 @@ psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd,
 	char range_def[32];
 	snprintf(range_def, sizeof(range_def), "%d:%d", tvals[0], tvals[1]);
 
-	if (!psm3_getenv("PSM3_TCP_PORT_RANGE",
-		"Set the TCP listener port range <low:high>. The listener will bind to a random port in the range. '0:0'=let OS pick.",
+	(void)psm3_getenv_range("PSM3_TCP_PORT_RANGE",
+		"Set the TCP listener port range <low:high>.",
+		"The listener will bind to a random port in the range. '0:0'=let OS pick.",
 		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR_TUPLES,
-		(union psmi_envvar_val) range_def, &env_val)) {
-		/* not using default values */
-		(void)psm3_parse_str_tuples(env_val.e_str, 2, tvals);
+		(union psmi_envvar_val) range_def,
+		(union psmi_envvar_val)NULL, (union psmi_envvar_val)NULL,
+		parse_check_tcp_port_range, tvals, &env_val);
+	if (parse_tcp_port_range(env_val.e_str, 0, NULL, tvals) < 0) {
+		// already checked, shouldn't get parse errors nor empty strings
+		psmi_assert(0);
 	}
 
 	_HFI_DBG("PSM3_TCP_PORT_RANGE = %d:%d\n", tvals[0], tvals[1]);
@@ -583,17 +643,14 @@ psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd,
 		start = 0;
 		end = 0;
 		_HFI_DBG("Binding to OS provided port\n");
-	} else if (tvals[0] > 0 && tvals[0] <= tvals[1] && tvals[1] <= UINT16_MAX) {
+	} else {
+		psmi_assert(tvals[0] > 0);
 		// start with a random port, find the first available one.
 		port = psm3_rand((long int) getpid());
 		port = port % (tvals[1] + 1 - tvals[0]) + tvals[0];
 		start = (uint16_t)tvals[0];
 		end = (uint16_t)tvals[1];
 		_HFI_DBG("Binding to port in range [%" PRIu16 ":%" PRIu16 "], starting from %ld\n", start, end, port);
-	} else {
-		// high < low or only set one
-		_HFI_ERROR("Invalid TCP port range [%d:%d]\n", tvals[0], tvals[1]);
-		return PSM2_INTERNAL_ERR;
 	}
 
 	psm3_getenv("PSM3_TCP_BACKLOG",
@@ -635,6 +692,46 @@ psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd,
 	}
 	_HFI_ERROR( "No available port on %s in range [%" PRIu16 ", %" PRIu16 "]\n", ep->dev_name, start, end);
 	return PSM2_INTERNAL_ERR;
+}
+
+/* parse TCP skip poll counts for PSM3_TCP_SKIPPOLL_COUNT
+ * format is inactive_polls:active_polls
+ * inactive_polls must be >= active_polls
+ * Either field can be omitted in which case default (input tvals) is used
+ * for given field.
+ * 0 - successfully parsed, tvals updated
+ * -1 - str empty, tvals unchanged
+ * -2 - syntax error, tvals may have been changed
+ */
+static int parse_tcp_skippoll_count(const char *str,
+				size_t errstr_size, char errstr[],
+				int tvals[2])
+{
+	psmi_assert(tvals);
+	int ret = psm3_parse_str_tuples(str, 2, tvals);
+	if (ret < 0)
+		return ret;
+	if (tvals[0] < 0 || tvals[1] < 0) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " Negative values not allowed");
+		return -2;
+	}
+	if (tvals[0] < tvals[1]) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " inactive_polls (%d) must be >= active_polls (%d)", tvals[0], tvals[1]);
+		return -2;
+	}
+	return 0;
+}
+
+static int parse_check_tcp_skippoll_count(int type,
+				const union psmi_envvar_val val, void *ptr,
+				size_t errstr_size, char errstr[])
+{
+	// parser will set tvals to result, use a copy to protect input of defaults
+	int tvals[2] = { ((int*)ptr)[0], ((int*)ptr)[1] };
+	psmi_assert(type == PSMI_ENVVAR_TYPE_STR_TUPLES);
+	return parse_tcp_skippoll_count(val.e_str, errstr_size, errstr, tvals);
 }
 
 psm2_error_t
@@ -772,21 +869,16 @@ psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 	char buf[32];
 	snprintf(buf, sizeof(buf), "%d:%d", TCP_INACT_SKIP_POLLS, TCP_ACT_SKIP_POLLS);
 	int tvals[2] = {TCP_INACT_SKIP_POLLS, TCP_ACT_SKIP_POLLS};
-	if (!psm3_getenv("PSM3_TCP_SKIPPOLL_COUNT",
-		"Polls to skip under inactive and active connections <inactive_polls[:active_polls]> "
+	(void)psm3_getenv_range("PSM3_TCP_SKIPPOLL_COUNT",
+		"Polls to skip under inactive and active connections <inactive_polls[:active_polls]> ",
 		"where inactive_polls >= active_polls.",
 		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR_TUPLES,
-		(union psmi_envvar_val) buf, &env_val)) {
-		(void)psm3_parse_str_tuples(env_val.e_str, 2, tvals);
-		if (tvals[0] < 0) {
-			tvals[0] = TCP_INACT_SKIP_POLLS;
-		}
-		if (tvals[1] < 0) {
-			tvals[1] = TCP_ACT_SKIP_POLLS;
-		}
-		if (tvals[1] > tvals[0]) {
-			tvals[1] = tvals[0];
-		}
+		(union psmi_envvar_val) buf,
+		(union psmi_envvar_val)NULL, (union psmi_envvar_val)NULL,
+		parse_check_tcp_skippoll_count, tvals, &env_val);
+	if (parse_tcp_skippoll_count(env_val.e_str, 0, NULL, tvals) < 0) {
+		// already checked, shouldn't get parse errors nor empty strings
+		psmi_assert(0);
 	}
 	ep->sockets_ep.inactive_skip_polls = tvals[0];
 	ep->sockets_ep.active_skip_polls_offset = tvals[0] - tvals[1];
@@ -1084,10 +1176,11 @@ psm3_sockets_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 
 	if (ep->sockets_ep.udp_gso) {
 		// set upper bounds for GSO segmentation
-		// OS limitation of 64K (UINT16_MAX)
+		// OS limitation of 64K (UINT16_MAX) and UDP_MAX_SEGMENTS (64)
 		ep->chunk_max_segs = min(UINT16_MAX / (ep->mtu + sizeof(struct ips_message_header)), UDP_MAX_SEGMENTS);
-		ep->chunk_max_size = ep->mq->hfi_base_window_rv;
-		// for acks to pipeline well need to limit max_nsegs to
+		ep->chunk_max_size = ep->sockets_ep.udp_gso;
+
+		// for acks to pipeline we'll need to limit max_nsegs to
 		// < flow_credits/2 and max_size to < flow_credit_bytes/2
 		// (ideally 1/4, but that makes GSO too small and is worse)
 		ep->chunk_max_segs = min(ep->chunk_max_segs, proto->flow_credits/2);

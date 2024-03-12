@@ -470,8 +470,10 @@ void
 MOCKABLE(psm3_mpool_get_obj_info)(mpool_t mp, uint32_t *num_obj_per_chunk,
 			uint32_t *num_obj_max_total)
 {
-	*num_obj_per_chunk = mp->mp_num_obj_per_chunk;
-	*num_obj_max_total = mp->mp_num_obj_max_total;
+	if (num_obj_per_chunk)
+		*num_obj_per_chunk = mp->mp_num_obj_per_chunk;
+	if (num_obj_max_total)
+		*num_obj_max_total = mp->mp_num_obj_max_total;
 	return;
 }
 MOCK_DEF_EPILOGUE(psm3_mpool_get_obj_info);

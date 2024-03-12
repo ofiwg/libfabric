@@ -264,11 +264,64 @@ void psm3_ips_ptl_rcvthread_transfer_ownership(ptl_t *from_ptl_gen, ptl_t *to_pt
 	rcvc->ptl = to_ptl_gen;
 }
 
+/* parse recv thread frequency for PSM3_RCVTHREAD_FREQ"
+ * format is min_freq[:max_freq[:shift_freq]]",
+ * Either field can be omitted in which case default (input tvals) is used
+ * for given field.
+ * 0 - successfully parsed, tvals updated
+ * -1 - str empty, tvals unchanged
+ * -2 - syntax error, tvals may have been changed
+ */
+static int parse_rcvthread_freq(const char *str,
+			size_t errstr_size, char errstr[],
+			int tvals[3])
+{
+	psmi_assert(tvals);
+	int ret = psm3_parse_str_tuples(str, 3, tvals);
+	if (ret < 0)
+		return ret;
+	if (tvals[0] == 0 || tvals[1] == 0) {
+		// disables receiver thread, no other checks needed
+		return 0;
+	}
+	if (tvals[0] < 0 || tvals[0] > 1000) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " min_freq must be 0 to 1000");
+		return -2;
+	}
+	if (tvals[1] < 0 || tvals[1] > 1000) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " max_freq must be 0 to 1000");
+		return -2;
+	}
+	if (tvals[0] > tvals[1]) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " min_freq (%d) must be <= max_freq (%d)", tvals[0], tvals[1]);
+		return -2;
+	}
+	if (tvals[2] < 0 || tvals[2] > 10) {
+		if (errstr_size)
+			snprintf(errstr, errstr_size, " shift_freq must be 0 to 10");
+		return -2;
+	}
+	return 0;
+}
+
+static int parse_check_rcvthread_freq(int type,
+				const union psmi_envvar_val val, void *ptr,
+				size_t errstr_size, char errstr[])
+{
+	// parser will set tvals to result, use a copy to protect input of defaults
+	int tvals[3] = { ((int*)ptr)[0], ((int*)ptr)[1], ((int*)ptr)[2] };
+	psmi_assert(type == PSMI_ENVVAR_TYPE_STR_TUPLES);
+	return parse_rcvthread_freq(val.e_str, errstr_size, errstr, tvals);
+}
+
+
 psm2_error_t rcvthread_initsched(struct ptl_rcvthread *rcvc)
 {
 	union psmi_envvar_val env_to;
 	char rcv_freq[192];
-	int no_timeout = 0;
 	int tvals[3] = { RCVTHREAD_TO_MIN_FREQ,
 		RCVTHREAD_TO_MAX_FREQ,
 		RCVTHREAD_TO_SHIFT
@@ -276,40 +329,19 @@ psm2_error_t rcvthread_initsched(struct ptl_rcvthread *rcvc)
 	snprintf(rcv_freq, sizeof(rcv_freq) - 1, "%d:%d:%d",
 		 RCVTHREAD_TO_MIN_FREQ, RCVTHREAD_TO_MAX_FREQ,
 		 RCVTHREAD_TO_SHIFT);
-	rcv_freq[sizeof(rcv_freq) - 1] = '\0';
 
-	if (!psm3_getenv("PSM3_RCVTHREAD_FREQ",
+	(void)psm3_getenv_range("PSM3_RCVTHREAD_FREQ",
 			 "Recv Thread frequency (per sec) <min_freq[:max_freq[:shift_freq]]>",
+			 "Specified as min_freq[:max_freq[:shift_freq]]\nwhere min_freq and max_freq are polls per second\n(0 disables receiver thread)\nand 2^shift_freq is amount to multiply or divide frequency by",
 			 PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR_TUPLES,
-			 (union psmi_envvar_val)rcv_freq, &env_to)) {
-		/* not using default values */
-		(void)psm3_parse_str_tuples(env_to.e_str, 3, tvals);
-		int invalid = 0;
-
-		if (tvals[0] == 0 || tvals[1] == 0) {
-			no_timeout = 1;
-		} else {
-			if (tvals[0] > 1000)
-				invalid = 1;
-			if (tvals[1] > 1000 || tvals[1] < tvals[0])
-				invalid = 1;
-			if (tvals[2] > 10)
-				invalid = 1;
-		}
-
-		if (invalid) {
-			_HFI_INFO
-			    ("Overriding invalid request for RcvThread frequency"
-			     " settings of %s to be <%d:%d:%d>\n", env_to.e_str,
-			     RCVTHREAD_TO_MIN_FREQ, RCVTHREAD_TO_MAX_FREQ,
-			     RCVTHREAD_TO_SHIFT);
-			tvals[0] = RCVTHREAD_TO_MIN_FREQ;
-			tvals[1] = RCVTHREAD_TO_MAX_FREQ;
-			tvals[2] = RCVTHREAD_TO_SHIFT;
-		}
+			 (union psmi_envvar_val)rcv_freq,
+			 (union psmi_envvar_val)NULL, (union psmi_envvar_val)NULL,
+			 parse_check_rcvthread_freq, tvals, &env_to);
+	if (parse_rcvthread_freq(env_to.e_str, 0, NULL, tvals) < 0) {
+		// already checked, shouldn't get parse errors nor empty strings
+		psmi_assert(0);
 	}
-
-	if (no_timeout) {
+	if (tvals[0] == 0 || tvals[1] == 0) {
 		rcvc->last_timeout = -1;
 		_HFI_PRDBG("PSM3_RCVTHREAD_FREQ set to only interrupt "
 			   "(no timeouts)\n");

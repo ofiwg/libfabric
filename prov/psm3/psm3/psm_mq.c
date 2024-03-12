@@ -1445,6 +1445,18 @@ psm2_error_t psm3_mqopt_ctl(psm2_mq_t mq, uint32_t key, void *value, int get)
 		_HFI_VDBG("RNDV_SHM_SZ = %d (%s)\n",
 			  mq->shm_thresh_rv, get ? "GET" : "SET");
 		break;
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	case PSM2_MQ_GPU_RNDV_SHM_SZ:
+		if (get)
+			*((uint32_t *) value) = mq->shm_gpu_thresh_rv;
+		else {
+			val32 = *((uint32_t *) value);
+			mq->shm_gpu_thresh_rv = val32;
+		}
+		_HFI_VDBG("RNDV_GPU_SHM_SZ = %d (%s)\n",
+			  mq->shm_gpu_thresh_rv, get ? "GET" : "SET");
+		break;
+#endif
 	case PSM2_MQ_MAX_SYSBUF_MBYTES:
 		/* Deprecated: this option no longer does anything. */
 		break;
@@ -1595,6 +1607,169 @@ psm3_mq_print_stats_finalize(psm2_mq_t mq)
 		mq->mq_perf_data.perf_print_stats = 0;
 		pthread_join(mq->mq_perf_data.perf_print_thread, NULL);
 	}
+}
+
+/* parse a list of window_rv:limit values for
+ * PSM3_RNDV_NIC_WINDOW and PSM3_GPU_RNDV_NIC_WINDOW
+ * format is window:limit,window:limit,window
+ * limit value must be increasing, limit for last entry is optional and
+ * will be UINT32_MAX even if a value is specified.
+ * 0 - successfully parsed, *list points to malloced list
+ * -1 - str empty, *list unchanged
+ * -2 - syntax error, *list unchanged
+ */
+static int psm3_mq_parse_window_rv(const char *str,
+							size_t errstr_size, char errstr[],
+							struct psm3_mq_window_rv_entry **list)
+{
+#define MAX_WINDOW_STR_LEN 1024
+	char temp[MAX_WINDOW_STR_LEN+1];
+	char *s;
+	char *delim;
+	struct psm3_mq_window_rv_entry *ret = NULL;
+	int i;
+	unsigned int win, limit;
+	int skip_limit;
+
+	if (!str || ! *str)
+		return -1;
+
+	strncpy(temp, str, MAX_WINDOW_STR_LEN);
+	if (temp[MAX_WINDOW_STR_LEN-1] != 0) {
+		// string too long
+		if (errstr_size)
+			snprintf(errstr, errstr_size,
+				" Value too long, limit %u characters",
+				MAX_WINDOW_STR_LEN-1);
+		return -2;
+	}
+
+	s = temp;
+	i = 0;
+	do {
+		if (! *s)	// trailing ',' on 2nd or later loop
+			break;
+		// find end of window field and put in \0 as needed
+		delim = strpbrk(s, ":,");
+		skip_limit = (!delim || *delim == ',');
+		if (delim)
+			*delim = '\0';
+		// parse window
+		if (psm3_parse_str_uint(s, &win, 1, PSM_MQ_NIC_MAX_RNDV_WINDOW)) {
+			if (errstr_size)
+				snprintf(errstr, errstr_size, " Invalid window_rv: %s", s);
+			goto fail;
+		}
+		// find next field
+		if (delim)
+			s = delim+1;
+		if (skip_limit) {
+			limit = UINT32_MAX;
+		} else {
+			delim = strpbrk(s, ",");
+			if (delim)
+				*delim = '\0';
+			//parse limit
+			if (!strcasecmp(s, "max") || !strcasecmp(s, "maximum")) {
+				limit = UINT32_MAX;
+			} else {
+				if (psm3_parse_str_uint(s, &limit, 1, UINT32_MAX)) {
+					if (errstr_size)
+						snprintf(errstr, errstr_size, " Invalid limit: %s", s);
+					goto fail;
+				}
+			}
+			// find next field
+			if (delim)
+				s = delim+1;
+		}
+		if (i && ret[i-1].limit >= limit) {
+			if (errstr_size)
+				snprintf(errstr, errstr_size, " Limit not increasing: %u", limit);
+			goto fail;
+		}
+
+		ret = (struct psm3_mq_window_rv_entry*)psmi_realloc(PSMI_EP_NONE,
+				UNDEFINED, ret, sizeof(struct psm3_mq_window_rv_entry)*(i+1));
+		if (! ret)	// keep scans happy
+			return -2;
+		ret[i].window_rv = ROUNDUP(win, PSMI_PAGESIZE);
+		ret[i].limit = limit;
+		i++;
+	} while (delim);
+	if (! i)
+		return -1;
+	// force last entry limit to UINT32_MAX so used for all remaining lengths
+	ret[i-1].limit = UINT32_MAX;
+	if (list)
+		*list = ret;
+	else
+		psmi_free(ret);
+	return 0;
+
+fail:
+	psmi_free(ret);
+	return -2;
+}
+
+static int psm3_mq_parse_check_window_rv(int type,
+										const union psmi_envvar_val val,
+										void * ptr,
+										size_t errstr_size, char errstr[])
+{
+	psmi_assert(type == PSMI_ENVVAR_TYPE_STR);
+	return psm3_mq_parse_window_rv(val.e_str, errstr_size, errstr, NULL);
+}
+
+PSMI_ALWAYS_INLINE(uint32_t search_window(struct psm3_mq_window_rv_entry *e,
+					uint32_t len))
+{
+	for (; len > e->limit; e++)
+		;
+	return e->window_rv;
+}
+
+// for CPU build, gpu argument ignored, but avoids needing ifdef in callers
+uint32_t psm3_mq_max_window_rv(psm2_mq_t mq, int gpu)
+{
+	// must do search since window_rv may not be increasing (but usually is)
+	uint32_t ret = 0;
+	struct psm3_mq_window_rv_entry *e;
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	if (gpu)
+		e = mq->ips_gpu_window_rv;
+	else
+#endif
+		e = mq->ips_cpu_window_rv;
+	do {
+		ret = max(ret, e->window_rv);
+	} while ((e++)->limit < UINT32_MAX);
+	return ret;
+}
+
+uint32_t psm3_mq_get_window_rv(psm2_mq_req_t req)
+{
+	if (! req->window_rv) {
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+		if (req->is_buf_gpu_mem) {
+			req->window_rv = search_window(
+						req->mq->ips_gpu_window_rv,
+						req->req_data.send_msglen);
+		} else
+#endif	/* PSM_CUDA || PSM_ONEAPI */
+		req->window_rv = search_window(req->mq->ips_cpu_window_rv,
+						req->req_data.send_msglen);
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+		_HFI_VDBG("Selected Window of %u for %u byte %s msg\n",
+			req->window_rv,
+			req->req_data.send_msglen,
+			req->is_buf_gpu_mem?"GPU":"CPU");
+#else
+		_HFI_VDBG("Selected Window of %u for %u byte msg\n",
+			req->window_rv, req->req_data.send_msglen);
+#endif
+	}
+	return req->window_rv;
 }
 
 /*
@@ -2402,6 +2577,9 @@ psm2_error_t psm3_mq_malloc(psm2_mq_t *mqo)
 	// shm_thresh_rv is N/A to NIC and HAL, so we set this here and let
 	// HAL set the rest of the defaults
 	mq->shm_thresh_rv = MQ_SHM_THRESH_RNDV;
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	mq->shm_gpu_thresh_rv = MQ_SHM_GPU_THRESH_RNDV;
+#endif
 
 	psmi_hal_mq_init_defaults(mq);
 
@@ -2426,6 +2604,9 @@ psm2_error_t psm3_mq_initialize_params(psm2_mq_t mq)
 {
 	union psmi_envvar_val env_hfitiny, env_rvwin, env_hfirv,
 		env_shmrv, env_hash, env_stats;
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	union psmi_envvar_val env_shmgpurv;
+#endif
 
 	// a limit of PSM_MQ_MAX_TINY btyes is hardcoded into the PSM protocol
 	psm3_getenv("PSM3_MQ_TINY_NIC_LIMIT",
@@ -2440,11 +2621,66 @@ psm2_error_t psm3_mq_initialize_params(psm2_mq_t mq)
 		    (union psmi_envvar_val)mq->hfi_thresh_rv, &env_hfirv);
 	mq->hfi_thresh_rv = env_hfirv.e_uint;
 
-	psm3_getenv("PSM3_MQ_RNDV_NIC_WINDOW",
-		    "NIC rendezvous window size, max 4M",
-		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
-		    (union psmi_envvar_val)mq->hfi_base_window_rv, &env_rvwin);
-	mq->hfi_base_window_rv = min(PSM_MQ_NIC_MAX_RNDV_WINDOW, env_rvwin.e_uint);
+#define WINDOW_SYNTAX "Specified as window_size:limit,window_size:limit, ...\nwhere limit is the largest message size the window_size is applicable to.\nThe last window_size in the list will be used for all remaining message\nsizes (eg. its limit is optional and ignored).\nwindow_size must be <= 4194304 and the limit in each entry must be larger\nthan the prior entry."
+
+	// for loopback, no ips so no window_rv
+	if (mq->ips_cpu_window_rv_str) {
+		int got_depwin = 0;	// using deprecated PSM3_MQ_RNDV_NIC_WINDOW
+
+		// PSM3_RNDV_NIC_WINDOW overrides deprecated PSM3_MQ_RNDV_NIC_WINDOW.
+		// only parse PSM3_MQ_RNDV_NIC_WINDOW if used default for
+		// PSM3_RNDV_NIC_WINDOW because it was not specified.
+		if (psm3_getenv_range("PSM3_RNDV_NIC_WINDOW",
+			"List of NIC rendezvous windows sizes for messges to and from a CPU buffer.",
+			WINDOW_SYNTAX,
+			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+			(union psmi_envvar_val)(char*)(mq->ips_cpu_window_rv_str),
+			(union psmi_envvar_val)NULL, (union psmi_envvar_val)NULL,
+			psm3_mq_parse_check_window_rv, NULL, &env_rvwin) > 0) {
+			// new syntax is superset of old
+			got_depwin = (0 == psm3_getenv_range("PSM3_MQ_RNDV_NIC_WINDOW",
+					"[Deprecated, use PSM3_RNDV_NIC_WINDOW and PSM3_GPU_RNDV_NIC_WINDOW]",
+					"NIC rendezvous window size, max 4194304",
+					PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_STR,
+					(union psmi_envvar_val)(char*)(mq->ips_cpu_window_rv_str),
+					(union psmi_envvar_val)NULL, (union psmi_envvar_val)NULL,
+					psm3_mq_parse_check_window_rv, NULL, &env_rvwin));
+		}
+		if (psm3_mq_parse_window_rv(env_rvwin.e_str, 0, NULL,
+								 &mq->ips_cpu_window_rv) < 0) {
+			// already checked, shouldn't get parse errors nor empty strings
+			psmi_assert(0);
+		}
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+		if (PSMI_IS_GPU_ENABLED && mq->ips_gpu_window_rv_str) {
+			union psmi_envvar_val env_gpurvwin;
+			char *env;
+
+			env =  psm3_env_get("PSM3_GPU_RNDV_NIC_WINDOW");
+			if (env && *env)
+				got_depwin = 0;	// use new default as default
+			// PSM3_GPU_RNDV_NIC_WINDOW overrides deprecated
+			// PSM3_MQ_RNDV_NIC_WINDOW.
+			// If PSM3_GPU_RNDV_NIC_WINDOW not specified and user specified
+			// PSM3_MQ_RNDV_NIC_WINDOW, use it for GPU too.
+			(void)psm3_getenv_range("PSM3_GPU_RNDV_NIC_WINDOW",
+					"List of NIC rendezvous windows sizes for messages to or from a GPU buffer.",
+					WINDOW_SYNTAX,
+					PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+					got_depwin?env_rvwin:
+					  (union psmi_envvar_val)(char*)(mq->ips_gpu_window_rv_str),
+					(union psmi_envvar_val)NULL, (union psmi_envvar_val)NULL,
+					psm3_mq_parse_check_window_rv, NULL, &env_gpurvwin);
+			if (psm3_mq_parse_window_rv(env_gpurvwin.e_str, 0, NULL,
+								 &mq->ips_gpu_window_rv)< 0) {
+				// already checked, shouldn't get parse errors nor empty strings
+				psmi_assert(0);
+			}
+		}
+#else
+		(void)got_depwin;	// keep compiler happy
+#endif /* PSM_CUDA || PSM_ONEAPI */
+	}
 
 	/* Re-evaluate this since it may have changed after initializing the shm
 	 * device */
@@ -2454,6 +2690,17 @@ psm2_error_t psm3_mq_initialize_params(psm2_mq_t mq)
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)mq->shm_thresh_rv, &env_shmrv);
 	mq->shm_thresh_rv = env_shmrv.e_uint;
+
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	if (PSMI_IS_GPU_ENABLED) {
+		mq->shm_gpu_thresh_rv = psm3_shm_mq_gpu_rv_thresh;
+		psm3_getenv("PSM3_MQ_RNDV_SHM_GPU_THRESH",
+			"shm eager-to-rendezvous switchover for GPU send",
+			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
+			(union psmi_envvar_val)mq->shm_gpu_thresh_rv, &env_shmgpurv);
+		mq->shm_gpu_thresh_rv = env_shmgpurv.e_uint;
+	}
+#endif
 
 	psm3_getenv("PSM3_MQ_HASH_THRESH",
 		    "linear list to hash tag matching switchover",
@@ -2486,6 +2733,10 @@ psm2_error_t MOCKABLE(psm3_mq_free)(psm2_mq_t mq)
 	psm3_mq_req_fini(mq);
 	psm3_mq_sysbuf_fini(mq);
 	psm3_stats_deregister_type(PSMI_STATSTYPE_MQ, mq);
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	psmi_free(mq->ips_gpu_window_rv);
+#endif
+	psmi_free(mq->ips_cpu_window_rv);
 	psmi_free(mq);
 	return PSM2_OK;
 }

@@ -175,15 +175,15 @@ static void psm3_hfp_sockets_mq_init_defaults(struct psm2_mq *mq)
 	 * corresponding PSM3_* env variables.
 	 * Otherwise these defaults are used.
 	 */
-	mq->hfi_thresh_rv = 64000;
-	mq->hfi_base_window_rv = 131072;
+	mq->hfi_thresh_rv = PSM_MQ_NIC_RNDV_THRESH;
+	mq->ips_cpu_window_rv_str = PSM_CPU_NIC_RNDV_WINDOW_STR;
 	// Even without RDMA do we want to disable rendezvous?
 	// even without RDMA, the receiver controlled pacing helps scalability
 	mq->hfi_thresh_rv = (~(uint32_t)0); // disable rendezvous
 	mq->hfi_thresh_tiny = PSM_MQ_NIC_MAX_TINY;
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	if (PSMI_IS_GPU_ENABLED)
-		mq->hfi_base_window_rv = 2097152;
+		mq->ips_gpu_window_rv_str = PSM_GPU_NIC_RNDV_WINDOW_STR;
 #endif
 	// we parse inet and rv_gpu_cache_size here so we can cache it
 	// once per EP open, even if multi-rail or multi-QP

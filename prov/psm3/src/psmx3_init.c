@@ -320,11 +320,11 @@ static int psmx3_check_multi_ep_cap(void)
 {
 	uint64_t caps = PSM2_MULTI_EP_CAP;
 	char *s = NULL;
+	int val = 1; /* if parses as empty (-1) or invalid (-2), use default of 1 */
 
 	s = psm3_env_get("PSM3_MULTI_EP");
-	/* if parses as empty or invalid (-1), use default of 1 */
-	/* psm3 below us will provide warning as needed when it parses it */
-	if (psm3_get_capability_mask(caps) == caps && 0 != psm3_parse_str_yesno(s))
+	/* psm3 below us will provide warning as needed when it parses it again */
+	if (psm3_get_capability_mask(caps) == caps && (psm3_parse_str_yesno(s, &val) || val))
 		psmx3_env.multi_ep = 1;
 	else
 		psmx3_env.multi_ep = 0;
@@ -438,7 +438,7 @@ static int psmx3_update_hfi_info(void)
 	// if parses as empty or invalid (-1), use default of 0 */
 	// PSM3 below us will provide warning as needed when it parses it
 	s = psm3_env_get("PSM3_MULTIRAIL");
-	(void)psm3_parse_str_int(s, &multirail);
+	(void)psm3_parse_str_int(s, &multirail, INT_MIN, INT_MAX);
 
 	psmx3_domain_info.num_reported_units = 0;
 	psmx3_domain_info.num_active_units = 0;
@@ -699,6 +699,7 @@ static void psmx3_update_nic_info(struct fi_info *info)
 	}
 }
 
+static int init_calls;
 static int psmx3_getinfo(uint32_t api_version, const char *node,
 			 const char *service, uint64_t flags,
 			 const struct fi_info *hints, struct fi_info **info)
@@ -739,6 +740,8 @@ static int psmx3_getinfo(uint32_t api_version, const char *node,
 			"no PSM3 device is active.\n");
 		goto err_out;
 	}
+
+	init_calls += 1;
 
 	/* when available, default domain and fabric names are a superset
 	 * of all individual names, so we can do a substr search as a 1st level
@@ -872,6 +875,9 @@ static int psmx3_getinfo(uint32_t api_version, const char *node,
 	*info = prov_info;
 	free(src_addr);
 	free(dest_addr);
+	if (hints || init_calls >= 2) {
+		psm3_turn_off_init_cache();
+	}
 	return 0;
 
 err_out:

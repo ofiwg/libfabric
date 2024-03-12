@@ -99,6 +99,11 @@
 /* #define PSM_PROFILE */
 #endif
 
+// If defined, for FI_INJECT Send DMA will be avoided
+#ifndef PSM_INJECT_NOSDMA
+/* #define PSM_INJECT_NOSDMA */
+#endif
+
 #define PSMI_MIN_EP_CONNECT_TIMEOUT	(2 * SEC_ULL)
 #define PSMI_MIN_EP_CLOSE_TIMEOUT	(1 * SEC_ULL)
 #define PSMI_MAX_EP_CLOSE_TIMEOUT	(2 * SEC_ULL)
@@ -174,9 +179,21 @@
 
 
 #define PSM_MQ_NIC_MAX_TINY		8	/* max TINY payload allowed */
+#define PSM_MQ_NIC_RNDV_THRESH	 	64000
+#define PSM_CPU_NIC_RNDV_WINDOW_STR "131072"
+#ifdef PSM_CUDA
+#define PSM_GPU_NIC_RNDV_WINDOW_STR "2097152"
+#elif defined(PSM_ONEAPI)
+#define PSM_GPU_NIC_RNDV_WINDOW_STR "131072:524287,262144:1048575,524288"
+#endif
 #define PSM_MQ_NIC_MAX_RNDV_WINDOW	(4 * 1024 * 1024) /* max rndv window */
 
 #define MQ_SHM_THRESH_RNDV 16000
+#if defined(PSM_CUDA)
+#define MQ_SHM_GPU_THRESH_RNDV 127
+#elif defined(PSM_ONEAPI)
+#define MQ_SHM_GPU_THRESH_RNDV 127
+#endif
 
 // LEARN_HASH_SELECTOR has PSM3 dynamically learn the combinations
 // of src_addr presence and tagsel used by a given middleware.  This

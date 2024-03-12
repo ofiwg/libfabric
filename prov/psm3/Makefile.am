@@ -30,9 +30,9 @@ ACLOCAL_AMFLAGS = -I config
 AM_CFLAGS = -Wall
 
 if HAVE_LD_VERSION_SCRIPT
-    libpsm3_fi_version_script = -Wl,--version-script=$(builddir)/libpsm3-fi.map
+	libpsm3_fi_version_script = -Wl,--version-script=$(builddir)/libpsm3-fi.map
 else !HAVE_LD_VERSION_SCRIPT
-    libpsm3_fi_version_script =
+	libpsm3_fi_version_script =
 endif !HAVE_LD_VERSION_SCRIPT
 
 # rdmaincludedir = $(includedir)/rdma
@@ -51,6 +51,8 @@ common_srcs = \
 	shared/hmem_neuron.c \
 	shared/hmem_synapseai.c \
 	shared/hmem_ipc_cache.c \
+	shared/xpmem.c \
+	shared/xpmem_cache.c \
 	shared/common.c \
 	shared/enosys.c \
 	shared/rbtree.c \
@@ -78,13 +80,22 @@ common_srcs = \
 	util/src/util_ns.c \
 	util/src/util_pep.c \
 	util/src/util_poll.c \
+	util/src/util_profile.c \
+	util/src/util_srx.c \
 	util/src/util_wait.c \
 	util/src/rxm_av.c \
 	util/src/cuda_mem_monitor.c \
 	util/src/cuda_ipc_monitor.c \
 	util/src/rocr_mem_monitor.c \
 	util/src/rocr_ipc_monitor.c \
-	util/src/ze_mem_monitor.c
+	util/src/ze_mem_monitor.c \
+	util/src/xpmem_monitor.c \
+	shared/fabric.c \
+	shared/fi_tostr.c \
+	shared/perf.c \
+	shared/log.c \
+	shared/var.c \
+	shared/abi_1_0.c
 
 if MACOS
 common_srcs += shared/osx/osd.c
@@ -103,9 +114,7 @@ if LINUX
 common_srcs += shared/unix/osd.c
 common_srcs += shared/linux/osd.c
 if HAVE_LINUX_PERF_RDPMC
-if !HAVE_PSM3_SRC
-common_srcs += shared/linux/rdpmc.c  #seems to be a copy of psm3/psm_perf.c
-endif
+common_srcs += shared/linux/rdpmc.c
 endif
 common_srcs += inc/linux/rdpmc.h
 common_srcs += inc/linux/osd.h
@@ -120,6 +129,8 @@ bin_SCRIPTS =
 nodist_src_libpsm3_fi_la_SOURCES =
 src_libpsm3_fi_la_SOURCES = \
 	inc/ofi_hmem.h \
+	inc/ofi_cma.h \
+	inc/ofi_xpmem.h \
 	inc/ofi.h \
 	inc/ofi_abi.h \
 	inc/ofi_atom.h \
@@ -137,7 +148,7 @@ src_libpsm3_fi_la_SOURCES = \
 	inc/ofi_proto.h \
 	inc/ofi_recvwin.h \
 	inc/ofi_rbuf.h \
-	inc/ofi_shm.h \
+	inc/ofi_shm_p2p.h \
 	inc/ofi_signal.h \
 	inc/ofi_epoll.h \
 	inc/ofi_tree.h \
@@ -148,10 +159,12 @@ src_libpsm3_fi_la_SOURCES = \
 	inc/ofi_net.h \
 	inc/ofi_perf.h \
 	inc/ofi_coll.h \
+	inc/ofi_mb.h \
 	inc/fasthash.h \
 	inc/rbtree.h \
 	inc/uthash.h \
 	inc/ofi_prov.h \
+	inc/ofi_profile.h \
 	inc/rdma/providers/fi_log.h \
 	inc/rdma/providers/fi_prov.h \
 	inc/rdma/providers/fi_peer.h \
@@ -167,6 +180,7 @@ src_libpsm3_fi_la_SOURCES = \
 	inc/rdma/fi_errno.h \
 	inc/rdma/fi_tagged.h \
 	inc/rdma/fi_trigger.h \
+	inc/rdma/fi_profile.h \
 	src/psmx3.h \
 	src/psmx3_am.c \
 	src/psmx3_atomic.c \
@@ -216,7 +230,7 @@ src_libpsm3_fi_la_LDFLAGS += -lpsm2
 endif !HAVE_PSM3_SRC
 
 if !EMBEDDED
-src_libpsm3_fi_la_LDFLAGS += -version-info 22:0:21
+src_libpsm3_fi_la_LDFLAGS += -version-info 24:0:23
 endif
 
 prov_install_man_pages = man/man7/fi_psm3.7
@@ -249,8 +263,8 @@ src/psm3_src_chksum.h: Makefile $(chksum_srcs)
 
 nroff:
 	@for file in $(prov_install_man_pages); do \
-	    source=`echo $$file | sed -e 's@/man[0-9]@@'`; \
-	    perl $(top_srcdir)/config/md2nroff.pl --source=$(top_srcdir)/$$source.md; \
+		source=`echo $$file | sed -e 's@/man[0-9]@@'`; \
+		perl $(top_srcdir)/config/md2nroff.pl --source=$(top_srcdir)/$$source.md; \
 	done
 
 dist-hook: libpsm3-fi.spec

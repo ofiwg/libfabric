@@ -1376,6 +1376,16 @@ void *psm3_epaddr_getctxt(psm2_epaddr_t epaddr);
    * option value: Deprecated; this option has no effect.
    */
 
+#define PSM2_MQ_OPT_GPU_RNDV_SHM_SZ      0x304
+#define PSM2_MQ_GPU_RNDV_SHM_SZ          PSM2_MQ_OPT_GPU_RNDV_SHM_SZ
+  /**< [@b uint32_t ] Size at which to start enabling
+   * rendezvous messaging for shared memory (intra-node) GPU messages (If
+   * unset, defaults to 127 bytes for Intel GPU, 127 for NVIDIA GPU).
+   *
+   * component object: PSM2 Matched Queue (@ref psm2_mq_t).
+   * option value: Size at which to switch to rendezvous protocol for GPU send.
+   */
+
 /* PSM2_COMPONENT_AM options */
 #define PSM2_AM_OPT_FRAG_SZ          0x401
 #define PSM2_AM_MAX_FRAG_SZ          PSM2_AM_OPT_FRAG_SZ
@@ -1802,10 +1812,10 @@ char* psm3_env_get(const char *name);
  *
  * @param[in] const char *str parameter value
  * @retval 0 The string was valid, *val has value
- * -1 The string was empty or NULL
- * -2 The string had invalid syntax
+ * -1 The string was empty or NULL, *val not updated
+ * -2 The string had invalid syntax, *val not updated
  */
-int psm3_parse_str_int(const char *string, int *val);
+int psm3_parse_str_int(const char *string, int *val, int min, int max);
 
 /** @brief PSM2 unsigned int parameter parsing
  *
@@ -1813,22 +1823,56 @@ int psm3_parse_str_int(const char *string, int *val);
  *
  * @param[in] const char *str parameter value
  * @retval 0 The string was valid, *val has value
- * -1 The string was empty or NULL
- * -2 The string had invalid syntax
+ * -1 The string was empty or NULL, *val not updated
+ * -2 The string had invalid syntax, *val not updated
  */
-int psm3_parse_str_uint(const char *string, unsigned int *val);
+int psm3_parse_str_uint(const char *string, unsigned int *val,
+							unsigned int min, unsigned int max);
 
 /** @brief PSM2 yesno parameter parsing
  *
  * Function that parses a string yesno parameter
  *
  * @param[in] const char *str parameter value
- * @retval -1 The string was empty or NULL
- * -2 The string had invalid syntax
+ * @retval 0 The string was valid, *val has value
+ * -1 The string was empty or NULL, *val not updated
+ * -2 The string had invalid syntax, *val not updated
+ * @param[out] int *val
  * 0  The string was No, False, Off or 0
  * 1  The string was Yes, True, On or 1
  */
-int psm3_parse_str_yesno(const char *str);
+int psm3_parse_str_yesno(const char *str, int *val);
+
+// for the purposes of psmx3 accessing PSM3_DEVICES config, these
+// interfaces are defined here.  Not for general consumption
+/* We currently have 3 PTLs, 0 is reserved. */
+#define PTL_DEVID_IPS  1	// ips aka nic, network inter-node
+#define PTL_DEVID_AMSH 2	// shm, intra-node, scale-up
+#define PTL_DEVID_SELF 3	// self
+
+/* We can currently initialize up to 3 PTLs */
+#define PTL_MAX_INIT    3
+
+/** @brief PSM2 devices parameter parsing
+ *
+ * Function that gets and parses the PSM3_DEVICES string parameter
+ *
+ * @param[out] array of devices
+ * @retval PSM2_OK - devices successfully returned
+ * other (PSM2_PARAM_ERR) - error parsing devices
+ */
+psm2_error_t psm3_parse_devices(int devices[PTL_MAX_INIT]);
+
+/** @brief PSM2 devices list search
+ *
+ * Function that searches devid_enabled for a specific device
+ *
+ * @param[in] array of devices from psm3_parse_devices
+ * @param[in] devid: PTL_DEVID_IPS, PTL_DEVID_AMSH, or PTL_DEVID_SELF
+ * @retval 1 - given devid is enabled in devices[]
+ * 0  Given devid is disabled in devices[]
+ */
+int psm3_device_is_enabled(const int devices[PTL_MAX_INIT], int devid);
 
 /** @brief PSM2 env finalize
  *
@@ -1871,6 +1915,8 @@ int psm3_getenv_str(const char *name, const char *descr, int visible,
 void psm3_memcpy(void *dest, const void *src, uint32_t len);
 
 /*! @} */
+
+void psm3_turn_off_init_cache();
 
 #ifdef __cplusplus
 } /* extern "C" */
