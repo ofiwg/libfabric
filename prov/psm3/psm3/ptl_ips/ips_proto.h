@@ -437,7 +437,8 @@ struct ips_proto {
 #ifdef PSM_CUDA
 	CUstream cudastream_send;
 #elif defined(PSM_ONEAPI)
-	ze_command_queue_handle_t cq_send;	// NULL if psm3_oneapi_immed_async_copy
+	/* Will not be used if psm3_oneapi_immed_async_copy */
+	ze_command_queue_handle_t cq_sends[MAX_ZE_DEVICES];
 #endif
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)

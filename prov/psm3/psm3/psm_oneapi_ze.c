@@ -70,6 +70,7 @@ int psm3_num_ze_dev_fds;
 #endif
 int psm3_oneapi_immed_sync_copy;
 int psm3_oneapi_immed_async_copy;
+unsigned psm3_oneapi_parallel_dtod_copy_thresh;
 
 const char* psmi_oneapi_ze_result_to_string(const ze_result_t result) {
 #define ZE_RESULT_CASE(RES) case ZE_RESULT_##RES: return STRINGIFY(RES)
@@ -200,6 +201,72 @@ void psmi_oneapi_ze_memcpy(void *dstptr, const void *srcptr, size_t size)
 		PSMI_ONEAPI_ZE_CALL(zeCommandQueueExecuteCommandLists, ctxt->cq,
 					1, &ctxt->cl, NULL);
 		PSMI_ONEAPI_ZE_CALL(zeCommandQueueSynchronize, ctxt->cq, UINT32_MAX);
+	}
+}
+
+// synchronous GPU memcpy DTOD (xeLink)
+void psmi_oneapi_ze_memcpy_DTOD(void *dstptr, const void *srcptr, size_t size)
+{
+	struct ze_dev_ctxt *ctxt;
+
+	psmi_assert(size > 0);
+	ctxt = psmi_oneapi_dev_ctxt_get(dstptr);
+	if (!ctxt) {
+		_HFI_ERROR("dst %p src %p not GPU buf for copying\n",
+			   dstptr, srcptr);
+		return;
+	}
+	if (size <= psm3_oneapi_parallel_dtod_copy_thresh) {
+		if (psm3_oneapi_immed_sync_copy) {
+			PSMI_ONEAPI_ZE_CALL(zeCommandListAppendMemoryCopy, ctxt->cl,
+					dstptr, srcptr, size, NULL, 0, NULL);
+		} else {
+			PSMI_ONEAPI_ZE_CALL(zeCommandListReset, ctxt->cl);
+			PSMI_ONEAPI_ZE_CALL(zeCommandListAppendMemoryCopy, ctxt->cl,
+					dstptr, srcptr, size, NULL, 0, NULL);
+			PSMI_ONEAPI_ZE_CALL(zeCommandListClose, ctxt->cl);
+			PSMI_ONEAPI_ZE_CALL(zeCommandQueueExecuteCommandLists, ctxt->cq,
+					1, &ctxt->cl, NULL);
+			PSMI_ONEAPI_ZE_CALL(zeCommandQueueSynchronize, ctxt->cq, UINT32_MAX);
+		}
+	} else {
+		// for large DTOD copies, start 2 parallel commands
+		// then wait for both
+		size_t size0 = ROUNDUP64P2(size/2, 64*1024);
+		size_t size1 = size - size0;
+
+		if (psm3_oneapi_immed_sync_copy) {
+			PSMI_ONEAPI_ZE_CALL(zeCommandListAppendMemoryCopy, ctxt->async_cl0,
+					dstptr, srcptr, size0, ctxt->copy_status0, 0, NULL);
+
+			PSMI_ONEAPI_ZE_CALL(zeCommandListAppendMemoryCopy, ctxt->async_cl1,
+					(void*)((uintptr_t)dstptr+size0),
+					(void*)((uintptr_t)srcptr+size0), size1, ctxt->copy_status1,
+					0, NULL);
+		} else {
+			PSMI_ONEAPI_ZE_CALL(zeCommandListReset, ctxt->async_cl0);
+			PSMI_ONEAPI_ZE_CALL(zeCommandListAppendMemoryCopy, ctxt->async_cl0,
+					dstptr, srcptr, size0, ctxt->copy_status0, 0, NULL);
+			PSMI_ONEAPI_ZE_CALL(zeCommandListClose, ctxt->async_cl0);
+			PSMI_ONEAPI_ZE_CALL(zeCommandQueueExecuteCommandLists, ctxt->async_cq0,
+					1, &ctxt->async_cl0, NULL);
+
+			PSMI_ONEAPI_ZE_CALL(zeCommandListReset, ctxt->async_cl1);
+			PSMI_ONEAPI_ZE_CALL(zeCommandListAppendMemoryCopy, ctxt->async_cl1,
+					(void*)((uintptr_t)dstptr+size0),
+					(void*)((uintptr_t)srcptr+size0), size1, ctxt->copy_status1,
+					0, NULL);
+			PSMI_ONEAPI_ZE_CALL(zeCommandListClose, ctxt->async_cl1);
+			PSMI_ONEAPI_ZE_CALL(zeCommandQueueExecuteCommandLists, ctxt->async_cq1,
+					1, &ctxt->async_cl1, NULL);
+		}
+		// 2nd copy may be slightly smaller so waity for it first so
+		// can potentially hide its Reset latency while 1st copy completes
+		PSMI_ONEAPI_ZE_CALL(zeEventHostSynchronize, ctxt->copy_status1, UINT32_MAX);
+		PSMI_ONEAPI_ZE_CALL(zeEventHostReset, ctxt->copy_status1);
+
+		PSMI_ONEAPI_ZE_CALL(zeEventHostSynchronize, ctxt->copy_status0, UINT32_MAX);
+		PSMI_ONEAPI_ZE_CALL(zeEventHostReset, ctxt->copy_status0);
 	}
 }
 

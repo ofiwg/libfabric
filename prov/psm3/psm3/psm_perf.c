@@ -207,7 +207,7 @@ static void psmi_rdpmc_perf_framework_init()
  *
  * Read the current value of a running performance counter.
  */
-unsigned long long rdpmc_read(struct rdpmc_ctx *ctx)
+unsigned long long psm3_rdpmc_read(struct rdpmc_ctx *ctx)
 {
 	static __thread int rdpmc_perf_initialized = 0;
 

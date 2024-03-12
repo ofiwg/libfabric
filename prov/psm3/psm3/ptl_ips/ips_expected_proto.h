@@ -137,7 +137,8 @@ struct ips_protoexp {
 #ifdef PSM_CUDA
 	CUstream cudastream_recv;
 #elif defined(PSM_ONEAPI)
-	ze_command_queue_handle_t cq_recv;	// NULL if psm3_oneapi_immed_async_copy
+	/* Will not be usd if psm3_oneapi_immed_async_copy */
+	ze_command_queue_handle_t cq_recvs[MAX_ZE_DEVICES];
 #endif
 };
 
@@ -201,6 +202,7 @@ struct ips_tid_send_desc {
 	 * would need to attach to a tidsendc would be 2
 	 */
 	struct ips_gpu_hostbuf *gpu_hostbuf[2];
+	struct ips_gpu_hostbuf *gpu_split_buf;
 	/* Number of hostbufs attached */
 	uint8_t gpu_num_buf;
 #endif
@@ -362,4 +364,11 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 			    ptl_arg_t rdescid, uint32_t tidflow_genseq,
 			    ips_tid_session_list *tid_list,
 			    uint32_t tid_list_size);
+
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+// buffers for GPU send copy pipeline
+struct ips_gpu_hostbuf* psm3_ips_allocate_send_chb(struct ips_proto *proto,
+				uint32_t nbytes, int allow_temp);
+void psm3_ips_deallocate_send_chb(struct ips_gpu_hostbuf* chb, int reset);
+#endif
 #endif /* #ifndef __IPS_EXPECTED_PROTO_H__ */

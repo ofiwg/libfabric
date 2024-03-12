@@ -97,9 +97,14 @@ static uint32_t dsa_thresh; // copies > thresh will use DSA
 // per process (such as OneCCL workers or Intel MPI Multi-EP threading).
 // But expected counts for such are modest (2-4 for Intel MPI, 8-16 for OneCCL)
 #define DSA_MAX_QUEUES 32
+
+// Default: 2 MB.
+#define DSA_MAX_XFER_SIZE_DEFAULT (1 << 21)
+
 // information parsed from PSM3_DSA_WQS
 static char *dsa_wq_filename[DSA_MAX_PROC][DSA_MAX_QUEUES];
 static uint8_t dsa_wq_mode[DSA_MAX_PROC][DSA_MAX_QUEUES];
+static uint32_t dsa_wq_max_xfer_size[DSA_MAX_PROC][DSA_MAX_QUEUES];
 static uint32_t dsa_num_wqs[DSA_MAX_PROC];
 static uint32_t dsa_num_proc;
 
@@ -108,6 +113,7 @@ struct dsa_wq {
 	const char *wq_filename;	// points into dsa_wq_filename
 	void *wq_reg;	// mmap memory
 	uint32_t use_count;	// how many threads assigned to this WQ
+	uint32_t max_xfer_size; // Maximum supported transfer size
 	uint8_t dedicated;	// is this a dedicated (1) or shared (0) WQ
 };
 static struct dsa_wq dsa_wqs[DSA_MAX_QUEUES];
@@ -119,6 +125,7 @@ static psmi_spinlock_t dsa_wq_lock; // protects dsa_wq.use_count
 // Each thread is assigned a DSA WQ on 1st memcpy
 static __thread void *dsa_wq_reg = NULL;
 static __thread uint8_t dsa_wq_dedicated;
+static __thread uint32_t dsa_wq_xfer_limit;
 
 // we keep completion record in thread local storage instead of stack
 // this way if a DSA completion times out and arrives late it still has a
@@ -163,6 +170,13 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 	uint32_t cpu_n;
 	uint64_t start_cycles, end_cycles;
 	uint64_t loops;
+	uint32_t dsa_chk_size;
+	uint32_t cpu_chk_size;
+	int t_chunks;
+	uint32_t dsa_copied_len = 0;
+	uint32_t cpu_copied_len = 0;
+	int copied_chunks = 0;
+	uint32_t dsa_cp_len;
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	if (n && PSMI_IS_GPU_ENABLED && (PSMI_IS_GPU_MEM(dest) || PSMI_IS_GPU_MEM((void *) src))) {
@@ -177,22 +191,31 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 		return;
 	}
 
+	/*
+	 * Calculate the total chunks.
+	 */
+	t_chunks = (n + dsa_wq_xfer_limit - 1) / dsa_wq_xfer_limit;
+
 	// TBD - add some statistics for DSA vs CPU copy use
 	// to maximize performance we do part of the copy with CPU while we
 	// wait for DSA to copy the rest
 	if (dsa_ratio) {
 		cpu_n = n/dsa_ratio;
+		cpu_chk_size = cpu_n / t_chunks;
 		// TBD - should we compute so DSA gets a full multiple of pages and CPU
 		// does the rest?  Should we start DSA on a page boundary?
 		// round down to page boundary
 		//cpu_n = ROUNDDOWNP2(cpu_n, PSMI_PAGESIZE);
 
 		// round to a multiple of 8 bytes at least
-		cpu_n = ROUNDDOWNP2(cpu_n, 8);
+		cpu_chk_size = ROUNDDOWNP2(cpu_chk_size, 8);
+		cpu_n = cpu_chk_size * t_chunks;
 	} else {
 		cpu_n = 0;
+		cpu_chk_size = 0;
 	}
 	dsa_n = n - cpu_n;
+	dsa_chk_size = (dsa_n + t_chunks - 1)/t_chunks;
 	dsa_src = (void*)((uintptr_t)src + cpu_n);
 	dsa_dest = (void*)((uintptr_t)dest + cpu_n);
 	psmi_assert(dsa_n);
@@ -200,6 +223,8 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 
 	// comp ptr must be 32 byte aligned
 	comp = (struct dsa_completion_record *)(((uintptr_t)&dsa_comp[0] + 0x1f) & ~0x1f);
+
+restart:
 	comp->status = 0;
 	desc.opcode = DSA_OPCODE_MEMMOVE;
 	/* set CRAV (comp address valid) and RCR (request comp) so get completion */
@@ -218,9 +243,13 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 	// for overall server.  Best to take the pain here as page faults should
 	// be rare during steady state of most apps
 	// desc.flags |= IDXD_OP_FLAG_BOF;
-	desc.xfer_size = dsa_n;
-	desc.src_addr = (uintptr_t)dsa_src;
-	desc.dst_addr = (uintptr_t)dsa_dest;
+	if (copied_chunks < (t_chunks - 1))
+		dsa_cp_len = dsa_chk_size;
+	else
+		dsa_cp_len = dsa_n - dsa_copied_len;
+	desc.xfer_size = dsa_cp_len;
+	desc.src_addr = (uintptr_t)dsa_src + dsa_copied_len;
+	desc.dst_addr = (uintptr_t)dsa_dest + dsa_copied_len;
 	desc.completion_addr = (uintptr_t)comp;
 
 	// make sure completion status zeroing fully written before post to HW
@@ -239,9 +268,8 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 				if (get_cycles() > end_cycles) {
 					_HFI_INFO("Disabling DSA: DSA SWQ Enqueue Timeout\n");
 					dsa_available = 0;
-					memcpy(dest, src, n);
 					stats->dsa_error++;
-					return;
+					goto memcpy_exit;
 				}
 			}
 			stats->dsa_swq_wait_ns += cycles_to_nanosecs(get_cycles() - start_cycles);
@@ -252,11 +280,13 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 
 	if (cpu_n) {
 		// while DSA does it's thing, we copy rest via CPU
-		memcpy(dest, src, cpu_n);
+		memcpy((void *)((uintptr_t)dest + cpu_copied_len),
+		       (void *)((uintptr_t)src + cpu_copied_len), cpu_chk_size);
+		cpu_copied_len += cpu_chk_size;
 	}
 
 	stats->dsa_copy++;
-	stats->dsa_copy_bytes += dsa_n;
+	stats->dsa_copy_bytes += dsa_cp_len;
 
 	// wait for DSA to finish
 	start_cycles = get_cycles();
@@ -269,8 +299,8 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 		if (get_cycles() > end_cycles && comp->status == 0) {
 			_HFI_INFO("Disabling DSA: DSA Hardware Timeout\n");
 			dsa_available = 0;
-			memcpy(dsa_dest, dsa_src, dsa_n);
 			stats->dsa_error++;
+			goto memcpy_exit;
 			return;
 		}
 		loops++;
@@ -294,9 +324,22 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 				stats->dsa_page_fault_rd++;
 			_HFI_VDBG("DSA desc failed: page fault status %u\n", comp->status);
 		}
-		memcpy(dsa_dest, dsa_src, dsa_n);
-		return;
+		goto memcpy_exit;
 	}
+	/* Check loop status */
+	dsa_copied_len += dsa_cp_len;
+	if (++copied_chunks < t_chunks)
+		goto restart;
+
+	return;
+
+memcpy_exit:
+	memcpy((void *)((uintptr_t)dsa_dest + dsa_copied_len),
+	       (void *)((uintptr_t)dsa_src + dsa_copied_len),
+	       dsa_n - dsa_copied_len);
+	memcpy((void *)((uintptr_t)dest + cpu_copied_len),
+	       (void *)((uintptr_t)src + cpu_copied_len),
+	       cpu_n - cpu_copied_len);
 	return;
 }
 
@@ -378,6 +421,58 @@ static int psm3_dsa_mode(const char *wq_filename)
 	return -1;
 }
 
+// determine the max transfer size for a DSA WQ by reading the max_transfer_size
+// file under DSA_DEVICES/wqX.Y/
+// where wqX.Y is last part of supplied wq_filename
+// return the max_transfer_size.
+// on error returns 0 and an _HFI_ERROR message has been output
+static int psm3_dsa_max_xfer_size(const char *wq_filename)
+{
+	char wq_size_filename[PATH_MAX];
+	const char *p;
+	char buf[20];
+	int fd;
+	int res;
+
+	p = strrchr(wq_filename, '/');
+	if (p)
+		p++;	// skip '/'
+	else
+		p = wq_filename;
+	res = snprintf(wq_size_filename, sizeof(wq_size_filename),
+		       "%s/%s/max_transfer_size", DSA_DEVICES, p);
+	if (res < 0 || res > sizeof(wq_size_filename) - 1) {
+		_HFI_ERROR("Unable to determine DSA WQ max xfer size for %s\n",
+			   wq_filename);
+		return 0;
+	}
+	fd = open(wq_size_filename, O_RDONLY);
+	if (fd < 0) {
+		_HFI_ERROR("Failed to open DSA WQ max xfer size: %s: %s\n",
+			   wq_size_filename, strerror(errno));
+		return 0;
+	}
+	res = read(fd, buf, sizeof(buf)-1);
+	if (res < 0) {
+		_HFI_ERROR("Failed to read DSA WQ max xfer size: %s: %s\n",
+			   wq_size_filename, strerror(errno));
+		close(fd);
+		return 0;
+	}
+	close(fd);
+	if (! res) {
+		_HFI_ERROR("Failed to read DSA WQ max xfer size: %s: empty file\n",
+			   wq_size_filename);
+		return 0;
+	}
+	if (buf[res-1] == '\n')
+		buf[res-1] = '\0';
+	else
+		buf[res] = '\0';
+	_HFI_DBG("DSA WQ %s max xfer size %s\n", wq_filename, buf);
+	return (uint32_t)strtoul(buf, NULL, 0);
+}
+
 /* initialize DSA - call once per process */
 /* Some invalid inputs and DSA initialization errors are treated as fatal errors
  * since if DSA gets initialized on some nodes, but not on others, the
@@ -410,11 +505,11 @@ int psm3_dsa_init(void)
 	if (! psm3_getenv("PSM3_DSA_WQS",
 			"List of DSA WQ devices to use, one list per local process or per\n"
 			"CPU socket:\n"
-			"     wq0,wq2:wq4,wq6:,...\n"
+			"     wq0,wq2;wq4,wq6;,...\n"
 			"Each wq should be a shared workqueue DSA device or a unique\n"
 			"dedicated workqueue DSA device,\n"
 			"     such as /dev/dsa/wq0.0\n"
-			"Colon separates the lists for different processes\n"
+			"Semicolon separates the lists for different processes\n"
 			"     default is '' in which case DSA is not used\n",
 			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
                         (union psmi_envvar_val)"", &env_dsa_wq)) {
@@ -430,10 +525,13 @@ int psm3_dsa_init(void)
 		}
 		s = temp;
 		psmi_assert(*s);
+		// both : and ; are treated the same below, : is deprecated
 		do {
 			int mode;
+			uint32_t xfer_size;
+
 			new_proc = 0;
-			if (! *s)	// trailing ',' or ':' on 2nd or later loop
+			if (! *s)	// trailing ',' or ':' or ';' on 2nd or later loop
 				break;
 			if (proc >= DSA_MAX_PROC) {
 				_HFI_ERROR("PSM3_DSA_WQS exceeds %u per node process limit: '%s'",
@@ -441,9 +539,9 @@ int psm3_dsa_init(void)
 				psmi_free(temp);
 				goto fail;
 			}
-			delim = strpbrk(s, ",:");
+			delim = strpbrk(s, ",:;");
 			if (delim)  {
-				new_proc = (*delim == ':');
+				new_proc = (*delim == ':' || *delim == ';');
 				*delim = '\0';
 			}
 			if (dsa_num_wqs[proc] > DSA_MAX_QUEUES) {
@@ -460,6 +558,9 @@ int psm3_dsa_init(void)
 			}
 			if (mode)
 				all_are_shared = 0;
+			xfer_size = psm3_dsa_max_xfer_size(s);
+			dsa_wq_max_xfer_size[proc][dsa_num_wqs[proc]] = xfer_size > 0 ?
+				xfer_size : DSA_MAX_XFER_SIZE_DEFAULT;
 			dsa_wq_mode[proc][dsa_num_wqs[proc]] = mode;
 			dsa_wq_filename[proc][dsa_num_wqs[proc]] = psmi_strdup(PSMI_EP_NONE, s);
 			dsa_num_wqs[proc]++;
@@ -468,7 +569,7 @@ int psm3_dsa_init(void)
 			s = delim+1;
 		} while (delim);
 		psmi_free(temp);
-		// new_proc means trailing :, ignore it
+		// new_proc means trailing : or ;, ignore it
 		// otherwise, last we processed counts
 		if (!new_proc && proc < DSA_MAX_PROC && dsa_num_wqs[proc])
 			proc++;
@@ -580,6 +681,7 @@ int psm3_dsa_init(void)
 		// key off having rw access to the DSA WQ to decide if DSA is available
 		dsa_wqs[i].wq_filename = dsa_wq_filename[proc][i];
 		dsa_wqs[i].dedicated = dsa_wq_mode[proc][i];
+		dsa_wqs[i].max_xfer_size = dsa_wq_max_xfer_size[proc][i];
 		if (! realpath(dsa_wqs[i].wq_filename, dsa_filename)) {
 			_HFI_ERROR("Failed to resolve DSA WQ path %s\n", dsa_wqs[i].wq_filename);
 			goto fail;
@@ -658,6 +760,7 @@ static inline void psm3_dsa_pick_wq(void)
 found:
 	dsa_wq_reg = dsa_wqs[sel].wq_reg;
 	dsa_wq_dedicated = dsa_wqs[sel].dedicated;
+	dsa_wq_xfer_limit = dsa_wqs[sel].max_xfer_size;
 }
 
 

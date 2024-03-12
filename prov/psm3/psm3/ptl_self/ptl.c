@@ -80,6 +80,14 @@ ptl_handle_rtsmatch(psm2_mq_req_t recv_req, int was_posted)
 	psm2_mq_req_t send_req = (psm2_mq_req_t) recv_req->ptl_req_ptr;
 
 	if (recv_req->req_data.recv_msglen > 0) {
+#ifdef PSM_DSA
+		if (psm3_use_dsa(recv_req->req_data.recv_msglen))
+			psm3_dsa_memcpy(recv_req->req_data.buf,
+					send_req->req_data.buf,
+					recv_req->req_data.recv_msglen, 0,
+					&send_req->mq->stats.dsa_stats[0]);
+		else
+#endif
 		psm3_mq_mtucpy(recv_req->req_data.buf, send_req->req_data.buf,
 			       recv_req->req_data.recv_msglen);
 	}

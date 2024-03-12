@@ -468,6 +468,10 @@ struct ptl_am {
 #ifdef PSM_ONEAPI
 	am_ze_memhandle_cache_t memhandle_cache;
 #endif
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#define AMSH_GPU_BOUNCE_BUF_SZ (256*1024)
+	void *gpu_bounce_buf;	// for H to D
+#endif
 } __attribute__((aligned(64)));
 
 #endif

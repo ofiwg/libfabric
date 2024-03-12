@@ -58,7 +58,7 @@ AC_DEFINE_UNQUOTED([BUILD_ID],["$with_build_id"],
 
 # Override autoconf default CFLAG settings (e.g. "-g -O2") while still
 # allowing the user to explicitly set CFLAGS=""
-: ${CFLAGS="-fvisibility=hidden ${base_c_warn_flags}"}
+: ${CFLAGS="${base_c_warn_flags}"}
 
 # AM_PROG_AS would set CFLAGS="-g -O2" by default if not set already so it
 # should not be called earlier
@@ -241,6 +241,35 @@ AS_IF([test x"$enable_debug" != x"no"],
 
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
                    [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
+
+AC_ARG_ENABLE([profile],
+              [AS_HELP_STRING([--enable-profile],
+                              [Enable profiling @<:@default=no@:>@])],
+              [],
+              [enable_profile=no])
+
+AS_IF([test x"$enable_profile" != x"no"],
+      [AC_DEFINE([HAVE_FABRIC_PROFILE], [1],
+                 [defined to 1 if libfabric was configured with --enable-profile, 0 otherwise])
+])
+
+AC_DEFUN([FI_ARG_ENABLE_SANITIZER],[
+        AC_ARG_ENABLE([$1],
+                      [AS_HELP_STRING([--enable-$1],
+                                      [Enable $3Sanitizer @<:@default=no@:>@])
+                      ],
+                      [],
+                      [enable_$1=no])
+        AS_IF([test x"$enable_$1" != x"no"],
+              [CFLAGS="-fsanitize=$2 $CFLAGS"])
+])
+
+m4_map([FI_ARG_ENABLE_SANITIZER],[
+       [asan, address, Address],
+       [lsan, leak, Leak],
+       [tsan, thread, Thread],
+       [ubsan, undefined, UndefinedBehavior]
+])
 
 dnl Checks for header files.
 AC_HEADER_STDC
@@ -463,7 +492,9 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[__asm__(".symver main_, main@ABIVER_1.0");]], 
 
 ]) dnl AS_IF icc_symver_hack
 
-AC_DEFINE_UNQUOTED([HAVE_SYMVER_SUPPORT], [$ac_asm_symver_support],
+dnl Disable in psm3 to include all symbols without symver
+dnl AC_DEFINE_UNQUOTED([HAVE_SYMVER_SUPPORT], [$ac_asm_symver_support],
+AC_DEFINE_UNQUOTED([HAVE_SYMVER_SUPPORT], [0],
            [Define to 1 if compiler/linker support symbol versioning.])
 
 AC_MSG_CHECKING(for __alias__ attribute support)
@@ -478,8 +509,9 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
       AC_MSG_RESULT(no)
       ac_prog_cc_alias_symbols=0
    ])
-
-AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [$ac_prog_cc_alias_symbols],
+dnl Disable in psm3 to include all symbols without symver
+dnl AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [$ac_prog_cc_alias_symbols],
+AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [0],
            [Define to 1 if the linker supports alias attribute.])
 AC_CHECK_FUNCS([getifaddrs])
 
@@ -772,6 +804,37 @@ AS_IF([test "x$enable_psm3_umr_cache" != "xno"],
               ])
       ])
 
+dnl ------------- hwloc
+AC_ARG_ENABLE([psm3-hwloc],
+        [AS_HELP_STRING([--enable-psm3-hwloc],
+                        [Enable PSM3 use of hwloc for NIC affinity selections @<:@default=check@:>@])],
+        [], [enable_psm3_hwloc=check])
+psm3_hwloc_happy=0
+AS_IF([test "x$enable_psm3_hwloc" != "xno"],
+      [
+        FI_CHECK_PACKAGE([psm3_hwloc],
+                         [hwloc.h],
+                         [hwloc],
+                         [hwloc_topology_init],
+                         [],
+                         [$psm3_PREFIX],
+                         [$psm3_LIBDIR],
+                         [psm3_hwloc_found=1],
+                         [psm3_hwloc_found=0])
+        AS_IF([test $psm3_hwloc_found -ne 1 && test "x$enable_psm3_hwloc" == "xyes"],
+              [
+                psm3_happy=0
+                AC_MSG_ERROR([hwloc Support requested but hwloc headers and/or library not found.])
+              ])
+        AS_IF([test "$psm3_hwloc_found" -eq 1],
+              [
+                  psm3_hwloc_happy=1
+                  CPPFLAGS="$CPPFLAGS $psm3_hwloc_CPPFLAGS -DPSM_USE_HWLOC"
+                  LDFLAGS="$LDFLAGS $psm3_hwloc_LDFLAGS"
+                  LIBS="$LIBS $psm3_hwloc_LIBS"
+              ])
+      ])
+
 dnl ------------- Driver Modules
 psm3_rv_happy=0
 AC_ARG_WITH([psm3-rv],
@@ -852,6 +915,9 @@ AC_DEFINE_UNQUOTED([PSM3_MARCH], ["$PSM3_MARCH"], [PSM3 built with instruction s
 AS_IF([test ! -z "$PSM_CPPFLAGS"], [CPPFLAGS="$CPPFLAGS $PSM_CPPFLAGS"], [])
 AS_IF([test ! -z "$PSM_CFLAGS"], [CFLAGS="$CFLAGS $PSM_CFLAGS"], [])
 
+dnl Workaround for including fabric.c
+AC_DEFINE([HOOK_NOOP_INIT], NULL, [Ignore HOOK_NOOP_INIT])
+AC_DEFINE([COLL_INIT], NULL, [Ignore COLL_INIT])
 dnl Defines not used in PSM3 provider
 AC_DEFINE([HAVE_DMABUF_PEER_MEM], 0, [Ignore HAVE_DMABUF_PEER_MEM])
 AC_DEFINE([HAVE_GDRCOPY], 0, [Ignore HAVE_GDRCOPY])
@@ -862,10 +928,16 @@ AC_DEFINE([HAVE_NEURON], 0, [Ignore HAVE_NEURON])
 AC_DEFINE([HAVE_ROCR], 0, [Ignore HAVE_ROCR])
 AC_DEFINE([HAVE_SYNAPSEAI], 0, [Ignore HAVE_SYNAPSEAI])
 AC_DEFINE([HAVE_UFFD_MONITOR], 0, [Ignore HAVE_UFFD_MONITOR])
+AC_DEFINE([HAVE_XPMEM], 0, [Ignore HAVE_XPMEM])
+
 dnl Provider-specific checks
 dnl FI_PROVIDER_INIT
+AC_DEFINE([HAVE_BGQ], 0, [Ignore HAVE_BGQ])
+AC_DEFINE([HAVE_BGQ_DL], 0, [Ignore HAVE_BGQ_DL])
 AC_DEFINE([HAVE_EFA], 0, [Ignore HAVE_EFA])
 AC_DEFINE([HAVE_EFA_DL], 0, [Ignore HAVE_EFA_DL])
+AC_DEFINE([HAVE_GNI], 0, [Ignore HAVE_GNI])
+AC_DEFINE([HAVE_GNI_DL], 0, [Ignore HAVE_GNI_DL])
 AC_DEFINE([HAVE_MRAIL], 0, [Ignore HAVE_MRAIL])
 AC_DEFINE([HAVE_MRAIL_DL], 0, [Ignore HAVE_MRAIL_DL])
 AC_DEFINE([HAVE_NET], 0, [Ignore HAVE_NET])
@@ -878,6 +950,8 @@ AC_DEFINE([HAVE_PSM2_DL], 0, [Ignore HAVE_PSM2_DL])
 dnl FI_PROVIDER_SETUP([psm3])
 AC_DEFINE([HAVE_OPX], 0, [Ignore HAVE_OPX])
 AC_DEFINE([HAVE_OPX_DL], 0, [Ignore HAVE_OPX_DL])
+AC_DEFINE([HAVE_RSTREAM], 0, [Ignore HAVE_RSTREAM])
+AC_DEFINE([HAVE_RSTREAM_DL], 0, [Ignore HAVE_RSTREAM_DL])
 AC_DEFINE([HAVE_RXD], 0, [Ignore HAVE_RXD])
 AC_DEFINE([HAVE_RXD_DL], 0, [Ignore HAVE_RXD_DL])
 AC_DEFINE([HAVE_RXM], 0, [Ignore HAVE_RXM])
@@ -896,6 +970,8 @@ AC_DEFINE([HAVE_UCX], 0, [Ignore HAVE_UCX])
 AC_DEFINE([HAVE_UCX_DL], 0, [Ignore HAVE_UCX_DL])
 AC_DEFINE([HAVE_UDP], 0, [Ignore HAVE_UDP])
 AC_DEFINE([HAVE_UDP_DL], 0, [Ignore HAVE_UDP_DL])
+AC_DEFINE([HAVE_USNIC], 0, [Ignore HAVE_USNIC])
+AC_DEFINE([HAVE_USNIC_DL], 0, [Ignore HAVE_USNIC_DL])
 AC_DEFINE([HAVE_VERBS], 0, [Ignore HAVE_VERBS])
 AC_DEFINE([HAVE_VERBS_DL], 0, [Ignore HAVE_VERBS_DL])
 dnl FI_PROVIDER_FINI
@@ -977,6 +1053,9 @@ if test $psm3_rv_happy -eq 1; then
 fi
 if test $psm3_dsa_happy -eq 1; then
     afeatures="$afeatures, Intel DSA"
+fi
+if test $psm3_hwloc_happy -eq 1; then
+    afeatures="$afeatures, hwloc"
 fi
 if test "x$enable_psm3_udp" = "xyes"; then
     afeatures="$afeatures, UDP"
