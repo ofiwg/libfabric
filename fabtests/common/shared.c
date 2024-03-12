@@ -2826,7 +2826,6 @@ int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 	       size_t size, void *ctx, int flags)
 {
-	int ret;
 	struct fi_msg msg;
 	struct fi_msg_tagged tagged_msg;
 	struct iovec msg_iov;
