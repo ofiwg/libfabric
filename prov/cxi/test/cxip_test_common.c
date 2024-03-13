@@ -1094,8 +1094,8 @@ void cxit_setup_rma(void)
 	int ret;
 	struct cxip_addr fake_addr = {.nic = 0xad, .pid = 0xbc};
 
-	cxip_trace_append = true;
-	cxip_trace_enable(true);
+	cxip_coll_trace_append = true;
+	cxip_coll_trace_muted = false;
 	cxit_setup_enabled_ep();
 
 	/* Insert local address into AV to prepare to send to self */

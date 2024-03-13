@@ -28,7 +28,7 @@
 #include <cxip.h>
 #include "multinode_frmwk.h"
 
-#define	TRACE(fmt, ...)	CXIP_TRACE(CXIP_TRC_TEST_CODE, fmt, ##__VA_ARGS__)
+#define	TRACE(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_TEST_CODE, fmt, ##__VA_ARGS__)
 
 /* convert delays to nsecs */
 #define	nUSEC(n)	(n * 1000L)
@@ -89,7 +89,7 @@ static void _idle_wait(struct cxip_ep_obj *ep_obj, int msec)
 			continue;
 		TRACE("ns=%ld dsc=%d err=%d ack=%d rcv=%d\n",
 			nsecs, dsc, err, ack, rcv);
-		cxip_trace_flush();
+		cxip_coll_trace_flush();
 		dsc0 = dsc;
 		err0 = err;
 		ack0 = ack;
@@ -129,7 +129,7 @@ static int _send_wait(struct cxip_zbcoll_obj *zb, int sndcnt, int rcvcnt)
 		TRACE("STATE FAILURE\n");
 		return 1;
 	}
-	cxip_trace_flush();
+	cxip_coll_trace_flush();
 	return 0;
 }
 
@@ -885,7 +885,7 @@ static inline bool _istest(uint64_t mask, int test)
 
 int main(int argc, char **argv)
 {
-	bool trace_enabled = false;
+	bool trace_muted = true;
 	char hostname[256];
 	fi_addr_t *fiaddrs = NULL;
 	struct cxip_ep *cxip_ep;
@@ -957,7 +957,7 @@ int main(int argc, char **argv)
 			badnic = strtol(optarg, NULL, 16);
 			break;
 		case 'V':
-			trace_enabled = true;
+			trace_muted = false;
 			break;
 		case 'v':
 			verbose = true;
@@ -977,9 +977,9 @@ int main(int argc, char **argv)
 	if (frmwk_errmsg(ret, "frmwk_init_libfabric()\n"))
 		return ret;
 
-	cxip_trace_rank = frmwk_rank;
-	cxip_trace_numranks = frmwk_numranks;
-	cxip_trace_enable(trace_enabled);
+	cxip_coll_trace_rank = frmwk_rank;
+	cxip_coll_trace_numranks = frmwk_numranks;
+	cxip_coll_trace_muted = trace_muted;
 	TRACE("==== tracing enabled offset %d\n", frmwk_rank);
 
 	srand(seed);
@@ -1259,7 +1259,7 @@ int main(int argc, char **argv)
 		double time;
 
 		TRACE("======= %s\n", testname);
-		trace_enabled = cxip_trace_enable(false);
+		cxip_coll_trace_muted = true;
 		zb1 = NULL;
 		ret = cxip_zbcoll_alloc(ep_obj, size, fiaddrs, ZB_NOSIM, &zb1);
 		clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -1276,7 +1276,7 @@ int main(int argc, char **argv)
 		time = _measure_nsecs(&t0);
 		time /= 1.0*count;
 		time /= 1000.0;
-		cxip_trace_enable(trace_enabled);
+		cxip_coll_trace_muted = trace_muted;
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
@@ -1291,7 +1291,7 @@ int main(int argc, char **argv)
 		double time;
 
 		TRACE("======= %s\n", testname);
-		trace_enabled = cxip_trace_enable(false);
+		cxip_coll_trace_muted = true;
 		zb1 = NULL;
 		ret = _getgroup(ep_obj, size, fiaddrs, &zb1);
 		clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -1303,7 +1303,7 @@ int main(int argc, char **argv)
 		time = _measure_nsecs(&t0);
 		time /= 1.0*count;
 		time /= 1000.0;
-		cxip_trace_enable(trace_enabled);
+		cxip_coll_trace_muted = trace_muted;
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
@@ -1319,7 +1319,7 @@ int main(int argc, char **argv)
 		double time;
 
 		TRACE("======= %s\n", testname);
-		trace_enabled = cxip_trace_enable(false);
+		cxip_coll_trace_muted = true;
 		zb1 = NULL;
 		ret = _getgroup(ep_obj, size, fiaddrs, &zb1);
 		clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -1331,7 +1331,7 @@ int main(int argc, char **argv)
 		time = _measure_nsecs(&t0);
 		time /= 1.0*count;
 		time /= 1000.0;
-		cxip_trace_enable(trace_enabled);
+		cxip_coll_trace_muted = trace_muted;
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
@@ -1347,7 +1347,7 @@ int main(int argc, char **argv)
 		double time;
 
 		TRACE("======= %s\n", testname);
-		trace_enabled = cxip_trace_enable(false);
+		cxip_coll_trace_muted = true;
 		zb1 = NULL;
 		ret = _getgroup(ep_obj, size, fiaddrs, &zb1);
 		clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -1359,7 +1359,7 @@ int main(int argc, char **argv)
 		time = _measure_nsecs(&t0);
 		time /= 1.0*count;
 		time /= 1000.0;
-		cxip_trace_enable(trace_enabled);
+		cxip_coll_trace_muted = trace_muted;
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
@@ -1396,7 +1396,7 @@ int main(int argc, char **argv)
 						 1, 0, frmwk_rank);
 			//ret = _getgroup(ep_obj, size, fiaddrs, &zb1);
 			TRACE("listening forever....\n");
-			cxip_trace_flush();
+			cxip_coll_trace_flush();
 			_idle_wait(ep_obj, -1);
 			frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		} else {
