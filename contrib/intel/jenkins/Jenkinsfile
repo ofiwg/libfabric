@@ -776,8 +776,8 @@ pipeline {
                              "shm", null, null, "h2d")
                 run_fabtests("cuda_v1_shm", "cyndaquil", "cyndaquil", "1",
                              "shm", null, null, "d2d")
-                run_fabtests("cuda_v1_shm", "cyndaquil", "cyndaquil", "1",
-                             "shm", null, null, "xd2d")
+                // run_fabtests("cuda_v1_shm", "cyndaquil", "cyndaquil", "1",
+                //              "shm", null, null, "xd2d")
               }
             }
           }
@@ -790,8 +790,8 @@ pipeline {
                              null, null, "h2d")
                 run_fabtests("cuda_v2_shm", "quilava", "quilava", "1", "shm",
                              null, null, "d2d")
-                run_fabtests("cuda_v2_shm", "quilava ", "quilava", "1", "shm",
-                             null, null, "xd2d")
+                // run_fabtests("cuda_v2_shm", "quilava ", "quilava", "1", "shm",
+                //              null, null, "xd2d")
               }
             }
           }

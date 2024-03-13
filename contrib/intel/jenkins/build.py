@@ -56,6 +56,9 @@ def build_fabtests(libfab_install_path, mode, cuda=False):
 		config_cmd = ['./configure', f'--prefix={libfab_install_path}',
 					  f'--with-libfabric={libfab_install_path}']
 
+	if cuda:
+		config_cmd.append(f'--with-cuda={os.environ["CUDA_INSTALL"]}')
+
 	common.run_command(['./autogen.sh'])
 	common.run_command(config_cmd)
 	common.run_command(['make','clean'])

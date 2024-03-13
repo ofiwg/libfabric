@@ -106,6 +106,7 @@ class Fabtest(Test):
                          util_prov, way)
         self.fabtestpath = f'{self.libfab_installpath}/bin'
         self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
+        self.device = cloudbees_config.fabric_map[self.hw]
 
     def get_exclude_file(self):
         path = self.libfab_installpath
@@ -113,6 +114,8 @@ class Fabtest(Test):
 
         if self.hw == 'ivysaur':
             efile = f'{efile_path}/{self.core_prov}/io_uring.exclude'
+        elif self.hw == 'cyndaquil' or self.hw == 'quilava':
+            efile = f'{efile_path}/{self.core_prov}/cuda.exclude'
         else:
             prov = self.util_prov if self.util_prov else self.core_prov
             efile_old = f'{efile_path}/{prov}/{prov}.exclude'
@@ -155,11 +158,11 @@ class Fabtest(Test):
             opts += "-t all "
 
         if (self.way == 'h2d'):
-            opts += f"-C \"-H\" -L \"-D {self.hw}\" "
+            opts += f"-C \"-H\" -L \"-D {self.device}\" "
         elif (self.way == 'd2d'):
-            opts += f"-C \"-D {self.hw}\" -L \"-D {self.hw}\" "
+            opts += f"-C \"-D {self.device}\" -L \"-D {self.device}\" "
         elif (self.way == 'xd2d'):
-            opts += f"-C \"-D {self.hw}\" -L \"-D {self.hw} -i 1\" "
+            opts += f"-C \"-D {self.device}\" -L \"-D {self.device} -i 1\" "
 
         if (self.core_prov == 'sockets' and self.ofi_build_mode == 'reg'):
             complex_test_file = f'{self.libfab_installpath}/share/fabtests/'\
