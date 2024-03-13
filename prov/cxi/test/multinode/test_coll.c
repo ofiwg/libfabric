@@ -30,7 +30,7 @@
 #include "multinode_frmwk.h"
 
 /* If not compiled with DEBUG=1, this is a no-op */
-#define	TRACE(fmt, ...)	CXIP_TRACE(CXIP_TRC_TEST_CODE, fmt, ##__VA_ARGS__)
+#define	TRACE(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_TEST_CODE, fmt, ##__VA_ARGS__)
 
 /* convert delays to nsecs */
 #define	nUSEC(n)	(n * 1000L)
@@ -825,7 +825,6 @@ static uint64_t testmask = 0L;
 
 int main(int argc, char **argv)
 {
-	bool trace_enabled = true;	// normally false, fix
 	fi_addr_t *fiaddrs = NULL;
 	fi_addr_t myaddr;
 	struct cxip_addr mycaddr;
@@ -838,6 +837,7 @@ int main(int argc, char **argv)
 	int N = 0;
 	int S = 1;
 	bool help = false;
+	bool trace_muted = true;
 	struct join_item *jctx;
 	struct avset_ary setary;
 	struct dlist_entry joinlist;
@@ -849,7 +849,6 @@ int main(int argc, char **argv)
 	testmask = -1L;
 	testname = NULL;
 
-	/* TRACE not enabled yet */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	while ((opt = getopt(argc, argv, "hvVS:Mt:N:")) != -1) {
 		char *str, *s, *p;
@@ -894,7 +893,7 @@ int main(int argc, char **argv)
 			break;
 		case 'V':
 			/* tracing is enabled below */
-			trace_enabled = true;
+			trace_muted = false;
 			break;
 		case 'v':
 			verbose = true;
@@ -935,8 +934,9 @@ int main(int argc, char **argv)
 		if (frmwk_errmsg(ret, "frmwk_init_libfabric()\n"))
 			goto done;
 
-		/* TRACE is not enabled until this point */
-		cxip_trace_enable(trace_enabled);
+		/* mute or unmute tracing */
+		cxip_coll_trace_muted = trace_muted;
+
 		/* always start with FI_UNIVERSE */
 		ret = frmwk_populate_av(&fiaddrs, &size);
 		errcnt += !!ret;

@@ -33,7 +33,7 @@
 #include "cxip_test_common.h"
 
 /* If not compiled with DEBUG=1, this is a no-op */
-#define	TRACE(fmt, ...)	CXIP_TRACE(CXIP_TRC_TEST_CODE, fmt, ##__VA_ARGS__)
+#define	TRACE(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_TEST_CODE, fmt, ##__VA_ARGS__)
 
 #define	MIN(a,b) (((a)<(b))?(a):(b))
 

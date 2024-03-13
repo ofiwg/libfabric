@@ -35,7 +35,7 @@ _cxi_files = \
 	prov/cxi/src/cxip_ctrl.c \
 	prov/cxi/src/cxip_req_buf.c \
 	prov/cxi/src/cxip_rdzv_pte.c \
-	prov/cxi/src/cxip_trace.c \
+	prov/cxi/src/cxip_coll_trace.c \
 	prov/cxi/src/cxip_telemetry.c \
 	prov/cxi/src/cxip_ptelist_buf.c \
 	prov/cxi/src/cxip_evtq.c \
