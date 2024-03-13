@@ -34,7 +34,7 @@
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-#define	TRACE(fmt, ...)	CXIP_TRACE(CXIP_TRC_ZBCOLL, fmt, ##__VA_ARGS__)
+#define	TRACE(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_ZBCOLL, fmt, ##__VA_ARGS__)
 
 /* see data packing structures below */
 #define	ZB_MAP_BITS	54

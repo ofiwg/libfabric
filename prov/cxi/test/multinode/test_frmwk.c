@@ -29,7 +29,7 @@
 #include <ofi.h>
 #include "multinode_frmwk.h"
 
-#define	TRACE(fmt, ...)	CXIP_TRACE(CXIP_TRC_TEST_CODE, fmt, ##__VA_ARGS__)
+#define	TRACE(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_TEST_CODE, fmt, ##__VA_ARGS__)
 
 int main(int argc, char **argv)
 {
@@ -64,12 +64,12 @@ int main(int argc, char **argv)
 			fiaddr[i]);
 	}
 
-	cxip_trace_enable(true);
+	cxip_coll_trace_muted = false;
 	TRACE("Trace message test %d\n", 0);
 	TRACE("Trace message test %d\n", 1);
-	cxip_trace_enable(false);
+	cxip_coll_trace_muted = true;
 	TRACE("This message should not appear\n");
-	cxip_trace_enable(true);
+	cxip_coll_trace_muted = false;
 	TRACE("This message should appear\n");
 
 	frmwk_free_libfabric();

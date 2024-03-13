@@ -14,7 +14,7 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
-#define	TRACE(fmt, ...)	CXIP_TRACE(CXIP_TRC_CTRL, fmt, ##__VA_ARGS__)
+#define	TRACE(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_CTRL, fmt, ##__VA_ARGS__)
 
 TestSuite(ctrl, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
@@ -164,7 +164,8 @@ Test(ctrl, zb_config)
 		  "no tree: simcnt=%d\n", zb->simcount);
 	cr_assert(zb->num_caddrs == 1,
 		  "no_tree: num_caddrs=%d\n", zb->num_caddrs);
-	cr_assert(memcmp(&zb->caddrs[0], &ep_obj->src_addr, sizeof(ep_obj->src_addr)) == 0);
+	cr_assert(memcmp(&zb->caddrs[0], &ep_obj->src_addr,
+			 sizeof(ep_obj->src_addr)) == 0);
 	cxip_zbcoll_free(zb);
 
 	/* request simulation */
