@@ -3341,64 +3341,53 @@ static inline bool is_netsim(struct cxip_ep_obj *ep_obj)
 }
 
 /* debugging TRACE functions */
-#define	cxip_trace_attr	__attribute__((format(__printf__, 1, 2)))
-typedef int (*cxip_trace_t)(const char *fmt, ...);
-extern cxip_trace_t cxip_trace_attr cxip_trace_fn;
+#define	cxip_coll_trace_attr	__attribute__((format(__printf__, 1, 2)))
+extern bool cxip_coll_trace_muted;		// suppress output if true
+extern bool cxip_coll_trace_append;		// append open for trace file
+extern bool cxip_coll_trace_linebuf;		// set line buffering for trace
+extern int cxip_coll_trace_rank;		// tracing rank
+extern int cxip_coll_trace_numranks;		// tracing number of ranks
+extern FILE *cxip_coll_trace_fid;		// trace output file descriptor
 
-typedef void (*cxip_trace_flush_t)(void);
-extern cxip_trace_flush_t cxip_trace_flush_fn;
-
-typedef void (*cxip_trace_close_t)(void);
-extern cxip_trace_close_t cxip_trace_close_fn;
-
-typedef bool (*cxip_trace_enable_t)(bool enable);
-extern cxip_trace_enable_t cxip_trace_enable_fn;
-
-extern bool cxip_trace_enabled;	// true if tracing is enabled
-extern bool cxip_trace_append;		// append open for trace file
-extern bool cxip_trace_linebuf;	// set line buffering for trace
-extern int cxip_trace_rank;		// tracing rank
-extern int cxip_trace_numranks;	// tracing number of ranks
-extern FILE *cxip_trace_fid;		// trace output file descriptor
-
-int cxip_trace_attr cxip_trace(const char *fmt, ...);
-void cxip_trace_flush(void);
-void cxip_trace_close(void);
-bool cxip_trace_enable(bool enable);
+int cxip_coll_trace_attr cxip_coll_trace(const char *fmt, ...);
+void cxip_coll_trace_flush(void);
+void cxip_coll_trace_close(void);
+void cxip_coll_trace_init(void);
 
 /* debugging TRACE filtering control */
-enum cxip_trace_module {
+enum cxip_coll_trace_module {
 	CXIP_TRC_CTRL,
 	CXIP_TRC_ZBCOLL,
-	CXIP_TRC_CURL,
+	CXIP_TRC_COLL_CURL,
 	CXIP_TRC_COLL_PKT,
 	CXIP_TRC_COLL_JOIN,
 	CXIP_TRC_COLL_DEBUG,
 	CXIP_TRC_TEST_CODE,
 	CXIP_TRC_MAX
 };
-extern uint64_t cxip_trace_mask;
+extern uint64_t cxip_coll_trace_mask;
 
-static inline void cxip_trace_set(int mod)
+static inline void cxip_coll_trace_set(int mod)
 {
-	cxip_trace_mask |= (1L << mod);
+	cxip_coll_trace_mask |= (1L << mod);
 }
 
-static inline void cxip_trace_clr(int mod)
+static inline void cxip_coll_trace_clr(int mod)
 {
-	cxip_trace_mask &= ~(1L << mod);
+	cxip_coll_trace_mask &= ~(1L << mod);
 }
 
-static inline bool cxip_trace_true(int mod)
+static inline bool cxip_coll_trace_true(int mod)
 {
-	return cxip_trace_enabled && (cxip_trace_mask & (1L << mod));
+	return (!cxip_coll_trace_muted) && (cxip_coll_trace_mask & (1L << mod));
 }
 
 #if ENABLE_DEBUG
-#define CXIP_TRACE(mod, fmt, ...) \
-	do {if (cxip_trace_true(mod)) cxip_trace_fn(fmt, ##__VA_ARGS__);} while (0)
+#define CXIP_COLL_TRACE(mod, fmt, ...) \
+	do {if (cxip_coll_trace_true(mod)) \
+	    cxip_coll_trace(fmt, ##__VA_ARGS__);} while (0)
 #else
-#define	CXIP_TRACE(mod, fmt, ...) do {} while (0)
+#define	CXIP_COLL_TRACE(mod, fmt, ...) do {} while (0)
 #endif
 
 /* fabric logging implementation functions */

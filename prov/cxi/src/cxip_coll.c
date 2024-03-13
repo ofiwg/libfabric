@@ -29,13 +29,13 @@
 #define _MM_GET_FLUSH_ZERO_MODE() ({0;})
 #endif
 
-#define	TRACE_PKT(fmt, ...)	CXIP_TRACE(CXIP_TRC_COLL_PKT, fmt, \
+#define	TRACE_PKT(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_COLL_PKT, fmt, \
 					   ##__VA_ARGS__)
-#define	TRACE_CURL(fmt, ...)	CXIP_TRACE(CXIP_TRC_CURL, fmt, \
+#define	TRACE_CURL(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_COLL_CURL, fmt, \
 					   ##__VA_ARGS__)
-#define	TRACE_JOIN(fmt, ...)	CXIP_TRACE(CXIP_TRC_COLL_JOIN, fmt, \
+#define	TRACE_JOIN(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_COLL_JOIN, fmt, \
 					   ##__VA_ARGS__)
-#define	TRACE_DEBUG(fmt, ...)	CXIP_TRACE(CXIP_TRC_COLL_DEBUG, fmt, \
+#define	TRACE_DEBUG(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_COLL_DEBUG, fmt, \
 					   ##__VA_ARGS__)
 
 // TODO regularize usage of these
@@ -3867,6 +3867,7 @@ int cxip_coll_enable(struct cxip_ep *ep)
 	ep->ep.collective = &cxip_collective_ops;
 	ep_obj->coll.enabled = true;
 
+	cxip_coll_trace_init();
 	return FI_SUCCESS;
 }
 
@@ -3876,6 +3877,7 @@ int cxip_coll_disable(struct cxip_ep_obj *ep_obj)
 	if (!ep_obj->coll.enabled)
 		return FI_SUCCESS;
 
+	cxip_coll_trace_close();
 	ep_obj->coll.enabled = false;
 	ep_obj->coll.rx_cmdq = NULL;
 	ep_obj->coll.tx_cmdq = NULL;

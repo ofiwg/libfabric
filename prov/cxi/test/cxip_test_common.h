@@ -41,9 +41,6 @@ extern bool cxit_prov_key;
 extern int s_page_size;
 extern bool enable_cxi_hmem_ops;
 
-extern bool cxip_trace_enable(bool enable);
-extern void cxip_trace_flush(void);
-
 void cxit_init(void);
 void cxit_create_fabric_info(void);
 void cxit_destroy_fabric_info(void);
