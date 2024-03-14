@@ -34,6 +34,38 @@
 
 #include "fabtest.h"
 
+int ft_random_fd = -1;
+
+static inline void ft_init_random(void)
+{
+	ft_random_fd = open("/dev/urandom", O_RDONLY);
+	if (ft_random_fd < 0)
+		FT_PRINTERR("ft_open_control", ft_random_fd);
+}
+
+static inline void ft_cleanup_random(void)
+{
+	if (ft_random_fd >= 0) {
+		close(ft_random_fd);
+		ft_random_fd = -1;
+	}
+}
+
+static int get_random_data(void)
+{
+	ssize_t ret;
+	static int rdata = 1;
+
+	if (ft_random_fd < 0)
+		return rdata;
+
+	ret = read(ft_random_fd, &rdata, sizeof(rdata));
+	if (ret < 0)
+		ft_record_error(ret);
+
+	return rdata;
+}
+
 void ft_record_error(int error)
 {
 	if (!ft_ctrl.error) {
@@ -247,7 +279,7 @@ static void ft_format_iov_random(struct iovec *iov, size_t cnt, char *buf,
 			 * the remaining IOV count. This is so we can reserve at
 			 * least a length of 1 for every IOV.
 			 */
-			weight = (rand() % (len - (cnt - i) + 1)) + 1;
+			weight = (get_random_data() % (len - (cnt - i) + 1)) + 1;
 		}
 
 		len -= weight;
@@ -272,7 +304,7 @@ void ft_format_iov(struct iovec *iov, size_t cnt, char *buf, size_t len)
 		ft_format_iov_random
 	};
 
-	choice = rand() % ARRAY_SIZE(options);
+	choice = get_random_data() % ARRAY_SIZE(options);
 
 	options[choice](iov, cnt, buf, len);
 }
@@ -989,6 +1021,7 @@ void ft_cleanup(void)
 	ft_free_host_tx_buf();
 	ft_cleanup_mr_control(&ft_mr_ctrl);
 	ft_cleanup_atomic_control(&ft_atom_ctrl);
+	ft_cleanup_random();
 	ft_free_res();
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
 }
@@ -1074,6 +1107,8 @@ int ft_open_res()
 		FT_PRINTERR("ft_open_control", ret);
 		goto cleanup;
 	}
+
+	ft_init_random();
 	if (test_info.ep_type == FI_EP_MSG && listen_sock >= 0) {
 		ret = ft_open_passive();
 		if (ret) {
