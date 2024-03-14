@@ -188,7 +188,7 @@ int ft_cuda_init(void)
 	}
 
 	cuda_ops.cudaFreeHost = dlsym(cudart_handle, STRINGIFY(cudaFreeHost));
-	if (!cuda_ops.cudaFree) {
+	if (!cuda_ops.cudaFreeHost) {
 		FT_ERR("Failed to find cudaFreeHost");
 		goto err_dlclose_cuda;
 	}
@@ -242,21 +242,21 @@ int ft_cuda_init(void)
 #if HAVE_CUDA_DMABUF
 	cuda_ops.cuMemGetHandleForAddressRange = dlsym(cuda_handle,
 						       STRINGIFY(cuMemGetHandleForAddressRange));
-	if (!cuda_ops.cuPointerSetAttribute) {
+	if (!cuda_ops.cuMemGetHandleForAddressRange) {
 		FT_ERR("Failed to find cuMemGetHandleForAddressRange\n");
 		goto err_dlclose_cuda;
 	}
 #endif
 	cuda_ops.cuDeviceGetAttribute = dlsym(cuda_handle,
 					      STRINGIFY(cuDeviceGetAttribute));
-	if (!cuda_ops.cuPointerSetAttribute) {
+	if (!cuda_ops.cuDeviceGetAttribute) {
 		FT_ERR("Failed to find cuPointerSetAttribute\n");
 		goto err_dlclose_cuda;
 	}
 
 	cuda_ops.cuDeviceGet = dlsym(cuda_handle,
 				     STRINGIFY(cuDeviceGet));
-	if (!cuda_ops.cuPointerSetAttribute) {
+	if (!cuda_ops.cuDeviceGet) {
 		FT_ERR("Failed to find cuDeviceGet\n");
 		goto err_dlclose_cuda;
 	}
