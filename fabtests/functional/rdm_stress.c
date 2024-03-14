@@ -812,7 +812,8 @@ static int init_ctrls(const char *ctrlfile)
 
 	if (stat(ctrlfile, &sb)) {
 		FT_PRINTERR("stat", -errno);
-		return -errno;
+		ret = -errno;
+		goto no_mem_out;
 	}
 
 	js = malloc(sb.st_size + 1);
