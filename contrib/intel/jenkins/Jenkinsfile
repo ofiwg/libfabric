@@ -93,6 +93,14 @@ def run_middleware(providers, stage_name, test, hw, partition, node_num,
   }
 }
 
+def run_ci(stage_name, config_name) {
+  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+        python run.py \
+        --output=${env.LOG_DIR}/${stage_name} \
+        --job=${config_name}
+  """
+}
+
 def gather_logs(cluster, key, dest, source) {
   def address = "${env.USER}@${cluster}"
 
@@ -159,9 +167,22 @@ def checkout_ci_resources() {
   """
 }
 
+def checkout_ci() {
+  sh """
+   if [[ ! -d ${env.WORKSPACE}/ci ]]; then
+      mkdir ${env.WORKSPACE}/ci
+    else
+      rm -rf ${env.WORKSPACE}/ci && mkdir ${env.WORKSPACE}/ci
+    fi
+
+    git clone --recurse-submodules ${env.CI} ${env.WORKSPACE}/ci
+  """
+}
+
 def checkout_external_resources() {
   checkout_ci_resources()
   checkout_upstream()
+  checkout_ci()
 }
 
 def generate_diff(def branch_name, def output_loc) {
@@ -238,6 +259,10 @@ def build(item, mode=null, hw=null, additional_args=null) {
   }
 
   run_python(PYTHON_VERSION, cmd)
+}
+
+def build_ci() {
+  sh "${CI_LOCATION}/${env.CI_MODULE}/bootstrap.sh"
 }
 
 def check_target() {
@@ -322,6 +347,7 @@ pipeline {
       CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
       DELETE_LOCATION="${env.CUSTOM_WORKSPACE}/middlewares"
       RUN_LOCATION="${env.CUSTOM_WORKSPACE}/ci_resources/legacy_pipeline_scripts/"
+      CI_LOCATION="${env.CUSTOM_WORKSPACE}/ci"
       LOG_DIR = "${env.CUSTOM_WORKSPACE}/log_dir"
   }
   stages {
@@ -394,7 +420,17 @@ pipeline {
     stage ('parallel-builds') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
+        stage ('build-ci') {
+          steps {
+            script {
+              build_ci()
+            }
+          }
+        }
         stage ('build-water') {
+          environment {
+            build_type = "water"
+          }
           steps {
             script {
               slurm_build(BUILD_MODES, "water", "water", "water")
@@ -412,6 +448,9 @@ pipeline {
           }
         }
         stage ('build-grass') {
+          environment {
+            build_type = "grass"
+          }
           steps {
             script {
               slurm_build(BUILD_MODES, "grass", "grass", "grass")
@@ -429,6 +468,9 @@ pipeline {
           }
         }
         stage ('build-electric') {
+          environment {
+            build_type = "electric"
+          }
           steps {
             script {
               slurm_build(BUILD_MODES, "electric", "electric", "electric")
@@ -505,48 +547,50 @@ pipeline {
     stage('parallel-tests') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
-        stage('MPI_verbs-rxm_IMB') {
+        stage ('CI_MPI_verbs-rxm_IMB') {
+          environment {
+            build_type = "water"
+          }
           steps {
             script {
-              dir (RUN_LOCATION) {
-                def providers = [["verbs", "rxm"]]
-                for (def mpi in ["impi"]) {
-                  for (imb_grp = 1; imb_grp < 4; imb_grp++) {
-                    run_middleware(providers, "MPI", "IMB", "water",
-                                   "squirtle,totodile", "2", "${mpi}",
-                                   "${imb_grp}")
-                  }
-                }
+              dir (CI_LOCATION) {
+                run_ci("CI_MPI_verbs-rxm_IMB", "pr_imb_water.json")
               }
             }
           }
         }
-        stage('MPI_verbs-rxm_OSU') {
+        stage ('CI_MPI_verbs-rxm_OSU') {
+          environment {
+            build_type = "water"
+          }
           steps {
             script {
-              dir (RUN_LOCATION) {
-                def providers = [["verbs", "rxm"]]
-                for (def mpi in ["impi", "mpich"]) {
-                  run_middleware(providers, "MPI", "osu", "water",
-                                 "squirtle,totodile", "2", "${mpi}")
-                }
+              dir (CI_LOCATION) {
+                run_ci("CI_MPI_verbs-rxm_OSU", "pr_osu_water.json")
               }
             }
           }
         }
-        stage('MPI_tcp') {
+        stage ('CI_MPI_tcp_IMB') {
+          environment {
+            build_type = "grass"
+          }
           steps {
             script {
-              dir (RUN_LOCATION) {
-                def providers = [["tcp", null]]
-                for (imb_grp = 1; imb_grp < 4; imb_grp++) {
-                  run_middleware(providers, "MPI", "IMB", "grass",
-                                 "bulbasaur", "2", "impi", "${imb_grp}")
-                }
-                for (def mpi in ["impi", "mpich"]) {
-                  run_middleware(providers, "MPI", "osu", "grass", "bulbasaur",
-                                 "2", "${mpi}")
-                }
+              dir (CI_LOCATION) {
+                run_ci("CI_MPI_tcp_IMB", "pr_imb_grass.json")
+              }
+            }
+          }
+        }
+        stage ('CI_MPI_tcp_OSU') {
+          environment {
+            build_type = "grass"
+          }
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("CI_MPI_tcp_OSU", "pr_osu_grass.json")
               }
             }
           }
