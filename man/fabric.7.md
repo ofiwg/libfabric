@@ -251,7 +251,9 @@ Users can enable or disable available providers through build configuration
 options.  See 'configure --help' for details.  In general, a specific provider
 can be controlled using the configure option '--enable-<provider_name>'.  For
 example, '--enable-udp' (or '--enable-udp=yes') will add the udp provider to the
-build.  To disable the provider, '--enable-udp=no' can be used.
+build.  To disable the provider, '--enable-udp=no' can be used.  To build the
+provider as a stand-alone dynamically loadable library (i.e. DL provider),
+'--enable-udp=dl' can be used.
 
 Providers can also be enable or disabled at run time using the FI_PROVIDER
 environment variable.  The FI_PROVIDER variable is set to a comma separated
@@ -259,7 +261,55 @@ list of providers to include.  If the list begins with the '^' symbol, then
 the list will be negated.
 
   Example: To enable the udp and tcp providers only, set:
-	FI_PROVIDER="udp,tcp"
+	`FI_PROVIDER="udp,tcp"`
+
+When libfabric is installed, DL providers are put under the *default provider path*,
+which is determined by how libfabric is built and installed. Usually the
+default provider path is `<libfabric-install-dir>/lib/libfabric` or
+`<libfabric-install-dir>/lib64/libfabric`. By default, libfabric tries to
+find DL providers in the following order:
+
+  1. Use 'dlopen' to load provider libraries named `lib<prov_name>-fi.so` for
+    all providers enabled at build time. The search path of 'ld.so' is used
+    to locate the files. This step is skipped if libfabric is configured with
+    the option '--enable-restricted-dl'.
+
+  2. Try to load every file under the default provider path as a DL provider.
+
+The FI_PROVIDER_PATH variable can be used to change the location to search
+for DL providers and how to resolve conflicts if multiple providers with the
+same name are found. Setting FI_PROVIDER_PATH to any value, even if empty,
+would cause step 1 be skipped, and may change the search directory used in
+step 2.
+
+In the simplest form, the FI_PROVIDER_PATH variable is set to a colon
+separated list of directories. These directories replace the default provider
+path used in step 2. For example:
+
+	FI_PROVIDER_PATH=/opt/libfabric:/opt/libfabric2
+
+By default, if multiple providers (including the built-in providers) with the
+same name are found, the first one with the highest version is active and all
+the others are hidden. This can be changed by setting the FI_PROVIDER_PATH
+variable to start with '@', which force the first one to be active regardless
+of the version. For example:
+
+	FI_PROVIDER_PATH=@/opt/libfabric:/opt/libfabric2
+
+The FI_PROVIDER_PATH variable can also specify preferred providers by supplying
+full paths to libraries instead of directories to search under. A preferred
+provider takes precedence over other providers with the same name. The
+specification of a preferred provider must be prefixed with '+'. For example:
+
+	FI_PROVIDER_PATH=+/opt/libfabric2/libtcp-fi.so:/opt/libfabric:+/opt/libfabric2/libudp-fi.so
+
+If FI_PROVIDER_PATH is set, but no directory is supplied, the default
+provider path is used. Some examples:
+
+	FI_PROVIDER_PATH=
+	FI_PROVIDER_PATH=@
+	FI_PROVIDER_PATH=+/opt/libfabric/libtcp-fi.so
+	FI_PROVIDER_PATH=@+/opt/libfabric/libtcp-fi.so
 
 The fi_info utility, which is included as part of the libfabric package, can
 be used to retrieve information about which providers are available in the
