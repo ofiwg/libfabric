@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include <criterion/criterion.h>
+#include <pthread.h>
 
 #include "cxip.h"
 #include "cxip_test_common.h"
@@ -717,4 +718,129 @@ Test(cntr, cntr_wait_bad_threshold)
 
 	ret = fi_close(&cntr->fid);
 	cr_assert(ret == FI_SUCCESS);
+}
+
+struct cntr_waiter_args {
+	struct fid_cntr *cntr;
+	int timeout;
+	uint64_t thresh;
+	uint64_t error_count;
+	uint64_t success_count;
+};
+
+static void *cntr_waiter(void *data)
+{
+	struct cntr_waiter_args *args = data;
+	uint64_t error;
+	uint64_t success;
+	int ret;
+
+	ret = fi_cntr_wait(args->cntr, args->thresh, args->timeout);
+	if (args->error_count && args->thresh > args->success_count) {
+		cr_assert(ret == -FI_EAVAIL, "fi_cntr_wait ret %d", ret);
+		error = fi_cntr_readerr(args->cntr);
+		cr_assert(error == args->error_count,
+			  "Unexpected counter error count %lu", error);
+	} else if (args->thresh <= args->success_count) {
+		cr_assert(ret == FI_SUCCESS, "fi_cntr_wait ret %d", ret);
+	} else {
+		cr_assert(ret == -FI_ETIMEDOUT,
+			  "fi_cntr_wait ret %d", ret);
+	}
+
+	if (args->success_count) {
+		success = fi_cntr_read(args->cntr);
+		cr_assert(success == args->success_count,
+			  "Unexpected counter success count %lu", success);
+	}
+
+	pthread_exit(NULL);
+}
+
+static void cntr_wait_success_and_error_runner(struct cntr_waiter_args *args)
+{
+	struct fid_cntr *cntr;
+	struct fi_cntr_attr cntr_attr = {
+		.wait_obj = FI_WAIT_UNSPEC,
+	};
+	pthread_t thread;
+	pthread_attr_t attr;
+	int ret;
+
+	ret = fi_cntr_open(cxit_domain, &cntr_attr, &cntr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+	args->cntr = cntr;
+
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	ret = pthread_create(&thread, &attr, cntr_waiter, (void *)args);
+	cr_assert_eq(ret, 0, "Counter waiter create failed %d", ret);
+
+	/* make sure wait thread is in fi_cntr_wait() */
+	usleep(1000);
+
+	if (args->success_count) {
+		ret = fi_cntr_set(cntr, args->success_count);
+		cr_assert(ret == FI_SUCCESS, "fi_cntr_seterr ret %d", ret);
+	}
+
+	if (args->error_count) {
+		ret = fi_cntr_seterr(cntr, args->error_count);
+		cr_assert(ret == FI_SUCCESS, "fi_cntr_seterr ret %d", ret);
+	}
+
+	ret = pthread_join(thread, NULL);
+	cr_assert_eq(ret, 0, "Counter waiter join failed %d", ret);
+
+	ret = fi_close(&cntr->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
+
+Test(cntr, cntr_wait_error_increment)
+{
+	struct cntr_waiter_args args = {
+		.timeout = 2000,
+		.thresh = 2,
+		.error_count = 1,
+		.success_count = 0,
+	};
+
+	cntr_wait_success_and_error_runner(&args);
+}
+
+Test(cntr, cntr_wait_success_and_error_increment)
+{
+	struct cntr_waiter_args args = {
+		.timeout = 2000,
+		.thresh = 3,
+		.error_count = 1,
+		.success_count = 2,
+	};
+
+	cntr_wait_success_and_error_runner(&args);
+}
+
+Test(cntr, cntr_wait_success_increment_timeout)
+{
+	struct cntr_waiter_args args = {
+		.timeout = 1000,
+		.thresh = 3,
+		.error_count = 0,
+		.success_count = 2,
+	};
+
+	cntr_wait_success_and_error_runner(&args);
+}
+
+Test(cntr, cntr_wait_success_increment)
+{
+	struct cntr_waiter_args args = {
+		.timeout = 1000,
+		.thresh = 3,
+		.error_count = 0,
+		.success_count = 4,
+	};
+
+	cntr_wait_success_and_error_runner(&args);
 }
