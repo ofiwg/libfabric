@@ -1,35 +1,6 @@
 #!/usr/bin/env python3
-#
-# Copyright (c) 2021-2022 Amazon.com, Inc. or its affiliates. All rights reserved.
-#
-# This software is available to you under a choice of one of two
-# licenses.  You may choose to be licensed under the terms of the GNU
-# General Public License (GPL) Version 2, available from the file
-# COPYING in the main directory of this source tree, or the
-# BSD license below:
-#
-#     Redistribution and use in source and binary forms, with or
-#     without modification, are permitted provided that the following
-#     conditions are met:
-#
-#      - Redistributions of source code must retain the above
-#        copyright notice, this list of conditions and the following
-#        disclaimer.
-#
-#      - Redistributions in binary form must reproduce the above
-#        copyright notice, this list of conditions and the following
-#        disclaimer in the documentation and/or other materials
-#        provided with the distribution.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
-# BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
-# ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-#
+# SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
+# SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved
 
 import argparse
 import builtins
@@ -39,6 +10,7 @@ import sys
 import yaml
 
 import pytest
+from junitparser import JUnitXml
 from pytest import ExitCode
 
 
@@ -355,11 +327,8 @@ def main():
         serial_status = run(fabtests_args, shared_options, "serial")
 
         if fabtests_args.junit_xml:
-            os.system("junitparser merge {}.parallel {}.serial {}".format(
-                    fabtests_args.junit_xml,
-                    fabtests_args.junit_xml,
-                    fabtests_args.junit_xml)
-                )
+            merged_xml = JUnitXml.fromfile(f'{fabtests_args.junit_xml}.parallel') + JUnitXml.fromfile(f'{fabtests_args.junit_xml}.serial')
+            merged_xml.write(f'{fabtests_args.junit_xml}')
             os.unlink(fabtests_args.junit_xml + ".parallel")
             os.unlink(fabtests_args.junit_xml + ".serial")
 
