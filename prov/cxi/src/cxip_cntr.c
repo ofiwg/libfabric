@@ -548,11 +548,21 @@ static int cxip_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 	uint64_t success = 0;
 	int ret;
 	uint64_t endtime;
-
+	uint64_t start_error = 0;
+	uint64_t error = 0;
 
 	if (cntr->attr.wait_obj == FI_WAIT_NONE ||
 	    threshold > FI_CXI_CNTR_SUCCESS_MAX)
 		return -FI_EINVAL;
+
+	/* Determine existing value of error count, if it increments
+	 * the function should return before threshold has been met.
+	 */
+	ret = cxip_cntr_get_ct_error(cntr, &start_error);
+	if (ret) {
+		CXIP_WARN("Failed to read counter error: %d\n", ret);
+		return ret;
+	}
 
 	endtime = ofi_timeout_time(timeout);
 
@@ -578,6 +588,14 @@ static int cxip_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 
 		if (success >= threshold)
 			return FI_SUCCESS;
+
+		ret = cxip_cntr_get_ct_error(cntr, &error);
+		if (ret) {
+			CXIP_WARN("Failed to read counter error: %d\n", ret);
+			return ret;
+		}
+		if (error != start_error)
+			return -FI_EAVAIL;
 
 		if (ofi_adjust_timeout(endtime, &timeout))
 			return -FI_ETIMEDOUT;
