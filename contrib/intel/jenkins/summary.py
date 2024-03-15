@@ -395,12 +395,7 @@ class OnecclSummarizer(Summarizer):
         self.file_path = os.path.join(self.log_dir, self.file_name)
         self.exists = os.path.exists(self.file_path)
         self.name = 'no_test'
-
-    def read_file(self):
-        with open(self.file_path, 'r') as log_file:
-            self.fast_forward(log_file)
-            for line in log_file:
-                self.check_line(line)
+        self.trace = False
 
     def check_name(self, line):
         #OneCCL GPU tests:
@@ -429,6 +424,45 @@ class OnecclSummarizer(Summarizer):
         if 'failed' in line or "exiting with" in line:
             self.fails += 1
             self.failed_tests.append(self.name)
+
+    def check_trace(self, line):
+        if not self.trace:
+            cmd_count = 0
+            faults_count = 0
+            if ("user to sar buffer" in line):
+                tokens = line.split(' ')
+                for i in range(0, len(tokens)):
+                    if 'cmd' in tokens[i]:
+                        cmd_count += int(tokens[i + 1])
+                    if 'faults' in tokens[i]:
+                        faults_count += int(tokens[i + 1])
+                if (cmd_count > 0 or faults_count > 0):
+                    self.trace = True
+
+    def check_line(self, line):
+        self.check_name(line)
+        if (self.name != 'no_test'):
+            self.check_pass(line)
+            self.check_fail(line)
+            if ('DSA' in self.file_name):
+                self.check_trace(line.lower())
+
+    def read_file(self):
+        with open(self.file_path, 'r') as log_file:
+            self.fast_forward(log_file)
+            for line in log_file:
+                self.check_line(line)
+
+    def summarize(self):
+        if not self.exists:
+            return 0
+
+        self.read_file()
+        self.print_results()
+        if ('DSA' in self.file_name and not self.trace):
+            exit("Expected: DSA to run. Actual: DSA Not Run")
+
+        return int(self.fails)
 
 class ShmemSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
@@ -817,6 +851,12 @@ def summarize_items(summary_item, logger, log_dir, mode):
                 logger, log_dir, 'shm',
                 f'{prov}_dsa_fabtests_{mode}',
                 f"{prov} dsa fabtests {mode}"
+            ).summarize()
+            err += ret if ret else 0
+            ret = OnecclSummarizer(
+                logger, log_dir, 'oneCCL',
+                f'oneCCL_DSA_shm_oneccl_{mode}',
+                f'oneCCL DSA {prov} {mode}'
             ).summarize()
             err += ret if ret else 0
 
