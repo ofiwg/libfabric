@@ -812,6 +812,7 @@ static int init_ctrls(const char *ctrlfile)
 
 	if (stat(ctrlfile, &sb)) {
 		FT_PRINTERR("stat", -errno);
+		fclose(ctrl_f);
 		return -errno;
 	}
 
