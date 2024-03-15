@@ -608,7 +608,7 @@ err1:
 }
 
 
-int vrb_init_progress(struct vrb_progress *progress, struct ibv_context *verbs)
+int vrb_init_progress(struct vrb_progress *progress, struct fi_info *info)
 {
 	int ret;
 

@@ -264,7 +264,7 @@ struct vrb_progress {
 	struct ofi_bufpool	*ctx_pool;
 };
 
-int vrb_init_progress(struct vrb_progress *progress, struct ibv_context *verbs);
+int vrb_init_progress(struct vrb_progress *progress, struct fi_info *info);
 void vrb_close_progress(struct vrb_progress *progress);
 
 struct vrb_eq_entry {
