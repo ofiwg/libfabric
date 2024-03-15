@@ -416,7 +416,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err4;
 	}
 
-	ret = vrb_init_progress(&_domain->progress, _domain->verbs);
+	ret = vrb_init_progress(&_domain->progress, _domain->info);
 	if (ret)
 		goto err4;
 
