@@ -158,6 +158,7 @@ providers = {
 }
 
 common_disable_list = [
+    'usnic',
     'efa',
     'perf',
     'hook_debug',

@@ -247,7 +247,12 @@ static int ofi_info_to_util(uint32_t version, const struct fi_provider *prov,
 	if (ofi_dup_addr(core_info, *util_info))
 		goto err;
 
-	assert(core_info->domain_attr->name);
+	/* Release 1.4 brought standardized domain names across IP based
+	 * providers. Before this release, the usNIC provider would return a
+	 * NULL domain name from fi_getinfo. For compatibility reasons, allow a
+	 * NULL domain name when apps are requesting version < 1.4.
+	 */
+	assert(FI_VERSION_LT(1, 4) || core_info->domain_attr->name);
 
 	if (core_info->domain_attr->name) {
 		(*util_info)->domain_attr->name =
