@@ -1263,6 +1263,15 @@ err_out:
 static int smr_discard(struct fi_peer_rx_entry *rx_entry)
 {
 	struct smr_cmd_ctx *cmd_ctx = rx_entry->peer_context;
+	struct smr_region *peer_smr;
+	struct smr_resp *resp;
+
+	if (cmd_ctx->cmd.msg.hdr.src_data >= smr_src_iov) {
+		peer_smr = smr_peer_region(cmd_ctx->ep->region,
+					   cmd_ctx->cmd.msg.hdr.id);
+		resp = smr_get_ptr(peer_smr, cmd_ctx->cmd.msg.hdr.src_data);
+		resp->status = SMR_STATUS_SUCCESS;
+	}
 
 	ofi_buf_free(cmd_ctx);
 
