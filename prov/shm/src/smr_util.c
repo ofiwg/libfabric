@@ -409,8 +409,9 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_map *map,
 
 	fd = shm_open(name, O_RDWR, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
-		FI_WARN_ONCE(prov, FI_LOG_AV, "shm_open error\n");
 		ret = -errno;
+		FI_WARN_ONCE(prov, FI_LOG_AV,
+			     "shm_open error: name %s errno %d\n", name, errno);
 		goto unlock;
 	}
 
