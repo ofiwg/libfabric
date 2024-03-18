@@ -803,11 +803,11 @@ pipeline {
             script {
               dir (RUN_LOCATION) {
                 run_fabtests("ze_v3_shm", "gpu", "fabrics-ci", "1", "shm", null,
-                             null, "h2d")
+                             "FI_HMEM_DISABLE_P2P=1", "h2d")
                 run_fabtests("ze_v3_shm", "gpu", "fabrics-ci", "1", "shm", null,
-                             null, "d2d")
+                             "FI_HMEM_DISABLE_P2P=1", "d2d")
                 run_fabtests("ze_v3_shm", "gpu", "fabrics-ci", "1", "shm", null,
-                             null, "xd2d")
+                             "FI_HMEM_DISABLE_P2P=1", "xd2d")
               }
             }
           }
