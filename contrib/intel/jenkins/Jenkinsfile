@@ -59,7 +59,7 @@ def run_fabtests(stage_name, hw, partition, node_num, prov, util=null,
 }
 
 def run_middleware(providers, stage_name, test, hw, partition, node_num,
-                   mpi=null, imb_grp=null) {
+                   mpi=null, imb_grp=null, user_env=null) {
   def base_cmd = "python3.9 ${RUN_LOCATION}/runtests.py --test=${test} --build_hw=${hw}"
   def opts = ""
   def prefix = "${env.LOG_DIR}/${stage_name}_"
@@ -74,7 +74,10 @@ def run_middleware(providers, stage_name, test, hw, partition, node_num,
 
   if (env.WEEKLY.toBoolean())
     base_cmd = "${base_cmd} --weekly=${env.WEEKLY}"
-    
+  
+  if (user_env)
+    base_cmd = "${base_cmd} --user_env ${user_env}"
+
   for (prov in providers) {
     if (prov[1]) {
       echo "Running ${prov[0]}-${prov[1]} ${stage_name}"
@@ -713,12 +716,15 @@ pipeline {
           steps {
             script {
               dir (RUN_LOCATION) {
-		run_middleware([["tcp", null]], "oneCCL-GPU-v3", "onecclgpu",
-			       "gpu", "fabrics-ci", "2")
-		run_middleware([["psm3", null]], "oneCCL-GPU-v3", "onecclgpu",
-			       "gpu", "fabrics-ci", "2")
-		run_middleware([["verbs", null]], "oneCCL-GPU-v3", "onecclgpu",
-                               "gpu", "fabrics-ci", "2")
+		            run_middleware([["tcp", null]], "oneCCL-GPU-v3", "onecclgpu",
+			                         "gpu", "fabrics-ci", "2", null, null,
+                               "FI_HMEM_DISABLE_P2P=1")
+		            run_middleware([["psm3", null]], "oneCCL-GPU-v3", "onecclgpu",
+			                         "gpu", "fabrics-ci", "2", null, null,
+                               "FI_HMEM_DISABLE_P2P=1")
+		            run_middleware([["verbs", null]], "oneCCL-GPU-v3", "onecclgpu",
+                               "gpu", "fabrics-ci", "2", null, null,
+                               "FI_HMEM_DISABLE_P2P=1")
               }
             }
           }
