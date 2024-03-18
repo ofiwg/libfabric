@@ -67,6 +67,10 @@ The following core providers are built into libfabric by default, assuming
 all build pre-requisites are met.  That is, necessary libraries are installed,
 operating system support is available, etc.  This list is not exhaustive.
 
+*CXI*
+: Provider for Cray's Slingshot network. See
+  [`fi_cxi`(7)](fi_cxi.7.html) for more information.
+
 *EFA*
 : A provider for the [Amazon EC2 Elastic Fabric Adapter
   (EFA)](https://aws.amazon.com/hpc/efa/), a custom-built OS bypass
