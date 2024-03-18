@@ -850,6 +850,10 @@ class OneCCLTests(Test):
             'CCL_ATL_TRANSPORT_LIST'    : 'ofi'
         }
 
+        if self.env:
+            for key in self.env:
+                self.oneccl_environ[key] = self.env[key]
+
         self.ld_library = [
                             f'{self.libfab_installpath}/lib',
                             f'{self.oneccl_path}/build/_install/lib'
