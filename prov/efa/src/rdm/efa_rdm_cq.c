@@ -115,7 +115,7 @@ void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 		EFA_WARN(FI_LOG_CQ,
 			"Unable to write a cq entry for remote for RECV_RDMA operation: %s\n",
 			fi_strerror(-ret));
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_WRITE_SHM_CQ_ENTRY);
+		efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_WRITE_SHM_CQ_ENTRY);
 	}
 
 	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, flags);
@@ -507,8 +507,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	ret = efa_cq_ibv_cq_ex_open(attr, efa_domain->device->ibv_ctx, &cq->ibv_cq.ibv_cq_ex, &cq->ibv_cq.ibv_cq_ex_type);
 	if (ret) {
-		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %d\n", ret);
-		ret = -FI_EINVAL;
+		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", fi_strerror(ret));
 		goto close_util_cq;
 	}
 
