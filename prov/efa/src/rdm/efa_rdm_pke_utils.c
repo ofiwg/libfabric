@@ -427,9 +427,9 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
 	 *
 	 * 3. message size is 0, thus no data to copy.
 	 */
-	if (OFI_UNLIKELY((ope->internal_flags & EFA_RDM_RXE_RECV_CANCEL)) ||
-	    OFI_UNLIKELY(segment_offset >= ope->cq_entry.len) ||
-	    OFI_UNLIKELY(pke->payload_size == 0)) {
+	if (OFI_UNLIKELY((ope->internal_flags & EFA_RDM_RXE_RECV_CANCEL) ||
+	    (segment_offset >= ope->cq_entry.len) ||
+	    (pke->payload_size == 0))) {
 		efa_rdm_pke_handle_data_copied(pke);
 		return 0;
 	}
