@@ -61,11 +61,17 @@ const char *fi_strerror(int errno);
 *FI_ENOSYS*
 : Function not implemented
 
+*FI_EWOULDBLOCK*
+: Operation would block
+
 *FI_ENOMSG*
 : No message of desired type
 
 *FI_ENODATA*
 : No data available
+
+*FI_EOVERFLOW*
+: Value too large for defined data type
 
 *FI_EMSGSIZE*
 : Message too long
@@ -94,6 +100,9 @@ const char *fi_strerror(int errno);
 *FI_ECONNRESET*
 : Connection reset by peer
 
+*FI_ENOBUFS*
+: No buffer space available
+
 *FI_EISCONN*
 : Transport endpoint is already connected
 
@@ -108,6 +117,9 @@ const char *fi_strerror(int errno);
 
 *FI_ECONNREFUSED*
 : Connection refused
+
+*FI_EHOSTDOWN*
+: Host is down
 
 *FI_EHOSTUNREACH*
 : No route to host
@@ -153,6 +165,27 @@ const char *fi_strerror(int errno);
 
 *FI_ENOCQ*
 : Missing or unavailable completion queue
+
+*FI_ECRC*
+: CRC error
+
+*FI_ETRUNC*
+: Truncation error
+
+*FI_ENOKEY*
+: Required key not available
+
+*FI_ENOAV*
+: Missing or unavailable address vector
+
+*FI_EOVERRUN*
+: Queue has been overrun
+
+*FI_ENORX*
+: Receiver not ready, no receive buffers available
+
+*FI_ENOMR*
+: Memory registration limit exceeded
 
 # SEE ALSO
 
