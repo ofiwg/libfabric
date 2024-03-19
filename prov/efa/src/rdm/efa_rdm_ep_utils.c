@@ -653,7 +653,7 @@ void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_pe
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Failed to post HANDSHAKE to peer %ld: %s\n",
 			peer->efa_fiaddr, fi_strerror(-err));
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
+		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_PEER_HANDSHAKE);
 		return;
 	}
 

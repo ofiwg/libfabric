@@ -745,7 +745,7 @@ fi_addr_t efa_rdm_pke_insert_addr(struct efa_rdm_pke *pkt_entry, void *raw_addr)
 	ret = efa_av_insert_one(ep->base_ep.av, (struct efa_ep_addr *)raw_addr,
 	                        &rdm_addr, 0, NULL, false);
 	if (OFI_UNLIKELY(ret != 0)) {
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_AV_INSERT);
+		efa_base_ep_write_eq_error(&ep->base_ep, ret, FI_EFA_ERR_AV_INSERT);
 		return -1;
 	}
 
@@ -910,7 +910,7 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 			"Peer %d is requesting feature %d, which this EP does not support.\n",
 			(int)pkt_entry->addr, base_hdr->type);
 
-		assert(0 && "invalid REQ packe type");
+		assert(0 && "invalid REQ packet type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
