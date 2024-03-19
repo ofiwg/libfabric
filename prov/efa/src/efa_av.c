@@ -811,27 +811,24 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 static int efa_av_close(struct fid *fid)
 {
 	struct efa_av *av;
-	int ret = 0;
 	int err = 0;
 
 	av = container_of(fid, struct efa_av, util_av.av_fid.fid);
 
 	efa_av_close_reverse_av(av);
 
-	ret = ofi_av_close(&av->util_av);
-	if (ret) {
-		err = ret;
+	err = ofi_av_close(&av->util_av);
+	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_AV, "Failed to close av: %s\n",
-			fi_strerror(ret));
+			fi_strerror(err));
 	}
 
 	if (av->ep_type == FI_EP_RDM) {
 		if (av->shm_rdm_av) {
-			ret = fi_close(&av->shm_rdm_av->fid);
-			if (ret) {
-				err = ret;
+			err = fi_close(&av->shm_rdm_av->fid);
+			if (OFI_UNLIKELY(err)) {
 				EFA_WARN(FI_LOG_AV, "Failed to close shm av: %s\n",
-					fi_strerror(ret));
+					fi_strerror(err));
 			}
 		}
 	}
