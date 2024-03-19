@@ -33,7 +33,7 @@ int efa_rdm_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"MR verification failed (%s), addr: %lx key: %ld\n",
 				fi_strerror(-ret), rma[i].addr, rma[i].key);
-			return -FI_EACCES;
+			return ret;
 		}
 
 		iov[i].iov_base = (void *)rma[i].addr;
