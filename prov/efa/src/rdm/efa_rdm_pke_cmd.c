@@ -504,9 +504,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 		}
 		break;
 	default:
-		EFA_WARN(FI_LOG_CQ,
-				"%s unknown x_entry type %d\n",
-				__func__, pkt_entry->ope->type);
+		EFA_WARN(FI_LOG_CQ, "Unknown x_entry type: %d\n", pkt_entry->ope->type);
 		assert(0 && "unknown x_entry state");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 		efa_rdm_pke_release_tx(pkt_entry);
