@@ -1632,7 +1632,7 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
   made to bind multiple domains.
 
 *-FI_ENOCQ*
-: The endpoint has not been configured with necessary event queue.
+: The endpoint has not been configured with necessary completion queue.
 
 *-FI_EOPBADSTATE*
 : The endpoint's state does not permit the requested operation.
