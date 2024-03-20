@@ -24,7 +24,6 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	peer->efa_fiaddr = conn->fi_addr;
 	peer->is_self = efa_is_same_addr(&ep->base_ep.src_addr, conn->ep_addr);
 	peer->host_id = peer->is_self ? ep->host_id : 0;	/* Peer host id is exchanged via handshake */
-	peer->num_read_msg_in_flight = 0;
 	peer->num_runt_bytes_in_flight = 0;
 	ofi_recvwin_buf_alloc(&peer->robuf, efa_env.recvwin_size);
 	dlist_init(&peer->outstanding_tx_pkts);
@@ -272,7 +271,8 @@ int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer,
 	int op = ope->op;
 
 	assert(op == ofi_op_tagged || op == ofi_op_msg);
-	if (peer->num_read_msg_in_flight == 0 &&
+
+	if (efa_rdm_ep_domain(ep)->num_read_msg_in_flight == 0 &&
 	    efa_rdm_peer_get_runt_size(peer, ep, ope) > 0 &&
 	    !(ope->fi_flags & FI_DELIVERY_COMPLETE)) {
 		return (op == ofi_op_tagged) ? EFA_RDM_RUNTREAD_TAGRTM_PKT

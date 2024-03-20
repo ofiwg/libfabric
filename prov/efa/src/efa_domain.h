@@ -30,6 +30,7 @@ struct efa_domain {
 	size_t			rdm_cq_size;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
 	struct ofi_genlock	srx_lock; /* shared among peer providers */
+	uint64_t		num_read_msg_in_flight;
 };
 
 extern struct dlist_entry g_efa_domain_list;
