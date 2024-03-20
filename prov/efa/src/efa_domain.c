@@ -159,6 +159,7 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	efa_domain->addrlen = (info->src_addr) ? info->src_addrlen : info->dest_addrlen;
 	efa_domain->rdm_cq_size = MAX(info->rx_attr->size + info->tx_attr->size,
 				  efa_env.cq_size);
+	efa_domain->num_read_msg_in_flight = 0;
 	return 0;
 }
 
