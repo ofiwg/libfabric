@@ -1172,11 +1172,7 @@ ssize_t efa_rdm_pke_init_longread_tagrtm(struct efa_rdm_pke *pkt_entry,
  */
 void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_rdm_peer *peer;
-
-	peer = efa_rdm_ep_get_peer(pkt_entry->ep, pkt_entry->addr);
-	assert(peer);
-	peer->num_read_msg_in_flight += 1;
+	efa_rdm_ep_domain(pkt_entry->ep)->num_read_msg_in_flight += 1;
 }
 
 /**
@@ -1357,7 +1353,7 @@ void efa_rdm_pke_handle_runtread_rtm_sent(struct efa_rdm_pke *pkt_entry)
 
 	if (efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry)->seg_offset == 0 &&
 	    txe->total_len > txe->bytes_runt)
-		peer->num_read_msg_in_flight += 1;
+		efa_rdm_ep_domain(pkt_entry->ep)->num_read_msg_in_flight += 1;
 }
 
 /**

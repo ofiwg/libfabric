@@ -58,11 +58,6 @@ struct efa_rdm_peer {
 	 * @details this value is capped by efa_env.efa_runt_size
 	 */
 	int64_t num_runt_bytes_in_flight;
-
-	/**
-	 * @brief number of messages that are using read based protocol
-	 */
-	int64_t num_read_msg_in_flight;
 };
 
 /**
