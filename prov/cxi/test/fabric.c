@@ -380,7 +380,6 @@ Test(getinfo, invalid_fi_directed_recv_with_multiple_auth_keys_per_ep)
 TestSuite(getinfo_infos, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 #define MAX_INFOS	24
-#define FI_ADDR_CXI_COMPAT FI_ADDR_OPX
 
 struct info_check {
 	int mr_mode;
@@ -397,8 +396,6 @@ Test(getinfo_infos, nohints)
 	struct fi_info *fi_ptr;
 	char *dom_name;
 	char *odp;
-	char *compat;
-	int compat_val;
 	struct info_check infos[MAX_INFOS];
 	size_t max_ep_auth_key;
 	uint32_t proto;
@@ -416,8 +413,6 @@ Test(getinfo_infos, nohints)
 	}
 
 	odp = getenv("FI_CXI_ODP");
-	compat = getenv("FI_CXI_COMPAT");
-	compat_val = !compat ? 1 : strtol(compat, NULL, 10);
 
 	/* By default when no hints are specified, each interface
 	 * should can have 8 HPC fi_info and 8 CS fi_info.
@@ -433,18 +428,11 @@ Test(getinfo_infos, nohints)
 		 * are used.
 		 */
 		if (i < 2)
-			proto = compat_val == 2 ? FI_PROTO_OPX : FI_PROTO_CXI;
+			proto = FI_PROTO_CXI;
 		else
 			proto = FI_PROTO_CXI_RNR;
 
 		format = FI_ADDR_CXI;
-		if (compat_val == 2) {
-			/* CS not valid with only old constants */
-			if (proto == FI_PROTO_CXI_RNR)
-				continue;
-			format = FI_ADDR_CXI_COMPAT;
-		}
-
 		infos[info_per_if].mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED |
 					FI_MR_PROV_KEY;
 		infos[info_per_if].format = format;
@@ -474,28 +462,6 @@ Test(getinfo_infos, nohints)
 		}
 	}
 
-	/* If we are supporting compatibility with old constants,
-	 * then fi_info are repeated with compatibility constants.
-	 */
-	if (!compat || strtol(compat, NULL, 10) == 1) {
-		for (i = 0; i < info_per_if; i++) {
-			/* FI_PROTO_CXI_RNR does not require compat */
-			if (infos[i].protocol == FI_PROTO_CXI_RNR) {
-				info_per_if = info_per_if + i;
-				goto done;
-			}
-
-			infos[info_per_if + i].mr_mode =
-				infos[i].mr_mode;
-			infos[info_per_if + i].format =
-				FI_ADDR_CXI_COMPAT;
-			infos[info_per_if + i].max_ep_auth_key =
-				infos[i].max_ep_auth_key;
-			infos[info_per_if + 1].protocol = FI_PROTO_OPX;
-		}
-		info_per_if += i;
-	}
-done:
 	cr_assert(info_per_if <= MAX_INFOS, "Too many infos");
 
 	fi_ptr = cxit_fi;
@@ -549,25 +515,12 @@ void getinfo_infos_hints(uint32_t proto)
 	int info_per_if = 0;
 	struct fi_info *fi_ptr;
 	char *dom_name;
-	char *compat;
-	int compat_val;
 	char *odp;
 	int odp_val;
 	struct info_check infos[3];
 
-	compat = getenv("FI_CXI_COMPAT");
-	compat_val = !compat ? 1 : strtol(compat, NULL, 10);
 	odp = getenv("FI_CXI_ODP");
 	odp_val = !odp ? 0 : strtol(odp, NULL, 10);
-
-	/* When only old compatibility constants are used,
-	 * FI_PROTO_CXI or FI_PROTO_CXI_RNR are not valid.
-	 */
-	if (compat_val >= 2 &&
-	    (proto == FI_PROTO_CXI_RNR || proto == FI_PROTO_CXI)) {
-		cr_assert(true);
-		return;
-	}
 
 	cr_assert(cxit_fi_hints == NULL, "hints not null");
 	cxit_setup_getinfo_proto(proto);
@@ -586,30 +539,15 @@ void getinfo_infos_hints(uint32_t proto)
 	}
 
 	/* We have address format FI_ADDR_CXI */
-	if (compat_val < 2) {
-		infos[info_per_if].mr_mode = FI_MR_ENDPOINT;
-		if (!odp_val)
-			infos[info_per_if].mr_mode |= FI_MR_ALLOCATED;
-		if (cxit_prov_key)
-			infos[info_per_if].mr_mode |= FI_MR_PROV_KEY;
+	infos[info_per_if].mr_mode = FI_MR_ENDPOINT;
+	if (!odp_val)
+		infos[info_per_if].mr_mode |= FI_MR_ALLOCATED;
+	if (cxit_prov_key)
+		infos[info_per_if].mr_mode |= FI_MR_PROV_KEY;
 
-		infos[info_per_if].format = FI_ADDR_CXI;
-		infos[info_per_if].protocol = proto;
-		info_per_if++;
-	}
-
-	/* Add compat if required */
-	if (compat_val != 0 && !proto) {
-		infos[info_per_if].mr_mode = FI_MR_ENDPOINT;
-		if (!odp_val)
-			infos[info_per_if].mr_mode |= FI_MR_ALLOCATED;
-		if (cxit_prov_key)
-			infos[info_per_if].mr_mode |= FI_MR_PROV_KEY;
-
-		infos[info_per_if].format = FI_ADDR_CXI_COMPAT;
-		infos[info_per_if].protocol = FI_PROTO_OPX;
-		info_per_if++;
-	}
+	infos[info_per_if].format = FI_ADDR_CXI;
+	infos[info_per_if].protocol = proto;
+	info_per_if++;
 
 	fi_ptr = cxit_fi;
 

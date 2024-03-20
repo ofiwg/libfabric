@@ -1699,16 +1699,12 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 
 		while (fi_ptr) {
 			/* If hints protocol is not specified, default to use
-			 * protocol FI_PROTO_CXI/FI_PROTO_CXI_COMPAT. This
+			 * protocol FI_PROTO_CXI. This
 			 * requires that FI_PROTO_CXI_RNR be explicitly
 			 * requested if hints are passed to be used.
 			 */
 			if (!hints->ep_attr->protocol) {
-				/* TODO: Only FI_ADDR_CXI will be supported
-				 * upstream.
-				 */
-				proto = fi_ptr->addr_format == FI_ADDR_CXI ?
-						FI_PROTO_CXI : FI_PROTO_OPX;
+				proto = FI_PROTO_CXI;
 			} else {
 				proto = hints->ep_attr->protocol;
 			}
