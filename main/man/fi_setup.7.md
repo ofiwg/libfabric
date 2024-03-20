@@ -947,7 +947,11 @@ struct fi_cq_err_entry {
 /* Sample error handling */
 struct fi_cq_msg_entry entry;
 struct fi_cq_err_entry err_entry;
+char err_data[256];
 int ret;
+
+err_entry.err_data = err_data;
+err_entry.err_data_size = 256;
 
 ret = fi_cq_read(cq, &entry, 1);
 if (ret == -FI_EAVAIL)
