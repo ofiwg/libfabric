@@ -1226,9 +1226,6 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 
 	/* Save EP attributes from hints */
 	ep_obj->protocol = hints->ep_attr->protocol;
-	/* If user is still using CXI_COMPAT point to right protocol */
-	if (ep_obj->protocol == FI_PROTO_OPX)
-		ep_obj->protocol = FI_PROTO_CXI;
 	ep_obj->caps = hints->caps;
 	ep_obj->ep_attr = *hints->ep_attr;
 	ep_obj->txq_size = hints->tx_attr->size;
