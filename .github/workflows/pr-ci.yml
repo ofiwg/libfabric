@@ -23,8 +23,6 @@ env:
     sparse
     valgrind
     wget
-  APT_REPOS: >-
-    ppa:lttng/ppa
   OFI_PROVIDER_FLAGS: >-
     --enable-efa=$PWD/rdma-core/build
     --enable-mrail
@@ -44,7 +42,6 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-20.04
           - ubuntu-22.04
         cc:
           - gcc
@@ -53,7 +50,6 @@ jobs:
     steps:
       - name: Install dependencies (Linux)
         run: |
-          sudo apt-add-repository ${{ env.APT_REPOS }}
           sudo apt-get update
           sudo apt-get install -y ${{ env.APT_PACKAGES }}
       - uses: actions/checkout@v4
@@ -75,11 +71,10 @@ jobs:
           name: ${{ matrix.os }}-${{ matrix.cc }}-config.log
           path: config.log
   hmem:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Install dependencies (Linux)
         run: |
-          sudo apt-add-repository ${{ env.APT_REPOS }}
           sudo apt-get update
           sudo apt-get install -y ${{ env.APT_PACKAGES }}
       - name: Install CUDA
