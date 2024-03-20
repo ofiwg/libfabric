@@ -1297,9 +1297,6 @@ Test(auth_key, max_ep_auth_key_null_hints)
 	int i = 0;
 	size_t expected_ep_auth_key;
 
-	ret = setenv("FI_CXI_COMPAT", "0", 1);
-	cr_assert(ret == 0);
-
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
 			 NULL, FI_SOURCE, NULL, &info);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
@@ -1336,9 +1333,6 @@ Test(auth_key, zero_max_ep_auth_key_null_hint)
 	struct fi_info *tmp;
 	int i = 0;
 	size_t expected_ep_auth_key;
-
-	ret = setenv("FI_CXI_COMPAT", "0", 1);
-	cr_assert(ret == 0);
 
 	hints = fi_allocinfo();
 	cr_assert_not_null(hints, "fi_allocinfo failed");
