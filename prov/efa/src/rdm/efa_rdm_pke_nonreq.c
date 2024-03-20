@@ -646,11 +646,8 @@ void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_eor_hdr *eor_hdr;
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_peer *peer;
 
-	peer = efa_rdm_ep_get_peer(pkt_entry->ep, pkt_entry->addr);
-	assert(peer);
-	peer->num_read_msg_in_flight -= 1;
+	efa_rdm_ep_domain(pkt_entry->ep)->num_read_msg_in_flight -= 1;
 
 	eor_hdr = (struct efa_rdm_eor_hdr *)pkt_entry->wiredata;
 
@@ -674,11 +671,8 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_read_nack_hdr *nack_hdr;
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_peer *peer;
 
-	peer = efa_rdm_ep_get_peer(pkt_entry->ep, pkt_entry->addr);
-	assert(peer);
-	peer->num_read_msg_in_flight -= 1;
+	efa_rdm_ep_domain(pkt_entry->ep)->num_read_msg_in_flight -= 1;
 
 	nack_hdr = (struct efa_rdm_read_nack_hdr *) pkt_entry->wiredata;
 
