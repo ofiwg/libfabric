@@ -92,7 +92,7 @@ static inline int efa_cq_ibv_cq_ex_open_with_ibv_create_cq_ex(
 
 	if (!*ibv_cq_ex) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", strerror(errno));
-		return -FI_ENOCQ;
+		return -FI_EINVAL;
 	}
 
 	*ibv_cq_ex_type = IBV_CQ;
