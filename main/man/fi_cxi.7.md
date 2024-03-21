@@ -229,6 +229,18 @@ CXI integrated launcher and CXI authorization key aware libfabric user:
 7. Application processes select from the list of available service IDs and VNIs
    to form an authorization key to use for Endpoint allocation.
 
+## Endpoint Protocols
+
+The provider supports multiple endpoint protocols. The default protocol is
+FI_PROTO_CXI and fully supports the messaging requirements of parallel
+applicaitons.
+
+The FI_PROTO_CXI_RNR endpoint protocol is an optional protocol that targets
+client/server environments where send-after-send ordering is not required and
+messaging is generally to pre-posted buffers; FI_MULTI_RECV is recommended.
+It utilizes a receiver-not-ready implementation where
+*FI_CXI_RNR_MAX_TIMEOUT_US* can be tuned to control the maximum retry duration.
+
 ## Address Vectors
 
 The CXI provider supports both *FI_AV_TABLE* and *FI_AV_MAP* with the same
@@ -432,6 +444,15 @@ physical memory. Using Pinned mode avoids any overhead due to network page
 faults but requires all buffers to be backed by physical memory. Copy-on-write
 semantics are broken when using pinned memory. See the Fork section for more
 information.
+
+The CXI provider supports DMABUF for device memory registration. If the ROCR
+and CUDA libraries support it, the CXI provider will default to use DMA-buf.
+There may be situations with CUDA that may double the BAR consumption.
+Until this is fixed in the CUDA stack, the environment variable
+*FI_CXI_DISABLE_DMABUF_CUDA* can be used to fall back to the nvidia
+peer-memory interface.
+Also, *FI_CXI_DISABLE_DMABUF_ROCR* can be used to fall back to the amdgpu
+peer-memory interface.
 
 ## Translation Cache
 
@@ -1076,6 +1097,12 @@ The CXI provider checks for the following environment variables:
 
 *FI_CXI_DEFAULT_VNI*
 :   Default VNI value used only for service IDs where the VNI is not restricted.
+
+*FI_CXI_RNR_MAX_TIMEOUT_US*
+:   When using the endpoint FI_PROTO_CXI_RNR protocol, this setting is used to
+    control the maximum time from the original posting of the message that the
+    message should be retried. A value of 0 will return an error completion
+    on the first RNR ack status.
 
 *FI_CXI_EQ_ACK_BATCH_SIZE*
 :   Number of EQ events to process before writing an acknowledgement to HW.
