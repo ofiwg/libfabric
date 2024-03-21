@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Cornelis Networks.
+ * Copyright (C) 2023-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,7 +36,6 @@
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_hfi1.h"
-
 #include "rdma/fi_direct_eq.h"
 
 //based on psm2 implementation
@@ -57,7 +56,7 @@ int normalize_core_id(int core_id, int num_cores)
 }
 
 // Affinity for the progress thread based on value for FI_OPX_PROG_AFFINITY
-// or default value in OPX_DEFAULT_PROG_AFFINITY_STR if not set
+// No affinity is set by default
 int fi_opx_progress_set_affinity(char *affinity)
 {
         int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
@@ -119,32 +118,26 @@ void* fi_opx_progress_func (void *args) {
 	char* prog_affinity = func_args->prog_affinity;
 	struct fi_opx_progress_track *progress_track = func_args->progress_track;
 	int progress_interval = func_args->progress_interval;
-	int affinity_set;
+	int affinity_set = fi_opx_progress_set_affinity(prog_affinity);
 	int sleep_usec;
 	struct timespec ts;
-	affinity_set = fi_opx_progress_set_affinity(prog_affinity);
 
 	if (progress_interval == 0) {
-		if (affinity_set) {
-			sleep_usec = 1;
-		} else {
-			sleep_usec = 1000;
-		}
+		sleep_usec = 1;
 	} else {
 		sleep_usec = progress_interval;
 	}
 
-	ts.tv_sec = 0;
-	ts.tv_nsec = 1000;
+	ts.tv_sec = sleep_usec / 1000000;
+	ts.tv_nsec = (sleep_usec % 1000000) * 1000;
+
 	while (!cq || !cq->ops) {
 		usleep(200);
 	}
-	int i;
+
 	while (progress_track->keep_running) {
 		fi_cq_read(cq, NULL, 0);
-		//This is done such that we are not waiting too long for the thread to close out while it is sleeping
-		for (i = 0; i<sleep_usec && progress_track->keep_running; i++)
-			nanosleep(&ts, NULL);
+		nanosleep(&ts, NULL);
 	}
 
 	pthread_exit(args);
@@ -168,13 +161,7 @@ void fi_opx_start_progress(struct fi_opx_progress_track *progress_track, struct 
 	args->cq = cq;
 	args->progress_interval = progress_interval;
 	args->progress_track = progress_track;
-	if (prog_affinity)
-		args->prog_affinity = prog_affinity;
-	else {
-		FI_WARN(fi_opx_global.prov, FI_LOG_CQ,
-			"Progress affinity incorrectly set\n");
-		goto err;
-	}
+	args->prog_affinity = prog_affinity;
 
 	progress_track->progress_thread = malloc(sizeof(pthread_t));
 	if (!progress_track->progress_thread){

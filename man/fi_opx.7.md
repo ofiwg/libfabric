@@ -209,11 +209,12 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_PROG_AFFINITY*
 : String. This sets the affinity to be used for any progress threads. Set as a colon-separated
   triplet as `start:end:stride`, where stride controls the interval between selected cores.
-  For example, `1:5:2` will have cores 1, 3, and 5 as valid cores for progress threads. Default is
-  `1:4:1`.
-
+  For example, `1:5:2` will have cores 1, 3, and 5 as valid cores for progress threads. By default
+  no affinity is set.
+  
 *FI_OPX_AUTO_PROGRESS_INTERVAL_USEC*
-: Integer, This setting controls the time (in usecs) between polls for auto progress threads. Default is 1.
+: Integer, This setting controls the time (in usecs) between polls for auto progress threads. 
+  Default is 1.
 
 *FI_OPX_PKEY*
 : Integer. Partition key, a 2 byte positive integer. Default is 0x8001
