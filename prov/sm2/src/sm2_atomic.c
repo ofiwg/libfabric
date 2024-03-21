@@ -81,8 +81,7 @@ sm2_atomic_format(struct sm2_xfer_entry *xfer_entry, uint8_t datatype,
 		xfer_entry->hdr.size = ofi_copy_from_iov(
 			atomic_entry->atomic_data.buf,
 			SM2_ATOMIC_COMP_INJECT_SIZE, iov, iov_count, 0);
-		comp_size = ofi_copy_from_iov(atomic_entry->atomic_data.comp +
-						      xfer_entry->hdr.size,
+		comp_size = ofi_copy_from_iov(atomic_entry->atomic_data.comp,
 					      SM2_ATOMIC_COMP_INJECT_SIZE,
 					      compare_iov, compare_count, 0);
 		if (comp_size != xfer_entry->hdr.size)
