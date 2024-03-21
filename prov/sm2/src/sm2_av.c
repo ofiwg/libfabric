@@ -128,8 +128,10 @@ static int sm2_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		srx->owner_ops->foreach_unspec_addr(srx, &sm2_get_addr);
 	}
 
-	if (flags & FI_EVENT)
+	if (flags & FI_EVENT) {
+		assert(util_av->eq);
 		ofi_av_write_event(util_av, succ_count, 0, context);
+	}
 
 	return succ_count;
 }
