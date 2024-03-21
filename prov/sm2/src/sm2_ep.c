@@ -641,7 +641,8 @@ int sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret || ofi_bufpool_grow(ep->xfer_ctx_pool)) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
 			"Unable to create xfer_entry ctx pool\n");
-		return -FI_ENOMEM;
+		ret = -FI_ENOMEM;
+		goto close;
 	}
 
 	ep->util_ep.ep_fid.fid.ops = &sm2_ep_fi_ops;
@@ -653,6 +654,8 @@ int sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 	*ep_fid = &ep->util_ep.ep_fid;
 	return 0;
 
+close:
+	(void) ofi_endpoint_close(&ep->util_ep);
 name:
 	free((void *) ep->name);
 ep:
