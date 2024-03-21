@@ -285,7 +285,7 @@ int sm2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	return 0;
 out:
-	ofi_av_close(&sm2_av->util_av);
+	(void) ofi_av_close(&sm2_av->util_av);
 	free(sm2_av);
 	return ret;
 }
