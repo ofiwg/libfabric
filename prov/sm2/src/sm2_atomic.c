@@ -58,9 +58,12 @@ sm2_atomic_format(struct sm2_xfer_entry *xfer_entry, uint8_t datatype,
 	memcpy(atomic_entry->atomic_hdr.rma_ioc, rma_ioc,
 	       sizeof(*rma_ioc) * rma_ioc_count);
 
-	atomic_entry->atomic_hdr.result_iov_count = result_count;
-	memcpy(atomic_entry->atomic_hdr.result_iov, resultv,
-	       sizeof(*resultv) * result_count);
+	if (xfer_entry->hdr.op == ofi_op_atomic_fetch ||
+	    xfer_entry->hdr.op == ofi_op_atomic_compare) {
+		atomic_entry->atomic_hdr.result_iov_count = result_count;
+		memcpy(atomic_entry->atomic_hdr.result_iov, resultv,
+		       sizeof(*resultv) * result_count);
+	}
 
 	switch (xfer_entry->hdr.op) {
 	case ofi_op_atomic:
