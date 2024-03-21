@@ -171,8 +171,8 @@ static inline ssize_t sm2_generic_atomic(
 		}
 		break;
 	default:
-		assert(0);
-		break;
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "Unrecognized atomic op\n");
+		return -FI_ENOSYS;
 	}
 
 	ofi_genlock_lock(&ep->util_ep.lock);
