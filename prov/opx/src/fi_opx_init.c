@@ -692,7 +692,7 @@ OPX_INI
                         "<start>:<end>:<stride>"
                         "where each triplet <start>:<end>:<stride> defines a block "
                         "Both <start> and <end> is a core_id.");
-	fi_param_define(&fi_opx_provider, "auto_progress_interval_usec", FI_PARAM_INT, "Number of usec that the progress thread waits between polling, the value of 0 is default where the interval is 1 if progress affinity is set, or 1000 otherwise.");
+	fi_param_define(&fi_opx_provider, "auto_progress_interval_usec", FI_PARAM_INT, "Number of usec that the progress thread waits between polling. Default is 1.");
 	fi_param_define(&fi_opx_provider, "pkey", FI_PARAM_INT, "Partition key.  Should be a 2 byte positive integer.  Default is 0x%x\n", FI_OPX_HFI1_DEFAULT_P_KEY);
 	fi_param_define(&fi_opx_provider, "sl", FI_PARAM_INT, "Service Level.  This will also determine Service Class and Virtual Lane.  Default is %d\n", FI_OPX_HFI1_SL_DEFAULT);
 	/* CN5000 only */

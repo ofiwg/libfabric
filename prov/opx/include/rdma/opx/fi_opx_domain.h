@@ -92,7 +92,6 @@ struct fi_opx_node {
 #define OPX_JOB_KEY_STR_SIZE 33
 #define OPX_DEFAULT_JOB_KEY_STR "00112233445566778899aabbccddeeff"
 
-#define OPX_DEFAULT_PROG_AFFINITY_STR "0:3:1"
 #define OPX_SDMA_BOUNCE_BUF_MIN FI_OPX_SDMA_MIN_LENGTH
 #define OPX_SDMA_BOUNCE_BUF_THRESHOLD FI_OPX_SDMA_DC_MIN
 #define OPX_SDMA_BOUNCE_BUF_MAX (INT_MAX - 1)
@@ -109,7 +108,7 @@ struct fi_opx_domain {
 	uuid_t			unique_job_key;
 	char			unique_job_key_str[OPX_JOB_KEY_STR_SIZE];
 
-	char			progress_affinity_str[OPX_JOB_KEY_STR_SIZE];
+	char*			progress_affinity_str;
 
 	int			auto_progress_interval;
 

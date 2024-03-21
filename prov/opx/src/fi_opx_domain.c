@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 by Cornelis Networks.
+ * Copyright (C) 2021-2024 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -258,6 +258,40 @@ err:
 	return -errno;
 }
 
+int fi_opx_validate_affinity_str(char *str)
+{
+	int cols = 0;
+	bool recentCol = true;
+	int iter;
+	
+	for (iter = 0; iter < strlen(str); iter++) {
+		if (!isdigit(str[iter]) && str[iter] != ':') {
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+				"Invalid program affinity. Progress affinity must be a digit or colon.\n");
+			return -1;
+		}
+
+		if (str[iter] == ':') {
+			if (recentCol) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+						"Progress Affinity improperly formatted. Must be a : separated triplet.\n");
+				return -1;
+			} else {
+				cols += 1;
+				recentCol = true;
+			}
+		} else
+			recentCol = false;
+	}
+
+	if (cols != 2){
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+				"Progress Affinity improperly formatted. Must be a : separated triplet.\n");
+		return -1;
+	}
+	return 0;
+}
+
 int fi_opx_domain(struct fid_fabric *fabric,
 		struct fi_info *info,
 		struct fid_domain **dom, void *context)
@@ -347,60 +381,15 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	opx_domain->domain_fid.fid.ops     = &fi_opx_fi_ops;
 	opx_domain->domain_fid.ops	   = &fi_opx_domain_ops;
 	
-	char * env_var_prog_affinity = OPX_DEFAULT_PROG_AFFINITY_STR;
-	get_param_check = fi_param_get_str(fi_opx_global.prov, "prog_affinity", &env_var_prog_affinity);
+	opx_domain->progress_affinity_str = NULL;
+	get_param_check = fi_param_get_str(fi_opx_global.prov, "prog_affinity", &opx_domain->progress_affinity_str);
 	if (get_param_check == FI_SUCCESS) {
-		if (strlen(env_var_prog_affinity) >= OPX_JOB_KEY_STR_SIZE) {
-                	env_var_prog_affinity[OPX_JOB_KEY_STR_SIZE-1] = 0;
-                	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-                        	"Progress Affinity too long. Must be no more than 32 characters total, using default.\n");
-			env_var_prog_affinity = OPX_DEFAULT_PROG_AFFINITY_STR;
-        	}
-	} else {
-		env_var_prog_affinity = OPX_DEFAULT_PROG_AFFINITY_STR;
-	}
-	
-
-	if (strncmp(env_var_prog_affinity, OPX_DEFAULT_PROG_AFFINITY_STR, OPX_JOB_KEY_STR_SIZE)){
-		goto skip;
-	}
-
-	int cols = 0;
-	bool recentCol = true;
-	int iter;
-	for (iter=0; iter < OPX_JOB_KEY_STR_SIZE && env_var_prog_affinity[iter] != 0; iter++) {
-		if (!isdigit(env_var_prog_affinity[iter]) && env_var_prog_affinity[iter] != ':'){
-			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-				"Invalid program affinity. Progress affinity must be a digit or colon.\n");
-			errno=FI_EINVAL;
+		if (fi_opx_validate_affinity_str(opx_domain->progress_affinity_str) != 0) {
+			opx_domain->progress_affinity_str = NULL;
+			errno = FI_EINVAL;
 			goto err;
 		}
-		if (env_var_prog_affinity[iter] == ':'){
-			if (recentCol){
-				FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-					"Progress Affinity improperly formatted. Must be a : separated triplet.\n");
-				errno=FI_EINVAL;
-				goto err;
-			}
-			else{
-				cols += 1;
-				recentCol = true;
-			}
-		}
-		else
-			recentCol = false;
 	}
-
-	if (cols != 2){
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-			"Progress Affinity improperly formatted. Must be a : separated triplet.\n");
-		errno=FI_EINVAL;
-		goto err;
-	}
-
-skip:
-	strncpy(opx_domain->progress_affinity_str, env_var_prog_affinity, OPX_JOB_KEY_STR_SIZE-1);
-        opx_domain->progress_affinity_str[OPX_JOB_KEY_STR_SIZE-1] = '\0';
 
 	// Max UUID consists of 32 hex digits.
 	char * env_var_uuid = OPX_DEFAULT_JOB_KEY_STR;
