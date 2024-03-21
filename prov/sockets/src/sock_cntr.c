@@ -452,8 +452,10 @@ static uint64_t sock_cntr_readerr(struct fid_cntr *cntr)
 	_cntr = container_of(cntr, struct sock_cntr, cntr_fid);
 	if (_cntr->domain->progress_mode == FI_PROGRESS_MANUAL)
 		sock_cntr_progress(_cntr);
+	pthread_mutex_lock(&_cntr->mut);
 	if (_cntr->err_flag)
 		_cntr->err_flag = 0;
+	pthread_mutex_unlock(&_cntr->mut);
 	return ofi_atomic_get32(&_cntr->err_cnt);
 }
 
