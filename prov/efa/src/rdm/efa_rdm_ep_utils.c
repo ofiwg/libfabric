@@ -327,8 +327,7 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
 	if (peer)
 		peer->efa_outstanding_tx_ops++;
 
-	if (ope)
-		ope->efa_outstanding_tx_ops++;
+	ope->efa_outstanding_tx_ops++;
 #if ENABLE_DEBUG
 	ep->efa_total_posted_tx_ops++;
 #endif
