@@ -727,18 +727,24 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	int user_pkey = -1;
 	if (fi_param_get_int(fi_opx_global.prov, "pkey", &user_pkey) == FI_SUCCESS) {
 		if (user_pkey < 0) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user specified FI_OPX_PKEY of 0x%x, which is an invalid value.  Using default pkey of 0x%x instead\n", 
-				user_pkey, FI_OPX_HFI1_DEFAULT_P_KEY);
-			user_pkey = FI_OPX_HFI1_DEFAULT_P_KEY;
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user specified FI_OPX_PKEY of %d (0x%x), which is an invalid value.\n", 
+				user_pkey, user_pkey);
+			if (fd >= 0) {
+				opx_hfi_context_close(fd);
+			}
+			free(internal);
+			return NULL;
 		}
 		rc = opx_hfi_set_pkey(ctrl, user_pkey);
 
 		if (rc) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set.  This pkey is likely not registered/valid.  Using default pkey of 0x%x instead\n", 
-				user_pkey, FI_OPX_HFI1_DEFAULT_P_KEY);
-			rc = opx_hfi_set_pkey(ctrl, FI_OPX_HFI1_DEFAULT_P_KEY);
-			assert(!rc);
-			context->pkey = FI_OPX_HFI1_DEFAULT_P_KEY;
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set.  This pkey is likely not registered/valid.\n", 
+				user_pkey);
+			if (fd >= 0) {
+				opx_hfi_context_close(fd);
+			}
+			free(internal);
+			return NULL;
 		} else {
 			context->pkey = user_pkey;
 			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
@@ -746,8 +752,17 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		}
 	} else {
 		rc = opx_hfi_set_pkey(ctrl, FI_OPX_HFI1_DEFAULT_P_KEY);
-		assert(!rc);
-		context->pkey = FI_OPX_HFI1_DEFAULT_P_KEY;
+		if (rc) {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Default Pkey %#x not registered/valid. Please use FI_OPX_PKEY to specify the pkey\n",
+				FI_OPX_HFI1_DEFAULT_P_KEY);
+			if (fd >= 0) {
+				opx_hfi_context_close(fd);
+			}
+			free(internal);
+			return NULL; 
+		} else {
+			context->pkey = FI_OPX_HFI1_DEFAULT_P_KEY;
+		}
 	}
 
 	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
