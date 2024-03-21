@@ -59,7 +59,6 @@ size_t sm2_calculate_size_offsets(ptrdiff_t *rq_offset, ptrdiff_t *fs_offset)
 int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 	       struct sm2_mmap *sm2_mmap, sm2_gid_t *gid)
 {
-	struct sm2_ep_name *ep_name;
 	ptrdiff_t recv_queue_offset, freestack_offset;
 	int ret;
 	void *mapped_addr;
@@ -78,20 +77,6 @@ int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 			"ourselves\n");
 		sm2_file_unlock(sm2_mmap);
 		return ret;
-	}
-
-	ep_name = calloc(1, sizeof(*ep_name));
-	if (!ep_name) {
-		FI_WARN(prov, FI_LOG_EP_CTRL, "calloc error\n");
-		return -FI_ENOMEM;
-	}
-	strncpy(ep_name->name, (char *) attr->name, FI_NAME_MAX - 1);
-	ep_name->name[FI_NAME_MAX - 1] = '\0';
-
-	if (ret < 0) {
-		FI_WARN(prov, FI_LOG_EP_CTRL, "ftruncate error\n");
-		ret = -errno;
-		goto remove;
 	}
 
 	mapped_addr = sm2_mmap_ep_region(sm2_mmap, *gid);
@@ -131,7 +116,6 @@ int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 
 remove:
 	sm2_file_unlock(sm2_mmap);
-	free(ep_name);
 	return ret;
 }
 
