@@ -3,7 +3,6 @@ import groovy.transform.Field
 properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def DO_RUN=true
 @Field def TARGET="main"
-@Field def SCRIPT_LOCATION="upstream/libfabric/contrib/intel/jenkins"
 @Field def RELEASE=false
 @Field def BUILD_MODES=["reg", "dbg", "dl"]
 @Field def PYTHON_VERSION="3.9"
@@ -320,9 +319,9 @@ pipeline {
   environment {
       JOB_CADENCE = 'PR'
       WITH_ENV="'PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH'"
-      RUN_LOCATION="${env.WORKSPACE}/${SCRIPT_LOCATION}/"
       CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
       DELETE_LOCATION="${env.CUSTOM_WORKSPACE}/middlewares"
+      RUN_LOCATION="${env.CUSTOM_WORKSPACE}/ci_resources/legacy_pipeline_scripts/"
       LOG_DIR = "${env.CUSTOM_WORKSPACE}/log_dir"
   }
   stages {
@@ -766,7 +765,7 @@ pipeline {
           options { skipDefaultCheckout() }
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 dmabuf_output = "${LOG_DIR}/DMABUF-Tests_verbs-rxm_dmabuf"
                 cmd = """ python3.9 runtests.py --test=dmabuf \
                            --prov=verbs --util=rxm --build_hw=gpu"""
