@@ -1,8 +1,11 @@
 Introduction
 ============
-Jenkins is a CI/CD (Continuous Integration/Continuous Development) Pipelining tool that Intel uses to test code changes to libfabric. It follows the Jenkinsfile pipeline stages to build, test, and cleanup resources.
+Jenkins is a CI/CD (Continuous Integration/Continuous Development) Pipelining
+tool that Intel uses to test code changes to libfabric. It follows the
+Jenkinsfile pipeline stages to build, test, and cleanup resources.
 
-The runtime flow generally follows, Jenkinsfile -> build.py -> runtests.py -> run.py -> tests.py.
+The scripts that this pipeline uses are stored in an internal Intel CI
+repository.
 
 Tests, Middlewares and Libraries supported by Intel CI/CD are:
 	Fabtests
