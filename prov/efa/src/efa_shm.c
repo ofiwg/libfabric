@@ -86,7 +86,7 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 	 * make this request to shm as well.
 	 */
 	shm_hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR;
-	if (app_info && (app_info->caps & FI_HMEM)) {
+	if (app_info->caps & FI_HMEM) {
 		shm_hints->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 
