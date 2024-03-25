@@ -57,7 +57,7 @@ int normalize_core_id(int core_id, int num_cores)
 
 // Affinity for the progress thread based on value for FI_OPX_PROG_AFFINITY
 // No affinity is set by default
-int fi_opx_progress_set_affinity(char *affinity)
+void fi_opx_progress_set_affinity(char *affinity)
 {
         int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
         int core_id;
@@ -69,7 +69,7 @@ int fi_opx_progress_set_affinity(char *affinity)
         if (!affinity) {
                 FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
                         "progress thread affinity not set\n");
-                return 0;
+                return;
         }
 
         CPU_ZERO(&cpuset);
@@ -108,7 +108,6 @@ int fi_opx_progress_set_affinity(char *affinity)
                 FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
                         "progress thread affinity not set due to invalid format\n");
 
-        return set_count;
 }
 
 // function the progress thread runs
@@ -118,9 +117,10 @@ void* fi_opx_progress_func (void *args) {
 	char* prog_affinity = func_args->prog_affinity;
 	struct fi_opx_progress_track *progress_track = func_args->progress_track;
 	int progress_interval = func_args->progress_interval;
-	int affinity_set = fi_opx_progress_set_affinity(prog_affinity);
 	int sleep_usec;
 	struct timespec ts;
+
+	fi_opx_progress_set_affinity(prog_affinity);
 
 	if (progress_interval == 0) {
 		sleep_usec = 1;
