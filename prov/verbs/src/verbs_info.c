@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2024 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -426,76 +427,6 @@ static int vrb_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
 	return FI_SUCCESS;
 }
 
-static inline int vrb_get_qp_cap(struct ibv_context *ctx,
-				    struct fi_info *info, uint32_t protocol)
-{
-	struct ibv_pd *pd;
-	struct ibv_cq *cq;
-	struct ibv_qp *qp;
-	struct ibv_qp_init_attr init_attr;
-	enum ibv_qp_type qp_type;
-	int ret = 0;
-
-	pd = ibv_alloc_pd(ctx);
-	if (!pd) {
-		VRB_WARN_ERRNO(FI_LOG_FABRIC, "ibv_alloc_pd");
-		return -errno;
-	}
-
-	cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
-	if (!cq) {
-		VRB_WARN_ERRNO(FI_LOG_FABRIC, "ibv_create_cq");
-		ret = -errno;
-		goto err1;
-	}
-
-	if (protocol == FI_PROTO_RDMA_CM_IB_XRC)
-		qp_type = IBV_QPT_XRC_SEND;
-	else
-		qp_type = (info->ep_attr->type != FI_EP_DGRAM) ?
-				    IBV_QPT_RC : IBV_QPT_UD;
-
-	memset(&init_attr, 0, sizeof init_attr);
-	init_attr.send_cq = cq;
-
-	assert(info->tx_attr->size &&
-	       info->tx_attr->iov_limit &&
-	       info->rx_attr->size &&
-	       info->rx_attr->iov_limit);
-
-	init_attr.cap.max_send_wr = MIN(vrb_gl_data.def_tx_size,
-					info->tx_attr->size);
-	init_attr.cap.max_send_sge = MIN(vrb_gl_data.def_tx_iov_limit,
-					 info->tx_attr->iov_limit);
-
-	if (qp_type != IBV_QPT_XRC_SEND) {
-		init_attr.recv_cq = cq;
-		init_attr.cap.max_recv_wr = MIN(vrb_gl_data.def_rx_size,
-						info->rx_attr->size);
-		init_attr.cap.max_recv_sge = MIN(vrb_gl_data.def_rx_iov_limit,
-						 info->rx_attr->iov_limit);
-	}
-	init_attr.cap.max_inline_data = vrb_find_max_inline(pd, ctx, qp_type);
-	init_attr.qp_type = qp_type;
-
-	qp = ibv_create_qp(pd, &init_attr);
-	if (!qp) {
-		VRB_WARN_ERRNO(FI_LOG_FABRIC, "ibv_create_qp");
-		ret = -errno;
-		goto err2;
-	}
-
-	info->tx_attr->inject_size = init_attr.cap.max_inline_data;
-
-	ibv_destroy_qp(qp);
-err2:
-	ibv_destroy_cq(cq);
-err1:
-	ibv_dealloc_pd(pd);
-
-	return ret;
-}
-
 static int vrb_mtu_type_to_len(enum ibv_mtu mtu_type)
 {
 	switch (mtu_type) {
@@ -552,6 +483,7 @@ static int vrb_get_device_attrs(struct ibv_context *ctx,
 	enum fi_log_level level =
 		vrb_gl_data.msg.prefer_xrc ? FI_LOG_WARN : FI_LOG_INFO;
 	const char *dev_name = ibv_get_device_name(ctx->device);
+	enum ibv_qp_type qp_type;
 
 	ret = ibv_query_device(ctx, &device_attr);
 	if (ret) {
@@ -595,11 +527,13 @@ static int vrb_get_device_attrs(struct ibv_context *ctx,
 	if (protocol == FI_PROTO_RDMA_CM_IB_XRC) {
 		info->rx_attr->iov_limit = MIN(info->rx_attr->iov_limit, 1);
 		info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
+	        qp_type = IBV_QPT_XRC_SEND;
+	} else {
+		qp_type = (info->ep_attr->type != FI_EP_DGRAM) ?
+			            IBV_QPT_RC : IBV_QPT_UD;
 	}
 
-	ret = vrb_get_qp_cap(ctx, info, protocol);
-	if (ret)
-		return ret;
+	info->tx_attr->inject_size = vrb_find_max_inline(ctx, qp_type);
 
 	for (port_num = 1; port_num < device_attr.phys_port_cnt + 1; port_num++) {
 		ret = ibv_query_port(ctx, port_num, &port_attr);

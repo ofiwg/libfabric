@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2021 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2024 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -461,10 +462,10 @@ void vrb_set_rnr_timer(struct ibv_qp *qp)
 	vrb_dbg_query_qp_attr(qp);
 }
 
-int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
-			   enum ibv_qp_type qp_type)
+int vrb_find_max_inline(struct ibv_context *context, enum ibv_qp_type qp_type)
 {
 	struct ibv_qp_init_attr qp_attr;
+	struct ibv_pd *pd;
 	struct ibv_qp *qp = NULL;
 	struct ibv_cq *cq;
 	int max_inline = 2;
@@ -478,9 +479,13 @@ int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 			return verbs_dev_presets[i].max_inline_data;
 	}
 
+	pd = ibv_alloc_pd(context);
+	if (!pd)
+		goto out;
+
 	cq = ibv_create_cq(context, 1, NULL, NULL, 0);
 	if (!cq)
-		goto out;
+		goto destroy_pd;
 
 	memset(&qp_attr, 0, sizeof(qp_attr));
 	qp_attr.send_cq = cq;
@@ -542,6 +547,8 @@ int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 	}
 
 	ibv_destroy_cq(cq);
+destroy_pd:
+	ibv_dealloc_pd(pd);
 out:
 	return rst;
 }
