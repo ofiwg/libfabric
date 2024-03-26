@@ -298,7 +298,7 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	size_t i = 0;
 	int prov_errno;
 	struct efa_rdm_ep *ep = NULL;
-	struct fi_cq_err_entry err_entry = {0};
+	struct fi_cq_err_entry err_entry;
 	struct efa_rdm_cq *efa_rdm_cq;
 
 	/* Call ibv_start_poll only once */
@@ -384,9 +384,11 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		prov_errno = efa_rdm_cq_get_prov_errno(ibv_cq->ibv_cq_ex);
 		EFA_WARN(FI_LOG_CQ, "Unexpected error when polling ibv cq, err: %s (%zd) prov_errno: %s (%d)\n", fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
 		efa_show_help(prov_errno);
-		err_entry.err = err;
-		err_entry.prov_errno = prov_errno;
-		err_entry.op_context = NULL;
+		err_entry = (struct fi_cq_err_entry) {
+			.err = err,
+			.prov_errno = prov_errno,
+			.op_context = NULL
+		};
 		efa_rdm_cq = container_of(ibv_cq, struct efa_rdm_cq, ibv_cq);
 		ofi_cq_write_error(&efa_rdm_cq->util_cq, &err_entry);
 	}
