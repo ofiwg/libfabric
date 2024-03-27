@@ -475,7 +475,10 @@ static inline int vrb_get_qp_cap(struct ibv_context *ctx,
 		init_attr.cap.max_recv_sge = MIN(vrb_gl_data.def_rx_iov_limit,
 						 info->rx_attr->iov_limit);
 	}
-	init_attr.cap.max_inline_data = vrb_find_max_inline(pd, ctx, qp_type);
+	/* Inline data > 0 would cause ibv_create_qp() to fail for large TX
+	 * queues. However, some applications may want to allocate large TX queues
+	 * and limit the amount of inline data. */
+	init_attr.cap.max_inline_data = 0;
 	init_attr.qp_type = qp_type;
 
 	qp = ibv_create_qp(pd, &init_attr);
@@ -485,7 +488,7 @@ static inline int vrb_get_qp_cap(struct ibv_context *ctx,
 		goto err2;
 	}
 
-	info->tx_attr->inject_size = init_attr.cap.max_inline_data;
+	info->tx_attr->inject_size = vrb_find_max_inline(pd, ctx, qp_type);
 
 	ibv_destroy_qp(qp);
 err2:
