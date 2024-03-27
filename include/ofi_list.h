@@ -57,15 +57,23 @@ enum ofi_list_end {
 struct dlist_entry {
 	struct dlist_entry	*next;
 	struct dlist_entry	*prev;
+	OFI_DBG_VAR(ssize_t, size)
+	OFI_DBG_VAR(struct dlist_entry *, list)
 };
 
+#if ENABLE_DEBUG
+#define DLIST_INIT(addr) { addr, addr, 0, addr }
+#else
 #define DLIST_INIT(addr) { addr, addr }
+#endif
 #define DEFINE_LIST(name) struct dlist_entry name = DLIST_INIT(&name)
 
 static inline void dlist_init(struct dlist_entry *head)
 {
 	head->next = head;
 	head->prev = head;
+	OFI_DBG_SET(head->size, 0);
+	OFI_DBG_SET(head->list, head);
 }
 
 static inline int dlist_empty(struct dlist_entry *head)
@@ -80,6 +88,8 @@ dlist_insert_after(struct dlist_entry *item, struct dlist_entry *head)
 	item->prev = head;
 	head->next->prev = item;
 	head->next = item;
+	OFI_DBG_SET(item->list, head->list);
+	OFI_DBG_ADD(item->list->size, 1);
 }
 
 static inline void
@@ -95,6 +105,8 @@ static inline void dlist_remove(struct dlist_entry *item)
 {
 	item->prev->next = item->next;
 	item->next->prev = item->prev;
+	OFI_DBG_ADD(item->list->size, -1);
+	OFI_DBG_SET(item->list, NULL);
 }
 
 static inline void dlist_remove_init(struct dlist_entry *item)
@@ -155,6 +167,18 @@ static inline void dlist_remove_init(struct dlist_entry *item)
 	     (tmp) = (container)->member.prev)
 
 typedef int dlist_func_t(struct dlist_entry *item, const void *arg);
+
+#if ENABLE_DEBUG
+static inline ssize_t dlist_size(struct dlist_entry *item)
+{
+	return item->list->size;
+}
+#else
+static inline ssize_t dlist_size(struct dlist_entry *item)
+{
+	return -1;
+}
+#endif
 
 static inline struct dlist_entry *
 dlist_find_first_match(struct dlist_entry *head, dlist_func_t *match,
@@ -218,6 +242,15 @@ static inline void dlist_splice_head(struct dlist_entry *head,
 	/* put first element of 'to_splice' as first element of 'head' */
 	head->next = to_splice->next;
 	head->next->prev = head;
+
+	OFI_DBG_ADD(head->size, to_splice->size);
+#if ENABLE_DEBUG
+	struct dlist_entry *item;
+	dlist_foreach(head, item) {
+		item->list = head->list;
+		item->size = head->size;
+	}
+#endif
 
 	/* set list to empty */
 	dlist_init(to_splice);
@@ -393,11 +426,13 @@ struct slist_entry {
 struct slist {
 	struct slist_entry	*head;
 	struct slist_entry	*tail;
+	OFI_DBG_VAR(ssize_t, size)
 };
 
 static inline void slist_init(struct slist *list)
 {
 	list->head = list->tail = NULL;
+	OFI_DBG_SET(list->size, 0);
 }
 
 static inline int slist_empty(struct slist *list)
@@ -415,6 +450,7 @@ static inline void slist_insert_head(struct slist_entry *item, struct slist *lis
 	}
 
 	list->head = item;
+	OFI_DBG_ADD(list->size, 1);
 }
 
 static inline void slist_insert_tail(struct slist_entry *item, struct slist *list)
@@ -426,6 +462,7 @@ static inline void slist_insert_tail(struct slist_entry *item, struct slist *lis
 
 	item->next = NULL;
 	list->tail = item;
+	OFI_DBG_ADD(list->size, 1);
 }
 
 static inline struct slist_entry *slist_remove_head(struct slist *list)
@@ -435,8 +472,10 @@ static inline struct slist_entry *slist_remove_head(struct slist *list)
 	item = list->head;
 	if (list->head == list->tail)
 		slist_init(list);
-	else
+	else {
 		list->head = item->next;
+		OFI_DBG_ADD(list->size, -1);
+	}
 #if ENABLE_DEBUG
 	if (item) {
 		item->next = NULL;
@@ -461,6 +500,18 @@ static inline struct slist_entry *slist_remove_head(struct slist *list)
 	} while (0)
 
 typedef int slist_func_t(struct slist_entry *item, const void *arg);
+
+#if ENABLE_DEBUG
+static inline ssize_t slist_size(struct slist *list)
+{
+	return list->size;
+}
+#else
+static inline ssize_t slist_size(struct slist *list)
+{
+	return -1;
+}
+#endif
 
 static inline struct slist_entry *
 slist_find_first_match(const struct slist *list, slist_func_t *match,
@@ -505,6 +556,7 @@ static inline void slist_remove(struct slist *list,
 
 	if (!item->next)
 		list->tail = prev;
+	OFI_DBG_ADD(list->size, -1);
 }
 
 static inline struct slist_entry *
@@ -558,8 +610,9 @@ slist_splice_head(struct slist *dst, struct slist *src)
 	src->tail->next = dst->head;
 	dst->head = src->head;
 
-	slist_init(src);
+	OFI_DBG_ADD(dst->size, src->size);
 
+	slist_init(src);
 	return dst;
 }
 
@@ -587,8 +640,9 @@ slist_splice_tail(struct slist *dst, struct slist *src)
 	dst->tail->next = src->head;
 	dst->tail = src->tail;
 
-	slist_init(src);
+	OFI_DBG_ADD(dst->size, src->size);
 
+	slist_init(src);
 	return dst;
 }
 
