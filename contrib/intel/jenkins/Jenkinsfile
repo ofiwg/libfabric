@@ -178,7 +178,7 @@ def checkout_ci_resources() {
       rm -rf ${env.WORKSPACE}/ci_resources && mkdir ${env.WORKSPACE}/ci_resources
     fi
 
-    git clone ${env.CI_RESOURCES} ${env.WORKSPACE}/ci_resources
+    git clone -b main ${env.ZDWORKIN_CI_RESOURCES} ${env.WORKSPACE}/ci_resources
 
   """
 }
@@ -191,7 +191,7 @@ def checkout_ci() {
       rm -rf ${env.WORKSPACE}/ci && mkdir ${env.WORKSPACE}/ci
     fi
 
-    git clone --recurse-submodules ${env.CI} ${env.WORKSPACE}/ci
+    git clone --recurse-submodules -b cloudbees ${env.ZDWORKIN_CI} ${env.WORKSPACE}/ci
   """
 }
 
@@ -348,7 +348,7 @@ def skip() {
 pipeline {
   agent {
     node {
-      label 'main'
+      label 'main-dev'
       customWorkspace "workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
     }
   }
@@ -930,20 +930,9 @@ pipeline {
       script {
         if (DO_RUN) {
           CI_summarize(verbose=true)
-          summarize("all", verbose=true, release=false,
-          send_mail=env.WEEKLY.toBoolean())
+          summarize("all", verbose=true)
         }
       }
-      node ('daos_head') {
-        dir("${env.WORKSPACE}") { deleteDir() }
-        dir("${env.WORKSPACE}@tmp") { deleteDir() }
-      }
-      node ('ze') {
-        dir("${env.WORKSPACE}") { deleteDir() }
-        dir("${env.WORKSPACE}@tmp") { deleteDir() }
-      }
-      dir("${env.WORKSPACE}") { deleteDir() }
-      dir("${env.WORKSPACE}@tmp") { deleteDir() }
     }
   }
 }
