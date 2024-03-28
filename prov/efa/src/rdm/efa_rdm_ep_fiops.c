@@ -427,7 +427,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 {
 	struct efa_domain *efa_domain = NULL;
 	struct efa_rdm_ep *efa_rdm_ep = NULL;
-	struct fi_cq_attr cq_attr;
 	int ret, retv, i;
 
 	efa_rdm_ep = calloc(1, sizeof(*efa_rdm_ep));
@@ -436,9 +435,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
-	memset(&cq_attr, 0, sizeof(cq_attr));
-	cq_attr.format = FI_CQ_FORMAT_DATA;
-	cq_attr.wait_obj = FI_WAIT_NONE;
 
 	ret = efa_base_ep_construct(&efa_rdm_ep->base_ep, domain, info,
 				    efa_rdm_ep_progress, context);
@@ -475,9 +471,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->efa_device_iov_limit = efa_domain->device->rdm_info->tx_attr->iov_limit;
 	efa_rdm_ep->use_device_rdma = efa_rdm_get_use_device_rdma(info->fabric_attr->api_version);
 	efa_rdm_ep->shm_permitted = true;
-
-	cq_attr.size = MAX(efa_rdm_ep->rx_size + efa_rdm_ep->tx_size,
-			   efa_env.cq_size);
 
 	assert(info->tx_attr->msg_order == info->rx_attr->msg_order);
 	efa_rdm_ep->msg_order = info->rx_attr->msg_order;
