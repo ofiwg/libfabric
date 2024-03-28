@@ -6,13 +6,16 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v1.20.2, Mon March 11, 2024
+v1.20.2, Fri March 29, 2024
 ========================
 
 ## Core
+
 - configure: Do not check for xpmem if disabled
+- man page fixes
 
 ## EFA
+
 - Remove unnecessary check in rdma write.
 - Enable runting for neuron with a different runt size
 - Handle rx pkts error without ope
@@ -25,6 +28,7 @@ v1.20.2, Mon March 11, 2024
 - Rename Doxyfile
 
 ## SHM
+
 - Revert the smr_region fields adjustment
 - Don't close dmabuf-fd when a request is done
 - Mark send as completed when a message is discarded
@@ -32,6 +36,7 @@ v1.20.2, Mon March 11, 2024
 - Close device_fds for connected peers when the EP is closed
 
 ## Fabtests
+
 - Replace strtok with strtok_r
 - Add new exclude file for io_uring tests
 
