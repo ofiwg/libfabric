@@ -4,6 +4,10 @@ on:
   # UTC time, 'minute hour day-of-month month day-of-week'
   - cron: '0 5 * * *'
 
+permissions:
+  contents: read
+  environments: read
+
 env:
   APT_PACKAGES: >-
     abi-compliance-checker
