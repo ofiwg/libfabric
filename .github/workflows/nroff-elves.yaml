@@ -11,6 +11,9 @@ jobs:
     nroff-elves-scheduled:
         name: The Nroff Elves
         runs-on: ubuntu-latest
+        permissions:
+          contents: read
+          pull-requests: write
         steps:
           - name: Debug information
             env:
