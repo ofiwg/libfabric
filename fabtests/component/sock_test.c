@@ -113,7 +113,7 @@ static int start_server(void)
 		goto close;
 	}
 
-	ret = listen(listen_sock, 0);
+	ret = listen(listen_sock, 511);
 	if (ret) {
 		FT_PRINTERR("listen", -errno);
 		goto close;
