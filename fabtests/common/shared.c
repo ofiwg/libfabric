@@ -3804,7 +3804,7 @@ int ft_sock_listen(char *node, char *service)
 		goto out;
 	}
 
-	ret = listen(listen_sock, 0);
+	ret = listen(listen_sock, 511);
 	if (ret)
 		perror("listen");
 
