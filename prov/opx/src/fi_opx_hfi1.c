@@ -279,7 +279,7 @@ void fi_opx_init_hfi_lookup()
 				int rc __attribute__ ((unused));
 				rc = posix_memalign((void **)&hfi_lookup, 32, sizeof(*hfi_lookup));
 				assert(rc==0);
-				
+
 				if (!hfi_lookup) {
 					FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
 						"Unable to allocate HFI lookup entry.\n");
@@ -510,7 +510,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		if (hfi_context_rank != -1) {
 			hfi_context_rank_inst =
 				fi_opx_get_daos_hfi_rank_inst(hfi_unit_number, hfi_context_rank);
-				
+
 			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 				"Application-specified HFI selection set to %d rank %d.%d. Skipping HFI selection algorithm\n",
 				hfi_unit_number, hfi_context_rank, hfi_context_rank_inst);
@@ -594,7 +594,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 					int j = hfi_candidates_count;
 					// Bubble the new HFI up till the list is sorted by distance
 					// and then by number of free contexts. Yes, this is lame but
-					// the practical matter is that there will never be so many HFIs 
+					// the practical matter is that there will never be so many HFIs
 					// on a single system that a real insertion sort is justified.
 					while (j > 0 && ((hfi_distances[j - 1] > hfi_distances[j]) ||
 						( (hfi_distances[j - 1] == hfi_distances[j]) && (hfi_freectxs[j - 1] < hfi_freectxs[j])))){
@@ -615,9 +615,9 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		}
 
 		// At this point we have a list of HFIs, sorted by distance from this pid (and by unit # as an implied key).
-		// HFIs that have the same distance are sorted by number of free contexts available. 
+		// HFIs that have the same distance are sorted by number of free contexts available.
 		// Pick the closest HFI that has the smallest load (largest number of free contexts).
-		// If we fail to open that HFI, try another one at the same distance but potentially 
+		// If we fail to open that HFI, try another one at the same distance but potentially
 		// under a heavier load. If that fails, we will try HFIs that are further away.
 		int lower = 0;
 		int higher = 0;
@@ -658,7 +658,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			if (flock(dirfd, LOCK_UN) == -1) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Flock unlock failure: %s\n", strerror(errno));
 				close(dirfd);
-				
+
 				if (fd >=0) {
 					opx_hfi_context_close(fd);
 				}
@@ -722,7 +722,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
 				"Detected user specfied ENV FI_OPX_SL, so set the service level to %d\n", user_sl);
 		} else {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Error: User specfied an env FI_OPX_SL.  Valid data is an positive integer 0 - 31 (Default is 0).  User specified %d.  Using default value of %d instead\n", 
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Error: User specfied an env FI_OPX_SL.  Valid data is an positive integer 0 - 31 (Default is 0).  User specified %d.  Using default value of %d instead\n",
 				user_sl, FI_OPX_HFI1_SL_DEFAULT);
 			context->sl = FI_OPX_HFI1_SL_DEFAULT;
 		}
@@ -743,7 +743,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		context->vl = rc;
 
 	if(context->sc == FI_OPX_HFI1_SC_ADMIN || context->vl == FI_OPX_HFI1_VL_ADMIN) {
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user set ENV FI_OPX_SL of %ld, which has translated to admin-level Service class (SC=%ld) and/or admin-level Virtual Lane(VL=%ld), which is invalid for user traffic.  Using default values instead\n", 
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user set ENV FI_OPX_SL of %ld, which has translated to admin-level Service class (SC=%ld) and/or admin-level Virtual Lane(VL=%ld), which is invalid for user traffic.  Using default values instead\n",
 			context->sl, context->sc, context->vl);
 		context->sl = FI_OPX_HFI1_SL_DEFAULT;
 		context->sc = FI_OPX_HFI1_SC_DEFAULT;
@@ -945,6 +945,7 @@ ssize_t fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer)
 			uint32_t segment_index = OPX_SHM_SEGMENT_INDEX(hfi_unit, rx_index);
 			assert(segment_index < OPX_SHM_MAX_CONN_NUM);
 
+#ifdef OPX_DAOS
 			/* HFI Rank Support:  Rank and PID included in the SHM file name */
 			if (opx_ep->daos_info.hfi_rank_enabled) {
 				rx_index = opx_shm_daos_rank_index(opx_ep->daos_info.rank,
@@ -952,8 +953,9 @@ ssize_t fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer)
 				inst = opx_ep->daos_info.rank_inst;
 				segment_index = rx_index;
 			}
+#endif
 
-			snprintf(buffer,sizeof(buffer), OPX_SHM_FILE_NAME_PREFIX_FORMAT,
+			snprintf(buffer, sizeof(buffer), OPX_SHM_FILE_NAME_PREFIX_FORMAT,
 				opx_ep->domain->unique_job_key_str, hfi_unit, inst);
 
 			rc = opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const)buffer,
@@ -978,7 +980,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_intranode(union fi_opx_hfi1_deferred_work *work
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
 	 */
-	ssize_t rc = fi_opx_shm_dynamic_tx_connect(1, opx_ep,
+	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep,
 			params->u32_extended_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
@@ -1048,14 +1050,14 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	const uint16_t total_credits_needed = 1 + /* packet header */
 		((payload_bytes + 63) >> 6); /* payload blocks needed */
-	uint64_t total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, 
+	uint64_t total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state,
 									 &opx_ep->tx->force_credit_return,
 									 total_credits_needed);
 
 	if (OFI_UNLIKELY(total_credits_available < total_credits_needed)) {
 		fi_opx_compiler_msync_writes();
 		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
-		total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, 
+		total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state,
 									&opx_ep->tx->force_credit_return,
 									total_credits_needed);
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
@@ -1129,12 +1131,12 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	}
 
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service,replay);
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, 
-							    params->slid, 
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state,
+							    params->slid,
 							    params->origin_rs,
-							    params->origin_rx, 
-							    psn_ptr, 
-							    replay, 
+							    params->origin_rx,
+							    psn_ptr,
+							    replay,
 							    params->reliability);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, HFI -- RENDEZVOUS %s RTS (end)\n",
@@ -3072,7 +3074,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	union fi_opx_reliability_tx_psn *psn_ptr;
 	int64_t psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.uid.lid, 
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.uid.lid,
 						dest_rx, addr.reliability_rx, &psn_ptr, &replay, reliability);
 	if(OFI_UNLIKELY(psn == -1)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
