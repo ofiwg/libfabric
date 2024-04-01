@@ -6,8 +6,7 @@ on:
 
 permissions:
   contents: read
-  environments: read
-
+  
 env:
   APT_PACKAGES: >-
     abi-compliance-checker
