@@ -324,17 +324,12 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe, struct fi_rma_iov *r
 static inline
 void efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
-	struct efa_rdm_peer *peer;
-
 	assert(txe->type == EFA_RDM_TXE);
 
 	if (txe->bytes_runt > 0)
 		return;
 
-	peer = efa_rdm_ep_get_peer(ep, txe->addr);
-
-	assert(peer);
-	txe->bytes_runt = efa_rdm_peer_get_runt_size(peer, ep, txe);
+	txe->bytes_runt = efa_rdm_ep_get_runt_size(ep, txe);
 
 	assert(txe->bytes_runt);
 }

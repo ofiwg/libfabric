@@ -1340,16 +1340,13 @@ void efa_rdm_pke_handle_runtread_rtm_sent(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_peer *peer;
 	size_t pkt_data_size = pkt_entry->payload_size;
 
 	ep = pkt_entry->ep;
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-	assert(peer);
 
 	txe = pkt_entry->ope;
 	txe->bytes_sent += pkt_data_size;
-	peer->num_runt_bytes_in_flight += pkt_data_size;
+	efa_rdm_ep_domain(ep)->num_runt_bytes_in_flight += pkt_data_size;
 
 	if (efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry)->seg_offset == 0 &&
 	    txe->total_len > txe->bytes_runt)
@@ -1368,7 +1365,6 @@ void efa_rdm_pke_handle_runtread_rtm_send_completion(struct efa_rdm_pke *pkt_ent
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_peer *peer;
 	size_t pkt_data_size;
 
 	ep = pkt_entry->ep;
@@ -1376,10 +1372,8 @@ void efa_rdm_pke_handle_runtread_rtm_send_completion(struct efa_rdm_pke *pkt_ent
 	pkt_data_size = pkt_entry->payload_size;
 	txe->bytes_acked += pkt_data_size;
 
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-	assert(peer);
-	assert(peer->num_runt_bytes_in_flight >= pkt_data_size);
-	peer->num_runt_bytes_in_flight -= pkt_data_size;
+	assert(efa_rdm_ep_domain(ep)->num_runt_bytes_in_flight >= pkt_data_size);
+	efa_rdm_ep_domain(ep)->num_runt_bytes_in_flight -= pkt_data_size;
 	if (txe->total_len == txe->bytes_acked)
 		efa_rdm_ope_handle_send_completed(txe);
 }

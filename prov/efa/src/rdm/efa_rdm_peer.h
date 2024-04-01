@@ -52,12 +52,6 @@ struct efa_rdm_peer {
 	struct dlist_entry rx_unexp_tagged_list; /**< a list of unexpected tagged rxe for this peer */
 	struct dlist_entry txe_list; /**< a list of txe related to this peer */
 	struct dlist_entry rxe_list; /**< a list of rxe relased to this peer */
-
-	/**
-	 * @brief number of bytes that has been sent as part of runting protocols
-	 * @details this value is capped by efa_env.efa_runt_size
-	 */
-	int64_t num_runt_bytes_in_flight;
 };
 
 /**
@@ -247,9 +241,5 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep);
 int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep);
-
-size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
-
-int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
 
 #endif /* EFA_RDM_PEER_H */

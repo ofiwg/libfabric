@@ -30,7 +30,15 @@ struct efa_domain {
 	size_t			rdm_cq_size;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
 	struct ofi_genlock	srx_lock; /* shared among peer providers */
+	/**
+	 * @brief number of messages that are using read based protocol
+	 */
 	uint64_t		num_read_msg_in_flight;
+	/**
+	 * @brief number of bytes that has been sent as part of runting protocols
+	 * @details this value is capped by efa_env.efa_runt_size
+	 */
+	int64_t 		num_runt_bytes_in_flight;
 };
 
 extern struct dlist_entry g_efa_domain_list;
