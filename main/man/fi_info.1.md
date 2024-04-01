@@ -73,7 +73,7 @@ providers, see the `--list` option.
 : List libfabric related environment variables which can be used to enable extra
 configuration or tuning.
 
-*-g [filter]
+*-g [filter]*
 : Same as -e option, with output limited to environment variables containing
 filter as a substring.
 
