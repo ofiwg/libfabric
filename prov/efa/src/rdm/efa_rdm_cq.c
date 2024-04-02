@@ -381,7 +381,7 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 
 	if (err && err != ENOENT) {
 		err = err > 0 ? err : -err;
-		prov_errno = efa_rdm_cq_get_prov_errno(ibv_cq->ibv_cq_ex);
+		prov_errno = ibv_wc_read_vendor_err(ibv_cq->ibv_cq_ex);
 		EFA_WARN(FI_LOG_CQ, "Unexpected error when polling ibv cq, err: %s (%zd) prov_errno: %s (%d)\n", fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
 		efa_show_help(prov_errno);
 		err_entry = (struct fi_cq_err_entry) {
