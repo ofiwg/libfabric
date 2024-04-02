@@ -318,11 +318,11 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			case IBV_WC_SEND: /* fall through */
 			case IBV_WC_RDMA_WRITE: /* fall through */
 			case IBV_WC_RDMA_READ:
-				efa_rdm_pke_handle_tx_error(pkt_entry, FI_EIO, prov_errno);
+				efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno);
 				break;
 			case IBV_WC_RECV: /* fall through */
 			case IBV_WC_RECV_RDMA_WITH_IMM:
-				efa_rdm_pke_handle_rx_error(pkt_entry, FI_EIO, prov_errno);
+				efa_rdm_pke_handle_rx_error(pkt_entry, prov_errno);
 				break;
 			default:
 				EFA_WARN(FI_LOG_EP_CTRL, "Unhandled op code %d\n", opcode);
