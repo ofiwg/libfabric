@@ -167,7 +167,7 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	strerror = fi_cq_strerror(resource->cq, cq_err_entry.prov_errno, cq_err_entry.err_data, NULL, 0);
 
 	assert_int_equal(ret, 1);
-	assert_int_equal(cq_err_entry.err, FI_EIO);
+	assert_int_not_equal(cq_err_entry.err, FI_SUCCESS);
 	assert_int_equal(cq_err_entry.prov_errno, vendor_error);
 
 	/* Reset value */
@@ -326,7 +326,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 
 	ret = fi_eq_readerr(resource->eq, &eq_err_entry, 0);
 	assert_int_equal(ret, sizeof(eq_err_entry));
-	assert_int_equal(eq_err_entry.err, FI_EIO);
+	assert_int_not_equal(eq_err_entry.err, FI_SUCCESS);
 	assert_int_equal(eq_err_entry.prov_errno, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 }
 

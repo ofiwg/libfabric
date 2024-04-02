@@ -374,15 +374,16 @@ void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry)
  *      For other types of error, an error EQ entry is written.
  *
  * @param[in]	pkt_entry	pkt entry
- * @param[in]	err		libfabric error code
  * @param[in]	prov_errno	provider specific error code
  */
-void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int prov_errno)
+void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 {
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ep *ep;
+
+	int err = to_fi_errno(prov_errno);
 
 	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
@@ -459,7 +460,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 				 */
 				if (!(txe->internal_flags & EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY)) {
 					txe->internal_flags |= EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY;
-					efa_rdm_txe_handle_error(pkt_entry->ope, FI_ENORX, prov_errno);
+					efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
 				}
 
 				efa_rdm_pke_release_tx(pkt_entry);
@@ -653,12 +654,12 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
  * This function will write error cq or eq entry, then release the packet entry.
  *
  * @param[in]	pkt_entry	pkt entry
- * @param[in]	err		libfabric error code
  * @param[in]	prov_errno	provider specific error code
  */
-void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int err, int prov_errno)
+void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 {
 	struct efa_rdm_ep *ep;
+	int err = to_fi_errno(prov_errno);
 
 	ep = pkt_entry->ep;
 	/*
