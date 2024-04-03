@@ -84,6 +84,9 @@ given domains cannot communicate, then the application will fail.
 *-d \<domain\>*
 : The name of the specific domain to be used.
 
+*-s \<source address\>*
+: Address to corresponding domain.  Required in multi-adapter environment.
+
 ## Test Options
 
 *-I \<iter\>*
