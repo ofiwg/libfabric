@@ -696,9 +696,8 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 	} else if (pkt_entry->ope->type == EFA_RDM_RXE) {
 		efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
 	} else {
-		EFA_WARN(FI_LOG_CQ,
-		"%s unknown x_entry type %d\n",
-			__func__, pkt_entry->ope->type);
+		EFA_WARN(FI_LOG_CQ, "unknown RDM operation entry type encountered: %d\n",
+			pkt_entry->ope->type);
 		assert(0 && "unknown x_entry state");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 	}

@@ -189,7 +189,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
 		break;
 	default:
 		EFA_WARN(FI_LOG_EP_CTRL,
-			"Unknown operation while %s\n", __func__);
+			"Unknown operation for RX entry allocation\n");
 		assert(0 && "Unknown operation");
 	}
 
