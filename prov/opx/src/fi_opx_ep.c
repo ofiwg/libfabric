@@ -1445,6 +1445,11 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 #else
 		opx_ep->hmem_copy_buf = NULL;
 #endif
+		if (opx_ep->use_expected_tid_rzv == 1 && (opx_ep->hfi->runtime_flags & HFI1_CAP_TID_UNMAP)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Expected receive (TID) cannot be enabled. HFI TID_UNMAP capability is turned on\n");
+			opx_ep->use_expected_tid_rzv = 0;
+		}
 	}
 
 	// Apply the saved info objects from the fi_getinfo call
@@ -2185,18 +2190,13 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 		opx_ep->use_expected_tid_rzv = expected_receive_enable;
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Override set for TID\n");
 #else
-		if (opx_is_tid_allowed() == 0) {
-			if (expected_receive_enable == 1) {
+		opx_ep->use_expected_tid_rzv = expected_receive_enable;
+		if (expected_receive_enable == 1) {
+			if (opx_is_tid_allowed() == 0) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"Expected receive (TID) cannot be enabled. Unsupported driver version\n");
-			}
-			opx_ep->use_expected_tid_rzv = 0;
-		} else if (opx_ep->hfi->runtime_flags & HFI1_CAP_TID_UNMAP) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"Expected receive (TID) cannot be enabled. HFI TID_UNMAP capability is turned on\n");
-			opx_ep->use_expected_tid_rzv = 0;
-		} else {
-			opx_ep->use_expected_tid_rzv = expected_receive_enable;
+				opx_ep->use_expected_tid_rzv = 0;
+			} 
 		}
 #endif
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
