@@ -205,10 +205,14 @@ static const uint64_t FI_OPX_HDRQ_MASK_8192	= 0X000000000003FFE0UL;
 #define FI_OPX_BASE_CAPS							\
 	( FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM			\
 	| FI_SOURCE | FI_NAMED_RX_CTX | FI_RMA | FI_ATOMIC | FI_HMEM )
+#define FI_OPX_BASE_MR_MODE							\
+	( OPX_MR | FI_MR_HMEM )			
 #else
 #define FI_OPX_BASE_CAPS							\
 	( FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM			\
 	| FI_SOURCE | FI_NAMED_RX_CTX | FI_RMA | FI_ATOMIC )
+#define FI_OPX_BASE_MR_MODE							\
+	( OPX_MR )
 #endif
 
 #define FI_OPX_DEFAULT_CAPS							\

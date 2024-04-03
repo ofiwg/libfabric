@@ -68,6 +68,12 @@ int fi_opx_check_info(const struct fi_info *info)
 	int ret;
 	/* TODO: check caps, mode */
 
+	if (info->domain_attr == NULL) {
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
+				"The domain_attr structure is null, there must be an issue in provider initialization\n");
+		goto err;
+	}
+
 	if ((info->tx_attr) && ((info->tx_attr->caps | info->caps) != info->caps)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "info->tx_attr->caps = 0x%016lx, info->caps = 0x%016lx\n", info->tx_attr->caps, info->caps);
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
@@ -82,6 +88,20 @@ int fi_opx_check_info(const struct fi_info *info)
 				"The rx_attr capabilities (0x%016lx) must be a subset of those requested of the associated endpoint (0x%016lx)",
 				info->rx_attr->caps, info->caps);
 		goto err;
+	}
+
+	if (info->caps & FI_HMEM) {
+	/* Add FI_MR_HMEM to mr_mode when claiming support of FI_HMEM
+	 * because OPX provider's HMEM support performance relies on
+	 * application to provide descriptor for device buffer.
+	*/
+		if (info->domain_attr && !(info->domain_attr->mr_mode & FI_MR_HMEM)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+			"FI_HMEM capability requires device registrations (FI_MR_HMEM)\n");
+			goto err;
+		}
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FI_HMEM capability has been successfully enforced by OPX\n");
 	}
 
 	switch (info->addr_format) {
@@ -649,6 +669,8 @@ static void do_static_assert_tests()
 				"sizeof(fi_opx_hmem_info) >> 3 != OPX_HMEM_SIZE_QWS") ;
 	OPX_COMPILE_TIME_ASSERT(OPX_HFI1_TID_PAGESIZE == 4096,
 				"OPX_HFI1_TID_PAGESIZE must be 4K!");
+	OPX_COMPILE_TIME_ASSERT(OPX_MR != FI_MR_UNSPEC,
+				"OPX_MR should be set to FI_MR_SCALABLE or FI_MR_BASIC, not FI_MR_UNSPEC");
 }
 #pragma GCC diagnostic pop
 

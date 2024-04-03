@@ -129,7 +129,7 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	attr->data_progress	= FI_PROGRESS_MANUAL;
 	attr->resource_mgmt	= FI_RM_DISABLED;
 	attr->av_type		= OPX_AV;
-	attr->mr_mode		= OPX_MR;
+	attr->mr_mode		= FI_OPX_BASE_MR_MODE;
 	attr->mr_key_size 	= sizeof(uint64_t);
 	attr->cq_data_size 	= FI_OPX_REMOTE_CQ_DATA_SIZE;
 	attr->cq_cnt		= (size_t)-1;
@@ -174,6 +174,10 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
  	 * it was set to the same setting.
  	 */
 	domain_attr->mr_mode = OPX_MR;
+#endif
+
+#ifdef OPX_HMEM
+	domain_attr->mr_mode |= FI_MR_HMEM;
 #endif
 
 	if (hints) {
@@ -232,7 +236,7 @@ int fi_opx_check_domain_attr(struct fi_domain_attr *attr)
 	}
 	
 	if (attr->mr_mode == FI_MR_UNSPEC) {
-		attr->mr_mode = OPX_MR == FI_MR_UNSPEC ? FI_MR_BASIC : OPX_MR;
+		attr->mr_mode = FI_OPX_BASE_MR_MODE;
 	}
 
 	if (attr->mr_key_size) {
