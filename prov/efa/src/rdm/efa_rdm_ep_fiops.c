@@ -1512,14 +1512,14 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 		 */
 		if (efa_rdm_ep->base_ep.efa_qp_enabled) {
 			EFA_WARN(FI_LOG_EP_CTRL,
-				"The option FI_OPT_EFA_RNR_RETRY is required \
-				to be set before EP enabled %s\n", __func__);
+				"The option FI_OPT_EFA_RNR_RETRY is required "
+				"to be set before EP enabled\n");
 			return -FI_EINVAL;
 		}
 
 		if (!efa_domain_support_rnr_retry_modify(efa_rdm_ep_domain(efa_rdm_ep))) {
 			EFA_WARN(FI_LOG_EP_CTRL,
-				"RNR capability is not supported %s\n", __func__);
+				"RNR capability is not supported\n");
 			return -FI_ENOSYS;
 		}
 		efa_rdm_ep->base_ep.rnr_retry = *(size_t *)optval;
@@ -1580,8 +1580,7 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 		efa_rdm_ep->write_in_order_aligned_128_bytes = *(bool *)optval;
 		break;
 	default:
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Unknown endpoint option %s\n", __func__);
+		EFA_WARN(FI_LOG_EP_CTRL, "Unknown endpoint option\n");
 		return -FI_ENOPROTOOPT;
 	}
 
@@ -1662,8 +1661,7 @@ static int efa_rdm_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*optlen = sizeof(bool);
 		break;
 	default:
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Unknown endpoint option %s\n", __func__);
+		EFA_WARN(FI_LOG_EP_CTRL, "Unknown endpoint option\n");
 		return -FI_ENOPROTOOPT;
 	}
 

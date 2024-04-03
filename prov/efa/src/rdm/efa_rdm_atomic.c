@@ -247,9 +247,8 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	int err;
 
-	EFA_DBG(FI_LOG_EP_DATA,
-	       "%s: iov_len: %lu flags: %lx\n",
-	       __func__, ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
+	EFA_DBG(FI_LOG_EP_DATA, "iov_len: %lu flags: %lx\n",
+		ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	err = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
@@ -295,8 +294,8 @@ efa_rdm_atomic_writev(struct fid_ep *ep,
 	msg.context = context;
 	msg.data = 0;
 
-	EFA_DBG(FI_LOG_EP_DATA, "%s total_count=%ld atomic_op=%d\n", __func__,
-	       ofi_total_ioc_cnt(iov, count), msg.op);
+	EFA_DBG(FI_LOG_EP_DATA, "total_count=%ld atomic_op=%d\n",
+		ofi_total_ioc_cnt(iov, count), msg.op);
 
 	return efa_rdm_atomic_writemsg(ep, &msg, 0);
 }
@@ -337,8 +336,8 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 		return -errno;
 	}
 
-	EFA_DBG(FI_LOG_EP_DATA, "%s total_len=%ld atomic_op=%d\n", __func__,
-	       ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), msg->op);
+	EFA_DBG(FI_LOG_EP_DATA, "total_len=%ld atomic_op=%d\n",
+		ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), msg->op);
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	err = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
@@ -444,9 +443,8 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 		return -errno;
 	}
 
-	EFA_DBG(FI_LOG_EP_DATA,
-	       "%s: iov_len: %lu flags: %lx\n",
-	       __func__, ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
+	EFA_DBG(FI_LOG_EP_DATA, "iov_len: %lu flags: %lx\n",
+		ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	err = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
