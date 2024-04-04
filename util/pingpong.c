@@ -2289,16 +2289,17 @@ static void pp_set_src_hint(struct ct_pingpong *ct)
 	struct addrinfo *results = NULL;
 
 	if (getaddrinfo(ct->opts.src_addr, NULL, NULL, &results))
-		return;
+		goto out;
 
 	ct->hints->src_addr = calloc(1, results->ai_addrlen);
 	if (!ct->hints->src_addr)
-		return;
+		goto out;
 
 	ct->hints->src_addrlen = results->ai_addrlen;
 	memcpy(ct->hints->src_addr, results->ai_addr, results->ai_addrlen);
 	ct->hints->addr_format = results->ai_family;
 
+out:
 	freeaddrinfo(results);
 }
 
