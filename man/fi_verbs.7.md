@@ -163,21 +163,21 @@ The verbs provider checks for the following environment variables.
 ### Common variables:
 
 *FI_VERBS_TX_SIZE*
-:  Default maximum tx context size (default: 384)
+:  Default tx context size (default: 384)
 
 *FI_VERBS_RX_SIZE*
-:  Default maximum rx context size (default: 384)
+:  Default rx context size (default: 384)
 
 *FI_VERBS_TX_IOV_LIMIT*
-: Default maximum tx iov_limit (default: 4). Note: RDM (internal -
+: Default tx iov_limit (default: 4). Note: RDM (internal -
   deprecated) EP type supports only 1
 
 *FI_VERBS_RX_IOV_LIMIT*
-: Default maximum rx iov_limit (default: 4). Note: RDM (internal -
+: Default rx iov_limit (default: 4). Note: RDM (internal -
   deprecated) EP type supports only 1
 
 *FI_VERBS_INLINE_SIZE*
-: Default maximum inline size. Actual inject size returned in fi_info
+: Default inline size. Actual inject size returned in fi_info
   may be greater (default: 64)
 
 *FI_VERBS_MIN_RNR_TIMER*

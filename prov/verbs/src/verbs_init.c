@@ -614,31 +614,31 @@ static int vrb_get_param_str(const char *param_name,
 int vrb_read_params(void)
 {
 	/* Common parameters */
-	if (vrb_get_param_int("tx_size", "Default maximum tx context size",
+	if (vrb_get_param_int("tx_size", "Default tx context size",
 			      &vrb_gl_data.def_tx_size) ||
 	    (vrb_gl_data.def_tx_size < 0)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of tx_size\n");
 		return -FI_EINVAL;
 	}
-	if (vrb_get_param_int("rx_size", "Default maximum rx context size",
+	if (vrb_get_param_int("rx_size", "Default rx context size",
 			      &vrb_gl_data.def_rx_size) ||
 	    (vrb_gl_data.def_rx_size < 0)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of rx_size\n");
 		return -FI_EINVAL;
 	}
-	if (vrb_get_param_int("tx_iov_limit", "Default maximum tx iov_limit",
+	if (vrb_get_param_int("tx_iov_limit", "Default tx iov_limit",
 			      &vrb_gl_data.def_tx_iov_limit) ||
 	    (vrb_gl_data.def_tx_iov_limit < 0)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of tx_iov_limit\n");
 		return -FI_EINVAL;
 	}
-	if (vrb_get_param_int("rx_iov_limit", "Default maximum rx iov_limit",
+	if (vrb_get_param_int("rx_iov_limit", "Default rx iov_limit",
 			      &vrb_gl_data.def_rx_iov_limit) ||
 	    (vrb_gl_data.def_rx_iov_limit < 0)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of rx_iov_limit\n");
 		return -FI_EINVAL;
 	}
-	if (vrb_get_param_int("inline_size", "Default maximum inline size. "
+	if (vrb_get_param_int("inline_size", "Default inline size. "
 			      "Actual inject size returned in fi_info may be "
 			      "greater", &vrb_gl_data.def_inline_size) ||
 	    (vrb_gl_data.def_inline_size < 0)) {
