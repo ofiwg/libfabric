@@ -428,9 +428,6 @@ pipeline {
           }
         }
         stage ('build-water') {
-          environment {
-            build_type = "water"
-          }
           steps {
             script {
               slurm_build(BUILD_MODES, "water", "water", "water")
@@ -448,9 +445,6 @@ pipeline {
           }
         }
         stage ('build-grass') {
-          environment {
-            build_type = "grass"
-          }
           steps {
             script {
               slurm_build(BUILD_MODES, "grass", "grass", "grass")
@@ -468,9 +462,6 @@ pipeline {
           }
         }
         stage ('build-electric') {
-          environment {
-            build_type = "electric"
-          }
           steps {
             script {
               slurm_build(BUILD_MODES, "electric", "electric", "electric")
@@ -487,9 +478,9 @@ pipeline {
         stage ('build-cuda') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "cyndaquil", "cuda", "cyndaquil",
+              slurm_build(["reg"], "cyndaquil", "cuda", "cyndaquil",
                           "--cuda")
-              slurm_build(BUILD_MODES, "quilava", "cuda", "quilava",
+              slurm_build(["reg"], "quilava", "cuda", "quilava",
                           "--cuda")
             }
           }
@@ -536,6 +527,7 @@ pipeline {
               dir (CUSTOM_WORKSPACE) {
                 build("logdir")
                 build("builddir")
+                build_ci()
                 slurm_build(BUILD_MODES, "fabrics-ci", "source", "gpu", "--gpu")
               }
             }
@@ -547,9 +539,6 @@ pipeline {
       when { equals expected: true, actual: DO_RUN }
       parallel {
         stage ('CI_MPI_verbs-rxm_IMB') {
-          environment {
-            build_type = "water"
-          }
           steps {
             script {
               dir (CI_LOCATION) {
@@ -559,9 +548,6 @@ pipeline {
           }
         }
         stage ('CI_MPI_verbs-rxm_OSU') {
-          environment {
-            build_type = "water"
-          }
           steps {
             script {
               dir (CI_LOCATION) {
@@ -571,9 +557,6 @@ pipeline {
           }
         }
         stage ('CI_MPI_tcp_IMB') {
-          environment {
-            build_type = "grass"
-          }
           steps {
             script {
               dir (CI_LOCATION) {
@@ -583,9 +566,6 @@ pipeline {
           }
         }
         stage ('CI_MPI_tcp_OSU') {
-          environment {
-            build_type = "grass"
-          }
           steps {
             script {
               dir (CI_LOCATION) {
@@ -594,97 +574,101 @@ pipeline {
             }
           }
         }
-        stage('tcp') {
+        stage('CI_fabtests_tcp') {
            steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("tcp", "grass", "bulbasaur", "2", "tcp")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_tcp_reg", "pr_fabtests_tcp_reg.json")
+                run_ci("CI_fabtests_tcp_dbg", "pr_fabtests_tcp_dbg.json")
+                run_ci("CI_fabtests_tcp_dl", "pr_fabtests_tcp_dl.json")
               }
             }
           }
         }
-        stage('tcp-iouring') {
-          steps {
+        stage('CI_fabtests_sockets') {
+           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("tcp-iouring", "ivysaur", "ivysaur", "2",
-                             "tcp", null, "FI_TCP_IO_URING=1")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_sockets_reg", "pr_fabtests_sockets_reg.json")
+                run_ci("CI_fabtests_sockets_dbg", "pr_fabtests_sockets_dbg.json")
+                run_ci("CI_fabtests_sockets_dl", "pr_fabtests_sockets_dl.json")
               }
             }
           }
         }
-        stage('verbs-rxm') {
-          steps {
+        stage('CI_fabtests_udp') {
+           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("verbs-rxm", "water", "squirtle,totodile", "2",
-                             "verbs", "rxm")
-                run_fabtests("verbs-rxm", "water", "squirtle,totodile", "2",
-                             "verbs", "rxm", "FI_MR_CACHE_MAX_COUNT=0")
-                run_fabtests("verbs-rxm", "water", "squirtle,totodile", "2",
-                             "verbs", "rxm", "FI_MR_CACHE_MONITOR=userfaultfd")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_udp_reg", "pr_fabtests_udp_reg.json")
+                run_ci("CI_fabtests_udp_dbg", "pr_fabtests_udp_dbg.json")
+                run_ci("CI_fabtests_udp_dl", "pr_fabtests_udp_dl.json")
               }
             }
           }
         }
-        stage('verbs-rxd') {
-          steps {
+        stage('CI_fabtests_shm') {
+           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("verbs-rxd", "water", "squirtle", "2", "verbs",
-                             "rxd")
-                run_fabtests("verbs-rxd", "water", "squirtle", "2", "verbs",
-                             "rxd", "FI_MR_CACHE_MAX_COUNT=0")
-                run_fabtests("verbs-rxd", "water", "squirtle", "2", "verbs",
-                             "rxd", "FI_MR_CACHE_MONITOR=userfaultfd")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_shm_reg", "pr_fabtests_shm_reg.json")
+                run_ci("CI_fabtests_shm_dbg", "pr_fabtests_shm_dbg.json")
+                run_ci("CI_fabtests_shm_dl", "pr_fabtests_shm_dl.json")
               }
             }
           }
         }
-        stage('udp') {
+        stage('CI_fabtests_ivysaur') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("udp", "grass", "bulbasaur", "2", "udp")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_ivysaur_reg", "pr_fabtests_ivysaur_reg.json")
+                run_ci("CI_fabtests_ivysaur_dbg", "pr_fabtests_ivysaur_dbg.json")
+                run_ci("CI_fabtests_ivysaur_dl", "pr_fabtests_ivysaur_dl.json")
               }
             }
           }
         }
-        stage('shm') {
+        stage('CI_fabtests_verbs_rxm') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("shm", "grass", "bulbasaur", "1", "shm")
-                run_fabtests("shm", "grass", "bulbasaur", "1", "shm", null,
-                            "FI_SHM_DISABLE_CMA=1")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_verbs_reg", "pr_fabtests_verbs_rxm_reg.json")
+                run_ci("CI_fabtests_verbs_dbg", "pr_fabtests_verbs_rxm_dbg.json")
+                run_ci("CI_fabtests_verbs_dl", "pr_fabtests_verbs_rxm_dl.json")
               }
             }
           }
         }
-        stage('sockets') {
+        stage('CI_fabtests_verbs_rxd') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("sockets", "grass", "bulbasaur", "2", "sockets")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_verbs_reg", "pr_fabtests_verbs_rxd_reg.json")
+                run_ci("CI_fabtests_verbs_dbg", "pr_fabtests_verbs_rxd_dbg.json")
+                run_ci("CI_fabtests_verbs_dl", "pr_fabtests_verbs_rxd_dl.json")
               }
             }
           }
         }
-        stage('ucx') {
+        stage('CI_fabtests_psm3') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("ucx", "ucx", "totodile", "2", "ucx")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_psm3_reg", "pr_fabtests_psm3_reg.json")
+                run_ci("CI_fabtests_psm3_dbg", "pr_fabtests_psm3_dbg.json")
+                run_ci("CI_fabtests_psm3_dl", "pr_fabtests_psm3_dl.json")
               }
             }
           }
         }
-        stage('psm3') {
+        stage('CI_fabtests_ucx') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("psm3", "water", "squirtle", "2", "psm3", null,
-                             "PSM3_IDENTIFY=1")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_ucx_reg", "pr_fabtests_ucx_reg.json")
+                run_ci("CI_fabtests_ucx_dbg", "pr_fabtests_ucx_dbg.json")
+                run_ci("CI_fabtests_ucx_dl", "pr_fabtests_ucx_dl.json")
               }
             }
           }
@@ -823,58 +807,53 @@ pipeline {
             }
           }
         }
-        stage ('cuda-shm-v1') {
+        stage ('CI_fabtests_cyndaquil') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("cuda_v1_shm", "cyndaquil", "cyndaquil", "1",
-                             "shm", null, null, "h2d")
-                run_fabtests("cuda_v1_shm", "cyndaquil", "cyndaquil", "1",
-                             "shm", null, null, "d2d")
-                // run_fabtests("cuda_v1_shm", "cyndaquil", "cyndaquil", "1",
-                //              "shm", null, null, "xd2d")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_cyndaquil_h2d_reg",
+                       "pr_fabtests_cyndaquil_h2d_reg.json")
+                run_ci("CI_fabtests_cyndaquil_d2d_reg",
+                       "pr_fabtests_cyndaquil_d2d_reg.json")
               }
             }
           }
         }
-        stage ('cuda-shm-v2') {
+        stage ('CI_fabtests_quilava') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("cuda_v2_shm", "quilava", "quilava", "1", "shm",
-                             null, null, "h2d")
-                run_fabtests("cuda_v2_shm", "quilava", "quilava", "1", "shm",
-                             null, null, "d2d")
-                // run_fabtests("cuda_v2_shm", "quilava ", "quilava", "1", "shm",
-                //              null, null, "xd2d")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_quilava_h2d_reg",
+                       "pr_fabtests_quilava_h2d_reg.json")
+                run_ci("CI_fabtests_quilava_d2d_reg",
+                       "pr_fabtests_quilava_d2d_reg.json")
               }
             }
           }
         }
-        stage ('ze-shm-v3') {
+        stage ('CI_fabtests_charizard') {
           agent { node { label 'ze' } }
           options { skipDefaultCheckout() }
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("ze_v3_shm", "gpu", "fabrics-ci", "1", "shm", null,
-                             "FI_HMEM_DISABLE_P2P=1", "h2d")
-                run_fabtests("ze_v3_shm", "gpu", "fabrics-ci", "1", "shm", null,
-                             "FI_HMEM_DISABLE_P2P=1", "d2d")
-                run_fabtests("ze_v3_shm", "gpu", "fabrics-ci", "1", "shm", null,
-                             "FI_HMEM_DISABLE_P2P=1", "xd2d")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_charizard_h2d_reg",
+                       "pr_fabtests_charizard_h2d_reg.json")
+                run_ci("CI_fabtests_charizard_d2d_reg",
+                       "pr_fabtests_charizard_d2d_reg.json")
+                run_ci("CI_fabtests_charizard_xd2d_reg",
+                       "pr_fabtests_charizard_xd2d_reg.json")
               }
             }
           }
         }
-        stage('dsa') {
-          when { equals expected: true, actual: DO_RUN }
+        stage('CI_fabtests_electric') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_fabtests("shm_dsa", "electric", "pikachu", "1", "shm", null,
-                             """FI_SHM_DISABLE_CMA=1 FI_SHM_USE_DSA_SAR=1 \
-                                FI_LOG_LEVEL=warn""")
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_electric_reg", "pr_fabtests_electric_reg.json")
+                run_ci("CI_fabtests_electric_dbg", "pr_fabtests_electric_dbg.json")
+                run_ci("CI_fabtests_electric_dl", "pr_fabtests_electric_dl.json")
               }
             }
           }
