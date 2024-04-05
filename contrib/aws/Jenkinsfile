@@ -70,8 +70,8 @@ pipeline {
                     stages["1_g4dn_centos7_shm"] = common.get_test_stage("1_g4dn_centos7_shm", env.BUILD_TAG, "centos7", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm")
                     stages["1_g4dn_ubuntu2004_shm_disable-cma"] = common.get_test_stage("1_g4dn_ubuntu2004_shm_disable-cma", env.BUILD_TAG, "ubuntu2004", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm --enable-cma false")
 
-                    // TODO: Get Single Node Windows test working
-                    // stages["EFA_Windows_Test"] = common.get_single_node_windows_test_stage("EFA_Windows_Test")
+                    // Single Node Windows Test
+                    stages["EFA_Windows_Test"] = common.get_single_node_windows_test_stage("EFA_Windows_Test")
 
                     // Multi Node Tests - EFA
                     stages["2_hpc6a_alinux2_efa"] = common.get_test_stage("2_hpc6a_alinux2_efa", env.BUILD_TAG, "alinux2", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", addl_args_pr)
@@ -114,7 +114,8 @@ pipeline {
         }
         failure {
             sh '''
-            echo FAILURE
+                . venv/bin/activate
+                ./PortaFiducia/scripts/delete_manual_cluster.py --cluster-name WindowsLibfabricCi_${env.CHANGE_ID}_*
             '''
         }
         aborted {
