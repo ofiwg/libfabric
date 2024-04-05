@@ -97,7 +97,12 @@ def get_single_node_windows_test_stage(stage_name) {
     return {
         stage("${stage_name}") {
             def ret = sh (
-                            script: ". venv/bin/activate; cd PortaFiducia/scripts; env AWS_DEFAULT_REGION=us-west-2 ./test_orchestrator_windows.py public",
+                            script: """
+                                . venv/bin/activate;
+                                cd PortaFiducia/scripts;
+                                export PULL_REQUEST_ID=${env.CHANGE_ID};
+                                env AWS_DEFAULT_REGION=us-west-2 ./test_orchestrator_windows.py --ci public --s3-bucket-name libfabric-ci-windows-prod-test-output --pull-request-id ${env.CHANGE_ID};
+                            """,
                             returnStatus: true
                          )
             if (ret == 65)
