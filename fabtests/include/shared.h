@@ -43,10 +43,13 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <assert.h>
+#include <complex.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_domain.h>
+
+#include "ofi_atomic.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -261,7 +264,11 @@ void ft_mcusage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);
 
 int ft_fill_buf(void *buf, size_t size);
+int ft_fill_atomic(void *buf, size_t count, enum fi_datatype datatype);
 int ft_check_buf(void *buf, size_t size);
+int ft_check_atomic(enum ft_atomic_opcodes atomic, enum fi_op op,
+		    enum fi_datatype type, void *src, void *orig_dst, void *dst,
+		    void *cmp, void *res, size_t count);
 int ft_check_opts(uint64_t flags);
 uint64_t ft_init_cq_data(struct fi_info *info);
 int ft_sock_listen(char *node, char *service);
@@ -714,5 +721,72 @@ static inline void *ft_get_page_end(const void *addr, size_t page_size)
 	return (void *)((uintptr_t)ft_get_page_start((const char *)addr
 			+ page_size, page_size) - 1);
 }
+
+/*
+ * Common validation functions and variables
+ */
+
+#define integ_alphabet "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+#define integ_alphabet_length (sizeof(integ_alphabet) - 1)
+
+#define CHECK_LOCAL(res,local,cnt,ret,TYPE)	\
+	do {					\
+		int i;				\
+		TYPE *r = (res);		\
+		TYPE *l = (local);		\
+		for (i = 0; i < cnt; i++) {	\
+			if (r[i] != l[i]) {	\
+				ret = -FI_EIO;	\
+				break;		\
+			}			\
+		}				\
+	} while (0)				\
+
+#define FT_FILL(dst,cnt,TYPE)					\
+	do {							\
+		int i, a = 0;					\
+		TYPE *d = (dst);				\
+		for (i = 0; i < cnt; i++) {			\
+			d[i] = (TYPE) (integ_alphabet[a]);	\
+			if (++a >= integ_alphabet_length)	\
+				a = 0;				\
+		}						\
+	} while (0)
+
+#ifdef  HAVE___INT128
+
+/* If __int128 supported, things just work. */
+#define FT_FILL_INT128(...)	FT_FILL(__VA_ARGS__)
+#define CHECK_LOCAL_INT128(...)	CHECK_LOCAL(__VA_ARGS__)
+
+#else
+
+/* If __int128, we're not going to fill/verify. */
+#define FT_FILL_INT128(...)
+#define CHECK_LOCAL_INT128(...)
+
+#endif
+
+#define SWITCH_TYPES(type,FUNC,...)				\
+	switch (type) {						\
+	case FI_INT8:	FUNC(__VA_ARGS__,int8_t); break;	\
+	case FI_UINT8:	FUNC(__VA_ARGS__,uint8_t); break;	\
+	case FI_INT16:	FUNC(__VA_ARGS__,int16_t); break;	\
+	case FI_UINT16: FUNC(__VA_ARGS__,uint16_t); break;	\
+	case FI_INT32:	FUNC(__VA_ARGS__,int32_t); break;	\
+	case FI_UINT32: FUNC(__VA_ARGS__,uint32_t); break;	\
+	case FI_INT64:	FUNC(__VA_ARGS__,int64_t); break;	\
+	case FI_UINT64: FUNC(__VA_ARGS__,uint64_t); break;	\
+	case FI_INT128:	FUNC##_INT128(__VA_ARGS__,ofi_int128_t); break;	\
+	case FI_UINT128: FUNC##_INT128(__VA_ARGS__,ofi_uint128_t); break; \
+	case FI_FLOAT:	FUNC(__VA_ARGS__,float); break;		\
+	case FI_DOUBLE:	FUNC(__VA_ARGS__,double); break;	\
+	case FI_LONG_DOUBLE: FUNC(__VA_ARGS__,long_double); break;		\
+	case FI_FLOAT_COMPLEX:	FUNC(__VA_ARGS__,ofi_complex_float); break;	\
+	case FI_DOUBLE_COMPLEX:	FUNC(__VA_ARGS__,ofi_complex_double); break;	\
+	case FI_LONG_DOUBLE_COMPLEX: FUNC(__VA_ARGS__,ofi_complex_long_double); break;\
+	default: return -FI_EOPNOTSUPP;				\
+	}
+
 
 #endif /* _SHARED_H_ */

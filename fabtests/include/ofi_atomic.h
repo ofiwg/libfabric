@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,7 +33,8 @@
 #ifndef _OFI_ATOMIC_H_
 #define _OFI_ATOMIC_H_
 
-#include "fabtest.h"
+#include "shared.h"
+#include "ft_osd.h"
 
 #ifdef __cplusplus
 extern "C" {
