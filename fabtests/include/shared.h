@@ -243,7 +243,7 @@ extern struct fid_mc *mc;
 
 extern fi_addr_t remote_fi_addr;
 extern char *buf, *tx_buf, *rx_buf;
-extern void *dev_host_buf;
+extern void *dev_host_buf, *dev_host_comp, *dev_host_res;
 extern struct ft_context *tx_ctx_arr, *rx_ctx_arr;
 extern char **tx_mr_bufs, **rx_mr_bufs;
 extern size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
@@ -458,8 +458,8 @@ int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
 		    struct fid_cntr **new_rma_cntr,
 		    struct fid_av **new_av);
 int ft_alloc_msgs(void);
-int ft_alloc_host_tx_buf(size_t size);
-void ft_free_host_tx_buf(void);
+int ft_alloc_host_bufs(size_t size);
+void ft_free_host_bufs(void);
 int ft_alloc_active_res(struct fi_info *fi);
 int ft_enable_ep_recv(void);
 int ft_enable_ep(struct fid_ep *bind_ep, struct fid_eq *bind_eq, struct fid_av *bind_av,
