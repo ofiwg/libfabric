@@ -479,7 +479,8 @@ int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 	}
 
 	cq = ibv_create_cq(context, 1, NULL, NULL, 0);
-	assert(cq);
+	if (!cq)
+		goto out;
 
 	memset(&qp_attr, 0, sizeof(qp_attr));
 	qp_attr.send_cq = cq;
@@ -540,10 +541,8 @@ int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 		ibv_destroy_qp(qp);
 	}
 
-	if (cq) {
-		ibv_destroy_cq(cq);
-	}
-
+	ibv_destroy_cq(cq);
+out:
 	return rst;
 }
 
