@@ -124,6 +124,147 @@ void test_info_ep_attr()
 	fi_freeinfo(info);
 }
 
+/**
+ * @brief Verify info->tx/rx_attr->msg_order is set according to hints.
+ *
+ */
+static void
+test_info_tx_rx_msg_order_from_hints(struct fi_info *hints, int expected_ret)
+{
+	struct fi_info *info;
+	int err;
+
+	err = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), NULL, NULL, 0ULL, hints, &info);
+
+	assert_int_equal(err, expected_ret);
+
+	if (expected_ret == FI_SUCCESS) {
+		assert_true(hints->tx_attr->msg_order == info->tx_attr->msg_order);
+		assert_true(hints->rx_attr->msg_order == info->rx_attr->msg_order);
+	}
+
+	fi_freeinfo(info);
+}
+
+/**
+ * @brief Verify info->tx/rx_attr->op_flags is set according to hints.
+ *
+ */
+static void
+test_info_tx_rx_op_flags_from_hints(struct fi_info *hints, int expected_ret)
+{
+	struct fi_info *info;
+	int err;
+
+	err = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), NULL, NULL, 0ULL, hints, &info);
+
+	assert_int_equal(err, expected_ret);
+
+	if (expected_ret == FI_SUCCESS) {
+		assert_true(hints->tx_attr->op_flags == info->tx_attr->op_flags);
+		assert_true(hints->rx_attr->op_flags == info->rx_attr->op_flags);
+	}
+
+	fi_freeinfo(info);
+}
+
+/**
+ * @brief Verify info->tx/rx_attr->size is set according to hints.
+ *
+ */
+static void test_info_tx_rx_size_from_hints(struct fi_info *hints, int expected_ret)
+{
+	struct fi_info *info;
+	int err;
+
+	err = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), NULL, NULL, 0ULL, hints, &info);
+
+	assert_int_equal(err, expected_ret);
+
+	if (expected_ret == FI_SUCCESS) {
+		assert_true(hints->tx_attr->size == info->tx_attr->size);
+		assert_true(hints->rx_attr->size == info->rx_attr->size);
+	}
+
+	fi_freeinfo(info);
+}
+
+void test_info_tx_rx_msg_order_rdm_order_none(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
+	test_info_tx_rx_msg_order_from_hints(resource->hints, 0);
+}
+
+void test_info_tx_rx_msg_order_rdm_order_sas(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	resource->hints->tx_attr->msg_order = FI_ORDER_SAS;
+	resource->hints->rx_attr->msg_order = FI_ORDER_SAS;
+	test_info_tx_rx_msg_order_from_hints(resource->hints, 0);
+}
+
+void test_info_tx_rx_msg_order_dgram_order_none(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_DGRAM);
+	assert_non_null(resource->hints);
+
+	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
+	test_info_tx_rx_msg_order_from_hints(resource->hints, 0);
+}
+
+/**
+ * @brief dgram endpoint doesn't support any ordering, so fi_getinfo
+ * should return -FI_ENODATA if hints requests sas
+ */
+void test_info_tx_rx_msg_order_dgram_order_sas(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_DGRAM);
+	assert_non_null(resource->hints);
+
+	resource->hints->tx_attr->msg_order = FI_ORDER_SAS;
+	resource->hints->rx_attr->msg_order = FI_ORDER_SAS;
+	test_info_tx_rx_msg_order_from_hints(resource->hints, -FI_ENODATA);
+}
+
+void test_info_tx_rx_op_flags_rdm(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	resource->hints->tx_attr->op_flags = FI_DELIVERY_COMPLETE;
+	resource->hints->rx_attr->op_flags = FI_COMPLETION;
+	test_info_tx_rx_op_flags_from_hints(resource->hints, 0);
+}
+
+void test_info_tx_rx_size_rdm(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	resource->hints->tx_attr->size = 16;
+	resource->hints->rx_attr->size = 16;
+	test_info_tx_rx_size_from_hints(resource->hints, 0);
+}
+
 static void test_info_check_shm_info_from_hints(struct fi_info *hints)
 {
 	struct fi_info *info;
