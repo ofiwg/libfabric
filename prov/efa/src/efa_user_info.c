@@ -408,11 +408,30 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 	 */
 	if (hints) {
 		if (hints->tx_attr) {
+			/* efa device doesn't have ordering (EFA_MSG_ORDER == FI_ORDER_NONE).
+			 * if apps request an ordering that is relaxed than
+			 * what provider supports, we should respect that.
+			 * This is specially true for FI_ORDER_NONE:
+			 * No ordering is specified. This value may be used as input in order to obtain
+			 * the default message order supported by the provider.
+			 */
+			info->tx_attr->msg_order &= hints->tx_attr->msg_order;
 			atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
 					  FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
 			if (!(hints->tx_attr->msg_order & atomic_ordering)) {
 				info->ep_attr->max_order_raw_size = 0;
 			}
+		}
+
+		if (hints->rx_attr) {
+			/* efa device doesn't have ordering (EFA_MSG_ORDER == FI_ORDER_NONE).
+			 * if apps request an ordering that is relaxed than
+			 * what provider supports, we should respect that.
+			 * This is specially true for FI_ORDER_NONE:
+			 * No ordering is specified. This value may be used as input in order to obtain
+			 * the default message order supported by the provider.
+			 */
+			info->rx_attr->msg_order &= hints->rx_attr->msg_order;
 		}
 
 		/* We only support manual progress for RMA operations */
