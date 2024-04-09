@@ -43,7 +43,7 @@ struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 	if (!hints)
 		return NULL;
 
-	hints->fabric_attr->prov_name = "efa";
+	hints->fabric_attr->prov_name = strdup("efa");
 	hints->ep_attr->type = ep_type;
 
 	hints->domain_attr->mr_mode |= FI_MR_LOCAL | FI_MR_ALLOCATED;
@@ -198,6 +198,10 @@ void efa_unit_test_resource_destruct(struct efa_resource *resource)
 
 	if (resource->info) {
 		fi_freeinfo(resource->info);
+	}
+
+	if (resource->hints) {
+		fi_freeinfo(resource->hints);
 	}
 }
 
