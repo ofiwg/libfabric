@@ -352,6 +352,7 @@ int main(int argc, char **argv)
 
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->tx_attr->msg_order = FI_ORDER_SAS;
+	hints->rx_attr->msg_order = FI_ORDER_SAS;
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_TAGGED;
 	hints->mode = FI_CONTEXT;
