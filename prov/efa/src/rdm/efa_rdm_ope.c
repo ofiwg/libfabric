@@ -57,10 +57,8 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->cq_entry.len = ofi_total_iov_len(txe->iov, txe->iov_count);
 	txe->cq_entry.buf = OFI_LIKELY(txe->cq_entry.len > 0) ? txe->iov[0].iov_base : NULL;
 
-	if (ep->msg_prefix_size > 0) {
-		assert(txe->iov[0].iov_len >= ep->msg_prefix_size);
-		txe->iov[0].iov_base = (char *)txe->iov[0].iov_base + ep->msg_prefix_size;
-		txe->iov[0].iov_len -= ep->msg_prefix_size;
+	if (ep->user_info->mode & FI_MSG_PREFIX) {
+		ofi_consume_iov(txe->iov, &txe->iov_count, ep->msg_prefix_size);
 	}
 	txe->total_len = ofi_total_iov_len(txe->iov, txe->iov_count);
 
