@@ -536,8 +536,7 @@ pipeline {
               dir (CUSTOM_WORKSPACE) {
                 build("logdir")
                 build("builddir")
-                build("libfabric", "reg", "gpu", "--gpu")
-                build("fabtests", "reg", "gpu")
+                slurm_build(BUILD_MODES, "fabrics-ci", "source", "gpu", "--gpu")
               }
             }
           }
