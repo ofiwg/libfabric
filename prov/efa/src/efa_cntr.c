@@ -15,14 +15,13 @@ static int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 	int numtry = 5;
 	int tryid = 0;
 	int waitim = 1;
-	struct util_srx_ctx *srx_ctx;
-
-	srx_ctx = efa_cntr_get_srx_ctx(cntr_fid);
-
-	if (srx_ctx)
-		ofi_genlock_lock(srx_ctx->lock);
+	struct efa_domain *domain;
 
 	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+	domain = container_of(cntr->domain, struct efa_domain, util_domain);
+
+	ofi_genlock_lock(&domain->srx_lock);
+
 	assert(cntr->wait);
 	errcnt = ofi_atomic_get64(&cntr->err);
 	start = (timeout >= 0) ? ofi_gettime_ms() : 0;
@@ -55,52 +54,47 @@ static int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 	}
 
 unlock:
-	if (srx_ctx)
-		ofi_genlock_unlock(srx_ctx->lock);
+	ofi_genlock_unlock(&domain->srx_lock);
 	return ret;
 }
 
 static uint64_t efa_cntr_read(struct fid_cntr *cntr_fid)
 {
-	struct util_srx_ctx *srx_ctx;
+	struct efa_domain *domain;
 	struct efa_cntr *efa_cntr;
 	uint64_t ret;
 
 	efa_cntr = container_of(cntr_fid, struct efa_cntr, util_cntr.cntr_fid);
 
-	srx_ctx = efa_cntr_get_srx_ctx(cntr_fid);
+	domain = container_of(efa_cntr->util_cntr.domain, struct efa_domain, util_domain);
 
-	if (srx_ctx)
-		ofi_genlock_lock(srx_ctx->lock);
+	ofi_genlock_lock(&domain->srx_lock);
 
 	if (efa_cntr->shm_cntr)
 		fi_cntr_read(efa_cntr->shm_cntr);
 	ret = ofi_cntr_read(cntr_fid);
 
-	if (srx_ctx)
-		ofi_genlock_unlock(srx_ctx->lock);
+	ofi_genlock_unlock(&domain->srx_lock);
 
 	return ret;
 }
 
 static uint64_t efa_cntr_readerr(struct fid_cntr *cntr_fid)
 {
-	struct util_srx_ctx *srx_ctx;
+	struct efa_domain *domain;
 	struct efa_cntr *efa_cntr;
 	uint64_t ret;
 
 	efa_cntr = container_of(cntr_fid, struct efa_cntr, util_cntr.cntr_fid);
 
-	srx_ctx = efa_cntr_get_srx_ctx(cntr_fid);
+	domain = container_of(efa_cntr->util_cntr.domain, struct efa_domain, util_domain);
 
-	if (srx_ctx)
-		ofi_genlock_lock(srx_ctx->lock);
+	ofi_genlock_lock(&domain->srx_lock);
 	if (efa_cntr->shm_cntr)
 		fi_cntr_read(efa_cntr->shm_cntr);
 	ret = ofi_cntr_readerr(cntr_fid);
 
-	if (srx_ctx)
-		ofi_genlock_unlock(srx_ctx->lock);
+	ofi_genlock_unlock(&domain->srx_lock);
 
 	return ret;
 }
