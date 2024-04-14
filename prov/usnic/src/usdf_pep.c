@@ -478,17 +478,18 @@ usdf_pep_grow_backlog(struct usdf_pep *pep)
 
 	extra = sizeof(struct usdf_connreq_msg) + pep->pep_cr_max_data;
 
+	pthread_spin_lock(&pep->pep_cr_lock);
 	while (pep->pep_cr_alloced < pep->pep_backlog) {
 		crp = calloc(1, sizeof(*crp) + extra);
 		if (crp == NULL) {
+			pthread_spin_unlock(&pep->pep_cr_lock);
 			return -FI_ENOMEM;
 		}
 		crp->handle.fclass = FI_CLASS_CONNREQ;
-		pthread_spin_lock(&pep->pep_cr_lock);
 		TAILQ_INSERT_TAIL(&pep->pep_cr_free, crp, cr_link);
 		++pep->pep_cr_alloced;
-		pthread_spin_unlock(&pep->pep_cr_lock);
 	}
+	pthread_spin_unlock(&pep->pep_cr_lock);
 	return 0;
 }
 
