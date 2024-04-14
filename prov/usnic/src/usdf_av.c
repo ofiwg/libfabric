@@ -175,7 +175,7 @@ static void
 usdf_post_insert_request_error(struct usdf_av_insert *insert,
 		struct usdf_av_req *req)
 {
-	struct fi_eq_err_entry err_entry;
+	struct fi_eq_err_entry err_entry = {0};
 	struct usdf_av *av;
 
 	av = insert->avi_av;
