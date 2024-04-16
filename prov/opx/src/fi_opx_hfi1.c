@@ -342,7 +342,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			if (!s) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 					"Error occurred parsing HFI selector string \"%s\"\n", env);
-				return NULL;
+				goto ctxt_open_err;
 			}
 
 			if (selector.type == HFI_SELECTOR_DEFAULT) {
@@ -354,11 +354,11 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 					"Error: selector unit %d >= number of HFIs %d\n",
 					selector.unit, hfi_count);
-				return NULL;
+				goto ctxt_open_err;
 			} else if (!opx_hfi_get_unit_active(selector.unit)) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 					"Error: selected unit %d is not active\n", selector.unit);
-				return NULL;
+				goto ctxt_open_err;
 			}
 
 			if (selector.type == HFI_SELECTOR_FIXED) {
@@ -372,14 +372,14 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 						FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 							"Error: mapby numa %d > numa_max_node %d\n",
 							selector.mapby.rangeS, max_numa);
-						return NULL;
+						goto ctxt_open_err;
 					}
 
 					if (selector.mapby.rangeE > max_numa){
 						FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 							"mapby numa end of range %d > numa_max_node %d\n",
 							selector.mapby.rangeE, max_numa);
-						return NULL;
+						goto ctxt_open_err;
 					}
 
 					if (selector.mapby.rangeS <= numa_node_id && selector.mapby.rangeE >= numa_node_id){
@@ -393,13 +393,13 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 						FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 							"Error: mapby core %d > nprocs %d\n",
 							selector.mapby.rangeS, max_core);
-						return NULL;
+						goto ctxt_open_err;
 					}
 					if (selector.mapby.rangeE > max_core) {
 						FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 							"mapby core end of range %d > nprocs %d\n",
 							selector.mapby.rangeE, max_core);
-						return NULL;
+						goto ctxt_open_err;
 					}
 					if (selector.mapby.rangeS <= core_id && selector.mapby.rangeE >= core_id){
 						hfi_unit_number = selector.unit;
@@ -409,12 +409,12 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				} else {
 					FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 						"Error: unsupported mapby type %d\n", selector.mapby.type);
-					return NULL;
+					goto ctxt_open_err;
 				}
 			} else {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 					"Error: unsupported selector type %d\n", selector.type);
-				return NULL;
+				goto ctxt_open_err;
 			}
 			selectors++;
 		}
@@ -424,7 +424,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		if (!use_default_logic) {
 			if (!matched) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "No HFI selectors matched.\n");
-				return NULL;
+				goto ctxt_open_err;
 			}
 
 			hfi_candidates[0] = hfi_unit_number;
@@ -440,7 +440,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			if (fd < 0) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 					"Unable to open user-specified HFI.\n");
-				return NULL;
+				goto ctxt_open_err;
 			}
 		}
 
@@ -487,7 +487,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		if (fd < 0) {
 			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 				"Unable to open application-specified HFI.\n");
-			return NULL;
+			goto ctxt_open_err;
 		}
 
 	}
@@ -498,7 +498,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		if (hfi_count == 0) {
 			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 				"FATAL: detected no HFIs, cannot continue\n");
-			return NULL;
+			goto ctxt_open_err;
 		}
 
 		else if (hfi_count == 1) {
@@ -513,7 +513,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				// No active ports, we're done here.
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 					"FATAL: HFI has no active ports, cannot continue\n");
-				return NULL;
+				goto ctxt_open_err;
 			}
 
 		} else {
@@ -527,16 +527,14 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			if ((dirfd = open(OPX_CLASS_DIR_PATH, O_RDONLY)) == -1) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 					"Failed to open %s: %s for flock use.\n", OPX_CLASS_DIR_PATH, strerror(errno));
-				free(internal);
-				return NULL;
+				goto ctxt_open_err;
 			}
 
 			if (flock(dirfd, LOCK_EX) == -1) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 					"Flock exclusive lock failure: %s\n", strerror(errno));
 				close(dirfd);
-				free(internal);
-				return NULL;
+				goto ctxt_open_err;
 			}
 
 			// The system has multiple HFIs. Sort them by distance from
@@ -627,8 +625,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				if (fd >=0) {
 					opx_hfi_context_close(fd);
 				}
-				free(internal);
-				return NULL;
+				goto ctxt_open_err;
 			}
 			close(dirfd);
 		}
@@ -638,7 +635,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				"FATAL: Found %d active HFI device%s, unable to open %s.\n",
 				hfi_candidates_count, (hfi_candidates_count > 1) ? "s" : "",
 				(hfi_candidates_count > 1) ? "any of them" : "it");
-			return NULL;
+			goto ctxt_open_err;
 		}
 	}
 
@@ -727,24 +724,22 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	int user_pkey = -1;
 	if (fi_param_get_int(fi_opx_global.prov, "pkey", &user_pkey) == FI_SUCCESS) {
 		if (user_pkey < 0) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user specified FI_OPX_PKEY of %d (0x%x), which is an invalid value.\n", 
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user specified FI_OPX_PKEY of %d (0x%x), which is an invalid value.\n",
 				user_pkey, user_pkey);
 			if (fd >= 0) {
 				opx_hfi_context_close(fd);
 			}
-			free(internal);
-			return NULL;
+			goto ctxt_open_err;
 		}
 		rc = opx_hfi_set_pkey(ctrl, user_pkey);
 
 		if (rc) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set.  This pkey is likely not registered/valid.\n", 
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set.  This pkey is likely not registered/valid.\n",
 				user_pkey);
 			if (fd >= 0) {
 				opx_hfi_context_close(fd);
 			}
-			free(internal);
-			return NULL;
+			goto ctxt_open_err;
 		} else {
 			context->pkey = user_pkey;
 			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
@@ -758,8 +753,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			if (fd >= 0) {
 				opx_hfi_context_close(fd);
 			}
-			free(internal);
-			return NULL; 
+			goto ctxt_open_err;
 		} else {
 			context->pkey = FI_OPX_HFI1_DEFAULT_P_KEY;
 		}
@@ -858,7 +852,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	}
 	context->runtime_flags = ctxt_info->runtime_flags;
 
-    /*  OPX relies on RHF.SeqNum, not the RcvHdrTail */
+	/* OPX relies on RHF.SeqNum, not the RcvHdrTail */
 	assert(!(context->runtime_flags & HFI1_CAP_DMA_RTAIL));
 
 	context->info.rxe.hdrq.elemsz = ctxt_info->rcvhdrq_entsize >> BYTE2DWORD_SHIFT;
@@ -881,12 +875,16 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->info.rxe.egrq.size = ctxt_info->rcvegr_size * ctxt_info->egrtids;
 
 	fi_opx_ref_init(&context->ref_cnt, "HFI context");
-	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Context configured with HFI=%d PORT=%d LID=0x%x JKEY=%d\n", 
+	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Context configured with HFI=%d PORT=%d LID=0x%x JKEY=%d\n",
 		context->hfi_unit, context->hfi_port, context->lid, context->jkey);
 
 	opx_print_context(context);
 
 	return context;
+
+ctxt_open_err:
+	free(internal);
+	return NULL;
 }
 
 int init_hfi1_rxe_state (struct fi_opx_hfi1_context * context,
@@ -2768,7 +2766,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 
 	fi_opx_set_scb(scb, tmp,
 			opx_ep->tx->rzv.qw0 | OPX_PBC_LEN(pbc_dws) | force_credit_return |
-		        OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid),
+			OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid),
 			opx_ep->tx->rzv.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32),
 			opx_ep->tx->rzv.hdr.qw[1] | bth_rx |
 				((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
