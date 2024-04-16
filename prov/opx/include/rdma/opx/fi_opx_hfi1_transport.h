@@ -42,6 +42,8 @@
 #include <rdma/hfi/hfi1_user.h>
 #include "rdma/opx/fi_opx_hmem.h"
 
+#include "rdma/opx/opx_tracer.h"
+
 /*
  * ==== NOTE_COMPLETION_TYPES ====
  *
@@ -660,6 +662,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== INJECT, SHM (begin)\n");
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-INJECT-SHM");
 		uint64_t pos;
 		ssize_t rc;
 		union fi_opx_hfi1_packet_hdr * const hdr =
@@ -700,6 +703,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 
 		opx_shm_tx_advance(&opx_ep->tx->shm, (void*)hdr, pos);
 
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-INJECT-SHM");
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== INJECT, SHM (end)\n");
 		return FI_SUCCESS;
@@ -707,6 +711,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== INJECT, HFI (begin)\n");
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-INJECT-HFI");
 
 	/* first check for sufficient credits to inject the entire packet */
 
@@ -727,6 +732,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	psn = fi_opx_reliability_get_replay(ep, &opx_ep->reliability->state, addr.uid.lid,
 					dest_rx, addr.reliability_rx, &psn_ptr, &replay, reliability);
 	if(OFI_UNLIKELY(psn == -1)) {
+		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-INJECT-HFI");
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 		return -FI_EAGAIN;
 	}
@@ -786,6 +792,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 
 	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.uid.lid, addr.reliability_rx, dest_rx, psn_ptr, replay, reliability);
 
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-INJECT-HFI");
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== INJECT, HFI (end)\n");
 
@@ -922,6 +929,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SENDV, SHM -- EAGER (begin)\n");
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-EAGER-SHM");
 		uint64_t pos;
 		ssize_t rc;
 		union fi_opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
@@ -1013,6 +1021,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 			lock_required, tag, caps);
 		}
 
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-EAGER-SHM");
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SENDV, SHM -- EAGER (end)\n");
 		return FI_SUCCESS;
@@ -1020,6 +1029,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- EAGER (begin)\n");
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-EAGER-HFI");
 
 	// Even though we're using the reliability service to pack this buffer
 	// we still want to make sure it will have enough credits available to send
@@ -1122,6 +1132,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-EAGER-HFI");
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- EAGER (end)\n");
 
@@ -1163,6 +1174,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, SHM -- EAGER (begin)\n");
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-EAGER-SHM");
 	uint64_t pos;
 	ssize_t rc;
 	union fi_opx_hfi1_packet_hdr * const hdr =
@@ -1171,6 +1183,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 			opx_ep->daos_info.rank_inst, &rc);
 
 	if (!hdr) {
+		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-EAGER-SHM");
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND, SHM -- EAGER (end) - No packet available.\n");
 		return rc;
@@ -1226,6 +1239,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 		fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required,
 			tag, caps);
 	}
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-EAGER-SHM");
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, SHM -- EAGER (end)\n");
 
@@ -1466,6 +1480,7 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- EAGER (begin)\n");
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-EAGER-HFI");
 
 	/* first check for sufficient credits to inject the entire packet */
 
@@ -1550,6 +1565,7 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 			lock_required, tag, caps);
 	}
 
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-EAGER-HFI");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- EAGER (end)\n");
 
@@ -1701,6 +1717,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first (struct fi_opx_ep *opx_ep,
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- MULTI-PACKET EAGER FIRST (begin)\n");
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-MP-EAGER-FIRST-HFI");
 
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, FI_OPX_MP_EGR_CHUNK_CREDITS);
@@ -1778,6 +1795,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first (struct fi_opx_ep *opx_ep,
 					FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL, tmp, buf_ptr,
 					FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS, reliability);
 
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-MP-EAGER-FIRST-HFI");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- MULTI-PACKET EAGER FIRST (end)\n");
 
@@ -1800,10 +1818,12 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth (struct fi_opx_ep *opx_ep,
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- MULTI-PACKET EAGER NTH (begin)\n");
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-MP-EAGER-NTH-HFI");
 
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, FI_OPX_MP_EGR_CHUNK_CREDITS);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
+		OPX_TRACER_TRACE(OPX_TRACER_END_ENOBUFS, "SEND-MP-EAGER-NTH-HFI");
 		return -FI_ENOBUFS;
 	}
 
@@ -1854,6 +1874,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth (struct fi_opx_ep *opx_ep,
 					FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL, tmp, buf,
 					FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS, reliability);
 
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-MP-EAGER-NTH-HFI");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- MULTI-PACKET EAGER NTH (end)\n");
 
@@ -1877,6 +1898,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last (struct fi_opx_ep *opx_ep,
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- MULTI-PACKET EAGER LAST (begin)\n");
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-MP-EAGER-NTH-LAST");
 
 	size_t xfer_bytes_tail;
 	if (len <= FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL) {
@@ -1907,6 +1929,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last (struct fi_opx_ep *opx_ep,
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
+		OPX_TRACER_TRACE(OPX_TRACER_END_ENOBUFS, "SEND-MP-EAGER-NTH-LAST");
 		return -FI_ENOBUFS;
 	}
 
@@ -1917,6 +1940,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last (struct fi_opx_ep *opx_ep,
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.uid.lid,
 						addr.hfi1_rx, addr.reliability_rx, &psn_ptr, &replay, reliability);
 	if (OFI_UNLIKELY(psn == -1)) {
+		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-MP-EAGER-NTH-LAST");
 		return -FI_EAGAIN;
 	}
 
@@ -1976,6 +2000,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last (struct fi_opx_ep *opx_ep,
 					xfer_bytes_tail, tmp, buf,
 					payload_qws_total, reliability);
 
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-MP-EAGER-NTH-LAST");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- MULTI-PACKET EAGER LAST (end)\n");
 
