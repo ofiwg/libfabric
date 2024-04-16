@@ -823,7 +823,7 @@ The follow flag may be specified to any memory registration call.
   fi_mr_attr structure.  This flag is only usable for domains opened with
   FI_HMEM capability support.
 
-- *FI_AUTH_KEY*
+*FI_AUTH_KEY*
 : Only valid with domains configured with FI_AV_AUTH_KEY. When used with
   fi_mr_regattr, this flag denotes that the fi_mr_auth_key::src_addr field
   contains an authorization key fi_addr_t (i.e. fi_addr_t returned from
