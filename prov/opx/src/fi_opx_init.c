@@ -44,6 +44,8 @@
 
 #include "rdma/opx/fi_opx_addr.h"
 
+#include "rdma/opx/opx_tracer.h"
+
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -599,6 +601,7 @@ static void fi_opx_fini()
 	}
 
 	fi_freeinfo(fi_opx_global.info);
+	OPX_TRACER_EXIT();
 
 	if (fi_opx_global.daos_hfi_rank_hashmap) {
 		struct fi_opx_daos_hfi_rank *cur_hfi_rank = NULL;
@@ -717,6 +720,8 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "auto_progress_interval_usec", FI_PARAM_INT, "Number of usec that the progress thread waits between polling. Default is 1.");
 	fi_param_define(&fi_opx_provider, "pkey", FI_PARAM_INT, "Partition key.  Should be a 2 byte positive integer.  Default is 0x%x\n", FI_OPX_HFI1_DEFAULT_P_KEY);
 	fi_param_define(&fi_opx_provider, "sl", FI_PARAM_INT, "Service Level.  This will also determine Service Class and Virtual Lane.  Default is %d\n", FI_OPX_HFI1_SL_DEFAULT);
+	fi_param_define(NULL, "opx_tracer_out_path", FI_PARAM_STRING,
+		"Specify path to output per-process performance tracing log files (default: none)");
 	/* CN5000 only */
 	fi_param_define(&fi_opx_provider, "rate_control", FI_PARAM_INT,"Rate control (CN5000 only).  Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Default is %d\n", OPX_BTH_RC2_DEFAULT);
 	// fi_param_define(&fi_opx_provider, "varname", FI_PARAM_*, "help");
@@ -734,6 +739,8 @@ OPX_INI
 				"Error retrieving library file location for opx Provider.\n");
 		}
 	}
+
+	OPX_TRACER_INIT();
 
 	return (&fi_opx_provider);
 }

@@ -48,6 +48,8 @@
 #include "opa_user.h"
 #include "fi_opx_hfi_select.h"
 
+#include "rdma/opx/opx_tracer.h"
+
 #define BYTE2DWORD_SHIFT	(2)
 
 /* RZV messages under FI_OPX_TID_MSG_MISALIGNED_THRESHOLD
@@ -962,6 +964,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_intranode(union fi_opx_hfi1_deferred_work *work
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, SHM -- RENDEZVOUS RTS (begin)\n");
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS-SHM");
 	uint64_t pos;
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
@@ -1008,6 +1011,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_intranode(union fi_opx_hfi1_deferred_work *work
 
 	opx_shm_tx_advance(&opx_ep->tx->shm, (void*)tx_hdr, pos);
 
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS-SHM");
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, SHM -- RENDEZVOUS RTS (end)\n");
 
@@ -1024,6 +1028,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, HFI -- RENDEZVOUS %s RTS (begin)\n",
 		params->ntidpairs ? "EXPECTED TID" : "EAGER");
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
 	const uint64_t tid_payload = params->ntidpairs ? ((params->ntidpairs + 2) * sizeof(uint32_t)) : 0;
 	const uint64_t payload_bytes = (params->niov * sizeof(union fi_opx_hfi1_dput_iov)) + tid_payload;
 	const uint64_t pbc_dws =
@@ -1126,6 +1131,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 							    psn_ptr,
 							    replay,
 							    params->reliability);
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, HFI -- RENDEZVOUS %s RTS (end)\n",
 		params->ntidpairs ? "EXPECTED TID" : "EAGER");
@@ -1317,6 +1323,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	const union fi_opx_hfi1_packet_hdr * const hfi1_hdr =
 		(const union fi_opx_hfi1_packet_hdr * const) hdr;
 
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS-HFI:%ld",hfi1_hdr->qw[6]);
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work != NULL);
 	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
@@ -1404,6 +1411,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	int rc = params->work_elem.work_fn(work);
 	if(rc == FI_SUCCESS) {
 		OPX_BUF_FREE(work);
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS-HFI:%ld",hfi1_hdr->qw[6]);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_SUCCESS\n");
 		return;
 	}
@@ -1411,6 +1419,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
+	OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "RECV-RZV-RTS-HFI:%ld",hfi1_hdr->qw[6]);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 }
 
@@ -1561,6 +1570,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND DPUT, %s opcode %d -- (begin)\n", is_intranode ? "SHM" : "HFI", opcode);
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-DPUT-%s", is_intranode ? "SHM" : "HFI");
 
 	for (i=params->cur_iov; i<niov; ++i) {
 		uint8_t * sbuf = (uint8_t*)((uintptr_t)sbuf_start + (uintptr_t)dput_iov[i].sbuf + params->bytes_sent);
@@ -1700,6 +1710,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 						params->u32_extended_rx);
 		}
 
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-DPUT-%s", is_intranode ? "SHM" : "HFI");
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND DPUT, %s finished IOV=%d bytes_sent=%ld -- (end)\n",
 			is_intranode ? "SHM" : "HFI", params->cur_iov, params->bytes_sent);
@@ -1819,6 +1830,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"%p:===================================== SEND DPUT SDMA, opcode %X -- (begin)\n", params, opcode);
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-DPUT-SDMA:%p:%ld", (void *) target_byte_counter_vaddr, dput_iov[params->cur_iov].bytes);
 
 	for (i=params->cur_iov; i<niov; ++i) {
 		uint8_t * sbuf = (uint8_t*)((uintptr_t)sbuf_start + (uintptr_t)dput_iov[i].sbuf + params->bytes_sent);
@@ -1840,6 +1852,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 									opx_ep->debug_counters.sdma.eagain_sdma_we_max_used);
 					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 						"%p:===================================== SEND DPUT SDMA, !WE FI_EAGAIN\n",params);
+					OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p", (void *) target_byte_counter_vaddr);
 					return -FI_EAGAIN;
 				}
 				assert(params->sdma_we->total_payload == 0);
@@ -1857,6 +1870,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_fill_index);
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"%p:===================================== SEND DPUT SDMA, !CNTR FI_EAGAIN\n",params);
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p", (void *) target_byte_counter_vaddr);
 				return -FI_EAGAIN;
 			}
 
@@ -1884,6 +1898,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					     "%p:===================================== SEND DPUT SDMA, !PSN FI_EAGAIN\n",params);
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p", (void *) target_byte_counter_vaddr);
 				return -FI_EAGAIN;
 			}
 			/* In the unlikely event that we'll be sending a single
@@ -1987,6 +2002,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_replay);
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"%p:===================================== SEND DPUT SDMA, !REPLAY FI_EAGAIN\n",params);
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p", (void *) target_byte_counter_vaddr);
 				return -FI_EAGAIN;
 			}
 
@@ -2010,6 +2026,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 		params->bytes_sent = 0;
 		params->cur_iov++;
 	} /* for niov */
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-DPUT-SDMA:%p", (void *) target_byte_counter_vaddr);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"%p:===================================== SEND DPUT SDMA, exit (end)\n",params);
 
@@ -2076,6 +2093,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"%p:===================================== SEND DPUT SDMA TID, opcode %X -- (begin)\n",
 		params, opcode);
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-DPUT-SDMA-TID");
 
 	for (i=params->cur_iov; i<niov; ++i) {
 		uint32_t *tidpairs= NULL;
@@ -2159,6 +2177,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 									opx_ep->debug_counters.sdma.eagain_sdma_we_max_used);
 					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 						"%p:===================================== SEND DPUT SDMA TID, !WE FI_EAGAIN\n",params);
+					OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA-TID");
 					return -FI_EAGAIN;
 				}
 				assert(params->sdma_we->total_payload == 0);
@@ -2176,6 +2195,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_fill_index);
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"%p:===================================== SEND DPUT SDMA TID, !CNTR FI_EAGAIN\n",params);
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA-TID");
 				return -FI_EAGAIN;
 			}
 
@@ -2204,6 +2224,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"%p:===================================== SEND DPUT SDMA TID, !PSN FI_EAGAIN\n",
 					params);
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA-TID");
 				return -FI_EAGAIN;
 			}
 #ifndef OPX_RELIABILITY_TEST /* defining this will force reliability replay of some packets */
@@ -2400,6 +2421,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"%p:===================================== SEND DPUT SDMA TID, !REPLAY FI_EAGAIN\n",
 					params);
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA-TID");
 				return -FI_EAGAIN;
 			}
 
@@ -2430,6 +2452,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 		params->bytes_sent = 0;
 		params->cur_iov++;
 	} /* for niov */
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-DPUT-SDMA-TID");
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"%p:===================================== SEND DPUT SDMA TID, exit (end)\n",params);
 
@@ -2648,6 +2671,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SENDV, SHM -- RENDEZVOUS RTS Noncontig (begin) context %p\n",context);
 
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-RZV-RTS-NONCONTIG-SHM");
 		uint64_t pos;
 		ssize_t rc;
 		union fi_opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
@@ -2698,6 +2722,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 						.send.rzv_noncontig);
 		opx_shm_tx_advance(&opx_ep->tx->shm, (void *)hdr, pos);
 
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-RZV-RTS-NONCONTIG-SHM");
 		FI_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SENDV, SHM -- RENDEZVOUS RTS (end) context %p\n",context);
@@ -2706,6 +2731,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	}
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- RENDEZVOUS RTS (begin) context %p\n",context);
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-RZV-RTS-HFI");
 
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	const uint16_t total_credits_needed = 1 +   /* packet header */
@@ -2841,6 +2867,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-RZV-RTS-HFI");
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- RENDEZVOUS RTS (end) context %p\n",context);
 
@@ -2939,6 +2966,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND, SHM -- RENDEZVOUS RTS (begin) context %p\n",context);
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-RTS-SHM");
 		uint64_t pos;
 		ssize_t rc;
 		union fi_opx_hfi1_packet_hdr * const hdr =
@@ -3020,6 +3048,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 		opx_shm_tx_advance(&opx_ep->tx->shm, (void*)hdr, pos);
 
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-SHM");
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND, SHM -- RENDEZVOUS RTS (end) context %p\n",context);
 
@@ -3027,6 +3056,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	}
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- RENDEZVOUS RTS (begin) context %p\n",context);
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-RTS-HFI:%ld", tag);
 
 	/*
 	 * While the bulk of the payload data will be sent via SDMA once we
@@ -3258,6 +3288,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-HFI:%ld",tag);
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- RENDEZVOUS RTS (end) context %p\n",context);
 
