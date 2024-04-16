@@ -496,23 +496,34 @@ static int fi_opx_close_ep(fid_t fid)
 
 	if (opx_ep->domain) {
 		ret = fi_opx_ref_dec(&opx_ep->domain->ref_cnt, "domain");
-		if (ret)
-			return ret;
+		if (ret) {
+			errno = -ret;
+			goto err_unlock;
+		}
 	}
 
 	/* av is only valid/required if tx capability is enabled */
 	if (opx_ep->av) {
 		ret = fi_opx_ref_dec(&opx_ep->av->ref_cnt, "address vector");
-		if (ret) return ret;
+		if (ret) {
+			errno = -ret;
+			goto err_unlock;
+		}
 	}
 
 	if (opx_ep->tx && (opx_ep->tx->cq && (fid->fclass == FI_CLASS_EP || fid->fclass == FI_CLASS_TX_CTX))) {
 		ret = fi_opx_ref_dec(&opx_ep->tx->cq->ref_cnt, "completion queue");
-		if (ret) return ret;
+		if (ret) {
+			errno = -ret;
+			goto err_unlock;
+		}
 	}
 	if (opx_ep->rx && (opx_ep->rx->cq && (fid->fclass == FI_CLASS_EP || fid->fclass == FI_CLASS_RX_CTX))) {
 		ret = fi_opx_ref_dec(&opx_ep->rx->cq->ref_cnt, "completion queue");
-		if (ret) return ret;
+		if (ret) {
+			errno = -ret;
+			goto err_unlock;
+		}
 	}
     // Placeholder functions to be uncommented when they do more than return 0
 	/*
@@ -529,7 +540,10 @@ static int fi_opx_close_ep(fid_t fid)
 
 	if(opx_ep->tx) {
 			ret = fi_opx_ref_dec(&opx_ep->tx->ref_cnt, "tx");
-			if(ret) return ret; // Error
+			if (ret) { // Error
+				errno = -ret;
+				goto err_unlock;
+			}
 			if(opx_ep->tx->cq && (opx_ep->tx->cq->ref_cnt == 0)) {
 				if (opx_ep->tx->work_pending_pool)
 					ofi_bufpool_destroy(opx_ep->tx->work_pending_pool);
@@ -549,7 +563,10 @@ static int fi_opx_close_ep(fid_t fid)
 	}
 	if(opx_ep->rx) {
 			ret = fi_opx_ref_dec(&opx_ep->rx->ref_cnt, "rx");
-			if(ret) return ret; // Error
+			if (ret) { // Error
+				errno = -ret;
+				goto err_unlock;
+			}
 			if(opx_ep->rx->ref_cnt == 0) {
 				if (opx_ep->rx->ue_packet_pool) {
 					ofi_bufpool_destroy(opx_ep->rx->ue_packet_pool);
@@ -568,7 +585,10 @@ static int fi_opx_close_ep(fid_t fid)
 	}
 	if(opx_ep->reliability) {
 		ret = fi_opx_ref_dec(&opx_ep->reliability->ref_cnt, "reliability");
-		if(ret) return ret; // Error
+		if (ret) { // Error
+			errno = -ret;
+			goto err_unlock;
+		}
 		if(opx_ep->reliability->ref_cnt == 0) {
 			opx_ep->reliability->service.active = 0;
 			fi_opx_reliability_service_fini(&opx_ep->reliability->service);	
@@ -681,6 +701,18 @@ static int fi_opx_close_ep(fid_t fid)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "ep closed\n");
 
 	return 0;
+
+err_unlock:
+	if (fi_opx_global.progress == FI_PROGRESS_AUTO) {
+		if (opx_ep->init_rx_cq) {
+			fi_opx_unlock(&opx_ep->init_rx_cq->lock);
+		}
+		if (opx_ep->init_tx_cq && opx_ep->init_tx_cq != opx_ep->init_rx_cq) {
+			fi_opx_unlock(&opx_ep->init_tx_cq->lock);
+		}
+		fi_opx_unlock(&opx_ep->lock);
+	}
+	return -errno;
 }
 
 static int fi_opx_bind_ep(struct fid *fid, struct fid *bfid,
