@@ -1204,7 +1204,7 @@ ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe)
 	struct efa_rdm_pke *pkt_entry_copy;
 
 	assert(txe->type == EFA_RDM_TXE);
-	assert(txe->rma_iov_count == 1);
+	assert(txe->rma_iov_count > 0 && txe->rma_iov_count <= efa_rdm_ep_domain(txe->ep)->info->tx_attr->rma_iov_limit);
 
 	pkt_entry = txe->local_read_pkt_entry;
 	if (pkt_entry->mr && !(txe->ep->sendrecv_in_order_aligned_128_bytes))
@@ -1286,10 +1286,10 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *pkt_entry;
 
-	assert(ope->iov_count > 0);
-	assert(ope->rma_iov_count > 0);
-
 	ep = ope->ep;
+
+	assert(ope->iov_count > 0 && ope->iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->iov_limit);
+	assert(ope->rma_iov_count > 0 && ope->rma_iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->rma_iov_limit);
 
 	if (ope->bytes_read_total_len == 0) {
 
@@ -1431,9 +1431,11 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *pkt_entry;
 
-	assert(ope->iov_count > 0);
-	assert(ope->rma_iov_count > 0);
 	ep = ope->ep;
+
+	assert(ope->iov_count > 0 && ope->iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->iov_limit);
+	assert(ope->rma_iov_count > 0 && ope->rma_iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->rma_iov_limit);
+
 	if (ope->bytes_write_total_len == 0) {
 		/* According to libfabric document
 		 *     https://ofiwg.github.io/libfabric/main/man/fi_rma.3.html

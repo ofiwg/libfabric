@@ -338,7 +338,7 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	domain = container_of(fid, struct efa_domain,
 			      util_domain.domain_fid.fid);
 
-	assert(attr->iov_count == 1);
+	assert(attr->iov_count > 0 && attr->iov_count <= domain->info->domain_attr->mr_iov_limit);
 	ofi_mr_info_get_iov_from_mr_attr(&info, attr, flags);
 	info.iface = attr->iface;
 	info.device = attr->device.reserved;
