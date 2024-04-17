@@ -211,6 +211,9 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	struct efa_mr *mr;
 	int err;
 
+	/*
+	 * TODO remove/change assert expression when function logic is fixed
+	 */
 	assert(rxe->iov_count == 1);
 	assert(rxe->iov[0].iov_len >= ep->msg_prefix_size);
 	pkt_entry = (struct efa_rdm_pke *)rxe->iov[0].iov_base;
