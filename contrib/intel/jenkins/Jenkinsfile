@@ -816,9 +816,7 @@ pipeline {
                 dmabuf_output = "${LOG_DIR}/DMABUF-Tests_verbs-rxm_dmabuf"
                 cmd = """ python3.9 runtests.py --test=dmabuf \
                            --prov=verbs --util=rxm --build_hw=gpu"""
-                slurm_batch("fabrics-ci", "1", "${dmabuf_output}_1_reg",
-                            "${cmd}")
-                slurm_batch("fabrics-ci", "2", "${dmabuf_output}_2_reg",
+                slurm_batch("torchic", "1", "${dmabuf_output}_reg",
                             "${cmd}")
               }
             }
