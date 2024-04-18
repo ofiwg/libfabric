@@ -36,6 +36,7 @@
 #include <rdma/hfi/hfi1_user.h>
 #include "rdma/opx/fi_opx_compiler.h"
 #include "rdma/opx/fi_opx_rma_ops.h"
+#include "rdma/opx/opx_tracer.h"
 #include "ofi_hmem.h"
 
 struct fi_opx_hmem_info {
@@ -111,22 +112,30 @@ __OPX_FORCE_INLINE__
 int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device,
 		     void *dest, const void *src, size_t len)
 {
+	int ret;
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "COPY-TO-HMEM");
 #if HAVE_CUDA
-	return (int) cudaMemcpy(dest, src, len, cudaMemcpyHostToDevice);
+	ret = (int) cudaMemcpy(dest, src, len, cudaMemcpyHostToDevice);
 #else
-	return ofi_copy_to_hmem(iface, device, dest, src, len);
+	ret = ofi_copy_to_hmem(iface, device, dest, src, len);
 #endif
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "COPY-TO-HMEM");
+	return ret;
 }
 
 __OPX_FORCE_INLINE__
 int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device,
 		       void *dest, const void *src, size_t len)
 {
+	int ret;
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "COPY-FROM-HMEM");
 #if HAVE_CUDA
-	return (int) cudaMemcpy(dest, src, len, cudaMemcpyDeviceToHost);
+	ret = (int) cudaMemcpy(dest, src, len, cudaMemcpyDeviceToHost);
 #else
-	return ofi_copy_from_hmem(iface, device, dest, src, len);
+	ret = ofi_copy_from_hmem(iface, device, dest, src, len);
 #endif
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "COPY-FROM-HMEM");
+	return ret;
 }
 
 __OPX_FORCE_INLINE__
