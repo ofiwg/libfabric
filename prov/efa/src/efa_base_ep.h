@@ -30,9 +30,8 @@ struct efa_recv_wr {
 	 *
 	 * @details
 	 * EFA device supports a maximum of 2 iov/SGE
-	 * For receive, we only use 1 SGE
 	 */
-	struct ibv_sge sge[1];
+	struct ibv_sge sge[2];
 };
 
 struct efa_base_ep {
