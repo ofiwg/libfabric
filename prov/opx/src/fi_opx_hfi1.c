@@ -2738,19 +2738,14 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 					      payload_blocks_total; /* packet payload */
 
 	uint64_t total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, total_credits_needed);
-	unsigned loop = 0;
-	while (OFI_UNLIKELY(total_credits_available < total_credits_needed)) {
-		if (loop++ > FI_OPX_HFI1_TX_SEND_RZV_CREDIT_MAX_WAIT) {
+	if (OFI_UNLIKELY(total_credits_available < total_credits_needed)) {
+		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
+		total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state,
+			&opx_ep->tx->force_credit_return, total_credits_needed);
+		if (total_credits_available < total_credits_needed) {
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 			return -FI_EAGAIN;
 		}
-		fi_opx_compiler_msync_writes();
-		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
-		total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, total_credits_needed);
-	}
-	if (OFI_UNLIKELY(loop)) {
-		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 	}
 
 	struct fi_opx_reliability_tx_replay *replay;
@@ -3072,25 +3067,14 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	uint64_t total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state,
 									 &opx_ep->tx->force_credit_return,
 									 total_credits_needed);
-	unsigned loop = 0;
-	while (OFI_UNLIKELY(total_credits_available < total_credits_needed)) {
-		/*
-		 * TODO: Implement PAUSE time-out functionality using time-out configuration
-		 * parameter(s).
-		 */
-		if (loop++ > FI_OPX_HFI1_TX_SEND_RZV_CREDIT_MAX_WAIT) {
+	if (OFI_UNLIKELY(total_credits_available < total_credits_needed)) {
+		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
+		total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state,
+			&opx_ep->tx->force_credit_return, total_credits_needed);
+		if (total_credits_available < total_credits_needed) {
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 			return -FI_EAGAIN;
 		}
-		fi_opx_compiler_msync_writes();
-
-		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
-		total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state,
-									&opx_ep->tx->force_credit_return,
-									total_credits_needed);
-	}
-	if (OFI_UNLIKELY(loop)) {
-		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 	}
 
 	struct fi_opx_reliability_tx_replay *replay;

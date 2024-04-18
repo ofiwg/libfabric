@@ -3869,6 +3869,7 @@ ssize_t fi_opx_ep_tx_send_try_eager(struct fid_ep *ep,
 							override_flags, tx_op_flags, addr.hfi1_rx,
 							caps, reliability, do_cq_completion);
 		}
+		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 	} while (rc == -FI_ENOBUFS && loop++ < FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES);
 
 	return rc;
