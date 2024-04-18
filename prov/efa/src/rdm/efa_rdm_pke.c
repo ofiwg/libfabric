@@ -445,11 +445,10 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
  * This function posts one read request.
  *
  * @param[in]		pkt_entry	read_entry that has information of the read request.
- * @param[in,out]	ep		endpoint
  * @param[in]		local_buf 	local buffer, where data will be copied to.
  * @param[in]		len		read size.
  * @param[in]		desc		memory descriptor of local buffer.
- * @param[in]		remote_buff	remote buffer, where data will be read from.
+ * @param[in]		remote_buf	remote buffer, where data will be read from.
  * @param[in]		remote_key	memory key of remote buffer.
  * @return	On success, return 0
  * 		On failure, return a negative error code.
@@ -506,12 +505,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
  *
  * This function posts one write request.
  *
- * @param[in]		pkt_entry	write_entry that has information of the write request.
- * @param[in]		local_buf 	local buffer, where data will be copied from.
- * @param[in]		len		write size.
- * @param[in]		desc		memory descriptor of local buffer.
- * @param[in]		remote_buff	remote buffer, where data will be written to.
- * @param[in]		remote_key	memory key of remote buffer.
+ * @param[in]	pkt_entry	write_entry that has information of the write request.
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
@@ -592,13 +586,10 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 /**
  * @brief Post receive requests to EFA device
  *
- * @param[in] ep	EFA rdm endpoint
- * @param[in] pkt_entry	packet entries that contains information of receive buffer
- * @param[in] desc	Memory registration key
- * @param[in] flags	flags to be applied to the receive operation
+ * @param[in] pke_vec	packet entries that contains information of receive buffer
+ * @param[in] pke_cnt	Number of packet entries to post receive requests for
  * @return		0 on success
  * 			On error, a negative value corresponding to fabric errno
- *
  */
 ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 			  int pke_cnt)
