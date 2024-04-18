@@ -975,7 +975,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 	if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT || opcode == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) {
 
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- INJECT (begin)\n");
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-INJECT");
 
@@ -1080,7 +1080,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 		} else {	/* truncation - unlikely */
 
-			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"INJECT truncation - send_len %lu > recv_len %lu posting error\n", send_len, recv_len);
 
 			struct fi_opx_context_ext * ext = NULL;
@@ -1118,12 +1118,12 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 		}
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-INJECT");
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- INJECT (end)\n");
 
 	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_EAGER || opcode == FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) {
 
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- EAGER (begin)\n");
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-EAGER");
 
@@ -1218,7 +1218,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 			/* fi_opx_hfi1_dump_packet_hdr((union fi_opx_hfi1_packet_hdr *)hdr, __func__, __LINE__); */
 
-			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"EAGER send_len %lu <= recv_len %lu; enqueue cq (completed)\n", send_len, recv_len);
 
 			context->flags |= FI_RECV | FI_REMOTE_CQ_DATA |
@@ -1234,7 +1234,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 		} else {	/* truncation - unlikely */
 
-			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"EAGER truncation - send_len %lu > recv_len %lu posting error\n", send_len, recv_len);
 
 			struct fi_opx_context_ext * ext = NULL;
@@ -1272,13 +1272,13 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 		}
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-EAGER");
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- EAGER (end)\n");
 
 	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST ||
 		   opcode == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST) {
 
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- MULTI PACKET EAGER FIRST (begin)\n");
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-MP-EAGER-FIRST");
 
@@ -1346,7 +1346,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			}
 		} else {	/* truncation - unlikely */
 
-			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"EAGER truncation - xfer_len %lu > recv_len %lu posting error\n", payload_total_len, recv_len);
 
 			struct fi_opx_context_ext * ext = NULL;
@@ -1382,12 +1382,12 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 		}
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-MP-EAGER-FIRST");
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- MULTI PACKET EAGER FIRST (end)\n");
 
 	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH) {
 
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- MULTI PACKET EAGER NTH (begin)\n");
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-MP-EAGER-NTH");
 
@@ -1489,12 +1489,12 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 		}
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-MP-EAGER-NTH");
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- MULTI PACKET EAGER NTH (end)\n");
 
 	} else {			/* rendezvous packet */
 
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- RENDEZVOUS RTS (%X) (begin) context %p is_multi_recv (%lu)\n",
 			opcode, context, is_multi_receive);
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS");
@@ -1783,7 +1783,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 		} else {				/* truncation - unlikely */
 
-			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"RENDEZVOUS truncation - xfer_len %lu > recv_len %lu posting error\n", xfer_len, recv_len);
 
 			/* Post a CTS Truncation error (FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC) to unblock the Tx of RTS */
@@ -1867,7 +1867,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 		}
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS");
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- RENDEZVOUS RTS (end) context %p\n",context);
 
 	}	/* rendezvous packet */
@@ -1976,7 +1976,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 				const int lock_required,
 				const enum ofi_reliability_kind reliability)
 {
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV -- %s RENDEZVOUS CTS (begin)\n", is_intranode ? "SHM":"HFI");
 
 	assert(payload != NULL);
@@ -2086,7 +2086,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 		break;
 	}
 
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV -- %s RENDEZVOUS CTS (end)\n", is_intranode ? "SHM":"HFI");
 }
 
@@ -2102,7 +2102,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 				const int lock_required,
 				const enum ofi_reliability_kind reliability)
 {
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV -- %s RENDEZVOUS DATA Opcode=%0hhX (begin)\n", is_intranode ? "SHM":"HFI", hdr->dput.target.opcode);
 	switch(hdr->dput.target.opcode) {
 	case FI_OPX_HFI_DPUT_OPCODE_RZV:
@@ -2260,7 +2260,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		if (opx_mr == NULL) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"lookup of key (%ld) failed; packet dropped\n", hdr->dput.target.mr.key);
-			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- RENDEZVOUS DATA - failed (end)\n");
 			assert(0);
 			return;
@@ -2496,7 +2496,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		break;
 	}
 
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 	"===================================== RECV -- %s RENDEZVOUS DATA (end)\n", is_intranode ? "SHM":"HFI");
 }
 

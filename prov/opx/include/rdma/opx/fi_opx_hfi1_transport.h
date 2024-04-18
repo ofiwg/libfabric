@@ -709,7 +709,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		return FI_SUCCESS;
 	}
 
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== INJECT, HFI (begin)\n");
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-INJECT-HFI");
 
@@ -793,7 +793,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.uid.lid, addr.reliability_rx, dest_rx, psn_ptr, replay, reliability);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-INJECT-HFI");
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== INJECT, HFI (end)\n");
 
 	return FI_SUCCESS;
@@ -1027,7 +1027,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 		return FI_SUCCESS;
 	}
 
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- EAGER (begin)\n");
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-EAGER-HFI");
 
@@ -1133,7 +1133,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-EAGER-HFI");
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- EAGER (end)\n");
 
 
@@ -1172,7 +1172,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 
 	const uint16_t lrh_dws = htons(pbc_dws-1);	/* does not include pbc (8 bytes), but does include icrc (4 bytes) */
 
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, SHM -- EAGER (begin)\n");
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-EAGER-SHM");
 	uint64_t pos;
@@ -1240,7 +1240,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 			tag, caps);
 	}
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-EAGER-SHM");
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, SHM -- EAGER (end)\n");
 
 	return FI_SUCCESS;
@@ -1478,7 +1478,7 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 
 	assert(lock_required == 0);
 
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- EAGER (begin)\n");
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-EAGER-HFI");
 
