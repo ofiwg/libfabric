@@ -670,7 +670,6 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
 		 */
 		rxe->cq_entry.len = 0;
 	} else {
-		assert(rxe->cq_entry.buf == pkt_entry->wiredata - sizeof(struct efa_rdm_pke));
 		rxe->cq_entry.len = pkt_entry->pkt_size + sizeof(struct efa_rdm_pke);
 	}
 

@@ -605,13 +605,20 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 
 	for (i = 0; i < pke_cnt; ++i) {
 		ep->base_ep.efa_recv_wr_vec[i].wr.wr_id = (uintptr_t)pke_vec[i];
-		ep->base_ep.efa_recv_wr_vec[i].wr.num_sge = 1;	/* Always post one iov/SGE */
+		ep->base_ep.efa_recv_wr_vec[i].wr.num_sge = 1;
 		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list = ep->base_ep.efa_recv_wr_vec[i].sge;
 		assert(pke_vec[i]->pkt_size > 0);
-		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->pkt_size;
+		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->pkt_size - pke_vec[i]->payload_size;
 		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
 		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
 		ep->base_ep.efa_recv_wr_vec[i].wr.next = NULL;
+
+		if (pke_vec[i]->payload) {
+			ep->base_ep.efa_recv_wr_vec[i].wr.num_sge = 2;
+			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[1].addr = (uintptr_t) pke_vec[i]->payload;
+			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[1].length = pke_vec[i]->payload_size;
+			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[1].lkey = ((struct efa_mr *) pke_vec[i]->payload_mr)->ibv_mr->lkey;
+		}
 		if (i > 0)
 			ep->base_ep.efa_recv_wr_vec[i-1].wr.next = &ep->base_ep.efa_recv_wr_vec[i].wr;
 #if HAVE_LTTNG

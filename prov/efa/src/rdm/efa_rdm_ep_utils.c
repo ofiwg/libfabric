@@ -209,12 +209,10 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 {
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_mr *mr;
-	int err;
+	size_t rx_iov_offset = 0;
+	int err, rx_iov_index = 0;
 
-	/*
-	 * TODO remove/change assert expression when function logic is fixed
-	 */
-	assert(rxe->iov_count == 1);
+	assert(rxe->iov_count > 0  && rxe->iov_count <= ep->rx_iov_limit);
 	assert(rxe->iov[0].iov_len >= ep->msg_prefix_size);
 	pkt_entry = (struct efa_rdm_pke *)rxe->iov[0].iov_base;
 	assert(pkt_entry);
@@ -231,17 +229,32 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	pkt_entry->alloc_type = EFA_RDM_PKE_FROM_USER_BUFFER;
 	pkt_entry->flags = EFA_RDM_PKE_IN_USE;
 	pkt_entry->next = NULL;
+	pkt_entry->ep = ep;
 	/*
 	 * The actual receiving buffer size (pkt_size) is
-	 *    rxe->total_len - sizeof(struct efa_rdm_pke)
+	 *    (total IOV length) - sizeof(struct efa_rdm_pke)
 	 * because the first part of user buffer was used to
 	 * construct pkt_entry. The actual receiving buffer
 	 * posted to device starts from pkt_entry->wiredata.
 	 */
-	pkt_entry->pkt_size = rxe->iov[0].iov_len - sizeof(struct efa_rdm_pke);
-
+	pkt_entry->pkt_size = ofi_total_iov_len(rxe->iov, rxe->iov_count) - sizeof *pkt_entry;
 	pkt_entry->ope = rxe;
 	rxe->state = EFA_RDM_RXE_MATCHED;
+
+	err = ofi_iov_locate(rxe->iov, rxe->iov_count, ep->msg_prefix_size, &rx_iov_index, &rx_iov_offset);
+	if (OFI_UNLIKELY(err)) {
+		EFA_WARN(FI_LOG_CQ, "ofi_iov_locate failure: %s (%d)\n", fi_strerror(-err), -err);
+		return err;
+	}
+	assert(rx_iov_index < rxe->iov_count);
+	assert(rx_iov_offset < rxe->iov[rx_iov_index].iov_len);
+
+	if (rx_iov_index > 0) {
+		assert(rxe->iov_count - rx_iov_index == 1);
+		pkt_entry->payload = (char *) rxe->iov[rx_iov_index].iov_base + rx_iov_offset;
+		pkt_entry->payload_mr = rxe->desc[rx_iov_index];
+		pkt_entry->payload_size = ofi_total_iov_len(&rxe->iov[rx_iov_index], rxe->iov_count - rx_iov_index) - rx_iov_offset;
+	}
 
 	err = efa_rdm_pke_recvv(&pkt_entry, 1);
 	if (OFI_UNLIKELY(err)) {
