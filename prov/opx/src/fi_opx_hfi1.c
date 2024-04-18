@@ -1568,7 +1568,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 			opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH &&
 			params->payload_bytes_for_iovec == 0));
 
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND DPUT, %s opcode %d -- (begin)\n", is_intranode ? "SHM" : "HFI", opcode);
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-DPUT-%s", is_intranode ? "SHM" : "HFI");
 
@@ -1711,7 +1711,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 		}
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-DPUT-%s", is_intranode ? "SHM" : "HFI");
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND DPUT, %s finished IOV=%d bytes_sent=%ld -- (end)\n",
 			is_intranode ? "SHM" : "HFI", params->cur_iov, params->bytes_sent);
 
@@ -2667,7 +2667,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	const uint16_t lrh_dws = htons(pbc_dws - 1);
 
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
-		FI_TRACE(
+		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SENDV, SHM -- RENDEZVOUS RTS Noncontig (begin) context %p\n",context);
 
@@ -2723,13 +2723,13 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 		opx_shm_tx_advance(&opx_ep->tx->shm, (void *)hdr, pos);
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-RZV-RTS-NONCONTIG-SHM");
-		FI_TRACE(
+		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SENDV, SHM -- RENDEZVOUS RTS (end) context %p\n",context);
 		fi_opx_shm_poll_many(&opx_ep->ep_fid, 0);
 		return FI_SUCCESS;
 	}
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- RENDEZVOUS RTS (begin) context %p\n",context);
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-RZV-RTS-HFI");
 
@@ -2863,7 +2863,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-RZV-RTS-HFI");
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- RENDEZVOUS RTS (end) context %p\n",context);
 
 	return FI_SUCCESS;
@@ -2959,7 +2959,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	const uint16_t lrh_dws = htons(pbc_dws-1);
 
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND, SHM -- RENDEZVOUS RTS (begin) context %p\n",context);
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-RTS-SHM");
 		uint64_t pos;
@@ -3044,12 +3044,12 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		opx_shm_tx_advance(&opx_ep->tx->shm, (void*)hdr, pos);
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-SHM");
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND, SHM -- RENDEZVOUS RTS (end) context %p\n",context);
 
 		return FI_SUCCESS;
 	}
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- RENDEZVOUS RTS (begin) context %p\n",context);
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-RTS-HFI:%ld", tag);
 
@@ -3273,7 +3273,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-HFI:%ld",tag);
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- RENDEZVOUS RTS (end) context %p\n",context);
 
 	return FI_SUCCESS;
