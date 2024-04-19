@@ -8,7 +8,11 @@
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke.h"
 
-#define EFA_RDM_MSG_PREFIX_SIZE (sizeof(struct efa_rdm_pke) + sizeof(struct efa_rdm_eager_msgrtm_hdr) + EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE)
+#define EFA_RDM_MSG_PREFIX_SIZE (			\
+	sizeof(struct efa_rdm_pke) +			\
+	sizeof(struct efa_rdm_eager_msgrtm_hdr)	+	\
+	sizeof(struct efa_rdm_req_opt_cq_data_hdr) +	\
+	EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE)
 
 #if defined(static_assert) && defined(__x86_64__)
 static_assert(EFA_RDM_MSG_PREFIX_SIZE % 8 == 0, "message prefix size alignment check");
