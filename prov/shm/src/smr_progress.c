@@ -652,7 +652,7 @@ static void smr_do_atomic(void *src, struct ofi_mr *dst_mr, void *dst,
 	}
 
 	if (flags & SMR_RMA_REQ)
-		memcpy(src, op == FI_ATOMIC_READ ? tmp_dst : tmp_result,
+		memcpy(src, op == FI_ATOMIC_READ ? cpy_dst : tmp_result,
 		       cnt * ofi_datatype_size(datatype));
 
 	if (cpy_dst != dst) {
