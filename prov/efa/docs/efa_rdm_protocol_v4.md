@@ -571,8 +571,8 @@ Table: 3.2 Format of the REQ optional raw address header
 
 | Field | Type    | Length | C language type |
 |---|---|---|---|
-| `size`  | integer | 4      | `uint32` |
-| `addr`  | array   | `size` | `uint8[]` |
+| `size`  | integer | 4      | `uint32_t` |
+| `addr`  | array   | `size` | `uint8_t[]` |
 
 As can be seen, the optional raw address consists of two fields `size` and `addr`. The field `size` describes the
 number of bytes in the `addr` array. The field `addr` contains the raw address. The `size` field is necessary because
@@ -599,7 +599,7 @@ application data. For example, the RTR (Request To Read) packet type does not co
 ### 3.2 Baseline features for two-sided communication
 
 This section describes the 3 baseline features for two sided communication: eager message, medium message, and
-long-CTS message.` Each of them corresponds to the same named subprotocol. When describing a subprotocol, we
+long-CTS message. Each of them corresponds to the same named subprotocol. When describing a subprotocol, we
 always follow the same structure: workflow, packet format, and implementation tips.
 
 #### Eager message feature/subprotocol
@@ -659,7 +659,7 @@ on this topic.
 
    total_packet_size is reported by the EFA device when a packet is received.  The REQ optional header length can be derived
    from the `flags` field in the base header. The choice of not including data length in the header is to keep the header
-   length as compact as possible, since eager messagers are sensitive to header length.
+   length as compact as possible, since eager messages are sensitive to header length.
 
 #### Medium message feature/subprotocol
 
@@ -698,7 +698,7 @@ refers to the segment of data in the packet)
 `seg_offset` seems redundant at first glance, as it can be deduced from the
 `seg_length` of other packets. However, because the EFA device does not
 guarantee ordered delivery, the MEDIUM_RTM packets of same message can
-arrive in a different order. Therefore, the recipent of MEDIUM_RTM packets
+arrive in a different order. Therefore, the recipient of MEDIUM_RTM packets
 needs `seg_offset` to put the data in the correct location in the receive
 buffer.
 
@@ -706,7 +706,7 @@ When implementing the medium message protocol, please keep in mind
 that because the EFA device has a limited TX queue (e.g. it can only send
 a limited number of packets at a time), it is possible when sending multiple
 medium RTM packets for some packets to be sent successfully and others to
-not be sent due to temporarily being out of reseources. Implementation needs
+not be sent due to temporarily being out of resources. Implementation needs
 to be able to handle this case.
 
 Note, this "partial send" situation is unique to the medium message
@@ -812,7 +812,7 @@ Table: 3.6 Format a CTS packet
 The 3 new fields in the header are `multiuse`, `recv_id` and `recv_length`.
 
 The field `multiuse` is a 4 byte integer. As the name indicates, it is a multi-purpose field.
-Its exact usage is determined by the the `flags` field.
+Its exact usage is determined by the `flags` field.
 
 If the CONNID_HDR universal flag is toggled in `flags`, this field is the sender's connection ID (connid).
 Otherwise, it is a padding space.
@@ -854,7 +854,7 @@ Table: 3.7 Format of the CTSDATA packet header
 | `padding`        | 4 | integer | `uint32_t` | padding for connid, optional |
 
 The last two fields `connid` and `padding` was introduced with the extra request "connid header".
-They are optional, which means an implemenation is not required to include them in the DATA of the
+They are optional, which means an implementation is not required to include them in the DATA of the
 data packet. If an implementation does include them in the CTSDATA packet header, the implementation
 needs to toggle on the CONNID_DHR flag in the `flags` field (Table 1.4).
 
@@ -873,7 +873,7 @@ Before getting into the details of each feature, we will discuss some topics rel
 
 There are 3 types of one-sided operations: write, read, and atomic.
 
-Like in two-sided communcation, there are also two endpoints involved in one-sided communcation.
+Like in two-sided communication, there are also two endpoints involved in one-sided communication.
 However, only on one side will the application call libfabric's one-sided API (such as `fi_write`,
 `fi_read` and `fi_atomic`). In protocol v4, this side is called the requester.
 
@@ -1012,7 +1012,7 @@ Table: 3.11 Format of the READRSP packet's header
 The field `multiuse` has been introduced before when introducing the CTS packet (table 3.6).
 It is a multi-purpose field, which can be used to store `connid` or as a padding space, depending
 on whether the CONNID_HDR universal flag is toggled in `flags`. See section 4.4 for more
-information about the field `connid.
+information about the field `connid`.
 
 The workflow of the emulated long-CTS read subprotocol is illustrated in the following diagram:
 
@@ -1054,7 +1054,7 @@ The workflow of emulated write atomic is illustrated in the following diagram:
 ![atomic_write](atomic_write.png)
 
 It is similar to the emulated eager write subprotocol, except a WRITE_RTA packet was
-sent. Table 3.13 lists the binary structure of an WRITE_RTA packet's mandatory
+sent. Table 3.13 lists the binary structure of a WRITE_RTA packet's mandatory
 header:
 
 Table: 3.13 Format of the WRITE_RTA packet's mandatory header
@@ -1351,7 +1351,7 @@ buffer at a later time. However, if an application has the following set of requ
    1. Does not need ordered send/receive (`FI_ORDER_SAS`)
    2. Only sends/receives eager messages
    3. Does not use tagged send
-   4. Does not require FI_DIRECTED_RECV (the ability to receive only from certain addresses)
+   4. Does not require `FI_DIRECTED_RECV` (the ability to receive only from certain addresses)
 
 it should be possible to receive data directly using the application buffer since, under such conditions, the
 receiver does not have special requirements on the data it is going to receive, and it will thus accept any
@@ -1371,7 +1371,7 @@ to work, the receiver needs to:
 However, there is no guarantee in the base protocol that the packet header length of EAGER_MSGRTM will not
 change.
 
-In fact, because of the existance of the handshake subprotocol, the packet header length of an EAGER_MSGRTM
+In fact, because of the existence of the handshake subprotocol, the packet header length of an EAGER_MSGRTM
 will definitely change. Recall that the handshake subprotocol's workflow is:
 
 Before receiving handshake packet, an endpoint will always include the optional raw address header in REQ packets.
@@ -1394,7 +1394,7 @@ In that case, implementation will have two choices:
 2. Move the application data to the right place
 
 Note, this extra request was initially introduced as an extra feature named "zero copy receive", but later it was realized
-that this is not an feature because the peer does not do anything different.  Rather, it is an expectation that the
+that this is not a feature because the peer does not do anything different.  Rather, it is an expectation that the
 receiving endpoint has for the sender. Therefore, it was re-interpreted as an extra request named "constant header length".
 This re-interpretation does not change the implementation, and thus, it does not cause backward incompatibility.
 
@@ -1407,7 +1407,7 @@ This extra feature is designed to solve the "QP collision" problem, which is com
 client-server types of application.
 
 The "QP collision" problem arose from the fact that the EFA device uses the Device ID (GID) + QP number (QPN)
-as the unique identifier of a peer. Recall that the raw address of the EFA endpoint consistsd of 3 parts:
+as the unique identifier of a peer. Recall that the raw address of the EFA endpoint consists of 3 parts:
 GID + QPN + Connection ID (CONNID). The EFA device only recognizes GID and QPN.  The connection ID was generated
 by the endpoint itself during its initialization.
 
