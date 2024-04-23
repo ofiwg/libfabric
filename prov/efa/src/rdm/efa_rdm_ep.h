@@ -75,9 +75,6 @@ struct efa_rdm_ep {
 	/* Resource management flag */
 	uint64_t rm_full;
 
-	/* application's ordering requirements */
-	uint64_t msg_order;
-
 	/* Application's maximum msg size hint */
 	size_t max_msg_size;
 
@@ -244,7 +241,7 @@ static inline size_t efa_rdm_ep_get_tx_pool_size(struct efa_rdm_ep *ep)
 
 static inline int efa_rdm_ep_need_sas(struct efa_rdm_ep *ep)
 {
-	return ep->msg_order & FI_ORDER_SAS;
+	return ((ep->user_info->tx_attr->msg_order & FI_ORDER_SAS) || (ep->user_info->rx_attr->msg_order & FI_ORDER_SAS));
 }
 
 

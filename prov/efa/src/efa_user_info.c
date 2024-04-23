@@ -434,6 +434,11 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 			info->rx_attr->msg_order &= hints->rx_attr->msg_order;
 		}
 
+		if (info->tx_attr->msg_order != info->rx_attr->msg_order)
+			EFA_INFO(FI_LOG_EP_CTRL, "Inconsistent tx/rx msg order. Tx msg order: %lu, Rx msg order: %lu. "
+						 "Libfabric can proceed but it is recommended to align the tx and rx msg order.\n",
+						 info->tx_attr->msg_order, info->rx_attr->msg_order);
+
 		/* We only support manual progress for RMA operations */
 		if (hints->caps & FI_RMA) {
 			info->domain_attr->control_progress = FI_PROGRESS_MANUAL;

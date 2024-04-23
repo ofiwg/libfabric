@@ -634,3 +634,79 @@ void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad(struct efa_resourc
 }
 
 #endif
+
+static void
+test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource, bool expected_use_zcpy_rx) {
+	struct efa_rdm_ep *ep;
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, resource->hints, false, false);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_true(ep->use_zcpy_rx == expected_use_zcpy_rx);
+}
+
+/**
+ * @brief Verify zcpy_rx is enabled when the following requirements are met:
+ * 1. app doesn't require FI_ORDER_SAS in tx or rx's msg_order
+ * 2. app uses FI_MSG_PREFIX mode
+ * 3. app's max msg size is smaller than mtu_size - prefix_size
+ * 4. app doesn't use FI_DIRECTED_RECV, FI_TAGGED, FI_ATOMIC capability
+ */
+void test_efa_rdm_ep_user_zcpy_rx_happy(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	/* Just use a small enough size */
+	resource->hints->ep_attr->max_msg_size = 1000;
+	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->mode = FI_MSG_PREFIX;
+	resource->hints->caps = FI_MSG;
+
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, true);
+}
+
+/**
+ * @brief When sas is requested for either tx or rx. zcpy will be disabled
+ */
+void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	/* Just use a small enough size */
+	resource->hints->ep_attr->max_msg_size = 1000;
+
+	resource->hints->tx_attr->msg_order = FI_ORDER_SAS;
+	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->mode = FI_MSG_PREFIX;
+	resource->hints->caps = FI_MSG;
+
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false);
+}
+
+/**
+ * @brief zcpy will be disabled if app doesn't use FI_MSG_PREFIX mode.
+ */
+void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_no_prefix(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	/* Just use a small enough size */
+	resource->hints->ep_attr->max_msg_size = 1000;
+
+	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->caps = FI_MSG;
+
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false);
+}
