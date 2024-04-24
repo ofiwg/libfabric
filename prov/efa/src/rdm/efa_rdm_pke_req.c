@@ -170,7 +170,7 @@ uint32_t *efa_rdm_pke_get_req_connid_ptr(struct efa_rdm_pke *pkt_entry)
  * @return
  * an integer
  */
-int64_t efa_rdm_pke_get_req_cq_data(struct efa_rdm_pke *pkt_entry)
+uint64_t efa_rdm_pke_get_req_cq_data(struct efa_rdm_pke *pkt_entry)
 {
 	char *opt_hdr;
 	struct efa_rdm_base_hdr *base_hdr;

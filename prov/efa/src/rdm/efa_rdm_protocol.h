@@ -406,7 +406,7 @@ struct efa_rdm_req_opt_raw_addr_hdr {
 };
 
 struct efa_rdm_req_opt_cq_data_hdr {
-	int64_t cq_data;
+	uint64_t cq_data;
 };
 
 struct efa_rdm_req_opt_connid_hdr {
