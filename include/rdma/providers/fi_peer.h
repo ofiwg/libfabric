@@ -197,6 +197,7 @@ struct fi_ops_srx_peer {
 	int	(*start_tag)(struct fi_peer_rx_entry *entry);
 	int	(*discard_msg)(struct fi_peer_rx_entry *entry);
 	int	(*discard_tag)(struct fi_peer_rx_entry *entry);
+	int	(*addr_match)(fi_addr_t addr, struct fi_peer_match *match);
 };
 
 struct fid_peer_srx {
