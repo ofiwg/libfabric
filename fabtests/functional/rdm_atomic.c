@@ -40,13 +40,13 @@
 static enum fi_op op_type = FI_MIN;
 static void *result;
 static void *compare;
+static void *cpy_dst;
 
 static struct fid_mr *mr_result;
 static struct fid_mr *mr_compare;
 static struct fi_context fi_ctx_atomic;
 
 static enum fi_datatype datatype;
-static size_t *count;
 static int run_all_ops = 1, run_all_datatypes = 1;
 
 static enum fi_op get_fi_op(char *op)
@@ -148,92 +148,15 @@ static void print_opts_usage(char *name)
 	FT_PRINT_OPTS_USAGE("", "int32|uint32|int64|uint64|int128|uint128|"
 			    "float|double|float_complex|double_complex|");
 	FT_PRINT_OPTS_USAGE("", "long_double|long_double_complex (default: all)");
+	FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
 }
 
-#define create_atomic_op_executor(type)						\
-static inline int execute_atomic_ ## type ## _op(enum fi_op op_type,		\
-						 enum fi_datatype datatype)	\
-{										\
-	int ret = FI_SUCCESS, len, i;						\
-	len = snprintf((test_name), sizeof(test_name), "%s_",			\
-		       fi_tostr(&(datatype), FI_TYPE_ATOMIC_TYPE));		\
-	snprintf((test_name) + len, sizeof(test_name) - len, "%s_"#type"_lat",	\
-		 fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));			\
-	opts.transfer_size = datatype_to_size(datatype);			\
-										\
-	ft_start();								\
-	for (i = 0; i < opts.iterations; i++) {					\
-		ret = execute_ ## type ## _atomic_op(op_type);			\
-		if (ret)							\
-			break;							\
-	}									\
-	ft_stop();								\
-	report_perf();								\
-										\
-	return ret;								\
-}
-
-#define create_atomic_op_handler(type)						\
-create_atomic_op_executor(type)							\
-static inline int handle_atomic_ ## type ## _op(int run_all_datatypes,		\
-						enum fi_op op_type,		\
-						size_t *count)			\
-{										\
-	int ret = FI_SUCCESS;							\
-										\
-	if (run_all_datatypes) {						\
-		for (datatype = 0; datatype < OFI_DATATYPE_CNT; datatype++) {	\
-			ret = check_ ## type ## _atomic_op(ep, op_type,		\
-							   datatype, count);	\
-			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {	\
-				fprintf(stderr,					\
-					"Provider doesn't support %s ",		\
-					fi_tostr(&op_type,			\
-						 FI_TYPE_ATOMIC_OP));		\
-				fprintf(stderr,					\
-					#type" atomic operation on %s\n",	\
-					fi_tostr(&datatype,			\
-						 FI_TYPE_ATOMIC_TYPE));		\
-				continue;					\
-			} else if (ret) {					\
-				goto fn;					\
-			}							\
-										\
-			ret = execute_atomic_ ##type ## _op(op_type, datatype);	\
-			if (ret)						\
-				goto fn;					\
-		}								\
-	} else {								\
-		ret = check_ ## type ## _atomic_op(ep, op_type,			\
-						   datatype, count);		\
-		if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {		\
-			fprintf(stderr,						\
-				"Provider doesn't support %s ",			\
-				fi_tostr(&op_type,				\
-					 FI_TYPE_ATOMIC_OP));			\
-			fprintf(stderr,						\
-				#type" atomic operation on %s\n",		\
-				fi_tostr(&datatype,				\
-					 FI_TYPE_ATOMIC_TYPE));			\
-			goto fn;						\
-		} else if (ret) {						\
-			goto fn;						\
-		}								\
-										\
-		ret = execute_atomic_ ## type ##_op(op_type, datatype);		\
-	}									\
-										\
-fn:										\
-	return ret;								\
-}
-
-
-static inline int execute_base_atomic_op(enum fi_op op)
+static inline int execute_base_atomic_op(void)
 {
 	int ret;
 
 	ret = ft_post_atomic(FT_ATOMIC_BASE, ep, NULL, NULL, NULL, NULL,
-			     &remote, datatype, op, &fi_ctx_atomic);
+			     &remote, datatype, op_type, &fi_ctx_atomic);
 	if (ret)
 		return ret;
 
@@ -242,13 +165,13 @@ static inline int execute_base_atomic_op(enum fi_op op)
 	return ret;
 }
 
-static inline int execute_fetch_atomic_op(enum fi_op op)
+static inline int execute_fetch_atomic_op(void)
 {
 	int ret;
 
 	ret = ft_post_atomic(FT_ATOMIC_FETCH, ep, NULL, NULL, result,
 			     fi_mr_desc(mr_result), &remote, datatype,
-			     op, &fi_ctx_atomic);
+			     op_type, &fi_ctx_atomic);
 	if (ret)
 		return ret;
 
@@ -257,13 +180,13 @@ static inline int execute_fetch_atomic_op(enum fi_op op)
 	return ret;
 }
 
-static inline int execute_compare_atomic_op(enum fi_op op)
+static inline int execute_compare_atomic_op(void)
 {
 	int ret;
 
 	ret = ft_post_atomic(FT_ATOMIC_COMPARE, ep, compare, fi_mr_desc(mr_compare),
 			     result, fi_mr_desc(mr_result), &remote, datatype,
-			     op, &fi_ctx_atomic);
+			     op_type, &fi_ctx_atomic);
 	if (ret)
 		return ret;
 
@@ -272,8 +195,44 @@ static inline int execute_compare_atomic_op(enum fi_op op)
 	return ret;
 }
 
+static int fill_data(enum ft_atomic_opcodes opcode)
+{
+	int ret;
+
+	switch (opcode) {
+	case FT_ATOMIC_COMPARE:
+		ft_fill_atomic(compare, 1, datatype);
+		/* fall through */
+	case FT_ATOMIC_FETCH:
+		ft_hmem_memset(opts.iface, opts.device, result, 0,
+			       datatype_to_size(datatype));
+		/* fall through */
+	case FT_ATOMIC_BASE:
+		ft_fill_atomic(tx_buf, 1, datatype);
+		ft_fill_atomic(rx_buf, 1, datatype);
+		break;
+	default:
+		break;
+	}
+
+	ret = ft_hmem_copy_from(opts.iface, opts.device, cpy_dst,
+				rx_buf, datatype_to_size(datatype));
+	if (ret)
+		return ret;
+
+	ft_sync();
+	return ret;
+}
+
 static void report_perf(void)
 {
+	int len;
+
+	len = snprintf((test_name), sizeof(test_name), "%s_",
+		       fi_tostr(&(datatype), FI_TYPE_ATOMIC_TYPE));
+	snprintf((test_name) + len, sizeof(test_name) - len, "%s_lat",
+		 fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
+
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 1, opts.argc,
 			opts.argv);
@@ -281,21 +240,117 @@ static void report_perf(void)
 		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 1);
 }
 
-create_atomic_op_handler(base)
-create_atomic_op_handler(fetch)
-create_atomic_op_handler(compare)
+static int handle_atomic_base_op(void)
+{
+	int ret = FI_SUCCESS, i;
+	size_t count = 0;
 
-static int run_op(void)
+	ret = check_base_atomic_op(ep, op_type, datatype, &count);
+	if (ret)
+		return ret;
+
+	opts.transfer_size = datatype_to_size(datatype);
+	ft_start();
+	for (i = 0; i < opts.iterations; i++) {
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+			ret = fill_data(FT_ATOMIC_BASE);
+			if (ret)
+				return ret;
+		}
+
+		ret = execute_base_atomic_op();
+		if (ret)
+			break;
+
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+			ft_sync();
+			ret = ft_check_atomic(FT_ATOMIC_BASE, op_type, datatype,
+					      tx_buf, cpy_dst, rx_buf, compare,
+					      result, 1);
+			if (ret)
+				return ret;
+		}
+	}
+	ft_stop();
+	report_perf();
+	return FI_SUCCESS;
+}
+
+static int handle_atomic_fetch_op(void)
+{
+	int ret = FI_SUCCESS, i;
+	size_t count = 0;
+
+	ret = check_fetch_atomic_op(ep, op_type, datatype, &count);
+	if (ret)
+		return ret;
+
+	opts.transfer_size = datatype_to_size(datatype);
+	ft_start();
+	for (i = 0; i < opts.iterations; i++) {
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+			ret = fill_data(FT_ATOMIC_FETCH);
+			if (ret)
+				return ret;
+		}
+
+		ret = execute_fetch_atomic_op();
+		if (ret)
+			break;
+
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+			ft_sync();
+			ret = ft_check_atomic(FT_ATOMIC_FETCH, op_type, datatype,
+					      tx_buf, cpy_dst, rx_buf, compare,
+					      result, 1);
+			if (ret)
+				return ret;
+		}
+	}
+	ft_stop();
+	report_perf();
+	return FI_SUCCESS;
+}
+
+static int handle_atomic_compare_op(void)
+{
+	int ret = FI_SUCCESS, i;
+	size_t count = 0;
+
+	ret = check_compare_atomic_op(ep, op_type, datatype, &count);
+	if (ret)
+		return ret;
+
+	opts.transfer_size = datatype_to_size(datatype);
+	ft_start();
+	for (i = 0; i < opts.iterations; i++) {
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+			ret = fill_data(FT_ATOMIC_COMPARE);
+			if (ret)
+				return ret;
+		}
+
+		ret = execute_compare_atomic_op();
+		if (ret)
+			break;
+
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+			ft_sync();
+			ret = ft_check_atomic(FT_ATOMIC_COMPARE, op_type, datatype,
+					      tx_buf, cpy_dst, rx_buf, compare,
+					      result, 1);
+			if (ret)
+				return ret;
+		}
+	}
+	ft_stop();
+	report_perf();
+	return FI_SUCCESS;
+}
+
+static int run_dt(void)
 {
 	int ret = -FI_EINVAL;
-
-	count = (size_t *)malloc(sizeof(*count));
-	if (!count) {
-		ret = -FI_ENOMEM;
-		perror("malloc");
-		goto fn;
-	}
-	ft_sync();
 
 	switch (op_type) {
 	case FI_MIN:
@@ -309,12 +364,10 @@ static int run_op(void)
 	case FI_LXOR:
 	case FI_BXOR:
 	case FI_ATOMIC_WRITE:
-		ret = handle_atomic_base_op(run_all_datatypes,
-					    op_type, count);
+		ret = handle_atomic_base_op();
 		break;
 	case FI_ATOMIC_READ:
-		ret = handle_atomic_fetch_op(run_all_datatypes,
-					     op_type, count);
+		ret = handle_atomic_fetch_op();
 		break;
 	case FI_CSWAP:
 	case FI_CSWAP_NE:
@@ -323,24 +376,54 @@ static int run_op(void)
 	case FI_CSWAP_GE:
 	case FI_CSWAP_GT:
 	case FI_MSWAP:
-		ret = handle_atomic_compare_op(run_all_datatypes,
-					       op_type, count);
+		ret = handle_atomic_compare_op();
 		break;
 	default:
 		FT_WARN("Invalid atomic operation type %d\n", op_type);
 		break;
 	}
 
-
 	ft_sync();
-	free(count);
-fn:
+
+	if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {
+		fprintf(stderr, "Provider doesn't support %s ",
+			fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
+		fprintf(stderr, "atomic operation on %s\n",
+			fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
+		return FI_SUCCESS;
+	}
+	if (ret) {
+		fprintf(stderr, "Failed atomic op %s ",
+			fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
+		fprintf(stderr, "with datatype %s\n",
+			fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
+	}
 	return ret;
 }
 
-static int run_ops(void)
+static int run_op(void)
 {
 	int ret;
+
+	if (!run_all_datatypes)
+		return run_dt();
+
+	for (datatype = 0; datatype < OFI_DATATYPE_CNT; datatype++) {
+		ret = run_dt();
+		if (ret && ret != -FI_ENOSYS && ret != -FI_EOPNOTSUPP) {
+			FT_PRINTERR("run_op", ret);
+			return ret;
+		}
+	}
+	return FI_SUCCESS;
+}
+
+static int run_test(void)
+{
+	int ret;
+
+	if (!run_all_ops)
+		return run_op();
 
 	for (op_type = FI_MIN; op_type < OFI_ATOMIC_OP_CNT; op_type++) {
 		ret = run_op();
@@ -350,12 +433,7 @@ static int run_ops(void)
 		}
 	}
 
-	return 0;
-}
-
-static int run_test(void)
-{
-	return run_all_ops ? run_ops() : run_op();
+	return FI_SUCCESS;
 }
 
 static void free_res(void)
@@ -369,6 +447,10 @@ static void free_res(void)
 	if (compare) {
 		ft_hmem_free(opts.iface, compare);
 		compare = NULL;
+	}
+	if (cpy_dst) {
+		ft_hmem_free_host(opts.iface, cpy_dst);
+		cpy_dst = NULL;
 	}
 }
 
@@ -395,6 +477,10 @@ static int alloc_ep_res(struct fi_info *fi)
 		perror("hmem allocation error");
 		return -1;
 	}
+
+	ret = ft_hmem_alloc_host(opts.iface, &cpy_dst, opts.transfer_size);
+	if (ret)
+		return ret;
 
 	// registers local data buffer that stores results
 	ret = ft_reg_mr(fi, result, buf_size,
@@ -453,7 +539,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt_long(argc, argv, "ho:Uz:" CS_OPTS INFO_OPTS,
+	while ((op = getopt_long(argc, argv, "ho:Uz:v" CS_OPTS INFO_OPTS,
 				 long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		case 'o':
@@ -482,6 +568,9 @@ int main(int argc, char **argv)
 					return EXIT_FAILURE;
 				}
 			}
+			break;
+		case 'v':
+			opts.options |= FT_OPT_VERIFY_DATA;
 			break;
 		default:
 			if (!ft_parse_long_opts(op, optarg))
