@@ -422,7 +422,7 @@ this call.
 Returns the remote protection key associated with a MR.  The memory
 registration must have completed successfully before invoking this.  The
 returned key may be used in data transfer operations at a peer.  If the
-FI_RAW_MR mode bit has been set for the domain, then the memory key must
+FI_MR_RAW mode bit has been set for the domain, then the memory key must
 be obtained using the fi_mr_raw_key function instead.  A return value of
 FI_KEY_NOTAVAIL will be returned if the registration has not completed
 or a raw memory key is required.
@@ -431,7 +431,7 @@ or a raw memory key is required.
 
 Returns the raw, remote protection key and base address associated with a MR.
 The memory registration must have completed successfully before invoking
-this routine.  Use of this call is required if the FI_RAW_MR mode bit has
+this routine.  Use of this call is required if the FI_MR_RAW mode bit has
 been set by the provider; however, it is safe to use this call with any
 memory region.
 
@@ -452,7 +452,7 @@ can be used for data transfer operations.  The mapping is done by the
 peer that initiates the RMA or atomic operation.  The mapping function
 takes as input the raw key and its size, and returns the mapped key.
 Use of the fi_mr_map_raw function is required if the peer has the
-FI_RAW_MR mode bit set, but this routine may be called on any valid
+FI_MR_RAW mode bit set, but this routine may be called on any valid
 key.  All mapped keys must be freed by calling fi_mr_unmap_key when
 access to the peer memory region is no longer necessary.
 
@@ -766,7 +766,7 @@ the memory region.  The application is responsible for transferring this
 key to the peer.  If FI_MR_RAW mode has been set, the key must be retrieved
 using the fi_mr_raw_attr function.
 
-FI_RAW_MR allows support for providers that require more than 8-bytes for
+FI_MR_RAW allows support for providers that require more than 8-bytes for
 their protection keys or need additional setup before a key can
 be used for transfers.  After a raw key has been retrieved, it must be
 exchanged with the remote peer.  The peer must use fi_mr_map_raw to convert
