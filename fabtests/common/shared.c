@@ -3081,7 +3081,7 @@ int ft_sync_inband(bool repost_rx)
 	int ret;
 
 	if (opts.dst_addr) {
-		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 1, &tx_ctx,
+		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 0, &tx_ctx,
 				FI_DELIVERY_COMPLETE);
 		if (ret)
 			return ret;
@@ -3094,7 +3094,7 @@ int ft_sync_inband(bool repost_rx)
 		if (ret)
 			return ret;
 
-		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 1, &tx_ctx,
+		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 0, &tx_ctx,
 				FI_DELIVERY_COMPLETE);
 		if (ret)
 			return ret;
