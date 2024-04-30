@@ -243,7 +243,7 @@ extern struct fid_mc *mc;
 
 extern fi_addr_t remote_fi_addr;
 extern char *buf, *tx_buf, *rx_buf;
-extern void *dev_host_buf, *dev_host_comp, *dev_host_res;
+extern void *dev_host_buf;
 extern struct ft_context *tx_ctx_arr, *rx_ctx_arr;
 extern char **tx_mr_bufs, **rx_mr_bufs;
 extern size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
