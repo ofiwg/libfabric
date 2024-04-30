@@ -2471,18 +2471,18 @@ ssize_t ft_post_atomic(enum ft_atomic_opcodes opcode, struct fid_ep *ep,
 	switch (opcode) {
 	case FT_ATOMIC_BASE:
 		FT_POST(fi_atomic, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"fi_atomic", ep, buf, count, mr_desc, remote_fi_addr,
+			"fi_atomic", ep, tx_buf, count, mr_desc, remote_fi_addr,
 			remote->addr, remote->key, datatype, atomic_op, context);
 		break;
 	case FT_ATOMIC_FETCH:
 		FT_POST(fi_fetch_atomic, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"fi_fetch_atomic", ep, buf, count, mr_desc, result,
+			"fi_fetch_atomic", ep, tx_buf, count, mr_desc, result,
 			result_desc, remote_fi_addr, remote->addr, remote->key,
 			datatype, atomic_op, context);
 		break;
 	case FT_ATOMIC_COMPARE:
 		FT_POST(fi_compare_atomic, ft_progress, txcq, tx_seq,
-			&tx_cq_cntr, "fi_compare_atomic", ep, buf, count,
+			&tx_cq_cntr, "fi_compare_atomic", ep, tx_buf, count,
 			mr_desc, compare, compare_desc, result, result_desc,
 			remote_fi_addr, remote->addr, remote->key, datatype,
 			atomic_op, context);
