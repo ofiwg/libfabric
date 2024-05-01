@@ -1028,6 +1028,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
 							.recv.inject);
 			} else {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnonnull"
 				switch (send_len) {
 				case 0:
 					break;
@@ -1062,6 +1064,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 					abort();
 					break;
 				}
+#pragma GCC diagnostic pop
 			}
 
 			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1186,6 +1189,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			}
 
 			if (xfer_bytes_tail) {
+				#pragma GCC diagnostic ignored "-Wnonnull"
 				memcpy(recv_buf, (void*)&hdr->send.xfer_tail, xfer_bytes_tail);
 				recv_buf = (void*)((uint8_t *)recv_buf + xfer_bytes_tail);
 			}
