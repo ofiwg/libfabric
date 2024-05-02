@@ -173,8 +173,10 @@ struct fi_peer_rx_entry {
 	size_t count;
 	void **desc;
 	void *peer_context;
+	void *peer_md;
 	void *owner_context;
 	struct iovec *iov;
+	uint32_t match_id;
 };
 
 struct fi_peer_match {
@@ -182,6 +184,7 @@ struct fi_peer_match {
 	uint64_t tag;
 	size_t size;
 	void *context;
+	uint32_t match_id;
 };
 
 struct fi_ops_srx_owner {
@@ -207,6 +210,8 @@ struct fi_ops_srx_peer {
 	int	(*discard_msg)(struct fi_peer_rx_entry *entry);
 	int	(*discard_tag)(struct fi_peer_rx_entry *entry);
 	int	(*addr_match)(fi_addr_t addr, struct fi_peer_match *match);
+	int	(*mem_reg)(struct fid_ep *ep, struct iovec *iov, fi_addr_t addr,
+			   void **md, uint32_t *match_id);
 };
 
 struct fid_peer_srx {
