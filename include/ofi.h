@@ -297,6 +297,7 @@ enum ofi_prov_type {
 	OFI_PROV_UTIL,
 	OFI_PROV_HOOK,
 	OFI_PROV_OFFLOAD,
+	OFI_PROV_LNX,
 };
 
 /* Restrict to size of struct fi_provider::context (struct fi_context) */

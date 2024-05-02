@@ -262,6 +262,11 @@ static int ofi_is_hook_prov(const struct fi_provider *provider)
 	return ofi_prov_ctx(provider)->type == OFI_PROV_HOOK;
 }
 
+static int ofi_is_lnx_prov(const struct fi_provider *provider)
+{
+	return ofi_prov_ctx(provider)->type == OFI_PROV_LNX;
+}
+
 int ofi_apply_filter(struct ofi_filter *filter, const char *name)
 {
 	if (!filter->names)
@@ -500,6 +505,8 @@ static void ofi_set_prov_type(struct fi_provider *provider)
 		ofi_prov_ctx(provider)->type = OFI_PROV_UTIL;
 	else if (ofi_has_offload_prefix(provider->name))
 		ofi_prov_ctx(provider)->type = OFI_PROV_OFFLOAD;
+	else if (ofi_is_lnx(provider->name))
+		ofi_prov_ctx(provider)->type = OFI_PROV_LNX;
 	else
 		ofi_prov_ctx(provider)->type = OFI_PROV_CORE;
 }
@@ -988,6 +995,7 @@ void fi_ini(void)
 	ofi_register_provider(SOCKETS_INIT, NULL);
 	ofi_register_provider(TCP_INIT, NULL);
 
+	ofi_register_provider(LNX_INIT, NULL);
 	ofi_register_provider(HOOK_PERF_INIT, NULL);
 	ofi_register_provider(HOOK_TRACE_INIT, NULL);
 	ofi_register_provider(HOOK_PROFILE_INIT, NULL);
@@ -1207,8 +1215,12 @@ static void ofi_set_prov_attr(struct fi_fabric_attr *attr,
 
 	core_name = attr->prov_name;
 	if (core_name) {
-		assert(ofi_is_util_prov(prov));
-		attr->prov_name = ofi_strdup_append(core_name, prov->name);
+		if (ofi_is_lnx_prov(prov)) {
+			attr->prov_name = ofi_strdup_link_append(core_name, prov->name);
+		} else {
+			assert(ofi_is_util_prov(prov));
+			attr->prov_name = ofi_strdup_append(core_name, prov->name);
+		}
 		free(core_name);
 	} else {
 		attr->prov_name = strdup(prov->name);
@@ -1557,7 +1569,9 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 
 	fi_ini();
 
-	top_name = strrchr(attr->prov_name, OFI_NAME_DELIM);
+	ret = ofi_is_linked(attr->prov_name);
+	top_name = strrchr(attr->prov_name,
+			   ret ? OFI_NAME_LNX_DELIM : OFI_NAME_DELIM);
 	if (top_name)
 		top_name++;
 	else

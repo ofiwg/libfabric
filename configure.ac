@@ -1125,6 +1125,7 @@ FI_PROVIDER_SETUP([hook_debug])
 FI_PROVIDER_SETUP([hook_hmem])
 FI_PROVIDER_SETUP([dmabuf_peer_mem])
 FI_PROVIDER_SETUP([opx])
+FI_PROVIDER_SETUP([lnx])
 FI_PROVIDER_FINI
 dnl Configure the .pc file
 FI_PROVIDER_SETUP_PC
