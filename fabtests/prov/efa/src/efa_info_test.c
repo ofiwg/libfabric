@@ -38,6 +38,8 @@
 int main(int argc, char **argv)
 {
 	int ret;
+	struct fi_info *info;
+
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
@@ -52,12 +54,14 @@ int main(int argc, char **argv)
 		FT_PRINTERR("ft_getinfo", -ret);
 		goto out;
 	}
-	while (NULL != fi) {
-		if (0 != strcmp(fi->fabric_attr->name, "efa")) {
+
+	info = fi;
+	while (NULL != info) {
+		if (0 != strcmp(info->fabric_attr->name, "efa")) {
 			ret = EXIT_FAILURE;
 			goto out;
 		}
-		fi = fi->next;
+		info = info->next;
 	}
 
 out:
