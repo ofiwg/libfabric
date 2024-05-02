@@ -844,8 +844,13 @@ static int smr_ep_close(struct fid *fid)
 		smr_free_sock_info(ep);
 	}
 
-	if (ep->srx && ep->util_ep.ep_fid.msg != &smr_no_recv_msg_ops)
-		(void) util_srx_close(&ep->srx->fid);
+	if (ep->srx) {
+		/* shm is an owner provider */
+		if (ep->util_ep.ep_fid.msg != &smr_no_recv_msg_ops)
+			(void) util_srx_close(&ep->srx->fid);
+		else /* shm is a peer provider */
+			free(ep->srx);
+	}
 
 	ofi_endpoint_close(&ep->util_ep);
 
@@ -1359,7 +1364,6 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 	struct smr_domain *domain;
 	struct smr_ep *ep;
 	struct smr_av *av;
-	struct fid_peer_srx *srx;
 	int ret;
 
 	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
@@ -1416,12 +1420,6 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 			if (ret)
 				return ret;
 		} else {
-			srx = calloc(1, sizeof(*srx));
-			srx->peer_ops = &smr_srx_peer_ops;
-			srx->owner_ops = smr_get_peer_srx(ep)->owner_ops;
-			srx->ep_fid.fid.context =
-				smr_get_peer_srx(ep)->ep_fid.fid.context;
-			ep->srx = &srx->ep_fid;
 			ep->util_ep.ep_fid.msg = &smr_no_recv_msg_ops;
 			ep->util_ep.ep_fid.tagged = &smr_no_recv_tag_ops;
 		}
