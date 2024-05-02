@@ -262,6 +262,7 @@ int lnx_get_tag(struct fid_peer_srx *srx, struct fi_peer_match *match,
 	}
 
 	rx_entry->rx_match_info = *match;
+	rx_entry->rx_match_info.match_id = 0;
 	rx_entry->rx_entry.owner_context = lnx_srq;
 
 	rc = -FI_ENOENT;
@@ -289,13 +290,13 @@ out:
  * If nothing is found on the unexpected messages, then add a receive
  * request on the SRQ; happens in the lnx_process_recv()
  */
-static int lnx_process_recv(struct lnx_ep *lep, struct iovec *iov, void **desc,
-			fi_addr_t addr, size_t count, struct lnx_peer *lp, uint64_t tag,
-			uint64_t ignore, void *context, uint64_t flags,
-			bool tagged)
+static int lnx_process_recv(struct lnx_ep *lep, struct local_prov_ep *cep,
+			    struct iovec *iov, void **desc, fi_addr_t addr,
+			    size_t count, struct lnx_peer *lp, uint64_t tag,
+			    uint64_t ignore, void *context, uint64_t flags,
+			    bool tagged)
 {
 	struct lnx_peer_srq *lnx_srq = &lep->le_srq;
-	struct local_prov_ep *cep;
 	struct lnx_rx_entry *rx_entry;
 	struct lnx_match_attr match_attr;
 	int rc = 0;
@@ -303,7 +304,7 @@ static int lnx_process_recv(struct lnx_ep *lep, struct iovec *iov, void **desc,
 	match_attr.lm_addr = addr;
 	match_attr.lm_ignore = ignore;
 	match_attr.lm_tag = tag;
-	match_attr.lm_cep = NULL;
+	match_attr.lm_cep = cep;
 	match_attr.lm_peer = lp;
 	match_attr.lm_match_info = NULL;
 
@@ -323,6 +324,8 @@ static int lnx_process_recv(struct lnx_ep *lep, struct iovec *iov, void **desc,
 	FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = %lx found\n",
 			getpid(), addr, tag, ignore);
 
+	/* if you found an unexpected message then use the core endpoint
+	 * identified there */
 	cep = rx_entry->rx_cep;
 
 	/* match is found in the unexpected queue. call into the core
@@ -364,6 +367,37 @@ nomatch:
 	}
 	rx_entry->rx_peer = lp;
 
+	/* call the core provider to register the buffer if the core
+	 * provider is known. It should be known for a receive request
+	 * with a specified source address
+	 *
+	 * Example: CXI provider doesn't need explicit memory
+	 * registration. It pins the memory on the receive call.
+	 * Experimentation shows that pinning the memory on the receive
+	 * call yields better performance than delaying the registration
+	 * as it would be with the peer infrastructure. Therefore,
+	 * a memory registration function was added on the peer_ops. If
+	 * this is set then we can call the registration, and therefore
+	 * keep the same order of operation as if the provider is called
+	 * directly.
+	 *
+	 * This makes the case for ensuring the parent provider (in this
+	 * case linkx) has access to the peer_ops outside the child
+	 * provider triggered operation, IE: get_tag/get_msg
+	 */
+	if (cep && cep->lpe_srx.peer_ops->mem_reg &&
+	    rx_entry->rx_entry.iov->iov_base &&
+	    rx_entry->rx_entry.iov->iov_len) {
+		rc = cep->lpe_srx.peer_ops->mem_reg(cep->lpe_ep,
+					rx_entry->rx_entry.iov, addr,
+					&rx_entry->rx_entry.peer_md,
+					&rx_entry->rx_entry.match_id);
+		if (rc) {
+			lnx_free_entry(&rx_entry->rx_entry);
+			goto out;
+		}
+	}
+
 insert_recvq:
 	lnx_insert_rx_entry(&lnx_srq->lps_trecv.lqp_recvq, rx_entry);
 
@@ -397,8 +431,13 @@ ssize_t lnx_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	 * core provider specific.
 	 */
 	lp = lnx_get_peer(peer_tbl->lpt_entries, src_addr);
+	if (lp) {
+		rc = lnx_select_recv_pathway(lp, desc, &cep, &core_addr, &iov, 1, &mem_desc);
+		if (rc)
+			return rc;
+	}
 
-	rc = lnx_process_recv(lep, &iov, &mem_desc, src_addr, 1, lp, tag, ignore,
+	rc = lnx_process_recv(lep, cep, &iov, &mem_desc, src_addr, 1, lp, tag, ignore,
 			      context, 0, true);
 	if (rc == -FI_ENOSYS)
 		goto do_recv;
@@ -408,14 +447,8 @@ ssize_t lnx_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	return rc;
 
 do_recv:
-	if (lp) {
-		rc = lnx_select_recv_pathway(lp, desc, &cep, &core_addr, &iov, 1, &mem_desc);
-		if (rc)
-			return rc;
-
-		rc = fi_trecv(cep->lpe_ep, buf, len, mem_desc, core_addr, tag, ignore, context);
-		return rc;
-	}
+	if (lp)
+		return fi_trecv(cep->lpe_ep, buf, len, mem_desc, core_addr, tag, ignore, context);
 
 	return rc;
 }
@@ -440,8 +473,13 @@ ssize_t lnx_trecvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	lnx_get_core_desc(*desc, &mem_desc);
 
 	lp = lnx_get_peer(peer_tbl->lpt_entries, src_addr);
+	if (lp) {
+		rc = lnx_select_recv_pathway(lp, *desc, &cep, &core_addr, iov, count, &mem_desc);
+		if (rc)
+			return rc;
+	}
 
-	rc = lnx_process_recv(lep, (struct iovec *)iov, &mem_desc, src_addr,
+	rc = lnx_process_recv(lep, cep, (struct iovec *)iov, &mem_desc, src_addr,
 			      1, lp, tag, ignore, context, 0, true);
 	if (rc == -FI_ENOSYS)
 		goto do_recv;
@@ -449,14 +487,8 @@ ssize_t lnx_trecvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	return rc;
 
 do_recv:
-	if (lp) {
-		rc = lnx_select_recv_pathway(lp, *desc, &cep, &core_addr, iov, count, &mem_desc);
-		if (rc)
-			return rc;
-
-		rc = fi_trecvv(cep->lpe_ep, iov, &mem_desc, count, core_addr, tag, ignore, context);
-		return rc;
-	}
+	if (lp)
+		return fi_trecvv(cep->lpe_ep, iov, &mem_desc, count, core_addr, tag, ignore, context);
 
 	return rc;
 }
@@ -480,9 +512,15 @@ ssize_t lnx_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	peer_tbl = lep->le_peer_tbl;
 
 	lp = lnx_get_peer(peer_tbl->lpt_entries, msg->addr);
+	if (lp) {
+		rc = lnx_select_recv_pathway(lp, *msg->desc, &cep, &core_addr,
+					     msg->msg_iov, msg->iov_count, &mem_desc);
+		if (rc)
+			return rc;
+	}
 	lnx_get_core_desc(*msg->desc, &mem_desc);
 
-	rc = lnx_process_recv(lep, (struct iovec *)msg->msg_iov, &mem_desc,
+	rc = lnx_process_recv(lep, cep, (struct iovec *)msg->msg_iov, &mem_desc,
 			msg->addr, msg->iov_count, lp, msg->tag, msg->ignore,
 			msg->context, flags, true);
 	if (rc == -FI_ENOSYS)
@@ -492,11 +530,6 @@ ssize_t lnx_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 
 do_recv:
 	if (lp) {
-		rc = lnx_select_recv_pathway(lp, *msg->desc, &cep, &core_addr,
-					msg->msg_iov, msg->iov_count, &mem_desc);
-		if (rc)
-			return rc;
-
 		memcpy(&core_msg, msg, sizeof(*msg));
 
 		core_msg.desc = mem_desc;

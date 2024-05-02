@@ -830,6 +830,7 @@ static int lnx_match_recvq(struct dlist_entry *item, const void *args)
 	 * the address without anyone having to do a reverse lookup on the AV
 	 * table.
 	 */
+	match_attr->lm_match_info->match_id = entry->rx_entry.match_id;
 	return lnx_match_common(entry->rx_entry.tag, match_attr->lm_tag,
 			entry->rx_entry.ignore, match_attr->lm_addr,
 			entry->rx_entry.addr, entry->rx_peer, match_attr->lm_cep,
