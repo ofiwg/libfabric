@@ -754,6 +754,9 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 
 	if (efa_rdm_ep->efa_tx_pkt_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->efa_tx_pkt_pool);
+
+	if (efa_rdm_ep->rx_atomrsp_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->rx_atomrsp_pool);
 }
 
 /*
