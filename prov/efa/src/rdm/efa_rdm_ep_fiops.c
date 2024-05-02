@@ -908,6 +908,10 @@ static int efa_rdm_ep_close(struct fid *fid)
 
 	if (efa_rdm_ep->pke_vec)
 		free(efa_rdm_ep->pke_vec);
+
+	if (efa_rdm_ep->user_info)
+		fi_freeinfo(efa_rdm_ep->user_info);
+
 	free(efa_rdm_ep);
 	return retv;
 }
