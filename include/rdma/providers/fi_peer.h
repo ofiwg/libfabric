@@ -169,6 +169,7 @@ struct fi_peer_rx_entry {
 	uint64_t tag;
 	uint64_t cq_data;
 	uint64_t flags;
+	uint64_t ignore;
 	void *context;
 	size_t count;
 	void **desc;

@@ -55,7 +55,12 @@ static int util_mr_find_within(struct ofi_rbmap *map, void *key, void *data)
 {
 	struct ofi_mr_entry *entry = data;
 	struct ofi_mr_info *info = key;
-
+/*
+	fprintf(stderr, "%d: Compare peer_id %ld-%ld addr %p:%ld-%p:%ld\n",
+		getpid(), info->peer_id, entry->info.peer_id,
+		info->iov.iov_base, info->iov.iov_len,
+		entry->info.iov.iov_base, entry->info.iov.iov_len);
+*/
 	if (info->peer_id < entry->info.peer_id)
 		return -1;
 	if (info->peer_id > entry->info.peer_id)

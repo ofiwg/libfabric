@@ -205,6 +205,7 @@ src_libfabric_la_SOURCES =			\
 	include/uthash.h			\
 	include/ofi_prov.h			\
 	include/ofi_profile.h       \
+	include/ofi_lnx.h			\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\
@@ -484,6 +485,7 @@ include prov/sm2/Makefile.include
 include prov/tcp/Makefile.include
 include prov/ucx/Makefile.include
 include prov/lpp/Makefile.include
+include prov/lnx/Makefile.include
 include prov/hook/Makefile.include
 include prov/hook/perf/Makefile.include
 include prov/hook/trace/Makefile.include
