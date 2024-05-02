@@ -520,6 +520,7 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 {
 	struct fid_peer_srx *peer_srx = sm2_get_peer_srx(ep);
 	struct fi_peer_rx_entry *rx_entry;
+	struct fi_peer_match match;
 	struct sm2_av *sm2_av;
 	fi_addr_t addr;
 	int ret = 0;
@@ -540,9 +541,12 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 	sm2_av = container_of(ep->util_ep.av, struct sm2_av, util_av);
 	addr = sm2_av->reverse_lookup[xfer_entry->hdr.sender_gid];
 
+	memset(&match, 0, sizeof(match));
+	match.addr = addr;
+
 	if (xfer_entry->hdr.op == ofi_op_tagged) {
-		ret = peer_srx->owner_ops->get_tag(
-			peer_srx, addr, xfer_entry->hdr.tag, &rx_entry);
+		match.tag = xfer_entry->hdr.tag;
+		ret = peer_srx->owner_ops->get_tag(peer_srx, &match, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			xfer_entry->hdr.proto_flags |= SM2_UNEXP;
 			ret = sm2_alloc_xfer_entry_ctx(ep, rx_entry,
@@ -557,8 +561,8 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 			goto out;
 		}
 	} else {
-		ret = peer_srx->owner_ops->get_msg(
-			peer_srx, addr, xfer_entry->hdr.size, &rx_entry);
+		match.size = xfer_entry->hdr.size;
+		ret = peer_srx->owner_ops->get_msg(peer_srx, &match, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			xfer_entry->hdr.proto_flags |= SM2_UNEXP;
 			ret = sm2_alloc_xfer_entry_ctx(ep, rx_entry,

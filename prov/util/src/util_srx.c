@@ -194,12 +194,15 @@ static int util_match_msg(struct fid_peer_srx *srx, fi_addr_t addr, size_t size,
 	return ret;
 }
 
-static int util_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
-		        size_t size, struct fi_peer_rx_entry **rx_entry)
+static int util_get_msg(struct fid_peer_srx *srx,
+			struct fi_peer_match *match_info,
+			struct fi_peer_rx_entry **rx_entry)
 {
 	struct util_srx_ctx *srx_ctx;
 	struct util_rx_entry *util_entry, *any_entry;
 	struct slist *queue;
+	fi_addr_t addr = match_info->addr;
+	size_t size = match_info->size;
 
 	srx_ctx = srx->ep_fid.fid.context;
 	assert(ofi_genlock_held(srx_ctx->lock));
@@ -269,14 +272,17 @@ out:
 	return ret;
 }
 
-static int util_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
-			uint64_t tag, struct fi_peer_rx_entry **rx_entry)
+static int util_get_tag(struct fid_peer_srx *srx,
+			struct fi_peer_match *match_info,
+			struct fi_peer_rx_entry **rx_entry)
 {
 	struct util_srx_ctx *srx_ctx;
 	struct slist *queue;
 	struct slist_entry *any_item, *any_prev;
 	struct slist_entry *item, *prev;
 	struct util_rx_entry *util_entry, *any_entry;
+	uint64_t tag = match_info->tag;
+	fi_addr_t addr = match_info->addr;
 	int ret = FI_SUCCESS;
 
 	srx_ctx = srx->ep_fid.fid.context;

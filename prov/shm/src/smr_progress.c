@@ -987,13 +987,16 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 {
 	struct fid_peer_srx *peer_srx = smr_get_peer_srx(ep);
 	struct fi_peer_rx_entry *rx_entry;
-	fi_addr_t addr;
+	struct fi_peer_match match_info = {0};
 	int ret;
 
-	addr = ep->region->map->peers[cmd->msg.hdr.id].fiaddr;
+	match_info.addr = ep->region->map->peers[cmd->msg.hdr.id].fiaddr;
+	match_info.context = NULL;
+
 	if (cmd->msg.hdr.op == ofi_op_tagged) {
-		ret = peer_srx->owner_ops->get_tag(peer_srx, addr,
-				cmd->msg.hdr.tag, &rx_entry);
+		match_info.tag = cmd->msg.hdr.tag;
+		ret = peer_srx->owner_ops->get_tag(peer_srx, &match_info,
+				&rx_entry);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
 			if (ret) {
@@ -1009,8 +1012,9 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 			goto out;
 		}
 	} else {
-		ret = peer_srx->owner_ops->get_msg(peer_srx, addr,
-				cmd->msg.hdr.size, &rx_entry);
+		match_info.size = cmd->msg.hdr.size;
+		ret = peer_srx->owner_ops->get_msg(peer_srx, &match_info,
+				&rx_entry);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
 			if (ret) {

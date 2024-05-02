@@ -764,6 +764,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 	size_t data_size;
 	int ret;
 	int pkt_type;
+	struct fi_peer_match match = {0};
 
 	if ((*pkt_entry_ptr)->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER) {
 		/* If a pkt_entry is constructred from user supplied buffer,
@@ -782,7 +783,10 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 	data_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
 
-	ret = peer_srx->owner_ops->get_msg(peer_srx, (*pkt_entry_ptr)->addr, data_size, &peer_rxe);
+	match.addr = (*pkt_entry_ptr)->addr;
+	match.size = data_size;
+
+	ret = peer_srx->owner_ops->get_msg(peer_srx, &match, &peer_rxe);
 
 	if (ret == FI_SUCCESS) { /* A matched rxe is found */
 		rxe = efa_rdm_msg_alloc_matched_rxe_for_rtm(ep, *pkt_entry_ptr, peer_rxe, ofi_op_msg);
@@ -844,12 +848,14 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 	struct efa_rdm_ope *rxe;
 	int ret;
 	int pkt_type;
+	struct fi_peer_match match = {0};
 
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 
-	ret = peer_srx->owner_ops->get_tag(peer_srx, (*pkt_entry_ptr)->addr,
-					   efa_rdm_pke_get_rtm_tag(*pkt_entry_ptr),
-					   &peer_rxe);
+	match.addr = (*pkt_entry_ptr)->addr;
+	match.tag = efa_rdm_pke_get_rtm_tag(*pkt_entry_ptr);
+
+	ret = peer_srx->owner_ops->get_tag(peer_srx, &match, &peer_rxe);
 
 	if (ret == FI_SUCCESS) { /* A matched rxe is found */
 		rxe = efa_rdm_msg_alloc_matched_rxe_for_rtm(ep, *pkt_entry_ptr, peer_rxe, ofi_op_tagged);
