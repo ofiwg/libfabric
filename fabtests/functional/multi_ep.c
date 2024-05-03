@@ -309,6 +309,7 @@ static int setup_av_ep(int idx)
 	hints = fi_dupinfo(fi);
 	fi_freeinfo(fi);
 
+	free(hints->src_addr);
 	hints->src_addr = NULL;
 	hints->src_addrlen = 0;
 
