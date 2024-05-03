@@ -90,6 +90,17 @@ show all environment variables defined for the tcp provider.
   through the standard socket APIs (i.e. connect, accept, send, recv).
   Default: disabled.
 
+The tcp provider also supports domain parameter via fi_set_val.
+
+*FI_TCP_DOMAIN_ACTIVE_PORT_RANGE*
+: Limit active connections to a TCP port range for a domain.  Value is
+  struct xnet_port_range *.  To disable, set hight and low to 0.
+  If an active connection's source address has a port number, it will
+  be used instead of the port range.
+  Sample:
+    struct xnet_port_range range = { .high = 5000, .low = 6000 };
+    fi_set_val(&domain->fid, FI_TCP_DOMAIN_ACTIVE_PORT_RANGE, &range);
+
 # NOTES
 
 The tcp provider supports both msg and rdm endpoints directly.  Support

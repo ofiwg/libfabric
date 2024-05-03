@@ -718,6 +718,38 @@ static struct fi_ops_ep xnet_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+static int xnet_bind_addr(struct fid_domain *fid_domain, struct fi_info *info,
+			  struct xnet_ep *ep)
+{
+	struct xnet_domain *domain;
+
+	domain = container_of(fid_domain, struct xnet_domain,
+				util_domain.domain_fid);
+
+	if ((info->src_addr && (!ofi_is_any_addr(info->src_addr) ||
+				ofi_addr_get_port(info->src_addr))) ||
+	    domain->active_ports.high) {
+		/* port specified in src_addr takes precedence */
+		if (ofi_addr_get_port(info->src_addr)) {
+		    if (bind(ep->bsock.sock, info->src_addr,
+			     (socklen_t) info->src_addrlen))
+			return -ofi_sockerr();
+		}
+		/* Check port range next */
+		if (domain->active_ports.high)
+			return xnet_bind_to_port_range(ep->bsock.sock,
+					info->src_addr, info->src_addrlen,
+					&domain->active_ports);
+		/* No port info */
+		xnet_set_no_port(ep->bsock.sock);
+		if (bind(ep->bsock.sock, info->src_addr,
+		         (socklen_t) info->src_addrlen))
+			return -ofi_sockerr();
+	}
+
+	return FI_SUCCESS;
+}
+
 int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
@@ -783,20 +815,10 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 		if (!xnet_io_uring)
 			xnet_set_zerocopy(ep->bsock.sock);
 
-		if (info->src_addr && (!ofi_is_any_addr(info->src_addr) ||
-					ofi_addr_get_port(info->src_addr))) {
-
-			if (!ofi_addr_get_port(info->src_addr)) {
-				xnet_set_no_port(ep->bsock.sock);
-			}
-
-			ret = bind(ep->bsock.sock, info->src_addr,
-				(socklen_t) info->src_addrlen);
-			if (ret) {
-				FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "bind failed\n");
-				ret = -ofi_sockerr();
-				goto err3;
-			}
+		ret = xnet_bind_addr(domain, info, ep);
+		if (ret) {
+			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "bind failed\n");
+			goto err3;
 		}
 	}
 

@@ -91,9 +91,9 @@ static void xnet_init_env(void)
 			"Specify interface name");
 
 	fi_param_define(&xnet_prov, "port_low_range", FI_PARAM_INT,
-			"define port low range");
+			"define passive port low range");
 	fi_param_define(&xnet_prov, "port_high_range", FI_PARAM_INT,
-			"define port high range");
+			"define passive port high range");
 	fi_param_get_int(&xnet_prov, "port_high_range", &xnet_ports.high);
 	fi_param_get_int(&xnet_prov, "port_low_range", &xnet_ports.low);
 
@@ -103,7 +103,7 @@ static void xnet_init_env(void)
 	if (xnet_ports.low < 0 || xnet_ports.high < 0 ||
 	    xnet_ports.low > xnet_ports.high) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,"User provided "
-			"port range invalid. Ignoring. \n");
+			"passive port range invalid. Ignoring. \n");
 		xnet_ports.low  = 0;
 		xnet_ports.high = 0;
 	}
