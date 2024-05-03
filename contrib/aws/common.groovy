@@ -101,7 +101,7 @@ def get_single_node_windows_test_stage(stage_name) {
                                 . venv/bin/activate;
                                 cd PortaFiducia/scripts;
                                 export PULL_REQUEST_ID=${env.CHANGE_ID};
-                                env AWS_DEFAULT_REGION=us-west-2 ./test_orchestrator_windows.py --ci public --s3-bucket-name libfabric-ci-windows-prod-test-output --pull-request-id ${env.CHANGE_ID};
+                                env AWS_DEFAULT_REGION=us-west-2 ./test_orchestrator_windows.py --ci public --s3-bucket-name libfabric-ci-windows-prod-test-output --ami-id ami-02b1cbf380f113c31 --pull-request-id ${env.CHANGE_ID};
                             """,
                             returnStatus: true
                          )
