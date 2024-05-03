@@ -38,6 +38,7 @@ int main(int argc, char **argv)
 {
 	int op, ret, err, mr_reg_limit;
 	size_t registered;
+	size_t alloced;
 	void **buffers = NULL;
 	struct ibv_mr **mr_reg_vec = NULL;
 	struct ibv_context *ibv_ctx = NULL;
@@ -108,7 +109,7 @@ int main(int argc, char **argv)
 
 		printf("Exhausting MRs on client\n");
 		err = ft_efa_alloc_bufs(buffers, EFA_MR_REG_BUF_SIZE,
-					mr_reg_limit);
+					mr_reg_limit, &alloced);
 		if (err)
 			FT_PRINTERR("alloc bufs", -err);
 
@@ -134,12 +135,12 @@ out:
 		err = ft_efa_deregister_mr_reg(mr_reg_vec, registered);
 		if (err)
 			FT_PRINTERR("ibv mr dereg", -err);
+		ft_efa_free_bufs(buffers, alloced);
+		free(buffers);
+		free(mr_reg_vec);
 		ft_efa_destroy_ibv_pd(pd);
 		ft_efa_close_ibv_device(ibv_ctx);
 	}
-
-	free(buffers);
-	free(mr_reg_vec);
 
 	ft_finalize();
 	ft_free_res();
