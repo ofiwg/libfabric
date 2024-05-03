@@ -96,16 +96,29 @@ int ft_efa_deregister_mr_reg(struct ibv_mr **mr_reg_vec, size_t count)
 	return err;
 }
 
-int ft_efa_alloc_bufs(void **buffers, size_t buf_size, size_t count) {
+int ft_efa_alloc_bufs(void **buffers, size_t buf_size, size_t count, size_t *alloced) {
 	int i;
+	int ret = FI_SUCCESS;
+
 	for (i = 0; i < count; i++) {
 		buffers[i] = malloc(buf_size);
 		if (!buffers[i]) {
 			FT_ERR("malloc failed!\n");
-			return EXIT_FAILURE;
+			ret = EXIT_FAILURE;
+			goto out;
 		}
 	}
-	return FI_SUCCESS;
+
+out:
+	*alloced = i;
+	return ret;
+}
+
+void ft_efa_free_bufs(void **buffers, size_t count) {
+	int i;
+
+	for (i = 0; i < count; i++)
+		free(buffers[i]);
 }
 
 int ft_efa_unexpected_pingpong(void)
