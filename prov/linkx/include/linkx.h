@@ -313,6 +313,11 @@ struct lnx_ep {
 	struct lnx_peer_srq le_srq;
 };
 
+struct lnx_srx_context {
+	struct lnx_ep *srx_lep;
+	struct local_prov_ep *srx_cep;
+};
+
 struct lnx_mem_desc_prov {
 	struct local_prov *prov;
 	struct fid_mr *core_mr;

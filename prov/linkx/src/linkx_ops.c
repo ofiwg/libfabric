@@ -216,11 +216,16 @@ int lnx_get_tag(struct fid_peer_srx *srx, struct fi_peer_match *match,
 	struct local_prov_ep *cep;
 	struct lnx_ep *lep;
 	struct lnx_rx_entry *rx_entry;
+	fi_addr_t addr = match->addr;
+	struct lnx_srx_context *srx_ctxt;
+	uint64_t tag = match->tag;
 	int rc = 0;
 
 	/* get the endpoint */
 	cep = container_of(srx, struct local_prov_ep, lpe_srx);
-	lep = cep->lpe_srx.ep_fid.fid.context;
+	srx_ctxt = cep->lpe_srx.ep_fid.fid.context;
+	cep = srx_ctxt->srx_cep;
+	lep = srx_ctxt->srx_lep;
 	lnx_srq = &lep->le_srq;
 
 	/* The fi_addr_t is a generic address returned by the provider. It's usually

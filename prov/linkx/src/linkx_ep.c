@@ -64,6 +64,10 @@ static int lnx_close_ceps(struct local_prov *prov)
 
 	dlist_foreach_container(&prov->lpv_prov_eps,
 		struct local_prov_ep, ep, entry) {
+
+		if (ep->lpe_srx.ep_fid.fid.context)
+			free(ep->lpe_srx.ep_fid.fid.context);
+
 		rc = fi_close(&ep->lpe_ep->fid);
 		if (rc)
 			frc = rc;
@@ -129,6 +133,8 @@ static int lnx_enable_core_eps(struct lnx_ep *lep)
 			rc = fi_enable(ep->lpe_ep);
 			if (rc)
 				return rc;
+			ep->lpe_srx.peer_ops =
+				util_get_peer_srx(ep->lpe_ep)->peer_ops;
 		}
 	}
 
@@ -487,7 +493,7 @@ static int lnx_ep_txc(struct fid_ep *fid, int index, struct fi_tx_attr *attr,
 }
 
 static int lnx_ep_rxc(struct fid_ep *fid, int index, struct fi_rx_attr *attr,
-			  struct fid_ep **rx_ep, void *context)
+		      struct fid_ep **rx_ep, void *context)
 {
 	int rc = 0;
 	struct lnx_ep *lep;
@@ -575,6 +581,11 @@ static int lnx_open_eps(struct local_prov *prov, struct fi_info *info,
 	struct local_prov_ep *ep;
 	struct dlist_entry *tmp;
 	struct ofi_bufpool_attr bp_attrs = {};
+	struct lnx_srx_context *ctxt;
+
+	ctxt = calloc(1, sizeof(*ctxt));
+	if (!ctxt)
+		return -FI_ENOMEM;
 
 	dlist_foreach_container_safe(&prov->lpv_prov_eps,
 		struct local_prov_ep, ep, entry, tmp) {
@@ -605,7 +616,10 @@ static int lnx_open_eps(struct local_prov *prov, struct fi_info *info,
 		if (rc)
 			return rc;
 
-		ep->lpe_srx.ep_fid.fid.context = lep;
+		ctxt->srx_lep = lep;
+		ctxt->srx_cep = ep;
+
+		ep->lpe_srx.ep_fid.fid.context = ctxt;
 		ep->lpe_srx.ep_fid.fid.fclass = FI_CLASS_SRX_CTX;
 		ofi_spin_init(&ep->lpe_bplock);
 		/* create a buffer pool for the receive requests */
