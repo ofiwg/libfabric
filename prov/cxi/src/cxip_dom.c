@@ -1556,6 +1556,35 @@ static int cxip_query_atomic(struct fid_domain *domain,
 	return FI_SUCCESS;
 }
 
+struct fi_ops_srx_peer cxip_srx_peer_ops = {
+	.size = sizeof(struct fi_ops_srx_peer),
+	.start_msg = cxip_unexp_start,
+	.start_tag = cxip_unexp_start,
+	.discard_msg = cxip_discard,
+	.discard_tag = cxip_discard,
+	.addr_match = cxip_addr_match,
+};
+
+static int cxip_srx_context(struct fid_domain *fid, struct fi_rx_attr *attr,
+		struct fid_ep **rx_ep, void *context)
+{
+	struct cxip_domain *dom;
+
+	if (!context || ! attr || !fid)
+		return -FI_EINVAL;
+
+	dom = container_of(fid, struct cxip_domain,
+			   util_domain.domain_fid.fid);
+
+	if (attr->op_flags & FI_PEER) {
+		dom->owner_srx = ((struct fi_peer_srx_context *) context)->srx;
+		dom->owner_srx->peer_ops = &cxip_srx_peer_ops;
+		return 0;
+	}
+
+	return -FI_ENOSYS;
+}
+
 static int cxip_query_collective(struct fid_domain *domain,
 				 enum fi_collective_op coll,
 			         struct fi_collective_attr *attr,
@@ -1695,7 +1724,7 @@ static struct fi_ops_domain cxip_dom_ops = {
 	.cntr_open = cxip_cntr_open,
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
-	.srx_ctx = fi_no_srx_context,
+	.srx_ctx = cxip_srx_context,
 	.query_atomic = cxip_query_atomic,
 	.query_collective = cxip_query_collective
 };
