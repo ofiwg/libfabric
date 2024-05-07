@@ -2058,7 +2058,7 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 	rxc->sw_pending_ux_list_len = 0;
 
 	RXC_WARN(rxc, "Software UX list updated, %d SW UX entries\n",
-		 rxc->sw_ux_list_len);
+		rxc->sw_ux_list_len);
 
 	if (rxc->base.state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED)
 		cxip_post_ux_onload_sw(rxc);
@@ -2125,6 +2125,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_deferred_event *def_ev;
 	struct cxip_ux_send *ux_send;
 	bool matched;
+	struct fid_peer_srx *owner_srx = cxip_get_owner_srx(&rxc->base);
 
 	assert(rxc->base.state == RXC_ONLOAD_FLOW_CONTROL ||
 	       rxc->base.state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
@@ -2179,8 +2180,13 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		}
 		rxc->cur_ule_offsets++;
 
-		dlist_insert_tail(&ux_send->rxc_entry, &rxc->sw_ux_list);
-		rxc->sw_ux_list_len++;
+		/* TODO: support onloading in peer mode */
+		if (owner_srx) {
+			RXC_FATAL(rxc, "Software onloading is currently not supported in peer mode\n");
+		} else {
+			dlist_insert_tail(&ux_send->rxc_entry, &rxc->sw_ux_list);
+			rxc->sw_ux_list_len++;
+		}
 
 		RXC_DBG(rxc, "Onloaded Send: %p\n", ux_send);
 
@@ -3033,7 +3039,9 @@ static void cxip_set_ux_dump_entry(struct cxip_req *req,
 		}
 
 		if (src_addr && req->recv.rxc->attr.caps & FI_SOURCE)
-			*src_addr = cxip_recv_req_src_addr(req);
+			*src_addr = cxip_recv_req_src_addr(req->recv.rxc,
+					req->recv.initiator,
+					req->recv.vni, false);
 	}
 }
 
@@ -3317,6 +3325,192 @@ static int cxip_recv_sw_matcher(struct cxip_rxc_hpc *rxc, struct cxip_req *req,
 	return ret;
 }
 
+static int
+cxip_recv_req_init(struct cxip_rxc *rxc, void *buf, size_t len, fi_addr_t addr,
+		uint64_t tag, uint64_t ignore, uint64_t flags, bool tagged,
+		void *context, struct cxip_cntr *comp_cntr,
+		struct cxip_req **req_out)
+{
+	struct cxip_req *req;
+	uint32_t match_id;
+	int ret;
+	uint16_t vni;
+
+	if (len && !buf) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	if (rxc->state == RXC_DISABLED) {
+		ret = -FI_EOPBADSTATE;
+		goto err;
+	}
+
+	/* HW to SW PtlTE transition, ensure progress is made */
+	if (rxc->state != RXC_ENABLED && rxc->state != RXC_ENABLED_SOFTWARE) {
+		cxip_cq_progress(rxc->recv_cq);
+		ret = -FI_EAGAIN;
+		goto err;
+	}
+
+	if (tagged) {
+		if (tag & ~CXIP_TAG_MASK || ignore & ~CXIP_TAG_MASK) {
+			RXC_WARN(rxc,
+				 "Invalid tag: %#018lx ignore: %#018lx (%#018lx)\n",
+				 tag, ignore, CXIP_TAG_MASK);
+			ret = -FI_EINVAL;
+			goto err;
+		}
+		flags &= ~FI_MULTI_RECV;
+	}
+
+	ret = cxip_set_recv_match_id(rxc, addr, rxc->ep_obj->av_auth_key &&
+				     (flags & FI_AUTH_KEY), &match_id, &vni);
+	if (ret) {
+		RXC_WARN(rxc, "Error setting match_id: %d %s\n",
+			 ret, fi_strerror(-ret));
+		goto err;
+	}
+
+	ofi_genlock_lock(&rxc->ep_obj->lock);
+	ret = cxip_recv_req_alloc(rxc, buf, len, NULL, &req, cxip_recv_cb);
+	ofi_genlock_unlock(&rxc->ep_obj->lock);
+	if (ret)
+		return ret;
+
+	/* req->data_len, req->tag, req->data must be set later. req->buf may
+	 * be overwritten later.
+	 */
+	req->context = (uint64_t)context;
+
+	req->flags = FI_RECV | (flags & FI_COMPLETION);
+	if (tagged)
+		req->flags |= FI_TAGGED;
+	else
+		req->flags |= FI_MSG;
+
+	req->recv.cntr = comp_cntr ? comp_cntr : rxc->recv_cntr;
+	req->recv.match_id = match_id;
+	req->recv.tag = tag;
+	req->recv.ignore = ignore;
+	req->recv.flags = flags;
+	req->recv.tagged = tagged;
+	req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
+
+	*req_out = req;
+
+	return FI_SUCCESS;
+
+err:
+	return ret;
+}
+
+int cxip_unexp_start(struct fi_peer_rx_entry *rx_entry)
+{
+	int ret;
+	struct cxip_ux_send *ux;
+	union cxip_match_bits ux_mb;
+	struct cxip_req *req;
+	struct cxip_rxc *rxc;
+
+	ux = rx_entry->peer_context;
+	ux_mb.raw = ux->put_ev.tgt_long.match_bits;
+	rxc = ux->rxc;
+
+	ret = cxip_recv_req_init(rxc, rx_entry->iov[0].iov_base,
+				rx_entry->iov[0].iov_len, rx_entry->addr,
+				rx_entry->tag, 0, rx_entry->flags,
+				ux_mb.tagged, rx_entry->context, NULL, &req);
+	if (ret)
+		return ret;
+
+	req->rx_entry = rx_entry;
+
+	ret = cxip_recv_sw_matched(req, ux);
+	if (ret == -FI_EAGAIN)
+		return ret;
+
+	/* FI_EINPROGRESS is return for a multi-recv match. */
+	assert(ret == FI_SUCCESS || ret == -FI_EINPROGRESS);
+
+	if (ux->req && ux->req->type == CXIP_REQ_RBUF)
+		cxip_req_buf_ux_free(ux);
+	else
+		free(ux);
+
+	RXC_DBG(rxc,
+		"Software match, req: %p ux_send: %p\n", req, ux);
+
+	return ret;
+}
+
+static int cxip_process_srx_ux_matcher(struct cxip_rxc *rxc,
+		struct fid_peer_srx *owner_srx, struct cxip_ux_send *ux)
+{
+	int ret;
+	uint32_t ux_init;
+	union cxip_match_bits ux_mb;
+	struct fi_peer_rx_entry *rx_entry = NULL;
+	struct cxip_req *req;
+	uint16_t vni;
+	struct fi_peer_match_attr match = {0};
+
+	/* stash the rxc because we're going to need it if the peer
+	 * address isn't already inserted into the AV table.
+	 */
+	ux->rxc = rxc;
+	ux_init = ux->put_ev.tgt_long.initiator.initiator.process;
+	vni = ux->put_ev.tgt_long.vni;
+
+	match.addr = cxip_recv_req_src_addr(rxc, ux_init, vni, true);
+
+	ux_mb.raw = ux->put_ev.tgt_long.match_bits;
+
+	if (ux_mb.tagged) {
+		match.tag = ux_mb.tag;
+		ret = owner_srx->owner_ops->get_tag(owner_srx, &match, &rx_entry);
+	} else {
+		ret = owner_srx->owner_ops->get_msg(owner_srx, &match, &rx_entry);
+	}
+
+	/* return it back to the caller */
+	ux->rx_entry = rx_entry;
+
+	if (ret == -FI_ENOENT) {
+		/* this is used when the owner calls start_msg */
+		rx_entry->peer_context = ux;
+		return -FI_ENOMSG;
+	} else if (ret) {
+		return ret;
+	}
+
+	ret = cxip_recv_req_init(rxc, rx_entry->iov[0].iov_base,
+				rx_entry->iov[0].iov_len, rx_entry->addr,
+				rx_entry->tag, 0, rx_entry->flags,
+				ux_mb.tagged, rx_entry->context, NULL, &req);
+	if (ret)
+		return ret;
+
+	req->rx_entry = rx_entry;
+
+	ret = cxip_recv_sw_matched(req, ux);
+	if (ret == -FI_EAGAIN)
+		return -FI_EAGAIN;
+
+	/* FI_EINPROGRESS is return for a multi-recv match. */
+	assert(ret == FI_SUCCESS || ret == -FI_EINPROGRESS);
+
+	if (ux->req && ux->req->type == CXIP_REQ_RBUF)
+		cxip_req_buf_ux_free(ux);
+	else
+		free(ux);
+
+	RXC_DBG(rxc,
+		"Software match, req: %p ux_send: %p\n", req, ux);
+
+	return ret;
+}
+
 /*
  * cxip_recv_ux_sw_matcher() - Attempt to match an unexpected message to a user
  * posted receive.
@@ -3327,9 +3521,16 @@ int cxip_recv_ux_sw_matcher(struct cxip_ux_send *ux)
 {
 	struct cxip_ptelist_buf *rbuf = ux->req->req_ctx;
 	struct cxip_rxc_hpc *rxc = rbuf->rxc;
+	struct fid_peer_srx *owner_srx = cxip_get_owner_srx(&rxc->base);
 	struct cxip_req *req;
 	struct dlist_entry *tmp;
 	int ret;
+
+	if (owner_srx) {
+		/* we never add anything on the sw_ux_list */
+		rxc->sw_ux_list_len--;
+		return cxip_process_srx_ux_matcher(&rxc->base, owner_srx, ux);
+	}
 
 	if (dlist_empty(&rxc->sw_recv_queue))
 		return -FI_ENOMSG;
@@ -3987,71 +4188,16 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 	int ret;
 	struct cxip_req *req;
 	struct cxip_ux_send *ux_msg;
-	uint32_t match_id;
-	uint16_t vni;
 
 	assert(rxc_hpc->base.protocol == FI_PROTO_CXI);
 
-	if (len && !buf)
-		return -FI_EINVAL;
-
-	if (rxc->state == RXC_DISABLED)
-		return -FI_EOPBADSTATE;
-
-	/* HW to SW PtlTE transition, ensure progress is made */
-	if (rxc->state != RXC_ENABLED && rxc->state != RXC_ENABLED_SOFTWARE) {
-		cxip_cq_progress(rxc->recv_cq);
-		return -FI_EAGAIN;
-	}
-
-	if (tagged) {
-		if (tag & ~CXIP_TAG_MASK || ignore & ~CXIP_TAG_MASK) {
-			RXC_WARN(rxc,
-				 "Invalid tag: %#018lx ignore: %#018lx (%#018lx)\n",
-				 tag, ignore, CXIP_TAG_MASK);
-			return -FI_EINVAL;
-		}
-	}
-
-	ret = cxip_set_recv_match_id(rxc, src_addr, rxc->ep_obj->av_auth_key &&
-				     (flags & FI_AUTH_KEY), &match_id, &vni);
-	if (ret) {
-		RXC_WARN(rxc, "Error setting match_id: %d %s\n",
-			 ret, fi_strerror(-ret));
-		return ret;
-	}
-
-	ofi_genlock_lock(&rxc->ep_obj->lock);
-	ret = cxip_recv_req_alloc(rxc, buf, len, NULL, &req, cxip_recv_cb);
+	ret = cxip_recv_req_init(rxc, buf, len, src_addr, tag, ignore, flags,
+				 tagged, context, comp_cntr, &req);
 	if (ret)
 		goto err;
 
-	/* req->data_len, req->tag, req->data must be set later. req->buf may
-	 * be overwritten later.
-	 */
-	req->context = (uint64_t)context;
-
-	req->flags = FI_RECV | (flags & FI_COMPLETION);
-	if (tagged)
-		req->flags |= FI_TAGGED;
-	else
-		req->flags |= FI_MSG;
-
-	req->recv.cntr = comp_cntr ? comp_cntr : rxc->recv_cntr;
-	req->recv.match_id = match_id;
-	req->recv.tag = tag;
-	req->recv.ignore = ignore;
-	req->recv.flags = flags;
-	req->recv.tagged = tagged;
-	req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
-
-	if (rxc->state != RXC_ENABLED && rxc->state != RXC_ENABLED_SOFTWARE) {
-		ret = -FI_EAGAIN;
-		goto err_free_request;
-	}
-
+	ofi_genlock_lock(&rxc->ep_obj->lock);
 	if (!(req->recv.flags & (FI_PEEK | FI_CLAIM))) {
-
 		ret = cxip_recv_req_queue(req, false);
 		/* Match made in software? */
 		if (ret == -FI_EALREADY) {
@@ -4110,9 +4256,8 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 
 err_free_request:
 	cxip_recv_req_free(req);
-err:
 	ofi_genlock_unlock(&rxc->ep_obj->lock);
-
+err:
 	return ret;
 }
 
