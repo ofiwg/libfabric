@@ -3257,6 +3257,8 @@ static inline int cxip_discard(struct fi_peer_rx_entry *rx_entry)
 
 int cxip_unexp_start(struct fi_peer_rx_entry *entry);
 int cxip_addr_match(fi_addr_t addr, struct fi_peer_match *match);
+int cxip_mem_reg(struct fid_ep *ep, struct iovec *iov, fi_addr_t addr,
+		 void **md, uint32_t *match_id);
 
 /*
  * Request variants:

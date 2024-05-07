@@ -3390,7 +3390,7 @@ static int
 cxip_recv_req_init(struct cxip_rxc *rxc, void *buf, size_t len, fi_addr_t addr,
 		uint64_t tag, uint64_t ignore, uint64_t flags, bool tagged,
 		void *context, struct cxip_cntr *comp_cntr,
-		struct cxip_req **req_out)
+		struct cxip_md *md, struct cxip_req **req_out)
 {
 	struct cxip_req *req;
 	uint32_t match_id;
@@ -3436,7 +3436,7 @@ cxip_recv_req_init(struct cxip_rxc *rxc, void *buf, size_t len, fi_addr_t addr,
 	}
 
 	ofi_genlock_lock(&rxc->ep_obj->lock);
-	ret = cxip_recv_req_alloc(rxc, buf, len, NULL, &req, cxip_recv_cb);
+	ret = cxip_recv_req_alloc(rxc, buf, len, md, &req, cxip_recv_cb);
 	if (ret)
 		return ret;
 
@@ -3481,11 +3481,40 @@ int cxip_addr_match(fi_addr_t addr, struct fi_peer_match *match)
 	 * a problem? This function shouldn't be making any changes to the
 	 * rxc. But do we need a read lock?
 	 */
-	match_id = cxip_get_match_id(rxc, addr);
+	if (!match->match_id)
+		match_id = cxip_get_match_id(rxc, addr);
+	else
+		match_id = match->match_id;
 
 	ux_init = ux->put_ev.tgt_long.initiator.initiator.process;
 
 	return init_match(rxc, ux_init, match_id);
+}
+
+int cxip_mem_reg(struct fid_ep *ep_fid, struct iovec *iov, fi_addr_t addr,
+		 void **md, uint32_t *match_id)
+{
+	struct cxip_ep *ep = container_of(ep_fid, struct cxip_ep, ep);
+	struct cxip_rxc *rxc = ep->ep_obj->rxc;
+	int ret;
+	struct cxip_domain *dom;
+	struct cxip_md *buf_md;
+
+	assert(iov->iov_base && iov->iov_len);
+
+	dom = rxc->domain;
+
+	ret = cxip_map(dom, iov->iov_base, iov->iov_len, 0, &buf_md);
+	if (ret) {
+		RXC_WARN(rxc, "Failed to map recv buffer: %d\n", ret);
+		return ret;
+	}
+
+	*md = (void*) buf_md;
+
+	*match_id = cxip_get_match_id(rxc, addr);
+
+	return FI_SUCCESS;
 }
 
 int cxip_unexp_start(struct fi_peer_rx_entry *rx_entry)
@@ -3500,10 +3529,14 @@ int cxip_unexp_start(struct fi_peer_rx_entry *rx_entry)
 	ux_mb.raw = ux->put_ev.tgt_long.match_bits;
 	rxc = ux->rxc;
 
+	/* TODO: NOTE: Ideally we'd like to do the buffer mapping on the
+	 * trecv() path, but short of pre-allocating the request, we can
+	 * not. Maybe there is a way, need to think on it.
+	 */
 	ret = cxip_recv_req_init(rxc, rx_entry->iov[0].iov_base,
 				rx_entry->iov[0].iov_len, rx_entry->addr,
 				rx_entry->tag, rx_entry->ignore, rx_entry->flags,
-				ux_mb.tagged, rx_entry->context, NULL, &req);
+				ux_mb.tagged, rx_entry->context, NULL, NULL, &req);
 	if (ret)
 		return ret;
 
@@ -3564,7 +3597,8 @@ static int cxip_process_srx_ux_matcher(struct cxip_rxc *rxc,
 	ret = cxip_recv_req_init(rxc, rx_entry->iov[0].iov_base,
 				rx_entry->iov[0].iov_len, rx_entry->addr,
 				rx_entry->tag, rx_entry->ignore, rx_entry->flags,
-				ux_mb.tagged, rx_entry->context, NULL, &req);
+				ux_mb.tagged, rx_entry->context, NULL,
+				(struct cxip_md *)rx_entry->peer_md, &req);
 	if (ret)
 		return ret;
 
@@ -4267,7 +4301,7 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 
 	ofi_genlock_lock(&rxc->ep_obj->lock);
 	ret = cxip_recv_req_init(rxc, buf, len, src_addr, tag, ignore, flags,
-				 tagged, context, comp_cntr, &req);
+				 tagged, context, comp_cntr, NULL, &req);
 	if (ret)
 		goto err;
 
