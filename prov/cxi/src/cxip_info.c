@@ -836,27 +836,8 @@ static void cxip_env_init(void)
 
 	fi_param_define(&cxip_prov, "rx_match_mode", FI_PARAM_STRING,
 			"Sets RX message match mode (hardware | software | hybrid).");
-	fi_param_get_str(&cxip_prov, "rx_match_mode", &param_str);
 
-	if (param_str) {
-		if (!strcasecmp(param_str, "hardware")) {
-			cxip_env.rx_match_mode = CXIP_PTLTE_HARDWARE_MODE;
-			cxip_env.msg_offload = true;
-		} else if (!strcmp(param_str, "software")) {
-			cxip_env.rx_match_mode = CXIP_PTLTE_SOFTWARE_MODE;
-			cxip_env.msg_offload = false;
-		} else if (!strcmp(param_str, "hybrid")) {
-			cxip_env.rx_match_mode = CXIP_PTLTE_HYBRID_MODE;
-			cxip_env.msg_offload = true;
-		} else {
-			CXIP_WARN("Unrecognized rx_match_mode: %s\n",
-				  param_str);
-			cxip_env.rx_match_mode = CXIP_PTLTE_HARDWARE_MODE;
-			cxip_env.msg_offload = true;
-		}
-
-		param_str = NULL;
-	}
+	cxip_set_env_rx_match_mode();
 
 	fi_param_define(&cxip_prov, "rdzv_threshold", FI_PARAM_SIZE_T,
 			"Message size threshold for rendezvous protocol.");
@@ -1043,54 +1024,6 @@ static void cxip_env_init(void)
 			"Maximum number of request buffer cached.");
 	fi_param_get_size_t(&cxip_prov, "req_buf_max_cached",
 			    &cxip_env.req_buf_max_cached);
-
-	/* Parameters to tailor hybrid hardware to software transitions
-	 * that are initiated by software.
-	 */
-	fi_param_define(&cxip_prov, "hybrid_preemptive", FI_PARAM_BOOL,
-			"Enable/Disable low LE preemptive UX transitions.");
-	fi_param_get_bool(&cxip_prov, "hybrid_preemptive",
-			  &cxip_env.hybrid_preemptive);
-	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
-	    cxip_env.hybrid_preemptive) {
-		cxip_env.hybrid_preemptive = false;
-		CXIP_WARN("Not in hybrid mode, ignoring preemptive\n");
-	}
-
-	fi_param_define(&cxip_prov, "hybrid_recv_preemptive", FI_PARAM_BOOL,
-			"Enable/Disable low LE preemptive recv transitions.");
-	fi_param_get_bool(&cxip_prov, "hybrid_recv_preemptive",
-			  &cxip_env.hybrid_recv_preemptive);
-
-	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
-	    cxip_env.hybrid_recv_preemptive) {
-		CXIP_WARN("Not in hybrid mode, ignore LE  recv preemptive\n");
-		cxip_env.hybrid_recv_preemptive = 0;
-	}
-
-	fi_param_define(&cxip_prov, "hybrid_posted_recv_preemptive",
-			FI_PARAM_BOOL,
-			"Enable preemptive transition to software endpoint when number of posted receives exceeds RX attribute size");
-	fi_param_get_bool(&cxip_prov, "hybrid_posted_recv_preemptive",
-			  &cxip_env.hybrid_posted_recv_preemptive);
-
-	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
-	    cxip_env.hybrid_posted_recv_preemptive) {
-		CXIP_WARN("Not in hybrid mode, ignore hybrid_posted_recv_preemptive\n");
-		cxip_env.hybrid_posted_recv_preemptive = 0;
-	}
-
-	fi_param_define(&cxip_prov, "hybrid_unexpected_msg_preemptive",
-			FI_PARAM_BOOL,
-			"Enable preemptive transition to software endpoint when number of hardware unexpected messages exceeds RX attribute size");
-	fi_param_get_bool(&cxip_prov, "hybrid_unexpected_msg_preemptive",
-			  &cxip_env.hybrid_unexpected_msg_preemptive);
-
-	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
-	    cxip_env.hybrid_unexpected_msg_preemptive) {
-		CXIP_WARN("Not in hybrid mode, ignore hybrid_unexpected_msg_preemptive\n");
-		cxip_env.hybrid_unexpected_msg_preemptive = 0;
-	}
 
 	if (cxip_software_pte_allowed()) {
 		min_free = CXIP_REQ_BUF_HEADER_MAX_SIZE +

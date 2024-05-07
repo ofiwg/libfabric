@@ -229,6 +229,18 @@ struct cxip_addr *(*cxip_av_addr_in)(const void *addr) = insert_in;
 void (*cxip_av_addr_out)(struct cxip_addr *addr_out,
 			 struct cxip_addr *addr) = insert_out;
 
+static fi_addr_t cxip_get_addr(struct fi_peer_rx_entry *entry)
+{
+	uint32_t ux_init;
+	uint16_t vni;
+	struct cxip_ux_send *ux = entry->peer_context;
+
+	ux_init = ux->put_ev.tgt_long.initiator.initiator.process;
+	vni = ux->put_ev.tgt_long.vni;
+
+	return cxip_recv_req_src_addr(ux->rxc, ux_init, vni, true);
+}
+
 static int cxip_av_insert(struct fid_av *fid, const void *addr_in, size_t count,
 			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
@@ -236,6 +248,7 @@ static int cxip_av_insert(struct fid_av *fid, const void *addr_in, size_t count,
 	size_t i;
 	size_t success_cnt = 0;
 	int ret;
+	struct fid_peer_srx *owner_srx;
 
 	ret = cxip_av_insert_validate_args(fid, addr_in, count, fi_addr, flags,
 					   context);
@@ -252,6 +265,10 @@ static int cxip_av_insert(struct fid_av *fid, const void *addr_in, size_t count,
 	}
 
 	cxip_av_unlock(av);
+
+	owner_srx = av->domain->owner_srx;
+	if (owner_srx)
+		owner_srx->owner_ops->foreach_unspec_addr(owner_srx, &cxip_get_addr);
 
 	return success_cnt;
 }
