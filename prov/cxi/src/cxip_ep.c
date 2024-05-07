@@ -575,6 +575,11 @@ static int cxip_ep_enable(struct fid_ep *fid_ep)
 		/* collectives will not function, but EP will */
 	}
 
+	if (ep->srx) {
+		fid_ep->fid.context =
+			container_of(ep->srx, struct fid_peer_srx, ep_fid);
+	}
+
 	/* Enable only appropriate API functions based on primary/secondary
 	 * capabilities. Send/Receive requires FI_MSG or FI_TAGGED.
 	 */
@@ -874,6 +879,7 @@ int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct cxip_cq *cq;
 	struct cxip_av *av;
 	struct cxip_cntr *cntr;
+	struct fid_peer_srx *srx, *srx_b;
 
 	/* TODO: Remove this since it requires malicious programming to
 	 * create this condition.
@@ -919,6 +925,12 @@ int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	case FI_CLASS_SRX_CTX:
+		srx = calloc(1, sizeof(*srx));
+		srx_b = container_of(bfid, struct fid_peer_srx, ep_fid.fid);
+		srx->peer_ops = ep->ep_obj->domain->owner_srx->peer_ops;
+		srx->owner_ops = srx_b->owner_ops;
+		srx->ep_fid.fid.context = srx_b->ep_fid.fid.context;
+		ep->srx = &srx->ep_fid;
 	break;
 
 	default:

@@ -2462,6 +2462,7 @@ struct cxip_ep {
 	struct fi_tx_attr tx_attr;
 	struct fi_rx_attr rx_attr;
 	struct cxip_ep_obj *ep_obj;
+	struct fid_ep *srx;
 	int is_alias;
 };
 
