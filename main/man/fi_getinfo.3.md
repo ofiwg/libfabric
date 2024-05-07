@@ -275,7 +275,7 @@ additional optimizations.
 : Requests that the provider support the association of a user specified
   identifier with each address vector (AV) address.  User identifiers are
   returned with completion data in place of the AV address.  See
-  [`fi_domain`(3)](fi_domain.3.html) and [`fi_av`(3)] (fi_av.3.html) for
+  [`fi_domain`(3)](fi_domain.3.html) and [`fi_av`(3)](fi_av.3.html) for
   more details.
 
 *FI_COLLECTIVE*
