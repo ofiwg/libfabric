@@ -918,6 +918,9 @@ int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		break;
 
+	case FI_CLASS_SRX_CTX:
+	break;
+
 	default:
 		return -FI_EINVAL;
 	}

@@ -118,6 +118,7 @@ err_free_request:
 void cxip_recv_req_free(struct cxip_req *req)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
+	struct fid_peer_srx *owner_srx = cxip_get_owner_srx(rxc);
 
 	assert(req->type == CXIP_REQ_RECV);
 	assert(dlist_empty(&req->recv.children));
@@ -127,6 +128,9 @@ void cxip_recv_req_free(struct cxip_req *req)
 
 	if (req->recv.recv_md && !req->recv.hybrid_md)
 		cxip_unmap(req->recv.recv_md);
+
+	if (owner_srx && req->rx_entry)
+		owner_srx->owner_ops->free_entry(req->rx_entry);
 
 	cxip_evtq_req_free(req);
 }
