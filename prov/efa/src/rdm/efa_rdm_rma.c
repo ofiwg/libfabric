@@ -135,7 +135,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	if (err)
 		return err;
 
-	assert(msg->iov_count <= efa_rdm_ep->tx_iov_limit);
+	assert(msg->iov_count <= efa_rdm_ep->user_info->tx_attr->iov_limit);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
 	ofi_genlock_lock(srx_ctx->lock);
@@ -471,7 +471,7 @@ ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 	if (err)
 		return err;
 
-	assert(msg->iov_count <= efa_rdm_ep->tx_iov_limit);
+	assert(msg->iov_count <= efa_rdm_ep->user_info->tx_attr->iov_limit);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);

@@ -212,8 +212,8 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	size_t rx_iov_offset = 0;
 	int err, rx_iov_index = 0;
 
-	assert(rxe->iov_count > 0  && rxe->iov_count <= ep->rx_iov_limit);
-	assert(rxe->iov[0].iov_len >= ep->msg_prefix_size);
+	assert(rxe->iov_count > 0  && rxe->iov_count <= ep->user_info->rx_attr->iov_limit);
+	assert(rxe->iov[0].iov_len >= ep->user_info->ep_attr->msg_prefix_size);
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
@@ -233,7 +233,7 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	pkt_entry->ope = rxe;
 	rxe->state = EFA_RDM_RXE_MATCHED;
 
-	err = ofi_iov_locate(rxe->iov, rxe->iov_count, ep->msg_prefix_size, &rx_iov_index, &rx_iov_offset);
+	err = ofi_iov_locate(rxe->iov, rxe->iov_count, ep->user_info->ep_attr->msg_prefix_size, &rx_iov_index, &rx_iov_offset);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "ofi_iov_locate failure: %s (%d)\n", fi_strerror(-err), -err);
 		return err;

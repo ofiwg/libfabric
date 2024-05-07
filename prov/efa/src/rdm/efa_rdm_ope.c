@@ -58,7 +58,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->cq_entry.buf = OFI_LIKELY(txe->cq_entry.len > 0) ? txe->iov[0].iov_base : NULL;
 
 	if (ep->user_info->mode & FI_MSG_PREFIX) {
-		ofi_consume_iov_desc(txe->iov, txe->desc, &txe->iov_count, ep->msg_prefix_size);
+		ofi_consume_iov_desc(txe->iov, txe->desc, &txe->iov_count, ep->user_info->ep_attr->msg_prefix_size);
 	}
 	txe->total_len = ofi_total_iov_len(txe->iov, txe->iov_count);
 
@@ -1153,11 +1153,11 @@ int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope)
 		 * extact message size to save memory registration pages.
 		 */
 		err = ofi_truncate_iov(ope->iov, &ope->iov_count,
-				       ope->total_len + ope->ep->msg_prefix_size);
+				       ope->total_len + ope->ep->user_info->ep_attr->msg_prefix_size);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ,
 				 "ofi_truncated_iov failed. new_size: %ld\n",
-				 ope->total_len + ope->ep->msg_prefix_size);
+				 ope->total_len + ope->ep->user_info->ep_attr->msg_prefix_size);
 			return err;
 		}
 	}
@@ -1333,7 +1333,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 	assert(max_read_once_len > 0);
 
 	err = ofi_iov_locate(ope->iov, ope->iov_count,
-			     ope->bytes_read_offset + ope->bytes_read_submitted + ep->msg_prefix_size,
+			     ope->bytes_read_offset + ope->bytes_read_submitted + ep->user_info->ep_attr->msg_prefix_size,
 			     &iov_idx, &iov_offset);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "ofi_iov_locate failed! err: %d\n", err);
@@ -1512,7 +1512,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 
 		if (ope->fi_flags & FI_INJECT) {
 			assert(ope->iov_count == 1);
-			assert(ope->total_len <= ep->inject_size);
+			assert(ope->total_len <= ep->user_info->tx_attr->inject_size);
 			copied = ofi_copy_from_hmem_iov(pkt_entry->wiredata + sizeof(struct efa_rdm_rma_context_pkt),
 				ope->total_len, FI_HMEM_SYSTEM, 0, ope->iov, ope->iov_count, 0);
 			assert(copied == ope->total_len);

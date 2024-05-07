@@ -658,12 +658,12 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
 	 * is correct. Otherwise, user will get wrong data.
 	 *
 	 * The expected header size is
-	 * 	ep->msg_prefix_size - sizeof(struct efa_rdm_pke)
+	 * 	ep->user_info->ep_attr->msg_prefix_size - sizeof(struct efa_rdm_pke)
 	 * because we used the first sizeof(struct efa_rdm_pke) to construct
 	 * a pkt_entry.
 	 */
 	hdr_size = pkt_entry->payload - pkt_entry->wiredata;
-	if (hdr_size != pkt_entry->ep->msg_prefix_size - sizeof(struct efa_rdm_pke)) {
+	if (hdr_size != pkt_entry->ep->user_info->ep_attr->msg_prefix_size - sizeof(struct efa_rdm_pke)) {
 		/* if header size is wrong, the data in user buffer is not useful.
 		 * setting rxe->cq_entry.len here will cause an error cq entry
 		 * to be written to application.

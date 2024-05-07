@@ -156,13 +156,13 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 								desc->peer.iface,
 								(uint64_t)desc->peer.hmem_data,
 								rxe->iov, rxe->iov_count,
-								segment_offset + ep->msg_prefix_size,
+								segment_offset + ep->user_info->ep_attr->msg_prefix_size,
 								data, pkt_entry->payload_size);
 		} else {
 			bytes_copied[i] = ofi_copy_to_hmem_iov(desc->peer.iface,
 			                                       desc->peer.device.reserved,
 			                                       rxe->iov, rxe->iov_count,
-			                                       segment_offset + ep->msg_prefix_size,
+			                                       segment_offset + ep->user_info->ep_attr->msg_prefix_size,
 			                                       data, pkt_entry->payload_size);
 		}
 	}
@@ -334,7 +334,7 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 			assert(desc->peer.hmem_data);
 			ofi_dev_reg_copy_to_hmem_iov(FI_HMEM_CUDA, (uint64_t)desc->peer.hmem_data,
 			                             rxe->iov, rxe->iov_count,
-			                             segment_offset + ep->msg_prefix_size,
+			                             segment_offset + ep->user_info->ep_attr->msg_prefix_size,
 			                             pke->payload, pke->payload_size);
 			efa_rdm_pke_handle_data_copied(pke);
 			return 0;
@@ -444,7 +444,7 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
 
 	assert( !desc || desc->peer.iface == FI_HMEM_SYSTEM);
 	bytes_copied = ofi_copy_to_iov(ope->iov, ope->iov_count,
-				       segment_offset + ep->msg_prefix_size,
+				       segment_offset + ep->user_info->ep_attr->msg_prefix_size,
 				       pke->payload, pke->payload_size);
 
 	if (bytes_copied != MIN(pke->payload_size, ope->cq_entry.len - segment_offset)) {

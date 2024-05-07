@@ -154,7 +154,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 
 	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
 
-	assert(msg->iov_count <= ep->tx_iov_limit);
+	assert(msg->iov_count <= ep->user_info->tx_attr->iov_limit);
 
 	efa_perfset_start(ep, perf_efa_tx);
 	ofi_genlock_lock(srx_ctx->lock);
@@ -350,7 +350,7 @@ ssize_t efa_rdm_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 	struct efa_rdm_peer *peer;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	if (len > efa_rdm_ep->inject_size) {
+	if (len > efa_rdm_ep->user_info->tx_attr->inject_size) {
 		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
 		return -FI_EINVAL;
 	}
@@ -381,7 +381,7 @@ ssize_t efa_rdm_msg_injectdata(struct fid_ep *ep, const void *buf,
 	struct efa_rdm_peer *peer;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	if (len > efa_rdm_ep->inject_size) {
+	if (len > efa_rdm_ep->user_info->tx_attr->inject_size) {
 		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
 		return -FI_EINVAL;
 	}
@@ -557,7 +557,7 @@ ssize_t efa_rdm_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct efa_rdm_peer *peer;
 
 	efa_rdm_ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	if (len > efa_rdm_ep->inject_size) {
+	if (len > efa_rdm_ep->user_info->tx_attr->inject_size) {
 		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
 		return -FI_EINVAL;
 	}
@@ -587,7 +587,7 @@ ssize_t efa_rdm_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t l
 	struct efa_rdm_peer *peer;
 
 	efa_rdm_ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	if (len > efa_rdm_ep->inject_size) {
+	if (len > efa_rdm_ep->user_info->tx_attr->inject_size) {
 		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
 		return -FI_EINVAL;
 	}
@@ -910,7 +910,7 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	struct efa_rdm_ope *rxe;
 	struct util_srx_ctx *srx_ctx;
 
-	assert(msg->iov_count <= ep->rx_iov_limit);
+	assert(msg->iov_count <= ep->user_info->rx_attr->iov_limit);
 
 	efa_perfset_start(ep, perf_efa_recv);
 

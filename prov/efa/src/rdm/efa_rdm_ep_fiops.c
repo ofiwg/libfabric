@@ -260,7 +260,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				 sizeof(struct efa_rdm_rxe_map_entry),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
-				 ep->rx_size, 0);
+				 ep->user_info->rx_attr->size, 0);
 
 	if (ret)
 		goto err_free;
@@ -276,7 +276,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				 sizeof(struct efa_rdm_ope),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
-				 ep->tx_size + ep->rx_size, 0);
+				 ep->user_info->tx_attr->size + ep->user_info->rx_attr->size, 0);
 	if (ret)
 		goto err_free;
 
@@ -403,7 +403,7 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 	ep->use_zcpy_rx = !(ep->base_ep.util_ep.caps & FI_DIRECTED_RECV) &&
 			  !(ep->base_ep.util_ep.caps & FI_TAGGED) &&
 			  !(ep->base_ep.util_ep.caps & FI_ATOMIC) &&
-			  (ep->max_msg_size <= ep->mtu_size - ep->max_proto_hdr_size) &&
+			  (ep->user_info->ep_attr->max_msg_size <= ep->mtu_size - ep->max_proto_hdr_size) &&
 			  !efa_rdm_ep_need_sas(ep) &&
 			  ep->user_info->mode & FI_MSG_PREFIX &&
 			  efa_env.use_zcpy_rx;
@@ -464,18 +464,11 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		EFA_INFO(FI_LOG_EP_CTRL, "efa_rdm_ep->host_id: i-%017lx\n", efa_rdm_ep->host_id);
 	}
 
-	efa_rdm_ep->rx_size = info->rx_attr->size;
-	efa_rdm_ep->tx_size = info->tx_attr->size;
-	efa_rdm_ep->rx_iov_limit = info->rx_attr->iov_limit;
-	efa_rdm_ep->tx_iov_limit = info->tx_attr->iov_limit;
-	efa_rdm_ep->inject_size = info->tx_attr->inject_size;
 	efa_rdm_ep->efa_max_outstanding_tx_ops = efa_domain->device->rdm_info->tx_attr->size;
 	efa_rdm_ep->efa_max_outstanding_rx_ops = efa_domain->device->rdm_info->rx_attr->size;
 	efa_rdm_ep->efa_device_iov_limit = efa_domain->device->rdm_info->tx_attr->iov_limit;
 	efa_rdm_ep->use_device_rdma = efa_rdm_get_use_device_rdma(info->fabric_attr->api_version);
 	efa_rdm_ep->shm_permitted = true;
-	efa_rdm_ep->max_msg_size = info->ep_attr->max_msg_size;
-	efa_rdm_ep->msg_prefix_size = info->ep_attr->msg_prefix_size;
 	efa_rdm_ep->max_proto_hdr_size = efa_rdm_pkt_type_get_max_hdr_size();
 	efa_rdm_ep->mtu_size = efa_domain->device->rdm_info->ep_attr->max_msg_size;
 
