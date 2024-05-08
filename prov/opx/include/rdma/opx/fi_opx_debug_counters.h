@@ -174,7 +174,6 @@ struct fi_opx_debug_counters {
 		uint64_t	tid_resource_limit_length_chunk_short;
 		uint64_t	tid_resource_limit_length_chunk_long;
 		uint64_t	tid_resource_limit_tidcnt_chunk_zero;
-		uint64_t	tid_invalidate_needed;
 		uint64_t	tid_rcv_pkts;
 		uint64_t	tid_rcv_pkts_replays;
 		uint64_t	rts_tid_ineligible;
@@ -351,7 +350,6 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters)
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_resource_limit);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_resource_limit_length_chunk_short);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_resource_limit_tidcnt_chunk_zero);
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_invalidate_needed);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_rcv_pkts);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_rcv_pkts_replays);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_ineligible);

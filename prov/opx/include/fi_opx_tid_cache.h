@@ -85,8 +85,7 @@ void opx_tid_cache_cleanup(struct ofi_mr_cache *cache);
 
 /* De-register (lazy, unless force is true) a memory region on TID rendezvous completion */
 void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
-			    const int64_t tid_length,
-			    bool invalidate);
+			    const int64_t tid_length);
 
 /* forward declaration of parameter structure */
 struct fi_opx_hfi1_rx_rzv_rts_params;
