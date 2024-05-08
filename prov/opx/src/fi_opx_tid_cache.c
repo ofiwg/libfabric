@@ -1206,8 +1206,7 @@ int opx_return_offset_for_new_cache_entry(
 
 __OPX_FORCE_INLINE__
 int opx_tid_cache_close_region(struct ofi_mr_cache *tid_cache,
-			       struct ofi_mr_entry *entry,
-			       bool invalidate)
+			       struct ofi_mr_entry *entry)
 {
 	/* TODO ... fix? */
 	OPX_DEBUG_ENTRY2(entry, OPX_ENTRY_FOUND);
@@ -1231,40 +1230,10 @@ int opx_tid_cache_close_region(struct ofi_mr_cache *tid_cache,
 	struct opx_tid_mr *opx_mr = (struct opx_tid_mr *)entry->data;
 	struct opx_mr_tid_info *const tid_info = &opx_mr->tid_info;
 
-	if(invalidate) {
-		/* Invalidate and deregister it.
-		 * Any ongoing RDMA will fail.
-		 * Any new RDMA will not use it and will fallback.
-		 * It will be killed and cleaned up on use_cnt 0 */
-		struct fi_opx_ep *const opx_ep = opx_mr->opx_ep;
-
-		FI_DBG(tid_cache->domain->prov, FI_LOG_MR, "OPX_TID_IS_INVALID %u->1, (%p/%p) insert lru [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
-		       tid_info->invalid,
-		       entry, entry->data,
-		       entry->info.iov.iov_base,
-		       (char*)entry->info.iov.iov_base + entry->info.iov.iov_len,
-		       entry->info.iov.iov_len,
-		       entry->info.iov.iov_len,
-		       entry->use_cnt);
-
-		/* drop mm_lock */
-		pthread_mutex_unlock(&mm_lock);
-
-		/* Hold the cache->lock across de-registering the TIDs  */
-		pthread_mutex_lock(&tid_cache->lock);
-		opx_deregister_tid_region(opx_ep, tid_info);
-		tid_info->invalid = 1; /* prevent double deregister later */
-		pthread_mutex_unlock(&tid_cache->lock);
-
-		/* re-acquire mm_lock */
-		pthread_mutex_lock(&mm_lock);
-
-	}
-
 	if (use_cnt == 0) {
 		OPX_DEBUG_UCNT(entry);
-		FI_DBG(tid_cache->domain->prov, FI_LOG_MR, "invalidate %u, invalid %u, node %p, (%p/%p) insert lru [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
-		       invalidate, tid_info->invalid, entry->node,
+		FI_DBG(tid_cache->domain->prov, FI_LOG_MR, "invalid %u, node %p, (%p/%p) insert lru [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
+		       tid_info->invalid, entry->node,
 		       entry, entry->data,
 		       entry->info.iov.iov_base,
 		       (char*)entry->info.iov.iov_base + entry->info.iov.iov_len,
@@ -1462,9 +1431,9 @@ int opx_tid_cache_setup(struct ofi_mr_cache **cache,
 	return 0;
 }
 
-/* De-register (lazy, unless invalidate is true) a memory region on TID rendezvous completion */
+/* De-register (lazy) a memory region on TID rendezvous completion */
 void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
-			    const int64_t tid_length, bool invalidate)
+			    const int64_t tid_length)
 {
 	struct opx_tid_domain *tid_domain = opx_ep->domain->tid_domain;
 	struct ofi_mr_cache *tid_cache = tid_domain->tid_cache;
@@ -1542,7 +1511,7 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
 					       (uint64_t)info.iov.iov_base));
 		ncache_entries++;
 		/* Force the invalidation and put it on the dead list */
-		opx_tid_cache_close_region(tid_cache, entry, invalidate);
+		opx_tid_cache_close_region(tid_cache, entry);
 		/* increment past found region for next find */
 		remaining_length -= adj;
 		info.iov.iov_base = (char *)info.iov.iov_base + adj;
@@ -2008,8 +1977,7 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 				pthread_mutex_unlock(&mm_lock);
 				opx_deregister_for_rzv(
 				    opx_ep, tid_vaddr,
-				    tid_length - (remaining_length + find_info.iov.iov_len),
-				    false);
+				    tid_length - (remaining_length + find_info.iov.iov_len));
 				return -FI_EPERM;
 			}
 			if (find == OPX_ENTRY_NOT_FOUND) {
@@ -2065,8 +2033,7 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 						opx_ep, tid_vaddr,
 						tid_length -
 							(remaining_length +
-							 find_info.iov.iov_len),
-						false);
+							 find_info.iov.iov_len));
 					/*crte may return an entry */
 					if (create_entry) {
 						FI_DBG(fi_opx_global.prov,
@@ -2131,8 +2098,7 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 						opx_ep, tid_vaddr,
 						tid_length -
 							(remaining_length +
-							 find_info.iov.iov_len),
-						false);
+							 find_info.iov.iov_len));
 					/*crte returned an entry even if tid update failed */
 					FI_DBG(fi_opx_global.prov, FI_LOG_MR,
 					       "OPX_DEBUG_EXIT FI_EFAULT (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
@@ -2265,8 +2231,7 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 				pthread_mutex_unlock(&mm_lock);
 				opx_deregister_for_rzv(
 					opx_ep, tid_vaddr,
-					tid_length - remaining_length,
-					false);
+					tid_length - remaining_length);
 				FI_DBG(fi_opx_global.prov, FI_LOG_MR,
 				       "OPX_DEBUG_EXIT -FI_EFAULT\n");
 				return -FI_EFAULT;
@@ -2306,8 +2271,7 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 						opx_ep, tid_vaddr,
 						tid_length -
 							(remaining_length +
-							 find_info.iov.iov_len),
-						false);
+							 find_info.iov.iov_len));
 					return -FI_EPERM;
 				}
 			}

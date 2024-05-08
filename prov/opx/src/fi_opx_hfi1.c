@@ -1426,7 +1426,6 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	params->rzv_comp->tid_vaddr = 0UL;
 	params->rzv_comp->tid_length = 0UL;
 	params->rzv_comp->context = target_context;
-	params->rzv_comp->invalidate_needed = false;
 	params->dst_vaddr = dst_vaddr;
 	params->is_intranode = is_intranode;
 	params->reliability = reliability;
