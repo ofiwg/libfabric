@@ -538,38 +538,38 @@ pipeline {
     stage('parallel-tests') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
-        stage ('CI_MPI_verbs-rxm_IMB') {
+        stage ('CI_mpi_verbs-rxm_imb') {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("CI_MPI_verbs-rxm_IMB", "pr_imb_water.json")
+                run_ci("CI_mpi_verbs-rxm_imb", "pr_imb_water.json")
               }
             }
           }
         }
-        stage ('CI_MPI_verbs-rxm_OSU') {
+        stage ('CI_mpi_verbs-rxm_osu') {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("CI_MPI_verbs-rxm_OSU", "pr_osu_water.json")
+                run_ci("CI_mpi_verbs-rxm_osu", "pr_osu_water.json")
               }
             }
           }
         }
-        stage ('CI_MPI_tcp_IMB') {
+        stage ('CI_mpi_tcp_imb') {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("CI_MPI_tcp_IMB", "pr_imb_grass.json")
+                run_ci("CI_mpi_tcp_imb", "pr_imb_grass.json")
               }
             }
           }
         }
-        stage ('CI_MPI_tcp_OSU') {
+        stage ('CI_mpi_tcp_osu') {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("CI_MPI_tcp_OSU", "pr_osu_grass.json")
+                run_ci("CI_mpi_tcp_osu", "pr_osu_grass.json")
               }
             }
           }
