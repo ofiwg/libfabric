@@ -105,9 +105,24 @@ def gather_logs(cluster, key, dest, source) {
   def address = "${env.USER}@${cluster}"
 
   try {
-    sh "scp -i ${key} ${address}:${source}/* ${dest}/"
+    sh "scp -r -i ${key} ${address}:${source}/* ${dest}/"
   } catch (Exception e) {
     echo "Caught exception ${e} when transfering files from ${cluster}"
+  }
+}
+
+def CI_summarize(verbose=false) {
+  if (verbose) {
+    sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+               python ${CI_LOCATION}/summarize.py \
+               --log_directory=${env.LOG_DIR} \
+               -v
+       """
+  } else {
+    sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+               python ${CI_LOCATION}/summarize.py \
+               --log_directory=${env.LOG_DIR}
+       """
   }
 }
 
@@ -867,6 +882,7 @@ pipeline {
           gather_logs("${env.ZE_ADDR}", "${env.ZE_KEY}", "${env.LOG_DIR}",
                       "${env.LOG_DIR}")
 
+          CI_summarize(verbose=false)
           summarize("all", verbose=false, release=RELEASE,
                     send_mail=env.WEEKLY.toBoolean())
           if (RELEASE) {
@@ -880,11 +896,13 @@ pipeline {
   post {
     always {
       script {
+        CI_summarize()
         summarize("all")
       }
     }
     success {
       script {
+        CI_summarize(verbose=true)
         summarize("all", verbose=true, release=false,
         send_mail=env.WEEKLY.toBoolean())
       }
