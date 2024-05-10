@@ -39,6 +39,7 @@
 #include "rdma/opx/fi_opx_eq.h"
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_rma.h"
+#include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/fi_opx_hfi1_sdma.h"
 #include "rdma/opx/fi_opx_match.h"
 
@@ -873,19 +874,38 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 
 	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Set pio_flow_eager_tx_bytes to %d \n", opx_ep->tx->pio_flow_eager_tx_bytes);
 
+	// Set the multi-packet eager max message length
+	int l_mp_eager_max_payload_bytes;
+	ssize_t rc = fi_param_get_int(fi_opx_global.prov, "mp_eager_max_payload_bytes", &l_mp_eager_max_payload_bytes);
+	if (rc != FI_SUCCESS) {
+		opx_ep->tx->mp_eager_max_payload_bytes = OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_MP_EAGER_MAX_PAYLOAD_BYTES not set.  Using default setting of %d\n",
+		opx_ep->tx->mp_eager_max_payload_bytes);
+	} else if (l_mp_eager_max_payload_bytes < opx_ep->tx->pio_flow_eager_tx_bytes || l_mp_eager_max_payload_bytes > OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX) {
+		opx_ep->tx->mp_eager_max_payload_bytes = OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_MP_EAGER_MAX_PAYLOAD_BYTES was set but is outside min/max thresholds (%d-%d).  Using default setting of %d\n",
+			opx_ep->tx->pio_flow_eager_tx_bytes, OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX, opx_ep->tx->mp_eager_max_payload_bytes);
+	} else {
+		opx_ep->tx->mp_eager_max_payload_bytes = l_mp_eager_max_payload_bytes;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_MP_EAGER_MAX_PAYLOAD_BYTES was specified.  Set to %d\n",
+			opx_ep->tx->mp_eager_max_payload_bytes);
+	}
+	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager chunk-size is %d.\n", FI_OPX_MP_EGR_CHUNK_SIZE);	
+
 	/* Set SDMA bounce buffer threshold.  Any messages larger than this value in bytes will not be copied to 
 	 * replay bounce buffers.  Instead, hold the sender's large message buffer until we get all ACKs back from the Rx 
 	 * side of the message.  Since no copy of the message is made, it will need to be used to handle NAKs.
 	 */
 	int l_sdma_bounce_buf_threshold;
-	ssize_t rc = fi_param_get_int(fi_opx_global.prov, "sdma_bounce_buf_threshold", &l_sdma_bounce_buf_threshold);
+	rc = fi_param_get_int(fi_opx_global.prov, "sdma_bounce_buf_threshold", &l_sdma_bounce_buf_threshold);
 	if (rc != FI_SUCCESS) {
 		rc = fi_param_get_int(fi_opx_global.prov, "delivery_completion_threshold", &l_sdma_bounce_buf_threshold);
 	}
 	if (rc != FI_SUCCESS) {
 		opx_ep->tx->sdma_bounce_buf_threshold = OPX_SDMA_BOUNCE_BUF_THRESHOLD;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD not set.  Using default setting of %d\n",
-		opx_ep->tx->sdma_bounce_buf_threshold);
+			opx_ep->tx->sdma_bounce_buf_threshold);
 	} else if (l_sdma_bounce_buf_threshold < OPX_SDMA_BOUNCE_BUF_MIN || l_sdma_bounce_buf_threshold > (OPX_SDMA_BOUNCE_BUF_MAX)) {
 		opx_ep->tx->sdma_bounce_buf_threshold = OPX_SDMA_BOUNCE_BUF_THRESHOLD;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -896,9 +916,6 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD was specified.  Set to %d\n",
 			opx_ep->tx->sdma_bounce_buf_threshold);
 	}
-
-	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager max message length is %d, chunk-size is %d.\n", 
-		FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES, FI_OPX_MP_EGR_CHUNK_SIZE);	
 
 	opx_ep->tx->force_credit_return = 0;
 

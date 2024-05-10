@@ -268,7 +268,7 @@ struct fi_opx_ep_tx {
 	uint64_t				cq_bind_flags;
 	struct fi_opx_context_slist *		cq_completed_ptr;
 	uint32_t				do_cq_completion;
-	uint16_t 				unused_1;
+	uint16_t 				mp_eager_max_payload_bytes;
 	uint8_t					force_credit_return;
 	uint8_t					use_sdma;
 
@@ -4027,7 +4027,7 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 
 #ifndef FI_OPX_MP_EGR_DISABLE
 	if (is_contiguous &&
-	    total_len <= FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES &&
+	    total_len <= opx_ep->tx->mp_eager_max_payload_bytes &&
 	    total_len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE &&
 	    !fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps) &&
 		(caps & FI_TAGGED)) {

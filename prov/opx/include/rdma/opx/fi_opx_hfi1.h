@@ -83,7 +83,8 @@
 #define FI_OPX_HFI1_TX_CREDIT_MIN_FORCE_CR		(130) // We won't force a credit return for FI_OPX_HFI1_TX_CREDIT_DELTA_THRESHOLD if the number 
 							      // of avalible credits is above this number
 														  
-#define FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES			(16384) /* Max payload size for using Multi-packet Eager */
+#define OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT		(16384) /* Default for max payload size for using Multi-packet Eager */
+#define OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX			(65535) /* Max value (set to fit within uint16_t) */
 
 /* The total size for a single packet used in a multi-packet eager send.
    This is packet payload plus 64 bytes for the PBC and packet header.
@@ -107,7 +108,9 @@
 #define FI_OPX_MP_EGR_XFER_BYTES_TAIL 0x0010000000000000ull
 
 static_assert(!(FI_OPX_MP_EGR_CHUNK_SIZE & 0x3F), "FI_OPX_MP_EGR_CHUNK_SIZE Must be a multiple of 64!");
-static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES must be greater than FI_OPX_MP_EGR_CHUNK_SIZE!");
+static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT > FI_OPX_MP_EGR_CHUNK_SIZE, "OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT must be greater than FI_OPX_MP_EGR_CHUNK_SIZE!");
+static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX > FI_OPX_MP_EGR_CHUNK_SIZE, "OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX must be greater than FI_OPX_MP_EGR_CHUNK_SIZE!");
+static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX >= OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT, "OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX must be greater than or equal to OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT!");
 
 /* SDMA tuning constants */
 
@@ -168,7 +171,7 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
 #define FI_OPX_HFI1_SDMA_MAX_COMP_INDEX			(128) // This should what opx_ep->hfi->info.sdma.queue_size is set to.
 
 #ifndef FI_OPX_SDMA_MIN_LENGTH
-#define FI_OPX_SDMA_MIN_LENGTH				(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES + 1)
+#define FI_OPX_SDMA_MIN_LENGTH				(16385)
 #endif
 
 /*
@@ -178,7 +181,6 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
 #define FI_OPX_SDMA_DC_MIN				FI_OPX_SDMA_MIN_LENGTH
 
 static_assert(!(FI_OPX_HFI1_SDMA_MAX_COMP_INDEX & (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX - 1)), "FI_OPX_HFI1_SDMA_MAX_COMP_INDEX must be power of 2!\n");
-static_assert(FI_OPX_SDMA_DC_MIN >= FI_OPX_SDMA_MIN_LENGTH, "FI_OPX_SDMA_DC_MIN Must be >= FI_OPX_SDMA_MIN_LENGHT!\n");
 static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX, "FI_OPX_HFI1_SDMA_MAX_WE must be >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX!\n");
 
 /*
