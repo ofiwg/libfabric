@@ -228,6 +228,18 @@ provider implementation constraints.
   a complex number and the second representing the imaginary
   portion.
 
+*FI_FLOAT16*
+: 16-bit half precision floating point value (IEEE 754-2008).
+
+*FI_BFLOAT16*
+: 16-bit brain floating point value (IEEE 754-2008).
+
+*FI_FLOAT8_E4M3*
+: 8-bit floating point value with 4-bit exponent and 3-bit mantissa.
+
+*FI_FLOAT8_E5M2*
+: 8-bit floating point value with 5-bit exponent and 2-bit mantissa.
+
 ## Atomic Operations
 
 The following atomic operations are defined.  An atomic operation
@@ -375,6 +387,13 @@ if (compare[i] > addr[i])
 
 ```c
 addr[i] = (buf[i] & compare[i]) | (addr[i] & ~compare[i])
+```
+
+*FI_DIFF*
+: Calculate the difference
+
+```c
+addr[i] = addr[i] - buf[i]
 ```
 
 ## Base Atomic Functions
