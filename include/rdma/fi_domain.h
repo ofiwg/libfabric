@@ -226,6 +226,10 @@ enum fi_datatype {
 	FI_LONG_DOUBLE_COMPLEX,
 	FI_INT128,
 	FI_UINT128,
+	FI_FLOAT16,
+	FI_BFLOAT16,
+	FI_FLOAT8_E4M3,
+	FI_FLOAT8_E5M2,
 
 	/* Collective datatypes */
 	FI_VOID = FI_COLLECTIVE_OFFSET,
@@ -251,6 +255,7 @@ enum fi_op {
 	FI_CSWAP_GE,
 	FI_CSWAP_GT,
 	FI_MSWAP,
+	FI_DIFF,
 
 	/* Collective datatypes */
 	FI_NOOP = FI_COLLECTIVE_OFFSET,
