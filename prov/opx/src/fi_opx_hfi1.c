@@ -45,8 +45,9 @@
 #include "rdma/opx/fi_opx_eq.h"
 #include "rdma/opx/fi_opx_hfi1_sdma.h"
 #include "ofi_mem.h"
-#include "opa_user.h"
+
 #include "fi_opx_hfi_select.h"
+#include "rdma/opx/opx_hfi1_pre_cn5000.h"
 
 #include "rdma/opx/opx_tracer.h"
 
@@ -72,14 +73,6 @@
 #ifndef FI_OPX_TID_MSG_MISALIGNED_THRESHOLD
 #define FI_OPX_TID_MSG_MISALIGNED_THRESHOLD (15 * OPX_HFI1_TID_PAGESIZE)
 #endif
-
-struct fi_opx_hfi1_context_internal {
-	struct fi_opx_hfi1_context	context;
-
-	struct hfi1_user_info_dep	user_info;
-	struct _hfi_ctrl *		ctrl;
-
-};
 
 /*
  * Return the NUMA node id where the process is currently running.
@@ -135,39 +128,7 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl,
 		fd = -1;
 	} else {
 		memset(&internal->user_info, 0, sizeof(internal->user_info));
-#ifdef OPX_PRE_CN5000
-		/* The environment variable is the "port" (PSM2 legacy)
-		 * A "port index" is always the "port" number - 1
-		 */
-		int port_index = OPX_PORT_NUM_ANY - 1;
-		if (getenv("HFI_PORT")) {
-			/* calculate port index from requested port */
-			port_index = atoi(getenv("HFI_PORT")) - 1;
-			assert((port_index == -1) || (port_index == 0) || (port_index == 1));
-		}
-		if (port_index == (OPX_PORT_NUM_ANY - 1)) {
-			/* Rudimentary attempt at load balancing across ports */
-			const pid_t pid = getpid();
-			/* Spread port index from pid (even 0, odd 1) */
-			port_index = (pid & (pid_t) 0x1);
-			/* check if port is usable and swap if it's down,
-			   assuming here that at least one port is working */
-			if (opx_hfi_get_port_lid(hfi_unit_number, (port_index + 1)) <= 0) {
-				 FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-					 "OPX_PRE_CN5000 port index %d failed, use %d,  pid %d\n",
-					 port_index, port_index ? 0 : 1,  getpid());
-				port_index = port_index ? 0 : 1 ;
-			}
-		}
-		/* Whatever we got from user or ANY better work now. */
-		assert(opx_hfi_get_port_lid(hfi_unit_number, (port_index + 1)) > 0);
-
-		/* Use ioctl pad field to request a port index on the context. */
-		internal->user_info.pad = port_index;
-		FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC,
-			     "OPX_PRE_CN5000 userinfo pad/port index %d, internal->context.hfi_port %u, pid %d\n",
-			     internal->user_info.pad, internal->context.hfi_port, getpid());
-#endif
+		opx_select_port_index(internal, hfi_unit_number);
 
 		internal->user_info.userversion =
 			HFI1_USER_SWMINOR |
@@ -914,6 +875,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->info.rxe.egrq.base_addr = (uint32_t *)(uintptr_t)base_info->rcvegr_bufbase;
 	context->info.rxe.egrq.elemsz = ctxt_info->rcvegr_size;
 	context->info.rxe.egrq.size = ctxt_info->rcvegr_size * ctxt_info->egrtids;
+
+	context->info.rxe.hdrq.rhe_base = opx_hfi_mmap_rheq(context);
 
 	fi_opx_ref_init(&context->ref_cnt, "HFI context");
 	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Context configured with HFI=%d PORT=%d LID=0x%x JKEY=%d\n",
@@ -3319,49 +3282,43 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 
 unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
-					volatile uint32_t * rhf_ptr,
-					const uint32_t rhf_msb,
-					const uint32_t rhf_lsb,
-					const uint64_t rhf_seq,
-					const uint64_t hdrq_offset,
-					const uint64_t rhf_rcvd)
+				       volatile uint64_t *rhe_ptr,
+				       volatile uint32_t * rhf_ptr,
+				       const uint32_t rhf_msb,
+				       const uint32_t rhf_lsb,
+				       const uint64_t rhf_seq,
+				       const uint64_t hdrq_offset,
+				       const uint64_t rhf_rcvd,
+				       const union fi_opx_hfi1_packet_hdr *const hdr)
 {
 	/* We are assuming that we can process any error and consume this header,
 	   let reliability detect and replay it as needed. */
 	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "RECEIVE ERROR: rhf_msb = 0x%08x, rhf_lsb = 0x%08x, rhf_seq = 0x%lx\n", rhf_msb, rhf_lsb, rhf_seq);
 
 	/* Unexpected errors on WFR */
-	assert((OPX_HFI1_TYPE == OPX_HFI1_JKR) || !(rhf_msb & OPX_WFR_RHF_LENERR));
-	assert((OPX_HFI1_TYPE == OPX_HFI1_JKR) || !(rhf_msb & OPX_WFR_RHF_KHDRLENERR));
 	(void)rhf_ptr;  /* unused unless debug is turned on */
+
 	/* drop this packet and allow reliability protocol to retry */
 #ifdef OPX_RELIABILITY_DEBUG
 	const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
-	uint32_t *pkt = (uint32_t *)rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS +
-		2 + /* rhf field size in dw */
-		hdrq_offset_dws;
-
-	const union fi_opx_hfi1_packet_hdr *const hdr =
-		(union fi_opx_hfi1_packet_hdr *)pkt;
-
 	fprintf(stderr,
-		"%s:%s():%d drop this packet and allow reliability protocol to retry, psn = %u\n",
-		__FILE__, __func__, __LINE__, FI_OPX_HFI1_PACKET_PSN(hdr));
+		"%s:%s():%d drop this packet and allow reliability protocol to retry, psn = %u, RHF %#16.16lX, OPX_RHF_IS_USE_EGR_BUF %u, hdrq_offset_dws %lu\n",
+		__FILE__, __func__, __LINE__, FI_OPX_HFI1_PACKET_PSN(hdr), rhf_rcvd, OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd), hdrq_offset_dws);
 #endif
-	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.recv.rhf_error);
+
+	OPX_RHE_DEBUG(opx_ep, rhe_ptr, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset, rhf_rcvd, hdr);
 
 	if (OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd)) {
 		/* "consume" this egrq element */
 		const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf_rcvd);
-			const uint32_t last_egrbfr_index =
-				opx_ep->rx->egrq.last_egrbfr_index;
-			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-				OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,
-						   ((const uint64_t)last_egrbfr_index));
-				opx_ep->rx->egrq.last_egrbfr_index = egrbfr_index;
-
-			}
+		const uint32_t last_egrbfr_index =
+			opx_ep->rx->egrq.last_egrbfr_index;
+		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
+			OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,
+					   ((const uint64_t)last_egrbfr_index));
+			opx_ep->rx->egrq.last_egrbfr_index = egrbfr_index;
+		}
 	}
 
 	/* "consume" this hdrq element */

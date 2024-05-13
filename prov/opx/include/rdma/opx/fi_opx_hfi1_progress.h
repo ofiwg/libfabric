@@ -63,6 +63,7 @@
 #include "rdma/opx/fi_opx_flight_recorder.h"
 
 #define FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS	(0x20ul)
+#define FI_OPX_HFI1_HDRQ_INDEX_SHIFT	(5) /* index FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS entries */
 
 #define FI_OPX_HFI1_HDRQ_UPDATE_MASK_1024	(0x7FFFul)
 #define FI_OPX_HFI1_HDRQ_UPDATE_MASK_512	(0x3FFFul)
@@ -86,9 +87,11 @@ OPX_COMPILE_TIME_ASSERT((FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE
 			"FI_OPX_HFI1_HDRQ_UPDATE_MASK_256, FI_OPX_HFI1_HDRQ_UPDATE_MASK_512, "
 			"or FI_OPX_HFI1_HDRQ_UPDATE_MASK_1024");
 
-unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep *opx_ep, volatile uint32_t *rhf_ptr,
+unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep *opx_ep,
+				       volatile uint64_t *rhe_ptr, volatile uint32_t *rhf_ptr,
 				       const uint32_t rhf_msb, const uint32_t rhf_lsb,
-				       const uint64_t rhf_seq, const uint64_t hdrq_offset, const uint64_t rhf_rcvd);
+				       const uint64_t rhf_seq, const uint64_t hdrq_offset, const uint64_t rhf_rcvd,
+				       const union fi_opx_hfi1_packet_hdr *const hdr);
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint64_t hdrq_offset)
@@ -468,6 +471,12 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 
 /*
  * ============================================================================
+ * Write CSR software trigger from host software by writing MISC_GPIO_OUT = 0x4
+ * ============================================================================
+*/
+
+/*
+ * ============================================================================
  *                      THIS IS THE HFI POLL FUNCTION
  * ============================================================================
 */
@@ -483,8 +492,9 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 	const uint64_t hdrq_offset = opx_ep->rx->state.hdrq.head & local_hdrq_mask;
 
 	assert(local_hdrq_mask % FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS == 0);
-	volatile uint32_t *rhf_ptr = (uint32_t *)opx_ep->rx->hdrq.rhf_base + hdrq_offset;
-	const uint64_t rhf_rcvd = *((uint64_t *)rhf_ptr);
+	volatile uint32_t *rhf_ptr = opx_ep->rx->hdrq.rhf_base + hdrq_offset;
+
+	const uint64_t rhf_rcvd = *((volatile uint64_t *)rhf_ptr);
 
 	const uint64_t rhf_seq = opx_ep->rx->state.hdrq.rhf_seq;
 	/* The software must look at the RHF.RcvSeq.
@@ -494,12 +504,8 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 	if (OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd)) {
 		const uint32_t rhf_msb = rhf_rcvd >> 32;
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "OPX_RHF_SEQ_MATCH = %d rhf_rcvd = %#lx rhf_seq = %#lx\n",
-			OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd), rhf_rcvd, rhf_seq);
+			     OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd), rhf_rcvd, rhf_seq);
 
-		if (OFI_UNLIKELY(OPX_IS_ERRORED_RHF(rhf_rcvd))) {
-			const uint32_t rhf_lsb  = rhf_rcvd & 0xFFFFFFFF;
-			return fi_opx_hfi1_handle_poll_error(opx_ep, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset, rhf_rcvd);
-		}
 		const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
 		uint32_t *pkt = (uint32_t *)rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS +
@@ -510,7 +516,14 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 
 		const uint8_t opcode = hdr->stl.bth.opcode;
 
-        
+		/* If there's an RHF/RHE error or a bad header detected,
+		   handle the error and return */
+		if(OPX_RHF_CHECK_HEADER(rhf_rcvd, hdr)) {
+			const uint32_t rhf_lsb  = rhf_rcvd & 0xFFFFFFFF;
+			volatile uint64_t *rhe_ptr = opx_ep->rx->hdrq.rhe_base;
+			return fi_opx_hfi1_handle_poll_error(opx_ep, rhe_ptr, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset, rhf_rcvd, hdr);
+		}
+
 		if (OFI_UNLIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_UD)) {
 			assert(reliability == OFI_RELIABILITY_KIND_ONLOAD);
 			/*

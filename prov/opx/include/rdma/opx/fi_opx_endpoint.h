@@ -376,6 +376,7 @@ struct fi_opx_ep_rx {
 
 	struct {
 		uint32_t *		rhf_base;
+		uint64_t *		rhe_base;
 		volatile uint64_t *	head_register;
 	} hdrq;
 
@@ -385,8 +386,6 @@ struct fi_opx_ep_rx {
 		uint32_t		last_egrbfr_index;
 		volatile uint64_t *	head_register;
 	} egrq __attribute__((__packed__));
-
-	uint64_t			unused_cacheline_4;
 
 	/* == CACHE LINE 5,6 == */
 

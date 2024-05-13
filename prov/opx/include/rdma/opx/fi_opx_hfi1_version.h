@@ -39,6 +39,13 @@
 /*******************************************/
 /* These are the same defines both WFR/JKR */
 /*******************************************/
+// RHF changes
+// Common to both JKR/WFR
+
+#define OPX_RHF_RCV_TYPE_EXPECTED_RCV(_rhf) ((_rhf & 0x00007000ul) == 0x00000000ul)
+#define OPX_RHF_RCV_TYPE_EAGER_RCV(_rhf)    ((_rhf & 0x00001000ul) == 0x00001000ul)
+#define OPX_RHF_RCV_TYPE_OTHER(_rhf)        ((_rhf & 0x00006000ul) != 0x00000000ul)
+
 
 #define OPX_PBC_CR(cr) ((cr & FI_OPX_HFI1_PBC_CR_MASK) << FI_OPX_HFI1_PBC_CR_SHIFT)
 #define OPX_PBC_LEN(len) (len)
@@ -164,7 +171,6 @@
 
 #endif
 
-// RHF changes
 #if (defined(OPX_JKR) && !defined(OPX_WFR))
 /***************************************************************/
 /* JKR Build specific definitions                              */
@@ -178,6 +184,9 @@
 #define OPX_RHF_EGR_INDEX      OPX_JKR_RHF_EGR_INDEX
 #define OPX_RHF_EGR_OFFSET     OPX_JKR_RHF_EGR_OFFSET
 #define OPX_RHF_HDRQ_OFFSET    OPX_JKR_RHF_HDRQ_OFFSET
+
+#define OPX_RHE_DEBUG          OPX_JKR_RHE_DEBUG
+#define OPX_RHF_CHECK_HEADER   OPX_JKR_RHF_CHECK_HEADER
 
 #elif (defined(OPX_WFR) && !defined(OPX_JKR))
 /***************************************************************/
@@ -193,10 +202,13 @@
 #define OPX_RHF_EGR_OFFSET     OPX_WFR_RHF_EGR_OFFSET
 #define OPX_RHF_HDRQ_OFFSET    OPX_WFR_RHF_HDRQ_OFFSET
 
+#define OPX_RHE_DEBUG          OPX_WFR_RHE_DEBUG
+#define OPX_RHF_CHECK_HEADER   OPX_WFR_RHF_CHECK_HEADER
 
 #elif (defined(OPX_JKR) && defined(OPX_WFR))
 /***************************************************************/
 /* Both JKR and WFR runtime support (not build-time constants) */
+/* Constant macro magic will be used later for this            */
 /***************************************************************/
 #define OPX_RHF_SEQ_NOT_MATCH(_seq, _rhf)   ((OPX_HFI1_TYPE == OPX_HFI1_JKR) ?         \
     OPX_JKR_RHF_SEQ_NOT_MATCH(_seq, _rhf) : OPX_WFR_RHF_SEQ_NOT_MATCH(_seq, _rhf))
@@ -224,6 +236,14 @@
 
 #define OPX_RHF_HDRQ_OFFSET(_rhf)    ((OPX_HFI1_TYPE == OPX_HFI1_JKR) ?         \
     OPX_JKR_RHF_HDRQ_OFFSET(_rhf) : OPX_WFR_RHF_HDRQ_OFFSET(_rhf))
+
+#define OPX_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr)    \
+    ((OPX_HFI1_TYPE == OPX_HFI1_JKR) ?                                                                       \
+    OPX_JKR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr) :  \
+    OPX_WFR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr))
+
+#define OPX_RHF_CHECK_HEADER(_rhf_rcvd, _hdr)     ((OPX_HFI1_TYPE == OPX_HFI1_JKR) ?         \
+    OPX_JKR_RHF_CHECK_HEADER(_rhf_rcvd, _hdr) : OPX_WFR_RHF_CHECK_HEADER(_rhf_rcvd, _hdr)
 
 #endif
 

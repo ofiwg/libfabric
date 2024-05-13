@@ -1002,6 +1002,7 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 	 * This is to improve cache layout.
 	 */
 	opx_ep->rx->hdrq.rhf_base = hfi1->info.rxe.hdrq.rhf_base;
+	opx_ep->rx->hdrq.rhe_base = hfi1->info.rxe.hdrq.rhe_base;
 	opx_ep->rx->hdrq.head_register = hfi1->info.rxe.hdrq.head_register;
 	opx_ep->rx->egrq.base_addr = hfi1->info.rxe.egrq.base_addr;
 	opx_ep->rx->egrq.elemsz = hfi1->info.rxe.egrq.elemsz;
