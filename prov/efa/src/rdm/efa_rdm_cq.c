@@ -71,6 +71,30 @@ static struct fi_ops efa_rdm_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+
+#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
+/**
+ * @brief Check whether a completion consumes recv buffer
+ *
+ * @param ibv_cq_ex extended ibv cq
+ * @return true the wc consumes a recv buffer
+ * @return false the wc doesn't consume a recv buffer
+ */
+static inline
+bool efa_rdm_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
+{
+	return efadv_wc_is_unsolicited(efadv_cq_from_ibv_cq_ex(ibv_cq_ex));
+}
+
+#else
+
+static inline
+bool efa_rdm_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
+{
+	return false;
+}
+
+#endif
 /**
  * @brief handle rdma-core CQ completion resulted from IBV_WRITE_WITH_IMM
  *
@@ -120,12 +144,20 @@ void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 
 	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, flags);
 
-	/* Recv with immediate will consume a pkt_entry, but the pkt is not
-	   filled, so free the pkt_entry and record we have one less posted
-	   packet now. */
-	assert(pkt_entry);
-	ep->efa_rx_pkts_posted--;
-	efa_rdm_pke_release_rx(pkt_entry);
+	/**
+	 * For unsolicited wc, pkt_entry can be NULL, so we can only
+	 * access it for solicited wc.
+	 */
+	if (!efa_rdm_cq_wc_is_unsolicited(ibv_cq_ex)) {
+		/**
+		 * Recv with immediate will consume a pkt_entry, but the pkt is not
+		 * filled, so free the pkt_entry and record we have one less posted
+		 * packet now.
+		 */
+		assert(pkt_entry);
+		ep->efa_rx_pkts_posted--;
+		efa_rdm_pke_release_rx(pkt_entry);
+	}
 }
 
 #if HAVE_EFADV_CQ_EX

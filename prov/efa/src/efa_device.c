@@ -268,6 +268,26 @@ bool efa_device_support_rdma_write(void)
 }
 #endif
 
+/**
+ * @brief check whether efa device support unsolicited write recv
+ *
+ * @return a boolean indicating unsolicited write recv
+ */
+#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
+bool efa_device_support_unsolicited_write_recv(void)
+{
+	if (g_device_cnt <=0)
+		return false;
+
+	return g_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_UNSOLICITED_WRITE_RECV;
+}
+#else
+bool efa_device_support_unsolicited_write_recv(void)
+{
+	return false;
+}
+#endif
+
 #ifndef _WIN32
 
 static char *get_sysfs_path(void)

@@ -130,6 +130,11 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 		.wc_flags = EFADV_WC_EX_WITH_SGID,
 	};
 
+#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
+	if (efa_device_support_unsolicited_write_recv())
+		efadv_cq_init_attr.wc_flags |= EFADV_WC_EX_WITH_IS_UNSOLICITED;
+#endif
+
 	*ibv_cq_ex = efadv_create_cq(ibv_ctx, &init_attr_ex,
 				     &efadv_cq_init_attr,
 				     sizeof(efadv_cq_init_attr));

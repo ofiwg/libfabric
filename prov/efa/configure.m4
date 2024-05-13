@@ -71,6 +71,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_rdma_size=0
 	have_caps_rnr_retry=0
 	have_caps_rdma_write=0
+	have_caps_unsolicited_write_recv=0
 	have_ibv_is_fork_initialized=0
 	efa_support_data_in_order_aligned_128_byte=0
 	efadv_support_extended_cq=0
@@ -94,6 +95,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 		AC_CHECK_DECL(EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE,
 			[have_caps_rdma_write=1],
 			[have_caps_rdma_write=0],
+			[[#include <infiniband/efadv.h>]])
+
+		AC_CHECK_DECL(EFADV_DEVICE_ATTR_CAPS_UNSOLICITED_WRITE_RECV,
+			[have_caps_unsolicited_write_recv=1],
+			[have_caps_unsolicited_write_recv=0],
 			[[#include <infiniband/efadv.h>]])
 
 		AC_CHECK_DECL([ibv_is_fork_initialized],
@@ -164,6 +170,9 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_CAPS_RDMA_WRITE],
 		[$have_caps_rdma_write],
 		[Indicates if EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE is defined])
+	AC_DEFINE_UNQUOTED([HAVE_CAPS_UNSOLICITED_WRITE_RECV],
+		[$have_caps_unsolicited_write_recv],
+		[Indicates if EFADV_DEVICE_ATTR_CAPS_UNSOLICITED_WRITE_RECV is defined])
 	AC_DEFINE_UNQUOTED([HAVE_IBV_IS_FORK_INITIALIZED],
 		[$have_ibv_is_fork_initialized],
 		[Indicates if libibverbs has ibv_is_fork_initialized])
