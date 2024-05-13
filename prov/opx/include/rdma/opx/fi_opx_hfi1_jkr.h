@@ -215,4 +215,57 @@ static inline int opx_bth_rc2_val()
 #define OPX_JKR_RHF_EGR_OFFSET(_rhf)            ((_rhf >> 32) & 0x0FFFul)
 #define OPX_JKR_RHF_HDRQ_OFFSET(_rhf)           ((_rhf >> (32 + 12)) & 0x01FFul)
 
+#define OPX_JKR_RHE_ICRCERR      (0x8000000000000000ul)
+#define OPX_JKR_RHE_TIDBYPASSERR (0x4000000000000000ul)
+#define OPX_JKR_RHE_ECCERR       (0x2000000000000000ul)
+#define OPX_JKR_RHE_LENERR       (0x1000000000000000ul)
+#define OPX_JKR_RHE_TIDERR       (0x0800000000000000ul)
+#define OPX_JKR_RHE_RCVTYPEERR   (0x0700000000000000ul)
+#define OPX_JKR_RHE_CRKERR       (0x0080000000000000ul)
+#define OPX_JKR_RHE_CRKUNCERR    (0x0040000000000000ul)
+#define OPX_JKR_RHE_KHDRLENERR   (0x0020000000000000ul)
+#define OPX_JKR_RHE_FLOWGENERR   (0x0010000000000000ul)
+#define OPX_JKR_RHE_FLOWSEQERR   (0x0008000000000000ul)
+#define OPX_JKR_RHE_TAIL         (0x000000000007FFFFul)
+
+struct fi_opx_ep;
+
+void opx_jkr_rhe_debug(struct fi_opx_ep * opx_ep,
+		       volatile uint64_t *rhe_ptr,
+		       volatile uint32_t * rhf_ptr,
+		       const uint32_t rhf_msb,
+		       const uint32_t rhf_lsb,
+		       const uint64_t rhf_seq,
+		       const uint64_t hdrq_offset,
+		       const uint64_t rhf_rcvd,
+		       const union fi_opx_hfi1_packet_hdr *const hdr);
+
+#define OPX_JKR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr) \
+        opx_jkr_rhe_debug(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr)
+
+// Common to both JKR/WFR
+
+#define OPX_JKR_RHF_RCV_TYPE_EXPECTED_RCV(_rhf) ((_rhf & 0x00007000ul) == 0x00000000ul)
+#define OPX_JKR_RHF_RCV_TYPE_EAGER_RCV(_rhf)    ((_rhf & 0x00001000ul) == 0x00001000ul)
+#define OPX_JKR_RHF_RCV_TYPE_OTHER(_rhf)        ((_rhf & 0x00006000ul) != 0x00000000ul)
+
+/* Common (jkr) handler to WFR/JKR 9B (for now) */
+int opx_jkr_rhf_error_handler(const uint64_t rhf_rcvd, const union fi_opx_hfi1_packet_hdr *const hdr);
+
+__OPX_FORCE_INLINE__ int opx_jkr_rhf_check_header(const uint64_t rhf_rcvd, const union fi_opx_hfi1_packet_hdr *const hdr)
+{
+	/* RHF error */
+	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd))) return 1; /* error */
+
+	/* Bad packet header */
+	if (OFI_UNLIKELY((!OPX_JKR_RHF_IS_USE_EGR_BUF(rhf_rcvd)) &&
+	    (ntohs(hdr->stl.lrh.pktlen) > 0x15) &&
+	    !(OPX_JKR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd))))
+		return opx_jkr_rhf_error_handler(rhf_rcvd, hdr); /* error */
+	else
+		return 0; /* no error*/
+}
+#define OPX_JKR_RHF_CHECK_HEADER(_rhf_rcvd, _hdr) opx_jkr_rhf_check_header(_rhf_rcvd, _hdr)
+
+
 #endif

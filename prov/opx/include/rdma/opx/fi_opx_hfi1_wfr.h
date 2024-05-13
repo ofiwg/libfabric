@@ -83,7 +83,7 @@
 
 #define OPX_WFR_RHF_SEQ_NOT_MATCH(_seq, _rhf)   (_seq != (_rhf & 0xF0000000ul))
 #define OPX_WFR_RHF_SEQ_INCREMENT(_seq)         ((_seq < 0xD0000000ul) * _seq + 0x10000000ul)
-#define OPX_WFR_IS_ERRORED_RHF(_rhf)            (_rhf & 0xFFE0000000000000ul)
+#define OPX_WFR_IS_ERRORED_RHF(_rhf)            (_rhf & 0xBFE0000000000000ul)
 #define OPX_WFR_RHF_SEQ_MATCH(_seq, _rhf)       (_seq == (_rhf & 0xF0000000ul))
 #define OPX_WFR_RHF_SEQ_INIT_VAL                (0x10000000ul)
 #define OPX_WFR_RHF_IS_USE_EGR_BUF(_rhf)        ((_rhf & 0x00008000ul) == 0x00008000ul)
@@ -93,7 +93,53 @@
 #define OPX_WFR_RHF_EGR_OFFSET(_rhf)            ((_rhf >> 32) & 0x0FFFul)
 #define OPX_WFR_RHF_HDRQ_OFFSET(_rhf)           ((_rhf >> (32 + 12)) & 0x01FFul)
 
-#define OPX_WFR_RHF_LENERR     (0x40000000u)
-#define OPX_WFR_RHF_KHDRLENERR (0x00400000u)
+#define OPX_WFR_RHF_ICRCERR    (0x80000000u)
+#define OPX_WFR_RHF_ECCERR     (0x20000000u)
+#define OPX_WFR_RHF_LENERR     (0x10000000u)
+#define OPX_WFR_RHF_TIDERR     (0x08000000u)
+#define OPX_WFR_RHF_RCVTYPEERR (0x07000000u)
+#define OPX_WFR_RHF_DCERR      (0x00800000u)
+#define OPX_WFR_RHF_DCUNCERR   (0x00400000u)
+#define OPX_WFR_RHF_KHDRLENERR (0x00200000u)
+
+struct fi_opx_ep;
+
+void opx_wfr_rhe_debug(struct fi_opx_ep * opx_ep,
+		       volatile uint64_t *rhe_ptr,
+		       volatile uint32_t * rhf_ptr,
+		       const uint32_t rhf_msb,
+		       const uint32_t rhf_lsb,
+		       const uint64_t rhf_seq,
+		       const uint64_t hdrq_offset,
+		       const uint64_t rhf_rcvd,
+		       const union fi_opx_hfi1_packet_hdr *const hdr);
+
+#define OPX_WFR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr) \
+        opx_wfr_rhe_debug(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr)
+
+// Common to both JKR/WFR
+
+#define OPX_WFR_RHF_RCV_TYPE_EXPECTED_RCV(_rhf) ((_rhf & 0x00007000ul) == 0x00000000ul)
+#define OPX_WFR_RHF_RCV_TYPE_EAGER_RCV(_rhf)    ((_rhf & 0x00001000ul) == 0x00001000ul)
+#define OPX_WFR_RHF_RCV_TYPE_OTHER(_rhf)        ((_rhf & 0x00006000ul) != 0x00000000ul)
+
+/* Common (jkr) handler to WFR/JKR 9B (for now) */
+int opx_jkr_rhf_error_handler(const uint64_t rhf_rcvd, const union fi_opx_hfi1_packet_hdr *const hdr);
+
+__OPX_FORCE_INLINE__ int opx_wfr_rhf_check_header(const uint64_t rhf_rcvd, const union fi_opx_hfi1_packet_hdr *const hdr)
+{
+	/* RHF error */
+	if (OFI_UNLIKELY(OPX_WFR_IS_ERRORED_RHF(rhf_rcvd))) return 1; /* error */
+
+	/* Bad packet header */
+	if (OFI_UNLIKELY((!OPX_WFR_RHF_IS_USE_EGR_BUF(rhf_rcvd)) &&
+	    (ntohs(hdr->stl.lrh.pktlen) > 0x15) &&
+	    !(OPX_WFR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd))))
+		return opx_jkr_rhf_error_handler(rhf_rcvd, hdr); /* error */
+	else
+		return 0; /* no error*/
+}
+
+#define OPX_WFR_RHF_CHECK_HEADER(_rhf_rcvd, _hdr) opx_wfr_rhf_check_header(_rhf_rcvd, _hdr)
 
 #endif

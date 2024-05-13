@@ -33,6 +33,8 @@
 #ifndef _FI_PROV_OPX_HFI1_H_
 #define _FI_PROV_OPX_HFI1_H_
 
+#include "opa_user.h"
+
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_hfi1_packet.h"
 #include "rdma/opx/fi_opx_compiler.h"
@@ -366,6 +368,7 @@ struct fi_opx_hfi1_rxe_static {
 		uint64_t		rx_poll_mask;
 
 		uint32_t *		rhf_base;
+		uint64_t *		rhe_base;
 
 
 		volatile uint64_t *	head_register;
@@ -431,7 +434,13 @@ struct fi_opx_hfi1_context {
 	int64_t				ref_cnt;
 };
 
+struct fi_opx_hfi1_context_internal {
+	struct fi_opx_hfi1_context	context;
 
+	struct hfi1_user_info_dep	user_info;
+	struct _hfi_ctrl *		ctrl;
+
+};
 
 #ifdef NDEBUG
 #define FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(credits_addr)
@@ -592,6 +601,7 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.elemcnt         %#X\n",context->info.rxe.hdrq.elemcnt);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.rx_poll_mask    %#lX\n",context->info.rxe.hdrq.rx_poll_mask);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.rhf_base        %p \n",context->info.rxe.hdrq.rhf_base);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.rhe_base        %p \n",context->info.rxe.hdrq.rhe_base);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.head_register   %p \n",context->info.rxe.hdrq.head_register);
 /*	Not printing                                Context info.rxe.hdrq.tail_register         */
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.egrq.base_addr       %p \n",context->info.rxe.egrq.base_addr);

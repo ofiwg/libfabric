@@ -71,6 +71,7 @@
 
 #include "opa_user_gen1.h"
 #include "opa_udebug.h"
+#include "rdma/opx/opx_hfi1_pre_cn5000.h"
 
 #include <sched.h>
 
@@ -151,7 +152,7 @@ static int map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt)
 	if(OPX_HFI1_WFR == opx_hfi1_check_hwversion(binfo->hw_version)){
 		sz = HFI_MMAP_PGSIZE;
 #ifndef OPX_WFR
-		_HFI_ERROR("Runtime HFI type (%u) found on non-WFR build\n",
+		fprintf(stderr, "Runtime HFI type (%u) found on non-WFR build\n",
 			   opx_hfi1_check_hwversion(binfo->hw_version));
 		abort();
 #endif
@@ -160,7 +161,7 @@ static int map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt)
 		   future work with 8K virtual memory pages */
 		sz = 2*HFI_MMAP_PGSIZE;
 #ifndef OPX_JKR
-		_HFI_ERROR("Runtime HFI type (%u) found on non-JKR build\n",
+		fprintf(stderr, "Runtime HFI type (%u) found on non-JKR build\n",
 			   opx_hfi1_check_hwversion(binfo->hw_version));
 		abort();
 #endif
@@ -631,22 +632,20 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	spctrl->__hfi_pg_sz = __hfi_pg_sz;
 	spctrl->__hfi_unit = cinfo->unit;
 
-	/* Unofficial, undocumented port configuration */
-	int port = OPX_PORT_NUM_ANY; /* default */
-	if (getenv("HFI_PORT")) {
+	/* Initial port configuration */
+	int port = opx_get_port(uinfo);
+
+	/* If not pre-selected, check envvar */
+	if ((port == OPX_PORT_NUM_ANY) && (getenv("HFI_PORT"))) {
 		port = atoi(getenv("HFI_PORT"));
-		/* No WFR/JKR checks here.
+		/* No HFI1 checks here.
 		 * That will happen below where invalid
 		 * port (lids) should fail to lowest
 		 * working port (likely 1).
 		 */
 		_HFI_INFO("HFI_PORT %d/%s requested.\n", port, getenv("HFI_PORT"));
 	}
-#ifdef OPX_PRE_CN5000
-	/* The port index is already in the "pad" */
-	port = uinfo->pad + 1;
-	_HFI_DBG("OPX_PRE_CN5000 pad/port index %d, port %d\n", uinfo->pad, port);
-#endif
+
 	if (port == OPX_PORT_NUM_ANY) {
 		int p,rv;
 		/* Use first working port */
@@ -664,14 +663,6 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 		abort();
 	}
 
-	/*
-	 * driver should provide the port where the context is opened for, But
-	 * OPA driver does not have port interface to psm because there is only
-	 * one port. So we hardcode the port to 1 here. When we work on the
-	 * version of PSM for the successor to OPA, we should have port returned
-	 * from driver and will be set accordingly.
-	 */
-	/* spctrl->__hfi_port = cinfo->port; */
 	spctrl->__hfi_port = port;
 	spctrl->__hfi_tidegrcnt = cinfo->egrtids;
 	spctrl->__hfi_tidexpcnt = cinfo->rcvtids - cinfo->egrtids;

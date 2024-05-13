@@ -45,6 +45,7 @@
 	#define OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
 	#define OPX_DEBUG_COUNTERS_MATCH
 	#define OPX_DEBUG_COUNTERS_RECV
+	#define OPX_DEBUG_COUNTERS_RHF
 	#define OPX_DEBUG_COUNTERS_HMEM
 #endif
 
@@ -232,10 +233,30 @@ struct fi_opx_debug_counters {
 		uint64_t	multi_recv_eager;
 		uint64_t	multi_recv_rzv_noncontig;
 		uint64_t	multi_recv_rzv_contig;
-
-		uint64_t	rhf_error;
-
 	} recv;
+
+	struct {
+		/* Packet type on error */
+		uint64_t	rcvtypeexp;
+		uint64_t	rcvtypeegr;
+		uint64_t	rcvtypeoth;
+
+		/* Errors */
+		uint64_t	error;
+		uint64_t	icrcerr;
+		uint64_t	lenerr;
+		uint64_t	eccerr;
+		uint64_t	tiderr;
+		uint64_t	dcerr;
+		uint64_t	dcuncerr;
+		uint64_t	khdrlenerr;
+		uint64_t	rcvtypeerr;
+		uint64_t	tidbypasserr;
+		uint64_t	crkerr;
+		uint64_t	crkuncerr;
+		uint64_t	flowgenerr;
+		uint64_t	flowseqerr;
+	} rhf;
 
 	struct {
 		struct fi_opx_debug_counters_typed_txr	hfi;
@@ -386,7 +407,28 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters)
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_eager);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_rzv_noncontig);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_rzv_contig);
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.rhf_error);
+	#endif
+
+	#ifdef OPX_DEBUG_COUNTERS_RHF
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.rcvtypeexp);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.rcvtypeegr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.rcvtypeoth);
+
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.error);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.icrcerr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.lenerr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.eccerr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.tiderr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.dcerr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.dcuncerr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.khdrlenerr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.rcvtypeerr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.tidbypasserr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.rcvtypeoth);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.crkerr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.crkuncerr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.flowgenerr);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, rhf.flowseqerr);
 	#endif
 
 	#ifdef OPX_DEBUG_COUNTERS_RELIABILITY
@@ -493,6 +535,7 @@ void fi_opx_debug_counters_init(struct fi_opx_debug_counters *counters) {
 	defined(OPX_DEBUG_COUNTERS_SDMA)		||		\
 	defined(OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE)	||		\
 	defined(OPX_DEBUG_COUNTERS_RECV)		||		\
+	defined(OPX_DEBUG_COUNTERS_RHF)  		||		\
 	defined(OPX_DEBUG_COUNTERS_HMEM)		||		\
 	defined(OPX_DEBUG_COUNTERS_MATCH)
 
