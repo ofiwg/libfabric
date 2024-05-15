@@ -606,9 +606,9 @@ int ft_get_cntr_comp(struct fid_cntr *cntr, uint64_t total, int timeout);
 int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		size_t size, void *ctx, int flags);
 int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
-		size_t size, void *ctx, int flags);
+	       void *buf, size_t size, void *ctx, int flags);
 int ft_tx_msg(struct fid_ep *ep, fi_addr_t fi_addr,
-	      size_t size, void *ctx, uint64_t flags);
+	      void *buf, size_t size, void *ctx, uint64_t flags);
 int ft_cq_read_verify(struct fid_cq *cq, void *op_context);
 
 void eq_readerr(struct fid_eq *eq, const char *eq_str);
