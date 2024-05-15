@@ -2801,17 +2801,17 @@ int ft_get_tx_comp(uint64_t total)
 	return ret;
 }
 
-int ft_tx_msg(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx, uint64_t flags)
+int ft_tx_msg(struct fid_ep *ep, fi_addr_t fi_addr, void *buf, size_t size, void *ctx, uint64_t flags)
 {
 	int ret;
 
 	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
-		ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+		ret = ft_fill_buf((char *) buf + ft_tx_prefix_size(), size);
 		if (ret)
 			return ret;
 	}
 
-	ret = ft_sendmsg(ep, fi_addr, size, ctx, flags);
+	ret = ft_sendmsg(ep, fi_addr, buf, size, ctx, flags);
 	if (ret)
 		return ret;
 
@@ -2820,13 +2820,13 @@ int ft_tx_msg(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx, uint
 }
 
 int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
-		size_t size, void *ctx, int flags)
+		void *buf, size_t size, void *ctx, int flags)
 {
 	struct fi_msg msg;
 	struct fi_msg_tagged tagged_msg;
 	struct iovec msg_iov;
 
-	msg_iov.iov_base = tx_buf;
+	msg_iov.iov_base = buf;
 	msg_iov.iov_len = size + ft_tx_prefix_size();
 
 	if (hints->caps & FI_TAGGED) {
@@ -2964,7 +2964,8 @@ int ft_sync()
 
 	if (opts.dst_addr) {
 		if (!(opts.options & FT_OPT_OOB_SYNC)) {
-			ret = ft_tx_msg(ep, remote_fi_addr, 1, &tx_ctx, FI_DELIVERY_COMPLETE);
+			ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 1, &tx_ctx,
+					FI_DELIVERY_COMPLETE);
 			if (ret)
 				return ret;
 
@@ -2984,7 +2985,8 @@ int ft_sync()
 			if (ret)
 				return ret;
 
-			ret = ft_tx_msg(ep, remote_fi_addr, 1, &tx_ctx, FI_DELIVERY_COMPLETE);
+			ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 1, &tx_ctx,
+					FI_DELIVERY_COMPLETE);
 			if (ret)
 				return ret;
 		} else {
@@ -3103,7 +3105,7 @@ int ft_finalize_ep(struct fid_ep *ep)
 	int ret;
 	struct fi_context ctx;
 
-	ret = ft_sendmsg(ep, remote_fi_addr, 4, &ctx, FI_TRANSMIT_COMPLETE);
+	ret = ft_sendmsg(ep, remote_fi_addr, tx_buf, 4, &ctx, FI_TRANSMIT_COMPLETE);
 	if (ret)
 		return ret;
 

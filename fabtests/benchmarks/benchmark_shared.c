@@ -274,9 +274,21 @@ static int rma_bw_rx_comp()
 	return ft_tx(ep, remote_fi_addr, FT_RMA_SYNC_MSG_BYTES, &tx_ctx);
 }
 
+static int set_fi_more_flag(int i, int j, int flags)
+{
+	if (j < opts.window_size - 1 && i >= opts.warmup_iterations &&
+	    i < opts.iterations + opts.warmup_iterations - 1) {
+		flags |= FI_MORE;
+	} else {
+		flags &= ~FI_MORE;
+	}
+	return flags;
+}
+
 int bandwidth(void)
 {
 	int ret, i, j, inject_size;
+	int flags = 0;
 
 	inject_size = inject_size_set ?
 			hints->tx_attr->inject_size : fi->tx_attr->inject_size;
@@ -310,6 +322,12 @@ int bandwidth(void)
 				ret = ft_post_inject_buf(ep, remote_fi_addr,
 						opts.transfer_size, NO_CQ_DATA,
 						tx_ctx_arr[j].buf, tx_seq);
+			} else if (opts.use_fi_more) {
+				flags = set_fi_more_flag(i, j, flags);
+				ret = ft_sendmsg(ep, remote_fi_addr,
+						tx_ctx_arr[j].buf,
+						opts.transfer_size,
+						&tx_ctx_arr[j].context, flags);
 			} else {
 				ret = ft_post_tx_buf(ep, remote_fi_addr,
 						opts.transfer_size, NO_CQ_DATA,

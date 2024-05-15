@@ -52,7 +52,7 @@ static int send_msg(int sendmsg, size_t size)
 	}
 
 	if (sendmsg) {
-		ret = ft_sendmsg(ep, remote_fi_addr, size, &tx_ctx, flag);
+		ret = ft_sendmsg(ep, remote_fi_addr, tx_buf, size, &tx_ctx, flag);
 		if (ret)
 			return ret;
 	} else {
