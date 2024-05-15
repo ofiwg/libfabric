@@ -73,7 +73,7 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 		opt_hdr += EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE;
 	}
 
-	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR) {
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR || pkt_entry->ep->use_zcpy_rx) {
 		struct efa_rdm_req_opt_cq_data_hdr *cq_data_hdr;
 
 		cq_data_hdr = (struct efa_rdm_req_opt_cq_data_hdr *)opt_hdr;
@@ -148,7 +148,7 @@ uint32_t *efa_rdm_pke_get_req_connid_ptr(struct efa_rdm_pke *pkt_entry)
 		return &raw_addr->qkey;
 	}
 
-	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR)
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR || pkt_entry->ep->use_zcpy_rx)
 		opt_hdr += sizeof(struct efa_rdm_req_opt_cq_data_hdr);
 
 	if (base_hdr->flags & EFA_RDM_PKT_CONNID_HDR) {
