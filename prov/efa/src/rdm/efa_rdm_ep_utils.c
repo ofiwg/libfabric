@@ -588,11 +588,10 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	struct efa_rdm_ope *txe;
 	struct fi_msg msg = {0};
 	struct efa_rdm_pke *pkt_entry;
-	fi_addr_t addr;
 	ssize_t ret;
 
-	addr = peer->efa_fiaddr;
-	msg.addr = addr;
+	assert(peer);
+	msg.addr = peer->efa_fiaddr;
 
 	/* ofi_op_write is ignored in handshake path */
 	txe = efa_rdm_ep_alloc_txe(ep, peer, &msg, ofi_op_write, 0, 0);
@@ -615,7 +614,7 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 
 	pkt_entry->ope = txe;
 
-	efa_rdm_pke_init_handshake(pkt_entry, addr);
+	efa_rdm_pke_init_handshake(pkt_entry, msg.addr);
 
 	ret = efa_rdm_pke_sendv(&pkt_entry, 1);
 	if (OFI_UNLIKELY(ret)) {
