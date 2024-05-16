@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2024 Cornelis Networks.
+ * Copyright (C) 2024-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -29,42 +29,35 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef _FI_PROV_OPX_TID_DOMAIN_H_
-#define _FI_PROV_OPX_TID_DOMAIN_H_
+#ifdef OPX_HMEM
+#ifndef _FI_PROV_OPX_HMEM_CACHE_H_
+#define _FI_PROV_OPX_HMEM_CACHE_H_
 
-#include "rdma/fi_domain.h"
-
-#include "ofi_util.h"
-#include "ofi_mr.h"
-
-#define OPX_TID_NO_LOCK_ON_CLEANUP (0)
+#include "config.h"
+#include <ofi_util.h>
+#include "rdma/opx/opx_hmem_domain.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct opx_tid_fabric {
-	struct util_fabric util_fabric;
-};
+/* @brief Setup the MR cache.
+ *
+ * This function enables the MR cache using the util MR cache code.
+ *
+ * @param cache		The ofi_mr_cache that is to be set up.
+ * @param domain	The OPX domain where cache will be used.
+ * @return 0 on success, fi_errno on failure.
+ */
+int opx_hmem_cache_setup(struct ofi_mr_cache **cache,
+			struct opx_hmem_domain *domain);
 
-struct opx_tid_domain {
-	struct util_domain util_domain;
-	struct opx_tid_fabric *fabric;
-	struct ofi_mr_cache *tid_cache;
-	uint64_t key;
-	struct dlist_entry list_entry; /* linked to tid_domain_list */
-};
-
-int opx_close_tid_domain(struct opx_tid_domain *tid_domain, int locked);
-int opx_open_tid_domain(struct opx_tid_fabric *tid_fabric,
-		      struct fi_info *info,
-		      struct opx_tid_domain **opx_tid_domain);
-
-int opx_close_tid_fabric(struct opx_tid_fabric *opx_tid_fabric);
-int opx_open_tid_fabric(struct opx_tid_fabric **opx_tid_fabric);
+int opx_hmem_cache_add_region();
+void opx_hmem_cache_delete_region();
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _FI_PROV_OPX_TID_DOMAIN_H_ */
+#endif /* _FI_PROV_OPX_HMEM_CACHE_H_ */
+#endif /* OPX_HMEM */

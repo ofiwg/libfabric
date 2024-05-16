@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,7 +47,7 @@
 #define FI_OPX_CQ_CONTEXT_MULTIRECV	(0x4000000000000000ull)
 #define FI_OPX_CQ_CONTEXT_HMEM		(0x2000000000000000ull)
 
-#define OPX_HMEM_SIZE_QWS	(2)
+#define OPX_HMEM_SIZE_QWS	(3)
 
 union fi_opx_mp_egr_id {
 	uint64_t		id;

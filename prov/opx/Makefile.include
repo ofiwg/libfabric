@@ -45,6 +45,7 @@ opx_files =									\
 		prov/opx/src/fi_opx_cq_ops_table_non_locking_runtime.c		\
 		prov/opx/src/fi_opx_domain.c					\
 		prov/opx/src/fi_opx_tid_domain.c				\
+		prov/opx/src/opx_hmem_domain.c					\
 		prov/opx/src/opx_tracer.c					\
 		prov/opx/src/fi_opx_ep.c					\
 		prov/opx/src/fi_opx_eq.c					\
@@ -65,6 +66,7 @@ opx_files =									\
 		prov/opx/src/fi_opx_service.c					\
 		prov/opx/src/fi_opx_shm.c					\
 		prov/opx/src/fi_opx_tid_cache.c					\
+		prov/opx/src/opx_hmem_cache.c					\
 		prov/opx/src/fi_opx_hfi_select.c				\
 		prov/opx/src/opa_utils_gen1.c					\
 		prov/opx/src/opa_proto.c					\
@@ -140,6 +142,7 @@ noinst_HEADERS = \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_hfi1_progress.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_progress.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_tid_domain.h \
+	$(top_srcdir)/prov/opx/include/rdma/opx/opx_hmem_domain.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_match.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_hmem.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_hfi1_jkr.h \
@@ -154,6 +157,7 @@ noinst_HEADERS = \
 	$(top_srcdir)/prov/opx/include/fi_opx_hfi_select.h \
 	$(top_srcdir)/prov/opx/include/fi_opx_tid.h \
 	$(top_srcdir)/prov/opx/include/fi_opx_tid_cache.h \
+	$(top_srcdir)/prov/opx/include/opx_hmem_cache.h \
 	$(top_srcdir)/prov/opx/include/opa_user_gen1.h \
 	$(top_srcdir)/prov/opx/include/opa_intf.h \
 	$(top_srcdir)/prov/opx/include/hfi1_deprecated_gen1.h \

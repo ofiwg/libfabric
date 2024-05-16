@@ -53,6 +53,7 @@
 #include <dlfcn.h>
 
 #include "fi_opx_tid_cache.h"
+#include "opx_hmem_cache.h"
 
 union fi_opx_addr opx_default_addr = {
 	.hfi1_rx = 0,
@@ -163,7 +164,7 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 	uint64_t caps;
 	union fi_opx_addr *addr;
 	uint32_t fmt;
-	size_t len;	
+	size_t len;
 
 	if (!fi)
 		goto err;
@@ -541,7 +542,7 @@ static int fi_opx_getinfo(uint32_t version, const char *node,
 	*info = NULL;
 	fi_opx_count = opx_hfi_get_hfi1_count();
 	FI_LOG(fi_opx_global.prov, FI_LOG_TRACE, FI_LOG_FABRIC,
-			"Detected %d hfi1(s) in the system\n", fi_opx_count);	
+		"Detected %d hfi1(s) in the system\n", fi_opx_count);
 
 	if (!fi_opx_count) {
 		return -FI_ENODATA;
@@ -557,7 +558,7 @@ static int fi_opx_getinfo(uint32_t version, const char *node,
 		}
 
 		FI_LOG(fi_opx_global.prov, FI_LOG_TRACE, FI_LOG_FABRIC,
-				"Successfully got getinfo for HFI %d\n", i);	
+			"Successfully got getinfo for HFI %d\n", i);
 
 		if (!*info) {
 			*info = cur;
@@ -583,7 +584,7 @@ static void fi_opx_fini()
 	 * so do our best and free storage */
 	pthread_mutex_trylock(&mm_lock);
 	int locked = pthread_mutex_unlock(&mm_lock); /* rc 0 is unlocked */
-	
+
 	struct dlist_entry *tmp;
 	struct opx_tid_domain *tid_domain;
 
@@ -591,14 +592,19 @@ static void fi_opx_fini()
 				     struct opx_tid_domain,
 				     tid_domain, list_entry, tmp) {
 
-		if (tid_domain->tid_cache) {
-			if(!locked) opx_tid_cache_cleanup(tid_domain->tid_cache);
-			free(tid_domain->tid_cache);
-			tid_domain->tid_cache = NULL;
-		}
-		free(tid_domain);
-		tid_domain = NULL;
+		opx_close_tid_domain(tid_domain, locked);
 	}
+
+#ifdef OPX_HMEM
+	struct opx_hmem_domain *hmem_domain;
+
+	dlist_foreach_container_safe(&(fi_opx_global.hmem_domain_list),
+					struct opx_hmem_domain,
+					hmem_domain, list_entry, tmp) {
+
+		opx_hmem_close_domain(hmem_domain, locked);
+	}
+#endif
 
 	fi_freeinfo(fi_opx_global.info);
 	OPX_TRACER_EXIT();
@@ -683,7 +689,7 @@ OPX_INI
 	fi_opx_global.progress = FI_PROGRESS_MANUAL;
 	fi_opx_set_default_info(); // TODO: fold into fi_opx_set_defaults
 
-	/* Refrain from allocating memory dynamically in this INI function. 
+	/* Refrain from allocating memory dynamically in this INI function.
 	   That sort of behavior will results in memory leaks for the fi_info
 	   executable. */
 
@@ -727,8 +733,11 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "rate_control", FI_PARAM_INT,"Rate control (CN5000 only).  Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Default is %d\n", OPX_BTH_RC2_DEFAULT);
 	// fi_param_define(&fi_opx_provider, "varname", FI_PARAM_*, "help");
 
-	/* Track TID domains so cache can be cleared on exit */
+	/* Track TID and HMEM domains so caches can be cleared on exit */
 	dlist_init(&fi_opx_global.tid_domain_list);
+#ifdef OPX_HMEM
+	dlist_init(&fi_opx_global.hmem_domain_list);
+#endif
 
 	if (fi_log_enabled(fi_opx_global.prov, FI_LOG_TRACE, FI_LOG_FABRIC)) {
 		Dl_info dl_info;

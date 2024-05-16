@@ -39,8 +39,11 @@
 #include "rdma/opx/opx_tracer.h"
 #include "ofi_hmem.h"
 
+#define OPX_HMEM_NO_HANDLE (0)
+
 struct fi_opx_hmem_info {
 	uint64_t			device;
+	uint64_t			hmem_dev_reg_handle;
 	enum fi_hmem_iface		iface;
 	uint32_t			unused;
 } __attribute__((__packed__)) __attribute__((aligned(8)));
@@ -109,30 +112,52 @@ enum fi_hmem_iface fi_opx_hmem_get_iface(const void *ptr,
 }
 
 __OPX_FORCE_INLINE__
-int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device,
+int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_handle,
 		     void *dest, const void *src, size_t len)
 {
 	int ret;
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "COPY-TO-HMEM");
 #if HAVE_CUDA
-	ret = (int) cudaMemcpy(dest, src, len, cudaMemcpyHostToDevice);
+	if (hmem_handle != 0) {
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-TO-DEV");
+		cuda_gdrcopy_to_dev(hmem_handle, dest, src, len);
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-TO-DEV");
+		ret = 0;
+	} else {
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "CUDAMEMCPY-TO-HMEM");
+		ret = (int) cudaMemcpy(dest, src, len, cudaMemcpyHostToDevice);
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "CUDAMEMCPY-TO-HMEM");
+	}
 #else
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "OFI-COPY-TO-HMEM");
 	ret = ofi_copy_to_hmem(iface, device, dest, src, len);
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "OFI-COPY-TO-HMEM");
 #endif
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "COPY-TO-HMEM");
 	return ret;
 }
 
 __OPX_FORCE_INLINE__
-int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device,
+int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_handle,
 		       void *dest, const void *src, size_t len)
 {
 	int ret;
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "COPY-FROM-HMEM");
 #if HAVE_CUDA
-	ret = (int) cudaMemcpy(dest, src, len, cudaMemcpyDeviceToHost);
+	if (hmem_handle != 0) {
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-FROM-DEV");
+		cuda_gdrcopy_from_dev(hmem_handle, dest, src, len);
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-FROM-DEV");
+		ret = 0;
+	} else {
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "CUDAMEMCPY-FROM-HMEM");
+		ret = (int) cudaMemcpy(dest, src, len, cudaMemcpyDeviceToHost);
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "CUDAMEMCPY-FROM-HMEM");
+	}
 #else
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "OFI-COPY-FROM-HMEM");
 	ret = ofi_copy_from_hmem(iface, device, dest, src, len);
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "OFI-COPY-FROM-HMEM");
 #endif
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "COPY-FROM-HMEM");
 	return ret;
@@ -169,45 +194,45 @@ static const unsigned OPX_HMEM_KERN_MEM_TYPE[4] = {
 };
 
 #ifdef OPX_HMEM
-#define OPX_HMEM_COPY_FROM(dst, src, len, src_iface, src_device)			\
-	do {										\
-		if (src_iface == FI_HMEM_SYSTEM) {					\
-			memcpy(dst, src, len);						\
-		} else {								\
-			opx_copy_from_hmem(src_iface, src_device, dst, src, len);	\
-		}									\
+#define OPX_HMEM_COPY_FROM(dst, src, len, handle, src_iface, src_device)			\
+	do {											\
+		if (src_iface == FI_HMEM_SYSTEM) {						\
+			memcpy(dst, src, len);							\
+		} else {									\
+			opx_copy_from_hmem(src_iface, src_device, handle, dst, src, len);	\
+		}										\
 	} while (0)
 
-#define OPX_HMEM_COPY_TO(dst, src, len, dst_iface, dst_device)				\
-	do {										\
-		if (dst_iface == FI_HMEM_SYSTEM) {					\
-			memcpy(dst, src, len);						\
-		} else {								\
-			opx_copy_to_hmem(dst_iface, dst_device, dst, src, len);		\
-		}									\
+#define OPX_HMEM_COPY_TO(dst, src, len, handle, dst_iface, dst_device)				\
+	do {											\
+		if (dst_iface == FI_HMEM_SYSTEM) {						\
+			memcpy(dst, src, len);							\
+		} else {									\
+			opx_copy_to_hmem(dst_iface, dst_device, handle, dst, src, len);		\
+		}										\
 	} while (0)
 
-#define OPX_HMEM_ATOMIC_DISPATCH(src, dst, len, dt, op, dst_iface, dst_device)		\
-	do {										\
-		if (dst_iface == FI_HMEM_SYSTEM) {					\
-			fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);		\
-		} else {								\
-			uint8_t hmem_buf[FI_OPX_HFI1_PACKET_MTU];			\
-			opx_copy_from_hmem(dst_iface, dst_device, hmem_buf, dst, len);	\
-			fi_opx_rx_atomic_dispatch(src, hmem_buf, len, dt, op);		\
-			opx_copy_to_hmem(dst_iface, dst_device, dst, hmem_buf, len);	\
-		}									\
+#define OPX_HMEM_ATOMIC_DISPATCH(src, dst, len, dt, op, dst_iface, dst_device)					\
+	do {													\
+		if (dst_iface == FI_HMEM_SYSTEM) {								\
+			fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);					\
+		} else {											\
+			uint8_t hmem_buf[FI_OPX_HFI1_PACKET_MTU];						\
+			opx_copy_from_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE, hmem_buf, dst, len);	\
+			fi_opx_rx_atomic_dispatch(src, hmem_buf, len, dt, op);					\
+			opx_copy_to_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE, dst, hmem_buf, len);	\
+		}												\
 	} while (0)
 
 #else
 
-#define OPX_HMEM_COPY_FROM(dst, src, len, src_iface, src_device)			\
+#define OPX_HMEM_COPY_FROM(dst, src, len, handle, src_iface, src_device)		\
 	do {										\
 		memcpy(dst, src, len);							\
 		(void)src_iface;							\
 	} while (0)
 
-#define OPX_HMEM_COPY_TO(dst, src, len, dst_iface, dst_device)				\
+#define OPX_HMEM_COPY_TO(dst, src, len, handle, dst_iface, dst_device)			\
 	do {										\
 		memcpy(dst, src, len);							\
 		(void)dst_iface;							\

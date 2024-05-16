@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2023 by Cornelis Networks.
+ * Copyright (C) 2022-2024 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -65,7 +65,6 @@ int opx_close_tid_fabric(struct opx_tid_fabric *opx_tid_fabric)
 	free((void*)opx_tid_fabric->util_fabric.name);
 	opx_tid_fabric->util_fabric.name = NULL;
 	free(opx_tid_fabric);
-	opx_tid_fabric = NULL;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "tid fabric closed\n");
 	return 0;
@@ -74,7 +73,7 @@ int opx_close_tid_fabric(struct opx_tid_fabric *opx_tid_fabric)
 static int fi_opx_tid_no_close_fabric(fid_t fid)
 {
 	assert(0);
-	return 0;
+	return -FI_ENOSYS;
 }
 
 static struct fi_ops fi_opx_fi_ops = { .size = sizeof(struct fi_ops),
@@ -89,7 +88,7 @@ static int opx_tid_no_domain(struct fid_fabric *fabric, struct fi_info *info,
 				struct fid_domain **dom, void *context)
 {
 	assert(0);
-	return 0;
+	return -FI_ENOSYS;
 }
 
 static struct fi_ops_fabric fi_opx_ops_fabric = {
@@ -108,8 +107,7 @@ int opx_open_tid_fabric(struct opx_tid_fabric **opx_tid_fabric)
 	if (tid_fabric == NULL) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
 			"Couldn't create tid fabric FI_ENOMEM\n");
-		errno = -FI_ENOMEM;
-		return -errno;
+		return -FI_ENOMEM;
 	}
 
 	tid_fabric->util_fabric.fabric_fid.fid.fclass = FI_CLASS_FABRIC;
@@ -138,10 +136,14 @@ int opx_open_tid_fabric(struct opx_tid_fabric **opx_tid_fabric)
 	return 0;
 }
 
-int opx_close_tid_domain(struct opx_tid_domain *tid_domain)
+/* The locked variable is used to handle abornmal exit cases where the
+ * memory monitor lock is held. In that case, we can't flush/cleanup, but
+ * we still want to do our best to free storage. In non-error cases,
+ * locked is always 0. */
+int opx_close_tid_domain(struct opx_tid_domain *tid_domain, int locked)
 {
 	if (tid_domain->tid_cache) {
-		opx_tid_cache_cleanup(tid_domain->tid_cache);
+		if (!locked) opx_tid_cache_cleanup(tid_domain->tid_cache);
 		free(tid_domain->tid_cache);
 		tid_domain->tid_cache = NULL;
 	}
@@ -149,7 +151,6 @@ int opx_close_tid_domain(struct opx_tid_domain *tid_domain)
 	dlist_remove(&tid_domain->list_entry);
 	ofi_domain_close(&tid_domain->util_domain);
 	free(tid_domain);
-	tid_domain = NULL;
 
 	return 0;
 }
@@ -169,6 +170,7 @@ int opx_open_tid_domain(struct opx_tid_fabric *tid_fabric,
 			      &tid_domain->util_domain, NULL, OFI_LOCK_NOOP);
 	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "init util domain done\n");
 	if (ret) {
+		free(tid_domain);
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
 			"init util domain failed %d\n", ret);
 		return ret;
@@ -182,6 +184,7 @@ int opx_open_tid_domain(struct opx_tid_fabric *tid_fabric,
 			  &(fi_opx_global.tid_domain_list));
 
 	if (ret) {
+		free(tid_domain);
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
 			"init util domain failed %d\n", ret);
 		return ret;

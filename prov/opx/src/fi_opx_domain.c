@@ -69,7 +69,12 @@ static int fi_opx_close_domain(fid_t fid)
 	if (ret)
 		return ret;
 
-	opx_close_tid_domain(opx_domain->tid_domain);
+	opx_close_tid_domain(opx_domain->tid_domain, OPX_TID_NO_LOCK_ON_CLEANUP);
+	opx_domain->tid_domain = NULL;
+#ifdef OPX_HMEM
+	opx_hmem_close_domain(opx_domain->hmem_domain, OPX_HMEM_NO_LOCK_ON_CLEANUP);
+	opx_domain->hmem_domain = NULL;
+#endif
 
 	ret = fi_opx_ref_finalize(&opx_domain->ref_cnt, "domain");
 	if (ret)
@@ -81,7 +86,7 @@ static int fi_opx_close_domain(fid_t fid)
 
 
 	free(opx_domain);
-	opx_domain = NULL;
+
 	//opx_domain (the object passed in as fid) is now unusable
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "domain closed\n");
@@ -107,6 +112,21 @@ static struct fi_ops_domain fi_opx_domain_ops = {
 	.stx_ctx	= fi_opx_stx_context,
 	.srx_ctx	= fi_no_srx_context
 };
+
+
+static inline void
+opx_util_domain_cleanup(struct fi_opx_domain *opx_domain) {
+	if (opx_domain->tid_domain) {
+		opx_close_tid_domain(opx_domain->tid_domain, OPX_TID_NO_LOCK_ON_CLEANUP);
+		opx_domain->tid_domain = NULL;
+	}
+#ifdef OPX_HMEM
+	if (opx_domain->hmem_domain) {
+		opx_hmem_close_domain(opx_domain->hmem_domain, OPX_HMEM_NO_LOCK_ON_CLEANUP);
+		opx_domain->hmem_domain = NULL;
+	}
+#endif
+}
 
 
 int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
@@ -234,7 +254,7 @@ int fi_opx_check_domain_attr(struct fi_domain_attr *attr)
 		FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "incorrect threading level\n");
 		goto err;
 	}
-	
+
 	if (attr->mr_mode == FI_MR_UNSPEC) {
 		attr->mr_mode = FI_OPX_BASE_MR_MODE;
 	}
@@ -267,7 +287,7 @@ int fi_opx_validate_affinity_str(char *str)
 	int cols = 0;
 	bool recentCol = true;
 	int iter;
-	
+
 	for (iter = 0; iter < strlen(str); iter++) {
 		if (!isdigit(str[iter]) && str[iter] != ':') {
 			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
@@ -324,23 +344,39 @@ int fi_opx_domain(struct fid_fabric *fabric,
 		errno = FI_ENOMEM;
 		goto err;
 	}
+	opx_domain->tid_domain = NULL;
+#ifdef OPX_HMEM
+	opx_domain->hmem_domain = NULL;
+#endif
 
 	if (fi_opx_global.default_domain_attr == NULL) {
 		if (fi_opx_alloc_default_domain_attr(&fi_opx_global.default_domain_attr)) {
 			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "alloc function could not allocate block of memory\n");
-			errno = FI_ENOMEM; 
+			errno = FI_ENOMEM;
 			goto err;
 		}
 	}
-  
+
 	struct opx_tid_domain *opx_tid_domain;
 	struct opx_tid_fabric *opx_tid_fabric = opx_fabric->tid_fabric;
 
-	if(opx_open_tid_domain(opx_tid_fabric, info, &opx_tid_domain)){
+	if(opx_open_tid_domain(opx_tid_fabric, info, &opx_tid_domain)) {
 		errno = FI_ENOMEM;
 		goto err;
 	}
 	opx_domain->tid_domain = opx_tid_domain;
+
+#ifdef OPX_HMEM
+	struct opx_hmem_domain *opx_hmem_domain;
+	struct opx_hmem_fabric *opx_hmem_fabric = opx_fabric->hmem_fabric;
+
+	if(opx_hmem_open_domain(opx_hmem_fabric, info, &opx_hmem_domain)) {
+		errno = FI_ENOMEM;
+		goto err;
+	}
+	opx_domain->hmem_domain = opx_hmem_domain;
+	opx_domain->hmem_domain->opx_domain = opx_domain;
+#endif
 
 	/* fill in default domain attributes */
 	opx_domain->threading		= fi_opx_global.default_domain_attr->threading;
@@ -384,7 +420,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	opx_domain->domain_fid.fid.context = context;
 	opx_domain->domain_fid.fid.ops     = &fi_opx_fi_ops;
 	opx_domain->domain_fid.ops	   = &fi_opx_domain_ops;
-	
+
 	opx_domain->progress_affinity_str = NULL;
 	get_param_check = fi_param_get_str(fi_opx_global.prov, "prog_affinity", &opx_domain->progress_affinity_str);
 	if (get_param_check == FI_SUCCESS) {
@@ -417,7 +453,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
 			"UUID too long. UUID must consist of 1-32 hexadecimal digits.  Using default OPX uuid instead\n");
 		env_var_uuid = OPX_DEFAULT_JOB_KEY_STR;
-	} 
+	}
 
 	int i;
 	for (i=0; i < OPX_JOB_KEY_STR_SIZE && env_var_uuid[i] != 0; i++) {
@@ -427,7 +463,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 			env_var_uuid = OPX_DEFAULT_JOB_KEY_STR;
 		}
 	}
-	
+
 	// Copy the job key and guarantee null termination.
 	strncpy(opx_domain->unique_job_key_str, env_var_uuid, OPX_JOB_KEY_STR_SIZE-1);
 	opx_domain->unique_job_key_str[OPX_JOB_KEY_STR_SIZE-1] = '\0';
@@ -471,8 +507,9 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	return 0;
 
 err:
-	fi_opx_finalize_mr_ops(&opx_domain->domain_fid);
 	if (opx_domain) {
+		fi_opx_finalize_mr_ops(&opx_domain->domain_fid);
+		opx_util_domain_cleanup(opx_domain);
 		free(opx_domain);
 		opx_domain = NULL;
 	}
