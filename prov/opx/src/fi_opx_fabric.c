@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -61,6 +61,9 @@ static int fi_opx_close_fabric(struct fid *fid)
 		return ret;
 
 	opx_close_tid_fabric(opx_fabric->tid_fabric);
+#ifdef OPX_HMEM
+	opx_hmem_close_fabric(opx_fabric->hmem_fabric);
+#endif
 
 	free(opx_fabric);
 	opx_fabric = NULL;
@@ -84,6 +87,21 @@ static struct fi_ops_fabric fi_opx_ops_fabric = {
 	.passive_ep	= fi_no_passive_ep,
 	.eq_open	= fi_no_eq_open,
 };
+
+static inline void
+opx_util_fabric_cleanup(struct fi_opx_fabric *opx_fabric)
+{
+	if (opx_fabric->tid_fabric) {
+		opx_close_tid_fabric(opx_fabric->tid_fabric);
+		opx_fabric->tid_fabric = NULL;
+	}
+#ifdef OPX_HMEM
+	if (opx_fabric->hmem_fabric) {
+		opx_hmem_close_fabric(opx_fabric->hmem_fabric);
+		opx_fabric->hmem_fabric = NULL;
+	}
+#endif
+}
 
 int fi_opx_check_fabric_attr(struct fi_fabric_attr *attr)
 {
@@ -141,15 +159,32 @@ int fi_opx_fabric(struct fi_fabric_attr *attr,
 	opx_fabric->fabric_fid.fid.ops = &fi_opx_fi_ops;
 	opx_fabric->fabric_fid.ops = &fi_opx_ops_fabric;
 	opx_fabric->fabric_fid.api_version = attr->api_version;
+	opx_fabric->tid_fabric = NULL;
+#ifdef OPX_HMEM
+	opx_fabric->hmem_fabric = NULL;
+#endif
 
-	struct opx_tid_fabric * opx_tid_fabric;
-	if(opx_open_tid_fabric(&opx_tid_fabric)) {
+	struct opx_tid_fabric *opx_tid_fabric;
+	ret = opx_open_tid_fabric(&opx_tid_fabric);
+	if (ret) {
+		errno = -ret;
 		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
 			"Couldn't create tid fabric\n");
-		errno = FI_EINVAL;
 		goto err;
 	}
 	opx_fabric->tid_fabric = opx_tid_fabric;
+
+#ifdef OPX_HMEM
+	struct opx_hmem_fabric *opx_hmem_fabric;
+	ret = opx_hmem_open_fabric(&opx_hmem_fabric);
+	if (ret) {
+		errno = -ret;
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+			"Couldn't create hmem fabric\n");
+		goto err;
+	}
+	opx_fabric->hmem_fabric = opx_hmem_fabric;
+#endif
 
 	*fabric = &opx_fabric->fabric_fid;
 
@@ -163,7 +198,9 @@ int fi_opx_fabric(struct fi_fabric_attr *attr,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "fabric opened\n");
 	return 0;
 err:
-	free(opx_fabric);
-	opx_fabric = NULL;
+	if(opx_fabric) {
+		opx_util_fabric_cleanup(opx_fabric);
+		free(opx_fabric);
+	}
 	return -errno;
 }

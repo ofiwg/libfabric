@@ -125,7 +125,7 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 		params->work_elem.work_fn = fi_opx_do_readv_internal;
 		params->work_elem.work_type = OPX_WORK_TYPE_PIO;
 	}
-	
+
 	FI_OPX_DEBUG_COUNTERS_INC_COND((iov->iface != FI_HMEM_SYSTEM) && params->is_intranode,
 					opx_ep->debug_counters.hmem.rma_read_intranode);
 	FI_OPX_DEBUG_COUNTERS_INC_COND((iov->iface != FI_HMEM_SYSTEM) && !params->is_intranode,
@@ -241,7 +241,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
 	if (tx_op_flags & FI_INJECT) {
 		assert(iov->len <= FI_OPX_HFI1_PACKET_IMM);
 		OPX_HMEM_COPY_FROM((void *) params->inject_data, (void *) iov->buf,
-				   iov->len, iov->iface, iov->device);
+				   iov->len, OPX_HMEM_NO_HANDLE, iov->iface, iov->device);
 		params->iov[0].sbuf = (uintptr_t) params->inject_data;
 		params->iov[0].sbuf_iface = FI_HMEM_SYSTEM;
 		params->iov[0].sbuf_device = 0;

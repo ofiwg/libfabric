@@ -163,9 +163,9 @@ static inline void fi_opx_set_scb(volatile uint64_t scb[8], uint64_t local[8],
 
 //fi_opx_duff_copy --A function to handle a fast memcpy of non-trival byte length (like 8 or 16) in the scb copy crtical path
 // Pre: Only called by fi_opx_set_scb_special()
-// Pre: NEVER call with length 0, 8, or 16 (Use long = long for 8 and 16) 
-// Post: len number of bytes are touched in both buffers. 
-// Post: arg0 buffer will be equal to arg1 buffer for arg2 bytes 
+// Pre: NEVER call with length 0, 8, or 16 (Use long = long for 8 and 16)
+// Post: len number of bytes are touched in both buffers.
+// Post: arg0 buffer will be equal to arg1 buffer for arg2 bytes
 __OPX_FORCE_INLINE__
 void fi_opx_duff_copy(char *to, const char *from, int64_t len) {
         //memcpy(to, from, len);
@@ -196,15 +196,15 @@ void fi_opx_duff_copy(char *to, const char *from, int64_t len) {
 
 // Use this to fill out an SCB before the data is copied to local storage.
 // (The local copy is usually used for setting up replay buffers or for log
-// messages.) 
+// messages.)
 //
-// This version embeds up to 16 bytes of immediate data into the SCB. 
+// This version embeds up to 16 bytes of immediate data into the SCB.
 __OPX_FORCE_INLINE__
 void fi_opx_set_scb_special(volatile uint64_t scb[8], uint64_t local[8],
 	uint64_t d0, uint64_t d1, uint64_t d2, uint64_t d3,
 	uint64_t d4, const void *buf, size_t len, uint64_t d7)
 {
-	// the purpose of this is to quickly copy the contents of buf into 
+	// the purpose of this is to quickly copy the contents of buf into
 	// the 5th and 6th DWORDs of the SCB and the local copy.
 	switch (len) {
 		case 0:
@@ -512,7 +512,7 @@ struct fi_opx_hfi1_rx_readv_params {
 	uint32_t opcode;
 	enum ofi_reliability_kind reliability;
 	bool is_intranode;
-	uint64_t pbc_dlid; 
+	uint64_t pbc_dlid;
 };
 
 union fi_opx_hfi1_deferred_work {
@@ -677,7 +677,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
 
 		if (iface != FI_HMEM_SYSTEM) {
-			opx_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
+			opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf, buf, len);
 			buf = opx_ep->hmem_copy_buf;
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.intranode
 							.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -736,7 +736,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 		return -FI_EAGAIN;
 	}
-	
+
 	if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
 
 #ifdef OPX_HMEM
@@ -744,7 +744,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
 
 	if (iface != FI_HMEM_SYSTEM) {
-		opx_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
+		opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf, buf, len);
 		buf = opx_ep->hmem_copy_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
 						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -953,9 +953,11 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 		   bounce buffer, and then proceed as if we only have a single IOV
 		   that points to the bounce buffer. */
 		if (iface != FI_HMEM_SYSTEM) {
+			struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
 			unsigned iov_total_len = 0;
 			for (int i = 0; i < niov; ++i) {
-				opx_copy_from_hmem(iface, hmem_device, &opx_ep->hmem_copy_buf[iov_total_len],
+				opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle,
+						   &opx_ep->hmem_copy_buf[iov_total_len],
 						   iov[i].iov_base, iov[i].iov_len);
 				iov_total_len += iov[i].iov_len;
 			}
@@ -1045,7 +1047,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 	int64_t psn;
 
 	psn = fi_opx_reliability_get_replay(ep, &opx_ep->reliability->state, addr.uid.lid,
-					dest_rx, addr.reliability_rx, &psn_ptr, &replay, reliability);	
+					dest_rx, addr.reliability_rx, &psn_ptr, &replay, reliability);
 	if(OFI_UNLIKELY(psn == -1)) {
 		return -FI_EAGAIN;
 	}
@@ -1061,8 +1063,9 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 	   that points to the bounce buffer. */
 	if (iface != FI_HMEM_SYSTEM) {
 		unsigned iov_total_len = 0;
+		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
 		for (int i = 0; i < niov; ++i) {
-			opx_copy_from_hmem(iface, hmem_device, &opx_ep->hmem_copy_buf[iov_total_len],
+			opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, &opx_ep->hmem_copy_buf[iov_total_len],
 						iov[i].iov_base, iov[i].iov_len);
 			iov_total_len += iov[i].iov_len;
 		}
@@ -1194,7 +1197,8 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
 
 	if (iface != FI_HMEM_SYSTEM) {
-		opx_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
+		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
+		opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, opx_ep->hmem_copy_buf, buf, len);
 		buf = opx_ep->hmem_copy_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.intranode
 						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -1512,7 +1516,8 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
 
 	if (iface != FI_HMEM_SYSTEM) {
-		opx_copy_from_hmem(iface, hmem_device, opx_ep->hmem_copy_buf, buf, len);
+		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
+		opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, opx_ep->hmem_copy_buf, buf, len);
 		buf = opx_ep->hmem_copy_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
 						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -1736,7 +1741,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first (struct fi_opx_ep *opx_ep,
 		return -FI_EAGAIN;
 	}
 
-	*psn_out = psn;		/* This will be the UID used in the remaining packets */ 
+	*psn_out = psn;		/* This will be the UID used in the remaining packets */
 
 #ifdef OPX_HMEM
 	uint64_t hmem_device;
@@ -1747,7 +1752,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first (struct fi_opx_ep *opx_ep,
 	   buffer for this first MP Eager packet as well as all subsequent
 	   MP Eager Nth packets. */
 	if (iface != FI_HMEM_SYSTEM) {
-		opx_copy_from_hmem(iface, hmem_device, hmem_bounce_buf, *buf, payload_bytes_total);
+		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
+		opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, hmem_bounce_buf, *buf, payload_bytes_total);
 		*buf = hmem_bounce_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
 						.kind[FI_OPX_KIND_TAG]
@@ -1952,7 +1958,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last (struct fi_opx_ep *opx_ep,
 
 	if (OFI_UNLIKELY(len <= FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL)) {
 #ifndef NDEBUG
-		credits_consumed = 
+		credits_consumed =
 #endif
 		fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(opx_ep, &pio_state, tmp, buf, bth_rx,
 								lrh_dlid, lrh_dws, pbc_dlid, pbc_dws, len, payload_offset,
@@ -1960,7 +1966,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last (struct fi_opx_ep *opx_ep,
 
 	} else {
 #ifndef NDEBUG
-		credits_consumed = 
+		credits_consumed =
 #endif
 		fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(opx_ep, &pio_state, tmp, buf, bth_rx, lrh_dlid,
 							lrh_dws, pbc_dlid, pbc_dws, xfer_bytes_tail, payload_offset, psn, mp_egr_uid);

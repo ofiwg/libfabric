@@ -39,6 +39,7 @@
 
 #include <ofi_enosys.h>
 
+
 static int fi_opx_close_mr(fid_t fid)
 {
 	struct fi_opx_domain *opx_domain;
@@ -48,16 +49,17 @@ static int fi_opx_close_mr(fid_t fid)
 
 	HASH_DEL(opx_domain->mr_hashmap, opx_mr);
 
+	int ret = 0;
 	if (opx_domain->mr_mode & FI_MR_SCALABLE) {
-		int ret;
-
 		ret = fi_opx_ref_dec(&opx_domain->ref_cnt, "domain");
-		if (ret) return ret;
+		if (ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+				"Attempted to decrement reference counter when counter value was already zero, freeing opx_mr and returning error");
+		}
 	}
 	free(opx_mr);
-	opx_mr = NULL;
 	//opx_mr (the object passed in as fid) is now unusable
-	return 0;
+	return ret;
 }
 
 static int fi_opx_bind_mr(struct fid *fid,
@@ -110,8 +112,6 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 		return -errno;
 	}
 
-	int ret;
-
 	struct fi_opx_mr *opx_mr;
 	struct fi_opx_domain *opx_domain;
 
@@ -120,12 +120,12 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 		return -errno;
 	}
 
-	ret = fi_opx_fid_check(fid, FI_CLASS_DOMAIN, "domain");
+	int ret = fi_opx_fid_check(fid, FI_CLASS_DOMAIN, "domain");
 	if (ret) return ret;
 
 	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_MR,
-			"buf=%p, len=%lu, access=%lu, offset=%lu, requested_key=%lu, flags=%lu, context=%p\n", 
-			iov->iov_base, iov->iov_len, access, offset, requested_key, flags, context);
+		"buf=%p, len=%lu, access=%lu, offset=%lu, requested_key=%lu, flags=%lu, context=%p\n",
+		iov->iov_base, iov->iov_len, access, offset, requested_key, flags, context);
 
 	opx_domain = (struct fi_opx_domain *) container_of(fid, struct fid_domain, fid);
 
@@ -153,11 +153,72 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 		return -errno;
 	}
 
+#ifdef OPX_HMEM
+	static uint64_t OPX_CUDA_MR_KEYGEN = 0;
+	if (hmem_iface == -1) {
+		hmem_iface = fi_opx_hmem_get_iface(iov->iov_base, NULL, &hmem_device);
+	}
+
+	if(hmem_iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) {
+		struct ofi_mr_entry *entry;
+		struct ofi_mr_info info = {
+			.iface = hmem_iface,
+			.device = hmem_device,
+			.iov.iov_base = iov->iov_base,
+			.iov.iov_len = iov->iov_len,
+			.flags = flags
+		};
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-CACHE-SEARCH");
+		if(!ofi_mr_cache_search(opx_domain->hmem_domain->hmem_cache, &info, &entry)) {
+			opx_mr = (struct fi_opx_mr *)entry->data;
+			/* Whenever we have a cache miss, we initalize the KEY to FI_KEY_NOTAVAIL.
+			 * Thus, we know a new entry was created if the key is not set. If the key is set,
+			 * we know it was a cache hit */
+			if (opx_mr->mr_fid.key == FI_KEY_NOTAVAIL) {
+				if (opx_domain->mr_mode & FI_MR_PROV_KEY) {
+					opx_mr->mr_fid.key = OPX_CUDA_MR_KEYGEN++;
+				} else {
+					opx_mr->mr_fid.key = requested_key;
+				}
+				opx_mr->attr.requested_key = opx_mr->mr_fid.key;
+
+				if (opx_mr->domain->mr_mode & FI_MR_SCALABLE) {
+					fi_opx_ref_inc(&opx_mr->domain->ref_cnt, "domain");
+				}
+				HASH_ADD(hh, opx_domain->mr_hashmap,
+					 mr_fid.key, sizeof(opx_mr->mr_fid.key),
+					 opx_mr);
+			}
+
+			*mr = &opx_mr->mr_fid;
+			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-CACHE-SEARCH");
+			return 0;
+		}
+		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "GDRCOPY-CACHE-SEARCH");
+	}
+#endif
+
 	opx_mr = calloc(1, sizeof(*opx_mr));
 	if (!opx_mr) {
 		errno = FI_ENOMEM;
 		return -errno;
 	}
+
+#ifdef OPX_HMEM
+	switch (hmem_iface) {
+		case FI_HMEM_CUDA:
+			opx_mr->attr.device.cuda = (int) hmem_device;
+			break;
+		case FI_HMEM_ZE:
+			opx_mr->attr.device.ze = (int) hmem_device;
+			break;
+		default:
+			opx_mr->attr.device.reserved = hmem_device;
+	}
+	opx_mr->attr.iface = (enum fi_hmem_iface) hmem_iface;
+#else
+	opx_mr->attr.iface = FI_HMEM_SYSTEM;
+#endif
 
 	opx_mr->mr_fid.mem_desc 	= opx_mr;
 	opx_mr->mr_fid.fid.fclass	= FI_CLASS_MR;
@@ -175,32 +236,12 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 	opx_mr->flags = flags;
 	opx_mr->domain = opx_domain;
 
-#ifdef OPX_HMEM
-	if (hmem_iface == -1) {
-		hmem_iface = fi_opx_hmem_get_iface(iov->iov_base, NULL, &hmem_device);
-	}
-
-	opx_mr->attr.iface = (enum fi_hmem_iface) hmem_iface;
-	switch (hmem_iface) {
-		case FI_HMEM_CUDA:
-			opx_mr->attr.device.cuda = (int) hmem_device;
-			break;
-		case FI_HMEM_ZE:
-			opx_mr->attr.device.ze = (int) hmem_device;
-			break;
-		default:
-			opx_mr->attr.device.reserved = hmem_device;
-	}
-#else
-	opx_mr->attr.iface = FI_HMEM_SYSTEM;
-	opx_mr->attr.device.reserved = 0ul;
-#endif
 	if (opx_domain->mr_mode & FI_MR_SCALABLE) {
 		fi_opx_ref_inc(&opx_domain->ref_cnt, "domain");
 	}
 	HASH_ADD(hh, opx_domain->mr_hashmap,
-			 mr_fid.key, sizeof(opx_mr->mr_fid.key),
-			 opx_mr);
+		 mr_fid.key, sizeof(opx_mr->mr_fid.key),
+		 opx_mr);
 
 	*mr = &opx_mr->mr_fid;
 

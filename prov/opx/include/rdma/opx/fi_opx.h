@@ -75,7 +75,7 @@
 
 #define EXIT_FAILURE 1
 
-// TODO: This is needed until we complete the locking model. 
+// TODO: This is needed until we complete the locking model.
 #define OPX_LOCK				0
 
 // These defines may change or disappear as we develop more capabilities.
@@ -160,6 +160,9 @@ struct fi_opx_global_data {
 	struct fi_opx_daos_hfi_rank	*daos_hfi_rank_hashmap;
 	enum fi_progress	progress;
 	struct dlist_entry	tid_domain_list;
+#ifdef OPX_HMEM
+	struct dlist_entry	hmem_domain_list;
+#endif
 	struct fi_opx_hfi_local_info hfi_local_info;
 };
 
@@ -175,9 +178,9 @@ static const size_t   FI_OPX_REMOTE_CQ_DATA_SIZE	= 4;
 static const uint64_t FI_OPX_MEM_TAG_FORMAT		= (0xFFFFFFFFFFFFFFFFULL);
 static const int      FI_OPX_MAX_HFIS				= 16;
 
-/* 
+/*
 Users may wish to change the depth of the Rx context ring.
-/sys/module/hfi1/parameters/rcvhdrcnt:8192 is a tuning knob that 
+/sys/module/hfi1/parameters/rcvhdrcnt:8192 is a tuning knob that
 allows useres to specify the count of entries.
 
 Supported values are 2048 (default), 4096, and 8192
@@ -185,7 +188,7 @@ To save on library bloat, 4096 is not implimented as an optimized compile-time v
 
 Remember that fi_opx_hfi1_poll_once works in terms of 4 doublewords
 So for example, 2k ring length (0-based) mask is
-2047 * 32 = 0xFFE0  
+2047 * 32 = 0xFFE0
 */
 static const uint64_t FI_OPX_HDRQ_MASK_RUNTIME	= 0ULL;
 static const uint64_t FI_OPX_HDRQ_MASK_2048 	= 0X000000000000FFE0UL;
@@ -206,7 +209,7 @@ static const uint64_t FI_OPX_HDRQ_MASK_8192	= 0X000000000003FFE0UL;
 	( FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM			\
 	| FI_SOURCE | FI_NAMED_RX_CTX | FI_RMA | FI_ATOMIC | FI_HMEM )
 #define FI_OPX_BASE_MR_MODE							\
-	( OPX_MR | FI_MR_HMEM )			
+	( OPX_MR | FI_MR_HMEM )
 #else
 #define FI_OPX_BASE_CAPS							\
 	( FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM			\

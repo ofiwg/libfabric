@@ -217,15 +217,15 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 		assert(buf_iov->len <= FI_OPX_HFI1_PACKET_IMM);
 		if (compare_iov) {
 			size_t buf_len = buf_iov->len >> 1;
-			OPX_HMEM_COPY_FROM(params->inject_data, (void *) buf_iov->buf, buf_len,
+			OPX_HMEM_COPY_FROM(params->inject_data, (void *) buf_iov->buf, buf_len, OPX_HMEM_NO_HANDLE,
 					   buf_iov->iface, buf_iov->device);
-			OPX_HMEM_COPY_FROM(params->inject_data + buf_len, (void *) compare_iov->buf, buf_len,
+			OPX_HMEM_COPY_FROM(params->inject_data + buf_len, (void *) compare_iov->buf, buf_len, OPX_HMEM_NO_HANDLE,
 					   compare_iov->iface, compare_iov->device);
 			params->compare_iov.buf = (uintptr_t) (&params->inject_data[buf_len]);
 			params->compare_iov.iface = FI_HMEM_SYSTEM;
 			params->compare_iov.device = 0;
 		} else {
-			OPX_HMEM_COPY_FROM(params->inject_data, (void *) buf_iov->buf, buf_iov->len,
+			OPX_HMEM_COPY_FROM(params->inject_data, (void *) buf_iov->buf, buf_iov->len, OPX_HMEM_NO_HANDLE,
 					   buf_iov->iface, buf_iov->device);
 		}
 		params->iov[0].sbuf = (uintptr_t) params->inject_data;

@@ -1777,7 +1777,7 @@ void fi_opx_hfi1_dput_copy_to_bounce_buf(uint32_t opcode,
 		}
 	} else {
 		assert(total_bytes <= FI_OPX_HFI1_SDMA_WE_BUF_LEN);
-		OPX_HMEM_COPY_FROM(target_buf, source_buf, total_bytes,
+		OPX_HMEM_COPY_FROM(target_buf, source_buf, total_bytes, OPX_HMEM_NO_HANDLE,
 				   sbuf_iface, sbuf_device);
 	}
 
@@ -2260,7 +2260,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 			if (params->sdma_we->use_bounce_buf) {
 				OPX_HMEM_COPY_FROM(params->sdma_we->bounce_buf.buf,
 						   sbuf,
-						   MIN((packet_count * max_dput_bytes), bytes_to_send),
+						   MIN((packet_count * max_dput_bytes), bytes_to_send), OPX_HMEM_NO_HANDLE,
 						   dput_iov[i].sbuf_iface,
 						   dput_iov[i].sbuf_device);
 				sbuf_tmp = params->sdma_we->bounce_buf.buf;
@@ -3020,7 +3020,10 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		if (immediate_total) {
 			uint8_t *sbuf;
 			if (src_iface != FI_HMEM_SYSTEM) {
-				opx_copy_from_hmem(src_iface, src_device_id, opx_ep->hmem_copy_buf, buf, immediate_total);
+				struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
+				opx_copy_from_hmem(src_iface, src_device_id,
+						desc_mr->hmem_dev_reg_handle,
+						opx_ep->hmem_copy_buf, buf, immediate_total);
 				sbuf = opx_ep->hmem_copy_buf;
 			} else {
 				sbuf = (uint8_t *) buf;
@@ -3165,7 +3168,9 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	uint8_t *sbuf;
 	if (src_iface != FI_HMEM_SYSTEM && immediate_total) {
-		opx_copy_from_hmem(src_iface, src_device_id, opx_ep->hmem_copy_buf, buf, immediate_total);
+		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
+		opx_copy_from_hmem(src_iface, src_device_id, desc_mr->hmem_dev_reg_handle,
+				opx_ep->hmem_copy_buf, buf, immediate_total);
 		sbuf = opx_ep->hmem_copy_buf;
 	} else {
 		sbuf = (uint8_t *) buf;
@@ -3246,7 +3251,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		assert(immediate_end_block_count == 1);
 
 		OPX_HMEM_COPY_FROM(align_tmp.immediate_byte, sbuf_end,
-				   (immediate_end_block_count << 6),
+				   (immediate_end_block_count << 6), OPX_HMEM_NO_HANDLE,
 				   src_iface, src_device_id);
 
 		scb_payload = (uint64_t *)FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);

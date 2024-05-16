@@ -45,6 +45,8 @@
 
 #include "rdma/opx/fi_opx_tid_domain.h"
 
+#include "rdma/opx/opx_hmem_domain.h"
+
 //#define OFI_RELIABILITY_CONFIG_STATIC_NONE
 //#define OFI_RELIABILITY_CONFIG_STATIC_OFFLOAD
 //#define OFI_RELIABILITY_CONFIG_STATIC_ONLOAD
@@ -77,11 +79,16 @@ struct fi_opx_ep;	/* forward declaration */
 
 
 struct opx_tid_fabric;
+struct opx_hmem_fabric;
+
 struct fi_opx_fabric {
 	struct fid_fabric	fabric_fid;
 
-	int64_t		ref_cnt;
-	struct opx_tid_fabric* tid_fabric;
+	int64_t			ref_cnt;
+	struct opx_tid_fabric*	tid_fabric;
+#ifdef OPX_HMEM
+	struct opx_hmem_fabric*	hmem_fabric;
+#endif
 };
 
 
@@ -117,15 +124,17 @@ struct fi_opx_domain {
 	uint8_t			ep_count;
 
 	uint64_t		num_mr_keys;
-	struct fi_opx_mr        *mr_hashmap;
+	struct fi_opx_mr	*mr_hashmap;
 
 	struct fi_opx_reliability_service	reliability_service_offload;	/* OFFLOAD only */
 	uint8_t					reliability_rx_offload;		/* OFFLOAD only */
 	enum ofi_reliability_kind		reliability_kind;
 
-	struct opx_tid_domain *tid_domain;
-
-	int64_t		ref_cnt;
+	struct opx_tid_domain	*tid_domain;
+#ifdef OPX_HMEM
+	struct opx_hmem_domain	*hmem_domain;
+#endif
+	int64_t			ref_cnt;
 };
 
 struct fi_opx_av {
@@ -160,6 +169,7 @@ struct fi_opx_mr {
 	uint64_t		cntr_bflags;
 	struct fi_opx_cntr	*cntr;
 	struct fi_opx_ep	*ep;
+	uint64_t		hmem_dev_reg_handle;
 	UT_hash_handle		hh;
 };
 

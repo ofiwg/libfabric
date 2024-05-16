@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2024 Cornelis Networks.
+ * Copyright (C) 2024-2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -29,42 +29,43 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef _FI_PROV_OPX_TID_DOMAIN_H_
-#define _FI_PROV_OPX_TID_DOMAIN_H_
+#ifdef OPX_HMEM
+#ifndef _FI_PROV_OPX_HMEM_DOMAIN_H_
+#define _FI_PROV_OPX_HMEM_DOMAIN_H_
 
 #include "rdma/fi_domain.h"
 
 #include "ofi_util.h"
 #include "ofi_mr.h"
 
-#define OPX_TID_NO_LOCK_ON_CLEANUP (0)
+#define OPX_HMEM_NO_LOCK_ON_CLEANUP (0)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct opx_tid_fabric {
+struct opx_hmem_fabric {
 	struct util_fabric util_fabric;
 };
 
-struct opx_tid_domain {
-	struct util_domain util_domain;
-	struct opx_tid_fabric *fabric;
-	struct ofi_mr_cache *tid_cache;
-	uint64_t key;
-	struct dlist_entry list_entry; /* linked to tid_domain_list */
+struct opx_hmem_domain {
+	struct util_domain	util_domain;
+	struct ofi_mr_cache	*hmem_cache;
+	struct fi_opx_domain	*opx_domain;
+	struct dlist_entry	list_entry; /* linked to hmem_domain_list */
 };
 
-int opx_close_tid_domain(struct opx_tid_domain *tid_domain, int locked);
-int opx_open_tid_domain(struct opx_tid_fabric *tid_fabric,
-		      struct fi_info *info,
-		      struct opx_tid_domain **opx_tid_domain);
+int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked);
+int opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric,
+			 struct fi_info *info,
+			 struct opx_hmem_domain **opx_hmem_domain);
 
-int opx_close_tid_fabric(struct opx_tid_fabric *opx_tid_fabric);
-int opx_open_tid_fabric(struct opx_tid_fabric **opx_tid_fabric);
+int opx_hmem_close_fabric(struct opx_hmem_fabric *opx_hmem_fabric);
+int opx_hmem_open_fabric(struct opx_hmem_fabric **opx_hmem_fabric);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _FI_PROV_OPX_TID_DOMAIN_H_ */
+#endif /* _FI_PROV_OPX_HMEM_DOMAIN_H_ */
+#endif /* OPX_HMEM */
