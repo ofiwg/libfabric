@@ -172,6 +172,11 @@ uint32_t efa_mock_ibv_read_vendor_err_return_mock(struct ibv_cq_ex *current)
 	return mock();
 }
 
+uint32_t efa_mock_ibv_read_qp_num_return_mock(struct ibv_cq_ex *current)
+{
+	return mock();
+}
+
 int g_ofi_copy_from_hmem_iov_call_counter;
 ssize_t efa_mock_ofi_copy_from_hmem_iov_inc_counter(void *dest, size_t size,
 						    enum fi_hmem_iface hmem_iface, uint64_t device,

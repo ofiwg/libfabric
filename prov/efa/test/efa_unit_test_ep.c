@@ -178,6 +178,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
 	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_slid = &efa_mock_ibv_read_slid_return_mock;
 	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
+	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
 	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
 	efa_rdm_cq->ibv_cq.ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
 	efa_rdm_cq->ibv_cq.ibv_cq_ex->status = IBV_WC_SUCCESS;
@@ -189,6 +190,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	will_return(efa_mock_ibv_next_poll_check_function_called_and_return_mock, ENOENT);
 	will_return(efa_mock_ibv_read_byte_len_return_mock, pkt_entry->pkt_size);
 	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
+	will_return(efa_mock_ibv_read_qp_num_return_mock, 0);
 	will_return(efa_mock_ibv_read_slid_return_mock, efa_rdm_ep_get_peer_ahn(efa_rdm_ep, peer_addr));
 	will_return(efa_mock_ibv_read_src_qp_return_mock, raw_addr.qpn);
 	will_return(efa_mock_ibv_start_poll_return_mock, IBV_WC_SUCCESS);
@@ -199,6 +201,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	 */
 	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
 	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
+	will_return(efa_mock_ibv_read_qp_num_return_mock, 0);
 	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_ERR_OTHER);
 	will_return(efa_mock_ibv_start_poll_return_mock, IBV_WC_SUCCESS);
 

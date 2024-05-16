@@ -78,25 +78,25 @@ static struct fi_ops efa_rdm_cq_fi_ops = {
  * remote endpoint.  These do not have a packet context, nor do they have a
  * connid available.
  *
- * @param[in]		flags		flags (such as FI_REMOTE_CQ_DATA)
- * @param[in]		pkt_entry	packet entry
  * @param[in]		ibv_cq_ex	extended ibv cq
+ * @param[in]		flags		flags (such as FI_REMOTE_CQ_DATA)
+ * @param[in]		ep	        efa_rdm_ep
+ * @param[in]		pkt_entry	packet entry
  */
 static
 void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
+						       struct ibv_cq_ex *ibv_cq_ex,
 						       uint64_t flags,
-						       struct efa_rdm_pke *pkt_entry,
-						       struct ibv_cq_ex *ibv_cq_ex)
+						       struct efa_rdm_ep *ep,
+						       struct efa_rdm_pke *pkt_entry
+						       )
 {
 	struct util_cq *target_cq;
 	int ret;
 	fi_addr_t src_addr;
 	struct efa_av *efa_av;
-	struct efa_rdm_ep *ep = pkt_entry->ep;
 	uint32_t imm_data = ibv_wc_read_imm_data(ibv_cq_ex);
 	uint32_t len = ibv_wc_read_byte_len(ibv_cq_ex);
-
-	assert(ep);
 
 	target_cq = ep->base_ep.util_ep.rx_cq;
 	efa_av = ep->base_ep.av;
@@ -123,6 +123,7 @@ void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 	/* Recv with immediate will consume a pkt_entry, but the pkt is not
 	   filled, so free the pkt_entry and record we have one less posted
 	   packet now. */
+	assert(pkt_entry);
 	ep->efa_rx_pkts_posted--;
 	efa_rdm_pke_release_rx(pkt_entry);
 }
@@ -300,6 +301,11 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	struct efa_rdm_ep *ep = NULL;
 	struct fi_cq_err_entry err_entry;
 	struct efa_rdm_cq *efa_rdm_cq;
+	struct efa_domain *efa_domain;
+	struct efa_qp *qp;
+
+	efa_rdm_cq = container_of(ibv_cq, struct efa_rdm_cq, ibv_cq);
+	efa_domain = container_of(efa_rdm_cq->util_cq.domain, struct efa_domain, util_domain);
 
 	/* Call ibv_start_poll only once */
 	err = ibv_start_poll(ibv_cq->ibv_cq_ex, &poll_cq_attr);
@@ -307,8 +313,8 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 
 	while (!err) {
 		pkt_entry = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
-		ep = pkt_entry->ep;
-		assert(ep);
+		qp = efa_domain->qp_table[ibv_wc_read_qp_num(ibv_cq->ibv_cq_ex) & efa_domain->qp_table_sz_m1];
+		ep = container_of(qp->base_ep, struct efa_rdm_ep, base_ep);
 		efa_av = ep->base_ep.av;
 		efa_rdm_tracepoint(poll_cq, (size_t) ibv_cq->ibv_cq_ex->wr_id);
 		opcode = ibv_wc_read_opcode(ibv_cq->ibv_cq_ex);
@@ -358,8 +364,9 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			break;
 		case IBV_WC_RECV_RDMA_WITH_IMM:
 			efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
+				ibv_cq->ibv_cq_ex,
 				FI_REMOTE_CQ_DATA | FI_RMA | FI_REMOTE_WRITE,
-				pkt_entry, ibv_cq->ibv_cq_ex);
+				ep, pkt_entry);
 			break;
 		default:
 			EFA_WARN(FI_LOG_EP_CTRL,
@@ -389,7 +396,6 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			.prov_errno = prov_errno,
 			.op_context = NULL
 		};
-		efa_rdm_cq = container_of(ibv_cq, struct efa_rdm_cq, ibv_cq);
 		ofi_cq_write_error(&efa_rdm_cq->util_cq, &err_entry);
 	}
 

@@ -68,6 +68,8 @@ uint32_t efa_mock_ibv_read_opcode_return_mock(struct ibv_cq_ex *current);
 
 uint32_t efa_mock_ibv_read_vendor_err_return_mock(struct ibv_cq_ex *current);
 
+uint32_t efa_mock_ibv_read_qp_num_return_mock(struct ibv_cq_ex *current);
+
 ssize_t __real_ofi_copy_from_hmem_iov(void *dest, size_t size,
 				      enum fi_hmem_iface hmem_iface, uint64_t device,
 				      const struct iovec *hmem_iov,
