@@ -59,12 +59,14 @@ efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 		return NULL;
 	}
 
-	msg.addr = msg_rma->addr;
-	msg.msg_iov = msg_rma->msg_iov;
-	msg.context = msg_rma->context;
-	msg.iov_count = msg_rma->iov_count;
-	msg.data = msg_rma->data;
-	msg.desc = msg_rma->desc;
+	msg = (struct fi_msg) {
+		.msg_iov	= msg_rma->msg_iov,
+		.desc		= msg_rma->desc,
+		.iov_count	= msg_rma->iov_count,
+		.addr		= msg_rma->addr,
+		.context	= msg_rma->context,
+		.data		= msg_rma->data,
+	};
 	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, op, flags);
 
 	assert(msg_rma->rma_iov_count > 0);

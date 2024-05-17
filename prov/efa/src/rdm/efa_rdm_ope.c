@@ -20,56 +20,47 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 {
 	uint64_t tx_op_flags;
 
-	txe->ep = ep;
-	txe->type = EFA_RDM_TXE;
-	txe->op = op;
-	txe->tx_id = ofi_buf_index(txe);
-	txe->state = EFA_RDM_TXE_REQ;
-	txe->addr = msg->addr;
-	txe->peer = peer;
-	/* peer would be NULL for local read operation */
-	if (txe->peer) {
-		dlist_insert_tail(&txe->peer_entry, &txe->peer->txe_list);
-	}
-
-	txe->internal_flags = 0;
-	txe->bytes_received = 0;
-	txe->bytes_copied = 0;
-	txe->bytes_acked = 0;
-	txe->bytes_sent = 0;
-	txe->window = 0;
-	txe->iov_count = msg->iov_count;
-	txe->rma_iov_count = 0;
-	txe->msg_id = 0;
-	txe->efa_outstanding_tx_ops = 0;
-	dlist_init(&txe->queued_pkts);
-
-	memcpy(txe->iov, msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
-	memset(txe->mr, 0, sizeof(*txe->mr) * msg->iov_count);
-	if (msg->desc)
-		memcpy(txe->desc, msg->desc, sizeof(*msg->desc) * msg->iov_count);
-	else
-		memset(txe->desc, 0, sizeof(txe->desc));
-
-	/* cq_entry on completion */
-	txe->cq_entry.op_context = msg->context;
-	txe->cq_entry.data = msg->data;
-	txe->cq_entry.len = ofi_total_iov_len(txe->iov, txe->iov_count);
-	txe->cq_entry.buf = OFI_LIKELY(txe->cq_entry.len > 0) ? txe->iov[0].iov_base : NULL;
-
-	if (ep->user_info->mode & FI_MSG_PREFIX) {
-		ofi_consume_iov_desc(txe->iov, txe->desc, &txe->iov_count, ep->msg_prefix_size);
-	}
-	txe->total_len = ofi_total_iov_len(txe->iov, txe->iov_count);
-
 	/* set flags */
 	assert(ep->base_ep.util_ep.tx_msg_flags == 0 ||
 	       ep->base_ep.util_ep.tx_msg_flags == FI_COMPLETION);
 	tx_op_flags = ep->base_ep.util_ep.tx_op_flags;
 	if (ep->base_ep.util_ep.tx_msg_flags == 0)
 		tx_op_flags &= ~FI_COMPLETION;
-	txe->fi_flags = flags | tx_op_flags;
-	txe->bytes_runt = 0;
+
+	*txe = (struct efa_rdm_ope) {
+		.type		= EFA_RDM_TXE,
+		.ep		= ep,
+		.addr		= msg->addr,
+		.peer		= peer,
+		.tx_id		= ofi_buf_index(txe),
+		.op		= op,
+		.state		= EFA_RDM_TXE_REQ,
+		.fi_flags	= flags | tx_op_flags,
+		.iov_count	= msg->iov_count,
+		.cq_entry	= (struct fi_cq_tagged_entry) {
+			.op_context	= msg->context,
+			.len		= ofi_total_iov_len(msg->msg_iov, msg->iov_count),
+			.data		= msg->data,
+		},
+	};
+
+	memcpy(txe->iov, msg->msg_iov, sizeof *txe->iov * txe->iov_count);
+	if (msg->desc)
+		memcpy(txe->desc, msg->desc, sizeof *txe->desc * txe->iov_count);
+
+	if (OFI_LIKELY(txe->cq_entry.len > 0))
+		txe->cq_entry.buf = txe->iov[0].iov_base;
+
+	/* peer would be NULL for local read operation */
+	if (txe->peer)
+		dlist_insert_tail(&txe->peer_entry, &txe->peer->txe_list);
+
+	dlist_init(&txe->queued_pkts);
+
+	if (ep->user_info->mode & FI_MSG_PREFIX)
+		ofi_consume_iov_desc(txe->iov, txe->desc, &txe->iov_count, ep->msg_prefix_size);
+	txe->total_len = ofi_total_iov_len(txe->iov, txe->iov_count);
+
 	dlist_init(&txe->entry);
 
 	switch (op) {

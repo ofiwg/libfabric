@@ -58,15 +58,15 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 		return NULL;
 	}
 
-	dlist_insert_tail(&txe->ep_entry, &efa_rdm_ep->txe_list);
-
 	ofi_ioc_to_iov(msg_atomic->msg_iov, iov, msg_atomic->iov_count, datatype_size);
-	msg.addr = msg_atomic->addr;
-	msg.msg_iov = iov;
-	msg.context = msg_atomic->context;
-	msg.iov_count = msg_atomic->iov_count;
-	msg.data = msg_atomic->data;
-	msg.desc = msg_atomic->desc;
+	msg = (struct fi_msg) {
+		.msg_iov	= iov,
+		.desc		= msg_atomic->desc,
+		.iov_count	= msg_atomic->iov_count,
+		.addr		= msg_atomic->addr,
+		.context	= msg_atomic->context,
+		.data		= msg_atomic->data,
+	};
 	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, op, flags);
 
 	assert(msg_atomic->rma_iov_count > 0);
@@ -76,6 +76,8 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 			   txe->rma_iov,
 			   msg_atomic->rma_iov_count,
 			   datatype_size);
+
+	dlist_insert_tail(&txe->ep_entry, &efa_rdm_ep->txe_list);
 
 	txe->atomic_hdr.atomic_op = msg_atomic->op;
 	txe->atomic_hdr.datatype = msg_atomic->datatype;
