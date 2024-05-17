@@ -277,6 +277,10 @@ static int efa_rdm_cq_get_prov_errno(struct ibv_cq_ex *ibv_cq_ex) {
 	return vendor_err;
 }
 
+static int efa_rdm_cq_match_ep(struct dlist_entry *item, const void *ep)
+{
+	return (container_of(item, struct efa_rdm_ep, entry) == ep) ;
+}
 
 /**
  * @brief poll rdma-core cq and process the cq entry
@@ -303,9 +307,11 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	struct efa_rdm_cq *efa_rdm_cq;
 	struct efa_domain *efa_domain;
 	struct efa_qp *qp;
+	struct dlist_entry rx_progressed_ep_list, *item;
 
 	efa_rdm_cq = container_of(ibv_cq, struct efa_rdm_cq, ibv_cq);
 	efa_domain = container_of(efa_rdm_cq->util_cq.domain, struct efa_domain, util_domain);
+	dlist_init(&rx_progressed_ep_list);
 
 	/* Call ibv_start_poll only once */
 	err = ibv_start_poll(ibv_cq->ibv_cq_ex, &poll_cq_attr);
@@ -315,7 +321,6 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		pkt_entry = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
 		qp = efa_domain->qp_table[ibv_wc_read_qp_num(ibv_cq->ibv_cq_ex) & efa_domain->qp_table_sz_m1];
 		ep = container_of(qp->base_ep, struct efa_rdm_ep, base_ep);
-		efa_av = ep->base_ep.av;
 		efa_rdm_tracepoint(poll_cq, (size_t) ibv_cq->ibv_cq_ex->wr_id);
 		opcode = ibv_wc_read_opcode(ibv_cq->ibv_cq_ex);
 		if (ibv_cq->ibv_cq_ex->status) {
@@ -328,6 +333,8 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 				break;
 			case IBV_WC_RECV: /* fall through */
 			case IBV_WC_RECV_RDMA_WITH_IMM:
+				if (!dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
+					dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
 				efa_rdm_pke_handle_rx_error(pkt_entry, FI_EIO, prov_errno);
 				break;
 			default:
@@ -344,6 +351,9 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			efa_rdm_pke_handle_send_completion(pkt_entry);
 			break;
 		case IBV_WC_RECV:
+			efa_av = ep->base_ep.av;
+			if (!dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
+				dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
 			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(ibv_cq->ibv_cq_ex),
 								ibv_wc_read_src_qp(ibv_cq->ibv_cq_ex), pkt_entry);
 
@@ -363,6 +373,8 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			efa_rdm_pke_handle_rma_completion(pkt_entry);
 			break;
 		case IBV_WC_RECV_RDMA_WITH_IMM:
+			if (!dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
+				dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
 			efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 				ibv_cq->ibv_cq_ex,
 				FI_REMOTE_CQ_DATA | FI_RMA | FI_REMOTE_WRITE,
@@ -401,6 +413,14 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 
 	if (should_end_poll)
 		ibv_end_poll(ibv_cq->ibv_cq_ex);
+
+	dlist_foreach(&rx_progressed_ep_list, item) {
+		ep = container_of(item, struct efa_rdm_ep, entry);
+		efa_rdm_ep_post_internal_rx_pkts(ep);
+		dlist_remove(&ep->entry);
+	}
+	assert(dlist_empty(&rx_progressed_ep_list));
+
 }
 
 static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr)
@@ -450,25 +470,20 @@ static struct fi_ops_cq efa_rdm_cq_ops = {
 
 static void efa_rdm_cq_progress(struct util_cq *cq)
 {
-	struct util_ep *ep;
-	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
 	struct efa_rdm_cq *efa_rdm_cq;
 	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
+	struct efa_domain *efa_domain;
 
 	ofi_genlock_lock(&cq->ep_list_lock);
 	efa_rdm_cq = container_of(cq, struct efa_rdm_cq, util_cq);
+	efa_domain = container_of(efa_rdm_cq->util_cq.domain, struct efa_domain, util_domain);
 
 	dlist_foreach(&efa_rdm_cq->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 	}
-
-	dlist_foreach(&cq->ep_list, item) {
-		fid_entry = container_of(item, struct fid_list_entry, entry);
-		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
-		ep->progress(ep);
-	}
+	efa_domain_progress_rdm_peers_and_queues(efa_domain);
 	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 

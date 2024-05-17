@@ -414,7 +414,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 				assert(!(peer->flags & EFA_RDM_PEER_HANDSHAKE_QUEUED));
 				peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
 				dlist_insert_tail(&peer->handshake_queued_entry,
-						  &ep->handshake_queued_peer_list);
+						  &efa_rdm_ep_domain(ep)->handshake_queued_peer_list);
 			} else if (prov_errno != EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN) {
 				/*
 				 * If prov_errno is EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN
@@ -475,7 +475,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 				if (!(txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
 					txe->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
 					dlist_insert_tail(&txe->queued_rnr_entry,
-							  &ep->ope_queued_rnr_list);
+							  &efa_rdm_ep_domain(ep)->ope_queued_rnr_list);
 				}
 			}
 		} else {
@@ -496,7 +496,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int pro
 			if (!(rxe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
 				rxe->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
 				dlist_insert_tail(&rxe->queued_rnr_entry,
-						  &ep->ope_queued_rnr_list);
+						  &efa_rdm_ep_domain(ep)->ope_queued_rnr_list);
 			}
 		} else {
 			efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);

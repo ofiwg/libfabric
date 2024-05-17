@@ -119,20 +119,6 @@ struct efa_rdm_ep {
 	struct ofi_bufpool *rx_atomrsp_pool;
 	/* list of pre-posted recv buffers */
 	struct dlist_entry rx_posted_buf_list;
-	/* op entries with queued rnr packets */
-	struct dlist_entry ope_queued_rnr_list;
-	/* op entries with queued ctrl packets */
-	struct dlist_entry ope_queued_ctrl_list;
-	/* op entries with queued read requests */
-	struct dlist_entry ope_queued_read_list;
-	/* tx/rx_entries used by long CTS msg/write/read protocol
-         * which have data to be sent */
-	struct dlist_entry ope_longcts_send_list;
-	/* list of #efa_rdm_peer that are in backoff due to RNR */
-	struct dlist_entry peer_backoff_list;
-	/* list of #efa_rdm_peer that will retry posting handshake pkt */
-	struct dlist_entry handshake_queued_peer_list;
-
 #if ENABLE_DEBUG
 	/* tx/rx_entries waiting to receive data in
          * long CTS msg/read/write protocols */
@@ -197,6 +183,7 @@ struct efa_rdm_ep {
 	bool write_in_order_aligned_128_bytes; /**< whether to support in order write of each aligned 128 bytes memory region */
 	char err_msg[EFA_RDM_ERROR_MSG_BUFFER_LENGTH]; /* A large enough buffer to store CQ/EQ error data used by e.g. fi_cq_readerr */
 	struct efa_rdm_pke **pke_vec;
+	struct dlist_entry entry;
 };
 
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);
@@ -251,10 +238,6 @@ static inline int efa_rdm_ep_need_sas(struct efa_rdm_ep *ep)
 int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		    struct fid_ep **ep, void *context);
 
-/* EP sub-functions */
-void efa_rdm_ep_progress(struct util_ep *util_ep);
-void efa_rdm_ep_progress_internal(struct efa_rdm_ep *efa_rdm_ep);
-
 int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe,
 			      uint64_t flags);
 
@@ -274,6 +257,8 @@ struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
 {
 	return container_of(ep->base_ep.util_ep.domain, struct efa_domain, util_domain);
 }
+
+void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep);
 
 /**
  * @brief return whether this endpoint should write error cq entry for RNR.
