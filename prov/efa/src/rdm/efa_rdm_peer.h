@@ -25,6 +25,7 @@ OFI_DECL_RECVWIN_BUF(struct efa_rdm_pke*, efa_rdm_robuf, uint32_t);
 #define EFA_RDM_PEER_HANDSHAKE_QUEUED      BIT_ULL(5)
 
 struct efa_rdm_peer {
+	struct efa_rdm_ep *ep;		/**< local ep */
 	bool is_self;			/**< flag indicating whether the peer is the endpoint itself */
 	bool is_local;			/**< flag indicating wehther the peer is local (on the same instance) */
 	uint32_t device_version;	/**< EFA device version */

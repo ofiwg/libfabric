@@ -55,7 +55,6 @@ _efa_files = \
 	prov/efa/src/rdm/efa_rdm_cq.c \
 	prov/efa/src/rdm/efa_rdm_ep_utils.c \
 	prov/efa/src/rdm/efa_rdm_ep_fiops.c \
-	prov/efa/src/rdm/efa_rdm_ep_progress.c \
 	prov/efa/src/rdm/efa_rdm_rma.c	\
 	prov/efa/src/rdm/efa_rdm_msg.c	\
 	prov/efa/src/rdm/efa_rdm_pke.c \
