@@ -57,7 +57,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 
 	dlist_init(&txe->queued_pkts);
 
-	if (ep->user_info->mode & FI_MSG_PREFIX)
+	if (txe->iov_count > 0 && ep->user_info->mode & FI_MSG_PREFIX)
 		ofi_consume_iov_desc(txe->iov, txe->desc, &txe->iov_count, ep->msg_prefix_size);
 	txe->total_len = ofi_total_iov_len(txe->iov, txe->iov_count);
 
