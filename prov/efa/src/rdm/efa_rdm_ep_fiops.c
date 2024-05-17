@@ -319,12 +319,6 @@ err_free:
 void efa_rdm_ep_init_linked_lists(struct efa_rdm_ep *ep)
 {
 	dlist_init(&ep->rx_posted_buf_list);
-	dlist_init(&ep->ope_queued_rnr_list);
-	dlist_init(&ep->ope_queued_ctrl_list);
-	dlist_init(&ep->ope_queued_read_list);
-	dlist_init(&ep->ope_longcts_send_list);
-	dlist_init(&ep->peer_backoff_list);
-	dlist_init(&ep->handshake_queued_peer_list);
 #if ENABLE_DEBUG
 	dlist_init(&ep->ope_recv_list);
 	dlist_init(&ep->rx_pkt_list);
@@ -413,6 +407,19 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 }
 
 /**
+ * @brief progress engine for the EFA RDM endpoint
+ *
+ * This function now a no-op.
+ *
+ * @param[in] util_ep The endpoint FID to progress
+ */
+static
+void efa_rdm_ep_progress_no_op(struct util_ep *util_ep)
+{
+	return;
+}
+
+/**
  * @brief implement the fi_endpoint() API for EFA RDM endpoint
  *
  * @param[in,out] domain The domain this endpoint belongs to
@@ -436,7 +443,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 				  util_domain.domain_fid);
 
 	ret = efa_base_ep_construct(&efa_rdm_ep->base_ep, domain, info,
-				    efa_rdm_ep_progress, context);
+				    efa_rdm_ep_progress_no_op, context);
 	if (ret)
 		goto err_free_ep;
 
@@ -656,35 +663,9 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	struct dlist_entry *entry, *tmp;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_ope *ope;
 #if ENABLE_DEBUG
 	struct efa_rdm_pke *pkt_entry;
-#endif
 
-	dlist_foreach_safe(&efa_rdm_ep->ope_queued_rnr_list, entry, tmp) {
-		txe = container_of(entry, struct efa_rdm_ope,
-					queued_rnr_entry);
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Closing ep with queued rnr txe: %p\n",
-			txe);
-		efa_rdm_txe_release(txe);
-	}
-
-	dlist_foreach_safe(&efa_rdm_ep->ope_queued_ctrl_list, entry, tmp) {
-		ope = container_of(entry, struct efa_rdm_ope,
-					queued_ctrl_entry);
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Closing ep with queued ctrl ope: %p\n",
-			ope);
-		if (ope->type == EFA_RDM_TXE) {
-			efa_rdm_txe_release(ope);
-		} else {
-			assert(ope->type == EFA_RDM_RXE);
-			efa_rdm_rxe_release(ope);
-		}
-	}
-
-#if ENABLE_DEBUG
 	dlist_foreach_safe(&efa_rdm_ep->rx_posted_buf_list, entry, tmp) {
 		pkt_entry = container_of(entry, struct efa_rdm_pke, dbg_entry);
 		efa_rdm_pke_release_rx(pkt_entry);
@@ -761,15 +742,35 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
  * Unfinished send includes queued ctrl packets, queued
  * RNR packets and inflight TX packets.
  *
- * @param[in]	efa_rdm_ep	endpoint
- * @return	a boolean
+ * @param[in]  efa_rdm_ep      endpoint
+ * @return     a boolean
  */
 static
 bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
 {
-	return !dlist_empty(&efa_rdm_ep->ope_queued_rnr_list) ||
-	       !dlist_empty(&efa_rdm_ep->ope_queued_ctrl_list) ||
-	       (efa_rdm_ep->efa_outstanding_tx_ops > 0);
+	struct dlist_entry *entry, *tmp;
+	struct efa_rdm_ope *ope;
+
+	if (efa_rdm_ep->efa_outstanding_tx_ops > 0)
+		return true;
+
+	dlist_foreach_safe(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_rnr_list, entry, tmp) {
+		ope = container_of(entry, struct efa_rdm_ope,
+					queued_rnr_entry);
+		if (ope->ep == efa_rdm_ep) {
+			return true;
+		}
+	}
+
+	dlist_foreach_safe(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_ctrl_list, entry, tmp) {
+		ope = container_of(entry, struct efa_rdm_ope,
+					queued_ctrl_entry);
+		if (ope->ep == efa_rdm_ep) {
+			return true;
+		}
+	}
+
+    return false;
 }
 
 /*
@@ -784,12 +785,9 @@ bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
 static inline
 void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 {
-	struct util_srx_ctx *srx_ctx;
 	struct efa_rdm_cq *tx_cq, *rx_cq;
-	/* peer srx should be initialized when ep is enabled */
-	assert(efa_rdm_ep->peer_srx_ep);
-	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
-	ofi_genlock_lock(srx_ctx->lock);
+
+	ofi_genlock_lock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
 
 	tx_cq = efa_rdm_ep_get_tx_rdm_cq(efa_rdm_ep);
 	rx_cq = efa_rdm_ep_get_rx_rdm_cq(efa_rdm_ep);
@@ -800,10 +798,10 @@ void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 			efa_rdm_cq_poll_ibv_cq(-1, &tx_cq->ibv_cq);
 		if (rx_cq)
 			efa_rdm_cq_poll_ibv_cq(-1, &rx_cq->ibv_cq);
-		efa_rdm_ep_progress_internal(efa_rdm_ep);
+		efa_domain_progress_rdm_peers_and_queues(efa_rdm_ep_domain(efa_rdm_ep));
 	}
 
-	ofi_genlock_unlock(srx_ctx->lock);
+	ofi_genlock_unlock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
 }
 
 static inline
@@ -1185,6 +1183,8 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		ofi_genlock_lock(srx_ctx->lock);
 
 		efa_rdm_ep_set_extra_info(ep);
+
+		efa_rdm_ep_post_internal_rx_pkts(ep);
 
 		ep_addr_strlen = sizeof(ep_addr_str);
 		efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &ep_addr_strlen);

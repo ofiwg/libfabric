@@ -126,13 +126,13 @@ struct efa_rdm_ope {
 	/* ep_entry is linked to tx/rxe_list in efa_rdm_ep */
 	struct dlist_entry ep_entry;
 
-	/* queued_ctrl_entry is linked with tx/rx_queued_ctrl_list in efa_rdm_ep */
+	/* queued_ctrl_entry is linked with tx/rx_queued_ctrl_list in efa_domain */
 	struct dlist_entry queued_ctrl_entry;
 
-	/* queued_read_entry is linked with ope_queued_read_list in efa_rdm_ep */
+	/* queued_read_entry is linked with ope_queued_read_list in efa_domain */
 	struct dlist_entry queued_read_entry;
 
-	/* queued_rnr_entry is linked with tx/rx_queued_rnr_list in efa_rdm_ep */
+	/* queued_rnr_entry is linked with tx/rx_queued_rnr_list in efa_domain */
 	struct dlist_entry queued_rnr_entry;
 
 	/* Queued packets due to TX queue full or RNR backoff */

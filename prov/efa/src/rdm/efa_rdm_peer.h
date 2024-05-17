@@ -25,6 +25,7 @@ OFI_DECL_RECVWIN_BUF(struct efa_rdm_pke*, efa_rdm_robuf, uint32_t);
 #define EFA_RDM_PEER_HANDSHAKE_QUEUED      BIT_ULL(5)
 
 struct efa_rdm_peer {
+	struct efa_rdm_ep *ep;		/**< local ep */
 	bool is_self;			/**< flag indicating whether the peer is the endpoint itself */
 	bool is_local;			/**< flag indicating wehther the peer is local (on the same instance) */
 	uint32_t device_version;	/**< EFA device version */
@@ -46,8 +47,8 @@ struct efa_rdm_peer {
 	uint64_t rnr_backoff_begin_ts;	/**< timestamp for RNR backoff period begin */
 	uint64_t rnr_backoff_wait_time;	/**< how long the RNR backoff period last */
 	int rnr_queued_pkt_cnt;		/**< queued RNR packet count */
-	struct dlist_entry rnr_backoff_entry;	/**< linked to efa_rdm_ep peer_backoff_list */
-	struct dlist_entry handshake_queued_entry; /**< linked with efa_rdm_ep->handshake_queued_peer_list */
+	struct dlist_entry rnr_backoff_entry;	/**< linked to efa_domain->peer_backoff_list */
+	struct dlist_entry handshake_queued_entry; /**< linked with efa_domain->handshake_queued_peer_list */
 	struct dlist_entry rx_unexp_list; /**< a list of unexpected untagged rxe for this peer */
 	struct dlist_entry rx_unexp_tagged_list; /**< a list of unexpected tagged rxe for this peer */
 	struct dlist_entry txe_list; /**< a list of txe related to this peer */

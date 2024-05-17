@@ -160,6 +160,13 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	efa_domain->rdm_cq_size = MAX(info->rx_attr->size + info->tx_attr->size,
 				  efa_env.cq_size);
 	efa_domain->num_read_msg_in_flight = 0;
+
+	dlist_init(&efa_domain->ope_queued_rnr_list);
+	dlist_init(&efa_domain->ope_queued_ctrl_list);
+	dlist_init(&efa_domain->ope_queued_read_list);
+	dlist_init(&efa_domain->ope_longcts_send_list);
+	dlist_init(&efa_domain->peer_backoff_list);
+	dlist_init(&efa_domain->handshake_queued_peer_list);
 	return 0;
 }
 
@@ -429,4 +436,204 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 	}
 
 	return ret;
+}
+
+
+void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
+{
+	struct efa_rdm_peer *peer;
+	struct dlist_entry *tmp;
+	struct efa_rdm_ope *ope;
+	int ret;
+
+	assert(domain->info->ep_attr->type == FI_EP_RDM);
+
+	/* Update timers for peers that are in backoff list*/
+	dlist_foreach_container_safe(&domain->peer_backoff_list, struct efa_rdm_peer,
+				     peer, rnr_backoff_entry, tmp) {
+		if (ofi_gettime_us() >= peer->rnr_backoff_begin_ts +
+					peer->rnr_backoff_wait_time) {
+			peer->flags &= ~EFA_RDM_PEER_IN_BACKOFF;
+			dlist_remove(&peer->rnr_backoff_entry);
+		}
+	}
+
+	/*
+	 * Resend handshake packet for any peers where the first
+	 * handshake send failed.
+	 */
+	dlist_foreach_container_safe(&domain->handshake_queued_peer_list,
+				     struct efa_rdm_peer, peer,
+				     handshake_queued_entry, tmp) {
+		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
+			continue;
+
+		ret = efa_rdm_ep_post_handshake(peer->ep, peer);
+		if (ret == -FI_EAGAIN)
+			break;
+
+		if (OFI_UNLIKELY(ret)) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				"Failed to post HANDSHAKE to peer %ld: %s\n",
+				peer->efa_fiaddr, fi_strerror(-ret));
+			efa_base_ep_write_eq_error(&peer->ep->base_ep, -ret, FI_EFA_ERR_PEER_HANDSHAKE);
+			return;
+		}
+
+		dlist_remove(&peer->handshake_queued_entry);
+		peer->flags &= ~EFA_RDM_PEER_HANDSHAKE_QUEUED;
+		peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
+	}
+
+	/*
+	 * Resend queued RNR pkts
+	 */
+	dlist_foreach_container_safe(&domain->ope_queued_rnr_list,
+				     struct efa_rdm_ope,
+				     ope, queued_rnr_entry, tmp) {
+		peer = efa_rdm_ep_get_peer(ope->ep, ope->addr);
+		assert(peer);
+
+		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
+			continue;
+
+		assert(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR);
+		assert(!dlist_empty(&ope->queued_pkts));
+		ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
+
+		if (ret == -FI_EAGAIN)
+			break;
+
+		if (OFI_UNLIKELY(ret)) {
+			assert(ope->type == EFA_RDM_RXE || ope->type == EFA_RDM_TXE);
+			if (ope->type == EFA_RDM_RXE)
+				efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_SEND);
+			else
+				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_SEND);
+			return;
+		}
+
+		dlist_remove(&ope->queued_rnr_entry);
+		ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_RNR;
+	}
+
+	/*
+	 * Send any queued ctrl packets.
+	 */
+	dlist_foreach_container_safe(&domain->ope_queued_ctrl_list,
+				     struct efa_rdm_ope,
+				     ope, queued_ctrl_entry, tmp) {
+		peer = efa_rdm_ep_get_peer(ope->ep, ope->addr);
+		assert(peer);
+
+		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
+			continue;
+
+		assert(ope->internal_flags & EFA_RDM_OPE_QUEUED_CTRL);
+		ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
+		if (ret == -FI_EAGAIN)
+			break;
+
+		if (OFI_UNLIKELY(ret)) {
+			efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
+			return;
+		}
+
+		/* it can happen that efa_rdm_ope_post_send() released ope
+		 * (if the ope is rxe and packet type is EOR and inject is used). In
+		 * that case rxe's state has been set to EFA_RDM_OPE_FREE and
+		 * it has been removed from ep->op_queued_entry_list, so nothing
+		 * is left to do.
+		 */
+		if (ope->state == EFA_RDM_OPE_FREE)
+			continue;
+
+		ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_CTRL;
+		dlist_remove(&ope->queued_ctrl_entry);
+	}
+
+	/*
+	 * Send data packets until window or data queue is exhausted.
+	 */
+	dlist_foreach_container(&domain->ope_longcts_send_list, struct efa_rdm_ope,
+				ope, entry) {
+		peer = efa_rdm_ep_get_peer(ope->ep, ope->addr);
+		assert(peer);
+		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
+			continue;
+
+		/*
+		 * Do not send DATA packet until we received HANDSHAKE packet from the peer,
+		 * this is because endpoint does not know whether peer need connid in header
+		 * until it get the HANDSHAKE packet.
+		 *
+		 * We only do this for DATA packet because other types of packets always
+		 * has connid in there packet header. If peer does not make use of the connid,
+		 * the connid can be safely ignored.
+		 *
+		 * DATA packet is different because for DATA packet connid is an optional
+		 * header inserted between the mandatory header and the application data.
+		 * Therefore if peer does not use/understand connid, it will take connid
+		 * as application data thus cause data corruption.
+		 *
+		 * This will not cause deadlock because peer will send a HANDSHAKE packet
+		 * back upon receiving 1st packet from the endpoint, and in all 3 sub0protocols
+		 * (long-CTS message, emulated long-CTS write and emulated long-CTS read)
+		 * where DATA packet is used, endpoint will send other types of packet to
+		 * peer before sending DATA packets. The workflow of the 3 sub-protocol
+		 * can be found in protocol v4 document chapter 3.
+		 */
+		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+			continue;
+
+		if (ope->window > 0) {
+			ret = efa_rdm_ope_post_send(ope, EFA_RDM_CTSDATA_PKT);
+			if (OFI_UNLIKELY(ret)) {
+				if (ret == -FI_EAGAIN)
+					break;
+
+				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
+				return;
+			}
+		}
+	}
+
+	/*
+	 * Send remote read requests until finish or error encoutered
+	 */
+	dlist_foreach_container_safe(&domain->ope_queued_read_list, struct efa_rdm_ope,
+				     ope, queued_read_entry, tmp) {
+		peer = efa_rdm_ep_get_peer(ope->ep, ope->addr);
+		/*
+		 * Here peer can be NULL, when the read request is a
+		 * local read request. Local read request is used to copy
+		 * data from host memory to device memory on same process.
+		 */
+		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
+			continue;
+
+		/*
+		 * The core's TX queue is full so we can't do any
+		 * additional work.
+		 */
+		if (ope->ep->efa_outstanding_tx_ops == ope->ep->efa_max_outstanding_tx_ops)
+			return;
+
+		ret = efa_rdm_ope_post_read(ope);
+		if (ret == -FI_EAGAIN)
+			break;
+
+		if (OFI_UNLIKELY(ret)) {
+			assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
+			if (ope->type == EFA_RDM_TXE)
+				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
+			else
+				efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
+
+			return;
+		}
+
+		ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_READ;
+		dlist_remove(&ope->queued_read_entry);
+	}
 }
