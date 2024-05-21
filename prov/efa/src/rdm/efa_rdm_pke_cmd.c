@@ -961,7 +961,13 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 		zcpy_rxe = pkt_entry->ope;
 	}
 
-	efa_rdm_pke_proc_received(pkt_entry);
+	if (ep->use_zcpy_rx) {
+		efa_rdm_pke_rtm_update_rxe(pkt_entry, zcpy_rxe);
+		efa_rdm_pke_rtm_handle_zcpy_recv_completion(pkt_entry, zcpy_rxe);
+		return;
+	} else {
+		efa_rdm_pke_proc_received(pkt_entry);
+	}
 
 	if (zcpy_rxe && pkt_type != EFA_RDM_EAGER_MSGRTM_PKT) {
 		/* user buffer was not matched with a message,

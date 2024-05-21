@@ -87,6 +87,9 @@ void efa_rdm_pke_set_rtm_tag(struct efa_rdm_pke *pkt_entry, uint64_t tag)
 	*tagptr = tag;
 }
 
+void efa_rdm_pke_rtm_handle_zcpy_recv_completion(struct efa_rdm_pke *pkt_entry,
+				struct efa_rdm_ope *rxe);
+
 void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
 				struct efa_rdm_ope *rxe);
 
