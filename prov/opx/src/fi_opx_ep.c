@@ -404,8 +404,8 @@ static void fi_opx_unbind_cq_ep(struct fi_opx_cq *cq, struct fi_opx_ep *ep)
 		}
 		if (found && ind < cq->progress.ep_count - 1) {
 			cq->progress.ep[ind] = cq->progress.ep[ind+1];
-		}	
-	} 
+		}
+	}
 	if (found) {
 		cq->progress.ep_count--;
 	}
@@ -417,12 +417,12 @@ static void fi_opx_unbind_cq_ep(struct fi_opx_cq *cq, struct fi_opx_ep *ep)
 		}
 		if (found && ind < cq->ep_bind_count - 1) {
 			cq->ep[ind] = cq->ep[ind+1];
-		}	
-	} 
+		}
+	}
 	if (found) {
 		cq->ep_bind_count--;
 	}
-	
+
 }
 
 static int fi_opx_close_ep(fid_t fid)
@@ -592,7 +592,7 @@ static int fi_opx_close_ep(fid_t fid)
 		}
 		if(opx_ep->reliability->ref_cnt == 0) {
 			opx_ep->reliability->service.active = 0;
-			fi_opx_reliability_service_fini(&opx_ep->reliability->service);	
+			fi_opx_reliability_service_fini(&opx_ep->reliability->service);
 			free(opx_ep->reliability->mem);
 		}
 		opx_ep->reliability = NULL;
@@ -843,9 +843,9 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	opx_ep->tx->pio_credits_addr = hfi->info.pio.credits_addr;
 
 	/* Now that we know how many PIO Tx send credits we have, calculate the threshold to switch from EAGER send to RTS/CTS
-	 * With max credits, there should be enough PIO Eager buffer to send 1 full-size message and 1 credit leftover for min reliablity.  
+	 * With max credits, there should be enough PIO Eager buffer to send 1 full-size message and 1 credit leftover for min reliablity.
 	 */
-	uint64_t l_pio_max_eager_tx_bytes = MIN(FI_OPX_HFI1_PACKET_MTU, 
+	uint64_t l_pio_max_eager_tx_bytes = MIN(FI_OPX_HFI1_PACKET_MTU,
 	((hfi->state.pio.credits_total - FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS) * 64));
 
 	assert(l_pio_max_eager_tx_bytes < ((2<<15) -1) ); // Make sure the value won't wrap a uint16_t
@@ -853,16 +853,16 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	assert((l_pio_max_eager_tx_bytes & 0x3f) == 0); //Make sure the value is 64 bit aligned
 	opx_ep->tx->pio_max_eager_tx_bytes = l_pio_max_eager_tx_bytes;
 
-	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Credits_total is %d, so set pio_max_eager_tx_bytes to %d \n", 
+	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Credits_total is %d, so set pio_max_eager_tx_bytes to %d \n",
 	hfi->state.pio.credits_total, opx_ep->tx->pio_max_eager_tx_bytes);
 
 	/* Similar logic to l_pio_max_eager_tx_bytes, calculate l_pio_flow_eager_tx_bytes to be an 'optimal' value for PIO
-	 * credit count that respects the HFI credit return threshold.  The threshold is default 33%, so multiply credits_total 
-	 * by .66.  The idea is to not wait for an overly long time on credit-constrained systems to get almost all the PIO 
+	 * credit count that respects the HFI credit return threshold.  The threshold is default 33%, so multiply credits_total
+	 * by .66.  The idea is to not wait for an overly long time on credit-constrained systems to get almost all the PIO
 	 * send credits back, rather wait to get the optimal number of credits determined by the return threshold.
-	 * TODO: multiply by user_credit_return_threshold from the hfi1 driver parms.  Default is 33   
+	 * TODO: multiply by user_credit_return_threshold from the hfi1 driver parms.  Default is 33
 	 */
-	uint64_t l_pio_flow_eager_tx_bytes = MIN(FI_OPX_HFI1_PACKET_MTU, 
+	uint64_t l_pio_flow_eager_tx_bytes = MIN(FI_OPX_HFI1_PACKET_MTU,
 	((uint16_t)((hfi->state.pio.credits_total - FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS) * .66) * 64) );
 
 	assert((l_pio_flow_eager_tx_bytes & 0x3f) == 0); //Make sure the value is 64 bit aligned
@@ -891,10 +891,10 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_MP_EAGER_MAX_PAYLOAD_BYTES was specified.  Set to %d\n",
 			opx_ep->tx->mp_eager_max_payload_bytes);
 	}
-	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager chunk-size is %d.\n", FI_OPX_MP_EGR_CHUNK_SIZE);	
+	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager chunk-size is %d.\n", FI_OPX_MP_EGR_CHUNK_SIZE);
 
-	/* Set SDMA bounce buffer threshold.  Any messages larger than this value in bytes will not be copied to 
-	 * replay bounce buffers.  Instead, hold the sender's large message buffer until we get all ACKs back from the Rx 
+	/* Set SDMA bounce buffer threshold.  Any messages larger than this value in bytes will not be copied to
+	 * replay bounce buffers.  Instead, hold the sender's large message buffer until we get all ACKs back from the Rx
 	 * side of the message.  Since no copy of the message is made, it will need to be used to handle NAKs.
 	 */
 	int l_sdma_bounce_buf_threshold;
@@ -927,7 +927,7 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	int sdma_disable;
 	if (fi_param_get_int(fi_opx_global.prov, "sdma_disable", &sdma_disable) == FI_SUCCESS) {
 		opx_ep->tx->use_sdma = !sdma_disable;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, 
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
 		"sdma_disable parm specified as %0X; opx_ep->tx->use_sdma set to %0hhX\n", sdma_disable, opx_ep->tx->use_sdma);
 	} else {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "sdma_disable parm not specified; using SDMA\n");
@@ -1117,7 +1117,7 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 			FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
 	}
 
-	/* Now that endpoint is complete enough to have context information from the hfi, 
+	/* Now that endpoint is complete enough to have context information from the hfi,
 	** update the function pointers in the cq for the rx polling loop
 	*/
 	fi_opx_cq_finalize_ops((struct fid_ep *) opx_ep);
@@ -1473,7 +1473,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	#if HAVE_CUDA
 		opx_ep->hmem_copy_buf = NULL;
 		cudaError_t cuda_rc = cudaHostAlloc((void **) &opx_ep->hmem_copy_buf,
-						FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES,
+						OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX,
 						cudaHostAllocDefault);
 		if (cuda_rc != cudaSuccess) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_CORE,
@@ -1484,7 +1484,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		}
 		assert(opx_ep->hmem_copy_buf);
 	#else
-		opx_ep->hmem_copy_buf = malloc(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES);
+		opx_ep->hmem_copy_buf = malloc(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX);
 		if (opx_ep->hmem_copy_buf == NULL) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_CORE,
 				"Failed allocating HMEM bounce buf with malloc().\n");
@@ -1798,7 +1798,7 @@ int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx * rx,
 
 		prev = item;
 		item = item->next;
-	}	
+	}
 
 	/* context not found in 'kind' match queue */
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end) not found\n");
@@ -1820,7 +1820,7 @@ ssize_t fi_opx_cancel(fid_t fid, void *context)
 				FI_MSG,
 				(const union fi_opx_context *) context,
 				FI_OPX_LOCK_NOT_REQUIRED);
-				
+
 		}
 
 		if (opx_ep->rx->caps & FI_TAGGED) {
@@ -2246,7 +2246,7 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"Expected receive (TID) cannot be enabled. Unsupported driver version\n");
 				opx_ep->use_expected_tid_rzv = 0;
-			} 
+			}
 		}
 #endif
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2421,7 +2421,7 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		} else {
 			ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
 			if (OFI_UNLIKELY(ext == NULL)) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, 
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"Out of memory.\n");
 				abort();
 			}
@@ -2463,7 +2463,7 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		struct fi_opx_hfi1_ue_packet * claimed_pkt = context->claim;
 
 		const unsigned is_intranode =
-			fi_opx_hfi_is_intranode(claimed_pkt->hdr.stl.lrh.slid); 
+			fi_opx_hfi_is_intranode(claimed_pkt->hdr.stl.lrh.slid);
 
 		complete_receive_operation(ep,
 			&claimed_pkt->hdr,
@@ -2840,7 +2840,7 @@ static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
 				if (cur_av_rank) {
 					union fi_opx_addr cur_av_addr;
 					cur_av_addr.fi = cur_av_rank->fi_addr;
-					
+
 					if (cur_av_addr.fi == addr) {
 						found = 1;
 						cur_av_rank->updated++;
