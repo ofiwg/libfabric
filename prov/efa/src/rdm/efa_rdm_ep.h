@@ -128,8 +128,6 @@ struct efa_rdm_ep {
 	/* tx/rx_entries used by long CTS msg/write/read protocol
          * which have data to be sent */
 	struct dlist_entry ope_longcts_send_list;
-	/* read entries with data to be read */
-	struct dlist_entry read_pending_list;
 	/* list of #efa_rdm_peer that are in backoff due to RNR */
 	struct dlist_entry peer_backoff_list;
 	/* list of #efa_rdm_peer that will retry posting handshake pkt */

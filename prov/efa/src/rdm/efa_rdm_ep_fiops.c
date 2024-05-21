@@ -323,7 +323,6 @@ void efa_rdm_ep_init_linked_lists(struct efa_rdm_ep *ep)
 	dlist_init(&ep->ope_queued_ctrl_list);
 	dlist_init(&ep->ope_queued_read_list);
 	dlist_init(&ep->ope_longcts_send_list);
-	dlist_init(&ep->read_pending_list);
 	dlist_init(&ep->peer_backoff_list);
 	dlist_init(&ep->handshake_queued_peer_list);
 #if ENABLE_DEBUG
