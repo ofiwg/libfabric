@@ -68,11 +68,56 @@ static int xnet_fabric_close(fid_t fid)
 	return 0;
 }
 
+static int xnet_fabric_set_val(struct xnet_fabric *fabric,
+				int name, void *val)
+{
+	int high, low;
+
+	switch (name) {
+	case FI_TCP_FABRIC_PASSIVE_PORT_RANGE:
+		high = ((struct xnet_port_range *)val)->high;
+		low = ((struct xnet_port_range *)val)->low;
+
+		if (high > XNET_PORT_MAX_RANGE || low > high ||
+		    high < 0 || low < 0)
+			return -FI_EINVAL;
+
+		xnet_ports.high = high;
+		xnet_ports.low = low;
+
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int xnet_fabric_control(fid_t fid, int command, void *arg)
+{
+	struct xnet_fabric *fabric;
+
+	fabric = container_of(fid, struct xnet_fabric,
+			      util_fabric.fabric_fid.fid);
+
+	switch (command) {
+	case FI_SET_VAL:
+		return xnet_fabric_set_val(fabric,
+				((struct fi_fid_var *)arg)->name,
+				((struct fi_fid_var *)arg)->val);
+		break;
+	default:
+		return -FI_ENOSYS;
+	}
+
+	return FI_SUCCESS;
+}
+
 struct fi_ops xnet_fabric_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = xnet_fabric_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = xnet_fabric_control,
 	.ops_open = fi_no_ops_open,
 };
 

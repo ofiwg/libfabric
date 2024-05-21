@@ -81,6 +81,7 @@ enum {
 enum {
 	/* null terminated string, <low port>-<high port> */
 	FI_TCP_DOMAIN_ACTIVE_PORT_RANGE = -FI_PROV_SPECIFIC_TCP,
+	FI_TCP_FABRIC_PASSIVE_PORT_RANGE,
 };
 
 struct fi_fid_export {
