@@ -365,17 +365,20 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((c = getopt(argc, argv, "n:x:z:u:Ths:I:" INFO_OPTS)) != -1) {
+	while ((c = getopt(argc, argv, "n:x:z:Ths:I:" INFO_OPTS)) != -1) {
 		switch (c) {
 		default:
 			ft_parse_addr_opts(c, optarg, &opts);
 			ft_parseinfo(c, optarg, hints, &opts);
-			ft_parsecsopts(c, optarg, &opts);
+			break;
+		case 'I':
+			opts.options |= FT_OPT_ITER;
+			opts.iterations = atoi(optarg);
 			break;
 		case 'n':
 			pm_job.num_ranks = atoi(optarg);
 			break;
-		case 'C':
+		case 'x':
 			pm_job.transfer_method = parse_caps(optarg);
 			break;
 		case 'T':
@@ -414,10 +417,9 @@ int main(int argc, char **argv)
 			FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
 			FT_PRINT_OPTS_USAGE("-p <provider>",
 				"specific provider name eg sockets, verbs");
-			FT_PRINT_OPTS_USAGE("-a", "do not use local address");
 			ft_addr_usage();
 			ft_hmem_usage();
-
+	
 			return EXIT_FAILURE;
 		}
 	}

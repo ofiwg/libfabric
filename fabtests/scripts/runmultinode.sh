@@ -1,7 +1,7 @@
 #!/bin/bash
 
-Options=$(getopt --options h:,n:,p:,I:,-x:-E:,z: \
-				--longoptions hosts:,processes-per-node:,provider:,xfer-method:,env:,iterations:,ci:,cleanup,help \
+Options=$(getopt --options h:,n:,p:,I:,-x:,z: \
+		  		--longoptions hosts:,processes-per-node:,provider:,xfer-method:,iterations:,ci:,cleanup,help \
 				-- "$@")
 
 eval set -- "$Options"
@@ -10,7 +10,7 @@ hosts=[]
 ppn=1
 iterations=1
 pattern=""
-xfer_method="msg"
+xfer-method="msg"
 cleanup=false
 help=false
 ci=""
@@ -30,14 +30,7 @@ while true; do
 		--cleanup)
 			cleanup=true; shift ;;
 		-x|--xfer-method)
-			xfer_method="$2"; shift 2 ;;
-		-E|--env)
-			delimiter="="
-			value=${2#*$delimiter}
-			var=${2:0:$(( ${#2} - ${#value} - ${#delimiter} ))}
-			EXPORT_STRING="export $var=\"$value\""
-			EXPORT_ENV="${EXPORT_ENV}${EXPORT_STRING}; "
-			shift 2 ;;
+			xfer-method="$2"; shift 2 ;;
 		--ci)
 			ci="$2"; shift 2 ;;
 		--help)
@@ -72,7 +65,7 @@ output="multinode_server_${num_hosts}_${ppn}.log"
 ret=0
 
 if ! $cleanup ; then
-	cmd="${EXPORT_ENV} ${ci}fi_multinode -n $ranks -s $server -p '$provider' -x $xfer_method $pattern -I $iterations -T"
+	cmd="${ci}fi_multinode -n $ranks -s $server -p '$provider' -x $xfer-method $pattern -I $iterations -T"
 	echo $cmd
 	for node in "${hosts[@]}"; do
 		for i in $(seq 1 $ppn); do
