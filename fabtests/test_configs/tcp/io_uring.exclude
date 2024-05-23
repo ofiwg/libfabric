@@ -108,8 +108,8 @@ fi_rma_bw -e msg -o writedata
 # ft_sock_recv(): ubertest/uber.c:356, ret=-107 (Transport endpoint is not connected)
 fi_ubertest
 
-# fi_multinode -C msg fails with no output
-fi_multinode -C msg
+# fi_multinode -x msg fails with no output
+fi_multinode -x msg
 
-# fi_multinode -C rma fails with no output
-fi_multinode -C rma
+# fi_multinode -x rma fails with no output
+fi_multinode -x rma
