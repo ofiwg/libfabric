@@ -321,17 +321,20 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((c = getopt(argc, argv, "n:C:z:Th" CS_OPTS INFO_OPTS)) != -1) {
+	while ((c = getopt(argc, argv, "n:x:z:Ths:I:" INFO_OPTS)) != -1) {
 		switch (c) {
 		default:
 			ft_parse_addr_opts(c, optarg, &opts);
 			ft_parseinfo(c, optarg, hints, &opts);
-			ft_parsecsopts(c, optarg, &opts);
+			break;
+		case 'I':
+			opts.options |= FT_OPT_ITER;
+			opts.iterations = atoi(optarg);
 			break;
 		case 'n':
 			pm_job.num_ranks = atoi(optarg);
 			break;
-		case 'C':
+		case 'x':
 			pm_job.transfer_method = parse_caps(optarg);
 			break;
 		case 'T':
@@ -342,7 +345,33 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "A simple multinode test");
+			fprintf(stderr, "Usage:\n");
+			fprintf(stderr, "    fi_multinode -s SERVER_NAME "
+					"-n NUM_RANKS [OPTIONS]\n\n");
+			fprintf(stderr, "    repeat command for each client\n");
+			fprintf(stderr, "    reccomend using "
+					"fabtests/scripts/runmultinode.sh\n\n");
+
+			fprintf(stderr, "fi_multinode specific options: \n\n");
+			FT_PRINT_OPTS_USAGE("-n <num_ranks>", "Number of ranks"
+					    " to expect");
+			FT_PRINT_OPTS_USAGE("-x <xfer_mode>", "msg or rma "
+					    "message mode");
+			FT_PRINT_OPTS_USAGE("-I <iters>", "number of iterations");
+			FT_PRINT_OPTS_USAGE("-T", "pass to enable performance "
+					    "timing mode");
+			FT_PRINT_OPTS_USAGE("-z <pattern>", "full_mesh, ring, "
+					    "gather, or broadcast pattern. "
+					    "Default: All\n");
+
+			fprintf(stderr, "General Fabtests options: \n\n");
+			FT_PRINT_OPTS_USAGE("-f <fabric>", "fabric name");
+			FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
+			FT_PRINT_OPTS_USAGE("-p <provider>",
+				"specific provider name eg sockets, verbs");
+			ft_addr_usage();
+			ft_hmem_usage();
+	
 			return EXIT_FAILURE;
 		}
 	}

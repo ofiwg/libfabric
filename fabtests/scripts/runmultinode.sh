@@ -1,7 +1,7 @@
 #!/bin/bash
 
-Options=$(getopt --options h:,n:,p:,I:,C:,z: \
-		  		--longoptions hosts:,processes-per-node:,provider:,capability:,iterations:,ci:,cleanup,help \
+Options=$(getopt --options h:,n:,p:,I:,-x:,z: \
+		  		--longoptions hosts:,processes-per-node:,provider:,xfer-method:,iterations:,ci:,cleanup,help \
 				-- "$@")
 
 eval set -- "$Options"
@@ -10,7 +10,7 @@ hosts=[]
 ppn=1
 iterations=1
 pattern=""
-capability="msg"
+xfer-method="msg"
 cleanup=false
 help=false
 ci=""
@@ -29,8 +29,8 @@ while true; do
 			pattern="-z $2"; shift 2 ;;
 		--cleanup)
 			cleanup=true; shift ;;
-		-C|--capability)
-			capability="$2"; shift 2 ;;
+		-x|--xfer-method)
+			xfer-method="$2"; shift 2 ;;
 		--ci)
 			ci="$2"; shift 2 ;;
 		--help) 
@@ -65,7 +65,7 @@ output="multinode_server_${num_hosts}_${ppn}.log"
 ret=0
 
 if ! $cleanup ; then
-	cmd="${ci}fi_multinode -n $ranks -s $server -p '$provider' -C $capability $pattern -I $iterations -T"
+	cmd="${ci}fi_multinode -n $ranks -s $server -p '$provider' -x $xfer-method $pattern -I $iterations -T"
 	echo $cmd
 	for node in "${hosts[@]}"; do
 		for i in $(seq 1 $ppn); do

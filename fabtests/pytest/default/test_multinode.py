@@ -3,12 +3,12 @@ from common import MultinodeTest
 
 
 @pytest.mark.multinode
-@pytest.mark.parametrize("C", ["msg", "rma"])
-def test_multinode(cmdline_args, C):
+@pytest.mark.parametrize("x", ["msg", "rma"])
+def test_multinode(cmdline_args, x):
 
     numproc = 3
     client_hostname_list = [cmdline_args.client_id, ] * (numproc - 1)
-    client_base_command = "fi_multinode -C " + C + f" -n {numproc}"
+    client_base_command = "fi_multinode -x " + x + f" -n {numproc}"
     server_base_command = client_base_command
     test = MultinodeTest(cmdline_args, server_base_command, client_base_command,
                          client_hostname_list, run_client_asynchronously=True)
