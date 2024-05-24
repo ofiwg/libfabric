@@ -475,30 +475,6 @@ struct fi_ops efa_mr_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-#if HAVE_EFA_DMABUF_MR
-
-static inline
-struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
-					size_t len, uint64_t iova, int fd, int access)
-{
-	return ibv_reg_dmabuf_mr(pd, offset, len, iova, fd, access);
-}
-
-#else
-
-static inline
-struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
-					size_t len, uint64_t iova, int fd, int access)
-{
-	EFA_WARN(FI_LOG_MR,
-		"ibv_reg_dmabuf_mr is required for memory"
-		" registration with FI_MR_DMABUF flags, but "
-		" not available in the current rdma-core library."
-		" please build libfabric with rdma-core >= 34.0\n");
-	return NULL;
-}
-
-#endif
 /**
  * @brief Register a memory buffer with rdma-core api.
  *
@@ -511,7 +487,20 @@ struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
 static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr,
 					int access, const uint64_t flags)
 {
-	if (flags & FI_MR_DMABUF)
+	int dmabuf_fd;
+	uint64_t offset;
+	int ret;
+
+	assert(efa_mr->domain->hmem_info[mr_attr->iface].p2p_supported_by_device);
+
+	if (flags & FI_MR_DMABUF) {
+		if (OFI_UNLIKELY(!efa_mr->domain->hmem_info[mr_attr->iface].dmabuf_supported)) {
+			EFA_WARN(FI_LOG_MR, "Requested FI_MR_DMABUF, but dmabuf is not supported.\n");
+			return NULL;
+		}
+
+		EFA_INFO(FI_LOG_MR, "FI_MR_DMABUF is set. Registering dmabuf mr with fd: %d, offset: %lu, len: %zu\n", 
+			mr_attr->dmabuf->fd, mr_attr->dmabuf->offset, mr_attr->dmabuf->len);
 		return efa_mr_reg_ibv_dmabuf_mr(
 			efa_mr->domain->ibv_pd,
 			mr_attr->dmabuf->offset,
@@ -520,64 +509,29 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 			mr_attr->dmabuf->fd,
 			access
 		);
+	}
 
-	/*
-	 * TODO: remove the synapseai and neuron blocks by onboarding the
-	 * ofi_hmem_get_dmabuf_fd API.
-	 */
-#if HAVE_SYNAPSEAI
-	if (efa_mr_is_synapseai(efa_mr)) {
-		int dmabuf_fd;
-		uint64_t offset;
-		int ret;
-
-		ret = synapseai_get_dmabuf_fd(mr_attr->mr_iov->iov_base,
-						(uint64_t) mr_attr->mr_iov->iov_len,
-						&dmabuf_fd, &offset);
+	if (efa_mr->domain->hmem_info[mr_attr->iface].dmabuf_supported) {
+		ret = ofi_hmem_get_dmabuf_fd(
+			mr_attr->iface,
+			mr_attr->mr_iov->iov_base,
+			(uint64_t) mr_attr->mr_iov->iov_len,
+			&dmabuf_fd, &offset);
 		if (ret != FI_SUCCESS) {
-			EFA_WARN(FI_LOG_MR, "Unable to get dmabuf fd for Gaudi device buffer \n");
+			EFA_WARN(FI_LOG_MR, "Unable to get dmabuf fd for device buffer. errno: %d, err_msg: %s\n",
+				ret, fi_strerror(-ret));
 			return NULL;
 		}
+		EFA_INFO(FI_LOG_MR, "Registering dmabuf mr with fd: %d, offset: %lu, len: %zu\n", 
+			dmabuf_fd, offset, mr_attr->mr_iov->iov_len);
 		return efa_mr_reg_ibv_dmabuf_mr(efa_mr->domain->ibv_pd, offset,
 					mr_attr->mr_iov->iov_len,
 					(uint64_t)mr_attr->mr_iov->iov_base,
 					dmabuf_fd, access);
 	}
-#endif
 
-#if HAVE_NEURON
-	if (efa_mr_is_neuron(efa_mr)) {
-		int dmabuf_fd;
-		uint64_t offset;
-		int ret;
-
-		ret = neuron_get_dmabuf_fd(
-				mr_attr->mr_iov->iov_base,
-				mr_attr->mr_iov->iov_len,
-				&dmabuf_fd,
-				&offset);
-
-		if (ret == FI_SUCCESS) {
-			/* Success => invoke ibv_reg_dmabuf_mr */
-			return efa_mr_reg_ibv_dmabuf_mr(
-					efa_mr->domain->ibv_pd, 0,
-					mr_attr->mr_iov->iov_len,
-					(uint64_t)mr_attr->mr_iov->iov_base,
-					dmabuf_fd, access);
-		} else if (ret == -FI_ENOPROTOOPT) {
-			/* Protocol not availabe => fallback */
-			EFA_INFO(FI_LOG_MR,
-				"Unable to get dmabuf fd for Neuron device buffer, "
-				"Fall back to ibv_reg_mr\n");
-			return ibv_reg_mr(
-				efa_mr->domain->ibv_pd,
-				(void *)mr_attr->mr_iov->iov_base,
-				mr_attr->mr_iov->iov_len, access);
-		}
-		return NULL;
-	}
-#endif
-
+	EFA_INFO(FI_LOG_MR, "Dmabuf is not supported. Registering memory via ibv_reg_mr with addr: %lu, len: %zu\n",
+		(uint64_t)mr_attr->mr_iov->iov_base, mr_attr->mr_iov->iov_len);
 	return ibv_reg_mr(efa_mr->domain->ibv_pd,
 			(void *)mr_attr->mr_iov->iov_base,
 			mr_attr->mr_iov->iov_len, access);
