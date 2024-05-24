@@ -1691,6 +1691,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	size_t segment_offset;
 	int pkt_entry_cnt, pkt_entry_cnt_allocated = 0, pkt_entry_data_size_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
 	int i;
+	uint64_t flags = 0;
 
 	err = efa_rdm_ope_prepare_to_post_send(ope, pkt_type, &pkt_entry_cnt, pkt_entry_data_size_vec);
 	if (err)
@@ -1726,7 +1727,21 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 
 	assert(pkt_entry_cnt == pkt_entry_cnt_allocated);
 
-	err = efa_rdm_pke_sendv(pkt_entry_vec, pkt_entry_cnt);
+	/**
+	 * We currently respect FI_MORE only for eager pkt type because
+	 * 1. For some non-REQ pkts like CTSDATA, its current implementation
+	 * relies on the logic that efa_rdm_ope_post_send always rings the doorbell,
+	 * because the ep progress call will keep calling this function until
+	 * ope->window is 0, but ope->window will only be decremented after
+	 * the CTSDATA pkts are actually posted to rdma-core.
+	 * 2. For non-eager REQ packets, we already send multiple pkts that contain
+	 * data and make the firmware saturated, there is no meaning to queue
+	 * pkts in this case.
+	 */
+	if (ope->fi_flags & FI_MORE && efa_rdm_pkt_type_is_eager(pkt_type))
+		flags |= FI_MORE;
+
+	err = efa_rdm_pke_sendv(pkt_entry_vec, pkt_entry_cnt, flags);
 	if (err)
 		goto handle_err;
 
