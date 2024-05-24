@@ -1932,7 +1932,7 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode,
 		segment_index = rx_id & OPX_SHM_MAX_CONN_MASK;
 	}
 #else
-	uint32_t segment_index = rx_id & OPX_SHM_MAX_CONN_MASK;
+	uint32_t segment_index = OPX_SHM_SEGMENT_INDEX(hfi1_unit, rx_id);
 #endif
 
 	if (OFI_LIKELY(opx_ep->tx->shm.fifo_segment[segment_index] != NULL)) {
