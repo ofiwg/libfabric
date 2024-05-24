@@ -227,7 +227,7 @@ struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_pke *src,
 struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_pke **pkt_entry_ptr);
 
 ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
-			  int pkt_entry_cnt);
+			  int pkt_entry_cnt, uint64_t flags);
 
 int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 		     void *local_buf, size_t len, void *desc,

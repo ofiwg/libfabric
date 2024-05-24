@@ -46,6 +46,7 @@ struct efa_base_ep {
 
 	bool util_ep_initialized;
 	bool efa_qp_enabled;
+	bool is_wr_started;
 
 	struct ibv_send_wr xmit_more_wr_head;
 	struct ibv_send_wr *xmit_more_wr_tail;

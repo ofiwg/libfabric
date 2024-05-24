@@ -350,11 +350,13 @@ void efa_rdm_pke_append(struct efa_rdm_pke *dst,
  *
  * @param[in] pkt_entry_vec	an array of packet entries to be sent
  * @param[in] pkt_entry_cnt	number of packet entries to be sent
+ * @param[in] flags		flags, currently only accept 0 or FI_MORE. When FI_MORE
+ * is passed, it doesn't ring the doorbell (ibv_wr_complete).
  * @return		0 on success
  * 			On error, a negative value corresponding to fabric errno
  */
 ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
-			  int pkt_entry_cnt)
+			  int pkt_entry_cnt, uint64_t flags)
 {
 	struct efa_qp *qp;
 	struct efa_conn *conn;
@@ -363,7 +365,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	struct efa_rdm_peer *peer;
 	struct ibv_sge sg_list[2];  /* efa device support up to 2 iov */
 	struct ibv_data_buf inline_data_list[2];
-	int ret, pkt_idx, iov_cnt;
+	int ret = 0, pkt_idx, iov_cnt;
 
 	assert(pkt_entry_cnt);
 	ep = pkt_entry_vec[0]->ep;
@@ -379,7 +381,10 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	assert(conn && conn->ep_addr);
 
 	qp = ep->base_ep.qp;
-	ibv_wr_start(qp->ibv_qp_ex);
+	if (!ep->base_ep.is_wr_started) {
+		ibv_wr_start(qp->ibv_qp_ex);
+		ep->base_ep.is_wr_started = true;
+	}
 	for (pkt_idx = 0; pkt_idx < pkt_entry_cnt; ++pkt_idx) {
 		pkt_entry = pkt_entry_vec[pkt_idx];
 		assert(pkt_entry->pkt_size);
@@ -429,7 +434,11 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 #endif
 	}
 
-	ret = ibv_wr_complete(qp->ibv_qp_ex);
+	if (!(flags & FI_MORE)) {
+		ret = ibv_wr_complete(qp->ibv_qp_ex);
+		ep->base_ep.is_wr_started = false;
+	}
+
 	if (OFI_UNLIKELY(ret)) {
 		return ret;
 	}
@@ -506,6 +515,8 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
  * This function posts one write request.
  *
  * @param[in]	pkt_entry	write_entry that has information of the write request.
+ * @param[in]	flags		flags, currently only accept 0 or FI_MORE. When FI_MORE
+ * is passed, it doesn't ring the doorbell (ibv_wr_complete).
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
@@ -543,7 +554,10 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 		pkt_entry->flags |= EFA_RDM_PKE_LOCAL_WRITE;
 
 	qp = ep->base_ep.qp;
-	ibv_wr_start(qp->ibv_qp_ex);
+	if (!ep->base_ep.is_wr_started) {
+		ibv_wr_start(qp->ibv_qp_ex);
+		ep->base_ep.is_wr_started = true;
+	}
 	qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
 
 	if (txe->fi_flags & FI_REMOTE_CQ_DATA) {
@@ -574,7 +588,10 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
 	}
 
-	err = ibv_wr_complete(qp->ibv_qp_ex);
+	if (!(txe->fi_flags & FI_MORE)) {
+		err = ibv_wr_complete(qp->ibv_qp_ex);
+		ep->base_ep.is_wr_started = false;
+	}
 
 	if (OFI_UNLIKELY(err))
 		return err;
