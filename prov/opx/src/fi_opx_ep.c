@@ -556,8 +556,8 @@ static int fi_opx_close_ep(fid_t fid)
 			if(opx_ep->tx->ref_cnt == 0) {
 				if (opx_ep->tx->sdma_work_pool)
 					ofi_bufpool_destroy(opx_ep->tx->sdma_work_pool);
-				if (opx_ep->tx->sdma_replay_work_pool)
-					ofi_bufpool_destroy(opx_ep->tx->sdma_replay_work_pool);
+				if (opx_ep->tx->sdma_request_pool)
+					ofi_bufpool_destroy(opx_ep->tx->sdma_request_pool);
 				free(opx_ep->tx->mem);
 			}
 			opx_ep->tx = NULL;
@@ -939,6 +939,12 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_SDMA]);
 	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_TID_SETUP]);
 	slist_init(&opx_ep->tx->work_pending_completion);
+	slist_init(&opx_ep->tx->sdma_request_queue.list);
+	opx_ep->tx->sdma_request_queue.num_reqs = 0;
+	opx_ep->tx->sdma_request_queue.num_iovs = 0;
+	opx_ep->tx->sdma_request_queue.max_iovs = OPX_SDMA_HFI_MAX_IOVS_PER_WRITE * OPX_SDMA_MAX_WRITEVS_PER_CYCLE;
+	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
+	slist_init(&opx_ep->tx->sdma_pending_queue);
 	ofi_bufpool_create(&opx_ep->tx->work_pending_pool,
 					   sizeof(union fi_opx_hfi1_deferred_work),
 					   0, UINT_MAX, 2048, 0);
@@ -956,13 +962,12 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 				sizeof(struct fi_opx_hfi1_sdma_work_entry),
 				64, FI_OPX_HFI1_SDMA_MAX_WE,
 				FI_OPX_HFI1_SDMA_MAX_WE, 0);
-		ofi_bufpool_create(&opx_ep->tx->sdma_replay_work_pool,
-				sizeof(struct fi_opx_hfi1_sdma_replay_work_entry),
-				64, FI_OPX_HFI1_SDMA_MAX_WE,
-				FI_OPX_HFI1_SDMA_MAX_WE, 0);
+		ofi_bufpool_create(&opx_ep->tx->sdma_request_pool,
+				sizeof(struct opx_sdma_request),
+				64, UINT_MAX, FI_OPX_HFI1_SDMA_MAX_WE, 0);
 	} else {
 		opx_ep->tx->sdma_work_pool = NULL;
-		opx_ep->tx->sdma_replay_work_pool = NULL;
+		opx_ep->tx->sdma_request_pool = NULL;
 	}
 	OPX_LOG(FI_LOG_INFO, FI_LOG_EP_DATA, "==== TX init finished\n");
 	return 0;

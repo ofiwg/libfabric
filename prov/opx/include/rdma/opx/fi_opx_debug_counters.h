@@ -53,6 +53,8 @@
 	#define OPX_DEBUG_COUNTERS_RELIABILITY_PING
 #endif
 
+#define OPX_DEBUG_COUNTERS_WRITEV_MAX	(65)
+
 static inline
 void fi_opx_debug_counters_print_counter(pid_t pid, char *name, uint64_t value)
 {
@@ -158,9 +160,20 @@ struct fi_opx_debug_counters {
 	} reliability_ping;
 
 	struct {
-		uint64_t	writev_calls[33];
-		uint64_t	total_requests;
+		uint64_t	writev_calls[OPX_DEBUG_COUNTERS_WRITEV_MAX];
+		uint64_t	writev_count;
+		uint64_t	writev_time_ns_total;
+		uint64_t	writev_time_ns_min;
+		uint64_t	writev_time_ns_max;
+		uint64_t	writev_time_ns_avg;
+		uint64_t	nontid_requests;
+		uint64_t	tid_requests;
+		uint64_t	replay_requests;
+		uint64_t	proc_reqs_calls;
+		uint64_t	proc_reqs_no_fill_slots;
+		uint64_t	proc_reqs_more_avail;
 		uint64_t	eagain_fill_index;
+		uint64_t	eagain_iov_limit;
 		uint64_t	eagain_psn;
 		uint64_t	eagain_replay;
 		uint64_t	eagain_sdma_we_none_free;
@@ -355,15 +368,33 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters)
 	#endif
 
 	#ifdef OPX_DEBUG_COUNTERS_SDMA
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.total_requests);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.nontid_requests);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.tid_requests);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.replay_requests);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.proc_reqs_calls);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.proc_reqs_no_fill_slots);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.proc_reqs_more_avail);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_fill_index);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_iov_limit);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_psn);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_replay);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_sdma_we_none_free);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_sdma_we_max_used);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_pending_writev);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_pending_dc);
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, sdma.writev_calls, 33);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.writev_count);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.writev_time_ns_total);
+		if (counters->sdma.writev_count == 0) {
+			counters->sdma.writev_time_ns_min = 0;
+			counters->sdma.writev_time_ns_avg = 0;
+		} else {
+			counters->sdma.writev_time_ns_avg =
+				counters->sdma.writev_time_ns_total / counters->sdma.writev_count;
+		}
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.writev_time_ns_min);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.writev_time_ns_max);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.writev_time_ns_avg);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, sdma.writev_calls, OPX_DEBUG_COUNTERS_WRITEV_MAX);
 	#endif
 
 	#ifdef OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
@@ -525,6 +556,7 @@ static void opx_debug_counters_handle_sig(int signum)
 static inline
 void fi_opx_debug_counters_init(struct fi_opx_debug_counters *counters) {
 	memset(counters, 0, sizeof(struct fi_opx_debug_counters));
+	counters->sdma.writev_time_ns_min = UINT64_MAX;
 	opx_debug_sig_counters = counters;
 	signal(SIGUSR1, opx_debug_counters_handle_sig);
 }

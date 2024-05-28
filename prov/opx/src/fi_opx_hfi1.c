@@ -1839,7 +1839,14 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 
 		uint64_t bytes_to_send = dput_iov[i].bytes - params->bytes_sent;
 		while (bytes_to_send > 0) {
-			fi_opx_hfi1_sdma_poll_completion(opx_ep);
+			if (!fi_opx_hfi1_sdma_queue_has_room(opx_ep, OPX_SDMA_NONTID_IOV_COUNT)) {
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"%p:===================================== SEND DPUT SDMA QUEUE FULL FI_EAGAIN\n",
+					params);
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p", (void *) target_byte_counter_vaddr);
+				return -FI_EAGAIN;
+
+			}
 			if (!params->sdma_we) {
 				/* Get an SDMA work entry since we don't already have one */
 				params->sdma_we = opx_sdma_get_new_work_entry(opx_ep,
@@ -1866,14 +1873,6 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 							(int) dput_iov[i].sbuf_device);
 			}
 			assert(!fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
-
-			if (opx_ep->hfi->info.sdma.available_counter < 1) {
-				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_fill_index);
-				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"%p:===================================== SEND DPUT SDMA, !CNTR FI_EAGAIN\n",params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p", (void *) target_byte_counter_vaddr);
-				return -FI_EAGAIN;
-			}
 
 			/* The driver treats the offset as a 4-byte value, so we
 			 * need to avoid sending a payload size that would wrap
@@ -1952,12 +1951,12 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				assert(packet_bytes <= FI_OPX_HFI1_PACKET_MTU);
 
 				struct fi_opx_reliability_tx_replay *replay;
-				replay = fi_opx_reliability_client_replay_allocate(
-					&opx_ep->reliability->state, true);
+				replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, true);
 				if(OFI_UNLIKELY(replay == NULL)) {
 					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-							"%p:!REPLAY on packet %u out of %lu, params->sdma_we->num_packets %u\n",
-							params, p, packet_count, params->sdma_we->num_packets);
+						"%p:!REPLAY on packet %u out of %lu, params->sdma_we->num_packets %u\n",
+						params, p, packet_count,
+						params->sdma_we->num_packets);
 					break;
 				}
 				replay->use_sdma = replay_use_sdma;
@@ -2047,7 +2046,10 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	params->work_elem.work_type = OPX_WORK_TYPE_LAST;
 	params->work_elem.work_fn = fi_opx_hfi1_dput_sdma_pending_completion;
 
-	return fi_opx_hfi1_dput_sdma_pending_completion(work);
+	// The SDMA request has been queued for sending, but not actually sent
+	// yet, so there's no point in checking for completion right away. Wait
+	// until the next poll cycle.
+	return -FI_EAGAIN;
 }
 
 int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
@@ -2164,7 +2166,14 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 			first_tidoffset, first_tidoffset,
 			first_tidoffset_page_adj, first_tidoffset_page_adj);
 		while (bytes_to_send > 0) {
-			fi_opx_hfi1_sdma_poll_completion(opx_ep);
+			if (!fi_opx_hfi1_sdma_queue_has_room(opx_ep, OPX_SDMA_TID_IOV_COUNT)) {
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"%p:===================================== SEND DPUT SDMA QUEUE FULL FI_EAGAIN\n",
+					params);
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA-TID");
+				return -FI_EAGAIN;
+
+			}
 			if (!params->sdma_we) {
 				/* Get an SDMA work entry since we don't already have one */
 				params->sdma_we = opx_sdma_get_new_work_entry(opx_ep,
@@ -2192,24 +2201,16 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 			}
 			assert(!fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 
-			if (opx_ep->hfi->info.sdma.available_counter < 1) {
-				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_fill_index);
-				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"%p:===================================== SEND DPUT SDMA TID, !CNTR FI_EAGAIN\n",params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA-TID");
-				return -FI_EAGAIN;
-			}
-
 			uint64_t packet_count = (bytes_to_send / max_dput_bytes) +
 						((bytes_to_send % max_dput_bytes) ? 1 : 0);
 
 			assert(packet_count > 0);
-			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS);
+			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS_TID);
 
-			if (packet_count < FI_OPX_HFI1_SDMA_MAX_PACKETS) {
+			if (packet_count < FI_OPX_HFI1_SDMA_MAX_PACKETS_TID) {
 				packet_count = (bytes_to_send / OPX_HFI1_TID_PAGESIZE) +
 						((bytes_to_send % OPX_HFI1_TID_PAGESIZE) ? 1 : 0);
-				packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS);
+				packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS_TID);
 			}
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(&opx_ep->ep_fid,
 										  &opx_ep->reliability->state,
@@ -2473,7 +2474,10 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 	params->work_elem.work_type = OPX_WORK_TYPE_LAST;
 	params->work_elem.work_fn = fi_opx_hfi1_dput_sdma_pending_completion;
 
-	return fi_opx_hfi1_dput_sdma_pending_completion(work);
+	// The SDMA request has been queued for sending, but not actually sent
+	// yet, so there's no point in checking for completion right away. Wait
+	// until the next poll cycle.
+	return -FI_EAGAIN;
 }
 
 union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_ep,
@@ -2557,7 +2561,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	uint32_t tidoffset = 0;
 	uint32_t *tidpairs = NULL;
 
-	if (hfi1_hdr->cts.target.vaddr.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) {
+	if (opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) {
 		ntidpairs = hfi1_hdr->cts.target.vaddr.ntidpairs;
 		if (ntidpairs) {
 			tidpairs = ((union fi_opx_hfi1_packet_payload *)payload)->tid_cts.tidpairs;
@@ -2581,7 +2585,8 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 
 
 	// We can't/shouldn't start this work until any pending work is finished.
-	if (slist_empty(&opx_ep->tx->work_pending[params->work_elem.work_type])) {
+	if (params->work_elem.work_type != OPX_WORK_TYPE_SDMA &&
+			slist_empty(&opx_ep->tx->work_pending[params->work_elem.work_type])) {
 		int rc = params->work_elem.work_fn(work);
 		if(rc == FI_SUCCESS) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,

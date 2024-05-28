@@ -163,6 +163,14 @@ struct fi_opx_context_ext {
 	uint64_t			unused;
 } __attribute__((__aligned__(32)));
 
+struct opx_sdma_queue {
+	struct slist	list;
+	uint16_t	num_reqs;
+	uint16_t	num_iovs;
+	uint16_t	max_iovs;
+	uint16_t	slots_avail;
+};
+
 #ifndef MAX
 #define MAX(a,b) ((a)^(((a)^(b))&-((a)<(b))))
 #endif

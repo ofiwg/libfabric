@@ -1263,65 +1263,67 @@ ssize_t fi_opx_reliability_sdma_replay_complete (union fi_opx_reliability_deferr
 	struct fi_opx_reliability_tx_sdma_replay_params *params = &work->sdma_replay;
 	struct fi_opx_ep *opx_ep = (struct fi_opx_ep *) params->opx_ep;
 
-#ifdef OPX_RELIABILITY_DEBUG
-	fprintf(stderr, "(tx) %016lx SDMA Replay Complete - BEGIN, params->sdma_reqs %s empty\n",
-		params->flow_key, slist_empty(&params->sdma_reqs) ? "IS" : "IS NOT");
-#endif
-
-	fi_opx_hfi1_sdma_poll_completion(opx_ep);
 	struct fi_opx_hfi1_sdma_replay_work_entry *we =
 		(struct fi_opx_hfi1_sdma_replay_work_entry *) params->sdma_reqs.head;
 
-	while (we) {
-		enum hfi1_sdma_comp_state status = fi_opx_hfi1_sdma_replay_get_status(opx_ep, we);
-		if (status != COMPLETE) {
+	while (we && we->comp_state != OPX_SDMA_COMP_QUEUED
+		&& we->comp_state != OPX_SDMA_COMP_PENDING_WRITEV) {
+
+		if (OFI_UNLIKELY(we->comp_state == OPX_SDMA_COMP_ERROR)) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Failed sending replay with PSN %u (%X) via SDMA\n",
+				(uint32_t)FI_OPX_HFI1_PACKET_PSN(&we->replay->scb.hdr),
+				(uint32_t)FI_OPX_HFI1_PACKET_PSN(&we->replay->scb.hdr));
 #ifdef OPX_RELIABILITY_DEBUG
-	fprintf(stderr, "(tx) %016lx SDMA Replay Complete - we has status of %d, return -FI_EAGAIN\n", params->flow_key, status);
+			fprintf(stderr, "(tx) replay packet %016lx %08u failed sending via SDMA.\n",
+				params->flow_key,
+				FI_OPX_HFI1_PACKET_PSN(&we->replay->scb.hdr));
 #endif
-			return -FI_EAGAIN;
 		}
 
-#ifdef OPX_RELIABILITY_DEBUG
-	fprintf(stderr, "(tx) %016lx SDMA Replay Complete - we is complete, unpinning/freeing %d replays...\n",
-		params->flow_key, we->num_packets);
-#endif
-		for (int i = 0; i < we->num_packets; ++i) {
-			struct fi_opx_reliability_tx_replay *replay = we->packets[i].replay;
+		assert(we->replay->pinned == true);
+		we->replay->pinned = false;
 
-			replay->pinned = false;
+		/* If the replay is already marked as ACK'd, then it has
+		   already been removed from the replay ring and we need
+		   to free it here */
+		if (we->replay->acked) {
+#ifdef OPX_RELIABILITY_DEBUG
+			fprintf(stderr,
+				"(tx) packet %016lx %08u replay over SDMA complete and ACK'd, freeing replay\n",
+				params->flow_key,
+				(uint32_t)we->replay->scb.hdr.reliability.psn);
+#endif
+			fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, we->replay);
 
-			/* If the replay is already marked as ACK'd, then it has
-			   already been removed from the replay ring and we need
-			   to free it here */
-			if (replay->acked) {
 #ifdef OPX_RELIABILITY_DEBUG
-				fprintf(stderr, "(tx) packet %016lx %08u replay over SDMA complete and ACK'd, freeing replay\n",
-					params->flow_key, (uint32_t)replay->scb.hdr.reliability.psn);
+		} else {
+			fprintf(stderr,
+				"(tx) packet %016lx %08u replay over SDMA complete, un-pinning replay\n",
+				params->flow_key,
+				(uint32_t)we->replay->scb.hdr.reliability.psn);
 #endif
-				fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, replay);
-#ifdef OPX_RELIABILITY_DEBUG
-			} else {
-				fprintf(stderr, "(tx) packet %016lx %08u replay over SDMA complete, un-pinning replay\n",
-					params->flow_key, (uint32_t)replay->scb.hdr.reliability.psn);
-#endif
-			}
 		}
-
 		slist_remove_head(&params->sdma_reqs);
-		fi_opx_hfi1_sdma_replay_return_we(opx_ep, we);
+		we->next = NULL;
+		OPX_BUF_FREE(we);
 		we = (struct fi_opx_hfi1_sdma_replay_work_entry *) params->sdma_reqs.head;
 	}
 
-	assert(slist_empty(&params->sdma_reqs));
+	if(!slist_empty(&params->sdma_reqs)) {
+		return -FI_EAGAIN;
+	}
 
 #ifdef OPX_RELIABILITY_DEBUG
-	fprintf(stderr, "(tx) %016lx SDMA Replay Complete - END - return FI_SUCCESS\n", params->flow_key);
+	fprintf(stderr, "(tx) %016lx SDMA Replay Complete - END - return FI_SUCCESS\n",
+		params->flow_key);
 #endif
+
 	return FI_SUCCESS;
 }
 
 ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
-						struct fi_opx_reliability_service * service,
+						struct fi_opx_reliability_service *service,
 						struct fi_opx_reliability_tx_replay *start_replay,
 						struct fi_opx_reliability_tx_replay *end_replay,
 						uint32_t num_replays)
@@ -1348,107 +1350,69 @@ ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
 
 #ifdef OPX_RELIABILITY_DEBUG
 	params->flow_key = key.value;
-	uint32_t num_sdma_reqs = 0;
-	struct fi_opx_reliability_tx_replay *orig_start_replay = start_replay;
 #endif
 
-	while (replayed < num_replays) {
+	struct fi_opx_reliability_tx_replay *replay = start_replay;
+	while (replay && replayed < num_replays) {
+		// Skip replaying any replays that are already in progress
+		if (replay->pinned) {
+			replay = replay->next;
+			continue;
+		}
 
-		struct fi_opx_hfi1_sdma_replay_work_entry *sdma_we = fi_opx_hfi1_sdma_replay_get_idle_we(opx_ep);
+		struct fi_opx_hfi1_sdma_replay_work_entry *sdma_we =
+			(struct fi_opx_hfi1_sdma_replay_work_entry *) ofi_buf_alloc(service->sdma_replay_request_pool);
+
 		if (!sdma_we) {
 #ifdef OPX_RELIABILITY_DEBUG
-			fprintf(stderr, "(tx) %016lx SDMA Replay: Couldn't allocate SDMA work entry\n", key.value);
+			fprintf(stderr,
+				"(tx) %016lx SDMA Replay: Couldn't allocate SDMA work entry\n",
+				key.value);
 #endif
 			break;
 		}
 
-		fi_opx_hfi1_sdma_poll_completion(opx_ep);
+		sdma_we->next = NULL;
+		sdma_we->replay = replay;
+		sdma_we->comp_state = OPX_SDMA_COMP_PENDING_WRITEV;
 
-		uint64_t max_packets = MIN(opx_ep->hfi->info.sdma.available_counter, FI_OPX_HFI1_SDMA_MAX_PACKETS);
+		uint64_t payload_size = fi_opx_reliability_replay_get_payload_size(replay);
 
-		if (max_packets == 0) {
-			fi_opx_hfi1_sdma_replay_return_we(opx_ep, sdma_we);
-#ifdef OPX_RELIABILITY_DEBUG
-			fprintf(stderr, "(tx) %016lx SDMA Replay: No available comp index entries\n", key.value);
-#endif
-			break;
-		}
-
-		uint64_t packet_count = 0;
-
-		struct fi_opx_reliability_tx_replay *replay = start_replay;
-		do {
-			// Skip replaying any replays that are already in progress
-			if (replay->pinned) {
-				replay = replay->next;
-				continue;
-			}
-			uint64_t payload_size = fi_opx_reliability_replay_get_payload_size(replay);
 #ifndef NDEBUG
-			fi_opx_hfi1_reliability_iov_payload_check(replay, key.value, "Replaying packet (SDMA) where source buffer has changed!", __FILE__, __func__, __LINE__);
+		fi_opx_hfi1_reliability_iov_payload_check(replay, key.value,
+			"Replaying packet (SDMA) where source buffer has changed!",
+			__FILE__, __func__, __LINE__);
 #endif
-			fi_opx_hfi1_sdma_replay_add_packet(sdma_we, replay, payload_size);/*, replay->use_iov, frag_size);*/
-#ifdef OPX_RELIABILITY_DEBUG
-			fprintf(stderr, "(tx) packet %016lx %08u size %ld bytes replay injected over SDMA (%ld packet in group)\n",
-				key.value, (uint32_t)replay->scb.hdr.reliability.psn, payload_size, packet_count);
-#endif
-			replay->pinned = true;
-			replay = replay->next;
-			++packet_count;
-			++replayed;
-		} while (packet_count < max_packets && replay != end_replay);
-#ifdef OPX_RELIABILITY_DEBUG
-		if (!packet_count) {
-			replay = start_replay;
-			fprintf(stderr, "(%d) %s:%s():%d Packet count is zero! Og start replay=%p, Og start psn=%u, Start replay=%p, start psn=%u, end replay=%p, end psn=%u\n",
-				getpid(), __FILE__, __func__, __LINE__,
-				orig_start_replay, orig_start_replay->scb.hdr.reliability.psn,
-				start_replay, start_replay->scb.hdr.reliability.psn,
-				end_replay, end_replay->scb.hdr.reliability.psn);
-			do {
-				fprintf(stderr, "(%d) %s:%s():%d Replay %p PSN %u pinned=%d!\n",
-					getpid(), __FILE__, __func__, __LINE__,
-					replay, replay->scb.hdr.reliability.psn, replay->pinned ? 1 : 0);
-				replay = replay->next;
-			} while (replay != end_replay);
-		}
-#endif
-		assert(packet_count);
-
-#ifdef OPX_RELIABILITY_DEBUG
-		num_sdma_reqs++;
-#endif
-		fi_opx_hfi1_sdma_do_sdma_replay(opx_ep, sdma_we);
-		if (OFI_UNLIKELY(sdma_we->writev_rc == -1)) {
-			for (int i = 0; i < sdma_we->num_packets; ++i) {
-				sdma_we->packets[i].replay->pinned = false;
-			}
-			replayed -= sdma_we->num_packets;
-			fi_opx_hfi1_sdma_replay_return_we(opx_ep, sdma_we);
+		int rc = opx_hfi1_sdma_enqueue_replay(opx_ep, sdma_we, replay, payload_size);
+		assert(rc == FI_SUCCESS);
+		if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
+			OPX_BUF_FREE(sdma_we);
 			break;
 		}
+#ifdef OPX_RELIABILITY_DEBUG
+		fprintf(stderr,
+			"(tx) packet %016lx %08u size %ld bytes replay injected over SDMA\n",
+			key.value, (uint32_t) replay->scb.hdr.reliability.psn,
+			payload_size);
+#endif
+		replay->pinned = true;
+		++replayed;
 		slist_insert_tail((struct slist_entry *)sdma_we, &params->sdma_reqs);
-		start_replay = replay;
+
+		replay = (replay == end_replay) ? NULL : replay->next;
 	}
 
 	if (OFI_LIKELY(!slist_empty(&params->sdma_reqs))) {
-#ifdef OPX_RELIABILITY_DEBUG
-		fprintf(stderr, "(tx) %016lx Sent %d total packets over %d SDMA requests, appending tail to work pending queue\n",
-				key.value, replayed, num_sdma_reqs);
-#endif
 		slist_insert_tail(&work->work_elem.slist_entry, &service->work_pending);
 	} else {
 		assert(replayed == 0);
-#ifdef OPX_RELIABILITY_DEBUG
-		fprintf(stderr, "(tx) %016lx Sent %d total packets over %d SDMA requests, but now freeing work item...\n",
-				key.value, replayed, num_sdma_reqs);
-#endif
 		OPX_BUF_FREE(work);
 	}
 
 #ifdef OPX_RELIABILITY_DEBUG
-	fprintf(stderr, "(tx) %016lx Sent %d total packets over %d SDMA requests\n",
-		key.value, replayed, num_sdma_reqs);
+	fprintf(stderr,
+		"(tx) %016lx Queued %d replays/packets for sending via SDMA\n",
+		key.value, replayed);
 #endif
 	return replayed;
 }
@@ -2553,6 +2517,10 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 					sizeof(union fi_opx_reliability_deferred_work),
 					0, UINT_MAX, 1024, 0);
 
+	ofi_bufpool_create(&service->sdma_replay_request_pool,
+					sizeof(struct fi_opx_hfi1_sdma_replay_work_entry),
+					8, UINT_MAX, 1024, 0);
+
 	slist_init(&service->work_pending);
 
 	return origin_reliability_rx;
@@ -2581,6 +2549,10 @@ void fi_opx_reliability_service_fini (struct fi_opx_reliability_service * servic
 
 	if (service->work_pending_pool) {
 		ofi_bufpool_destroy(service->work_pending_pool);
+	}
+
+	if (service->sdma_replay_request_pool) {
+		ofi_bufpool_destroy(service->sdma_replay_request_pool);
 	}
 
 	if (service->tx.flow) {

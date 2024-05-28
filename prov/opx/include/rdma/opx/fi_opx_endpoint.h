@@ -192,12 +192,14 @@ enum fi_opx_ep_state {
 };
 
 enum opx_work_type {
-	OPX_WORK_TYPE_SDMA = 0,
+	OPX_WORK_TYPE_SDMA = 0,		// SDMA should always be first value in enum
 	OPX_WORK_TYPE_PIO,
 	OPX_WORK_TYPE_SHM,
 	OPX_WORK_TYPE_TID_SETUP,
 	OPX_WORK_TYPE_LAST
 };
+OPX_COMPILE_TIME_ASSERT(OPX_WORK_TYPE_SDMA == 0,
+			"OPX_WORK_TYPE_SDMA needs to be 0/first value in the enum!");
 
 static const char * const OPX_WORK_TYPE_STR[] = {
 	[OPX_WORK_TYPE_SDMA] = "SDMA",
@@ -299,10 +301,15 @@ struct fi_opx_ep_tx {
 	struct ofi_bufpool			*rma_payload_pool;
 	struct ofi_bufpool			*rma_request_pool;
 	struct ofi_bufpool			*sdma_work_pool;
-	struct ofi_bufpool			*sdma_replay_work_pool;
-	uint64_t				unused_cacheline6;
+	uint64_t				unused_cacheline6[2];
 
-	/* == CACHE LINE 7, ... == */
+	/* == CACHE LINE 7 == */
+	struct opx_sdma_queue			sdma_request_queue;
+	struct slist				sdma_pending_queue;
+	struct ofi_bufpool			*sdma_request_pool;
+	uint64_t				unused_cacheline7[2];
+
+	/* == CACHE LINE 8, ... == */
 	int64_t					ref_cnt;
 	struct fi_opx_stx			*stx;
 
@@ -320,8 +327,10 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_C
 			"Offset of fi_opx_ep_tx->work_pending should start at cacheline 5!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) == (FI_OPX_CACHE_LINE_SIZE * 6),
 			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 6!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, ref_cnt) == (FI_OPX_CACHE_LINE_SIZE * 7),
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, sdma_request_queue) == (FI_OPX_CACHE_LINE_SIZE * 7),
 			"Offset of fi_opx_ep_tx->ref_cnt should start at cacheline 7!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, ref_cnt) == (FI_OPX_CACHE_LINE_SIZE * 8),
+			"Offset of fi_opx_ep_tx->ref_cnt should start at cacheline 8!");
 
 
 struct fi_opx_ep_rx {
@@ -2221,7 +2230,9 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		const uint64_t value = target_context->byte_counter;
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, target_context->byte_counter = %p, %lu -> %lu\n",
-			hdr->dput.target.last_bytes, hdr->dput.target.bytes, bytes, &target_context->byte_counter, value, value - bytes);
+			hdr->dput.target.last_bytes, hdr->dput.target.bytes,
+			bytes, &target_context->byte_counter,
+			value, value - bytes);
 		assert(value >= bytes);
 		target_context->byte_counter = value - bytes;
 		/* On completion, decrement TID refcount and maybe free the TID cache */
@@ -2946,11 +2957,80 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 
 #include "rdma/opx/fi_opx_fabric_progress.h"
 
+
+void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep);
+void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep);
+
+__OPX_FORCE_INLINE__
+void fi_opx_ep_do_pending_sdma_work(struct fi_opx_ep *opx_ep)
+{
+	/* Process pending (sent) SDMA requests to maximize free slots for new requests */
+	if (!slist_empty(&opx_ep->tx->sdma_pending_queue)) {
+		fi_opx_hfi1_poll_sdma_completion(opx_ep);
+		opx_hfi1_sdma_process_pending(opx_ep);
+	} else {
+		/* If no SDMA requests were pending, then the SDMA completion
+		   queue should also not have any outstanding requests */
+		assert(opx_ep->hfi->info.sdma.done_index == opx_ep->hfi->info.sdma.fill_index);
+	}
+
+	struct opx_sdma_queue *sdma_queue = &opx_ep->tx->sdma_request_queue;
+	struct slist_entry *sdma_work_prev = NULL;
+	union fi_opx_hfi1_deferred_work *sdma_work =
+		(union fi_opx_hfi1_deferred_work *) opx_ep->tx->work_pending[OPX_WORK_TYPE_SDMA].head;
+
+	uint16_t iovs_left = sdma_queue->max_iovs - sdma_queue->num_iovs;
+	/* Make a single pass through the SDMA work queue, trying each work item
+	   and queuing up SDMA requests. Non-TID work items require a minimum of
+	   2 IOV slots, and TID work items require 3. */
+	while (sdma_work && (sdma_queue->num_reqs < sdma_queue->slots_avail)
+			 && (iovs_left > 1)) {
+		struct slist_entry *sdma_work_next = sdma_work->work_elem.slist_entry.next;
+
+		if (OFI_UNLIKELY(iovs_left < 3) && sdma_work->dput.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) {
+			sdma_work_prev = &sdma_work->work_elem.slist_entry;
+			sdma_work = (union fi_opx_hfi1_deferred_work *) sdma_work_next;
+			continue;
+		}
+
+		int rc = sdma_work->work_elem.work_fn(sdma_work);
+		if(rc == FI_SUCCESS) {
+			if(sdma_work->work_elem.completion_action) {
+				sdma_work->work_elem.completion_action(sdma_work);
+			}
+			if(sdma_work->work_elem.payload_copy) {
+				OPX_BUF_FREE(sdma_work->work_elem.payload_copy);
+			}
+			slist_remove(&opx_ep->tx->work_pending[OPX_WORK_TYPE_SDMA],
+				     &sdma_work->work_elem.slist_entry,
+				     sdma_work_prev);
+			OPX_BUF_FREE(sdma_work);
+		} else if (sdma_work->work_elem.work_type == OPX_WORK_TYPE_LAST) {
+			slist_remove(&opx_ep->tx->work_pending[OPX_WORK_TYPE_SDMA],
+				     &sdma_work->work_elem.slist_entry,
+				     sdma_work_prev);
+			/* Move this to the pending completion queue,
+				since there's nothing left to do but wait */
+			slist_insert_tail(&sdma_work->work_elem.slist_entry,
+					  &opx_ep->tx->work_pending_completion);
+		} else {
+			sdma_work_prev = &sdma_work->work_elem.slist_entry;
+		}
+		sdma_work = (union fi_opx_hfi1_deferred_work *) sdma_work_next;
+		iovs_left = sdma_queue->max_iovs - sdma_queue->num_iovs;
+	}
+
+	/* Process new SDMA requests to egress */
+	if (!slist_empty(&opx_ep->tx->sdma_request_queue.list)) {
+		opx_hfi1_sdma_process_requests(opx_ep);
+	}
+}
+
 __OPX_FORCE_INLINE__
 void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 {
 	/* Clean up all the pending completion work, but stop as soon as we
-	   encounter one that isn't done (and requeue that one to the back) */
+	   encounter one that isn't done (and requeue that one) */
 	uintptr_t work_pending_completion = (uintptr_t) opx_ep->tx->work_pending_completion.head;
 	while (work_pending_completion) {
 		union fi_opx_hfi1_deferred_work *work =
@@ -2973,7 +3053,8 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 		}
 	}
 
-        for (enum opx_work_type work_type = OPX_WORK_TYPE_SDMA; work_type < OPX_WORK_TYPE_LAST; ++work_type) {
+	/* Note that SDMA work is not included in this loop, as it is done separately */
+	for (enum opx_work_type work_type = OPX_WORK_TYPE_PIO; work_type < OPX_WORK_TYPE_LAST; ++work_type) {
 		const uintptr_t work_pending = (const uintptr_t)opx_ep->tx->work_pending[work_type].head;
 		if (work_pending) {
 			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "DO-DEFERRED-WORK-%s", OPX_WORK_TYPE_STR[work_type]);
@@ -3007,6 +3088,8 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 				"===================================== POLL WORK PENDING type %d %u done>\n", work_type, rc);
 		}
 	}
+
+	fi_opx_ep_do_pending_sdma_work(opx_ep);
 }
 
 static inline
@@ -3018,8 +3101,6 @@ void fi_opx_ep_rx_poll (struct fid_ep *ep,
 
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const enum ofi_reliability_kind kind = opx_ep->reliability->state.kind;
-
-	fi_opx_ep_do_pending_work(opx_ep);
 
 	const uint64_t rx_caps = (caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) ? caps
 				: opx_ep->rx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
@@ -3053,6 +3134,8 @@ void fi_opx_ep_rx_poll (struct fid_ep *ep,
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps,
 					reliability, hdrq_mask);
 	}
+
+	fi_opx_ep_do_pending_work(opx_ep);
 
 	if (!slist_empty(&opx_ep->reliability->service.work_pending)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,

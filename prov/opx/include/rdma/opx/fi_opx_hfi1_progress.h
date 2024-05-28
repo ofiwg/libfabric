@@ -565,8 +565,8 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	uint64_t pos;
 	struct opx_shm_packet* packet = opx_shm_rx_next(&opx_ep->rx->shm, &pos);
-	union fi_opx_hfi1_packet_hdr * hdr = (packet) ? 
-		(union fi_opx_hfi1_packet_hdr *) packet->data : NULL; 
+	union fi_opx_hfi1_packet_hdr * hdr = (packet) ?
+		(union fi_opx_hfi1_packet_hdr *) packet->data : NULL;
 
 	while (hdr != NULL) {
 		const uint8_t opcode = hdr->stl.bth.opcode;
@@ -727,6 +727,39 @@ void fi_opx_hfi1_poll_many (struct fid_ep *ep,
 	return;
 }
 
+__OPX_FORCE_INLINE__
+void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
+{
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SDMA POLL BEGIN\n");
+	struct fi_opx_hfi1_context *hfi = opx_ep->hfi;
+	uint16_t queue_size = hfi->info.sdma.queue_size;
+
+	while (hfi->info.sdma.available_counter < queue_size) {
+		volatile struct hfi1_sdma_comp_entry * entry =
+			&hfi->info.sdma.completion_queue[hfi->info.sdma.done_index];
+		if (entry->status == QUEUED) {
+			break;
+		}
+
+		// Update the status/errcode of the work entry who was using this index
+		assert(hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]);
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->status = entry->status;
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->errcode = entry->errcode;
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index] = NULL;
+
+		assert(entry->status == COMPLETE || entry->status == FREE);
+		++hfi->info.sdma.available_counter;
+		hfi->info.sdma.done_index = (hfi->info.sdma.done_index + 1) % (queue_size);
+		if (hfi->info.sdma.done_index == hfi->info.sdma.fill_index) {
+			assert(hfi->info.sdma.available_counter == queue_size);
+		}
+	}
+	assert(hfi->info.sdma.available_counter >= opx_ep->tx->sdma_request_queue.slots_avail);
+	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SDMA POLL COMPLETE\n");
+}
 
 
 

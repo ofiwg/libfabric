@@ -186,16 +186,17 @@ struct fi_opx_reliability_service {
 	uint32_t					preemptive_ack_rate;
 
 	/* == CACHE LINE == */
+	RbtHandle			handshake_init;		/*  1 qw  =   8 bytes */
+	struct ofi_bufpool 		*uepkt_pool;
+	struct slist			work_pending;		/* 16 bytes */
+	struct ofi_bufpool 		*work_pending_pool;
+	struct ofi_bufpool 		*sdma_replay_request_pool;
+
 	int				is_backoff_enabled;
 	enum ofi_reliability_kind	reliability_kind;	/* 4 bytes */
 	uint16_t			unused[3];
 	uint8_t				fifo_max;
 	uint8_t				hfi1_max;
-	RbtHandle			handshake_init;		/*  1 qw  =   8 bytes */
-	struct ofi_bufpool 		*uepkt_pool;
-	struct slist			work_pending;		/* 16 bytes */
-	struct ofi_bufpool 		*work_pending_pool;
-	/* 8 bytes left in cacheline */
 
 } __attribute__((__aligned__(64))) __attribute__((__packed__));
 
