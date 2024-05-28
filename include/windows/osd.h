@@ -1008,6 +1008,7 @@ size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa);
 
 #define file2unix_time	10000000i64
 #define win2unix_epoch	116444736000000000i64
+#define CLOCK_REALTIME 0
 #define CLOCK_MONOTONIC 1
 
 /* Own implementation of clock_gettime*/
