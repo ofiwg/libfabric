@@ -304,6 +304,24 @@ uint32_t ofi_generate_seed(void)
 	return rand_seed;
 }
 
+uint64_t ofi_get_realtime_ns(void)
+{
+	struct timespec now;
+
+	clock_gettime(CLOCK_REALTIME, &now);
+	return now.tv_sec * 1000000000 + now.tv_nsec;
+}
+
+uint64_t ofi_get_realtime_us(void)
+{
+	return ofi_get_realtime_ns() / 1000;
+}
+
+uint64_t ofi_get_realtime_ms(void)
+{
+	return ofi_get_realtime_ns() / 1000000;
+}
+
 uint64_t ofi_gettime_ns(void)
 {
 	struct timespec now;

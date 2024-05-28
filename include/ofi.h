@@ -377,6 +377,10 @@ uint64_t ofi_gettime_ns(void);
 uint64_t ofi_gettime_us(void);
 uint64_t ofi_gettime_ms(void);
 
+uint64_t ofi_get_realtime_ns(void);
+uint64_t ofi_get_realtime_ms(void);
+uint64_t ofi_get_realtime_us(void);
+
 static inline uint64_t ofi_timeout_time(int timeout)
 {
 	return (timeout >= 0) ? ofi_gettime_ms() + timeout : 0;
