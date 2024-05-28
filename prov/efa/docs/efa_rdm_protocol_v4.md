@@ -1374,19 +1374,15 @@ change.
 In fact, because of the existence of the handshake subprotocol, the packet header length of an EAGER_MSGRTM
 will definitely change. Recall that the handshake subprotocol's workflow is:
 
-1. Before receiving handshake packet, an endpoint will always include the
-   optional raw address header in REQ packets.
-2. After receiving handshake packet, an endpoint will stop including the
-   optional raw address header in REQ packets.
+Before receiving handshake packet, an endpoint will always include the optional raw address header in REQ packets.
 
-Furthermore, a REQ packet may also contain the optional CQ data header (section
-3.1) header (`REQ_OPT_CQ_DATA_HDR`) and is not mutually exclusive with other
-optional REQ header components.  Therefore, a compliant request of _constant
-header length_ should include space for the CQ data header.
+After receiving handshake packet, an endpoint will stop including the optional raw address header in REQ packets.
 
-The extra feature "keep packet header length constant" (constant header length)
-is designed to solve this problem. When an endpoint toggles on this extra
-request, its peer will try to satisfy it by keeping the header length constant.
+The extra feature "keep packet header length constant" (constant header length) is designed to solve this problem.
+
+When an endpoint toggles on this extra request, its peer will try to satisfy it by keeping the header length
+constant.  Exactly how to achieve that is up to the implementation to decide.  The easiest way to do so is to keep
+including the raw address header in the EAGER_MSGRTM even after receiving the handshake packet.
 
 Note, because this is an extra request, an endpoint cannot assume its peer will comply with the request. Therefore,
 the receiving endpoint must be able to handle the situation that a received packet does not have the expected header
