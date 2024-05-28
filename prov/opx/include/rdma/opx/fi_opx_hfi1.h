@@ -123,6 +123,10 @@ static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX >= OPX_MP_EGR_MAX_PAYLOAD_BYTES_D
 #define FI_OPX_HFI1_SDMA_MAX_PACKETS			(32)
 #endif
 
+#ifndef FI_OPX_HFI1_SDMA_MAX_PACKETS_TID
+#define FI_OPX_HFI1_SDMA_MAX_PACKETS_TID		(32)
+#endif
+
 /*
  * The number of SDMA requests (SDMA work entries) available.
  * Each of these will use a single comp index entry in the SDMA ring buffer
@@ -155,9 +159,9 @@ static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX >= OPX_MP_EGR_MAX_PAYLOAD_BYTES_D
 
 /*
  * The number of iovecs in a single SDMA Work Entry.
- * 1 header vec, 1 payload data vec, 1 TID mapping.
+ * 1 payload data vec, 1 TID mapping.
  */
-#define FI_OPX_HFI1_SDMA_WE_IOVS			(3)
+#define FI_OPX_HFI1_SDMA_WE_IOVS			(2)
 
 /*
  * The number of iovecs for SDMA replay - 2 iovec per packet
@@ -187,13 +191,8 @@ static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX, "FI_OP
 
 /*
  * SDMA includes 8B sdma hdr, 8B PBC, and message header.
- * If we are using GPU workloads, we need to set a new
- * "flags" member which takes another 2 bytes in the
- * sdma hdr. We let the driver know of this 2 extra bytes
- * at runtime when we set the length for the iovecs.
- * See HFI_SDMA_HDR_SIZE for historical info
  */
-#define FI_OPX_HFI1_SDMA_HDR_SIZE      (8+8+56)  //TODO, Will change if using GPU (header gets 2 bytes bigger)
+#define FI_OPX_HFI1_SDMA_HDR_SIZE			(8 + 8 + 56)
 
 
 //Version 1, EAGER opcode (1)(byte 0), 0 iovectors (byte 1, set at runtime)
@@ -201,9 +200,6 @@ static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX, "FI_OP
 
 //Version 1, EXPECTED TID opcode (0)(byte 0), 0 iovectors (byte 1, set at runtime)
 #define FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS	(0x0001)
-
-//Version 1, SDMA replays - EAGER opcode (1)(byte 0), 2 iovectors (byte 1)
-#define FI_OPX_HFI1_SDMA_REQ_HEADER_REPLAY_EAGER_FIXEDBITS	(0x0211)
 
 #ifndef OPX_RTS_TID_SETUP_MAX_TRIES
 #define OPX_RTS_TID_SETUP_MAX_TRIES	(1)

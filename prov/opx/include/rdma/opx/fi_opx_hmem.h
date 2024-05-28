@@ -193,6 +193,15 @@ static const unsigned OPX_HMEM_KERN_MEM_TYPE[4] = {
 	#endif
 };
 
+static const unsigned OPX_HMEM_OFI_MEM_TYPE[4] = {
+	#ifdef OPX_HMEM
+		FI_HMEM_SYSTEM,		/* HFI1_MEMINFO_TYPE_SYSTEM */
+		FI_HMEM_ZE,		/* HFI1_MEMINFO_TYPE_DMABUF */
+		FI_HMEM_ROCR,		/* HFI1_MEMINFO_TYPE_AMD    */
+		FI_HMEM_CUDA		/* HFI1_MEMINFO_TYPE_NVIDIA */
+	#endif
+};
+
 #ifdef OPX_HMEM
 #define OPX_HMEM_COPY_FROM(dst, src, len, handle, src_iface, src_device)			\
 	do {											\
