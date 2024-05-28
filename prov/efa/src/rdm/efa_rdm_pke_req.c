@@ -275,7 +275,7 @@ size_t efa_rdm_pke_get_req_hdr_size(struct efa_rdm_pke *pkt_entry)
 		opt_hdr += sizeof(struct efa_rdm_req_opt_raw_addr_hdr) + raw_addr_hdr->addr_len;
 	}
 
-	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR || pkt_entry->ep->use_zcpy_rx)
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR)
 		opt_hdr += sizeof(struct efa_rdm_req_opt_cq_data_hdr);
 
 	if (base_hdr->flags & EFA_RDM_PKT_CONNID_HDR) {
