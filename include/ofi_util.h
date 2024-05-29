@@ -1084,6 +1084,7 @@ const char *ofi_eq_strerror(struct fid_eq *eq_fid, int prov_errno,
 			    const void *err_data, char *buf, size_t len);
 
 int ofi_valid_addr_format(uint32_t prov_format, uint32_t user_format);
+int ofi_match_addr_format(uint32_t if_format, uint32_t user_format);
 int ofi_check_ep_type(const struct fi_provider *prov,
 		      const struct fi_ep_attr *prov_attr,
 		      const struct fi_ep_attr *user_attr);

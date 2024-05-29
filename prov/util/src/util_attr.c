@@ -40,6 +40,20 @@
 #define OFI_RMA_DIRECTION_CAPS	(FI_READ | FI_WRITE | \
 				 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
+int ofi_match_addr_format(uint32_t if_format, uint32_t user_format)
+{
+	if (user_format == FI_FORMAT_UNSPEC || if_format == FI_FORMAT_UNSPEC)
+		return 1;
+
+	switch (user_format) {
+	case FI_SOCKADDR:
+		/* Provider supports INET and INET6 */
+		return if_format <= FI_SOCKADDR_IN6;
+	default:
+		return if_format == user_format;
+	}
+}
+
 int ofi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 {
 	if (user_format == FI_FORMAT_UNSPEC || prov_format == FI_FORMAT_UNSPEC)

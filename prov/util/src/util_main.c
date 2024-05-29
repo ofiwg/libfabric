@@ -391,7 +391,7 @@ static void util_getinfo_ifs(const struct util_prov *prov,
 
 		if (hints && ((hints->caps & addr_entry->comm_caps) !=
 		    (hints->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) ||
-		     !ofi_valid_addr_format(addr_format, hints->addr_format)))
+		     !ofi_match_addr_format(addr_format, hints->addr_format)))
 			continue;
 
 		cur = fi_dupinfo(src_info);
