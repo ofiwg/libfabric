@@ -385,7 +385,7 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 
 			pkt_entry->pkt_size = ibv_wc_read_byte_len(ibv_cq->ibv_cq_ex);
 			assert(pkt_entry->pkt_size > 0);
-			efa_rdm_pke_handle_recv_completion(pkt_entry);
+			efa_rdm_pke_handle_recv_completion(pkt_entry, ibv_wc_read_imm_data(ibv_cq->ibv_cq_ex));
 #if ENABLE_DEBUG
 			ep->recv_comps++;
 #endif

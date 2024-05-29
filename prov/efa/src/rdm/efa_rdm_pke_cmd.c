@@ -889,7 +889,7 @@ fi_addr_t efa_rdm_pke_determine_addr(struct efa_rdm_pke *pkt_entry)
  * @param	ep[in,out]		endpoint
  * @param	pkt_entry[in,out]	received packet, will be released by this function
  */
-void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry, uint32_t cq_data)
 {
 	int pkt_type;
 	struct efa_rdm_ep *ep;

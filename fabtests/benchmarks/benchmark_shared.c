@@ -310,7 +310,7 @@ int bandwidth(void)
 						tx_ctx_arr[j].buf, tx_seq);
 			} else {
 				ret = ft_post_tx_buf(ep, remote_fi_addr,
-						opts.transfer_size, NO_CQ_DATA,
+						opts.transfer_size, remote_cq_data,
 						&tx_ctx_arr[j].context,
 						tx_ctx_arr[j].buf,
 						mr_desc, tx_seq);

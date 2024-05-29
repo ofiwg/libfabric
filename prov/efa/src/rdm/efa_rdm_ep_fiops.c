@@ -27,7 +27,7 @@ void efa_rdm_ep_construct_ibv_qp_init_attr_ex(struct efa_rdm_ep *ep,
 	attr_ex->cap.max_inline_data = ep->base_ep.domain->device->efa_attr.inline_buf_size;
 	attr_ex->qp_type = IBV_QPT_DRIVER;
 	attr_ex->comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
-	attr_ex->send_ops_flags = IBV_QP_EX_WITH_SEND;
+	attr_ex->send_ops_flags = IBV_QP_EX_WITH_SEND | IBV_QP_EX_WITH_SEND_WITH_IMM;
 	if (efa_device_support_rdma_read())
 		attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
 	if (efa_device_support_rdma_write()) {
