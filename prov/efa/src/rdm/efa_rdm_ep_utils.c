@@ -214,22 +214,14 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 
 	assert(rxe->iov_count > 0  && rxe->iov_count <= ep->rx_iov_limit);
 	assert(rxe->iov[0].iov_len >= ep->msg_prefix_size);
-	pkt_entry = (struct efa_rdm_pke *)rxe->iov[0].iov_base;
-	assert(pkt_entry);
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	if (OFI_UNLIKELY(!pkt_entry))
+		return -FI_EAGAIN;
 
-	/*
-	 * The ownership of the prefix buffer lies with the application, do not
-	 * put it on the dbg list for cleanup during shutdown or poison it. The
-	 * provider loses jurisdiction over it soon after writing the rx
-	 * completion.
-	 */
-	dlist_init(&pkt_entry->entry);
 	mr = (struct efa_mr *)rxe->desc[0];
 	pkt_entry->mr = &mr->mr_fid;
-	pkt_entry->alloc_type = EFA_RDM_PKE_FROM_USER_BUFFER;
-	pkt_entry->flags = EFA_RDM_PKE_IN_USE;
-	pkt_entry->next = NULL;
-	pkt_entry->ep = ep;
+	pkt_entry->flags = EFA_RDM_PKE_IN_USE | EFA_RDM_PKE_USER_RECV;
+
 	/*
 	 * The actual receiving buffer size (pkt_size) is
 	 *    (total IOV length) - sizeof(struct efa_rdm_pke)
