@@ -382,6 +382,7 @@ ze_result_t ofi_zexDriverReleaseImportedPointer(ze_driver_handle_t hDriver,
 #include <sys/ioctl.h>
 #include <stdio.h>
 
+/*
 static int ze_hmem_init_fds(void)
 {
 	const char *dev_dir = "/dev/dri/by-path/";
@@ -434,6 +435,7 @@ err:
 		"Failed open device %d\n", num_pci_devices);
 	return -FI_EIO;
 }
+*/
 
 int ze_hmem_get_shared_handle(uint64_t device, void *dev_buf, int *ze_fd,
 			      void **handle)
@@ -790,9 +792,9 @@ int ze_hmem_init(void)
 	ze_context_desc_t context_desc = {0};
 	ze_device_properties_t dev_prop = {0};
 	ze_result_t ze_ret;
-	ze_bool_t access;
+//	ze_bool_t access;
 	uint32_t count, i;
-	bool p2p = true;
+//	bool p2p = false;
 	int ret;
 	char *enginestr = NULL;
 	int ordinal = -1;
@@ -876,18 +878,22 @@ int ze_hmem_init(void)
 		if (ze_ret)
 			goto err;
 
+/*
 		for (i = 0; i < count; i++) {
 			if (ofi_zeDeviceCanAccessPeer(devices[num_devices],
 					devices[i], &access) || !access)
 				p2p = false;
 		}
+*/
 	}
 
+/*
 	ret = ze_hmem_init_fds();
 	if (ret)
 		goto err;
 
 	p2p_enabled = p2p;
+*/
 	return FI_SUCCESS;
 
 err:
