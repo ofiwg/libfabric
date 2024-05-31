@@ -483,6 +483,11 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache,
 	assert(opx_mr->attr.iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled());
 	opx_mr->attr.device.cuda = entry->info.device;
 
+	/* FLush the cache so that if there are entries on the dead region list
+	 * with the same page as we are about to register, they are unregistered first.
+	 */
+	ofi_mr_cache_flush(cache, false);
+
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-DEV-REGISTER");
 	err = ofi_hmem_dev_register(FI_HMEM_CUDA, entry->info.iov.iov_base, entry->info.iov.iov_len,
 				    &opx_mr->hmem_dev_reg_handle);
