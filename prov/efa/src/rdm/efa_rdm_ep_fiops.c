@@ -408,6 +408,10 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 			  ep->user_info->mode & FI_MSG_PREFIX &&
 			  efa_env.use_zcpy_rx;
 
+	if ((ep->base_ep.util_ep.caps & FI_RMA) && \
+		!efa_device_support_unsolicited_write_recv())
+		ep->use_zcpy_rx = false;
+
 	EFA_INFO(FI_LOG_EP_CTRL, "efa_rdm_ep->use_zcpy_rx = %d\n",
 		 ep->use_zcpy_rx);
 }
