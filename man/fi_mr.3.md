@@ -526,20 +526,32 @@ When binding the memory region to an endpoint, flags should be 0.
 
 ## fi_mr_refresh
 
-The use of this call is required to notify the provider of any change
-to the physical pages backing a registered memory region if the
-FI_MR_MMU_NOTIFY mode bit has been set.  This call informs the provider
-that the page table entries associated with the region may have been
-modified, and the provider should verify and update the registered
-region accordingly.  The iov parameter is optional and may be used
-to specify which portions of the registered region requires updating.
-Providers are only guaranteed to update the specified address ranges.
+The use of this call is to notify the provider of any change to the physical
+pages backing a registered memory region. This call must be supported by
+providers requiring FI_MR_MMU_NOTIFY and may optionally be supported by
+providers not requiring FI_MR_ALLOCATED.
 
-The refresh operation has the effect of disabling and re-enabling
-access to the registered region.  Any operations from peers that attempt
-to access the region will fail while the refresh is occurring.
-Additionally, attempts to access the region by the local process
+This call informs the provider that the page table entries associated with
+the region may have been modified, and the provider should verify and update
+the registered region accordingly. The iov parameter is optional and may be
+used to specify which portions of the registered region requires updating.
+
+Providers are only guaranteed to update the specified address ranges. Failing
+to update a range will result in an error being returned.
+
+When FI_MR_MMU_NOTIFY is set, the refresh operation has the effect of
+disabling and re-enabling access to the registered region. Any operations
+from peers that attempt to access the region will fail while the refresh is
+occurring. Additionally, attempts to access the region by the local process
 through libfabric APIs may result in a page fault or other fatal operation.
+
+When FI_MR_ALLOCATED is unset, -FI_ENOSYS will be returned if a provider
+does not support fi_mr_refresh. If supported, the provider will atomically
+update physical pages of the MR associated with the user specified address
+ranges. The MR will remain enabled during this time.
+
+Note: FI_MR_MMU_NOTIFY set behavior takes precedence over FI_MR_ALLOCATED unset
+behavior.
 
 The fi_mr_refresh call is only needed if the physical pages might have
 been updated after the memory region was created.
