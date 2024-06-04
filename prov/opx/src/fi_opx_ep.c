@@ -59,6 +59,9 @@
 #define FI_OPX_EP_RX_UEPKT_BLOCKSIZE (256)
 #define FI_OPX_EP_RX_CTX_EXT_BLOCKSIZE (2048)
 #define FI_OPX_VER_CHECK_BUF_LEN (512)
+#define OPX_MODINFO_PATH "/sbin/modinfo"
+#define OPX_MODINFO_DRV_VERS OPX_MODINFO_PATH " hfi1 -F version"
+#define OPX_MODINFO_SRC_VERS OPX_MODINFO_PATH " hfi1 -F srcversion"
 
 enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep) {
 #if defined(OFI_RELIABILITY_CONFIG_STATIC_NONE)
@@ -2041,7 +2044,8 @@ err:
 int opx_get_drv_ver(char *drv_ver)
 {
 	FILE *p;
-	p = popen("modinfo hfi1 -F version", "r");
+	
+	p = popen(OPX_MODINFO_DRV_VERS, "r");
 	if (p == NULL) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"popen failed, unable to get hfi1 version\n");
@@ -2063,7 +2067,8 @@ int opx_get_drv_ver(char *drv_ver)
 int opx_get_srcver_modinfo(char *srcver_modinfo)
 {
 	FILE *p;
-	p = popen("modinfo hfi1 -F srcversion", "r");
+
+	p = popen(OPX_MODINFO_SRC_VERS, "r");
 	if (p == NULL) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"popen failed, unable to get hfi1 srcversion\n");
@@ -2109,6 +2114,17 @@ int opx_hfi_drv_version_check(char *min_version)
 	char drv_ver[FI_OPX_VER_CHECK_BUF_LEN] = {0};
 	char srcver_modinfo[FI_OPX_VER_CHECK_BUF_LEN] = {0};
 	char srcver_sys[FI_OPX_VER_CHECK_BUF_LEN] = {0};
+
+	if (access(OPX_MODINFO_PATH, F_OK)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"modinfo utility not in standard location of %s\n", OPX_MODINFO_PATH);
+		return 0;
+	};
+	if (access(OPX_MODINFO_PATH, X_OK)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"User does not have execute permissions on %s\n", OPX_MODINFO_PATH);
+		return 0;
+	};
 
 	if (opx_get_drv_ver(drv_ver) != FI_SUCCESS) {
 		return 0;

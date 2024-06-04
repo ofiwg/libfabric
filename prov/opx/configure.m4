@@ -155,9 +155,9 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				opx_happy=0
 				])
 			CPPFLAGS=$save_CPPFLAGS
-			opx_hfi_version=$(modinfo hfi1 -F version)
+			opx_hfi_version=$(/sbin/modinfo hfi1 -F version)
 			opx_hfi_version_sorted=$(echo -e "10.14.0.0\n$opx_hfi_version" | sort -V | tail -n 1)
-			opx_hfi_srcversion=$(modinfo hfi1 -F srcversion)
+			opx_hfi_srcversion=$(/sbin/modinfo hfi1 -F srcversion)
 			opx_hfi_sys_srcversion=$(cat /sys/module/hfi1/srcversion)
 			AS_IF([test $opx_hfi_srcversion != $opx_hfi_sys_srcversion ||
 				test -z $opx_hfi_version ||
