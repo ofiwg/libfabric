@@ -514,61 +514,6 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 	}
 }
 
-/**
- * @brief trigger a peer to send a handshake packet
- *
- * This patch send a EAGER_RTW packet of 0 byte to a peer, which would
- * cause the peer to send a handshake packet back to the endpoint.
- *
- * This function is used for any extra feature that does not have an
- * alternative.
- *
- * We do not send eager rtm packets here because the receiver might require
- * ordering and an extra eager rtm will interrupt the reorder
- * process.
- *
- * @param[in]	ep	The endpoint on which the packet for triggering handshake will be sent.
- * @param[in]	addr	The address of the peer.
- *
- * @returns
- * return 0 for success.
- * return negative libfabric error code for error. Possible errors include:
- * -FI_EAGAIN	temporarily out of resource to send packet
- */
-ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
-{
-	struct efa_rdm_ope *txe;
-	struct fi_msg msg = {0};
-	ssize_t err;
-
-	assert(peer);
-	if ((peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) ||
-	    (peer->flags & EFA_RDM_PEER_REQ_SENT))
-		return 0;
-
-	msg.addr = peer->efa_fiaddr;
-
-	txe = efa_rdm_ep_alloc_txe(ep, peer, &msg, ofi_op_write, 0, 0);
-
-	if (OFI_UNLIKELY(!txe)) {
-		EFA_WARN(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
-		return -FI_EAGAIN;
-	}
-
-	/* efa_rdm_ep_alloc_txe() joins ep->base_ep.util_ep.tx_op_flags and passed in flags,
-	 * reset to desired flags (remove things like FI_DELIVERY_COMPLETE, and FI_COMPLETION)
-	 */
-	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
-	txe->msg_id = -1;
-
-	err = efa_rdm_ope_post_send(txe, EFA_RDM_EAGER_RTW_PKT);
-
-	if (OFI_UNLIKELY(err))
-		return err;
-
-	return 0;
-}
-
 /** @brief Post a handshake packet to a peer.
  *
  * @param ep The endpoint on which the handshake packet is sent out.
@@ -582,6 +527,10 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	struct efa_rdm_pke *pkt_entry;
 	fi_addr_t addr;
 	ssize_t ret;
+
+	/* Nothing to do */
+	if (peer->flags & (EFA_RDM_PEER_HANDSHAKE_SENT | EFA_RDM_PEER_HANDSHAKE_RECEIVED | EFA_RDM_PEER_HANDSHAKE_QUEUED))
+		return FI_SUCCESS;
 
 	addr = peer->efa_fiaddr;
 	msg.addr = addr;
@@ -612,8 +561,11 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	ret = efa_rdm_pke_sendv(&pkt_entry, 1);
 	if (OFI_UNLIKELY(ret)) {
 		efa_rdm_pke_release_tx(pkt_entry);
+		return ret;
 	}
-	return ret;
+
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
+	return FI_SUCCESS;
 }
 
 /** @brief Post a handshake packet to a peer.
@@ -644,9 +596,6 @@ void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_pe
 {
 	ssize_t err;
 
-	if (peer->flags & (EFA_RDM_PEER_HANDSHAKE_SENT | EFA_RDM_PEER_HANDSHAKE_QUEUED))
-		return;
-
 	err = efa_rdm_ep_post_handshake(ep, peer);
 	if (OFI_UNLIKELY(err == -FI_EAGAIN)) {
 		/* add peer to handshake_queued_peer_list for retry later */
@@ -663,8 +612,6 @@ void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_pe
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_PEER_HANDSHAKE);
 		return;
 	}
-
-	peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
 }
 
 /**

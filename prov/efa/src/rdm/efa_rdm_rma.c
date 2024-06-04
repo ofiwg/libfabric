@@ -177,7 +177,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	 * need to check the local ep's capabilities.
 	 */
 	if (!(peer->is_self) && !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = efa_rdm_ep_trigger_handshake(efa_rdm_ep, txe->peer);
+		err = efa_rdm_ep_post_handshake(efa_rdm_ep, txe->peer);
 		err = err ? err : -FI_EAGAIN;
 		goto out;
 	}
@@ -349,7 +349,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	 * check one-side capability
 	 */
 	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = efa_rdm_ep_trigger_handshake(ep, txe->peer);
+		err = efa_rdm_ep_post_handshake(ep, txe->peer);
 		return err ? err : -FI_EAGAIN;
 	}
 
@@ -375,7 +375,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		 * the information whether the peer
 		 * support it or not.
 		 */
-		err = efa_rdm_ep_trigger_handshake(ep, txe->peer);
+		err = efa_rdm_ep_post_handshake(ep, txe->peer);
 		if (OFI_UNLIKELY(err))
 			return err;
 

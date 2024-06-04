@@ -143,7 +143,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 		 * the information whether the peer
 		 * support it or not.
 		 */
-		err = efa_rdm_ep_trigger_handshake(efa_rdm_ep, txe->peer);
+		err = efa_rdm_ep_post_handshake(efa_rdm_ep, txe->peer);
 		if (OFI_UNLIKELY(err)) {
 			efa_rdm_txe_release(txe);
 			goto out;

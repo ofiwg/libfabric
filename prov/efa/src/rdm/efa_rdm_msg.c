@@ -134,7 +134,7 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 	 * Check handshake packet from peer to verify support status.
 	 */
 	if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = efa_rdm_ep_trigger_handshake(ep, txe->peer);
+		err = efa_rdm_ep_post_handshake(ep, txe->peer);
 		return err ? err : -FI_EAGAIN;
 	}
 

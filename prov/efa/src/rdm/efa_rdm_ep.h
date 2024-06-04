@@ -389,8 +389,6 @@ static inline struct util_srx_ctx *efa_rdm_ep_get_peer_srx_ctx(struct efa_rdm_ep
 	return (struct util_srx_ctx *) ep->peer_srx_ep->fid.context;
 }
 
-ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer);
-
 ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer);
 
 void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep,
