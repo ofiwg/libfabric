@@ -289,12 +289,19 @@ The following apply to memory registration.
 
 *FI_MR_HMEM*
 : This mode bit is associated with the FI_HMEM capability.
+
   If FI_MR_HMEM is set, the application must register buffers that
   were allocated using a device call and provide a valid desc
   parameter into applicable data transfer operations even if they are
   only used for local operations (e.g. send and receive data buffers).
   Device memory must be registered using the fi_mr_regattr call, with
   the iface and device fields filled out.
+
+  If FI_MR_HMEM is unset, the application need not register device buffers
+  for local operations. In addition, fi_mr_regattr is not required to be used
+  for device memory registration. It is the responsibility of the provider to
+  discover the appropriate device memory registration attributes, if
+  applicable.
 
   If FI_MR_HMEM is set, but FI_MR_LOCAL is unset, only device buffers
   must be registered when used locally.  In this case, the desc parameter
