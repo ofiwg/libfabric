@@ -244,7 +244,31 @@ The following apply to memory registration.
 
 *FI_MR_ALLOCATED*
 : When set, all registered memory regions must be backed by physical
-  memory pages at the time the registration call is made.
+  memory pages at the time the registration call is made. In addition,
+  applications must not perform operations which may result in the underlying
+  virtual address to physical page mapping to change (e.g. calling free()
+  against an allocated MR). Failing to adhere to this may result in the
+  virtual address pointing to one set of physical pages while the MR points
+  to another set of physical pages.
+
+  When unset, registered memory regions need not be backed by physical
+  memory pages at the time the registration call is made. In addition, the
+  underlying virtual address to physical page mapping is allowed to change,
+  and the provider will ensure the corresponding MR is updated accordingly.
+  This behavior enables application use-cases where memory may be frequently
+  freed and reallocated or system memory migrating to/from device memory.
+
+  When unset, the application is responsible for ensuring that a registered
+  memory region references valid physical pages while a data transfer is
+  active against it, or the data transfer may fail. Application changes to
+  the virtual address range must be coordinated with network traffic to or
+  from that range.
+
+  If unset and FI_HMEM is supported, the ability for the virtual address to
+  physical address mapping to change extends to HMEM interfaces as well. If a
+  provider cannot support a virtual address to physical address changing for
+  a given HMEM interface, the provider should support a reasonable fallback
+  or the operation should fail.
 
 *FI_MR_PROV_KEY*
 : This memory region mode indicates that the provider does not support
