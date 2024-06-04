@@ -200,12 +200,14 @@ The following apply to memory registration.
 : When the FI_MR_LOCAL mode bit is set, applications must register all
   data buffers that will be accessed by the local hardware and provide
   a valid desc parameter into applicable data transfer operations.
-  When FI_MR_LOCAL is zero, applications are not required to register
+
+  When FI_MR_LOCAL is unset, applications are not required to register
   data buffers before using them for local operations (e.g. send and
-  receive data buffers).  The desc parameter into data transfer
-  operations will be ignored in this case, unless otherwise required
-  (e.g. se  FI_MR_HMEM).  It is recommended that applications pass in
-  NULL for desc when not required.
+  receive data buffers). Prior to libfabric 1.22, the desc parameter was
+  ignored. In libfabric 1.22 and later, the desc parameter must be either
+  valid or NULL. This behavior allows applications to optionally pass in a
+  valid desc parameter. If the desc parameter is NULL, any required local
+  memory registration will be handled by the provider.
 
   A provider may hide local registration requirements from applications
   by making use of an internal registration cache or similar mechanisms.
@@ -214,7 +216,7 @@ The following apply to memory registration.
   In order to support as broad range of applications as possible,
   without unduly affecting their performance, applications that wish to
   manage their own local memory registrations may do so by using the
-  memory registration calls.
+  memory registration calls and passing in a valid desc parameter.
 
   Note: the FI_MR_LOCAL mr_mode bit replaces the FI_LOCAL_MR fi_info mode bit.
   When FI_MR_LOCAL is set, FI_LOCAL_MR is ignored.
@@ -303,6 +305,10 @@ The following apply to memory registration.
   discover the appropriate device memory registration attributes, if
   applicable.
 
+  Similar to if FI_MR_LOCAL is unset, if FI_MR_HMEM is unset, applications may
+  optionally pass in a valid desc parameter. If the desc parameter is NULL, any
+  required local memory registration will be handled by the provider.
+
   If FI_MR_HMEM is set, but FI_MR_LOCAL is unset, only device buffers
   must be registered when used locally.  In this case, the desc parameter
   passed into data transfer operations must either be valid or NULL.
@@ -310,11 +316,17 @@ The following apply to memory registration.
   parameter must either be valid or NULL.
 
 *FI_MR_COLLECTIVE*
-: This bit is associated with the FI_COLLECTIVE capability.  When set,
-  the provider requires that memory regions used in collection operations
-  must explicitly be registered for use with collective calls.  This
-  requires registering regions passed to collective calls using the
+: This bit is associated with the FI_COLLECTIVE capability.
+
+  If FI_MR_COLLECTIVE is set, the provider requires that memory regions used in
+  collection operations must explicitly be registered for use with collective
+  calls. This requires registering regions passed to collective calls using the
   FI_COLLECTIVE flag.
+
+  If FI_MR_COLLECTIVE is unset, memory registration for collection operations is
+  optional. Applications may optionally pass in a valid desc parameter. If the
+  desc parameter is NULL, any required local memory registration will be handled
+  by the provider.
 
 *Basic Memory Registration*
 : Basic memory registration was deprecated in libfabric version 1.5, but
