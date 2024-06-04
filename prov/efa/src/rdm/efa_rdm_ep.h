@@ -53,6 +53,12 @@ struct efa_rdm_ep {
 	/* Endpoint's capability to support zero-copy rx */
 	bool use_zcpy_rx;
 
+	/* Whether RDM protocol is enabled.
+	 * When it is false, no protocol hdrs
+	 * will be included in pkt entry's payload.
+	 */
+	bool rdm_protocol_enabled;
+
 	/* Application requested resource management support */
 	int handle_resource_management;
 
