@@ -394,16 +394,43 @@ static struct fi_ops efa_rdm_ep_base_ops = {
 static inline
 void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 {
-	ep->use_zcpy_rx = !(ep->base_ep.util_ep.caps & FI_DIRECTED_RECV) &&
-			  !(ep->base_ep.util_ep.caps & FI_TAGGED) &&
-			  !(ep->base_ep.util_ep.caps & FI_ATOMIC) &&
-			  (ep->max_msg_size <= ep->mtu_size - ep->max_proto_hdr_size) &&
-			  !efa_rdm_ep_need_sas(ep) &&
-			  ep->user_info->mode & FI_MSG_PREFIX &&
-			  efa_env.use_zcpy_rx;
+	uint64_t unsupported_caps = FI_DIRECTED_RECV | FI_TAGGED | FI_ATOMIC;
 
+	ep->use_zcpy_rx = true;
+
+	/* User requests to turn off zcpy recv */
+	if (!efa_env.use_zcpy_rx) {
+		EFA_INFO(FI_LOG_EP_CTRL, "User disables zero-copy receive protocol via environment\n");
+		ep->use_zcpy_rx = false;
+		goto out;
+	}
+
+	/* Unsupported capabilities */
+	if (ep->base_ep.util_ep.caps & unsupported_caps) {
+		EFA_INFO(FI_LOG_EP_CTRL, "Unsupported capabilities, zero-copy receive protocol will be disabled\n");
+		ep->use_zcpy_rx = false;
+		goto out;
+	}
+
+	/* Max msg size is too large, turn off zcpy recv */
+	if (ep->max_msg_size > ep->mtu_size - ep->user_info->ep_attr->msg_prefix_size) {
+		EFA_INFO(FI_LOG_EP_CTRL, "max_msg_size (%zu) is greater than the mtu size limit: %zu. Zero-copy receive protocol will be disabled.\n",
+			ep->max_msg_size, ep->mtu_size - ep->user_info->ep_attr->msg_prefix_size);
+		ep->use_zcpy_rx = false;
+		goto out;
+	}
+
+	/* If app needs sas ordering, turn off zcpy recv */
+	if (efa_rdm_ep_need_sas(ep)) {
+		EFA_INFO(FI_LOG_EP_CTRL, "FI_ORDER_SAS is requested, zero-copy receive protocol will be disabled\n");
+		ep->use_zcpy_rx = false;
+		goto out;
+	}
+
+out:
 	EFA_INFO(FI_LOG_EP_CTRL, "efa_rdm_ep->use_zcpy_rx = %d\n",
 		 ep->use_zcpy_rx);
+	return;
 }
 
 /**

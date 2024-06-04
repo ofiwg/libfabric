@@ -688,20 +688,3 @@ void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(struct efa_resource **state
 
 	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false);
 }
-
-/**
- * @brief zcpy will be disabled if app doesn't use FI_MSG_PREFIX mode.
- */
-void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_no_prefix(struct efa_resource **state)
-{
-	struct efa_resource *resource = *state;
-
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
-	assert_non_null(resource->hints);
-
-	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
-	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
-	resource->hints->caps = FI_MSG;
-
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false);
-}
