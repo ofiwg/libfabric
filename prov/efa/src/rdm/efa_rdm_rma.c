@@ -360,28 +360,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 
 	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
 	if (delivery_complete_requested) {
-		/*
-		 * Because delivery complete is defined as an extra
-		 * feature, the receiver might not support it.
-		 *
-		 * The sender cannot send with FI_DELIVERY_COMPLETE
-		 * if the peer is not able to handle it.
-		 *
-		 * If the sender does not know whether the peer
-		 * can handle it, it needs to trigger
-		 * a handshake packet from the peer.
-		 *
-		 * The handshake packet contains
-		 * the information whether the peer
-		 * support it or not.
-		 */
-		err = efa_rdm_ep_post_handshake(ep, txe->peer);
-		if (OFI_UNLIKELY(err))
-			return err;
-
-		if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
-			return -FI_EAGAIN;
-		else if (!efa_rdm_peer_support_delivery_complete(txe->peer))
+		if (!efa_rdm_peer_support_delivery_complete(txe->peer))
 			return -FI_EOPNOTSUPP;
 
 		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_DC_EAGER_RTW_PKT);

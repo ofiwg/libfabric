@@ -126,34 +126,16 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 		goto out;
 	}
 
+	if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		err = efa_rdm_ep_post_handshake(efa_rdm_ep, txe->peer);
+		efa_rdm_txe_release(txe);
+		err = err ? err : -FI_EAGAIN;
+		goto out;
+	}
+
 	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
 	if (delivery_complete_requested && !(peer->is_local)) {
-		/*
-		 * Because delivery complete is defined as an extra
-		 * feature, the receiver might not support it.
-		 *
-		 * The sender cannot send with FI_DELIVERY_COMPLETE
-		 * if the peer is not able to handle it.
-		 *
-		 * If the sender does not know whether the peer
-		 * can handle it, it needs to trigger
-		 * a handshake packet from the peer.
-		 *
-		 * The handshake packet contains
-		 * the information whether the peer
-		 * support it or not.
-		 */
-		err = efa_rdm_ep_post_handshake(efa_rdm_ep, txe->peer);
-		if (OFI_UNLIKELY(err)) {
-			efa_rdm_txe_release(txe);
-			goto out;
-		}
-
-		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-			efa_rdm_txe_release(txe);
-			err = -FI_EAGAIN;
-			goto out;
-		} else if (!efa_rdm_peer_support_delivery_complete(peer)) {
+		 if (!efa_rdm_peer_support_delivery_complete(peer)) {
 			efa_rdm_txe_release(txe);
 			err = -FI_EOPNOTSUPP;
 			goto out;

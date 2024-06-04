@@ -115,7 +115,6 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
  */
 ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int use_p2p)
 {
-	ssize_t err;
 	int rtm_type;
 
 	assert(txe->peer);
@@ -126,16 +125,6 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 	if (rtm_type < EFA_RDM_EXTRA_REQ_PKT_BEGIN) {
 		/* rtm requires only baseline feature, which peer should always support. */
 		return efa_rdm_ope_post_send(txe, rtm_type);
-	}
-
-	/*
-	 * rtm_type requires an extra feature, which peer might not support.
-	 *
-	 * Check handshake packet from peer to verify support status.
-	 */
-	if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = efa_rdm_ep_post_handshake(ep, txe->peer);
-		return err ? err : -FI_EAGAIN;
 	}
 
 	if (!efa_rdm_pkt_type_is_supported_by_peer(rtm_type, txe->peer))
@@ -149,7 +138,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 			     uint64_t tag, uint32_t op, uint64_t flags)
 {
 	ssize_t err, ret, use_p2p;
-	struct efa_rdm_ope *txe;
+	struct efa_rdm_ope *txe = NULL;
 	struct util_srx_ctx *srx_ctx;
 
 	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
@@ -161,7 +150,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
-		goto out;
+		goto unlock;
 	}
 
 	txe = efa_rdm_ep_alloc_txe(ep, peer, msg, op, tag, flags);
@@ -187,6 +176,15 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 
 	txe->msg_id = peer->next_msg_id++;
 
+	/*
+	 * Enforce handshake from peer to verify support status.
+	 */
+	if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		err = efa_rdm_ep_post_handshake(ep, txe->peer);
+		err = err ? err : -FI_EAGAIN;
+		goto out;
+	}
+
 	efa_rdm_tracepoint(send_begin, txe->msg_id,
 		    (size_t) txe->cq_entry.op_context, txe->total_len);
 	efa_rdm_tracepoint(send_begin_msg_context,
@@ -194,12 +192,14 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 
 
 	err = efa_rdm_msg_post_rtm(ep, txe, use_p2p);
+
+out:
 	if (OFI_UNLIKELY(err)) {
 		efa_rdm_txe_release(txe);
 		peer->next_msg_id--;
 	}
 
-out:
+unlock:
 	ofi_genlock_unlock(srx_ctx->lock);
 	efa_perfset_end(ep, perf_efa_tx);
 	return err;
