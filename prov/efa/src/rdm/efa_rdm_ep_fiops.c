@@ -411,6 +411,16 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 	}
 
 	/**
+	 * zcpy recv mode cannot work with emulated RMA protocols which
+	 * involves protocol hdrs in data transfer.
+	 */
+	if ((ep->base_ep.util_ep.caps & FI_RMA) && \
+		(!efa_device_support_rdma_read() || !efa_device_support_rdma_write())) {
+		ep->use_zcpy_rx = false;
+		goto out;
+	}
+
+	/**
 	 * In zcpy recv mode, the recv buffer is posted by applications. 
 	 * There is no good way for application to know the recv buffer
 	 * consumption for rdma-write with imm operations unless it doesn't
