@@ -973,12 +973,15 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
 	ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE;
 
 	if (ep->use_zcpy_rx) {
-		/*
-		 * zero copy receive requires the packet header length remains
-		 * constant, so the application receive buffer is match with
-		 * incoming application data.
+		/**
+		 * When zero-copy receive is enabled, sender will not start transmitting
+		 * application data until a handshake is made with the peer, and it will
+		 * not include protocol hdrs in the wire payload of the pkt. This is a
+		 * new feature and must be matched with receivers that can handle such
+		 * no hdr pkts. On the other hand, receiver also need to check sender's
+		 * feature to know whether the pkt it received can be no hdr.
 		 */
-		ep->extra_info[0] |= EFA_RDM_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
+		ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_ZERO_HEADER_DATA_TRANSFER;
 	}
 
 	ep->extra_info[0] |= EFA_RDM_EXTRA_REQUEST_CONNID_HEADER;
