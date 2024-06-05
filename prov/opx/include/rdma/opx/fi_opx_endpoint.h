@@ -1967,20 +1967,6 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode,
 }
 
 __OPX_FORCE_INLINE__
-uintptr_t fi_opx_dput_rbuf_out(const uintptr_t rbuf_in) {
-	union fi_opx_hfi1_dput_rbuf rbuf_out = { .ptr = htonll(rbuf_in)};
-	rbuf_out.dw[1] = ntohl(rbuf_out.dw[1]);
-	return rbuf_out.ptr;
-}
-
-__OPX_FORCE_INLINE__
-uintptr_t fi_opx_dput_rbuf_in(const uintptr_t rbuf_out) {
-	union fi_opx_hfi1_dput_rbuf rbuf_in = { .ptr = rbuf_out};
-	rbuf_in.dw[1] = htonl(rbuf_in.dw[1]);
-	return ntohll(rbuf_in.ptr);
-}
-
-__OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 				const union fi_opx_hfi1_packet_hdr * const hdr,
 				const union fi_opx_hfi1_packet_payload * const payload,
