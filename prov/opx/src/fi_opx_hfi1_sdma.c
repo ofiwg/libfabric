@@ -212,9 +212,9 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 #endif
 		fprintf(stderr, "(%d) [%d] PBC: %#16.16lX\n",
 			pid, req_num, header_vec->scb.qw0);
-#ifndef NDEBUG
+
 		fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.hdr, func, line);
-#endif
+
 		fprintf(stderr, "(%d) [%d] req data iov=%p len=%lu\n",
 			pid, req_num, iov_ptr[1].iov_base, iov_ptr[1].iov_len);
 

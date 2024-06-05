@@ -123,6 +123,7 @@ static inline const char* opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 		? (packet_hdr)->dput.target.origin_tx				\
 		: (packet_hdr)->reliability.origin_tx)
 
+#define FI_OPX_HFI_UD_OPCODE_FIRST_INVALID			(0x00)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING			(0x01)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK			(0x02)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK			(0x03)
@@ -131,25 +132,28 @@ static inline const char* opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH		(0x06)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK		(0x07)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP			(0x08)
+/* Add new UD Opcodes here, and increment LAST_INVALID accordingly */
+#define FI_OPX_HFI_UD_OPCODE_LAST_INVALID			(0x09)
 
 static const char* FI_OPX_HFI_UD_OPCODE_STRINGS[] = {
-	"INVALID UD OPCODE                               ",
-	"FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING           ",
-	"FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK            ",
-	"FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK           ",
-	"FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT           ",
-	"FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK       ",
-	"FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH        ",
-	"FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK    ",
-	"FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP           " };
+	[FI_OPX_HFI_UD_OPCODE_FIRST_INVALID] = "INVALID UD OPCODE",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING] = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK] = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK] = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT] = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK] = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH] = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK] = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP] = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP"
+};
 
 static inline const char* opx_hfi1_ud_opcode_to_string(uint8_t opcode)
 {
-	if ((opcode >= FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING) &&
-	    (opcode <= FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP)) {
+	if (opcode > FI_OPX_HFI_UD_OPCODE_FIRST_INVALID &&
+	    opcode < FI_OPX_HFI_UD_OPCODE_LAST_INVALID) {
 		return FI_OPX_HFI_UD_OPCODE_STRINGS[opcode];
 	}
-	return FI_OPX_HFI_UD_OPCODE_STRINGS[0]; /* INVALID */
+	return FI_OPX_HFI_UD_OPCODE_STRINGS[FI_OPX_HFI_UD_OPCODE_FIRST_INVALID];
 }
 
 #define FI_OPX_HFI_DPUT_OPCODE_RZV				(0x00)
@@ -161,25 +165,28 @@ static inline const char* opx_hfi1_ud_opcode_to_string(uint8_t opcode)
 #define FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG			(0x06)
 #define FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC			(0x07)
 #define FI_OPX_HFI_DPUT_OPCODE_RZV_TID				(0x08)
+/* Add new DPUT Opcodes here, and increment LAST_INVALID accordingly */
+#define FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID			(0x09)
 
 static const char* FI_OPX_HFI_DPUT_OPCODE_STRINGS[] = {
-	"FI_OPX_HFI_DPUT_OPCODE_RZV                      ",
-	"FI_OPX_HFI_DPUT_OPCODE_PUT                      ",
-	"FI_OPX_HFI_DPUT_OPCODE_GET                      ",
-	"FI_OPX_HFI_DPUT_OPCODE_FENCE                    ",
-	"FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH             ",
-	"FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH     ",
-	"FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG            ",
-	"FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC           	 ",
-	"FI_OPX_HFI_DPUT_OPCODE_RZV_TID                  ",
-        "INVALID DPUT OPCODE                             " };
+	[FI_OPX_HFI_DPUT_OPCODE_RZV] = "FI_OPX_HFI_DPUT_OPCODE_RZV",
+	[FI_OPX_HFI_DPUT_OPCODE_PUT] = "FI_OPX_HFI_DPUT_OPCODE_PUT",
+	[FI_OPX_HFI_DPUT_OPCODE_GET] = "FI_OPX_HFI_DPUT_OPCODE_GET",
+	[FI_OPX_HFI_DPUT_OPCODE_FENCE] = "FI_OPX_HFI_DPUT_OPCODE_FENCE",
+	[FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH] = "FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH",
+	[FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH] = "FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH",
+	[FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG] = "FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG",
+	[FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC] = "FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC",
+	[FI_OPX_HFI_DPUT_OPCODE_RZV_TID] = "FI_OPX_HFI_DPUT_OPCODE_RZV_TID",
+	[FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID] = "INVALID DPUT OPCODE"
+};
 
 static inline const char* opx_hfi1_dput_opcode_to_string(uint8_t opcode)
 {
-	if (opcode <= FI_OPX_HFI_DPUT_OPCODE_RZV_TID) {
+	if (opcode < FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID) {
 		return FI_OPX_HFI_DPUT_OPCODE_STRINGS[opcode];
 	}
-	return FI_OPX_HFI_DPUT_OPCODE_STRINGS[FI_OPX_HFI_DPUT_OPCODE_RZV_TID+1]; /* INVALID */
+	return FI_OPX_HFI_DPUT_OPCODE_STRINGS[FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID];
 }
 
 /* KDETH header consts */
@@ -335,12 +342,12 @@ static inline
 void fi_opx_hfi1_dump_stl_packet_hdr (struct fi_opx_hfi1_stl_packet_hdr * hdr,
 		const char * fn, const unsigned ln) {
 
-#if __GNUC__ > 9 
+#if __GNUC__ > 9
 #pragma GCC diagnostic ignored "=Waddress-of-packed-member"
 #endif
 	const uint64_t * const qw = (uint64_t *)hdr;
-#if __GNUC__ > 9 
-#pragma GCC diagnostic pop	
+#if __GNUC__ > 9
+#pragma GCC diagnostic pop
 #endif
 
 	fprintf(stderr, "%s():%u ==== dump stl packet header @ %p [%016lx %016lx %016lx %016lx]\n", fn, ln, hdr, qw[0], qw[1], qw[2], qw[3]);
@@ -778,68 +785,14 @@ fi_opx_hfi1_packet_hdr_message_length (const union fi_opx_hfi1_packet_hdr * cons
 			message_length = hdr->rendezvous.message_length;
 			break;
 		default:
-			fprintf(stderr, "%s:%s():%d abort. hdr->stl.bth.opcode = %02x (%u)\n", __FILE__, __func__, __LINE__, hdr->stl.bth.opcode, hdr->stl.bth.opcode); abort();
+			fprintf(stderr, "%s:%s():%d abort. hdr->stl.bth.opcode = %02x (%u)\n",
+				__FILE__, __func__, __LINE__, hdr->stl.bth.opcode,
+				hdr->stl.bth.opcode);
+			abort();
 			break;
 	}
 
 	return message_length;
-}
-
-static inline
-void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr,
-		const char * fn, const unsigned ln) {
-
-	const uint64_t * const qw = (uint64_t *)hdr;
-	const pid_t pid = getpid();
-
-	fprintf(stderr, "(%d) %s():%u ==== dump packet header @ %p [%016lx %016lx %016lx %016lx]\n", pid, fn, ln, hdr, qw[0], qw[1], qw[2], qw[3]);
-	fprintf(stderr, "(%d) %s():%u .stl.lrh.flags ...........     0x%04hx\n", pid, fn, ln, hdr->stl.lrh.flags);
-	fprintf(stderr, "(%d) %s():%u .stl.lrh.dlid ............     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->stl.lrh.dlid, hdr->stl.lrh.dlid, ntohs(hdr->stl.lrh.dlid));
-	fprintf(stderr, "(%d) %s():%u .stl.lrh.pktlen ..........     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->stl.lrh.pktlen, hdr->stl.lrh.pktlen, ntohs(hdr->stl.lrh.pktlen));
-	fprintf(stderr, "(%d) %s():%u .stl.lrh.slid ............     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->stl.lrh.slid, hdr->stl.lrh.slid, ntohs(hdr->stl.lrh.slid));
-	fprintf(stderr, "(%d) %s():%u\n", pid, fn, ln);
-	fprintf(stderr, "(%d) %s():%u .match.slid ..............     0x%04x \n", pid, fn, ln, hdr->match.slid);
-	fprintf(stderr, "(%d) %s():%u .match.origin_tx .........     0x%02x \n", pid, fn, ln, hdr->match.origin_tx);
-	fprintf(stderr, "(%d) %s():%u .match.ofi_data ..........     0x%08x \n", pid, fn, ln, hdr->match.ofi_data);
-	fprintf(stderr, "(%d) %s():%u .match.ofi_tag ...........     0x%016lx \n", pid, fn, ln, hdr->match.ofi_tag);
-	fprintf(stderr, "(%d) %s():%u\n", pid, fn, ln);
-	fprintf(stderr, "(%d) %s():%u .stl.bth.opcode ..........     0x%02x  (%s)\n", pid, fn, ln,
-		hdr->stl.bth.opcode, opx_hfi1_bth_opcode_to_string((uint16_t)hdr->stl.bth.opcode));
-	fprintf(stderr, "(%d) %s():%u .stl.bth.psn    ..........     0x%08x \n", pid, fn, ln, hdr->stl.bth.psn);
-
-	switch (hdr->stl.bth.opcode) {
-		case FI_OPX_HFI_BTH_OPCODE_UD:
-			fprintf(stderr, "(%d) %s():%u .ud.opcode ...     0x%02x (%s) \n", pid, fn, ln,
-				hdr->ud.opcode, opx_hfi1_ud_opcode_to_string(hdr->ud.opcode));
-			break;
-		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT:
-		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
-			fprintf(stderr, "(%d) %s():%u .inject.message_length ...     0x%02x \n", pid, fn, ln, hdr->inject.message_length);
-			fprintf(stderr, "(%d) %s():%u .inject.app_data_u64[0] ..     0x%016lx \n", pid, fn, ln, hdr->inject.app_data_u64[0]);
-			fprintf(stderr, "(%d) %s():%u .inject.app_data_u64[1] ..     0x%016lx \n", pid, fn, ln, hdr->inject.app_data_u64[1]);
-			break;
-		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER:
-		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER:
-			fprintf(stderr, "(%d) %s():%u .send.xfer_bytes_tail ....     0x%02x \n", pid, fn, ln, hdr->send.xfer_bytes_tail);
-			fprintf(stderr, "(%d) %s():%u .send.payload_qws_total ..     0x%04x \n", pid, fn, ln, hdr->send.payload_qws_total);
-			fprintf(stderr, "(%d) %s():%u .send.xfer_tail ..........     0x%016lx \n", pid, fn, ln, hdr->send.xfer_tail);
-			break;
-		case  FI_OPX_HFI_BTH_OPCODE_RZV_CTS:
-			fprintf(stderr, "(%d) %s():%u .cts.origin                 ..........     0x%x \n", pid, fn, ln, hdr->cts.origin_rx);
-			fprintf(stderr, "(%d) %s():%u .cts.target.vaddr.ntidpairs ..........     0x%x \n", pid, fn, ln, hdr->cts.target.vaddr.ntidpairs);
-			fprintf(stderr, "(%d) %s():%u .cts.target.opcode          ..........     0x%x (%s) \n", pid, fn, ln,
-				hdr->cts.target.opcode, opx_hfi1_dput_opcode_to_string(hdr->cts.target.opcode));
-			break;
-		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
-		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:	/* calculate (?) total bytes to be transfered */
-			break;
-		default:
-			break;
-	}
-	fprintf(stderr, "(%d) %s():%u\n", pid, fn, ln);
-	fprintf(stderr, "(%d) %s():%u ==== QWs 4-7 : [%016lx %016lx %016lx %016lx]\n", pid, fn, ln, qw[4], qw[5], qw[6], qw[7]);
-
-	return;
 }
 
 union cacheline {
@@ -870,6 +823,20 @@ union fi_opx_hfi1_dput_rbuf {
 	uintptr_t ptr;
 	uint32_t dw[2];
 };
+
+static inline
+uintptr_t fi_opx_dput_rbuf_out(const uintptr_t rbuf_in) {
+	union fi_opx_hfi1_dput_rbuf rbuf_out = { .ptr = htonll(rbuf_in)};
+	rbuf_out.dw[1] = ntohl(rbuf_out.dw[1]);
+	return rbuf_out.ptr;
+}
+
+static inline
+uintptr_t fi_opx_dput_rbuf_in(const uintptr_t rbuf_out) {
+	union fi_opx_hfi1_dput_rbuf rbuf_in = { .ptr = rbuf_out};
+	rbuf_in.dw[1] = htonl(rbuf_in.dw[1]);
+	return ntohll(rbuf_in.ptr);
+}
 
 struct fi_opx_hmem_iov {
 	uintptr_t buf;
@@ -914,7 +881,7 @@ union fi_opx_hfi1_packet_payload {
 					uint8_t		immediate_byte[8];
 					uint64_t	immediate_qw[7];
 				};
-				
+
 				union cacheline	cache_line_1;
 			};
 
@@ -1105,6 +1072,126 @@ struct fi_opx_hfi1_ue_packet *fi_opx_hfi1_ue_packet_slist_remove_item (struct fi
 	ofi_buf_free(item);
 
 	return next_item;
+}
+
+static inline
+void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr,
+		const char * fn, const unsigned ln) {
+
+	const uint64_t * const qw = (uint64_t *)hdr;
+	const pid_t pid = getpid();
+
+	fprintf(stderr, "(%d) %s():%u ==== dump packet header @ %p [%016lx %016lx %016lx %016lx]\n",
+		pid, fn, ln, hdr, qw[0], qw[1], qw[2], qw[3]);
+	fprintf(stderr, "(%d) %s():%u .stl.lrh.flags ...................... 0x%04hx\n",
+		pid, fn, ln, hdr->stl.lrh.flags);
+	fprintf(stderr, "(%d) %s():%u .stl.lrh.dlid                         0x%04hx (be: %5hu, le: %5hu)\n",
+		pid, fn, ln, hdr->stl.lrh.dlid, hdr->stl.lrh.dlid,
+		ntohs(hdr->stl.lrh.dlid));
+	fprintf(stderr, "(%d) %s():%u .stl.lrh.pktlen ..................... 0x%04hx (be: %5hu, le: %5hu)\n",
+		pid, fn, ln, hdr->stl.lrh.pktlen, hdr->stl.lrh.pktlen,
+		ntohs(hdr->stl.lrh.pktlen));
+	fprintf(stderr, "(%d) %s():%u .stl.lrh.slid                         0x%04hx (be: %5hu, le: %5hu)\n",
+		pid, fn, ln, hdr->stl.lrh.slid, hdr->stl.lrh.slid,
+		ntohs(hdr->stl.lrh.slid));
+	fprintf(stderr, "(%d) %s():%u .stl.bth.opcode ..................... 0x%02x  (%s)\n",
+		pid, fn, ln, hdr->stl.bth.opcode,
+		opx_hfi1_bth_opcode_to_string((uint16_t)hdr->stl.bth.opcode));
+	fprintf(stderr, "(%d) %s():%u .stl.bth.psn                          0x%08x\n",
+		pid, fn, ln, FI_OPX_HFI1_PACKET_PSN(hdr));
+
+	fprintf(stderr, "(%d) %s():%u\n", pid, fn, ln);
+	fprintf(stderr, "(%d) %s():%u .match.slid ......................... 0x%04x\n",
+		pid, fn, ln, hdr->match.slid);
+	fprintf(stderr, "(%d) %s():%u .match.origin_tx                      0x%02x\n",
+		pid, fn, ln, hdr->match.origin_tx);
+	fprintf(stderr, "(%d) %s():%u .match.ofi_data ..................... 0x%08x\n",
+		pid, fn, ln, hdr->match.ofi_data);
+	fprintf(stderr, "(%d) %s():%u .match.ofi_tag                        0x%016lx\n",
+		pid, fn, ln, hdr->match.ofi_tag);
+	fprintf(stderr, "(%d) %s():%u\n", pid, fn, ln);
+	switch (hdr->stl.bth.opcode) {
+		case FI_OPX_HFI_BTH_OPCODE_UD:
+			fprintf(stderr, "(%d) %s():%u .ud.opcode .......................... 0x%02x (%s)\n",
+				pid, fn, ln, hdr->ud.opcode,
+				opx_hfi1_ud_opcode_to_string(hdr->ud.opcode));
+			break;
+		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
+			fprintf(stderr, "(%d) %s():%u .inject.message_length .............. 0x%02x\n",
+				pid, fn, ln, hdr->inject.message_length);
+			fprintf(stderr, "(%d) %s():%u .inject.app_data_u64[0]               0x%016lx\n",
+				pid, fn, ln, hdr->inject.app_data_u64[0]);
+			fprintf(stderr, "(%d) %s():%u .inject.app_data_u64[1] ............. 0x%016lx\n",
+				pid, fn, ln, hdr->inject.app_data_u64[1]);
+			break;
+		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER:
+			fprintf(stderr, "(%d) %s():%u .send.xfer_bytes_tail ............... 0x%02x\n",
+				pid, fn, ln, hdr->send.xfer_bytes_tail);
+			fprintf(stderr, "(%d) %s():%u .send.payload_qws_total               0x%04x\n",
+				pid, fn, ln, hdr->send.payload_qws_total);
+			fprintf(stderr, "(%d) %s():%u .send.xfer_tail ..................... 0x%016lx\n",
+				pid, fn, ln, hdr->send.xfer_tail);
+			break;
+		case FI_OPX_HFI_BTH_OPCODE_RZV_CTS:
+			fprintf(stderr, "(%d) %s():%u .cts.origin ......................... 0x%x\n",
+				pid, fn, ln, hdr->cts.origin_rx);
+			fprintf(stderr, "(%d) %s():%u .cts.target.vaddr.ntidpairs           0x%x\n",
+				pid, fn, ln, hdr->cts.target.vaddr.ntidpairs);
+			fprintf(stderr, "(%d) %s():%u .cts.target.opcode .................. 0x%x (%s)\n",
+				pid, fn, ln, hdr->cts.target.opcode,
+				opx_hfi1_dput_opcode_to_string(hdr->cts.target.opcode));
+			break;
+		case FI_OPX_HFI_BTH_OPCODE_RZV_DATA:
+			fprintf(stderr, "(%d) %s():%u .dput.target.opcode ................. 0x%x (%s)\n",
+				pid, fn, ln, hdr->dput.target.opcode,
+				opx_hfi1_dput_opcode_to_string(hdr->dput.target.opcode));
+			fprintf(stderr, "(%d) %s():%u .dput.target.bytes                    0x%x\n",
+				pid, fn, ln, hdr->dput.target.bytes);
+			fprintf(stderr, "(%d) %s():%u .dput.target.last_bytes ............. 0x%x\n",
+				pid, fn, ln, hdr->dput.target.last_bytes);
+			if (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV ||
+			    hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG ||
+			    hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) {
+				fprintf(stderr, "(%d) %s():%u .dput.target.rzv.completion_vaddr     %p\n",
+					pid, fn, ln,
+					(void *) hdr->dput.target.rzv.completion_vaddr);
+				fprintf(stderr, "(%d) %s():%u .dput.target.rzv.rbuf ............... %p\n",
+					pid, fn, ln,
+					(void *) fi_opx_dput_rbuf_in(hdr->dput.target.rzv.rbuf));
+			} else if (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_FENCE) {
+				fprintf(stderr, "(%d) %s():%u .dput.target.fence.completion_counter %p\n",
+					pid, fn, ln,
+					(void *) hdr->dput.target.fence.completion_counter);
+				fprintf(stderr, "(%d) %s():%u .dput.target.fence.bytes_to_fence ... %lu\n",
+					pid, fn, ln, hdr->dput.target.fence.bytes_to_fence);
+			} else if (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_GET) {
+				fprintf(stderr, "(%d) %s():%u .dput.target.get.rma_request_vaddr    %p\n",
+					pid, fn, ln,
+					(void *) hdr->dput.target.get.rma_request_vaddr);
+				fprintf(stderr, "(%d) %s():%u .dput.target.get.rbuf ............... %p\n",
+					pid, fn, ln,
+					(void *) fi_opx_dput_rbuf_in(hdr->dput.target.get.rbuf));
+			} else if (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_PUT ||
+				   hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
+				   hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH) {
+				fprintf(stderr, "(%d) %s():%u .dput.target.mr.key                   0x%016lx\n",
+					pid, fn, ln, hdr->dput.target.mr.key);
+				fprintf(stderr, "(%d) %s():%u .dput.target.mr.offset .............. 0x%016lx\n",
+					pid, fn, ln, hdr->dput.target.mr.offset);
+			}
+			break;
+		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:	/* calculate (?) total bytes to be transfered */
+			break;
+		default:
+			break;
+	}
+	fprintf(stderr, "(%d) %s():%u\n", pid, fn, ln);
+	fprintf(stderr, "(%d) %s():%u ==== QWs 4-7 : [%016lx %016lx %016lx %016lx]\n", pid, fn, ln, qw[4], qw[5], qw[6], qw[7]);
+
+	return;
 }
 
 #endif /* _FI_PROV_OPX_HFI1_PACKET_H_ */
