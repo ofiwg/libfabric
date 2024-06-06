@@ -172,9 +172,7 @@ fi_addr_t efa_rdm_cq_determine_peer_address_from_efadv(
 						       enum ibv_cq_ex_type ibv_cq_ex_type)
 {
 	struct efa_rdm_pke *pkt_entry;
-	struct efa_rdm_ep *ep;
 	struct efa_ep_addr efa_ep_addr = {0};
-	fi_addr_t addr;
 	union ibv_gid gid = {0};
 	uint32_t *connid = NULL;
 
@@ -190,8 +188,6 @@ fi_addr_t efa_rdm_cq_determine_peer_address_from_efadv(
 	}
 
 	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
-	ep = pkt_entry->ep;
-	assert(ep);
 
 	connid = efa_rdm_pke_connid_ptr(pkt_entry);
 	if (!connid) {
@@ -204,16 +200,7 @@ fi_addr_t efa_rdm_cq_determine_peer_address_from_efadv(
 	memcpy(efa_ep_addr.raw, gid.raw, sizeof(efa_ep_addr.raw));
 	efa_ep_addr.qpn = ibv_wc_read_src_qp(ibv_cqx);
 	efa_ep_addr.qkey = *connid;
-	addr = ofi_av_lookup_fi_addr(&ep->base_ep.av->util_av, &efa_ep_addr);
-	if (addr != FI_ADDR_NOTAVAIL) {
-		char gid_str_cdesc[INET6_ADDRSTRLEN];
-		inet_ntop(AF_INET6, gid.raw, gid_str_cdesc, INET6_ADDRSTRLEN);
-		EFA_WARN(FI_LOG_AV,
-				"Recovered peer fi_addr. [Raw]:[QPN]:[QKey] = [%s]:[%" PRIu16 "]:[%" PRIu32 "]\n",
-				gid_str_cdesc, efa_ep_addr.qpn, efa_ep_addr.qkey);
-	}
-
-	return addr;
+	return efa_rdm_pke_insert_addr(pkt_entry, &efa_ep_addr);
 }
 
 /**
@@ -289,6 +276,10 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(ibv_cq_ex),
 					ibv_wc_read_src_qp(ibv_cq_ex), pkt_entry);
 
+	/**
+	 * This should only happen before a handshake is made between receiver and sender,
+	 * and the pkt always have a hdr in this case.
+	 */
 	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
 		pkt_entry->addr = efa_rdm_cq_determine_addr_from_ibv_cq(ibv_cq_ex, ibv_cq->ibv_cq_ex_type);
 	}

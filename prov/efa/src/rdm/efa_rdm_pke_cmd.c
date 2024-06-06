@@ -718,7 +718,6 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 	efa_rdm_pke_release_rx(pkt_entry);
 }
 
-static
 fi_addr_t efa_rdm_pke_insert_addr(struct efa_rdm_pke *pkt_entry, void *raw_addr)
 {
 	int ret;
@@ -744,8 +743,6 @@ fi_addr_t efa_rdm_pke_insert_addr(struct efa_rdm_pke *pkt_entry, void *raw_addr)
 			self_raw_addr_str, base_hdr->version, EFA_RDM_PROTOCOL_VERSION, __FILE__, __LINE__);
 		abort();
 	}
-
-	assert(base_hdr->type >= EFA_RDM_REQ_PKT_BEGIN);
 
 	/*
 	 * The message is from a peer through efa device, which means peer is not local
