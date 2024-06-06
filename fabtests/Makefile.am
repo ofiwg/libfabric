@@ -158,6 +158,7 @@ nobase_dist_config_DATA = \
 	pytest/default/test_rdm.py \
 	pytest/default/test_recv_cancel.py \
 	pytest/default/test_rma_bw.py \
+	pytest/default/test_rma_pingpong.py \
 	pytest/default/test_scalable_ep.py \
 	pytest/default/test_shared_ctx.py \
 	pytest/default/test_ubertest.py \
@@ -173,6 +174,7 @@ nobase_dist_config_DATA = \
 	pytest/efa/test_dgram.py \
 	pytest/efa/test_rdm.py \
 	pytest/efa/test_rma_bw.py \
+	pytest/efa/test_rma_pingpong.py \
 	pytest/efa/test_unexpected_msg.py \
 	pytest/efa/test_multi_recv.py \
 	pytest/efa/test_rnr.py \
@@ -197,6 +199,7 @@ nobase_dist_config_DATA = \
 	pytest/shm/test_multi_recv.py \
 	pytest/shm/test_rdm.py \
 	pytest/shm/test_rma_bw.py \
+	pytest/shm/test_rma_pingpong.py \
 	pytest/shm/test_ubertest.py \
 	pytest/shm/test_unexpected_msg.py \
 	pytest/shm/test_sighandler.py \
