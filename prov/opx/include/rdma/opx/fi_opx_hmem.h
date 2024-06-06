@@ -40,6 +40,15 @@
 #include "ofi_hmem.h"
 
 #define OPX_HMEM_NO_HANDLE (0)
+#define OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET (-1L)
+
+#ifdef OPX_HMEM
+#define OPX_HMEM_DEV_REG_SEND_THRESHOLD	(opx_ep->domain->hmem_domain->devreg_copy_from_threshold)
+#define OPX_HMEM_DEV_REG_RECV_THRESHOLD	(opx_ep->domain->hmem_domain->devreg_copy_to_threshold)
+#else
+#define OPX_HMEM_DEV_REG_SEND_THRESHOLD	(0)
+#define OPX_HMEM_DEV_REG_RECV_THRESHOLD	(0)
+#endif
 
 struct fi_opx_hmem_info {
 	uint64_t			device;
@@ -113,12 +122,14 @@ enum fi_hmem_iface fi_opx_hmem_get_iface(const void *ptr,
 
 __OPX_FORCE_INLINE__
 int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_handle,
-		     void *dest, const void *src, size_t len)
+		     void *dest, const void *src, size_t len, int64_t threshold)
 {
 	int ret;
+	assert((hmem_handle == OPX_HMEM_NO_HANDLE && threshold == OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET) ||
+		(hmem_handle != OPX_HMEM_NO_HANDLE && threshold != OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET));
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "COPY-TO-HMEM");
 #if HAVE_CUDA
-	if (hmem_handle != 0) {
+	if (hmem_handle != 0 && len <= threshold) {
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-TO-DEV");
 		cuda_gdrcopy_to_dev(hmem_handle, dest, src, len);
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-TO-DEV");
@@ -139,12 +150,14 @@ int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_ha
 
 __OPX_FORCE_INLINE__
 int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_handle,
-		       void *dest, const void *src, size_t len)
+		       void *dest, const void *src, size_t len, int64_t threshold)
 {
 	int ret;
+	assert((hmem_handle == OPX_HMEM_NO_HANDLE && threshold == OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET) ||
+		(hmem_handle != OPX_HMEM_NO_HANDLE && threshold != OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET));
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "COPY-FROM-HMEM");
 #if HAVE_CUDA
-	if (hmem_handle != 0) {
+	if (hmem_handle != 0 && len <= threshold) {
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-FROM-DEV");
 		cuda_gdrcopy_from_dev(hmem_handle, dest, src, len);
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-FROM-DEV");
@@ -208,17 +221,19 @@ static const unsigned OPX_HMEM_OFI_MEM_TYPE[4] = {
 		if (src_iface == FI_HMEM_SYSTEM) {						\
 			memcpy(dst, src, len);							\
 		} else {									\
-			opx_copy_from_hmem(src_iface, src_device, handle, dst, src, len);	\
+			opx_copy_from_hmem(src_iface, src_device, handle, dst, src, len,	\
+						OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);		\
 		}										\
 	} while (0)
 
-#define OPX_HMEM_COPY_TO(dst, src, len, handle, dst_iface, dst_device)				\
-	do {											\
-		if (dst_iface == FI_HMEM_SYSTEM) {						\
-			memcpy(dst, src, len);							\
-		} else {									\
-			opx_copy_to_hmem(dst_iface, dst_device, handle, dst, src, len);		\
-		}										\
+#define OPX_HMEM_COPY_TO(dst, src, len, handle, dst_iface, dst_device)			\
+	do {										\
+		if (dst_iface == FI_HMEM_SYSTEM) {					\
+			memcpy(dst, src, len);						\
+		} else {								\
+			opx_copy_to_hmem(dst_iface, dst_device, handle, dst, src, len,	\
+					OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);		\
+		}									\
 	} while (0)
 
 #define OPX_HMEM_ATOMIC_DISPATCH(src, dst, len, dt, op, dst_iface, dst_device)					\
@@ -227,9 +242,11 @@ static const unsigned OPX_HMEM_OFI_MEM_TYPE[4] = {
 			fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);					\
 		} else {											\
 			uint8_t hmem_buf[FI_OPX_HFI1_PACKET_MTU];						\
-			opx_copy_from_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE, hmem_buf, dst, len);	\
+			opx_copy_from_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE, hmem_buf, dst, len,	\
+					   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);					\
 			fi_opx_rx_atomic_dispatch(src, hmem_buf, len, dt, op);					\
-			opx_copy_to_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE, dst, hmem_buf, len);	\
+			opx_copy_to_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE, dst, hmem_buf, len,		\
+					OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);					\
 		}												\
 	} while (0)
 

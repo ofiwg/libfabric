@@ -11,10 +11,10 @@ fi_opx \- The Omni-Path Express Fabric Provider
 
 # OVERVIEW
 
-The *opx* provider is a native libfabric provider suitable for 
+The *opx* provider is a native libfabric provider suitable for
 use with Omni-Path fabrics.  OPX features great scalability and
-performance when running libfabric-enabled message layers.  
-OPX requires 3 additonal external development libraries to build: 
+performance when running libfabric-enabled message layers.
+OPX requires 3 additonal external development libraries to build:
 libuuid, libnuma, and the Linux kernel headers.
 
 
@@ -24,24 +24,24 @@ The OPX provider supports most features defined for the libfabric API.
 
 Key features include:
 
-Endpoint types 
+Endpoint types
 : The Omni-Path HFI hardware is connectionless and reliable.
   The OPX provider only supports the *FI_EP_RDM* endpoint type.
 
-Capabilities 
+Capabilities
 : Supported capabilities include *FI_MSG*, *FI_RMA, *FI_TAGGED*, *FI_ATOMIC*,
-  *FI_NAMED_RX_CTX*, *FI_SOURCE*, *FI_SEND*, *FI_RECV*, *FI_MULTI_RECV*, 
+  *FI_NAMED_RX_CTX*, *FI_SOURCE*, *FI_SEND*, *FI_RECV*, *FI_MULTI_RECV*,
   *FI_DIRECTED_RECV*, *FI_SOURCE*.
 
   Notes on *FI_DIRECTED_RECV* capability: The immediate data which is sent
-  within the "senddata" call to support *FI_DIRECTED_RECV* for OPX 
+  within the "senddata" call to support *FI_DIRECTED_RECV* for OPX
   must be exactly 4 bytes, which OPX uses to completely identify the
   source address to an exascale\-level number of ranks for tag matching on
   the recv and can be managed within the MU packet.
   Therefore the domain attribute "cq_data_size" is set to 4 which is the OFI
   standard minimum.
 
-Modes 
+Modes
 : Two modes are defined: *FI_CONTEXT2* and *FI_ASYNC_IOV*.
   The OPX provider requires *FI_CONTEXT2*.
 
@@ -49,23 +49,23 @@ Additional features
 : Supported additional features include *FABRIC_DIRECT*, *scalable endpoints*,
   and *counters*.
 
-Progress 
-: *FI_PROGRESS_MANUAL* and *FI_PROGRESS_AUTO* are supported, for best performance, use 
+Progress
+: *FI_PROGRESS_MANUAL* and *FI_PROGRESS_AUTO* are supported, for best performance, use
   *FI_PROGRESS_MANUAL* when possible. *FI_PROGRESS_AUTO* will spawn 1 thread per CQ.
 
-Address vector 
+Address vector
 : *FI_AV_MAP* and *FI_AV_TABLE* are both supported. *FI_AV_MAP* is default.
 
-Memory registration modes 
+Memory registration modes
 : Only *FI_MR_SCALABLE* is supported.
 
 # UNSUPPORTED FEATURES
 
-Endpoint types 
+Endpoint types
 : Unsupported endpoint types include *FI_EP_DGRAM* and *FI_EP_MSG*.
 
-Capabilities 
-: The OPX provider does not support *FI_RMA_EVENT* and *FI_TRIGGER* 
+Capabilities
+: The OPX provider does not support *FI_RMA_EVENT* and *FI_TRIGGER*
   capabilities.
 
 # LIMITATIONS
@@ -101,25 +101,25 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   OPX_AV=table ./configure\
   make install\
 \
-  There is no way to change OPX_AV after it is set. If OPX_AV is not set in 
-  the configure, the default value is runtime.  
+  There is no way to change OPX_AV after it is set. If OPX_AV is not set in
+  the configure, the default value is runtime.
 
 # RUNTIME PARAMETERS
 
 *FI_OPX_UUID*
 : OPX requires a unique ID for each job. In order for all processes in a
   job to communicate with each other, they require to use the same UUID.
-  This variable can be set with FI_OPX_UUID=${RANDOM} 
+  This variable can be set with FI_OPX_UUID=${RANDOM}
   The default UUID is 00112233445566778899aabbccddeeff.
 
 *FI_OPX_FORCE_CPUAFFINITY*
-: Boolean (0/1, on/off, true/false, yes/no). Causes the thread to bind 
+: Boolean (0/1, on/off, true/false, yes/no). Causes the thread to bind
   itself to the cpu core it is running on. Defaults to "No"
 
 *FI_OPX_RELIABILITY_SERVICE_USEC_MAX*
 : Integer. This setting controls how frequently the reliability/replay
-  function will issue PING requests to a remote connection. Reducing this 
-  value may improve performance at the expense of increased traffic on the 
+  function will issue PING requests to a remote connection. Reducing this
+  value may improve performance at the expense of increased traffic on the
   OPX fabric.
   Default setting is 500.
 
@@ -133,10 +133,10 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Valid values are 0 (disabled) and powers of 2 in the range of 1-32,768, inclusive.
 
   Default setting is 64.
-  
+
 *FI_OPX_SELINUX*
-: Boolean (0/1, on/off, true/false, yes/no). Set to true if you're running a 
-  security-enhanced Linux. This enables updating the Jkey used based on system 
+: Boolean (0/1, on/off, true/false, yes/no). Set to true if you're running a
+  security-enhanced Linux. This enables updating the Jkey used based on system
   settings. Defaults to "No"
 
 *FI_OPX_HFI_SELECT*
@@ -179,7 +179,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   E.g.  for the `numa` selector, if the caller can migrate between NUMA domains,
   then HFI selection will not be deterministic.
 
-  The logic used will always be the first valid in a selector list. For example, `default` and 
+  The logic used will always be the first valid in a selector list. For example, `default` and
   `fixed` will match all callers, so if either are in the beginning of a selector list, you will
   only use `fixed` or `default` regardles of if there are any more selectors.
 
@@ -211,9 +211,9 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   triplet as `start:end:stride`, where stride controls the interval between selected cores.
   For example, `1:5:2` will have cores 1, 3, and 5 as valid cores for progress threads. By default
   no affinity is set.
-  
+
 *FI_OPX_AUTO_PROGRESS_INTERVAL_USEC*
-: Integer, This setting controls the time (in usecs) between polls for auto progress threads. 
+: Integer. This setting controls the time (in usecs) between polls for auto progress threads.
   Default is 1.
 
 *FI_OPX_PKEY*
@@ -221,6 +221,18 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 
 *FI_OPX_SL*
 : Integer. Service Level. This will also determine Service Class and Virtual Lane.  Default is 0
+
+*FI_OPX_DEV_REG_SEND_THRESHOLD*
+: Integer. The individual packet threshold where lengths above do not use a device
+  registered copy when sending data from GPU.
+  The default threshold is 4096.
+  This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
+
+*FI_OPX_DEV_REG_RECV_THRESHOLD*
+: Integer. The individual packet threshold where lengths above do not use a device
+  registered copy when receiving data into GPU.
+  The default threshold is 8192.
+  This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
 
 # SEE ALSO
 

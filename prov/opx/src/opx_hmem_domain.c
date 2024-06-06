@@ -190,6 +190,9 @@ int opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric,
 	new_hmem_domain->util_domain.domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	new_hmem_domain->util_domain.domain_fid.fid.context = NULL;
 
+	new_hmem_domain->devreg_copy_from_threshold = OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT;
+	new_hmem_domain->devreg_copy_to_threshold = OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT;
+
 	*hmem_domain = new_hmem_domain;
 	return FI_SUCCESS;
 }

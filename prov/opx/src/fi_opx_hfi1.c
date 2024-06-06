@@ -3028,7 +3028,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 				struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
 				opx_copy_from_hmem(src_iface, src_device_id,
 						desc_mr->hmem_dev_reg_handle,
-						opx_ep->hmem_copy_buf, buf, immediate_total);
+						opx_ep->hmem_copy_buf, buf, immediate_total,
+						OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 				sbuf = opx_ep->hmem_copy_buf;
 			} else {
 				sbuf = (uint8_t *) buf;
@@ -3175,7 +3176,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	if (src_iface != FI_HMEM_SYSTEM && immediate_total) {
 		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
 		opx_copy_from_hmem(src_iface, src_device_id, desc_mr->hmem_dev_reg_handle,
-				opx_ep->hmem_copy_buf, buf, immediate_total);
+				opx_ep->hmem_copy_buf, buf, immediate_total,
+				OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 		sbuf = opx_ep->hmem_copy_buf;
 	} else {
 		sbuf = (uint8_t *) buf;
@@ -3260,9 +3262,9 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		/* desc_mr will only be referenced if it is non-null */
 		uint64_t handle_or_not = desc_mr ? desc_mr->hmem_dev_reg_handle : OPX_HMEM_NO_HANDLE;
 
-		OPX_HMEM_COPY_FROM(align_tmp.immediate_byte, sbuf_end,
-				   (immediate_end_block_count << 6), handle_or_not,
-				   src_iface, src_device_id);
+		opx_copy_from_hmem(src_iface, src_device_id,  handle_or_not,
+				align_tmp.immediate_byte, sbuf_end, (immediate_end_block_count << 6),
+				OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 
 		scb_payload = (uint64_t *)FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 		fi_opx_copy_scb(scb_payload, align_tmp.immediate_qw);

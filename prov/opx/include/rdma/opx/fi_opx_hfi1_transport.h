@@ -677,7 +677,8 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
 
 		if (iface != FI_HMEM_SYSTEM) {
-			opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf, buf, len);
+			opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf,
+						buf, len, OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
 			buf = opx_ep->hmem_copy_buf;
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.intranode
 							.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -744,7 +745,8 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
 
 	if (iface != FI_HMEM_SYSTEM) {
-		opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf, buf, len);
+		opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf,
+					buf, len, OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
 		buf = opx_ep->hmem_copy_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
 						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -958,7 +960,8 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 			for (int i = 0; i < niov; ++i) {
 				opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle,
 						   &opx_ep->hmem_copy_buf[iov_total_len],
-						   iov[i].iov_base, iov[i].iov_len);
+						   iov[i].iov_base, iov[i].iov_len,
+						   OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 				iov_total_len += iov[i].iov_len;
 			}
 
@@ -1066,7 +1069,8 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
 		for (int i = 0; i < niov; ++i) {
 			opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, &opx_ep->hmem_copy_buf[iov_total_len],
-						iov[i].iov_base, iov[i].iov_len);
+						iov[i].iov_base, iov[i].iov_len,
+						OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 			iov_total_len += iov[i].iov_len;
 		}
 
@@ -1198,7 +1202,8 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 
 	if (iface != FI_HMEM_SYSTEM) {
 		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
-		opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, opx_ep->hmem_copy_buf, buf, len);
+		opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, opx_ep->hmem_copy_buf,
+					buf, len, OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 		buf = opx_ep->hmem_copy_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.intranode
 						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -1517,7 +1522,8 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 
 	if (iface != FI_HMEM_SYSTEM) {
 		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
-		opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, opx_ep->hmem_copy_buf, buf, len);
+		opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, opx_ep->hmem_copy_buf,
+					buf, len, OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 		buf = opx_ep->hmem_copy_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
 						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -1753,7 +1759,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first (struct fi_opx_ep *opx_ep,
 	   MP Eager Nth packets. */
 	if (iface != FI_HMEM_SYSTEM) {
 		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
-		opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, hmem_bounce_buf, *buf, payload_bytes_total);
+		opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, hmem_bounce_buf,
+					*buf, payload_bytes_total, OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 		*buf = hmem_bounce_buf;
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
 						.kind[FI_OPX_KIND_TAG]

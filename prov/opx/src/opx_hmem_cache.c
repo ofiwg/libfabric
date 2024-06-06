@@ -85,8 +85,8 @@
  *
  */
 
-#define OPX_HMEM_CACHE_MAX_COUNT 128
-#define OPX_HMEM_CACHE_MAX_SIZE  32768
+#define OPX_HMEM_CACHE_MAX_COUNT 2048
+#define OPX_HMEM_CACHE_MAX_SIZE  134217728
 
 #ifndef NDEBUG
 #define OPX_DEBUG_EXIT(entryp)								\

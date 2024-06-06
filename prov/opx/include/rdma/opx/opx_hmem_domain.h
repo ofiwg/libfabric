@@ -34,11 +34,17 @@
 #define _FI_PROV_OPX_HMEM_DOMAIN_H_
 
 #include "rdma/fi_domain.h"
+#include "rdma/opx/fi_opx_hfi1_packet.h"
 
 #include "ofi_util.h"
 #include "ofi_mr.h"
 
 #define OPX_HMEM_NO_LOCK_ON_CLEANUP (0)
+
+#define OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT	(4096)
+#define OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT	(FI_OPX_HFI1_PACKET_MTU)
+#define OPX_HMEM_DEV_REG_THRESHOLD_MAX		(FI_OPX_HFI1_PACKET_MTU)
+#define OPX_HMEM_DEV_REG_THRESHOLD_MIN		(0)
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,6 +59,8 @@ struct opx_hmem_domain {
 	struct ofi_mr_cache	*hmem_cache;
 	struct fi_opx_domain	*opx_domain;
 	struct dlist_entry	list_entry; /* linked to hmem_domain_list */
+	uint32_t		devreg_copy_from_threshold;
+	uint32_t		devreg_copy_to_threshold;
 };
 
 int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked);
