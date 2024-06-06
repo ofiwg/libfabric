@@ -391,7 +391,8 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 		assert(efa_rdm_ep_get_peer(ep, pkt_entry->addr) == peer);
 
 		qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
-		if (pkt_entry->ope->fi_flags & FI_REMOTE_CQ_DATA)
+		if ((pkt_entry->ope->fi_flags & FI_REMOTE_CQ_DATA) &&
+		    (pkt_entry->flags & EFA_RDM_PKE_SEND_NO_HDR))
 			ibv_wr_send_imm(qp->ibv_qp_ex, pkt_entry->ope->cq_entry.data);
 		else
 			ibv_wr_send(qp->ibv_qp_ex);
