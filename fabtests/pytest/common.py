@@ -226,6 +226,49 @@ def check_returncode_list(returncode_list, strict):
         pytest.skip(reason)
 
 
+class WaitableProcess:
+    def __init__(self, process, timeout, output_file):
+        self.process = process
+        self._returncode = None
+        self.timeout = timeout
+        self.output_file = output_file
+        self._complete = False
+        self._output = ""
+
+    def wait(self, timeout=None):
+        if self._complete:
+            return
+
+        exception = None
+        try:
+            self._output, _ = self.process.communicate(timeout=timeout or self.timeout)
+        except Exception as e:
+            exception = e
+            self.process.terminate()
+
+        if (self.output_file):
+            self.output_file.close()
+
+        self._returncode = self.process.returncode
+        self._complete = True
+
+        if exception:
+            raise exception
+
+    @property
+    def output(self):
+        if self.output_file:
+            with open(self.output_file.name, "r") as f:
+                self._output = f.read()
+
+        return self._output
+
+    @property
+    def returncode(self):
+        if not self._complete:
+            self.wait()
+        return self._returncode
+
 class UnitTest:
 
     def __init__(self, cmdline_args, base_command, is_negative=False, failing_warn_msgs=None):
@@ -428,46 +471,55 @@ class ClientServerTest:
 
         return command, additional_environment
 
-    def _run_client_command(self, server_process, client_command, client_output_file=None,
+    def _run_client_command(self, server_process, client_command, output_filename=None,
                             run_client_asynchronously=False):
 
+        if not output_filename:
+            output_file = open(NamedTemporaryFile(prefix="client.out.").name, "w")
+        else:
+            output_file = open(output_filename, "w")
+
         if server_process.poll():
-            if client_output_file:
-                with open(client_output_file, "w") as f:
-                    f.write("")
+            output_file.write("")
+            output_file.close()
             raise RuntimeError("Server has terminated")
 
         print("")
         print("client_command: " + client_command)
 
-        process = Popen(client_command, stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT, shell=True, universal_newlines=True)
+        result = WaitableProcess(
+            Popen(
+                client_command,
+                stdout=output_file,
+                stderr=output_file,
+                shell=True,
+                universal_newlines=True,
+            ),
+            self._timeout,
+            output_file,
+        )
+
         if run_client_asynchronously:
-            return process
+            return result
 
         client_timed_out = False
-        output = ""
         try:
-            output, _ = process.communicate(timeout=self._timeout)
-            if client_output_file:
-                with open(client_output_file, "w") as f:
-                    f.write(output)
+            result.wait()
         except TimeoutExpired:
             client_timed_out = True
-            process.terminate()
 
-        if has_ssh_connection_err_msg(output):
+        if has_ssh_connection_err_msg(result.output):
             print("client encountered ssh connection issue!")
             raise SshConnectionError()
 
         print("client_stdout:")
-        print(output)
-        print(f"client returncode: {process.returncode}")
+        print(result.output)
+        print(f"client returncode: {result.returncode}")
 
         if client_timed_out:
             raise RuntimeError("Client timed out")
 
-        return process
+        return result
 
     @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=SERVER_RESTART_DELAY_MS)
     def run(self):
@@ -591,11 +643,8 @@ class MultinodeTest(ClientServerTest):
         if self._run_client_asynchronously:
             for i in range(self.numclient):
                 try:
-                    output, _ = client_process_list[i].communicate(timeout=self._timeout)
-                    with open(client_outfile_list[i], "w") as f:
-                        f.write(output)
+                    client_process_list[i].wait()
                 except TimeoutExpired:
-                    client_process_list[i].terminate()
                     client_timed_out = True
 
         print("")
@@ -607,7 +656,7 @@ class MultinodeTest(ClientServerTest):
         for i in range(self.numclient):
             print("client_{}_command: ".format(i) + self._client_base_command_list[i])
             print("client_{}_stdout:".format(i))
-            print(open(client_outfile_list[i]).read())
+            print(client_process_list[i].output)
             os.unlink(client_outfile_list[i])
 
         if server_timed_out:
