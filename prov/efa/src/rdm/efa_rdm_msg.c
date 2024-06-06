@@ -765,7 +765,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 	int ret;
 	int pkt_type;
 
-	if ((*pkt_entry_ptr)->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER) {
+	if ((*pkt_entry_ptr)->flags == EFA_RDM_PKE_USER_RECV) {
 		/* If a pkt_entry is constructred from user supplied buffer,
 		 * the endpoint must be in zero copy receive mode.
 		 */
@@ -776,6 +776,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 		 * pkt_entry->ope right away.
 		 */
 		assert((*pkt_entry_ptr)->ope);
+		efa_rdm_pke_rtm_update_rxe(*pkt_entry_ptr, (*pkt_entry_ptr)->ope);
 		return (*pkt_entry_ptr)->ope;
 	}
 

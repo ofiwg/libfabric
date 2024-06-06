@@ -151,8 +151,6 @@ void efa_rdm_pke_release_rx(struct efa_rdm_pke *pkt_entry)
 	assert(pkt_entry->next == NULL);
 	ep = pkt_entry->ep;
 	assert(ep);
-	if (ep->use_zcpy_rx && pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER)
-		return;
 
 	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL) {
 		ep->efa_rx_pkts_to_post++;

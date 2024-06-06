@@ -353,7 +353,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 		return;
 	}
 
-	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER) {
+	if (pkt_entry->flags & EFA_RDM_PKE_USER_RECV) {
 		assert(pkt_entry->ope);
 		zcpy_rxe = pkt_entry->ope;
 	}
