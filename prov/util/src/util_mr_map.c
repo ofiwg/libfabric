@@ -280,6 +280,11 @@ void ofi_mr_update_attr(uint32_t user_version, uint64_t caps,
 		cur_abi_attr->device.reserved = 0;
 		cur_abi_attr->hmem_data = NULL;
 	}
+
+	if (FI_VERSION_GE(user_version, FI_VERSION(1, 22)))
+		cur_abi_attr->page_size = user_attr->page_size;
+	else
+		cur_abi_attr->page_size = 0;
 }
 
 int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,

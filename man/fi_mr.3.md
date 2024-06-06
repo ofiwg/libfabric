@@ -593,6 +593,7 @@ struct fi_mr_attr {
         int            synapseai;
     } device;
     void               *hmem_data;
+    size_t             page_size;
 };
 
 struct fi_mr_auth_key {
@@ -787,6 +788,26 @@ field is determined by the value specified through iface.
 
 ## hmem_data
 The hmem_data field is reserved for future use and must be null.
+
+## page_size
+Page size allows applications to optionally provide a hint at what the
+optimal page size is for the an MR allocation. Typically, providers can
+select the optimal page size. In cases where VA range has zero pages
+backing it, which is supported with FI_MR_ALLOCATED unset, the provider
+may not know the optimal page size during registration. Rather than use
+a less efficient page size, this attribute allows applications to specify
+the page size to be used.
+
+If page size is zero, provider will select the page size.
+
+If non-zero, page size must be supported by OS. If a specific page size
+is specified for a memory region during creation, all pages later
+associated with the region must be of the given size. Attaching a memory
+page of a different size to a region may result in failed transfers to
+or from the region.
+
+Providers may choose to ignore page size. This will result in a provider
+selected page size always being used.
 
 ## fi_hmem_ze_device
 

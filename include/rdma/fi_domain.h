@@ -175,6 +175,7 @@ struct fi_mr_attr {
 		int		synapseai;
 	} device;
 	void			*hmem_data;
+	size_t			page_size;
 };
 
 struct fi_mr_modify {
