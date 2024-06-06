@@ -267,6 +267,117 @@ fi_addr_t efa_rdm_cq_determine_addr_from_ibv_cq(struct ibv_cq_ex *ibv_cqx, enum 
 #endif
 
 /**
+ * @brief handle a received packet
+ *
+ * @param	ep[in,out]		endpoint
+ * @param	pkt_entry[in,out]	received packet, will be released by this function
+ */
+static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct efa_rdm_pke *pkt_entry, struct efa_rdm_ep *ep)
+{
+	int pkt_type;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_rdm_ope *zcpy_rxe = NULL;
+	struct efa_av *efa_av = ep->base_ep.av;
+	uint32_t imm_data = 0;
+	bool has_imm_data = false;
+	struct ibv_cq_ex *ibv_cq_ex = ibv_cq->ibv_cq_ex;
+
+	assert(ep->efa_rx_pkts_posted > 0);
+	ep->efa_rx_pkts_posted--;
+
+	pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(ibv_cq_ex),
+					ibv_wc_read_src_qp(ibv_cq_ex), pkt_entry);
+
+	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
+		pkt_entry->addr = efa_rdm_cq_determine_addr_from_ibv_cq(ibv_cq_ex, ibv_cq->ibv_cq_ex_type);
+	}
+
+	pkt_entry->pkt_size = ibv_wc_read_byte_len(ibv_cq_ex);
+	assert(pkt_entry->pkt_size > 0);
+	if (ibv_wc_read_wc_flags(ibv_cq_ex) & IBV_WC_WITH_IMM) {
+		has_imm_data = true;
+		imm_data = ibv_wc_read_imm_data(ibv_cq_ex);
+	}
+
+	/*
+	 * Ignore packet if peer address cannot be determined. This ususally happens if
+	 * we had prior communication with the peer, but
+	 * application called fi_av_remove() to remove the address
+	 * from address vector.
+	 */
+	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
+		EFA_WARN(FI_LOG_CQ,
+			"Warning: ignoring a received packet from a removed address. packet type: %" PRIu8
+			", packet flags: %x\n",
+			efa_rdm_pke_get_base_hdr(pkt_entry)->type,
+			efa_rdm_pke_get_base_hdr(pkt_entry)->flags);
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
+#if ENABLE_DEBUG
+	if (!ep->use_zcpy_rx) {
+		dlist_remove(&pkt_entry->dbg_entry);
+		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
+	}
+#ifdef ENABLE_EFA_RDM_PKE_DUMP
+	efa_rdm_pke_print(pkt_entry, "Received");
+#endif
+#endif
+	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
+	if (peer->is_local) {
+		/*
+		 * This happens when the peer is on same instance, but chose to
+		 * use EFA device to communicate with me. In this case, we respect
+		 * that and will not use shm with the peer.
+		 * TODO: decide whether to use shm through handshake packet.
+		 */
+		peer->is_local = 0;
+	}
+
+	efa_rdm_ep_post_handshake_or_queue(ep, peer);
+
+	/**
+	 * At this time, receiver already got the handshake from sender and expects
+	 * pkts with no hdr if both sides support this feature.
+	 */
+	if (efa_both_support_zero_hdr_data_transfer(ep, peer)) {
+		efa_rdm_pke_proc_received_no_hdr(pkt_entry, has_imm_data, imm_data);
+		return;
+	}
+
+	/* Proc receives with pkt hdrs */
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
+	pkt_type = base_hdr->type;
+	if (pkt_type >= EFA_RDM_EXTRA_REQ_PKT_END) {
+		EFA_WARN(FI_LOG_CQ,
+			"Peer %d is requesting feature %d, which this EP does not support.\n",
+			(int)pkt_entry->addr, base_hdr->type);
+
+		assert(0 && "invalid REQ packet type");
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
+	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER) {
+		assert(pkt_entry->ope);
+		zcpy_rxe = pkt_entry->ope;
+	}
+
+	efa_rdm_pke_proc_received(pkt_entry);
+
+	if (zcpy_rxe && pkt_type != EFA_RDM_EAGER_MSGRTM_PKT) {
+		/* user buffer was not matched with a message,
+		 * therefore reposting the buffer */
+		efa_rdm_ep_post_user_recv_buf(ep, zcpy_rxe, 0);
+	}
+}
+
+
+/**
  * @brief Get the vendor error code for an endpoint's CQ
  *
  * This function is essentially a wrapper for `ibv_wc_read_vendor_err()`; making
@@ -328,7 +439,6 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	 * EFA expects .comp_mask = 0, or otherwise returns EINVAL.
 	 */
 	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
-	struct efa_av *efa_av;
 	struct efa_rdm_pke *pkt_entry;
 	ssize_t err;
 	int opcode;
@@ -383,19 +493,9 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			efa_rdm_pke_handle_send_completion(pkt_entry);
 			break;
 		case IBV_WC_RECV:
-			efa_av = ep->base_ep.av;
 			if (!dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
 				dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
-			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(ibv_cq->ibv_cq_ex),
-								ibv_wc_read_src_qp(ibv_cq->ibv_cq_ex), pkt_entry);
-
-			if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
-				pkt_entry->addr = efa_rdm_cq_determine_addr_from_ibv_cq(ibv_cq->ibv_cq_ex, ibv_cq->ibv_cq_ex_type);
-			}
-
-			pkt_entry->pkt_size = ibv_wc_read_byte_len(ibv_cq->ibv_cq_ex);
-			assert(pkt_entry->pkt_size > 0);
-			efa_rdm_pke_handle_recv_completion(pkt_entry, ibv_wc_read_imm_data(ibv_cq->ibv_cq_ex));
+			efa_rdm_cq_handle_recv_completion(ibv_cq, pkt_entry, ep);
 #if ENABLE_DEBUG
 			ep->recv_comps++;
 #endif
