@@ -102,7 +102,7 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 #define FI_OPX_MSG_SPECIALIZED_FUNC(LOCK,AV,CAPS,RELIABILITY)			\
 	FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK,AV,CAPS,RELIABILITY)
 
-#define FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK,AV,CAPS,RELIABILITY)		\
+#define FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK,AV,CAPS,RELIABILITY)			\
 	static inline ssize_t							\
 	fi_opx_send_ ## LOCK ## _ ## AV ## _ ## CAPS ## _ ## RELIABILITY	\
 		(struct fid_ep *ep, const void *buf, size_t len,		\
@@ -1024,7 +1024,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
-						recv_buf, hdr->inject.app_data_u8, send_len);
+						recv_buf, hdr->inject.app_data_u8, send_len,
+						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(is_intranode, opx_ep->debug_counters.hmem.intranode
 							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT)
 								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -1215,7 +1216,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
-						context->buf, opx_ep->hmem_copy_buf, send_len);
+						context->buf, opx_ep->hmem_copy_buf, send_len,
+						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(is_intranode, opx_ep->debug_counters.hmem.intranode
 							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_EAGER)
 								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
@@ -1346,7 +1348,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
-						recv_buf, opx_ep->hmem_copy_buf, packet_payload_len);
+						recv_buf, opx_ep->hmem_copy_buf, packet_payload_len,
+						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 
 				/* MP Eager sends are never intranode */
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
@@ -1480,7 +1483,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
-						recv_buf, opx_ep->hmem_copy_buf, send_len);
+						recv_buf, opx_ep->hmem_copy_buf, send_len,
+						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 			}
 			/* fi_opx_hfi1_dump_packet_hdr((union fi_opx_hfi1_packet_hdr *)hdr, __func__, __LINE__); */
 
@@ -1762,7 +1766,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 								   (immediate_block_count * sizeof(union cacheline));
 					if (immediate_total) {
 						opx_copy_to_hmem(rbuf_iface, rbuf_device, hmem_handle,
-							recv_buf, opx_ep->hmem_copy_buf, immediate_total);
+							recv_buf, opx_ep->hmem_copy_buf, immediate_total,
+							OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 					}
 				}
 
@@ -1779,7 +1784,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 					} else {
 						opx_copy_to_hmem(rbuf_iface, rbuf_device, hmem_handle, rbuf_start,
 							immediate_block[immediate_block_count].qw,
-							(immediate_end_block_count << 6));
+							(immediate_end_block_count << 6),
+							OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 					}
 				}
 
@@ -2131,7 +2137,8 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 			assert(hmem_info->iface > FI_HMEM_SYSTEM);
 			opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
-					rbuf_qws, sbuf_qws, bytes);
+					rbuf_qws, sbuf_qws, bytes,
+					OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 		} else
 #endif
 		{
@@ -2193,7 +2200,8 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				assert(hmem_info->iface > FI_HMEM_SYSTEM);
 				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
-						rbuf_qws, sbuf_qws, bytes);
+						rbuf_qws, sbuf_qws, bytes,
+						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 			} else {
 				memcpy(rbuf_qws, sbuf_qws, bytes);
 			}

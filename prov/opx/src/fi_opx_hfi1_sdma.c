@@ -226,7 +226,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 		} else {
 			uint64_t first_qw;
 			opx_copy_from_hmem(hmem_iface, hmem_device, OPX_HMEM_NO_HANDLE, &first_qw,
-					iov_ptr[1].iov_base, sizeof(uint64_t));
+					iov_ptr[1].iov_base, sizeof(uint64_t), OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
 			fprintf(stderr, "(%d) [%d] First 8 bytes of %p == %#16.16lX\n",
 				pid, req_num, iov_ptr[1].iov_base, first_qw);
 		}
