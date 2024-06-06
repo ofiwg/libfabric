@@ -96,7 +96,6 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 					  int data_size)
 {
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
-	int ret;
 
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
 
@@ -128,10 +127,9 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 		}
 	}
 
-	ret = efa_rdm_pke_init_payload_from_ope(pkt_entry, txe,
+	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe,
 						efa_rdm_pke_get_req_hdr_size(pkt_entry),
 						segment_offset, data_size);
-	return ret;
 }
 
 /**
@@ -516,6 +514,23 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 }
 
 /**
+ * @brief construct a eager msgrtm pkt without hdr
+ *
+ * @param[in,out]	pkt_entry	pkt to be initialized
+ * @param[in]		txe		TX entry
+ */
+static inline
+ssize_t efa_rdm_pke_init_eager_msgrtm_zero_hdr(struct efa_rdm_pke *pkt_entry,
+				      struct efa_rdm_ope *txe)
+{
+	pkt_entry->ope = txe;
+	pkt_entry->addr = txe->addr;
+
+	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe,
+						0, 0, txe->total_len);
+}
+
+/**
  * @brief initialzie a EFA_RDM_EAGER_MSGRTM pacekt entry
  *
  * @param[in,out]	pkt_entry	EFA_RDM_EAGER_MSGRTM to be initialized
@@ -526,7 +541,10 @@ ssize_t efa_rdm_pke_init_eager_msgrtm(struct efa_rdm_pke *pkt_entry,
 {
 	int ret;
 
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry,
+	if (pkt_entry->flags & EFA_RDM_PKE_SEND_NO_HDR)
+		ret = efa_rdm_pke_init_eager_msgrtm_zero_hdr(pkt_entry, txe);
+	else
+		ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry,
 						EFA_RDM_EAGER_MSGRTM_PKT,
 						txe, 0, -1);
 	if (ret)

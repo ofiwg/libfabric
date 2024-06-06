@@ -239,6 +239,22 @@ bool efa_rdm_peer_need_connid(struct efa_rdm_peer *peer)
 	       (peer->extra_info[0] & EFA_RDM_EXTRA_REQUEST_CONNID_HEADER);
 }
 
+/**
+ * @brief determine if both peers support zero hdr data transfer
+ *
+ * This function can only return true if a handshake packet has already been
+ * exchanged, and the peer set the EFA_RDM_EXTRA_FEATURE_ZERO_HEADER_DATA_TRANSFER flag.
+ * @params[in]		ep		Endpoint for communication with peer
+ * @params[in]		peer		An EFA peer
+ * @return		boolean		both self and peer support RDMA read
+ */
+static inline
+bool efa_both_support_zero_hdr_data_transfer(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
+{
+	return ((ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_ZERO_HEADER_DATA_TRANSFER) &&
+		(peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_ZERO_HEADER_DATA_TRANSFER));
+}
+
 struct efa_conn;
 
 void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn);

@@ -50,6 +50,13 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 {
 	int ret = 0;
 
+
+	if (efa_both_support_zero_hdr_data_transfer(pkt_entry->ep, ope->peer)) {
+		/* zero hdr transfer only happens for eager msg (non-tagged) pkt */
+		assert(pkt_type == EFA_RDM_EAGER_MSGRTM_PKT);
+		pkt_entry->flags |= EFA_RDM_PKE_SEND_NO_HDR;
+	}
+
 	/* Only 3 categories of packets has data_size and data_offset:
 	 * data packet, medium req and runtread req.
 	 *
@@ -541,6 +548,11 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		EFA_WARN(FI_LOG_CQ, "ignoring send completion of a packet to a removed peer.\n");
 		efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
 		efa_rdm_pke_release_tx(pkt_entry);
+		return;
+	}
+
+	if (pkt_entry->flags & EFA_RDM_PKE_SEND_NO_HDR) {
+		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
 		return;
 	}
 
