@@ -41,7 +41,7 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 					  size_t data_size)
 {
 	int tx_iov_index, ret;
-	bool p2p_available;
+	bool efa_can_access_memory;
 	size_t tx_iov_offset, copied;
 	struct efa_mr *iov_mr;
 
@@ -71,9 +71,16 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 		ret = efa_rdm_ep_use_p2p(pke->ep, iov_mr);
 		if (ret < 0)
 			return ret;
-		p2p_available = ret;
+		efa_can_access_memory = ret;
+	/**
+	 * efa can directly access memory if the buffer is host memory
+	 * and the pkt size (hdr + data) is within inline buf size.
+	 */
+	} else if (!efa_mr_is_hmem(iov_mr) &&
+	           payload_offset + data_size <= efa_rdm_ep_domain(pke->ep)->device->efa_attr.inline_buf_size) {
+		efa_can_access_memory = true;
 	} else {
-		p2p_available = false;
+		efa_can_access_memory = false;
 	}
 
 	/*
@@ -82,7 +89,7 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 	 * 2. data to be send is in 1 iov, because device only support 2 iov, and we use
 	 *    1st iov for header.
 	 */
-	if (p2p_available &&
+	if (efa_can_access_memory &&
 	    (tx_iov_offset + data_size <= ope->iov[tx_iov_index].iov_len)) {
 		pke->payload = (char *)ope->iov[tx_iov_index].iov_base + tx_iov_offset;
 		pke->payload_size = data_size;
