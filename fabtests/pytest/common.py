@@ -495,7 +495,7 @@ class ClientServerTest:
                 shell=True,
                 universal_newlines=True,
             ),
-            self._timeout,
+            self._timeout + SERVER_RESTART_DELAY_MS/1000,
             output_file,
         )
 
@@ -554,7 +554,7 @@ class ClientServerTest:
         server_timed_out = False
         try:
             server_output, _ = server_process.communicate(
-                timeout=self._timeout)
+                timeout=self._timeout + SERVER_RESTART_DELAY_MS/1000)
         except TimeoutExpired:
             server_process.terminate()
             server_timed_out = True
