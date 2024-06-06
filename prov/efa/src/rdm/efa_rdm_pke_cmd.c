@@ -50,6 +50,13 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 {
 	int ret = 0;
 
+
+	if (efa_both_support_zero_hdr_data_transfer(pkt_entry->ep, ope->peer)) {
+		/* zero hdr transfer only happens for eager msg (non-tagged) pkt */
+		assert(pkt_type == EFA_RDM_EAGER_MSGRTM_PKT);
+		pkt_entry->flags |= EFA_RDM_PKE_SEND_TO_USER_RECV_QP;
+	}
+
 	/* Only 3 categories of packets has data_size and data_offset:
 	 * data packet, medium req and runtread req.
 	 *
@@ -226,10 +233,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
  *
  * @param[in,out]	pkt_entry	packet entry
  */
-void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type)
 {
-	int pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
-
 	switch (pkt_type) {
 	case EFA_RDM_READRSP_PKT:
 		efa_rdm_pke_handle_readrsp_sent(pkt_entry);
@@ -407,7 +412,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 	switch (pkt_entry->ope->type) {
 	case EFA_RDM_TXE:
 		txe = pkt_entry->ope;
-		if (efa_rdm_pke_get_base_hdr(pkt_entry)->type == EFA_RDM_HANDSHAKE_PKT) {
+		if (!(pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) && efa_rdm_pke_get_base_hdr(pkt_entry)->type == EFA_RDM_HANDSHAKE_PKT) {
 			if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
 				/*
 				 * handshake should always be queued for RNR
@@ -544,6 +549,15 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
+	/* These pkts are eager pkts withour hdrs */
+	if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
+		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
+		efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
+		efa_rdm_pke_release_tx(pkt_entry);
+		return;
+	}
+
+	/* Start handling pkts with hdrs */
 	switch (efa_rdm_pke_get_base_hdr(pkt_entry)->type) {
 	case EFA_RDM_HANDSHAKE_PKT:
 		efa_rdm_txe_release(pkt_entry->ope);

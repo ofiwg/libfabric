@@ -1747,7 +1747,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 
 	ope->peer->flags |= EFA_RDM_PEER_REQ_SENT;
 	for (i = 0; i < pkt_entry_cnt; ++i)
-		efa_rdm_pke_handle_sent(pkt_entry_vec[i]);
+		efa_rdm_pke_handle_sent(pkt_entry_vec[i], pkt_type);
 
 	return FI_SUCCESS;
 

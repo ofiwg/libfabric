@@ -418,8 +418,14 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 			ibv_wr_set_sge_list(ep->base_ep.qp->ibv_qp_ex, iov_cnt, sg_list);
 		}
 
-		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
+		if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
+			assert(peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP);
+			ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
+				   peer->user_recv_qp.qpn, peer->user_recv_qp.qkey);
+		} else {
+			ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
+		}
 
 #if ENABLE_DEBUG
 		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
