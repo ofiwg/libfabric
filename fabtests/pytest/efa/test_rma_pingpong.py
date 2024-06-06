@@ -31,7 +31,7 @@ def test_rma_pingpong_range(cmdline_args, operation_type, completion_semantic, m
 
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["writedata", "write"])
-def test_rma_pingpong_range_no_inject(cmdline_args, operation_type, completion_semantic, inject_message_size):
+def test_rma_pingpong_range_no_inject(cmdline_args, operation_type, completion_semantic, inject_message_size, memory_type):
     if memory_type != "host_to_host" and operation_type == "write":
         pytest.skip("no hmem memory support for pingpong_rma write test")
     command = "fi_rma_pingpong -e rdm -j 0"
