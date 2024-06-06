@@ -677,12 +677,16 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 		 */
 		dlist_remove(&pkt_entry->entry);
 
-		base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-		if (base_hdr->type == EFA_RDM_RMA_CONTEXT_PKT) {
-			assert(((struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata)->context_type == EFA_RDM_RDMA_WRITE_CONTEXT);
-			ret = efa_rdm_pke_write(pkt_entry);
-		} else {
+		if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
 			ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
+		} else {
+			base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
+			if (base_hdr->type == EFA_RDM_RMA_CONTEXT_PKT) {
+				assert(((struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata)->context_type == EFA_RDM_RDMA_WRITE_CONTEXT);
+				ret = efa_rdm_pke_write(pkt_entry);
+			} else {
+				ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
+			}
 		}
 
 		if (ret) {

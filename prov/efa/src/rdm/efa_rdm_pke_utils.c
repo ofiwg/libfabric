@@ -45,8 +45,6 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 	size_t tx_iov_offset, copied;
 	struct efa_mr *iov_mr;
 
-	assert(payload_offset > 0);
-
 	pke->ope = ope;
 	if (data_size == 0) {
 		pke->pkt_size = payload_offset;
