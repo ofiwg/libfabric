@@ -167,8 +167,10 @@ void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
 	rxe->addr = pkt_entry->addr;
 	rxe->msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
 	rxe->total_len = efa_rdm_pke_get_rtm_msg_length(pkt_entry);
-	rxe->tag = efa_rdm_pke_get_rtm_tag(pkt_entry);
-	rxe->cq_entry.tag = rxe->tag;
+	if (rxe->op == ofi_op_tagged) {
+		rxe->tag = efa_rdm_pke_get_rtm_tag(pkt_entry);
+		rxe->cq_entry.tag = rxe->tag;
+	}
 }
 
 /**

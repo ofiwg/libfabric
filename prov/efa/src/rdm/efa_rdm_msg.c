@@ -701,8 +701,6 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
-	if (op == ofi_op_tagged)
-		rxe->tag = efa_rdm_pke_get_rtm_tag(unexp_pkt_entry);
 	rxe->internal_flags = 0;
 	rxe->state = EFA_RDM_RXE_UNEXP;
 	rxe->unexp_pkt = unexp_pkt_entry;
