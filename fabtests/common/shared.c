@@ -2195,16 +2195,28 @@ ssize_t ft_tx_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote,
 }
 
 ssize_t ft_post_inject_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
-			   void *op_buf, uint64_t op_tag)
+			   void *op_buf, uint64_t op_tag, uint64_t data)
 {
 	if (hints->caps & FI_TAGGED) {
-		FT_POST(fi_tinject, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"inject", ep, op_buf, size + ft_tx_prefix_size(),
-			fi_addr, op_tag);
+		if (data != NO_CQ_DATA) {
+			FT_POST(fi_tinjectdata, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+				"inject", ep, op_buf, size + ft_tx_prefix_size(),
+				data, fi_addr, op_tag);
+		} else {
+			FT_POST(fi_tinject, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+				"inject", ep, op_buf, size + ft_tx_prefix_size(),
+				fi_addr, op_tag);
+		}
 	} else {
-		FT_POST(fi_inject, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"inject", ep, op_buf, size + ft_tx_prefix_size(),
-			fi_addr);
+		if (data != NO_CQ_DATA) {
+			FT_POST(fi_injectdata, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+				"inject", ep, op_buf, size + ft_tx_prefix_size(),
+				data, fi_addr);
+		} else {
+			FT_POST(fi_inject, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+				"inject", ep, op_buf, size + ft_tx_prefix_size(),
+				fi_addr);
+		}
 	}
 
 	tx_cq_cntr++;
@@ -2213,7 +2225,7 @@ ssize_t ft_post_inject_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
 
 ssize_t ft_post_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 {
-	return ft_post_inject_buf(ep, fi_addr, size, tx_buf, tx_seq);
+	return ft_post_inject_buf(ep, fi_addr, size, tx_buf, tx_seq, NO_CQ_DATA);
 }
 
 ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)

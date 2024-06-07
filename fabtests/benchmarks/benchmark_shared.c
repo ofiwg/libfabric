@@ -307,7 +307,7 @@ int bandwidth(void)
 			if (opts.transfer_size <= inject_size) {
 				ret = ft_post_inject_buf(ep, remote_fi_addr,
 						opts.transfer_size,
-						tx_ctx_arr[j].buf, tx_seq);
+						tx_ctx_arr[j].buf, tx_seq, remote_cq_data);
 			} else {
 				ret = ft_post_tx_buf(ep, remote_fi_addr,
 						opts.transfer_size, remote_cq_data,
