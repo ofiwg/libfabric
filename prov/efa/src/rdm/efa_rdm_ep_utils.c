@@ -241,12 +241,11 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	assert(rx_iov_index < rxe->iov_count);
 	assert(rx_iov_offset < rxe->iov[rx_iov_index].iov_len);
 
-	if (rx_iov_index > 0) {
-		assert(rxe->iov_count - rx_iov_index == 1);
-		pkt_entry->payload = (char *) rxe->iov[rx_iov_index].iov_base + rx_iov_offset;
-		pkt_entry->payload_mr = rxe->desc[rx_iov_index];
-		pkt_entry->payload_size = ofi_total_iov_len(&rxe->iov[rx_iov_index], rxe->iov_count - rx_iov_index) - rx_iov_offset;
-	}
+	pkt_entry->payload = (char *) rxe->iov[rx_iov_index].iov_base + rx_iov_offset;
+	pkt_entry->payload_mr = rxe->desc[rx_iov_index];
+	pkt_entry->payload_size = ofi_total_iov_len(&rxe->iov[rx_iov_index], rxe->iov_count - rx_iov_index) - rx_iov_offset;
+
+	EFA_INFO(FI_LOG_EP_DATA, "Constructed pkt_entry %p from rx entry %p, payload %p, payload size %lu\n", pkt_entry, rxe, pkt_entry->payload, pkt_entry->payload_size);
 
 	err = efa_rdm_pke_recvv(&pkt_entry, 1);
 	if (OFI_UNLIKELY(err)) {
@@ -466,6 +465,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 		/* This is the first time this packet encountered RNR,
 		 * we are NOT going to put the peer in backoff mode just yet.
 		 */
+		EFA_INFO(FI_LOG_EP_DATA, "Adding EFA_RDM_PKE_RNR_RETRANSMIT flags to pkt_entry %p\n", pkt_entry);
 		pkt_entry->flags |= EFA_RDM_PKE_RNR_RETRANSMIT;
 		peer->rnr_queued_pkt_cnt++;
 		return;
@@ -549,6 +549,7 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	EFA_INFO(FI_LOG_EP_DATA, "allocated tx pkt entry %p\n", pkt_entry);
 	if (OFI_UNLIKELY(!pkt_entry)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "PKE entries exhausted.\n");
 		return -FI_EAGAIN;
@@ -560,6 +561,7 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 
 	ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
 	if (OFI_UNLIKELY(ret)) {
+		EFA_WARN(FI_LOG_EP_CTRL, "handshake pkt %p send failed %ld.\n", pkt_entry, ret);
 		efa_rdm_pke_release_tx(pkt_entry);
 		return ret;
 	}
@@ -639,12 +641,18 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 		 */
 		dlist_remove(&pkt_entry->entry);
 
-		base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-		if (base_hdr->type == EFA_RDM_RMA_CONTEXT_PKT) {
-			assert(((struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata)->context_type == EFA_RDM_RDMA_WRITE_CONTEXT);
-			ret = efa_rdm_pke_write(pkt_entry);
-		} else {
+		if (pkt_entry->flags & EFA_RDM_PKE_SEND_NO_HDR) {
+			EFA_INFO(FI_LOG_EP_DATA, "reposting queued rnr pkt %p\n", pkt_entry);
 			ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
+		} else {
+			base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
+			if (base_hdr->type == EFA_RDM_RMA_CONTEXT_PKT) {
+				assert(((struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata)->context_type == EFA_RDM_RDMA_WRITE_CONTEXT);
+				ret = efa_rdm_pke_write(pkt_entry);
+			} else {
+				EFA_INFO(FI_LOG_EP_DATA, "reposting queued rnr pkt %p\n", pkt_entry);
+				ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
+			}
 		}
 
 		if (ret) {
@@ -830,7 +838,7 @@ void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 		 */
 		if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0) {
 			ep->efa_rx_pkts_to_post = 1;
-		} else if (ep->efa_rx_pkts_posted > 0 && ep->efa_rx_pkts_to_post > 0){
+		} else {
 			ep->efa_rx_pkts_to_post = 0;
 		}
 	} else {

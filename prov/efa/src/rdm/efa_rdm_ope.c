@@ -126,6 +126,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	dlist_foreach_container_safe(&txe->queued_pkts,
 				     struct efa_rdm_pke,
 				     pkt_entry, entry, tmp) {
+		EFA_INFO(FI_LOG_EP_DATA, "releasing tx pkt_entry %p from txe's queued rnr pkts\n", pkt_entry);
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
 
@@ -175,6 +176,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 		dlist_foreach_container_safe(&rxe->queued_pkts,
 					     struct efa_rdm_pke,
 					     pkt_entry, entry, tmp) {
+			EFA_INFO(FI_LOG_EP_DATA, "releasing tx pkt_entry %p from rxe's queued rnr pkts\n", pkt_entry);
 			efa_rdm_pke_release_tx(pkt_entry);
 		}
 		dlist_remove(&rxe->queued_rnr_entry);
@@ -586,8 +588,10 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_RNR) {
 		dlist_foreach_container_safe(&rxe->queued_pkts,
 					     struct efa_rdm_pke,
-					     pkt_entry, entry, tmp)
+					     pkt_entry, entry, tmp) {
+			EFA_INFO(FI_LOG_EP_DATA, "releasing tx pkt_entry %p from rxe's queued rnr pkts\n", pkt_entry);
 			efa_rdm_pke_release_tx(pkt_entry);
+		}
 		dlist_remove(&rxe->queued_rnr_entry);
 	}
 
@@ -692,8 +696,10 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 
 	dlist_foreach_container_safe(&txe->queued_pkts,
 				     struct efa_rdm_pke,
-				     pkt_entry, entry, tmp)
+				     pkt_entry, entry, tmp) {
+		EFA_INFO(FI_LOG_EP_DATA, "releasing tx pkt_entry %p from txe's queued rnr pkts\n", pkt_entry);
 		efa_rdm_pke_release_tx(pkt_entry);
+	}
 
 	err_entry.flags = txe->cq_entry.flags;
 	err_entry.op_context = txe->cq_entry.op_context;
@@ -1703,6 +1709,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	segment_offset = efa_rdm_pkt_type_contains_data(pkt_type) ? ope->bytes_sent : -1;
 	for (i = 0; i < pkt_entry_cnt; ++i) {
 		pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		EFA_INFO(FI_LOG_EP_DATA, "allocated tx pkt entry %p\n", pkt_entry_vec[i]);
 
 		if (OFI_UNLIKELY(!pkt_entry_vec[i])) {
 			err = -FI_EAGAIN;
@@ -1747,7 +1754,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 
 	ope->peer->flags |= EFA_RDM_PEER_REQ_SENT;
 	for (i = 0; i < pkt_entry_cnt; ++i)
-		efa_rdm_pke_handle_sent(pkt_entry_vec[i]);
+		efa_rdm_pke_handle_sent(pkt_entry_vec[i], pkt_type);
 
 	return FI_SUCCESS;
 

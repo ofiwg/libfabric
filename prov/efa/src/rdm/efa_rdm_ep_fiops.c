@@ -400,12 +400,14 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 
 	/* User requests to turn off zcpy recv */
 	if (!efa_env.use_zcpy_rx) {
+		EFA_INFO(FI_LOG_EP_CTRL, "User disables zcpy rx via environment\n");
 		ep->use_zcpy_rx = false;
 		goto out;
 	}
 
 	/* Unsupported capabilities */
 	if (ep->base_ep.util_ep.caps & unsupported_caps) {
+		EFA_INFO(FI_LOG_EP_CTRL, "Unsupported capabilities, disable zcpy rx\n");
 		ep->use_zcpy_rx = false;
 		goto out;
 	}
@@ -417,6 +419,7 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 	if ((ep->base_ep.util_ep.caps & FI_RMA) && \
 		(!efa_device_support_rdma_read() || !efa_device_support_rdma_write())) {
 		ep->use_zcpy_rx = false;
+		EFA_INFO(FI_LOG_EP_CTRL, "FI_RMA is requested while rdma read or write is not available, disable zcpy rx\n");
 		goto out;
 	}
 
@@ -428,19 +431,23 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 	 */
 	if ((ep->base_ep.util_ep.caps & FI_RMA) && \
 		!efa_device_support_unsolicited_write_recv()) {
+		EFA_INFO(FI_LOG_EP_CTRL, "FI_RMA is requested while unsolicited write recv is not available, disable zcpy rx\n");
 		ep->use_zcpy_rx = false;
 		goto out;
 	}
 
 
 	/* Max msg size is too large, turn off zcpy recv */
-	if (ep->user_info->ep_attr->max_msg_size <= ep->mtu_size - ep->user_info->ep_attr->msg_prefix_size) {
+	if (ep->user_info->ep_attr->max_msg_size > ep->mtu_size - ep->user_info->ep_attr->msg_prefix_size) {
+		EFA_INFO(FI_LOG_EP_CTRL, "max_msg_size %lu is greater than the mtu size limit: %lu, turn off zcpy rx\n",
+			ep->user_info->ep_attr->max_msg_size, ep->mtu_size - ep->user_info->ep_attr->msg_prefix_size);
 		ep->use_zcpy_rx = false;
 		goto out;
 	}
 
 	/* If app needs sas ordering, turn off zcpy recv */
 	if (efa_rdm_ep_need_sas(ep)) {
+		EFA_INFO(FI_LOG_EP_CTRL, "FI_ORDER_SAS is requested, disable zcpy rx\n");
 		ep->use_zcpy_rx = false;
 		goto out;
 	}

@@ -276,6 +276,8 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(ibv_cq_ex),
 					ibv_wc_read_src_qp(ibv_cq_ex), pkt_entry);
 
+	EFA_INFO(FI_LOG_CQ, "Get recv completion for pkt_entry %p\n", pkt_entry);
+
 	/**
 	 * This should only happen before a handshake is made between receiver and sender,
 	 * and the pkt always have a hdr in this case.
@@ -363,6 +365,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	if (zcpy_rxe && pkt_type != EFA_RDM_EAGER_MSGRTM_PKT) {
 		/* user buffer was not matched with a message,
 		 * therefore reposting the buffer */
+		EFA_INFO(FI_LOG_EP_DATA, "reposting recv for rxe %p\n", zcpy_rxe);
 		efa_rdm_ep_post_user_recv_buf(ep, zcpy_rxe, 0);
 	}
 }

@@ -109,6 +109,7 @@ void *efa_rdm_pke_get_req_raw_addr(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_base_hdr *base_hdr;
 	struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
 
+	assert(!(pkt_entry->flags & EFA_RDM_PKE_SEND_NO_HDR));
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
 	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {

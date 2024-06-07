@@ -127,6 +127,7 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 	}
 
 	efa_rdm_pke_release(pkt_entry);
+	EFA_INFO(FI_LOG_EP_DATA, "released tx pkt entry %p\n", pkt_entry);
 }
 
 /**
@@ -163,6 +164,7 @@ void efa_rdm_pke_release_rx(struct efa_rdm_pke *pkt_entry)
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
 	efa_rdm_pke_release(pkt_entry);
+	EFA_INFO(FI_LOG_EP_DATA, "released rx pkt entry %p\n", pkt_entry);
 }
 
 void efa_rdm_pke_copy(struct efa_rdm_pke *dest,
@@ -423,6 +425,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
+		EFA_INFO(FI_LOG_EP_DATA, "posted ibv send for pkt_entry %p, payload size %lu\n", pkt_entry, pkt_entry->payload_size);
 
 #if ENABLE_DEBUG
 		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
@@ -631,10 +634,12 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].addr = (uintptr_t) pke_vec[i]->payload;
 			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->payload_size;
 			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->payload_mr)->ibv_mr->lkey;
+			EFA_INFO(FI_LOG_EP_DATA, "Posted user recv buffer [%d]: wr_id: %p, addr: %p, length %lu\n", i, pke_vec[i], pke_vec[i]->payload, pke_vec[i]->payload_size);
 		} else {
 			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
 			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->pkt_size;
 			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
+			EFA_INFO(FI_LOG_EP_DATA, "Posted internal recv buffer[%d]: wr_id: %p, addr: %p, length %lu\n", i, pke_vec[i], (void *)pke_vec[i]->wiredata, pke_vec[i]->pkt_size);
 		}
 		ep->base_ep.efa_recv_wr_vec[i].wr.next = NULL;
 

@@ -233,10 +233,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
  *
  * @param[in,out]	pkt_entry	packet entry
  */
-void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type)
 {
-	int pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
-
 	switch (pkt_type) {
 	case EFA_RDM_READRSP_PKT:
 		efa_rdm_pke_handle_readrsp_sent(pkt_entry);
@@ -414,7 +412,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 	switch (pkt_entry->ope->type) {
 	case EFA_RDM_TXE:
 		txe = pkt_entry->ope;
-		if (efa_rdm_pke_get_base_hdr(pkt_entry)->type == EFA_RDM_HANDSHAKE_PKT) {
+		if (!(pkt_entry->flags & EFA_RDM_PKE_SEND_NO_HDR) && efa_rdm_pke_get_base_hdr(pkt_entry)->type == EFA_RDM_HANDSHAKE_PKT) {
 			if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
 				/*
 				 * handshake should always be queued for RNR
@@ -449,6 +447,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 				efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 			}
 
+			EFA_INFO(FI_LOG_EP_DATA, "Releasing handshake pkt_entry %p due to completion error %d\n", pkt_entry, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
 			efa_rdm_txe_release(txe);
 
@@ -487,6 +486,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 				}
 			}
 		} else {
+			EFA_INFO(FI_LOG_EP_DATA, "other completion error for txe's pkt_entry %p\n", pkt_entry);
 			efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
 		}
@@ -507,6 +507,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 						  &efa_rdm_ep_domain(ep)->ope_queued_rnr_list);
 			}
 		} else {
+			EFA_INFO(FI_LOG_EP_DATA, "other completion error for rxe's pkt_entry %p\n", pkt_entry);
 			efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
 		}
@@ -535,6 +536,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 
+	EFA_INFO(FI_LOG_EP_DATA, "Got send completion for pkt_entry %p \n", pkt_entry);
 	ep = pkt_entry->ep;
 	/*
 	 * For a send completion, pkt_entry->addr can be FI_ADDR_NOTAVAIL in 3 situations:
@@ -552,7 +554,10 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	}
 
 	if (pkt_entry->flags & EFA_RDM_PKE_SEND_NO_HDR) {
+		EFA_INFO(FI_LOG_EP_DATA, "Got send completion for no hdr pkt_entry %p \n", pkt_entry);
 		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
+		efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
+		efa_rdm_pke_release_tx(pkt_entry);
 		return;
 	}
 
@@ -765,6 +770,9 @@ void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_im
 {
 	struct efa_rdm_ope *rxe = pkt_entry->ope;
 
+	EFA_INFO(FI_LOG_EP_DATA, "Getting pkt_entry %p from ope %p without pkt hdr\n", pkt_entry, pkt_entry->ope);
+
+	assert(pkt_entry->flags & EFA_RDM_PKE_USER_RECV);
 	if (has_imm_data) {
 		rxe->cq_entry.flags |= FI_REMOTE_CQ_DATA;
 		rxe->cq_entry.data = imm_data;
@@ -899,6 +907,7 @@ fi_addr_t efa_rdm_pke_determine_addr(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_base_hdr *base_hdr;
 
+	assert(!(pkt_entry->flags & EFA_RDM_PKE_SEND_NO_HDR));
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	if (base_hdr->type >= EFA_RDM_REQ_PKT_BEGIN && efa_rdm_pke_get_req_raw_addr(pkt_entry)) {
 		void *raw_addr;
