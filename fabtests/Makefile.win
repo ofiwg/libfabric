@@ -75,7 +75,7 @@ all: benchmarks functional unit multinode
 benchmarks: $(outdir)\dgram_pingpong.exe $(outdir)\msg_bw.exe \
 	$(outdir)\msg_pingpong.exe $(outdir)\rdm_cntr_pingpong.exe \
 	$(outdir)\rdm_pingpong.exe $(outdir)\rma_pingpong.exe $(outdir)\rdm_tagged_bw.exe \
-	$(outdir)\rdm_tagged_pingpong.exe $(outdir)\rma_bw.exe
+	$(outdir)\rdm_bw.exe $(outdir)\rdm_tagged_pingpong.exe $(outdir)\rma_bw.exe
 
 functional: $(outdir)\av_xfer.exe $(outdir)\bw.exe $(outdir)\cm_data.exe $(outdir)\cq_data.exe \
 	$(outdir)\dgram.exe $(outdir)\dgram_waitset.exe $(outdir)\msg.exe $(outdir)\msg_epoll.exe \
@@ -104,6 +104,8 @@ $(outdir)\msg_bw.exe: {benchmarks}msg_bw.c $(basedeps) {benchmarks}benchmark_sha
 $(outdir)\msg_pingpong.exe: {benchmarks}msg_pingpong.c $(basedeps) {benchmarks}benchmark_shared.c
 
 $(outdir)\rdm_cntr_pingpong.exe: {benchmarks}rdm_cntr_pingpong.c $(basedeps) {benchmarks}benchmark_shared.c
+
+$(outdir)\rdm_bw.exe: {benchmarks}rdm_bw.c $(basedeps) {benchmarks}benchmark_shared.c
 
 $(outdir)\rdm_pingpong.exe: {benchmarks}rdm_pingpong.c $(basedeps) {benchmarks}benchmark_shared.c
 

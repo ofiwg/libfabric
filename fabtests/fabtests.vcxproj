@@ -187,6 +187,7 @@
     <ClCompile Include="benchmarks\msg_bw.c" />
     <ClCompile Include="benchmarks\msg_pingpong.c" />
     <ClCompile Include="benchmarks\rdm_cntr_pingpong.c" />
+    <ClCompile Include="benchmarks\rdm_bw.c" />
     <ClCompile Include="benchmarks\rdm_pingpong.c" />
     <ClCompile Include="benchmarks\rma_pingpong.c" />
     <ClCompile Include="benchmarks\rdm_tagged_bw.c" />

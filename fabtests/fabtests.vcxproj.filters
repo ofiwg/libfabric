@@ -174,6 +174,9 @@
     <ClCompile Include="benchmarks\rdm_pingpong.c">
       <Filter>Source Files\benchmarks</Filter>
     </ClCompile>
+    <ClCompile Include="benchmarks\rdm_bw.c">
+      <Filter>Source Files\benchmarks</Filter>
+    </ClCompile>
     <ClCompile Include="benchmarks\rma_pingpong.c">
       <Filter>Source Files\benchmarks</Filter>
     </ClCompile>
