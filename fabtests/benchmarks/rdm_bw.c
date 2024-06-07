@@ -110,6 +110,8 @@ int main(int argc, char **argv)
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
 	hints->tx_attr->tclass = FI_TC_BULK_DATA;
 	hints->addr_format = opts.address_format;
+	hints->ep_attr->max_msg_size = opts.options & FT_OPT_SIZE ?
+		  opts.transfer_size : test_size[TEST_CNT - 1].size;
 
 	ret = run();
 
