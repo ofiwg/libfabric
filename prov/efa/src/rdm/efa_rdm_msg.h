@@ -31,6 +31,7 @@ struct efa_rdm_ope *efa_rdm_msg_split_rxe(struct efa_rdm_ep *ep,
 					    struct efa_rdm_ope *posted_entry,
 					    struct efa_rdm_ope *consumer_entry,
 					    struct efa_rdm_pke *pkt_entry);
+ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
 /*
  * The following 2 OP structures are defined in efa_rdm_msg.c and is
  * used by #efa_rdm_ep_open()

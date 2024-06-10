@@ -436,7 +436,6 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 	return ret;
 }
 
-
 void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 {
 	struct efa_rdm_peer *peer;
@@ -493,6 +492,21 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 
 		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
 			continue;
+
+		if (ope->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE) {
+			ret = efa_rdm_ope_repost_ope_queued_before_handshake(ope);
+			if (ret == -FI_EAGAIN)
+				continue;
+
+			if (OFI_UNLIKELY(ret)) {
+				assert(ope->type == EFA_RDM_TXE);
+				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
+				continue;
+			}
+
+			dlist_remove(&ope->queued_entry);
+			ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE;
+		}
 
 		if (ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR) {
 			assert(!dlist_empty(&ope->queued_pkts));

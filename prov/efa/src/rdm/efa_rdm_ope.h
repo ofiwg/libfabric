@@ -327,4 +327,6 @@ ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
 
 ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type);
 
+ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope);
+
 #endif
