@@ -6,6 +6,7 @@
 #include "efa_cntr.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
+#include "efa_rdm_atomic.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_tracepoint.h"
@@ -1838,4 +1839,35 @@ ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type)
 	}
 
 	return err;
+}
+
+/**
+ * @brief Repost the ope that was queued before a handshake is made with peer
+ *
+ * @param ope efa rdm ope
+ * @return ssize_t 0 on success, negative integer on failure.
+ */
+ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
+{
+	assert(ope->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
+
+	if (!(ope->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+		return -FI_EAGAIN;
+
+	switch (ope->op) {
+	case ofi_op_msg: /* fall through */
+	case ofi_op_tagged:
+		return efa_rdm_msg_post_rtm(ope->ep, ope);
+	case ofi_op_write:
+		return efa_rdm_rma_post_write(ope->ep, ope);
+	case ofi_op_read_req:
+		return efa_rdm_rma_post_read(ope->ep, ope);
+	case ofi_op_atomic: /* fall through */
+	case ofi_op_atomic_fetch: /* fall through */
+	case ofi_op_atomic_compare:
+		return efa_rdm_atomic_post_atomic(ope->ep, ope);
+	default:
+		EFA_WARN(FI_LOG_EP_DATA, "Unknown operation type: %d\n", ope->op);
+		return -FI_EINVAL;
+	}
 }
