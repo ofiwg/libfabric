@@ -107,18 +107,23 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
  *
  * @param[in,out]	ep		endpoint
  * @param[in,out]	txe	information of the send operation.
- * @param[in]		use_p2p		whether p2p can be used for this send operation.
  * @retval		0 if packet(s) was posted successfully.
  * @retval		-FI_ENOSUPP if the send operation requires an extra feature,
  * 			which peer does not support.
  * @retval		-FI_EAGAIN for temporary out of resources for send
  */
-ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int use_p2p)
+ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
 	ssize_t err;
-	int rtm_type;
+	int rtm_type, use_p2p;
 
 	assert(txe->peer);
+
+	err = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
+	if (err < 0)
+		return err;
+
+	use_p2p = err;
 
 	rtm_type = efa_rdm_msg_select_rtm(ep, txe, use_p2p);
 	assert(rtm_type >= EFA_RDM_REQ_PKT_BEGIN);
@@ -148,7 +153,7 @@ static inline
 ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer, const struct fi_msg *msg,
 			     uint64_t tag, uint32_t op, uint64_t flags)
 {
-	ssize_t err, ret, use_p2p;
+	ssize_t err;
 	struct efa_rdm_ope *txe;
 	struct util_srx_ctx *srx_ctx;
 
@@ -170,14 +175,6 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 		goto out;
 	}
 
-	ret = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
-	if (ret < 0) {
-		err = ret;
-		goto out;
-	}
-
-	use_p2p = ret;
-
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "iov_len: %lu tag: %lx op: %x flags: %lx\n",
 	       txe->total_len,
@@ -192,8 +189,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 	efa_rdm_tracepoint(send_begin_msg_context,
 		    (size_t) msg->context, (size_t) msg->addr);
 
-
-	err = efa_rdm_msg_post_rtm(ep, txe, use_p2p);
+	err = efa_rdm_msg_post_rtm(ep, txe);
 	if (OFI_UNLIKELY(err)) {
 		efa_rdm_txe_release(txe);
 		peer->next_msg_id--;
