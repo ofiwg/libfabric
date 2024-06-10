@@ -107,6 +107,60 @@ ssize_t efa_rdm_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm
 	return err;
 }
 
+/**
+ * @brief Post an rma read request for a given ep and tx entry
+ *
+ * @param ep efa rdm ep
+ * @param txe tx entry
+ * @return int 0 on success, negative integer on failure.
+ */
+ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
+{
+	bool use_device_read = false;
+	ssize_t ret;
+
+	/*
+	 * A handshake is required to choose the correct protocol (whether to use device read).
+	 * For local read (read from self ep), such handshake is not needed because we only
+	 * need to check the local ep's capabilities.
+	 */
+	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		ret = efa_rdm_ep_trigger_handshake(ep, txe->peer);
+		return ret ? ret : -FI_EAGAIN;
+	}
+
+	if (efa_rdm_interop_rdma_read(ep, txe->peer)) {
+		/* RDMA read interoperability check also checks domain.use_device_rdma,
+		 * so we do not check it here
+		 */
+		use_device_read = true;
+	} else if (efa_mr_is_neuron(txe->desc[0])) {
+		EFA_WARN(FI_LOG_EP_CTRL, "rdma read is required to post read for AWS trainium memory\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	/*
+	 * Not going to check efa_ep->hmem_p2p_opt here, if the remote side
+	 * gave us a valid MR we should just honor the request even if p2p is
+	 * disabled.
+	 */
+	if (use_device_read) {
+		ret = efa_rdm_ope_prepare_to_post_read(txe);
+		if (ret)
+			return ret;
+
+		ret = efa_rdm_ope_post_read(txe);
+		if (OFI_UNLIKELY(ret)) {
+			if (ret == -FI_ENOBUFS)
+				ret = -FI_EAGAIN;
+		}
+	} else {
+		ret = efa_rdm_rma_post_efa_emulated_read(ep, txe);
+	}
+
+	return ret;
+}
+
 ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	ssize_t err;
@@ -115,7 +169,6 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	struct efa_rdm_ope *txe = NULL;
 	fi_addr_t tmp_addr;
 	struct fi_msg_rma *msg_clone;
-	bool use_device_read;
 	void *shm_desc[EFA_RDM_IOV_LIMIT];
 	void **tmp_desc;
 	struct util_srx_ctx *srx_ctx;
@@ -171,48 +224,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 		goto out;
 	}
 
-	/*
-	 * A handshake is required to choose the correct protocol (whether to use device read).
-	 * For local read (read from self ep), such handshake is not needed because we only
-	 * need to check the local ep's capabilities.
-	 */
-	if (!(peer->is_self) && !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = efa_rdm_ep_trigger_handshake(efa_rdm_ep, txe->peer);
-		err = err ? err : -FI_EAGAIN;
-		goto out;
-	}
-
-	use_device_read = false;
-	if (efa_rdm_interop_rdma_read(efa_rdm_ep, peer)) {
-		/* RDMA read interoperability check also checks domain.use_device_rdma,
-		 * so we do not check it here
-		 */
-		use_device_read = true;
-	} else if (efa_mr_is_neuron(txe->desc[0])) {
-		EFA_WARN(FI_LOG_EP_CTRL, "rdma read is required to post read for AWS trainium memory\n");
-		err = -FI_EOPNOTSUPP;
-		goto out;
-	}
-
-	/*
-	 * Not going to check efa_ep->hmem_p2p_opt here, if the remote side
-	 * gave us a valid MR we should just honor the request even if p2p is
-	 * disabled.
-	 */
-	if (use_device_read) {
-		err = efa_rdm_ope_prepare_to_post_read(txe);
-		if (err)
-			goto out;
-
-		err = efa_rdm_ope_post_read(txe);
-		if (OFI_UNLIKELY(err)) {
-			if (err == -FI_ENOBUFS)
-				err = -FI_EAGAIN;
-			goto out;
-		}
-	} else {
-		err = efa_rdm_rma_post_efa_emulated_read(efa_rdm_ep, txe);
-	}
+	err = efa_rdm_rma_post_read(efa_rdm_ep, txe);
 
 out:
 	if (OFI_UNLIKELY(err && txe))
