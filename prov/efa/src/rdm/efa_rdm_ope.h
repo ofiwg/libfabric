@@ -270,6 +270,15 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  */
 #define EFA_RDM_OPE_READ_NACK 	BIT_ULL(13)
 
+/**
+ * @brief flag to indicate that the ope was queued because it hasn't
+ * made a handshake with the peer. Because this happens before
+ * EFA provider makes any protocol selection, the progress engine
+ * needs to determine the protocol from the peer status when
+ * progressing the queued opes.
+ */
+#define EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE	BIT_ULL(14)
+
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
 
 int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe,
