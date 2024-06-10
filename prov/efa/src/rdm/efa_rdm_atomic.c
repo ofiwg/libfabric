@@ -88,6 +88,48 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	return txe;
 }
 
+/**
+ * @brief Post atomic operations from give ep and tx entry
+ *
+ * @param efa_rdm_ep efa rdm ep
+ * @param txe tx entry
+ * @return ssize_t 0 on success, negative integer on failure
+ */
+ssize_t efa_rdm_atomic_post_atomic(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *txe)
+{
+	bool delivery_complete_requested;
+	int ret;
+	int req_pkt_type_list[] = {
+		[ofi_op_atomic] = EFA_RDM_WRITE_RTA_PKT,
+		[ofi_op_atomic_fetch] = EFA_RDM_FETCH_RTA_PKT,
+		[ofi_op_atomic_compare] = EFA_RDM_COMPARE_RTA_PKT
+	};
+
+	if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		ret = efa_rdm_ep_post_handshake(efa_rdm_ep, txe->peer);
+		efa_rdm_txe_release(txe);
+		return ret ? ret : -FI_EAGAIN;
+	}
+
+	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
+	if (delivery_complete_requested && !(txe->peer->is_local)) {
+		 if (!efa_rdm_peer_support_delivery_complete(txe->peer)) {
+			return -FI_EOPNOTSUPP;
+		}
+	}
+
+	if (delivery_complete_requested && txe->op == ofi_op_atomic) {
+		return efa_rdm_ope_post_send(txe, EFA_RDM_DC_WRITE_RTA_PKT);
+	} else {
+		/*
+		 * Fetch atomic and compare atomic
+		 * support DELIVERY_COMPLETE
+		 * by nature
+		 */
+		return efa_rdm_ope_post_send(txe, req_pkt_type_list[txe->op]);
+	}
+}
+
 static
 ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 			       const struct fi_msg_atomic *msg,
@@ -96,13 +138,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 {
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
-	bool delivery_complete_requested;
 	ssize_t err;
-	static int req_pkt_type_list[] = {
-		[ofi_op_atomic] = EFA_RDM_WRITE_RTA_PKT,
-		[ofi_op_atomic_fetch] = EFA_RDM_FETCH_RTA_PKT,
-		[ofi_op_atomic_compare] = EFA_RDM_COMPARE_RTA_PKT
-	};
 	struct util_srx_ctx *srx_ctx;
 
 	assert(msg->iov_count <= efa_rdm_ep->user_info->tx_attr->iov_limit);
@@ -126,35 +162,10 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 		goto out;
 	}
 
-	if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = efa_rdm_ep_post_handshake(efa_rdm_ep, txe->peer);
-		efa_rdm_txe_release(txe);
-		err = err ? err : -FI_EAGAIN;
-		goto out;
-	}
-
-	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
-	if (delivery_complete_requested && !(peer->is_local)) {
-		 if (!efa_rdm_peer_support_delivery_complete(peer)) {
-			efa_rdm_txe_release(txe);
-			err = -FI_EOPNOTSUPP;
-			goto out;
-		}
-	}
-
 	txe->msg_id = (peer->next_msg_id != ~0) ?
 			    peer->next_msg_id++ : ++peer->next_msg_id;
 
-	if (delivery_complete_requested && op == ofi_op_atomic) {
-		err = efa_rdm_ope_post_send(txe, EFA_RDM_DC_WRITE_RTA_PKT);
-	} else {
-		/*
-		 * Fetch atomic and compare atomic
-		 * support DELIVERY_COMPLETE
-		 * by nature
-		 */
-		err = efa_rdm_ope_post_send(txe, req_pkt_type_list[op]);
-	}
+	err = efa_rdm_atomic_post_atomic(efa_rdm_ep, txe);
 
 	if (OFI_UNLIKELY(err)) {
 		efa_rdm_txe_release(txe);
