@@ -105,10 +105,16 @@ ssize_t efa_rdm_atomic_post_atomic(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm
 		[ofi_op_atomic_compare] = EFA_RDM_COMPARE_RTA_PKT
 	};
 
+	/*
+	 * Enforce handshake from peer to verify support status.
+	 */
 	if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		ret = efa_rdm_ep_post_handshake(efa_rdm_ep, txe->peer);
-		efa_rdm_txe_release(txe);
-		return ret ? ret : -FI_EAGAIN;
+		if (ret)
+			return ret;
+		txe->internal_flags |= EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE;
+		dlist_insert_tail(&txe->queued_entry, &efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list);
+		return FI_SUCCESS;
 	}
 
 	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;

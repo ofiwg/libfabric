@@ -123,7 +123,11 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	 */
 	if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		ret = efa_rdm_ep_post_handshake(ep, txe->peer);
-		return ret ? ret : -FI_EAGAIN;
+		if (ret)
+			return ret;
+		txe->internal_flags |= EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE;
+		dlist_insert_tail(&txe->queued_entry, &efa_rdm_ep_domain(ep)->ope_queued_list);
+		return FI_SUCCESS;
 	}
 
 	ret = efa_rdm_ep_use_p2p(ep, txe->desc[0]);

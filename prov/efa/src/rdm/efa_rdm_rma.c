@@ -126,7 +126,11 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	 */
 	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		ret = efa_rdm_ep_post_handshake(ep, txe->peer);
-		return ret ? ret : -FI_EAGAIN;
+		if (ret)
+			return ret;
+		txe->internal_flags |= EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE;
+		dlist_insert_tail(&txe->queued_entry, &efa_rdm_ep_domain(ep)->ope_queued_list);
+		return FI_SUCCESS;
 	}
 
 	if (efa_rdm_interop_rdma_read(ep, txe->peer)) {
@@ -362,7 +366,11 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	 */
 	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		err = efa_rdm_ep_post_handshake(ep, txe->peer);
-		return err ? err : -FI_EAGAIN;
+		if (err)
+			return err;
+		txe->internal_flags |= EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE;
+		dlist_insert_tail(&txe->queued_entry, &efa_rdm_ep_domain(ep)->ope_queued_list);
+		return FI_SUCCESS;
 	}
 
 	if (efa_rdm_rma_should_write_using_rdma(ep, txe, txe->peer)) {
