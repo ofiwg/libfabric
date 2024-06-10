@@ -486,7 +486,7 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 	}
 
 	/*
-	 * Send any queued ctrl packets.
+	 * Resend queued RNR pkts
 	 */
 	dlist_foreach_container_safe(&domain->ope_queued_rnr_list,
 				     struct efa_rdm_ope,
@@ -517,6 +517,9 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 		ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_RNR;
 	}
 
+	/*
+	 * Send any queued ctrl packets.
+	 */
 	dlist_foreach_container_safe(&domain->ope_queued_ctrl_list,
 				     struct efa_rdm_ope,
 				     ope, queued_ctrl_entry, tmp) {
