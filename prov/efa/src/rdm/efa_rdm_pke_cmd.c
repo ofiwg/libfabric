@@ -475,8 +475,8 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 				efa_rdm_ep_queue_rnr_pkt(ep, &txe->queued_pkts, pkt_entry);
 				if (!(txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
 					txe->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
-					dlist_insert_tail(&txe->queued_rnr_entry,
-							  &efa_rdm_ep_domain(ep)->ope_queued_rnr_list);
+					dlist_insert_tail(&txe->queued_entry,
+							  &efa_rdm_ep_domain(ep)->ope_queued_list);
 				}
 			}
 		} else {
@@ -496,8 +496,8 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			efa_rdm_ep_queue_rnr_pkt(ep, &rxe->queued_pkts, pkt_entry);
 			if (!(rxe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
 				rxe->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
-				dlist_insert_tail(&rxe->queued_rnr_entry,
-						  &efa_rdm_ep_domain(ep)->ope_queued_rnr_list);
+				dlist_insert_tail(&rxe->queued_entry,
+						  &efa_rdm_ep_domain(ep)->ope_queued_list);
 			}
 		} else {
 			efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
