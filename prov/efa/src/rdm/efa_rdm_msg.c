@@ -119,6 +119,16 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 
 	assert(txe->peer);
 
+	/*
+	 * It is required to get receiver's user recv QP through handshake
+	 * if sender supports this feature.
+	 */
+	if ((ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) &&
+		!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		err = efa_rdm_ep_trigger_handshake(ep, txe->peer);
+		return err ? err : -FI_EAGAIN;
+	}
+
 	err = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
 	if (err < 0)
 		return err;
