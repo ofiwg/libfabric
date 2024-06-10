@@ -796,17 +796,17 @@ bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
 	struct dlist_entry *entry, *tmp;
 	struct efa_rdm_ope *ope;
 
-	dlist_foreach_safe(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_rnr_list, entry, tmp) {
+	dlist_foreach_safe(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list, entry, tmp) {
 		ope = container_of(entry, struct efa_rdm_ope,
-					queued_rnr_entry);
+					queued_entry);
 		if (ope->ep == efa_rdm_ep) {
 			return true;
 		}
 	}
 
-	dlist_foreach_safe(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_ctrl_list, entry, tmp) {
+	dlist_foreach_safe(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list, entry, tmp) {
 		ope = container_of(entry, struct efa_rdm_ope,
-					queued_ctrl_entry);
+					queued_entry);
 		if (ope->ep == efa_rdm_ep) {
 			return true;
 		}
