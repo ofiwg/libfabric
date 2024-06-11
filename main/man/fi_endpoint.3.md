@@ -568,6 +568,70 @@ The following option levels and option names and parameters are defined.
   shared memory will not be used and the implementation of intra-node communication
   is provider dependent.
 
+- *FI_OPT_MAX_MSG_SIZE - size_t *
+: Define the maximum message size that can be transferred by the endpoint
+  in a single untagged message. The size is limited by the endpoint's configuration
+  and the provider's capabilities, and must be less than or equal to
+  `ep_attr->max_msg_size`.
+  Providers that don't support this option will return -FI_ENOPROTOOPT. In that
+  case, `ep_attr->max_msg_size` should be used.
+
+- *FI_OPT_MAX_TAGGED_SIZE - size_t *
+: Define the maximum message size that can be trnasferred by the endpoint
+  in a single tagged message. The size is limited by the endpoint's configuration
+  and the provider's capabilities, and must be less than or equal to
+  `ep_attr->max_msg_size`.
+  Providers that don't support this option will return -FI_ENOPROTOOPT. In that
+  case, `ep_attr->max_msg_size` should be used.
+
+- *FI_OPT_MAX_RMA_SIZE - size_t *
+: Define the maximum message size that can be transferred by the endpoint
+  via a single RMA operation. The size is limited by the endpoint's configuration
+  and the provider's capabilities, and must be less than or equal to
+  `ep_attr->max_msg_size`.
+  Providers that don't support this option will return -FI_ENOPROTOOPT. In that
+  case, `ep_attr->max_msg_size` should be used.
+
+- *FI_OPT_MAX_ATOMIC_SIZE - size_t *
+: Define the maximum data size that can be transferred by the endpoint
+  via a single atomic operation. The size is limited by the endpoint's configuration
+  and the provider's capabilities, and must be less than or equal to
+  `ep_attr->max_msg_size`.
+  Providers that don't support this option will return -FI_ENOPROTOOPT. In that
+  case, `ep_attr->max_msg_size` should be used.
+
+- *FI_OPT_INJECT_SIZE - size_t *
+: Define the maximum message size that can be injected by the endpoint
+  in a single untagged message. The size is limited by the endpoint's configuration
+  and the provider's capabilities, and must be less than or equal to
+  `tx_attr->inject_size`.
+  Providers that don't support this option will return -FI_ENOPROTOOPT. In that
+  case, `tx_attr->inject_size` should be used.
+
+- *FI_OPT_TAGGED_INJECT_SIZE - size_t *
+: Define the maximum message size that can be injected by the endpoint
+  in a single tagged message. The size is limited by the endpoint's configuration
+  and the provider's capabilities, and must be less than or equal to
+  `tx_attr->inject_size`.
+  Providers that don't support this option will return -FI_ENOPROTOOPT. In that
+  case, `tx_attr->inject_size` should be used.
+
+- *FI_OPT_RMA_INJECT_SIZE - size_t *
+: Define the maximum data size that can be injected by the endpoint
+  in a single RMA operation. The size is limited by the endpoint's configuration
+  and the provider's capabilities, and must be less than or equal to
+  `tx_attr->inject_size`.
+  Providers that don't support this option will return -FI_ENOPROTOOPT. In that
+  case, `tx_attr->inject_size` should be used.
+
+- *FI_OPT_ATOMIC_INJECT_SIZE - size_t *
+: Define the maximum data size that can be injected by the endpoint
+  in a single atomic operation. The size is limited by the endpoint's configuration
+  and the provider's capabilities, and must be less than or equal to
+  `tx_attr->inject_size`.
+  Providers that don't support this option will return -FI_ENOPROTOOPT. In that
+  case, `tx_attr->inject_size` should be used.
+
 ## fi_tc_dscp_set
 
 This call converts a DSCP defined value into a libfabric traffic class value.
