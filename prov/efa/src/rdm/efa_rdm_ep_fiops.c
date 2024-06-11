@@ -86,7 +86,7 @@ int efa_rdm_ep_create_base_ep_ibv_qp(struct efa_rdm_ep *ep)
 
 	if (!rx_rdm_cq && ofi_needs_rx(ep->base_ep.info->caps)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
-			"Endpoint is not bound to a receive completion queue when it has receive capabilities enabled. (FI_RECV)\n");
+			"Endpoint is not bound to a receive completion queue when it has receive capabilities enabled (FI_RECV).\n");
 		return -FI_ENOCQ;
 	}
 
@@ -1329,7 +1329,7 @@ static int efa_rdm_ep_set_shared_memory_permitted(struct efa_rdm_ep *ep, bool sh
 {
 	if (!shm_permitted) {
 		EFA_WARN(FI_LOG_EP_CTRL,
-			 "FI_OPT_SHARED_MEMORY_PERMITTED set to false");
+			 "FI_OPT_SHARED_MEMORY_PERMITTED set to false\n");
 		ep->shm_permitted = false;
 		return FI_SUCCESS;
 	}
@@ -1338,7 +1338,7 @@ static int efa_rdm_ep_set_shared_memory_permitted(struct efa_rdm_ep *ep, bool sh
 		EFA_WARN(FI_LOG_EP_CTRL,
 			 "FI_OPT_SHARED_MEMORY_PERMITTED endpoint option set "
 			 "to true but FI_EFA_ENABLE_SHM_TRANSFER environment "
-			 "variable is set to false.");
+			 "variable is set to false.\n");
 		return -FI_EINVAL;
 	}
 

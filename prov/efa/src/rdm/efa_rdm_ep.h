@@ -353,7 +353,7 @@ bool efa_rdm_ep_support_rdma_write(struct efa_rdm_ep *ep)
 static inline int efa_rdm_ep_cap_check_rma(struct efa_rdm_ep *ep) {
 	if ((ep->user_info->caps & FI_RMA) == FI_RMA)
 		return 0;
-	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_RMA capability, which was not requested.");
+	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_RMA capability, which was not requested.\n");
 	return -FI_EOPNOTSUPP;
 }
 
@@ -364,7 +364,7 @@ static inline int efa_rdm_ep_cap_check_rma(struct efa_rdm_ep *ep) {
 static inline int efa_rdm_ep_cap_check_atomic(struct efa_rdm_ep *ep) {
 	if ((ep->user_info->caps & FI_ATOMIC) == FI_ATOMIC)
 		return 0;
-	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_ATOMIC capability, which was not requested.");
+	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_ATOMIC capability, which was not requested.\n");
 	return -FI_EOPNOTSUPP;
 }
 

@@ -525,7 +525,7 @@ ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov,
 	}
 
 	if (bytes_remaining) {
-		EFA_WARN(FI_LOG_CQ, "Source buffer is larger than target IOV");
+		EFA_WARN(FI_LOG_CQ, "Source buffer is larger than target IOV\n");
 		return -FI_ETRUNC;
 	}
 	return buff_size;
