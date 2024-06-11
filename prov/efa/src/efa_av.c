@@ -207,6 +207,7 @@ struct efa_ah *efa_ah_alloc(struct efa_av *av, const uint8_t *gid)
 	efa_ah->ahn = efa_ah_attr.ahn;
 	memcpy(efa_ah->gid, gid, EFA_GID_LEN);
 	HASH_ADD(hh, av->ah_map, gid, EFA_GID_LEN, efa_ah);
+	av->ah_table[efa_ah->ahn] = efa_ah;
 	return efa_ah;
 
 err_destroy_ibv_ah:
@@ -836,6 +837,7 @@ static int efa_av_close(struct fid *fid)
 			}
 		}
 	}
+	free(av->ah_table);
 	free(av);
 	return err;
 }
@@ -952,6 +954,11 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 "\n",
 			av_attr.flags);
 
+	av->ah_table = calloc(roundup_power_of_two(efa_domain->device->ibv_attr.max_ah), sizeof(*av->ah_table));
+	if (!av->ah_table) {
+		ret = -FI_ENOMEM;
+		goto err_close_util_av;
+	}
 	av->domain = efa_domain;
 	av->type = attr->type;
 	av->used = 0;
