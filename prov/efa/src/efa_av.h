@@ -71,7 +71,6 @@ struct efa_av {
 	struct efa_cur_reverse_av *cur_reverse_av;
 	struct efa_prv_reverse_av *prv_reverse_av;
 	struct efa_ah *ah_map;
-	struct efa_ah **ah_table;
 	struct util_av util_av;
 	enum fi_ep_type ep_type;
 };
@@ -88,12 +87,5 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
 fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qpn, struct efa_rdm_pke *pkt_entry);
 
 fi_addr_t efa_av_reverse_lookup_dgram(struct efa_av *av, uint16_t ahn, uint16_t qpn);
-
-static inline
-bool efa_av_is_ahn_valid(struct efa_av *av, uint32_t ahn) {
-	struct efa_domain *domain = container_of(av->util_av.domain, struct efa_domain, util_domain);
-
-	return (ahn < domain->device->ibv_attr.max_ah);
-}
 
 #endif

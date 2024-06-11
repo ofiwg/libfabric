@@ -162,33 +162,6 @@ void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 
 #if HAVE_EFADV_CQ_EX
 /**
- * @brief Determine source gid from efa firmware
- *
- * @param ibv_cqx pointer to ibv cq ex
- * @param ibv_cq_ex_type ibv cq ex type
- * @param gid the output gid
- * @return int 0 on success, negative integer on failure
- */
-static inline
-int efa_rdm_cq_determine_sgid_from_efadv(struct ibv_cq_ex *ibv_cqx,
-				enum ibv_cq_ex_type ibv_cq_ex_type, union ibv_gid *gid)
-{
-	if (ibv_cq_ex_type != EFADV_CQ) {
-		/* EFA DV CQ is not supported. This could be due to old EFA kernel module versions. */
-		return -FI_EOPNOTSUPP;
-	}
-
-	/* Return code can be  negative if the peer AH is known */
-	return efadv_wc_read_sgid(efadv_cq_from_ibv_cq_ex(ibv_cqx), gid);
-}
-#else
-int efa_rdm_cq_determine_sgid_from_efadv(struct ibv_cq_ex *ibv_cqx, enum ibv_cq_ex_type ibv_cq_ex_type, uint8_t *gid)
-{
-	return -FI_ENOSYS;
-}
-#endif /* HAVE_EFADV_CQ_EX */
-
-/**
  * @brief Read peer raw address from EFA device and look up the peer address in AV.
  * This function should only be called if the peer AH is unknown.
  * @return Peer address, or FI_ADDR_NOTAVAIL if unavailable.
@@ -196,25 +169,23 @@ int efa_rdm_cq_determine_sgid_from_efadv(struct ibv_cq_ex *ibv_cqx, enum ibv_cq_
 static inline
 fi_addr_t efa_rdm_cq_determine_peer_address_from_efadv(
 						       struct ibv_cq_ex *ibv_cqx,
-						       enum ibv_cq_ex_type ibv_cq_ex_type,
-							   struct efa_av *av)
+						       enum ibv_cq_ex_type ibv_cq_ex_type)
 {
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_ep_addr efa_ep_addr = {0};
 	union ibv_gid gid = {0};
 	uint32_t *connid = NULL;
-	uint32_t ahn = ibv_wc_read_slid(ibv_cqx);
 
 	if (ibv_cq_ex_type != EFADV_CQ) {
 		/* EFA DV CQ is not supported. This could be due to old EFA kernel module versions. */
 		return FI_ADDR_NOTAVAIL;
 	}
 
-	/* Get source gid */
-	if (efa_av_is_ahn_valid(av, ahn))
-		memcpy(&gid, av->ah_table[ahn]->gid, EFA_GID_LEN);
-	else if (efa_rdm_cq_determine_sgid_from_efadv(ibv_cqx, ibv_cq_ex_type, &gid) < 0)
+	/* Attempt to read sgid from EFA firmware */
+	if (efadv_wc_read_sgid(efadv_cq_from_ibv_cq_ex(ibv_cqx), &gid) < 0) {
+		/* Return code is negative if the peer AH is known */
 		return FI_ADDR_NOTAVAIL;
+	}
 
 	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
 
@@ -231,6 +202,56 @@ fi_addr_t efa_rdm_cq_determine_peer_address_from_efadv(
 	efa_ep_addr.qkey = *connid;
 	return efa_rdm_pke_insert_addr(pkt_entry, &efa_ep_addr);
 }
+
+/**
+ * @brief Determine peer address from ibv_cq_ex
+ * Attempt to inject or determine peer address if not available. This usually
+ * happens when the endpoint receives the first packet from a new peer.
+ * There is an edge case for EFA endpoint - the device might lose the address
+ * handle of a known peer due to a firmware bug and return FI_ADDR_NOTAVAIL.
+ * The provider needs to look up the address using Raw address:QPN:QKey.
+ * Note: This function introduces addtional overhead. It should only be called if
+ * efa_av_lookup_address_rdm fails to find the peer address.
+ * @param ep Pointer to RDM endpoint
+ * @param ibv_cqx Pointer to CQ
+ * @returns Peer address, or FI_ADDR_NOTAVAIL if unsuccessful.
+ */
+static inline fi_addr_t efa_rdm_cq_determine_addr_from_ibv_cq(struct ibv_cq_ex *ibv_cqx, enum ibv_cq_ex_type ibv_cq_ex_type)
+{
+	struct efa_rdm_pke *pkt_entry;
+	fi_addr_t addr = FI_ADDR_NOTAVAIL;
+
+	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
+
+	addr = efa_rdm_pke_determine_addr(pkt_entry);
+
+	if (addr == FI_ADDR_NOTAVAIL) {
+		addr = efa_rdm_cq_determine_peer_address_from_efadv(ibv_cqx, ibv_cq_ex_type);
+	}
+
+	return addr;
+}
+#else
+/**
+ * @brief Determine peer address from ibv_cq_ex
+ * Attempt to inject peer address if not available. This usually
+ * happens when the endpoint receives the first packet from a new peer.
+ * Note: This function introduces addtional overhead. It should only be called if
+ * efa_av_lookup_address_rdm fails to find the peer address.
+ * @param ep Pointer to RDM endpoint
+ * @param ibv_cqx Pointer to CQ
+ * @returns Peer address, or FI_ADDR_NOTAVAIL if unsuccessful.
+ */
+static inline
+fi_addr_t efa_rdm_cq_determine_addr_from_ibv_cq(struct ibv_cq_ex *ibv_cqx, enum ibv_cq_ex_type ibv_cq_ex_type)
+{
+	struct efa_rdm_pke *pkt_entry;
+
+	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
+
+	return efa_rdm_pke_determine_addr(pkt_entry);
+}
+#endif
 
 /**
  * @brief handle a received packet
@@ -262,7 +283,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	 * and the pkt always have a hdr in this case.
 	 */
 	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
-		pkt_entry->addr = efa_rdm_cq_determine_peer_address_from_efadv(ibv_cq_ex, ibv_cq->ibv_cq_ex_type, efa_av);
+		pkt_entry->addr = efa_rdm_cq_determine_addr_from_ibv_cq(ibv_cq_ex, ibv_cq->ibv_cq_ex_type);
 	}
 
 	pkt_entry->pkt_size = ibv_wc_read_byte_len(ibv_cq_ex);
