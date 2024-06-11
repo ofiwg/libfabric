@@ -1347,6 +1347,61 @@ static int efa_rdm_ep_set_shared_memory_permitted(struct efa_rdm_ep *ep, bool sh
 }
 
 /**
+ * @brief Conditionally set efa_rdm_ep#max_msg_size per user's request
+ *
+ * If the requested msg size exceeds the EFA provider's default value, the
+ * request is rejected.
+ *
+ * @param[in,out]	ep		EFA RDM endpoint
+ * @param[in]		max_msg_size	Requested maximum msg size
+ *
+ * @return		0 on success, -FI_EINVAL otherwise
+ *
+ * @sa #FI_OPT_MAX_MSG_SIZE
+ */
+static int efa_rdm_ep_set_max_msg_size(struct efa_rdm_ep *ep, size_t max_msg_size)
+{
+	if (max_msg_size > ep->user_info->ep_attr->max_msg_size) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Requested size of %zu for FI_OPT_MAX_MSG_SIZE "
+			"exceeds the maximum (%zu)\n",
+			max_msg_size, ep->user_info->ep_attr->max_msg_size);
+		return -FI_EINVAL;
+	}
+	ep->max_msg_size = max_msg_size;
+
+	/* Update ep->use_zcpy_rx since it depends on ep->max_msg_size */
+	efa_rdm_ep_set_use_zcpy_rx(ep);
+	return 0;
+}
+
+/**
+ * @brief Conditionally set efa_rdm_ep#inject_size per user's request
+ *
+ * If the requested inject size exceeds the EFA provider's default value, the
+ * request is rejected.
+ *
+ * @param[in,out]	ep		EFA RDM endpoint
+ * @param[in]		inject_size	Requested inject size
+ *
+ * @return		0 on success, -FI_EINVAL otherwise
+ *
+ * @sa #FI_OPT_INJECT_MSG_SIZE
+ */
+static int efa_rdm_ep_set_inject_msg_size(struct efa_rdm_ep *ep, size_t inject_msg_size)
+{
+	if (inject_msg_size > ep->user_info->tx_attr->inject_size) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Requested size of %zu for FI_OPT_INJECT_MSG_SIZE "
+			"exceeds the maximum (%zu)\n",
+			inject_msg_size, ep->user_info->tx_attr->inject_size);
+		return -FI_EINVAL;
+	}
+	ep->inject_size = inject_msg_size;
+	return 0;
+}
+
+/**
  * @brief set use_device_rdma flag in efa_rdm_ep.
  *
  * If the environment variable FI_EFA_USE_DEVICE_RDMA is set, this function will
@@ -1551,6 +1606,20 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 		if (ret)
 			return ret;
 		break;
+	case FI_OPT_MAX_MSG_SIZE:
+		if (optlen != sizeof (size_t))
+			return -FI_EINVAL;
+		ret = efa_rdm_ep_set_max_msg_size(efa_rdm_ep, *(size_t *) optval);
+		if (ret)
+			return ret;
+		break;
+	case FI_OPT_INJECT_MSG_SIZE:
+		if (optlen != sizeof (size_t))
+			return -FI_EINVAL;
+		ret = efa_rdm_ep_set_inject_msg_size(efa_rdm_ep, *(size_t *) optval);
+		if (ret)
+			return ret;
+		break;
 	case FI_OPT_EFA_USE_DEVICE_RDMA:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
@@ -1626,6 +1695,18 @@ static int efa_rdm_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			return -FI_ETOOSMALL;
 		*(int *)optval = efa_rdm_ep->hmem_p2p_opt;
 		*optlen = sizeof(int);
+		break;
+	case FI_OPT_MAX_MSG_SIZE:
+		if (*optlen < sizeof (size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *) optval = efa_rdm_ep->max_msg_size;
+		*optlen = sizeof (size_t);
+		break;
+	case FI_OPT_INJECT_MSG_SIZE:
+		if (*optlen < sizeof (size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *) optval = efa_rdm_ep->inject_size;
+		*optlen = sizeof (size_t);
 		break;
 	case FI_OPT_EFA_EMULATED_READ:
 		if (*optlen < sizeof(bool))
