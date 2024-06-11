@@ -98,7 +98,7 @@ void efa_env_param_get(void)
 			"FI_EFA_TX_MIN_CREDITS was set to %d, which is <= 0.\n"
 			"This value will cause EFA communication to deadlock.\n"
 			"Please unset the environment variable or set it to a positive number.\n"
-			"Your application will now abort.",
+			"Your application will now abort.\n",
 			efa_env.tx_min_credits);
 		abort();
 	}
