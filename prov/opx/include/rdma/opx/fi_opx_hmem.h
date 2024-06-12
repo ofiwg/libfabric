@@ -46,8 +46,8 @@
 #define OPX_HMEM_DEV_REG_SEND_THRESHOLD	(opx_ep->domain->hmem_domain->devreg_copy_from_threshold)
 #define OPX_HMEM_DEV_REG_RECV_THRESHOLD	(opx_ep->domain->hmem_domain->devreg_copy_to_threshold)
 #else
-#define OPX_HMEM_DEV_REG_SEND_THRESHOLD	(0)
-#define OPX_HMEM_DEV_REG_RECV_THRESHOLD	(0)
+#define OPX_HMEM_DEV_REG_SEND_THRESHOLD	(OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET)
+#define OPX_HMEM_DEV_REG_RECV_THRESHOLD	(OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET)
 #endif
 
 struct fi_opx_hmem_info {
