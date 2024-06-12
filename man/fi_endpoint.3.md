@@ -577,7 +577,7 @@ The following option levels and option names and parameters are defined.
   case, `ep_attr->max_msg_size` should be used.
 
 - *FI_OPT_MAX_TAGGED_SIZE - size_t *
-: Define the maximum message size that can be trnasferred by the endpoint
+: Define the maximum message size that can be transferred by the endpoint
   in a single tagged message. The size is limited by the endpoint's configuration
   and the provider's capabilities, and must be less than or equal to
   `ep_attr->max_msg_size`.
