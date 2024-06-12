@@ -478,6 +478,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->use_device_rdma = efa_rdm_get_use_device_rdma(info->fabric_attr->api_version);
 	efa_rdm_ep->shm_permitted = true;
 	efa_rdm_ep->max_msg_size = info->ep_attr->max_msg_size;
+	efa_rdm_ep->max_rma_size = info->ep_attr->max_msg_size;
 	efa_rdm_ep->msg_prefix_size = info->ep_attr->msg_prefix_size;
 	efa_rdm_ep->max_proto_hdr_size = efa_rdm_pkt_type_get_max_hdr_size();
 	efa_rdm_ep->mtu_size = efa_domain->device->rdm_info->ep_attr->max_msg_size;
@@ -1376,6 +1377,32 @@ static int efa_rdm_ep_set_max_msg_size(struct efa_rdm_ep *ep, size_t max_msg_siz
 }
 
 /**
+ * @brief Conditionally set efa_rdm_ep#max_rma_size per user's request
+ *
+ * If the requested inject size exceeds the EFA provider's default value, the
+ * request is rejected.
+ *
+ * @param[in,out]	ep		EFA RDM endpoint
+ * @param[in]		max_rma_size	Requested max RMA size
+ *
+ * @return		0 on success, -FI_EINVAL otherwise
+ *
+ * @sa #FI_OPT_MAX_RMA_SIZE
+ */
+static int efa_rdm_ep_set_max_rma_size(struct efa_rdm_ep *ep, size_t max_rma_size)
+{
+	if (max_rma_size > ep->user_info->ep_attr->max_msg_size) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Requested size of %zu for FI_OPT_MAX_RMA_SIZE "
+			"exceeds the maximum (%zu)\n",
+			max_rma_size, ep->user_info->ep_attr->max_msg_size);
+		return -FI_EINVAL;
+	}
+	ep->max_rma_size = max_rma_size;
+	return 0;
+}
+
+/**
  * @brief Conditionally set efa_rdm_ep#inject_size per user's request
  *
  * If the requested inject size exceeds the EFA provider's default value, the
@@ -1613,6 +1640,13 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 		if (ret)
 			return ret;
 		break;
+	case FI_OPT_MAX_RMA_SIZE:
+		if (optlen != sizeof (size_t))
+			return -FI_EINVAL;
+		ret = efa_rdm_ep_set_max_rma_size(efa_rdm_ep, *(size_t *) optval);
+		if (ret)
+			return ret;
+		break;
 	case FI_OPT_INJECT_MSG_SIZE:
 		if (optlen != sizeof (size_t))
 			return -FI_EINVAL;
@@ -1700,6 +1734,12 @@ static int efa_rdm_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		if (*optlen < sizeof (size_t))
 			return -FI_ETOOSMALL;
 		*(size_t *) optval = efa_rdm_ep->max_msg_size;
+		*optlen = sizeof (size_t);
+		break;
+	case FI_OPT_MAX_RMA_SIZE:
+		if (*optlen < sizeof (size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *) optval = efa_rdm_ep->max_rma_size;
 		*optlen = sizeof (size_t);
 		break;
 	case FI_OPT_INJECT_MSG_SIZE:

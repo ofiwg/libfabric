@@ -78,6 +78,9 @@ struct efa_rdm_ep {
 	/* Application's maximum msg size hint */
 	size_t max_msg_size;
 
+	/** Application's maximum RMA size */
+	size_t max_rma_size;
+
 	/* Applicaiton's message prefix size. */
 	size_t msg_prefix_size;
 
