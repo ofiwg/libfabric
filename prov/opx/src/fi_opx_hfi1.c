@@ -3257,12 +3257,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		} align_tmp;
 		assert(immediate_end_block_count == 1);
 
-		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
-
-		/* desc_mr will only be referenced if it is non-null */
-		uint64_t handle_or_not = desc_mr ? desc_mr->hmem_dev_reg_handle : OPX_HMEM_NO_HANDLE;
-
-		opx_copy_from_hmem(src_iface, src_device_id,  handle_or_not,
+		opx_copy_from_hmem(src_iface, src_device_id,
+				desc ? ((struct fi_opx_mr *)desc)->hmem_dev_reg_handle : OPX_HMEM_NO_HANDLE,
 				align_tmp.immediate_byte, sbuf_end, (immediate_end_block_count << 6),
 				OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 
