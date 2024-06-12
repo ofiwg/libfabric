@@ -388,7 +388,7 @@ struct efa_rdm_receipt_hdr {
 /*
  * REQ Packets common Header Flags (section 3.1)
  */
-#define EFA_RDM_REQ_OPT_RAW_ADDR_HDR	BIT_ULL(0)
+#define EFA_RDM_PKT_RAW_ADDR_HDR	BIT_ULL(0)
 #define EFA_RDM_REQ_OPT_CQ_DATA_HDR	BIT_ULL(1)
 #define EFA_RDM_REQ_MSG			BIT_ULL(2)
 #define EFA_RDM_REQ_TAGGED		BIT_ULL(3)
@@ -401,7 +401,7 @@ struct efa_rdm_receipt_hdr {
 /*
  * optional headers for REQ packets
  */
-struct efa_rdm_req_opt_raw_addr_hdr {
+struct efa_rdm_pkt_raw_addr_hdr {
 	uint32_t addr_len;
 	char raw_addr[0];
 };
@@ -415,7 +415,7 @@ struct efa_rdm_req_opt_connid_hdr {
 };
 
 #define EFA_RDM_REQ_OPT_HDR_ALIGNMENT 8
-#define EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE (((sizeof(struct efa_rdm_req_opt_raw_addr_hdr) + EFA_EP_ADDR_LEN - 1)/EFA_RDM_REQ_OPT_HDR_ALIGNMENT + 1) * EFA_RDM_REQ_OPT_HDR_ALIGNMENT)
+#define EFA_RDM_PKT_RAW_ADDR_HDR_SIZE (((sizeof(struct efa_rdm_pkt_raw_addr_hdr) + EFA_EP_ADDR_LEN - 1)/EFA_RDM_REQ_OPT_HDR_ALIGNMENT + 1) * EFA_RDM_REQ_OPT_HDR_ALIGNMENT)
 
 /*
  * Base header for all RTM packets

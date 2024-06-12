@@ -19,17 +19,28 @@ struct efa_rdm_handshake_hdr *efa_rdm_pke_get_handshake_hdr(struct efa_rdm_pke *
 }
 
 static inline
-struct efa_rdm_handshake_opt_connid_hdr *efa_rdm_pke_get_handshake_opt_connid_hdr(struct efa_rdm_pke *pke)
+void *efa_rdm_pke_get_handshake_raw_addr(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_handshake_hdr *handshake_hdr;
-	size_t base_hdr_size;
+	struct efa_rdm_pkt_raw_addr_hdr *raw_addr_hdr;
+	size_t offset = 0;
 
-	handshake_hdr = (struct efa_rdm_handshake_hdr *)pke->wiredata;
+	handshake_hdr = (struct efa_rdm_handshake_hdr *)pkt_entry->wiredata;
 	assert(handshake_hdr->type == EFA_RDM_HANDSHAKE_PKT);
-	assert(handshake_hdr->flags & EFA_RDM_PKT_CONNID_HDR);
-	base_hdr_size = sizeof(struct efa_rdm_handshake_hdr) +
-			(handshake_hdr->nextra_p3 - 3) * sizeof(uint64_t);
-	return (struct efa_rdm_handshake_opt_connid_hdr *)((char *)pke->wiredata + base_hdr_size);
+
+	offset += sizeof(struct efa_rdm_handshake_hdr) +
+		  (handshake_hdr->nextra_p3 - 3) * sizeof(uint64_t);
+
+	raw_addr_hdr = (struct efa_rdm_pkt_raw_addr_hdr *)(pkt_entry->wiredata + offset);
+	return raw_addr_hdr->raw_addr;
+}
+
+static inline
+void *efa_rdm_pke_get_handshake_connid_ptr(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_ep_addr *raw_addr = efa_rdm_pke_get_handshake_raw_addr(pkt_entry);
+
+	return &raw_addr->qkey;
 }
 
 /**
@@ -58,9 +69,9 @@ uint64_t *efa_rdm_pke_get_handshake_opt_host_id_ptr(struct efa_rdm_pke *pke)
 
 	assert(handshake_hdr->flags & EFA_RDM_HANDSHAKE_HOST_ID_HDR);
 
-	if (handshake_hdr->flags & EFA_RDM_PKT_CONNID_HDR) {
-		/* HOST_ID_HDR is always immediately after CONNID_HDR(if present) */
-		offset += sizeof(struct efa_rdm_handshake_opt_connid_hdr);
+	if (handshake_hdr->flags & EFA_RDM_PKT_RAW_ADDR_HDR) {
+		/* HOST_ID_HDR is always immediately after RAW_ADDR_HDR(if present) */
+		offset += EFA_RDM_PKT_RAW_ADDR_HDR_SIZE;
 	}
 
 	handshake_opt_host_id_hdr = (struct efa_rdm_handshake_opt_host_id_hdr *)(pke->wiredata + offset);
@@ -81,8 +92,8 @@ uint32_t efa_rdm_pke_get_handshake_opt_device_version(struct efa_rdm_pke *pke)
 	offset = sizeof (struct efa_rdm_handshake_hdr)
 		+ ((handshake_hdr->nextra_p3 - 3) * sizeof handshake_hdr->extra_info[0]);
 
-	if (handshake_hdr->flags & EFA_RDM_PKT_CONNID_HDR)
-		offset += sizeof (struct efa_rdm_handshake_opt_connid_hdr);
+	if (handshake_hdr->flags & EFA_RDM_PKT_RAW_ADDR_HDR)
+		offset += EFA_RDM_PKT_RAW_ADDR_HDR_SIZE;
 	if (handshake_hdr->flags & EFA_RDM_HANDSHAKE_HOST_ID_HDR)
 		offset += sizeof (struct efa_rdm_handshake_opt_host_id_hdr);
 

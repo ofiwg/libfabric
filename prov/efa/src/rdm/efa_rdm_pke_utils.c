@@ -539,9 +539,6 @@ uint32_t *efa_rdm_pke_connid_ptr(struct efa_rdm_pke *pkt_entry)
 	if (base_hdr->type >= EFA_RDM_REQ_PKT_BEGIN)
 		return efa_rdm_pke_get_req_connid_ptr(pkt_entry);
 
-	if (!(base_hdr->flags & EFA_RDM_PKT_CONNID_HDR))
-		return NULL;
-
 	switch (base_hdr->type) {
 	case EFA_RDM_CTS_PKT:
 		return &(efa_rdm_pke_get_cts_hdr(pkt_entry)->connid);
@@ -565,7 +562,7 @@ uint32_t *efa_rdm_pke_connid_ptr(struct efa_rdm_pke *pkt_entry)
 		return &efa_rdm_pke_get_read_nack_hdr(pkt_entry)->connid;
 
 	case EFA_RDM_HANDSHAKE_PKT:
-		return &(efa_rdm_pke_get_handshake_opt_connid_hdr(pkt_entry)->connid);
+		return efa_rdm_pke_get_handshake_connid_ptr(pkt_entry);
 
 	default:
 		EFA_WARN(FI_LOG_CQ, "unknown packet type: %d\n", base_hdr->type);

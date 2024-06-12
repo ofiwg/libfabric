@@ -909,9 +909,9 @@ fi_addr_t efa_rdm_pke_determine_addr(struct efa_rdm_pke *pkt_entry)
 
 	assert(!(pkt_entry->flags & EFA_RDM_PKE_SEND_NO_HDR));
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	if (base_hdr->type >= EFA_RDM_REQ_PKT_BEGIN && efa_rdm_pke_get_req_raw_addr(pkt_entry)) {
+	if (base_hdr->flags & EFA_RDM_PKT_RAW_ADDR_HDR) {
 		void *raw_addr;
-		raw_addr = efa_rdm_pke_get_req_raw_addr(pkt_entry);
+		raw_addr = efa_rdm_pke_get_handshake_raw_addr(pkt_entry);
 		assert(raw_addr);
 		return efa_rdm_pke_insert_addr(pkt_entry, raw_addr);
 	}

@@ -42,7 +42,7 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 		 * endpoint, so send the core's address for this EP in the REQ
 		 * so the remote side can insert it into its address vector.
 		 */
-		base_hdr->flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
+		base_hdr->flags |= EFA_RDM_PKT_RAW_ADDR_HDR;
 	} else if (efa_rdm_peer_need_connid(txe->peer)) {
 		/*
 		 * After receiving handshake packet, we will know the peer's capability.
@@ -63,14 +63,14 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 
 	/* init the opt header */
 	opt_hdr = (char *)base_hdr + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
-	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
-		struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
+	if (base_hdr->flags & EFA_RDM_PKT_RAW_ADDR_HDR) {
+		struct efa_rdm_pkt_raw_addr_hdr *raw_addr_hdr;
 
-		raw_addr_hdr = (struct efa_rdm_req_opt_raw_addr_hdr *)opt_hdr;
-		raw_addr_hdr->addr_len = EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE - sizeof(struct efa_rdm_req_opt_raw_addr_hdr);
+		raw_addr_hdr = (struct efa_rdm_pkt_raw_addr_hdr *)opt_hdr;
+		raw_addr_hdr->addr_len = EFA_RDM_PKT_RAW_ADDR_HDR_SIZE - sizeof(struct efa_rdm_pkt_raw_addr_hdr);
 		assert(raw_addr_hdr->addr_len >= sizeof(ep->base_ep.src_addr));
 		memcpy(raw_addr_hdr->raw_addr, &ep->base_ep.src_addr, sizeof(ep->base_ep.src_addr));
-		opt_hdr += EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE;
+		opt_hdr += EFA_RDM_PKT_RAW_ADDR_HDR_SIZE;
 	}
 
 	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR) {
@@ -95,35 +95,6 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 
 
 
-
-/**
- * @brief return the optional raw addr header pointer in a req packet
- *
- * @param[in]	pkt_entry	an REQ packet entry
- * @return	If the input has the optional raw addres header, return the pointer to it.
- *		Otherwise, return NULL
- */
-void *efa_rdm_pke_get_req_raw_addr(struct efa_rdm_pke *pkt_entry)
-{
-	char *opt_hdr;
-	struct efa_rdm_base_hdr *base_hdr;
-	struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
-
-	assert(!(pkt_entry->flags & EFA_RDM_PKE_SEND_NO_HDR));
-	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	opt_hdr = pkt_entry->wiredata + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
-	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
-		/* For req packet, the optional connid header and the optional
-		 * raw address header are mutually exclusive.
-		 */
-		assert(!(base_hdr->flags & EFA_RDM_PKT_CONNID_HDR));
-		raw_addr_hdr = (struct efa_rdm_req_opt_raw_addr_hdr *)opt_hdr;
-		return raw_addr_hdr->raw_addr;
-	}
-
-	return NULL;
-}
-
 /**
  * @brief return the pointer to connid in a req packet
  *
@@ -140,11 +111,11 @@ uint32_t *efa_rdm_pke_get_req_connid_ptr(struct efa_rdm_pke *pkt_entry)
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
 
-	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
-		struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
+	if (base_hdr->flags & EFA_RDM_PKT_RAW_ADDR_HDR) {
+		struct efa_rdm_pkt_raw_addr_hdr *raw_addr_hdr;
 		struct efa_ep_addr *raw_addr;
 
-		raw_addr_hdr = (struct efa_rdm_req_opt_raw_addr_hdr *)opt_hdr;
+		raw_addr_hdr = (struct efa_rdm_pkt_raw_addr_hdr *)opt_hdr;
 		raw_addr = (struct efa_ep_addr *)raw_addr_hdr->raw_addr;
 		return &raw_addr->qkey;
 	}
@@ -176,13 +147,13 @@ uint64_t efa_rdm_pke_get_req_cq_data(struct efa_rdm_pke *pkt_entry)
 	char *opt_hdr;
 	struct efa_rdm_base_hdr *base_hdr;
 	struct efa_rdm_req_opt_cq_data_hdr *cq_data_hdr;
-	struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
+	struct efa_rdm_pkt_raw_addr_hdr *raw_addr_hdr;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
-	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
-		raw_addr_hdr = (struct efa_rdm_req_opt_raw_addr_hdr *)opt_hdr;
-		opt_hdr += sizeof(struct efa_rdm_req_opt_raw_addr_hdr) + raw_addr_hdr->addr_len;
+	if (base_hdr->flags & EFA_RDM_PKT_RAW_ADDR_HDR) {
+		raw_addr_hdr = (struct efa_rdm_pkt_raw_addr_hdr *)opt_hdr;
+		opt_hdr += sizeof(struct efa_rdm_pkt_raw_addr_hdr) + raw_addr_hdr->addr_len;
 	}
 
 	assert(base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR);
@@ -248,7 +219,7 @@ size_t efa_rdm_pke_get_req_base_hdr_size(struct efa_rdm_pke *pkt_entry)
  * The difference between this function and efa_rdm_pkt_type_req_hdr_size() is
  * the handling of the size of req opt raw address header.
  *
- * efa_rdm_pke_get_req_hdr_size() always use EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE, while
+ * efa_rdm_pke_get_req_hdr_size() always use EFA_RDM_PKT_RAW_ADDR_HDR_SIZE, while
  * this function pull raw address from pkt_entry's size.
  *
  * The difference is because older version of libfabric EFA provider has
@@ -261,7 +232,7 @@ size_t efa_rdm_pke_get_req_hdr_size(struct efa_rdm_pke *pkt_entry)
 {
 	char *opt_hdr;
 	struct efa_rdm_base_hdr *base_hdr;
-	struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
+	struct efa_rdm_pkt_raw_addr_hdr *raw_addr_hdr;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
@@ -270,17 +241,17 @@ size_t efa_rdm_pke_get_req_hdr_size(struct efa_rdm_pke *pkt_entry)
 	 * It is not possible to have both optional raw addr header and optional
 	 * connid header in a packet header.
 	 */
-	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
+	if (base_hdr->flags & EFA_RDM_PKT_RAW_ADDR_HDR) {
 		assert(!(base_hdr->flags & EFA_RDM_PKT_CONNID_HDR));
-		raw_addr_hdr = (struct efa_rdm_req_opt_raw_addr_hdr *)opt_hdr;
-		opt_hdr += sizeof(struct efa_rdm_req_opt_raw_addr_hdr) + raw_addr_hdr->addr_len;
+		raw_addr_hdr = (struct efa_rdm_pkt_raw_addr_hdr *)opt_hdr;
+		opt_hdr += sizeof(struct efa_rdm_pkt_raw_addr_hdr) + raw_addr_hdr->addr_len;
 	}
 
 	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR)
 		opt_hdr += sizeof(struct efa_rdm_req_opt_cq_data_hdr);
 
 	if (base_hdr->flags & EFA_RDM_PKT_CONNID_HDR) {
-		assert(!(base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR));
+		assert(!(base_hdr->flags & EFA_RDM_PKT_RAW_ADDR_HDR));
 		opt_hdr += sizeof(struct efa_rdm_req_opt_connid_hdr);
 	}
 

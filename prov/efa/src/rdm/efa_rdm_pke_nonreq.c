@@ -27,7 +27,7 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 {
 	int nex;
 	struct efa_rdm_handshake_hdr *handshake_hdr;
-	struct efa_rdm_handshake_opt_connid_hdr *connid_hdr;
+	struct efa_rdm_pkt_raw_addr_hdr *raw_addr_hdr;
 	struct efa_rdm_handshake_opt_host_id_hdr *host_id_hdr;
 	struct efa_rdm_handshake_opt_device_version_hdr *device_version_hdr;
 
@@ -46,13 +46,13 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_handshake_hdr) + nex * sizeof(uint64_t);
 
 	/*
-	 * Always include connid at the end of a handshake packet.
-	 * If peer cannot make use of connid, the connid will be ignored.
-	 */
-	connid_hdr = (struct efa_rdm_handshake_opt_connid_hdr *)(pkt_entry->wiredata + pkt_entry->pkt_size);
-	connid_hdr->connid = efa_rdm_ep_raw_addr(pkt_entry->ep)->qkey;
-	handshake_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
-	pkt_entry->pkt_size += sizeof(struct efa_rdm_handshake_opt_connid_hdr);
+	 * Always include raw addr hdr at the end of a handshake packet */
+	raw_addr_hdr = (struct efa_rdm_pkt_raw_addr_hdr *)(pkt_entry->wiredata + pkt_entry->pkt_size);
+	raw_addr_hdr->addr_len = EFA_RDM_PKT_RAW_ADDR_HDR_SIZE - sizeof(struct efa_rdm_pkt_raw_addr_hdr);
+	handshake_hdr->flags |= EFA_RDM_PKT_RAW_ADDR_HDR;
+	assert(raw_addr_hdr->addr_len >= sizeof(pkt_entry->ep->base_ep.src_addr));
+	memcpy(raw_addr_hdr->raw_addr, &pkt_entry->ep->base_ep.src_addr, sizeof(pkt_entry->ep->base_ep.src_addr));
+	pkt_entry->pkt_size += EFA_RDM_PKT_RAW_ADDR_HDR_SIZE;
 
 	/**
 	 * Include the optional host id if it is non-zero

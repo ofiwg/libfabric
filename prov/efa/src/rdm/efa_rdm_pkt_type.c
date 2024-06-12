@@ -83,13 +83,13 @@ size_t efa_rdm_pkt_type_get_req_hdr_size(int pkt_type, uint16_t flags, size_t rm
 {
 	int hdr_size = EFA_RDM_PKT_TYPE_REQ_INFO_VEC[pkt_type].base_hdr_size;
 
-	if (flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
+	if (flags & EFA_RDM_PKT_RAW_ADDR_HDR) {
 		/* It is impossible to have both optional connid hdr and opt_raw_addr_hdr
 		 * in the header, and length of opt raw addr hdr is larger than
 		 * connid hdr (which is confirmed by the following assertion).
 		 */
-		assert(EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE >= sizeof(struct efa_rdm_req_opt_connid_hdr));
-		hdr_size += EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE;
+		assert(EFA_RDM_PKT_RAW_ADDR_HDR_SIZE >= sizeof(struct efa_rdm_req_opt_connid_hdr));
+		hdr_size += EFA_RDM_PKT_RAW_ADDR_HDR_SIZE;
 	} else if (flags & EFA_RDM_PKT_CONNID_HDR) {
 		hdr_size += sizeof(struct efa_rdm_req_opt_connid_hdr);
 	}
@@ -119,7 +119,7 @@ size_t efa_rdm_pkt_type_get_req_max_hdr_size(int pkt_type)
 	 * exist at the same time, and the raw address header is longer than connid header,
 	 * we did not include the flag for CONNID header
 	 */
-	uint16_t header_flags = EFA_RDM_REQ_OPT_RAW_ADDR_HDR | EFA_RDM_REQ_OPT_CQ_DATA_HDR;
+	uint16_t header_flags = EFA_RDM_PKT_RAW_ADDR_HDR | EFA_RDM_REQ_OPT_CQ_DATA_HDR;
 
 	return efa_rdm_pkt_type_get_req_hdr_size(pkt_type, header_flags, EFA_RDM_IOV_LIMIT);
 }

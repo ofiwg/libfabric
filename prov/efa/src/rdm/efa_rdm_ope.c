@@ -400,7 +400,7 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
 	assert(pkt_type >= EFA_RDM_REQ_PKT_BEGIN);
 
 	if (efa_rdm_peer_need_raw_addr_hdr(txe->peer))
-		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
+		header_flags |= EFA_RDM_PKT_RAW_ADDR_HDR;
 	else if (efa_rdm_peer_need_connid(txe->peer))
 		header_flags |= EFA_RDM_PKT_CONNID_HDR;
 
