@@ -2014,6 +2014,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 					    0,
 					    0,
 					    0,
+					    0,
 					    reliability);
 			params->sdma_we = NULL;
 
@@ -2099,19 +2100,14 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-DPUT-SDMA-TID");
 
 	for (i=params->cur_iov; i<niov; ++i) {
-		uint32_t *tidpairs= NULL;
+		uint32_t *tidpairs = (uint32_t *) params->tid_iov.iov_base;
 		uint32_t tididx = params->tididx;
-		uint32_t tidlen_consumed =  params->tidlen_consumed;
-		uint32_t tidlen_remaining = params->tidlen_remaining;
+		uint32_t tidlen_consumed;
+		uint32_t tidlen_remaining;
 		uint32_t prev_tididx = 0;
 		uint32_t prev_tidlen_consumed = 0;
 		uint32_t prev_tidlen_remaining = 0;
 		uint32_t tidoffset = 0;
-		/* offset into first TID, may be multiple pages */
-		uint32_t first_tidoffset = 0;
-		/* adjust for page/packet alignment and pages
-		 * consumed */
-		uint32_t first_tidoffset_page_adj = 0;
 		uint32_t tidOMshift = 0;
 		if (tididx == -1U) { /* first time */
 			FI_OPX_DEBUG_COUNTERS_INC_COND_N((opx_ep->debug_counters.expected_receive.first_tidpair_minoffset == 0),
@@ -2123,7 +2119,6 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 						     params->tidoffset);
 
 			tididx = 0;
-			tidpairs = (uint32_t *)params->tid_iov.iov_base;
 			tidlen_remaining = FI_OPX_EXP_TID_GET(tidpairs[0],LEN);
 			/* When reusing TIDs we can offset <n> pages into the TID
 			   so "consume" that */
@@ -2137,11 +2132,18 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 					FI_OPX_EXP_TID_GET(tidpairs[0],LEN));
 			}
 		} else { /* eagain retry, restore previous TID state */
-			tidpairs = (uint32_t *)params->tid_iov.iov_base;
+			tidlen_consumed = params->tidlen_consumed;
+			tidlen_remaining = params->tidlen_remaining;
 		}
-		if(tididx == 0) {
+
+		uint32_t first_tidoffset;
+		uint32_t first_tidoffset_page_adj;
+		if (tididx == 0) {
 			first_tidoffset = params->tidoffset;
 			first_tidoffset_page_adj = first_tidoffset & (OPX_HFI1_TID_PAGESIZE-1) ;
+		} else {
+			first_tidoffset = 0;
+			first_tidoffset_page_adj = 0;
 		}
 
 		uint32_t starting_tid_idx = tididx;
@@ -2208,8 +2210,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS_TID);
 
 			if (packet_count < FI_OPX_HFI1_SDMA_MAX_PACKETS_TID) {
-				packet_count = (bytes_to_send / OPX_HFI1_TID_PAGESIZE) +
-						((bytes_to_send % OPX_HFI1_TID_PAGESIZE) ? 1 : 0);
+				packet_count = (bytes_to_send + (OPX_HFI1_TID_PAGESIZE - 1)) / OPX_HFI1_TID_PAGESIZE;
 				packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS_TID);
 			}
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(&opx_ep->ep_fid,
@@ -2379,7 +2380,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 
 				// Round packet_bytes up to the next multiple of 4,
 				// then divide by 4 to get the correct number of dws.
-				uint64_t payload_dws = ((packet_bytes + 3) & -4) >> 2;
+				uint64_t payload_dws = (packet_bytes + 3) >> 2;
 				const uint64_t pbc_dws = 2 + /* pbc */
 							2 + /* lrh */
 							3 + /* bth */
@@ -2436,6 +2437,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 					    1, /* use tid */
 					    &params->tid_iov,
 					    starting_tid_idx,
+					    tididx,
 					    tidOMshift,
 					    tidoffset,
 					    reliability);
