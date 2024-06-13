@@ -161,7 +161,9 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 				  efa_env.cq_size);
 	efa_domain->num_read_msg_in_flight = 0;
 
-	dlist_init(&efa_domain->ope_queued_list);
+	dlist_init(&efa_domain->ope_queued_rnr_list);
+	dlist_init(&efa_domain->ope_queued_ctrl_list);
+	dlist_init(&efa_domain->ope_queued_read_list);
 	dlist_init(&efa_domain->ope_longcts_send_list);
 	dlist_init(&efa_domain->peer_backoff_list);
 	dlist_init(&efa_domain->handshake_queued_peer_list);
@@ -484,81 +486,72 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 	}
 
 	/*
-	 * Repost pkts for all queued op entries
+	 * Resend queued RNR pkts
 	 */
-	dlist_foreach_container_safe(&domain->ope_queued_list,
+	dlist_foreach_container_safe(&domain->ope_queued_rnr_list,
 				     struct efa_rdm_ope,
-				     ope, queued_entry, tmp) {
+				     ope, queued_rnr_entry, tmp) {
 		peer = efa_rdm_ep_get_peer(ope->ep, ope->addr);
+		assert(peer);
 
-		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
+		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
 
-		if (ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR) {
-			assert(!dlist_empty(&ope->queued_pkts));
-			ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
+		assert(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR);
+		assert(!dlist_empty(&ope->queued_pkts));
+		ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
 
-			if (ret == -FI_EAGAIN)
-				break;
+		if (ret == -FI_EAGAIN)
+			break;
 
-			if (OFI_UNLIKELY(ret)) {
-				assert(ope->type == EFA_RDM_RXE || ope->type == EFA_RDM_TXE);
-				if (ope->type == EFA_RDM_RXE)
-					efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_SEND);
-				else
-					efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_SEND);
-				return;
-			}
-
-			dlist_remove(&ope->queued_entry);
-			ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_RNR;
+		if (OFI_UNLIKELY(ret)) {
+			assert(ope->type == EFA_RDM_RXE || ope->type == EFA_RDM_TXE);
+			if (ope->type == EFA_RDM_RXE)
+				efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_SEND);
+			else
+				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_SEND);
+			return;
 		}
 
-		if (ope->internal_flags & EFA_RDM_OPE_QUEUED_CTRL) {
-			ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
-			if (ret == -FI_EAGAIN)
-				break;
-
-			if (OFI_UNLIKELY(ret)) {
-				assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
-				if (ope->type == EFA_RDM_TXE)
-					efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
-				else
-					efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
-				return;
-			}
-
-			/* it can happen that efa_rdm_ope_post_send() released ope
-			 * (if the ope is rxe and packet type is EOR and inject is used). In
-			 * that case rxe's state has been set to EFA_RDM_OPE_FREE and
-			 * it has been removed from ep->op_queued_entry_list, so nothing
-			 * is left to do.
-			 */
-			if (ope->state == EFA_RDM_OPE_FREE)
-				continue;
-
-			ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_CTRL;
-			dlist_remove(&ope->queued_entry);
-		}
-
-		if (ope->internal_flags & EFA_RDM_OPE_QUEUED_READ) {
-			ret = efa_rdm_ope_post_read(ope);
-			if (ret == -FI_EAGAIN)
-				break;
-
-			if (OFI_UNLIKELY(ret)) {
-				assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
-				if (ope->type == EFA_RDM_TXE)
-					efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
-				else
-					efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
-				return;
-			}
-
-			ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_READ;
-			dlist_remove(&ope->queued_entry);
-		}
+		dlist_remove(&ope->queued_rnr_entry);
+		ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_RNR;
 	}
+
+	/*
+	 * Send any queued ctrl packets.
+	 */
+	dlist_foreach_container_safe(&domain->ope_queued_ctrl_list,
+				     struct efa_rdm_ope,
+				     ope, queued_ctrl_entry, tmp) {
+		peer = efa_rdm_ep_get_peer(ope->ep, ope->addr);
+		assert(peer);
+
+		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
+			continue;
+
+		assert(ope->internal_flags & EFA_RDM_OPE_QUEUED_CTRL);
+		ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
+		if (ret == -FI_EAGAIN)
+			break;
+
+		if (OFI_UNLIKELY(ret)) {
+			efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
+			return;
+		}
+
+		/* it can happen that efa_rdm_ope_post_send() released ope
+		 * (if the ope is rxe and packet type is EOR and inject is used). In
+		 * that case rxe's state has been set to EFA_RDM_OPE_FREE and
+		 * it has been removed from ep->op_queued_entry_list, so nothing
+		 * is left to do.
+		 */
+		if (ope->state == EFA_RDM_OPE_FREE)
+			continue;
+
+		ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_CTRL;
+		dlist_remove(&ope->queued_ctrl_entry);
+	}
+
 	/*
 	 * Send data packets until window or data queue is exhausted.
 	 */
@@ -603,5 +596,44 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 				return;
 			}
 		}
+	}
+
+	/*
+	 * Send remote read requests until finish or error encoutered
+	 */
+	dlist_foreach_container_safe(&domain->ope_queued_read_list, struct efa_rdm_ope,
+				     ope, queued_read_entry, tmp) {
+		peer = efa_rdm_ep_get_peer(ope->ep, ope->addr);
+		/*
+		 * Here peer can be NULL, when the read request is a
+		 * local read request. Local read request is used to copy
+		 * data from host memory to device memory on same process.
+		 */
+		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
+			continue;
+
+		/*
+		 * The core's TX queue is full so we can't do any
+		 * additional work.
+		 */
+		if (ope->ep->efa_outstanding_tx_ops == ope->ep->efa_max_outstanding_tx_ops)
+			return;
+
+		ret = efa_rdm_ope_post_read(ope);
+		if (ret == -FI_EAGAIN)
+			break;
+
+		if (OFI_UNLIKELY(ret)) {
+			assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
+			if (ope->type == EFA_RDM_TXE)
+				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
+			else
+				efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
+
+			return;
+		}
+
+		ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_READ;
+		dlist_remove(&ope->queued_read_entry);
 	}
 }

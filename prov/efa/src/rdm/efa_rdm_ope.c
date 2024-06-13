@@ -130,10 +130,10 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	}
 
 	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)
-		dlist_remove(&txe->queued_entry);
+		dlist_remove(&txe->queued_rnr_entry);
 
 	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
-		dlist_remove(&txe->queued_entry);
+		dlist_remove(&txe->queued_ctrl_entry);
 
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(txe,
@@ -177,11 +177,11 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 					     pkt_entry, entry, tmp) {
 			efa_rdm_pke_release_tx(pkt_entry);
 		}
-		dlist_remove(&rxe->queued_entry);
+		dlist_remove(&rxe->queued_rnr_entry);
 	}
 
 	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
-		dlist_remove(&rxe->queued_entry);
+		dlist_remove(&rxe->queued_ctrl_entry);
 
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(rxe,
@@ -588,11 +588,11 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 					     struct efa_rdm_pke,
 					     pkt_entry, entry, tmp)
 			efa_rdm_pke_release_tx(pkt_entry);
-		dlist_remove(&rxe->queued_entry);
+		dlist_remove(&rxe->queued_rnr_entry);
 	}
 
 	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
-		dlist_remove(&rxe->queued_entry);
+		dlist_remove(&rxe->queued_ctrl_entry);
 
 	if (rxe->unexp_pkt) {
 		efa_rdm_pke_release_rx(rxe->unexp_pkt);
@@ -685,10 +685,10 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	}
 
 	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)
-		dlist_remove(&txe->queued_entry);
+		dlist_remove(&txe->queued_rnr_entry);
 
 	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
-		dlist_remove(&txe->queued_entry);
+		dlist_remove(&txe->queued_ctrl_entry);
 
 	dlist_foreach_container_safe(&txe->queued_pkts,
 				     struct efa_rdm_pke,
@@ -1571,8 +1571,8 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 	err = efa_rdm_ope_post_read(ope);
 	switch (err) {
 	case -FI_EAGAIN:
-		dlist_insert_tail(&ope->queued_entry,
-				  &efa_rdm_ep_domain(ope->ep)->ope_queued_list);
+		dlist_insert_tail(&ope->queued_read_entry,
+				  &efa_rdm_ep_domain(ope->ep)->ope_queued_read_list);
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_READ;
 		err = 0;
 		break;
@@ -1807,8 +1807,8 @@ ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
  * @brief post packet(s) according to packet type. Queue the post if -FI_EAGAIN is encountered.
  *
  * This function will call efa_rdm_ope_post_send() to post packet(s) according to packet type.
- * If efa_rdm_ope_post_send() returned -FI_EAGAIN, this function will put the txe in efa_domain's
- * queued_list. The progress engine will try to post the packet later.
+ * If efa_rdm_ope_post_send() returned -FI_EAGAIN, this function will put the txe in efa_rdm_ep's
+ * queued_ctrl_list. The progress engine will try to post the packet later.
  *
  * This function is mainly used by packet handler to post responsive ctrl packet (such as EOR and CTS).
  *
@@ -1825,8 +1825,8 @@ ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type)
 		assert(!(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR));
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_CTRL;
 		ope->queued_ctrl_type = pkt_type;
-		dlist_insert_tail(&ope->queued_entry,
-				  &efa_rdm_ep_domain(ope->ep)->ope_queued_list);
+		dlist_insert_tail(&ope->queued_ctrl_entry,
+				  &efa_rdm_ep_domain(ope->ep)->ope_queued_ctrl_list);
 		err = 0;
 	}
 
