@@ -158,18 +158,20 @@ int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	if (ft_check_opts(FT_OPT_VERIFY_DATA))
 		inject_size = 0;
 
-	ret = ft_sync();
-	if (ret)
-		return ret;
-
 	if (opts.transfer_size == 0) {
 		FT_ERR("Zero-sized transfers not supported");
 		return EXIT_FAILURE;
 	}
 
-	/* Init rx_buf with invalid iteration number */
+	/* Init rx_buf with invalid iteration number.
+	 * This must be done before the sender sends any data.
+	 */
 	if (rma_op == FT_RMA_WRITE)
 		*(rx_buf + opts.transfer_size - 1) = (char)-1;
+
+	ret = ft_sync();
+	if (ret)
+		return ret;
 
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
