@@ -49,7 +49,10 @@
 #define OPX_SDMA_REPLAY_IOV_COUNT	(OPX_SDMA_REPLAY_DATA_IOV_COUNT + 1)
 #define OPX_SDMA_HFI_MAX_IOVS_PER_WRITE	(64)
 OPX_COMPILE_TIME_ASSERT((OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1) == OPX_DEBUG_COUNTERS_WRITEV_MAX,
-			"OPX_DEBUG_COUNTERS_WRITEV_MAX should be same as OPX_SDMA_HFI_MAX_IOVS_PER_WRITE!\n");
+			"OPX_DEBUG_COUNTERS_WRITEV_MAX should be OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1!\n");
+
+// Driver limit of the number of TIDs that can be used in a single SDMA request
+#define OPX_SDMA_MAX_TIDS_PER_REQUEST	(1024)
 
 #ifndef OPX_SDMA_MAX_WRITEVS_PER_CYCLE
 #define OPX_SDMA_MAX_WRITEVS_PER_CYCLE	(1)
@@ -629,16 +632,21 @@ void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep,
 				    uint32_t fragsize,
 				    uint64_t last_packet_bytes,
 				    struct iovec *tid_iov, /* not an array */
-				    uint32_t tid_idx, uint32_t tidOMshift,
+				    uint32_t start_tid_idx,
+				    uint32_t end_tid_idx,
+				    uint32_t tidOMshift,
 				    uint32_t tidoffset)
 {
 	uint32_t *tidpairs = NULL;
 
 	/* tid packet lengths should have been aligned.*/
-	assert(tid_idx < tid_iov->iov_len / sizeof(uint32_t));
+	assert(start_tid_idx < tid_iov->iov_len / sizeof(uint32_t));
+	assert(end_tid_idx < tid_iov->iov_len / sizeof(uint32_t));
+	assert(end_tid_idx >= start_tid_idx);
+	assert(((end_tid_idx - start_tid_idx) + 1) <= OPX_SDMA_MAX_TIDS_PER_REQUEST);
 	tidpairs = (uint32_t *)tid_iov->iov_base;
 
-	uint32_t tidpair = tidpairs[tid_idx];
+	uint32_t tidpair = tidpairs[start_tid_idx];
 	uint32_t kdeth = (FI_OPX_HFI1_KDETH_TIDCTRL & FI_OPX_EXP_TID_GET((tidpair), CTRL))
 			 << FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT;
 	kdeth |= (FI_OPX_HFI1_KDETH_TID & FI_OPX_EXP_TID_GET((tidpair), IDX))
@@ -653,14 +661,15 @@ void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep,
 	       tidOMshift ? tidoffset << KDETH_OM_LARGE_SHIFT :
 				  tidoffset << KDETH_OM_SMALL_SHIFT);
 
+	size_t tid_iov_len = ((end_tid_idx - start_tid_idx) + 1) * sizeof(uint32_t);
 	struct iovec payload_tid_iovs[2] = {
 		{
 			.iov_base = we->packets[0].replay->iov->iov_base,
 			.iov_len = (we->total_payload + 3) & -4
 		},
 		{
-			.iov_base = &tidpairs[tid_idx],
-			.iov_len = tid_iov->iov_len - (tid_idx * sizeof(uint32_t))
+			.iov_base = &tidpairs[start_tid_idx],
+			.iov_len = tid_iov_len
 		}
 	};
 
@@ -686,7 +695,9 @@ void opx_hfi1_sdma_flush(struct fi_opx_ep *opx_ep,
 			 struct slist *sdma_reqs,
 			 const bool use_tid,
 			 struct iovec *tid_iov,
-			 uint32_t tid_idx, uint32_t tidOMshift,
+			 uint32_t start_tid_idx,
+			 uint32_t end_tid_idx,
+			 uint32_t tidOMshift,
 			 uint32_t tidoffset,
 			 enum ofi_reliability_kind reliability)
 {
@@ -704,7 +715,8 @@ void opx_hfi1_sdma_flush(struct fi_opx_ep *opx_ep,
 	if (use_tid) {
 		opx_hfi1_sdma_enqueue_dput_tid(opx_ep, we, fragsize,
 					       last_packet_bytes, tid_iov,
-					       tid_idx, tidOMshift, tidoffset);
+					       start_tid_idx, end_tid_idx,
+					       tidOMshift, tidoffset);
 	} else {
 		opx_hfi1_sdma_enqueue_dput(opx_ep, we, fragsize, last_packet_bytes);
 	}
