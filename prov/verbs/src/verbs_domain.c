@@ -188,6 +188,9 @@ static int vrb_domain_close(fid_t fid)
 
 	vrb_close_progress(&domain->progress);
 
+	if (domain->profile)
+		vrb_prof_report(domain->profile);
+
 	switch (domain->ep_type) {
 	case FI_EP_DGRAM:
 		fab = container_of(&domain->util_domain.fabric->fabric_fid,
@@ -419,6 +422,8 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	ret = vrb_init_progress(&_domain->progress, _domain->info);
 	if (ret)
 		goto err4;
+
+	vrb_prof_create(&_domain->profile);
 
 	*domain = &_domain->util_domain.domain_fid;
 	return FI_SUCCESS;

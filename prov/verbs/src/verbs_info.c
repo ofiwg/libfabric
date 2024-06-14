@@ -754,6 +754,8 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	const char *dev_name = ibv_get_device_name(ctx->device);
 	int ret;
 
+	vrb_prof_func_start(__func__);
+
 	if ((ctx->device->transport_type != IBV_TRANSPORT_IB) &&
 	    ((ep_dom->type == FI_EP_DGRAM) ||
 	    (ep_dom->protocol == FI_PROTO_RDMA_CM_IB_XRC)))
@@ -871,10 +873,12 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		 ctx->device->name, ep_dom->suffix);
 
 	*info = fi;
+	vrb_prof_func_end(__func__);
 
 	return 0;
 err:
 	fi_freeinfo(fi);
+	vrb_prof_func_end(__func__);
 	return ret;
 }
 
@@ -1358,6 +1362,7 @@ static int vrb_init_info(const struct fi_info **all_infos)
 	int ret = 0, i, j, num_devices, dom_count = 0;
 	static bool initialized = false;
 
+	vrb_prof_func_start(__func__);
 	ofi_mutex_lock(&vrb_init_mutex);
 
 	if (initialized)
@@ -1366,8 +1371,10 @@ static int vrb_init_info(const struct fi_info **all_infos)
 	initialized = true;
 	*all_infos = NULL;
 
+	vrb_prof_func_start("vrb_os_mem_support");
 	vrb_os_mem_support(&vrb_gl_data.peer_mem_support,
 			   &vrb_gl_data.dmabuf_support);
+	vrb_prof_func_end("vrb_os_mem_support");
 
 	if (vrb_read_params()) {
 		VRB_INFO(FI_LOG_FABRIC, "failed to read parameters\n");
@@ -1390,8 +1397,9 @@ static int vrb_init_info(const struct fi_info **all_infos)
 				"XRC not built into provider, skip allocating "
 				"fi_info for XRC FI_EP_MSG endpoints\n");
 	}
-
+	vrb_prof_func_start("vrb_getifaddrs");
 	vrb_getifaddrs(&verbs_devs);
+	vrb_prof_func_end("vrb_getifaddrs");
 	if (!vrb_gl_data.iface)
 		vrb_get_sib(&verbs_devs);
 
@@ -1414,6 +1422,7 @@ static int vrb_init_info(const struct fi_info **all_infos)
 		goto done;
 	}
 
+	vrb_prof_func_start("alloc_info_loop");
 	for (i = 0; i < num_devices; i++) {
 		if (!ctx_list[i]) {
 			FI_INFO(&vrb_prov, FI_LOG_FABRIC,
@@ -1468,12 +1477,14 @@ static int vrb_init_info(const struct fi_info **all_infos)
 			}
 		}
 	}
+	vrb_prof_func_end("alloc_info_loop");
 
 	/* note we are possibly discarding ENOMEM */
 	ret = *all_infos ? 0 : ret;
 
 	rdma_free_devices(ctx_list);
 done:
+	vrb_prof_func_end(__func__);
 	ofi_mutex_unlock(&vrb_init_mutex);
 	return ret;
 }
@@ -1885,6 +1896,7 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 {
 	int ret;
 
+	vrb_prof_func_start(__func__);
 	ret = vrb_init_info(&vrb_util_prov.info);
 	if (ret)
 		goto out;
@@ -1899,6 +1911,7 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 
 	vrb_alter_info(hints, *info);
 out:
+	vrb_prof_func_end(__func__);
 	if (!ret || ret == -FI_ENOMEM || ret == -FI_ENODEV)
 		return ret;
 	else

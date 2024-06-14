@@ -618,6 +618,10 @@ static int vrb_ep_close(fid_t fid)
 	struct vrb_ep *ep =
 		container_of(fid, struct vrb_ep, util_ep.ep_fid.fid);
 
+	if (ep->profile)
+		vrb_prof_set_st_time(ep->profile, (ofi_gettime_ns()),
+				VRB_DISCONNECTED);
+
 	switch (ep->util_ep.type) {
 	case FI_EP_MSG:
 		if (ep->eq) {
@@ -704,6 +708,8 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct vrb_dgram_av *av;
 	int ret;
 
+	vrb_prof_func_start(__func__);
+
 	ep = container_of(fid, struct vrb_ep, util_ep.ep_fid.fid);
 	ret = ofi_ep_bind_valid(&vrb_prov, bfid, flags);
 	if (ret)
@@ -749,6 +755,7 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		ret = -FI_EINVAL;
 		break;
 	}
+	vrb_prof_func_start(__func__);
 
 	return ret;
 }
@@ -770,11 +777,13 @@ static int vrb_create_dgram_ep(struct vrb_domain *domain, struct vrb_ep *ep,
 
 	init_attr->qp_type = IBV_QPT_UD;
 
+	vrb_prof_func_start("ibv_create_qp");
 	ep->ibv_qp = ibv_create_qp(domain->pd, init_attr);
 	if (!ep->ibv_qp) {
 		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_create_qp");
 		return -errno;
 	}
+	vrb_prof_func_end("ibv_create_qp");
 
 	ret = ibv_modify_qp(ep->ibv_qp, &attr,
 			    IBV_QP_STATE |
@@ -987,6 +996,8 @@ static int vrb_ep_enable(struct fid_ep *ep_fid)
 	struct vrb_domain *domain = vrb_ep2_domain(ep);
 	int ret;
 
+	vrb_prof_func_start(__func__);
+
 	if (!ep->eq && (ep->util_ep.type == FI_EP_MSG)) {
 		VRB_WARN(FI_LOG_EP_CTRL,
 			 "Endpoint is not bound to an event queue\n");
@@ -1036,11 +1047,16 @@ static int vrb_ep_enable(struct fid_ep *ep_fid)
 		/* Server-side QP creation, after RDMA_CM_EVENT_CONNECT_REQUEST
 		 * is recevied */
 		if (ep->id->verbs && ep->ibv_qp == NULL) {
+			vrb_prof_func_start("rdma_create_qp");
 			ret = rdma_create_qp(ep->id, domain->pd, &attr);
 			if (ret) {
 				VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_create_qp");
 				return -errno;
 			}
+			vrb_prof_func_end("rdma_create_qp");
+			if (ep->profile)
+				vrb_prof_cntr_inc(ep->profile,
+						 FI_VAR_MSG_QUEUE_CNT);
 
 			/* Allow shared XRC INI QP not controlled by RDMA CM
 			 * to share same post functions as RC QP. */
@@ -1061,6 +1077,7 @@ static int vrb_ep_enable(struct fid_ep *ep_fid)
 		assert(0);
 		return -FI_EINVAL;
 	}
+	vrb_prof_func_end(__func__);
 	return 0;
 }
 
@@ -1200,6 +1217,8 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 	struct fi_info *fi;
 	int ret;
 
+	vrb_prof_func_start("vrb_open_ep");
+
 	if (!info->ep_attr || !info->rx_attr || !info->tx_attr)
 		return -FI_EINVAL;
 
@@ -1250,6 +1269,22 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 	ret = vrb_ep_save_info_attr(ep, info);
 	if (ret)
 		goto close_ep;
+
+	// initiate profile
+	if ((info->ep_attr->type == FI_EP_MSG) ||
+	    (info->ep_attr->type == FI_EP_DGRAM)) {
+		ret = vrb_prof_create(&ep->profile);
+		if (!ret) {
+			if (info->handle &&
+			    (info->handle->fclass == FI_CLASS_CONNREQ)) {
+				vrb_prof_init_state(ep->profile,
+					ofi_gettime_ns(), VRB_PASSIVE_CONN);
+			} else {
+				vrb_prof_init_state(ep->profile,
+					ofi_gettime_ns(), VRB_ACTIVE_CONN);
+			}
+		}
+	}
 
 	switch (info->ep_attr->type) {
 	case FI_EP_MSG:
@@ -1313,7 +1348,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 			ep->id = pep->id;
 			ep->ibv_qp = ep->id->qp;
 			pep->id = NULL;
-
+			vrb_prof_func_start("rdma_resolve_addr");
 			if (rdma_resolve_addr(ep->id, info->src_addr, info->dest_addr,
 					      VERBS_RESOLVE_TIMEOUT)) {
 				ret = -errno;
@@ -1323,6 +1358,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 				rdma_destroy_ep(ep->id);
 				goto close_ep;
 			}
+			vrb_prof_func_end("rdma_resolve_addr");
 			ep->id->context = &ep->util_ep.ep_fid.fid;
 		} else {
 			ret = -FI_ENOSYS;
@@ -1356,6 +1392,9 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 	*ep_fid = &ep->util_ep.ep_fid;
 	ep->util_ep.ep_fid.fid.ops = &vrb_ep_ops;
 	ep->util_ep.ep_fid.ops = &vrb_ep_base_ops;
+	(*ep_fid)->fid.ops->ops_open = vrb_ep_ops_open;
+
+	vrb_prof_func_end("vrb_open_ep");
 
 	return FI_SUCCESS;
 
@@ -1530,6 +1569,9 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->src_addrlen = info->src_addrlen;
 
 	*pep = &_pep->pep_fid;
+
+	vrb_prof_create(&_pep->profile);
+
 	return 0;
 
 err4:

@@ -146,6 +146,15 @@
 #define VERBS_ANY_DOMAIN "verbs_any_domain"
 #define VERBS_ANY_FABRIC "verbs_any_fabric"
 
+#ifdef HAVE_FABRIC_PROFILE
+struct vrb_profile;
+typedef struct vrb_profile    vrb_profile_t;
+
+#else
+typedef void  vrb_profile_t;
+
+#endif
+
 extern struct fi_provider vrb_prov;
 extern struct util_prov vrb_util_prov;
 extern ofi_mutex_t vrb_init_mutex;
@@ -353,6 +362,9 @@ struct vrb_pep {
 	int			bound;
 	size_t			src_addrlen;
 	struct fi_info		*info;
+
+	/* for profiling */
+	vrb_profile_t		*profile;
 };
 
 struct fi_ops_cm *vrb_pep_ops_cm(struct vrb_pep *pep);
@@ -405,6 +417,9 @@ struct vrb_domain {
 
 	/* MR stuff */
 	struct ofi_mr_cache		cache;
+
+	/* for profiling */
+	vrb_profile_t		*profile;
 };
 
 struct vrb_cq;
@@ -634,6 +649,9 @@ struct vrb_ep {
 	struct vrb_cm_data_hdr		*cm_hdr;
 	void				*cm_priv_data;
 	bool				hmem_enabled;
+
+	/* for profiling */
+	vrb_profile_t			*profile;
 };
 
 
@@ -1016,5 +1034,86 @@ vrb_free_recv_wr(struct vrb_progress *progress, struct vrb_recv_wr *wr)
 	assert(ofi_genlock_held(progress->active_lock));
 	ofi_buf_free(wr);
 }
+
+int vrb_ep_ops_open(struct fid *fid, const char *name,
+                     uint64_t flags, void **ops, void *context);
+
+#ifdef HAVE_FABRIC_PROFILE
+#include <ofi_profile.h>
+#define VRB_MAX_STATES  (VRB_DISCONNECTED + 1)
+
+struct vrb_prof_state_time {
+        uint64_t start;
+        uint64_t time[VRB_MAX_STATES];
+};
+
+enum {
+        VRB_ACTIVE_CONN,
+        VRB_PASSIVE_CONN,
+};
+
+#define VRB_PROF_TIMERS   (VRB_PASSIVE_CONN + 1)
+// verbs supported variables defined in fi_profile.h
+// from FI_VAR_MSG_QUEUE_CNT to FI_VAR_CONN_REJECT
+#define VRB_PROF_VARS     5
+
+struct vrb_prof_counter {
+        uint64_t cntr[VRB_PROF_VARS];
+};
+
+struct vrb_profile {
+        struct util_profile util_prof;
+        struct vrb_prof_counter *vars;  // pointer to an entry in counters table
+        struct vrb_prof_state_time *state;    // pointer to an entry in conntion table
+};
+
+// support verbs connection counters
+#define vrb_prof_var2_cntr(var)    ((var) - FI_VAR_MSG_QUEUE_CNT)
+#define vrb_prof_cntr2_var(cntr)   ((cntr) + FI_VAR_MSG_QUEUE_CNT)
+
+#define vrb_prof_cntr_inc(prof, var) \
+do { \
+        (prof)->vars->cntr[vrb_prof_var2_cntr((var))] += 1; \
+} while (0)
+
+#define vrb_prof_cntr_inc_val(prof, var, val) \
+do { \
+	(prof)->vars->cntr[vrb_prof_var2_cntr((var))] += (val); \
+} while (0)
+
+#define vrb_prof_st_start(prof, cur_time) \
+do { \
+        (prof)->state->start = (cur_time); \
+} while (0)
+
+#define vrb_prof_set_st_time(prof, cur_time, st) \
+do { \
+        if ((prof)->state->start) \
+                (prof)->state->time[(st)] =  \
+                        ((cur_time) - (prof)->state->start); \
+} while (0)
+
+void vrb_prof_report(struct vrb_profile *prof);
+void vrb_prof_init_state(struct vrb_profile *prof, uint64_t cur_time, int type);
+void vrb_prof_func_start(const char *fname);
+void vrb_prof_func_end(const char *fname);
+void vrb_prof_init();
+
+#else
+
+#define vrb_prof_cntr_inc(prof, var)			do {} while (0)
+#define vrb_prof_cntr_inc_val(prof, var, val)		do {} while (0)
+#define vrb_prof_st_start(prof, cur_time)		do {} while (0)
+#define vrb_prof_set_st_time(prof, cur_time, state)	do {} while (0)
+#define vrb_prof_report(prof)				do {} while (0)
+#define vrb_prof_init_state(prof, cur_time, type)	do {} while (0)
+#define vrb_prof_func_start(fname)			do {} while (0)
+#define vrb_prof_func_end(fname)			do {} while (0)
+#define vrb_prof_init()					do {} while (0)
+
+#endif
+
+int vrb_prof_create(vrb_profile_t **prof);
+
 
 #endif /* VERBS_OFI_H */
