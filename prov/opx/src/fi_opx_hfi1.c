@@ -206,60 +206,63 @@ void fi_opx_init_hfi_lookup()
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Single HFI 0 found. No need for HFI hashmap.\n");
 		return;
 	}
-	/* Will need to fix opx_hfi_get_port_lid below to handle multiple ports on
-	 * multiple hfi-units.  For now, multiple ports are considered remote.
+	/* Multiple ports are handled
 	 */
 	for (hfi_unit = 0; hfi_unit < hfi_units; hfi_unit++) {
-		int lid = opx_hfi_get_port_lid(hfi_unit, OPX_MIN_PORT);
+		int num_ports = opx_hfi_get_num_ports(hfi_unit);
+		for (int port = OPX_MIN_PORT; port <= num_ports; port++) {
+			int lid = opx_hfi_get_port_lid(hfi_unit, port);
 
-		if (lid > 0) {
-			if (hfi_unit == fi_opx_global.hfi_local_info.hfi_unit) {
-				/* This is the HFI to be used by the EP.  No need to add to the
-				 * HFI hashmap.
-				 */
-				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"EP HFI %d LID 0x%x found.\n",
-					hfi_unit, lid);
-				continue;
-			}
-
-			struct fi_opx_hfi_local_lookup *hfi_lookup = NULL;
-
-			key.lid = htons((uint16_t)lid);
-
-			HASH_FIND(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, &key,
-				  sizeof(key), hfi_lookup);
-
-			if (hfi_lookup) {
-				hfi_lookup->instance++;
-
-				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"HFI %d LID 0x%x again: %d.\n",
-					hfi_lookup->hfi_unit, key.lid, hfi_lookup->instance);
-			} else {
-				int rc __attribute__ ((unused));
-				rc = posix_memalign((void **)&hfi_lookup, 32, sizeof(*hfi_lookup));
-				assert(rc==0);
-
-				if (!hfi_lookup) {
-					FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
-						"Unable to allocate HFI lookup entry.\n");
-					break;
+			if (lid > 0) {
+				if (hfi_unit == fi_opx_global.hfi_local_info.hfi_unit &&
+				lid == fi_opx_global.hfi_local_info.lid) {
+					/* This is the HFI and port to be used by the EP.  No need to add to the
+					* HFI hashmap.
+					*/
+					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"EP HFI %d LID 0x%x found.\n",
+						hfi_unit, lid);
+					continue;
 				}
-				hfi_lookup->key = key;
-				hfi_lookup->hfi_unit = hfi_unit;
-				hfi_lookup->instance = 0;
-				HASH_ADD(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, key,
-					 sizeof(hfi_lookup->key), hfi_lookup);
 
-				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"HFI %hhu LID 0x%hx entry created.\n",
-					hfi_lookup->hfi_unit, key.lid);
+				struct fi_opx_hfi_local_lookup *hfi_lookup = NULL;
+
+				key.lid = htons((uint16_t)lid);
+
+				HASH_FIND(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, &key,
+					sizeof(key), hfi_lookup);
+
+				if (hfi_lookup) {
+					hfi_lookup->instance++;
+
+					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"HFI %d LID 0x%x again: %d.\n",
+						hfi_lookup->hfi_unit, key.lid, hfi_lookup->instance);
+				} else {
+					int rc __attribute__ ((unused));
+					rc = posix_memalign((void **)&hfi_lookup, 32, sizeof(*hfi_lookup));
+					assert(rc==0);
+
+					if (!hfi_lookup) {
+						FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
+							"Unable to allocate HFI lookup entry.\n");
+						break;
+					}
+					hfi_lookup->key = key;
+					hfi_lookup->hfi_unit = hfi_unit;
+					hfi_lookup->instance = 0;
+					HASH_ADD(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, key,
+						sizeof(hfi_lookup->key), hfi_lookup);
+
+					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"HFI %hhu LID 0x%hx entry created.\n",
+						hfi_lookup->hfi_unit, key.lid);
+				}
+			} else {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"No LID found for HFI unit %d of %d units and port %d of %d ports: ret = %d, %s.\n",
+					hfi_unit, hfi_units, port, num_ports, lid, strerror(errno));
 			}
-		} else {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"No LID found for HFI unit %d of %d units: ret = %d, %s.\n",
-				hfi_unit, hfi_units, lid, strerror(errno));
 		}
 	}
 }
