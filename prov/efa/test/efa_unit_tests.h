@@ -126,7 +126,6 @@ void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer();
 void test_ibv_cq_ex_read_ignore_removed_peer();
 void test_info_open_ep_with_wrong_info();
 void test_info_open_ep_with_api_1_1_info();
-void test_info_ep_attr();
 void test_info_tx_rx_msg_order_rdm_order_none();
 void test_info_tx_rx_msg_order_rdm_order_sas();
 void test_info_tx_rx_msg_order_dgram_order_none();

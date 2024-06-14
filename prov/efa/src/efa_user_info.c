@@ -473,15 +473,6 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 			EFA_INFO(FI_LOG_CORE,
 				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
 		}
-
-		/* Handle other EP attributes */
-		if (hints->ep_attr) {
-			if (hints->ep_attr->max_msg_size) {
-				info->ep_attr->max_msg_size =
-					MIN(info->ep_attr->max_msg_size,
-					    hints->ep_attr->max_msg_size);
-			}
-		}
 	}
 
 	/* Use a table for AV if the app has no strong requirement */
