@@ -68,6 +68,7 @@ int efa_rdm_ep_create_base_ep_ibv_qp(struct efa_rdm_ep *ep)
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 	struct efa_rdm_cq *tx_rdm_cq, *rx_rdm_cq;
 	struct ibv_cq_ex *tx_ibv_cq, *rx_ibv_cq;
+	int ret;
 
 	tx_rdm_cq = efa_rdm_ep_get_tx_rdm_cq(ep);
 	rx_rdm_cq = efa_rdm_ep_get_rx_rdm_cq(ep);
@@ -95,7 +96,24 @@ int efa_rdm_ep_create_base_ep_ibv_qp(struct efa_rdm_ep *ep)
 
 	efa_rdm_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, tx_ibv_cq, rx_ibv_cq);
 
-	return efa_base_ep_create_qp(&ep->base_ep, &attr_ex);
+	ret = efa_base_ep_create_qp(&ep->base_ep, &attr_ex);
+	if (ret)
+		return ret;
+
+	/**
+	 * Create separate user_recv_qp to receive pkts that carries user data
+	 * without any headers.
+	 */
+	if (ep->use_zcpy_rx) {
+		ret = efa_qp_create(&ep->base_ep.user_recv_qp, &attr_ex);
+		if (ret) {
+			efa_base_ep_destruct_qp(&ep->base_ep);
+			return ret;
+		}
+		ep->base_ep.user_recv_qp->base_ep = &ep->base_ep;
+	}
+
+	return FI_SUCCESS;
 }
 
 static
@@ -1200,11 +1218,11 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 
 		ret = efa_rdm_ep_insert_cq_ibv_cq_poll_list(ep);
 		if (ret)
-			return ret;
+			goto err_destroy_qp;
 
 		ret = efa_rdm_ep_insert_cntr_ibv_cq_poll_list(ep);
 		if (ret)
-			return ret;
+			goto err_destroy_qp;
 
 		assert(ep->peer_srx_ep);
 		srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
@@ -1229,26 +1247,26 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * shared memory region.
 		 */
 		if (ep->shm_ep) {
-                        peer_srx_context.srx = util_get_peer_srx(ep->peer_srx_ep);
-                        peer_srx_attr.op_flags |= FI_PEER;
-                        ret = fi_srx_context(efa_rdm_ep_domain(ep)->shm_domain,
-					     &peer_srx_attr, &peer_srx_ep, &peer_srx_context);
-                        if (ret)
-                                goto err_unlock_and_destroy_qp;
+			peer_srx_context.srx = util_get_peer_srx(ep->peer_srx_ep);
+			peer_srx_attr.op_flags |= FI_PEER;
+			ret = fi_srx_context(efa_rdm_ep_domain(ep)->shm_domain,
+				&peer_srx_attr, &peer_srx_ep, &peer_srx_context);
+			if (ret)
+				goto err_unlock;
 			shm_ep_name_len = EFA_SHM_NAME_MAX;
 			ret = efa_shm_ep_name_construct(shm_ep_name, &shm_ep_name_len, &ep->base_ep.src_addr);
 			if (ret < 0)
-				goto err_unlock_and_destroy_qp;
+				goto err_unlock;
 			fi_setname(&ep->shm_ep->fid, shm_ep_name, shm_ep_name_len);
 
 			/* Bind srx to shm ep */
 			ret = fi_ep_bind(ep->shm_ep, &ep->peer_srx_ep->fid, 0);
 			if (ret)
-				goto err_unlock_and_destroy_qp;
+				goto err_unlock;
 
 			ret = fi_enable(ep->shm_ep);
 			if (ret)
-				goto err_unlock_and_destroy_qp;
+				goto err_unlock;
 		}
 		ofi_genlock_unlock(srx_ctx->lock);
 		break;
@@ -1259,8 +1277,9 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 
 	return ret;
 
-err_unlock_and_destroy_qp:
+err_unlock:
 	ofi_genlock_unlock(srx_ctx->lock);
+err_destroy_qp:
 	efa_base_ep_destruct_qp(&ep->base_ep);
 	return ret;
 }
@@ -1558,13 +1577,8 @@ int efa_rdm_ep_check_qp_in_order_aligned_128_bytes(struct efa_rdm_ep *ep,
 		ret = -FI_EOPNOTSUPP;
 
 out:
-	if (qp) {
-		retv = ibv_destroy_qp(qp->ibv_qp);
-		if (retv)
-			EFA_WARN(FI_LOG_EP_CTRL, "destroy ibv qp failed! err: %s\n",
-				fi_strerror(-retv));
-		free(qp);
-	}
+	if (qp)
+		efa_qp_destruct(qp);
 
 	if (ibv_cq_ex) {
 		retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(ibv_cq_ex));
