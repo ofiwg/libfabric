@@ -425,6 +425,15 @@ dummy_man_pages = \
         man/man3/fi_writemsg.3 \
         man/man3/fi_writev.3
 
+windows_files = \
+	Libfabric.Build.Default.props \
+	libfabric.def \
+	libfabric.vcxproj \
+	include/windows \
+	src/windows \
+	prov/verbs/include/windows \
+	prov/verbs/src/windows
+
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libfabric.pc
 
@@ -484,6 +493,7 @@ EXTRA_DIST += \
         libfabric.spec.in \
         config/distscript.pl \
         $(real_man_pages) $(prov_dist_man_pages) $(dummy_man_pages) \
+	$(windows_files) \
         $(prov_extra_dist)
 
 # a workaround for http://debbugs.gnu.org/cgi/bugreport.cgi?bug=18744, this
