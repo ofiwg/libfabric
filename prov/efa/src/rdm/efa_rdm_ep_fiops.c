@@ -956,11 +956,10 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
 
 	if (ep->use_zcpy_rx) {
 		/*
-		 * zero copy receive requires the packet header length remains
-		 * constant, so the application receive buffer is match with
-		 * incoming application data.
+		 * When zcpy rx is enabled, an extra QP is created to
+		 * post rx pkts from user recv buffer directly.
 		 */
-		ep->extra_info[0] |= EFA_RDM_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
+		ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP;
 	}
 
 	ep->extra_info[0] |= EFA_RDM_EXTRA_REQUEST_CONNID_HEADER;
