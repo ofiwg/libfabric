@@ -200,12 +200,14 @@ The following apply to memory registration.
 : When the FI_MR_LOCAL mode bit is set, applications must register all
   data buffers that will be accessed by the local hardware and provide
   a valid desc parameter into applicable data transfer operations.
-  When FI_MR_LOCAL is zero, applications are not required to register
+
+  When FI_MR_LOCAL is unset, applications are not required to register
   data buffers before using them for local operations (e.g. send and
-  receive data buffers).  The desc parameter into data transfer
-  operations will be ignored in this case, unless otherwise required
-  (e.g. se  FI_MR_HMEM).  It is recommended that applications pass in
-  NULL for desc when not required.
+  receive data buffers). Prior to libfabric 1.22, the desc parameter was
+  ignored. In libfabric 1.22 and later, the desc parameter must be either
+  valid or NULL. This behavior allows applications to optionally pass in a
+  valid desc parameter. If the desc parameter is NULL, any required local
+  memory registration will be handled by the provider.
 
   A provider may hide local registration requirements from applications
   by making use of an internal registration cache or similar mechanisms.
@@ -214,7 +216,7 @@ The following apply to memory registration.
   In order to support as broad range of applications as possible,
   without unduly affecting their performance, applications that wish to
   manage their own local memory registrations may do so by using the
-  memory registration calls.
+  memory registration calls and passing in a valid desc parameter.
 
   Note: the FI_MR_LOCAL mr_mode bit replaces the FI_LOCAL_MR fi_info mode bit.
   When FI_MR_LOCAL is set, FI_LOCAL_MR is ignored.
@@ -242,7 +244,31 @@ The following apply to memory registration.
 
 *FI_MR_ALLOCATED*
 : When set, all registered memory regions must be backed by physical
-  memory pages at the time the registration call is made.
+  memory pages at the time the registration call is made. In addition,
+  applications must not perform operations which may result in the underlying
+  virtual address to physical page mapping to change (e.g. calling free()
+  against an allocated MR). Failing to adhere to this may result in the
+  virtual address pointing to one set of physical pages while the MR points
+  to another set of physical pages.
+
+  When unset, registered memory regions need not be backed by physical
+  memory pages at the time the registration call is made. In addition, the
+  underlying virtual address to physical page mapping is allowed to change,
+  and the provider will ensure the corresponding MR is updated accordingly.
+  This behavior enables application use-cases where memory may be frequently
+  freed and reallocated or system memory migrating to/from device memory.
+
+  When unset, the application is responsible for ensuring that a registered
+  memory region references valid physical pages while a data transfer is
+  active against it, or the data transfer may fail. Application changes to
+  the virtual address range must be coordinated with network traffic to or
+  from that range.
+
+  If unset and FI_HMEM is supported, the ability for the virtual address to
+  physical address mapping to change extends to HMEM interfaces as well. If a
+  provider cannot support a virtual address to physical address changing for
+  a given HMEM interface, the provider should support a reasonable fallback
+  or the operation should fail.
 
 *FI_MR_PROV_KEY*
 : This memory region mode indicates that the provider does not support
@@ -289,12 +315,23 @@ The following apply to memory registration.
 
 *FI_MR_HMEM*
 : This mode bit is associated with the FI_HMEM capability.
+
   If FI_MR_HMEM is set, the application must register buffers that
   were allocated using a device call and provide a valid desc
   parameter into applicable data transfer operations even if they are
   only used for local operations (e.g. send and receive data buffers).
   Device memory must be registered using the fi_mr_regattr call, with
   the iface and device fields filled out.
+
+  If FI_MR_HMEM is unset, the application need not register device buffers
+  for local operations. In addition, fi_mr_regattr is not required to be used
+  for device memory registration. It is the responsibility of the provider to
+  discover the appropriate device memory registration attributes, if
+  applicable.
+
+  Similar to if FI_MR_LOCAL is unset, if FI_MR_HMEM is unset, applications may
+  optionally pass in a valid desc parameter. If the desc parameter is NULL, any
+  required local memory registration will be handled by the provider.
 
   If FI_MR_HMEM is set, but FI_MR_LOCAL is unset, only device buffers
   must be registered when used locally.  In this case, the desc parameter
@@ -303,11 +340,17 @@ The following apply to memory registration.
   parameter must either be valid or NULL.
 
 *FI_MR_COLLECTIVE*
-: This bit is associated with the FI_COLLECTIVE capability.  When set,
-  the provider requires that memory regions used in collection operations
-  must explicitly be registered for use with collective calls.  This
-  requires registering regions passed to collective calls using the
+: This bit is associated with the FI_COLLECTIVE capability.
+
+  If FI_MR_COLLECTIVE is set, the provider requires that memory regions used in
+  collection operations must explicitly be registered for use with collective
+  calls. This requires registering regions passed to collective calls using the
   FI_COLLECTIVE flag.
+
+  If FI_MR_COLLECTIVE is unset, memory registration for collection operations is
+  optional. Applications may optionally pass in a valid desc parameter. If the
+  desc parameter is NULL, any required local memory registration will be handled
+  by the provider.
 
 *Basic Memory Registration*
 : Basic memory registration was deprecated in libfabric version 1.5, but
@@ -483,20 +526,32 @@ When binding the memory region to an endpoint, flags should be 0.
 
 ## fi_mr_refresh
 
-The use of this call is required to notify the provider of any change
-to the physical pages backing a registered memory region if the
-FI_MR_MMU_NOTIFY mode bit has been set.  This call informs the provider
-that the page table entries associated with the region may have been
-modified, and the provider should verify and update the registered
-region accordingly.  The iov parameter is optional and may be used
-to specify which portions of the registered region requires updating.
-Providers are only guaranteed to update the specified address ranges.
+The use of this call is to notify the provider of any change to the physical
+pages backing a registered memory region. This call must be supported by
+providers requiring FI_MR_MMU_NOTIFY and may optionally be supported by
+providers not requiring FI_MR_ALLOCATED.
 
-The refresh operation has the effect of disabling and re-enabling
-access to the registered region.  Any operations from peers that attempt
-to access the region will fail while the refresh is occurring.
-Additionally, attempts to access the region by the local process
+This call informs the provider that the page table entries associated with
+the region may have been modified, and the provider should verify and update
+the registered region accordingly. The iov parameter is optional and may be
+used to specify which portions of the registered region requires updating.
+
+Providers are only guaranteed to update the specified address ranges. Failing
+to update a range will result in an error being returned.
+
+When FI_MR_MMU_NOTIFY is set, the refresh operation has the effect of
+disabling and re-enabling access to the registered region. Any operations
+from peers that attempt to access the region will fail while the refresh is
+occurring. Additionally, attempts to access the region by the local process
 through libfabric APIs may result in a page fault or other fatal operation.
+
+When FI_MR_ALLOCATED is unset, -FI_ENOSYS will be returned if a provider
+does not support fi_mr_refresh. If supported, the provider will atomically
+update physical pages of the MR associated with the user specified address
+ranges. The MR will remain enabled during this time.
+
+Note: FI_MR_MMU_NOTIFY set behavior takes precedence over FI_MR_ALLOCATED unset
+behavior.
 
 The fi_mr_refresh call is only needed if the physical pages might have
 been updated after the memory region was created.
@@ -538,6 +593,7 @@ struct fi_mr_attr {
         int            synapseai;
     } device;
     void               *hmem_data;
+    size_t             page_size;
 };
 
 struct fi_mr_auth_key {
@@ -732,6 +788,26 @@ field is determined by the value specified through iface.
 
 ## hmem_data
 The hmem_data field is reserved for future use and must be null.
+
+## page_size
+Page size allows applications to optionally provide a hint at what the
+optimal page size is for the an MR allocation. Typically, providers can
+select the optimal page size. In cases where VA range has zero pages
+backing it, which is supported with FI_MR_ALLOCATED unset, the provider
+may not know the optimal page size during registration. Rather than use
+a less efficient page size, this attribute allows applications to specify
+the page size to be used.
+
+If page size is zero, provider will select the page size.
+
+If non-zero, page size must be supported by OS. If a specific page size
+is specified for a memory region during creation, all pages later
+associated with the region must be of the given size. Attaching a memory
+page of a different size to a region may result in failed transfers to
+or from the region.
+
+Providers may choose to ignore page size. This will result in a provider
+selected page size always being used.
 
 ## fi_hmem_ze_device
 
