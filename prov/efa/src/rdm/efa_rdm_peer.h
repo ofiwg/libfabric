@@ -24,6 +24,12 @@ OFI_DECL_RECVWIN_BUF(struct efa_rdm_pke*, efa_rdm_robuf, uint32_t);
  */
 #define EFA_RDM_PEER_HANDSHAKE_QUEUED      BIT_ULL(5)
 
+struct efa_rdm_peer_user_recv_qp
+{
+	uint32_t qpn;
+	uint32_t qkey;
+};
+
 struct efa_rdm_peer {
 	struct efa_rdm_ep *ep;		/**< local ep */
 	bool is_self;			/**< flag indicating whether the peer is the endpoint itself */
@@ -59,6 +65,10 @@ struct efa_rdm_peer {
 	 * @details this value is capped by efa_env.efa_runt_size
 	 */
 	int64_t num_runt_bytes_in_flight;
+	/**
+	 * only valid when (extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) is non-zero
+	 */
+	struct efa_rdm_peer_user_recv_qp user_recv_qp;
 };
 
 /**
