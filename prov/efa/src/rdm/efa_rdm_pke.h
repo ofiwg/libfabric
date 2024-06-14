@@ -25,7 +25,7 @@ enum efa_rdm_pke_alloc_type {
 	EFA_RDM_PKE_FROM_EFA_RX_POOL,     /**< packet is allocated from `ep->efa_rx_pkt_pool` */
 	EFA_RDM_PKE_FROM_UNEXP_POOL,      /**< packet is allocated from `ep->rx_unexp_pkt_pool` */
 	EFA_RDM_PKE_FROM_OOO_POOL,	      /**< packet is allocated from `ep->rx_ooo_pkt_pool` */
-	EFA_RDM_PKE_FROM_USER_BUFFER,     /**< packet is from user provided buffer` */
+	EFA_RDM_PKE_FROM_USER_RX_POOL,     /**< packet is allocated from `ep->user_rx_pkt_pool` */
 	EFA_RDM_PKE_FROM_READ_COPY_POOL,  /**< packet is allocated from `ep->rx_readcopy_pkt_pool` */
 };
 
