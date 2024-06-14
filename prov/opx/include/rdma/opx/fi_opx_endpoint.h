@@ -2281,7 +2281,10 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		// Optimize Memcpy
 		if(hdr->dput.target.op == FI_NOOP - 1 &&
 			hdr->dput.target.dt == FI_VOID - 1) {
-			OPX_HMEM_COPY_TO(rbuf_qws, sbuf_qws, bytes, OPX_HMEM_NO_HANDLE, hmem_iface, hmem_device);
+			OPX_HMEM_COPY_TO(rbuf_qws, sbuf_qws, bytes,
+					OPX_HMEM_NO_HANDLE,
+					OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
+					hmem_iface, hmem_device);
 		} else {
 			OPX_HMEM_ATOMIC_DISPATCH(sbuf_qws, rbuf_qws, bytes,
 						hdr->dput.target.dt,
@@ -2312,6 +2315,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 
 		if (hdr->dput.target.dt == (FI_VOID - 1)) {
 			OPX_HMEM_COPY_TO(rbuf_qws, sbuf_qws, bytes, OPX_HMEM_NO_HANDLE,
+					 OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
 					 rma_req->hmem_iface, rma_req->hmem_device);
 		} else {
 			OPX_HMEM_ATOMIC_DISPATCH(sbuf_qws, rbuf_qws, bytes,

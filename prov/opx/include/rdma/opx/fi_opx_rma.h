@@ -241,7 +241,9 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
 	if (tx_op_flags & FI_INJECT) {
 		assert(iov->len <= FI_OPX_HFI1_PACKET_IMM);
 		OPX_HMEM_COPY_FROM((void *) params->inject_data, (void *) iov->buf,
-				   iov->len, OPX_HMEM_NO_HANDLE, iov->iface, iov->device);
+				   iov->len, OPX_HMEM_NO_HANDLE,
+				   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
+				   iov->iface, iov->device);
 		params->iov[0].sbuf = (uintptr_t) params->inject_data;
 		params->iov[0].sbuf_iface = FI_HMEM_SYSTEM;
 		params->iov[0].sbuf_device = 0;
