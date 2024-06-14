@@ -365,8 +365,6 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 				break;
 			case IBV_WC_RECV: /* fall through */
 			case IBV_WC_RECV_RDMA_WITH_IMM:
-				if (!dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
-					dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
 				efa_rdm_pke_handle_rx_error(pkt_entry, prov_errno);
 				break;
 			default:
@@ -384,8 +382,6 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			break;
 		case IBV_WC_RECV:
 			efa_av = ep->base_ep.av;
-			if (!dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
-				dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
 			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(ibv_cq->ibv_cq_ex),
 								ibv_wc_read_src_qp(ibv_cq->ibv_cq_ex), pkt_entry);
 
@@ -405,8 +401,6 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			efa_rdm_pke_handle_rma_completion(pkt_entry);
 			break;
 		case IBV_WC_RECV_RDMA_WITH_IMM:
-			if (!dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
-				dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
 			efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 				ibv_cq->ibv_cq_ex,
 				FI_REMOTE_CQ_DATA | FI_RMA | FI_REMOTE_WRITE,
@@ -418,6 +412,8 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			assert(0 && "Unhandled cq type");
 		}
 
+		if (ep->efa_rx_pkts_to_post > 0 && !dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
+			dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
 		i++;
 		if (i == cqe_to_process) {
 			break;
