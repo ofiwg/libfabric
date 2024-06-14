@@ -53,6 +53,9 @@ struct efa_base_ep {
 	struct ibv_recv_wr recv_more_wr_head;
 	struct ibv_recv_wr *recv_more_wr_tail;
 	struct efa_recv_wr *efa_recv_wr_vec;
+
+	/* Only used by RDM ep type */
+	struct efa_qp *user_recv_qp; /* Separate qp to receive pkts posted by users */
 };
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);
@@ -70,6 +73,8 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
 
 int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex);
+
+void efa_qp_destruct(struct efa_qp *qp);
 
 int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 			  struct ibv_qp_init_attr_ex *init_attr_ex);

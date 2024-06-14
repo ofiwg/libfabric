@@ -38,17 +38,20 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 {
 	struct efa_domain *domain;
 	struct efa_qp *qp = base_ep->qp;
-	int err;
+	struct efa_qp *user_recv_qp = base_ep->user_recv_qp;
 
 	if (qp) {
 		domain = qp->base_ep->domain;
 		domain->qp_table[qp->qp_num & domain->qp_table_sz_m1] = NULL;
-		err = -ibv_destroy_qp(qp->ibv_qp);
-		if (err)
-			EFA_INFO(FI_LOG_CORE, "destroy qp[%u] failed!\n", qp->qp_num);
-
-		free(qp);
+		efa_qp_destruct(qp);
 		base_ep->qp = NULL;
+	}
+
+	if (user_recv_qp) {
+		domain = user_recv_qp->base_ep->domain;
+		domain->qp_table[user_recv_qp->qp_num & domain->qp_table_sz_m1] = NULL;
+		efa_qp_destruct(user_recv_qp);
+		base_ep->user_recv_qp = NULL;
 	}
 
 	return 0;
@@ -212,20 +215,16 @@ int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 }
 
 static
-int efa_base_ep_enable_qp(struct efa_base_ep *base_ep)
+int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 {
-	struct efa_qp *qp;
 	int err;
 
-	qp = base_ep->qp;
 	qp->qkey = (base_ep->util_ep.type == FI_EP_DGRAM) ?
 			   EFA_DGRAM_CONNID :
 			   efa_generate_rdm_connid();
 	err = efa_base_ep_modify_qp_rst2rts(base_ep, qp);
 	if (err)
 		return err;
-
-	base_ep->efa_qp_enabled = true;
 
 	qp->qp_num = qp->ibv_qp->qp_num;
 	base_ep->domain->qp_table[qp->qp_num & base_ep->domain->qp_table_sz_m1] = qp;
@@ -252,13 +251,35 @@ int efa_base_ep_create_self_ah(struct efa_base_ep *base_ep, struct ibv_pd *ibv_p
 	return base_ep->self_ah ? 0 : -FI_EINVAL;
 }
 
+void efa_qp_destruct(struct efa_qp *qp)
+{
+	int err;
+
+	err = -ibv_destroy_qp(qp->ibv_qp);
+	if (err)
+		EFA_INFO(FI_LOG_CORE, "destroy qp[%u] failed, err: %s\n", qp->qp_num, fi_strerror(-err));
+	free(qp);
+}
+
 int efa_base_ep_enable(struct efa_base_ep *base_ep)
 {
 	int err;
 
-	err = efa_base_ep_enable_qp(base_ep);
-	if (err)
+	err = efa_base_ep_enable_qp(base_ep, base_ep->qp);
+	if (err) {
+		efa_base_ep_destruct_qp(base_ep);
 		return err;
+	}
+
+	base_ep->efa_qp_enabled = true;
+
+	if (base_ep->user_recv_qp) {
+		err = efa_base_ep_enable_qp(base_ep, base_ep->user_recv_qp);
+		if (err) {
+			efa_base_ep_destruct_qp(base_ep);
+			return err;
+		}
+	}
 
 	memcpy(base_ep->src_addr.raw, base_ep->domain->device->ibv_gid.raw, EFA_GID_LEN);
 	base_ep->src_addr.qpn = base_ep->qp->qp_num;
@@ -310,6 +331,8 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 		return -FI_ENOMEM;
 	}
 	base_ep->efa_qp_enabled = false;
+	base_ep->qp = NULL;
+	base_ep->user_recv_qp = NULL;
 	return 0;
 }
 
