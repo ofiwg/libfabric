@@ -750,6 +750,7 @@
     <ClCompile Include="prov\util\src\util_mem_monitor.c" />
     <ClCompile Include="prov\util\src\util_mem_hooks.c" />
     <ClCompile Include="prov\util\src\util_mr_cache.c" />
+    <ClCompile Include="prov\util\src\util_profile.c" />
     <ClCompile Include="prov\util\src\cuda_mem_monitor.c" />
     <ClCompile Include="prov\util\src\rocr_mem_monitor.c" />
     <ClCompile Include="prov\util\src\ze_mem_monitor.c" />
@@ -931,6 +932,7 @@
     <ClInclude Include="include\ofi_tree.h" />
     <ClInclude Include="include\ofi_util.h" />
     <ClInclude Include="include\ofi_prov.h" />
+    <ClInclude Include="include\ofi_profile.h" />
     <ClInclude Include="include\rbtree.h" />
     <ClInclude Include="include\rdma\fabric.h" />
     <ClInclude Include="include\rdma\fi_atomic.h" />
