@@ -956,7 +956,7 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 	efa_rdm_ep_post_handshake_or_queue(ep, peer);
 
 
-	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER) {
+	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL) {
 		assert(pkt_entry->ope);
 		zcpy_rxe = pkt_entry->ope;
 	}

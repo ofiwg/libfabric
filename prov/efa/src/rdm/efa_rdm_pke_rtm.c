@@ -643,7 +643,7 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
 
 	rxe = pkt_entry->ope;
 
-	if (pkt_entry->alloc_type != EFA_RDM_PKE_FROM_USER_BUFFER) {
+	if (pkt_entry->alloc_type != EFA_RDM_PKE_FROM_USER_RX_POOL) {
 		/*
 		 * On success, efa_rdm_pke_copy_data_to_ope will write rx completion,
 		 * release pkt_entry and rxe

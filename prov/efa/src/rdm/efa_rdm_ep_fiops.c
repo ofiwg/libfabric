@@ -233,6 +233,13 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (ret)
 		goto err_free;
 
+	ret = ofi_bufpool_create(&ep->user_rx_pkt_pool,
+			sizeof(struct efa_rdm_pke),
+			EFA_RDM_BUFPOOL_ALIGNMENT,
+			0,ep->rx_size,0);
+	if (ret)
+		goto err_free;
+
 	if (efa_env.rx_copy_unexp) {
 		ret = efa_rdm_ep_create_pke_pool(
 			ep,
@@ -319,6 +326,9 @@ err_free:
 
 	if (efa_env.rx_copy_unexp && ep->rx_unexp_pkt_pool)
 		ofi_bufpool_destroy(ep->rx_unexp_pkt_pool);
+
+	if (ep->user_rx_pkt_pool)
+		ofi_bufpool_destroy(ep->user_rx_pkt_pool);
 
 	if (ep->efa_rx_pkt_pool)
 		ofi_bufpool_destroy(ep->efa_rx_pkt_pool);
