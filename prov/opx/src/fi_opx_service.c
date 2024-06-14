@@ -407,6 +407,42 @@ int opx_hfi_get_num_units(void)
 	return ret;
 }
 
+/* get the number of ports per hfi unit */
+/* should return OPX_MAX_PORT if number of ports is greater than OPX_MAX_PORT*/
+/* should return 0 if number of ports is less than OPX_MIN_PORT*/
+int opx_hfi_get_num_ports(int hfi_unit) {
+	char path[256];
+	snprintf(path, sizeof(path), "%s_%d/ports/", OPX_CLASS_PATH, hfi_unit);
+	DIR* dir = opendir(path);
+	if (!dir) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Failed to open directory to read the number of ports on HFI unit %d. \n", hfi_unit);
+		return 0;
+	}
+
+	struct dirent* entry;
+	int port_count = 0;
+
+	while ((entry = readdir(dir)) != NULL) {
+		if (entry->d_type == DT_DIR && isdigit(entry->d_name[0])) {
+			port_count++;
+		}
+	}
+
+	closedir(dir);
+
+	if (port_count < OPX_MIN_PORT) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Number of ports should be greater than or equal to OPX_MIN_PORT. \n");
+		return 0;	
+	}
+
+	if (port_count > OPX_MAX_PORT) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Number of ports should be less than or equal to OPX_MAX_PORT. \n");
+		return OPX_MAX_PORT;	
+	}
+
+	return port_count;
+}
+
 /* Given a unit number, returns 1 if any port on the unit is active.
    returns 0 if no port on the unit is active. */
 int opx_hfi_get_unit_active(int unit)

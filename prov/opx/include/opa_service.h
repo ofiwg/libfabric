@@ -184,6 +184,11 @@ int opx_hfi_get_port_index2pkey(int unit, int port, int index);
    Returns -1 with errno set, or number of units >=0 (0 means none found). */
 int opx_hfi_get_num_units();
 
+/* get the number of ports per hfi unit */
+/* should return OPX_MAX_PORT if number of ports is greater than OPX_MAX_PORT*/
+/* should return 0 if number of ports is less than OPX_MIN_PORT*/
+int opx_hfi_get_num_ports(int hfi_unit);
+
 /* Given a unit number, returns 1 if any port on the unit is active.
    returns 0 if no port on the unit is active.
    returns -1 when an error occurred. */
