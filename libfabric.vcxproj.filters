@@ -225,6 +225,9 @@
     <ClCompile Include="prov\util\src\ze_mem_monitor.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
+    <ClCompile Include="prov\util\src\util_profile.c">
+      <Filter>Source Files\prov\util</Filter>
+    </ClCompile>
     <ClCompile Include="prov\coll\src\coll_attr.c">
       <Filter>Source Files\prov\coll</Filter>
     </ClCompile>
@@ -711,6 +714,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ofi_util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ofi_profile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\windows\poll.h">
