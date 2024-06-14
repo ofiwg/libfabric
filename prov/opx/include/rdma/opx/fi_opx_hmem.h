@@ -124,6 +124,12 @@ __OPX_FORCE_INLINE__
 int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_handle,
 		     void *dest, const void *src, size_t len, int64_t threshold)
 {
+	// These functions should never be called for regular host memory.
+	// Calling this function directly should only ever be done in code
+	// paths where we know iface != FI_HMEM_SYSTEM. Otherwise, the
+	// OPX_HMEM_COPY_* macros should be used
+	assert(iface != FI_HMEM_SYSTEM);
+
 	int ret;
 	assert((hmem_handle == OPX_HMEM_NO_HANDLE && threshold == OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET) ||
 		(hmem_handle != OPX_HMEM_NO_HANDLE && threshold != OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET));
@@ -152,6 +158,12 @@ __OPX_FORCE_INLINE__
 int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_handle,
 		       void *dest, const void *src, size_t len, int64_t threshold)
 {
+	// These functions should never be called for regular host memory.
+	// Calling this function directly should only ever be done in code
+	// paths where we know iface != FI_HMEM_SYSTEM. Otherwise, the
+	// OPX_HMEM_COPY_* macros should be used
+	assert(iface != FI_HMEM_SYSTEM);
+
 	int ret;
 	assert((hmem_handle == OPX_HMEM_NO_HANDLE && threshold == OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET) ||
 		(hmem_handle != OPX_HMEM_NO_HANDLE && threshold != OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET));
@@ -216,49 +228,51 @@ static const unsigned OPX_HMEM_OFI_MEM_TYPE[4] = {
 };
 
 #ifdef OPX_HMEM
-#define OPX_HMEM_COPY_FROM(dst, src, len, handle, src_iface, src_device)			\
-	do {											\
-		if (src_iface == FI_HMEM_SYSTEM) {						\
-			memcpy(dst, src, len);							\
-		} else {									\
-			opx_copy_from_hmem(src_iface, src_device, handle, dst, src, len,	\
-						OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);		\
-		}										\
+#define OPX_HMEM_COPY_FROM(dst, src, len, handle, threshold, src_iface, src_device)	\
+	do {										\
+		if (src_iface == FI_HMEM_SYSTEM) {					\
+			memcpy(dst, src, len);						\
+		} else {								\
+			opx_copy_from_hmem(src_iface, src_device, handle, dst,		\
+					src, len, threshold);				\
+		}									\
 	} while (0)
 
-#define OPX_HMEM_COPY_TO(dst, src, len, handle, dst_iface, dst_device)			\
+#define OPX_HMEM_COPY_TO(dst, src, len, handle, threshold, dst_iface, dst_device)	\
 	do {										\
 		if (dst_iface == FI_HMEM_SYSTEM) {					\
 			memcpy(dst, src, len);						\
 		} else {								\
-			opx_copy_to_hmem(dst_iface, dst_device, handle, dst, src, len,	\
+			opx_copy_to_hmem(dst_iface, dst_device, handle, dst,		\
+					src, len, threshold);				\
+		}									\
+	} while (0)
+
+#define OPX_HMEM_ATOMIC_DISPATCH(src, dst, len, dt, op, dst_iface, dst_device)		\
+	do {										\
+		if (dst_iface == FI_HMEM_SYSTEM) {					\
+			fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);		\
+		} else {								\
+			uint8_t hmem_buf[FI_OPX_HFI1_PACKET_MTU];			\
+			opx_copy_from_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE,	\
+					hmem_buf, dst, len,				\
+					OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);		\
+			fi_opx_rx_atomic_dispatch(src, hmem_buf, len, dt, op);		\
+			opx_copy_to_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE,	\
+					dst, hmem_buf, len,				\
 					OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);		\
 		}									\
 	} while (0)
 
-#define OPX_HMEM_ATOMIC_DISPATCH(src, dst, len, dt, op, dst_iface, dst_device)					\
-	do {													\
-		if (dst_iface == FI_HMEM_SYSTEM) {								\
-			fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);					\
-		} else {											\
-			uint8_t hmem_buf[FI_OPX_HFI1_PACKET_MTU];						\
-			opx_copy_from_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE, hmem_buf, dst, len,	\
-					   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);					\
-			fi_opx_rx_atomic_dispatch(src, hmem_buf, len, dt, op);					\
-			opx_copy_to_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE, dst, hmem_buf, len,		\
-					OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);					\
-		}												\
-	} while (0)
-
 #else
 
-#define OPX_HMEM_COPY_FROM(dst, src, len, handle, src_iface, src_device)		\
+#define OPX_HMEM_COPY_FROM(dst, src, len, handle, threshold, src_iface, src_device)	\
 	do {										\
 		memcpy(dst, src, len);							\
 		(void)src_iface;							\
 	} while (0)
 
-#define OPX_HMEM_COPY_TO(dst, src, len, handle, dst_iface, dst_device)			\
+#define OPX_HMEM_COPY_TO(dst, src, len, handle, threshold, dst_iface, dst_device)	\
 	do {										\
 		memcpy(dst, src, len);							\
 		(void)dst_iface;							\

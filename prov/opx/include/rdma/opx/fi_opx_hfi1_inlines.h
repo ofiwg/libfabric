@@ -60,7 +60,9 @@ size_t opx_hfi1_dput_write_header_and_payload_put(
 	if (tx_payload) {
 		assert(!iov);
 		OPX_HMEM_COPY_FROM((void *)tx_payload,
-				   (const void *)*sbuf, payload_bytes, OPX_HMEM_NO_HANDLE,
+				   (const void *)*sbuf, payload_bytes,
+				   OPX_HMEM_NO_HANDLE,
+				   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
 				   sbuf_iface, sbuf_device);
 	} else {
 		assert(iov);
@@ -91,6 +93,7 @@ void opx_hfi1_dput_write_payload_atomic_fetch(
 
 	OPX_HMEM_COPY_FROM((void *)&tx_payload->byte[sizeof(*dput_fetch)],
 			   (const void *)sbuf, dput_bytes, OPX_HMEM_NO_HANDLE,
+			   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
 			   sbuf_iface, sbuf_device);
 }
 
@@ -170,9 +173,11 @@ void opx_hfi1_dput_write_payload_atomic_compare_fetch(
 	   in the destination's memory, to see if a swap should take place. */
 	OPX_HMEM_COPY_FROM((void *)&tx_payload->byte[sizeof(*dput_fetch)],
 			   (const void *)sbuf, dput_bytes_half, OPX_HMEM_NO_HANDLE,
+			   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
 			   sbuf_iface, sbuf_device);
 	OPX_HMEM_COPY_FROM((void *)&tx_payload->byte[sizeof(*dput_fetch) + dput_bytes_half],
 			   (const void *)cbuf, dput_bytes_half, OPX_HMEM_NO_HANDLE,
+			   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
 			   cbuf_iface, cbuf_device);
 }
 
@@ -257,7 +262,9 @@ size_t opx_hfi1_dput_write_header_and_payload_get(
 		assert(!iov);
 		if (dt64 == (FI_VOID - 1)) {
 			OPX_HMEM_COPY_FROM((void *)tx_payload,
-					   (const void *)*sbuf, payload_bytes, OPX_HMEM_NO_HANDLE,
+					   (const void *)*sbuf, payload_bytes,
+					   OPX_HMEM_NO_HANDLE,
+					   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
 					   sbuf_iface, sbuf_device);
 		} else {
 			OPX_HMEM_ATOMIC_DISPATCH((void *)*sbuf,
@@ -302,7 +309,9 @@ size_t opx_hfi1_dput_write_header_and_payload_rzv(
 	if (tx_payload) {
 		assert(!iov);
 		OPX_HMEM_COPY_FROM((void *)tx_payload, (const void *)*sbuf,
-				   payload_bytes, OPX_HMEM_NO_HANDLE, sbuf_iface, sbuf_device);
+				   payload_bytes, OPX_HMEM_NO_HANDLE,
+				   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
+				   sbuf_iface, sbuf_device);
 	} else {
 		assert(iov);
 		iov->iov_base = (void *) *sbuf;

@@ -1777,7 +1777,9 @@ void fi_opx_hfi1_dput_copy_to_bounce_buf(uint32_t opcode,
 		}
 	} else {
 		assert(total_bytes <= FI_OPX_HFI1_SDMA_WE_BUF_LEN);
-		OPX_HMEM_COPY_FROM(target_buf, source_buf, total_bytes, OPX_HMEM_NO_HANDLE,
+		OPX_HMEM_COPY_FROM(target_buf, source_buf, total_bytes,
+				   OPX_HMEM_NO_HANDLE,
+				   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
 				   sbuf_iface, sbuf_device);
 	}
 
@@ -2262,7 +2264,10 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 			if (params->sdma_we->use_bounce_buf) {
 				OPX_HMEM_COPY_FROM(params->sdma_we->bounce_buf.buf,
 						   sbuf,
-						   MIN((packet_count * max_dput_bytes), bytes_to_send), OPX_HMEM_NO_HANDLE,
+						   MIN((packet_count * max_dput_bytes),
+						       bytes_to_send),
+						   OPX_HMEM_NO_HANDLE,
+						   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
 						   dput_iov[i].sbuf_iface,
 						   dput_iov[i].sbuf_device);
 				sbuf_tmp = params->sdma_we->bounce_buf.buf;
@@ -2345,7 +2350,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 					tidlen_remaining -= 1;
 					tidlen_consumed  += 1;
 				}
-				if (tidlen_remaining == 0) {
+				if (tidlen_remaining == 0 && tididx < (params->ntidpairs - 1)) {
 #ifndef NDEBUG
 					if(tididx == 0) first_tid_last_packet = true;/* First tid even though tididx ++*/
 #endif
@@ -3250,7 +3255,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	}
 
-	if(immediate_end_block_count) {
+	if (immediate_end_block_count) {
 		char* sbuf_end = (char *)buf + len - (immediate_end_block_count << 6);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"IMMEDIATE SEND RZV buf %p, buf end %p, sbuf immediate end block %p\n",(char *)buf, (char *)buf+len, sbuf_end);
 		union {
@@ -3259,10 +3264,11 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		} align_tmp;
 		assert(immediate_end_block_count == 1);
 
-		opx_copy_from_hmem(src_iface, src_device_id,
-				desc ? ((struct fi_opx_mr *)desc)->hmem_dev_reg_handle : OPX_HMEM_NO_HANDLE,
-				align_tmp.immediate_byte, sbuf_end, (immediate_end_block_count << 6),
-				OPX_HMEM_DEV_REG_SEND_THRESHOLD);
+		OPX_HMEM_COPY_FROM(align_tmp.immediate_byte, sbuf_end, (immediate_block_count << 6),
+				   desc ? ((struct fi_opx_mr *)desc)->hmem_dev_reg_handle
+					: OPX_HMEM_NO_HANDLE,
+				   OPX_HMEM_DEV_REG_SEND_THRESHOLD,
+				   src_iface, src_device_id);
 
 		scb_payload = (uint64_t *)FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 		fi_opx_copy_scb(scb_payload, align_tmp.immediate_qw);
