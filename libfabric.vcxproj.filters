@@ -674,6 +674,9 @@
     <ClInclude Include="include\rdma\fi_collective.h">
       <Filter>Header Files\rdma</Filter>
     </ClInclude>
+    <ClInclude Include="include\rdma\fi_profile.h">
+      <Filter>Header Files\rdma</Filter>
+    </ClInclude>
     <ClInclude Include="include\windows\osd.h">
       <Filter>Header Files\windows</Filter>
     </ClInclude>
