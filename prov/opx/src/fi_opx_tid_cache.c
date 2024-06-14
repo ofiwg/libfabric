@@ -898,9 +898,7 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache,
 {
 	/*struct ofi_mr_entry *cur;*/
 	int ret;
-	// TODO - Original behavior is struct ofi_mem_monitor *monitor = cache->monitors[info->iface];
-	// Hardcoding to FI_HMEM_SYSTEM
-	struct ofi_mem_monitor *monitor = cache->monitors[FI_HMEM_SYSTEM];
+	struct ofi_mem_monitor *monitor = cache->monitors[info->iface];
 
 	/* Assert precondition that the lock is held with a trylock assert */
 	assert(pthread_mutex_trylock(&mm_lock) == EBUSY);
@@ -1289,6 +1287,13 @@ int opx_tid_cache_setup(struct ofi_mr_cache **cache,
 
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
 		[FI_HMEM_SYSTEM] = default_monitor,
+		[FI_HMEM_CUDA] = default_cuda_monitor,
+		[FI_HMEM_ROCR] = default_rocr_monitor,
+		[FI_HMEM_ZE] = default_ze_monitor,
+
+		/* Not supported in OPX */
+		[FI_HMEM_NEURON] = NULL,
+		[FI_HMEM_SYNAPSEAI] = NULL
 	};
 	int err;
 
