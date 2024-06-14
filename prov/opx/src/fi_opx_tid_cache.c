@@ -1263,6 +1263,112 @@ int opx_tid_cache_close_region(struct ofi_mr_cache *tid_cache,
 }
 
 /****************************************************
+ *
+ * Dump Cache functions
+ * - opx_tid_cache_dump_entry
+ * - opx_tid_cache_dump_entries
+ * - opx_tid_cache_dump_dlist
+ * - opx_tid_cache_dump_cache
+ *
+ * These functions are for dumping the TID cache in
+ * a debug situation. The functions are not actually
+ * used/called from anywhere, just available in case
+ * a dev wants to temporarily dump the cache contents
+ * while debugging.
+ *
+ ****************************************************/
+void opx_tid_cache_dump_entry(struct ofi_rbnode *root, struct ofi_mr_entry *entry)
+{
+	fprintf(stderr, "(%d) %s:%s():%d ===== Entry Node %p %s parent %p, Left %p Right %p Color %s Data %p =====\n",
+		getpid(), __FILE__, __func__, __LINE__,
+		root,
+		(root->parent) ?
+			((root == root->parent->left) ? "is a LEFT child of" : "is a RIGHT child of") :
+			"has no",
+		root->parent,
+		root->left, root->right,
+		root->color ? "RED" : "BLACK",
+		entry);
+
+	fprintf(stderr, "(%d) %s:%s():%d Key: %p-%p (%lu bytes)\n",
+		getpid(), __FILE__, __func__, __LINE__,
+		entry->info.iov.iov_base,
+		(void *) ((uintptr_t)entry->info.iov.iov_base + entry->info.iov.iov_len),
+		entry->info.iov.iov_len);
+
+	fprintf(stderr, "(%d) %s:%s():%d Use count: %d\n",
+		getpid(), __FILE__, __func__, __LINE__,
+		entry->use_cnt);
+	struct opx_mr_tid_info *tid_info = &((struct opx_tid_mr *) entry->data)->tid_info;
+
+	fprintf(stderr, "(%d) %s:%s():%d Tid Info vaddr: %p-%p (%lu bytes)\n",
+		getpid(), __FILE__, __func__, __LINE__,
+		(void *) tid_info->tid_vaddr,
+		(void *) ((uintptr_t)tid_info->tid_vaddr + tid_info->tid_length),
+		tid_info->tid_length);
+
+	fprintf(stderr, "(%d) %s:%s():%d Tid Info ninfo=%u\n",
+		getpid(), __FILE__, __func__, __LINE__,
+		tid_info->ninfo);
+	for (int i = 0; i < tid_info->ninfo; ++i) {
+		fprintf(stderr, "(%d) %s:%s():%d\tinfo[%d]=%08X\n",
+			getpid(), __FILE__, __func__, __LINE__,
+			i, tid_info->info[i]);
+	}
+	fprintf(stderr, "(%d) %s:%s():%d Tid Info npairs=%u\n",
+		getpid(), __FILE__, __func__, __LINE__,
+		tid_info->npairs);
+	for (int i = 0; i < tid_info->npairs; ++i) {
+		fprintf(stderr, "(%d) %s:%s():%d\tpairs[%d]=%08X\n",
+			getpid(), __FILE__, __func__, __LINE__,
+			i, tid_info->pairs[i]);
+	}
+
+}
+
+void opx_tid_cache_dump_entries(struct ofi_rbnode *root, struct ofi_rbnode *sentinal)
+{
+	if (root == sentinal) {
+		return;
+	}
+
+	opx_tid_cache_dump_entry(root, (struct ofi_mr_entry *) root->data);
+	opx_tid_cache_dump_entries(root->left, sentinal);
+	opx_tid_cache_dump_entries(root->right, sentinal);
+}
+
+void opx_tid_cache_dump_dlist(struct dlist_entry *dl_entry)
+{
+	struct ofi_mr_entry *entry;
+
+	if (!dlist_empty(dl_entry)) {
+		dlist_foreach_container(dl_entry, struct ofi_mr_entry, entry, list_entry) {
+			opx_tid_cache_dump_entry(entry->node, entry);
+		}
+	} else {
+		fprintf(stderr, "(%d) %s:%s():%d\t<Empty>\n",
+			getpid(), __FILE__, __func__, __LINE__);
+	}
+}
+
+void opx_tid_cache_dump_cache(struct fi_opx_ep *opx_ep, struct ofi_mr_cache *tid_cache)
+{
+	struct ofi_rbnode *root = ofi_rbmap_get_root(&tid_cache->tree);
+
+	opx_tid_cache_dump_entries(root, &tid_cache->tree.sentinel);
+
+	fprintf(stderr, "(%d) %s:%s():%d\t====LRU List====\n",
+		getpid(), __FILE__, __func__, __LINE__);
+
+	opx_tid_cache_dump_dlist(&tid_cache->lru_list);
+
+	fprintf(stderr, "(%d) %s:%s():%d\t====Dead List====\n",
+		getpid(), __FILE__, __func__, __LINE__);
+
+	opx_tid_cache_dump_dlist(&tid_cache->dead_region_list);
+}
+
+/****************************************************
  * Main entry points for external callers
  * - opx_tid_cache_setup
  * - opx_deregister_for_rzv
