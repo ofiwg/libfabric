@@ -122,6 +122,13 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 	peer->device_version = efa_rdm_pke_get_handshake_opt_device_version(pkt_entry);
 	EFA_INFO(FI_LOG_CQ, "Received peer EFA device version: 0x%x\n", peer->device_version);
 
+	if (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) {
+		struct efa_rdm_handshake_opt_user_recv_qp_hdr *user_recv_qp_hdr;
+		user_recv_qp_hdr = efa_rdm_pke_get_handshake_opt_user_recv_qp_ptr(pkt_entry);
+		peer->user_recv_qp.qpn = user_recv_qp_hdr->qpn;
+		peer->user_recv_qp.qkey = user_recv_qp_hdr->qkey;
+	}
+
 	efa_rdm_pke_release_rx(pkt_entry);
 }
 
