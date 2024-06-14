@@ -96,6 +96,7 @@ struct efa_rdm_ep {
 	/* buffer pool for send & recv */
 	struct ofi_bufpool *efa_tx_pkt_pool;
 	struct ofi_bufpool *efa_rx_pkt_pool;
+	struct ofi_bufpool *user_rx_pkt_pool;
 
 	/* staging area for unexpected and out-of-order packets */
 	struct ofi_bufpool *rx_unexp_pkt_pool;
@@ -155,6 +156,11 @@ struct efa_rdm_ep {
 	 * due to queued hmem copy or local read.
 	 */
 	size_t efa_rx_pkts_held;
+
+	/*
+	 * number of RX pkts posted by user (for zero-copy recv)
+	 */
+	size_t user_rx_pkts_posted;
 
 	/* number of outstanding tx ops on efa device */
 	size_t efa_outstanding_tx_ops;

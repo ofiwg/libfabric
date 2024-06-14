@@ -208,36 +208,13 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
 int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe, size_t flags)
 {
 	struct efa_rdm_pke *pkt_entry;
-	struct efa_mr *mr;
 	size_t rx_iov_offset = 0;
 	int err, rx_iov_index = 0;
 
 	assert(rxe->iov_count > 0  && rxe->iov_count <= ep->rx_iov_limit);
 	assert(rxe->iov[0].iov_len >= ep->msg_prefix_size);
-	pkt_entry = (struct efa_rdm_pke *)rxe->iov[0].iov_base;
-	assert(pkt_entry);
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->user_rx_pkt_pool, EFA_RDM_PKE_FROM_USER_RX_POOL);
 
-	/*
-	 * The ownership of the prefix buffer lies with the application, do not
-	 * put it on the dbg list for cleanup during shutdown or poison it. The
-	 * provider loses jurisdiction over it soon after writing the rx
-	 * completion.
-	 */
-	dlist_init(&pkt_entry->entry);
-	mr = (struct efa_mr *)rxe->desc[0];
-	pkt_entry->mr = &mr->mr_fid;
-	pkt_entry->alloc_type = EFA_RDM_PKE_FROM_USER_BUFFER;
-	pkt_entry->flags = EFA_RDM_PKE_IN_USE;
-	pkt_entry->next = NULL;
-	pkt_entry->ep = ep;
-	/*
-	 * The actual receiving buffer size (pkt_size) is
-	 *    (total IOV length) - sizeof(struct efa_rdm_pke)
-	 * because the first part of user buffer was used to
-	 * construct pkt_entry. The actual receiving buffer
-	 * posted to device starts from pkt_entry->wiredata.
-	 */
-	pkt_entry->pkt_size = ofi_total_iov_len(rxe->iov, rxe->iov_count) - sizeof *pkt_entry;
 	pkt_entry->ope = rxe;
 	rxe->state = EFA_RDM_RXE_MATCHED;
 
@@ -249,12 +226,9 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	assert(rx_iov_index < rxe->iov_count);
 	assert(rx_iov_offset < rxe->iov[rx_iov_index].iov_len);
 
-	if (rx_iov_index > 0) {
-		assert(rxe->iov_count - rx_iov_index == 1);
-		pkt_entry->payload = (char *) rxe->iov[rx_iov_index].iov_base + rx_iov_offset;
-		pkt_entry->payload_mr = rxe->desc[rx_iov_index];
-		pkt_entry->payload_size = ofi_total_iov_len(&rxe->iov[rx_iov_index], rxe->iov_count - rx_iov_index) - rx_iov_offset;
-	}
+	pkt_entry->payload = (char *) rxe->iov[rx_iov_index].iov_base + rx_iov_offset;
+	pkt_entry->payload_mr = rxe->desc[rx_iov_index];
+	pkt_entry->payload_size = ofi_total_iov_len(&rxe->iov[rx_iov_index], rxe->iov_count - rx_iov_index) - rx_iov_offset;
 
 	err = efa_rdm_pke_recvv(&pkt_entry, 1);
 	if (OFI_UNLIKELY(err)) {
@@ -265,7 +239,10 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 		return err;
 	}
 
-	ep->efa_rx_pkts_posted++;
+#if ENABLE_DEBUG
+	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_posted_buf_list);
+#endif
+	ep->user_rx_pkts_posted++;
 	return 0;
 }
 
@@ -837,6 +814,16 @@ int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep)
 		if (OFI_UNLIKELY(err)) {
 			EFA_WARN(FI_LOG_CQ,
 				 "cannot allocate memory for map entry pool. error: %s\n",
+				 strerror(-err));
+			return err;
+		}
+	}
+
+	if (ep->use_zcpy_rx) {
+		err = ofi_bufpool_grow(ep->user_rx_pkt_pool);
+		if (OFI_UNLIKELY(err)) {
+			EFA_WARN(FI_LOG_CQ,
+				 "cannot allocate memory for user recv pkt pool. error: %s\n",
 				 strerror(-err));
 			return err;
 		}

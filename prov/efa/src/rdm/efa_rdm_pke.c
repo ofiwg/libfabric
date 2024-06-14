@@ -62,7 +62,6 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	 * should be adjusted according to the actual data size.
 	 */
 	pkt_entry->pkt_size = pkt_pool->attr.size - sizeof(struct efa_rdm_pke);
-	assert(pkt_entry->pkt_size == ep->mtu_size);
 	pkt_entry->alloc_type = alloc_type;
 	pkt_entry->flags = EFA_RDM_PKE_IN_USE;
 	pkt_entry->next = NULL;
@@ -151,7 +150,7 @@ void efa_rdm_pke_release_rx(struct efa_rdm_pke *pkt_entry)
 	assert(pkt_entry->next == NULL);
 	ep = pkt_entry->ep;
 	assert(ep);
-	if (ep->use_zcpy_rx && pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER)
+	if (ep->use_zcpy_rx && pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL)
 		return;
 
 	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL) {
@@ -613,6 +612,7 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 {
 	struct efa_rdm_ep *ep;
 	struct ibv_recv_wr *bad_wr;
+	struct ibv_qp *qp;
 	int i, err;
 
 	assert(pke_cnt);
@@ -624,18 +624,17 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 		ep->base_ep.efa_recv_wr_vec[i].wr.wr_id = (uintptr_t)pke_vec[i];
 		ep->base_ep.efa_recv_wr_vec[i].wr.num_sge = 1;
 		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list = ep->base_ep.efa_recv_wr_vec[i].sge;
-		assert(pke_vec[i]->pkt_size > 0);
-		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->pkt_size - pke_vec[i]->payload_size;
-		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
-		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
-		ep->base_ep.efa_recv_wr_vec[i].wr.next = NULL;
-
-		if (pke_vec[i]->payload) {
-			ep->base_ep.efa_recv_wr_vec[i].wr.num_sge = 2;
-			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[1].addr = (uintptr_t) pke_vec[i]->payload;
-			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[1].length = pke_vec[i]->payload_size;
-			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[1].lkey = ((struct efa_mr *) pke_vec[i]->payload_mr)->ibv_mr->lkey;
+		if (pke_vec[i]->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL) {
+			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].addr = (uintptr_t) pke_vec[i]->payload;
+			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->payload_size;
+			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->payload_mr)->ibv_mr->lkey;
+		} else {
+			assert(pke_vec[i]->pkt_size > 0);
+			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->pkt_size;
+			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
+			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
 		}
+		ep->base_ep.efa_recv_wr_vec[i].wr.next = NULL;
 		if (i > 0)
 			ep->base_ep.efa_recv_wr_vec[i-1].wr.next = &ep->base_ep.efa_recv_wr_vec[i].wr;
 #if HAVE_LTTNG
@@ -643,7 +642,14 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 #endif
 	}
 
-	err = ibv_post_recv(ep->base_ep.qp->ibv_qp, &ep->base_ep.efa_recv_wr_vec[0].wr, &bad_wr);
+	if (pke_vec[0]->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL) {
+		assert(ep->base_ep.user_recv_qp);
+		qp = ep->base_ep.user_recv_qp->ibv_qp;
+	} else {
+		qp = ep->base_ep.qp->ibv_qp;
+	}
+
+	err = ibv_post_recv(qp, &ep->base_ep.efa_recv_wr_vec[0].wr, &bad_wr);
 	if (OFI_UNLIKELY(err)) {
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 	}
