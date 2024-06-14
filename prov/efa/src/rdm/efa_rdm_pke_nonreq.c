@@ -30,6 +30,7 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	struct efa_rdm_handshake_opt_connid_hdr *connid_hdr;
 	struct efa_rdm_handshake_opt_host_id_hdr *host_id_hdr;
 	struct efa_rdm_handshake_opt_device_version_hdr *device_version_hdr;
+	struct efa_rdm_handshake_opt_user_recv_qp_hdr *user_recv_qp_hdr;
 
 	handshake_hdr = (struct efa_rdm_handshake_hdr *)pkt_entry->wiredata;
 	handshake_hdr->type = EFA_RDM_HANDSHAKE_PKT;
@@ -74,6 +75,16 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	device_version_hdr->device_version = g_device_list[0].ibv_attr.vendor_part_id;
 	handshake_hdr->flags |= EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR;
 	pkt_entry->pkt_size += sizeof (struct efa_rdm_handshake_opt_device_version_hdr);
+
+	/* Include the user recv qp information (qpn and qkey) */
+	if (pkt_entry->ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) {
+		user_recv_qp_hdr = (struct efa_rdm_handshake_opt_user_recv_qp_hdr *) (pkt_entry->wiredata + pkt_entry->pkt_size);
+		assert(pkt_entry->ep->base_ep.user_recv_qp);
+		user_recv_qp_hdr->qpn = pkt_entry->ep->base_ep.user_recv_qp->qp_num;
+		user_recv_qp_hdr->qkey = pkt_entry->ep->base_ep.user_recv_qp->qkey;
+		handshake_hdr->flags |= EFA_RDM_HANDSHAKE_USER_RECV_QP_HDR;
+		pkt_entry->pkt_size += sizeof (struct efa_rdm_handshake_opt_user_recv_qp_hdr);
+	}
 
 	pkt_entry->addr = addr;
 	return 0;
