@@ -944,6 +944,7 @@
     <ClInclude Include="include\rdma\fi_tagged.h" />
     <ClInclude Include="include\rdma\fi_trigger.h" />
     <ClInclude Include="include\rdma\fi_collective.h" />
+    <ClInclude Include="include\rdma\fi_profile.h" />
     <ClInclude Include="include\rdma\providers\fi_log.h" />
     <ClInclude Include="include\rdma\providers\fi_peer.h" />
     <ClInclude Include="include\rdma\providers\fi_prov.h" />
