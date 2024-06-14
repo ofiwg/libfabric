@@ -874,67 +874,43 @@ void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 {
 	int err;
 
-	if (ep->use_zcpy_rx) {
-		/*
-		 * In zero copy receive mode,
+	if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0 && ep->efa_rx_pkts_held == 0) {
+		/* All of efa_rx_pkts_posted, efa_rx_pkts_to_post and
+		 * efa_rx_pkts_held equal to 0 means
+		 * this is the first call of the progress engine on this endpoint.
 		 *
-		 * If application did not post any receive buffer,
-		 * we post one internal buffer so endpoint can
-		 * receive control packets such as handshake.
+		 * In this case, we explictly allocate the 1st chunk of memory
+		 * for unexp/ooo/readcopy RX packet pool.
 		 *
-		 * If buffers have posted to the device, we do NOT
-		 * repost internal buffers to maximize the chance
-		 * user buffer is used to receive data.
+		 * The reason to explicitly allocate the memory for RX packet
+		 * pool is to improve efficiency.
+		 *
+		 * Without explicit memory allocation, a pkt pools's memory
+		 * is allocated when 1st packet is allocated from it.
+		 * During the computation, different processes got their 1st
+		 * unexp/ooo/read-copy packet at different time. Therefore,
+		 * if we do not explicitly allocate memory at the beginning,
+		 * memory will be allocated at different time.
+		 *
+		 * When one process is allocating memory, other processes
+		 * have to wait. When each process allocate memory at different
+		 * time, the accumulated waiting time became significant.
+		 *
+		 * By explicitly allocating memory at ep initialization
+		 * engine, the memory allocation is parallelized.
+		 * (This assumes the ep initialization on
+		 * all processes happen at roughly the same time, which
+		 * is a valid assumption according to our knowledge of
+		 * the workflow of most application)
 		 */
-		if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0) {
-			ep->efa_rx_pkts_to_post = 1;
-		} else if (ep->efa_rx_pkts_posted > 0){
-			ep->efa_rx_pkts_to_post = 0;
-		}
-	} else {
-		if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0 && ep->efa_rx_pkts_held == 0) {
-			/* All of efa_rx_pkts_posted, efa_rx_pkts_to_post and
-			 * efa_rx_pkts_held equal to 0 means
-			 * this is the first call of the progress engine on this endpoint.
-			 *
-			 * In this case, we explictly allocate the 1st chunk of memory
-			 * for unexp/ooo/readcopy RX packet pool.
-			 *
-			 * The reason to explicitly allocate the memory for RX packet
-			 * pool is to improve efficiency.
-			 *
-			 * Without explicit memory allocation, a pkt pools's memory
-			 * is allocated when 1st packet is allocated from it.
-			 * During the computation, different processes got their 1st
-			 * unexp/ooo/read-copy packet at different time. Therefore,
-			 * if we do not explicitly allocate memory at the beginning,
-			 * memory will be allocated at different time.
-			 *
-			 * When one process is allocating memory, other processes
-			 * have to wait. When each process allocate memory at different
-			 * time, the accumulated waiting time became significant.
-			 *
-			 * By explicitly allocating memory at 1st call to progress
-			 * engine, the memory allocation is parallelized.
-			 * (This assumes the 1st call to the progress engine on
-			 * all processes happen at roughly the same time, which
-			 * is a valid assumption according to our knowledge of
-			 * the workflow of most application)
-			 *
-			 * The memory was not allocated during endpoint initialization
-			 * because some applications will initialize some endpoints
-			 * but never uses it, thus allocating memory initialization
-			 * causes waste.
-			 */
-			err = efa_rdm_ep_grow_rx_pools(ep);
-			if (err)
-				goto err_exit;
+		err = efa_rdm_ep_grow_rx_pools(ep);
+		if (err)
+			goto err_exit;
 
-			ep->efa_rx_pkts_to_post = efa_rdm_ep_get_rx_pool_size(ep);
-		}
-		/* only valid for non-zero copy */
-		assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted + ep->efa_rx_pkts_held == efa_rdm_ep_get_rx_pool_size(ep));
+		ep->efa_rx_pkts_to_post = efa_rdm_ep_get_rx_pool_size(ep);
 	}
+
+	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted + ep->efa_rx_pkts_held == efa_rdm_ep_get_rx_pool_size(ep));
 
 	err = efa_rdm_ep_bulk_post_internal_rx_pkts(ep);
 	if (err)
