@@ -60,7 +60,8 @@ ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 : Data buffer to send or receive.
 
 *len*
-: Length of data buffer to send or receive.
+: Length of data buffer to send or receive, specified in bytes.  Valid
+  transfers are from 0 bytes up to the endpoint's max_msg_size.
 
 *iov*
 : Vectored data buffer.
