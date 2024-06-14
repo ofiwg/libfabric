@@ -51,14 +51,18 @@ static struct fid_ep **eps;
 static char **send_bufs, **recv_bufs;
 static struct fid_mr **send_mrs, **recv_mrs;
 static void **send_descs, **recv_descs;
+static uint64_t *remote_keys;
+static uint64_t *remote_addrs;
 static struct fi_context *recv_ctx;
 static struct fi_context *send_ctx;
 static struct fid_cq **txcqs, **rxcqs;
 static struct fid_av **avs;
-static fi_addr_t *remote_addr;
+static fi_addr_t *remote_fiaddr;
 static bool shared_cq = false;
 static bool shared_av = false;
 int num_eps = 3;
+
+#define WRITEDATA (0xC0DE)
 
 enum {
 	LONG_OPT_SHARED_AV,
@@ -89,11 +93,13 @@ static void free_ep_res()
 	free(recv_bufs);
 	free(send_mrs);
 	free(recv_mrs);
+	free(remote_keys);
+	free(remote_addrs);
 	free(send_descs);
 	free(recv_descs);
 	free(send_ctx);
 	free(recv_ctx);
-	free(remote_addr);
+	free(remote_fiaddr);
 	free(eps);
 	free(avs);
 }
@@ -126,11 +132,13 @@ static int alloc_multi_ep_res()
 	int i, ret;
 
 	eps = calloc(num_eps, sizeof(*eps));
-	remote_addr = calloc(num_eps, sizeof(*remote_addr));
+	remote_fiaddr = calloc(num_eps, sizeof(*remote_fiaddr));
 	send_mrs = calloc(num_eps, sizeof(*send_mrs));
 	recv_mrs = calloc(num_eps, sizeof(*recv_mrs));
 	send_descs = calloc(num_eps, sizeof(*send_descs));
 	recv_descs = calloc(num_eps, sizeof(*recv_descs));
+	remote_keys = calloc(num_eps, sizeof(*remote_keys));
+	remote_addrs = calloc(num_eps, sizeof(*remote_addrs));
 	send_ctx = calloc(num_eps, sizeof(*send_ctx));
 	recv_ctx = calloc(num_eps, sizeof(*recv_ctx));
 	send_bufs = calloc(num_eps, opts.transfer_size);
@@ -140,10 +148,10 @@ static int alloc_multi_ep_res()
 	rxcqs = calloc(num_eps, sizeof(*rxcqs));
 	avs = calloc(num_eps, sizeof(*avs));
 
-	if (!eps || !remote_addr || !send_bufs || !recv_bufs ||
+	if (!eps || !remote_fiaddr || !send_bufs || !recv_bufs ||
 	    !send_ctx || !recv_ctx || !send_bufs || !recv_bufs ||
 	    !send_mrs || !recv_mrs || !send_descs || !recv_descs ||
-	    !txcqs || !rxcqs)
+	    !txcqs || !rxcqs || !remote_keys)
 		return -FI_ENOMEM;
 
 	for (i = 0; i < num_eps; i++) {
@@ -188,15 +196,9 @@ static int ep_post_tx(int idx)
 	if (shared_cq)
 		cq_read_idx = 0;
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-		ret = ft_fill_buf(send_bufs[idx], opts.transfer_size);
-		if (ret)
-			return ret;
-	}
-
 	do {
 		ret = fi_send(eps[idx], send_bufs[idx], opts.transfer_size,
-			      send_descs[idx], remote_addr[idx],
+			      send_descs[idx], remote_fiaddr[idx],
 			      &send_ctx[idx]);
 		if (ret == -FI_EAGAIN)
 			(void) fi_cq_read(txcqs[cq_read_idx], NULL, 0);
@@ -206,7 +208,32 @@ static int ep_post_tx(int idx)
 	return ret;
 }
 
-static int do_transfers(void)
+static int ep_post_write(int idx)
+{
+	int ret, cq_read_idx = idx;
+
+	if (shared_cq)
+		cq_read_idx = 0;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_fill_buf(send_bufs[idx], opts.transfer_size);
+		if (ret)
+			return ret;
+	}
+	do {
+		ret = fi_writedata(eps[idx], send_bufs[idx], opts.transfer_size,
+			       send_descs[idx], WRITEDATA, remote_fiaddr[idx],
+			       remote_addrs[idx], remote_keys[idx],
+			       &send_ctx[idx]);
+		if (ret == -FI_EAGAIN)
+			(void) fi_cq_read(txcqs[cq_read_idx], NULL, 0);
+
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
+}
+
+static int do_sends(void)
 {
 	int i, ret, cq_read_idx;
 	uint64_t cur;
@@ -219,8 +246,12 @@ static int do_transfers(void)
 		}
 	}
 
-	printf("Send to all %d remote EPs\n", num_eps);
+	printf("Send RMA info to all %d remote EPs\n", num_eps);
 	for (i = 0; i < num_eps; i++) {
+		((uint64_t *)send_bufs[i])[0] = fi_mr_key(recv_mrs[i]);
+		((uint64_t *)send_bufs[i])[1] =
+				fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR ?
+				(uint64_t) recv_bufs[i] : 0;
 		ret = ep_post_tx(i);
 		if (ret) {
 			FT_PRINTERR("fi_send", ret);
@@ -234,6 +265,7 @@ static int do_transfers(void)
 			cq_read_idx = 0;
 		else
 			cq_read_idx = i;
+
 		cur = 0;
 		ret = ft_get_cq_comp(txcqs[cq_read_idx], &cur, 1, -1);
 		if (ret < 0)
@@ -241,6 +273,61 @@ static int do_transfers(void)
 
 		cur = 0;
 		ret = ft_get_cq_comp(rxcqs[cq_read_idx], &cur, 1, -1);
+		if (ret < 0)
+			return ret;
+	}
+
+	for (i = 0; i < num_eps; i++) {
+		remote_keys[i] = ((uint64_t *)recv_bufs[i])[0];
+		remote_addrs[i] = ((uint64_t *)recv_bufs[i])[1];
+	}
+
+	printf("PASSED multi ep sends\n");
+	return 0;
+}
+
+static int do_rma(void)
+{
+	int i, ret, cq_read_idx;
+	uint64_t cur;
+
+	for (i = 0; i < num_eps; i++) {
+		if (fi->rx_attr->mode & FI_RX_CQ_DATA) {
+			ret = ep_post_rx(i);
+			if (ret) {
+				FT_PRINTERR("fi_recv", ret);
+				return ret;
+			}
+		}
+
+		ret = ep_post_write(i);
+		if (ret) {
+			FT_PRINTERR("fi_write", ret);
+			return ret;
+		}
+	}
+
+	printf("Wait for all writes from peer\n");
+	for (i = 0; i < num_eps; i++) {
+		if (shared_cq)
+			cq_read_idx = 0;
+		else
+			cq_read_idx = i;
+
+		cur = 0;
+		ret = ft_get_cq_comp(rxcqs[cq_read_idx], &cur, 1, -1);
+		if (ret < 0)
+			return ret;
+	}
+
+	for (i = 0; i < num_eps; i++) {
+		if (shared_cq)
+			cq_read_idx = 0;
+		else
+			cq_read_idx = i;
+
+		cur = 0;
+		ret = ft_get_cq_comp(txcqs[cq_read_idx], &cur, 1, -1);
 		if (ret < 0)
 			return ret;
 	}
@@ -254,11 +341,7 @@ static int do_transfers(void)
 		printf("Data check OK\n");
 	}
 
-	ret = ft_finalize_ep(ep);
-	if (ret)
-		return ret;
-
-	printf("PASSED multi ep\n");
+	printf("PASSED multi ep writes\n");
 	return 0;
 }
 
@@ -380,7 +463,7 @@ static int enable_ep(int idx)
 	if (ret)
 		return ret;
 
-	ret = ft_init_av_addr(avs[av_bind_idx], eps[idx], &remote_addr[idx]);
+	ret = ft_init_av_addr(avs[av_bind_idx], eps[idx], &remote_fiaddr[idx]);
 	if (ret)
 		return ret;
 
@@ -434,8 +517,15 @@ static int run_test(void)
 		}
 	}
 
-	ret = do_transfers();
+	ret = do_sends();
+	if (ret)
+		goto out;
 
+	ret = do_rma();
+	if (ret)
+		goto out;
+
+	ret = ft_finalize_ep(ep);
 out:
 	free_ep_res();
 	return ret;
@@ -499,7 +589,7 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->caps = FI_MSG;
+	hints->caps = FI_MSG | FI_RMA;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;
