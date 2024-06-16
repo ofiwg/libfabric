@@ -237,6 +237,27 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 					"(%d) [%d] ERROR: Request specifies 3 IOVs, but opcode is set to EAGER!\n",
 					pid, req_num);
 			}
+			fprintf(stderr, "(%d) [%d] tid iov=%p len=%lu pairs=%lu\n",
+				pid, req_num, iov_ptr[2].iov_base, iov_ptr[2].iov_len,
+				iov_ptr[2].iov_len / sizeof(uint32_t));
+			if (iov_ptr[2].iov_len < sizeof(uint32_t)) {
+				fprintf(stderr,
+					"(%d) [%d] ERROR: Request opcode is set to EXPECTED (TID), but TID IOV's length is < minimum!\n",
+					pid, req_num);
+			}
+			uint32_t kdeth = (uint32_t) (header_vec->scb.hdr.qw[2] >> 32);
+			uint32_t tidctrl = (kdeth >> FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT) & FI_OPX_HFI1_KDETH_TIDCTRL;
+			uint32_t tididx = (kdeth >> FI_OPX_HFI1_KDETH_TID_SHIFT) & FI_OPX_HFI1_KDETH_TID;
+			uint32_t tidOMshift = (kdeth >> KDETH_OM_SHIFT) & KDETH_OM_MASK;
+			uint32_t tidoffset = (kdeth >> KDETH_OFFSET_SHIFT) & KDETH_OFFSET_MASK;
+			uint32_t actual_offset = tidoffset << (tidOMshift ? KDETH_OM_LARGE_SHIFT
+									  : KDETH_OM_SMALL_SHIFT);
+
+			fprintf(stderr,
+				"(%d) [%d] kdeth=%08X tidctrl=%08X tididx=%08X tidOMshift=%08X tidoffset=%08X actual offset=%08X\n",
+				pid, req_num, kdeth, tidctrl, tididx, tidOMshift,
+				tidoffset, actual_offset);
+
 			uint32_t *tidpairs = (uint32_t*)iov_ptr[2].iov_base;
 			for (int j = 0; j < (iov_ptr[2].iov_len / sizeof(uint32_t)); ++j ) {
 				fprintf(stderr, "(%d) [%d] tid    [%u]=%#8.8X LEN %u, CTRL %u, IDX %u\n",
@@ -251,6 +272,17 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 				pid, req_num);
 		}
 
+#ifdef OPX_SDMA_DEBUG
+		ssize_t retry_rc = writev(opx_ep->hfi->fd, iov_ptr, req_info_iovs);
+
+		if (retry_rc > 0) {
+			fprintf(stderr, "(%d) [%d] Retry succeeded!\n", pid, req_num);
+		} else {
+			fprintf(stderr, "(%d) [%d] Retry FAILED retry_rc=%ld errno=%d (%s)\n",
+			pid, req_num, retry_rc, errno, strerror(errno));
+		}
+#endif
+		++req_num;
 		iov_ptr += req_info_iovs;
 	} while (iov_ptr < (iovs + num_iovs));
 
@@ -346,7 +378,15 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 		assert(*request->comp_state == OPX_SDMA_COMP_PENDING_WRITEV);
 		assert(request->fill_index == OPX_SDMA_FILL_INDEX_INVALID);
 
-		if (iovs_free < request->num_iovs) {
+#ifdef OPX_SDMA_DEBUG
+		// For debugging SDMA issues, issue one writev per request, so
+		// that in the event of a failure, it's easy to identify the
+		// offending request.
+		if (iovs_used)
+#else
+		if (iovs_free < request->num_iovs)
+#endif
+		{
 			opx_hfi1_sdma_writev(opx_ep, iovecs, iovs_used, avail,
 					fill_index, __FILE__, __func__, __LINE__);
 
