@@ -390,7 +390,14 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 		assert(efa_rdm_ep_get_peer(ep, pkt_entry->addr) == peer);
 
 		qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
-		ibv_wr_send(qp->ibv_qp_ex);
+		if ((pkt_entry->ope->fi_flags & FI_REMOTE_CQ_DATA) &&
+		    (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP)) {
+			/* Currently this is only expected for eager pkts */
+			assert(pkt_entry_cnt == 1);
+			ibv_wr_send_imm(qp->ibv_qp_ex, pkt_entry->ope->cq_entry.data);
+		} else {
+			ibv_wr_send(qp->ibv_qp_ex);
+		}
 		if (pkt_entry->pkt_size <= efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size &&
 	            !efa_mr_is_hmem((struct efa_mr *)pkt_entry->payload_mr)) {
 			iov_cnt = 1;
