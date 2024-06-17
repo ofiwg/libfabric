@@ -314,7 +314,7 @@ static ssize_t
 ofi_async_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t device,
 			    const struct iovec *hmem_iov,
 			    size_t hmem_iov_count,
-			    uint64_t hmem_iov_offset, void *buf,
+			    size_t hmem_iov_offset, void *buf,
 			    size_t size, int dir, ofi_hmem_async_event_t event)
 {
 	uint64_t done = 0, len;
@@ -353,7 +353,7 @@ ofi_async_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t device,
 static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t device,
 				     const struct iovec *hmem_iov,
 				     size_t hmem_iov_count,
-				     uint64_t hmem_iov_offset, void *buf,
+				     size_t hmem_iov_offset, void *buf,
 				     size_t size, int dir)
 {
 	uint64_t done = 0, len;
@@ -385,7 +385,7 @@ static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t dev
 static ssize_t ofi_dev_reg_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t handle,
 					      const struct iovec *hmem_iov,
 					      size_t hmem_iov_count,
-					      uint64_t hmem_iov_offset, void *buf,
+					      size_t hmem_iov_offset, void *buf,
 					      size_t size, int dir)
 {
 	uint64_t done = 0, len;
@@ -414,7 +414,7 @@ static ssize_t ofi_dev_reg_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint
 }
 
 static ssize_t ofi_copy_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
-		size_t iov_count, uint64_t offset, void *buf,
+		size_t iov_count, size_t offset, void *buf,
 		size_t size, int dir)
 {
 	uint64_t done = 0, len;
