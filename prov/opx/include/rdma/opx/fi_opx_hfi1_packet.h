@@ -108,7 +108,7 @@ static inline const char* opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 		   (opcode <= (uint16_t) FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS)) {
 		return FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS[opcode-FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH];
 	}
-	return FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS[FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS+1]; /* INVALID */
+	return FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS[sizeof(FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS)/sizeof(char*)-1]; /* INVALID */
 }
 #define FI_OPX_HFI1_PACKET_SLID(packet_hdr)				\
 	(((packet_hdr).qw[0] & 0xFFFF000000000000ul) >> 48)
