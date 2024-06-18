@@ -63,6 +63,10 @@
 #define OPX_MODINFO_DRV_VERS OPX_MODINFO_PATH " hfi1 -F version"
 #define OPX_MODINFO_SRC_VERS OPX_MODINFO_PATH " hfi1 -F srcversion"
 
+#define OPX_EXPECTED_RECEIVE_ENABLE_ON		1
+#define OPX_EXPECTED_RECEIVE_ENABLE_OFF		0
+#define OPX_EXPECTED_RECEIVE_ENABLE_DEFAULT	OPX_EXPECTED_RECEIVE_ENABLE_OFF
+
 enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep) {
 #if defined(OFI_RELIABILITY_CONFIG_STATIC_NONE)
 			if (opx_ep->type == FI_EP_RDM) {
@@ -2044,7 +2048,7 @@ err:
 int opx_get_drv_ver(char *drv_ver)
 {
 	FILE *p;
-	
+
 	p = popen(OPX_MODINFO_DRV_VERS, "r");
 	if (p == NULL) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2249,35 +2253,40 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	/*
 	  fi_info -e output:
 
-          # FI_OPX_EXPECTED_RECEIVE_ENABLE: Boolean (0/1, on/off, true/false, yes/no)
-          # opx: Enables expected receive rendezvous using Token ID (TID). Defaults to "No"
+	  # FI_OPX_EXPECTED_RECEIVE_ENABLE: Boolean (0/1, on/off, true/false, yes/no)
+	  # opx: Enables expected receive rendezvous using Token ID (TID). Defaults to "No"
 
 	 */
 
 	/* enable/disable receive side (CTS) expected receive (TID) */
-	int expected_receive_enable; /* get bool takes an int */
-	if (fi_param_get_bool(fi_opx_global.prov, "expected_receive_enable", &expected_receive_enable) == FI_SUCCESS) {
+	int expected_receive_enable_env; /* get bool takes an int */
+	if (fi_param_get_bool(fi_opx_global.prov, "expected_receive_enable", &expected_receive_enable_env) == FI_SUCCESS) {
 #ifdef OPX_DEV_OVERRIDE
-		opx_ep->use_expected_tid_rzv = expected_receive_enable;
+		opx_ep->use_expected_tid_rzv = expected_receive_enable_env;
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Override set for TID\n");
 #else
-		opx_ep->use_expected_tid_rzv = expected_receive_enable;
-		if (expected_receive_enable == 1) {
+		opx_ep->use_expected_tid_rzv = expected_receive_enable_env;
+		if (expected_receive_enable_env == OPX_EXPECTED_RECEIVE_ENABLE_ON) {
 			if (opx_is_tid_allowed() == 0) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"Expected receive (TID) cannot be enabled. Unsupported driver version\n");
-				opx_ep->use_expected_tid_rzv = 0;
+					"Expected receive (TID) cannot be enabled. Unsupported driver version.\n");
+				fprintf(stderr, "Expected receive (TID) set with FI_OPX_EXPECTED_RECEIVE_ENABLE env var but driver version does not support it.\n");
+				fprintf(stderr, "Upgrade Omnipath driver or remove FI_OPX_EXPECTED_RECEIVE_ENABLE env var.\n");
+				if (OPX_EXPECTED_RECEIVE_ENABLE_DEFAULT == OPX_EXPECTED_RECEIVE_ENABLE_OFF)
+					abort();
+				else
+					opx_ep->use_expected_tid_rzv = OPX_EXPECTED_RECEIVE_ENABLE_OFF;
 			}
 		}
 #endif
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"expected_receive_enable parm specified as %0X; "
 			"opx_ep->use_expected_tid_rzv = set to %0hhX\n",
-			 expected_receive_enable, opx_ep->use_expected_tid_rzv);
+			 expected_receive_enable_env, opx_ep->use_expected_tid_rzv);
 	} else {
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"expected_receive_enable parm not specified; disabled expected receive rendezvous\n");
-		opx_ep->use_expected_tid_rzv = 0;
+		opx_ep->use_expected_tid_rzv = OPX_EXPECTED_RECEIVE_ENABLE_DEFAULT;
 	}
 
 #if defined(OPX_HMEM) && !defined(OPX_DEV_OVERRIDE)
