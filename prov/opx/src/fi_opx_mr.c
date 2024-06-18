@@ -159,7 +159,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 		hmem_iface = fi_opx_hmem_get_iface(iov->iov_base, NULL, &hmem_device);
 	}
 
-	if(hmem_iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) {
+	if((hmem_iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) || hmem_iface == FI_HMEM_ROCR) {
 		struct ofi_mr_entry *entry;
 		struct ofi_mr_info info = {
 			.iface = hmem_iface,
