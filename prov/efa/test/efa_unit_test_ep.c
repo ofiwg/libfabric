@@ -635,10 +635,16 @@ void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad(struct efa_resourc
 static void
 test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource, bool expected_use_zcpy_rx) {
 	struct efa_rdm_ep *ep;
+	size_t max_msg_size = 1000;
 
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, resource->hints, false, false);
 
 	ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Set sufficiently small max_msg_size */
+	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_MAX_MSG_SIZE,
+			&max_msg_size, sizeof max_msg_size), 0);
+	assert_true(ep->max_msg_size == max_msg_size);
 
 	assert_true(ep->use_zcpy_rx == expected_use_zcpy_rx);
 }
@@ -657,8 +663,6 @@ void test_efa_rdm_ep_user_zcpy_rx_happy(struct efa_resource **state)
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	assert_non_null(resource->hints);
 
-	/* Just use a small enough size */
-	resource->hints->ep_attr->max_msg_size = 1000;
 	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
 	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
 	resource->hints->mode = FI_MSG_PREFIX;
@@ -677,9 +681,6 @@ void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(struct efa_resource **state
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	assert_non_null(resource->hints);
 
-	/* Just use a small enough size */
-	resource->hints->ep_attr->max_msg_size = 1000;
-
 	resource->hints->tx_attr->msg_order = FI_ORDER_SAS;
 	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
 	resource->hints->mode = FI_MSG_PREFIX;
@@ -697,9 +698,6 @@ void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_no_prefix(struct efa_resource *
 
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	assert_non_null(resource->hints);
-
-	/* Just use a small enough size */
-	resource->hints->ep_attr->max_msg_size = 1000;
 
 	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
 	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
