@@ -443,7 +443,7 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
 	struct efa_mr *desc;
 	struct efa_rdm_ep *ep;
 	size_t segment_offset;
-	ssize_t bytes_copied;
+	size_t bytes_copied;
 
 	ep = pke->ep;
 	assert(ep);

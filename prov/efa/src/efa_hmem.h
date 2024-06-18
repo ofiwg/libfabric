@@ -102,6 +102,6 @@ static inline int efa_copy_to_hmem(void *desc, void *dest, const void *buff, siz
 	return ofi_copy_to_hmem(iface, device, dest, buff, size);
 };
 
-ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, int buff_size, const struct iovec *hmem_iov, int iov_count);
-ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov, int iov_count, char *buff, int buff_size);
+ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, size_t buff_size, const struct iovec *hmem_iov, size_t iov_count);
+ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov, size_t iov_count, char *buff, size_t buff_size);
 #endif

@@ -248,11 +248,11 @@ int efa_domain_hmem_support_init_all(struct efa_domain *efa_domain)
  * @param[in]   iov_count     Number of IOV structures in IOV array
  * @return  number of bytes copied on success, or a negative error code
  */
-ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, int buff_size,
-                               const struct iovec *hmem_iov, int iov_count)
+ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, size_t buff_size,
+                               const struct iovec *hmem_iov, size_t iov_count)
 {
-	int i, ret = -1;
-	size_t data_size = 0;
+	int ret = -1;
+	size_t i, data_size = 0;
 
 	for (i = 0; i < iov_count; i++) {
 		if (data_size + hmem_iov[i].iov_len > buff_size) {
@@ -283,9 +283,10 @@ ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, int buff_size,
  * @return  number of bytes copied on success, or a negative error code
  */
 ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov,
-                             int iov_count, char *buff, int buff_size)
+                             size_t iov_count, char *buff, size_t buff_size)
 {
-	int i, ret, bytes_remaining = buff_size, size;
+	int ret;
+	size_t i, bytes_remaining = buff_size, size;
 
 	for (i = 0; i < iov_count && bytes_remaining; i++) {
 		size = hmem_iov[i].iov_len;
