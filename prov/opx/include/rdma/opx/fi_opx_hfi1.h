@@ -81,10 +81,10 @@
 						     Normally, the payload should be larger than 8K */
 
 #define FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS	(1)  //Todo not actually reserving a credit
-#define FI_OPX_HFI1_TX_CREDIT_DELTA_THRESHOLD 		(63)  // If the incomming request asks for more credits than this, force a return.  Lower number here is more agressive 
-#define FI_OPX_HFI1_TX_CREDIT_MIN_FORCE_CR		(130) // We won't force a credit return for FI_OPX_HFI1_TX_CREDIT_DELTA_THRESHOLD if the number 
+#define FI_OPX_HFI1_TX_CREDIT_DELTA_THRESHOLD 		(63)  // If the incomming request asks for more credits than this, force a return.  Lower number here is more agressive
+#define FI_OPX_HFI1_TX_CREDIT_MIN_FORCE_CR		(130) // We won't force a credit return for FI_OPX_HFI1_TX_CREDIT_DELTA_THRESHOLD if the number
 							      // of avalible credits is above this number
-														  
+
 #define OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT		(16384) /* Default for max payload size for using Multi-packet Eager */
 #define OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX			(65535) /* Max value (set to fit within uint16_t) */
 
@@ -92,7 +92,7 @@
    This is packet payload plus 64 bytes for the PBC and packet header.
    All packets in a multi-packet eager send will be this size, except
    possibly the last one, which may be smaller.
-   
+
    NOTE: This value MUST be a multiple of 64!
    */
 #define FI_OPX_MP_EGR_CHUNK_SIZE 			(4160)
@@ -204,18 +204,6 @@ static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX, "FI_OP
 #ifndef OPX_RTS_TID_SETUP_MAX_TRIES
 #define OPX_RTS_TID_SETUP_MAX_TRIES	(1)
 #endif
-
-/*
- * Minimum page sizes to use for different memory types.
- * The array is indexed by the values defined in
- * enum fi_hmem_iface. Some values are not supported.
- */
-static const uint64_t OPX_TID_PAGE_SIZE[4] = {
-	PAGE_SIZE,	/* FI_HMEM_SYSTEM */
-	64 * 1024,	/* FI_HMEM_CUDA   */
-	PAGE_SIZE,	/* FI_HMEM_ROCR   */
-	PAGE_SIZE	/* FI_HMEM_ZE     */
-};
 
 static inline
 uint32_t fi_opx_addr_calculate_base_rx (const uint32_t process_id, const uint32_t processes_per_node) {

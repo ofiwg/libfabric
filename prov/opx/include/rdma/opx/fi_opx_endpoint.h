@@ -50,7 +50,7 @@
 #include "rdma/opx/fi_opx_debug_counters.h"
 #include "rdma/opx/fi_opx_flight_recorder.h"
 #include "opx_shm.h"
-#include "fi_opx_tid.h"
+#include "fi_opx_tid_cache.h"
 
 void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 
@@ -542,7 +542,7 @@ struct fi_opx_ep {
 	bool					is_tx_cq_bound;
 	bool					is_rx_cq_bound;
 	bool					use_expected_tid_rzv;
-	uint8_t				        unused_cacheline5[3];
+	uint8_t					unused_cacheline5[3];
 	uint32_t				unused_cacheline5_u32[3];
 
 	ofi_spin_t				lock; /* lock size varies based on ENABLE_DEBUG*/
