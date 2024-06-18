@@ -304,6 +304,7 @@ int opx_hmem_cache_setup(struct ofi_mr_cache **cache,
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
 		[FI_HMEM_SYSTEM] = default_monitor,
 		[FI_HMEM_CUDA] = cuda_monitor,
+		[FI_HMEM_ROCR] = rocr_monitor,
 	};
 	int err;
 
@@ -376,16 +377,18 @@ int opx_hmem_cache_setup(struct ofi_mr_cache **cache,
 		FI_DBG(&fi_opx_provider, FI_LOG_MR, "uffd_monitor\n");
 	} else if (default_monitor == cuda_monitor) {
 		FI_DBG(&fi_opx_provider, FI_LOG_MR, "cuda_monitor\n");
+	} else if (default_monitor == rocr_monitor) {
+		FI_DBG(&fi_opx_provider, FI_LOG_MR, "rocr_monitor\n");
 	} else {
 		if (default_monitor == cuda_ipc_monitor)
 			FI_WARN(&fi_opx_provider, FI_LOG_MR,
 				"cuda_ipc_monitor is unsupported in opx\n");
-		else if (default_monitor == rocr_monitor)
-			FI_WARN(&fi_opx_provider, FI_LOG_MR,
-				"rocr_monitor is unsupported in opx\n");
 		else if (default_monitor == ze_monitor)
 			FI_WARN(&fi_opx_provider, FI_LOG_MR,
 				"ze_monitor is unsupported in opx\n");
+		else if (default_monitor == rocr_ipc_monitor)
+			FI_WARN(&fi_opx_provider, FI_LOG_MR,
+				"rocr_ipc_monitor is unsupported in opx\n");
 		else if (default_monitor == import_monitor)
 			FI_WARN(&fi_opx_provider, FI_LOG_MR,
 				"import_monitor enabled\n");
@@ -480,28 +483,31 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache,
 	struct opx_hmem_domain *hmem_domain = (struct opx_hmem_domain *)cache->domain;
 	opx_mr->domain = hmem_domain->opx_domain;
 
-	assert(opx_mr->attr.iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled());
-	opx_mr->attr.device.cuda = entry->info.device;
-
+	assert((opx_mr->attr.iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) || opx_mr->attr.iface == FI_HMEM_ROCR);
+	
+	(opx_mr->attr.iface == FI_HMEM_CUDA) ? (opx_mr->attr.device.cuda = entry->info.device) : (void)0;
+	
 	/* FLush the cache so that if there are entries on the dead region list
 	 * with the same page as we are about to register, they are unregistered first.
 	 */
 	ofi_mr_cache_flush(cache, false);
 
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-DEV-REGISTER");
-	err = ofi_hmem_dev_register(FI_HMEM_CUDA, entry->info.iov.iov_base, entry->info.iov.iov_len,
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "HMEM-DEV-HANDLE-REGISTER");
+	err = ofi_hmem_dev_register(opx_mr->attr.iface, entry->info.iov.iov_base, entry->info.iov.iov_len,
 				    &opx_mr->hmem_dev_reg_handle);
 
 	if (OFI_UNLIKELY(err)) {
+		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "HMEM-DEV-HANDLE-REGISTER");
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 			"Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
 			err, entry->info.iov.iov_base, entry->info.iov.iov_len);
 		// When gdrcopy pin buf failed, fallback to cudaMemcpy and return without caching
 		opx_mr->hmem_dev_reg_handle = 0UL;
+	} else {
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "HMEM-DEV-HANDLE-REGISTER");
 	}
-	opx_mr->mr_fid.mem_desc = opx_mr;
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-DEV-REGISTER");
+	opx_mr->mr_fid.mem_desc = opx_mr;
 
 	return FI_SUCCESS;
 }
@@ -545,9 +551,9 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache,
 	if (opx_mr->hmem_dev_reg_handle) {
 		/* Hold the cache->lock across unregister call */
 		pthread_mutex_lock(&cache->lock);
-		assert(opx_mr->attr.iface == FI_HMEM_CUDA);
+		assert(opx_mr->attr.iface == FI_HMEM_CUDA || opx_mr->attr.iface == FI_HMEM_ROCR);
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-DEV-UNREGISTER");
-		int err = ofi_hmem_dev_unregister(FI_HMEM_CUDA,
+		int err = ofi_hmem_dev_unregister(opx_mr->attr.iface,
 						opx_mr->hmem_dev_reg_handle);
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-DEV-UNREGISTER");
 		pthread_mutex_unlock(&cache->lock);
