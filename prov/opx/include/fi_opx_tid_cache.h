@@ -34,7 +34,8 @@
 
 #include "config.h"
 #include <ofi_util.h>
-struct opx_tid_domain;
+#include "rdma/opx/fi_opx_tid_domain.h"
+#include "fi_opx_tid.h"
 
 
 /* @brief Setup the MR cache.

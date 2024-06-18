@@ -53,156 +53,102 @@
 #include "rdma/opx/fi_opx_domain.h"
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "fi_opx_tid_cache.h"
-#include "fi_opx_tid.h"
 #include <ofi_iov.h>
-
-/* Structure overview
- *
- * OPX has a cache of memory regions which may be used for RZV
- *
- *      struct ofi_mr_cache *cache
- *
- * The OPX cache is currently attached to a TID domain linked to
- * the endpoint for convenience. (It will later move to endpoints)
- *
- *      cache = opx_ep->tid_domain->tid_cache;
- *
- * Each memory region has an entry in the cache which can be found
- * with the page aligned memory region [virtual address + length]
- *
- *      struct ofi_mr_entry *entry
- *
- *      struct ofi_mr_info info;
- *	info.iov.iov_base = (void *) tid_vaddr;
- *      info.iov.iov_len = tid_length;
- *
- * 	opx_tid_cache_find(opx_ep, &info, &entry, 0);
- *
- * The entry data is the OPX TID memory region (mr)
- *
- *      struct opx_tid_mr *opx_mr = (struct opx_tid_mr *)entry->data;
- *
- * The TID memory region (mr) has TID info for that mr that is
- * registered/ioctl(update) and deregistered/ioctl(free)
- *
- *      struct opx_mr_tid_info * tid_info = &opx_mr->tid_info;
- *
- * A RZV buffer may be composed of multiple entries/mr's/tid_info's that
- * are reference counted (use_cnt) and registered/deregistered separately.
- *
- */
-struct opx_mr_tid_info {
-	uint64_t tid_vaddr;
-	uint64_t tid_length;
-	uint32_t ninfo;
-	uint32_t npairs;
-	uint32_t invalid; /* mmu notify */
-	/* tidinfo is used on TID update/free ioctl */
-	uint32_t info[FI_OPX_MAX_DPUT_TIDPAIRS];
-	/* tidpairs combine CTRL 1 & 2 into CTRL 3 tidpairs for SDMA use */
-	uint32_t pairs[FI_OPX_MAX_DPUT_TIDPAIRS];
-};
-
-struct opx_tid_mr {
-	struct opx_tid_domain  *domain;
-	struct fi_opx_ep       *opx_ep;
-	struct opx_mr_tid_info  tid_info;
-};
 
 
 #ifndef NDEBUG
-#define OPX_DEBUG_UCNT(entryp)                                                          \
-	do {                                                                            \
-		const uint64_t entry_vaddr =                                            \
-			entryp ? ((struct opx_tid_mr *)(entryp)->data)               \
-					 ->tid_info.tid_vaddr :                      \
-				       0UL;                                             \
-		const uint64_t entry_length =                                           \
-			entryp ? ((struct opx_tid_mr *)(entryp)->data)               \
-					 ->tid_info.tid_length :                     \
-				       0UL;                                             \
-		const int32_t entry_use_cnt =                                           \
-			entryp ? ((struct ofi_mr_entry *)(entryp))->use_cnt :           \
-				       0X0BAD;                                          \
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,                                   \
+#define OPX_DEBUG_UCNT(entryp)								\
+	do {										\
+		const uint64_t entry_vaddr =						\
+			entryp	? ((struct opx_tid_mr *)(entryp)->data)			\
+					->tid_info.tid_vaddr				\
+				: 0UL;							\
+		const uint64_t entry_length =						\
+			entryp	? ((struct opx_tid_mr *)(entryp)->data)			\
+					->tid_info.tid_length				\
+				: 0UL;							\
+		const int32_t entry_use_cnt =						\
+			entryp	? ((struct ofi_mr_entry *)(entryp))->use_cnt		\
+				: 0X0BAD;						\
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR,					\
 		       "OPX_DEBUG_UCNT (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n", \
-		       entryp, entryp ? entryp->data : NULL,                            \
-		       (void *)entry_vaddr,                                             \
-		       (void *)(entry_vaddr + entry_length), entry_length,              \
-		       entry_length, entry_use_cnt);                                    \
+		       entryp, entryp ? entryp->data : NULL,				\
+		       (void *)entry_vaddr,						\
+		       (void *)(entry_vaddr + entry_length), entry_length,		\
+		       entry_length, entry_use_cnt);					\
 	} while (0)
 #else
 #define OPX_DEBUG_UCNT(entryp)
 #endif
 
 #ifndef NDEBUG
-#define OPX_DEBUG_ENTRY(info)                                  \
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,                  \
-	       "OPX_DEBUG_ENTRY [%p - %p] (len: %zu/%#lX)\n",  \
-	       info->iov.iov_base,                             \
-	       (char *)info->iov.iov_base + info->iov.iov_len, \
+#define OPX_DEBUG_ENTRY(info)					\
+	FI_DBG(fi_opx_global.prov, FI_LOG_MR,			\
+	       "OPX_DEBUG_ENTRY [%p - %p] (len: %zu/%#lX)\n",	\
+	       info->iov.iov_base,				\
+	       (char *)info->iov.iov_base + info->iov.iov_len,	\
 	       info->iov.iov_len, info->iov.iov_len)
 #else
 #define OPX_DEBUG_ENTRY(info)
 #endif
 
 #ifndef NDEBUG
-#define OPX_DEBUG_EXIT(entryp, ret)                                                     \
-	do {                                                                            \
-		const uint64_t entry_vaddr =                                            \
-			entryp ? ((struct opx_tid_mr *)(entryp)->data)               \
-					 ->tid_info.tid_vaddr :                      \
-				       0UL;                                             \
-		const uint64_t entry_length =                                           \
-			entryp ? ((struct opx_tid_mr *)(entryp)->data)               \
-					 ->tid_info.tid_length :                     \
-				       0UL;                                             \
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,                                   \
-		       "OPX_DEBUG_EXIT (%p/%p) [%p - %p] (len: %zu,%#lX) rc %d (%s)\n", \
-		       entryp, entryp ? entryp->data : NULL,                            \
-		       (void *)entry_vaddr,                                             \
-		       (void *)(entry_vaddr + entry_length), entry_length,              \
-		       entry_length, ret,                                               \
-		       ret == OPX_ENTRY_FOUND ?                                         \
-				     "OPX_ENTRY_FOUND" :                                \
-				     (ret == OPX_ENTRY_NOT_FOUND ?                      \
-					      "OPX_ENTRY_NOT_FOUND" :                   \
-				              (ret == OPX_ENTRY_OVERLAP ?               \
-					               "OPX_ENTRY_OVERLAP" :            \
-					               (ret == OPX_ENTRY_IN_USE ?       \
-						               "OPX_ENTRY_IN_USE" :     \
-						               "ERRPR"))));             \
-		OPX_DEBUG_UCNT(entryp);                                                 \
+#define OPX_DEBUG_EXIT(entryp, ret)							\
+	do {										\
+		const uint64_t entry_vaddr =						\
+			entryp	? ((struct opx_tid_mr *)(entryp)->data)			\
+					->tid_info.tid_vaddr				\
+				: 0UL;							\
+		const uint64_t entry_length =						\
+			entryp	? ((struct opx_tid_mr *)(entryp)->data)			\
+					->tid_info.tid_length				\
+				: 0UL;							\
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR,					\
+		       "OPX_DEBUG_EXIT (%p/%p) [%p - %p] (len: %zu,%#lX) rc %d (%s)\n",	\
+		       entryp, entryp ? entryp->data : NULL,				\
+		       (void *)entry_vaddr,						\
+		       (void *)(entry_vaddr + entry_length), entry_length,		\
+		       entry_length, ret,						\
+		       ret == OPX_ENTRY_FOUND ?						\
+				"OPX_ENTRY_FOUND" :					\
+					(ret == OPX_ENTRY_NOT_FOUND ?			\
+						"OPX_ENTRY_NOT_FOUND" :			\
+						(ret == OPX_ENTRY_OVERLAP ?		\
+							"OPX_ENTRY_OVERLAP" :		\
+							(ret == OPX_ENTRY_IN_USE ?	\
+								"OPX_ENTRY_IN_USE" :	\
+								"ERRPR"))));		\
+		OPX_DEBUG_UCNT(entryp);							\
 	} while (0)
 #else
 #define OPX_DEBUG_EXIT(entryp, ret)
 #endif
 
 #ifndef NDEBUG
-#define OPX_DEBUG_ENTRY2(entryp, ret)                                                    \
-	do {                                                                             \
-		const uint64_t entry_vaddr =                                             \
-			entryp ? ((struct opx_tid_mr *)(entryp)->data)                \
-					 ->tid_info.tid_vaddr :                       \
-				       0UL;                                              \
-		const uint64_t entry_length =                                            \
-			entryp ? ((struct opx_tid_mr *)(entryp)->data)                \
-					 ->tid_info.tid_length :                      \
-				       0UL;                                              \
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,                                    \
-		       "OPX_DEBUG_ENTRY (%p/%p) [%p - %p] (len: %zu,%#lX) rc %d (%s)\n", \
-		       entryp, entryp ? entryp->data : NULL,                             \
-		       (void *)entry_vaddr,                                              \
-		       (void *)(entry_vaddr + entry_length), entry_length,               \
-		       entry_length, ret,                                                \
-		       ret == OPX_ENTRY_FOUND ?                                          \
-				     "OPX_ENTRY_FOUND" :                                 \
-				     (ret == OPX_ENTRY_NOT_FOUND ?                       \
-					      "OPX_ENTRY_NOT_FOUND" :                    \
-					      (ret == OPX_ENTRY_OVERLAP ?                \
-						       "OPX_ENTRY_OVERLAP" :             \
-						       "ERRPR")));                       \
-		OPX_DEBUG_UCNT(entryp);                                                  \
+#define OPX_DEBUG_ENTRY2(entryp, ret)							\
+	do {										\
+		const uint64_t entry_vaddr =						\
+			entryp	? ((struct opx_tid_mr *)(entryp)->data)			\
+					->tid_info.tid_vaddr				\
+				: 0UL;							\
+		const uint64_t entry_length =						\
+			entryp	? ((struct opx_tid_mr *)(entryp)->data)			\
+					->tid_info.tid_length				\
+				: 0UL;							\
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR,					\
+		       "OPX_DEBUG_ENTRY (%p/%p) [%p - %p] (len: %zu,%#lX) rc %d (%s)\n",\
+		       entryp, entryp ? entryp->data : NULL,				\
+		       (void *)entry_vaddr,						\
+		       (void *)(entry_vaddr + entry_length), entry_length,		\
+		       entry_length, ret,						\
+		       ret == OPX_ENTRY_FOUND ?						\
+				"OPX_ENTRY_FOUND" :					\
+					(ret == OPX_ENTRY_NOT_FOUND ?			\
+						"OPX_ENTRY_NOT_FOUND" :			\
+						(ret == OPX_ENTRY_OVERLAP ?		\
+							"OPX_ENTRY_OVERLAP" :		\
+							"ERRPR")));			\
+		OPX_DEBUG_UCNT(entryp);							\
 	} while (0)
 #else
 #define OPX_DEBUG_ENTRY2(entryp, ret)
@@ -239,107 +185,6 @@ static int opx_util_mr_find_within(struct ofi_rbmap *map, void *key, void *data)
 	return 0;
 }
 #endif
-
-void opx_regen_tidpairs(struct fi_opx_ep *opx_ep,
-		   struct opx_mr_tid_info *const tid_reuse_cache)
-{
-	uint32_t *tidinfo = (uint32_t *)&tid_reuse_cache->info[0];
-	uint32_t ntidinfo = tid_reuse_cache->ninfo;
-	uint32_t *tidpairs = &tid_reuse_cache->pairs[0];
-	tid_reuse_cache->npairs = 0;
-	size_t accumulated_len = 0;
-	int32_t tid_idx = 0, pair_idx = -1;
-	unsigned int npages = 0;
-	OPX_DEBUG_TIDS("Input tidinfo", ntidinfo, tidinfo);
-	uint32_t tid_length = tid_reuse_cache->tid_length;
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-	       "OPX_DEBUG_ENTRY tid_idx %u, ntidinfo %u, accumulated_len %zu, length_pages %u\n",
-	       tid_idx, ntidinfo, accumulated_len, tid_length);
-	/* Combine ctrl 1/2 tids into single ctrl 3 tid pair */
-	while ((tid_idx < ntidinfo) && (accumulated_len < tid_length)) {
-#ifdef OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
-		uint32_t len = FI_OPX_EXP_TID_GET(tidinfo[tid_idx], LEN);
-		FI_OPX_DEBUG_COUNTERS_INC_COND(
-			(len == 1),
-			opx_ep->debug_counters.expected_receive.tid_buckets[0]);
-		FI_OPX_DEBUG_COUNTERS_INC_COND(
-			(len == 2),
-			opx_ep->debug_counters.expected_receive.tid_buckets[1]);
-		FI_OPX_DEBUG_COUNTERS_INC_COND(
-			(len > 2 && len < 128),
-			opx_ep->debug_counters.expected_receive.tid_buckets[2]);
-		FI_OPX_DEBUG_COUNTERS_INC_COND(
-			(len >= 128),
-			opx_ep->debug_counters.expected_receive.tid_buckets[3]);
-#endif
-		size_t tid_pages = FI_OPX_EXP_TID_GET(tidinfo[tid_idx], LEN);
-		size_t tid_pages_len = tid_pages * OPX_HFI1_TID_PAGESIZE;
-		uint64_t tid_ctrl = FI_OPX_EXP_TID_GET(tidinfo[tid_idx], CTRL);
-		/* Starts with CTRL 1 *or* it's the first entry (tid_idx == 0)
-		   and starts with ONLY CTRL 2, just accumulate it, no previous
-		   CTRL 1 to pair */
-		if (tid_idx == 0 || tid_ctrl == 1) {
-			npages += (int) tid_pages;
-			accumulated_len += tid_pages_len;
-			pair_idx++;
-			tidpairs[pair_idx] = tidinfo[tid_idx];
-		} else { /* possible CTRL 1/2 tid pair */
-			assert(tid_ctrl == 2);
-			npages += tid_pages;
-			accumulated_len += tid_pages_len;
-			if ((FI_OPX_EXP_TID_GET(tidinfo[tid_idx - 1], IDX) !=
-					FI_OPX_EXP_TID_GET(tidinfo[tid_idx], IDX))
-				|| (FI_OPX_EXP_TID_GET(tidinfo[tid_idx - 1], CTRL) != 1)
-				|| ((FI_OPX_EXP_TID_GET(tidinfo[tid_idx - 1], LEN) +
-					tid_pages) > 512)) {
-				/* Can't combine into CTRL 3 if :
-					- not the same IDX or
-					- previous was not CTRL 1 or
-					- combined LEN > 512
-
-					Offset field (OFFSET): For expected receive packets this offset is added to the address field
-					associated with the specified TID to determine a physical address. This physical address is then
-					used to DMA the data portion of the received packet to system memory. If OM is 0 the 15-bit
-					OFFSET can address a 128KB mapping in DW multiples. If OM is 1 the 15-bit OFFSET can address a
-					2MB mapping in 64B multiples.
-
-					512 pages is 2MB.  So even if a "tid pair" *seems* to be available, it won't work over 512 pages
-					so keep ctrl 1 tid and ctrl 2 tid separate, do not optimize into ctrl 3 tidpair
-					*/
-				pair_idx++;
-				tidpairs[pair_idx] = tidinfo[tid_idx];
-			} else {
-				FI_OPX_EXP_TID_RESET(tidpairs[pair_idx], CTRL, 0x3);
-				int32_t len = tid_pages +
-					FI_OPX_EXP_TID_GET(tidinfo[tid_idx - 1], LEN);
-				FI_OPX_EXP_TID_RESET(tidpairs[pair_idx], LEN, len);
-			}
-		}
-		tid_idx++;
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "tid_idx %u, ntidinfo %u, accumulated_len %zu, tid_length %u\n",
-		       tid_idx, ntidinfo, accumulated_len, tid_length);
-	}
-#ifdef OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
-	uint32_t first_pair_len = FI_OPX_EXP_TID_GET(tidpairs[0], LEN);
-	FI_OPX_DEBUG_COUNTERS_INC_COND_N(
-		(opx_ep->debug_counters.expected_receive.first_tidpair_minlen ==
-		 0),
-		first_pair_len,
-		opx_ep->debug_counters.expected_receive.first_tidpair_minlen);
-	FI_OPX_DEBUG_COUNTERS_MIN_OF(
-		opx_ep->debug_counters.expected_receive.first_tidpair_minlen,
-		first_pair_len);
-	FI_OPX_DEBUG_COUNTERS_MAX_OF(
-		opx_ep->debug_counters.expected_receive.first_tidpair_maxlen,
-		first_pair_len);
-#endif
-	tid_reuse_cache->npairs = pair_idx + 1;
-	OPX_DEBUG_TIDS("Regen tidpairs", tid_reuse_cache->npairs,
-		       &tid_reuse_cache->pairs[0]);
-	(void) npages;
-}
-
 
 /* Register/TID Update (pin) the pages.
  *
@@ -553,7 +398,11 @@ int opx_register_tid_region(uint64_t tid_vaddr, uint64_t tid_length,
 	       tid_reuse_cache->tid_vaddr + tid_reuse_cache->tid_length,
 	       tid_reuse_cache->tid_length, tid_reuse_cache->ninfo);
 
-	opx_regen_tidpairs(opx_ep, tid_reuse_cache);
+	opx_tid_regen_pairs(tid_reuse_cache->tid_length, tid_reuse_cache->ninfo,
+			   tid_reuse_cache->info, &tid_reuse_cache->npairs,
+			   tid_reuse_cache->pairs,
+			   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+
 	return 0;
 }
 
