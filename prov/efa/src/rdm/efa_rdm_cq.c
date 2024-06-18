@@ -83,7 +83,7 @@ static struct fi_ops efa_rdm_cq_fi_ops = {
 static inline
 bool efa_rdm_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
 {
-	return efadv_wc_is_unsolicited(efadv_cq_from_ibv_cq_ex(ibv_cq_ex));
+	return efa_device_support_unsolicited_write_recv() ? efadv_wc_is_unsolicited(efadv_cq_from_ibv_cq_ex(ibv_cq_ex)) : false;
 }
 
 #else
