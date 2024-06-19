@@ -490,8 +490,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	    efa_env.tx_queue_size < efa_rdm_ep->efa_max_outstanding_tx_ops)
 		efa_rdm_ep->efa_max_outstanding_tx_ops = efa_env.tx_queue_size;
 
-	efa_rdm_ep_set_use_zcpy_rx(efa_rdm_ep);
-
 	efa_rdm_ep->handle_resource_management = info->domain_attr->resource_mgmt;
 	EFA_INFO(FI_LOG_EP_CTRL,
 		"efa_rdm_ep->handle_resource_management = %d\n",
@@ -1162,6 +1160,8 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
+		efa_rdm_ep_set_use_zcpy_rx(ep);
+
 		ret = efa_rdm_ep_create_base_ep_ibv_qp(ep);
 		if (ret)
 			return ret;
@@ -1370,9 +1370,6 @@ static int efa_rdm_ep_set_max_msg_size(struct efa_rdm_ep *ep, size_t max_msg_siz
 		return -FI_EINVAL;
 	}
 	ep->max_msg_size = max_msg_size;
-
-	/* Update ep->use_zcpy_rx since it depends on ep->max_msg_size */
-	efa_rdm_ep_set_use_zcpy_rx(ep);
 	return 0;
 }
 
