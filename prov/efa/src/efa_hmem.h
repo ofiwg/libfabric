@@ -26,7 +26,6 @@ struct efa_hmem_info {
 	bool p2p_disabled_by_user;	/* Did the user disable p2p via FI_OPT_FI_HMEM_P2P? */
 	bool p2p_required_by_impl;	/* Is p2p required for this interface? */
 	bool p2p_supported_by_device;	/* do we support p2p with this device */
-	bool dmabuf_supported;
 
 	size_t max_medium_msg_size;
 	size_t runt_size;

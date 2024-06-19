@@ -6,9 +6,6 @@
 
 #include <stdbool.h>
 #include <ofi_mr.h>
-#include <infiniband/verbs.h>
-
-#include "efa_prov.h"
 
 /*
  * Descriptor returned for FI_HMEM peer memory registrations
@@ -37,31 +34,6 @@ struct efa_mr {
 	bool			inserted_to_mr_map;
 	bool 			needs_sync;
 };
-
-#if HAVE_EFA_DMABUF_MR
-
-static inline
-struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
-					size_t len, uint64_t iova, int fd, int access)
-{
-	return ibv_reg_dmabuf_mr(pd, offset, len, iova, fd, access);
-}
-
-#else
-
-static inline
-struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
-					size_t len, uint64_t iova, int fd, int access)
-{
-	EFA_WARN(FI_LOG_MR,
-		"ibv_reg_dmabuf_mr is required for memory"
-		" registration with FI_MR_DMABUF flags, but "
-		" not available in the current rdma-core library."
-		" please build libfabric with rdma-core >= 34.0\n");
-	return NULL;
-}
-
-#endif
 
 extern int efa_mr_cache_enable;
 extern size_t efa_mr_max_cached_count;
