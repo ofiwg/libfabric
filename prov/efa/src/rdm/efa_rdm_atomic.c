@@ -327,7 +327,9 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	struct fi_rma_ioc shm_rma_iov[EFA_RDM_IOV_LIMIT];
 	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	void *shm_res_desc[EFA_RDM_IOV_LIMIT] = {NULL};
-	struct efa_rdm_atomic_ex atomic_ex;
+	struct efa_rdm_atomic_ex atomic_ex = {
+		.resp_iov_count = result_count,
+	};
 	size_t datatype_size;
 	int err;
 
@@ -364,10 +366,7 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	}
 
 	ofi_ioc_to_iov(resultv, atomic_ex.resp_iov, result_count, datatype_size);
-	atomic_ex.resp_iov_count = result_count;
-
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
-	atomic_ex.compare_desc = NULL;
 
 	return efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_fetch, flags);
 }
@@ -434,7 +433,11 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	void *shm_res_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	void *shm_comp_desc[EFA_RDM_IOV_LIMIT] = {NULL};
-	struct efa_rdm_atomic_ex atomic_ex;
+	struct efa_rdm_atomic_ex atomic_ex = {
+		.resp_iov_count = result_count,
+		.comp_iov_count = compare_count,
+		.compare_desc = compare_desc,
+	};
 	size_t datatype_size;
 	int err;
 
@@ -477,13 +480,8 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	}
 
 	ofi_ioc_to_iov(resultv, atomic_ex.resp_iov, result_count, datatype_size);
-	atomic_ex.resp_iov_count = result_count;
-
 	ofi_ioc_to_iov(comparev, atomic_ex.comp_iov, compare_count, datatype_size);
-	atomic_ex.comp_iov_count = compare_count;
-
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
-	atomic_ex.compare_desc = compare_desc;
 
 	return efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_compare, flags);
 }
