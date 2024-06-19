@@ -551,7 +551,7 @@ The following option levels and option names and parameters are defined.
 : The FI_HMEM_DISABLE_P2P environment variable discussed in
   [`fi_mr`(3)](fi_mr.3.html) takes precedence over this setopt option.
 
-- *FI_OPT_CUDA_API_PERMITTED - bool \**
+- *FI_OPT_CUDA_API_PERMITTED - bool*
 : This option only applies to the fi_setopt call. It is used to control
   endpoint's behavior in making calls to CUDA API. By default, an endpoint
   is permitted to call CUDA API. If user wish to prohibit an endpoint from
@@ -562,13 +562,13 @@ The following option levels and option names and parameters are defined.
   return -FI_EINVAL.
   All providers that support FI_HMEM capability implement this option.
 
-- *FI_OPT_SHARED_MEMORY_PERMITTED - bool \**
+- *FI_OPT_SHARED_MEMORY_PERMITTED - bool*
 : This option controls the use of shared memory for intra-node communication.
   Setting it to true will allow the use of shared memory. When set to false,
   shared memory will not be used and the implementation of intra-node communication
   is provider dependent.
 
-- *FI_OPT_MAX_MSG_SIZE - size_t *
+- *FI_OPT_MAX_MSG_SIZE - size_t*
 : Define the maximum message size that can be transferred by the endpoint
   in a single untagged message. The size is limited by the endpoint's configuration
   and the provider's capabilities, and must be less than or equal to
@@ -576,7 +576,7 @@ The following option levels and option names and parameters are defined.
   Providers that don't support this option will return -FI_ENOPROTOOPT. In that
   case, `ep_attr->max_msg_size` should be used.
 
-- *FI_OPT_MAX_TAGGED_SIZE - size_t *
+- *FI_OPT_MAX_TAGGED_SIZE - size_t*
 : Define the maximum message size that can be transferred by the endpoint
   in a single tagged message. The size is limited by the endpoint's configuration
   and the provider's capabilities, and must be less than or equal to
@@ -584,7 +584,7 @@ The following option levels and option names and parameters are defined.
   Providers that don't support this option will return -FI_ENOPROTOOPT. In that
   case, `ep_attr->max_msg_size` should be used.
 
-- *FI_OPT_MAX_RMA_SIZE - size_t *
+- *FI_OPT_MAX_RMA_SIZE - size_t*
 : Define the maximum message size that can be transferred by the endpoint
   via a single RMA operation. The size is limited by the endpoint's configuration
   and the provider's capabilities, and must be less than or equal to
@@ -592,7 +592,7 @@ The following option levels and option names and parameters are defined.
   Providers that don't support this option will return -FI_ENOPROTOOPT. In that
   case, `ep_attr->max_msg_size` should be used.
 
-- *FI_OPT_MAX_ATOMIC_SIZE - size_t *
+- *FI_OPT_MAX_ATOMIC_SIZE - size_t*
 : Define the maximum data size that can be transferred by the endpoint
   via a single atomic operation. The size is limited by the endpoint's configuration
   and the provider's capabilities, and must be less than or equal to
@@ -600,7 +600,7 @@ The following option levels and option names and parameters are defined.
   Providers that don't support this option will return -FI_ENOPROTOOPT. In that
   case, `ep_attr->max_msg_size` should be used.
 
-- *FI_OPT_INJECT_MSG_SIZE - size_t *
+- *FI_OPT_INJECT_MSG_SIZE - size_t*
 : Define the maximum message size that can be injected by the endpoint
   in a single untagged message. The size is limited by the endpoint's configuration
   and the provider's capabilities, and must be less than or equal to
@@ -608,7 +608,7 @@ The following option levels and option names and parameters are defined.
   Providers that don't support this option will return -FI_ENOPROTOOPT. In that
   case, `tx_attr->inject_size` should be used.
 
-- *FI_OPT_INJECT_TAGGED_SIZE - size_t *
+- *FI_OPT_INJECT_TAGGED_SIZE - size_t*
 : Define the maximum message size that can be injected by the endpoint
   in a single tagged message. The size is limited by the endpoint's configuration
   and the provider's capabilities, and must be less than or equal to
@@ -616,7 +616,7 @@ The following option levels and option names and parameters are defined.
   Providers that don't support this option will return -FI_ENOPROTOOPT. In that
   case, `tx_attr->inject_size` should be used.
 
-- *FI_OPT_INJECT_RMA_SIZE - size_t *
+- *FI_OPT_INJECT_RMA_SIZE - size_t*
 : Define the maximum data size that can be injected by the endpoint
   in a single RMA operation. The size is limited by the endpoint's configuration
   and the provider's capabilities, and must be less than or equal to
@@ -624,7 +624,7 @@ The following option levels and option names and parameters are defined.
   Providers that don't support this option will return -FI_ENOPROTOOPT. In that
   case, `tx_attr->inject_size` should be used.
 
-- *FI_OPT_INJECT_ATOMIC_SIZE - size_t *
+- *FI_OPT_INJECT_ATOMIC_SIZE - size_t*
 : Define the maximum data size that can be injected by the endpoint
   in a single atomic operation. The size is limited by the endpoint's configuration
   and the provider's capabilities, and must be less than or equal to
