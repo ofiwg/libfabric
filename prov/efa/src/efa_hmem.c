@@ -97,8 +97,6 @@ static int efa_domain_hmem_info_init_system(struct efa_domain *efa_domain)
 	info->p2p_disabled_by_user = false;
 	info->p2p_required_by_impl = false;
 	info->p2p_supported_by_device = true;
-	info->dmabuf_supported = false;
-
 	efa_domain_hmem_info_init_protocol_thresholds(efa_domain, FI_HMEM_SYSTEM);
 	return 0;
 }
@@ -139,7 +137,6 @@ static int efa_domain_hmem_info_init_cuda(struct efa_domain *efa_domain)
 
 	info->initialized = true;
 	info->p2p_disabled_by_user = false;
-	info->dmabuf_supported = false;
 
 	/* If user is using libfabric API 1.18 or later, by default EFA provider is permitted to
 	 * use CUDA library to support CUDA memory, therefore p2p is not required.
@@ -149,24 +146,26 @@ static int efa_domain_hmem_info_init_cuda(struct efa_domain *efa_domain)
 	else
 		info->p2p_required_by_impl = true;
 
-	ret = ofi_hmem_get_dmabuf_fd(FI_HMEM_CUDA, ptr, len, &dmabuf_fd, &dmabuf_offset);
+#if HAVE_EFA_DMABUF_MR
+	ret = cuda_get_dmabuf_fd(ptr, len, &dmabuf_fd, &dmabuf_offset);
 	if (ret == FI_SUCCESS) {
-		ibv_mr = efa_mr_reg_ibv_dmabuf_mr(efa_domain->ibv_pd, dmabuf_offset,
+		ibv_mr = ibv_reg_dmabuf_mr(g_device_list[0].ibv_pd, dmabuf_offset,
 					   len, (uint64_t)ptr, dmabuf_fd, ibv_access);
 		if (!ibv_mr) {
 			EFA_INFO(FI_LOG_DOMAIN,
 				"Unable to register CUDA device buffer via dmabuf: %s. "
 				"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
-			ibv_mr = ibv_reg_mr(efa_domain->ibv_pd, ptr, len, ibv_access);
-		} else {
-			info->dmabuf_supported = true;
+			ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
 		}
 	} else {
 		EFA_INFO(FI_LOG_DOMAIN,
 			"Unable to retrieve dmabuf fd of CUDA device buffer: %d. "
 			"Fall back to ibv_reg_mr\n", ret);
-		ibv_mr = ibv_reg_mr(efa_domain->ibv_pd, ptr, len, ibv_access);
+		ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
 	}
+#else
+	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
+#endif
 
 	if (!ibv_mr) {
 		info->p2p_supported_by_device = false;
@@ -248,27 +247,22 @@ static int efa_domain_hmem_info_init_neuron(struct efa_domain *efa_domain)
 	info->p2p_disabled_by_user = false;
 	/* Neuron currently requires P2P */
 	info->p2p_required_by_impl = true;
-	info->dmabuf_supported = false;
 
-	ret = ofi_hmem_get_dmabuf_fd(FI_HMEM_NEURON, ptr, (uint64_t)len, &dmabuf_fd, &offset);
+#if HAVE_EFA_DMABUF_MR
+	ret = neuron_get_dmabuf_fd(ptr, (uint64_t)len, &dmabuf_fd, &offset);
 	if (ret == FI_SUCCESS) {
-		ibv_mr = efa_mr_reg_ibv_dmabuf_mr(
-					efa_domain->ibv_pd, offset,
+		ibv_mr = ibv_reg_dmabuf_mr(
+					g_device_list[0].ibv_pd, offset,
 					len, (uint64_t)ptr, dmabuf_fd, ibv_access);
-		if (!ibv_mr) {
-			EFA_INFO(FI_LOG_DOMAIN,
-				"Unable to register neuron device buffer via dmabuf: %s. "
-				"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
-			ibv_mr = ibv_reg_mr(efa_domain->ibv_pd, ptr, len, ibv_access);
-		} else {
-			info->dmabuf_supported = true;
-		}
-	} else {
-		EFA_INFO(FI_LOG_DOMAIN,
+	} else if (ret == -FI_ENOPROTOOPT) {
+		EFA_INFO(FI_LOG_MR,
 			"Unable to retrieve dmabuf fd of Neuron device buffer, "
 			"Fall back to ibv_reg_mr\n");
-		ibv_mr = ibv_reg_mr(efa_domain->ibv_pd, ptr, len, ibv_access);
+		ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
 	}
+#else
+	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
+#endif
 
 	if (!ibv_mr) {
 		info->p2p_supported_by_device = false;
@@ -331,7 +325,6 @@ static int efa_domain_hmem_info_init_synapseai(struct efa_domain *efa_domain)
 	/* SynapseAI currently requires P2P */
 	info->p2p_required_by_impl = true;
 	info->p2p_supported_by_device = true;
-	info->dmabuf_supported = true;
 	efa_domain_hmem_info_init_protocol_thresholds(efa_domain, FI_HMEM_SYNAPSEAI);
 
 	/*  Only the long read protocol is supported */
