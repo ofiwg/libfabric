@@ -380,7 +380,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	size_t env_var_threshold;
 	get_param_check = fi_param_get_size_t(fi_opx_global.prov, "dev_reg_send_threshold",
 						&env_var_threshold);
-	if ((get_param_check == FI_SUCCESS) && (env_var_threshold < OPX_HMEM_DEV_REG_THRESHOLD_MAX)) {
+	if ((get_param_check == FI_SUCCESS) && (env_var_threshold <= OPX_HMEM_DEV_REG_THRESHOLD_MAX)) {
 		opx_domain->hmem_domain->devreg_copy_from_threshold = env_var_threshold;
 	} else {
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
@@ -390,7 +390,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 
 	get_param_check = fi_param_get_size_t(fi_opx_global.prov, "dev_reg_recv_threshold",
 						&env_var_threshold);
-	if ((get_param_check == FI_SUCCESS) && (env_var_threshold < OPX_HMEM_DEV_REG_THRESHOLD_MAX)) {
+	if ((get_param_check == FI_SUCCESS) && (env_var_threshold <= OPX_HMEM_DEV_REG_THRESHOLD_MAX)) {
 		opx_domain->hmem_domain->devreg_copy_to_threshold = env_var_threshold;
 	} else {
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
