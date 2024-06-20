@@ -640,12 +640,7 @@ static int cuda_hmem_detect_p2p_access_support(void)
 		peer = dev + 1;
 		cuda_ret = ofi_cuDeviceCanAccessPeer(&can_access_peer, dev, peer);
 		if (CUDA_SUCCESS != cuda_ret) {
-			FI_WARN(&core_prov, FI_LOG_CORE,
-				"Failed to detect support for peer-to-peer "
-				"access between CUDA devices via "
-				"cuDeviceCanAccessPeer(): %s:%s\n",
-				ofi_cudaGetErrorName((cudaError_t)cuda_ret),
-				ofi_cudaGetErrorString((cudaError_t)cuda_ret));
+			CUDA_DRIVER_LOG_ERR(cuda_ret, "cuDeviceCanAccessPeer");
 			return -FI_EIO;
 		}
 		FI_INFO(&core_prov, FI_LOG_CORE,
