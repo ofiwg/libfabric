@@ -269,7 +269,7 @@ int ft_sock_connect(char *node, char *service);
 int ft_sock_accept();
 int ft_sock_send(int fd, void *msg, size_t len);
 int ft_sock_recv(int fd, void *msg, size_t len);
-int ft_sock_sync(int value);
+int ft_sock_sync(int fd, int value);
 void ft_sock_shutdown(int fd);
 extern int (*ft_mr_alloc_func)(void);
 extern uint64_t ft_tag;

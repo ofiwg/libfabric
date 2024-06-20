@@ -3916,31 +3916,31 @@ int ft_sock_recv(int fd, void *msg, size_t len)
 	return err ? err: 0;
 }
 
-int ft_sock_sync(int value)
+int ft_sock_sync(int fd, int value)
 {
 	int result = -FI_EOTHER;
 	int ret;
 
 	if (listen_sock < 0) {
-		ret = ft_sock_send(sock, &value,  sizeof value);
+		ret = ft_sock_send(fd, &value,  sizeof value);
 		if (ret) {
 			FT_PRINTERR("ft_sock_send", ret);
 			return ret;
 		}
 
-		ret = ft_sock_recv(sock, &result, sizeof result);
+		ret = ft_sock_recv(fd, &result, sizeof result);
 		if (ret) {
 			FT_PRINTERR("ft_sock_recv", ret);
 			return ret;
 		}
 	} else {
-		ret = ft_sock_recv(sock, &result, sizeof result);
+		ret = ft_sock_recv(fd, &result, sizeof result);
 		if (ret) {
 			FT_PRINTERR("ft_sock_recv", ret);
 			return ret;
 		}
 
-		ret = ft_sock_send(sock, &value,  sizeof value);
+		ret = ft_sock_send(fd, &value,  sizeof value);
 		if (ret) {
 			FT_PRINTERR("ft_sock_send", ret);
 			return ret;

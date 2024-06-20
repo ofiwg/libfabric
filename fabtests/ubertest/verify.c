@@ -101,7 +101,7 @@ static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_a
 int ft_sync_fill_bufs(size_t size)
 {
 	int ret;
-	ft_sock_sync(0);
+	ft_sock_sync(sock, 0);
 
 	if (test_info.caps & FI_ATOMIC) {
 		SWITCH_TYPES(ft_atom_ctrl.datatype, FT_FILL, ft_tx_ctrl.buf,
@@ -126,7 +126,7 @@ int ft_sync_fill_bufs(size_t size)
 			return ret;
 	}
 
-	ft_sock_sync(0);
+	ft_sock_sync(sock, 0);
 
 	return 0;
 }
