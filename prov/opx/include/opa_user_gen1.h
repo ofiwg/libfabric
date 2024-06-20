@@ -17,9 +17,6 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
   General Public License for more details.
 
-  Contact Information:
-  Intel Corporation, www.intel.com
-
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
