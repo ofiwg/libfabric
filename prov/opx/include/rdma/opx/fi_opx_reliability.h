@@ -44,6 +44,8 @@
 #include "rdma/opx/fi_opx_atomic_fifo.h"
 #include "rdma/opx/fi_opx_timer.h"
 
+#include "rdma/opx/opx_tracer.h"
+
 enum ofi_reliability_kind {
 	OFI_RELIABILITY_KIND_NONE = 0,
 	OFI_RELIABILITY_KIND_OFFLOAD,
@@ -932,6 +934,7 @@ int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
 					uint32_t psns_to_get,
 					uint32_t bytes_per_packet)
 {
+	OPX_TRACER_TRACE_SDMA(OPX_TRACER_BEGIN, "GET_PSNS");
 	assert(psns_to_get && psns_to_get <= 128);
 
 	union fi_opx_reliability_service_flow_key key = {
@@ -947,6 +950,7 @@ int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
 		with them. Once they create the receive flow on their end, and we receive
 		their ack, we'll create the flow on our end and be able to send. */
 		opx_reliability_handshake_init(ep, key, target_reliability_rx);
+		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_EAGAIN_SDMA_PSNS, "GET_PSNS");
 		return -1;
 	}
 
@@ -960,12 +964,14 @@ int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
 	 * a threshold, return an error.
 	 */
 	if(OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
+		OPX_TRACER_TRACE_SDMA(OPX_TRACER_INSTANT, "GET_PSN_THROTTLE");
 		return -1;
 	}
 	if(OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_nacks(ep);
+		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_EAGAIN_SDMA_PSNS_MAX_NACKS, "GET_PSNS");
 		return -1;
 	}
 	uint32_t max_outstanding = fi_opx_reliability_tx_max_outstanding();
@@ -973,10 +979,12 @@ int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_maxo(ep);
+		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_EAGAIN_SDMA_PSNS_MAX_OUT, "GET_PSNS");
 		return -1;
 	}
 
 	uint32_t bytes_avail = max_outstanding - (*psn_ptr)->psn.bytes_outstanding;
+	OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "GET_PSNS");
 	return MIN(bytes_avail / bytes_per_packet, psns_to_get);
 }
 

@@ -58,16 +58,34 @@ extern struct opx_tracer_info opx_tracer;
 
 enum opx_tracer_status {
 	OPX_TRACER_BEGIN,
+	OPX_TRACER_INSTANT,
 	OPX_TRACER_END_SUCCESS,
 	OPX_TRACER_END_EAGAIN,
+	OPX_TRACER_END_EAGAIN_SDMA_QUEUE_FULL,
+	OPX_TRACER_END_EAGAIN_SDMA_NO_WE,
+	OPX_TRACER_END_EAGAIN_SDMA_PSNS,
+	OPX_TRACER_END_EAGAIN_SDMA_PSNS_THROTTLE,
+	OPX_TRACER_END_EAGAIN_SDMA_PSNS_MAX_NACKS,
+	OPX_TRACER_END_EAGAIN_SDMA_PSNS_MAX_OUT,
+	OPX_TRACER_END_EAGAIN_SDMA_REPLAY_BUFFER,
+	OPX_TRACER_END_ACK_IGNORED,
 	OPX_TRACER_END_ENOBUFS,
 	OPX_TRACER_END_ERROR
 };
 
 static const char * const OPX_TRACER_STATUS_STR[] = {
+	[OPX_TRACER_INSTANT] = "INSTANT",
 	[OPX_TRACER_BEGIN] = "BEGIN",
 	[OPX_TRACER_END_SUCCESS] = "END_SUCCESS",
 	[OPX_TRACER_END_EAGAIN] = "END_EAGAIN",
+	[OPX_TRACER_END_EAGAIN_SDMA_QUEUE_FULL] = "OPX_TRACER_END_EAGAIN_SDMA_QUEUE_FULL",
+	[OPX_TRACER_END_EAGAIN_SDMA_NO_WE] = "OPX_TRACER_END_EAGAIN_SDMA_NO_WE",
+	[OPX_TRACER_END_EAGAIN_SDMA_PSNS] = "OPX_TRACER_END_EAGAIN_SDMA_PSNS",
+	[OPX_TRACER_END_EAGAIN_SDMA_PSNS_THROTTLE] = "OPX_TRACER_END_EAGAIN_SDMA_PSNS_THROTTLE",
+	[OPX_TRACER_END_EAGAIN_SDMA_PSNS_MAX_NACKS] = "OPX_TRACER_END_EAGAIN_SDMA_PSNS_MAX_NACKS",
+	[OPX_TRACER_END_EAGAIN_SDMA_PSNS_MAX_OUT] = "OPX_TRACER_END_EAGAIN_SDMA_PSNS_MAX_OUT",
+	[OPX_TRACER_END_EAGAIN_SDMA_REPLAY_BUFFER] = "OPX_TRACER_END_EAGAIN_SDMA_REPLAY_BUFFER",
+	[OPX_TRACER_END_ACK_IGNORED] = "OPX_TRACER_END_ACK_IGNORED",
 	[OPX_TRACER_END_ENOBUFS] = "END_ENOBUFS",
 	[OPX_TRACER_END_ERROR] = "END_ERROR"
 };
@@ -114,7 +132,7 @@ void opx_tracer_trace(enum opx_tracer_status status,
 		timestamp, opx_tracer.pid, func, line, OPX_TRACER_STATUS_STR[status], msg);
 }
 
-#if defined(OPX_TRACER)
+#if defined(OPX_TRACER) || defined(OPX_TRACER_SDMA) || defined(OPX_TRACER_RELI)
 
 #define OPX_TRACER_INIT() opx_tracer_init()
 
@@ -136,6 +154,42 @@ void opx_tracer_trace(enum opx_tracer_status status,
 #define OPX_TRACER_INIT()
 #define OPX_TRACER_TRACE(status, ...)
 #define OPX_TRACER_EXIT()
+#endif
+
+#if defined(OPX_TRACER_SDMA)
+
+#define OPX_TRACER_TRACE_SDMA(status, fmt, ...)				\
+	do {													\
+		if (opx_tracer_enabled()) {							\
+			int saved_errno = errno;						\
+			char msg[1024];									\
+			snprintf(msg, sizeof(msg), fmt, ##__VA_ARGS__);	\
+			opx_tracer_trace(status,						\
+				__func__, __LINE__, msg);					\
+			errno = saved_errno;							\
+		}													\
+	} while (0)
+
+#else
+#define OPX_TRACER_TRACE_SDMA(status, ...)
+#endif
+
+#if defined(OPX_TRACER_RELI)
+
+#define OPX_TRACER_TRACE_RELI(status, fmt, ...)				\
+	do {													\
+		if (opx_tracer_enabled()) {							\
+			int saved_errno = errno;						\
+			char msg[1024];									\
+			snprintf(msg, sizeof(msg), fmt, ##__VA_ARGS__);	\
+			opx_tracer_trace(status,						\
+				__func__, __LINE__, msg);					\
+			errno = saved_errno;							\
+		}													\
+	} while (0)
+
+#else
+#define OPX_TRACER_TRACE_RELI(status, ...)
 #endif
 
 #endif
