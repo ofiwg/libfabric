@@ -359,6 +359,7 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 		if (sdma_we) {
 			++(*reqs_used);
 			assert(sdma_we->next == NULL);
+			OPX_TRACER_TRACE_SDMA(OPX_TRACER_INSTANT, "GET_IDLE_WE");
 			return sdma_we;
 		}
 	}
@@ -379,11 +380,14 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 			sdma_we->total_payload = 0;
 			sdma_we->psn_ptr = NULL;
 			++sdma_we->bounce_buf.use_count;
+			OPX_TRACER_TRACE_SDMA(OPX_TRACER_INSTANT, "GET_REUSED_WE");
 			return sdma_we;
 		}
 		prev = sdma_we;
 		sdma_we = sdma_we->next;
 	}
+
+	OPX_TRACER_TRACE_SDMA(OPX_TRACER_INSTANT, "GET_NO_WE");
 	return NULL;
 }
 

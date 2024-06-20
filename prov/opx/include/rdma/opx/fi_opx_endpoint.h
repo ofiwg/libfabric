@@ -2163,6 +2163,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 	break;
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_TID:
 	{
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RX_PROCESS_HEADER_RZV_TID");
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_rcv_pkts);
 		struct fi_opx_rzv_completion * rzv_comp = (struct fi_opx_rzv_completion *)(hdr->dput.target.rzv.completion_vaddr);
 		union fi_opx_context *target_context = rzv_comp->context;
@@ -2248,6 +2249,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			OPX_BUF_FREE(rzv_comp);
 		}
 
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RX_PROCESS_HEADER_RZV_TID");
 	}
 	break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT:

@@ -334,7 +334,9 @@ void opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep,
 		fi_opx_timer_now(&timestamp, &opx_ep->reliability->state.service->tx.timer);
 #endif
 
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "WRITEV");
 	ssize_t writev_rc = writev(opx_ep->hfi->fd, iovecs, iovs_used);
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITEV");
 
 #ifdef OPX_DEBUG_COUNTERS_SDMA
 	uint64_t writev_end_ns =
@@ -397,6 +399,7 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 		struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&request->header_vec, request->set_meminfo);
 		req_info->comp_idx = fill_index;
 		request->fill_index = fill_index;
+		OPX_TRACER_TRACE_SDMA(OPX_TRACER_BEGIN, "SDMA_COMPLETE_%hu", fill_index);
 
 		assert(opx_ep->hfi->info.sdma.queued_entries[fill_index] == NULL);
 		request->comp_entry.status = QUEUED;

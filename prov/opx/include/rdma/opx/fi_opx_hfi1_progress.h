@@ -61,6 +61,7 @@
 #include "uthash.h"
 #include "fi_opx_reliability.h"
 #include "rdma/opx/fi_opx_flight_recorder.h"
+#include "rdma/opx/opx_tracer.h"
 
 #define FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS	(0x20ul)
 #define FI_OPX_HFI1_HDRQ_INDEX_SHIFT	(5) /* index FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS entries */
@@ -745,6 +746,7 @@ void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
 		// Update the status/errcode of the work entry who was using this index
 		assert(hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]);
 		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->status = entry->status;
+		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "SDMA_COMPLETE_%hu", hfi->info.sdma.done_index);
 		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->errcode = entry->errcode;
 		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index] = NULL;
 
