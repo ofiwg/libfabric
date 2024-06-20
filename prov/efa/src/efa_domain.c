@@ -468,14 +468,14 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 
 		ret = efa_rdm_ep_post_handshake(peer->ep, peer);
 		if (ret == -FI_EAGAIN)
-			break;
+			continue;
 
 		if (OFI_UNLIKELY(ret)) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"Failed to post HANDSHAKE to peer %ld: %s\n",
 				peer->efa_fiaddr, fi_strerror(-ret));
 			efa_base_ep_write_eq_error(&peer->ep->base_ep, -ret, FI_EFA_ERR_PEER_HANDSHAKE);
-			return;
+			continue;
 		}
 
 		dlist_remove(&peer->handshake_queued_entry);
@@ -600,7 +600,7 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 					break;
 
 				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
-				return;
+				continue;
 			}
 		}
 	}
