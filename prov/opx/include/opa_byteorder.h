@@ -17,9 +17,6 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
   General Public License for more details.
 
-  Contact Information:
-  Intel Corporation, www.intel.com
-
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
@@ -54,6 +51,7 @@
 */
 
 /* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
+/* Copyright (C) 2021-2024 by Cornelis Networks.                   */
 
 #ifndef OPA_BYTEORDER_H
 #define OPA_BYTEORDER_H
