@@ -1809,15 +1809,15 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 		}
 
 		/* Copy the tid info to params list for further modifications */
-		params->ntidpairs = cached_tid_entry->npairs;
-		assert(params->ntidpairs != 0);
+		params->tid_info.npairs = cached_tid_entry->npairs;
+		assert(params->tid_info.npairs != 0);
 		memcpy(params->tidpairs, &cached_tid_entry->pairs[0],
 		       (cached_tid_entry->npairs *
 			sizeof(cached_tid_entry->pairs[0])));
-		params->tid_offset = 0;
+		params->tid_info.offset = 0;
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "tid_offset %u/%#X\n",
-		       params->tid_offset, params->tid_offset);
-		OPX_DEBUG_TIDS("RTS tidpairs", params->ntidpairs,
+		       params->tid_info.offset, params->tid_info.offset);
+		OPX_DEBUG_TIDS("RTS tidpairs", params->tid_info.npairs,
 			       params->tidpairs);
 	} else if (find == OPX_ENTRY_FOUND) {
 		struct opx_mr_tid_info *cached_tid_entry =
@@ -1857,16 +1857,16 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 			       &cached_tid_entry->pairs[first_tid_index]);
 
 		/* Copy the tid info to params list for further modifications */
-		params->ntidpairs = last_tid_index - first_tid_index + 1;
-		assert(params->ntidpairs != 0);
+		params->tid_info.npairs = last_tid_index - first_tid_index + 1;
+		assert(params->tid_info.npairs != 0);
 		memcpy(params->tidpairs,
 		       &cached_tid_entry->pairs[first_tid_index],
-		       params->ntidpairs * sizeof(params->tidpairs[0]));
-		params->tid_offset =
+		       params->tid_info.npairs * sizeof(params->tidpairs[0]));
+		params->tid_info.offset =
 			page_offset_in_tid * OPX_HFI1_TID_PAGESIZE;
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "tid_offset %u/%#X\n",
-		       params->tid_offset, params->tid_offset);
-		OPX_DEBUG_TIDS("RTS tidpairs", params->ntidpairs,
+		       params->tid_info.offset, params->tid_info.offset);
+		OPX_DEBUG_TIDS("RTS tidpairs", params->tid_info.npairs,
 			       params->tidpairs);
 	} else if (find == OPX_ENTRY_OVERLAP) {
 		/* Multiple entries to process - loop */
@@ -2088,7 +2088,7 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 				       created_tidpairs,
 				       (created_ntidpairs * sizeof(uint32_t)));
 				if (ntidpairs == 0) {
-					params->tid_offset = 0;
+					params->tid_info.offset = 0;
 				}
 				ntidpairs += created_ntidpairs;
 
@@ -2158,7 +2158,7 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 				       params && params->tidpairs);
 
 				if (ntidpairs == 0) {
-					params->tid_offset =
+					params->tid_info.offset =
 						page_offset_in_tid *
 						OPX_HFI1_TID_PAGESIZE;
 				}
@@ -2236,8 +2236,8 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 				}
 			}
 		}
-		params->ntidpairs = ntidpairs;
-		OPX_DEBUG_TIDS("RTS tidpairs", params->ntidpairs,
+		params->tid_info.npairs = ntidpairs;
+		OPX_DEBUG_TIDS("RTS tidpairs", params->tid_info.npairs,
 			       params->tidpairs);
 	}
 	pthread_mutex_unlock(&mm_lock);
