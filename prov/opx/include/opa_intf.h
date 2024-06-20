@@ -54,6 +54,7 @@
 */
 
 /* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
+/* Copyright (C) 2021-2024 by Cornelis Networks.                   */
 
 #ifndef OPA_INTF_H
 #define OPA_INTF_H
