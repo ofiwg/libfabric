@@ -1031,10 +1031,16 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== RECV, HFI -- RENDEZVOUS %s RTS (begin)\n",
-		params->ntidpairs ? "EXPECTED TID" : "EAGER");
+		"===================================== RECV, HFI -- RENDEZVOUS %s RTS (begin) (params=%p rzv_comp=%p context=%p)\n",
+		params->tid_info.npairs ? "EXPECTED TID" : "EAGER",
+		params,
+		params->rzv_comp,
+		params->rzv_comp->context);
+	assert (params->rzv_comp->context->byte_counter >= params->dput_iov[0].bytes);
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
-	const uint64_t tid_payload = params->ntidpairs ? ((params->ntidpairs + 2) * sizeof(uint32_t)) : 0;
+	const uint64_t tid_payload = params->tid_info.npairs
+					?  ((params->tid_info.npairs + 4) * sizeof(params->tidpairs[0]))
+					: 0;
 	const uint64_t payload_bytes = (params->niov * sizeof(union fi_opx_hfi1_dput_iov)) + tid_payload;
 	const uint64_t pbc_dws =
 		2 + /* pbc */
@@ -1058,6 +1064,12 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 									total_credits_needed);
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 		if (total_credits_available < total_credits_needed) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"===================================== RECV, HFI -- RENDEZVOUS %s RTS (EAGAIN credits) (params=%p rzv_comp=%p context=%p)\n",
+				params->tid_info.npairs ? "EXPECTED TID" : "EAGER",
+				params,
+				params->rzv_comp,
+				params->rzv_comp->context);
 			return -FI_EAGAIN;
 		}
 	}
@@ -1075,7 +1087,12 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 					    &replay,
 					    params->reliability);
 	if(OFI_UNLIKELY(psn == -1)) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== RECV, HFI -- RENDEZVOUS %s RTS (EAGAIN psn/replay) (params=%p rzv_comp=%p context=%p)\n",
+			params->tid_info.npairs ? "EXPECTED TID" : "EAGER",
+			params,
+			params->rzv_comp,
+			params->rzv_comp->context);
 		return -FI_EAGAIN;
 	}
 
@@ -1092,7 +1109,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	replay->scb.hdr.qw[2] = opx_ep->rx->tx.cts.hdr.qw[2] | psn;
 	replay->scb.hdr.qw[3] = opx_ep->rx->tx.cts.hdr.qw[3];
 	replay->scb.hdr.qw[4] = opx_ep->rx->tx.cts.hdr.qw[4] |
-				((uint64_t) params->ntidpairs << 32) |
+				((uint64_t) params->tid_info.npairs << 32) |
 				(params->niov << 48) | params->opcode;
 	replay->scb.hdr.qw[5] = params->origin_byte_counter_vaddr;
 	replay->scb.hdr.qw[6] = (uint64_t) params->rzv_comp;
@@ -1101,13 +1118,13 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		(union fi_opx_hfi1_packet_payload *) replay->payload;
 	assert(((uint8_t *)tx_payload) == ((uint8_t *)&replay->data));
 
-	uintptr_t vaddr_with_offset = params->ntidpairs ?
+	uintptr_t vaddr_with_offset = params->tid_info.npairs ?
 			((uint64_t)params->dst_vaddr & -64) :
 			params->dst_vaddr; /* receive buffer virtual address */
 
 	for (int i = 0; i < params->niov; i++) {
 		tx_payload->cts.iov[i].rbuf = vaddr_with_offset;
-		tx_payload->cts.iov[i].sbuf = (uintptr_t)params->dput_iov[i].sbuf;
+		tx_payload->cts.iov[i].sbuf = params->dput_iov[i].sbuf;
 		tx_payload->cts.iov[i].bytes = params->dput_iov[i].bytes;
 		tx_payload->cts.iov[i].sbuf_device = params->dput_iov[i].sbuf_device;
 		tx_payload->cts.iov[i].rbuf_device = params->dput_iov[i].rbuf_device;
@@ -1117,15 +1134,19 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	}
 
 	/* copy tidpairs to packet */
-	if (params->ntidpairs) {
+	if (params->tid_info.npairs) {
+		assert(params->tid_info.npairs < FI_OPX_MAX_DPUT_TIDPAIRS);
+		assert(params->tidpairs[0] != 0);
 		assert(params->niov == 1);
+		assert(params->rzv_comp->context->byte_counter >= params->dput_iov[0].bytes);
 
 		/* coverity[missing_lock] */
-		tx_payload->tid_cts.tid_offset = params->tid_offset;
-		tx_payload->tid_cts.ntidpairs = params->ntidpairs;
-		assert(params->tidpairs[0] != 0);
-		memcpy(&tx_payload->tid_cts.tidpairs, params->tidpairs,
-			params->ntidpairs * sizeof(uint32_t));
+		tx_payload->tid_cts.tid_offset = params->tid_info.offset;
+		tx_payload->tid_cts.ntidpairs = params->tid_info.npairs;
+		tx_payload->tid_cts.origin_byte_counter_adjust = params->tid_info.origin_byte_counter_adj;
+		for (int i = 0; i < params->tid_info.npairs; ++i) {
+			tx_payload->tid_cts.tidpairs[i] = params->tidpairs[i];
+		}
 	}
 
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service,replay);
@@ -1138,8 +1159,11 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 							    params->reliability);
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== RECV, HFI -- RENDEZVOUS %s RTS (end)\n",
-		params->ntidpairs ? "EXPECTED TID" : "EAGER");
+		"===================================== RECV, HFI -- RENDEZVOUS %s RTS (end) (params=%p rzv_comp=%p context=%p)\n",
+		params->tid_info.npairs ? "EXPECTED TID" : "EAGER",
+		params,
+		params->rzv_comp,
+		params->rzv_comp->context);
 	return FI_SUCCESS;
 }
 
@@ -1195,33 +1219,34 @@ int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep,
 
 	/* Adjust length for aligning the buffer and adjust again for total length,
 	   aligning to SDMA header auto-generation payload requirements. */
-	const int64_t length = (params->dput_iov[0].bytes + alignment_adjustment) & -64;
+	const int64_t length_with_adjustment = params->dput_iov[0].bytes + alignment_adjustment;
+	const int64_t new_length = length_with_adjustment & -64;
 
 	/* Tune for unaligned buffers.  Buffers misaligned more than the threshold on
 	 * message sizes under the MSG threshold will fallback to eager.
 	 */
-	if ((length < FI_OPX_TID_MSG_MISALIGNED_THRESHOLD) &&
+	if ((new_length < FI_OPX_TID_MSG_MISALIGNED_THRESHOLD) &&
 		((vaddr - tid_vaddr) > FI_OPX_TID_MISALIGNED_THRESHOLD)) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.rts_fallback_eager_misaligned_thrsh);
 		return 0;
 	}
 
 	/* The tid length must account for starting at a page boundary and will be page aligned */
-	const int64_t tid_length = (uint64_t)(((vaddr + length) - tid_vaddr) +
+	const int64_t tid_length = (uint64_t)(((vaddr + new_length) - tid_vaddr) +
 				(OPX_TID_PAGE_SIZE[iface] - 1)) & (uint64_t)page_alignment_mask;
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"iov_len %#lX, length %#lX, tid_length %#lX, "
 		"params->dst_vaddr %p, iov_base %p, vaddr [%p - %p], tid_vaddr [%p - %p]\n",
-		params->dput_iov[0].bytes, length, tid_length,
+		params->dput_iov[0].bytes, new_length, tid_length,
 		(void *)params->dst_vaddr, (void *) params->dput_iov[0].sbuf,
-		(void *)vaddr, (void *)(vaddr + length),
+		(void *)vaddr, (void *)(vaddr + new_length),
 		(void *)tid_vaddr, (void *)(tid_vaddr + tid_length));
 
 	params->tid_pending_vaddr = vaddr;
-	params->tid_pending_length = length;
+	params->tid_pending_length = new_length;
 	params->tid_pending_tid_vaddr = tid_vaddr;
 	params->tid_pending_tid_length = tid_length;
-	params->tid_pending_alignment_adjustment = alignment_adjustment;
+	params->tid_pending_alignment_adjustment = new_length - params->dput_iov[0].bytes;
 
 
 	return 1;
@@ -1250,7 +1275,7 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 		return opx_hfi1_rx_rzv_rts_send_cts(work);
 	}
 
-	assert(params->ntidpairs);
+	assert(params->tid_info.npairs);
 
 	const uint64_t vaddr = params->tid_pending_vaddr;
 	const uint64_t tid_vaddr = params->tid_pending_tid_vaddr;
@@ -1264,15 +1289,15 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"vaddr %p, tid_vaddr %p, diff %#X, registered tid_offset %u/%#X, buffer tid_offset %u/%#X, tid_length %lu/%#lX \n",
 		(void *)vaddr, (void *)tid_vaddr,
-		(uint32_t)(vaddr - tid_vaddr), params->tid_offset,
-		params->tid_offset,
-		params->tid_offset + (uint32_t)(vaddr - tid_vaddr),
-		params->tid_offset + (uint32_t)(vaddr - tid_vaddr),
+		(uint32_t)(vaddr - tid_vaddr), params->tid_info.offset,
+		params->tid_info.offset,
+		params->tid_info.offset + (uint32_t)(vaddr - tid_vaddr),
+		params->tid_info.offset + (uint32_t)(vaddr - tid_vaddr),
 		tid_length, tid_length);
 
 	/* Adjust the offset for vaddr byte offset into the tid.  */
 	/* coverity[missing_lock] */
-	params->tid_offset += (uint32_t)(vaddr - tid_vaddr);
+	params->tid_info.offset += (uint32_t)(vaddr - tid_vaddr);
 
 	const uint64_t iov_adj = ((uint64_t)params->dst_vaddr - vaddr);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1285,6 +1310,7 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 
 	params->dput_iov[0].sbuf -= iov_adj;
 	params->dput_iov[0].bytes = (params->dput_iov[0].bytes + iov_adj) & -64;
+	params->tid_info.origin_byte_counter_adj = (int32_t) params->tid_pending_alignment_adjustment;
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		" ==== iov[%u].base %p len %zu/%#lX alignment_adjustment %lu/%#lX\n",
 		0, (void *) params->dput_iov[0].sbuf,
@@ -1295,6 +1321,8 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 	params->rzv_comp->context->byte_counter = length;
 	params->rzv_comp->tid_length = tid_length;
 	params->rzv_comp->tid_vaddr = tid_vaddr;
+	params->rzv_comp->tid_byte_counter = length;
+	params->rzv_comp->tid_bytes_accumulated = 0;
 	params->opcode = FI_OPX_HFI_DPUT_OPCODE_RZV_TID;
 
 	FI_OPX_DEBUG_COUNTERS_INC(params->opx_ep->debug_counters
@@ -1391,16 +1419,16 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	params->rzv_comp = ofi_buf_alloc(opx_ep->rzv_completion_pool);
 	params->rzv_comp->tid_vaddr = 0UL;
 	params->rzv_comp->tid_length = 0UL;
+	params->rzv_comp->tid_byte_counter = 0UL;
+	params->rzv_comp->tid_bytes_accumulated = 0UL;
 	params->rzv_comp->context = target_context;
 	params->dst_vaddr = dst_vaddr;
 	params->is_intranode = is_intranode;
 	params->reliability = reliability;
-	params->tid_pending_vaddr = 0UL;
-	params->tid_pending_tid_vaddr = 0UL;
-	params->tid_pending_length = 0L;
-	params->tid_pending_tid_length = 0L;
+	params->tid_info.npairs = 0;
+	params->tid_info.offset = 0;
+	params->tid_info.origin_byte_counter_adj = 0;
 	params->tid_setup_retries = 0;
-	params->ntidpairs = 0;
 	params->opcode = opcode;
 
 	if (opx_hfi1_rx_rzv_rts_tid_eligible(opx_ep, params, niov,
@@ -1999,6 +2027,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				bytes_to_send -= bytes_sent;
 				sdma_we_bytes -= bytes_sent;
 				params->bytes_sent += bytes_sent;
+				params->origin_bytes_sent += bytes_sent;
 				sbuf += bytes_sent;
 			}
 
@@ -2048,6 +2077,8 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 		assert(params->origin_byte_counter);
 		*params->origin_byte_counter = 0;
 		params->origin_byte_counter = NULL;
+	} else {
+		assert(params->origin_bytes_sent == *params->origin_byte_counter);
 	}
 	params->work_elem.work_type = OPX_WORK_TYPE_LAST;
 	params->work_elem.work_fn = fi_opx_hfi1_dput_sdma_pending_completion;
@@ -2423,6 +2454,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 
 				bytes_to_send -= bytes_sent;
 				params->bytes_sent += bytes_sent;
+				params->origin_bytes_sent += bytes_sent;
 				sbuf += bytes_sent;
 			}
 
@@ -2478,7 +2510,8 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 	// be in progress.
 	if (!params->sdma_no_bounce_buf) {
 		assert(params->origin_byte_counter);
-		*params->origin_byte_counter = 0;
+		assert((*params->origin_byte_counter) >= params->origin_bytes_sent);
+		*params->origin_byte_counter -= params->origin_bytes_sent;
 		params->origin_byte_counter = NULL;
 	}
 	params->work_elem.work_type = OPX_WORK_TYPE_LAST;
@@ -2531,6 +2564,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->dput_iov = &params->iov[0];
 	params->cur_iov = 0;
 	params->bytes_sent = 0;
+	params->origin_bytes_sent = 0;
 	params->cc = NULL;
 	params->user_cc = NULL;
 	params->payload_bytes_for_iovec = 0;
@@ -2574,15 +2608,18 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	if (opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) {
 		ntidpairs = hfi1_hdr->cts.target.vaddr.ntidpairs;
 		if (ntidpairs) {
-			tidpairs = ((union fi_opx_hfi1_packet_payload *)payload)->tid_cts.tidpairs;
-			tidoffset = ((union fi_opx_hfi1_packet_payload *)payload)->tid_cts.tid_offset;
+			union fi_opx_hfi1_packet_payload *tid_payload =
+				(union fi_opx_hfi1_packet_payload *) payload;
+			tidpairs = tid_payload->tid_cts.tidpairs;
+			tidoffset = tid_payload->tid_cts.tid_offset;
 			/* Receiver may have adjusted the length for expected TID alignment.*/
-			assert(origin_byte_counter == NULL || (iov_total_bytes >= *origin_byte_counter));
-			if(origin_byte_counter) *origin_byte_counter = iov_total_bytes;
+			if (origin_byte_counter) {
+				(*origin_byte_counter) += tid_payload->tid_cts.origin_byte_counter_adjust;
+			}
 		}
 	}
 	assert((ntidpairs == 0) || (niov == 1));
-	assert(origin_byte_counter == NULL || iov_total_bytes == *origin_byte_counter);
+	assert(origin_byte_counter == NULL || iov_total_bytes <= *origin_byte_counter);
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, tidoffset, ntidpairs, tidpairs, is_hmem);
 
 	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_intranode, opx_ep->debug_counters.hmem.dput_rzv_intranode);
@@ -3328,7 +3365,9 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
 
 	fprintf(stderr,
 		"%s:%s():%d drop this packet and allow reliability protocol to retry, psn = %u, RHF %#16.16lX, OPX_RHF_IS_USE_EGR_BUF %u, hdrq_offset_dws %lu\n",
-		__FILE__, __func__, __LINE__, FI_OPX_HFI1_PACKET_PSN(hdr), rhf_rcvd, OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd), hdrq_offset_dws);
+		__FILE__, __func__, __LINE__, FI_OPX_HFI1_PACKET_PSN(hdr),
+		rhf_rcvd, OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd), hdrq_offset_dws);
+
 #endif
 
 	OPX_RHE_DEBUG(opx_ep, rhe_ptr, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset, rhf_rcvd, hdr);
