@@ -401,7 +401,7 @@ static int ft_sync_test(int value)
 	if (ret)
 		return ret;
 
-	return ft_sock_sync(value);
+	return ft_sock_sync(sock, value);
 }
 
 static int ft_sync_manual()
@@ -444,7 +444,7 @@ static int ft_sync_progress(int value)
 {
 	if (test_info.progress == FI_PROGRESS_MANUAL)
 		return ft_sync_manual();
-	return ft_sock_sync(value);
+	return ft_sock_sync(sock, value);
 }
 
 static int ft_sync_msg_needed(void)
@@ -1134,7 +1134,7 @@ int ft_init_test()
 {
 	int ret;
 
-	ft_sock_sync(0);
+	ft_sock_sync(sock, 0);
 
 	ret = ft_enable_comm();
 	if (ret) {

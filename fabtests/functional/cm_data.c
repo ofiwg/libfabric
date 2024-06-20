@@ -440,7 +440,7 @@ static int run(void)
 		if (ret)
 			goto err1;
 
-		ret = ft_sock_sync(0);
+		ret = ft_sock_sync(sock, 0);
 		if (ret)
 			goto err1;
 	}
