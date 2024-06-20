@@ -2208,7 +2208,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"%p:===================================== SEND DPUT SDMA QUEUE FULL FI_EAGAIN\n",
 					params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA-TID");
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN_SDMA_QUEUE_FULL, "SEND-DPUT-SDMA-TID");
 				return -FI_EAGAIN;
 
 			}
@@ -2225,7 +2225,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 									opx_ep->debug_counters.sdma.eagain_sdma_we_max_used);
 					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 						"%p:===================================== SEND DPUT SDMA TID, !WE FI_EAGAIN\n",params);
-					OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA-TID");
+					OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN_SDMA_NO_WE, "SEND-DPUT-SDMA-TID");
 					return -FI_EAGAIN;
 				}
 				assert(params->sdma_we->total_payload == 0);
@@ -2263,7 +2263,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"%p:===================================== SEND DPUT SDMA TID, !PSN FI_EAGAIN\n",
 					params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA-TID");
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN_SDMA_PSNS, "SEND-DPUT-SDMA-TID:%d:%ld", psns_avail, packet_count);
 				return -FI_EAGAIN;
 			}
 #ifndef OPX_RELIABILITY_TEST /* defining this will force reliability replay of some packets */
@@ -2464,7 +2464,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"%p:===================================== SEND DPUT SDMA TID, !REPLAY FI_EAGAIN\n",
 					params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA-TID");
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN_SDMA_REPLAY_BUFFER, "SEND-DPUT-SDMA-TID");
 				return -FI_EAGAIN;
 			}
 
