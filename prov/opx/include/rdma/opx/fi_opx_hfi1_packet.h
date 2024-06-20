@@ -848,7 +848,9 @@ struct fi_opx_hmem_iov {
 #define FI_OPX_MAX_HMEM_IOV ((FI_OPX_HFI1_PACKET_MTU - sizeof(uintptr_t)) / sizeof(struct fi_opx_hmem_iov))
 #define FI_OPX_MAX_DPUT_IOV ((FI_OPX_HFI1_PACKET_MTU / sizeof(union fi_opx_hfi1_dput_iov) - 4) + 3)
 
-#define FI_OPX_MAX_DPUT_TIDPAIRS ((FI_OPX_HFI1_PACKET_MTU - sizeof(union fi_opx_hfi1_dput_iov) - (2 * sizeof(uint32_t)))/sizeof(uint32_t))
+#define FI_OPX_MAX_DPUT_TIDPAIRS ((FI_OPX_HFI1_PACKET_MTU - sizeof(union fi_opx_hfi1_dput_iov)	\
+							  - (4 * sizeof(uint32_t)))		\
+				  / sizeof(uint32_t))
 
 union fi_opx_hfi1_rzv_rts_immediate_info {
 	uint64_t	qw0;
@@ -909,14 +911,21 @@ union fi_opx_hfi1_packet_payload {
 
 	/* tid_cts extends cts*/
 	struct {
+		/* ==== CACHE LINE 0 ==== */
 		union fi_opx_hfi1_dput_iov	iov[1];
 		uint32_t  tid_offset;
 		uint32_t  ntidpairs;
+		int32_t   origin_byte_counter_adjust;
+		uint32_t  unused;
+
+		/* ==== CACHE LINE 1 ==== */
 		uint32_t  tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 	} tid_cts;
 
 } __attribute__((__aligned__(32)));
 
+static_assert(sizeof(union fi_opx_hfi1_packet_payload) <= FI_OPX_HFI1_PACKET_MTU,
+		"sizeof(union fi_opx_hfi1_packet_payload) must be <= FI_OPX_HFI1_PACKET_MTU!");
 static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_byte) == 64,
 		"struct fi_opx_hfi1_packet_payload.rendezvous.contiguous.immediate_byte should be aligned on cacheline 1!");
 static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_block) == 128,
@@ -927,6 +936,10 @@ static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguou
 		"struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.iov_ext should be aligned on cacheline 1!");
 static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.unused) == (FI_OPX_HFI1_PACKET_MTU - 8),
 		"struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.unused should end at packet MTU!");
+static_assert((offsetof(union fi_opx_hfi1_packet_payload, tid_cts.tidpairs) +
+		sizeof(((union fi_opx_hfi1_packet_payload*) 0)->tid_cts.tidpairs)) == FI_OPX_HFI1_PACKET_MTU,
+		"offsetof(fi_opx_hfi1_packet_payload.tid_cts.tidpairs) + sizeof(...tid_cts.tidpairs) should equal packet MTU! "
+		"If you added/removed fields in struct tid_cts, you need to adjust FI_OPX_MAX_DPUT_TIDPAIRS!");
 
 
 

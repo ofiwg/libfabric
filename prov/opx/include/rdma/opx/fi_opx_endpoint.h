@@ -87,13 +87,13 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
  * const FI_AV_MAP/FI_AV_TABLE compile optimized.
  * const FI_AV_UNSPEC requires a conditional pulling it out of the endpoint   */
 
-#define FI_OPX_EP_AV_ADDR(const_av_type, ep, addr)                             \
-{                                                                              \
-        (const_av_type == FI_AV_TABLE) ? ep->tx->av_addr[addr].fi :            \
-            ( (const_av_type == FI_AV_MAP) ? addr :             	       \
-                ( (ep->av_type == FI_AV_TABLE) ?                	       \
-                    ep->tx->av_addr[addr].fi : addr) )          	       \
-}       								       \
+#define FI_OPX_EP_AV_ADDR(const_av_type, ep, addr)				\
+{										\
+	(const_av_type == FI_AV_TABLE) ? ep->tx->av_addr[addr].fi :		\
+		( (const_av_type == FI_AV_MAP) ? addr :				\
+		( (ep->av_type == FI_AV_TABLE) ?				\
+		ep->tx->av_addr[addr].fi : addr) )				\
+}
 
 /* Macro indirection in order to support other macros as arguments
  * C requires another indirection for expanding macros since
@@ -600,7 +600,8 @@ struct fi_opx_rzv_completion {
 	};
 	uint64_t		tid_length;
 	uint64_t		tid_vaddr;
-	uint8_t			unused[8];
+	uint64_t		tid_byte_counter;
+	uint64_t		tid_bytes_accumulated;
 };
 
 struct fi_opx_rma_request {
@@ -2193,7 +2194,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.rzv.rbuf);
 			const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"REPLAY rbuf_qws %p, sbuf_qws %p, bytes %u/%#x, target_context->byte_counter %p\n",
+				"TID REPLAY rbuf_qws %p, sbuf_qws %p, bytes %u/%#x, target_context->byte_counter %p\n",
 				(void*)rbuf_qws, (void*)sbuf_qws, bytes, bytes, &target_context->byte_counter);
 			if (target_context->flags & FI_OPX_CQ_CONTEXT_HMEM) {
 				struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) target_context;
@@ -2221,16 +2222,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 				&target_context->byte_counter);
 		}
 #endif
-		const uint64_t value = target_context->byte_counter;
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, target_context->byte_counter = %p, %lu -> %lu\n",
 			hdr->dput.target.last_bytes, hdr->dput.target.bytes,
 			bytes, &target_context->byte_counter,
-			value, value - bytes);
-		assert(value >= bytes);
-		target_context->byte_counter = value - bytes;
+			rzv_comp->tid_byte_counter, rzv_comp->tid_byte_counter - bytes);
+		assert(rzv_comp->tid_byte_counter >= bytes);
+		rzv_comp->tid_bytes_accumulated += bytes;
+		rzv_comp->tid_byte_counter -= bytes;
+
 		/* On completion, decrement TID refcount and maybe free the TID cache */
-		if ((value - bytes) == 0) {
+		if (rzv_comp->tid_byte_counter == 0) {
 			const uint64_t tid_vaddr = rzv_comp->tid_vaddr;
 			const uint64_t tid_length = rzv_comp->tid_length;
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2238,7 +2240,10 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 				(void *)tid_vaddr,
 				(void *)(tid_vaddr + tid_length),
 				tid_length, tid_length);
+			target_context->byte_counter -= rzv_comp->tid_bytes_accumulated;
+
 			opx_deregister_for_rzv(opx_ep, tid_vaddr, tid_length);
+
 			/* free the rendezvous completion structure */
 			OPX_BUF_FREE(rzv_comp);
 		}

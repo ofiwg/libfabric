@@ -401,6 +401,7 @@ struct fi_opx_hfi1_dput_params {
 	uint64_t *origin_byte_counter;
 	uint64_t key;
 	uint64_t bytes_sent;
+	uint64_t origin_bytes_sent;
 	uint32_t niov;
 	uint32_t cur_iov;
 	uint32_t opcode;
@@ -456,8 +457,6 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	uint64_t pbc_dlid;
 
 	uint32_t tid_setup_retries;
-	uint32_t ntidpairs;
-	uint32_t tid_offset;
 	uint32_t u32_extended_rx;
 	unsigned is_intranode;
 	enum ofi_reliability_kind reliability;
@@ -469,6 +468,12 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	uint8_t u8_rx;
 	uint8_t	target_hfi_unit;
 
+	struct {
+		struct fi_opx_hmem_iov	cur_addr_range;
+		uint32_t 		npairs;
+		uint32_t		offset;
+		int32_t 		origin_byte_counter_adj;
+	} tid_info;
 	/* Either FI_OPX_MAX_DPUT_IOV iov's or
 	   1 iov and FI_OPX_MAX_DPUT_TIDPAIRS tidpairs */
 	union {
