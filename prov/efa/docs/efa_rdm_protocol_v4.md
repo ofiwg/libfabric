@@ -322,6 +322,7 @@ Table: 2.1 a list of extra features/requests
 | 4  | runting read message protocol    | extra feature | libfabric 1.16.0 | Section 4.5 |
 | 5  | RDMA-Write based data transfer   | extra feature | libfabric 1.18.0 | Section 4.6 |
 | 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 |
+| 7  | User recv QP            | extra feature & request| libfabric 1.22.0 | Section 4.8 |
 
 How does protocol v4 maintain backward compatibility when extra features/requests are introduced?
 
@@ -388,6 +389,8 @@ Table: 2.2 binary format of the HANDSHAKE packet
 | `host_id`        | 8                     | integer       | `uint64_t`   | `HANDSHAKE_HOST_ID_HDR`        |
 | `device_version` | 4                     | integer       | `uint32_t`   | `HANDSHAKE_DEVICE_VERSION_HDR` |
 | _reserved_       | 4                     | _N/A_         | _N/A_        | `HANDSHAKE_DEVICE_VERSION_HDR` |
+| `qpn`            | 4                     | integer       | `uint32_t`   | `HANDSHAKE_USER_RECV_QP_HDR`   |
+| `qkey`           | 4                     | integer       | `uint32_t`   | `HANDSHAKE_USER_RECV_QP_HDR`   |
 
 The first 4 bytes (3 fields: `type`, `version`, `flags`) is the EFA RDM base header (section 1.3).
 
@@ -435,6 +438,7 @@ HANDSHAKE packet's header (table 2.3).
 - `connid` is a universal field explained in detail in section 4.4.
 - `host_id` is an unsigned integer representing the host identifier of the sender.
 - `device_version` represents the version of the sender's EFA device.
+- `qpn` and `qkey` represents the qp number of the user receive QP, explained in detail in section 4.8.
 
 Table 2.3 Flags for optional HANDSHAKE packet fields
 
@@ -443,6 +447,7 @@ Table 2.3 Flags for optional HANDSHAKE packet fields
 | `CONNID_HDR`                   | $2^{15}$ | `0x8000` | `connid`         |
 | `HANDSHAKE_HOST_ID_HDR`        | $2^0$    | `0x0001` | `host_id`        |
 | `HANDSHAKE_DEVICE_VERSION_HDR` | $2^1$    | `0x0002` | `device_version` |
+| `HANDSHAKE_USER_RECV_QP_HDR`   | $2^2$    | `0x0004` | `qpn` and `qkey` |
 
 Refer to table 2.2 for field attributes, such as corresponding C data
 types and length in bytes (including padding).
@@ -648,9 +653,8 @@ later. The difficulty of implementing zero copy receive is that the EFA device d
 occurs when the eager RTM packet arrives before the application calls libfabric's receive API.
 
 4. If the application does not require ordered send, it would be possible to use the application's receive buffer to receive
-data directly. In this case, the receiver might need the sender to keep the packet header length constant throughout the
-communication. The extra request "constant header length" is designed for this use case - see section 4.3 for more discussion
-on this topic.
+data directly. In this case, the receiver might need the sender to send packets without any headers to its dedicated user recv
+QP - see section 4.8 for more discussion on this topic.
 
 5. One might notice that there is no application data length in the header, so how can the receiver of an eager RTM packet
    know how many application bytes are in the packet? The answer is to use the following formula:
@@ -1339,6 +1343,8 @@ for more information about the field `connid`.
 
 ### 4.3 Keep packet header length constant (constant header length) and zero-copy receive
 
+**This mode bit is deprecated since libfabric 1.22.0 and replaced by the "user recv qp" feature/request (See 4.8)**
+
 The extra request "keep packet header length constant" (constant header length) was introduced in the libfabric 1.13.0
 release and was assigned the ID 2.
 
@@ -1536,6 +1542,65 @@ The workflow for long read protocol is shown below
 The workflow for runting read protocol is shown below
 
 ![long-read fallback](message_runtread_fallback.png)
+
+### 4.8 User receive QP feature & request and zero-copy receive
+
+The extra feature/request "user recv(receive) qp" was introduced in the libfabric 1.22.0
+release and was assigned the ID 7. It is used if an endpoint wants to implement the "zero copy receive" optimization.
+(see 4.3)
+
+Historically, zero copy receive was implemented via the "constant header length" extra request (See 4.3). But
+such approach has the following drawbacks:
+
+1. It still keeps protocol headers (48 bytes) in the payload, which makes it impossible to make the payload
+fit into EFA device 's inline data size (32 bytes). Especially the raw address header, which is 40 bytes, can
+be replaced to connid header (8 bytes) after a handshake is made. But with this request, the raw address
+header will always be included and cause a waste of payload space. It will also require applications to use
+the FI_MSG_PREFIX mode that reserve some space in the receive buffers.
+
+2. It cannot address the buffer mix issue: When zero copy receive mode is enabled, Libfabric should mostly only
+post user recv buffer to rdma-core to maximize the possibility that the packets are delivered
+to the user buffers. However, each ep can still get the handshake packets from its peers. For a client/server
+model that 1 ep only talks to 1 peer, it needs to post 1 internal bounce buffer to get handshake packet
+, because user may only use the ep for send and never posts a receive buffer. For MPI/NCCL applications where 1
+ep talks to multiple peers, posting internal bounce buffers and user buffers to the same QP will never be
+safe or efficient because of the following buffer mix issues.
+
+   a. A bounce buffer receives a RTM packet. In zero copy receive mode, Libfabric posts
+   user receive buffer to rdma-core directly, and such post cannot be cancelled. If
+   libfabric chooses to copy data from the bounce buffer to the user receive buffer and
+   write completion, and later another packet delivers to the same user buffer, it will
+   cause a data corruption. There is no good way to avoid this case unless the ep knows
+   the number of peers it will send to and also make sure no peers will send RTM pkts to it
+   before it get all handshakes from its peers, which is impossibile.
+
+   b. A user receive buffer receives a handshake pkt. In this case, Libfabric needs to repost
+   the user receive buffer to rdma-core.
+
+The "user recv qp" approach is proposed to address the deficits above.
+
+When zero-copy recv is enabled, an EP creates an additional QP to post user receive buffers. This
+QP expects to get packets delivered to user buffers without any headers. The default QP
+is still used to receive the packets with headers. The user receive QP and default QP share the
+same AH but differ in QPN and QKEY. Only the default QP is exposed by fi_getname and inserted
+to AV.
+
+This mode bit is interpreted as an extra feature for both senders and receivers, and an extra
+request from receivers. For senders, it means senders can send packets to receiver's user
+recv QP for optimized performance. For receivers, it means receivers support getting packets
+that carries application data delivered to the user recv QP, and receivers only
+allow getting such packets delivered to the user recv QP.
+
+When the mode bit is turned on, a sender triggers a handshake (via a REQ) with the receiver
+before it does any real data transfer. The receiver includes the qpn and qkey of the user
+receive QP as an optional header in the handshake packet and sends back to the sender. Upon
+getting a handshake, the sender checks whether the receiver supports such extra feature.
+If the receiver supports it, sender will then send packets with user data to the user recv qp. Because
+there is no ordering or tagging requirement, and the receiver already knows the sender, sender can
+send packets without any headers in the payload. If the receiver doesn's support this extra feature,
+sender will continue send packets with headers to the receiver's default QP.
+If a receiver gets RTM packets delivered to its default QP, it raises an error
+because it requests all RTM packets must be delivered to its user recv QP.
 
 ## 5. What's not covered?
 
