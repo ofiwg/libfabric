@@ -477,6 +477,7 @@ int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 	struct ibv_cq *cq;
 	int max_inline = 2;
 	int rst = 0;
+	int pos, neg;
 	const char *dev_name = ibv_get_device_name(context->device);
 	uint8_t i;
 
@@ -501,6 +502,21 @@ int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 		qp_attr.cap.max_recv_sge = 1;
 	}
 	qp_attr.sq_sig_all = 1;
+
+	if (vrb_gl_data.def_inline_size >= max_inline) {
+		qp_attr.cap.max_inline_data = vrb_gl_data.def_inline_size;
+		qp = ibv_create_qp(pd, &qp_attr);
+		if (qp) {
+			rst = qp_attr.cap.max_inline_data;
+			goto out;
+		}
+
+		/*
+		 * Truescale and iWarp will not reach here.
+		 */
+		max_inline = vrb_gl_data.def_inline_size;
+		goto backwards_query;
+	}
 
 	do {
 		if (qp)
@@ -527,7 +543,8 @@ int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 	} while (qp && (max_inline < INT_MAX / 2) && (max_inline *= 2));
 
 	if (rst != 0) {
-		int pos = rst, neg = max_inline;
+backwards_query: ;
+		pos = rst, neg = max_inline;
 		do {
 			max_inline = pos + (neg - pos) / 2;
 			if (qp)
@@ -545,6 +562,7 @@ int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 		rst = pos;
 	}
 
+out:
 	if (qp) {
 		ibv_destroy_qp(qp);
 	}
@@ -643,9 +661,14 @@ int vrb_read_params(void)
 		VRB_WARN(FI_LOG_CORE, "Invalid value of rx_iov_limit\n");
 		return -FI_EINVAL;
 	}
-	if (vrb_get_param_int("inline_size", "Default maximum inline size. "
-			      "Actual inject size returned in fi_info may be "
-			      "greater", &vrb_gl_data.def_inline_size) ||
+	if (vrb_get_param_int("inline_size", "Maximum inline size for the "
+			      "verbs device. Actual inline size returned may "
+			      "be different depending on device capability. "
+			      "This value will be returned by fi_info as the "
+			      "inject size for the application to use. Set to "
+			      "0 for the maximum device inline size to be "
+			      "used. (default: 256).",
+			      &vrb_gl_data.def_inline_size) ||
 	    (vrb_gl_data.def_inline_size < 0)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of inline_size\n");
 		return -FI_EINVAL;
