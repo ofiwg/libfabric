@@ -490,10 +490,20 @@ static int fi_opx_close_ep(fid_t fid)
 	}
 
 	if (opx_ep->tx && ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0))) {
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
+			"Cleaning up endpoint's tx shared memory (%p)\n",
+			&opx_ep->tx->shm);
+		dlist_remove_first_match(&shm_tx_list,
+			opx_shm_match, (void*) &opx_ep->tx->shm);
 		opx_shm_tx_fini(&opx_ep->tx->shm);
 	}
 
 	if (opx_ep->rx && ((opx_ep->rx->caps & FI_LOCAL_COMM) || ((opx_ep->rx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0))) {
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
+			"Cleaning up endpoint's rx shared memory (%p)\n",
+			&opx_ep->rx->shm);
+		dlist_remove_first_match(&shm_rx_list,
+			opx_shm_match, (void*) &opx_ep->rx->shm);
 		opx_shm_rx_fini(&opx_ep->rx->shm);
 	}
 

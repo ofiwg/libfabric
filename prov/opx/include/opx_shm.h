@@ -86,7 +86,7 @@ struct opx_shm_connection {
 };
 
 struct opx_shm_tx {
-	struct opx_shm_tx		*next; // for signal handler
+	struct dlist_entry list_entry; // for signal handler
 	struct fi_provider		*prov;
 	struct opx_shm_fifo_segment	*fifo_segment[OPX_SHM_MAX_CONN_NUM];
 	struct opx_shm_connection	connection[OPX_SHM_MAX_CONN_NUM];
@@ -100,17 +100,18 @@ struct opx_shm_resynch {
 };
 
 struct opx_shm_rx {
-	struct opx_shm_rx 		*next; // for signal handler
+	struct dlist_entry list_entry; // for signal handler
 	struct fi_provider		*prov;
 	struct opx_shm_fifo_segment	*fifo_segment;
 	void				*segment_ptr;
 	size_t				segment_size;
 	char				segment_key[OPX_SHM_SEGMENT_NAME_MAX_LENGTH];
+
 	struct opx_shm_resynch		resynch_connection[OPX_SHM_MAX_CONN_NUM];
 };
 
-extern struct opx_shm_tx *shm_tx_head;
-extern struct opx_shm_rx *shm_rx_head;
+extern struct dlist_entry shm_tx_list;
+extern struct dlist_entry shm_rx_list;
 
 struct opx_shm_packet
 {
@@ -151,6 +152,9 @@ struct opx_shm_fifo_segment {
 	uint8_t		pad1_[FI_OPX_CACHE_LINE_SIZE - sizeof(ofi_atomic64_t)];
 	struct		opx_shm_fifo fifo;
 } __attribute__((__aligned__(64)));
+
+
+int opx_shm_match(struct dlist_entry *item, const void *arg);
 
 static inline
 ssize_t opx_shm_rx_init (struct opx_shm_rx *rx,
@@ -234,8 +238,7 @@ ssize_t opx_shm_rx_init (struct opx_shm_rx *rx,
 	rx->segment_ptr = segment_ptr;
 	rx->segment_size = segment_size;
 
-	rx->next = shm_rx_head;
-	shm_rx_head = rx; // add to signal handler list.
+	dlist_insert_head(&rx->list_entry, &shm_rx_list); // add to signal handler list.
 
 	ofi_atomic_set64(&rx->fifo_segment->initialized_, 1);
 
@@ -284,8 +287,7 @@ ssize_t opx_shm_tx_init (struct opx_shm_tx *tx,
 	tx->rank = hfi_rank;
 	tx->rank_inst = hfi_rank_inst;
 
-	tx->next = shm_tx_head;
-	shm_tx_head = tx; // add to signal handler list.
+	dlist_insert_head(&tx->list_entry, &shm_tx_list); // add to signal handler list.
 
 	return FI_SUCCESS;
 }

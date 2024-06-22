@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 by Cornelis Networks.
+ * Copyright (C) 2021-2024 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -43,8 +43,8 @@ OPX_COMPILE_TIME_ASSERT(OPX_SHM_MAX_CONN_NUM >= (16 * 256),
 /*
  * Used by signal handler to free shared memory files.
  */
-struct opx_shm_tx *shm_tx_head = NULL;
-struct opx_shm_rx *shm_rx_head = NULL;
+struct dlist_entry shm_tx_list;
+struct dlist_entry shm_rx_list;
 
 struct sigaction SIGSEGV_old_action;
 struct sigaction SIGBUS_old_action;
@@ -52,22 +52,30 @@ struct sigaction SIGINT_old_action;
 struct sigaction SIGTERM_old_action;
 struct sigaction SIGABRT_old_action;
 
+int opx_shm_match(struct dlist_entry *item, const void *arg)
+{
+	return ((void *) item) == arg;
+}
+
 // Frees the shared memory files then calls the old
 // signal handler.
 static void opx_shm_signal(int signum, siginfo_t *info, void *ucontext)
 {
-	while (shm_tx_head != NULL) {
-		struct opx_shm_tx *tmp = shm_tx_head;
-		shm_tx_head = shm_tx_head->next;
+	struct opx_shm_tx *tx_entry;
 
-		opx_shm_tx_fini(tmp);
+	while (!dlist_empty(&shm_tx_list)) {
+		dlist_pop_front(&shm_tx_list, struct opx_shm_tx, tx_entry,
+				list_entry);
+
+		opx_shm_tx_fini(tx_entry);
 	}
 
-	while (shm_rx_head != NULL) {
-		struct opx_shm_rx *tmp = shm_rx_head;
-		shm_rx_head = shm_rx_head->next;
+	struct opx_shm_rx *rx_entry;
+	while (!dlist_empty(&shm_rx_list)) {
+		dlist_pop_front(&shm_rx_list, struct opx_shm_rx, rx_entry,
+				list_entry);
 
-		opx_shm_rx_fini(tmp);
+		opx_shm_rx_fini(rx_entry);
 	}
 
 	// Restore old signal handlers and re-raise signal.
@@ -87,6 +95,9 @@ void opx_register_shm_handler()
 	struct sigaction act; 
 
 	if (registered) return;
+
+	dlist_init(&shm_tx_list);
+	dlist_init(&shm_rx_list);
 
 	memset(&act, 0, sizeof(act));
 
