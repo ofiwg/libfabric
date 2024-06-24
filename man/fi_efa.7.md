@@ -309,6 +309,14 @@ Using huge page memory has a small performance advantage, but can
 cause system to run out of huge page memory. By default, EFA provider
 will use huge page unless FI_EFA_FORK_SAFE is set to 1/on/true.
 
+*FI_EFA_USE_ZCPY_RX*
+: Enables the use of application's receive buffers in place of bounce-buffers when feasible.
+(Default: 1). Setting this environment variable to 0 can disable this feature.
+However, setting this variable to 1 is not sufficient to finally enable this feature because
+it has other requirements, see
+https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md
+for details.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
