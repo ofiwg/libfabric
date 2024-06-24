@@ -124,10 +124,8 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	 * For local read (read from self ep), such handshake is not needed because we only
 	 * need to check the local ep's capabilities.
 	 */
-	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		ret = efa_rdm_ep_trigger_handshake(ep, txe->peer);
-		return ret ? ret : -FI_EAGAIN;
-	}
+	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 
 	if (efa_rdm_interop_rdma_read(ep, txe->peer)) {
 		/* RDMA read interoperability check also checks domain.use_device_rdma,
@@ -361,10 +359,8 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	 * For local write (writing it self), this handshake is not required because we only need to
 	 * check one-side capability
 	 */
-	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = efa_rdm_ep_trigger_handshake(ep, txe->peer);
-		return err ? err : -FI_EAGAIN;
-	}
+	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 
 	if (efa_rdm_rma_should_write_using_rdma(ep, txe, txe->peer)) {
 		efa_rdm_ope_prepare_to_post_write(txe);
@@ -380,21 +376,11 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		 * The sender cannot send with FI_DELIVERY_COMPLETE
 		 * if the peer is not able to handle it.
 		 *
-		 * If the sender does not know whether the peer
-		 * can handle it, it needs to trigger
-		 * a handshake packet from the peer.
-		 *
-		 * The handshake packet contains
-		 * the information whether the peer
-		 * support it or not.
+		 * handshake is already made now since we enforce
+		 * handshake for write earlier.
 		 */
-		err = efa_rdm_ep_trigger_handshake(ep, txe->peer);
-		if (OFI_UNLIKELY(err))
-			return err;
 
-		if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
-			return -FI_EAGAIN;
-		else if (!efa_rdm_peer_support_delivery_complete(txe->peer))
+		if (!(txe->peer->is_self) && !efa_rdm_peer_support_delivery_complete(txe->peer))
 			return -FI_EOPNOTSUPP;
 
 		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_DC_EAGER_RTW_PKT);

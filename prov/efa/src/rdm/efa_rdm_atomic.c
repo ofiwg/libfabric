@@ -98,7 +98,6 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 ssize_t efa_rdm_atomic_post_atomic(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *txe)
 {
 	bool delivery_complete_requested;
-	int ret;
 	static int req_pkt_type_list[] = {
 		[ofi_op_atomic] = EFA_RDM_WRITE_RTA_PKT,
 		[ofi_op_atomic_fetch] = EFA_RDM_FETCH_RTA_PKT,
@@ -119,12 +118,10 @@ ssize_t efa_rdm_atomic_post_atomic(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm
 		 * the information whether the peer
 		 * support it or not.
 		 */
-		if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-			ret = efa_rdm_ep_trigger_handshake(efa_rdm_ep, txe->peer);
-			return ret ? ret : -FI_EAGAIN;
-		}
+		if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+			return efa_rdm_ep_enforce_handshake_for_txe(efa_rdm_ep, txe);
 
-		if (!efa_rdm_peer_support_delivery_complete(txe->peer))
+		if (!(txe->peer->is_self) && !efa_rdm_peer_support_delivery_complete(txe->peer))
 			return -FI_EOPNOTSUPP;
 	}
 
