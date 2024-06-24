@@ -49,9 +49,13 @@ static int run(void)
 
 	while (nconn && !ret) {
 		ret = ft_send_recv_greeting(ep);
+		if (ret)
+			return ret;
 
 		if (--nconn && !ret) {
 			ret = ft_accept_next_client();
+			if (ret)
+				return ret;
 		}
 	}
 
