@@ -21,11 +21,24 @@ static const enum fi_hmem_iface efa_hmem_ifaces[] = {
 	FI_HMEM_SYNAPSEAI
 };
 
+enum efa_dmabuf_support_status {
+	EFA_DMABUF_UNINITIALIZED,
+	EFA_DMABUF_NOT_SUPPORTED,
+	EFA_DMABUF_SUPPORTED,
+};
+
+enum efa_hmem_p2p_prov {
+	EFA_HMEM_P2P_NULL,
+	EFA_HMEM_P2P_NVIDIA,
+	EFA_HMEM_P2P_NEURON,
+};
+
 struct efa_hmem_info {
 	bool initialized; 	/* do we support it at all */
 	bool p2p_disabled_by_user;	/* Did the user disable p2p via FI_OPT_FI_HMEM_P2P? */
 	bool p2p_required_by_impl;	/* Is p2p required for this interface? */
 	bool p2p_supported_by_device;	/* do we support p2p with this device */
+	enum efa_dmabuf_support_status dmabuf_support_status;
 
 	size_t max_medium_msg_size;
 	size_t runt_size;

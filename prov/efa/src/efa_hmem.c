@@ -6,6 +6,7 @@
 #include "rdm/efa_rdm_pkt_type.h"
 
 #if HAVE_CUDA || HAVE_NEURON
+static const uint16_t P2P_PROV_MAX_LEN = 32;
 static size_t efa_max_eager_msg_size_with_largest_header(struct efa_domain *efa_domain) {
 	int mtu_size;
 
@@ -78,6 +79,109 @@ static int efa_domain_hmem_info_init_protocol_thresholds(struct efa_domain *efa_
 	return 0;
 }
 
+#if HAVE_CUDA || HAVE_NEURON
+static ssize_t efa_domain_hmem_p2p_prov_name(struct efa_domain *efa_domain,
+					     char *name, uint16_t len)
+{
+	FILE *fp = NULL;
+	char *ibdev_path, *p2p_path = NULL;
+	ssize_t ret = FI_SUCCESS;
+
+	ibdev_path = efa_domain->device->ibv_ctx->device->ibdev_path;
+	if (!ibdev_path) {
+		EFA_WARN(FI_LOG_DOMAIN, "IB device sysfs is not defined\n");
+		ret = -FI_EINVAL;
+		goto out;
+	}
+
+	p2p_path = malloc(strlen(ibdev_path) + strlen(efa_env.p2p_file_suffix) +
+			  1);
+	if (!p2p_path) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+
+	strcpy(p2p_path, ibdev_path);
+	strcat(p2p_path, efa_env.p2p_file_suffix);
+
+	fp = fopen(p2p_path, "r");
+	if (!fp) {
+		EFA_WARN(FI_LOG_DOMAIN, "Cannot open P2P file: %s\n", p2p_path);
+		ret = -FI_ENOENT;
+		goto out;
+	}
+
+	ret = (ssize_t) fread(name, 1, (size_t) len, fp);
+	if (ret <= 0) {
+		EFA_WARN(FI_LOG_DOMAIN, "P2P provider is not available\n");
+		ret = -FI_ENOSYS;
+		goto out;
+	} else if (ret >= (ssize_t) len) {
+		EFA_WARN(FI_LOG_DOMAIN, "Truncated P2P provider name\n");
+		ret = -FI_ETRUNC;
+		goto out;
+	}
+
+	name[ret] = '\0';
+	EFA_INFO(FI_LOG_DOMAIN, "P2P provider name: %s\n", name);
+out:
+	if (fp) {
+		fclose(fp);
+	}
+	if (p2p_path) {
+		free(p2p_path);
+	}
+	return ret;
+}
+#endif
+
+#if HAVE_CUDA
+static enum efa_hmem_p2p_prov
+efa_domain_hmem_p2p_prov(struct efa_domain *efa_domain)
+{
+	enum efa_hmem_p2p_prov prov = EFA_HMEM_P2P_NULL;
+	char p2p_prov[P2P_PROV_MAX_LEN];
+	const char *p2p_prov_prefix = "NVIDIA";
+
+	if ((efa_domain_hmem_p2p_prov_name(efa_domain, p2p_prov,
+					   P2P_PROV_MAX_LEN)) <= 0) {
+		EFA_INFO(FI_LOG_DOMAIN, "Failed to get P2P provider\n");
+		goto out;
+	}
+
+	if (strlen(p2p_prov) < strlen(p2p_prov_prefix) ||
+	    strncmp(p2p_prov, p2p_prov_prefix, strlen(p2p_prov_prefix))) {
+		EFA_INFO(FI_LOG_DOMAIN, "P2P provider does not support CUDA\n");
+		goto out;
+	}
+out:
+	return prov;
+}
+#elif HAVE_NEURON
+static enum efa_hmem_p2p_prov
+efa_domain_hmem_p2p_prov(struct efa_domain *efa_domain)
+{
+	enum efa_hmem_p2p_prov prov = EFA_HMEM_P2P_NULL;
+	char p2p_prov[P2P_PROV_MAX_LEN];
+	const char *p2p_prov_prefix = "NEURON";
+
+	if ((efa_domain_hmem_p2p_prov_name(efa_domain, p2p_prov,
+					   P2P_PROV_MAX_LEN)) <= 0) {
+		EFA_INFO(FI_LOG_DOMAIN, "Failed to get P2P provider\n");
+		goto out;
+	}
+
+	if (strlen(p2p_prov) < strlen(p2p_prov_prefix) ||
+	    strncmp(p2p_prov, p2p_prov_prefix, strlen(p2p_prov_prefix))) {
+		EFA_INFO(FI_LOG_DOMAIN,
+			 "P2P provider does not support NEURON\n");
+		goto out;
+	}
+out:
+	return prov;
+}
+#endif
+
 /**
  * @brief          Initialize the efa_hmem_info state for FI_HMEM_SYSTEM
  *
@@ -93,6 +197,7 @@ static int efa_domain_hmem_info_init_system(struct efa_domain *efa_domain)
 	info->p2p_disabled_by_user = false;
 	info->p2p_required_by_impl = false;
 	info->p2p_supported_by_device = true;
+	info->dmabuf_support_status = EFA_DMABUF_NOT_SUPPORTED;
 	efa_domain_hmem_info_init_protocol_thresholds(efa_domain, FI_HMEM_SYSTEM);
 	return 0;
 }
@@ -109,30 +214,20 @@ static int efa_domain_hmem_info_init_cuda(struct efa_domain *efa_domain)
 {
 #if HAVE_CUDA
 	struct efa_hmem_info *info = &efa_domain->hmem_info[FI_HMEM_CUDA];
-	cudaError_t cuda_ret;
-	void *ptr = NULL;
-	struct ibv_mr *ibv_mr;
-	int ibv_access = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
-	size_t len = ofi_get_page_size() * 2, tmp_value;
-	int ret;
-	int dmabuf_fd;
-	uint64_t dmabuf_offset;
+	size_t tmp_value;
 
 	if (!ofi_hmem_is_initialized(FI_HMEM_CUDA)) {
 		EFA_INFO(FI_LOG_DOMAIN, "FI_HMEM_CUDA is not initialized\n");
 		return 0;
 	}
 
-	cuda_ret = ofi_cudaMalloc(&ptr, len);
-	if (cuda_ret != cudaSuccess) {
-		EFA_WARN(FI_LOG_DOMAIN,
-			 "Failed to allocate CUDA buffer: %s\n",
-			 ofi_cudaGetErrorString(cuda_ret));
-		return 0;
-	}
-
 	info->initialized = true;
 	info->p2p_disabled_by_user = false;
+	info->p2p_supported_by_device =
+		efa_domain_hmem_p2p_prov(efa_domain) == EFA_HMEM_P2P_NVIDIA;
+	info->dmabuf_support_status = info->p2p_supported_by_device ?
+					      EFA_DMABUF_UNINITIALIZED :
+					      EFA_DMABUF_NOT_SUPPORTED;
 
 	/* If user is using libfabric API 1.18 or later, by default EFA provider is permitted to
 	 * use CUDA library to support CUDA memory, therefore p2p is not required.
@@ -142,54 +237,13 @@ static int efa_domain_hmem_info_init_cuda(struct efa_domain *efa_domain)
 	else
 		info->p2p_required_by_impl = true;
 
-#if HAVE_EFA_DMABUF_MR
-	ret = cuda_get_dmabuf_fd(ptr, len, &dmabuf_fd, &dmabuf_offset);
-	if (ret == FI_SUCCESS) {
-		ibv_mr = ibv_reg_dmabuf_mr(g_device_list[0].ibv_pd, dmabuf_offset,
-					   len, (uint64_t)ptr, dmabuf_fd, ibv_access);
-		if (!ibv_mr) {
-			EFA_INFO(FI_LOG_DOMAIN,
-				"Unable to register CUDA device buffer via dmabuf: %s. "
-				"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
-			ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
-		}
-	} else {
-		EFA_INFO(FI_LOG_DOMAIN,
-			"Unable to retrieve dmabuf fd of CUDA device buffer: %d. "
-			"Fall back to ibv_reg_mr\n", ret);
-		ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
-	}
-#else
-	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
-#endif
-
-	if (!ibv_mr) {
-		info->p2p_supported_by_device = false;
-		efa_domain_hmem_info_init_protocol_thresholds(efa_domain, FI_HMEM_CUDA);
-		EFA_WARN(FI_LOG_DOMAIN,
-			 "Failed to register CUDA buffer with the EFA device, FI_HMEM transfers that require peer to peer support will fail.\n");
-		ofi_cudaFree(ptr);
-		return 0;
-	}
-
-	ret = ibv_dereg_mr(ibv_mr);
-	ofi_cudaFree(ptr);
-	if (ret) {
-		EFA_WARN(FI_LOG_DOMAIN,
-			 "Failed to deregister CUDA buffer: %s\n",
-			 fi_strerror(-ret));
-		return ret;
-	}
-
-	info->p2p_supported_by_device = true;
 	efa_domain_hmem_info_init_protocol_thresholds(efa_domain, FI_HMEM_CUDA);
 	if (-FI_ENODATA != fi_param_get(&efa_prov, "inter_max_medium_message_size", &tmp_value)) {
 		EFA_WARN(FI_LOG_DOMAIN,
 		         "The environment variable FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE was set, "
 		         "but EFA HMEM via Cuda API only supports eager and runting read protocols. "
-				 "The variable will not modify Cuda memory run config.\n");
+		         "The variable will not modify CUDA memory run config.\n");
 	}
-
 #endif
 	return 0;
 }
@@ -206,36 +260,10 @@ static int efa_domain_hmem_info_init_neuron(struct efa_domain *efa_domain)
 {
 #if HAVE_NEURON
 	struct efa_hmem_info *info = &efa_domain->hmem_info[FI_HMEM_NEURON];
-	struct ibv_mr *ibv_mr = NULL;
-	int ibv_access = IBV_ACCESS_LOCAL_WRITE;
-	void *handle;
-	void *ptr = NULL;
-	size_t len = ofi_get_page_size() * 2, tmp_value;
-	int dmabuf_fd;
-	uint64_t offset;
-	int ret;
+	size_t tmp_value;
 
 	if (!ofi_hmem_is_initialized(FI_HMEM_NEURON)) {
 		EFA_INFO(FI_LOG_DOMAIN, "FI_HMEM_NEURON is not initialized\n");
-		return 0;
-	}
-
-	if (g_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
-		ibv_access |= IBV_ACCESS_REMOTE_READ;
-	} else {
-		EFA_WARN(FI_LOG_DOMAIN,
-			 "No EFA RDMA read support, transfers using AWS Neuron will fail.\n");
-		return 0;
-	}
-
-	ptr = neuron_alloc(&handle, len);
-	/*
-	 * neuron_alloc will fail if application did not call nrt_init,
-	 * which is ok if it's not running neuron workloads. libfabric
-	 * will move on and leave info->initialized as false.
-	 */
-	if (!ptr) {
-		EFA_INFO(FI_LOG_DOMAIN, "Cannot allocate Neuron buffer\n");
 		return 0;
 	}
 
@@ -243,51 +271,18 @@ static int efa_domain_hmem_info_init_neuron(struct efa_domain *efa_domain)
 	info->p2p_disabled_by_user = false;
 	/* Neuron currently requires P2P */
 	info->p2p_required_by_impl = true;
-
-#if HAVE_EFA_DMABUF_MR
-	ret = neuron_get_dmabuf_fd(ptr, (uint64_t)len, &dmabuf_fd, &offset);
-	if (ret == FI_SUCCESS) {
-		ibv_mr = ibv_reg_dmabuf_mr(
-					g_device_list[0].ibv_pd, offset,
-					len, (uint64_t)ptr, dmabuf_fd, ibv_access);
-	} else if (ret == -FI_ENOPROTOOPT) {
-		EFA_INFO(FI_LOG_MR,
-			"Unable to retrieve dmabuf fd of Neuron device buffer, "
-			"Fall back to ibv_reg_mr\n");
-		ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
-	}
-#else
-	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
-#endif
-
-	if (!ibv_mr) {
-		info->p2p_supported_by_device = false;
-		/* We do not expect to support Neuron on non p2p systems */
-		EFA_WARN(FI_LOG_DOMAIN,
-		         "Failed to register Neuron buffer with the EFA device, "
-		         "FI_HMEM transfers that require peer to peer support will fail.\n");
-		neuron_free(&handle);
-		return 0;
-	}
-
-	ret = ibv_dereg_mr(ibv_mr);
-	neuron_free(&handle);
-	if (ret) {
-		EFA_WARN(FI_LOG_DOMAIN,
-			 "Failed to deregister Neuron buffer: %s\n",
-			 fi_strerror(-ret));
-		return ret;
-	}
-
-	info->p2p_supported_by_device = true;
+	info->p2p_supported_by_device =
+		efa_domain_hmem_p2p_prov(efa_domain) == EFA_HMEM_P2P_NEURON;
+	info->dmabuf_support_status = info->p2p_supported_by_device ?
+					      EFA_DMABUF_UNINITIALIZED :
+					      EFA_DMABUF_NOT_SUPPORTED;
 	efa_domain_hmem_info_init_protocol_thresholds(efa_domain, FI_HMEM_NEURON);
 	if (-FI_ENODATA != fi_param_get(&efa_prov, "inter_max_medium_message_size", &tmp_value)) {
 		EFA_WARN(FI_LOG_DOMAIN,
 		         "The environment variable FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE was set, "
 		         "but EFA HMEM via Neuron API only supports eager and runting read protocols. "
-				 "The variable will not modify Neuron memory run config.\n");
+		         "The variable will not modify Neuron memory run config.\n");
 	}
-
 #endif
 	return 0;
 }
@@ -321,6 +316,7 @@ static int efa_domain_hmem_info_init_synapseai(struct efa_domain *efa_domain)
 	/* SynapseAI currently requires P2P */
 	info->p2p_required_by_impl = true;
 	info->p2p_supported_by_device = true;
+	info->dmabuf_support_status = EFA_DMABUF_SUPPORTED;
 	efa_domain_hmem_info_init_protocol_thresholds(efa_domain, FI_HMEM_SYNAPSEAI);
 
 	/*  Only the long read protocol is supported */
