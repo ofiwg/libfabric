@@ -125,6 +125,12 @@ static int run_client(int client_id, bool address_reuse)
 		return ret;
 	}
 
+	if (!client_id && oob_sock >= 0) {
+		ret = ft_sock_sync(oob_sock, 0);
+		if (ret)
+			return ret;
+	}
+
 	ret = ft_getinfo(hints, &fi);
 	if (ret) {
 		FT_PRINTERR("ft_getinfo", -ret);

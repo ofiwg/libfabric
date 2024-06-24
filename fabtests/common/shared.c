@@ -987,7 +987,11 @@ int ft_accept_next_client() {
 		ret = ft_reset_oob();
 		if (ret)
 			return ret;
-	}
+
+		ret = ft_sock_sync(oob_sock, 0);
+		if (ret)
+			return ret;
+}
 	return ft_init_av();
 }
 
@@ -1305,6 +1309,12 @@ int ft_init_fabric(void)
 	if (ret)
 		return ret;
 
+	if (oob_sock >= 0 && opts.dst_addr) {
+		ret = ft_sock_sync(oob_sock, 0);
+		if (ret)
+			return ret;
+	}
+
 	ret = ft_getinfo(hints, &fi);
 	if (ret)
 		return ret;
@@ -1320,6 +1330,12 @@ int ft_init_fabric(void)
 	ret = ft_enable_ep_recv();
 	if (ret)
 		return ret;
+
+	if (oob_sock >= 0 && !opts.dst_addr) {
+		ret = ft_sock_sync(oob_sock, 0);
+		if (ret)
+			return ret;
+	}
 
 	ret = ft_init_av();
 	if (ret)
