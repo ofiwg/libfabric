@@ -102,7 +102,10 @@ void test_efa_rdm_ep_getopt_undersized_optlen();
 void test_efa_rdm_ep_getopt_oversized_optlen();
 void test_efa_rdm_ep_pkt_pool_flags();
 void test_efa_rdm_ep_pkt_pool_page_alignment();
-void test_efa_rdm_ep_dc_atomic_error_handling();
+void test_efa_rdm_ep_dc_atomic_queue_before_handshake();
+void test_efa_rdm_ep_dc_send_queue_before_handshake();
+void test_efa_rdm_ep_write_queue_before_handshake();
+void test_efa_rdm_ep_read_queue_before_handshake();
 void test_efa_rdm_ep_send_with_shm_no_copy();
 void test_efa_rdm_ep_rma_without_caps();
 void test_efa_rdm_ep_atomic_without_caps();
@@ -175,4 +178,17 @@ void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cq_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
+
+static inline
+int efa_unit_test_get_dlist_length(struct dlist_entry *head)
+{
+	int i = 0;
+	struct dlist_entry *item;
+
+	dlist_foreach(head, item) {
+		i++;
+	}
+
+	return i;
+}
 #endif

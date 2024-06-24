@@ -934,3 +934,35 @@ size_t efa_rdm_ep_get_memory_alignment(struct efa_rdm_ep *ep, enum fi_hmem_iface
 	return memory_alignment;
 }
 
+/**
+ * @brief Enforce a handshake to made for given txe.
+ * It will trigger a handshake with peer and choose to
+ * return EAGAIN or queue the txe.
+ * @param ep efa_rdm_ep
+ * @param txe tx entry
+ * @return int 0 on success, negative integer on failure.
+ */
+int efa_rdm_ep_enforce_handshake_for_txe(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
+{
+	int ret;
+
+	assert(txe->type == EFA_RDM_TXE);
+	assert(!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED));
+
+	ret = efa_rdm_ep_trigger_handshake(ep, txe->peer);
+	if (ret)
+		return ret;
+	/**
+	 * we cannot queue requests (and return 0) for inject,
+	 * which expects the buffer can be reused when the call
+	 * returns success.
+	 */
+	if (txe->fi_flags & FI_INJECT)
+		return -FI_EAGAIN;
+
+	if (!(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)) {
+		txe->internal_flags |= EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE;
+		dlist_insert_tail(&txe->queued_entry, &efa_rdm_ep_domain(ep)->ope_queued_list);
+	}
+	return FI_SUCCESS;
+}

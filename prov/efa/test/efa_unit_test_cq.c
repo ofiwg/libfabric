@@ -415,16 +415,10 @@ void test_rdm_cq_create_error_handling(struct efa_resource **state)
 static
 int test_efa_rdm_cq_get_ibv_cq_poll_list_length(struct fid_cq *cq_fid)
 {
-	int i = 0;
-	struct dlist_entry *item;
 	struct efa_rdm_cq *cq;
 
 	cq = container_of(cq_fid, struct efa_rdm_cq, util_cq.cq_fid.fid);
-	dlist_foreach(&cq->ibv_cq_poll_list, item) {
-		i++;
-	}
-
-	return i;
+	return efa_unit_test_get_dlist_length(&cq->ibv_cq_poll_list);
 }
 
 /**
