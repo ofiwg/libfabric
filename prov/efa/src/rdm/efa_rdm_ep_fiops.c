@@ -804,6 +804,8 @@ bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
 {
 	struct dlist_entry *entry, *tmp;
 	struct efa_rdm_ope *ope;
+	/* Only flush the opes queued due to rnr and ctrl */
+	uint64_t queued_ope_flags = EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_RNR;
 
 	if (efa_rdm_ep->efa_outstanding_tx_ops > 0)
 		return true;
@@ -811,15 +813,7 @@ bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
 	dlist_foreach_safe(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list, entry, tmp) {
 		ope = container_of(entry, struct efa_rdm_ope,
 					queued_entry);
-		if (ope->ep == efa_rdm_ep) {
-			return true;
-		}
-	}
-
-	dlist_foreach_safe(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list, entry, tmp) {
-		ope = container_of(entry, struct efa_rdm_ope,
-					queued_entry);
-		if (ope->ep == efa_rdm_ep) {
+		if (ope->ep == efa_rdm_ep && (ope->internal_flags & queued_ope_flags)) {
 			return true;
 		}
 	}
