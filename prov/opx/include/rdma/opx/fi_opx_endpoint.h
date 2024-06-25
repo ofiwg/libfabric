@@ -3462,13 +3462,8 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 
 #ifdef OPX_HMEM
 	uint64_t hmem_device;
-	enum fi_hmem_iface hmem_iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
+	enum fi_hmem_iface hmem_iface = desc ? fi_opx_hmem_get_iface(buf, desc, &hmem_device) : FI_HMEM_SYSTEM;
 	if (hmem_iface != FI_HMEM_SYSTEM) {
-		if (OFI_UNLIKELY(desc == NULL)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_MR_HMEM requires a valid desc when the buffer resides in device memory\n");
-			return -FI_EINVAL;
-		}
 		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_MSG, opx_ep->debug_counters.hmem.posted_recv_msg);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_TAGGED, opx_ep->debug_counters.hmem.posted_recv_tag);
 		struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
@@ -4046,14 +4041,7 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 
 	/* TODO - Pass hmem_iface into all of the callee functions that also call fi_opx_hmem_get_iface */
 	uint64_t hmem_device;
-	enum fi_hmem_iface hmem_iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
-	if (hmem_iface != FI_HMEM_SYSTEM) {
-		if (OFI_UNLIKELY(desc == NULL)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_MR_HMEM requires a valid desc when the buffer resides in device memory\n");
-			return -FI_EINVAL;
-		}
-	}
+	enum fi_hmem_iface hmem_iface = desc ? fi_opx_hmem_get_iface(buf, desc, &hmem_device) : FI_HMEM_SYSTEM;
 
 	assert(is_contiguous == OPX_CONTIG_FALSE || is_contiguous == OPX_CONTIG_TRUE);
 
