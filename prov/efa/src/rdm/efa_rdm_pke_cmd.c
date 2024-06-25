@@ -766,6 +766,27 @@ fi_addr_t efa_rdm_pke_insert_addr(struct efa_rdm_pke *pkt_entry, void *raw_addr)
 	return rdm_addr;
 }
 
+void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_imm_data, uint32_t imm_data)
+{
+	struct efa_rdm_ope *rxe = pkt_entry->ope;
+
+	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL);
+	assert(rxe);
+
+	if (has_imm_data) {
+		rxe->cq_entry.flags |= FI_REMOTE_CQ_DATA;
+		rxe->cq_entry.data = imm_data;
+	}
+
+	rxe->addr = pkt_entry->addr;
+	rxe->total_len = pkt_entry->pkt_size;
+	rxe->cq_entry.len = pkt_entry->pkt_size;
+
+	efa_rdm_rxe_report_completion(rxe);
+	efa_rdm_rxe_release(rxe);
+	efa_rdm_pke_release_rx(pkt_entry);
+}
+
 /**
  * @brief process a received packet
  *
@@ -895,93 +916,6 @@ fi_addr_t efa_rdm_pke_determine_addr(struct efa_rdm_pke *pkt_entry)
 	}
 
 	return FI_ADDR_NOTAVAIL;
-}
-
-/**
- * @brief handle a received packet
- *
- * @param	ep[in,out]		endpoint
- * @param	pkt_entry[in,out]	received packet, will be released by this function
- */
-void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
-{
-	int pkt_type;
-	struct efa_rdm_ep *ep;
-	struct efa_rdm_peer *peer;
-	struct efa_rdm_base_hdr *base_hdr;
-	struct efa_rdm_ope *zcpy_rxe = NULL;
-
-	ep = pkt_entry->ep;
-	assert(ep);
-
-	assert(ep->efa_rx_pkts_posted > 0);
-	ep->efa_rx_pkts_posted--;
-
-	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	pkt_type = base_hdr->type;
-	if (pkt_type >= EFA_RDM_EXTRA_REQ_PKT_END) {
-		EFA_WARN(FI_LOG_CQ,
-			"Peer %d is requesting feature %d, which this EP does not support.\n",
-			(int)pkt_entry->addr, base_hdr->type);
-
-		assert(0 && "invalid REQ packet type");
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
-		efa_rdm_pke_release_rx(pkt_entry);
-		return;
-	}
-
-	/*
-	 * Ignore packet if peer address cannot be determined. This ususally happens if
-	 * we had prior communication with the peer, but
-	 * application called fi_av_remove() to remove the address
-	 * from address vector.
-	 */
-	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
-		EFA_WARN(FI_LOG_CQ,
-			"Warning: ignoring a received packet from a removed address. packet type: %" PRIu8
-			", packet flags: %x\n",
-			efa_rdm_pke_get_base_hdr(pkt_entry)->type,
-			efa_rdm_pke_get_base_hdr(pkt_entry)->flags);
-		efa_rdm_pke_release_rx(pkt_entry);
-		return;
-	}
-
-#if ENABLE_DEBUG
-	if (!ep->use_zcpy_rx) {
-		dlist_remove(&pkt_entry->dbg_entry);
-		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
-	}
-#ifdef ENABLE_EFA_RDM_PKE_DUMP
-	efa_rdm_pke_print(pkt_entry, "Received");
-#endif
-#endif
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-	assert(peer);
-	if (peer->is_local) {
-		/*
-		 * This happens when the peer is on same instance, but chose to
-		 * use EFA device to communicate with me. In this case, we respect
-		 * that and will not use shm with the peer.
-		 * TODO: decide whether to use shm through handshake packet.
-		 */
-		peer->is_local = 0;
-	}
-
-	efa_rdm_ep_post_handshake_or_queue(ep, peer);
-
-
-	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL) {
-		assert(pkt_entry->ope);
-		zcpy_rxe = pkt_entry->ope;
-	}
-
-	efa_rdm_pke_proc_received(pkt_entry);
-
-	if (zcpy_rxe && pkt_type != EFA_RDM_EAGER_MSGRTM_PKT) {
-		/* user buffer was not matched with a message,
-		 * therefore reposting the buffer */
-		efa_rdm_ep_post_user_recv_buf(ep, zcpy_rxe, 0);
-	}
 }
 
 #if ENABLE_DEBUG

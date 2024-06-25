@@ -117,9 +117,13 @@ fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qp
 	if (OFI_UNLIKELY(!cur_entry))
 		return FI_ADDR_NOTAVAIL;
 
-	if (!pkt_entry) {
-		/* There is no packet entry to extract connid from when we get an
-		   IBV_WC_RECV_RDMA_WITH_IMM completion from rdma-core. */
+	if (!pkt_entry || (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL)) {
+		/**
+		 * There is no packet entry to extract connid from when we get an
+		 * IBV_WC_RECV_RDMA_WITH_IMM completion from rdma-core.
+		 * Or the pkt_entry is allocated from a buffer user posted that
+		 * doesn't expect any pkt hdr.
+		 */
 		return cur_entry->conn->fi_addr;
 	}
 

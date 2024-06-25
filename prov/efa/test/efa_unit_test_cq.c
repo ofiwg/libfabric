@@ -560,6 +560,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_byte_len = &efa_mock_ibv_read_byte_len_return_mock;
 	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
 	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
+	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_wc_flags = &efa_mock_ibv_read_wc_flags_return_mock;
 	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
 
 	if (support_efadv_cq) {
@@ -581,6 +582,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	will_return(efa_mock_ibv_read_byte_len_return_mock, pkt_entry->pkt_size);
 	will_return_maybe(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
 	will_return_maybe(efa_mock_ibv_read_qp_num_return_mock, 0);
+	will_return_maybe(efa_mock_ibv_read_wc_flags_return_mock, 0);
 	will_return_maybe(efa_mock_ibv_read_src_qp_return_mock, raw_addr.qpn);
 
 	/* Post receive buffer */
