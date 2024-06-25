@@ -527,24 +527,22 @@ struct fi_opx_ep {
 	struct fi_info				*common_info;
 	struct fi_info				*tx_info;
 	struct fi_info				*rx_info;
-	uint32_t				tx_cq_bflags;
-	uint32_t				rx_cq_bflags;
 	struct fi_opx_cq			*init_tx_cq;
 	struct fi_opx_cq			*init_rx_cq;
 	struct fi_opx_cntr			*init_read_cntr;
 	struct fi_opx_cntr			*init_write_cntr;
+	uint64_t				rx_cq_bflags;
 
 	/* == CACHE LINE 5 == */
 	struct fi_opx_cntr			*init_send_cntr;
 	struct fi_opx_cntr			*init_recv_cntr;
-
+	uint64_t				tx_cq_bflags;
 	struct fi_opx_ep_daos_info		daos_info;	/* 18 bytes */
 	bool					is_tx_cq_bound;
 	bool					is_rx_cq_bound;
 	bool					use_expected_tid_rzv;
 	uint8_t					unused_cacheline5[3];
-	uint32_t				unused_cacheline5_u32[3];
-
+	uint32_t				unused_cacheline5_u32;
 	ofi_spin_t				lock; /* lock size varies based on ENABLE_DEBUG*/
 
 	/* == CACHE LINE 6 (if ENABLE_DEBUG) == */
