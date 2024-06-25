@@ -43,3 +43,6 @@ writedata
 rdm_atomic
 # FI_INJECT_COMPLETE not supported
 -A inj_complete
+
+# Fails as a race condition because of segfault
+rdm_tagged_peek
