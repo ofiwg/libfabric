@@ -28,6 +28,10 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno);
 
 void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry);
 
+void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry);
+
+void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_imm_data, uint32_t imm_data);
+
 #if ENABLE_DEBUG
 void efa_rdm_pke_print(struct efa_rdm_pke *pkt_entry, char *prefix);
 #endif
