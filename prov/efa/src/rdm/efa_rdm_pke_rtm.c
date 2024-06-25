@@ -656,49 +656,19 @@ void efa_rdm_pke_handle_eager_rtm_send_completion(struct efa_rdm_pke *pkt_entry)
 ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
 {
 	int err;
-	int hdr_size;
 	struct efa_rdm_ope *rxe;
 
 	rxe = pkt_entry->ope;
 
-	if (pkt_entry->alloc_type != EFA_RDM_PKE_FROM_USER_RX_POOL) {
-		/*
-		 * On success, efa_rdm_pke_copy_data_to_ope will write rx completion,
-		 * release pkt_entry and rxe
-		 */
-		err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
-		if (err)
-			efa_rdm_pke_release_rx(pkt_entry);
-
-		return err;
-	}
-
-	/* In this case, data is already in user provided buffer, so no need
-	 * to copy. However, we do need to make sure the packet header length
-	 * is correct. Otherwise, user will get wrong data.
-	 *
-	 * The expected header size is
-	 * 	ep->msg_prefix_size - sizeof(struct efa_rdm_pke)
-	 * because we used the first sizeof(struct efa_rdm_pke) to construct
-	 * a pkt_entry.
+	/*
+	 * On success, efa_rdm_pke_copy_data_to_ope will write rx completion,
+	 * release pkt_entry and rxe
 	 */
-	hdr_size = pkt_entry->payload - pkt_entry->wiredata;
-	if (hdr_size != pkt_entry->ep->msg_prefix_size - sizeof(struct efa_rdm_pke)) {
-		/* if header size is wrong, the data in user buffer is not useful.
-		 * setting rxe->cq_entry.len here will cause an error cq entry
-		 * to be written to application.
-		 */
-		rxe->cq_entry.len = 0;
-	} else {
-		rxe->cq_entry.len = pkt_entry->pkt_size + sizeof(struct efa_rdm_pke);
-	}
+	err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
+	if (err)
+		efa_rdm_pke_release_rx(pkt_entry);
 
-	efa_rdm_rxe_report_completion(rxe);
-	efa_rdm_rxe_release(rxe);
-
-	/* no need to release packet entry because it is
-	 * constructed using user supplied buffer */
-	return 0;
+	return err;
 }
 
 
