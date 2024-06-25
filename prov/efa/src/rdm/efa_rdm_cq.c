@@ -354,13 +354,30 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	/* Proc receives with pkt hdrs (posted to ctrl QPs)*/
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	pkt_type = base_hdr->type;
-	if (pkt_type >= EFA_RDM_EXTRA_REQ_PKT_END) {
+	if (OFI_UNLIKELY(pkt_type >= EFA_RDM_EXTRA_REQ_PKT_END)) {
 		EFA_WARN(FI_LOG_CQ,
 			"Peer %d is requesting feature %d, which this EP does not support.\n",
 			(int)pkt_entry->addr, base_hdr->type);
 
 		assert(0 && "invalid REQ packet type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
+	/**
+	 * When zero copy recv is turned on, the ep cannot
+	 * handle rtm pkts delivered to the internal bounce buffer,
+	 * because the user recv buffer has been posted to the other
+	 * QP and we cannot cancel that.
+	 */
+	if (OFI_UNLIKELY(ep->use_zcpy_rx && efa_rdm_pkt_type_is_rtm(pkt_type))) {
+		EFA_WARN(FI_LOG_CQ,
+			"Invalid pkt type %d! Peer %d doesn't respect the request from this EP that"
+			" RTM packets must be sent to the user recv QP.\n",
+			base_hdr->type, (int)pkt_entry->addr);
+
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_INVALID_PKT_TYPE);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}

@@ -761,20 +761,6 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 	int ret;
 	int pkt_type;
 
-	if ((*pkt_entry_ptr)->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL) {
-		/* If a pkt_entry is constructred from user supplied buffer,
-		 * the endpoint must be in zero copy receive mode.
-		 */
-		assert(ep->use_zcpy_rx);
-		/* In this mode, an rxe is always created together
-		 * with this pkt_entry, and pkt_entry->ope is pointing
-		 * to it. Thus we can skip the matching process, and return
-		 * pkt_entry->ope right away.
-		 */
-		assert((*pkt_entry_ptr)->ope);
-		return (*pkt_entry_ptr)->ope;
-	}
-
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 	data_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
 
