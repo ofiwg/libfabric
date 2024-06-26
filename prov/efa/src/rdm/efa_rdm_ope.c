@@ -130,10 +130,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
 
-	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)
-		dlist_remove(&txe->queued_entry);
-
-	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
 		dlist_remove(&txe->queued_entry);
 
 #ifdef ENABLE_EFA_POISONING
@@ -172,16 +169,12 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 		}
 	}
 
-	if (!dlist_empty(&rxe->queued_pkts)) {
-		dlist_foreach_container_safe(&rxe->queued_pkts,
-					     struct efa_rdm_pke,
-					     pkt_entry, entry, tmp) {
-			efa_rdm_pke_release_tx(pkt_entry);
-		}
-		dlist_remove(&rxe->queued_entry);
-	}
+	dlist_foreach_container_safe(&rxe->queued_pkts,
+				     struct efa_rdm_pke,
+				     pkt_entry, entry, tmp)
+		efa_rdm_pke_release_tx(pkt_entry);
 
-	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
 		dlist_remove(&rxe->queued_entry);
 
 #ifdef ENABLE_EFA_POISONING
@@ -584,15 +577,12 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		assert(0 && "rxe unknown state");
 	}
 
-	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_RNR) {
-		dlist_foreach_container_safe(&rxe->queued_pkts,
-					     struct efa_rdm_pke,
-					     pkt_entry, entry, tmp)
-			efa_rdm_pke_release_tx(pkt_entry);
-		dlist_remove(&rxe->queued_entry);
-	}
+	dlist_foreach_container_safe(&rxe->queued_pkts,
+				     struct efa_rdm_pke,
+				     pkt_entry, entry, tmp)
+		efa_rdm_pke_release_tx(pkt_entry);
 
-	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
 		dlist_remove(&rxe->queued_entry);
 
 	if (rxe->unexp_pkt) {
@@ -685,10 +675,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		assert(0 && "txe unknown state");
 	}
 
-	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)
-		dlist_remove(&txe->queued_entry);
-
-	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
 		dlist_remove(&txe->queued_entry);
 
 	dlist_foreach_container_safe(&txe->queued_pkts,
