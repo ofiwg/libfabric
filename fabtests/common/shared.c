@@ -1427,6 +1427,14 @@ int ft_enable_ep(struct fid_ep *bind_ep, struct fid_eq *bind_eq, struct fid_av *
 		FT_EP_BIND(bind_ep, bind_rma_cntr, flags);
 	}
 
+	if (opts.max_msg_size) {
+		ret = fi_setopt(&bind_ep->fid, FI_OPT_ENDPOINT, FI_OPT_MAX_MSG_SIZE, &opts.max_msg_size, sizeof opts.max_msg_size);
+		if (ret && ret != -FI_EOPNOTSUPP) {
+			FT_PRINTERR("fi_setopt(FI_OPT_MAX_MSG_SIZE)", ret);
+			return ret;
+		}
+	}
+
 	ret = fi_enable(bind_ep);
 	if (ret) {
 		FT_PRINTERR("fi_enable", ret);
@@ -4173,6 +4181,8 @@ void ft_longopts_usage()
 		"manual, or auto");
 	FT_PRINT_OPTS_USAGE("--control-progress <progress_model>",
 		"manual, auto, or unified");
+	FT_PRINT_OPTS_USAGE("--max-msg-size <size>",
+		"maximum untagged message size");
 }
 
 int debug_assert;
@@ -4184,6 +4194,7 @@ struct option long_opts[] = {
 	{"debug-assert", no_argument, &debug_assert, LONG_OPT_DEBUG_ASSERT},
 	{"data-progress", required_argument, NULL, LONG_OPT_DATA_PROGRESS},
 	{"control-progress", required_argument, NULL, LONG_OPT_CONTROL_PROGRESS},
+	{"max-msg-size", required_argument, NULL, LONG_OPT_MAX_MSG_SIZE},
 	{NULL, 0, NULL, 0},
 };
 
@@ -4220,6 +4231,9 @@ int ft_parse_long_opts(int op, char *optarg)
 		hints->domain_attr->control_progress = ft_parse_progress_model_string(optarg);
 		if (hints->domain_attr->control_progress == -1)
 			return EXIT_FAILURE;
+		return 0;
+	case LONG_OPT_MAX_MSG_SIZE:
+		opts.max_msg_size = atoi(optarg);
 		return 0;
 	default:
 		return EXIT_FAILURE;
