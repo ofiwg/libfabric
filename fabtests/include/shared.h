@@ -175,6 +175,7 @@ struct ft_opts {
 	int iterations;
 	int warmup_iterations;
 	size_t transfer_size;
+	size_t max_msg_size;
 	int window_size;
 	int av_size;
 	int verbose;
@@ -637,6 +638,7 @@ enum {
 	LONG_OPT_DEBUG_ASSERT,
 	LONG_OPT_DATA_PROGRESS,
 	LONG_OPT_CONTROL_PROGRESS,
+	LONG_OPT_MAX_MSG_SIZE,
 };
 
 extern int debug_assert;
