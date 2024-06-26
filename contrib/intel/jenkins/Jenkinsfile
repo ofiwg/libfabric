@@ -445,13 +445,13 @@ pipeline {
         stage ('build-water') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "water", "water", "water")
-              slurm_batch("squirtle,totodile", "1",
+              slurm_build(BUILD_MODES, "totodile", "water", "water")
+              slurm_batch("totodile", "1",
                             "${env.LOG_DIR}/build_mpich_water_log",
                             """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
                               --build_item=mpich --build_hw=water"""
                           )
-              slurm_batch("water", "1",
+              slurm_batch("totodile", "1",
                           "${env.LOG_DIR}/build_shmem_water_log",
                           """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
                               --build_item=shmem --build_hw=water"""
@@ -699,7 +699,7 @@ pipeline {
                 }
                 for (def mpi in MPIS) {
                   run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
-                                 "water", "squirtle,totodile", "2", "${mpi}")
+                                 "water", "totodile", "2", "${mpi}")
                 }
               }
             }
@@ -720,7 +720,7 @@ pipeline {
             script {
               dir (RUN_LOCATION) {
                 run_middleware([["verbs", "rxm"], ["sockets", null]], "SHMEM",
-                                "shmem", "water", "squirtle,totodile", "2")
+                                "shmem", "water", "totodile", "2")
               }
             }
           }
@@ -729,8 +729,10 @@ pipeline {
           steps {
             script {
               dir (RUN_LOCATION) {
-                run_middleware([["tcp", null]], "multinode_performance",
-                               "multinode", "grass", "bulbasaur", "2")
+                run_middleware([["tcp", null],["sockets", null]],
+			       "multinode_performance", "multinode", "grass", "grass", "2")
+		run_middleware([["verbs", "rxm"]], "multinode_performance",
+			       "multinode", "water", "totodile", "2")
               }
             }
           }
@@ -740,11 +742,11 @@ pipeline {
             script {
               dir (RUN_LOCATION) {
 		            run_middleware([["verbs", null]], "oneCCL",
-                               "oneccl", "water", "squirtle,totodile", "2")
+                               "oneccl", "water", "totodile", "2")
 		            run_middleware([["shm", null]], "oneCCL",
 			                         "oneccl", "grass", "bulbasaur", "1")
 		            run_middleware([["psm3", null]], "oneCCL",
-			                         "oneccl", "water", "squirtle", "2")
+			                         "oneccl", "water", "totodile", "2")
 		            run_middleware([["tcp", null]], "oneCCL",
 			                         "oneccl", "grass", "bulbasaur", "2")
                 run_middleware([["shm", null]], "oneCCL_DSA",
