@@ -173,6 +173,7 @@ void test_efa_domain_open_ops_wrong_name();
 void test_efa_domain_open_ops_mr_query();
 void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cq_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
+void test_efa_rdm_cq_post_initial_rx_pkts();
 void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 #endif
