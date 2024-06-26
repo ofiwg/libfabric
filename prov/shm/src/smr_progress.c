@@ -1358,8 +1358,9 @@ static void smr_buffer_sar(struct smr_ep *ep, struct smr_region *peer_smr,
 		buf = ofi_buf_alloc(ep->unexp_buf_pool);
 		if (!buf) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"Error allocating buffer\n");
-			assert(0);
+				"Error allocating buffer for unexpected SAR "
+				"(-FI_ENOMEM)\n");
+			return;
 		}
 		slist_insert_tail(&buf->entry,
 			&sar_entry->cmd_ctx->buf_list);
