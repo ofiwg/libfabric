@@ -439,6 +439,69 @@ void test_efa_rdm_ep_dc_send_queue_before_handshake(struct efa_resource **state)
 	assert_true(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
 }
 
+/**
+ * @brief when delivery complete send was used and handshake packet has not been received
+ * verify the txes are queued before the number of requests reach EFA_RDM_MAX_QUEUED_OPE_BEFORE_HANDSHAKE.
+ * After reaching the limit, fi_send should return -FI_EAGAIN
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_rdm_ep_dc_send_queue_limit_before_handshake(struct efa_resource **state)
+{
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t peer_addr;
+	int err, numaddr;
+	int i;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	/* create a fake peer */
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(numaddr, 1);
+
+	msg.addr = peer_addr;
+	msg.iov_count = 1;
+	iov.iov_base = NULL;
+	iov.iov_len = 0;
+	msg.msg_iov = &iov;
+	msg.desc = NULL;
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	/* close shm_ep to force efa_rdm_ep to use efa device to send */
+	if (efa_rdm_ep->shm_ep) {
+		err = fi_close(&efa_rdm_ep->shm_ep->fid);
+		assert_int_equal(err, 0);
+		efa_rdm_ep->shm_ep = NULL;
+	}
+	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make efa_rdm_atomic() think
+	 * a REQ packet has been sent to the peer (so no need to send again)
+	 * handshake has not been received, so we do not know whether the peer support DC
+	 */
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer->flags = EFA_RDM_PEER_REQ_SENT;
+	peer->is_local = false;
+
+	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+
+	for (i = 0; i < EFA_RDM_MAX_QUEUED_OPE_BEFORE_HANDSHAKE; i++) {
+		err = fi_sendmsg(resource->ep, &msg, FI_DELIVERY_COMPLETE);
+		assert_int_equal(err, 0);
+	}
+
+	assert_true(efa_rdm_ep->ope_queued_before_handshake_cnt == EFA_RDM_MAX_QUEUED_OPE_BEFORE_HANDSHAKE);
+	err = fi_sendmsg(resource->ep, &msg, FI_DELIVERY_COMPLETE);
+	assert_int_equal(err, -FI_EAGAIN);
+}
 
 /**
  * @brief verify tx entry is queued for rma (read or write) request before handshake is made.

@@ -953,16 +953,19 @@ int efa_rdm_ep_enforce_handshake_for_txe(struct efa_rdm_ep *ep, struct efa_rdm_o
 	if (ret)
 		return ret;
 	/**
-	 * we cannot queue requests (and return 0) for inject,
+	 * We cannot queue requests (and return 0) for inject,
 	 * which expects the buffer can be reused when the call
-	 * returns success.
+	 * returns success. We also have a limit for the number
+	 * of opes queued due to handshake not made
 	 */
-	if (txe->fi_flags & FI_INJECT)
+	if ((txe->fi_flags & FI_INJECT) ||
+	    (ep->ope_queued_before_handshake_cnt >= EFA_RDM_MAX_QUEUED_OPE_BEFORE_HANDSHAKE))
 		return -FI_EAGAIN;
 
 	if (!(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)) {
 		txe->internal_flags |= EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE;
 		dlist_insert_tail(&txe->queued_entry, &efa_rdm_ep_domain(ep)->ope_queued_list);
+		ep->ope_queued_before_handshake_cnt++;
 	}
 	return FI_SUCCESS;
 }

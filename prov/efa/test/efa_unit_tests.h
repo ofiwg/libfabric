@@ -104,6 +104,7 @@ void test_efa_rdm_ep_pkt_pool_flags();
 void test_efa_rdm_ep_pkt_pool_page_alignment();
 void test_efa_rdm_ep_dc_atomic_queue_before_handshake();
 void test_efa_rdm_ep_dc_send_queue_before_handshake();
+void test_efa_rdm_ep_dc_send_queue_limit_before_handshake();
 void test_efa_rdm_ep_write_queue_before_handshake();
 void test_efa_rdm_ep_read_queue_before_handshake();
 void test_efa_rdm_ep_send_with_shm_no_copy();
