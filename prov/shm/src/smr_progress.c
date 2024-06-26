@@ -222,10 +222,10 @@ static void smr_progress_resp(struct smr_ep *ep)
 		if (smr_progress_resp_entry(ep, resp, pending, &resp->status))
 			break;
 
-		if (-resp->status) {
+		if (resp->status) {
 			ret = smr_write_err_comp(ep->util_ep.tx_cq, pending->context,
 					 pending->op_flags, pending->cmd.msg.hdr.tag,
-					 -(resp->status));
+					 resp->status);
 		} else {
 			ret = smr_complete_tx(ep, pending->context,
 					  pending->cmd.msg.hdr.op, pending->op_flags);
@@ -331,7 +331,7 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 
 out:
 	//Status must be set last (signals peer: op done, valid resp entry)
-	resp->status = ret;
+	resp->status = -ret;
 
 	return -ret;
 }
@@ -411,9 +411,9 @@ static int smr_progress_mmap(struct smr_cmd *cmd, struct ofi_mr **mr,
 	ret = smr_mmap_peer_copy(ep, cmd, mr, iov, iov_count, total_len);
 
 	//Status must be set last (signals peer: op done, valid resp entry)
-	resp->status = ret;
+	resp->status = -ret;
 
-	return ret;
+	return -ret;
 }
 
 static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
@@ -578,7 +578,7 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 					 iov_count, mr_entry, cmd,
 					 &ipc_entry);
 		if (ret)
-			resp->status = ret;
+			resp->status = -ret;
 
 		return ipc_entry;
 	}
@@ -613,7 +613,7 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 
 out:
 	//Status must be set last (signals peer: op done, valid resp entry)
-	resp->status = ret;
+	resp->status = -ret;
 
 	return NULL;
 }
