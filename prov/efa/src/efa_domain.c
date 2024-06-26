@@ -566,7 +566,7 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 					efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
 				else
 					efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
-				return;
+				continue;
 			}
 
 			ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_READ;
@@ -611,7 +611,7 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 			ret = efa_rdm_ope_post_send(ope, EFA_RDM_CTSDATA_PKT);
 			if (OFI_UNLIKELY(ret)) {
 				if (ret == -FI_EAGAIN)
-					break;
+					continue;
 
 				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
 				continue;
