@@ -27,6 +27,13 @@ struct efa_rdm_ep_queued_copy {
 };
 
 #define EFA_RDM_MAX_QUEUED_COPY (8)
+
+/**
+ * Max number of opes queued before handshake is made
+ * with their peers. This cnt is per EP.
+ */
+#define EFA_RDM_MAX_QUEUED_OPE_BEFORE_HANDSHAKE (16)
+
 /** @brief max number of concurrent send reuqests allowed by EFA device
  *
  * The value was from EFA device's attribute (device->efa_attr.max_sq_wr)
@@ -190,6 +197,8 @@ struct efa_rdm_ep {
 	char err_msg[EFA_RDM_ERROR_MSG_BUFFER_LENGTH]; /* A large enough buffer to store CQ/EQ error data used by e.g. fi_cq_readerr */
 	struct efa_rdm_pke **pke_vec;
 	struct dlist_entry entry;
+	/* the count of opes queued before handshake is made with their peers */
+	size_t ope_queued_before_handshake_cnt;
 };
 
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);

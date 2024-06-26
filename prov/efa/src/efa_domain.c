@@ -500,12 +500,15 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 
 			if (OFI_UNLIKELY(ret)) {
 				assert(ope->type == EFA_RDM_TXE);
+				/* efa_rdm_txe_handle_error will remove ope from the queued_list */
+				ope->ep->ope_queued_before_handshake_cnt--;
 				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
 				continue;
 			}
 
 			dlist_remove(&ope->queued_entry);
 			ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE;
+			ope->ep->ope_queued_before_handshake_cnt--;
 		}
 
 		if (ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR) {
