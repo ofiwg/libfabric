@@ -56,7 +56,7 @@ struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 
 void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 						 enum fi_ep_type ep_type,
-						 struct fi_info *hints,
+						 uint32_t fi_version, struct fi_info *hints,
 						 bool enable_ep, bool open_cq)
 {
 	int ret = 0;
@@ -64,7 +64,7 @@ void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 	struct fi_cq_attr cq_attr = {0};
 	struct fi_eq_attr eq_attr = {0};
 
-	ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, hints, &resource->info);
+	ret = fi_getinfo(fi_version, NULL, NULL, 0ULL, hints, &resource->info);
 	if (ret)
 		goto err;
 
@@ -120,8 +120,8 @@ void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_
 	resource->hints = efa_unit_test_alloc_hints(ep_type);
 	if (!resource->hints)
 		goto err;
-	efa_unit_test_resource_construct_with_hints(resource, ep_type,
-						    resource->hints, true, true);
+	efa_unit_test_resource_construct_with_hints(resource, ep_type, FI_VERSION(1, 14),
+	                                            resource->hints, true, true);
 	return;
 
 err:
@@ -137,7 +137,7 @@ void efa_unit_test_resource_construct_ep_not_enabled(struct efa_resource *resour
 	resource->hints = efa_unit_test_alloc_hints(ep_type);
 	if (!resource->hints)
 		goto err;
-	efa_unit_test_resource_construct_with_hints(resource, ep_type,
+	efa_unit_test_resource_construct_with_hints(resource, ep_type, FI_VERSION(1, 14),
 						    resource->hints, false, true);
 	return;
 
@@ -154,7 +154,7 @@ void efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(struct efa_resour
 	resource->hints = efa_unit_test_alloc_hints(ep_type);
 	if (!resource->hints)
 		goto err;
-	efa_unit_test_resource_construct_with_hints(resource, ep_type,
+	efa_unit_test_resource_construct_with_hints(resource, ep_type, FI_VERSION(1, 14),
 						    resource->hints, false, false);
 	return;
 
