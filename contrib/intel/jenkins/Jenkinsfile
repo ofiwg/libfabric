@@ -223,7 +223,7 @@ def generate_release_num(def branch_name, def output_loc) {
   """
 }
 
-def slurm_build(modes, partition, location, hw=null, additional_args=null) {
+def slurm_build(modes, partition, location, tag, hw=null, additional_args=null) {
   def cmd = "pwd; "
   def prefix = "python${PYTHON_VERSION} ${RUN_LOCATION}/build.py"
   def libfabric = "--build_item=libfabric --build_loc=${CUSTOM_WORKSPACE}/${location}/libfabric"
@@ -245,7 +245,7 @@ def slurm_build(modes, partition, location, hw=null, additional_args=null) {
     cmd = "${cmd} ${prefix} ${fabtests} --ofi_build_mode=${mode};"
   }
 
-  slurm_batch(partition, "1", "${env.LOG_DIR}/libfabric_${partition}", cmd)
+  slurm_batch(partition, "1", "${env.LOG_DIR}/libfabric_${tag}", cmd)
 }
 
 def build(item, mode=null, hw=null, additional_args=null) {
@@ -445,7 +445,7 @@ pipeline {
         stage ('build-water') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "totodile", "water", "water")
+              slurm_build(BUILD_MODES, "totodile", "water", "water", "water")
               slurm_batch("totodile", "1",
                             "${env.LOG_DIR}/build_mpich_water_log",
                             """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
@@ -462,7 +462,7 @@ pipeline {
         stage ('build-grass') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "grass", "grass", "grass")
+              slurm_build(BUILD_MODES, "grass", "grass", "grass", "grass")
               slurm_batch("grass", "1",
                             "${env.LOG_DIR}/build_mpich_grass_log",
                             """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
@@ -479,14 +479,15 @@ pipeline {
         stage ('build-electric') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "electric", "electric", "electric")
+              slurm_build(BUILD_MODES, "electric", "electric", "electric",
+                          "electric")
             }
           }
         }
         stage ('build-ucx') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "totodile", "ucx", "ucx")
+              slurm_build(BUILD_MODES, "totodile", "ucx", "ucx", "ucx")
             }
           }
         }
@@ -494,16 +495,17 @@ pipeline {
           steps {
             script {
               slurm_build(["reg"], "cyndaquil", "cuda", "cyndaquil",
-                          "--cuda")
+                          "cyndaquil", "--cuda")
               slurm_build(["reg"], "quilava", "cuda", "quilava",
-                          "--cuda")
+                          "quilava", "--cuda")
             }
           }
         }
         stage ('build-iouring') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "ivysaur", "iouring", "ivysaur")
+              slurm_build(BUILD_MODES, "ivysaur", "iouring", "ivysaur",
+                          "ivysaur")
             }
           }
         }
@@ -543,7 +545,8 @@ pipeline {
                 build("logdir")
                 build("builddir")
                 build_ci()
-                slurm_build(BUILD_MODES, "fabrics-ci", "source", "gpu", "--gpu")
+                slurm_build(BUILD_MODES, "fabrics-ci", "source", "ze", "gpu",
+                            "--gpu")
               }
             }
           }
