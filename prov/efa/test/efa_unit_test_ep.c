@@ -533,7 +533,8 @@ void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	resource->hints->caps |= FI_MSG | FI_TAGGED | FI_RMA;
 	resource->hints->domain_attr->mr_mode = FI_MR_BASIC;
-	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, resource->hints, true, true);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+	                                            resource->hints, true, true);
 
 	/* ensure we don't have RMA capability. */
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -656,7 +657,8 @@ void test_efa_rdm_ep_rma_without_caps(struct efa_resource **state)
 	resource->hints->caps |= FI_MSG | FI_TAGGED;
 	resource->hints->caps &= ~FI_RMA;
 	resource->hints->domain_attr->mr_mode = FI_MR_BASIC;
-	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, resource->hints, true, true);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+	                                            resource->hints, true, true);
 
 	/* ensure we don't have RMA capability. */
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -706,7 +708,8 @@ void test_efa_rdm_ep_atomic_without_caps(struct efa_resource **state)
 	resource->hints->caps |= FI_MSG | FI_TAGGED;
 	resource->hints->caps &= ~FI_ATOMIC;
 	resource->hints->domain_attr->mr_mode = FI_MR_BASIC;
-	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, resource->hints, true, true);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+	                                            resource->hints, true, true);
 
 	/* ensure we don't have ATOMIC capability. */
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -864,7 +867,8 @@ test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource, bool expected_us
 	struct efa_rdm_ep *ep;
 	size_t max_msg_size = 1000;
 
-	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, resource->hints, false, true);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+	                                            resource->hints, false, true);
 
 	ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
