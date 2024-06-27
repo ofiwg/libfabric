@@ -177,8 +177,10 @@ The verbs provider checks for the following environment variables.
   deprecated) EP type supports only 1
 
 *FI_VERBS_INLINE_SIZE*
-: Default maximum inline size. Actual inject size returned in fi_info
-  may be greater (default: 64)
+: Maximum inline size for the verbs device. Actual inline size returned may be
+  different depending on device capability. This value will be returned by
+  fi_info as the inject size for the application to use. Set to 0 for the
+  maximum device inline size to be used. (default: 256).
 
 *FI_VERBS_MIN_RNR_TIMER*
 : Set min_rnr_timer QP attribute (0 - 31) (default: 12)
