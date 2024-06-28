@@ -92,7 +92,6 @@ struct smr_dsa_context {
 	void *wq_portal[MAX_WQS_PER_EP];
 	int wq_count;
 	int next_wq;
-	int enable_dsa_page_touch;
 
 	unsigned long copy_type_stats[2];
 	unsigned long page_fault_stats[2];
@@ -514,22 +513,6 @@ static void smr_dsa_copy_sar(struct smr_freestack *sar_pool,
 	dsa_cmd_context->op = cmd->msg.hdr.op;
 }
 
-static void dsa_handle_page_fault(struct dsa_completion_record *comp)
-{
-	volatile char *fault_addr;
-
-	if (comp->status & DSA_COMP_PAGE_FAULT_NOBOF) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-value"
-		fault_addr = (char *)comp->fault_addr;
-
-		if (comp->status & DSA_COMP_STATUS_WRITE)
-			*fault_addr = *fault_addr;
-		else
-			*fault_addr;
-#pragma GCC diagnostic pop
-	}
-}
 
 static void
 dsa_process_partially_completed_desc(struct smr_dsa_context *dsa_context,
@@ -541,8 +524,6 @@ dsa_process_partially_completed_desc(struct smr_dsa_context *dsa_context,
 	uint32_t bytes_completed;
 	struct dsa_completion_record *comp =
 	    (struct dsa_completion_record *)dsa_descriptor->completion_addr;
-
-	dsa_handle_page_fault(comp);
 
 	bytes_completed = comp->bytes_completed;
 
@@ -562,8 +543,7 @@ dsa_process_partially_completed_desc(struct smr_dsa_context *dsa_context,
 	dsa_prepare_copy_desc(dsa_descriptor, new_xfer_size,
 			       new_src_addr, new_dst_addr);
 
-	if (dsa_context->enable_dsa_page_touch)
-		dsa_touch_buffer_pages(dsa_descriptor);
+	dsa_touch_buffer_pages(dsa_descriptor);
 
 	dsa_desc_submit(dsa_context, dsa_descriptor);
 }
@@ -834,7 +814,6 @@ void smr_dsa_context_init(struct smr_ep *ep)
 	int wq_count;
 	struct smr_dsa_context *dsa_context;
 	unsigned int numa_node;
-	int enable_dsa_page_touch = 0;
 
 	cpu = sched_getcpu();
 	numa_node = numa_node_of_cpu(cpu);
@@ -850,9 +829,6 @@ void smr_dsa_context_init(struct smr_ep *ep)
 
 	dsa_context = ep->dsa_context;
 	memset(dsa_context, 0, sizeof(*dsa_context));
-
-	fi_param_get_bool(&smr_prov, "enable_dsa_page_touch",
-			  &enable_dsa_page_touch);
 
 	wq_count = dsa_idxd_init_wq_array(1, numa_node,
 				      dsa_context->wq_portal);
@@ -870,7 +846,6 @@ void smr_dsa_context_init(struct smr_ep *ep)
 
 	dsa_context->next_wq = 0;
 	dsa_context->wq_count = wq_count;
-	dsa_context->enable_dsa_page_touch = enable_dsa_page_touch;
 
 	FI_DBG(&smr_prov, FI_LOG_EP_CTRL, "Numa node of endpoint CPU: %d\n",
 			numa_node);
