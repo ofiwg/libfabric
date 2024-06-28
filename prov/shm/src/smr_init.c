@@ -219,10 +219,6 @@ SHM_INI
 			"Manually disables CMA. Default: false");
 	fi_param_define(&smr_prov, "use_dsa_sar", FI_PARAM_BOOL,
 			"Enable use of DSA in SAR protocol. Default: false");
-	fi_param_define(&smr_prov, "enable_dsa_page_touch", FI_PARAM_BOOL,
-			"Enable CPU touching of memory pages in DSA command \
-			 descriptor when page fault is reported. \
-			 Default: false");
 	fi_param_define(&smr_prov, "use_xpmem", FI_PARAM_BOOL,
 			"Enable XPMEM over CMA when possible "
 			"(default: false)");
