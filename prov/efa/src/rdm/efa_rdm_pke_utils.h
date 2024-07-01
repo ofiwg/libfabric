@@ -7,6 +7,7 @@
 #include "efa_rdm_pke.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pkt_type.h"
+#include "efa_mr.h"
 
 /**
  * @brief get the base header of an pke
@@ -69,5 +70,11 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
 					struct efa_rdm_ope *ope);
 
 uint32_t *efa_rdm_pke_connid_ptr(struct efa_rdm_pke *pkt_entry);
+
+int efa_rdm_pke_get_available_copy_methods(struct efa_rdm_ep *ep,
+					   struct efa_mr *efa_mr,
+					   bool *restrict local_read_available,
+					   bool *restrict cuda_memcpy_available,
+					   bool *restrict gdrcopy_available);
 
 #endif
