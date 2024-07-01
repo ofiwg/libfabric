@@ -4,7 +4,6 @@
 #include <rdma/fi_rma.h>
 #include "ofi_iov.h"
 #include "efa.h"
-#include "efa_mr.h"
 #include "efa_hmem.h"
 #include "efa_device.h"
 #include "efa_rdm_ep.h"
@@ -229,23 +228,62 @@ int efa_rdm_pke_queued_copy_payload_to_hmem(struct efa_rdm_pke *pke,
 	return efa_rdm_ep_flush_queued_blocking_copy_to_hmem(ep);
 }
 
-/* @brief copy data in pkt_entry to CUDA memory
+/*
+ * @brief check which copy methods are available
  *
  * There are 3 ways to copy data to CUDA memory. None of them is guaranteed to
  * be available:
  *
- * gdrcopy, which is avaibale only when cuda_is_gdrcopy_enabled() is true
+ * localread copy, which is available only when p2p is supported by device, and
+ * device support read.
  *
- * cudaMemcpy, which is available only when endpoint is permitted to call CUDA api
+ * gdrcopy, which is available only when cuda_is_gdrcopy_enabled() is true.
  *
- * localread copy, which is available only when p2p is supported by device, and device support read.
+ * cudaMemcpy, which is available only when endpoint is permitted to call CUDA
+ * api.
+ *
+ * @param[in]			ep, efa_mr
+ * @param[in,out]		local_read_available, cuda_memcpy_available,
+ * gdrcopy_available
+ * @return		On success, return 0
+ * 				On failure, return libfabric error code
+ */
+int efa_rdm_pke_get_available_copy_methods(struct efa_rdm_ep *ep,
+					   struct efa_mr *efa_mr,
+					   bool *restrict local_read_available,
+					   bool *restrict cuda_memcpy_available,
+					   bool *restrict gdrcopy_available)
+{
+	int ret;
+	bool p2p_available;
+
+	ret = efa_rdm_ep_use_p2p(ep, efa_mr);
+	if (ret < 0) {
+		return ret;
+	}
+
+	p2p_available = ret;
+	*local_read_available = p2p_available && efa_rdm_ep_support_rdma_read(ep);
+	*cuda_memcpy_available = ep->cuda_api_permitted;
+	*gdrcopy_available = efa_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE;
+
+	/* For in-order aligned send/recv, only allow local read to be used to copy data */
+	if (ep->sendrecv_in_order_aligned_128_bytes) {
+		*cuda_memcpy_available = false;
+		*gdrcopy_available = false;
+	}
+
+	return 0;
+}
+
+/* @brief copy data in pkt_entry to CUDA memory using gdrcopy, cudaMemcpy, or localread copy
  *
  * gdrcopy and cudaMemcpy is mutally exclusive, when they are both available, cudaMemcpy is used.
  * so we consider them as blocking copy.
  *
  * When neither blocking copy and localread copy is available, this function return error.
  *
- * When only one method is available, the availble one will be used.
+ * When only one method is available, the available one will be used.
  *
  * When both methods are available, we used a mixed approach, e.g.
  *
@@ -266,7 +304,7 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 	struct efa_mr *desc;
 	struct efa_rdm_ep *ep;
 	size_t segment_offset;
-	bool p2p_available, local_read_available, gdrcopy_available, cuda_memcpy_available;
+	bool local_read_available, gdrcopy_available, cuda_memcpy_available;
 	int ret, err;
 
 	desc = rxe->desc[0];
@@ -275,21 +313,13 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 	ep = pke->ep;
 	assert(ep);
 
-	ret = efa_rdm_ep_use_p2p(ep, desc);
-	if (ret < 0)
+	segment_offset = efa_rdm_pke_get_segment_offset(pke);
+
+	ret = efa_rdm_pke_get_available_copy_methods(
+		ep, desc, &local_read_available, &gdrcopy_available, &cuda_memcpy_available);
+	if (ret < 0) {
+		EFA_WARN(FI_LOG_EP_DATA, "Failed to get available copy methods, ret = %d\n", ret);
 		return ret;
-
-	segment_offset = efa_rdm_pke_get_segment_offset(pke),
-
-	p2p_available = ret;
-	local_read_available = p2p_available && efa_rdm_ep_support_rdma_read(ep);
-	cuda_memcpy_available = ep->cuda_api_permitted;
-	gdrcopy_available = desc->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE;
-
-	/* For in-order aligned send/recv, only allow local read to be used to copy data */
-	if (ep->sendrecv_in_order_aligned_128_bytes) {
-		cuda_memcpy_available = false;
-		gdrcopy_available = false;
 	}
 
 	if (!local_read_available && !gdrcopy_available && !cuda_memcpy_available) {
