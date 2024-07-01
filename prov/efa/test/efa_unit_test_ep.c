@@ -915,3 +915,22 @@ void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(struct efa_resource **state
 
 	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false);
 }
+
+void test_efa_rdm_ep_close_discard_posted_recv(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	char buf[16];
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	/* Post recv and then close ep */
+	assert_int_equal(fi_recv(resource->ep, (void *) buf, 16, NULL, FI_ADDR_UNSPEC, NULL), 0);
+
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+
+	/* CQ should be empty and no err entry */
+	assert_int_equal(fi_cq_read(resource->cq, NULL, 1), -FI_EAGAIN);
+
+	/* Reset to NULL to avoid test reaper closing again */
+	resource->ep = NULL;
+}
