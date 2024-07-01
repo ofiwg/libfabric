@@ -896,19 +896,14 @@ static int util_cancel_entry(struct util_srx_ctx *srx, uint64_t flags,
 static int util_cleanup_queues(struct ofi_dyn_arr *arr, void *list,
 			       void *context)
 {
-	struct util_srx_ctx *srx = context;
 	struct slist *queue = list;
 	struct slist_entry *item;
 	struct util_rx_entry *rx_entry;
-	uint64_t flags;
-
-	flags = arr == &srx->src_trecv_queues ?
-		FI_TAGGED | FI_RECV : FI_MSG | FI_RECV;
 
 	while (!slist_empty(queue)) {
 		item = slist_remove_head(queue);
 		rx_entry = container_of(item, struct util_rx_entry, peer_entry);
-		(void) util_cancel_entry(srx, flags, rx_entry);
+		ofi_buf_free(rx_entry);
 	}
 	return FI_SUCCESS;
 }
@@ -932,16 +927,14 @@ int util_srx_close(struct fid *fid)
 
 	while (!slist_empty(&srx->msg_queue)) {
 		entry = slist_remove_head(&srx->msg_queue);
-		(void) util_cancel_entry(srx, FI_SEND | FI_MSG,
-				container_of(entry, struct util_rx_entry,
-				             peer_entry));
+		ofi_buf_free(container_of(entry, struct util_rx_entry,
+				          peer_entry));
 	}
 
 	while (!slist_empty(&srx->tag_queue)) {
 		entry = slist_remove_head(&srx->tag_queue);
-		(void) util_cancel_entry(srx, FI_SEND | FI_TAGGED,
-				container_of(entry, struct util_rx_entry,
-					     peer_entry));
+		ofi_buf_free(container_of(entry, struct util_rx_entry,
+				          peer_entry));
 	}
 
 	while (!dlist_empty(&srx->unspec_unexp_msg_queue)) {
