@@ -3897,6 +3897,10 @@ int ft_sock_send(int fd, void *msg, size_t len)
 	for (sent = 0; sent < len; ) {
 		ret = ofi_send_socket(fd, ((char *) msg) + sent, len - sent, 0);
 		if (ret > 0) {
+			if (SIZE_MAX - sent < (size_t)ret) {
+				err = -1;
+				break;
+			}
 			sent += ret;
 		} else if (ofi_sockerr() == EAGAIN || ofi_sockerr() == EWOULDBLOCK) {
 			ft_force_progress();
@@ -3917,6 +3921,10 @@ int ft_sock_recv(int fd, void *msg, size_t len)
 	for (rcvd = 0; rcvd < len; ) {
 		ret = ofi_recv_socket(fd, ((char *) msg) + rcvd, len - rcvd, 0);
 		if (ret > 0) {
+			if (SIZE_MAX - rcvd < (size_t)ret || len - rcvd < (size_t)ret) {
+				err = -FI_EOTHER;
+				break;
+			}
 			rcvd += ret;
 		} else if (ret == 0) {
 			err = -FI_ENOTCONN;

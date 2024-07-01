@@ -84,6 +84,10 @@ ssize_t socket_send(int sock, void *buf, size_t len, int flags)
 		if (ret < 0)
 			return ret;
 
+		if (SIZE_MAX - m < (size_t)ret || len - m < (size_t)ret) {
+			return -1;
+		}
+
 		m += ret;
 	} while (m != len);
 
@@ -100,6 +104,10 @@ int socket_recv(int sock, void *buf, size_t len, int flags)
 		ret = recv(sock, (void *) &ptr[m], len-m, flags);
 		if (ret <= 0)
 			return -1;
+
+		if (SIZE_MAX - m < (size_t)ret) {
+			return -1;
+		}
 
 		m += ret;
 	} while (m < len);
