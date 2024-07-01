@@ -9,9 +9,9 @@ jobs:
         path:
           - 'prov/opx'
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
     - name: Run clang-format style check for C/C++/Protobuf programs (Cornelis Networks-specific).
-      uses: jidicula/clang-format-action@v4.10.2
+      uses: jidicula/clang-format-action@81356ae1ab1ef29a26ff0409930e76f84b3a239b # v4.10.2
       with:
         clang-format-version: '15'
         check-path: ${{ matrix.path }}
