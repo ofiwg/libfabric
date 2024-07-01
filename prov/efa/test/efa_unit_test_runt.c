@@ -127,6 +127,95 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_normal(struct efa_resource **st
 	test_efa_rdm_peer_get_runt_size_impl(resource, FI_HMEM_CUDA, peer_num_runt_bytes_in_flight, total_runt_size, msg_length, expected_runt_size);
 }
 
+/* When using LL128 protocol, the segmented size of runting read must be 128 multiple. */
+void test_efa_rdm_peer_get_runt_size_cuda_memory_128_multiple_alignment(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	size_t msg_length;
+	size_t expected_runt_size;
+	size_t peer_num_runt_bytes_in_flight;
+	size_t total_runt_size;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
+
+	msg_length = 12000;
+	peer_num_runt_bytes_in_flight = 10240;
+	total_runt_size = 16384;
+	/* 16384 - 10240 is smaller than 12000 (total_len), 
+	 * runt size must be (16384 - 10240) // 128 * 128 = 6144 
+	 */
+	expected_runt_size = 6144;
+	test_efa_rdm_peer_get_runt_size_impl(resource, FI_HMEM_CUDA, peer_num_runt_bytes_in_flight, total_runt_size, msg_length, expected_runt_size);
+}
+
+void test_efa_rdm_peer_get_runt_size_cuda_memory_non_128_multiple_alignment(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	size_t msg_length;
+	size_t expected_runt_size;
+	size_t peer_num_runt_bytes_in_flight;
+	size_t total_runt_size;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
+
+	msg_length = 12000;
+	peer_num_runt_bytes_in_flight = 512;
+	total_runt_size = 1004;
+	/* 1004 - 512 is smaller than 12000 (total_len), 
+	 * runt size must be (1004 - 512) // 128 * 128 = 384 
+	 */
+	expected_runt_size = 384;
+	test_efa_rdm_peer_get_runt_size_impl(resource, FI_HMEM_CUDA, peer_num_runt_bytes_in_flight, total_runt_size, msg_length, expected_runt_size);
+}
+
+void test_efa_rdm_peer_get_runt_size_cuda_memory_smaller_than_128_alignment(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	size_t msg_length;
+	size_t expected_runt_size;
+	size_t peer_num_runt_bytes_in_flight;
+	size_t total_runt_size;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
+
+	msg_length = 12000;
+	peer_num_runt_bytes_in_flight = 1000;
+	total_runt_size = 1048;
+	/* 1048 - 1000 is smaller than 128 memory alignment, runt size must be 0 */
+	expected_runt_size = 0;
+	test_efa_rdm_peer_get_runt_size_impl(resource, FI_HMEM_CUDA, peer_num_runt_bytes_in_flight, total_runt_size, msg_length, expected_runt_size);
+}
+
+void test_efa_rdm_peer_get_runt_size_cuda_memory_exceeding_total_len_128_alignment(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	size_t msg_length;
+	size_t expected_runt_size;
+	size_t peer_num_runt_bytes_in_flight;
+	size_t total_runt_size;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
+
+	msg_length = 12000;
+	peer_num_runt_bytes_in_flight = 0;
+	total_runt_size = 16384;
+	/* 16384 - 0 is exceeding 12000 (total_len), runt size must be 12000 // 128 * 128 = 11904 */
+	expected_runt_size = 11904;
+	test_efa_rdm_peer_get_runt_size_impl(resource, FI_HMEM_CUDA, peer_num_runt_bytes_in_flight, total_runt_size, msg_length, expected_runt_size);
+}
+
 void test_efa_rdm_peer_get_runt_size_host_memory_smaller_than_alignment(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
