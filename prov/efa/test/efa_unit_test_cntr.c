@@ -95,4 +95,47 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_r
     fi_close(&cntr->fid);
 }
 
+void test_efa_cntr_post_initial_rx_pkts(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct fid_cntr *cntr;
+	struct fi_cntr_attr cntr_attr = {0};
+	struct efa_cntr *efa_cntr;
+	uint64_t cnt;
 
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* At this time, rx pkts are not growed and posted */
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, 0);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, 0);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, 0);
+
+	assert_int_equal(fi_cntr_open(resource->domain, &cntr_attr, &cntr, NULL), 0);
+
+	/* TODO: expand this test to all flags */
+	assert_int_equal(fi_ep_bind(resource->ep, &cntr->fid, FI_TRANSMIT), 0);
+
+	assert_int_equal(fi_enable(resource->ep), 0);
+
+	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr.cntr_fid);
+
+	assert_false(efa_cntr->initial_rx_to_all_eps_posted);
+
+	cnt = fi_cntr_read(cntr);
+	/* No completion should be read */
+	assert_int_equal(cnt, 0);
+
+	/* At this time, rx pool size number of rx pkts are posted */
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, efa_rdm_ep_get_rx_pool_size(efa_rdm_ep));
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, 0);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, 0);
+
+	assert_true(efa_cntr->initial_rx_to_all_eps_posted);
+	/* ep must be closed before cq/av/eq... */
+	fi_close(&resource->ep->fid);
+	resource->ep = NULL;
+
+	fi_close(&cntr->fid);
+}
