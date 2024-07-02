@@ -701,6 +701,7 @@
     <ClCompile Include="prov\tcp\src\xnet_cm.c" />
     <ClCompile Include="prov\tcp\src\xnet_cq.c" />
     <ClCompile Include="prov\tcp\src\xnet_domain.c" />
+    <ClCompile Include="prov\tcp\src\xnet_av.c" />
     <ClCompile Include="prov\tcp\src\xnet_ep.c" />
     <ClCompile Include="prov\tcp\src\xnet_eq.c" />
     <ClCompile Include="prov\tcp\src\xnet_fabric.c" />
