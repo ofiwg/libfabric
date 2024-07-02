@@ -467,10 +467,34 @@ struct xnet_xfer_entry {
 	char			msg_data[];
 };
 
+struct xnet_mplex_av {
+	struct util_av		util_av;
+	struct dlist_entry	subav_list;
+	struct ofi_genlock	lock;
+};
+
 struct xnet_domain {
 	struct util_domain		util_domain;
 	struct xnet_progress		progress;
 	enum fi_ep_type			ep_type;
+
+	/* When an application requests FI_THREAD_COMPLETION
+	 * the assumption is that the domain will be used
+	 * across multiple threads.
+	 *
+	 * The xnet progress engine is optimized for single
+	 * threaded performance, so instead of reworking the
+	 * progress engine, likely losing single threaded
+	 * performance, multiplex the domain into multiple
+	 * subdomains for each ep. This way, each ep, with
+	 * the assumption that the application wants to
+	 * progress an ep per thread, can have it's own
+	 * progress engine and avoid having a single
+	 * synchronization point among all eps.
+	 */
+	 struct fi_info		*subdomain_info;
+	 struct ofi_genlock	subdomain_list_lock;
+	 struct dlist_entry	subdomain_list;
 };
 
 static inline struct xnet_progress *xnet_ep2_progress(struct xnet_ep *ep)
@@ -544,10 +568,6 @@ int xnet_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 int xnet_set_port_range(void);
 
-int xnet_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-		     struct fid_domain **domain, void *context);
-
-
 int xnet_setup_socket(SOCKET sock, struct fi_info *info);
 void xnet_set_zerocopy(SOCKET sock);
 
@@ -567,6 +587,13 @@ static inline struct xnet_cq *xnet_ep_tx_cq(struct xnet_ep *ep)
 }
 
 
+int xnet_mplex_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		       struct fid_av **fid_av, void *context);
+int xnet_domain_multiplexed(struct fid_domain *domain_fid);
+int xnet_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+		     struct fid_domain **domain, void *context);
+int xnet_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		 struct fid_av **fid_av, void *context);
 int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
 void xnet_report_success(struct xnet_xfer_entry *xfer_entry);

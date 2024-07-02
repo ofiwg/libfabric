@@ -462,6 +462,9 @@
     <ClCompile Include="prov\tcp\src\xnet_domain.c">
       <Filter>Source Files\prov\tcp\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\tcp\src\xnet_av.c">
+      <Filter>Source Files\prov\tcp\src</Filter>
+    </ClCompile>
     <ClCompile Include="prov\tcp\src\xnet_rma.c">
       <Filter>Source Files\prov\tcp\src</Filter>
     </ClCompile>

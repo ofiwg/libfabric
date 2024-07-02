@@ -658,9 +658,9 @@ int ofi_ip_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 				 count, fi_addr, flags, context);
 }
 
-static int ip_av_insertsvc(struct fid_av *av, const char *node,
-			   const char *service, fi_addr_t *fi_addr,
-			   uint64_t flags, void *context)
+int ofi_ip_av_insertsvc(struct fid_av *av, const char *node,
+			const char *service, fi_addr_t *fi_addr,
+			uint64_t flags, void *context)
 {
 	return fi_av_insertsym(av, node, 1, service, 1, fi_addr, flags, context);
 }
@@ -838,9 +838,9 @@ int ofi_ip_av_sym_getaddr(struct util_av *av, const char *node,
 				     svccnt, addr, addrlen);
 }
 
-static int ip_av_insertsym(struct fid_av *av_fid, const char *node,
-			   size_t nodecnt, const char *service, size_t svccnt,
-			   fi_addr_t *fi_addr, uint64_t flags, void *context)
+int ofi_ip_av_insertsym(struct fid_av *av_fid, const char *node,
+			size_t nodecnt, const char *service, size_t svccnt,
+			fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct util_av *av;
 	void *addr;
@@ -895,6 +895,14 @@ int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	return 0;
 }
 
+bool ofi_ip_av_is_valid(struct fid_av *av_fid, fi_addr_t fi_addr)
+{
+	struct util_av *av =
+		container_of(av_fid, struct util_av, av_fid);
+
+	return ofi_bufpool_ibuf_is_valid(av->av_entry_pool, fi_addr);
+}
+
 int ofi_ip_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 		     void *addr, size_t *addrlen)
 {
@@ -918,8 +926,8 @@ ofi_ip_av_straddr(struct fid_av *av, const void *addr, char *buf, size_t *len)
 static struct fi_ops_av ip_av_ops = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = ofi_ip_av_insert,
-	.insertsvc = ip_av_insertsvc,
-	.insertsym = ip_av_insertsym,
+	.insertsvc = ofi_ip_av_insertsvc,
+	.insertsym = ofi_ip_av_insertsym,
 	.remove = ofi_ip_av_remove,
 	.lookup = ofi_ip_av_lookup,
 	.straddr = ofi_ip_av_straddr,
