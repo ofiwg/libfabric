@@ -564,7 +564,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 					mr_attr->mr_iov->iov_len,
 					(uint64_t)mr_attr->mr_iov->iov_base,
 					dmabuf_fd, access);
-		} else if (ret == -FI_ENOPROTOOPT) {
+		} else if (ret == -FI_EOPNOTSUPP) {
 			/* Protocol not availabe => fallback */
 			EFA_INFO(FI_LOG_MR,
 				"Unable to get dmabuf fd for Neuron device buffer, "
