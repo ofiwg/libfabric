@@ -209,7 +209,6 @@ void efa_rdm_pke_copy(struct efa_rdm_pke *dest,
 	dest->addr = src->addr;
 	dest->flags = EFA_RDM_PKE_IN_USE;
 	dest->next = NULL;
-	assert(dest->pkt_size > 0);
 	memcpy(dest->wiredata, src->wiredata + src_pkt_offset, dest->pkt_size);
 }
 
@@ -384,7 +383,6 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	}
 	for (pkt_idx = 0; pkt_idx < pkt_entry_cnt; ++pkt_idx) {
 		pkt_entry = pkt_entry_vec[pkt_idx];
-		assert(pkt_entry->pkt_size);
 		assert(efa_rdm_ep_get_peer(ep, pkt_entry->addr) == peer);
 
 		qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
@@ -640,7 +638,6 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->payload_size;
 			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->payload_mr)->ibv_mr->lkey;
 		} else {
-			assert(pke_vec[i]->pkt_size > 0);
 			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->pkt_size;
 			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
 			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
