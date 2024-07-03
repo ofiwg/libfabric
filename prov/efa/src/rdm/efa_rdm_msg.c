@@ -70,7 +70,7 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
 	hmem_info = efa_rdm_ep_domain(efa_rdm_ep)->hmem_info;
 
-	if (txe->fi_flags & FI_INJECT)
+	if (txe->fi_flags & FI_INJECT || efa_both_support_zero_hdr_data_transfer(efa_rdm_ep, txe->peer))
 		delivery_complete_requested = false;
 	else
 		delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
