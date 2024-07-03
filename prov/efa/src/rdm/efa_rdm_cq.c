@@ -298,7 +298,6 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	}
 
 	pkt_entry->pkt_size = ibv_wc_read_byte_len(ibv_cq_ex);
-	assert(pkt_entry->pkt_size > 0);
 	if (ibv_wc_read_wc_flags(ibv_cq_ex) & IBV_WC_WITH_IMM) {
 		has_imm_data = true;
 		imm_data = ibv_wc_read_imm_data(ibv_cq_ex);
