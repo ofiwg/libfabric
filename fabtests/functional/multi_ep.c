@@ -573,6 +573,30 @@ static int run_test(void)
 	if (ret)
 		goto out;
 
+	printf("Testing closing and re-registering all MRs and retesting\n");
+	for (i = 0; i < num_eps; i++) {
+		if (fi->domain_attr->mr_mode & FI_MR_RAW) {
+			ret = fi_mr_unmap_key(domain, peer_iovs[i].key);
+			if (ret)
+				goto out;
+		}
+
+		FT_CLOSE_FID(send_mrs[i]);
+		FT_CLOSE_FID(recv_mrs[i]);
+	}
+
+	ret = reg_mrs();
+	if (ret)
+		goto out;
+
+	ret = do_sends();
+	if (ret)
+		goto out;
+
+	ret = do_rma();
+	if (ret)
+		goto out;
+
 	ret = ft_finalize_ep(ep);
 out:
 	free_ep_res();
