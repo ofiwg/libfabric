@@ -250,7 +250,7 @@ static int efa_domain_hmem_info_init_neuron(struct efa_domain *efa_domain)
 		ibv_mr = ibv_reg_dmabuf_mr(
 					g_device_list[0].ibv_pd, offset,
 					len, (uint64_t)ptr, dmabuf_fd, ibv_access);
-	} else if (ret == -FI_ENOPROTOOPT) {
+	} else if (ret == -FI_EOPNOTSUPP) {
 		EFA_INFO(FI_LOG_MR,
 			"Unable to retrieve dmabuf fd of Neuron device buffer, "
 			"Fall back to ibv_reg_mr\n");
