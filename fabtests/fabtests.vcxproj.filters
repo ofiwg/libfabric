@@ -69,6 +69,9 @@
     <ClCompile Include="common\hmem_neuron.c">
       <Filter>Source Files\common</Filter>
     </ClCompile>
+    <ClCompile Include="common\hmem_synapseai.c">
+      <Filter>Source Files\common</Filter>
+    </ClCompile>
     <ClCompile Include="common\shared.c">
       <Filter>Source Files\common</Filter>
     </ClCompile>

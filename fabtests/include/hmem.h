@@ -199,6 +199,17 @@ int ft_neuron_memset(uint64_t device, void *buf, int value, size_t size);
 int ft_neuron_memcpy_to_hmem(uint64_t device, void *dst, const void *src, size_t size);
 int ft_neuron_memcpy_from_hmem(uint64_t device, void *dst, const void *src, size_t size);
 
+int ft_synapseai_init(void);
+int ft_synapseai_cleanup(void);
+int ft_synapseai_alloc(uint64_t device, void **buf, size_t size);
+int ft_synapseai_alloc_host(void **buf, size_t size);
+int ft_synapseai_free(void *buf);
+int ft_synapseai_free_host(void *buf);
+int ft_synapseai_memset(uint64_t device, void *buf, int value, size_t size);
+int ft_synapseai_copy_to_hmem(uint64_t device, void *dst, const void *src, size_t size);
+int ft_synapseai_copy_from_hmem(uint64_t device, void *dst, const void *src, size_t size);
+int ft_synapseai_get_dmabuf_fd(void *buf, size_t len, int *dmabuf_fd, uint64_t *dmabuf_offset);
+
 int ft_hmem_init(enum fi_hmem_iface iface);
 int ft_hmem_cleanup(enum fi_hmem_iface iface);
 int ft_hmem_alloc(enum fi_hmem_iface iface, uint64_t device, void **buf,

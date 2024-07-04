@@ -65,6 +65,18 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.copy_from_hmem = ft_host_memcpy,
 		.get_dmabuf_fd = ft_hmem_no_get_dmabuf_fd,
 	},
+	[FI_HMEM_SYNAPSEAI] = {
+		.init = ft_synapseai_init,
+		.cleanup = ft_synapseai_cleanup,
+		.alloc = ft_synapseai_alloc,
+		.alloc_host = ft_synapseai_alloc_host,
+		.free = ft_synapseai_free,
+		.free_host = ft_synapseai_free_host,
+		.mem_set = ft_synapseai_memset,
+		.copy_to_hmem = ft_synapseai_copy_to_hmem,
+		.copy_from_hmem = ft_synapseai_copy_from_hmem,
+		.get_dmabuf_fd = ft_synapseai_get_dmabuf_fd,
+	},
 	[FI_HMEM_CUDA] = {
 		.init = ft_cuda_init,
 		.cleanup = ft_cuda_cleanup,
