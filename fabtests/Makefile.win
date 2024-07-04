@@ -46,7 +46,7 @@ CFLAGS = $(CFLAGS) /O2 /MT
 basedeps = common\hmem.c common\shared.c \
 	common\windows\getopt.c common\windows\osd.c \
 	common\hmem_cuda.c common\hmem_rocr.c common\hmem_ze.c \
-	common\hmem_neuron.c
+	common\hmem_neuron.c common\hmem_synapseai.c
 
 includes = /Iinclude /Iinclude\windows /I..\include /FIft_osd.h \
 	/Iinclude\windows\getopt /Imultinode\include

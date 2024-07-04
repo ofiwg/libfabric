@@ -191,6 +191,26 @@ AC_ARG_WITH([neuron],
                              [AC_MSG_ERROR([<nrt/nrt.h> not found])])],
             [])
 
+dnl Check for SynapseAI support. Require fabtests to dlopen SynapseAI runtime.
+AC_ARG_WITH([synapseai],
+            [AS_HELP_STRING([--with-synapseai=DIR],
+                            [Enable SynapseAI build and fail if not found.
+                             Optional=<Path to where the SynapseAI libraries
+                             and headers are installed.>])],
+            [AS_IF([test "$freebsd" == "0"],
+                   [AC_CHECK_LIB(dl, dlopen, [], [AC_MSG_ERROR([dlopen not found.])])],
+                   [])
+             CPPFLAGS="-I$withval/include $CPPFLAGS"
+             AC_CHECK_HEADER([habanalabs/synapse_api.h],
+                        [AC_CHECK_HEADER([habanalabs/hlthunk.h],
+                              [AC_CHECK_HEADER([habanalabs/scal.h],
+                                    [AC_DEFINE([HAVE_SYNAPSEAI], [1], [Define to 1 if you have <synapse_api.h>, <hlthunk.h>, and <scal.h>])],
+                                    [AC_MSG_ERROR([<habanalabs/scal.h> not found])],
+                                    [-])],
+                              [AC_MSG_ERROR([<habanalabs/hlthunk.h> not found])])],
+                  [AC_MSG_ERROR([<habanalabs/synapse_api.h> not found])])],
+            [])
+
 dnl Checks for libraries
 AC_CHECK_LIB([fabric], fi_getinfo, [],
     AC_MSG_ERROR([fi_getinfo() not found.  fabtests requires libfabric.]))

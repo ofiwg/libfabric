@@ -225,6 +225,7 @@ libfabtests_la_SOURCES = \
 	common/hmem_rocr.c \
 	common/hmem_ze.c \
 	common/hmem_neuron.c \
+	common/hmem_synapseai.c \
 	include/shared.h \
 	include/ft_list.h \
 	include/hmem.h \

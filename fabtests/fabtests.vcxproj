@@ -198,6 +198,7 @@
     <ClCompile Include="common\hmem_rocr.c" />
     <ClCompile Include="common\hmem_ze.c" />
     <ClCompile Include="common\hmem_neuron.c" />
+    <ClCompile Include="common\hmem_synapseai.c" />
     <ClCompile Include="common\shared.c" />
     <ClCompile Include="common\windows\getopt.c" />
     <ClCompile Include="common\windows\osd.c" />
