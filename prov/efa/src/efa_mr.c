@@ -499,9 +499,20 @@ struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
 }
 
 #endif
+
 /**
  * @brief Register a memory buffer with rdma-core api.
- *
+ * - If the application requests FI_MR_DMABUF, we will always use
+ *   ibv_reg_dmabuf_mr
+ * - If the memory region is on system or CUDA device, we will always use
+ *   ibv_reg_mr
+ * - If the memory region is on Gaudi device, we will always use
+ *   ibv_reg_dmabuf_mr
+ * - If the memory region is on Neuron device, we will first attempt to
+ *   export the dmabuf fd: 1) if fd is available we will proceed to use
+ *   ibv_reg_dmabuf_mr, 2) if dmabuf fd is not supported then we will
+ *   fallback to ibv_reg_mr
+ * 
  * @param efa_mr the ptr to the efa_mr object
  * @param mr_attr the ptr to the fi_mr_attr object
  * @param access the desired memory protection attributes
@@ -509,78 +520,51 @@ struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
  * @return struct ibv_mr* the ptr to the registered MR
  */
 static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr,
-					int access, const uint64_t flags)
+                                        int access, const uint64_t flags)
 {
-	if (flags & FI_MR_DMABUF)
-		return efa_mr_reg_ibv_dmabuf_mr(
-			efa_mr->domain->ibv_pd,
-			mr_attr->dmabuf->offset,
-			mr_attr->dmabuf->len,
-			(uintptr_t) mr_attr->dmabuf->base_addr + mr_attr->dmabuf->offset,
-			mr_attr->dmabuf->fd,
-			access
-		);
+	int ret, dmabuf_fd;
+	uint64_t offset;
 
-	/*
-	 * TODO: remove the synapseai and neuron blocks by onboarding the
-	 * ofi_hmem_get_dmabuf_fd API.
-	 */
-#if HAVE_SYNAPSEAI
-	if (efa_mr_is_synapseai(efa_mr)) {
-		int dmabuf_fd;
-		uint64_t offset;
-		int ret;
-
-		ret = synapseai_get_dmabuf_fd(mr_attr->mr_iov->iov_base,
-						(uint64_t) mr_attr->mr_iov->iov_len,
-						&dmabuf_fd, &offset);
-		if (ret != FI_SUCCESS) {
-			EFA_WARN(FI_LOG_MR, "Unable to get dmabuf fd for Gaudi device buffer \n");
-			return NULL;
-		}
-		return efa_mr_reg_ibv_dmabuf_mr(efa_mr->domain->ibv_pd, offset,
-					mr_attr->mr_iov->iov_len,
-					(uint64_t)mr_attr->mr_iov->iov_base,
-					dmabuf_fd, access);
+	if (flags & FI_MR_DMABUF) {
+		return efa_mr_reg_ibv_dmabuf_mr(efa_mr->domain->ibv_pd,
+		                                mr_attr->dmabuf->offset,
+		                                mr_attr->dmabuf->len,
+		                                (uintptr_t) mr_attr->dmabuf->base_addr + mr_attr->dmabuf->offset,
+		                                mr_attr->dmabuf->fd, access);
 	}
-#endif
 
-#if HAVE_NEURON
-	if (efa_mr_is_neuron(efa_mr)) {
-		int dmabuf_fd;
-		uint64_t offset;
-		int ret;
+	if (!efa_mr_is_hmem(efa_mr) || efa_mr_is_cuda(efa_mr)) {
+		return ibv_reg_mr(efa_mr->domain->ibv_pd,
+		                  (void *) mr_attr->mr_iov->iov_base,
+		                  mr_attr->mr_iov->iov_len, access);
+	}
 
-		ret = neuron_get_dmabuf_fd(
-				mr_attr->mr_iov->iov_base,
-				mr_attr->mr_iov->iov_len,
-				&dmabuf_fd,
-				&offset);
+	ret = ofi_hmem_get_dmabuf_fd(mr_attr->iface, mr_attr->mr_iov->iov_base,
+	                             mr_attr->mr_iov->iov_len, &dmabuf_fd,
+	                             &offset);
 
-		if (ret == FI_SUCCESS) {
-			/* Success => invoke ibv_reg_dmabuf_mr */
-			return efa_mr_reg_ibv_dmabuf_mr(
-					efa_mr->domain->ibv_pd, 0,
-					mr_attr->mr_iov->iov_len,
-					(uint64_t)mr_attr->mr_iov->iov_base,
-					dmabuf_fd, access);
-		} else if (ret == -FI_EOPNOTSUPP) {
-			/* Protocol not availabe => fallback */
-			EFA_INFO(FI_LOG_MR,
-				"Unable to get dmabuf fd for Neuron device buffer, "
-				"Fall back to ibv_reg_mr\n");
-			return ibv_reg_mr(
-				efa_mr->domain->ibv_pd,
-				(void *)mr_attr->mr_iov->iov_base,
-				mr_attr->mr_iov->iov_len, access);
+	if (ret != FI_SUCCESS) {
+		EFA_WARN(FI_LOG_MR,
+		         "Unable to get dmabuf fd for device buffer. "
+		         "iface: %s errno: %d, err_msg: %s\n",
+		         fi_tostr(&mr_attr->iface, FI_TYPE_HMEM_IFACE), ret,
+		         fi_strerror(-ret));
+		if (ret == -FI_EOPNOTSUPP && efa_mr_is_neuron(efa_mr)) {
+			return ibv_reg_mr(efa_mr->domain->ibv_pd,
+			                  (void *) mr_attr->mr_iov->iov_base,
+			                  mr_attr->mr_iov->iov_len, access);
 		}
 		return NULL;
 	}
-#endif
 
-	return ibv_reg_mr(efa_mr->domain->ibv_pd,
-			(void *)mr_attr->mr_iov->iov_base,
-			mr_attr->mr_iov->iov_len, access);
+	EFA_INFO(FI_LOG_MR,
+	         "Registering dmabuf mr with fd: %d, offset: %lu, len: %zu\n",
+	         dmabuf_fd, offset, mr_attr->mr_iov->iov_len);
+
+	return efa_mr_reg_ibv_dmabuf_mr(efa_mr->domain->ibv_pd, offset,
+	                                mr_attr->mr_iov->iov_len,
+	                                (uint64_t) mr_attr->mr_iov->iov_base,
+	                                dmabuf_fd, access);
 }
 
 #if HAVE_CUDA

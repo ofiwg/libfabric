@@ -234,6 +234,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AM_CONDITIONAL([HAVE_EFADV_CQ_EX], [ test $efadv_support_extended_cq = 1])
 	AM_CONDITIONAL([HAVE_EFADV_QUERY_MR], [ test $have_efadv_query_mr = 1])
 	AM_CONDITIONAL([HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES], [ test $efa_support_data_in_order_aligned_128_byte = 1])
+	AM_CONDITIONAL([HAVE_EFA_DMABUF_MR], [ test $have_efa_dmabuf_mr = 1])
 	AM_CONDITIONAL([ENABLE_EFA_UNIT_TEST], [ test x"$enable_efa_unit_test" != xno])
 
 	AC_SUBST(efa_CPPFLAGS)
