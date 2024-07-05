@@ -156,15 +156,14 @@ prov_efa_test_efa_unit_test_LDFLAGS = $(cmocka_rpath) $(efa_LDFLAGS) $(cmocka_LD
 					-Wl,--wrap=ibv_create_ah \
 					-Wl,--wrap=ibv_is_fork_initialized \
 					-Wl,--wrap=efadv_query_device \
+					-Wl,--wrap=ibv_reg_mr \
+					-Wl,--wrap=ibv_reg_mr_iova2 \
+					-Wl,--wrap=ibv_dereg_mr \
 					-Wl,--wrap=ofi_copy_from_hmem_iov
 
 if HAVE_EFADV_CQ_EX
 prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=efadv_create_cq
 endif HAVE_EFADV_CQ_EX
-
-if HAVE_NEURON
-prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=neuron_alloc
-endif HAVE_NEURON
 
 if HAVE_EFADV_QUERY_MR
 prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=efadv_query_mr
@@ -173,6 +172,10 @@ endif HAVE_EFADV_QUERY_MR
 if HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES
 prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=ibv_query_qp_data_in_order
 endif
+
+if HAVE_EFA_DMABUF_MR
+prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=ibv_reg_dmabuf_mr
+endif HAVE_EFA_DMABUF_MR
 
 prov_efa_test_efa_unit_test_LIBS = $(efa_LIBS) $(linkback)
 

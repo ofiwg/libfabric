@@ -37,6 +37,7 @@ struct efa_env efa_env = {
 	.host_id_file = "/sys/devices/virtual/dmi/id/board_asset_tag", /* Available on EC2 instances and containers */
 	.use_sm2 = false,
 	.huge_page_setting = EFA_ENV_HUGE_PAGE_UNSPEC,
+	.p2p_file_suffix= "/device/p2p",
 };
 
 /**
