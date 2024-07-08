@@ -382,6 +382,7 @@ int ft_ze_free(void *buf)
 
 int ft_ze_memset(uint64_t device, void *buf, int value, size_t size)
 {
+	unsigned char set_value = (unsigned char) value;
 	ze_result_t ze_ret;
 
 	ze_ret = (*libze_ops.zeCommandListReset)(cmd_list);
@@ -389,7 +390,8 @@ int ft_ze_memset(uint64_t device, void *buf, int value, size_t size)
 		return -FI_EINVAL;
 
 	ze_ret = (*libze_ops.zeCommandListAppendMemoryFill)(
-					cmd_list, buf, &value, sizeof(value),
+					cmd_list, buf, &set_value,
+					sizeof(set_value),
 					size, NULL, 0, NULL);
 	if (ze_ret)
 		return -FI_EINVAL;
