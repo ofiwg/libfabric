@@ -4,6 +4,7 @@ import pytest
 import copy
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("operation_type", ["read", "writedata", "write"])
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
@@ -15,6 +16,7 @@ def test_rma_bw(cmdline_args, iteration_type, operation_type, completion_semanti
     timeout = max(540, cmdline_args.timeout)
     efa_run_client_server_test(cmdline_args, command, iteration_type, completion_semantic, memory_type, "all", timeout=timeout)
 
+@pytest.mark.serial
 @pytest.mark.parametrize("operation_type", ["read", "writedata", "write"])
 @pytest.mark.parametrize("env_vars", [["FI_EFA_TX_SIZE=64"], ["FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=64", "FI_EFA_RX_SIZE=64"]])
 def test_rma_bw_small_tx_rx(cmdline_args, operation_type, completion_semantic, memory_type, env_vars):
@@ -28,6 +30,7 @@ def test_rma_bw_small_tx_rx(cmdline_args, operation_type, completion_semantic, m
     timeout = max(540, cmdline_args_copy.timeout)
     efa_run_client_server_test(cmdline_args_copy, command, "short", completion_semantic, memory_type, "all", timeout=timeout)
 
+@pytest.mark.serial
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["read", "writedata", "write"])
 def test_rma_bw_range(cmdline_args, operation_type, completion_semantic, message_size, memory_type):
@@ -38,6 +41,7 @@ def test_rma_bw_range(cmdline_args, operation_type, completion_semantic, message
     efa_run_client_server_test(cmdline_args, command, "short", completion_semantic, memory_type, message_size, timeout=timeout)
 
 
+@pytest.mark.serial
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["read", "writedata", "write"])
 def test_rma_bw_range_no_inject(cmdline_args, operation_type, completion_semantic, inject_message_size):
