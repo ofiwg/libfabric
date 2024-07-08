@@ -185,6 +185,10 @@ int ft_hmem_free_host(enum fi_hmem_iface iface, void *buf)
 	return hmem_ops[iface].free_host(buf);
 }
 
+/*
+ * Matches the behavior of memset where value is an int but
+ * used as a unsigned char
+ */
 int ft_hmem_memset(enum fi_hmem_iface iface, uint64_t device, void *buf,
 		   int value, size_t size)
 {
