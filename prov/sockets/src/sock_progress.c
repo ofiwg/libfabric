@@ -1486,7 +1486,7 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 	struct sock_conn_map *map;
 	union ofi_sock_ip *addr;
 	struct sock_conn *conn;
-	uint64_t index;
+	int index;
 
 	if (!pe_entry->comm_addr) {
 		pe_entry->comm_addr = calloc(1, sizeof(union ofi_sock_ip));
@@ -1506,11 +1506,11 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 	pe_entry->conn->addr = *addr;
 
 	index = (ep_attr->ep_type == FI_EP_MSG) ? 0 : sock_av_get_addr_index(ep_attr->av, addr);
-	if (index != -1) {
+	if (index >= 0) {
 		ofi_mutex_lock(&map->lock);
-		conn = sock_ep_lookup_conn(ep_attr, index, addr);
+		conn = sock_ep_lookup_conn(ep_attr, (fi_addr_t)index, addr);
 		if (conn == NULL || conn == SOCK_CM_CONN_IN_PROGRESS) {
-			if (ofi_idm_set(&ep_attr->av_idm, (int) index, pe_entry->conn) < 0)
+			if (ofi_idm_set(&ep_attr->av_idm, index, pe_entry->conn) < 0)
 				SOCK_LOG_ERROR("ofi_idm_set failed\n");
 		}
 		ofi_mutex_unlock(&map->lock);
