@@ -84,7 +84,7 @@ extern "C" {
 #endif
 
 #define FI_MAJOR_VERSION 1
-#define FI_MINOR_VERSION 21
+#define FI_MINOR_VERSION 22
 #define FI_REVISION_VERSION 0
 
 enum {

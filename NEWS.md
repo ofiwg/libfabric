@@ -6,40 +6,22 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v1.21.0, Fri Mar 22, 2024
+v1.22.0, Fri Jul 26, 2024
 ========================
 
 ## Core
 
-## BGQ
-
-Removed.
-
 ## CXI
-
-New provider supporting Cray's Slingshot network.
 
 ## EFA
 
-## GNI
-
-Removed.
-
 ## Hooks
-
-# NETDIR
-
-Removed. The functionality is intergrated into the verbs provider.
 
 ## OPX
 
 ## Peer
 
 ## PSM3
-
-## RSTREAM
-
-Removed.
 
 ## RXM
 
@@ -53,8 +35,234 @@ Removed.
 
 ## Verbs
 
+## Fabtests
+
+
+v1.21.0, Fri Mar 22, 2024
+========================
+
+## Core
+
+- Various update and fixed in man pages
+- Fix xpmem memory corruption
+- Extend FI_PROVIDER_PATH to allow setting preferred DL provider
+- Add a SECURITY.md file
+- Document preferred threading model for scalable endpoints
+- Move FI_PRIORITY to internal flag
+- Remove FI_PROV_SPECIFIC
+- Remove unimplemented or unused features
+- Support cntr byte counting
+- configure: Do not check for xpmem if disabled
+- Add FI_PROGRESS_CONTROL_UNIFIED
+- hmem/cuda: Get multiple attributes at once in cuda_is_addr_valid
+- configure: Add -pipe by default to CFLAGS
+- Selectively generate warnings on failed loading of DL providers
+- hmem: introduce ofi_dev_reg_copy_*_iov ops
+- Print provider path on fabric creation
+- Introduce FI_OPT_SHARED_MEMORY_PERMITTED
+- README.md: Add badge for openssf scorecard
+- man: Regulate the fi_setopt call sequence.
+- man: Clarify the usage of FI_RMOTE_CQ_DATA flag
+- man: Add ucx provider to the fi_provider man page
+- configure.ac: add extra check for 128 bit atomic support
+- include/osd: align atomic complex definitions
+- hmem/synapseai: Refine the error handling and warning
+- Specify C11 standard for Visual Studio builds
+
+## BGQ
+
+Removed.
+
+## CXI
+
+New provider supporting Cray's Slingshot network.
+
+## EFA
+
+- General improvement and bug fixes
+- Propagate errnos from core functions untouched
+- Create 1:1 relationship between libfabric CQs and IBV CQs
+- Do not progress ep inside transmission call when hitting EAGAIN
+- Remove unnecessary check in rdma write.
+- Handle rx pkts error without ope
+- Add a new rx pkt counter
+- Enable runting for neuron with a different runt size
+- Distinguish unresponsive receiver errors
+- Remove unnecessary handshake in send path
+- Don't fail the whole domain init if cudamalloc failed
+- Introduce efa specific domain operations
+- Implement FI_OPT_SHARED_MEMORY_PERMITTED
+- Do not memset rxe to 0 on init
+- Reduce # of error cases in happy path
+- Add FI_EFA_USE_HUGE_PAGE to efa man page.
+- Don't do handshake for local fi_write
+- Add pingpong test after exhausting MRs
+- Introduce utilities to exhaust MRs on EFA device
+- Test EFA with a 1GiB message
+- Do not abort on all deprecated env vars
+- Onboard fi_mr_dmabuf API in mem reg ops.
+- Try registering cuda memory via dmabuf when checking p2p
+- Introduce HAVE_EFA_DMABUF_MR macro in configure
+- Use long CTS protocol if long read and runting read protocols fail
+  because of memory registration limits
+
+## GNI
+
+Removed.
+
+## Hooks
+
+- dmabuf_peer_mem: initialize fd to supress compiler warning
+
+## NETDIR
+
+Removed. The functionality is intergrated into the verbs provider.
+
+## OPX
+
+- Fix compiler warnings and coverity issues
+- General improvement and bug fixes
+- Add GPU support to expected TID
+- RZV RTS packet exclude empty immediate data
+- Add more efficient check for cuda-resident user buffer
+- Improve default HFI selection logic in multi rail environments
+- Flush dead list opportunistically
+- Add RISC-V support
+- Make update HDRQ register frequency configurable at build time
+- Removed all references to the reliability nack threshold env var
+- Added missing tuneables, rearraged to match fi_info -e output
+- Use BAR load/store macros
+- Check HFI driver version to allow GPU-enabled build/run
+- Added kernel and driver version check to allow/disallow expected receive TID
+- Fix max SHM connections to allow up to 16 HFIs
+- Use FI_HMEM_SYSTEM for Cuda-Managed (Unified) memory
+- Handle FI_OPT_CUDA_API_PERMITTED
+- Use contiguous send when only one iov present
+- Always replay TID packets over SDMA
+- Add Virtual Lane and Partition pkey (FI_OPX_SL and FI_OPX_PKEY)
+- Forced AV type to be AV Map when requested AV is unsupported
+- Reduce size of opx_shm_tx
+- Add GPU support for RMA Atomic operations
+- Add GPU support for RMA reads and writes
+- Add HMEM debug counters
+- Print debug counters upon receiving SIGUSR1
+- Fix multi-receive to work with contiguous rzv payload
+- Initial support for GPU / FI_HMEM
+- Limit multipacket eager implementation to tagged sends
+- Read, verify and store some hfi chip attributes
+
+## PSM3
+
+- Update provider to sync with IEFS 11.6.0.0.231
+- Fix some conditional build errors
+
+## RSTREAM
+
+Removed.
+
+## RXM
+
+- Add option to auto detect hmem iface of user buffers
+
+## SHM
+
+- Manually align 8 byte fields in memory region
+- Close device_fds for connected peers when the EP is closed
+- Print shm name and error code when failed to open
+- Mark send as completed when a message is discarded
+- Don't close dmabuf-fd when a request is done
+- Revert the smr_region fields adjustment
+- Fix various coverity issues
+- Add ep to cq ep list once in cq bind
+- Add ofi_buf_alloc error handling
+
+## SOCKETS
+
+- fix compiler warnings and coverity issues
+
+## UCX
+
+- Fix incorrect enum value in FI_DBG() and FI_WARN()
+
+## USNIC
+
+- Turn off compiler warnings of possible string truncation
+
+## Util
+
+- Make ep_list_lock noop for FI_PROGRESS_CONTROL_UNIFIED
+- Save control progress model to util_domain
+- Set import monitor state to idle upon close
+- Add name field to memory monitors
+- memhooks: Fix a bug when calculating mprotect region
+- Modify domain_attr based on FI_AV_AUTH_KEY
+
+## Verbs
+
+- Non-blocking EP creation
+- Address cm_id resource leak in rdma_reject path
+- Redirected error handle logic for dmabuf failure in verbs
+- Added rocr dmabuf support under verbs
+- Windows: Check error code from GetPrivateData
+- Add missing lock to protect SRX
+- Fix compiler warnings about out of boundary access
 
 ## Fabtests
+
+- Fix various coverity issues
+- General improvement and bug fixes
+- Add multi_ep test
+- Serialize the run of fi_cq_test
+- Utilize `junitparser` module directly
+- Add progress models to SHM/EFA fabtests
+- Add option to change progress model
+- efa/rnr_cq_read_err: poll cq when hitting EAGAIN
+- Allow testing multi_ep with shared/non-shared cq and av
+- Print warning for HMEM iface init failure
+- efa: Add small tx_rx size test
+- pytest: Make ssh connection error pattern less stringent
+- Add new exclude file for io_uring tests
+- Add rma_pingpong benchmark
+- efa: Make 1G tests run faster
+- pytests: add command line argument for dmabuf reg
+- Bump Libfabric API version.
+- Add option to support dmabuf MR
+- Add dmabuf ops for cuda.
+
+
+v1.20.2, Fri March 29, 2024
+========================
+
+## Core
+
+- configure: Do not check for xpmem if disabled
+- man page fixes
+
+## EFA
+
+- Remove unnecessary check in rdma write.
+- Enable runting for neuron with a different runt size
+- Handle rx pkts error without ope
+- Distinguish unresponsive receiver errors
+- Add `efa_show_help()`
+- Refactor error code definitions
+- Remove error message assertions from CQ unit tests
+- Refactor `efa_strerror()`
+- Doxyfile: Configure tabs to 8 spaces
+- Rename Doxyfile
+
+## SHM
+
+- Revert the smr_region fields adjustment
+- Don't close dmabuf-fd when a request is done
+- Mark send as completed when a message is discarded
+- Print shm name and error code when failed to open
+- Close device_fds for connected peers when the EP is closed
+
+## Fabtests
+
+- Replace strtok with strtok_r
+- Add new exclude file for io_uring tests
 
 
 v1.20.1, Mon Jan 22, 2024
