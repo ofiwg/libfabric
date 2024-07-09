@@ -245,6 +245,7 @@ void test_efa_synapseai_dmabuf_support_fd_fail_no_fallback();
  */
 void test_efa_cuda_dmabuf_support_require_dmabuf_fail_no_fallback();
 void test_efa_neuron_dmabuf_support_require_dmabuf_fail_no_fallback();
+void test_efa_mr_reg_counters();
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)

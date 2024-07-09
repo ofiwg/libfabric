@@ -397,14 +397,21 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 	struct efa_domain *efa_domain;
 	int ret = 0;
 	int err;
+	size_t ibv_mr_size;
 
 	efa_domain = efa_mr->domain;
 	if (efa_mr->ibv_mr) {
+		ibv_mr_size = efa_mr->ibv_mr->length;
 		err = -ibv_dereg_mr(efa_mr->ibv_mr);
 		if (err) {
 			EFA_WARN(FI_LOG_MR,
 				"Unable to deregister memory registration\n");
 			ret = err;
+		} else {
+			efa_mr->domain->ibv_mr_reg_ct--;
+			efa_mr->domain->ibv_mr_reg_sz -= ibv_mr_size;
+			EFA_INFO(FI_LOG_MR, "Deregistered memory of size %zu for ibv pd %p, total mr reg size %zu, mr reg count %zu\n",
+				 efa_mr->ibv_mr->length, efa_mr->domain->ibv_pd, efa_mr->domain->ibv_mr_reg_sz, efa_mr->domain->ibv_mr_reg_ct);
 		}
 	}
 
@@ -829,16 +836,21 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	} else {
 		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(efa_mr, &mr_attr, fi_ibv_access, flags);
 		if (!efa_mr->ibv_mr) {
-			EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
-					fi_strerror(-errno));
+			EFA_WARN(FI_LOG_MR, "Unable to register MR of %zu bytes: %s, ibv pd: %p, total mr reg size %zu, mr reg count %zu\n",
+				 (flags & FI_MR_DMABUF) ? mr_attr.dmabuf->len : mr_attr.mr_iov->iov_len, fi_strerror(-errno), efa_mr->domain->ibv_pd,
+				 efa_mr->domain->ibv_mr_reg_sz, efa_mr->domain->ibv_mr_reg_ct);
 			if (efa_mr->peer.iface == FI_HMEM_CUDA &&
 			    (efa_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
-					assert(efa_mr->peer.hmem_data);
-					ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_mr->peer.hmem_data);
-				}
+				assert(efa_mr->peer.hmem_data);
+				ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_mr->peer.hmem_data);
+			}
 
 			return -errno;
 		}
+		efa_mr->domain->ibv_mr_reg_ct++;
+		efa_mr->domain->ibv_mr_reg_sz += efa_mr->ibv_mr->length;
+		EFA_INFO(FI_LOG_MR, "Registered memory of size %zu for ibv pd %p, total mr reg size %zu, mr reg count %zu\n",
+			 efa_mr->ibv_mr->length, efa_mr->domain->ibv_pd, efa_mr->domain->ibv_mr_reg_sz, efa_mr->domain->ibv_mr_reg_ct);
 		efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	}
 	efa_mr->mr_fid.mem_desc = efa_mr;

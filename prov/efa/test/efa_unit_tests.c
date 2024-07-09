@@ -196,6 +196,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_neuron_dmabuf_support_mr_fail_no_fallback, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_neuron_dmabuf_support_require_dmabuf_fail_no_fallback, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_synapseai_dmabuf_support_fd_fail_no_fallback, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_mr_reg_counters, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);
