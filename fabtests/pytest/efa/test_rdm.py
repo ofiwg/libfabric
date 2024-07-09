@@ -109,3 +109,13 @@ def test_rdm_pingpong_1G(cmdline_args, completion_semantic):
     efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong -W 1", 2,
                                completion_semantic=completion_semantic, message_size=1073741824,
                                memory_type="host_to_host", warmup_iteration_type=0)
+
+@pytest.mark.functional
+def test_rdm_pingpong_zcpy_recv(cmdline_args, memory_type, message_size):
+    efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong --max-msg-size 8192",
+                               "short", "transmit_complete", memory_type, message_size)
+
+@pytest.mark.functional
+def test_rdm_bw_zcpy_recv(cmdline_args, memory_type, message_size):
+    efa_run_client_server_test(cmdline_args, "fi_rdm_bw --max-msg-size 8192",
+                               "short", "transmit_complete", memory_type, message_size)
