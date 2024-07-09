@@ -109,3 +109,17 @@ def test_rdm_pingpong_1G(cmdline_args, completion_semantic):
     efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong -W 1", 2,
                                completion_semantic=completion_semantic, message_size=1073741824,
                                memory_type="host_to_host", warmup_iteration_type=0)
+
+@pytest.mark.functional
+def test_rdm_pingpong_zcpy_recv(cmdline_args, memory_type, zcpy_recv_max_msg_size, zcpy_recv_message_size):
+    if cmdline_args.server_id == cmdline_args.client_id:
+        pytest.skip("no zero copy recv for intra-node communication")
+    efa_run_client_server_test(cmdline_args, f"fi_rdm_pingpong --max-msg-size {zcpy_recv_max_msg_size}",
+                               "short", "transmit_complete", memory_type, zcpy_recv_message_size)
+
+@pytest.mark.functional
+def test_rdm_bw_zcpy_recv(cmdline_args, memory_type, zcpy_recv_max_msg_size, zcpy_recv_message_size):
+    if cmdline_args.server_id == cmdline_args.client_id:
+        pytest.skip("no zero copy recv for intra-node communication")
+    efa_run_client_server_test(cmdline_args, f"fi_rdm_bw --max-msg-size {zcpy_recv_max_msg_size}",
+                               "short", "transmit_complete", memory_type, zcpy_recv_message_size)
