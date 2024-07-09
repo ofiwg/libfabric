@@ -28,6 +28,10 @@ struct efa_domain {
 	bool 			mr_local;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
 	struct ofi_genlock	srx_lock; /* shared among peer providers */
+	/* Total count of ibv memory registrations */
+	size_t ibv_mr_reg_ct;
+	/* Total size of memory registrations (in bytes) */
+	size_t ibv_mr_reg_sz;
 
 	/* Only valid for RDM EP type */
 	uint64_t		rdm_mode;

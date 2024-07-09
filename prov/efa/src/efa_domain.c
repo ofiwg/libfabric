@@ -201,6 +201,9 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_free;
 	}
 
+	efa_domain->ibv_mr_reg_ct = 0;
+	efa_domain->ibv_mr_reg_sz = 0;
+
 	err = ofi_genlock_init(&efa_domain->srx_lock, efa_domain->util_domain.threading != FI_THREAD_SAFE ?
 			       OFI_LOCK_NOOP : OFI_LOCK_MUTEX);
 	if (err) {
