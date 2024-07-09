@@ -182,19 +182,21 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 		goto unlock;
 	}
 
-	if (!ep->sq_credits || !ep->peer_rq_credits) {
-		cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
+	if (!ep->sq_credits) {
+		cq = container_of(ep->util_ep.tx_cq, struct vrb_cq, util_cq);
 		vrb_flush_cq(cq);
 
-		if (!ep->sq_credits || !ep->peer_rq_credits)
+		if (!ep->sq_credits)
 			goto freectx;
 	}
 
-	if (vrb_wr_consumes_recv(wr) && !--ep->peer_rq_credits &&
-	    !(flags & OFI_PRIORITY)) {
+	if (vrb_wr_consumes_recv(wr)) {
+		if  (!ep->peer_rq_credits || 
+		     (ep->peer_rq_credits == 1 && !(flags & OFI_PRIORITY)))
 		/* Last credit is reserved for credit update */
-		ep->peer_rq_credits++;
-		goto freectx;
+			goto freectx;
+
+		ep->peer_rq_credits--;
 	}
 
 	ep->sq_credits--;
