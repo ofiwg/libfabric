@@ -624,6 +624,7 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct sock_fid_list *list_entry;
 	struct sock_wait *wait;
 	int ret;
+	ssize_t retsize;
 
 	sock_dom = container_of(domain, struct sock_domain, dom_fid);
 	ret = sock_cq_verify_attr(attr);
@@ -650,7 +651,13 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	}
 
 	sock_cq->domain = sock_dom;
-	sock_cq->cq_entry_size = sock_cq_entry_size(sock_cq);
+	retsize = sock_cq_entry_size(sock_cq);
+	if (retsize < 0) {
+		ret = (int) retsize;
+		goto err1;
+	}
+
+	sock_cq->cq_entry_size = retsize;
 	sock_cq_set_report_fn(sock_cq);
 
 	dlist_init(&sock_cq->tx_list);
