@@ -1,9 +1,8 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
+#include "efa.h"
 #include "efa_errno.h"
-
-#include <stdio.h>
 
 #define IO_COMP_STATUS_MESSAGES(code, suffix, ...)	[EFA_IO_COMP_STATUS_##suffix] = #__VA_ARGS__,
 #define PROV_ERRNO_MESSAGES(code, suffix, ...)		[FI_EFA_ERR_##suffix - EFA_PROV_ERRNO_START] = #__VA_ARGS__,
@@ -87,5 +86,5 @@ void efa_show_help(enum efa_errno err) {
 	default:
 		return;
 	}
-	fprintf(stderr, "%s\n", help);
+	EFA_WARN(FI_LOG_CQ, "%s\n", help);
 }
