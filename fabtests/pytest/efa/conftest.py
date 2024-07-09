@@ -26,6 +26,16 @@ def message_size(request):
 def inject_message_size(request):
     return request.param
 
+
+@pytest.fixture(scope="module", params=["r:0,4,32",
+                                        "r:0,1024,8192",])
+def zcpy_recv_message_size(request):
+    return request.param
+
+@pytest.fixture(scope="module")
+def zcpy_recv_max_msg_size(request):
+    return 8192
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_collection_modifyitems(session, config, items):
     # Called after collection has been performed, may filter or re-order the items in-place
