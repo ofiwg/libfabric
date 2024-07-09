@@ -342,6 +342,7 @@ void test_efa_rdm_read_copy_pkt_pool_128_alignment(struct efa_resource **state)
 		efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->rx_readcopy_pkt_pool,
 				  EFA_RDM_PKE_FROM_READ_COPY_POOL);
 	assert_non_null(pkt_entry);
+	efa_rdm_ep->rx_readcopy_pkt_pool_used++;
 	assert(ofi_is_addr_aligned((void *) pkt_entry->wiredata,
 				   EFA_RDM_IN_ORDER_ALIGNMENT));
 	efa_rdm_pke_release_rx(pkt_entry);
