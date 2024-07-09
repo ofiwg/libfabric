@@ -6,7 +6,7 @@
 
 #include <assert.h>
 #include <stdint.h>
-#include "efa_rdm_protocol.h"
+#include "efa_rdm_peer.h"
 
 /**
  * @brief information of a REQ packet type

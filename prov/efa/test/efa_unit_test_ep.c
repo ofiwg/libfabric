@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
-#include "efa_rdm_pke_utils.h"
 #include "efa_unit_tests.h"
 #include "rdm/efa_rdm_cq.h"
+#include "efa_rdm_pke_utils.h"
 
 /**
  * @brief Verify the EFA RDM endpoint correctly parses the host id string
