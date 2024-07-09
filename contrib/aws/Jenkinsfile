@@ -75,6 +75,7 @@ pipeline {
 
                     // Multi Node Tests - EFA
                     stages["2_hpc6a_alinux2_efa"] = common.get_test_stage("2_hpc6a_alinux2_efa", env.BUILD_TAG, "alinux2", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", addl_args_pr)
+                    stages["2_c6gn_alinux2_efa"] = common.get_test_stage("2_c6gn_alinux2_efa", env.BUILD_TAG, "alinux2", "c6gn.16xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", addl_args_pr)
                     stages["2_c5n_alinux2_efa"] = common.get_test_stage("2_c5n_alinux2_efa", env.BUILD_TAG, "alinux2", "c5n.18xlarge", 2, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr)
                     stages["2_hpc6a_ubuntu2004_efa"] = common.get_test_stage("2_hpc6a_ubuntu2004_efa", env.BUILD_TAG, "ubuntu2004", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", addl_args_pr)
                     stages["2_hpc6a_rhel8_efa"] = common.get_test_stage("2_hpc6a_rhel8_efa", env.BUILD_TAG, "rhel8", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", addl_args_pr)
