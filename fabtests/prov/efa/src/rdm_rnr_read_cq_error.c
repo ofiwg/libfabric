@@ -93,9 +93,9 @@ static int rnr_read_cq_error(void)
 								     comp_err.err_data,
 								     comp_err.buf,
 								     comp_err.len);
-					if (strstr(prov_errmsg, "Receiver not ready") == NULL) {
+					if (strstr(prov_errmsg, "Destination resource not ready") == NULL) {
 						printf("Got unexpected provider error message.\n");
-						printf("    Expected error message to have \"Receiver not ready\" in it\n");
+						printf("    Expected error message to have \"Destination resource not ready\" in it\n");
 						printf("    Got: %s\n", prov_errmsg);
 						return -FI_EINVAL;
 					}

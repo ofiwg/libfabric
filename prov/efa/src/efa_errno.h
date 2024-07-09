@@ -55,22 +55,22 @@
  * These status codes correspond directly to the `efa_io_comp_status` codes
  * defined by the RDMA Core EFA provider.
  */
-#define EFA_IO_COMP_STATUSES(_)									\
-	_(0,	OK,				Success)					\
-	_(1,	FLUSHED,			Flushed during queue pair destroy)		\
-	_(2,	LOCAL_ERROR_QP_INTERNAL_ERROR,	Internal queue pair error)			\
-	_(3,	LOCAL_ERROR_INVALID_OP_TYPE,	Invalid operation type)				\
-	_(4,	LOCAL_ERROR_INVALID_AH,		Invalid address handle (local))			\
-	_(5,	LOCAL_ERROR_INVALID_LKEY,	Invalid local key (LKEY))			\
-	_(6,	LOCAL_ERROR_BAD_LENGTH,		Message too long)				\
-	_(7,	REMOTE_ERROR_BAD_ADDRESS,	RKEY not registered or does not match remote IOVA)	\
-	_(8,	REMOTE_ERROR_ABORT,		Receiver connection aborted)			\
-	_(9,	REMOTE_ERROR_BAD_DEST_QPN,	Invalid receiver queue pair number (QPN))	\
-	_(10,	REMOTE_ERROR_RNR,		Receiver not ready)				\
-	_(11,	REMOTE_ERROR_BAD_LENGTH,	Receiver scatter-gather list (SGL) too short)	\
-	_(12,	REMOTE_ERROR_BAD_STATUS,	Unexpected status received from remote)		\
-	_(13,	LOCAL_ERROR_UNRESP_REMOTE,	Unresponsive receiver (connection never established or unknown))	\
-	_(14,	REMOTE_ERROR_UNKNOWN_PEER,	Invalid address handle on remote)
+#define EFA_IO_COMP_STATUSES(_)													\
+	_(0,	OK,				Success)									\
+	_(1,	FLUSHED,			Flushed during queue pair destroy)						\
+	_(2,	LOCAL_ERROR_QP_INTERNAL_ERROR,	Internal queue pair error (local))						\
+	_(3,	LOCAL_ERROR_UNSUPPORTED_OP,	Unsupported operation type)							\
+	_(4,	LOCAL_ERROR_INVALID_AH,		Invalid address handle (local))							\
+	_(5,	LOCAL_ERROR_INVALID_LKEY,	Local key (LKEY) invalid or does not match IOVA)				\
+	_(6,	LOCAL_ERROR_BAD_LENGTH,		Message too long)								\
+	_(7,	REMOTE_ERROR_BAD_ADDRESS,	Remote key (RKEY) not registered or does not match remote IOVA)			\
+	_(8,	REMOTE_ERROR_ABORT,		Connection was reset by remote peer)						\
+	_(9,	REMOTE_ERROR_BAD_DEST_QPN,	Bad queue pair (QP) number (QP does not exist or is in error state))		\
+	_(10,	REMOTE_ERROR_RNR,		Destination resource not ready (no work queue entries posted on receive queue))	\
+	_(11,	REMOTE_ERROR_BAD_LENGTH,	Remote scatter-gather list too short)						\
+	_(12,	REMOTE_ERROR_BAD_STATUS,	Unexpected status returned by responder)					\
+	_(13,	LOCAL_ERROR_UNRESP_REMOTE,	Unresponsive remote (detected locally))						\
+	_(14,	REMOTE_ERROR_UNKNOWN_PEER,	No valid address handle at remote side (required for RDMA operations))
 
 /**
  * @brief EFA provider proprietary error codes
@@ -152,7 +152,7 @@ static inline int to_fi_errno(enum efa_errno err) {
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_QP_INTERNAL_ERROR:
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_AH:
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY:
-	case EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_OP_TYPE:
+	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNSUPPORTED_OP:
 	case EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS:
 		return FI_EINVAL;
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE:
