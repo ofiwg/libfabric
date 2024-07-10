@@ -2674,7 +2674,9 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 				 const unsigned override_flags, uint64_t tx_op_flags,
 				 const uint64_t dest_rx, const uintptr_t origin_byte_counter_vaddr,
 				 uint64_t *origin_byte_counter_value, const uint64_t caps,
-				 const enum ofi_reliability_kind reliability)
+				 const enum ofi_reliability_kind reliability,
+				 const enum fi_hmem_iface hmem_iface,
+				 const uint64_t hmem_device)
 {
 	// We should already have grabbed the lock prior to calling this function
 	assert(!lock_required);
@@ -2686,13 +2688,6 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	assert(niov <= MIN(FI_OPX_MAX_DPUT_IOV, FI_OPX_MAX_HMEM_IOV));
 	*origin_byte_counter_value = total_len;
 
-#ifdef OPX_HMEM
-	uint64_t hmem_device;
-	enum fi_hmem_iface hmem_iface;
-#else
-	const uint64_t hmem_device = 0;
-	const enum fi_hmem_iface hmem_iface = FI_HMEM_SYSTEM;
-#endif
 	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(hmem_non_system);
 
 	/* This is a hack to trick an MPICH test to make some progress    */
@@ -2758,7 +2753,6 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 			//       to void ** to get an array of desc, one for each IOV.
 			//       For now, just use the first iov's desc, assuming all
 			//       the IOVs will reside in the same HMEM space.
-			hmem_iface = fi_opx_hmem_get_iface(iov[i].iov_base, desc, &hmem_device);
 			FI_OPX_DEBUG_COUNTERS_INC_COND(hmem_iface != FI_HMEM_SYSTEM, hmem_non_system);
 #endif
 			payload_iov->buf = (uintptr_t) input_iov->iov_base;
@@ -2818,9 +2812,9 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 		hmem_iov[i].buf = (uintptr_t) iov[i].iov_base;
 		hmem_iov[i].len = iov[i].iov_len;
 #ifdef OPX_HMEM
-		uint64_t hmem_device;
-		hmem_iov[i].iface = fi_opx_hmem_get_iface(iov[i].iov_base, desc, &hmem_device);
-		hmem_iov[i].device = hmem_device;
+		uint64_t device;
+		hmem_iov[i].iface = fi_opx_hmem_get_iface(iov[i].iov_base, desc, &device);
+		hmem_iov[i].device = device;
 		FI_OPX_DEBUG_COUNTERS_INC_COND(hmem_iov[i].iface != FI_HMEM_SYSTEM, hmem_non_system);
 #else
 		hmem_iov[i].iface = FI_HMEM_SYSTEM;
@@ -2931,7 +2925,9 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		const uintptr_t origin_byte_counter_vaddr,
 		uint64_t *origin_byte_counter_value,
 		const uint64_t caps,
-		const enum ofi_reliability_kind reliability)
+		const enum ofi_reliability_kind reliability,
+		const enum fi_hmem_iface src_iface,
+		const uint64_t src_device_id)
 {
 	// We should already have grabbed the lock prior to calling this function
 	assert(!lock_required);
@@ -3026,14 +3022,6 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"return %zd\n",rc);
 			return rc;
 		}
-
-#ifdef OPX_HMEM
-		uint64_t src_device_id;
-		enum fi_hmem_iface src_iface = fi_opx_hmem_get_iface(buf, desc, &src_device_id);
-#else
-		const uint64_t src_device_id = 0;
-		const enum fi_hmem_iface src_iface = FI_HMEM_SYSTEM;
-#endif
 
 		FI_OPX_DEBUG_COUNTERS_INC_COND(src_iface != FI_HMEM_SYSTEM,
 					opx_ep->debug_counters.hmem.intranode
@@ -3144,14 +3132,6 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 		return -FI_EAGAIN;
 	}
-
-#ifdef OPX_HMEM
-	uint64_t src_device_id;
-	enum fi_hmem_iface src_iface = fi_opx_hmem_get_iface(buf, desc, &src_device_id);
-#else
-	const uint64_t src_device_id = 0;
-	const enum fi_hmem_iface src_iface = FI_HMEM_SYSTEM;
-#endif
 
 	FI_OPX_DEBUG_COUNTERS_INC_COND(src_iface != FI_HMEM_SYSTEM, opx_ep->debug_counters.hmem.hfi
 					.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
