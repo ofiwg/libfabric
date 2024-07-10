@@ -902,7 +902,9 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 				 const unsigned override_flags, uint64_t tx_op_flags,
 				 const uint64_t dest_rx, const uint64_t caps,
 				 const enum ofi_reliability_kind reliability,
-				 const uint64_t do_cq_completion)
+				 const uint64_t do_cq_completion,
+				 const enum fi_hmem_iface iface,
+				 const uint64_t hmem_device)
 {
 	assert(lock_required == 0);
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -953,8 +955,6 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 		   or credits/replay/psn */
 		size_t hmem_niov = 1;
 		struct iovec hmem_iov;
-		uint64_t hmem_device;
-		enum fi_hmem_iface iface = fi_opx_hmem_get_iface(iov->iov_base, desc, &hmem_device);
 
 		/* If the IOVs are GPU-resident, copy all their data to the HMEM
 		   bounce buffer, and then proceed as if we only have a single IOV
@@ -1063,8 +1063,6 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 #ifdef OPX_HMEM
 	size_t hmem_niov = 1;
 	struct iovec hmem_iov;
-	uint64_t hmem_device;
-	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(iov->iov_base, desc, &hmem_device);
 
 	/* If the IOVs are GPU-resident, copy all their data to the HMEM
 	   bounce buffer, and then proceed as if we only have a single IOV
@@ -1164,7 +1162,9 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 					int lock_required,
 					const uint64_t dest_rx,
 					const uint64_t caps,
-					const uint64_t do_cq_completion)
+					const uint64_t do_cq_completion,
+					const enum fi_hmem_iface iface,
+					const uint64_t hmem_device)
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const union fi_opx_addr addr = { .fi = dest_addr };
@@ -1202,9 +1202,6 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 	}
 
 #ifdef OPX_HMEM
-	uint64_t hmem_device;
-	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
-
 	if (iface != FI_HMEM_SYSTEM) {
 		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
 		opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, opx_ep->hmem_copy_buf,
@@ -1461,14 +1458,17 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 		const uint64_t dest_rx,
 		const uint64_t caps,
 		const enum ofi_reliability_kind reliability,
-		const uint64_t do_cq_completion)
+		const uint64_t do_cq_completion,
+		const enum fi_hmem_iface iface,
+		const uint64_t hmem_device)
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const union fi_opx_addr addr = { .fi = dest_addr };
 
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
 		return fi_opx_hfi1_tx_send_egr_intranode(ep, buf, len, desc, dest_addr,
-			tag, context, data, lock_required, dest_rx, caps, do_cq_completion);
+			tag, context, data, lock_required, dest_rx, caps, do_cq_completion,
+			iface, hmem_device);
 	}
 
 	const size_t xfer_bytes_tail = len & 0x07ul;
@@ -1522,9 +1522,6 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 	}
 
 #ifdef OPX_HMEM
-	uint64_t hmem_device;
-	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
-
 	if (iface != FI_HMEM_SYSTEM) {
 		struct fi_opx_mr * desc_mr = (struct fi_opx_mr *) desc;
 		opx_copy_from_hmem(iface, hmem_device, desc_mr->hmem_dev_reg_handle, opx_ep->hmem_copy_buf,
@@ -1727,7 +1724,9 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first (struct fi_opx_ep *opx_ep,
 					int lock_required,
 					const uint64_t caps,
 					const enum ofi_reliability_kind reliability,
-					uint32_t *psn_out)
+					uint32_t *psn_out,
+					const enum fi_hmem_iface iface,
+					const uint64_t hmem_device)
 {
 	assert(lock_required == 0);
 
@@ -1755,9 +1754,6 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first (struct fi_opx_ep *opx_ep,
 	*psn_out = psn;		/* This will be the UID used in the remaining packets */
 
 #ifdef OPX_HMEM
-	uint64_t hmem_device;
-	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(*buf, desc, &hmem_device);
-
 	/* If the source buf resides in GPU memory, copy the entire payload to
 	   the HMEM bounce buf. This HMEM bounce buf will be used as the source
 	   buffer for this first MP Eager packet as well as all subsequent
@@ -2072,7 +2068,9 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 				const unsigned override_flags, uint64_t tx_op_flags,
 				const uint64_t dest_rx, const uintptr_t origin_byte_counter_vaddr,
 				uint64_t *origin_byte_counter_value, const uint64_t caps,
-				const enum ofi_reliability_kind reliability);
+				const enum ofi_reliability_kind reliability,
+				const enum fi_hmem_iface hmem_iface,
+				const uint64_t hmem_device);
 
 ssize_t fi_opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 				fi_addr_t dest_addr, uint64_t tag, void *context,
@@ -2080,7 +2078,9 @@ ssize_t fi_opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, 
 				const unsigned override_flags, uint64_t tx_op_flags,
 				const uint64_t dest_rx, const uintptr_t origin_byte_counter_vaddr,
 				uint64_t *origin_byte_counter_value, const uint64_t caps,
-				const enum ofi_reliability_kind reliability);
+				const enum ofi_reliability_kind reliability,
+				const enum fi_hmem_iface hmem_iface,
+				const uint64_t hmem_device);
 
 
 #endif /* _FI_PROV_OPX_HFI1_TRANSPORT_H_ */

@@ -3776,7 +3776,9 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 		const unsigned override_flags, uint64_t tx_op_flags,
 		const uint64_t caps,
 		const enum ofi_reliability_kind reliability,
-		const uint64_t do_cq_completion)
+		const uint64_t do_cq_completion,
+		const enum fi_hmem_iface hmem_iface,
+		const uint64_t hmem_device)
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const union fi_opx_addr addr = { .fi = dest_addr };
@@ -3795,7 +3797,8 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 	ssize_t rc = fi_opx_hfi1_tx_send_mp_egr_first (opx_ep, (void **) &buf_bytes_ptr, len, desc,
 						opx_ep->hmem_copy_buf, pbc_dlid, bth_rx, lrh_dlid,
 						addr, tag, data, lock_required,
-						caps, reliability, &first_packet_psn);
+						caps, reliability, &first_packet_psn,
+						hmem_iface, hmem_device);
 
 	if (rc != FI_SUCCESS) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_fall_back_to_rzv);
@@ -3894,7 +3897,9 @@ ssize_t fi_opx_ep_tx_send_try_eager(struct fid_ep *ep,
 				uint64_t tx_op_flags,
 				const uint64_t caps,
 				const enum ofi_reliability_kind reliability,
-				const uint64_t do_cq_completion)
+				const uint64_t do_cq_completion,
+				const enum fi_hmem_iface hmem_iface,
+				const uint64_t hmem_device)
 {
 	ssize_t rc;
 
@@ -3903,13 +3908,15 @@ ssize_t fi_opx_ep_tx_send_try_eager(struct fid_ep *ep,
 						desc, addr.fi, tag, context, data,
 						lock_required,
 						override_flags, tx_op_flags, addr.hfi1_rx,
-						caps, reliability, do_cq_completion);
+						caps, reliability, do_cq_completion,
+						hmem_iface, hmem_device);
 	} else {
 		rc = FI_OPX_FABRIC_TX_SENDV_EGR(ep, local_iov, niov, total_len,
 						desc, addr.fi, tag, context, data,
 						lock_required,
 						override_flags, tx_op_flags, addr.hfi1_rx,
-						caps, reliability, do_cq_completion);
+						caps, reliability, do_cq_completion,
+						hmem_iface, hmem_device);
 	}
 
 	if (OFI_LIKELY(rc == FI_SUCCESS)) {
@@ -3941,13 +3948,15 @@ ssize_t fi_opx_ep_tx_send_try_eager(struct fid_ep *ep,
 							desc, addr.fi, tag, context, data,
 							lock_required,
 							override_flags, tx_op_flags, addr.hfi1_rx,
-							caps, reliability, do_cq_completion);
+							caps, reliability, do_cq_completion,
+							hmem_iface, hmem_device);
 		} else {
 			rc = FI_OPX_FABRIC_TX_SENDV_EGR(ep, local_iov, niov, total_len,
 							desc, addr.fi, tag, context, data,
 							lock_required,
 							override_flags, tx_op_flags, addr.hfi1_rx,
-							caps, reliability, do_cq_completion);
+							caps, reliability, do_cq_completion,
+							hmem_iface, hmem_device);
 		}
 		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 	} while (rc == -FI_ENOBUFS && loop++ < FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES);
@@ -3967,7 +3976,9 @@ ssize_t fi_opx_ep_tx_send_rzv(struct fid_ep *ep,
 			uint64_t tx_op_flags,
 			const uint64_t caps,
 			const enum ofi_reliability_kind reliability,
-			const uint64_t do_cq_completion)
+			const uint64_t do_cq_completion,
+			const enum fi_hmem_iface hmem_iface,
+			const uint64_t hmem_device)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	union fi_opx_context * opx_context = (union fi_opx_context *)context;
@@ -3997,7 +4008,7 @@ ssize_t fi_opx_ep_tx_send_rzv(struct fid_ep *ep,
 				lock_required, override_flags, tx_op_flags, addr.hfi1_rx,
 				byte_counter_ptr,
 				byte_counter,
-				caps, reliability);
+				caps, reliability, hmem_iface, hmem_device);
 		} else {
 			rc = FI_OPX_FABRIC_TX_SENDV_RZV(
 				ep, local_iov, niov, total_len, desc, addr.fi, tag,
@@ -4005,7 +4016,7 @@ ssize_t fi_opx_ep_tx_send_rzv(struct fid_ep *ep,
 				addr.hfi1_rx,
 				byte_counter_ptr,
 				byte_counter,
-				caps, reliability);
+				caps, reliability, hmem_iface, hmem_device);
 		}
 		if (OFI_UNLIKELY(rc == -EAGAIN)) {
 			fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
@@ -4037,9 +4048,14 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 		"===================================== SEND (begin)\n");
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND");
 
-	/* TODO - Pass hmem_iface into all of the callee functions that also call fi_opx_hmem_get_iface */
 	uint64_t hmem_device;
-	enum fi_hmem_iface hmem_iface = desc ? fi_opx_hmem_get_iface(buf, desc, &hmem_device) : FI_HMEM_SYSTEM;
+	enum fi_hmem_iface hmem_iface;
+	if (desc) {
+		hmem_iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
+	} else {
+		hmem_iface = FI_HMEM_SYSTEM;
+		hmem_device = 0ul;
+	}
 
 	assert(is_contiguous == OPX_CONTIG_FALSE || is_contiguous == OPX_CONTIG_TRUE);
 
@@ -4105,7 +4121,7 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 		rc = fi_opx_ep_tx_send_try_eager(ep, buf, len, desc, addr, tag, context, local_iov,
 						niov, total_len, data, lock_required, is_contiguous,
 						override_flags, tx_op_flags, caps, reliability,
-						do_cq_completion);
+						do_cq_completion, hmem_iface, hmem_device);
 		if (OFI_LIKELY(rc == FI_SUCCESS)) {
 			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
 			return rc;
@@ -4125,7 +4141,8 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 
 		rc = fi_opx_hfi1_tx_send_try_mp_egr(ep, buf, len, desc, addr.fi, tag,
 						context, data, lock_required, override_flags,
-						tx_op_flags, caps, reliability, do_cq_completion);
+						tx_op_flags, caps, reliability, do_cq_completion,
+						FI_HMEM_SYSTEM, 0ul);
 		if (OFI_LIKELY(rc == FI_SUCCESS)) {
 			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
 			return rc;
@@ -4154,7 +4171,8 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 				tx_op_flags,
 				caps,
 				reliability,
-				do_cq_completion);
+				do_cq_completion,
+				hmem_iface, hmem_device);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
