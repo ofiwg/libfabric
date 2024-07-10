@@ -870,9 +870,9 @@ static int ft_unit_atomic(void)
 
 	ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
 	if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
-	    ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
+	    ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0)
 		return 0;
-	}
+
 	if (ret)
 		return ret;
 
@@ -1018,7 +1018,7 @@ void ft_cleanup(void)
 	FT_CLOSE_FID(ft_atom_ctrl.comp_mr);
 	ft_cleanup_xcontrol(&ft_rx_ctrl);
 	ft_cleanup_xcontrol(&ft_tx_ctrl);
-	ft_free_host_tx_buf();
+	ft_free_host_bufs();
 	ft_cleanup_mr_control(&ft_mr_ctrl);
 	ft_cleanup_atomic_control(&ft_atom_ctrl);
 	ft_cleanup_random();
