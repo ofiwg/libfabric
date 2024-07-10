@@ -237,11 +237,11 @@ int efa_rdm_pke_queued_copy_payload_to_hmem(struct efa_rdm_pke *pke,
  * localread copy, which is available only when p2p is supported by device, and
  * device support read.
  *
- * gdrcopy, which is available only when cuda_is_gdrcopy_enabled() is true.
- *
  * cudaMemcpy, which is available only when endpoint is permitted to call CUDA
  * api.
  *
+ * gdrcopy, which is available only when cuda_is_gdrcopy_enabled() is true.
+ * 
  * @param[in]			ep, efa_mr
  * @param[in,out]		local_read_available, cuda_memcpy_available,
  * gdrcopy_available
@@ -316,7 +316,7 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 	segment_offset = efa_rdm_pke_get_segment_offset(pke);
 
 	ret = efa_rdm_pke_get_available_copy_methods(
-		ep, desc, &local_read_available, &gdrcopy_available, &cuda_memcpy_available);
+		ep, desc, &local_read_available, &cuda_memcpy_available, &gdrcopy_available);
 	if (ret < 0) {
 		EFA_WARN(FI_LOG_EP_DATA, "Failed to get available copy methods, ret = %d\n", ret);
 		return ret;
