@@ -77,7 +77,6 @@ struct efa_env {
 	char *host_id_file;
 	int use_sm2;
 	enum efa_env_huge_page_setting huge_page_setting;
-	char *p2p_file_suffix;
 };
 
 /**
