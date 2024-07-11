@@ -6,6 +6,48 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+
+v1.21.1, Fri July 26, 2024
+========================
+
+## Core
+
+- Disable ZE IPC due to possible memory corruption
+- Fix an error in the error handling path of fi_param_define()
+
+## EFA
+
+- Destroy rx_atomrsp_pool during ep close.
+- Free user_info during ep close.
+- Use srx lock from domain directly
+- Fix error handling in efa_rdm_cq_poll_ibv_cq
+- Move efa_rdm_cq_poll_ibv_cq to efa_rdm_cq.h
+- Remove unused cq_attr
+- Remove unnecessary app_info check
+- Remove unnecessary ope check
+- Make the inflight read msg per domain
+
+
+## SHM
+
+- Fix memory leaks for srx
+- fix atomic read
+
+## Fabtests
+
+- efa: reset error completion entry for each fi_cq_readerr call
+- pytest: Skip rma_pingpong write tests
+- Init rx_buf before sending data
+- Add rma_pingpong tests to makefile
+- pytest: use different message sizes for rma pingpong
+- Fix missing fixture memory_type in test_rma_pingpong_range_no_inject
+- pytest: account for process startup overhead in client-server tests
+- pytest: save client process output to a file
+- Fix memory leaks for efa_exhaust_mr_reg test
+- Fix memory leak in multi_ep test
+- Fix memory leak in efa_info_test
+
+
 v1.21.0, Fri Mar 22, 2024
 ========================
 
