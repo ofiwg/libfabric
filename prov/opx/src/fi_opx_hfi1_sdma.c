@@ -114,7 +114,8 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 		// If we're not doing delivery_competion, then origin_byte_counter
 		// should have already been zero'd and NULL'd at the end of do_dput_sdma(...)
 		assert(params->sdma_no_bounce_buf);
-		*params->origin_byte_counter = 0;
+		assert((*params->origin_byte_counter) >= params->origin_bytes_sent);
+		*params->origin_byte_counter -= params->origin_bytes_sent;
 		params->origin_byte_counter = NULL;
 	}
 
