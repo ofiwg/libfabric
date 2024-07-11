@@ -116,6 +116,8 @@ struct ofi_ringbuf {
 
 static inline int ofi_rbinit(struct ofi_ringbuf *rb, size_t size)
 {
+	if (size == 0 || size > (SIZE_MAX / 2))
+		return -EINVAL;
 	rb->size = roundup_power_of_two(size);
 	rb->size_mask = rb->size - 1;
 	rb->rcnt = 0;
