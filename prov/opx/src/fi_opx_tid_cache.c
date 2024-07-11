@@ -52,9 +52,18 @@
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_domain.h"
 #include "rdma/opx/fi_opx_endpoint.h"
+#include "fi_opx_tid.h"
 #include "fi_opx_tid_cache.h"
 #include <ofi_iov.h>
 
+
+static const char* OPX_TID_CACHE_ENTRY_STATUS[] = {
+	[OPX_TID_CACHE_ENTRY_NOT_FOUND] = "OPX_TID_CACHE_ENTRY_NOT_FOUND",
+	[OPX_TID_CACHE_ENTRY_FOUND] = "OPX_TID_CACHE_ENTRY_FOUND",
+	[OPX_TID_CACHE_ENTRY_OVERLAP_LEFT] = "OPX_TID_CACHE_ENTRY_OVERLAP_LEFT",
+	[OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT] = "OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT",
+	[OPX_TID_CACHE_ENTRY_IN_USE] = "OPX_TID_CACHE_ENTRY_IN_USE"
+};
 
 #ifndef NDEBUG
 #define OPX_DEBUG_UCNT(entryp)								\
@@ -109,15 +118,7 @@
 		       (void *)entry_vaddr,						\
 		       (void *)(entry_vaddr + entry_length), entry_length,		\
 		       entry_length, ret,						\
-		       ret == OPX_ENTRY_FOUND ?						\
-				"OPX_ENTRY_FOUND" :					\
-					(ret == OPX_ENTRY_NOT_FOUND ?			\
-						"OPX_ENTRY_NOT_FOUND" :			\
-						(ret == OPX_ENTRY_OVERLAP ?		\
-							"OPX_ENTRY_OVERLAP" :		\
-							(ret == OPX_ENTRY_IN_USE ?	\
-								"OPX_ENTRY_IN_USE" :	\
-								"ERRPR"))));		\
+		       OPX_TID_CACHE_ENTRY_STATUS[ret]);				\
 		OPX_DEBUG_UCNT(entryp);							\
 	} while (0)
 #else
@@ -141,13 +142,7 @@
 		       (void *)entry_vaddr,						\
 		       (void *)(entry_vaddr + entry_length), entry_length,		\
 		       entry_length, ret,						\
-		       ret == OPX_ENTRY_FOUND ?						\
-				"OPX_ENTRY_FOUND" :					\
-					(ret == OPX_ENTRY_NOT_FOUND ?			\
-						"OPX_ENTRY_NOT_FOUND" :			\
-						(ret == OPX_ENTRY_OVERLAP ?		\
-							"OPX_ENTRY_OVERLAP" :		\
-							"ERRPR")));			\
+		       OPX_TID_CACHE_ENTRY_STATUS[ret]);				\
 		OPX_DEBUG_UCNT(entryp);							\
 	} while (0)
 #else
@@ -189,11 +184,12 @@ static int opx_util_mr_find_within(struct ofi_rbmap *map, void *key, void *data)
 /* Register/TID Update (pin) the pages.
  *
  * Hold the cache->lock across registering the TIDs  */
+__OPX_FORCE_INLINE__
 int opx_register_tid_region(uint64_t tid_vaddr, uint64_t tid_length,
 			enum fi_hmem_iface tid_iface,
 			uint64_t tid_device,
 			struct fi_opx_ep *opx_ep,
-			struct opx_mr_tid_info *const tid_reuse_cache)
+			struct opx_mr_tid_info *tid_info)
 {
 	uint64_t flags = (uint64_t) OPX_HMEM_KERN_MEM_TYPE[tid_iface];
 
@@ -206,204 +202,40 @@ int opx_register_tid_region(uint64_t tid_vaddr, uint64_t tid_length,
 	FI_DBG(fi_opx_global.prov, FI_LOG_MR, "vaddr %p, length %lu\n",
 		(void *)tid_vaddr, tid_length);
 
-	/* TODO: Remove opx_ep - we aren't registering for an ep, it's domain-wide */
-	struct _hfi_ctrl *ctx = opx_ep->hfi->ctrl;
-	const uint32_t max_tidcnt = ctx->__hfi_tidexpcnt;
-	assert(max_tidcnt <= OPX_MAX_TID_COUNT);
-
-	const uint64_t max_tidlen = max_tidcnt * OPX_TID_PAGE_SIZE[tid_iface];
-	if (OFI_UNLIKELY(tid_length > max_tidlen)) {
-		/* This is somewhat arbitrary - if we "chunk" the TID updates we might be able
-		 * to do larger buffers using multiple update calls. */
-		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-			"OPX_DEBUG_EXIT Max TID length exceeded, %lu > %lu\n",
-			tid_length, max_tidlen);
-		OPX_TID_CACHE_RZV_RTS(tid_reuse_cache, "UPDATE LENGTH EXCEEDED");
-		return -1;
-	}
-
-	uint32_t tidcnt = (uint32_t) (tid_length / OPX_TID_PAGE_SIZE[tid_iface]);
-	if (OFI_UNLIKELY(tidcnt > max_tidcnt)) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-			"OPX_DEBUG_EXIT Max TIDs exceeded, %u > %u\n",
-			tidcnt, max_tidcnt);
-		OPX_TID_CACHE_RZV_RTS(tid_reuse_cache, "UPDATE NTIDS EXCEEDED");
-		OPX_TID_CACHE_DEBUG_FPRINTF("## %s:%u OPX_TID_CACHE_DEBUG Update number of TIDs (%u) exceeded\n",
-			__func__, __LINE__, tidcnt);
-		return -1;
-	}
-
-	/* Eventually we might need to "chunk" updates, thus the naming here */
 	uint32_t length_chunk = (uint32_t) tid_length;
-	/* new (cumulative) vaddr/length of this operation*/
-	uint64_t new_vaddr = tid_vaddr;
-	assert((tid_reuse_cache->tid_length == 0) &&
-	       (tid_reuse_cache->tid_vaddr == 0));
+	assert((tid_info->tid_length == 0) && (tid_info->tid_vaddr == 0));
 
-	uint64_t *tidlist = (uint64_t *)&tid_reuse_cache->info[0];
+	uint64_t *tidlist = (uint64_t *)&tid_info->info[0];
 
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-	       "OPX_DEBUG_ENTRY buffer range [%#lx - %#lx] length %lu %u, new range [%#lx - %#lx] length %u, tidcnt %u, tidlist %p iface %u flags %#lx\n",
-	       tid_vaddr, tid_vaddr + tid_length, tid_length, length_chunk,
-	       new_vaddr, new_vaddr + length_chunk, length_chunk,
-	       tidcnt, tidlist, tid_iface, flags);
-
-	if (tid_iface == FI_HMEM_CUDA) {
-		int err = cuda_set_sync_memops((void *) tid_vaddr);
-		if (OFI_UNLIKELY(err != 0)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-				"cuda_set_sync_memops(%p) FAILED (returned %d)\n",
-				(void *) tid_vaddr, err);
-			return -1;
-		}
-	}
-
-	uint32_t tidcnt_chunk;
-	/* return code is ignored in favor of length/tidcnt checks
-	 * because the ioctl can "succeed" (return code 0) within
-	 * resource limitations and the updated length/tidcnt will
-	 * show the actual results which can be a reduction
-	 * from the requested length/tidcnt. */
-	opx_hfi_update_tid(
-		ctx, tid_vaddr, /* input */
-		&length_chunk, /* input/output*/
-		(uint64_t)tidlist, /* input/output ptr cast as uint64_t */
-		&tidcnt_chunk, /* output */
-		flags);
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_updates);
 	FI_OPX_DEBUG_COUNTERS_INC_COND(tid_iface > FI_HMEM_SYSTEM, opx_ep->debug_counters.hmem.tid_update);
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-	       "opx_hfi_update_tid return length %u, tidcnt %u\n", length_chunk,
-	       tidcnt_chunk);
-	/* update failed, soft (partial length update) or
-	 * hard (-1 ioctl & 0 length)  or
-	   soft (tidcnt 0) */
-	if (OFI_UNLIKELY(((uint64_t)length_chunk < tid_length) || (tidcnt_chunk == 0))) {
-		/* errors generally mean we hit the TID resource limit */
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_resource_limit);
-		FI_OPX_DEBUG_COUNTERS_INC_COND(length_chunk < tid_length,
-			opx_ep->debug_counters.expected_receive.tid_resource_limit_length_chunk_short);
-		FI_OPX_DEBUG_COUNTERS_INC_COND(tidcnt_chunk == 0,
-			opx_ep->debug_counters.expected_receive.tid_resource_limit_tidcnt_chunk_zero);
-		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-			"OPX_DEBUG_EXIT opx_hfi_update_tid failed on vaddr %#lX, length %lu/%u, tidcnt %u\n",
-			tid_vaddr, tid_length, length_chunk, tidcnt_chunk);
-		if (tidcnt_chunk == 0) {
-			/* The return length is untouched, so update it
-			   for the recovery calculations below */
-			length_chunk = 0;
-		}
-		/* flush the cache to recover resources  */
-		pthread_mutex_unlock(&opx_ep->tid_domain->tid_cache->lock);
-		opx_tid_cache_flush_all(opx_ep->tid_domain->tid_cache, true, true);
-		pthread_mutex_lock(&opx_ep->tid_domain->tid_cache->lock);
 
-		/* Attempt one recovery ioctl()*/
-		uint32_t new_length_chunk = tid_length - length_chunk;
-		uint32_t new_tidcnt_chunk = 0;
-		/* Frustrating mix of uint32_t/uint64_t*/
-		uint32_t *new_tidinfo = &tid_reuse_cache->info[tidcnt_chunk];
-		opx_hfi_update_tid(
-			ctx, (tid_vaddr + length_chunk), /* input */
-			&new_length_chunk, /* input/output*/
-			(uint64_t)new_tidinfo, /* input/output ptr cast as uint64_t */
-			&new_tidcnt_chunk, /* output */
-			flags);
-		FI_OPX_DEBUG_COUNTERS_INC(
-			opx_ep->debug_counters.expected_receive.tid_updates);
-		FI_OPX_DEBUG_COUNTERS_INC_COND(tid_iface > FI_HMEM_SYSTEM,
-			opx_ep->debug_counters.hmem.tid_update);
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "opx_hfi_update_tid return length %u, tidcnt %u\n",
-		       new_length_chunk, new_tidcnt_chunk);
-		if (OFI_UNLIKELY((length_chunk + new_length_chunk) < tid_length) ||
-				(new_tidcnt_chunk == 0)) {
-#ifdef OPX_IOCTL_DEBUG
-			fprintf(stderr,
-				"## FAILED RECOVERY opx_hfi_update_tid failed on vaddr %#lX, length %lu/%u, tidcnt %u\n",
-				tid_vaddr, tid_length, length_chunk, tidcnt_chunk);
-			fprintf(stderr,
-				"## FAILED RECOVERY opx_hfi_update_tid failed on vaddr %#lX, length %lu/%u, tidcnt %u\n",
-				(tid_vaddr + length_chunk),
-				(OPX_TID_PAGE_SIZE[tid_iface] * tidcnt) - length_chunk,
-				new_length_chunk, new_tidcnt_chunk);
-#endif
-			OPX_TID_CACHE_RZV_RTS(tid_reuse_cache, "UPDATE/NEW FAILED");
-			/* free first partial update, it's not useful */
-			if (length_chunk) {
-				OPX_FPRINTF_TIDS("Partially updated tidinfo",
-						 (tidcnt_chunk + new_tidcnt_chunk),
-						 &tid_reuse_cache->info[0]);
-				opx_hfi_free_tid(ctx, (uint64_t)tidlist, tidcnt_chunk);
-			}
-			OPX_TID_CACHE_DEBUG_FPRINTF(
-				"## %s:%u OPX_TID_CACHE_DEBUG (UPDATE/NEW) opx_hfi_update_tid failed on vaddr %#lX, length %lu/%u, tidcnt %u\n",
-				__func__, __LINE__, tid_vaddr, tid_length, length_chunk,
-				tidcnt_chunk);
-			/* free second partial update, it's not useful */
-			if (new_length_chunk) {
-				opx_hfi_free_tid(ctx, (uint64_t)new_tidinfo, new_tidcnt_chunk);
-			}
-			OPX_TID_CACHE_DEBUG_FPRINTF("## %s:%u OPX_TID_CACHE_DEBUG (UPDATE/NEW) opx_hfi_update_tid failed on vaddr %#lX/%#lX, length %lu/%u, tidcnt %u\n",
-				__func__, __LINE__, tid_vaddr, tid_vaddr + length_chunk, tid_length, new_length_chunk,
-				new_tidcnt_chunk);
-			return -1;
-		}
-#ifdef OPX_IOCTL_DEBUG
-		else {
-			fprintf(stderr,
-				"## SUCCESS RECOVERY opx_hfi_update_tid on vaddr %#lX, length %lu/%u, tidcnt %u\n",
-				tid_vaddr, tid_length, length_chunk, tidcnt_chunk);
-			fprintf(stderr,
-				"## SUCCESS RECOVERY opx_hfi_update_tid on vaddr %#lX, length %lu/%u, tidcnt %u\n",
-				(tid_vaddr + length_chunk),
-				(OPX_TID_PAGE_SIZE[tid_iface] * tidcnt) - length_chunk,
-				new_length_chunk, new_tidcnt_chunk);
-		}
-#endif
-		/* Successfully recovered */
-		tidcnt_chunk += new_tidcnt_chunk;
-		length_chunk += new_length_chunk;
-		OPX_FPRINTF_TIDS("Recovered partially updated tidinfo",
-						 tidcnt_chunk,
-						 &tid_reuse_cache->info[0]);
-	} else if (length_chunk > tid_length) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-			"opx_hfi_update_tid gave larger than requested range! requested length %lu, return length %u, tidcnt %u\n",
-			tid_length, length_chunk, tidcnt_chunk);
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
-					.tid_resource_limit_length_chunk_long);
+	uint32_t tidcnt_chunk;
+	int ret = opx_hfi_update_tid(opx_ep->hfi->ctrl,
+				     tid_vaddr,		/* input */
+				     &length_chunk,	/* input/output*/
+				     (uint64_t)tidlist,	/* input/output ptr cast as uint64_t */
+				     &tidcnt_chunk,	/* output */
+				     flags);
+
+	if (ret) { // ERROR, no TIDs were registered
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_update_fail);
+		return ret;
 	}
-	assert(tidcnt_chunk <= FI_OPX_MAX_DPUT_TIDPAIRS);
-	OPX_DEBUG_TIDS("Updated tidinfo", tidcnt_chunk,
-		       (&(tid_reuse_cache->info[0])));
-	tid_reuse_cache->tid_vaddr = new_vaddr;
-	tid_reuse_cache->tid_length = length_chunk;
-	tid_reuse_cache->ninfo += tidcnt_chunk; /* appended or replaced */
-	tid_reuse_cache->invalid = 0;
 
-	OPX_TID_CACHE_RZV_RTS(tid_reuse_cache, "UPDATE/NEW");
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_update_success);
+	FI_OPX_DEBUG_COUNTERS_INC_COND(length_chunk < tid_length,
+		opx_ep->debug_counters.expected_receive.tid_update_success_partial);
 
-	/* open (maybe create/flush) and close a cache entry
-	uint64_t key = new_vaddr;
-	opx_tid_cache_open_region(opx_ep->tid_domain,  (void*)new_vaddr, new_length, key, opx_ep, &opx_ep->tid_mr);
+	tid_info->tid_vaddr = tid_vaddr;
+	tid_info->tid_length = length_chunk;
+	tid_info->ninfo = tidcnt_chunk; /* appended or replaced */
 
-	opx_tid_cache_close_region(opx_ep->tid_mr);
-	*/
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-	       "OPX_DEBUG_EXIT UPDATED TIDs vaddr [%#lx - %#lx] length %lu, tid vaddr [%#lx - %#lx] , tid length %lu, number of TIDs %u\n",
-	       tid_vaddr,
-	       tid_vaddr + tid_length, tid_length,
-	       tid_reuse_cache->tid_vaddr,
-	       tid_reuse_cache->tid_vaddr + tid_reuse_cache->tid_length,
-	       tid_reuse_cache->tid_length, tid_reuse_cache->ninfo);
-
-	opx_tid_regen_pairs(tid_reuse_cache->tid_length, tid_reuse_cache->ninfo,
-			   tid_reuse_cache->info, &tid_reuse_cache->npairs,
-			   tid_reuse_cache->pairs,
+	opx_tid_regen_pairs(tid_info->tid_length, tid_info->ninfo,
+			   tid_info->info, &tid_info->npairs, tid_info->pairs,
 			   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 
-	return 0;
+	return FI_SUCCESS;
 }
 
 
@@ -411,20 +243,19 @@ int opx_register_tid_region(uint64_t tid_vaddr, uint64_t tid_length,
  *
  * Hold the cache->lock across deregistering the TIDs  */
 void opx_deregister_tid_region(struct fi_opx_ep *opx_ep,
-			  struct opx_mr_tid_info *const tid_reuse_cache)
+			  struct opx_mr_tid_info *const tid_info)
 {
-	struct _hfi_ctrl *ctx = opx_ep->hfi->ctrl;
-	uint32_t old_ntidinfo = tid_reuse_cache->ninfo;
-	uint64_t *old_tidlist = (uint64_t *)&tid_reuse_cache->info[0];
+	uint32_t old_ntidinfo = tid_info->ninfo;
+	uint64_t *old_tidlist = (uint64_t *)&tid_info->info[0];
 	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
 	       "OPX_DEBUG_ENTRY vaddr %p, length %lu, opx_hfi_free_tid %u tidpairs\n",
-	       (void *)tid_reuse_cache->tid_vaddr, tid_reuse_cache->tid_length,
+	       (void *)tid_info->tid_vaddr, tid_info->tid_length,
 	       old_ntidinfo);
 
 	/* Assert precondition that the lock is held with a trylock assert */
 	assert(pthread_mutex_trylock(&opx_ep->tid_domain->tid_cache->lock) == EBUSY);
 
-	opx_hfi_free_tid(ctx, (uint64_t)old_tidlist, old_ntidinfo);
+	opx_hfi_free_tid(opx_ep->hfi->ctrl, (uint64_t)old_tidlist, old_ntidinfo);
 }
 
 /*
@@ -453,7 +284,7 @@ static int opx_util_mr_find_overlap(struct ofi_rbmap *map, void *key,
 	if (ofi_iov_right(&info->iov, &entry->info.iov))
 		return 1;
 
-	OPX_DEBUG_EXIT(entry, OPX_ENTRY_FOUND);
+	OPX_DEBUG_EXIT(entry, OPX_TID_CACHE_ENTRY_FOUND);
 
 	FI_DBG_TRACE(
 	    fi_opx_global.prov, FI_LOG_MR,
@@ -481,7 +312,7 @@ void opx_tid_cache_delete_region(struct ofi_mr_cache *cache,
 	FI_DBG(cache->domain->prov, FI_LOG_MR,
 	       "OPX_DEBUG_ENTRY entry %p, data %p opx_domain %p, endpoint %p\n",
 	       entry, opx_mr, opx_mr->domain, opx_mr->opx_ep);
-	OPX_DEBUG_ENTRY2(entry, OPX_ENTRY_FOUND);
+	OPX_DEBUG_ENTRY2(entry, OPX_TID_CACHE_ENTRY_FOUND);
 
 	struct opx_mr_tid_info *const tid_reuse_cache =
 		&opx_mr->tid_info;
@@ -490,8 +321,7 @@ void opx_tid_cache_delete_region(struct ofi_mr_cache *cache,
 	const size_t iov_len = entry->info.iov.iov_len;
 	assert(entry->use_cnt == 0);
 	/* Is this region current?  deregister it */
-	if (!tid_reuse_cache->invalid &&
-	    (tid_reuse_cache->tid_length == iov_len) &&
+	if ((tid_reuse_cache->tid_length == iov_len) &&
 	    (tid_reuse_cache->tid_vaddr == (uint64_t)iov_base)) {
 		FI_DBG(cache->domain->prov, FI_LOG_MR,
 		       "ENTRY cache %p, entry %p, data %p, iov_base %p, iov_len %zu\n",
@@ -499,8 +329,10 @@ void opx_tid_cache_delete_region(struct ofi_mr_cache *cache,
 		opx_deregister_tid_region(opx_ep, tid_reuse_cache);
 	} else {
 		FI_DBG(cache->domain->prov, FI_LOG_MR,
-		       "ENTRY OPX_TID_IS_INVALID==%u cache %p, entry %p, data %p, iov_base %p, iov_len %zu\n",
-		       tid_reuse_cache->invalid, cache, entry, opx_mr, iov_base, iov_len);
+		       "ENTRY OPX_TID_IS INVALID cache %p, entry %p, data %p, iov_base %p, iov_len %zu, tid_info->tid_vaddr %p tid_info->tid_length=%zu\n",
+		       cache, entry, opx_mr, iov_base, iov_len,
+		       (void *) tid_reuse_cache->tid_vaddr,
+		       tid_reuse_cache->tid_length);
 	}
 
 	memset(opx_mr, 0x00, sizeof(*opx_mr));
@@ -511,6 +343,16 @@ void opx_tid_cache_delete_region(struct ofi_mr_cache *cache,
 __OPX_FORCE_INLINE__
 int opx_tid_inc_use_cnt(struct ofi_mr_entry *entry)
 {
+	#ifdef OPX_TID_DEBUG_USECNT
+	fprintf(stderr, "(%d) %s:%s():%d [%p-%p/%lu] Entry %p Incrementing use_cnt %d -> %d\n",
+		getpid(), __FILE__, __func__, __LINE__,
+		entry->info.iov.iov_base,
+		(void *) ((uintptr_t)entry->info.iov.iov_base + entry->info.iov.iov_len),
+		entry->info.iov.iov_len,
+		entry,
+		entry->use_cnt,
+		entry->use_cnt + 1);
+	#endif
 	if (entry->use_cnt++ == 0) {
 		FI_DBG(&fi_opx_provider, FI_LOG_MR,
 		       "(%p/%p) remove lru [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
@@ -534,6 +376,27 @@ int opx_tid_inc_use_cnt(struct ofi_mr_entry *entry)
 __OPX_FORCE_INLINE__
 int opx_tid_dec_use_cnt(struct ofi_mr_entry *entry)
 {
+	#ifdef OPX_TID_DEBUG_USECNT
+	if (entry->use_cnt == 0) {
+		fprintf(stderr, "(%d) %s:%s():%d [%p-%p/%lu] Entry %p Decrementing use_cnt %d -> %d, ERROR, Negative use_cnt!\n",
+			getpid(), __FILE__, __func__, __LINE__,
+			entry->info.iov.iov_base,
+			(void *) ((uintptr_t)entry->info.iov.iov_base + entry->info.iov.iov_len),
+			entry->info.iov.iov_len,
+			entry,
+			entry->use_cnt,
+			entry->use_cnt - 1);
+		abort();
+	}
+	fprintf(stderr, "(%d) %s:%s():%d [%p-%p/%lu] Entry %p Decrementing use_cnt %d -> %d\n",
+		getpid(), __FILE__, __func__, __LINE__,
+		entry->info.iov.iov_base,
+		(void *) ((uintptr_t)entry->info.iov.iov_base + entry->info.iov.iov_len),
+		entry->info.iov.iov_len,
+		entry,
+		entry->use_cnt,
+		entry->use_cnt - 1);
+	#endif
 	entry->use_cnt--;
 	FI_DBG(&fi_opx_provider, FI_LOG_MR,
 	       "OPX_DEBUG_EXIT (%p/%p) [%p - %p] (len: %zu/%#lX) use_cnt %x\n",
@@ -555,7 +418,7 @@ bool opx_tid_cache_full(struct ofi_mr_cache *cache)
 	FI_DBG(cache->domain->prov, FI_LOG_MR,
 	       "cache->cached_cnt %zu, cache_params.max_cnt %zu\n",
 	       cache->cached_cnt, cache_params.max_cnt);
-	if (cache->cached_cnt >= cache_params.max_cnt)
+	if (OFI_UNLIKELY(cache->cached_cnt >= cache_params.max_cnt))
 	{
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 			"FULL cache->cached_cnt %zu, cache_params.max_cnt %zu, cache->cached_size %zu, cache_params.max_size %zu\n",
@@ -608,7 +471,7 @@ int opx_tid_cache_init(struct util_domain *domain,
 	ret = ofi_bufpool_create(&cache->entry_pool,
 				 sizeof(struct ofi_mr_entry) +
 					 cache->entry_data_size,
-				 16, 0, 0, 0);
+				 16, 131072, 0, 0);
 	if (ret)
 		goto del;
 
@@ -651,15 +514,57 @@ struct ofi_mr_entry *opx_mr_entry_alloc(struct ofi_mr_cache *cache)
 
 	pthread_mutex_lock(&cache->lock);
 	entry = ofi_buf_alloc(cache->entry_pool);
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "entry %p use_cnt %x\n", entry,
-	       entry->use_cnt);
-#ifndef NDEBUG
-	/* OPX_BUF_FREE memsets to 0x3C3C3C, clear it now */
-	assert((entry->use_cnt == 0) || (entry->use_cnt == 0x3c3c3c3c));
-	memset(entry, 0x00, sizeof(*entry));
-#endif
 	pthread_mutex_unlock(&cache->lock);
+
 	return entry;
+}
+
+__OPX_FORCE_INLINE__
+int opx_mr_entry_alloc_init(struct ofi_mr_cache *cache,
+			const struct ofi_mr_info *info,
+			struct fi_opx_ep *opx_ep,
+			struct ofi_mr_entry **entry,
+			struct opx_mr_tid_info **tid_info)
+{
+	*entry = opx_mr_entry_alloc(cache);
+
+	if (OFI_UNLIKELY(!(*entry))) {
+		FI_DBG(cache->domain->prov, FI_LOG_MR,
+		       "OPX_DEBUG_ENTRY FI_NOMEM [%p - %p] (len: %zu/%#lX) \n",
+		       info->iov.iov_base,
+		       (char *)info->iov.iov_base + info->iov.iov_len,
+		       info->iov.iov_len, info->iov.iov_len);
+		return -FI_ENOMEM;
+	}
+
+	(*entry)->node = NULL;
+	(*entry)->info = *info;
+	(*entry)->use_cnt = 0;
+	dlist_init(&((*entry)->list_entry));
+
+	struct opx_tid_mr *opx_mr = (struct opx_tid_mr *)(*entry)->data;
+	struct opx_tid_domain *opx_domain = container_of(
+		cache->domain, struct opx_tid_domain, util_domain);
+
+	opx_mr->domain = opx_domain;
+	opx_mr->opx_ep = opx_ep; /* regions are ep specific (ioctl(fd-from-ep-context)) */
+
+	*tid_info = &opx_mr->tid_info;
+
+	(*tid_info)->ninfo = 0;
+	(*tid_info)->npairs = 0;
+	(*tid_info)->tid_vaddr = 0UL;
+	(*tid_info)->tid_length = 0UL;
+
+#ifndef NDEBUG
+	// Poison the TID pairs with values that would cause a failure
+	// if they were accidentally used
+	for (int i = 0; i < FI_OPX_MAX_DPUT_TIDPAIRS; ++i) {
+		(*tid_info)->info[i] = -1U;
+		(*tid_info)->pairs[i] = -1U;
+	}
+#endif
+	return FI_SUCCESS;
 }
 
 /*
@@ -669,9 +574,9 @@ struct ofi_mr_entry *opx_mr_entry_alloc(struct ofi_mr_cache *cache)
 
 __OPX_FORCE_INLINE__
 void opx_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
-				     struct ofi_mr_entry *entry)
+				  struct ofi_mr_entry *entry)
 {
-	OPX_DEBUG_ENTRY2(entry, OPX_ENTRY_FOUND);
+	OPX_DEBUG_ENTRY2(entry, OPX_TID_CACHE_ENTRY_FOUND);
 	/* Without subscription context, we might unsubscribe from
 	 * an address range in use by another region. As a result,
 	 * we remain subscribed. This may result in extra
@@ -702,7 +607,7 @@ void opx_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
  */
 __OPX_FORCE_INLINE__
 void opx_cache_free_entry(struct ofi_mr_cache *cache,
-				  struct ofi_mr_entry *entry)
+			  struct ofi_mr_entry *entry)
 {
 	FI_DBG(cache->domain->prov, FI_LOG_MR,
 	       "OPX_DEBUG_ENTRY free (%p/%p) [%p - %p] (len: %zu/%#lX) use_cnt %x\n",
@@ -716,13 +621,58 @@ void opx_cache_free_entry(struct ofi_mr_cache *cache,
 	pthread_mutex_lock(&cache->lock);
 	opx_tid_cache_delete_region(cache, entry);
 	OPX_DEBUG_ENTRY((&entry->info));
-	OPX_DEBUG_ENTRY2(entry, OPX_ENTRY_FOUND);
+	OPX_DEBUG_ENTRY2(entry, OPX_TID_CACHE_ENTRY_FOUND);
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "entry %p use_cnt %x\n", entry,
 	       entry->use_cnt);
 	OPX_BUF_FREE(entry);
 	pthread_mutex_unlock(&cache->lock);
-	OPX_DEBUG_EXIT(((struct ofi_mr_entry *)NULL), OPX_ENTRY_NOT_FOUND);
+	OPX_DEBUG_EXIT(((struct ofi_mr_entry *)NULL), OPX_TID_CACHE_ENTRY_NOT_FOUND);
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "OPX_DEBUG_EXIT\n");
+}
+
+__OPX_FORCE_INLINE__
+int opx_register_tid_region_retryable(struct ofi_mr_cache *cache,
+			uint64_t tid_vaddr, uint64_t tid_length,
+			enum fi_hmem_iface tid_iface,
+			uint64_t tid_device,
+			struct fi_opx_ep *opx_ep,
+			struct opx_mr_tid_info *tid_info)
+{
+	int ret;
+
+	/* Hold the cache->lock across registering the TIDs  */
+	pthread_mutex_lock(&cache->lock);
+	{
+		ret = opx_register_tid_region(tid_vaddr,
+					tid_length,
+					tid_iface, tid_device,
+					opx_ep, tid_info);
+	}
+	pthread_mutex_unlock(&cache->lock);
+
+	/* If no TIDs were available, flush the cache's dead list and retry.
+	   Note that we can only try flushing the dead list, and must NOT free
+	   any LRU entries, as we may be in the midst of collecting a range of
+	   entries who's use counts we have not yet incremented, and we can't
+	   have them freed out from under us right now. */
+	if (OFI_UNLIKELY(ret == -FI_ENOSPC)) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+					.tid_cache_flush_not_lru);
+		if (opx_tid_cache_flush_all(cache, false, false) > 0) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+					.tid_cache_flush_not_lru_helped);
+			pthread_mutex_lock(&cache->lock);
+			{
+				ret = opx_register_tid_region(tid_vaddr,
+							tid_length,
+							tid_iface, tid_device,
+							opx_ep, tid_info);
+			}
+			pthread_mutex_unlock(&cache->lock);
+		}
+	}
+
+	return ret;
 }
 
 /*
@@ -745,89 +695,57 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache,
 		       const struct ofi_mr_info *info,
 		       struct ofi_mr_entry **entry, struct fi_opx_ep *opx_ep)
 {
-	/*struct ofi_mr_entry *cur;*/
-	int ret;
-	struct ofi_mem_monitor *monitor = cache->monitors[info->iface];
-
 	/* Assert precondition that the lock is held with a trylock assert */
 	assert(pthread_mutex_trylock(&mm_lock) == EBUSY);
+
+	struct ofi_mem_monitor *monitor = cache->monitors[info->iface];
 	assert(monitor);
+
+	// Check for a full cache before we even try to register
+	if (OFI_UNLIKELY(opx_tid_cache_full(cache))) {
+
+		/* Note that we can only try flushing the dead list, and must NOT free
+		   any LRU entries, as we may be in the midst of collecting a range of
+		   entries who's use counts we have not yet incremented, and we can't
+		   have them freed out from under us right now. */
+		int freed_entries = opx_tid_cache_flush(cache, false);
+
+		if (freed_entries == 0 || opx_tid_cache_full(cache)) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+						.tid_cache_full);
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "CACHE FULL UNCACHED ERROR\n");
+			return -FI_EAGAIN;
+		}
+	}
 
 	OPX_DEBUG_ENTRY(info);
 	/* drop the mm lock across alloc/register */
 	pthread_mutex_unlock(&mm_lock);
-	*entry = opx_mr_entry_alloc(cache);
-	if (!*entry) {
-		FI_DBG(cache->domain->prov, FI_LOG_MR,
-		       "OPX_DEBUG_ENTRY FI_NOMEM [%p - %p] (len: %zu/%#lX) \n",
-		       info->iov.iov_base,
-		       (char *)info->iov.iov_base + info->iov.iov_len,
-		       info->iov.iov_len, info->iov.iov_len);
+	struct opx_mr_tid_info *tid_info;
+	int ret = opx_mr_entry_alloc_init(cache, info, opx_ep, entry, &tid_info);
+	if (OFI_UNLIKELY(ret)) {
+		assert(ret == -FI_ENOMEM);
 		/* re-acquire mm_lock */
 		pthread_mutex_lock(&mm_lock);
 		return -FI_ENOMEM;
 	}
-	assert((*entry)->use_cnt == 0);
 
-	(*entry)->node = NULL;
-	(*entry)->info = *info;
-	(*entry)->use_cnt = 0;
-	dlist_init(&((*entry)->list_entry));
-	opx_tid_inc_use_cnt(*entry);/* traceable */
+	const size_t register_max_len = opx_ep->hfi->ctrl->__hfi_tidexpcnt * OPX_TID_PAGE_SIZE[info->iface];
+	ret = opx_register_tid_region_retryable(cache, (uint64_t)info->iov.iov_base,
+				MIN(info->iov.iov_len, register_max_len),
+				info->iface, info->device,
+				opx_ep, tid_info);
 
-	struct opx_tid_mr *opx_mr = (struct opx_tid_mr *)(*entry)->data;
-	struct opx_tid_domain *opx_domain = container_of(
-		cache->domain, struct opx_tid_domain, util_domain);
-	FI_DBG(cache->domain->prov, FI_LOG_MR,
-	       "ENTRY cache %p, entry %p, data %p, iov_base %p, iov_len %zu\n",
-	       cache, (*entry), opx_mr, (*entry)->info.iov.iov_base,
-	       (*entry)->info.iov.iov_len);
-	memset(opx_mr, 0x00, sizeof(*opx_mr));
-	opx_mr->domain = opx_domain;
-	opx_mr->opx_ep = opx_ep; /* regions are ep specific (ioctl(fd-from-ep-context)) */
-
-	FI_DBG(cache->domain->prov, FI_LOG_MR,
-	       "cached_cnt    %zu, cached_size   %zu, uncached_cnt  %zu, uncached_size %zu, search_cnt    %zu, delete_cnt    %zu, hit_cnt       %zu, notify_cnt    %zu\n",
-	       (cache)->cached_cnt, (cache)->cached_size, (cache)->uncached_cnt,
-	       (cache)->uncached_size, (cache)->search_cnt, (cache)->delete_cnt,
-	       (cache)->hit_cnt, (cache)->notify_cnt);
-
-	struct opx_mr_tid_info *tid_info = &opx_mr->tid_info;
-
-	tid_info->ninfo = 0;
-	tid_info->npairs = 0;
-	tid_info->tid_vaddr = 0UL;
-	tid_info->tid_length = 0UL;
-
-#ifndef NDEBUG
-	for (int i = 0; i < FI_OPX_MAX_DPUT_TIDPAIRS; ++i) {
-		tid_info->info[i] = -1U;
-		tid_info->pairs[i] = -1U;
-	}
-#endif
-
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-	       "opx_register_tid_region vaddr %#lX, length %#lX\n",
-	       (uint64_t)info->iov.iov_base, (uint64_t)info->iov.iov_len);
-	/* Hold the cache->lock across registering the TIDs  */
-	pthread_mutex_lock(&cache->lock);
-	if (opx_register_tid_region((uint64_t)info->iov.iov_base,
-				    (uint64_t)info->iov.iov_len,
-				    info->iface, info->device,
-				    opx_ep, tid_info)) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "opx_register_tid_region failed\n");
-		/* Failed, tid_info->ninfo will be zero */
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "FREE node %p\n",
-		       (*entry)->node);
-		pthread_mutex_unlock(&cache->lock);
-		/* re-acquire mm_lock */
-		pthread_mutex_lock(&mm_lock);
-		goto error;
-	}
-	pthread_mutex_unlock(&cache->lock);
 	/* re-acquire mm_lock */
 	pthread_mutex_lock(&mm_lock);
+
+	if (ret) {
+		/* Failed, tid_info->ninfo will be zero */
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
+		       "opx_register_tid_region failed with return code %d (%s), FREE node %p\n",
+		       ret, strerror(ret), (*entry)->node);
+		goto error;
+	}
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
 	       "NEW vaddr [%#lx - %#lx] length %lu, tid vaddr [%#lx - %#lx] , tid length %lu\n",
@@ -837,39 +755,32 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache,
 	       tid_info->tid_vaddr + tid_info->tid_length,
 	       tid_info->tid_length);
 
-	if (opx_tid_cache_full(cache)) {
-		opx_tid_cache_flush_all(cache, true, true);
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "CACHE FULL flushed\n");
-	}
-	if (opx_tid_cache_full(cache)) {
-		cache->uncached_cnt++;
-		cache->uncached_size += info->iov.iov_len;
-		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "CACHE FULL UNCACHED ERROR\n");
-		goto error;
-	} else {
-		if (ofi_rbmap_insert(&cache->tree, (void *)&(*entry)->info,
-				     (void *)*entry, &(*entry)->node)) {
-			ret = -FI_ENOMEM;
-			FI_DBG(fi_opx_global.prov, FI_LOG_MR, "FI_ENOMEM %p\n",
-			       (*entry)->node);
-			goto error;
-		}
-		cache->cached_cnt++;
-		cache->cached_size += info->iov.iov_len;
+	(*entry)->info.iov.iov_base = (void *) tid_info->tid_vaddr;
+	(*entry)->info.iov.iov_len = tid_info->tid_length;
 
-		ret = ofi_monitor_subscribe(monitor, info->iov.iov_base,
-					    info->iov.iov_len,
-					    &(*entry)->hmem_info);
-		if (ret) {
-			opx_mr_uncache_entry_storage(cache, *entry);
-			cache->uncached_cnt++;
-			cache->uncached_size += (*entry)->info.iov.iov_len;
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "MONITOR SUBSCRIBE FAILED UNCACHED ERROR\n");
-			goto error;
-		}
+	ret = ofi_rbmap_insert(&cache->tree, (void *)&(*entry)->info,
+				(void *)*entry, &(*entry)->node);
+
+	if (OFI_UNLIKELY(ret)) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "ofi_rbmap_insert returned %d (%s) %p\n",
+			ret, strerror(ret), (*entry)->node);
+		goto error;
 	}
-	OPX_DEBUG_EXIT((*entry), 0);
-	return 0;
+	cache->cached_cnt++;
+	cache->cached_size += tid_info->tid_length;
+
+	ret = ofi_monitor_subscribe(monitor, info->iov.iov_base,
+					info->iov.iov_len,
+					&(*entry)->hmem_info);
+	if (OFI_UNLIKELY(ret)) {
+		opx_mr_uncache_entry_storage(cache, *entry);
+		cache->uncached_cnt++;
+		cache->uncached_size += (*entry)->info.iov.iov_len;
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "MONITOR SUBSCRIBE FAILED UNCACHED ERROR\n");
+		goto error;
+	}
+	OPX_DEBUG_EXIT((*entry), OPX_TID_CACHE_ENTRY_FOUND);
+	return FI_SUCCESS;
 error:
 	/* Create failed to initialize the entry but it
 	   exists...caller should delete the entry */
@@ -878,21 +789,38 @@ error:
 	       info->iov.iov_base,
 	       (char *)info->iov.iov_base + info->iov.iov_len,
 	       info->iov.iov_len, info->iov.iov_len);
-	assert((*entry)->use_cnt == 1);
-	opx_tid_dec_use_cnt(*entry);/* traceable */
-	tid_info->ninfo = 0; /* error == no tid pairs */
-	OPX_DEBUG_EXIT((*entry), 2);
-	return 0; //TODO - handle case for free
+	tid_info->npairs = 0; /* error == no tid pairs */
+	OPX_DEBUG_EXIT((*entry), OPX_TID_CACHE_ENTRY_NOT_FOUND);
+	return ret; //TODO - handle case for free
+}
+
+__OPX_FORCE_INLINE__
+int opx_tid_register_and_cache_entry(struct ofi_mr_cache *cache,
+				     const struct ofi_mr_info *info,
+				     struct ofi_mr_entry **entry,
+				     struct fi_opx_ep *opx_ep)
+{
+	int ret = opx_tid_cache_crte(cache, info, entry, opx_ep);
+	if (OFI_UNLIKELY(ret != FI_SUCCESS && (*entry) != NULL)) {
+		/*crte returns an entry even if tid update failed */
+		/* Unlock for free/return */
+		pthread_mutex_unlock(&mm_lock);
+		opx_cache_free_entry(cache, *entry);
+		*entry = NULL;
+		pthread_mutex_lock(&mm_lock);
+	}
+
+	return ret;
 }
 
 /* Find is similar to search but it does not increment use_cnt.
  */
 __OPX_FORCE_INLINE__
-int opx_tid_cache_find(struct fi_opx_ep *opx_ep,
-		       const struct ofi_mr_info *info,
-		       struct ofi_mr_entry **entry)
+enum opx_tid_cache_entry_status opx_tid_cache_find(struct fi_opx_ep *opx_ep,
+						const struct ofi_mr_info *info,
+						struct ofi_mr_entry **entry)
 {
-	int ret = -1;
+	enum opx_tid_cache_entry_status ret;
 
 	OPX_DEBUG_ENTRY(info);
 
@@ -901,19 +829,42 @@ int opx_tid_cache_find(struct fi_opx_ep *opx_ep,
 	*entry = opx_mr_rbt_find(&cache->tree, info);
 	const struct opx_tid_mr *const opx_mr = (*entry)? (struct opx_tid_mr *)(*entry)->data : NULL;
 	if (!*entry) {
-		ret = OPX_ENTRY_NOT_FOUND;
+		ret = OPX_TID_CACHE_ENTRY_NOT_FOUND;
+	} else if (OFI_UNLIKELY(opx_mr->opx_ep != opx_ep)) {
+		/* In use by an endpoint other than the requestor */
+
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+			"OPX_ENTRY_IN_USE [%p - %p] (len: %zu/%#lX) ENTRY(%p/%p) ENDPOINT(mr:%p, input:%p)\n",
+			info->iov.iov_base,
+			(char *)info->iov.iov_base + info->iov.iov_len,
+			info->iov.iov_len, info->iov.iov_len,
+			(*entry), (*entry) ? (*entry)->data : NULL,
+			opx_mr? opx_mr->opx_ep:NULL, opx_ep);
+		/* One-time message per endpoint.
+		* Future support - cache per endpoint
+		* and this code goes away. */
+		if (opx_ep->use_expected_tid_rzv) {
+			OPX_TID_CACHE_DEBUG_FPRINTF(
+				"## %s:%u OPX_TID_CACHE_DEBUG Unsupported: OPX_ENTRY_IN_USE by another endpoint. Disabling expected receive rendezvous (FI_OPX_EXPECTED_RECEIVE_ENABLE) on this endpoint\n",
+				__func__,__LINE__);
+		}
+		opx_ep->use_expected_tid_rzv = 0;
+		ret = OPX_TID_CACHE_ENTRY_IN_USE;
+
 	} else if (ofi_iov_within(&info->iov, &(*entry)->info.iov)) {
-		if (opx_mr->opx_ep != opx_ep) {
-			FI_DBG(fi_opx_global.prov, FI_LOG_MR,"OPX_ENTRY_IN_USE %p/%p\n",opx_mr? opx_mr->opx_ep:NULL, opx_ep);
-			goto in_use;
-		}
-		ret = OPX_ENTRY_FOUND;
+		ret = OPX_TID_CACHE_ENTRY_FOUND;
+	} else if (info->iov.iov_base >= (*entry)->info.iov.iov_base) {
+		// The search IOV starts within the range of the cached IOV, and
+		// the end of the search IOV is after the end of the cached IOV
+		assert(info->iov.iov_base <= ofi_iov_end(&(*entry)->info.iov));
+		assert(ofi_iov_end(&info->iov) > ofi_iov_end(&(*entry)->info.iov));
+		ret = OPX_TID_CACHE_ENTRY_OVERLAP_LEFT;
 	} else {
-		if (opx_mr->opx_ep != opx_ep) {
-			FI_DBG(fi_opx_global.prov, FI_LOG_MR,"OPX_ENTRY_IN_USE %p/%p\n",opx_mr? opx_mr->opx_ep:NULL, opx_ep);
-			goto in_use;
-		}
-		ret = OPX_ENTRY_OVERLAP;
+		// The search IOV starts before the range of the cached IOV,
+		// and ends at some point after the start of the cached IOV.
+		assert(info->iov.iov_base < (*entry)->info.iov.iov_base);
+		assert(ofi_iov_end(&info->iov) > (*entry)->info.iov.iov_base);
+		ret = OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT;
 	}
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_MR,"INFO [%p - %p] (len: %zu/%#lX) ENTRY(%p/%p) ENDPOINT(mr:%p, input:%p)\n",
@@ -924,125 +875,246 @@ int opx_tid_cache_find(struct fi_opx_ep *opx_ep,
 	       opx_mr? opx_mr->opx_ep:NULL, opx_ep);
 	OPX_DEBUG_EXIT((*entry), ret);
 	return ret;
-in_use:
-	/* In use by an endpoint other than the requestor */
-
-	FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-		"OPX_ENTRY_IN_USE [%p - %p] (len: %zu/%#lX) ENTRY(%p/%p) ENDPOINT(mr:%p, input:%p)\n",
-	       info->iov.iov_base,
-	       (char *)info->iov.iov_base + info->iov.iov_len,
-	       info->iov.iov_len, info->iov.iov_len,
-	       (*entry), (*entry) ? (*entry)->data : NULL,
-	       opx_mr? opx_mr->opx_ep:NULL, opx_ep);
-	/* One-time message per endpoint.
-	 * Future support - cache per endpoint
-	 * and this code goes away. */
-	if(opx_ep->use_expected_tid_rzv) {
-		OPX_TID_CACHE_DEBUG_FPRINTF("## %s:%u OPX_TID_CACHE_DEBUG Unsupported: OPX_ENTRY_IN_USE by another endpoint. Disabling expected receive rendezvous (FI_OPX_EXPECTED_RECEIVE_ENABLE) on this endpoint\n",
-					    __func__,__LINE__);
-	}
-	opx_ep->use_expected_tid_rzv = 0;
-	ret =  OPX_ENTRY_IN_USE;
-	OPX_DEBUG_EXIT((*entry), ret);
-	return ret;
 }
 
 __OPX_FORCE_INLINE__
-int opx_return_offset_for_new_cache_entry(
-	uint64_t tid_vaddr, uint64_t tid_length,
-	const struct opx_mr_tid_info *const tid_info,
-	int *return_index, int *return_offset, int *return_last_index)
+void opx_tid_set_offset_and_copy_pairs(uintptr_t buf_vaddr, size_t buf_length,
+					const struct opx_mr_tid_info *const tid_entry,
+					struct opx_tid_addr_block *tid_addr_block)
 {
-	int ret = -FI_EINVAL;
-	*return_index = 0;
-	*return_offset = 0;
-	*return_last_index = tid_info->npairs - 1;
+	assert(tid_entry->tid_vaddr <= buf_vaddr);
+	assert((tid_entry->tid_vaddr + tid_entry->tid_length >= buf_vaddr));
 
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-	       "The range of the found region is [%p - %p] and number of tid pairs is %u and the length is %lu pages\n",
-	       (char *)tid_info->tid_vaddr,
-	       (char *)tid_info->tid_vaddr + tid_info->tid_length,
-	       tid_info->npairs,
-	       tid_info->tid_length / OPX_HFI1_TID_PAGESIZE);
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-	       "The range of the input region is [%p - %p] with offset %lu pages and the length is %lu pages\n",
-	       (char *)tid_vaddr, (char *)tid_vaddr + tid_length,
-	       (tid_vaddr - tid_info->tid_vaddr) / OPX_HFI1_TID_PAGESIZE,
-	       tid_length / OPX_HFI1_TID_PAGESIZE);
+	// 1. Find index of first pair to use
+	uintptr_t tid_entry_addr = tid_entry->tid_vaddr;
+	uint32_t cur_pair_len = (uint32_t) FI_OPX_EXP_TID_GET(tid_entry->pairs[0], LEN) * OPX_HFI1_TID_PAGESIZE;
+	uintptr_t cur_pair_end = tid_entry_addr + cur_pair_len;
+	int pair_index = 0;
 
-	assert(tid_vaddr == (tid_vaddr & -(int64_t)OPX_HFI1_TID_PAGESIZE));
+	/* Note that cur_pair_end represents the address of the first byte
+	   *after* the last byte of the current pair's address range.
+	   e.g. tid_entry_addr = 0x10000
+	        cur_pair_len   = 0x01000
+	   then cur_pair_end   = 0x11000
+	   but the range of tid_entry_addr would be 0x10000-0x10FFF.
+	   So if cur_pair_end == buf_vaddr, buf_vaddr is still beyond the
+	   the address range represented by this pair, and we need to move on
+	   to the next one. */
+	while (cur_pair_end <= buf_vaddr) {
+		assert(pair_index < tid_entry->npairs);
+		tid_entry_addr += cur_pair_len;
+		cur_pair_len = (uint32_t) FI_OPX_EXP_TID_GET(tid_entry->pairs[++pair_index], LEN)
+				* OPX_HFI1_TID_PAGESIZE;
+		cur_pair_end += cur_pair_len;
+	}
+	assert(pair_index < tid_entry->npairs);
 
-	assert(tid_info->tid_length);
-	assert(tid_info->npairs);
+	// 2. Set first_pair_tid_addr & offset
+	tid_addr_block->target_iov.iov_base = (void *) tid_entry_addr;
+	tid_addr_block->offset = buf_vaddr - tid_entry_addr;
 
-	__attribute__((__unused__))
-	const uint64_t new_entry_vaddr = tid_info->tid_vaddr;
-	__attribute__((__unused__)) const uint64_t new_entry_end_vaddr =
-		tid_info->tid_vaddr + tid_info->tid_length;
+	// 3. Copy the first pair (we'll always copy at least one pair)
+	tid_addr_block->pairs[0] = tid_entry->pairs[pair_index++];
 
-	assert((tid_vaddr >= new_entry_vaddr) &&
-	       (tid_vaddr <= new_entry_end_vaddr));
+	uint32_t pairs_copied = 1;
 
-	if ((tid_vaddr == tid_info->tid_vaddr) &&
-	    (tid_length >= tid_info->tid_length)) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "MATCHING SUCCES(0) return_index %u, return_offset %u, return_last_index %u\n",
-		       *return_index, *return_offset, *return_last_index);
-		return 0;
+	tid_entry_addr = cur_pair_end;
+	uintptr_t buf_end = buf_vaddr + buf_length;
+
+	// 4. Copy remaining pairs while we have not exhausted the tid entry or input buf length
+	while (tid_entry_addr < buf_end && pair_index < tid_entry->npairs) {
+		tid_addr_block->pairs[pairs_copied++] = tid_entry->pairs[pair_index];
+		cur_pair_len = (uint32_t) FI_OPX_EXP_TID_GET(tid_entry->pairs[pair_index++], LEN)
+				* OPX_HFI1_TID_PAGESIZE;
+		tid_entry_addr += cur_pair_len;
 	}
 
-	uint32_t leading_pages_to_walk =
-		(tid_vaddr - tid_info->tid_vaddr) / OPX_HFI1_TID_PAGESIZE;
+	// 5. Set npairs_copied
+	tid_addr_block->npairs = pairs_copied;
 
-	/* Find the starting tidpair index and the offset into that tidpair for the number of pages
-	 * the new regions has for a leading offset into the found region */
-	for (int i = 0; i < tid_info->npairs; i++) {
-		const uint32_t *const pair = &tid_info->pairs[i];
-		uint32_t npages = (uint32_t)FI_OPX_EXP_TID_GET(*pair, LEN);
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "Leading pages left to walk is now %u and the tidpair[%d] is npages %u\n",
-		       leading_pages_to_walk, i, npages);
-		if (leading_pages_to_walk < npages) {
-			*return_index = i;
-			*return_offset = leading_pages_to_walk;
-			FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-			       "The first tidpair to use is tidpair[%d], The page offset into this tidpair is %d pages out of %d pages\n",
-			       *return_index, *return_offset, npages);
-			ret = 0;
-			break;
+	// 6. Set length of buf covered by the pairs in this tid entry
+	tid_addr_block->target_iov.iov_len = (tid_entry_addr >= buf_end) ? (buf_length + tid_addr_block->offset) :
+							(tid_entry_addr - (uintptr_t)tid_addr_block->target_iov.iov_base);
+}
+
+__OPX_FORCE_INLINE__
+enum opx_tid_cache_entry_status
+opx_tid_cache_build_overlap_chain(struct fi_opx_ep *opx_ep,
+				  struct ofi_mr_cache *cache,
+				  struct ofi_mr_info find_info,
+				  const enum opx_tid_cache_entry_status initial_find,
+				  struct ofi_mr_entry *initial_entry,
+				  struct opx_tid_cache_chain *result)
+{
+	assert(initial_find == OPX_TID_CACHE_ENTRY_OVERLAP_LEFT ||
+		initial_find == OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT);
+
+	enum opx_tid_cache_entry_status	find = initial_find;
+	struct ofi_mr_entry *cur_entry = initial_entry;
+	struct ofi_mr_entry *right_overlap[OPX_MAX_TID_COUNT];
+	uint32_t right_entries = 0;
+
+	result->entry_count = 0;
+	result->range.iov_base = find_info.iov.iov_base;
+	result->range.iov_len = find_info.iov.iov_len;
+
+	do {
+		uintptr_t cur_entry_end = (uintptr_t) cur_entry->info.iov.iov_base +
+					  cur_entry->info.iov.iov_len;
+		ssize_t overlap_bytes;
+		if (find == OPX_TID_CACHE_ENTRY_OVERLAP_LEFT) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+							.tid_cache_overlap_left);
+			assert(cur_entry->info.iov.iov_base <= find_info.iov.iov_base);
+			result->entries[result->entry_count++] = cur_entry;
+			overlap_bytes = (ssize_t)cur_entry_end - (uintptr_t)find_info.iov.iov_base;
+			find_info.iov.iov_base = (void *) ((uintptr_t)find_info.iov.iov_base + overlap_bytes);
+		} else {
+			assert(find == OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+							.tid_cache_overlap_right);
+			assert(cur_entry->info.iov.iov_base > find_info.iov.iov_base);
+			uintptr_t find_info_end = (uintptr_t) find_info.iov.iov_base +
+						  find_info.iov.iov_len;
+			if (OFI_UNLIKELY(find_info_end > cur_entry_end)) {
+				// Disregard any right overlap entries we found previously
+				right_overlap[0] = cur_entry;
+				right_entries = 1;
+				find_info.iov.iov_len = cur_entry_end - (uintptr_t)find_info.iov.iov_base;
+				overlap_bytes = cur_entry->info.iov.iov_len;
+			} else {
+				right_overlap[right_entries++] = cur_entry;
+				overlap_bytes = (ssize_t)find_info_end - (uintptr_t)cur_entry->info.iov.iov_base;
+			}
 		}
-		leading_pages_to_walk -= npages;
+
+		// If no overlap bytes, we should have returned
+		// NOT_FOUND on the previous find attempt and already
+		// exited the loop instead of iterating and getting here.
+		assert(overlap_bytes > 0);
+
+		// If overlap bytes is >= find_info.iov.iov_len, we should
+		// have returned FOUND instead of an overlap
+		assert(overlap_bytes < find_info.iov.iov_len);
+
+		find_info.iov.iov_len -= overlap_bytes;
+
+		find = opx_tid_cache_find(opx_ep, &find_info, &cur_entry);
+	} while (find == OPX_TID_CACHE_ENTRY_OVERLAP_LEFT ||
+		 find == OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT);
+
+	if (OFI_UNLIKELY(find == OPX_TID_CACHE_ENTRY_IN_USE)) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+					.tid_cache_found_entry_in_use);
+		return OPX_TID_CACHE_ENTRY_IN_USE;
 	}
 
-	/* Found the start, now find the last tidpair for the length of the new input region */
-	uint32_t region_pages_to_walk =
-		(tid_length / OPX_HFI1_TID_PAGESIZE) + *return_offset;
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-	       "The value of the new region pages_to_walk is %u, total with offset %u\n",
-	       (unsigned int)(tid_length / OPX_HFI1_TID_PAGESIZE),
-	       region_pages_to_walk);
+	if (find == OPX_TID_CACHE_ENTRY_FOUND) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+					.tid_cache_hit);
+		result->entries[result->entry_count++] = cur_entry;
 
-	for (int i = *return_index; i < tid_info->npairs; i++) {
-		*return_last_index = i;
-		const uint32_t *const pair = &tid_info->pairs[i];
-		uint32_t npages = (uint32_t)FI_OPX_EXP_TID_GET(*pair, LEN);
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "The number of new region pages left to walk is now %u and the tidpair[%d] is npages %u\n",
-		       region_pages_to_walk, i, npages);
-		if (region_pages_to_walk <= npages) {
-			FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-			       "The last tidpair to use is tidpair[%d] \n",
-			       *return_last_index);
-			break;
+		// We need to copy in the right entries in reverse order, because
+		// the lower the index in the right_overlap array, the further
+		// "right" in the address range the entries are
+		for (int i = right_entries - 1; i >= 0; i--) {
+			result->entries[result->entry_count++] = right_overlap[i];
 		}
-		region_pages_to_walk -= npages;
+		uintptr_t result_range_end =
+			((uintptr_t) result->entries[result->entry_count - 1]->info.iov.iov_base +
+				     result->entries[result->entry_count - 1]->info.iov.iov_len);
+
+		size_t total_len = result_range_end - (uintptr_t)result->range.iov_base;
+
+		result->range.iov_len = MIN(result->range.iov_len, total_len);
+
+		return OPX_TID_CACHE_ENTRY_FOUND;
 	}
 
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-	       "%s(%d) return_index %u, return_offset %u, return_last_index %u\n",
-	       ret ? "FAILED" : "SUCCESS", ret, *return_index, *return_offset,
-	       *return_last_index);
-	return ret;
+	assert (find == OPX_TID_CACHE_ENTRY_NOT_FOUND);
+
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+				.tid_cache_miss);
+
+	cur_entry = NULL;
+	int rc = opx_tid_register_and_cache_entry(cache, &find_info, &cur_entry, opx_ep);
+
+	if (rc == FI_SUCCESS) {
+		result->entries[result->entry_count++] = cur_entry;
+	}
+
+	// If we only found right overlap entries, and we failed to create
+	// a new entry for the uncached left portion of the address range,
+	// then we can't proceed.
+	if (result->entry_count == 0) {
+		assert(right_entries > 0);
+		return OPX_TID_CACHE_ENTRY_NOT_FOUND;
+	}
+
+	uintptr_t result_range_end =
+		((uintptr_t) result->entries[result->entry_count - 1]->info.iov.iov_base +
+			     result->entries[result->entry_count - 1]->info.iov.iov_len);
+
+	// If the address range of the new entry we just created ends at the start
+	// of the left-most right overlap entry, then we can add all the right
+	// overlap entries to our result chain.
+	if (right_entries > 0 &&
+		result_range_end == (uintptr_t)right_overlap[right_entries - 1]->info.iov.iov_base) {
+
+		for (int i = right_entries - 1; i >= 0; i--) {
+			result->entries[result->entry_count++] = right_overlap[i];
+		}
+
+		result_range_end = ((uintptr_t) right_overlap[0]->info.iov.iov_base +
+						right_overlap[0]->info.iov.iov_len);
+	}
+
+	size_t total_len = result_range_end - (uintptr_t)result->range.iov_base;
+	result->range.iov_len = MIN(result->range.iov_len, total_len);
+
+	return OPX_TID_CACHE_ENTRY_FOUND;
+}
+
+__OPX_FORCE_INLINE__
+void opx_tid_cache_combine_chain_entries(struct opx_tid_cache_chain *overlap_chain,
+					struct fi_opx_hmem_iov *cur_addr_range,
+					struct opx_tid_addr_block *tid_addr_block)
+{
+	opx_tid_inc_use_cnt(overlap_chain->entries[0]);
+
+	struct opx_mr_tid_info *cached_tid_entry =
+		&((struct opx_tid_mr *)overlap_chain->entries[0]->data)->tid_info;
+
+	opx_tid_set_offset_and_copy_pairs(cur_addr_range->buf, cur_addr_range->len,
+						cached_tid_entry, tid_addr_block);
+
+	uintptr_t target_iov_end = (uintptr_t)tid_addr_block->target_iov.iov_base
+					+ tid_addr_block->target_iov.iov_len;
+	uintptr_t overlap_range_end = (uintptr_t) overlap_chain->range.iov_base +
+					+ overlap_chain->range.iov_len;
+
+	tid_addr_block->target_iov.iov_len += overlap_range_end - target_iov_end;
+
+	for (int i = 1; i < overlap_chain->entry_count; i++) {
+		cached_tid_entry =
+			&((struct opx_tid_mr *)overlap_chain->entries[i]->data)->tid_info;
+		assert(cached_tid_entry->tid_length != 0);
+		assert(cached_tid_entry->npairs != 0);
+
+		opx_tid_inc_use_cnt(overlap_chain->entries[i]);
+
+		uint32_t cur_npairs = tid_addr_block->npairs;
+		for (int j = 0; j < cached_tid_entry->npairs; j++) {
+			tid_addr_block->pairs[cur_npairs + j] = cached_tid_entry->pairs[j];
+		}
+		tid_addr_block->npairs += cached_tid_entry->npairs;
+	}
+
+	uintptr_t buf_end = cur_addr_range->buf + cur_addr_range->len;
+
+	tid_addr_block->target_iov.iov_len = MIN(buf_end, overlap_range_end)
+			- (uintptr_t)tid_addr_block->target_iov.iov_base;
+
 }
 
 /*
@@ -1056,7 +1128,7 @@ int opx_tid_cache_close_region(struct ofi_mr_cache *tid_cache,
 			       struct ofi_mr_entry *entry)
 {
 	/* TODO ... fix? */
-	OPX_DEBUG_ENTRY2(entry, OPX_ENTRY_FOUND);
+	OPX_DEBUG_ENTRY2(entry, OPX_TID_CACHE_ENTRY_FOUND);
 	/* Assert precondition that the lock is held with a trylock assert */
 	assert(pthread_mutex_trylock(&mm_lock) == EBUSY);
 
@@ -1069,18 +1141,13 @@ int opx_tid_cache_close_region(struct ofi_mr_cache *tid_cache,
 
 	tid_cache->delete_cnt++;
 
-#ifndef NDEBUG
-	const int use_cnt = opx_tid_dec_use_cnt(entry);/* traceable */
-#else
-	const int use_cnt = --entry->use_cnt;
-#endif
-	struct opx_tid_mr *opx_mr = (struct opx_tid_mr *)entry->data;
-	struct opx_mr_tid_info *const tid_info = &opx_mr->tid_info;
+	const int use_cnt = opx_tid_dec_use_cnt(entry);
 
 	if (use_cnt == 0) {
 		OPX_DEBUG_UCNT(entry);
-		FI_DBG(tid_cache->domain->prov, FI_LOG_MR, "invalid %u, node %p, (%p/%p) insert lru [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
-		       tid_info->invalid, entry->node,
+		FI_DBG(tid_cache->domain->prov, FI_LOG_MR,
+			"node %p, (%p/%p) insert lru [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
+		       entry->node,
 		       entry, entry->data,
 		       entry->info.iov.iov_base,
 		       (char*)entry->info.iov.iov_base + entry->info.iov.iov_len,
@@ -1096,15 +1163,8 @@ int opx_tid_cache_close_region(struct ofi_mr_cache *tid_cache,
 			pthread_mutex_lock(&mm_lock);
 			return 0;
 		}
-		if(tid_info->invalid) { /* it's dead, not just "least recently used */
-			FI_DBG(tid_cache->domain->prov, FI_LOG_MR, "DEAD entry %p\n",entry);
-			opx_mr_uncache_entry_storage(tid_cache, entry);
-			dlist_insert_tail(&entry->list_entry, &tid_cache->dead_region_list);
-		}
-		else {
-			FI_DBG(tid_cache->domain->prov, FI_LOG_MR, "LRU entry %p\n",entry);
-			dlist_insert_tail(&entry->list_entry, &tid_cache->lru_list);
-		}
+		FI_DBG(tid_cache->domain->prov, FI_LOG_MR, "LRU entry %p\n",entry);
+		dlist_insert_tail(&entry->list_entry, &tid_cache->lru_list);
 	}
 	OPX_DEBUG_UCNT(entry);
 
@@ -1407,14 +1467,15 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
 
 	pthread_mutex_lock(&mm_lock);
 
-	int64_t remaining_length = tid_length;
+	uintptr_t tid_end = (uintptr_t) (tid_vaddr + tid_length);
+	ssize_t remaining_length = tid_length;
 	/* Just find (one page) from left to right and close */
 	info.iov.iov_base = (void *)tid_vaddr;
-	info.iov.iov_len = OPX_HFI1_TID_PAGESIZE;
+	info.iov.iov_len = 1;
 
 	while (remaining_length) {
-		int find = opx_tid_cache_find(opx_ep, &info, &entry);
-		if (find == OPX_ENTRY_IN_USE) {
+		enum opx_tid_cache_entry_status find = opx_tid_cache_find(opx_ep, &info, &entry);
+		if (find == OPX_TID_CACHE_ENTRY_IN_USE) {
 			/* Impossible on deregister.. no - MPICH does this.
 			 * find() disabled expected receive on THIS ep but
 			 * whatever ep registered the memory is still ok.
@@ -1429,23 +1490,17 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 				"OPX_ENTRY_IN_USE in %s.  Closing a region for a different endpoint\n",
 				__func__);
-			find = OPX_ENTRY_FOUND;
+			find = OPX_TID_CACHE_ENTRY_FOUND;
 		}
 		const struct opx_mr_tid_info *const found_tid_entry =
 			entry ? &((struct opx_tid_mr *)entry->data)
 					 ->tid_info :
 				      NULL;
-		if (find != OPX_ENTRY_FOUND || !found_tid_entry) {
+		if (OFI_UNLIKELY(find == OPX_TID_CACHE_ENTRY_NOT_FOUND || !found_tid_entry)) {
 			fprintf(stderr,
 				"Assert find ret=%u %s : ncache_entries %u, entry %p, found_tid_entry %p, remaining_length %lu/%#lX, iov base %p, iov len %lu/%#lX\n",
 				find,
-				find == OPX_ENTRY_FOUND ?
-					      "OPX_ENTRY_FOUND" :
-					      (find == OPX_ENTRY_NOT_FOUND ?
-						       "OPX_ENTRY_NOT_FOUND" :
-						       (find == OPX_ENTRY_OVERLAP ?
-								"OPX_ENTRY_OVERLAP" :
-								"ERRPR")),
+				OPX_TID_CACHE_ENTRY_STATUS[find],
 				ncache_entries, entry, found_tid_entry,
 				remaining_length, remaining_length,
 				info.iov.iov_base, info.iov.iov_len,
@@ -1465,16 +1520,49 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
 			abort();
 		}
 		/* How much of this entry did we use (handle leading overlap) */
-		const uint64_t adj =
-			MIN(remaining_length, ((found_tid_entry->tid_vaddr +
-						found_tid_entry->tid_length) -
-					       (uint64_t)info.iov.iov_base));
+		uintptr_t found_entry_end = found_tid_entry->tid_vaddr + found_tid_entry->tid_length;
+		ssize_t adj;
+		#ifdef OPX_TID_DEBUG_USECNT
+			fprintf(stderr, "(%d) %s:%s():%d [%p-%p (%lu bytes)] find result=%d (%s), find_info=%p-%p (%lu bytes), found entry %p %p-%p (%lu bytes), use cnt=%d, remaining_length=%ld\n",
+				getpid(), __FILE__, __func__, __LINE__,
+				(void *) tid_vaddr,
+				(void *) (tid_vaddr + tid_length),
+				tid_length,
+				find,
+				OPX_TID_CACHE_ENTRY_STATUS[find],
+				info.iov.iov_base,
+				(void *) ((uintptr_t)info.iov.iov_base + info.iov.iov_len),
+				info.iov.iov_len,
+				entry,
+				(void *) found_tid_entry->tid_vaddr,
+				(void *) found_entry_end,
+				found_tid_entry->tid_length,
+				entry->use_cnt,
+				remaining_length);
+		#endif
+		if (find == OPX_TID_CACHE_ENTRY_FOUND || find == OPX_TID_CACHE_ENTRY_OVERLAP_LEFT) {
+			adj = MIN(remaining_length,
+				  found_entry_end - (uintptr_t)info.iov.iov_base);
+			info.iov.iov_base = (void *) ((uintptr_t)info.iov.iov_base + adj);
+			assert(adj == remaining_length || info.iov.iov_base == (void *)found_entry_end);
+		} else {
+			assert(find == OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT);
+			// Since we were only looking for a 1-byte long key, if we get an
+			// overlap right, it must mean the entry starts at the same address
+			assert(found_tid_entry->tid_vaddr == (uintptr_t)info.iov.iov_base);
+
+			adj = MIN(tid_end, found_entry_end) - found_tid_entry->tid_vaddr;
+
+			assert(adj > 0);
+			info.iov.iov_base = (void *) ((uintptr_t)info.iov.iov_base + adj);
+		}
 		ncache_entries++;
 		/* Force the invalidation and put it on the dead list */
 		opx_tid_cache_close_region(tid_cache, entry);
 		/* increment past found region for next find */
 		remaining_length -= adj;
-		info.iov.iov_base = (char *)info.iov.iov_base + adj;
+		info.iov.iov_len = MIN(remaining_length, OPX_HFI1_TID_PAGESIZE);
+		assert(remaining_length >= 0);
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
 		       "adj %lu, vaddr [%p - %p] %lu/%#lX\n", adj,
 		       info.iov.iov_base,
@@ -1489,763 +1577,224 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
 	pthread_mutex_unlock(&mm_lock);
 }
 
-/* opx_process_entry()
- *
- *  Process the entry found in a region
- *  for hole or overlap.
- *
- *  Input:
- *       tid_cache being used
- *       find return code
- *       info used on find by caller
- *       entry found by caller
- *       vaddr of remaining region
- *       length of remaining region
- *
- * returns:
- *
- *  Updated vaddr/length with next entry to find.
- *
- *  OPX_ENTRY_NOT_FOUND - create entry
- *      Update info with entry to be created.
- *
- *  OPX_ENTRY_FOUND     - use entry (overlap)
- *      Update entry with actual entry to use
- */
-int opx_process_entry(struct fi_opx_ep *opx_ep, int find,
-		      struct ofi_mr_info *inout_info,
-		      struct ofi_mr_entry **inout_entry, uint64_t *vaddr,
-		      int64_t *length)
+__OPX_FORCE_INLINE__
+int opx_tid_get_tids_for_range(struct fi_opx_ep *opx_ep,
+				struct fi_opx_hmem_iov *cur_addr_range,
+				struct opx_tid_addr_block *tid_addr_block)
 {
-	struct opx_mr_tid_info *input_tid_info = (*inout_entry) ?
-			      &((struct opx_tid_mr *)(*inout_entry)->data)->tid_info : NULL;
+	int ret = FI_SUCCESS;
 
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-	       "rc %u(%s), input info [%p - %p]  %lu/%#lX, input entry [%p - %p]  %lu/%#lX, remaining vaddr [%p - %p] %lu/%#lX\n",
-	       find,
-	       find == OPX_ENTRY_FOUND ? "OPX_ENTRY_FOUND" :
-					       (find == OPX_ENTRY_NOT_FOUND ?
-							"OPX_ENTRY_NOT_FOUND" :
-							(find == OPX_ENTRY_OVERLAP ?
-								 "OPX_ENTRY_OVERLAP" :
-								 "ERROR")),
-	       (char *)inout_info->iov.iov_base,
-	       (char *)inout_info->iov.iov_base + inout_info->iov.iov_len,
-	       inout_info->iov.iov_len, inout_info->iov.iov_len,
-	       input_tid_info ? (char *)input_tid_info->tid_vaddr : NULL,
-	       input_tid_info ? (char *)input_tid_info->tid_vaddr +
-					 input_tid_info->tid_length :
-				       NULL,
-	       input_tid_info ? input_tid_info->tid_length : 0UL,
-	       input_tid_info ? input_tid_info->tid_length : 0UL,
-	       (void *)(*vaddr), (void *)((*vaddr) + *length), *length,
-	       *length);
-
-	assert(inout_info->iov.iov_base == (void *)(*vaddr));
-	assert(inout_info->iov.iov_len == *length);
-
-	/* NOT FOUND mean no more overlap so create the
-	 * the remaining region by using the dummy
-	 * storage to pretend to find overlap past
-	 * our region */
-	if (find == OPX_ENTRY_NOT_FOUND || !input_tid_info) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_ENTRY_NOT_FOUND\n");
-		const uint64_t adj = *length;
-		*vaddr += adj;
-		*length -= adj;
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "adj %lu, vaddr [%p - %p] %lu/%#lX\n", adj,
-		       (char *)*vaddr, (char *)(*vaddr) + *length, *length,
-		       *length);
-		OPX_DEBUG_EXIT(((struct ofi_mr_entry *)NULL),
-			       OPX_ENTRY_NOT_FOUND);
-		return OPX_ENTRY_NOT_FOUND;
-	}
-	/* process the found or overlap region */
-	assert(input_tid_info);
-	assert(input_tid_info->tid_length != 0);
-
-	/* FOUND entry (completely in region) so use it */
-	if (find == OPX_ENTRY_FOUND) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_ENTRY_FOUND\n");
-		assert(inout_info->iov.iov_base >=
-		       (void *)(input_tid_info->tid_vaddr));
-		assert(inout_info->iov.iov_len <= input_tid_info->tid_length);
-		/*
-		"Found" means it's contained in the region, so if
-		the region is  0xf5000-0xf8000, then ranges
-		0xf6000-0xf7000, 0xf6000-0xf8000, 0xf7000-0xf8000
-		are "Found".
-
-		BUT the way we use opx_process_next_entry, I
-		believe it will always be at the head of the
-		region so I'm asserting.
-
-		If I'm wrong we switch to :
-		const uint64_t adj =
-			MIN(*length, ((found_tid_entry->tid_vaddr +
-				       found_tid_entry->tid_length) -
-				      *vaddr));
-
-		*/
-		assert(inout_info->iov.iov_base == (void *)(input_tid_info->tid_vaddr));
-		assert(inout_info->iov.iov_base == (void *)*vaddr);
-		const uint64_t adj = *length;
-
-		*vaddr += adj;
-		*length -= adj;
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "adj %lu, vaddr [%p - %p] %lu/%#lX\n", adj,
-		       (char *)*vaddr, (char *)(*vaddr) + *length, *length,
-		       *length);
-		/* entry was correct */
-		OPX_DEBUG_EXIT(((struct ofi_mr_entry *)NULL),
-			       OPX_ENTRY_NOT_FOUND);
-		return OPX_ENTRY_FOUND;
-	}
-
-	/* Overlap*/
-	assert(find == OPX_ENTRY_OVERLAP);
-
-	/* Leading overlap, use it */
-	if (input_tid_info->tid_vaddr <= *vaddr) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "LEADING OPX_ENTRY_OVERLAP\n");
-		const uint64_t adj = MIN(*length,
-					 ((input_tid_info->tid_vaddr + input_tid_info->tid_length) - *vaddr));
-		*length -= adj;
-		*vaddr += adj;
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "adj %lu, vaddr [%p - %p] %lu/%#lX\n", adj,
-		       (char *)*vaddr, (char *)(*vaddr) + *length, *length,
-		       *length);
-		/* entry was correct */
-		OPX_DEBUG_EXIT((*inout_entry), OPX_ENTRY_FOUND);
-		return OPX_ENTRY_FOUND;
-	}
-
-	/* Possible overlap OR hole */
-
-	struct ofi_mr_entry *find_new_entry = NULL;
-	struct ofi_mr_info find_new_entry_info = {0};
-	struct opx_mr_tid_info *find_tid_info;
-
-	/* Loop and do smaller finds for real left-most hole/overlap */
-	find_new_entry_info.iov.iov_base = (void *)(*vaddr);
-	find_new_entry_info.iov.iov_len = (uint64_t)input_tid_info->tid_vaddr - *vaddr;
-
-	do {
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "info [%p - %p]  %lu/%#lX, entry [%p - %p] %lu/%#lX, find_info [%p - %p] %lu/%#lX, vaddr [%p - %p] %lu/%#lX\n",
-		       (char *)inout_info->iov.iov_base,
-		       (char *)inout_info->iov.iov_base + inout_info->iov.iov_len,
-		       inout_info->iov.iov_len, inout_info->iov.iov_len,
-		       input_tid_info ? (char *)input_tid_info->tid_vaddr : NULL,
-		       input_tid_info ? (char *)input_tid_info->tid_vaddr +
-						 input_tid_info->tid_length :
-					       NULL,
-		       input_tid_info ? input_tid_info->tid_length : 0UL,
-		       input_tid_info ? input_tid_info->tid_length : 0UL,
-		       (char*)find_new_entry_info.iov.iov_base, (char*)find_new_entry_info.iov.iov_base + find_new_entry_info.iov.iov_len,
-		       find_new_entry_info.iov.iov_len, find_new_entry_info.iov.iov_len,
-		       (void *)(*vaddr), (void *)((*vaddr) + *length), *length,
-		       *length);
-		find = opx_tid_cache_find(opx_ep, &find_new_entry_info,
-					  &find_new_entry);
-		if (find == OPX_ENTRY_IN_USE) {
-			return OPX_ENTRY_IN_USE;
-		}
-		find_tid_info =
-			find_new_entry ? &((struct opx_tid_mr *)find_new_entry->data)
-						  ->tid_info :
-					       NULL;
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "info [%p - %p]  %lu/%#lX, entry [%p - %p] %lu/%#lX, find_info [%p - %p] %lu/%#lX, find_tid_info [%p - %p] %lu/%#lX, vaddr [%p - %p] %lu/%#lX\n",
-		       (char *)inout_info->iov.iov_base,
-		       (char *)inout_info->iov.iov_base + inout_info->iov.iov_len,
-		       inout_info->iov.iov_len, inout_info->iov.iov_len,
-		       input_tid_info ? (char *)input_tid_info->tid_vaddr : NULL,
-		       input_tid_info ? (char *)input_tid_info->tid_vaddr +
-						 input_tid_info->tid_length :
-					       NULL,
-		       input_tid_info ? input_tid_info->tid_length : 0UL,
-		       input_tid_info ? input_tid_info->tid_length : 0UL,
-		       (char*)find_new_entry_info.iov.iov_base, (char*)find_new_entry_info.iov.iov_base + find_new_entry_info.iov.iov_len,
-		       find_new_entry_info.iov.iov_len, find_new_entry_info.iov.iov_len,
-		       find_tid_info ? (char *)find_tid_info->tid_vaddr : NULL,
-		       find_tid_info ? (char *)find_tid_info->tid_vaddr +
-						  find_tid_info->tid_length :
-						NULL,
-		       find_tid_info ? find_tid_info->tid_length : 0UL,
-		       find_tid_info ? find_tid_info->tid_length : 0UL,
-		       (void *)(*vaddr), (void *)((*vaddr) + *length), *length,
-		       *length);
-
-		/* Real (left-most) hole */
-		if (find == OPX_ENTRY_NOT_FOUND || !find_tid_info) {
-			assert(find_new_entry_info.iov.iov_base == (void *)(*vaddr));
-			inout_info->iov.iov_len = find_new_entry_info.iov.iov_len;
-			if(!(find_new_entry_info.iov.iov_len < *length)) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_MR,"iov_len %zu, *length %lu\n",
-					find_new_entry_info.iov.iov_len, *length);
-			}
-			const uint64_t adj = find_new_entry_info.iov.iov_len;
-			*vaddr += adj;
-			*length -= adj;
-			FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-			       "adj %lu, vaddr [%p - %p] %lu/%#lX\n", adj,
-			       (char *)*vaddr, (char *)(*vaddr) + *length, *length,
-			       *length);
-			OPX_DEBUG_EXIT(((struct ofi_mr_entry *)NULL),
-				       OPX_ENTRY_NOT_FOUND);
-			return OPX_ENTRY_NOT_FOUND;
-		}
-		assert((find == OPX_ENTRY_OVERLAP) || (find == OPX_ENTRY_FOUND));
-		assert(find_tid_info);
-		/* Real (left-most) overlap starting at iov_base */
-		if ((uint64_t)find_tid_info->tid_vaddr <= *vaddr) {
-			const uint64_t adj = MIN(*length,
-						 ((find_tid_info->tid_vaddr + find_tid_info->tid_length) - *vaddr));
-			assert(adj < *length);
-			*vaddr += adj;
-			*length -= adj;
-			FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-			       "adj %lu, vaddr [%p - %p] %lu/%#lX\n", adj,
-			       (char *)*vaddr, (char *)(*vaddr) + *length, *length,
-			       *length);
-			/* new entry found, set it */
-			(*inout_entry) = find_new_entry;
-			OPX_DEBUG_EXIT((*inout_entry), OPX_ENTRY_FOUND);
-			return OPX_ENTRY_FOUND;
-		}
-		/*
-		 * Smaller hole/overlap, loop with smaller finds until
-		 * we find the real hole or left-most overlap
-		 */
-		find_new_entry_info.iov.iov_len = (uint64_t)find_tid_info->tid_vaddr - *vaddr;
-		assert(find_new_entry_info.iov.iov_len);
-	} while (1);
-	assert(0);
-	return -1 ;
-}
-
-int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
-			 const uint64_t tid_vaddr, const uint64_t tid_length,
-			 const enum fi_hmem_iface tid_iface,
-			 const uint64_t tid_device)
-{
-	struct fi_opx_ep *opx_ep = params->opx_ep;
 	struct opx_tid_domain *tid_domain = opx_ep->domain->tid_domain;
 	struct ofi_mr_cache *tid_cache = tid_domain->tid_cache;
 	struct ofi_mr_entry *entry = NULL;
 	struct ofi_mr_info find_info = {0};
-	int first_tid_index = -1, last_tid_index = -1, page_offset_in_tid = -1;
 
-	assert(tid_vaddr == (tid_vaddr & -(int64_t)OPX_TID_PAGE_SIZE[tid_iface]));
-	assert(tid_length == (tid_length & -(int64_t)OPX_TID_PAGE_SIZE[tid_iface]));
+	struct fi_opx_hmem_iov cur_tid_range;
+	opx_tid_range(cur_addr_range, &cur_tid_range);
+
+	find_info.iov.iov_base = (void *) cur_tid_range.buf;
+	find_info.iov.iov_len = cur_tid_range.len;
+	find_info.iface = cur_tid_range.iface;
+	find_info.device = cur_tid_range.device;
 
 	pthread_mutex_lock(&mm_lock);
-
-	find_info.iov.iov_base = (void *)tid_vaddr;
-	find_info.iov.iov_len = tid_length;
-	find_info.iface = tid_iface;
-	find_info.device = tid_device;
-
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-	       "OPX_DEBUG_ENTRY tid vaddr [%#lx - %#lx] , tid length %lu/%#lX\n",
-	       tid_vaddr, tid_vaddr + tid_length, tid_length, tid_length);
-	int find = opx_tid_cache_find(opx_ep, &find_info, &entry);
-	if (find == OPX_ENTRY_IN_USE) {
+	enum opx_tid_cache_entry_status find = opx_tid_cache_find(opx_ep, &find_info, &entry);
+	if (OFI_UNLIKELY(find == OPX_TID_CACHE_ENTRY_IN_USE)) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+					.tid_cache_found_entry_in_use);
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "FAILED OPX_ENTRY_IN_USE "
-		       "tid vaddr [%#lx - %#lx] length %lu/%#lX, "
-		       "find vaddr [%#lx - %#lx] length %lu/%#lX\n",
-		       tid_vaddr, tid_vaddr + tid_length,
-		       tid_length, tid_length,
-		       (uint64_t)find_info.iov.iov_base,
-		       (uint64_t)find_info.iov.iov_base +
-			       find_info.iov.iov_len,
+		       "FAILED OPX_ENTRY_IN_USE tid vaddr [%p - %p] length %lu/%#lX, find vaddr [%p - %p] length %lu/%#lX\n",
+		       entry->info.iov.iov_base,
+		       (void *) ((uintptr_t)entry->info.iov.iov_base + entry->info.iov.iov_len),
+		       entry->info.iov.iov_len, entry->info.iov.iov_len,
+		       find_info.iov.iov_base,
+		       (void *) ((uintptr_t)find_info.iov.iov_base + find_info.iov.iov_len),
 		       find_info.iov.iov_len,
 		       find_info.iov.iov_len);
-		pthread_mutex_unlock(&mm_lock);
-		/* Should be nothing to deregister at this point */
-		return -FI_EPERM;
+		ret = -FI_EPERM;
+		goto register_end;
 	}
 
-	assert(find == OPX_ENTRY_FOUND || find == OPX_ENTRY_OVERLAP ||
-	       find == OPX_ENTRY_NOT_FOUND);
-	/* Two simple cases -
-	 * - new entry
-	 * - found entry
-	 *
-	 * Third case -
-	 * - multple entries
+	tid_addr_block->npairs = 0;
+
+	/* Three possible cases:
+	 * - Not found: Register and cache an entry
+	 * - Found: Use the found entry
+	 * - Overlap: Find all other entries that also overlap this range,
+	 *            possibly registering/caching an entry for the first
+	 *            uncovered portion of the range. Then combine all the
+	 *            usable entries into a single block.
 	 */
-	if (find == OPX_ENTRY_NOT_FOUND) {
-		/* Flush the dead list, don't flush the lru list (false) */
-		opx_tid_cache_flush(tid_cache, false);
+	if (find == OPX_TID_CACHE_ENTRY_NOT_FOUND) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+					.tid_cache_miss);
+		assert(entry == NULL);
+
 		/* No entry found, create it. */
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_ENTRY_NOT_FOUND\n");
-		opx_tid_cache_crte(tid_cache, &find_info, &entry, opx_ep);
-		struct opx_mr_tid_info *cached_tid_entry =
-			&((struct opx_tid_mr *)entry->data)->tid_info;
+		int rc = opx_tid_register_and_cache_entry(tid_cache, &find_info, &entry, opx_ep);
 
 		/* opx_register_tid_region was done in add region, check result */
-		if (cached_tid_entry->ninfo == 0) { /* failed */
-			OPX_TID_CACHE_DEBUG_FPRINTF("## %s:%u return -FI_EFAULT\n",
-				__func__, __LINE__);
-			/*crte returns an entry even if tid update failed */
-			FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-			       "OPX_DEBUG_EXIT FI_EFAULT (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
-			       entry, entry->data, entry->info.iov.iov_base,
-			       (char *)entry->info.iov.iov_base +
-				       entry->info.iov.iov_len,
-			       entry->info.iov.iov_len, entry->info.iov.iov_len,
-			       entry->use_cnt);
-			/* Unlock for free/return */
-			pthread_mutex_unlock(&mm_lock);
-			opx_cache_free_entry(tid_cache, entry);
-			return -FI_EFAULT;
+		if (rc != FI_SUCCESS) {
+			OPX_TID_CACHE_DEBUG_FPRINTF("## %s:%u return %d (%s) errno=%d (%s)\n",
+				__func__, __LINE__,
+				rc, strerror(rc),
+				errno, strerror(errno));
+			ret = -FI_EAGAIN;
+			goto register_end;
 		}
 
-		/* Copy the tid info to params list for further modifications */
-		params->tid_info.npairs = cached_tid_entry->npairs;
-		assert(params->tid_info.npairs != 0);
-		memcpy(params->tidpairs, &cached_tid_entry->pairs[0],
-		       (cached_tid_entry->npairs *
-			sizeof(cached_tid_entry->pairs[0])));
-		params->tid_info.offset = 0;
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "tid_offset %u/%#X\n",
-		       params->tid_info.offset, params->tid_info.offset);
-		OPX_DEBUG_TIDS("RTS tidpairs", params->tid_info.npairs,
-			       params->tidpairs);
-	} else if (find == OPX_ENTRY_FOUND) {
+		opx_tid_inc_use_cnt(entry);
+
+		struct opx_mr_tid_info *cached_tid_entry =
+			&((struct opx_tid_mr *)entry->data)->tid_info;
+		opx_tid_set_offset_and_copy_pairs(cur_addr_range->buf,
+						  cur_addr_range->len,
+						  cached_tid_entry,
+						  tid_addr_block);
+	} else if (find == OPX_TID_CACHE_ENTRY_FOUND) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+					.tid_cache_hit);
 		struct opx_mr_tid_info *cached_tid_entry =
 			&((struct opx_tid_mr *)entry->data)->tid_info;
 		assert(cached_tid_entry->tid_length != 0);
 
-		if (cached_tid_entry->invalid) {
-			/* TID was invalidated while still in use and not deleted,
-			   can't user or re-register it until it's dead. */
-			/* Unlock for failed return */
-			pthread_mutex_unlock(&mm_lock);
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-				"OPX_DEBUG_EXIT OPX_TID_IS_INVALID FI_EINVAL TIDs "
-				"tid vaddr [%#lx - %#lx] length %lu/%#lX,  "
-				"found [%#lx - %#lx] length %lu/%#lX\n",
-				tid_vaddr, tid_vaddr + tid_length,
-				tid_length, tid_length,
-				cached_tid_entry->tid_vaddr,
-				cached_tid_entry->tid_vaddr + cached_tid_entry->tid_length,
-				cached_tid_entry->tid_length,
-				cached_tid_entry->tid_length);
-			return -FI_EINVAL;
-		}
 		/* Entry was found.  Our search is completely contained in this region */
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_ENTRY_FOUND\n");
 		opx_tid_inc_use_cnt(entry);
 
-		OPX_DEBUG_TIDS("REUSE FULL LIST",
-			       cached_tid_entry->npairs,
-			       &cached_tid_entry->pairs[0]);
-		opx_return_offset_for_new_cache_entry(
-			(uint64_t)find_info.iov.iov_base,
-			(uint64_t)find_info.iov.iov_len, cached_tid_entry,
-			&first_tid_index, &page_offset_in_tid, &last_tid_index);
-		OPX_DEBUG_TIDS("REUSE SUBSET LIST",
-			       (last_tid_index - first_tid_index + 1),
-			       &cached_tid_entry->pairs[first_tid_index]);
+		opx_tid_set_offset_and_copy_pairs(cur_addr_range->buf,
+						  cur_addr_range->len,
+						  cached_tid_entry,
+						  tid_addr_block);
+	} else { // OVERLAP_LEFT or OVERLAP_RIGHT
+		struct opx_tid_cache_chain overlap_chain;
+		find = opx_tid_cache_build_overlap_chain(opx_ep, tid_cache,
+							find_info, find, entry,
+							&overlap_chain);
 
-		/* Copy the tid info to params list for further modifications */
-		params->tid_info.npairs = last_tid_index - first_tid_index + 1;
-		assert(params->tid_info.npairs != 0);
-		memcpy(params->tidpairs,
-		       &cached_tid_entry->pairs[first_tid_index],
-		       params->tid_info.npairs * sizeof(params->tidpairs[0]));
-		params->tid_info.offset =
-			page_offset_in_tid * OPX_HFI1_TID_PAGESIZE;
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "tid_offset %u/%#X\n",
-		       params->tid_info.offset, params->tid_info.offset);
-		OPX_DEBUG_TIDS("RTS tidpairs", params->tid_info.npairs,
-			       params->tidpairs);
-	} else if (find == OPX_ENTRY_OVERLAP) {
-		/* Multiple entries to process - loop */
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_ENTRY_OVERLAP\n");
-
-		const struct opx_mr_tid_info *const overlap_tid_entry =
-			&((struct opx_tid_mr *)entry->data)->tid_info;
-		assert(overlap_tid_entry->tid_length != 0);
-
-		if (overlap_tid_entry->invalid) {
-			/* TID was invalidated while still in use and not deleted,
-			   can't user or re-register it until it's dead. */
-			/* Unlock for failed return */
-			pthread_mutex_unlock(&mm_lock);
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-				"OPX_DEBUG_EXIT OPX_TID_IS_INVALID FI_EINVAL TIDs "
-				"tid vaddr [%#lx - %#lx] length %lu/%#lX,  "
-				"found [%#lx - %#lx] length %lu/%#lX\n",
-				tid_vaddr, tid_vaddr + tid_length,
-				tid_length, tid_length,
-				overlap_tid_entry->tid_vaddr,
-				overlap_tid_entry->tid_vaddr + overlap_tid_entry->tid_length,
-				overlap_tid_entry->tid_length,
-				overlap_tid_entry->tid_length);
-			return -FI_EINVAL;
+		if (OFI_UNLIKELY(find == OPX_TID_CACHE_ENTRY_IN_USE)) {
+			ret = -FI_EPERM;
+			goto register_end;
 		}
-		/* Partial/overlapping memory region found */
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "OVERLAP TIDs "
-		       "tid vaddr [%#lx - %#lx] length %lu/%#lX, "
-		       "overlap vaddr [%#lx - %#lx] , tid length %lu/%#lX\n",
-		       tid_vaddr, tid_vaddr + tid_length,
-		       tid_length, tid_length,
-		       overlap_tid_entry->tid_vaddr,
-		       overlap_tid_entry->tid_vaddr + overlap_tid_entry->tid_length,
-		       overlap_tid_entry->tid_length,
-		       overlap_tid_entry->tid_length);
 
-		uint64_t remaining_vaddr = tid_vaddr;
-		int64_t remaining_length = tid_length;
-		uint32_t ntidpairs = 0;
-		/* This loop handles the more complicated
-		   combinations of holes and overlap */
-		bool once = true;
-		while (remaining_length) {
-			/* process previos find results */
-			find = opx_process_entry(opx_ep, find,
-						      &find_info, &entry,
-						      &remaining_vaddr,
-						      &remaining_length);
-			if(find == OPX_ENTRY_IN_USE) {
-				FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-				       "FAILED OPX_ENTRY_IN_USE "
-				       "tid vaddr [%#lx - %#lx] length %lu/%#lX, "
-				       "find vaddr [%#lx - %#lx] length %lu/%#lX, "
-				       "deregister vaddr [%#lx - %#lx] length %lu/%#lX\n",
-				       tid_vaddr, tid_vaddr + tid_length,
-				       tid_length, tid_length,
-				       (uint64_t)find_info.iov.iov_base,
-				       (uint64_t)find_info.iov.iov_base + find_info.iov.iov_len,
-				       find_info.iov.iov_len,
-				       find_info.iov.iov_len, tid_vaddr,
-				       tid_vaddr + tid_length -
-				       (remaining_length + find_info.iov.iov_len),
-				       tid_length - (remaining_length + find_info.iov.iov_len),
-				       tid_length - (remaining_length + find_info.iov.iov_len));
-				/* Unlock for deregister and free/return */
-				pthread_mutex_unlock(&mm_lock);
-				opx_deregister_for_rzv(
-				    opx_ep, tid_vaddr,
-				    tid_length - (remaining_length + find_info.iov.iov_len));
-				return -FI_EPERM;
-			}
-			if (find == OPX_ENTRY_NOT_FOUND) {
-				/* Flush the dead list, don't flush the lru list (false) */
-				if(once) {
-					once = false;
-					opx_tid_cache_flush(tid_cache, false);
-				}
-				FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-				       "NEXT OPX_ENTRY_NOT_FOUND TIDs "
-				       "remaining vaddr [%#lx - %#lx] length %lu/%#lX, "
-				       "not found vaddr [%#lx - %#lx] %lu/%#lX\n",
-				       remaining_vaddr, remaining_vaddr + remaining_length,
-				       remaining_length, remaining_length,
-				       (uint64_t)find_info.iov.iov_base,
-				       (uint64_t)find_info.iov.iov_base +
-					       find_info.iov.iov_len,
-				       find_info.iov.iov_len,
-				       find_info.iov.iov_len);
-				/* Create the missing hole */
-				struct ofi_mr_entry *create_entry = NULL;
-				int rc = opx_tid_cache_crte(tid_cache,
-							    &find_info,
-							    &create_entry,
-							    opx_ep);
-				if (rc) { /* failed */
-					OPX_TID_CACHE_DEBUG_FPRINTF("## %s:%u return -FI_EFAULT\n",
-						__func__, __LINE__);
-					FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-					       "FAILED "
-					       "tid vaddr [%#lx - %#lx] length %lu/%#lX, "
-					       "failed vaddr [%#lx - %#lx] , tid length %lu/%#lX, "
-					       "deregister vaddr [%#lx - %#lx] , tid length %lu/%#lX\n",
-					       tid_vaddr, tid_vaddr + tid_length,
-					       tid_length, tid_length,
-					       (uint64_t)find_info.iov.iov_base,
-					       (uint64_t)find_info.iov.iov_base +
-						       find_info.iov.iov_len,
-					       find_info.iov.iov_len,
-					       find_info.iov.iov_len, tid_vaddr,
-					       tid_vaddr + tid_length -
-						       (remaining_length +
-							find_info.iov.iov_len),
-					       tid_length -
-						       (remaining_length +
-							find_info.iov.iov_len),
-					       tid_length -
-						       (remaining_length +
-							find_info.iov.iov_len));
-					/* Unlock for deregister and free/return */
-					pthread_mutex_unlock(&mm_lock);
-					opx_deregister_for_rzv(
-						opx_ep, tid_vaddr,
-						tid_length -
-							(remaining_length +
-							 find_info.iov.iov_len));
-					/*crte may return an entry */
-					if (create_entry) {
-						FI_DBG(fi_opx_global.prov,
-						       FI_LOG_MR,
-						       "OPX_DEBUG_EXIT FI_EFAULT (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
-						       create_entry,
-						       create_entry->data,
-						       create_entry->info.iov
-							       .iov_base,
-						       (char *)create_entry->info
-								       .iov
-								       .iov_base +
-							       create_entry->info
-								       .iov
-								       .iov_len,
-						       create_entry->info.iov
-							       .iov_len,
-						       create_entry->info.iov
-							       .iov_len,
-						       create_entry->use_cnt);
-						opx_cache_free_entry(
-							tid_cache,
-							create_entry);
-					}
-					return -FI_EFAULT;
-				}
-				assert(create_entry);
-				/* opx_register_tid_region was done in add region, check result */
-				const struct opx_mr_tid_info
-					*const create_tid_entry =
-						&((struct opx_tid_mr *)
-							  create_entry->data)
-							 ->tid_info;
-				if (create_tid_entry->ninfo ==
-				    0) { /* failed */
-					OPX_TID_CACHE_DEBUG_FPRINTF("## %s:%u return -FI_EFAULT\n",
-						__func__, __LINE__);
-					FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-					       "FAILED "
-					       "tid vaddr [%#lx - %#lx] length %lu/%#lX, "
-					       "failed vaddr [%#lx - %#lx] , tid length %lu/%#lX, "
-					       "deregister vaddr [%#lx - %#lx] , tid length %lu/%#lX\n",
-					       tid_vaddr, tid_vaddr + tid_length,
-					       tid_length, tid_length,
-					       (uint64_t)find_info.iov.iov_base,
-					       (uint64_t)find_info.iov.iov_base +
-						       find_info.iov.iov_len,
-					       find_info.iov.iov_len,
-					       find_info.iov.iov_len, tid_vaddr,
-					       tid_vaddr + tid_length -
-						       (remaining_length +
-							find_info.iov.iov_len),
-					       tid_length -
-						       (remaining_length +
-							find_info.iov.iov_len),
-					       tid_length -
-						       (remaining_length +
-							find_info.iov.iov_len));
-					/* Unlock for deregister and free/return */
-					pthread_mutex_unlock(&mm_lock);
-					opx_deregister_for_rzv(
-						opx_ep, tid_vaddr,
-						tid_length -
-							(remaining_length +
-							 find_info.iov.iov_len));
-					/*crte returned an entry even if tid update failed */
-					FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-					       "OPX_DEBUG_EXIT FI_EFAULT (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
-					       create_entry, create_entry->data,
-					       create_entry->info.iov.iov_base,
-					       (char *)create_entry->info.iov
-							       .iov_base +
-						       create_entry->info.iov
-							       .iov_len,
-					       create_entry->info.iov.iov_len,
-					       create_entry->info.iov.iov_len,
-					       create_entry->use_cnt);
-					opx_cache_free_entry(tid_cache,
-							      create_entry);
-					return -FI_EFAULT;
-				}
-
-				/* Copy the tid info to params list for further modifications */
-				const uint32_t created_ntidpairs =
-					(int)create_tid_entry->npairs;
-				const uint32_t *created_tidpairs =
-					&create_tid_entry->pairs[0];
-				OPX_DEBUG_TIDS("Created tidpairs",
-					       created_ntidpairs,
-					       created_tidpairs);
-				memcpy(&params->tidpairs[ntidpairs],
-				       created_tidpairs,
-				       (created_ntidpairs * sizeof(uint32_t)));
-				if (ntidpairs == 0) {
-					params->tid_info.offset = 0;
-				}
-				ntidpairs += created_ntidpairs;
-
-			} else if (find == OPX_ENTRY_FOUND) {
-				/* Use the found overlap*/
-				const struct opx_mr_tid_info
-					*const found_tid_entry =
-						&((struct opx_tid_mr *)
-							  entry->data)
-							 ->tid_info;
-				if (found_tid_entry->invalid) {
-					/* TID was invalidated while still in use and not deleted,
-					   can't user or re-register it until it's dead. */
-					/* Unlock for failed return */
-					pthread_mutex_unlock(&mm_lock);
-					FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-						"OPX_DEBUG_EXIT OPX_TID_IS_INVALID FI_EINVAL TIDs "
-						"vaddr [%#lx - %#lx] length %lu/%#lX "
-						"found [%#lx - %#lx] length %lu/%#lX\n",
-						tid_vaddr, tid_vaddr + tid_length, tid_length, tid_length,
-						found_tid_entry->tid_vaddr,
-						found_tid_entry->tid_vaddr + found_tid_entry->tid_length,
-						found_tid_entry->tid_length,
-						found_tid_entry->tid_length);
-					return -FI_EINVAL;
-				}
-				opx_tid_inc_use_cnt(entry);
-				FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-				       "NEXT OPX_ENTRY_FOUND TIDs "
-				       "remaining vaddr [%#lx - %#lx] length %lu/%#lX, "
-				       "found vaddr [%#lx - %#lx] %lu/%#lX\n",
-				       remaining_vaddr, remaining_vaddr + remaining_length,
-				       remaining_length, remaining_length,
-				       found_tid_entry->tid_vaddr,
-				       found_tid_entry->tid_vaddr +
-					       found_tid_entry->tid_length,
-				       found_tid_entry->tid_length,
-				       found_tid_entry->tid_length);
-				first_tid_index = 0;
-				last_tid_index =
-					(int)found_tid_entry->npairs;
-				page_offset_in_tid = 0;
-				OPX_DEBUG_TIDS("OVERLAP REUSE FULL LIST",
-					       found_tid_entry->npairs,
-					       &found_tid_entry->pairs[0]);
-				if ((found_tid_entry->tid_vaddr <
-				     remaining_vaddr) ||
-				    (remaining_length <
-				     found_tid_entry->tid_length)) {
-					/* Not using all the found entry */
-					opx_return_offset_for_new_cache_entry(
-						(uint64_t)find_info.iov.iov_base,
-						find_info.iov.iov_len,
-						found_tid_entry,
-						&first_tid_index,
-						&page_offset_in_tid,
-						&last_tid_index);
-				}
-				OPX_DEBUG_TIDS(
-					"OVERLAP REUSE SUBSET LIST",
-					(last_tid_index - first_tid_index + 1),
-					&found_tid_entry->pairs[first_tid_index]);
-				const uint32_t found_ntidpairs =
-					last_tid_index - first_tid_index + 1;
-				const uint32_t *found_tidpairs = &found_tid_entry->pairs[first_tid_index];
-				assert(found_ntidpairs && found_tidpairs &&
-				       params && params->tidpairs);
-
-				if (ntidpairs == 0) {
-					params->tid_info.offset =
-						page_offset_in_tid *
-						OPX_HFI1_TID_PAGESIZE;
-				}
-
-				memcpy(&params->tidpairs[ntidpairs],
-				       found_tidpairs,
-				       (found_ntidpairs * sizeof(uint32_t)));
-				ntidpairs += found_ntidpairs;
-				assert(ntidpairs < FI_OPX_MAX_DPUT_TIDPAIRS);
-			} else { /* Impossible? */
-				OPX_TID_CACHE_DEBUG_FPRINTF( "## %s:%u return -FI_EFAULT\n",
-					__func__, __LINE__);
-				FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-				       "IMPOSSIBLE? "
-				       "tid vaddr [%#lx - %#lx] length %lu/%#lX, "
-				       "failed vaddr [%#lx - %#lx] , tid length %lu/%#lX, "
-				       "deregister vaddr [%#lx - %#lx] , tid length %lu/%#lX\n",
-				       tid_vaddr, tid_vaddr + tid_length,
-				       tid_length, tid_length,
-				       (uint64_t)find_info.iov.iov_base,
-				       (uint64_t)find_info.iov.iov_base +
-					       find_info.iov.iov_len,
-				       find_info.iov.iov_len,
-				       find_info.iov.iov_len, tid_vaddr,
-				       tid_vaddr + tid_length -
-					       remaining_length,
-				       tid_length - remaining_length,
-				       tid_length - remaining_length);
-				/* Unlock for deregister and free/return */
-				pthread_mutex_unlock(&mm_lock);
-				opx_deregister_for_rzv(
-					opx_ep, tid_vaddr,
-					tid_length - remaining_length);
-				FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-				       "OPX_DEBUG_EXIT -FI_EFAULT\n");
-				return -FI_EFAULT;
-			}
-			if (remaining_length) {
-				/* Find for next loop/process */
-				find_info.iov.iov_base =
-					(void *)remaining_vaddr;
-				find_info.iov.iov_len = remaining_length;
-				find = opx_tid_cache_find(opx_ep, &find_info,
-							  &entry);
-				if (find == OPX_ENTRY_IN_USE) {
-					FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-					       "FAILED OPX_ENTRY_IN_USE "
-					       "tid vaddr [%#lx - %#lx] length %lu/%#lX, "
-					       "find vaddr [%#lx - %#lx] length %lu/%#lX, "
-					       "deregister vaddr [%#lx - %#lx] length %lu/%#lX\n",
-					       tid_vaddr, tid_vaddr + tid_length,
-					       tid_length, tid_length,
-					       (uint64_t)find_info.iov.iov_base,
-					       (uint64_t)find_info.iov.iov_base +
-						       find_info.iov.iov_len,
-					       find_info.iov.iov_len,
-					       find_info.iov.iov_len, tid_vaddr,
-					       tid_vaddr + tid_length -
-						       (remaining_length +
-							find_info.iov.iov_len),
-					       tid_length -
-						       (remaining_length +
-							find_info.iov.iov_len),
-					       tid_length -
-						       (remaining_length +
-							find_info.iov.iov_len));
-					/* Unlock for deregister and free/return */
-					pthread_mutex_unlock(&mm_lock);
-					opx_deregister_for_rzv(
-						opx_ep, tid_vaddr,
-						tid_length -
-							(remaining_length +
-							 find_info.iov.iov_len));
-					return -FI_EPERM;
-				}
-			}
+		if (find == OPX_TID_CACHE_ENTRY_NOT_FOUND) {
+			ret = -FI_EAGAIN;
+			goto register_end;
 		}
-		params->tid_info.npairs = ntidpairs;
-		OPX_DEBUG_TIDS("RTS tidpairs", params->tid_info.npairs,
-			       params->tidpairs);
+
+		assert(find == OPX_TID_CACHE_ENTRY_FOUND);
+		assert(overlap_chain.entry_count > 0);
+
+		opx_tid_cache_combine_chain_entries(&overlap_chain, cur_addr_range, tid_addr_block);
 	}
+	assert(tid_addr_block->target_iov.iov_base <= (void *) cur_addr_range->buf);
+	assert(ofi_iov_end(&tid_addr_block->target_iov) >= (void *) cur_addr_range->buf);
+
+register_end:
 	pthread_mutex_unlock(&mm_lock);
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_DEBUG_EXIT 0\n");
-	return 0;
+	return ret;
 }
 
-void opx_tid_cache_flush_all(struct ofi_mr_cache *cache,const bool flush_lru,const bool flush_all)
+__OPX_FORCE_INLINE__
+int opx_tid_get_tids_for_initial_range(struct fi_opx_ep *opx_ep,
+					struct fi_opx_hmem_iov *cur_addr_range,
+					struct opx_tid_addr_block *tid_addr_block)
+{
+	int ret = opx_tid_get_tids_for_range(opx_ep, cur_addr_range, tid_addr_block);
+
+	// If we failed, try flushing the LRU to free up some TIDs and retry.
+	if (ret == -FI_EAGAIN) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+								.tid_cache_flush_lru);
+		if (opx_tid_cache_flush_all(opx_ep->domain->tid_domain->tid_cache, true, false)) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+									.tid_cache_flush_lru_helped);
+			ret = opx_tid_get_tids_for_range(opx_ep, cur_addr_range, tid_addr_block);
+		}
+	}
+
+	return ret;
+}
+
+__OPX_FORCE_INLINE__
+int opx_tid_get_tids_for_remaining_range(struct fi_opx_ep *opx_ep,
+					struct fi_opx_hmem_iov *cur_addr_range,
+					struct opx_tid_addr_block *tid_addr_block,
+					uintptr_t cur_addr_range_end,
+					uintptr_t target_range_end)
+{
+	struct fi_opx_hmem_iov next_addr_range = {
+		.buf = target_range_end,
+		.len = cur_addr_range_end - target_range_end,
+		.iface = cur_addr_range->iface,
+		.device = cur_addr_range->device
+	};
+
+	struct opx_tid_addr_block next_tid_block = {};
+
+	int ret_and_val = -1;
+	int ret;
+
+	while (target_range_end < cur_addr_range_end &&
+		(ret = opx_tid_get_tids_for_range(opx_ep, &next_addr_range, &next_tid_block) == FI_SUCCESS)) {
+
+		// If we got at least one FI_SUCCESS, then we want to ultimately
+		// return FI_SUCCESS, even if we get a subsequent failure.
+		ret_and_val = 0;
+
+		assert(next_tid_block.offset == 0);
+		assert(next_tid_block.npairs > 0);
+		assert(next_tid_block.target_iov.iov_base == (void *) target_range_end);
+
+		int pair_idx = tid_addr_block->npairs;
+		for (int i = 0; i < next_tid_block.npairs; i++) {
+			tid_addr_block->pairs[pair_idx++] = next_tid_block.pairs[i];
+		}
+		tid_addr_block->npairs = pair_idx;
+
+		tid_addr_block->target_iov.iov_len += next_tid_block.target_iov.iov_len;
+
+		target_range_end = ((uintptr_t) next_tid_block.target_iov.iov_base)
+				+ next_tid_block.target_iov.iov_len;
+
+		next_addr_range.buf = target_range_end;
+		next_addr_range.len = cur_addr_range_end - target_range_end;
+	}
+
+	return ret & ret_and_val;
+}
+
+int opx_register_for_rzv(struct fi_opx_ep *opx_ep,
+			 struct fi_opx_hmem_iov *cur_addr_range,
+			 struct opx_tid_addr_block *tid_addr_block)
+{
+	uintptr_t cur_addr_range_end = cur_addr_range->buf + cur_addr_range->len;
+
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+							.reg_for_rzv_get_initial);
+	int ret = opx_tid_get_tids_for_initial_range(opx_ep, cur_addr_range, tid_addr_block);
+
+	if (ret != FI_SUCCESS) {
+		return ret;
+	}
+
+	uintptr_t target_end = ((uintptr_t) tid_addr_block->target_iov.iov_base)
+				+ tid_addr_block->target_iov.iov_len;
+
+	if (target_end >= cur_addr_range_end) {
+		return FI_SUCCESS;
+	}
+
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive
+							.reg_for_rzv_get_remaining);
+	return opx_tid_get_tids_for_remaining_range(opx_ep, cur_addr_range,
+						    tid_addr_block,
+						    cur_addr_range_end,
+						    target_end);
+}
+
+int opx_tid_cache_flush_all(struct ofi_mr_cache *cache,const bool flush_lru,const bool flush_all)
 {
 	struct dlist_entry free_list;
 	struct ofi_mr_entry *entry;
@@ -2321,6 +1870,7 @@ void opx_tid_cache_flush_all(struct ofi_mr_cache *cache,const bool flush_lru,con
 
 	pthread_mutex_unlock(&mm_lock);
 
+	int freed_entries = 0;
 	/* Free dead and selected lru entries */
 	while (!dlist_empty(&free_list)) {
 		dlist_pop_front(&free_list, struct ofi_mr_entry, entry,
@@ -2334,9 +1884,10 @@ void opx_tid_cache_flush_all(struct ofi_mr_cache *cache,const bool flush_lru,con
 		       entry->info.iov.iov_len, entry->info.iov.iov_len,
 		       entry->use_cnt);
 		opx_cache_free_entry(cache, entry);
+		++freed_entries;
 	}
 
-	return ;
+	return freed_entries;
 }
 
 /* Copied from opx_tid_cache_flush

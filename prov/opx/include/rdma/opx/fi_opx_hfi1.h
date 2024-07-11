@@ -86,7 +86,7 @@
 							      // of avalible credits is above this number
 
 #define OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT		(16384) /* Default for max payload size for using Multi-packet Eager */
-#define OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX			(65535) /* Max value (set to fit within uint16_t) */
+#define OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX		(65535) /* Max value (set to fit within uint16_t) */
 
 /* The total size for a single packet used in a multi-packet eager send.
    This is packet payload plus 64 bytes for the PBC and packet header.
@@ -200,10 +200,6 @@ static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX, "FI_OP
 
 //Version 1, EXPECTED TID opcode (0)(byte 0), 0 iovectors (byte 1, set at runtime)
 #define FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS	(0x0001)
-
-#ifndef OPX_RTS_TID_SETUP_MAX_TRIES
-#define OPX_RTS_TID_SETUP_MAX_TRIES	(1)
-#endif
 
 static inline
 uint32_t fi_opx_addr_calculate_base_rx (const uint32_t process_id, const uint32_t processes_per_node) {
