@@ -36,7 +36,7 @@ struct efa_hmem_info {
 struct efa_domain;
 
 int efa_domain_hmem_validate_p2p_opt(struct efa_domain *efa_domain, enum fi_hmem_iface iface, int p2p_opt);
-int efa_domain_hmem_support_init_all(struct efa_domain *efa_domain);
+int efa_domain_hmem_info_init_all(struct efa_domain *efa_domain);
 
 /**
  * @brief Copy data from a hmem device to a system buffer
