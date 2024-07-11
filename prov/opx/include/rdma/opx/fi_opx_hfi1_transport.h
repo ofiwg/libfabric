@@ -441,22 +441,21 @@ struct fi_opx_hfi1_dput_params {
 OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_hfi1_dput_params, compare_iov) & 7) == 0, "compare_iov not 8-byte aligned!");
 
 struct fi_opx_hfi1_rx_rzv_rts_params {
-	struct fi_opx_work_elem work_elem;
+	/* == CACHE LINE 0 == */
+	struct fi_opx_work_elem work_elem;	// 40 bytes
 	struct fi_opx_ep *opx_ep;
 	uint64_t lrh_dlid;
 	uint64_t slid;
+
+	/* == CACHE LINE 1 == */
 	uint64_t niov;
 	uintptr_t origin_byte_counter_vaddr;
 	struct fi_opx_rzv_completion* rzv_comp;
 	uintptr_t dst_vaddr; /* bumped past immediate data */
-	uint64_t tid_pending_vaddr;
-	uint64_t tid_pending_tid_vaddr;
-	int64_t tid_pending_length;
-	int64_t tid_pending_tid_length;
-	int64_t tid_pending_alignment_adjustment;
+
 	uint64_t pbc_dlid;
 
-	uint32_t tid_setup_retries;
+	uint32_t cur_iov;
 	uint32_t u32_extended_rx;
 	unsigned is_intranode;
 	enum ofi_reliability_kind reliability;
@@ -467,13 +466,17 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	uint8_t opcode;
 	uint8_t u8_rx;
 	uint8_t	target_hfi_unit;
+	uint8_t unused;
 
+	/* == CACHE LINE 2 == */
+	/* This struct should reside immediately before the IOVs */
 	struct {
 		struct fi_opx_hmem_iov	cur_addr_range;
 		uint32_t 		npairs;
 		uint32_t		offset;
 		int32_t 		origin_byte_counter_adj;
 	} tid_info;
+
 	/* Either FI_OPX_MAX_DPUT_IOV iov's or
 	   1 iov and FI_OPX_MAX_DPUT_TIDPAIRS tidpairs */
 	union {
@@ -484,6 +487,16 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 		};
 	};
 };
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_hfi1_rx_rzv_rts_params, tid_info)
+			== (offsetof(struct fi_opx_hfi1_rx_rzv_rts_params, dput_iov) -
+				 sizeof(((struct fi_opx_hfi1_rx_rzv_rts_params *)0)->tid_info)),
+			"fi_opx_hfi1_rx_rzv_rts_params->tid_info should reside immediately before dput iovs!");
+OPX_COMPILE_TIME_ASSERT(sizeof(((struct fi_opx_hfi1_rx_rzv_rts_params *)0)->dput_iov)
+			< FI_OPX_HFI1_PACKET_MTU,
+			"sizeof(fi_opx_hfi1_rx_rzv_rts_params->dput_iov) should be < MAX PACKET MTU!");
+OPX_COMPILE_TIME_ASSERT(sizeof(((struct fi_opx_hfi1_rx_rzv_rts_params *)0)->tidpairs)
+			< (FI_OPX_HFI1_PACKET_MTU - sizeof(union fi_opx_hfi1_dput_iov)),
+			"sizeof(fi_opx_hfi1_rx_rzv_rts_params->tidpairs) should be < (MAX PACKET MTU - sizeof(dput iov)!");
 
 struct fi_opx_hfi1_rx_dput_fence_params {
 	struct fi_opx_work_elem work_elem;
