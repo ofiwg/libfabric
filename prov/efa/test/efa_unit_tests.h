@@ -143,6 +143,7 @@ void test_info_check_shm_info_threading();
 void test_info_check_hmem_cuda_support_on_api_lt_1_18();
 void test_info_check_hmem_cuda_support_on_api_ge_1_18();
 void test_info_check_no_hmem_support_when_not_requested();
+void test_efa_hmem_info_update_neuron();
 void test_efa_use_device_rdma_env1_opt1();
 void test_efa_use_device_rdma_env0_opt0();
 void test_efa_use_device_rdma_env1_opt0();
@@ -187,65 +188,6 @@ void test_efa_rdm_cq_post_initial_rx_pkts();
 void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 void test_efa_cntr_post_initial_rx_pkts();
-/**
- * System memory always supports P2P
- */
-void test_efa_system_p2p_support_true_system_p2p_file_does_not_exist();
-void test_efa_system_p2p_support_true_system_p2p_file_empty();
-/**
- * CUDA P2P needs NVIDIA/NVIDIA peermem provider which can be verified
- * in the sysfs file
- */
-void test_efa_cuda_p2p_support_true_nvidia_prov();
-void test_efa_cuda_p2p_support_true_nvidia_peermem_prov();
-void test_efa_cuda_p2p_support_false_p2p_file_does_not_exist();
-void test_efa_cuda_p2p_support_false_p2p_file_empty();
-/**
- * NEURON P2P needs NEURON provider which can be verified in the sysfs file
- */
-void test_efa_neuron_p2p_support_true_neuron_prov();
-void test_efa_neuron_p2p_support_false_p2p_file_does_not_exist();
-void test_efa_neuron_p2p_support_false_p2p_file_empty();
-/**
- * synapseai platforms always support P2P
- */
-void test_efa_synapseai_p2p_support_true_p2p_file_does_not_exist();
-void test_efa_synapseai_p2p_support_true_p2p_file_empty();
-/**
- * System memory does not support dmabuf so it should always use ibv_reg_mr
- */
-void test_efa_system_always_ibv_reg_mr();
-/**
- * Verify dmabuf is supported lazily for the HMEM iface
- */
-void test_efa_neuron_dmabuf_support_dmabuf_success();
-/**
- * If dmabuf fd cannot be retrieved, verify dmabuf is not supported lazily
- * for the HMEM iface
- */
-void test_efa_neuron_dmabuf_support_get_fd_fail_fallback();
-/**
- * If ibv_reg_dmabuf_mr fails, verify dmabuf is not supported lazily
- * for the HMEM iface
- */
-void test_efa_neuron_dmabuf_support_mr_fail_no_fallback();
-/**
- * Unless FI_MR_DMABUF is required CUDA should always use ibv_reg_mr
- */
-void test_efa_cuda_dmabuf_support_always_ibv_reg_mr();
-/**
- * If dmabuf is supported we should always use ibv_reg_dmabuf_mr,
- * even if it fails unexpctedly
- */
-void test_efa_synapseai_dmabuf_support_fd_fail_no_fallback();
-/**
- * If dmabuf is NOT supported, but the application still requires FI_MR_DMABUF,
- * we should respect application's request and use ibv_reg_dmabuf_mr.
- * This is a theoretical corner case to allow application override.
- */
-void test_efa_cuda_dmabuf_support_require_dmabuf_fail_no_fallback();
-void test_efa_neuron_dmabuf_support_require_dmabuf_fail_no_fallback();
-void test_efa_mr_reg_counters();
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)
