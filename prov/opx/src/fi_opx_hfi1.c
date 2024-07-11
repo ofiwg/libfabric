@@ -855,6 +855,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	for (int i=0; i < 32; ++i) {
 		OPX_HFI1_BAR_STORE(&tidflowtable[i],0UL);
 	}
+	assert(ctrl->__hfi_tidexpcnt <= OPX_MAX_TID_COUNT);
 	context->runtime_flags = ctxt_info->runtime_flags;
 
 	/* OPX relies on RHF.SeqNum, not the RcvHdrTail */
@@ -1149,6 +1150,17 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		}
 	}
 
+#ifdef HAVE_CUDA
+	if (params->dput_iov[0].rbuf_iface == FI_HMEM_CUDA) {
+		int err = cuda_set_sync_memops((void *) params->dput_iov[0].rbuf);
+		if (OFI_UNLIKELY(err != 0)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+				"cuda_set_sync_memops(%p) FAILED (returned %d)\n",
+				(void *) params->dput_iov[0].rbuf, err);
+		}
+	}
+#endif
+
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service,replay);
 	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state,
 							    params->slid,
@@ -1192,18 +1204,13 @@ int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep,
 		return 0;
 	}
 
-	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.rts_tid_eligible);
-
 	/* Caller adjusted pointers and lengths past the immediate data.
 	 * Now align the destination buffer to be page aligned for expected TID writes
 	 * This should point/overlap into the immediate data area.
 	 * Then realign source buffer and lengths appropriately.
 	 */
-	const uint64_t page_alignment_mask = -(int64_t)OPX_TID_PAGE_SIZE[iface];
 	/* TID writes must start on 64 byte boundaries */
 	const uint64_t vaddr = ((uint64_t)params->dst_vaddr) & -64;
-	/* TID updates require page alignment*/
-	const uint64_t tid_vaddr = (uint64_t)vaddr & (uint64_t)page_alignment_mask;
 
 	/* If adjusted pointer doesn't fall into the immediate data region, can't
 	 * continue with TID.  Fallback to eager.
@@ -1216,125 +1223,251 @@ int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep,
 
 	/* First adjust for the start page alignment, using immediate data that was sent.*/
 	const int64_t alignment_adjustment = (uint64_t)params->dst_vaddr - vaddr;
+	const int64_t length_with_adjustment = params->dput_iov[0].bytes + alignment_adjustment;
+	const int64_t new_length = length_with_adjustment & -64;
+	const int64_t len_difference = new_length - params->dput_iov[0].bytes;
+
+	if (alignment_adjustment) {
+		params->dst_vaddr -= alignment_adjustment;
+		params->dput_iov[0].rbuf -= alignment_adjustment;
+		params->dput_iov[0].sbuf -= alignment_adjustment;
+	}
 
 	/* Adjust length for aligning the buffer and adjust again for total length,
 	   aligning to SDMA header auto-generation payload requirements. */
-	const int64_t length_with_adjustment = params->dput_iov[0].bytes + alignment_adjustment;
-	const int64_t new_length = length_with_adjustment & -64;
+	params->dput_iov[0].bytes += len_difference;
+	params->rzv_comp->context->byte_counter += len_difference;
+	params->tid_info.origin_byte_counter_adj = (int32_t) len_difference;
 
-	/* Tune for unaligned buffers.  Buffers misaligned more than the threshold on
-	 * message sizes under the MSG threshold will fallback to eager.
-	 */
-	if ((new_length < FI_OPX_TID_MSG_MISALIGNED_THRESHOLD) &&
-		((vaddr - tid_vaddr) > FI_OPX_TID_MISALIGNED_THRESHOLD)) {
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.rts_fallback_eager_misaligned_thrsh);
-		return 0;
-	}
-
-	/* The tid length must account for starting at a page boundary and will be page aligned */
-	const int64_t tid_length = (uint64_t)(((vaddr + new_length) - tid_vaddr) +
-				(OPX_TID_PAGE_SIZE[iface] - 1)) & (uint64_t)page_alignment_mask;
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"iov_len %#lX, length %#lX, tid_length %#lX, "
-		"params->dst_vaddr %p, iov_base %p, vaddr [%p - %p], tid_vaddr [%p - %p]\n",
-		params->dput_iov[0].bytes, new_length, tid_length,
-		(void *)params->dst_vaddr, (void *) params->dput_iov[0].sbuf,
-		(void *)vaddr, (void *)(vaddr + new_length),
-		(void *)tid_vaddr, (void *)(tid_vaddr + tid_length));
-
-	params->tid_pending_vaddr = vaddr;
-	params->tid_pending_length = new_length;
-	params->tid_pending_tid_vaddr = tid_vaddr;
-	params->tid_pending_tid_length = tid_length;
-	params->tid_pending_alignment_adjustment = new_length - params->dput_iov[0].bytes;
-
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.rts_tid_eligible);
 
 	return 1;
+}
+
+__OPX_FORCE_INLINE__
+union fi_opx_hfi1_deferred_work * opx_hfi1_rx_rzv_rts_tid_prep_cts(
+			union fi_opx_hfi1_deferred_work *work,
+			struct fi_opx_hfi1_rx_rzv_rts_params *params,
+			const struct opx_tid_addr_block *tid_addr_block,
+			const size_t cur_addr_range_tid_len,
+			const bool last_cts)
+{
+	union fi_opx_hfi1_deferred_work *cts_work;
+	struct fi_opx_hfi1_rx_rzv_rts_params *cts_params;
+
+	// If this will not be the last CTS we send, allocate a new deferred
+	// work item and rzv completion to use for the CTS, and copy the first
+	// portion of the current work item into it. If this will be the last
+	// CTS, we'll just use the existing deferred work item and rzv completion
+	if (!last_cts) {
+		cts_work = ofi_buf_alloc(params->opx_ep->tx->work_pending_pool);
+		if (OFI_UNLIKELY(cts_work == NULL)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Failed to allocate deferred work item!\n");
+			return NULL;
+		}
+		struct fi_opx_rzv_completion* rzv_comp = ofi_buf_alloc(params->opx_ep->rzv_completion_pool);
+		if (OFI_UNLIKELY(rzv_comp == NULL)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Failed to allocate rendezvous completion item!\n");
+			OPX_BUF_FREE(cts_work);
+			return NULL;
+		}
+
+		const size_t copy_length = offsetof(struct fi_opx_hfi1_rx_rzv_rts_params, tid_info);
+		assert(copy_length < sizeof(*work));
+		memcpy(cts_work, work, copy_length);
+
+		cts_work->work_elem.slist_entry.next = NULL;
+		cts_params = &cts_work->rx_rzv_rts;
+		cts_params->rzv_comp = rzv_comp;
+		cts_params->rzv_comp->context = params->rzv_comp->context;
+	} else {
+		cts_work = work;
+		cts_params = params;
+	}
+
+	// Calculate the offset of the target buffer relative to the
+	// original target buffer address, and then use that to set
+	// the address for the source buffer
+	size_t target_offset = params->tid_info.cur_addr_range.buf -
+				params->dput_iov[params->cur_iov].rbuf;
+	uintptr_t adjusted_source_buf = params->dput_iov[params->cur_iov].sbuf + target_offset;
+
+	cts_params->niov = 1;
+	cts_params->dput_iov[0].rbuf_iface = params->dput_iov[params->cur_iov].rbuf_iface;
+	cts_params->dput_iov[0].rbuf_device = params->dput_iov[params->cur_iov].rbuf_device;
+	cts_params->dput_iov[0].sbuf_iface = params->dput_iov[params->cur_iov].sbuf_iface;
+	cts_params->dput_iov[0].sbuf_device = params->dput_iov[params->cur_iov].sbuf_device;
+	cts_params->dput_iov[0].rbuf = params->tid_info.cur_addr_range.buf;
+	cts_params->dput_iov[0].sbuf = adjusted_source_buf;
+	cts_params->dput_iov[0].bytes = cur_addr_range_tid_len;
+	cts_params->dst_vaddr = params->tid_info.cur_addr_range.buf;
+
+	cts_params->rzv_comp->tid_vaddr = params->tid_info.cur_addr_range.buf;
+	cts_params->rzv_comp->tid_length = cur_addr_range_tid_len;
+	cts_params->rzv_comp->tid_byte_counter = cur_addr_range_tid_len;
+	cts_params->rzv_comp->tid_bytes_accumulated = 0;
+
+	cts_params->tid_info.npairs = tid_addr_block->npairs;
+	cts_params->tid_info.offset = tid_addr_block->offset;
+	cts_params->tid_info.origin_byte_counter_adj = params->tid_info.origin_byte_counter_adj;
+
+	assert(cur_addr_range_tid_len <= cts_params->rzv_comp->context->byte_counter);
+	assert(tid_addr_block->npairs < FI_OPX_MAX_DPUT_TIDPAIRS);
+	for (int i = 0; i < tid_addr_block->npairs; i++) {
+		cts_params->tidpairs[i] = tid_addr_block->pairs[i];
+	}
+
+	assert(cur_addr_range_tid_len <= cts_params->rzv_comp->context->byte_counter);
+	cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
+	cts_params->work_elem.work_type = OPX_WORK_TYPE_PIO;
+
+	return cts_work;
+}
+
+__OPX_FORCE_INLINE__
+int opx_hfi1_rx_rzv_rts_tid_fallback(union fi_opx_hfi1_deferred_work *work,
+				struct fi_opx_hfi1_rx_rzv_rts_params *params)
+{
+	/* Since we may have already sent one or more CTS packets covering
+	   some portion of the receive range using TID, we now need to
+	   adjust the buf pointers and length in the dput_iov we were
+	   working on to reflect only the unsent portion */
+	assert(params->tid_info.cur_addr_range.buf
+		>= ((uintptr_t) params->dput_iov[params->cur_iov].rbuf));
+	size_t bytes_already_sent = params->tid_info.cur_addr_range.buf
+		- ((uintptr_t) params->dput_iov[params->cur_iov].rbuf);
+	assert(bytes_already_sent < params->dput_iov[params->cur_iov].bytes);
+
+	params->dput_iov[params->cur_iov].rbuf = params->tid_info.cur_addr_range.buf;
+	params->dput_iov[params->cur_iov].sbuf += bytes_already_sent;
+	params->dput_iov[params->cur_iov].bytes -= bytes_already_sent;
+	params->dst_vaddr = params->dput_iov[params->cur_iov].rbuf;
+
+	params->tid_info.npairs = 0;
+	params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
+	params->work_elem.work_type = OPX_WORK_TYPE_PIO;
+	params->opcode = FI_OPX_HFI_DPUT_OPCODE_RZV;
+
+	FI_OPX_DEBUG_COUNTERS_INC(params->opx_ep->debug_counters
+		.expected_receive.rts_fallback_eager_reg_rzv);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV, HFI -- RENDEZVOUS RTS TID SETUP (end) EPERM, switching to non-TID send CTS (params=%p rzv_comp=%p context=%p)\n",
+		params,
+		params->rzv_comp,
+		params->rzv_comp->context);
+
+	return opx_hfi1_rx_rzv_rts_send_cts(work);
 }
 
 int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
 
-	if (opx_register_for_rzv(params, params->tid_pending_tid_vaddr,
-				params->tid_pending_tid_length,
-				params->dput_iov[0].rbuf_iface,
-				params->dput_iov[0].rbuf_device)) {
-		/* Retry TID setup */
-		if (++params->tid_setup_retries < OPX_RTS_TID_SETUP_MAX_TRIES) {
-			FI_OPX_DEBUG_COUNTERS_INC(params->opx_ep->debug_counters
-				.expected_receive.rts_tid_setup_retries);
-			return -FI_EAGAIN;
-		}
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV, HFI -- RENDEZVOUS RTS TID SETUP (begin) (params=%p rzv_comp=%p context=%p)\n",
+		params,
+		params->rzv_comp,
+		params->rzv_comp->context);
 
-		// Give up and fall back to non-TID
+	struct opx_tid_addr_block tid_addr_block = {};
+
+	int register_rc = opx_register_for_rzv(params->opx_ep,
+					       &params->tid_info.cur_addr_range,
+					       &tid_addr_block);
+
+	/* TID has been disabled for this endpoint, fall back to rendezvous */
+	if (OFI_UNLIKELY(register_rc == -FI_EPERM)) {
+		return opx_hfi1_rx_rzv_rts_tid_fallback(work, params);
+	} else if (register_rc != FI_SUCCESS) {
+		assert(register_rc == -FI_EAGAIN);
 		FI_OPX_DEBUG_COUNTERS_INC(params->opx_ep->debug_counters
-			.expected_receive.rts_fallback_eager_reg_rzv);
-		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
-		params->work_elem.work_type = OPX_WORK_TYPE_PIO;
-		return opx_hfi1_rx_rzv_rts_send_cts(work);
+			.expected_receive.rts_tid_setup_retries);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== RECV, HFI -- RENDEZVOUS RTS TID SETUP (end) EAGAIN (No Progress) (params=%p rzv_comp=%p context=%p)\n",
+			params,
+			params->rzv_comp,
+			params->rzv_comp->context);
+		return -FI_EAGAIN;
 	}
 
-	assert(params->tid_info.npairs);
+	void *cur_addr_range_end = (void *) (params->tid_info.cur_addr_range.buf
+					+ params->tid_info.cur_addr_range.len);
+	void *tid_addr_block_end = (void *) ((uintptr_t)tid_addr_block.target_iov.iov_base
+					+ tid_addr_block.target_iov.iov_len);
 
-	const uint64_t vaddr = params->tid_pending_vaddr;
-	const uint64_t tid_vaddr = params->tid_pending_tid_vaddr;
-	const int64_t tid_length = params->tid_pending_tid_length;
-	const int64_t length = params->tid_pending_length;
-	/* Register was done based on tid_vaddr and the offset should be set to the page
-	 * offset into the TID now.
-	 * This was done under the mm_lock, but that lock is not required.
-	 * Stop the MISSING_LOCK false positives. */
-	/* coverity[missing_lock] */
+	// The start of the Current Address Range should always fall within the
+	// resulting tid_addr_block IOV
+	assert(tid_addr_block.target_iov.iov_base <= (void *)params->tid_info.cur_addr_range.buf);
+	assert(tid_addr_block_end > (void *)params->tid_info.cur_addr_range.buf);
+
+	// Calculate the portion of cur_addr_range that we were able to get TIDs for
+	size_t cur_addr_range_tid_len = ((uintptr_t) MIN(tid_addr_block_end, cur_addr_range_end))
+					- params->tid_info.cur_addr_range.buf;
+	assert(cur_addr_range_tid_len <= params->rzv_comp->context->byte_counter);
+
+	// If this is the last IOV and the tid range covers the end of the current
+	// range, then this will be the last CTS we need to send.
+	const bool last_cts = (params->cur_iov == (params->niov - 1)) &&
+			(tid_addr_block_end >= cur_addr_range_end);
+
+	union fi_opx_hfi1_deferred_work *cts_work =
+		opx_hfi1_rx_rzv_rts_tid_prep_cts(work, params, &tid_addr_block,
+						cur_addr_range_tid_len, last_cts);
+
+	if (last_cts) {
+		assert(cts_work == work);
+		assert(work->work_elem.work_fn == opx_hfi1_rx_rzv_rts_send_cts);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== RECV, HFI -- RENDEZVOUS RTS TID SETUP (end) SUCCESS (params=%p rzv_comp=%p context=%p)\n",
+			params,
+			params->rzv_comp,
+			params->rzv_comp->context);
+
+		FI_OPX_DEBUG_COUNTERS_INC(params->opx_ep->debug_counters
+			.expected_receive.rts_tid_setup_success);
+
+		// This is the "FI_SUCCESS" exit point for this function
+		return opx_hfi1_rx_rzv_rts_send_cts(cts_work);
+	}
+
+	assert(cts_work != work);
+	int rc = opx_hfi1_rx_rzv_rts_send_cts(cts_work);
+	if (rc == FI_SUCCESS) {
+		OPX_BUF_FREE(cts_work);
+	} else {
+		assert(rc == -FI_EAGAIN);
+		slist_insert_tail(&cts_work->work_elem.slist_entry,
+				  &params->opx_ep->tx->work_pending[cts_work->work_elem.work_type]);
+	}
+
+	// We shouldn't need to adjust the origin byte counter after sending the
+	// first CTS packet.
+	params->tid_info.origin_byte_counter_adj = 0;
+
+	/* Adjust Current Address Range for next iteration */
+	if (tid_addr_block_end >= cur_addr_range_end) {
+		// We finished processing the current IOV, so move on to the next one
+		++params->cur_iov;
+		assert(params->cur_iov < params->niov);
+		params->tid_info.cur_addr_range.buf = params->dput_iov[params->cur_iov].rbuf;
+		params->tid_info.cur_addr_range.len = params->dput_iov[params->cur_iov].bytes;
+		params->tid_info.cur_addr_range.iface = params->dput_iov[params->cur_iov].rbuf_iface;
+		params->tid_info.cur_addr_range.device = params->dput_iov[params->cur_iov].rbuf_device;
+	} else {
+		params->tid_info.cur_addr_range.buf += cur_addr_range_tid_len;
+		params->tid_info.cur_addr_range.len -= cur_addr_range_tid_len;
+	}
+
+	// Wait until the next poll cycle before trying to register more TIDs.
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"vaddr %p, tid_vaddr %p, diff %#X, registered tid_offset %u/%#X, buffer tid_offset %u/%#X, tid_length %lu/%#lX \n",
-		(void *)vaddr, (void *)tid_vaddr,
-		(uint32_t)(vaddr - tid_vaddr), params->tid_info.offset,
-		params->tid_info.offset,
-		params->tid_info.offset + (uint32_t)(vaddr - tid_vaddr),
-		params->tid_info.offset + (uint32_t)(vaddr - tid_vaddr),
-		tid_length, tid_length);
+		"===================================== RECV, HFI -- RENDEZVOUS RTS TID SETUP (end) EAGAIN (Progress) (params=%p rzv_comp=%p context=%p)\n",
+		params,
+		params->rzv_comp,
+		params->rzv_comp->context);
 
-	/* Adjust the offset for vaddr byte offset into the tid.  */
-	/* coverity[missing_lock] */
-	params->tid_info.offset += (uint32_t)(vaddr - tid_vaddr);
-
-	const uint64_t iov_adj = ((uint64_t)params->dst_vaddr - vaddr);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-		" ==== iov[%u].base %p len %zu/%#lX iov_adj %lu/%#lX alignment_adjustment %lu/%#lX\n",
-		0, (void *) params->dput_iov[0].sbuf,
-		params->dput_iov[0].bytes, params->dput_iov[0].bytes,
-		iov_adj, iov_adj,
-		params->tid_pending_alignment_adjustment,
-		params->tid_pending_alignment_adjustment);
-
-	params->dput_iov[0].sbuf -= iov_adj;
-	params->dput_iov[0].bytes = (params->dput_iov[0].bytes + iov_adj) & -64;
-	params->tid_info.origin_byte_counter_adj = (int32_t) params->tid_pending_alignment_adjustment;
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-		" ==== iov[%u].base %p len %zu/%#lX alignment_adjustment %lu/%#lX\n",
-		0, (void *) params->dput_iov[0].sbuf,
-		params->dput_iov[0].bytes, params->dput_iov[0].bytes,
-		params->tid_pending_alignment_adjustment,
-		params->tid_pending_alignment_adjustment);
-	/* Adjust the (context) counter with the new length ... */
-	params->rzv_comp->context->byte_counter = length;
-	params->rzv_comp->tid_length = tid_length;
-	params->rzv_comp->tid_vaddr = tid_vaddr;
-	params->rzv_comp->tid_byte_counter = length;
-	params->rzv_comp->tid_bytes_accumulated = 0;
-	params->opcode = FI_OPX_HFI_DPUT_OPCODE_RZV_TID;
-
-	FI_OPX_DEBUG_COUNTERS_INC(params->opx_ep->debug_counters
-		.expected_receive.rts_tid_setup_success);
-	FI_OPX_DEBUG_COUNTERS_INC_COND(params->dput_iov[0].rbuf_iface,
-		params->opx_ep->debug_counters.hmem.tid_recv);
-	FI_OPX_DEBUG_COUNTERS_INC_COND(params->tid_setup_retries > 0,
-		params->opx_ep->debug_counters.expected_receive.rts_tid_setup_retry_success);
-
-	params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
-	params->work_elem.work_type = OPX_WORK_TYPE_PIO;
-	return opx_hfi1_rx_rzv_rts_send_cts(work);
+	return -FI_EAGAIN;
 }
 
 void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
@@ -1415,6 +1548,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	params->u8_rx = u8_rx;
 	params->u32_extended_rx = u32_extended_rx;
 	params->niov = niov;
+	params->cur_iov = 0;
 	params->origin_byte_counter_vaddr = origin_byte_counter_vaddr;
 	params->rzv_comp = ofi_buf_alloc(opx_ep->rzv_completion_pool);
 	params->rzv_comp->tid_vaddr = 0UL;
@@ -1428,7 +1562,6 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	params->tid_info.npairs = 0;
 	params->tid_info.offset = 0;
 	params->tid_info.origin_byte_counter_adj = 0;
-	params->tid_setup_retries = 0;
 	params->opcode = opcode;
 
 	if (opx_hfi1_rx_rzv_rts_tid_eligible(opx_ep, params, niov,
@@ -1436,8 +1569,14 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 					immediate_end_block_count,
 					is_hmem, is_intranode,
 					dst_iface, opcode)) {
+		params->tid_info.cur_addr_range.buf = params->dput_iov[0].rbuf;
+		params->tid_info.cur_addr_range.len = params->dput_iov[0].bytes;
+		params->tid_info.cur_addr_range.iface = params->dput_iov[0].rbuf_iface;
+		params->tid_info.cur_addr_range.device = params->dput_iov[0].rbuf_device;
+
 		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_tid_setup;
 		params->work_elem.work_type = OPX_WORK_TYPE_TID_SETUP;
+		params->opcode = FI_OPX_HFI_DPUT_OPCODE_RZV_TID;
 	}
 
 	int rc = params->work_elem.work_fn(work);
@@ -2075,10 +2214,11 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	// be in progress.
 	if (!params->sdma_no_bounce_buf) {
 		assert(params->origin_byte_counter);
-		*params->origin_byte_counter = 0;
+		assert((*params->origin_byte_counter) >= params->origin_bytes_sent);
+		*params->origin_byte_counter -= params->origin_bytes_sent;
 		params->origin_byte_counter = NULL;
 	} else {
-		assert(params->origin_bytes_sent == *params->origin_byte_counter);
+		assert(params->origin_bytes_sent <= *params->origin_byte_counter);
 	}
 	params->work_elem.work_type = OPX_WORK_TYPE_LAST;
 	params->work_elem.work_fn = fi_opx_hfi1_dput_sdma_pending_completion;
@@ -2158,7 +2298,8 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 			tidlen_remaining = FI_OPX_EXP_TID_GET(tidpairs[0],LEN);
 			/* When reusing TIDs we can offset <n> pages into the TID
 			   so "consume" that */
-			tidlen_consumed =  params->tidoffset / OPX_HFI1_TID_PAGESIZE ;
+			tidlen_consumed =  (params->tidoffset & -(int32_t)OPX_HFI1_TID_PAGESIZE)
+						/ OPX_HFI1_TID_PAGESIZE;
 			tidlen_remaining -= tidlen_consumed;
 			if (tidlen_consumed) {
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,

@@ -184,19 +184,16 @@ struct fi_opx_debug_counters {
 
 	struct {
 		uint64_t	tid_updates;
-		uint64_t	tid_resource_limit;
-		uint64_t	tid_resource_limit_length_chunk_short;
-		uint64_t	tid_resource_limit_length_chunk_long;
-		uint64_t	tid_resource_limit_tidcnt_chunk_zero;
+		uint64_t	tid_update_fail;
+		uint64_t	tid_update_success;
+		uint64_t	tid_update_success_partial;
 		uint64_t	tid_rcv_pkts;
 		uint64_t	tid_rcv_pkts_replays;
 		uint64_t	rts_tid_ineligible;
 		uint64_t	rts_tid_eligible;
 		uint64_t	rts_fallback_eager_immediate;
-		uint64_t	rts_fallback_eager_misaligned_thrsh;
 		uint64_t	rts_fallback_eager_reg_rzv;
 		uint64_t	rts_tid_setup_retries;
-		uint64_t	rts_tid_setup_retry_success;
 		uint64_t	rts_tid_setup_success;
 		uint64_t	tid_buckets[4];
 		uint64_t	first_tidpair_minlen;
@@ -204,6 +201,19 @@ struct fi_opx_debug_counters {
 		uint64_t	first_tidpair_minoffset;
 		uint64_t	first_tidpair_maxoffset;
 		uint64_t	generation_wrap;
+		uint64_t	tid_cache_flush_not_lru;
+		uint64_t	tid_cache_flush_not_lru_helped;
+		uint64_t	tid_cache_flush_lru;
+		uint64_t	tid_cache_flush_lru_helped;
+		uint64_t	tid_cache_full;
+		uint64_t	tid_cache_miss;
+		uint64_t	tid_cache_hit;
+		uint64_t	tid_cache_found_entry_in_use;
+		uint64_t	tid_cache_found_entry_invalid;
+		uint64_t	tid_cache_overlap_left;
+		uint64_t	tid_cache_overlap_right;
+		uint64_t	reg_for_rzv_get_initial;
+		uint64_t	reg_for_rzv_get_remaining;
 	} expected_receive;
 
 	struct {
@@ -399,21 +409,18 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters)
 
 	#ifdef OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_updates);
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_resource_limit);
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_resource_limit_length_chunk_short);
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_resource_limit_tidcnt_chunk_zero);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_update_fail);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_update_success);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_update_success_partial);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_rcv_pkts);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_rcv_pkts_replays);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_ineligible);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_eligible);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_fallback_eager_immediate);
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_fallback_eager_misaligned_thrsh);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_fallback_eager_reg_rzv);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_setup_retries);
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_setup_retry_success);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_setup_success);
 		uint64_t rts_sum = counters->expected_receive.rts_fallback_eager_immediate +
-				   counters->expected_receive.rts_fallback_eager_misaligned_thrsh +
 				   counters->expected_receive.rts_fallback_eager_reg_rzv +
 				   counters->expected_receive.rts_tid_setup_success;
 		if (rts_sum != counters->expected_receive.rts_tid_eligible) {
@@ -428,6 +435,19 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters)
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.first_tidpair_minoffset);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.first_tidpair_maxoffset);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.generation_wrap);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_flush_not_lru);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_flush_not_lru_helped);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_flush_lru);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_flush_lru_helped);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_full);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_hit);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_miss);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_found_entry_in_use);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_found_entry_invalid);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_overlap_left);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_overlap_right);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.reg_for_rzv_get_initial);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.reg_for_rzv_get_remaining);
 	#endif
 
 	#ifdef OPX_DEBUG_COUNTERS_RECV

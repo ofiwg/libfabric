@@ -318,17 +318,25 @@ struct opx_mr_tid_info {
 	uint64_t tid_length;
 	uint32_t ninfo;
 	uint32_t npairs;
-	uint32_t invalid; /* mmu notify */
+
 	/* tidinfo is used on TID update/free ioctl */
 	uint32_t info[FI_OPX_MAX_DPUT_TIDPAIRS];
+
 	/* tidpairs combine CTRL 1 & 2 into CTRL 3 tidpairs for SDMA use */
 	uint32_t pairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 };
 
 struct opx_tid_mr {
-	struct opx_tid_domain  *domain;
-	struct fi_opx_ep       *opx_ep;
-	struct opx_mr_tid_info  tid_info;
+	struct opx_tid_domain	*domain;
+	struct fi_opx_ep	*opx_ep;
+	struct opx_mr_tid_info	tid_info;
+};
+
+struct opx_tid_addr_block {
+	struct iovec	target_iov;
+	uint32_t	offset;
+	uint32_t	npairs;
+	uint32_t	pairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 };
 
 /*
@@ -466,3 +474,4 @@ void opx_tid_regen_pairs(const uint32_t tid_length,
 }
 
 #endif /* _FI_PROV_OPX_TID_H_ */
+

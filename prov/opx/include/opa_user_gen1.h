@@ -566,47 +566,59 @@ static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl,
 	cmd.type = OPX_HFI_CMD_TID_UPDATE; /* HFI1_IOCTL_TID_UPDATE */
 #endif
 	FI_DBG(&fi_opx_provider, FI_LOG_MR,
-		"OPX_DEBUG_ENTRY update [%p - %p], length %u (pages %u)\n",
-		(void*)vaddr, (void*) (vaddr + *length), *length, (*length) / 4096);
+		"OPX_DEBUG_ENTRY update [%p - %p], length %u (pages %lu)\n",
+		(void*)vaddr, (void*) (vaddr + *length), *length, (*length) / PAGE_SIZE);
 
 	cmd.len = sizeof(tidinfo);
 	cmd.addr = (__u64) &tidinfo;
 
 	errno = 0;
 	err = opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd));
-	__attribute__((__unused__)) int saved_errno = errno;
 
 	if (err != -1) {
+		assert(err == 0);
 		struct hfi1_tid_info *rettidinfo =
 			(struct hfi1_tid_info *)cmd.addr;
-		if ((rettidinfo->length != *length) || (rettidinfo->tidcnt == 0) ) {
+		assert(rettidinfo->length);
+		assert(rettidinfo->tidcnt);
+
+		if (rettidinfo->length != *length) {
 			FI_WARN(&fi_opx_provider, FI_LOG_MR,
-				"PARTIAL UPDATE errno %d  \"%s\" INPUTS vaddr [%p - %p] length %u (pages %u), OUTPUTS vaddr [%p - %p] length %u (pages %u), tidcnt %u\n",
-				saved_errno, strerror(saved_errno), (void*)vaddr,
-				(void*)(vaddr + *length), *length, (*length)/4096,
+				"PARTIAL UPDATE errno %d  \"%s\" INPUTS vaddr [%p - %p] length %u (pages %lu), OUTPUTS vaddr [%p - %p] length %u (pages %lu), tidcnt %u\n",
+				errno, strerror(errno), (void*)vaddr,
+				(void*)(vaddr + *length), *length, (*length) / PAGE_SIZE,
 				(void*)rettidinfo->vaddr,(void*)(rettidinfo->vaddr + rettidinfo->length),
-				rettidinfo->length, rettidinfo->length/4096,
+				rettidinfo->length, rettidinfo->length / PAGE_SIZE,
 				rettidinfo->tidcnt);
 		}
-                /* Always update outputs, even on soft errors */
+		/* Always update outputs, even on soft errors */
 		*length = rettidinfo->length;
 		*tidcnt = rettidinfo->tidcnt;
+
 		FI_DBG(&fi_opx_provider, FI_LOG_MR,
-			"OPX_DEBUG_EXIT OUTPUTS errno %d  \"%s\" vaddr [%p - %p] length %u (pages %u), tidcnt %u\n",
-			saved_errno, strerror(saved_errno), (void*)vaddr,
-			(void*)(vaddr + *length), *length, (*length)/4096, *tidcnt);
-	} else {
-		FI_WARN(&fi_opx_provider, FI_LOG_MR,
-			"FAILED ERR %d errno %d \"%s\"\n",
-			err, saved_errno, strerror(saved_errno));
-		/* Hard error, we can't trust these */
-		*length = 0;
-		*tidcnt = 0;
+			"TID UPDATE IOCTL returned %d errno %d  \"%s\" vaddr [%p - %p] length %u (pages %lu), tidcnt %u\n",
+			err, errno, strerror(errno), (void*)vaddr,
+			(void*)(vaddr + *length), *length, (*length) / PAGE_SIZE, *tidcnt);
+
+		return 0;
 	}
 
-	/* Either length or tidcnt may be reduced on return
-	 * if there are resource limitations (soft errors)
-	 * in the driver */
+	if (errno == ENOSPC) {
+		FI_DBG(&fi_opx_provider, FI_LOG_MR,
+			"IOCTL FAILED : No TIDs available, requested range=%p-%p (%u bytes, %lu pages)\n",
+			(void*)vaddr, (void*) (vaddr + *length), *length, (*length) / PAGE_SIZE);
+		err = -FI_ENOSPC;
+	} else {
+		FI_WARN(&fi_opx_provider, FI_LOG_MR,
+			"IOCTL FAILED ERR %d errno %d \"%s\" requested range=%p-%p (%u bytes, %lu pages)\n",
+			err, errno, strerror(errno),
+			(void*)vaddr, (void*) (vaddr + *length), *length, (*length) / PAGE_SIZE);
+	}
+
+	/* Hard error, we can't trust these */
+	*length = 0;
+	*tidcnt = 0;
+
 	return err;
 }
 
