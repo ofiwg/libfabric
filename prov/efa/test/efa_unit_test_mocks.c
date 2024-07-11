@@ -35,51 +35,6 @@ int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibv_ctx,
 	return mock();
 }
 
-struct ibv_mr *__wrap_ibv_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
-                                 int access)
-{
-	return g_efa_unit_test_mocks.ibv_reg_mr_fn(pd, addr, length, access);
-}
-
-struct ibv_mr *efa_mock_ibv_reg_mr_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
-                                                              size_t length, int access)
-{
-	++g_efa_unit_test_mocks.ibv_reg_mr_calls;
-	if ((uint64_t) addr != g_efa_unit_test_mocks.dummy_address) {
-		return __real_ibv_reg_mr(pd, addr, length, access);
-	}
-	return (struct ibv_mr *) mock();
-}
-
-struct ibv_mr *__wrap_ibv_reg_mr_iova2(struct ibv_pd *pd, void *addr,
-				       size_t length, uint64_t iova,
-				       unsigned int access)
-{
-	return g_efa_unit_test_mocks.ibv_reg_mr_iova2(pd, addr, length, iova, access);
-}
-
-struct ibv_mr *efa_mock_ibv_reg_mr_iova2_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
-                                                                    size_t length, uint64_t iova,
-                                                                    unsigned int access)
-{
-	++g_efa_unit_test_mocks.ibv_reg_mr_calls;
-	if ((uint64_t) addr != g_efa_unit_test_mocks.dummy_address) {
-		return __real_ibv_reg_mr_iova2(pd, addr, length, iova, access);
-	}
-	return (struct ibv_mr *) mock();
-}
-
-int __wrap_ibv_dereg_mr(struct ibv_mr *ibv_mr) {
-	return g_efa_unit_test_mocks.ibv_dereg_mr(ibv_mr);
-}
-
-int efa_mock_ibv_dereg_mr_return_mock_for_dummy_mr(struct ibv_mr *ibv_mr)
-{
-	if (ibv_mr->pd) {
-		return __real_ibv_dereg_mr(ibv_mr);
-	}
-	return mock();
-}
 
 /**
  * @brief a list of work requests request's WR ID
@@ -238,17 +193,15 @@ ssize_t efa_mock_ofi_copy_from_hmem_iov_inc_counter(void *dest, size_t size,
 }
 
 struct efa_unit_test_mocks g_efa_unit_test_mocks = {
-	.dummy_address = -1,
 	.local_host_id = 0,
 	.peer_host_id = 0,
 	.ibv_create_ah = __real_ibv_create_ah,
 	.efadv_query_device = __real_efadv_query_device,
-	.ibv_reg_mr_calls = 0,
-	.ibv_reg_mr_fn = __real_ibv_reg_mr,
-	.ibv_reg_mr_iova2 = __real_ibv_reg_mr_iova2,
-	.ibv_dereg_mr = __real_ibv_dereg_mr,
 #if HAVE_EFADV_CQ_EX
 	.efadv_create_cq = __real_efadv_create_cq,
+#endif
+#if HAVE_NEURON
+	.neuron_alloc = __real_neuron_alloc,
 #endif
 	.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
 	.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,
@@ -257,9 +210,6 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 #endif
 #if HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES
 	.ibv_query_qp_data_in_order = __real_ibv_query_qp_data_in_order,
-#endif
-#if HAVE_EFA_DMABUF_MR
-	.ibv_reg_dmabuf_mr = __real_ibv_reg_dmabuf_mr,
 #endif
 };
 
@@ -344,6 +294,18 @@ struct ibv_cq_ex *efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null(struct
 }
 #endif
 
+#if HAVE_NEURON
+void *__wrap_neuron_alloc(void **handle, size_t size)
+{
+	return g_efa_unit_test_mocks.neuron_alloc(handle, size);
+}
+
+void *efa_mock_neuron_alloc_return_null(void **handle, size_t size)
+{
+	return NULL;
+}
+#endif
+
 ssize_t __wrap_ofi_copy_from_hmem_iov(void *dest, size_t size,
 				      enum fi_hmem_iface hmem_iface, uint64_t device,
 				      const struct iovec *hmem_iov,
@@ -418,27 +380,5 @@ int efa_mock_ibv_query_qp_data_in_order_return_0(struct ibv_qp *qp, enum ibv_wr_
 int efa_mock_ibv_query_qp_data_in_order_return_in_order_aligned_128_bytes(struct ibv_qp *qp, enum ibv_wr_opcode op, uint32_t flags)
 {
 	return IBV_QUERY_QP_DATA_IN_ORDER_ALIGNED_128_BYTES;
-}
-#endif
-
-int efa_mock_get_dmabuf_fd_set_errno_return_mock(const void *addr, uint64_t size, int *fd,
-				       uint64_t *offset)
-{
-	int ret = mock();
-	errno = ret;
-	*fd = 0;
-	*offset = 0;
-	return ret;
-}
-
-#if HAVE_EFA_DMABUF_MR
-struct ibv_mr *__wrap_ibv_reg_dmabuf_mr(struct ibv_pd *pd, uint64_t offset, size_t length, uint64_t iova, int fd, int access)
-{
-	return g_efa_unit_test_mocks.ibv_reg_dmabuf_mr(pd, offset, length, iova, fd, access);
-}
-
-struct ibv_mr *efa_mock_ibv_reg_dmabuf_mr_set_eopnotsupp_and_return_mock(struct ibv_pd *pd, uint64_t offset, size_t length, uint64_t iova, int fd, int access) {
-	errno = -FI_EOPNOTSUPP;
-	return (struct ibv_mr *) mock();
 }
 #endif
