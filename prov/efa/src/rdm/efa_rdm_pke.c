@@ -43,7 +43,7 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 		return NULL;
 
 #ifdef ENABLE_EFA_POISONING
-	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct efa_rdm_pke) + ep->mtu_size);
+	efa_rdm_poison_mem_region(pkt_entry, pkt_pool->attr.size);
 #endif
 	dlist_init(&pkt_entry->entry);
 
@@ -82,7 +82,7 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 void efa_rdm_pke_release(struct efa_rdm_pke *pkt_entry)
 {
 #ifdef ENABLE_EFA_POISONING
-	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct efa_rdm_pke) + pkt_entry->ep->mtu_size);
+	efa_rdm_poison_mem_region(pkt_entry, ofi_buf_pool(pkt_entry)->attr.size);
 #endif
 	pkt_entry->flags = 0;
 	ofi_buf_free(pkt_entry);
