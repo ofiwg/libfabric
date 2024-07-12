@@ -717,7 +717,7 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "delivery_completion_threshold", FI_PARAM_INT, "Will be deprecated. Please use FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD");
 	fi_param_define(&fi_opx_provider, "sdma_bounce_buf_threshold", FI_PARAM_INT, "The maximum message length in bytes that will be copied to the SDMA bounce buffer. For messages larger than this threshold, the send will not be completed until receiver has ACKed. Value must be between %d and %d. Defaults to %d.", OPX_SDMA_BOUNCE_BUF_MIN, OPX_SDMA_BOUNCE_BUF_MAX, OPX_SDMA_BOUNCE_BUF_THRESHOLD);
  	fi_param_define(&fi_opx_provider, "sdma_disable", FI_PARAM_INT, "Disables SDMA offload hardware. Default is 0");
-	fi_param_define(&fi_opx_provider, "expected_receive_enable", FI_PARAM_BOOL, "Enables expected receive rendezvous using Token ID (TID). Defaults to \"No\". This feature is not currently supported.");
+	fi_param_define(&fi_opx_provider, "expected_receive_enable", FI_PARAM_BOOL, "Enables expected receive rendezvous using Token ID (TID). Defaults to \"No\".");
 	fi_param_define(&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
                         "When set, specify the set of CPU cores to set the progress "
                         "thread affinity to. The format is "
