@@ -51,6 +51,10 @@
 
 #include "rdma/opx/opx_tracer.h"
 
+#define OPX_SHM_ENABLE_ON			1
+#define OPX_SHM_ENABLE_OFF			0
+#define OPX_SHM_ENABLE_DEFAULT	OPX_SHM_ENABLE_ON
+
 #define BYTE2DWORD_SHIFT	(2)
 
 /* RZV messages under FI_OPX_TID_MSG_MISALIGNED_THRESHOLD
@@ -190,78 +194,82 @@ static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const ui
 	return hfi_rank->instance;
 }
 
-void fi_opx_init_hfi_lookup()
+void process_hfi_lookup(int hfi_unit, unsigned int lid)
+{
+	struct fi_opx_hfi_local_lookup_key key;
+	key.lid = htons((uint16_t)lid);
+	struct fi_opx_hfi_local_lookup *hfi_lookup = NULL;
+
+	HASH_FIND(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, &key,
+		sizeof(key), hfi_lookup);
+
+	if (hfi_lookup) {
+		hfi_lookup->instance++;
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"HFI %d LID 0x%x again: %d.\n",
+		hfi_lookup->hfi_unit, key.lid, hfi_lookup->instance);
+	} else {
+		int rc __attribute__ ((unused));
+		rc = posix_memalign((void **)&hfi_lookup, 32, sizeof(*hfi_lookup));
+		assert(rc==0);
+
+		if (!hfi_lookup) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
+				"Unable to allocate HFI lookup entry.\n");
+			return;
+		}
+		hfi_lookup->key = key;
+		hfi_lookup->hfi_unit = hfi_unit;
+		hfi_lookup->instance = 0;
+		HASH_ADD(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, key,
+			sizeof(hfi_lookup->key), hfi_lookup);
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"HFI %hhu LID 0x%hx entry created.\n",
+			hfi_lookup->hfi_unit, key.lid);
+	}
+}
+
+
+void fi_opx_init_hfi_lookup() 
 {
 	int hfi_unit = 0;
-	struct fi_opx_hfi_local_lookup_key key;
 	int hfi_units = MIN(opx_hfi_get_num_units(), FI_OPX_MAX_HFIS);
 
 	if (hfi_units == 0) {
-		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
-			"No HFI units found.\n");
+		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA, "No HFI units found.\n");
 		return;
 	}
 
-	if (hfi_units == 1) {
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Single HFI 0 found. No need for HFI hashmap.\n");
-		return;
+	int shm_enable_env;
+	if (fi_param_get_bool(fi_opx_global.prov, "shm_enable", &shm_enable_env) != FI_SUCCESS) {
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "shm_enable param not specified\n");
+		shm_enable_env = OPX_SHM_ENABLE_DEFAULT;
 	}
-	/* Multiple ports are handled
-	 */
-	for (hfi_unit = 0; hfi_unit < hfi_units; hfi_unit++) {
-		int num_ports = opx_hfi_get_num_ports(hfi_unit);
-		for (int port = OPX_MIN_PORT; port <= num_ports; port++) {
-			int lid = opx_hfi_get_port_lid(hfi_unit, port);
 
-			if (lid > 0) {
-				if (hfi_unit == fi_opx_global.hfi_local_info.hfi_unit &&
-				lid == fi_opx_global.hfi_local_info.lid) {
-					/* This is the HFI and port to be used by the EP.  No need to add to the
-					* HFI hashmap.
-					*/
-					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-						"EP HFI %d LID 0x%x found.\n",
-						hfi_unit, lid);
-					continue;
-				}
-
-				struct fi_opx_hfi_local_lookup *hfi_lookup = NULL;
-
-				key.lid = htons((uint16_t)lid);
-
-				HASH_FIND(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, &key,
-					sizeof(key), hfi_lookup);
-
-				if (hfi_lookup) {
-					hfi_lookup->instance++;
-
-					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-						"HFI %d LID 0x%x again: %d.\n",
-						hfi_lookup->hfi_unit, key.lid, hfi_lookup->instance);
-				} else {
-					int rc __attribute__ ((unused));
-					rc = posix_memalign((void **)&hfi_lookup, 32, sizeof(*hfi_lookup));
-					assert(rc==0);
-
-					if (!hfi_lookup) {
-						FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
-							"Unable to allocate HFI lookup entry.\n");
-						break;
+	if (shm_enable_env == OPX_SHM_ENABLE_ON) {
+		for (hfi_unit = 0; hfi_unit < hfi_units; hfi_unit++) {
+			int num_ports = opx_hfi_get_num_ports(hfi_unit);
+			for (int port = OPX_MIN_PORT; port <= num_ports; port++) {
+				int lid = opx_hfi_get_port_lid(hfi_unit, port);
+				if (lid > 0) {
+					if (lid == fi_opx_global.hfi_local_info.lid) {
+						/* This is the HFI and port to be used by the EP.  No need to add to the
+						* HFI hashmap.
+						*/
+						FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+							"EP HFI %d LID 0x%x found.\n",
+							hfi_unit, lid);
+						continue;
+					} else {
+						process_hfi_lookup(hfi_unit, lid);
 					}
-					hfi_lookup->key = key;
-					hfi_lookup->hfi_unit = hfi_unit;
-					hfi_lookup->instance = 0;
-					HASH_ADD(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, key,
-						sizeof(hfi_lookup->key), hfi_lookup);
-
-					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-						"HFI %hhu LID 0x%hx entry created.\n",
-						hfi_lookup->hfi_unit, key.lid);
+				} else {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"No LID found for HFI unit %d of %d units and port %d of %d ports: ret = %d, %s.\n",
+						hfi_unit, hfi_units, port, num_ports, lid, strerror(errno));
 				}
-			} else {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"No LID found for HFI unit %d of %d units and port %d of %d ports: ret = %d, %s.\n",
-					hfi_unit, hfi_units, port, num_ports, lid, strerror(errno));
 			}
 		}
 	}
