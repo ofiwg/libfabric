@@ -94,11 +94,13 @@ def run_middleware(providers, stage_name, test, hw, partition, node_num,
 }
 
 def run_ci(stage_name, config_name) {
-  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
-        python run.py \
-        --output=${env.LOG_DIR}/${stage_name} \
-        --job=${config_name}
-  """
+  return sh(returnStatus: true,
+            script: """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+                      python run.py \
+                      --output=${env.LOG_DIR}/${stage_name} \
+                      --job=${config_name}
+                    """
+  )
 }
 
 def gather_logs(cluster, key, dest, source) {
