@@ -905,13 +905,6 @@ pipeline {
         summarize("all")
       }
     }
-    success {
-      script {
-        CI_summarize(verbose=true)
-        summarize("all", verbose=true, release=false,
-        send_mail=env.WEEKLY.toBoolean())
-      }
-    }
     aborted {
       node ('daos_head') {
         dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
@@ -921,7 +914,12 @@ pipeline {
       }
       dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
     }
-    cleanup {
+    success {
+      script {
+        CI_summarize(verbose=true)
+        summarize("all", verbose=true, release=false,
+        send_mail=env.WEEKLY.toBoolean())
+      }
       node ('daos_head') {
         dir("${env.WORKSPACE}") { deleteDir() }
         dir("${env.WORKSPACE}@tmp") { deleteDir() }
