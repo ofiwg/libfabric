@@ -901,7 +901,9 @@ pipeline {
   post {
     always {
       script {
+        CI_summarize(verbose=true)
         CI_summarize()
+        summarize("all", verbose=true)
         summarize("all")
       }
     }
