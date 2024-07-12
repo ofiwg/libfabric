@@ -1890,6 +1890,24 @@ void vrb_alter_info(const struct fi_info *hints, struct fi_info *info)
 	}
 }
 
+static void vrb_filter_info_by_addr_format(struct fi_info **info, int addr_format)
+{
+	struct fi_info *cur, *prev= NULL, *next = NULL;
+	for (cur = *info; cur; cur = next) {
+		next = cur->next;
+		if (!ofi_match_addr_format(cur->addr_format, addr_format)) {
+			if (prev)
+				prev->next = cur->next;
+			else
+				*info = cur->next;
+			cur->next = NULL;
+			fi_freeinfo(cur);
+		} else {
+			prev = cur;
+		}
+	}
+}
+
 int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
 		   struct fi_info **info)
@@ -1910,6 +1928,9 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 	ofi_alter_info(*info, hints, version);
 
 	vrb_alter_info(hints, *info);
+
+	if (hints)
+		vrb_filter_info_by_addr_format(info, hints->addr_format);
 out:
 	vrb_prof_func_end(__func__);
 	if (!ret || ret == -FI_ENOMEM || ret == -FI_ENODEV)
