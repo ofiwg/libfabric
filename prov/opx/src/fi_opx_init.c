@@ -729,6 +729,7 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "sl", FI_PARAM_INT, "Service Level.  This will also determine Service Class and Virtual Lane.  Default is %d\n", FI_OPX_HFI1_SL_DEFAULT);
 	fi_param_define(NULL, "opx_tracer_out_path", FI_PARAM_STRING,
 		"Specify path to output per-process performance tracing log files (default: none)");
+	fi_param_define(&fi_opx_provider, "shm_enable", FI_PARAM_BOOL, "Enables shm across all ports and hfi units on the node. Setting it to NO disables shm except peers with same lid and same hfi1 (loopback).  Defaults to: \"YES\"");
 #ifdef OPX_HMEM
 	fi_param_define(&fi_opx_provider, "dev_reg_send_threshold", FI_PARAM_INT,
 		"The individual packet threshold where lengths above do not use a device registered copy when sending data from GPU. Default is %d\n)", OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT);
