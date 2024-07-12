@@ -901,10 +901,12 @@ pipeline {
   post {
     always {
       script {
-        CI_summarize(verbose=true)
-        CI_summarize()
-        summarize("all", verbose=true)
-        summarize("all")
+        if (DO_RUN) {
+          CI_summarize(verbose=true)
+          CI_summarize()
+          summarize("all", verbose=true)
+          summarize("all")
+        }
       }
     }
     aborted {
@@ -918,9 +920,11 @@ pipeline {
     }
     success {
       script {
-        CI_summarize(verbose=true)
-        summarize("all", verbose=true, release=false,
-        send_mail=env.WEEKLY.toBoolean())
+        if (DO_RUN) {
+          CI_summarize(verbose=true)
+          summarize("all", verbose=true, release=false,
+          send_mail=env.WEEKLY.toBoolean())
+        }
       }
       node ('daos_head') {
         dir("${env.WORKSPACE}") { deleteDir() }
