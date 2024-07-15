@@ -16,6 +16,7 @@
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke_req.h"
+#include "efa_rdm_tracepoint.h"
 
 /**
  * @brief initialize the payload, payload_size, payload_mr and pkt_size of an outgoing packet
@@ -150,6 +151,7 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 		desc = rxe->desc[0];
 		assert(desc && desc->peer.iface != FI_HMEM_SYSTEM);
 
+		efa_rdm_tracepoint(rx_pke_blocking_copy_payload_begin, (size_t) pkt_entry, pkt_entry->payload_size, rxe->msg_id, (size_t) rxe->cq_entry.op_context, rxe->total_len);
 		if (desc->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
 			assert(desc->peer.hmem_data);
 			bytes_copied[i] = ofi_dev_reg_copy_to_hmem_iov(
@@ -165,6 +167,7 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 			                                       segment_offset + ep->msg_prefix_size,
 			                                       data, pkt_entry->payload_size);
 		}
+		efa_rdm_tracepoint(rx_pke_blocking_copy_payload_end, (size_t) pkt_entry, pkt_entry->payload_size, rxe->msg_id, (size_t) rxe->cq_entry.op_context, rxe->total_len);
 	}
 
 	for (i = 0; i < ep->queued_copy_num; ++i) {
@@ -332,10 +335,12 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 		 */
 		if (rxe->bytes_copied + pke->payload_size == rxe->total_len) {
 			assert(desc->peer.hmem_data);
+			efa_rdm_tracepoint(rx_pke_blocking_copy_payload_begin, (size_t) pke, pke->payload_size, rxe->msg_id, (size_t) rxe->cq_entry.op_context, rxe->total_len);
 			ofi_dev_reg_copy_to_hmem_iov(FI_HMEM_CUDA, (uint64_t)desc->peer.hmem_data,
 			                             rxe->iov, rxe->iov_count,
 			                             segment_offset + ep->msg_prefix_size,
 			                             pke->payload, pke->payload_size);
+			efa_rdm_tracepoint(rx_pke_blocking_copy_payload_end, (size_t) pke, pke->payload_size, rxe->msg_id, (size_t) rxe->cq_entry.op_context, rxe->total_len);
 			efa_rdm_pke_handle_data_copied(pke);
 			return 0;
 		}
@@ -443,9 +448,11 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
 		return efa_rdm_pke_queued_copy_payload_to_hmem(pke, ope);
 
 	assert( !desc || desc->peer.iface == FI_HMEM_SYSTEM);
+	efa_rdm_tracepoint(rx_pke_blocking_copy_payload_begin, (size_t) pke, pke->payload_size, ope->msg_id, (size_t) ope->cq_entry.op_context, ope->total_len);
 	bytes_copied = ofi_copy_to_iov(ope->iov, ope->iov_count,
 				       segment_offset + ep->msg_prefix_size,
 				       pke->payload, pke->payload_size);
+	efa_rdm_tracepoint(rx_pke_blocking_copy_payload_end, (size_t) pke, pke->payload_size, ope->msg_id, (size_t) ope->cq_entry.op_context, ope->total_len);
 
 	if (bytes_copied != MIN(pke->payload_size, ope->cq_entry.len - segment_offset)) {
 		EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
