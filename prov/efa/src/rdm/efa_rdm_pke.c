@@ -19,6 +19,7 @@
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_req.h"
+#include "efa_rdm_tracepoint.h"
 
 /**
  * @brief allocate a packet entry
