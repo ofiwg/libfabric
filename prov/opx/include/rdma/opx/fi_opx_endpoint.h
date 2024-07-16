@@ -270,7 +270,7 @@ struct fi_opx_ep_tx {
 	uint64_t				cq_bind_flags;
 	struct fi_opx_context_slist *		cq_completed_ptr;
 	uint32_t				do_cq_completion;
-	uint16_t 				mp_eager_max_payload_bytes;
+	uint16_t 				unused_cacheline1;
 	uint8_t					force_credit_return;
 	uint8_t					use_sdma;
 
@@ -301,7 +301,10 @@ struct fi_opx_ep_tx {
 	struct ofi_bufpool			*rma_payload_pool;
 	struct ofi_bufpool			*rma_request_pool;
 	struct ofi_bufpool			*sdma_work_pool;
-	uint64_t				unused_cacheline6[2];
+	uint32_t				sdma_min_payload_bytes;
+	uint32_t				rzv_min_payload_bytes;
+	uint16_t				mp_eager_max_payload_bytes;
+	uint8_t					unused_cacheline6[6];
 
 	/* == CACHE LINE 7 == */
 	struct opx_sdma_queue			sdma_request_queue;
@@ -328,7 +331,7 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_C
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) == (FI_OPX_CACHE_LINE_SIZE * 6),
 			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 6!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, sdma_request_queue) == (FI_OPX_CACHE_LINE_SIZE * 7),
-			"Offset of fi_opx_ep_tx->ref_cnt should start at cacheline 7!");
+			"Offset of fi_opx_ep_tx->sdma_request_queue should start at cacheline 7!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, ref_cnt) == (FI_OPX_CACHE_LINE_SIZE * 8),
 			"Offset of fi_opx_ep_tx->ref_cnt should start at cacheline 8!");
 
@@ -3899,7 +3902,8 @@ ssize_t fi_opx_ep_tx_send_try_eager(struct fid_ep *ep,
 				const enum ofi_reliability_kind reliability,
 				const uint64_t do_cq_completion,
 				const enum fi_hmem_iface hmem_iface,
-				const uint64_t hmem_device)
+				const uint64_t hmem_device,
+				const bool mp_eager_fallback)
 {
 	ssize_t rc;
 
@@ -3922,7 +3926,7 @@ ssize_t fi_opx_ep_tx_send_try_eager(struct fid_ep *ep,
 	if (OFI_LIKELY(rc == FI_SUCCESS)) {
 		return rc;
 #ifndef FI_OPX_MP_EGR_DISABLE
-	} else if (rc == -FI_ENOBUFS && len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE) {
+	} else if (rc == -FI_ENOBUFS && mp_eager_fallback) {
 		/* Insufficient credits. If the payload is big enough,
 		   fall back to Multi-packet eager to try sending this in
 		   smaller chunks. */
@@ -4116,48 +4120,52 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 	const uint64_t do_cq_completion =
 		fi_opx_ep_tx_do_cq_completion(opx_ep, override_flags, tx_op_flags);
 
-	if (total_len <= opx_ep->tx->pio_max_eager_tx_bytes) {
+	if (total_len < opx_ep->tx->rzv_min_payload_bytes) {
+		const bool mp_eager_fallback = (total_len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE &&
+						total_len <= opx_ep->tx->mp_eager_max_payload_bytes);
+		if (total_len <= opx_ep->tx->pio_max_eager_tx_bytes) {
 
-		rc = fi_opx_ep_tx_send_try_eager(ep, buf, len, desc, addr, tag, context, local_iov,
-						niov, total_len, data, lock_required, is_contiguous,
-						override_flags, tx_op_flags, caps, reliability,
-						do_cq_completion, hmem_iface, hmem_device);
-		if (OFI_LIKELY(rc == FI_SUCCESS)) {
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
-			return rc;
+			rc = fi_opx_ep_tx_send_try_eager(ep, buf, len, desc, addr, tag, context, local_iov,
+							niov, total_len, data, lock_required, is_contiguous,
+							override_flags, tx_op_flags, caps, reliability,
+							do_cq_completion, hmem_iface, hmem_device,
+							mp_eager_fallback);
+			if (OFI_LIKELY(rc == FI_SUCCESS)) {
+				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
+				return rc;
+			}
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"===================================== SEND -- Eager send failed, trying next method\n");
 		}
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND -- Eager send failed, trying next method\n");
-	}
 
 #ifndef FI_OPX_MP_EGR_DISABLE
-	/* If hmem_iface != FI_HMEM_SYSTEM, we skip MP EGR because RZV yields better performance for devices */
-	if (is_contiguous &&
-	    total_len <= opx_ep->tx->mp_eager_max_payload_bytes &&
-	    total_len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE &&
-	    !fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps) &&
-		(caps & FI_TAGGED) && hmem_iface == FI_HMEM_SYSTEM) {
+		/* If hmem_iface != FI_HMEM_SYSTEM, we skip MP EGR because RZV yields better performance for devices */
+		if (is_contiguous &&
+		    mp_eager_fallback &&
+		    !fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps) &&
+			(caps & FI_TAGGED) && hmem_iface == FI_HMEM_SYSTEM) {
 
-		rc = fi_opx_hfi1_tx_send_try_mp_egr(ep, buf, len, desc, addr.fi, tag,
-						context, data, lock_required, override_flags,
-						tx_op_flags, caps, reliability, do_cq_completion,
-						FI_HMEM_SYSTEM, 0ul);
-		if (OFI_LIKELY(rc == FI_SUCCESS)) {
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
-			return rc;
+			rc = fi_opx_hfi1_tx_send_try_mp_egr(ep, buf, len, desc, addr.fi, tag,
+							context, data, lock_required, override_flags,
+							tx_op_flags, caps, reliability, do_cq_completion,
+						  FI_HMEM_SYSTEM, 0ul);
+			if (OFI_LIKELY(rc == FI_SUCCESS)) {
+				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
+				return rc;
+			}
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"===================================== SEND -- MP-Eager send failed, trying next method\n");
 		}
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND -- MP-Eager send failed, trying next method\n");
-	}
 #endif
 
-	if (OFI_UNLIKELY(total_len < FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN,"SEND");
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND -- FI_EAGAIN Can't do RZV with payload length = %ld\n",len);
-		return -FI_EAGAIN;
+		if (OFI_UNLIKELY(total_len < FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES)) {
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN,"SEND");
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"===================================== SEND -- FI_EAGAIN Can't do RZV with payload length = %ld\n",len);
+			return -FI_EAGAIN;
+		}
 	}
 
 	rc = fi_opx_ep_tx_send_rzv(ep,
