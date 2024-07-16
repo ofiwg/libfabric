@@ -859,6 +859,25 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	opx_ep->tx->pio_scb_first = hfi->info.pio.scb_first;
 	opx_ep->tx->pio_credits_addr = hfi->info.pio.credits_addr;
 
+	// Retrieve the parameter for RZV min message length
+	int l_rzv_min_payload_bytes;
+	ssize_t rc = fi_param_get_int(fi_opx_global.prov, "rzv_min_payload_bytes", &l_rzv_min_payload_bytes);
+	if (rc != FI_SUCCESS) {
+		l_rzv_min_payload_bytes = OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_RZV_MIN_PAYLOAD_BYTES not set.  Using default setting of %d\n",
+		l_rzv_min_payload_bytes);
+	} else if (l_rzv_min_payload_bytes < OPX_RZV_MIN_PAYLOAD_BYTES_MIN ||
+		l_rzv_min_payload_bytes > OPX_RZV_MIN_PAYLOAD_BYTES_MAX) {
+		l_rzv_min_payload_bytes = OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_RZV_MIN_PAYLOAD_BYTES was set but is outside min/max thresholds (%d-%d).  Using default setting of %d\n",
+			OPX_RZV_MIN_PAYLOAD_BYTES_MIN, OPX_RZV_MIN_PAYLOAD_BYTES_MAX, l_rzv_min_payload_bytes);
+	} else {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_RZV_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
+			l_rzv_min_payload_bytes);
+	}
+	opx_ep->tx->rzv_min_payload_bytes = l_rzv_min_payload_bytes;
+
 	/* Now that we know how many PIO Tx send credits we have, calculate the threshold to switch from EAGER send to RTS/CTS
 	 * With max credits, there should be enough PIO Eager buffer to send 1 full-size message and 1 credit leftover for min reliablity.
 	 */
@@ -892,22 +911,22 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Set pio_flow_eager_tx_bytes to %d \n", opx_ep->tx->pio_flow_eager_tx_bytes);
 
 	// Set the multi-packet eager max message length
-	int l_mp_eager_max_payload_bytes;
-	ssize_t rc = fi_param_get_int(fi_opx_global.prov, "mp_eager_max_payload_bytes", &l_mp_eager_max_payload_bytes);
-	if (rc != FI_SUCCESS) {
-		opx_ep->tx->mp_eager_max_payload_bytes = OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_MP_EAGER_MAX_PAYLOAD_BYTES not set.  Using default setting of %d\n",
-		opx_ep->tx->mp_eager_max_payload_bytes);
-	} else if (l_mp_eager_max_payload_bytes < opx_ep->tx->pio_flow_eager_tx_bytes || l_mp_eager_max_payload_bytes > OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX) {
-		opx_ep->tx->mp_eager_max_payload_bytes = OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT;
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"Error: FI_OPX_MP_EAGER_MAX_PAYLOAD_BYTES was set but is outside min/max thresholds (%d-%d).  Using default setting of %d\n",
-			opx_ep->tx->pio_flow_eager_tx_bytes, OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX, opx_ep->tx->mp_eager_max_payload_bytes);
+	int l_mp_eager_disable;
+	if (fi_param_get_bool(fi_opx_global.prov, "mp_eager_disable", &l_mp_eager_disable) != FI_SUCCESS) {
+		l_mp_eager_disable = OPX_MP_EGR_DISABLE_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_MP_EAGER_DISABLE not set.  Using default setting of %d\n",
+			l_mp_eager_disable);
 	} else {
-		opx_ep->tx->mp_eager_max_payload_bytes = l_mp_eager_max_payload_bytes;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_MP_EAGER_MAX_PAYLOAD_BYTES was specified.  Set to %d\n",
-			opx_ep->tx->mp_eager_max_payload_bytes);
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_MP_EAGER_DISABLE was specified.  Set to %d\n",
+			l_mp_eager_disable);
 	}
+
+	if (l_mp_eager_disable == OPX_MP_EGR_DISABLE_SET) {
+		opx_ep->tx->mp_eager_max_payload_bytes = 0;
+	} else {
+		opx_ep->tx->mp_eager_max_payload_bytes = l_rzv_min_payload_bytes - 1;
+	}
+	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Using MP eager threshold of %d\n", opx_ep->tx->mp_eager_max_payload_bytes);
 	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager chunk-size is %d.\n", FI_OPX_MP_EGR_CHUNK_SIZE);
 
 	/* Set SDMA bounce buffer threshold.  Any messages larger than this value in bytes will not be copied to
@@ -926,8 +945,8 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	} else if (l_sdma_bounce_buf_threshold < OPX_SDMA_BOUNCE_BUF_MIN || l_sdma_bounce_buf_threshold > (OPX_SDMA_BOUNCE_BUF_MAX)) {
 		opx_ep->tx->sdma_bounce_buf_threshold = OPX_SDMA_BOUNCE_BUF_THRESHOLD;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"Error: FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD was set but is outside of MIN/MAX thresholds.  Using default setting of %d\n",
-			opx_ep->tx->sdma_bounce_buf_threshold);
+			"Error: FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD was set but is outside of min/max thresholds (%d-%d).  Using default setting of %d\n",
+			OPX_SDMA_BOUNCE_BUF_MIN, OPX_SDMA_BOUNCE_BUF_MAX, opx_ep->tx->sdma_bounce_buf_threshold);
 	} else {
 		opx_ep->tx->sdma_bounce_buf_threshold = l_sdma_bounce_buf_threshold;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD was specified.  Set to %d\n",
@@ -949,6 +968,24 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	} else {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "sdma_disable parm not specified; using SDMA\n");
 		opx_ep->tx->use_sdma = 1;
+	}
+
+	// Set the SDMA minimum message length
+	int l_sdma_min_payload_bytes;
+	rc = fi_param_get_int(fi_opx_global.prov, "sdma_min_payload_bytes", &l_sdma_min_payload_bytes);
+	if (rc != FI_SUCCESS) {
+		opx_ep->tx->sdma_min_payload_bytes = FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MIN_PAYLOAD_BYTES not set.  Using default setting of %d\n",
+		opx_ep->tx->sdma_min_payload_bytes);
+	} else if (l_sdma_min_payload_bytes < FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES || l_sdma_min_payload_bytes > INT_MAX) {
+		opx_ep->tx->sdma_min_payload_bytes = FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_SDMA_MIN_PAYLOAD_BYTES was set but is outside min/max thresholds (%d-%d).  Using default setting of %d\n",
+			FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES, INT_MAX, opx_ep->tx->sdma_min_payload_bytes);
+	} else {
+		opx_ep->tx->sdma_min_payload_bytes = l_sdma_min_payload_bytes;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
+					opx_ep->tx->sdma_min_payload_bytes);
 	}
 
 	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_SHM]);
