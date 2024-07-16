@@ -214,7 +214,7 @@ bool fi_opx_hfi1_sdma_use_sdma(struct fi_opx_ep *opx_ep,
 
 	return !is_intranode &&
 		(is_hmem || opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID
-			 || total_bytes >= FI_OPX_SDMA_MIN_LENGTH) &&
+			 || total_bytes >= opx_ep->tx->sdma_min_payload_bytes) &&
 		opx_ep->tx->use_sdma;
 }
 

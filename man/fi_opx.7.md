@@ -202,6 +202,19 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_SDMA_DISABLE*
 : Integer. Disables SDMA offload hardware. Default is 0
 
+*FI_OPX_SDMA_MIN_PAYLOAD_BYTES*
+: Integer. The minimum length in bytes where SDMA will be used.
+  For messages smaller than this threshold, the send will be completed using PIO.
+  Value must be between 64 and 2147483646. Defaults to 16385.
+
+*FI_OPX_RZV_MIN_PAYLOAD_BYTES*
+: Integer. The minimum length in bytes where rendezvous will be used.
+  For messages smaller than this threshold, the send will first try to be completed using eager or multi-packet eager.
+  Value must be between 64 and 65536. Defaults to 16385.
+
+*FI_OPX_MP_EAGER_DISABLE*
+: Integer. Disables multi-packet eager. Defaults to 0.
+
 *FI_OPX_EXPECTED_RECEIVE_ENABLE*
 : Boolean (0/1, on/off, true/false, yes/no). Enables expected receive rendezvous using Token ID (TID).
   Defaults to "No". This feature is not currently supported.

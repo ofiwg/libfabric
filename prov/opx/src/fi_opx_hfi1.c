@@ -3093,7 +3093,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	/* Expected tid needs to send a leading data block and a trailing
 	 * data block for alignment. Limit this to SDMA (8K+) for now  */
 
-	const uint64_t immediate_block_count = (len > FI_OPX_SDMA_MIN_LENGTH  && opx_ep->use_expected_tid_rzv) ?  1 : 0;
+	const uint64_t immediate_block_count = (len > opx_ep->tx->sdma_min_payload_bytes && opx_ep->use_expected_tid_rzv) ?  1 : 0;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "immediate_block_count %#lX *origin_byte_counter_value %#lX, origin_byte_counter_vaddr %p, "
 		     "*origin_byte_counter_vaddr %lu/%#lX, len %lu/%#lX\n",
