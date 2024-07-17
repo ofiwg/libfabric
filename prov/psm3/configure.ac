@@ -129,7 +129,7 @@ AC_ARG_ENABLE([psm3-udp],
     ],[],[enable_psm3_udp=no])
 AC_ARG_ENABLE([psm3-rc],
     [AS_HELP_STRING([--enable-psm3-rc],
-        [EXPERIMENTAL: Enable User Space RC QPs on applicable HALs @<:@default=[Verbs HAL]@:>@])
+        [EXPERIMENTAL: Enable User Space RC QPs on applicable HALs @<:@default=check [check means match --enable-psm3-verbs option]@:>@])
     ],[],[enable_psm3_rc=check])
 AS_IF([test "x$enable_psm3_udp" = "xyes"],
       [
@@ -428,6 +428,10 @@ AS_IF([test x"$enable_atomics" != x"no"],
     LIBS=$LIBS_save
 ])
 unset LIBS_save
+
+dnl Check for 128-bit integer support
+AC_CHECK_TYPE([__int128],
+	[AC_DEFINE(HAVE___INT128, 1, [Set to 1 to use 128-bit ints])])
 
 dnl Check for gcc cpuid intrinsics
 AC_MSG_CHECKING(compiler support for cpuid)

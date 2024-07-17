@@ -261,16 +261,10 @@ ips_scb_prepare_flow_inner(struct ips_proto *proto, struct ips_epaddr *ipsaddr,
 	scb->abs_timeout = TIMEOUT_INFINITE;
 	scb->scb_flags |= IPS_SEND_FLAG_PENDING;
 
-	if (flow->protocol == PSM_PROTOCOL_TIDFLOW) {
-		flow->xmit_seq_num.psn_seq += scb->nfrag;
-		scb->seq_num = flow->xmit_seq_num;
-		scb->seq_num.psn_seq--;
-	} else {
-		flow->xmit_seq_num.psn_num =
+	flow->xmit_seq_num.psn_num =
 		    (flow->xmit_seq_num.psn_num + scb->nfrag) & proto->psn_mask;
-		scb->seq_num.psn_num =
+	scb->seq_num.psn_num =
 		    (flow->xmit_seq_num.psn_num - 1) & proto->psn_mask;
-	}
 
 	return;
 }

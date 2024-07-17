@@ -115,6 +115,19 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 }
 #endif
 
+#ifdef HAVE___INT128
+#define CASE_INT_TYPE(FUNC,...) \
+		case FI_INT8:	FUNC(__VA_ARGS__,int8_t); break; \
+		case FI_UINT8:	FUNC(__VA_ARGS__,uint8_t); break; \
+		case FI_INT16:	FUNC(__VA_ARGS__,int16_t); break; \
+		case FI_UINT16: FUNC(__VA_ARGS__,uint16_t); break; \
+		case FI_INT32:	FUNC(__VA_ARGS__,int32_t); break; \
+		case FI_UINT32: FUNC(__VA_ARGS__,uint32_t); break; \
+		case FI_INT64:	FUNC(__VA_ARGS__,int64_t); break; \
+		case FI_UINT64: FUNC(__VA_ARGS__,uint64_t); break; \
+		case FI_INT128:	FUNC(__VA_ARGS__,ofi_int128_t); break; \
+		case FI_UINT128: FUNC(__VA_ARGS__,ofi_uint128_t); break;
+#else
 #define CASE_INT_TYPE(FUNC,...) \
 		case FI_INT8:	FUNC(__VA_ARGS__,int8_t); break; \
 		case FI_UINT8:	FUNC(__VA_ARGS__,uint8_t); break; \
@@ -124,6 +137,7 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 		case FI_UINT32: FUNC(__VA_ARGS__,uint32_t); break; \
 		case FI_INT64:	FUNC(__VA_ARGS__,int64_t); break; \
 		case FI_UINT64: FUNC(__VA_ARGS__,uint64_t); break;
+#endif
 
 #define CASE_FP_TYPE(FUNC,...) \
 		case FI_FLOAT:	FUNC(__VA_ARGS__,float); break; \
@@ -168,6 +182,20 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 #define PSMX3_BXOR(dst,src)	(dst) ^= (src)
 #define PSMX3_COPY(dst,src)	(dst) = (src)
 
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+/* res is always CPU address, dst could be GPU address */
+#define PSMX3_ATOMIC_READ(dst,res,cnt,TYPE) \
+		do { \
+			/*int i;*/ \
+			TYPE *d = (dst); \
+			TYPE *r = (res); \
+			psmx3_lock(&psmx3_atomic_lock, 1); \
+			/* for (i=0; i<(cnt); i++) */ \
+				/*r[i] = d[i];*/ \
+			psm3_memcpy(r, d, sizeof(TYPE)*cnt); \
+			psmx3_unlock(&psmx3_atomic_lock, 1); \
+		} while (0)
+#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
 #define PSMX3_ATOMIC_READ(dst,res,cnt,TYPE) \
 		do { \
 			int i; \
@@ -178,7 +206,29 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 				r[i] = d[i]; \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
+#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
 
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+/* src is always CPU address, dst could be GPU address */
+#define PSMX3_ATOMIC_WRITE(dst,src,cnt,OP,TYPE) \
+		do { \
+			int i; \
+			TYPE *d = (dst); \
+			TYPE *s = (src); \
+			psmx3_lock(&psmx3_atomic_lock, 1); \
+			for (i=0; i<cnt; i++) { \
+				/*OP(d[i],s[i]);*/ \
+				TYPE tmp; \
+				psm3_memcpy(&tmp, d+i, sizeof(TYPE)); \
+				TYPE orig = tmp; \
+				OP(tmp,s[i]); \
+				/* GPU copy slow, worth extra check to avoid HTOD */\
+				if (tmp != orig) \
+					psm3_memcpy(d+i, &tmp, sizeof(TYPE)); \
+			} \
+			psmx3_unlock(&psmx3_atomic_lock, 1); \
+		} while (0)
+#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
 #define PSMX3_ATOMIC_WRITE(dst,src,cnt,OP,TYPE) \
 		do { \
 			int i; \
@@ -189,7 +239,49 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 				OP(d[i],s[i]); \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
+#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
 
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+/* src is always CPU address, dst could be GPU address */
+// optimized to avoid unnecessary read and compare, OP==PSMX3_COPY and not used
+#define PSMX3_ATOMIC_WRITE_COPY(dst,src,cnt,OP,TYPE) \
+		do { \
+			/*int i;*/ \
+			TYPE *d = (dst); \
+			TYPE *s = (src); \
+			psmx3_lock(&psmx3_atomic_lock, 1); \
+			/* for (i=0; i<cnt; i++) */ \
+				/*PSMX3_COPY(d[i],s[i]);*/ \
+			psm3_memcpy(d, s, sizeof(TYPE)*cnt); \
+			psmx3_unlock(&psmx3_atomic_lock, 1); \
+		} while (0)
+#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#define PSMX3_ATOMIC_WRITE_COPY(dst,src,cnt,OP,TYPE) \
+	PSMX3_ATOMIC_WRITE(dst,src,cnt,OP,TYPE)
+#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+/* src, res are always CPU address, dst could be GPU address */
+#define PSMX3_ATOMIC_READWRITE(dst,src,res,cnt,OP,TYPE) \
+		do { \
+			int i; \
+			TYPE *d = (dst); \
+			TYPE *s = (src); \
+			TYPE *r = (res); \
+			psmx3_lock(&psmx3_atomic_lock, 1); \
+			psm3_memcpy(r, d, sizeof(TYPE)*cnt); \
+			for (i=0; i<(cnt); i++) { \
+				/*r[i] = d[i]; - done above */ \
+				/*OP(d[i],s[i]); */ \
+				TYPE tmp = r[i]; \
+				OP(tmp, s[i]); \
+				/* GPU copy slow, worth extra check to avoid HTOD */ \
+				if (tmp != r[i]) \
+					psm3_memcpy(d+i, &tmp, sizeof(TYPE)); \
+			} \
+			psmx3_unlock(&psmx3_atomic_lock, 1); \
+		} while (0)
+#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
 #define PSMX3_ATOMIC_READWRITE(dst,src,res,cnt,OP,TYPE) \
 		do { \
 			int i; \
@@ -203,7 +295,32 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			} \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
+#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
 
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+/* src, cmp, res are always CPU address, dst could be GPU address */
+#define PSMX3_ATOMIC_CSWAP(dst,src,cmp,res,cnt,CMP_OP,TYPE) \
+		do { \
+			int i; \
+			TYPE *d = (dst); \
+			TYPE *s = (src); \
+			TYPE *c = (cmp); \
+			TYPE *r = (res); \
+			psmx3_lock(&psmx3_atomic_lock, 1); \
+			psm3_memcpy(r, d, sizeof(TYPE)*cnt); \
+			for (i=0; i<(cnt); i++) { \
+				/*r[i] = d[i]; - done above*/ \
+				/* if (c[i] CMP_OP d[i]) */ \
+				if (c[i] CMP_OP r[i]) { \
+					/* d[i] = s[i]; */ \
+					/* GPU copy slow, may be worth check to avoid HTOD */ \
+					if (s[i] != r[i]) \
+						psm3_memcpy(d+i, &s[i], sizeof(TYPE)); \
+				} \
+			} \
+			psmx3_unlock(&psmx3_atomic_lock, 1); \
+		} while (0)
+#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
 #define PSMX3_ATOMIC_CSWAP(dst,src,cmp,res,cnt,CMP_OP,TYPE) \
 		do { \
 			int i; \
@@ -219,7 +336,30 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			} \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
+#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
 
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+/* src, cmp, res are always CPU address, dst could be GPU address */
+#define PSMX3_ATOMIC_MSWAP(dst,src,cmp,res,cnt,TYPE) \
+		do { \
+			int i; \
+			TYPE *d = (dst); \
+			TYPE *s = (src); \
+			TYPE *c = (cmp); \
+			TYPE *r = (res); \
+			psmx3_lock(&psmx3_atomic_lock, 1); \
+			psm3_memcpy(r, d, sizeof(TYPE)*cnt); \
+			for (i=0; i<(cnt); i++) { \
+				/*r[i] = d[i]; - done above*/ \
+				/* d[i] = (s[i] & c[i]) | (d[i] & ~c[i]) */; \
+				TYPE tmp = (s[i] & c[i]) | (r[i] & ~c[i]); \
+				/* GPU copy slow, may be worth check to avoid HTOD */ \
+				if (tmp != r[i]) \
+					psm3_memcpy(d+i, &tmp, sizeof(TYPE)); \
+			} \
+			psmx3_unlock(&psmx3_atomic_lock, 1); \
+		} while (0)
+#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
 #define PSMX3_ATOMIC_MSWAP(dst,src,cmp,res,cnt,TYPE) \
 		do { \
 			int i; \
@@ -234,6 +374,7 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			} \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
+#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
 
 static int psmx3_atomic_do_write(void *dest, void *src,
 				 int datatype, int op, int count)
@@ -290,7 +431,7 @@ static int psmx3_atomic_do_write(void *dest, void *src,
 		break;
 
 	case FI_ATOMIC_WRITE:
-		SWITCH_ALL_TYPE(datatype,PSMX3_ATOMIC_WRITE,
+		SWITCH_ALL_TYPE(datatype,PSMX3_ATOMIC_WRITE_COPY,
 				dest,src,count,PSMX3_COPY);
 		break;
 

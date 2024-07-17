@@ -101,10 +101,6 @@ prov_psm3_psm3_libptl_ips_la_SOURCES = \
 	prov/psm3/psm3/ptl_ips/ips_recvq.h \
 	prov/psm3/psm3/ptl_ips/ips_scb.c \
 	prov/psm3/psm3/ptl_ips/ips_scb.h \
-	prov/psm3/psm3/ptl_ips/ips_tid.c \
-	prov/psm3/psm3/ptl_ips/ips_tid.h \
-	prov/psm3/psm3/ptl_ips/ips_tidcache.c \
-	prov/psm3/psm3/ptl_ips/ips_tidcache.h \
 	prov/psm3/psm3/ptl_ips/ips_tidflow.c \
 	prov/psm3/psm3/ptl_ips/ips_tidflow.h \
 	prov/psm3/psm3/ptl_ips/ptl.c \

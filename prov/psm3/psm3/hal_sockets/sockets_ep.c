@@ -1125,7 +1125,7 @@ psm3_sockets_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 		// unfortunately default TCP max_buffering (16K) is too small
 		// so flow_credit_bytes < 16K would prevent getting a good pipeline of
 		// packets/ACKs going
-		proto->flow_credit_bytes = ep->mtu * proto->flow_credits;
+		proto->flow_credit_bytes = ep->mtu * proto->max_credits;
 	} else {
 		// sockets buffering needs to place an upper bound on bytes
 		// while flow_credits places an upper bound on pkts
@@ -1229,7 +1229,7 @@ fail:
 }
 
 // Fetch current link state to update linkinfo fields in ips_proto:
-// 	ep_base_lid, ep_lmc, ep_link_rate, QoS tables, CCA tables
+// 	ep_base_lid, ep_lmc, ep_link_rate
 // These are all fields which can change during a link bounce.
 // Note "active" state is not adjusted as on link down PSM will wait for
 // the link to become usable again so it's always a viable/active device

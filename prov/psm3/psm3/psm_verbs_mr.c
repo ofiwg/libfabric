@@ -1347,6 +1347,7 @@ static psm3_verbs_mr_t prep_and_reg_mr(psm2_mr_cache_t cache,
 								psm3_verbs_mr_t key)
 {
 	int save_errno;
+	static int fail_cnt = 0; /* Number of failed priority reg_mr requests */
 
 	ASSERT_MRC_FREE_LOCK(cache, mrc);
 #ifdef PSM_HAVE_RNDV_MOD
@@ -1414,11 +1415,26 @@ static psm3_verbs_mr_t prep_and_reg_mr(psm2_mr_cache_t cache,
 	mrc->alloc_id = key->alloc_id;
 #endif
 	ADD_STAT(cache, mrc->length, registered_bytes, max_registered_bytes);
+	/* Reset the fail counter */
+	fail_cnt = 0;
 	return mrc;
 
 failed_reg_mr:
-	_HFI_ERROR("reg_mr failed: "MRC_FMT": %s\n", MR_OUT_MRC(key),
-				strerror(save_errno));
+	if (priority) {
+		/* Print the first failure */
+		if (!fail_cnt)
+			_HFI_ERROR("reg_mr failed: "MRC_FMT": %s\n",
+				   MR_OUT_MRC(key), strerror(save_errno));
+		fail_cnt++;
+		/* Print a warning after consecutive failures */
+		if (fail_cnt == psm3_reg_mr_warn_cnt)
+			_HFI_ERROR("reg_mr failed %d times in a row.\n",
+				   psm3_reg_mr_warn_cnt);
+		/* Bail out if it fails too many times */
+		if (fail_cnt >= psm3_reg_mr_fail_limit)
+			psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+					  "reg_mr failed for too many times.\n");
+	}
 	cache->failed++;
 	cache->failed_reg_mr++;
 	free_mr(cache, mrc);

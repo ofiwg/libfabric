@@ -73,7 +73,7 @@ static int psm3_hfp_sockets_initialize(psmi_hal_instance_t *phi,
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	// testing on HED-2629 suggests turning off RNDV can help
 	// latency for messages in size 8-256 KB
-	gpu_thresh_rndv = SOCKET_GPU_THRESH_RNDV;
+	psm3_gpu_thresh_rndv = SOCKET_GPU_THRESH_RNDV;
 #endif
 	/* we initialize a few HAL software specific capabilities which
 	 * are known before context_open can open RV or parse HAL specific
@@ -175,11 +175,11 @@ static void psm3_hfp_sockets_mq_init_defaults(struct psm2_mq *mq)
 	 * corresponding PSM3_* env variables.
 	 * Otherwise these defaults are used.
 	 */
-	mq->hfi_thresh_rv = PSM_MQ_NIC_RNDV_THRESH;
+	mq->rndv_nic_thresh = PSM3_MQ_RNDV_NIC_THRESH;
 	mq->ips_cpu_window_rv_str = PSM_CPU_NIC_RNDV_WINDOW_STR;
 	// Even without RDMA do we want to disable rendezvous?
 	// even without RDMA, the receiver controlled pacing helps scalability
-	mq->hfi_thresh_rv = (~(uint32_t)0); // disable rendezvous
+	mq->rndv_nic_thresh = (~(uint32_t)0); // disable rendezvous
 	mq->hfi_thresh_tiny = PSM_MQ_NIC_MAX_TINY;
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	if (PSMI_IS_GPU_ENABLED)
@@ -218,16 +218,6 @@ static int psm3_hfp_sockets_get_num_ports(void)
 static int psm3_hfp_sockets_get_unit_active(int unit)
 {
 	return psm3_sockets_get_unit_active(unit, SIMS_FILTER);
-}
-
-static int psm3_hfp_sockets_get_num_contexts(int unit)
-{
-	return 1024;
-}
-
-static int psm3_hfp_sockets_get_num_free_contexts(int unit)
-{
-	return 1024;
 }
 
 static int psm3_hfp_sockets_get_default_pkey(void)
@@ -305,8 +295,6 @@ static hfp_sockets_t psm3_sockets_hi = {
 		.hfp_get_num_ports			  = psm3_hfp_sockets_get_num_ports,
 		.hfp_get_unit_active			  = psm3_hfp_sockets_get_unit_active,
 		.hfp_get_port_active			  = psm3_hfp_sockets_get_port_active,
-		.hfp_get_num_contexts			  = psm3_hfp_sockets_get_num_contexts,
-		.hfp_get_num_free_contexts		  = psm3_hfp_sockets_get_num_free_contexts,
 		.hfp_get_default_pkey			  = psm3_hfp_sockets_get_default_pkey,
 		.hfp_get_port_subnet			  = psm3_hfp_sockets_get_port_subnet,
 		.hfp_get_unit_pci_bus			  = psm3_hfp_sockets_get_unit_pci_bus,

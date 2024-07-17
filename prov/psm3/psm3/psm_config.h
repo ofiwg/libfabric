@@ -140,9 +140,13 @@
  * Mutexlock should be used for experimentation while the more useful
  * mutexlock-debug should be enabled during development to catch potential
  * errors.
+ *
+ * When mutexlock-debug is enabled, mutexlock-debug-log-contention may also
+ * be enabled to log anytime a lock is contended for
  */
 #ifdef PSM_DEBUG
 #define PSMI_LOCK_IS_MUTEXLOCK_DEBUG
+//#define PSMI_LOCK_MUTEXLOCK_DEBUG_LOG_CONTENTION
 #else
 #define PSMI_LOCK_IS_SPINLOCK
 /* #define PSMI_LOCK_IS_MUTEXLOCK */
@@ -168,7 +172,7 @@
 /* All GPU transfers beyond this threshold use
  * RNDV protocol. It is mostly a send side knob.
  */
-#define GPU_THRESH_RNDV 8000
+#define PSM3_GPU_THRESH_RNDV 8000
 
 #define GPUDIRECT_THRESH_RV 3
 
@@ -179,20 +183,26 @@
 
 
 #define PSM_MQ_NIC_MAX_TINY		8	/* max TINY payload allowed */
-#define PSM_MQ_NIC_RNDV_THRESH	 	64000
+#define PSM3_MQ_RNDV_NIC_THRESH	 	64000
 #define PSM_CPU_NIC_RNDV_WINDOW_STR "131072"
 #ifdef PSM_CUDA
 #define PSM_GPU_NIC_RNDV_WINDOW_STR "2097152"
 #elif defined(PSM_ONEAPI)
 #define PSM_GPU_NIC_RNDV_WINDOW_STR "131072:524287,262144:1048575,524288"
 #endif
-#define PSM_MQ_NIC_MAX_RNDV_WINDOW	(4 * 1024 * 1024) /* max rndv window */
+#define PSM3_MQ_RNDV_NIC_WINDOW_MAX	(4 * 1024 * 1024) /* max rndv window */
 
-#define MQ_SHM_THRESH_RNDV 16000
+/*
+ * Rendezvous threshold is same for CMA, scale-up or LONG_DATA mechanisms
+ */
+#define PSM3_MQ_RNDV_SHM_THRESH 16000
+
 #if defined(PSM_CUDA)
-#define MQ_SHM_GPU_THRESH_RNDV 127
+/* Threshold for GPU rendezvous (aka scale-up transfer vs via CPU shared mem */
+#define PSM3_MQ_RNDV_SHM_GPU_THRESH 63
 #elif defined(PSM_ONEAPI)
-#define MQ_SHM_GPU_THRESH_RNDV 127
+/* Threshold for GPU rendezvous (aka scale-up transfer vs via CPU shared mem */
+#define PSM3_MQ_RNDV_SHM_GPU_THRESH 127
 #endif
 
 // LEARN_HASH_SELECTOR has PSM3 dynamically learn the combinations

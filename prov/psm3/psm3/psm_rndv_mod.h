@@ -185,6 +185,8 @@ static inline uint16_t psm3_rv_get_gpu_user_minor_bldtime_version(void)
 extern uint64_t psm3_min_gpu_bar_size(void);
 #endif
 
+extern int psm3_rv_available();
+
 extern psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info);
 
 extern int psm3_rv_close(psm3_rv_t rv);

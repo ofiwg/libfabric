@@ -83,10 +83,10 @@ struct psm3_ep_open_opts;
  */
 typedef enum
 {
-	PSM_HAL_INDEX_VERBS	=  1,
-	PSM_HAL_INDEX_SOCKETS	=  2,
-	PSM_HAL_INDEX_LOOPBACK	=  3,
-	PSM_HAL_INDEX_MAX	=  3,
+	PSM_HAL_INDEX_VERBS	=  0,
+	PSM_HAL_INDEX_SOCKETS	=  1,
+	PSM_HAL_INDEX_LOOPBACK	=  2,
+	PSM_HAL_INDEX_MAX	=  2,
 } psmi_hal_instance_index_t;
 
 /* This string is used as the hal_name for both log messages
@@ -232,8 +232,6 @@ typedef struct _psmi_hal_params
 	int8_t     *port_speed_valid;
 	int        *port_lid;
 	int8_t     *port_lid_valid;
-	uint16_t   *num_contexts,*num_contexts_valid;
-	uint16_t   *num_free_contexts,*num_free_contexts_valid;
 		// information from port_get_subnet
 	int8_t     *port_subnet_valid;
 	uint8_t    *port_subnet_addr_fmt;
@@ -339,13 +337,6 @@ struct _psmi_hal_instance
 	   be callable before the hal instance is initialized. */
 	int (*hfp_get_unit_active)(int unit);
 	int (*hfp_get_port_active)(int unit,int port);
-
-	/* NOTE: hfp_get_num_contexts is a function that must
-	   be callable before the hal instance is initialized. */
-	int (*hfp_get_num_contexts)(int unit);
-	/* NOTE: hfp_get_num_free_contexts is a function that must
-	   be callable before the hal instance is initialized. */
-	int (*hfp_get_num_free_contexts)(int unit);
 
 	/* Returns the default pkey:
 	   NOTE: hfp_get_default_pkey is a function that must
@@ -519,8 +510,6 @@ enum psmi_hal_pre_init_cache_func_krnls
 	psmi_hal_pre_init_cache_func_get_port_active,
 	psmi_hal_pre_init_cache_func_get_port_speed,
 	psmi_hal_pre_init_cache_func_get_port_lid,
-	psmi_hal_pre_init_cache_func_get_num_contexts,
-	psmi_hal_pre_init_cache_func_get_num_free_contexts,
 	psmi_hal_pre_init_cache_func_get_default_pkey,
 	psmi_hal_pre_init_cache_func_get_port_subnet,
 	psmi_hal_pre_init_cache_func_get_port_subnet_name,
@@ -580,8 +569,6 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 #define psmi_hal_get_port_active(...)                           PSMI_HAL_DISPATCH_PI(get_port_active,__VA_ARGS__)
 #define psmi_hal_get_port_speed(...)                            PSMI_HAL_DISPATCH_PI(get_port_speed,__VA_ARGS__)
 #define psmi_hal_get_port_lid(...)				PSMI_HAL_DISPATCH_PI(get_port_lid,__VA_ARGS__)
-#define psmi_hal_get_num_contexts(...)                          PSMI_HAL_DISPATCH_PI(get_num_contexts,__VA_ARGS__)
-#define psmi_hal_get_num_free_contexts(...)                     PSMI_HAL_DISPATCH_PI(get_num_free_contexts,__VA_ARGS__)
 #define psmi_hal_get_default_pkey(...)			        PSMI_HAL_DISPATCH_PI(get_default_pkey,##__VA_ARGS__)
 #define psmi_hal_get_port_subnet(...)				PSMI_HAL_DISPATCH_PI(get_port_subnet,__VA_ARGS__)
 #define psmi_hal_get_port_subnet_name(...)                      PSMI_HAL_DISPATCH_PI(get_port_subnet_name,__VA_ARGS__)

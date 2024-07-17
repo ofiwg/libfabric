@@ -284,6 +284,17 @@ static void rv_unmap_event_ring(psm3_rv_t rv, struct rv_event_ring* ring)
 	ring->num = 0;
 }
 
+// RV is available if RV_FILE_NAME (/dev/rv) exists
+int psm3_rv_available()
+{
+	int fd = open(RV_FILE_NAME, O_RDWR);
+	if (fd == -1) {
+		return 0;
+	}
+	close(fd);
+	return 1;
+}
+
 // we call this once per ep (eg. NIC) so we supply the local address
 // of our NIC for use in the IB CM bind, especially for ethernet
 psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info)

@@ -189,7 +189,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_proto_init(
 }
 
 // Fetch current link state to update linkinfo fields in ips_proto:
-// 	ep_base_lid, ep_lmc, ep_link_rate, QoS tables, CCA tables
+// 	ep_base_lid, ep_lmc, ep_link_rate
 // These are all fields which can change during a link bounce.
 // Note "active" state is not adjusted as on link down PSM will wait for
 // the link to become usable again so it's always a viable/active device
@@ -409,7 +409,7 @@ static PSMI_HAL_INLINE void psm3_hfp_sockets_ips_ipsaddr_disconnect(
 {
 }
 
-/* Handle HAL specific initialization of ibta path record query, CCA
+/* Handle HAL specific initialization of ibta path record query
  * and dispersive routing
  */
 static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_ibta_init(

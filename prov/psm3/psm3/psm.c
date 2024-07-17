@@ -69,6 +69,8 @@ int psm3_allow_routers;	// PSM3_ALLOW_ROUTERS
 char *psm3_allow_subnets[PSMI_MAX_SUBNETS];	// PSM3_SUBNETS
 int psm3_num_allow_subnets;
 unsigned int psm3_addr_per_nic = 1;
+unsigned int psm3_reg_mr_fail_limit = 100;
+unsigned int psm3_reg_mr_warn_cnt = 10;
 
 const char *psm3_nic_wildcard = NULL;
 
@@ -108,7 +110,7 @@ uint32_t gdr_copy_limit_recv;
 int is_gpudirect_enabled = 0;
 int _device_support_gpudirect = -1; // -1 indicates "unset". See device_support_gpudirect().
 int is_driver_gpudirect_enabled;
-uint32_t gpu_thresh_rndv = GPU_THRESH_RNDV;
+uint32_t psm3_gpu_thresh_rndv = PSM3_GPU_THRESH_RNDV;
 uint64_t psm3_gpu_cache_evict;	// in bytes
 #endif
 
@@ -653,7 +655,7 @@ static void psmi_gpu_init(void)
 	ret = psm3_getenv_range("PSM3_GPU_THRESH_RNDV",
 			  "RNDV protocol is used for GPU send message sizes greater than the threshold",
 			  NULL, PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
-			  (union psmi_envvar_val)gpu_thresh_rndv,
+			  (union psmi_envvar_val)psm3_gpu_thresh_rndv,
 			  (union psmi_envvar_val)0, (union psmi_envvar_val)UINT32_MAX,
 			  NULL, NULL, &env_gpu_thresh_rndv);
 	if (ret > 0)
@@ -665,9 +667,10 @@ static void psmi_gpu_init(void)
 			    "[Deprecated, use PSM3_GPU_THRESH_RNDV]"
 			    " RNDV protocol is used for GPU send message sizes greater than the threshold",
 			    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
-			    (union psmi_envvar_val)gpu_thresh_rndv, &env_gpu_thresh_rndv);
+			    (union psmi_envvar_val)psm3_gpu_thresh_rndv,
+				&env_gpu_thresh_rndv);
 
-	gpu_thresh_rndv = env_gpu_thresh_rndv.e_uint;
+	psm3_gpu_thresh_rndv = env_gpu_thresh_rndv.e_uint;
 
 
 	union psmi_envvar_val env_gdr_copy_limit_send;
@@ -683,8 +686,8 @@ static void psmi_gpu_init(void)
 				(union psmi_envvar_val)GDR_COPY_LIMIT_SEND, &env_gdr_copy_limit_send);
 	gdr_copy_limit_send = env_gdr_copy_limit_send.e_int;
 
-	if (gdr_copy_limit_send < 8 || gdr_copy_limit_send > gpu_thresh_rndv)
-		gdr_copy_limit_send = max(GDR_COPY_LIMIT_SEND, gpu_thresh_rndv);
+	if (gdr_copy_limit_send < 8 || gdr_copy_limit_send > psm3_gpu_thresh_rndv)
+		gdr_copy_limit_send = max(GDR_COPY_LIMIT_SEND, psm3_gpu_thresh_rndv);
 
 	union psmi_envvar_val env_gdr_copy_limit_recv;
 	psm3_getenv("PSM3_GDRCOPY_LIMIT_RECV",
@@ -1345,6 +1348,18 @@ psm2_error_t psm3_init(int *major, int *minor)
 		psm3_addr_per_nic = env_addr_per_nic.e_uint;
 	}
 	{
+		union psmi_envvar_val env_reg_mr_fail_limit;
+		psm3_getenv("PSM3_REG_MR_FAIL_LIMIT",
+					"Max number of consecutive reg_mr failures",
+					PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
+					(union psmi_envvar_val)100, &env_reg_mr_fail_limit);
+		if (env_reg_mr_fail_limit.e_uint >= 1) {
+			psm3_reg_mr_fail_limit = env_reg_mr_fail_limit.e_uint;
+			if (psm3_reg_mr_warn_cnt > psm3_reg_mr_fail_limit)
+				psm3_reg_mr_warn_cnt = psm3_reg_mr_fail_limit;
+		}
+	}
+	{
 		union psmi_envvar_val env_allow_routers;
 		psm3_getenv("PSM3_ALLOW_ROUTERS",
 					"Disable check for Ethernet subnet equality between nodes\n"
@@ -1576,8 +1591,8 @@ psm2_error_t psm3_info_query(psm2_info_query_t q, void *out,
 		0, /* PSM2_INFO_QUERY_NUM_PORTS         */
 		1, /* PSM2_INFO_QUERY_UNIT_STATUS       */
 		2, /* PSM2_INFO_QUERY_UNIT_PORT_STATUS  */
-		1, /* PSM2_INFO_QUERY_NUM_FREE_CONTEXTS */
-		1, /* PSM2_INFO_QUERY_NUM_CONTEXTS      */
+		0, /* was PSM2_INFO_QUERY_NUM_FREE_CONTEXTS */
+		0, /* was PSM2_INFO_QUERY_NUM_CONTEXTS      */
 		0, /* was PSM2_INFO_QUERY_CONFIG        */
 		0, /* was PSM2_INFO_QUERY_THRESH        */
 		0, /* was PSM2_INFO_QUERY_DEVICE_NAME   */
@@ -1619,14 +1634,6 @@ psm2_error_t psm3_info_query(psm2_info_query_t q, void *out,
 	case PSM2_INFO_QUERY_UNIT_PORT_STATUS:
 		*((uint32_t*)out) = psmi_hal_get_port_active(args[0].unit,
 								args[1].port);
-		rv = PSM2_OK;
-		break;
-	case PSM2_INFO_QUERY_NUM_FREE_CONTEXTS:
-		*((uint32_t*)out) = psmi_hal_get_num_free_contexts(args[0].unit);
-		rv = PSM2_OK;
-		break;
-	case PSM2_INFO_QUERY_NUM_CONTEXTS:
-		*((uint32_t*)out) = psmi_hal_get_num_contexts(args[0].unit);
 		rv = PSM2_OK;
 		break;
 	case PSM2_INFO_QUERY_FEATURE_MASK:

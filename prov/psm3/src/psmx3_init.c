@@ -391,16 +391,12 @@ out:
 static int psmx3_update_hfi_info(void)
 {
 	unsigned short i, j, psmx3_unit;
-	int nctxts = 0;
-	int nfreectxts = 0;
 	int multirail = 0;
-	int counted_unit;
 	char *s = NULL;
 	char unit_name[NAME_MAX];
 	char fabric_name[NAME_MAX];
 	uint32_t cnt = 0;
 	uint32_t addr_cnt = 0;
-	int tmp_nctxts, tmp_nfreectxts;
 	int unit_active;
 	int ret;
 	psm2_info_query_arg_t args[4];
@@ -459,25 +455,6 @@ static int psmx3_update_hfi_info(void)
 			continue;
 		}
 
-		if (PSM2_OK != psm3_info_query(PSM2_INFO_QUERY_NUM_FREE_CONTEXTS,
-						&tmp_nfreectxts, 1, args) || (tmp_nfreectxts < 0))
-		{
-			PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
-				"Failed to read number of free contexts from HFI unit_id %d\n",
-				i);
-			continue;
-		}
-
-		if (PSM2_OK != psm3_info_query(PSM2_INFO_QUERY_NUM_CONTEXTS,
-						&tmp_nctxts, 1, args) || (tmp_nctxts < 0))
-		{
-			PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
-				"Failed to read number of contexts from HFI unit_id %d\n",
-				i);
-			continue;
-		}
-
-		counted_unit = 0;
 		for (j=0; j < addr_cnt; j++) {
 			psmx3_unit = i * addr_cnt + j;
 			args[1].port = 1;	// VERBS_PORT
@@ -506,12 +483,6 @@ static int psmx3_update_hfi_info(void)
 				continue;
 			}
 
-			if (! counted_unit) {
-				nctxts += tmp_nctxts;
-				nfreectxts += tmp_nfreectxts;
-				counted_unit = 1;
-			}
-
 			psmx3_domain_info.num_active_units++;
 
 			/* for PSM3_MULTIRAIL only report 1 "autoselect" unit */
@@ -519,8 +490,6 @@ static int psmx3_update_hfi_info(void)
 				psmx3_domain_info.unit_is_active[psmx3_unit] = 1;
 				psmx3_domain_info.unit_id[psmx3_unit] = i;
 				psmx3_domain_info.addr_index[psmx3_unit] = j;
-				psmx3_domain_info.unit_nctxts[psmx3_unit] = tmp_nctxts;
-				psmx3_domain_info.unit_nfreectxts[psmx3_unit] = tmp_nfreectxts;
 				psmx3_domain_info.active_units[psmx3_domain_info.num_reported_units++] = psmx3_unit;
 			}
 			if (psmx3_domain_info.num_active_units == 1) {
@@ -554,22 +523,19 @@ static int psmx3_update_hfi_info(void)
 	}
 
 	PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
-		"hfi1 units: total %d, reported %d, active %d; "
-		"hfi1 contexts: total %d, free %d\n",
+		"psm3 units: total %d, reported %d, active %d\n",
 		psmx3_domain_info.num_units, psmx3_domain_info.num_reported_units,
-		psmx3_domain_info.num_active_units, nctxts, nfreectxts);
+		psmx3_domain_info.num_active_units);
 
 	if (psmx3_env.multi_ep) {
-		psmx3_domain_info.max_trx_ctxt = nctxts;
-		psmx3_domain_info.free_trx_ctxt = nfreectxts;
+		psmx3_domain_info.max_trx_ctxt = PSMX3_MAX_EPS;
 	} else {
 		psmx3_domain_info.max_trx_ctxt = 1;
-		psmx3_domain_info.free_trx_ctxt = (nfreectxts == 0) ? 0 : 1;
 	}
 
 	PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
-		"Tx/Rx contexts: %d in total, %d available.\n",
-		psmx3_domain_info.max_trx_ctxt, psmx3_domain_info.free_trx_ctxt);
+		"Tx/Rx contexts: %d allowed per process.\n",
+		psmx3_domain_info.max_trx_ctxt);
 
 	return 0;
 }

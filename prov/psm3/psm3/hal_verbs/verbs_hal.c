@@ -166,12 +166,12 @@ static void psm3_hfp_verbs_mq_init_defaults(struct psm2_mq *mq)
 	 * Otherwise these defaults are used.
 	 */
 	unsigned rdmamode = psm3_verbs_parse_rdmamode(1);
-	mq->hfi_thresh_rv = PSM_MQ_NIC_RNDV_THRESH;
+	mq->rndv_nic_thresh = PSM3_MQ_RNDV_NIC_THRESH;
 	mq->ips_cpu_window_rv_str = PSM_CPU_NIC_RNDV_WINDOW_STR;
 	if (! (rdmamode & IPS_PROTOEXP_FLAG_ENABLED)) {
 		// TBD - when RDMA is disabled do we want to disable rendezvous?
 		// even without RDMA, the receiver controlled pacing helps scalability
-		mq->hfi_thresh_rv = (~(uint32_t)0); // disable rendezvous
+		mq->rndv_nic_thresh = (~(uint32_t)0); // disable rendezvous
 	}
 	mq->hfi_thresh_tiny = PSM_MQ_NIC_MAX_TINY;
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
@@ -211,16 +211,6 @@ static int psm3_hfp_verbs_get_num_ports(void)
 static int psm3_hfp_verbs_get_unit_active(int unit)
 {
 	return psm3_verbs_get_unit_active(unit, VIMS_FILTER);
-}
-
-static int psm3_hfp_verbs_get_num_contexts(int unit)
-{
-	return 1024;
-}
-
-static int psm3_hfp_verbs_get_num_free_contexts(int unit)
-{
-	return 1024;
 }
 
 static int psm3_hfp_verbs_get_default_pkey(void)
@@ -293,8 +283,6 @@ static hfp_verbs_t psm3_verbs_hi = {
 		.hfp_get_num_ports			  = psm3_hfp_verbs_get_num_ports,
 		.hfp_get_unit_active			  = psm3_hfp_verbs_get_unit_active,
 		.hfp_get_port_active			  = psm3_hfp_verbs_get_port_active,
-		.hfp_get_num_contexts			  = psm3_hfp_verbs_get_num_contexts,
-		.hfp_get_num_free_contexts		  = psm3_hfp_verbs_get_num_free_contexts,
 		.hfp_get_default_pkey			  = psm3_hfp_verbs_get_default_pkey,
 		.hfp_get_port_subnet			  = psm3_hfp_verbs_get_port_subnet,
 		.hfp_get_unit_pci_bus			  = psm3_hfp_verbs_get_unit_pci_bus,
