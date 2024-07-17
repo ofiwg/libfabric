@@ -153,6 +153,8 @@ int MOCKABLE(psm3_getenv_range)(const char *name, const char *descr,
 		union psmi_envvar_val *newval);
 MOCK_DCL_EPILOGUE(psm3_getenv_range);
 
+int psm3_count_tuples(const char *str);
+
 /*
  * Parsing int, unsigned int and long parameters
  * 0 -> ok, *val updated

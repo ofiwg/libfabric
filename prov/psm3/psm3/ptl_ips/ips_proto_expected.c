@@ -53,17 +53,16 @@
 
 /* Copyright (c) 2016 Intel Corporation. All rights reserved. */
 
-// This file implements the TID protocol for STL100 and the RDMA
-// protocol for UD mode.  The majority of functons in this file (perhaps all)
-// are not used when TID/RDMA is disabled via PSM3_TID o PSM3_RDMA respectively
-// RDMA is N/A for UDP, so it will behave as if PSM3_RDMA is disabled
+// This file implements the RDMA
+// protocol for verbs mode.  The majority of functons in this file (perhaps all)
+// are not used when RDMA is disabled via PSM3_RDMA
+// RDMA is N/A for sockets, so it will behave as if PSM3_RDMA is disabled
 // and not use functions in this file.
 
 #include "psm_user.h"
 #include "psm2_hal.h"
 
 #include "ips_scb.h"
-#include "ips_tid.h"
 #include "ips_tidflow.h"
 #include "ips_proto.h"
 #include "ips_expected_proto.h"
@@ -113,7 +112,6 @@ static void psmi_attach_chb_to_tidsendc(struct ips_protoexp *protoexp,
 					struct ips_gpu_hostbuf *chb_prev,
 					uint32_t tsess_srcoff,
 					uint32_t tsess_length,
-					uint32_t tsess_unaligned_start,
 					psm2_chb_match_type_t type);
 #endif
 
@@ -175,12 +173,10 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 	if (err != PSM2_OK)
 		goto fail;
 
-
 	if ((err = psm3_ips_scbctrl_init(ep, num_of_send_desc, 0,
 				    0, 0, ips_tid_scbavail_callback,
 				    protoexp, &protoexp->tid_scbc_rv)))
 		goto fail;
-
 
 	{
 		union psmi_envvar_val env_rts_cts_interleave;
@@ -256,75 +252,71 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 #endif
 #endif
 
-
-
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	{
-		if (PSMI_IS_GPU_ENABLED) {
-			struct psmi_rlimit_mpool rlim = GPU_HOSTBUFFER_LIMITS;
-			uint32_t maxsz, chunksz, max_elements;
-			uint32_t pool_num_obj_max_total;
-			uint32_t small_pool_num_obj_max_total;
+	if (PSMI_IS_GPU_ENABLED) {
+		struct psmi_rlimit_mpool rlim = GPU_HOSTBUFFER_LIMITS;
+		uint32_t maxsz, chunksz, max_elements;
+		uint32_t pool_num_obj_max_total;
+		uint32_t small_pool_num_obj_max_total;
 
-			if ((err = psm3_parse_mpool_env(protoexp->proto->mq, 1,
-							&rlim, &maxsz, &chunksz)))
-				goto fail;
+		if ((err = psm3_parse_mpool_env(protoexp->proto->mq, 1,
+						&rlim, &maxsz, &chunksz)))
+			goto fail;
 
-			/* the maxsz is the amount in MB, not the number of entries,
-			 * since the element size depends on the window size */
-			max_elements = (maxsz*1024*1024) /
-				psm3_mq_max_window_rv(proto->mq, 1);
-			/* mpool requires max_elements to be power of 2. round down. */
-			max_elements = 1 << (31 - __builtin_clz(max_elements));
-			/* need at least 2 buffers */
-			max_elements = max(2, max_elements);
-			protoexp->gpu_hostbuf_recv_cfg.bufsz =
-				psm3_mq_max_window_rv(proto->mq, 1);
+		/* the maxsz is the amount in MB, not the number of entries,
+		 * since the element size depends on the window size */
+		max_elements = (maxsz*1024*1024) /
+			psm3_mq_max_window_rv(proto->mq, 1);
+		/* mpool requires max_elements to be power of 2. round down. */
+		max_elements = 1 << (31 - __builtin_clz(max_elements));
+		/* need at least 2 buffers */
+		max_elements = max(2, max_elements);
+		protoexp->gpu_hostbuf_recv_cfg.bufsz =
+			psm3_mq_max_window_rv(proto->mq, 1);
 
-			protoexp->gpu_hostbuf_pool_recv =
-				psm3_mpool_create_for_gpu(sizeof(struct ips_gpu_hostbuf),
-							  chunksz, max_elements, 0,
-							  UNDEFINED, NULL, NULL,
-							  psmi_gpu_hostbuf_alloc_func,
-							  (void *)
-							  &protoexp->gpu_hostbuf_recv_cfg);
+		protoexp->gpu_hostbuf_pool_recv =
+			psm3_mpool_create_for_gpu(sizeof(struct ips_gpu_hostbuf),
+						  chunksz, max_elements, 0,
+						  UNDEFINED, NULL, NULL,
+						  psmi_gpu_hostbuf_alloc_func,
+						  (void *)
+						  &protoexp->gpu_hostbuf_recv_cfg);
 
-			if (protoexp->gpu_hostbuf_pool_recv == NULL) {
-				err = psm3_handle_error(proto->ep, PSM2_NO_MEMORY,
-							"Couldn't allocate GPU host receive buffer pool");
-				goto fail;
-			}
-			psm3_mpool_get_obj_info(protoexp->gpu_hostbuf_pool_recv,
-						NULL, &pool_num_obj_max_total);
-
-			protoexp->gpu_hostbuf_small_recv_cfg.bufsz =
-				GPU_SMALLHOSTBUF_SZ;
-			protoexp->gpu_hostbuf_pool_small_recv =
-				psm3_mpool_create_for_gpu(sizeof(struct ips_gpu_hostbuf),
-							  chunksz, max_elements, 0,
-							  UNDEFINED, NULL, NULL,
-							  psmi_gpu_hostbuf_alloc_func,
-							  (void *)
-							  &protoexp->gpu_hostbuf_small_recv_cfg);
-
-			if (protoexp->gpu_hostbuf_pool_small_recv == NULL) {
-				err = psm3_handle_error(proto->ep, PSM2_NO_MEMORY,
-							"Couldn't allocate GPU host small receive buffer pool");
-				goto fail;
-			}
-			psm3_mpool_get_obj_info(protoexp->gpu_hostbuf_pool_small_recv,
-						NULL, &small_pool_num_obj_max_total);
-			_HFI_DBG("GPU Recv Copy Pipeline: %u of %u bytes (small), %u of %u bytes\n",
-				small_pool_num_obj_max_total,
-				protoexp->gpu_hostbuf_small_recv_cfg.bufsz,
-				pool_num_obj_max_total,
-				protoexp->gpu_hostbuf_recv_cfg.bufsz);
-			PSM3_GPU_PREPARE_HTOD_MEMCPYS(protoexp);
-			STAILQ_INIT(&protoexp->gpupend_getreqsq);
-		} else {
-			protoexp->gpu_hostbuf_pool_recv = NULL;
-			protoexp->gpu_hostbuf_pool_small_recv = NULL;
+		if (protoexp->gpu_hostbuf_pool_recv == NULL) {
+			err = psm3_handle_error(proto->ep, PSM2_NO_MEMORY,
+						"Couldn't allocate GPU host receive buffer pool");
+			goto fail;
 		}
+		psm3_mpool_get_obj_info(protoexp->gpu_hostbuf_pool_recv,
+					NULL, &pool_num_obj_max_total);
+
+		protoexp->gpu_hostbuf_small_recv_cfg.bufsz =
+			GPU_SMALLHOSTBUF_SZ;
+		protoexp->gpu_hostbuf_pool_small_recv =
+			psm3_mpool_create_for_gpu(sizeof(struct ips_gpu_hostbuf),
+						  chunksz, max_elements, 0,
+						  UNDEFINED, NULL, NULL,
+						  psmi_gpu_hostbuf_alloc_func,
+						  (void *)
+						  &protoexp->gpu_hostbuf_small_recv_cfg);
+
+		if (protoexp->gpu_hostbuf_pool_small_recv == NULL) {
+			err = psm3_handle_error(proto->ep, PSM2_NO_MEMORY,
+						"Couldn't allocate GPU host small receive buffer pool");
+			goto fail;
+		}
+		psm3_mpool_get_obj_info(protoexp->gpu_hostbuf_pool_small_recv,
+					NULL, &small_pool_num_obj_max_total);
+		_HFI_DBG("GPU Recv Copy Pipeline: %u of %u bytes (small), %u of %u bytes\n",
+			small_pool_num_obj_max_total,
+			protoexp->gpu_hostbuf_small_recv_cfg.bufsz,
+			pool_num_obj_max_total,
+			protoexp->gpu_hostbuf_recv_cfg.bufsz);
+		PSM3_GPU_PREPARE_HTOD_MEMCPYS(protoexp);
+		STAILQ_INIT(&protoexp->gpupend_getreqsq);
+	} else {
+		protoexp->gpu_hostbuf_pool_recv = NULL;
+		protoexp->gpu_hostbuf_pool_small_recv = NULL;
 	}
 #endif
 	psmi_assert(err == PSM2_OK);
@@ -368,14 +360,11 @@ psm2_error_t psm3_ips_protoexp_fini(struct ips_protoexp *protoexp)
 	if ((err = psm3_ips_scbctrl_fini(&protoexp->tid_scbc_rv)))
 		goto fail;
 
-
 	/* finalize tid flow control. */
 	if ((err = psm3_ips_tf_fini(&protoexp->tfc)))
 		goto fail;
 
-
 	psmi_free(protoexp);
-
 fail:
 	return err;
 }
@@ -414,19 +403,16 @@ void ips_tid_mravail_callback(struct ips_proto *proto)
 
 #endif // PSM_HAVE_RDMA
 
-// On STL100 ips_tf is a user space control for the HW tidflow which
+// On STL100 ips_tf was a user space control for the HW tidflow which
 // would fully process most valid inbound EXPTID packets within an RV Window.
-// For UD we maintain the user space control to help manage each active
+// For verbs we maintain the user space control to help manage each active
 // RV window.
 // There is one CTS per RV window (typically 128K).
-// For UD with RV, RDMA is used instread of EXPTID, with 1 RDMA per RV window.
+// For verbs with RV, RDMA is used instread of EXPTID, with 1 RDMA per RV window
 // Typically there are 32 (HFI_TF_NFLOWS) configured.
 // The 32 is hard coded, could make it tunable.
 // The tidflow provides a natural pacing mechanism and limits the total amount
-// of inflight EXPTID or RDMA incoming to given receiver.
-// In addition on STL100 there is an upper bound on TIDs which limited total
-// inbound DMA for a receiver to avoid 4MB. For smaller messages tidflow
-// count may be the limit, for larger messages TIDs would be the limit.
+// of inflight RDMA incoming to given receiver.
 
 /* New Tid Flows are available. If there are pending get requests put the
  * get timer on the timerq so it can be processed. */
@@ -544,12 +530,10 @@ psm3_ips_protoexp_tid_get_from_token(struct ips_protoexp *protoexp,
 	tidflows = ips_tf_available(&protoexp->tfc);
 	_HFI_MMDBG("available tidflow %u\n", tidflows);
 
-	if (
-		tidflows > 0)
+	if (tidflows > 0)
 		// get the actual TIDs and tidflows and send the CTS
 		ips_tid_pendtids_timer_callback(&protoexp->timer_getreqs, 0);
-	else if (
-		tidflows != -1)
+	else if (tidflows != -1)
 		// out of TIDs, set a timer to try again later
 		psmi_timer_request(protoexp->timerq, &protoexp->timer_getreqs,
 				   PSMI_TIMER_PRIO_1);
@@ -732,7 +716,6 @@ ips_protoexp_tidsendc_complete(struct ips_tid_send_desc *tidsendc)
 // so it cannot issue any sends directly, otherwise we will have a recursive
 // situation and potentially deeper recursion if more send CQEs found
 // key notes in this regard:
-//	OPA100 code which may send acks here is ifdef'ed out since N/A to RC QP RDMA
 //	psm3_mq_handle_rts_complete - sets flags in req and queues it, no callbacks
 //	psm3_mpool_put(tidsendc) - tid_desc_send_pool has no callback configured
 //	ips_tid_mravail_callback - psmi_timer_request call queues timer for future
@@ -1171,13 +1154,10 @@ done:
 #endif // defined(PSM_VERBS)
 
 #ifdef PSM_HAVE_RDMA
-// Intermediate STL100 EXTID packets can be delivered to software when
-// acks are requested.
-// The final packet in a STL100 EXTID flow is also delivered to software
-// to indicate the completion of the flow and can contain unaligned data.
-// for RDMA Write we will simply use immediate data in the write
-// to indicate the completed receive of the RDMA Write
-// if we use RDMA Read, the local SQ Completion will indicate this
+// Upon completion of an RDMA Write, a completion is delivered with
+// immediate data.  The immediate data is used
+// to indicate the completed receive of the RDMA Write.
+// If we use RDMA Read, the local SQ Completion will indicate this.
 #if defined(PSM_VERBS)
 // could build and pass a ips_recvhdrq_event or pass struct ips_recvhdrq
 // but all we really need is proto and len
@@ -1270,7 +1250,7 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 
 	/* Do some sanity checking */
 	psmi_assert_always(tidrecvc->state == TIDRECVC_STATE_BUSY);
-	// STL100 does this at the end of ips_protoexp_send_tid_completion
+	// STL100 did this at the end of ips_protoexp_send_tid_completion
 	// TBD - seems like this should be done after ips_tid_recv_free
 	// so we have more likelihood of getting freshly freed resources?
 	if (tidrecvc->protoexp->tid_flags & IPS_PROTOEXP_FLAG_CTS_SERIALIZED) {
@@ -1403,7 +1383,6 @@ void psmi_attach_chb_to_tidsendc(struct ips_protoexp *protoexp,
 				 struct ips_gpu_hostbuf *chb_prev,
 				 uint32_t tsess_srcoff,
 				 uint32_t tsess_length,
-				 uint32_t tsess_unaligned_start,
 				 psm2_chb_match_type_t type)
 {
 	struct ips_proto *proto = protoexp->proto;
@@ -1447,8 +1426,7 @@ void psmi_attach_chb_to_tidsendc(struct ips_protoexp *protoexp,
 				tidsendc->userbuf =
 					(void *)((uintptr_t) tidsendc->gpu_split_buf->host_buf);
 				tidsendc->buffer =
-					(void *)((uintptr_t)tidsendc->userbuf +
-						tsess_unaligned_start);
+					(void *)((uintptr_t)tidsendc->userbuf);
 				return;
 			}
 		} else {
@@ -1467,8 +1445,7 @@ void psmi_attach_chb_to_tidsendc(struct ips_protoexp *protoexp,
 				tidsendc->userbuf =
 					(void *)((uintptr_t) tidsendc->gpu_split_buf->host_buf);
 				tidsendc->buffer =
-					(void *)((uintptr_t)tidsendc->userbuf +
-						tsess_unaligned_start);
+					(void *)((uintptr_t)tidsendc->userbuf);
 				return;
 			}
 			if ((tsess_srcoff > chb->offset)
@@ -1489,8 +1466,7 @@ void psmi_attach_chb_to_tidsendc(struct ips_protoexp *protoexp,
 					(void *)((uintptr_t) chb->host_buf +
 						tsess_srcoff - chb->offset);
 				tidsendc->buffer =
-					(void *)((uintptr_t)tidsendc->userbuf +
-							tsess_unaligned_start );
+					(void *)((uintptr_t)tidsendc->userbuf);
 				return;
 			}
 		}
@@ -1571,7 +1547,7 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 #if defined(PSM_SOCKETS) && PSMI_HAL_INST_CNT == 1
 	psmi_assert_always(0);	// should not get here
 #elif defined(PSM_VERBS)
-	// for UD we do not need a ips_flow since we will use the RC QP and
+	// for verbs we do not need a ips_flow since we will use the RC QP and
 	// then will use our main flow for the final RV completion control msg
 	// The path record for use by RDMA will be selected when the connection
 	// is established
@@ -1646,7 +1622,6 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 						    chb,
 						    tid_list->tsess_srcoff,
 						    tid_list->tsess_length,
-							0,
 						    rc);
 		} else {
 			// no match, need to prefetch
@@ -1655,7 +1630,6 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 						    NULL,
 						    tid_list->tsess_srcoff,
 						    tid_list->tsess_length,
-							0,
 						    PSMI_GPU_CONTINUE);
 		}
 		protoexp->proto->strat_stats.rndv_rdma_hbuf_send++;
@@ -1678,7 +1652,6 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 	tidsendc->rv_conn_count = 0;
 #endif
 
-
 	_HFI_EXP
 	    ("alloc tidsend=%4d tidrecv=%4d srcoff=%6d length=%6d"
 		"\n",
@@ -1686,7 +1659,7 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 	     tid_list->tsess_srcoff, tid_list->tsess_length
 		);
 
-	// start sending TIDEXP packets
+	// start sending RDMA packets
 	ips_tid_send_exp(tidsendc);
 
 	/* Add as a pending op and ring up the timer */
@@ -1726,12 +1699,9 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 	struct ips_proto *proto = protoexp->proto;
 	psm2_error_t err = PSM2_OK;
 
-	// for STL100 native we would loop on ips_scb_prepare_tid_sendctrl and
-	// ips_proto_flow_enqueue to prepare EXPTID scbs for the TIDFLOW protocol
-	// and queue and issue them.  Once they were all posted the is_complete
-	// flag would be set.  For larger messages, it might take multiple
-	// attempts to get resources to queue everything in which case callbacks
-	// and timers ensure progress
+	// for STL100 the EXPTID scbs were sent by software and had to loop
+	// to get and queue scbs for the STL100 TIDFLOW protocol.
+	// Once they were all posted the is_complete flag would be set.
 	// For verbs we are delegating the RC Write "flow" to the NIC's RC QP
 	// it will manage segmentation, sequence numbers and acks for the flow
 	// so our job is done here after one call.
@@ -1865,8 +1835,7 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
  *
  */
 
-// we got a CTS and processed it.  Now we can start sending EXPTID packets.
-// For UD we will use RDMA instead of EXPTID
+// we got a CTS and processed it.  Now we can start sending RDMA packets.
 static
 psm2_error_t ips_tid_send_exp(struct ips_tid_send_desc *tidsendc)
 {
@@ -1978,7 +1947,7 @@ ips_tid_pendsend_timer_callback(struct psmi_timer *timer, uint64_t current)
 	while (!STAILQ_EMPTY(phead)) {
 		tidsendc = STAILQ_FIRST(phead);
 
-		// we have some scb's and can use them to queue some more EXPTID packets
+		// we have some scb's and can use them to queue some more packets
 #if defined(PSM_VERBS)
 #ifdef RNDV_MOD
 		if (tidsendc->rv_need_err_chk_rdma)
@@ -2023,15 +1992,6 @@ ips_tid_pendsend_timer_callback(struct psmi_timer *timer, uint64_t current)
 	return PSM2_OK;
 }
 #endif // PSM_HAVE_RDMA
-
-/* Right now, in the kernel we are allowing for virtually non-contiguous pages,
-   in a single call, and we are therefore locking one page at a time, but since
-   the intended use of this routine is for a single group of
-   virtually contiguous pages, that should change to improve
-   performance.  That means possibly changing the calling MPI code.
-   Doing so gets rid of some of the loop stuff here, and in the driver,
-   and allows for a single call to the core VM code in the kernel,
-   rather than one per page, definitely improving performance. */
 
 
 static
@@ -2261,9 +2221,8 @@ ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current)
 #endif
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	if (
-	    1	/* due to unaligned recv using hostbuf, must always do this */
-	) {
+	/* due to unaligned recv using hostbuf, must always do this */
+	{
 		/* Before processing pending TID requests, first try to free up
 		 * any GPU host buffers that are now idle. */
 		struct ips_tid_get_gpupend *cphead =
@@ -2392,8 +2351,7 @@ ipsaddr_next:
 
 		psmi_assert(nbytes_this >= 4);
 
-		// for STL native the tids and tidflows available pace incoming TIDs
-		// for UD we still use tidflows available to pace incoming RDMA
+		// for verbs we use tidflows available to pace incoming RDMA
 			if ((ret = ips_tf_available(&protoexp->tfc)) <= 0) {
 			/* We're out of tidflow. If this process used all the resource,
 			 * the free callback will reschedule the operation, otherwise,
@@ -2576,6 +2534,3 @@ psm2_error_t ips_tid_recv_free(struct ips_tid_recv_desc *tidrecvc)
 	return err;
 }
 #endif // PSM_HAVE_RDMA
-
-
-

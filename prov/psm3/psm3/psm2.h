@@ -66,7 +66,7 @@ extern "C" {
  * @file psm2.h
  * @page psm2_main PSM2 API
  *
- * @brief PSM2 OPA Messaging Library
+ * @brief PSM2 Messaging Library
  *
  * The PSM2 OPA Messaging API, or PSM2 API, is Intel's low-level
  * user-level communications interface for the OPA family of products.
@@ -666,11 +666,11 @@ typedef psm2_epid_t psm2_nid_t;
  */
 psm2_nid_t psm3_epid_nid(psm2_epid_t epid);
 
-/** @brief Get Endpoint identifier's OPA context number */
+/** @brief Get Endpoint identifier's context number */
 uint64_t psm3_epid_context(psm2_epid_t epid);
 #endif // 0
 
-/** @brief Get Endpoint identifier's OPA port (deprecated, use
+/** @brief Get Endpoint identifier's network port (deprecated, use
  * @ref psm3_epid_context instead) */
 uint64_t psm3_epid_port(psm2_epid_t epid);
 
@@ -743,10 +743,10 @@ struct psm3_ep_open_opts {
 	int imm_size;		/* Immediate data size for endpoint */
 };
 
-/** @brief OPA endpoint creation
+/** @brief PSM3 endpoint creation
  *
- * Function used to create a new local communication endpoint on an OPA
- * adapter.  The returned endpoint handle is required in all PSM2 communication
+ * Function used to create a new local communication endpoint on an adapter/NIC.
+ * The returned endpoint handle is required in all PSM2 communication
  * operations, as PSM2 can manage communication over multiple endpoints.  An
  * opened endpoint has no global context until the user connects the endpoint
  * to other global endpoints by way of @ref psm3_ep_connect.  All local endpoint
@@ -1328,7 +1328,7 @@ void *psm3_epaddr_getctxt(psm2_epaddr_t epaddr);
 /* PSM2_COMPONENT_IB options */
 /* Default service level to use to communicate with remote endpoints */
 #define PSM2_IB_OPT_DF_SL 0x201
-  /**< [@b uint32_t ] Default OPA SL to use for all remote communication.
+  /**< [@b uint32_t ] Default OPA/IB SL to use for all remote communication.
    * If unset defaults to Service Level 0.
    *
    * component object: Opened PSM2 endpoint id (@ref psm2_ep_t).
@@ -1337,7 +1337,7 @@ void *psm3_epaddr_getctxt(psm2_epaddr_t epaddr);
 
 /* Set IB service level to use for communication to an endpoint */
 #define PSM2_IB_OPT_EP_SL 0x202
-  /**< [@b uint32_t ] OPA SL to use for communication to specified
+  /**< [@b uint32_t ] OPA/IB SL to use for communication to specified
    * remote endpoint.
    *
    * component object: PSM2 endpoint (@ ref psm2_epaddr_t) address.
@@ -1348,7 +1348,7 @@ void *psm3_epaddr_getctxt(psm2_epaddr_t epaddr);
 /* MQ options that can be set in psm3_mq_init and psm2_{set,get}_opt */
 #define PSM2_MQ_OPT_RNDV_IB_SZ       0x301
   /**< [@b uint32_t ] Size at which to start enabling rendezvous
-   * messaging for OPA messages (if unset, defaults to values
+   * messaging for PSM3 messages (if unset, defaults to values
    * between 56000 and 72000 depending on the system configuration)
    *
    * component object: PSM2 Matched Queue (@ref psm2_mq_t).
@@ -1615,19 +1615,11 @@ typedef enum psm2_info_query_et
                      active.  */
 	PSM2_INFO_QUERY_UNIT_PORT_STATUS,
 
-/*! Required input arguments: 1
-   1.  type: uint32_t, description: the unit for which the number of
-       free contexts is desired (use: psm2_info_query_arg_t.unit).
-   Output parameter: uint32_t, description: the number of free
-                     contexts..  */
-	PSM2_INFO_QUERY_NUM_FREE_CONTEXTS,
+/*! removed QUERY_NUM_FREE_CONTEXTS, but kept placeholder to retain values in enum */
+	PSM2_WAS_INFO_QUERY_NUM_FREE_CONTEXTS,
 
-/*! Required input arguments: 1
-   1.  type: uint32_t, description: the unit for which the number of
-       contexts is desired (use: psm2_info_query_arg_t.unit).
-   Output parameter: uint32_t, description: the number of
-                     contexts..  */
-	PSM2_INFO_QUERY_NUM_CONTEXTS,
+/*! removed QUERY_NUM_CONTEXTS, but kept placeholder to retain values in enum */
+	PSM2_WAS_INFO_QUERY_NUM_CONTEXTS,
 
 /*! removed QUERY_CONFIG, but kept placeholder to retain values in enum */
 	PSM2_WAS_INFO_QUERY_CONFIG,

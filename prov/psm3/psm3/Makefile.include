@@ -66,10 +66,6 @@ psm3_libptl_ips_la_SOURCES = \
 	psm3/ptl_ips/ips_recvq.h \
 	psm3/ptl_ips/ips_scb.c \
 	psm3/ptl_ips/ips_scb.h \
-	psm3/ptl_ips/ips_tid.c \
-	psm3/ptl_ips/ips_tid.h \
-	psm3/ptl_ips/ips_tidcache.c \
-	psm3/ptl_ips/ips_tidcache.h \
 	psm3/ptl_ips/ips_tidflow.c \
 	psm3/ptl_ips/ips_tidflow.h \
 	psm3/ptl_ips/ptl.c \

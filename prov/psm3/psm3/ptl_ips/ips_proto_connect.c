@@ -317,10 +317,11 @@ ips_ipsaddr_set_req_params(struct ips_proto *proto,
 	ipsaddr->connidx_outgoing = req->hdr.connidx;
 	ipsaddr->runid_key = req->runid_key;
 	/* ipsaddr->initpsn = req->initpsn; */
-	_HFI_CONNDBG("%s -> %s: connidx_incoming=%u connidx_outgoing=%u\n",
+	_HFI_CONNDBG("%s -> %s: connidx_incoming=%u connidx_outgoing=%u flow=%p\n",
 		     psm3_epid_fmt_internal(proto->ep->epid, 0),
 		     psm3_epid_fmt_internal(ipsaddr->epaddr.epid, 1),
-		     ipsaddr->connidx_incoming, ipsaddr->connidx_outgoing);
+		     ipsaddr->connidx_incoming, ipsaddr->connidx_outgoing,
+		     &ipsaddr->flows[EP_FLOW_GO_BACK_N_PIO]);
 
 	err =
 	    psm3_epid_set_hostname(psm3_epid_nid(((psm2_epaddr_t) ipsaddr)->epid),
@@ -611,7 +612,8 @@ MOCKABLE(psm3_ips_flow_init)(struct ips_flow *flow, struct ips_proto *proto,
 	flow->recv_seq_num.psn_val = 0;
 	flow->xmit_ack_num.psn_val = 0;
 	flow->flags = 0;
-	flow->credits = flow->cwin = proto->flow_credits;
+	flow->credits = proto->flow_credits;
+	flow->max_credits = proto->flow_credits;
 	flow->ack_interval = max((proto->flow_credits >> 2) - 1, 1);
 	flow->ack_counter = 0;
 #ifdef PSM_BYTE_FLOW_CREDITS

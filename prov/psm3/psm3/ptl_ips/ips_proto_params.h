@@ -110,8 +110,7 @@
 #define PSM_CRC_SIZE_IN_BYTES 8
 
 /*
- * version of protocol header (known to chip also).
- * This value for OPA is defined in spec.
+ * version of protocol header
  */
 #define IPS_PROTO_VERSION 0x1
 
@@ -199,7 +198,7 @@
 /* Path selection policies:
  *
  * (a) Adaptive - Dynamically determine the least loaded paths using various
- * feedback mechanism - Completion time via ACKs, NAKs, CCA using BECNs.
+ * feedback mechanism - Completion time via ACKs, NAKs, etc.
  *
  * (b) Static schemes  -
  *     (i) static_src  - Use path keyed off source context

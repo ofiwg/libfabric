@@ -386,8 +386,6 @@ psm3_context_set_affinity(psm2_ep_t ep, int unit)
 		int cpu_and_count = CPU_COUNT(&andcpuset);
 
 		if (cpu_and_count > 0 && pthread_setaffinity_np(mythread, sizeof(andcpuset), &andcpuset)) {
-			// bug on OPA, dev_name not yet initialized
-			// ok on UD and UDP
 			_HFI_ERROR( "Failed to set %s (unit %d) cpu set: %s\n", ep->dev_name,  unit, strerror(errno));
 			//err = -PSM_HAL_ERROR_GENERAL_ERROR;
 			goto bail;

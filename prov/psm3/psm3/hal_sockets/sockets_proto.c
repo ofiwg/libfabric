@@ -74,7 +74,7 @@ psm3_tcp_proto_local_ack(struct ips_proto *proto, struct ips_flow *flow)
 
 	psmi_seqnum_t last_seq_num = STAILQ_LAST(unackedq, ips_scb, nextq)->seq_num;
 	while (between((scb = STAILQ_FIRST(unackedq))->seq_num.psn_num,
-		       last_seq_num.psn_num, flow->xmit_ack_num.psn_num-1)
+		       last_seq_num.psn_num, (flow->xmit_ack_num.psn_num-1) & proto->psn_mask)
 	    ) {
 		STAILQ_REMOVE_HEAD(unackedq, nextq);
 #ifdef PSM_DEBUG
@@ -151,6 +151,7 @@ psm3_tcp_proto_flow_flush_pio(struct ips_flow *flow, int *nflushed)
 		// local ack
 		if (scb) { // this check is unnecessary, but can make KW happy
 			flow->xmit_ack_num.psn_num = 1 + (__be32_to_cpu(scb->ips_lrh.bth[2]) & proto->psn_mask);
+			flow->xmit_ack_num.psn_num &= proto->psn_mask;
 		}
 		psm3_tcp_proto_local_ack(proto, flow);
 	}

@@ -66,6 +66,24 @@
 #include "am_oneapi_memhandle_cache.h"
 #endif
 
+#ifdef PSM_FI
+/*
+ * fault injection for psm3_cma_get() and psm3_cma_put().
+ * since the reaction to cma faults is for the given endpoint to stop
+ * using CMA, this should be set to be quite rare and only 1 fault per
+ * endpoint can occur, then the endpoint stops using CMA altogether
+ */
+PSMI_ALWAYS_INLINE(int cma_do_fault(psm2_ep_t ep))
+{
+	if_pf(PSM3_FAULTINJ_ENABLED()) {
+		PSM3_FAULTINJ_STATIC_DECL(fi, "cma_err", "CMA failure",
+					 0, SHM_FAULTINJ_CMA_ERR);
+		return PSM3_FAULTINJ_IS_FAULT(fi, ep, "");
+	} else
+		return 0;
+}
+#endif
+
 /* not reported yet, so just track in a global so can pass a pointer to
  * psm3_mq_handle_envelope and psm3_mq_handle_rts
  */
@@ -153,7 +171,8 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 	}
 #endif
 
-	if ((ptl->psmi_kassist_mode & PSMI_KASSIST_GET)
+	// since we will do the cma_get, can decide based on local config of ptl
+	if ((ptl->kassist_mode & PSM3_KASSIST_GET)
 	    && req->req_data.recv_msglen > 0
 	    && (pid = psm3_epaddr_pid(epaddr))) {
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
@@ -167,10 +186,18 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 			if (!ptl->gpu_bounce_buf)
 				PSM3_GPU_HOST_ALLOC(&ptl->gpu_bounce_buf, AMSH_GPU_BOUNCE_BUF_SZ);
 			while (cnt < req->req_data.recv_msglen) {
+				size_t res;
 				size_t nbytes = min(req->req_data.recv_msglen-cnt,
 									AMSH_GPU_BOUNCE_BUF_SZ);
-				size_t res = psm3_cma_get(pid, (void *)(req->rts_sbuf+cnt),
+#ifdef PSM_FI
+				if_pf(cma_do_fault(ptl->ep))
+					res = -1;
+				else
+#endif
+				res = psm3_cma_get(pid, (void *)(req->rts_sbuf+cnt),
 										ptl->gpu_bounce_buf, nbytes);
+				if (res == -1)
+					goto fail_cma;
 				void *buf;
 				psmi_assert_always(nbytes == res);
 				if (PSMI_USE_GDR_COPY_RECV(nbytes)
@@ -191,35 +218,42 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 			PSM3_GPU_SYNCHRONIZE_MEMCPY();
 		} else {
 			/* cma can be done in handler context or not. */
-			size_t nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,
+			size_t nbytes;
+#ifdef PSM_FI
+			if_pf(cma_do_fault(ptl->ep))
+				nbytes = -1;
+			else
+#endif
+			nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,
 						req->req_data.buf, req->req_data.recv_msglen);
+			if (nbytes == -1)
+				goto fail_cma;
 			psmi_assert_always(nbytes == req->req_data.recv_msglen);
 		}
 #else
 		/* cma can be done in handler context or not. */
-		size_t nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,
+		size_t nbytes;
+#ifdef PSM_FI
+		if_pf(cma_do_fault(ptl->ep))
+			nbytes = -1;
+		else
+#endif
+		nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,
 					req->req_data.buf, req->req_data.recv_msglen);
-		if (nbytes == -1) {
-			ptl->psmi_kassist_mode = PSMI_KASSIST_OFF;
-			_HFI_ERROR("Reading from remote process' memory failed. Disabling CMA support\n");
-		}
-		else {
-			psmi_assert_always(nbytes == req->req_data.recv_msglen);
-			cma_succeed = 1;
-		}
+		if (nbytes == -1)
+			goto fail_cma;
 		psmi_assert_always(nbytes == req->req_data.recv_msglen);
 #endif
+		cma_succeed = 1;
 	}
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 send_cts:
-#endif
 	args[0].u64w0 = (uint64_t) (uintptr_t) req->ptl_req_ptr;
 	args[1].u64w0 = (uint64_t) (uintptr_t) req;
 	args[2].u64w0 = (uint64_t) (uintptr_t) req->req_data.buf;
 	args[3].u32w0 = req->req_data.recv_msglen;
 	args[3].u32w1 = tok != NULL ? 1 : 0;
-	args[4].u32w0 = ptl->psmi_kassist_mode;		// pass current kassist mode to the peer process
+	args[4].u32w0 = ptl->kassist_mode;		// pass current kassist mode to the peer process
 
 	if (tok != NULL) {
 		psm3_am_reqq_add(AMREQUEST_SHORT, tok->ptl,
@@ -235,12 +269,18 @@ send_cts:
 	req->mq->stats.rx_shm_bytes += req->req_data.recv_msglen;
 
 	/* 0-byte completion or we used kassist */
-	if (pid || cma_succeed ||
+	if (cma_succeed ||
 		req->req_data.recv_msglen == 0 || gpu_ipc_send_completion == 1) {
 		psm3_mq_handle_rts_complete(req);
 	}
 	PSM2_LOG_MSG("leaving.");
 	return PSM2_OK;
+
+fail_cma:
+	ptl->kassist_mode = PSM3_KASSIST_OFF;
+	ptl->self_nodeinfo->amsh_features &= ~AMSH_HAVE_CMA;
+	_HFI_ERROR("Reading from remote process' memory failed. Disabling CMA support\n");
+	goto send_cts;
 }
 
 static
@@ -417,22 +457,25 @@ psm3_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
 
 	if (msglen > 0) {
 		rarg[0].u64w0 = args[1].u64w0;	/* rreq */
-		int kassist_mode = ((struct ptl_am *)ptl)->psmi_kassist_mode;
+		int kassist_mode = ((struct ptl_am *)ptl)->kassist_mode;
 		int kassist_mode_peer = args[4].u32w0;
-		// In general, peer process(es) shall have the same kassist mode set,
-		// but due to dynamic CMA failure detection, we must align local and remote state,
-		// and make protocol to adopt to that potential change.
-		if (kassist_mode_peer == PSMI_KASSIST_OFF && (kassist_mode & PSMI_KASSIST_MASK)) {
-			((struct ptl_am *)ptl)->psmi_kassist_mode = PSMI_KASSIST_OFF;
-			goto no_kassist;
-		}
 
-		if (kassist_mode & PSMI_KASSIST_PUT) {
+		if (kassist_mode_peer & PSM3_KASSIST_GET) {
+			// peer did cma_get(), nothing for us to do
+		} else if (kassist_mode & PSM3_KASSIST_PUT) {
+			// we can do cma_put()
 			int pid = psm3_epaddr_pid(tok->tok.epaddr_incoming);
-			size_t nbytes = psm3_cma_put(sreq->req_data.buf, pid, dest, msglen);
+			size_t nbytes;
+#ifdef PSM_FI
+			if_pf(cma_do_fault(((struct ptl_am *)ptl)->ep))
+				nbytes = -1;
+			else
+#endif
+			nbytes = psm3_cma_put(sreq->req_data.buf, pid, dest, msglen);
 			if (nbytes == -1) {
 				_HFI_ERROR("Writing to remote process' memory failed. Disabling CMA support\n");
-				((struct ptl_am *)ptl)->psmi_kassist_mode = PSMI_KASSIST_OFF;
+				((struct ptl_am *)ptl)->kassist_mode = PSM3_KASSIST_OFF;
+				((struct ptl_am *)ptl)->self_nodeinfo->amsh_features &= ~AMSH_HAVE_CMA;
 				goto no_kassist;
 			}
 
@@ -441,8 +484,8 @@ psm3_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			/* Send response that PUT is complete */
 			psm3_amsh_short_reply(tok, mq_handler_rtsdone_hidx,
 					      rarg, 1, NULL, 0, 0);
-		} else if (!(kassist_mode & PSMI_KASSIST_MASK)) {
-			/* Only transfer if kassist is off, i.e. neither GET nor PUT. */
+		} else {
+			/* Only transfer if peer didn't do GET and we didn't do PUT */
 no_kassist:
 			psm3_amsh_long_reply(tok, mq_handler_rtsdone_hidx, rarg,
 					     1, sreq->req_data.buf, msglen, dest, 0);

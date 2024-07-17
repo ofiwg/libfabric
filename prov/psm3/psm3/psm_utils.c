@@ -130,7 +130,7 @@ uint32_t psm3_ceil_log2(uint64_t val)
 // so that psm2_epid_t contents can remain opaque to psm2 API callers
 // who will not see this more detailed psmi_epid_t but will just see psm2_epid_t
 // A psm2_nid_t also uses this format, but has 0 in the protocol and process
-// specific fields (protocol, context, subcontext, qpn, pri_sock, aux_sock).
+// specific fields (protocol, context, qpn, pri_sock, aux_sock).
 typedef union {
 	psm2_epid_t psm2_epid;	// to cast to/from psm2_epid_t
 	uint64_t w[3];	// word by word access
@@ -884,7 +884,6 @@ uint8_t psm3_epid_prefix_len(psm2_epid_t epid)
 }
 
 // The locally unique identifiers for the HW resources
-// OPA Native - Context (also need sub-context)
 // Verbs - 24b QPN (IB, OPA and RoCE Verbs)
 // Sockets - 16b primary socket number (sin_port) (UDP/TCP)
 // This should not be called for psm2_nid_t

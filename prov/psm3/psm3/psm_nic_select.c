@@ -290,24 +290,22 @@ static void
 psmi_spread_nic_selection(psm2_uuid_t const job_key, long *unit_start,
 			     long *unit_end, int nunits)
 {
-	{
-		int found, saved_hfis[nunits];
+	int found, saved_hfis[nunits];
 
-		/* else, we are going to look at:
-		   (a hash of the job key plus the local rank id) mod nunits. */
-		found = hfi_find_active_hfis(nunits, -1, saved_hfis);
-		if (found)
-			*unit_start = saved_hfis[((psm3_get_mylocalrank()+1) +
-				psm3_get_uuid_hash(job_key)) % found];
-		else
-			// none found, caller will fail, start is a don't care
-			*unit_start = 0;
-		/* just in case, caller will check all other units, with wrap */
-		if (*unit_start > 0)
-			*unit_end = *unit_start - 1;
-		else
-			*unit_end = nunits-1;
-	}
+	/* we are going to look at:
+	   (a hash of the job key plus the local rank id) mod nunits. */
+	found = hfi_find_active_hfis(nunits, -1, saved_hfis);
+	if (found)
+		*unit_start = saved_hfis[((psm3_get_mylocalrank()+1) +
+			psm3_get_uuid_hash(job_key)) % found];
+	else
+		// none found, caller will fail, start is a don't care
+		*unit_start = 0;
+	/* just in case, caller will check all other units, with wrap */
+	if (*unit_start > 0)
+		*unit_end = *unit_start - 1;
+	else
+		*unit_end = nunits-1;
 	_HFI_DBG("RoundRobinAll Will select 1st viable NIC unit= %ld to %ld.\n",
 		*unit_start, *unit_end);
 }

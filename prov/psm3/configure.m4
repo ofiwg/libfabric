@@ -456,7 +456,7 @@ AC_ARG_ENABLE([psm3-udp],
     [enable_psm3_udp=no])
 AC_ARG_ENABLE([psm3-rc],
     [AS_HELP_STRING([--enable-psm3-rc],
-        [EXPERIMENTAL: Enable User Space RC QPs on applicable HALs @<:@default=[Verbs HAL]@:>@])],
+        [EXPERIMENTAL: Enable User Space RC QPs on applicable HALs @<:@default=check [check means match --enable-psm3-verbs option]@:>@])],
     [],
     [enable_psm3_rc=check])
 dnl ------------- Extra Features

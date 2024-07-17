@@ -268,7 +268,7 @@ struct psmi_error_item psmi_error_items[] = {
 	{PSMI_NOLOG, "unknown 18"},
 	{PSMI_NOLOG, "unknown 19"},
 	{PSMI_NOLOG, "Endpoint was closed"},	/* PSM2_EP_WAS_CLOSED = 20 */
-	{LOG_ALERT, "PSM Could not find an OPA Unit"},	/* PSM2_EP_NO_DEVICE = 21 */
+	{LOG_ALERT, "PSM Could not find a NIC"},	/* PSM2_EP_NO_DEVICE = 21 */
 	{PSMI_NOLOG, "User passed a bad unit number"},	/* PSM2_EP_UNIT_NOT_FOUND = 22 */
 	{LOG_ALERT, "Failure in initializing endpoint"},	/* PSM2_EP_DEVICE_FAILURE = 23 */
 	{PSMI_NOLOG, "Error closing the endpoing error"},	/* PSM2_EP_CLOSE_TIMEOUT = 24 */

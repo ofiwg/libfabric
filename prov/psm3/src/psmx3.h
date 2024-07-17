@@ -857,9 +857,9 @@ struct psmx3_env {
 };
 
 #define PSMX3_MAX_UNITS	PSMI_MAX_RAILS /* from psm_config.h */
+#define PSMX3_MAX_EPS	64 /* no real limit, used to report max_trx_ctxt */
 struct psmx3_domain_info {
 	int max_trx_ctxt;
-	int free_trx_ctxt;
 	int num_units;	/* total HW units found by PSM3 */
 	int num_reported_units;	/* num entries in arrays below */
 	int num_active_units;	/* total active found, >= num_reported_units */
@@ -867,8 +867,6 @@ struct psmx3_domain_info {
 	int unit_is_active[PSMX3_MAX_UNITS];
 	int unit_id[PSMX3_MAX_UNITS];	/* PSM3 unit_id */
 	int addr_index[PSMX3_MAX_UNITS];/* PSM3 address index within unit_id */
-	int unit_nctxts[PSMX3_MAX_UNITS];
-	int unit_nfreectxts[PSMX3_MAX_UNITS];
 	char default_domain_name[PSMX3_MAX_UNITS * NAME_MAX]; /* autoselect:irdma0;irdma1;..... */
 	char default_fabric_name[PSMX3_MAX_UNITS * NAME_MAX]; /* RoCE 192.168.101.0/24;RoCE 192.168.102.0/24;.... */
 };

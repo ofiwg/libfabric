@@ -105,8 +105,6 @@ struct ips_protoexp {
 
 	psm_transfer_type_t ctrl_xfer_type;
 	struct ips_scbctrl tid_scbc_rv;	// pool of SCBs for TID sends
-									// for OPA this includes: TIDEXP, CTS,
-									// EXPTID_COMPLETION
 									// For UD: CTS, ERR_CHK_RDMA,
 									// ERR_CHK_RDMA_RESP
 	mpool_t tid_desc_send_pool;

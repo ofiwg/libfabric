@@ -234,11 +234,11 @@ void psmx3_epid_to_epaddr(struct psmx3_trx_ctxt *trx_ctxt,
 		psmx3_log(&psmx3_prov, FI_LOG_WARN, FI_LOG_AV, __func__, __LINE__,
 			"psm3_ep_connect returned error %s, remote epid=%s."
 			"Try setting FI_PSM3_CONN_TIMEOUT "
-			"to a larger value (current: %d seconds).\n",
+			"to a larger value (current: %d seconds). Aborting\n",
 			psm3_error_get_string(err), psm3_epid_fmt(epid, 0), psmx3_env.conn_timeout);
 	else
 		psmx3_log(&psmx3_prov, FI_LOG_WARN, FI_LOG_AV, __func__, __LINE__,
-			"psm3_ep_connect returned error %s, remote epid=%s.\n",
+			"psm3_ep_connect returned error %s, remote epid=%s. Aborting\n",
 			psm3_error_get_string(err), psm3_epid_fmt(epid, 0));
 
 	abort();

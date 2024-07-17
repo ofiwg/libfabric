@@ -280,8 +280,8 @@ connect_fail:
 			} else
 			    if (!psm3_ep_device_is_enabled(ep, PTL_DEVID_IPS)) {
 				deverr =
-				    "there is no OPA PSM3 device (nic)";
-				eperr = " OPA";
+				    "there is no PSM3 device (nic)";
+				eperr = " nic";
 			}
 
 			len = snprintf(errbuf, sizeof(errbuf) - 1,
@@ -540,8 +540,8 @@ disconnect_fail:
 			} else
 			    if (!psm3_ep_device_is_enabled(ep, PTL_DEVID_IPS)) {
 				deverr =
-				    "there is no OPA PSM3 device (nic)";
-				eperr = " OPA";
+				    "there is no PSM3 device (nic)";
+				eperr = " nic";
 			}
 
 			len = snprintf(errbuf, sizeof(errbuf) - 1,

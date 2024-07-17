@@ -59,13 +59,13 @@
 #include "ips_config.h"
 #include "psm_user.h"
 
-#include "ips_tid.h"
 #include "ips_recvhdrq.h"
 #include "ips_epstate.h"
 #include "ips_proto_am.h"
 #include "ips_tidflow.h"
 #include "ips_path_rec.h"
 
+#if defined(PSM_SOCKETS) && defined(USE_UDP)
 // when defined, this enables use of byte based flow credits in addition
 // to packet based.
 // It can help UDP to avoid overflowing the sockets kernel buffers.
@@ -73,6 +73,7 @@
 // memory at scale.
 // UD/RC, TCP and OPA HALs self configure so this has no effect
 #define PSM_BYTE_FLOW_CREDITS
+#endif
 
 typedef enum ips_path_type {
 	IPS_PATH_LOW_PRIORITY,
@@ -328,7 +329,6 @@ typedef enum psm_transfer_type {
 
 typedef enum psm_protocol_type {
 	PSM_PROTOCOL_GO_BACK_N = 0,
-	PSM_PROTOCOL_TIDFLOW,
 	PSM_PROTOCOL_LAST	/* Keep this the last protocol type */
 } psm_protocol_type_t;
 
@@ -369,6 +369,10 @@ struct ips_proto {
 #ifdef PSM_BYTE_FLOW_CREDITS
 	uint32_t flow_credit_bytes;	// credit limit in bytes
 #endif
+	uint16_t min_credits;		// min credits
+	uint16_t max_credits;		// max credits
+	uint16_t credits_adjust;	// credit adjusting amount
+	uint16_t credits_inc_thresh;	// credit increase threshold
 	mpool_t pend_sends_pool;
 	struct ips_ibta_compliance_fn ibta;
 	struct ips_proto_stats stats;
@@ -510,8 +514,6 @@ struct ips_flow {
 	uint16_t protocol:3;	/* go-back-n or tidflow */
 	uint16_t flags:8;	/* flow state flags */
 
-	// TBD - cwin only needed for OPA for CCA
-	uint16_t cwin;		/* Size of congestion window in packets */
 	// to allow for good pipelining of send/ACK need to trigger an ack at
 	// least every ack_interval packets (roughy flow_credits/4) or every
 	// ack_inteval_bytes bytes (roughly flow_credit_bytes/4) whichever
@@ -537,12 +539,14 @@ struct ips_flow {
 	// For UDP, sockets has byte oriented buffering so we need to
 	// impose a credit_bytes limit to allow sufficient pkt credits
 	// but avoid sockets buffer overflow and recv side discards/flow control
-	int16_t  credits;	/* Current credits available to send on flow */
+	int16_t  credits;	 /* Current credits available to send on flow */
+	uint16_t max_credits;	 /* credits limit */
+	uint32_t credits_inc_psn; /* the reference pkt psn used for increasing credit. We increase */
+	                         /* credit if current psn - credits_inc_psn > credit_inc_thresh */
 #ifdef PSM_BYTE_FLOW_CREDITS
 	int32_t  credit_bytes;	/* Current credit bytes avail to send on flow */
 #endif
 	uint32_t ack_index;     /* Index of the last ACK message type in pending message queue */
-
 	psmi_seqnum_t xmit_seq_num;	/* next psn for xmit */
 	psmi_seqnum_t xmit_ack_num;	/* last xmited psn acked + 1 */
 	psmi_seqnum_t recv_seq_num;	/* next psn expect to recv */

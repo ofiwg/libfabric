@@ -58,7 +58,6 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include "ips_proto.h"
-#include "ptl_ips/ips_tid.h"
 #include "ptl_ips/ips_expected_proto.h"
 
 // flags=0 for send, 1 for recv

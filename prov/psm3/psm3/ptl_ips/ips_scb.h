@@ -150,7 +150,7 @@ struct ips_scb {
 	uint32_t scb_flags;
 	/* When nfrag==1, frag_size and *remaining are undefined.
 	 * An scb can describe a large user buffer (nfrag>1) for segmentation
-	 * (UDP GSO and OPA send DMA).
+	 * (UDP GSO and verbs send DMA).
 	 * When such a buffer needs retransmission, the payload and payload_size
 	 * will be advanced to reflect what needs to be retransmitted.
 	 * *_remaining also are reduced to reflect what remains.

@@ -131,16 +131,6 @@ static int psm3_hfp_loopback_get_port_active(int unit, int port)
 	return (unit == 0) && (port == 1);
 }
 
-static int psm3_hfp_loopback_get_num_contexts(int unit)
-{
-	return 1024;
-}
-
-static int psm3_hfp_loopback_get_num_free_contexts(int unit)
-{
-	return 1024;
-}
-
 static int psm3_hfp_loopback_get_port_subnet(int unit, int port, int addr_index,
 	psmi_subnet128_t *subnet, psmi_naddr128_t *addr,
 	int *idx, psmi_gid128_t *gid)
@@ -213,7 +203,7 @@ static void psm3_hfp_loopback_mq_init_defaults(struct psm2_mq *mq)
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	mq->ips_gpu_window_rv_str =  NULL; // no rendezvous
 #endif
-	mq->hfi_thresh_rv = (~(uint32_t)0); // disable rendezvous
+	mq->rndv_nic_thresh = (~(uint32_t)0); // disable rendezvous
 	mq->hfi_thresh_tiny = PSM_MQ_NIC_MAX_TINY;
 	// RDMA and MR cache N/A, leave ep->rdmamode, ep->mr_cache_mode and
 	// ep->rv_gpu_cache_size as set by caller (0, NONE, 0)
@@ -276,8 +266,6 @@ hfp_loopback_t psm3_loopback_hi = {
 		.hfp_get_num_ports			  = psm3_hfp_loopback_get_num_ports,
 		.hfp_get_unit_active			  = psm3_hfp_loopback_get_unit_active,
 		.hfp_get_port_active			  = psm3_hfp_loopback_get_port_active,
-		.hfp_get_num_contexts			  = psm3_hfp_loopback_get_num_contexts,
-		.hfp_get_num_free_contexts		  = psm3_hfp_loopback_get_num_free_contexts,
 		.hfp_get_default_pkey			  = psm3_hfp_loopback_get_default_pkey,
 		.hfp_get_port_subnet			  = psm3_hfp_loopback_get_port_subnet,
 		.hfp_get_unit_pci_bus			  = psm3_hfp_loopback_get_unit_pci_bus,

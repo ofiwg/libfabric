@@ -463,7 +463,7 @@ psm3_mq_handle_rts(psm2_mq_t mq, psm2_epaddr_t src, uint32_t *_tag,
 		/* We don't know recv_msglen yet but we set it here for
 		 * mq_iprobe */
 		req->req_data.send_msglen = req->req_data.recv_msglen = send_msglen;
-		PSM2_LOG_EPM_COND(req->req_data.send_msglen > mq->hfi_thresh_rv,
+		PSM2_LOG_EPM_COND(req->req_data.send_msglen > mq->rndv_nic_thresh,
 				 OPCODE_LONG_RTS,PSM2_LOG_RX,src->epid,mq->ep->epid,
 				    "req->rts_reqidx_peer: %d",req->rts_reqidx_peer);
 		req->state = MQ_STATE_UNEXP_RV;

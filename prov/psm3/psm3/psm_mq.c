@@ -1426,13 +1426,13 @@ psm2_error_t psm3_mqopt_ctl(psm2_mq_t mq, uint32_t key, void *value, int get)
 	switch (key) {
 	case PSM2_MQ_RNDV_HFI_SZ:
 		if (get)
-			*((uint32_t *) value) = mq->hfi_thresh_rv;
+			*((uint32_t *) value) = mq->rndv_nic_thresh;
 		else {
 			val32 = *((uint32_t *) value);
-			mq->hfi_thresh_rv = val32;
+			mq->rndv_nic_thresh = val32;
 		}
 		_HFI_VDBG("RNDV_HFI_SZ = %d (%s)\n",
-			  mq->hfi_thresh_rv, get ? "GET" : "SET");
+			  mq->rndv_nic_thresh, get ? "GET" : "SET");
 		break;
 
 	case PSM2_MQ_RNDV_SHM_SZ:
@@ -1655,7 +1655,7 @@ static int psm3_mq_parse_window_rv(const char *str,
 		if (delim)
 			*delim = '\0';
 		// parse window
-		if (psm3_parse_str_uint(s, &win, 1, PSM_MQ_NIC_MAX_RNDV_WINDOW)) {
+		if (psm3_parse_str_uint(s, &win, 1, PSM3_MQ_RNDV_NIC_WINDOW_MAX)) {
 			if (errstr_size)
 				snprintf(errstr, errstr_size, " Invalid window_rv: %s", s);
 			goto fail;
@@ -2576,9 +2576,9 @@ psm2_error_t psm3_mq_malloc(psm2_mq_t *mqo)
 
 	// shm_thresh_rv is N/A to NIC and HAL, so we set this here and let
 	// HAL set the rest of the defaults
-	mq->shm_thresh_rv = MQ_SHM_THRESH_RNDV;
+	mq->shm_thresh_rv = PSM3_MQ_RNDV_SHM_THRESH;
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	mq->shm_gpu_thresh_rv = MQ_SHM_GPU_THRESH_RNDV;
+	mq->shm_gpu_thresh_rv = PSM3_MQ_RNDV_SHM_GPU_THRESH;
 #endif
 
 	psmi_hal_mq_init_defaults(mq);
@@ -2618,8 +2618,8 @@ psm2_error_t psm3_mq_initialize_params(psm2_mq_t mq)
 	psm3_getenv("PSM3_MQ_RNDV_NIC_THRESH",
 		    "NIC eager-to-rendezvous switchover",
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
-		    (union psmi_envvar_val)mq->hfi_thresh_rv, &env_hfirv);
-	mq->hfi_thresh_rv = env_hfirv.e_uint;
+		    (union psmi_envvar_val)mq->rndv_nic_thresh, &env_hfirv);
+	mq->rndv_nic_thresh = env_hfirv.e_uint;
 
 #define WINDOW_SYNTAX "Specified as window_size:limit,window_size:limit, ...\nwhere limit is the largest message size the window_size is applicable to.\nThe last window_size in the list will be used for all remaining message\nsizes (eg. its limit is optional and ignored).\nwindow_size must be <= 4194304 and the limit in each entry must be larger\nthan the prior entry."
 
@@ -2682,9 +2682,6 @@ psm2_error_t psm3_mq_initialize_params(psm2_mq_t mq)
 #endif /* PSM_CUDA || PSM_ONEAPI */
 	}
 
-	/* Re-evaluate this since it may have changed after initializing the shm
-	 * device */
-	mq->shm_thresh_rv = psm3_shm_mq_rv_thresh;
 	psm3_getenv("PSM3_MQ_RNDV_SHM_THRESH",
 		    "shm eager-to-rendezvous switchover",
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
@@ -2693,7 +2690,6 @@ psm2_error_t psm3_mq_initialize_params(psm2_mq_t mq)
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	if (PSMI_IS_GPU_ENABLED) {
-		mq->shm_gpu_thresh_rv = psm3_shm_mq_gpu_rv_thresh;
 		psm3_getenv("PSM3_MQ_RNDV_SHM_GPU_THRESH",
 			"shm eager-to-rendezvous switchover for GPU send",
 			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,

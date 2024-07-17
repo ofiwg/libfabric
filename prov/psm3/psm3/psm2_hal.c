@@ -110,8 +110,6 @@ void psm3_hal_register_instance(psmi_hal_instance_t *psm_hi)
 	REJECT_IMPROPER_HI(hfp_get_num_ports);
 	REJECT_IMPROPER_HI(hfp_get_unit_active);
 	REJECT_IMPROPER_HI(hfp_get_port_active);
-	REJECT_IMPROPER_HI(hfp_get_num_contexts);
-	REJECT_IMPROPER_HI(hfp_get_num_free_contexts);
 	REJECT_IMPROPER_HI(hfp_get_default_pkey);
 	REJECT_IMPROPER_HI(hfp_get_port_subnet);
 	REJECT_IMPROPER_HI(hfp_get_unit_pci_bus);
@@ -288,37 +286,6 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 					}
 					else
 						rv = -1;
-				}
-				else
-					rv = -1;
-			}
-			break;
-		case psmi_hal_pre_init_cache_func_get_num_contexts:
-			{
-				int unit = va_arg(ap,int);
-				if ((unit >= 0) && (unit < p->params.num_units))
-				{
-					if (!p->params.num_contexts_valid[unit]) {
-						p->params.num_contexts_valid[unit] = 1;
-						p->params.num_contexts[unit] = p->hfp_get_num_contexts(unit);
-					}
-					rv = p->params.num_contexts[unit];
-				}
-				else
-					rv = -1;
-			}
-			break;
-		case psmi_hal_pre_init_cache_func_get_num_free_contexts:
-			{
-				int unit = va_arg(ap,int);
-
-				if ((unit >= 0) && (unit < p->params.num_units))
-				{
-					if (!p->params.num_free_contexts_valid[unit]) {
-						p->params.num_free_contexts_valid[unit] = 1;
-						p->params.num_free_contexts[unit] = p->hfp_get_num_free_contexts(unit);
-					}
-					rv = p->params.num_free_contexts[unit];
 				}
 				else
 					rv = -1;
@@ -581,10 +548,6 @@ static void psm3_hal_free_cache(struct _psmi_hal_instance *p)
 	FREE_HAL_CACHE(port_speed_valid);
 	FREE_HAL_CACHE(port_lid);
 	FREE_HAL_CACHE(port_lid_valid);
-	FREE_HAL_CACHE(num_contexts);
-	FREE_HAL_CACHE(num_contexts_valid);
-	FREE_HAL_CACHE(num_free_contexts);
-	FREE_HAL_CACHE(num_free_contexts_valid);
 	FREE_HAL_CACHE(port_subnet_valid);
 	FREE_HAL_CACHE(port_subnet);
 	FREE_HAL_CACHE(port_subnet_addr);
@@ -638,10 +601,6 @@ static psmi_hal_instance_t *psm3_hal_select_hal(psmi_hal_instance_t *p,
 	ALLOC_HAL_CACHE(port_speed_valid, int8_t, nunits*(nports+1));
 	ALLOC_HAL_CACHE(port_lid, int, nunits*(nports+1)*psm3_addr_per_nic);
 	ALLOC_HAL_CACHE(port_lid_valid, int8_t, nunits*(nports+1)*psm3_addr_per_nic);
-	ALLOC_HAL_CACHE(num_contexts, uint16_t, nunits);
-	ALLOC_HAL_CACHE(num_contexts_valid, uint16_t, nunits);
-	ALLOC_HAL_CACHE(num_free_contexts, uint16_t, nunits);
-	ALLOC_HAL_CACHE(num_free_contexts_valid, uint16_t, nunits);
 	ALLOC_HAL_CACHE(port_subnet_valid, int8_t, nunits*(nports+1)*psm3_addr_per_nic);
 	ALLOC_HAL_CACHE(port_subnet, psmi_subnet128_t, nunits*(nports+1)*psm3_addr_per_nic);
 	ALLOC_HAL_CACHE(port_subnet_addr, psmi_naddr128_t, nunits*(nports+1)*psm3_addr_per_nic);
