@@ -5,14 +5,6 @@ if test ! -f src/psmx3.h; then
 	exit 1
 fi
 
-if [ -f psm3/Makefile.include.base ]
-then
-	make -f - <<EOF
-psm3/Makefile.include: psm3/Makefile.include.base
-	cp psm3/Makefile.include.base psm3/Makefile.include
-EOF
-fi
-
 set -x
 
 autoreconf -ivf

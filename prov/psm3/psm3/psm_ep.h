@@ -173,7 +173,7 @@ struct psm2_ep {
 	uint32_t hfi_imm_size;	  /** Immediate data size */
 	uint32_t connections;	    /**> Number of connections */
 
-	/* HAL indicates send segmentation support (OPA Send DMA or UDP GSO)
+	/* HAL indicates send segmentation support (Send DMA or UDP GSO)
 	 * by setting max_segs>1 and max_size > 1 MTU.
 	 * chunk_size used will be min(chunk_max_segs*frag_size, chunk_max_size)
 	 * Can set 1 huge and other reasonable if want only 1 to control

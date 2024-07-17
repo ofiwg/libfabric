@@ -178,7 +178,7 @@ struct psm2_mq {
 	STAILQ_HEAD(, psm2_mq_req) eager_q; /**> eager request queue */
 
 	uint32_t hfi_thresh_tiny;
-	uint32_t hfi_thresh_rv;
+	uint32_t rndv_nic_thresh;
 	uint32_t shm_thresh_rv;
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	uint32_t shm_gpu_thresh_rv;

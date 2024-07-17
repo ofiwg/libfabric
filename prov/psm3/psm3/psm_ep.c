@@ -455,6 +455,10 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 		opts.outsl = opts_i->outsl;
 	if (opts_i->service_id)
 		opts.service_id = (uint64_t) opts_i->service_id;
+#ifdef PSM3_PATH_REC_QUERY
+	if (opts_i->path_res_type != PSM2_PATH_RES_NONE)
+		opts.path_res_type = opts_i->path_res_type;
+#endif
 	if (opts_i->senddesc_num)
 		opts.senddesc_num = opts_i->senddesc_num;
 	if (opts_i->imm_size)
@@ -470,7 +474,33 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 		opts.service_id = (uint64_t) envvar_val.e_ulonglong;
 	}
 
+#ifdef PSM3_PATH_REC_QUERY
+	const char *PSM3_PATH_REC_HELP =
+			 "Mechanism to query NIC path record [opp, umad or none] (default is none)";
+	/* Get Path resolution type from environment Possible choices are:
+	 *
+	 * NONE : Default same as previous instances. Utilizes static data.
+	 * OPP  : Use OFED Plus Plus library to do path record queries.
+	 * UMAD : Use raw libibumad interface to form and process path records.
+	 */
+	if (!psm3_getenv("PSM3_PATH_REC", PSM3_PATH_REC_HELP,
+			 PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+			 (union psmi_envvar_val)"none", &envvar_val)) {
+		if (!strcasecmp(envvar_val.e_str, "none"))
+			opts.path_res_type = PSM2_PATH_RES_NONE;
+		else if (!strcasecmp(envvar_val.e_str, "opp"))
+			opts.path_res_type = PSM2_PATH_RES_OPP;
+		else if (!strcasecmp(envvar_val.e_str, "umad"))
+			opts.path_res_type = PSM2_PATH_RES_UMAD;
+		else {
+			_HFI_INFO("Invalid value for PSM3_PATH_REC ('%s') %-40s Using: none\n",
+				envvar_val.e_str, PSM3_PATH_REC_HELP);
+			opts.path_res_type = PSM2_PATH_RES_NONE;
+		}
+	}
+#else
 	opts.path_res_type = PSM2_PATH_RES_NONE;
+#endif
 
 	/* Get user specified port number to use. */
 	if (!psm3_getenv("PSM3_NIC_PORT", "NIC Port number (0 autodetects)",

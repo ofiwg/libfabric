@@ -397,8 +397,6 @@ psm3_verbs_parse_params(psm2_ep_t ep)
 	// min size is (HFI_TF_NFLOWS + ep->hfi_num_send_rdma) *
 	// chunk size (psm3_mq_max_window_rv(mq, 0) after
 	// psm3_mq_initialize_params)
-	// for OPA native, actual window_rv may be smaller, but for UD it
-	// is not reduced
 	psm3_getenv("PSM3_RV_MR_CACHE_SIZE",
 			"kernel space MR cache size"
 			" (MBs, 0 lets rv module decide) [0]",
@@ -550,7 +548,7 @@ psm3_verbs_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 	ep->chunk_max_size = ep->mtu;
 #ifdef PSM_BYTE_FLOW_CREDITS
 	// let flow_credits be the control
-	proto->flow_credit_bytes = ep->mtu * proto->flow_credits;
+	proto->flow_credit_bytes = ep->mtu * proto->max_credits;
 	_HFI_DBG("initial flow_credits %d bytes %d\n",
 				proto->flow_credits, proto->flow_credit_bytes);
 #else
@@ -594,7 +592,7 @@ fail:
 }
 
 // Fetch current link state to update linkinfo fields in ips_proto:
-// 	ep_base_lid, ep_lmc, ep_link_rate, QoS tables, CCA tables
+// 	ep_base_lid, ep_lmc, ep_link_rate
 // These are all fields which can change during a link bounce.
 // Note "active" state is not adjusted as on link down PSM will wait for
 // the link to become usable again so it's always a viable/active device
@@ -2884,8 +2882,11 @@ unsigned psm3_verbs_parse_rdmamode(int reload)
 	// IPS_PROTOEXP_FLAGS_INTERLEAVE are N/A when RDMA not enabled
 
 	default_value = 0;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #ifdef RNDV_MOD
+	if (psm3_rv_available()) {
+		default_value = IPS_PROTOEXP_FLAG_RDMA_KERNEL;
+	}
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	// GPUDIRECT causes default_value of RDMA=1
 	if (PSMI_IS_GPU_ENABLED && psmi_parse_gpudirect())
 		default_value = IPS_PROTOEXP_FLAG_RDMA_KERNEL;

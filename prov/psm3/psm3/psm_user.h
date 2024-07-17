@@ -200,6 +200,9 @@ typedef void *psmi_hal_hw_context;
 #define PSMI_VERNO_GET_MAJOR(verno) (((verno)>>8) & 0xff)
 #define PSMI_VERNO_GET_MINOR(verno) (((verno)>>0) & 0xff)
 
+extern unsigned int psm3_reg_mr_fail_limit;
+extern unsigned int psm3_reg_mr_warn_cnt;
+
 int psm3_verno_client();
 int psm3_verno_isinteroperable(uint16_t verno);
 int MOCKABLE(psm3_isinitialized)();
@@ -213,7 +216,6 @@ int psm3_get_current_proc_location();
 int psm3_get_max_cpu_numa();
 
 extern int psm3_allow_routers;
-extern uint32_t non_dw_mul_sdma;
 extern psmi_lock_t psm3_creation_lock;
 extern psm2_ep_t psm3_opened_endpoint;
 extern int psm3_opened_endpoint_count;
@@ -246,43 +248,96 @@ extern void psm3_wake(psm2_ep_t ep);	// wake from psm3_wait
 PSMI_ALWAYS_INLINE(
 int
 _psmi_mutex_trylock_inner(pthread_mutex_t *mutex,
-			  const char *curloc, pthread_t *lock_owner))
+			  const char *curloc, pthread_t *lock_owner
+#ifdef PSMI_LOCK_MUTEXLOCK_DEBUG_LOG_CONTENTION
+			  , int check, const char **lock_owner_loc
+#endif
+			  ))
 {
 	psmi_assert_always_loc(*lock_owner != pthread_self(),
 			       curloc);
+#ifdef PSMI_LOCK_MUTEXLOCK_DEBUG_LOG_CONTENTION
+	// this is imperfect as the owner's unlock can race with this function
+	// so we fetch loc1 and loc2 just before and after our trylock.  Still
+	// imperfect, but helps provide insight on frequently contended locks
+	const char *loc1 = *lock_owner_loc;
+#endif
 	int ret = pthread_mutex_trylock(mutex);
-	if (ret == 0)
+	if (ret == 0) {
 		*lock_owner = pthread_self();
+#ifdef PSMI_LOCK_MUTEXLOCK_DEBUG_LOG_CONTENTION
+		*lock_owner_loc = curloc;
+	} else {
+		const char *loc2 = *lock_owner_loc;
+		if (check)
+			_HFI_VDBG("%s is trying for lock held by %s %s\n", curloc, loc1, loc2);
+#endif
+	}
 	return ret;
 }
 
 PSMI_ALWAYS_INLINE(
 int
 _psmi_mutex_lock_inner(pthread_mutex_t *mutex,
-		       const char *curloc, pthread_t *lock_owner))
+		       const char *curloc, pthread_t *lock_owner
+#ifdef PSMI_LOCK_MUTEXLOCK_DEBUG_LOG_CONTENTION
+		       , const char **lock_owner_loc
+#endif
+		       ))
 {
 	psmi_assert_always_loc(*lock_owner != pthread_self(),
 			       curloc);
+#ifdef PSMI_LOCK_MUTEXLOCK_DEBUG_LOG_CONTENTION
+	// this is imperfect as the owner's unlock can race with this function
+	// so we fetch loc1 and loc2 just before and after our trylock.  Still
+	// imperfect, but helps provide insight on frequently contended locks
+	const char *loc1 = *lock_owner_loc;
+	if (! _psmi_mutex_trylock_inner(mutex, curloc, lock_owner, 0, lock_owner_loc))
+		return 0;
+	const char *loc2 = *lock_owner_loc;
+	_HFI_VDBG("%s is waiting for lock held by %s %s\n", curloc, loc1, loc2);
+#endif
 	int ret = pthread_mutex_lock(mutex);
 	psmi_assert_always_loc(ret != EDEADLK, curloc);
 	*lock_owner = pthread_self();
+#ifdef PSMI_LOCK_MUTEXLOCK_DEBUG_LOG_CONTENTION
+	*lock_owner_loc = curloc;
+#endif
 	return ret;
 }
 
 PSMI_ALWAYS_INLINE(
 void
 _psmi_mutex_unlock_inner(pthread_mutex_t *mutex,
-			 const char *curloc, pthread_t *lock_owner))
+			 const char *curloc, pthread_t *lock_owner
+#ifdef PSMI_LOCK_MUTEXLOCK_DEBUG_LOG_CONTENTION
+			 , const char **lock_owner_loc
+#endif
+			 ))
 {
 	psmi_assert_always_loc(*lock_owner == pthread_self(),
 			       curloc);
 	*lock_owner = PSMI_LOCK_NO_OWNER;
+#ifdef PSMI_LOCK_MUTEXLOCK_DEBUG_LOG_CONTENTION
+	*lock_owner_loc = "NONE";
+#endif
 	psmi_assert_always_loc(pthread_mutex_unlock(mutex) !=
 			       EPERM, curloc);
 	return;
 }
 
 #define _PSMI_LOCK_INIT(pl)	/* static initialization */
+#ifdef PSMI_LOCK_MUTEXLOCK_DEBUG_LOG_CONTENTION
+#define _PSMI_LOCK_TRY(pl)							\
+	    _psmi_mutex_trylock_inner(&((pl).lock), PSMI_CURLOC,		\
+					&((pl).lock_owner), 1, &((pl).lock_owner_loc))
+#define _PSMI_LOCK(pl)								\
+	    _psmi_mutex_lock_inner(&((pl).lock), PSMI_CURLOC,			\
+                    &((pl).lock_owner), &((pl).lock_owner_loc))
+#define _PSMI_UNLOCK(pl)							\
+	    _psmi_mutex_unlock_inner(&((pl).lock), PSMI_CURLOC,			\
+                    &((pl).lock_owner), &((pl).lock_owner_loc))
+#else
 #define _PSMI_LOCK_TRY(pl)							\
 	    _psmi_mutex_trylock_inner(&((pl).lock), PSMI_CURLOC,		\
 					&((pl).lock_owner))
@@ -292,6 +347,7 @@ _psmi_mutex_unlock_inner(pthread_mutex_t *mutex,
 #define _PSMI_UNLOCK(pl)							\
 	    _psmi_mutex_unlock_inner(&((pl).lock), PSMI_CURLOC,			\
                                         &((pl).lock_owner))
+#endif
 #define _PSMI_LOCK_ASSERT(pl)							\
 	psmi_assert_always((pl).lock_owner == pthread_self());
 #define _PSMI_UNLOCK_ASSERT(pl)							\
@@ -375,13 +431,13 @@ void psmi_profile_reblock(int did_no_progress) __attribute__ ((weak));
 extern int is_gdr_copy_enabled;
 /* This limit dictates when the sender turns off
  * GDR Copy and uses SDMA. The limit needs to be less than equal
- * GPU RNDV threshold (gpu_thresh_rndv)
+ * GPU RNDV threshold (psm3_gpu_thresh_rndv)
  * set to 0 if GDR Copy disabled
  */
 extern uint32_t gdr_copy_limit_send;
 /* This limit dictates when the reciever turns off
  * GDR Copy. The limit needs to be less than equal
- * GPU RNDV threshold (gpu_thresh_rndv)
+ * GPU RNDV threshold (psm3_gpu_thresh_rndv)
  * set to 0 if GDR Copy disabled
  */
 extern uint32_t gdr_copy_limit_recv;
@@ -389,7 +445,7 @@ extern int is_gpudirect_enabled; // only for use during parsing of other params
 extern int _device_support_gpudirect;
 extern uint32_t gpudirect_rdma_send_limit;
 extern uint32_t gpudirect_rdma_recv_limit;
-extern uint32_t gpu_thresh_rndv;
+extern uint32_t psm3_gpu_thresh_rndv;
 
 #define MAX_ZE_DEVICES 8
 
@@ -920,31 +976,31 @@ int gpu_p2p_supported())
 {
 	if (likely(_gpu_p2p_supported > -1)) return _gpu_p2p_supported;
 
+	_gpu_p2p_supported = 0;
+
 	if (unlikely(!is_cuda_enabled)) {
-		_gpu_p2p_supported=0;
+		_HFI_DBG("returning 0 (cuda disabled)\n");
 		return 0;
 	}
 
-	int num_devices, dev;
-	CUcontext c;
-
 	/* Check which devices the current device has p2p access to. */
-	CUdevice current_device;
+	CUdevice  current_device;
+	CUcontext current_context;
+	int num_devices, dev_idx;
 	PSMI_CUDA_CALL(cuDeviceGetCount, &num_devices);
-	_gpu_p2p_supported = 0;
 
 	if (num_devices > 1) {
-		PSMI_CUDA_CALL(cuCtxGetCurrent, &c);
-		if (c == NULL) {
+		PSMI_CUDA_CALL(cuCtxGetCurrent, &current_context);
+		if (current_context == NULL) {
 			_HFI_INFO("Unable to find active CUDA context, assuming P2P not supported\n");
 			return 0;
 		}
 		PSMI_CUDA_CALL(cuCtxGetDevice, &current_device);
 	}
 
-	for (dev = 0; dev < num_devices; dev++) {
+	for (dev_idx = 0; dev_idx < num_devices; dev_idx++) {
 		CUdevice device;
-		PSMI_CUDA_CALL(cuDeviceGet, &device, dev);
+		PSMI_CUDA_CALL(cuDeviceGet, &device, dev_idx);
 
 		if (num_devices > 1 && device != current_device) {
 			int canAccessPeer = 0;
@@ -952,16 +1008,17 @@ int gpu_p2p_supported())
 					current_device, device);
 
 			if (canAccessPeer != 1)
-				_HFI_DBG("CUDA device %d does not support P2P from current device (Non-fatal error)\n", dev);
+				_HFI_DBG("CUDA device %d does not support P2P from current device (Non-fatal error)\n", dev_idx);
 			else
-				_gpu_p2p_supported |= (1 << device);
+				_gpu_p2p_supported |= (1 << dev_idx);
 		} else {
 			/* Always support p2p on the same GPU */
-			my_gpu_device = device;
-			_gpu_p2p_supported |= (1 << device);
+			my_gpu_device = dev_idx;
+			_gpu_p2p_supported |= (1 << dev_idx);
 		}
 	}
 
+	_HFI_DBG("returning (0x%x), device 0x%x (%d)\n", _gpu_p2p_supported, (1 << my_gpu_device), my_gpu_device);
 	return _gpu_p2p_supported;
 }
 

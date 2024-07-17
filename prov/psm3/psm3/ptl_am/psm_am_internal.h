@@ -132,14 +132,14 @@ typedef struct psmi_handlertab {
 #define PSMI_AM_DISC_REQ    3
 #define PSMI_AM_DISC_REP    4
 
-#define PSMI_KASSIST_OFF       0x0
-#define PSMI_KASSIST_CMA_GET   0x1
-#define PSMI_KASSIST_CMA_PUT   0x2
+#define PSM3_KASSIST_OFF       0x0
+#define PSM3_KASSIST_CMA_GET   0x1
+#define PSM3_KASSIST_CMA_PUT   0x2
 
-#define PSMI_KASSIST_CMA       0x3
-#define PSMI_KASSIST_GET       0x1
-#define PSMI_KASSIST_PUT       0x2
-#define PSMI_KASSIST_MASK      0x3
+#define PSM3_KASSIST_CMA       0x3
+#define PSM3_KASSIST_GET       0x1
+#define PSM3_KASSIST_PUT       0x2
+#define PSM3_KASSIST_MASK      0x3
 
 int psm3_epaddr_pid(psm2_epaddr_t epaddr);
 
@@ -404,7 +404,7 @@ struct amsh_qdirectory {
  * Shared fifo element counts and sizes
  ******************************************
  * These values are context-wide, they can only be set early on and can't be *
- * modified at runtime.  All endpoints are expected to use the same values.
+ * modified at runtime.  Each endpoint could potentially use different values.
  */
 typedef
 struct amsh_qinfo {
@@ -424,6 +424,10 @@ struct amsh_qinfo {
  *
  * This structure is carefully arranged to optimize cache locality and
  * performance.  Do not modify without careful and thorough analysis.
+ *
+ * In addition to the copies in ptl_am.am_ep and ptl_am.self_nodeinfo
+ * this is also placed at the beginning of the shared memory segment so
+ * our peers can get info about our version, epid, qsizes, features, etc
  */
 struct am_ctl_nodeinfo {
 	uint16_t psm_verno;
@@ -433,7 +437,7 @@ struct am_ctl_nodeinfo {
 	psm2_epaddr_t epaddr;
 	uintptr_t amsh_shmbase;
 	amsh_qinfo_t amsh_qsizes;
-	uint32_t amsh_features;
+	volatile uint32_t amsh_features;
 	struct amsh_qdirectory qdir;
 } __attribute__((aligned(64)));
 
@@ -450,7 +454,7 @@ struct ptl_am {
 	int zero_polls;
 	int amsh_only_polls;
 	int max_ep_idx, am_ep_size;
-	int psmi_kassist_mode;
+	int kassist_mode;
 	char *amsh_keyname;
 
 	/* These three items carefully picked to fit in one cache line. */
@@ -460,8 +464,8 @@ struct ptl_am {
 
 	am_pkt_short_t amsh_empty_shortpkt;
 
-	struct am_ctl_nodeinfo *self_nodeinfo;
-	struct am_ctl_nodeinfo *am_ep;
+	struct am_ctl_nodeinfo *self_nodeinfo; /* our local advertized shm */
+	struct am_ctl_nodeinfo *am_ep; /* local array w/copy of each peer's info */
 #ifdef PSM_CUDA
 	am_cuda_memhandle_cache_t memhandle_cache;
 #endif
@@ -472,6 +476,9 @@ struct ptl_am {
 #define AMSH_GPU_BOUNCE_BUF_SZ (256*1024)
 	void *gpu_bounce_buf;	// for H to D
 #endif
+	// qcounts and qelemsz tunable via amsh_fifo_getconfig()
+	amsh_qinfo_t qcounts;
+	amsh_qinfo_t qelemsz;
 } __attribute__((aligned(64)));
 
 #endif
