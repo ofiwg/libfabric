@@ -508,8 +508,10 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep,
 	request->fill_index = OPX_SDMA_FILL_INDEX_INVALID;
 	request->set_meminfo = set_meminfo;
 
+	/* Set the Acknowledge Request Bit if we're only sending one packet */
+	uint64_t set_ack_bit = (num_packets == 1) ? (uint64_t)htonl(0x80000000) : 0;
 	request->header_vec.scb = *source_scb;
-	request->header_vec.scb.hdr.qw[2] |= ((uint64_t)kdeth << 32);
+	request->header_vec.scb.hdr.qw[2] |= ((uint64_t)kdeth << 32) | set_ack_bit;
 	request->header_vec.scb.hdr.qw[4] |= (last_packet_bytes << 32);
 
 	request->iovecs[0].iov_len = OPX_SDMA_REQ_HDR_SIZE[set_meminfo];
