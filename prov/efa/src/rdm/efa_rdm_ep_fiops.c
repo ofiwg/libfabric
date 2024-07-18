@@ -305,6 +305,14 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (ret)
 		goto err_free;
 
+	ret = ofi_bufpool_create(&ep->overflow_pke_pool,
+				 sizeof(struct efa_rdm_peer_overflow_pke_list_entry),
+				 EFA_RDM_BUFPOOL_ALIGNMENT,
+				 0, /* no limit for max_cnt */
+				 ep->rx_size, 0);
+	if (ret)
+		goto err_free;
+
 	efa_rdm_rxe_map_construct(&ep->rxe_map);
 	return 0;
 
@@ -317,6 +325,9 @@ err_free:
 
 	if (ep->ope_pool)
 		ofi_bufpool_destroy(ep->ope_pool);
+
+	if (ep->overflow_pke_pool)
+		ofi_bufpool_destroy(ep->overflow_pke_pool);
 
 	if (ep->rx_readcopy_pkt_pool)
 		ofi_bufpool_destroy(ep->rx_readcopy_pkt_pool);
@@ -784,6 +795,9 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 
 	if (efa_rdm_ep->ope_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->ope_pool);
+
+	if (efa_rdm_ep->overflow_pke_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->overflow_pke_pool);
 
 	if (efa_rdm_ep->map_entry_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->map_entry_pool);

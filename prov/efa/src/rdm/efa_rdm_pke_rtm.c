@@ -434,7 +434,8 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	bool slide_recvwin;
-	int ret, msg_id;
+	int ret;
+	uint32_t msg_id, exp_msg_id;
 
 	ep = pkt_entry->ep;
 
@@ -513,6 +514,11 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 	if (slide_recvwin) {
 		ofi_recvwin_slide((&peer->robuf));
 	}
+
+	exp_msg_id = ofi_recvwin_next_exp_id((&peer->robuf));
+	if (exp_msg_id % efa_env.recvwin_size == 0)
+		efa_rdm_peer_move_overflow_pke_to_recvwin(peer);
+
 	efa_rdm_peer_proc_pending_items_in_robuf(peer, ep);
 }
 
