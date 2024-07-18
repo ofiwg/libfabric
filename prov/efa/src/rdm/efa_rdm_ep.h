@@ -116,6 +116,8 @@ struct efa_rdm_ep {
 
 	/* datastructure to maintain send/recv states */
 	struct ofi_bufpool *ope_pool;
+	/* data structure to maintain overflow pke linked list entry */
+	struct ofi_bufpool *overflow_pke_pool;
 	/* data structure to maintain pkt rx map */
 	struct ofi_bufpool *map_entry_pool;
 	/** a map between sender address + msg_id to RX entry */

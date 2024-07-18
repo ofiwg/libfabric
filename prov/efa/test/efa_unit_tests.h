@@ -203,6 +203,13 @@ void test_efa_cuda_dmabuf_support_ibv_reg_mr_fail_retain_p2p_fallback_keygen();
 void test_efa_synapseai_dmabuf_support_fd_fail_no_fallback();
 void test_efa_cuda_dmabuf_support_require_dmabuf_fail_no_fallback();
 void test_efa_neuron_dmabuf_support_require_dmabuf_fail_no_fallback();
+void test_efa_rdm_peer_reorder_expected_msg_id();
+void test_efa_rdm_peer_reorder_smaller_msg_id();
+void test_efa_rdm_peer_reorder_larger_msg_id();
+void test_efa_rdm_peer_reorder_overflow_msg_id();
+void test_efa_rdm_peer_move_overflow_pke_to_recvwin();
+void test_efa_rdm_peer_keep_pke_in_overflow_list();
+void test_efa_rdm_peer_append_overflow_pke_to_recvwin();
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)
