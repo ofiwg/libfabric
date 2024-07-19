@@ -9,33 +9,186 @@ releases with earlier release dates.
 v1.22.0, Fri Jul 26, 2024
 ========================
 
+## Coll
+
+- Fix Coverity issues
+
 ## Core
 
-## CXI
+- General bug fixes
+- hmem: change neuron get_dmabuf_fd error code
+- Fix an error in the error handling path of fi_param_define()
+- Makefile.am: Add Windows build files to distribution tarball
+- hmem: disable ZE IPC
+- Add profile variables for connections and memory allocated
+- hmem: Fix `cuDeviceCanAccessPeer()` error reporting
+- man: Update text for `len` parameter
+- Add page size MR attr field
+- man: Extend fi_mr_refresh support
+- man: Improve FI_MR_ALLOCATED documentation
+- man: Support optional MR desc
+- man: Improve FI_MR_HMEM documentation
+- Added ofi_get_realtime interfaces
+- Add endpoint options for max message size and inject size
+- Add Windows definition for `EREMOTEIO`
 
 ## EFA
 
+- General improvement and bug fixes
+- Avoid iterating EP list in CQ read
+- Add RDMA core errno for remote unknown peer
+- Map EFA errnos to Libfabric codes
+- Improve the zero-copy receive feature
+- Improve the handshake enforcement procedure
+- Support unsolicited rdma-write recv
+- Support FI_MORE for eager send and rdma-write
+- Improve the EFA_IO_COMP error code and explanation
+- Improve the unit test for LL128 protocol
+- Distinguish max RMA size from msg size
+
 ## Hooks
+
+- dmabuf: Fix incompatible pointer warning
 
 ## OPX
 
-## Peer
+- Fix performance issue caused by not setting ACK bit in the single
+  SDMA packet case
+- TID cache debug improvements
+- Detection of driver lack of support for TID
+- Multi-CTS support for TID
+- Removal of statement that TID is not supported
+- OPX Tracer improvements
+- Improvements to OPX shared memory cleanup
+- H to H performance improvements for build that supports HMEM
+- Bug fix for a threshold check
+- Bug fix for FI_SELECTIVE_COMPLETION
+- CN5000 fixes
+- Parameterization of various thresholds
+- Further enhancements to support NVIDIA GPUs, included CUDA-allocated
+  bounce buffers and in-provider support for GDRCopy
+- Enhancements to enable support for CN5000 hardware
+- Better checking for TID support
+- General TID enhancements
+- Pkey error handling
+- Send work queue splitting
+- Support for OPX tracer for profiling purposes
+- Coverity scan fixes
+- Fixes and enhancements to logging and debug messages
+- Intranode RMA read fixes
+- Fix compile issues
+- Fix shared memory segment index creation bug
 
 ## PSM3
 
-## RXM
+- Update provider to sync with IEFS 11.7.0.0.110
+- Improved auto-tuning features for PSM3, including dynamic Credit Flows
+  and detecting the presence of the rv kernel module
+- Improved PSM3 intra-node performance for large message sizes
 
 ## SHM
 
-## TCP
+- Added support for write() method to submit DSA work
+- Touch all buffer pages after DSA page fault
+- Add return and more descriptive error message
+- Fix coverity about incorrect sign
+- Fix memory leaks for srx
+- Fix atomic read
 
-## UCX
+## Sockets
+
+- Fix Coverity issues
+
+## USNIC
+
+- Fix a few Coverity issues
 
 ## Util
 
+- Discard outstanding operations in util_srx_close
+- Enable profile on the size of bufpool allocated.
+- Add more predefined profile variables.
+- Fix issue while displaying addresses with fi_info -a <addr_format>
+- fi_pingpong: Fix out of scope memory leak
+- Add source address to fi_pingpong
+
 ## Verbs
 
+- Flush CQ for SQ on no SQ credit
+- Optimize search for device max inline size
+- Enable profiling
+
 ## Fabtests
+
+- Add pytests for EFA zero-copy receive
+- Add benchmark option for `FI_OPT_MAX_MSG_SIZE`
+- benchmarks: Add synapseai support
+- Disable fi_rdm_tagged_peek test for ucx and psm3
+- Add manual init sync to fi_rdm_multiclient and fi_rdm
+- Refactor ft_sock_sync to take in a socket
+- Add fi_rdm_bw test
+- Skip rma_pingpong write tests
+- Init rx_buf before sending data
+- Add rma_pingpong tests to makefile
+- pytest: use different message sizes for rma pingpong
+- Fix missing fixture memory_type in test_rma_pingpong_range_no_inject
+- pytest: account for process startup overhead in client-server tests
+- pytest: save client process output to a file
+- Support testing inject with cq data
+- multinode: update arguments
+- multi_ep: Fix memory leak
+- rdm_tagged_peek: Align rx's msg_order with tx's
+- Add backlog > 0 to listen call
+
+
+v1.21.1, Fri July 26, 2024
+==========================
+
+## Core
+
+- Fix integer overflow in ofi_get_mem_size
+- Fix overflow issue in ofi_rbinit
+- Disable ZE IPC due to possible memory corruption
+- Fix an error in the error handling path of fi_param_define()
+
+## EFA
+
+- Destroy rx_atomrsp_pool during ep close.
+- Free user_info during ep close.
+- Use srx lock from domain directly
+- Fix error handling in efa_rdm_cq_poll_ibv_cq
+- Move efa_rdm_cq_poll_ibv_cq to efa_rdm_cq.h
+- Remove unused cq_attr
+- Remove unnecessary app_info check
+- Remove unnecessary ope check
+- Make the inflight read msg per domain
+
+## SHM
+
+- Added support for write() method to submit DSA work
+- Touch all buffer pages after DSA page fault
+- add return and more descriptive error message
+- fix coverity about incorrect sign
+- Fix memory leaks for srx
+- fix atomic read
+
+## Verbs
+
+- Flush CQ for SQ on no SQ credit
+
+## Fabtests
+
+- efa: reset error completion entry for each fi_cq_readerr call
+- pytest: Skip rma_pingpong write tests
+- Init rx_buf before sending data
+- Add rma_pingpong tests to makefile
+- pytest: use different message sizes for rma pingpong
+- Fix missing fixture memory_type in test_rma_pingpong_range_no_inject
+- pytest: account for process startup overhead in client-server tests
+- pytest: save client process output to a file
+- Fix memory leaks for efa_exhaust_mr_reg test
+- Fix memory leak in multi_ep test
+- Fix memory leak in efa_info_test
 
 
 v1.21.0, Fri Mar 22, 2024
