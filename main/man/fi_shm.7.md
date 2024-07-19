@@ -163,12 +163,6 @@ The *shm* provider checks for the following environment variables:
 *FI_SHM_USE_DSA_SAR*
 : Enables memory copy offload to Intel DSA in SAR protocol. Default false
 
-*FI_SHM_ENABLE_DSA_PAGE_TOUCH*
-: Enables CPU touching of memory pages in a DSA command descriptor when the
-  page fault is reported, so that there is valid address translation for the
-  remaining addresses in the command. This minimizes DSA page faults. Default
-  false
-
 *FI_SHM_USE_XPMEM*
  : SHM can use SAR, CMA or XPMEM for host memory transfer. If
    FI_SHM_USE_XPMEM is set to 1, the provider will select XPMEM over CMA if
