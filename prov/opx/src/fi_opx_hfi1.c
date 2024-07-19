@@ -152,8 +152,9 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl,
 				"Unable to open a context on HFI unit %d.\n",
 				hfi_unit_number);
 			fd = -1;
+		} else {
+			assert((*ctrl)->__hfi_pg_sz == OPX_HFI1_TID_PAGESIZE);
 		}
-		assert((*ctrl)->__hfi_pg_sz == OPX_HFI1_TID_PAGESIZE);
 	}
 	return fd;
 }
