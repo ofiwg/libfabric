@@ -12,6 +12,8 @@ v1.21.1, Fri July 26, 2024
 
 ## Core
 
+- Fix integer overflow in ofi_get_mem_size
+- Fix overflow issue in ofi_rbinit
 - Disable ZE IPC due to possible memory corruption
 - Fix an error in the error handling path of fi_param_define()
 
@@ -27,11 +29,18 @@ v1.21.1, Fri July 26, 2024
 - Remove unnecessary ope check
 - Make the inflight read msg per domain
 
-
 ## SHM
 
+- Added support for write() method to submit DSA work
+- Touch all buffer pages after DSA page fault
+- Add return and more descriptive error message
+- Fix coverity about incorrect sign
 - Fix memory leaks for srx
 - fix atomic read
+
+## VERBS
+
+- Flush CQ for SQ on no SQ credit
 
 ## Fabtests
 
