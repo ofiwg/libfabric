@@ -200,7 +200,7 @@ AC_ARG_WITH([synapseai],
             [AS_IF([test "$freebsd" == "0"],
                    [AC_CHECK_LIB(dl, dlopen, [], [AC_MSG_ERROR([dlopen not found.])])],
                    [])
-             CPPFLAGS="-I$withval/include $CPPFLAGS"
+             CPPFLAGS="-I$withval/include -I/usr/include/drm -I/usr/include/libdrm $CPPFLAGS"
              AC_CHECK_HEADER([habanalabs/synapse_api.h],
                         [AC_CHECK_HEADER([habanalabs/hlthunk.h],
                               [AC_CHECK_HEADER([habanalabs/scal.h],
