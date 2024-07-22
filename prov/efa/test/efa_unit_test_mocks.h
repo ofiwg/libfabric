@@ -31,7 +31,7 @@ struct ibv_mr *__real_ibv_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
 
 struct ibv_mr *efa_mock_ibv_reg_mr_success_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
                                                                       size_t length, int access);
-struct ibv_mr *efa_mock_ibv_reg_mr_einval_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
+struct ibv_mr *efa_mock_ibv_reg_mr_set_errno_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
                                                                      size_t length, int access);
 
 struct ibv_mr *__real_ibv_reg_mr_iova2(struct ibv_pd *pd, void *addr, size_t length, uint64_t iova,
@@ -39,7 +39,7 @@ struct ibv_mr *__real_ibv_reg_mr_iova2(struct ibv_pd *pd, void *addr, size_t len
 struct ibv_mr *efa_mock_ibv_reg_mr_iova2_success_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
                                                                             size_t length, uint64_t iova,
                                                                             unsigned int access);
-struct ibv_mr *efa_mock_ibv_reg_mr_iova2_einval_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
+struct ibv_mr *efa_mock_ibv_reg_mr_iova2_set_errno_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
                                                                            size_t length, uint64_t iova,
                                                                            unsigned int access);
 
@@ -115,6 +115,7 @@ struct efa_unit_test_mocks
 	int (*efadv_query_device)(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 							  uint32_t inlen);
 	int ibv_reg_mr_calls;
+	int ibv_reg_mr_errno;
 	struct ibv_mr *(*ibv_reg_mr_fn)(struct ibv_pd *pd, void *addr, size_t length,
 	                                int access);
 	struct ibv_mr *(*ibv_reg_mr_iova2)(struct ibv_pd *pd, void *addr, size_t length,

@@ -51,14 +51,14 @@ struct ibv_mr *efa_mock_ibv_reg_mr_success_return_mock_for_dummy_addr(struct ibv
 	return (struct ibv_mr *) mock();
 }
 
-struct ibv_mr *efa_mock_ibv_reg_mr_einval_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
+struct ibv_mr *efa_mock_ibv_reg_mr_set_errno_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
                                                                      size_t length, int access)
 {
 	++g_efa_unit_test_mocks.ibv_reg_mr_calls;
 	if ((uint64_t) addr != g_efa_unit_test_mocks.dummy_address) {
 		return __real_ibv_reg_mr(pd, addr, length, access);
 	}
-	errno = EINVAL;
+	errno = g_efa_unit_test_mocks.ibv_reg_mr_errno;
 	return (struct ibv_mr *) mock();
 }
 
@@ -80,7 +80,7 @@ struct ibv_mr *efa_mock_ibv_reg_mr_iova2_success_return_mock_for_dummy_addr(stru
 	return (struct ibv_mr *) mock();
 }
 
-struct ibv_mr *efa_mock_ibv_reg_mr_iova2_einval_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
+struct ibv_mr *efa_mock_ibv_reg_mr_iova2_set_errno_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
                                                                          size_t length, uint64_t iova,
                                                                          unsigned int access)
 {
@@ -88,7 +88,7 @@ struct ibv_mr *efa_mock_ibv_reg_mr_iova2_einval_return_mock_for_dummy_addr(struc
 	if ((uint64_t) addr != g_efa_unit_test_mocks.dummy_address) {
 		return __real_ibv_reg_mr_iova2(pd, addr, length, iova, access);
 	}
-	errno = EINVAL;
+	errno = g_efa_unit_test_mocks.ibv_reg_mr_errno;
 	return (struct ibv_mr *) mock();
 }
 
@@ -267,6 +267,7 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.ibv_create_ah = __real_ibv_create_ah,
 	.efadv_query_device = __real_efadv_query_device,
 	.ibv_reg_mr_calls = 0,
+	.ibv_reg_mr_errno = 0,
 	.ibv_reg_mr_fn = __real_ibv_reg_mr,
 	.ibv_reg_mr_iova2 = __real_ibv_reg_mr_iova2,
 	.ibv_dereg_mr = __real_ibv_dereg_mr,
