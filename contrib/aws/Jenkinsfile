@@ -61,13 +61,11 @@ pipeline {
                     stages["1_g4dn_alinux2-efa"] = common.get_test_stage("1_g4dn_alinux2_efa", env.BUILD_TAG, "alinux2", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr)
                     stages["1_g4dn_ubuntu2004-efa"] = common.get_test_stage("1_g4dn_ubuntu2004_efa", env.BUILD_TAG, "ubuntu2004", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr)
                     stages["1_g4dn_rhel8-efa"] = common.get_test_stage("1_g4dn_rhel8_efa", env.BUILD_TAG, "rhel8", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr)
-                    stages["1_g4dn_centos7-efa"] = common.get_test_stage("1_g4dn_centos7_efa", env.BUILD_TAG, "centos7", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr)
 
                     // Single Node Tests - SHM
                     stages["1_g4dn_alinux2_shm"] = common.get_test_stage("1_g4dn_alinux2_shm", env.BUILD_TAG, "alinux2", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm")
                     stages["1_g4dn_ubuntu2004_shm"] = common.get_test_stage("1_g4dn_ubuntu2004_shm", env.BUILD_TAG, "ubuntu2004", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm")
                     stages["1_g4dn_rhel8_shm"] = common.get_test_stage("1_g4dn_rhel8_shm", env.BUILD_TAG, "rhel8", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm")
-                    stages["1_g4dn_centos7_shm"] = common.get_test_stage("1_g4dn_centos7_shm", env.BUILD_TAG, "centos7", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm")
                     stages["1_g4dn_ubuntu2004_shm_disable-cma"] = common.get_test_stage("1_g4dn_ubuntu2004_shm_disable-cma", env.BUILD_TAG, "ubuntu2004", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm --enable-cma false")
 
                     // Single Node Windows Test
