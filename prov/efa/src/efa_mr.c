@@ -841,6 +841,15 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 			         efa_mr->domain->ibv_mr_reg_sz,
 			         efa_mr->domain->ibv_mr_reg_ct);
 			ret = -errno;
+			/* Disable CUDA P2P support if MR failed with a fatal error code */
+			if (mr_attr.iface == FI_HMEM_CUDA && ret != -ENOMEM) {
+				EFA_WARN(FI_LOG_MR,
+				         "Unable to register %s memory, disable P2P support. "
+				         "Error code: %d\n",
+				         fi_tostr(&mr_attr.iface, FI_TYPE_HMEM_IFACE),
+				         -ret);
+				efa_mr->domain->hmem_info[mr_attr.iface].p2p_supported_by_device = false;
+			}
 		} else {
 			efa_mr->domain->ibv_mr_reg_ct++;
 			efa_mr->domain->ibv_mr_reg_sz += efa_mr->ibv_mr->length;
@@ -854,30 +863,18 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 		}
 	}
 
-	if (ret) {
-		if (efa_mr->domain->hmem_info[mr_attr.iface].p2p_required_by_impl) {
-			if (efa_mr->peer.iface == FI_HMEM_CUDA &&
-			    (efa_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
-				assert(efa_mr->peer.hmem_data);
-				ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_mr->peer.hmem_data);
-			}
-			return ret;
-		}
-
-		EFA_WARN(FI_LOG_MR,
-			 "Unable to register %s memory, disable P2P support.\n",
-			 fi_tostr(&mr_attr.iface, FI_TYPE_HMEM_IFACE));
-		efa_mr->domain->hmem_info[mr_attr.iface].p2p_supported_by_device = false;
-		ret = FI_SUCCESS;
-	}
-
-	/*
-	 * For FI_HMEM_CUDA iface when p2p is unavailable, skip ibv_reg_mr() and generate proprietary mr_fid key.
-	 */
-	if (mr_attr.iface == FI_HMEM_CUDA && !efa_mr->domain->hmem_info[mr_attr.iface].p2p_supported_by_device) {
+	if (mr_attr.iface == FI_HMEM_CUDA && efa_mr->mr_fid.key == FI_KEY_NOTAVAIL) {
+		/* When CDA ibv_reg_mr() fails, generate proprietary mr_fid key. */
 		efa_mr->mr_fid.key = efa_mr_cuda_non_p2p_keygen();
+	} else if (ret) {
+		if (efa_mr->peer.iface == FI_HMEM_CUDA &&
+		    (efa_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
+			assert(efa_mr->peer.hmem_data);
+			ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t) efa_mr->peer.hmem_data);
+		}
+		return ret;
 	} else if (!efa_mr->domain->hmem_info[mr_attr.iface].p2p_supported_by_device) {
-		EFA_WARN(FI_LOG_MR, "P2P is not support for iface: %s\n",
+		EFA_WARN(FI_LOG_MR, "P2P is not supported for iface: %s\n",
 		         fi_tostr(&mr_attr.iface, FI_TYPE_HMEM_IFACE));
 		return -FI_EOPNOTSUPP;
 	}
