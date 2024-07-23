@@ -1820,7 +1820,7 @@ static int vrb_get_match_infos(uint32_t version, const char *node,
 {
 	int ret, ret_sock_addr = -FI_ENODATA, ret_ib_ud_addr = -FI_ENODATA;
 
-	// TODO check for AF_IB addr
+	// TODO: check for AF_IB addr
 	ret = vrb_get_matching_info(version, hints, info, *raw_info,
 				       ofi_is_wildcard_listen_addr(node, service,
 								   flags, hints));
