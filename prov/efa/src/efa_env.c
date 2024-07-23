@@ -9,6 +9,7 @@
 #include "ofi_hmem.h"
 
 struct efa_env efa_env = {
+	.iface = "all",
 	.tx_min_credits = 32,
 	.tx_queue_size = 0,
 	.enable_shm_transfer = 1,
@@ -104,6 +105,15 @@ void efa_env_param_get(void)
 		abort();
 	}
 
+	fi_param_get_str(&efa_prov, "iface", &efa_env.iface);
+	if (strlen(efa_env.iface) < 1) {
+		fprintf(stderr,
+			"FI_EFA_IFACE is empty. Specify full-qualified names separated by comma, "
+			"or \"all\" to use all available devices.\n"
+			"Your application will now abort.\n");
+		abort();
+	}
+
 	fi_param_get_int(&efa_prov, "tx_queue_size", &efa_env.tx_queue_size);
 	fi_param_get_int(&efa_prov, "enable_shm_transfer", &efa_env.enable_shm_transfer);
 	fi_param_get_int(&efa_prov, "use_zcpy_rx", &efa_env.use_zcpy_rx);
@@ -155,6 +165,8 @@ void efa_env_param_get(void)
 void efa_env_define()
 {
 	efa_env_define_use_device_rdma();
+	fi_param_define(&efa_prov, "iface", FI_PARAM_STRING,
+			"A comma delimited list of case-sensitive names to restrict eligible EFA NICs (Default: all).");
 	fi_param_define(&efa_prov, "tx_min_credits", FI_PARAM_INT,
 			"Defines the minimum number of credits a sender requests from a receiver (Default: 32).");
 	fi_param_define(&efa_prov, "tx_queue_size", FI_PARAM_INT,

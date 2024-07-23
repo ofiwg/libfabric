@@ -182,6 +182,9 @@ int efa_user_info_get_dgram(uint32_t version, const char *node, const char *serv
 	for (i = 0; i < g_device_cnt; ++i) {
 		prov_info_dgram = g_device_list[i].dgram_info;
 
+		if (!efa_env_allows_nic(prov_info_dgram->nic->device_attr->name))
+			continue;
+
 		ret = efa_prov_info_compare_src_addr(node, flags, hints, prov_info_dgram);
 		if (ret)
 			continue;
@@ -531,6 +534,9 @@ int efa_user_info_get_rdm(uint32_t version, const char *node,
 	     prov_info = prov_info->next) {
 
 		if (prov_info->ep_attr->type != FI_EP_RDM)
+			continue;
+
+		if (!efa_env_allows_nic(prov_info->nic->device_attr->name))
 			continue;
 
 		ret = efa_prov_info_compare_src_addr(node, flags, hints, prov_info);
