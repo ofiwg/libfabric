@@ -201,6 +201,12 @@ struct fi_efa_mr_attr {
 
 # RUNTIME PARAMETERS
 
+*FI_EFA_IFACE*
+: A comma-delimited list of EFA device, i.e. NIC, names that should be visible to
+  the application. This paramater can be used to include/exclude NICs to enforce
+  process affinity based on the hardware topology. The default value is "all" which
+  allows all available NICs to be discovered.
+
 *FI_EFA_TX_SIZE*
 : Maximum number of transmit operations before the provider returns -FI_EAGAIN.
   For only the RDM endpoint, this parameter will cause transmit operations to
