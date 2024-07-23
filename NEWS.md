@@ -35,6 +35,7 @@ v1.22.0, Fri Jul 26, 2024
 ## EFA
 
 - General improvement and bug fixes
+- Handle recv cancel for zero copy recv
 - Avoid iterating EP list in CQ read
 - Add RDMA core errno for remote unknown peer
 - Map EFA errnos to Libfabric codes
@@ -52,6 +53,7 @@ v1.22.0, Fri Jul 26, 2024
 
 ## OPX
 
+- Add missing file needed for fabric direct build to release package
 - Fix performance issue caused by not setting ACK bit in the single
   SDMA packet case
 - TID cache debug improvements
@@ -120,6 +122,8 @@ v1.22.0, Fri Jul 26, 2024
 
 ## Fabtests
 
+- pytest/shm: reduce the msg size in test_unexpected_msg
+- Fix synapseai fabtests build
 - Add pytests for EFA zero-copy receive
 - Add benchmark option for `FI_OPT_MAX_MSG_SIZE`
 - benchmarks: Add synapseai support
@@ -153,6 +157,7 @@ v1.21.1, Fri July 26, 2024
 
 ## EFA
 
+- Add tracepoints for rx pkt processing events
 - Destroy rx_atomrsp_pool during ep close.
 - Free user_info during ep close.
 - Use srx lock from domain directly
