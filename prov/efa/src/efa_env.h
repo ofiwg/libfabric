@@ -20,6 +20,7 @@ enum efa_env_huge_page_setting
 };
 
 struct efa_env {
+	char *iface;
 	int tx_min_credits;
 	int tx_queue_size;
 	int use_zcpy_rx;
@@ -79,6 +80,8 @@ struct efa_env {
 	enum efa_env_huge_page_setting huge_page_setting;
 };
 
+extern struct efa_env efa_env;
+
 /**
  * @brief Return true if the environment variable FI_EFA_USE_DEVICE_RDMA is present
  *
@@ -92,7 +95,38 @@ static inline bool efa_env_has_use_device_rdma() {
 	return (ret != -FI_ENODATA);
 }
 
-extern struct efa_env efa_env;
+/**
+ * @brief Return true if the NIC is allowed by FI_EFA_IFACE variable
+ *
+ * @param[in]	name	NIC name string
+ * @return	true if the NIC is allowed, otherwise false
+ */
+static inline bool efa_env_allows_nic(const char *name) {
+	char *match = efa_env.iface;
+	char *end = efa_env.iface + strlen(efa_env.iface);
+
+	if (name == NULL || strlen(name) < 1)
+		return false;
+
+	if (!strncmp("all", efa_env.iface, 3))
+		return true;
+
+	while (match < end) {
+		match = strstr(match, name);
+		if (!match)
+			return false;
+
+		if ((match > efa_env.iface && *(match - 1) != ',') ||
+		    ((match + strlen(name)) < end && *(match + strlen(name)) != ',')) {
+			/* Skip partial match */
+			match += strlen(name);
+			continue;
+		}
+		return true;
+	}
+
+	return false;
+}
 
 void efa_env_initialize();
 
