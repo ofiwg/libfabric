@@ -168,6 +168,8 @@ noinst_HEADERS = \
 	$(top_srcdir)/prov/opx/include/linux-i386/sysdep.h \
 	$(top_srcdir)/prov/opx/include/opx_shm.h
 
+prov_extra_dist += $(top_srcdir)/prov/opx/provider_FABRIC_1.0.map
+
 prov_install_man_pages += man/man7/fi_opx.7
 
 endif #HAVE_OPX
