@@ -1018,3 +1018,57 @@ void test_efa_rdm_ep_close_discard_posted_recv(struct efa_resource **state)
 	/* Reset to NULL to avoid test reaper closing again */
 	resource->ep = NULL;
 }
+
+void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_context cancel_context = {0};
+	struct fi_cq_err_entry cq_err_entry = {0};
+	struct efa_unit_test_buff recv_buff;
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_ope *rxe;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->caps = FI_MSG;
+
+	/* enable zero-copy recv mode in ep */
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, true);
+
+	/* Construct a recv buffer with mr */
+	efa_unit_test_buff_construct(&recv_buff, resource, 16);
+
+	assert_int_equal(fi_recv(resource->ep, recv_buff.buff, recv_buff.size, fi_mr_desc(recv_buff.mr), FI_ADDR_UNSPEC, &cancel_context), 0);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->user_recv_rxe_list),  1);
+
+	rxe = container_of(efa_rdm_ep->user_recv_rxe_list.next, struct efa_rdm_ope, entry);
+	pke = rxe->user_rx_pkt;
+
+	assert_int_equal(fi_cancel((struct fid *)resource->ep, &cancel_context), 0);
+
+	assert_true(pke->flags & EFA_RDM_PKE_USER_RECV_CANCEL);
+
+	assert_int_equal(fi_cq_read(resource->cq, NULL, 1), -FI_EAVAIL);
+
+	assert_int_equal(fi_cq_readerr(resource->cq, &cq_err_entry, 0), 1);
+
+	assert_int_equal(cq_err_entry.err, FI_ECANCELED);
+
+	assert_int_equal(cq_err_entry.prov_errno, -FI_ECANCELED);
+
+	assert_true(cq_err_entry.op_context == (void *) &cancel_context);
+
+	/**
+	 * the buf is still posted to rdma-core, so unregistering mr can
+	 * return non-zero. Currently ignore this failure.
+	 */
+	(void) fi_close(&recv_buff.mr->fid);
+	free(recv_buff.buff);
+}

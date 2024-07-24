@@ -117,6 +117,7 @@ void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad();
 void test_efa_rdm_ep_user_zcpy_rx_happy();
 void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas();
 void test_efa_rdm_ep_close_discard_posted_recv();
+void test_efa_rdm_ep_zcpy_recv_cancel();
 void test_dgram_cq_read_empty_cq();
 void test_ibv_cq_ex_read_empty_cq();
 void test_ibv_cq_ex_read_failed_poll();

@@ -354,6 +354,7 @@ void efa_rdm_ep_init_linked_lists(struct efa_rdm_ep *ep)
 #endif
 	dlist_init(&ep->rxe_list);
 	dlist_init(&ep->txe_list);
+	dlist_init(&ep->user_recv_rxe_list);
 }
 
 /**
@@ -1288,6 +1289,59 @@ err_destroy_qp:
 	return ret;
 }
 
+static int efa_rdm_ep_cancel_match_recv(struct dlist_entry *item,
+				         const void *context)
+{
+	struct efa_rdm_ope *rxe = container_of(item, struct efa_rdm_ope, entry);
+	return rxe->cq_entry.op_context == context;
+}
+
+/**
+ * @brief Cancel a recv in ep->user_recv_rxe_list
+ *
+ * @param ep efa_rdm_ep
+ * @param context pointer to the context to be cancelled
+ * @return ssize_t 0 on success, negative integer on failure.
+ */
+static
+ssize_t efa_rdm_ep_cancel_zcpy_recv(struct efa_rdm_ep *ep,
+				     void *context)
+{
+	struct dlist_entry *entry;
+	struct efa_rdm_ope *rxe;
+	struct fi_cq_err_entry err_entry = {0};
+	struct util_srx_ctx *srx_ctx;
+	int ret;
+
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	ofi_genlock_lock(srx_ctx->lock);
+
+	entry = dlist_remove_first_match(&ep->user_recv_rxe_list,
+					 &efa_rdm_ep_cancel_match_recv,
+					 context);
+	if (!entry) {
+		ret = 0;
+		goto unlock;
+	}
+
+	rxe = container_of(entry, struct efa_rdm_ope, entry);
+	assert(rxe->user_rx_pkt);
+	rxe->user_rx_pkt->flags |= EFA_RDM_PKE_USER_RECV_CANCEL;
+
+	dlist_remove(&rxe->entry);
+	err_entry.op_context = rxe->cq_entry.op_context;
+	err_entry.flags |= rxe->cq_entry.flags;
+	err_entry.err = FI_ECANCELED;
+	err_entry.prov_errno = -FI_ECANCELED;
+
+	efa_rdm_rxe_release(rxe);
+	ret = ofi_cq_write_error(ep->base_ep.util_ep.rx_cq, &err_entry);
+
+unlock:
+	ofi_genlock_unlock(srx_ctx->lock);
+	return ret;
+}
+
 /**
  * @brief implement the fi_cancel API
  * @param[in]	fid_ep	EFA RDM endpoint to perform the cancel operation
@@ -1299,7 +1353,9 @@ ssize_t efa_rdm_ep_cancel(fid_t fid_ep, void *context)
 	struct efa_rdm_ep *ep;
 
 	ep = container_of(fid_ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	return ep->peer_srx_ep->ops->cancel(&ep->peer_srx_ep->fid, context);
+
+	return (ep->use_zcpy_rx) ? efa_rdm_ep_cancel_zcpy_recv(ep, context) :
+				   ep->peer_srx_ep->ops->cancel(&ep->peer_srx_ep->fid, context);
 }
 
 /**
