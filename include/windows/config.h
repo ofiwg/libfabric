@@ -256,7 +256,7 @@
 #define PACKAGE_TARNAME PACKAGE
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.21.1rc2"
+#define PACKAGE_VERSION "1.21.1"
 
 /* Define to the full name and version of this package. */
 #define PACKAGE_STRING PACKAGE_NAME " " PACKAGE_VERSION
