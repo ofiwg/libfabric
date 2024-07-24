@@ -317,6 +317,10 @@ due to other requirements. See
 https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md
 for details.
 
+*FI_EFA_USE_UNSOLICITED_WRITE_RECV*
+: Use device's unsolicited write recv functionality when it's available. (Default: 1).
+Setting this environment variable to 0 can disable this feature.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

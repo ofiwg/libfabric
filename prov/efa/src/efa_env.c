@@ -37,6 +37,7 @@ struct efa_env efa_env = {
 	.host_id_file = "/sys/devices/virtual/dmi/id/board_asset_tag", /* Available on EC2 instances and containers */
 	.use_sm2 = false,
 	.huge_page_setting = EFA_ENV_HUGE_PAGE_UNSPEC,
+	.use_unsolicited_write_recv = 1,
 };
 
 /**
@@ -141,6 +142,7 @@ void efa_env_param_get(void)
 	fi_param_get_size_t(&efa_prov, "inter_max_gdrcopy_message_size",
 			    &efa_env.efa_max_gdrcopy_msg_size);
 	fi_param_get_bool(&efa_prov, "use_sm2", &efa_env.use_sm2);
+	fi_param_get_bool(&efa_prov, "use_unsolicited_write_recv", &efa_env.use_unsolicited_write_recv);
 
 	int use_huge_page;
 	if (fi_param_get_bool(&efa_prov, "use_huge_page", &use_huge_page) ==0) {
@@ -216,6 +218,8 @@ void efa_env_define()
 			"Using huge page memory has a small performance advantage, but can "
 			"cause system to run out of huge page memory. By default, EFA provider "
 			"will use huge page unless FI_EFA_FORK_SAFE is set to 1/on/true.");
+	fi_param_define(&efa_prov, "use_unsolicited_write_recv", FI_PARAM_BOOL,
+			"Use device's unsolicited write recv functionality when it's available. (Default: true)");
 }
 
 

@@ -30,4 +30,10 @@ static inline void efa_rdm_poison_mem_region(void *ptr, size_t size)
 }
 #endif
 
+static inline
+bool efa_rdm_use_unsolicited_write_recv()
+{
+	return efa_env.use_unsolicited_write_recv && efa_device_support_unsolicited_write_recv();
+}
+
 #endif /* _EFA_RDM_UTIL_H */

@@ -131,7 +131,7 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 	};
 
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-	if (efa_device_support_unsolicited_write_recv())
+	if (efa_rdm_use_unsolicited_write_recv())
 		efadv_cq_init_attr.wc_flags |= EFADV_WC_EX_WITH_IS_UNSOLICITED;
 #endif
 
