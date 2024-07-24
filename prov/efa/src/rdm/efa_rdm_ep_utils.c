@@ -221,6 +221,7 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 
 	pkt_entry->ope = rxe;
 	rxe->state = EFA_RDM_RXE_MATCHED;
+	rxe->user_rx_pkt = pkt_entry;
 
 	err = ofi_iov_locate(rxe->iov, rxe->iov_count, ep->msg_prefix_size, &rx_iov_index, &rx_iov_offset);
 	if (OFI_UNLIKELY(err)) {
@@ -247,6 +248,7 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_posted_buf_list);
 #endif
 	ep->user_rx_pkts_posted++;
+	dlist_insert_tail(&rxe->entry, &ep->user_recv_rxe_list);
 	return 0;
 }
 
