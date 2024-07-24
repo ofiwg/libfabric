@@ -19,6 +19,7 @@ v1.21.1, Fri July 26, 2024
 
 ## EFA
 
+- Add tracepoints for rx pkt processing events
 - Destroy rx_atomrsp_pool during ep close.
 - Free user_info during ep close.
 - Use srx lock from domain directly
