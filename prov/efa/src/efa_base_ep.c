@@ -181,7 +181,7 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex)
 	} else {
 		assert(init_attr_ex->qp_type == IBV_QPT_DRIVER);
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-		if (efa_device_support_unsolicited_write_recv())
+		if (efa_rdm_use_unsolicited_write_recv())
 			efa_attr.flags |= EFADV_QP_FLAGS_UNSOLICITED_WRITE_RECV;
 #endif
 		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
