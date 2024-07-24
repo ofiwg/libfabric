@@ -199,6 +199,8 @@ struct efa_rdm_ep {
 	struct dlist_entry entry;
 	/* the count of opes queued before handshake is made with their peers */
 	size_t ope_queued_before_handshake_cnt;
+	/* user posted rx entry list (for zero copy recv) */
+	struct dlist_entry user_recv_rxe_list;
 };
 
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);
