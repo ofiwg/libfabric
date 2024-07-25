@@ -496,12 +496,12 @@ static int cuda_hmem_dl_init(void)
 
 	cuda_attr.nvml_handle = dlopen("libnvidia-ml.so", RTLD_NOW);
 	if (!cuda_attr.nvml_handle) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
+		FI_INFO(&core_prov, FI_LOG_CORE,
 			"Failed to dlopen libnvidia-ml.so.  Trying libnvidia-ml.so.1\n");
 		cuda_attr.nvml_handle = dlopen("libnvidia-ml.so.1", RTLD_NOW);
 		if (!cuda_attr.nvml_handle) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to dlopen libnvidia-ml.so.1 also, bypassing nvml calls\n");
+			"Failed to dlopen libnvidia-ml.so or libnvidia-ml.so.1, bypassing nvml calls\n");
 		}
 	}
 
