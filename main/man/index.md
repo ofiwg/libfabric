@@ -48,14 +48,10 @@ main](https://github.com/ofiwg/libfabric/tree/main).
   * [fi_version(3)](fi_version.3.html)
 
 * Provider details
-  * [fi_bgq(7)](fi_bgq.7.html)
   * [fi_efa(7)](fi_efa.7.html)
-  * [fi_gni(7)](fi_gni.7.html)
   * [fi_hook(7)](fi_hook.7.html)
   * [fi_mrail(7)](fi_mrail.7.html)
-  * [fi_netdir(7)](fi_netdir.7.html)
   * [fi_opx(7)](fi_opx.7.html)
-  * [fi_psm(7)](fi_psm.7.html)
   * [fi_psm2(7)](fi_psm2.7.html)
   * [fi_psm3(7)](fi_psm3.7.html)
   * [fi_rxd(7)](fi_rxd.7.html)
