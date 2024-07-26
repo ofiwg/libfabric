@@ -845,6 +845,22 @@ static int rocr_hmem_dl_init(void)
 		goto err;
 	}
 
+	hsa_ops.hsa_system_get_info = dlsym(hsa_handle, "hsa_system_get_info");
+	if (!hsa_ops.hsa_system_get_info) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_system_get_info\n");
+		goto err;
+	}
+
+#if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
+	hsa_ops.hsa_amd_portable_export_dmabuf = dlsym(hsa_handle, "hsa_amd_portable_export_dmabuf");
+	if (!hsa_ops.hsa_amd_portable_export_dmabuf) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_amd_portable_export_dmabuf\n");
+		goto err;
+	}
+#endif
+
 	return FI_SUCCESS;
 
 err:
