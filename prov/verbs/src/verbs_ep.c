@@ -1999,7 +1999,7 @@ check_datatype:
 	switch (datatype) {
 	case FI_INT64:
 	case FI_UINT64:
-#if __BITS_PER_LONG == 64
+#if LONG_WIDTH == 64
 	case FI_DOUBLE:
 	case FI_FLOAT:
 #endif
