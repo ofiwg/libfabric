@@ -39,7 +39,6 @@
 
 #include "config.h"
 
-#include <asm/types.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
@@ -79,6 +78,22 @@
 
 #include "ofi_verbs_compat.h"
 
+/* define LONG_WIDTH used by atomics */
+#include <limits.h>
+#ifndef LONG_WIDTH
+#ifdef LONG_BIT
+#define LONG_WIDTH LONG_BIT
+#elif defined(HAVE_ASM_TYPES_H)
+#include <asm/types.h>
+#define LONG_WIDTH __BITS_PER_LONG
+#elif defined(__x86_64__) || defined(__aarch64__)
+#ifndef __ILP32__
+#define LONG_WIDTH 64
+#else
+#define LONG_WIDTH 32
+#endif
+#endif
+#endif
 
 #ifndef AF_IB
 #define AF_IB 27
