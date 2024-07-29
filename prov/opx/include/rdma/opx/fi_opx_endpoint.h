@@ -3105,39 +3105,22 @@ void fi_opx_ep_rx_poll (struct fid_ep *ep,
 {
 
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	const enum ofi_reliability_kind kind = opx_ep->reliability->state.kind;
 
 	const uint64_t rx_caps = (caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) ? caps
 				: opx_ep->rx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 
-	if ( OFI_LIKELY((reliability == OPX_RELIABILITY) && (hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME)) ) {			/* constant compile-time expression */
+	if (OFI_LIKELY(hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME)) {		/* constant compile-time expression */
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps,
-					OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
-	} else if ( (reliability == OFI_RELIABILITY_KIND_RUNTIME) && (hdrq_mask == FI_OPX_HDRQ_MASK_2048) ) {			/* constant compile-time expression */
-		if (kind == OFI_RELIABILITY_KIND_ONLOAD) {
-			FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps,
-						OFI_RELIABILITY_KIND_ONLOAD, FI_OPX_HDRQ_MASK_2048);
-		} else {
-			FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps,
-						OFI_RELIABILITY_KIND_OFFLOAD, FI_OPX_HDRQ_MASK_2048);
-		}
-	} else if ( (reliability == OFI_RELIABILITY_KIND_RUNTIME) && (hdrq_mask == FI_OPX_HDRQ_MASK_8192) ) {			/* constant compile-time expression */
-		if (kind == OFI_RELIABILITY_KIND_ONLOAD) {
-			FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps,
-						OFI_RELIABILITY_KIND_ONLOAD, FI_OPX_HDRQ_MASK_8192);
-		} else {
-			FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps,
-						OFI_RELIABILITY_KIND_OFFLOAD, FI_OPX_HDRQ_MASK_8192);
-		}
-	} else if (hdrq_mask == FI_OPX_HDRQ_MASK_2048) {		/* constant compile-time expression */
+					OFI_RELIABILITY_KIND_ONLOAD, FI_OPX_HDRQ_MASK_RUNTIME);
+	} else if (hdrq_mask == FI_OPX_HDRQ_MASK_2048) {			/* constant compile-time expression */
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps,
-					reliability, FI_OPX_HDRQ_MASK_2048);
-	} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192) {		/* constant compile-time expression */
+					OFI_RELIABILITY_KIND_ONLOAD, FI_OPX_HDRQ_MASK_2048);
+	} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192) {			/* constant compile-time expression */
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps,
-					reliability, FI_OPX_HDRQ_MASK_8192);
+					OFI_RELIABILITY_KIND_ONLOAD, FI_OPX_HDRQ_MASK_8192);
 	} else {
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps,
-					reliability, hdrq_mask);
+					OFI_RELIABILITY_KIND_ONLOAD, hdrq_mask);
 	}
 
 	fi_opx_ep_do_pending_work(opx_ep);

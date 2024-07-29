@@ -2698,66 +2698,31 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 
 	const uint8_t opcode = hdr->stl.bth.opcode;
 
-	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	const enum ofi_reliability_kind reliability_kind = opx_ep->reliability->state.kind;
-
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	const uint16_t lrh_pktlen_le = ntohs(hdr->stl.lrh.pktlen);
 	const size_t total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
 	const size_t payload_bytes = total_bytes - sizeof(union fi_opx_hfi1_packet_hdr);
 
 	if (OFI_LIKELY(opcode >= FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)) {
-
-		if (reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {
-
-			fi_opx_ep_rx_process_header(ep, hdr,
-				(const union fi_opx_hfi1_packet_payload * const) payload,
-				payload_bytes,
-				FI_TAGGED,
-				opcode,
-				origin_rs,
-				OPX_INTRANODE_FALSE,
-				FI_OPX_LOCK_NOT_REQUIRED,
-				OFI_RELIABILITY_KIND_OFFLOAD);
-
-		} else if (reliability_kind == OFI_RELIABILITY_KIND_ONLOAD) {
-
-			fi_opx_ep_rx_process_header(ep, hdr,
-				(const union fi_opx_hfi1_packet_payload * const) payload,
-				payload_bytes,
-				FI_TAGGED,
-				opcode,
-				origin_rs,
-				OPX_INTRANODE_FALSE,
-				FI_OPX_LOCK_NOT_REQUIRED,
-				OFI_RELIABILITY_KIND_ONLOAD);
-		}
+		fi_opx_ep_rx_process_header(ep, hdr,
+			(const union fi_opx_hfi1_packet_payload * const) payload,
+			payload_bytes,
+			FI_TAGGED,
+			opcode,
+			origin_rs,
+			OPX_INTRANODE_FALSE,
+			FI_OPX_LOCK_NOT_REQUIRED,
+			OFI_RELIABILITY_KIND_ONLOAD);
 	} else {
-
-		if (reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {
-
-			fi_opx_ep_rx_process_header(ep, hdr,
-				(const union fi_opx_hfi1_packet_payload * const) payload,
-				payload_bytes,
-				FI_MSG,
-				opcode,
-				origin_rs,
-				OPX_INTRANODE_FALSE,
-				FI_OPX_LOCK_NOT_REQUIRED,
-				OFI_RELIABILITY_KIND_OFFLOAD);
-
-		} else if (reliability_kind == OFI_RELIABILITY_KIND_ONLOAD) {
-
-			fi_opx_ep_rx_process_header(ep, hdr,
-				(const union fi_opx_hfi1_packet_payload * const) payload,
-				payload_bytes,
-				FI_MSG,
-				opcode,
-				origin_rs,
-				OPX_INTRANODE_FALSE,
-				FI_OPX_LOCK_NOT_REQUIRED,
-				OFI_RELIABILITY_KIND_ONLOAD);
-		}
+		fi_opx_ep_rx_process_header(ep, hdr,
+			(const union fi_opx_hfi1_packet_payload * const) payload,
+			payload_bytes,
+			FI_MSG,
+			opcode,
+			origin_rs,
+			OPX_INTRANODE_FALSE,
+			FI_OPX_LOCK_NOT_REQUIRED,
+			OFI_RELIABILITY_KIND_ONLOAD);
 	}
 }
 
