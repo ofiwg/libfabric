@@ -106,7 +106,7 @@ behavior of the counter are defined by `struct fi_cntr_attr`.
 struct fi_cntr_attr {
 	enum fi_cntr_events  events;    /* type of events to count */
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
-	struct fid_wait     *wait_set;  /* optional wait set */
+	struct fid_wait     *wait_set;  /* optional wait set, deprecated */
 	uint64_t             flags;     /* operation flags */
 };
 ```
@@ -166,7 +166,7 @@ struct fi_cntr_attr {
   Applications that select FI_WAIT_UNSPEC are not guaranteed to
   retrieve the underlying wait object.
 
-- *FI_WAIT_SET*
+- *FI_WAIT_SET* (deprecated)
 : Indicates that the event counter should use a wait set object to
   wait for events.  If specified, the wait_set field must reference an
   existing wait set object.
@@ -185,7 +185,7 @@ struct fi_cntr_attr {
 : Indicates that the counter will wait without a wait object but instead
   yield on every wait. Allows usage of fi_cntr_wait through a spin.
 
-*wait_set*
+*wait_set* (deprecated)
 : If wait_obj is FI_WAIT_SET, this field references a wait object to
   which the event counter should attach.  When an event is added to
   the event counter, the corresponding wait set will be signaled if

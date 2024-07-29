@@ -46,7 +46,7 @@ static int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 			}
 		}
 
-		ret = fi_wait(&cntr->wait->wait_fid, waitim);
+		ret = ofi_wait(&cntr->wait->wait_fid, waitim);
 		if (ret == -FI_ETIMEDOUT)
 			ret = 0;
 

@@ -72,6 +72,44 @@ extern "C" {
 
 #define OFI_REG_MR 		(1ULL << 59)
 
+static inline int
+ofi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+	      struct fid_wait **waitset)
+{
+	return fabric->ops->wait_open(fabric, attr, waitset);
+}
+
+static inline int
+ofi_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
+	      struct fid_poll **pollset)
+{
+	return domain->ops->poll_open(domain, attr, pollset);
+}
+
+static inline int
+ofi_wait(struct fid_wait *waitset, int timeout)
+{
+	 return waitset->ops->wait(waitset, timeout);
+}
+
+static inline int
+ofi_poll(struct fid_poll *pollset, void **context, int count)
+{
+	return pollset->ops->poll(pollset, context, count);
+}
+
+static inline int
+ofi_poll_add(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
+{
+	return pollset->ops->poll_add(pollset, event_fid, flags);
+}
+
+static inline int
+ofi_poll_del(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
+{
+	return pollset->ops->poll_del(pollset, event_fid, flags);
+}
+
 /* For in-tree providers */
 #define OFI_VERSION_LATEST	FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION)
 /* The lower minor digit is reserved for custom libfabric builds */
@@ -228,6 +266,8 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 	case SYM: { ofi_strncatf(buf, N, #SYM); break; }
 #define IFFLAGSTRN(flags, SYM, N) \
 	do { if (flags & SYM) ofi_strncatf(buf, N, #SYM ", "); } while(0)
+#define IFFLAGSTRN2(flags, SYMVAL, SYMNAME, N) \
+	do { if (flags & SYMVAL) ofi_strncatf(buf, N, #SYMNAME ", "); } while(0)
 
 
 /*

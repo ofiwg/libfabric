@@ -136,7 +136,7 @@ struct fi_cq_attr {
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
 	int                  signaling_vector; /* interrupt affinity */
 	enum fi_cq_wait_cond wait_cond; /* wait condition format */
-	struct fid_wait     *wait_set;  /* optional wait set */
+	struct fid_wait     *wait_set;  /* optional wait set, deprecated */
 };
 ```
 
@@ -237,7 +237,7 @@ struct fi_cq_tagged_entry {
   mechanisms.  Applications that select FI_WAIT_UNSPEC are not
   guaranteed to retrieve the underlying wait object.
 
-- *FI_WAIT_SET*
+- *FI_WAIT_SET* (deprecated)
 : Indicates that the completion queue should use a wait set object to
   wait for completions.  If specified, the wait_set field must
   reference an existing wait set object.
@@ -286,7 +286,7 @@ struct fi_cq_tagged_entry {
 
   This field is ignored if wait_obj is set to FI_WAIT_NONE.
 
-*wait_set*
+*wait_set* (deprecated)
 : If wait_obj is FI_WAIT_SET, this field references a wait object to
   which the completion queue should attach.  When an event is inserted
   into the completion queue, the corresponding wait set will be
