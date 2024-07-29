@@ -2345,18 +2345,18 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	}
 #endif
 
-#if OPX_HMEM && HAVE_CUDA
+#if defined(OPX_HMEM && HAVE_CUDA)
 	int use_gdrcopy = 1;
 	int gdrcopy_enabled = cuda_is_gdrcopy_enabled();
 	
 	if (fi_param_get_bool(NULL, "hmem_cuda_use_gdrcopy", &use_gdrcopy) != FI_SUCCESS) {
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "FI_HMEM_CUDA_USE_GDRCOPY either not specified or invalid. Using default value of 1\n");
+		FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "FI_HMEM_CUDA_USE_GDRCOPY either not specified or invalid. Using default value of 1\n");
 		use_gdrcopy = 1; /* Set to the libfabric default of FI_HMEM_CUDA_USE_GDRCOPY=1 */
 	}
 
 	if (gdrcopy_enabled == 1) {
 		if (use_gdrcopy == 1) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "GDRCopy has been requested and is available. If you wish to explicity disable GDRCopy, set FI_HMEM_CUDA_USE_GDRCOPY=0\n");
+			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "GDRCopy has been requested and is available. If you wish to explicity disable GDRCopy, set FI_HMEM_CUDA_USE_GDRCOPY=0\n");
 		}
 	} else if (use_gdrcopy == 1) {
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "GDRCopy has been requested but is not available on this system, set FI_HMEM_CUDA_USE_GDRCOPY=0 and try again.\n");
@@ -2365,7 +2365,7 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 		goto err;
 	} else {
 		/* gdrcopy_enabled = 0 and use_gdr = 0 */
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "If GDRCopy is installed on this system, change FI_HMEM_CUDA_USE_GDRCOPY=0 to FI_HMEM_CUDA_USE_GDRCOPY=1 to enable GDRCopy. \n");
+		FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "If GDRCopy is installed on this system, change FI_HMEM_CUDA_USE_GDRCOPY=0 to FI_HMEM_CUDA_USE_GDRCOPY=1 to enable GDRCopy. \n");
 	}
 #endif
 
