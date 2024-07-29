@@ -7,22 +7,22 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-fi_poll \- Polling and wait set operations
+fi_poll \- Polling and wait set operations (deprecated)
 
-fi_poll_open / fi_close
+fi_poll_open / fi_close (deprecated)
 : Open/close a polling set
 
-fi_poll_add / fi_poll_del
+fi_poll_add / fi_poll_del (deprecated)
 : Add/remove a completion queue or counter to/from a poll set.
 
-fi_poll
+fi_poll (deprecated)
 : Poll for progress and events across multiple completion queues
   and counters.
 
-fi_wait_open / fi_close
+fi_wait_open / fi_close (deprecated)
 : Open/close a wait set
 
-fi_wait
+fi_wait (deprecated)
 : Waits for one or more wait objects in a set to be signaled.
 
 fi_trywait
@@ -101,7 +101,7 @@ int fi_control(struct fid *waitset, int command, void *arg);
 # DESCRIPTION
 
 
-## fi_poll_open
+## fi_poll_open (deprecated)
 
 fi_poll_open creates a new polling set.  A poll set enables an
 optimized method for progressing asynchronous operations across
@@ -119,21 +119,21 @@ struct fi_poll_attr {
 : Flags that set the default operation of the poll set.  The use of
   this field is reserved and must be set to 0 by the caller.
 
-## fi_close
+## fi_close (deprecated)
 
 The fi_close call releases all resources associated with a poll set.
 The poll set must not be associated with any other resources prior to
 being closed, otherwise the call will return -FI_EBUSY.
 
-## fi_poll_add
+## fi_poll_add (deprecated)
 
 Associates a completion queue or counter with a poll set.
 
-## fi_poll_del
+## fi_poll_del (deprecated)
 
 Removes a completion queue or counter from a poll set.
 
-## fi_poll
+## fi_poll (deprecated)
 
 Progresses all completion queues and counters associated with a poll set
 and checks for events.  If events might have occurred, contexts associated
@@ -151,7 +151,7 @@ should drive their progress based on the results of reading events from a
 completion queue or reading counter values.  The fi_poll function will always
 return all completion queues and counters that do have new events.
 
-## fi_wait_open
+## fi_wait_open (deprecated)
 
 fi_wait_open allocates a new wait set.  A wait set enables an
 optimized method of waiting for events across multiple completion queues
@@ -215,13 +215,13 @@ struct fi_wait_attr {
 : Flags that set the default operation of the wait set.  The use of
   this field is reserved and must be set to 0 by the caller.
 
-## fi_close
+## fi_close (deprecated)
 
 The fi_close call releases all resources associated with a wait set.
 The wait set must not be bound to any other opened resources prior to
 being closed, otherwise the call will return -FI_EBUSY.
 
-## fi_wait
+## fi_wait (deprecated)
 
 Waits on a wait set until one or more of its underlying wait objects
 is signaled.

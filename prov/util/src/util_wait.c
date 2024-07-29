@@ -363,7 +363,7 @@ static int util_wait_fd_try(struct util_wait *wait)
 	}
 
 	ofi_mutex_unlock(&wait->lock);
-	ret = fi_poll(&wait->pollset->poll_fid, &context, 1);
+	ret = ofi_poll(&wait->pollset->poll_fid, &context, 1);
 	return (ret > 0) ? -FI_EAGAIN : (ret == -FI_EAGAIN) ? FI_SUCCESS : ret;
 
 release:

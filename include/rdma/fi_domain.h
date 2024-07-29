@@ -381,14 +381,14 @@ fi_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	return domain->ops->cntr_open(domain, attr, cntr, context);
 }
 
-static inline int
+static inline FI_DEPRECATED_FUNC int
 fi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	     struct fid_wait **waitset)
 {
 	return fabric->ops->wait_open(fabric, attr, waitset);
 }
 
-static inline int
+static inline FI_DEPRECATED_FUNC int
 fi_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 	     struct fid_poll **pollset)
 {
