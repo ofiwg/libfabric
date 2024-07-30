@@ -215,6 +215,7 @@ struct ft_opts {
 	int force_prefix;
 	enum fi_hmem_iface iface;
 	uint64_t device;
+	enum fi_threading threading;
 
 	char **argv;
 };
@@ -320,7 +321,8 @@ extern char default_port[8];
 		.iface = FI_HMEM_SYSTEM, \
 		.device = 0, \
 		.argc = argc, .argv = argv, \
-		.address_format = FI_FORMAT_UNSPEC \
+		.address_format = FI_FORMAT_UNSPEC, \
+		.threading = FI_THREAD_DOMAIN \
 	}
 
 #define FT_STR_LEN 32
@@ -661,6 +663,7 @@ enum {
 	LONG_OPT_CONTROL_PROGRESS,
 	LONG_OPT_MAX_MSG_SIZE,
 	LONG_OPT_USE_FI_MORE,
+	LONG_OPT_THREADING,
 };
 
 extern int debug_assert;
