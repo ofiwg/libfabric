@@ -1599,6 +1599,10 @@ If the receiver supports it, sender will then send packets with user data to the
 there is no ordering or tagging requirement, and the receiver already knows the sender, sender can
 send packets without any headers in the payload. If the receiver doesn't support this extra feature,
 the sender will continue send packets with headers to the receiver's default QP.
+
+On the receiver side, it will post the user recv buffer to the user recv QP directly when the user
+calls fi_recv(). Currently such receive cannot be cancelled and fi_cancel() is not supported in
+zero-copy receive mode.
 If a receiver gets RTM packets delivered to its default QP, it raises an error
 because it requests all RTM packets must be delivered to its user recv QP.
 

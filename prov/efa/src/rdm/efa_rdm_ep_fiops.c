@@ -1299,6 +1299,11 @@ ssize_t efa_rdm_ep_cancel(fid_t fid_ep, void *context)
 	struct efa_rdm_ep *ep;
 
 	ep = container_of(fid_ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	if (ep->use_zcpy_rx) {
+		EFA_WARN(FI_LOG_EP_CTRL, "fi_cancel is not supported in zero-copy receive mode.\n");
+		return -FI_EOPNOTSUPP;
+	}
+
 	return ep->peer_srx_ep->ops->cancel(&ep->peer_srx_ep->fid, context);
 }
 
