@@ -93,7 +93,7 @@ void test_efa_dmabuf_support(struct efa_resource **state,
 			g_efa_unit_test_mocks.ibv_reg_mr_fn =
 				efa_mock_ibv_reg_mr_success_return_mock_for_dummy_addr;
 			will_return_maybe(
-				efa_mock_ibv_reg_mr_return_mock_for_dummy_addr,
+				efa_mock_ibv_reg_mr_success_return_mock_for_dummy_addr,
 				&ibv_mr);
 		} else {
 			g_efa_unit_test_mocks.ibv_reg_mr_iova2 =
