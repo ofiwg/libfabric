@@ -283,6 +283,34 @@ int ofi_verify_av_insert(struct util_av *av, uint64_t flags, void *context)
 	return 0;
 }
 
+int ofi_av_insert_addr_at(struct util_av *av, const void *addr, fi_addr_t fi_addr)
+{
+	struct util_av_entry *entry = NULL;
+
+	assert(ofi_mutex_held(&av->lock));
+	ofi_straddr_log(av->prov, FI_LOG_INFO, FI_LOG_AV, "inserting addr", addr);
+	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
+	if (entry) {
+		if (fi_addr == ofi_buf_index(entry))
+			return FI_SUCCESS;
+
+		ofi_straddr_log(av->prov, FI_LOG_WARN, FI_LOG_AV,
+						"addr already in AV", addr);
+		return -FI_EALREADY;
+	}
+
+	entry = ofi_ibuf_alloc_at(av->av_entry_pool, fi_addr);
+	if (!entry)
+		return -FI_ENOMEM;
+
+	memcpy(entry->data, addr, av->addrlen);
+	ofi_atomic_initialize32(&entry->use_cnt, 1);
+	HASH_ADD(hh, av->hash, data, av->addrlen, entry);
+	FI_INFO(av->prov, FI_LOG_AV, "fi_addr: %" PRIu64 "\n",
+		ofi_buf_index(entry));
+	return 0;
+}
+
 int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 {
 	struct util_av_entry *entry = NULL;
