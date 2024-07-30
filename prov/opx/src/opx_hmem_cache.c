@@ -565,7 +565,7 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache,
 	}
 	opx_mr->hmem_dev_reg_handle = 0UL;
 
-	if (opx_mr->domain->mr_mode & FI_MR_SCALABLE) {
+	if (opx_mr->domain->mr_mode & OFI_MR_SCALABLE) {
 		int ret = fi_opx_ref_dec(&opx_mr->domain->ref_cnt, "domain");
 		if (ret) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR,

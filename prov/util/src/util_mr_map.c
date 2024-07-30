@@ -199,10 +199,10 @@ int ofi_mr_map_init(const struct fi_provider *prov, int mode,
 		return -FI_ENOMEM;
 
 	switch (mode) {
-	case FI_MR_BASIC:
+	case OFI_MR_BASIC:
 		map->mode = OFI_MR_BASIC_MAP;
 		break;
-	case FI_MR_SCALABLE:
+	case OFI_MR_SCALABLE:
 		map->mode = 0;
 		break;
 	default:

@@ -41,7 +41,7 @@
 
 #define USDF_DGRAM_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
 
-#define USDF_DGRAM_SUPP_MODE (FI_LOCAL_MR | FI_MSG_PREFIX)
+#define USDF_DGRAM_SUPP_MODE (OFI_LOCAL_MR | FI_MSG_PREFIX)
 
 #define USDF_DGRAM_MSG_ORDER (0)
 #define USDF_DGRAM_INJECT_SIZE                                                 \

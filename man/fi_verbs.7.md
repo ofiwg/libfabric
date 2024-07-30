@@ -58,7 +58,7 @@ Verbs provider requires applications to support the following modes:
 
 #### FI_EP_MSG endpoint type
 
-  * FI_LOCAL_MR / FI_MR_LOCAL mr mode.
+  * FI_MR_LOCAL mr mode.
 
   * FI_RX_CQ_DATA for applications that want to use RMA. Applications must
     take responsibility of posting receives for any incoming CQ data.

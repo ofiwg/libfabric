@@ -1429,7 +1429,7 @@ static void sock_set_domain_attr(uint32_t api_version, void *src_addr,
 		*attr = sock_domain_attr;
 
 		if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
-			attr->mr_mode = FI_MR_SCALABLE;
+			attr->mr_mode = OFI_MR_SCALABLE;
 		goto out;
 	}
 
@@ -1449,11 +1449,11 @@ static void sock_set_domain_attr(uint32_t api_version, void *src_addr,
 	if (attr->data_progress == FI_PROGRESS_UNSPEC)
 		attr->data_progress = sock_domain_attr.data_progress;
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
-		if (attr->mr_mode == FI_MR_UNSPEC)
-			attr->mr_mode = FI_MR_SCALABLE;
+		if (attr->mr_mode == OFI_MR_UNSPEC)
+			attr->mr_mode = OFI_MR_SCALABLE;
 	} else {
-		if ((attr->mr_mode != FI_MR_BASIC) &&
-		    (attr->mr_mode != FI_MR_SCALABLE))
+		if ((attr->mr_mode != OFI_MR_BASIC) &&
+		    (attr->mr_mode != OFI_MR_SCALABLE))
 			attr->mr_mode = 0;
 	}
 

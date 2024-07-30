@@ -62,14 +62,14 @@ void rxd_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 {
 	/* We handle FI_MR_BASIC and FI_MR_SCALABLE irrespective of version */
 	if (hints && hints->domain_attr &&
-	    (hints->domain_attr->mr_mode & (FI_MR_SCALABLE | FI_MR_BASIC))) {
-		core_info->mode = FI_LOCAL_MR;
+	    (hints->domain_attr->mr_mode & (OFI_MR_SCALABLE | OFI_MR_BASIC))) {
+		core_info->mode = OFI_LOCAL_MR;
 		core_info->domain_attr->mr_mode = hints->domain_attr->mr_mode;
 	} else if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		core_info->mode |= FI_LOCAL_MR;
+		core_info->mode |= OFI_LOCAL_MR;
 		/* Specify FI_MR_UNSPEC (instead of FI_MR_BASIC) so that
 		 * providers that support only FI_MR_SCALABLE aren't dropped */
-		core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
+		core_info->domain_attr->mr_mode = OFI_MR_UNSPEC;
 	} else {
 		core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
 		core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
@@ -81,7 +81,7 @@ int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info_in,
 {
 	rxd_info_to_core_mr_modes(version, rxd_info_in, core_info);
 	core_info->caps = FI_MSG;
-	core_info->mode = FI_LOCAL_MR | FI_CONTEXT | FI_MSG_PREFIX;
+	core_info->mode = OFI_LOCAL_MR | FI_CONTEXT | FI_MSG_PREFIX;
 	core_info->ep_attr->type = FI_EP_DGRAM;
 
 	return 0;

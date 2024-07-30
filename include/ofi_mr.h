@@ -79,11 +79,11 @@ static inline int ofi_mr_local(const struct fi_info *info)
 	if (info->domain_attr->mr_mode & FI_MR_LOCAL)
 		return 1;
 
-	if (info->domain_attr->mr_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE))
+	if (info->domain_attr->mr_mode & ~(OFI_MR_BASIC | OFI_MR_SCALABLE))
 		return 0;
 
 check_local_mr:
-	return (info->mode & FI_LOCAL_MR) ? 1 : 0;
+	return (info->mode & OFI_LOCAL_MR) ? 1 : 0;
 }
 
 #define OFI_MR_MODE_RMA_TARGET (FI_MR_RAW | FI_MR_VIRT_ADDR |			\
@@ -101,7 +101,7 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 	    (user_info->domain_attr &&
 	     !(user_info->domain_attr->mr_mode & FI_MR_LOCAL))) {
 		return (prov_info->domain_attr->mr_mode & FI_MR_LOCAL) ?
-			prov_info->mode | FI_LOCAL_MR : prov_info->mode;
+			prov_info->mode | OFI_LOCAL_MR : prov_info->mode;
 	} else {
 		return prov_info->mode;
 	}

@@ -526,7 +526,7 @@ supported set of modes will be returned in the info structure(s).
   The requirements for using struct fi_context2 are identical as
   defined for FI_CONTEXT above.
 
-*FI_LOCAL_MR*
+*FI_LOCAL_MR* (deprecated)
 : The provider is optimized around having applications register memory
   for locally accessed data buffers.  Data buffers used in send and
   receive operations and as the source buffer for RMA and atomic

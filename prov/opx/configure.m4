@@ -74,9 +74,9 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		AC_DEFINE_UNQUOTED(OPX_AV, [$OPX_AV_MODE], [fabric direct address vector])
 
 		AS_CASE([x$OPX_MR],
-			[xscalable], [OPX_MR_MODE=FI_MR_SCALABLE],
-			[xbasic], [OPX_MR_MODE=FI_MR_BASIC],
-			[OPX_MR_MODE=FI_MR_SCALABLE])
+			[xscalable], [OPX_MR_MODE=OFI_MR_SCALABLE],
+			[xbasic], [OPX_MR_MODE=OFI_MR_BASIC],
+			[OPX_MR_MODE=OFI_MR_SCALABLE])
 
 		AC_SUBST(opx_mr, [$OPX_MR_MODE])
 		AC_DEFINE_UNQUOTED(OPX_MR, [$OPX_MR_MODE], [fabric direct memory region])

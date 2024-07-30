@@ -159,7 +159,7 @@ static struct fi_info *mrail_create_core_hints(const struct fi_info *hints)
 		core_hints->mode &= MRAIL_PASSTHRU_MODES;
 
 		if (core_hints->domain_attr) {
-			if (core_hints->domain_attr->mr_mode == FI_MR_BASIC)
+			if (core_hints->domain_attr->mr_mode == OFI_MR_BASIC)
 				core_hints->domain_attr->mr_mode = OFI_MR_BASIC_MAP;
 			removed_mr_mode = core_hints->domain_attr->mr_mode &
 					  ~MRAIL_PASSTHRU_MR_MODES;
