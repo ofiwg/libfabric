@@ -6,8 +6,6 @@ atomic
 # dgram endpoints not supported
 dgram
 
-multi_ep
-
 # tests use counters, but counters not supported
 multi_mr
 rma_event
