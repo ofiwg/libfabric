@@ -770,17 +770,9 @@ fi_addr_t efa_rdm_pke_insert_addr(struct efa_rdm_pke *pkt_entry, void *raw_addr)
 
 void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_imm_data, uint32_t imm_data)
 {
-	struct efa_rdm_ope *rxe;
+	struct efa_rdm_ope *rxe = pkt_entry->ope;
 
 	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL);
-
-	/* In this case, the rxe has been released and we need to release pkt entry only */
-	if (pkt_entry->flags & EFA_RDM_PKE_USER_RECV_CANCEL) {
-		efa_rdm_pke_release_rx(pkt_entry);
-		return;
-	}
-
-	rxe = pkt_entry->ope;
 	assert(rxe);
 
 	if (has_imm_data) {
@@ -792,7 +784,6 @@ void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_im
 	rxe->total_len = pkt_entry->pkt_size;
 	rxe->cq_entry.len = pkt_entry->pkt_size;
 
-	dlist_remove(&rxe->entry);
 	efa_rdm_rxe_report_completion(rxe);
 	efa_rdm_rxe_release(rxe);
 	efa_rdm_pke_release_rx(pkt_entry);
