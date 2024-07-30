@@ -1046,6 +1046,8 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 		hints->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 
+	hints->domain_attr->threading = opts.threading;
+
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
@@ -3263,6 +3265,7 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "fi_rma_bw");
 	FT_PRINT_OPTS_USAGE("-M <mode>", "Disable mode bit from test");
 	FT_PRINT_OPTS_USAGE("-K", "fork a child process after initializing endpoint");
+	FT_PRINT_OPTS_USAGE("-T", "threading model: safe|completion|domain (default:domain)");
 	FT_PRINT_OPTS_USAGE("", "mr_local");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
@@ -3367,6 +3370,14 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 		break;
 	case 'K':
 		opts->options |= FT_OPT_FORK_CHILD;
+		break;
+	case 'T':
+		if (!strcasecmp("safe", optarg))
+			opts->threading = FI_THREAD_SAFE;
+		if (!strcasecmp("completion", optarg))
+			opts->threading = FI_THREAD_COMPLETION;
+		if (!strcasecmp("domain", optarg))
+			opts->threading = FI_THREAD_DOMAIN;
 		break;
 	default:
 		ft_parse_hmem_opts(op, optarg, opts);
