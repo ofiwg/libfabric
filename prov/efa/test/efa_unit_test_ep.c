@@ -1035,12 +1035,13 @@ void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
 	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
 	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
 	resource->hints->caps = FI_MSG;
+	resource->hints->mode = FI_MSG_PREFIX;
 
 	/* enable zero-copy recv mode in ep */
 	test_efa_rdm_ep_use_zcpy_rx_impl(resource, true);
 
 	/* Construct a recv buffer with mr */
-	efa_unit_test_buff_construct(&recv_buff, resource, 16);
+	efa_unit_test_buff_construct(&recv_buff, resource, EFA_RDM_MSG_PREFIX_SIZE + 16);
 
 	assert_int_equal(fi_recv(resource->ep, recv_buff.buff, recv_buff.size, fi_mr_desc(recv_buff.mr), FI_ADDR_UNSPEC, &cancel_context), 0);
 

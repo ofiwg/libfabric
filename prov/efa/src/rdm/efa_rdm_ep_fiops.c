@@ -452,6 +452,13 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 		goto out;
 	}
 
+	/* Unsupported capabilities */
+	if (!(ep->user_info->mode & FI_MSG_PREFIX)) {
+		EFA_INFO(FI_LOG_EP_CTRL, "FI_MSG_PREFIX capability is not requested. Zero-copy receive protocol will be disabled\n");
+		ep->use_zcpy_rx = false;
+		goto out;
+	}
+
 	/* Max msg size is too large, turn off zcpy recv */
 	if (ep->max_msg_size > ep->mtu_size - ep->user_info->ep_attr->msg_prefix_size) {
 		EFA_INFO(FI_LOG_EP_CTRL, "max_msg_size (%zu) is greater than the mtu size limit: %zu. Zero-copy receive protocol will be disabled.\n",
