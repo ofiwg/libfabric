@@ -574,6 +574,33 @@ static inline void *ofi_ibuf_alloc(struct ofi_bufpool *pool)
 	return ofi_buf_data(buf_hdr);
 }
 
+static inline void *ofi_ibuf_alloc_at(struct ofi_bufpool *pool, size_t index)
+{
+	void *buf;
+	struct ofi_bufpool_hdr *buf_hdr;
+	struct ofi_bufpool_region *buf_region;
+	size_t region_index = index / pool->attr.chunk_cnt;
+
+	assert(pool->attr.flags & OFI_BUFPOOL_INDEXED);
+	while (region_index >= pool->region_cnt) {
+		if (ofi_bufpool_grow(pool))
+			return NULL;
+	}
+	buf_region = pool->region_table[region_index];
+	buf = buf_region->mem_region +
+		(index % pool->attr.chunk_cnt) * pool->entry_size;
+	buf_hdr = ofi_buf_hdr(buf);
+	assert(ofi_atomic_inc32(&buf_hdr->region->use_cnt));
+	assert(!ofi_buf_is_valid(buf));
+
+	dlist_remove(&buf_hdr->entry.dlist);
+	buf_hdr->entry.dlist.next = &buf_hdr->entry.dlist;
+
+	if (dlist_empty(&buf_region->free_list))
+		dlist_remove_init(&buf_region->entry);
+
+	return buf;
+}
 
 /*
  * Persistent memory support
