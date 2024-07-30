@@ -15,7 +15,6 @@
 #define EFA_RDM_PKE_DC_LONGCTS_DATA	BIT_ULL(3) /**< this DATA packet entry is used by a delivery complete LONGCTS send/write protocol*/
 #define EFA_RDM_PKE_LOCAL_WRITE		BIT_ULL(4) /**< this packet entry is used as context of an RDMA Write to self */
 #define EFA_RDM_PKE_SEND_TO_USER_RECV_QP	BIT_ULL(5) /**< this packet entry is used for posting send to a dedicated QP that doesn't expect any pkt hdrs */
-#define EFA_RDM_PKE_USER_RECV_CANCEL	BIT_ULL(6) /**< this packet entry refers to a rx buffer that has been canceled by the user */
 
 #define EFA_RDM_PKE_ALIGNMENT		128
 
