@@ -109,7 +109,7 @@ struct fi_opx_domain {
 
 	enum fi_threading	threading;
 	enum fi_resource_mgmt	resource_mgmt;
-	enum fi_mr_mode		mr_mode;
+	int			mr_mode;
 	enum fi_progress	data_progress;
 
 	uuid_t			unique_job_key;

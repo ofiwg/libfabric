@@ -268,7 +268,7 @@ static void ofi_tostr_mode(char *buf, size_t len, uint64_t mode)
 	IFFLAGSTRN(mode, FI_MSG_PREFIX, len);
 	IFFLAGSTRN(mode, FI_ASYNC_IOV, len);
 	IFFLAGSTRN(mode, FI_RX_CQ_DATA, len);
-	IFFLAGSTRN(mode, FI_LOCAL_MR, len);
+	IFFLAGSTRN2(mode, OFI_LOCAL_MR, FI_LOCAL_MR, len);
 	IFFLAGSTRN(mode, FI_CONTEXT2, len);
 
 	ofi_remove_comma(buf);
@@ -431,8 +431,8 @@ static void ofi_tostr_av_type(char *buf, size_t len, enum fi_av_type type)
 
 static void ofi_tostr_mr_mode(char *buf, size_t len, int mr_mode)
 {
-	IFFLAGSTRN(mr_mode, FI_MR_BASIC, len);
-	IFFLAGSTRN(mr_mode, FI_MR_SCALABLE, len);
+	IFFLAGSTRN2(mr_mode, OFI_MR_BASIC, FI_MR_BASIC, len);
+	IFFLAGSTRN2(mr_mode, OFI_MR_SCALABLE, FI_MR_SCALABLE, len);
 	IFFLAGSTRN(mr_mode, FI_MR_LOCAL, len);
 	IFFLAGSTRN(mr_mode, FI_MR_RAW, len);
 	IFFLAGSTRN(mr_mode, FI_MR_VIRT_ADDR, len);

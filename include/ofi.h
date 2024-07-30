@@ -70,6 +70,11 @@ extern "C" {
  * These are used internally to avoid compiler warnings.
  */
 
+#define OFI_MR_UNSPEC		0
+#define OFI_MR_BASIC		(1 << 0)
+#define OFI_MR_SCALABLE		(1 << 1)
+
+#define OFI_LOCAL_MR 		(1ULL << 55)
 #define OFI_REG_MR 		(1ULL << 59)
 
 static inline int

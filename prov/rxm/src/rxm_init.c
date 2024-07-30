@@ -84,12 +84,12 @@ void rxm_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 			       struct fi_info *core_info)
 {
 	if (hints && hints->domain_attr &&
-	    (hints->domain_attr->mr_mode & (FI_MR_SCALABLE | FI_MR_BASIC))) {
-		core_info->mode |= FI_LOCAL_MR;
+	    (hints->domain_attr->mr_mode & (OFI_MR_SCALABLE | OFI_MR_BASIC))) {
+		core_info->mode |= OFI_LOCAL_MR;
 		core_info->domain_attr->mr_mode = hints->domain_attr->mr_mode;
 	} else if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		core_info->mode |= FI_LOCAL_MR;
-		core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
+		core_info->mode |= OFI_LOCAL_MR;
+		core_info->domain_attr->mr_mode = OFI_MR_UNSPEC;
 	} else {
 		core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
 		if (!hints || !hints->domain_attr ||
@@ -474,9 +474,9 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 			}
 
 			if (!ofi_mr_local(hints)) {
-				cur->mode &= ~FI_LOCAL_MR;
-				cur->tx_attr->mode &= ~FI_LOCAL_MR;
-				cur->rx_attr->mode &= ~FI_LOCAL_MR;
+				cur->mode &= ~OFI_LOCAL_MR;
+				cur->tx_attr->mode &= ~OFI_LOCAL_MR;
+				cur->rx_attr->mode &= ~OFI_LOCAL_MR;
 				cur->domain_attr->mr_mode &= ~FI_MR_LOCAL;
 			}
 

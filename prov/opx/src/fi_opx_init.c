@@ -675,8 +675,8 @@ static void do_static_assert_tests()
 				"sizeof(fi_opx_hmem_info) >> 3 != OPX_HMEM_SIZE_QWS") ;
 	OPX_COMPILE_TIME_ASSERT(OPX_HFI1_TID_PAGESIZE == 4096,
 				"OPX_HFI1_TID_PAGESIZE must be 4K!");
-	OPX_COMPILE_TIME_ASSERT(OPX_MR != FI_MR_UNSPEC,
-				"OPX_MR should be set to FI_MR_SCALABLE or FI_MR_BASIC, not FI_MR_UNSPEC");
+	OPX_COMPILE_TIME_ASSERT(OPX_MR != OFI_MR_UNSPEC,
+				"OPX_MR should be set to 'FI_MR_SCALABLE' or 'FI_MR_BASIC', not 'FI_MR_UNSPEC'");
 }
 #pragma GCC diagnostic pop
 

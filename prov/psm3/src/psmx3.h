@@ -557,7 +557,7 @@ struct psmx3_fid_domain {
 	uint64_t		mode;
 	uint64_t		caps;
 
-	enum fi_mr_mode		mr_mode;
+	int			mr_mode;
 	ofi_spin_t		mr_lock;
 	uint64_t		mr_reserved_key;
 	RbtHandle		mr_map;

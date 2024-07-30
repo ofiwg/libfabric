@@ -352,7 +352,7 @@ The following apply to memory registration.
   desc parameter is NULL, any required local memory registration will be handled
   by the provider.
 
-*Basic Memory Registration*
+*Basic Memory Registration* (deprecated)
 : Basic memory registration was deprecated in libfabric version 1.5, but
   is supported for backwards compatibility.  Basic memory registration
   is indicated by setting mr_mode equal to FI_MR_BASIC.

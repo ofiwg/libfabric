@@ -254,7 +254,7 @@ int fi_opx_check_domain_attr(struct fi_domain_attr *attr)
 		goto err;
 	}
 
-	if (attr->mr_mode == FI_MR_UNSPEC) {
+	if (attr->mr_mode == OFI_MR_UNSPEC) {
 		attr->mr_mode = FI_OPX_BASE_MR_MODE;
 	}
 

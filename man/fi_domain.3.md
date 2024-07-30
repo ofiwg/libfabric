@@ -575,7 +575,7 @@ The following values may be specified.
 : Indicates that the memory regions associated with completion counters
   must be explicitly enabled after being bound to any counter.
 
-*FI_MR_UNSPEC*
+*FI_MR_UNSPEC* (deprecated)
 : Defined for compatibility -- library versions 1.4 and earlier.  Setting
   mr_mode to 0 indicates that FI_MR_BASIC or FI_MR_SCALABLE are requested
   and supported.
@@ -584,14 +584,14 @@ The following values may be specified.
 : Registered memory regions are referenced by peers using the virtual address
   of the registered memory region, rather than a 0-based offset.
 
-*FI_MR_BASIC*
+*FI_MR_BASIC* (deprecated)
 : Defined for compatibility -- library versions 1.4 and earlier.  Only
   basic memory registration operations are requested or supported.
   This mode is equivalent to the FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, and
   FI_MR_PROV_KEY flags being set in later library versions.  This flag
   may not be used in conjunction with other mr_mode bits.
 
-*FI_MR_SCALABLE*
+*FI_MR_SCALABLE* (deprecated)
 : Defined for compatibility -- library versions 1.4 and earlier.
   Only scalable memory registration operations
   are requested or supported.  Scalable registration uses offset based

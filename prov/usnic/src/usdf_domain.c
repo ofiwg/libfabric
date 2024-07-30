@@ -171,7 +171,7 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 		if (ofi_check_mr_mode(
 			&usdf_ops, fabric->api_version,
-			FI_MR_BASIC | FI_MR_ALLOCATED | FI_MR_LOCAL, info)) {
+			OFI_MR_BASIC | FI_MR_ALLOCATED | FI_MR_LOCAL, info)) {
 			/* the caller ignored our fi_getinfo results */
 			USDF_WARN_SYS(DOMAIN, "MR mode (%d) not supported\n",
 				      info->domain_attr->mr_mode);
@@ -379,7 +379,7 @@ int usdf_catch_dom_attr(uint32_t version, const struct fi_info *hints,
 		 * this function. This means it is safe to return
 		 * 1.4 default mr_mode.
 		 */
-		dom_attr->mr_mode = FI_MR_BASIC;
+		dom_attr->mr_mode = OFI_MR_BASIC;
 
 		/* FI_REMOTE_COMM is introduced in 1.5. So don't return it. */
 		dom_attr->caps &= ~FI_REMOTE_COMM;
@@ -390,7 +390,7 @@ int usdf_catch_dom_attr(uint32_t version, const struct fi_info *hints,
 				return -FI_EBADFLAGS;
 		}
         } else {
-            dom_attr->mr_mode &= ~(FI_MR_BASIC | FI_MR_SCALABLE);
+            dom_attr->mr_mode &= ~(OFI_MR_BASIC | OFI_MR_SCALABLE);
 	}
 
 	return FI_SUCCESS;
@@ -401,7 +401,7 @@ int usdf_catch_tx_attr(uint32_t version, const struct fi_tx_attr *tx_attr)
 {
 	/* In version < 1.5, FI_LOCAL_MR is required. */
 	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		if ((tx_attr->mode & FI_LOCAL_MR) == 0)
+		if ((tx_attr->mode & OFI_LOCAL_MR) == 0)
 			return -FI_ENODATA;
 	}
 
@@ -413,7 +413,7 @@ int usdf_catch_rx_attr(uint32_t version, const struct fi_rx_attr *rx_attr)
 {
 	/* In version < 1.5, FI_LOCAL_MR is required. */
 	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		if ((rx_attr->mode & FI_LOCAL_MR) == 0)
+		if ((rx_attr->mode & OFI_LOCAL_MR) == 0)
 			return -FI_ENODATA;
 	}
 

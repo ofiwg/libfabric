@@ -228,12 +228,10 @@ enum fi_av_type {
 	FI_AV_TABLE
 };
 
-/* Named enum for backwards compatibility */
-enum fi_mr_mode {
-	FI_MR_UNSPEC,
-	FI_MR_BASIC,	     /* (1 << 0) */
-	FI_MR_SCALABLE,	     /* (1 << 1) */
-};
+#define FI_MR_UNSPEC		_Pragma("GCC warning \"'FI_MR_UNSPEC' is deprecated\"")		(0)
+#define FI_MR_BASIC		_Pragma("GCC warning \"'FI_MR_BASIC' is deprecated\"")		(1 << 0)
+#define FI_MR_SCALABLE		_Pragma("GCC warning \"'FI_MR_SCALABLE' is deprecated\"")	(1 << 1)
+
 #define FI_MR_LOCAL		(1 << 2)
 #define FI_MR_RAW		(1 << 3)
 #define FI_MR_VIRT_ADDR		(1 << 4)
@@ -369,7 +367,7 @@ static inline uint8_t fi_tc_dscp_get(uint32_t tclass)
 #define FI_MSG_PREFIX		(1ULL << 58)
 #define FI_ASYNC_IOV		(1ULL << 57)
 #define FI_RX_CQ_DATA		(1ULL << 56)
-#define FI_LOCAL_MR		(1ULL << 55)
+#define FI_LOCAL_MR		_Pragma("GCC warning \"'FI_LOCAL_MR' is deprecated\"")	(1ULL << 55)
 /* #define FI_NOTIFY_FLAGS_ONLY	(1ULL << 54) */
 /* #define FI_RESTRICTED_COMP	(1ULL << 53) */
 #define FI_CONTEXT2		(1ULL << 52)

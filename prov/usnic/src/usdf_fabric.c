@@ -330,7 +330,7 @@ static int validate_modebits(uint32_t version, const struct fi_info *hints,
 
 	/* Before version 1.5, FI_LOCAL_MR is a requirement. */
 	if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		if ((mode & FI_LOCAL_MR) == 0)
+		if ((mode & OFI_LOCAL_MR) == 0)
 			return -FI_ENODATA;
 	}
 
