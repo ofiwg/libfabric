@@ -118,8 +118,8 @@ struct efa_rdm_ope {
 
 	struct fi_cq_tagged_entry cq_entry;
 
-	/* For txe, entry is linked with ope_longcts_send_list in efa_rdm_ep.
-	 * For rxe, entry is linked with ope_longcts_send_list, user_recv_rxe_list in efa_rdm_ep.
+	/* For txe, entry is linked with tx_pending_list, ope_longcts_send_list in efa_rdm_ep.
+	 * For rxe, entry is linked with ope_longcts_send_list.
 	 */
 	struct dlist_entry entry;
 
@@ -154,8 +154,6 @@ struct efa_rdm_ope {
 	size_t efa_outstanding_tx_ops;
 
 	struct efa_rdm_pke *unexp_pkt;
-	/* the pkt entry posted from user's rx buffer */
-	struct efa_rdm_pke *user_rx_pkt;
 	char *atomrsp_data;
 	enum efa_rdm_cuda_copy_method cuda_copy_method;
 	/* end of RX related variables */
