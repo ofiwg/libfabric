@@ -174,7 +174,7 @@ struct fi_wait_attr {
   allow applications to block until the wait object is signaled,
   indicating that an event is available to be read.  The following
   values may be used to specify the type of wait object associated
-  with a wait set: FI_WAIT_UNSPEC, FI_WAIT_FD, FI_WAIT_MUTEX_COND,
+  with a wait set: FI_WAIT_UNSPEC, FI_WAIT_FD, FI_WAIT_MUTEX_COND (deprecated),
   and FI_WAIT_YIELD.
 
 - *FI_WAIT_UNSPEC*
@@ -194,7 +194,7 @@ struct fi_wait_attr {
   available).  Provider signal an FD wait object by marking it as
   readable or with an error.
 
-- *FI_WAIT_MUTEX_COND*
+- *FI_WAIT_MUTEX_COND* (deprecated)
 : Specifies that the wait set should use a pthread mutex and cond
   variable as a wait object.
 
@@ -298,7 +298,7 @@ are usable with a wait set or fid.
   during wait set creation, through the wait set attributes. The fi_control
   arg parameter should be an address where a pointer to the returned wait
   object will be written. This should be an 'int *' for FI_WAIT_FD,
-  'struct fi_mutex_cond' for FI_WAIT_MUTEX_COND, or 'struct fi_wait_pollfd'
+  'struct fi_mutex_cond' for FI_WAIT_MUTEX_COND (deprecated), or 'struct fi_wait_pollfd'
   for FI_WAIT_POLLFD. Support for FI_GETWAIT is provider specific.
 
 *FI_GETWAITOBJ (enum fi_wait_obj \*)*

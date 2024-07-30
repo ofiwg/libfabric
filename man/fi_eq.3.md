@@ -172,7 +172,7 @@ struct fi_eq_attr {
   poll, and epoll routines.  However, a provider may signal an FD wait
   object by marking it as readable or with an error.
 
-- *FI_WAIT_MUTEX_COND*
+- *FI_WAIT_MUTEX_COND* (deprecated)
 : Specifies that the EQ should use a pthread mutex and cond variable
   as a wait object.
 
@@ -216,7 +216,7 @@ commands are usable with an EQ.
   during EQ creation, through the EQ attributes.  The fi_control arg
   parameter should be an address where a pointer to the returned wait
   object will be written.  This should be an 'int *' for FI_WAIT_FD,
-  or 'struct fi_mutex_cond' for FI_WAIT_MUTEX_COND.
+  or 'struct fi_mutex_cond' for FI_WAIT_MUTEX_COND (deprecated).
   
 ```c
 struct fi_mutex_cond {

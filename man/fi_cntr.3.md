@@ -151,7 +151,7 @@ struct fi_cntr_attr {
   object associated with a counter, in order to use it in other system
   calls.  The following values may be used to specify the type of wait
   object associated with a counter: FI_WAIT_NONE, FI_WAIT_UNSPEC,
-  FI_WAIT_SET, FI_WAIT_FD, FI_WAIT_MUTEX_COND, and FI_WAIT_YIELD. 
+  FI_WAIT_SET, FI_WAIT_FD, FI_WAIT_MUTEX_COND (deprecated), and FI_WAIT_YIELD. 
   The default is FI_WAIT_NONE.
 
 - *FI_WAIT_NONE*
@@ -177,7 +177,7 @@ struct fi_cntr_attr {
   poll, and epoll routines.  However, a provider may signal an FD wait
   object by marking it as readable, writable, or with an error.
 
-- *FI_WAIT_MUTEX_COND*
+- *FI_WAIT_MUTEX_COND* (deprecated)
 : Specifies that the counter should use a pthread mutex and cond
   variable as a wait object.
 
