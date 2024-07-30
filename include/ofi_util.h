@@ -976,6 +976,7 @@ int ofi_av_close(struct util_av *av);
 int ofi_av_close_lightweight(struct util_av *av);
 
 size_t ofi_av_size(struct util_av *av);
+int ofi_av_insert_addr_at(struct util_av *av, const void *addr, fi_addr_t fi_addr);
 int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr);
 int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr);
 fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr);
