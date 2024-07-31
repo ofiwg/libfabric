@@ -672,7 +672,7 @@ int rocr_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr)
 	return -FI_EINVAL;
 }
 
-int rocr_close_handle(void *ipc_ptr)
+int rocr_close_handle(void *ipc_ptr, void **handle)
 {
 	hsa_status_t hsa_ret;
 
@@ -1229,7 +1229,7 @@ int rocr_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr)
 	return -FI_ENOSYS;
 }
 
-int rocr_close_handle(void *ipc_ptr)
+int rocr_close_handle(void *ipc_ptr, void **handle)
 {
 	return -FI_ENOSYS;
 }
