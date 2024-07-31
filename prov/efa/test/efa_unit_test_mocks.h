@@ -6,8 +6,6 @@
 
 extern struct efa_unit_test_mocks g_efa_unit_test_mocks;
 
-typedef int (*get_dmabuf_fd_fn_t)(const void *addr, uint64_t size, int *fd, uint64_t *offset);
-
 struct efa_mock_ibv_send_wr_list
 {
 	struct ibv_send_wr *head;
@@ -25,26 +23,6 @@ int __real_efadv_query_device(struct ibv_context *ibvctx, struct efadv_device_at
 
 int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 					    uint32_t inlen);
-
-struct ibv_mr *__real_ibv_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
-                                 int access);
-
-struct ibv_mr *efa_mock_ibv_reg_mr_success_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
-                                                                      size_t length, int access);
-struct ibv_mr *efa_mock_ibv_reg_mr_einval_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
-                                                                     size_t length, int access);
-
-struct ibv_mr *__real_ibv_reg_mr_iova2(struct ibv_pd *pd, void *addr, size_t length, uint64_t iova,
-                                       unsigned int access);
-struct ibv_mr *efa_mock_ibv_reg_mr_iova2_success_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
-                                                                            size_t length, uint64_t iova,
-                                                                            unsigned int access);
-struct ibv_mr *efa_mock_ibv_reg_mr_iova2_einval_return_mock_for_dummy_addr(struct ibv_pd *pd, void *addr,
-                                                                           size_t length, uint64_t iova,
-                                                                           unsigned int access);
-
-int __real_ibv_dereg_mr(struct ibv_mr *ibv_mr);
-int efa_mock_ibv_dereg_mr_return_mock_for_dummy_mr(struct ibv_mr *ibv_mr);
 
 extern void *g_ibv_submitted_wr_id_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
 
@@ -107,35 +85,28 @@ ssize_t efa_mock_ofi_copy_from_hmem_iov_inc_counter(void *dest, size_t size,
 
 struct efa_unit_test_mocks
 {
-	uint64_t dummy_address;
 	uint64_t local_host_id;
 	uint64_t peer_host_id;
 	struct ibv_ah *(*ibv_create_ah)(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
 	int (*efadv_query_device)(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 							  uint32_t inlen);
-	int ibv_reg_mr_calls;
-	struct ibv_mr *(*ibv_reg_mr_fn)(struct ibv_pd *pd, void *addr, size_t length,
-	                                int access);
-	struct ibv_mr *(*ibv_reg_mr_iova2)(struct ibv_pd *pd, void *addr, size_t length,
-	                                   uint64_t iova, unsigned int access);
-	int (*ibv_dereg_mr)(struct ibv_mr *mr);
 #if HAVE_EFADV_CQ_EX
 
 	struct ibv_cq_ex *(*efadv_create_cq)(struct ibv_context *ibvctx,
-	                                     struct ibv_cq_init_attr_ex *attr_ex,
-	                                     struct efadv_cq_init_attr *efa_attr,
-	                                     uint32_t inlen);
+										 struct ibv_cq_init_attr_ex *attr_ex,
+										 struct efadv_cq_init_attr *efa_attr,
+										 uint32_t inlen);
+#endif
+
+#if HAVE_NEURON
+	void *(*neuron_alloc)(void **handle, size_t size);
 #endif
 
 	ssize_t (*ofi_copy_from_hmem_iov)(void *dest, size_t size,
 					  enum fi_hmem_iface hmem_iface, uint64_t device,
 					  const struct iovec *hmem_iov,
 					  size_t hmem_iov_count, uint64_t hmem_iov_offset);
-
-	int (*ofi_hmem_get_dmabuf_fd)(enum fi_hmem_iface iface,
-				      const void *addr, uint64_t size, int *fd,
-				      uint64_t *offset);
 
 	enum ibv_fork_status (*ibv_is_fork_initialized)(void);
 
@@ -145,11 +116,6 @@ struct efa_unit_test_mocks
 
 #if HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES
 	int (*ibv_query_qp_data_in_order)(struct ibv_qp *qp, enum ibv_wr_opcode op, uint32_t flags);
-#endif
-
-#if HAVE_EFA_DMABUF_MR
-	struct ibv_mr *(*ibv_reg_dmabuf_mr)(struct ibv_pd *pd, uint64_t offset, size_t length, uint64_t iova,
-	                                    int fd, int access);
 #endif
 };
 
@@ -178,6 +144,11 @@ struct ibv_cq_ex *efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null(struct
 																		  uint32_t inlen);
 #endif
 
+#if HAVE_NEURON
+void *__real_neuron_alloc(void **handle, size_t size);
+void *efa_mock_neuron_alloc_return_null(void **handle, size_t size);
+#endif
+
 #if HAVE_EFADV_QUERY_MR
 int __real_efadv_query_mr(struct ibv_mr *ibv_mr, struct efadv_mr_attr *attr, uint32_t inlen);
 int efa_mock_efadv_query_mr_recv_ic_id_0(struct ibv_mr *ibv_mr, struct efadv_mr_attr *attr, uint32_t inlen);
@@ -190,13 +161,6 @@ int efa_mock_efadv_query_mr_recv_and_rdma_read_ic_id_0_1(struct ibv_mr *ibv_mr, 
 int __real_ibv_query_qp_data_in_order(struct ibv_qp *qp, enum ibv_wr_opcode op, uint32_t flags);
 int efa_mock_ibv_query_qp_data_in_order_return_0(struct ibv_qp *qp, enum ibv_wr_opcode op, uint32_t flags);
 int efa_mock_ibv_query_qp_data_in_order_return_in_order_aligned_128_bytes(struct ibv_qp *qp, enum ibv_wr_opcode op, uint32_t flags);
-#endif
-
-int efa_mock_get_dmabuf_fd_set_errno_return_mock(const void *addr, uint64_t size, int *fd, uint64_t *offset);
-
-#if HAVE_EFA_DMABUF_MR
-struct ibv_mr *__real_ibv_reg_dmabuf_mr(struct ibv_pd *pd, uint64_t offset, size_t length, uint64_t iova, int fd, int access);
-struct ibv_mr *efa_mock_ibv_reg_dmabuf_mr_set_eopnotsupp_and_return_mock(struct ibv_pd *pd, uint64_t offset, size_t length, uint64_t iova, int fd, int access);
 #endif
 
 enum ibv_fork_status __real_ibv_is_fork_initialized(void);
