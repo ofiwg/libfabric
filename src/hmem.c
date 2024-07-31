@@ -568,9 +568,10 @@ int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
 					   mapped_addr);
 }
 
-int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *mapped_addr)
+int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *mapped_addr,
+			  void **handle)
 {
-	return hmem_ops[iface].close_handle(mapped_addr);
+	return hmem_ops[iface].close_handle(mapped_addr, handle);
 }
 
 int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *addr,

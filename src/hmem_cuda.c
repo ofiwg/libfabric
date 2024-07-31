@@ -420,7 +420,7 @@ int cuda_open_handle(void **handle, size_t size, uint64_t device,
 	return (cuda_ret == cudaErrorAlreadyMapped) ? -FI_EALREADY:-FI_EINVAL;
 }
 
-int cuda_close_handle(void *ipc_ptr)
+int cuda_close_handle(void *ipc_ptr, void **handle)
 {
 	cudaError_t cuda_ret;
 
@@ -1009,7 +1009,7 @@ int cuda_open_handle(void **handle, size_t size, uint64_t device,
 	return -FI_ENOSYS;
 }
 
-int cuda_close_handle(void *ipc_ptr)
+int cuda_close_handle(void *ipc_ptr, void **handle)
 {
 	return -FI_ENOSYS;
 }
