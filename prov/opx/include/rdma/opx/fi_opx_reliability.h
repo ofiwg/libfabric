@@ -118,6 +118,12 @@ union fi_opx_reliability_deferred_work {
 	struct fi_opx_reliability_tx_pio_replay_params pio_replay;
 };
 
+#define OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MIN	(1)
+#define OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MAX	(65535)
+#define OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_DEFAULT	(128)
+#define OPX_RELIABILITY_MAX_CONGESTED_PINGS_MIN		(1)
+#define OPX_RELIABILITY_MAX_CONGESTED_PINGS_MAX		(65535)
+#define OPX_RELIABILITY_MAX_CONGESTED_PINGS_DEFAULT	(4)
 struct fi_opx_reliability_service {
 
 	struct fi_opx_atomic_fifo			fifo;		/* 27 qws = 216 bytes */
@@ -134,7 +140,10 @@ struct fi_opx_reliability_service {
 	/* == CACHE LINE == */
 		RbtHandle				flow;		/*  1 qw  =   8 bytes */
 		uint64_t				ping_start_key;
-		uint64_t				unused;
+		uint16_t max_uncongested_pings;
+		uint16_t max_congested_pings;
+		uint8_t congested_flag;
+		uint8_t unused_padding2[3];
 
 		struct {
 			uint64_t			unused_cacheline_1;
@@ -358,6 +367,13 @@ RbtIterator fi_opx_rbt_begin(RbtHandle h) {
         NodeType *i;
         for (i = rbt->root; i->left != &rbt->sentinel; i = i->left);
         return i != &rbt->sentinel ? i : NULL;
+}
+
+__OPX_FORCE_INLINE__
+void fi_opx_rbt_key(RbtIterator it, uint64_t *key) {
+	NodeType *i = it;
+
+	*key = (uint64_t) i->key;
 }
 
 __OPX_FORCE_INLINE__
