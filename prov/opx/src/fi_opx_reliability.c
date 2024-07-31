@@ -1843,10 +1843,16 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RELI_RX_NACK");
 }
 
+enum opx_reliability_ping_result {
+	OPX_RELIABILITY_PING_NO_REPLAYS = -1,
+	OPX_RELIABILITY_PING_NO_CREDITS, //NO_CREDITS = 0 to make the if statements in ping_remote clean
+	OPX_RELIABILITY_PING_SENT
+};
+
 __OPX_FORCE_INLINE__
-uint64_t fi_opx_reliability_send_ping(struct fid_ep *ep,
+ssize_t fi_opx_reliability_send_ping(struct fid_ep *ep,
 				struct fi_opx_reliability_service * service,
-				RbtIterator itr)
+				RbtIterator itr, uint64_t key_value)
 {
 	OPX_TRACER_TRACE_RELI(OPX_TRACER_BEGIN, "RELI_SEND_PING");
 	struct fi_opx_reliability_tx_replay ** value_ptr =
@@ -1856,15 +1862,8 @@ uint64_t fi_opx_reliability_send_ping(struct fid_ep *ep,
 
 	if (OFI_UNLIKELY(head == NULL)) {
 		OPX_TRACER_TRACE_RELI(OPX_TRACER_END_ERROR, "RELI_SEND_PING");
-		return 0;
+		return OPX_RELIABILITY_PING_NO_REPLAYS;
 	}
-
-	const union fi_opx_reliability_service_flow_key key = {
-		.slid = (uint32_t)head->scb.hdr.stl.lrh.slid,
-		.tx = (uint32_t)FI_OPX_HFI1_PACKET_ORIGIN_TX(&head->scb.hdr),
-		.dlid = (uint32_t)head->scb.hdr.stl.lrh.dlid,
-		.rx = (uint32_t)head->scb.hdr.stl.bth.rx,
-	};
 
 	const uint64_t dlid = (uint64_t)head->scb.hdr.stl.lrh.dlid;
 	const uint64_t rx = (uint64_t)head->target_reliability_rx;
@@ -1880,26 +1879,34 @@ uint64_t fi_opx_reliability_send_ping(struct fid_ep *ep,
 
 	// Send one ping to cover the entire replay range.
 	ssize_t rc = fi_opx_hfi1_tx_reliability_inject(ep,
-					key.value, dlid, rx,
+					key_value, dlid, rx,
 					psn_start,
 					psn_count,
 					FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING);
 
-	INC_PING_STAT_COND(rc == FI_SUCCESS, PINGS_SENT, key.value, psn_start, psn_count);
+	INC_PING_STAT_COND(rc == FI_SUCCESS, PINGS_SENT, key_value, psn_start, psn_count);
 
 	OPX_TRACER_TRACE_RELI(OPX_TRACER_END_SUCCESS, "RELI_SEND_PING");
-	return (rc == FI_SUCCESS) ? 0 : key.value;
+
+	if(rc){
+		return OPX_RELIABILITY_PING_NO_CREDITS;
+	}
+
+	return OPX_RELIABILITY_PING_SENT;
 }
 
 void fi_reliability_service_ping_remote (struct fid_ep *ep,
 		struct fi_opx_reliability_service * service)
 {
-
 	/* for each flow in the rbtree ... */
 	RbtIterator start_key_itr;
 	RbtIterator itr;
 
-	uint64_t fail_key = 0;
+	uint64_t key_value = 0;
+	ssize_t rc = OPX_RELIABILITY_PING_SENT;
+	uint16_t num_pings = 0;
+	uint16_t max_pings = service->tx.congested_flag ? service->tx.max_congested_pings : service->tx.max_uncongested_pings;
+
 	uint64_t start_key = service->tx.ping_start_key;
 	if (start_key) {
 		itr = fi_opx_rbt_find(service->tx.flow, (void*)start_key);
@@ -1910,41 +1917,82 @@ void fi_reliability_service_ping_remote (struct fid_ep *ep,
 	}
 
 	/* Loop until we hit the end of the tree, or we fail on a particular ping */
-	while (itr && !fail_key) {
+	while (itr && rc && num_pings < max_pings) {
+		fi_opx_rbt_key(itr, &key_value);
 
-		fail_key = fi_opx_reliability_send_ping(ep, service, itr);
-
+		rc = fi_opx_reliability_send_ping(ep, service, itr, key_value);
+		
 		/* advance to the next dlid */
-		itr = rbtNext(service->tx.flow, itr);
+		itr = rbtNext(service->tx.flow, itr);	
+		
+		if(rc == OPX_RELIABILITY_PING_SENT) {
+			++num_pings;
+		}
 	}
 
-	/* We failed on a particular ping. Store the failing key to be the first to try next time, and stop */
-	if (fail_key) {
-		service->tx.ping_start_key = fail_key;
+	/* We ran out of credits on a particular ping. 
+	 * Store the failing key to be the first to try next time,
+	 * set the congested flag to limit future pings, and stop */
+	if (!rc) {
+		service->tx.congested_flag = 1;
+		service->tx.ping_start_key = key_value;
 		return;
+	}
+
+	// We sent the max number of pings this round, save the next key and stop
+	if (num_pings == max_pings) {
+		if (itr) {
+			fi_opx_rbt_key(itr, &key_value);
+			service->tx.ping_start_key = key_value;
+			return;
+		}
+		service->tx.ping_start_key = 0;
+		return;	
 	}
 
 	/* We hit the end of the tree. If there was no starting key, we've iterated through the whole tree and we're done. */
 	if (!start_key) {
+		// Unset the congested flag
+		service->tx.congested_flag = 0;
 		return;
 	}
 
 	/* Wrap back around from the beginning of the tree and iterate until we've hit the starting key */
 	itr = rbtBegin(service->tx.flow);
 
-	while (itr && itr != start_key_itr && !fail_key) {
+	while (itr && itr != start_key_itr && rc && num_pings < max_pings) {
+		fi_opx_rbt_key(itr, &key_value);
 
-		fail_key = fi_opx_reliability_send_ping(ep, service, itr);
+		rc = fi_opx_reliability_send_ping(ep, service, itr, key_value);
 
 		/* advance to the next dlid */
 		itr = rbtNext(service->tx.flow, itr);
+		
+		if(rc == OPX_RELIABILITY_PING_SENT) {
+			++num_pings;
+		}
 	}
 
-	if (fail_key) {
-		service->tx.ping_start_key = fail_key;
-	} else {
-		service->tx.ping_start_key = 0;
+	if (!rc) {
+		service->tx.congested_flag = 1;
+		service->tx.ping_start_key = key_value;
+		return;
 	}
+
+	if (num_pings == max_pings) {
+		if(itr){
+			fi_opx_rbt_key(itr, &key_value);
+			service->tx.ping_start_key = key_value;
+			return;
+		}
+		service->tx.ping_start_key = 0;
+		return;
+	}
+	
+	service->tx.ping_start_key = 0;
+	
+	// We iterated through the whole tree, unset the congested flag
+	service->tx.congested_flag = 0;
 }
 
 void fi_opx_reliability_service_process_pending (struct fi_opx_reliability_service * service)
@@ -2353,6 +2401,48 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 	service->usec_max = usec;
 
 	service->usec_next = fi_opx_timer_next_event_usec(&service->tx.timer, &service->tx.timestamp, service->usec_max);
+
+	/*
+	* Initialize send ping flag(s)
+	*
+	* ONLOAD only
+	*/
+	service->tx.congested_flag = 0;
+
+	/*
+	 * Maximum number of reliability pings per timer in congested/uncongested scenarios
+	 *
+	 * OFFLOAD and ONLOAD
+	 */
+	int max_uncongested_pings;
+	if(fi_param_get_int(fi_opx_global.prov, "reliability_max_uncongested_pings", &max_uncongested_pings) == FI_SUCCESS) {
+		if (max_uncongested_pings < OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MIN || max_uncongested_pings > OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MAX) {
+			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FI_OPX_RELIABILITY_MAX_UNCONGESTED_PINGS has value %d which is outside the valid range of %d-%d. Using default rate of %d\n", max_uncongested_pings, OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MIN, OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MAX, OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_DEFAULT);
+			max_uncongested_pings = OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_DEFAULT;
+		} else {
+			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Using environment-specified FI_OPX_RELIABILITY_MAX_UNCONGESTED_PINGS of %d\n", max_uncongested_pings);
+		}
+	} else {
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_MAX_UNCONGESTED_PINGS not specified, using default value of %d\n", OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_DEFAULT);
+		max_uncongested_pings = OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_DEFAULT;
+	}
+	service->tx.max_uncongested_pings = max_uncongested_pings;
+	
+	int max_congested_pings;
+	if(fi_param_get_int(fi_opx_global.prov, "reliability_max_congested_pings", &max_congested_pings) == FI_SUCCESS) {
+		if (max_congested_pings < OPX_RELIABILITY_MAX_CONGESTED_PINGS_MIN || max_congested_pings > OPX_RELIABILITY_MAX_CONGESTED_PINGS_MAX) {
+			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FI_OPX_RELIABILITY_MAX_CONGESTED_PINGS has value %d which is outside the valid range of %d-%d. Using default rate of %d\n", max_congested_pings, OPX_RELIABILITY_MAX_CONGESTED_PINGS_MIN, OPX_RELIABILITY_MAX_CONGESTED_PINGS_MAX, OPX_RELIABILITY_MAX_CONGESTED_PINGS_DEFAULT);
+			max_congested_pings = OPX_RELIABILITY_MAX_CONGESTED_PINGS_DEFAULT;
+		} else {
+			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Using environment-specified FI_OPX_RELIABILITY_MAX_CONGESTED_PINGS of %d\n", max_congested_pings);
+		}
+	} else {
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_MAX_CONGESTED_PINGS not specified, using default value of %d\n", OPX_RELIABILITY_MAX_CONGESTED_PINGS_DEFAULT);
+		max_congested_pings = OPX_RELIABILITY_MAX_CONGESTED_PINGS_DEFAULT;
+	}
+	service->tx.max_congested_pings = max_congested_pings;
 
 	/*
 	 * Maximum number of commands to process from atomic fifo before
