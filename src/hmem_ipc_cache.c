@@ -94,11 +94,13 @@ int ofi_ipc_cache_open(struct ofi_mr_cache **cache,
 	int ret;
 
 	if (!ofi_hmem_is_ipc_enabled(FI_HMEM_CUDA) &&
-		!ofi_hmem_is_ipc_enabled(FI_HMEM_ROCR))
+		!ofi_hmem_is_ipc_enabled(FI_HMEM_ROCR) &&
+		!ofi_hmem_is_ipc_enabled(FI_HMEM_ZE))
 		return FI_SUCCESS;
 
 	memory_monitors[FI_HMEM_CUDA] = cuda_ipc_monitor;
 	memory_monitors[FI_HMEM_ROCR] = rocr_ipc_monitor;
+	memory_monitors[FI_HMEM_ZE] = ze_ipc_monitor;
 
 	*cache = calloc(1, sizeof(*(*cache)));
 	if (!*cache) {

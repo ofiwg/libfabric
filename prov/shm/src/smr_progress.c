@@ -533,9 +533,8 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 {
 	struct smr_region *peer_smr;
 	struct smr_resp *resp;
-	void *base, *ptr;
-	int64_t id;
-	int ret, ipc_fd;
+	void *ptr;
+	int ret;
 	ssize_t hmem_copy_ret;
 	struct ofi_mr_entry *mr_entry;
 	struct smr_domain *domain;
@@ -547,27 +546,18 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
 
+	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ZE)
+		ze_set_pid_fd((void **) &cmd->msg.data.ipc_info.ipc_handle,
+			      ep->region->map->peers[cmd->msg.hdr.id].pid_fd);
+
 	//TODO disable IPC if more than 1 interface is initialized
-	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ZE) {
-		id = cmd->msg.hdr.id;
-		ret = ze_hmem_open_shared_handle(cmd->msg.data.ipc_info.device,
-				ep->sock_info->peers[id].device_fds,
-				(void **) &cmd->msg.data.ipc_info.ipc_handle,
-				&ipc_fd, &base);
-	} else {
-		ret = ofi_ipc_cache_search(domain->ipc_cache,
-					   cmd->msg.hdr.id,
-					   &cmd->msg.data.ipc_info,
-					   &mr_entry);
-	}
+	ret = ofi_ipc_cache_search(domain->ipc_cache, cmd->msg.hdr.id,
+				   &cmd->msg.data.ipc_info, &mr_entry);
 	if (ret)
 		goto out;
 
-	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ZE)
-		ptr = (char *) base + (uintptr_t) cmd->msg.data.ipc_info.offset;
-	else
-		ptr = (char *) (uintptr_t) mr_entry->info.mapped_addr +
-		      (uintptr_t) cmd->msg.data.ipc_info.offset;
+	ptr = (char *) (uintptr_t) mr_entry->info.mapped_addr +
+		(uintptr_t) cmd->msg.data.ipc_info.offset;
 
 	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ROCR) {
 		*total_len = 0;
@@ -594,14 +584,7 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 					iov_count, 0, ptr, cmd->msg.hdr.size);
 	}
 
-	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ZE) {
-		close(ipc_fd);
-		/* Truncation error takes precedence over close_handle error */
-		ret = ofi_hmem_close_handle(cmd->msg.data.ipc_info.iface, base,
-					    NULL);
-	} else {
-		ofi_mr_cache_delete(domain->ipc_cache, mr_entry);
-	}
+	ofi_mr_cache_delete(domain->ipc_cache, mr_entry);
 
 	if (hmem_copy_ret < 0)
 		*err = hmem_copy_ret;
@@ -906,6 +889,8 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 		smr_map_to_region(&smr_prov, ep->region->map, idx);
 		peer_smr = smr_peer_region(ep->region, idx);
 	}
+
+	smr_set_ipc_valid(ep->region, idx);
 	smr_peer_data(peer_smr)[cmd->msg.hdr.id].addr.id = idx;
 	smr_peer_data(ep->region)[idx].addr.id = cmd->msg.hdr.id;
 

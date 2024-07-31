@@ -65,6 +65,7 @@
 #include <ofi_iov.h>
 #include <ofi_mr.h>
 #include <ofi_lock.h>
+#include <ofi_hmem.h>
 
 #include "smr_util.h"
 
@@ -124,7 +125,6 @@ struct smr_tx_entry {
 	void		*map_ptr;
 	struct smr_ep_name *map_name;
 	struct ofi_mr	*mr[SMR_IOV_LIMIT];
-	int			fd;
 };
 
 struct smr_pend_entry {
@@ -164,8 +164,6 @@ struct smr_domain {
 
 #define SMR_PREFIX	"fi_shm://"
 #define SMR_PREFIX_NS	"fi_ns://"
-
-#define SMR_ZE_SOCK_PATH	"/dev/shm/ze_"
 
 #define SMR_RMA_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS |	\
 		       OFI_ORDER_WAR_SET | OFI_ORDER_WAW_SET | FI_ORDER_WAS |	\
@@ -282,7 +280,8 @@ size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 			 const struct iovec *iov, size_t count,
 			 size_t *bytes_done);
 int smr_select_proto(void **desc, size_t iov_count, bool cma_avail,
-		     uint32_t op, uint64_t total_len, uint64_t op_flags);
+		     bool ipc_valid, uint32_t op, uint64_t total_len,
+		     uint64_t op_flags);
 typedef ssize_t (*smr_proto_func)(struct smr_ep *ep, struct smr_region *peer_smr,
 		int64_t id, int64_t peer_id, uint32_t op, uint64_t tag,
 		uint64_t data, uint64_t op_flags, struct ofi_mr **desc,
@@ -318,6 +317,22 @@ static inline bool smr_vma_enabled(struct smr_ep *ep,
 	else
 		return (ep->region->cma_cap_peer == SMR_VMA_CAP_ON ||
 			peer_smr->xpmem_cap_self == SMR_VMA_CAP_ON);
+}
+
+static inline void smr_set_ipc_valid(struct smr_region *region, uint64_t id)
+{
+	if (ofi_hmem_is_initialized(FI_HMEM_ZE) &&
+	    region->map->peers[id].pid_fd == -1)
+		smr_peer_data(region)[id].ipc_valid = 0;
+        else
+        	smr_peer_data(region)[id].ipc_valid = 1;
+}
+
+static inline bool smr_ipc_valid(struct smr_ep *ep, struct smr_region *peer_smr,
+				 int64_t id, int64_t peer_id)
+{
+	return (smr_peer_data(ep->region)[id].ipc_valid &&
+		smr_peer_data(peer_smr)[peer_id].ipc_valid);
 }
 
 static inline bool smr_ze_ipc_enabled(struct smr_region *smr,

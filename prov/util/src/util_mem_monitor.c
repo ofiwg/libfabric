@@ -189,6 +189,7 @@ static void initialize_monitor_list()
 		rocr_ipc_monitor,
 		xpmem_monitor,
 		ze_monitor,
+		ze_ipc_monitor,
 		import_monitor,
 	};
 

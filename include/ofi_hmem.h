@@ -204,24 +204,34 @@ int cuda_gdrcopy_dev_register(const void *buf, size_t len, uint64_t *handle);
 int cuda_gdrcopy_dev_unregister(uint64_t handle);
 int cuda_set_sync_memops(void *ptr);
 
+/*
+ * ze handle is just an fd so we need a wrapper to contain extra fields for ipc
+ * copies
+ * get_fd 	fd from handle_get
+ * open_fd	fd from pidfd_get_fd. Needed for closing extra fd and for
+ * 		opening with open_handle
+ * pid_fd	fd that references a pid used to open an fd across processes
+ */
+struct ze_pid_handle {
+	int get_fd;
+	int open_fd;
+	int pid_fd;
+};
+
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
 int ze_hmem_init(void);
 int ze_hmem_cleanup(void);
 bool ze_hmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int ze_hmem_get_handle(void *dev_buf, size_t size, void **handle);
+void ze_set_pid_fd(void **handle, int pid_fd);
 int ze_hmem_open_handle(void **handle, size_t size, uint64_t device,
 			void **ipc_ptr);
-int ze_hmem_get_shared_handle(uint64_t device, void *dev_buf, int *ze_fd,
-			      void **handle);
-int ze_hmem_open_shared_handle(uint64_t device, int *peer_fds, void **handle,
-			       int *ze_fd, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr, void **handle);
 bool ze_hmem_p2p_enabled(void);
 int ze_hmem_get_ipc_handle_size(size_t *size);
 int ze_hmem_get_base_addr(const void *ptr, size_t len, void **base,
 			  size_t *size);
 int ze_hmem_get_id(const void *ptr, uint64_t *id);
-int *ze_hmem_get_dev_fds(int *nfds);
 int ze_hmem_host_register(void *ptr, size_t size);
 int ze_hmem_host_unregister(void *ptr);
 int ze_dev_register(const void *addr, size_t size, uint64_t *handle);
