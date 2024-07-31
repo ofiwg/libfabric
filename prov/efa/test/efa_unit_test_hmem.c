@@ -97,14 +97,14 @@ void test_efa_dmabuf_support(struct efa_resource **state,
 				&ibv_mr);
 		} else {
 			g_efa_unit_test_mocks.ibv_reg_mr_iova2 =
-					efa_mock_ibv_reg_mr_iova2_set_errno_return_mock_for_dummy_addr;
+					efa_mock_ibv_reg_mr_iova2_einval_return_mock_for_dummy_addr;
 			will_return_maybe(
-				efa_mock_ibv_reg_mr_iova2_set_errno_return_mock_for_dummy_addr,
+				efa_mock_ibv_reg_mr_iova2_einval_return_mock_for_dummy_addr,
 				NULL);
 			g_efa_unit_test_mocks.ibv_reg_mr_fn =
-				efa_mock_ibv_reg_mr_set_errno_return_mock_for_dummy_addr;
+				efa_mock_ibv_reg_mr_einval_return_mock_for_dummy_addr;
 			will_return_maybe(
-				efa_mock_ibv_reg_mr_set_errno_return_mock_for_dummy_addr,
+				efa_mock_ibv_reg_mr_einval_return_mock_for_dummy_addr,
 				NULL);
 		}
 	}
@@ -153,23 +153,10 @@ void test_efa_cuda_dmabuf_support_always_ibv_reg_mr(struct efa_resource **state)
 /**
  * P2P is not required for FI_VERSION >= 1.18, and CUDA ibv_reg_mr
  * is allowed to fail and fallback to keygen.
- * If MR fails for reasons other than ENOMEM, P2P support will be disabled.
  */
-void test_efa_cuda_dmabuf_support_ibv_reg_mr_fail_disable_p2p_fallback_keygen(struct efa_resource **state)
+void test_efa_cuda_dmabuf_support_ibv_reg_mr_fail_fallback_keygen(struct efa_resource **state)
 {
-	g_efa_unit_test_mocks.ibv_reg_mr_errno = EINVAL;
 	test_efa_dmabuf_support(state, FI_HMEM_CUDA, false, false, false, false, true, false, false, true);
-}
-
-/**
- * P2P is not required for FI_VERSION >= 1.18, and CUDA ibv_reg_mr
- * is allowed to fail and fallback to keygen.
- * If MR fails due to ENOMEM, P2P support will NOT be disabled.
- */
-void test_efa_cuda_dmabuf_support_ibv_reg_mr_fail_retain_p2p_fallback_keygen(struct efa_resource **state)
-{
-	g_efa_unit_test_mocks.ibv_reg_mr_errno = ENOMEM;
-	test_efa_dmabuf_support(state, FI_HMEM_CUDA, false, false, false, false, true, false, true, true);
 }
 
 /**
