@@ -1358,6 +1358,8 @@ buffer at a later time. However, if an application has the following set of requ
    2. Only sends/receives eager messages
    3. Does not use tagged send
    4. Does not require `FI_DIRECTED_RECV` (the ability to receive only from certain addresses)
+   5. Does not use Libfabric's shared memory communication, e.g. by setting `FI_OPT_SHARED_MEMORY_PERMITTED` as false
+   via `fi_setopt`.
 
 it should be possible to receive data directly using the application buffer since, under such conditions, the
 receiver does not have special requirements on the data it is going to receive, and it will thus accept any
