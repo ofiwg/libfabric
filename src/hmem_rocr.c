@@ -125,10 +125,10 @@ struct hsa_ops {
 	hsa_status_t (*hsa_iterate_agents)(
 		hsa_status_t (*callback)(hsa_agent_t agent, void *data),
 		void *data);
-	hsa_status_t (*hsa_system_get_info)(hsa_system_info_t attribute, 
+	hsa_status_t (*hsa_system_get_info)(hsa_system_info_t attribute,
 					    void* value);
 #if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
-	hsa_status_t (*hsa_amd_portable_export_dmabuf)(const void* ptr, size_t size, 
+	hsa_status_t (*hsa_amd_portable_export_dmabuf)(const void* ptr, size_t size,
 						       int* dmabuf, uint64_t* offset);
 #endif
 };
@@ -604,6 +604,10 @@ bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 	hsa_ret = ofi_hsa_amd_pointer_info((void *)addr, &hsa_info, NULL, NULL,
 					   NULL);
 	if (hsa_ret == HSA_STATUS_SUCCESS) {
+		if (hsa_info.type == HSA_EXT_POINTER_TYPE_UNKNOWN) {
+			return false;
+		}
+
 		hsa_ret = ofi_hsa_agent_get_info(hsa_info.agentOwner,
 						 HSA_AGENT_INFO_DEVICE,
 						 (void *) &hsa_dev_type);
