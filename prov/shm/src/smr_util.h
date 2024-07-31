@@ -54,7 +54,7 @@
 extern "C" {
 #endif
 
-#define SMR_VERSION	7
+#define SMR_VERSION	8
 
 #define SMR_FLAG_ATOMIC	(1 << 0)
 #define SMR_FLAG_DEBUG	(1 << 1)
@@ -177,7 +177,8 @@ struct smr_addr {
 struct smr_peer_data {
 	struct smr_addr		addr;
 	uint32_t		sar_status;
-	uint32_t		name_sent;
+	uint16_t		name_sent;
+	uint16_t		ipc_valid;
 	struct xpmem_client 	xpmem;
 };
 
@@ -205,6 +206,7 @@ struct smr_peer {
 	struct smr_addr		peer;
 	fi_addr_t		fiaddr;
 	struct smr_region	*region;
+	int			pid_fd;
 };
 
 #define SMR_MAX_PEERS	256

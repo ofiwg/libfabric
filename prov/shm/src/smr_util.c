@@ -453,6 +453,15 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_map *map,
 		if (ret)
 			FI_WARN(prov, FI_LOG_EP_CTRL,
 				"unable to register shm with iface\n");
+		if (ofi_hmem_is_initialized(FI_HMEM_ZE)) {
+			peer_buf->pid_fd = ofi_pidfd_open(peer->pid, 0);
+			if (peer_buf->pid_fd < 0) {
+				FI_WARN(prov, FI_LOG_EP_CTRL,
+					"unable to open pidfd\n");
+			}
+		} else {
+			peer_buf->pid_fd = -1;
+		}
 	}
 
 out:
@@ -498,6 +507,8 @@ void smr_map_to_endpoint(struct smr_region *region, int64_t id)
 	} else {
 		local_peers[id].xpmem.cap = SMR_VMA_CAP_OFF;
 	}
+
+	smr_set_ipc_valid(region, id);
 
 	return;
 }
@@ -585,8 +596,12 @@ void smr_map_del(struct smr_map *map, int64_t id)
 		goto unlock;
 
 	if (!entry) {
-		if (map->flags & SMR_FLAG_HMEM_ENABLED)
+		if (map->flags & SMR_FLAG_HMEM_ENABLED) {
+			if (map->peers[id].pid_fd != -1)
+				close(map->peers[id].pid_fd);
+
 			(void) ofi_hmem_host_unregister(map->peers[id].region);
+		}
 		munmap(map->peers[id].region, map->peers[id].region->total_size);
 	}
 

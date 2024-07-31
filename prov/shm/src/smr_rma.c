@@ -171,7 +171,8 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	assert(!(op_flags & FI_INJECT) || total_len <= SMR_INJECT_SIZE);
 
 	proto = smr_select_proto(desc, iov_count, smr_vma_enabled(ep, peer_smr),
-	                         op, total_len, op_flags);
+	                         smr_ipc_valid(ep, peer_smr, id, peer_id), op,
+				 total_len, op_flags);
 
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, 0, data,
 				   op_flags, (struct ofi_mr **)desc, iov,
