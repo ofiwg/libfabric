@@ -946,6 +946,7 @@ static void
 test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource, bool expected_use_zcpy_rx) {
 	struct efa_rdm_ep *ep;
 	size_t max_msg_size = 1000;
+	bool shm_permitted = false;
 
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
 	                                            resource->hints, false, true);
@@ -955,6 +956,11 @@ test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource, bool expected_us
 	/* Set sufficiently small max_msg_size */
 	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_MAX_MSG_SIZE,
 			&max_msg_size, sizeof max_msg_size), 0);
+
+	/* Disable shm */
+	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_SHARED_MEMORY_PERMITTED,
+			&shm_permitted, sizeof shm_permitted), 0);
+
 	assert_true(ep->max_msg_size == max_msg_size);
 	assert_int_equal(fi_enable(resource->ep), 0);
 	assert_true(ep->use_zcpy_rx == expected_use_zcpy_rx);

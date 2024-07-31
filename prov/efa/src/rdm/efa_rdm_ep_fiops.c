@@ -455,6 +455,12 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 		goto out;
 	}
 
+	if (ep->shm_ep) {
+		EFA_INFO(FI_LOG_EP_CTRL, "Libfabric SHM is not turned off, zero-copy receive protocol will be disabled\n");
+		ep->use_zcpy_rx = false;
+		goto out;
+	}
+
 out:
 	EFA_INFO(FI_LOG_EP_CTRL, "efa_rdm_ep->use_zcpy_rx = %d\n",
 		 ep->use_zcpy_rx);
@@ -1211,6 +1217,8 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
+		efa_rdm_ep_update_shm(ep);
+
 		efa_rdm_ep_set_use_zcpy_rx(ep);
 
 		ret = efa_rdm_ep_create_base_ep_ibv_qp(ep);
@@ -1240,8 +1248,6 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &ep_addr_strlen);
 		EFA_INFO(FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
 			fi_tostr("1", FI_TYPE_VERSION), ep_addr_str);
-
-		efa_rdm_ep_update_shm(ep);
 
 		/* Enable shm provider endpoint & post recv buff.
 		 * Once core ep enabled, 18 bytes efa_addr (16 bytes raw + 2 bytes qpn) is set.
