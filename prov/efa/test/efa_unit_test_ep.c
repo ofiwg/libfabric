@@ -942,14 +942,38 @@ void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad(struct efa_resourc
 
 #endif
 
-static void
-test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource, bool expected_use_zcpy_rx) {
+static void test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource,
+                                             bool cuda_p2p_disabled,
+                                             bool cuda_p2p_supported,
+                                             bool expected_use_zcpy_rx)
+{
+	struct efa_domain *efa_domain;
 	struct efa_rdm_ep *ep;
 	size_t max_msg_size = 1000;
 	bool shm_permitted = false;
 
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
 	                                            resource->hints, false, true);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+	                          util_domain.domain_fid.fid);
+
+	/* System memory P2P should always be enabled */
+	assert_true(efa_domain->hmem_info[FI_HMEM_SYSTEM].initialized);
+	assert_false(efa_domain->hmem_info[FI_HMEM_SYSTEM].p2p_disabled_by_user);
+	assert_true(efa_domain->hmem_info[FI_HMEM_SYSTEM].p2p_supported_by_device);
+
+	/**
+	 * We want to be able to run this test on any platform:
+	 * 1. Fake CUDA support.
+	 * 2. Disable all other hmem ifaces.
+	 */
+	efa_domain->hmem_info[FI_HMEM_CUDA].initialized = true;
+	efa_domain->hmem_info[FI_HMEM_CUDA].p2p_disabled_by_user = cuda_p2p_disabled;
+	efa_domain->hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = cuda_p2p_supported;
+
+	efa_domain->hmem_info[FI_HMEM_NEURON].initialized = false;
+	efa_domain->hmem_info[FI_HMEM_SYNAPSEAI].initialized = false;
 
 	ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
@@ -973,7 +997,7 @@ test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource, bool expected_us
  * 3. app's max msg size is smaller than mtu_size - prefix_size
  * 4. app doesn't use FI_DIRECTED_RECV, FI_TAGGED, FI_ATOMIC capability
  */
-void test_efa_rdm_ep_user_zcpy_rx_happy(struct efa_resource **state)
+void test_efa_rdm_ep_user_zcpy_rx_disabled(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -985,7 +1009,25 @@ void test_efa_rdm_ep_user_zcpy_rx_happy(struct efa_resource **state)
 	resource->hints->mode = FI_MSG_PREFIX;
 	resource->hints->caps = FI_MSG;
 
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, true);
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, true, true);
+}
+
+/**
+ * @brief Verify zcpy_rx is enabled if CUDA P2P is explictly disabled
+ */
+void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_happy(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->mode = FI_MSG_PREFIX;
+	resource->hints->caps = FI_MSG;
+
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, true, false, true);
 }
 
 /**
@@ -1003,7 +1045,25 @@ void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(struct efa_resource **state
 	resource->hints->mode = FI_MSG_PREFIX;
 	resource->hints->caps = FI_MSG;
 
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false);
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, true, false);
+}
+
+/**
+ * @brief Verify zcpy_rx is disabled if CUDA P2P is enabled but not supported
+ */
+void test_efa_rdm_ep_user_p2p_not_supported_zcpy_rx_happy(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->mode = FI_MSG_PREFIX;
+	resource->hints->caps = FI_MSG;
+
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, false, false);
 }
 
 void test_efa_rdm_ep_close_discard_posted_recv(struct efa_resource **state)
@@ -1039,7 +1099,7 @@ void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
 	resource->hints->caps = FI_MSG;
 
 	/* enable zero-copy recv mode in ep */
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, true);
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, true, true);
 
 	/* fi_recv should work with a recv buffer with NULL desc */
 	assert_int_equal(fi_recv(resource->ep, recv_buff, 16, NULL, FI_ADDR_UNSPEC, &cancel_context), 0);
