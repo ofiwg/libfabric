@@ -691,16 +691,18 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		if (!hdr) return rc;
 
 #ifdef OPX_HMEM
-		uint64_t hmem_device;
-		enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
+		if (buf && len) {
+			uint64_t hmem_device;
+			enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
 
-		if (iface != FI_HMEM_SYSTEM) {
-			opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf,
-						buf, len, OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
-			buf = opx_ep->hmem_copy_buf;
-			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.intranode
-							.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
-							.send.inject);
+			if (iface != FI_HMEM_SYSTEM) {
+				opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf,
+							buf, len, OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
+				buf = opx_ep->hmem_copy_buf;
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.intranode
+								.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+								.send.inject);
+			}
 		}
 #endif
 		hdr->qw[0] = opx_ep->tx->inject.hdr.qw[0] | lrh_dlid;
@@ -759,16 +761,18 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
 
 #ifdef OPX_HMEM
-	uint64_t hmem_device;
-	enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
+	if (buf && len) {
+		uint64_t hmem_device;
+		enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
 
-	if (iface != FI_HMEM_SYSTEM) {
-		opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf,
-					buf, len, OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
-		buf = opx_ep->hmem_copy_buf;
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
-						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
-						.send.inject);
+		if (iface != FI_HMEM_SYSTEM) {
+			opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf,
+						buf, len, OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
+			buf = opx_ep->hmem_copy_buf;
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
+							.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.send.inject);
+		}
 	}
 #endif
 
