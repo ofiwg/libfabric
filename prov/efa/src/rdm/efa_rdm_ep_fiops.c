@@ -433,6 +433,8 @@ static struct fi_ops efa_rdm_ep_base_ops = {
 static inline
 void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 {
+	enum fi_hmem_iface iface;
+	struct efa_hmem_info *hmem_info;
 	uint64_t unsupported_caps = FI_DIRECTED_RECV | FI_TAGGED | FI_ATOMIC;
 
 	ep->use_zcpy_rx = true;
@@ -470,6 +472,21 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 		EFA_INFO(FI_LOG_EP_CTRL, "Libfabric SHM is not turned off, zero-copy receive protocol will be disabled\n");
 		ep->use_zcpy_rx = false;
 		goto out;
+	}
+
+	/* Zero-copy receive requires P2P support. Disable it if any initialized HMEM iface does not support P2P. */
+	for (iface = FI_HMEM_SYSTEM; iface < OFI_HMEM_MAX; ++iface) {
+		hmem_info = &ep->base_ep.domain->hmem_info[iface];
+		if (hmem_info->initialized &&
+		    !hmem_info->p2p_disabled_by_user &&
+		    !hmem_info->p2p_supported_by_device) {
+			EFA_INFO(FI_LOG_EP_CTRL,
+			         "%s does not support P2P, zero-copy receive "
+			         "protocol will be disabled\n",
+			         fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+			ep->use_zcpy_rx = false;
+			goto out;
+		}
 	}
 
 out:
