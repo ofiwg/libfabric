@@ -65,6 +65,8 @@ enum fi_hmem_iface fi_opx_hmem_get_iface(const void *ptr,
 					 const struct fi_opx_mr *desc,
 					 uint64_t *device)
 {
+	assert(ptr != NULL);
+
 #ifdef OPX_HMEM
 	if (desc) {
 		switch (desc->attr.iface) {
@@ -226,7 +228,7 @@ int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_
 			}
 			break;
 #endif
-	
+
 		default:
 			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "OFI-COPY-FROM-HMEM");
 			ret = ofi_copy_from_hmem(iface, device, dest, src, len);
