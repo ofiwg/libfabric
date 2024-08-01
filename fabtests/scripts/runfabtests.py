@@ -304,7 +304,7 @@ def main():
     parser.add_argument("--junit-xml", type=str, help="path to generated junit xml report")
     parser.add_argument("--junit-logging", choices=['no', 'log', 'system-out', 'system-err', 'out-err', 'all'], type=str,
                         help="Write captured log messages to JUnit report")
-    parser.add_argument("--nworkers", type=int, default=8, help="Number of parallel test workers. Defaut is 8.")
+    parser.add_argument("--nworkers", type=int, default=16, help="Number of parallel test workers. Defaut is 16.")
 
     add_common_arguments(parser, shared_options)
 
