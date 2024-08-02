@@ -148,6 +148,8 @@ void test_info_check_hmem_cuda_support_on_api_lt_1_18();
 void test_info_check_hmem_cuda_support_on_api_ge_1_18();
 void test_info_check_no_hmem_support_when_not_requested();
 void test_efa_hmem_info_update_neuron();
+void test_efa_hmem_info_disable_p2p_neuron();
+void test_efa_hmem_info_disable_p2p_cuda();
 void test_efa_nic_select_all_devices_matches();
 void test_efa_nic_select_first_device_matches();
 void test_efa_nic_select_first_device_with_surrounding_comma_matches();
