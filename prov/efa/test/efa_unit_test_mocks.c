@@ -203,6 +203,9 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 #if HAVE_NEURON
 	.neuron_alloc = __real_neuron_alloc,
 #endif
+#if HAVE_CUDA
+	.ofi_cudaMalloc = __real_ofi_cudaMalloc,
+#endif
 	.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
 	.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,
 #if HAVE_EFADV_QUERY_MR
@@ -303,6 +306,25 @@ void *__wrap_neuron_alloc(void **handle, size_t size)
 void *efa_mock_neuron_alloc_return_null(void **handle, size_t size)
 {
 	return NULL;
+}
+
+void *efa_mock_neuron_alloc_return_mock(void **handle, size_t size)
+{
+	/* Not mocking return value so this function will fail when it is called */
+	return (void *) mock();
+}
+#endif
+
+#if HAVE_CUDA
+cudaError_t __wrap_ofi_cudaMalloc(void **ptr, size_t size)
+{
+	return g_efa_unit_test_mocks.ofi_cudaMalloc(ptr, size);
+}
+
+cudaError_t efa_mock_ofi_cudaMalloc_return_mock(void **ptr, size_t size)
+{
+	/* Not mocking return value so this function will fail when it is called */
+	return (cudaError_t) mock();
 }
 #endif
 

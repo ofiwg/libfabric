@@ -103,6 +103,10 @@ struct efa_unit_test_mocks
 	void *(*neuron_alloc)(void **handle, size_t size);
 #endif
 
+#if HAVE_CUDA
+	cudaError_t (*ofi_cudaMalloc)(void **ptr, size_t size);
+#endif
+
 	ssize_t (*ofi_copy_from_hmem_iov)(void *dest, size_t size,
 					  enum fi_hmem_iface hmem_iface, uint64_t device,
 					  const struct iovec *hmem_iov,
@@ -147,6 +151,12 @@ struct ibv_cq_ex *efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null(struct
 #if HAVE_NEURON
 void *__real_neuron_alloc(void **handle, size_t size);
 void *efa_mock_neuron_alloc_return_null(void **handle, size_t size);
+void *efa_mock_neuron_alloc_return_mock(void **handle, size_t size);
+#endif
+
+#if HAVE_CUDA
+cudaError_t __real_ofi_cudaMalloc(void **ptr, size_t size);
+cudaError_t efa_mock_ofi_cudaMalloc_return_mock(void **ptr, size_t size);
 #endif
 
 #if HAVE_EFADV_QUERY_MR
