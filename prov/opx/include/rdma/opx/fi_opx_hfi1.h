@@ -91,9 +91,16 @@
 #define OPX_MP_EGR_DISABLE_NOT_SET			(0)
 #define OPX_MP_EGR_DISABLE_DEFAULT			(OPX_MP_EGR_DISABLE_NOT_SET)
 
-#define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT	(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT+1) /* Default for payload threshold size for RZV */
-#define OPX_RZV_MIN_PAYLOAD_BYTES_MAX		(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX+1) /* Max value */
+/* Default for payload threshold size for RZV */
+#if HAVE_CUDA
+#define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT	(4096)
+#elif HAVE_ROCR
+#define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT	(256)
+#else
+#define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT	(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT+1) 
+#endif
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MIN		(FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min value */
+#define OPX_RZV_MIN_PAYLOAD_BYTES_MAX		(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX+1) /* Max value */
 
 /* The total size for a single packet used in a multi-packet eager send.
    This is packet payload plus 64 bytes for the PBC and packet header.
@@ -183,11 +190,19 @@ static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX >= OPX_MP_EGR_MAX_PAYLOAD_BYTES_D
 
 #define FI_OPX_HFI1_SDMA_MAX_COMP_INDEX			(128) // This should what opx_ep->hfi->info.sdma.queue_size is set to.
 
+/* Default for payload threshold size for SDMA */
 #ifndef FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT
+#if HAVE_CUDA
+#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(4096)
+#elif HAVE_ROCR
+#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(256)
+#else
 #define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(16385)
 #endif
-#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN		(FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES)
-#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX		(INT_MAX-1)
+#endif
+#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN		(FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min Value */
+#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX		(INT_MAX-1) /* Max Value */
+
 
 
 static_assert(!(FI_OPX_HFI1_SDMA_MAX_COMP_INDEX & (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX - 1)), "FI_OPX_HFI1_SDMA_MAX_COMP_INDEX must be power of 2!\n");
