@@ -546,9 +546,10 @@ The following option levels and option names and parameters are defined.
 	  to copy the data to initiate the transfer if peer to peer support is
 	  unavailable.
 	* FI_HMEM_P2P_DISABLED: Peer to peer support should not be used.
-: fi_setopt() will return -FI_EOPNOTSUPP if the mode requested cannot be supported
+
+  fi_setopt() will return -FI_EOPNOTSUPP if the mode requested cannot be supported
   by the provider.
-: The FI_HMEM_DISABLE_P2P environment variable discussed in
+  The FI_HMEM_DISABLE_P2P environment variable discussed in
   [`fi_mr`(3)](fi_mr.3.html) takes precedence over this setopt option.
 
 - *FI_OPT_CUDA_API_PERMITTED - bool*
