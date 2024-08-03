@@ -124,8 +124,9 @@ DEPRECATED ssize_t fi_tx_size_left(struct fid_ep *ep);
   associated resource.
 
 *info*
-: Details about the fabric interface endpoint to be opened, obtained
-  from fi_getinfo.
+: Details about the fabric interface endpoint to be opened.
+  The struct fi_info must have been obtained using either fi_getinfo()
+  or fi_dupinfo().
 
 *ep*
 : A fabric endpoint.
@@ -484,34 +485,6 @@ and must be called before the endpoint is enabled (fi_enable).
 The following option levels and option names and parameters are defined.
 
 *FI_OPT_ENDPOINT*
-
-- *FI_OPT_BUFFERED_LIMIT - size_t*
-: Defines the maximum size of a buffered message that will be reported
-  to users as part of a receive completion when the FI_BUFFERED_RECV mode
-  is enabled on an endpoint.
-
-  fi_getopt() will return the currently configured threshold, or the
-  provider's default threshold if one has not be set by the application.
-  fi_setopt() allows an application to configure the threshold.  If the
-  provider cannot support the requested threshold, it will fail the
-  fi_setopt() call with FI_EMSGSIZE.  Calling fi_setopt() with the
-  threshold set to SIZE_MAX will set the threshold to the maximum
-  supported by the provider.  fi_getopt() can then be used to retrieve
-  the set size.
-
-  In most cases, the sending and receiving endpoints must be
-  configured to use the same threshold value, and the threshold must be
-  set prior to enabling the endpoint.
-
-- *FI_OPT_BUFFERED_MIN - size_t*
-: Defines the minimum size of a buffered message that will be reported.
-  Applications would set this to a size that's big enough to decide whether
-  to discard or claim a buffered receive or when to claim a buffered receive
-  on getting a buffered receive completion. The value is typically used by a
-  provider when sending a rendezvous protocol request where it would send
-  at least FI_OPT_BUFFERED_MIN bytes of application data along with it. A smaller
-  sized rendezvous protocol message usually results in better latency for the
-  overall transfer of a large message.
 
 - *FI_OPT_CM_DATA_SIZE - size_t*
 : Defines the size of available space in CM messages for user-defined
@@ -1044,13 +1017,18 @@ Message order is determined using a set of ordering bits.  Each set
 bit indicates that ordering is maintained between data transfers of
 the specified type.  Message order is defined for [read | write |
 send] operations submitted by an application after [read | write |
-send] operations.
+send] operations.  Value 0 indicates that no ordering is specified.
+Value 0 may be used as input in order to obtain the default message
+order supported by the provider.
 
 Message ordering only applies to the end to end transmission of transport
 headers.  Message ordering is necessary, but does not guarantee, the order in
 which message data is sent or received by the transport layer.  Message
 ordering requires matching ordering semantics on the receiving side of a data
 transfer operation in order to guarantee that ordering is met.
+
+*FI_ORDER_NONE* (deprecated)
+: This is an alias for value 0. It is deprecated and should not be used.
 
 *FI_ORDER_ATOMIC_RAR*
 : Atomic read after read.  If set, atomic fetch operations are
@@ -1075,11 +1053,6 @@ transfer operation in order to guarantee that ordering is met.
   transmitted in the order submitted relative to other atomic
   update operations.  If not atomic updates may be
   transmitted out of order from their submission.
-
-*FI_ORDER_NONE*
-: No ordering is specified.  This value may be used as input in order
-  to obtain the default message order supported by the provider. FI_ORDER_NONE
-  is an alias for the value 0.
 
 *FI_ORDER_RAR*
 : Read after read.  If set, RMA and atomic read operations are
@@ -1161,34 +1134,19 @@ transfer operation in order to guarantee that ordering is met.
 
 ## comp_order - Completion Ordering
 
+This field is provided for version 1 compatibility and should be set
+to 0.
+
+**Deprecated**
+
 Completion ordering refers to the order in which completed requests are
-written into the completion queue.  Completion ordering is similar to
-message order.  Relaxed completion order may enable faster reporting of
-completed transfers, allow acknowledgments to be sent over different
-fabric paths, and support more sophisticated retry mechanisms.
-This can result in lower-latency completions, particularly when
-using connectionless endpoints.  Strict completion ordering may require
-that providers queue completed operations or limit available optimizations.
+written into the completion queue.  Supported completion order values are:
 
-For transmit requests, completion ordering depends on the endpoint
-communication type.  For unreliable communication, completion ordering
-applies to all data transfer requests submitted to an endpoint.
-For reliable communication, completion ordering only applies to requests
-that target a single destination endpoint.  Completion ordering of
-requests that target different endpoints over a reliable transport
-is not defined.
-
-Applications should specify the completion ordering that they support
-or require.  Providers should return the completion order that they
-actually provide, with the constraint that the returned ordering is
-stricter than that specified by the application.  Supported completion
-order values are:
-
-*FI_ORDER_NONE*
+*FI_ORDER_NONE* (deprecated)
 : No ordering is defined for completed operations.  Requests submitted
   to the transmit context may complete in any order.
 
-*FI_ORDER_STRICT*
+*FI_ORDER_STRICT* (deprecated)
 : Requests complete in the order in which they are submitted to the
   transmit context.
 
@@ -1296,7 +1254,6 @@ struct fi_rx_attr {
 	uint64_t  op_flags;
 	uint64_t  msg_order;
 	uint64_t  comp_order;
-	size_t    total_buffered_recv;
 	size_t    size;
 	size_t    iov_limit;
 };
@@ -1351,7 +1308,7 @@ that messages will be handled in order based on a message level sequence
 number.
 
 The following ordering flags, as defined for transmit ordering, also
-apply to the processing of received operations: FI_ORDER_NONE,
+apply to the processing of received operations:
 FI_ORDER_RAR, FI_ORDER_RAW, FI_ORDER_RAS, FI_ORDER_WAR, FI_ORDER_WAW,
 FI_ORDER_WAS, FI_ORDER_SAR, FI_ORDER_SAW, FI_ORDER_SAS, FI_ORDER_RMA_RAR,
 FI_ORDER_RMA_RAW, FI_ORDER_RMA_WAR, FI_ORDER_RMA_WAW, FI_ORDER_ATOMIC_RAR,
@@ -1359,39 +1316,31 @@ FI_ORDER_ATOMIC_RAW, FI_ORDER_ATOMIC_WAR, and FI_ORDER_ATOMIC_WAW.
 
 ## comp_order - Completion Ordering
 
-For a description of completion ordering, see the comp_order field in
-the _Transmit Context Attribute_ section.
+This field is provided for version 1 compatibility and should be set
+to 0.
 
-*FI_ORDER_DATA*
+**Deprecated**
+
+Completion ordering refers to the order in which completed requests are
+written into the completion queue.  Supported completion order values are:
+
+*FI_ORDER_DATA* (deprecated)
 : When set, this bit indicates that received data is written into memory
   in order.  Data ordering applies to memory accessed as part of a single
   operation and between operations if message ordering is guaranteed.
 
-*FI_ORDER_NONE*
-: No ordering is defined for completed operations.  Receive operations may
-  complete in any order, regardless of their submission order.
+*FI_ORDER_NONE* (deprecated)
+: No ordering is defined for completed operations.  Requests submitted
+  to the transmit context may complete in any order.
 
-*FI_ORDER_STRICT*
-: Receive operations complete in the order in which they are processed by
-  the receive context, based on the receive side msg_order attribute.
+*FI_ORDER_STRICT* (deprecated)
+: Requests complete in the order in which they are submitted to the
+  transmit context.
 
 ## total_buffered_recv
 
-This field is supported for backwards compatibility purposes.
-It is a hint to the provider of the total available space
-that may be needed to buffer messages that are received for which there
-is no matching receive operation.  The provider may adjust or ignore
-this value.  The allocation of internal network buffering among received
-message is provider specific.  For instance, a provider may limit the size
-of messages which can be buffered or the amount of buffering allocated to
-a single message.
-
-If receive side buffering is disabled (total_buffered_recv = 0)
-and a message is received by an endpoint, then the behavior is dependent on
-whether resource management has been enabled (FI_RM_ENABLED has be set or not).
-See the Resource Management section of fi_domain.3 for further clarification.
-It is recommended that applications enable resource management if they
-anticipate receiving unexpected messages, rather than modifying this value.
+This field is provided for version 1 compatibility and should be set
+to 0.
 
 ## size
 
@@ -1673,7 +1622,7 @@ can return provider info structures that can support the minimal set
 of requirements (such that the application maintains correctness).
 However, it can also return provider info structures that exceed
 application requirements. As an example, consider an application
-requesting msg_order as FI_ORDER_NONE. The resulting output from
+requesting no msg_order. The resulting output from
 fi_getinfo may have all the ordering bits set. The application can reset
 the ordering bits it does not require before creating the endpoint.
 The provider is free to implement a stricter ordering than is

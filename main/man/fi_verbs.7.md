@@ -58,7 +58,7 @@ Verbs provider requires applications to support the following modes:
 
 #### FI_EP_MSG endpoint type
 
-  * FI_LOCAL_MR / FI_MR_LOCAL mr mode.
+  * FI_MR_LOCAL mr mode.
 
   * FI_RX_CQ_DATA for applications that want to use RMA. Applications must
     take responsibility of posting receives for any incoming CQ data.
@@ -94,11 +94,6 @@ Verbs provider support the following message ordering:
   * Send after Write
 
   * Send after Send
-
-and the following completion ordering:
-
-  * TX contexts: FI_ORDER_STRICT
-  * RX contexts: FI_ORDER_DATA
 
 ### Fork
 Verbs provider does not provide fork safety by default. Fork safety can be requested
