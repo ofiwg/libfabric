@@ -136,7 +136,7 @@ struct fi_cq_attr {
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
 	int                  signaling_vector; /* interrupt affinity */
 	enum fi_cq_wait_cond wait_cond; /* wait condition format */
-	struct fid_wait     *wait_set;  /* optional wait set */
+	struct fid_wait     *wait_set;  /* optional wait set, deprecated */
 };
 ```
 
@@ -222,7 +222,8 @@ struct fi_cq_tagged_entry {
   CQ, in order to use it in other system calls.  The following values
   may be used to specify the type of wait object associated with a
   CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_SET, FI_WAIT_FD,
-  FI_WAIT_MUTEX_COND, and FI_WAIT_YIELD.  The default is FI_WAIT_NONE.
+  FI_WAIT_MUTEX_COND (deprecated), and FI_WAIT_YIELD.  The default is
+  FI_WAIT_NONE.
 
 - *FI_WAIT_NONE*
 : Used to indicate that the user will not block (wait) for completions
@@ -237,7 +238,7 @@ struct fi_cq_tagged_entry {
   mechanisms.  Applications that select FI_WAIT_UNSPEC are not
   guaranteed to retrieve the underlying wait object.
 
-- *FI_WAIT_SET*
+- *FI_WAIT_SET* (deprecated)
 : Indicates that the completion queue should use a wait set object to
   wait for completions.  If specified, the wait_set field must
   reference an existing wait set object.
@@ -248,7 +249,7 @@ struct fi_cq_tagged_entry {
   poll, and epoll routines.  However, a provider may signal an FD wait
   object by marking it as readable, writable, or with an error.
 
-- *FI_WAIT_MUTEX_COND*
+- *FI_WAIT_MUTEX_COND* (deprecated)
 : Specifies that the CQ should use a pthread mutex and cond variable
   as a wait object.
 
@@ -286,7 +287,7 @@ struct fi_cq_tagged_entry {
 
   This field is ignored if wait_obj is set to FI_WAIT_NONE.
 
-*wait_set*
+*wait_set* (deprecated)
 : If wait_obj is FI_WAIT_SET, this field references a wait object to
   which the completion queue should attach.  When an event is inserted
   into the completion queue, the corresponding wait set will be
@@ -631,20 +632,6 @@ operation.  The following completion flags are defined.
   If other flag bits are zero, the provider is reporting that the multi-recv
   buffer has been released, and the completion entry is not associated
   with a received message.
-
-*FI_MORE*
-: See the 'Buffered Receives' section in `fi_msg`(3) for more details.
-  This flag is associated with receive completions on endpoints that
-  have FI_BUFFERED_RECV mode enabled.  When set to one, it indicates that
-  the buffer referenced by the completion is limited by the
-  FI_OPT_BUFFERED_LIMIT threshold, and additional message data must be
-  retrieved by the application using an FI_CLAIM operation.
-
-*FI_CLAIM*
-: See the 'Buffered Receives' section in `fi_msg`(3) for more details.
-  This flag is set on completions associated with receive operations
-  that claim buffered receive data.  Note that this flag only applies
-  to endpoints configured with the FI_BUFFERED_RECV mode bit.
 
 # COMPLETION EVENT SEMANTICS
 

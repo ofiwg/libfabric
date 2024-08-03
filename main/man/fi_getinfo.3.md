@@ -42,7 +42,8 @@ struct fi_info *fi_dupinfo(const struct fi_info *info);
 
 *hints*
 : Reference to an fi_info structure that specifies criteria for
-  selecting the returned fabric information.
+  selecting the returned fabric information.  The fi_info hints
+  structure must be allocated using either fi_allocinfo() or fi_dupinfo().
 
 *info*
 : A pointer to a linked list of fi_info structures containing response
@@ -495,17 +496,6 @@ supported set of modes will be returned in the info structure(s).
   related memory descriptor array, until the associated
   operation has completed.
 
-*FI_BUFFERED_RECV*
-: The buffered receive mode bit indicates that the provider owns the
-  data buffer(s) that are accessed by the networking layer for received
-  messages.  Typically, this implies that data must be copied from the
-  provider buffer into the application buffer.  Applications that can
-  handle message processing from network allocated data buffers can set
-  this mode bit to avoid copies.  For full details on application
-  requirements to support this mode, see the 'Buffered Receives' section
-  in [`fi_msg`(3)](fi_msg.3.html).  This mode bit applies to FI_MSG and
-  FI_TAGGED receive operations.
-
 *FI_CONTEXT*
 : Specifies that the provider requires that applications use struct
   fi_context as their per operation context parameter for operations
@@ -536,7 +526,7 @@ supported set of modes will be returned in the info structure(s).
   The requirements for using struct fi_context2 are identical as
   defined for FI_CONTEXT above.
 
-*FI_LOCAL_MR*
+*FI_LOCAL_MR* (deprecated)
 : The provider is optimized around having applications register memory
   for locally accessed data buffers.  Data buffers used in send and
   receive operations and as the source buffer for RMA and atomic
@@ -709,6 +699,12 @@ via fi_freeinfo().
 : Indicates that requested version is newer than the library being used.
 
 # NOTES
+
+Various libfabric calls, including fi_getinfo, take a struct fi_info as
+input.  Applications must use libfabric allocated fi_info structures.
+A zeroed struct fi_info can be allocated using fi_allocinfo, which may
+then be initialized by the user.  A struct fi_info may be copied for
+modification using the fi_dupinfo() call.
 
 If hints are provided, the operation will be controlled by the values
 that are supplied in the various fields (see section on _fi_info_).
