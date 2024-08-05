@@ -1,0 +1,21 @@
+name: 'Cornelis'
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types:
+      - labeled
+      - opened
+      - reopened
+      - synchronize
+    branches:
+      - main
+    paths-ignore:
+      - 'man/**'
+      - 'docs/**'
+
+jobs:
+  opx-ci:
+    name: OPX CI
+    if: github.repository == 'cornelisnetworks/libfabric-internal'
+    uses: cornelisnetworks/libfabric-devel/.github/workflows/cn.yml@master
