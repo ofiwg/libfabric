@@ -223,7 +223,7 @@ int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_
 			} else {
 				/* Perform standard rocr_memcopy*/
 				OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "AMD-ROCR-MEMCOPY-FROM-HMEM");
-				ret = rocr_copy_to_dev(device, dest, src, len);
+				ret = rocr_copy_from_dev(device, dest, src, len);
 				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "AMD-ROCR-MEMCOPY-FROM-HMEM");
 			}
 			break;
