@@ -1,0 +1,3 @@
+# Regex patterns of tests to exclude in runfabtests.sh
+# Exclude av_test tests. Lpp supports FABREX types only
+av_test

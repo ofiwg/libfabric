@@ -1,0 +1,66 @@
+#
+# Copyright (c) 2018-2024 GigaIO, Inc. All Rights Reserved.
+#
+# This software is available to you under a choice of one of two
+# licenses.  You may choose to be licensed under the terms of the GNU
+# General Public License (GPL) Version 2, available from the file
+# COPYING in the main directory of this source tree, or the
+# BSD license below:
+#
+#     Redistribution and use in source and binary forms, with or
+#     without modification, are permitted provided that the following
+#     conditions are met:
+#
+#      - Redistributions of source code must retain the above
+#        copyright notice, this list of conditions and the following
+#        disclaimer.
+#
+#      - Redistributions in binary form must reproduce the above
+#        copyright notice, this list of conditions and the following
+#        disclaimer in the documentation and/or other materials
+#        provided with the distribution.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+# BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+# ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+
+LPP_REGRESSION_SRCS = prov/lpp/src/rcq_data.c \
+                      prov/lpp/src/main.c \
+                      prov/lpp/src/ipc.c \
+                      prov/lpp/src/ipc.h \
+                      prov/lpp/src/error.c \
+                      prov/lpp/src/error.h \
+                      prov/lpp/src/test_util.c \
+                      prov/lpp/src/test_util.h \
+                      prov/lpp/src/rma.c \
+                      prov/lpp/src/msg.c \
+                      prov/lpp/src/atomic.c \
+                      prov/lpp/src/test.h
+
+bin_PROGRAMS += prov/lpp/src/lpp_regression
+AM_CFLAGS += -I../prov/lpp/include
+
+if HAVE_CUDA
+AM_CFLAGS += -DUSE_CUDA
+endif
+
+if HAVE_ROCR
+AM_CFLAGS += -DUSE_ROCM
+endif
+
+if HAVE_HMEM
+LPP_REGRESSION_SRCS += prov/lpp/src/hmem_util.c \
+                       prov/lpp/src/hmem_cuda.c \
+                       prov/lpp/src/hmem_rocm.c \
+                       prov/lpp/src/hmem_htil.h
+AM_CFLAGS += -DUSE_HMEM
+endif
+
+prov_lpp_src_lpp_regression_SOURCES = $(LPP_REGRESSION_SRCS)
+prov_lpp_src_lpp_regression_LDADD = libfabtests.la

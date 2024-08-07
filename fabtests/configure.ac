@@ -140,6 +140,8 @@ AC_ARG_WITH([cuda],
 AC_DEFINE_UNQUOTED([HAVE_CUDA_RUNTIME_H], [$have_cuda],
             [Define to 1 if you have <cuda_runtime.h>])
 
+AM_CONDITIONAL([HAVE_CUDA], [test $have_cuda -eq 1])
+
 AS_IF([test x"$have_cuda" = x"1"],
       [
             have_cuda_dmabuf=1
@@ -162,6 +164,7 @@ AS_IF([test x"$have_cuda" = x"1"],
 AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF], [$have_cuda_dmabuf], [CUDA dmabuf support])
 
 dnl Check for ROCR support. Require fabtests to dlopen ROCR.
+have_rocr=0
 AC_ARG_WITH([rocr],
             [AS_HELP_STRING([--with-rocr=DIR],
                             [Provide path to where the ROCR development
@@ -170,11 +173,15 @@ AC_ARG_WITH([rocr],
                    [AC_CHECK_LIB(dl, dlopen, [], [AC_MSG_ERROR([dlopen not found.])])],
                    [])
              CPPFLAGS="-I$withval/include $CPPFLAGS"
+             have_rocr=0
              AC_CHECK_HEADER([hsa/hsa.h],
                              [AC_DEFINE([HAVE_ROCR_RUNTIME_H], [1],
                                         [Define to 1 if you have <hsa/hsa.h>])],
                              [AC_MSG_ERROR([<hsa/hsa.h> not found])])],
             [])
+
+AM_CONDITIONAL([HAVE_ROCR], [test $have_rocr -eq 1])
+AM_CONDITIONAL([HAVE_HMEM], [[test $have_rocr -eq 1] || [test $have_cuda -eq 1]])
 
 dnl Check for Neuron support.
 AC_ARG_WITH([neuron],
