@@ -608,6 +608,7 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "PKE entries exhausted.\n");
+		efa_rdm_txe_release(txe);
 		return -FI_EAGAIN;
 	}
 
@@ -618,6 +619,7 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
 	if (OFI_UNLIKELY(ret)) {
 		efa_rdm_pke_release_tx(pkt_entry);
+		efa_rdm_txe_release(txe);
 	}
 	return ret;
 }

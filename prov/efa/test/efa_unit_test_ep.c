@@ -1107,3 +1107,66 @@ void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
 	assert_int_equal(fi_cancel((struct fid *)resource->ep, &cancel_context), -FI_EOPNOTSUPP);
 
 }
+
+/**
+ * @brief when efa_rdm_ep_post_handshake_error failed due to pkt pool exhaustion, 
+ * make sure both txe is cleaned
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(struct efa_resource **state)
+{
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t peer_addr;
+	int err, numaddr;
+	struct efa_rdm_pke **pkt_entry_vec;
+	int i;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	/* create a fake peer */
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(numaddr, 1);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	/* close shm_ep to force efa_rdm_ep to use efa device to send */
+	if (efa_rdm_ep->shm_ep) {
+		err = fi_close(&efa_rdm_ep->shm_ep->fid);
+		assert_int_equal(err, 0);
+		efa_rdm_ep->shm_ep = NULL;
+	}
+	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make efa_rdm_atomic() think
+	 * a REQ packet has been sent to the peer (so no need to send again)
+	 * handshake has not been received, so we do not know whether the peer support DC
+	 */
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer->flags = EFA_RDM_PEER_REQ_SENT;
+	peer->is_local = false;
+
+	pkt_entry_vec = calloc(efa_rdm_ep->tx_size, sizeof(struct efa_rdm_pke *));
+	assert_non_null(pkt_entry_vec);
+
+	/* Exhaust the tx pkt pool */
+	for (i = 0; i < efa_rdm_ep->tx_size; i++) {
+		pkt_entry_vec[i] = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		assert_non_null(pkt_entry_vec[i]);
+	}
+
+	/* txe list should be empty before and after the failed handshake post call */
+	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_int_equal(efa_rdm_ep_post_handshake(efa_rdm_ep, peer), -FI_EAGAIN);
+	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+
+	for (i = 0; i < efa_rdm_ep->tx_size; i++)
+		efa_rdm_pke_release_tx(pkt_entry_vec[i]);
+
+	free(pkt_entry_vec);
+}
