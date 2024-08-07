@@ -1,0 +1,20 @@
+Building
+========
+Lpp_regression is build as part of tabtests.
+Follow the usuall steps to build it:
+./configure && make && sudo make install
+
+Running
+=======
+The libfabric .so file must either be in the system lib path or LD_LIBRARY_PATH
+must be set accordingly. To run the basic test, run the following on both test
+nodes:
+
+user@node1 $ FI_LPP_MAX_EAGER_SIZE=2048 ./lpp_regression
+user@node2 $ FI_LPP_MAX_EAGER_SIZE=2048 ./lpp_regression
+
+If the hosts are not preconfigured in the test code, information about the peer
+node must also be specified:
+
+user@node1 $ FI_LPP_MAX_EAGER_SIZE=2048 ./lpp_regression -P node2 -N 0
+user@node2 $ FI_LPP_MAX_EAGER_SIZE=2048 ./lpp_regression -P node1 -N 1

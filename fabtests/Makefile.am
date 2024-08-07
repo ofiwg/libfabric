@@ -135,6 +135,11 @@ nobase_dist_config_DATA = \
 	test_configs/sm2/verify.test \
 	test_configs/efa/efa-neuron.exclude \
 	test_configs/efa/efa.exclude \
+	test_configs/lpp/all.test \
+	test_configs/lpp/complete.test \
+	test_configs/lpp/lpp.exclude \
+	test_configs/lpp/quick.test \
+	test_configs/lpp/verify.test \
 	test_configs/ucx/all.test \
 	test_configs/ucx/quick.test \
 	test_configs/ucx/ucx.exclude \
@@ -670,6 +675,9 @@ nroff:
         done
 
 include prov/efa/Makefile.include
+if !MACOS
+include prov/lpp/Makefile.include
+endif
 
 man_MANS = $(real_man_pages) $(dummy_man_pages)
 
