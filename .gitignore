@@ -80,6 +80,7 @@ fabtests/functional/fi_*
 fabtests/unit/fi_*
 fabtests/multinode/fi_*
 fabtests/prov/efa/src/fi_efa*
+fabtests/prov/lpp/src/lpp_regression
 pingpong/fi_*
 
 fabtests/pytest/__pycache__

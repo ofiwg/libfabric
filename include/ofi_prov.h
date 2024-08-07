@@ -304,6 +304,21 @@ UCX_INI ;
 #  define UCX_INIT NULL
 #endif
 
+#if defined(_WIN32) && (HAVE_LPP)
+#  define LPP_INIT NULL
+#else
+#  if (HAVE_LPP) && (HAVE_LPP_DL)
+#    define LPP_INI FI_EXT_INI
+#    define LPP_INIT NULL
+#  elif (HAVE_LPP)
+#    define LPP_INI INI_SIG(fi_lpp_ini)
+#    define LPP_INIT fi_lpp_ini()
+LPP_INI ;
+#  else
+#    define LPP_INIT NULL
+#  endif
+#endif
+
 /* the utility collective provider is always enabled and built-in */
 #define COLL_INI INI_SIG(fi_coll_ini)
 #define COLL_INIT fi_coll_ini()

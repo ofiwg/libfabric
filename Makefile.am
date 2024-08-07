@@ -3,6 +3,7 @@
 # Copyright (c) 2017-2018 Intel Corporation, Inc. All right reserved.
 # Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
 # (C) Copyright 2020-2023 Hewlett Packard Enterprise Development LP
+# Copyright (c) 2018-2024 GigaIO, Inc.  All right reserved.
 #
 # Makefile.am for libfabric
 
@@ -479,6 +480,7 @@ include prov/shm/Makefile.include
 include prov/sm2/Makefile.include
 include prov/tcp/Makefile.include
 include prov/ucx/Makefile.include
+include prov/lpp/Makefile.include
 include prov/hook/Makefile.include
 include prov/hook/perf/Makefile.include
 include prov/hook/trace/Makefile.include
