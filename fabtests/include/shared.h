@@ -208,6 +208,7 @@ struct ft_opts {
 	int force_prefix;
 	enum fi_hmem_iface iface;
 	uint64_t device;
+	enum fi_threading threading;
 
 	char **argv;
 };
@@ -286,7 +287,7 @@ extern int listen_sock;
 #define ADDR_OPTS "B:P:s:a:b::E::C:F:O:"
 #define FAB_OPTS "f:d:p:K"
 #define HMEM_OPTS "D:i:HR"
-#define INFO_OPTS FAB_OPTS HMEM_OPTS "e:M:"
+#define INFO_OPTS FAB_OPTS HMEM_OPTS "e:M:T:"
 #define CS_OPTS ADDR_OPTS "I:QS:mc:t:w:l"
 #define API_OPTS "o:"
 #define NO_CQ_DATA 0
@@ -313,7 +314,8 @@ extern char default_port[8];
 		.iface = FI_HMEM_SYSTEM, \
 		.device = 0, \
 		.argc = argc, .argv = argv, \
-		.address_format = FI_FORMAT_UNSPEC \
+		.address_format = FI_FORMAT_UNSPEC, \
+		.threading = FI_THREAD_DOMAIN \
 	}
 
 #define FT_STR_LEN 32
