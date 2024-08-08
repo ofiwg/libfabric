@@ -916,7 +916,7 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 	}
 	cmd_ctx->ep = ep;
 
-	rx_entry->size = cmd->msg.hdr.size;
+	rx_entry->msg_size = cmd->msg.hdr.size;
 	if (cmd->msg.hdr.op_flags & SMR_REMOTE_CQ_DATA) {
 		rx_entry->flags |= FI_REMOTE_CQ_DATA;
 		rx_entry->cq_data = cmd->msg.hdr.data;
@@ -972,14 +972,15 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 {
 	struct fid_peer_srx *peer_srx = smr_get_peer_srx(ep);
+	struct fi_peer_match_attr attr;
 	struct fi_peer_rx_entry *rx_entry;
-	fi_addr_t addr;
 	int ret;
 
-	addr = ep->region->map->peers[cmd->msg.hdr.id].fiaddr;
+	attr.addr = ep->region->map->peers[cmd->msg.hdr.id].fiaddr;
+	attr.msg_size = cmd->msg.hdr.size;
+	attr.tag = cmd->msg.hdr.tag;
 	if (cmd->msg.hdr.op == ofi_op_tagged) {
-		ret = peer_srx->owner_ops->get_tag(peer_srx, addr,
-				cmd->msg.hdr.tag, &rx_entry);
+		ret = peer_srx->owner_ops->get_tag(peer_srx, &attr, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
 			if (ret) {
@@ -995,8 +996,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 			goto out;
 		}
 	} else {
-		ret = peer_srx->owner_ops->get_msg(peer_srx, addr,
-				cmd->msg.hdr.size, &rx_entry);
+		ret = peer_srx->owner_ops->get_msg(peer_srx, &attr, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
 			if (ret) {
