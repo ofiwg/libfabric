@@ -327,7 +327,7 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 	//Status must be set last (signals peer: op done, valid resp entry)
 	resp->status = -ret;
 
-	return -ret;
+	return ret;
 }
 
 static int smr_mmap_peer_copy(struct smr_ep *ep, struct smr_cmd *cmd,
@@ -585,7 +585,7 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 	else if (hmem_copy_ret != cmd->msg.hdr.size)
 		*err = -FI_ETRUNC;
 	else
-		*err = ret;
+		*err = FI_SUCCESS;
 
 	*total_len = hmem_copy_ret;
 
@@ -719,7 +719,7 @@ static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 	uint64_t comp_flags;
 	void *comp_buf;
 	int ret;
-	uint64_t err = 0;
+	int err = 0;
 
 	switch (cmd->msg.hdr.op_src) {
 	case smr_src_inline:
@@ -752,7 +752,7 @@ static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 		pend = smr_progress_ipc(cmd, rx_entry,
 				(struct ofi_mr **) rx_entry->desc,
 				rx_entry->iov, rx_entry->count,
-				&total_len, ep, (int*)&err);
+				&total_len, ep, &err);
 		break;
 	default:
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -770,7 +770,7 @@ static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 			ret = smr_write_err_comp(ep->util_ep.rx_cq,
 						 rx_entry->context,
 						 comp_flags, rx_entry->tag,
-						 err);
+						 -err);
 		} else {
 			ret = smr_complete_rx(ep, rx_entry->context, cmd->msg.hdr.op,
 					      comp_flags, total_len, comp_buf,
@@ -1109,7 +1109,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd,
 			"error processing rma op\n");
 		ret = smr_write_err_comp(ep->util_ep.rx_cq, NULL,
 					 smr_rx_cq_flags(cmd->msg.hdr.op, 0,
-					 cmd->msg.hdr.op_flags), 0, err);
+					 cmd->msg.hdr.op_flags), 0, -err);
 	} else {
 		ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id,
 			      cmd->msg.hdr.op, smr_rx_cq_flags(cmd->msg.hdr.op,
