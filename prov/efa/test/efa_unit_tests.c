@@ -56,6 +56,9 @@ static int efa_unit_test_mocks_teardown(void **state)
 #if HAVE_NEURON
 		.neuron_alloc = __real_neuron_alloc,
 #endif
+#if HAVE_CUDA
+		.ofi_cudaMalloc = __real_ofi_cudaMalloc,
+#endif
 		.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
 		.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,
 	};
@@ -148,6 +151,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_opt0, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_opt_old, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_update_neuron, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hmem_info_disable_p2p_neuron, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hmem_info_disable_p2p_cuda, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_min_multi_recv_size, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_cq, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_lock, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
