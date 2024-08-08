@@ -417,14 +417,15 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru);
  * a new ofi_mr_entry and assign it to entry.
  *
  * @param[in] cache     The cache the entry belongs to
- * @param[in] info      Information about the mr entry to search
+ * @param[in out] info  Information about the mr entry to search. Info IOV may
+ *			be updated by providers to reflect region registered by
+ *			the provider.
  * @param[out] entry    The registered entry corresponding to the
  *			region described in info.
  * @returns On success, returns 0. On failure, returns a negative error code.
  */
-int ofi_mr_cache_search(struct ofi_mr_cache *cache,
-			 const struct ofi_mr_info *info,
-			 struct ofi_mr_entry **entry);
+int ofi_mr_cache_search(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
+			struct ofi_mr_entry **entry);
 
 /**
  * Given an attr (with an iov range), if the iov range is already registered,

@@ -267,7 +267,7 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
  * restart the entire operation.
  */
 static int
-util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
+util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 		     struct ofi_mr_entry **entry)
 {
 	struct ofi_mr_entry *cur;
@@ -290,6 +290,12 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 	ret = cache->add_region(cache, *entry);
 	if (ret)
 		goto free;
+
+	/* Providers may have expanded the MR. Update MR info input
+	 * accordingly.
+	 */
+	assert(ofi_iov_within(&(*info).iov, &(*entry)->info.iov));
+	*info = (*entry)->info;
 
 	pthread_mutex_lock(&mm_lock);
 	cur = ofi_mr_rbt_find(&cache->tree, info);
@@ -329,7 +335,7 @@ free:
 	return ret;
 }
 
-int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
+int ofi_mr_cache_search(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 			struct ofi_mr_entry **entry)
 {
 	struct ofi_mem_monitor *monitor;
