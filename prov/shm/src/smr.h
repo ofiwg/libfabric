@@ -290,7 +290,7 @@ typedef ssize_t (*smr_proto_func)(struct smr_ep *ep, struct smr_region *peer_smr
 extern smr_proto_func smr_proto_ops[smr_src_max];
 
 int smr_write_err_comp(struct util_cq *cq, void *context,
-		       uint64_t flags, uint64_t tag, uint64_t err);
+		       uint64_t flags, uint64_t tag, int err);
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 		    uint64_t flags);
 int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
