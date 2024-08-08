@@ -752,16 +752,18 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 						     struct efa_rdm_pke **pkt_entry_ptr)
 {
 	struct fid_peer_srx *peer_srx;
+	struct fi_peer_match_attr attr;
 	struct fi_peer_rx_entry *peer_rxe;
 	struct efa_rdm_ope *rxe;
-	size_t data_size;
 	int ret;
 	int pkt_type;
 
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
-	data_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
 
-	ret = peer_srx->owner_ops->get_msg(peer_srx, (*pkt_entry_ptr)->addr, data_size, &peer_rxe);
+	attr.addr = (*pkt_entry_ptr)->addr;
+	attr.msg_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
+	attr.tag = 0;
+	ret = peer_srx->owner_ops->get_msg(peer_srx, &attr, &peer_rxe);
 
 	if (ret == FI_SUCCESS) { /* A matched rxe is found */
 		rxe = efa_rdm_msg_alloc_matched_rxe_for_rtm(ep, *pkt_entry_ptr, peer_rxe, ofi_op_msg);
@@ -819,16 +821,18 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 						     struct efa_rdm_pke **pkt_entry_ptr)
 {
 	struct fid_peer_srx *peer_srx;
+	struct fi_peer_match_attr attr;
 	struct fi_peer_rx_entry *peer_rxe;
 	struct efa_rdm_ope *rxe;
 	int ret;
 	int pkt_type;
 
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+	attr.addr = (*pkt_entry_ptr)->addr;
+	attr.msg_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
+	attr.tag = efa_rdm_pke_get_rtm_tag(*pkt_entry_ptr);
 
-	ret = peer_srx->owner_ops->get_tag(peer_srx, (*pkt_entry_ptr)->addr,
-					   efa_rdm_pke_get_rtm_tag(*pkt_entry_ptr),
-					   &peer_rxe);
+	ret = peer_srx->owner_ops->get_tag(peer_srx, &attr, &peer_rxe);
 
 	if (ret == FI_SUCCESS) { /* A matched rxe is found */
 		rxe = efa_rdm_msg_alloc_matched_rxe_for_rtm(ep, *pkt_entry_ptr, peer_rxe, ofi_op_tagged);
@@ -850,7 +854,6 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 		}
 		(*pkt_entry_ptr)->ope = rxe;
 
-		peer_rxe->size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
 		if (efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->flags &
 		    EFA_RDM_REQ_OPT_CQ_DATA_HDR) {
 			peer_rxe->flags |= FI_REMOTE_CQ_DATA;
