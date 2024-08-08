@@ -78,6 +78,12 @@ enum {
 	FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES, /* bool */
 };
 
+enum {
+	/* null terminated string, <low port>-<high port> */
+	FI_TCP_DOMAIN_ACTIVE_PORT_RANGE = -FI_PROV_SPECIFIC_TCP,
+	FI_TCP_FABRIC_PASSIVE_PORT_RANGE,
+};
+
 struct fi_fid_export {
 	struct fid **fid;
 	uint64_t flags;

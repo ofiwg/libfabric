@@ -171,6 +171,8 @@ void xnet_connect_done(struct xnet_ep *ep);
 void xnet_req_done(struct xnet_ep *ep);
 int xnet_send_cm_msg(struct xnet_ep *ep);
 void xnet_uring_req_done(struct xnet_ep *ep, int res);
+int xnet_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen,
+			    struct xnet_port_range *range);
 
 /* Inject buffer space is included */
 union xnet_hdrs {
@@ -471,6 +473,7 @@ struct xnet_domain {
 	struct util_domain		util_domain;
 	struct xnet_progress		progress;
 	enum fi_ep_type			ep_type;
+	struct xnet_port_range		active_ports;
 };
 
 static inline struct xnet_progress *xnet_ep2_progress(struct xnet_ep *ep)

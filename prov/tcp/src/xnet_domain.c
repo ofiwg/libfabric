@@ -199,11 +199,55 @@ static int xnet_domain_close(fid_t fid)
 	return FI_SUCCESS;
 }
 
+static int xnet_domain_set_val(struct xnet_domain *domain,
+			       int name,
+			       void *val)
+{
+	int high, low;
+
+	switch (name) {
+	case FI_TCP_DOMAIN_ACTIVE_PORT_RANGE:
+		high = ((struct xnet_port_range *)val)->high;
+		low = ((struct xnet_port_range *)val)->low;
+
+		if (high > XNET_PORT_MAX_RANGE || low > high ||
+		    high < 0 || low < 0)
+			return -FI_EINVAL;
+
+		domain->active_ports.high = high;
+		domain->active_ports.low = low;
+
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int xnet_domain_control(fid_t fid, int command, void *arg)
+{
+	struct xnet_domain *domain;
+
+	domain = container_of(fid, struct xnet_domain,
+			      util_domain.domain_fid.fid);
+
+	switch (command) {
+	case FI_SET_VAL:
+		return xnet_domain_set_val(domain,
+				((struct fi_fid_var *)arg)->name,
+				((struct fi_fid_var *)arg)->val);
+		break;
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
 static struct fi_ops xnet_domain_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = xnet_domain_close,
 	.bind = ofi_domain_bind,
-	.control = fi_no_control,
+	.control = xnet_domain_control,
 	.ops_open = fi_no_ops_open,
 	.tostr = fi_no_tostr,
 	.ops_set = fi_no_ops_set,

@@ -101,20 +101,23 @@ static struct fi_ops xnet_pep_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int xnet_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
+int xnet_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen,
+			    struct xnet_port_range *range)
 {
-	int ret, i, rand_port_number;
+	int ret, i, rand_port_number, high, low;
 	static uint32_t seed;
+
+	high = range->high;
+	low = range->low;
 	if (!seed)
 		seed = ofi_generate_seed();
 
 	rand_port_number = ofi_xorshift_random_r(&seed) %
-			   (xnet_ports.high + 1 - xnet_ports.low) +
-			   xnet_ports.low;
+			   (high + 1 - low) + low;
 
-	for (i = xnet_ports.low; i <= xnet_ports.high; i++, rand_port_number++) {
-		if (rand_port_number > xnet_ports.high)
-			rand_port_number = xnet_ports.low;
+	for (i = low; i <= high; i++, rand_port_number++) {
+		if (rand_port_number > high)
+			rand_port_number = low;
 
 		ofi_addr_set_port(src_addr, (uint16_t) rand_port_number);
 		ret = bind(sock, src_addr, (socklen_t) addrlen);
@@ -129,7 +132,7 @@ static int xnet_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
 		}
 		break;
 	}
-	return (i <= xnet_ports.high) ? FI_SUCCESS : -FI_EADDRNOTAVAIL;
+	return (i <= high) ? FI_SUCCESS : -FI_EADDRNOTAVAIL;
 }
 
 static int xnet_pep_sock_create(struct xnet_pep *pep)
@@ -175,7 +178,7 @@ static int xnet_pep_sock_create(struct xnet_pep *pep)
 			ret = -ofi_sockerr();
 	} else {
 		ret = xnet_bind_to_port_range(pep->sock, pep->info->src_addr,
-					      pep->info->src_addrlen);
+					      pep->info->src_addrlen, &xnet_ports);
 	}
 
 	if (ret) {
