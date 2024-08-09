@@ -283,3 +283,61 @@ void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
 	mock_txe.ep->efa_outstanding_tx_ops = 0;
 	efa_unit_test_buff_destruct(&local_buff);
 }
+
+/**
+ * @brief efa_rdm_rxe_post_local_read_or_queue should call
+ * efa_rdm_pke_read.
+ * When efa_rdm_pke_read failed,
+ * make sure there is no txe leak in efa_rdm_rxe_post_local_read_or_queue
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_rdm_rxe_post_local_read_or_queue_cleanup_txe(struct efa_resource **state)
+{
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_resource *resource = *state;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_ope *rxe;
+	struct efa_mr cuda_mr = {0};
+	int expected_err = -FI_ENOMR;
+	char buf[16];
+	struct iovec iov = {
+		.iov_base = buf,
+		.iov_len = sizeof buf
+	};
+
+	/**
+	 * TODO: Ideally we should mock efa_rdm_ope_post_remote_read_or_queue here,
+	 * but this function is currently cannot be mocked as it is at the same file
+	 * with efa_rdm_rxe_post_local_read_or_queue, see this restriction in
+	 * prov/efa/test/README.md's mocking session
+	 */
+	g_efa_unit_test_mocks.efa_rdm_pke_read = &efa_mock_efa_rdm_pke_read_return_mock;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Fake a rdma read enabled device */
+	efa_rdm_ep_domain(efa_rdm_ep)->device->max_rdma_size = efa_env.efa_read_segment_size;
+
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	pkt_entry->payload = pkt_entry->wiredata;
+
+	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, FI_ADDR_UNSPEC, ofi_op_tagged);
+	cuda_mr.peer.iface = FI_HMEM_CUDA;
+
+	rxe->desc[0] = &cuda_mr;
+	rxe->iov_count = 1;
+	rxe->iov[0] = iov;
+	pkt_entry->ope = rxe;
+
+	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	will_return(efa_mock_efa_rdm_pke_read_return_mock, expected_err);
+	assert_int_equal(efa_rdm_rxe_post_local_read_or_queue(rxe, 0, pkt_entry, pkt_entry->payload, 16), expected_err);
+	/* Make sure txe is cleaned for a failed read */
+	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+
+	efa_rdm_pke_release_rx(pkt_entry);
+}

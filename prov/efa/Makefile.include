@@ -157,7 +157,8 @@ prov_efa_test_efa_unit_test_LDFLAGS = $(cmocka_rpath) $(efa_LDFLAGS) $(cmocka_LD
 					-Wl,--wrap=ibv_create_ah \
 					-Wl,--wrap=ibv_is_fork_initialized \
 					-Wl,--wrap=efadv_query_device \
-					-Wl,--wrap=ofi_copy_from_hmem_iov
+					-Wl,--wrap=ofi_copy_from_hmem_iov \
+					-Wl,--wrap=efa_rdm_pke_read
 
 if HAVE_EFADV_CQ_EX
 prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=efadv_create_cq
