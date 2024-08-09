@@ -83,6 +83,10 @@ ssize_t efa_mock_ofi_copy_from_hmem_iov_inc_counter(void *dest, size_t size,
 						    const struct iovec *hmem_iov,
 						    size_t hmem_iov_count, uint64_t hmem_iov_offset);
 
+int __real_efa_rdm_pke_read(struct efa_rdm_ope *ope);
+
+int efa_mock_efa_rdm_pke_read_return_mock(struct efa_rdm_ope *ope);
+
 struct efa_unit_test_mocks
 {
 	uint64_t local_host_id;
@@ -111,6 +115,8 @@ struct efa_unit_test_mocks
 					  enum fi_hmem_iface hmem_iface, uint64_t device,
 					  const struct iovec *hmem_iov,
 					  size_t hmem_iov_count, uint64_t hmem_iov_offset);
+
+	int (*efa_rdm_pke_read)(struct efa_rdm_ope *ope);
 
 	enum ibv_fork_status (*ibv_is_fork_initialized)(void);
 
