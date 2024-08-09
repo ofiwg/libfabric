@@ -60,6 +60,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 		.ofi_cudaMalloc = __real_ofi_cudaMalloc,
 #endif
 		.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
+		.efa_rdm_pke_read = __real_efa_rdm_pke_read,
 		.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,
 	};
 
@@ -164,6 +165,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_post_write_0_byte,
 		efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_rxe_post_local_read_or_queue_cleanup_txe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_msg_send_to_local_peer_with_null_desc, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_fork_support_request_initialize_when_ibv_fork_support_is_needed, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_fork_support_request_initialize_when_ibv_fork_support_is_unneeded, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
