@@ -67,7 +67,8 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 			   const uint32_t opcode,
 			   const int lock_required,
 			   const uint64_t caps,
-			   const enum ofi_reliability_kind reliability)
+			   const enum ofi_reliability_kind reliability,
+			   const enum opx_hfi1_type hfi1_type)
 {
 
 	union fi_opx_hfi1_deferred_work *work =
@@ -86,12 +87,14 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->dest_rx = opx_target_addr.hfi1_rx;
 	params->bth_rx = params->dest_rx << 56;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_target_addr.fi);
-	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid);
+	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid, hfi1_type);
 	params->pbc_dws = 2 + /* pbc */
 			 2 + /* lrh */
 			 3 + /* bth */
 			 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 			 16; /* one "struct fi_opx_hfi1_dput_iov", padded to cache line */
+	/* lrh does not include pbc (8 bytes/2 dws), but does include icrc (4 bytes/1 dws),
+	   so subtract 1 dws */
 	params->lrh_dws = htons(params->pbc_dws - 1);
 	params->is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_target_addr, caps);
 	params->reliability = reliability;
@@ -163,7 +166,8 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
 			   const uint64_t tx_op_flags,
 			   const uint64_t is_hmem,
 			   const int lock_required, const uint64_t caps,
-			   const enum ofi_reliability_kind reliability)
+			   const enum ofi_reliability_kind reliability,
+			   const enum opx_hfi1_type hfi1_type)
 {
 	assert(niov == 1); // TODO, support something ... bigger
 	assert(op == FI_NOOP || op < OFI_ATOMIC_OP_LAST);
@@ -179,7 +183,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
 	params->work_elem.complete = false;
 	params->opx_ep = opx_ep;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_dst_addr.fi);
-	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid);
+	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid, hfi1_type);
 	params->slid = opx_dst_addr.uid.lid;
 	params->origin_rs = opx_dst_addr.reliability_rx;
 	params->dt = dt == FI_VOID ? FI_VOID-1 : dt;
@@ -214,7 +218,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
 	 */
 	ssize_t rc = fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u32_extended_rx, opx_dst_addr.hfi1_unit);
 	assert(rc == FI_SUCCESS);
-	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov->len, 0, 0, NULL, is_hmem);
 	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && params->is_intranode,
@@ -260,37 +264,42 @@ ssize_t fi_opx_inject_write_generic(struct fid_ep *ep, const void *buf, size_t l
 				    fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key,
 				    int lock_required, const enum fi_av_type av_type,
 				    const uint64_t caps,
-				    const enum ofi_reliability_kind reliability);
+				    const enum ofi_reliability_kind reliability,
+					const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_write_generic(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			     fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key, void *context,
 			     int lock_required, const enum fi_av_type av_type, const uint64_t caps,
-			     const enum ofi_reliability_kind reliability);
+			     const enum ofi_reliability_kind reliability,
+				 const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_writev_generic(struct fid_ep *ep, const struct iovec *iov, void **desc, size_t count,
 			      fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key, void *context,
 			      int lock_required, const enum fi_av_type av_type, const uint64_t caps,
-			      const enum ofi_reliability_kind reliability);
+			      const enum ofi_reliability_kind reliability,
+				  const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_writemsg_generic(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags,
 				int lock_required, const enum fi_av_type av_type,
-				const uint64_t caps, const enum ofi_reliability_kind reliability);
+				const uint64_t caps, const enum ofi_reliability_kind reliability,
+				const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_read_generic(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			    fi_addr_t src_addr, uint64_t addr_offset, uint64_t key, void *context,
 			    int lock_required, const enum fi_av_type av_type, const uint64_t caps,
-
-			    const enum ofi_reliability_kind reliability);
+			    const enum ofi_reliability_kind reliability,
+				const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_readv_generic(struct fid_ep *ep, const struct iovec *iov, void **desc, size_t count,
 			     fi_addr_t src_addr, uint64_t addr_offset, uint64_t key, void *context,
 			     int lock_required, const enum fi_av_type av_type, const uint64_t caps,
-
-			     const enum ofi_reliability_kind reliability);
+			     const enum ofi_reliability_kind reliability,
+				 const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_readmsg_generic(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags,
 			       int lock_required, const enum fi_av_type av_type,
-			       const uint64_t caps, const enum ofi_reliability_kind reliability);
+			       const uint64_t caps, const enum ofi_reliability_kind reliability,
+				   const enum opx_hfi1_type hfi1_type);
 
 #ifdef __cplusplus
 }

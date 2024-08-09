@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2021,2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,61 +38,61 @@
  * C requires another indirection for expanding macros since
  * operands of the token pasting operator are not expanded */
 
-#define FI_OPX_RMA_SPECIALIZED_FUNC(LOCK, AV, CAPS, RELIABILITY)                                   \
-	FI_OPX_RMA_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY)
+#define FI_OPX_RMA_SPECIALIZED_FUNC(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)                                   \
+	FI_OPX_RMA_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)
 
-#define FI_OPX_RMA_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY)                                  \
-	static inline ssize_t fi_opx_writemsg_##LOCK##_##AV##_##CAPS##_##RELIABILITY(              \
+#define FI_OPX_RMA_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)                                  \
+	static inline ssize_t fi_opx_writemsg_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(              \
 		struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)                   \
 	{                                                                                          \
-		return fi_opx_writemsg_generic(ep, msg, flags, LOCK, AV, CAPS, RELIABILITY);       \
+		return fi_opx_writemsg_generic(ep, msg, flags, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE);       \
 	}                                                                                          \
-	static inline ssize_t fi_opx_writev_##LOCK##_##AV##_##CAPS##_##RELIABILITY(                \
+	static inline ssize_t fi_opx_writev_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                \
 		struct fid_ep *ep, const struct iovec *iov, void **desc, size_t count,             \
 		fi_addr_t dest_addr, uint64_t addr_offset, uint64_t key, void *context)            \
 	{                                                                                          \
 		return fi_opx_writev_generic(ep, iov, desc, count, dest_addr, addr_offset, key,    \
-					     context, LOCK, AV, CAPS, RELIABILITY);                \
+					     context, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE);                \
 	}                                                                                          \
-	static inline ssize_t fi_opx_write_##LOCK##_##AV##_##CAPS##_##RELIABILITY(                 \
+	static inline ssize_t fi_opx_write_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                 \
 		struct fid_ep *ep, const void *buf, size_t len, void *desc, fi_addr_t dst_addr,    \
 		uint64_t addr_offset, uint64_t key, void *context)                                 \
 	{                                                                                          \
 		return fi_opx_write_generic(ep, buf, len, desc, dst_addr, addr_offset, key,        \
-					    context, LOCK, AV, CAPS, RELIABILITY);                 \
+					    context, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE);                 \
 	}                                                                                          \
-	static inline ssize_t fi_opx_inject_write_##LOCK##_##AV##_##CAPS##_##RELIABILITY(          \
+	static inline ssize_t fi_opx_inject_write_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(          \
 		struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dst_addr,                \
 		uint64_t addr_offset, uint64_t key)                                                \
 	{                                                                                          \
 		return fi_opx_inject_write_generic(ep, buf, len, dst_addr, addr_offset, key, LOCK, \
-						   AV, CAPS, RELIABILITY);                         \
+						   AV, CAPS, RELIABILITY, HFI1_TYPE);                         \
 	}                                                                                          \
-	static inline ssize_t fi_opx_readmsg_##LOCK##_##AV##_##CAPS##_##RELIABILITY(               \
+	static inline ssize_t fi_opx_readmsg_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(               \
 		struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)                   \
 	{                                                                                          \
-		return fi_opx_readmsg_generic(ep, msg, flags, LOCK, AV, CAPS, RELIABILITY);        \
+		return fi_opx_readmsg_generic(ep, msg, flags, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE);        \
 	}                                                                                          \
-	static inline ssize_t fi_opx_readv_##LOCK##_##AV##_##CAPS##_##RELIABILITY(                 \
+	static inline ssize_t fi_opx_readv_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                 \
 		struct fid_ep *ep, const struct iovec *iov, void **desc, size_t count,             \
 		fi_addr_t src_addr, uint64_t addr_offset, uint64_t key, void *context)             \
 	{                                                                                          \
 		return fi_opx_writev_generic(ep, iov, desc, count, src_addr, addr_offset, key,     \
-					     context, LOCK, AV, CAPS, RELIABILITY);                \
+					     context, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE);                \
 	}                                                                                          \
-	static inline ssize_t fi_opx_read_##LOCK##_##AV##_##CAPS##_##RELIABILITY(                  \
+	static inline ssize_t fi_opx_read_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                  \
 		struct fid_ep *ep, void *buf, size_t len, void *desc, fi_addr_t src_addr,          \
 		uint64_t addr_offset, uint64_t key, void *context)                                 \
 	{                                                                                          \
 		return fi_opx_read_generic(ep, buf, len, desc, src_addr, addr_offset, key,         \
-					   context, LOCK, AV, CAPS, RELIABILITY);                  \
+					   context, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE);                  \
 	}
 
-#define FI_OPX_RMA_SPECIALIZED_FUNC_NAME(TYPE, LOCK, AV, CAPS, RELIABILITY)                        \
-	FI_OPX_RMA_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY)
+#define FI_OPX_RMA_SPECIALIZED_FUNC_NAME(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)                        \
+	FI_OPX_RMA_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)
 
-#define FI_OPX_RMA_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY)                       \
-	fi_opx_##TYPE##_##LOCK##_##AV##_##CAPS##_##RELIABILITY
+#define FI_OPX_RMA_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)                       \
+	fi_opx_##TYPE##_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE
 
 
 /*

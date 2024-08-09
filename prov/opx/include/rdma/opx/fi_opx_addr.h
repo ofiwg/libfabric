@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2021,2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,8 +47,12 @@ union fi_opx_uid {
 
 	fi_opx_uid_t			fi;
 	struct {
-		uint16_t		endpoint_id;/* node-scoped endpoint identifier */
-		uint16_t		lid;		/* fabric-scoped node identifier (big-endian) */
+		uint8_t 		endpoint_id;/* node-scoped endpoint identifier */
+		uint8_t 		lid_3B;     /* fabric-scoped node identifier   (3rd byte) */
+		uint16_t		lid;	    /* fabric-scoped node identifier (big-endian) */
+	} __attribute__((__packed__));
+	struct {
+		uint32_t		lid_32;	    /* fabric-scoped node identifier (big-endian) */
 	} __attribute__((__packed__));
 } __attribute__((__packed__));
 

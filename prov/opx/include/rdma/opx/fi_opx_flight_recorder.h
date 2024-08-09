@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2021,2024 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,7 +41,8 @@
 #include "fi_opx_hfi1_packet.h"
 #include "fi_opx_timer.h"
 
-#define FLIGHT_RECORDER_ENTRY_DATA_LEN (sizeof(union fi_opx_hfi1_packet_payload) + sizeof(union fi_opx_hfi1_packet_hdr))
+#define FLIGHT_RECORDER_ENTRY_DATA_LEN (sizeof(union fi_opx_hfi1_packet_payload) + sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B))
+
 #ifndef FLIGHT_RECORDER_ENTRY_COUNT
 #define FLIGHT_RECORDER_ENTRY_COUNT (1024)
 #endif
@@ -187,8 +188,8 @@ void flight_recorder_dump (struct flight_recorder * fr)
 		}
 		if (entry[i].type == FR_ENTRY_TYPE_PACKET_HDR) {
 			fprintf(stderr, "PACKET HDR|\n");
-			fi_opx_hfi1_dump_packet_hdr((union fi_opx_hfi1_packet_hdr *)entry[i].data,
-							"#FLIGHT_RECORDER", 0);
+			//fi_opx_hfi1_dump_packet_hdr((union opx_hfi1_packet_hdr *)entry[i].data,
+				//			"#FLIGHT_RECORDER", 0);
 		} else if (entry[i].type == FR_ENTRY_TYPE_PACKET) {
 			flight_recorder_dump_packet_payload(entry);
 		} else {
@@ -220,7 +221,7 @@ void flight_recorder_dump (struct flight_recorder * fr)
 		flight_recorder_init_next_entry((fr), (event_id),		\
 						FR_ENTRY_TYPE_PACKET_HDR);	\
 	memcpy((void *)next->data, (void *) &(packet_hdr),			\
-			sizeof(union fi_opx_hfi1_packet_hdr));			\
+		sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B));                  \
 	if ((fr)->count + 1 == FLIGHT_RECORDER_ENTRY_COUNT)			\
 		flight_recorder_dump((fr));					\
 }

@@ -52,8 +52,6 @@
     __OPX_FORCE_INLINE__
     uint32_t opx_pbc_wfr_l2type(unsigned _type)
     {
-    	/* Just verify WFR isn't attempting non-9B */
-    	assert(_type == _OPX_PBC_JKR_L2TYPE_9B_);
     	return OPX_PBC_WFR_UNUSED;
     }
 #define OPX_PBC_WFR_L2TYPE(_type)    opx_pbc_wfr_l2type(_type)
@@ -64,7 +62,7 @@
 #define OPX_PBC_WFR_RUNTIME(_dlid, _pidx) OPX_PBC_WFR_UNUSED
 
 /* Unused WFR field - always initialized with PBC to 0. 
-  #define OPX_PBC_STATICRCC(srcc) (((unsigned long long)(dlid & OPX_PBC_WFR_STATICRCC_MASK) << OPX_PBC_WFR_STATICRCC_SHIFT) << OPX_PBC_MSB_SHIFT)
+  #define OPX_PBC_STATICRCC(srcc) (((unsigned long long)(dlid & OPX_PBC_WFR_STATICRCC_MASK) << OPX_PBC_WFR_STATICRCC_SHIFT) << OPX_MSB_SHIFT)
  */
 
 /* WFR
@@ -83,8 +81,8 @@
 
 #define OPX_WFR_RHF_SEQ_NOT_MATCH(_seq, _rhf)   (_seq != (_rhf & 0xF0000000ul))
 #define OPX_WFR_RHF_SEQ_INCREMENT(_seq)         ((_seq < 0xD0000000ul) * _seq + 0x10000000ul)
-#define OPX_WFR_IS_ERRORED_RHF(_rhf)            (_rhf & 0xBFE0000000000000ul)
-#define OPX_WFR_RHF_SEQ_MATCH(_seq, _rhf)       (_seq == (_rhf & 0xF0000000ul))
+#define OPX_WFR_IS_ERRORED_RHF(_rhf, _hfi1_type)            (_rhf & 0xBFE0000000000000ul)
+#define OPX_WFR_RHF_SEQ_MATCH(_seq, _rhf, _hfi1_type)       (_seq == (_rhf & 0xF0000000ul))
 #define OPX_WFR_RHF_SEQ_INIT_VAL                (0x10000000ul)
 #define OPX_WFR_RHF_IS_USE_EGR_BUF(_rhf)        ((_rhf & 0x00008000ul) == 0x00008000ul)
 #define OPX_WFR_RHF_EGRBFR_INDEX_MASK           (0x7FF)
@@ -112,10 +110,11 @@ void opx_wfr_rhe_debug(struct fi_opx_ep * opx_ep,
 		       const uint64_t rhf_seq,
 		       const uint64_t hdrq_offset,
 		       const uint64_t rhf_rcvd,
-		       const union fi_opx_hfi1_packet_hdr *const hdr);
+		       const union opx_hfi1_packet_hdr *const hdr,
+		       const enum opx_hfi1_type hfi1_type);
 
-#define OPX_WFR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr) \
-        opx_wfr_rhe_debug(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr)
+#define OPX_WFR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr, _hfi1_type) \
+        opx_wfr_rhe_debug(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr, _hfi1_type)
 
 // Common to both JKR/WFR
 
@@ -124,22 +123,24 @@ void opx_wfr_rhe_debug(struct fi_opx_ep * opx_ep,
 #define OPX_WFR_RHF_RCV_TYPE_OTHER(_rhf)        ((_rhf & 0x00006000ul) != 0x00000000ul)
 
 /* Common (jkr) handler to WFR/JKR 9B (for now) */
-int opx_jkr_rhf_error_handler(const uint64_t rhf_rcvd, const union fi_opx_hfi1_packet_hdr *const hdr);
+int opx_jkr_rhf_error_handler(const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
+			      const enum opx_hfi1_type hfi1_type);
 
-__OPX_FORCE_INLINE__ int opx_wfr_rhf_check_header(const uint64_t rhf_rcvd, const union fi_opx_hfi1_packet_hdr *const hdr)
+__OPX_FORCE_INLINE__ int opx_wfr_rhf_check_header(const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
+						  const enum opx_hfi1_type hfi1_type)
 {
 	/* RHF error */
-	if (OFI_UNLIKELY(OPX_WFR_IS_ERRORED_RHF(rhf_rcvd))) return 1; /* error */
+	if (OFI_UNLIKELY(OPX_WFR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_WFR))) return 1; /* error */
 
 	/* Bad packet header */
 	if (OFI_UNLIKELY((!OPX_WFR_RHF_IS_USE_EGR_BUF(rhf_rcvd)) &&
-	    (ntohs(hdr->stl.lrh.pktlen) > 0x15) &&
+			 (ntohs(hdr->lrh_9B.pktlen) > 0x15) &&
 	    !(OPX_WFR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd))))
-		return opx_jkr_rhf_error_handler(rhf_rcvd, hdr); /* error */
+		return opx_jkr_rhf_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
 	else
 		return 0; /* no error*/
 }
 
-#define OPX_WFR_RHF_CHECK_HEADER(_rhf_rcvd, _hdr) opx_wfr_rhf_check_header(_rhf_rcvd, _hdr)
+#define OPX_WFR_RHF_CHECK_HEADER(_rhf_rcvd, _hdr, _hfi1_type) opx_wfr_rhf_check_header(_rhf_rcvd, _hdr, _hfi1_type)
 
 #endif

@@ -122,7 +122,8 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 				const int lock_required, const uint64_t caps,
 				const enum ofi_reliability_kind reliability,
 				const uint64_t is_hmem,
-				const uint64_t is_intranode)
+				const uint64_t is_intranode,
+				const enum opx_hfi1_type hfi1_type)
 {
 	if (tx_op_flags & FI_INJECT) {
 		assert((tx_op_flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)) !=
@@ -145,7 +146,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	params->work_elem.complete = false;
 	params->opx_ep = opx_ep;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_dst_addr.fi);
-	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid);
+	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid, hfi1_type);
 	params->slid = opx_dst_addr.uid.lid;
 	params->origin_rs = opx_dst_addr.reliability_rx;
 	params->dt = dt == FI_VOID ? FI_VOID-1 : dt;
@@ -193,7 +194,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	rma_request->hmem_device = fetch_iov->device;
 	params->rma_request_vaddr = (uintptr_t) rma_request;
 
-	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, buf_iov->len, 0, 0, NULL, is_hmem);
 
@@ -256,7 +257,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 				const unsigned is_compare, const void *compare_vaddr,
 				const uint64_t tx_op_flags, const int lock_required,
 				const enum fi_av_type av_type, const uint64_t caps,
-				const enum ofi_reliability_kind reliability)
+				const enum ofi_reliability_kind reliability,
+				const enum opx_hfi1_type hfi1_type)
 {
 	assert((is_fetch == 0) || (is_fetch == 1));
 	assert((is_compare == 0) || (is_compare == 1));
@@ -275,7 +277,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 				      (union fi_opx_context *)context, opx_ep->tx->op_flags,
 				      opx_ep->rx->cq, opx_ep->read_cntr, cc,
 				      datatype, op, FI_OPX_HFI_DPUT_OPCODE_GET,
-				      lock_required, caps, reliability);
+				      lock_required, caps, reliability, hfi1_type);
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== ATOMIC READ (end)\n");
 		return count;
@@ -309,7 +311,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 						NULL, (union fi_opx_context *)context,
 						opx_ep->tx->op_flags, opx_ep->rx->cq,
 						opx_ep->read_cntr, cc, datatype, op,
-						lock_required, caps, reliability, is_hmem, is_intranode);
+						lock_required, caps, reliability, is_hmem, is_intranode, hfi1_type);
 
 		} else {
 			struct fi_opx_hmem_iov compare_iov;
@@ -326,7 +328,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 						&compare_iov, (union fi_opx_context *)context,
 						opx_ep->tx->op_flags, opx_ep->rx->cq,
 						opx_ep->read_cntr, cc, datatype, op,
-						lock_required, caps, reliability, is_hmem, is_intranode);
+						lock_required, caps, reliability, is_hmem, is_intranode, hfi1_type);
 		}
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== ATOMIC %s (end)\n",
@@ -348,7 +350,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 				(union fi_opx_context *)NULL, cc,
 				datatype, op, opx_ep->tx->op_flags,
 				is_hmem, lock_required, caps,
-				reliability);
+				reliability,
+				hfi1_type);
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		 "===================================== ATOMIC WRITE (end)\n");
 
@@ -359,7 +362,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, fi_addr_t dst_addr,
 			      uint64_t addr, uint64_t key, enum fi_datatype datatype, enum fi_op op,
 			      void *context, const int lock_required, const enum fi_av_type av_type,
-			      const uint64_t caps, const enum ofi_reliability_kind reliability)
+			      const uint64_t caps, const enum ofi_reliability_kind reliability,
+				  const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep;
 
@@ -379,7 +383,7 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 			opx_addr.hfi1_rx,
 			opx_addr.reliability_rx,
 			reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}
 
@@ -400,7 +404,7 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 	size_t xfer __attribute__((unused));
 	xfer = fi_opx_atomic_internal(opx_ep, buf, count, opx_addr, addr, key, datatype, op,
 				      context, cc, 0, NULL, 0, NULL, opx_ep->tx->op_flags,
-				      lock_required, av_type, caps, reliability);
+				      lock_required, av_type, caps, reliability, hfi1_type);
 	assert(xfer == count);
 
 	return 0;
@@ -413,7 +417,8 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
 					const int lock_required,
 					const enum fi_av_type av_type,
 					const uint64_t caps,
-					const enum ofi_reliability_kind reliability)
+					const enum ofi_reliability_kind reliability,
+					const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep;
 	opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -442,7 +447,7 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
 			opx_dst_addr.hfi1_rx,
 			opx_dst_addr.reliability_rx,
 			reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}
 
@@ -482,7 +487,7 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
 			fi_opx_atomic_internal(opx_ep, (void *)msg_iov_vaddr, count_requested,
 					       opx_dst_addr, rma_iov_addr, rma_iov_key, datatype,
 					       op, NULL, cc, 0, NULL, 0, NULL, flags, lock_required,
-					       av_type, caps, reliability);
+					       av_type, caps, reliability, hfi1_type);
 
 		const size_t bytes_transfered = dtsize * count_transfered;
 
@@ -518,7 +523,8 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
 					   const int lock_required,
 					   const enum fi_av_type av_type,
 					   const uint64_t caps,
-					   const enum ofi_reliability_kind reliability)
+					   const enum ofi_reliability_kind reliability,
+					   const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep;
 	opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -547,7 +553,7 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
 			opx_dst_addr.hfi1_rx,
 			opx_dst_addr.reliability_rx,
 			reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}
 
@@ -595,7 +601,8 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
 						       count_requested, opx_dst_addr, rma_iov_addr,
 						       rma_iov_key, datatype, op, NULL, cc, 1,
 						       (const void *)rst_iov_vaddr, 0, NULL, flags,
-						       lock_required, av_type, caps, reliability);
+						       lock_required, av_type, caps, reliability,
+							   hfi1_type);
 
 			const size_t bytes_transfered = dtsize * count_transfered;
 
@@ -637,7 +644,7 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
 			const size_t count_transfered = fi_opx_atomic_internal(
 				opx_ep, NULL, count_requested, opx_dst_addr, rma_iov_addr,
 				rma_iov_key, datatype, op, NULL, cc, 1, (const void *)rst_iov_vaddr,
-				0, NULL, flags, lock_required, av_type, caps, reliability);
+				0, NULL, flags, lock_required, av_type, caps, reliability, hfi1_type);
 
 			const size_t bytes_transfered = dtsize * count_transfered;
 
@@ -678,7 +685,8 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep,
 					   const int lock_required,
 					   const enum fi_av_type av_type,
 					   const uint64_t caps,
-					   const enum ofi_reliability_kind reliability)
+					   const enum ofi_reliability_kind reliability,
+					   const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep;
 	opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -707,7 +715,7 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep,
 			opx_dst_addr.hfi1_rx,
 			opx_dst_addr.reliability_rx,
 			reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}
 
@@ -759,7 +767,7 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep,
 					       opx_dst_addr, rma_iov_addr, rma_iov_key, datatype,
 					       op, NULL, cc, 1, (const void *)rst_iov_vaddr, 1,
 					       (const void *)cmp_iov_vaddr, flags, lock_required,
-					       av_type, caps, reliability);
+					       av_type, caps, reliability, hfi1_type);
 
 		const size_t bytes_transfered = dtsize * count_transfered;
 
@@ -815,7 +823,8 @@ ssize_t fi_opx_fetch_compare_atomic_generic(
 	void *compare_desc, void *result, void *result_desc, fi_addr_t dest_addr, uint64_t addr,
 	uint64_t key, enum fi_datatype datatype, enum fi_op op, void *context, int lock_required,
 	const enum fi_av_type av_type, const uint64_t caps,
-	const enum ofi_reliability_kind reliability)
+	const enum ofi_reliability_kind reliability,
+	const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep;
 
@@ -835,7 +844,7 @@ ssize_t fi_opx_fetch_compare_atomic_generic(
 			opx_addr.hfi1_rx,
 			opx_addr.reliability_rx,
 			reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}
 
@@ -856,7 +865,7 @@ ssize_t fi_opx_fetch_compare_atomic_generic(
 	size_t xfer __attribute__((unused));
 	xfer = fi_opx_atomic_internal(opx_ep, buf, count, opx_addr, addr, key, datatype, op,
 				      context, cc, 1, result, compare!=NULL, compare, opx_ep->tx->op_flags,
-				      lock_required, av_type, caps, reliability);
+				      lock_required, av_type, caps, reliability, hfi1_type);
 	assert(xfer == count);
 
 	return 0;
@@ -866,12 +875,14 @@ ssize_t fi_opx_fetch_atomic_generic(struct fid_ep *ep, const void *buf, size_t c
 				    uint64_t addr, uint64_t key, enum fi_datatype datatype,
 				    enum fi_op op, void *context, const int lock_required,
 				    const enum fi_av_type av_type, const uint64_t caps,
-				    const enum ofi_reliability_kind reliability)
+				    const enum ofi_reliability_kind reliability,
+					const enum opx_hfi1_type hfi1_type)
 {
 	return fi_opx_fetch_compare_atomic_generic(ep, buf, count, desc, NULL, NULL, result,
 						   result_desc, dest_addr, addr, key, datatype, op,
 						   context, lock_required, av_type, caps,
-						   reliability);
+						   reliability,
+						   hfi1_type);
 }
 
 ssize_t fi_opx_compare_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, void *desc,
@@ -880,12 +891,13 @@ ssize_t fi_opx_compare_atomic_generic(struct fid_ep *ep, const void *buf, size_t
 				      uint64_t key, enum fi_datatype datatype, enum fi_op op,
 				      void *context, const int lock_required,
 				      const enum fi_av_type av_type, const uint64_t caps,
-				      const enum ofi_reliability_kind reliability)
+				      const enum ofi_reliability_kind reliability,
+					  const enum opx_hfi1_type hfi1_type)
 {
 	return fi_opx_fetch_compare_atomic_generic(ep, buf, count, desc, compare, compare_desc,
 						   result, result_desc, dest_addr, addr, key,
 						   datatype, op, context, lock_required, av_type,
-						   caps, reliability);
+						   caps, reliability, hfi1_type);
 }
 
 ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t count,
@@ -893,7 +905,8 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 				     enum fi_datatype datatype, enum fi_op op,
 				     const int lock_required, const enum fi_av_type av_type,
 				     const uint64_t caps,
-				     const enum ofi_reliability_kind reliability)
+				     const enum ofi_reliability_kind reliability,
+					 const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -915,7 +928,7 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 			opx_dst_addr.hfi1_rx,
 			opx_dst_addr.reliability_rx,
 			reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}
 
@@ -937,7 +950,7 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 
 	fi_opx_write_internal(opx_ep, &iov, 1, opx_dst_addr, addr, key, NULL, cc,
 				datatype, op, opx_ep->tx->op_flags | FI_INJECT,
-				is_hmem, lock_required, caps, reliability);
+				is_hmem, lock_required, caps, reliability, hfi1_type);
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== ATOMIC INJECT WRITE (end)\n");
@@ -960,10 +973,30 @@ ssize_t fi_opx_atomic(struct fid_ep *ep, const void *buf, size_t count, void *de
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
-	rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op,
-				     context, FI_OPX_LOCK_NOT_REQUIRED,
-				     opx_ep->av_type, 0x0018000000000000ull,
-				     OPX_RELIABILITY);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op,
+				     	context, FI_OPX_LOCK_NOT_REQUIRED,
+				     	opx_ep->av_type, 0x0018000000000000ull,
+				     	OPX_RELIABILITY,
+					 	OPX_HFI1_WFR);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op,
+				     	context, FI_OPX_LOCK_NOT_REQUIRED,
+				     	opx_ep->av_type, 0x0018000000000000ull,
+				     	OPX_RELIABILITY,
+					 	OPX_HFI1_JKR_9B);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op,
+				     	context, FI_OPX_LOCK_NOT_REQUIRED,
+				     	opx_ep->av_type, 0x0018000000000000ull,
+				     	OPX_RELIABILITY,
+					 	OPX_HFI1_JKR);
+	} else {
+		rc = -FI_EPERM;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+		abort();
+	}
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 
@@ -987,16 +1020,47 @@ ssize_t fi_opx_fetch_atomic(struct fid_ep *ep, const void *buf, size_t count, vo
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
-	if (opx_ep->av_type == FI_AV_MAP) {
-		rc = fi_opx_fetch_atomic_generic(
-			ep, buf, count, desc, result, result_desc, dest_addr, addr, key,
-			datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
-			FI_AV_MAP, 0x0018000000000000ull, OPX_RELIABILITY);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_fetch_atomic_generic(
+				ep, buf, count, desc, result, result_desc, dest_addr, addr, key,
+				datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_MAP, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR);
+		} else {
+			rc = fi_opx_fetch_atomic_generic(
+				ep, buf, count, desc, result, result_desc, dest_addr, addr, key,
+				datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_TABLE, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_fetch_atomic_generic(
+				ep, buf, count, desc, result, result_desc, dest_addr, addr, key,
+				datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_MAP, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
+		} else {
+			rc = fi_opx_fetch_atomic_generic(
+				ep, buf, count, desc, result, result_desc, dest_addr, addr, key,
+				datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_TABLE, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_fetch_atomic_generic(
+				ep, buf, count, desc, result, result_desc, dest_addr, addr, key,
+				datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_MAP, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR);
+		} else {
+			rc = fi_opx_fetch_atomic_generic(
+				ep, buf, count, desc, result, result_desc, dest_addr, addr, key,
+				datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_TABLE, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR);
+		}
 	} else {
-		rc = fi_opx_fetch_atomic_generic(
-			ep, buf, count, desc, result, result_desc, dest_addr, addr, key,
-			datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
-			FI_AV_TABLE, 0x0018000000000000ull, OPX_RELIABILITY);
+		rc = -FI_EPERM;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+		abort();
 	}
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
@@ -1022,16 +1086,47 @@ ssize_t fi_opx_compare_atomic(struct fid_ep *ep, const void *buf, size_t count, 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
-	if (opx_ep->av_type == FI_AV_MAP) {
-		rc = fi_opx_compare_atomic_generic(
-			ep, buf, count, desc, compare, compare_desc, result, result_desc,
-			dest_addr, addr, key, datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
-			FI_AV_MAP, 0x0018000000000000ull, OPX_RELIABILITY);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_compare_atomic_generic(
+				ep, buf, count, desc, compare, compare_desc, result, result_desc,
+				dest_addr, addr, key, datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_MAP, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR);
+		} else {
+			rc = fi_opx_compare_atomic_generic(
+				ep, buf, count, desc, compare, compare_desc, result, result_desc,
+				dest_addr, addr, key, datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_TABLE, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_compare_atomic_generic(
+				ep, buf, count, desc, compare, compare_desc, result, result_desc,
+				dest_addr, addr, key, datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_MAP, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
+		} else {
+			rc = fi_opx_compare_atomic_generic(
+				ep, buf, count, desc, compare, compare_desc, result, result_desc,
+				dest_addr, addr, key, datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_TABLE, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_compare_atomic_generic(
+				ep, buf, count, desc, compare, compare_desc, result, result_desc,
+				dest_addr, addr, key, datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_MAP, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR);
+		} else {
+			rc = fi_opx_compare_atomic_generic(
+				ep, buf, count, desc, compare, compare_desc, result, result_desc,
+				dest_addr, addr, key, datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
+				FI_AV_TABLE, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR);
+		}
 	} else {
-		rc = fi_opx_compare_atomic_generic(
-			ep, buf, count, desc, compare, compare_desc, result, result_desc,
-			dest_addr, addr, key, datatype, op, context, FI_OPX_LOCK_NOT_REQUIRED,
-			FI_AV_TABLE, 0x0018000000000000ull, OPX_RELIABILITY);
+		rc = -FI_EPERM;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+		abort();
 	}
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
@@ -1055,17 +1150,55 @@ ssize_t fi_opx_inject_atomic(struct fid_ep *ep, const void *buf, size_t count, f
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
-	if (opx_ep->av_type == FI_AV_MAP) {
-		rc = fi_opx_inject_atomic_generic(ep, buf, count, dest_addr, addr, key,
-						  datatype, op, FI_OPX_LOCK_NOT_REQUIRED,
-						  FI_AV_MAP, 0x0018000000000000ull,
-						  OPX_RELIABILITY);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_inject_atomic_generic(ep, buf, count, dest_addr, addr, key,
+							  datatype, op, FI_OPX_LOCK_NOT_REQUIRED,
+							  FI_AV_MAP, 0x0018000000000000ull,
+							  OPX_RELIABILITY,
+							  OPX_HFI1_WFR);
+		} else {
+			rc = fi_opx_inject_atomic_generic(ep, buf, count, dest_addr, addr, key,
+							  datatype, op, FI_OPX_LOCK_NOT_REQUIRED,
+							  FI_AV_TABLE, 0x0018000000000000ull,
+							  OPX_RELIABILITY,
+							  OPX_HFI1_WFR);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_inject_atomic_generic(ep, buf, count, dest_addr, addr, key,
+							  datatype, op, FI_OPX_LOCK_NOT_REQUIRED,
+							  FI_AV_MAP, 0x0018000000000000ull,
+							  OPX_RELIABILITY,
+							  OPX_HFI1_JKR_9B);
+		} else {
+			rc = fi_opx_inject_atomic_generic(ep, buf, count, dest_addr, addr, key,
+							  datatype, op, FI_OPX_LOCK_NOT_REQUIRED,
+							  FI_AV_TABLE, 0x0018000000000000ull,
+							  OPX_RELIABILITY,
+							  OPX_HFI1_JKR_9B);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_inject_atomic_generic(ep, buf, count, dest_addr, addr, key,
+							  datatype, op, FI_OPX_LOCK_NOT_REQUIRED,
+							  FI_AV_MAP, 0x0018000000000000ull,
+							  OPX_RELIABILITY,
+							  OPX_HFI1_JKR);
+		} else {
+			rc = fi_opx_inject_atomic_generic(ep, buf, count, dest_addr, addr, key,
+							  datatype, op, FI_OPX_LOCK_NOT_REQUIRED,
+							  FI_AV_TABLE, 0x0018000000000000ull,
+							  OPX_RELIABILITY,
+							  OPX_HFI1_JKR);
+		}
 	} else {
-		rc = fi_opx_inject_atomic_generic(ep, buf, count, dest_addr, addr, key,
-						  datatype, op, FI_OPX_LOCK_NOT_REQUIRED,
-						  FI_AV_TABLE, 0x0018000000000000ull,
-						  OPX_RELIABILITY);
+		rc = -FI_EPERM;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+		abort();
 	}
+
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	return rc;
 }
@@ -1093,16 +1226,53 @@ ssize_t fi_opx_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *ms
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
-	if (opx_ep->av_type == FI_AV_MAP) {
-		rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
-						    FI_AV_MAP,
-						    0x0018000000000000ull,
-						    OPX_RELIABILITY);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
+							    FI_AV_MAP,
+							    0x0018000000000000ull,
+							    OPX_RELIABILITY,
+								OPX_HFI1_WFR);
+		} else {
+			rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
+							    FI_AV_TABLE,
+							    0x0018000000000000ull,
+							    OPX_RELIABILITY,
+								OPX_HFI1_WFR);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
+							    FI_AV_MAP,
+							    0x0018000000000000ull,
+							    OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B);
+		} else {
+			rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
+							    FI_AV_TABLE,
+							    0x0018000000000000ull,
+							    OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
+							    FI_AV_MAP,
+							    0x0018000000000000ull,
+							    OPX_RELIABILITY,
+								OPX_HFI1_JKR);
+		} else {
+			rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
+							    FI_AV_TABLE,
+							    0x0018000000000000ull,
+							    OPX_RELIABILITY,
+								OPX_HFI1_JKR);
+		}
 	} else {
-		rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
-						    FI_AV_TABLE,
-						    0x0018000000000000ull,
-						    OPX_RELIABILITY);
+		rc = -FI_EPERM;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+		abort();
 	}
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
@@ -1126,19 +1296,62 @@ ssize_t fi_opx_atomic_readwritemsg(struct fid_ep *ep, const struct fi_msg_atomic
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
-	if (opx_ep->av_type == FI_AV_MAP) {
-		rc = fi_opx_atomic_readwritemsg_generic(ep, msg, resultv, result_count,
-							flags, FI_OPX_LOCK_NOT_REQUIRED,
-							FI_AV_MAP,
-							0x0018000000000000ull,
-							OPX_RELIABILITY);
+
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_atomic_readwritemsg_generic(ep, msg, resultv, result_count,
+								flags, FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_MAP,
+								0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_WFR);
+		} else {
+			rc = fi_opx_atomic_readwritemsg_generic(ep, msg, resultv, result_count,
+								flags, FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_TABLE,
+								0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_WFR);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_atomic_readwritemsg_generic(ep, msg, resultv, result_count,
+								flags, FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_MAP,
+								0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B);
+		} else {
+			rc = fi_opx_atomic_readwritemsg_generic(ep, msg, resultv, result_count,
+								flags, FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_TABLE,
+								0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_atomic_readwritemsg_generic(ep, msg, resultv, result_count,
+								flags, FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_MAP,
+								0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_JKR);
+		} else {
+			rc = fi_opx_atomic_readwritemsg_generic(ep, msg, resultv, result_count,
+								flags, FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_TABLE,
+								0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_JKR);
+		}
 	} else {
-		rc = fi_opx_atomic_readwritemsg_generic(ep, msg, resultv, result_count,
-							flags, FI_OPX_LOCK_NOT_REQUIRED,
-							FI_AV_TABLE,
-							0x0018000000000000ull,
-							OPX_RELIABILITY);
+		rc = -FI_EINVAL;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EINVAL\n");
+		abort();
 	}
+
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	return rc;
@@ -1162,18 +1375,59 @@ ssize_t fi_opx_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
-	if (opx_ep->av_type == FI_AV_MAP) {
-		rc = fi_opx_atomic_compwritemsg_generic(ep, msg, comparev, compare_count,
-							resultv, result_count, flags,
-							FI_OPX_LOCK_NOT_REQUIRED,
-							FI_AV_MAP, 0x0018000000000000ull,
-							OPX_RELIABILITY);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_atomic_compwritemsg_generic(ep, msg, comparev, compare_count,
+								resultv, result_count, flags,
+								FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_MAP, 0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_WFR);
+		} else {
+			rc = fi_opx_atomic_compwritemsg_generic(ep, msg, comparev, compare_count,
+								resultv, result_count, flags,
+								FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_TABLE, 0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_WFR);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_atomic_compwritemsg_generic(ep, msg, comparev, compare_count,
+								resultv, result_count, flags,
+								FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_MAP, 0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B);
+		} else {
+			rc = fi_opx_atomic_compwritemsg_generic(ep, msg, comparev, compare_count,
+								resultv, result_count, flags,
+								FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_TABLE, 0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B);
+		}
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		if (opx_ep->av_type == FI_AV_MAP) {
+			rc = fi_opx_atomic_compwritemsg_generic(ep, msg, comparev, compare_count,
+								resultv, result_count, flags,
+								FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_MAP, 0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_JKR);
+		} else {
+			rc = fi_opx_atomic_compwritemsg_generic(ep, msg, comparev, compare_count,
+								resultv, result_count, flags,
+								FI_OPX_LOCK_NOT_REQUIRED,
+								FI_AV_TABLE, 0x0018000000000000ull,
+								OPX_RELIABILITY,
+								OPX_HFI1_JKR);
+		}
 	} else {
-		rc = fi_opx_atomic_compwritemsg_generic(ep, msg, comparev, compare_count,
-							resultv, result_count, flags,
-							FI_OPX_LOCK_NOT_REQUIRED,
-							FI_AV_TABLE, 0x0018000000000000ull,
-							OPX_RELIABILITY);
+		rc = -FI_EPERM;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+		abort();
 	}
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
@@ -1333,24 +1587,58 @@ int fi_opx_finalize_atomic_ops(struct fid_ep *ep)
 	return 0;
 }
 
-FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY)
+FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR)
+FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR_9B)
+FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR)
 
 ssize_t fi_opx_atomic_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t count, void *desc,
 				    fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 				    enum fi_datatype datatype, enum fi_op op, void *context)
 {
-	return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, OPX_AV, 0x0018000000000000ull,
-						   OPX_RELIABILITY)(
-		ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, OPX_AV, 0x0018000000000000ull,
+							   OPX_RELIABILITY, OPX_HFI1_WFR)(
+			ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, OPX_AV, 0x0018000000000000ull,
+							   OPX_RELIABILITY, OPX_HFI1_JKR_9B)(
+			ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, OPX_AV, 0x0018000000000000ull,
+							   OPX_RELIABILITY, OPX_HFI1_JKR)(
+			ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+	} else {
+		/* should never get here */
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+		abort();
+	}
+	return (ssize_t) -FI_EPERM;
 }
 
 ssize_t fi_opx_inject_atomic_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t count,
 					   fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 					   enum fi_datatype datatype, enum fi_op op)
 {
-	return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(inject_atomic, OPX_LOCK, OPX_AV,
-						   0x0018000000000000ull, OPX_RELIABILITY)(
-		ep, buf, count, dest_addr, addr, key, datatype, op);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(inject_atomic, OPX_LOCK, OPX_AV,
+							   0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR)(
+			ep, buf, count, dest_addr, addr, key, datatype, op);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(inject_atomic, OPX_LOCK, OPX_AV,
+							   0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR_9B)(
+			ep, buf, count, dest_addr, addr, key, datatype, op);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(inject_atomic, OPX_LOCK, OPX_AV,
+							   0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR)(
+			ep, buf, count, dest_addr, addr, key, datatype, op);
+	} else {
+		/* should never get here */
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+		abort();
+	}
+	return (ssize_t) -FI_EPERM;
 }
 
 ssize_t fi_opx_fetch_atomic_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t count,
@@ -1358,11 +1646,31 @@ ssize_t fi_opx_fetch_atomic_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, si
 					  fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 					  enum fi_datatype datatype, enum fi_op op, void *context)
 {
-	return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, OPX_AV,
-						   0x0018000000000000ull,
-						   OPX_RELIABILITY)(ep, buf, count, desc, result,
-								    result_desc, dest_addr, addr,
-								    key, datatype, op, context);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, OPX_AV,
+							   0x0018000000000000ull,
+							   OPX_RELIABILITY, OPX_HFI1_WFR)(ep, buf, count, desc, result,
+									    result_desc, dest_addr, addr,
+									    key, datatype, op, context);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, OPX_AV,
+							   0x0018000000000000ull,
+							   OPX_RELIABILITY, OPX_HFI1_JKR_9B)(ep, buf, count, desc, result,
+									    result_desc, dest_addr, addr,
+									    key, datatype, op, context);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, OPX_AV,
+							   0x0018000000000000ull,
+							   OPX_RELIABILITY, OPX_HFI1_JKR)(ep, buf, count, desc, result,
+									    result_desc, dest_addr, addr,
+									    key, datatype, op, context);
+	} else {
+		/* should never get here */
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+		abort();
+	}
+	return (ssize_t) -FI_EPERM;
 }
 
 ssize_t fi_opx_compare_atomic_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t count,
@@ -1371,8 +1679,26 @@ ssize_t fi_opx_compare_atomic_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, 
 					    uint64_t addr, uint64_t key, enum fi_datatype datatype,
 					    enum fi_op op, void *context)
 {
-	return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(compare_atomic, OPX_LOCK, OPX_AV,
-						   0x0018000000000000ull, OPX_RELIABILITY)(
-		ep, buf, count, desc, compare, compare_desc, result, result_desc, dest_addr, addr,
-		key, datatype, op, context);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(compare_atomic, OPX_LOCK, OPX_AV,
+							   0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR)(
+			ep, buf, count, desc, compare, compare_desc, result, result_desc, dest_addr, addr,
+			key, datatype, op, context);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(compare_atomic, OPX_LOCK, OPX_AV,
+							   0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR_9B)(
+			ep, buf, count, desc, compare, compare_desc, result, result_desc, dest_addr, addr,
+			key, datatype, op, context);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(compare_atomic, OPX_LOCK, OPX_AV,
+							   0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR)(
+			ep, buf, count, desc, compare, compare_desc, result, result_desc, dest_addr, addr,
+			key, datatype, op, context);
+	} else {
+		/* should never get here */
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+		abort();
+	}
+	return (ssize_t) -FI_EPERM;
 }

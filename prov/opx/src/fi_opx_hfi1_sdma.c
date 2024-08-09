@@ -214,7 +214,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 		fprintf(stderr, "(%d) [%d] PBC: %#16.16lX\n",
 			pid, req_num, header_vec->scb.qw0);
 
-		fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.hdr, func, line);
+		fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.hdr, OPX_HFI1_TYPE, func, line);
 
 		fprintf(stderr, "(%d) [%d] req data iov=%p len=%lu\n",
 			pid, req_num, iov_ptr[1].iov_base, iov_ptr[1].iov_len);
@@ -246,7 +246,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 					"(%d) [%d] ERROR: Request opcode is set to EXPECTED (TID), but TID IOV's length is < minimum!\n",
 					pid, req_num);
 			}
-			uint32_t kdeth = (uint32_t) (header_vec->scb.hdr.qw[2] >> 32);
+			uint32_t kdeth = (uint32_t) (header_vec->scb.hdr.qw_9B[2] >> 32);
 			uint32_t tidctrl = (kdeth >> FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT) & FI_OPX_HFI1_KDETH_TIDCTRL;
 			uint32_t tididx = (kdeth >> FI_OPX_HFI1_KDETH_TID_SHIFT) & FI_OPX_HFI1_KDETH_TID;
 			uint32_t tidOMshift = (kdeth >> KDETH_OM_SHIFT) & KDETH_OM_MASK;
