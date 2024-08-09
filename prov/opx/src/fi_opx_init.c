@@ -59,7 +59,7 @@ union fi_opx_addr opx_default_addr = {
 	.hfi1_rx = 0,
 	.hfi1_unit = 0xff,
 	.reliability_rx = 0,
-	.uid = { .lid = 0xffff, .endpoint_id = 0xffff },
+	.uid = {.lid = 0xffff, .lid_3B = 0xff, .endpoint_id = 0xff },
 	.rx_index = 0,
 };
 
@@ -649,10 +649,10 @@ struct fi_provider fi_opx_provider = {
  */
 static void do_static_assert_tests()
 {
-	// Verify that pio_state is exactly one cache-line long. */
+	// Verify that pio_state is exactly one cache-line long.
 	OPX_COMPILE_TIME_ASSERT((sizeof(union fi_opx_hfi1_pio_state) == 8),
 		"fi_opx_hfi1_pio_state size error.");
-	// Verify that pointers are exactly one cache-line long. */
+	// Verify that pointers are exactly one cache-line long.
 	OPX_COMPILE_TIME_ASSERT((sizeof(union fi_opx_hfi1_pio_state*) == 8),
 		"fi_opx_hfi1_pio_state pointer size error.");
 
@@ -675,8 +675,6 @@ static void do_static_assert_tests()
 				"sizeof(fi_opx_hmem_info) >> 3 != OPX_HMEM_SIZE_QWS") ;
 	OPX_COMPILE_TIME_ASSERT(OPX_HFI1_TID_PAGESIZE == 4096,
 				"OPX_HFI1_TID_PAGESIZE must be 4K!");
-	OPX_COMPILE_TIME_ASSERT(OPX_MR != OFI_MR_UNSPEC,
-				"OPX_MR should be set to 'FI_MR_SCALABLE' or 'FI_MR_BASIC', not 'FI_MR_UNSPEC'");
 }
 #pragma GCC diagnostic pop
 
@@ -740,6 +738,7 @@ OPX_INI
 	/* CN5000 only */
 	fi_param_define(&fi_opx_provider, "rate_control", FI_PARAM_INT,"Rate control (CN5000 only).  Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Default is %d\n", OPX_BTH_RC2_DEFAULT);
 	// fi_param_define(&fi_opx_provider, "varname", FI_PARAM_*, "help");
+	fi_param_define(&fi_opx_provider, "mixed_network", FI_PARAM_INT, "Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when mixed network is used. Default is 0.\n");
 
 	/* Track TID and HMEM domains so caches can be cleared on exit */
 	dlist_init(&fi_opx_global.tid_domain_list);

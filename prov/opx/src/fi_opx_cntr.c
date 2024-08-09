@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 by Cornelis Networks.
+ * Copyright (C) 2021-2024 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -79,12 +79,12 @@ static uint64_t fi_opx_cntr_read(struct fid_cntr *cntr)
 		if (OFI_UNLIKELY(opx_cntr->lock_required)) {
 			for (i=0; i<count; ++i) {
 				fi_opx_lock(&opx_cntr->progress.ep[i]->lock);
-				fi_opx_ep_rx_poll(&opx_cntr->progress.ep[i]->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+				fi_opx_ep_rx_poll(&opx_cntr->progress.ep[i]->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, OPX_HFI1_TYPE);
 				fi_opx_unlock(&opx_cntr->progress.ep[i]->lock);
 			}
 		} else {
 			for (i=0; i<count; ++i) {
-				fi_opx_ep_rx_poll(&opx_cntr->progress.ep[i]->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+				fi_opx_ep_rx_poll(&opx_cntr->progress.ep[i]->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, OPX_HFI1_TYPE);
 			}
 		}
 	}
@@ -153,14 +153,16 @@ fi_opx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 					fi_opx_lock(&opx_cntr->progress.ep[i]->lock);
 					fi_opx_ep_rx_poll(&opx_cntr->progress.ep[i]->ep_fid, 0,
 							  OPX_RELIABILITY,
-							  FI_OPX_HDRQ_MASK_RUNTIME);
+							  FI_OPX_HDRQ_MASK_RUNTIME,
+							  OPX_HFI1_TYPE);
 					fi_opx_unlock(&opx_cntr->progress.ep[i]->lock);
 				}
 			} else {
 				for (i=0; i<count; ++i) {
 					fi_opx_ep_rx_poll(&opx_cntr->progress.ep[i]->ep_fid, 0,
 							  OPX_RELIABILITY,
-							  FI_OPX_HDRQ_MASK_RUNTIME);
+							  FI_OPX_HDRQ_MASK_RUNTIME,
+							  OPX_HFI1_TYPE);
 				}
 			}
 		}

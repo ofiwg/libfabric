@@ -101,11 +101,39 @@ struct fi_opx_daos_hfi_rank {
 	UT_hash_handle 	hh;         /* makes this structure hashable */
 };
 
+/* hfi1 type for bit logic */
 enum opx_hfi1_type {
 	OPX_HFI1_UNDEF		= 0,	// undefined
-	OPX_HFI1_WFR		= 4,	// Omni-path (all generations)
-	OPX_HFI1_JKR		= 5 	// CN5000 (initial generation)
+	OPX_HFI1_JKR_9B		= 1,    // CN5000 built for mixed network. Internal use
+	OPX_HFI1_WFR		= 2,	// Omni-path (all generations)
+	OPX_HFI1_JKR		= 4 	// CN5000 (initial generation)
 };
+
+/* Will remove after 16B SDMA support is finished */
+#define OPX_NO_9B_SUPPORT(_hfi1_type)       			             \
+do {       								     \
+	if(!(_hfi1_type & OPX_HFI1_JKR)) {                                   \
+		fprintf(stderr, "%s NO JKR 9B SUPPORT for %u %s\n", __func__,\
+		    _hfi1_type,                                              \
+		    _hfi1_type & OPX_HFI1_WFR ? "OPX_HFI1_WFR" :   	     \
+		    _hfi1_type & OPX_HFI1_JKR_9B ? "OPX_HFI1_JKR_9B" :       \
+		    "UNKNOWN" );                                             \
+		if(getenv("OPX_9B_ABORT")) abort();                          \
+	}								     \
+	assert(_hfi1_type != OPX_HFI1_UNDEF);                                \
+} while(0)
+
+
+#define OPX_NO_16B_SUPPORT(_hfi1_type)       			             \
+do {       								     \
+	if(!(_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {               \
+		fprintf(stderr, "%s NO 16B SUPPORT for %u %s\n", __func__,   \
+		    _hfi1_type, _hfi1_type & OPX_HFI1_JKR ? "OPX_HFI1_JKR" : \
+		    "UNKNOWN" );                                             \
+		if(getenv("OPX_16B_ABORT")) abort();                         \
+	}								     \
+	assert(_hfi1_type != OPX_HFI1_UNDEF);                                \
+} while(0)
 
 struct fi_opx_hfi_local_info {
 	struct fi_opx_hfi_local_lookup *hfi_local_lookup_hashmap;
@@ -125,19 +153,13 @@ struct fi_opx_hfi_local_info {
 #undef  OPX_SIM_ENABLED
 #endif
 
-/* Build constant for JKR/WFR path optimization */
-#if (defined(OPX_WFR) && defined(OPX_JKR))
-/* Both JKR and WFR runtime support (not constant) */
 #define OPX_HFI1_TYPE fi_opx_global.hfi_local_info.type
-#elif defined(OPX_WFR)
-#define OPX_HFI1_TYPE OPX_HFI1_WFR
-#elif defined(OPX_JKR)
-#define OPX_HFI1_TYPE OPX_HFI1_JKR
-#else
-/* Currently default to WFR (only) */
-#define OPX_WFR
-#define OPX_HFI1_TYPE OPX_HFI1_WFR
-#endif
+
+
+/* Default is both JKR and WFR runtime support (no constant),
+   use a local or global variable */
+
+#define OPX_PRE_CN5000 1
 
 struct fi_opx_hfi_local_lookup_key {
 	uint16_t lid;

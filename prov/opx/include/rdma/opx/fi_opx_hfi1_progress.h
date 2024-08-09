@@ -92,7 +92,8 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep *opx_ep,
 				       volatile uint64_t *rhe_ptr, volatile uint32_t *rhf_ptr,
 				       const uint32_t rhf_msb, const uint32_t rhf_lsb,
 				       const uint64_t rhf_seq, const uint64_t hdrq_offset, const uint64_t rhf_rcvd,
-				       const union fi_opx_hfi1_packet_hdr *const hdr);
+				       const union opx_hfi1_packet_hdr *const hdr,
+				       const enum opx_hfi1_type hfi1_type);
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint64_t hdrq_offset)
@@ -107,25 +108,22 @@ void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint6
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_handle_ud_eager_packet(struct fi_opx_ep *opx_ep,
-					const union fi_opx_hfi1_packet_hdr *const hdr,
-					const uint64_t rhf)
+					const union opx_hfi1_packet_hdr *const hdr,
+					const uint64_t rhf,
+					const uint64_t slid,
+					const uint64_t dlid,
+					const uint16_t pktlen,
+					const enum opx_hfi1_type hfi1_type)
 {
 	/* "eager" packet - has payload */
-	const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf);
-	const uint32_t egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf);
+	const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf,hfi1_type);
+	const uint32_t egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf,hfi1_type);
 	const uint8_t *const __attribute__((unused)) payload =
 		(uint8_t *)((uintptr_t)opx_ep->rx->egrq.base_addr +
 			    (uintptr_t)egrbfr_index * (uintptr_t)opx_ep->rx->egrq.elemsz +
 			    egrbfr_offset * 64);
 
 	assert(payload != NULL);
-
-	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
-	const uint16_t lrh_pktlen_le = ntohs(hdr->stl.lrh.pktlen);
-	const size_t __attribute__((unused)) total_bytes_to_copy =
-		(lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
-	const size_t __attribute__((unused)) payload_bytes_to_copy =
-		total_bytes_to_copy - sizeof(union fi_opx_hfi1_packet_hdr);
 
 	/* currently no eager UD packets are defined */
 	fprintf(stderr, "%s:%s():%d bad ud eager packet; abort.\n", __FILE__, __func__,
@@ -142,7 +140,8 @@ void fi_opx_hfi1_handle_ud_eager_packet(struct fi_opx_ep *opx_ep,
 
 static
 void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep,
-				const union fi_opx_hfi1_packet_hdr *const hdr)
+				const union opx_hfi1_packet_hdr *const hdr,
+				const uint64_t slid)
 {
 	struct fi_opx_reliability_service *service =
 		opx_ep->reliability->state.service;
@@ -165,7 +164,7 @@ void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep,
 						->pending_rx_reliability_pool);
 		assert(ping_op != NULL);
 		ping_op->ud_opcode = hdr->ud.opcode;
-		ping_op->slid = (uint64_t)hdr->stl.lrh.slid;
+		ping_op->slid = slid;
 		ping_op->rx = (uint64_t)hdr->service.origin_reliability_rx;
 		ping_op->key.key = hdr->service.key;
 		ping_op->psn_count = hdr->service.psn_count;
@@ -185,7 +184,7 @@ void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep,
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_handle_ud_ack(struct fi_opx_ep *opx_ep,
-				const union fi_opx_hfi1_packet_hdr *const hdr)
+				const union opx_hfi1_packet_hdr *const hdr)
 {
 	const uint64_t key = hdr->service.key;
 	const uint64_t psn_count = hdr->service.psn_count;
@@ -198,7 +197,7 @@ void fi_opx_hfi1_handle_ud_ack(struct fi_opx_ep *opx_ep,
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_handle_ud_nack(struct fi_opx_ep *opx_ep,
-				const union fi_opx_hfi1_packet_hdr *const hdr)
+				const union opx_hfi1_packet_hdr *const hdr)
 {
 	const uint64_t key = hdr->service.key;
 	const uint64_t psn_count = hdr->service.psn_count;
@@ -211,15 +210,19 @@ void fi_opx_hfi1_handle_ud_nack(struct fi_opx_ep *opx_ep,
 
 __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
-				      const union fi_opx_hfi1_packet_hdr *const hdr,
+				      const union opx_hfi1_packet_hdr *const hdr,
 				      const uint64_t rhf_seq, const uint64_t hdrq_offset,
-				      const uint64_t rhf)
+				      const uint64_t rhf,
+					  const uint64_t slid,
+					  const uint64_t dlid,
+					  const uint16_t pktlen,
+					  const enum opx_hfi1_type hfi1_type)
 {
-	if (OFI_LIKELY(!OPX_RHF_IS_USE_EGR_BUF(rhf))) {
-		/* "header only" packet - no payload */
+	/* "header only" packet - no payload */
+	if (OFI_LIKELY(!OPX_RHF_IS_USE_EGR_BUF(rhf, hfi1_type))) {
 		switch(hdr->ud.opcode) {
 			case FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING:
-				fi_opx_hfi1_handle_ud_ping(opx_ep, hdr);
+				fi_opx_hfi1_handle_ud_ping(opx_ep, hdr, slid);
 				break;
 			case FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK:
 				fi_opx_hfi1_handle_ud_ack(opx_ep, hdr);
@@ -248,12 +251,12 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 				fprintf(stderr, "%s:%s():%d bad ud header packet; abort.\n", __FILE__,
 					__func__, __LINE__);
 				abort();
-		};
+		}
 	} else {
-		fi_opx_hfi1_handle_ud_eager_packet(opx_ep, hdr, rhf);
+		fi_opx_hfi1_handle_ud_eager_packet(opx_ep, hdr, rhf, slid, dlid, pktlen, hfi1_type);
 	}
 
-	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq);
+	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq,hfi1_type);
 	opx_ep->rx->state.hdrq.head =
 		hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
@@ -264,7 +267,7 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 
 __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep,
-				  const union fi_opx_hfi1_packet_hdr *const hdr,
+				  const union opx_hfi1_packet_hdr *const hdr,
 				  const uint64_t rhf_seq, const uint64_t hdrq_offset,
 				  const uint64_t rhf)
 {
@@ -273,11 +276,11 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep,
 	 * Error injection .. purposefully drop packet
 	 */
 	if (OFI_UNLIKELY(FI_OPX_RELIABILITY_RX_DROP_PACKET(&opx_ep->reliability->state, hdr))) {
-		opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq);
+		opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq,OPX_HFI1_TYPE);
 		opx_ep->rx->state.hdrq.head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-		if (OPX_RHF_IS_USE_EGR_BUF(rhf)) { /* eager */
-			const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf);
+		if (OPX_RHF_IS_USE_EGR_BUF(rhf,OPX_HFI1_TYPE)) { /* eager */
+			const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf,OPX_HFI1_TYPE);
 			const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
 			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
 				OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register,
@@ -296,27 +299,30 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep,
 
 __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
-					const union fi_opx_hfi1_packet_hdr *const hdr,
+					const union opx_hfi1_packet_hdr *const hdr,
 					const uint64_t rhf_seq, const uint64_t hdrq_offset,
-					uint8_t *origin_rx, const uint64_t rhf)
+					uint8_t *origin_rx, const uint64_t rhf,
+					const uint64_t slid,
+					const uint16_t pktlen,
+					const enum opx_hfi1_type hfi1_type)
 {
 	/*
 	 * Check for 'reliability' exceptions
 	 */
-	const uint64_t slid = hdr->stl.lrh.slid;
 	const uint64_t origin_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(hdr);
 	const uint64_t psn = FI_OPX_HFI1_PACKET_PSN(hdr);
+
 	if (OFI_UNLIKELY(fi_opx_reliability_rx_check(&opx_ep->reliability->state, slid, origin_tx,
 						     psn, origin_rx) == FI_OPX_RELIABILITY_EXCEPTION)) {
-		if (!OPX_RHF_IS_USE_EGR_BUF(rhf)) {
+		if (!OPX_RHF_IS_USE_EGR_BUF(rhf,hfi1_type)) {
 			/* no payload */
 			fi_opx_reliability_rx_exception(&opx_ep->reliability->state, slid,
-							origin_tx, psn, &opx_ep->ep_fid, hdr, NULL);
+							origin_tx, psn, &opx_ep->ep_fid, hdr, NULL, pktlen, hfi1_type);
 
 		} else {
 			/* has payload */
-			const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf);
-			const uint32_t egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf);
+			const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf,hfi1_type);
+			const uint32_t egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf,hfi1_type);
 			const uint8_t *const payload =
 				(uint8_t *)((uintptr_t)opx_ep->rx->egrq.base_addr +
 					    (uintptr_t)egrbfr_index *
@@ -326,7 +332,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 			assert(payload != NULL);
 			fi_opx_reliability_rx_exception(&opx_ep->reliability->state, slid,
 							origin_tx, psn, &opx_ep->ep_fid, hdr,
-							payload);
+							payload, pktlen, hfi1_type);
 
 			const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
 			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
@@ -336,7 +342,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 			}
 		}
 
-		opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq);
+		opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq,hfi1_type);
 		opx_ep->rx->state.hdrq.head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
 		fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
@@ -348,40 +354,43 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
-			       const union fi_opx_hfi1_packet_hdr *const hdr,
+			       const union opx_hfi1_packet_hdr *const hdr,
 			       const uint64_t rhf_seq, const uint64_t hdrq_offset,
 			       const int lock_required,
 			       const enum ofi_reliability_kind reliability,
 			       const uint8_t origin_rx,
-				   const uint64_t rhf)
+				   const uint64_t rhf,
+				   const enum opx_hfi1_type hfi1_type,
+				   const uint64_t slid,
+				   const uint16_t pktlen)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "================ received a packet from the fabric\n");
 
-	if (!OPX_RHF_IS_USE_EGR_BUF(rhf)) {
+	if (!OPX_RHF_IS_USE_EGR_BUF(rhf,hfi1_type)) {
 		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)) {
 			/* "header only" packet - no payload */
 			fi_opx_ep_rx_process_header(&opx_ep->ep_fid, hdr, NULL, 0, FI_TAGGED,
 						    FI_OPX_HFI_BTH_OPCODE_TAG_INJECT,
 						    origin_rx,
 						    OPX_INTRANODE_FALSE,
-						    lock_required, reliability);
-
+						    lock_required, reliability, 
+							hfi1_type, slid);
 		} else if (opcode > FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
 			/* all other "tag" packets */
 			fi_opx_ep_rx_process_header_tag(&opx_ep->ep_fid, hdr, NULL, 0, opcode,
 							origin_rx, OPX_INTRANODE_FALSE,
-							lock_required, reliability);
+							lock_required, reliability, hfi1_type, slid);
 
 		} else {
 			fi_opx_ep_rx_process_header_msg(&opx_ep->ep_fid, hdr, NULL, 0, opcode,
 							origin_rx, OPX_INTRANODE_FALSE,
-							lock_required, reliability);
+							lock_required, reliability, hfi1_type, slid);
 		}
 	} else {
 		/* "eager" packet - has payload */
-		const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf);
-		const uint32_t egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf);
+		const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf,hfi1_type);
+		const uint32_t egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf,hfi1_type);
 		const uint8_t *const payload =
 			(uint8_t *)((uintptr_t)opx_ep->rx->egrq.base_addr +
 				    (uintptr_t)egrbfr_index * (uintptr_t)opx_ep->rx->egrq.elemsz +
@@ -390,11 +399,21 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 		assert(payload != NULL);
 
 		/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
-		const uint16_t lrh_pktlen_le = ntohs(hdr->stl.lrh.pktlen);
-		const size_t total_bytes_to_copy =
-			(lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
-		const size_t payload_bytes_to_copy =
-			total_bytes_to_copy - sizeof(union fi_opx_hfi1_packet_hdr);
+		uint16_t lrh_pktlen_le;
+		size_t total_bytes_to_copy;
+		size_t payload_bytes_to_copy;
+		
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			lrh_pktlen_le = ntohs(pktlen);
+			total_bytes_to_copy = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
+			payload_bytes_to_copy =
+				total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B);
+		} else {
+			lrh_pktlen_le = pktlen;
+			total_bytes_to_copy = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing tail/icrc QW*/
+			payload_bytes_to_copy =
+				total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B);
+		}
 
 		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)) {
 			fi_opx_ep_rx_process_header(
@@ -403,18 +422,20 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 				payload_bytes_to_copy, FI_TAGGED, FI_OPX_HFI_BTH_OPCODE_TAG_EAGER,
 				origin_rx,
 				OPX_INTRANODE_FALSE,
-				lock_required, reliability);
+				lock_required, reliability,
+				hfi1_type,
+				slid);
 		} else if (opcode > FI_OPX_HFI_BTH_OPCODE_TAG_EAGER) { /* all other "tag" packets */
 			fi_opx_ep_rx_process_header_tag(&opx_ep->ep_fid, hdr, payload,
 							payload_bytes_to_copy, opcode,
 							origin_rx, OPX_INTRANODE_FALSE,
-							lock_required, reliability);
+							lock_required, reliability, hfi1_type, slid);
 
 		} else {
 			fi_opx_ep_rx_process_header_msg(&opx_ep->ep_fid, hdr, payload,
 							payload_bytes_to_copy, opcode,
 							origin_rx, OPX_INTRANODE_FALSE,
-							lock_required, reliability);
+							lock_required, reliability, hfi1_type, slid);
 		}
 		const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
@@ -426,7 +447,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 		FLIGHT_RECORDER_PACKET_HDR(opx_ep->fr, FR_EVENT_HFI1_POLL_ONCE, hdr);
 	}
 
-	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq);
+	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq,hfi1_type);
 	opx_ep->rx->state.hdrq.head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
 	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
@@ -449,10 +470,10 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 				opx_ep->reliability->state.rx,
 				psn - opx_ep->reliability->service.preemptive_ack_rate + 1, /* psn_start */
 				opx_ep->reliability->service.preemptive_ack_rate, /* psn_count */
-				hdr, origin_rx);
+				hdr, origin_rx, slid, hfi1_type);
 
-	} else if (hdr->stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA &&
-			((ntohl(hdr->stl.bth.psn) & 0x80000000) ||
+	} else if (hdr->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA &&
+			((ntohl(hdr->bth.psn) & 0x80000000) ||
 			(hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_PUT))) {
 		/* Send preemptive ACKs on Rendezvous FI_OPX_HFI_DPUT_OPCODE_PUT or
 		 * on the final packet of a Rendezvous SDMA writev (the high bit
@@ -466,15 +487,9 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 				opx_ep->reliability->state.rx,
 				psn - psn_count + 1, /* psn_start */
 				psn_count, /* psn_count */
-				hdr, origin_rx);
+				hdr, origin_rx, slid, hfi1_type);
 	}
 }
-
-/*
- * ============================================================================
- * Write CSR software trigger from host software by writing MISC_GPIO_OUT = 0x4
- * ============================================================================
-*/
 
 /*
  * ============================================================================
@@ -484,7 +499,8 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			       const enum ofi_reliability_kind reliability,
-			       const uint64_t hdrq_mask)
+			       const uint64_t hdrq_mask,
+			       const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const uint64_t local_hdrq_mask = (hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME) ?
@@ -496,34 +512,62 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 	volatile uint32_t *rhf_ptr = opx_ep->rx->hdrq.rhf_base + hdrq_offset;
 
 	const uint64_t rhf_rcvd = *((volatile uint64_t *)rhf_ptr);
+	uint32_t slid, dlid;
+	uint16_t pktlen;
 
 	const uint64_t rhf_seq = opx_ep->rx->state.hdrq.rhf_seq;
 	/* The software must look at the RHF.RcvSeq.
 	 * If it detects the next sequence number in the entry, the new header
 	 * was written into memory.  Otherwise, do not process RHF - no packet.
 	 */
-	if (OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd)) {
+	if (OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type)) {
 		const uint32_t rhf_msb = rhf_rcvd >> 32;
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "OPX_RHF_SEQ_MATCH = %d rhf_rcvd = %#lx rhf_seq = %#lx\n",
-			     OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd), rhf_rcvd, rhf_seq);
+       			     OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type), rhf_rcvd, rhf_seq);
 
 		const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
-		uint32_t *pkt = (uint32_t *)rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS +
-				2 + /* rhf field size in dw */
-				hdrq_offset_dws;
+		uint32_t *pkt;
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			assert(hdrq_offset_dws); /* need padding before this header */
+			pkt = (uint32_t *)rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS +
+				2 /* rhf field size in dw */
+				- 2 /* sizeof(uint64_t) in dw, offset back to align
+				       for the 9B padding in the header union */
+				+ hdrq_offset_dws;
+		} else {
+			assert(((union opx_jkr_rhf)rhf_rcvd).L2Type == 0x2);
+			pkt = (uint32_t *)rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS +
+				2 /* rhf field size in dw */
+				+ hdrq_offset_dws;
+			/* Assert we got full expected kdeth split header.
+			 * In the future, we may handle this so this is
+			 *  not part of OPX_RHF_CHECK_HEADER */
+			assert(!(((union opx_jkr_rhf)rhf_rcvd).KHdrLenErr));
+		}
 
-		const union fi_opx_hfi1_packet_hdr *const hdr = (union fi_opx_hfi1_packet_hdr *)pkt;
-
-		const uint8_t opcode = hdr->stl.bth.opcode;
+		const union opx_hfi1_packet_hdr *const hdr = (union opx_hfi1_packet_hdr *)pkt;
+		const uint8_t opcode = hdr->bth.opcode;
 
 		/* If there's an RHF/RHE error or a bad header detected,
 		   handle the error and return */
-		if(OPX_RHF_CHECK_HEADER(rhf_rcvd, hdr)) {
+		if(OPX_RHF_CHECK_HEADER(rhf_rcvd, hdr, hfi1_type)) {
 			const uint32_t rhf_lsb  = rhf_rcvd & 0xFFFFFFFF;
 			volatile uint64_t *rhe_ptr = opx_ep->rx->hdrq.rhe_base;
-			return fi_opx_hfi1_handle_poll_error(opx_ep, rhe_ptr, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset, rhf_rcvd, hdr);
+			return fi_opx_hfi1_handle_poll_error(opx_ep, rhe_ptr, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset, rhf_rcvd, hdr, hfi1_type);
 		}
+
+
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			slid = (uint32_t)hdr->lrh_9B.slid;
+			pktlen = (uint32_t)hdr->lrh_9B.pktlen; /* pass it down unchanged. lower layers handle BE/LE */
+			dlid = (uint32_t)hdr->lrh_9B.dlid;
+		} else {
+			slid = htons((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid)); /* BE for lower layers */
+			pktlen = (uint16_t) hdr->lrh_16B.pktlen; /* pass it down unchanged. lower layers handle BE/LE */
+			dlid = htons(((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid))); /* BE for lower layers */
+		}        
+
 
 		if (OFI_UNLIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_UD)) {
 			assert(reliability == OFI_RELIABILITY_KIND_ONLOAD);
@@ -531,25 +575,29 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			 * process "unreliable datagram" packets first - before all the
 			 * software reliability protocol checks.
 			 */
-			return fi_opx_hfi1_handle_ud_packet(opx_ep, hdr, rhf_seq, hdrq_offset, rhf_rcvd);
+			return fi_opx_hfi1_handle_ud_packet(opx_ep, hdr, rhf_seq, hdrq_offset, rhf_rcvd, 
+						slid, dlid, pktlen, hfi1_type);
 		}
 
 		uint8_t origin_rx;
 		/*
-			* check for software reliability events
-			*/
+		 * check for software reliability events
+		 */
 		/* This error inject call will compile out in optimized builds */
 		unsigned rc = fi_opx_hfi1_error_inject(opx_ep, hdr, rhf_seq, hdrq_offset, rhf_rcvd);
 		if (OFI_UNLIKELY(rc != -1)) {
 			return rc;
 		}
+
 		rc = fi_opx_hfi1_handle_reliability(opx_ep, hdr,  rhf_seq,
-							hdrq_offset, &origin_rx, rhf_rcvd);
+							hdrq_offset, &origin_rx, rhf_rcvd, slid, pktlen, hfi1_type);
 		if (OFI_UNLIKELY(rc != -1)) {
 			return rc;
 		}
+
 		fi_opx_hfi1_handle_packet(opx_ep, opcode, hdr, rhf_seq,
-					  hdrq_offset, lock_required, reliability, origin_rx, rhf_rcvd);
+					  hdrq_offset, lock_required, reliability, origin_rx, rhf_rcvd, 
+					  hfi1_type, slid, pktlen);
 		return 1; /* one packet was processed */
 	}
 	return 0;
@@ -561,23 +609,34 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
  * ============================================================================
  */
 static inline
-void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
+void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
+		const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	uint64_t pos;
 	struct opx_shm_packet* packet = opx_shm_rx_next(&opx_ep->rx->shm, &pos);
-	union fi_opx_hfi1_packet_hdr * hdr = (packet) ?
-		(union fi_opx_hfi1_packet_hdr *) packet->data : NULL;
+	union opx_hfi1_packet_hdr * hdr = (packet) ?
+		(union opx_hfi1_packet_hdr *) packet->data : NULL;
+	uint32_t slid;
 
 	while (hdr != NULL) {
-		const uint8_t opcode = hdr->stl.bth.opcode;
+		const uint8_t opcode = hdr->bth.opcode;
 		uint32_t origin_reliability_rx = hdr->service.origin_reliability_rx;
 
 		/* DAOS HFI Rank Support: */
 		if (!opx_ep->daos_info.hfi_rank_enabled) {
-			assert(hdr->stl.lrh.dlid == opx_ep->rx->self.uid.lid);
-			assert(hdr->stl.bth.rx == opx_ep->rx->self.hfi1_rx ||
-				hdr->stl.bth.rx == opx_ep->rx->self.reliability_rx);
+#ifndef NDEBUG
+			uint32_t dlid __attribute__ ((unused));
+			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+				dlid = hdr->lrh_9B.dlid;
+			} else {
+				dlid = htons((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid));
+			} 
+
+			assert(dlid == opx_ep->rx->self.uid.lid);
+			assert(hdr->bth.rx == opx_ep->rx->self.hfi1_rx ||
+				hdr->bth.rx == opx_ep->rx->self.reliability_rx);
+#endif
 		} else {
 			/* DAOS Persistent Address Support:
 			 * No Context Resource Management Framework is supported by OPX to
@@ -596,8 +655,16 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 			 * change due to support for Persistent Addressing.  The only reliable field
 			 * in the fi_addr is the hfi1_unit.
 			 */
-			assert(hdr->stl.lrh.dlid == opx_ep->rx->self.uid.lid);
+#ifndef NDEBUG
+			uint32_t dlid __attribute__ ((unused));
+			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+				dlid = hdr->lrh_9B.dlid;
+			} else {
+				dlid = htons(hdr->lrh_16B.dlid20 << 20 | hdr->lrh_16B.dlid);
+			}
 
+			assert(dlid == opx_ep->rx->self.uid.lid);
+#endif
 			/* origin_reliability_rx is HFI rank instead of HFI rx */
 			origin_reliability_rx = packet->origin_rank;
 
@@ -610,6 +677,12 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 				opx_ep->daos_info.rank, opx_ep->rx->shm.segment_key);
 		}
 
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			slid = hdr->lrh_9B.slid;
+		} else {
+			slid = htons(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
+		}
+
 		if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
 			fi_opx_ep_rx_process_header(ep, hdr, NULL, 0,
 				FI_TAGGED,
@@ -617,7 +690,9 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 				(const uint8_t) origin_reliability_rx,
 				OPX_INTRANODE_TRUE,
 				lock_required,
-				OFI_RELIABILITY_KIND_NONE);
+				OFI_RELIABILITY_KIND_NONE,
+				hfi1_type,
+				slid);
 
 		} else if (opcode == FI_OPX_HFI_BTH_OPCODE_UD) {
 			const uint8_t ud_opcode = hdr->ud.opcode;
@@ -642,9 +717,19 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 			const uint8_t * const payload = (uint8_t *)(hdr+1);
 
 			/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
-			const uint16_t lrh_pktlen_le = ntohs(hdr->stl.lrh.pktlen);
-			const size_t total_bytes_to_copy = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
-			const size_t payload_bytes_to_copy = total_bytes_to_copy - sizeof(union fi_opx_hfi1_packet_hdr);
+			uint16_t lrh_pktlen_le;
+			size_t total_bytes_to_copy;	
+			size_t payload_bytes_to_copy;
+
+			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+				lrh_pktlen_le = ntohs(hdr->lrh_9B.pktlen);
+				total_bytes_to_copy = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
+				payload_bytes_to_copy = total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B);
+			} else {
+				lrh_pktlen_le = hdr->lrh_16B.pktlen;
+				total_bytes_to_copy = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing tail/icrc QW*/
+				payload_bytes_to_copy = total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B);
+			}
 
 			if (opcode >= FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
 
@@ -652,7 +737,8 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 					payload_bytes_to_copy, opcode,
 					(const uint8_t) origin_reliability_rx,
 					OPX_INTRANODE_TRUE,
-					lock_required, OFI_RELIABILITY_KIND_NONE);
+					lock_required, OFI_RELIABILITY_KIND_NONE,
+					hfi1_type, slid);
 
 			} else {
 
@@ -660,13 +746,15 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 					payload_bytes_to_copy, opcode,
 					(const uint8_t) origin_reliability_rx,
 					OPX_INTRANODE_TRUE,
-					lock_required, OFI_RELIABILITY_KIND_NONE);
+					lock_required, OFI_RELIABILITY_KIND_NONE,
+					hfi1_type, slid);
 			}
 		}
 
 		opx_shm_rx_advance(&opx_ep->rx->shm, (void *)hdr, pos);
 		packet = opx_shm_rx_next(&opx_ep->rx->shm, &pos);
-		hdr = (packet) ? (union fi_opx_hfi1_packet_hdr *) packet->data : NULL;
+		hdr = (packet) ?
+			(union opx_hfi1_packet_hdr *) packet->data : NULL;
 	}
 }
 
@@ -677,7 +765,8 @@ void fi_opx_hfi1_poll_many (struct fid_ep *ep,
 		const int lock_required,
 		const uint64_t caps,
 		const enum ofi_reliability_kind reliability,
-		const uint64_t hdrq_mask)
+		const uint64_t hdrq_mask,
+		const enum opx_hfi1_type hfi1_type)
 {
 	/* All callers to this function should have already obtained the necessary lock */
 	assert(!lock_required);
@@ -690,13 +779,15 @@ void fi_opx_hfi1_poll_many (struct fid_ep *ep,
 
 
 	if ((caps & FI_LOCAL_COMM) || (caps == 0)) {
-		fi_opx_shm_poll_many(ep, 0);
+		fi_opx_shm_poll_many(ep, 0, hfi1_type);
 	}
 
 	if ((caps & FI_REMOTE_COMM) || (caps == 0)) {
 		do {
-			packets = fi_opx_hfi1_poll_once(ep, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask);
+			packets = fi_opx_hfi1_poll_once(ep, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, hfi1_type);
 		} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
+
+
 
 		if (reliability == OFI_RELIABILITY_KIND_ONLOAD) {	/* compile-time constant expression */
 
@@ -717,7 +808,6 @@ void fi_opx_hfi1_poll_many (struct fid_ep *ep,
 				fi_opx_timer_now(timestamp, timer);
 				service->usec_next = fi_opx_timer_next_event_usec(timer, timestamp, service->usec_max);
 			}// End timer fired
-
 
 		}
 	}

@@ -98,23 +98,22 @@
 /* Fields that unused on JKR (zero will be OR'd) */
 #define OPX_PBC_JKR_UNUSED            0UL
          
-#define OPX_PBC_JKR_DLID(_dlid) (((unsigned long long)(_dlid & OPX_PBC_JKR_DLID_MASK) << OPX_PBC_JKR_DLID_SHIFT) << OPX_PBC_MSB_SHIFT)
-#define OPX_PBC_JKR_SCTXT(_ctx) (((unsigned long long)(_ctx & OPX_PBC_JKR_SCTXT_MASK) << OPX_PBC_JKR_SCTXT_SHIFT) << OPX_PBC_MSB_SHIFT)
+#define OPX_PBC_JKR_DLID(_dlid) (((unsigned long long)(_dlid & OPX_PBC_JKR_DLID_MASK) << OPX_PBC_JKR_DLID_SHIFT) << OPX_MSB_SHIFT)
+#define OPX_PBC_JKR_SCTXT(_ctx) (((unsigned long long)(_ctx & OPX_PBC_JKR_SCTXT_MASK) << OPX_PBC_JKR_SCTXT_SHIFT) << OPX_MSB_SHIFT)
 #define OPX_PBC_JKR_L2COMPRESSED(_c)    OPX_PBC_JKR_UNUSED /* unused until 16B headers are optimized */
 #define OPX_PBC_JKR_PORTIDX(_pidx)  (((OPX_JKR_PHYS_PORT_TO_INDEX(_pidx)) & OPX_PBC_JKR_PORT_MASK) << OPX_PBC_JKR_PORT_SHIFT)
 #define OPX_PBC_JKR_LRH_DLID_TO_PBC_DLID(_dlid)    OPX_PBC_JKR_DLID(htons(_dlid >> 16))
+#define OPX_PBC_JKR_INSERT_NON9B_ICRC           (1<<24)
 
 #ifndef NDEBUG
 __OPX_FORCE_INLINE__
 uint32_t opx_pbc_jkr_l2type(unsigned _type)
 {
-	/* 16B not supported yet */
-	assert(_type == OPX_PBC_JKR_L2TYPE_9B);
 	return (_type & OPX_PBC_JKR_L2TYPE_MASK) << OPX_PBC_JKR_L2TYPE_SHIFT;
 }
 #define OPX_PBC_JKR_L2TYPE(_type) opx_pbc_jkr_l2type(_type)
 #else
-#define OPX_PBC_JKR_L2TYPE(_type) ((OPX_PBC_JKR_L2TYPE_9B & OPX_PBC_JKR_L2TYPE_MASK) << OPX_PBC_JKR_L2TYPE_SHIFT) /* 16B not supported yet */
+#define OPX_PBC_JKR_L2TYPE(_type) ((_type & OPX_PBC_JKR_L2TYPE_MASK) << OPX_PBC_JKR_L2TYPE_SHIFT) 
 #endif
 
 #define OPX_PBC_JKR_RUNTIME(_dlid, _pidx) OPX_PBC_JKR_UNUSED
@@ -187,6 +186,18 @@ static inline int opx_bth_rc2_val()
 #define OPX_BTH_JKR_RC2(_rc2)     ((_rc2 & OPX_BTH_JKR_RC2_MASK) << OPX_BTH_JKR_RC2_SHIFT)
 #define OPX_BTH_JKR_RC2_VAL       opx_bth_rc2_val()
 
+
+/* LRH */
+#define OPX_LRH_JKR_16B_DLID_MASK_16B 0x0FFFFF
+#define OPX_LRH_JKR_16B_DLID_SHIFT_16B OPX_MSB_SHIFT
+
+#define OPX_LRH_JKR_16B_DLID20_MASK_16B 0xF00000
+#define OPX_LRH_JKR_16B_DLID20_SHIFT_16B (20 - 12) // shift right 20 (dlid bits) and left 12 (lrh bits)
+
+#define OPX_LRH_JKR_16B_RX_MASK_16B 0xFF
+#define OPX_LRH_JKR_16B_RX_SHIFT_16B (7*8) // 7 bytes
+
+
 /* RHF */
 /* JKR
  *
@@ -204,8 +215,8 @@ static inline int opx_bth_rc2_val()
 
 #define OPX_JKR_RHF_SEQ_NOT_MATCH(_seq, _rhf)   (_seq != (_rhf & 0x0F00000000000000ul))
 #define OPX_JKR_RHF_SEQ_INCREMENT(_seq)         ((_seq < 0x0D00000000000000ul) * _seq + 0x0100000000000000ul)
-#define OPX_JKR_IS_ERRORED_RHF(_rhf)            (_rhf & 0x8000000000000000ul)
-#define OPX_JKR_RHF_SEQ_MATCH(_seq, _rhf)       (_seq == (_rhf & 0x0F00000000000000ul))
+#define OPX_JKR_IS_ERRORED_RHF(_rhf, _hfi1_type)            (_rhf & 0x8000000000000000ul) /* does not check RHF.KHdrLenErr */
+#define OPX_JKR_RHF_SEQ_MATCH(_seq, _rhf, _hfi1_type)       (_seq == (_rhf & 0x0F00000000000000ul))
 #define OPX_JKR_RHF_SEQ_INIT_VAL                (0x0100000000000000ul)
 
 #define OPX_JKR_RHF_IS_USE_EGR_BUF(_rhf)        ((_rhf & 0x00008000ul) == 0x00008000ul)
@@ -238,10 +249,11 @@ void opx_jkr_rhe_debug(struct fi_opx_ep * opx_ep,
 		       const uint64_t rhf_seq,
 		       const uint64_t hdrq_offset,
 		       const uint64_t rhf_rcvd,
-		       const union fi_opx_hfi1_packet_hdr *const hdr);
+		       const union opx_hfi1_packet_hdr *const hdr,
+		       const enum opx_hfi1_type hfi1_type);
 
-#define OPX_JKR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr) \
-        opx_jkr_rhe_debug(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr)
+#define OPX_JKR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr, _hfi1_type) \
+        opx_jkr_rhe_debug(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr, _hfi1_type)
 
 // Common to both JKR/WFR
 
@@ -250,22 +262,122 @@ void opx_jkr_rhe_debug(struct fi_opx_ep * opx_ep,
 #define OPX_JKR_RHF_RCV_TYPE_OTHER(_rhf)        ((_rhf & 0x00006000ul) != 0x00000000ul)
 
 /* Common (jkr) handler to WFR/JKR 9B (for now) */
-int opx_jkr_rhf_error_handler(const uint64_t rhf_rcvd, const union fi_opx_hfi1_packet_hdr *const hdr);
+int opx_jkr_rhf_error_handler(const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
+			      const enum opx_hfi1_type hfi1_type);
 
-__OPX_FORCE_INLINE__ int opx_jkr_rhf_check_header(const uint64_t rhf_rcvd, const union fi_opx_hfi1_packet_hdr *const hdr)
+__OPX_FORCE_INLINE__ int opx_jkr_9B_rhf_check_header(const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
+						  const enum opx_hfi1_type hfi1_type)
 {
 	/* RHF error */
-	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd))) return 1; /* error */
+	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR))) return 1; /* error */
 
 	/* Bad packet header */
 	if (OFI_UNLIKELY((!OPX_JKR_RHF_IS_USE_EGR_BUF(rhf_rcvd)) &&
-	    (ntohs(hdr->stl.lrh.pktlen) > 0x15) &&
+			 (ntohs(hdr->lrh_9B.pktlen) > 0x15) &&
 	    !(OPX_JKR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd))))
-		return opx_jkr_rhf_error_handler(rhf_rcvd, hdr); /* error */
+		return opx_jkr_rhf_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
 	else
 		return 0; /* no error*/
 }
-#define OPX_JKR_RHF_CHECK_HEADER(_rhf_rcvd, _hdr) opx_jkr_rhf_check_header(_rhf_rcvd, _hdr)
 
+__OPX_FORCE_INLINE__ int opx_jkr_16B_rhf_check_header(const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
+						  const enum opx_hfi1_type hfi1_type)
+{
+	/* RHF error */
+	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR))) return 1; /* error */
+
+	/* Bad packet header */
+	if (OFI_UNLIKELY((!OPX_JKR_RHF_IS_USE_EGR_BUF(rhf_rcvd)) &&
+			 (hdr->lrh_16B.pktlen > 0x9) &&
+	    !(OPX_JKR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd))))
+		return opx_jkr_rhf_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
+	else
+		return 0; /* no error*/
+}
+
+#define OPX_JKR_RHF_CHECK_HEADER(_rhf_rcvd, _hdr, _hfi1_type) ((_hfi1_type & OPX_HFI1_JKR_9B) ? \
+		opx_jkr_9B_rhf_check_header(_rhf_rcvd, _hdr, _hfi1_type) : opx_jkr_16B_rhf_check_header(_rhf_rcvd, _hdr, _hfi1_type))
+
+union opx_jkr_pbc{
+	uint64_t raw64b;
+	uint32_t raw32b[2];
+
+	__le64 qw;
+	__le32 dw[2];
+	__le16 w[1];
+
+	struct {
+		__le64 LengthDWs:12;
+		__le64 Vl:4;
+		__le64 PortIdx:2;
+		__le64 Reserved_2:1;
+		__le64 L2Compressed:1;
+		__le64 L2Type:2;
+		__le64 Fecnd:1;
+		__le64 TestBadLcrc:1;
+		__le64 InsertNon9bIcrc:1;
+		__le64 CreditReturn:1;
+		__le64 InsertHcrc:2;
+		__le64 Reserved_1:1;
+		__le64 TestEbp:1;
+		__le64 Sc4:1;
+		__le64 Intr:1;
+		__le64 Dlid: 24;
+		__le64 SendCtxt: 8;
+	};
+
+};
+
+#ifndef NDEBUG
+        #define OPX_PRINT_RHF(a) opx_print_rhf((opx_jkr_rhf)(a),__func__,__LINE__)
+#else
+        #define OPX_PRINT_RHF(a)
+#endif
+
+union opx_jkr_rhf {
+	uint64_t qw;
+	uint32_t dw[2];
+	uint16_t w[4];
+	struct {
+		uint64_t PktLen:12;
+		uint64_t RcvType:3;
+		uint64_t UseEgrBfr:1;
+		uint64_t EgrIndex:14;
+		uint64_t Rsvd:1;
+		uint64_t KHdrLenErr:1;
+		uint64_t EgrOffset:12;
+		uint64_t HdrqOffset:9;
+		uint64_t L2Type9bSc4:1;
+		uint64_t L2Type:2;
+		uint64_t RcvSeq:4;
+		uint64_t RcvPort:2;
+		uint64_t SendPacing:1;
+		uint64_t RheValid:1;
+	};
+};
+
+
+static inline void opx_print_rhf(union opx_jkr_rhf rhf, const char* func, const unsigned line) {
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: %s \n", func, line, __func__);
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.RheValid = %#x\n", func, line, rhf.RheValid);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.SendPacing = %#x\n", func, line, rhf.SendPacing);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.RcvPort = %#x\n", func, line, rhf.RcvPort);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.RcvSeq = %#x\n", func, line, rhf.RcvSeq);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s:%u: RHF.L2Type = %#x%s\n", func, line, rhf.L2Type,
+		     (rhf.L2Type == 0x3 ? " 9B":
+		      (rhf.L2Type == 0x2 ? " 16B":
+		       (rhf.L2Type == 0x1 ? " 10B":
+			(rhf.L2Type == 0x0 ? " 8B":" INVALID")))));
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.L2Type9bSc4 = %#x\n", func, line, rhf.L2Type9bSc4);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.HdrqOffset = %#x\n", func, line, rhf.HdrqOffset);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.EgrOffset = %#x\n", func, line, rhf.EgrOffset);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.Rsvd = %#x\n", func, line, rhf.Rsvd);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.KHdrLenErr = %#x\n", func, line, rhf.KHdrLenErr);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.EgrIndex = %#x\n", func, line, rhf.EgrIndex);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.UseEgrBfr = %#x\n", func, line, rhf.UseEgrBfr);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.RcvType = %#x\n", func, line, rhf.RcvType);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s:%u: RHF.PktLen = %#x\n", func, line, rhf.PktLen);
+}
 
 #endif

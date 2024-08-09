@@ -53,6 +53,7 @@
 #define FI_OPX_ADDR_SEP_RX_MAX			(4)
 #define FI_OPX_HFI1_PACKET_MTU			(8192)
 #define OPX_HFI1_TID_PAGESIZE			(PAGE_SIZE) /* assume 4K, no hugepages*/
+
 #define FI_OPX_HFI1_PACKET_IMM			(16)
 
 /* opcodes (0x00..0xBF) are reserved */
@@ -110,18 +111,18 @@ static inline const char* opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 	}
 	return FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS[sizeof(FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS)/sizeof(char*)-1]; /* INVALID */
 }
-#define FI_OPX_HFI1_PACKET_SLID(packet_hdr)				\
-	(((packet_hdr).qw[0] & 0xFFFF000000000000ul) >> 48)
 
-#define FI_OPX_HFI1_PACKET_PSN(packet_hdr)					\
-	(((packet_hdr)->stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA)	\
-		? ntohl((packet_hdr)->stl.bth.psn) & 0x00FFFFFF			\
-		: (packet_hdr)->reliability.psn)
 
-#define FI_OPX_HFI1_PACKET_ORIGIN_TX(packet_hdr)				\
-	(((packet_hdr)->stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA)	\
-		? (packet_hdr)->dput.target.origin_tx				\
+
+#define FI_OPX_HFI1_PACKET_ORIGIN_TX(packet_hdr)			\
+	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA)	\
+		? (packet_hdr)->dput.target.origin_tx			\
 		: (packet_hdr)->reliability.origin_tx)
+
+#define FI_OPX_HFI1_PACKET_PSN(packet_hdr)				\
+	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA)	\
+		? ntohl((packet_hdr)->bth.psn) & 0x00FFFFFF		\
+		: (packet_hdr)->reliability.psn)
 
 #define FI_OPX_HFI_UD_OPCODE_FIRST_INVALID			(0x00)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING			(0x01)
@@ -214,7 +215,9 @@ static inline const char* opx_hfi1_dput_opcode_to_string(uint8_t opcode)
 #define HFI_KHDR_KVER_SHIFT 30
 #define HFI_KHDR_KVER_MASK 0x3
 
-struct fi_opx_hfi1_stl_packet_hdr {
+
+/* "Legacy" header with 9DWs of KDETH */
+struct fi_opx_hfi1_stl_packet_hdr_9B {
 
 	/* == quadword 0 == */
 	union {
@@ -226,8 +229,8 @@ struct fi_opx_hfi1_stl_packet_hdr {
 			uint16_t	dlid;	/* lrh.w[1] - big-endian! */
 			uint16_t	pktlen;	/* lrh.w[2] - big-endian! */
 			uint16_t	slid;	/* lrh.w[3] - big-endian! */
-		} __attribute__((packed));
-	} lrh;
+		} __attribute__((__packed__));
+	} lrh_9B;
 
 	/* == quadword 1 == */
 	union {
@@ -245,7 +248,7 @@ struct fi_opx_hfi1_stl_packet_hdr {
 
 	/* == quadword 2 == */
 			uint32_t	psn;	/* bth.dw[2] ..... the 'psn' field is unused for 'eager' packets -----> reliability::psn, etc */
-		} __attribute__((packed));
+		} __attribute__((__packed__));
 	} bth;
 
 	union {
@@ -259,11 +262,87 @@ struct fi_opx_hfi1_stl_packet_hdr {
 			uint16_t	jkey;		/* kdeth.w[2]  */
 			uint16_t	hcrc;		/* kdeth.w[3]  */
 			uint32_t	unused;		/* kdeth.dw[2] -----> immediate data (32b) */
-		} __attribute__((packed));
+		} __attribute__((__packed__));
 	} kdeth;
 
 	/* == quadword 4,5,6 == */
-	uint64_t			unused[3];
+	uint64_t			kdeth_sw[3];
+
+} __attribute__((__packed__));
+
+/* "Legacy" header with 9DWs of KDETH */
+struct fi_opx_hfi1_stl_packet_hdr_16B {
+
+	/* == quadword 0,1 == */
+	union {
+		struct {
+			__le64 qw0;
+			__le64 qw1;
+		};
+		__le64 qw[2];
+		__le32 dw[4];
+		__le16 w[8];
+		struct { /* 16B header */
+			__le32 slid:20;   /* dw[0] qw[0]*/
+		/* This is the packet length and is in units of flits (QWs) for 8B, 10B and 16B
+		   formats, but in units of DWs for 9B formats.*/
+		   __le32 pktlen:11;
+		   __le32 b:1;
+		   
+		   __le32 dlid:20;   /* dw[1] */
+		   __le32 sc:5;
+		   __le32 rc:3;
+		   __le32 f:1;
+		   __le32 l2:2;
+		   __le32 lt:1;
+		   
+		   __le32 l4:8;      /* dw[2] qw[1] */
+		   __le32 slid20:4;
+		   __le32 dlid20:4;
+		   __le32 pkey:16;
+		   
+		   __le32 entropy:16;   /* dw[3] */
+		   __le32 age:3;
+		   __le32 cspec:5;
+		   __le32 r:8;
+		};
+	}lrh_16B;
+
+	/* == quadword 2 == */
+	union {
+		uint32_t		dw[3];
+		uint16_t		w[6];
+		uint8_t			hw[12];
+		struct {
+			uint8_t		opcode;	/* bth.hw[0] */
+			uint8_t		bth_1;	/* bth.hw[1] */
+			uint16_t	pkey;	/* bth.w[1]  - big-endian! */
+			uint8_t		ecn;	/* bth.hw[4] (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
+			uint8_t		qp;	/* bth.hw[5] */
+			uint8_t		unused; /* bth.hw[6] -----> inject::message_length, send::xfer_bytes_tail */
+			uint8_t		rx;	/* bth.hw[7] */
+
+	/* == quadword 3 == */
+			uint32_t	psn;	/* bth.dw[2] ..... the 'psn' field is unused for 'eager' packets -----> reliability::psn, etc */
+		} __attribute__((__packed__));
+	} bth;
+
+	union {
+		uint32_t		dw[3];
+		uint16_t		w[6];
+		uint8_t			hw[12];
+		struct {
+			uint32_t	offset_ver_tid;	/* kdeth.dw[0]  .... the 'offset' field is unused for 'eager' packets */
+
+	/* == quadword 4 == */
+			uint16_t	jkey;		/* kdeth.w[2]  */
+			uint16_t	hcrc;		/* kdeth.w[3]  */
+			uint32_t	unused;		/* kdeth.dw[2] -----> immediate data (32b) */
+		} __attribute__((__packed__));
+	} kdeth;
+
+	/* == quadword 5,6,7 == */
+	uint64_t			kdeth_sw[3];
 
 } __attribute__((__packed__));
 
@@ -337,9 +416,10 @@ struct fi_opx_hfi1_stl_packet_hdr {
 #define FI_OPX_PKT_RZV_FLAGS_NONCONTIG		(1ul)
 #define FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK	(FI_OPX_PKT_RZV_FLAGS_NONCONTIG << FI_OPX_PKT_RZV_FLAGS_SHIFT)
 
+#if 0
 #ifndef NDEBUG
 static inline
-void fi_opx_hfi1_dump_stl_packet_hdr (struct fi_opx_hfi1_stl_packet_hdr * hdr,
+void fi_opx_hfi1_dump_stl_packet_hdr (struct fi_opx_hfi1_stl_packet_hdr_9B * hdr,
 		const char * fn, const unsigned ln) {
 
 #if __GNUC__ > 9
@@ -351,10 +431,10 @@ void fi_opx_hfi1_dump_stl_packet_hdr (struct fi_opx_hfi1_stl_packet_hdr * hdr,
 #endif
 
 	fprintf(stderr, "%s():%u ==== dump stl packet header @ %p [%016lx %016lx %016lx %016lx]\n", fn, ln, hdr, qw[0], qw[1], qw[2], qw[3]);
-	fprintf(stderr, "%s():%u .lrh.flags .............     0x%04hx\n", fn, ln, hdr->lrh.flags);
-	fprintf(stderr, "%s():%u .lrh.dlid ..............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh.dlid, hdr->lrh.dlid, ntohs(hdr->lrh.dlid));
-	fprintf(stderr, "%s():%u .lrh.pktlen ............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh.pktlen, hdr->lrh.pktlen, ntohs(hdr->lrh.pktlen));
-	fprintf(stderr, "%s():%u .lrh.slid ..............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh.slid, hdr->lrh.slid, ntohs(hdr->lrh.slid));
+	fprintf(stderr, "%s():%u .lrh.flags .............     0x%04hx\n", fn, ln, hdr->lrh_9B.flags);
+	fprintf(stderr, "%s():%u .lrh.dlid ..............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh_9B.dlid, hdr->lrh_9B.dlid, ntohs(hdr->lrh.dlid));
+	fprintf(stderr, "%s():%u .lrh.pktlen ............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh_9B.pktlen, hdr->lrh_9B.pktlen, ntohs(hdr->lrh.pktlen));
+	fprintf(stderr, "%s():%u .lrh.slid ..............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh_9B.slid, hdr->lrh_9B.slid, ntohs(hdr->lrh.slid));
 	fprintf(stderr, "%s():%u\n", fn, ln);
 	fprintf(stderr, "%s():%u .bth.opcode ............       0x%02x \n", fn, ln, hdr->bth.opcode);
 	fprintf(stderr, "%s():%u .bth.bth_1 .............       0x%02x \n", fn, ln, hdr->bth.bth_1);
@@ -374,7 +454,7 @@ void fi_opx_hfi1_dump_stl_packet_hdr (struct fi_opx_hfi1_stl_packet_hdr * hdr,
 	return;
 }
 #endif
-
+#endif
 
 
 /**
@@ -383,17 +463,17 @@ void fi_opx_hfi1_dump_stl_packet_hdr (struct fi_opx_hfi1_stl_packet_hdr * hdr,
  * The HFI1 packet header is consumed in many places and sometimes overloaded
  * for cache and memory allocation reasons.
  */
-union fi_opx_hfi1_packet_hdr {
+union fi_opx_hfi1_packet_hdr_9B {
 
 
 	uint64_t				qw[7];
 
-	struct fi_opx_hfi1_stl_packet_hdr	stl;
+	struct fi_opx_hfi1_stl_packet_hdr_9B	stl;
 
 	struct {
 		/* == quadword 0 == */
 		uint16_t			reserved_0[3];
-		uint16_t			slid;
+		uint16_t			_slid;
 
 		/* == quadword 1 == */
 		uint64_t			reserved_1;
@@ -413,7 +493,7 @@ union fi_opx_hfi1_packet_hdr {
 	struct {
 		/* == quadword 0 == */
 		uint16_t	reserved_0[3];
-		uint16_t	slid;			/* used for FI_DIRECTED_RECV; identifies the node - big-endian! */
+		uint16_t	_slid;			/* used for FI_DIRECTED_RECV; identifies the node - big-endian! */
 
 		/* == quadword 1 == */
 		uint64_t	reserved_1;
@@ -724,7 +804,7 @@ union fi_opx_hfi1_packet_hdr {
 	struct {
 		/* == quadword 0 == */
 		uint16_t	reserved_0[3];
-		uint16_t	slid;			/* stl.lrh.slid */
+		uint16_t	_slid;			/* stl.lrh.slid */
 
 		/* == quadword 1 == */
 		uint64_t	reserved_1;
@@ -746,16 +826,477 @@ union fi_opx_hfi1_packet_hdr {
 	} __attribute__((__packed__)) service;		/* "reliability service" */
 } __attribute__((__aligned__(8)));
 
-static_assert(((offsetof(union fi_opx_hfi1_packet_hdr, rendezvous.flags) % 8) * 8) == FI_OPX_PKT_RZV_FLAGS_SHIFT,
-		"struct fi_opx_hfi1_packet_hdr.rendezvous.flags offset inconsistent with FLAGS_SHIFT!");
+
+static_assert(((offsetof(union fi_opx_hfi1_packet_hdr_9B, rendezvous.flags) % 8) * 8) == FI_OPX_PKT_RZV_FLAGS_SHIFT,
+		"struct opx_hfi1_packet_hdr.rendezvous.flags offset inconsistent with FLAGS_SHIFT!");
+
+
+
+/*
+          HEADER  UNION             RX POLL
+        =====================    =============
+         9B         16B           9B      16B
+	=========  ==========    =====   =====
+QW[0]   (pad)      LRH               <--    | <-- RX header union pointer
+QW[1]   LRH        LRH              |       |
+QW[2]   BTH        BTH              |       | <- RX common OPX headers
+QW[3]   BTH/KDETH  BTH/KDETH        |       |
+QW[4]   KDETH      KDETH            |       |
+QW[5]   USER/SW    USER/SW          |       |
+QW[6]   USER/SW    USER/SW          |       |
+QW[7]   USER/SW    USER/SW          |       |
+                                   RHF     RHF
+
+  (*) HDRQ entries are 128 bytes (16 quadwords) and include HEADER + RHF
+
+  In RX POLL, pull SLID, DLID and PKTLEN out of 9B/16B LRH.
+  All other RX stack can use the common OPX headers to access OPX fields.
+*/
+
+/**
+ * \brief Converged HFI1 packet header for 9B & 16B (JKR)
+ *
+ * The HFI1 packet header is consumed in many places and sometimes overloaded
+ * for cache and memory allocation reasons.
+ */
+union opx_hfi1_packet_hdr {
+	/* STL UNION */
+	union opx_hfi1_stl_packet_hdr {
+		struct {
+			uint64_t qw0;
+			struct fi_opx_hfi1_stl_packet_hdr_9B hdr_9B; /* 9B legacy w/ 9 DW KDETH */
+			uint64_t qwn[7]; /* 9B(+) QW's */
+		}  __attribute__((__packed__)) fi_opx_hfi1_stl_packet_hdr_9BP; /* 9B(+14 DWs of KDETH ) */
+		struct {
+			struct fi_opx_hfi1_stl_packet_hdr_16B hdr_16B; /* 16B legacy w/ 9 DW KDETH */
+			uint64_t qwn[7]; /* 16B(+) QW's */
+		}  __attribute__((__packed__)) fi_opx_hfi1_stl_packet_hdr_16BP; /* 16B(+14 DWs of KDETH  */
+	} __attribute__((__packed__)) stl; /* for alignment/sizes*/
+
+	/* QUADWORD UNION */
+	struct {
+		uint64_t			unused_pad_9B;
+		uint64_t			qw_9B[7];  /* 9B QW's */
+		uint64_t			qw_9BP[7]; /* 9B(+) QW's */
+	};
+	uint64_t				qw_16B[15]; /* 16B QW's */
+
+	/* Standard (new) Headers - LRH, BTH, KDETH, SW defined (KDETH)
+	   15 quadwords  */
+	struct {
+		/* LRH union for (padded) 9B and 16B LRH */
+		union {
+			struct {
+				uint64_t unused_pad_qw0;
+				union {
+					uint64_t  qw[1]; /* 9B LRH is 1 quadword */
+
+					struct {         /* 9B LRH  */
+						uint16_t	flags;
+						uint16_t	dlid;
+						uint16_t	pktlen;
+						uint16_t	slid;
+					} __attribute__((__packed__));
+				} lrh_9B;
+			};
+			union {
+				__le64 qw[2]; /* 16B is 2 quadwords */
+
+				struct {      /* 16B LRH  */
+					__le32 slid:20;
+				/* This is the packet length and is in units of flits (QWs) for 8B, 10B and 16B
+				   formats, but in units of DWs for 9B formats.*/
+				   __le32 pktlen:11;
+				   __le32 b:1;
+
+				   __le32 dlid:20;
+				   __le32 sc:5;
+				   __le32 rc:3;
+				   __le32 f:1;
+				   __le32 l2:2;
+				   __le32 lt:1;
+
+				   __le32 l4:8;
+				   __le32 slid20:4;
+				   __le32 dlid20:4;
+				   __le32 pkey:16;
+
+				   __le32 entropy:16;
+				   __le32 age:3;
+				   __le32 cspec:5;
+				   __le32 r:8;
+				};
+			} lrh_16B;
+		} ;
+
+		/* QW[2-3] BTH 1 1/2 quadwords, 3 dwords */
+		struct {
+			uint8_t		opcode;
+			uint8_t		bth_1;
+			uint16_t	pkey;
+			uint8_t		ecn;	/* (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
+			uint8_t		qp;
+			uint8_t		unused;
+			uint8_t		rx;
+
+			/* QW[3] starts */
+			uint32_t	psn;
+		} __attribute__((__packed__)) bth;
+
+		/* QW[3-4] KDETH 1 1/2 quadwords, 3 dwords */
+		struct {
+			uint32_t	offset_ver_tid;
+
+			/* QW[4] starts */
+			uint16_t	jkey;
+			uint16_t	hcrc;
+			uint32_t	unused;
+		} __attribute__((__packed__)) kdeth;
+
+		/*  QW[5-7]   9B    SW defined */
+		/*  QW[8-14]  9B(+) SW defined */
+		/*  QW[5-14] 16B    SW defined */
+		uint64_t			sw_defined[10];
+	} __attribute__((__packed__));
+
+
+	/* OPX headers
+	 *
+	 * overlay/redefine some standard header fields
+	 * and the SW defined header */
+
+
+	/*    OPX RELIABILITY HEADER               */
+	struct {
+		uint64_t	                reserved[3]; /* QW[0-2] */
+
+		/* QW[3] BTH/KDETH (psn,offset_ver_tid)*/
+		uint32_t			psn		: 24;
+		uint32_t			origin_tx	:  8;
+		uint8_t				unused;  /* WHY? unused but zeroed in model */
+		uint8_t				reserved_1[3];
+
+		uint64_t			reserved_n[10]; /* QW[4-14] KDETH/SW */
+
+	} __attribute__((__packed__)) reliability;
+
+
+	/*    OPX MATCH HEADER               */
+	struct {
+		uint64_t	reserved[3];            /* QW[0-2] */
+
+		/* QW[3] BTH/KDETH (psn) */
+		uint8_t		reserved_0[3];
+		uint8_t		origin_tx;		/* used for FI_DIRECTED_RECV; identifies the endpoint on the node */
+		uint32_t	reserved_1;
+
+		/* QW[4] KDETH (unused) */
+		uint32_t	reserved_2;
+		uint32_t	ofi_data;		/* used for FI_RX_CQ_DATA */
+
+		uint64_t	reserved_3[2]; 		/* QW[5-6] SW */
+
+		uint64_t	ofi_tag;		/* QW[7] SW last 9B quadword */
+		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+
+	} __attribute__((__packed__)) match;
+
+
+	/*    OPX INJECT HEADER               */
+	struct {
+		uint64_t	reserved[2];            /* QW[0-1] */
+
+		/* QW[2] BTH (unused)*/
+		uint16_t	reserved_1[3];
+		uint8_t		message_length;		/* only need 5 bits; maximum inject message size is 16 bytes */
+		uint8_t		reserved_2;
+
+		/* QW[3-4] BTH/KDETH*/
+		uint64_t	reserved_3[2];
+
+		/* QW[5-6] SW */
+		union {
+			uint8_t		app_data_u8[16];
+			uint16_t	app_data_u16[8];
+			uint32_t	app_data_u32[4];
+			uint64_t	app_data_u64[2];
+		};
+
+		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+
+	} __attribute__((__packed__)) inject;
+
+
+	/*    OPX SEND HEADER               */
+	struct {
+		uint64_t	reserved[2];            /* QW[0-1] */
+
+		/* QW[2] BTH (unused)*/
+		uint16_t	reserved_1[3];
+		uint8_t		xfer_bytes_tail;	/* only need 4 bits; maximum tail size is 8 bytes (or is it 7?) */
+		uint8_t		reserved_2;
+
+		/* QW[3-4] BTH/KDETH*/
+		uint64_t	reserved_3[2];
+
+		/* QW[5] SW */
+		uint16_t	unused[3];
+		uint16_t	payload_qws_total;	/* TODO - use stl.lrh.pktlen instead (num dws); only need 11 bits; maximum number of payload qw is 10240 / 8 = 1280 */
+
+		/* QW[6] SW */
+		uint64_t	xfer_tail;
+
+		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+
+	} __attribute__((__packed__)) send;
+
+	/*    OPX MP EAGER 1ST HEADER            */
+	struct {
+		uint64_t	reserved[2];            /* QW[0-1] */
+
+		/* QW[2] BTH (unused)*/
+		uint16_t	reserved_1[3];
+		uint8_t		xfer_bytes_tail;	/* Maximum tail size is 16 bytes */
+		uint8_t		reserved_2;
+
+		/* QW[3] BTH/KDETH (offset_ver_tid) */
+		uint32_t	reserved_3;
+		uint32_t	payload_bytes_total;	/* Total length of payload across all mp-eager packets */
+
+		/* QW[4] KDETH */
+		uint64_t	reserved_4;
+
+		/* QW[5-6] SW */
+		uint64_t	xfer_tail[2];
+
+		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+
+	} __attribute__((__packed__)) mp_eager_first;
+
+	/*    OPX MP EAGER NTH HEADER               */
+	struct {
+		uint64_t	reserved[2];            /* QW[0-1] */
+
+		/* QW[2] BTH (unused)*/
+		uint16_t	reserved_1[3];
+		uint8_t		xfer_bytes_tail;	/* Maximum tail size is 16 bytes */
+		uint8_t		reserved_2;
+
+		/* QW[3-4] BTH/KDETH */
+		uint64_t	reserved_3[2];
+
+		/* QW[5-6] SW */
+		uint64_t	xfer_tail[2];
+
+		/* QW[7] SW last 9B quadword */
+		uint32_t	payload_offset;
+		uint32_t	mp_egr_uid;
+
+		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+
+	} __attribute__((__packed__)) mp_eager_nth;
+
+	/*    OPX RENDEZVOUS HEADER                   */
+	struct {
+		uint64_t	reserved[2];            /* QW[0-1] */
+
+		/* QW[2] BTH (unused)*/
+		uint16_t	reserved_1[3];
+		uint8_t		origin_rx;
+		uint8_t		reserved_2;
+
+		/* QW[3-4] BTH/KDETH */
+		uint64_t	reserved_3[2];
+
+		/* QW[5] SW */
+		uint16_t	origin_rs;
+		uint8_t		flags;
+		uint8_t		unused[3];
+		uint16_t	niov;			/* number of non-contiguous buffers */
+
+		/* QW[6] SW */
+		uint64_t	message_length;		/* total length in bytes of all non-contiguous buffers and immediate data */
+
+		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+
+	} __attribute__((__packed__)) rendezvous;
+
+	/*    OPX CTS HEADER                   */
+	struct {
+		uint64_t	reserved[2];            /* QW[0-1] */
+
+		/* QW[2] BTH (unused)*/
+		uint16_t	reserved_1[3];
+		uint8_t		origin_rx;
+		uint8_t		reserved_2;
+
+		/* QW[3-4] BTH/KDETH */
+		uint64_t	reserved_3[2];
+
+		/* QW[5-14] SW */
+		union {
+			uint8_t	opcode;
+			struct {
+				/* QW[5] SW */
+				uint8_t		opcode;
+				uint8_t		unused0;
+				uint16_t	unused1;
+				uint16_t	ntidpairs;	/* number of tidpairs described in the packet payload */
+				uint16_t	niov;		/* number of non-contiguous buffers described in the packet payload */
+
+				/* QW[6-7] SW */
+				uintptr_t	origin_byte_counter_vaddr;
+				uintptr_t	target_context_vaddr;
+			} vaddr;
+			struct {
+				/* QW[5] SW */
+				uint8_t		opcode;
+				uint8_t		unused0;
+				uint16_t	unused1;
+				uint8_t		dt;
+				uint8_t		op;
+				uint16_t	niov;		/* number of non-contiguous buffers described in the packet payload */
+
+				/* QW[6-7] SW */
+				uintptr_t	rma_request_vaddr;
+				uint64_t	key;
+			} mr;
+			struct {
+				/* QW[5] SW */
+				uint8_t		opcode;
+				uint8_t		unused0;
+				uint16_t	unused1;
+				uint8_t		unused2;
+				uint8_t		unused3;
+				uint16_t	unused4;	/* number of non-contiguous buffers described in the packet payload */
+
+				/* QW[6-7] SW */
+				uintptr_t	completion_counter;
+				uint64_t	bytes_to_fence;
+			} fence;
+		} target;
+
+		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+
+	} __attribute__((__packed__)) cts;
+
+	/*    OPX DPUT HEADER                   */
+	struct {
+		uint64_t	                reserved[2]; /* QW[0-1] */
+
+		/* QW[2] BTH (unused)*/
+		uint16_t	reserved_1[3];
+		uint8_t		origin_rx;
+		uint8_t		reserved_o2;
+
+		/* == quadword 2 == */
+		uint64_t	reserved_3;
+
+		/* == quadword 3 == */
+		uint64_t	reserved_4;
+
+		union {
+			/* QW[5] SW */
+			/*  Common fields   */
+			struct {
+				uint8_t		opcode;
+				uint8_t		origin_tx;
+				uint8_t		dt;
+				uint8_t		op;
+				uint16_t	last_bytes;
+				uint16_t	bytes;
+
+				uint64_t	reserved[2]; /* op-specific */
+			};
+
+			struct {
+				/* QW[5] SW */
+				uint64_t	reserved; /* Common fields */
+
+				/* QW[6] SW */
+				uintptr_t	rma_request_vaddr;
+				/* QW[7] SW */
+				uintptr_t	rbuf;
+			} get;
+
+			struct {
+				/* QW[5] SW */
+				uint64_t	reserved; /* Common fields */
+
+				/* QW[6] SW */
+				uintptr_t	completion_vaddr; /* struct fi_opx_rzv_completion * */
+				/* QW[7] SW */
+				uintptr_t	rbuf;
+			} rzv;
+
+			struct {
+				/* QW[5] SW */
+				uint64_t	reserved; /* Common fields */
+
+				/* QW[6-7] SW */
+				uintptr_t	key;
+				uintptr_t	offset;
+			} mr;
+
+			struct {
+				/* QW[5] SW */
+				uint64_t	reserved; /* Common fields */
+
+				/* QW[6-7] SW */
+				uintptr_t	completion_counter;
+				uint64_t	bytes_to_fence;
+			} fence;
+		} target;
+
+		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+
+	} __attribute__((__packed__)) dput;
+
+	/*    OPX UD HEADER                   */
+	struct {
+		uint64_t	reserved[2];            /* QW[0-1] */
+
+		/* QW[2] BTH (unused)*/
+		uint16_t	reserved_1[3];
+		uint8_t		opcode;
+		uint8_t		reserved_2;
+
+		uint64_t	reserved_n[11];         /* QW[3-14] SW */
+
+	} __attribute__((__packed__)) ud;
+
+	/*    OPX SERVICE HEADER                   */
+	struct {
+		uint64_t	reserved[3];            /* QW[0-2] */
+
+		/* QW[3] BTH/KDETH (psn,offset_ver_tid) */
+		uint32_t	range_count;
+		uint8_t		origin_reliability_rx;
+		uint8_t		reserved_1[3];
+
+		/* QW[4] KDETH (unused) */
+		uint32_t	reserved_2;
+		uint32_t	unused;  /* WHY? unused but zeroed in model */
+
+		/* QW[5-7] SW */
+		uint64_t	psn_count;
+		uint64_t	psn_start;
+		uint64_t	key;			/* fi_opx_reliability_service_flow_key */
+
+		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+
+	} __attribute__((__packed__)) service;		/* "reliability service" */
+}  __attribute__((__packed__)) __attribute__((__aligned__(8)));
+
 
 static inline
-fi_opx_uid_t fi_opx_hfi1_packet_hdr_uid (const union fi_opx_hfi1_packet_hdr * const hdr) {
-
+fi_opx_uid_t fi_opx_hfi1_packet_hdr_uid (const union opx_hfi1_packet_hdr * const hdr, 
+			const uint64_t slid) {
 	const union fi_opx_uid uid =
 	{
 		.endpoint_id = hdr->reliability.origin_tx,	/* node-scoped endpoint id */
-		.lid = hdr->match.slid			/* job-scoped node id */
+		.lid_3B = 0,
+		.lid = slid                     /* job-scoped node id */
 	};
 
 	return uid.fi;
@@ -763,10 +1304,10 @@ fi_opx_uid_t fi_opx_hfi1_packet_hdr_uid (const union fi_opx_hfi1_packet_hdr * co
 
 
 static inline size_t
-fi_opx_hfi1_packet_hdr_message_length (const union fi_opx_hfi1_packet_hdr * const hdr)
+fi_opx_hfi1_packet_hdr_message_length (const union opx_hfi1_packet_hdr * const hdr)
 {
 	size_t message_length = 0;
-	switch (hdr->stl.bth.opcode) {
+	switch (hdr->bth.opcode) {
 		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
 			message_length = hdr->inject.message_length;
@@ -786,14 +1327,199 @@ fi_opx_hfi1_packet_hdr_message_length (const union fi_opx_hfi1_packet_hdr * cons
 			break;
 		default:
 			fprintf(stderr, "%s:%s():%d abort. hdr->stl.bth.opcode = %02x (%u)\n",
-				__FILE__, __func__, __LINE__, hdr->stl.bth.opcode,
-				hdr->stl.bth.opcode);
+				__FILE__, __func__, __LINE__, hdr->bth.opcode,
+				hdr->bth.opcode);
 			abort();
 			break;
 	}
 
 	return message_length;
 }
+
+#ifndef NDEBUG
+
+#define OPX_JKR_PRINT_16B_PBC(a) opx_jkr_print_16B_pbc((a),__func__)
+#define OPX_JKR_PRINT_16B_LRH(a,b) opx_jkr_print_16B_lrh((a),(b),__func__)
+#define OPX_JKR_PRINT_16B_BTH(a,b) opx_jkr_print_16B_bth((a),(b),__func__)
+
+void opx_jkr_print_16B_pbc(uint64_t pbc1, const char* func);
+void opx_jkr_print_16B_lrh(uint64_t lrh1, uint64_t lrh2, const char* func);
+void opx_jkr_print_16B_bth(uint64_t bth1, uint64_t bth2, const char* func);
+
+
+static inline
+void fi_opx_hfi1_dump_stl_packet_hdr (const union opx_hfi1_packet_hdr * hdr,
+				      const enum opx_hfi1_type hfi1_type,
+				      const char * fn, const unsigned ln)
+{
+
+#if __GNUC__ > 9
+#pragma GCC diagnostic ignored "=Waddress-of-packed-member"
+#endif
+	const uint64_t * const qw = (uint64_t *)hdr;
+#if __GNUC__ > 9
+#pragma GCC diagnostic pop
+#endif
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u ==== dump stl packet header @ %p [%016lx %016lx %016lx %016lx]\n", fn, ln, hdr, qw[0], qw[1], qw[2], qw[3]);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .lrh.flags .............     0x%04hx\n", fn, ln, hdr->lrh_9B.flags);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .lrh.dlid ..............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh_9B.dlid, hdr->lrh_9B.dlid, ntohs(hdr->lrh_9B.dlid));
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .lrh.pktlen ............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh_9B.pktlen, hdr->lrh_9B.pktlen, ntohs(hdr->lrh_9B.pktlen));
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .lrh.slid ..............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh_9B.slid, hdr->lrh_9B.slid, ntohs(hdr->lrh_9B.slid));
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u\n", fn, ln);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .bth.opcode ............       0x%02x \n", fn, ln, hdr->bth.opcode);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .bth.bth_1 .............       0x%02x \n", fn, ln, hdr->bth.bth_1);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .bth.pkey ..............     0x%04hx \n", fn, ln, hdr->bth.pkey);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .bth.ecn ...............       0x%02x \n", fn, ln, hdr->bth.ecn);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .bth.qp ................       0x%02x \n", fn, ln, hdr->bth.qp);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .bth.unused ............       0x%02x \n", fn, ln, hdr->bth.unused);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .bth.rx ................       0x%02x \n", fn, ln, hdr->bth.rx);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u\n", fn, ln);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .bth.psn ............... 0x%08x \n", fn, ln, hdr->bth.psn);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .kdeth.offset_ver_tid .. 0x%08x\n", fn, ln, hdr->kdeth.offset_ver_tid);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u\n", fn, ln);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .kdeth.jkey ............     0x%04hx\n", fn, ln, hdr->kdeth.jkey);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .kdeth.hcrc ............     0x%04hx\n", fn, ln, hdr->kdeth.hcrc);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .kdeth.unused .......... 0x%08x\n", fn, ln, hdr->kdeth.unused);
+
+	return;
+}
+
+static inline
+void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
+				  const enum opx_hfi1_type hfi1_type,
+				  const char * fn, const unsigned ln)
+{
+	const uint64_t * const qw = (uint64_t *)hdr;
+	const pid_t pid = getpid();
+	//fi_opx_hfi1_dump_stl_packet_hdr (hdr, hfi1_type, fn, ln);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u ==== dump packet header @ %p [%016lx %016lx %016lx %016lx]\n", pid, fn, ln, hdr, qw[0], qw[1], qw[2], qw[3]);
+        if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.flags ...........     0x%04hx\n", pid, fn, ln, hdr->lrh_9B.flags);
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.dlid ............     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.dlid, hdr->lrh_9B.dlid, ntohs(hdr->lrh_9B.dlid));
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.pktlen ..........     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.pktlen, hdr->lrh_9B.pktlen, ntohs(hdr->lrh_9B.pktlen));
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.slid ............     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.slid, hdr->lrh_9B.slid, ntohs(hdr->lrh_9B.slid));
+	} else {
+		OPX_JKR_PRINT_16B_LRH(hdr->qw_16B[0], hdr->qw_16B[1]);
+		OPX_JKR_PRINT_16B_BTH(hdr->qw_16B[2], hdr->qw_16B[2]);
+	}
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u\n", pid, fn, ln);
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .stl.bth.opcode ......     0x%02x  (%s)\n", pid, fn, ln,
+		hdr->bth.opcode, opx_hfi1_bth_opcode_to_string((uint16_t)hdr->bth.opcode));
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .bth.bth_1  ..........     0x%02x \n", pid, fn, ln, hdr->bth.bth_1);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .bth.pkey   ..........     0x%04hx\n", pid, fn, ln, hdr->bth.pkey);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .bth.ecn    ..........     0x%02x \n", pid, fn, ln, hdr->bth.ecn);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .bth.qp     ..........     0x%02x \n", pid, fn, ln, hdr->bth.qp);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .bth.unused ..........     0x%02x \n", pid, fn, ln, hdr->bth.unused);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .bth.rx     ..........     0x%02x \n", pid, fn, ln, hdr->bth.rx);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .bth.psn    ..........     0x%08x \n", pid, fn, ln, hdr->bth.psn);
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u\n", pid, fn, ln);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .kdeth.offset_ver_tid.     0x%08x \n", pid, fn, ln, hdr->kdeth.offset_ver_tid);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .jkey       ..........     0x%04hx \n", pid, fn, ln, hdr->kdeth.jkey);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .hcrc       ..........     0x%04hx \n", pid, fn, ln, hdr->kdeth.hcrc);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .unused     ..........     0x%08x \n", pid, fn, ln, hdr->kdeth.unused);
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u ofi_tag, last 9B QW...     0x%16.16lx\n", pid, fn, ln, hdr->qw_9B[6]);
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u\n", pid, fn, ln);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .match.origin_tx .....     0x%02x \n", pid, fn, ln, hdr->match.origin_tx);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .match.ofi_data ......     0x%08x \n", pid, fn, ln, hdr->match.ofi_data);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .match.ofi_tag .......     0x%016lx \n", pid, fn, ln, hdr->match.ofi_tag);
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u\n", pid, fn, ln);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .inject.message_length     0x%04x \n", pid, fn, ln, hdr->inject.message_length);
+
+	switch (hdr->bth.opcode) {
+		case FI_OPX_HFI_BTH_OPCODE_UD:
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .ud.opcode ...     0x%02x (%s) \n", pid, fn, ln,
+				hdr->ud.opcode, opx_hfi1_ud_opcode_to_string(hdr->ud.opcode));
+			break;
+		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .inject.message_length ...     0x%02x \n", pid, fn, ln, hdr->inject.message_length);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .inject.app_data_u64[0] ..     0x%016lx \n", pid, fn, ln, hdr->inject.app_data_u64[0]);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .inject.app_data_u64[1] ..     0x%016lx \n", pid, fn, ln, hdr->inject.app_data_u64[1]);
+			break;
+		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER:
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .send.xfer_bytes_tail ....     0x%02x \n", pid, fn, ln, hdr->send.xfer_bytes_tail);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .send.payload_qws_total ..     0x%04x \n", pid, fn, ln, hdr->send.payload_qws_total);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .send.xfer_tail ..........     0x%016lx \n", pid, fn, ln, hdr->send.xfer_tail);
+			break;
+		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:	/* calculate (?) total bytes to be transfered */
+		case  FI_OPX_HFI_BTH_OPCODE_RZV_CTS:
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .cts.origin                 ..........     0x%x \n", pid, fn, ln, hdr->cts.origin_rx);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .cts.target.vaddr.ntidpairs ..........     0x%x \n", pid, fn, ln, hdr->cts.target.vaddr.ntidpairs);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .cts.target.opcode          ..........     0x%x (%s) \n", pid, fn, ln,
+				hdr->cts.target.opcode, opx_hfi1_dput_opcode_to_string(hdr->cts.target.opcode));
+			break;
+		default:
+			break;
+	}
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u\n", pid, fn, ln);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u ==== QWs 4-7 : [%016lx %016lx %016lx %016lx]\n", pid, fn, ln, qw[4], qw[5], qw[6], qw[7]);
+
+	return;
+}
+
+#define OPX_DEBUG_PRINT_HDR(__hdr,__hfi1_type)      		 \
+	if (__hfi1_type & OPX_HFI1_JKR) {      		         \
+		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0], 	 \
+				      __hdr->qw_16B[1]);	 \
+		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2], 	 \
+				      __hdr->qw_16B[3]);	 \
+	} else {						 \
+		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type,  \
+					    __func__, __LINE__); \
+	}
+
+#define OPX_DEBUG_PRINT_PBC_HDR(__pbc,__hdr,__hfi1_type)	\
+	if (__hfi1_type & OPX_HFI1_JKR) {			\
+		OPX_JKR_PRINT_16B_PBC(__pbc);			\
+		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0], 	\
+				      __hdr->qw_16B[1]);	\
+		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2], 	\
+				      __hdr->qw_16B[3]);	\
+	} else {						\
+		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type, \
+					    __func__, __LINE__);\
+	}
+
+#define OPX_DEBUG_PRINT_PBC_HDR_QW(q0,q1,q2,q3,q4,__hfi1_type)	\
+	if (__hfi1_type & OPX_HFI1_JKR) {			\
+		OPX_JKR_PRINT_16B_PBC(q0);			\
+		OPX_JKR_PRINT_16B_LRH(q1,q2);			\
+		OPX_JKR_PRINT_16B_BTH(q3,q4);			\
+	}
+
+#else
+// Disable the macros
+#define OPX_JKR_PRINT_16B_PBC(a)
+#define OPX_JKR_PRINT_16B_LRH(a,b)
+#define OPX_JKR_PRINT_16B_BTH(a,b)
+
+void opx_jkr_print_16B_pbc(uint64_t pbc1, const char* func);
+void opx_jkr_print_16B_lrh(uint64_t lrh1, uint64_t lrh2, const char* func);
+void opx_jkr_print_16B_bth(uint64_t bth1, uint64_t bth2, const char* func);
+
+static inline
+void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
+				  const enum opx_hfi1_type hfi1_type,
+				  const char * fn, const unsigned ln)
+{
+	return;
+}
+
+#define OPX_DEBUG_PRINT_HDR(__hdr,__hfi1_type)
+#define OPX_DEBUG_PRINT_PBC_HDR(__pbc,__hdr,__hfi1_type)
+#define OPX_DEBUG_PRINT_PBC_HDR_QW(q0,q1,q2,q3,q4,__hfi1_type)
+
+#endif
+
 
 union cacheline {
 	uint64_t			qw[8];
@@ -863,8 +1589,110 @@ union fi_opx_hfi1_rzv_rts_immediate_info {
 	};
 };
 
+
+/* Cache "blocked" payloads in 16B are currently "tricky".
+ * The sender will always send 1 QW of header after SOP so STORE'ing
+ * a full cacheline block is not possible.  The payload will
+ * arrive cacheline aligned in the eager buffer but not in the
+ * same "blocks" as written.
+ *
+ * For example, contiguous rzv:
+ *
+ * STORE(tag + 7 qw's of CACHELINE 0 unused[1], not unused[2] as in 9B above)
+ * fi_opx_init_hfi_lookupoptionally STORE(icrc/tail) if no more immediate data
+ *
+ * STORE(full block of immediate fragment unaligned data)
+ * STORe(full block of immediate data)
+ * STORE(full block of immediate end data)
+ * STORE(icrc/tail)
+ */
+union fi_opx_hfi1_packet_payload_16B {
+	uint8_t				byte[FI_OPX_HFI1_PACKET_MTU];
+	uint64_t	                qw[FI_OPX_HFI1_PACKET_MTU>>3];
+	union {
+		struct {
+			/* ==== CACHE LINE 0 ==== */
+
+			uintptr_t		src_vaddr;
+			uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
+			uint64_t		src_device_id;
+			uint64_t		src_iface;
+			uint64_t		immediate_info;
+			uintptr_t		origin_byte_counter_vaddr;
+			uint64_t		unused[1];
+
+			/* Not cacheline aligned after the first block */
+			union {
+				struct {
+					uint8_t		immediate_byte[8];
+					uint64_t	immediate_qw[7];
+				};
+
+				union cacheline	cache_line_1;
+			};
+
+			union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
+
+		} contiguous;
+		struct {
+			/* ==== CACHE LINE 0 ==== */
+
+			uintptr_t		src_vaddr;
+			uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
+			uint64_t		src_device_id;
+			uint64_t		src_iface;
+			uint64_t		immediate_info;
+			uintptr_t		origin_byte_counter_vaddr;
+			uint64_t		unused[1];
+
+			union {
+				struct {
+					uint8_t		immediate_byte[8];
+					uint64_t	immediate_qw[7];
+				};
+
+				union cacheline	cache_line_1;
+			};
+
+			union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
+
+		} contiguous_16B;
+		struct {
+			/* ==== CACHE LINE 0 ==== */
+
+			uintptr_t		origin_byte_counter_vaddr;
+			struct fi_opx_hmem_iov	iov[2];
+
+			/* ==== CACHE LINE 1-127 (for 8k mtu) ==== */
+			struct fi_opx_hmem_iov	iov_ext[FI_OPX_MAX_HMEM_IOV - 2];
+			size_t			unused;
+
+		} noncontiguous;
+	} rendezvous;
+
+	struct {
+		union fi_opx_hfi1_dput_iov	iov[FI_OPX_MAX_DPUT_IOV];
+	} cts;
+
+	/* tid_cts extends cts*/
+	struct {
+		/* ==== CACHE LINE 0 ==== */
+		union fi_opx_hfi1_dput_iov	iov[1];
+		uint32_t  tid_offset;
+		uint32_t  ntidpairs;
+		int32_t   origin_byte_counter_adjust;
+		uint32_t  unused;
+
+		/* ==== CACHE LINE 1 ==== */
+		uint32_t  tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
+	} tid_cts;
+
+} __attribute__((__aligned__(32)));
+
+/* 9B and common payload structure */
 union fi_opx_hfi1_packet_payload {
 	uint8_t				byte[FI_OPX_HFI1_PACKET_MTU];
+	uint64_t	                qw[FI_OPX_HFI1_PACKET_MTU>>3];
 	union {
 		struct {
 			/* ==== CACHE LINE 0 ==== */
@@ -921,7 +1749,8 @@ union fi_opx_hfi1_packet_payload {
 		/* ==== CACHE LINE 1 ==== */
 		uint32_t  tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 	} tid_cts;
-
+	/* Union with 16B payload */
+	union fi_opx_hfi1_packet_payload_16B payload_16B;
 } __attribute__((__aligned__(32)));
 
 static_assert(sizeof(union fi_opx_hfi1_packet_payload) <= FI_OPX_HFI1_PACKET_MTU,
@@ -940,7 +1769,6 @@ static_assert((offsetof(union fi_opx_hfi1_packet_payload, tid_cts.tidpairs) +
 		sizeof(((union fi_opx_hfi1_packet_payload*) 0)->tid_cts.tidpairs)) == FI_OPX_HFI1_PACKET_MTU,
 		"offsetof(fi_opx_hfi1_packet_payload.tid_cts.tidpairs) + sizeof(...tid_cts.tidpairs) should equal packet MTU! "
 		"If you added/removed fields in struct tid_cts, you need to adjust FI_OPX_MAX_DPUT_TIDPAIRS!");
-
 
 
 struct fi_opx_hfi1_ue_packet_slist;
@@ -968,17 +1796,18 @@ struct fi_opx_hfi1_ue_packet {
 
 	uint32_t					unused_cacheline0;
 
-	/* == CACHE LINE 1 == */
+	/* == CACHE LINE 1, 2 == */
 	uint64_t					unused_cacheline1;
-	union fi_opx_hfi1_packet_hdr		hdr;
+	union opx_hfi1_packet_hdr			hdr;
 
-	/* == CACHE LINE 2 == */
-	union fi_opx_hfi1_packet_payload	payload;
+	/* == CACHE LINE 3 == */
+	union fi_opx_hfi1_packet_payload		payload;
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 
 static_assert(offsetof(struct fi_opx_hfi1_ue_packet, unused_cacheline1) == 64,
 		"struct fi_opx_hfi1_ue_packet->unused_cacheline1 should be aligned on cache boundary!");
-static_assert(offsetof(struct fi_opx_hfi1_ue_packet, payload) == 128,
+
+static_assert(offsetof(struct fi_opx_hfi1_ue_packet, payload) == 192,
 		"struct fi_opx_hfi1_ue_packet->payload should be aligned on cache boundary!");
 
 struct fi_opx_hfi1_ue_packet_slist {
@@ -1087,6 +1916,7 @@ struct fi_opx_hfi1_ue_packet *fi_opx_hfi1_ue_packet_slist_remove_item (struct fi
 	return next_item;
 }
 
+#if 0
 static inline
 void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr,
 		const char * fn, const unsigned ln) {
@@ -1206,5 +2036,6 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 
 	return;
 }
+#endif
 
 #endif /* _FI_PROV_OPX_HFI1_PACKET_H_ */

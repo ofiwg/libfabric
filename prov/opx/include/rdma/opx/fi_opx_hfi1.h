@@ -102,8 +102,11 @@
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MIN		(FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min value */
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MAX		(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX+1) /* Max value */
 
-/* The total size for a single packet used in a multi-packet eager send.
-   This is packet payload plus 64 bytes for the PBC and packet header.
+/* The PBC length to use for a single packet in a multi-packet eager send.
+
+   This is packet payload plus the PBC plus the packet header plus
+   tail (16B only).
+
    All packets in a multi-packet eager send will be this size, except
    possibly the last one, which may be smaller.
 
@@ -112,14 +115,25 @@
 #define FI_OPX_MP_EGR_CHUNK_SIZE 			(4160)
 
 /* For full MP-Eager chunks, we pack 16 bytes of payload data in the
-   packet header. So the actual payload size for a full chunk is the
-   total chunk size minus 64 bytes for PBC and packet header, plus 16
-   bytes for the space we use for payload data in the packet header.
-   Or, more simply, 48 bytes less than the total chunk size. */
-#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE (FI_OPX_MP_EGR_CHUNK_SIZE - 48)
-#define FI_OPX_MP_EGR_CHUNK_CREDITS (FI_OPX_MP_EGR_CHUNK_SIZE >> 6)
-#define FI_OPX_MP_EGR_CHUNK_DWS (FI_OPX_MP_EGR_CHUNK_SIZE >> 2)
-#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS (FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE >> 3)
+   packet header.
+
+   So the actual user payload __consumed__ for a full chunk is the
+   FI_OPX_MP_EGR_CHUNK_SIZE minus the PBC minus the header minus
+   the tail (16B only) plus 16 bytes payload packed in the header.
+
+   The payload itself will be FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE - 16
+   */
+
+#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)  \
+                 ((hfi1_type & OPX_HFI1_JKR) ?      \
+		   (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 64 /* hdr */ + 8 /* tail */) - 16 /* payload */)) :\
+		   (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 56 /* hdr */) - 16 /* payload */)))
+                                                                    /* PAYLOAD BYTES CONSUMED */
+
+#define FI_OPX_MP_EGR_CHUNK_CREDITS (FI_OPX_MP_EGR_CHUNK_SIZE >> 6) /* PACKET CREDITS TOTAL */
+#define FI_OPX_MP_EGR_CHUNK_DWS (FI_OPX_MP_EGR_CHUNK_SIZE >> 2)     /* PBC DWS */
+#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS(hfi1_type) \
+             ((FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) >> 3)   /* PAYLOAD QWS CONSUMED */
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL 16
 #define FI_OPX_MP_EGR_XFER_BYTES_TAIL 0x0010000000000000ull
 
@@ -227,20 +241,106 @@ abort();
 	return 0;
 }
 
-struct fi_opx_hfi1_txe_scb {
+/* Also refer to union opx_hfi1_packet_hdr comment
 
-	union {
-		uint64_t		qw0;	/* a.k.a. 'struct hfi_pbc' */
-		//struct hfi_pbc		pbc;
-	};
-	union fi_opx_hfi1_packet_hdr	hdr;
+ SCB (Send Control Block) is 8 QW's written to PIO SOP.
 
-} __attribute__((__aligned__(8)));
+ Optimally, store 8 contiguous QW's.
 
+ Cannot define a common 9B/16B structure that is contiguous,
+ so send code is 9B/16B aware.
+
+                    TX SCB
+      =====================================================
+      GENERIC      9B                   16B
+      =========    ==================   ===================
+QW[0]  PBC
+QW[1]  HDR         qw_9B[0] LRH         qw_16B[0] LRH
+QW[2]  HDR         qw_9B[1] BTH         qw_16B[1] LRH
+QW[3]  HDR         qw_9B[2] BTH/KDETH   qw_16B[2] BTH
+QW[4]  HDR         qw_9B[3] KDETH       qw_16B[3] BTH/KDETH
+QW[5]  HDR         qw_9B[4] USER/SW     qw_16B[4] KDETH
+QW[6]  HDR         qw_9B[5] USER/SW     qw_16B[5] USER/SW
+QW[7]  HDR         qw_9B[6] USER/SW     qw_16B[6] USER/SW
+
+                                        qw_16B[7] USER/SW
+
+Generic example
+
+// faster than memcpy() for this amount of data.
+// SCB (PIO or UREG) COPY ONLY (STORE)
+static inline void fi_opx_store_scb_qw(volatile uint64_t dest[8], const uint64_t source[8])
+{
+	OPX_HFI1_BAR_STORE(&dest[0], source[0]);
+	OPX_HFI1_BAR_STORE(&dest[1], source[1]);
+	OPX_HFI1_BAR_STORE(&dest[2], source[2]);
+	OPX_HFI1_BAR_STORE(&dest[3], source[3]);
+	OPX_HFI1_BAR_STORE(&dest[4], source[4]);
+	OPX_HFI1_BAR_STORE(&dest[5], source[5]);
+	OPX_HFI1_BAR_STORE(&dest[6], source[6]);
+	OPX_HFI1_BAR_STORE(&dest[7], source[7]);
+}
+
+
+9B/16B example, must be hfi1-aware
+
+	struct fi_opx_hfi1_txe_scb_9B  model_9B  = opx_ep->reliability->service.tx.hfi1.ping_model_9B;
+	struct fi_opx_hfi1_txe_scb_16B model_16B = opx_ep->reliability->service.tx.hfi1.ping_model_16B;
+
+	volatile uint64_t * const scb =
+		FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
+
+	if ((hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {
+		OPX_HFI1_BAR_STORE(&scb[0], (model_9B.qw0 | OPX_PBC_CR(0x1, hfi1_type) | OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type)));
+		OPX_HFI1_BAR_STORE(&scb[1], (model_9B.hdr.qw_9B[0] | lrh_dlid));
+		OPX_HFI1_BAR_STORE(&scb[2], (model_9B.hdr.qw_9B[1] | bth_rx));
+<...>
+	} else {
+		OPX_HFI1_BAR_STORE(&scb[0], (model_16B.qw0 | OPX_PBC_CR(1, hfi1_type) | OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type)));
+		OPX_HFI1_BAR_STORE(&scb[1], (model_16B.hdr.qw_16B[0] | ((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B)));
+		OPX_HFI1_BAR_STORE(&scb[2], (model_16B.hdr.qw_16B[1] | ((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)));
+		OPX_HFI1_BAR_STORE(&scb[3], model_16B.hdr.qw_16B[2] | bth_rx);
+<...>
+        }
+
+*/
+
+/* Only 8 QWs valid in 16 QW storage. */
+struct fi_opx_hfi1_txe_scb_9B {
+
+	union { /* 15 QWs union*/
+
+		/* pbc is qw0. it overlays hdr's unused_pad_9B */
+		struct {
+			uint64_t          qw0;
+			uint64_t          qw[14];
+		}   __attribute__((__packed__)) __attribute__((__aligned__(8)));
+
+		union opx_hfi1_packet_hdr hdr;  /* 1 QW unused + 7 QWs 9B header + 7 QWs unused*/
+
+	}   __attribute__((__packed__)) __attribute__((__aligned__(8)));
+
+    uint64_t pad;            /* 1 QW pad (to 16 QWs) */
+} __attribute__((__aligned__(8))) __attribute__((packed));
+
+/* 16 QW valid in 16 QW storage.  */
+struct fi_opx_hfi1_txe_scb_16B {
+	uint64_t          qw0;   /* PBC */
+	union opx_hfi1_packet_hdr	hdr;    /* 15 QWs 16B header */
+} __attribute__((__aligned__(8))) __attribute__((packed));
+
+static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == sizeof(struct fi_opx_hfi1_txe_scb_16B)), "storge for scbs should match");
+static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == (sizeof(uint64_t)*16)), "16 qw scb storage");
+
+/* Storage for a scb. Use HFI1 type to access the correct structure */
+union opx_hfi1_txe_scb_union {
+	struct fi_opx_hfi1_txe_scb_9B scb_9B;
+	struct fi_opx_hfi1_txe_scb_16B scb_16B;
+};
 
 struct fi_opx_hfi1_rxe_hdr {
 
-	union fi_opx_hfi1_packet_hdr	hdr;
+	union opx_hfi1_packet_hdr	hdr;
 	uint64_t			rhf;
 
 } __attribute__((__aligned__(64)));
@@ -403,7 +503,7 @@ struct fi_opx_hfi1_context {
 	} info;
 
 	int				fd;
-	uint16_t			lid;
+	uint32_t			lid;
 	struct _hfi_ctrl *		ctrl;
 	//struct hfi1_user_info_dep	user_info;
 	enum opx_hfi1_type		hfi_hfi1_type;
@@ -500,12 +600,12 @@ void fi_opx_consume_credits(union fi_opx_hfi1_pio_state *pio_state, size_t count
 }
 
 #define FI_OPX_HFI1_CREDITS_IN_USE(pio_state) fi_opx_credits_in_use(&pio_state)
-#define FI_OPX_HFI1_UPDATE_CREDITS(pio_state, pio_credits_addr)	fi_opx_update_credits(&pio_state, pio_credits_addr);
+#define FI_OPX_HFI1_UPDATE_CREDITS(pio_state, pio_credits_addr)	fi_opx_update_credits(&pio_state, pio_credits_addr)
 #define FI_OPX_HFI1_PIO_SCB_HEAD(pio_scb_base, pio_state) fi_opx_pio_scb_base(pio_scb_base, &pio_state)
 #define FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, force_credit_return, credits_needed) fi_opx_credits_avail(&pio_state, force_credit_return, credits_needed)
 #define FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state) fi_opx_reliability_credits_avail(&pio_state)
 #define FI_OPX_HFI1_CONSUME_CREDITS(pio_state, count) fi_opx_consume_credits(&pio_state, count)
-#define FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state) FI_OPX_HFI1_CONSUME_CREDITS(pio_state, 1);
+#define FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state) FI_OPX_HFI1_CONSUME_CREDITS(pio_state, 1)
 
 
 __OPX_FORCE_INLINE__
@@ -531,13 +631,26 @@ int fi_opx_hfi1_get_lid_local_unit(uint16_t lid)
 }
 
 __OPX_FORCE_INLINE__
-bool fi_opx_hfi_is_intranode(uint16_t lid)
+bool opx_lid_is_intranode(uint16_t lid)
 {
 	if (fi_opx_global.hfi_local_info.lid == lid) {
 		return true;
 	}
 
 	return fi_opx_hfi1_get_lid_local(lid);
+}
+
+__OPX_FORCE_INLINE__
+bool opx_lrh_is_intranode(union opx_hfi1_packet_hdr *hdr, const enum opx_hfi1_type hfi1_type)
+{
+	uint32_t lid_be;
+
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		lid_be = hdr->lrh_9B.slid;
+	} else {
+		lid_be = htons(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
+	}
+	return opx_lid_is_intranode(lid_be);
 }
 
 struct fi_opx_hfi1_context * fi_opx_hfi1_context_open (struct fid_ep *ep, uuid_t unique_job_key);
@@ -552,7 +665,10 @@ void fi_opx_init_hfi_lookup();
  */
 #define FI_OPX_SHM_FIFO_SIZE		(1024)
 #define FI_OPX_SHM_BUFFER_MASK		(FI_OPX_SHM_FIFO_SIZE-1)
-#define FI_OPX_SHM_PACKET_SIZE	(FI_OPX_HFI1_PACKET_MTU + sizeof(struct fi_opx_hfi1_stl_packet_hdr))
+
+
+#define FI_OPX_SHM_PACKET_SIZE	(FI_OPX_HFI1_PACKET_MTU + sizeof(union opx_hfi1_packet_hdr))
+
 
 #ifndef NDEBUG
 #define OPX_BUF_FREE(x)				\
@@ -589,7 +705,7 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.queue_size          %#X\n",context->info.sdma.queue_size);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.completion_queue    %p errcode %#X status %#X\n",context->info.sdma.completion_queue,
 	       context->info.sdma.completion_queue->errcode,
-	       context->info.sdma.completion_queue->status);
+	       context->info.sdma.completion_queue->status); 
 /*	Not printing                                Context info.sdma.queued_entries);          */
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.base_addr       %p \n",context->info.rxe.hdrq.base_addr);

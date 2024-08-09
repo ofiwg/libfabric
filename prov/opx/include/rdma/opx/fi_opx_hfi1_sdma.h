@@ -48,8 +48,10 @@
 #define OPX_SDMA_REPLAY_DATA_IOV_COUNT	(1)
 #define OPX_SDMA_REPLAY_IOV_COUNT	(OPX_SDMA_REPLAY_DATA_IOV_COUNT + 1)
 #define OPX_SDMA_HFI_MAX_IOVS_PER_WRITE	(64)
+
 OPX_COMPILE_TIME_ASSERT((OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1) == OPX_DEBUG_COUNTERS_WRITEV_MAX,
 			"OPX_DEBUG_COUNTERS_WRITEV_MAX should be OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1!\n");
+
 
 // Driver limit of the number of TIDs that can be used in a single SDMA request
 #define OPX_SDMA_MAX_TIDS_PER_REQUEST	(1024)
@@ -60,12 +62,14 @@ OPX_COMPILE_TIME_ASSERT((OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1) == OPX_DEBUG_COUNT
 
 #define OPX_SDMA_MEMINFO_SIZE		(136)
 #define OPX_SDMA_MEMINFO_SIZE_QWS	(OPX_SDMA_MEMINFO_SIZE >> 3)
+
 OPX_COMPILE_TIME_ASSERT((OPX_SDMA_MEMINFO_SIZE & 0x7) == 0, "OPX_SDMA_MEMINFO_SIZE must be a multiple of 8!");
 #ifdef OPX_HMEM
 OPX_COMPILE_TIME_ASSERT(sizeof(struct sdma_req_meminfo) == OPX_SDMA_MEMINFO_SIZE,
 			"OPX_SDMA_MEMINFO_SIZE should be sizeof(struct sdma_req_meminfo)");
 
 #endif
+
 
 static const uint16_t OPX_SDMA_REQ_SET_MEMINFO[2] = {0,
 					#ifdef OPX_HMEM
@@ -96,7 +100,7 @@ struct fi_opx_hfi1_sdma_header_vec {
 		} hmem;
 	};
 
-	struct fi_opx_hfi1_txe_scb		scb;
+	struct fi_opx_hfi1_txe_scb_9B		scb;
 };
 
 static const size_t OPX_SDMA_REQ_INFO_OFFSET[2] = {
@@ -467,7 +471,8 @@ __OPX_FORCE_INLINE__
 int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep,
 				void *requester,
 				enum opx_sdma_comp_state *requester_comp_state,
-				struct fi_opx_hfi1_txe_scb *source_scb,
+				struct fi_opx_hfi1_txe_scb_9B *source_scb,
+/*				struct opx_hfi1_txe_scb_union *source_scb, */
 				struct iovec *iovs,
 				const uint16_t num_iovs,
 				const uint16_t num_packets,
@@ -510,9 +515,11 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep,
 
 	/* Set the Acknowledge Request Bit if we're only sending one packet */
 	uint64_t set_ack_bit = (num_packets == 1) ? (uint64_t)htonl(0x80000000) : 0;
+
+	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
 	request->header_vec.scb = *source_scb;
-	request->header_vec.scb.hdr.qw[2] |= ((uint64_t)kdeth << 32) | set_ack_bit;
-	request->header_vec.scb.hdr.qw[4] |= (last_packet_bytes << 32);
+	request->header_vec.scb.hdr.qw_9B[2] |= ((uint64_t)kdeth << 32) | set_ack_bit;
+	request->header_vec.scb.hdr.qw_9B[4] |= (last_packet_bytes << 32);
 
 	request->iovecs[0].iov_len = OPX_SDMA_REQ_HDR_SIZE[set_meminfo];
 	request->iovecs[0].iov_base = req_info;
@@ -539,11 +546,13 @@ int opx_hfi1_sdma_enqueue_replay(struct fi_opx_ep *opx_ep,
 	assert(replay->use_iov);
 	assert(replay->iov->iov_len == payload_bytes);
 
+	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
+
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.replay_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== Enqueuing replay for SDMA Send\n");
 	return opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state,
-					     &replay->scb, replay->iov,
+					     &replay->scb_9B, replay->iov,
 					     OPX_SDMA_REPLAY_DATA_IOV_COUNT,
 					     1, // num_packets,
 					     (payload_bytes + 63) & 0xFFC0, // Frag_size
@@ -585,10 +594,12 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep,
 					     we->dlid, we->rx, we->rs,
 					     &we->psn_ptr, we->num_packets);
 
+	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
+
 	uint32_t fragsize = 0;
 	for (int i = 0; i < we->num_packets; ++i) {
 		fragsize = MAX(fragsize, we->packets[i].length);
-		we->packets[i].replay->scb.hdr.qw[2] |= (uint64_t)htonl((uint32_t)psn);
+		we->packets[i].replay->scb_9B.hdr.qw_9B[2] |= (uint64_t)htonl((uint32_t)psn);
 		we->packets[i].replay->sdma_we_use_count = we->bounce_buf.use_count;
 		we->packets[i].replay->sdma_we = replay_back_ptr;
 		we->packets[i].replay->hmem_iface = we->hmem.iface;
@@ -617,11 +628,13 @@ void opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep,
 		.iov_len = (we->total_payload + 3) & -4
 	};
 
+	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
+
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.nontid_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== Enqueuing non-tid request for SDMA Send\n");
 	opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state,
-				     &we->packets[0].replay->scb,
+				     &we->packets[0].replay->scb_9B,
 				     &payload_iov,
 				     OPX_SDMA_NONTID_DATA_IOV_COUNT,
 				     we->num_packets,
@@ -680,11 +693,13 @@ void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep,
 		}
 	};
 
+	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
+
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.tid_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== Enqueuing tid request for SDMA Send\n");
 	opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state,
-				      &we->packets[0].replay->scb,
+				      &we->packets[0].replay->scb_9B,
 				      payload_tid_iovs,
 				      OPX_SDMA_TID_DATA_IOV_COUNT,
 				      we->num_packets,

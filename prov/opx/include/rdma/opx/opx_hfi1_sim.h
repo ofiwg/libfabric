@@ -49,15 +49,15 @@
 	void opx_sim_store(uint64_t  offset, uint64_t *value, const char* func, const int line)
 	{
 		long ret, loffset = (long) offset;
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				 "%s:%u FI_OPX_HFI1_BAR_STORE: offset %#16.16lX\n", func,line,offset);
 		ret = lseek(fi_opx_global.hfi_local_info.sim_fd, offset, SEEK_SET);
 		if (ret != loffset) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+					 "%s:%u FI_OPX_HFI1_BAR_STORE: offset %#16.16lX\n", func,line,offset);
 			perror("FI_OPX_HFI1_BAR_STORE: Unable to lseek BAR: ");
 			sleep(5); abort();
 		}
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				 "FI_OPX_HFI1_BAR_STORE: value %#16.16lX\n", *value);
+				 "%s:%u FI_OPX_HFI1_BAR_STORE: %#16.16lX value [%#16.16lX]\n", func,line,offset, *value);
 		if (write(fi_opx_global.hfi_local_info.sim_fd, value, sizeof(*value)) < 0) {
 			perror("FI_OPX_HFI1_BAR_STORE: Unable to write BAR: ");
 			sleep(5); abort();
@@ -101,10 +101,7 @@
 		assert(unit < 2);
 
 		const char* filename = sim_barfiles[unit];
-	#if (!defined(OPX_WFR) && !defined(OPX_JKR))
-		fprintf(stderr, "Simulator MUST be built with OPX_WFR or OPX_JKR\n");
-		abort();
-	#endif
+
 		if (getenv("HFI_FNAME")) {
 			filename = getenv("HFI_FNAME");
 		}
@@ -134,7 +131,7 @@
 	#define OPX_HFI1_INIT_PIO_SOP(context, input) ({				\
 	volatile uint64_t * __pio_sop;							\
 	do {										\
-			if(OPX_HFI1_TYPE == OPX_HFI1_WFR) {				\
+			if(OPX_HFI1_TYPE & OPX_HFI1_WFR) {				\
 				__pio_sop = (uint64_t *)				\
 					    (OPX_TXE_PIO_SEND +				\
 					     (context * (64*1024L)) +			\
@@ -152,7 +149,7 @@
 	#define OPX_HFI1_INIT_PIO(context, input) ({					\
 	volatile uint64_t * __pio;							\
 	do {										\
-		if(OPX_HFI1_TYPE == OPX_HFI1_WFR) {					\
+		if(OPX_HFI1_TYPE & OPX_HFI1_WFR) {					\
 			__pio = (uint64_t *)(OPX_TXE_PIO_SEND +				\
 				(context * (64*1024L)));				\
 		} else {								\
@@ -167,7 +164,7 @@
 	#define OPX_HFI1_INIT_UREGS(context, input) ({					\
 	volatile uint64_t  * __uregs;							\
 	do {										\
-		if(OPX_HFI1_TYPE == OPX_HFI1_WFR) {					\
+		if(OPX_HFI1_TYPE & OPX_HFI1_WFR) {					\
 			__uregs = (uint64_t *)(OPX_WFR_RXE_PER_CONTEXT_OFFSET +		\
 				  ((context) * OPX_WFR_RXE_UCTX_STRIDE));		\
 		} else {								\

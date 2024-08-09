@@ -149,22 +149,12 @@ static int map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt)
 
 	/* 7. Map RXE per-context CSRs */
 	/* JKR sz is 8K. WFR sz is 4K. */
-	if(OPX_HFI1_WFR == opx_hfi1_check_hwversion(binfo->hw_version)){
+	if(OPX_HFI1_WFR == opx_hfi1_check_hwversion(binfo->hw_version)) {
 		sz = HFI_MMAP_PGSIZE;
-#ifndef OPX_WFR
-		fprintf(stderr, "Runtime HFI type (%u) found on non-WFR build\n",
-			   opx_hfi1_check_hwversion(binfo->hw_version));
-		abort();
-#endif
 	} else {
 		/* JKR prefers 8K page alignment for possible
 		   future work with 8K virtual memory pages */
 		sz = 2*HFI_MMAP_PGSIZE;
-#ifndef OPX_JKR
-		fprintf(stderr, "Runtime HFI type (%u) found on non-JKR build\n",
-			   opx_hfi1_check_hwversion(binfo->hw_version));
-		abort();
-#endif
 	}
 	HFI_MMAP_ERRCHECK(fd, binfo, user_regbase, sz, PROT_WRITE|PROT_READ);
 	arrsz[USER_REGBASE] = sz;
