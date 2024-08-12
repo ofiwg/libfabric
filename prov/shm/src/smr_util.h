@@ -178,7 +178,7 @@ struct smr_peer_data {
 	struct smr_addr		addr;
 	uint32_t		sar_status;
 	uint32_t		name_sent;
-	struct xpmem_client 	xpmem;
+	struct ofi_xpmem_client xpmem;
 };
 
 extern struct dlist_entry ep_name_list;
@@ -229,8 +229,8 @@ struct smr_region {
 	uint8_t		resv2;
 
 	uint32_t	max_sar_buf_per_peer;
-	struct xpmem_pinfo xpmem_self;
-	struct xpmem_pinfo xpmem_peer;
+	struct ofi_xpmem_pinfo	xpmem_self;
+	struct ofi_xpmem_pinfo	xpmem_peer;
 	void		*base_addr;
 	pthread_spinlock_t	lock; /* lock for shm access
 				 if both ep->tx_lock and this lock need to
