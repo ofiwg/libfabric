@@ -42,13 +42,13 @@
 #include <stdio.h>
 
 #define XPMEM_DEFAULT_MEMCPY_CHUNK_SIZE 262144
-struct xpmem *xpmem = NULL;
+struct ofi_xpmem *xpmem = NULL;
 
 #if HAVE_XPMEM
 /* global cache for use with xpmem */
 static struct ofi_mr_cache *xpmem_cache;
 
-int xpmem_init(void)
+int ofi_xpmem_init(void)
 {
 	/* Any attachment that goes past the Linux TASK_SIZE will always
 	 * fail. To prevent this we need to determine the value of
@@ -132,7 +132,7 @@ fail:
 	return ret;
 }
 
-int xpmem_cleanup(void)
+int ofi_xpmem_cleanup(void)
 {
 	int ret = 0;
 
@@ -158,9 +158,9 @@ static inline void xpmem_memcpy(void *dst, void *src, size_t size)
 	}
 }
 
-int xpmem_copy(struct iovec *local, unsigned long local_cnt,
-	       struct iovec *remote, unsigned long remote_cnt,
-	       size_t total, pid_t pid, bool write, void *user_data)
+int ofi_xpmem_copy(struct iovec *local, unsigned long local_cnt,
+                   struct iovec *remote, unsigned long remote_cnt,
+                   size_t total, pid_t pid, bool write, void *user_data)
 {
 	int ret, i;
 	struct iovec iov;
@@ -181,7 +181,7 @@ int xpmem_copy(struct iovec *local, unsigned long local_cnt,
 					(uintptr_t)iov.iov_base;
 
 		ret = ofi_xpmem_cache_search(xpmem_cache, &iov, pid, &mr_entry,
-					     (struct xpmem_client *)user_data);
+					     (struct ofi_xpmem_client *)user_data);
 		if (ret)
 			return ret;
 
@@ -209,8 +209,8 @@ int xpmem_copy(struct iovec *local, unsigned long local_cnt,
 	return 0;
 }
 
-int ofi_xpmem_enable(struct xpmem_pinfo *peer,
-		     struct xpmem_client *xpmem)
+int ofi_xpmem_enable(struct ofi_xpmem_pinfo *peer,
+		     struct ofi_xpmem_client *xpmem)
 {
 	xpmem->apid = xpmem_get(peer->seg_id,
 				XPMEM_RDWR, XPMEM_PERMIT_MODE, (void *) 0666);
@@ -220,37 +220,37 @@ int ofi_xpmem_enable(struct xpmem_pinfo *peer,
 	return FI_SUCCESS;
 }
 
-void ofi_xpmem_release(struct xpmem_client *xpmem)
+void ofi_xpmem_release(struct ofi_xpmem_client *xpmem)
 {
 	xpmem_release(xpmem->apid);
 }
 
 #else
 
-int xpmem_init(void)
+int ofi_xpmem_init(void)
 {
 	return -FI_ENOSYS;
 }
 
-int xpmem_cleanup(void)
+int ofi_xpmem_cleanup(void)
 {
 	return -FI_ENOSYS;
 }
 
-int xpmem_copy(struct iovec *local, unsigned long local_cnt,
-	       struct iovec *remote, unsigned long remote_cnt,
-	       size_t total, pid_t pid, bool write, void *user_data)
+int ofi_xpmem_copy(struct iovec *local, unsigned long local_cnt,
+                   struct iovec *remote, unsigned long remote_cnt,
+                   size_t total, pid_t pid, bool write, void *user_data)
 {
 	return -FI_ENOSYS;
 }
 
-int ofi_xpmem_enable(struct xpmem_pinfo *peer,
-		     struct xpmem_client *xpmem)
+int ofi_xpmem_enable(struct ofi_xpmem_pinfo *peer,
+		     struct ofi_xpmem_client *xpmem)
 {
 	return -FI_ENOSYS;
 }
 
-void ofi_xpmem_release(struct xpmem_client *xpmem)
+void ofi_xpmem_release(struct ofi_xpmem_client *xpmem)
 {
 }
 
