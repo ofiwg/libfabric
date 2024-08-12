@@ -457,7 +457,7 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	struct efa_rdm_cq *efa_rdm_cq;
 	struct efa_domain *efa_domain;
 	struct efa_qp *qp;
-	struct dlist_entry rx_progressed_ep_list, *item;
+	struct dlist_entry rx_progressed_ep_list, *tmp;
 
 	efa_rdm_cq = container_of(ibv_cq, struct efa_rdm_cq, ibv_cq);
 	efa_domain = container_of(efa_rdm_cq->util_cq.domain, struct efa_domain, util_domain);
@@ -550,8 +550,8 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	if (should_end_poll)
 		ibv_end_poll(ibv_cq->ibv_cq_ex);
 
-	dlist_foreach(&rx_progressed_ep_list, item) {
-		ep = container_of(item, struct efa_rdm_ep, entry);
+	dlist_foreach_container_safe(
+		&rx_progressed_ep_list, struct efa_rdm_ep, ep, entry, tmp) {
 		efa_rdm_ep_post_internal_rx_pkts(ep);
 		dlist_remove(&ep->entry);
 	}
