@@ -41,6 +41,7 @@ env:
     --enable-usnic
     --enable-verbs=rdma-core/build
     --enable-sm2
+    --enable-lpp
   RDMA_CORE_PATH: 'rdma-core/build'
   RDMA_CORE_VERSION: v34.1
 jobs:
