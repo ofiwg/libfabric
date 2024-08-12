@@ -203,10 +203,7 @@ AC_ARG_WITH([synapseai],
              CPPFLAGS="-I$withval/include -I/usr/include/drm -I/usr/include/libdrm $CPPFLAGS"
              AC_CHECK_HEADER([habanalabs/synapse_api.h],
                         [AC_CHECK_HEADER([habanalabs/hlthunk.h],
-                              [AC_CHECK_HEADER([habanalabs/scal.h],
-                                    [AC_DEFINE([HAVE_SYNAPSEAI], [1], [Define to 1 if you have <synapse_api.h>, <hlthunk.h>, and <scal.h>])],
-                                    [AC_MSG_ERROR([<habanalabs/scal.h> not found])],
-                                    [-])],
+                              [AC_DEFINE([HAVE_SYNAPSEAI], [1], [Define to 1 if you have <synapse_api.h> and <hlthunk.h>])],
                               [AC_MSG_ERROR([<habanalabs/hlthunk.h> not found])])],
                   [AC_MSG_ERROR([<habanalabs/synapse_api.h> not found])])],
             [])
