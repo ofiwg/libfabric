@@ -62,7 +62,7 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 			uint32_t op, uint64_t op_flags)
 {
 	struct iovec vma_iovec[SMR_IOV_LIMIT], rma_iovec[SMR_IOV_LIMIT];
-	struct xpmem_client *xpmem;
+	struct ofi_xpmem_client *xpmem;
 	struct smr_cmd_entry *ce;
 	size_t total_len;
 	int ret, i;

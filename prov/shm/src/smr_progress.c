@@ -308,7 +308,7 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 			    struct smr_ep *ep, int err)
 {
 	struct smr_region *peer_smr;
-	struct xpmem_client *xpmem;
+	struct ofi_xpmem_client *xpmem;
 	struct smr_resp *resp;
 	int ret;
 
