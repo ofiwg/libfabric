@@ -305,7 +305,7 @@ static int smr_progress_inject(struct smr_cmd *cmd, struct ofi_mr **mr,
 
 static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 			    size_t iov_count, size_t *total_len,
-			    struct smr_ep *ep, int err)
+			    struct smr_ep *ep)
 {
 	struct smr_region *peer_smr;
 	struct ofi_xpmem_client *xpmem;
@@ -314,11 +314,6 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 
 	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
-
-	if (err) {
-		ret = -err;
-		goto out;
-	}
 
 	xpmem = &smr_peer_data(ep->region)[cmd->msg.hdr.id].xpmem;
 
@@ -329,7 +324,6 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 	if (!ret)
 		*total_len = cmd->msg.hdr.size;
 
-out:
 	//Status must be set last (signals peer: op done, valid resp entry)
 	resp->status = -ret;
 
@@ -741,7 +735,7 @@ static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 		break;
 	case smr_src_iov:
 		err = smr_progress_iov(cmd, rx_entry->iov, rx_entry->count,
-				       &total_len, ep, 0);
+				       &total_len, ep);
 		break;
 	case smr_src_mmap:
 		err = smr_progress_mmap(cmd, (struct ofi_mr **) rx_entry->desc,
@@ -1088,7 +1082,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd,
 		}
 		break;
 	case smr_src_iov:
-		err = smr_progress_iov(cmd, iov, iov_count, &total_len, ep, ret);
+		err = smr_progress_iov(cmd, iov, iov_count, &total_len, ep);
 		break;
 	case smr_src_mmap:
 		err = smr_progress_mmap(cmd, mr, iov, iov_count, &total_len,
