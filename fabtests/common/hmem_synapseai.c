@@ -41,31 +41,6 @@
 #include "habanalabs/synapse_api.h"
 #include "habanalabs/hlthunk.h"
 
-#define SCAL_SUCCESS 0
-
-#define DECLARE_HANDLE(name) struct name##__ { int unused; }; \
-                             typedef struct name##__ *name
-
-DECLARE_HANDLE(scal_handle_t);
-DECLARE_HANDLE(scal_pool_handle_t);
-
-typedef struct _scal_memory_pool_infoV2
-{
-    scal_handle_t scal;
-    const char * name;
-    unsigned idx;
-    uint64_t device_base_address;
-    void *host_base_address;
-    uint32_t core_base_address;  // 0 when the pool is not mapped to the cores
-    uint64_t totalSize;
-    uint64_t freeSize;
-    uint64_t device_base_allocated_address;
-} scal_memory_pool_infoV2;
-
-int scal_get_handle_from_fd(int fd, scal_handle_t* scal);
-int scal_get_pool_handle_by_name(const scal_handle_t scal, const char *pool_name, scal_pool_handle_t *pool);
-int scal_pool_get_infoV2(const scal_pool_handle_t pool, scal_memory_pool_infoV2 *info);
-
 #define ACCEL_PAGE_SIZE 4096
 struct synapseai_ops {
 	synStatus (*synInitialize)(void);
@@ -88,20 +63,14 @@ struct synapseai_ops {
 	synStatus (*synDeviceGetInfoV2)(const synDeviceId deviceId, synDeviceInfoV2 *pDeviceInfo);
 	int (*hlthunk_device_mapped_memory_export_dmabuf_fd)(int fd, uint64_t addr, uint64_t size,
 					uint64_t offset, uint32_t flags);
-	int (*scal_pool_get_infoV2)(const scal_pool_handle_t pool, scal_memory_pool_infoV2 *info);
-	int (*scal_get_pool_handle_by_name)(const scal_handle_t scal, const char *pool_name,
-					scal_pool_handle_t *pool);
-	int (*scal_get_handle_from_fd)(int fd, scal_handle_t *scal);
 };
 
 static void *synapseai_handle;
 static void *hlthunk_handle;
-static void *scal_handle;
 static struct synapseai_ops synapseai_ops;
 static synDeviceId synapseai_fd = -1;
 static synStreamHandle synapseai_stream_handle;
 static synDeviceInfoV2 deviceInfo;
-static uint64_t device_fd;
 
 static void cleanup_synapseai_ops(void)
 {
@@ -113,11 +82,6 @@ static void cleanup_synapseai_ops(void)
 	if (hlthunk_handle) {
 		dlclose(hlthunk_handle);
 		hlthunk_handle = NULL;
-	}
-
-	if (scal_handle) {
-		dlclose(scal_handle);
-		scal_handle = NULL;
 	}
 }
 
@@ -215,31 +179,6 @@ int init_synapseai_ops(void)
 		goto err_dlclose;
 	}
 
-	scal_handle = dlopen("libscal.so", RTLD_NOW);
-	if (!scal_handle) {
-		FT_ERR("Falid to dlopen libscal.so\n");
-		goto err_dlclose;
-	}
-
-	synapseai_ops.scal_pool_get_infoV2 = dlsym(scal_handle, "scal_pool_get_infoV2");
-	if (!synapseai_ops.scal_pool_get_infoV2) {
-		FT_ERR("Failed to find scal_pool_get_infoV2\n");
-		goto err_dlclose;
-	}
-
-	synapseai_ops.scal_get_pool_handle_by_name =
-		dlsym(scal_handle, "scal_get_pool_handle_by_name");
-	if (!synapseai_ops.scal_get_pool_handle_by_name) {
-		FT_ERR("Failed to find scal_get_pool_handle_by_name\n");
-		goto err_dlclose;
-	}
-
-	synapseai_ops.scal_get_handle_from_fd = dlsym(scal_handle, "scal_get_handle_from_fd");
-	if (!synapseai_ops.scal_get_handle_from_fd) {
-		FT_ERR("Failed to find scal_get_handle_from_fd\n");
-		goto err_dlclose;
-	}
-
 	return FI_SUCCESS;
 
 err_dlclose:
@@ -284,7 +223,6 @@ int ft_synapseai_init(void)
 		FT_ERR("Failed to synDeviceGetInfoV2()\n");
 		goto err;
 	}
-	device_fd = deviceInfo.fd;
 
 	if (synapseai_ops.synStreamCreateGeneric(&synapseai_stream_handle, synapseai_fd, 0) !=
 		synSuccess) {
@@ -383,29 +321,12 @@ int ft_synapseai_copy_from_hmem(uint64_t device, void *dst, const void *src, siz
 
 int ft_synapseai_get_dmabuf_fd(void *buf, size_t len, int *dmabuf_fd, uint64_t *dmabuf_offset)
 {
-	scal_pool_handle_t mpHandle;
-	scal_memory_pool_infoV2 mpInfo;
-	scal_handle_t a = 0;
-
-	if (synapseai_ops.scal_get_handle_from_fd(device_fd, &a) != SCAL_SUCCESS) {
-		return -FI_ENOBUFS;
-	}
-
-	if (synapseai_ops.scal_get_pool_handle_by_name(a, "global_hbm", &mpHandle) != SCAL_SUCCESS) {
-		return -FI_ENOBUFS;
-	}
-
-	if (synapseai_ops.scal_pool_get_infoV2(mpHandle, &mpInfo) != SCAL_SUCCESS) {
-		return -FI_ENOBUFS;
-	}
-	uint64_t baseAddress = mpInfo.device_base_allocated_address;
-
 	size_t buf_size = (len + ACCEL_PAGE_SIZE - 1) & ~(ACCEL_PAGE_SIZE - 1);
 	*dmabuf_fd =
-		synapseai_ops.hlthunk_device_mapped_memory_export_dmabuf_fd(device_fd,
-				baseAddress,
+		synapseai_ops.hlthunk_device_mapped_memory_export_dmabuf_fd(deviceInfo.fd,
+				deviceInfo.globalHbmBaseAddress,
 				buf_size,
-				(uint64_t)buf - baseAddress,
+				(uint64_t)buf - deviceInfo.globalHbmBaseAddress,
 				(O_RDWR | O_CLOEXEC));
 
 	if (*dmabuf_fd < 0)	{
