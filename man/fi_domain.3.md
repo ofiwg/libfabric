@@ -719,6 +719,11 @@ The following are support primary capabilities:
   FI_AV_USER_ID can still be supported through the AV insert calls without
   this domain capability set. See [`fi_av`(3)](fi_av.3.html).
 
+*FI_PEER*
+: Specifies that the domain must support importing resources to be used in the
+  the peer API flow. The domain must support importing owner_ops when opening
+  a CQ, counter, and shared receive queue.
+
 The following are supported secondary capabilities:
 
 *FI_LOCAL_COMM*
