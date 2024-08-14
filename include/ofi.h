@@ -161,7 +161,7 @@ ofi_poll_del(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
 	(FI_MULTI_RECV | FI_TRIGGER | FI_RMA_PMEM | FI_SOURCE | \
 	 FI_RMA_EVENT | FI_SOURCE_ERR)
 
-#define OFI_DOMAIN_PRIMARY_CAPS FI_AV_USER_ID
+#define OFI_DOMAIN_PRIMARY_CAPS (FI_AV_USER_ID | FI_PEER)
 #define OFI_DOMAIN_SECONDARY_CAPS \
 	(FI_SHARED_AV | FI_REMOTE_COMM | FI_LOCAL_COMM)
 
