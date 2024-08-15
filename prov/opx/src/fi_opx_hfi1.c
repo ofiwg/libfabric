@@ -1875,12 +1875,6 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 
 int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 {
-	const uint64_t pbc_dws = 2 + /* pbc */
-				2 + /* lrh */
-				3 + /* bth */
-				9;  /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-	const uint16_t lrh_dws = htons(pbc_dws - 1);
-
 	struct fi_opx_hfi1_rx_dput_fence_params *params = &work->fence;
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 
@@ -1903,13 +1897,39 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 		return rc;
 	}
 
-	hdr->qw_9B[0] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[0] | params->lrh_dlid | ((uint64_t)lrh_dws << 32);
-	hdr->qw_9B[1] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[1] | params->bth_rx;
-	hdr->qw_9B[2] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[2];
-	hdr->qw_9B[3] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[3];
-	hdr->qw_9B[4] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[4] | FI_OPX_HFI_DPUT_OPCODE_FENCE;
-	hdr->qw_9B[5] = (uint64_t)params->cc;
-	hdr->qw_9B[6] = params->bytes_to_fence;
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		const uint64_t pbc_dws = 2 + /* pbc */
+					 2 + /* lrh */
+					 3 + /* bth */
+					 9;  /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+		const uint16_t lrh_dws = htons(pbc_dws - 1);
+
+		hdr->qw_9B[0] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[0] | params->lrh_dlid | ((uint64_t)lrh_dws << 32);
+		hdr->qw_9B[1] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[1] | params->bth_rx;
+		hdr->qw_9B[2] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[2];
+		hdr->qw_9B[3] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[3];
+		hdr->qw_9B[4] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[4] | FI_OPX_HFI_DPUT_OPCODE_FENCE;
+		hdr->qw_9B[5] = (uint64_t)params->cc;
+		hdr->qw_9B[6] = params->bytes_to_fence;
+	} else {
+		const uint64_t pbc_dws = 2 + /* pbc */
+					 4 + /* lrh */
+					 3 + /* bth */
+					 9 + /* kdeth */
+					 2;  /* ICRC */
+		const uint16_t lrh_dws = (pbc_dws - 1) >> 1;
+		hdr->qw_16B[0] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[0] |
+					((uint64_t)(params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
+					((uint64_t)lrh_dws << 20);
+		hdr->qw_16B[1] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[1] |
+					((uint64_t)((params->lrh_dlid  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
+		hdr->qw_16B[2] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[2] | params->bth_rx;
+		hdr->qw_16B[3] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[3];
+		hdr->qw_16B[4] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[4];
+		hdr->qw_16B[5] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[5] | FI_OPX_HFI_DPUT_OPCODE_FENCE | (0ULL << 32);
+		hdr->qw_16B[6] = (uintptr_t)params->cc;
+		hdr->qw_16B[7] = params->bytes_to_fence;
+	}
 
 	opx_shm_tx_advance(&opx_ep->tx->shm, (void *)hdr, pos);
 
@@ -2200,7 +2220,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 		if (opcode == FI_OPX_HFI_DPUT_OPCODE_PUT && is_intranode) {  // RMA-type put, so send a ping/fence to better latency
 			fi_opx_shm_write_fence(opx_ep, params->target_hfi_unit, u8_rx,
 						lrh_dlid, cc, params->bytes_sent,
-						params->u32_extended_rx);
+						params->u32_extended_rx, hfi1_type);
 		}
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-DPUT-%s", is_intranode ? "SHM" : "HFI");
@@ -3184,17 +3204,30 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 
 	// Calculate space for each IOV, then add in the origin_byte_counter_vaddr,
 	// and round to the next 64-byte block.
+	const uint64_t icrc_and_tail_block = ((hfi1_type == OPX_HFI1_JKR) ? 1 : 0);
 	const uint64_t payload_blocks_total = ((niov * sizeof(struct fi_opx_hmem_iov)) +
-					      sizeof(uintptr_t) + 63) >> 6;
+					      sizeof(uintptr_t) + icrc_and_tail_block + 63) >> 6;
 	assert(payload_blocks_total > 0 && payload_blocks_total < (FI_OPX_HFI1_PACKET_MTU >> 6));
 
-	const uint64_t pbc_dws = 2 + /* pbc */
-				 2 + /* lhr */
-				 3 + /* bth */
-				 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-				 (payload_blocks_total << 4);
+	uint64_t pbc_dws;
+	uint16_t lrh_dws;
 
-	const uint16_t lrh_dws = htons(pbc_dws - 1);
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		pbc_dws = 2 + /* pbc */
+			  2 + /* lrh */
+			  3 + /* bth */
+			  9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+			  (payload_blocks_total << 4);
+
+		lrh_dws = htons(pbc_dws - 1);
+	} else {
+		pbc_dws = 2 + /* pbc */
+			  4 + /* lrh */
+			  3 + /* bth */
+			  9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+			  (payload_blocks_total << 4);
+		lrh_dws = (pbc_dws - 1) >> 1;
+	}
 
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
 		FI_DBG_TRACE(
@@ -3210,16 +3243,33 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 
 		if (!hdr) return rc;
 
-		hdr->qw_9B[0] = opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
-		hdr->qw_9B[1] = opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx |
-			     ((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS);
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			hdr->qw_9B[0] = opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
+			hdr->qw_9B[1] = opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx |
+				((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
+					(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS);
 
-		hdr->qw_9B[2] = opx_ep->tx->rzv_9B.hdr.qw_9B[2];
-		hdr->qw_9B[3] = opx_ep->tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32);
-		hdr->qw_9B[4] = opx_ep->tx->rzv_9B.hdr.qw_9B[4] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK;
-		hdr->qw_9B[5] = total_len;
-		hdr->qw_9B[6] = tag;
+			hdr->qw_9B[2] = opx_ep->tx->rzv_9B.hdr.qw_9B[2];
+			hdr->qw_9B[3] = opx_ep->tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32);
+			hdr->qw_9B[4] = opx_ep->tx->rzv_9B.hdr.qw_9B[4] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK;
+			hdr->qw_9B[5] = total_len;
+			hdr->qw_9B[6] = tag;
+		} else {
+			const uint64_t lrh_dlid_16B = ntohs(FI_OPX_HFI1_LRH_DLID_TO_LID(lrh_dlid));
+			hdr->qw_16B[0] = opx_ep->tx->rzv_16B.hdr.qw_16B[0] |
+					((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
+					((uint64_t)lrh_dws << 20);
+			hdr->qw_16B[1] = opx_ep->tx->rzv_16B.hdr.qw_16B[1] |
+					((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
+			hdr->qw_16B[2] = opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx |
+				((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
+					(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS);
+			hdr->qw_16B[3] = opx_ep->tx->rzv_16B.hdr.qw_16B[3];
+			hdr->qw_16B[4] = opx_ep->tx->rzv_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32);
+			hdr->qw_16B[5] = opx_ep->tx->rzv_16B.hdr.qw_16B[5] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK;
+			hdr->qw_16B[6] = total_len;
+			hdr->qw_16B[7] = tag;
+		}
 
 		union fi_opx_hfi1_packet_payload *const payload =
 			(union fi_opx_hfi1_packet_payload *)(hdr + 1);
@@ -3316,9 +3366,10 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	volatile uint64_t * const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 	uint64_t local_temp[16] = {0};
 
-	fi_opx_store_and_copy_qw(scb, local_temp,
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		fi_opx_store_and_copy_qw(scb, local_temp,
 			opx_ep->tx->rzv_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
-			OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type),
+				OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx |
 				((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
@@ -3327,6 +3378,25 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 			opx_ep->tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[4] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK,
 			total_len, tag);
+		fi_opx_copy_hdr9B_cacheline(&replay->scb_9B, local_temp);
+	} else {
+		const uint64_t lrh_dlid_16B = ntohs(FI_OPX_HFI1_LRH_DLID_TO_LID(lrh_dlid));
+		fi_opx_store_and_copy_qw(scb, local_temp,
+			opx_ep->tx->rzv_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
+				OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type),
+			opx_ep->tx->rzv_16B.hdr.qw_16B[0] |
+						((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
+						((uint64_t)lrh_dws << 20),
+			opx_ep->tx->rzv_16B.hdr.qw_16B[1] |
+						((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
+			opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx |
+				((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
+						   (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS),
+			opx_ep->tx->rzv_16B.hdr.qw_16B[3] | psn,
+			opx_ep->tx->rzv_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32),
+			opx_ep->tx->rzv_16B.hdr.qw_16B[5] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK,
+			total_len);
+	}
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
@@ -3337,21 +3407,34 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	unsigned credits_consumed = 1;
 #endif
 
-	fi_opx_copy_hdr9B_cacheline(&replay->scb_9B, local_temp);
 	/* write the payload */
 	uint64_t *iov_qws = (uint64_t *) &hmem_iov[0];
 	volatile uint64_t * scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
 	uint64_t local_temp_payload[16] = {0};
-	fi_opx_store_and_copy_qw(scb_payload, local_temp_payload,
-			origin_byte_counter_vaddr,
-			iov_qws[0],
-			iov_qws[1],
-			iov_qws[2],
-			iov_qws[3],
-			iov_qws[4],
-			iov_qws[5],
-			iov_qws[6]);
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		fi_opx_store_and_copy_qw(scb_payload, local_temp_payload,
+				origin_byte_counter_vaddr,
+				iov_qws[0],
+				iov_qws[1],
+				iov_qws[2],
+				iov_qws[3],
+				iov_qws[4],
+				iov_qws[5],
+				iov_qws[6]);
+		iov_qws += 7;
+	} else {
+		fi_opx_store_and_copy_qw(scb_payload, local_temp_payload,
+				tag,
+				origin_byte_counter_vaddr,
+				iov_qws[0],
+				iov_qws[1],
+				iov_qws[2],
+				iov_qws[3],
+				iov_qws[4],
+				iov_qws[5]);
+		iov_qws += 6;
+	}
 
 	/* consume one credit for the rendezvous payload metadata */
 	--total_credits_available;
@@ -3363,8 +3446,19 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	uint64_t * replay_payload = replay->payload;
 	assert(!replay->use_iov);
 	assert(((uint8_t *)replay_payload) == ((uint8_t *)&replay->data));
-	fi_opx_copy_cacheline(replay_payload, local_temp_payload);
-	replay_payload += 8;
+	uint64_t rem_payload_size;
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		fi_opx_copy_cacheline(replay_payload, local_temp_payload);
+		replay_payload += 8;
+		rem_payload_size = sizeof(struct fi_opx_hmem_iov) * (niov - 2);
+	} else {
+		local_temp[7] = local_temp_payload[0];
+		fi_opx_copy_hdr16B_cacheline(&replay->scb_16B, local_temp);
+		fi_opx_copy_cacheline(replay_payload, &local_temp_payload[1]);
+		replay_payload += 7;
+		rem_payload_size = (sizeof(struct fi_opx_hmem_iov) * (niov - 2) + 8); // overflow 8 bytes from 2nd cacheline
+	}
+	
 
 	if (payload_blocks_total > 1) {
 		assert(niov > 2);
@@ -3373,11 +3467,11 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 		credits_consumed +=
 #endif
 		fi_opx_hfi1_tx_egr_store_full_payload_blocks(opx_ep, &pio_state,
-							     (uint64_t *) &hmem_iov[2],
+							     iov_qws,
 							     payload_blocks_total - 1,
 							     total_credits_available);
 
-		memcpy(replay_payload, &hmem_iov[2], sizeof(struct fi_opx_hmem_iov) * (niov - 2));
+		memcpy(replay_payload, iov_qws, rem_payload_size);
 	}
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);

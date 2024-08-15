@@ -4235,42 +4235,23 @@ ssize_t fi_opx_ep_tx_send_rzv(struct fid_ep *ep,
 	}
 
 	do {
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			if (is_contiguous) {
-				rc = FI_OPX_FABRIC_TX_SEND_RZV(
-				    ep, buf, len, desc, addr.fi, tag, context, data,
-				    lock_required, override_flags, tx_op_flags, addr.hfi1_rx,
-				    byte_counter_ptr,
-				    byte_counter,
-				    caps, reliability, hmem_iface, hmem_device, hfi1_type);
-			} else {
-				rc = FI_OPX_FABRIC_TX_SENDV_RZV(
-				    ep, local_iov, niov, total_len, desc, addr.fi, tag,
-				    context, data, lock_required, override_flags, tx_op_flags,
-				    addr.hfi1_rx,
-				    byte_counter_ptr,
-				    byte_counter,
-				    caps, reliability, hmem_iface, hmem_device, hfi1_type);
-			}
+		if (is_contiguous) {
+			rc = FI_OPX_FABRIC_TX_SEND_RZV(
+				ep, buf, len, desc, addr.fi, tag, context, data,
+				lock_required, override_flags, tx_op_flags, addr.hfi1_rx,
+				byte_counter_ptr,
+				byte_counter,
+				caps, reliability, hmem_iface, hmem_device, hfi1_type);
 		} else {
-			if (is_contiguous) {
-				rc = FI_OPX_FABRIC_TX_SEND_RZV_16B(
-				    ep, buf, len, desc, addr.fi, tag, context, data,
-				    lock_required, override_flags, tx_op_flags, addr.hfi1_rx,
-				    byte_counter_ptr,
-				    byte_counter,
-				    caps, reliability, hmem_iface, hmem_device, hfi1_type);
-			} else {
-				/*rc = FI_OPX_FABRIC_TX_SENDV_RZV(
-					ep, local_iov, niov, total_len, desc, addr.fi, tag,
-					context, data, lock_required, override_flags, tx_op_flags,
-					addr.hfi1_rx,
-					byte_counter_ptr,
-					byte_counter,
-					caps, reliability, hfi1_type); */
-				abort();
-			}
+			rc = FI_OPX_FABRIC_TX_SENDV_RZV(
+				ep, local_iov, niov, total_len, desc, addr.fi, tag,
+				context, data, lock_required, override_flags, tx_op_flags,
+				addr.hfi1_rx,
+				byte_counter_ptr,
+				byte_counter,
+				caps, reliability, hmem_iface, hmem_device, hfi1_type);
 		}
+
 		if (OFI_UNLIKELY(rc == -EAGAIN)) {
 			fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		}
