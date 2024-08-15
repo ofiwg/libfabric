@@ -204,7 +204,7 @@ enum opx_work_type {
 };
 
 OPX_COMPILE_TIME_ASSERT(OPX_WORK_TYPE_SDMA == 0,
-			"OPX_WORK_TYPE_SDMA needs to be 0/first value in the enum!"); 
+			"OPX_WORK_TYPE_SDMA needs to be 0/first value in the enum!");
 
 static const char * const OPX_WORK_TYPE_STR[] = {
 	[OPX_WORK_TYPE_SDMA] = "SDMA",
@@ -1719,7 +1719,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-MP-EAGER-FIRST");
 
 		const uint64_t ofi_data = hdr->match.ofi_data;
-		
+
 		uint64_t payload_qws_total;
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			payload_qws_total = (((uint64_t) ntohs(hdr->lrh_9B.pktlen)) - 15) >> 1;
@@ -1951,14 +1951,14 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			"===================================== RECV -- MULTI PACKET EAGER NTH byte counter %lu (end)\n",context->byte_counter);
 	} else if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) { /* 9B rendezvous packet */
 		union fi_opx_hfi1_packet_payload *p = (union fi_opx_hfi1_packet_payload *) payload;
-	
+
 		const uint64_t is_noncontig = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_NONCONTIG;
 
 		uintptr_t origin_byte_counter_vaddr = (is_noncontig == 1) ? p->rendezvous.noncontiguous.origin_byte_counter_vaddr :
 									p->rendezvous.contiguous.origin_byte_counter_vaddr;
 
 		struct fi_opx_hmem_iov *iov = &p->rendezvous.noncontiguous.iov[0];
-		
+
 		const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
 					.qw0 = p->rendezvous.contiguous.immediate_info
 		};
@@ -2294,7 +2294,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		uint16_t lrh_pktlen_le;
 		size_t total_bytes_to_copy;
 		uint16_t bytes;
-		
+
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			lrh_pktlen_le = ntohs(hdr->lrh_9B.pktlen);
 			total_bytes_to_copy =
@@ -2727,7 +2727,7 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
 			slid = (uint64_t)(uepkt->hdr.lrh_9B.slid);
 		} else {
 			slid = htons(((uepkt->hdr.lrh_16B.slid20 << 20) | (uepkt->hdr.lrh_16B.slid)));
-		}  
+		}
 
 		if (fi_opx_mp_egr_id_from_nth_packet(&uepkt->hdr, slid) == mp_egr_id.id) {
 
@@ -2970,7 +2970,7 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 							static_flags, opcode,
 							origin_rs,
 							is_intranode,
-							lock_required, reliability, 
+							lock_required, reliability,
 							hfi1_type, slid);
 
 		return;
@@ -3435,7 +3435,7 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 					.unused = 0
 			};
 
-			fi_opx_ep_rx_process_pending_mp_eager_ue(ep, context, mp_egr_id, is_intranode, 
+			fi_opx_ep_rx_process_pending_mp_eager_ue(ep, context, mp_egr_id, is_intranode,
 					lock_required, reliability, hfi1_type);
 
 			if (context->byte_counter) {
@@ -3601,6 +3601,7 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== POST RECV: context = %p\n", context);
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "POST-RECV");
 
 	const uint64_t rx_op_flags = opx_ep->rx->op_flags;
 	uint64_t rx_caps = opx_ep->rx->caps;
@@ -3644,6 +3645,7 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 		if (OFI_UNLIKELY(ext == NULL)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== POST RECV RETURN FI_ENOMEM\n");
+			OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "POST-RECV");
 			return -FI_ENOMEM;
 		}
 		struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &ext->hmem_info_qws[0];
@@ -3683,6 +3685,7 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 					hfi1_type);
 	}
 
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECV");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"===================================== POST RECV RETURN\n");
 
 	return 0;
@@ -3707,6 +3710,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 		const enum opx_hfi1_type hfi1_type)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"===================================== POST RECVMSG\n");
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "POST-RECVMSG");
 	FI_OPX_DEBUG_COUNTERS_INC_COND(!(flags & FI_MULTI_RECV), opx_ep->debug_counters.recv.posted_recv_msg);
 	FI_OPX_DEBUG_COUNTERS_INC_COND((flags & FI_MULTI_RECV), opx_ep->debug_counters.recv.posted_multi_recv);
 	assert(!lock_required);
@@ -3798,6 +3802,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 		if (OFI_UNLIKELY(ext == NULL)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== POST RECVMSG (HMEM) RETURN FI_ENOMEM\n");
+			OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "POST-RECVMSG");
 			return -FI_ENOMEM;
 		}
 
@@ -3863,6 +3868,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 	struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
 	if (OFI_UNLIKELY(ext == NULL)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,"===================================== POST RECVMSG RETURN FI_ENOMEM\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "POST-RECVMSG");
 		return -FI_ENOMEM;
 	}
 
@@ -3885,6 +3891,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 					reliability,
 					hfi1_type);
 
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== POST RECVMSG RETURN\n");
 
@@ -4579,7 +4586,7 @@ ssize_t fi_opx_recvmsg_generic(struct fid_ep *ep,
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
-	ssize_t rc = fi_opx_ep_rx_recvmsg_internal(opx_ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED, av_type, 
+	ssize_t rc = fi_opx_ep_rx_recvmsg_internal(opx_ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED, av_type,
 					reliability, hfi1_type);
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 

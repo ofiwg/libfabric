@@ -41,6 +41,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "rdma/opx/opx_tracer.h"
+
 #define FI_OPX_CACHE_LINE_SIZE	(64)
 
 #define FI_OPX_CQ_CONTEXT_EXT		(0x8000000000000000ull)
@@ -204,7 +206,12 @@ static inline int fi_opx_threading_lock_required(const enum fi_threading threadi
 
 static inline void fi_opx_lock_if_required (ofi_spin_t *lock, const int required)
 {
-	if (required) ofi_spin_lock(lock);
+	if (required) {
+		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_BEGIN, "LOCK");
+		ofi_spin_lock(lock);
+		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_END_SUCCESS, "LOCK");
+		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_BEGIN, "LOCK-HELD");
+	}
 }
 
 static inline void fi_opx_lock (ofi_spin_t *lock)
@@ -214,7 +221,12 @@ static inline void fi_opx_lock (ofi_spin_t *lock)
 
 static inline void fi_opx_unlock_if_required (ofi_spin_t *lock, const int required)
 {
-	if (required) ofi_spin_unlock(lock);
+	if (required) {
+		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_END_SUCCESS, "LOCK-HELD");
+		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_BEGIN, "UNLOCK");
+		ofi_spin_unlock(lock);
+		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_END_SUCCESS, "UNLOCK");
+	}
 }
 
 static inline void fi_opx_unlock (ofi_spin_t *lock)
