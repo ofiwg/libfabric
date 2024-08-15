@@ -128,9 +128,9 @@ struct fi_opx_cq {
 
 	/* == CACHE LINE == */
 
-	struct fi_opx_context_slist	pending;
-	struct fi_opx_context_slist	completed;
-	struct fi_opx_context_slist	err;		/* 'struct fi_opx_context_ext' element linked list */
+	struct slist			pending;
+	struct slist			completed;
+	struct slist			err;		/* 'struct fi_opx_context_ext' element linked list */
 
 	struct {
 		uint64_t		ep_count;
@@ -218,14 +218,7 @@ int fi_opx_cq_enqueue_pending (struct fi_opx_cq * opx_cq,
 
 	if (lock_required) { FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n"); abort(); }
 
-	union fi_opx_context * tail = opx_cq->pending.tail;
-	context->next = NULL;
-	if (tail) {
-		tail->next = context;
-	} else {
-		opx_cq->pending.head = context;
-	}
-	opx_cq->pending.tail = context;
+	slist_insert_tail((struct slist_entry *) context, &opx_cq->pending);
 
 	return 0;
 }
@@ -243,19 +236,7 @@ int fi_opx_cq_enqueue_completed (struct fi_opx_cq * opx_cq,
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== MANUAL PROGRESS COMPLETION CQ ENQUEUED\n");
 
-	union fi_opx_context * tail = opx_cq->completed.tail;
-	context->next = NULL;
-	if (tail) {
-
-		assert(NULL != opx_cq->completed.head);
-		tail->next = context;
-		opx_cq->completed.tail = context;
-
-	} else {
-		assert(NULL == opx_cq->completed.head);
-		opx_cq->completed.head = context;
-		opx_cq->completed.tail = context;
-	}
+	slist_insert_tail((struct slist_entry *) context, &opx_cq->completed);
 
 	return 0;
 }
@@ -320,8 +301,8 @@ static ssize_t fi_opx_cq_poll_noinline (struct fi_opx_cq *opx_cq,
 	/* examine each context in the pending completion queue and, if the
 	 * operation is complete, initialize the cq entry in the application
 	 * buffer and remove the context from the queue. */
-	union fi_opx_context * pending_head = opx_cq->pending.head;
-	union fi_opx_context * pending_tail = opx_cq->pending.tail;
+	union fi_opx_context * pending_head = (union fi_opx_context *) opx_cq->pending.head;
+	union fi_opx_context * pending_tail = (union fi_opx_context *) opx_cq->pending.tail;
 
 	if (NULL != pending_head) {
 		union fi_opx_context * context = pending_head;
@@ -346,7 +327,8 @@ static ssize_t fi_opx_cq_poll_noinline (struct fi_opx_cq *opx_cq,
 					   multi_recv_context->byte_counter == 0) {
 						/* Signal the user to repost their buffers */
 						assert(multi_recv_context->next == NULL);
-						fi_opx_context_slist_insert_tail(multi_recv_context, opx_ep->rx->cq_completed_ptr);
+						slist_insert_tail((struct slist_entry *) multi_recv_context,
+								  opx_ep->rx->cq_completed_ptr);
 					}
 				} else if (context->flags & FI_OPX_CQ_CONTEXT_EXT) {
 					struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) context;
@@ -374,12 +356,12 @@ static ssize_t fi_opx_cq_poll_noinline (struct fi_opx_cq *opx_cq,
 		}
 
 		/* save the updated pending head and pending tail pointers */
-		opx_cq->pending.head = pending_head;
-		opx_cq->pending.tail = pending_tail;
+		opx_cq->pending.head = (struct slist_entry *) pending_head;
+		opx_cq->pending.tail = (struct slist_entry *) pending_tail;
 	}
 
 
-	union fi_opx_context * head = opx_cq->completed.head;
+	union fi_opx_context * head = (union fi_opx_context *) opx_cq->completed.head;
 	if (head) {
 		union fi_opx_context * context = head;
 		while ((count - num_entries) > 0 && context != NULL) {
@@ -387,7 +369,7 @@ static ssize_t fi_opx_cq_poll_noinline (struct fi_opx_cq *opx_cq,
 			++ num_entries;
 			context = context->next;
 		}
-		opx_cq->completed.head = context;
+		opx_cq->completed.head = (struct slist_entry *) context;
 		if (!context) opx_cq->completed.tail = NULL;
 
 	}
@@ -438,8 +420,8 @@ ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
 				fi_opx_lock(&opx_cq->progress.ep[i]->lock);
 				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_8192, hfi1_type);
 				fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
-			}				
-			
+			}
+
 		} else {
 			for (i=0; i<ep_count; ++i) {
 				fi_opx_lock(&opx_cq->progress.ep[i]->lock);
@@ -488,7 +470,7 @@ ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
 			++ num_entries;
 			context = context->next;
 		}
-		opx_cq->completed.head = context;
+		opx_cq->completed.head = (struct slist_entry *) context;
 		if (!context) opx_cq->completed.tail = NULL;
 
 		return num_entries;
@@ -514,7 +496,7 @@ ssize_t fi_opx_cq_read_generic_non_locking (struct fid_cq *cq, void *buf, size_t
 		const uint64_t caps,
 		const enum opx_hfi1_type hfi1_type)
 {
-	return fi_opx_cq_poll_inline(cq, buf, count, NULL, format, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, caps, hfi1_type);	
+	return fi_opx_cq_poll_inline(cq, buf, count, NULL, format, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, caps, hfi1_type);
 }
 
 __OPX_FORCE_INLINE__

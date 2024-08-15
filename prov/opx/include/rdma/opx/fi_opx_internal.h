@@ -91,61 +91,6 @@ union fi_opx_context {
 	};
 };
 
-struct fi_opx_context_slist {
-	union fi_opx_context *	head;
-	union fi_opx_context *	tail;
-};
-
-static inline void fi_opx_context_slist_init (struct fi_opx_context_slist* list)
-{
-	list->head = list->tail = NULL;
-}
-
-static inline int fi_opx_context_slist_empty (struct fi_opx_context_slist* list)
-{
-	return !list->head;
-}
-
-static inline void fi_opx_context_slist_insert_head (union fi_opx_context *item,
-		struct fi_opx_context_slist* list)
-{
-	assert(item->next == NULL);
-	if (fi_opx_context_slist_empty(list))
-		list->tail = item;
-	else
-		item->next = list->head;
-
-	list->head = item;
-}
-
-static inline void fi_opx_context_slist_insert_tail (union fi_opx_context *item,
-		struct fi_opx_context_slist* list)
-{
-	assert(item->next == NULL);
-	if (fi_opx_context_slist_empty(list))
-		list->head = item;
-	else
-		list->tail->next = item;
-
-	list->tail = item;
-}
-
-static inline void fi_opx_context_slist_remove_item (union fi_opx_context *item,
-		union fi_opx_context *prev, struct fi_opx_context_slist *list)
-{
-	if (prev) {
-		prev->next = item->next;
-	} else {
-		list->head = item->next;
-	}
-
-	if (item->next == NULL) {
-		list->tail = prev;
-	}
-
-	item->next = NULL;
-}
-
 struct fi_opx_context_ext {
 	union fi_opx_context		opx_context;
 	struct fi_cq_err_entry		err_entry;

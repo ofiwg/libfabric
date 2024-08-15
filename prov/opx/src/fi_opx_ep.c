@@ -388,7 +388,7 @@ void fi_opx_ep_tx_model_init_16B (struct fi_opx_hfi1_context * hfi,
 			4 + /* software kdeth + unused */
 			2 + /* ICRC and tail */
 			2 ; /* second cacheline */
-	
+
 	inject_16B->qw0 = OPX_PBC_LEN(pbc_dws,hfi1_type) /* length_dws */ |
 		OPX_PBC_VL(hfi->vl,hfi1_type) |
 		OPX_PBC_SC(hfi->sc,hfi1_type) |
@@ -463,7 +463,7 @@ int fi_opx_stx_init (struct fi_opx_domain *opx_domain, struct fi_tx_attr *attr,
                               &opx_stx->tx.inject,
                               &opx_stx->tx.send,
                               &opx_stx->tx.rzv);
-	
+
 	fi_opx_ep_tx_model_init_16B(opx_stx->hfi,
                               opx_stx->reliability_rx,
                               &opx_stx->tx.inject_16B,
@@ -956,7 +956,7 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 		&opx_ep->tx->inject_9B,
 		&opx_ep->tx->send_9B,
 		&opx_ep->tx->rzv_9B);
-	
+
 	fi_opx_ep_tx_model_init_16B(hfi,
 		opx_ep->reliability->rx,
 		&opx_ep->tx->inject_16B,
@@ -1562,7 +1562,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			return -errno;
 		}
 		fi_opx_ref_inc(&opx_ep->hfi->ref_cnt, "HFI context");
-			
+
 		fi_opx_global.hfi_local_info.type = opx_ep->hfi->hfi_hfi1_type;
 
 		int mixed_network = 0;
@@ -1709,9 +1709,9 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		opx_ep->rx->mp_egr_queue.ue.tail = NULL;
 
 		/* Context match queues (queue[0] == FI_TAGGED, queue[1] == FI_MSG) */
-		fi_opx_context_slist_init(&opx_ep->rx->queue[0].mq);
-		fi_opx_context_slist_init(&opx_ep->rx->queue[1].mq);
-		fi_opx_context_slist_init(&opx_ep->rx->mp_egr_queue.mq);
+		slist_init(&opx_ep->rx->queue[0].mq);
+		slist_init(&opx_ep->rx->queue[1].mq);
+		slist_init(&opx_ep->rx->mp_egr_queue.mq);
 
 		opx_ep->tx->cq = NULL;
 		opx_ep->tx->cq_pending_ptr = NULL;
@@ -1974,11 +1974,11 @@ static int fi_opx_setopt_ep(fid_t fid, int level, int optname,
 		break;
 	case FI_OPT_CUDA_API_PERMITTED:
 		if (!hmem_ops[FI_HMEM_CUDA].initialized) {
-                        FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
-                                "Cannot set CUDA API permitted when"
-                                "CUDA library or CUDA device is not available\n");
-                        return -FI_EINVAL;
-                }
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"Cannot set CUDA API permitted when"
+				"CUDA library or CUDA device is not available\n");
+			return -FI_EINVAL;
+		}
 		/* our HMEM support does not make calls to CUDA API,
 		 * therefore we can accept any option for FI_OPT_CUDA_API_PERMITTED.
 		 */
@@ -1989,7 +1989,6 @@ static int fi_opx_setopt_ep(fid_t fid, int level, int optname,
 
 	return 0;
 }
-
 
 int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx * rx,
 		const uint64_t static_flags,
@@ -2006,7 +2005,7 @@ int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx * rx,
 	 */
 
 	union fi_opx_context * prev = NULL;
-	union fi_opx_context * item = rx->queue[kind].mq.head;
+	union fi_opx_context * item = (union fi_opx_context *) rx->queue[kind].mq.head;
 	while (item) {
 
 		const uint64_t is_context_ext = item->flags & FI_OPX_CQ_CONTEXT_EXT;
@@ -2018,10 +2017,10 @@ int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx * rx,
 			if (prev)
 				prev->next = item->next;
 			else
-				rx->queue[kind].mq.head = item->next;
+				rx->queue[kind].mq.head = (struct slist_entry *) item->next;
 
 			if (!item->next)
-				rx->queue[kind].mq.tail = prev;
+				rx->queue[kind].mq.tail = (struct slist_entry *) prev;
 
 			struct fi_opx_context_ext * ext = NULL;
 			if (cancel_context->flags & FI_OPX_CQ_CONTEXT_EXT) {
@@ -2052,7 +2051,7 @@ int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx * rx,
 			ext->err_entry.err_data_size = 0;
 
 			if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-			fi_opx_context_slist_insert_tail((union fi_opx_context*)ext, rx->cq_err_ptr);
+			slist_insert_tail((struct slist_entry *) ext, rx->cq_err_ptr);
 
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end) canceled\n");
 			return FI_ECANCELED;
@@ -2845,7 +2844,8 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 						// to ensure that any pending ops are completed (eg rendezvous multi-receive)
 						if(context->byte_counter == 0) {
 							assert(context->next == NULL);
-							fi_opx_context_slist_insert_tail(context, opx_ep->rx->cq_completed_ptr);
+							slist_insert_tail((struct slist_entry *) context,
+									  opx_ep->rx->cq_completed_ptr);
 						}
 
 						return;
@@ -2863,7 +2863,7 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		 * no unexpected headers were matched; add this match
 		 * information to the appropriate match queue
 		 */
-		fi_opx_context_slist_insert_tail(context, &opx_ep->rx->queue[kind].mq);
+		slist_insert_tail((struct slist_entry *) context, &opx_ep->rx->queue[kind].mq);
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
@@ -2932,7 +2932,7 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	uint16_t lrh_pktlen_le;
-	size_t total_bytes;	
+	size_t total_bytes;
 	size_t payload_bytes;
 	uint32_t slid;
 
@@ -3247,7 +3247,7 @@ ssize_t
 fi_opx_recv_FABRIC_DIRECT(struct fid_ep *ep, void *buf, size_t len,
 		void *desc, fi_addr_t src_addr, void *context)
 {
-	
+
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
 		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv,
