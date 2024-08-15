@@ -66,6 +66,11 @@
 
 #define CXIP_REQ_CLEANUP_TO		3000
 
+/* PATH_MAX is generally 4K, when not required and variables
+ * are stack based use CXIP_PATH_MAX
+ */
+#define CXIP_PATH_MAX			256
+
 #define CXIP_BUFFER_ID_MAX		(1 << 16)
 
 /* Scalable EP not supported */

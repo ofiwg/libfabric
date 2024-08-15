@@ -10,13 +10,13 @@
 static long cxip_telemetry_entry_read_value(struct cxip_telemetry_entry *entry)
 {
 	long ret;
-	char path[FI_PATH_MAX];
+	char path[CXIP_PATH_MAX];
 	FILE *f;
 	long value;
 	long tstamp_sec;
 	long tstamp_nsec;
 
-	ret = snprintf(path, FI_PATH_MAX, TELEMETRY_FILE_FMT,
+	ret = snprintf(path, CXIP_PATH_MAX, TELEMETRY_FILE_FMT,
 		       entry->telemetry->dom->iface->info->dev_id, entry->name);
 	if (ret < 0)
 		return ret;
@@ -93,10 +93,10 @@ static bool
 cxip_telemetry_entry_validate_token_file(struct cxip_telemetry *telemetry,
 					 const char *telemetry_token)
 {
-	char path[FI_PATH_MAX];
+	char path[CXIP_PATH_MAX];
 	int ret;
 
-	ret = snprintf(path, FI_PATH_MAX, TELEMETRY_FILE_FMT,
+	ret = snprintf(path, CXIP_PATH_MAX, TELEMETRY_FILE_FMT,
 		       telemetry->dom->iface->info->dev_id, telemetry_token);
 	if (ret < 0)
 		return false;
