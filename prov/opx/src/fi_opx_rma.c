@@ -65,7 +65,7 @@ void fi_opx_hit_zero(struct fi_opx_completion_counter *cc)
 		opx_context->tag = 0;
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== CQ ENQUEUE COMPLETION\n");
-		fi_opx_cq_enqueue_completed(cc->cq, cc->context, 0);
+		fi_opx_cq_enqueue_completed(cc->cq, cc->context, FI_OPX_LOCK_NOT_REQUIRED);
 	} else {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== NO CQ COMPLETION\n");
 	}
@@ -279,7 +279,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 		params->opx_target_addr.reliability_rx,
 		params->dest_rx, psn_ptr, replay, params->reliability,
 		OPX_HFI1_TYPE);
-	
+
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
@@ -1174,7 +1174,7 @@ static inline ssize_t fi_opx_rma_writev(struct fid_ep *ep, const struct iovec *i
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
 		abort();
 	}
-						
+
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	return rc;
 }
@@ -1345,7 +1345,7 @@ int fi_opx_enable_rma_ops(struct fid_ep *ep)
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
 		abort();
 	}
-	
+
 	return 0;
 err:
 	return -errno;

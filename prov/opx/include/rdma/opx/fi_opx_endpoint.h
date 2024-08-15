@@ -274,7 +274,7 @@ struct fi_opx_ep_tx {
 	volatile uint64_t *			pio_credits_addr;		/* const; only used to infrequently "refresh" credit information */
 	volatile uint64_t *			pio_scb_first;			/* const; only eager and rendezvous */
 	uint64_t				cq_bind_flags;
-	struct fi_opx_context_slist *		cq_completed_ptr;
+	struct slist *				cq_completed_ptr;
 	uint32_t				do_cq_completion;
 	uint16_t 				unused_cacheline1;
 	uint8_t					force_credit_return;
@@ -305,9 +305,9 @@ struct fi_opx_ep_tx {
 	uint64_t				op_flags;
 	uint64_t				caps;
 	uint64_t				mode;
-	struct fi_opx_context_slist *		cq_err_ptr;
+	struct slist *				cq_err_ptr;
 	struct fi_opx_cq *			cq;
-	struct fi_opx_context_slist *		cq_pending_ptr;			/* only rendezvous (typically) */
+	struct slist *				cq_pending_ptr;			/* only rendezvous (typically) */
 
 	/* == CACHE LINE 14 == */
 
@@ -388,19 +388,19 @@ struct fi_opx_ep_rx {
 
 	struct {
 		struct fi_opx_hfi1_ue_packet_slist	ue;	/* 3 qws */
-		struct fi_opx_context_slist		mq;	/* 2 qws */
+		struct slist				mq;	/* 2 qws */
 	} queue[2];	/* 0 = FI_TAGGED, 1 = FI_MSG */
 
 	struct {
 		struct fi_opx_hfi1_ue_packet_slist	ue;	/* 3 qws */
-		struct fi_opx_context_slist		mq;	/* 2 qws */
+		struct slist				mq;	/* 2 qws */
 	} mp_egr_queue;
 
 	struct fi_opx_match_ue_hash *			match_ue_tag_hash;
 
 	/* == CACHE LINE 3 == */
-	struct fi_opx_context_slist *			cq_pending_ptr;
-	struct fi_opx_context_slist *			cq_completed_ptr;
+	struct slist *					cq_pending_ptr;
+	struct slist *					cq_completed_ptr;
 	struct ofi_bufpool *				ue_packet_pool;
 	struct ofi_bufpool *				ctx_ext_pool;
 
@@ -450,8 +450,8 @@ struct fi_opx_ep_rx {
 	uint64_t			mode;
 	union fi_opx_addr		self;
 
-	struct fi_opx_context_slist	*cq_err_ptr;
-	struct fi_opx_cq *		cq;
+	struct slist			*cq_err_ptr;
+	struct fi_opx_cq		*cq;
 
 	struct opx_shm_rx		shm;
 	void				*mem;
@@ -966,7 +966,7 @@ uint32_t fi_opx_ep_get_u32_extended_rx (struct fi_opx_ep * opx_ep,
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_enqueue_completed(struct fi_opx_context_slist *queue,
+void fi_opx_enqueue_completed(struct slist *queue,
 				void *context,
 				const uint64_t is_context_ext,
 				const int lock_required)
@@ -986,7 +986,7 @@ void fi_opx_enqueue_completed(struct fi_opx_context_slist *queue,
 		real_context = (union fi_opx_context *) context;
 	}
 
-	fi_opx_context_slist_insert_tail(real_context, queue);
+	slist_insert_tail((struct slist_entry *) real_context, queue);
 }
 
 __OPX_FORCE_INLINE__
@@ -1141,7 +1141,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 		original_multi_recv_context->buf = (void*)((uintptr_t)(original_multi_recv_context->buf) + bytes_consumed);
 		assert(context->next == NULL);
 		if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-		fi_opx_context_slist_insert_tail(context, rx->cq_pending_ptr);
+		slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
 
 	} else if (OFI_LIKELY(xfer_len <= recv_len)) {
 
@@ -1278,7 +1278,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 
 		/* post a pending completion event for the individual receive */
 		if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-		fi_opx_context_slist_insert_tail(context, rx->cq_pending_ptr);
+		slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
 
 	} else {				/* truncation - unlikely */
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1317,7 +1317,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 					 hfi1_type);
 
 		if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-		fi_opx_context_slist_insert_tail(context, rx->cq_pending_ptr);
+		slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
 
 		/* Post a E_TRUNC to our local RX error queue because a client called receive
 		with too small a buffer.  Tell them about it via the error cq */
@@ -1353,7 +1353,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 
 		/* post an 'error' completion event */
 		if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-		fi_opx_context_slist_insert_tail((union fi_opx_context*)ext, rx->cq_err_ptr);
+		slist_insert_tail((struct slist_entry *) ext, rx->cq_err_ptr);
 	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS");
@@ -1440,7 +1440,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 			/* post a completion event for the individual receive */
 			if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-			fi_opx_context_slist_insert_tail(context, rx->cq_completed_ptr);
+			slist_insert_tail((struct slist_entry *) context, rx->cq_completed_ptr);
 
 		} else if (OFI_LIKELY(send_len <= recv_len)) {
 			if (is_hmem && send_len) {
@@ -1548,7 +1548,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 			/* post an 'error' completion event for the receive */
 			if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-			fi_opx_context_slist_insert_tail((union fi_opx_context*)ext, rx->cq_err_ptr);
+			slist_insert_tail((struct slist_entry *) ext, rx->cq_err_ptr);
 		}
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-INJECT");
@@ -1609,7 +1609,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			assert(context->next == NULL);
 			/* post a completion event for the individual receive */
 			if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-			fi_opx_context_slist_insert_tail(context, rx->cq_completed_ptr);
+			slist_insert_tail((struct slist_entry *) context, rx->cq_completed_ptr);
 
 		} else if (OFI_LIKELY(send_len <= recv_len)) {
 
@@ -1704,7 +1704,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 			/* post an 'error' completion event for the receive */
 			if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-			fi_opx_context_slist_insert_tail((union fi_opx_context*)ext, rx->cq_err_ptr);
+			slist_insert_tail((struct slist_entry *) ext, rx->cq_err_ptr);
 		}
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-EAGER");
@@ -2780,7 +2780,7 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 	const uint64_t kind = (static_flags & FI_TAGGED) ? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG;
 	assert((kind == FI_OPX_KIND_TAG && opcode == FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST) ||
 		(kind == FI_OPX_KIND_MSG && opcode == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST));
-	union fi_opx_context * context = opx_ep->rx->queue[kind].mq.head;
+	union fi_opx_context * context = (union fi_opx_context *) opx_ep->rx->queue[kind].mq.head;
 	union fi_opx_context * prev = NULL;
 
 	while (
@@ -2817,7 +2817,9 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 	}
 
 	/* Found a match. Remove from the match queue */
-	fi_opx_context_slist_remove_item(context, prev, &opx_ep->rx->queue[kind].mq);
+	slist_remove(&opx_ep->rx->queue[kind].mq,
+		     (struct slist_entry *) context,
+		     (struct slist_entry *) prev);
 
 	uint64_t is_context_ext = context->flags & FI_OPX_CQ_CONTEXT_EXT;
 	uint64_t is_hmem = context->flags & FI_OPX_CQ_CONTEXT_HMEM;
@@ -2845,13 +2847,13 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 	/* Only add this to the multi-packet egr queue if we still expect additional packets to come in */
 	if (context->byte_counter) {
 		context->mp_egr_id = mp_egr_id;
-		fi_opx_context_slist_insert_tail(context, &opx_ep->rx->mp_egr_queue.mq);
+		slist_insert_tail((struct slist_entry *) context, &opx_ep->rx->mp_egr_queue.mq);
 	} else {
 		context->next = NULL;
 
 		if (OFI_UNLIKELY(is_context_ext &&
 				((struct fi_opx_context_ext *)context)->err_entry.err == FI_ETRUNC)) {
-			fi_opx_context_slist_insert_tail(context, opx_ep->rx->cq_err_ptr);
+			slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_err_ptr);
 		} else {
 			fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context,
 						is_context_ext, lock_required);
@@ -2881,7 +2883,7 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep,
 	/* Search mp-eager queue for the context w/ matching mp-eager ID */
 
 	const uint64_t mp_egr_id = fi_opx_mp_egr_id_from_nth_packet(hdr, slid);
-	union fi_opx_context *context = opx_ep->rx->mp_egr_queue.mq.head;
+	union fi_opx_context *context = (union fi_opx_context *) opx_ep->rx->mp_egr_queue.mq.head;
 	union fi_opx_context *prev = NULL;
 
 	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(length);
@@ -2926,11 +2928,13 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep,
 
 	if (!context->byte_counter) {
 		/* Remove from the mp-eager queue */
-		fi_opx_context_slist_remove_item(context, prev, &opx_ep->rx->mp_egr_queue.mq);
+		slist_remove(&opx_ep->rx->mp_egr_queue.mq,
+			     (struct slist_entry *) context,
+			     (struct slist_entry *) prev);
 
 		if (OFI_UNLIKELY(is_context_ext &&
 				((struct fi_opx_context_ext *)context)->err_entry.err == FI_ETRUNC)) {
-			fi_opx_context_slist_insert_tail(context, opx_ep->rx->cq_err_ptr);
+			slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_err_ptr);
 		} else {
 			fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context,
 						is_context_ext, lock_required);
@@ -2990,7 +2994,7 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 
 	assert(static_flags & (FI_TAGGED | FI_MSG));
 	const uint64_t kind = (static_flags & FI_TAGGED) ? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG;
-	union fi_opx_context * context = opx_ep->rx->queue[kind].mq.head;
+	union fi_opx_context * context = (union fi_opx_context *) opx_ep->rx->queue[kind].mq.head;
 	union fi_opx_context * prev = NULL;
 
 	while (OFI_LIKELY(context != NULL) &&
@@ -3035,13 +3039,13 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 		if (prev)
 			prev->next = context->next;
 		else {
-			assert(opx_ep->rx->queue[kind].mq.head == context);
-			opx_ep->rx->queue[kind].mq.head = context->next;
+			assert(opx_ep->rx->queue[kind].mq.head == (struct slist_entry *) context);
+			opx_ep->rx->queue[kind].mq.head = (struct slist_entry *) context->next;
 		}
 
 		if (context->next == NULL){
-			assert(opx_ep->rx->queue[kind].mq.tail == context);
-			opx_ep->rx->queue[kind].mq.tail = prev;
+			assert(opx_ep->rx->queue[kind].mq.tail == (struct slist_entry *) context);
+			opx_ep->rx->queue[kind].mq.tail = (struct slist_entry *) prev;
 		}
 
 		context->next = NULL;
@@ -3091,7 +3095,7 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 			if (prev)
 				prev->next = context->next;
 			else
-				opx_ep->rx->queue[kind].mq.head = context->next;
+				opx_ep->rx->queue[kind].mq.head = (struct slist_entry *) context->next;
 
 			if (context->next == NULL)
 				opx_ep->rx->queue[kind].mq.tail = NULL;
@@ -3103,7 +3107,7 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 			// to ensure that any pending ops are completed (eg rendezvous multi-receive)
 			if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
 			if(context->byte_counter == 0) {
-				fi_opx_context_slist_insert_tail(context, opx_ep->rx->cq_completed_ptr);
+				slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_completed_ptr);
 			}
 		}
 	} else {
@@ -3358,7 +3362,7 @@ int fi_opx_ep_cancel_context(struct fi_opx_ep * opx_ep,
 
 		/* post an 'error' completion event for the canceled receive */
 		if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-		fi_opx_context_slist_insert_tail((union fi_opx_context*)ext, opx_ep->rx->cq_err_ptr);
+		slist_insert_tail((struct slist_entry *) ext, opx_ep->rx->cq_err_ptr);
 
 		return FI_ECANCELED;
 	}
@@ -3440,14 +3444,14 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 
 			if (context->byte_counter) {
 				context->mp_egr_id = mp_egr_id;
-				fi_opx_context_slist_insert_tail(context, &opx_ep->rx->mp_egr_queue.mq);
+				slist_insert_tail((struct slist_entry *) context, &opx_ep->rx->mp_egr_queue.mq);
 			} else {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_completed_process_context);
 
 				context->next = NULL;
 				if (OFI_UNLIKELY(is_context_ext &&
 						((struct fi_opx_context_ext *)context)->err_entry.err == FI_ETRUNC)) {
-					fi_opx_context_slist_insert_tail(context, opx_ep->rx->cq_err_ptr);
+					slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_err_ptr);
 				} else {
 					fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context,
 								is_context_ext, lock_required);
@@ -3489,7 +3493,7 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 	 * (context) to the appropriate match queue
 	 */
 	context->next = NULL;
-	fi_opx_context_slist_insert_tail(context, &opx_ep->rx->queue[kind].mq);
+	slist_insert_tail((struct slist_entry *) context, &opx_ep->rx->queue[kind].mq);
 
 	return 0;
 }
@@ -3956,7 +3960,7 @@ void fi_opx_ep_tx_cq_completion_rzv(struct fid_ep *ep,
 	opx_context->next = NULL;
 
 	if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-	fi_opx_context_slist_insert_tail(opx_context, opx_ep->tx->cq_pending_ptr);
+	slist_insert_tail((struct slist_entry *) opx_context, opx_ep->tx->cq_pending_ptr);
 }
 
 __OPX_FORCE_INLINE__

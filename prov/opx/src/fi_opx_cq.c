@@ -58,7 +58,7 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line) {
 	len -= n;
 
 	if (opx_cq->completed.head != NULL) {
-		context = opx_cq->completed.head;
+		context = (union fi_opx_context *) opx_cq->completed.head;
 		n = snprintf(s, len, " = { %p", context); s += n; len -= n;
 
 		context = context->next;
@@ -73,7 +73,7 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line) {
 	n = 0; len = 2047; s = str; *s = 0;
 	n = snprintf(s, len, "%s():%d [%p] pending(%p,%p)", func, line, opx_cq, opx_cq->pending.head, opx_cq->pending.tail); s += n; len -= n;
 	if (opx_cq->pending.head != NULL) {
-		context = opx_cq->pending.head;
+		context = (union fi_opx_context *) opx_cq->pending.head;
 		n = snprintf(s, len, " = { %p(%lu,0x%016lx)", context, context->byte_counter, context->byte_counter); s += n; len -= n;
 
 		context = context->next;
@@ -89,7 +89,7 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line) {
 	n = 0; len = 2047; s = str; *s = 0;
 	n = snprintf(s, len, "%s():%d [%p] err(%p,%p)", func, line, opx_cq, opx_cq->err.head, opx_cq->err.tail); s += n; len -= n;
 	if (opx_cq->err.head != NULL) {
-		context = opx_cq->err.head;
+		context = (union fi_opx_context *) opx_cq->err.head;
 		n = snprintf(s, len, " = { %p(%lu)", context, context->byte_counter); s += n; len -= n;
 
 		context = context->next;
@@ -142,7 +142,7 @@ static int fi_opx_close_cq(fid_t fid)
 
 	free(opx_cq);
 	opx_cq = NULL;
-	//opx_cq (the object passed in as fid) is now unusable 
+	//opx_cq (the object passed in as fid) is now unusable
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "cq closed\n");
 	return 0;
@@ -193,7 +193,7 @@ int fi_opx_cq_enqueue_err (struct fi_opx_cq * opx_cq,
 	assert(!lock_required);
 	ext->opx_context.next = NULL;
 
-	fi_opx_context_slist_insert_tail((union fi_opx_context *)ext, &opx_cq->err);
+	slist_insert_tail((struct slist_entry *) ext, &opx_cq->err);
 
 	return 0;
 }
@@ -227,7 +227,7 @@ struct fi_ops_cq * fi_opx_cq_select_ops(const enum fi_cq_format format,
 
 	if (hfi1_type & OPX_HFI1_WFR)	{
 
-		switch(rcvhdrcnt) {	
+		switch(rcvhdrcnt) {
 			case 2048:
 				return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 0) :
 			                       	fi_opx_cq_select_non_locking_2048_ops(format, reliability, comm_caps, 0);
@@ -235,12 +235,12 @@ struct fi_ops_cq * fi_opx_cq_select_ops(const enum fi_cq_format format,
 				return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps, 0) :
 			                       	fi_opx_cq_select_non_locking_8192_ops(format, reliability, comm_caps, 0);
 			default:
-				FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");			
+				FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");
 				return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 0) :
 			                       	fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps, 0);
 		}
 	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
-		switch(rcvhdrcnt) {	
+		switch(rcvhdrcnt) {
 			case 2048:
 				return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 1) :
 			                       	fi_opx_cq_select_non_locking_2048_ops(format, reliability, comm_caps, 1);
@@ -248,12 +248,12 @@ struct fi_ops_cq * fi_opx_cq_select_ops(const enum fi_cq_format format,
 				return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps, 1) :
 			                       	fi_opx_cq_select_non_locking_8192_ops(format, reliability, comm_caps, 1);
 			default:
-				FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");			
+				FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");
 				return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 1) :
 			                       	fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps, 1);
 		}
 	} else if (hfi1_type & OPX_HFI1_JKR) {
-		switch(rcvhdrcnt) {	
+		switch(rcvhdrcnt) {
 			case 2048:
 				return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 2) :
 			                       	fi_opx_cq_select_non_locking_2048_ops(format, reliability, comm_caps, 2);
@@ -261,7 +261,7 @@ struct fi_ops_cq * fi_opx_cq_select_ops(const enum fi_cq_format format,
 				return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps, 2) :
 			                       	fi_opx_cq_select_non_locking_8192_ops(format, reliability, comm_caps, 2);
 			default:
-				FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");			
+				FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");
 				return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 2) :
 			                       	fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps, 2);
 		}
@@ -307,9 +307,9 @@ int fi_opx_cq_open(struct fid_domain *dom,
 
 	opx_cq->format = attr->format ? attr->format : FI_CQ_FORMAT_CONTEXT;
 
-	fi_opx_context_slist_init(&opx_cq->pending);
-	fi_opx_context_slist_init(&opx_cq->completed);
-	fi_opx_context_slist_init(&opx_cq->err);
+	slist_init(&opx_cq->pending);
+	slist_init(&opx_cq->completed);
+	slist_init(&opx_cq->err);
 
 	opx_cq->ep_bind_count = 0;
 	opx_cq->progress.ep_count = 0;

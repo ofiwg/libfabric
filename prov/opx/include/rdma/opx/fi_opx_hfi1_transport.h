@@ -104,7 +104,7 @@ void fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep,
 
 	if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== TX CQ COMPLETION QUEUED\n");
-	fi_opx_context_slist_insert_tail(opx_context, opx_ep->tx->cq_completed_ptr);
+	slist_insert_tail((struct slist_entry *) opx_context, opx_ep->tx->cq_completed_ptr);
 }
 
 // faster than memcpy() for this amount of data.
@@ -627,7 +627,7 @@ void fi_opx_store_inject_and_copy_scb2_16B(volatile uint64_t scb[8],
 					   uint64_t *local, uint64_t d8)
 {
 	// 2nd cacheline PIO (only) padded out
-	
+
 	OPX_HFI1_BAR_STORE(&scb[0], d8);   // tag
 	OPX_HFI1_BAR_STORE(&scb[1], 0);
 	OPX_HFI1_BAR_STORE(&scb[2], 0);
@@ -1069,9 +1069,9 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 
 			hdr->qw_9B[6] = tag;
 		} else {
-			hdr->qw_16B[0] = opx_ep->tx->inject_16B.hdr.qw_16B[0] | 
+			hdr->qw_16B[0] = opx_ep->tx->inject_16B.hdr.qw_16B[0] |
 								((uint64_t)(dlid & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B);
-			hdr->qw_16B[1] = opx_ep->tx->inject_16B.hdr.qw_16B[1] | 
+			hdr->qw_16B[1] = opx_ep->tx->inject_16B.hdr.qw_16B[1] |
 								(((uint64_t)(dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
 			hdr->qw_16B[2] = opx_ep->tx->inject_16B.hdr.qw_16B[2] | bth_rx | (len << 48) |
 					((caps & FI_MSG) ?  /* compile-time constant expression */
@@ -1103,7 +1103,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
 	const uint16_t credits_needed = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ? 1 : 2;
-	if (OFI_UNLIKELY(FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, credits_needed) < 
+	if (OFI_UNLIKELY(FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, credits_needed) <
 			credits_needed)) {
 		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
@@ -1147,7 +1147,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
 	uint64_t local_temp[16] = {0};
- 
+
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		fi_opx_store_inject_and_copy_scb_9B(scb, local_temp,
 			opx_ep->tx->inject_9B.qw0 | OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) |
@@ -1204,7 +1204,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		fi_opx_copy_hdr16B_cacheline(&replay->scb_16B, local_temp);
 	}
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.reliability_rx, 
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.reliability_rx,
 		dest_rx, psn_ptr, replay, reliability, hfi1_type);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-INJECT-HFI");
@@ -1274,7 +1274,7 @@ bool fi_opx_hfi1_fill_from_iov8(const struct iovec *iov,   /* In:  iovec array *
 	return false;
 }
 
-static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required, 
+static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 				const enum opx_hfi1_type hfi1_type);
 
 __OPX_FORCE_INLINE__
@@ -2252,16 +2252,16 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(struct fi_opx_ep *opx_ep,
 				opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32),
 				opx_ep->tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48),
 				*((uint64_t *)buf), tag);
-			
+
 		} else {
 			uint32_t lrh_dlid_16B = htons(FI_OPX_HFI1_LRH_DLID_TO_LID(lrh_dlid));
 			fi_opx_store_and_copy_qw(scb, local_storage,
 				opx_ep->tx->send_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) |
 					pbc_dlid,
-				opx_ep->tx->send_16B.hdr.qw_16B[0] | 
+				opx_ep->tx->send_16B.hdr.qw_16B[0] |
 					((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 					((uint64_t)lrh_packet_length << 20),
-				opx_ep->tx->send_16B.hdr.qw_16B[1] | 
+				opx_ep->tx->send_16B.hdr.qw_16B[1] |
 					((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
 
 				opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
@@ -2316,9 +2316,9 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(struct fi_opx_ep *opx_ep,
 
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_egr_store_packet_hdr_and_payload(struct fi_opx_ep *opx_ep,
-				union fi_opx_hfi1_pio_state *pio_state, 
+				union fi_opx_hfi1_pio_state *pio_state,
 				uint64_t *local_storage,
-				uint64_t *buf_qws, 
+				uint64_t *buf_qws,
 				const size_t hdr_and_payload_qws,
 				const uint64_t tag)
 {
@@ -2328,7 +2328,7 @@ ssize_t fi_opx_hfi1_tx_egr_store_packet_hdr_and_payload(struct fi_opx_ep *opx_ep
 	union fi_opx_hfi1_pio_state pio_local = *pio_state;
 	volatile uint64_t * scb_payload =
 		FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_local);
-	
+
 	// spill from 1st cacheline (SOP)
 	OPX_HFI1_BAR_STORE(&scb_payload[0], tag);  // header
 	local_storage[8] = tag; /* todo: pretty sure it's already there */
@@ -2345,7 +2345,7 @@ ssize_t fi_opx_hfi1_tx_egr_store_packet_hdr_and_payload(struct fi_opx_ep *opx_ep
 			local_storage[8 + i] = -1UL;
 		}
 	}
-	
+
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 
 	FI_OPX_HFI1_CONSUME_CREDITS(pio_local, 1);
@@ -2470,7 +2470,7 @@ void fi_opx_hfi1_tx_send_egr_write_replay_data(struct fi_opx_ep *opx_ep,
 			const enum ofi_reliability_kind reliability,
 			const enum opx_hfi1_type hfi1_type)
 {
-	
+
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))
 		fi_opx_copy_hdr9B_cacheline(&replay->scb_9B, local_source);
 	else
@@ -3007,7 +3007,7 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(struct fi_opx_ep *opx_ep,
 					((uint64_t)lrh_dws << 20),
 			opx_ep->tx->send_16B.hdr.qw_16B[1] |
 				((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
-				
+
 			opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
 				(uint64_t)FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
 			opx_ep->tx->send_16B.hdr.qw_16B[3] | psn,
@@ -3331,18 +3331,18 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B (struct fi_opx_ep *opx_ep,
 					     const enum opx_hfi1_type hfi1_type)
 {
 	assert(lock_required == 0);
-	
+
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND 16B, HFI -- MULTI-PACKET EAGER NTH (begin)\n");
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-MP-EAGER-NTH-HFI");
-	
+
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, FI_OPX_MP_EGR_CHUNK_CREDITS);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ENOBUFS, "SEND-MP-EAGER-NTH-HFI");
 		return -FI_ENOBUFS;
 	}
-	
+
 	struct fi_opx_reliability_tx_replay *replay;
 	union fi_opx_reliability_tx_psn *psn_ptr;
 	int32_t psn;
@@ -3365,13 +3365,13 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B (struct fi_opx_ep *opx_ep,
 						      psn,
 						      mp_egr_uid,
 						      hfi1_type);
-									
+
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	uint64_t *buf_qws = (uint64_t*)((uintptr_t)buf + FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL);
 
 	/* header and payload */
 #ifndef NDEBUG
-	credits_consumed += 
+	credits_consumed +=
 #endif
 	fi_opx_hfi1_tx_mp_egr_store_hdr_and_payload(opx_ep, &pio_state, local_temp,
 			(((uint64_t) mp_egr_uid) << 32) | payload_offset, buf_qws);
@@ -3655,7 +3655,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last_16B (struct fi_opx_ep *opx_ep,
 			buf_qws = (uint64_t*)((uintptr_t)buf + 56);
 
 		if (full_block_credits_needed) full_block_credits_needed--;
-		
+
 		if (OFI_LIKELY(full_block_credits_needed)) {
 #ifndef NDEBUG
 			credits_consumed +=
@@ -3665,7 +3665,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last_16B (struct fi_opx_ep *opx_ep,
 							full_block_credits_needed,
 							total_credits_available - 2);
 		}
-		
+
 		if (OFI_LIKELY(tail_partial_block_qws)) {
 #ifndef NDEBUG
 			credits_consumed +=
