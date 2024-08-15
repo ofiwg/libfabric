@@ -4183,6 +4183,8 @@ void ft_longopts_usage()
 		"manual, auto, or unified");
 	FT_PRINT_OPTS_USAGE("--max-msg-size <size>",
 		"maximum untagged message size");
+	FT_PRINT_OPTS_USAGE("--use-fi-more",
+		"Run tests with FI_MORE");
 }
 
 int debug_assert;
@@ -4195,6 +4197,7 @@ struct option long_opts[] = {
 	{"data-progress", required_argument, NULL, LONG_OPT_DATA_PROGRESS},
 	{"control-progress", required_argument, NULL, LONG_OPT_CONTROL_PROGRESS},
 	{"max-msg-size", required_argument, NULL, LONG_OPT_MAX_MSG_SIZE},
+	{"use-fi-more", no_argument, NULL, LONG_OPT_USE_FI_MORE},
 	{NULL, 0, NULL, 0},
 };
 
@@ -4234,6 +4237,9 @@ int ft_parse_long_opts(int op, char *optarg)
 		return 0;
 	case LONG_OPT_MAX_MSG_SIZE:
 		opts.max_msg_size = atoi(optarg);
+		return 0;
+	case LONG_OPT_USE_FI_MORE:
+		opts.use_fi_more = 1;
 		return 0;
 	default:
 		return EXIT_FAILURE;
