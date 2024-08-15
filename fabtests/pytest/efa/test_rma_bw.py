@@ -62,3 +62,13 @@ def test_rma_bw_1G(cmdline_args, operation_type, completion_semantic):
     efa_run_client_server_test(cmdline_args, command, 2,
                                completion_semantic=completion_semantic, message_size=1073741824,
                                memory_type="host_to_host", warmup_iteration_type=0, timeout=timeout)
+
+@pytest.mark.functional
+@pytest.mark.parametrize("operation_type", ["writedata", "write"])
+def test_rma_bw_use_fi_more(cmdline_args, operation_type, completion_semantic, inject_message_size):
+    command = "fi_rma_bw -e rdm -j 0 --use-fi-more"
+    command = command + " -o " + operation_type
+    # rma_bw test with data verification takes longer to finish
+    timeout = max(540, cmdline_args.timeout)
+    efa_run_client_server_test(cmdline_args, command, "short", completion_semantic,
+                               "host_to_host", inject_message_size, timeout=timeout)
