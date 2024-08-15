@@ -192,6 +192,7 @@ struct ft_opts {
 	char *dst_addr;
 	char *av_name;
 	int sizes_enabled;
+	int use_fi_more;
 	int options;
 	enum ft_comp_method comp_method;
 	int machr;
@@ -644,6 +645,7 @@ enum {
 	LONG_OPT_DATA_PROGRESS,
 	LONG_OPT_CONTROL_PROGRESS,
 	LONG_OPT_MAX_MSG_SIZE,
+	LONG_OPT_USE_FI_MORE,
 };
 
 extern int debug_assert;
