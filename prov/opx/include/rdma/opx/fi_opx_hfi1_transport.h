@@ -1797,8 +1797,8 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov,
 							      lrh_qws,
 							      lrh_dlid_16B,
 							      bth_rx,
-							      payload_qws_total,
 							      total_len,
+							      payload_qws_total,
 							      xfer_bytes_tail,
 							      desc,
 							      &addr,
@@ -2863,8 +2863,6 @@ ssize_t fi_opx_hfi1_tx_send_egr_select(struct fid_ep *ep,
 	return (ssize_t)-1L;
 }
 
-
-
 /*
  * Write the initial packet header of a multi-packet eager send. This will include the size of
  * the entire multi-packet eager payload.
@@ -3705,14 +3703,9 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep,
 					  const uint64_t lrh_dlid,
 					  struct fi_opx_completion_counter *cc,
 					  const uint64_t bytes_to_sync,
-					  const uint32_t dest_extended_rx)
+					  const uint32_t dest_extended_rx,
+					  enum opx_hfi1_type hfi1_type)
 {
-	const uint64_t pbc_dws = 2 + /* pbc */
-				 2 + /* lrh */
-				 3 + /* bth */
-				 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-				 (0 << 4);
-	const uint16_t lrh_dws = htons(pbc_dws - 1);
 	const uint64_t bth_rx = dest_rx << 56;
 	uint64_t pos;
 	ssize_t rc;
@@ -3729,14 +3722,40 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep,
 			dest_extended_rx, 0, &rc);
 	}
 
-	hdr->qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
-	hdr->qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx;
-	hdr->qw_9B[2] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[2];
-	hdr->qw_9B[3] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[3];
-	hdr->qw_9B[4] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | FI_OPX_HFI_DPUT_OPCODE_FENCE | (0ULL << 32);
-	hdr->qw_9B[5] = (uintptr_t)cc;
-	hdr->qw_9B[6] = bytes_to_sync;
-
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		const uint64_t pbc_dws = 2 + /* pbc */
+				 2 + /* lrh */
+				 3 + /* bth */
+				 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+				 (0 << 4);
+		const uint16_t lrh_dws = htons(pbc_dws - 1);
+		hdr->qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
+		hdr->qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx;
+		hdr->qw_9B[2] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[2];
+		hdr->qw_9B[3] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[3];
+		hdr->qw_9B[4] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | FI_OPX_HFI_DPUT_OPCODE_FENCE | (0ULL << 32);
+		hdr->qw_9B[5] = (uintptr_t)cc;
+		hdr->qw_9B[6] = bytes_to_sync;
+	} else {
+		const uint64_t pbc_dws = 2 + /* pbc */
+					 4 + /* lrh */
+					 3 + /* bth */
+					 9 + /* kdeth */
+					 2;  /* ICRC */
+		const uint16_t lrh_dws = (pbc_dws - 1) >> 1;
+		uint32_t lrh_dlid_16B = htons(FI_OPX_HFI1_LRH_DLID_TO_LID(lrh_dlid));
+		hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
+					((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
+					((uint64_t)lrh_dws << 20);
+		hdr->qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
+					((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
+		hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx;
+		hdr->qw_16B[3] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[3];
+		hdr->qw_16B[4] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[4];
+		hdr->qw_16B[5] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | FI_OPX_HFI_DPUT_OPCODE_FENCE | (0ULL << 32);
+		hdr->qw_16B[6] = (uintptr_t)cc;
+		hdr->qw_16B[7] = bytes_to_sync;
+	}
 	opx_shm_tx_advance(&opx_ep->tx->shm, (void *)hdr, pos);
 }
 
@@ -3772,5 +3791,40 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t l
 				const enum fi_hmem_iface hmem_iface,
 				const uint64_t hmem_device,
 				const enum opx_hfi1_type hfi1_type);
+
+__OPX_FORCE_INLINE__
+ssize_t fi_opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+					fi_addr_t dest_addr, uint64_t tag, void *context,
+					const uint32_t data, int lock_required,
+					const unsigned override_flags, uint64_t tx_op_flags,
+					const uint64_t dest_rx, const uintptr_t origin_byte_counter_vaddr,
+					uint64_t *origin_byte_counter_value, const uint64_t caps,
+					const enum ofi_reliability_kind reliability,
+					const enum fi_hmem_iface hmem_iface,
+					const uint64_t hmem_device,
+					const enum opx_hfi1_type hfi1_type)
+{
+	if (hfi1_type & OPX_HFI1_WFR) {
+		return fi_opx_hfi1_tx_send_rzv(ep, buf, len, desc, dest_addr, tag, context, data,
+				    lock_required, override_flags, tx_op_flags, dest_rx,
+				    origin_byte_counter_vaddr,
+				    origin_byte_counter_value,
+				    caps, reliability, hmem_iface, hmem_device, OPX_HFI1_WFR);
+	} else if (hfi1_type & OPX_HFI1_JKR) {
+		return fi_opx_hfi1_tx_send_rzv_16B(ep, buf, len, desc, dest_addr, tag, context, data,
+				    lock_required, override_flags, tx_op_flags, dest_rx,
+				    origin_byte_counter_vaddr,
+				    origin_byte_counter_value,
+				    caps, reliability, hmem_iface, hmem_device, OPX_HFI1_JKR);
+	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
+		return fi_opx_hfi1_tx_send_rzv(ep, buf, len, desc, dest_addr, tag, context, data,
+				    lock_required, override_flags, tx_op_flags, dest_rx,
+				    origin_byte_counter_vaddr,
+				    origin_byte_counter_value,
+				    caps, reliability, hmem_iface, hmem_device, OPX_HFI1_JKR_9B);
+	}
+	abort();
+	return (ssize_t)-1L;
+}
 
 #endif /* _FI_PROV_OPX_HFI1_TRANSPORT_H_ */

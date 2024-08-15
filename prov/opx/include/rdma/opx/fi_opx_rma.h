@@ -88,14 +88,24 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->bth_rx = params->dest_rx << 56;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_target_addr.fi);
 	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid, hfi1_type);
-	params->pbc_dws = 2 + /* pbc */
-			 2 + /* lrh */
-			 3 + /* bth */
-			 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-			 16; /* one "struct fi_opx_hfi1_dput_iov", padded to cache line */
-	/* lrh does not include pbc (8 bytes/2 dws), but does include icrc (4 bytes/1 dws),
-	   so subtract 1 dws */
-	params->lrh_dws = htons(params->pbc_dws - 1);
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		params->pbc_dws = 2 + /* pbc */
+				2 + /* lrh */
+				3 + /* bth */
+				9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+				16; /* one "struct fi_opx_hfi1_dput_iov", padded to cache line */
+		/* lrh does not include pbc (8 bytes/2 dws), but does include icrc (4 bytes/1 dws),
+		so subtract 1 dws */
+		params->lrh_dws = htons(params->pbc_dws - 1);
+	} else {
+		params->pbc_dws = 2 + /* pbc */
+				4 + /* lrh */
+				3 + /* bth */
+				9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+				16 + /* one "struct fi_opx_hfi1_dput_iov", padded to cache line */
+				2; /* ICRC */
+		params->lrh_dws = (params->pbc_dws - 2) >> 1;
+	}
 	params->is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_target_addr, caps);
 	params->reliability = reliability;
 	params->opcode = opcode;
