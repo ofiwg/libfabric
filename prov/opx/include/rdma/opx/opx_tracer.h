@@ -118,7 +118,7 @@ int opx_tracer_enabled()
 }
 
 __OPX_FORCE_INLINE__
-void opx_tracer_trace(enum opx_tracer_status status, 
+void opx_tracer_trace(enum opx_tracer_status status,
 		const char *func, int line, const char *msg)
 {
 	struct timespec ts;
@@ -132,20 +132,20 @@ void opx_tracer_trace(enum opx_tracer_status status,
 		timestamp, opx_tracer.pid, func, line, OPX_TRACER_STATUS_STR[status], msg);
 }
 
-#if defined(OPX_TRACER) || defined(OPX_TRACER_SDMA) || defined(OPX_TRACER_RELI)
+#if defined(OPX_TRACER) || defined(OPX_TRACER_SDMA) || defined(OPX_TRACER_RELI) || defined(OPX_TRACER_LOCK_IF_REQUIRED)
 
 #define OPX_TRACER_INIT() opx_tracer_init()
 
-#define OPX_TRACER_TRACE(status, fmt, ...)					\
-	do {													\
-		if (opx_tracer_enabled()) {							\
-			int saved_errno = errno;						\
-			char msg[1024];									\
+#define OPX_TRACER_TRACE(status, fmt, ...)				\
+	do {								\
+		if (opx_tracer_enabled()) {				\
+			int saved_errno = errno;			\
+			char msg[1024];					\
 			snprintf(msg, sizeof(msg), fmt, ##__VA_ARGS__);	\
-			opx_tracer_trace(status,						\
-				__func__, __LINE__, msg);					\
-			errno = saved_errno;							\
-		}													\
+			opx_tracer_trace(status,			\
+				__func__, __LINE__, msg);		\
+			errno = saved_errno;				\
+		}							\
 	} while (0)
 
 #define OPX_TRACER_EXIT() opx_tracer_exit()
@@ -159,15 +159,15 @@ void opx_tracer_trace(enum opx_tracer_status status,
 #if defined(OPX_TRACER_SDMA)
 
 #define OPX_TRACER_TRACE_SDMA(status, fmt, ...)				\
-	do {													\
-		if (opx_tracer_enabled()) {							\
-			int saved_errno = errno;						\
-			char msg[1024];									\
+	do {								\
+		if (opx_tracer_enabled()) {				\
+			int saved_errno = errno;			\
+			char msg[1024];					\
 			snprintf(msg, sizeof(msg), fmt, ##__VA_ARGS__);	\
-			opx_tracer_trace(status,						\
-				__func__, __LINE__, msg);					\
-			errno = saved_errno;							\
-		}													\
+			opx_tracer_trace(status,			\
+				__func__, __LINE__, msg);		\
+			errno = saved_errno;				\
+		}							\
 	} while (0)
 
 #else
@@ -177,19 +177,37 @@ void opx_tracer_trace(enum opx_tracer_status status,
 #if defined(OPX_TRACER_RELI)
 
 #define OPX_TRACER_TRACE_RELI(status, fmt, ...)				\
-	do {													\
-		if (opx_tracer_enabled()) {							\
-			int saved_errno = errno;						\
-			char msg[1024];									\
+	do {								\
+		if (opx_tracer_enabled()) {				\
+			int saved_errno = errno;			\
+			char msg[1024];					\
 			snprintf(msg, sizeof(msg), fmt, ##__VA_ARGS__);	\
-			opx_tracer_trace(status,						\
-				__func__, __LINE__, msg);					\
-			errno = saved_errno;							\
-		}													\
+			opx_tracer_trace(status,			\
+				__func__, __LINE__, msg);		\
+			errno = saved_errno;				\
+		}							\
 	} while (0)
 
 #else
 #define OPX_TRACER_TRACE_RELI(status, ...)
+#endif
+
+#if defined(OPX_TRACER_LOCK_IF_REQUIRED)
+
+#define OPX_TRACER_TRACE_LOCK_IF_REQUIRED(status, fmt, ...)		\
+	do {								\
+		if (opx_tracer_enabled()) {				\
+			int saved_errno = errno;			\
+			char msg[1024];					\
+			snprintf(msg, sizeof(msg), fmt, ##__VA_ARGS__);	\
+			opx_tracer_trace(status,			\
+				__func__, __LINE__, msg);		\
+			errno = saved_errno;				\
+		}							\
+	} while (0)
+
+#else
+#define OPX_TRACER_TRACE_LOCK_IF_REQUIRED(status, ...)
 #endif
 
 #endif
