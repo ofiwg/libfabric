@@ -182,6 +182,8 @@ struct fi_mr_attr {
 	} device;
 	void			*hmem_data;
 	size_t			page_size;
+	const struct fid_mr	*base_mr;
+	size_t			sub_mr_cnt;
 };
 
 struct fi_mr_modify {
