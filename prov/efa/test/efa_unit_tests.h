@@ -207,6 +207,7 @@ void test_efa_rdm_peer_reorder_overflow_msg_id();
 void test_efa_rdm_peer_move_overflow_pke_to_recvwin();
 void test_efa_rdm_peer_keep_pke_in_overflow_list();
 void test_efa_rdm_peer_append_overflow_pke_to_recvwin();
+void test_efa_rdm_pke_handle_longcts_rtm_send_completion();
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)

@@ -1084,6 +1084,18 @@ void efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_rdm_pke *pkt_entr
 {
 	struct efa_rdm_ope *txe;
 
+	/**
+	 * A zero-payload longcts rtm pkt currently should only happen when it's
+	 * used for the READ NACK protocol. In this case, this pkt doesn't
+	 * contribute to the send completion, and the associated tx entry
+	 * may be released earlier as the CTSDATA pkts have already kicked off
+	 * and finished the send.
+	 */
+	if (pkt_entry->payload_size == 0) {
+		assert(efa_rdm_pke_get_rtm_base_hdr(pkt_entry)->flags & EFA_RDM_REQ_READ_NACK);
+		return;
+	}
+
 	txe = pkt_entry->ope;
 	txe->bytes_acked += pkt_entry->payload_size;
 	if (txe->total_len == txe->bytes_acked)
