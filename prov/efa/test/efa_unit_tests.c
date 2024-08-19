@@ -197,6 +197,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_move_overflow_pke_to_recvwin, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_keep_pke_in_overflow_list, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_append_overflow_pke_to_recvwin, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_handle_longcts_rtm_send_completion, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);
