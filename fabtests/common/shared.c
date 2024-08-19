@@ -2360,6 +2360,34 @@ ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, char *buf, size_t size,
 	return 0;
 }
 
+ssize_t ft_post_rma_writemsg(char *buf, size_t size, struct fi_rma_iov *remote,
+			     void *context, uint64_t flags)
+{
+	struct fi_msg_rma msg;
+	struct iovec msg_iov;
+	struct fi_rma_iov rma_iov;
+
+	msg_iov.iov_base = buf;
+	msg_iov.iov_len = size;
+	msg.msg_iov = &msg_iov;
+	msg.desc = &mr_desc;
+	msg.iov_count = 1;
+	rma_iov.addr = remote->addr + ft_remote_write_offset(buf);
+	rma_iov.len = size;
+	rma_iov.key = remote->key;
+	msg.rma_iov = &rma_iov;
+	msg.rma_iov_count = 1;
+	msg.addr = remote_fi_addr;
+	msg.data = flags & FI_REMOTE_CQ_DATA ? remote_cq_data : NO_CQ_DATA;
+	msg.context = context;
+
+	FT_POST(fi_writemsg, ft_progress, txcq, tx_seq,
+		&tx_cq_cntr, "fi_writemsg", ep, &msg,
+		flags);
+
+	return 0;
+}
+
 ssize_t ft_post_atomic(enum ft_atomic_opcodes opcode, struct fid_ep *ep,
 		       void *compare, void *compare_desc, void *result,
 		       void *result_desc, struct fi_rma_iov *remote,
