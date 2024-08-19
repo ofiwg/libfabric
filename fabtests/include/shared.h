@@ -583,6 +583,8 @@ ssize_t ft_post_rma(enum ft_rma_opcodes op, char *buf, size_t size,
 		struct fi_rma_iov *remote, void *context);
 ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, char *buf, size_t size,
 		struct fi_rma_iov *remote);
+ssize_t ft_post_rma_writemsg(char *buf, size_t size, struct fi_rma_iov *remote,
+		void *context, uint64_t flags);
 int ft_rma_poll_buf(void *buf, int iter, size_t size);
 
 ssize_t ft_post_atomic(enum ft_atomic_opcodes opcode, struct fid_ep *ep,
@@ -607,6 +609,8 @@ int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		size_t size, void *ctx, int flags);
 int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 	       void *buf, size_t size, void *ctx, int flags);
+int ft_writemsg(struct fid_ep *ep, fi_addr_t fi_addr, void *buf, size_t size,
+		void *ctx, struct fi_rma_iov *remote, int flags);
 int ft_tx_msg(struct fid_ep *ep, fi_addr_t fi_addr,
 	      void *buf, size_t size, void *ctx, uint64_t flags);
 int ft_cq_read_verify(struct fid_cq *cq, void *op_context);

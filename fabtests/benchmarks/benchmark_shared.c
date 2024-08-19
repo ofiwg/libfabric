@@ -413,6 +413,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 {
 	int ret, i, j, inject_size;
 	size_t offset;
+	int flags = 0;
 
 	inject_size = inject_size_set ?
 			hints->tx_attr->inject_size: fi->tx_attr->inject_size;
@@ -455,6 +456,12 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 			if (opts.transfer_size <= inject_size) {
 				ret = ft_post_rma_inject(FT_RMA_WRITE, tx_buf + offset,
 						opts.transfer_size, remote);
+			} else if (opts.use_fi_more) {
+				flags = set_fi_more_flag(i, j, flags);
+				ret = ft_post_rma_writemsg(
+						tx_buf + offset,
+						opts.transfer_size, remote,
+						&tx_ctx_arr[j].context, flags);
 			} else {
 				ret = ft_post_rma(FT_RMA_WRITE, tx_buf + offset,
 						opts.transfer_size, remote,
@@ -478,6 +485,13 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 							tx_buf + offset,
 							opts.transfer_size,
 							remote);
+				} else if (opts.use_fi_more) {
+					flags = set_fi_more_flag(i, j, flags);
+					flags |= FI_REMOTE_CQ_DATA;
+					ret = ft_post_rma_writemsg(
+							tx_buf + offset,
+							opts.transfer_size, remote,
+							&tx_ctx_arr[j].context, flags);
 				} else {
 					ret = ft_post_rma(FT_RMA_WRITEDATA,
 							tx_buf + offset,
