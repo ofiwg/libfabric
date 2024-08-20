@@ -446,18 +446,18 @@ The base operation of an endpoint is selected during creation using
 struct fi_info.  The following control commands and arguments may be
 assigned to an endpoint.
 
-**FI_BACKLOG - int *value**
+*FI_BACKLOG - int \*value*
 : This option only applies to passive endpoints.  It is used to set the
   connection request backlog for listening endpoints.
 
-**FI_GETOPSFLAG -- uint64_t *flags**
+*FI_GETOPSFLAG -- uint64_t \*flags*
 : Used to retrieve the current value of flags associated with the data
   transfer operations initiated on the endpoint. The control argument must
   include FI_TRANSMIT or FI_RECV (not both) flags to indicate the type of
   data transfer flags to be returned.
   See below for a list of control flags.
 
-**FI_GETWAIT -- void \*\***
+*FI_GETWAIT -- void \*\**
 : This command allows the user to retrieve the file descriptor associated
   with a socket endpoint.  The fi_control arg parameter should be an address
   where a pointer to the returned file descriptor will be written.  See fi_eq.3
@@ -465,7 +465,7 @@ assigned to an endpoint.
   may be used for notification that the endpoint is ready to send or receive
   data.
 
-**FI_SETOPSFLAG -- uint64_t *flags**
+*FI_SETOPSFLAG -- uint64_t \*flags*
 : Used to change the data transfer operation flags associated with an
   endpoint. The control argument must include FI_TRANSMIT or FI_RECV (not both)
   to indicate the type of data transfer that the flags should apply to, with other
