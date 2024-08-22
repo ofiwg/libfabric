@@ -6,6 +6,6 @@ def test_multi_ep(cmdline_args, shared_cq):
     from common import ClientServerTest
     cmd = "fi_multi_ep -e rdm"
     if shared_cq:
-        cmd += "  --shared-cq"
+        cmd += "  -Q"
     test = ClientServerTest(cmdline_args, cmd)
     test.run()
