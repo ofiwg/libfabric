@@ -3,16 +3,15 @@ name: 'Cornelis'
 on:
   workflow_dispatch:
   pull_request:
-    types:
-      - labeled
-      - opened
-      - reopened
-      - synchronize
     branches:
       - main
     paths-ignore:
       - 'man/**'
       - 'docs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   opx-ci:
