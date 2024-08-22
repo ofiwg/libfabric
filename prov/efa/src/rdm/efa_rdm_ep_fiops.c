@@ -1259,6 +1259,15 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 
 		efa_rdm_ep_set_use_zcpy_rx(ep);
 
+		/* In zero-copy mode, update inject_size to the size of the inline data
+		 * buffer of the NIC, unless the user already requested a smaller size
+		 *
+		 * TODO: Distinguish between inline data sizes for RDMA {send,write}
+		 * when supported
+		 */
+		if (ep->use_zcpy_rx)
+			ep->inject_size = MIN(ep->inject_size, efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size);
+
 		ret = efa_rdm_ep_create_base_ep_ibv_qp(ep);
 		if (ret)
 			return ret;
