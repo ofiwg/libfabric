@@ -616,14 +616,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	int lopt_idx = 0;
-	struct option long_opts[] = {
-		{"shared-av", no_argument, NULL, LONG_OPT_SHARED_AV},
-		{"shared-cq", no_argument, NULL, LONG_OPT_SHARED_CQ},
-		{0, 0, 0, 0}
-	};
-
-	while ((op = getopt_long(argc, argv, "c:vh" ADDR_OPTS INFO_OPTS,
+	while ((op = getopt_long(argc, argv, "c:vhAQ" ADDR_OPTS INFO_OPTS,
 				 long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		default:
@@ -636,10 +629,10 @@ int main(int argc, char **argv)
 		case 'v':
 			opts.options |= FT_OPT_VERIFY_DATA;
 			break;
-		case LONG_OPT_SHARED_AV:
+		case 'A':
 			shared_av = true;
 			break;
-		case LONG_OPT_SHARED_CQ:
+		case 'Q':
 			shared_cq = true;
 			break;
 		case '?':
@@ -648,10 +641,10 @@ int main(int argc, char **argv)
 			FT_PRINT_OPTS_USAGE("-c <int>",
 				"number of endpoints to create and test (def 3)");
 			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
-			FT_PRINT_OPTS_USAGE("--shared-cq",
+			FT_PRINT_OPTS_USAGE("-Q",
 				"Share tx/rx cq among endpoints. \n"
 				"By default each ep has its own tx/rx cq");
-			FT_PRINT_OPTS_USAGE("--shared-av",
+			FT_PRINT_OPTS_USAGE("-A",
 				"Share the av among endpoints. \n"
 				"By default each ep has its own av");
 			return EXIT_FAILURE;

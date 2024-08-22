@@ -200,6 +200,7 @@ static int recv_cancel_host(void)
 static int run_test(void)
 {
 	int ret;
+
 	if (hints->ep_attr->type == FI_EP_MSG)
 		ret = ft_init_fabric_cm();
 	else
