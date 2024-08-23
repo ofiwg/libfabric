@@ -780,7 +780,8 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		break;
 	default:
 		assert(0);
-		return -FI_EINVAL;
+		ret = -FI_EINVAL;
+		goto err;
 	}
 
 
