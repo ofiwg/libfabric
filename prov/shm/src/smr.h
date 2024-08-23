@@ -91,7 +91,7 @@ int smr_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 
 struct smr_av {
 	struct util_av		util_av;
-	struct smr_map		*smr_map;
+	struct smr_map		smr_map;
 	size_t			used;
 };
 
