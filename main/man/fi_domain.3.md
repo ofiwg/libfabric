@@ -518,7 +518,7 @@ Specifies the type of address vectors that are usable with this domain.
 For additional details on AV type, see [`fi_av`(3)](fi_av.3.html).
 The following values may be specified.
 
-*FI_AV_MAP*
+*FI_AV_MAP* (deprecated)
 : Only address vectors of type AV map are requested or supported.
 
 *FI_AV_TABLE*
@@ -767,9 +767,10 @@ Providers which support authorization keys and connectionless endpoint must
 support this option.
 
 ## Max Error Data Size (max_err_data)
-: The maximum amount of error data, in bytes, that may be returned as part of
-  a completion or event queue error.  This value corresponds to the
-  err_data_size field in struct fi_cq_err_entry and struct fi_eq_err_entry.
+
+The maximum amount of error data, in bytes, that may be returned as part of
+a completion or event queue error.  This value corresponds to the
+err_data_size field in struct fi_cq_err_entry and struct fi_eq_err_entry.
 
 ## Memory Regions Count (mr_cnt)
 
@@ -790,8 +791,8 @@ for additional information.
 
 ## Max Authorization Keys per Endpoint (max_ep_auth_key)
 
-: The maximum number of authorization keys which can be supported per connectionless
-  endpoint.
+The maximum number of authorization keys which can be supported per connectionless
+endpoint.
 
 ## Maximum Peer Group Id (max_group_id)
 
