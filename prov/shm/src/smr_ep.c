@@ -216,13 +216,15 @@ int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
 
 	id = smr_addr_lookup(ep->util_ep.av, fi_addr);
 	assert(id < SMR_MAX_PEERS);
+	if (id < 0)
+		return -1;
 
 	if (smr_peer_data(ep->region)[id].addr.id >= 0)
 		return id;
 
-	if (ep->region->map->peers[id].peer.id < 0) {
+	if (!ep->region->map->peers[id].region) {
 		ret = smr_map_to_region(&smr_prov, ep->region->map, id);
-		if (ret == -ENOENT)
+		if (ret)
 			return -1;
 	}
 

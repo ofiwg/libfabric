@@ -167,16 +167,16 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			fi_addr[i] = util_addr;
 
 		assert(smr_av->smr_map.num_peers > 0);
-
 		dlist_foreach(&util_av->ep_list, av_entry) {
-			util_ep = container_of(av_entry, struct util_ep, av_entry);
-			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
-			smr_map_to_endpoint(smr_ep->region, shm_id);
+        		util_ep = container_of(av_entry, struct util_ep,
+					       av_entry);
+        		smr_ep = container_of(util_ep, struct smr_ep, util_ep);
 			smr_ep->region->max_sar_buf_per_peer =
 				SMR_MAX_PEERS / smr_av->smr_map.num_peers;
 			srx = smr_get_peer_srx(smr_ep);
 			srx->owner_ops->foreach_unspec_addr(srx, &smr_get_addr);
 		}
+
 	}
 
 	return succ_count;
