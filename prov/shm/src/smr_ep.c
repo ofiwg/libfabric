@@ -1148,7 +1148,7 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		attr.flags = ep->util_ep.caps & FI_HMEM ?
 				SMR_FLAG_HMEM_ENABLED : 0;
 
-		ret = smr_create(&smr_prov, av->smr_map, &attr, &ep->region);
+		ret = smr_create(&smr_prov, &av->smr_map, &attr, &ep->region);
 		if (ret)
 			return ret;
 

@@ -32,6 +32,49 @@
 
 #include "smr.h"
 
+static void smr_peer_addr_init(struct smr_addr *peer)
+{
+	memset(peer->name, 0, SMR_NAME_MAX);
+	peer->id = -1;
+}
+
+static int smr_name_compare(struct ofi_rbmap *map, void *key, void *data)
+{
+	struct smr_map *smr_map;
+
+	smr_map = container_of(map, struct smr_map, rbmap);
+
+	return strncmp(smr_map->peers[(uintptr_t) data].peer.name,
+		       (char *) key, SMR_NAME_MAX);
+}
+
+static int smr_map_init(const struct fi_provider *prov, struct smr_map *map,
+		 int peer_count, uint16_t flags)
+{
+	int i;
+
+	for (i = 0; i < peer_count; i++) {
+		smr_peer_addr_init(&map->peers[i].peer);
+		map->peers[i].fiaddr = FI_ADDR_NOTAVAIL;
+	}
+	map->flags = flags;
+
+	ofi_rbmap_init(&map->rbmap, smr_name_compare);
+	ofi_spin_init(&map->lock);
+
+	return 0;
+}
+
+static void smr_map_cleanup(struct smr_map *map)
+{
+	int64_t i;
+
+	for (i = 0; i < SMR_MAX_PEERS; i++)
+		smr_map_del(map, i);
+
+	ofi_rbmap_cleanup(&map->rbmap);
+}
+
 static int smr_av_close(struct fid *fid)
 {
 	int ret;
@@ -45,7 +88,7 @@ static int smr_av_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	smr_map_free(smr_av->smr_map);
+	smr_map_cleanup(&smr_av->smr_map);
 	free(av);
 	return 0;
 }
@@ -85,7 +128,7 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 
 		util_addr = FI_ADDR_NOTAVAIL;
 		if (smr_av->used < SMR_MAX_PEERS) {
-			ret = smr_map_add(&smr_prov, smr_av->smr_map,
+			ret = smr_map_add(&smr_prov, &smr_av->smr_map,
 					  addr, &shm_id);
 			if (!ret) {
 				ofi_mutex_lock(&util_av->lock);
@@ -106,16 +149,16 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			if (fi_addr)
 				fi_addr[i] = util_addr;
 			if (shm_id >= 0)
-				smr_map_del(smr_av->smr_map, shm_id);
+				smr_map_del(&smr_av->smr_map, shm_id);
 			continue;
 		}
 
 		assert(shm_id >= 0 && shm_id < SMR_MAX_PEERS);
 		if (flags & FI_AV_USER_ID) {
 			assert(fi_addr);
-			smr_av->smr_map->peers[shm_id].fiaddr = fi_addr[i];
+			smr_av->smr_map.peers[shm_id].fiaddr = fi_addr[i];
 		} else {
-			smr_av->smr_map->peers[shm_id].fiaddr = util_addr;
+			smr_av->smr_map.peers[shm_id].fiaddr = util_addr;
 		}
 		succ_count++;
 		smr_av->used++;
@@ -123,14 +166,14 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		if (fi_addr)
 			fi_addr[i] = util_addr;
 
-		assert(smr_av->smr_map->num_peers > 0);
+		assert(smr_av->smr_map.num_peers > 0);
 
 		dlist_foreach(&util_av->ep_list, av_entry) {
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
 			smr_map_to_endpoint(smr_ep->region, shm_id);
 			smr_ep->region->max_sar_buf_per_peer =
-				SMR_MAX_PEERS / smr_av->smr_map->num_peers;
+				SMR_MAX_PEERS / smr_av->smr_map.num_peers;
 			srx = smr_get_peer_srx(smr_ep);
 			srx->owner_ops->foreach_unspec_addr(srx, &smr_get_addr);
 		}
@@ -164,15 +207,15 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 			break;
 		}
 
-		smr_map_del(smr_av->smr_map, id);
+		smr_map_del(&smr_av->smr_map, id);
 		dlist_foreach(&util_av->ep_list, av_entry) {
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
 			smr_unmap_from_endpoint(smr_ep->region, id);
-			if (smr_av->smr_map->num_peers > 0)
+			if (smr_av->smr_map.num_peers > 0)
 				smr_ep->region->max_sar_buf_per_peer =
 					SMR_MAX_PEERS /
-					smr_av->smr_map->num_peers;
+					smr_av->smr_map.num_peers;
 			else
 				smr_ep->region->max_sar_buf_per_peer =
 					SMR_BUF_BATCH_MAX;
@@ -196,7 +239,7 @@ static int smr_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	smr_av = container_of(util_av, struct smr_av, util_av);
 
 	id = smr_addr_lookup(util_av, fi_addr);
-	name = smr_av->smr_map->peers[id].peer.name;
+	name = smr_av->smr_map.peers[id].peer.name;
 
 	strncpy((char *) addr, name, *addrlen);
 
@@ -280,9 +323,9 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	(*av)->fid.ops = &smr_av_fi_ops;
 	(*av)->ops = &smr_av_ops;
 
-	ret = smr_map_create(&smr_prov, SMR_MAX_PEERS,
-			     util_domain->info_domain_caps & FI_HMEM ?
-			     SMR_FLAG_HMEM_ENABLED : 0, &smr_av->smr_map);
+	ret = smr_map_init(&smr_prov, &smr_av->smr_map, SMR_MAX_PEERS,
+			   util_domain->info_domain_caps & FI_HMEM ?
+			   SMR_FLAG_HMEM_ENABLED : 0);
 	if (ret)
 		goto close;
 

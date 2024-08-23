@@ -61,12 +61,6 @@ void smr_cleanup(void)
 	pthread_mutex_unlock(&ep_list_lock);
 }
 
-static void smr_peer_addr_init(struct smr_addr *peer)
-{
-	memset(peer->name, 0, SMR_NAME_MAX);
-	peer->id = -1;
-}
-
 void smr_cma_check(struct smr_region *smr, struct smr_region *peer_smr)
 {
 	struct iovec local_iov, remote_iov;
@@ -312,7 +306,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	smr_freestack_init(smr_sar_pool(*smr), SMR_MAX_PEERS,
 			sizeof(struct smr_sar_buf));
 	for (i = 0; i < SMR_MAX_PEERS; i++) {
-		smr_peer_addr_init(&smr_peer_data(*smr)[i].addr);
+		smr_peer_data(*smr)[i].addr.id = -1;
 		smr_peer_data(*smr)[i].sar_status = 0;
 		smr_peer_data(*smr)[i].name_sent = 0;
 		smr_peer_data(*smr)[i].xpmem.cap = SMR_VMA_CAP_OFF;
@@ -340,39 +334,6 @@ void smr_free(struct smr_region *smr)
 		(void) ofi_hmem_host_unregister(smr);
 	shm_unlink(smr_name(smr));
 	munmap(smr, smr->total_size);
-}
-
-static int smr_name_compare(struct ofi_rbmap *map, void *key, void *data)
-{
-	struct smr_map *smr_map;
-
-	smr_map = container_of(map, struct smr_map, rbmap);
-
-	return strncmp(smr_map->peers[(uintptr_t) data].peer.name,
-		       (char *) key, SMR_NAME_MAX);
-}
-
-int smr_map_create(const struct fi_provider *prov, int peer_count,
-		   uint16_t flags, struct smr_map **map)
-{
-	int i;
-
-	(*map) = calloc(1, sizeof(struct smr_map));
-	if (!*map) {
-		FI_WARN(prov, FI_LOG_DOMAIN, "failed to create SHM region group\n");
-		return -FI_ENOMEM;
-	}
-
-	for (i = 0; i < peer_count; i++) {
-		smr_peer_addr_init(&(*map)->peers[i].peer);
-		(*map)->peers[i].fiaddr = FI_ADDR_NOTAVAIL;
-	}
-	(*map)->flags = flags;
-
-	ofi_rbmap_init(&(*map)->rbmap, smr_name_compare);
-	ofi_spin_init(&(*map)->lock);
-
-	return 0;
 }
 
 static int smr_match_name(struct dlist_entry *item, const void *args)
@@ -614,17 +575,6 @@ void smr_map_del(struct smr_map *map, int64_t id)
 
 unlock:
 	ofi_spin_unlock(&map->lock);
-}
-
-void smr_map_free(struct smr_map *map)
-{
-	int64_t i;
-
-	for (i = 0; i < SMR_MAX_PEERS; i++)
-		smr_map_del(map, i);
-
-	ofi_rbmap_cleanup(&map->rbmap);
-	free(map);
 }
 
 struct smr_region *smr_map_get(struct smr_map *map, int64_t id)
