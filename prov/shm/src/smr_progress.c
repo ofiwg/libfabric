@@ -876,15 +876,33 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 
 	ret = smr_map_add(&smr_prov, ep->region->map,
 			  (char *) tx_buf->data, &idx);
-	if (ret)
+	if (ret || idx < 0) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"Error processing mapping request\n");
+		return;
+	}
 
 	peer_smr = smr_peer_region(ep->region, idx);
+	if (!peer_smr) {
+		ret = smr_map_to_region(&smr_prov, ep->region->map, idx);
+		if (ret) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"Could not map peer region\n");
+			return;
+		}
+		peer_smr = smr_peer_region(ep->region, idx);
+	}
 
+	assert(peer_smr);
 	if (peer_smr->pid != (int) cmd->msg.hdr.data) {
-		//TODO track and update/complete in error any transfers
-		//to or from old mapping
+		/* TODO track and update/complete in error any transfers
+		 * to or from old mapping
+		 *
+		 * TODO create smr_unmap_region
+		 * this needs to close peer_smr->map->peers[idx].pid_fd
+		 * This case will also return an unmapped region because the idx
+		 * is valid but the region was unmapped
+		 */
 		munmap(peer_smr, peer_smr->total_size);
 		smr_map_to_region(&smr_prov, ep->region->map, idx);
 		peer_smr = smr_peer_region(ep->region, idx);
