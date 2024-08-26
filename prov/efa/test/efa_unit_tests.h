@@ -118,6 +118,7 @@ void test_efa_rdm_ep_user_zcpy_rx_disabled();
 void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_happy();
 void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas();
 void test_efa_rdm_ep_user_p2p_not_supported_zcpy_rx_happy();
+void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_no_mr_local();
 void test_efa_rdm_ep_close_discard_posted_recv();
 void test_efa_rdm_ep_zcpy_recv_cancel();
 void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion();
