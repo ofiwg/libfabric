@@ -207,7 +207,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
  */
 int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe, size_t flags)
 {
-	struct efa_rdm_pke *pkt_entry = NULL;
+	struct efa_rdm_pke *pkt_entry;
 	size_t rx_iov_offset = 0;
 	int err, rx_iov_index = 0;
 
@@ -225,23 +225,10 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	err = ofi_iov_locate(rxe->iov, rxe->iov_count, ep->msg_prefix_size, &rx_iov_index, &rx_iov_offset);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "ofi_iov_locate failure: %s (%d)\n", fi_strerror(-err), -err);
-		goto err_free;
+		return err;
 	}
-
 	assert(rx_iov_index < rxe->iov_count);
 	assert(rx_iov_offset < rxe->iov[rx_iov_index].iov_len);
-
-	efa_rdm_ope_try_fill_desc(rxe, rx_iov_index, FI_RECV);
-	if (!rxe->desc[rx_iov_index]) {
-		/* efa_rdm_ope_try_fill_desc() did not fill the desc,
-		 * which means memory registration failed.
-		 * return -FI_EAGAIN here will cause user to run progress
-		 * engine, which will cause some memory registration
-		 * in MR cache to be released.
-		 */
-		err = -FI_EAGAIN;
-		goto err_free;
-	}
 
 	pkt_entry->payload = (char *) rxe->iov[rx_iov_index].iov_base + rx_iov_offset;
 	pkt_entry->payload_mr = rxe->desc[rx_iov_index];
@@ -249,10 +236,11 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 
 	err = efa_rdm_pke_recvv(&pkt_entry, 1);
 	if (OFI_UNLIKELY(err)) {
+		efa_rdm_pke_release_rx(pkt_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"failed to post user supplied buffer %d (%s)\n", -err,
 			fi_strerror(-err));
-		goto err_free;
+		return err;
 	}
 
 #if ENABLE_DEBUG
@@ -260,11 +248,6 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 #endif
 	ep->user_rx_pkts_posted++;
 	return 0;
-
-err_free:
-	if (pkt_entry)
-		efa_rdm_pke_release_rx(pkt_entry);
-	return err;
 }
 
 
