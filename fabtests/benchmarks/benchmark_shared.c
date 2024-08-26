@@ -63,7 +63,8 @@ void ft_parse_benchmark_opts(int op, char *optarg)
 		ft_force_prefix(hints, &opts);
 		break;
 	case 'j':
-		hints->tx_attr->inject_size = atoi(optarg);
+		opts.inject_size = atoi(optarg);
+		hints->tx_attr->inject_size = opts.inject_size;
 		inject_size_set = 1;
 		break;
 	case 'W':
@@ -87,10 +88,18 @@ void ft_benchmark_usage(void)
 
 int pingpong(void)
 {
-	int ret, i, inject_size;
+	int ret, i;
+	size_t inject_size = fi->tx_attr->inject_size;
 
-	inject_size = inject_size_set ?
-			hints->tx_attr->inject_size : fi->tx_attr->inject_size;
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
+			&inject_size, &(size_t){sizeof inject_size});
+	if (ret && ret != -FI_ENOPROTOOPT) {
+		FT_PRINTERR("fi_getopt(FI_OPT_INJECT_MSG_SIZE)", ret);
+		return ret;
+	}
+
+	if (inject_size_set)
+		inject_size = opts.inject_size;
 
 	if (opts.options & FT_OPT_ENABLE_HMEM)
 		inject_size = 0;
@@ -145,10 +154,18 @@ int pingpong(void)
 
 int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 {
-	int ret, i, inject_size;
+	int ret, i;
+	size_t inject_size = fi->tx_attr->inject_size;
 
-	inject_size = inject_size_set ?
-			hints->tx_attr->inject_size : fi->tx_attr->inject_size;
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
+			&inject_size, &(size_t){sizeof inject_size});
+	if (ret && ret != -FI_ENOPROTOOPT) {
+		FT_PRINTERR("fi_getopt(FI_OPT_INJECT_RMA_SIZE)", ret);
+		return ret;
+	}
+
+	if (inject_size_set)
+		inject_size = opts.inject_size;
 
 	if (ft_check_opts(FT_OPT_ENABLE_HMEM))
 		inject_size = 0;
@@ -287,11 +304,18 @@ static int set_fi_more_flag(int i, int j, int flags)
 
 int bandwidth(void)
 {
-	int ret, i, j, inject_size;
-	int flags = 0;
+	int ret, i, j, flags = 0;
+	size_t inject_size = fi->tx_attr->inject_size;
 
-	inject_size = inject_size_set ?
-			hints->tx_attr->inject_size : fi->tx_attr->inject_size;
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
+			&inject_size, &(size_t){sizeof inject_size});
+	if (ret && ret != -FI_ENOPROTOOPT) {
+		FT_PRINTERR("fi_getopt(FI_OPT_INJECT_MSG_SIZE)", ret);
+		return ret;
+	}
+
+	if (inject_size_set)
+		inject_size = opts.inject_size;
 
 	if (opts.options & FT_OPT_ENABLE_HMEM)
 		inject_size = 0;
@@ -411,12 +435,18 @@ static int bw_rma_comp(enum ft_rma_opcodes rma_op, int num_completions)
 
 int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 {
-	int ret, i, j, inject_size;
-	size_t offset;
-	int flags = 0;
+	int ret, i, j, flags = 0;
+	size_t offset, inject_size = fi->tx_attr->inject_size;
 
-	inject_size = inject_size_set ?
-			hints->tx_attr->inject_size: fi->tx_attr->inject_size;
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
+			&inject_size, &(size_t){sizeof inject_size});
+	if (ret && ret != -FI_ENOPROTOOPT) {
+		FT_PRINTERR("fi_getopt(FI_OPT_INJECT_RMA_SIZE)", ret);
+		return ret;
+	}
+
+	if (inject_size_set)
+		inject_size = opts.inject_size;
 
 	if (ft_check_opts(FT_OPT_ENABLE_HMEM))
 		inject_size = 0;
