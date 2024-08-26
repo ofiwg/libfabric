@@ -70,13 +70,14 @@ fi_msg_sockets
 # fi_unexpected_msg -e rdm fails with no message
 fi_unexpected_msg -e rdm
 
-# fi_bw -e msg fails with
+# fi_flood -e msg fails with
 # fi_eq_sread(): common/shared.c:1165, ret=-4 (Interrupted system call)
-fi_bw -e msg
+fi_flood -e msg
 
-# fi_bw fails by hanging
+# fi_flood fails by hanging
+# fi_flood fails by runfabtest timeout only on the CI.
 # This is a suspected race condition
-fi_bw
+fi_flood
 
 # fi_msg_pingpong fails with
 # fi_eq_sread(): common/shared.c:1127, ret=-4 (Interrupted system call)
