@@ -411,12 +411,11 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 	 */
 	if (hints) {
 		if (hints->tx_attr) {
-			/* efa device doesn't have ordering (EFA_MSG_ORDER == FI_ORDER_NONE).
+			/* efa device doesn't have ordering,
 			 * if apps request an ordering that is relaxed than
 			 * what provider supports, we should respect that.
-			 * This is specially true for FI_ORDER_NONE:
-			 * No ordering is specified. This value may be used as input in order to obtain
-			 * the default message order supported by the provider.
+			 * If no ordering is specified,
+			 * the default message order supported by the provider is returned.
 			 */
 			info->tx_attr->msg_order &= hints->tx_attr->msg_order;
 			atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
@@ -427,12 +426,11 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 		}
 
 		if (hints->rx_attr) {
-			/* efa device doesn't have ordering (EFA_MSG_ORDER == FI_ORDER_NONE).
+			/* efa device doesn't have ordering,
 			 * if apps request an ordering that is relaxed than
 			 * what provider supports, we should respect that.
-			 * This is specially true for FI_ORDER_NONE:
-			 * No ordering is specified. This value may be used as input in order to obtain
-			 * the default message order supported by the provider.
+			 * If no ordering is specified,
+			 * the default message order supported by the provider is returned.
 			 */
 			info->rx_attr->msg_order &= hints->rx_attr->msg_order;
 		}

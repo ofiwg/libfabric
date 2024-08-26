@@ -1015,8 +1015,6 @@ void test_efa_rdm_ep_user_zcpy_rx_disabled(struct efa_resource **state)
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	assert_non_null(resource->hints);
 
-	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
-	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
 	resource->hints->mode = FI_MSG_PREFIX;
 	resource->hints->caps = FI_MSG;
 
@@ -1033,8 +1031,6 @@ void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_happy(struct efa_resource **state)
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	assert_non_null(resource->hints);
 
-	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
-	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
 	resource->hints->mode = FI_MSG_PREFIX;
 	resource->hints->caps = FI_MSG;
 
@@ -1052,7 +1048,7 @@ void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(struct efa_resource **state
 	assert_non_null(resource->hints);
 
 	resource->hints->tx_attr->msg_order = FI_ORDER_SAS;
-	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
+	resource->hints->rx_attr->msg_order = FI_ORDER_SAS;
 	resource->hints->mode = FI_MSG_PREFIX;
 	resource->hints->caps = FI_MSG;
 
@@ -1069,8 +1065,6 @@ void test_efa_rdm_ep_user_p2p_not_supported_zcpy_rx_happy(struct efa_resource **
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	assert_non_null(resource->hints);
 
-	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
-	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
 	resource->hints->mode = FI_MSG_PREFIX;
 	resource->hints->caps = FI_MSG;
 
@@ -1121,8 +1115,6 @@ void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	assert_non_null(resource->hints);
 
-	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
-	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
 	resource->hints->caps = FI_MSG;
 
 	/* enable zero-copy recv mode in ep */
