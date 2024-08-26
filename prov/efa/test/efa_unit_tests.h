@@ -5,6 +5,9 @@
 #define EFA_UNIT_TESTS_H
 
 #define _GNU_SOURCE
+
+#define MR_MODE_BITS FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_LOCAL
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdarg.h>
