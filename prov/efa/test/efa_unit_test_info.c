@@ -174,8 +174,6 @@ void test_info_tx_rx_msg_order_rdm_order_none(struct efa_resource **state)
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	assert_non_null(resource->hints);
 
-	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
-	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
 	test_info_tx_rx_msg_order_from_hints(resource->hints, 0);
 }
 
@@ -198,8 +196,6 @@ void test_info_tx_rx_msg_order_dgram_order_none(struct efa_resource **state)
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_DGRAM);
 	assert_non_null(resource->hints);
 
-	resource->hints->tx_attr->msg_order = FI_ORDER_NONE;
-	resource->hints->rx_attr->msg_order = FI_ORDER_NONE;
 	test_info_tx_rx_msg_order_from_hints(resource->hints, 0);
 }
 
