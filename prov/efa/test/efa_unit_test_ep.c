@@ -1089,7 +1089,7 @@ void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_context cancel_context = {0};
-	char recv_buff[16];
+	struct efa_unit_test_buff recv_buff;
 
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	assert_non_null(resource->hints);
@@ -1101,11 +1101,19 @@ void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
 	/* enable zero-copy recv mode in ep */
 	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, true, true);
 
-	/* fi_recv should work with a recv buffer with NULL desc */
-	assert_int_equal(fi_recv(resource->ep, recv_buff, 16, NULL, FI_ADDR_UNSPEC, &cancel_context), 0);
+	/* Construct a recv buffer with mr */
+	efa_unit_test_buff_construct(&recv_buff, resource, 16);
+
+	assert_int_equal(fi_recv(resource->ep, recv_buff.buff, recv_buff.size, fi_mr_desc(recv_buff.mr), FI_ADDR_UNSPEC, &cancel_context), 0);
 
 	assert_int_equal(fi_cancel((struct fid *)resource->ep, &cancel_context), -FI_EOPNOTSUPP);
 
+	/**
+	 * the buf is still posted to rdma-core, so unregistering mr can
+	 * return non-zero. Currently ignore this failure.
+	 */
+	(void) fi_close(&recv_buff.mr->fid);
+	free(recv_buff.buff);
 }
 
 /**
