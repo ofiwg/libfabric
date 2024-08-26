@@ -74,9 +74,9 @@ set functional_tests=^
 	"inject_test -N -A inject -v"^
 	"inject_test -A inj_complete -v"^
 	"inject_test -N -A inj_complete -v"^
-	"bw -e rdm -v -T 1"^
-	"bw -e rdm -v -T 1 -U"^
-	"bw -e msg -v -T 1"^
+	"flood -e rdm -v -T 1"^
+	"flood -e rdm -v -T 1 -U"^
+	"flood -e msg -v -T 1"^
 	"rdm_multi_client -C 10 -I 5"^
 	"rdm_multi_client -C 10 -I 5 -U"
 

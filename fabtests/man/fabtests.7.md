@@ -140,10 +140,13 @@ features of libfabric.
   buffer tries to remain the same.  This test is used to validate the
   correct behavior of memory registration caches.
 
-*fi_bw*
-: Performs a one-sided bandwidth test with an option for data verification.
-  A sleep time on the receiving side can be enabled in order to allow
-  the sender to get ahead of the receiver.
+*fi_flood*
+: The test performs a one-sided transfer by utilizing Bulk Memory Region (MR)
+  registration and flooding the receiver with unexpected messages. This is
+  followed by sequential MR registration transfers, which force the MR cache
+  to evict the least recently used MRs before making new transfers. An optional
+  sleep time can be enabled on the receiving side to allow the sender to get
+  ahead of the receiver.
 
 *fi_rdm_multi_client*
 : Tests a persistent server communicating with multiple clients, one at a

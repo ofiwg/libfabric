@@ -77,7 +77,7 @@ benchmarks: $(outdir)\dgram_pingpong.exe $(outdir)\msg_bw.exe \
 	$(outdir)\rdm_pingpong.exe $(outdir)\rma_pingpong.exe $(outdir)\rdm_tagged_bw.exe \
 	$(outdir)\rdm_bw.exe $(outdir)\rdm_tagged_pingpong.exe $(outdir)\rma_bw.exe
 
-functional: $(outdir)\av_xfer.exe $(outdir)\bw.exe $(outdir)\cm_data.exe $(outdir)\cq_data.exe \
+functional: $(outdir)\av_xfer.exe $(outdir)\flood.exe $(outdir)\cm_data.exe $(outdir)\cq_data.exe \
 	$(outdir)\dgram.exe $(outdir)\msg.exe $(outdir)\msg_epoll.exe \
 	$(outdir)\inject_test.exe $(outdir)\msg_sockets.exe $(outdir)\multi_mr.exe \
 	$(outdir)\multi_ep.exe $(outdir)\multi_recv.exe $(outdir)\rdm.exe \
@@ -120,7 +120,7 @@ $(outdir)\rma_bw.exe: {benchmarks}rma_bw.c $(basedeps) {benchmarks}benchmark_sha
 
 $(outdir)\av_xfer.exe: {functional}av_xfer.c $(basedeps)
 
-$(outdir)\bw.exe: {functional}bw.c $(basedeps)
+$(outdir)\flood.exe: {functional}flood.c $(basedeps)
 
 $(outdir)\cm_data.exe: {functional}cm_data.c $(basedeps)
 
