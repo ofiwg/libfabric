@@ -150,9 +150,9 @@ functional_tests=(
 	"fi_inject_test -N -A inject -v"
 	"fi_inject_test -A inj_complete -v"
 	"fi_inject_test -N -A inj_complete -v"
-	"fi_bw -e rdm -v -T 1"
-	"fi_bw -e rdm -v -T 1 -U"
-	"fi_bw -e msg -v -T 1"
+	"fi_flood -e rdm -v -T 1"
+	"fi_flood -e rdm -v -T 1 -U"
+	"fi_flood -e msg -v -T 1"
 	"fi_rdm_multi_client -C 10 -I 5"
 	"fi_rdm_multi_client -C 10 -I 5 -U"
 )
