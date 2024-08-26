@@ -468,6 +468,13 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 		goto out;
 	}
 
+	/* FI_MR_LOCAL is not set, turn off zcpy recv */
+	if (!ep->base_ep.domain->mr_local) {
+		EFA_INFO(FI_LOG_EP_CTRL, "FI_MR_LOCAL mode bit is not set, zero-copy receive protocol will be disabled\n");
+		ep->use_zcpy_rx = false;
+		goto out;
+	}
+
 	if (ep->shm_ep) {
 		EFA_INFO(FI_LOG_EP_CTRL, "Libfabric SHM is not turned off, zero-copy receive protocol will be disabled\n");
 		ep->use_zcpy_rx = false;
