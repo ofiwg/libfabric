@@ -1435,6 +1435,21 @@ int ft_enable_ep(struct fid_ep *bind_ep, struct fid_eq *bind_eq, struct fid_av *
 		}
 	}
 
+	if (opts.inject_size) {
+		ret = fi_setopt(&bind_ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
+				&opts.inject_size, sizeof opts.inject_size);
+		if (ret && ret != -FI_EOPNOTSUPP) {
+			FT_PRINTERR("fi_setopt(FI_OPT_INJECT_MSG_SIZE)", ret);
+			return ret;
+		}
+		ret = fi_setopt(&bind_ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
+				&opts.inject_size, sizeof opts.inject_size);
+		if (ret && ret != -FI_EOPNOTSUPP) {
+			FT_PRINTERR("fi_setopt(FI_OPT_INJECT_RMA_SIZE)", ret);
+			return ret;
+		}
+	}
+
 	ret = fi_enable(bind_ep);
 	if (ret) {
 		FT_PRINTERR("fi_enable", ret);

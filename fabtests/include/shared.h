@@ -176,6 +176,7 @@ struct ft_opts {
 	int warmup_iterations;
 	size_t transfer_size;
 	size_t max_msg_size;
+	size_t inject_size;
 	int window_size;
 	int av_size;
 	int verbose;
