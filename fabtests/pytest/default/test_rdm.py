@@ -39,7 +39,7 @@ def test_rdm_shared_av(cmdline_args):
 @pytest.mark.functional
 def test_rdm_bw_functional(cmdline_args, completion_semantic):
     from common import ClientServerTest
-    test = ClientServerTest(cmdline_args, "fi_bw -e rdm -v -T 1", completion_semantic=completion_semantic)
+    test = ClientServerTest(cmdline_args, "fi_flood -e rdm -v -T 1", completion_semantic=completion_semantic)
     test.run()
 
 @pytest.mark.parametrize("iteration_type",

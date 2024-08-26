@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Intel Corporation.  All rights reserved.
+ * Copyright (c) Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -34,7 +34,7 @@
 
 #include <shared.h>
 
-int sleep_time = 0;
+static int sleep_time = 0;
 
 static ssize_t post_one_tx(struct ft_context *msg)
 {
@@ -99,27 +99,96 @@ static int post_rx_sync(void)
 	return ret;
 }
 
-static int run_loop(void)
+static void mr_close_all(struct ft_context *ctx_arr, int window_size)
+{
+	int i;
+
+	for (i = 0; i < window_size; i++)
+		FT_CLOSE_FID(ctx_arr[i].mr);
+}
+
+static int run_seq_mr_send(void) {
+
+	int ret;
+	int i;
+
+	mr_close_all(tx_ctx_arr, opts.window_size);
+	mr_close_all(rx_ctx_arr, opts.window_size);
+
+	printf("Sequential memory registration:");
+	if (opts.dst_addr) {
+		for (i = 0; i < opts.window_size; i++) {
+			ret = ft_reg_mr(fi, tx_ctx_arr[i].buf, tx_mr_size,
+					ft_info_to_mr_access(fi),
+					FT_TX_MR_KEY + i, opts.iface, opts.device,
+					&(tx_ctx_arr[i].mr), &(tx_ctx_arr[i].desc));
+			if (ret)
+				goto out;
+
+			ret = post_one_tx(&tx_ctx_arr[i]);
+			if (ret)
+				goto out;
+
+			ret = ft_get_tx_comp(tx_seq);
+			if (ret)
+				goto out;
+
+			FT_CLOSE_FID(tx_ctx_arr[i].mr);
+		}
+	} else {
+		for (i = 0; i < opts.window_size; i++) {
+			ret = ft_reg_mr(fi, rx_ctx_arr[i].buf, rx_mr_size,
+					ft_info_to_mr_access(fi), FT_RX_MR_KEY + i, opts.iface, opts.device,
+					&(rx_ctx_arr[i].mr),
+					&(rx_ctx_arr[i].desc));
+			if (ret)
+				goto out;
+
+			ret = ft_post_rx_buf(ep, opts.transfer_size,
+				             &(rx_ctx_arr[i].context),
+					     rx_ctx_arr[i].buf,
+					     rx_ctx_arr[i].desc, ft_tag);
+			if (ret)
+				goto out;
+
+			ret = wait_check_rx_bufs();
+			if (ret)
+				goto out;
+
+			FT_CLOSE_FID(rx_ctx_arr[i].mr);
+		}
+	}
+	if (opts.options & FT_OPT_OOB_SYNC)
+		ret = ft_sync();
+	else
+		ret = post_rx_sync();
+out:
+	printf("%s\n", ret ? "Fail" : "Pass");
+	return ret;
+}
+
+static int run_batch_mr_send(void)
 {
 	int ret, i;
 
 	/* Receive side delay is used in order to let the sender
- 	   get ahead of the receiver and post multiple sends
-	   before the receiver begins processing them. */
+	 * get ahead of the receiver and post multiple sends
+	 * before the receiver begins processing them.
+	 */
 	if (!opts.dst_addr)
 		sleep(sleep_time);
 
-	ft_start();
+	printf("Batch memory registration:");
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.window_size; i++) {
 			ret = post_one_tx(&tx_ctx_arr[i]);
 			if (ret)
-				return ret;
+				goto out;
 		}
 
 		ret = ft_get_tx_comp(tx_seq);
 		if (ret)
-			return ret;
+			goto out;
 	} else {
 		for (i = 0; i < opts.window_size; i++) {
 			ret = ft_post_rx_buf(ep, opts.transfer_size,
@@ -127,66 +196,39 @@ static int run_loop(void)
 					     rx_ctx_arr[i].buf,
 					     rx_ctx_arr[i].desc, 0);
 			if (ret)
-				return ret;
+				goto out;
 		}
 
 		ret = wait_check_rx_bufs();
 		if (ret)
-			return ret;
+			goto out;
 	}
-	ft_stop();
 
 	if (opts.options & FT_OPT_OOB_SYNC)
 		ret = ft_sync();
 	else
 		ret = post_rx_sync();
-	if (ret)
-		return ret;
-
-	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.window_size, &start, &end, 1,
-				opts.argc, opts.argv);
-	else
-		show_perf(NULL, opts.transfer_size, opts.window_size, &start, &end, 1);
-
+out:
+	printf("%s\n", ret ? "Fail" : "Pass");
 	return ret;
 }
 
 static int run(void)
 {
-	int ret, i;
+	int ret;
 
 	ret = hints->ep_attr->type == FI_EP_MSG ?
 		ft_init_fabric_cm() : ft_init_fabric();
 	if (ret)
 		return ret;
-	
-	ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
-	if (ret)
-		return ret;
 
-	ret = ft_get_tx_comp(tx_seq);
+	ret = run_batch_mr_send();
 	if (ret)
-		return ret;
+		goto out;
 
-	ret = ft_get_rx_comp(rx_seq);
+	ret = run_seq_mr_send();
 	if (ret)
-		return ret;
-
-	if (!(opts.options & FT_OPT_SIZE)) {
-		for (i = 0; i < TEST_CNT; i++) {
-			if (!ft_use_size(i, opts.sizes_enabled))
-				continue;
-			opts.transfer_size = test_size[i].size;
-			ret = run_loop();
-			if (ret)
-				goto out;
-		}
-	} else {
-		ret = run_loop();
-		if (ret)
-			goto out;
-	}
+		goto out;
 
 out:
 	return ret;
@@ -197,6 +239,8 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
+	opts.options |= FT_OPT_ALLOC_MULT_MR;
+	opts.options |= FT_OPT_NO_PRE_POSTED_RX;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -225,7 +269,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "A bandwidth test with data verification.");
+			ft_usage(argv[0], "test to oversubscribe mr cache and receiver with unexpected msgs.");
 			FT_PRINT_OPTS_USAGE("-T sleep_time",
 				"Receive side delay before starting");
 			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
@@ -242,8 +286,6 @@ int main(int argc, char **argv)
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;
-
-	opts.options |= FT_OPT_ALLOC_MULT_MR;
 
 	if (hints->ep_attr->type == FI_EP_DGRAM) {
 		fprintf(stderr, "This test does not support DGRAM endpoints\n");
