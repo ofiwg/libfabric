@@ -500,14 +500,14 @@ int multinode_run_tests(int argc, char **argv)
 		timers = calloc(opts.iterations * pm_job.num_ranks, sizeof(*timers));
 
 	if (pm_job.pattern != -1) {
-		printf("starting %s... ", patterns[pm_job.pattern].name);
+		PRINTF("starting %s... ", patterns[pm_job.pattern].name);
 		pattern = &patterns[pm_job.pattern];
 		ret = multi_run_test();
 		if (ret) {
-			printf("failed\n");
+			PRINTF("failed\n");
 			goto out;
 		}
-		printf("passed\n");
+		PRINTF("passed\n");
 
 		if (ft_check_opts(FT_OPT_PERF)) {
 			ret = multi_timer_analyze(timers, opts.iterations *
@@ -519,14 +519,14 @@ int multinode_run_tests(int argc, char **argv)
 
 	} else {
 		for (i = 0; i < NUM_TESTS && !ret; i++) {
-			printf("starting %s... ", patterns[i].name);
+			PRINTF("starting %s... ", patterns[i].name);
 			pattern = &patterns[i];
 			ret = multi_run_test();
 			if (ret) {
-				printf("failed\n");
+				PRINTF("failed\n");
 				goto out;
 			}
-			printf("passed\n");
+			PRINTF("passed\n");
 
 			if (ft_check_opts(FT_OPT_PERF)) {
 				ret = multi_timer_analyze(timers, opts.iterations
