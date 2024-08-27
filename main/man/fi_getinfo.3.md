@@ -338,6 +338,11 @@ additional optimizations.
   allow an initiator to target (or name) a specific receive context as
   part of a data transfer operation.
 
+*FI_PEER*
+: Specifies that the provider must support being used as a peer provider in
+  the peer API flow. The provider must support importing owner_ops when opening
+  a CQ, counter, and shared receive queue.
+
 *FI_READ*
 : Indicates that the user requires an endpoint capable of initiating
   reads against remote memory regions.  This flag requires that FI_RMA
@@ -457,7 +462,8 @@ may optionally report non-selected secondary capabilities if doing so
 would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_MULTICAST,
-FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_HMEM, FI_COLLECTIVE, FI_XPU, FI_AV_USER_ID
+FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_HMEM, FI_COLLECTIVE, FI_XPU,
+FI_AV_USER_ID, FI_PEER
 
 Primary modifiers: FI_READ, FI_WRITE, FI_RECV, FI_SEND,
 FI_REMOTE_READ, FI_REMOTE_WRITE
