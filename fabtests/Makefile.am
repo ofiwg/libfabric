@@ -86,6 +86,7 @@ dist_bin_SCRIPTS = \
 	scripts/runfabtests.sh \
 	scripts/runfabtests.py \
 	scripts/runmultinode.sh \
+	scripts/runmultinode.py \
 	scripts/rft_yaml_to_junit_xml
 
 dist_noinst_SCRIPTS = \

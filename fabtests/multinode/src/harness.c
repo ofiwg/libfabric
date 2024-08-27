@@ -57,6 +57,17 @@ static enum multi_xfer parse_caps(char *caps)
 	}
 }
 
+static enum multi_pm_type parse_pm(char *pm)
+{
+	if (strcmp(pm, "pmix") == 0) {
+		return PM_PMIX;
+	} else if (strcmp(pm, "pmi") == 0) {
+		return PM_PMI;
+	}
+
+	return PM_NONE;
+}
+
 static enum multi_pattern parse_pattern(char *pattern)
 {
 	if (strcmp(pattern, "full_mesh") == 0) {
@@ -155,8 +166,34 @@ void pm_barrier(void)
 	pm_allgather(&ch, chs, 1);
 }
 
-static int pm_init_ranks(void)
+static int pm_get_rank(char *env_name, size_t *rank)
 {
+	char *rank_str;
+
+	rank_str = getenv(env_name);
+
+	if (!rank_str)
+		return -FI_EINVAL;
+
+	*rank = atoi(rank_str);
+
+	return FI_SUCCESS;
+}
+
+static int pm_init_ranks_pm(void)
+{
+	int ret = -FI_EINVAL;
+
+	if (pm_job.pm == PM_PMIX)
+		return pm_get_rank("PMIX_RANK", &pm_job.my_rank);
+	else if (pm_job.pm == PM_PMI)
+		return pm_get_rank("PMI_RANK", &pm_job.my_rank);
+
+	return ret;
+}
+
+ static int pm_init_ranks(void)
+ {
 	int ret;
 	int i;
 	size_t send_rank;
@@ -165,17 +202,18 @@ static int pm_init_ranks(void)
 		for (i = 0; i < pm_job.num_ranks-1; i++) {
 			send_rank = i + 1;
 			ret = socket_send(pm_job.clients[i], &send_rank,
-					  sizeof(send_rank), 0);
+						sizeof(send_rank), 0);
 			if (ret < 0)
 				break;
 		}
 	} else {
 		ret = socket_recv(pm_job.sock, &(pm_job.my_rank),
-				  sizeof(pm_job.my_rank), 0);
+					sizeof(pm_job.my_rank), 0);
 	}
 
 	return ret;
-}
+ }
+
 
 static int server_connect(void)
 {
@@ -211,10 +249,11 @@ err:
 	return new_sock;
 }
 
-static int pm_conn_setup(void)
+static int pm_conn_setup(bool pm)
 {
 	int sock,  ret;
 	int optval = 1;
+	bool bound = false;
 
 	sock = socket(pm_job.oob_server_addr.ss_family, SOCK_STREAM, 0);
 	if (sock < 0)
@@ -234,11 +273,15 @@ static int pm_conn_setup(void)
 	}
 #endif
 
-	ret = bind(sock, (struct sockaddr *)&pm_job.oob_server_addr,
-		  pm_job.server_addr_len);
-	if (ret == 0) {
-		ret = server_connect();
-	} else {
+	if (!pm || (pm && pm_job.my_rank == 0)) {
+		ret = bind(sock, (struct sockaddr *)&pm_job.oob_server_addr,
+			pm_job.server_addr_len);
+		if (ret == 0) {
+			ret = server_connect();
+			bound = true;
+		}
+	}
+	if ((!pm && !bound) || (pm && pm_job.my_rank != 0)) {
 		opts.dst_addr = opts.src_addr;
 		opts.dst_port = opts.src_port;
 		opts.src_addr = NULL;
@@ -316,12 +359,13 @@ int main(int argc, char **argv)
 
 	pm_job.clients = NULL;
 	pm_job.pattern = -1;
+	pm_job.pm = PM_NONE;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((c = getopt(argc, argv, "n:C:z:Th" CS_OPTS INFO_OPTS)) != -1) {
+	while ((c = getopt(argc, argv, "n:x:z:u:Ths:I:" INFO_OPTS)) != -1) {
 		switch (c) {
 		default:
 			ft_parse_addr_opts(c, optarg, &opts);
@@ -340,9 +384,40 @@ int main(int argc, char **argv)
 		case 'z':
 			pm_job.pattern = parse_pattern(optarg);
 			break;
+		case 'u':
+			/* setup the process manager type */
+			pm_job.pm = parse_pm(optarg);
+			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "A simple multinode test");
+			fprintf(stderr, "Usage:\n");
+			fprintf(stderr, "    fi_multinode -s SERVER_NAME "
+					"-n NUM_RANKS [OPTIONS]\n\n");
+			fprintf(stderr, "    repeat command for each client\n");
+			fprintf(stderr, "    reccomend using "
+					"fabtests/scripts/runmultinode.sh\n\n");
+
+			fprintf(stderr, "fi_multinode specific options: \n\n");
+			FT_PRINT_OPTS_USAGE("-n <num_ranks>", "Number of ranks"
+					    " to expect");
+			FT_PRINT_OPTS_USAGE("-x <xfer_mode>", "msg or rma "
+					    "message mode");
+			FT_PRINT_OPTS_USAGE("-I <iters>", "number of iterations");
+			FT_PRINT_OPTS_USAGE("-T", "pass to enable performance "
+					    "timing mode");
+			FT_PRINT_OPTS_USAGE("-z <pattern>", "full_mesh, ring, "
+					    "gather, or broadcast pattern. "
+					    "Default: All\n");
+
+			fprintf(stderr, "General Fabtests options: \n\n");
+			FT_PRINT_OPTS_USAGE("-f <fabric>", "fabric name");
+			FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
+			FT_PRINT_OPTS_USAGE("-p <provider>",
+				"specific provider name eg sockets, verbs");
+			FT_PRINT_OPTS_USAGE("-a", "do not use local address");
+			ft_addr_usage();
+			ft_hmem_usage();
+
 			return EXIT_FAILURE;
 		}
 	}
@@ -355,16 +430,30 @@ int main(int argc, char **argv)
 	if (ret)
 		goto err1;
 
-	ret = pm_conn_setup();
-	if (ret) {
-		FT_ERR("connection setup failed\n");
-		goto err1;
-	}
+	if (pm_job.pm != PM_NONE) {
+		ret = pm_init_ranks_pm();
+		if (ret < 0) {
+			FT_ERR("rank initialization failed\n");
+			goto err1;
+		}
 
-	ret = pm_init_ranks();
-	if (ret < 0) {
-		FT_ERR("rank initialization failed\n");
-		goto err2;
+		ret = pm_conn_setup(true);
+		if (ret) {
+			FT_ERR("connection setup failed\n");
+			goto err1;
+		}
+	} else {
+		ret = pm_conn_setup(false);
+		if (ret) {
+			FT_ERR("connection setup failed\n");
+			goto err1;
+		}
+
+		ret = pm_init_ranks();
+		if (ret < 0) {
+			FT_ERR("rank initialization failed\n");
+			goto err2;
+		}
 	}
 
 	FT_DEBUG("OOB job setup done\n");

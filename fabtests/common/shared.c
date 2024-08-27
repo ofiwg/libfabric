@@ -1935,6 +1935,7 @@ int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 	if (opts->options & FT_OPT_ADDR_IS_OOB) {
 		*service = NULL;
 		*node = NULL;
+		*flags = 0;
 	} else if (opts->address_format == FI_ADDR_STR) {
 		/* We are likely dealing with a provider specific address format.
 		 * I.e. NOT an IP address or host name
