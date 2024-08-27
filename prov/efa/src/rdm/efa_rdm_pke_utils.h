@@ -58,6 +58,42 @@ size_t efa_rdm_pke_get_segment_offset(struct efa_rdm_pke *pke)
 	return 0;
 }
 
+/**
+ * @brief copy data from the user's buffer to the packet's wiredata.
+ *
+ * @param[in]		iov_mr  memory descriptors of the user's data buffer.
+ * @param[in,out]	pke	    packet entry. Header must have been set when the function is called.
+ * @param[in]		ope		operation entry that has user buffer information.
+ * @param[in]		payload_offset	the data offset in reference to pkt_entry->wiredata.
+ * @param[in]		segment_offset	the data offset in reference to user's buffer
+ * @param[in]		data_size	length of the data to be set up.
+ * @return   		length of data copied.
+ */
+static inline size_t
+efa_rdm_pke_copy_from_hmem_iov(struct efa_mr *iov_mr, struct efa_rdm_pke *pke,
+			       struct efa_rdm_ope *ope, size_t payload_offset,
+			       size_t segment_offset, size_t data_size)
+{
+	size_t copied;
+
+	if (iov_mr && (iov_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
+		assert(iov_mr->peer.hmem_data);
+		copied = ofi_dev_reg_copy_from_hmem_iov(pke->wiredata + payload_offset,
+							data_size, iov_mr->peer.iface,
+							(uint64_t)iov_mr->peer.hmem_data,
+							ope->iov, ope->iov_count,
+							segment_offset);
+	} else {
+		copied = ofi_copy_from_hmem_iov(pke->wiredata + payload_offset,
+		                                data_size,
+		                                iov_mr ? iov_mr->peer.iface : FI_HMEM_SYSTEM,
+		                                iov_mr ? iov_mr->peer.device.reserved : 0,
+		                                ope->iov, ope->iov_count, segment_offset);
+	}
+
+	return copied;
+}
+
 size_t efa_rdm_pke_get_payload_offset(struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,

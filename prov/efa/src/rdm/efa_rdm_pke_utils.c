@@ -93,20 +93,8 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 		return 0;
 	}
 
-	if (iov_mr && (iov_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
-		assert(iov_mr->peer.hmem_data);
-		copied = ofi_dev_reg_copy_from_hmem_iov(pke->wiredata + payload_offset,
-							data_size, iov_mr->peer.iface,
-							(uint64_t)iov_mr->peer.hmem_data,
-							ope->iov, ope->iov_count,
-							segment_offset);
-	} else {
-		copied = ofi_copy_from_hmem_iov(pke->wiredata + payload_offset,
-						data_size,
-		                                iov_mr ? iov_mr->peer.iface : FI_HMEM_SYSTEM,
-		                                iov_mr ? iov_mr->peer.device.reserved : 0,
-		                                ope->iov, ope->iov_count, segment_offset);
-	}
+	copied = efa_rdm_pke_copy_from_hmem_iov(
+		iov_mr, pke, ope, payload_offset, segment_offset, data_size);
 
 	assert(copied == data_size);
 	pke->payload = pke->wiredata + payload_offset;
