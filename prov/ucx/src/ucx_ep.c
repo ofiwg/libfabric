@@ -94,7 +94,7 @@ static int ucx_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*optlen = sizeof(size_t);
 		return FI_SUCCESS;
 	}
-	return -FI_EINVAL;
+	return -FI_ENOPROTOOPT;
 }
 
 static int ucx_ep_setopt(fid_t fid, int level, int optname,
@@ -109,7 +109,7 @@ static int ucx_ep_setopt(fid_t fid, int level, int optname,
 		ep->ep_opts.mrecv_min_size = *(size_t*)optval;
 		return FI_SUCCESS;
 	}
-	return -FI_EINVAL;
+	return -FI_ENOPROTOOPT;
 }
 
 static int ucx_ep_close(fid_t fid)
