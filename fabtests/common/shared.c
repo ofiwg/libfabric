@@ -1706,39 +1706,66 @@ int ft_init_av_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 	return 0;
 }
 
-int ft_exchange_keys(struct fi_rma_iov *peer_iov)
+int ft_fill_rma_info(struct fid_mr *mr, void *mr_buf,
+		     struct fi_rma_iov *rma_iov, size_t *key_size,
+		     size_t *rma_iov_len)
 {
-	char temp[FT_MAX_CTRL_MSG];
-	struct fi_rma_iov *rma_iov = (struct fi_rma_iov *) temp;
-	size_t key_size = 0, len;
 	uint64_t addr;
+	size_t buf_len = *rma_iov_len;
 	int ret;
 
 	if (fi->domain_attr->mr_mode & FI_MR_RAW) {
-		ret = fi_mr_raw_attr(mr, &addr, NULL, &key_size, 0);
+		*key_size = 0;
+		ret = fi_mr_raw_attr(mr, &addr, NULL, key_size, 0);
 		if (ret != -FI_ETOOSMALL)
 			return ret;
-		len = sizeof(*rma_iov) + key_size - sizeof(rma_iov->key);
-		if (len > FT_MAX_CTRL_MSG) {
+		*rma_iov_len = sizeof(*rma_iov) + *key_size - sizeof(rma_iov->key);
+		if (*rma_iov_len > buf_len) {
 			FT_PRINTERR("Raw key too large for ctrl message",
 				    -FI_ETOOSMALL);
 			return -FI_ETOOSMALL;
 		}
-	} else {
-		len = sizeof(*rma_iov);
-	}
 
-	rma_iov->addr = fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR ?
-		(uintptr_t) rx_buf + ft_rx_prefix_size() : 0;
-
-	if (fi->domain_attr->mr_mode & FI_MR_RAW) {
 		ret = fi_mr_raw_attr(mr, &addr, (uint8_t *) &rma_iov->key,
-				     &key_size, 0);
+				     key_size, 0);
 		if (ret)
 			return ret;
 	} else {
 		rma_iov->key = fi_mr_key(mr);
+		*key_size = sizeof(rma_iov->key);
+		*rma_iov_len = sizeof(*rma_iov);
 	}
+
+	rma_iov->addr = fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR ?
+		(uintptr_t) mr_buf : 0;
+
+	return FI_SUCCESS;
+}
+
+int ft_get_rma_info(struct fi_rma_iov *rma_iov,
+		    struct fi_rma_iov *peer_iov, size_t key_size)
+{
+	if (fi->domain_attr->mr_mode & FI_MR_RAW) {
+		peer_iov->addr = rma_iov->addr;
+		peer_iov->len = rma_iov->len;
+		return fi_mr_map_raw(domain, rma_iov->addr,
+				     (uint8_t *) &rma_iov->key, key_size,
+				     &peer_iov->key, 0);
+	}
+	*peer_iov = *rma_iov;
+	return FI_SUCCESS;
+}
+
+int ft_exchange_keys(struct fi_rma_iov *peer_iov)
+{
+	char temp[FT_MAX_CTRL_MSG];
+	struct fi_rma_iov *rma_iov = (struct fi_rma_iov *) temp;
+	size_t key_size, len = FT_MAX_CTRL_MSG;
+	int ret;
+
+	ret = ft_fill_rma_info(mr, rx_buf, rma_iov, &key_size, &len);
+	if (ret)
+		return ret;
 
 	ret = ft_hmem_copy_to(opts.iface, opts.device,
 			      tx_buf + ft_tx_prefix_size(), temp, len);
@@ -1758,17 +1785,9 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 	if (ret)
 		return ret;
 
-	if (fi->domain_attr->mr_mode & FI_MR_RAW) {
-		peer_iov->addr = rma_iov->addr;
-		peer_iov->len = rma_iov->len;
-		ret = fi_mr_map_raw(domain, rma_iov->addr,
-				    (uint8_t *) &rma_iov->key, key_size,
-				    &peer_iov->key, 0);
-		if (ret)
-			return ret;
-	} else {
-		*peer_iov = *rma_iov;
-	}
+	ret = ft_get_rma_info(rma_iov, peer_iov, key_size);
+	if (ret)
+		return ret;
 
 	ret = ft_post_rx(ep, rx_size, &rx_ctx);
 	if (ret)

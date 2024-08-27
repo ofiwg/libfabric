@@ -466,6 +466,11 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		fi_addr_t *remote_addr);
 int ft_init_av_addr(struct fid_av *av, struct fid_ep *ep,
 		fi_addr_t *addr);
+int ft_fill_rma_info(struct fid_mr *mr, void *mr_buf,
+		     struct fi_rma_iov *rma_iov, size_t *key_size,
+		     size_t *rma_iov_len);
+int ft_get_rma_info(struct fi_rma_iov *rma_iov,
+		    struct fi_rma_iov *peer_iov, size_t key_size);
 int ft_exchange_keys(struct fi_rma_iov *peer_iov);
 void ft_fill_mr_attr(struct iovec *iov, struct fi_mr_dmabuf *dmabuf,
 		     int iov_count, uint64_t access,
