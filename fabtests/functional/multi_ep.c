@@ -46,17 +46,16 @@
 #include <rdma/fi_cm.h>
 
 #include "shared.h"
+#include "hmem.h"
 
 static struct fid_ep **eps;
-static char *data_bufs;
-static char **send_bufs;
-static char **recv_bufs;
+static char **send_bufs, **recv_bufs;
+static struct fid_mr **send_mrs, **recv_mrs;
+static void **send_descs, **recv_descs;
 static struct fi_context *recv_ctx;
 static struct fi_context *send_ctx;
 static struct fid_cq **txcqs, **rxcqs;
 static struct fid_av **avs;
-static struct fid_mr *data_mr = NULL;
-static void *data_desc = NULL;
 static fi_addr_t *remote_addr;
 static bool shared_cq = false;
 static bool shared_av = false;
@@ -71,9 +70,13 @@ static void free_ep_res()
 {
 	int i;
 
-	FT_CLOSE_FID(data_mr);
 	for (i = 0; i < num_eps; i++) {
+		FT_CLOSE_FID(send_mrs[i]);
+		FT_CLOSE_FID(recv_mrs[i]);
 		FT_CLOSE_FID(eps[i]);
+
+		(void) ft_hmem_free(opts.iface, (void *) send_bufs[i]);
+		(void) ft_hmem_free(opts.iface, (void *) recv_bufs[i]);
 	}
 
 	for (i = 0; i < num_eps; i++) {
@@ -84,9 +87,12 @@ static void free_ep_res()
 
 	free(txcqs);
 	free(rxcqs);
-	free(data_bufs);
 	free(send_bufs);
 	free(recv_bufs);
+	free(send_mrs);
+	free(recv_mrs);
+	free(send_descs);
+	free(recv_descs);
 	free(send_ctx);
 	free(recv_ctx);
 	free(remote_addr);
@@ -94,38 +100,64 @@ static void free_ep_res()
 	free(avs);
 }
 
+static int reg_mrs(void)
+{
+	int i, ret;
+
+	for (i = 0; i < num_eps; i++) {
+		ret = ft_reg_mr(fi, send_bufs[i], opts.transfer_size,
+				ft_info_to_mr_access(fi),
+				(FT_MR_KEY + 1) * (i + 1), opts.iface,
+				opts.device, &send_mrs[i], &send_descs[i]);
+		if (ret)
+			return ret;
+
+		ret = ft_reg_mr(fi, recv_bufs[i], opts.transfer_size,
+				ft_info_to_mr_access(fi),
+				(FT_MR_KEY + 2) * (i + 2), opts.iface,
+				opts.device, &recv_mrs[i], &recv_descs[i]);
+		if (ret)
+			return ret;
+	}
+
+	return FI_SUCCESS;
+}
+
 static int alloc_multi_ep_res()
 {
-	char *rx_buf_ptr;
 	int i, ret;
 
 	eps = calloc(num_eps, sizeof(*eps));
 	remote_addr = calloc(num_eps, sizeof(*remote_addr));
-	send_bufs = calloc(num_eps, sizeof(*send_bufs));
-	recv_bufs = calloc(num_eps, sizeof(*recv_bufs));
+	send_mrs = calloc(num_eps, sizeof(*send_mrs));
+	recv_mrs = calloc(num_eps, sizeof(*recv_mrs));
+	send_descs = calloc(num_eps, sizeof(*send_descs));
+	recv_descs = calloc(num_eps, sizeof(*recv_descs));
 	send_ctx = calloc(num_eps, sizeof(*send_ctx));
 	recv_ctx = calloc(num_eps, sizeof(*recv_ctx));
-	data_bufs = calloc(num_eps * 2, opts.transfer_size);
+	send_bufs = calloc(num_eps, opts.transfer_size);
+	recv_bufs = calloc(num_eps, opts.transfer_size);
+
 	txcqs = calloc(num_eps, sizeof(*txcqs));
 	rxcqs = calloc(num_eps, sizeof(*rxcqs));
 	avs = calloc(num_eps, sizeof(*avs));
 
 	if (!eps || !remote_addr || !send_bufs || !recv_bufs ||
-	    !send_ctx || !recv_ctx || !data_bufs || !txcqs || !rxcqs)
+	    !send_ctx || !recv_ctx || !send_bufs || !recv_bufs ||
+	    !send_mrs || !recv_mrs || !send_descs || !recv_descs ||
+	    !txcqs || !rxcqs)
 		return -FI_ENOMEM;
 
-	rx_buf_ptr = data_bufs + opts.transfer_size * num_eps;
 	for (i = 0; i < num_eps; i++) {
-		send_bufs[i] = data_bufs + opts.transfer_size * i;
-		recv_bufs[i] = rx_buf_ptr + opts.transfer_size * i;
-	}
+		ret = ft_hmem_alloc(opts.iface, opts.device,
+				    (void **) &send_bufs[i], opts.transfer_size);
+		if (ret)
+			return ret;
 
-	ret = ft_reg_mr(fi, data_bufs, num_eps * 2 * opts.transfer_size,
-			ft_info_to_mr_access(fi), FT_MR_KEY + 1, opts.iface,
-			opts.device, &data_mr, &data_desc);
-	if (ret) {
-		free_ep_res();
-		return ret;
+		ret = ft_hmem_alloc(opts.iface, opts.device,
+				    (void **) &recv_bufs[i], opts.transfer_size);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
@@ -140,7 +172,8 @@ static int ep_post_rx(int idx)
 
 	do {
 		ret = fi_recv(eps[idx], recv_bufs[idx], opts.transfer_size,
-			      data_desc, FI_ADDR_UNSPEC, &recv_ctx[idx]);
+			      recv_descs[idx], FI_ADDR_UNSPEC,
+			      &recv_ctx[idx]);
 		if (ret == -FI_EAGAIN)
 			(void) fi_cq_read(rxcqs[cq_read_idx], NULL, 0);
 
@@ -164,7 +197,8 @@ static int ep_post_tx(int idx)
 
 	do {
 		ret = fi_send(eps[idx], send_bufs[idx], opts.transfer_size,
-			      data_desc, remote_addr[idx], &send_ctx[idx]);
+			      send_descs[idx], remote_addr[idx],
+			      &send_ctx[idx]);
 		if (ret == -FI_EAGAIN)
 			(void) fi_cq_read(txcqs[cq_read_idx], NULL, 0);
 
@@ -392,6 +426,10 @@ static int run_test(void)
 				goto out;
 		}
 	}
+
+	ret = reg_mrs();
+	if (ret)
+		goto out;
 
 	for (i = 0; i < num_eps; i++) {
 		if (hints->ep_attr->type != FI_EP_MSG) {
