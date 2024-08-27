@@ -1693,7 +1693,7 @@ STATIC ssize_t psmx2_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 				  buf, &cq_priv->pending_error->cqe.err);
 		free(cq_priv->pending_error);
 		cq_priv->pending_error = NULL;
-		psmx2_unlock(&cq_priv->lock, 2);
+		cq_priv->domain->cq_unlock_fn(&cq_priv->lock, 2);
 		return 1;
 	}
 	cq_priv->domain->cq_unlock_fn(&cq_priv->lock, 2);
