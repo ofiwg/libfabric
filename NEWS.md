@@ -6,36 +6,306 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v1.22.0, Fri Jul 26, 2024
-========================
+v2.0.0 alpha, Fri Aug 30, 2024
+==============================
 
 ## Core
 
+hmem/ze: Fix mistmatched library name in an error message
+Add FI_PEER as a capability
+Add missing FI_AV_USER_ID to cap tostr
+Update and clarify peer SRX API flow
+Prefix public xpmem symbols with ofi
+Add rbmap foreach node utility function
+ofi_mem: Add release bufpool validity check
+hmem/rocr: Don't attempt to get device info when pointer type is unknown.
+hmem: Added handle field to close_handle
+Introduce new atomic datatypes and operation
+Define new tag formats
+Add new peer group feature
+Add fi_fabric2() API
+Deprecate old MR modes
+Deprecate FI_WAIT_MUTEX_COND
+Deprecate wait set and poll set
+Require using libfabric APIs to allocate fi_info structures
+Cleanup FI_ORDER flags
+Deprecate support for async memory registration
+Remove total_buffered_recv
+Deprecate comp_order attribute
+Simplify progress definition
+Simplify threading models
+Move FI_BUFFERED_RECV to internal flag
+Simplify the AV API
+Remove internally used definitions from public headers
+hmem/cuda: Modify the logging for nvml dlopen
+hmem/rocr: Fix dmabuf for amd gpu implementation
+
 ## CXI
+
+FI_PATH_MAX is removed in 2.0 API
 
 ## EFA
 
-## Hooks
+Zero the cq entry array in dgram ep progress
+Remove unit test for libfabric 1.1 API
+Replace deprecated MR modes
+Remove deprecated FI_ORDER flag
+Update EP's `inject_size` in zero-copy mode
+Add support for `FI_OPT_INJECT_RMA_SIZE`
+Query for shm's FI_PEER capability
+Require FI_MR_LOCAL for zero-copy receive
+Correctly handle fallback longcts-rtm send completion
+Adjust the logging for pke exhaustion
+Fix a memory leak in local read
+Use dlist_foreach_container_safe to iterate progressed ep list
+refactor hmem interface initialization
+Fix a memory leak in efa_rdm_ep_post_handshake
+disable zero-copy receive if p2p is not supported
+Update data types for various IOV operations
+Require shm to be disabled for using zero-copy recv
+Register user recv buffer for zero-copy receive mode
+Make fi_cancel return EOPNOTSUPP for zero copy receive mode.
+Handle receive window overflow
+Introduce FI_EFA_IFACE to restrict visible NICs
+Allow disabling unsolicited write recv via env
 
-## OPX
+## LPP
 
-## Peer
+Initial addition
+
+## PSM2
+
+Fix incorrect unlock function
 
 ## PSM3
 
-## RXM
+Fix incorrect unlock function
 
 ## SHM
 
+Add FI_PEER capability
+Refactor ze ipc path to use pidfd
+
 ## TCP
+
+Introduce sub-domains to support FI_THREAD_COMPLETION
 
 ## UCX
 
+Support FI_OPT_CUDA_API_PERMITTED in fi_setopt()
+Fix error code for fi_setopt()/fi_getopt()
+
 ## Util
+
+Initialize ROCR name in memory monitor struct
+Support specific placement of addr into the av
 
 ## Verbs
 
+Fix resource leak in error handling path
+Replace __BITS_PER_LONG with LONG_WIDTH
+Fix issue while displaying addresses with fi_info -a <addr_format>
+
 ## Fabtests
+
+Add LPP specific fabtests
+Add `inject_size` to `ft_opts`
+Add pytests for FI_MORE Test fi_rma_bw and fi_rdm_tagged_bw with flag FI_MORE.
+Use fi_writemsg to test rma write/writedata with FI_MORE
+Use fi_sendmsg to test rdm_tagged_bw with FI_MORE
+Add option for running tests with FI_MORE
+synapse: Remove dependency of scal
+Pass `memory_type` to client server test
+
+
+v1.22.0, Fri Jul 26, 2024
+=========================
+
+## Coll
+
+- Fix Coverity issues
+
+## Core
+
+- General bug fixes
+- hmem: change neuron get_dmabuf_fd error code
+- Fix an error in the error handling path of fi_param_define()
+- Makefile.am: Add Windows build files to distribution tarball
+- hmem: disable ZE IPC
+- Add profile variables for connections and memory allocated
+- hmem: Fix `cuDeviceCanAccessPeer()` error reporting
+- man: Update text for `len` parameter
+- Add page size MR attr field
+- man: Extend fi_mr_refresh support
+- man: Improve FI_MR_ALLOCATED documentation
+- man: Support optional MR desc
+- man: Improve FI_MR_HMEM documentation
+- Added ofi_get_realtime interfaces
+- Add endpoint options for max message size and inject size
+- Add Windows definition for `EREMOTEIO`
+
+## EFA
+
+- General improvement and bug fixes
+- Handle recv cancel for zero copy recv
+- Avoid iterating EP list in CQ read
+- Add RDMA core errno for remote unknown peer
+- Map EFA errnos to Libfabric codes
+- Improve the zero-copy receive feature
+- Improve the handshake enforcement procedure
+- Support unsolicited rdma-write recv
+- Support FI_MORE for eager send and rdma-write
+- Improve the EFA_IO_COMP error code and explanation
+- Improve the unit test for LL128 protocol
+- Distinguish max RMA size from msg size
+
+## Hooks
+
+- dmabuf: Fix incompatible pointer warning
+
+## OPX
+
+- Add missing file needed for fabric direct build to release package
+- Fix performance issue caused by not setting ACK bit in the single
+  SDMA packet case
+- TID cache debug improvements
+- Detection of driver lack of support for TID
+- Multi-CTS support for TID
+- Removal of statement that TID is not supported
+- OPX Tracer improvements
+- Improvements to OPX shared memory cleanup
+- H to H performance improvements for build that supports HMEM
+- Bug fix for a threshold check
+- Bug fix for FI_SELECTIVE_COMPLETION
+- CN5000 fixes
+- Parameterization of various thresholds
+- Further enhancements to support NVIDIA GPUs, included CUDA-allocated
+  bounce buffers and in-provider support for GDRCopy
+- Enhancements to enable support for CN5000 hardware
+- Better checking for TID support
+- General TID enhancements
+- Pkey error handling
+- Send work queue splitting
+- Support for OPX tracer for profiling purposes
+- Coverity scan fixes
+- Fixes and enhancements to logging and debug messages
+- Intranode RMA read fixes
+- Fix compile issues
+- Fix shared memory segment index creation bug
+
+## PSM3
+
+- Update provider to sync with IEFS 11.7.0.0.110
+- Improved auto-tuning features for PSM3, including dynamic Credit Flows
+  and detecting the presence of the rv kernel module
+- Improved PSM3 intra-node performance for large message sizes
+
+## SHM
+
+- Added support for write() method to submit DSA work
+- Touch all buffer pages after DSA page fault
+- Add return and more descriptive error message
+- Fix coverity about incorrect sign
+- Fix memory leaks for srx
+- Fix atomic read
+
+## Sockets
+
+- Fix Coverity issues
+
+## USNIC
+
+- Fix a few Coverity issues
+
+## Util
+
+- Discard outstanding operations in util_srx_close
+- Enable profile on the size of bufpool allocated.
+- Add more predefined profile variables.
+- Fix issue while displaying addresses with fi_info -a <addr_format>
+- fi_pingpong: Fix out of scope memory leak
+- Add source address to fi_pingpong
+
+## Verbs
+
+- Flush CQ for SQ on no SQ credit
+- Optimize search for device max inline size
+- Enable profiling
+
+## Fabtests
+
+- pytest/shm: reduce the msg size in test_unexpected_msg
+- Fix synapseai fabtests build
+- Add pytests for EFA zero-copy receive
+- Add benchmark option for `FI_OPT_MAX_MSG_SIZE`
+- benchmarks: Add synapseai support
+- Disable fi_rdm_tagged_peek test for ucx and psm3
+- Add manual init sync to fi_rdm_multiclient and fi_rdm
+- Refactor ft_sock_sync to take in a socket
+- Add fi_rdm_bw test
+- Skip rma_pingpong write tests
+- Init rx_buf before sending data
+- Add rma_pingpong tests to makefile
+- pytest: use different message sizes for rma pingpong
+- Fix missing fixture memory_type in test_rma_pingpong_range_no_inject
+- pytest: account for process startup overhead in client-server tests
+- pytest: save client process output to a file
+- Support testing inject with cq data
+- multinode: update arguments
+- multi_ep: Fix memory leak
+- rdm_tagged_peek: Align rx's msg_order with tx's
+- Add backlog > 0 to listen call
+
+
+v1.21.1, Fri July 26, 2024
+==========================
+
+## Core
+
+- Fix integer overflow in ofi_get_mem_size
+- Fix overflow issue in ofi_rbinit
+- Disable ZE IPC due to possible memory corruption
+- Fix an error in the error handling path of fi_param_define()
+
+## EFA
+
+- Add tracepoints for rx pkt processing events
+- Destroy rx_atomrsp_pool during ep close.
+- Free user_info during ep close.
+- Use srx lock from domain directly
+- Fix error handling in efa_rdm_cq_poll_ibv_cq
+- Move efa_rdm_cq_poll_ibv_cq to efa_rdm_cq.h
+- Remove unused cq_attr
+- Remove unnecessary app_info check
+- Remove unnecessary ope check
+- Make the inflight read msg per domain
+
+## SHM
+
+- Added support for write() method to submit DSA work
+- Touch all buffer pages after DSA page fault
+- add return and more descriptive error message
+- fix coverity about incorrect sign
+- Fix memory leaks for srx
+- fix atomic read
+
+## Verbs
+
+- Flush CQ for SQ on no SQ credit
+
+## Fabtests
+
+- efa: reset error completion entry for each fi_cq_readerr call
+- pytest: Skip rma_pingpong write tests
+- Init rx_buf before sending data
+- Add rma_pingpong tests to makefile
+- pytest: use different message sizes for rma pingpong
+- Fix missing fixture memory_type in test_rma_pingpong_range_no_inject
+- pytest: account for process startup overhead in client-server tests
+- pytest: save client process output to a file
+- Fix memory leaks for efa_exhaust_mr_reg test
+- Fix memory leak in multi_ep test
+- Fix memory leak in efa_info_test
 
 
 v1.21.0, Fri Mar 22, 2024

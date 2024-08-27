@@ -222,7 +222,7 @@ src_libfabric_la_LIBADD =
 src_libfabric_la_DEPENDENCIES = libfabric.map
 
 if !EMBEDDED
-src_libfabric_la_LDFLAGS += -version-info 26:0:25
+src_libfabric_la_LDFLAGS += -version-info 2:0:0
 endif
 src_libfabric_la_LDFLAGS += -export-dynamic \
 			   $(libfabric_version_script)
@@ -449,6 +449,9 @@ nroff:
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
 	perl $(top_srcdir)/config/distscript.pl "$(distdir)" "$(PACKAGE_VERSION)"
+
+install-exec-hook:
+	ln -sf libfabric.so.2 $(DESTDIR)$(libdir)/libfabric.so.1
 
 TESTS = \
 	util/fi_info
