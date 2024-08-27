@@ -52,11 +52,12 @@ static struct fid_ep **eps;
 static char **send_bufs, **recv_bufs;
 static struct fid_mr **send_mrs, **recv_mrs;
 static void **send_descs, **recv_descs;
+static struct fi_rma_iov *peer_iovs;
 static struct fi_context *recv_ctx;
 static struct fi_context *send_ctx;
 static struct fid_cq **txcqs, **rxcqs;
 static struct fid_av **avs;
-static fi_addr_t *remote_addr;
+static fi_addr_t *remote_fiaddr;
 static bool shared_cq = false;
 static bool shared_av = false;
 int num_eps = 3;
@@ -71,6 +72,9 @@ static void free_ep_res()
 	int i;
 
 	for (i = 0; i < num_eps; i++) {
+		if (fi->domain_attr->mr_mode & FI_MR_RAW)
+			(void) fi_mr_unmap_key(domain, peer_iovs[i].key);
+
 		FT_CLOSE_FID(send_mrs[i]);
 		FT_CLOSE_FID(recv_mrs[i]);
 		FT_CLOSE_FID(eps[i]);
@@ -91,11 +95,12 @@ static void free_ep_res()
 	free(recv_bufs);
 	free(send_mrs);
 	free(recv_mrs);
+	free(peer_iovs);
 	free(send_descs);
 	free(recv_descs);
 	free(send_ctx);
 	free(recv_ctx);
-	free(remote_addr);
+	free(remote_fiaddr);
 	free(eps);
 	free(avs);
 }
@@ -128,11 +133,12 @@ static int alloc_multi_ep_res()
 	int i, ret;
 
 	eps = calloc(num_eps, sizeof(*eps));
-	remote_addr = calloc(num_eps, sizeof(*remote_addr));
+	remote_fiaddr = calloc(num_eps, sizeof(*remote_fiaddr));
 	send_mrs = calloc(num_eps, sizeof(*send_mrs));
 	recv_mrs = calloc(num_eps, sizeof(*recv_mrs));
 	send_descs = calloc(num_eps, sizeof(*send_descs));
 	recv_descs = calloc(num_eps, sizeof(*recv_descs));
+	peer_iovs = calloc(num_eps, sizeof(*peer_iovs));
 	send_ctx = calloc(num_eps, sizeof(*send_ctx));
 	recv_ctx = calloc(num_eps, sizeof(*recv_ctx));
 	send_bufs = calloc(num_eps, opts.transfer_size);
@@ -142,10 +148,10 @@ static int alloc_multi_ep_res()
 	rxcqs = calloc(num_eps, sizeof(*rxcqs));
 	avs = calloc(num_eps, sizeof(*avs));
 
-	if (!eps || !remote_addr || !send_bufs || !recv_bufs ||
+	if (!eps || !remote_fiaddr || !send_bufs || !recv_bufs ||
 	    !send_ctx || !recv_ctx || !send_bufs || !recv_bufs ||
 	    !send_mrs || !recv_mrs || !send_descs || !recv_descs ||
-	    !txcqs || !rxcqs)
+	    !txcqs || !rxcqs || !peer_iovs)
 		return -FI_ENOMEM;
 
 	for (i = 0; i < num_eps; i++) {
@@ -182,22 +188,16 @@ static int ep_post_rx(int idx)
 	return ret;
 }
 
-static int ep_post_tx(int idx)
+static int ep_post_tx(int idx, size_t len)
 {
 	int ret, cq_read_idx = idx;
 
 	if (shared_cq)
 		cq_read_idx = 0;
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-		ret = ft_fill_buf(send_bufs[idx], opts.transfer_size);
-		if (ret)
-			return ret;
-	}
-
 	do {
-		ret = fi_send(eps[idx], send_bufs[idx], opts.transfer_size,
-			      send_descs[idx], remote_addr[idx],
+		ret = fi_send(eps[idx], send_bufs[idx], len,
+			      send_descs[idx], remote_fiaddr[idx],
 			      &send_ctx[idx]);
 		if (ret == -FI_EAGAIN)
 			(void) fi_cq_read(txcqs[cq_read_idx], NULL, 0);
@@ -207,10 +207,87 @@ static int ep_post_tx(int idx)
 	return ret;
 }
 
-static int do_transfers(void)
+static int ep_post_write(int idx)
+{
+	int ret, cq_read_idx = idx;
+
+	if (shared_cq)
+		cq_read_idx = 0;
+
+	do {
+		ret = fi_write(eps[idx], send_bufs[idx], opts.transfer_size,
+			       send_descs[idx], remote_fiaddr[idx],
+			       peer_iovs[idx].addr, peer_iovs[idx].key,
+			       &send_ctx[idx]);
+		if (ret == -FI_EAGAIN)
+			(void) fi_cq_read(txcqs[cq_read_idx], NULL, 0);
+
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
+}
+
+static int get_one_comp(struct fid_cq *cq)
+{
+	struct fi_cq_err_entry comp;
+	int ret, i;
+
+	do {
+		ret = fi_cq_read(cq, &comp, 1);
+		if (ret > 0)
+			break;
+
+		if (ret < 0 && ret != -FI_EAGAIN)
+			return ret;
+
+		if (!shared_cq) {
+			/* Drive progress on all EPs in case peer is waiting on
+			 * different EP pair
+			 */
+			for (i = 0; i < num_eps; i++)
+				(void) fi_cq_read(rxcqs[i], NULL, 0);
+		}
+	} while (1);
+
+	return FI_SUCCESS;
+}
+
+static int sync_all(void)
 {
 	int i, ret, cq_read_idx;
-	uint64_t cur;
+
+	for (i = 0; i < num_eps; i++) {
+		ret = ep_post_rx(i);
+		if (ret) {
+			FT_PRINTERR("fi_recv", ret);
+			return ret;
+		}
+
+		ret = ep_post_tx(i, 0);
+		if (ret) {
+			FT_PRINTERR("fi_send", ret);
+			return ret;
+		}
+
+		cq_read_idx = shared_cq ? 0 : i;
+
+		ret = get_one_comp(txcqs[cq_read_idx]);
+		if (ret)
+			return ret;
+
+		ret = get_one_comp(rxcqs[cq_read_idx]);
+		if (ret)
+			return ret;
+	}
+	return FI_SUCCESS;
+}
+
+static int do_sends(void)
+{
+	char temp[FT_MAX_CTRL_MSG];
+	struct fi_rma_iov *rma_iov = (struct fi_rma_iov *) temp;
+	int i, ret, cq_read_idx;
+	size_t key_size, len;
 
 	for (i = 0; i < num_eps; i++) {
 		ret = ep_post_rx(i);
@@ -220,31 +297,84 @@ static int do_transfers(void)
 		}
 	}
 
-	printf("Send to all %d remote EPs\n", num_eps);
+	memset(peer_iovs, 0, sizeof(*peer_iovs) * num_eps);
+
+	printf("Send RMA info to all %d remote EPs\n", num_eps);
 	for (i = 0; i < num_eps; i++) {
-		ret = ep_post_tx(i);
+		len = opts.transfer_size;
+		ret = ft_fill_rma_info(recv_mrs[i], recv_bufs[i], rma_iov,
+				       &key_size, &len);
+		if (ret)
+			return ret;
+
+		ret = ft_hmem_copy_to(opts.iface, opts.device, send_bufs[i],
+				      rma_iov, len);
+		if (ret)
+			return ret;
+
+		ret = ep_post_tx(i, len);
 		if (ret) {
 			FT_PRINTERR("fi_send", ret);
 			return ret;
 		}
+
+		cq_read_idx = shared_cq ? 0 : i;
+
+		ret = get_one_comp(rxcqs[cq_read_idx]);
+		if (ret)
+			return ret;
+
+		ret = get_one_comp(txcqs[cq_read_idx]);
+		if (ret)
+			return ret;
 	}
 
 	printf("Wait for all messages from peer\n");
 	for (i = 0; i < num_eps; i++) {
-		if (shared_cq)
-			cq_read_idx = 0;
-		else
-			cq_read_idx = i;
-		cur = 0;
-		ret = ft_get_cq_comp(txcqs[cq_read_idx], &cur, 1, -1);
-		if (ret < 0)
+		ret = ft_hmem_copy_from(opts.iface, opts.device, rma_iov,
+				        recv_bufs[i], len);
+		if (ret)
 			return ret;
 
-		cur = 0;
-		ret = ft_get_cq_comp(rxcqs[cq_read_idx], &cur, 1, -1);
-		if (ret < 0)
+		ret = ft_get_rma_info(rma_iov, &peer_iovs[i], key_size);
+		if (ret)
 			return ret;
 	}
+
+	ret = sync_all();
+	if (ret)
+		return ret;
+
+	printf("PASSED multi ep sends\n");
+	return 0;
+}
+
+static int do_rma(void)
+{
+	int i, ret, cq_read_idx;
+
+	for (i = 0; i < num_eps; i++) {
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+			ret = ft_fill_buf(send_bufs[i], opts.transfer_size);
+			if (ret)
+				return ret;
+		}
+		ret = ep_post_write(i);
+		if (ret)
+			return ret;
+	}
+
+	printf("Wait for all writes from peer\n");
+	for (i = 0; i < num_eps; i++) {
+		cq_read_idx = shared_cq ? 0 : i;
+		ret = get_one_comp(txcqs[cq_read_idx]);
+		if (ret)
+			return ret;
+	}
+
+	ret = sync_all();
+	if (ret)
+		return ret;
 
 	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
 		for (i = 0; i < num_eps; i++) {
@@ -255,11 +385,7 @@ static int do_transfers(void)
 		printf("Data check OK\n");
 	}
 
-	ret = ft_finalize_ep(ep);
-	if (ret)
-		return ret;
-
-	printf("PASSED multi ep\n");
+	printf("PASSED multi ep writes\n");
 	return 0;
 }
 
@@ -381,7 +507,7 @@ static int enable_ep(int idx)
 	if (ret)
 		return ret;
 
-	ret = ft_init_av_addr(avs[av_bind_idx], eps[idx], &remote_addr[idx]);
+	ret = ft_init_av_addr(avs[av_bind_idx], eps[idx], &remote_fiaddr[idx]);
 	if (ret)
 		return ret;
 
@@ -439,8 +565,15 @@ static int run_test(void)
 		}
 	}
 
-	ret = do_transfers();
+	ret = do_sends();
+	if (ret)
+		goto out;
 
+	ret = do_rma();
+	if (ret)
+		goto out;
+
+	ret = ft_finalize_ep(ep);
 out:
 	free_ep_res();
 	return ret;
@@ -504,7 +637,7 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->caps = FI_MSG;
+	hints->caps = FI_MSG | FI_RMA;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;
