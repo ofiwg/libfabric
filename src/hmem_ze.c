@@ -400,7 +400,7 @@ static int ze_hmem_dl_init(void)
 	libze_handle = dlopen("libze_loader.so.1", RTLD_NOW);
 	if (!libze_handle) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to dlopen libze_loader.so\n");
+			"Failed to dlopen libze_loader.so.1\n");
 		goto err_out;
 	}
 
