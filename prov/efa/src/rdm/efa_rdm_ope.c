@@ -268,6 +268,12 @@ void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64
 		if (ope->desc[i])
 			continue;
 
+		if (OFI_UNLIKELY(ope->ep->base_ep.domain->mr_local))
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "No valid desc is provided, not compliant with FI_MR_LOCAL. "
+				 "buf: %p len: %ld access: %#lx\n",
+				 ope->iov[i].iov_base, ope->iov[i].iov_len, access);
+
 		err = fi_mr_regv(
 			&efa_rdm_ep_domain(ope->ep)->util_domain.domain_fid,
 			ope->iov + i, 1, access, 0, 0, 0, &ope->mr[i],
@@ -275,7 +281,7 @@ void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64
 
 		if (err) {
 			EFA_WARN(FI_LOG_EP_CTRL,
-				"fi_mr_reg failed! buf: %p len: %ld access: %lx\n",
+				"fi_mr_reg failed! buf: %p len: %ld access: %#lx\n",
 				ope->iov[i].iov_base, ope->iov[i].iov_len,
 				access);
 
