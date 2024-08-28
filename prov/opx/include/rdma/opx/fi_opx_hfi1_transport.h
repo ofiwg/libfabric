@@ -1108,7 +1108,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
-		if (FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, credits_needed) < 1) {
+		if (FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, credits_needed) < credits_needed) {
 			return -FI_EAGAIN;
 		}
 	}
