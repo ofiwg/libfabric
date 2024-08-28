@@ -282,7 +282,7 @@ static struct fi_ops efa_dgram_ep_ops = {
 static void efa_dgram_ep_progress_internal(struct efa_dgram_ep *ep, struct efa_dgram_cq *efa_dgram_cq)
 {
 	struct util_cq *cq;
-	struct fi_cq_tagged_entry cq_entry[efa_dgram_cq_PROGRESS_ENTRIES];
+	struct fi_cq_tagged_entry cq_entry[efa_dgram_cq_PROGRESS_ENTRIES] = {0};
 	struct fi_cq_tagged_entry *temp_cq_entry;
 	struct fi_cq_err_entry cq_err_entry = {0};
 	fi_addr_t src_addr[efa_dgram_cq_PROGRESS_ENTRIES];
