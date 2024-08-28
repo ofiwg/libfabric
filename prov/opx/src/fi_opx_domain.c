@@ -492,7 +492,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	strncpy(opx_domain->unique_job_key_str, env_var_uuid, OPX_JOB_KEY_STR_SIZE-1);
 	opx_domain->unique_job_key_str[OPX_JOB_KEY_STR_SIZE-1] = '\0';
 
-	sscanf(opx_domain->unique_job_key_str, "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx-%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
+	int elements_read = sscanf(opx_domain->unique_job_key_str, "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
 		&opx_domain->unique_job_key[0],
 		&opx_domain->unique_job_key[1],
 		&opx_domain->unique_job_key[2],
@@ -509,6 +509,11 @@ int fi_opx_domain(struct fid_fabric *fabric,
 		&opx_domain->unique_job_key[13],
 		&opx_domain->unique_job_key[14],
 		&opx_domain->unique_job_key[15]);
+	if (elements_read == EOF) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error: sscanf encountered an input failure (EOF), unable to parse the unique job key string.\n");
+		errno = FI_EINVAL;
+		goto err;
+	}
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "Domain unique job key set to %s\n", opx_domain->unique_job_key_str);
 	//TODO: Print out a summary of all domain settings wtih FI_INFO

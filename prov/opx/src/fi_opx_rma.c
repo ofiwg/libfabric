@@ -469,9 +469,14 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 	cc->hit_zero = fi_opx_hit_zero;
 
 	struct fi_opx_mr **mr_ptr_array = (struct fi_opx_mr **)desc;
-	const uint64_t mr_ptr_present = (mr_ptr_array != NULL);
-	struct fi_opx_mr *mr_ptr = mr_ptr_present ? *mr_ptr_array : NULL;
 	for (index = 0; index < count; ++index) {
+		struct fi_opx_mr *mr_ptr;
+		if (mr_ptr_array != NULL) {
+			mr_ptr = *mr_ptr_array;
+			++mr_ptr_array;
+		} else {
+			mr_ptr = NULL;
+		}
 		struct fi_opx_hmem_iov hmem_iov;
 		const uint64_t is_hmem = fi_opx_hmem_iov_init(iov[index].iov_base,
 							      iov[index].iov_len,
@@ -484,8 +489,6 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 					lock_required, caps, reliability, hfi1_type);
 
 		addr_offset += iov[index].iov_len;
-		++mr_ptr_array;
-		mr_ptr = mr_ptr_present ? *mr_ptr_array : NULL;
 	}
 
 	return 0;
@@ -603,12 +606,17 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 	uintptr_t msg_iov_vaddr = (uintptr_t)msg->msg_iov[msg_iov_index].iov_base;
 
 	struct fi_opx_mr **mr_ptr_array = (struct fi_opx_mr **)msg->desc;
-	const uint64_t mr_ptr_present = (mr_ptr_array != NULL);
-	struct fi_opx_mr *mr_ptr = mr_ptr_present ? *mr_ptr_array : NULL;
 	struct fi_opx_hmem_iov iov;
-	uint64_t is_hmem = fi_opx_hmem_iov_init((void *)msg_iov_vaddr, msg_iov_bytes, mr_ptr, &iov);
 
 	while (msg_iov_bytes != 0 && rma_iov_bytes != 0) {
+		struct fi_opx_mr *mr_ptr;
+		if (mr_ptr_array != NULL) {
+			mr_ptr = *mr_ptr_array;
+			++mr_ptr_array;
+		} else {
+			mr_ptr = NULL;
+		}
+		uint64_t is_hmem = fi_opx_hmem_iov_init((void *)msg_iov_vaddr, msg_iov_bytes, mr_ptr, &iov);
 		size_t len = (msg_iov_bytes <= rma_iov_bytes) ? msg_iov_bytes : rma_iov_bytes;
 		iov.buf = msg_iov_vaddr;
 		iov.len = len;
@@ -624,8 +632,6 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 			++msg_iov_index;
 			msg_iov_bytes = msg->msg_iov[msg_iov_index].iov_len;
 			msg_iov_vaddr = (uintptr_t)msg->msg_iov[msg_iov_index].iov_base;
-			++mr_ptr_array;
-			mr_ptr = mr_ptr_present ? *mr_ptr_array : NULL;
 			is_hmem = fi_opx_hmem_iov_init((void *)msg_iov_vaddr, msg_iov_bytes, mr_ptr, &iov);
 		}
 
@@ -789,18 +795,21 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 	/* max 8 descriptors (iovecs) per readv_internal */
 	struct fi_opx_mr **mr_ptr_array = (struct fi_opx_mr **)desc;
-	const uint64_t mr_ptr_present = (mr_ptr_array != NULL);
-	struct fi_opx_mr *mr_ptr = mr_ptr_present ? *mr_ptr_array : NULL;
 	const size_t full_count = count >> 3;
 	for (index = 0; index < full_count; index += 8) {
 		for (int i = 0; i < 8; ++i) {
+			struct fi_opx_mr *mr_ptr;
+			if (mr_ptr_array != NULL) {
+				mr_ptr = *mr_ptr_array;
+				++mr_ptr_array;
+			} else {
+				mr_ptr = NULL;
+			}
 			hmem_iface = fi_opx_hmem_get_iface(iov[index + i].iov_base, mr_ptr, &hmem_device);
 			hmem_iovs[i].buf = (uintptr_t) iov[index + i].iov_base;
 			hmem_iovs[i].len = iov[index + i].iov_len;
 			hmem_iovs[i].iface = hmem_iface;
 			hmem_iovs[i].device = hmem_device;
-			++mr_ptr_array;
-			mr_ptr = mr_ptr_present ? *mr_ptr_array : NULL;
 		}
 		fi_opx_readv_internal(opx_ep, hmem_iovs, 8, opx_addr, addr_v, key_v,
 				      NULL, 0, NULL, NULL, cc, FI_VOID, FI_NOOP,
@@ -811,13 +820,18 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	/* if 'partial_ndesc' is zero, the fi_opx_readv_internal() will fence */
 	const size_t partial_ndesc = count & 0x07ull;
 	for (int i = 0; i < partial_ndesc; ++i) {
+		struct fi_opx_mr *mr_ptr;
+		if (mr_ptr_array != NULL) {
+			mr_ptr = *mr_ptr_array;
+			++mr_ptr_array;
+		} else {
+			mr_ptr = NULL;
+		}
 		hmem_iface = fi_opx_hmem_get_iface(iov[index + i].iov_base, mr_ptr, &hmem_device);
 		hmem_iovs[i].buf = (uintptr_t) iov[index + i].iov_base;
 		hmem_iovs[i].len = iov[index + i].iov_len;
 		hmem_iovs[i].iface = hmem_iface;
 		hmem_iovs[i].device = hmem_device;
-		++mr_ptr_array;
-		mr_ptr = mr_ptr_present ? *mr_ptr_array : NULL;
 	}
 	fi_opx_readv_internal(opx_ep, hmem_iovs, partial_ndesc, opx_addr, addr_v, key_v,
 			      opx_context, tx_op_flags, opx_ep->rx->cq, opx_ep->read_cntr, cc,
@@ -920,10 +934,15 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	cc->hit_zero = fi_opx_hit_zero;
 
 	struct fi_opx_mr **mr_ptr_array = (struct fi_opx_mr **)msg->desc;
-	const uint64_t mr_ptr_present = (mr_ptr_array != NULL);
-	struct fi_opx_mr *mr_ptr = mr_ptr_present ? *mr_ptr_array : NULL;
 	while (src_iov_index < src_iov_count) {
 		for (niov = 0; niov < 8; ++niov) {
+			struct fi_opx_mr *mr_ptr;
+			if (mr_ptr_array != NULL) {
+				mr_ptr = *mr_ptr_array;
+				++mr_ptr_array;
+			} else {
+				mr_ptr = NULL;
+			}
 			const size_t len =
 				(dst_iov_bytes <= src_iov_bytes) ? dst_iov_bytes : src_iov_bytes;
 			fi_opx_hmem_iov_init(dst_iov_vaddr, len, mr_ptr, &iov[niov]);
@@ -987,8 +1006,6 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 					++dst_iov_index;
 					dst_iov_bytes = msg->msg_iov[dst_iov_index].iov_len;
 					dst_iov_vaddr = msg->msg_iov[dst_iov_index].iov_base;
-					++mr_ptr_array;
-					mr_ptr = (mr_ptr_present) ? *mr_ptr_array : NULL;
 				}
 			} else {
 				dst_iov_vaddr = (void *)((uintptr_t)dst_iov_vaddr + len);
