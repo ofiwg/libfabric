@@ -149,7 +149,11 @@ int opx_close_tid_domain(struct opx_tid_domain *tid_domain, int locked)
 	}
 
 	dlist_remove(&tid_domain->list_entry);
-	ofi_domain_close(&tid_domain->util_domain);
+	int ret = ofi_domain_close(&tid_domain->util_domain);
+	if (ret != 0) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error closing domain: %d\n", ret);
+	}
+
 	free(tid_domain);
 
 	return 0;
