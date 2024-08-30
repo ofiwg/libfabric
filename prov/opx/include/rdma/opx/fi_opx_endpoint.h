@@ -1296,28 +1296,15 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 		const uint8_t u8_rx = hdr->rendezvous.origin_rx;
 		const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->rendezvous.origin_rx);
 
-		uint8_t * rbuf = (uint8_t *)recv_buf;
+		assert(payload != NULL);
 
-		FI_OPX_FABRIC_RX_RZV_RTS(opx_ep,
-					 hdr,
-					 payload,
-					 u8_rx, 1,
-					 origin_byte_counter_vaddr,
-					 context,
-					 (uintptr_t)(rbuf),		/* receive buffer virtual address */
-					 FI_HMEM_SYSTEM,		/* receive buffer iface */
-					 0UL,				/* receive buffer device */
-					 0UL,				/* immediate_data */
-					 0UL,				/* immediate_end_block_count */
-					 src_dst_iov,
-					 FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC,
-					 is_intranode,
-					 reliability,			/* compile-time constant expression */
-					 u32_ext_rx,
-					 hfi1_type);
-
-		if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-		slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
+		FI_OPX_FABRIC_RX_RZV_RTS_ETRUNC(opx_ep,
+						(const void * const)hdr,
+						u8_rx,
+						origin_byte_counter_vaddr,
+						is_intranode,
+						reliability,			/* compile-time constant expression */
+						u32_ext_rx, hfi1_type);
 
 		/* Post a E_TRUNC to our local RX error queue because a client called receive
 		with too small a buffer.  Tell them about it via the error cq */
@@ -1993,6 +1980,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 					.len = (p->rendezvous.contiguous.src_blocks << 6),
 					.device = p->rendezvous.contiguous.src_device_id,
 					.iface = (enum fi_hmem_iface) p->rendezvous.contiguous.src_iface
+
 		};
 		const uint8_t * const immediate_byte = p->rendezvous.contiguous.immediate_byte;
 		const uint64_t * const immediate_qw = p->rendezvous.contiguous.immediate_qw;
@@ -2099,7 +2087,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV -- %s RENDEZVOUS CTS (begin)\n", is_intranode ? "SHM":"HFI");
 
-	assert(payload != NULL);
+	assert(payload != NULL || hdr->cts.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC);
 	const uint8_t u8_rx = hdr->cts.origin_rx;
 	const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->cts.origin_rx);
 
