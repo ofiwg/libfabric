@@ -640,6 +640,15 @@ void fi_opx_store_inject_and_copy_scb2_16B(volatile uint64_t scb[8],
 	local[8] = d8;
 }
 
+void fi_opx_hfi1_rx_rzv_rts_etrunc (struct fi_opx_ep *opx_ep,
+			     const union opx_hfi1_packet_hdr * const hdr,
+			     const uint8_t u8_rx,
+			     uintptr_t origin_byte_counter_vaddr,
+			     const unsigned is_intranode,
+			     const enum ofi_reliability_kind reliability,
+			     const uint32_t u32_extended_rx,
+				 const enum opx_hfi1_type hfi1_type);
+
 void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 			     const union opx_hfi1_packet_hdr * const hdr, const void * const payload,
 			     const uint8_t u8_rx, const uint64_t niov,

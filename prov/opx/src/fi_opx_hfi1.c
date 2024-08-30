@@ -1727,6 +1727,370 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 	return -FI_EAGAIN;
 }
 
+int opx_hfi1_rx_rzv_rts_send_etrunc_intranode(union fi_opx_hfi1_deferred_work *work)
+{
+	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
+
+	struct fi_opx_ep * opx_ep = params->opx_ep;
+	const uint64_t lrh_dlid = params->lrh_dlid;
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV, SHM -- RENDEZVOUS RTS ETRUNC (begin)\n");
+	uint64_t pos;
+	/* Possible SHM connections required for certain applications (i.e., DAOS)
+	 * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
+	 */
+	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep,
+			params->u32_extended_rx, params->target_hfi_unit);
+
+	if (OFI_UNLIKELY(rc)) {
+		return -FI_EAGAIN;
+	}
+
+	union opx_hfi1_packet_hdr * const tx_hdr =
+		opx_shm_tx_next(&opx_ep->tx->shm, params->target_hfi_unit, params->u8_rx, &pos,
+			opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx,
+			opx_ep->daos_info.rank_inst, &rc);
+
+	if(!tx_hdr) return rc;
+
+	/* Note that we do not set stl.hdr.lrh.pktlen here (usually lrh_dws << 32),
+	   because this is intranode and since it's a CTS packet, lrh.pktlen
+	   isn't used/needed */
+	tx_hdr->qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid;
+	tx_hdr->qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx;
+	tx_hdr->qw_9B[2] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[2];
+	tx_hdr->qw_9B[3] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[3];
+	tx_hdr->qw_9B[4] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode;
+	tx_hdr->qw_9B[5] = params->origin_byte_counter_vaddr;
+
+	opx_shm_tx_advance(&opx_ep->tx->shm, (void*)tx_hdr, pos);
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV, SHM -- RENDEZVOUS RTS ETRUNC (end)\n");
+
+	return FI_SUCCESS;
+}
+
+int opx_hfi1_rx_rzv_rts_send_etrunc_intranode_16B(union fi_opx_hfi1_deferred_work *work)
+{
+	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
+	struct fi_opx_ep * opx_ep = params->opx_ep;
+	const uint64_t lrh_dlid = params->lrh_dlid;
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+	const uint64_t lrh_dlid_16B = htons(lrh_dlid >> 16);
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV 16B, SHM -- RENDEZVOUS RTS ETRUNC (begin)\n");
+	uint64_t pos;
+	/* Possible SHM connections required for certain applications (i.e., DAOS)
+	 * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
+	 */
+	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep,
+			params->u32_extended_rx, params->target_hfi_unit);
+
+	if (OFI_UNLIKELY(rc)) {
+		return -FI_EAGAIN;
+	}
+
+	union opx_hfi1_packet_hdr * const tx_hdr =
+		opx_shm_tx_next(&opx_ep->tx->shm, params->target_hfi_unit, params->u8_rx, &pos,
+			opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx,
+			opx_ep->daos_info.rank_inst, &rc);
+
+	if(!tx_hdr) return rc;
+
+	/* Note that we do not set stl.hdr.lrh.pktlen here (usually lrh_dws << 32),
+	   because this is intranode and since it's a CTS packet, lrh.pktlen
+	   isn't used/needed */
+	tx_hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] | 
+					((uint64_t)((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B));
+	tx_hdr->qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
+					((uint64_t)((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
+	tx_hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx;
+	tx_hdr->qw_16B[3] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[3];
+	tx_hdr->qw_16B[4] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[4];
+	tx_hdr->qw_16B[5] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode;
+	tx_hdr->qw_16B[6] = params->origin_byte_counter_vaddr;
+
+	opx_shm_tx_advance(&opx_ep->tx->shm, (void*)tx_hdr, pos);
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV, SHM -- RENDEZVOUS RTS ETRUNC (end)\n");
+
+	return FI_SUCCESS;
+}
+
+int opx_hfi1_rx_rzv_rts_send_etrunc(union fi_opx_hfi1_deferred_work *work)
+{
+	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
+	struct fi_opx_ep *opx_ep = params->opx_ep;
+	const uint64_t lrh_dlid = params->lrh_dlid;
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (begin)\n");
+
+	const uint64_t pbc_dws =
+		2 + /* pbc */
+		2 + /* lrh */
+		3 + /* bth */
+		9;  /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+	const uint16_t lrh_dws = htons(pbc_dws - 1);
+	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
+
+	if (OFI_UNLIKELY(FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, 1) < 1)) {
+		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
+		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+		if (FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, 1) < 1) {
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (EAGAIN credits)\n");
+			return -FI_EAGAIN;
+		}
+	}
+
+	struct fi_opx_reliability_tx_replay *replay;
+	union fi_opx_reliability_tx_psn *psn_ptr;
+	int64_t psn;
+
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid,
+					    &opx_ep->reliability->state,
+					    params->slid,
+					    params->u8_rx,
+					    params->origin_rs,
+					    &psn_ptr,
+					    &replay,
+					    params->reliability,
+					    OPX_HFI1_TYPE);
+	if(OFI_UNLIKELY(psn == -1)) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (EAGAIN psn/replay)\n");
+		return -FI_EAGAIN;
+	}
+
+	volatile uint64_t * const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
+
+	fi_opx_store_and_copy_scb_9B(scb, &replay->scb_9B,
+		opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid,
+		opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid |
+			((uint64_t) lrh_dws << 32),
+		opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx,
+		opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn,
+		opx_ep->rx->tx.cts_9B.hdr.qw_9B[3],
+		opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode,
+		params->origin_byte_counter_vaddr, 0);
+
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
+
+	/* consume one credit */
+	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
+	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+
+	/* save the updated txe state */
+	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state,
+							    params->origin_rs,
+							    params->origin_rx,
+							    psn_ptr,
+							    replay,
+							    params->reliability,
+								OPX_HFI1_TYPE);
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (end)");
+
+	return FI_SUCCESS;
+}
+
+int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
+{
+	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
+	struct fi_opx_ep *opx_ep = params->opx_ep;
+	const uint64_t lrh_dlid = params->lrh_dlid;
+	const uint64_t lrh_dlid_16B = htons(params->lrh_dlid >> 16);
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (begin)\n");
+
+	const uint64_t pbc_dws =
+		2 + /* pbc */
+		4 + /* lrh */
+		3 + /* bth */
+		9 +  /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+		2;
+	const uint16_t lrh_qws = (pbc_dws - 2) >> 1;
+	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
+
+	// Note: Only need 1 credit here for the message truncation error case. Just
+	// the opcode and origin_byte_counter_vaddr is needed for replaying back to the
+	// sender. 
+	if (OFI_UNLIKELY(FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, 2) < 2)) {
+		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
+		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+		if (FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, 2) < 2) {
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (EAGAIN credits)\n");
+			return -FI_EAGAIN;
+		}
+	}
+
+	struct fi_opx_reliability_tx_replay *replay;
+	union fi_opx_reliability_tx_psn *psn_ptr;
+	int64_t psn;
+
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid,
+					    &opx_ep->reliability->state,
+					    params->slid,
+					    params->u8_rx,
+					    params->origin_rs,
+					    &psn_ptr,
+					    &replay,
+					    params->reliability,
+					    OPX_HFI1_TYPE);
+	if(OFI_UNLIKELY(psn == -1)) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (EAGAIN psn/replay)\n");
+		return -FI_EAGAIN;
+	}
+
+	volatile uint64_t * const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
+
+	fi_opx_store_and_copy_scb_16B(scb, &replay->scb_16B,
+		opx_ep->rx->tx.cts_16B.qw0 |
+				OPX_PBC_LEN(pbc_dws, hfi1_type) |
+				OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, OPX_HFI1_JKR),
+		opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
+				((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B)  |
+				((uint64_t) lrh_qws << 20),
+		opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
+				((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
+		opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx,
+		opx_ep->rx->tx.cts_16B.hdr.qw_16B[3] | psn,
+		opx_ep->rx->tx.cts_16B.hdr.qw_16B[4],
+		opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode,
+		params->origin_byte_counter_vaddr);
+
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
+
+	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
+	// 2nd cacheline
+	volatile uint64_t * const scb2 =
+		FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
+	
+	fi_opx_store_and_copy_qw(scb2, &replay->scb_16B.hdr.qw_16B[7], 
+		0, 0, 0, 0, 0, 0, 0, 0);
+
+	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
+	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+
+	/* save the updated txe state */
+	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state,
+							    params->origin_rs,
+							    params->origin_rx,
+							    psn_ptr,
+							    replay,
+							    params->reliability, 
+								OPX_HFI1_TYPE);
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (end)");
+
+	return FI_SUCCESS;
+}
+
+void fi_opx_hfi1_rx_rzv_rts_etrunc (struct fi_opx_ep *opx_ep,
+			     const union opx_hfi1_packet_hdr * const hdr,
+			     const uint8_t u8_rx,
+			     uintptr_t origin_byte_counter_vaddr,
+			     const unsigned is_intranode,
+			     const enum ofi_reliability_kind reliability,
+			     const uint32_t u32_extended_rx,
+				 const enum opx_hfi1_type hfi1_type)
+{
+
+	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
+	assert(work != NULL);
+	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
+	params->opx_ep = opx_ep;
+	params->work_elem.slist_entry.next = NULL;
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_intranode %u, opcode=%u\n", 
+		is_intranode, FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC);
+
+	if (is_intranode) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_intranode;
+		} else {
+			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_intranode_16B;
+		}
+		params->work_elem.work_type = OPX_WORK_TYPE_SHM;
+
+		uint32_t lid;
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))
+			lid = hdr->lrh_9B.slid;
+		else
+			lid = htons(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
+
+		if (lid == opx_ep->rx->self.uid.lid) {
+			params->target_hfi_unit = opx_ep->rx->self.hfi1_unit;
+		} else {
+			struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(lid);
+			assert(hfi_lookup);
+			params->target_hfi_unit = hfi_lookup->hfi_unit;
+		}
+	} else {
+
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc;
+		} else {
+			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_16B;
+		}
+		params->work_elem.work_type = OPX_WORK_TYPE_PIO;
+		params->target_hfi_unit = 0xFF;
+	}
+
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		params->slid = hdr->lrh_9B.slid;
+		if (hfi1_type & OPX_HFI1_WFR)
+			params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
+		else
+			params->lrh_dlid = hdr->lrh_9B.slid << 16;
+	} else {
+		params->slid = htons(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
+		params->lrh_dlid = htons(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid) << 16; // Send CTS to the SLID that sent RTS
+	}
+
+	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid, hfi1_type);
+	params->origin_rx = hdr->rendezvous.origin_rx;
+	params->origin_rs = hdr->rendezvous.origin_rs;
+	params->u8_rx = u8_rx;
+	params->u32_extended_rx = u32_extended_rx;
+	params->origin_byte_counter_vaddr = origin_byte_counter_vaddr;
+	params->is_intranode = is_intranode;
+	params->reliability = reliability;
+	params->opcode = FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC;
+
+	int rc = params->work_elem.work_fn(work);
+	if(rc == FI_SUCCESS) {
+		OPX_BUF_FREE(work);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_SUCCESS\n");
+		return;
+	}
+	assert(rc == -FI_EAGAIN);
+	/* Try again later*/
+	assert(work->work_elem.slist_entry.next == NULL);
+	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
+}
+
 void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 			     const union opx_hfi1_packet_hdr * const hdr,
 			     const void * const payload,
