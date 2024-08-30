@@ -58,7 +58,7 @@ if HAVE_HMEM
 LPP_REGRESSION_SRCS += prov/lpp/src/hmem_util.c \
                        prov/lpp/src/hmem_cuda.c \
                        prov/lpp/src/hmem_rocm.c \
-                       prov/lpp/src/hmem_htil.h
+                       prov/lpp/src/hmem_util.h
 AM_CFLAGS += -DUSE_HMEM
 endif
 
