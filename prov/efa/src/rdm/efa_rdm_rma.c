@@ -117,7 +117,8 @@ ssize_t efa_rdm_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm
 ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
 	bool use_device_read = false;
-	ssize_t ret;
+	int use_p2p;
+	ssize_t ret, err;
 
 	/*
 	 * A handshake is required to choose the correct protocol (whether to use device read).
@@ -127,7 +128,14 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 
-	if (efa_rdm_interop_rdma_read(ep, txe->peer)) {
+	/* Check p2p support. Cannot use device read when p2p is not available. */
+	err = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
+	if (err < 0)
+		return err;
+
+	use_p2p = err;
+
+	if (use_p2p && efa_rdm_interop_rdma_read(ep, txe->peer)) {
 		/* RDMA read interoperability check also checks domain.use_device_rdma,
 		 * so we do not check it here
 		 */
@@ -137,11 +145,6 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		return -FI_EOPNOTSUPP;
 	}
 
-	/*
-	 * Not going to check efa_ep->hmem_p2p_opt here, if the remote side
-	 * gave us a valid MR we should just honor the request even if p2p is
-	 * disabled.
-	 */
 	if (use_device_read) {
 		ret = efa_rdm_ope_prepare_to_post_read(txe);
 		if (ret)
@@ -351,7 +354,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
 	ssize_t err;
 	bool delivery_complete_requested;
-	int ctrl_type, iface;
+	int ctrl_type, iface, use_p2p;
 	size_t max_eager_rtw_data_size;
 
 	/*
@@ -388,9 +391,16 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_EAGER_RTW_PKT);
 	}
 
+	err = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
+	if (err < 0)
+		return err;
+
+	use_p2p = err;
+
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
 
-	if (txe->total_len >= efa_rdm_ep_domain(ep)->hmem_info[iface].min_read_write_size &&
+	if (use_p2p && 
+		txe->total_len >= efa_rdm_ep_domain(ep)->hmem_info[iface].min_read_write_size &&
 		efa_rdm_interop_rdma_read(ep, txe->peer) &&
 		(txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(ep)))) {
 		err = efa_rdm_ope_post_send(txe, EFA_RDM_LONGREAD_RTW_PKT);
