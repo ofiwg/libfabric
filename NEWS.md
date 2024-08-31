@@ -11,111 +11,111 @@ v2.0.0 alpha, Fri Aug 30, 2024
 
 ## Core
 
-hmem/ze: Fix mistmatched library name in an error message
-Add FI_PEER as a capability
-Add missing FI_AV_USER_ID to cap tostr
-Update and clarify peer SRX API flow
-Prefix public xpmem symbols with ofi
-Add rbmap foreach node utility function
-ofi_mem: Add release bufpool validity check
-hmem/rocr: Don't attempt to get device info when pointer type is unknown.
-hmem: Added handle field to close_handle
-Introduce new atomic datatypes and operation
-Define new tag formats
-Add new peer group feature
-Add fi_fabric2() API
-Deprecate old MR modes
-Deprecate FI_WAIT_MUTEX_COND
-Deprecate wait set and poll set
-Require using libfabric APIs to allocate fi_info structures
-Cleanup FI_ORDER flags
-Deprecate support for async memory registration
-Remove total_buffered_recv
-Deprecate comp_order attribute
-Simplify progress definition
-Simplify threading models
-Move FI_BUFFERED_RECV to internal flag
-Simplify the AV API
-Remove internally used definitions from public headers
-hmem/cuda: Modify the logging for nvml dlopen
-hmem/rocr: Fix dmabuf for amd gpu implementation
+- hmem/ze: Fix mistmatched library name in an error message
+- Add FI_PEER as a capability
+- Add missing FI_AV_USER_ID to cap tostr
+- Update and clarify peer SRX API flow
+- Prefix public xpmem symbols with ofi
+- Add rbmap foreach node utility function
+- ofi_mem: Add release bufpool validity check
+- hmem/rocr: Don't attempt to get device info when pointer type is unknown.
+- hmem: Added handle field to close_handle
+- Introduce new atomic datatypes and operation
+- Define new tag formats
+- Add new peer group feature
+- Add fi_fabric2() API
+- Deprecate old MR modes
+- Deprecate FI_WAIT_MUTEX_COND
+- Deprecate wait set and poll set
+- Require using libfabric APIs to allocate fi_info structures
+- Cleanup FI_ORDER flags
+- Deprecate support for async memory registration
+- Remove total_buffered_recv
+- Deprecate comp_order attribute
+- Simplify progress definition
+- Simplify threading models
+- Move FI_BUFFERED_RECV to internal flag
+- Simplify the AV API
+- Remove internally used definitions from public headers
+- hmem/cuda: Modify the logging for nvml dlopen
+- hmem/rocr: Fix dmabuf for amd gpu implementation
 
 ## CXI
 
-FI_PATH_MAX is removed in 2.0 API
+- FI_PATH_MAX is removed in 2.0 API
 
 ## EFA
 
-Zero the cq entry array in dgram ep progress
-Remove unit test for libfabric 1.1 API
-Replace deprecated MR modes
-Remove deprecated FI_ORDER flag
-Update EP's `inject_size` in zero-copy mode
-Add support for `FI_OPT_INJECT_RMA_SIZE`
-Query for shm's FI_PEER capability
-Require FI_MR_LOCAL for zero-copy receive
-Correctly handle fallback longcts-rtm send completion
-Adjust the logging for pke exhaustion
-Fix a memory leak in local read
-Use dlist_foreach_container_safe to iterate progressed ep list
-refactor hmem interface initialization
-Fix a memory leak in efa_rdm_ep_post_handshake
-disable zero-copy receive if p2p is not supported
-Update data types for various IOV operations
-Require shm to be disabled for using zero-copy recv
-Register user recv buffer for zero-copy receive mode
-Make fi_cancel return EOPNOTSUPP for zero copy receive mode.
-Handle receive window overflow
-Introduce FI_EFA_IFACE to restrict visible NICs
-Allow disabling unsolicited write recv via env
+- Zero the cq entry array in dgram ep progress
+- Remove unit test for libfabric 1.1 API
+- Replace deprecated MR modes
+- Remove deprecated FI_ORDER flag
+- Update EP's `inject_size` in zero-copy mode
+- Add support for `FI_OPT_INJECT_RMA_SIZE`
+- Query for shm's FI_PEER capability
+- Require FI_MR_LOCAL for zero-copy receive
+- Correctly handle fallback longcts-rtm send completion
+- Adjust the logging for pke exhaustion
+- Fix a memory leak in local read
+- Use dlist_foreach_container_safe to iterate progressed ep list
+- refactor hmem interface initialization
+- Fix a memory leak in efa_rdm_ep_post_handshake
+- disable zero-copy receive if p2p is not supported
+- Update data types for various IOV operations
+- Require shm to be disabled for using zero-copy recv
+- Register user recv buffer for zero-copy receive mode
+- Make fi_cancel return EOPNOTSUPP for zero copy receive mode.
+- Handle receive window overflow
+- Introduce FI_EFA_IFACE to restrict visible NICs
+- Allow disabling unsolicited write recv via env
 
 ## LPP
 
-Initial addition
+- Initial addition
 
 ## PSM2
 
-Fix incorrect unlock function
+- Fix incorrect unlock function
 
 ## PSM3
 
-Fix incorrect unlock function
+- Fix incorrect unlock function
 
 ## SHM
 
-Add FI_PEER capability
-Refactor ze ipc path to use pidfd
+- Add FI_PEER capability
+- Refactor ze ipc path to use pidfd
 
 ## TCP
 
-Introduce sub-domains to support FI_THREAD_COMPLETION
+- Introduce sub-domains to support FI_THREAD_COMPLETION
 
 ## UCX
 
-Support FI_OPT_CUDA_API_PERMITTED in fi_setopt()
-Fix error code for fi_setopt()/fi_getopt()
+- Support FI_OPT_CUDA_API_PERMITTED in fi_setopt()
+- Fix error code for fi_setopt()/fi_getopt()
 
 ## Util
 
-Initialize ROCR name in memory monitor struct
-Support specific placement of addr into the av
+- Initialize ROCR name in memory monitor struct
+- Support specific placement of addr into the av
 
 ## Verbs
 
-Fix resource leak in error handling path
-Replace __BITS_PER_LONG with LONG_WIDTH
-Fix issue while displaying addresses with fi_info -a <addr_format>
+- Fix resource leak in error handling path
+- Replace __BITS_PER_LONG with LONG_WIDTH
+- Fix issue while displaying addresses with fi_info -a <addr_format>
 
 ## Fabtests
 
-Add LPP specific fabtests
-Add `inject_size` to `ft_opts`
-Add pytests for FI_MORE Test fi_rma_bw and fi_rdm_tagged_bw with flag FI_MORE.
-Use fi_writemsg to test rma write/writedata with FI_MORE
-Use fi_sendmsg to test rdm_tagged_bw with FI_MORE
-Add option for running tests with FI_MORE
-synapse: Remove dependency of scal
-Pass `memory_type` to client server test
+- Add LPP specific fabtests
+- Add `inject_size` to `ft_opts`
+- Add pytests for FI_MORE Test fi_rma_bw and fi_rdm_tagged_bw with flag FI_MORE.
+- Use fi_writemsg to test rma write/writedata with FI_MORE
+- Use fi_sendmsg to test rdm_tagged_bw with FI_MORE
+- Add option for running tests with FI_MORE
+- synapse: Remove dependency of scal
+- Pass `memory_type` to client server test
 
 
 v1.22.0, Fri Jul 26, 2024
