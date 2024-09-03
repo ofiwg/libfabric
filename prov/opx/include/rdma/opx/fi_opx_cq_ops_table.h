@@ -60,26 +60,23 @@ fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags
 
 	if (IS_PROGRESS_MANUAL(opx_cq->domain)) {
 
-		struct fi_opx_context_ext * ext =
-			 (struct fi_opx_context_ext *) opx_cq->err.head;
+		struct opx_context *context =
+			 (struct opx_context *) opx_cq->err.head;
 
-		if ((ext == NULL) || (ext->opx_context.byte_counter != 0)) {
+		if ((context == NULL) || (context->byte_counter != 0)) {
 			/* perhaps an in-progress truncated rendezvous receive? */
 			errno = FI_EAGAIN;
 			return -errno;
 		}
-
-		assert(ext->opx_context.flags & FI_OPX_CQ_CONTEXT_EXT);	/* DEBUG */
 
 		const enum fi_threading threading = opx_cq->domain->threading;
 		const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 		fi_opx_lock_if_required(&opx_cq->lock, lock_required);
 		ofi_cq_err_memcpy(opx_cq->domain->fabric->fabric_fid.api_version,
-				  buf, &ext->err_entry);
+				  buf, &context->err_entry);
 		slist_remove_head((struct slist *)&opx_cq->err);
-		OPX_BUF_FREE(ext);
-		ext = NULL;
+		OPX_BUF_FREE(context);
 		fi_opx_unlock_if_required(&opx_cq->lock, lock_required);
 
 	} else {

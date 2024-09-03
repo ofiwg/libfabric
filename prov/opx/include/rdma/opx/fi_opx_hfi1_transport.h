@@ -75,8 +75,8 @@
 
 // Function for performing FI_INJECT_COMPLETIONs.
 __OPX_FORCE_INLINE__
-void fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep,
-				void *context,
+ssize_t fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep,
+				void *user_context,
 				const size_t len,
 				const int lock_required,
 				const uint64_t tag,
@@ -91,20 +91,28 @@ void fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep,
 
 	/* initialize the completion entry */
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	assert(context);
-	assert(((uintptr_t)context & 0x07ull) == 0);	/* must be 8 byte aligned */
 	assert((caps & (FI_TAGGED | FI_MSG)) != (FI_TAGGED | FI_MSG));
-	union fi_opx_context * opx_context = (union fi_opx_context *)context;
-	opx_context->flags =  FI_SEND | (caps & (FI_TAGGED | FI_MSG));
-	opx_context->len = len;
-	opx_context->buf = NULL;		/* receive data buffer */
-	opx_context->byte_counter = 0;
-	opx_context->tag = tag;
-	opx_context->next = NULL;
+
+	struct opx_context *context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+	if (OFI_UNLIKELY(context == NULL)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		return -FI_ENOMEM;
+	}
+
+	context->err_entry.err = 0;
+	context->err_entry.op_context = user_context;
+	context->flags =  FI_SEND | (caps & (FI_TAGGED | FI_MSG));
+	context->len = len;
+	context->buf = NULL;		/* receive data buffer */
+	context->byte_counter = 0;
+	context->tag = tag;
+	context->next = NULL;
 
 	if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== TX CQ COMPLETION QUEUED\n");
-	slist_insert_tail((struct slist_entry *) opx_context, opx_ep->tx->cq_completed_ptr);
+	slist_insert_tail((struct slist_entry *) context, opx_ep->tx->cq_completed_ptr);
+
+	return FI_SUCCESS;
 }
 
 // faster than memcpy() for this amount of data.
@@ -653,7 +661,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 			     const union opx_hfi1_packet_hdr * const hdr, const void * const payload,
 			     const uint8_t u8_rx, const uint64_t niov,
 			     uintptr_t origin_byte_counter_vaddr,
-			     union fi_opx_context *const target_context,
+			     struct opx_context *const target_context,
 			     const uintptr_t dst_vaddr,
 			     const enum fi_hmem_iface dst_iface,
 			     const uint64_t dst_device,
@@ -1398,14 +1406,13 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_intranode(struct fid_ep *ep,
 	if (xfer_bytes_tail) {
 		ssize_t tail_len = xfer_bytes_tail;
 		remain = total_len - tail_len;
-		while (false ==
-		       fi_opx_hfi1_fill_from_iov8(
-			   iov_ptr, /* In:  iovec array */
-			   *niov_ptr, /* In:  total iovecs */
-			   buf, /* In:  target buffer to fill */
-			   &tail_len, /* In/Out:  buffer length to fill */
-			   &iov_idx, /* In/Out:  start index, returns end */
-			   &iov_base_offset)) { /* In/Out:  start offset, returns offset */
+		while (false == fi_opx_hfi1_fill_from_iov8(
+					iov_ptr, /* In:  iovec array */
+					*niov_ptr, /* In:  total iovecs */
+					buf, /* In:  target buffer to fill */
+					&tail_len, /* In/Out:  buffer length to fill */
+					&iov_idx, /* In/Out:  start index, returns end */
+					&iov_base_offset)) { /* In/Out:  start offset, returns offset */
 			// copy until done;
 		}
 		assert(tail_len == 0);
@@ -1416,8 +1423,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_intranode(struct fid_ep *ep,
 		(union fi_opx_hfi1_packet_payload *)(hdr + 1);
 
 	buf = payload->byte;
-	while (false ==
-	       fi_opx_hfi1_fill_from_iov8(
+	while (false == fi_opx_hfi1_fill_from_iov8(
 		   iov_ptr, /* In:  iovec array */
 		   *niov_ptr, /* In:  total iovecs */
 		   buf, /* In:  target buffer to fill */
@@ -1431,15 +1437,17 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_intranode(struct fid_ep *ep,
 	fi_opx_shm_poll_many(&opx_ep->ep_fid, 0, hfi1_type);
 
 	if (OFI_LIKELY(do_cq_completion)) {
-		fi_opx_ep_tx_cq_inject_completion(ep, context, total_len,
-						  lock_required, tag, caps);
+		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, total_len, lock_required, tag, caps);
+	} else {
+		rc = FI_SUCCESS;
 	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-EAGER-SHM");
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		 "===================================== SENDV, SHM -- EAGER (end)\n");
-	return FI_SUCCESS;
+	return rc;
 }
+
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t niov,
 				 size_t total_len, void *desc, fi_addr_t dest_addr, uint64_t tag,
@@ -1558,28 +1566,27 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 
 	OPX_NO_16B_SUPPORT(hfi1_type);
 
-	replay->scb_9B.qw0       = opx_ep->tx->send_9B.qw0 |
-		                OPX_PBC_LEN(pbc_dws, hfi1_type) |
-		                OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) |
-		                OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type);
+	replay->scb_9B.qw0 = opx_ep->tx->send_9B.qw0 |
+			     OPX_PBC_LEN(pbc_dws, hfi1_type) |
+			     OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) |
+			     OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type);
 	replay->scb_9B.hdr.qw_9B[0] = opx_ep->tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 	replay->scb_9B.hdr.qw_9B[1] = opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
-		((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER :
-		 (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER);
+		((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER
+				 : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER);
 	replay->scb_9B.hdr.qw_9B[2] = opx_ep->tx->send_9B.hdr.qw_9B[2] | psn;
 	replay->scb_9B.hdr.qw_9B[3] = opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32);
 	replay->scb_9B.hdr.qw_9B[4] = opx_ep->tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48);
 	if (xfer_bytes_tail) {
 		ssize_t tail_len = xfer_bytes_tail;
 		remain = total_len - tail_len;
-		while (false ==
-		       fi_opx_hfi1_fill_from_iov8(
-			       iov_ptr, /* In:  iovec array */
-			       *niov_ptr, /* In:  total iovecs */
-			       &replay->scb_9B.hdr.qw_9B[5],   /* In:  target buffer to fill */
-			       &tail_len, /* In/Out:  buffer length to fill */
-			       &iov_idx, /* In/Out:  start index, returns end */
-			       &iov_base_offset)) { /* In/Out:  start offset, returns offset */
+		while (false == fi_opx_hfi1_fill_from_iov8(
+					iov_ptr, /* In:  iovec array */
+					*niov_ptr, /* In:  total iovecs */
+					&replay->scb_9B.hdr.qw_9B[5],   /* In:  target buffer to fill */
+					&tail_len, /* In/Out:  buffer length to fill */
+					&iov_idx, /* In/Out:  start index, returns end */
+					&iov_base_offset)) { /* In/Out:  start offset, returns offset */
 			// copy until done;
 		}
 		assert(tail_len == 0);
@@ -1588,14 +1595,13 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 
 	remain = total_len - xfer_bytes_tail;
 	uint64_t *payload = replay->payload;
-	while (false ==
-		   fi_opx_hfi1_fill_from_iov8(
-			   iov_ptr, /* In:  iovec array */
-			   *niov_ptr, /* In:  total iovecs */
-			   payload, /* In:  target buffer to fill */
-			   &remain, /* In/Out:  buffer length to fill */
-			   &iov_idx, /* In/Out:  start index, returns end */
-			   &iov_base_offset)) { /* In/Out:  start offset, returns offset */
+	while (false == fi_opx_hfi1_fill_from_iov8(
+				iov_ptr, /* In:  iovec array */
+				*niov_ptr, /* In:  total iovecs */
+				payload, /* In:  target buffer to fill */
+				&remain, /* In/Out:  buffer length to fill */
+				&iov_idx, /* In/Out:  start index, returns end */
+				&iov_base_offset)) { /* In/Out:  start offset, returns offset */
 		// copy until done;
 	}
 
@@ -1603,23 +1609,23 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 		&opx_ep->reliability->state, addr.reliability_rx,
 		dest_rx, psn_ptr, replay, reliability, hfi1_type);
 
-	if (OFI_LIKELY(do_cq_completion)) {
-		fi_opx_ep_tx_cq_inject_completion(ep, context, total_len,
-			lock_required, tag, caps);
-	}
-
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+
+	ssize_t rc;
+	if (OFI_LIKELY(do_cq_completion)) {
+		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, total_len, lock_required, tag, caps);
+	} else {
+		rc = FI_SUCCESS;
+	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-EAGER-HFI");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- EAGER (end)\n");
 
-
-	return FI_SUCCESS;
+	return rc;
 }
-
 
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_sendv_egr_intranode_16B(struct fid_ep *ep,
@@ -1744,16 +1750,16 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_intranode_16B(struct fid_ep *ep,
 	fi_opx_shm_poll_many(&opx_ep->ep_fid, 0, hfi1_type);
 
 	if (OFI_LIKELY(do_cq_completion)) {
-		fi_opx_ep_tx_cq_inject_completion(ep, context, total_len,
-						  lock_required, tag, caps);
+		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, total_len, lock_required, tag, caps);
+	} else {
+		rc = FI_SUCCESS;
 	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-EAGER-SHM");
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		 "===================================== SENDV 16B, SHM -- EAGER (end)\n");
-	return FI_SUCCESS;
+	return rc;
 }
-
 
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, size_t niov,
@@ -1924,23 +1930,23 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov,
 		&opx_ep->reliability->state, addr.reliability_rx,
 		dest_rx, psn_ptr, replay, reliability, hfi1_type);
 
-	if (OFI_LIKELY(do_cq_completion)) {
-		fi_opx_ep_tx_cq_inject_completion(ep, context, total_len,
-			lock_required, tag, caps);
-	}
-
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+
+	ssize_t rc;
+	if (OFI_LIKELY(do_cq_completion)) {
+		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, total_len, lock_required, tag, caps);
+	} else {
+		rc = FI_SUCCESS;
+	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-EAGER-HFI");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV 16B, HFI -- EAGER (end)\n");
 
-
-	return FI_SUCCESS;
+	return rc;
 }
-
 
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_sendv_egr_select(struct fid_ep *ep,
@@ -2094,14 +2100,15 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 	opx_shm_tx_advance(&opx_ep->tx->shm, (void*)hdr, pos);
 
 	if (do_cq_completion) {
-		fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required,
-			tag, caps);
+		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required, tag, caps);
+	} else {
+		rc = FI_SUCCESS;
 	}
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-EAGER-SHM");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, SHM -- EAGER (end)\n");
 
-	return FI_SUCCESS;
+	return rc;
 
 }
 
@@ -2205,14 +2212,15 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode_16B(struct fid_ep *ep,
 	opx_shm_tx_advance(&opx_ep->tx->shm, (void*)hdr, pos);
 
 	if (do_cq_completion) {
-		fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required,
-			tag, caps);
+		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required, tag, caps);
+	} else {
+		rc = FI_SUCCESS;
 	}
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-EAGER-SHM");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND 16B, SHM -- EAGER (end)\n");
 
-	return FI_SUCCESS;
+	return rc;
 
 }
 
@@ -2363,8 +2371,6 @@ ssize_t fi_opx_hfi1_tx_egr_store_packet_hdr_and_payload(struct fi_opx_ep *opx_ep
 
 }
 
-
-
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_egr_store_full_payload_blocks(struct fi_opx_ep *opx_ep,
 					union fi_opx_hfi1_pio_state *pio_state,
@@ -2465,7 +2471,6 @@ ssize_t fi_opx_hfi1_tx_egr_store_payload_tail(struct fi_opx_ep *opx_ep,
 
 	return 1;	/* Consumed 1 credit */
 }
-
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_tx_send_egr_write_replay_data(struct fi_opx_ep *opx_ep,
@@ -2632,16 +2637,18 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr,
 					xfer_bytes_tail, local_temp, buf, payload_qws_total, reliability, hfi1_type);
 
+	ssize_t rc;
 	if (OFI_LIKELY(do_cq_completion)) {
-		fi_opx_ep_tx_cq_inject_completion(ep, context, len,
-			lock_required, tag, caps);
+		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required, tag, caps);
+	} else {
+		rc = FI_SUCCESS;
 	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-EAGER-HFI");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- EAGER (end)\n");
 
-	return FI_SUCCESS;
+	return rc;
 }
 
 __OPX_FORCE_INLINE__
@@ -2802,16 +2809,18 @@ ssize_t fi_opx_hfi1_tx_send_egr_16B(struct fid_ep *ep,
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr,
 					xfer_bytes_tail, local_temp, buf, payload_qws_total, reliability, hfi1_type);
 
+	ssize_t rc;
 	if (OFI_LIKELY(do_cq_completion)) {
-		fi_opx_ep_tx_cq_inject_completion(ep, context, len,
-			lock_required, tag, caps);
+		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required, tag, caps);
+	} else {
+		rc = FI_SUCCESS;
 	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-EAGER-HFI");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND 16B, HFI -- EAGER (end)\n");
 
-	return FI_SUCCESS;
+	return rc;
 }
 
 __OPX_FORCE_INLINE__
@@ -3770,33 +3779,36 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep,
 
 ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_t niov,
 				size_t total_len, void *desc, fi_addr_t dest_addr, uint64_t tag,
-				void *context, const uint32_t data, int lock_required,
+				void *user_context, const uint32_t data, int lock_required,
 				const unsigned override_flags, uint64_t tx_op_flags,
-				const uint64_t dest_rx, const uintptr_t origin_byte_counter_vaddr,
-				uint64_t *origin_byte_counter_value, const uint64_t caps,
+				const uint64_t dest_rx,
+				const uint64_t caps,
 				const enum ofi_reliability_kind reliability,
+				const uint64_t do_cq_completion,
 				const enum fi_hmem_iface hmem_iface,
 				const uint64_t hmem_device,
 				const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-				fi_addr_t dest_addr, uint64_t tag, void *context,
+				fi_addr_t dest_addr, uint64_t tag, void *user_context,
 				const uint32_t data, int lock_required,
 				const unsigned override_flags, uint64_t tx_op_flags,
-				const uint64_t dest_rx, const uintptr_t origin_byte_counter_vaddr,
-				uint64_t *origin_byte_counter_value, const uint64_t caps,
+				const uint64_t dest_rx,
+				const uint64_t caps,
 				const enum ofi_reliability_kind reliability,
+				const uint64_t do_cq_completion,
 				const enum fi_hmem_iface hmem_iface,
 				const uint64_t hmem_device,
 				const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-				fi_addr_t dest_addr, uint64_t tag, void *context,
+				fi_addr_t dest_addr, uint64_t tag, void *user_context,
 				const uint32_t data, int lock_required,
 				const unsigned override_flags, uint64_t tx_op_flags,
-				const uint64_t dest_rx, const uintptr_t origin_byte_counter_vaddr,
-				uint64_t *origin_byte_counter_value, const uint64_t caps,
+				const uint64_t dest_rx,
+				const uint64_t caps,
 				const enum ofi_reliability_kind reliability,
+				const uint64_t do_cq_completion,
 				const enum fi_hmem_iface hmem_iface,
 				const uint64_t hmem_device,
 				const enum opx_hfi1_type hfi1_type);
@@ -3806,9 +3818,10 @@ ssize_t fi_opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_
 					fi_addr_t dest_addr, uint64_t tag, void *context,
 					const uint32_t data, int lock_required,
 					const unsigned override_flags, uint64_t tx_op_flags,
-					const uint64_t dest_rx, const uintptr_t origin_byte_counter_vaddr,
-					uint64_t *origin_byte_counter_value, const uint64_t caps,
+					const uint64_t dest_rx,
+					const uint64_t caps,
 					const enum ofi_reliability_kind reliability,
+					const uint64_t do_cq_completion,
 					const enum fi_hmem_iface hmem_iface,
 					const uint64_t hmem_device,
 					const enum opx_hfi1_type hfi1_type)
@@ -3816,21 +3829,18 @@ ssize_t fi_opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_
 	if (hfi1_type & OPX_HFI1_WFR) {
 		return fi_opx_hfi1_tx_send_rzv(ep, buf, len, desc, dest_addr, tag, context, data,
 				    lock_required, override_flags, tx_op_flags, dest_rx,
-				    origin_byte_counter_vaddr,
-				    origin_byte_counter_value,
-				    caps, reliability, hmem_iface, hmem_device, OPX_HFI1_WFR);
+				    caps, reliability, do_cq_completion, hmem_iface,
+				    hmem_device, OPX_HFI1_WFR);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		return fi_opx_hfi1_tx_send_rzv_16B(ep, buf, len, desc, dest_addr, tag, context, data,
 				    lock_required, override_flags, tx_op_flags, dest_rx,
-				    origin_byte_counter_vaddr,
-				    origin_byte_counter_value,
-				    caps, reliability, hmem_iface, hmem_device, OPX_HFI1_JKR);
+				    caps, reliability, do_cq_completion, hmem_iface,
+				    hmem_device, OPX_HFI1_JKR);
 	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
 		return fi_opx_hfi1_tx_send_rzv(ep, buf, len, desc, dest_addr, tag, context, data,
 				    lock_required, override_flags, tx_op_flags, dest_rx,
-				    origin_byte_counter_vaddr,
-				    origin_byte_counter_value,
-				    caps, reliability, hmem_iface, hmem_device, OPX_HFI1_JKR_9B);
+				    caps, reliability, do_cq_completion, hmem_iface,
+				    hmem_device, OPX_HFI1_JKR_9B);
 	}
 	abort();
 	return (ssize_t)-1L;

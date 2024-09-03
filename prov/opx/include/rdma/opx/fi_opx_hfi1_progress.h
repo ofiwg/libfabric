@@ -359,10 +359,10 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 			       const int lock_required,
 			       const enum ofi_reliability_kind reliability,
 			       const uint8_t origin_rx,
-				   const uint64_t rhf,
-				   const enum opx_hfi1_type hfi1_type,
-				   const uint64_t slid,
-				   const uint16_t pktlen)
+			       const uint64_t rhf,
+			       const enum opx_hfi1_type hfi1_type,
+			       const uint64_t slid,
+			       const uint16_t pktlen)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "================ received a packet from the fabric\n");
@@ -374,8 +374,8 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 						    FI_OPX_HFI_BTH_OPCODE_TAG_INJECT,
 						    origin_rx,
 						    OPX_INTRANODE_FALSE,
-						    lock_required, reliability, 
-							hfi1_type, slid);
+						    lock_required, reliability,
+						    hfi1_type, slid);
 		} else if (opcode > FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
 			/* all other "tag" packets */
 			fi_opx_ep_rx_process_header_tag(&opx_ep->ep_fid, hdr, NULL, 0, opcode,
@@ -402,7 +402,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 		uint16_t lrh_pktlen_le;
 		size_t total_bytes_to_copy;
 		size_t payload_bytes_to_copy;
-		
+
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			lrh_pktlen_le = ntohs(pktlen);
 			total_bytes_to_copy = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
@@ -522,8 +522,10 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 	 */
 	if (OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type)) {
 		const uint32_t rhf_msb = rhf_rcvd >> 32;
+#ifdef OPX_JKR_DEBUG
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "OPX_RHF_SEQ_MATCH = %d rhf_rcvd = %#lx rhf_seq = %#lx\n",
-       			     OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type), rhf_rcvd, rhf_seq);
+			OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type), rhf_rcvd, rhf_seq);
+#endif
 
 		const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
@@ -566,7 +568,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			slid = htons((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid)); /* BE for lower layers */
 			pktlen = (uint16_t) hdr->lrh_16B.pktlen; /* pass it down unchanged. lower layers handle BE/LE */
 			dlid = htons(((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid))); /* BE for lower layers */
-		}        
+		}
 
 
 		if (OFI_UNLIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_UD)) {
@@ -575,7 +577,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			 * process "unreliable datagram" packets first - before all the
 			 * software reliability protocol checks.
 			 */
-			return fi_opx_hfi1_handle_ud_packet(opx_ep, hdr, rhf_seq, hdrq_offset, rhf_rcvd, 
+			return fi_opx_hfi1_handle_ud_packet(opx_ep, hdr, rhf_seq, hdrq_offset, rhf_rcvd,
 						slid, dlid, pktlen, hfi1_type);
 		}
 
@@ -596,7 +598,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 		}
 
 		fi_opx_hfi1_handle_packet(opx_ep, opcode, hdr, rhf_seq,
-					  hdrq_offset, lock_required, reliability, origin_rx, rhf_rcvd, 
+					  hdrq_offset, lock_required, reliability, origin_rx, rhf_rcvd,
 					  hfi1_type, slid, pktlen);
 		return 1; /* one packet was processed */
 	}
@@ -631,7 +633,7 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 				dlid = hdr->lrh_9B.dlid;
 			} else {
 				dlid = htons((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid));
-			} 
+			}
 
 			assert(dlid == opx_ep->rx->self.uid.lid);
 			assert(hdr->bth.rx == opx_ep->rx->self.hfi1_rx ||
@@ -718,7 +720,7 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 
 			/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 			uint16_t lrh_pktlen_le;
-			size_t total_bytes_to_copy;	
+			size_t total_bytes_to_copy;
 			size_t payload_bytes_to_copy;
 
 			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
