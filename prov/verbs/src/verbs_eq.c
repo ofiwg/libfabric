@@ -893,6 +893,9 @@ vrb_eq_addr_resolved_event(struct vrb_ep *ep)
 		/* Allow shared XRC INI QP not controlled by RDMA CM
 		 * to share same post functions as RC QP. */
 		ep->ibv_qp = ep->id->qp;
+
+		if (vrb_rdma_set_tos(ep->id))
+			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "vrb_rdma_set_tos");
 	}
 
 	assert(ep->ibv_qp);

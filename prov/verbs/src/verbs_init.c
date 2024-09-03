@@ -45,6 +45,7 @@ static const char *local_node = "localhost";
 #define VERBS_DEFAULT_MIN_RNR_TIMER 12
 
 struct vrb_gl_data vrb_gl_data = {
+	.tos			= VERBS_TOS_UNSET,
 	.def_tx_size		= 384,
 	.def_rx_size		= 384,
 	.def_tx_iov_limit	= 4,
@@ -637,6 +638,14 @@ static int vrb_get_param_str(const char *param_name,
 int vrb_read_params(void)
 {
 	/* Common parameters */
+	if (vrb_get_param_int("tos", "RDMA CM ToS value. If unset or set to -1, then "
+			      "the ToS will not be explicitly set and the system "
+			      "default will be used. Valid range is -1 through 255.",
+			      &vrb_gl_data.tos) ||
+	    (vrb_gl_data.tos < -1 || vrb_gl_data.tos > 255)) {
+		VRB_WARN(FI_LOG_CORE, "Invalid value of ToS\n");
+		return -FI_EINVAL;
+	}
 	if (vrb_get_param_int("tx_size", "Default maximum tx context size",
 			      &vrb_gl_data.def_tx_size) ||
 	    (vrb_gl_data.def_tx_size < 0)) {

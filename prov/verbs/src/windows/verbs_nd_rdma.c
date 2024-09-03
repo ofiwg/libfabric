@@ -240,6 +240,13 @@ int rdma_destroy_id(struct rdma_cm_id *id)
 	return 0;
 }
 
+int rdma_set_option(struct rdma_cm_id *id, int level, int optname,
+		    void *optval, size_t optlen)
+{
+	errno = ENOSYS;
+	return -1;
+}
+
 int rdma_migrate_id(struct rdma_cm_id *id, struct rdma_event_channel *channel)
 {
 	struct nd_cm_id *id_nd;

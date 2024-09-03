@@ -67,6 +67,10 @@ static int vrb_create_ini_qp(struct vrb_xrc_ep *ep)
 			   "XRC INI QP rdma_create_qp_ex failed %d\n", -ret);
 		return ret;
 	}
+
+	if (vrb_rdma_set_tos(ep->base_ep.id))
+		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "vrb_rdma_set_tos");
+
 	return FI_SUCCESS;
 #else /* VERBS_HAVE_XRC */
 	return -FI_ENOSYS;
@@ -399,6 +403,9 @@ int vrb_ep_create_tgt_qp(struct vrb_xrc_ep *ep, uint32_t tgt_qpn)
 		return ret;
 	}
 	ep->tgt_ibv_qp = ep->tgt_id->qp;
+
+	if (vrb_rdma_set_tos(ep->tgt_id))
+		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "vrb_rdma_set_tos");
 
 	return FI_SUCCESS;
 #else /* VERBS_HAVE_XRC */
