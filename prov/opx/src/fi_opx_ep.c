@@ -57,8 +57,8 @@
 #include "rdma/opx/fi_opx_fabric.h"
 
 #define FI_OPX_EP_RX_UEPKT_BLOCKSIZE (256)
-#define FI_OPX_EP_RX_CTX_EXT_BLOCKSIZE (2048)
 #define FI_OPX_VER_CHECK_BUF_LEN (512)
+#define OPX_EP_RX_CTX_BLOCKSIZE (2048)
 #define OPX_MODINFO_PATH "/sbin/modinfo"
 #define OPX_MODINFO_DRV_VERS OPX_MODINFO_PATH " hfi1 -F version"
 #define OPX_MODINFO_SRC_VERS OPX_MODINFO_PATH " hfi1 -F srcversion"
@@ -548,6 +548,31 @@ static void fi_opx_unbind_cq_ep(struct fi_opx_cq *cq, struct fi_opx_ep *ep)
 
 }
 
+__OPX_FORCE_INLINE__
+int opx_ep_free_match_queue_list_contexts(struct slist *list)
+{
+	int count = 0;
+
+	while (!slist_empty(list)) {
+		struct opx_context *context = (struct opx_context *) slist_remove_head(list);
+		OPX_BUF_FREE(context);
+		++count;
+	}
+
+	return count;
+}
+
+__OPX_FORCE_INLINE__
+void opx_ep_free_match_queued_contexts(struct fi_opx_ep *opx_ep)
+{
+	int tag_count = opx_ep_free_match_queue_list_contexts(&opx_ep->rx->queue[0].mq);
+	int msg_count = opx_ep_free_match_queue_list_contexts(&opx_ep->rx->queue[1].mq);
+
+	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
+		"Freed %d contexts from tag match queue, %d contexts from msg match queue\n",
+		tag_count, msg_count);
+}
+
 static int fi_opx_close_ep(fid_t fid)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "close ep\n");
@@ -653,6 +678,7 @@ static int fi_opx_close_ep(fid_t fid)
 		}
 	}
 	if (opx_ep->rx && (opx_ep->rx->cq && (fid->fclass == FI_CLASS_EP || fid->fclass == FI_CLASS_RX_CTX))) {
+		opx_ep_free_match_queued_contexts(opx_ep);
 		ret = fi_opx_ref_dec(&opx_ep->rx->cq->ref_cnt, "completion queue");
 		if (ret) {
 			errno = -ret;
@@ -709,9 +735,9 @@ static int fi_opx_close_ep(fid_t fid)
 				if (opx_ep->rx->match_ue_tag_hash) {
 					fi_opx_match_ue_hash_free(&opx_ep->rx->match_ue_tag_hash);
 				}
-				if (opx_ep->rx->ctx_ext_pool) {
-					ofi_bufpool_destroy(opx_ep->rx->ctx_ext_pool);
-					opx_ep->rx->ctx_ext_pool = NULL;
+				if (opx_ep->rx->ctx_pool) {
+					ofi_bufpool_destroy(opx_ep->rx->ctx_pool);
+					opx_ep->rx->ctx_pool = NULL;
 				}
 				free(opx_ep->rx->mem);
 			}
@@ -1165,10 +1191,10 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 		goto err;
 	}
 
-	opx_ep->rx->ctx_ext_pool = NULL;
-	if (ofi_bufpool_create(&opx_ep->rx->ctx_ext_pool,
-			       sizeof(struct fi_opx_context_ext),
-			       8, UINT_MAX, FI_OPX_EP_RX_CTX_EXT_BLOCKSIZE, 0)) {
+	opx_ep->rx->ctx_pool = NULL;
+	if (ofi_bufpool_create(&opx_ep->rx->ctx_pool,
+			       sizeof(struct opx_context),
+			       64, UINT_MAX, OPX_EP_RX_CTX_BLOCKSIZE, 0)) {
 		goto err;
 	}
 	struct fi_opx_domain * opx_domain = opx_ep->domain;
@@ -1387,9 +1413,9 @@ err:
 
 	fi_opx_match_ue_hash_free(&opx_ep->rx->match_ue_tag_hash);
 
-	if (opx_ep->rx->ctx_ext_pool) {
-		ofi_bufpool_destroy(opx_ep->rx->ctx_ext_pool);
-		opx_ep->rx->ctx_ext_pool = NULL;
+	if (opx_ep->rx->ctx_pool) {
+		ofi_bufpool_destroy(opx_ep->rx->ctx_pool);
+		opx_ep->rx->ctx_pool = NULL;
 	}
 
 	return -FI_ENOMEM;
@@ -1990,9 +2016,9 @@ static int fi_opx_setopt_ep(fid_t fid, int level, int optname,
 	return 0;
 }
 
-int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx * rx,
+int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx *rx,
 		const uint64_t static_flags,
-		const union fi_opx_context * cancel_context,
+		const uintptr_t cancel_context,
 		const int lock_required) {
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(begin)\n");
@@ -2004,16 +2030,13 @@ int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx * rx,
 	 * search the match queue for this context
 	 */
 
-	union fi_opx_context * prev = NULL;
-	union fi_opx_context * item = (union fi_opx_context *) rx->queue[kind].mq.head;
+	struct opx_context *prev = NULL;
+	struct opx_context *item = (struct opx_context *) rx->queue[kind].mq.head;
 	while (item) {
 
-		const uint64_t is_context_ext = item->flags & FI_OPX_CQ_CONTEXT_EXT;
-		const uint64_t compare_context = is_context_ext ?
-			(uint64_t)(((struct fi_opx_context_ext *)item)->msg.op_context) :
-			(uint64_t)item;
+		const uintptr_t compare_context = (uintptr_t) item->err_entry.op_context;
 
-		if ((uintptr_t)cancel_context == compare_context) {
+		if (cancel_context == compare_context) {
 			if (prev)
 				prev->next = item->next;
 			else
@@ -2022,36 +2045,21 @@ int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx * rx,
 			if (!item->next)
 				rx->queue[kind].mq.tail = (struct slist_entry *) prev;
 
-			struct fi_opx_context_ext * ext = NULL;
-			if (cancel_context->flags & FI_OPX_CQ_CONTEXT_EXT) {
-				ext = (struct fi_opx_context_ext *)cancel_context;
-			} else {
-				ext = (struct fi_opx_context_ext *) ofi_buf_alloc(rx->ctx_ext_pool);
-				if (OFI_UNLIKELY(ext == NULL)) {
-					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-						"Out of memory.\n");
-					return -FI_ENOMEM;
-				}
-
-				ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
-			}
-
-			ext->opx_context.byte_counter = 0;
-			ext->opx_context.next = NULL;
-			ext->err_entry.op_context = (void *)cancel_context;
-			ext->err_entry.flags = cancel_context->flags;
-			ext->err_entry.len = 0;
-			ext->err_entry.buf = 0;
-			ext->err_entry.data = 0;
-			ext->err_entry.tag = cancel_context->tag;
-			ext->err_entry.olen = 0;
-			ext->err_entry.err = FI_ECANCELED;
-			ext->err_entry.prov_errno = 0;
-			ext->err_entry.err_data = NULL;
-			ext->err_entry.err_data_size = 0;
+			item->byte_counter = 0;
+			item->next = NULL;
+			item->err_entry.flags = item->flags;
+			item->err_entry.len = 0;
+			item->err_entry.buf = 0;
+			item->err_entry.data = 0;
+			item->err_entry.tag = item->tag;
+			item->err_entry.olen = 0;
+			item->err_entry.err = FI_ECANCELED;
+			item->err_entry.prov_errno = 0;
+			item->err_entry.err_data = NULL;
+			item->err_entry.err_data_size = 0;
 
 			if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-			slist_insert_tail((struct slist_entry *) ext, rx->cq_err_ptr);
+			slist_insert_tail((struct slist_entry *) item, rx->cq_err_ptr);
 
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end) canceled\n");
 			return FI_ECANCELED;
@@ -2079,7 +2087,7 @@ ssize_t fi_opx_cancel(fid_t fid, void *context)
 		if (opx_ep->rx->caps & FI_MSG) {
 			fi_opx_ep_rx_cancel(opx_ep->rx,
 				FI_MSG,
-				(const union fi_opx_context *) context,
+				(const uintptr_t) context,
 				FI_OPX_LOCK_NOT_REQUIRED);
 
 		}
@@ -2087,7 +2095,7 @@ ssize_t fi_opx_cancel(fid_t fid, void *context)
 		if (opx_ep->rx->caps & FI_TAGGED) {
 			fi_opx_ep_rx_cancel(opx_ep->rx,
 				FI_TAGGED,
-				(const union fi_opx_context *) context,
+				(const uintptr_t) context,
 				FI_OPX_LOCK_NOT_REQUIRED);
 		}
 		fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
@@ -2127,7 +2135,7 @@ int fi_opx_alloc_default_rx_attr(struct fi_rx_attr **rx_attr)
 		goto err;
 
 	attr->caps 	= FI_OPX_DEFAULT_RX_CAPS;
-	attr->mode 	= FI_CONTEXT2 | FI_ASYNC_IOV;
+	attr->mode 	= FI_ASYNC_IOV;
 	attr->op_flags 	= 0;
 	attr->msg_order = FI_OPX_DEFAULT_MSG_ORDER;
 	attr->size 	= SIZE_MAX; //FI_OPX_RX_SIZE;
@@ -2157,7 +2165,7 @@ int fi_opx_alloc_default_tx_attr(struct fi_tx_attr **tx_attr)
 		goto err;
 
 	attr->caps	= FI_OPX_DEFAULT_TX_CAPS;
-	attr->mode	= FI_CONTEXT2 | FI_ASYNC_IOV;
+	attr->mode	= FI_ASYNC_IOV;
 	attr->op_flags	= FI_TRANSMIT_COMPLETE;
 	attr->msg_order	= FI_OPX_DEFAULT_MSG_ORDER;
 	attr->inject_size = FI_OPX_HFI1_PACKET_IMM;
@@ -2523,7 +2531,7 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 #if defined(OPX_HMEM) && HAVE_CUDA
 	int use_gdrcopy;
 	int gdrcopy_enabled = cuda_is_gdrcopy_enabled();
-	
+
 	if (fi_param_get_bool(NULL, "hmem_cuda_use_gdrcopy", &use_gdrcopy) != FI_SUCCESS) {
 		FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "FI_HMEM_CUDA_USE_GDRCOPY either not specified or invalid. Using default value of 1\n");
 		use_gdrcopy = 1; /* Set to the libfabric default of FI_HMEM_CUDA_USE_GDRCOPY=1 */
@@ -2612,18 +2620,14 @@ int fi_opx_ep_tx_check (struct fi_opx_ep_tx * tx, enum fi_av_type av_type)
 
 /* rx_op_flags is only checked for FI_PEEK | FI_CLAIM | FI_MULTI_RECV;
  * rx_op_flags is only used if FI_PEEK | FI_CLAIM;
- * is_context_ext is only used if FI_PEEK | iovec;
- *
- * The "normal" data movement functions, such as fi_[t]recv(), can safely
- * specify '0' for rx_op_flags, and is_context_ext, in order to reduce code path.
  *
  * See `fi_opx_ep_rx_process_context()`
  */
 __attribute__((noinline))
 void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		const uint64_t static_flags,
-		union fi_opx_context * context,
-		const uint64_t rx_op_flags, const uint64_t is_context_ext,
+		struct opx_context *context,
+		const uint64_t rx_op_flags,
 		const uint64_t is_hmem,
 		const int lock_required, const enum fi_av_type av_type,
 		const enum ofi_reliability_kind reliability,
@@ -2681,8 +2685,8 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 #endif
 			}
 
-			fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context,
-						is_context_ext, lock_required);
+			fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context, lock_required);
+
 			return;
 		}
 
@@ -2690,42 +2694,22 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		 * did not find a match for this "peek"; notify the application
 		 * via completion queue error entry
 		 */
-
-		struct fi_opx_context_ext * ext = NULL;
-		if (is_context_ext) {
-			ext = (struct fi_opx_context_ext *)context;
-			assert((ext->opx_context.flags & FI_OPX_CQ_CONTEXT_EXT) != 0);
-		} else {
-			ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
-			if (OFI_UNLIKELY(ext == NULL)) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"Out of memory.\n");
-				abort();
-			}
-			ext->opx_context.flags = rx_op_flags | FI_OPX_CQ_CONTEXT_EXT;
-		}
-
-		ext->err_entry.op_context = context;
-		ext->err_entry.flags = rx_op_flags;
-		ext->err_entry.len = 0;
-		ext->err_entry.buf = 0;
-		ext->err_entry.data = 0;
-		ext->err_entry.tag = 0;
-		ext->err_entry.olen = 0;
-		ext->err_entry.err = FI_ENOMSG;
-		ext->err_entry.prov_errno = 0;
-		ext->err_entry.err_data = NULL;
-		ext->err_entry.err_data_size = 0;
-		ext->opx_context.byte_counter = 0;
-
+		context->err_entry.flags = rx_op_flags;
+		context->err_entry.len = 0;
+		context->err_entry.buf = 0;
+		context->err_entry.data = 0;
+		context->err_entry.tag = 0;
+		context->err_entry.olen = 0;
+		context->err_entry.err = FI_ENOMSG;
+		context->err_entry.prov_errno = 0;
+		context->err_entry.err_data = NULL;
+		context->err_entry.err_data_size = 0;
+		context->byte_counter = 0;
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "no match found on unexpected queue posting error\n");
 
-		fi_opx_cq_enqueue_err(opx_ep->rx->cq, ext, lock_required);
+		fi_opx_cq_enqueue_err(opx_ep->rx->cq, context, lock_required);
 
 	} else if (rx_op_flags & FI_CLAIM) {
-
-		assert((!(rx_op_flags & FI_OPX_CQ_CONTEXT_EXT) && !(rx_op_flags & FI_OPX_CQ_CONTEXT_HMEM)) ||
-			((rx_op_flags & FI_OPX_CQ_CONTEXT_EXT) && (rx_op_flags & FI_OPX_CQ_CONTEXT_HMEM)));
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "rx_op_flags & FI_CLAIM complete receive operation\n");
 
@@ -2742,13 +2726,12 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		const unsigned is_intranode =
 			opx_lrh_is_intranode(&(claimed_pkt->hdr), hfi1_type);
 
-		complete_receive_operation(ep,
+		opx_ep_complete_receive_operation(ep,
 			&claimed_pkt->hdr,
 			(union fi_opx_hfi1_packet_payload *)&claimed_pkt->payload,
 			claimed_pkt->hdr.match.ofi_tag,
 			context,
 			claimed_pkt->hdr.bth.opcode,
-			rx_op_flags & FI_OPX_CQ_CONTEXT_EXT,
 			OPX_MULTI_RECV_FALSE,
 			is_intranode,
 			rx_op_flags & FI_OPX_CQ_CONTEXT_HMEM,
@@ -2766,8 +2749,7 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 	} else if ((static_flags & FI_MSG) && (rx_op_flags & FI_MULTI_RECV)) {
 
 		/* TODO: HMEM not supported for multi-receive */
-		assert(!(rx_op_flags & FI_OPX_CQ_CONTEXT_EXT) &&
-			!(rx_op_flags & FI_OPX_CQ_CONTEXT_HMEM));
+		assert(!(rx_op_flags & FI_OPX_CQ_CONTEXT_HMEM));
 
 		context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, context->src_addr);
 
@@ -2813,13 +2795,12 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 					/* the 'context->len' field will be updated to the
 					 * new multi-receive buffer free space as part of
 					 * the receive completion */
-					complete_receive_operation(ep,
+					opx_ep_complete_receive_operation(ep,
 						&uepkt->hdr,
 						(union fi_opx_hfi1_packet_payload *)&uepkt->payload,
 						uepkt->hdr.match.ofi_tag,
 						context,
 						uepkt->hdr.bth.opcode,
-						OPX_CONTEXT_EXTENDED_FALSE,
 						OPX_MULTI_RECV_TRUE,
 						OPX_HMEM_FALSE,
 						is_intranode,

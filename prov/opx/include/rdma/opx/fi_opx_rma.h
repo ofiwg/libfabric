@@ -57,7 +57,6 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 			   const union fi_opx_addr opx_target_addr,
 			   const uint64_t *addr_offset,
 			   const uint64_t *key,
-			   union fi_opx_context *opx_context,
 			   const uint64_t tx_op_flags,
 			   const struct fi_opx_cq *opx_cq,
 			   const struct fi_opx_cntr *opx_cntr,
@@ -170,7 +169,6 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
 			   const size_t niov,
 			   const union fi_opx_addr opx_dst_addr,
 			   uint64_t addr_offset, const uint64_t key,
-			   union fi_opx_context *opx_context,
 			   struct fi_opx_completion_counter *cc,
 			   enum fi_datatype dt, enum fi_op op,
 			   const uint64_t tx_op_flags,
@@ -268,26 +266,50 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
 }
 
+__OPX_FORCE_INLINE__
+ssize_t opx_rma_get_context(struct fi_opx_ep *opx_ep, const void *user_context,
+			    const void *cq, const uint64_t flags,
+			    struct opx_context **context)
+{
+	if (!cq || !user_context) {
+		*context = NULL;
+		return FI_SUCCESS;
+	}
 
+	struct opx_context *ctx = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+	if (OFI_UNLIKELY(ctx == NULL)) {
+		*context = NULL;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		return -FI_ENOMEM;
+	}
+
+	ctx->next = NULL;
+	ctx->flags = (uint64_t) flags;
+	ctx->err_entry.err = 0;
+	ctx->err_entry.op_context = (void *) user_context;
+
+	*context = ctx;
+	return FI_SUCCESS;
+}
 
 ssize_t fi_opx_inject_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 				    fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key,
 				    int lock_required, const enum fi_av_type av_type,
 				    const uint64_t caps,
 				    const enum ofi_reliability_kind reliability,
-					const enum opx_hfi1_type hfi1_type);
+				    const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_write_generic(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			     fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key, void *context,
 			     int lock_required, const enum fi_av_type av_type, const uint64_t caps,
 			     const enum ofi_reliability_kind reliability,
-				 const enum opx_hfi1_type hfi1_type);
+			     const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_writev_generic(struct fid_ep *ep, const struct iovec *iov, void **desc, size_t count,
 			      fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key, void *context,
 			      int lock_required, const enum fi_av_type av_type, const uint64_t caps,
 			      const enum ofi_reliability_kind reliability,
-				  const enum opx_hfi1_type hfi1_type);
+			      const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_writemsg_generic(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags,
 				int lock_required, const enum fi_av_type av_type,
@@ -298,18 +320,18 @@ ssize_t fi_opx_read_generic(struct fid_ep *ep, void *buf, size_t len, void *desc
 			    fi_addr_t src_addr, uint64_t addr_offset, uint64_t key, void *context,
 			    int lock_required, const enum fi_av_type av_type, const uint64_t caps,
 			    const enum ofi_reliability_kind reliability,
-				const enum opx_hfi1_type hfi1_type);
+			    const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_readv_generic(struct fid_ep *ep, const struct iovec *iov, void **desc, size_t count,
 			     fi_addr_t src_addr, uint64_t addr_offset, uint64_t key, void *context,
 			     int lock_required, const enum fi_av_type av_type, const uint64_t caps,
 			     const enum ofi_reliability_kind reliability,
-				 const enum opx_hfi1_type hfi1_type);
+			     const enum opx_hfi1_type hfi1_type);
 
 ssize_t fi_opx_readmsg_generic(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags,
 			       int lock_required, const enum fi_av_type av_type,
 			       const uint64_t caps, const enum ofi_reliability_kind reliability,
-				   const enum opx_hfi1_type hfi1_type);
+			       const enum opx_hfi1_type hfi1_type);
 
 #ifdef __cplusplus
 }

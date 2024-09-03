@@ -47,18 +47,19 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line) {
 	char *s = str;
 	size_t len = 2047;
 	int n = 0;
-	union fi_opx_context * context = NULL;;
+	struct opx_context *context = NULL;;
 
 	struct fi_opx_cq *opx_cq = (struct fi_opx_cq *)cq;
 
 	if (!func) func = "undef";
 
-	n = snprintf(s, len, "%s():%d [%p] completed(%p,%p)", func, line, opx_cq, opx_cq->completed.head, opx_cq->completed.tail);
+	n = snprintf(s, len, "%s():%d [%p] completed(%p,%p)", func, line,
+		     opx_cq, opx_cq->completed.head, opx_cq->completed.tail);
 	s += n;
 	len -= n;
 
 	if (opx_cq->completed.head != NULL) {
-		context = (union fi_opx_context *) opx_cq->completed.head;
+		context = (struct opx_context *) opx_cq->completed.head;
 		n = snprintf(s, len, " = { %p", context); s += n; len -= n;
 
 		context = context->next;
@@ -73,7 +74,7 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line) {
 	n = 0; len = 2047; s = str; *s = 0;
 	n = snprintf(s, len, "%s():%d [%p] pending(%p,%p)", func, line, opx_cq, opx_cq->pending.head, opx_cq->pending.tail); s += n; len -= n;
 	if (opx_cq->pending.head != NULL) {
-		context = (union fi_opx_context *) opx_cq->pending.head;
+		context = (struct opx_context *) opx_cq->pending.head;
 		n = snprintf(s, len, " = { %p(%lu,0x%016lx)", context, context->byte_counter, context->byte_counter); s += n; len -= n;
 
 		context = context->next;
@@ -89,7 +90,7 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line) {
 	n = 0; len = 2047; s = str; *s = 0;
 	n = snprintf(s, len, "%s():%d [%p] err(%p,%p)", func, line, opx_cq, opx_cq->err.head, opx_cq->err.tail); s += n; len -= n;
 	if (opx_cq->err.head != NULL) {
-		context = (union fi_opx_context *) opx_cq->err.head;
+		context = (struct opx_context *) opx_cq->err.head;
 		n = snprintf(s, len, " = { %p(%lu)", context, context->byte_counter); s += n; len -= n;
 
 		context = context->next;
@@ -185,15 +186,13 @@ static struct fi_ops fi_opx_fi_ops = {
 	.ops_open	= fi_opx_ops_open_cq
 };
 
-int fi_opx_cq_enqueue_err (struct fi_opx_cq * opx_cq,
-		struct fi_opx_context_ext * ext,
+int fi_opx_cq_enqueue_err (struct fi_opx_cq *opx_cq,
+		struct opx_context *context,
 		const int lock_required)
 {
-	assert(ext->opx_context.flags & FI_OPX_CQ_CONTEXT_EXT);	/* DEBUG */
 	assert(!lock_required);
-	ext->opx_context.next = NULL;
 
-	slist_insert_tail((struct slist_entry *) ext, &opx_cq->err);
+	slist_insert_tail((struct slist_entry *) context, &opx_cq->err);
 
 	return 0;
 }

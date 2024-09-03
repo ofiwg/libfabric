@@ -288,19 +288,19 @@ struct fi_opx_hfi1_stl_packet_hdr_16B {
 		   formats, but in units of DWs for 9B formats.*/
 		   __le32 pktlen:11;
 		   __le32 b:1;
-		   
+
 		   __le32 dlid:20;   /* dw[1] */
 		   __le32 sc:5;
 		   __le32 rc:3;
 		   __le32 f:1;
 		   __le32 l2:2;
 		   __le32 lt:1;
-		   
+
 		   __le32 l4:8;      /* dw[2] qw[1] */
 		   __le32 slid20:4;
 		   __le32 dlid20:4;
 		   __le32 pkey:16;
-		   
+
 		   __le32 entropy:16;   /* dw[3] */
 		   __le32 age:3;
 		   __le32 cspec:5;
@@ -1290,7 +1290,7 @@ union opx_hfi1_packet_hdr {
 
 
 static inline
-fi_opx_uid_t fi_opx_hfi1_packet_hdr_uid (const union opx_hfi1_packet_hdr * const hdr, 
+fi_opx_uid_t fi_opx_hfi1_packet_hdr_uid (const union opx_hfi1_packet_hdr * const hdr,
 			const uint64_t slid) {
 	const union fi_opx_uid uid =
 	{
@@ -1394,7 +1394,7 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 	const pid_t pid = getpid();
 	//fi_opx_hfi1_dump_stl_packet_hdr (hdr, hfi1_type, fn, ln);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u ==== dump packet header @ %p [%016lx %016lx %016lx %016lx]\n", pid, fn, ln, hdr, qw[0], qw[1], qw[2], qw[3]);
-        if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.flags ...........     0x%04hx\n", pid, fn, ln, hdr->lrh_9B.flags);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.dlid ............     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.dlid, hdr->lrh_9B.dlid, ntohs(hdr->lrh_9B.dlid));
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.pktlen ..........     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.pktlen, hdr->lrh_9B.pktlen, ntohs(hdr->lrh_9B.pktlen));
@@ -1466,36 +1466,6 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 	return;
 }
 
-#define OPX_DEBUG_PRINT_HDR(__hdr,__hfi1_type)      		 \
-	if (__hfi1_type & OPX_HFI1_JKR) {      		         \
-		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0], 	 \
-				      __hdr->qw_16B[1]);	 \
-		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2], 	 \
-				      __hdr->qw_16B[3]);	 \
-	} else {						 \
-		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type,  \
-					    __func__, __LINE__); \
-	}
-
-#define OPX_DEBUG_PRINT_PBC_HDR(__pbc,__hdr,__hfi1_type)	\
-	if (__hfi1_type & OPX_HFI1_JKR) {			\
-		OPX_JKR_PRINT_16B_PBC(__pbc);			\
-		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0], 	\
-				      __hdr->qw_16B[1]);	\
-		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2], 	\
-				      __hdr->qw_16B[3]);	\
-	} else {						\
-		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type, \
-					    __func__, __LINE__);\
-	}
-
-#define OPX_DEBUG_PRINT_PBC_HDR_QW(q0,q1,q2,q3,q4,__hfi1_type)	\
-	if (__hfi1_type & OPX_HFI1_JKR) {			\
-		OPX_JKR_PRINT_16B_PBC(q0);			\
-		OPX_JKR_PRINT_16B_LRH(q1,q2);			\
-		OPX_JKR_PRINT_16B_BTH(q3,q4);			\
-	}
-
 #else
 // Disable the macros
 #define OPX_JKR_PRINT_16B_PBC(a)
@@ -1513,6 +1483,41 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 {
 	return;
 }
+
+#endif
+
+#ifdef OPX_JKR_DEBUG
+#define OPX_DEBUG_PRINT_HDR(__hdr,__hfi1_type)			\
+	if (__hfi1_type & OPX_HFI1_JKR) {			\
+		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0],		\
+				      __hdr->qw_16B[1]);	\
+		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2],		\
+				      __hdr->qw_16B[3]);	\
+	} else {						\
+		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type,	\
+					    __func__, __LINE__);\
+	}
+
+#define OPX_DEBUG_PRINT_PBC_HDR(__pbc,__hdr,__hfi1_type)	\
+	if (__hfi1_type & OPX_HFI1_JKR) {			\
+		OPX_JKR_PRINT_16B_PBC(__pbc);			\
+		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0],		\
+				      __hdr->qw_16B[1]);	\
+		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2],		\
+				      __hdr->qw_16B[3]);	\
+	} else {						\
+		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type,	\
+					    __func__, __LINE__);\
+	}
+
+#define OPX_DEBUG_PRINT_PBC_HDR_QW(q0,q1,q2,q3,q4,__hfi1_type)	\
+	if (__hfi1_type & OPX_HFI1_JKR) {			\
+		OPX_JKR_PRINT_16B_PBC(q0);			\
+		OPX_JKR_PRINT_16B_LRH(q1,q2);			\
+		OPX_JKR_PRINT_16B_BTH(q3,q4);			\
+	}
+
+#else
 
 #define OPX_DEBUG_PRINT_HDR(__hdr,__hfi1_type)
 #define OPX_DEBUG_PRINT_PBC_HDR(__pbc,__hdr,__hfi1_type)

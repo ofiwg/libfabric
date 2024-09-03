@@ -45,9 +45,8 @@
 
 #define FI_OPX_CACHE_LINE_SIZE	(64)
 
-#define FI_OPX_CQ_CONTEXT_EXT		(0x8000000000000000ull)
+#define FI_OPX_CQ_CONTEXT_HMEM		(0x8000000000000000ull)
 #define FI_OPX_CQ_CONTEXT_MULTIRECV	(0x4000000000000000ull)
-#define FI_OPX_CQ_CONTEXT_HMEM		(0x2000000000000000ull)
 
 #define OPX_HMEM_SIZE_QWS	(3)
 
@@ -62,53 +61,42 @@ union fi_opx_mp_egr_id {
 	};
 } __attribute__((__packed__));
 
-union fi_opx_context {
-	struct fi_context2			context;
-	struct {
-		//struct slist_entry		entry;		/* fi_cq_entry::op_context */
-		union fi_opx_context *	next;		/* fi_cq_entry::op_context */
-		uint64_t			flags;		/* fi_cq_msg_entry::flags */
-		size_t				len;		/* fi_cq_msg_entry::len */
-		void				*buf;		/* fi_cq_data_entry::buf (unused for tagged cq's and non-multi-receive message cq's) */
+struct opx_context {
+	/**** CACHELINE 0 ****/
+	struct opx_context		*next;		/* fi_cq_entry::op_context */
+	uint64_t			flags;		/* fi_cq_msg_entry::flags */
+	size_t				len;		/* fi_cq_msg_entry::len */
+	void				*buf;		/* fi_cq_data_entry::buf (unused for tagged cq's and non-multi-receive message cq's) */
 
-		union {
-			uint64_t		data;		/* fi_cq_data_entry::data; only used _after_ a message is matched */
-			fi_addr_t		src_addr;	/* only used _before_ a message is matched ('FI_DIRECTED_RECEIVE') */
-		};
-
-		union {
-			uint64_t		tag;		/* fi_cq_tagged_entry::tag */
-			union fi_opx_context	*multi_recv_next;	/* only for multi-receives; which is not tagged */
-		};
-		union {
-			uint64_t		ignore;		/* only for tagged receive */
-			void 			*claim;		/* only for peek/claim */
-			void			*multi_recv_context;	/* only for individual FI_MULTI_RECV's */
-			union fi_opx_mp_egr_id	mp_egr_id;
-		};
-
-		volatile uint64_t	byte_counter;
+	union {
+		uint64_t		data;		/* fi_cq_data_entry::data; only used _after_ a message is matched */
+		fi_addr_t		src_addr;	/* only used _before_ a message is matched ('FI_DIRECTED_RECEIVE') */
 	};
-};
 
-struct fi_opx_context_ext {
-	union fi_opx_context		opx_context;
-	struct fi_cq_err_entry		err_entry;
+	uint64_t			tag;			/* fi_cq_tagged_entry::tag */
+	union {
+		uint64_t		ignore;			/* only for tagged receive */
+		void			*claim;			/* only for peek/claim */
+		void			*multi_recv_context;	/* only for individual FI_MULTI_RECV's */
+		union fi_opx_mp_egr_id	mp_egr_id;
+	};
 
-	// offset 144 bytes
+	volatile uint64_t		byte_counter;
+
+	/**** CACHELINE 1 & 2 ****/
+	uint64_t			hmem_info_qws[OPX_HMEM_SIZE_QWS];
 
 	struct {
-		struct fi_context2	*op_context;
 		size_t			iov_count;
 		struct iovec		*iov;
 	} msg;
 
-	// offset 168 bytes
-	uint64_t			hmem_info_qws[OPX_HMEM_SIZE_QWS];
-
-	// 184 bytes
-	uint64_t			unused;
-} __attribute__((__aligned__(32)));
+	struct fi_cq_err_entry		err_entry; // 88 bytes
+} __attribute__((__packed__)) __attribute__((__aligned__(64)));
+static_assert(offsetof(struct opx_context, hmem_info_qws) == FI_OPX_CACHE_LINE_SIZE,
+		"struct opx_context.hmem_info_qws offset should start at Cacheline 1!");
+static_assert(sizeof(struct opx_context) == (FI_OPX_CACHE_LINE_SIZE * 3),
+		"sizeof(struct opx_context) should be equal to 3 cachelines!");
 
 struct opx_sdma_queue {
 	struct slist	list;

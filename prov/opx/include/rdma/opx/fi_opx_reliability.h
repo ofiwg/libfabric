@@ -83,7 +83,7 @@ struct fi_opx_completion_counter {
 		struct fi_opx_cntr *cntr;
 		struct fi_opx_cq *cq;
 		union {
-			union fi_opx_context *context;
+			struct opx_context *context;
 			void *container;
 		};
 		void (*hit_zero)(struct fi_opx_completion_counter*);
@@ -447,7 +447,7 @@ union fi_opx_reliability_tx_psn {
 		uint64_t	bytes_outstanding:24;
 	} psn;
 } __attribute__((__packed__));
- 
+
 // TODO - make these tunable.
 #define FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS	(2048)
 #define FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS	(8192)
@@ -689,7 +689,7 @@ uint16_t fi_opx_reliability_rx_drop_packet (struct fi_opx_reliability_client_sta
 	const uint16_t tmp = state->drop_count & state->drop_mask;
 
 	if (tmp == 0)
-		FI_WARN(fi_opx_global.prov,FI_LOG_EP_DATA, 
+		FI_WARN(fi_opx_global.prov,FI_LOG_EP_DATA,
 			"DEBUG: discarding packet %hu\n", state->drop_count);
 
 	state->drop_count = tmp + 1;
@@ -744,7 +744,7 @@ size_t fi_opx_reliability_replay_get_payload_size(struct fi_opx_reliability_tx_r
 		const uint16_t lrh_pktlen_le = replay->scb_16B.hdr.lrh_16B.pktlen;
 		const size_t total_bytes = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing icrc */
 		return (total_bytes - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B));
-	} 
+	}
 }
 
 __OPX_FORCE_INLINE__
@@ -1137,7 +1137,7 @@ int32_t fi_opx_reliability_get_replay (struct fid_ep *ep,
 					const enum ofi_reliability_kind reliability,
 					const enum opx_hfi1_type hfi1_type)
 {
-	
+
 	union fi_opx_reliability_service_flow_key key = {
 		.slid = (uint32_t) state->lid_be,
 		.tx = (uint32_t) state->tx,
@@ -1153,7 +1153,7 @@ int32_t fi_opx_reliability_get_replay (struct fid_ep *ep,
 		opx_reliability_handshake_init(ep, key, target_reliability_rx, hfi1_type);
 		return -1;
 	}
-		
+
 	*psn_ptr = (union fi_opx_reliability_tx_psn *)fi_opx_rbt_value_ptr(state->tx_flow_rbtree, itr);
 	union fi_opx_reliability_tx_psn  psn_value = **psn_ptr;
 
@@ -1180,7 +1180,7 @@ int32_t fi_opx_reliability_get_replay (struct fid_ep *ep,
 		fi_opx_reliability_inc_throttle_maxo(ep);
 		return -1;
 	}
-	
+
 	*replay = fi_opx_reliability_client_replay_allocate(state, false);
 	if (*replay == NULL) {
 		return -1;
