@@ -90,9 +90,6 @@
     <ClCompile Include="functional\msg_sockets.c">
       <Filter>Source Files\functional</Filter>
     </ClCompile>
-    <ClCompile Include="functional\poll.c">
-      <Filter>Source Files\functional</Filter>
-    </ClCompile>
     <ClCompile Include="functional\rdm.c">
       <Filter>Source Files\functional</Filter>
     </ClCompile>

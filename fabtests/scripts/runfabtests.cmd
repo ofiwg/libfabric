@@ -66,8 +66,6 @@ set functional_tests=^
 	"msg"^
 	"msg_epoll"^
 	"msg_sockets"^
-	"poll -t queue"^
-	"poll -t counter"^
 	"rdm"^
 	"rdm -U"^
 	"rdm_tagged_peek"^
