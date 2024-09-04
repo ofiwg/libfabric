@@ -69,9 +69,6 @@ cmatose
 # shared AV isn't supported
 shared_av
 
-# wait isn't supported
-dgram_waitset
-
 # Remove this once ubertest supports setting MR modes
 ubertest
 

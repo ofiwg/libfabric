@@ -22,7 +22,6 @@ bin_PROGRAMS = \
 	functional/fi_rdm_deferred_wq \
 	functional/fi_dgram \
 	functional/fi_mcast \
-	functional/fi_dgram_waitset \
 	functional/fi_rdm_tagged_peek \
 	functional/fi_cq_data \
 	functional/fi_poll \
@@ -296,10 +295,6 @@ functional_fi_dgram_LDADD = libfabtests.la
 functional_fi_mcast_SOURCES = \
 	functional/mcast.c
 functional_fi_mcast_LDADD = libfabtests.la
-
-functional_fi_dgram_waitset_SOURCES = \
-	functional/dgram_waitset.c
-functional_fi_dgram_waitset_LDADD = libfabtests.la
 
 functional_fi_rdm_tagged_peek_SOURCES = \
 	functional/rdm_tagged_peek.c
@@ -624,7 +619,6 @@ dummy_man_pages = \
 	man/man1/fi_cm_data.1 \
 	man/man1/fi_cq_data.1 \
 	man/man1/fi_dgram.1 \
-	man/man1/fi_dgram_waitset.1 \
 	man/man1/fi_inj_complete.1 \
 	man/man1/fi_mcast.1 \
 	man/man1/fi_msg.1 \

@@ -15,6 +15,5 @@ scalable_ep
 shared_av
 rdm_cntr_pingpong
 multi_recv
-dgram_waitset
 multinode
 rdm_tagged_peek
