@@ -81,9 +81,6 @@
     <ClCompile Include="functional\dgram.c">
       <Filter>Source Files\functional</Filter>
     </ClCompile>
-    <ClCompile Include="functional\dgram_waitset.c">
-      <Filter>Source Files\functional</Filter>
-    </ClCompile>
     <ClCompile Include="functional\msg.c">
       <Filter>Source Files\functional</Filter>
     </ClCompile>

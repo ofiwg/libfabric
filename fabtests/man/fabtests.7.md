@@ -50,9 +50,6 @@ features of libfabric.
 *fi_dgram*
 : A basic datagram endpoint example.
 
-*fi_dgram_waitset*
-: Transfers datagrams using waitsets for completion notification.
-
 *fi_inj_complete*
 : Sends messages using the FI_INJECT_COMPLETE operation flag.
 

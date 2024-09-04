@@ -108,7 +108,6 @@ functional_tests=(
 	"fi_cq_data -e rdm -o writedata"
 	"fi_cq_data -e dgram -o writedata"
 	"fi_dgram"
-	"fi_dgram_waitset"
 	"fi_msg"
 	"fi_msg_epoll"
 	"fi_msg_sockets"
