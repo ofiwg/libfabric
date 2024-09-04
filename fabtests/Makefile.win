@@ -80,7 +80,7 @@ benchmarks: $(outdir)\dgram_pingpong.exe $(outdir)\msg_bw.exe \
 functional: $(outdir)\av_xfer.exe $(outdir)\bw.exe $(outdir)\cm_data.exe $(outdir)\cq_data.exe \
 	$(outdir)\dgram.exe $(outdir)\msg.exe $(outdir)\msg_epoll.exe \
 	$(outdir)\inject_test.exe $(outdir)\msg_sockets.exe $(outdir)\multi_mr.exe \
-	$(outdir)\multi_ep.exe $(outdir)\multi_recv.exe $(outdir)\poll.exe $(outdir)\rdm.exe \
+	$(outdir)\multi_ep.exe $(outdir)\multi_recv.exe $(outdir)\rdm.exe \
 	$(outdir)\rdm_atomic.exe $(outdir)\rdm_multi_client.exe $(outdir)\rdm_rma_event.exe \
 	$(outdir)\rdm_rma_trigger.exe $(outdir)\rdm_shared_av.exe $(outdir)\rdm_tagged_peek.exe \
 	$(outdir)\recv_cancel.exe $(outdir)\scalable_ep.exe $(outdir)\shared_ctx.exe \
@@ -141,8 +141,6 @@ $(outdir)\multi_mr.exe: {functional}multi_mr.c $(basedeps)
 $(outdir)\multi_ep.exe: {functional}multi_ep.c $(basedeps)
 
 $(outdir)\multi_recv.exe: {functional}multi_recv.c $(basedeps)
-
-$(outdir)\poll.exe: {functional}poll.c $(basedeps)
 
 $(outdir)\rdm.exe: {functional}rdm.c $(basedeps)
 

@@ -24,7 +24,6 @@ bin_PROGRAMS = \
 	functional/fi_mcast \
 	functional/fi_rdm_tagged_peek \
 	functional/fi_cq_data \
-	functional/fi_poll \
 	functional/fi_scalable_ep \
 	functional/fi_shared_ctx \
 	functional/fi_msg_epoll \
@@ -160,7 +159,6 @@ nobase_dist_config_DATA = \
 	pytest/default/test_msg.py \
 	pytest/default/test_multinode.py \
 	pytest/default/test_multi_recv.py \
-	pytest/default/test_poll.py \
 	pytest/default/test_rdm.py \
 	pytest/default/test_recv_cancel.py \
 	pytest/default/test_rma_bw.py \
@@ -315,10 +313,6 @@ functional_fi_scalable_ep_LDADD = libfabtests.la
 functional_fi_shared_ctx_SOURCES = \
 	functional/shared_ctx.c
 functional_fi_shared_ctx_LDADD = libfabtests.la
-
-functional_fi_poll_SOURCES = \
-	functional/poll.c
-functional_fi_poll_LDADD = libfabtests.la
 
 functional_fi_multi_ep_SOURCES = \
 	functional/multi_ep.c
@@ -626,7 +620,6 @@ dummy_man_pages = \
 	man/man1/fi_msg_sockets.1 \
 	man/man1/fi_multi_ep.1 \
 	man/man1/fi_multi_mr.1 \
-	man/man1/fi_poll.1 \
 	man/man1/fi_rdm.1 \
 	man/man1/fi_rdm_atomic.1 \
 	man/man1/fi_rdm_deferred_wq.1 \

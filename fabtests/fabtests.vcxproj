@@ -231,7 +231,6 @@
     <ClCompile Include="functional\msg_epoll.c" />
     <ClCompile Include="functional\msg_netdir.c" />
     <ClCompile Include="functional\msg_sockets.c" />
-    <ClCompile Include="functional\poll.c" />
     <ClCompile Include="functional\rdm.c" />
     <ClCompile Include="functional\rdm_rma_event.c" />
     <ClCompile Include="functional\rdm_rma_trigger.c" />
