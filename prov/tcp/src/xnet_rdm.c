@@ -700,7 +700,7 @@ static int xnet_mplex_av_dup(struct util_ep *ep, struct xnet_mplex_av *mplex_av,
 {
 	int ret, i;
 	struct util_av *subav;
-	size_t addr_size;
+	size_t addr_size = sizeof(struct sockaddr_in6);
 	char addr[sizeof(struct sockaddr_in6)];
 	struct fi_av_attr av_attr = {
 		.type = ep->domain->av_type,
