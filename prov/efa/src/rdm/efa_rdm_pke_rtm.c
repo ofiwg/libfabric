@@ -857,14 +857,12 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_pke *cur, *nxt;
-	struct efa_rdm_peer *peer;
 	int pkt_type;
 	ssize_t ret, err;
 	uint64_t msg_id;
 
 	ep = pkt_entry->ep;
 	rxe = pkt_entry->ope;
-	peer = rxe->peer;
 	pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 
 	ret = 0;
@@ -883,20 +881,9 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 			efa_rdm_tracepoint(runtread_read_posted, rxe->msg_id,
 				    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
-			err = efa_rdm_ope_post_remote_read_or_queue(rxe);
-			if (err) {
-				if (err == -FI_ENOMR) {
-					if (efa_rdm_peer_support_read_nack(peer))
-						/* Only set the flag here. The NACK
-						 * packet is sent after all runting read
-						 * RTM packets have been received */
-						rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
-					else
-						ret = -FI_EAGAIN;
-				} else {
-					return err;
-				}
-			}
+			err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
+			if (err)
+				return err;
 		}
 	}
 
@@ -912,7 +899,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 		if (efa_rdm_ope_mulreq_total_data_size(rxe, pkt_type) ==
 		    rxe->bytes_received_via_mulreq) {
 			if (rxe->internal_flags & EFA_RDM_OPE_READ_NACK) {
-				EFA_WARN(FI_LOG_EP_CTRL,
+				EFA_INFO(FI_LOG_EP_CTRL,
 					 "Receiver sending long read NACK "
 					 "packet because memory registration "
 					 "limit was reached on the receiver\n");
@@ -1198,12 +1185,10 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
 	struct efa_rdm_ep *ep;
-	struct efa_rdm_peer *peer;
 	int err;
 
 	rxe = pkt_entry->ope;
 	ep = rxe->ep;
-	peer = rxe->peer;
 
 	rtm_hdr = efa_rdm_pke_get_longread_rtm_base_hdr(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + efa_rdm_pke_get_req_hdr_size(pkt_entry));
@@ -1216,24 +1201,8 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 	efa_rdm_tracepoint(longread_read_posted, rxe->msg_id,
 		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
-	err = efa_rdm_ope_post_remote_read_or_queue(rxe);
-	if (err == -FI_ENOMR) {
-		if (efa_rdm_peer_support_read_nack(peer)) {
-			EFA_WARN(FI_LOG_EP_CTRL, "Receiver sending long read "
-						 "NACK packet because memory "
-						 "registration limit was "
-						 "reached on the receiver\n");
-			efa_rdm_rxe_map_insert(&ep->rxe_map, pkt_entry, rxe);
-			rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
-			err = efa_rdm_ope_post_send_or_queue(
-				rxe, EFA_RDM_READ_NACK_PKT);
-		} else {
-			/* Peer does not support the READ_NACK packet. So we
-			 * return EAGAIN and hope that the app runs progress
-			 * again which will free some MR registrations */
-			err = -FI_EAGAIN;
-		}
-	}
+	err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
+
 	efa_rdm_pke_release_rx(pkt_entry);
 	return err;
 }
