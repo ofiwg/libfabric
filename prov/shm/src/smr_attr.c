@@ -149,8 +149,7 @@ struct fi_info smr_hmem_info = {
 };
 
 struct fi_info smr_info = {
-	.caps = SMR_TX_CAPS | SMR_RX_CAPS | FI_MULTI_RECV | FI_LOCAL_COMM,
-		SMR_DOMAIN_CAPS,
+	.caps = SMR_TX_CAPS | SMR_RX_CAPS | FI_MULTI_RECV | SMR_DOMAIN_CAPS,
 	.addr_format = FI_ADDR_STR,
 	.tx_attr = &smr_tx_attr,
 	.rx_attr = &smr_rx_attr,
