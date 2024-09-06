@@ -1781,7 +1781,7 @@ ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
 		switch (pkt_type) {
 		case EFA_RDM_LONGREAD_MSGRTM_PKT:
 		case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-			EFA_WARN(FI_LOG_EP_CTRL,
+			EFA_INFO(FI_LOG_EP_CTRL,
 				 "Sender fallback to long CTS untagged "
 				 "protocol because memory registration limit "
 				 "was reached on the sender\n");
@@ -1789,7 +1789,7 @@ ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
 				ope, EFA_RDM_LONGCTS_MSGRTM_PKT);
 		case EFA_RDM_LONGREAD_TAGRTM_PKT:
 		case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-			EFA_WARN(FI_LOG_EP_CTRL,
+			EFA_INFO(FI_LOG_EP_CTRL,
 				 "Sender fallback to long CTS tagged protocol "
 				 "because memory registration limit was "
 				 "reached on the sender\n");
