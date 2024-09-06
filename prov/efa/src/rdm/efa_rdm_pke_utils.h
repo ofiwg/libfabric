@@ -57,6 +57,78 @@ size_t efa_rdm_pke_get_segment_offset(struct efa_rdm_pke *pke)
 	return 0;
 }
 
+/** 
+ * @brief This function either posts RDMA read, or sends a NACK packet when p2p
+ * is not available or memory registration limit was reached on the receiver.
+ *
+ * @param[in]    ep         endpoint
+ * @param[in]    pkt_entry  packet entry
+ * @param[in]    rxe        RX entry
+ *
+ * @return 0 on success, or a negative error code.
+ */
+static inline int
+efa_rdm_pke_post_remote_read_or_nack(struct efa_rdm_ep  *ep,
+                                     struct efa_rdm_pke *pkt_entry,
+                                     struct efa_rdm_ope *rxe)
+{
+	int err = 0;
+	int pkt_type;
+	int p2p_avail;
+
+	pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
+	err = efa_rdm_ep_use_p2p(ep, rxe->desc[0]);
+	if (err < 0)
+		return err;
+
+	p2p_avail = err;
+	if (p2p_avail) {
+		err = efa_rdm_ope_post_remote_read_or_queue(rxe);
+	} else if (efa_rdm_peer_support_read_nack(rxe->peer)) {
+		EFA_INFO(FI_LOG_EP_CTRL,
+			 "Receiver sending long read "
+			 "NACK packet because P2P is not available, "
+			 "unable to post RDMA read.\n");
+		goto send_nack;
+	} else {
+		EFA_INFO(FI_LOG_EP_CTRL, "P2P is not available, "
+					 "unable to post RDMA read.\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	if (err == -FI_ENOMR) {
+		if (efa_rdm_peer_support_read_nack(rxe->peer)) {
+			EFA_INFO(FI_LOG_EP_CTRL, "Receiver sending long read "
+						 "NACK packet because memory "
+						 "registration limit was "
+						 "reached on the receiver.\n");
+			goto send_nack;
+		} else {
+			/* Peer does not support the READ_NACK packet. So we
+			 * return EAGAIN and hope that the app runs progress
+			 * again which will free some MR registrations */
+			return -FI_EAGAIN;
+		}
+	}
+
+	return err;
+
+send_nack:
+	rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
+	/* Only set the flag for runting read. The NACK
+	 * packet is sent after all runting read
+	 * RTM packets have been received */
+	if (efa_rdm_pkt_type_is_runtread(pkt_type)) {
+		return 0;
+	}
+
+	if (efa_rdm_pkt_type_is_rtm(pkt_type)) {
+		efa_rdm_rxe_map_insert(&ep->rxe_map, pkt_entry, rxe);
+	}
+
+	return efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_READ_NACK_PKT);
+}
+
 size_t efa_rdm_pke_get_payload_offset(struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
