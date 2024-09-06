@@ -557,14 +557,14 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	memcpy(rxe->rma_iov, read_iov,
 	       rxe->rma_iov_count * sizeof(struct fi_rma_iov));
 
+	err = efa_rdm_pke_post_remote_read_or_nack(rxe->ep, pkt_entry, rxe);
+
 	efa_rdm_pke_release_rx(pkt_entry);
 
-	err = efa_rdm_ope_post_remote_read_or_queue(rxe);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ,
 			"RDMA post read or queue failed.\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RDMA_READ_POST);
 		efa_rdm_rxe_release(rxe);
-		efa_rdm_pke_release_rx(pkt_entry);
 	}
 }
