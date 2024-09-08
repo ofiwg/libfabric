@@ -157,9 +157,9 @@ int ft_cuda_init(void)
 		goto err;
 	}
 
-	cuda_handle = dlopen("libcuda.so", RTLD_NOW);
+	cuda_handle = dlopen("libcuda.so.1", RTLD_NOW);
 	if (!cuda_handle) {
-		FT_ERR("Failed to dlopen libcuda.so\n");
+		FT_ERR("Failed to dlopen libcuda.so.1\n");
 		goto err_dlclose_cudart;
 	}
 
