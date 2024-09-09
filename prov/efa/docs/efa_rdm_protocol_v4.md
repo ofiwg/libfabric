@@ -1505,8 +1505,9 @@ in order to support CQ entry generation in case the sender uses
 ### 4.7 Long read and runting read nack protocol
 
 Long read and runting read protocols in Libfabric 1.20 and above use a nack protocol
-when the receiver is unable to register a memory region for the RDMA read operation.
-Failure to register the memory region is typically because of a hardware limitation.
+when the receiver is unable to register a memory region for the RDMA read operation 
+or P2P support is unavailable for the RDMA read operation, typically because of a 
+hardware limitation.
 
 Table: 4.2 Format of the READ_NACK packet
 
@@ -1521,12 +1522,14 @@ Table: 4.2 Format of the READ_NACK packet
 
 The nack protocols work as follows
 * Sender has decided to use the long read or runting read protocol
-* The receiver receives the RTM packet(s)
+* The receiver receives the RTM packet(s) or RTW packet
    - One LONGREAD_RTM packet in case of long read protocol
    - Multiple RUNTREAD_RTM packets in case of runting read protocol
-* The receiver attempts to register a memory region for the RDMA operation but fails
-* After all RTM packets have been processed, the receiver sends a READ_NACK packet to the sender 
-* The sender then switches to the long CTS protocol and sends a LONGCTS_RTM packet
+   - One LONGREAD_RTW packet in case of emulated long-read write protocol
+* The receiver attempts to register a memory region for the RDMA operation but fails, 
+or P2P is unavailable for the RDMA operation
+* After all RTM/RTW packets have been processed, the receiver sends a READ_NACK packet to the sender 
+* The sender then switches to the long CTS protocol and sends a LONGCTS_RTM/LONGCTS_RTW packet
 * The receiver sends a CTS packet and the data transfer continues as in the long CTS protocol
 
 The LONGCTS_RTM packet sent in the nack protocol does not contain any application data.
