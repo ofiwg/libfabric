@@ -718,7 +718,7 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 	hints->domain_attr->mode = ~0;
-	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
+	hints->domain_attr->mr_mode = ~OFI_MR_DEPRECATED;
 	hints->addr_format = FI_SOCKADDR;
 
 	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, 0, FI_SOURCE, hints, &fi);

@@ -69,6 +69,11 @@ extern "C" {
 	((type *) ((char *)ptr - offsetof(type, field)))
 #endif
 
+/*
+ * Internal version of deprecated APIs.
+ * These are used internally to avoid compiler warnings.
+ */
+#define OFI_MR_DEPRECATED	(0x3) /* FI_MR_BASIC | FI_MR_SCALABLE */
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 
 /* exit codes must be 0-255 */

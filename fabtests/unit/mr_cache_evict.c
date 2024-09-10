@@ -806,7 +806,7 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 	hints->domain_attr->mode = ~0;
-	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
+	hints->domain_attr->mr_mode = ~OFI_MR_DEPRECATED;
 	hints->caps |= FI_MSG | FI_RMA;
 
 	if (opts.options & FT_OPT_ENABLE_HMEM)
