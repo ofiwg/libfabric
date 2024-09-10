@@ -152,7 +152,7 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 	hints->domain_attr->mode = ~0;
-	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
+	hints->domain_attr->mr_mode = ~OFI_MR_DEPRECATED;
 	hints->caps |= FI_MSG;
 
 	failed = run_tests(test_array, err_buf);

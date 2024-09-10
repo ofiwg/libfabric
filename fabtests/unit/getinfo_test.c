@@ -538,53 +538,6 @@ static int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
 /*
  * MR mode checks
  */
-static int init_mr_basic(struct fi_info *hints)
-{
-	hints->caps |= FI_RMA;
-	hints->domain_attr->mr_mode = FI_MR_BASIC;
-	return 0;
-}
-
-static int check_mr_basic(struct fi_info *info)
-{
-	return (info->domain_attr->mr_mode != FI_MR_BASIC) ?
-		EXIT_FAILURE : 0;
-}
-
-static int init_mr_scalable(struct fi_info *hints)
-{
-	hints->caps |= FI_RMA;
-	hints->domain_attr->mr_mode = FI_MR_SCALABLE;
-	return 0;
-}
-
-static int check_mr_scalable(struct fi_info *info)
-{
-	return (info->domain_attr->mr_mode != FI_MR_SCALABLE) ?
-		EXIT_FAILURE : 0;
-}
-
-static int init_mr_unspec(struct fi_info *hints)
-{
-	hints->caps |= FI_RMA;
-	hints->domain_attr->mr_mode = FI_MR_UNSPEC;
-	return 0;
-}
-
-static int test_mr_v1_0(char *node, char *service, uint64_t flags,
-			struct fi_info *test_hints, struct fi_info **info)
-{
-	return fi_getinfo(FI_VERSION(1, 0), node, service, flags,
-			  test_hints, info);
-}
-
-static int check_mr_unspec(struct fi_info *info)
-{
-	return (info->domain_attr->mr_mode != FI_MR_BASIC &&
-		info->domain_attr->mr_mode != FI_MR_SCALABLE) ?
-		EXIT_FAILURE : 0;
-}
-
 static int init_mr_mode(struct fi_info *hints, uint64_t mode)
 {
 	hints->domain_attr->mr_mode = (uint32_t) mode;
@@ -906,18 +859,7 @@ getinfo_test(bad_waw_ordering, 1, "Test invalid rma WAW ordering size",
 	     NULL, NULL, -FI_ENODATA)
 
 /* MR mode tests */
-getinfo_test(mr_mode, 1, "Test FI_MR_BASIC", NULL, NULL, 0,
-	     hints, init_mr_basic, NULL, check_mr_basic, -FI_ENODATA)
-getinfo_test(mr_mode, 2, "Test FI_MR_SCALABLE", NULL, NULL, 0,
-	     hints, init_mr_scalable, NULL, check_mr_scalable, -FI_ENODATA)
-getinfo_test(mr_mode, 3, "Test FI_MR_UNSPEC (v1.0)", NULL, NULL, 0,
-	     hints, init_mr_unspec, test_mr_v1_0, check_mr_unspec, -FI_ENODATA)
-getinfo_test(mr_mode, 4, "Test FI_MR_BASIC (v1.0)", NULL, NULL, 0,
-	     hints, init_mr_basic, test_mr_v1_0, check_mr_basic, -FI_ENODATA)
-getinfo_test(mr_mode, 5, "Test FI_MR_SCALABLE (v1.0)", NULL, NULL, 0,
-     	     hints, init_mr_scalable, test_mr_v1_0, check_mr_scalable,
-	     -FI_ENODATA)
-getinfo_test(mr_mode, 6, "Test mr_mode bits", NULL, NULL, 0,
+getinfo_test(mr_mode, 1, "Test mr_mode bits", NULL, NULL, 0,
 	     hints, NULL, validate_mr_modes, NULL, 0)
 
 /* Progress tests */
@@ -1008,11 +950,6 @@ int main(int argc, char **argv)
 		TEST_ENTRY_GETINFO(bad_waw_ordering1),
 		TEST_ENTRY_GETINFO(neg1),
 		TEST_ENTRY_GETINFO(mr_mode1),
-		TEST_ENTRY_GETINFO(mr_mode2),
-		TEST_ENTRY_GETINFO(mr_mode3),
-		TEST_ENTRY_GETINFO(mr_mode4),
-		TEST_ENTRY_GETINFO(mr_mode5),
-		TEST_ENTRY_GETINFO(mr_mode6),
 		TEST_ENTRY_GETINFO(progress1),
 		TEST_ENTRY_GETINFO(progress2),
 		TEST_ENTRY_GETINFO(caps1),
