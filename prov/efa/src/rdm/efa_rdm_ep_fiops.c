@@ -1426,7 +1426,7 @@ static int efa_rdm_ep_set_cuda_api_permitted(struct efa_rdm_ep *ep, bool cuda_ap
 static int efa_rdm_ep_set_shared_memory_permitted(struct efa_rdm_ep *ep, bool shm_permitted)
 {
 	if (!shm_permitted) {
-		EFA_WARN(FI_LOG_EP_CTRL,
+		EFA_INFO(FI_LOG_EP_CTRL,
 			 "FI_OPT_SHARED_MEMORY_PERMITTED set to false\n");
 		ep->shm_permitted = false;
 		return FI_SUCCESS;
