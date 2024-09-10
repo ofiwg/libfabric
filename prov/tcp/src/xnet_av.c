@@ -69,23 +69,27 @@ static int xnet_mplex_av_insert(struct fid_av *av_fid, const void *addr, size_t 
 	int ret;
 	struct fid_list_entry *item;
 	struct fid_av *subav_fid;
-	fi_addr_t sub_fi_addr;
+	fi_addr_t *sub_fi_addr;
 	struct xnet_mplex_av *av = container_of(av_fid, struct xnet_mplex_av,
-						util_av.av_fid.fid);
-
+						util_av.av_fid);
+	sub_fi_addr = calloc(count, sizeof(fi_addr_t));
+	if (!sub_fi_addr)
+		return -FI_ENOMEM;
 	ofi_genlock_lock(&av->lock);
 	ret = ofi_ip_av_insert(&av->util_av.av_fid, addr, count, fi_addr, flags, context);
 	if (ret < count)
 		goto out;
-	dlist_foreach_container(&av->subav_list, struct fid_list_entry,	item, entry) {
+	dlist_foreach_container(&av->subav_list, struct fid_list_entry, item, entry) {
 		subav_fid = container_of(item->fid, struct fid_av, fid);
-		ret = fi_av_insert(subav_fid, addr, count, &sub_fi_addr, flags, context);
+		ret = fi_av_insert(subav_fid, addr, count, sub_fi_addr, flags, context);
 		if (ret < count)
 			break;
-		assert(*fi_addr == sub_fi_addr);
+		assert(!fi_addr || memcmp(fi_addr, sub_fi_addr,
+					  sizeof(fi_addr_t) * count) == 0);
 	}
 out:
 	ofi_genlock_unlock(&av->lock);
+	free(sub_fi_addr);
 	return ret;
 }
 
@@ -97,26 +101,29 @@ static int xnet_mplex_av_insertsym(struct fid_av *av_fid, const char *node,
 	int ret;
 	struct fid_list_entry *item;
 	struct fid_av *subav_fid;
-	fi_addr_t sub_fi_addr;
+	fi_addr_t *sub_fi_addr;
 	struct xnet_mplex_av *av = container_of(av_fid, struct xnet_mplex_av,
 						util_av.av_fid.fid);
-
+	sub_fi_addr = calloc(nodecnt * svccnt, sizeof(fi_addr_t));
+	if (!sub_fi_addr)
+		return -FI_ENOMEM;
 	ofi_genlock_lock(&av->lock);
 	ret = ofi_ip_av_insertsym(&av->util_av.av_fid, node, nodecnt,
 				  service, svccnt, fi_addr, flags, context);
-	if (ret)
+	if (ret < nodecnt * svccnt)
 		goto out;
 	dlist_foreach_container(&av->subav_list, struct fid_list_entry,	item, entry) {
 		subav_fid = container_of(item->fid, struct fid_av, fid);
 		ret = fi_av_insertsym(subav_fid, node, nodecnt, service, svccnt,
-				      &sub_fi_addr, flags, context);
-		if (ret)
+				      sub_fi_addr, flags, context);
+		if (ret <= nodecnt * svccnt)
 			break;
-		assert(*fi_addr == sub_fi_addr);
+		assert(!fi_addr || memcmp(fi_addr, sub_fi_addr,
+					  sizeof(fi_addr_t) * nodecnt * svccnt) == 0);
 	}
 out:
 	ofi_genlock_unlock(&av->lock);
-
+	free(sub_fi_addr);
 	return ret;
 }
 
@@ -130,19 +137,18 @@ static int xnet_mplex_av_insertsvc(struct fid_av *av_fid, const char *node,
 	fi_addr_t sub_fi_addr;
 	struct xnet_mplex_av *av = container_of(av_fid, struct xnet_mplex_av,
 						util_av.av_fid.fid);
-
 	ofi_genlock_lock(&av->lock);
 	ret = ofi_ip_av_insertsvc(&av->util_av.av_fid, node, service,
 				  fi_addr, flags, context);
-	if (ret)
+	if (ret <= 0)
 		goto out;
 	dlist_foreach_container(&av->subav_list, struct fid_list_entry,	item, entry) {
 		subav_fid = container_of(item->fid, struct fid_av, fid);
 		ret = fi_av_insertsvc(subav_fid, node, service, &sub_fi_addr, flags,
 				      context);
-		if (ret)
+		if (ret <= 0)
 			break;
-		assert(*fi_addr == sub_fi_addr);
+		assert(!fi_addr || *fi_addr == sub_fi_addr);
 	}
 out:
 	ofi_genlock_unlock(&av->lock);
