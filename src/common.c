@@ -1053,19 +1053,19 @@ size_t ofi_mask_addr(struct sockaddr *maskaddr, const struct sockaddr *srcaddr,
 	return len;
 }
 
-void ofi_straddr_log_internal(const char *func, int line,
+void ofi_straddr_log_internal(const char *func, int line, uint32_t addr_format,
 			      const struct fi_provider *prov,
 			      enum fi_log_level level,
 			      enum fi_log_subsys subsys, char *log_str,
 			      const void *addr)
 {
 	char buf[OFI_ADDRSTRLEN];
-	uint32_t addr_format;
 	size_t len = sizeof(buf);
 
 	if (fi_log_enabled(prov, level, subsys)) {
 		if (addr) {
-			addr_format = ofi_translate_addr_format(ofi_sa_family(addr));
+			if (addr_format == FI_FORMAT_UNSPEC)
+				addr_format = ofi_translate_addr_format(ofi_sa_family(addr));
 			fi_log(prov, level, subsys, func, line, "%s: %s\n", log_str,
 			       ofi_straddr(buf, &len, addr_format, addr));
 		} else {
