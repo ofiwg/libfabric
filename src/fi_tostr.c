@@ -295,6 +295,36 @@ ofi_tostr_addr(char *buf, size_t len, uint32_t addr_format, void *addr)
 }
 
 static void
+ofi_tostr_hmem_iface(char *buf, size_t len, enum fi_hmem_iface iface)
+{
+	switch (iface) {
+	CASEENUMSTRN(FI_HMEM_SYSTEM, len);
+	CASEENUMSTRN(FI_HMEM_CUDA, len);
+	CASEENUMSTRN(FI_HMEM_ROCR, len);
+	CASEENUMSTRN(FI_HMEM_ZE, len);
+	CASEENUMSTRN(FI_HMEM_NEURON, len);
+	CASEENUMSTRN(FI_HMEM_SYNAPSEAI, len);
+	default:
+		ofi_strncatf(buf, len, "Unknown");
+		break;
+	}
+}
+
+static void
+ofi_tostr_hmem_attr_opt(char *buf, size_t len, enum fi_hmem_attr_opt hmem_attr_opt)
+{
+	switch (hmem_attr_opt) {
+	CASEENUMSTRN(FI_HMEM_ATTR_UNSPEC, len);
+	CASEENUMSTRN(FI_HMEM_ATTR_REQUIRED, len);
+	CASEENUMSTRN(FI_HMEM_ATTR_PREFERRED, len);
+	CASEENUMSTRN(FI_HMEM_ATTR_DISABLED, len);
+	default:
+		ofi_strncatf(buf, len, "Unknown");
+		break;
+	}
+}
+
+static void
 ofi_tostr_tx_attr(char *buf, size_t len, const struct fi_tx_attr *attr,
 		  const char *prefix)
 {
@@ -560,6 +590,36 @@ ofi_tostr_fabric_attr(char *buf, size_t len, const struct fi_fabric_attr *attr,
 		FI_MAJOR(attr->api_version), FI_MINOR(attr->api_version));
 }
 
+static void
+ofi_tostr_hmem_attr(char *buf, size_t len, const struct fi_hmem_attr *attr,
+		      const char *prefix)
+{
+	const struct fi_hmem_attr *next_hmem_attr = attr;
+
+	if (!attr) {
+		ofi_strncatf(buf, len, "%sfi_hmem_attr: (null)\n", prefix);
+		return;
+	}
+
+	ofi_strncatf(buf, len, "%sfi_hmem_attr:\n", prefix);
+
+	while (next_hmem_attr != NULL) {
+		ofi_strncatf(buf, len, "%s%siface: ", prefix, TAB);
+		ofi_tostr_hmem_iface(buf, len, attr->iface);
+		ofi_strncatf(buf, len, "\n");
+		ofi_strncatf(buf, len, "%s%s%sapi_permitted: ", prefix, TAB, TAB);
+		ofi_tostr_hmem_attr_opt(buf, len, attr->api_permitted);
+		ofi_strncatf(buf, len, "\n");
+		ofi_strncatf(buf, len, "%s%s%suse_p2p: ", prefix, TAB, TAB);
+		ofi_tostr_hmem_attr_opt(buf, len, attr->use_p2p);
+		ofi_strncatf(buf, len, "\n");
+		ofi_strncatf(buf, len, "%s%s%suse_dev_reg_copy: ", prefix, TAB, TAB);
+		ofi_tostr_hmem_attr_opt(buf, len, attr->use_dev_reg_copy);
+		ofi_strncatf(buf, len, "\n");
+		next_hmem_attr = next_hmem_attr->next;
+	}
+}
+
 static void ofi_tostr_info(char *buf, size_t len, const struct fi_info *info)
 {
 	ofi_strncatf(buf, len, "fi_info:\n");
@@ -592,6 +652,7 @@ static void ofi_tostr_info(char *buf, size_t len, const struct fi_info *info)
 	ofi_tostr_domain_attr(buf, len, info->domain_attr, TAB);
 	ofi_tostr_fabric_attr(buf, len, info->fabric_attr, TAB);
 	ofi_tostr_fid(TAB "nic: ", buf, len, &info->nic->fid);
+	ofi_tostr_hmem_attr(buf, len, info->hmem_attr, TAB);
 }
 
 static void ofi_tostr_atomic_type(char *buf, size_t len, enum fi_datatype type)
@@ -705,22 +766,6 @@ static void ofi_tostr_cq_event_flags(char *buf, size_t len, uint64_t flags)
 	IFFLAGSTRN(flags, FI_MORE, len);
 	IFFLAGSTRN(flags, FI_CLAIM, len);
 	ofi_remove_comma(buf);
-}
-
-static void
-ofi_tostr_hmem_iface(char *buf, size_t len, enum fi_hmem_iface iface)
-{
-	switch (iface) {
-	CASEENUMSTRN(FI_HMEM_SYSTEM, len);
-	CASEENUMSTRN(FI_HMEM_CUDA, len);
-	CASEENUMSTRN(FI_HMEM_ROCR, len);
-	CASEENUMSTRN(FI_HMEM_ZE, len);
-	CASEENUMSTRN(FI_HMEM_NEURON, len);
-	CASEENUMSTRN(FI_HMEM_SYNAPSEAI, len);
-	default:
-		ofi_strncatf(buf, len, "Unknown");
-		break;
-	}
 }
 
 static void
@@ -1037,6 +1082,8 @@ char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 	case FI_TYPE_CQ_ERR_ENTRY:
 		ofi_tostr_cq_err_entry(buf, len, data);
 		break;
+	case FI_TYPE_HMEM_ATTR:
+		ofi_tostr_hmem_attr(buf, len, data, "");
 	default:
 		ofi_strncatf(buf, len, "Unknown type");
 		break;
