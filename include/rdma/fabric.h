@@ -360,6 +360,22 @@ enum {
 	FI_TC_NETWORK_CTRL,
 };
 
+enum fi_hmem_iface {
+	FI_HMEM_SYSTEM = 0,
+	FI_HMEM_CUDA,
+	FI_HMEM_ROCR,
+	FI_HMEM_ZE,
+	FI_HMEM_NEURON,
+	FI_HMEM_SYNAPSEAI,
+};
+
+enum fi_hmem_attr_opt {
+	FI_HMEM_ATTR_UNSPEC = 0,
+	FI_HMEM_ATTR_REQUIRED,
+	FI_HMEM_ATTR_PREFERRED,
+	FI_HMEM_ATTR_DISABLED,
+};
+
 static inline uint32_t fi_tc_dscp_set(uint8_t dscp)
 {
 	return ((uint32_t) dscp) | FI_TC_DSCP;
@@ -465,6 +481,14 @@ struct fi_fabric_attr {
 	uint32_t		api_version;
 };
 
+struct fi_hmem_attr {
+	enum fi_hmem_iface		iface;
+	enum fi_hmem_attr_opt		api_permitted;
+	enum fi_hmem_attr_opt		use_p2p;
+	enum fi_hmem_attr_opt		use_dev_reg_copy;
+	struct fi_hmem_attr		*next;
+};
+
 struct fi_info {
 	struct fi_info		*next;
 	uint64_t		caps;
@@ -481,6 +505,7 @@ struct fi_info {
 	struct fi_domain_attr	*domain_attr;
 	struct fi_fabric_attr	*fabric_attr;
 	struct fid_nic		*nic;
+	struct fi_hmem_attr	*hmem_attr;
 };
 
 struct fi_device_attr {
@@ -771,6 +796,7 @@ enum fi_type {
 	FI_TYPE_MR_ATTR,
 	FI_TYPE_CNTR_ATTR,
 	FI_TYPE_CQ_ERR_ENTRY,
+	FI_TYPE_HMEM_ATTR,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);

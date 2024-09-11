@@ -281,6 +281,14 @@ struct fi_domain_attr_1_7 {
 	size_t			max_ep_auth_key;
 };
 
+struct fi_hmem_attr_1_7 {
+        enum fi_hmem_iface        iface;
+        enum fi_hmem_attr_opt     api_permitted;
+        enum fi_hmem_attr_opt     use_p2p;
+        enum fi_hmem_attr_opt     use_dev_reg_copy;
+        struct fi_hmem_attr       *next;
+};
+
 #define fi_tx_attr_1_7 fi_tx_attr_1_3
 #define fi_rx_attr_1_7 fi_rx_attr_1_3
 #define fi_ep_attr_1_7 fi_ep_attr_1_3
@@ -303,6 +311,7 @@ struct fi_info_1_7 {
         struct fi_domain_attr_1_7 *domain_attr;
         struct fi_fabric_attr_1_7 *fabric_attr;
         struct fid_nic_1_7        *nic;
+        struct fi_hmem_attr_1_7   *hmem_attr;
 };
 
 #define ofi_dup_attr(dst, src)				\
