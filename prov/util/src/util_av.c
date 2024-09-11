@@ -276,14 +276,13 @@ int ofi_av_insert_addr_at(struct util_av *av, const void *addr, fi_addr_t fi_add
 	struct util_av_entry *entry = NULL;
 
 	assert(ofi_mutex_held(&av->lock));
-	ofi_straddr_log(av->prov, FI_LOG_INFO, FI_LOG_AV, "inserting addr", addr);
+	ofi_av_straddr_log(av, FI_LOG_INFO, "inserting addr", addr);
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	if (entry) {
 		if (fi_addr == ofi_buf_index(entry))
 			return FI_SUCCESS;
 
-		ofi_straddr_log(av->prov, FI_LOG_WARN, FI_LOG_AV,
-						"addr already in AV", addr);
+		ofi_av_straddr_log(av, FI_LOG_WARN, "addr already in AV", addr);
 		return -FI_EALREADY;
 	}
 
@@ -304,14 +303,13 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 	struct util_av_entry *entry = NULL;
 
 	assert(ofi_mutex_held(&av->lock));
-	ofi_straddr_log(av->prov, FI_LOG_INFO, FI_LOG_AV, "inserting addr", addr);
+	ofi_av_straddr_log(av, FI_LOG_INFO, "inserting addr", addr);
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	if (entry) {
 		if (fi_addr)
 			*fi_addr = ofi_buf_index(entry);
 		if (ofi_atomic_inc32(&entry->use_cnt) > 1) {
-			ofi_straddr_log(av->prov, FI_LOG_WARN, FI_LOG_AV,
-							"addr already in AV", addr);
+			ofi_av_straddr_log(av, FI_LOG_WARN, "addr already in AV", addr);
 		}
 	} else {
 		entry = ofi_ibuf_alloc(av->av_entry_pool);

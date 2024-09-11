@@ -835,6 +835,10 @@ static inline void ofi_ep_peer_rx_cntr_incerr(struct util_ep *ep, uint8_t op)
  * AV / addressing
  */
 
+#define ofi_av_straddr_log(av, level, ...) \
+	ofi_straddr_log_internal(__func__, __LINE__, av->domain->addr_format, \
+			av->prov, level, FI_LOG_AV, __VA_ARGS__)
+
 struct util_av;
 struct util_av_set;
 struct util_peer_addr;
