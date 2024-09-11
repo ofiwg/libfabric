@@ -1041,6 +1041,7 @@ __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 {
 	struct fi_info *next;
+	struct fi_hmem_attr *next_hmem_attr;
 
 	for (; info; info = next) {
 		next = info->next;
@@ -1066,6 +1067,12 @@ void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 		if (info->nic &&
 		    FI_CHECK_OP(info->nic->fid.ops, struct fi_ops, close)) {
 			fi_close(&info->nic->fid);
+		}
+		if (info->hmem_attr) {
+			for (; info->hmem_attr; info->hmem_attr = next_hmem_attr) {
+				next_hmem_attr = info->hmem_attr->next;
+				free(info->hmem_attr);
+			}
 		}
 		free(info);
 	}
@@ -1303,6 +1310,21 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 	return !strcasecmp(provider->name, prov_name);
 }
 
+static struct fi_hmem_attr *dup_hmem_attr(const struct fi_hmem_attr *hmem_attr)
+{
+	if (!hmem_attr)
+		return NULL;
+
+	struct fi_hmem_attr *dup =
+		(struct fi_hmem_attr *) mem_dup(hmem_attr, sizeof(*hmem_attr));
+	if (!dup)
+		return NULL;
+
+	dup->next = dup_hmem_attr(hmem_attr->next);
+
+	return dup;
+}
+
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		const char *service, uint64_t flags,
@@ -1423,7 +1445,7 @@ struct fi_info *ofi_allocinfo_internal(void)
 	info->ep_attr = calloc(1, sizeof(*info->ep_attr));
 	info->domain_attr = calloc(1, sizeof(*info->domain_attr));
 	info->fabric_attr = calloc(1, sizeof(*info->fabric_attr));
-	if (!info->tx_attr|| !info->rx_attr || !info->ep_attr ||
+	if (!info->tx_attr || !info->rx_attr || !info->ep_attr ||
 	    !info->domain_attr || !info->fabric_attr)
 		goto err;
 
@@ -1454,6 +1476,7 @@ struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 	dup->ep_attr = NULL;
 	dup->domain_attr = NULL;
 	dup->fabric_attr = NULL;
+	dup->hmem_attr = NULL;
 	dup->next = NULL;
 
 	if (info->src_addr != NULL) {
@@ -1530,6 +1553,12 @@ struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 	if (info->nic) {
 		ret = fi_control(&info->nic->fid, FI_DUP, &dup->nic);
 		if (ret && ret != -FI_ENOSYS)
+			goto fail;
+	}
+
+	if (info->hmem_attr) {
+		dup->hmem_attr = dup_hmem_attr(info->hmem_attr);
+		if (dup->hmem_attr == NULL)
 			goto fail;
 	}
 
