@@ -13,6 +13,8 @@ on:
     paths-ignore:
       - 'man/**'
       - 'docs/**'
+  schedule:
+    - cron:  '0 21 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -22,12 +24,11 @@ jobs:
   opx-ci:
     name: OPX CI
     if: |
-        github.repository == 'cornelisnetworks/libfabric-internal' && 
-        github.event.pull_request.merged != true
+        github.repository == 'cornelisnetworks/libfabric-internal'
     uses: cornelisnetworks/libfabric-devel/.github/workflows/cn.yml@master
-  on-merge:
-    name: On-Merge
+  nightly:
+    name: Nightly
     if: |
         github.repository == 'cornelisnetworks/libfabric-internal' && 
-        github.event.pull_request.merged == true
-    uses: cornelisnetworks/libfabric-devel/.github/workflows/merge.yml@master
+        github.event.schedule == '0 21 * * *'
+    uses: cornelisnetworks/libfabric-devel/.github/workflows/nightly.yml@master
