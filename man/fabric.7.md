@@ -455,6 +455,11 @@ Added new fields to the following attributes:
 *fi_domain_attr*
 : Added max_group_id
 
+*fi_info*
+: The fi_info structure was expanded to reference a new fabric object,
+  fi_hmem_attr.  When available, the fi_hmem_attr references a new set of 
+  attributes related to heterogeneous memory.
+
 # SEE ALSO
 
 [`fi_info`(1)](fi_info.1.html),

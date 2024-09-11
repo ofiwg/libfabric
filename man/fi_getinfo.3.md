@@ -143,6 +143,7 @@ struct fi_info {
 	struct fi_domain_attr *domain_attr;
 	struct fi_fabric_attr *fabric_attr;
 	struct fid_nic        *nic;
+	struct fi_hmem_attr   *hmem_attr;
 };
 ```
 
@@ -248,6 +249,73 @@ struct fi_info {
   only valid for providers where the corresponding attributes are
   closely associated with a hardware NIC.  See
   [`fi_nic`(3)](fi_nic.3.html) for details.
+
+*hmem_attr - heterogeneous memory attributes*
+: Optionally supplied HMEM attributes.  HMEM attributes may be
+  specified and returned as part of fi_getinfo.  When provided as
+  hints, requested values of struct fi_hmem_attr should be set.  On
+  output, the actual HMEM attributes that can be provided will be
+  returned.
+
+## HMEM ATTRIBUTES
+
+```c
+enum fi_hmem_attr_opt {
+	FI_HMEM_ATTR_UNSPEC,
+	FI_HMEM_ATTR_REQUIRED,
+	FI_HMEM_ATTR_PREFERRED,
+	FI_HMEM_ATTR_DISABLED
+};
+
+struct fi_hmem_attr {
+	enum fi_hmem_iface		iface;
+	enum fi_hmem_attr_opt		api_permitted;
+	enum fi_hmem_attr_opt		use_p2p;
+	enum fi_hmem_attr_opt		use_dev_reg_copy;
+	struct fi_hmem_attr		*next;
+};
+```
+- *fi_hmem_attr_opt - int*
+: Defines how the provider should handle HMEM attributes for an interface.
+  By default, the provider will chose whether to use the attributes 
+  (FI_HMEM_ATTR_UNSPEC). 
+  Valid values defined in fabric.h are:
+	* FI_HMEM_ATTR_UNSPEC: The attribute may be used by the provider
+	  and is subject to the provider implementation.
+	* FI_HMEM_ATTR_REQUIRED: The attribute must be used for this interface,
+	  operations that cannot be performed will be reported as failing.
+	* FI_HMEM_ATTR_PREFERRED: The attribute should be used by the
+	  provider if available, but the provider may choose other implementation 
+	  if it is unavailable.
+	* FI_HMEM_ATTR_DISABLED: The attribute should not be used.
+
+- *iface*
+
+Indicates the software interfaces used by the application, details in 
+[`fi_mr`(3)](fi_mr.3.html)
+
+- *api_permitted*
+
+Controls whether libfabric is allowed to make device-specific API calls. 
+By default, libfabric is permitted to call device-specific API(e.g. CUDA API). 
+If user wish to prohibit libfabric from making such calls, user can achieve 
+that by set this field to FI_HMEM_ATTR_DISABLED.
+The setopt option FI_OPT_CUDA_API_PERMITTED for endpoint takes precedence 
+over this attribute when api_permitted is not disabled.
+
+- *use_p2p*
+
+Controls whether peer to peer FI_HMEM transfers should be used.
+The FI_OPT_FI_HMEM_P2P setopt option discussed in 
+[`fi_endpoint`(3)](fi_endpoint.3.html) takes precedence over this attribute.
+
+- *use_dev_reg_copy*
+
+Controls whether optimized memcpy for device memory is used, e.g. GDR copy.
+
+- *next*
+
+Pointer to the next fi_hmem_attr if using multiple non-system iface.
 
 # CAPABILITIES
 

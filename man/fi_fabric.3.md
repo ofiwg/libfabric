@@ -177,6 +177,9 @@ datatype or field value.
 *FI_TYPE_LOG_SUBSYS*
 : enum fi_log_subsys
 
+*FI_TYPE_HMEM_ATTR*
+: struct fi_hmem_attr
+
 fi_tostr() will return a pointer to an internal libfabric buffer that
 should not be modified, and will be overwritten the next time
 fi_tostr() is invoked.  fi_tostr() is not thread safe.
