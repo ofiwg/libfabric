@@ -101,13 +101,12 @@ void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc)
  * @brief Write the error message and return its byte length
  * @param[in]    ep          EFA RDM endpoint
  * @param[in]    addr        Remote peer fi_addr_t
- * @param[in]    err         FI_* error code(must be positive)
  * @param[in]    prov_errno  EFA provider * error code(must be positive)
  * @param[out]   buf         Pointer to the address of error data written by this function
  * @param[out]   buflen      Pointer to the returned error data size
  * @return       A status code. 0 if the error data was written successfully, otherwise a negative FI error code.
  */
-int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, fi_addr_t addr, int err, int prov_errno, void **buf, size_t *buflen)
+int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, fi_addr_t addr, int prov_errno, void **buf, size_t *buflen)
 {
     char ep_addr_str[OFI_ADDRSTRLEN] = {0}, peer_addr_str[OFI_ADDRSTRLEN] = {0};
     char peer_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
