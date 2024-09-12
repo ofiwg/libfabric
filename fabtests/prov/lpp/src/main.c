@@ -320,6 +320,7 @@ static void run_tests(int parallel)
 	// iteration.
 	ret = pthread_barrier_init(&_barrier, NULL, nthreads + 1);
 	assert(ret == 0);
+	(void) ret; /* suppress compiler warning for non-debug build */
 
 	pthread_t *threads = calloc(nthreads, sizeof(pthread_t));
 	assert(threads);
