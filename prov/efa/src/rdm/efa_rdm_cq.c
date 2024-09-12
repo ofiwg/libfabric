@@ -371,12 +371,13 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	 * QP and we cannot cancel that.
 	 */
 	if (OFI_UNLIKELY(ep->use_zcpy_rx && efa_rdm_pkt_type_is_rtm(pkt_type))) {
-		EFA_WARN(FI_LOG_CQ,
-			"Invalid pkt type %d! Peer %d doesn't respect the request from this EP that"
-			" RTM packets must be sent to the user recv QP.\n",
-			base_hdr->type, (int)pkt_entry->addr);
+		void *errbuf;
+		size_t errbuf_len;
 
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_INVALID_PKT_TYPE);
+		/* local & peer host-id & ep address will be logged by efa_rdm_write_error_msg */
+		if (!efa_rdm_write_error_msg(ep, pkt_entry->addr, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX, &errbuf, &errbuf_len))
+			EFA_WARN(FI_LOG_CQ, "Error: %s\n", (const char *) errbuf);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}

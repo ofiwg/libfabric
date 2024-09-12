@@ -83,6 +83,11 @@ void efa_show_help(enum efa_errno err) {
 		"which indicates the error is likely due to the peer process no "
 		"longer being present.";
 		break;
+	case FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX:
+		help = "This error is detected locally. "
+		"Please consider matching the local and remote libfabric versions, or turning off "
+		"the zero-copy recv feature by setting FI_EFA_USE_ZCPY_RX=0 in the environment";
+		break;
 	default:
 		return;
 	}
