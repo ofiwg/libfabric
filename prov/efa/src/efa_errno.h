@@ -104,7 +104,8 @@
 	_(4121,	DGRAM_CQ_READ,			Error reading from DGRAM CQ)			\
 	_(4122,	SHM_INTERNAL_ERROR,		SHM internal error)				\
 	_(4123,	WRITE_SHM_CQ_ENTRY,		Failure to write CQ entry for SHM operation)	\
-	_(4124, ESTABLISHED_RECV_UNRESP,	Unresponsive receiver (connection previously established))
+	_(4124, ESTABLISHED_RECV_UNRESP,	Unresponsive receiver (connection previously established))	\
+	_(4125,	INVALID_PKT_TYPE_ZCPY_RX,	Invalid packet type received when zero copy recv mode is ON)
 
 /** @} */
 
