@@ -247,6 +247,10 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   The default threshold is 8192.
   This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
 
+*FI_OPX_MIXED_NETWORK*
+: Integer. Indicates that the network is a mix of OPA100 and CN5000. Needs to be set to 1
+  in case of mixed network. Default is 0.
+  
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
