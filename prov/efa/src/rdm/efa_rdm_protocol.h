@@ -41,7 +41,12 @@ struct efa_ep_addr {
 #define EFA_RDM_EXTRA_FEATURE_READ_NACK		BIT_ULL(6)
 #define EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP	BIT_ULL(7)
 #define EFA_RDM_NUM_EXTRA_FEATURE_OR_REQUEST		8
-#define EFA_RDM_MAX_NUM_EXINFO				(256)
+/*
+ * The length of 64-bit extra_info array used in efa_rdm_ep
+ * and efa_rdm_peer
+ * 4 means 64*4=256 bits of extra features or requests
+ */
+#define EFA_RDM_MAX_NUM_EXINFO				(4)
 
 /*
  * Packet type ID of each packet type (section 1.3)
