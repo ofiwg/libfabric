@@ -60,8 +60,6 @@ struct efa_rdm_peer {
 	int rnr_queued_pkt_cnt;		/**< queued RNR packet count */
 	struct dlist_entry rnr_backoff_entry;	/**< linked to efa_domain->peer_backoff_list */
 	struct dlist_entry handshake_queued_entry; /**< linked with efa_domain->handshake_queued_peer_list */
-	struct dlist_entry rx_unexp_list; /**< a list of unexpected untagged rxe for this peer */
-	struct dlist_entry rx_unexp_tagged_list; /**< a list of unexpected tagged rxe for this peer */
 	struct dlist_entry txe_list; /**< a list of txe related to this peer */
 	struct dlist_entry rxe_list; /**< a list of rxe relased to this peer */
 	struct dlist_entry overflow_pke_list; /**< a list of out-of-order pke that overflow the current recvwin */
