@@ -208,7 +208,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 		FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
-		fi_opx_copy_hdr9B_cacheline(&replay->scb_9B, local_temp);
+		fi_opx_copy_hdr9B_cacheline(&replay->scb.scb_9B, local_temp);
 
 		/* write the CTS payload "send control block"  */
 		volatile uint64_t * scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
@@ -266,7 +266,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 		local_temp[8] = temp[0];
-		fi_opx_copy_hdr16B_cacheline(&replay->scb_16B, local_temp);
+		fi_opx_copy_hdr16B_cacheline(&replay->scb.scb_16B, local_temp);
 
 		replay->payload[0] = temp[1];
 		replay->payload[1] = temp[2];

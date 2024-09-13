@@ -1216,9 +1216,9 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		fi_opx_copy_hdr9B_cacheline(&replay->scb_9B, local_temp);
+		fi_opx_copy_hdr9B_cacheline(&replay->scb.scb_9B, local_temp);
 	} else {
-		fi_opx_copy_hdr16B_cacheline(&replay->scb_16B, local_temp);
+		fi_opx_copy_hdr16B_cacheline(&replay->scb.scb_16B, local_temp);
 	}
 
 	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.reliability_rx,
@@ -1566,24 +1566,24 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 
 	OPX_NO_16B_SUPPORT(hfi1_type);
 
-	replay->scb_9B.qw0 = opx_ep->tx->send_9B.qw0 |
+	replay->scb.scb_9B.qw0 = opx_ep->tx->send_9B.qw0 |
 			     OPX_PBC_LEN(pbc_dws, hfi1_type) |
 			     OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) |
 			     OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type);
-	replay->scb_9B.hdr.qw_9B[0] = opx_ep->tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
-	replay->scb_9B.hdr.qw_9B[1] = opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
+	replay->scb.scb_9B.hdr.qw_9B[0] = opx_ep->tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
+	replay->scb.scb_9B.hdr.qw_9B[1] = opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
 		((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER
 				 : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER);
-	replay->scb_9B.hdr.qw_9B[2] = opx_ep->tx->send_9B.hdr.qw_9B[2] | psn;
-	replay->scb_9B.hdr.qw_9B[3] = opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32);
-	replay->scb_9B.hdr.qw_9B[4] = opx_ep->tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48);
+	replay->scb.scb_9B.hdr.qw_9B[2] = opx_ep->tx->send_9B.hdr.qw_9B[2] | psn;
+	replay->scb.scb_9B.hdr.qw_9B[3] = opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32);
+	replay->scb.scb_9B.hdr.qw_9B[4] = opx_ep->tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48);
 	if (xfer_bytes_tail) {
 		ssize_t tail_len = xfer_bytes_tail;
 		remain = total_len - tail_len;
 		while (false == fi_opx_hfi1_fill_from_iov8(
 					iov_ptr, /* In:  iovec array */
 					*niov_ptr, /* In:  total iovecs */
-					&replay->scb_9B.hdr.qw_9B[5],   /* In:  target buffer to fill */
+					&replay->scb.scb_9B.hdr.qw_9B[5],   /* In:  target buffer to fill */
 					&tail_len, /* In/Out:  buffer length to fill */
 					&iov_idx, /* In/Out:  start index, returns end */
 					&iov_base_offset)) { /* In/Out:  start offset, returns offset */
@@ -1591,7 +1591,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 		}
 		assert(tail_len == 0);
 	}
-	replay->scb_9B.hdr.qw_9B[6] = tag;
+	replay->scb.scb_9B.hdr.qw_9B[6] = tag;
 
 	remain = total_len - xfer_bytes_tail;
 	uint64_t *payload = replay->payload;
@@ -1883,19 +1883,19 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov,
 
 	OPX_NO_9B_SUPPORT(hfi1_type);
 
-	replay->scb_16B.qw0       = opx_ep->tx->send_16B.qw0 |
+	replay->scb.scb_16B.qw0       = opx_ep->tx->send_16B.qw0 |
 		                OPX_PBC_LEN(pbc_dws, hfi1_type) |
 		                OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) |
 		                pbc_dlid; //OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid_16B, hfi1_type);
 
-	replay->scb_16B.hdr.qw_16B[0] = opx_ep->tx->send_16B.hdr.qw_16B[0] | ((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) | ((uint64_t)lrh_qws << 20);
-	replay->scb_16B.hdr.qw_16B[1] = opx_ep->tx->send_16B.hdr.qw_16B[1] |((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
-	replay->scb_16B.hdr.qw_16B[2] = opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
+	replay->scb.scb_16B.hdr.qw_16B[0] = opx_ep->tx->send_16B.hdr.qw_16B[0] | ((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) | ((uint64_t)lrh_qws << 20);
+	replay->scb.scb_16B.hdr.qw_16B[1] = opx_ep->tx->send_16B.hdr.qw_16B[1] |((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
+	replay->scb.scb_16B.hdr.qw_16B[2] = opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
 		((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER :
 		 (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER);
-	replay->scb_16B.hdr.qw_16B[3] = opx_ep->tx->send_16B.hdr.qw_16B[3] | psn;
-	replay->scb_16B.hdr.qw_16B[4] = opx_ep->tx->send_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32);
-	replay->scb_16B.hdr.qw_16B[5] = opx_ep->tx->send_16B.hdr.qw_16B[5] | (payload_qws_total << 48);
+	replay->scb.scb_16B.hdr.qw_16B[3] = opx_ep->tx->send_16B.hdr.qw_16B[3] | psn;
+	replay->scb.scb_16B.hdr.qw_16B[4] = opx_ep->tx->send_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32);
+	replay->scb.scb_16B.hdr.qw_16B[5] = opx_ep->tx->send_16B.hdr.qw_16B[5] | (payload_qws_total << 48);
 	if (xfer_bytes_tail) {
 		ssize_t tail_len = xfer_bytes_tail;
 		remain = total_len - tail_len;
@@ -1903,7 +1903,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov,
 		       fi_opx_hfi1_fill_from_iov8(
 			       iov_ptr, /* In:  iovec array */
 			       *niov_ptr, /* In:  total iovecs */
-			       &replay->scb_16B.hdr.qw_16B[6],   /* In:  target buffer to fill */
+			       &replay->scb.scb_16B.hdr.qw_16B[6],   /* In:  target buffer to fill */
 			       &tail_len, /* In/Out:  buffer length to fill */
 			       &iov_idx, /* In/Out:  start index, returns end */
 			       &iov_base_offset)) { /* In/Out:  start offset, returns offset */
@@ -1911,7 +1911,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov,
 		}
 		assert(tail_len == 0);
 	}
-	replay->scb_16B.hdr.qw_16B[7] = tag;
+	replay->scb.scb_16B.hdr.qw_16B[7] = tag;
 
 	remain = total_len - xfer_bytes_tail;
 	uint64_t *payload = replay->payload;
@@ -2486,9 +2486,9 @@ void fi_opx_hfi1_tx_send_egr_write_replay_data(struct fi_opx_ep *opx_ep,
 {
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))
-		fi_opx_copy_hdr9B_cacheline(&replay->scb_9B, local_source);
+		fi_opx_copy_hdr9B_cacheline(&replay->scb.scb_9B, local_source);
 	else
-		fi_opx_copy_hdr16B_cacheline(&replay->scb_16B, local_source);
+		fi_opx_copy_hdr16B_cacheline(&replay->scb.scb_16B, local_source);
 
 	uint64_t *buf_qws = (uint64_t*)((uintptr_t)buf + xfer_bytes_tail);
 	uint64_t * payload = replay->payload;

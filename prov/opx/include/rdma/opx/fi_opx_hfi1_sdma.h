@@ -99,8 +99,7 @@ struct fi_opx_hfi1_sdma_header_vec {
 #endif
 		} hmem;
 	};
-
-	struct fi_opx_hfi1_txe_scb_9B		scb;
+	union opx_hfi1_txe_scb_union scb;
 };
 
 static const size_t OPX_SDMA_REQ_INFO_OFFSET[2] = {
@@ -134,7 +133,7 @@ struct opx_sdma_request {
 
 	/* ==== CACHELINE 1 ==== */
 	struct iovec				iovecs[OPX_SDMA_REQUEST_IOVS];
-	struct fi_opx_hfi1_sdma_header_vec	header_vec; // 72 bytes or 208 bytes (OPX_HMEM)
+	struct fi_opx_hfi1_sdma_header_vec	header_vec; // 72 bytes 9B or 80 bytes 16B, plus 136 bytes (OPX_HMEM)
 };
 OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_sdma_request, iovecs) == FI_OPX_CACHE_LINE_SIZE,
 			"Offset of opx_sdma_request->iovecs should start at cacheline 1!");
@@ -471,8 +470,7 @@ __OPX_FORCE_INLINE__
 int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep,
 				void *requester,
 				enum opx_sdma_comp_state *requester_comp_state,
-				struct fi_opx_hfi1_txe_scb_9B *source_scb,
-/*				struct opx_hfi1_txe_scb_union *source_scb, */
+				union opx_hfi1_txe_scb_union *source_scb,
 				struct iovec *iovs,
 				const uint16_t num_iovs,
 				const uint16_t num_packets,
@@ -517,12 +515,21 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep,
 	uint64_t set_ack_bit = (num_packets == 1) ? (uint64_t)htonl(0x80000000) : 0;
 
 	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
-	request->header_vec.scb = *source_scb;
-	request->header_vec.scb.hdr.qw_9B[2] |= ((uint64_t)kdeth << 32) | set_ack_bit;
-	request->header_vec.scb.hdr.qw_9B[4] |= (last_packet_bytes << 32);
 
-	request->iovecs[0].iov_len = OPX_SDMA_REQ_HDR_SIZE[set_meminfo];
+
 	request->iovecs[0].iov_base = req_info;
+
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		request->header_vec.scb.scb_9B = (source_scb->scb_9B);
+		request->header_vec.scb.scb_9B.hdr.qw_9B[2] |= ((uint64_t)kdeth << 32) | set_ack_bit;
+		request->header_vec.scb.scb_9B.hdr.qw_9B[4] |= (last_packet_bytes << 32);
+		request->iovecs[0].iov_len = OPX_SDMA_REQ_HDR_SIZE[set_meminfo];
+	} else {
+		request->header_vec.scb.scb_16B = (source_scb->scb_16B);
+		request->header_vec.scb.scb_16B.hdr.qw_16B[3] |= ((uint64_t)kdeth << 32) | set_ack_bit;
+		request->header_vec.scb.scb_16B.hdr.qw_16B[5] |= (last_packet_bytes << 32);
+		request->iovecs[0].iov_len = OPX_SDMA_REQ_HDR_SIZE[set_meminfo] + 8; // extra QWORD in 16B LRH
+	}
 
 	for (int i = 0; i < num_iovs; ++i) {
 		request->iovecs[i + 1] = iovs[i];
@@ -552,7 +559,7 @@ int opx_hfi1_sdma_enqueue_replay(struct fi_opx_ep *opx_ep,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== Enqueuing replay for SDMA Send\n");
 	return opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state,
-					     &replay->scb_9B, replay->iov,
+					     &replay->scb, replay->iov,
 					     OPX_SDMA_REPLAY_DATA_IOV_COUNT,
 					     1, // num_packets,
 					     (payload_bytes + 63) & 0xFFC0, // Frag_size
@@ -599,7 +606,7 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep,
 	uint32_t fragsize = 0;
 	for (int i = 0; i < we->num_packets; ++i) {
 		fragsize = MAX(fragsize, we->packets[i].length);
-		we->packets[i].replay->scb_9B.hdr.qw_9B[2] |= (uint64_t)htonl((uint32_t)psn);
+		we->packets[i].replay->scb.scb_9B.hdr.qw_9B[2] |= (uint64_t)htonl((uint32_t)psn);
 		we->packets[i].replay->sdma_we_use_count = we->bounce_buf.use_count;
 		we->packets[i].replay->sdma_we = replay_back_ptr;
 		we->packets[i].replay->hmem_iface = we->hmem.iface;
@@ -634,7 +641,7 @@ void opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== Enqueuing non-tid request for SDMA Send\n");
 	opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state,
-				     &we->packets[0].replay->scb_9B,
+				     &we->packets[0].replay->scb,
 				     &payload_iov,
 				     OPX_SDMA_NONTID_DATA_IOV_COUNT,
 				     we->num_packets,
@@ -699,7 +706,7 @@ void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== Enqueuing tid request for SDMA Send\n");
 	opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state,
-				      &we->packets[0].replay->scb_9B,
+				      &we->packets[0].replay->scb,
 				      payload_tid_iovs,
 				      OPX_SDMA_TID_DATA_IOV_COUNT,
 				      we->num_packets,

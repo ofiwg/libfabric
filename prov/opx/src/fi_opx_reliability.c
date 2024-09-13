@@ -1195,10 +1195,10 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 
 			/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 			if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-				lrh_pktlen_le = ntohs(tmp->scb_9B.hdr.lrh_9B.pktlen);
+				lrh_pktlen_le = ntohs(tmp->scb.scb_9B.hdr.lrh_9B.pktlen);
 				total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
 			} else {
-				lrh_pktlen_le = tmp->scb_16B.hdr.lrh_16B.pktlen;
+				lrh_pktlen_le = tmp->scb.scb_16B.hdr.lrh_16B.pktlen;
 				total_bytes = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing icrc */
 			}
 			tmp->psn_ptr->psn.bytes_outstanding -= total_bytes;
@@ -1346,10 +1346,10 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		size_t total_bytes;
 		/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			lrh_pktlen_le = ntohs(tmp->scb_9B.hdr.lrh_9B.pktlen);
+			lrh_pktlen_le = ntohs(tmp->scb.scb_9B.hdr.lrh_9B.pktlen);
 			total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
 		} else {
-			lrh_pktlen_le = tmp->scb_16B.hdr.lrh_16B.pktlen;
+			lrh_pktlen_le = tmp->scb.scb_16B.hdr.lrh_16B.pktlen;
 			total_bytes = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing icrc */
 		}
 		tmp->psn_ptr->psn.bytes_outstanding -= total_bytes;
@@ -1464,12 +1464,12 @@ ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
 #if defined(OPX_RELIABILITY_DEBUG) || !defined(NDEBUG)
 	union fi_opx_reliability_service_flow_key key;
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		key.slid = (uint32_t)start_replay->scb_9B.hdr.lrh_9B.slid;
-		key.dlid = (uint32_t)start_replay->scb_9B.hdr.lrh_9B.dlid;
+		key.slid = (uint32_t)start_replay->scb.scb_9B.hdr.lrh_9B.slid;
+		key.dlid = (uint32_t)start_replay->scb.scb_9B.hdr.lrh_9B.dlid;
 	}
 	else {
-		key.slid = htons(start_replay->scb_16B.hdr.lrh_16B.slid20 << 20 | start_replay->scb_16B.hdr.lrh_16B.slid);
-		key.dlid = htons(start_replay->scb_16B.hdr.lrh_16B.dlid20 << 20 | start_replay->scb_16B.hdr.lrh_16B.dlid);
+		key.slid = htons(start_replay->scb.scb_16B.hdr.lrh_16B.slid20 << 20 | start_replay->scb.scb_16B.hdr.lrh_16B.slid);
+		key.dlid = htons(start_replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 | start_replay->scb.scb_16B.hdr.lrh_16B.dlid);
 	}
 	key.tx = (uint32_t)(OPX_REPLAY_HDR(start_replay)->reliability.origin_tx);
 	key.rx = (uint32_t)(OPX_REPLAY_HDR(start_replay)->bth.rx);
@@ -1556,11 +1556,11 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 #if defined(OPX_RELIABILITY_DEBUG) || !defined(NDEBUG)
 	union fi_opx_reliability_service_flow_key key;
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		key.slid = (uint32_t)replay->scb_9B.hdr.lrh_9B.slid;
-		key.dlid = (uint32_t)replay->scb_9B.hdr.lrh_9B.dlid;
+		key.slid = (uint32_t)replay->scb.scb_9B.hdr.lrh_9B.slid;
+		key.dlid = (uint32_t)replay->scb.scb_9B.hdr.lrh_9B.dlid;
 	} else {
-		key.slid = htons(replay->scb_16B.hdr.lrh_16B.slid20 << 20 | replay->scb_16B.hdr.lrh_16B.slid);
-		key.dlid = htons(replay->scb_16B.hdr.lrh_16B.dlid20 << 20 | replay->scb_16B.hdr.lrh_16B.dlid);
+		key.slid = htons(replay->scb.scb_16B.hdr.lrh_16B.slid20 << 20 | replay->scb.scb_16B.hdr.lrh_16B.slid);
+		key.dlid = htons(replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 | replay->scb.scb_16B.hdr.lrh_16B.dlid);
 	}
 	key.tx = (uint32_t)FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR(replay));
 	key.rx = (uint32_t)(OPX_REPLAY_HDR(replay)->bth.rx);
@@ -1576,12 +1576,12 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 	uint16_t payload_credits_needed;
 	int payload_qw_to_copy_with_header = 0;
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		lrh_pktlen_le = ntohs(replay->scb_9B.hdr.lrh_9B.pktlen);
+		lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
 		total_bytes_to_copy = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
 		payload_bytes_to_copy = total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B);
 		payload_credits_needed = (payload_bytes_to_copy >> 6);	/* number of full 64-byte blocks of payload */
 	} else {
-		lrh_pktlen_le = replay->scb_16B.hdr.lrh_16B.pktlen;
+		lrh_pktlen_le = replay->scb.scb_16B.hdr.lrh_16B.pktlen;
 		total_bytes_to_copy = (lrh_pktlen_le) * 8;	/* including trailing icrc */
 		payload_bytes_to_copy = (total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B));
 		payload_qw_to_copy_with_header = MIN((7*8), payload_bytes_to_copy)>>3; /* up to 7 qwords */
@@ -1658,14 +1658,14 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 	volatile uint64_t * const scb =
 		FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.hfi1.pio_scb_sop_first, pio_state);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		OPX_HFI1_BAR_STORE(&scb[0], replay->scb_9B.qw0);
-		OPX_HFI1_BAR_STORE(&scb[1], replay->scb_9B.hdr.qw_9B[0]);
-		OPX_HFI1_BAR_STORE(&scb[2], replay->scb_9B.hdr.qw_9B[1]);
-		OPX_HFI1_BAR_STORE(&scb[3], replay->scb_9B.hdr.qw_9B[2]);
-		OPX_HFI1_BAR_STORE(&scb[4], replay->scb_9B.hdr.qw_9B[3]);
-		OPX_HFI1_BAR_STORE(&scb[5], replay->scb_9B.hdr.qw_9B[4]);
-		OPX_HFI1_BAR_STORE(&scb[6], replay->scb_9B.hdr.qw_9B[5]);
-		OPX_HFI1_BAR_STORE(&scb[7], replay->scb_9B.hdr.qw_9B[6]);
+		OPX_HFI1_BAR_STORE(&scb[0], replay->scb.scb_9B.qw0);
+		OPX_HFI1_BAR_STORE(&scb[1], replay->scb.scb_9B.hdr.qw_9B[0]);
+		OPX_HFI1_BAR_STORE(&scb[2], replay->scb.scb_9B.hdr.qw_9B[1]);
+		OPX_HFI1_BAR_STORE(&scb[3], replay->scb.scb_9B.hdr.qw_9B[2]);
+		OPX_HFI1_BAR_STORE(&scb[4], replay->scb.scb_9B.hdr.qw_9B[3]);
+		OPX_HFI1_BAR_STORE(&scb[5], replay->scb.scb_9B.hdr.qw_9B[4]);
+		OPX_HFI1_BAR_STORE(&scb[6], replay->scb.scb_9B.hdr.qw_9B[5]);
+		OPX_HFI1_BAR_STORE(&scb[7], replay->scb.scb_9B.hdr.qw_9B[6]);
 
 
 		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR((service->tx.hfi1.pio_credits_addr));
@@ -1677,14 +1677,14 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 		consumed_credits = 1;
 #endif
 	} else {
-		OPX_HFI1_BAR_STORE(&scb[0], replay->scb_16B.qw0);
-		OPX_HFI1_BAR_STORE(&scb[1], replay->scb_16B.hdr.qw_16B[0]);
-		OPX_HFI1_BAR_STORE(&scb[2], replay->scb_16B.hdr.qw_16B[1]);
-		OPX_HFI1_BAR_STORE(&scb[3], replay->scb_16B.hdr.qw_16B[2]);
-		OPX_HFI1_BAR_STORE(&scb[4], replay->scb_16B.hdr.qw_16B[3]);
-		OPX_HFI1_BAR_STORE(&scb[5], replay->scb_16B.hdr.qw_16B[4]);
-		OPX_HFI1_BAR_STORE(&scb[6], replay->scb_16B.hdr.qw_16B[5]);
-		OPX_HFI1_BAR_STORE(&scb[7], replay->scb_16B.hdr.qw_16B[6]);
+		OPX_HFI1_BAR_STORE(&scb[0], replay->scb.scb_16B.qw0);
+		OPX_HFI1_BAR_STORE(&scb[1], replay->scb.scb_16B.hdr.qw_16B[0]);
+		OPX_HFI1_BAR_STORE(&scb[2], replay->scb.scb_16B.hdr.qw_16B[1]);
+		OPX_HFI1_BAR_STORE(&scb[3], replay->scb.scb_16B.hdr.qw_16B[2]);
+		OPX_HFI1_BAR_STORE(&scb[4], replay->scb.scb_16B.hdr.qw_16B[3]);
+		OPX_HFI1_BAR_STORE(&scb[5], replay->scb.scb_16B.hdr.qw_16B[4]);
+		OPX_HFI1_BAR_STORE(&scb[6], replay->scb.scb_16B.hdr.qw_16B[5]);
+		OPX_HFI1_BAR_STORE(&scb[7], replay->scb.scb_16B.hdr.qw_16B[6]);
 
 		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR((service->tx.hfi1.pio_credits_addr));
 
@@ -1696,7 +1696,7 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 			FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.hfi1.pio_scb_first, pio_state);
 
 		// spill from 1st cacheline (SOP)
-		OPX_HFI1_BAR_STORE(&scb_payload[0], replay->scb_16B.hdr.qw_16B[7]);  // header
+		OPX_HFI1_BAR_STORE(&scb_payload[0], replay->scb.scb_16B.hdr.qw_16B[7]);  // header
 
 		int i;
 
@@ -2123,9 +2123,9 @@ ssize_t fi_opx_reliability_send_ping(struct fid_ep *ep,
 	uint64_t dlid;
 	/* Inlined but called from non-inlined functions with no const hfi1 type, so just use the runtime check */
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) { 
-		dlid = (uint64_t) head->scb_9B.hdr.lrh_9B.dlid;
+		dlid = (uint64_t) head->scb.scb_9B.hdr.lrh_9B.dlid;
 	} else {
-		dlid = (uint64_t) htons(head->scb_16B.hdr.lrh_16B.dlid20 << 20 | head->scb_16B.hdr.lrh_16B.dlid);
+		dlid = (uint64_t) htons(head->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 | head->scb.scb_16B.hdr.lrh_16B.dlid);
 	}
 
 	const uint64_t rx = (uint64_t)head->target_reliability_rx;

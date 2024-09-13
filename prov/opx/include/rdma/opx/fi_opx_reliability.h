@@ -284,10 +284,7 @@ struct fi_opx_reliability_tx_replay {
 	/* == CACHE LINE == */
 
 	/* --- MUST BE 64 BYTE ALIGNED --- */
-	union {
-		struct fi_opx_hfi1_txe_scb_9B		scb_9B;
-		struct fi_opx_hfi1_txe_scb_16B		scb_16B;
-	};
+	union opx_hfi1_txe_scb_union            scb;
 
 	uint8_t						data[];
 } __attribute__((__aligned__(64)));
@@ -295,11 +292,11 @@ struct fi_opx_reliability_tx_replay {
 #define OPX_REPLAY_HDR(_replay)  OPX_REPLAY_HDR_TYPE(_replay, OPX_HFI1_TYPE)
 
 #define OPX_REPLAY_HDR_TYPE(_replay,_hfi1_type)  ((_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))  ? \
-	                                      (&((_replay)->scb_9B.hdr)) : (&((_replay)->scb_16B.hdr)) )
+	                                      (&((_replay)->scb.scb_9B.hdr)) : (&((_replay)->scb.scb_16B.hdr)) )
 
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_replay, sdma_we) == FI_OPX_CACHE_LINE_SIZE,
 			"Reliability Replay sdma_we should start on first cacheline!");
-OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_reliability_tx_replay, scb_9B) & (FI_OPX_CACHE_LINE_SIZE - 1)) == 0,
+OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_reliability_tx_replay, scb) & (FI_OPX_CACHE_LINE_SIZE - 1)) == 0,
 			"Reliability Replay scb must be 64-byte aligned!");
 
 struct fi_opx_reliability_resynch_flow {
@@ -737,11 +734,11 @@ size_t fi_opx_reliability_replay_get_payload_size(struct fi_opx_reliability_tx_r
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	/* Inlined but called from non-inlined functions with no const hfi1 type, so just use the runtime check */
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		const uint16_t lrh_pktlen_le = ntohs(replay->scb_9B.hdr.lrh_9B.pktlen);
+		const uint16_t lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
 		const size_t total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
 		return (total_bytes - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B));
 	} else {
-		const uint16_t lrh_pktlen_le = replay->scb_16B.hdr.lrh_16B.pktlen;
+		const uint16_t lrh_pktlen_le = replay->scb.scb_16B.hdr.lrh_16B.pktlen;
 		const size_t total_bytes = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing icrc */
 		return (total_bytes - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B));
 	}
@@ -1217,16 +1214,16 @@ void fi_opx_reliability_client_replay_register_no_update (struct fi_opx_reliabil
 	uint8_t	hdr_rx;
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		lrh_pktlen_le = ntohs(replay->scb_9B.hdr.lrh_9B.pktlen);
+		lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
 		total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
-		hdr_dlid = replay->scb_9B.hdr.lrh_9B.dlid;
+		hdr_dlid = replay->scb.scb_9B.hdr.lrh_9B.dlid;
 		/* hardcoded replay hfi type for macros */
 		hdr_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR_9B)),
 		hdr_rx = OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR_9B)->bth.rx;
 	} else {
-		lrh_pktlen_le = replay->scb_16B.hdr.lrh_16B.pktlen;
+		lrh_pktlen_le = replay->scb.scb_16B.hdr.lrh_16B.pktlen;
 		total_bytes = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing icrc */
-		hdr_dlid = htons(replay->scb_16B.hdr.lrh_16B.dlid20 << 20 | replay->scb_16B.hdr.lrh_16B.dlid);
+		hdr_dlid = htons(replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 | replay->scb.scb_16B.hdr.lrh_16B.dlid);
 		/* hardcoded replay hfi type for macros */
 		hdr_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR));
 		hdr_rx = OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR)->bth.rx;
@@ -1281,16 +1278,16 @@ void fi_opx_reliability_client_replay_register_with_update (struct fi_opx_reliab
 
 	/* global note: runtime HFI1 type - may need macro/inlining/const parameter hfi1_type to be branchless */
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		lrh_pktlen_le = ntohs(replay->scb_9B.hdr.lrh_9B.pktlen);
+		lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
 		total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
-		hdr_dlid = replay->scb_9B.hdr.lrh_9B.dlid;
+		hdr_dlid = replay->scb.scb_9B.hdr.lrh_9B.dlid;
 		/* hardcoded replay hfi type for macros */
 		hdr_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR_9B)),
 		hdr_rx = OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR_9B)->bth.rx;
 	} else {
-		lrh_pktlen_le = replay->scb_16B.hdr.lrh_16B.pktlen;
+		lrh_pktlen_le = replay->scb.scb_16B.hdr.lrh_16B.pktlen;
 		total_bytes = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing icrc */
-		hdr_dlid = htons(replay->scb_16B.hdr.lrh_16B.dlid20 << 20 | replay->scb_16B.hdr.lrh_16B.dlid);
+		hdr_dlid = htons(replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 | replay->scb.scb_16B.hdr.lrh_16B.dlid);
 		/* hardcoded replay hfi type for macros */
 		hdr_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR));
 		hdr_rx = OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR)->bth.rx;
