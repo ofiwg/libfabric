@@ -414,7 +414,7 @@ Note, the field `extra_info` was named `features` when protocol v4 was initially
 only planned for extra features. Later, we discovered that the handshake subprotocol can also be used to pass
 additional request information, thus introduced the concept of "extra request" and renamed this field `extra_info`.
 
-`nextra_p3` is number of `extra_info` flags of the endpoint plus 3. The "plus 3" is for historical reasons.
+`nextra_p3` is number of 64-bit `extra_info` elements of the endpoint plus 3. The "plus 3" is for historical reasons.
 When protocol v4 was initially introduced, this field is named `maxproto`. The original plan was that protocol
 v4 can only have 64 extra features/requests. If the number of extra feature/request ever exceeds 64, the next
 feature/request will be defined as version 5 feature/request, (version 6 if the number exceeds 128, so on so
