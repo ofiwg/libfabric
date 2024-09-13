@@ -305,7 +305,7 @@ static inline void fi_opx_store_scb_qw(volatile uint64_t dest[8], const uint64_t
 
 */
 
-/* Only 8 QWs valid in 16 QW storage. */
+/* 8 QWs valid in 16 QW storage. */
 struct fi_opx_hfi1_txe_scb_9B {
 
 	union { /* 15 QWs union*/
@@ -323,28 +323,23 @@ struct fi_opx_hfi1_txe_scb_9B {
     uint64_t pad;            /* 1 QW pad (to 16 QWs) */
 } __attribute__((__aligned__(8))) __attribute__((packed));
 
-/* 16 QW valid in 16 QW storage.  */
+/* 9 QWs valid in 16 QW storage.  */
 struct fi_opx_hfi1_txe_scb_16B {
-	uint64_t          qw0;   /* PBC */
-	union opx_hfi1_packet_hdr	hdr;    /* 15 QWs 16B header */
+	uint64_t                        qw0;   /* PBC */
+	union opx_hfi1_packet_hdr	hdr;   /* 8 QWs 16B header + 7 QWs currently unused */
 } __attribute__((__aligned__(8))) __attribute__((packed));
 
-static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == sizeof(struct fi_opx_hfi1_txe_scb_16B)), "storge for scbs should match");
+static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == sizeof(struct fi_opx_hfi1_txe_scb_16B)), "storage for scbs should match");
 static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == (sizeof(uint64_t)*16)), "16 qw scb storage");
 
 /* Storage for a scb. Use HFI1 type to access the correct structure */
 union opx_hfi1_txe_scb_union {
 	struct fi_opx_hfi1_txe_scb_9B scb_9B;
 	struct fi_opx_hfi1_txe_scb_16B scb_16B;
-};
+} __attribute__((__aligned__(8))) __attribute__((packed));
 
-struct fi_opx_hfi1_rxe_hdr {
-
-	union opx_hfi1_packet_hdr	hdr;
-	uint64_t			rhf;
-
-} __attribute__((__aligned__(64)));
-
+static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == sizeof(union opx_hfi1_txe_scb_union)), "storage for scbs should match");
+static_assert((sizeof(struct fi_opx_hfi1_txe_scb_16B) == sizeof(union opx_hfi1_txe_scb_union)), "storage for scbs should match");
 
 
 

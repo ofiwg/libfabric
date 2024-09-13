@@ -997,7 +997,7 @@ union opx_hfi1_packet_hdr {
 		uint64_t	reserved_3[2]; 		/* QW[5-6] SW */
 
 		uint64_t	ofi_tag;		/* QW[7] SW last 9B quadword */
-		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+		uint64_t	reserved_n[7];          /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) match;
 
@@ -1022,7 +1022,7 @@ union opx_hfi1_packet_hdr {
 			uint64_t	app_data_u64[2];
 		};
 
-		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+		uint64_t	reserved_n[8];          /* QW[7-14] SW */
 
 	} __attribute__((__packed__)) inject;
 
@@ -1046,7 +1046,7 @@ union opx_hfi1_packet_hdr {
 		/* QW[6] SW */
 		uint64_t	xfer_tail;
 
-		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+		uint64_t	reserved_n[8];          /* QW[7-14] SW */
 
 	} __attribute__((__packed__)) send;
 
@@ -1069,7 +1069,7 @@ union opx_hfi1_packet_hdr {
 		/* QW[5-6] SW */
 		uint64_t	xfer_tail[2];
 
-		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+		uint64_t	reserved_n[8];          /* QW[7-14] SW */
 
 	} __attribute__((__packed__)) mp_eager_first;
 
@@ -1092,7 +1092,7 @@ union opx_hfi1_packet_hdr {
 		uint32_t	payload_offset;
 		uint32_t	mp_egr_uid;
 
-		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+		uint64_t	reserved_n[7];          /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) mp_eager_nth;
 
@@ -1117,7 +1117,7 @@ union opx_hfi1_packet_hdr {
 		/* QW[6] SW */
 		uint64_t	message_length;		/* total length in bytes of all non-contiguous buffers and immediate data */
 
-		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+		uint64_t	reserved_n[8];          /* QW[7-14] SW */
 
 	} __attribute__((__packed__)) rendezvous;
 
@@ -1133,7 +1133,7 @@ union opx_hfi1_packet_hdr {
 		/* QW[3-4] BTH/KDETH */
 		uint64_t	reserved_3[2];
 
-		/* QW[5-14] SW */
+		/* QW[5-7] SW */
 		union {
 			uint8_t	opcode;
 			struct {
@@ -1176,7 +1176,7 @@ union opx_hfi1_packet_hdr {
 			} fence;
 		} target;
 
-		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+		uint64_t	reserved_n[7];          /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) cts;
 
@@ -1189,16 +1189,17 @@ union opx_hfi1_packet_hdr {
 		uint8_t		origin_rx;
 		uint8_t		reserved_o2;
 
-		/* == quadword 2 == */
+		/* QW[3] BTH/KDETH */
 		uint64_t	reserved_3;
 
-		/* == quadword 3 == */
+		/* QW[4] KDETH/SW */
 		uint64_t	reserved_4;
 
+		/* QW[5,6,7] KDETH/SW */
 		union {
-			/* QW[5] SW */
 			/*  Common fields   */
 			struct {
+				/* QW[5] KDETH/SW */
 				uint8_t		opcode;
 				uint8_t		origin_tx;
 				uint8_t		dt;
@@ -1206,6 +1207,7 @@ union opx_hfi1_packet_hdr {
 				uint16_t	last_bytes;
 				uint16_t	bytes;
 
+				/* QW[6,7] SW */
 				uint64_t	reserved[2]; /* op-specific */
 			};
 
@@ -1233,7 +1235,7 @@ union opx_hfi1_packet_hdr {
 				/* QW[5] SW */
 				uint64_t	reserved; /* Common fields */
 
-				/* QW[6-7] SW */
+				/* QW[6,7] SW */
 				uintptr_t	key;
 				uintptr_t	offset;
 			} mr;
@@ -1242,13 +1244,13 @@ union opx_hfi1_packet_hdr {
 				/* QW[5] SW */
 				uint64_t	reserved; /* Common fields */
 
-				/* QW[6-7] SW */
+				/* QW[6,7] SW */
 				uintptr_t	completion_counter;
 				uint64_t	bytes_to_fence;
 			} fence;
 		} target;
 
-		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+		uint64_t	reserved_n[7];          /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) dput;
 
@@ -1261,7 +1263,7 @@ union opx_hfi1_packet_hdr {
 		uint8_t		opcode;
 		uint8_t		reserved_2;
 
-		uint64_t	reserved_n[11];         /* QW[3-14] SW */
+		uint64_t	reserved_n[12];         /* QW[3-14] SW */
 
 	} __attribute__((__packed__)) ud;
 
@@ -1283,10 +1285,13 @@ union opx_hfi1_packet_hdr {
 		uint64_t	psn_start;
 		uint64_t	key;			/* fi_opx_reliability_service_flow_key */
 
-		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+		uint64_t	reserved_n[7];          /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) service;		/* "reliability service" */
 }  __attribute__((__packed__)) __attribute__((__aligned__(8)));
+
+static_assert(sizeof(union opx_hfi1_packet_hdr) == sizeof(uint64_t[15]),
+		"sizeof(union opx_hfi1_packet_hdr) must be 15 qwords!");
 
 
 static inline
