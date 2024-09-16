@@ -606,6 +606,12 @@ The following option levels and option names and parameters are defined.
   Providers that don't support this option will return -FI_ENOPROTOOPT. In that
   case, `tx_attr->inject_size` should be used.
 
+- *FI_OPT_TRAFFIC_CLASS - int *
+: Define the traffic class (tclass) for this endpoint. See the `Traffic Class (tclass)`
+  section for more information and allowed values.
+  Providers that don't support this option will return -FI_ENOPROTOOPT. In that
+  case, `tx_attr->tclass` should be used.
+
 ## fi_tc_dscp_set
 
 This call converts a DSCP defined value into a libfabric traffic class value.
