@@ -856,3 +856,64 @@ int opx_hfi_get_hfi1_count() {
 	}
 	return hfi1_count;
 }
+
+/**
+ * @brief Reset the HFI context.
+ *
+ * This function resets the HFI context by sending a command to the specified file descriptor.
+ * The command type is set to OPX_HFI_CMD_CTXT_RESET and the command length and address are set to 0.
+ * If the command write fails, the function will retry if the error is ENOLCK.
+ * If the error is not EINVAL, a warning message will be printed.
+ *
+ * @param fd The file descriptor to send the command to.
+ * @return 0 on success, -1 on failure.
+ */
+int opx_hfi_reset_context(int fd)
+{
+	struct hfi1_cmd cmd;
+
+	cmd.type = OPX_HFI_CMD_CTXT_RESET;
+	cmd.len = 0;
+	cmd.addr = 0;
+
+retry:
+	if (opx_hfi_cmd_write(fd, &cmd, sizeof(cmd)) == -1) {
+		if (errno == ENOLCK)
+			goto retry;
+
+		if (errno != EINVAL)
+			_HFI_INFO("reset ctxt failed: %s\n", strerror(errno));
+
+		return -1;
+	}
+	return 0;
+}
+
+/**
+ * @brief Acknowledge events for the HFI.
+ *
+ * This function sends an acknowledgment for events to the HFI.
+ *
+ * @param fd The file descriptor for the HFI control.
+ * @param ackbits The bits to be acknowledged.
+ * @return 0 on success, -1 on failure.
+ */
+int opx_hfi_ack_events(int fd, uint64_t ackbits)
+{
+	struct hfi1_cmd cmd;
+
+	cmd.type = OPX_HFI_CMD_ACK_EVENT;
+	cmd.len = 0;
+	cmd.addr = ackbits;
+
+retry:
+	if (opx_hfi_cmd_write(fd, &cmd, sizeof(cmd)) == -1) {
+		if (errno == ENOLCK)
+			goto retry;
+
+		if (errno != EINVAL)
+			_HFI_INFO("ack event failed: %s\n", strerror(errno));
+		return -1;
+	}
+	return 0;
+}

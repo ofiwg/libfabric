@@ -159,6 +159,29 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl,
 	return fd;
 }
 
+void opx_reset_context(struct fi_opx_ep * opx_ep)
+{
+	fi_opx_compiler_msync_writes();
+	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
+	opx_ep->rx->state.hdrq.head = 0;
+
+	if (opx_hfi_reset_context(opx_ep->hfi->fd)) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Send context reset failed: %d.\n",
+				errno);
+		abort();
+	}
+
+	opx_ep->tx->pio_state->fill_counter = 0;
+	opx_ep->tx->pio_state->scb_head_index = 0;
+	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
+	FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
+	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+
+	fi_opx_hfi1_poll_sdma_completion(opx_ep);
+	opx_hfi1_sdma_process_pending(opx_ep);
+}
+
+
 static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const uint32_t rank)
 {
 	struct fi_opx_daos_hfi_rank_key key;
@@ -894,6 +917,9 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	fi_opx_ref_init(&context->ref_cnt, "HFI context");
 	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Context configured with HFI=%d PORT=%d LID=0x%x JKEY=%d\n",
 		context->hfi_unit, context->hfi_port, context->lid, context->jkey);
+
+	context->status_lasterr = 0;
+	context->status_check_next_usec = fi_opx_timer_now(&context->link_status_timestamp, &context->link_status_timer);
 
 	opx_print_context(context);
 
@@ -3714,7 +3740,6 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 			&opx_ep->tx->force_credit_return, total_credits_needed);
 		if (total_credits_available < total_credits_needed) {
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-
 			return -FI_EAGAIN;
 		}
 	}

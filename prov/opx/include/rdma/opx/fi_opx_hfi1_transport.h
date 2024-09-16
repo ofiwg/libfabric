@@ -952,7 +952,6 @@ void fi_opx_force_credit_return(struct fid_ep *ep,
 	while (OFI_UNLIKELY(available_credits < credits_needed)) {
 		if (loop++ & 0x10) {
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-
 			return;
 		}
 		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);

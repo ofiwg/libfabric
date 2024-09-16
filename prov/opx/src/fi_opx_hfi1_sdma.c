@@ -94,7 +94,7 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 			return -FI_EAGAIN;
 		}
-		assert(we->comp_state == OPX_SDMA_COMP_COMPLETE);
+		assert(we->comp_state == OPX_SDMA_COMP_COMPLETE || we->comp_state == OPX_SDMA_COMP_ERROR);
 
 		slist_remove_head(&params->sdma_reqs);
 		we->next = NULL;
@@ -142,6 +142,14 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 				    const int line)
 {
 	const pid_t pid = getpid();
+
+	if (errno == ECOMM || errno == EINTR) {
+		int err = fi_opx_context_check_status(opx_ep->hfi);
+		if (err != FI_SUCCESS) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Link down detected\n");
+			return;
+		}
+	}
 
 	fprintf(stderr, "(%d) %s:%s():%d ERROR: SDMA Abort errno=%d (%s)\n",
 		pid, file, func, line, errno, strerror(errno));
@@ -315,7 +323,7 @@ void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep)
 }
 
 __OPX_FORCE_INLINE__
-void opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep,
+int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep,
 			struct iovec *iovecs,
 			int iovs_used,
 			uint16_t avail,
@@ -356,6 +364,7 @@ void opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep,
 	}
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.writev_calls[iovs_used]);
+	return(writev_rc);
 }
 
 void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
@@ -390,9 +399,13 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 		if (iovs_free < request->num_iovs)
 #endif
 		{
-			opx_hfi1_sdma_writev(opx_ep, iovecs, iovs_used, avail,
+			int err = opx_hfi1_sdma_writev(opx_ep, iovecs, iovs_used, avail,
 					fill_index, __FILE__, __func__, __LINE__);
-
+			if (err < 0) {
+				/* Error occured in writev. Add the request back to queue */
+				slist_insert_head((struct slist_entry *)request, &queue->list);
+				return;
+			}
 			iovs_used = 0;
 			iovs_free = OPX_SDMA_HFI_MAX_IOVS_PER_WRITE;
 		}

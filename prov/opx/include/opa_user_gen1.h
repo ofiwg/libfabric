@@ -329,7 +329,10 @@ int opx_hfi_event_ack(struct _hfi_ctrl *ctrl, __u64 ackbits);
 int opx_hfi_poll_type(struct _hfi_ctrl *ctrl, uint16_t poll_type);
 
 /* reset halted send context, error if context is not halted. */
-int opx_hfi_reset_context(struct _hfi_ctrl *ctrl);
+int opx_hfi_reset_context(int fd);
+
+/* ack hfi events */
+int opx_hfi_ack_events(int fd, uint64_t ackbits);
 
 /*
 * Safe version of opx_hfi_[d/q]wordcpy that is guaranteed to only copy each byte once.
