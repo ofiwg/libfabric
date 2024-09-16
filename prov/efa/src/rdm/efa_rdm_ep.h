@@ -91,12 +91,6 @@ struct efa_rdm_ep {
 	/* Applicaiton's message prefix size. */
 	size_t msg_prefix_size;
 
-	/* EFA RDM protocol's max header size */
-	size_t max_proto_hdr_size;
-
-	/* tx iov limit of EFA device */
-	size_t efa_device_iov_limit;
-
 	/* threshold to release multi_recv buffer */
 	size_t min_multi_recv_size;
 
