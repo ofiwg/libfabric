@@ -52,6 +52,7 @@
 
 #include "rdma/opx/opx_hfi1_sim.h"
 #include "rdma/opx/fi_opx_hfi1_version.h"
+#include "rdma/opx/fi_opx_timer.h"
 
 // #define FI_OPX_TRACE 1
 
@@ -526,6 +527,11 @@ struct fi_opx_hfi1_context {
 	} daos_info;
 
 	int64_t				ref_cnt;
+	size_t				status_lasterr;
+	time_t				network_lost_time;
+	union fi_opx_timer_stamp	link_status_timestamp;
+	union fi_opx_timer_state	link_status_timer;
+	uint64_t 			status_check_next_usec;
 };
 
 struct fi_opx_hfi1_context_internal {
@@ -746,6 +752,66 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context daos_info.rank                %#X  \n",context->daos_info.rank);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context daos_info.rank_inst           %#X  \n",context->daos_info.rank_inst);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ref_cnt                       %#lX \n",context->ref_cnt);
+}
+
+void opx_reset_context(struct fi_opx_ep * opx_ep);
+
+#define OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC	250000 /* 250 ms*/
+
+__OPX_FORCE_INLINE__
+uint64_t opx_get_hw_status(struct fi_opx_hfi1_context *context)
+{
+	struct hfi1_status *status =
+	    (struct hfi1_status *) context->ctrl->base_info.status_bufbase;
+
+	return((status->dev & (HFI1_STATUS_INITTED | HFI1_STATUS_CHIP_PRESENT | HFI1_STATUS_HWERROR))
+        | (status->port & (HFI1_STATUS_IB_READY | HFI1_STATUS_IB_CONF)));
+}
+
+#define OPX_HFI1_HW_CHIP_STATUS  (HFI1_STATUS_CHIP_PRESENT | HFI1_STATUS_INITTED)
+#define OPX_HFI1_IB_STATUS       (HFI1_STATUS_IB_CONF | HFI1_STATUS_IB_READY)
+
+/* The linkup time duration for a system should allow the time needed
+   to complete 3 LNI passes which is:
+   50 seconds for a passive copper channel
+   65 seconds for optical channel.
+   (we add 5 seconds of margin.) */
+#define OPX_LINK_DOWN_MAX_SEC  70.0 
+
+__OPX_FORCE_INLINE__
+size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context)
+{
+	size_t err = FI_SUCCESS;
+	uint64_t status = opx_get_hw_status(context);
+
+	/* Fatal chip-related errors */
+	if (!((status & OPX_HFI1_HW_CHIP_STATUS) == OPX_HFI1_HW_CHIP_STATUS) ||
+	    (status & HFI1_STATUS_HWERROR)) {
+		err = FI_ENETUNREACH;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL, "HFI1 chip error detected\n");
+		abort();
+		return(err);
+	} else if (!((status & OPX_HFI1_IB_STATUS) == OPX_HFI1_IB_STATUS)) {
+		err = FI_ENETDOWN;
+		if (err != context->status_lasterr) {
+			context->network_lost_time = time(NULL);
+		} else {
+			time_t now = time(NULL);
+
+			if (difftime(now,context->network_lost_time) > OPX_LINK_DOWN_MAX_SEC)
+			{
+				fprintf(stderr, "Link has been down more than 70s. Aborting\n");
+				abort();
+				return(err);
+			}
+		}
+	}
+
+	if (err != FI_SUCCESS) {
+		context->status_lasterr = err;	/* record error */
+	}
+
+	return err;
 }
 
 #endif /* _FI_PROV_OPX_HFI1_H_ */

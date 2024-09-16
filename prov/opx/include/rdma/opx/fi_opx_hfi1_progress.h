@@ -760,7 +760,78 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 	}
 }
 
+__OPX_FORCE_INLINE__
+void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
+{
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SDMA POLL BEGIN\n");
+	struct fi_opx_hfi1_context *hfi = opx_ep->hfi;
+	uint16_t queue_size = hfi->info.sdma.queue_size;
 
+	while (hfi->info.sdma.available_counter < queue_size) {
+		volatile struct hfi1_sdma_comp_entry * entry =
+			&hfi->info.sdma.completion_queue[hfi->info.sdma.done_index];
+		if (entry->status == QUEUED) {
+			break;
+		}
+
+		// Update the status/errcode of the work entry who was using this index
+		assert(hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]);
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->status = entry->status;
+		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "SDMA_COMPLETE_%hu", hfi->info.sdma.done_index);
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->errcode = entry->errcode;
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index] = NULL;
+
+		assert(entry->status == COMPLETE || entry->status == FREE || 
+				(entry->status == ERROR && entry->errcode != ECOMM)); // If it is a network error, retry
+		++hfi->info.sdma.available_counter;
+		hfi->info.sdma.done_index = (hfi->info.sdma.done_index + 1) % (queue_size);
+		if (hfi->info.sdma.done_index == hfi->info.sdma.fill_index) {
+			assert(hfi->info.sdma.available_counter == queue_size);
+		}
+	}
+	assert(hfi->info.sdma.available_counter >= opx_ep->tx->sdma_request_queue.slots_avail);
+	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SDMA POLL COMPLETE\n");
+}
+
+__OPX_FORCE_INLINE__
+int opx_is_rhf_empty(struct fi_opx_ep *opx_ep,
+			const uint64_t hdrq_mask,
+			const enum opx_hfi1_type hfi1_type)
+{
+	const uint64_t local_hdrq_mask = (hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME) ?
+		opx_ep->hfi->info.rxe.hdrq.rx_poll_mask :
+		hdrq_mask;
+	const uint64_t hdrq_offset = opx_ep->rx->state.hdrq.head & local_hdrq_mask;
+	volatile uint32_t *rhf_ptr = opx_ep->rx->hdrq.rhf_base + hdrq_offset;
+	const uint64_t rhf_rcvd = *((volatile uint64_t *)rhf_ptr);
+	const uint64_t rhf_seq = opx_ep->rx->state.hdrq.rhf_seq;
+
+	if (!OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type)) {
+		return 1;
+	}
+	return 0;
+}
+
+__OPX_FORCE_INLINE__
+void opx_handle_events(struct fi_opx_ep *opx_ep,
+			const uint64_t hdrq_mask,
+			const enum opx_hfi1_type hfi1_type)
+{
+	uint64_t events = *(uint64_t *)(opx_ep->hfi->ctrl->base_info.events_bufbase);
+	if (events & HFI1_EVENT_FROZEN) {
+		/* reset context only if RHF queue is empty */
+		if (opx_is_rhf_empty(opx_ep, hdrq_mask, hfi1_type)) {
+			opx_reset_context(opx_ep);
+			opx_hfi_ack_events(opx_ep->hfi->fd, events);
+		} else {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Context frozen: Not resetting because packets are present in receive queue\n");
+		}
+	}
+}
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_poll_many (struct fid_ep *ep,
@@ -789,28 +860,36 @@ void fi_opx_hfi1_poll_many (struct fid_ep *ep,
 			packets = fi_opx_hfi1_poll_once(ep, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, hfi1_type);
 		} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
 
+		struct fi_opx_reliability_service *service = &opx_ep->reliability->service;
+		union fi_opx_timer_state *timer = &service->tx.timer;
+		union fi_opx_timer_stamp *timestamp = &service->tx.timestamp;
+		uint64_t compare = fi_opx_timer_now(timestamp, timer);
 
+		//TODO: There needs to be feedback from the replay buffer pool into this following if as well
+		//		If the pool is getting full, then send pings out more frequently
 
-		if (reliability == OFI_RELIABILITY_KIND_ONLOAD) {	/* compile-time constant expression */
+		if (OFI_UNLIKELY(compare > service->usec_next)) {
+			// Drain all coalesced pings
+			fi_opx_hfi_rx_reliablity_process_requests(ep, PENDING_RX_RELIABLITY_COUNT_MAX);
+			fi_reliability_service_ping_remote(ep, service);
+			// Fetch the timer again as it could have taken us a while to get through reliability
+			compare = fi_opx_timer_now(timestamp, timer);
+			service->usec_next = fi_opx_timer_next_event_usec(timer, timestamp, service->usec_max);
+		} // End timer fired
 
-			struct fi_opx_reliability_service *service = opx_ep->reliability->state.service;
+		struct fi_opx_hfi1_context *context = opx_ep->hfi;
+		timer = &context->link_status_timer;
+		timestamp = &context->link_status_timestamp;
 
-			union fi_opx_timer_state *timer = &service->tx.timer;
-			union fi_opx_timer_stamp *timestamp = &service->tx.timestamp;
-			uint64_t compare = fi_opx_timer_now(timestamp, timer);
-
-			//TODO: There needs to be feedback from the replay buffer pool into this following if as well
-			//		If the pool is getting full, then send pings out more frequently
-
-			if (OFI_UNLIKELY(compare > service->usec_next)) {
-				// Drain all coalesced pings
-				fi_opx_hfi_rx_reliablity_process_requests(ep, PENDING_RX_RELIABLITY_COUNT_MAX);
-				fi_reliability_service_ping_remote(ep, service);
-				// Fetch the timer again as it could have taken us a while to get through reliability
-				fi_opx_timer_now(timestamp, timer);
-				service->usec_next = fi_opx_timer_next_event_usec(timer, timestamp, service->usec_max);
-			}// End timer fired
-
+		if (OFI_UNLIKELY(compare > context->status_check_next_usec)) {
+			int prev_link_status = context->status_lasterr;
+			int err = fi_opx_context_check_status(context);
+			// check for hfi event if link is moving from down to up
+			if ((prev_link_status != FI_SUCCESS) && (err == FI_SUCCESS)) {  // check for hfi event if
+				context->status_lasterr = FI_SUCCESS; /* clear error */
+				opx_handle_events(opx_ep, hdrq_mask, hfi1_type);
+			}
+			context->status_check_next_usec = fi_opx_timer_next_event_usec(timer, timestamp, OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC);
 		}
 	}
 
@@ -819,43 +898,5 @@ void fi_opx_hfi1_poll_many (struct fid_ep *ep,
 
 	return;
 }
-
-__OPX_FORCE_INLINE__
-void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
-{
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "===================================== SDMA POLL BEGIN\n");
-	struct fi_opx_hfi1_context *hfi = opx_ep->hfi;
-	uint16_t queue_size = hfi->info.sdma.queue_size;
-
-	while (hfi->info.sdma.available_counter < queue_size) {
-		volatile struct hfi1_sdma_comp_entry * entry =
-			&hfi->info.sdma.completion_queue[hfi->info.sdma.done_index];
-		if (entry->status == QUEUED) {
-			break;
-		}
-
-		// Update the status/errcode of the work entry who was using this index
-		assert(hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]);
-		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->status = entry->status;
-		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "SDMA_COMPLETE_%hu", hfi->info.sdma.done_index);
-		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->errcode = entry->errcode;
-		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index] = NULL;
-
-		assert(entry->status == COMPLETE || entry->status == FREE);
-		++hfi->info.sdma.available_counter;
-		hfi->info.sdma.done_index = (hfi->info.sdma.done_index + 1) % (queue_size);
-		if (hfi->info.sdma.done_index == hfi->info.sdma.fill_index) {
-			assert(hfi->info.sdma.available_counter == queue_size);
-		}
-	}
-	assert(hfi->info.sdma.available_counter >= opx_ep->tx->sdma_request_queue.slots_avail);
-	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "===================================== SDMA POLL COMPLETE\n");
-}
-
-
-
 
 #endif /* _FI_PROV_OPX_HFI1_PROGRESS_H_ */
