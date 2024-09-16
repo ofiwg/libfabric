@@ -163,6 +163,22 @@ inclusive.
 .PP
 Default setting is 64.
 .TP
+\f[I]FI_OPX_RELIABILITY_MAX_UNCONGESTED_PINGS\f[R]
+Integer.
+This setting controls how many PING requests the reliability/replay
+function will issue per iteration of FI_OPX_RELIABILITY_SERVICE_USEC_MAX 
+in situations with less contending, outgoing traffic from the HFI.
+.PP
+Default setting is 128. Range of valid values is 1-65535.
+.TP
+\f[I]FI_OPX_RELIABILITY_MAX_CONGESTED_PINGS\f[R]
+Integer.
+This setting controls how many PING requests the reliability/replay
+function will issue per iteration of FI_OPX_RELIABILITY_SERVICE_USEC_MAX 
+in situations with more contending, outgoing traffic from the HFI.
+.PP
+Default setting is 4. Range of valid values is 1-65535.
+.TP
 \f[I]FI_OPX_SELINUX\f[R]
 Boolean (0/1, on/off, true/false, yes/no).
 Set to true if you\[cq]re running a security-enhanced Linux.
