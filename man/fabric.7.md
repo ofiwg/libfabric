@@ -447,6 +447,14 @@ attributes:
 *fi_domain_attr*
 : Added max_ep_auth_key
 
+## ABI 1.8
+
+ABI version starting with libfabric 2.0. Added new fi_fabric2 API call.
+Added new fields to the following attributes:
+
+*fi_domain_attr*
+: Added max_group_id
+
 # SEE ALSO
 
 [`fi_info`(1)](fi_info.1.html),

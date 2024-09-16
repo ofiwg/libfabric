@@ -111,7 +111,7 @@ extern "C" {
  * name appended with the ABI version that it is compatible with.
  */
 
-#define CURRENT_ABI "FABRIC_1.7"
+#define CURRENT_ABI "FABRIC_1.8"
 
 #if  HAVE_ALIAS_ATTRIBUTE == 1
 #define DEFAULT_SYMVER_PRE(a) a##_
