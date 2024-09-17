@@ -93,17 +93,15 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 				3 + /* bth */
 				9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 				16; /* one "struct fi_opx_hfi1_dput_iov", padded to cache line */
-		/* lrh does not include pbc (8 bytes/2 dws), but does include icrc (4 bytes/1 dws),
-		so subtract 1 dws */
-		params->lrh_dws = htons(params->pbc_dws - 1);
+		params->lrh_dws = htons(params->pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 	} else {
 		params->pbc_dws = 2 + /* pbc */
-				4 + /* lrh */
+				4 + /* lrh uncompressed */
 				3 + /* bth */
 				9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 				16 + /* one "struct fi_opx_hfi1_dput_iov", padded to cache line */
-				2; /* ICRC */
-		params->lrh_dws = (params->pbc_dws - 2) >> 1;
+				2; /* ICRC/tail */
+		params->lrh_dws = (params->pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 	}
 	params->is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_target_addr, caps);
 	params->reliability = reliability;

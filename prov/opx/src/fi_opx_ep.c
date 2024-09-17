@@ -293,8 +293,7 @@ void fi_opx_ep_tx_model_init (struct fi_opx_hfi1_context * hfi,
 		OPX_PBC_PORTIDX(hfi->hfi_port,hfi1_type) |
 		OPX_PBC_SCTXT(hfi->send_ctxt,hfi1_type);
 
-	/* does not include pbc (8 bytes), but does include icrc (4 bytes) */
-	inject_9B->hdr.lrh_9B.pktlen = htons(inject_pbc_dws-1);
+	inject_9B->hdr.lrh_9B.pktlen = htons(inject_pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 
 	/* specified at runtime */
 	inject_9B->hdr.inject.message_length = 0;
@@ -381,13 +380,11 @@ void fi_opx_ep_tx_model_init_16B (struct fi_opx_hfi1_context * hfi,
 	*inject_16B = *send_16B;
 
 	const uint64_t pbc_dws =
-			2 +	/* pbc */
-			4 +	/* lrh */
-			3 +	/* bth */
-			3 +	/* kdeth */
-			4 + /* software kdeth + unused */
-			2 + /* ICRC and tail */
-			2 ; /* second cacheline */
+			2 + /* pbc */
+			4 + /* lrh uncompressed */
+			3 + /* bth */
+			9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+			2 ; /* ICRC/tail */
 
 	inject_16B->qw0 = OPX_PBC_LEN(pbc_dws,hfi1_type) /* length_dws */ |
 		OPX_PBC_VL(hfi->vl,hfi1_type) |
@@ -398,12 +395,12 @@ void fi_opx_ep_tx_model_init_16B (struct fi_opx_hfi1_context * hfi,
 		OPX_PBC_SCTXT(hfi->send_ctxt,hfi1_type) |
 		OPX_PBC_JKR_INSERT_NON9B_ICRC;
 
+	/* (LRH QW) does not include pbc (8 bytes) */
 	const uint32_t packetLength = (pbc_dws - 2) * 4;
 	const uint32_t lrh_qws = (packetLength >> 3) +
 				     ((packetLength & 0x07u) != 0);
 
 
-	/* does not include pbc (8 bytes), but does include icrc (4 bytes) */
 	inject_16B->hdr.lrh_16B.pktlen = lrh_qws;
 
 	/* specified at runtime */

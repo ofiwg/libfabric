@@ -1150,7 +1150,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		3 + /* bth */
 		9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 		((payload_bytes + 3) >> 2);
-	const uint16_t lrh_dws = htons(pbc_dws - 1);
+	const uint16_t lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	const uint16_t total_credits_needed = 1 + /* packet header */
 		((payload_bytes + 63) >> 6); /* payload blocks needed */
@@ -1306,12 +1306,12 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "payload_bytes = %ld\n", payload_bytes);
 	const uint64_t pbc_dws =
 		2 + /* pbc */
-		4 + /* lrh */
+		4 + /* lrh uncompressed */
 		3 + /* bth */
-		7 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+		9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 		((payload_bytes + 3) >> 2) +
-		2; // ICRC
-	const uint16_t lrh_qws = (pbc_dws - 2) >> 1;
+		2;  /* ICRC/tail */
+	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	const uint16_t total_credits_needed = 1 + /* packet header */
 		((payload_bytes + 63) >> 6); /* payload blocks needed */
@@ -1386,17 +1386,6 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 
 	replay->scb.scb_16B.hdr.qw_16B[7] = (uint64_t) params->rzv_comp;
 
-#ifndef NDEBUG
-	if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-		OPX_JKR_PRINT_16B_PBC(replay->scb.scb_16B.qw0);
-		OPX_JKR_PRINT_16B_LRH(replay->scb.scb_16B.hdr.qw_16B[0], replay->scb.scb_16B.hdr.qw_16B[1]);
-		OPX_JKR_PRINT_16B_BTH(replay->scb.scb_16B.hdr.qw_16B[2], replay->scb.scb_16B.hdr.qw_16B[3]);
-	} else {
-		abort();
-		fi_opx_hfi1_dump_packet_hdr(&(replay->scb.scb_9B.hdr), OPX_HFI1_TYPE, __func__, __LINE__);
-	}
-#endif
-
 	union fi_opx_hfi1_packet_payload *const tx_payload =
 		(union fi_opx_hfi1_packet_payload *) (replay->payload);
 
@@ -1416,16 +1405,6 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 		tx_payload->cts.iov[i].rbuf_iface = params->dput_iov[i].rbuf_iface;
 		vaddr_with_offset += params->dput_iov[i].bytes;
 	}
-#ifndef NDEBUG
-	if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-		OPX_JKR_PRINT_16B_PBC(replay->scb.scb_16B.qw0);
-		OPX_JKR_PRINT_16B_LRH(replay->scb.scb_16B.hdr.qw_16B[0], replay->scb.scb_16B.hdr.qw_16B[1]);
-		OPX_JKR_PRINT_16B_BTH(replay->scb.scb_16B.hdr.qw_16B[2], replay->scb.scb_16B.hdr.qw_16B[3]);
-	} else {
-		abort();
-		fi_opx_hfi1_dump_packet_hdr(&(replay->scb.scb_9B.hdr), OPX_HFI1_TYPE, __func__, __LINE__);
-	}
-#endif
 
 	/* copy tidpairs to packet */
 	if (params->tid_info.npairs) {
@@ -1863,7 +1842,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc(union fi_opx_hfi1_deferred_work *work)
 		2 + /* lrh */
 		3 + /* bth */
 		9;  /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-	const uint16_t lrh_dws = htons(pbc_dws - 1);
+	const uint16_t lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
 	if (OFI_UNLIKELY(FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, 1) < 1)) {
@@ -1944,11 +1923,11 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 
 	const uint64_t pbc_dws =
 		2 + /* pbc */
-		4 + /* lrh */
+		4 + /* lrh uncompressed */
 		3 + /* bth */
 		9 +  /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-		2;
-	const uint16_t lrh_qws = (pbc_dws - 2) >> 1;
+		2;   /* ICRC/tail */
+	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
 	// Note: Only need 1 credit here for the message truncation error case. Just
@@ -2292,7 +2271,7 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 					 2 + /* lrh */
 					 3 + /* bth */
 					 9;  /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-		const uint16_t lrh_dws = htons(pbc_dws - 1);
+		const uint16_t lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 
 		hdr->qw_9B[0] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[0] | params->lrh_dlid | ((uint64_t)lrh_dws << 32);
 		hdr->qw_9B[1] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[1] | params->bth_rx;
@@ -2303,11 +2282,11 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 		hdr->qw_9B[6] = params->bytes_to_fence;
 	} else {
 		const uint64_t pbc_dws = 2 + /* pbc */
-					 4 + /* lrh */
+					 4 + /* lrh uncompressed */
 					 3 + /* bth */
-					 9 + /* kdeth */
-					 2;  /* ICRC */
-		const uint16_t lrh_dws = (pbc_dws - 1) >> 1;
+					 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+					 2;  /* ICRC/tail */
+		const uint16_t lrh_dws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 		hdr->qw_16B[0] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[0] |
 					((uint64_t)(params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 					((uint64_t)lrh_dws << 20);
@@ -2460,10 +2439,10 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 				uint64_t tail_bytes = bytes_to_send_this_packet & 0x3Ful;
 				blocks_to_send_in_this_packet = (bytes_to_send_this_packet >> 6) + (tail_bytes ? 1 : 0);
 			} else {
-				const uint64_t additional_hdr_tail_byte = 2 * 8; /* 1 QW for hdr that spills to 2nd cacheline
-																	1 QW for ICRC/tail */
-				uint64_t payload_n_additional_hdr_tail_bytes = (MIN(bytes_to_send + params->payload_bytes_for_iovec + additional_hdr_tail_byte,
-								max_bytes_per_packet));
+				/* 1 QW for hdr that spills to 2nd cacheline + 1 QW for ICRC/tail */
+				const uint64_t additional_hdr_tail_byte = 2 * 8; 
+				uint64_t payload_n_additional_hdr_tail_bytes = (MIN(bytes_to_send + params->payload_bytes_for_iovec + additional_hdr_tail_byte,  
+								max_bytes_per_packet));   
 				uint64_t tail_bytes = payload_n_additional_hdr_tail_bytes & 0x3Ful;
 				blocks_to_send_in_this_packet = (payload_n_additional_hdr_tail_bytes >> 6) + (tail_bytes ? 1 : 0);
 				bytes_to_send_this_packet = payload_n_additional_hdr_tail_bytes - additional_hdr_tail_byte;
@@ -2478,14 +2457,14 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 						 3 + /* bth */
 						 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 						 (blocks_to_send_in_this_packet << 4);
-				lrh_dws = htons(pbc_dws - 1);
+				lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 			} else {
 				pbc_dws = 2 + /* pbc */
-						 4 + /* lrh */
+						 4 + /* lrh uncompressed */
 						 3 + /* bth */
 						 7 + /* kdeth */
 						 (blocks_to_send_in_this_packet << 4); // ICRC and the kdeth in the second cacheline are accounted for here
-				lrh_dws = (pbc_dws - 1) >> 1;
+				lrh_dws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 			}
 
 			uint64_t bytes_sent;
@@ -2868,21 +2847,34 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				// Round packet_bytes up to the next multiple of 4,
 				// then divide by 4 to get the correct number of dws.
 				uint64_t payload_dws = ((packet_bytes + 3) & -4) >> 2;
-				const uint64_t pbc_dws = 2 + /* pbc */
-							2 + /* lrh */
-							3 + /* bth */
-							9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-							payload_dws;
-
-				const uint16_t lrh_dws = htons(pbc_dws - 1);
+				uint64_t pbc_dws;
+				uint16_t lrh_dws;
+				if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+					pbc_dws = 2 + /* pbc */
+						2 + /* lrh */
+						3 + /* bth */
+						9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+						payload_dws;
+					lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
+				} else {
+					pbc_dws = 2 + /* pbc */
+						4 + /* lrh uncompressed */
+						3 + /* bth */
+						9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+						2 +  /* ICRC/tail */
+						payload_dws;
+					lrh_dws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
+				}
 
 				assert(replay != NULL);
 
 				if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-					replay->scb.scb_16B.qw0 = opx_ep->rx->tx.dput_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+					replay->scb.scb_16B.qw0 = opx_ep->rx->tx.dput_16B.qw0 |
+						OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) |
 						params->pbc_dlid;
 				} else {
-					replay->scb.scb_9B.qw0 = opx_ep->rx->tx.dput_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+					replay->scb.scb_9B.qw0 = opx_ep->rx->tx.dput_9B.qw0 |
+						OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) |
 						params->pbc_dlid;
 				}
 
@@ -3299,22 +3291,34 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 				// Round packet_bytes up to the next multiple of 4,
 				// then divide by 4 to get the correct number of dws.
 				uint64_t payload_dws = (packet_bytes + 3) >> 2;
-				const uint64_t pbc_dws = 2 + /* pbc */
-							2 + /* lrh */
-							3 + /* bth */
-							9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-							payload_dws;
+				uint64_t pbc_dws;
+				uint16_t lrh_dws;
+				if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+					pbc_dws = 2 + /* pbc */
+						2 + /* lrh */
+						3 + /* bth */
+						9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+						payload_dws;
+					lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
+				} else {
+					pbc_dws = 2 + /* pbc */
+						4 + /* lrh uncompressed */
+						3 + /* bth */
+						9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+						2 +  /* ICRC/tail */
+						payload_dws;
+					lrh_dws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
+				}
 
-				const uint16_t lrh_dws = htons(pbc_dws - 1);
-
-				OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
-
+				assert(replay != NULL);
 
 				if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-					replay->scb.scb_16B.qw0 = opx_ep->rx->tx.dput_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+					replay->scb.scb_16B.qw0 = opx_ep->rx->tx.dput_16B.qw0 |
+						OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) |
 						params->pbc_dlid;
 				} else {
-					replay->scb.scb_9B.qw0 = opx_ep->rx->tx.dput_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+					replay->scb.scb_9B.qw0 = opx_ep->rx->tx.dput_9B.qw0 |
+						OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) |
 						params->pbc_dlid;
 				}
 
@@ -3610,14 +3614,14 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 			  9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 			  (payload_blocks_total << 4);
 
-		lrh_dws = htons(pbc_dws - 1);
+		lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 	} else {
 		pbc_dws = 2 + /* pbc */
-			  4 + /* lrh */
+			  4 + /* lrh uncompressed */
 			  3 + /* bth */
 			  9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-			  (payload_blocks_total << 4);
-		lrh_dws = (pbc_dws - 1) >> 1;
+			  (payload_blocks_total << 4); /* ICRC/tail is accounted for here */
+		lrh_dws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 	}
 
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
@@ -4005,7 +4009,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		9 +			/* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 		(payload_blocks_total << 4);
 
-	const uint16_t lrh_dws = htons(pbc_dws-1);
+	const uint16_t lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -4453,7 +4457,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 
 	/* full blocks only. icrc_end_block/icrc_fragment_block count 1 qw only */
 	const uint64_t payload_blocks_total =
-		1 +				/* rzv metadata */
+		1 +				/* last kdeth + rzv metadata */
 		immediate_fragment +
 		immediate_block_count +
 		immediate_end_block_count;
@@ -4462,12 +4466,12 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 		2 +			/* pbc */
 		4 +			/* lhr */
 		3 +			/* bth */
-		3 +			/* kdeth */
-		4 +			/* software kdeth + unused */
-		(payload_blocks_total << 4) +
+		/* 9 +  kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+		7 +			/* kdeth */
+		(payload_blocks_total << 4) + /* includes last kdeth + metadata + immediate data */
 		((icrc_end_block | icrc_fragment_block) << 1); /* 1 QW of any added tail block */
 
-	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; // Does not include PBC and is in QW
+	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -4689,6 +4693,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 
 	volatile uint64_t * scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 	uint64_t temp[8];
+
 	fi_opx_store_and_copy_qw(scb_payload, temp,
 				 tag,  /* end of header */
 				 /* start of receiver payload/cacheline                                                    */

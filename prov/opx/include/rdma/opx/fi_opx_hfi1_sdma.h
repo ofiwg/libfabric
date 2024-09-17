@@ -514,9 +514,6 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep,
 	/* Set the Acknowledge Request Bit if we're only sending one packet */
 	uint64_t set_ack_bit = (num_packets == 1) ? (uint64_t)htonl(0x80000000) : 0;
 
-	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
-
-
 	request->iovecs[0].iov_base = req_info;
 
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
@@ -552,8 +549,6 @@ int opx_hfi1_sdma_enqueue_replay(struct fi_opx_ep *opx_ep,
 {
 	assert(replay->use_iov);
 	assert(replay->iov->iov_len == payload_bytes);
-
-	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.replay_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -601,12 +596,15 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep,
 					     we->dlid, we->rx, we->rs,
 					     &we->psn_ptr, we->num_packets);
 
-	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
-
 	uint32_t fragsize = 0;
 	for (int i = 0; i < we->num_packets; ++i) {
 		fragsize = MAX(fragsize, we->packets[i].length);
-		we->packets[i].replay->scb.scb_9B.hdr.qw_9B[2] |= (uint64_t)htonl((uint32_t)psn);
+		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			we->packets[i].replay->scb.scb_9B.hdr.qw_9B[2] |= (uint64_t)htonl((uint32_t)psn);
+		} else {
+			we->packets[i].replay->scb.scb_16B.hdr.qw_16B[3] |= (uint64_t)htonl((uint32_t)psn);
+		}
+
 		we->packets[i].replay->sdma_we_use_count = we->bounce_buf.use_count;
 		we->packets[i].replay->sdma_we = replay_back_ptr;
 		we->packets[i].replay->hmem_iface = we->hmem.iface;
@@ -634,8 +632,6 @@ void opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep,
 		.iov_base = we->packets[0].replay->iov->iov_base,
 		.iov_len = (we->total_payload + 3) & -4
 	};
-
-	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.nontid_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -699,8 +695,6 @@ void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep,
 			.iov_len = tid_iov_len
 		}
 	};
-
-	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.tid_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
