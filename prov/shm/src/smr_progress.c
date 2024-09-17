@@ -781,7 +781,7 @@ static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"unable to process rx completion\n");
 		}
-		smr_get_peer_srx(ep)->owner_ops->free_entry(rx_entry);
+		ep->srx->owner_ops->free_entry(rx_entry);
 	}
 
 	return 0;
@@ -836,7 +836,7 @@ static int smr_copy_saved(struct smr_cmd_ctx *cmd_ctx,
 			"unable to process rx completion\n");
 		return ret;
 	}
-	smr_get_peer_srx(cmd_ctx->ep)->owner_ops->free_entry(rx_entry);
+	cmd_ctx->ep->srx->owner_ops->free_entry(rx_entry);
 
 	return FI_SUCCESS;
 }
@@ -983,7 +983,6 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 
 static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 {
-	struct fid_peer_srx *peer_srx = smr_get_peer_srx(ep);
 	struct fi_peer_match_attr attr;
 	struct fi_peer_rx_entry *rx_entry;
 	int ret;
@@ -992,33 +991,33 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	attr.msg_size = cmd->msg.hdr.size;
 	attr.tag = cmd->msg.hdr.tag;
 	if (cmd->msg.hdr.op == ofi_op_tagged) {
-		ret = peer_srx->owner_ops->get_tag(peer_srx, &attr, &rx_entry);
+		ret = ep->srx->owner_ops->get_tag(ep->srx, &attr, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
 			if (ret) {
-				peer_srx->owner_ops->free_entry(rx_entry);
+				ep->srx->owner_ops->free_entry(rx_entry);
 				return ret;
 			}
 
-			ret = peer_srx->owner_ops->queue_tag(rx_entry);
+			ret = ep->srx->owner_ops->queue_tag(rx_entry);
 			if (ret) {
-				peer_srx->owner_ops->free_entry(rx_entry);
+				ep->srx->owner_ops->free_entry(rx_entry);
 				return ret;
 			}
 			goto out;
 		}
 	} else {
-		ret = peer_srx->owner_ops->get_msg(peer_srx, &attr, &rx_entry);
+		ret = ep->srx->owner_ops->get_msg(ep->srx, &attr, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
 			if (ret) {
-				peer_srx->owner_ops->free_entry(rx_entry);
+				ep->srx->owner_ops->free_entry(rx_entry);
 				return ret;
 			}
 
-			ret = peer_srx->owner_ops->queue_msg(rx_entry);
+			ret = ep->srx->owner_ops->queue_msg(rx_entry);
 			if (ret) {
-				peer_srx->owner_ops->free_entry(rx_entry);
+				ep->srx->owner_ops->free_entry(rx_entry);
 				return ret;
 			}
 			goto out;
@@ -1338,7 +1337,7 @@ void smr_progress_ipc_list(struct smr_ep *ep)
 					  ipc_entry->async_event);
 		dlist_remove(&ipc_entry->entry);
 		if (ipc_entry->rx_entry)
-			smr_get_peer_srx(ep)->owner_ops->free_entry(ipc_entry->rx_entry);
+			ep->srx->owner_ops->free_entry(ipc_entry->rx_entry);
 		ofi_buf_free(ipc_entry);
 	}
 }
@@ -1444,7 +1443,7 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 					"unable to process rx completion\n");
 			}
 			if (sar_entry->rx_entry)
-				smr_get_peer_srx(ep)->owner_ops->free_entry(sar_entry->rx_entry);
+				ep->srx->owner_ops->free_entry(sar_entry->rx_entry);
 
 			dlist_remove(&sar_entry->entry);
 			ofi_buf_free(sar_entry);
