@@ -1459,8 +1459,6 @@ ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
 	params->opx_ep = opx_ep;
 	slist_init(&params->sdma_reqs);
 
-	OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
-
 #if defined(OPX_RELIABILITY_DEBUG) || !defined(NDEBUG)
 	union fi_opx_reliability_service_flow_key key;
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
@@ -1504,8 +1502,6 @@ ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
 		sdma_we->next = NULL;
 		sdma_we->replay = replay;
 		sdma_we->comp_state = OPX_SDMA_COMP_PENDING_WRITEV;
-
-		OPX_NO_16B_SUPPORT(OPX_HFI1_TYPE);
 
 		uint64_t payload_size = fi_opx_reliability_replay_get_payload_size(replay);
 
@@ -2444,13 +2440,11 @@ void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service * servi
 	{
 		/* PBC */		
 		const uint64_t pbc_dws =
-			2 +	/* pbc */
-			4 +	/* lrh */
-			3 +	/* bth */
-			3 +	/* kdeth */
-			4 + /* software kdeth + unused */
-			2 + /* ICRC and tail */
-			2 ; /* second cacheline */
+			2 + /* pbc */
+			4 + /* lrh uncompressed */
+			3 + /* bth */
+			9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+			2 ; /* ICRC/tail */
 
 			
 		/* Setup the 16B models whether or not they'll be used */
@@ -2466,13 +2460,14 @@ void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service * servi
 			OPX_PBC_JKR_INSERT_NON9B_ICRC;
 
 		/* LRH */
+		/* (LRH QW) does not include pbc (8 bytes) */
 		const uint32_t packetLength = (pbc_dws - 2) * 4;
 		const uint32_t lrh_qws = (packetLength >> 3) +
 				     ((packetLength & 0x07u) != 0);
 
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.qw[0] = 0UL;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.qw[1] = 0UL;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.pktlen = lrh_qws;	/* does not include pbc, but does include icrc */
+		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.pktlen = lrh_qws;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.sc = hfi1->sc;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.entropy = 0;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.lt = 0;   // need to add env variable to change
@@ -2645,7 +2640,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 			((hfi1->sc & FI_OPX_HFI1_LRH_SC_MASK) << FI_OPX_HFI1_LRH_SC_SHIFT));
 
 		service->tx.hfi1.ping_model_9B.hdr.lrh_9B.dlid = 0;			/* set at runtime */
-		service->tx.hfi1.ping_model_9B.hdr.lrh_9B.pktlen = htons(pbc_dws-1);	/* does not include pbc (8 bytes), but does include icrc (4 bytes) */
+		service->tx.hfi1.ping_model_9B.hdr.lrh_9B.pktlen = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 		service->tx.hfi1.ping_model_9B.hdr.lrh_9B.slid = htons(hfi1->lid);
 
 		/* BTH */

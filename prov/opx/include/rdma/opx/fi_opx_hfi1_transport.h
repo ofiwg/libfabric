@@ -926,8 +926,8 @@ void fi_opx_force_credit_return(struct fid_ep *ep,
 	const uint64_t bth_rx = ((uint64_t)dest_rx) << 56;
 	const uint64_t lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(dest_addr);
 	const uint64_t pbc_dws = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ? 16 : 20;
-	const uint16_t lrh_dws = htons(pbc_dws-1);
-	const uint16_t lrh_qws =  (pbc_dws - 2) >> 1; /* does not include pbc (8 bytes) */
+	const uint16_t lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
+	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 
 	const uint64_t force_credit_return = OPX_PBC_CR(0x1, hfi1_type);
 
@@ -1482,8 +1482,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 				 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 		         ((total_credits_needed-1) << 4);
 
-	/* does not include pbc (8 bytes), but does include icrc (4 bytes) */
-	const uint16_t lrh_dws = htons(pbc_dws - 1);
+	const uint16_t lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 
 	struct iovec *iov_ptr = (struct iovec *) iov;
 	size_t *niov_ptr = &niov;
@@ -1795,12 +1794,17 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov,
 			2 +  /* kdeth9 remaining 2 dws */
 		        //--------------------- header split point KDETH 9 DWS
 			(payload_qws_total << 1) + /* one packet payload */
-			2 ;    /* tail 1 qws/2 dws   */
+			2 ;    /* ICRC/tail 1 qws/2 dws   */
+
+	/* Descriptive code above, but for reference most code just has: */
+	/*              9 +  kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+	/*              2;   ICRC/tail */
+
 
 	const uint16_t total_credits_needed = (pbc_dws + 15 ) >> 4; /* round up to full blocks */
 
 	/* 16B LRH is qws */
-	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* does not include pbc (8 bytes) */
+	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 
 	struct iovec *iov_ptr = (struct iovec *) iov;
 	size_t *niov_ptr = &niov;
@@ -2037,7 +2041,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 		9 +			/* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 		(payload_qws_total << 1);
 
-	const uint16_t lrh_dws = htons(pbc_dws-1);	/* does not include pbc (8 bytes), but does include icrc (4 bytes) */
+	const uint16_t lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, SHM -- EAGER (begin)\n");
@@ -2138,15 +2142,13 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode_16B(struct fid_ep *ep,
 
 	const uint64_t pbc_dws =
 			2 +	/* pbc */
-			4 +	/* lrh */
+			4 +	/* lrh uncompressed */
 			3 +	/* bth */
-			3 +	/* kdeth */
-			4 + /* software kdeth + unused */
-			2 + /* second cacheline */
+			9 +     /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 			((payload_qws_total) << 1) +
-			2; //ICRC + Tail
+			2;      /* ICRC/tail */
 
-	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* does not include pbc (8 bytes) */
+	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND 16B, SHM -- EAGER (begin)\n");
@@ -2544,15 +2546,13 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 			2 +	/* pbc */
 			2 +	/* lhr */
 			3 +	/* bth */
-			3 +	/* kdeth */
-			6 +	/* software kdeth */
-		        //--------------------- header split point KDETH 9 DWS
+			9 +     /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 
 			/* PIO is everything else */
 			(payload_qws_total << 1); /* one packet payload */
 
 	/* 9B LRH is dws */
-	const uint16_t lrh_dws = htons(pbc_dws - 2 + 1); /* does not include pbc (8 bytes), but does include icrc (4 bytes) */
+	const uint16_t lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 
 	assert(lock_required == 0);
 
@@ -2709,7 +2709,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_16B(struct fid_ep *ep,
 			(tail_qws_total << 1) ;    /* tail 1 qws/2 dws   */
 
 	/* 16B LRH is qws */
-	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* does not include pbc (8 bytes) */
+	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 
 	assert(lock_required == 0);
 
@@ -3477,7 +3477,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last (struct fi_opx_ep *opx_ep,
 	const uint64_t pbc_dws = 16 +	/* pbc + packet header */
 		(payload_qws_total << 1);
 
-	const uint16_t lrh_dws = htons(pbc_dws-1);	/* does not include pbc (8 bytes), but does include icrc (4 bytes) */
+	const uint16_t lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
@@ -3617,7 +3617,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last_16B (struct fi_opx_ep *opx_ep,
 			(payload_qws_total << 1) + /* one packet payload */
 			(tail_qws_total << 1) ;    /* tail 1 qws/2 dws   */
 
-	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* does not include pbc (8 bytes) */
+	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 
 	uint16_t total_credits_needed =
 		1 +				/* PIO SOP -- 1 credit */
@@ -3745,7 +3745,7 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep,
 				 3 + /* bth */
 				 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 				 (0 << 4);
-		const uint16_t lrh_dws = htons(pbc_dws - 1);
+		const uint16_t lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 		hdr->qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 		hdr->qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx;
 		hdr->qw_9B[2] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[2];
@@ -3755,11 +3755,11 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep,
 		hdr->qw_9B[6] = bytes_to_sync;
 	} else {
 		const uint64_t pbc_dws = 2 + /* pbc */
-					 4 + /* lrh */
+					 4 + /* lrh uncompressed */
 					 3 + /* bth */
-					 9 + /* kdeth */
-					 2;  /* ICRC */
-		const uint16_t lrh_dws = (pbc_dws - 1) >> 1;
+					 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+					 2;  /* ICRC/tail */
+		const uint16_t lrh_dws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 		uint32_t lrh_dlid_16B = htons(FI_OPX_HFI1_LRH_DLID_TO_LID(lrh_dlid));
 		hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 					((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
