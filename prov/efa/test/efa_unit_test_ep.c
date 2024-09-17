@@ -742,7 +742,7 @@ void test_efa_rdm_ep_rma_without_caps(struct efa_resource **state)
 
 	/* ensure we don't have RMA capability. */
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	assert_int_equal( efa_rdm_ep->user_info->caps & FI_RMA, 0);
+	assert_int_equal( efa_rdm_ep->base_ep.info->caps & FI_RMA, 0);
 
 	/* create a fake peer */
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -793,7 +793,7 @@ void test_efa_rdm_ep_atomic_without_caps(struct efa_resource **state)
 
 	/* ensure we don't have ATOMIC capability. */
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	assert_int_equal( efa_rdm_ep->user_info->caps & FI_ATOMIC, 0);
+	assert_int_equal( efa_rdm_ep->base_ep.info->caps & FI_ATOMIC, 0);
 
 	/* create a fake peer */
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
