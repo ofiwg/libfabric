@@ -454,9 +454,9 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 	}
 
 	/* Max msg size is too large, turn off zcpy recv */
-	if (ep->max_msg_size > ep->mtu_size - ep->user_info->ep_attr->msg_prefix_size) {
+	if (ep->max_msg_size > ep->mtu_size - ep->base_ep.info->ep_attr->msg_prefix_size) {
 		EFA_INFO(FI_LOG_EP_CTRL, "max_msg_size (%zu) is greater than the mtu size limit: %zu. Zero-copy receive protocol will be disabled.\n",
-			ep->max_msg_size, ep->mtu_size - ep->user_info->ep_attr->msg_prefix_size);
+			ep->max_msg_size, ep->mtu_size - ep->base_ep.info->ep_attr->msg_prefix_size);
 		ep->use_zcpy_rx = false;
 		goto out;
 	}
@@ -550,12 +550,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 			goto err_destroy_base_ep;
 	} else {
 		efa_rdm_ep->shm_ep = NULL;
-	}
-
-	efa_rdm_ep->user_info = fi_dupinfo(info);
-	if (!efa_rdm_ep->user_info) {
-		ret = -FI_ENOMEM;
-		goto err_free_ep;
 	}
 
 	efa_rdm_ep->host_id = efa_get_host_id(efa_env.host_id_file);
@@ -999,9 +993,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 	if (efa_rdm_ep->pke_vec)
 		free(efa_rdm_ep->pke_vec);
 
-	if (efa_rdm_ep->user_info)
-		fi_freeinfo(efa_rdm_ep->user_info);
-
 	free(efa_rdm_ep);
 	return retv;
 }
@@ -1137,7 +1128,7 @@ void efa_rdm_ep_update_shm(struct efa_rdm_ep *ep)
 
 	use_shm = true;
 
-	assert(ep->user_info);
+	assert(ep->base_ep.info);
 
 	/*
 	 * shm provider must make cuda calls to transfer cuda memory.
@@ -1147,7 +1138,7 @@ void efa_rdm_ep_update_shm(struct efa_rdm_ep *ep)
 	 * AWS Neuron and Habana Synapse, have no SHM provider
 	 * support anyways, so disabling SHM will not impact them.
 	 */
-	if (((ep->user_info->caps & FI_HMEM)
+	if (((ep->base_ep.info->caps & FI_HMEM)
 	    && hmem_ops[FI_HMEM_CUDA].initialized
 	    && !ep->cuda_api_permitted)
 		|| !ep->shm_permitted) {
@@ -1468,11 +1459,11 @@ static int efa_rdm_ep_set_shared_memory_permitted(struct efa_rdm_ep *ep, bool sh
  */
 static int efa_rdm_ep_set_max_msg_size(struct efa_rdm_ep *ep, size_t max_msg_size)
 {
-	if (max_msg_size > ep->user_info->ep_attr->max_msg_size) {
+	if (max_msg_size > ep->base_ep.info->ep_attr->max_msg_size) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Requested size of %zu for FI_OPT_MAX_MSG_SIZE "
 			"exceeds the maximum (%zu)\n",
-			max_msg_size, ep->user_info->ep_attr->max_msg_size);
+			max_msg_size, ep->base_ep.info->ep_attr->max_msg_size);
 		return -FI_EINVAL;
 	}
 	ep->max_msg_size = max_msg_size;
@@ -1494,11 +1485,11 @@ static int efa_rdm_ep_set_max_msg_size(struct efa_rdm_ep *ep, size_t max_msg_siz
  */
 static int efa_rdm_ep_set_max_rma_size(struct efa_rdm_ep *ep, size_t max_rma_size)
 {
-	if (max_rma_size > ep->user_info->ep_attr->max_msg_size) {
+	if (max_rma_size > ep->base_ep.info->ep_attr->max_msg_size) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Requested size of %zu for FI_OPT_MAX_RMA_SIZE "
 			"exceeds the maximum (%zu)\n",
-			max_rma_size, ep->user_info->ep_attr->max_msg_size);
+			max_rma_size, ep->base_ep.info->ep_attr->max_msg_size);
 		return -FI_EINVAL;
 	}
 	ep->max_rma_size = max_rma_size;
@@ -1520,11 +1511,11 @@ static int efa_rdm_ep_set_max_rma_size(struct efa_rdm_ep *ep, size_t max_rma_siz
  */
 static int efa_rdm_ep_set_inject_msg_size(struct efa_rdm_ep *ep, size_t inject_msg_size)
 {
-	if (inject_msg_size > ep->user_info->tx_attr->inject_size) {
+	if (inject_msg_size > ep->base_ep.info->tx_attr->inject_size) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Requested size of %zu for FI_OPT_INJECT_MSG_SIZE "
 			"exceeds the maximum (%zu)\n",
-			inject_msg_size, ep->user_info->tx_attr->inject_size);
+			inject_msg_size, ep->base_ep.info->tx_attr->inject_size);
 		return -FI_EINVAL;
 	}
 	ep->inject_size = inject_msg_size;
@@ -1546,11 +1537,11 @@ static int efa_rdm_ep_set_inject_msg_size(struct efa_rdm_ep *ep, size_t inject_m
  */
 static int efa_rdm_ep_set_inject_rma_size(struct efa_rdm_ep *ep, size_t inject_rma_size)
 {
-	if (inject_rma_size > ep->user_info->tx_attr->inject_size) {
+	if (inject_rma_size > ep->base_ep.info->tx_attr->inject_size) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Requested size of %zu for FI_OPT_INJECT_RMA_SIZE "
 			"exceeds the maximum (%zu)\n",
-			inject_rma_size, ep->user_info->tx_attr->inject_size);
+			inject_rma_size, ep->base_ep.info->tx_attr->inject_size);
 		return -FI_EINVAL;
 	}
 	ep->inject_size = inject_rma_size;
