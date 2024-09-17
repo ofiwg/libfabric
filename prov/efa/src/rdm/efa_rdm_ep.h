@@ -304,13 +304,11 @@ bool efa_rdm_ep_should_write_rnr_completion(struct efa_rdm_ep *ep)
 static inline
 int efa_rdm_ep_use_p2p(struct efa_rdm_ep *efa_rdm_ep, struct efa_mr *efa_mr)
 {
-	if (!efa_mr)
-		return 0;
-
 	/*
-	 * always send from host buffers if we have a descriptor
+	 * P2P is always available for host memory (Unregistered buffer will be
+	 * regarded as host memory as EFA provider requires FI_MR_HMEM)
 	 */
-	if (efa_mr->peer.iface == FI_HMEM_SYSTEM)
+	if (!efa_mr || efa_mr->peer.iface == FI_HMEM_SYSTEM)
 		return 1;
 
 	if (efa_rdm_ep_domain(efa_rdm_ep)->hmem_info[efa_mr->peer.iface].p2p_supported_by_device)
