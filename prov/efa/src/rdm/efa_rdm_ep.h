@@ -187,7 +187,6 @@ struct efa_rdm_ep {
 	*/
 	bool use_device_rdma;
 
-	struct fi_info *user_info; /**< fi_info passed by user when calling fi_endpoint */
 	bool sendrecv_in_order_aligned_128_bytes; /**< whether to support in order send/recv of each aligned 128 bytes memory region */
 	bool write_in_order_aligned_128_bytes; /**< whether to support in order write of each aligned 128 bytes memory region */
 	char err_msg[EFA_RDM_ERROR_MSG_BUFFER_LENGTH]; /* A large enough buffer to store CQ/EQ error data used by e.g. fi_cq_readerr */
@@ -240,7 +239,7 @@ static inline size_t efa_rdm_ep_get_tx_pool_size(struct efa_rdm_ep *ep)
 
 static inline int efa_rdm_ep_need_sas(struct efa_rdm_ep *ep)
 {
-	return ((ep->user_info->tx_attr->msg_order & FI_ORDER_SAS) || (ep->user_info->rx_attr->msg_order & FI_ORDER_SAS));
+	return ((ep->base_ep.info->tx_attr->msg_order & FI_ORDER_SAS) || (ep->base_ep.info->rx_attr->msg_order & FI_ORDER_SAS));
 }
 
 
@@ -365,7 +364,7 @@ bool efa_rdm_ep_support_rdma_write(struct efa_rdm_ep *ep)
  * @return -FI_EOPNOTSUPP if FI_RMA wasn't requested, 0 if it was.
  */
 static inline int efa_rdm_ep_cap_check_rma(struct efa_rdm_ep *ep) {
-	if ((ep->user_info->caps & FI_RMA) == FI_RMA)
+	if ((ep->base_ep.info->caps & FI_RMA) == FI_RMA)
 		return 0;
 	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_RMA capability, which was not requested.\n");
 	return -FI_EOPNOTSUPP;
@@ -376,7 +375,7 @@ static inline int efa_rdm_ep_cap_check_rma(struct efa_rdm_ep *ep) {
  * @return -FI_EOPNOTSUPP if FI_ATOMIC wasn't requested, 0 if it was.
  */
 static inline int efa_rdm_ep_cap_check_atomic(struct efa_rdm_ep *ep) {
-	if ((ep->user_info->caps & FI_ATOMIC) == FI_ATOMIC)
+	if ((ep->base_ep.info->caps & FI_ATOMIC) == FI_ATOMIC)
 		return 0;
 	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_ATOMIC capability, which was not requested.\n");
 	return -FI_EOPNOTSUPP;
