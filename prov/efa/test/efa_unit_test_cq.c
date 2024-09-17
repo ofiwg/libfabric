@@ -153,7 +153,7 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
 	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
 	will_return(efa_mock_ibv_read_vendor_err_return_mock, vendor_error);
-	will_return(efa_mock_ibv_read_qp_num_return_mock, 0);
+	will_return(efa_mock_ibv_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 	/* fi_cq_read() called efa_mock_ibv_start_poll_use_saved_send_wr(), which pulled one send_wr from g_ibv_submitted_wr_idv=_vec */
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
@@ -317,7 +317,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	 * therefore use will_return_always()
 	 */
 	will_return_always(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
-	will_return_always(efa_mock_ibv_read_qp_num_return_mock, 0);
+	will_return_always(efa_mock_ibv_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
 	will_return(efa_mock_ibv_read_vendor_err_return_mock, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 	/* the recv error will not populate to application cq because it's an EFA internal error and
 	 * and not related to any application recv. Currently we can only read the error from eq.
@@ -612,7 +612,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	will_return(efa_mock_ibv_read_slid_return_mock, 0xffff); // slid=0xffff(-1) indicates an unknown AH
 	will_return(efa_mock_ibv_read_byte_len_return_mock, pkt_entry->pkt_size);
 	will_return_maybe(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
-	will_return_maybe(efa_mock_ibv_read_qp_num_return_mock, 0);
+	will_return_maybe(efa_mock_ibv_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
 	will_return_maybe(efa_mock_ibv_read_wc_flags_return_mock, 0);
 	will_return_maybe(efa_mock_ibv_read_src_qp_return_mock, raw_addr.qpn);
 
