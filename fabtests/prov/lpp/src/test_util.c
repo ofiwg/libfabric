@@ -124,6 +124,7 @@ void util_init(struct rank_info *ri)
 	hints.domain_attr = &domain_attr;
 
 	hints.ep_attr->type = FI_EP_RDM;
+	hints.ep_attr->protocol = FI_PROTO_LPP;
 	// TODO: Run some tests with more surgical application of caps (e.g.,
 	// only FI_MSG and FI_SEND for the sending side endpoint).
 	hints.caps = FI_ATOMIC | FI_RMA | FI_MSG | FI_TAGGED | FI_READ |
@@ -133,13 +134,14 @@ void util_init(struct rank_info *ri)
 	hints.fabric_attr->prov_name = "lpp";
 	hints.domain_attr->mr_mode = FI_MR_BASIC;
 
-	rc = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0, &hints, &ri->fi);
+	rc = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			NULL, NULL, 0, &hints, &ri->fi);
 	if (rc == -ENODATA) {
 		warn("Failed to find provider with FI_HMEM, trying again without\n");
 		hints.caps &= ~FI_HMEM;
 		INSIST_FI_EQ(ri,
-			     fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0,
-							&hints, &ri->fi),
+			     fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+				        NULL, NULL, 0, &hints, &ri->fi),
 			     0);
 	}
 
