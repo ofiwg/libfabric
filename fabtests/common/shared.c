@@ -1340,6 +1340,14 @@ int ft_init_fabric(void)
 	if (ft_check_opts(FT_OPT_FORK_CHILD))
 		ft_fork_child();
 
+	if (ft_check_opts(FT_OPT_NO_PRE_POSTED_RX) &&
+	    !ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) &&
+	    (fi->caps & (FI_MSG | FI_TAGGED))) {
+		ret = ft_sync_inband(false);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
