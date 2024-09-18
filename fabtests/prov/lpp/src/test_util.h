@@ -167,8 +167,8 @@ static inline struct fi_context *get_ctx_simple(struct rank_info *ri,
 }
 void free_ctx_tree(struct rank_info *ri);
 
-const static unsigned int seed_node_a = 1234;
-const static unsigned int seed_node_b = 9876;
+static const unsigned int seed_node_a = 1234;
+static const unsigned int seed_node_b = 9876;
 
 #ifdef USE_HMEM
 void hmem_init(void);

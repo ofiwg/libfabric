@@ -1,6 +1,6 @@
 #include "test_util.h"
 
-const static uint64_t context = 0xabcd;
+static const uint64_t context = 0xabcd;
 
 int run_fi_tsenddata(struct rank_info *ri){
 	struct wait_tx_cq_params wait_tx_cq_params = { 0 };

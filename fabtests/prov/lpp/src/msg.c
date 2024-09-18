@@ -34,7 +34,7 @@
 
 #include "test_util.h"
 
-const static uint64_t context = 0xabcd;
+static const uint64_t context = 0xabcd;
 
 int run_simple_msg(struct rank_info *ri)
 {
