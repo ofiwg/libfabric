@@ -224,7 +224,6 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
 	 */
 	ssize_t rc = fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u32_extended_rx, opx_dst_addr.hfi1_unit);
 	assert(rc == FI_SUCCESS);
-	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov->len, 0, 0, NULL, is_hmem);
 	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && params->is_intranode,
