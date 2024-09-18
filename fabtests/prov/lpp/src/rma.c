@@ -32,7 +32,7 @@
 
 #include "test_util.h"
 
-const static uint64_t context = 0xabcd;
+static const uint64_t context = 0xabcd;
 
 static int simple_rma_write_common(struct rank_info *ri, size_t buffer_len)
 {

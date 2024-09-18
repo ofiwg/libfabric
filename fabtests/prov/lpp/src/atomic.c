@@ -32,7 +32,7 @@
 
 #include "test_util.h"
 
-const static uint64_t context = 0xabce;
+static const uint64_t context = 0xabce;
 
 int run_simple_atomic_write(struct rank_info *ri)
 {

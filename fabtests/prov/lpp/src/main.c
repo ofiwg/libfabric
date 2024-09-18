@@ -78,7 +78,7 @@ enum node_id my_node;
 // Note: the two large RMA tests are intentionally far apart to reduce the
 // chances they run simultaneously. On configs with small IOVAs spaces, this
 // can be a problem. This only matters when running with -p > 1, of course.
-const static struct test testlist[] = {
+static const struct test testlist[] = {
 	{ run_simple_rma_write,                    "simple_rma_write" },
 	{ run_offset_rma_write,                    "offset_rma_write" },
 	{ run_inject_rma_write,                    "inject_rma_write" },
@@ -273,7 +273,7 @@ static void *worker_thread(void *arg)
 	return (void*)1;
 }
 
-static void inline populate_filtered_testlist(const struct test* tlist,
+static inline void populate_filtered_testlist(const struct test* tlist,
 							size_t num_tests)
 {
 	for (int i = 0; i < num_tests; i++) {
