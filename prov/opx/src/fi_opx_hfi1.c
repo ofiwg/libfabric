@@ -1309,7 +1309,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 		4 + /* lrh uncompressed */
 		3 + /* bth */
 		9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-		((payload_bytes + 3) >> 2) +
+		(((payload_bytes + 7) & -8) >> 2) + /* 16B is QW length/padded */
 		2;  /* ICRC/tail */
 	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
@@ -1582,7 +1582,12 @@ union fi_opx_hfi1_deferred_work * opx_hfi1_rx_rzv_rts_tid_prep_cts(
 	}
 
 	assert(cur_addr_range_tid_len <= cts_params->rzv_comp->context->byte_counter);
-	cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
+
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
+	} else {
+		cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_16B;
+	}
 	cts_params->work_elem.work_type = OPX_WORK_TYPE_PIO;
 
 	return cts_work;
@@ -1608,7 +1613,12 @@ int opx_hfi1_rx_rzv_rts_tid_fallback(union fi_opx_hfi1_deferred_work *work,
 	params->dst_vaddr = params->dput_iov[params->cur_iov].rbuf;
 
 	params->tid_info.npairs = 0;
-	params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
+
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
+	} else {
+		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_16B;
+	}
 	params->work_elem.work_type = OPX_WORK_TYPE_PIO;
 	params->opcode = FI_OPX_HFI_DPUT_OPCODE_RZV;
 
@@ -1620,7 +1630,8 @@ int opx_hfi1_rx_rzv_rts_tid_fallback(union fi_opx_hfi1_deferred_work *work,
 		params->rzv_comp,
 		params->rzv_comp->context);
 
-	return opx_hfi1_rx_rzv_rts_send_cts(work);
+
+        return params->work_elem.work_fn(work);
 }
 
 int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
@@ -1680,7 +1691,12 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 
 	if (last_cts) {
 		assert(cts_work == work);
-		assert(work->work_elem.work_fn == opx_hfi1_rx_rzv_rts_send_cts);
+
+		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			assert(work->work_elem.work_fn == opx_hfi1_rx_rzv_rts_send_cts);
+		} else {
+			assert(work->work_elem.work_fn == opx_hfi1_rx_rzv_rts_send_cts_16B);
+		}
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV, HFI -- RENDEZVOUS RTS TID SETUP (end) SUCCESS (params=%p rzv_comp=%p context=%p)\n",
 			params,
@@ -1691,11 +1707,12 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 			.expected_receive.rts_tid_setup_success);
 
 		// This is the "FI_SUCCESS" exit point for this function
-		return opx_hfi1_rx_rzv_rts_send_cts(cts_work);
+		return cts_work->work_elem.work_fn(cts_work);
 	}
 
 	assert(cts_work != work);
-	int rc = opx_hfi1_rx_rzv_rts_send_cts(cts_work);
+
+        int rc = cts_work->work_elem.work_fn(cts_work);
 	if (rc == FI_SUCCESS) {
 		OPX_BUF_FREE(cts_work);
 	} else {
@@ -3290,10 +3307,10 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 
 				// Round packet_bytes up to the next multiple of 4,
 				// then divide by 4 to get the correct number of dws.
-				uint64_t payload_dws = (packet_bytes + 3) >> 2;
 				uint64_t pbc_dws;
 				uint16_t lrh_dws;
 				if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+					uint64_t payload_dws = (packet_bytes + 3) >> 2;
 					pbc_dws = 2 + /* pbc */
 						2 + /* lrh */
 						3 + /* bth */
@@ -3301,6 +3318,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 						payload_dws;
 					lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 				} else {
+					uint64_t payload_dws = ((packet_bytes + 7) & -8) >> 2;/* 16B is QW length/padded */
 					pbc_dws = 2 + /* pbc */
 						4 + /* lrh uncompressed */
 						3 + /* bth */
