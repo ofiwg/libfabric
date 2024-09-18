@@ -36,34 +36,6 @@
 #include "shared.h"
 #include "benchmark_shared.h"
 
-static int run(void)
-{
-	int i, ret = 0;
-
-	ret = ft_init_fabric();
-	if (ret)
-		return ret;
-
-	if (!(opts.options & FT_OPT_SIZE)) {
-		for (i = 0; i < TEST_CNT; i++) {
-			if (!ft_use_size(i, opts.sizes_enabled))
-				continue;
-			opts.transfer_size = test_size[i].size;
-			init_test(&opts, test_name, sizeof(test_name));
-			ret = pingpong();
-			if (ret)
-				return ret;
-		}
-	} else {
-		init_test(&opts, test_name, sizeof(test_name));
-		ret = pingpong();
-		if (ret)
-			return ret;
-	}
-
-	return ft_finalize();
-}
-
 int main(int argc, char **argv)
 {
 	int op, ret;
@@ -106,7 +78,7 @@ int main(int argc, char **argv)
 	hints->tx_attr->tclass = FI_TC_LOW_LATENCY;
 	hints->addr_format = opts.address_format;
 
-	ret = run();
+	ret = run_pingpong();
 
 	ft_free_res();
 	return ft_exit_code(ret);

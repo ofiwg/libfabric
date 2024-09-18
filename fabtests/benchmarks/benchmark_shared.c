@@ -168,6 +168,34 @@ int pingpong(void)
 	return 0;
 }
 
+int run_pingpong(void)
+{
+	int i, ret = 0;
+
+	ret = ft_init_fabric();
+	if (ret)
+		return ret;
+
+	if (!(opts.options & FT_OPT_SIZE)) {
+		for (i = 0; i < TEST_CNT; i++) {
+			if (!ft_use_size(i, opts.sizes_enabled))
+				continue;
+			opts.transfer_size = test_size[i].size;
+			init_test(&opts, test_name, sizeof(test_name));
+			ret = pingpong();
+			if (ret)
+				return ret;
+		}
+	} else {
+		init_test(&opts, test_name, sizeof(test_name));
+		ret = pingpong();
+		if (ret)
+			return ret;
+	}
+
+	return ft_finalize();
+}
+
 int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 {
 	int ret, i;
