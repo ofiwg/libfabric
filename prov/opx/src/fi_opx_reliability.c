@@ -3182,15 +3182,24 @@ struct fi_opx_reliability_rx_uepkt *fi_opx_reliability_allocate_uepkt(struct fi_
 {
 	struct fi_opx_reliability_rx_uepkt * tmp = ofi_buf_alloc(service->uepkt_pool);
 	assert(tmp);
-
-	/* tmp->hdr.unused_pad_9B = hdr->unused_pad_9B; */
-	tmp->hdr.qw_9B[0] = hdr->qw_9B[0];
-	tmp->hdr.qw_9B[1] = hdr->qw_9B[1];
-	tmp->hdr.qw_9B[2] = hdr->qw_9B[2];
-	tmp->hdr.qw_9B[3] = hdr->qw_9B[3];
-	tmp->hdr.qw_9B[4] = hdr->qw_9B[4];
-	tmp->hdr.qw_9B[5] = hdr->qw_9B[5];
-	tmp->hdr.qw_9B[6] = hdr->qw_9B[6];
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		tmp->hdr.qw_9B[0] = hdr->qw_9B[0];
+		tmp->hdr.qw_9B[1] = hdr->qw_9B[1];
+		tmp->hdr.qw_9B[2] = hdr->qw_9B[2];
+		tmp->hdr.qw_9B[3] = hdr->qw_9B[3];
+		tmp->hdr.qw_9B[4] = hdr->qw_9B[4];
+		tmp->hdr.qw_9B[5] = hdr->qw_9B[5];
+		tmp->hdr.qw_9B[6] = hdr->qw_9B[6];
+	} else {
+		tmp->hdr.qw_16B[0] = hdr->qw_16B[0];
+		tmp->hdr.qw_16B[1] = hdr->qw_16B[1];
+		tmp->hdr.qw_16B[2] = hdr->qw_16B[2];
+		tmp->hdr.qw_16B[3] = hdr->qw_16B[3];
+		tmp->hdr.qw_16B[4] = hdr->qw_16B[4];
+		tmp->hdr.qw_16B[5] = hdr->qw_16B[5];
+		tmp->hdr.qw_16B[6] = hdr->qw_16B[6];
+		tmp->hdr.qw_16B[7] = hdr->qw_16B[7];
+	}
 
 	if (payload && payload_bytes_to_copy > 0)
 		memcpy((void*)&tmp->payload[0], (const void *)payload, payload_bytes_to_copy);
