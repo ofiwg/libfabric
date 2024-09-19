@@ -560,6 +560,8 @@ void *ft_get_aligned_addr(void *ptr, size_t alignment)
 
 int ft_read_cq(struct fid_cq *cq, uint64_t *cur, uint64_t total,
 		int timeout, uint64_t tag);
+int ft_sync_oob(void);
+int ft_sync_inband(bool repost_rx);
 int ft_sync(void);
 int ft_sync_pair(int status);
 int ft_fork_and_pair(void);
