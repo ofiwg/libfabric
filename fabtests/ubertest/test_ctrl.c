@@ -870,9 +870,9 @@ static int ft_unit_atomic(void)
 
 	ft_atom_ctrl.count = ft_tx_ctrl.rma_msg_size / ft_atom_ctrl.datatype_size;
 	if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP ||
-	    ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0) {
+	    ft_atom_ctrl.count > count || ft_atom_ctrl.count == 0)
 		return 0;
-	}
+
 	if (ret)
 		return ret;
 
