@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -141,7 +141,7 @@
 		ofi_complex_##type *r = (res);				\
 		OFI_UNUSED(src);					\
 		for (i = 0; i < cnt; i++)				\
-			r[i] = d[i];					\
+			ofi_complex_set_##type (&r[i], d[i]);		\
 	}
 
 /*
@@ -173,7 +173,7 @@
 		const ofi_complex_##type *s = (src);			\
 		ofi_complex_##type *r = (res);				\
 		for (i = 0; i < cnt; i++) {				\
-			r[i] = d[i];					\
+			ofi_complex_set_##type (&r[i], d[i]);		\
 			op(type, d[i], s[i]);				\
 		}							\
 	}
@@ -211,7 +211,7 @@
 		const ofi_complex_##type *c = (cmp);			\
 		ofi_complex_##type *r = (res);				\
 		for (i = 0; i < cnt; i++) {				\
-			r[i] = d[i];					\
+			ofi_complex_set_##type (&r[i], d[i]);		\
 			op(type, d[i], s[i], c[i]);			\
 		}							\
 	}

@@ -726,9 +726,9 @@ ofi_send_socket(SOCKET fd, const void *buf, size_t count, int flags)
 
 
 /* complex operations implementation */
-#define OFI_COMPLEX(name) ofi_##name##_complex
+#define OFI_COMPLEX(name) ofi_complex_##name
 #define OFI_COMPLEX_BASE(name) OFI_COMPLEX(name)##_base
-#define OFI_COMPLEX_OP(name, op) ofi_complex_##name##_##op
+#define OFI_COMPLEX_OP(name, op) ofi_complex_##op##_##name
 #define OFI_COMPLEX_TYPE_DECL(name, type)	\
 typedef type OFI_COMPLEX_BASE(name);		\
 typedef struct {				\
@@ -754,29 +754,42 @@ static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, sum)(OFI_COMPLEX(name) v1, 
 	OFI_COMPLEX(name) ret = {.re = v1.re + v2.re, .im = v1.im + v2.im};		\
 	return ret;									\
 }											\
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, mul)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
+static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, prod)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
 {											\
 	OFI_COMPLEX(name) ret = {.re = (v1.re * v2.re) - (v1.im * v2.im),		\
 			      .im = (v1.re * v2.im) + (v1.im * v2.re)};			\
 	return ret;									\
 }											\
-static inline int OFI_COMPLEX_OP(name, equ)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)	\
+static inline int OFI_COMPLEX_OP(name, eq)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)	\
 {											\
 	return v1.re == v2.re && v1.im == v2.im;					\
 }											\
 static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, land)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
 {											\
 	OFI_COMPLEX(name) zero = {.re = 0, .im = 0};					\
-	int equ = !OFI_COMPLEX_OP(name, equ)(v1, zero) && !OFI_COMPLEX_OP(name, equ)(v2, zero); \
+	int equ = !OFI_COMPLEX_OP(name, eq)(v1, zero) && !OFI_COMPLEX_OP(name, eq)(v2, zero); \
 	OFI_COMPLEX(name) ret = {.re = equ ? 1.f : 0, .im = 0};				\
 	return ret;									\
 }											\
 static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lor)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
 {											\
 	OFI_COMPLEX(name) zero = {.re = 0, .im = 0};					\
-	int equ = !OFI_COMPLEX_OP(name, equ)(v1, zero) || !OFI_COMPLEX_OP(name, equ)(v2, zero); \
+	int equ = !OFI_COMPLEX_OP(name, eq)(v1, zero) || !OFI_COMPLEX_OP(name, eq)(v2, zero); \
 	OFI_COMPLEX(name) ret = {.re = equ ? 1.f : 0, .im = 0};				\
 	return ret;									\
+}											\
+static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lxor)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
+{											\
+	OFI_COMPLEX(name) zero = {.re = 0, .im = 0};					\
+	int equ = (!OFI_COMPLEX_OP(name, eq)(v1, zero) && OFI_COMPLEX_OP(name, eq)(v2, zero)) || \
+		  (OFI_COMPLEX_OP(name, eq)(v1, zero) && !OFI_COMPLEX_OP(name, eq)(v2, zero)); \
+	OFI_COMPLEX(name) ret = {.re = equ ? 1.f : 0, .im = 0};				\
+	return ret;									\
+}											\
+static inline void OFI_COMPLEX_OP(name, set)(OFI_COMPLEX(name) *v1, OFI_COMPLEX(name) v2) \
+{											\
+	v1->re = v2.re;									\
+	v1->im = v2.im;									\
 }
 
 OFI_COMPLEX_OPS(float)

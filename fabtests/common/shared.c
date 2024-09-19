@@ -161,10 +161,6 @@ struct test_size_param *test_size = def_test_sizes;
 /* range of messages is dynamically allocated */
 struct test_size_param *user_test_sizes;
 
-static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
-
-
 int ft_poll_fd(int fd, int timeout)
 {
 	struct pollfd fds;
@@ -3736,6 +3732,108 @@ int ft_fill_buf(void *buf, size_t size)
 	}
 out:
 	return ret;
+}
+
+int ft_fill_atomic(void *buf, size_t count, enum fi_datatype datatype)
+{
+	switch (datatype) {
+	case FI_INT8:
+	case FI_UINT8:
+	case FI_INT16:
+	case FI_UINT16:
+	case FI_INT32:
+	case FI_UINT32:
+	case FI_INT64:
+	case FI_UINT64:
+	case FI_INT128:
+	case FI_UINT128:
+	case FI_FLOAT:
+	case FI_DOUBLE:
+	case FI_LONG_DOUBLE:
+		SWITCH_REAL_TYPES(datatype, FT_FILL, buf, count);
+		break;
+	case FI_FLOAT_COMPLEX:
+	case FI_DOUBLE_COMPLEX:
+	case FI_LONG_DOUBLE_COMPLEX:
+		SWITCH_COMPLEX_TYPES(datatype, FT_FILL_COMPLEX, buf, count);
+		break;
+	default:
+		return -FI_EOPNOTSUPP;
+	}
+	return 0;
+}
+
+static int ft_check_atomic_compare(void *buf, void *cmp,
+				   enum fi_datatype datatype, size_t count)
+{
+	switch (datatype) {
+	case FI_INT8:
+	case FI_UINT8:
+	case FI_INT16:
+	case FI_UINT16:
+	case FI_INT32:
+	case FI_UINT32:
+	case FI_INT64:
+	case FI_UINT64:
+	case FI_INT128:
+	case FI_UINT128:
+	case FI_FLOAT:
+	case FI_DOUBLE:
+	case FI_LONG_DOUBLE:
+		SWITCH_REAL_TYPES(datatype, FT_CHECK, buf, cmp, count);
+		break;
+	case FI_FLOAT_COMPLEX:
+	case FI_DOUBLE_COMPLEX:
+	case FI_LONG_DOUBLE_COMPLEX:
+		SWITCH_COMPLEX_TYPES(datatype, FT_CHECK_COMPLEX, buf, cmp,
+				     count);
+		break;
+	default:
+		return -FI_EOPNOTSUPP;
+	}
+	return 0;
+}
+
+int ft_check_atomic(enum ft_atomic_opcodes atomic, enum fi_op op,
+		    enum fi_datatype type, void *src, void *dst_cpy, void *dst,
+		    void *cmp, void *res, size_t count)
+{
+	/*
+	 * If we don't have the test function, return > 0 to indicate
+	 * verification is unsupported.
+	 */
+	if (atomic == FT_ATOMIC_COMPARE) {
+		if (!ofi_atomic_swap_handler(op, type))
+			return 1;
+	} else if (atomic == FT_ATOMIC_FETCH) {
+		if (!ofi_atomic_readwrite_handler(op, type))
+			return 1;
+	} else {
+		if (!ofi_atomic_write_handler(op, type))
+			return 1;
+	}
+
+	if (atomic == FT_ATOMIC_COMPARE || atomic == FT_ATOMIC_FETCH) {
+		if (ft_check_atomic_compare(dst_cpy, res, type, count)) {
+			printf("Data check error on atomic fetch buffer\n");
+			return -1;
+		}
+	}
+
+	if (atomic == FT_ATOMIC_COMPARE) {
+		ofi_atomic_swap_op(op, type, dst_cpy, src, cmp, res, count);
+	} else if (atomic == FT_ATOMIC_FETCH) {
+		ofi_atomic_readwrite_op(op, type, dst_cpy, src, res, count);
+	} else {
+		ofi_atomic_write_op(op, type, dst_cpy, src, count);
+	}
+
+	if (ft_check_atomic_compare(dst_cpy, dst, type, count)) {
+		printf("Data check error on atomic target buffer\n");
+		return -1;
+	}
+
+	return FI_SUCCESS;
 }
 
 int ft_check_buf(void *buf, size_t size)

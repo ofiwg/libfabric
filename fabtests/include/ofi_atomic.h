@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,16 +33,14 @@
 #ifndef _OFI_ATOMIC_H_
 #define _OFI_ATOMIC_H_
 
-#include "fabtest.h"
+#include "shared.h"
+#include "ft_osd.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef long double long_double;
-typedef float complex ofi_complex_float;
-typedef double complex ofi_complex_double;
-typedef long double complex ofi_complex_long_double;
 
 #define OFI_WRITE_OP_START	FI_MIN
 #define OFI_WRITE_OP_LAST	(FI_ATOMIC_WRITE + 1)
@@ -82,42 +80,6 @@ extern void (*ofi_atomic_swap_handlers[OFI_SWAP_OP_CNT][OFI_DATATYPE_CNT])
 	ofi_atomic_readwrite_handler(op, datatype)(dst, src, res, cnt)
 #define ofi_atomic_swap_op(op, datatype, dst, src, cmp, res, cnt)	\
 	ofi_atomic_swap_handler(op, datatype)(dst, src, cmp, res, cnt)
-
-#define OFI_DEF_COMPLEX_OPS(type)				\
-static inline int ofi_complex_eq_## type			\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return a == b;						\
-}								\
-static inline ofi_complex_## type ofi_complex_sum_## type	\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return a + b;						\
-}								\
-static inline ofi_complex_## type ofi_complex_prod_## type	\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return a * b;						\
-}								\
-static inline ofi_complex_## type ofi_complex_land_## type	\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return a && b;      					\
-}								\
-static inline ofi_complex_## type ofi_complex_lor_## type	\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return a || b;						\
-}								\
-static inline int ofi_complex_lxor_## type			\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return (a && !b) || (!a && b);				\
-}								\
-
-OFI_DEF_COMPLEX_OPS(float)
-OFI_DEF_COMPLEX_OPS(double)
-OFI_DEF_COMPLEX_OPS(long_double)
 
 #ifdef __cplusplus
 }
