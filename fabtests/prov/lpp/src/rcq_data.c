@@ -1,6 +1,7 @@
 #include "test_util.h"
 
 static const uint64_t context = 0xabcd;
+#define BUF_NUM 4
 
 int run_fi_tsenddata(struct rank_info *ri){
 	struct wait_tx_cq_params wait_tx_cq_params = { 0 };
@@ -8,23 +9,16 @@ int run_fi_tsenddata(struct rank_info *ri){
 	struct verify_buf_params verify_buf_params = { 0 };
 	struct mr_params mr_params = { 0 };
 	struct ep_params ep_params = { 0 };
-	const size_t buff_lens[] = { (1<<15), (1<<14), 1024, 64 };
+	const size_t buff_lens[BUF_NUM] = { (1<<15), (1<<14), 1024, 64 };
+	const uint64_t tags[BUF_NUM] = {0xffff0001, 0xffff0002, 0xffff0003, 0xffff0004};
+	uint64_t rcq_data[BUF_NUM] = { 0x1000, 0x2000, 0x3000, 0x4000};
 	struct rank_info *pri = NULL;
-	const uint64_t tags[] = {0xffff0001, 0xffff0002, 0xffff0003, 0xffff0004};
-	uint64_t rcq_data[] = { 0x1000, 0x2000, 0x3000, 0x4000};
 
-	size_t ndata = sizeof(rcq_data)/sizeof(*rcq_data);
-	size_t nbufflens = sizeof(buff_lens)/sizeof(*buff_lens);
-
-	if (ndata == nbufflens)
-		return -EINVAL;
-
-	for(int i = 0; i<ndata; i++){
+	for (int i = 0; i < BUF_NUM; i++)
 		rcq_data[i] += ri->iteration;
-	}
 
 	TRACE(ri, util_init(ri));
-	for(int i = 0; i < ndata; i++){
+	for (int i = 0; i < BUF_NUM; i++) {
 		mr_params.idx = i;
 		mr_params.length = buff_lens[i];
 		mr_params.access = FI_SEND | FI_RECV;
@@ -34,10 +28,9 @@ int run_fi_tsenddata(struct rank_info *ri){
 
 	ep_params.idx = 0;
 	TRACE(ri, util_create_ep(ri, &ep_params));
-
 	TRACE(ri, util_sync(ri, &pri));
 
-	for(int i= 0; i<ndata; i++){
+	for (int i= 0; i < BUF_NUM; i++) {
 		if (my_node == NODE_A) {
 			INSIST_FI_EQ(ri,
 					 fi_tsenddata(ri->ep_info[0].fid, ri->mr_info[i].uaddr,
