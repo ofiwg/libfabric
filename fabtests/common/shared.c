@@ -3012,48 +3012,73 @@ void eq_readerr(struct fid_eq *eq, const char *eq_str)
 	}
 }
 
-int ft_sync()
+int ft_sync_oob(void)
 {
 	char buf = 'a';
 	int ret;
 
 	if (opts.dst_addr) {
-		if (!(opts.options & FT_OPT_OOB_SYNC)) {
-			ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 1, &tx_ctx,
-					FI_DELIVERY_COMPLETE);
-			if (ret)
-				return ret;
+		ret = ft_sock_send(oob_sock, &buf, 1);
+		if (ret)
+			return ret;
 
-			ret = ft_rx(ep, 1);
-		} else {
-			ret = ft_sock_send(oob_sock, &buf, 1);
-			if (ret)
-				return ret;
-
-			ret = ft_sock_recv(oob_sock, &buf, 1);
-			if (ret)
-				return ret;
-		}
+		ret = ft_sock_recv(oob_sock, &buf, 1);
+		if (ret)
+			return ret;
 	} else {
-		if (!(opts.options & FT_OPT_OOB_SYNC)) {
-			ret = ft_rx(ep, 1);
-			if (ret)
-				return ret;
+		ret = ft_sock_recv(oob_sock, &buf, 1);
+		if (ret)
+			return ret;
 
-			ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 1, &tx_ctx,
-					FI_DELIVERY_COMPLETE);
-			if (ret)
-				return ret;
-		} else {
-			ret = ft_sock_recv(oob_sock, &buf, 1);
-			if (ret)
-				return ret;
-
-			ret = ft_sock_send(oob_sock, &buf, 1);
-			if (ret)
-				return ret;
-		}
+		ret = ft_sock_send(oob_sock, &buf, 1);
+		if (ret)
+			return ret;
 	}
+
+	return FI_SUCCESS;
+}
+
+int ft_sync_inband(bool repost_rx)
+{
+	int ret;
+
+	if (opts.dst_addr) {
+		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 1, &tx_ctx,
+				FI_DELIVERY_COMPLETE);
+		if (ret)
+			return ret;
+
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
+	} else {
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
+
+		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 1, &tx_ctx,
+				FI_DELIVERY_COMPLETE);
+		if (ret)
+			return ret;
+	}
+
+	if (repost_rx) {
+		ret = ft_post_rx(ep, rx_size, &rx_ctx);
+		if (ret)
+			return ret;
+	}
+
+	return FI_SUCCESS;
+}
+
+int ft_sync()
+{
+	int ret;
+
+	if (ft_check_opts(FT_OPT_OOB_SYNC))
+		ret = ft_sync_oob();
+	else
+		ret = ft_sync_inband(true);
 
 	return ret;
 }
