@@ -975,6 +975,9 @@ void fi_opx_force_credit_return(struct fid_ep *ep,
 			opx_ep->tx->send_9B.hdr.qw_9B[3],
 			opx_ep->tx->send_9B.hdr.qw_9B[4],
 			0, 0);
+
+		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
 	} else {
 		uint32_t lrh_dlid_16B = htons(FI_OPX_HFI1_LRH_DLID_TO_LID(lrh_dlid));
 		fi_opx_store_and_copy_qw(scb, local_temp,
@@ -993,7 +996,10 @@ void fi_opx_force_credit_return(struct fid_ep *ep,
 					 opx_ep->tx->send_16B.hdr.qw_16B[5],
 					 0);
 
+		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
 		volatile uint64_t * scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
+
 		fi_opx_store_and_copy_qw(scb_payload, local_temp,
 					 0UL,
 					 0UL,
@@ -1003,9 +1009,9 @@ void fi_opx_force_credit_return(struct fid_ep *ep,
 					 0UL,
 					 0UL,
 					 0UL);
+		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 	}
 
-	FI_OPX_HFI1_CONSUME_CREDITS(pio_state, credits_needed);
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
