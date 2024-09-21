@@ -3532,6 +3532,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 	struct opx_context *context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 	if (OFI_UNLIKELY(context == NULL)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "POST-RECVMSG");
 		return -FI_ENOMEM;
 	}
 	context->next = NULL;
@@ -3566,6 +3567,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 						hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== POST RECVMSG RETURN\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 		return rc;
 
 	} else if (msg->iov_count == 0) {
@@ -3585,6 +3587,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 						hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== POST RECVMSG RETURN\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 		return rc;
 	}
 
@@ -3631,6 +3634,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 						hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== POST RECVMSG (HMEM) RETURN\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 		return rc;
 	}
 #endif
@@ -3652,6 +3656,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 						hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== POST RECVMSG RETURN\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 		return rc;
 	}
 
@@ -3672,10 +3677,9 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 					reliability,
 					hfi1_type);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== POST RECVMSG RETURN\n");
-
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 	return rc;
 }
 
