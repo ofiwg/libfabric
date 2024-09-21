@@ -75,25 +75,6 @@ void fi_opx_hit_zero(struct fi_opx_completion_counter *cc)
 	OPX_BUF_FREE(cc);
 }
 
-inline int fi_opx_check_rma(struct fi_opx_ep *opx_ep)
-{
-	if (!opx_ep)
-		return -FI_EINVAL;
-	if (opx_ep->state != FI_OPX_EP_INITITALIZED_ENABLED)
-		return -FI_EINVAL;
-
-	const enum fi_av_type av_type = opx_ep->av->type;
-
-	if (av_type == FI_AV_UNSPEC)
-		return -FI_EINVAL;
-	if (av_type == FI_AV_MAP && opx_ep->av->type != FI_AV_MAP)
-		return -FI_EINVAL;
-	if (av_type == FI_AV_TABLE && opx_ep->av->type != FI_AV_TABLE)
-		return -FI_EINVAL;
-
-	return 0;
-}
-
 int fi_opx_do_readv_internal_intranode(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_readv_params *params = &work->readv;
