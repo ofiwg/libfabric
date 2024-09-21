@@ -43,7 +43,13 @@
 extern "C" {
 #endif
 
-int fi_opx_check_rma(struct fi_opx_ep *opx_ep);
+__OPX_FORCE_INLINE__
+int fi_opx_check_rma(struct fi_opx_ep *opx_ep)
+{
+	return OFI_UNLIKELY(!opx_ep ||
+		(opx_ep->state != FI_OPX_EP_INITITALIZED_ENABLED) ||
+		(opx_ep->av->type == FI_AV_UNSPEC)) ? -FI_EINVAL : 0;
+}
 
 void fi_opx_hit_zero(struct fi_opx_completion_counter *cc);
 
