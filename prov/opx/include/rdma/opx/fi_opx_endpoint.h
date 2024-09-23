@@ -1862,7 +1862,7 @@ void opx_ep_complete_receive_operation (struct fid_ep *ep,
 		};
 		const uint8_t * const immediate_byte = p->rendezvous.contiguous.immediate_byte;
 		const uint64_t * const immediate_qw = p->rendezvous.contiguous.immediate_qw;
-		const uint64_t immediate_fragment = ((immediate_info.byte_count + immediate_info.byte_count + 63) >> 6);
+		const uint64_t immediate_fragment = ((immediate_info.byte_count + immediate_info.qw_count + 63) >> 6);
 		const union cacheline * const immediate_block = &p->rendezvous.contiguous.cache_line_1 + immediate_fragment;
 
 		fi_opx_handle_recv_rts(hdr, payload, opx_ep, origin_tag, opcode,
@@ -1889,7 +1889,7 @@ void opx_ep_complete_receive_operation (struct fid_ep *ep,
 		};
 		const uint8_t * const immediate_byte = p->rendezvous.contiguous.immediate_byte;
 		const uint64_t * const immediate_qw = p->rendezvous.contiguous.immediate_qw;
-		const uint64_t immediate_fragment = ((immediate_info.byte_count + immediate_info.byte_count + 63) >> 6);
+		const uint64_t immediate_fragment = ((immediate_info.byte_count + immediate_info.qw_count + 63) >> 6);
 		const union cacheline * const immediate_block = &p->rendezvous.contiguous.cache_line_1 + immediate_fragment;
 
 		fi_opx_handle_recv_rts(hdr, payload, opx_ep, origin_tag, opcode,
