@@ -109,7 +109,6 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_pke *pkt_entry;
 	uint64_t actual_peer_host_id = UINT64_MAX;
-	int ret;
 	struct efa_rdm_cq *efa_rdm_cq;
 
 	g_efa_unit_test_mocks.local_host_id = local_host_id;
@@ -117,19 +116,13 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 
 	assert_false(actual_peer_host_id == g_efa_unit_test_mocks.peer_host_id);
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	/* disable shm to force using efa device to send */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, util_cq.cq_fid.fid);
 
 	efa_rdm_ep->host_id = g_efa_unit_test_mocks.local_host_id;
-	/* close shm_ep to force efa_rdm_ep to use efa device to send */
-	if (efa_rdm_ep->shm_ep) {
-		ret = fi_close(&efa_rdm_ep->shm_ep->fid);
-		assert_int_equal(ret, 0);
-		efa_rdm_ep->shm_ep = NULL;
-	}
-
 
 	/* Create and register a fake peer */
 	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
@@ -411,7 +404,8 @@ void test_efa_rdm_ep_dc_atomic_queue_before_handshake(struct efa_resource **stat
 	int buf[1] = {0}, err, numaddr;
 	struct efa_rdm_ope *txe;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	/* disable shm to force using efa device to send */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
 
 	/* create a fake peer */
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -434,12 +428,7 @@ void test_efa_rdm_ep_dc_atomic_queue_before_handshake(struct efa_resource **stat
 	msg.op = FI_SUM;
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	/* close shm_ep to force efa_rdm_ep to use efa device to send */
-	if (efa_rdm_ep->shm_ep) {
-		err = fi_close(&efa_rdm_ep->shm_ep->fid);
-		assert_int_equal(err, 0);
-		efa_rdm_ep->shm_ep = NULL;
-	}
+
 	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make efa_rdm_atomic() think
 	 * a REQ packet has been sent to the peer (so no need to send again)
 	 * handshake has not been received, so we do not know whether the peer support DC
@@ -480,7 +469,8 @@ void test_efa_rdm_ep_dc_send_queue_before_handshake(struct efa_resource **state)
 	int err, numaddr;
 	struct efa_rdm_ope *txe;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	/* disable shm to force using efa device to send */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
 
 	/* create a fake peer */
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -498,12 +488,7 @@ void test_efa_rdm_ep_dc_send_queue_before_handshake(struct efa_resource **state)
 	msg.desc = NULL;
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	/* close shm_ep to force efa_rdm_ep to use efa device to send */
-	if (efa_rdm_ep->shm_ep) {
-		err = fi_close(&efa_rdm_ep->shm_ep->fid);
-		assert_int_equal(err, 0);
-		efa_rdm_ep->shm_ep = NULL;
-	}
+
 	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make efa_rdm_atomic() think
 	 * a REQ packet has been sent to the peer (so no need to send again)
 	 * handshake has not been received, so we do not know whether the peer support DC
@@ -545,7 +530,8 @@ void test_efa_rdm_ep_dc_send_queue_limit_before_handshake(struct efa_resource **
 	int err, numaddr;
 	int i;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	/* disable shm to force using efa device to send */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
 
 	/* create a fake peer */
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -563,12 +549,7 @@ void test_efa_rdm_ep_dc_send_queue_limit_before_handshake(struct efa_resource **
 	msg.desc = NULL;
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	/* close shm_ep to force efa_rdm_ep to use efa device to send */
-	if (efa_rdm_ep->shm_ep) {
-		err = fi_close(&efa_rdm_ep->shm_ep->fid);
-		assert_int_equal(err, 0);
-		efa_rdm_ep->shm_ep = NULL;
-	}
+
 	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make efa_rdm_atomic() think
 	 * a REQ packet has been sent to the peer (so no need to send again)
 	 * handshake has not been received, so we do not know whether the peer support DC
@@ -867,19 +848,12 @@ void test_efa_rdm_ep_setopt_shared_memory_permitted(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
-	bool optval = false;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM);
+	/* disable shm to force using efa device to send */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
 
 	ep = container_of(resource->ep, struct efa_rdm_ep,
 			  base_ep.util_ep.ep_fid);
-
-	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
-				   FI_OPT_SHARED_MEMORY_PERMITTED, &optval,
-				   sizeof(optval)),
-			 0);
-
-	assert_int_equal(fi_enable(resource->ep), 0);
 
 	assert_null(ep->shm_ep);
 }
@@ -1153,7 +1127,8 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(struct efa_res
 	struct efa_rdm_pke **pkt_entry_vec;
 	int i;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	/* disable shm to force using efa device to send */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
 
 	/* create a fake peer */
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -1164,12 +1139,7 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(struct efa_res
 	assert_int_equal(numaddr, 1);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	/* close shm_ep to force efa_rdm_ep to use efa device to send */
-	if (efa_rdm_ep->shm_ep) {
-		err = fi_close(&efa_rdm_ep->shm_ep->fid);
-		assert_int_equal(err, 0);
-		efa_rdm_ep->shm_ep = NULL;
-	}
+
 	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make efa_rdm_atomic() think
 	 * a REQ packet has been sent to the peer (so no need to send again)
 	 * handshake has not been received, so we do not know whether the peer support DC

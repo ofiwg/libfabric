@@ -45,6 +45,8 @@ void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 						 uint32_t fi_version, struct fi_info *hints,
 						 bool enable_ep, bool open_cq);
 
+void efa_unit_test_resource_construct_rdm_shm_disabled(struct efa_resource *resource);
+
 void efa_unit_test_resource_destruct(struct efa_resource *resource);
 
 void efa_unit_test_construct_msg(struct fi_msg *msg, struct iovec *iov,
