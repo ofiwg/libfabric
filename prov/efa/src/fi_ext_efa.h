@@ -4,6 +4,8 @@
 #ifndef _FI_EXT_EFA_H_
 #define _FI_EXT_EFA_H_
 
+#include <rdma/fi_domain.h>
+
 #define FI_EFA_DOMAIN_OPS "efa domain ops"
 
 struct fi_efa_mr_attr {
