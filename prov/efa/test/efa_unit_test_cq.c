@@ -102,7 +102,8 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_cq *efa_rdm_cq;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	/* disable shm to force using efa device to send */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
 	efa_unit_test_buff_construct(&send_buff, resource, 4096 /* buff_size */);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -111,12 +112,6 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, util_cq.cq_fid.fid);
 	ibv_cqx = efa_rdm_cq->ibv_cq.ibv_cq_ex;
-	/* close shm_ep to force efa_rdm_ep to use efa device to send */
-	if (efa_rdm_ep->shm_ep) {
-		err = fi_close(&efa_rdm_ep->shm_ep->fid);
-		assert_int_equal(err, 0);
-		efa_rdm_ep->shm_ep = NULL;
-	}
 
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(ret, 0);
