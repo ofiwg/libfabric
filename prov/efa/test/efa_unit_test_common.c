@@ -166,6 +166,39 @@ err:
 }
 
 /**
+ * @brief Construct RDM ep type resources with shm disabled
+ */
+void efa_unit_test_resource_construct_rdm_shm_disabled(struct efa_resource *resource)
+{
+	int ret;
+	bool shm_permitted = false;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	if (!resource->hints)
+		goto err;
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+						    resource->hints, false, true);
+
+	ret = fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
+			FI_OPT_SHARED_MEMORY_PERMITTED, &shm_permitted,
+			sizeof(shm_permitted));
+	if (ret)
+		goto err;
+
+	ret = fi_enable(resource->ep);
+	if (ret)
+		goto err;
+
+	return;
+err:
+	efa_unit_test_resource_destruct(resource);
+
+	/* Fail test early if the resource struct fails to initialize */
+	fail();
+}
+
+/**
  * @brief Clean up test resources.
  * Note: Resources should be destroyed in order.
  * @param[in] resource	struct efa_resource to clean up.
