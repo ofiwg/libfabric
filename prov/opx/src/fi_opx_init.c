@@ -396,6 +396,9 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 			fi->ep_attr->rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;	/* TODO - check */
 	}
 
+	fi->nic = ofi_nic_dup(NULL);
+	fi->nic->bus_attr->bus_type = FI_BUS_PCI;
+
 	return 0;
 
 err:
