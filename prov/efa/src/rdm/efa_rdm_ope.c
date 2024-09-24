@@ -1767,6 +1767,8 @@ handle_err:
 ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
 					   int pkt_type, ssize_t err)
 {
+	bool delivery_complete_requested = ope->fi_flags & FI_DELIVERY_COMPLETE;
+
 	if (err == -FI_ENOMR) {
 		/* Long read and runting read protocols could fail because of a
 		 * lack of memory registrations. In that case, we retry with
@@ -1780,7 +1782,7 @@ ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
 				 "protocol because memory registration limit "
 				 "was reached on the sender\n");
 			return efa_rdm_ope_post_send_or_queue(
-				ope, EFA_RDM_LONGCTS_MSGRTM_PKT);
+				ope, delivery_complete_requested ?  EFA_RDM_DC_LONGCTS_MSGRTM_PKT : EFA_RDM_LONGCTS_MSGRTM_PKT);
 		case EFA_RDM_LONGREAD_TAGRTM_PKT:
 		case EFA_RDM_RUNTREAD_TAGRTM_PKT:
 			EFA_INFO(FI_LOG_EP_CTRL,
@@ -1788,7 +1790,7 @@ ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
 				 "because memory registration limit was "
 				 "reached on the sender\n");
 			return efa_rdm_ope_post_send_or_queue(
-				ope, EFA_RDM_LONGCTS_TAGRTM_PKT);
+				ope, delivery_complete_requested ?  EFA_RDM_DC_LONGCTS_TAGRTM_PKT : EFA_RDM_LONGCTS_TAGRTM_PKT);
 		default:
 			return err;
 		}
