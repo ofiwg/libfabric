@@ -229,6 +229,23 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver_missing_peer_host_id
 
 /**
  * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
+ * unreachable remote error for send.
+ *
+ * When send operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
+ * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_rdm_cq_read_bad_send_status_unreachable_receiver(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	test_rdm_cq_read_bad_send_status(resource,
+					 0x1234567812345678, 0x8765432187654321,
+					 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+}
+
+/**
+ * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
  * invalid qpn error for send.
  *
  * When send operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.

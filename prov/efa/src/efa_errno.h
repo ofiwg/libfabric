@@ -69,8 +69,9 @@
 	_(10,	REMOTE_ERROR_RNR,		Destination resource not ready (no work queue entries posted on receive queue))	\
 	_(11,	REMOTE_ERROR_BAD_LENGTH,	Remote scatter-gather list too short)						\
 	_(12,	REMOTE_ERROR_BAD_STATUS,	Unexpected status returned by responder)					\
-	_(13,	LOCAL_ERROR_UNRESP_REMOTE,	Unresponsive remote (detected locally))						\
-	_(14,	REMOTE_ERROR_UNKNOWN_PEER,	No valid address handle at remote side (required for RDMA operations))
+	_(13,	LOCAL_ERROR_UNRESP_REMOTE,	Unresponsive remote (was previously responsive))						\
+	_(14,	REMOTE_ERROR_UNKNOWN_PEER,	No valid address handle at remote side (required for RDMA operations))	\
+	_(15,	LOCAL_ERROR_UNREACH_REMOTE,	Unreachable remote (never received a response))
 
 /**
  * @brief EFA provider proprietary error codes
@@ -105,7 +106,8 @@
 	_(4122,	SHM_INTERNAL_ERROR,		SHM internal error)				\
 	_(4123,	WRITE_SHM_CQ_ENTRY,		Failure to write CQ entry for SHM operation)	\
 	_(4124, ESTABLISHED_RECV_UNRESP,	Unresponsive receiver (connection previously established))	\
-	_(4125,	INVALID_PKT_TYPE_ZCPY_RX,	Invalid packet type received when zero copy recv mode is ON)
+	_(4125,	INVALID_PKT_TYPE_ZCPY_RX,	Invalid packet type received when zero copy recv mode is ON)	\
+	_(4126, UNESTABLISHED_RECV_UNRESP,	Unresponsive receiver (reachable by EFA device but handshake failed))
 
 /** @} */
 
@@ -156,13 +158,15 @@ static inline int to_fi_errno(enum efa_errno err) {
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNSUPPORTED_OP:
 	case EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS:
 		return FI_EINVAL;
-	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE:
+	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE:
 		return FI_EHOSTUNREACH;
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH:
 	case EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_LENGTH:
 		return FI_EMSGSIZE;
 	case EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT:
+	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE:
 	case FI_EFA_ERR_ESTABLISHED_RECV_UNRESP:
+	case FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP:
 		return FI_ECONNABORTED;
 	case EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN:
 	case EFA_IO_COMP_STATUS_REMOTE_ERROR_UNKNOWN_PEER:
