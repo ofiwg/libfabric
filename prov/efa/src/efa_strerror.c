@@ -67,10 +67,10 @@ void efa_show_help(enum efa_errno err) {
 		help = "This error is detected remotely; "
 		"typically encountered when the peer process is no longer present";
 		break;
-	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE:
+	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE:
 		help = "This error is detected locally. "
-		"The connection status is unknown or was never established via "
-		"handshake. This typically indicates one or more misconfigured "
+		"The peer is not reachable by the EFA device. "
+		"This typically indicates one or more misconfigured "
 		"EC2 instances; most often due to incorrect inbound/outbound "
 		"security group rules and/or instances placed in different "
 		"subnets. Refer to the public AWS documentation for EFA for "
@@ -80,8 +80,14 @@ void efa_show_help(enum efa_errno err) {
 	case FI_EFA_ERR_ESTABLISHED_RECV_UNRESP:
 		help = "This error is detected locally. "
 		"The connection was previously established via handshake, "
-		"which indicates the error is likely due to the peer process no "
-		"longer being present.";
+		"which indicates the error is likely due to a hardware failure "
+		"on the remote peer, or the peer process no longer being present.";
+		break;
+	case FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP:
+		help = "This error is detected locally. "
+		"The peer is reachable by the EFA device but libfabric failed "
+		"to complete a handshake, which indicates the error is likely "
+		"due to the peer process no longer being present.";
 		break;
 	case FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX:
 		help = "This error is detected locally. "
