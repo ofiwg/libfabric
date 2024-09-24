@@ -1,6 +1,6 @@
 import pytest
 
-from efa.efa_common import has_gdrcopy
+from efa.efa_common import has_gdrcopy, has_rdma
 
 
 # TODO Expand this test to run on all memory types (and rename)
@@ -16,6 +16,9 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     import copy
     from common import has_cuda, has_hmem_support
     from efa.efa_common import efa_run_client_server_test, efa_retrieve_hw_counter_value
+
+    if cntrl_env_var == "FI_EFA_INTER_MIN_READ_WRITE_SIZE" and has_rdma(cmdline_args, "write"):
+        pytest.skip("FI_EFA_INTER_MIN_READ_WRITE_SIZE is only applied to emulated write protocols")
 
     if cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("No read for intra-node communication")
