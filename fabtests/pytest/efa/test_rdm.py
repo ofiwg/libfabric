@@ -16,9 +16,9 @@ def test_rdm_pingpong(cmdline_args, iteration_type, completion_semantic, memory_
 
 @pytest.mark.functional
 @pytest.mark.serial
-def test_mr_exhaustion_rdm_pingpong(cmdline_args):
+def test_mr_exhaustion_rdm_pingpong(cmdline_args, completion_semantic):
     efa_run_client_server_test(cmdline_args, "fi_efa_exhaust_mr_reg_rdm_pingpong", "short",
-                                "transmit_complete", "host_to_host", "all", timeout=1000)
+                                completion_semantic, "host_to_host", "all", timeout=1000)
 
 @pytest.mark.functional
 def test_rdm_pingpong_range(cmdline_args, completion_semantic, memory_type_bi_dir, message_size):
