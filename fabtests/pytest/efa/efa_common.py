@@ -1,3 +1,4 @@
+import os
 import subprocess
 import functools
 from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg, ClientServerTest
@@ -65,6 +66,29 @@ def has_gdrcopy(hostname):
     command = "ssh {} /bin/bash --login -c lsmod | grep gdrdrv".format(hostname)
     process = subprocess.run(command, shell=True, check=False, stdout=subprocess.PIPE)
     return process.returncode == 0
+
+def has_rdma(cmdline_args, operation):
+    """
+    determine whether a host has rdma <operation> enabled in efa device
+    hostname: a host
+    operation: rdma operation name, allowed values are read and write
+    return: a boolean
+    """
+    assert operation in ["read", "write"]
+    binpath = cmdline_args.binpath or ""
+    cmd = "timeout " + str(cmdline_args.timeout) \
+          + " " + os.path.join(binpath, f"fi_efa_rdma_checker -o {operation}")
+    if cmdline_args.environments:
+        cmd = cmdline_args.environments + " " + cmd
+    proc = subprocess.run("ssh {} {}".format(cmdline_args.server_id, cmd),
+               stdout=subprocess.PIPE,
+               stderr=subprocess.STDOUT,
+               shell=True,
+               universal_newlines=True)
+    if has_ssh_connection_err_msg(proc.stdout):
+        raise SshConnectionError()
+
+    return proc.returncode == 0
 
 def efa_retrieve_gid(hostname):
     """
