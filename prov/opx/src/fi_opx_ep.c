@@ -1110,7 +1110,8 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	if (fi_param_get_int(fi_opx_global.prov, "sdma_disable", &sdma_disable) == FI_SUCCESS) {
 		opx_ep->tx->use_sdma = !sdma_disable;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
-		"sdma_disable parm specified as %0X; opx_ep->tx->use_sdma set to %0hhX\n", sdma_disable, opx_ep->tx->use_sdma);
+			"sdma_disable parm specified as %0X; opx_ep->tx->use_sdma set to %0hhX\n",
+			sdma_disable, opx_ep->tx->use_sdma);
 	} else {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "sdma_disable parm not specified; using SDMA\n");
 		opx_ep->tx->use_sdma = 1;
@@ -1121,17 +1122,40 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	rc = fi_param_get_int(fi_opx_global.prov, "sdma_min_payload_bytes", &l_sdma_min_payload_bytes);
 	if (rc != FI_SUCCESS) {
 		opx_ep->tx->sdma_min_payload_bytes = FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MIN_PAYLOAD_BYTES not set.  Using default setting of %d\n",
-		opx_ep->tx->sdma_min_payload_bytes);
-	} else if (l_sdma_min_payload_bytes < FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES || l_sdma_min_payload_bytes > INT_MAX) {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+			"FI_OPX_SDMA_MIN_PAYLOAD_BYTES not set.  Using default setting of %d\n",
+			opx_ep->tx->sdma_min_payload_bytes);
+	} else if (l_sdma_min_payload_bytes < FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN ||
+		   l_sdma_min_payload_bytes > FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX) {
 		opx_ep->tx->sdma_min_payload_bytes = FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_SDMA_MIN_PAYLOAD_BYTES was set but is outside min/max thresholds (%d-%d).  Using default setting of %d\n",
-			FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES, INT_MAX, opx_ep->tx->sdma_min_payload_bytes);
+			FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN, FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX,
+			FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT);
 	} else {
 		opx_ep->tx->sdma_min_payload_bytes = l_sdma_min_payload_bytes;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
-					opx_ep->tx->sdma_min_payload_bytes);
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+			"FI_OPX_SDMA_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
+			opx_ep->tx->sdma_min_payload_bytes);
+	}
+
+	int l_tid_min_payload_bytes;
+	rc = fi_param_get_int(fi_opx_global.prov, "tid_min_payload_bytes", &l_tid_min_payload_bytes);
+	if (rc != FI_SUCCESS) {
+		opx_ep->tx->tid_min_payload_bytes = OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+			"FI_OPX_TID_MIN_PAYLOAD_BYTES not set. Using default setting of %d\n",
+			opx_ep->tx->tid_min_payload_bytes);
+	} else if (l_tid_min_payload_bytes < OPX_TID_MIN_PAYLOAD_BYTES_MIN) {
+		opx_ep->tx->tid_min_payload_bytes = OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_TID_MIN_PAYLOAD_BYTES was set but is less than minimum allowed (%lu). Using default setting of %d\n",
+			OPX_TID_MIN_PAYLOAD_BYTES_MIN, OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT);
+	} else {
+		opx_ep->tx->tid_min_payload_bytes = l_tid_min_payload_bytes;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+			"FI_OPX_TID_MIN_PAYLOAD_BYTES was specified. Set to %d\n",
+			opx_ep->tx->tid_min_payload_bytes);
 	}
 
 	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_SHM]);

@@ -219,6 +219,11 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   For messages smaller than this threshold, the send will be completed using PIO.
   Value must be between 64 and 2147483646. Defaults to 16385.
 
+*FI_OPX_TID_MIN_PAYLOAD_BYTES*
+: Integer. The minimum length in bytes where TID (Expected Receive) will be used.
+  For messages smaller than this threshold, the send will be completed using Eager Receive.
+  Value must be between 4096 and 2147483646. Defaults to 4096.
+
 *FI_OPX_RZV_MIN_PAYLOAD_BYTES*
 : Integer. The minimum length in bytes where rendezvous will be used.
   For messages smaller than this threshold, the send will first try to be completed using eager or multi-packet eager.
