@@ -356,7 +356,7 @@ ssize_t efa_rdm_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 	struct efa_rdm_peer *peer;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	assert(len <= efa_rdm_ep->inject_size);
+	assert(len <= efa_rdm_ep->inject_msg_size);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
@@ -384,7 +384,7 @@ ssize_t efa_rdm_msg_injectdata(struct fid_ep *ep, const void *buf,
 	struct efa_rdm_peer *peer;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	assert(len <= efa_rdm_ep->inject_size);
+	assert(len <= efa_rdm_ep->inject_msg_size);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
@@ -559,7 +559,6 @@ ssize_t efa_rdm_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct efa_rdm_peer *peer;
 
 	efa_rdm_ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	assert(len <= efa_rdm_ep->inject_size);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
@@ -586,7 +585,6 @@ ssize_t efa_rdm_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t l
 	struct efa_rdm_peer *peer;
 
 	efa_rdm_ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	assert(len <= efa_rdm_ep->inject_size);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
