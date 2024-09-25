@@ -56,7 +56,10 @@ struct efa_rdm_ep {
 	struct fid_ep *shm_ep;
 
 	size_t mtu_size;
-	size_t inject_size;
+	size_t max_msg_size;		/**< #FI_OPT_MAX_MSG_SIZE */
+	size_t max_rma_size;		/**< #FI_OPT_MAX_RMA_SIZE */
+	size_t inject_msg_size;		/**< #FI_OPT_INJECT_MSG_SIZE */
+	size_t inject_rma_size;		/**< #FI_OPT_INJECT_RMA_SIZE */
 
 	/* Endpoint's capability to support zero-copy rx */
 	bool use_zcpy_rx;
@@ -73,11 +76,6 @@ struct efa_rdm_ep {
 	/* Resource management flag */
 	uint64_t rm_full;
 
-	/* Application's maximum msg size hint */
-	size_t max_msg_size;
-
-	/** Application's maximum RMA size */
-	size_t max_rma_size;
 
 	/* Applicaiton's message prefix size. */
 	size_t msg_prefix_size;

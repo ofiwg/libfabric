@@ -1503,7 +1503,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 
 		if (ope->fi_flags & FI_INJECT) {
 			assert(ope->iov_count == 1);
-			assert(ope->total_len <= ep->inject_size);
+			assert(ope->total_len <= ep->inject_rma_size);
 			copied = efa_rdm_pke_copy_from_hmem_iov(
 				ope->desc[iov_idx], pkt_entry, ope,
 				sizeof(struct efa_rdm_rma_context_pkt), 0,
