@@ -167,7 +167,7 @@ static int efa_base_ep_modify_qp_rst2rts(struct efa_base_ep *base_ep,
  * @param init_attr_ex ibv_qp_init_attr_ex
  * @return int 0 on success, negative integer on failure
  */
-int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex)
+int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, uint32_t tclass)
 {
 	struct efadv_qp_init_attr efa_attr = { 0 };
 
@@ -185,6 +185,10 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex)
 			efa_attr.flags |= EFADV_QP_FLAGS_UNSOLICITED_WRITE_RECV;
 #endif
 		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
+#if HAVE_EFADV_SL
+		if (tclass == FI_TC_LOW_LATENCY)
+			efa_attr.sl = EFA_QP_DEFAULT_SERVICE_LEVEL;
+#endif
 		(*qp)->ibv_qp = efadv_create_qp_ex(
 			init_attr_ex->pd->context, init_attr_ex, &efa_attr,
 			sizeof(struct efadv_qp_init_attr));
@@ -206,7 +210,7 @@ int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 {
 	int ret;
 
-	ret = efa_qp_create(&base_ep->qp, init_attr_ex);
+	ret = efa_qp_create(&base_ep->qp, init_attr_ex, base_ep->info->tx_attr->tclass);
 	if (ret)
 		return ret;
 

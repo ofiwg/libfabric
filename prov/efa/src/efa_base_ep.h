@@ -12,6 +12,8 @@
 #include "ofi_util.h"
 #include "rdm/efa_rdm_protocol.h"
 
+#define EFA_QP_DEFAULT_SERVICE_LEVEL 8
+
 struct efa_qp {
 	struct ibv_qp *ibv_qp;
 	struct ibv_qp_ex *ibv_qp_ex;
@@ -72,7 +74,7 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 
 int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
 
-int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex);
+int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, uint32_t tclass);
 
 void efa_qp_destruct(struct efa_qp *qp);
 
