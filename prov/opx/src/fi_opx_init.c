@@ -706,6 +706,9 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "sdma_bounce_buf_threshold", FI_PARAM_INT, "The maximum message length in bytes that will be copied to the SDMA bounce buffer. For messages larger than this threshold, the send will not be completed until receiver has ACKed. Value must be between %d and %d. Defaults to %d.", OPX_SDMA_BOUNCE_BUF_MIN, OPX_SDMA_BOUNCE_BUF_MAX, OPX_SDMA_BOUNCE_BUF_THRESHOLD);
  	fi_param_define(&fi_opx_provider, "sdma_disable", FI_PARAM_INT, "Disables SDMA offload hardware. Default is 0");
 	fi_param_define(&fi_opx_provider, "sdma_min_payload_bytes", FI_PARAM_INT, "The minimum message length in bytes where SDMA will be used. For messages smaller than this threshold, the send will be completed using PIO. Value must be between %d and %d. Defaults to %d.", FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN, FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX, FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT);
+	fi_param_define(&fi_opx_provider, "tid_min_payload_bytes", FI_PARAM_INT,
+		"The minimum message length in bytes where TID will be used. Value must be >= %d. Defaults to %d.",
+		OPX_TID_MIN_PAYLOAD_BYTES_MIN, OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT);
 	fi_param_define(&fi_opx_provider, "expected_receive_enable", FI_PARAM_BOOL, "Enables expected receive rendezvous using Token ID (TID). Defaults to \"No\".");
 	fi_param_define(&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
                         "When set, specify the set of CPU cores to set the progress "

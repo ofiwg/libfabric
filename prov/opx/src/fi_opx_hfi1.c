@@ -1455,6 +1455,7 @@ int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep,
 	if (is_intranode
 		|| !opx_ep->use_expected_tid_rzv
 		|| (niov != 1)
+		|| (params->dput_iov[0].bytes < opx_ep->tx->tid_min_payload_bytes)
 		|| (opcode != FI_OPX_HFI_DPUT_OPCODE_RZV &&
 			opcode != FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG)
 		|| !fi_opx_hfi1_sdma_use_sdma(opx_ep, params->dput_iov[0].bytes,
@@ -1826,7 +1827,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_intranode_16B(union fi_opx_hfi1_deferred_wor
 	/* Note that we do not set stl.hdr.lrh.pktlen here (usually lrh_dws << 32),
 	   because this is intranode and since it's a CTS packet, lrh.pktlen
 	   isn't used/needed */
-	tx_hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] | 
+	tx_hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 					((uint64_t)((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B));
 	tx_hdr->qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
 					((uint64_t)((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
@@ -1949,7 +1950,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 
 	// Note: Only need 1 credit here for the message truncation error case. Just
 	// the opcode and origin_byte_counter_vaddr is needed for replaying back to the
-	// sender. 
+	// sender.
 	if (OFI_UNLIKELY(FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, 2) < 2)) {
 		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
@@ -2003,7 +2004,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 	// 2nd cacheline
 	volatile uint64_t * const scb2 =
 		FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-	
+
 	fi_opx_store_and_copy_qw(scb2, &replay->scb.scb_16B.hdr.qw_16B[7],
 		0, 0, 0, 0, 0, 0, 0, 0);
 
@@ -2019,7 +2020,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 							    params->origin_rx,
 							    psn_ptr,
 							    replay,
-							    params->reliability, 
+							    params->reliability,
 								OPX_HFI1_TYPE);
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2044,7 +2045,7 @@ void fi_opx_hfi1_rx_rzv_rts_etrunc (struct fi_opx_ep *opx_ep,
 	params->opx_ep = opx_ep;
 	params->work_elem.slist_entry.next = NULL;
 
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_intranode %u, opcode=%u\n", 
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_intranode %u, opcode=%u\n",
 		is_intranode, FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC);
 
 	if (is_intranode) {

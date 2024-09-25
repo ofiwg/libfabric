@@ -98,7 +98,7 @@
 #elif HAVE_ROCR
 #define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT	(256)
 #else
-#define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT	(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT+1) 
+#define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT	(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT+1)
 #endif
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MIN		(FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min value */
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MAX		(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX+1) /* Max value */
@@ -125,16 +125,15 @@
    The payload itself will be FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE - 16
    */
 
-#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)  \
-                 ((hfi1_type & OPX_HFI1_JKR) ?      \
-		   (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 64 /* hdr */ + 8 /* tail */) - 16 /* payload */)) :\
-		   (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 56 /* hdr */) - 16 /* payload */)))
-                                                                    /* PAYLOAD BYTES CONSUMED */
+#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)								\
+		((hfi1_type & OPX_HFI1_JKR)									\
+		? (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 64 /* hdr */ + 8 /* tail */) - 16 /* payload */))	\
+		: (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 56 /* hdr */)                - 16 /* payload */)))
 
 #define FI_OPX_MP_EGR_CHUNK_CREDITS (FI_OPX_MP_EGR_CHUNK_SIZE >> 6) /* PACKET CREDITS TOTAL */
 #define FI_OPX_MP_EGR_CHUNK_DWS (FI_OPX_MP_EGR_CHUNK_SIZE >> 2)     /* PBC DWS */
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS(hfi1_type) \
-             ((FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) >> 3)   /* PAYLOAD QWS CONSUMED */
+		((FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) >> 3)   /* PAYLOAD QWS CONSUMED */
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL 16
 #define FI_OPX_MP_EGR_XFER_BYTES_TAIL 0x0010000000000000ull
 
@@ -207,21 +206,36 @@ static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX >= OPX_MP_EGR_MAX_PAYLOAD_BYTES_D
 
 /* Default for payload threshold size for SDMA */
 #ifndef FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT
-#if HAVE_CUDA
-#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(4096)
-#elif HAVE_ROCR
-#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(256)
-#else
-#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(16385)
-#endif
+	#if HAVE_CUDA
+		#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(4096)
+	#elif HAVE_ROCR
+		#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(256)
+	#else
+		#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(16385)
+	#endif
 #endif
 #define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN		(FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min Value */
 #define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX		(INT_MAX-1) /* Max Value */
 
+/* Default for payload threshold size for TID */
+#ifndef OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT
+	#if HAVE_CUDA
+		#define OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT		(4096)
+	#elif HAVE_ROCR
+		#define OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT		(4096)
+	#else
+		#define OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT		(4096)
+	#endif
+#endif
+#define OPX_TID_MIN_PAYLOAD_BYTES_MIN		(OPX_HFI1_TID_PAGESIZE)
+static_assert(OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT >= OPX_TID_MIN_PAYLOAD_BYTES_MIN,
+	      "OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT must be >= OPX_TID_MIN_PAYLOAD_BYTES_MIN!\n");
 
 
-static_assert(!(FI_OPX_HFI1_SDMA_MAX_COMP_INDEX & (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX - 1)), "FI_OPX_HFI1_SDMA_MAX_COMP_INDEX must be power of 2!\n");
-static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX, "FI_OPX_HFI1_SDMA_MAX_WE must be >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX!\n");
+static_assert(!(FI_OPX_HFI1_SDMA_MAX_COMP_INDEX & (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX - 1)),
+	      "FI_OPX_HFI1_SDMA_MAX_COMP_INDEX must be power of 2!\n");
+static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX,
+	      "FI_OPX_HFI1_SDMA_MAX_WE must be >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX!\n");
 
 /*
  * SDMA includes 8B sdma hdr, 8B PBC, and message header.
@@ -706,7 +720,7 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.queue_size          %#X\n",context->info.sdma.queue_size);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.completion_queue    %p errcode %#X status %#X\n",context->info.sdma.completion_queue,
 	       context->info.sdma.completion_queue->errcode,
-	       context->info.sdma.completion_queue->status); 
+	       context->info.sdma.completion_queue->status);
 /*	Not printing                                Context info.sdma.queued_entries);          */
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.base_addr       %p \n",context->info.rxe.hdrq.base_addr);
