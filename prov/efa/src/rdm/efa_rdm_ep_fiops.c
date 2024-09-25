@@ -1808,7 +1808,7 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 		efa_rdm_ep->write_in_order_aligned_128_bytes = *(bool *)optval;
 		break;
 	default:
-		EFA_WARN(FI_LOG_EP_CTRL, "Unknown endpoint option\n");
+		EFA_INFO(FI_LOG_EP_CTRL, "Unknown endpoint option\n");
 		return -FI_ENOPROTOOPT;
 	}
 
@@ -1913,7 +1913,7 @@ static int efa_rdm_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*optlen = sizeof(bool);
 		break;
 	default:
-		EFA_WARN(FI_LOG_EP_CTRL, "Unknown endpoint option\n");
+		EFA_INFO(FI_LOG_EP_CTRL, "Unknown endpoint option\n");
 		return -FI_ENOPROTOOPT;
 	}
 
