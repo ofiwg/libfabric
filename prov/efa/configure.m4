@@ -77,6 +77,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	efadv_support_extended_cq=0
 	have_efa_dmabuf_mr=0
 	have_efadv_query_mr=0
+	have_efadv_sl=0
 
 	dnl $have_neuron is defined at top-level configure.ac
 	AM_CONDITIONAL([HAVE_NEURON], [ test x"$have_neuron" = x1 ])
@@ -159,6 +160,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[],
 			[have_efadv_query_mr=0],
 			[[#include <infiniband/efadv.h>]])
+
+		AC_CHECK_MEMBER(struct efadv_qp_init_attr.sl,
+			[have_efadv_sl=1],
+			[have_efadv_sl=0],
+			[[#include <infiniband/efadv.h>]])
 	])
 
 	AC_DEFINE_UNQUOTED([HAVE_RDMA_SIZE],
@@ -188,6 +194,9 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_EFADV_QUERY_MR],
 		[$have_efadv_query_mr],
 		[Indicates if efadv_query_mr verbs is available])
+	AC_DEFINE_UNQUOTED([HAVE_EFADV_SL],
+		[$have_efadv_sl],
+		[Indicates if efadv_qp_init_attr has sl])
 
 
 	CPPFLAGS=$save_CPPFLAGS
