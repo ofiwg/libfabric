@@ -80,6 +80,9 @@ AS_IF([test -z "$CFLAGS"],
 # <3), but it is necessary in AM 1.12.x.
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
+dnl Call the provider's CONFIGURE and CONDITIONALS macros
+m4_include([prov/efa/configure.m4])
+
 AM_PROG_LIBTOOL
 
 AC_ARG_WITH([valgrind],
