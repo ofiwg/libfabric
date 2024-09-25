@@ -119,7 +119,7 @@ jobs:
           name: hmem-config.log
           path: config.log
   macos:
-    runs-on: macos-12
+    runs-on: macos-13
     steps:
       - name: Install dependencies (Mac OS)
         run: |
@@ -140,5 +140,5 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b # v4.3.4
         with:
-          name: macos-12-config.log
+          name: macos-config.log
           path: config.log
