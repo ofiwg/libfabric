@@ -105,7 +105,7 @@ int efa_rdm_ep_create_base_ep_ibv_qp(struct efa_rdm_ep *ep)
 	 * without any headers.
 	 */
 	if (ep->use_zcpy_rx) {
-		ret = efa_qp_create(&ep->base_ep.user_recv_qp, &attr_ex);
+		ret = efa_qp_create(&ep->base_ep.user_recv_qp, &attr_ex, ep->base_ep.info->tx_attr->tclass);
 		if (ret) {
 			efa_base_ep_destruct_qp(&ep->base_ep);
 			return ret;
@@ -1545,7 +1545,7 @@ int efa_rdm_ep_check_qp_in_order_aligned_128_bytes(struct efa_rdm_ep *ep,
 	/* Create a dummy qp for query only */
 	efa_rdm_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, ibv_cq_ex, ibv_cq_ex);
 
-	ret = efa_qp_create(&qp, &attr_ex);
+	ret = efa_qp_create(&qp, &attr_ex, FI_TC_UNSPEC);
 	if (ret)
 		goto out;
 
