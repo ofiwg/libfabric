@@ -57,9 +57,13 @@ struct efa_rdm_ep {
 
 	size_t mtu_size;
 	size_t max_msg_size;		/**< #FI_OPT_MAX_MSG_SIZE */
+	size_t max_tagged_size;		/**< #FI_OPT_MAX_TAGGED_SIZE */
 	size_t max_rma_size;		/**< #FI_OPT_MAX_RMA_SIZE */
+	size_t max_atomic_size;		/**< #FI_OPT_MAX_ATOMIC_SIZE */
 	size_t inject_msg_size;		/**< #FI_OPT_INJECT_MSG_SIZE */
+	size_t inject_tagged_size;	/**< #FI_OPT_INJECT_TAGGED_SIZE */
 	size_t inject_rma_size;		/**< #FI_OPT_INJECT_RMA_SIZE */
+	size_t inject_atomic_size;	/**< #FI_OPT_INJECT_ATOMIC_SIZE */
 
 	/* Endpoint's capability to support zero-copy rx */
 	bool use_zcpy_rx;
