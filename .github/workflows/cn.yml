@@ -7,8 +7,6 @@ on:
       - opened
       - reopened
       - synchronize
-  schedule:
-    - cron: '0 23 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -16,10 +14,6 @@ concurrency:
 
 jobs:
   opx-ci:
-    name: OPX CI
-    if: ${{ github.repository == 'cornelisnetworks/libfabric-internal' && github.event_name == 'pull_request' }}
+    name: CI
+    if: ${{ github.repository == 'cornelisnetworks/libfabric-internal' }}
     uses: cornelisnetworks/libfabric-devel/.github/workflows/cn.yml@master
-  nightly:
-    name: Nightly
-    if: ${{ github.repository == 'cornelisnetworks/libfabric-internal' && github.event_name == 'schedule' }}
-    uses: cornelisnetworks/libfabric-devel/.github/workflows/nightly.yml@master
