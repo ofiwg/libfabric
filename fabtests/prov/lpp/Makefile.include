@@ -30,6 +30,8 @@
 # SOFTWARE.
 #
 
+if ENABLE_LPP
+
 LPP_REGRESSION_SRCS = prov/lpp/src/rcq_data.c \
                       prov/lpp/src/main.c \
                       prov/lpp/src/ipc.c \
@@ -64,3 +66,5 @@ endif
 
 prov_lpp_src_lpp_regression_SOURCES = $(LPP_REGRESSION_SRCS)
 prov_lpp_src_lpp_regression_LDADD = libfabtests.la
+
+endif ENABLE_LPP
