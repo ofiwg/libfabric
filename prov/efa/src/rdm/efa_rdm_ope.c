@@ -1060,6 +1060,12 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 		efa_rdm_rxe_report_completion(rxe);
 	}
 
+	if (ope->internal_flags & EFA_RDM_OPE_READ_NACK) {
+		assert(ope->type == EFA_RDM_RXE);
+		/* Apply to both DC and non-DC */
+		efa_rdm_rxe_map_remove(&ope->ep->rxe_map, ope->msg_id, ope->peer->efa_fiaddr, ope);
+	}
+
 	/* As can be seen, this function does not release rxe when
 	 * efa_rdm_ope_post_send_or_queue() was successful.
 	 *
@@ -1099,9 +1105,6 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 	if (ope->internal_flags & EFA_RDM_RXE_EOR_IN_FLIGHT) {
 		return;
 	}
-
-	if (ope->internal_flags & EFA_RDM_OPE_READ_NACK)
-		efa_rdm_rxe_map_remove(&ope->ep->rxe_map, ope->msg_id, ope->peer->efa_fiaddr, ope);
 
 	if (ope->type == EFA_RDM_TXE) {
 		efa_rdm_txe_release(ope);
