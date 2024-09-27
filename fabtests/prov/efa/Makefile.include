@@ -30,6 +30,7 @@
 # SOFTWARE.
 #
 
+if ENABLE_EFA
 bin_PROGRAMS += prov/efa/src/fi_efa_rnr_read_cq_error \
 		prov/efa/src/fi_efa_rnr_queue_resend \
 		prov/efa/src/fi_efa_info_test
@@ -77,3 +78,4 @@ prov_efa_src_fi_efa_rdma_checker_LDFLAGS = -lefa
 endif BUILD_EFA_RDMA_CHECKER
 
 endif HAVE_VERBS_DEVEL
+endif ENABLE_EFA
