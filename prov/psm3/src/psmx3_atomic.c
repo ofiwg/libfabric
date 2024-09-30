@@ -2067,6 +2067,11 @@ static int psmx3_atomic_writevalid_internal(size_t chunk_size,
 	switch (op) {
 	case FI_MIN:
 	case FI_MAX:
+		if (datatype == FI_FLOAT_COMPLEX ||
+		    datatype == FI_DOUBLE_COMPLEX ||
+		    datatype == FI_LONG_DOUBLE_COMPLEX)
+			return -FI_EOPNOTSUPP;
+	/* fall through */
 	case FI_SUM:
 	case FI_PROD:
 	case FI_LOR:
@@ -2098,6 +2103,11 @@ static int psmx3_atomic_readwritevalid_internal(size_t chunk_size,
 	switch (op) {
 	case FI_MIN:
 	case FI_MAX:
+		if (datatype == FI_FLOAT_COMPLEX ||
+		    datatype == FI_DOUBLE_COMPLEX ||
+		    datatype == FI_LONG_DOUBLE_COMPLEX)
+			return -FI_EOPNOTSUPP;
+	/* fall through */
 	case FI_SUM:
 	case FI_PROD:
 	case FI_LOR:
