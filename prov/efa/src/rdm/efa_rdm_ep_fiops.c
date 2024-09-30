@@ -559,8 +559,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	efa_rdm_ep->rx_size = info->rx_attr->size;
 	efa_rdm_ep->tx_size = info->tx_attr->size;
-	efa_rdm_ep->rx_iov_limit = info->rx_attr->iov_limit;
-	efa_rdm_ep->tx_iov_limit = info->tx_attr->iov_limit;
 	efa_rdm_ep->inject_size = info->tx_attr->inject_size;
 	efa_rdm_ep->efa_max_outstanding_tx_ops = efa_domain->device->rdm_info->tx_attr->size;
 	efa_rdm_ep->efa_max_outstanding_rx_ops = efa_domain->device->rdm_info->rx_attr->size;
