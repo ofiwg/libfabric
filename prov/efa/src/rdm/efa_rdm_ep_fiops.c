@@ -236,7 +236,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	ret = ofi_bufpool_create(&ep->user_rx_pkt_pool,
 			sizeof(struct efa_rdm_pke),
 			EFA_RDM_BUFPOOL_ALIGNMENT,
-			0,ep->rx_size,0);
+			0, ep->base_ep.info->rx_attr->size, 0);
 	if (ret)
 		goto err_free;
 
@@ -285,7 +285,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				 sizeof(struct efa_rdm_rxe_map_entry),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
-				 ep->rx_size, 0);
+				 ep->base_ep.info->rx_attr->size, 0);
 
 	if (ret)
 		goto err_free;
@@ -301,7 +301,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				 sizeof(struct efa_rdm_ope),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
-				 ep->tx_size + ep->rx_size, 0);
+				 ep->base_ep.info->tx_attr->size + ep->base_ep.info->rx_attr->size, 0);
 	if (ret)
 		goto err_free;
 
@@ -309,7 +309,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				 sizeof(struct efa_rdm_peer_overflow_pke_list_entry),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
-				 ep->rx_size, 0);
+				 ep->base_ep.info->rx_attr->size, 0);
 	if (ret)
 		goto err_free;
 
@@ -557,8 +557,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		EFA_INFO(FI_LOG_EP_CTRL, "efa_rdm_ep->host_id: i-%017lx\n", efa_rdm_ep->host_id);
 	}
 
-	efa_rdm_ep->rx_size = info->rx_attr->size;
-	efa_rdm_ep->tx_size = info->tx_attr->size;
 	efa_rdm_ep->inject_size = info->tx_attr->inject_size;
 	efa_rdm_ep->efa_max_outstanding_tx_ops = efa_domain->device->rdm_info->tx_attr->size;
 	efa_rdm_ep->efa_max_outstanding_rx_ops = efa_domain->device->rdm_info->rx_attr->size;

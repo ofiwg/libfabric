@@ -1134,6 +1134,7 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(struct efa_res
 	int err, numaddr;
 	struct efa_rdm_pke **pkt_entry_vec;
 	int i;
+	size_t tx_size;
 
 	/* disable shm to force using efa device to send */
 	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
@@ -1147,6 +1148,7 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(struct efa_res
 	assert_int_equal(numaddr, 1);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	tx_size = efa_rdm_ep->base_ep.info->tx_attr->size;
 
 	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make efa_rdm_atomic() think
 	 * a REQ packet has been sent to the peer (so no need to send again)
@@ -1156,11 +1158,11 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(struct efa_res
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	peer->is_local = false;
 
-	pkt_entry_vec = calloc(efa_rdm_ep->tx_size, sizeof(struct efa_rdm_pke *));
+	pkt_entry_vec = calloc(tx_size, sizeof(struct efa_rdm_pke *));
 	assert_non_null(pkt_entry_vec);
 
 	/* Exhaust the tx pkt pool */
-	for (i = 0; i < efa_rdm_ep->tx_size; i++) {
+	for (i = 0; i < tx_size; i++) {
 		pkt_entry_vec[i] = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 		assert_non_null(pkt_entry_vec[i]);
 	}
@@ -1170,7 +1172,7 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(struct efa_res
 	assert_int_equal(efa_rdm_ep_post_handshake(efa_rdm_ep, peer), -FI_EAGAIN);
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 
-	for (i = 0; i < efa_rdm_ep->tx_size; i++)
+	for (i = 0; i < tx_size; i++)
 		efa_rdm_pke_release_tx(pkt_entry_vec[i]);
 
 	free(pkt_entry_vec);
