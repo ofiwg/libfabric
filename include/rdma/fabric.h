@@ -162,8 +162,8 @@ typedef struct fid *fid_t;
 #define FI_AV_USER_ID		(1ULL << 41)
 #define FI_PEER			(1ULL << 43)
 /* #define FI_XPU_TRIGGER		(1ULL << 44) */
-/* #define FI_HMEM_HOST_ALLOC	(1ULL << 45) */
-/* #define FI_HMEM_DEVICE_ONLY	(1ULL << 46) */
+
+#define FI_TAGGED_MULTI_RECV	(1ULL << 46)
 #define FI_HMEM			(1ULL << 47)
 /* #define FI_VARIABLE_MSG		(1ULL << 48) */
 #define FI_RMA_PMEM		(1ULL << 49)

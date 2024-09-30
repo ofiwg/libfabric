@@ -333,6 +333,10 @@ additional optimizations.
 : Specifies that the endpoint must support the FI_MULTI_RECV flag when
   posting receive buffers.
 
+*FI_TAGGED_MULTI_RECV*
+: Specifies that the endpoint must support the FI_MULTI_RECV flag when
+  posting tagged receive buffers.
+
 *FI_NAMED_RX_CTX*
 : Requests that endpoints which support multiple receive contexts
   allow an initiator to target (or name) a specific receive context as
@@ -468,8 +472,9 @@ FI_AV_USER_ID, FI_PEER
 Primary modifiers: FI_READ, FI_WRITE, FI_RECV, FI_SEND,
 FI_REMOTE_READ, FI_REMOTE_WRITE
 
-Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SHARED_AV,
-FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM.
+Secondary capabilities: FI_MULTI_RECV, FI_TAGGED_MULTI_RECV, FI_SOURCE,
+FI_RMA_EVENT, FI_SHARED_AV, FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM,
+FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM.
 
 # MODE
 
