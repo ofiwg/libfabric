@@ -122,6 +122,11 @@ struct fid_av {
  * Tracks registered memory regions, primarily for remote access,
  * but also for local access until we can remove that need.
  */
+
+#define FI_MR_DMABUF		(1ULL << 40)
+#define FI_HMEM_HOST_ALLOC	(1ULL << 45)
+#define FI_HMEM_DEVICE_ONLY	(1ULL << 46)
+
 struct fid_mr {
 	struct fid		fid;
 	void			*mem_desc;
