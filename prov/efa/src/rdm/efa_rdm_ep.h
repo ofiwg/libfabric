@@ -63,8 +63,6 @@ struct efa_rdm_ep {
 	size_t rx_size;
 	size_t tx_size;
 	size_t mtu_size;
-	size_t rx_iov_limit;
-	size_t tx_iov_limit;
 	size_t inject_size;
 
 	/* Endpoint's capability to support zero-copy rx */
