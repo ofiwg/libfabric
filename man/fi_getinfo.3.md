@@ -290,6 +290,10 @@ additional optimizations.
   capability is not set, then the src_addr parameter for msg and tagged
   receive operations is ignored.
 
+*FI_TAGGED_DIRECTED_RECV*
+: Similar to FI_DIRECTED_RECV, but only applies to tagged receive
+  operations.
+
 *FI_FENCE*
 : Indicates that the endpoint support the FI_FENCE flag on data
   transfer operations.  Support requires tracking that all previous
@@ -466,8 +470,8 @@ may optionally report non-selected secondary capabilities if doing so
 would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_MULTICAST,
-FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_HMEM, FI_COLLECTIVE, FI_XPU,
-FI_AV_USER_ID, FI_PEER
+FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TAGGED_DIRECTED_RECV, FI_HMEM,
+FI_COLLECTIVE, FI_XPU, FI_AV_USER_ID, FI_PEER
 
 Primary modifiers: FI_READ, FI_WRITE, FI_RECV, FI_SEND,
 FI_REMOTE_READ, FI_REMOTE_WRITE

@@ -310,9 +310,9 @@ and/or fi_tsendmsg.
 
 *FI_AUTH_KEY*
 : Only valid with domains configured with FI_AV_AUTH_KEY and connectionless
-  endpoints configured with FI_DIRECTED_RECV. When used with fi_trecvmsg, this
-  flag denotes that the src_addr is an authorization key fi_addr_t instead of
-  an endpoint fi_addr_t.
+  endpoints configured with FI_DIRECTED_RECV or FI_TAGGED_DIRECTED_RECV. When
+  used with fi_trecvmsg, this flag denotes that the src_addr is an authorization
+  key fi_addr_t instead of an endpoint fi_addr_t.
 
 The following flags may be used with fi_trecvmsg.
 
