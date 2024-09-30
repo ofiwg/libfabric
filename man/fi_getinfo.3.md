@@ -294,6 +294,13 @@ additional optimizations.
 : Similar to FI_DIRECTED_RECV, but only applies to tagged receive
   operations.
 
+*FI_EXACT_DIRECTED_RECV*
+: Similar to FI_DIRECTED_RECV, but requires the source address to be
+  exact, i.e., FI_ADDR_UNSPEC is not allowed. This capability can
+  be used alone, or in conjunction with FI_DIRECTED_RECV or
+  FI_TAGGED_DIRECTED_RECV as a modifier to disallow FI_ADDR_UNSPEC
+  being used as the source address.
+
 *FI_FENCE*
 : Indicates that the endpoint support the FI_FENCE flag on data
   transfer operations.  Support requires tracking that all previous
