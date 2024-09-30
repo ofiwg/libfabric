@@ -124,6 +124,7 @@ struct fid_av {
  */
 
 #define FI_MR_DMABUF		(1ULL << 40)
+#define FI_MR_SINGLE_USE	(1ULL << 41)
 #define FI_HMEM_HOST_ALLOC	(1ULL << 45)
 #define FI_HMEM_DEVICE_ONLY	(1ULL << 46)
 
