@@ -151,7 +151,7 @@ int efa_rdm_peer_srx_construct(struct efa_rdm_ep *ep)
 {
 	int ret;
 	ret = util_ep_srx_context(&efa_rdm_ep_domain(ep)->util_domain,
-				ep->rx_size, EFA_RDM_IOV_LIMIT,
+				ep->base_ep.info->rx_attr->size, EFA_RDM_IOV_LIMIT,
 				ep->min_multi_recv_size,
 				&efa_rdm_srx_update_mr,
 				&efa_rdm_ep_domain(ep)->srx_lock,
