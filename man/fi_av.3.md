@@ -384,8 +384,9 @@ Upon successful insert with FI_AUTH_KEY flag, the returned fi_addr_t's will map 
 endpoint address against the specified authorization keys. These fi_addr_t's can be
 used as the target for local data transfer operations.
 
-If the endpoint supports `FI_DIRECTED_RECV`, these fi_addr_t's can be used to
-restrict receive buffers to a specific endpoint address and authorization key.
+If the endpoint supports `FI_DIRECTED_RECV` or `FI_TAGGED_DIRECTED_RECV`, these
+fi_addr_t's can be used to restrict receive buffers to a specific endpoint address
+and authorization key.
 
 For address vectors configured with FI_AV_USER_ID, all subsequent target events
 corresponding to the address being inserted will return FI_ADDR_NOTAVAIL until

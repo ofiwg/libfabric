@@ -163,6 +163,7 @@ typedef struct fid *fid_t;
 #define FI_PEER			(1ULL << 43)
 /* #define FI_XPU_TRIGGER		(1ULL << 44) */
 
+#define FI_TAGGED_DIRECTED_RECV	(1ULL << 45)
 #define FI_TAGGED_MULTI_RECV	(1ULL << 46)
 #define FI_HMEM			(1ULL << 47)
 /* #define FI_VARIABLE_MSG		(1ULL << 48) */
