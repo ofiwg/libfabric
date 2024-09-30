@@ -167,7 +167,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 
 	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
 
-	assert(msg->iov_count <= ep->tx_iov_limit);
+	assert(msg->iov_count <= ep->base_ep.info->tx_attr->iov_limit);
 
 	efa_perfset_start(ep, perf_efa_tx);
 	ofi_genlock_lock(srx_ctx->lock);
@@ -890,7 +890,7 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	struct efa_rdm_ope *rxe;
 	struct util_srx_ctx *srx_ctx;
 
-	assert(msg->iov_count <= ep->rx_iov_limit);
+	assert(msg->iov_count <= ep->base_ep.info->rx_attr->iov_limit);
 
 	efa_perfset_start(ep, perf_efa_recv);
 

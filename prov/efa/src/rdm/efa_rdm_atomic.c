@@ -148,7 +148,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 	ssize_t err;
 	struct util_srx_ctx *srx_ctx;
 
-	assert(msg->iov_count <= efa_rdm_ep->tx_iov_limit);
+	assert(msg->iov_count <= efa_rdm_ep->base_ep.info->tx_attr->iov_limit);
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
 
 	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
