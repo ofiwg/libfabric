@@ -55,13 +55,6 @@ struct efa_rdm_ep {
 	/* shm provider fid */
 	struct fid_ep *shm_ep;
 
-	/*
-	 * EFA RDM endpoint rx/tx queue sizes. These may be different from the core
-	 * provider's rx/tx size and will either limit the number of possible
-	 * receives/sends or allow queueing.
-	 */
-	size_t rx_size;
-	size_t tx_size;
 	size_t mtu_size;
 	size_t inject_size;
 
@@ -227,12 +220,12 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke
 
 static inline size_t efa_rdm_ep_get_rx_pool_size(struct efa_rdm_ep *ep)
 {
-	return MIN(ep->efa_max_outstanding_rx_ops, ep->rx_size);
+	return MIN(ep->efa_max_outstanding_rx_ops, ep->base_ep.info->rx_attr->size);
 }
 
 static inline size_t efa_rdm_ep_get_tx_pool_size(struct efa_rdm_ep *ep)
 {
-	return MIN(ep->efa_max_outstanding_tx_ops, ep->tx_size);
+	return MIN(ep->efa_max_outstanding_tx_ops, ep->base_ep.info->tx_attr->size);
 }
 
 static inline int efa_rdm_ep_need_sas(struct efa_rdm_ep *ep)
