@@ -205,6 +205,8 @@ struct fi_efa_mr_attr {
 **query_mr()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
 
+# Traffic Class (tclass) in EFA
+To prioritize the messages from a given endpoint, user can specify `fi_info->tx_attr->tclass = FI_TC_LOW_LATENCY` in the fi_endpoint() call to set the service level in rdma-core. All other tclass values will be ignored.
 
 # RUNTIME PARAMETERS
 
