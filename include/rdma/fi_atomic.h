@@ -138,6 +138,10 @@ struct fi_ops_atomic {
 			enum fi_datatype datatype, enum fi_op op, size_t *count);
 	int	(*compwritevalid)(struct fid_ep *ep,
 			enum fi_datatype datatype, enum fi_op op, size_t *count);
+
+	ssize_t	(*inject2)(struct fid_ep *ep, const void *buf, size_t count,
+			void *desc, fi_addr_t dest_addr, uint64_t addr,
+			uint64_t key, enum fi_datatype datatype, enum fi_op op);
 };
 
 #ifdef FABRIC_DIRECT
@@ -182,6 +186,17 @@ fi_inject_atomic(struct fid_ep *ep, const void *buf, size_t count,
 {
 	return ep->atomic->inject(ep, buf, count, dest_addr, addr,
 			key, datatype, op);
+}
+
+static inline ssize_t
+fi_inject_atomic2(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+		  fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+		  enum fi_datatype datatype, enum fi_op op)
+{
+	return FI_CHECK_OP(ep->atomic, struct fi_ops_atomic, inject2) ?
+		ep->atomic->inject2(ep, buf, count, desc, dest_addr, addr, key,
+				    datatype, op) :
+		-FI_ENOSYS;
 }
 
 static inline ssize_t

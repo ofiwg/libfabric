@@ -43,12 +43,18 @@ ssize_t fi_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 ssize_t fi_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	fi_addr_t dest_addr, uint64_t tag);
 
+ssize_t fi_tinject2(struct fid_ep *ep, const void *buf, size_t len,
+	void *desc, fi_addr_t dest_addr, uint64_t tag);
+
 ssize_t fi_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 	void *desc, uint64_t data, fi_addr_t dest_addr, uint64_t tag,
 	void *context);
 
 ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr, uint64_t tag);
+
+ssize_t fi_tinjectdata2(struct fid_ep *ep, const void *buf, size_t len,
+	void *desc, uint64_t data, fi_addr_t dest_addr, uint64_t tag);
 ```
 
 # ARGUMENTS
@@ -196,6 +202,13 @@ struct fi_msg_tagged {
 The tagged inject call is an optimized version of fi_tsend.  It provides
 similar completion semantics as fi_inject [`fi_msg`(3)](fi_msg.3.html).
 
+## fi_tinject2
+
+The fi_tinject2 call is similar to fi_tinject, but allows passing a descriptor
+to be associated with the send buffer. This is especially useful when FI_HMEM
+support is enabled and the buffer is registered with FI_HMEM iface other than
+FI_HMEM_SYSTEM.
+
 ## fi_tsenddata
 
 The tagged send data call is similar to fi_tsend, but allows for the
@@ -207,6 +220,13 @@ transfer.
 The tagged inject data call is similar to fi_tinject, but allows for the
 sending of remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the
 transfer.
+
+## fi_tinjectdata2
+
+The fi_tinjectdata2 call is similar to fi_tinjectdata, but allows passing a
+descriptor to be associated with the send buffer. This is especially useful
+when FI_HMEM support is enabled and the buffer is registered with FI_HMEM
+iface other than FI_HMEM_SYSTEM.
 
 ## fi_trecv
 

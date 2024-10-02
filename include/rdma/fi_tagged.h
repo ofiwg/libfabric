@@ -85,6 +85,11 @@ struct fi_ops_tagged {
 			uint64_t data, fi_addr_t dest_addr, uint64_t tag, void *context);
 	ssize_t	(*injectdata)(struct fid_ep *ep, const void *buf, size_t len,
 			uint64_t data, fi_addr_t dest_addr, uint64_t tag);
+	ssize_t	(*inject2)(struct fid_ep *ep, const void *buf, size_t len,
+			void *desc, fi_addr_t dest_addr, uint64_t tag);
+	ssize_t	(*injectdata2)(struct fid_ep *ep, const void *buf, size_t len,
+			void *desc, uint64_t data, fi_addr_t dest_addr,
+			uint64_t tag);
 };
 
 
@@ -157,6 +162,24 @@ fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t dest_addr, uint64_t tag)
 {
 	return ep->tagged->injectdata(ep, buf, len, data, dest_addr, tag);
+}
+
+static inline ssize_t
+fi_tinject2(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+	    fi_addr_t dest_addr, uint64_t tag)
+{
+	return FI_CHECK_OP(ep->tagged, struct fi_ops_tagged, inject2) ?
+		ep->tagged->inject2(ep, buf, len, desc, dest_addr, tag) :
+		-FI_ENOSYS;
+}
+
+static inline ssize_t
+fi_tinjectdata2(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+		uint64_t data, fi_addr_t dest_addr, uint64_t tag)
+{
+	return FI_CHECK_OP(ep->tagged, struct fi_ops_tagged, injectdata2) ?
+		ep->tagged->injectdata2(ep, buf, len, desc, data, dest_addr, tag) :
+		-FI_ENOSYS;
 }
 
 #endif

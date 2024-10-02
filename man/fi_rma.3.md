@@ -45,12 +45,19 @@ ssize_t fi_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 ssize_t fi_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 	fi_addr_t dest_addr, uint64_t addr, uint64_t key);
 
+ssize_t fi_inject_write2(struct fid_ep *ep, const void *buf, size_t len,
+	void *desc, fi_addr_t dest_addr, uint64_t addr, uint64_t key);
+
 ssize_t fi_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	void *desc, uint64_t data, fi_addr_t dest_addr, uint64_t addr,
 	uint64_t key, void *context);
 
 ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key);
+
+ssize_t fi_inject_writedata2(struct fid_ep *ep, const void *buf, size_t len,
+	void *desc, uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+	uint64_t key);
 ```
 
 # ARGUMENTS
@@ -180,6 +187,13 @@ struct fi_rma_iov {
 The write inject call is an optimized version of fi_write.  It provides
 similar completion semantics as fi_inject [`fi_msg`(3)](fi_msg.3.html).
 
+## fi_injectwrite2
+
+The fi_injectwrite2 call is similar to fi_injectwrite, but allows passing a
+descriptor associated with the source buffer. This is especially useful when
+FI_HMEM support is enabled and the buffer is registered with FI_HMEM iface
+other than FI_HMEM_SYSTEM.
+
 ## fi_writedata
 
 The write data call is similar to fi_write, but allows for the sending
@@ -191,6 +205,13 @@ transfer.
 The inject write data call is similar to fi_inject_write, but allows for the sending
 of remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the
 transfer.
+
+## fi_injectwritedata2
+
+The fi_injectwritedata2 call is similar to fi_injectwritedata, but allows
+passing a descriptor associated with the source buffer. This is especially
+useful when FI_HMEM support is enabled and the buffer is registered with
+FI_HMEM iface other than FI_HMEM_SYSTEM.
 
 ## fi_read
 

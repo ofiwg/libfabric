@@ -47,6 +47,11 @@ ssize_t fi_inject_atomic(struct fid_ep *ep, const void *buf,
 	uint64_t addr, uint64_t key,
 	enum fi_datatype datatype, enum fi_op op);
 
+ssize_t fi_inject_atomic2(struct fid_ep *ep, const void *buf,
+	size_t count, void *desc, fi_addr_t dest_addr,
+	uint64_t addr, uint64_t key,
+	enum fi_datatype datatype, enum fi_op op);
+
 ssize_t fi_fetch_atomic(struct fid_ep *ep, const void *buf,
 	size_t count, void *desc, void *result, void *result_desc,
 	fi_addr_t dest_addr, uint64_t addr, uint64_t key,
@@ -428,6 +433,11 @@ atomic.  The completion event will be suppressed even if the endpoint
 has not been configured with FI_SELECTIVE_COMPLETION.  See the flags
 discussion below for more details. The requested message size that
 can be used with fi_inject_atomic is limited by inject_size.
+
+The fi_inject_atomic2 call is similar to fi_inject_atomic, but allows
+passing a descriptor associated with the data buffer. This is especially
+useful when FI_HMEM support is enabled and the buffer is registered with
+FI_HMEM iface other than FI_HMEM_SYSTEM.
 
 The fi_atomicmsg call supports atomic functions over both connected
 and connectionless endpoints, with the ability to control the atomic

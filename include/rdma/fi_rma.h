@@ -86,6 +86,12 @@ struct fi_ops_rma {
 			void *context);
 	ssize_t	(*injectdata)(struct fid_ep *ep, const void *buf, size_t len,
 			uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key);
+	ssize_t	(*inject2)(struct fid_ep *ep, const void *buf, size_t len,
+			void *desc, fi_addr_t dest_addr, uint64_t addr,
+			uint64_t key);
+	ssize_t	(*injectdata2)(struct fid_ep *ep, const void *buf, size_t len,
+			void *desc, uint64_t data, fi_addr_t dest_addr,
+			uint64_t addr, uint64_t key);
 };
 
 #ifdef FABRIC_DIRECT
@@ -157,6 +163,25 @@ fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	return ep->rma->injectdata(ep, buf, len, data, dest_addr, addr, key);
+}
+
+static inline ssize_t
+fi_inject_write2(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+		 fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+{
+	return FI_CHECK_OP(ep->rma, struct fi_ops_rma, inject2) ?
+		ep->rma->inject2(ep, buf, len, desc, dest_addr, addr, key) :
+		-FI_ENOSYS;
+}
+
+static inline ssize_t
+fi_inject_writedata2(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+		     uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+		     uint64_t key)
+{
+	return FI_CHECK_OP(ep->rma, struct fi_ops_rma, injectdata2) ?
+		ep->rma->injectdata2(ep, buf, len, desc, data, dest_addr, addr, key) :
+		-FI_ENOSYS;
 }
 
 #endif
