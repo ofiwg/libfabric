@@ -3074,7 +3074,9 @@ static void cxip_set_ux_dump_entry(struct cxip_req *req,
 		}
 
 		if (src_addr && req->recv.rxc->attr.caps & FI_SOURCE)
-			*src_addr = cxip_recv_req_src_addr(req);
+			*src_addr = cxip_recv_req_src_addr(req->recv.rxc,
+					req->recv.initiator,
+					req->recv.vni, false);
 	}
 }
 
@@ -3354,38 +3356,6 @@ static int cxip_recv_sw_matcher(struct cxip_rxc_hpc *rxc, struct cxip_req *req,
 	return ret;
 }
 
-static uint32_t cxip_get_match_id(struct cxip_rxc *rxc,
-					fi_addr_t src_addr)
-{
-	int ret;
-	uint32_t match_id;
-	struct cxip_addr caddr;
-
-	if (rxc->attr.caps & FI_DIRECTED_RECV &&
-	    src_addr != FI_ADDR_UNSPEC) {
-		if (rxc->ep_obj->av->symmetric) {
-			/* PID is not used for matching */
-			match_id = CXI_MATCH_ID(rxc->pid_bits, C_PID_ANY,
-						src_addr);
-		} else {
-			ret = cxip_av_lookup_addr(rxc->ep_obj->av, src_addr,
-					      &caddr);
-			if (ret != FI_SUCCESS) {
-				RXC_WARN(rxc, "Failed to look up FI addr: %d\n",
-					 ret);
-				return -FI_EINVAL;
-			}
-
-			match_id = CXI_MATCH_ID(rxc->pid_bits, caddr.pid,
-						caddr.nic);
-		}
-	} else {
-		match_id = CXI_MATCH_ID_ANY;
-	}
-
-	return match_id;
-}
-
 static int
 cxip_recv_req_init(struct cxip_rxc *rxc, void *buf, size_t len, fi_addr_t addr,
 		uint64_t tag, uint64_t ignore, uint64_t flags, bool tagged,
@@ -3468,26 +3438,6 @@ lock_err:
 	return ret;
 }
 
-int cxip_addr_match(fi_addr_t addr, struct fi_peer_match *match)
-{
-	uint32_t ux_init;
-	uint32_t match_id;
-	struct cxip_ux_send *ux = match->context;
-	struct cxip_rxc *rxc = ux->rxc;
-
-	/* TODO: this is sometimes called with the rxc_lock held in the case
-	 * of cxip_process_srx_ux_matcher() and sometimes not if the owner is
-	 * iterating through its unexpected queue. Is this going to be
-	 * a problem? This function shouldn't be making any changes to the
-	 * rxc. But do we need a read lock?
-	 */
-	match_id = cxip_get_match_id(rxc, addr);
-
-	ux_init = ux->put_ev.tgt_long.initiator.initiator.process;
-
-	return init_match(rxc, ux_init, match_id);
-}
-
 int cxip_unexp_start(struct fi_peer_rx_entry *rx_entry)
 {
 	int ret;
@@ -3527,19 +3477,21 @@ static int cxip_process_srx_ux_matcher(struct cxip_rxc *rxc,
 		struct fid_peer_srx *owner_srx, struct cxip_ux_send *ux)
 {
 	int ret;
+	uint32_t ux_init;
 	union cxip_match_bits ux_mb;
 	struct fi_peer_rx_entry *rx_entry = NULL;
 	struct cxip_req *req;
-	struct fi_peer_match match = {0};
+	uint16_t vni;
+	struct fi_peer_match_attr match = {0};
 
-	/* stash the rxc because we're going to need it during address
-	 * matching
+	/* stash the rxc because we're going to need it if the peer
+	 * address isn't already inserted into the AV table.
 	 */
 	ux->rxc = rxc;
-	match.context = ux;
-	/* not being used */
-	match.addr = FI_ADDR_UNSPEC;
-	match.size = 0;
+	ux_init = ux->put_ev.tgt_long.initiator.initiator.process;
+	vni = ux->put_ev.tgt_long.vni;
+
+	match.addr = cxip_recv_req_src_addr(rxc, ux_init, vni, true);
 
 	ux_mb.raw = ux->put_ev.tgt_long.match_bits;
 

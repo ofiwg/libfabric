@@ -1562,7 +1562,6 @@ struct fi_ops_srx_peer cxip_srx_peer_ops = {
 	.start_tag = cxip_unexp_start,
 	.discard_msg = cxip_discard,
 	.discard_tag = cxip_discard,
-	.addr_match = cxip_addr_match,
 };
 
 static int cxip_srx_context(struct fid_domain *fid, struct fi_rx_attr *attr,

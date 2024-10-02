@@ -23,26 +23,25 @@
 /*
  * cxip_recv_req_src_addr() - Translate request source address to FI address.
  */
-fi_addr_t cxip_recv_req_src_addr(struct cxip_req *req)
+fi_addr_t cxip_recv_req_src_addr(struct cxip_rxc *rxc,
+				 uint32_t init, uint16_t vni,
+				 bool force)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
-
 	/* If the FI_SOURCE capability is enabled, convert the initiator's
 	 * address to an FI address to be reported in a CQ event. If
 	 * application AVs are symmetric, the match_id in the EQ event is
 	 * logical and translation is not needed. Otherwise, translate the
 	 * physical address in the EQ event to logical FI address.
 	 */
-	if (rxc->attr.caps & FI_SOURCE) {
+	if ((rxc->attr.caps & FI_SOURCE) || force) {
 		struct cxip_addr addr = {};
 
 		if (rxc->ep_obj->av->symmetric)
-			return CXI_MATCH_ID_EP(rxc->pid_bits,
-					       req->recv.initiator);
+			return CXI_MATCH_ID_EP(rxc->pid_bits, init);
 
-		addr.nic = CXI_MATCH_ID_EP(rxc->pid_bits, req->recv.initiator);
-		addr.pid = CXI_MATCH_ID_PID(rxc->pid_bits, req->recv.initiator);
-		addr.vni = req->recv.vni;
+		addr.nic = CXI_MATCH_ID_EP(rxc->pid_bits, init);
+		addr.pid = CXI_MATCH_ID_PID(rxc->pid_bits, init);
+		addr.vni = vni;
 
 		return cxip_av_lookup_fi_addr(rxc->ep_obj->av, &addr);
 	}
@@ -154,7 +153,8 @@ static inline int recv_req_event_success(struct cxip_rxc *rxc,
 	}
 
 	if (req->recv.rxc->attr.caps & FI_SOURCE) {
-		src_addr = cxip_recv_req_src_addr(req);
+		src_addr = cxip_recv_req_src_addr(req->recv.rxc, req->recv.initiator,
+						  req->recv.vni, false);
 		if (src_addr != FI_ADDR_NOTAVAIL ||
 		    !(rxc->attr.caps & FI_SOURCE_ERR))
 			return cxip_cq_req_complete_addr(req, src_addr);

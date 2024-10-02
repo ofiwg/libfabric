@@ -177,7 +177,7 @@
 #define CXIP_MINOR_VERSION		1
 #define CXIP_PROV_VERSION		FI_VERSION(CXIP_MAJOR_VERSION, \
 						   CXIP_MINOR_VERSION)
-#define CXIP_FI_VERSION			FI_VERSION(1, 21)
+#define CXIP_FI_VERSION			FI_VERSION(2, 0)
 #define CXIP_WIRE_PROTO_VERSION		1
 
 #define	CXIP_COLL_MAX_CONCUR		8
@@ -3260,7 +3260,6 @@ static inline int cxip_discard(struct fi_peer_rx_entry *rx_entry)
 }
 
 int cxip_unexp_start(struct fi_peer_rx_entry *entry);
-int cxip_addr_match(fi_addr_t addr, struct fi_peer_match *match);
 
 /*
  * Request variants:
@@ -3673,7 +3672,9 @@ int cxip_set_recv_match_id(struct cxip_rxc *rxc, fi_addr_t src_addr,
 	return FI_SUCCESS;
 }
 
-fi_addr_t cxip_recv_req_src_addr(struct cxip_req *req);
+fi_addr_t cxip_recv_req_src_addr(struct cxip_rxc *rxc,
+				 uint32_t init, uint16_t vni,
+				 bool force);
 int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
 			struct cxip_md *md, struct cxip_req **cxip_req,
 			int (*recv_cb)(struct cxip_req *req,
