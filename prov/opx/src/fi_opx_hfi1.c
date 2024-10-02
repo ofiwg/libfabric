@@ -4735,8 +4735,17 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 
 	assert(!replay->use_iov);
 	assert(((uint8_t *)replay_payload) == ((uint8_t *)&replay->data));
-	fi_opx_copy_cacheline(replay_payload, temp);
-	replay_payload += 8;
+
+	/* temp is hdr (1 QW) + payload (7 QW) */
+	replay_payload[0] = temp[1];
+	replay_payload[1] = temp[2];
+	replay_payload[2] = temp[3];
+	replay_payload[3] = temp[4];
+	replay_payload[4] = temp[5];
+	replay_payload[5] = temp[6];
+	replay_payload[6] = temp[7];
+
+	replay_payload += 7;
 
 	uint8_t *sbuf;
 	if (src_iface != FI_HMEM_SYSTEM && immediate_total) {
