@@ -478,13 +478,13 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode (struct fid_ep *ep,
 		FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
 		OPX_HFI1_BAR_STORE(&scb_payload[0], key);
-		OPX_HFI1_BAR_STORE(&scb_payload[1], 0);
-		OPX_HFI1_BAR_STORE(&scb_payload[2], 0);
-		OPX_HFI1_BAR_STORE(&scb_payload[3], 0);
-		OPX_HFI1_BAR_STORE(&scb_payload[4], 0);
-		OPX_HFI1_BAR_STORE(&scb_payload[5], 0);
-		OPX_HFI1_BAR_STORE(&scb_payload[6], 0);
-		OPX_HFI1_BAR_STORE(&scb_payload[7], 0);
+		OPX_HFI1_BAR_STORE(&scb_payload[1], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb_payload[2], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb_payload[3], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb_payload[4], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb_payload[5], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb_payload[6], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb_payload[7], OPX_JKR_16B_PAD_QWORD);
 		FI_OPX_HFI1_CONSUME_CREDITS(pio_state, 1);
 	}
 
@@ -727,16 +727,13 @@ ssize_t fi_opx_hfi1_tx_reliability_inject (struct fid_ep *ep,
 			FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
 		OPX_HFI1_BAR_STORE(&scb2[0], key);
-
-		//fi_opx_compiler_msync_writes();
-
-		OPX_HFI1_BAR_STORE(&scb2[1], 0);
-		OPX_HFI1_BAR_STORE(&scb2[2], 0);
-		OPX_HFI1_BAR_STORE(&scb2[3], 0);
-		OPX_HFI1_BAR_STORE(&scb2[4], 0);
-		OPX_HFI1_BAR_STORE(&scb2[5], 0);
-		OPX_HFI1_BAR_STORE(&scb2[6], 0);
-		OPX_HFI1_BAR_STORE(&scb2[7], 0);
+		OPX_HFI1_BAR_STORE(&scb2[1], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb2[2], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb2[3], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb2[4], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb2[5], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb2[6], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_STORE(&scb2[7], OPX_JKR_16B_PAD_QWORD);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
@@ -1561,16 +1558,19 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 	key.tx = (uint32_t)FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR(replay));
 	key.rx = (uint32_t)(OPX_REPLAY_HDR(replay)->bth.rx);
 #endif
+	/* runtime checks for non-inlined functions */
+	const enum opx_hfi1_type hfi1_type = OPX_HFI1_TYPE;
 
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	uint16_t lrh_pktlen_le;
-	size_t total_bytes_to_copy;
-	size_t payload_bytes_to_copy;
 
-	/* runtime checks for non-inlined functions */
-	const enum opx_hfi1_type hfi1_type = OPX_HFI1_TYPE;
+	size_t total_bytes_to_copy;
+	size_t payload_bytes_to_copy; /* payload without (16B) icrc tail */
 	uint16_t payload_credits_needed;
-	int payload_qw_to_copy_with_header = 0;
+
+	uint32_t payload_qw_to_copy_with_header = 0;
+	bool     tail_block_needed = false; /* 16B tail needed */
+
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
 		total_bytes_to_copy = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
@@ -1579,12 +1579,15 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 	} else {
 		lrh_pktlen_le = replay->scb.scb_16B.hdr.lrh_16B.pktlen;
 		total_bytes_to_copy = (lrh_pktlen_le) * 8;	/* including trailing icrc */
-		payload_bytes_to_copy = (total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B));
+		/* do not copy icrc, it is "pad" not user data */
+		payload_bytes_to_copy = (total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B) - 8 /* icrc */);
 		payload_qw_to_copy_with_header = MIN((7*8), payload_bytes_to_copy)>>3; /* up to 7 qwords */
-		assert(payload_bytes_to_copy >= payload_qw_to_copy_with_header*8);
+		assert(payload_bytes_to_copy >= payload_qw_to_copy_with_header * 8);
 		payload_bytes_to_copy -= payload_qw_to_copy_with_header<<3;
-		/* ICRC/tail qword is already accounted for in the lrh */
-		payload_credits_needed = (payload_bytes_to_copy >> 6);	/* number of full 64-byte blocks of payload */
+		payload_credits_needed = (payload_bytes_to_copy >> 6);	/* number of full 64-byte blocks of payload - icrc */
+		if (payload_qw_to_copy_with_header >= 7) { /* if tail is not in with hdr/payload block */
+			tail_block_needed = true; /* tail needed even if there's no partial payload block*/
+		}
 	}
 
 	union fi_opx_hfi1_pio_state pio_state = *service->tx.hfi1.pio_state;
@@ -1592,9 +1595,10 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	const uint16_t credits_needed = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ? 1 : 2;
+	const uint16_t last_partial_block = (((payload_bytes_to_copy & 0x3Ful) || tail_block_needed) ? 1 : 0);
 	const uint16_t total_credits_needed = credits_needed +     /* header */
 		payload_credits_needed +                           /* full payload blocks */
-		((payload_bytes_to_copy & 0x3Ful) ? 1 : 0);        /* last partial block */
+		last_partial_block ;                               /* last partial block  */
 	uint16_t total_credits_available = FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state);
 	if (total_credits_available < total_credits_needed) {
 		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, service->tx.hfi1.pio_credits_addr);
@@ -1642,7 +1646,6 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 		}
 		fi_opx_hfi1_reliability_iov_payload_check(replay, key.value, "Replaying packet (PIO) where source buffer has changed!", __FILE__, __func__, __LINE__);
 #endif
-		/* TODO if using user iov we can't go past their buffer for the tail */
 		buf_qws = replay->iov[0].iov_base;
 	} else {
 		buf_qws = replay->payload;
@@ -1701,7 +1704,7 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 			buf_qws += 1;
 		}
 		for (i = payload_qw_to_copy_with_header+1; i <= 7 ; ++i) {
-			OPX_HFI1_BAR_STORE(&scb_payload[i], 0UL);
+			OPX_HFI1_BAR_STORE(&scb_payload[i], OPX_JKR_16B_PAD_QWORD);
 		}
 
 
@@ -1714,12 +1717,8 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 		consumed_credits = 2;
 #endif
 	}
-
-	/* Skip last block if there a partial 64-byte block of payload */
-	const uint16_t last_partial_block = (payload_bytes_to_copy & 0x3Ful) ? 1 : 0;
+	/* Copy full blocks of payload */
 	while (payload_credits_needed) {
-		/* TODO if using user iov we can't go past their buffer for the tail */
-
 		volatile uint64_t * scb_payload =
 			FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.hfi1.pio_scb_first, pio_state);
 
@@ -1744,8 +1743,8 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 			OPX_HFI1_BAR_STORE(&scb_payload[6], buf_qws[6]);
 			OPX_HFI1_BAR_STORE(&scb_payload[7], buf_qws[7]);
 
-			scb_payload += 8;
-			buf_qws += 8;
+			scb_payload += FI_OPX_CACHE_LINE_QWS;
+			buf_qws += FI_OPX_CACHE_LINE_QWS;
 		}
 
 		payload_credits_needed -= contiguous_full_blocks_to_write;
@@ -1757,16 +1756,15 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 	}
 	/* Store last partial 64-byte block of payload */
 	if(last_partial_block != 0) {
-		/* TODO if using user iov we can't go past their buffer for the tail */
 
-		int16_t tail_bytes = (payload_bytes_to_copy & 0x3Ful) ;
+		int16_t payload_tail_bytes = (payload_bytes_to_copy & 0x3Ful) ; /* not icrc/pad */
 
 		/* We have a credit so we don't have to worry about this wrapping on one block */
 		volatile uint64_t * scb_payload =
 			FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.hfi1.pio_scb_first, pio_state);
 
 		uint16_t i = 0;
-		for ( ; tail_bytes >= 8; tail_bytes-=8) {
+		for ( ; payload_tail_bytes >= 8; payload_tail_bytes-=8) {
 
 			OPX_HFI1_BAR_STORE(scb_payload, *buf_qws);
 			scb_payload += 1;
@@ -1775,46 +1773,25 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 		}
 
 		/* LRH packets are dword (9B) or qword (16b) aligned */
-		assert((tail_bytes == 4) || (tail_bytes == 0));
+		assert((payload_tail_bytes == 4) || (payload_tail_bytes == 0));
 		if (hfi1_type != OPX_HFI1_JKR) {
-			if (tail_bytes) {
+			if (payload_tail_bytes) {
 				OPX_HFI1_BAR_STORE(scb_payload, ((*buf_qws)));
 				scb_payload += 1;
 				i++;
 			}
 		} else {
 			/* QWORD aligned for 16B */
-			assert(tail_bytes == 0);
-			/* TODO if using user iov we can't go past their buffer for the tail */
-			/* assert(i<-8); // left a pad for tail */
+			assert(payload_tail_bytes == 0);
+			/* Have not yet stored icrc/pad */
+			assert(i < 8);
 		}
 		/* Pad out the cacheline/block */
 		for (; i <8; i++) {
-			OPX_HFI1_BAR_STORE(scb_payload, 0UL);
+			OPX_HFI1_BAR_STORE(scb_payload, OPX_JKR_16B_PAD_QWORD);
 			scb_payload += 1;
 		}
 
-		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR((service->tx.hfi1.pio_credits_addr));
-
-		/* consume one credit for the tail partial block payload */
-		--total_credits_available;
-		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-#ifndef NDEBUG
-		consumed_credits += 1;
-#endif
-	} else if (0 /* TODO */ ) /* (hfi1_type & OPX_HFI1_JKR) */ {
-		/* TODO if using user iov we can't go past their buffer for the tail */
-
-		/* The padding counted as a tail above but if we wrote
-		 * all full blocks of payload, we need to write another
-		 * block just to send a tail qword
-		 */
-		volatile uint64_t * scb_payload =
-			FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.hfi1.pio_scb_first, pio_state);
-		for (int i = 0; i <8; i++) {
-			OPX_HFI1_BAR_STORE(scb_payload, 0UL);
-			scb_payload += 1;
-		}
 		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR((service->tx.hfi1.pio_credits_addr));
 
 		/* consume one credit for the tail partial block payload */

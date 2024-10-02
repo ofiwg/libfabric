@@ -637,13 +637,13 @@ void fi_opx_store_inject_and_copy_scb2_16B(volatile uint64_t scb[8],
 	// 2nd cacheline PIO (only) padded out
 
 	OPX_HFI1_BAR_STORE(&scb[0], d8);   // tag
-	OPX_HFI1_BAR_STORE(&scb[1], 0);
-	OPX_HFI1_BAR_STORE(&scb[2], 0);
-	OPX_HFI1_BAR_STORE(&scb[3], 0);
-	OPX_HFI1_BAR_STORE(&scb[4], 0);
-	OPX_HFI1_BAR_STORE(&scb[5], 0);
-	OPX_HFI1_BAR_STORE(&scb[6], 0);
-	OPX_HFI1_BAR_STORE(&scb[7], 0);
+	OPX_HFI1_BAR_STORE(&scb[1], OPX_JKR_16B_PAD_QWORD);
+	OPX_HFI1_BAR_STORE(&scb[2], OPX_JKR_16B_PAD_QWORD);
+	OPX_HFI1_BAR_STORE(&scb[3], OPX_JKR_16B_PAD_QWORD);
+	OPX_HFI1_BAR_STORE(&scb[4], OPX_JKR_16B_PAD_QWORD);
+	OPX_HFI1_BAR_STORE(&scb[5], OPX_JKR_16B_PAD_QWORD);
+	OPX_HFI1_BAR_STORE(&scb[6], OPX_JKR_16B_PAD_QWORD);
+	OPX_HFI1_BAR_STORE(&scb[7], OPX_JKR_16B_PAD_QWORD);
 
 	local[8] = d8;
 }
@@ -2365,8 +2365,8 @@ ssize_t fi_opx_hfi1_tx_egr_store_packet_hdr_and_payload(struct fi_opx_ep *opx_ep
 	}
 	if (hdr_and_payload_qws < 8) { /* less than a full block stored?  pad it out */
 		for (; i<8 ; ++i) {
-			OPX_HFI1_BAR_STORE(&scb_payload[i], -1UL);
-			local_storage[8 + i] = -1UL;
+			OPX_HFI1_BAR_STORE(&scb_payload[i], OPX_JKR_16B_PAD_QWORD);
+			local_storage[8 + i] = OPX_JKR_16B_PAD_QWORD;
 		}
 	}
 
@@ -2411,8 +2411,8 @@ ssize_t fi_opx_hfi1_tx_egr_store_full_payload_blocks(struct fi_opx_ep *opx_ep,
 		OPX_HFI1_BAR_STORE(&scb_payload[5], buf_qws[5]);
 		OPX_HFI1_BAR_STORE(&scb_payload[6], buf_qws[6]);
 		OPX_HFI1_BAR_STORE(&scb_payload[7], buf_qws[7]);
-		scb_payload += 8;
-		buf_qws += 8;
+		scb_payload += FI_OPX_CACHE_LINE_QWS;
+		buf_qws += FI_OPX_CACHE_LINE_QWS;
 		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	}
 
@@ -2439,8 +2439,8 @@ ssize_t fi_opx_hfi1_tx_egr_store_full_payload_blocks(struct fi_opx_ep *opx_ep,
 			OPX_HFI1_BAR_STORE(&scb_payload[5], buf_qws[5]);
 			OPX_HFI1_BAR_STORE(&scb_payload[6], buf_qws[6]);
 			OPX_HFI1_BAR_STORE(&scb_payload[7], buf_qws[7]);
-			scb_payload += 8;
-			buf_qws += 8;
+			scb_payload += FI_OPX_CACHE_LINE_QWS;
+			buf_qws += FI_OPX_CACHE_LINE_QWS;
 			FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 		}
 
@@ -2471,7 +2471,7 @@ ssize_t fi_opx_hfi1_tx_egr_store_payload_tail(struct fi_opx_ep *opx_ep,
 
 	if (payload_qws_tail < 8) { /* less than a full block stored?  pad it out */
 		for (; i<8; ++i) {
-			OPX_HFI1_BAR_STORE(&scb_payload[i], -1UL);
+			OPX_HFI1_BAR_STORE(&scb_payload[i], OPX_JKR_16B_PAD_QWORD);
 		}
 	}
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(*pio_state);
@@ -2772,15 +2772,17 @@ ssize_t fi_opx_hfi1_tx_send_egr_16B(struct fid_ep *ep,
 
 	/* write one block of PIO non-SOP, either one full block (8 qws) or the partial qws/block */
 	const size_t first_block_qws = full_block_credits_needed ? 8 : tail_partial_block_qws ;
+
 #ifndef NDEBUG
 	credits_consumed +=
 #endif
 		fi_opx_hfi1_tx_egr_store_packet_hdr_and_payload(opx_ep, &pio_state, local_temp, buf_qws,
 								first_block_qws, tag);
 
-	buf_qws = buf_qws + first_block_qws - 1 /* not the kdeth qword */;
+	buf_qws = buf_qws + first_block_qws - 1 /* qws of payload, not the kdeth qword */;
 	/* adjust full or partial for what we just consumed */
 	if (full_block_credits_needed) full_block_credits_needed--;
+	/* we wrote 7 qw, counts as partial tail*/
 	else tail_partial_block_qws = 0;
 
 
@@ -2799,7 +2801,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_16B(struct fid_ep *ep,
 #endif
 		fi_opx_hfi1_tx_egr_store_payload_tail(opx_ep, &pio_state,
 					buf_qws + (full_block_credits_needed << 3),
-					tail_partial_block_qws);
+					tail_partial_block_qws - 1);// (tail_partial_block_qws-1) data + 1 QW ICRC
 	}
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
@@ -2961,21 +2963,29 @@ ssize_t fi_opx_hfi1_tx_mp_egr_store_hdr_and_payload(struct fi_opx_ep *opx_ep,
                union fi_opx_hfi1_pio_state *pio_state,
                uint64_t *local_storage,
                const uint64_t tag,
+	       const size_t payload_after_header_qws,
                uint64_t *buf_qws)
 {
        union fi_opx_hfi1_pio_state pio_local = *pio_state;
        volatile uint64_t * scb_payload =
                FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_local);
+       assert(payload_after_header_qws <=7);
 
        // spill from 1st cacheline (SOP)
        OPX_HFI1_BAR_STORE(&scb_payload[0], tag);  // header
-       local_storage[8] = tag; /* todo: pretty sure it's already there */
+       local_storage[8] = tag;
 
-       int i;
+       int i = 1; /* start past the hdr qword */
 
-       for (i = 1; i <= 7 ; ++i) {
+       /* store remaing buffer */
+       for (; i <= payload_after_header_qws ; ++i) {
                OPX_HFI1_BAR_STORE(&scb_payload[i], buf_qws[i-1]);
                local_storage[8 + i] = buf_qws[i-1];
+       }
+       /* store padding if needed */
+       for (; i <= 7 ; ++i) {
+	       OPX_HFI1_BAR_STORE(&scb_payload[i], OPX_JKR_16B_PAD_QWORD);
+	       local_storage[8 + i] = OPX_JKR_16B_PAD_QWORD;
        }
 
        FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
@@ -3203,9 +3213,10 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep,
 #ifndef NDEBUG
 		credits_consumed +=
 #endif
-			fi_opx_hfi1_tx_mp_egr_store_hdr_and_payload(opx_ep, &pio_state, local_temp, tag, buf_qws);
+			fi_opx_hfi1_tx_mp_egr_store_hdr_and_payload(opx_ep, &pio_state, local_temp, tag,
+								    7 /* qws of payload */, buf_qws);
 
-		buf_qws = buf_qws + 7;
+		buf_qws += OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS;
 
 		uint32_t full_block_credits_needed = FI_OPX_MP_EGR_CHUNK_CREDITS - 3;  // the last block needs to include icrc,
 #ifndef NDEBUG
@@ -3397,8 +3408,9 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B (struct fi_opx_ep *opx_ep,
 	credits_consumed +=
 #endif
 	fi_opx_hfi1_tx_mp_egr_store_hdr_and_payload(opx_ep, &pio_state, local_temp,
-			(((uint64_t) mp_egr_uid) << 32) | payload_offset, buf_qws);
-	buf_qws = (uint64_t*)((uintptr_t)buf + 56);
+			(((uint64_t) mp_egr_uid) << 32) | payload_offset,
+			7 /* qws of payload */, buf_qws);
+	buf_qws += OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS;
 
     uint16_t full_block_credits_needed = FI_OPX_MP_EGR_CHUNK_CREDITS - 3;
 #ifndef NDEBUG
@@ -3429,8 +3441,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B (struct fi_opx_ep *opx_ep,
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr,
-									FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL, local_temp, buf,
-									FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS(hfi1_type), reliability, hfi1_type);
+						  FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL, local_temp, buf,
+						  FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS(hfi1_type), reliability, hfi1_type);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-MP-EAGER-NTH-HFI");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -3667,17 +3679,27 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last_16B (struct fi_opx_ep *opx_ep,
 #endif
 			fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(opx_ep, &pio_state, local_temp, buf, bth_rx, lrh_dlid,
 				lrh_qws, pbc_dlid, pbc_dws, xfer_bytes_tail, payload_offset, psn, mp_egr_uid, hfi1_type);
-			uint64_t *buf_qws = (uint64_t*)((uintptr_t)buf + xfer_bytes_tail);
+		uint64_t *buf_qws = (uint64_t*)((uintptr_t)buf + xfer_bytes_tail);
+
+		/* write 7 qwords of payload data or the partial tail qws/block minus hdr/kdeth minus tail (not in buffer) */
+		const size_t payload_after_hdr_qws = full_block_credits_needed ?
+			OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS :
+			tail_partial_block_qws - kdeth9_qws_total - tail_qws_total ;
 
 		/* header and payload */
 #ifndef NDEBUG
 		credits_consumed +=
 #endif
 		fi_opx_hfi1_tx_mp_egr_store_hdr_and_payload(opx_ep, &pio_state, local_temp,
-			(((uint64_t) mp_egr_uid) << 32) | payload_offset, buf_qws);
-			buf_qws = (uint64_t*)((uintptr_t)buf + 56);
+			(((uint64_t) mp_egr_uid) << 32) | payload_offset,
+			payload_after_hdr_qws, buf_qws);
 
+		buf_qws += payload_after_hdr_qws /* qws of payload, not the kdeth qword */;
+
+		/* adjust full or partial for what we just consumed */
 		if (full_block_credits_needed) full_block_credits_needed--;
+		/* we wrote 7 qw, counts as partial tail*/
+		else tail_partial_block_qws = 0;
 
 		if (OFI_LIKELY(full_block_credits_needed)) {
 #ifndef NDEBUG
@@ -3695,7 +3717,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last_16B (struct fi_opx_ep *opx_ep,
 #endif
 			fi_opx_hfi1_tx_egr_store_payload_tail(opx_ep, &pio_state,
 					buf_qws + (full_block_credits_needed << 3),
-					tail_partial_block_qws);
+					tail_partial_block_qws - 1);// (tail_partial_block_qws-1) data + 1 QW ICRC
 		}
 	}
 
