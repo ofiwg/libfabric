@@ -3908,7 +3908,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	uint64_t rem_payload_size;
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		fi_opx_copy_cacheline(replay_payload, local_temp_payload);
-		replay_payload += 8;
+		replay_payload += FI_OPX_CACHE_LINE_QWS;
 		rem_payload_size = sizeof(struct fi_opx_hmem_iov) * (niov - 2);
 	} else {
 		local_temp[7] = local_temp_payload[0];
@@ -4266,7 +4266,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	assert(!replay->use_iov);
 	assert(((uint8_t *)replay_payload) == ((uint8_t *)&replay->data));
 	fi_opx_copy_cacheline(replay_payload, temp);
-	replay_payload += 8;
+	replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 	uint8_t *sbuf;
 	if (src_iface != FI_HMEM_SYSTEM && immediate_total) {
@@ -4309,7 +4309,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		sbuf_qw += immediate_qw_count;
 
 		fi_opx_copy_cacheline(replay_payload, temp);
-		replay_payload += 8;
+		replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 		/* consume one credit for the rendezvous payload immediate data */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -4362,7 +4362,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		fi_opx_store_scb_qw(scb_payload, align_tmp.immediate_qw);
 
 		fi_opx_copy_cacheline(replay_payload, align_tmp.immediate_qw);
-		replay_payload += 8;
+		replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 #ifndef NDEBUG
@@ -4745,7 +4745,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 	replay_payload[5] = temp[6];
 	replay_payload[6] = temp[7];
 
-	replay_payload += 7;
+	replay_payload += OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS;
 
 	uint8_t *sbuf;
 	if (src_iface != FI_HMEM_SYSTEM && immediate_total) {
@@ -4787,7 +4787,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 		sbuf_qw += immediate_qw_count;
 
 		fi_opx_copy_cacheline(replay_payload, temp);
-		replay_payload += 8;
+		replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 		/* consume one credit for the rendezvous payload immediate data */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -4805,7 +4805,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 
 			fi_opx_store_scb_qw(scb_payload, temp_0);
 			fi_opx_copy_cacheline(replay_payload, temp_0);
-			replay_payload += 8;
+			replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 			FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 #ifndef NDEBUG
@@ -4872,7 +4872,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 		fi_opx_store_scb_qw(scb_payload, align_tmp.immediate_qw);
 
 		fi_opx_copy_cacheline(replay_payload, align_tmp.immediate_qw);
-		replay_payload += 8;
+		replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 #ifndef NDEBUG
@@ -4887,7 +4887,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 		scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 		fi_opx_store_scb_qw(scb_payload, temp_0);
 		fi_opx_copy_cacheline(replay_payload, temp_0);
-		replay_payload += 8;
+		replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 #ifndef NDEBUG

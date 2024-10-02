@@ -69,7 +69,8 @@
 #define FI_OPX_DOMAIN_NAME		"ib0"
 #define FI_OPX_DOMAIN_NAME_PREFIX	"ib"
 
-#define FI_OPX_CACHE_LINE_SIZE	(64)
+#define FI_OPX_CACHE_LINE_SIZE		(64)
+#define FI_OPX_CACHE_LINE_QWS		(FI_OPX_CACHE_LINE_SIZE/sizeof(uint64_t))
 
 #define FI_OPX_MAX_STRLEN		(64)
 
