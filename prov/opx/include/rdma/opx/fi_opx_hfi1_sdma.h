@@ -561,7 +561,7 @@ int opx_hfi1_sdma_enqueue_replay(struct fi_opx_ep *opx_ep,
 					     FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS,
 					     replay->hmem_iface,
 					     replay->hmem_device,
-					     0, // last packet bytes unused for replays
+					     replay->scb.scb_9B.hdr.dput.target.bytes, // last packet bytes
 					     0 // kdeth tid info unused for replays
 					     );
 }
