@@ -601,7 +601,8 @@ int psmx3_am_atomic_handler(psm2_am_token_t token,
 
 		if (!op_error) {
 			addr += mr->offset;
-			psmx3_atomic_do_write(addr, src, datatype, op, count);
+			op_error = psmx3_atomic_do_write(addr, src, datatype,
+							 op, count);
 
 			if (rx->ep->caps & FI_RMA_EVENT) {
 				cntr = rx->ep->remote_write_cntr;
@@ -646,8 +647,8 @@ int psmx3_am_atomic_handler(psm2_am_token_t token,
 			addr += mr->offset;
 			tmp_buf = malloc(len);
 			if (tmp_buf)
-				psmx3_atomic_do_readwrite(addr, src, tmp_buf,
-							  datatype, op, count);
+				op_error = psmx3_atomic_do_readwrite(addr, src,
+						tmp_buf, datatype, op, count);
 			else
 				op_error = -FI_ENOMEM;
 
@@ -698,9 +699,10 @@ int psmx3_am_atomic_handler(psm2_am_token_t token,
 			addr += mr->offset;
 			tmp_buf = malloc(len);
 			if (tmp_buf)
-				psmx3_atomic_do_compwrite(addr, src, (uint8_t *)src + len,
-							  tmp_buf, datatype,
-							  op, count);
+				op_error = psmx3_atomic_do_compwrite(addr, src,
+							(uint8_t *)src + len,
+							tmp_buf, datatype,
+							op, count);
 			else
 				op_error = -FI_ENOMEM;
 
