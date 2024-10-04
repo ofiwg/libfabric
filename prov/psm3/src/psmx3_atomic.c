@@ -401,12 +401,12 @@ static int psmx3_atomic_do_write(void *dest, void *src,
 		break;
 
 	case FI_LOR:
-		SWITCH_INT_TYPE(datatype,PSMX3_ATOMIC_WRITE,
+		SWITCH_ALL_TYPE(datatype,PSMX3_ATOMIC_WRITE,
 				dest,src,count,PSMX3_LOR);
 		break;
 
 	case FI_LAND:
-		SWITCH_INT_TYPE(datatype,PSMX3_ATOMIC_WRITE,
+		SWITCH_ALL_TYPE(datatype,PSMX3_ATOMIC_WRITE,
 				dest,src,count,PSMX3_LAND);
 		break;
 
@@ -421,7 +421,7 @@ static int psmx3_atomic_do_write(void *dest, void *src,
 		break;
 
 	case FI_LXOR:
-		SWITCH_INT_TYPE(datatype,PSMX3_ATOMIC_WRITE,
+		SWITCH_ALL_TYPE(datatype,PSMX3_ATOMIC_WRITE,
 				dest,src,count,PSMX3_LXOR);
 		break;
 
