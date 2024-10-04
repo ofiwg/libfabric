@@ -2119,6 +2119,10 @@ static int psmx3_atomic_readwritevalid_internal(size_t chunk_size,
 	case FI_LXOR:
 	case FI_BXOR:
 	case FI_ATOMIC_READ:
+		/* Disable failing combinations */
+		if (datatype == FI_LONG_DOUBLE ||
+		    datatype == FI_LONG_DOUBLE_COMPLEX)
+			return -FI_EOPNOTSUPP;
 	case FI_ATOMIC_WRITE:
 		break;
 
@@ -2138,6 +2142,10 @@ static int psmx3_atomic_compwritevalid_internal(size_t chunk_size,
 {
 
 	if (datatype >= OFI_DATATYPE_LAST)
+		return -FI_EOPNOTSUPP;
+
+	/* Disable failing combinations */
+	if (datatype == FI_LONG_DOUBLE || datatype == FI_LONG_DOUBLE_COMPLEX)
 		return -FI_EOPNOTSUPP;
 
 	switch (op) {
