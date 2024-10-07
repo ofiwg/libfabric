@@ -255,6 +255,7 @@ __lpp_rumc_get_insert(struct lpp_ep *lpp_epp, int node_id, int umc_id, bool inse
 	struct klpp_mc_params *mc_params = &lpp_epp->domain->devinfo.mc_params;
 	struct lpp_umc *umc = lpp_epp->umc;
 	struct lpp_umc_remote *rumc_arr;
+	int ret;
 
 	rumc_arr = ofi_idm_lookup(&umc->rumc_idm, node_id);
 	if (OFI_UNLIKELY(rumc_arr == NULL && insert)) {
@@ -275,7 +276,12 @@ __lpp_rumc_get_insert(struct lpp_ep *lpp_epp, int node_id, int umc_id, bool inse
 			rumc->last_rx_time = 0;
 			rumc->flags = 0;
 		}
-		ofi_idm_set(&umc->rumc_idm, node_id, rumc_arr);
+		ret = ofi_idm_set(&umc->rumc_idm, node_id, rumc_arr);
+		if (ret == -1) {
+			FI_WARN(&lpp_prov, FI_LOG_EP_CTRL, "ofi_idm_set failed\n");
+			free(rumc_arr);
+			return NULL;
+		}
 	}
 	return rumc_arr ? &rumc_arr[umc_id] : NULL;
 }
@@ -583,7 +589,7 @@ int lpp_umc_tx_cmpl(struct lpp_ep *lpp_epp, struct lpp_fi_addr addr,
 	struct lpp_spooled_msg_dqp *dmsg;
 	struct lpp_spooled_msg_srq *smsg;
 	struct klpp_ioc_kmc_send *ioc;
-	struct iovec iov;
+	struct iovec iov = { 0 };
 	size_t iov_count;
 	int ret;
 
@@ -813,11 +819,11 @@ void lpp_umc_dqp_teardown(struct lpp_ep *lpp_epp, struct klpp_umc_k2u *k2u)
 {
 	struct lpp_umc *umc = lpp_epp->umc;
 	struct lpp_umc_remote *rumc;
-	struct klpp_umc_u2k u2k;
+	struct klpp_umc_u2k u2k = { 0 };
 	struct lpp_umc_dqp *dqp;
 
 	rumc = lpp_rumc_get(lpp_epp, k2u->dqp.remote_node_id,
-	    k2u->dqp.remote_umc_id);
+			    k2u->dqp.remote_umc_id);
 	dqp = &umc->dqps[k2u->dqp.local_dqp_id];
 
 	/* Ensure all remaining messages have been scooped up before we trash

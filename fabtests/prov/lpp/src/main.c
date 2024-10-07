@@ -57,11 +57,6 @@
 #include "test.h"
 #include "test_util.h"
 
-#define NUM_TESTS	(sizeof(testlist) / sizeof(testlist[0]))
-#define NUM_CUDA_TESTS	(sizeof(cuda_testlist) / sizeof(cuda_testlist[0]))
-#define NUM_ROCM_TESTS	(sizeof(rocm_testlist) / sizeof(rocm_testlist[0]))
-#define TOTAL_TESTS	(NUM_TESTS + NUM_CUDA_TESTS + NUM_ROCM_TESTS)
-
 static char myhostname[128];
 static const char *peerhostname;
 static int peer_node;
@@ -139,7 +134,12 @@ static const struct test rocm_testlist[] = {
 #endif
 };
 
-static const struct test *filtered_testlist[TOTAL_TESTS];
+static const int num_tests = (sizeof(testlist) / sizeof(testlist[0]));
+static const int num_cuda_tests = (sizeof(cuda_testlist) / sizeof(cuda_testlist[0]));
+static const int num_rocm_tests = (sizeof(rocm_testlist) / sizeof(rocm_testlist[0]));
+static const int total_tests = ((num_tests + num_cuda_tests + num_rocm_tests));
+
+static struct test *filtered_testlist[60];
 static int n_include_tests;
 static atomic_int next_test;
 
@@ -274,7 +274,7 @@ static void *worker_thread(void *arg)
 }
 
 static inline void populate_filtered_testlist(const struct test* tlist,
-							size_t num_tests)
+					      size_t num_tests)
 {
 	for (int i = 0; i < num_tests; i++) {
 		if (test_filtered(tlist[i].name)) {
@@ -284,7 +284,7 @@ static inline void populate_filtered_testlist(const struct test* tlist,
 			}
 			n_exclude_tests++;
 		} else {
-			filtered_testlist[n_include_tests] = &tlist[i];
+			filtered_testlist[n_include_tests] = (struct test*)&tlist[i];
 			n_include_tests++;
 		}
 	}
@@ -296,16 +296,16 @@ static void run_tests(int parallel)
 	n_include_tests = 0;
 	n_exclude_tests = 0;
 
-	populate_filtered_testlist(testlist, NUM_TESTS);
+	populate_filtered_testlist(testlist, num_tests);
 
 	if(run_cuda_tests)
-		populate_filtered_testlist(cuda_testlist, NUM_CUDA_TESTS);
-	else if (NUM_CUDA_TESTS > 0)
+		populate_filtered_testlist(cuda_testlist, num_cuda_tests);
+	else if (num_cuda_tests > 0)
 		debug("skipping Cuda tests\n");
 
 	if(run_rocm_tests)
-		populate_filtered_testlist(rocm_testlist, NUM_ROCM_TESTS);
-	else if (NUM_ROCM_TESTS > 0)
+		populate_filtered_testlist(rocm_testlist, num_rocm_tests);
+	else if (num_rocm_tests > 0)
 		debug("skipping Cuda tests\n");
 
 	if (n_include_tests == 0) {
@@ -354,13 +354,13 @@ static void run_tests(int parallel)
 	printf("============================================\n");
 	printf("            S U C C E S S\n");
 	printf("============================================\n");
-	printf("%d/%ld tests done, %d filtered, %d iterations each, parallelism of %d at a time \n",
-	       n_include_tests, TOTAL_TESTS, n_exclude_tests, iterations,
+	printf("%d/%d tests done, %d filtered, %d iterations each, parallelism of %d at a time \n",
+	       n_include_tests, total_tests, n_exclude_tests, iterations,
 	       nthreads);
 	if (!run_cuda_tests)
-		printf("skipped %lu cuda tests\n", NUM_CUDA_TESTS);
+		printf("skipped %d cuda tests\n", num_cuda_tests);
 	if (!run_rocm_tests)
-		printf("skipped %lu rocm tests\n", NUM_ROCM_TESTS);
+		printf("skipped %d rocm tests\n", num_rocm_tests);
 }
 
 void usage()

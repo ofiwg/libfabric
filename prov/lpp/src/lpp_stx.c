@@ -304,7 +304,7 @@ int lpp_fi_stx_close(struct fid *fid)
 static void lpp_tx_rdzv_cancel(struct lpp_ep *lpp_epp, struct lpp_tx_entry *tx_entry)
 {
 	struct lpp_stx *lpp_stxp = lpp_epp->stx;
-	struct klpp_umc_u2k u2k;
+	struct klpp_umc_u2k u2k = { 0 };
 
 	u2k.type = KLPP_U2K_RDZV_SEND_CANCEL;
 	u2k.rdzv_send.token = lpp_tx_entry_to_token(lpp_stxp, tx_entry);
@@ -719,7 +719,7 @@ ssize_t lpp_send_common(struct lpp_ep *lpp_epp, struct lpp_tx_entry *tx_entry)
 {
 	struct lpp_stx *lpp_stxp = lpp_epp->stx;
 	struct lpp_cq *lpp_cqp = lpp_epp->cq_transmit;
-	struct klpp_umc_u2k u2k;
+	struct klpp_umc_u2k u2k = { 0 };
 	size_t gpu_cnt;
 	ssize_t ret;
 

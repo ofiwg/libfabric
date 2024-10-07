@@ -48,6 +48,7 @@
 #include "error.h"
 
 static pthread_t info_server_pt;
+static int server_running;
 
 static int info_server_port = 9000;
 static struct rank_info rank_info[MAX_RANK] = { 0 };
@@ -233,7 +234,7 @@ static void *info_server_thread(void *arg)
 
 	int info_server_sock = setup_server(info_server_port);
 
-	while (1) {
+	while (server_running) {
 		int clientsock = accept(info_server_sock, NULL, NULL);
 		if (clientsock < 0) {
 			error("accept");
@@ -355,7 +356,7 @@ struct rank_info *exchange_rank_info(struct rank_info *ri)
 	if (ret) {
 		ERROR(ri, "recv (our peer likely failed)");
 	}
-	
+
 	return pri;
 }
 
@@ -471,6 +472,9 @@ void server_init(const char *peerhostname, int server_port)
 	if (server_port > 0) {
 		info_server_port = server_port;
 	}
+	server_running = 1;
 	get_peer_addrinfo(peerhostname);
-	pthread_create(&info_server_pt, NULL, info_server_thread, NULL);
+	if (pthread_create(&info_server_pt, NULL, info_server_thread, NULL)) {
+		errorx("Failed to create server thread errno: %d\n", errno);
+	}
 }
