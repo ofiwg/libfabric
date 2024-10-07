@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
- * Copyright (c) 2020-2023 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2020-2024 Hewlett Packard Enterprise Development LP
  * Support for accelerated collective reductions.
  */
 
@@ -31,8 +31,6 @@
 
 #define	TRACE_PKT(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_COLL_PKT, fmt, \
 					   ##__VA_ARGS__)
-#define	TRACE_CURL(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_COLL_CURL, fmt, \
-					   ##__VA_ARGS__)
 #define	TRACE_JOIN(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_COLL_JOIN, fmt, \
 					   ##__VA_ARGS__)
 #define	TRACE_DEBUG(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_COLL_DEBUG, fmt, \
@@ -49,6 +47,56 @@
 #define __trc_data	1
 
 #define	MAGIC		0x677d
+
+/****************************************************************************
+ * Metrics for evaluating collectives
+ */
+
+struct cxip_coll_metrics_loc {
+	ofi_atomic64_t red_count_bad;
+	ofi_atomic64_t red_count_full;
+	ofi_atomic64_t red_count_partial;
+	ofi_atomic64_t red_count_unreduced;
+	struct cxip_coll_metrics_ep ep_data;
+};
+static struct cxip_coll_metrics_loc _coll_metrics;
+
+void cxip_coll_init_metrics(void)
+{
+	ofi_atomic_initialize64(&_coll_metrics.red_count_bad, 0);
+	ofi_atomic_initialize64(&_coll_metrics.red_count_full, 0);
+	ofi_atomic_initialize64(&_coll_metrics.red_count_partial, 0);
+	ofi_atomic_initialize64(&_coll_metrics.red_count_unreduced, 0);
+	memset(&_coll_metrics.ep_data, 0, sizeof(_coll_metrics.ep_data));
+}
+
+void cxip_coll_get_metrics(struct cxip_coll_metrics *metrics)
+{
+	metrics->red_count_bad =
+		ofi_atomic_get64(&_coll_metrics.red_count_bad);
+	metrics->red_count_full =
+		ofi_atomic_get64(&_coll_metrics.red_count_full);
+	metrics->red_count_partial =
+		ofi_atomic_get64(&_coll_metrics.red_count_partial);
+	metrics->red_count_unreduced =
+		ofi_atomic_get64(&_coll_metrics.red_count_unreduced);
+	memcpy(&metrics->ep_data, &_coll_metrics.ep_data,
+	       sizeof(struct cxip_coll_metrics_ep));
+}
+
+static inline void _measure_completions(int red_cnt, size_t total)
+{
+	if (red_cnt >= total)
+		ofi_atomic_inc64(&_coll_metrics.red_count_bad);
+	else if (red_cnt == total-1)
+		ofi_atomic_inc64(&_coll_metrics.red_count_full);
+	else if (red_cnt > 1)
+		ofi_atomic_inc64(&_coll_metrics.red_count_partial);
+	else if (red_cnt > 0)
+		ofi_atomic_inc64(&_coll_metrics.red_count_unreduced);
+	else
+		ofi_atomic_inc64(&_coll_metrics.red_count_bad);
+}
 
 /****************************************************************************
  * Reduction packet for hardware accelerated collectives:
@@ -97,7 +145,22 @@
  *
  * retry is a control bit that can be invoked by the hw root node to initiate a
  * retransmission of the data from the leaves, if packets are lost.
+ *
+ * A re-arm of an armed switch port may not clear the data in the port,
+ * resulting in incorrect results. Arming twice will guarantee that the
+ * old data is cleared.
+ *
+ * To disambiguate these two arming packets, it is recommended that the first
+ * arm use a reserved sequence number, allowing the software to receive the
+ * first arm packet (and data), identify it as a pre-emptive arm, and discard
+ * it.
+ *
+ * The sequence numbers occupy 10 bits of the packet header. The sequence
+ * numbers are monotonically incremented modulo ((1 << 10)-1), meaning that
+ * the largest sequence number will be ((1 << 10)-2). The unreachable value
+ * of ((1 << 10)-1) is designated the reserved value for pre-emptive arming.
  */
+
 struct cxip_coll_cookie {
 	uint32_t mcast_id:13;
 	uint32_t red_id:3;
@@ -314,7 +377,6 @@ static cxip_coll_op_t _uint8_16_32_op_to_opcode[FI_CXI_OP_LAST];
 static cxip_coll_op_t _int64_op_to_opcode[FI_CXI_OP_LAST];
 static cxip_coll_op_t _uint64_op_to_opcode[FI_CXI_OP_LAST];
 static cxip_coll_op_t _flt_op_to_opcode[FI_CXI_OP_LAST];
-static enum c_return_code _cxip_rc_to_cxi_rc[16];
 static enum cxip_coll_redtype _cxi_op_to_redtype[COLL_OPCODE_MAX];
 
 /* One-time dynamic initialization of FI to CXI opcode.
@@ -323,7 +385,7 @@ void cxip_coll_populate_opcodes(void)
 {
 	int i;
 
-	if ((int)FI_CXI_MINMAXLOC < (int)OFI_ATOMIC_OP_LAST) {
+	if ((int)FI_CXI_MINMAXLOC < (int)FI_ATOMIC_OP_LAST) {
 		CXIP_FATAL("Invalid CXI_FMINMAXLOC value\n");
 	}
 	for (i = 0; i < FI_CXI_OP_LAST; i++) {
@@ -384,17 +446,6 @@ void cxip_coll_populate_opcodes(void)
 	_cxi_op_to_redtype[COLL_OPCODE_INT_MINMAXLOC] = REDTYPE_IMINMAX;
 	_cxi_op_to_redtype[COLL_OPCODE_FLT_MINMAXNUMLOC] = REDTYPE_FMINMAX;
 	_cxi_op_to_redtype[COLL_OPCODE_FLT_REPSUM] = REDTYPE_REPSUM;
-
-	for (i = 0; i < 16; i++)
-		_cxip_rc_to_cxi_rc[i] = C_RC_AMO_ALIGN_ERROR;
-	_cxip_rc_to_cxi_rc[CXIP_COLL_RC_SUCCESS] = C_RC_OK;
-	_cxip_rc_to_cxi_rc[CXIP_COLL_RC_FLT_INEXACT] = C_RC_AMO_FP_INEXACT;
-	_cxip_rc_to_cxi_rc[CXIP_COLL_RC_FLT_OVERFLOW] = C_RC_AMO_FP_OVERFLOW;
-	_cxip_rc_to_cxi_rc[CXIP_COLL_RC_FLT_INVALID] = C_RC_AMO_FP_INVALID;
-	_cxip_rc_to_cxi_rc[CXIP_COLL_RC_REP_INEXACT] = C_RC_AMO_FP_INEXACT;
-	_cxip_rc_to_cxi_rc[CXIP_COLL_RC_INT_OVERFLOW] = C_RC_AMO_FP_OVERFLOW;
-	_cxip_rc_to_cxi_rc[CXIP_COLL_RC_CONTR_OVERFLOW] = C_RC_AMO_LENGTH_ERROR;
-	_cxip_rc_to_cxi_rc[CXIP_COLL_RC_OP_MISMATCH] = C_RC_AMO_INVAL_OP_ERROR;
 }
 
 static inline int int8_16_32_op_to_opcode(int op)
@@ -830,7 +881,7 @@ static void _coll_rx_req_report(struct cxip_req *req)
 		} else {
 			/* non-reduction packet */
 			err = FI_ENOMSG;
-			CXIP_INFO("Not reduction pkt: %p (err: %d, %s)\n",
+			CXIP_WARN("Not reduction pkt: %p (err: %d, %s)\n",
 				  req, err, cxi_rc_to_str(err));
 		}
 
@@ -930,6 +981,11 @@ static void _coll_rx_progress(struct cxip_req *req,
 		return;
 	}
 #endif
+	// A re-arm of an armed switch port drop this packet
+	if (pkt->hdr.seqno == CXIP_COLL_MOD_SEQNO) {
+		CXIP_INFO("pre-rearm pkt dropped\n");
+		return;
+	}
 
 	/* Progress the reduction */
 	_dump_red_pkt(pkt, "recv");
@@ -1247,7 +1303,7 @@ bool _quiesce_nan(double *d)
 }
 
 /**
- * Implement NaN comparison in RSDG 4.5.9.2.4 FLT_MINNUM and FLT_MAXNUM
+ * Implement NaN comparisons FLT_MINNUM and FLT_MAXNUM
  *
  * Only associative mode is supported. The old IEEE mode is incorrect, and has
  * been deprecated.
@@ -1322,35 +1378,6 @@ void swpidx(uint64_t *i1, uint64_t i2, int swp)
 {
 	if (swp >= 0 && (swp > 0 || *i1 > i2))
 		*i1 = i2;
-}
-
-/* Determine if double precision sum is exact. This shifts the value with the
- * lower exponent toward the MSBit by the amount of the bitwise overlap between
- * the final sum and the value that resulted in that sum. If any non-zero bits
- * remain in that smaller value, they were discarded during the summation, and
- * the result is inexact.
- */
-static inline
-bool exact(double rslt, double d)
-{
-	// TODO verify sign and shift
-	unsigned long m1, m2;
-	int s1, e1, s2, e2;
-	int shft, dlte;
-	bool ret;
-
-	_decompose_dbl(rslt, &s1, &e1, &m1);
-	_decompose_dbl(d, &s2, &e2, &m2);
-	dlte = e1 - e2;
-
-	if (dlte < 0) {
-		shft = MIN(52 + dlte, 0);
-		ret = !(m1 << shft);
-	} else {
-		shft= MIN(52 - dlte, 0);
-		ret = !(m2 << shft);
-	}
-	return ret;
 }
 
 static inline
@@ -1488,7 +1515,6 @@ static void _reduce(struct cxip_coll_data *accum,
 		/* overflow not possible */
 		break;
 	case COLL_OPCODE_INT_MINMAXLOC:
-		/* RSDG 4.5.9.2.2 MINMAXLOC */
 		/* return smallest value and its index */
 		if (accum->intminmax.iminval > coll_data->intminmax.iminval) {
 			accum->intminmax.iminval = coll_data->intminmax.iminval;
@@ -1526,21 +1552,18 @@ static void _reduce(struct cxip_coll_data *accum,
 		}
 		break;
 	case COLL_OPCODE_FLT_MINNUM:
-		/* RSDG 4.5.9.2.4 FLT_MINNUM and FLT_MAXNUM */
 		for (i = 0; i < 4; i++) {
 			swpnan2(&accum->fltval.fval[i], coll_data->fltval.fval[i], 1,
 				&accum->red_rc);
 		}
 		break;
 	case COLL_OPCODE_FLT_MAXNUM:
-		/* RSDG 4.5.9.2.4 FLT_MINNUM and FLT_MAXNUM */
 		for (i = 0; i < 4; i++) {
 			swpnan2(&accum->fltval.fval[i], coll_data->fltval.fval[i], 0,
 				&accum->red_rc);
 		}
 		break;
 	case COLL_OPCODE_FLT_MINMAXNUMLOC:
-		/* RSDG 4.5.9.2.4 FLT_MINNUM and FLT_MAXNUM */
 		swp = swpnan2(&accum->fltminmax.fminval,
 			      coll_data->fltminmax.fminval, 1, &accum->red_rc);
 		swpidx(&accum->fltminmax.fminidx, coll_data->fltminmax.fminidx, swp);
@@ -1560,10 +1583,6 @@ static void _reduce(struct cxip_coll_data *accum,
 			/* NOTE: arithmetic operations will quiesce snan */
 			accum->fltval.fval[i] +=  coll_data->fltval.fval[i];
 
-			if (!exact(accum->fltval.fval[i],
-				   coll_data->fltval.fval[i]))
-				SET_RED_RC(accum->red_rc,
-					   CXIP_COLL_RC_FLT_INEXACT);
 			if (isinf(accum->fltval.fval[i]))
 				SET_RED_RC(accum->red_rc,
 					   CXIP_COLL_RC_FLT_OVERFLOW);
@@ -1581,10 +1600,6 @@ static void _reduce(struct cxip_coll_data *accum,
 			/* NOTE: arithmetic operations will quiesce snan */
 			accum->fltval.fval[i] +=  coll_data->fltval.fval[i];
 
-			if (!exact(accum->fltval.fval[i],
-				   coll_data->fltval.fval[i]))
-				SET_RED_RC(accum->red_rc,
-					   CXIP_COLL_RC_FLT_INEXACT);
 			if (isinf(accum->fltval.fval[i]))
 				SET_RED_RC(accum->red_rc,
 					   CXIP_COLL_RC_FLT_OVERFLOW);
@@ -1727,7 +1742,7 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 			   bool arm, bool retry)
 {
 	struct red_pkt *pkt;
-	int ret;
+	int ret = FI_SUCCESS;
 
 	pkt = (struct red_pkt *)reduction->tx_msg;
 
@@ -1758,13 +1773,33 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 		pkt->hdr.repsum_ovflid = 0;
 		memset(pkt->data, 0, CXIP_COLL_MAX_DATA_SIZE);
 	}
-	_dump_red_pkt(pkt, "send");
-	_swappkt(pkt);
 
-	/* -FI_EAGAIN means HW queue is full, should self-clear */
-	do {
-		ret = _send_pkt(reduction);
-	} while (ret == -FI_EAGAIN);
+	// A re-arm of an armed switch port send clearing packet
+	if (arm && retry) {
+		int save_seqno = pkt->hdr.seqno;
+
+		// A re-arm of an armed switch port skip illegal value
+		pkt->hdr.seqno = CXIP_COLL_MOD_SEQNO;
+		_dump_red_pkt(pkt, "retry");
+		_swappkt(pkt);
+		do {
+			/* -FI_EAGAIN means HW queue is full, self-clears */
+			ret = _send_pkt(reduction);
+		} while (ret == -FI_EAGAIN);
+		_swappkt(pkt);
+		pkt->hdr.seqno = save_seqno;
+	}
+
+	if (ret == FI_SUCCESS) {
+		_dump_red_pkt(pkt, "send");
+		_swappkt(pkt);
+		do {
+			/* -FI_EAGAIN means HW queue is full, self-clears */
+			ret = _send_pkt(reduction);
+		} while (ret == -FI_EAGAIN);
+		_swappkt(pkt);
+	}
+
 	/* any other error is a serious config/hardware issue */
 	if (ret)
 		CXIP_WARN("Fatal send error = %d\n", ret);
@@ -1776,28 +1811,44 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 static void _post_coll_complete(struct cxip_coll_reduction *reduction)
 {
 	struct cxip_req *req;
-	int ret;
+	int ret, prov;
 
 	/* Indicates collective completion by writing to the endpoint TX CQ */
 	req = reduction->op_inject_req;
 	if (!req)
 		return;
 
-	if (reduction->accum.red_rc == CXIP_COLL_RC_SUCCESS) {
+	/* convert Rosetta return codes to CXIP return codes */
+	if (reduction->accum.red_rc == CXIP_COLL_RC_SUCCESS ||
+	    reduction->accum.red_rc == CXIP_COLL_RC_FLT_INEXACT) {
 		ret = cxip_cq_req_complete(req);
 	} else {
-		ret = cxip_cq_req_error(req, 0,
-			_cxip_rc_to_cxi_rc[reduction->accum.red_rc],
-			reduction->accum.red_rc, NULL, 0, FI_ADDR_UNSPEC);
+		switch (reduction->accum.red_rc) {
+		case CXIP_COLL_RC_FLT_OVERFLOW:
+			prov = FI_CXI_ERRNO_RED_FLT_OVERFLOW;
+			break;
+		case CXIP_COLL_RC_FLT_INVALID:
+			prov = FI_CXI_ERRNO_RED_FLT_INVALID;
+			break;
+		case CXIP_COLL_RC_INT_OVERFLOW:
+			prov = FI_CXI_ERRNO_RED_INT_OVERFLOW;
+			break;
+		case CXIP_COLL_RC_CONTR_OVERFLOW:
+			prov = FI_CXI_ERRNO_RED_CONTR_OVERFLOW;
+			break;
+		case CXIP_COLL_RC_OP_MISMATCH:
+			prov = FI_CXI_ERRNO_RED_OP_MISMATCH;
+			break;
+		default:
+			prov = FI_CXI_ERRNO_RED_OTHER;
+			break;
+		}
+		ret = cxip_cq_req_error(req, 0, -FI_EOTHER, prov,
+					NULL, 0, FI_ADDR_UNSPEC);
 	}
-	if (ret) {
-		/* Is this possible? The only error is -FI_ENOMEM. It looks like
-		 * send is blocked with -FI_EAGAIN until we are guaranteed EQ
-		 * space in the queue. Display and ignore.
-		 */
-		CXIP_WARN("Attempt to post completion failed %s\n",
+	if (ret)
+		CXIP_FATAL("Attempt to post completion failed %s\n",
 			   fi_strerror(-ret));
-	}
 
 	/* req structure no longer needed */
 	cxip_evtq_req_free(req);
@@ -1880,12 +1931,19 @@ static void _unpack_red_data(struct cxip_coll_data *coll_data,
 #define DECMOD(val, mod)	do {(val)=((val)+(mod)-1)%(mod);} while (0)
 
 /* MONOTONIC timestamp operations for timeouts/retries */
+
+/* get current time */
 static inline
 void _tsget(struct timespec *ts)
 {
-	clock_gettime(CLOCK_MONOTONIC, ts);
+	uint64_t ns;
+
+	ns = ofi_gettime_ns();
+	ts->tv_sec = ns / 1000000000;
+	ts->tv_nsec = ns % 1000000000;
 }
 
+/* advance time by delta */
 static inline
 void _tsadd(struct timespec *ts, const struct timespec *dt)
 {
@@ -1897,42 +1955,64 @@ void _tsadd(struct timespec *ts, const struct timespec *dt)
 	}
 }
 
-/* Set a timespec at expiration time (future) */
+/* set current time plus increment */
 static inline
-void _tsset(struct cxip_coll_reduction *reduction)
+void _tsset(struct timespec *ts, const struct timespec *dt)
 {
-	_tsget(&reduction->tv_expires);
-	_tsadd(&reduction->tv_expires, &reduction->mc_obj->timeout);
+	_tsget(ts);
+	_tsadd(ts, dt);
+}
+
+/* test for expiration of time */
+static inline
+bool _tsexp(struct timespec *ts)
+{
+	struct timespec tsnow;
+
+	_tsget(&tsnow);
+	TRACE_JOIN("now=%ld.%ld exp=%ld.%ld\n",
+		   tsnow.tv_sec, tsnow.tv_nsec,
+		   ts->tv_sec, ts->tv_nsec);
+	if (tsnow.tv_sec < ts->tv_sec)
+		return false;
+	if (tsnow.tv_sec > ts->tv_sec)
+		return true;
+	return (tsnow.tv_nsec >= ts->tv_nsec);
+}
+
+/* test for {0,0} timestamp */
+static inline
+bool _tsnul(struct timespec *ts)
+{
+	return !(ts->tv_sec | ts->tv_nsec);
+}
+
+/* Set reduction expiration time (future) */
+static inline
+void _ts_red_set(struct cxip_coll_reduction *reduction)
+{
+	_tsset(&reduction->tv_expires, &reduction->mc_obj->timeout);
 }
 
 /* Used to prevent first-use incast */
 static inline
 bool _is_red_first_time(struct cxip_coll_reduction *reduction)
 {
-	return (reduction->tv_expires.tv_sec == 0L &&
-	    	reduction->tv_expires.tv_nsec == 0L);
+	return _tsnul(&reduction->tv_expires);
 }
 
 /* Used to reduce incast congestion during run */
 static inline
 bool _is_red_timed_out(struct cxip_coll_reduction *reduction)
 {
-	struct timespec tsnow;
-
 	if (reduction->mc_obj->retry_disable)
 		return false;
 	if (_is_red_first_time(reduction)) {
-		TRACE_DEBUG("=== root first time, retry\n");
+		TRACE_DEBUG("=== root redid=%d first time, retry\n",
+			    reduction->red_id);
 		return true;
 	}
-	_tsget(&tsnow);
-	if (tsnow.tv_sec < reduction->tv_expires.tv_sec)
-		return false;
-	if (tsnow.tv_sec == reduction->tv_expires.tv_sec &&
-	    tsnow.tv_nsec < reduction->tv_expires.tv_nsec)
-		return false;
-	TRACE_DEBUG("=== root timeout, retry\n");
-	return true;
+	return _tsexp(&reduction->tv_expires);
 }
 
 /* Root node state machine progress.
@@ -1954,12 +2034,14 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 	if (_is_red_timed_out(reduction)) {
 		/* reset reduction for retry send */
 		reduction->seqno = mc_obj->seqno;
-		INCMOD(mc_obj->seqno, CXIP_COLL_MAX_SEQNO);
+		TRACE_PKT("root T/O reduction seqno = %d\n", reduction->seqno);
+		INCMOD(mc_obj->seqno, CXIP_COLL_MOD_SEQNO);
+		TRACE_PKT("root T/O mc_obj seqno = %d\n", mc_obj->seqno);
 		ofi_atomic_inc32(&mc_obj->tmout_cnt);
 
 		ret = cxip_coll_send_red_pkt(reduction, NULL,
 					     !mc_obj->arm_disable, true);
-		_tsset(reduction);
+		_ts_red_set(reduction);
 		if (ret) {
 			SET_RED_RC(reduction->accum.red_rc,
 				   CXIP_COLL_RC_TX_FAILURE);
@@ -1971,9 +2053,6 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 
 	/* Process received packet */
 	if (pkt) {
-		/* Root has received a leaf packet */
-		_dump_red_pkt(pkt, "Rrcv");
-
 		/* Drop out-of-date packets */
 		if (pkt->hdr.resno != reduction->seqno) {
 			TRACE_DEBUG("bad seqno, exp=%d saw=%d\n",
@@ -1982,8 +2061,14 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 			return;
 		}
 
-		/* capture and reduce packet information */
+		/* capture packet information */
 		_unpack_red_data(&coll_data, pkt);
+#if ENABLE_DEBUG
+		/* capture completion metrics */
+		_measure_completions(coll_data.red_cnt,
+				     mc_obj->av_set_obj->fi_addr_cnt);
+#endif
+		/* perform the reduction */
 		_reduce(&reduction->accum, &coll_data, false);
 		_dump_coll_data("after leaf contrib to root", &reduction->accum);
 	}
@@ -1999,12 +2084,13 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 
 		/* send reduction result to leaves, arm new seqno */
 		reduction->seqno = mc_obj->seqno;
-		INCMOD(mc_obj->seqno, CXIP_COLL_MAX_SEQNO);
+		INCMOD(mc_obj->seqno, CXIP_COLL_MOD_SEQNO);
 		reduction->completed = true;
 
+		TRACE_DEBUG("root send seqno = %d\n", reduction->seqno);
 		ret = cxip_coll_send_red_pkt(reduction, &reduction->accum,
 					     !mc_obj->arm_disable, false);
-		_tsset(reduction);
+		_ts_red_set(reduction);
 		if (ret)
 			SET_RED_RC(reduction->accum.red_rc,
 				   CXIP_COLL_RC_TX_FAILURE);
@@ -2040,19 +2126,21 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 
 	/* if reduction packet, reset timer, seqno, honor retry */
 	if (pkt) {
-		_dump_red_pkt(pkt, "Lrcv");
-		_tsset(reduction);
+		TRACE_DEBUG("%s: packet seen\n", __func__);
+		_ts_red_set(reduction);
 		reduction->seqno = pkt->hdr.seqno;
 		reduction->resno = pkt->hdr.seqno;
 		if (pkt->hdr.retry)
 			reduction->pktsent = false;
+		TRACE_PKT("leaf rcv seqno = %d\n", reduction->seqno);
 	}
 
 	/* leaves lead with sending a packet */
 	if (!reduction->pktsent) {
 		/* Avoid first-use incast, retry guaranteed */
 		if (_is_red_first_time(reduction)) {
-			TRACE_DEBUG("=== leaf first time, wait\n");
+			TRACE_DEBUG("=== leaf redid=%d first time, wait\n",
+				    reduction->red_id);
 			return;
 		}
 
@@ -2418,15 +2506,19 @@ union pack_mcast {
 		uint64_t mcast_addr: 16;// maximum anticipated multicast
 		uint64_t hwroot_idx: 27;// 128M endpoints in tree
 		uint64_t valid: 1;	// success flag
-		uint64_t pad: 20;	// needed by zbcoll
+		uint64_t pad: 20;	// used by zbcoll
 	} __attribute__((__packed__));
+} __attribute__((__packed__));
+
+union pack_errbits {
+	uint64_t uint64;
 	struct {
 		uint64_t error_bits: 43;// up to 43 independent errors
-		uint64_t valid1: 1;	// unused/reserved
-		uint64_t pad1: 20;	// unused/reserved
+		uint64_t valid: 1;	// success flag
+		uint64_t pad1: 20;	// needed by zbcoll
 
 	} __attribute__((__packed__));
-};
+} __attribute__((__packed__));
 
 /* State structure for carrying data through the join sequence */
 struct cxip_join_state {
@@ -2434,10 +2526,12 @@ struct cxip_join_state {
 	struct cxip_av_set *av_set_obj;	// av set for this collective
 	struct cxip_coll_mc *mc_obj;	// mc object for this collective
 	struct cxip_zbcoll_obj *zb;	// zb object associated with state
+	struct timespec curlexpires;	// multicast creation expiration timeout
 	struct fid_mc **mc;		// user pointer to return mc_obj
 	void *context;			// user context for concurrent joins
 	uint64_t join_flags;		// user-supplied libfabric join flags
 	union pack_mcast bcast_data;	// packed multicast data
+	union pack_errbits reduce_err;	// packed join error bits
 	bool rx_discard;		// set if RX events should be discarded
 	bool is_rank;			// set if using COLL_RANK simulation model
 	bool is_mcast;			// set if using Rosetta multicast tree
@@ -2455,10 +2549,14 @@ struct cxip_join_state {
 };
 
 /* State structure for recovering data from CURL response */
-struct cxip_curl_mcast_usrptr {
+struct cxip_curl_mcast_create_usrptr {
 	struct cxip_join_state *jstate;	// join state
 	int mcast_id;			// multicast address
 	int hwroot_rank;		// hardware root index
+};
+
+struct cxip_curl_mcast_delete_usrptr {
+	struct cxip_coll_mc *mc_obj;	// multicast object
 };
 
 /* pack provider errors into AND bitmask - address data */
@@ -2467,37 +2565,49 @@ void _proverr_to_bits(struct cxip_join_state *jstate)
 	int bitno;
 
 	/* record error as a bit for this endpoint */
-	jstate->bcast_data.error_bits = 0L;
-	if (!jstate->bcast_data.valid) {
-		bitno = -jstate->prov_errno;
-		jstate->bcast_data.error_bits |= (1L << bitno);
+	TRACE_JOIN("%s: prov_errno=%d\n", __func__, jstate->prov_errno);
+	jstate->reduce_err.error_bits = 0L;
+	if (jstate->prov_errno) {
+		if (jstate->prov_errno >= FI_CXI_ERRNO_JOIN_LAST)
+			jstate->prov_errno = FI_CXI_ERRNO_JOIN_OTHER;
+		bitno = jstate->prov_errno - FI_CXI_ERRNO_JOIN_FIRST;
+		jstate->reduce_err.error_bits |= (1L << bitno);
 	}
 	/* invert bits, zbcoll reduce does AND */
-	jstate->bcast_data.error_bits ^= -1L;
+	TRACE_JOIN("%s: error bitmask=%016lx\n", __func__,
+		   (uint64_t)jstate->reduce_err.error_bits);
+	jstate->reduce_err.error_bits ^= -1L;
 }
 
-/* unpack AND bitmask into dominant provider error */
+/* unpack bitmask and return largest error */
 void _bits_to_proverr(struct cxip_join_state *jstate)
 {
-	int bitno;
+	int prov_errno;
+	uint64_t bitmask;
 
 	/* zbcoll reduce does AND, invert bits */
-	jstate->bcast_data.error_bits ^= -1L;
+	jstate->reduce_err.error_bits ^= -1L;
+	TRACE_JOIN("%s: error bitmask=%016lx\n", __func__,
+		   (uint64_t)jstate->reduce_err.error_bits);
 
-	/* if data is valid, bits do not represent errors */
-	if (jstate->bcast_data.valid) {
-		jstate->prov_errno = CXIP_PROV_ERRNO_OK;
+	/* display all errors, capture the highest value error */
+	jstate->prov_errno = 0L;
+	if (!jstate->reduce_err.error_bits) {
+		TRACE_JOIN("%s: no error seen\n", __func__);
 		return;
 	}
 
-	/* bits set represent multiple errors from endpoints */
-	for (bitno = -CXIP_PROV_ERRNO_OK; bitno < -CXIP_PROV_ERRNO_LAST; bitno++) {
-		if (jstate->bcast_data.error_bits & (1 << bitno)) {
-			jstate->prov_errno = -bitno;
-			CXIP_WARN("join error %d seen\n", jstate->prov_errno);
+	bitmask = 1L;
+	for (prov_errno = FI_CXI_ERRNO_JOIN_FIRST;
+	     prov_errno < FI_CXI_ERRNO_JOIN_LAST;
+	     prov_errno++) {
+		if (jstate->reduce_err.error_bits & bitmask) {
+			jstate->prov_errno = prov_errno;
+			CXIP_WARN("%s\n", cxip_strerror(jstate->prov_errno));
+			TRACE_JOIN("%s\n", cxip_strerror(jstate->prov_errno));
 		}
+		bitmask <<= 1;
 	}
-	/* returns most significant of multiple errors as jstate->prov_errno */
 }
 
 /* Close collective pte object - ep_obj->lock must be held */
@@ -2532,8 +2642,10 @@ static int _acquire_pte(struct cxip_ep_obj *ep_obj, int pid_idx,
 
 	*coll_pte_ret = NULL;
 	coll_pte = calloc(1, sizeof(*coll_pte));
-	if (!coll_pte)
+	if (!coll_pte) {
+		TRACE_JOIN("out of memory\n");
 		return -FI_ENOMEM;
+	}
 
 	/* initialize coll_pte */
 	coll_pte->ep_obj = ep_obj;
@@ -2546,20 +2658,27 @@ static int _acquire_pte(struct cxip_ep_obj *ep_obj, int pid_idx,
 	ret = cxip_pte_alloc(ep_obj->ptable, ep_obj->coll.rx_evtq->eq,
 			     pid_idx, is_mcast, &pt_opts, _coll_pte_cb,
 			     coll_pte, &coll_pte->pte);
-	if (ret)
-		goto fail;
+	if (ret) {
+		TRACE_JOIN("cxip_pte_alloc failed=%d\n", ret);
+		free(coll_pte);
+		return ret;
+	}
 
 	/* enable the PTE */
 	ret = _coll_pte_enable(coll_pte, CXIP_PTE_IGNORE_DROPS);
-	if (ret)
+	if (ret) {
+		TRACE_JOIN("_coll_pte_enable failed=%d\n", ret);
 		goto fail;
+	}
 
 	/* add buffers to the PTE */
 	ret = _coll_add_buffers(coll_pte,
 				ep_obj->coll.buffer_size,
 				ep_obj->coll.buffer_count);
-	if (ret)
+	if (ret) {
+		TRACE_JOIN("_coll_add_buffers failed=%d\n", ret);
 		goto fail;
+	}
 
 	*coll_pte_ret = coll_pte;
 	return FI_SUCCESS;
@@ -2569,13 +2688,20 @@ fail:
 	return ret;
 }
 
+/* forward references for CURL operations */
+static void _create_mcast_addr(struct cxip_join_state *jstate);
+static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle);
+static void _curl_delete_mc_obj(struct cxip_coll_mc *mc_obj);
+static void _cxip_delete_mcast_cb(struct cxip_curl_handle *handle);
+
 /* Close multicast collective object */
-static void _close_mc(struct cxip_coll_mc *mc_obj)
+static void _close_mc(struct cxip_coll_mc *mc_obj, bool delete)
 {
 	int count;
 
 	if (!mc_obj)
 		return;
+	TRACE_JOIN("%s starting MC cleanup\n", __func__);
 	/* clear the mcast_addr -> mc_obj reference*/
 	ofi_idm_clear(&mc_obj->ep_obj->coll.mcast_map, mc_obj->mcast_addr);
 	mc_obj->ep_obj->coll.is_hwroot = false;
@@ -2598,19 +2724,33 @@ static void _close_mc(struct cxip_coll_mc *mc_obj)
 		_close_pte(mc_obj->ep_obj->coll.coll_pte);
 		mc_obj->ep_obj->coll.coll_pte = NULL;
 	}
-	free(mc_obj);
+	/* index zero deletes the multicast address */
+	if (delete && mc_obj->is_multicast && !mc_obj->mynode_idx) {
+		struct timespec expires = {
+			cxip_env.coll_fm_timeout_msec/1000,
+			(cxip_env.coll_fm_timeout_msec%1000)*1000000};
+
+		_tsset(&mc_obj->curlexpires, &expires);
+		_curl_delete_mc_obj(mc_obj);
+	} else
+		free(mc_obj);
 }
 
+/* The user can close an individual collective MC address. It must do so on
+ * all endpoints in the collective group, just as fi_join_collective() must
+ * be called on all endpoints in the group.
+ */
 static int _fi_close_mc(struct fid *fid)
 {
 	struct cxip_coll_mc *mc_obj;
 
+	TRACE_JOIN("%s: closing MC\n", __func__);
 	mc_obj = container_of(fid, struct cxip_coll_mc, mc_fid.fid);
-	_close_mc(mc_obj);
+	_close_mc(mc_obj, true);
 	return FI_SUCCESS;
 }
 
-/* multicast object operational functions */
+/* multicast object libfabric functions */
 static struct fi_ops mc_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = _fi_close_mc,
@@ -2678,9 +2818,10 @@ static int _initialize_mc(void *ptr)
 	if (!mc_obj)
 		return -FI_ENOMEM;
 
-	TRACE_DEBUG("acquiring PTE\n");
+	TRACE_JOIN("acquiring PTE\n");
 	if (jstate->is_rank) {
 		// NETSIM
+		TRACE_JOIN("acquiring PTE NETSIM\n");
 		// pid_idx = simulated collective rank
 		pid_idx = CXIP_PTL_IDX_COLL + jstate->simrank;
 		ret = _acquire_pte(ep_obj, pid_idx, false, &coll_pte);
@@ -2689,11 +2830,13 @@ static int _initialize_mc(void *ptr)
 	} else if (!jstate->is_mcast) {
 		// UNICAST
 		// pid_idx = simulated collective tree
+		TRACE_JOIN("acquiring PTE UNICAST\n");
 		pid_idx = CXIP_PTL_IDX_COLL;
 		ret = _acquire_pte(ep_obj, pid_idx, false, &coll_pte);
 	} else {
 		// MULTICAST
 		// pid_idx = bit-shifted multicast address
+		TRACE_JOIN("acquiring PTE MULTICAST\n");
 		memset(&pid_mcast, 0, sizeof(pid_mcast));
 		pid_mcast.mcast_id = jstate->bcast_data.mcast_addr;
 		pid_mcast.mcast_pte_index = 0;
@@ -2829,6 +2972,11 @@ static int _initialize_mc(void *ptr)
 	/* Last field to set */
 	mc_obj->is_joined = true;
 
+	/* Prepare static metrics for this endpoint*/
+	_coll_metrics.ep_data.myrank = mc_obj->mynode_idx;
+	_coll_metrics.ep_data.isroot =
+		mc_obj->hwroot_idx == mc_obj->mynode_idx;
+
 	/* Return information to the caller */
 	jstate->mc_obj = mc_obj;
 	*jstate->mc = &mc_obj->mc_fid;
@@ -2838,146 +2986,207 @@ static int _initialize_mc(void *ptr)
 	return FI_SUCCESS;
 
 fail:
-	_close_mc(mc_obj);
+	jstate->prov_errno = FI_CXI_ERRNO_JOIN_FAIL_PTE;
+	_close_mc(mc_obj, true);
 	return ret;
 }
 
 /**
- * CURL callback function upon completion of a request.
+ * CURL MODEL
  *
- * This sets jstate->finished_mcast, even if the operation fails.
- * This sets jstate->bcast_data.valid if the address is valid.
+ * void _cxip_action(void *object);
+ * void _cxip_action_cb(struct cxip_curl_handle *handle);
+ *
+ * The action object must persist until the action has reached a conclusion,
+ * which may involve multiple CURL requests, particularly retries on busy
+ * responses. It must retain state for multiple retries of the action if the
+ * CURL response indicates a retry is needed. This is the cxip_join_state
+ * object for multicast creation, and the mc_obj object for multicast deletion.
+ *
+ * The curl_usrptr object is allocated for each CURL request, and deleted after
+ * the response has been evaluated. The response may be a retry of the same
+ * CURL request, or it may be some other recovery or completion operation.
+ *
+ * This simplifies retries and adaptive responses to the CURL result. The
+ * callback function runs as an agent of the CURL processing, using the
+ * curl_usrptr object, and can assume that the CURL implementation (cxip_curl.c)
+ * will do all CURL memory cleanup, regardless of success or failure. This means
+ * that the callback can simply re-issue the same command as if for the first
+ * time to perform a retry on any kind of busy error.
+ *
+ * To prevent endless retries, the elapsing time must be recorded in the
+ * action object (so that it will persist across multiple CURL operations).
  */
-static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
-{
-	struct cxip_curl_mcast_usrptr *curl_usrptr = handle->usrptr;
-	struct cxip_join_state *jstate = curl_usrptr->jstate;
-	struct json_object *json_obj;
-	struct cxip_addr caddr;
-	const char *hwrootstr;
-	int mcaddr, hwroot;
-	uint32_t octet[6], n;
-	int i, ret;
 
-	/* Creation process is done */
-	TRACE_CURL("CURL COMPLETED!\n");
-	jstate->finished_mcast = true;
+/**
+ * Perform a CURL request to delete a multicast address.
+ *
+ * This is the last thing done after closing down the mc_object in libfabric, so
+ * all that remains is to remove the actual multicast in the FM and delete
+ * allocated memory for mc_obj. If the CURL operation cannot complete
+ * successfully, the multicast delete will occur at the end of the job.
+ */
+static void _curl_delete_mc_obj(struct cxip_coll_mc *mc_obj)
+{
+	struct cxip_curl_mcast_delete_usrptr *curl_usrptr;
+	char *url;
+	int ret;
+
+	/* early exit will attempt to free these */
+	curl_usrptr = NULL;
+	url = NULL;
+
+	TRACE_JOIN("deleting multicast address via REST\n");
+	ret = asprintf(&url, "%s/%d", cxip_env.coll_fabric_mgr_url,
+		       mc_obj->mcast_addr);
+	if (ret < 0) {
+		TRACE_JOIN("Failed to construct CURL address\n");
+		goto quit;
+	}
+	/* create the return pointer */
+	curl_usrptr = calloc(1, sizeof(*curl_usrptr));
+	if (!curl_usrptr) {
+		TRACE_JOIN("curl_usrptr calloc() error\n");
+		ret = -FI_ENOMEM;
+		goto quit;
+	}
+	curl_usrptr->mc_obj = mc_obj;
+	ret = cxip_curl_perform(url, NULL, cxip_env.coll_mcast_token, 0,
+				CURL_DELETE, false, _cxip_delete_mcast_cb,
+				curl_usrptr);
+	if (ret < 0) {
+		TRACE_JOIN("CURL delete mcast %d dispatch failed %d\n",
+			   mc_obj->mcast_addr, ret);
+		goto quit;
+	}
+	TRACE_JOIN("CURL delete mcast %d dispatch successful\n",
+		   mc_obj->mcast_addr);
+quit:
+	free(url);
+	if (ret < 0) {
+		TRACE_JOIN("CURL delete mcast %d failed\n",
+			   mc_obj->mcast_addr);
+		free(curl_usrptr);
+		free(mc_obj);
+	}
+}
+
+static void _cxip_delete_mcast_cb(struct cxip_curl_handle *handle)
+{
+	struct cxip_curl_mcast_delete_usrptr *curl_usrptr = handle->usrptr;
+	struct cxip_coll_mc *mc_obj = curl_usrptr->mc_obj;
+	struct json_object *json_obj;
+	const char *errmsg = "";
+
+	/* note: allocates space for strings, free at end */
+	json_obj = json_tokener_parse(handle->response);
+	if (json_obj) {
+		if (cxip_json_string("message", json_obj, &errmsg))
+			errmsg = "";
+	} else {
+		TRACE_JOIN("callback: malformed server response: '%s'\n",
+			   handle->response);
+	}
 
 	switch (handle->status) {
 	case 200:
 	case 201:
-		/* CURL succeeded, parse response */
-		TRACE_CURL("CURL PARSE RESPONSE:\n%s\n", handle->response);
-		if (!(json_obj = json_tokener_parse(handle->response)))
-			break;
-		if (cxip_json_int("mcastID", json_obj, &mcaddr))
-			break;
-		if (cxip_json_string("hwRoot", json_obj, &hwrootstr))
-			break;
+		TRACE_JOIN("callback: %ld SUCCESS MCAST DELETED\n",
+			   handle->status);
+		free(mc_obj);
+		break;
+	case 409:
+		TRACE_JOIN("callback: delete mcast failed: %ld '%s'\n",
+			   handle->status, errmsg);
 
-		memset(octet, 0, sizeof(octet));
-		hwroot = 0;
-		n = sscanf(hwrootstr, "%x:%x:%x:%x:%x:%x",
-			   &octet[5], &octet[4], &octet[3],
-			   &octet[2], &octet[1], &octet[0]);
-		if (n < 3) {
-			TRACE_CURL("bad hwroot address = %s\n", hwrootstr);
+		if (_tsexp(&mc_obj->curlexpires)) {
+			TRACE_JOIN("callback: FM expired\n");
+			free(mc_obj);
 			break;
 		}
-		for (i = 0; i < n; i++)
-			hwroot |= octet[i] << (8*i);
-
-		TRACE_CURL("mcastID=%d hwRoot='%s'=%x\n", mcaddr, hwrootstr,
-			   hwroot);
-		for (i = 0; i < jstate->av_set_obj->fi_addr_cnt; i++) {
-			ret = cxip_av_lookup_addr(
-					jstate->av_set_obj->cxi_av,
-					jstate->av_set_obj->fi_addr_ary[i],
-					&caddr);
-			if (ret < 0)
-				continue;
-			TRACE_JOIN("test %d == %d\n", hwroot, caddr.nic);
-			if (hwroot == caddr.nic)
-				break;
-		}
-		TRACE_CURL("final index=%d\n", i);
-		if (i >= jstate->av_set_obj->fi_addr_cnt) {
-			TRACE_CURL("multicast HWroot not found in av_set\n");
-			jstate->prov_errno = CXIP_PROV_ERRNO_HWROOT_INVALID;
-			break;
-		}
-		/* Production MCAST address */
-		jstate->bcast_data.valid = true;
-		jstate->bcast_data.hwroot_idx = i;
-		jstate->bcast_data.mcast_addr = (uint32_t)mcaddr;
-		jstate->is_mcast = true;
-		/* This succeeded */
-		TRACE_CURL("curl: mcaddr   =%08x\n",
-			   jstate->bcast_data.mcast_addr);
-		TRACE_CURL("curl: hwrootidx=%d\n",
-			   jstate->bcast_data.hwroot_idx);
+		/* try again */
+		_curl_delete_mc_obj(mc_obj);
 		break;
 	default:
-		TRACE_CURL("ERRMSK SET CURL error %ld!\n", handle->status);
-		if (handle->response)
-			TRACE_CURL("ERROR RESPONSE:\n%s\n", handle->response);
-		// TODO finer error differentiation from CURL errors
-		jstate->prov_errno = CXIP_PROV_ERRNO_CURL;
+		TRACE_JOIN("callback: %ld unknown status\n", handle->status);
+		free(mc_obj);
 		break;
 	}
+	/* free json memory */
+	json_object_put(json_obj);
 	free(curl_usrptr);
-	TRACE_CURL("CURL COMPLETED!\n");
-	jstate->finished_mcast = true;
 }
 
 /**
- * Start a CURL request for a multicast address.
+ * Perform a CURL request to create a new multicast address.
  */
-static void _start_curl(void *ptr)
+static void _create_mcast_addr(struct cxip_join_state *jstate)
 {
-	struct cxip_curl_mcast_usrptr *curl_usrptr;
-	struct cxip_join_state *jstate = ptr;
+	struct cxip_curl_mcast_create_usrptr *curl_usrptr;
 	struct cxip_addr caddr;
-	char *jsonreq, *mac, *url, *p;
+	char *jsonreq, *mac, *url, *tok, *p;
 	int i, ret;
 
-	/* early exit will attempt to free these */
+	/* all exit paths attempt to free these */
 	curl_usrptr = NULL;
 	jsonreq = NULL;
 	mac = NULL;
 	url = NULL;
+	tok = NULL;
 
-	/* acquire the environment variables needed */
-	TRACE_CURL("jobid   = %s\n", cxip_env.coll_job_id);
-	TRACE_CURL("stepid  = %s\n", cxip_env.coll_job_step_id);
-	TRACE_CURL("fmurl   = %s\n", cxip_env.coll_fabric_mgr_url);
-	TRACE_CURL("token   = %s\n", cxip_env.coll_mcast_token);
-	TRACE_CURL("maxadrs = %ld\n", cxip_env.hwcoll_addrs_per_job);
-	TRACE_CURL("minnodes= %ld\n", cxip_env.hwcoll_min_nodes);
-	TRACE_CURL("retry   = %ld\n", cxip_env.coll_retry_usec);
-	TRACE_CURL("tmout   = %ld\n", cxip_env.coll_timeout_usec);
+	/* check the environment variables needed */
+	TRACE_JOIN("ENV jobid   = %s\n", cxip_env.coll_job_id);
+	TRACE_JOIN("ENV stepid  = %s\n", cxip_env.coll_job_step_id);
+	TRACE_JOIN("ENV fmurl   = %s\n", cxip_env.coll_fabric_mgr_url);
+	TRACE_JOIN("ENV token   = %s\n", cxip_env.coll_mcast_token);
+	TRACE_JOIN("ENV maxadrs = %ld\n", cxip_env.hwcoll_addrs_per_job);
+	TRACE_JOIN("ENV minnodes= %ld\n", cxip_env.hwcoll_min_nodes);
+	TRACE_JOIN("ENV retry   = %ld\n", cxip_env.coll_retry_usec);
+	TRACE_JOIN("ENV tmout   = %ld\n", cxip_env.coll_timeout_usec);
+	TRACE_JOIN("ENV fmtmout = %ld\n", cxip_env.coll_fm_timeout_msec);
 
 	/* Generic error for any preliminary failures */
-	jstate->prov_errno = CXIP_PROV_ERRNO_CURL;
-	if (!cxip_env.coll_job_id ||
-	    !cxip_env.coll_fabric_mgr_url ||
-	    !cxip_env.coll_mcast_token) {
-		TRACE_JOIN("Check environment variables\n");
+	ret = 0;
+	if (!cxip_env.coll_job_id) {
+		TRACE_JOIN("missing job id\n");
 		ret = -FI_EINVAL;
-		goto quit;
 	}
+	if (!cxip_env.coll_fabric_mgr_url) {
+		TRACE_JOIN("missing FM url\n");
+		ret = -FI_EINVAL;
+	}
+	if (!cxip_env.coll_mcast_token) {
+		TRACE_JOIN("missing FM token\n");
+		ret = -FI_EINVAL;
+	}
+	if (ret < 0)
+		goto quit;
 
-	ret = asprintf(&url, "%s", cxip_env.coll_fabric_mgr_url);
+	if (cxip_trap_search(0, CXIP_TRAP_CURL_FM_URL, NULL, NULL))
+		ret = asprintf(&url, "%s-bad", cxip_env.coll_fabric_mgr_url);
+	else
+		ret = asprintf(&url, "%s", cxip_env.coll_fabric_mgr_url);
 	if (ret < 0) {
-		TRACE_JOIN("Failed to construct CURL address\n");
+		TRACE_JOIN("failed to construct CURL address\n");
 		ret = -FI_ENOMEM;
 		goto quit;
 	}
+	TRACE_JOIN("final fmurl = %s\n", url);
+	if (cxip_trap_search(0, CXIP_TRAP_CURL_TOKEN, NULL, NULL))
+		ret = asprintf(&tok, "%s-bad", cxip_env.coll_mcast_token);
+	else
+		ret = asprintf(&tok, "%s", cxip_env.coll_mcast_token);
+	if (ret < 0) {
+		TRACE_JOIN("failed to construct CURL token\n");
+		ret = -FI_ENOMEM;
+		goto quit;
+	}
+	TRACE_JOIN("final token = %s\n", tok);
 
 	/* five hex digits per mac, two colons, two quotes, comma */
 	p = mac = malloc(10*jstate->av_set_obj->fi_addr_cnt + 1);
 	if (!mac) {
-		TRACE_JOIN("Failed to allocate mac list\n");
+		TRACE_JOIN("failed to allocate mac list\n");
 		ret = -FI_ENOMEM;
 		goto quit;
 	}
@@ -3008,37 +3217,194 @@ static void _start_curl(void *ptr)
 			cxip_env.coll_job_id,
 			cxip_env.coll_job_step_id);
 	if (ret < 0) {
-		TRACE_JOIN("Creating JSON request = %d\n", ret);
+		TRACE_JOIN("failed to create jsonreq= %d\n", ret);
 		ret = -FI_ENOMEM;
 		goto quit;
 	}
 	single_to_double_quote(jsonreq);
-	TRACE_JOIN("JSON = %s\n", jsonreq);
 
-	/* create the mcast address */
+	/* create the user return pointer */
 	curl_usrptr = calloc(1, sizeof(*curl_usrptr));
 	if (!curl_usrptr) {
-		TRACE_JOIN("curl_usrptr calloc() error\n");
+		TRACE_JOIN("failed to calloc() curl_usrptr\n");
 		ret = -FI_ENOMEM;
 		goto quit;
 	}
 	/* dispatch CURL request */
 	curl_usrptr->jstate = jstate;
-	if (cxip_trap_search(jstate->mynode_idx, CXIP_TRAP_CURLSND, &ret))
+	ret = cxip_curl_perform(url, jsonreq, tok, 0, CURL_POST, false,
+				_cxip_create_mcast_cb, curl_usrptr);
+	if (ret < 0) {
+		TRACE_JOIN("CURL create mcast dispatch failed %d\n", ret);
 		goto quit;
-	ret = cxip_curl_perform(url, jsonreq, cxip_env.coll_mcast_token, 0,
-				CURL_POST, false, _cxip_create_mcast_cb,
-				curl_usrptr);
+	}
+	TRACE_JOIN("CURL create mcast dispatch successful\n");
 quit:
+	free(tok);
 	free(url);
 	free(mac);
 	free(jsonreq);
 	if (ret < 0) {
-		TRACE_JOIN("CURL execution failed\n");
+		TRACE_JOIN("CURL create mcast failed\n");
 		free(curl_usrptr);
+		jstate->prov_errno = FI_CXI_ERRNO_JOIN_CURL_FAILED;
 		jstate->finished_mcast = true;
 	}
 }
+
+static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
+{
+	struct cxip_curl_mcast_create_usrptr *curl_usrptr = handle->usrptr;
+	struct cxip_join_state *jstate = curl_usrptr->jstate;
+	struct json_object *json_obj;
+	struct cxip_addr caddr;
+	const char *hwrootstr = "";
+	const char *message = "";
+	const char *cptr;
+	int mcaddr = -1;
+	int hwroot = -1;
+	int curl_errcode = 0;
+	uint32_t octet[6], n;
+	int i, ret;
+
+	/* note: allocates space for strings, free at end */
+	json_obj = json_tokener_parse(handle->response);
+	if (json_obj) {
+		if (cxip_json_string("message", json_obj, &message))
+			message = "";
+		if (cxip_json_string("hwRoot", json_obj, &hwrootstr))
+			hwrootstr = "";
+		if (cxip_json_int("mcastID", json_obj, &mcaddr))
+			mcaddr = -1;
+	} else {
+		TRACE_JOIN("callback: malformed server response: '%s'\n",
+			   handle->response);
+	}
+	TRACE_JOIN("%s status   =%ld\n", __func__, handle->status);
+	TRACE_JOIN("%s response ='%s'\n", __func__, handle->response);
+	TRACE_JOIN("%s message  ='%s'\n", __func__, message);
+	TRACE_JOIN("%s hwrootstr='%s'\n", __func__, hwrootstr);
+	TRACE_JOIN("%s mcaddr   ='%d'\n", __func__, mcaddr);
+
+	/* Process result */
+	switch (handle->status) {
+	case 200:
+	case 201:
+		if (mcaddr < 0 || mcaddr >= 8192) {
+			TRACE_JOIN("callback: mcaddr=%d is invalid\n", mcaddr);
+			jstate->prov_errno = FI_CXI_ERRNO_JOIN_MCAST_INVALID;
+			jstate->finished_mcast = true;
+			break;
+		}
+		memset(octet, 0, sizeof(octet));
+		hwroot = 0;
+		n = 0;
+		if (hwrootstr)
+			n = sscanf(hwrootstr, "%x:%x:%x:%x:%x:%x",
+				&octet[5], &octet[4], &octet[3],
+				&octet[2], &octet[1], &octet[0]);
+		if (n < 3) {
+			TRACE_JOIN("callback: hwroot '%s' too few octets\n",
+				   hwrootstr);
+			jstate->prov_errno = FI_CXI_ERRNO_JOIN_HWROOT_INVALID;
+			jstate->finished_mcast = true;
+			break;
+		}
+		for (i = 0; i < n; i++)
+			hwroot |= octet[i] << (8*i);
+
+		for (i = 0; i < jstate->av_set_obj->fi_addr_cnt; i++) {
+			ret = cxip_av_lookup_addr(
+					jstate->av_set_obj->cxi_av,
+					jstate->av_set_obj->fi_addr_ary[i],
+					&caddr);
+			if (ret < 0)
+				continue;
+			if (hwroot == caddr.nic)
+				break;
+		}
+		if (i >= jstate->av_set_obj->fi_addr_cnt) {
+			TRACE_JOIN("callback: hwroot rank invalid\n");
+			jstate->prov_errno = FI_CXI_ERRNO_JOIN_HWROOT_INVALID;
+			jstate->finished_mcast = true;
+			break;
+		}
+		/* Production MCAST address */
+		jstate->bcast_data.valid = true;
+		jstate->bcast_data.hwroot_idx = i;
+		jstate->bcast_data.mcast_addr = (uint32_t)mcaddr;
+		jstate->is_mcast = true;
+		/* This succeeded */
+		TRACE_JOIN("callback: SUCCESS mcaddr=%d hwroot=%d\n",
+			   jstate->bcast_data.mcast_addr,
+			   jstate->bcast_data.hwroot_idx);
+		jstate->prov_errno = 0;
+		jstate->finished_mcast = true;
+		break;
+	case 400:
+		TRACE_JOIN("callback: create mcast failed: %ld '%s'\n",
+			   handle->status, message ? message : "<empty>");
+		jstate->prov_errno = FI_CXI_ERRNO_JOIN_SERVER_ERR;
+		jstate->finished_mcast = true;
+		break;
+	case 409:
+		TRACE_JOIN("callback: create mcast failed: %ld '%s'\n",
+		           handle->status, message);
+
+		if (_tsexp(&jstate->curlexpires)) {
+			TRACE_JOIN("callback: FM expired\n");
+			jstate->prov_errno = FI_CXI_ERRNO_JOIN_CURL_TIMEOUT;
+			jstate->finished_mcast = true;
+			break;
+		}
+		/* retry */
+		_create_mcast_addr(jstate);
+		break;
+	case 507:
+		/* find and parse error instance number */
+		cptr = message;
+		curl_errcode = 0;
+		while (cptr && *cptr != ':')
+			cptr++;
+		if (*cptr == ':') {
+			cptr -= 2;
+			sscanf(cptr, "%02d:", &curl_errcode);
+			TRACE_JOIN("error code = %d\n", curl_errcode);
+		}
+		switch (curl_errcode) {
+		case 1:
+			TRACE_JOIN("failed: no mcast, exceeded job limit\n");
+			jstate->prov_errno = FI_CXI_ERRNO_JOIN_MCAST_INUSE;
+			break;
+		case 2:
+			TRACE_JOIN("failed: no mcast, no addresses left\n");
+			jstate->prov_errno = FI_CXI_ERRNO_JOIN_MCAST_INUSE;
+			break;
+		case 3:
+			TRACE_JOIN("failed: no hwroot available in group\n");
+			jstate->prov_errno = FI_CXI_ERRNO_JOIN_HWROOT_INUSE;
+			break;
+		default:
+			TRACE_JOIN("failed: errcode=%d\n", curl_errcode);
+			jstate->prov_errno = FI_CXI_ERRNO_JOIN_SERVER_ERR;
+			break;
+		}
+		jstate->finished_mcast = true;
+		break;
+	default:
+		TRACE_JOIN("callback: unhandled CURL error %ld '%s'\n",
+			   handle->status, message ? message : "<empty>");
+		jstate->prov_errno = FI_CXI_ERRNO_JOIN_SERVER_ERR;
+		jstate->finished_mcast = true;
+		TRACE_JOIN("jstate->prov_errno = %d\n", jstate->prov_errno);
+		break;
+	}
+	TRACE_JOIN("jstate->prov_errno = %d\n", jstate->prov_errno);
+	/* free json memory */
+	json_object_put(json_obj);
+	free(curl_usrptr);
+}
+
 
 /****************************************************************************
  * State machine for performing fi_join_collective()
@@ -3115,7 +3481,8 @@ static void _start_getgroup(void *ptr)
 
 	TRACE_JOIN("%s on %d: entry\n", __func__, jstate->mynode_idx);
 
-	if (cxip_trap_search(jstate->mynode_idx, CXIP_TRAP_GETGRP, &zb->error))
+	if (cxip_trap_search(jstate->mynode_idx, CXIP_TRAP_GETGRP, &zb->error,
+			     &jstate->prov_errno))
 		goto quit;
 	/* zb->error == FI_SUCCESS, -FI_EAGAIN, -FI_EINVAL */
 	zb->error = cxip_zbcoll_getgroup(zb);
@@ -3137,6 +3504,10 @@ static void _finish_getgroup(void *ptr)
 /* Create a multicast address and broadcast it to all endpoints.
  * If jstate->create_mcast is set, this will use CURL to get an address.
  * Otherwise, this presumes static initialization, and sets bcast_data.valid.
+ *
+ * Caution: re-entrant routine.
+ * This routine is called repeatedly by rank 0, returning -FI_EAGAIN to drive
+ * the CURL state. See the branch to 'quit' below.
  */
 static void _start_bcast(void *ptr)
 {
@@ -3146,8 +3517,6 @@ static void _start_bcast(void *ptr)
 	if (!suppress_busy_log)
 		TRACE_JOIN("%s: entry\n", __func__);
 
-	/* error will indicate that the multicast request fails */
-	jstate->prov_errno = C_RC_INVALID_DFA_FORMAT;
 	/* rank 0 always does the work here */
 	if (jstate->mynode_idx == 0) {
 		if (!suppress_busy_log)
@@ -3155,9 +3524,16 @@ static void _start_bcast(void *ptr)
 		if (jstate->create_mcast) {
 			/* first call (only) initiates CURL request */
 			if (!jstate->creating_mcast) {
+				struct timespec expires = {
+					cxip_env.coll_fm_timeout_msec/1000,
+					(cxip_env.coll_fm_timeout_msec%1000)*1000000};
+
 				TRACE_JOIN("%s create mcast\n", __func__);
 				jstate->creating_mcast = true;
-				_start_curl(jstate);
+
+				_tsset(&jstate->curlexpires, &expires);
+				_create_mcast_addr(jstate);
+				TRACE_JOIN("%s create mcast initiated\n", __func__);
 			}
 			/* every retry call checks to see if CURL is complete */
 			if (!jstate->finished_mcast) {
@@ -3165,16 +3541,17 @@ static void _start_bcast(void *ptr)
 				suppress_busy_log++;
 				goto quit;
 			}
+			TRACE_JOIN("%s create mcast completed\n", __func__);
 			suppress_busy_log = 0;
 			/* bcast_data.valid is set by curl callback */
 		} else {
 			/* static bcast data is presumed correct */
+			TRACE_JOIN("%s static multicast accepted\n", __func__);
 			jstate->bcast_data.valid = true;
 		}
 	}
-	/* speculative prov_errno for trap */
-	jstate->prov_errno = CXIP_PROV_ERRNO_CURL;
-	if (cxip_trap_search(jstate->mynode_idx, CXIP_TRAP_BCAST, &zb->error))
+	if (cxip_trap_search(jstate->mynode_idx, CXIP_TRAP_BCAST, &zb->error,
+			     &jstate->prov_errno))
 		goto quit;
 	/* rank > 0 endpoints overwritten by rank = 0 data */
 	/* zb->error == FI_SUCCESS, -FI_EAGAIN, -FI_EINVAL */
@@ -3192,10 +3569,13 @@ static void _finish_bcast(void *ptr)
 	bool is_hwroot;
 	int ret;
 
-	TRACE_JOIN("%s: mc addr=%d hw_root=%d valid=%d\n", __func__,
+	TRACE_JOIN("%s: mc addr=%d hw_root=%d valid=%d\n",
+		   __func__,
 		   jstate->bcast_data.mcast_addr,
 		   jstate->bcast_data.hwroot_idx,
 		   jstate->bcast_data.valid);
+	TRACE_JOIN("%s: jstate->prov_errno %d\n", __func__,
+		   jstate->prov_errno);
 	/* all NICs now have same mc_addr data, if invalid, fail */
 	/* jstate->prov_errno is presumed set if not valid */
 	if (!jstate->bcast_data.valid)
@@ -3207,7 +3587,7 @@ static void _finish_bcast(void *ptr)
 	if (jstate->bcast_data.hwroot_idx >=
 	    jstate->av_set_obj->fi_addr_cnt) {
 		TRACE_JOIN("%s: reject invalid hwroot_idx\n", __func__);
-		jstate->prov_errno = CXIP_PROV_ERRNO_HWROOT_INVALID;
+		jstate->prov_errno = FI_CXI_ERRNO_JOIN_HWROOT_INVALID;
 		ret = -FI_EINVAL;
 		goto quit;
 	}
@@ -3216,7 +3596,7 @@ static void _finish_bcast(void *ptr)
 	is_hwroot = (jstate->bcast_data.hwroot_idx == jstate->mynode_idx);
 	if (is_hwroot && jstate->ep_obj->coll.is_hwroot) {
 		TRACE_JOIN("%s: reject join, hwroot in use\n", __func__);
-		jstate->prov_errno = CXIP_PROV_ERRNO_HWROOT_INUSE;
+		jstate->prov_errno = FI_CXI_ERRNO_JOIN_HWROOT_INUSE;
 		ret = -FI_EINVAL;
 		goto quit;
 
@@ -3228,15 +3608,16 @@ static void _finish_bcast(void *ptr)
 			   jstate->bcast_data.mcast_addr)) {
 		TRACE_JOIN("%s: reject join, mcast %d in use\n", __func__,
 			   jstate->bcast_data.mcast_addr);
-		jstate->prov_errno = CXIP_PROV_ERRNO_MCAST_INUSE;
+		jstate->prov_errno = FI_CXI_ERRNO_JOIN_MCAST_INUSE;
 		ret = -FI_EINVAL;
 		goto quit;
 	}
-	/* speculative prov_errno for trap */
-	jstate->prov_errno = CXIP_PROV_ERRNO_PTE;
-	if (cxip_trap_search(jstate->mynode_idx, CXIP_TRAP_INITPTE, &ret))
+	jstate->prov_errno = 0;
+
+	if (cxip_trap_search(jstate->mynode_idx, CXIP_TRAP_INITPTE, &ret,
+			     &jstate->prov_errno))
 		goto quit;
-	TRACE_JOIN("%s: continuing to configure\n", __func__);
+	/* all endpoints initialize with same mcast addr and hwroot */
 	ret = _initialize_mc(jstate);
 quit:
 	/* if initialization fails, invalidate bcast_data */
@@ -3253,11 +3634,13 @@ static void _start_reduce(void *ptr)
 	struct cxip_join_state *jstate = ptr;
 	struct cxip_zbcoll_obj *zb = jstate->zb;
 
-	/* reduce ANDs inverted bcast_data, if any invalid, all become invalid */
-	if (cxip_trap_search(jstate->mynode_idx, CXIP_TRAP_REDUCE, &zb->error))
+	/* Create an error bitmask from the prov_errno */
+	_proverr_to_bits(jstate);
+	if (cxip_trap_search(jstate->mynode_idx, CXIP_TRAP_REDUCE, &zb->error,
+			     &jstate->prov_errno))
 		goto quit;
 	/* zb->error == FI_SUCCESS, -FI_EAGAIN, -FI_EINVAL */
-	zb->error = cxip_zbcoll_reduce(zb, &jstate->bcast_data.uint64);
+	zb->error = cxip_zbcoll_reduce(zb, &jstate->reduce_err.uint64);
 quit:
 	if (zb->error)
 		_append_sched(zb, jstate);
@@ -3293,10 +3676,10 @@ static void _start_cleanup(void *ptr)
 				&jstate->mc_obj->mc_fid.fid : NULL;
 		entry.context = jstate->context;
 
-		if (jstate->prov_errno != CXIP_PROV_ERRNO_OK) {
+		if (jstate->prov_errno >= FI_CXI_ERRNO_JOIN_FIRST) {
 			size = sizeof(struct fi_eq_err_entry);
 			entry.data = FI_JOIN_COMPLETE;
-			entry.err = -FI_EAVAIL;
+			entry.err = -FI_ECONNREFUSED;
 			entry.prov_errno = jstate->prov_errno;
 			flags |= UTIL_FLAG_ERROR;
 		}
@@ -3756,6 +4139,18 @@ void cxip_coll_reset_mc_ctrs(struct fid_mc *mc)
 	ofi_atomic_set32(&mc_obj->tmout_cnt, 0);
 }
 
+void cxip_coll_get_mc_ctrs(struct fid_mc *mc, struct coll_counters *counters)
+{
+	struct cxip_coll_mc *mc_obj = (struct cxip_coll_mc *)mc;
+
+	counters->coll_recv_cnt = ofi_atomic_get32(&mc_obj->coll_pte->recv_cnt);
+	counters->send_cnt = ofi_atomic_get32(&mc_obj->send_cnt);
+	counters->recv_cnt = ofi_atomic_get32(&mc_obj->recv_cnt);
+	counters->pkt_cnt = ofi_atomic_get32(&mc_obj->pkt_cnt);
+	counters->seq_err_cnt = ofi_atomic_get32(&mc_obj->seq_err_cnt);
+	counters->tmout_cnt = ofi_atomic_get32(&mc_obj->tmout_cnt);
+}
+
 /****************************************************************************
  * Manage the static coll structure in the EP. Because of its specialized
  * nature, it made sense to manage it here, rather than in the EP module.
@@ -3788,7 +4183,16 @@ struct fi_ops_collective cxip_collective_no_ops = {
 	.msg = fi_coll_no_msg,
 };
 
-/* Close collectives - call during EP close, ep_obj->lock is held */
+/* Close collectives - called during EP close, ep_obj->lock is held.
+ * This does not issue CURL requests to delete multicast addresses.
+ *
+ * This is called as part of an endpoint shutdown, which is part of an
+ * application shutdown, and the SLURM cleanup handler will destroy all
+ * multicast addresses with an efficient method that deletes all per-job
+ * addresses. The concern is that if there is a large count of multicast
+ * addresses, deleting them individually in this code will create a delay,
+ * and could clog the REST API.
+ */
 void cxip_coll_close(struct cxip_ep_obj *ep_obj)
 {
 	struct cxip_coll_mc *mc_obj;
@@ -3796,7 +4200,7 @@ void cxip_coll_close(struct cxip_ep_obj *ep_obj)
 	while (!dlist_empty(&ep_obj->coll.mc_list)) {
 		dlist_pop_front(&ep_obj->coll.mc_list,
 				struct cxip_coll_mc, mc_obj, entry);
-		_close_mc(mc_obj);
+		_close_mc(mc_obj, false);
 	}
 }
 
@@ -3867,6 +4271,7 @@ int cxip_coll_enable(struct cxip_ep *ep)
 	ep->ep.collective = &cxip_collective_ops;
 	ep_obj->coll.enabled = true;
 
+	cxip_coll_init_metrics();
 	cxip_coll_trace_init();
 	return FI_SUCCESS;
 }

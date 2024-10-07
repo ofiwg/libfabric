@@ -104,7 +104,7 @@ int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
 	dlist_init(&req->recv.children);
 	dlist_init(&req->recv.rxc_entry);
 
-	ofi_atomic_inc32(&rxc->orx_reqs);
+	cxip_rxc_orx_reqs_inc(rxc);
 	*cxip_req = req;
 
 	return FI_SUCCESS;
@@ -123,7 +123,7 @@ void cxip_recv_req_free(struct cxip_req *req)
 	assert(dlist_empty(&req->recv.children));
 	assert(dlist_empty(&req->recv.rxc_entry));
 
-	ofi_atomic_dec32(&rxc->orx_reqs);
+	cxip_rxc_orx_reqs_dec(rxc);
 
 	if (req->recv.recv_md && !req->recv.hybrid_md)
 		cxip_unmap(req->recv.recv_md);
@@ -217,7 +217,12 @@ void cxip_recv_req_report(struct cxip_req *req)
 			    parent->recv.mrecv_bytes == parent->recv.mrecv_unlink_bytes)
 				unlinked = true;
 		} else {
-			if ((parent->recv.ulen - parent->recv.mrecv_bytes) < rxc->min_multi_recv)
+			parent->recv.multirecv_inflight--;
+			assert(parent->recv.multirecv_inflight >= 0);
+
+			if (!parent->recv.multirecv_inflight &&
+			    ((parent->recv.ulen - parent->recv.mrecv_bytes) <
+			    rxc->min_multi_recv))
 				unlinked = true;
 		}
 
@@ -313,6 +318,9 @@ struct cxip_req *cxip_mrecv_req_dup(struct cxip_req *mrecv_req)
 
 	/* Update fields specific to this Send */
 	req->recv.parent = mrecv_req;
+
+	/* Parent keeps track of operations in flight */
+	mrecv_req->recv.multirecv_inflight++;
 
 	/* Start pointer and data_len must be set elsewhere! */
 
@@ -460,7 +468,7 @@ int cxip_recv_cancel(struct cxip_req *req)
 	/* In hybrid mode requests could be on priority list
 	 * or software receive list.
 	 */
-	if (req->recv.software_list) {
+	if (!req->recv.hw_offloaded) {
 		dlist_remove_init(&req->recv.rxc_entry);
 		req->recv.canceled = true;
 		req->recv.unlinked = true;
@@ -526,7 +534,7 @@ int cxip_flush_appends(struct cxip_rxc_hpc *rxc,
 		ret = -FI_EAGAIN;
 		goto err;
 	}
-	ofi_atomic_inc32(&rxc->base.orx_reqs);
+	cxip_rxc_orx_reqs_inc(&rxc->base);
 
 	rxc->base.rx_evtq.ack_batch_size = 1;
 
@@ -553,7 +561,7 @@ int cxip_flush_appends(struct cxip_rxc_hpc *rxc,
 	return FI_SUCCESS;
 
 err_dec_free_cq_req:
-	ofi_atomic_dec32(&rxc->base.orx_reqs);
+	cxip_rxc_orx_reqs_dec(&rxc->base);
 	cxip_evtq_req_free(req);
 err:
 	return ret;
@@ -575,6 +583,7 @@ int cxip_recv_req_dropped(struct cxip_req *req)
 	assert(rxc->base.protocol == FI_PROTO_CXI);
 	assert(dlist_empty(&req->recv.rxc_entry));
 
+	req->recv.hw_offloaded = false;
 	dlist_insert_tail(&req->recv.rxc_entry, &rxc->replay_queue);
 
 	RXC_DBG(rxc, "Receive dropped: %p\n", req);

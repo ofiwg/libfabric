@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
- * Copyright (c) 2020 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2020-2024 Cray Inc. All rights reserved.
  */
 
  /*
@@ -58,6 +58,18 @@ static void cxip_eq_progress(struct cxip_eq *eq)
 	ofi_mutex_unlock(&eq->list_lock);
 }
 
+/* cxip_cq_strerror() - Converts provider specific error information into a
+ * printable string. Not eq-specific.
+ */
+static const char *cxip_eq_strerror(struct fid_eq *eq, int prov_errno,
+				    const void *err_data, char *buf, size_t len)
+{
+	const char *errmsg = cxip_strerror(prov_errno);
+	if (buf && len > 0)
+		strncpy(buf, errmsg, len);
+	return errmsg;
+}
+
 ssize_t cxip_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 		     void *buf, size_t len, uint64_t flags)
 {
@@ -78,7 +90,7 @@ static struct fi_ops_eq cxi_eq_ops = {
 	.readerr = ofi_eq_readerr,
 	.sread = ofi_eq_sread,
 	.write = ofi_eq_write,
-	.strerror = ofi_eq_strerror,
+	.strerror = cxip_eq_strerror,	// customized
 };
 
 static struct fi_ops cxi_eq_fi_ops = {

@@ -14,6 +14,59 @@
 
 #define RMA_WIN_KEY 0x1f
 
+TestSuite(rma_no_init, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(rma_no_init, xfer_disable_optimized_mrs_disable_prov_key_cache)
+{
+	int ret;
+	bool value;
+	uint64_t key;
+	struct mem_region mem_window;
+	size_t len = 16 * 1024;
+	uint8_t *send_buf;
+	struct fi_cq_tagged_entry cqe;
+	struct cxip_mr_key mr_key;
+
+	send_buf = calloc(1, len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	ret = setenv("CXIP_TEST_PROV_KEY", "1", 1);
+	cr_assert_eq(ret, 0);
+
+	cxit_setup_rma();
+
+	value = false;
+	ret = fi_control(&cxit_domain->fid,
+			 FI_OPT_CXI_SET_OPTIMIZED_MRS, &value);
+	cr_assert_eq(ret, FI_SUCCESS, "Unexpected call failure");
+
+	value = false;
+	ret = fi_control(&cxit_domain->fid,
+			 FI_OPT_CXI_SET_PROV_KEY_CACHE, &value);
+	cr_assert_eq(ret, FI_SUCCESS, "Unexpected call failure");
+
+	ret = mr_create(len, FI_REMOTE_READ | FI_REMOTE_WRITE, 0, &key,
+			&mem_window);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	mr_key.raw = key;
+	cr_assert(mr_key.opt == 0);
+
+	ret = fi_write(cxit_ep, send_buf, len, NULL, cxit_ep_fi_addr, 0, key,
+		       NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+	mr_destroy(&mem_window);
+	cxit_teardown_rma();
+	free(send_buf);
+}
+
 TestSuite(rma, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
@@ -580,9 +633,10 @@ void cxit_rma_setup_no_rma_events(void)
 }
 
 /* Test HRP Put */
-Test(rma_opt, hrp,
+Test(rma_opt_hrp, hrp,
      .init = cxit_rma_setup_no_rma_events,
-     .fini = cxit_teardown_rma)
+     .fini = cxit_teardown_rma,
+     .timeout = CXIT_DEFAULT_TIMEOUT)
 {
 	int ret;
 	uint64_t hrp_acks_start;
@@ -1543,6 +1597,143 @@ Test(rma_sel, selective_completion_suppress,
 	free(send_buf);
 }
 
+Test(rma_sel, fi_more_write_stream_optimized,
+     .init = cxit_setup_rma_selective_completion_suppress,
+     .fini = cxit_teardown_rma)
+{
+	int ret;
+	struct mem_region mem_window;
+	uint64_t key_val = 0x0;
+	struct fi_msg_rma msg = {};
+	struct fi_rma_iov rma = {};
+	unsigned int write_count = 0;
+	struct fid_cntr *cntr = cxit_write_cntr;
+
+	mr_create(0, FI_REMOTE_WRITE, 0, &key_val, &mem_window);
+
+	rma.key = key_val;
+	msg.rma_iov = &rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+
+	do {
+		ret = fi_writemsg(cxit_ep, &msg, FI_MORE);
+		cr_assert((ret == FI_SUCCESS) || (ret == -FI_EAGAIN));
+		if (ret == FI_SUCCESS)
+			write_count++;
+	} while (ret != -FI_EAGAIN);
+
+	cr_assert(write_count >= cxit_fi_hints->tx_attr->size);
+
+	do {
+		ret = fi_writemsg(cxit_ep, &msg, FI_MORE);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == FI_SUCCESS);
+	write_count++;
+
+	ret = fi_writemsg(cxit_ep, &msg, 0);
+	cr_assert(ret == FI_SUCCESS);
+	write_count++;
+
+	ret = fi_cntr_wait(cntr, write_count, 10000);
+	cr_assert(ret == FI_SUCCESS, "ret=%d", ret);
+
+	mr_destroy(&mem_window);
+}
+
+Test(rma_sel, fi_more_write_stream_mix_optimzied_unoptimized,
+     .init = cxit_setup_rma_selective_completion_suppress,
+     .fini = cxit_teardown_rma)
+{
+	int ret;
+	struct mem_region opt_mem_window;
+	struct mem_region mem_window;
+	uint64_t opt_key_val = 0x0;
+	uint64_t key_val = 0x1234;
+	struct fi_msg_rma msg = {};
+	struct fi_rma_iov rma = {};
+	unsigned int write_count = 0;
+	struct fid_cntr *cntr = cxit_write_cntr;
+
+	mr_create(0, FI_REMOTE_WRITE, 0, &opt_key_val, &opt_mem_window);
+	mr_create(0, FI_REMOTE_WRITE, 0, &key_val, &mem_window);
+
+	rma.key = opt_key_val;
+	msg.rma_iov = &rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+
+	do {
+		ret = fi_writemsg(cxit_ep, &msg, FI_MORE);
+		cr_assert((ret == FI_SUCCESS) || (ret == -FI_EAGAIN));
+		if (ret == FI_SUCCESS)
+			write_count++;
+	} while (ret != -FI_EAGAIN);
+
+	cr_assert(write_count >= cxit_fi_hints->tx_attr->size);
+
+	rma.key = key_val;
+	do {
+		ret = fi_writemsg(cxit_ep, &msg, FI_MORE);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == FI_SUCCESS);
+	write_count++;
+
+	ret = fi_writemsg(cxit_ep, &msg, 0);
+	cr_assert(ret == FI_SUCCESS, "ret=%d", ret);
+	write_count++;
+
+	ret = fi_cntr_wait(cntr, write_count, 10000);
+	cr_assert(ret == FI_SUCCESS, "ret=%d", ret);
+
+	mr_destroy(&mem_window);
+	mr_destroy(&opt_mem_window);
+}
+
+Test(rma_sel, fi_more_read_stream,
+     .init = cxit_setup_rma_selective_completion_suppress,
+     .fini = cxit_teardown_rma)
+{
+	int ret;
+	struct mem_region mem_window;
+	uint64_t key_val = 0x0;
+	struct fi_msg_rma msg = {};
+	struct fi_rma_iov rma = {};
+	unsigned int count = 0;
+	struct fid_cntr *cntr = cxit_read_cntr;
+
+	mr_create(0, FI_REMOTE_READ, 0, &key_val, &mem_window);
+
+	rma.key = key_val;
+	msg.rma_iov = &rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+
+	do {
+		ret = fi_readmsg(cxit_ep, &msg, FI_MORE);
+		cr_assert((ret == FI_SUCCESS) || (ret == -FI_EAGAIN));
+		if (ret == FI_SUCCESS)
+			count++;
+	} while (ret != -FI_EAGAIN);
+
+	cr_assert(count >= cxit_fi_hints->tx_attr->size);
+
+	do {
+		ret = fi_readmsg(cxit_ep, &msg, FI_MORE);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == FI_SUCCESS);
+	count++;
+
+	ret = fi_readmsg(cxit_ep, &msg, 0);
+	cr_assert(ret == FI_SUCCESS);
+	count++;
+
+	ret = fi_cntr_wait(cntr, count, 10000);
+	cr_assert(ret == FI_SUCCESS, "ret=%d", ret);
+
+	mr_destroy(&mem_window);
+}
+
 /* Test remote counter events with RMA */
 Test(rma, rem_cntr)
 {
@@ -1794,6 +1985,82 @@ Test(rma, invalid_read_target_std_mr_key)
 Test(rma, invalid_read_target_opt_mr_key)
 {
 	rma_invalid_read_target_mr_key(0x10);
+}
+
+/* Tests to verify FI_RM_ENABLED */
+
+static void mr_overrun(bool write)
+{
+     int ret;
+     uint8_t *local;
+     size_t good_len = 4096;
+     uint64_t key_val = 0xa;
+     struct fi_cq_err_entry err;
+     struct fi_cq_tagged_entry cqe;
+     struct mem_region remote;
+
+     /* Create over-sized local buffer */
+     local = calloc(1, good_len * 2);
+     cr_assert_not_null(local, "local alloc failed");
+
+     mr_create(good_len, write ? FI_REMOTE_WRITE : FI_REMOTE_READ, 0xc0,
+                    &key_val, &remote);
+
+     /* Perform good length data transfer first */
+     if(write) {
+          ret = fi_write(cxit_ep, local, good_len, NULL, cxit_ep_fi_addr, 0,
+                    key_val, NULL);
+          cr_assert_eq(ret, FI_SUCCESS, "fi_write() failed (%d)", ret);
+     }
+     else {
+          ret = fi_read(cxit_ep, local, good_len, NULL, cxit_ep_fi_addr, 0,
+                    key_val, NULL);
+          cr_assert_eq(ret, FI_SUCCESS, "fi_read() failed (%d)", ret);
+     }
+
+     /* Wait for async event indicating data has been sent */
+     ret = cxit_await_completion(cxit_tx_cq, &cqe);
+     cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
+
+     validate_tx_event(&cqe, FI_RMA | (write ? FI_WRITE : FI_READ), NULL);
+
+     /* Validate read data */
+     for (int i = 0; i < good_len; i++)
+          cr_expect_eq(local[i], remote.mem[i],
+                    "data mismatch, element: (%d) %02x != %02x\n", i,
+                    local[i], remote.mem[i]);
+
+     /* Perform overrun data transfer */
+     if (write) {
+          ret = fi_write(cxit_ep, local, good_len*2, NULL, cxit_ep_fi_addr,
+                    0, key_val, NULL);
+          cr_assert_eq(ret, FI_SUCCESS, "fi_write() failed (%d)", ret);
+     }
+     else {
+          ret = fi_read(cxit_ep, local, good_len*2, NULL, cxit_ep_fi_addr,
+                    0, key_val, NULL);
+          cr_assert_eq(ret, FI_SUCCESS, "fi_read() failed (%d)", ret);
+     }
+
+     /* Wait for async event indicating data has been sent */
+     ret = cxit_await_completion(cxit_tx_cq, &cqe);
+     cr_assert_eq(ret, -FI_EAVAIL, "Unexpected RMA success %d", ret);
+     ret = fi_cq_readerr(cxit_tx_cq, &err, 1);
+     cr_assert(ret == 1);
+     cr_assert_eq(err.err, FI_EIO, "Error return %d", err.err);
+
+     mr_destroy(&remote);
+     free(local);
+}
+
+Test(rma, read_mr_overrun)
+{
+     mr_overrun(false);
+}
+
+Test(rma, write_mr_overrun)
+{
+     mr_overrun(true);
 }
 
 static void rma_hybrid_mr_desc_test_runner(bool write, bool cq_events)

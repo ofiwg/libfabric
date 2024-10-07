@@ -638,7 +638,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		}
 	}
 
-	ret = cxip_ep_ctrl_eq_alloc(ep_obj, 4 * s_page_size,
+	ret = cxip_ep_ctrl_eq_alloc(ep_obj, 4 * sc_page_size,
 				    &ep_obj->ctrl.tx_evtq_buf,
 				    &ep_obj->ctrl.tx_evtq_buf_md,
 				    &ep_obj->ctrl.tx_evtq);

@@ -25,6 +25,29 @@ enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass)
 	}
 }
 
+static int cxip_cp_find(struct cxip_lni *lni, uint16_t vni,
+		       enum cxi_traffic_class tc,
+		       enum cxi_traffic_class_type tc_type,
+		       struct cxi_cp **cp)
+{
+	struct cxip_remap_cp *sw_cp;
+
+	dlist_foreach_container(&lni->remap_cps, struct cxip_remap_cp, sw_cp,
+				remap_entry) {
+		if (sw_cp->remap_cp.vni == vni && sw_cp->remap_cp.tc == tc &&
+		    sw_cp->remap_cp.tc_type == tc_type) {
+			CXIP_DBG("Reusing SW CP: %u VNI: %u TC: %s TYPE: %s\n",
+				 sw_cp->remap_cp.lcid, sw_cp->remap_cp.vni,
+				 cxi_tc_to_str(sw_cp->remap_cp.tc),
+				 cxi_tc_type_to_str(sw_cp->remap_cp.tc_type));
+			*cp = &sw_cp->remap_cp;
+			return FI_SUCCESS;
+		}
+	}
+
+	return -FI_ENOENT;
+}
+
 static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
 		       enum cxi_traffic_class tc,
 		       enum cxi_traffic_class_type tc_type,
@@ -35,21 +58,22 @@ static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
 	struct cxip_remap_cp *sw_cp;
 	static const enum cxi_traffic_class remap_tc = CXI_TC_BEST_EFFORT;
 
-	ofi_spin_lock(&lni->lock);
-
 	/* Always prefer SW remapped CPs over allocating HW CP. */
-	dlist_foreach_container(&lni->remap_cps, struct cxip_remap_cp, sw_cp,
-				remap_entry) {
-		if (sw_cp->remap_cp.vni == vni && sw_cp->remap_cp.tc == tc &&
-		    sw_cp->remap_cp.tc_type == tc_type) {
-			CXIP_DBG("Reusing SW CP: %u VNI: %u TC: %s TYPE: %s\n",
-				 sw_cp->remap_cp.lcid, sw_cp->remap_cp.vni,
-				 cxi_tc_to_str(sw_cp->remap_cp.tc),
-				 cxi_tc_type_to_str(sw_cp->remap_cp.tc_type));
-			*cp = &sw_cp->remap_cp;
-			goto success_unlock;
-		}
-	}
+	pthread_rwlock_rdlock(&lni->cp_lock);
+	ret = cxip_cp_find(lni, vni, tc, tc_type, cp);
+	pthread_rwlock_unlock(&lni->cp_lock);
+
+	if (ret == FI_SUCCESS)
+		return FI_SUCCESS;
+
+	/* Need to repeat search with write lock held to ensure no CPs have
+	 * been added in threaded env.
+	 */
+	pthread_rwlock_wrlock(&lni->cp_lock);
+	ret = cxip_cp_find(lni, vni, tc, tc_type, cp);
+
+	if (ret == FI_SUCCESS)
+		goto success_unlock;
 
 	/* Allocate a new SW remapped CP entry and attempt to allocate the
 	 * user requested HW CP.
@@ -113,14 +137,14 @@ found_hw_cp:
 	*cp = &sw_cp->remap_cp;
 
 success_unlock:
-	ofi_spin_unlock(&lni->lock);
+	pthread_rwlock_unlock(&lni->cp_lock);
 
 	return FI_SUCCESS;
 
 err_free_sw_cp:
 	free(sw_cp);
 err_unlock:
-	ofi_spin_unlock(&lni->lock);
+	pthread_rwlock_unlock(&lni->cp_lock);
 
 	return ret;
 }
@@ -144,6 +168,7 @@ int cxip_cmdq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
 	ret = cxi_cq_emit_cq_lcid(cmdq->dev_cmdq, cp->lcid);
 	if (ret) {
 		CXIP_DBG("Failed to update CMDQ(%p) CP: %d\n", cmdq, ret);
+		cxi_cq_ring(cmdq->dev_cmdq);
 		ret = -FI_EAGAIN;
 	} else {
 		ret = FI_SUCCESS;
@@ -241,6 +266,7 @@ int cxip_cmdq_emit_c_state(struct cxip_cmdq *cmdq,
 		ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, c_state);
 		if (ret) {
 			CXIP_DBG("Failed to issue C_STATE command: %d\n", ret);
+			cxi_cq_ring(cmdq->dev_cmdq);
 			return -FI_EAGAIN;
 		}
 
@@ -262,7 +288,8 @@ int cxip_cmdq_emit_idc_put(struct cxip_cmdq *cmdq,
 		if (ret) {
 			CXIP_WARN("Failed to issue fence command: %d:%s\n", ret,
 				  fi_strerror(-ret));
-			return -FI_EAGAIN;
+			ret = -FI_EAGAIN;
+			goto err;
 		}
 	}
 
@@ -270,17 +297,26 @@ int cxip_cmdq_emit_idc_put(struct cxip_cmdq *cmdq,
 	if (ret) {
 		CXIP_WARN("Failed to emit c_state command: %d:%s\n", ret,
 			  fi_strerror(-ret));
-		return ret;
+		goto err;
 	}
 
 	ret = cxi_cq_emit_idc_put(cmdq->dev_cmdq, put, buf, len);
 	if (ret) {
 		CXIP_WARN("Failed to emit idc_put command: %d:%s\n", ret,
 			  fi_strerror(-ret));
-		return -FI_EAGAIN;
+		ret = -FI_EAGAIN;
+		goto err;
 	}
 
 	return FI_SUCCESS;
+
+err:
+	/* On error (e.g. command queue full), always ring the CQ to prevent
+	 * FI_MORE deadlock.
+	 */
+	cxi_cq_ring(cmdq->dev_cmdq);
+
+	return ret;
 }
 
 int cxip_cmdq_emit_dma(struct cxip_cmdq *cmdq, struct c_full_dma_cmd *dma,
@@ -293,7 +329,8 @@ int cxip_cmdq_emit_dma(struct cxip_cmdq *cmdq, struct c_full_dma_cmd *dma,
 		if (ret) {
 			CXIP_WARN("Failed to issue fence command: %d:%s\n", ret,
 				  fi_strerror(-ret));
-			return -FI_EAGAIN;
+			ret = -FI_EAGAIN;
+			goto err;
 		}
 	}
 
@@ -301,10 +338,19 @@ int cxip_cmdq_emit_dma(struct cxip_cmdq *cmdq, struct c_full_dma_cmd *dma,
 	if (ret) {
 		CXIP_WARN("Failed to emit dma command: %d:%s\n", ret,
 			  fi_strerror(-ret));
-		return -FI_EAGAIN;
+		ret = -FI_EAGAIN;
+		goto err;
 	}
 
 	return FI_SUCCESS;
+
+err:
+	/* On error (e.g. command queue full), always ring the CQ to prevent
+	 * FI_MORE deadlock.
+	 */
+	cxi_cq_ring(cmdq->dev_cmdq);
+
+	return ret;
 }
 
 int cxip_cmdq_emic_idc_amo(struct cxip_cmdq *cmdq,
@@ -333,7 +379,8 @@ int cxip_cmdq_emic_idc_amo(struct cxip_cmdq *cmdq,
 		if (ret) {
 			CXIP_WARN("Failed to issue fence command: %d:%s\n", ret,
 				  fi_strerror(-ret));
-			return -FI_EAGAIN;
+			ret = -FI_EAGAIN;
+			goto err;
 		}
 	}
 
@@ -341,7 +388,7 @@ int cxip_cmdq_emic_idc_amo(struct cxip_cmdq *cmdq,
 	if (ret) {
 		CXIP_WARN("Failed to emit c_state command: %d:%s\n", ret,
 			  fi_strerror(-ret));
-		return ret;
+		goto err;
 	}
 
 	/* Fetching AMO with flush requires two commands. Ensure there is enough
@@ -349,13 +396,15 @@ int cxip_cmdq_emic_idc_amo(struct cxip_cmdq *cmdq,
 	 */
 	if (fetching_flush && __cxi_cq_free_slots(cmdq->dev_cmdq) < 16) {
 		CXIP_WARN("No space for FAMO with FI_DELIVERY_COMPLETE\n");
-		return -FI_EAGAIN;
+		ret = -FI_EAGAIN;
+		goto err;
 	}
 
 	ret = cxi_cq_emit_idc_amo(cmdq->dev_cmdq, amo, fetching);
 	if (ret) {
 		CXIP_WARN("Failed to emit IDC amo\n");
-		return -FI_EAGAIN;
+		ret = -FI_EAGAIN;
+		goto err;
 	}
 
 	if (fetching_flush) {
@@ -367,6 +416,14 @@ int cxip_cmdq_emic_idc_amo(struct cxip_cmdq *cmdq,
 	}
 
 	return FI_SUCCESS;
+
+err:
+	/* On error (e.g. command queue full), always ring the CQ to prevent
+	 * FI_MORE deadlock.
+	 */
+	cxi_cq_ring(cmdq->dev_cmdq);
+
+	return ret;
 }
 
 int cxip_cmdq_emit_dma_amo(struct cxip_cmdq *cmdq, struct c_dma_amo_cmd *amo,
@@ -394,7 +451,8 @@ int cxip_cmdq_emit_dma_amo(struct cxip_cmdq *cmdq, struct c_dma_amo_cmd *amo,
 		if (ret) {
 			CXIP_WARN("Failed to issue fence command: %d:%s\n", ret,
 				  fi_strerror(-ret));
-			return -FI_EAGAIN;
+			ret = -FI_EAGAIN;
+			goto err;
 		}
 	}
 
@@ -403,13 +461,15 @@ int cxip_cmdq_emit_dma_amo(struct cxip_cmdq *cmdq, struct c_dma_amo_cmd *amo,
 	 */
 	if (fetching_flush && __cxi_cq_free_slots(cmdq->dev_cmdq) < 16) {
 		CXIP_WARN("No space for FAMO with FI_DELIVERY_COMPLETE\n");
-		return -FI_EAGAIN;
+		ret = -FI_EAGAIN;
+		goto err;
 	}
 
 	ret = cxi_cq_emit_dma_amo(cmdq->dev_cmdq, amo, fetching);
 	if (ret) {
 		CXIP_WARN("Failed to emit DMA amo\n");
-		return -FI_EAGAIN;
+		ret = -FI_EAGAIN;
+		goto err;
 	}
 
 	if (fetching_flush) {
@@ -421,6 +481,14 @@ int cxip_cmdq_emit_dma_amo(struct cxip_cmdq *cmdq, struct c_dma_amo_cmd *amo,
 	}
 
 	return FI_SUCCESS;
+
+err:
+	/* On error (e.g. command queue full), always ring the CQ to prevent
+	 * FI_MORE deadlock.
+	 */
+	cxi_cq_ring(cmdq->dev_cmdq);
+
+	return ret;
 }
 
 int cxip_cmdq_emit_idc_msg(struct cxip_cmdq *cmdq,
@@ -435,7 +503,8 @@ int cxip_cmdq_emit_idc_msg(struct cxip_cmdq *cmdq,
 		if (ret) {
 			CXIP_WARN("Failed to issue fence command: %d:%s\n", ret,
 				  fi_strerror(-ret));
-			return -FI_EAGAIN;
+			ret = -FI_EAGAIN;
+			goto err;
 		}
 	}
 
@@ -443,15 +512,24 @@ int cxip_cmdq_emit_idc_msg(struct cxip_cmdq *cmdq,
 	if (ret) {
 		CXIP_WARN("Failed to emit c_state command: %d:%s\n", ret,
 			  fi_strerror(-ret));
-		return ret;
+		goto err;
 	}
 
 	ret = cxi_cq_emit_idc_msg(cmdq->dev_cmdq, msg, buf, len);
 	if (ret) {
 		CXIP_WARN("Failed to emit idc_msg command: %d:%s\n", ret,
 			  fi_strerror(-ret));
-		return -FI_EAGAIN;
+		ret = -FI_EAGAIN;
+		goto err;
 	}
 
 	return FI_SUCCESS;
+
+err:
+	/* On error (e.g. command queue full), always ring the CQ to prevent
+	 * FI_MORE deadlock.
+	 */
+	cxi_cq_ring(cmdq->dev_cmdq);
+
+	return ret;
 }

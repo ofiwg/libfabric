@@ -339,7 +339,7 @@ static int cxip_rxc_rnr_msg_init(struct cxip_rxc *rxc_base)
 		dlist_init(&req->recv.rxc_entry);
 
 		/* Selective does not count toward outstanding RX operations */
-		ofi_atomic_dec32(&rxc->base.orx_reqs);
+		cxip_rxc_orx_reqs_dec(&rxc->base);
 
 		ret = cxip_recv_req_alloc(&rxc->base, NULL, 0, NULL, &req,
 					  cxip_rnr_recv_selective_comp_cb);
@@ -359,7 +359,7 @@ static int cxip_rxc_rnr_msg_init(struct cxip_rxc *rxc_base)
 		dlist_init(&req->recv.rxc_entry);
 
 		/* Selective does not count toward outstanding RX operations */
-		ofi_atomic_dec32(&rxc->base.orx_reqs);
+		cxip_rxc_orx_reqs_dec(&rxc->base);
 		rxc->hybrid_mr_desc = true;
 	}
 
@@ -400,12 +400,12 @@ free_pte:
 	cxip_pte_free(rxc->base.rx_pte);
 free_req_tag:
 	if (rxc->req_selective_comp_tag) {
-		ofi_atomic_inc32(&rxc->base.orx_reqs);
+		cxip_rxc_orx_reqs_inc(&rxc->base);
 		cxip_recv_req_free(rxc->req_selective_comp_tag);
 	}
 free_req_msg:
 	if (rxc->req_selective_comp_msg) {
-		ofi_atomic_inc32(&rxc->base.orx_reqs);
+		cxip_rxc_orx_reqs_inc(&rxc->base);
 		cxip_recv_req_free(rxc->req_selective_comp_msg);
 	}
 
@@ -423,11 +423,11 @@ static int cxip_rxc_rnr_msg_fini(struct cxip_rxc *rxc_base)
 	 * back before freeing.
 	 */
 	if (rxc->req_selective_comp_msg) {
-		ofi_atomic_inc32(&rxc->base.orx_reqs);
+		cxip_rxc_orx_reqs_inc(&rxc->base);
 		cxip_recv_req_free(rxc->req_selective_comp_msg);
 	}
 	if (rxc->req_selective_comp_tag) {
-		ofi_atomic_inc32(&rxc->base.orx_reqs);
+		cxip_rxc_orx_reqs_inc(&rxc->base);
 		cxip_recv_req_free(rxc->req_selective_comp_tag);
 	}
 
@@ -827,7 +827,7 @@ static int cxip_process_rnr_time_wait(struct cxip_txc_rnr *txc)
 					ofi_atomic_dec32(&txc->time_wait_reqs);
 					cxip_send_buf_fini(req);
 					cxip_report_send_completion(req, true);
-					ofi_atomic_dec32(&txc->base.otx_reqs);
+					cxip_txc_otx_reqs_dec(&txc->base);
 					cxip_evtq_req_free(req);
 
 					continue;
@@ -836,10 +836,10 @@ static int cxip_process_rnr_time_wait(struct cxip_txc_rnr *txc)
 				/* Must TX return credit, will take it back if
 				 * we could not send.
 				 */
-				ofi_atomic_dec32(&txc->base.otx_reqs);
+				cxip_txc_otx_reqs_dec(&txc->base);
 				ret = cxip_rnr_msg_send(req);
 				if (ret != FI_SUCCESS) {
-					ofi_atomic_inc32(&txc->base.otx_reqs);
+					cxip_txc_otx_reqs_inc(&txc->base);
 					goto reset_min_time_wait;
 				}
 
@@ -1031,7 +1031,7 @@ static int cxip_rnr_send_cb(struct cxip_req *req, const union c_event *event)
 			 req->send.caddr.nic, req->send.caddr.pid,
 			 req->send.tagged ? '*' : '-',
 			 req->send.tag, req->send.retries,
-			 ofi_atomic_get32(&txc->base.otx_reqs));
+			 cxip_txc_otx_reqs_get(&txc->base));
 	}
 
 	cxip_rnr_send_req_dequeue(req);
@@ -1054,7 +1054,7 @@ static int cxip_rnr_send_cb(struct cxip_req *req, const union c_event *event)
 
 	cxip_report_send_completion(req, req->send.canceled);
 
-	ofi_atomic_dec32(&txc->base.otx_reqs);
+	cxip_txc_otx_reqs_dec(&txc->base);
 	cxip_evtq_req_free(req);
 
 	return FI_SUCCESS;
@@ -1147,7 +1147,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	}
 
 	/* Restrict outstanding success event requests to queue size */
-	if (ofi_atomic_get32(&txc->otx_reqs) > txc->attr.size) {
+	if (cxip_txc_otx_reqs_get(txc) > txc->attr.size) {
 		ret = -FI_EAGAIN;
 		goto free_req;
 	}

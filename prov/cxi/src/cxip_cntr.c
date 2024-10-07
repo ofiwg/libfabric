@@ -56,20 +56,33 @@ static int cxip_cntr_get_ct_error(struct cxip_cntr *cntr, uint64_t *error)
 	struct c_ct_writeback wb_copy;
 	int ret;
 
-	/* Only can reference the ct_failure field directly if dealing with
-	 * system memory. Device memory requires a memcpy of the contents into
-	 * system memory.
-	 */
 	if (cntr->wb_iface == FI_HMEM_SYSTEM) {
-		*error = cntr->wb->ct_failure;
-		return FI_SUCCESS;
+		do {
+			if (cntr->wb->ct_writeback ||
+			    cntr->attr.flags & FI_CXI_CNTR_CACHED) {
+				*error = cntr->wb->ct_failure;
+				return -FI_SUCCESS;
+			}
+			sched_yield();
+		} while (true);
 	}
 
-	ret = cxip_cntr_copy_ct_writeback(cntr, &wb_copy);
-	if (ret)
-		return ret;
+	/* Device memory requires a memcpy of the contents into
+	 * system memory.
+	 */
+	do {
+		ret = cxip_cntr_copy_ct_writeback(cntr, &wb_copy);
+		if (ret)
+			return ret;
 
-	*error = wb_copy.ct_failure;
+		if (wb_copy.ct_writeback ||
+		    cntr->attr.flags & FI_CXI_CNTR_CACHED) {
+			*error = wb_copy.ct_failure;
+			return -FI_SUCCESS;
+		}
+		sched_yield();
+	} while (true);
+
 	return FI_SUCCESS;
 }
 
@@ -78,20 +91,33 @@ static int cxip_cntr_get_ct_success(struct cxip_cntr *cntr, uint64_t *success)
 	struct c_ct_writeback wb_copy;
 	int ret;
 
-	/* Only can reference the ct_success field directly if dealing with
-	 * system memory. Device memory requires a memcpy of the contents into
-	 * system memory.
-	 */
 	if (cntr->wb_iface == FI_HMEM_SYSTEM) {
-		*success = cntr->wb->ct_success;
-		return FI_SUCCESS;
+		do {
+			if (cntr->wb->ct_writeback ||
+			    cntr->attr.flags & FI_CXI_CNTR_CACHED) {
+				*success = cntr->wb->ct_success;
+				return FI_SUCCESS;
+			}
+			sched_yield();
+		} while (true);
 	}
 
-	ret = cxip_cntr_copy_ct_writeback(cntr, &wb_copy);
-	if (ret)
-		return ret;
+	 /* Device memory requires a memcpy of the contents into
+	  * system memory.
+	  */
+	do {
+		ret = cxip_cntr_copy_ct_writeback(cntr, &wb_copy);
+		if (ret)
+			return ret;
 
-	*success = wb_copy.ct_success;
+		if (wb_copy.ct_writeback ||
+		    cntr->attr.flags & FI_CXI_CNTR_CACHED) {
+			*success = wb_copy.ct_success;
+			return FI_SUCCESS;
+		}
+		sched_yield();
+	} while (true);
+
 	return FI_SUCCESS;
 }
 
@@ -306,6 +332,7 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 	return FI_SUCCESS;
 }
 
+/* Caller must hold cntr->lock */
 static int cxip_cntr_issue_ct_get(struct cxip_cntr *cntr, bool *issue_ct_get)
 {
 	int ret;
@@ -313,8 +340,6 @@ static int cxip_cntr_issue_ct_get(struct cxip_cntr *cntr, bool *issue_ct_get)
 	/* The calling thread which changes CT writeback bit from 1 to 0 must
 	 * issue a CT get command.
 	 */
-	ofi_mutex_lock(&cntr->lock);
-
 	ret = cxip_cntr_get_ct_writeback(cntr);
 	if (ret < 0) {
 		CXIP_WARN("Failed to read counter writeback: rc=%d\n", ret);
@@ -334,8 +359,6 @@ static int cxip_cntr_issue_ct_get(struct cxip_cntr *cntr, bool *issue_ct_get)
 		*issue_ct_get = false;
 	}
 
-	ofi_mutex_unlock(&cntr->lock);
-
 	return FI_SUCCESS;
 
 err_unlock:
@@ -351,6 +374,8 @@ err_unlock:
  * Schedule hardware to write the value of a counter to memory. Avoid
  * scheduling multiple write-backs at once. The counter value will appear in
  * memory a small amount of time later.
+ *
+ * Caller must hold cntr->lock
  */
 static int cxip_cntr_get(struct cxip_cntr *cxi_cntr, bool force)
 {
@@ -367,7 +392,7 @@ static int cxip_cntr_get(struct cxip_cntr *cxi_cntr, bool force)
 			return ret;
 		}
 
-		if (!issue_ct_get)
+		if (!issue_ct_get && cxi_cntr->attr.flags & FI_CXI_CNTR_CACHED)
 			return FI_SUCCESS;
 	}
 
@@ -422,10 +447,13 @@ static uint64_t cxip_cntr_read(struct fid_cntr *fid_cntr)
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
 
 	cxip_cntr_progress(cxi_cntr);
+
+	ofi_mutex_lock(&cxi_cntr->lock);
 	cxip_cntr_get(cxi_cntr, false);
 
-	/* TODO: Fall back to reading register on error? */
 	ret = cxip_cntr_get_ct_success(cxi_cntr, &success);
+	ofi_mutex_unlock(&cxi_cntr->lock);
+
 	if (ret != FI_SUCCESS)
 		CXIP_WARN("Failed to read counter success: rc=%d\n", ret);
 
@@ -444,10 +472,13 @@ static uint64_t cxip_cntr_readerr(struct fid_cntr *fid_cntr)
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
 
 	cxip_cntr_progress(cxi_cntr);
+
+	ofi_mutex_lock(&cxi_cntr->lock);
 	cxip_cntr_get(cxi_cntr, false);
 
-	/* TODO: Fall back to reading register on error? */
 	ret = cxip_cntr_get_ct_error(cxi_cntr, &error);
+	ofi_mutex_unlock(&cxi_cntr->lock);
+
 	if (ret != FI_SUCCESS)
 		CXIP_WARN("Failed to read counter error: rc=%d\n", ret);
 
@@ -746,9 +777,11 @@ int cxip_set_wb_buffer(struct fid *fid, void *buf, size_t len)
 	}
 
 	/* Force a counter writeback into the user's provider buffer. */
+	ofi_mutex_lock(&cntr->lock);
 	do {
 		ret = cxip_cntr_get(cntr, true);
 	} while (ret == -FI_EAGAIN);
+	ofi_mutex_unlock(&cntr->lock);
 
 	return ret;
 }
@@ -825,7 +858,7 @@ static int cxip_cntr_verify_attr(struct fi_cntr_attr *attr)
 		return -FI_ENOSYS;
 	}
 
-	if (attr->flags)
+	if (attr->flags & ~FI_CXI_CNTR_CACHED)
 		return -FI_ENOSYS;
 
 	return FI_SUCCESS;

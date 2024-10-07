@@ -4,7 +4,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
- * Copyright (c) 2018-2023 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018-2024 Hewlett Packard Enterprise Development LP
  */
 
 #ifndef _CXIP_PROV_H_
@@ -123,6 +123,9 @@
 #define CXIP_UX_BUFFER_SIZE		(CXIP_OFLOW_BUF_MIN_POSTED * \
 					 CXIP_OFLOW_BUF_SIZE)
 
+#define CXIP_MR_CACHE_EVENTS_DISABLE_POLL_NSECS 100000U
+#define CXIP_MR_CACHE_EVENTS_DISABLE_LE_POLL_NSECS 1000000000U
+
 /* When device memory is safe to access via load/store then the
  * CPU will be used to move data below this threshold.
  */
@@ -131,8 +134,8 @@
 #define CXIP_EP_PRI_CAPS \
 	(FI_RMA | FI_ATOMICS | FI_TAGGED | FI_RECV | FI_SEND | \
 	 FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
-	 FI_DIRECTED_RECV | FI_MSG | FI_NAMED_RX_CTX | \
-	 FI_COLLECTIVE | FI_HMEM)
+	 FI_DIRECTED_RECV | FI_MSG | FI_NAMED_RX_CTX | FI_HMEM | \
+	 FI_COLLECTIVE)
 #define CXIP_EP_SEC_CAPS \
 	(FI_SOURCE | FI_SOURCE_ERR | FI_LOCAL_COMM | \
 	 FI_REMOTE_COMM | FI_RMA_EVENT | FI_MULTI_RECV | FI_FENCE | FI_TRIGGER)
@@ -148,8 +151,7 @@
 					 FI_ORDER_ATOMIC_RAR)
 
 #define CXIP_EP_CQ_FLAGS \
-	(FI_SEND | FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION | \
-	 FI_COLLECTIVE)
+	(FI_SEND | FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION)
 #define CXIP_EP_CNTR_FLAGS \
 	(FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | \
 	 FI_REMOTE_WRITE)
@@ -177,7 +179,7 @@
 #define CXIP_MINOR_VERSION		1
 #define CXIP_PROV_VERSION		FI_VERSION(CXIP_MAJOR_VERSION, \
 						   CXIP_MINOR_VERSION)
-#define CXIP_FI_VERSION			FI_VERSION(1, 21)
+#define CXIP_FI_VERSION			FI_VERSION(1, 22)
 #define CXIP_WIRE_PROTO_VERSION		1
 
 #define	CXIP_COLL_MAX_CONCUR		8
@@ -185,19 +187,24 @@
 #define	CXIP_COLL_MIN_RX_SIZE		4096
 #define	CXIP_COLL_MIN_MULTI_RECV	64
 #define	CXIP_COLL_MAX_DATA_SIZE		32
-#define	CXIP_COLL_MAX_SEQNO		(1 << 10)
+#define	CXIP_COLL_MAX_SEQNO		((1 << 10) - 1)
+#define	CXIP_COLL_MOD_SEQNO		(CXIP_COLL_MAX_SEQNO - 1)
+
 // TODO adjust based on performance testing
-#define	CXIP_COLL_MIN_RETRY_USEC	1
-#define	CXIP_COLL_MAX_RETRY_USEC	32000
-#define	CXIP_COLL_MIN_TIMEOUT_USEC	1
-#define	CXIP_COLL_MAX_TIMEOUT_USEC	32000
+#define CXIP_COLL_MIN_RETRY_USEC	1
+#define CXIP_COLL_MAX_RETRY_USEC	32000
+#define CXIP_COLL_MIN_TIMEOUT_USEC	1
+#define CXIP_COLL_MAX_TIMEOUT_USEC	32000
+#define CXIP_COLL_MIN_FM_TIMEOUT_MSEC	1
+#define CXIP_COLL_DFL_FM_TIMEOUT_MSEC	100
+#define CXIP_COLL_MAX_FM_TIMEOUT_MSEC	1000000
 
 #define CXIP_REQ_BUF_HEADER_MAX_SIZE (sizeof(struct c_port_fab_hdr) + \
 	sizeof(struct c_port_unrestricted_hdr))
 #define CXIP_REQ_BUF_HEADER_MIN_SIZE (sizeof(struct c_port_fab_hdr) + \
 	sizeof(struct c_port_small_msg_hdr))
 
-extern int s_page_size;
+extern int sc_page_size;
 extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
 extern struct util_prov cxip_util_prov;
@@ -301,6 +308,7 @@ struct cxip_environment {
 	char *coll_job_step_id;
 	size_t coll_retry_usec;
 	size_t coll_timeout_usec;
+	size_t coll_fm_timeout_msec;
 	char *coll_fabric_mgr_url;
 	char *coll_mcast_token;
 	size_t hwcoll_addrs_per_job;
@@ -316,6 +324,8 @@ struct cxip_environment {
 	int enable_trig_op_limit;
 	int hybrid_posted_recv_preemptive;
 	int hybrid_unexpected_msg_preemptive;
+	size_t mr_cache_events_disable_poll_nsecs;
+	size_t mr_cache_events_disable_le_poll_nsecs;
 };
 
 extern struct cxip_environment cxip_env;
@@ -713,7 +723,7 @@ struct cxip_lni {
 	/* Software remapped communication profiles. */
 	struct dlist_entry remap_cps;
 
-	ofi_spin_t lock;
+	pthread_rwlock_t cp_lock;
 };
 
 /* A portals table define a network endpoint address. The endpoint address is
@@ -1144,7 +1154,7 @@ struct cxip_req_recv {
 	uint32_t rdzv_initiator;	// Rendezvous initiator used for mrecvs
 	uint32_t rget_nic;
 	uint32_t rget_pid;
-	bool software_list;		// Appended to HW or SW
+	int multirecv_inflight;		// SW EP Multi-receives in progress
 	bool canceled;			// Request canceled?
 	bool unlinked;
 	bool multi_recv;
@@ -1850,7 +1860,7 @@ struct cxip_rxc {
 	struct cxip_evtq rx_evtq;
 	struct cxip_pte *rx_pte;
 	struct cxip_cmdq *rx_cmdq;
-	ofi_atomic32_t orx_reqs;
+	int orx_reqs;
 
 	/* If FI_MULTI_RECV is supported, minimum receive size required
 	 * for buffers posted.
@@ -2212,7 +2222,7 @@ struct cxip_txc {
 	struct ofi_bufpool *ibuf_pool;
 
 	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
-	ofi_atomic32_t otx_reqs;	// outstanding transmit requests
+	int otx_reqs;	// outstanding transmit requests
 
 	/* Queue of TX messages in flight for the context */
 	struct dlist_entry msg_queue;
@@ -2430,6 +2440,54 @@ struct cxip_ep_obj {
 	ofi_atomic32_t ref;
 	struct cxip_portals_table *ptable;
 };
+
+static inline void cxip_txc_otx_reqs_inc(struct cxip_txc *txc)
+{
+	assert(ofi_genlock_held(&txc->ep_obj->lock) == 1);
+	txc->otx_reqs++;
+}
+
+static inline void cxip_txc_otx_reqs_dec(struct cxip_txc *txc)
+{
+	assert(ofi_genlock_held(&txc->ep_obj->lock) == 1);
+	txc->otx_reqs--;
+	assert(txc->otx_reqs >= 0);
+}
+
+static inline int cxip_txc_otx_reqs_get(struct cxip_txc *txc)
+{
+	assert(ofi_genlock_held(&txc->ep_obj->lock) == 1);
+	return txc->otx_reqs;
+}
+
+static inline void cxip_txc_otx_reqs_init(struct cxip_txc *txc)
+{
+	txc->otx_reqs = 0;
+}
+
+static inline void cxip_rxc_orx_reqs_inc(struct cxip_rxc *rxc)
+{
+	assert(ofi_genlock_held(&rxc->ep_obj->lock) == 1);
+	rxc->orx_reqs++;
+}
+
+static inline void cxip_rxc_orx_reqs_dec(struct cxip_rxc *rxc)
+{
+	assert(ofi_genlock_held(&rxc->ep_obj->lock) == 1);
+	rxc->orx_reqs--;
+	assert(rxc->orx_reqs >= 0);
+}
+
+static inline int cxip_rxc_orx_reqs_get(struct cxip_rxc *rxc)
+{
+	assert(ofi_genlock_held(&rxc->ep_obj->lock) == 1);
+	return rxc->orx_reqs;
+}
+
+static inline void cxip_rxc_orx_reqs_init(struct cxip_rxc *rxc)
+{
+	rxc->orx_reqs = 0;
+}
 
 /*
  * CXI endpoint implementations to support FI_CLASS_EP.
@@ -2711,18 +2769,7 @@ enum cxip_coll_state {
 	CXIP_COLL_STATE_FAULT,
 };
 
-/* Similar to C_RC_* provider errors, but pure libfabric */
-/* These should be in priority order, from lowest to highest */
-enum cxip_coll_prov_errno {
-	CXIP_PROV_ERRNO_OK = -1,		// good
-	CXIP_PROV_ERRNO_PTE = -2,		// PTE setup failure
-	CXIP_PROV_ERRNO_MCAST_INUSE = -3,	// multicast in-use
-	CXIP_PROV_ERRNO_HWROOT_INUSE = -4,	// hwroot in-use
-	CXIP_PROV_ERRNO_MCAST_INVALID = -5,	// multicast invalid
-	CXIP_PROV_ERRNO_HWROOT_INVALID = -6,	// hwroot invalid
-	CXIP_PROV_ERRNO_CURL = -7,		// CURL failure
-	CXIP_PROV_ERRNO_LAST = -8,		// last error code (unused)
-};
+const char *cxip_strerror(int prov_errno);
 
 /* Rosetta reduction engine error codes */
 typedef enum cxip_coll_rc {
@@ -2778,6 +2825,33 @@ struct cxip_coll_data {
 	bool initialized;
 };
 
+struct coll_counters {
+	int32_t coll_recv_cnt;
+	int32_t send_cnt;
+	int32_t recv_cnt;
+	int32_t pkt_cnt;
+	int32_t seq_err_cnt;
+	int32_t tmout_cnt;
+};
+
+struct cxip_coll_metrics_ep {
+	int myrank;
+	bool isroot;
+};
+struct cxip_coll_metrics {
+	long red_count_bad;
+	long red_count_full;
+	long red_count_partial;
+	long red_count_unreduced;
+	struct cxip_coll_metrics_ep ep_data;
+};
+
+void cxip_coll_reset_mc_ctrs(struct fid_mc *mc);
+void cxip_coll_get_mc_ctrs(struct fid_mc *mc, struct coll_counters *counters);
+
+void cxip_coll_init_metrics(void);
+void cxip_coll_get_metrics(struct cxip_coll_metrics *metrics);
+
 struct cxip_coll_reduction {
 	struct cxip_coll_mc *mc_obj;		// parent mc_obj
 	uint32_t red_id;			// reduction id
@@ -2807,6 +2881,7 @@ struct cxip_coll_mc {
 	struct cxip_zbcoll_obj *zb;		// zb object for zbcol
 	struct cxip_coll_pte *coll_pte;		// collective PTE
 	struct timespec timeout;		// state machine timeout
+	struct timespec curlexpires;		// CURL delete expiration timeout
 	fi_addr_t mynode_fiaddr;		// fi_addr of this node
 	int mynode_idx;				// av_set index of this node
 	uint32_t hwroot_idx;			// av_set index of hwroot node
@@ -3164,8 +3239,6 @@ int cxip_coll_arm_disable(struct fid_mc *mc, bool disable);
 void cxip_coll_limit_red_id(struct fid_mc *mc, int max_red_id);
 void cxip_coll_drop_send(struct cxip_coll_reduction *reduction);
 void cxip_coll_drop_recv(struct cxip_coll_reduction *reduction);
-
-void cxip_coll_reset_mc_ctrs(struct fid_mc *mc);
 
 void cxip_dbl_to_rep(struct cxip_repsum *x, double d);
 void cxip_rep_to_dbl(double *d, const struct cxip_repsum *x);

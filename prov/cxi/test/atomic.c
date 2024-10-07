@@ -76,13 +76,13 @@ Test(atomic_invalid, invalid_amo)
 	int ret;
 
 	ret = fi_atomic(cxit_ep, &operand1, 1, 0, cxit_ep_fi_addr, 0, 0,
-			FI_UINT64, OFI_ATOMIC_OP_LAST, 0);
+			FI_UINT64, FI_ATOMIC_OP_LAST, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_atomic(cxit_ep, &operand1, 1, 0, cxit_ep_fi_addr, 0, 0,
 			FI_UINT64, -1, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_atomic(cxit_ep, &operand1, 1, 0, cxit_ep_fi_addr, 0, 0,
-			OFI_DATATYPE_LAST, FI_SUM, 0);
+			FI_VOID, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_atomic(cxit_ep, &operand1, 1, 0, cxit_ep_fi_addr, 0, 0,
 			-1, FI_SUM, 0);
@@ -132,13 +132,13 @@ Test(atomic_invalid, invalid_fetch)
 
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0, &result, 0,
 			      cxit_ep_fi_addr, 0, 0, FI_UINT64,
-			      OFI_ATOMIC_OP_LAST, 0);
+			      FI_ATOMIC_OP_LAST, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0, &result, 0,
 			      cxit_ep_fi_addr, 0, 0, FI_UINT64, -1, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0, &result, 0,
-			      cxit_ep_fi_addr, 0, 0, OFI_DATATYPE_LAST, FI_SUM,
+			      cxit_ep_fi_addr, 0, 0, FI_VOID, FI_SUM,
 			      0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0, &result, 0,
@@ -220,7 +220,7 @@ Test(atomic_invalid, invalid_swap)
 				&compare, 0,
 				&result, 0,
 				cxit_ep_fi_addr, 0, 0,
-				FI_UINT64, OFI_ATOMIC_OP_LAST, 0);
+				FI_UINT64, FI_ATOMIC_OP_LAST, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomic(cxit_ep,
 				&operand1, 1, 0,
@@ -234,7 +234,7 @@ Test(atomic_invalid, invalid_swap)
 				&compare, 0,
 				&result, 0,
 				cxit_ep_fi_addr, 0, 0,
-				OFI_DATATYPE_LAST, FI_CSWAP_NE, NULL);
+				FI_VOID, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomic(cxit_ep,
 				&operand1, 1, 0,
@@ -277,7 +277,7 @@ Test(atomic_invalid, invalid_swap)
 				&result, 0,
 				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
-
+	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomicv(cxit_ep,
 				&iov, 0, 1,
 				&ciov, 0, 1,
@@ -1037,6 +1037,18 @@ struct test_int_parms {
 	uint64_t key;
 };
 
+static enum fi_datatype int_datatypes[] = {
+	FI_UINT8,
+	FI_INT16,
+	FI_UINT16,
+	FI_INT32,
+	FI_UINT32,
+	FI_INT64,
+	FI_UINT64,
+	FI_INT128,
+	FI_UINT128,
+};
+
 static struct test_int_parms int_parms[] = {
 	{ _AMO|_FAMO, 11, FI_MIN,  0, 0, 123, 120, 120 },
 	{ _AMO|_FAMO, 12, FI_MIN,  0, 0, 120, 123, 120 },
@@ -1128,42 +1140,73 @@ ParameterizedTestParameters(atomic, test_int)
 				   tests * 2);
 }
 
+
+/* Don't rely on compiler __int128 support. */
+typedef struct {
+	uint64_t u64[2];
+} __attribute__ ((aligned (16))) amo128_t;
+
+#define AMO128_INIT(_v64) { .u64 = { _v64, 0 } }
+
+static int test_int_expect_err(int err, enum fi_datatype dt, enum fi_op op)
+{
+	if (!err && op != FI_CSWAP && (dt == FI_INT128 || dt == FI_UINT128))
+		err = 1;
+
+	return err;
+}
+
 ParameterizedTest(struct test_int_parms *p, atomic, test_int)
 {
 	struct mem_region mr;
 	enum fi_datatype dt;
 	uint64_t *rma;
-	uint64_t *loc;
-	uint64_t lini = -1;
+	uint64_t *loc = NULL;
+	int err;
+	/* Need 128-bit data types for FI_INT128/FI_UINT128. */
+	amo128_t o1_128 = AMO128_INIT(p->o1);
+	void *o1 = &o1_128;
+	amo128_t comp_128 = AMO128_INIT(p->comp);
+	void *comp = &comp_128;
+	amo128_t lini_128 = AMO128_INIT(-1);
+	void *lini = &lini_128;
+	amo128_t rini_128 = AMO128_INIT(p->rini);
+	void *rini = &rini_128;
+	amo128_t rexp_128 = AMO128_INIT(p->rexp);
+	void *rexp = &rexp_128;
+	size_t i;
 
 	rma = _cxit_create_mr(&mr, &p->key);
 
-	loc = calloc(1, RMA_WIN_LEN);
-	cr_assert_not_null(loc);
+	err = posix_memalign((void **)&loc, ofi_datatype_size(FI_UINT128),
+			     RMA_WIN_LEN);
+	cr_assert(err == 0);
+	memset(loc, 0, RMA_WIN_LEN);
 
 	if (p->opmask & _AMO) {
-		for (dt = FI_INT8; dt <= FI_UINT64; dt++) {
-			_test_amo(p->index, dt, p->op, p->err, &p->o1,
-				  0, 0, 0,
-				  rma, &p->rini, &p->rexp,
-				  p->key);
+		for (i = 0; i < ARRAY_SIZE(int_datatypes); i++) {
+			dt = int_datatypes[i];
+			err = test_int_expect_err(p->err, dt, p->op);
+			_test_amo(p->index, dt, p->op, err, o1,
+				  0, 0, 0, rma, rini, rexp, p->key);
 		}
 	}
 
 	if (p->opmask & _FAMO) {
-		for (dt = FI_INT8; dt <= FI_UINT64; dt++) {
-			_test_amo(p->index, dt, p->op, p->err, &p->o1,
-				  0, loc, &lini, rma, &p->rini, &p->rexp,
-				  p->key);
+		for (i = 0; i < ARRAY_SIZE(int_datatypes); i++) {
+			dt = int_datatypes[i];
+			err = test_int_expect_err(p->err, dt, p->op);
+			_test_amo(p->index, dt, p->op, err, o1,
+				  0, loc, lini, rma, rini, rexp, p->key);
 		}
 	}
 
 	if (p->opmask & _CAMO) {
-		for (dt = FI_INT8; dt <= FI_UINT64; dt++) {
-			_test_amo(p->index, dt, p->op, p->err, &p->o1,
-				  &p->comp, loc, &lini, rma, &p->rini,
-				  &p->rexp,
-				  p->key);
+		for (i = 0; i < ARRAY_SIZE(int_datatypes); i++) {
+			dt = int_datatypes[i];
+			err = test_int_expect_err(p->err, dt, p->op);
+			_test_amo(p->index, dt, p->op, err, o1,
+				  comp, loc, lini, rma, rini, rexp, p->key);
 		}
 	}
 
@@ -1940,6 +1983,214 @@ void cxit_setup_amo_selective_completion_suppress(void)
 	cxit_setup_getinfo();
 	cxit_fi_hints->tx_attr->op_flags = 0;
 	cxit_setup_rma();
+}
+
+void cxit_setup_amo_selective_completion_suppress_hybrid_mr_desc(void)
+{
+	int ret;
+
+	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+
+	cxit_setup_getinfo();
+	cxit_fi_hints->tx_attr->op_flags = 0;
+	cxit_setup_rma();
+
+	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_3, 0,
+			  (void **)&dom_ops, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_open_ops v2");
+	cr_assert(dom_ops->cntr_read != NULL &&
+		  dom_ops->topology != NULL &&
+		  dom_ops->enable_hybrid_mr_desc != NULL,
+		  "V3 functions returned");
+
+	ret = dom_ops->enable_hybrid_mr_desc(&cxit_domain->fid, true);
+	cr_assert(ret == FI_SUCCESS, "enable_hybrid_mr_desc failed");
+}
+
+Test(atomic_sel, fi_more_amo_stream_optimzied,
+     .init = cxit_setup_amo_selective_completion_suppress,
+     .fini = cxit_teardown_rma)
+{
+	int ret;
+	struct mem_region mem_window;
+	uint64_t key_val = 0x0;
+	size_t rma_len = 1;
+	struct fi_msg_atomic msg = {};
+	struct fi_rma_ioc rma = {};
+	struct fi_ioc src_iov = {};
+	unsigned int count = 0;
+	struct fid_cntr *cntr = cxit_write_cntr;
+	char src_buf = 0;
+
+	mr_create(rma_len, FI_REMOTE_WRITE, 0, &key_val, &mem_window);
+
+	src_iov.addr = &src_buf;
+	src_iov.count = 1;
+
+	rma.count = 1;
+	rma.key = key_val;
+
+	msg.msg_iov = &src_iov;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.datatype = FI_INT8;
+	msg.op = FI_SUM;
+
+	do {
+		ret = fi_atomicmsg(cxit_ep, &msg, FI_MORE);
+		cr_assert((ret == FI_SUCCESS) || (ret == -FI_EAGAIN));
+		if (ret == FI_SUCCESS)
+			count++;
+	} while (ret != -FI_EAGAIN);
+
+	cr_assert(count >= cxit_fi_hints->tx_attr->size);
+
+	do {
+		ret = fi_atomicmsg(cxit_ep, &msg, FI_MORE);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == FI_SUCCESS);
+	count++;
+
+	ret = fi_atomicmsg(cxit_ep, &msg, 0);
+	cr_assert(ret == FI_SUCCESS);
+	count++;
+
+	ret = fi_cntr_wait(cntr, count, 10000);
+	cr_assert(ret == FI_SUCCESS, "ret=%d", ret);
+
+	mr_destroy(&mem_window);
+}
+
+Test(atomic_sel, fi_more_amo_stream_mix_optimzied_unoptimized,
+     .init = cxit_setup_amo_selective_completion_suppress,
+     .fini = cxit_teardown_rma)
+{
+	int ret;
+	struct mem_region opt_mem_window;
+	struct mem_region mem_window;
+	uint64_t opt_key_val = 0x0;
+	uint64_t key_val = 0x1234;
+	size_t rma_len = 1;
+	struct fi_msg_atomic msg = {};
+	struct fi_rma_ioc rma = {};
+	struct fi_ioc src_iov = {};
+	unsigned int count = 0;
+	struct fid_cntr *cntr = cxit_write_cntr;
+	char src_buf = 0;
+
+	mr_create(rma_len, FI_REMOTE_WRITE, 0, &opt_key_val, &opt_mem_window);
+	mr_create(rma_len, FI_REMOTE_WRITE, 0, &key_val, &mem_window);
+
+	src_iov.addr = &src_buf;
+	src_iov.count = 1;
+
+	rma.count = 1;
+	rma.key = opt_key_val;
+
+	msg.msg_iov = &src_iov;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.datatype = FI_INT8;
+	msg.op = FI_SUM;
+
+	do {
+		ret = fi_atomicmsg(cxit_ep, &msg, FI_MORE);
+		cr_assert((ret == FI_SUCCESS) || (ret == -FI_EAGAIN));
+		if (ret == FI_SUCCESS)
+			count++;
+	} while (ret != -FI_EAGAIN);
+
+	cr_assert(count >= cxit_fi_hints->tx_attr->size);
+
+	rma.key = key_val;
+	do {
+		ret = fi_atomicmsg(cxit_ep, &msg, FI_MORE);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == FI_SUCCESS);
+	count++;
+
+	ret = fi_atomicmsg(cxit_ep, &msg, 0);
+	cr_assert(ret == FI_SUCCESS);
+	count++;
+
+	ret = fi_cntr_wait(cntr, count, 10000);
+	cr_assert(ret == FI_SUCCESS, "ret=%d", ret);
+
+	mr_destroy(&mem_window);
+	mr_destroy(&opt_mem_window);
+}
+
+Test(atomic_sel, fi_more_fetch_amo_stream_optimzied,
+     .init = cxit_setup_amo_selective_completion_suppress_hybrid_mr_desc,
+     .fini = cxit_teardown_rma)
+{
+	int ret;
+	struct mem_region mem_window;
+	uint64_t key_val = 0x0;
+	size_t rma_len = 1;
+	struct fi_msg_atomic msg = {};
+	struct fi_rma_ioc rma = {};
+	struct fi_ioc src_iov = {};
+	unsigned int count = 0;
+	struct fid_cntr *cntr = cxit_read_cntr;
+	char src_buf = 0;
+	struct fi_ioc result_iov = {};
+	void *mr;
+
+	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_3, 0,
+			  (void **)&dom_ops, NULL);
+
+	mr_create(rma_len,
+		  FI_REMOTE_WRITE | FI_REMOTE_READ | FI_WRITE | FI_READ, 0,
+		  &key_val, &mem_window);
+	mr = fi_mr_desc(mem_window.mr);
+
+	result_iov.addr = mem_window.mem;
+	result_iov.count = 1;
+
+	src_iov.addr = &src_buf;
+	src_iov.count = 1;
+
+	rma.count = 1;
+	rma.key = key_val;
+
+	msg.msg_iov = &src_iov;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.datatype = FI_INT8;
+	msg.op = FI_SUM;
+
+	do {
+		ret = fi_fetch_atomicmsg(cxit_ep, &msg, &result_iov, &mr, 1,
+					 FI_MORE);
+		cr_assert((ret == FI_SUCCESS) || (ret == -FI_EAGAIN));
+		if (ret == FI_SUCCESS)
+			count++;
+	} while (ret != -FI_EAGAIN);
+
+	cr_assert(count >= cxit_fi_hints->tx_attr->size);
+
+	do {
+		ret = fi_fetch_atomicmsg(cxit_ep, &msg, &result_iov, &mr, 1,
+					 FI_MORE);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == FI_SUCCESS);
+	count++;
+
+	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &result_iov, &mr, 1, 0);
+	cr_assert(ret == FI_SUCCESS);
+	count++;
+
+	ret = fi_cntr_wait(cntr, count, 10000);
+	cr_assert(ret == FI_SUCCESS, "ret=%d", ret);
+
+	mr_destroy(&mem_window);
 }
 
 /* Test selective completion behavior with RMA. */
@@ -3634,7 +3885,23 @@ ParameterizedTestParameters(atomic, query_atomic)
 			.valid_atomic_attr = true,
 			.flags = FI_FETCH_ATOMIC,
 			.expected_rc = FI_SUCCESS,
-		}
+		},
+		/* FI_UINT128 unsupported for FI_MIN. */
+		{
+			.datatype = FI_UINT128,
+			.op = FI_MIN,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EOPNOTSUPP,
+		},
+		/* FI_UINT128 supported for FI_CSWAP. */
+		{
+			.datatype = FI_UINT128,
+			.op = FI_CSWAP,
+			.valid_atomic_attr = true,
+			.flags = FI_COMPARE_ATOMIC,
+			.expected_rc = FI_SUCCESS,
+		},
 	};
 	size_t param_sz = ARRAY_SIZE(params);
 

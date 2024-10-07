@@ -159,7 +159,7 @@ Test(mr, mr_zero_len)
 /* Validate that unique keys are enforced. */
 Test(mr, mr_unique_key)
 {
-	char buf[256];
+	char buf[256] = {};
 	struct fid_mr *mr1;
 	struct fid_mr *mr2;
 	int ret;
@@ -185,7 +185,7 @@ Test(mr, mr_unique_key)
 /* Validate not recycling non-cached FI_MR_PROV_KEY */
 Test(mr, mr_recycle)
 {
-	char buf[256];
+	char buf[256] = {};
 	struct fid_mr *mr1;
 	struct fid_mr *mr2;
 	struct fid_mr *mr3;
@@ -273,7 +273,7 @@ Test(mr, mr_recycle)
 /* Validate that RKEY are not required for local MR */
 Test(mr, mr_no_local_rkey)
 {
-	char buf[256];
+	char buf[256] = {};
 	struct fid_mr *mr1;
 	struct fid_mr *mr2;
 	uint64_t rkey = 0;

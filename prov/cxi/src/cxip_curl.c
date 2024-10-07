@@ -1,24 +1,31 @@
 /*
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
- * Copyright (c) 2021 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2021-2024 Hewlett Packard Enterprise Development LP
  */
 #include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <curl/curl.h>
+#include <dlfcn.h>
+#include <sys/stat.h>
 
 #include <ofi.h>
 
 #include "cxip.h"
+static void *cxip_curlhandle;
+static CURLM *cxip_curlm;
+static int cxip_curl_count;
 
 #define	TRACE_CURL(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_COLL_CURL, fmt, \
 						##__VA_ARGS__)
 
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_FABRIC, __VA_ARGS__)
+#define	CXIP_INFO(...) _CXIP_INFO(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_FABRIC, __VA_ARGS__)
 
 #define	CHUNK_SIZE	4096
@@ -117,28 +124,139 @@ static size_t write_callback(void *curl_rcvd, size_t size, size_t nmemb,
  * The CURL library must be explicitly initialized. It is application-global,
  * and the initialization is not thread-safe, according to the documentation. We
  * do not protect this call, because it is running under CXI_INIT (see
- * cxip_info.c), which is single-threaded. The curl_global_init() call can be
+ * cxip_info.c), which is single-threaded. The (*dl_curl_global_init)() call can be
  * issued multiple times (non-concurrently) and has the same end result as
  * calling it once.
  */
-static CURLM *cxip_curlm;
-static int cxip_curl_count;
 
 /**
  * Initialize CURL globally for the application, enabling multi-curl
  * (concurrent calls).
  */
+
+/* Each of these should be referenced in curlary[] below */
+CURLcode (*dl_curl_global_init)(long);
+void	 (*dl_curl_global_cleanup)(void);
+CURL *	 (*dl_curl_easy_init)(void);
+void	 (*dl_curl_easy_cleanup)(CURL *);
+CURLcode (*dl_curl_easy_getinfo)(CURL *, CURLINFO, ...);
+CURLcode (*dl_curl_easy_setopt)(CURL *, CURLoption, ...);
+const char *(*dl_curl_easy_strerror)(CURLcode);
+CURLcode (*dl_curl_easy_perform)(CURL *);
+CURLM *	 (*dl_curl_multi_init)(void);
+CURLMcode (*dl_curl_multi_cleanup)(CURLM *);
+CURLMcode (*dl_curl_multi_add_handle)(CURLM *multi_handle, CURL *);
+CURLMsg * (*dl_curl_multi_info_read)(CURLM *multi_handle, int *);
+CURLMcode (*dl_curl_multi_perform)(CURLM *multi_handle, int *);
+const char *(*dl_curl_multi_strerror)(CURLMcode);
+struct curl_slist *(*dl_curl_slist_append)(struct curl_slist *, const char *);
+void	  (*dl_curl_slist_free_all)(struct curl_slist *);
+
+struct curlfunc {
+	void **fptr;
+	char *name;
+};
+
+struct curlfunc curlary[] = {
+	{(void **)&dl_curl_global_init, "curl_global_init"},
+	{(void **)&dl_curl_global_cleanup, "curl_global_cleanup"},
+	{(void **)&dl_curl_easy_init, "curl_easy_init"},
+	{(void **)&dl_curl_easy_cleanup, "curl_easy_cleanup"},
+	{(void **)&dl_curl_easy_getinfo, "curl_easy_getinfo"},
+	{(void **)&dl_curl_easy_setopt, "curl_easy_setopt"},
+	{(void **)&dl_curl_easy_strerror, "curl_easy_strerror"},
+	{(void **)&dl_curl_easy_perform, "curl_easy_perform"},
+	{(void **)&dl_curl_multi_init, "curl_multi_init"},
+	{(void **)&dl_curl_multi_cleanup, "curl_multi_cleanup"},
+	{(void **)&dl_curl_multi_add_handle, "curl_multi_add_handle"},
+	{(void **)&dl_curl_multi_info_read, "curl_multi_info_read"},
+	{(void **)&dl_curl_multi_perform, "curl_multi_perform"},
+	{(void **)&dl_curl_multi_strerror, "curl_multi_strerror"},
+	{(void **)&dl_curl_slist_append, "curl_slist_append"},
+	{(void **)&dl_curl_slist_free_all, "curl_slist_free_all"},
+	{NULL, NULL}
+};
+
+int cxip_curl_load_symbols(void)
+{
+	struct curlfunc *funcptr;
+	char libfile[256], *libpath;
+	int version;
+	int errcnt;
+	void *h;
+
+	/* load successfully only once */
+	if (cxip_curlhandle)
+		return 0;
+
+	/* Try to find latest usable version */
+	// TODO test earlier versions
+	for (version = 4; version >= 4; version--) {
+		sprintf(libfile, "/usr/lib64/libcurl.so.%d", version);
+		libpath = realpath(libfile, NULL);
+		if (!libpath) {
+			TRACE_CURL("could not expand '%s'\n", libfile);
+			CXIP_INFO("could not expand '%s'\n", libfile);
+			continue;
+		}
+		TRACE_CURL("dlopen '%s'\n", libpath);
+		h = dlopen(libpath, RTLD_NOW);
+		if (!h) {
+			TRACE_CURL("%s not found\n", libpath);
+			CXIP_INFO("%s not found\n", libpath);
+			free(libpath);
+			continue;
+		}
+		TRACE_CURL("%s found\n", libpath);
+		free(libpath);
+		break;
+	}
+	if (!h) {
+		TRACE_CURL("libcurl not supported\n");
+		CXIP_WARN("libcurl not supported\n");
+		CXIP_WARN("Accelerated collectives cannot be enabled\n");
+		return -FI_EOPNOTSUPP;
+	}
+	/* Load all the necessary functions, or none */
+	errcnt = 0;
+	funcptr = curlary;
+	while (funcptr->fptr) {
+		*funcptr->fptr = dlsym(h, funcptr->name);
+		if (!(*funcptr->fptr)) {
+			CXIP_WARN("curl function '%s' not found\n",
+				  funcptr->name);
+			errcnt++;
+		}
+		funcptr++;
+	}
+	if (errcnt) {
+		funcptr = curlary;
+		while (funcptr->fptr)
+			*funcptr->fptr = NULL;
+		CXIP_WARN("libcurl incomplete support\n");
+		return -FI_EOPNOTSUPP;
+	}
+	/* record handle to prevent reloading */
+	cxip_curlhandle = h;
+	return 0;
+}
+
 int cxip_curl_init(void)
 {
-	int ret = FI_SUCCESS;
 	CURLcode res;
+	int ret;
+
+	/* can be safely called multiple times */
+	ret = cxip_curl_load_symbols();
+	if (ret)
+		return ret;
 
 	if (!cxip_curlm) {
-		res = curl_global_init(CURL_GLOBAL_DEFAULT);
+		res = (*dl_curl_global_init)(CURL_GLOBAL_DEFAULT);
 		if (res == CURLE_OK) {
-			cxip_curlm = curl_multi_init();
+			cxip_curlm = (*dl_curl_multi_init)();
 			if (!cxip_curlm) {
-				curl_global_cleanup();
+				(*dl_curl_global_cleanup)();
 				ret = -FI_EINVAL;
 			}
 		} else
@@ -154,8 +272,8 @@ void cxip_curl_fini(void)
 {
 	cxip_curl_count = 0;
 	if (cxip_curlm) {
-		curl_multi_cleanup(cxip_curlm);
-		curl_global_cleanup();
+		(*dl_curl_multi_cleanup)(cxip_curlm);
+		(*dl_curl_global_cleanup)();
 		cxip_curlm = NULL;
 	}
 }
@@ -207,7 +325,11 @@ void cxip_curl_free(struct cxip_curl_handle *handle)
  * The usrfunc is called in cxip_curl_progress() when the request completes,
  * and receives the handle as its sole argument. The handle also contains an
  * arbitrary usrptr supplied by the caller. This usrptr can contain specific
- * information to identify which of multiple concurrent requests has completed.
+ * user information to identify which of multiple concurrent requests has
+ * completed.
+ *
+ * An error return indicates that the dispatch was unsuccessful. All memory
+ * cleanup is done here.
  *
  * There are no "normal" REST errors from this call. REST errors are instead
  * returned on attempts to progress the dispatched operation.
@@ -220,7 +342,9 @@ void cxip_curl_free(struct cxip_curl_handle *handle)
  * @param userfunc      : user-defined completion function
  * @param usrptr	: user-defined data pointer
  *
- * @return int          : 0 on success, -1 on failure
+ * @return int          : 0 on success, -errno on failure
+ * -FI_ENOMEM		: out-of-memory
+ * -FI_ECONNREFUSED	: CURL easy/multi init failed
  */
 int cxip_curl_perform(const char *endpoint, const char *request,
 		      const char *sessionToken, size_t rsp_init_size,
@@ -230,125 +354,177 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	struct cxip_curl_handle *handle;
 	struct curl_slist *headers;
 	char *token;
-	char *verify_peer_str;
-	int verify_peer;
+	char *cert_env_var;
+	bool verify = true;
+	bool isdir = false;
+	bool isfile = false;
+	struct stat buf;
 	CURLMcode mres;
 	CURL *curl;
 	int running;
 	int ret;
 
-	ret = -FI_ENOMEM;
 	handle = calloc(1, sizeof(*handle));
-	if (!handle)
+	if (!handle) {
+		ret = -FI_ENOMEM;
 		goto fail;
+	}
 
 	/* libcurl is fussy about NULL requests */
 	handle->endpoint = strdup(endpoint);
-	if (!handle->endpoint)
+	if (!handle->endpoint) {
+		ret = -FI_ENOMEM;
 		goto fail;
+	}
 	handle->request = strdup(request ? request : "");
-	if (!handle->request)
+	if (!handle->request) {
+		ret = -FI_ENOMEM;
 		goto fail;
+	}
 	handle->response = NULL;
 	handle->recv = (void *)init_curl_buffer(rsp_init_size);
-	if (!handle->recv)
+	if (!handle->recv) {
+		ret = -FI_ENOMEM;
 		goto fail;
+	}
+
 	/* add user completion function and pointer */
 	handle->usrfunc = usrfunc;
 	handle->usrptr = usrptr;
 
-	ret = -FI_EACCES;
-	curl = curl_easy_init();
+	curl = (*dl_curl_easy_init)();
 	if (!curl) {
-		CXIP_WARN("curl_easy_init() failed\n");
+		CXIP_WARN("(*dl_curl_easy_init)() failed\n");
+		ret = -FI_ECONNREFUSED;
 		goto fail;
 	}
 
 	/* HTTP 1.1 assumed */
 	headers = NULL;
-	headers = curl_slist_append(headers, "Expect:");
-	headers = curl_slist_append(headers, "Accept: application/json");
-	headers = curl_slist_append(headers, "Content-Type: application/json");
-	headers = curl_slist_append(headers, "charset: utf-8");
+	headers = (*dl_curl_slist_append)(headers, "Expect:");
+	headers = (*dl_curl_slist_append)(headers, "Accept: application/json");
+	headers = (*dl_curl_slist_append)(headers, "Content-Type: application/json");
+	headers = (*dl_curl_slist_append)(headers, "charset: utf-8");
 	token = NULL;
 	if (sessionToken) {
 		ret = asprintf(&token, "Authorization: Bearer %s",
 			       sessionToken);
 		if (ret < 0) {
 			CXIP_WARN("token string create failed\n");
+			ret = -FI_ENOMEM;
 			goto fail;
 		}
-		headers = curl_slist_append(headers, token);
+		headers = (*dl_curl_slist_append)(headers, token);
 	}
 	handle->headers = (void *)headers;
 
-	curl_easy_setopt(curl, CURLOPT_URL, handle->endpoint);
+	(*dl_curl_easy_setopt)(curl, CURLOPT_URL, handle->endpoint);
 	if (op == CURL_GET) {
-		curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+		(*dl_curl_easy_setopt)(curl, CURLOPT_HTTPGET, 1L);
+	} else if (op == CURL_DELETE) {
+		(*dl_curl_easy_setopt)(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
 	} else {
-		curl_easy_setopt(curl, CURLOPT_POST, 1L);
-		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, handle->request);
-		curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,
+		(*dl_curl_easy_setopt)(curl, CURLOPT_POST, 1L);
+		(*dl_curl_easy_setopt)(curl, CURLOPT_POSTFIELDS, handle->request);
+		(*dl_curl_easy_setopt)(curl, CURLOPT_POSTFIELDSIZE,
 				 strlen(handle->request));
 	}
-	curl_easy_setopt(curl, CURLOPT_STDERR, stderr);
-	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, handle->recv);
-	curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)handle);
-	curl_easy_setopt(curl, CURLOPT_VERBOSE, (long)verbose);
-	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, cxip_curl_opname(op));
+	(*dl_curl_easy_setopt)(curl, CURLOPT_STDERR, stderr);
+	(*dl_curl_easy_setopt)(curl, CURLOPT_HTTPHEADER, headers);
+	(*dl_curl_easy_setopt)(curl, CURLOPT_WRITEFUNCTION, write_callback);
+	(*dl_curl_easy_setopt)(curl, CURLOPT_WRITEDATA, handle->recv);
+	(*dl_curl_easy_setopt)(curl, CURLOPT_PRIVATE, (void *)handle);
+	(*dl_curl_easy_setopt)(curl, CURLOPT_VERBOSE, (long)verbose);
+	(*dl_curl_easy_setopt)(curl, CURLOPT_CUSTOMREQUEST, cxip_curl_opname(op));
 
-	verify_peer_str = getenv("CURLOPT_SSL_VERIFYPEER");
-	if (verify_peer_str)
-		verify_peer = atoi(verify_peer_str);
-	else
-		verify_peer = 0;
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, verify_peer);
+	/* Value of fm_cacert variable in slurmctld configuration */
+	/* If set to 'yes' or a path, the CACERT will be validated and used for the connection */
+	cert_env_var = getenv("FI_CXI_COLL_FABRIC_MGR_CACERT");
 
-	curl_multi_add_handle(cxip_curlm, curl);
-	mres = curl_multi_perform(cxip_curlm, &running);
+	if (!cert_env_var || !strcmp(cert_env_var, "no"))
+		verify = false;
+	else if (!strcmp(cert_env_var, "yes"))
+		verify = true;
+	else {
+		if (stat(cert_env_var, &buf) == -1) {
+			ret = FI_ENOENT;
+			goto fail;
+		}
+		if (S_ISDIR(buf.st_mode))
+			isdir = true;
+		else if (S_ISREG(buf.st_mode))
+			isfile = true;
+		else {
+			ret = FI_EINVAL;
+			goto fail;
+		}
+	}
+
+	if (!verify) {
+		/* These are needed to work with self-signed certificates */
+		(*dl_curl_easy_setopt)(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+		(*dl_curl_easy_setopt)(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+	} else {
+		/* FI_CXI_COLL_FABRIC_MGR_CACERT is "yes" or a pathname */
+		(*dl_curl_easy_setopt)(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+		(*dl_curl_easy_setopt)(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+	}
+
+	/* If certificate file/dir specified, use it */
+	if (isdir)
+		(*dl_curl_easy_setopt)(curl, CURLOPT_CAPATH, cert_env_var);
+	else if (isfile)
+		(*dl_curl_easy_setopt)(curl, CURLOPT_CAINFO, cert_env_var);
+
+	(*dl_curl_multi_add_handle)(cxip_curlm, curl);
+	mres = (*dl_curl_multi_perform)(cxip_curlm, &running);
 	if (mres != CURLM_OK) {
-		CXIP_WARN("curl_multi_perform() failed: %s\n",
-			  curl_multi_strerror(mres));
+		CXIP_WARN("(*dl_curl_multi_perform)() failed: %s\n",
+			  (*dl_curl_multi_strerror)(mres));
+		ret = -FI_ECONNREFUSED;
 		goto fail;
 	}
 	cxip_curl_count += 1;
 	return FI_SUCCESS;
 
 fail:
-	CXIP_WARN("%s failed %d\n", __func__, ret);
+	CXIP_WARN("%s failed %d (%s)\n", __func__, ret, fi_strerror(ret));
 	cxip_curl_free(handle);
 	return ret;
 }
 
 /**
- * Progress the CURL requests.
+ * Progress the pending CURL requests.
  *
  * This progresses concurrent CURL requests, and returns the following:
  *
- * -  0 indicates an operation completed
- * -  -FI_EAGAIN  indicates operations are pending, none completed
- * -  -FI_ENODATA indicates no operations are pending
- * -  -errorcode  a fatal error
+ * -  0			success
+ * -  -FI_EAGAIN 	indicates operations are pending, none completed
+ * -  -FI_ENODATA	indicates no operations are pending
+ * -  -FI_ECONNREFUSED  fatal error, CURL is not functioning properly
  *
- * Repeated calls will return additional completions, until there are no more
- * pending and -FI_ENODATA is returned.
+ * Note that -FI_ECONNREFUSED should be treated as a fatal CURL error. It
+ * indicates that CURL is behaving in an abnormal fashion, and cannot be
+ * relied upon. In normal use, it should not happen.
  *
- * Note that a CURL request will succeed if the server is not reachable. It will
- * return a handle->status value of 0, which is an invalid HTTP status, and
- * indicates that it could not connect to a server.
+ * All other error handling is performed by the usrfunc function (supplied
+ * during cxip_curl_perform() call), see below.
  *
- * For unit testing, it is useful for the test to be able to inspect the handle
- * directly, and it can be obtained by specifying a non-null handleptr value. If
- * handleptr is supplied, the caller is responsible for calling cxip_curl_free()
- * on the returned handle. In normal usage, handleptr is NULL, and this routine
- * will clean up the handle after the operation completes.
+ * A CURL request will complete if the server is not reachable. It will return a
+ * handle->status value of 0, which is an invalid HTTP status, and indicates
+ * that it could not connect to a server.
  *
- * The user should provide a callback routine to examine the final state of the
- * CURL request, as well as any data it returns: see cxip_curl_perform(). This
- * user callback is called after completion of the request, before the handle is
- * destroyed.
+ * In normal use, handleptr is NULL. the caller has passed a a usrfunc callback
+ * routine when dispatching the CURL request to process the returned errors and
+ * data: see cxip_curl_perform(). This usrfunc callback is called after
+ * completion of the request, before the handle is destroyed, and is expected to
+ * know enough about CURL operations to interpret the results. This routine will
+ * delete the handle after the callback has processed it.
+ *
+ * For unit testing, it can be useful for the test to be able to inspect the
+ * handle and the error return, and it can be obtained by specifying a non-null
+ * handleptr. If handleptr is supplied, the caller is responsible for
+ * calling cxip_curl_free() on the returned handle.
  *
  * The callback routine has read-only access to the handle, and read-write
  * access to its own data area, available as handle->usrptr.
@@ -356,7 +532,7 @@ fail:
  * The handle contains the following documented fields:
  *
  * - status   = HTTP status of the op, or 0 if the endpoint could not be reached
- * - endpoint = copy of the endpoint address supplied for the post
+ * - endpoint = copy of the endpoint address (URL) supplied for the post
  * - request  = copy of the JSON request data supplied for the post
  * - response = pointer to the JSON response returned by the endpoint
  * - usrptr  = arbitrary user pointer supplied during CURL request
@@ -379,55 +555,57 @@ int cxip_curl_progress(struct cxip_curl_handle **handleptr)
 	if (!cxip_curl_count)
 		return -FI_ENODATA;
 
-	handle = NULL;
-
 	/* running returns the number of curls running */
-	mres = curl_multi_perform(cxip_curlm, &running);
+	mres = (*dl_curl_multi_perform)(cxip_curlm, &running);
 	if (mres != CURLM_OK) {
-		CXIP_WARN("curl_multi_perform() failed: %s\n",
-			  curl_multi_strerror(mres));
-		return -FI_EOTHER;
+		CXIP_WARN("(*dl_curl_multi_perform)() failed: %s\n",
+			  (*dl_curl_multi_strerror)(mres));
+		return -FI_ECONNREFUSED;
 	}
 
 	/* messages returns the number of additional curls finished */
-	msg = curl_multi_info_read(cxip_curlm, &messages);
+	msg = (*dl_curl_multi_info_read)(cxip_curlm, &messages);
 	if (!msg || msg->msg != CURLMSG_DONE) {
 		return (running) ? -FI_EAGAIN : -FI_ENODATA;
 	}
 
+	/* These should not occur, but if (*dl_curl_easy_getinfo)() succeeds, we
+	 * don't really care. Just post a warning.
+	 */
 	if (msg->data.result >= CURL_LAST) {
 		CXIP_WARN("CURL unknown result %d\n", msg->data.result);
-	}
-	else if (msg->data.result > CURLE_OK) {
+	} else if (msg->data.result > CURLE_OK) {
 		CXIP_WARN("CURL error '%s'\n",
-			  curl_easy_strerror(msg->data.result));
+			  (*dl_curl_easy_strerror)(msg->data.result));
 	}
+
 	/* retrieve our handle from the private pointer */
-	res = curl_easy_getinfo(msg->easy_handle,
+	handle = NULL;
+	res = (*dl_curl_easy_getinfo)(msg->easy_handle,
 				CURLINFO_PRIVATE, (char **)&handle);
 	if (res != CURLE_OK) {
-		TRACE_CURL("curl_easy_getinfo(%s) failed: %s\n",
-			   "CURLINFO_PRIVATE", curl_easy_strerror(res));
-		CXIP_WARN("curl_easy_getinfo(%s) failed: %s\n",
-			  "CURLINFO_PRIVATE", curl_easy_strerror(res));
-		return -FI_EOTHER;
+		TRACE_CURL("(*dl_curl_easy_getinfo)(%s) failed: %s\n",
+			   "CURLINFO_PRIVATE", (*dl_curl_easy_strerror)(res));
+		CXIP_WARN("(*dl_curl_easy_getinfo)(%s) failed: %s\n",
+			  "CURLINFO_PRIVATE", (*dl_curl_easy_strerror)(res));
+		return -FI_ECONNREFUSED;
 	}
 	/* handle is now valid, must eventually be freed */
 	/* retrieve the status code, should not fail */
-	res = curl_easy_getinfo(msg->easy_handle,
+	res = (*dl_curl_easy_getinfo)(msg->easy_handle,
 				CURLINFO_RESPONSE_CODE, &status);
 	if (res != CURLE_OK) {
-		TRACE_CURL("curl_easy_getinfo(%s) failed: %s\n",
-			   "CURLINFO_RESPONSE_CODE", curl_easy_strerror(res));
-		CXIP_WARN("curl_easy_getinfo(%s) failed: %s\n",
-			  "CURLINFO_RESPONSE_CODE", curl_easy_strerror(res));
+		TRACE_CURL("(*dl_curl_easy_getinfo)(%s) failed: %s\n",
+			   "CURLINFO_RESPONSE_CODE", (*dl_curl_easy_strerror)(res));
+		CXIP_WARN("(*dl_curl_easy_getinfo)(%s) failed: %s\n",
+			  "CURLINFO_RESPONSE_CODE", (*dl_curl_easy_strerror)(res));
 		/* continue, handle->status should show zero */
 	}
-	TRACE_CURL("curl_easy_getinfo() success\n");
+	TRACE_CURL("(*dl_curl_easy_getinfo)() success\n");
 
 	/* we can recover resources now */
-	curl_slist_free_all((struct curl_slist *)handle->headers);
-	curl_easy_cleanup(msg->easy_handle);
+	(*dl_curl_slist_free_all)((struct curl_slist *)handle->headers);
+	(*dl_curl_easy_cleanup)(msg->easy_handle);
 	handle->headers = NULL;
 
 	/* make sure response string is terminated */

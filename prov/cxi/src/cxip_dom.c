@@ -395,7 +395,7 @@ int cxip_domain_prov_mr_id_alloc(struct cxip_domain *dom,
 	 */
 	key.events = mr->count_events || mr->rma_events || mr->cntr;
 
-	key.opt = cxip_env.optimized_mrs &&
+	key.opt = dom->optimized_mrs &&
 			key.id < CXIP_PTL_IDX_PROV_MR_OPT_CNT;
 	mr->key = key.raw;
 	ofi_spin_unlock(&dom->ctrl_id_lock);
@@ -596,7 +596,7 @@ static int cxip_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return -FI_EINVAL;
 
 	dom->eq = eq;
-	if (flags & OFI_REG_MR)
+	if (flags & FI_REG_MR)
 		dom->mr_eq = eq;
 
 	return 0;

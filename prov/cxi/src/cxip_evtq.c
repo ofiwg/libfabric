@@ -155,7 +155,7 @@ void cxip_evtq_flush_trig_reqs(struct cxip_evtq *evtq)
 					  req->type);
 			}
 
-			ofi_atomic_dec32(&txc->otx_reqs);
+			cxip_txc_otx_reqs_dec(txc);
 			cxip_evtq_req_free_no_lock(req);
 		}
 

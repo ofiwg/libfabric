@@ -31,7 +31,7 @@ static void cuda_init(void)
 	srand(seed);
 }
 
-TestSuite(cuda, .timeout = CXIT_DEFAULT_TIMEOUT, .init = cuda_init);
+TestSuite(cuda, .timeout = 60, .init = cuda_init);
 
 static void cuda_message_runner(void *cuda_send_buf, void *cuda_recv_buf,
 				size_t buf_size, bool device_only_mem,
@@ -422,4 +422,12 @@ Test(cuda, verify_hmemDevReg)
 	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
 
 	verify_dev_reg_handle(true);
+}
+
+
+/* Verify that large transfers (4+ GiB) work. */
+#define LARGE_XFER ((4ULL * 1024 * 1024 * 1024) - 1)
+Test(cuda, large_transfer)
+{
+	cuda_dev_memory_test(LARGE_XFER, 2, false, true);
 }
