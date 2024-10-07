@@ -227,7 +227,7 @@ void cxip_rxc_recv_req_cleanup(struct cxip_rxc *rxc)
 	uint64_t start;
 	int canceled = 0;
 
-	if (!ofi_atomic_get32(&rxc->orx_reqs))
+	if (!cxip_rxc_orx_reqs_get(rxc))
 		return;
 
 	cxip_evtq_req_discard(&rxc->rx_evtq, rxc);
@@ -242,7 +242,7 @@ void cxip_rxc_recv_req_cleanup(struct cxip_rxc *rxc)
 		CXIP_DBG("Canceled %d Receives: %p\n", canceled, rxc);
 
 	start = ofi_gettime_ms();
-	while (ofi_atomic_get32(&rxc->orx_reqs)) {
+	while (cxip_rxc_orx_reqs_get(rxc)) {
 		sched_yield();
 		cxip_evtq_progress(&rxc->rx_evtq);
 
@@ -436,7 +436,7 @@ struct cxip_rxc *cxip_rxc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 	rxc->attr = ep_obj->rx_attr;
 	rxc->hmem = !!(rxc->attr.caps & FI_HMEM);
 	rxc->pid_bits = ep_obj->domain->iface->dev->info.pid_bits;
-	ofi_atomic_initialize32(&rxc->orx_reqs, 0);
+	cxip_rxc_orx_reqs_init(rxc);
 
 	rxc->sw_ep_only = cxip_env.rx_match_mode ==
 					CXIP_PTLTE_SOFTWARE_MODE;

@@ -295,6 +295,9 @@ static size_t cxip_txc_get_num_events(struct cxip_txc *txc)
 	/* Account for internal operations. */
 	num_events += CXIP_INTERNAL_TX_REQS;
 
+	/* ACK batching */
+	num_events += cxip_env.eq_ack_batch_size;
+
 	return num_events;
 }
 
@@ -375,13 +378,13 @@ static void txc_cleanup(struct cxip_txc *txc)
 {
 	uint64_t start;
 
-	if (!ofi_atomic_get32(&txc->otx_reqs))
+	if (!cxip_txc_otx_reqs_get(txc))
 		goto proto_cleanup;
 
 	cxip_evtq_req_discard(&txc->tx_evtq, txc);
 
 	start = ofi_gettime_ms();
-	while (ofi_atomic_get32(&txc->otx_reqs)) {
+	while (cxip_txc_otx_reqs_get(txc)) {
 		sched_yield();
 
 		cxip_evtq_progress(&txc->tx_evtq);
@@ -393,7 +396,7 @@ static void txc_cleanup(struct cxip_txc *txc)
 		}
 	}
 
-	assert(ofi_atomic_get32(&txc->otx_reqs) == 0);
+	assert(cxip_txc_otx_reqs_get(txc) == 0);
 
 proto_cleanup:
 	txc->ops.cleanup(txc);
@@ -434,16 +437,20 @@ void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc)
 	struct cxip_req *req;
 	struct dlist_entry *tmp;
 
+	ofi_genlock_lock(&txc->ep_obj->lock);
+
 	/* Drain the message queue. */
 	dlist_foreach_container_safe(&txc->msg_queue, struct cxip_req, req,
 				     send.txc_entry, tmp) {
 		if (cxip_is_trig_req(req)) {
-			ofi_atomic_dec32(&txc->otx_reqs);
+			cxip_txc_otx_reqs_dec(txc);
 			dlist_remove(&req->send.txc_entry);
 			cxip_unmap(req->send.send_md);
 			cxip_evtq_req_free(req);
 		}
 	}
+
+	ofi_genlock_unlock(&txc->ep_obj->lock);
 }
 
 static bool cxip_txc_can_emit_op(struct cxip_txc *txc,
@@ -456,7 +463,7 @@ static bool cxip_txc_can_emit_op(struct cxip_txc *txc,
 
 	/* If taking a successful completion, limit outstanding operations */
 	if (!event_success_disabled &&
-	    (ofi_atomic_get32(&txc->otx_reqs) >= txc->attr.size)) {
+	    (cxip_txc_otx_reqs_get(txc) >= txc->attr.size)) {
 		TXC_WARN(txc, "TXC attr size saturated\n");
 		return false;
 	}
@@ -483,7 +490,7 @@ int cxip_txc_emit_idc_put(struct cxip_txc *txc, uint16_t vni,
 			TXC_WARN(txc, "Failed to emit domain idc put: %d\n",
 				 ret);
 		else if (!c_state->event_success_disable)
-			ofi_atomic_inc32(&txc->otx_reqs);
+			cxip_txc_otx_reqs_inc(txc);
 
 		return ret;
 	}
@@ -506,10 +513,10 @@ int cxip_txc_emit_idc_put(struct cxip_txc *txc, uint16_t vni,
 
 	/* Kick the command queue. */
 	cxip_txq_ring(txc->tx_cmdq, !!(flags & FI_MORE),
-		      ofi_atomic_get32(&txc->otx_reqs));
+		      cxip_txc_otx_reqs_get(txc));
 
 	if (!c_state->event_success_disable)
-		ofi_atomic_inc32(&txc->otx_reqs);
+		cxip_txc_otx_reqs_inc(txc);
 
 	return FI_SUCCESS;
 }
@@ -534,7 +541,7 @@ int cxip_txc_emit_dma(struct cxip_txc *txc, uint16_t vni,
 				 "Failed to emit trigger dma command: %d:%s\n",
 				 ret, fi_strerror(-ret));
 		else if (!dma->event_success_disable)
-			ofi_atomic_inc32(&txc->otx_reqs);
+			cxip_txc_otx_reqs_inc(txc);
 
 		return ret;
 	}
@@ -545,7 +552,7 @@ int cxip_txc_emit_dma(struct cxip_txc *txc, uint16_t vni,
 			TXC_WARN(txc, "Failed to emit domain dma command: %d\n",
 				 ret);
 		else if (!dma->event_success_disable)
-			ofi_atomic_inc32(&txc->otx_reqs);
+			cxip_txc_otx_reqs_inc(txc);
 
 		return ret;
 	}
@@ -567,10 +574,10 @@ int cxip_txc_emit_dma(struct cxip_txc *txc, uint16_t vni,
 
 	/* Kick the command queue. */
 	cxip_txq_ring(txc->tx_cmdq, !!(flags & FI_MORE),
-		      ofi_atomic_get32(&txc->otx_reqs));
+		      cxip_txc_otx_reqs_get(txc));
 
 	if (!dma->event_success_disable)
-		ofi_atomic_inc32(&txc->otx_reqs);
+		cxip_txc_otx_reqs_inc(txc);
 
 	return FI_SUCCESS;
 }
@@ -594,7 +601,7 @@ int cxip_txc_emit_idc_amo(struct cxip_txc *txc, uint16_t vni,
 			TXC_WARN(txc, "Failed to emit domain idc amo: %d\n",
 				 ret);
 		else if (!c_state->event_success_disable)
-			ofi_atomic_inc32(&txc->otx_reqs);
+			cxip_txc_otx_reqs_inc(txc);
 
 		return ret;
 	}
@@ -617,10 +624,10 @@ int cxip_txc_emit_idc_amo(struct cxip_txc *txc, uint16_t vni,
 
 	/* Kick the command queue. */
 	cxip_txq_ring(txc->tx_cmdq, !!(flags & FI_MORE),
-		      ofi_atomic_get32(&txc->otx_reqs));
+		      cxip_txc_otx_reqs_get(txc));
 
 	if (!c_state->event_success_disable)
-		ofi_atomic_inc32(&txc->otx_reqs);
+		cxip_txc_otx_reqs_inc(txc);
 
 	return FI_SUCCESS;
 }
@@ -647,7 +654,7 @@ int cxip_txc_emit_dma_amo(struct cxip_txc *txc, uint16_t vni,
 				 "Failed to emit trigger amo command: %d:%s\n",
 				 ret, fi_strerror(-ret));
 		else if (!amo->event_success_disable)
-			ofi_atomic_inc32(&txc->otx_reqs);
+			cxip_txc_otx_reqs_inc(txc);
 
 		return ret;
 	}
@@ -659,7 +666,7 @@ int cxip_txc_emit_dma_amo(struct cxip_txc *txc, uint16_t vni,
 			TXC_WARN(txc, "Failed to emit domain amo: %d\n",
 				 ret);
 		else if (!amo->event_success_disable)
-			ofi_atomic_inc32(&txc->otx_reqs);
+			cxip_txc_otx_reqs_inc(txc);
 
 		return ret;
 	}
@@ -681,10 +688,10 @@ int cxip_txc_emit_dma_amo(struct cxip_txc *txc, uint16_t vni,
 
 	/* Kick the command queue. */
 	cxip_txq_ring(txc->tx_cmdq, !!(flags & FI_MORE),
-		      ofi_atomic_get32(&txc->otx_reqs));
+		      cxip_txc_otx_reqs_get(txc));
 
 	if (!amo->event_success_disable)
-		ofi_atomic_inc32(&txc->otx_reqs);
+		cxip_txc_otx_reqs_inc(txc);
 
 	return FI_SUCCESS;
 }
@@ -708,7 +715,7 @@ int cxip_txc_emit_idc_msg(struct cxip_txc *txc, uint16_t vni,
 			TXC_WARN(txc, "Failed to emit domain idc msg: %d\n",
 				 ret);
 		else if (!c_state->event_success_disable)
-			ofi_atomic_inc32(&txc->otx_reqs);
+			cxip_txc_otx_reqs_inc(txc);
 
 		return ret;
 	}
@@ -731,10 +738,10 @@ int cxip_txc_emit_idc_msg(struct cxip_txc *txc, uint16_t vni,
 
 	/* Kick the command queue. */
 	cxip_txq_ring(txc->tx_cmdq, !!(flags & FI_MORE),
-		      ofi_atomic_get32(&txc->otx_reqs));
+		      cxip_txc_otx_reqs_get(txc));
 
 	if (!c_state->event_success_disable)
-		ofi_atomic_inc32(&txc->otx_reqs);
+		cxip_txc_otx_reqs_inc(txc);
 
 	return FI_SUCCESS;
 }
@@ -778,7 +785,7 @@ struct cxip_txc *cxip_txc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 
 	dlist_init(&txc->msg_queue);
 	dlist_init(&txc->dom_entry);
-	ofi_atomic_initialize32(&txc->otx_reqs, 0);
+	cxip_txc_otx_reqs_init(txc);
 
 	/* Derived initialization/overrides */
 	txc->ops.init_struct(txc, ep_obj);

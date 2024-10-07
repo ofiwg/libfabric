@@ -17,7 +17,7 @@ modprobe ptp
 modprobe iommu_v2 || modprobe amd_iommu_v2
 insmod $DBS_DIR/slingshot_base_link/cxi-sbl.ko
 insmod $DBS_DIR/sl-driver/knl/cxi-sl.ko
-insmod $DBS_DIR/cxi-driver/cxi/cxi-core.ko disable_default_svc=0
+insmod $DBS_DIR/cxi-driver/cxi/cxi-ss1.ko disable_default_svc=0
 insmod $DBS_DIR/cxi-driver/cxi/cxi-user.ko
 insmod $DBS_DIR/cxi-driver/cxi/cxi-eth.ko
 insmod $DBS_DIR/kdreg2/kdreg2.ko

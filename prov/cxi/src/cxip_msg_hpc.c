@@ -1066,7 +1066,7 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 		 */
 		cxip_report_send_completion(put_req, true);
 
-		ofi_atomic_dec32(&put_req->send.txc->otx_reqs);
+		cxip_txc_otx_reqs_dec(put_req->send.txc);
 		cxip_evtq_req_free(put_req);
 
 		return FI_SUCCESS;
@@ -1337,12 +1337,13 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				if (req->recv.multi_recv &&
 				    !req->recv.rdzv_events) {
 					dlist_remove(&req->recv.children);
+					req->recv.parent->recv.multirecv_inflight--;
 					cxip_evtq_req_free(req);
 				}
 				return -FI_EAGAIN;
 			}
 
-			RXC_DBG(rxc, "Software issued Get, req: %p\n", req);
+			RXC_DBG(rxc, "Software issued RGet, req: %p\n", req);
 		}
 
 		/* Count the rendezvous event. */
@@ -1357,17 +1358,22 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		}
 
 		/* If a rendezvous operation requires a done notification
-		 * send it. Must wait for the ACK from the notify to be returned
-		 * before completing the target operation.
+		 * it was initiated by software. Re-use the existing
+		 * rendezvous get TX credit. Need to wait for the ACK from
+		 * the done notify to be returned before releasing the
+		 * TX credit and completing the target operation.
 		 */
-		if (req->recv.done_notify) {
-			if (ofi_atomic_inc32(&rxc->orx_tx_reqs) >
-			    rxc->base.max_tx || cxip_rdzv_done_notify(req)) {
+		if (req->recv.done_notify && cxip_rdzv_done_notify(req))
+			return -FI_EAGAIN;
 
-				/* Could not issue notify, will be retried */
-				ofi_atomic_dec32(&rxc->orx_tx_reqs);
-				return -FI_EAGAIN;
-			}
+		/* If RGet initiated by software return the TX credit unless
+		 * it will be used for sending an alt_read done_notify message.
+		 */
+		if (!event->init_short.rendezvous &&
+		    !req->recv.done_notify) {
+			ofi_atomic_dec32(&req->recv.rxc_hpc->orx_tx_reqs);
+			assert(ofi_atomic_get32(&req->recv.rxc_hpc->orx_tx_reqs)
+			       >= 0);
 		}
 
 		/* Rendezvous Get completed, update event counts and
@@ -1375,13 +1381,6 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		 */
 		req->recv.rc = cxi_init_event_rc(event);
 		rdzv_recv_req_event(req, event->hdr.event_type);
-
-		/* If RGet initiated by software return the TX credit */
-		if (!event->init_short.rendezvous) {
-			ofi_atomic_dec32(&req->recv.rxc_hpc->orx_tx_reqs);
-			assert(ofi_atomic_get32(&req->recv.rxc_hpc->orx_tx_reqs)
-			       >= 0);
-		}
 
 		return FI_SUCCESS;
 
@@ -1394,7 +1393,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 		/* Special case of the ZBP destination EQ being full and ZBP
 		 * could not complete. This must be retried, we use the TX
-		 * credit already allocated.
+		 * credit already allocated for the done notify.
 		 */
 		if (event_rc == C_RC_ENTRY_NOT_FOUND) {
 			usleep(CXIP_DONE_NOTIFY_RETRY_DELAY_US);
@@ -2066,7 +2065,7 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 	else
 		cxip_post_ux_onload_fc(rxc);
 
-	ofi_atomic_dec32(&rxc->base.orx_reqs);
+	cxip_rxc_orx_reqs_dec(&rxc->base);
 	cxip_evtq_req_free(req);
 }
 
@@ -2253,7 +2252,7 @@ static int cxip_ux_onload(struct cxip_rxc_hpc *rxc)
 		ret = -FI_EAGAIN;
 		goto err_free_onload_offset;
 	}
-	ofi_atomic_inc32(&rxc->base.orx_reqs);
+	cxip_rxc_orx_reqs_inc(&rxc->base);
 
 	req->cb = cxip_ux_onload_cb;
 	req->type = CXIP_REQ_SEARCH;
@@ -2279,7 +2278,7 @@ static int cxip_ux_onload(struct cxip_rxc_hpc *rxc)
 	return FI_SUCCESS;
 
 err_dec_free_cq_req:
-	ofi_atomic_dec32(&rxc->base.orx_reqs);
+	cxip_rxc_orx_reqs_dec(&rxc->base);
 	cxip_evtq_req_free(req);
 err_free_onload_offset:
 	free(rxc->ule_offsets);
@@ -2304,7 +2303,7 @@ static int cxip_flush_appends_cb(struct cxip_req *req,
 
 	ret = cxip_ux_onload(rxc);
 	if (ret == FI_SUCCESS) {
-		ofi_atomic_dec32(&rxc->base.orx_reqs);
+		cxip_rxc_orx_reqs_dec(&rxc->base);
 		cxip_evtq_req_free(req);
 	}
 
@@ -3179,19 +3178,23 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 		/* Make sure we can issue the RGet; if not we stall
 		 * and TX event queue progress will free up credits.
 		 */
-		if (ofi_atomic_inc32(&rxc->orx_tx_reqs) > rxc->base.max_tx) {
-			ofi_atomic_dec32(&rxc->orx_tx_reqs);
-			return -FI_EAGAIN;
-		}
+		do {
+			if (ofi_atomic_inc32(&rxc->orx_tx_reqs) <=
+			    rxc->base.max_tx)
+				break;
 
-		ret = cxip_ux_send(req, ux_send->req, &ux_send->put_ev,
-				   mrecv_start, mrecv_len, req_done);
-		if (ret != FI_SUCCESS) {
-			req->recv.start_offset -= mrecv_len;
 			ofi_atomic_dec32(&rxc->orx_tx_reqs);
+			cxip_evtq_progress(&rxc->base.ep_obj->txc->tx_evtq);
+		} while (true);
 
-			return ret;
-		}
+		do {
+			ret = cxip_ux_send(req, ux_send->req, &ux_send->put_ev,
+					   mrecv_start, mrecv_len, req_done);
+			if (ret == FI_SUCCESS)
+				break;
+
+			cxip_evtq_progress(&rxc->base.ep_obj->txc->tx_evtq);
+		} while (true);
 
 		/* If multi-recv, a child request was created from
 		 * cxip_ux_send(). Need to lookup this request.
@@ -3243,7 +3246,7 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 
 		if (ret != FI_SUCCESS) {
 			/* undo mrecv_req_put_bytes() */
-			req->recv.start_offset -= mrecv_len;
+			req->recv.start_offset = mrecv_start;
 			return ret;
 		}
 	}
@@ -3464,8 +3467,7 @@ static int cxip_recv_req_queue(struct cxip_req *req, bool restart_seq)
 		if (ret)
 			goto err_dequeue_req;
 	} else {
-
-		req->recv.software_list = true;
+		req->recv.hw_offloaded = false;
 		dlist_insert_tail(&req->recv.rxc_entry, &rxc->sw_recv_queue);
 	}
 
@@ -3866,7 +3868,7 @@ static int cxip_rxc_check_recv_count_hybrid_preempt(struct cxip_rxc *rxc)
 
 	if (cxip_env.rx_match_mode == CXIP_PTLTE_HYBRID_MODE &&
 	    cxip_env.hybrid_posted_recv_preemptive == 1) {
-		count = ofi_atomic_get32(&rxc->orx_reqs);
+		count = cxip_rxc_orx_reqs_get(rxc);
 
 		if (count > rxc->attr.size) {
 			assert(rxc->state == RXC_ENABLED);
@@ -4125,7 +4127,7 @@ static void rdzv_send_req_complete(struct cxip_req *req)
 
 	cxip_report_send_completion(req, true);
 
-	ofi_atomic_dec32(&req->send.txc->otx_reqs);
+	cxip_txc_otx_reqs_dec(req->send.txc);
 	cxip_evtq_req_free(req);
 }
 
@@ -4460,7 +4462,7 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 	/* If MATCH_COMPLETE was requested, software must manage counters. */
 	cxip_report_send_completion(req, match_complete);
 
-	ofi_atomic_dec32(&req->send.txc->otx_reqs);
+	cxip_txc_otx_reqs_dec(req->send.txc);
 	cxip_evtq_req_free(req);
 
 	return FI_SUCCESS;
@@ -4885,7 +4887,7 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint32_t nic_addr, uint32_t pid,
 		 * a TXC credit for replay. _cxip_send_req() will take the
 		 * credit again.
 		 */
-		ofi_atomic_dec32(&txc->base.otx_reqs);
+		cxip_txc_otx_reqs_dec(&txc->base);
 
 		/* -FI_EAGAIN can be return if the command queue is full. Loop
 		 * until this goes through.
@@ -5159,7 +5161,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	}
 
 	/* Restrict outstanding success event requests to queue size */
-	if (ofi_atomic_get32(&txc->otx_reqs) >= txc->attr.size) {
+	if (cxip_txc_otx_reqs_get(txc) >= txc->attr.size) {
 		ret = -FI_EAGAIN;
 		goto err_req_free;
 	}

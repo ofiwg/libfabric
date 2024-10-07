@@ -115,6 +115,17 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		goto err;
 	}
 
+	/* If the md len is larger than the iov_len, the VA and len have
+	 * been aligned to a larger page size. Update the cache memory
+	 * region registered by returning -FI_EAGAIN. Note, that GPU memory
+	 * cannot be aligned since the aligned iov_base may fall outside the
+	 * valid device address.
+	 */
+	if (entry->info.iface == FI_HMEM_SYSTEM) {
+		entry->info.iov.iov_base = (void *)md->md->va;
+		entry->info.iov.iov_len = md->md->len;
+	}
+
 	/* zeHostMalloc() returns FI_HMEM_ZE but this cannot currently be
 	 * registered with ofi_hmem_dev_register(). Thus skip it.
 	 */
@@ -475,10 +486,15 @@ static void cxip_map_get_mem_region_size(const void *buf, unsigned long len,
 {
 	int ret;
 
-	ret = ofi_hmem_get_base_addr(iface, buf, len, out_buf, out_len);
-	if (ret) {
+	if (iface == FI_HMEM_SYSTEM) {
 		*out_buf = (void *)buf;
 		*out_len = len;
+	} else {
+		ret = ofi_hmem_get_base_addr(iface, buf, len, out_buf, out_len);
+		if (ret) {
+			*out_buf = (void *)buf;
+			*out_len = len;
+		}
 	}
 
 	CXIP_DBG("%s: User addr=%p User len=%lu Region addr=%p Region len=0x%lx\n",

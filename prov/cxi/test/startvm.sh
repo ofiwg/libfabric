@@ -67,7 +67,7 @@ else
 	DEVICE=$(cat /sys/class/cxi/cxi0/device/virtfn0/device)
 
 	# Unbind VF from cxi core driver. cxi1 no longer exists
-	echo $PCIFN > /sys/bus/pci/drivers/cxi_core/unbind
+	echo $PCIFN > /sys/bus/pci/drivers/cxi_ss1/unbind
 
 	# Bind the VF to vfio driver
 	modprobe vfio_pci

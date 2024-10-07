@@ -247,7 +247,7 @@ int cxip_alloc_lni(struct cxip_if *iface, uint32_t svc_id,
 	}
 
 	lni->iface = iface;
-	ofi_spin_init(&lni->lock);
+	pthread_rwlock_init(&lni->cp_lock, NULL);
 	dlist_init(&lni->remap_cps);
 
 	CXIP_DBG("Allocated LNI, %s RGID: %u\n",

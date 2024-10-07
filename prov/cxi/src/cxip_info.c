@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
- * Copyright (c) 2019,2022 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2019,2022-2024 Hewlett Packard Enterprise Development LP
  */
 
 /* CXI fabric discovery implementation. */
@@ -270,6 +270,8 @@ struct fi_rx_attr cxip_rx_attr = {
 	.caps = CXIP_EP_CAPS & ~OFI_IGNORED_RX_CAPS,
 	.op_flags = CXIP_RX_OP_FLAGS,
 	.msg_order = CXIP_MSG_ORDER,
+	.comp_order = FI_ORDER_NONE,
+	.total_buffered_recv = CXIP_UX_BUFFER_SIZE,
 	.size = CXIP_MAX_RX_SIZE,
 	.iov_limit = 1,
 };
@@ -288,6 +290,8 @@ struct fi_rx_attr cxip_multi_auth_key_rx_attr = {
 	.caps = CXIP_EP_CAPS & ~OFI_IGNORED_RX_CAPS & ~FI_DIRECTED_RECV,
 	.op_flags = CXIP_RX_OP_FLAGS,
 	.msg_order = CXIP_MSG_ORDER,
+	.comp_order = FI_ORDER_NONE,
+	.total_buffered_recv = CXIP_UX_BUFFER_SIZE,
 	.size = CXIP_MAX_RX_SIZE,
 	.iov_limit = 1,
 };
@@ -386,13 +390,13 @@ struct util_prov cxip_util_prov = {
 	.flags = 0,
 };
 
-int s_page_size;
+int sc_page_size;
 
 /* Get _SC_PAGESIZE */
 static void set_system_page_size(void)
 {
-	if (!s_page_size)
-		s_page_size = sysconf(_SC_PAGESIZE);
+	if (!sc_page_size)
+		sc_page_size = sysconf(_SC_PAGESIZE);
 }
 
 /*
@@ -510,6 +514,7 @@ static int cxip_info_init(void)
 			fi->tx_attr->inject_size = 0;
 			fi->rx_attr->msg_order = CXIP_MSG_ORDER & ~FI_ORDER_SAS;
 			fi->rx_attr->caps |= FI_DIRECTED_RECV;
+			fi->rx_attr->total_buffered_recv = 0;
 
 			CXIP_DBG("%s RNR info created\n",
 				 nic_if->info->device_name);
@@ -660,12 +665,17 @@ struct cxip_environment cxip_env = {
 	.coll_fabric_mgr_url = NULL,
 	.coll_retry_usec = CXIP_COLL_MAX_RETRY_USEC,
 	.coll_timeout_usec = CXIP_COLL_MAX_TIMEOUT_USEC,
+	.coll_fm_timeout_msec = CXIP_COLL_DFL_FM_TIMEOUT_MSEC,
 	.coll_use_dma_put = false,
 	.telemetry_rgid = -1,
 	.disable_hmem_dev_register = 0,
 	.ze_hmem_supported = 0,
 	.rdzv_proto = CXIP_RDZV_PROTO_DEFAULT,
 	.enable_trig_op_limit = false,
+	.mr_cache_events_disable_poll_nsecs =
+		CXIP_MR_CACHE_EVENTS_DISABLE_POLL_NSECS,
+	.mr_cache_events_disable_le_poll_nsecs =
+		CXIP_MR_CACHE_EVENTS_DISABLE_LE_POLL_NSECS,
 };
 
 static void cxip_env_init(void)
@@ -1246,6 +1256,17 @@ static void cxip_env_init(void)
 	if (cxip_env.coll_timeout_usec > CXIP_COLL_MAX_TIMEOUT_USEC)
 		cxip_env.coll_timeout_usec = CXIP_COLL_MAX_TIMEOUT_USEC;
 
+	fi_param_define(&cxip_prov, "coll_fm_timeout_msec", FI_PARAM_SIZE_T,
+		"FM API timeout (msec) (default %d, min %d, max %d).",
+		cxip_env.coll_fm_timeout_msec, CXIP_COLL_MIN_FM_TIMEOUT_MSEC,
+		CXIP_COLL_MAX_FM_TIMEOUT_MSEC);
+	fi_param_get_size_t(&cxip_prov, "coll_fm_timeout_msec",
+			    &cxip_env.coll_fm_timeout_msec);
+	if (cxip_env.coll_fm_timeout_msec < CXIP_COLL_MIN_FM_TIMEOUT_MSEC)
+		cxip_env.coll_fm_timeout_msec = CXIP_COLL_MIN_FM_TIMEOUT_MSEC;
+	if (cxip_env.coll_fm_timeout_msec > CXIP_COLL_MAX_FM_TIMEOUT_MSEC)
+		cxip_env.coll_fm_timeout_msec = CXIP_COLL_MAX_FM_TIMEOUT_MSEC;
+
 	fi_param_define(&cxip_prov, "default_tx_size", FI_PARAM_SIZE_T,
 			"Default provider tx_attr.size (default: %lu).",
 			cxip_env.default_tx_size);
@@ -1327,6 +1348,18 @@ static void cxip_env_init(void)
 
 		param_str = NULL;
 	}
+
+	fi_param_define(&cxip_prov, "mr_cache_events_disable_poll_nsecs", FI_PARAM_SIZE_T,
+			"Max amount of time to poll when disabling an MR configured with MR match events (default: %lu).",
+			cxip_env.mr_cache_events_disable_poll_nsecs);
+	fi_param_get_size_t(&cxip_prov, "mr_cache_events_disable_poll_nsecs",
+			    &cxip_env.mr_cache_events_disable_poll_nsecs);
+
+	fi_param_define(&cxip_prov, "mr_cache_events_disable_le_poll_nsecs", FI_PARAM_SIZE_T,
+			"Max amount of time to poll when LE invalidate disabling an MR configured with MR match events (default: %lu).",
+			cxip_env.mr_cache_events_disable_le_poll_nsecs);
+	fi_param_get_size_t(&cxip_prov, "mr_cache_events_disable_le_poll_nsecs",
+			    &cxip_env.mr_cache_events_disable_le_poll_nsecs);
 
 	set_system_page_size();
 }

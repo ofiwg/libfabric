@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2022,2024 Hewlett Packard Enterprise Development LP
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  */
 #include "config.h"
@@ -112,8 +112,10 @@ static bool
 cxip_telemetry_entry_validate_token(struct cxip_telemetry *telemetry,
 				    const char *telemetry_token)
 {
-	/* The telemetry directory has an ALL-in-binary entry. This file is
-	 * considered invalid for this telemetry implementation.
+	/*
+	 * Cassini NextGen-Telemetry no longer provides 'ALL-in-binary'.
+	 * Keeping this simple logic in place temporarily allows this
+	 * logic to run with older versions of the driver.
 	 */
 	if (strcmp(telemetry_token, "ALL-in-binary") == 0)
 		return false;
@@ -165,54 +167,9 @@ err_free_entry:
 	return ret;
 }
 
-static int cxip_telemetry_sleep_duration(void)
-{
-	int ret;
-	int msec_sleep;
-	char *path = "/sys/module/cxi_core/parameters/cntr_refresh_interval";
-	FILE *f;
-
-	f = fopen(path, "r");
-	if (!f)
-		return -errno;
-
-	ret = fscanf(f, "%d", &msec_sleep);
-	if (ret != 1) {
-		if (ret == EOF)
-			ret = -errno;
-		else
-			ret = -FI_EINVAL;
-	} else {
-		/* Convert sleep duration to seconds. */
-		ret = msec_sleep / 1000;
-		if (msec_sleep % 1000)
-			ret++;
-		ret = MAX(ret, 1);
-	}
-
-	fclose(f);
-
-	return ret;
-}
-
 void cxip_telemetry_dump_delta(struct cxip_telemetry *telemetry)
 {
 	struct cxip_telemetry_entry *entry;
-	int sleep_duration;
-
-	/* Since sysfs telemetry entries are refreshed as some interval, we need
-	 * to sleep for a refresh interval to get updates. Else, the application
-	 * could run and telemetry deltas would be zero.
-	 */
-	sleep_duration = cxip_telemetry_sleep_duration();
-	if (sleep_duration < 0) {
-		DOM_WARN(telemetry->dom,
-			 "Failed to retrieve telemetry sleep duration: %d:%s\n",
-			 sleep_duration, fi_strerror(-sleep_duration));
-		return;
-	}
-
-	sleep(sleep_duration);
 
 	dlist_foreach_container(&telemetry->telemetry_list,
 				struct cxip_telemetry_entry, entry,

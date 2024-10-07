@@ -1,7 +1,8 @@
 /*
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
- * Copyright (c) 2018 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2020-2024 Hewlett Packard Enterprise Development LP
  */
 
 #include <stdio.h>
@@ -1758,8 +1759,8 @@ Test(ep_caps, coll_only)
 			 &info);
 	cr_assert(ret == FI_SUCCESS);
 	verify_caps_only(info, FI_COLLECTIVE | FI_MSG);
-
 	fi_freeinfo(info);
+
 	cxit_teardown_getinfo();
 }
 

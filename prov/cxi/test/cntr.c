@@ -844,3 +844,69 @@ Test(cntr, cntr_wait_success_increment)
 
 	cntr_wait_success_and_error_runner(&args);
 }
+
+Test(cntr, verify_sync)
+{
+	struct fid_cntr *cntr;
+	struct fi_cntr_attr cntr_attr = {
+		.wait_obj = FI_WAIT_UNSPEC,
+	};
+	uint64_t success;
+	int ret;
+
+	ret = fi_cntr_open(cxit_domain, &cntr_attr, &cntr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_cntr_set(cntr, 2);
+	cr_assert(ret == FI_SUCCESS, "fi_cntr_set ret %d", ret);
+
+	success = fi_cntr_read(cntr);
+	cr_assert(success == 2,
+		  "Unexpected counter success count %lu", success);
+
+	ret = fi_close(&cntr->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
+
+/* This test is non-deterministic in that the counter write back
+ * associated with the set can occur before the fi_cntr_read()
+ * is issued, invalidating the test. Disable the test until another
+ * approach is implemented.
+ */
+Test(cntr, verify_no_sync, .disabled = true)
+{
+	struct fid_cntr *cntr;
+	struct fi_cntr_attr cntr_attr = {
+		.wait_obj = FI_WAIT_UNSPEC,
+		.flags = FI_CXI_CNTR_CACHED,
+	};
+	struct cxip_ep *ep = container_of(cxit_ep, struct cxip_ep, ep);
+	uint64_t success;
+	int ret;
+
+	/* Test is only deterministic with netsim */
+	if (!is_netsim(ep->ep_obj)) {
+		cr_assert(1);
+		return;
+	}
+
+	ret = fi_cntr_open(cxit_domain, &cntr_attr, &cntr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_cntr_set(cntr, 2);
+	cr_assert(ret == FI_SUCCESS, "fi_cntr_set ret %d", ret);
+
+	success = fi_cntr_read(cntr);
+	/* should have returned cached value */
+	cr_assert(success == 0,
+		  "Unexpected counter success count %lu", success);
+
+	do {
+		success = fi_cntr_read(cntr);
+	} while (success < 2);
+	cr_assert(success == 2,
+		  "Unexpected counter success count %lu", success);
+
+	ret = fi_close(&cntr->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
