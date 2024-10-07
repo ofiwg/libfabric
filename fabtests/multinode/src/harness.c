@@ -355,7 +355,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE | FT_OPT_OOB_ADDR_EXCH |
-			FT_OPT_DISABLE_TAG_VALIDATION;
+			FT_OPT_ADDR_IS_OOB | FT_OPT_DISABLE_TAG_VALIDATION;
 
 	pm_job.clients = NULL;
 	pm_job.pattern = -1;
