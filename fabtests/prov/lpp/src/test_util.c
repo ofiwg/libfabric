@@ -132,7 +132,7 @@ void util_init(struct rank_info *ri)
 
 	hints.mode = 0;
 	hints.fabric_attr->prov_name = "lpp";
-	hints.domain_attr->mr_mode = FI_MR_BASIC;
+	hints.domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	rc = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 			NULL, NULL, 0, &hints, &ri->fi);
