@@ -271,7 +271,6 @@ struct fi_rx_attr cxip_rx_attr = {
 	.op_flags = CXIP_RX_OP_FLAGS,
 	.msg_order = CXIP_MSG_ORDER,
 	.comp_order = FI_ORDER_NONE,
-	.total_buffered_recv = CXIP_UX_BUFFER_SIZE,
 	.size = CXIP_MAX_RX_SIZE,
 	.iov_limit = 1,
 };
@@ -291,7 +290,6 @@ struct fi_rx_attr cxip_multi_auth_key_rx_attr = {
 	.op_flags = CXIP_RX_OP_FLAGS,
 	.msg_order = CXIP_MSG_ORDER,
 	.comp_order = FI_ORDER_NONE,
-	.total_buffered_recv = CXIP_UX_BUFFER_SIZE,
 	.size = CXIP_MAX_RX_SIZE,
 	.iov_limit = 1,
 };
