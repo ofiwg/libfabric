@@ -6,7 +6,7 @@ def parse_args():
 	parser = argparse.ArgumentParser(description="libfabric multinode test with slurm")
 	parser.add_argument('--dry-run', action='store_true', help='Perform a dry run without making any changes.')
 	parser.add_argument("--ci", type=str, help="Commands to prepend to test call. Only used with the internal launcher option", default="")
-	parser.add_argument("-C", "--capability", type=str, help="libfabric capability", default="msg")
+	parser.add_argument("-x", "--capability", type=str, help="libfabric capability", default="msg")
 	parser.add_argument("-i", "--iterations", type=int , help="Number of iterations", default=1)
 	parser.add_argument("-l", "--launcher", type=str, choices=['internal', 'srun', 'mpirun'], help="launcher to use for running job. If nothing is specified, test manages processes internally. Available options: internal, srun and mpirun", default="internal")
 
@@ -172,11 +172,11 @@ if __name__ == '__main__':
 
 	if args.provider in no_addr_prov:
 		cmd = f"fi_multinode -n {args.num_procs} -s {socket.gethostname()} " \
-			f"-p {args.provider} -C {args.capability} -z {mnode['pattern']} " \
-			f"-I {args.iterations} -u {args.launcher.lower()} -E -T"
+			f"-p {args.provider} -x {args.capability} -z {mnode['pattern']} " \
+			f"-I {args.iterations} -u {args.launcher.lower()} -T"
 	else:
 		cmd = f"fi_multinode -n {args.num_procs} -s {socket.gethostname()} " \
-			f"-p {args.provider} -C {args.capability} -z '{mnode['pattern']}' " \
+			f"-p {args.provider} -x {args.capability} -z '{mnode['pattern']}' " \
 			f"-I {args.iterations} -u {args.launcher.lower()} -T"
 
 	if args.launcher.lower() == 'mpirun':
@@ -196,7 +196,7 @@ if __name__ == '__main__':
 			exit()
 		hl = ",".join(expand_host_list(os.environ['SLURM_NODELIST']))
 		mpi = f"runmultinode.sh -h {hl} -n {args.procs_per_node} -p {args.provider} " \
-			  f"-C {args.capability} -I {args.iterations} -z {mnode['pattern']}"
+			  f"-x {args.capability} -I {args.iterations} -z {mnode['pattern']}"
 		if args.ci:
 			mpi += f" --ci '{args.ci}'"
 	else:
