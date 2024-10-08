@@ -529,61 +529,32 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 		);
 
 	/*
-	 * TODO: remove the synapseai and neuron blocks by onboarding the
-	 * ofi_hmem_get_dmabuf_fd API.
+	 * When FI_MR_DMABUF flag is not set,
+	 * only do ibv_reg_mr.
+	 * The only exception is synapseai,
+	 * because dmabuf is the only way
+	 * to register Gaudi device buffer and
+	 * it was implemented before the FI_MR_DMABUF API.
 	 */
-#if HAVE_SYNAPSEAI
 	if (efa_mr_is_synapseai(efa_mr)) {
 		int dmabuf_fd;
 		uint64_t offset;
 		int ret;
 
-		ret = synapseai_get_dmabuf_fd(mr_attr->mr_iov->iov_base,
-						(uint64_t) mr_attr->mr_iov->iov_len,
-						&dmabuf_fd, &offset);
+		ret = ofi_hmem_get_dmabuf_fd(FI_HMEM_SYNAPSEAI,
+					     mr_attr->mr_iov->iov_base,
+					     (uint64_t) mr_attr->mr_iov->iov_len,
+					     &dmabuf_fd, &offset);
 		if (ret != FI_SUCCESS) {
 			EFA_WARN(FI_LOG_MR, "Unable to get dmabuf fd for Gaudi device buffer \n");
 			return NULL;
 		}
+
 		return efa_mr_reg_ibv_dmabuf_mr(efa_mr->domain->ibv_pd, offset,
 					mr_attr->mr_iov->iov_len,
 					(uint64_t)mr_attr->mr_iov->iov_base,
 					dmabuf_fd, access);
 	}
-#endif
-
-#if HAVE_NEURON
-	if (efa_mr_is_neuron(efa_mr)) {
-		int dmabuf_fd;
-		uint64_t offset;
-		int ret;
-
-		ret = neuron_get_dmabuf_fd(
-				mr_attr->mr_iov->iov_base,
-				mr_attr->mr_iov->iov_len,
-				&dmabuf_fd,
-				&offset);
-
-		if (ret == FI_SUCCESS) {
-			/* Success => invoke ibv_reg_dmabuf_mr */
-			return efa_mr_reg_ibv_dmabuf_mr(
-					efa_mr->domain->ibv_pd, 0,
-					mr_attr->mr_iov->iov_len,
-					(uint64_t)mr_attr->mr_iov->iov_base,
-					dmabuf_fd, access);
-		} else if (ret == -FI_EOPNOTSUPP) {
-			/* Protocol not availabe => fallback */
-			EFA_INFO(FI_LOG_MR,
-				"Unable to get dmabuf fd for Neuron device buffer, "
-				"Fall back to ibv_reg_mr\n");
-			return ibv_reg_mr(
-				efa_mr->domain->ibv_pd,
-				(void *)mr_attr->mr_iov->iov_base,
-				mr_attr->mr_iov->iov_len, access);
-		}
-		return NULL;
-	}
-#endif
 
 	return ibv_reg_mr(efa_mr->domain->ibv_pd,
 			(void *)mr_attr->mr_iov->iov_base,
