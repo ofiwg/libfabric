@@ -924,6 +924,7 @@ static void test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource,
 	struct efa_domain *efa_domain;
 	struct efa_rdm_ep *ep;
 	size_t max_msg_size = 1000;
+	size_t inject_msg_size = 0;
 	size_t inject_rma_size = 0;
 	bool shm_permitted = false;
 
@@ -966,13 +967,22 @@ static void test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource,
 	assert_int_equal(fi_enable(resource->ep), 0);
 
 	assert_true(ep->use_zcpy_rx == expected_use_zcpy_rx);
+
+	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
+			&inject_msg_size, &(size_t){sizeof inject_msg_size}), 0);
+	assert_int_equal(ep->inject_msg_size, inject_msg_size);
+
 	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
 			&inject_rma_size, &(size_t){sizeof inject_rma_size}), 0);
 	assert_int_equal(ep->inject_rma_size, inject_rma_size);
-	if (expected_use_zcpy_rx)
+
+	if (expected_use_zcpy_rx) {
+		assert_int_equal(inject_msg_size, efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size);
 		assert_int_equal(inject_rma_size, efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size);
-	else
+	} else {
+		assert_int_equal(inject_msg_size, resource->info->tx_attr->inject_size);
 		assert_int_equal(inject_rma_size, resource->info->tx_attr->inject_size);
+	}
 }
 
 /**
