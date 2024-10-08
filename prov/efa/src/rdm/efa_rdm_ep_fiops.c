@@ -1255,8 +1255,10 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * TODO: Distinguish between inline data sizes for RDMA {send,write}
 		 * when supported
 		 */
-		if (ep->use_zcpy_rx)
+		if (ep->use_zcpy_rx) {
+			ep->inject_msg_size = MIN(ep->inject_msg_size, efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size);
 			ep->inject_rma_size = MIN(ep->inject_rma_size, efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size);
+		}
 
 		ret = efa_rdm_ep_create_base_ep_ibv_qp(ep);
 		if (ret)
