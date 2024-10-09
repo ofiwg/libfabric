@@ -118,7 +118,8 @@ ssize_t fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep,
 // faster than memcpy() for this amount of data.
 // DOES NOT SUPPORT SCB (PIO or UREG) (does not support SIM/BAR)
 // Unstructured copy - for payloads or other memcpy replacement
-static inline void fi_opx_copy_cacheline(uint64_t dest[8], uint64_t source[8])
+__OPX_FORCE_INLINE__
+void fi_opx_copy_cacheline(uint64_t dest[8], uint64_t source[8])
 {
 	dest[0] = source[0];
 	dest[1] = source[1];

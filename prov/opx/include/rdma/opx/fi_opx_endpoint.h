@@ -969,6 +969,61 @@ void fi_opx_enqueue_completed(struct slist *queue, struct opx_context *context, 
 }
 
 __OPX_FORCE_INLINE__
+void opx_ep_copy_immediate_data(struct fi_opx_ep * opx_ep,
+				const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info,
+				struct opx_payload_rzv_contig *contiguous,
+				const uint64_t immediate_byte_count,
+				const uint64_t immediate_qw_count,
+				const uint64_t immediate_block,
+				const uint64_t immediate_tail,
+				const uint64_t immediate_total,
+				const size_t xfer_len,
+				const uint64_t is_hmem,
+				const enum fi_hmem_iface rbuf_iface,
+				const uint64_t rbuf_device,
+				const uint64_t hmem_handle,
+				uint8_t *rbuf_in)
+{
+	uint8_t *rbuf = is_hmem ? opx_ep->hmem_copy_buf : rbuf_in;
+
+	for (int i = 0; i < immediate_byte_count; ++i) {
+		rbuf[i] = contiguous->immediate_byte[i];
+	}
+	rbuf += immediate_byte_count;
+
+	uint64_t * rbuf_qw = (uint64_t *)rbuf;
+	for (int i = 0; i < immediate_qw_count; ++i) {
+		rbuf_qw[i] = contiguous->immediate_qw[i];
+	}
+	rbuf += immediate_qw_count * sizeof(uint64_t);
+
+	if (immediate_block) {
+		const uint64_t immediate_fragment = (immediate_byte_count || immediate_qw_count) ? 1 : 0;
+		memcpy(rbuf, (void *) (&contiguous->cache_line_1 + immediate_fragment), FI_OPX_CACHE_LINE_SIZE);
+	}
+
+	if (is_hmem && immediate_total) {
+		opx_copy_to_hmem(rbuf_iface, rbuf_device, hmem_handle,
+			rbuf_in, opx_ep->hmem_copy_buf, immediate_total,
+			OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+	}
+
+	if (immediate_tail) {
+		uint8_t *rbuf_start = rbuf_in + xfer_len - OPX_IMMEDIATE_TAIL_BYTE_COUNT;
+
+		if (!is_hmem) {
+			for (int i = 0; i < OPX_IMMEDIATE_TAIL_BYTE_COUNT; ++i) {
+				rbuf_start[i] = immediate_info.tail_bytes[i];
+			}
+		} else {
+			opx_copy_to_hmem(rbuf_iface, rbuf_device, hmem_handle, rbuf_start,
+					immediate_info.tail_bytes, OPX_IMMEDIATE_TAIL_BYTE_COUNT,
+					OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+		}
+	}
+}
+
+__OPX_FORCE_INLINE__
 void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 			    const union fi_opx_hfi1_packet_payload * const payload,
 			    struct fi_opx_ep * opx_ep,
@@ -980,14 +1035,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 			    const uint64_t is_hmem,
 			    const int lock_required,
 			    const enum ofi_reliability_kind reliability,
-			    const enum opx_hfi1_type hfi1_type,
-			    const uintptr_t origin_byte_counter_vaddr,
-			    const struct fi_opx_hmem_iov *iov,
-			    const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info,
-			    const struct fi_opx_hmem_iov *src_dst_iov,
-			    const uint8_t * const immediate_byte,
-			    const uint64_t * const immediate_qw,
-			    const union cacheline * const immediate_block)
+			    const enum opx_hfi1_type hfi1_type)
 {
 	assert( (opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) || (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS));
 
@@ -1028,14 +1076,14 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 						hdr,
 						payload,
 						u8_rx, niov,
-						origin_byte_counter_vaddr,
+						payload->rendezvous.noncontiguous.origin_byte_counter_vaddr,
 						context,
 						(uintptr_t)(rbuf),		/* receive buffer virtual address */
 						FI_HMEM_SYSTEM,			/* receive buffer iface */
 						0UL,				/* receive buffer device */
 						0UL,				/* immediate_data */
 						0UL,				/* immediate_end_block_count */
-						iov,
+						&payload->rendezvous.noncontiguous.iov[0],
 						FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG,
 						is_intranode,
 						reliability,			/* compile-time constant expression */
@@ -1044,16 +1092,35 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 		} else {
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.recv.multi_recv_rzv_contig);
 			assert(niov == 1);
-			const uint64_t immediate_byte_count = immediate_info.byte_count;
-			const uint64_t immediate_qw_count = immediate_info.qw_count;
-			const uint64_t immediate_block_count = immediate_info.block_count;
-			const uint64_t immediate_total = immediate_byte_count +
-							immediate_qw_count * sizeof(uint64_t) +
-							immediate_block_count * sizeof(union cacheline);
-			const uint64_t immediate_end_block_count = immediate_info.end_block_count;
+			struct opx_payload_rzv_contig *contiguous = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))
+				? (struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous
+				: (struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous_16B;
+			const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
+				.qw0 = contiguous->immediate_info
+			};
+			const uint64_t immediate_byte_count = (immediate_info.count & OPX_IMMEDIATE_BYTE_COUNT_MASK)
+								>> OPX_IMMEDIATE_BYTE_COUNT_SHIFT;
+			const uint64_t immediate_qw_count   = (immediate_info.count & OPX_IMMEDIATE_QW_COUNT_MASK)
+								>> OPX_IMMEDIATE_QW_COUNT_SHIFT;
+			const uint64_t immediate_block      = (immediate_info.count & OPX_IMMEDIATE_BLOCK_MASK)
+								>> OPX_IMMEDIATE_BLOCK_SHIFT;
+			const uint64_t immediate_tail       = (immediate_info.count & OPX_IMMEDIATE_TAIL_MASK)
+								>> OPX_IMMEDIATE_TAIL_SHIFT;
+			const uint64_t immediate_total      = immediate_byte_count +
+								immediate_qw_count * sizeof(uint64_t) +
+								immediate_block * sizeof(union cacheline);
+
+			const struct fi_opx_hmem_iov src_dst_iov[1] = {
+				{
+					.buf = contiguous->src_vaddr,
+					.len = (contiguous->src_blocks << 6),
+					.device = contiguous->src_device_id,
+					.iface = (enum fi_hmem_iface) contiguous->src_iface
+				}
+			};
 
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"IMMEDIATE  RZV_RTS immediate_total %#lX, immediate_byte_count %#lX, immediate_qw_count %#lX, immediate_block_count %#lX\n",
-					 immediate_total, immediate_byte_count, immediate_qw_count, immediate_block_count);
+					 immediate_total, immediate_byte_count, immediate_qw_count, immediate_block);
 
 			context->byte_counter -= immediate_total;
 
@@ -1061,13 +1128,13 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 						hdr,
 						payload,
 						u8_rx, niov,
-						origin_byte_counter_vaddr,
+						contiguous->origin_byte_counter_vaddr,
 						context,
 						(uintptr_t)(rbuf + immediate_total),	/* receive buffer virtual address */
 						FI_HMEM_SYSTEM,				/* receive buffer iface */
 						0UL,					/* receive buffer device */
 						immediate_total,
-						immediate_end_block_count,
+						immediate_tail,
 						src_dst_iov,
 						FI_OPX_HFI_DPUT_OPCODE_RZV,
 						is_intranode,
@@ -1075,41 +1142,10 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 						u32_ext_rx,
 						hfi1_type);
 
-			/*
-			 * copy the immediate payload data
-			 */
-			unsigned i;
-
-			if (immediate_byte_count) {
-				for (i=0; i<immediate_byte_count; ++i) {
-					rbuf[i] = immediate_byte[i];
-				}
-				rbuf += immediate_byte_count;
-			}
-
-			if (immediate_qw_count) {
-				uint64_t * rbuf_qw = (uint64_t *)rbuf;
-				for (i=0; i<immediate_qw_count; ++i) {
-					rbuf_qw[i] = immediate_qw[i];
-				}
-				rbuf += immediate_qw_count * sizeof(uint64_t);
-			}
-
-			if (immediate_block_count) {
-				union cacheline * rbuf_block = (union cacheline *)rbuf;
-				for (i=0; i<immediate_block_count; ++i) {
-					rbuf_block[i] = immediate_block[i];
-				};
-			}
-
-			/* up to 1 block of immediate end data after the immediate blocks
-				Copy this to the end of rbuf */
-			if (immediate_end_block_count) {
-				uint8_t *rbuf_start = (uint8_t *)recv_buf;
-				rbuf_start += xfer_len - (immediate_end_block_count << 6);
-				memcpy(rbuf_start, immediate_block[immediate_block_count].qw,
-						(immediate_end_block_count << 6));
-			}
+			opx_ep_copy_immediate_data(opx_ep, immediate_info, contiguous, immediate_byte_count,
+						immediate_qw_count, immediate_block, immediate_tail,
+						immediate_total, xfer_len, OPX_HMEM_FALSE, FI_HMEM_SYSTEM,
+						0ul, OPX_HMEM_NO_HANDLE, rbuf);
 		}
 
 		uint64_t bytes_consumed = ((xfer_len + 8) & (~0x07ull)) + sizeof(struct opx_context);
@@ -1159,29 +1195,48 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 			}
 			uint8_t * rbuf = (uint8_t *)recv_buf;
 
-			const uint64_t immediate_byte_count = immediate_info.byte_count;
-			const uint64_t immediate_qw_count = immediate_info.qw_count;
-			const uint64_t immediate_block_count = immediate_info.block_count;
-			const uint64_t immediate_total = immediate_byte_count +
-							immediate_qw_count * sizeof(uint64_t) +
-							immediate_block_count * sizeof(union cacheline);
-			const uint64_t immediate_end_block_count = immediate_info.end_block_count;
+			struct opx_payload_rzv_contig *contiguous = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))
+				? (struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous
+				: (struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous_16B;
+			const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
+				.qw0 = contiguous->immediate_info
+			};
+			const uint64_t immediate_byte_count = (immediate_info.count & OPX_IMMEDIATE_BYTE_COUNT_MASK)
+								>> OPX_IMMEDIATE_BYTE_COUNT_SHIFT;
+			const uint64_t immediate_qw_count   = (immediate_info.count & OPX_IMMEDIATE_QW_COUNT_MASK)
+								>> OPX_IMMEDIATE_QW_COUNT_SHIFT;
+			const uint64_t immediate_block      = (immediate_info.count & OPX_IMMEDIATE_BLOCK_MASK)
+								>> OPX_IMMEDIATE_BLOCK_SHIFT;
+			const uint64_t immediate_tail       = (immediate_info.count & OPX_IMMEDIATE_TAIL_MASK)
+								>> OPX_IMMEDIATE_TAIL_SHIFT;
+			const uint64_t immediate_total      = immediate_byte_count +
+								immediate_qw_count * sizeof(uint64_t) +
+								immediate_block * sizeof(union cacheline);
+
+			const struct fi_opx_hmem_iov src_dst_iov[1] = {
+				{
+					.buf = contiguous->src_vaddr,
+					.len = (contiguous->src_blocks << 6),
+					.device = contiguous->src_device_id,
+					.iface = (enum fi_hmem_iface) contiguous->src_iface
+				}
+			};
 
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"IMMEDIATE  RZV_RTS immediate_total %#lX, immediate_byte_count %#lX, immediate_qw_count %#lX, immediate_block_count %#lX\n",
-				     immediate_total, immediate_byte_count, immediate_qw_count, immediate_block_count);
+				     immediate_total, immediate_byte_count, immediate_qw_count, immediate_block);
 			context->byte_counter = xfer_len - immediate_total;
 
 			FI_OPX_FABRIC_RX_RZV_RTS(opx_ep,
 						 hdr,
 						 payload,
 						 u8_rx, 1,
-						 origin_byte_counter_vaddr,
+						 contiguous->origin_byte_counter_vaddr,
 						 context,
 						 (uintptr_t) (rbuf + immediate_total),
 						 rbuf_iface,
 						 rbuf_device,
 						 immediate_total,
-						 immediate_end_block_count,
+						 immediate_tail,
 						 src_dst_iov,
 						 FI_OPX_HFI_DPUT_OPCODE_RZV,
 						 is_intranode,
@@ -1189,63 +1244,10 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 						 u32_ext_rx,
 						 hfi1_type);
 
-			/*
-			 * copy the immediate payload data
-			 */
-			if (is_hmem) {
-				rbuf = opx_ep->hmem_copy_buf;
-			}
-			unsigned i;
-
-			if (immediate_byte_count) {
-				for (i=0; i<immediate_byte_count; ++i) {
-					rbuf[i] = immediate_byte[i];
-				}
-				rbuf += immediate_byte_count;
-			}
-
-			if (immediate_qw_count) {
-				uint64_t * rbuf_qw = (uint64_t *)rbuf;
-				for (i=0; i<immediate_qw_count; ++i) {
-					rbuf_qw[i] = immediate_qw[i];
-				}
-				rbuf += immediate_qw_count * sizeof(uint64_t);
-			}
-
-			if (immediate_block_count) {
-				union cacheline * rbuf_block = (union cacheline *)rbuf;
-				for (i=0; i<immediate_block_count; ++i) {
-					rbuf_block[i] = immediate_block[i];
-				};
-			}
-
-			if (is_hmem) {
-				uint64_t immediate_total = (rbuf - opx_ep->hmem_copy_buf) +
-							   (immediate_block_count * sizeof(union cacheline));
-				if (immediate_total) {
-					opx_copy_to_hmem(rbuf_iface, rbuf_device, hmem_handle,
-						recv_buf, opx_ep->hmem_copy_buf, immediate_total,
-						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
-				}
-			}
-
-			/* up to 1 block of immediate end data after the immediate blocks
-				Copy this to the end of rbuf */
-			if (immediate_end_block_count) {
-				uint8_t *rbuf_start = (uint8_t *)recv_buf;
-				rbuf_start += xfer_len - (immediate_end_block_count << 6);
-				if (!is_hmem) {
-					memcpy(rbuf_start,
-						immediate_block[immediate_block_count].qw,
-						(immediate_end_block_count << 6));
-				} else {
-					opx_copy_to_hmem(rbuf_iface, rbuf_device, hmem_handle, rbuf_start,
-						immediate_block[immediate_block_count].qw,
-						(immediate_end_block_count << 6),
-						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
-				}
-			}
-
+			opx_ep_copy_immediate_data(opx_ep, immediate_info, contiguous, immediate_byte_count,
+						immediate_qw_count, immediate_block, immediate_tail,
+						immediate_total, xfer_len, is_hmem, rbuf_iface,
+						rbuf_device, hmem_handle, rbuf);
 		} else {
 			/*fi_opx_hfi1_dump_packet_hdr(hdr, __func__, __LINE__); */
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1275,6 +1277,11 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 
 		assert(payload != NULL);
 
+		uintptr_t origin_byte_counter_vaddr = is_noncontig ?
+				payload->rendezvous.noncontiguous.origin_byte_counter_vaddr :
+				(hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ?
+					payload->rendezvous.contiguous.origin_byte_counter_vaddr :
+					payload->rendezvous.contiguous_16B.origin_byte_counter_vaddr;
 		FI_OPX_FABRIC_RX_RZV_RTS_ETRUNC(opx_ep,
 						(const void * const)hdr,
 						u8_rx,
@@ -1842,61 +1849,10 @@ void opx_ep_complete_receive_operation (struct fid_ep *ep,
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-MP-EAGER-NTH");
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- MULTI PACKET EAGER NTH byte counter %lu (end)\n",context->byte_counter);
-	} else if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) { /* 9B rendezvous packet */
-		union fi_opx_hfi1_packet_payload *p = (union fi_opx_hfi1_packet_payload *) payload;
-
-		const uint64_t is_noncontig = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_NONCONTIG;
-
-		uintptr_t origin_byte_counter_vaddr = (is_noncontig == 1) ? p->rendezvous.noncontiguous.origin_byte_counter_vaddr :
-									p->rendezvous.contiguous.origin_byte_counter_vaddr;
-
-		struct fi_opx_hmem_iov *iov = &p->rendezvous.noncontiguous.iov[0];
-
-		const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
-					.qw0 = p->rendezvous.contiguous.immediate_info
-		};
-		const struct fi_opx_hmem_iov src_dst_iov = {
-					.buf = p->rendezvous.contiguous.src_vaddr,
-					.len = (p->rendezvous.contiguous.src_blocks << 6),
-					.device = p->rendezvous.contiguous.src_device_id,
-					.iface = (enum fi_hmem_iface) p->rendezvous.contiguous.src_iface
-		};
-		const uint8_t * const immediate_byte = p->rendezvous.contiguous.immediate_byte;
-		const uint64_t * const immediate_qw = p->rendezvous.contiguous.immediate_qw;
-		const uint64_t immediate_fragment = ((immediate_info.byte_count + immediate_info.qw_count + 63) >> 6);
-		const union cacheline * const immediate_block = &p->rendezvous.contiguous.cache_line_1 + immediate_fragment;
-
+	} else {
 		fi_opx_handle_recv_rts(hdr, payload, opx_ep, origin_tag, opcode,
 					context, is_multi_receive, is_intranode, is_hmem,
-					lock_required, reliability, hfi1_type, origin_byte_counter_vaddr,
-					iov, immediate_info, &src_dst_iov, immediate_byte, immediate_qw, immediate_block);
-
-	} else { /* (hfi1_type & OPX_HFI1_JKR) 16B rendezvous packet */
-		union fi_opx_hfi1_packet_payload_16B *p = (union fi_opx_hfi1_packet_payload_16B *) payload;
-		const uint64_t is_noncontig = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_NONCONTIG;
-		uintptr_t origin_byte_counter_vaddr = (is_noncontig == 1) ? p->rendezvous.noncontiguous.origin_byte_counter_vaddr :
-									p->rendezvous.contiguous.origin_byte_counter_vaddr;
-		struct fi_opx_hmem_iov *iov = &p->rendezvous.noncontiguous.iov[0];
-		const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
-					.qw0 = p->rendezvous.contiguous.immediate_info
-		};
-
-		const struct fi_opx_hmem_iov src_dst_iov = {
-					.buf = p->rendezvous.contiguous.src_vaddr,
-					.len = (p->rendezvous.contiguous.src_blocks << 6),
-					.device = p->rendezvous.contiguous.src_device_id,
-					.iface = (enum fi_hmem_iface) p->rendezvous.contiguous.src_iface
-
-		};
-		const uint8_t * const immediate_byte = p->rendezvous.contiguous.immediate_byte;
-		const uint64_t * const immediate_qw = p->rendezvous.contiguous.immediate_qw;
-		const uint64_t immediate_fragment = ((immediate_info.byte_count + immediate_info.qw_count + 63) >> 6);
-		const union cacheline * const immediate_block = &p->rendezvous.contiguous.cache_line_1 + immediate_fragment;
-
-		fi_opx_handle_recv_rts(hdr, payload, opx_ep, origin_tag, opcode,
-					context, is_multi_receive, is_intranode, is_hmem,
-					lock_required, reliability, hfi1_type, origin_byte_counter_vaddr,
-					iov, immediate_info, &src_dst_iov, immediate_byte, immediate_qw, immediate_block);
+					lock_required, reliability, hfi1_type);
 	}
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "\n");
 }

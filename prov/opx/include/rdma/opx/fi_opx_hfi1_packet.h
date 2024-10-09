@@ -1588,17 +1588,26 @@ struct fi_opx_hmem_iov {
 							  - (4 * sizeof(uint32_t)))		\
 				  / sizeof(uint32_t))
 
+#define OPX_IMMEDIATE_BYTE_COUNT_SHIFT	(5)
+#define OPX_IMMEDIATE_BYTE_COUNT_MASK	(0xE0)
+#define OPX_IMMEDIATE_QW_COUNT_SHIFT	(2)
+#define OPX_IMMEDIATE_QW_COUNT_MASK	(0x1C)
+#define OPX_IMMEDIATE_BLOCK_SHIFT	(1)
+#define OPX_IMMEDIATE_BLOCK_MASK	(0x02)
+#define OPX_IMMEDIATE_TAIL_SHIFT	(0)
+#define OPX_IMMEDIATE_TAIL_MASK		(0x01)
+#define OPX_IMMEDIATE_TAIL_BYTE_COUNT	(7)
+
 union fi_opx_hfi1_rzv_rts_immediate_info {
 	uint64_t	qw0;
 	struct {
-		uint8_t	byte_count;	/* only need 3 bits (0..7 bytes) */
-		uint8_t	qw_count;	/* only need 3 bits (0..7 quadwords) */
-		uint8_t	block_count;	/* only need 1 bits (0 or 1) */
-		uint8_t	end_block_count;/* only need 1 bits (0 or 1) */
-		uint32_t unused;
+		uint8_t tail_bytes[7];
+		uint8_t count;
 	};
 };
 
+static_assert(sizeof(((union fi_opx_hfi1_rzv_rts_immediate_info *)0)->tail_bytes) == OPX_IMMEDIATE_TAIL_BYTE_COUNT,
+		"sizeof(immediate_info->tail_bytes) must be equal to OPX_IMMEDIATE_TAIL_BYTE_COUNT!");
 
 /* Cache "blocked" payloads in 16B are currently "tricky".
  * The sender will always send 1 QW of header after SOP so STORE'ing
@@ -1612,124 +1621,49 @@ union fi_opx_hfi1_rzv_rts_immediate_info {
  * fi_opx_init_hfi_lookupoptionally STORE(icrc/tail) if no more immediate data
  *
  * STORE(full block of immediate fragment unaligned data)
- * STORe(full block of immediate data)
+ * STORE(full block of immediate data)
  * STORE(full block of immediate end data)
  * STORE(icrc/tail)
  */
-union fi_opx_hfi1_packet_payload_16B {
-	uint8_t				byte[FI_OPX_HFI1_PACKET_MTU];
-	uint64_t	                qw[FI_OPX_HFI1_PACKET_MTU>>3];
+
+struct opx_payload_rzv_contig {
+	/* ==== CACHE LINE 0 ==== */
+
+	uintptr_t		src_vaddr;
+	uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
+	uint64_t		src_device_id;
+	uint64_t		src_iface;
+	uint64_t		immediate_info;
+	uintptr_t		origin_byte_counter_vaddr;
+	uint64_t		unused;
+
+	/* ==== CACHE LINE 1 (WFR/9B only) ==== */
 	union {
 		struct {
-			/* ==== CACHE LINE 0 ==== */
+			uint8_t		immediate_byte[8];
+			uint64_t	immediate_qw[7];
+		};
 
-			uintptr_t		src_vaddr;
-			uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
-			uint64_t		src_device_id;
-			uint64_t		src_iface;
-			uint64_t		immediate_info;
-			uintptr_t		origin_byte_counter_vaddr;
-			uint64_t		unused[1];
+		union cacheline	cache_line_1;
+	};
 
-			/* Not cacheline aligned after the first block */
-			union {
-				struct {
-					uint8_t		immediate_byte[8];
-					uint64_t	immediate_qw[7];
-				};
+	/* ==== CACHE LINE 2-127 ==== */
 
-				union cacheline	cache_line_1;
-			};
+	union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
 
-			union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
-
-		} contiguous;
-		struct {
-			/* ==== CACHE LINE 0 ==== */
-
-			uintptr_t		src_vaddr;
-			uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
-			uint64_t		src_device_id;
-			uint64_t		src_iface;
-			uint64_t		immediate_info;
-			uintptr_t		origin_byte_counter_vaddr;
-			uint64_t		unused[1];
-
-			union {
-				struct {
-					uint8_t		immediate_byte[8];
-					uint64_t	immediate_qw[7];
-				};
-
-				union cacheline	cache_line_1;
-			};
-
-			union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
-
-		} contiguous_16B;
-		struct {
-			/* ==== CACHE LINE 0 ==== */
-
-			uintptr_t		origin_byte_counter_vaddr;
-			struct fi_opx_hmem_iov	iov[2];
-
-			/* ==== CACHE LINE 1-127 (for 8k mtu) ==== */
-			struct fi_opx_hmem_iov	iov_ext[FI_OPX_MAX_HMEM_IOV - 2];
-			size_t			unused;
-
-		} noncontiguous;
-	} rendezvous;
-
-	struct {
-		union fi_opx_hfi1_dput_iov	iov[FI_OPX_MAX_DPUT_IOV];
-	} cts;
-
-	/* tid_cts extends cts*/
-	struct {
-		/* ==== CACHE LINE 0 ==== */
-		union fi_opx_hfi1_dput_iov	iov[1];
-		uint32_t  tid_offset;
-		uint32_t  ntidpairs;
-		int32_t   origin_byte_counter_adjust;
-		uint32_t  unused;
-
-		/* ==== CACHE LINE 1 ==== */
-		uint32_t  tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
-	} tid_cts;
-
-} __attribute__((__aligned__(32)));
+};
 
 /* 9B and common payload structure */
 union fi_opx_hfi1_packet_payload {
 	uint8_t				byte[FI_OPX_HFI1_PACKET_MTU];
-	uint64_t	                qw[FI_OPX_HFI1_PACKET_MTU>>3];
+	uint64_t			qw[FI_OPX_HFI1_PACKET_MTU>>3];
 	union {
 		struct {
-			/* ==== CACHE LINE 0 ==== */
+			uint64_t			contig_9B_padding;
+			struct opx_payload_rzv_contig 	contiguous;
+		};
+		struct opx_payload_rzv_contig contiguous_16B;
 
-			uintptr_t		src_vaddr;
-			uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
-			uint64_t		src_device_id;
-			uint64_t		src_iface;
-			uint64_t		immediate_info;
-			uintptr_t		origin_byte_counter_vaddr;
-			uint64_t		unused[2];
-
-			/* ==== CACHE LINE 1 ==== */
-			union {
-				struct {
-					uint8_t		immediate_byte[8];
-					uint64_t	immediate_qw[7];
-				};
-
-				union cacheline	cache_line_1;
-			};
-
-			/* ==== CACHE LINE 2-127 ==== */
-
-			union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
-
-		} contiguous;
 		struct {
 			/* ==== CACHE LINE 0 ==== */
 
@@ -1759,8 +1693,6 @@ union fi_opx_hfi1_packet_payload {
 		/* ==== CACHE LINE 1 ==== */
 		uint32_t  tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 	} tid_cts;
-	/* Union with 16B payload */
-	union fi_opx_hfi1_packet_payload_16B payload_16B;
 } __attribute__((__aligned__(32)));
 
 static_assert(sizeof(union fi_opx_hfi1_packet_payload) <= FI_OPX_HFI1_PACKET_MTU,

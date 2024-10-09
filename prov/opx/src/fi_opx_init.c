@@ -655,7 +655,7 @@ static void do_static_assert_tests()
 	OPX_COMPILE_TIME_ASSERT(sizeof(*payload) == sizeof(payload->tid_cts),
 							"Expected TID rendezvous CTS payload size error");
 
-	OPX_COMPILE_TIME_ASSERT(sizeof(*payload) == sizeof(payload->rendezvous.contiguous),
+	OPX_COMPILE_TIME_ASSERT(sizeof(*payload) >= sizeof(payload->rendezvous.contiguous),
 							"Contiguous rendezvous payload size error");
 
 	OPX_COMPILE_TIME_ASSERT(sizeof(*payload) == sizeof(payload->rendezvous.noncontiguous),
