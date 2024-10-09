@@ -1414,9 +1414,13 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 
 		snprintf(buffer,sizeof(buffer),"%s-%02x.%d",
 			opx_domain->unique_job_key_str, hfi_unit, inst);
-		opx_shm_rx_init(&opx_ep->rx->shm, fi_opx_global.prov,
+		ssize_t rc = opx_shm_rx_init(&opx_ep->rx->shm, fi_opx_global.prov,
 			(const char *)buffer, rx_index,
 			FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
+		if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Shared memory initialization failed.\n");
+			goto err;
+		}
 	}
 
 	/* Now that endpoint is complete enough to have context information from the hfi,
