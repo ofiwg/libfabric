@@ -2507,55 +2507,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 {
 	uint8_t origin_reliability_rx = (uint8_t)-1;
 
-	if (OFI_RELIABILITY_KIND_OFFLOAD == reliability_kind) {
-
-		assert (hfi1 == NULL);
-
-		service->reliability_kind = reliability_kind;
-
-		/*
-		 * open the hfi1 context, determines JKR or WFR
-		 */
-		service->context = fi_opx_hfi1_context_open(NULL, unique_job_key);
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"Opened hfi %p, HFI type %#X/%#X, unit %#X, port %#X, ref_cnt %#lX,"
-			" rcv ctxt %#X, send ctxt %#X, \n",
-			service->context, service->context->hfi_hfi1_type, OPX_HFI1_TYPE,
-			service->context->hfi_unit, service->context->hfi_port,
-			service->context->ref_cnt,
-			service->context->ctrl->ctxt_info.ctxt,
-			service->context->ctrl->ctxt_info.send_ctxt);
-
-		assert (service->context != NULL);
-
-		hfi1 = service->context;
-		init_hfi1_rxe_state(hfi1, &service->rx.hfi1.state);
-
-		service->lid_be = (uint32_t)htons(hfi1->lid);
-
-		/*
-		 * COPY the rx static information from the hfi context structure.
-		 * This is to improve cache layout.
-		 */
-		service->rx.hfi1.hdrq.rhf_base = hfi1->info.rxe.hdrq.rhf_base;
-		service->rx.hfi1.hdrq.head_register = hfi1->info.rxe.hdrq.head_register;
-		service->rx.hfi1.egrq.base_addr = hfi1->info.rxe.egrq.base_addr;
-		service->rx.hfi1.egrq.elemsz = hfi1->info.rxe.egrq.elemsz;
-		service->rx.hfi1.egrq.last_egrbfr_index = 0;
-		service->rx.hfi1.egrq.head_register = hfi1->info.rxe.egrq.head_register;
-
-
-		/* the 'state' fields will change after every tx operation */
-		service->tx.hfi1.pio_state = &hfi1->state.pio;
-
-		/* the 'info' fields do not change; the values can be safely copied */
-		service->tx.hfi1.pio_scb_sop_first = hfi1->info.pio.scb_sop_first;
-		service->tx.hfi1.pio_scb_first = hfi1->info.pio.scb_first;
-		service->tx.hfi1.pio_credits_addr = hfi1->info.pio.credits_addr;
-
-		origin_reliability_rx = hfi1->info.rxe.id;
-
-	} else if (OFI_RELIABILITY_KIND_ONLOAD == reliability_kind) {
+	if (OFI_RELIABILITY_KIND_ONLOAD == reliability_kind) {
 
 		assert(hfi1 != NULL);
 
