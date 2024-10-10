@@ -173,6 +173,11 @@ to write CQ entries for all successful completions.  See the flags
 discussion below for more details. The requested message size that
 can be used with fi_inject is limited by inject_size.
 
+If FI_HMEM is enabled, the fi_inject call can only accept buffer with
+iface equal to FI_HMEM_SYSTEM if the provider requires the FI_MR_HMEM
+mr_mode.  This limitation applies to all the fi_\*inject\* calls and
+does not affect how inject_size is reported.
+
 ## fi_senddata
 
 The send data call is similar to fi_send, but allows for the sending
