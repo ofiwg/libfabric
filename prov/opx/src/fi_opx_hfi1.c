@@ -3678,8 +3678,8 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			hdr->qw_9B[0] = opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 			hdr->qw_9B[1] = opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx |
-				((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
-					(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS);
+				((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) :
+						   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS));
 			hdr->qw_9B[2] = opx_ep->tx->rzv_9B.hdr.qw_9B[2];
 			hdr->qw_9B[3] = opx_ep->tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32);
 			hdr->qw_9B[4] = opx_ep->tx->rzv_9B.hdr.qw_9B[4] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK;
@@ -3693,8 +3693,8 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 			hdr->qw_16B[1] = opx_ep->tx->rzv_16B.hdr.qw_16B[1] |
 					((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
 			hdr->qw_16B[2] = opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx |
-				((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
-					(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS);
+				((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) :
+						   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS));
 			hdr->qw_16B[3] = opx_ep->tx->rzv_16B.hdr.qw_16B[3];
 			hdr->qw_16B[4] = opx_ep->tx->rzv_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32);
 			hdr->qw_16B[5] = opx_ep->tx->rzv_16B.hdr.qw_16B[5] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK;
@@ -3830,8 +3830,8 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 				OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx |
-				((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
-						   (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS),
+				((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) :
+						   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS)),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[2] | psn,
 			opx_ep->tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[4] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK,
@@ -3848,8 +3848,8 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 			opx_ep->tx->rzv_16B.hdr.qw_16B[1] |
 						((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
 			opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx |
-				((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
-						   (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS),
+				((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) :
+						   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS)),
 			opx_ep->tx->rzv_16B.hdr.qw_16B[3] | psn,
 			opx_ep->tx->rzv_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32),
 			opx_ep->tx->rzv_16B.hdr.qw_16B[5] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK,
@@ -4077,9 +4077,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 		hdr->qw_9B[0] = opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 		hdr->qw_9B[1] = opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx |
-			((caps & FI_MSG) ?
-				(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
-				(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS);
+			((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) :
+					   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS));
 
 		hdr->qw_9B[2] = opx_ep->tx->rzv_9B.hdr.qw_9B[2];
 		hdr->qw_9B[3] = opx_ep->tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32);
@@ -4250,9 +4249,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 			OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx |
-			((caps & FI_MSG) ?
-				(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
-				(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS),
+			((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) :
+					   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS)),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[2] | psn,
 			opx_ep->tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[4] | (1ull << 48),
@@ -4535,9 +4533,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 					((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
 
 		hdr->qw_16B[2] = opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx |
-			((caps & FI_MSG) ?
-				(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
-				(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS);
+			((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) :
+					   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS));
 
 		hdr->qw_16B[3] = opx_ep->tx->rzv_16B.hdr.qw_16B[3];
 		hdr->qw_16B[4] = opx_ep->tx->rzv_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32);
@@ -4705,9 +4702,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 		opx_ep->tx->rzv_16B.hdr.qw_16B[1] |
 					((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
 		opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx |
-			((caps & FI_MSG) ?
-				(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS :
-				(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS),
+			((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) :
+					   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS)),
 		opx_ep->tx->rzv_16B.hdr.qw_16B[3] | psn,
 		opx_ep->tx->rzv_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32),
 		opx_ep->tx->rzv_16B.hdr.qw_16B[5] | (1ull << 48),

@@ -64,17 +64,38 @@
 #define FI_OPX_HFI_BTH_OPCODE_ATOMIC			(0xC4)
 #define FI_OPX_HFI_BTH_OPCODE_ACK			(0xC5)
 #define FI_OPX_HFI_BTH_OPCODE_UD			(0xC6)	/* unreliabile datagram */
-/* opcodes (0xC7..0xEF) are unused */
-#define FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH		(0xF7)
-#define FI_OPX_HFI_BTH_OPCODE_MSG_INJECT		(0xF8)
-#define FI_OPX_HFI_BTH_OPCODE_MSG_EAGER			(0xF9)
-#define FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST	(0xFA)
-#define FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS		(0xFB)
-#define FI_OPX_HFI_BTH_OPCODE_TAG_INJECT		(0xFC)
-#define FI_OPX_HFI_BTH_OPCODE_TAG_EAGER			(0xFD)
-#define FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST	(0xFE)
-#define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS		(0xFF)
+/* opcodes (0xC7..0xEE) are unused */
 
+#define FI_OPX_HFI_BTH_OPCODE_CQ_BIT			(0x01)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_BIT			(0x02)
+#define FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode)					\
+	(opcode & ~(FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT))
+#define FI_OPX_HFI_BTH_OPCODE_WITHOUT_CQ(opcode)					\
+	(opcode & ~(FI_OPX_HFI_BTH_OPCODE_CQ_BIT))
+#define FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode)					\
+	((opcode & FI_OPX_HFI_BTH_OPCODE_CQ_BIT) ? FI_REMOTE_CQ_DATA : 0)
+#define FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode)					\
+	((opcode & FI_OPX_HFI_BTH_OPCODE_TAG_BIT) ? FI_TAGGED : FI_MSG)
+#define FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)						\
+	((opcode & FI_OPX_HFI_BTH_OPCODE_TAG_BIT) ? 1 : 0)
+
+#define FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH		(0xEF)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_INJECT		(0xF0)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_INJECT | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_INJECT		(FI_OPX_HFI_BTH_OPCODE_MSG_INJECT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_INJECT | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_EAGER			(0xF4)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_EAGER | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_EAGER			(FI_OPX_HFI_BTH_OPCODE_MSG_EAGER | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_EAGER | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST	(0xF8)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS		(0xFC)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS		(FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
 
 static const char* FI_OPX_HFI_BTH_LOW_OPCODE_STRINGS[] = {
 	/* opcodes (0x00..0xBF) are reserved */
@@ -87,17 +108,46 @@ static const char* FI_OPX_HFI_BTH_LOW_OPCODE_STRINGS[] = {
 	"FI_OPX_HFI_BTH_OPCODE_UD                  " };
 
 static const char* FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS[] = {
-	/* opcodes (0xC7..0xEF) are unused */
-	"FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH        ",
-	"FI_OPX_HFI_BTH_OPCODE_MSG_INJECT          ",
-	"FI_OPX_HFI_BTH_OPCODE_MSG_EAGER           ",
-	"FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST  ",
-	"FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS         ",
-	"FI_OPX_HFI_BTH_OPCODE_TAG_INJECT          ",
-	"FI_OPX_HFI_BTH_OPCODE_TAG_EAGER           ",
-	"FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST  ",
-	"FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS         ",
-	"INVALID BTH OPCODE                        " };
+	/* opcodes (0xC7..0xEE) are unused */
+	"FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH          ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_INJECT            ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ         ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_INJECT            ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ         ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_EAGER             ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ          ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_EAGER             ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ          ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST    ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST    ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS           ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ        ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS           ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ        ",
+	"INVALID BTH OPCODE                          " };
+
+OPX_COMPILE_TIME_ASSERT((FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH == (FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ - sizeof(FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS)/sizeof(char*) + 2)), "FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH must be first in the high opcode array, or dependent code conditionals need updated");
+OPX_COMPILE_TIME_ASSERT((FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ == 0xFF), "FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ must be last in the high opcode array, or dependent code conditionals need updated");
+
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_INJECT ^ FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_INJECT and FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_EAGER ^ FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_EAGER and FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST ^ FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST and FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS ^ FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS and FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_TAG_INJECT ^ FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_TAG_INJECT and FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_TAG_EAGER ^ FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_TAG_EAGER and FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST ^ FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST and FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS ^ FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS and FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_INJECT ^ FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_INJECT and FI_OPX_HFI_BTH_OPCODE_TAG_INJECT must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ ^ FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ and FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_EAGER ^ FI_OPX_HFI_BTH_OPCODE_TAG_EAGER) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_EAGER and FI_OPX_HFI_BTH_OPCODE_TAG_EAGER must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ ^ FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ and FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST ^ FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST and FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ ^ FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ and FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS ^ FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS and FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ ^ FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ and FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
 
 static inline const char* opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 {
@@ -106,7 +156,7 @@ static inline const char* opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 	    (opcode <= (uint16_t) FI_OPX_HFI_BTH_OPCODE_UD)) {
 		return FI_OPX_HFI_BTH_LOW_OPCODE_STRINGS[opcode-FI_OPX_HFI_BTH_OPCODE_INVALID];
 	} else if ((opcode >= (uint16_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH) &&
-		   (opcode <= (uint16_t) FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS)) {
+		   (opcode <= (uint16_t) FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ)) {
 		return FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS[opcode-FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH];
 	}
 	return FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS[sizeof(FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS)/sizeof(char*)-1]; /* INVALID */
@@ -1315,18 +1365,26 @@ fi_opx_hfi1_packet_hdr_message_length (const union opx_hfi1_packet_hdr * const h
 	switch (hdr->bth.opcode) {
 		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
 			message_length = hdr->inject.message_length;
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ:
 			message_length = hdr->send.xfer_bytes_tail + hdr->send.payload_qws_total * sizeof(uint64_t);
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ:
 			message_length = hdr->mp_eager_first.payload_bytes_total & FI_OPX_HFI1_KDETH_VERSION_OFF_MASK;
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ:
 			//assert(hdr->rendezvous.niov == 1);
 			message_length = hdr->rendezvous.message_length;
 			break;
@@ -1444,18 +1502,24 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .inject.message_length ...     0x%02x \n", pid, fn, ln, hdr->inject.message_length);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .inject.app_data_u64[0] ..     0x%016lx \n", pid, fn, ln, hdr->inject.app_data_u64[0]);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .inject.app_data_u64[1] ..     0x%016lx \n", pid, fn, ln, hdr->inject.app_data_u64[1]);
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ:
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .send.xfer_bytes_tail ....     0x%02x \n", pid, fn, ln, hdr->send.xfer_bytes_tail);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .send.payload_qws_total ..     0x%04x \n", pid, fn, ln, hdr->send.payload_qws_total);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .send.xfer_tail ..........     0x%016lx \n", pid, fn, ln, hdr->send.xfer_tail);
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:	/* calculate (?) total bytes to be transfered */
+		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ:	/* calculate (?) total bytes to be transfered */
 		case  FI_OPX_HFI_BTH_OPCODE_RZV_CTS:
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .cts.origin                 ..........     0x%x \n", pid, fn, ln, hdr->cts.origin_rx);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .cts.target.vaddr.ntidpairs ..........     0x%x \n", pid, fn, ln, hdr->cts.target.vaddr.ntidpairs);
@@ -1903,6 +1967,8 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
 			fprintf(stderr, "(%d) %s():%u .inject.message_length .............. 0x%02x\n",
 				pid, fn, ln, hdr->inject.message_length);
 			fprintf(stderr, "(%d) %s():%u .inject.app_data_u64[0]               0x%016lx\n",
@@ -1912,6 +1978,8 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ:
 			fprintf(stderr, "(%d) %s():%u .send.xfer_bytes_tail ............... 0x%02x\n",
 				pid, fn, ln, hdr->send.xfer_bytes_tail);
 			fprintf(stderr, "(%d) %s():%u .send.payload_qws_total               0x%04x\n",
@@ -1969,6 +2037,8 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:	/* calculate (?) total bytes to be transfered */
+		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ:	/* calculate (?) total bytes to be transfered */
 			break;
 		default:
 			break;

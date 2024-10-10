@@ -454,7 +454,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode (struct fid_ep *ep,
 		OPX_HFI1_BAR_STORE(&scb[5], 0UL);
 		OPX_HFI1_BAR_STORE(&scb[6], 0UL);
 		OPX_HFI1_BAR_STORE(&scb[7], key);
-		
+
 		/* consume one credit for the packet header */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 	} else {
@@ -841,7 +841,7 @@ void fi_opx_hfi1_rx_reliability_ping (struct fid_ep *ep,
 				key, slid, rx,
 				0,	/* psn_start */
 				1,	/* psn_count */
-				FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, 
+				FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK,
 				OPX_HFI1_TYPE);
 		INC_PING_STAT_COND(rc == FI_SUCCESS, NACKS_SENT, key, 0, 1);
 		OPX_TRACER_TRACE_RELI(OPX_TRACER_END_ERROR, "RX_RELI_PING");
@@ -2003,7 +2003,7 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 			if (!queing_replays) {
 #ifdef OPX_DEBUG_COUNTERS_RELIABILITY
 				struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-				if(OPX_REPLAY_HDR(replay)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS || OPX_REPLAY_HDR(replay)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS) {
+				if(FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(OPX_REPLAY_HDR(replay)->bth.opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) {
 					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_rts);
 				} else if (OPX_REPLAY_HDR(replay)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_CTS) {
 					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_cts);
@@ -2047,7 +2047,7 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 		}
 #ifdef OPX_DEBUG_COUNTERS_RELIABILITY
 		struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-		if(OPX_REPLAY_HDR(replay)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS || OPX_REPLAY_HDR(replay)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS) {
+		if(FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(OPX_REPLAY_HDR(replay)->bth.opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) {
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_rts);
 		} else if (OPX_REPLAY_HDR(replay)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_CTS) {
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_cts);
@@ -2095,7 +2095,7 @@ ssize_t fi_opx_reliability_send_ping(struct fid_ep *ep,
 
 	uint64_t dlid;
 	/* Inlined but called from non-inlined functions with no const hfi1 type, so just use the runtime check */
-	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) { 
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		dlid = (uint64_t) head->scb.scb_9B.hdr.lrh_9B.dlid;
 	} else {
 		dlid = (uint64_t) htons(head->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 | head->scb.scb_16B.hdr.lrh_16B.dlid);
@@ -2158,16 +2158,16 @@ void fi_reliability_service_ping_remote (struct fid_ep *ep,
 		fi_opx_rbt_key(itr, &key_value);
 
 		rc = fi_opx_reliability_send_ping(ep, service, itr, key_value);
-		
+
 		/* advance to the next dlid */
-		itr = rbtNext(service->tx.flow, itr);	
-		
+		itr = rbtNext(service->tx.flow, itr);
+
 		if(rc == OPX_RELIABILITY_PING_SENT) {
 			++num_pings;
 		}
 	}
 
-	/* We ran out of credits on a particular ping. 
+	/* We ran out of credits on a particular ping.
 	 * Store the failing key to be the first to try next time,
 	 * set the congested flag to limit future pings, and stop */
 	if (!rc) {
@@ -2184,7 +2184,7 @@ void fi_reliability_service_ping_remote (struct fid_ep *ep,
 			return;
 		}
 		service->tx.ping_start_key = 0;
-		return;	
+		return;
 	}
 
 	/* We hit the end of the tree. If there was no starting key, we've iterated through the whole tree and we're done. */
@@ -2204,7 +2204,7 @@ void fi_reliability_service_ping_remote (struct fid_ep *ep,
 
 		/* advance to the next dlid */
 		itr = rbtNext(service->tx.flow, itr);
-		
+
 		if(rc == OPX_RELIABILITY_PING_SENT) {
 			++num_pings;
 		}
@@ -2225,9 +2225,9 @@ void fi_reliability_service_ping_remote (struct fid_ep *ep,
 		service->tx.ping_start_key = 0;
 		return;
 	}
-	
+
 	service->tx.ping_start_key = 0;
-	
+
 	// We iterated through the whole tree, unset the congested flag
 	service->tx.congested_flag = 0;
 }
@@ -2415,7 +2415,7 @@ void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service * servi
 {
 	/* Ping model */
 	{
-		/* PBC */		
+		/* PBC */
 		const uint64_t pbc_dws =
 			2 + /* pbc */
 			4 + /* lrh uncompressed */
@@ -2423,7 +2423,7 @@ void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service * servi
 			9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 			2 ; /* ICRC/tail */
 
-			
+
 		/* Setup the 16B models whether or not they'll be used */
 		enum opx_hfi1_type __attribute__ ((unused)) hfi1_type = OPX_HFI1_JKR;
 
@@ -2453,8 +2453,8 @@ void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service * servi
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.rc = OPX_RC_IN_ORDER_0;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.cspec = OPX_BTH_CSPEC_DEFAULT; /*NOT BTH CSPEC*/
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.pkey = hfi1->pkey;
-		
-		
+
+
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.slid = hfi1->lid & 0xFFFFF;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.slid20 = (hfi1->lid) >> 20;
 
@@ -2710,7 +2710,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 		max_uncongested_pings = OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_DEFAULT;
 	}
 	service->tx.max_uncongested_pings = max_uncongested_pings;
-	
+
 	int max_congested_pings;
 	if(fi_param_get_int(fi_opx_global.prov, "reliability_max_congested_pings", &max_congested_pings) == FI_SUCCESS) {
 		if (max_congested_pings < OPX_RELIABILITY_MAX_CONGESTED_PINGS_MIN || max_congested_pings > OPX_RELIABILITY_MAX_CONGESTED_PINGS_MAX) {
