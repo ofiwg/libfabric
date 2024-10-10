@@ -1002,6 +1002,83 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 	return 0;
 }
 
+static bool ofi_compare_hmem_attr_opt(enum fi_hmem_attr_opt prov_opt,
+				  enum fi_hmem_attr_opt user_opt)
+{
+	switch (user_opt) {
+	case FI_HMEM_ATTR_UNSPEC:
+		return true;
+	case FI_HMEM_ATTR_REQUIRED:
+	case FI_HMEM_ATTR_PREFERRED:
+		return prov_opt != FI_HMEM_ATTR_DISABLED;
+	case FI_HMEM_ATTR_DISABLED:
+		return prov_opt != FI_HMEM_ATTR_REQUIRED;
+	default:
+		return false;
+	}
+}
+
+static int
+ofi_validate_hmem_attr_compat(const struct fi_provider *prov,
+			      const struct fi_hmem_attr *prov_attr_head,
+			      const struct fi_hmem_attr *user_attr)
+{
+	const struct fi_hmem_attr *prov_attr = prov_attr_head;
+
+	while (prov_attr) {
+		if (prov_attr->iface == user_attr->iface) {
+			if (!ofi_compare_hmem_attr_opt(
+				    prov_attr->api_permitted,
+				    user_attr->api_permitted)) {
+				FI_INFO(prov, FI_LOG_CORE,
+					"api_permitted option not supported\n");
+				return -FI_ENODATA;
+			}
+
+			if (!ofi_compare_hmem_attr_opt(
+				    prov_attr->use_p2p,
+				    user_attr->use_p2p)) {
+				FI_INFO(prov, FI_LOG_CORE,
+					"use_p2p option not supported\n");
+				return -FI_ENODATA;
+			}
+
+			if (!ofi_compare_hmem_attr_opt(
+				    prov_attr->use_dev_reg_copy,
+				    user_attr->use_dev_reg_copy)) {
+				FI_INFO(prov, FI_LOG_CORE,
+					"use_dev_reg_copy option not supported\n");
+				return -FI_ENODATA;
+			}
+
+			return 0;
+		}
+		prov_attr = prov_attr->next;
+	}
+
+	return -FI_ENODATA;
+}
+
+int ofi_check_hmem_attr(const struct fi_provider *prov,
+			const struct fi_hmem_attr *prov_attr,
+			const struct fi_info *user_info)
+{
+	struct fi_hmem_attr *user_attr = user_info->hmem_attr;
+
+	if (!(user_info->caps & FI_HMEM)) {
+		FI_INFO(prov, FI_LOG_CORE, "FI_HMEM not set\n");
+		return -FI_ENODATA;
+	}
+
+	while (user_attr) {
+		if (ofi_validate_hmem_attr_compat(prov, prov_attr, user_attr) < 0)
+			return -FI_ENODATA;
+		user_attr = user_attr->next;
+	}
+
+	return 0;
+}
+
 /* Use if there are multiple fi_info in the provider:
  * check provider's info */
 int ofi_prov_check_info(const struct util_prov *util_prov,
@@ -1152,6 +1229,13 @@ int ofi_check_info(const struct util_prov *util_prov,
 		if (ret)
 			return ret;
 	}
+
+	if (user_info->hmem_attr) {
+		ret = ofi_check_hmem_attr(prov, prov_info->hmem_attr, user_info);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
@@ -1271,6 +1355,24 @@ static void fi_alter_tx_attr(struct fi_tx_attr *attr,
 		attr->rma_iov_limit = hints->rma_iov_limit;
 }
 
+static void fi_alter_hmem_attr(struct fi_hmem_attr *attr,
+			       const struct fi_hmem_attr *hints)
+{
+	if (!hints)
+		return;
+
+	if (hints->iface)
+		attr->iface = hints->iface;
+	if (hints->api_permitted)
+		attr->api_permitted = hints->api_permitted;
+	if (hints->use_p2p)
+		attr->use_p2p = hints->use_p2p;
+	if (hints->use_dev_reg_copy)
+		attr->use_dev_reg_copy = hints->use_dev_reg_copy;
+	if (hints->next)
+		attr->next = hints->next;
+}
+
 static uint64_t ofi_get_info_caps(const struct fi_info *prov_info,
 				  const struct fi_info *user_info,
 				  uint32_t api_version)
@@ -1336,5 +1438,6 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 				 info->caps);
 		fi_alter_tx_attr(info->tx_attr, hints ? hints->tx_attr : NULL,
 				 info->caps);
+		fi_alter_hmem_attr(info->hmem_attr, hints ? hints->hmem_attr : NULL);
 	}
 }

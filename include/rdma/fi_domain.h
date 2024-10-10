@@ -128,15 +128,6 @@ struct fid_mr {
 	uint64_t		key;
 };
 
-enum fi_hmem_iface {
-	FI_HMEM_SYSTEM	= 0,
-	FI_HMEM_CUDA,
-	FI_HMEM_ROCR,
-	FI_HMEM_ZE,
-	FI_HMEM_NEURON,
-	FI_HMEM_SYNAPSEAI,
-};
-
 static inline int fi_hmem_ze_device(int driver_index, int device_index)
 {
 	return driver_index << 16 | device_index;
