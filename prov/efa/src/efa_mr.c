@@ -184,12 +184,6 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 {
 	int err;
 	struct iovec mr_iov = {0};
-
-	if (flags & FI_MR_DMABUF)
-		ofi_mr_get_iov_from_dmabuf(&mr_iov, attr->dmabuf, 1);
-	else
-		mr_iov = *attr->mr_iov;
-
 	efa_mr->peer.flags = flags;
 
 	if (attr->iface == FI_HMEM_SYSTEM) {
@@ -227,7 +221,8 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		efa_mr->needs_sync = true;
 		efa_mr->peer.device.cuda = attr->device.cuda;
 
-		if (cuda_is_gdrcopy_enabled()) {
+		if (!(flags & FI_MR_DMABUF) && cuda_is_gdrcopy_enabled()) {
+			mr_iov = *attr->mr_iov;
 			err = ofi_hmem_dev_register(FI_HMEM_CUDA, mr_iov.iov_base, mr_iov.iov_len,
 						    (uint64_t *)&efa_mr->peer.hmem_data);
 			efa_mr->peer.flags |= OFI_HMEM_DATA_DEV_REG_HANDLE;
