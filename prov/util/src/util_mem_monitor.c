@@ -3,7 +3,7 @@
  * Copyright (c) 2017-2021 Intel Inc. All rights reserved.
  * Copyright (c) 2019-2021 Amazon.com, Inc. or its affiliates.
  *                         All rights reserved.
- * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * (C) Copyright 2020,2024 Hewlett Packard Enterprise Development LP
  * Copyright (C) 2024 Cornelis Networks. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -555,6 +555,8 @@ void ofi_monitor_unsubscribe_no_op(struct ofi_mem_monitor *notifier,
 #include <sys/ioctl.h>
 #include <linux/userfaultfd.h>
 
+static void ofi_uffd_pagefault_handler(struct uffd_msg *msg);
+
 /* The userfault fd monitor requires for events that could
  * trigger it to be handled outside of the monitor functions
  * itself. When a fault occurs on a monitored region, the
@@ -588,6 +590,8 @@ static void *ofi_uffd_handler(void *arg)
 			continue;
 		}
 
+		FI_DBG(&core_prov, FI_LOG_MR, "Received UFFD event %d\n", msg.event);
+
 		switch (msg.event) {
 		case UFFD_EVENT_REMOVE:
 			ofi_monitor_unsubscribe(&uffd.monitor,
@@ -606,6 +610,9 @@ static void *ofi_uffd_handler(void *arg)
 				(void *) (uintptr_t) msg.arg.remap.from,
 				(size_t) msg.arg.remap.len);
 			break;
+		case UFFD_EVENT_PAGEFAULT:
+			ofi_uffd_pagefault_handler(&msg);
+			break;
 		default:
 			FI_WARN(&core_prov, FI_LOG_MR,
 				"Unhandled uffd event %d\n", msg.event);
@@ -615,6 +622,114 @@ static void *ofi_uffd_handler(void *arg)
 		pthread_rwlock_unlock(&mm_list_rwlock);
 	}
 	return NULL;
+}
+
+static void ofi_uffd_pagefault_handler(struct uffd_msg *msg)
+{
+	struct uffdio_zeropage zp;
+	int i;
+	int ret;
+	void * const address = (void *) (uintptr_t) msg->arg.pagefault.address;
+	uint64_t const flags = (uint64_t) msg->arg.pagefault.flags;
+#if HAVE_UFFD_THREAD_ID
+	uint32_t const ptid = (uint32_t) msg->arg.pagefault.feat.ptid;
+#endif
+	/* ofi_uffd_register sets the mode to
+	 * UFFDIO_REGISTER_MODE_MISSING.  As a result, we can
+	 * get read, write or write-protect notifications via
+	 * UFFD_EVENT_PAGEFAULT.  The only ones we can sensibly
+	 * handle are writes to non-backed pages.
+	 * (Read and write-protect notifications are likely
+	 * application bugs.)
+	 */
+
+	if (flags != UFFD_PAGEFAULT_FLAG_WRITE) {
+#if HAVE_UFFD_THREAD_ID
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"UFFD pagefault with unrecognized flags: %lu, address %p, thread %u\n",
+			flags, address, ptid);
+#else
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"UFFD pagefault with unrecognized flags: %lu, address %p\n",
+			flags, address);
+#endif
+		/* The faulting thread is halted at this point. In
+		 * theory we could wake it up with UFFDIO_WAKE. In
+		 * practice that requires the address range of the
+		 * fault, information we don't have from the
+		 * pagefault event.
+		 */
+
+		return;
+	}
+
+	/* The event tells us the address of the fault
+	 * (which can be anywhere on the page). It does not
+	 * tell us the size of the page so we have to guess
+	 * from the list of known page_sizes.
+	 *
+	 * We employ the standard resolution: install a zeroed page.
+	 */
+
+	for (i = 0; i < num_page_sizes; ) {
+		/* setup a zeropage reqest for this pagesize */
+		zp.range.start = (uint64_t) (uintptr_t)
+			ofi_get_page_start(address, page_sizes[i]);
+		zp.range.len = (uint64_t) page_sizes[i];
+		zp.mode = 0;
+		zp.zeropage = 0;
+
+		ret = ioctl(uffd.fd, UFFDIO_ZEROPAGE, &zp);
+
+		if (ret == 0)		/* success */
+			return;
+
+		/* Note: the documentation (man ioctl_userfaultfd) says
+		 * that the ioctl() returns -1 on error and errno is set
+		 * to indicate the error. It also says that the zeropage
+		 * member of struct uffdio_zeropage is set to the negated
+		 * error.  The unit tests for uffd say
+		 *    real retval in uffdio_zeropage.zeropage
+		 * so that's what we use here.
+		 */
+
+		if (zp.zeropage == -EAGAIN)
+			/* This is a tough case.  If the memory map is
+			 * changing, the kernel returns EAGAIN before
+			 * installing the zeroed page.  So the page
+			 * fault has not been rectified.  If we don't try
+			 * again, the application will crash.  If we add
+			 * a maximum retry count we could still end up
+			 * with an unresolved page fault.
+			 *
+			 * It's likely a kernel bug or (something else
+			 * bad like OOM) if it returns EAGAIN forever.
+			 * So we retry until we get something besides
+			 * EAGAIN.
+			 */
+			continue;	/* retry this page size */
+
+		i++;			/* try next page size */
+
+		if (zp.zeropage == -EINVAL)     /* wrong page size */
+			continue;
+
+		/* If we get here we failed to install the zeroed
+		 * page for this page size and it wasn't a size error.
+		 * We could either stop trying or go on to the
+		 * next pagesize.  We choose to print a message and try
+		 * another page size.
+		 */
+
+		FI_DBG(&core_prov, FI_LOG_MR,
+			"Unable to install zeroed page of size %zu to handle page fault."
+			"  address = %p zeropage = %lld errno = %d\n",
+			page_sizes[i], address, zp.zeropage, errno);
+	}
+
+	FI_WARN(&core_prov, FI_LOG_MR,
+		"Unable to handle event UFFD_EVENT_PAGEFAULT for address %p.\n",
+		address);
 }
 
 static int ofi_uffd_register(const void *addr, size_t len, size_t page_size)
