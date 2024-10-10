@@ -372,9 +372,10 @@ static int rxm_mr_add_map_entry(struct util_domain *domain,
 	ofi_genlock_lock(&domain->lock);
 	ret = ofi_mr_map_insert(&domain->mr_map, msg_attr, &temp_key, rxm_mr, flags);
 	if (OFI_UNLIKELY(ret)) {
-		FI_WARN(&rxm_prov, FI_LOG_DOMAIN,
-			"MR map insert for atomic verification failed %d\n",
-			ret);
+		if (ret != -FI_ENOKEY)
+			FI_WARN(&rxm_prov, FI_LOG_DOMAIN,
+				"MR map insert for atomic verification failed %d\n",
+				ret);
 	} else {
 		assert(rxm_mr->mr_fid.key == temp_key);
 	}
@@ -622,7 +623,7 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (rxm_domain->util_domain.info_domain_caps & FI_ATOMIC) {
 		ret = rxm_mr_add_map_entry(&rxm_domain->util_domain,
 					   &msg_attr, rxm_mr, flags);
-		if (ret)
+		if (ret && ret != -FI_ENOKEY)
 			goto map_err;
 	}
 
@@ -674,7 +675,7 @@ static int rxm_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 	if (rxm_domain->util_domain.info_domain_caps & FI_ATOMIC) {
 		ret = rxm_mr_add_map_entry(&rxm_domain->util_domain,
 					   &msg_attr, rxm_mr, flags);
-		if (ret)
+		if (ret && ret != -FI_ENOKEY)
 			goto map_err;
 	}
 
