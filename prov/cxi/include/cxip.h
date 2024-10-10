@@ -138,7 +138,7 @@
 	 FI_REMOTE_COMM | FI_RMA_EVENT | FI_MULTI_RECV | FI_FENCE | FI_TRIGGER)
 #define CXIP_EP_CAPS (CXIP_EP_PRI_CAPS | CXIP_EP_SEC_CAPS)
 #define CXIP_DOM_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM | FI_AV_USER_ID)
-#define CXIP_CAPS (CXIP_DOM_CAPS | CXIP_EP_CAPS)
+#define CXIP_CAPS (CXIP_DOM_CAPS | CXIP_EP_CAPS | FI_PEER)
 #define CXIP_MSG_ORDER			(FI_ORDER_SAS | \
 					 FI_ORDER_WAW | \
 					 FI_ORDER_RMA_WAW | \
@@ -177,7 +177,7 @@
 #define CXIP_MINOR_VERSION		1
 #define CXIP_PROV_VERSION		FI_VERSION(CXIP_MAJOR_VERSION, \
 						   CXIP_MINOR_VERSION)
-#define CXIP_FI_VERSION			FI_VERSION(1, 21)
+#define CXIP_FI_VERSION			FI_VERSION(2, 0)
 #define CXIP_WIRE_PROTO_VERSION		1
 
 #define	CXIP_COLL_MAX_CONCUR		8
@@ -853,6 +853,8 @@ struct cxip_domain {
 	ofi_spin_t lock;
 	ofi_atomic32_t ref;
 
+	struct fid_peer_srx *owner_srx;
+
 	uint32_t tclass;
 
 	struct cxip_eq *eq; //unused
@@ -1263,6 +1265,9 @@ struct cxip_req {
 	uint64_t trig_thresh;
 	struct cxip_cntr *trig_cntr;
 
+	/* pointer to the shared receive entry */
+	struct fi_peer_rx_entry *rx_entry;
+
 	/* CQ event fields, set according to fi_cq.3
 	 *   - set by provider
 	 *   - returned to user in completion event
@@ -1382,6 +1387,23 @@ struct cxip_evtq {
 };
 
 /*
+ * Peer CQ callbacks.
+ * These callback definitions can be used by providers to define generic
+ * callbacks which can be assigned different functions to handle completion
+ * for an imported cq vs an internal cq
+ */
+struct cxip_peer_cq_cb {
+	int (*cq_comp)(struct util_cq *cq, void *context,
+		       uint64_t flags, size_t len, void *buf, uint64_t data,
+		       uint64_t tag);
+	int (*cq_comp_src)(struct util_cq *cq, void *context,
+			   uint64_t flags, size_t len, void *buf, uint64_t data,
+			   uint64_t tag, fi_addr_t addr);
+	int (*cq_err)(struct util_cq *cq,
+		      const struct fi_cq_err_entry *err_entry);
+};
+
+/*
  * CXI Libfbric software completion queue
  */
 struct cxip_cq {
@@ -1393,6 +1415,10 @@ struct cxip_cq {
 	 * is always taken walking the CQ EP, but can be optimized to no-op.
 	 */
 	struct ofi_genlock ep_list_lock;
+
+	/* Peer CQ */
+	struct fid_peer_cq *peer_cq;
+	struct cxip_peer_cq_cb cq_cb;
 
 	/* Internal CXI wait object allocated only if required. */
 	struct cxil_wait_obj *priv_wait;
@@ -1436,6 +1462,8 @@ struct cxip_cntr {
 struct cxip_ux_send {
 	struct dlist_entry rxc_entry;
 	struct cxip_req *req;
+	struct cxip_rxc *rxc;
+	struct fi_peer_rx_entry *rx_entry;
 	union c_event put_ev;
 	bool claimed;			/* Reserved with FI_PEEK | FI_CLAIM */
 };
@@ -3176,6 +3204,11 @@ double cxip_rep_sum(size_t count, double *values);
 int cxip_check_auth_key_info(struct fi_info *info);
 int cxip_gen_auth_key(struct fi_info *info, struct cxi_auth_key *key);
 
+static inline struct fid_peer_srx *cxip_get_owner_srx(struct cxip_rxc *rxc)
+{
+	return rxc->domain->owner_srx;
+}
+
 #define CXIP_FC_SOFTWARE_INITIATED -1
 
 /* cxip_fc_reason() - Returns the event reason for portal state
@@ -3219,6 +3252,14 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			bool triggered, uint64_t trig_thresh,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr);
+
+static inline int cxip_discard(struct fi_peer_rx_entry *rx_entry)
+{
+	/* TODO: how do we discard a message properly? */
+	return -FI_ENOSYS;
+}
+
+int cxip_unexp_start(struct fi_peer_rx_entry *entry);
 
 /*
  * Request variants:
@@ -3631,7 +3672,9 @@ int cxip_set_recv_match_id(struct cxip_rxc *rxc, fi_addr_t src_addr,
 	return FI_SUCCESS;
 }
 
-fi_addr_t cxip_recv_req_src_addr(struct cxip_req *req);
+fi_addr_t cxip_recv_req_src_addr(struct cxip_rxc *rxc,
+				 uint32_t init, uint16_t vni,
+				 bool force);
 int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
 			struct cxip_md *md, struct cxip_req **cxip_req,
 			int (*recv_cb)(struct cxip_req *req,
@@ -3682,5 +3725,75 @@ int cxip_domain_dwq_emit_amo(struct cxip_domain *dom, uint16_t vni,
 			     struct cxip_cntr *trig_cntr, size_t trig_thresh,
 			     struct c_dma_amo_cmd *amo, uint64_t flags,
 			     bool fetching, bool flush);
+
+static inline void cxip_set_env_rx_match_mode(void)
+{
+	char *param_str = NULL;
+
+	fi_param_get_str(&cxip_prov, "rx_match_mode", &param_str);
+	/* Parameters to tailor hybrid hardware to software transitions
+	 * that are initiated by software.
+	 */
+	fi_param_define(&cxip_prov, "hybrid_preemptive", FI_PARAM_BOOL,
+			"Enable/Disable low LE preemptive UX transitions.");
+	fi_param_get_bool(&cxip_prov, "hybrid_preemptive",
+			  &cxip_env.hybrid_preemptive);
+	fi_param_define(&cxip_prov, "hybrid_recv_preemptive", FI_PARAM_BOOL,
+			"Enable/Disable low LE preemptive recv transitions.");
+	fi_param_get_bool(&cxip_prov, "hybrid_recv_preemptive",
+			  &cxip_env.hybrid_recv_preemptive);
+	fi_param_define(&cxip_prov, "hybrid_unexpected_msg_preemptive",
+			FI_PARAM_BOOL,
+			"Enable preemptive transition to software endpoint when number of hardware unexpected messages exceeds RX attribute size");
+	fi_param_get_bool(&cxip_prov, "hybrid_unexpected_msg_preemptive",
+			  &cxip_env.hybrid_unexpected_msg_preemptive);
+	fi_param_define(&cxip_prov, "hybrid_posted_recv_preemptive",
+			FI_PARAM_BOOL,
+			"Enable preemptive transition to software endpoint when number of posted receives exceeds RX attribute size");
+	fi_param_get_bool(&cxip_prov, "hybrid_posted_recv_preemptive",
+			  &cxip_env.hybrid_posted_recv_preemptive);
+
+	if (param_str) {
+		if (!strcasecmp(param_str, "hardware")) {
+			cxip_env.rx_match_mode = CXIP_PTLTE_HARDWARE_MODE;
+			cxip_env.msg_offload = true;
+		} else if (!strcmp(param_str, "software")) {
+			cxip_env.rx_match_mode = CXIP_PTLTE_SOFTWARE_MODE;
+			cxip_env.msg_offload = false;
+		} else if (!strcmp(param_str, "hybrid")) {
+			cxip_env.rx_match_mode = CXIP_PTLTE_HYBRID_MODE;
+			cxip_env.msg_offload = true;
+		} else {
+			_CXIP_WARN(FI_LOG_FABRIC, "Unrecognized rx_match_mode: %s\n",
+				  param_str);
+			cxip_env.rx_match_mode = CXIP_PTLTE_HARDWARE_MODE;
+			cxip_env.msg_offload = true;
+		}
+	}
+
+	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
+	    cxip_env.hybrid_preemptive) {
+		cxip_env.hybrid_preemptive = false;
+		_CXIP_WARN(FI_LOG_FABRIC, "Not in hybrid mode, ignoring preemptive\n");
+	}
+
+	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
+	    cxip_env.hybrid_recv_preemptive) {
+		_CXIP_WARN(FI_LOG_FABRIC, "Not in hybrid mode, ignore LE  recv preemptive\n");
+		cxip_env.hybrid_recv_preemptive = 0;
+	}
+
+	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
+	    cxip_env.hybrid_posted_recv_preemptive) {
+		_CXIP_WARN(FI_LOG_FABRIC, "Not in hybrid mode, ignore hybrid_posted_recv_preemptive\n");
+		cxip_env.hybrid_posted_recv_preemptive = 0;
+	}
+
+	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
+	    cxip_env.hybrid_unexpected_msg_preemptive) {
+		_CXIP_WARN(FI_LOG_FABRIC, "Not in hybrid mode, ignore hybrid_unexpected_msg_preemptive\n");
+		cxip_env.hybrid_unexpected_msg_preemptive = 0;
+	}
+}
 
 #endif

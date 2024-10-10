@@ -24,6 +24,46 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_CQ, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_CQ, __VA_ARGS__)
 
+static int cxip_peer_cq_comp(struct util_cq *cq, void *context,
+			uint64_t flags, size_t len, void *buf, uint64_t data,
+			uint64_t tag)
+{
+	struct cxip_cq *cxip_cq;
+	struct fid_peer_cq *peer_cq;
+
+	cxip_cq = container_of(cq, struct cxip_cq, util_cq);
+	peer_cq = cxip_cq->peer_cq;
+
+	return peer_cq->owner_ops->write(peer_cq, context, flags, len,
+					buf, data, tag, FI_ADDR_NOTAVAIL);
+}
+
+static int cxip_peer_cq_comp_src(struct util_cq *cq, void *context,
+			uint64_t flags, size_t len, void *buf, uint64_t data,
+			uint64_t tag, fi_addr_t addr)
+{
+	struct cxip_cq *cxip_cq;
+	struct fid_peer_cq *peer_cq;
+
+	cxip_cq = container_of(cq, struct cxip_cq, util_cq);
+	peer_cq = cxip_cq->peer_cq;
+
+	return peer_cq->owner_ops->write(peer_cq, context, flags, len,
+					buf, data, tag, addr);
+}
+
+static int cxip_peer_cq_err(struct util_cq *cq,
+			const struct fi_cq_err_entry *err_entry)
+{
+	struct cxip_cq *cxip_cq;
+	struct fid_peer_cq *peer_cq;
+
+	cxip_cq = container_of(cq, struct cxip_cq, util_cq);
+	peer_cq = cxip_cq->peer_cq;
+
+	return peer_cq->owner_ops->writeerr(peer_cq, err_entry);
+}
+
 /*
  * cxip_cq_req_complete() - Generate a completion event for the request.
  */
@@ -34,9 +74,9 @@ int cxip_cq_req_complete(struct cxip_req *req)
 		return FI_SUCCESS;
 	}
 
-	return ofi_cq_write(&req->cq->util_cq, (void *)req->context,
-			    req->flags, req->data_len, (void *)req->buf,
-			    req->data, req->tag);
+	return req->cq->cq_cb.cq_comp(&req->cq->util_cq, (void *)req->context,
+				req->flags, req->data_len, (void *)req->buf,
+				req->data, req->tag);
 }
 
 /*
@@ -50,7 +90,7 @@ int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src)
 		return FI_SUCCESS;
 	}
 
-	return ofi_cq_write_src(&req->cq->util_cq, (void *)req->context,
+	return req->cq->cq_cb.cq_comp_src(&req->cq->util_cq, (void *)req->context,
 				req->flags, req->data_len, (void *)req->buf,
 				req->data, req->tag, src);
 }
@@ -94,7 +134,7 @@ int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 	err_entry.buf = (void *)(uintptr_t)req->buf;
 	err_entry.src_addr = src_addr;
 
-	return ofi_cq_write_error(&req->cq->util_cq, &err_entry);
+	return req->cq->cq_cb.cq_err(&req->cq->util_cq, &err_entry);
 }
 
 /*
@@ -316,6 +356,20 @@ static int cxip_cq_verify_attr(struct fi_cq_attr *attr)
 	return FI_SUCCESS;
 }
 
+ssize_t cxip_peer_cq_progress(struct fid_cq *cq, void *buf, size_t count)
+{
+	struct util_cq *util_cq;
+
+	if (buf || count > 0)
+		return -FI_EINVAL;
+
+	util_cq = container_of(cq, struct util_cq, cq_fid);
+
+	cxip_util_cq_progress(util_cq);
+
+	return 0;
+}
+
 /*
  * cxip_cq_alloc_priv_wait - Allocate an internal wait channel for the CQ.
  */
@@ -400,7 +454,24 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err_util_cq;
 	}
 
-	cxi_cq->util_cq.cq_fid.ops->strerror = &cxip_cq_strerror;
+	if (attr->flags & FI_PEER) {
+		struct fi_peer_cq_context *cq_cntxt = context;
+
+		if (!cq_cntxt)
+			return -FI_EINVAL;
+
+		cxi_cq->peer_cq = cq_cntxt->cq;
+
+		cxi_cq->cq_cb.cq_comp = cxip_peer_cq_comp;
+		cxi_cq->cq_cb.cq_comp_src = cxip_peer_cq_comp_src;
+		cxi_cq->cq_cb.cq_err = cxip_peer_cq_err;
+	} else {
+		cxi_cq->cq_cb.cq_comp = ofi_cq_write;
+		cxi_cq->cq_cb.cq_comp_src = ofi_cq_write_src;
+		cxi_cq->cq_cb.cq_err = ofi_cq_write_error;
+		cxi_cq->util_cq.cq_fid.ops->strerror = &cxip_cq_strerror;
+	}
+
 	cxi_cq->util_cq.cq_fid.fid.ops = &cxip_cq_fi_ops;
 
 	cxi_cq->domain = cxi_dom;
