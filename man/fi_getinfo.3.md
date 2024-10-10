@@ -290,6 +290,17 @@ additional optimizations.
   capability is not set, then the src_addr parameter for msg and tagged
   receive operations is ignored.
 
+*FI_TAGGED_DIRECTED_RECV*
+: Similar to FI_DIRECTED_RECV, but only applies to tagged receive
+  operations.
+
+*FI_EXACT_DIRECTED_RECV*
+: Similar to FI_DIRECTED_RECV, but requires the source address to be
+  exact, i.e., FI_ADDR_UNSPEC is not allowed. This capability can
+  be used alone, or in conjunction with FI_DIRECTED_RECV or
+  FI_TAGGED_DIRECTED_RECV as a modifier to disallow FI_ADDR_UNSPEC
+  being used as the source address.
+
 *FI_FENCE*
 : Indicates that the endpoint support the FI_FENCE flag on data
   transfer operations.  Support requires tracking that all previous
@@ -332,6 +343,10 @@ additional optimizations.
 *FI_MULTI_RECV*
 : Specifies that the endpoint must support the FI_MULTI_RECV flag when
   posting receive buffers.
+
+*FI_TAGGED_MULTI_RECV*
+: Specifies that the endpoint must support the FI_MULTI_RECV flag when
+  posting tagged receive buffers.
 
 *FI_NAMED_RX_CTX*
 : Requests that endpoints which support multiple receive contexts
@@ -462,14 +477,15 @@ may optionally report non-selected secondary capabilities if doing so
 would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_MULTICAST,
-FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_HMEM, FI_COLLECTIVE, FI_XPU,
-FI_AV_USER_ID, FI_PEER
+FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TAGGED_DIRECTED_RECV, FI_HMEM,
+FI_COLLECTIVE, FI_XPU, FI_AV_USER_ID, FI_PEER
 
 Primary modifiers: FI_READ, FI_WRITE, FI_RECV, FI_SEND,
 FI_REMOTE_READ, FI_REMOTE_WRITE
 
-Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SHARED_AV,
-FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM.
+Secondary capabilities: FI_MULTI_RECV, FI_TAGGED_MULTI_RECV, FI_SOURCE,
+FI_RMA_EVENT, FI_SHARED_AV, FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM,
+FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM.
 
 # MODE
 
