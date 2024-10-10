@@ -41,6 +41,7 @@ bin_PROGRAMS = \
 	functional/fi_rdm_stress \
 	functional/fi_multi_recv \
 	functional/fi_bw \
+	functional/fi_flood \
 	functional/fi_rdm_multi_client \
 	functional/fi_loopback \
 	benchmarks/fi_msg_pingpong \
@@ -362,6 +363,10 @@ functional_fi_bw_SOURCES = \
 	functional/bw.c
 functional_fi_bw_LDADD = libfabtests.la
 
+functional_fi_flood_SOURCES = \
+	 functional/flood.c
+functional_fi_flood_LDADD = libfabtests.la
+
 functional_fi_rdm_multi_client_SOURCES = \
 	functional/rdm_multi_client.c
 functional_fi_rdm_multi_client_LDADD = libfabtests.la
@@ -652,6 +657,7 @@ dummy_man_pages = \
 	man/man1/fi_getinfo_test.1 \
 	man/man1/fi_mr_test.1 \
 	man/man1/fi_bw.1 \
+	man/man1/fi_flood.1 \
 	man/man1/fi_rdm_multi_client.1 \
 	man/man1/fi_ubertest.1 \
 	man/man1/fi_efa_ep_rnr_retry.1
