@@ -615,7 +615,7 @@ bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 			if (hsa_dev_type == HSA_DEVICE_TYPE_GPU) {
 				/* TODO get device pointer/id */
 				if (flags)
-					*flags = FI_HMEM_DEVICE_ONLY;
+					*flags = (FI_HMEM_DEVICE_ONLY | OFI_HMEM_DATA_DEV_REG_HANDLE);
 				return true;
 			}
 		} else {

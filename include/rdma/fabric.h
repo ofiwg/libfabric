@@ -339,6 +339,7 @@ enum {
 	FI_PROTO_SM2,
 	FI_PROTO_CXI_RNR,
 	FI_PROTO_LPP,
+	FI_PROTO_LNX,
 };
 
 enum {
@@ -622,6 +623,8 @@ int fi_fabric2(struct fi_info *info, struct fid_fabric **fabric,
 	       uint64_t flags, void *context);
 int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	      void *context);
+int fi_link(struct fi_info *prov_list, struct fid_fabric **fabric,
+	    uint64_t caps, void *context);
 int fi_open(uint32_t version, const char *name, void *attr, size_t attr_len,
 	    uint64_t flags, struct fid **fid, void *context);
 
