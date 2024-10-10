@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -124,24 +124,14 @@
 	static void ofi_read_## op ##_## type				\
 		(void *dst, const void *src, void *res, size_t cnt) 	\
 	{								\
-		size_t i;						\
-		type *d = (dst);					\
-		type *r = (res);					\
-		OFI_UNUSED(src);					\
-		for (i = 0; i < cnt; i++)				\
-			r[i] = d[i];					\
+		memcpy(res, dst, sizeof(type) * cnt);			\
 	}
 
 #define OFI_DEF_READ_COMPLEX_FUNC(op, type)				\
 	static void ofi_read_## op ##_## type				\
 		(void *dst, const void *src, void *res, size_t cnt)	\
 	{								\
-		size_t i;						\
-		ofi_complex_##type *d = (dst);				\
-		ofi_complex_##type *r = (res);				\
-		OFI_UNUSED(src);					\
-		for (i = 0; i < cnt; i++)				\
-			r[i] = d[i];					\
+		memcpy(res, dst, sizeof(ofi_complex_##type) * cnt);	\
 	}
 
 /*
@@ -157,11 +147,9 @@
 		size_t i;						\
 		type *d = (dst);					\
 		const type *s = (src);					\
-		type *r = (res);					\
-		for (i = 0; i < cnt; i++) {				\
-			r[i] = d[i];					\
+		memcpy(res, dst, sizeof(type) * cnt);			\
+		for (i = 0; i < cnt; i++)				\
 			op(type, d[i], s[i]);				\
-		}							\
 	}
 
 #define OFI_DEF_READWRITE_COMPLEX_FUNC(op, type)			\
@@ -171,11 +159,9 @@
 		size_t i;						\
 		ofi_complex_##type *d = (dst);				\
 		const ofi_complex_##type *s = (src);			\
-		ofi_complex_##type *r = (res);				\
-		for (i = 0; i < cnt; i++) {				\
-			r[i] = d[i];					\
+		memcpy(res, dst, sizeof(ofi_complex_##type) * cnt);	\
+		for (i = 0; i < cnt; i++)				\
 			op(type, d[i], s[i]);				\
-		}							\
 	}
 
 /*
@@ -193,11 +179,9 @@
 		type *d = (dst);					\
 		const type *s = (src);					\
 		const type *c = (cmp);					\
-		type *r = (res);					\
-		for (i = 0; i < cnt; i++) {				\
-			r[i] = d[i];					\
+		memcpy(res, dst, sizeof(type) * cnt);			\
+		for (i = 0; i < cnt; i++)				\
 			op(type, d[i], s[i], c[i]);			\
-		}							\
 	}
 
 #define OFI_DEF_CSWAP_COMPLEX_FUNC(op, type)				\
@@ -209,11 +193,9 @@
 		ofi_complex_##type *d = (dst);				\
 		const ofi_complex_##type *s = (src);			\
 		const ofi_complex_##type *c = (cmp);			\
-		ofi_complex_##type *r = (res);				\
-		for (i = 0; i < cnt; i++) {				\
-			r[i] = d[i];					\
+		memcpy(res, dst, sizeof(ofi_complex_##type) * cnt);	\
+		for (i = 0; i < cnt; i++)				\
 			op(type, d[i], s[i], c[i]);			\
-		}							\
 	}
 
 

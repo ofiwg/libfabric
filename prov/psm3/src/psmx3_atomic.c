@@ -401,12 +401,12 @@ static int psmx3_atomic_do_write(void *dest, void *src,
 		break;
 
 	case FI_LOR:
-		SWITCH_INT_TYPE(datatype,PSMX3_ATOMIC_WRITE,
+		SWITCH_ALL_TYPE(datatype,PSMX3_ATOMIC_WRITE,
 				dest,src,count,PSMX3_LOR);
 		break;
 
 	case FI_LAND:
-		SWITCH_INT_TYPE(datatype,PSMX3_ATOMIC_WRITE,
+		SWITCH_ALL_TYPE(datatype,PSMX3_ATOMIC_WRITE,
 				dest,src,count,PSMX3_LAND);
 		break;
 
@@ -421,7 +421,7 @@ static int psmx3_atomic_do_write(void *dest, void *src,
 		break;
 
 	case FI_LXOR:
-		SWITCH_INT_TYPE(datatype,PSMX3_ATOMIC_WRITE,
+		SWITCH_ALL_TYPE(datatype,PSMX3_ATOMIC_WRITE,
 				dest,src,count,PSMX3_LXOR);
 		break;
 
@@ -601,7 +601,8 @@ int psmx3_am_atomic_handler(psm2_am_token_t token,
 
 		if (!op_error) {
 			addr += mr->offset;
-			psmx3_atomic_do_write(addr, src, datatype, op, count);
+			op_error = psmx3_atomic_do_write(addr, src, datatype,
+							 op, count);
 
 			if (rx->ep->caps & FI_RMA_EVENT) {
 				cntr = rx->ep->remote_write_cntr;
@@ -646,8 +647,8 @@ int psmx3_am_atomic_handler(psm2_am_token_t token,
 			addr += mr->offset;
 			tmp_buf = malloc(len);
 			if (tmp_buf)
-				psmx3_atomic_do_readwrite(addr, src, tmp_buf,
-							  datatype, op, count);
+				op_error = psmx3_atomic_do_readwrite(addr, src,
+						tmp_buf, datatype, op, count);
 			else
 				op_error = -FI_ENOMEM;
 
@@ -698,9 +699,10 @@ int psmx3_am_atomic_handler(psm2_am_token_t token,
 			addr += mr->offset;
 			tmp_buf = malloc(len);
 			if (tmp_buf)
-				psmx3_atomic_do_compwrite(addr, src, (uint8_t *)src + len,
-							  tmp_buf, datatype,
-							  op, count);
+				op_error = psmx3_atomic_do_compwrite(addr, src,
+							(uint8_t *)src + len,
+							tmp_buf, datatype,
+							op, count);
 			else
 				op_error = -FI_ENOMEM;
 
@@ -2067,6 +2069,11 @@ static int psmx3_atomic_writevalid_internal(size_t chunk_size,
 	switch (op) {
 	case FI_MIN:
 	case FI_MAX:
+		if (datatype == FI_FLOAT_COMPLEX ||
+		    datatype == FI_DOUBLE_COMPLEX ||
+		    datatype == FI_LONG_DOUBLE_COMPLEX)
+			return -FI_EOPNOTSUPP;
+	/* fall through */
 	case FI_SUM:
 	case FI_PROD:
 	case FI_LOR:
@@ -2098,6 +2105,11 @@ static int psmx3_atomic_readwritevalid_internal(size_t chunk_size,
 	switch (op) {
 	case FI_MIN:
 	case FI_MAX:
+		if (datatype == FI_FLOAT_COMPLEX ||
+		    datatype == FI_DOUBLE_COMPLEX ||
+		    datatype == FI_LONG_DOUBLE_COMPLEX)
+			return -FI_EOPNOTSUPP;
+	/* fall through */
 	case FI_SUM:
 	case FI_PROD:
 	case FI_LOR:
@@ -2107,6 +2119,10 @@ static int psmx3_atomic_readwritevalid_internal(size_t chunk_size,
 	case FI_LXOR:
 	case FI_BXOR:
 	case FI_ATOMIC_READ:
+		/* Disable failing combinations */
+		if (datatype == FI_LONG_DOUBLE ||
+		    datatype == FI_LONG_DOUBLE_COMPLEX)
+			return -FI_EOPNOTSUPP;
 	case FI_ATOMIC_WRITE:
 		break;
 
@@ -2126,6 +2142,10 @@ static int psmx3_atomic_compwritevalid_internal(size_t chunk_size,
 {
 
 	if (datatype >= OFI_DATATYPE_LAST)
+		return -FI_EOPNOTSUPP;
+
+	/* Disable failing combinations */
+	if (datatype == FI_LONG_DOUBLE || datatype == FI_LONG_DOUBLE_COMPLEX)
 		return -FI_EOPNOTSUPP;
 
 	switch (op) {

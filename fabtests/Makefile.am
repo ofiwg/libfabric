@@ -229,6 +229,8 @@ libfabtests_la_SOURCES = \
 	common/hmem_ze.c \
 	common/hmem_neuron.c \
 	common/hmem_synapseai.c \
+	common/ofi_atomic.c \
+	include/ofi_atomic.h \
 	include/shared.h \
 	include/ft_list.h \
 	include/hmem.h \
@@ -468,8 +470,6 @@ unit_fi_setopt_test_LDADD = libfabtests.la
 
 ubertest_fi_ubertest_SOURCES = \
 	ubertest/fabtest.h \
-	ubertest/ofi_atomic.h \
-	ubertest/ofi_atomic.c \
 	ubertest/uber.c \
 	ubertest/connect.c \
 	ubertest/cq.c \
