@@ -119,8 +119,8 @@ int smr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 	struct smr_ep *smr_ep =
 		container_of(fid, struct smr_ep, util_ep.ep_fid);
 
-	return smr_ep->srx->ops->getopt(&smr_ep->srx->fid, level, optname,
-					optval, optlen);
+	return smr_ep->srx->ep_fid.ops->getopt(&smr_ep->srx->ep_fid.fid, level,
+					       optname, optval, optlen);
 }
 
 int smr_ep_setopt(fid_t fid, int level, int optname, const void *optval,
@@ -134,7 +134,7 @@ int smr_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 		return -FI_ENOPROTOOPT;
 
 	if (optname == FI_OPT_MIN_MULTI_RECV) {
-		srx = util_get_peer_srx(smr_ep->srx)->ep_fid.fid.context;
+		srx = smr_ep->srx->ep_fid.fid.context;
 		srx->min_multi_recv_size = *(size_t *)optval;
 		return FI_SUCCESS;
 	}
@@ -159,7 +159,7 @@ static ssize_t smr_ep_cancel(fid_t ep_fid, void *context)
 	struct smr_ep *ep;
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid);
-	return ep->srx->ops->cancel(&ep->srx->fid, context);
+	return ep->srx->ep_fid.ops->cancel(&ep->srx->ep_fid.fid, context);
 }
 
 static struct fi_ops_ep smr_ep_ops = {
@@ -808,9 +808,7 @@ static int smr_ep_close(struct fid *fid)
 	if (ep->srx) {
 		/* shm is an owner provider */
 		if (ep->util_ep.ep_fid.msg != &smr_no_recv_msg_ops)
-			(void) util_srx_close(&ep->srx->fid);
-		else /* shm is a peer provider */
-			free(ep->srx);
+			(void) util_srx_close(&ep->srx->ep_fid.fid);
 	}
 
 	ofi_endpoint_close(&ep->util_ep);
@@ -1062,30 +1060,11 @@ static void smr_update(struct util_srx_ctx *srx, struct util_rx_entry *rx_entry)
 	//by another provider
 }
 
-int smr_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
-		    struct fid_ep **rx_ep, void *context)
-{
-	struct smr_domain *smr_domain;
-
-	smr_domain = container_of(domain, struct smr_domain,
-				  util_domain.domain_fid);
-
-	if (attr->op_flags & FI_PEER) {
-		smr_domain->srx = ((struct fi_peer_srx_context *)
-					(context))->srx;
-		return FI_SUCCESS;
-	}
-	FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-		"shared srx only supported with FI_PEER flag\n");
-	return -FI_EINVAL;
-}
-
 static int smr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
 	struct smr_ep *ep;
 	struct util_av *av;
 	int ret = 0;
-	struct fid_peer_srx *srx, *srx_b;
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	switch (bfid->fclass) {
@@ -1109,16 +1088,10 @@ static int smr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 				struct util_cntr, cntr_fid.fid), flags);
 		break;
 	case FI_CLASS_SRX_CTX:
-		srx = calloc(1, sizeof(*srx));
-		srx_b = container_of(bfid, struct fid_peer_srx, ep_fid.fid);
-		srx->peer_ops = &smr_srx_peer_ops;
-		srx->owner_ops = srx_b->owner_ops;
-		srx->ep_fid.fid.context = srx_b->ep_fid.fid.context;
-		ep->srx = &srx->ep_fid;
+		ep->srx = (container_of(bfid, struct smr_domain, rx_ep.fid))->srx;
 		break;
 	default:
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"invalid fid class\n");
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "invalid fid class\n");
 		ret = -FI_EINVAL;
 		break;
 	}
@@ -1131,6 +1104,7 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 	struct smr_domain *domain;
 	struct smr_ep *ep;
 	struct smr_av *av;
+	struct fid_ep *srx;
 	int ret;
 
 	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
@@ -1171,15 +1145,17 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 			ret = util_ep_srx_context(&domain->util_domain,
 					ep->rx_size, SMR_IOV_LIMIT,
 					SMR_INJECT_SIZE, &smr_update,
-					&ep->util_ep.lock, &ep->srx);
+					&ep->util_ep.lock, &srx);
 			if (ret)
 				return ret;
 
-			util_get_peer_srx(ep->srx)->peer_ops =
-							&smr_srx_peer_ops;
-			ret = util_srx_bind(&ep->srx->fid,
-					   &ep->util_ep.rx_cq->cq_fid.fid,
-					   FI_RECV);
+			ep->srx = container_of(srx, struct fid_peer_srx,
+					       ep_fid.fid);
+			ep->srx->peer_ops = &smr_srx_peer_ops;
+
+			ret = util_srx_bind(&ep->srx->ep_fid.fid,
+					    &ep->util_ep.rx_cq->cq_fid.fid,
+					    FI_RECV);
 			if (ret)
 				return ret;
 		} else {

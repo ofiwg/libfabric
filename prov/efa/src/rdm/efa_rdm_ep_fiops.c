@@ -942,6 +942,42 @@ void efa_rdm_ep_remove_cq_ibv_cq_poll_list(struct efa_rdm_ep *ep)
 }
 
 /**
+ * @brief Clean efa_rdm_ep's shm ep level resources as the best effort
+ *
+ * @param efa_rdm_ep pointer to efa rdm ep
+ * @return int FI_SUCCESS on success, negative integer on failure
+ */
+static int efa_rdm_ep_close_shm_ep_resources(struct efa_rdm_ep *efa_rdm_ep)
+{
+	int ret, retv = 0;
+
+	if (efa_rdm_ep->shm_srx) {
+		ret = fi_close(&efa_rdm_ep->shm_srx->fid);
+		if (ret) {
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm srx\n");
+			retv = ret;
+		}
+		efa_rdm_ep->shm_srx = NULL;
+	}
+
+	if (efa_rdm_ep->shm_peer_srx) {
+		free(efa_rdm_ep->shm_peer_srx);
+		efa_rdm_ep->shm_peer_srx = NULL;
+	}
+
+	if (efa_rdm_ep->shm_ep) {
+		ret = fi_close(&efa_rdm_ep->shm_ep->fid);
+		if (ret) {
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm ep\n");
+			retv = ret;
+		}
+		efa_rdm_ep->shm_ep = NULL;
+	}
+
+	return retv;
+}
+
+/**
  * @brief implement the fi_close() API for the EFA RDM endpoint
  * @param[in,out]	fid		Endpoint to close
  */
@@ -981,13 +1017,9 @@ static int efa_rdm_ep_close(struct fid *fid)
 		retv = ret;
 	}
 
-	if (efa_rdm_ep->shm_ep) {
-		ret = fi_close(&efa_rdm_ep->shm_ep->fid);
-		if (ret) {
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm EP\n");
-			retv = ret;
-		}
-	}
+	ret = efa_rdm_ep_close_shm_ep_resources(efa_rdm_ep);
+	if (ret)
+		retv = ret;
 
 	efa_rdm_ep_destroy_buffer_pools(efa_rdm_ep);
 
@@ -1053,12 +1085,8 @@ static void efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 	struct efa_av *efa_av;
 	struct efa_rdm_cq *efa_rdm_cq;
 
-	if (efa_rdm_ep->shm_ep) {
-		ret = fi_close(&efa_rdm_ep->shm_ep->fid);
-		if (ret)
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm ep\n");
-		efa_rdm_ep->shm_ep = NULL;
-	}
+
+	(void) efa_rdm_ep_close_shm_ep_resources(efa_rdm_ep);
 
 	efa_av = efa_rdm_ep->base_ep.av;
 	if (efa_av->shm_rdm_av) {
@@ -1230,7 +1258,6 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 	int ret = 0;
 	struct fi_peer_srx_context peer_srx_context = {0};
 	struct fi_rx_attr peer_srx_attr = {0};
-	struct fid_ep *peer_srx_ep = NULL;
 	struct util_srx_ctx *srx_ctx;
 
 	switch (command) {
@@ -1296,26 +1323,36 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * shared memory region.
 		 */
 		if (ep->shm_ep) {
-			peer_srx_context.srx = util_get_peer_srx(ep->peer_srx_ep);
+			ep->shm_peer_srx = calloc(1, sizeof(*ep->shm_peer_srx));
+			if (!ep->shm_peer_srx) {
+				ret = -FI_ENOMEM;
+				goto err_close_shm;
+			}
+			memcpy(ep->shm_peer_srx, util_get_peer_srx(ep->peer_srx_ep),
+			       sizeof(*ep->shm_peer_srx));
+
+			peer_srx_context.size = sizeof(peer_srx_context);
+			peer_srx_context.srx = ep->shm_peer_srx;
+
 			peer_srx_attr.op_flags |= FI_PEER;
 			ret = fi_srx_context(efa_rdm_ep_domain(ep)->shm_domain,
-				&peer_srx_attr, &peer_srx_ep, &peer_srx_context);
+				&peer_srx_attr, &ep->shm_srx, &peer_srx_context);
 			if (ret)
-				goto err_unlock;
+				goto err_close_shm;
 			shm_ep_name_len = EFA_SHM_NAME_MAX;
 			ret = efa_shm_ep_name_construct(shm_ep_name, &shm_ep_name_len, &ep->base_ep.src_addr);
 			if (ret < 0)
-				goto err_unlock;
+				goto err_close_shm;
 			fi_setname(&ep->shm_ep->fid, shm_ep_name, shm_ep_name_len);
 
 			/* Bind srx to shm ep */
-			ret = fi_ep_bind(ep->shm_ep, &ep->peer_srx_ep->fid, 0);
+			ret = fi_ep_bind(ep->shm_ep, &ep->shm_srx->fid, 0);
 			if (ret)
-				goto err_unlock;
+				goto err_close_shm;
 
 			ret = fi_enable(ep->shm_ep);
 			if (ret)
-				goto err_unlock;
+				goto err_close_shm;
 		}
 		ofi_genlock_unlock(srx_ctx->lock);
 		break;
@@ -1326,7 +1363,8 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 
 	return ret;
 
-err_unlock:
+err_close_shm:
+	efa_rdm_ep_close_shm_ep_resources(ep);
 	ofi_genlock_unlock(srx_ctx->lock);
 err_destroy_qp:
 	efa_base_ep_destruct_qp(&ep->base_ep);

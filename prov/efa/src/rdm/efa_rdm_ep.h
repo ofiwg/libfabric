@@ -54,6 +54,10 @@ struct efa_rdm_ep {
 
 	/* shm provider fid */
 	struct fid_ep *shm_ep;
+	/* shm srx fid (shm-owned) */
+	struct fid_ep *shm_srx;
+	/* shm peer_srx (efa-owned) */
+	struct fid_peer_srx *shm_peer_srx;
 
 	size_t mtu_size;
 	size_t max_msg_size;		/**< #FI_OPT_MAX_MSG_SIZE */

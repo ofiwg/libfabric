@@ -159,6 +159,7 @@ struct smr_domain {
 	int			fast_rma;
 	/* cache for use with hmem ipc */
 	struct ofi_mr_cache	*ipc_cache;
+	struct fid_ep		rx_ep;
 	struct fid_peer_srx	*srx;
 };
 
@@ -220,7 +221,7 @@ struct smr_ep {
 	const char		*name;
 	uint64_t		msg_id;
 	struct smr_region	*volatile region;
-	struct fid_ep		*srx;
+	struct fid_peer_srx	*srx;
 	struct ofi_bufpool	*cmd_ctx_pool;
 	struct ofi_bufpool	*unexp_buf_pool;
 	struct ofi_bufpool	*pend_buf_pool;
@@ -236,11 +237,6 @@ struct smr_ep {
 	void 			(*smr_progress_ipc_list)(struct smr_ep *ep);
 };
 
-static inline struct fid_peer_srx *smr_get_peer_srx(struct smr_ep *ep)
-{
-	return container_of(ep->srx, struct fid_peer_srx, ep_fid);
-}
-
 #define smr_ep_rx_flags(smr_ep) ((smr_ep)->util_ep.rx_op_flags)
 #define smr_ep_tx_flags(smr_ep) ((smr_ep)->util_ep.tx_op_flags)
 
@@ -250,9 +246,6 @@ static inline int smr_mmap_name(char *shm_name, const char *ep_name,
 	return snprintf(shm_name, SMR_NAME_MAX - 1, "%s_%ld",
 			ep_name, msg_id);
 }
-
-int smr_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
-		struct fid_ep **rx_ep, void *context);
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);

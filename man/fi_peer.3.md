@@ -83,6 +83,20 @@ similar, independent from the object being shared.  However, because the goal
 of using peer providers is to avoid overhead, providers must be explicitly
 written to support the peer provider mechanisms.
 
+When importing any shared fabric object into a peer, the owner will create a
+separate fid_peer_* for each peer provider it intends to import into.  The owner
+will pass this unique fid_peer_* into each peer through the context parameter of
+the init call for the resource (i.e. fi_cq_open, fi_srx_context, fi_cntr_open,
+etc).  The fi_peer_*_context will indicate the owner-allocated fid_peer_* for
+the peer to use but is temporary for the init call and may not be accessed by
+the peer after initialization.  The peer will set just the peer_ops of the
+owner-allocated fid and save a reference to the imported fid_peer_* for use in
+the peer API flow.  The peer will allocate its own fid for internal uses and
+return that fid to the owner through the regular fid parameter of the init call
+(as if it were just another opened resource).  The owner is responsible for
+saving the returned peer fid from the open call in order to close it later
+(or to drive progress in the case of the cq_fid).
+
 There are two peer provider models.  In the example listed above, both peers
 are full providers in their own right and usable in a stand-alone fashion.
 In a second model, one of the peers is known as an offload provider.  An
