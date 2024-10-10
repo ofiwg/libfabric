@@ -368,15 +368,15 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 		     "================ received a packet from the fabric\n");
 
 	if (!OPX_RHF_IS_USE_EGR_BUF(rhf,hfi1_type)) {
-		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)) {
+		if (OFI_LIKELY(FI_OPX_HFI_BTH_OPCODE_WITHOUT_CQ(opcode) == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)) {
 			/* "header only" packet - no payload */
 			fi_opx_ep_rx_process_header(&opx_ep->ep_fid, hdr, NULL, 0, FI_TAGGED,
-						    FI_OPX_HFI_BTH_OPCODE_TAG_INJECT,
+						    opcode,
 						    origin_rx,
 						    OPX_INTRANODE_FALSE,
 						    lock_required, reliability,
 						    hfi1_type, slid);
-		} else if (opcode > FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
+		} else if (FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)) {
 			/* all other "tag" packets */
 			fi_opx_ep_rx_process_header_tag(&opx_ep->ep_fid, hdr, NULL, 0, opcode,
 							origin_rx, OPX_INTRANODE_FALSE,
@@ -415,17 +415,17 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 				total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B);
 		}
 
-		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)) {
+		if (OFI_LIKELY(FI_OPX_HFI_BTH_OPCODE_WITHOUT_CQ(opcode) == FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)) {
 			fi_opx_ep_rx_process_header(
 				&opx_ep->ep_fid, hdr,
 				(const union fi_opx_hfi1_packet_payload *const)payload,
-				payload_bytes_to_copy, FI_TAGGED, FI_OPX_HFI_BTH_OPCODE_TAG_EAGER,
+				payload_bytes_to_copy, FI_TAGGED, opcode,
 				origin_rx,
 				OPX_INTRANODE_FALSE,
 				lock_required, reliability,
 				hfi1_type,
 				slid);
-		} else if (opcode > FI_OPX_HFI_BTH_OPCODE_TAG_EAGER) { /* all other "tag" packets */
+		} else if (FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)) { /* all other "tag" packets */
 			fi_opx_ep_rx_process_header_tag(&opx_ep->ep_fid, hdr, payload,
 							payload_bytes_to_copy, opcode,
 							origin_rx, OPX_INTRANODE_FALSE,
@@ -685,10 +685,10 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 			slid = htons(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		}
 
-		if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
+		if (FI_OPX_HFI_BTH_OPCODE_WITHOUT_CQ(opcode) == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
 			fi_opx_ep_rx_process_header(ep, hdr, NULL, 0,
 				FI_TAGGED,
-				FI_OPX_HFI_BTH_OPCODE_TAG_INJECT,
+				opcode,
 				(const uint8_t) origin_reliability_rx,
 				OPX_INTRANODE_TRUE,
 				lock_required,
@@ -733,7 +733,7 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 				payload_bytes_to_copy = total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B);
 			}
 
-			if (opcode >= FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
+			if (FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)) {
 
 				fi_opx_ep_rx_process_header_tag(ep, hdr, payload,
 					payload_bytes_to_copy, opcode,
@@ -782,7 +782,7 @@ void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
 		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->errcode = entry->errcode;
 		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index] = NULL;
 
-		assert(entry->status == COMPLETE || entry->status == FREE || 
+		assert(entry->status == COMPLETE || entry->status == FREE ||
 				(entry->status == ERROR && entry->errcode != ECOMM)); // If it is a network error, retry
 		++hfi->info.sdma.available_counter;
 		hfi->info.sdma.done_index = (hfi->info.sdma.done_index + 1) % (queue_size);

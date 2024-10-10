@@ -2956,7 +2956,7 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 		slid = htons(((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid)));
 	}
 
-	if (OFI_LIKELY(opcode >= FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)) {
+	if (OFI_LIKELY(opcode & FI_OPX_HFI_BTH_OPCODE_TAG_BIT)) {
 		fi_opx_ep_rx_process_header(ep, hdr,
 			(const union fi_opx_hfi1_packet_payload * const) payload,
 			payload_bytes,

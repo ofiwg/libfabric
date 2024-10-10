@@ -1033,6 +1033,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		const void *buf, size_t len, fi_addr_t dest_addr, uint64_t tag,
 		const uint32_t data, int lock_required,
 		const uint64_t dest_rx,
+		uint64_t tx_op_flags,
 		const uint64_t caps,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type)
@@ -1079,9 +1080,8 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 
 			hdr->qw_9B[1] = opx_ep->tx->inject_9B.hdr.qw_9B[1] | bth_rx | (len << 48) |
 				((caps & FI_MSG) ? /* compile-time constant expression */
-					(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT :
-					(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT);
-
+				 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) :
+				 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT));
 			hdr->qw_9B[2] = opx_ep->tx->inject_9B.hdr.qw_9B[2];
 
 			hdr->qw_9B[3] = opx_ep->tx->inject_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32);
@@ -1097,9 +1097,9 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 			hdr->qw_16B[1] = opx_ep->tx->inject_16B.hdr.qw_16B[1] |
 								(((uint64_t)(dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
 			hdr->qw_16B[2] = opx_ep->tx->inject_16B.hdr.qw_16B[2] | bth_rx | (len << 48) |
-					((caps & FI_MSG) ?  /* compile-time constant expression */
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT :
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT);
+					((caps & FI_MSG) ? /* compile-time constant expression */
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) :
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT));
 
 			hdr->qw_16B[3] = opx_ep->tx->inject_16B.hdr.qw_16B[3];
 			hdr->qw_16B[4] = opx_ep->tx->inject_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32),
@@ -1179,8 +1179,8 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 
 			opx_ep->tx->inject_9B.hdr.qw_9B[1] | bth_rx | (len << 48) |
 					((caps & FI_MSG) ? /* compile-time constant expression */
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT :
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT),
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) :
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)),
 
 			opx_ep->tx->inject_9B.hdr.qw_9B[2] | psn,
 			opx_ep->tx->inject_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32),
@@ -1195,9 +1195,9 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 			opx_ep->tx->inject_16B.hdr.qw_16B[1] | (((uint64_t)(dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
 
 			opx_ep->tx->inject_16B.hdr.qw_16B[2] | bth_rx | (len << 48) |
-					((caps & FI_MSG) ?  /* compile-time constant expression */
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT :
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT),
+					((caps & FI_MSG) ? /* compile-time constant expression */
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) :
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)),
 
 			opx_ep->tx->inject_16B.hdr.qw_16B[3] | psn,
 			opx_ep->tx->inject_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32),
@@ -1344,6 +1344,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_intranode(struct fid_ep *ep,
 					   const uint32_t data,
 					   int lock_required,
 					   const uint64_t dest_rx,
+					   uint64_t tx_op_flags,
 					   const uint64_t caps,
 					   const uint64_t do_cq_completion,
 					   const enum fi_hmem_iface iface,
@@ -1400,8 +1401,8 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_intranode(struct fid_ep *ep,
 #endif
 	hdr->qw_9B[0] = opx_ep->tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 	hdr->qw_9B[1] = opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
-		((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER :
-		 (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER);
+		((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
+				   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
 	hdr->qw_9B[2] = opx_ep->tx->send_9B.hdr.qw_9B[2];
 	hdr->qw_9B[3] = opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32);
 	hdr->qw_9B[4] = opx_ep->tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48);
@@ -1510,6 +1511,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 							  data,
 							  lock_required,
 							  dest_rx,
+							  tx_op_flags,
 							  caps,
 							  do_cq_completion,
 							  iface,
@@ -1577,8 +1579,8 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 			     OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type);
 	replay->scb.scb_9B.hdr.qw_9B[0] = opx_ep->tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 	replay->scb.scb_9B.hdr.qw_9B[1] = opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
-		((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER
-				 : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER);
+		((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
+				   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
 	replay->scb.scb_9B.hdr.qw_9B[2] = opx_ep->tx->send_9B.hdr.qw_9B[2] | psn;
 	replay->scb.scb_9B.hdr.qw_9B[3] = opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32);
 	replay->scb.scb_9B.hdr.qw_9B[4] = opx_ep->tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48);
@@ -1648,6 +1650,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_intranode_16B(struct fid_ep *ep,
 					       const uint32_t data,
 					       int lock_required,
 					       const uint64_t dest_rx,
+					       uint64_t tx_op_flags,
 					       const uint64_t caps,
 					       const uint64_t do_cq_completion,
 					       const enum fi_hmem_iface iface,
@@ -1709,8 +1712,8 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_intranode_16B(struct fid_ep *ep,
 					((uint64_t)((lrh_dlid  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
 	hdr->qw_16B[2] = opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
 					((caps & FI_MSG) ?  /* compile-time constant expression */
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER :
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER);
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
 	hdr->qw_16B[3] = opx_ep->tx->send_16B.hdr.qw_16B[3];
 	hdr->qw_16B[4] = opx_ep->tx->send_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32);
 	hdr->qw_16B[5] = opx_ep->tx->send_16B.hdr.qw_16B[5] | (payload_qws_total << 48);
@@ -1832,6 +1835,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov,
 							      data,
 							      lock_required,
 							      dest_rx,
+							      tx_op_flags,
 							      caps,
 							      do_cq_completion,
 							      iface,
@@ -1901,8 +1905,9 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov,
 	replay->scb.scb_16B.hdr.qw_16B[0] = opx_ep->tx->send_16B.hdr.qw_16B[0] | ((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) | ((uint64_t)lrh_qws << 20);
 	replay->scb.scb_16B.hdr.qw_16B[1] = opx_ep->tx->send_16B.hdr.qw_16B[1] |((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
 	replay->scb.scb_16B.hdr.qw_16B[2] = opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
-		((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER :
-		 (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER);
+		((caps & FI_MSG) ?
+		 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
+		 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
 	replay->scb.scb_16B.hdr.qw_16B[3] = opx_ep->tx->send_16B.hdr.qw_16B[3] | psn;
 	replay->scb.scb_16B.hdr.qw_16B[4] = opx_ep->tx->send_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32);
 	replay->scb.scb_16B.hdr.qw_16B[5] = opx_ep->tx->send_16B.hdr.qw_16B[5] | (payload_qws_total << 48);
@@ -2027,6 +2032,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 					  const uint32_t data,
 					  int lock_required,
 					  const uint64_t dest_rx,
+					  uint64_t tx_op_flags,
 					  const uint64_t caps,
 					  const uint64_t do_cq_completion,
 					  const enum fi_hmem_iface iface,
@@ -2082,8 +2088,8 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 	hdr->qw_9B[0] = opx_ep->tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 	hdr->qw_9B[1] = opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
 		((caps & FI_MSG) ?  /* compile-time constant expression */
-		 (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER :
-		 (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER);
+		 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
+		 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
 	hdr->qw_9B[2] = opx_ep->tx->send_9B.hdr.qw_9B[2];
 	hdr->qw_9B[3] = opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32);
 	hdr->qw_9B[4] = opx_ep->tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48);
@@ -2133,6 +2139,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode_16B(struct fid_ep *ep,
 					      const uint32_t data,
 					      int lock_required,
 					      const uint64_t dest_rx,
+					      uint64_t tx_op_flags,
 					      const uint64_t caps,
 					      const uint64_t do_cq_completion,
 					      const enum fi_hmem_iface iface,
@@ -2192,8 +2199,8 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode_16B(struct fid_ep *ep,
 					((uint64_t)((lrh_dlid  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
 	hdr->qw_16B[2] = opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
 		((caps & FI_MSG) ?  /* compile-time constant expression */
-		 (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER :
-		 (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER);
+		 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
+		 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
 	hdr->qw_16B[3] = opx_ep->tx->send_16B.hdr.qw_16B[3];
 	hdr->qw_16B[4] = opx_ep->tx->send_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32);
 	hdr->qw_16B[5] = opx_ep->tx->send_16B.hdr.qw_16B[5] | (payload_qws_total << 48);
@@ -2248,6 +2255,7 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(struct fi_opx_ep *opx_ep,
 					const uint32_t psn,
 					const uint32_t data,
 					const uint64_t tag,
+					uint64_t tx_op_flags,
 					const uint64_t caps,
 					const enum opx_hfi1_type hfi1_type)
 {
@@ -2270,8 +2278,8 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(struct fi_opx_ep *opx_ep,
 
 				opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
 					((caps & FI_MSG) ?
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER :
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER),
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)),
 
 				opx_ep->tx->send_9B.hdr.qw_9B[2] | psn,
 				opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32),
@@ -2291,8 +2299,8 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(struct fi_opx_ep *opx_ep,
 
 				opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
 					((caps & FI_MSG) ?  /* compile-time constant expression */
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER :
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER),
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)),
 
 				opx_ep->tx->send_16B.hdr.qw_16B[3] | psn,
 				opx_ep->tx->send_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32),
@@ -2308,8 +2316,8 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(struct fi_opx_ep *opx_ep,
 
 				opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
 					((caps & FI_MSG) ?
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER :
-						(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER),
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)),
 
 				opx_ep->tx->send_9B.hdr.qw_9B[2] | psn,
 				opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32),
@@ -2322,7 +2330,10 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(struct fi_opx_ep *opx_ep,
 				opx_ep->tx->send_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) | pbc_dlid,
 				opx_ep->tx->send_16B.hdr.qw_16B[0] | ((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) | ((uint64_t)lrh_packet_length << 20),
 				opx_ep->tx->send_16B.hdr.qw_16B[1] | ((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
-				opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) | ((caps & FI_MSG) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER),
+				opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
+					((caps & FI_MSG) ?
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)),
 				opx_ep->tx->send_16B.hdr.qw_16B[3] | psn,
 				opx_ep->tx->send_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32),
 				opx_ep->tx->send_16B.hdr.qw_16B[5] | (payload_qws_total << 48),
@@ -2531,7 +2542,7 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
 		return fi_opx_hfi1_tx_send_egr_intranode(ep, buf, len, desc, dest_addr,
-			tag, context, data, lock_required, dest_rx, caps, do_cq_completion,
+			tag, context, data, lock_required, dest_rx, tx_op_flags, caps, do_cq_completion,
 			iface, hmem_device);
 	}
 
@@ -2609,7 +2620,7 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 #endif
 	fi_opx_hfi1_tx_egr_write_packet_header(opx_ep, &pio_state, local_temp, buf, bth_rx, lrh_dlid,
 						lrh_dws, pbc_dlid, pbc_dws, len, xfer_bytes_tail,
-						payload_qws_total, psn, data, tag, caps, hfi1_type);
+						payload_qws_total, psn, data, tag, tx_op_flags, caps, hfi1_type);
 
 	uint64_t *buf_qws = (uint64_t*)((uintptr_t)buf + xfer_bytes_tail);
 
@@ -2678,7 +2689,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_16B(struct fid_ep *ep,
 
 	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
 		return fi_opx_hfi1_tx_send_egr_intranode_16B(ep, buf, len, desc, dest_addr,
-			tag, context, data, lock_required, dest_rx, caps, do_cq_completion,
+			tag, context, data, lock_required, dest_rx, tx_op_flags, caps, do_cq_completion,
 			iface, hmem_device);
 	}
 
@@ -2765,7 +2776,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_16B(struct fid_ep *ep,
 #endif
 	fi_opx_hfi1_tx_egr_write_packet_header(opx_ep, &pio_state, local_temp, buf, bth_rx, lrh_dlid,
 						lrh_qws, pbc_dlid, pbc_dws, len, xfer_bytes_tail,
-						payload_qws_total, psn, data, tag, caps, hfi1_type);
+						payload_qws_total, psn, data, tag, tx_op_flags, caps, hfi1_type);
 
 	uint64_t *buf_qws = (uint64_t*)((uintptr_t)buf + xfer_bytes_tail);
 
@@ -2907,6 +2918,7 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(struct fi_opx_ep *opx_
 					const uint32_t psn,
 					const uint32_t data,
 					const uint64_t tag,
+					uint64_t tx_op_flags,
 					const uint64_t caps,
 					const enum opx_hfi1_type hfi1_type)
 {
@@ -2926,8 +2938,8 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(struct fi_opx_ep *opx_
 			opx_ep->tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t)lrh_dws << 32),
 			opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | FI_OPX_MP_EGR_XFER_BYTES_TAIL |
 				((caps & FI_MSG) ?
-					(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST :
-					(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST),
+				 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST) :
+				 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST)),
 			opx_ep->tx->send_9B.hdr.qw_9B[2] | (payload_bytes_total << 32) | psn,
 			opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t)data) << 32),
 			*((uint64_t *)buf),
@@ -2944,8 +2956,8 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(struct fi_opx_ep *opx_
 						((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
 				opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | FI_OPX_MP_EGR_XFER_BYTES_TAIL |
 						((caps & FI_MSG) ?  /* compile-time constant expression */
-							(uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST :
-							(uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST),
+						 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST) :
+						 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ : (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST)),
 				opx_ep->tx->send_16B.hdr.qw_16B[3] | psn | (payload_bytes_total << 32),
 				opx_ep->tx->send_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32),
 				*((uint64_t *)buf),
@@ -3140,6 +3152,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep,
 						uint64_t tag,
 						const uint32_t data,
 						int lock_required,
+						uint64_t tx_op_flags,
 						const uint64_t caps,
 						const enum ofi_reliability_kind reliability,
 						uint32_t *psn_out,
@@ -3203,6 +3216,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep,
 							  psn,
 							  data,
 							  tag,
+							  tx_op_flags,
 							  caps,
 							  hfi1_type);
 

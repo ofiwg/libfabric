@@ -78,11 +78,12 @@
 				dest_addr, tag, 0,				\
 				LOCK,	/* lock_required */			\
 				AV,	/* av_type */				\
+				0,	/* flags */				\
 				CAPS | FI_TAGGED,				\
-				RELIABILITY,				\
+				RELIABILITY,					\
 				HFI1_TYPE);					\
 	}									\
-	__OPX_FORCE_INLINE__ ssize_t                          \
+	__OPX_FORCE_INLINE__ ssize_t						\
 	fi_opx_tsenddata_ ## LOCK ## _ ## AV ## _ ## CAPS ## _ ## RELIABILITY ## _ ## HFI1_TYPE	\
 		(struct fid_ep *ep, const void *buf, size_t len,		\
 			void *desc, uint64_t data, fi_addr_t dest_addr,		\
@@ -90,27 +91,28 @@
 	{									\
 		return fi_opx_ep_tx_send(ep, buf, len, desc,			\
 				dest_addr, tag, context, data,			\
-				LOCK,	/* lock_required */			\
-				AV,	/* av_type */				\
-				1,	/* is_contiguous */			\
-				0,	/* override_flags */			\
-				0,	/* flags */				\
+				LOCK,			/* lock_required */	\
+				AV,			/* av_type */		\
+				1,			/* is_contiguous */	\
+				0,			/* override_flags */	\
+				FI_REMOTE_CQ_DATA,	/* flags */		\
 				CAPS | FI_TAGGED,				\
-				RELIABILITY,				\
+				RELIABILITY,					\
 				HFI1_TYPE);					\
 	}									\
-	__OPX_FORCE_INLINE__ ssize_t                          \
+	__OPX_FORCE_INLINE__ ssize_t						\
 	fi_opx_tinjectdata_ ## LOCK ## _ ## AV ## _ ## CAPS ## _ ## RELIABILITY ## _ ## HFI1_TYPE	\
 		(struct fid_ep *ep, const void *buf, size_t len,		\
 			uint64_t data, fi_addr_t dest_addr,			\
 			uint64_t tag)						\
-	{	\
+	{									\
 		return fi_opx_ep_tx_inject(ep, buf, len,			\
 				dest_addr, tag, data,				\
 				LOCK,	/* lock_required */			\
 				AV,	/* av_type */				\
+				FI_REMOTE_CQ_DATA,	/* flags */		\
 				CAPS | FI_TAGGED,				\
-				RELIABILITY,			\
+				RELIABILITY,					\
 				HFI1_TYPE);					\
 	}
 

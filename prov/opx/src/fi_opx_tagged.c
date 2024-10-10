@@ -238,6 +238,7 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep,
 				msg->addr, msg->tag, msg->data,
 				FI_OPX_LOCK_NOT_REQUIRED,
 				av_type,
+				flags,
 				caps | FI_TAGGED,
 				opx_ep->reliability->state.kind,
 				OPX_HFI1_TYPE);
