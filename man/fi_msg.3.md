@@ -42,10 +42,16 @@ ssize_t fi_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 ssize_t fi_inject(struct fid_ep *ep, const void *buf, size_t len,
 	fi_addr_t dest_addr);
 
+ssize_t fi_inject2(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+	fi_addr_t dest_addr);
+
 ssize_t fi_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	void *desc, uint64_t data, fi_addr_t dest_addr, void *context);
 
 ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+	uint64_t data, fi_addr_t dest_addr);
+
+ssize_t fi_injectdata2(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	uint64_t data, fi_addr_t dest_addr);
 ```
 
@@ -173,6 +179,13 @@ to write CQ entries for all successful completions.  See the flags
 discussion below for more details. The requested message size that
 can be used with fi_inject is limited by inject_size.
 
+## fi_inject2
+
+The fi_inject2 call is similar to fi_inject, but allows passing a descriptor
+associated with the send buffer. This is especially useful when FI_HMEM
+support is enabled and the buffer is registered with FI_HMEM iface other
+than FI_HMEM_SYSTEM.
+
 ## fi_senddata
 
 The send data call is similar to fi_send, but allows for the sending
@@ -184,6 +197,13 @@ transfer.
 The inject data call is similar to fi_inject, but allows for the sending
 of remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the
 transfer.
+
+## fi_injectdata2
+
+The fi_injectdata2 call is similar to fi_injectdata, but allows passing a
+descriptor associated with the send buffer. This is especially useful when
+FI_HMEM support is enabled and the buffer is registered with FI_HMEM iface
+other than FI_HMEM_SYSTEM.
 
 ## fi_recv
 

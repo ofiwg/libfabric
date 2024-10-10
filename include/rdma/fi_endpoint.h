@@ -128,6 +128,10 @@ struct fi_ops_msg {
 			uint64_t data, fi_addr_t dest_addr, void *context);
 	ssize_t	(*injectdata)(struct fid_ep *ep, const void *buf, size_t len,
 			uint64_t data, fi_addr_t dest_addr);
+	ssize_t	(*inject2)(struct fid_ep *ep, const void *buf, size_t len,
+			void *desc, fi_addr_t dest_addr);
+	ssize_t	(*injectdata2)(struct fid_ep *ep, const void *buf, size_t len,
+			void *desc, uint64_t data, fi_addr_t dest_addr);
 };
 
 struct fi_ops_cm;
@@ -357,6 +361,24 @@ fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t dest_addr)
 {
 	return ep->msg->injectdata(ep, buf, len, data, dest_addr);
+}
+
+static inline ssize_t
+fi_inject2(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+	   fi_addr_t dest_addr)
+{
+	return FI_CHECK_OP(ep->msg, struct fi_ops_msg, inject2) ?
+		ep->msg->inject2(ep, buf, len, desc, dest_addr) :
+		-FI_ENOSYS;
+}
+
+static inline ssize_t
+fi_injectdata2(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+	       uint64_t data, fi_addr_t dest_addr)
+{
+	return FI_CHECK_OP(ep->msg, struct fi_ops_msg, injectdata2) ?
+		ep->msg->injectdata2(ep, buf, len, desc, data, dest_addr) :
+		-FI_ENOSYS;
 }
 
 #endif
