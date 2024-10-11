@@ -691,11 +691,28 @@ pipeline {
             }
           }
         }
-        stage('mpichtestsuite') {
+        stage('mpichtestsuite-tcp') {
           steps {
             script {
               dir (RUN_LOCATION) {
-                def providers = [['tcp', null], ["verbs","rxm"]]
+                def providers = [['tcp', null]]
+                def MPIS = ["mpich"]
+                if (env.WEEKLY.toBoolean()) {
+                  MPIS = ["impi", "mpich"]
+                }
+                for (def mpi in MPIS) {
+                  run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
+                                 "grass", "bulbasaur", "2", "${mpi}")
+                }
+              }
+            }
+          }
+        }
+        stage('mpichtestsuite-verbs') {
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                def providers = [["verbs","rxm"]]
                 def MPIS = ["mpich"]
                 if (env.WEEKLY.toBoolean()) {
                   MPIS = ["impi", "mpich"]
