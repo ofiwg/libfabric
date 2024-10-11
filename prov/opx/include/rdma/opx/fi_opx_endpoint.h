@@ -2067,7 +2067,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.bytes;
 
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
-
+#ifndef NDEBUG
+		if (bytes == 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Received RZV (non-TID) data packet with 0-byte payload size. hdr->dput.target.last_bytes=%hd, hdr->dput.target.bytes=%hd. Based on PSN high bit (%s), bytes was set to %s\n",
+				hdr->dput.target.last_bytes,
+				hdr->dput.target.bytes,
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "ON" : "OFF",
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "last_bytes" : "bytes");
+			abort();
+		}
+#endif
 		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
 #ifdef OPX_HMEM
 		if (target_context->flags & FI_OPX_CQ_CONTEXT_HMEM) {
@@ -2230,6 +2240,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.bytes;
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
 
+#ifndef NDEBUG
+		if (bytes == 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Received RMA PUT data packet with 0-byte payload size. hdr->dput.target.last_bytes=%hd, hdr->dput.target.bytes=%hd. Based on PSN high bit (%s), bytes was set to %s\n",
+				hdr->dput.target.last_bytes,
+				hdr->dput.target.bytes,
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "ON" : "OFF",
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "last_bytes" : "bytes");
+			abort();
+		}
+#endif
 		// Optimize Memcpy
 		if(hdr->dput.target.op == FI_NOOP - 1 &&
 			hdr->dput.target.dt == FI_VOID - 1) {
@@ -2265,6 +2286,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		assert(cc);
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
 
+#ifndef NDEBUG
+		if (bytes == 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Received RMA GET data packet with 0-byte payload size. hdr->dput.target.last_bytes=%hd, hdr->dput.target.bytes=%hd. Based on PSN high bit (%s), bytes was set to %s\n",
+				hdr->dput.target.last_bytes,
+				hdr->dput.target.bytes,
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "ON" : "OFF",
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "last_bytes" : "bytes");
+			abort();
+		}
+#endif
 		if (hdr->dput.target.dt == (FI_VOID - 1)) {
 			OPX_HMEM_COPY_TO(rbuf_qws, sbuf_qws, bytes, OPX_HMEM_NO_HANDLE,
 					 OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
@@ -2310,6 +2342,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.last_bytes :
 					hdr->dput.target.bytes;
 
+#ifndef NDEBUG
+		if (bytes == 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Received ATOMIC FETCH data packet with 0-byte payload size. hdr->dput.target.last_bytes=%hd, hdr->dput.target.bytes=%hd. Based on PSN high bit (%s), bytes was set to %s\n",
+				hdr->dput.target.last_bytes,
+				hdr->dput.target.bytes,
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "ON" : "OFF",
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "last_bytes" : "bytes");
+			abort();
+		}
+#endif
 		assert(bytes > sizeof(*dput_fetch));
 		uint64_t hmem_device;
 		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
@@ -2383,6 +2426,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.last_bytes :
 					hdr->dput.target.bytes;
 
+#ifndef NDEBUG
+		if (bytes == 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Received ATOMIC COMPARE FETCH data packet with 0-byte payload size. hdr->dput.target.last_bytes=%hd, hdr->dput.target.bytes=%hd. Based on PSN high bit (%s), bytes was set to %s\n",
+				hdr->dput.target.last_bytes,
+				hdr->dput.target.bytes,
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "ON" : "OFF",
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "last_bytes" : "bytes");
+			abort();
+		}
+#endif
 		assert(bytes > sizeof(*dput_fetch));
 		uint64_t hmem_device;
 		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
