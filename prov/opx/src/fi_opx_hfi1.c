@@ -2449,12 +2449,21 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 
 		uint64_t bytes_to_send = dput_iov[i].bytes - params->bytes_sent;
 		while (bytes_to_send > 0) {
-			uint64_t bytes_to_send_this_packet, blocks_to_send_in_this_packet;
+			uint64_t bytes_to_send_this_packet;
+			uint64_t blocks_to_send_in_this_packet;
+			uint64_t pbc_dws;
+			uint16_t lrh_dws;
 			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 				bytes_to_send_this_packet = MIN(bytes_to_send + params->payload_bytes_for_iovec,
 								max_bytes_per_packet);
 				uint64_t tail_bytes = bytes_to_send_this_packet & 0x3Ful;
 				blocks_to_send_in_this_packet = (bytes_to_send_this_packet >> 6) + (tail_bytes ? 1 : 0);
+				pbc_dws = 2 + /* pbc */
+						 2 + /* lrh */
+						 3 + /* bth */
+						 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+						 (blocks_to_send_in_this_packet << 4);
+				lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 			} else {
 				/* 1 QW for hdr that spills to 2nd cacheline + 1 QW for ICRC/tail */
 				const uint64_t additional_hdr_tail_byte = 2 * 8;
@@ -2463,19 +2472,6 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 				uint64_t tail_bytes = payload_n_additional_hdr_tail_bytes & 0x3Ful;
 				blocks_to_send_in_this_packet = (payload_n_additional_hdr_tail_bytes >> 6) + (tail_bytes ? 1 : 0);
 				bytes_to_send_this_packet = payload_n_additional_hdr_tail_bytes - additional_hdr_tail_byte;
-
-			}
-
-			uint64_t pbc_dws;
-			uint16_t lrh_dws;
-			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-				pbc_dws = 2 + /* pbc */
-						 2 + /* lrh */
-						 3 + /* bth */
-						 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-						 (blocks_to_send_in_this_packet << 4);
-				lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
-			} else {
 				pbc_dws = 2 + /* pbc */
 						 4 + /* lrh uncompressed */
 						 3 + /* bth */
@@ -2515,8 +2511,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 			} else {
 				union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
-				const uint16_t credits_needed = blocks_to_send_in_this_packet
-					                         + 1 /* header */;
+				const uint16_t credits_needed = blocks_to_send_in_this_packet + 1 /* header */;
 				uint32_t total_credits_available =
 					FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state,
 								      &opx_ep->tx->force_credit_return,
@@ -2539,8 +2534,9 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 				union fi_opx_reliability_tx_psn *psn_ptr;
 				int64_t psn;
 
-				psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid,
-								u8_rx, params->origin_rs, &psn_ptr, &replay, reliability, hfi1_type);
+				psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state,
+								params->slid, u8_rx, params->origin_rs, &psn_ptr,
+								&replay, reliability, hfi1_type);
 				if(OFI_UNLIKELY(psn == -1)) {
 					return -FI_EAGAIN;
 				}
@@ -2578,6 +2574,21 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 				FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
 				if (opcode == FI_OPX_HFI_DPUT_OPCODE_PUT) {
+					if (bytes_to_send == bytes_sent) {
+						/* This is the last packet to send for this PUT.
+						   Turn on the immediate ACK request bit so the
+						   user gets control of their buffer back ASAP */
+						const uint64_t set_ack_bit = (uint64_t)htonl(0x80000000);
+						if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+							replay->scb.scb_9B.hdr.qw_9B[2] |= set_ack_bit;
+							replay->scb.scb_9B.hdr.dput.target.last_bytes =
+								replay->scb.scb_9B.hdr.dput.target.bytes;
+						} else {
+							replay->scb.scb_16B.hdr.qw_16B[3] |= set_ack_bit;
+							replay->scb.scb_16B.hdr.dput.target.last_bytes =
+								replay->scb.scb_16B.hdr.dput.target.bytes;
+						}
+					}
 					fi_opx_reliability_client_replay_register_with_update(
 						&opx_ep->reliability->state, params->slid,
 						params->origin_rs, u8_rx, psn_ptr, replay, cc,

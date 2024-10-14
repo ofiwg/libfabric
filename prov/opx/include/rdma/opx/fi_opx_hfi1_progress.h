@@ -473,11 +473,9 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 				hdr, origin_rx, slid, hfi1_type);
 
 	} else if (hdr->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA &&
-			((ntohl(hdr->bth.psn) & 0x80000000) ||
-			(hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_PUT))) {
-		/* Send preemptive ACKs on Rendezvous FI_OPX_HFI_DPUT_OPCODE_PUT or
-		 * on the final packet of a Rendezvous SDMA writev (the high bit
-		 * of the PSN - the Acknowledge Request bit - is set)
+			(ntohl(hdr->bth.psn) & 0x80000000)) {
+		/* Send preemptive ACKs on Rendezvous Data packets when
+		 * the high bit of the PSN - the Acknowledge Request bit - is set
 		 */
 		uint32_t psn_count = MAX(MIN(opx_ep->reliability->service.preemptive_ack_rate, psn), 1);
 		assert(psn >= psn_count - 1);
