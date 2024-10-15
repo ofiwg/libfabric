@@ -139,6 +139,14 @@ attributes (mr_mode field).  Each mr_mode bit requires that an
 application take specific steps in order to use memory buffers with
 libfabric interfaces.
 
+As a special case, a new memory region can be created from an existing
+memory region.  Such a new memory region is called a sub-MR, and the existing
+memory region is called the base MR.  Sub-MRs may be used to shared hardware
+resources, such as virtual to physical address translations and page pinning.
+This can improve performance when creating and destroying sub-regions that
+need different access rights.  The base MR itself can also be a sub-MR,
+allowing for a hierarchy of memory regions.
+
 The following apply to memory registration.
 
 *Default Memory Registration*
@@ -575,8 +583,8 @@ into calls as function parameters.
 ```c
 struct fi_mr_attr {
     union {
-      const struct iovec *mr_iov;
-      const struct fi_mr_dmabuf *dmabuf;
+        const struct iovec *mr_iov;
+        const struct fi_mr_dmabuf *dmabuf;
     };
     size_t             iov_count;
     uint64_t           access;
@@ -595,6 +603,8 @@ struct fi_mr_attr {
     } device;
     void               *hmem_data;
     size_t             page_size;
+    const struct fid_mr *base_mr;
+    size_t             sub_mr_cnt;
 };
 
 struct fi_mr_auth_key {
@@ -810,6 +820,31 @@ or from the region.
 Providers may choose to ignore page size. This will result in a provider
 selected page size always being used.
 
+## base_mr
+
+If non-NULL, create a sub-MR from an existing memory region specified by
+the base_mr field.
+
+The sub-MR must be fully contained within the base MR; however, the sub-MR
+has its own authorization keys and access rights.  The following attributes
+are inherited from the base MR, and as a result, are ignored when creating the
+sub-MR:
+
+iface, device, hmem_data, page_size
+
+The sub-MR should hold a reference to the base MR. When fi_close is called
+on the base MR, the call would fail if there are any outstanding sub-MRs.
+
+The base_mr field must be NULL if the FI_MR_DMABUF flag is set.
+
+## sub_mr_cnt
+
+The number of sub-MRs expected to be created from the memory region.  This
+value is not a limit.  Instead, it is a hint to the provider to allow provider
+specific optimization for sub-MR creation.  For example, the provider may
+reserve access keys or pre-allocation fid_mr objects.  The provider may
+ignore this hint.
+
 ## fi_hmem_ze_device
 
 Returns an hmem device identifier for a level zero <driver, device> tuple.
@@ -899,6 +934,12 @@ The follow flag may be specified to any memory registration call.
   region.  When set, the region is specified through the dmabuf field of the
   fi_mr_attr structure.  This flag is only usable for domains opened with
   FI_HMEM capability support.
+
+*FI_MR_SINGLE_USE*
+: This flag indicates that the memory region is only used for a single
+  operation.  After the operation is complete, the key associated with the
+  memory region is automatically invalidated and can no longer be used for
+  remote access.
 
 *FI_AUTH_KEY*
 : Only valid with domains configured with FI_AV_AUTH_KEY. When used with
