@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_av" "3" "2024\-10\-11" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_av" "3" "2024\-10\-15" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -430,9 +430,10 @@ authorization keys.
 These fi_addr_t\[cq]s can be used as the target for local data transfer
 operations.
 .PP
-If the endpoint supports \f[V]FI_DIRECTED_RECV\f[R], these
-fi_addr_t\[cq]s can be used to restrict receive buffers to a specific
-endpoint address and authorization key.
+If the endpoint supports \f[V]FI_DIRECTED_RECV\f[R] or
+\f[V]FI_TAGGED_DIRECTED_RECV\f[R], these fi_addr_t\[cq]s can be used to
+restrict receive buffers to a specific endpoint address and
+authorization key.
 .PP
 For address vectors configured with FI_AV_USER_ID, all subsequent target
 events corresponding to the address being inserted will return
