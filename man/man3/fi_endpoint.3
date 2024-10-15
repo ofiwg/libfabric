@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_endpoint" "3" "2024\-10\-11" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_endpoint" "3" "2024\-10\-15" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -1502,8 +1502,9 @@ capability bits from the fi_info structure will be used.
 .PP
 The following capabilities apply to the receive attributes: FI_MSG,
 FI_RMA, FI_TAGGED, FI_ATOMIC, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_RECV,
-FI_HMEM, FI_TRIGGER, FI_RMA_PMEM, FI_DIRECTED_RECV, FI_MULTI_RECV,
-FI_SOURCE, FI_RMA_EVENT, FI_SOURCE_ERR, FI_COLLECTIVE, and FI_XPU.
+FI_HMEM, FI_TRIGGER, FI_RMA_PMEM, FI_DIRECTED_RECV,
+FI_TAGGED_DIRECTED_RECV, FI_TAGGED_MULTI_RECV, FI_MULTI_RECV, FI_SOURCE,
+FI_RMA_EVENT, FI_SOURCE_ERR, FI_COLLECTIVE, and FI_XPU.
 .PP
 Many applications will be able to ignore this field and rely solely on
 the fi_info::caps field.

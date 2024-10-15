@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_tagged" "3" "2024\-10\-11" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_tagged" "3" "2024\-10\-15" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -283,6 +283,26 @@ This may require that the underlying provider implementation copy the
 data into a local buffer and transfer out of that buffer.
 This flag can only be used with messages smaller than inject_size.
 .TP
+\f[I]FI_MULTI_RECV\f[R]
+Applies to posted tagged receive operations when the
+FI_TAGGED_MULTI_RECV capability is enabled.
+This flag allows the user to post a single tagged receive buffer that
+will receive multiple incoming messages.
+Received messages will be packed into the receive buffer until the
+buffer has been consumed.
+Use of this flag may cause a single posted receive operation to generate
+multiple events as messages are placed into the buffer.
+The placement of received data into the buffer may be subjected to
+provider specific alignment restrictions.
+.PP
+The buffer will be released by the provider when the available buffer
+space falls below the specified minimum (see FI_OPT_MIN_MULTI_RECV).
+Note that an entry to the associated receive completion queue will
+always be generated when the buffer has been consumed, even if other
+receive completions have been suppressed (i.e.\ the Rx context has been
+configured for FI_SELECTIVE_COMPLETION).
+See the FI_MULTI_RECV completion flag \f[V]fi_cq\f[R](3).
+.TP
 \f[I]FI_INJECT_COMPLETE\f[R]
 Applies to fi_tsendmsg.
 Indicates that a completion should be generated when the source
@@ -315,7 +335,8 @@ operation (inclusive) to the posting of a subsequent fenced operation
 .TP
 \f[I]FI_AUTH_KEY\f[R]
 Only valid with domains configured with FI_AV_AUTH_KEY and
-connectionless endpoints configured with FI_DIRECTED_RECV.
+connectionless endpoints configured with FI_DIRECTED_RECV or
+FI_TAGGED_DIRECTED_RECV.
 When used with fi_trecvmsg, this flag denotes that the src_addr is an
 authorization key fi_addr_t instead of an endpoint fi_addr_t.
 .PP
