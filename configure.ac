@@ -885,6 +885,25 @@ AC_ARG_ENABLE([uffd-monitor],
 AC_DEFINE_UNQUOTED(ENABLE_UFFD_MONITOR, [$enable_uffd],
 	[Define to 1 to enable uffd memory monitor])
 
+default_monitor=""
+bad_default="0"
+AC_ARG_WITH([default-monitor],
+	[AS_HELP_STRING([--with-default-monitor=<memhooks|uffd|disabled>],
+			[Select the default memory monitor.])],
+	[AS_CASE([$with_default_monitor],
+		[memhooks],[default_monitor=memhooks],
+		[uffd],[default_monitor=uffd],
+		[disabled], [default_monitor=disabled],
+		[AC_MSG_ERROR([Unknown monitor specified: $with_default_monitor.  Choices are memhooks, uffd, or disabled.])])
+	 AS_CASE([$default_monitor],
+		[memhooks], [AS_IF([test "$enable_memhooks" != "1"], [bad_default=1])],
+		[uffd], [AS_IF([test "$enable_uffd" != "1"], [bad_default=1])],
+		[])
+	 AS_IF([test "$bad_default" != "0"],
+		[AC_MSG_ERROR(["Default memory monitor is not available: $default_monitor."])])
+	 AC_DEFINE_UNQUOTED([HAVE_MR_CACHE_MONITOR_DEFAULT], ["$default_monitor"], [Default memory monitor])
+	],
+	[])
 
 AH_BOTTOM([
 #if defined(__linux__) && (defined(__x86_64__) || defined(__amd64__) || defined(__aarch64__) || (defined(__riscv) && __riscv_xlen == 64)) && ENABLE_MEMHOOKS_MONITOR
