@@ -211,6 +211,30 @@ static void cleanup_monitor_list() {
 	monitor_list_size = 0;
 }
 
+static void set_default_monitor(const char *monitor)
+{
+	if (!monitor)
+		return;
+
+	if (!strcmp(monitor, "userfaultfd") || !strcmp(monitor, "uffd")) {
+#if HAVE_UFFD_MONITOR
+		default_monitor = uffd_monitor;
+#else
+		FI_WARN(&core_prov, FI_LOG_MR, "userfaultfd monitor not available\n");
+		default_monitor = NULL;
+#endif
+	} else if (!strcmp(monitor, "memhooks")) {
+#if HAVE_MEMHOOKS_MONITOR
+		default_monitor = memhooks_monitor;
+#else
+		FI_WARN(&core_prov, FI_LOG_MR, "memhooks monitor not available\n");
+		default_monitor = NULL;
+#endif
+	} else if (!strcmp(monitor, "disabled")) {
+		default_monitor = NULL;
+	}
+}
+
 /*
  * Initialize all available memory monitors
  */
@@ -247,9 +271,14 @@ void ofi_monitors_init(void)
 			" address changes.  Options are: userfaultfd, memhooks"
 			" and disabled.  Userfaultfd is a Linux kernel feature."
 			" Memhooks operates by intercepting memory allocation"
-			" and free calls.  Userfaultfd is the default if"
-			" available on the system. 'disabled' option disables"
-			" memory caching.");
+			" and free calls."
+#if defined(HAVE_MR_CACHE_MONITOR_DEFAULT)
+			" " HAVE_MR_CACHE_MONITOR_DEFAULT
+#else
+			" Userfaultfd"
+#endif
+			" is the default if available on the system. 'disabled'"
+			" option disables memory caching.");
 	fi_param_define(NULL, "mr_cuda_cache_monitor_enabled", FI_PARAM_BOOL,
 			"Enable or disable the CUDA cache memory monitor."
 			"Enabled by default.");
@@ -278,7 +307,9 @@ void ofi_monitors_init(void)
 	 * do not override
 	 */
 	if (!default_monitor) {
-#if HAVE_MEMHOOKS_MONITOR
+#if defined(HAVE_MR_CACHE_MONITOR_DEFAULT)
+		set_default_monitor(HAVE_MR_CACHE_MONITOR_DEFAULT);
+#elif HAVE_MEMHOOKS_MONITOR
 		default_monitor = memhooks_monitor;
 #elif HAVE_UFFD_MONITOR
 		default_monitor = uffd_monitor;
@@ -287,25 +318,8 @@ void ofi_monitors_init(void)
 #endif
 	}
 
-	if (cache_params.monitor != NULL) {
-		if (!strcmp(cache_params.monitor, "userfaultfd")) {
-#if HAVE_UFFD_MONITOR
-			default_monitor = uffd_monitor;
-#else
-			FI_WARN(&core_prov, FI_LOG_MR, "userfaultfd monitor not available\n");
-			default_monitor = NULL;
-#endif
-		} else if (!strcmp(cache_params.monitor, "memhooks")) {
-#if HAVE_MEMHOOKS_MONITOR
-			default_monitor = memhooks_monitor;
-#else
-			FI_WARN(&core_prov, FI_LOG_MR, "memhooks monitor not available\n");
-			default_monitor = NULL;
-#endif
-		} else if (!strcmp(cache_params.monitor, "disabled")) {
-			default_monitor = NULL;
-		}
-	}
+	if (cache_params.monitor != NULL)
+		set_default_monitor(cache_params.monitor);
 
 	FI_INFO(&core_prov, FI_LOG_MR,
 		"Default memory monitor is: %s\n",
