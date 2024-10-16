@@ -1,7 +1,7 @@
 #!/bin/bash
 
 Options=$(getopt --options h:,n:,p:,I:,-x:,z: \
-		  		--longoptions hosts:,processes-per-node:,provider:,xfer-method:,iterations:,ci:,cleanup,help \
+				--longoptions hosts:,processes-per-node:,provider:,xfer-method:,iterations:,ci:,cleanup,help \
 				-- "$@")
 
 eval set -- "$Options"
@@ -10,7 +10,7 @@ hosts=[]
 ppn=1
 iterations=1
 pattern=""
-xfer-method="msg"
+xfer_method="msg"
 cleanup=false
 help=false
 ci=""
@@ -19,7 +19,7 @@ while true; do
 	case "$1" in
 		-h|--hosts)
 			IFS=',' read -r -a hosts <<< "$2"; shift 2 ;;
-		-n|--processes-per-node) 
+		-n|--processes-per-node)
 			ppn=$2; shift 2 ;;
 		-p|--provider)
 			provider="$2"; shift 2 ;;
@@ -30,10 +30,10 @@ while true; do
 		--cleanup)
 			cleanup=true; shift ;;
 		-x|--xfer-method)
-			xfer-method="$2"; shift 2 ;;
+			xfer_method="$2"; shift 2 ;;
 		--ci)
 			ci="$2"; shift 2 ;;
-		--help) 
+		--help)
 			help=true; shift ;;
 		--)
 			shift; break ;;
@@ -41,21 +41,21 @@ while true; do
 done
 
 if $help ; then
-	echo "Run the multinode test suite on the nodes provided for many procceses" 
+	echo "Run the multinode test suite on the nodes provided for many procceses"
 	echo "multinode tests are run in performance mode"
 	echo "Options"
 	echo "\t-h,--hosts list of host names to run the tests on"
 	echo "\t-n,--processes-per-node number of processes to be run on each node.\
 				Total number of fi_mulinode tests run will be n*number of hosts"
 	echo "\t-p,--provider libfabric provider to run the multinode tests on"
-	echo "\t-C,--cabability multinode cabability to use (rma or default: msg)"
+	echo "\t-x,--xfer-method multinode transfer method/capability to use (rma or default: msg)"
 	echo "\t-I,-- iterations number of iterations for the multinode test \
 				to run each pattern on"
 	echo "\t--cleanup end straggling processes. Does not rerun tests"
 	echo "\t--help show this message"
 	exit 1
 fi
-		
+
 num_hosts=${#hosts[@]}
 max_ranks=$(($num_hosts*$ppn))
 ranks=$max_ranks;
@@ -65,7 +65,7 @@ output="multinode_server_${num_hosts}_${ppn}.log"
 ret=0
 
 if ! $cleanup ; then
-	cmd="${ci}fi_multinode -n $ranks -s $server -p '$provider' -x $xfer-method $pattern -I $iterations -T"
+	cmd="${ci}fi_multinode -n $ranks -s $server -p '$provider' -x $xfer_method $pattern -I $iterations -T"
 	echo $cmd
 	for node in "${hosts[@]}"; do
 		for i in $(seq 1 $ppn); do
@@ -73,7 +73,7 @@ if ! $cleanup ; then
 				echo STARTING SERVER
 				if [ "$ci" == "" ]; then
 					ssh $node $cmd &> $output &
-				else 
+				else
 					ssh $node $cmd | tee $output &
 				fi
 				server_pid=$!
@@ -104,4 +104,4 @@ if ! $cleanup ; then
 	echo "Output: $PWD/$output"
 fi
 
-exit $ret 
+exit $ret
