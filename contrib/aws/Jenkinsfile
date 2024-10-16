@@ -23,16 +23,11 @@ def download_and_extract_portafiducia(outputDir) {
     /* Download PortaFiducia tarball from S3 and extract to outputDir */
     def tempPath = "/tmp/portafiducia.tar.gz"
     def downloadPath = this.get_portafiducia_download_path()
-
-    def ret = sh (
-        script: "mkdir -p ${outputDir} && aws s3 cp ${downloadPath} ${tempPath} && " +
-            "tar xf ${tempPath} -C ${outputDir}",
-        returnStatus: true,
-    )
-
-    if (ret != 0) {
-        unstable('Failed to download and extract PortaFiducia')
-    }
+    sh """
+        mkdir -p ${outputDir}
+        aws s3 cp ${downloadPath} ${tempPath}
+        tar xf ${tempPath} -C ${outputDir}
+    """
 }
 
 def install_porta_fiducia() {
@@ -55,17 +50,7 @@ def run_test_orchestrator_once(run_name, build_tag, os, instance_type, instance_
      */
     def cluster_name = get_cluster_name(build_tag, os, instance_type)
     def args = "--config configs/${test_config_file} --os ${os} --instance-type ${instance_type} --instance-count ${instance_count} --region ${region} --cluster-name ${cluster_name} ${addl_args} --junit-xml outputs/${cluster_name}.xml"
-    def ret = sh (
-                    script: ". venv/bin/activate; cd PortaFiducia/tests && ./test_orchestrator.py ${args}",
-                    returnStatus: true
-                  )
-    if (ret == 65)
-        unstable('Scripts exited with status 65')
-    else if (ret != 0)
-        build_ok = false
-    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-        sh "exit ${ret}"
-    }
+    sh ". venv/bin/activate; cd PortaFiducia/tests && ./test_orchestrator.py ${args}"
 }
 
 def get_random_string(len) {
@@ -102,22 +87,12 @@ def get_single_node_windows_test_stage(stage_name) {
      */
     return {
         stage("${stage_name}") {
-            def ret = sh (
-                            script: """
-                                . venv/bin/activate;
-                                cd PortaFiducia/scripts;
-                                export PULL_REQUEST_ID=${env.CHANGE_ID};
-                                env AWS_DEFAULT_REGION=us-west-2 ./test_orchestrator_windows.py --ci public --s3-bucket-name libfabric-ci-windows-prod-test-output --pull-request-id ${env.CHANGE_ID};
-                            """,
-                            returnStatus: true
-                         )
-            if (ret == 65)
-                unstable('Scripts exited with status 65')
-            else if (ret != 0)
-                build_ok = false
-            catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                sh "exit ${ret}"
-            }
+            sh """
+                . venv/bin/activate;
+                cd PortaFiducia/scripts;
+                export PULL_REQUEST_ID=${env.CHANGE_ID};
+                env AWS_DEFAULT_REGION=us-west-2 ./test_orchestrator_windows.py --ci public --s3-bucket-name libfabric-ci-windows-prod-test-output --pull-request-id ${env.CHANGE_ID};
+            """
         }
     }
 
