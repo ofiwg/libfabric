@@ -108,7 +108,7 @@ int ofi_xpmem_init(void)
 	xpmem->pinfo.seg_id = xpmem_make(0, XPMEM_MAXADDR_SIZE, XPMEM_PERMIT_MODE,
 					 (void *) 0666);
 	if (xpmem->pinfo.seg_id == -1) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
+		FI_INFO(&core_prov, FI_LOG_CORE,
 			"Failed to export process virtual address space for use with xpmem\n");
 		ret = -FI_ENODATA;
 		goto fail;
