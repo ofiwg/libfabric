@@ -67,12 +67,17 @@ static int smr_map_init(const struct fi_provider *prov, struct smr_map *map,
 
 static void smr_map_cleanup(struct smr_map *map)
 {
-	int64_t i;
+	int ret;
 
-	for (i = 0; i < SMR_MAX_PEERS; i++)
-		smr_map_del(map, i);
+	ofi_spin_lock(&map->lock);
+	ret = ofi_rbmap_foreach(&map->rbmap, map->rbmap.root, smr_map_unmap,
+				NULL);
+	if (ret)
+		FI_WARN(&smr_prov, FI_LOG_AV,
+			"Failed to remove all entries from the map\n");
 
 	ofi_rbmap_cleanup(&map->rbmap);
+	ofi_spin_unlock(&map->lock);
 }
 
 static int smr_av_close(struct fid *fid)
@@ -147,8 +152,13 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		if (ret) {
 			if (fi_addr)
 				fi_addr[i] = util_addr;
-			if (shm_id >= 0)
-				smr_map_del(&smr_av->smr_map, shm_id);
+			if (shm_id >= 0) {
+				ret = smr_map_del(&smr_av->smr_map, shm_id);
+				if (ret)
+					FI_WARN(&smr_prov, FI_LOG_AV,
+						"Failed to remove shm_id %ld\n",
+						shm_id);
+			}
 			continue;
 		}
 
@@ -206,11 +216,15 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 			break;
 		}
 
-		smr_map_del(&smr_av->smr_map, id);
+		ret = smr_map_del(&smr_av->smr_map, id);
+		if (ret) {
+			FI_WARN(&smr_prov, FI_LOG_AV,
+				"Failed to remove shm_id %ld\n", id);
+			break;
+		}
 		dlist_foreach(&util_av->ep_list, av_entry) {
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
-			smr_unmap_from_endpoint(smr_ep->region, id);
 			if (smr_av->smr_map.num_peers > 0)
 				smr_ep->region->max_sar_buf_per_peer =
 					SMR_MAX_PEERS /
