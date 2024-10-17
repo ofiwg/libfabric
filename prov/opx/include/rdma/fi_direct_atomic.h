@@ -48,7 +48,7 @@ extern "C" {
 
 #define fi_inject_atomic(ep, buf, count, dest_addr, addr, key,		\
 		datatype, op)						\
-	(fi_opx_inject_atomic_FABRIC_DIRECT(ep, buf, count, dest_addr,\
+	(fi_opx_inject_atomic_FABRIC_DIRECT(ep, buf, count, dest_addr,	\
 		addr, key, datatype, op))
 
 #define fi_fetch_atomic(ep, buf, count, desc, result, result_desc,	\

@@ -94,7 +94,7 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 			return -FI_EAGAIN;
 		}
-		assert(we->comp_state == OPX_SDMA_COMP_COMPLETE);
+		assert(we->comp_state == OPX_SDMA_COMP_COMPLETE || we->comp_state == OPX_SDMA_COMP_ERROR);
 
 		slist_remove_head(&params->sdma_reqs);
 		we->next = NULL;
@@ -142,6 +142,14 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 				    const int line)
 {
 	const pid_t pid = getpid();
+
+	if (errno == ECOMM || errno == EINTR) {
+		int err = fi_opx_context_check_status(opx_ep->hfi);
+		if (err != FI_SUCCESS) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Link down detected\n");
+			return;
+		}
+	}
 
 	fprintf(stderr, "(%d) %s:%s():%d ERROR: SDMA Abort errno=%d (%s)\n",
 		pid, file, func, line, errno, strerror(errno));
@@ -212,9 +220,9 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 		}
 #endif
 		fprintf(stderr, "(%d) [%d] PBC: %#16.16lX\n",
-			pid, req_num, header_vec->scb.qw0);
+			pid, req_num, header_vec->scb.scb_9B.qw0);
 
-		fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.hdr, OPX_HFI1_TYPE, func, line);
+		fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_9B.hdr, OPX_HFI1_TYPE, func, line);
 
 		fprintf(stderr, "(%d) [%d] req data iov=%p len=%lu\n",
 			pid, req_num, iov_ptr[1].iov_base, iov_ptr[1].iov_len);
@@ -246,7 +254,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 					"(%d) [%d] ERROR: Request opcode is set to EXPECTED (TID), but TID IOV's length is < minimum!\n",
 					pid, req_num);
 			}
-			uint32_t kdeth = (uint32_t) (header_vec->scb.hdr.qw_9B[2] >> 32);
+			uint32_t kdeth = (uint32_t) (header_vec->scb.scb_9B.hdr.qw_9B[2] >> 32);
 			uint32_t tidctrl = (kdeth >> FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT) & FI_OPX_HFI1_KDETH_TIDCTRL;
 			uint32_t tididx = (kdeth >> FI_OPX_HFI1_KDETH_TID_SHIFT) & FI_OPX_HFI1_KDETH_TID;
 			uint32_t tidOMshift = (kdeth >> KDETH_OM_SHIFT) & KDETH_OM_MASK;
@@ -315,7 +323,7 @@ void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep)
 }
 
 __OPX_FORCE_INLINE__
-void opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep,
+int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep,
 			struct iovec *iovecs,
 			int iovs_used,
 			uint16_t avail,
@@ -356,6 +364,7 @@ void opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep,
 	}
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.writev_calls[iovs_used]);
+	return(writev_rc);
 }
 
 void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
@@ -390,9 +399,13 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 		if (iovs_free < request->num_iovs)
 #endif
 		{
-			opx_hfi1_sdma_writev(opx_ep, iovecs, iovs_used, avail,
+			int err = opx_hfi1_sdma_writev(opx_ep, iovecs, iovs_used, avail,
 					fill_index, __FILE__, __func__, __LINE__);
-
+			if (err < 0) {
+				/* Error occured in writev. Add the request back to queue */
+				slist_insert_head((struct slist_entry *)request, &queue->list);
+				return;
+			}
 			iovs_used = 0;
 			iovs_free = OPX_SDMA_HFI_MAX_IOVS_PER_WRITE;
 		}

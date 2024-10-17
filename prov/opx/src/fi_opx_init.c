@@ -158,7 +158,7 @@ err:
 
 static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 		const char* service, const struct fi_info *hints,
-	        uint64_t flags, enum fi_progress progress)
+		uint64_t flags, enum fi_progress progress)
 {
 	int ret;
 	uint64_t caps;
@@ -172,19 +172,11 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 	if (!hints && !node && !service)
 		goto err;
 
-	if (hints && (((hints->mode & FI_CONTEXT) != 0) && ((hints->mode & FI_CONTEXT2) == 0))) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-			"FI_CONTEXT mode is not supported. Use FI_CONTEXT2 mode instead.\n");
-		errno = FI_ENODATA;
-		return -errno;
-	}
-
 	fi->next = NULL;
 	fi->caps = FI_OPX_DEFAULT_CAPS;
 
 	/* set the mode that we require */
 	fi->mode = FI_ASYNC_IOV;
-	fi->mode |= (FI_CONTEXT2);
 
 	fi->addr_format = FI_ADDR_OPX;
 	fi->src_addrlen = 0;
@@ -195,7 +187,7 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 	// Process the node field. Service is treated identically to node.
 	if (node) {
 		if (!ofi_str_toaddr(node, &fmt, (void **)&addr, &len) &&
-	    	fmt == FI_ADDR_OPX) {
+		    fmt == FI_ADDR_OPX) {
 			if (flags & FI_SOURCE) {
 				fi->src_addr = addr;
 				fi->src_addrlen = sizeof(union fi_opx_addr);
@@ -403,6 +395,9 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 		if (0 != hints->ep_attr->rx_ctx_cnt && hints->ep_attr->rx_ctx_cnt <= fi->ep_attr->rx_ctx_cnt)
 			fi->ep_attr->rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;	/* TODO - check */
 	}
+
+	fi->nic = ofi_nic_dup(NULL);
+	fi->nic->bus_attr->bus_type = FI_BUS_PCI;
 
 	return 0;
 
@@ -660,17 +655,12 @@ static void do_static_assert_tests()
 	OPX_COMPILE_TIME_ASSERT(sizeof(*payload) == sizeof(payload->tid_cts),
 							"Expected TID rendezvous CTS payload size error");
 
-	OPX_COMPILE_TIME_ASSERT(sizeof(*payload) == sizeof(payload->rendezvous.contiguous),
+	OPX_COMPILE_TIME_ASSERT(sizeof(*payload) >= sizeof(payload->rendezvous.contiguous),
 							"Contiguous rendezvous payload size error");
 
 	OPX_COMPILE_TIME_ASSERT(sizeof(*payload) == sizeof(payload->rendezvous.noncontiguous),
 							"Non-contiguous rendezvous payload size error");
 
-	OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_context2) == sizeof(union fi_opx_context),
-							"fi_opx_context size error");
-
-	OPX_COMPILE_TIME_ASSERT((sizeof(struct fi_opx_context_ext) & 0x1F) == 0,
-				"sizeof(fi_opx_context_ext) should be a multiple of 32") ;
 	OPX_COMPILE_TIME_ASSERT((sizeof(struct fi_opx_hmem_info) >> 3) == OPX_HMEM_SIZE_QWS,
 				"sizeof(fi_opx_hmem_info) >> 3 != OPX_HMEM_SIZE_QWS") ;
 	OPX_COMPILE_TIME_ASSERT(OPX_HFI1_TID_PAGESIZE == 4096,
@@ -701,7 +691,7 @@ OPX_INI
 
 	fi_opx_init = 1;
 
-	fi_param_define(&fi_opx_provider, "uuid", FI_PARAM_STRING, "Globally unique ID for preventing OPX jobs from conflicting either in shared memory or over the OPX fabric. Defaults to \"%s\"",
+	fi_param_define(&fi_opx_provider, "uuid", FI_PARAM_STRING, "Globally unique ID for preventing OPX jobs from conflicting either in shared memory or over the OPX fabric. Defaults to the Slurm job ID if one exists, otherwise defaults to Intel MPI UUID if one exists, otherwise defaults to \"%s\"",
 		OPX_DEFAULT_JOB_KEY_STR);
 	fi_param_define(&fi_opx_provider, "force_cpuaffinity", FI_PARAM_BOOL, "Causes the thread to bind itself to the cpu core it is running on. Defaults to \"No\"");
 	fi_param_define(&fi_opx_provider, "reliability_service_usec_max", FI_PARAM_INT, "The number of microseconds between pings for un-acknowledged packets. Defaults to 500 usec.");
@@ -716,6 +706,9 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "sdma_bounce_buf_threshold", FI_PARAM_INT, "The maximum message length in bytes that will be copied to the SDMA bounce buffer. For messages larger than this threshold, the send will not be completed until receiver has ACKed. Value must be between %d and %d. Defaults to %d.", OPX_SDMA_BOUNCE_BUF_MIN, OPX_SDMA_BOUNCE_BUF_MAX, OPX_SDMA_BOUNCE_BUF_THRESHOLD);
  	fi_param_define(&fi_opx_provider, "sdma_disable", FI_PARAM_INT, "Disables SDMA offload hardware. Default is 0");
 	fi_param_define(&fi_opx_provider, "sdma_min_payload_bytes", FI_PARAM_INT, "The minimum message length in bytes where SDMA will be used. For messages smaller than this threshold, the send will be completed using PIO. Value must be between %d and %d. Defaults to %d.", FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN, FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX, FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT);
+	fi_param_define(&fi_opx_provider, "tid_min_payload_bytes", FI_PARAM_INT,
+		"The minimum message length in bytes where TID will be used. Value must be >= %d. Defaults to %d.",
+		OPX_TID_MIN_PAYLOAD_BYTES_MIN, OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT);
 	fi_param_define(&fi_opx_provider, "expected_receive_enable", FI_PARAM_BOOL, "Enables expected receive rendezvous using Token ID (TID). Defaults to \"No\".");
 	fi_param_define(&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
                         "When set, specify the set of CPU cores to set the progress "

@@ -359,24 +359,24 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 			       const int lock_required,
 			       const enum ofi_reliability_kind reliability,
 			       const uint8_t origin_rx,
-				   const uint64_t rhf,
-				   const enum opx_hfi1_type hfi1_type,
-				   const uint64_t slid,
-				   const uint16_t pktlen)
+			       const uint64_t rhf,
+			       const enum opx_hfi1_type hfi1_type,
+			       const uint64_t slid,
+			       const uint16_t pktlen)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "================ received a packet from the fabric\n");
 
 	if (!OPX_RHF_IS_USE_EGR_BUF(rhf,hfi1_type)) {
-		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)) {
+		if (OFI_LIKELY(FI_OPX_HFI_BTH_OPCODE_WITHOUT_CQ(opcode) == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)) {
 			/* "header only" packet - no payload */
 			fi_opx_ep_rx_process_header(&opx_ep->ep_fid, hdr, NULL, 0, FI_TAGGED,
-						    FI_OPX_HFI_BTH_OPCODE_TAG_INJECT,
+						    opcode,
 						    origin_rx,
 						    OPX_INTRANODE_FALSE,
-						    lock_required, reliability, 
-							hfi1_type, slid);
-		} else if (opcode > FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
+						    lock_required, reliability,
+						    hfi1_type, slid);
+		} else if (FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)) {
 			/* all other "tag" packets */
 			fi_opx_ep_rx_process_header_tag(&opx_ep->ep_fid, hdr, NULL, 0, opcode,
 							origin_rx, OPX_INTRANODE_FALSE,
@@ -402,7 +402,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 		uint16_t lrh_pktlen_le;
 		size_t total_bytes_to_copy;
 		size_t payload_bytes_to_copy;
-		
+
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			lrh_pktlen_le = ntohs(pktlen);
 			total_bytes_to_copy = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
@@ -415,17 +415,17 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 				total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B);
 		}
 
-		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)) {
+		if (OFI_LIKELY(FI_OPX_HFI_BTH_OPCODE_WITHOUT_CQ(opcode) == FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)) {
 			fi_opx_ep_rx_process_header(
 				&opx_ep->ep_fid, hdr,
 				(const union fi_opx_hfi1_packet_payload *const)payload,
-				payload_bytes_to_copy, FI_TAGGED, FI_OPX_HFI_BTH_OPCODE_TAG_EAGER,
+				payload_bytes_to_copy, FI_TAGGED, opcode,
 				origin_rx,
 				OPX_INTRANODE_FALSE,
 				lock_required, reliability,
 				hfi1_type,
 				slid);
-		} else if (opcode > FI_OPX_HFI_BTH_OPCODE_TAG_EAGER) { /* all other "tag" packets */
+		} else if (FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)) { /* all other "tag" packets */
 			fi_opx_ep_rx_process_header_tag(&opx_ep->ep_fid, hdr, payload,
 							payload_bytes_to_copy, opcode,
 							origin_rx, OPX_INTRANODE_FALSE,
@@ -473,11 +473,9 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 				hdr, origin_rx, slid, hfi1_type);
 
 	} else if (hdr->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA &&
-			((ntohl(hdr->bth.psn) & 0x80000000) ||
-			(hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_PUT))) {
-		/* Send preemptive ACKs on Rendezvous FI_OPX_HFI_DPUT_OPCODE_PUT or
-		 * on the final packet of a Rendezvous SDMA writev (the high bit
-		 * of the PSN - the Acknowledge Request bit - is set)
+			(ntohl(hdr->bth.psn) & 0x80000000)) {
+		/* Send preemptive ACKs on Rendezvous Data packets when
+		 * the high bit of the PSN - the Acknowledge Request bit - is set
 		 */
 		uint32_t psn_count = MAX(MIN(opx_ep->reliability->service.preemptive_ack_rate, psn), 1);
 		assert(psn >= psn_count - 1);
@@ -522,8 +520,10 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 	 */
 	if (OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type)) {
 		const uint32_t rhf_msb = rhf_rcvd >> 32;
+#ifdef OPX_JKR_DEBUG
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "OPX_RHF_SEQ_MATCH = %d rhf_rcvd = %#lx rhf_seq = %#lx\n",
-       			     OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type), rhf_rcvd, rhf_seq);
+			OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type), rhf_rcvd, rhf_seq);
+#endif
 
 		const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
@@ -566,7 +566,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			slid = htons((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid)); /* BE for lower layers */
 			pktlen = (uint16_t) hdr->lrh_16B.pktlen; /* pass it down unchanged. lower layers handle BE/LE */
 			dlid = htons(((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid))); /* BE for lower layers */
-		}        
+		}
 
 
 		if (OFI_UNLIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_UD)) {
@@ -575,7 +575,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			 * process "unreliable datagram" packets first - before all the
 			 * software reliability protocol checks.
 			 */
-			return fi_opx_hfi1_handle_ud_packet(opx_ep, hdr, rhf_seq, hdrq_offset, rhf_rcvd, 
+			return fi_opx_hfi1_handle_ud_packet(opx_ep, hdr, rhf_seq, hdrq_offset, rhf_rcvd,
 						slid, dlid, pktlen, hfi1_type);
 		}
 
@@ -596,7 +596,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 		}
 
 		fi_opx_hfi1_handle_packet(opx_ep, opcode, hdr, rhf_seq,
-					  hdrq_offset, lock_required, reliability, origin_rx, rhf_rcvd, 
+					  hdrq_offset, lock_required, reliability, origin_rx, rhf_rcvd,
 					  hfi1_type, slid, pktlen);
 		return 1; /* one packet was processed */
 	}
@@ -631,7 +631,7 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 				dlid = hdr->lrh_9B.dlid;
 			} else {
 				dlid = htons((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid));
-			} 
+			}
 
 			assert(dlid == opx_ep->rx->self.uid.lid);
 			assert(hdr->bth.rx == opx_ep->rx->self.hfi1_rx ||
@@ -683,10 +683,10 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 			slid = htons(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		}
 
-		if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
+		if (FI_OPX_HFI_BTH_OPCODE_WITHOUT_CQ(opcode) == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
 			fi_opx_ep_rx_process_header(ep, hdr, NULL, 0,
 				FI_TAGGED,
-				FI_OPX_HFI_BTH_OPCODE_TAG_INJECT,
+				opcode,
 				(const uint8_t) origin_reliability_rx,
 				OPX_INTRANODE_TRUE,
 				lock_required,
@@ -718,7 +718,7 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 
 			/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 			uint16_t lrh_pktlen_le;
-			size_t total_bytes_to_copy;	
+			size_t total_bytes_to_copy;
 			size_t payload_bytes_to_copy;
 
 			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
@@ -731,7 +731,7 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 				payload_bytes_to_copy = total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B);
 			}
 
-			if (opcode >= FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
+			if (FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)) {
 
 				fi_opx_ep_rx_process_header_tag(ep, hdr, payload,
 					payload_bytes_to_copy, opcode,
@@ -758,7 +758,78 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 	}
 }
 
+__OPX_FORCE_INLINE__
+void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
+{
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SDMA POLL BEGIN\n");
+	struct fi_opx_hfi1_context *hfi = opx_ep->hfi;
+	uint16_t queue_size = hfi->info.sdma.queue_size;
 
+	while (hfi->info.sdma.available_counter < queue_size) {
+		volatile struct hfi1_sdma_comp_entry * entry =
+			&hfi->info.sdma.completion_queue[hfi->info.sdma.done_index];
+		if (entry->status == QUEUED) {
+			break;
+		}
+
+		// Update the status/errcode of the work entry who was using this index
+		assert(hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]);
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->status = entry->status;
+		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "SDMA_COMPLETE_%hu", hfi->info.sdma.done_index);
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->errcode = entry->errcode;
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index] = NULL;
+
+		assert(entry->status == COMPLETE || entry->status == FREE ||
+				(entry->status == ERROR && entry->errcode != ECOMM)); // If it is a network error, retry
+		++hfi->info.sdma.available_counter;
+		hfi->info.sdma.done_index = (hfi->info.sdma.done_index + 1) % (queue_size);
+		if (hfi->info.sdma.done_index == hfi->info.sdma.fill_index) {
+			assert(hfi->info.sdma.available_counter == queue_size);
+		}
+	}
+	assert(hfi->info.sdma.available_counter >= opx_ep->tx->sdma_request_queue.slots_avail);
+	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SDMA POLL COMPLETE\n");
+}
+
+__OPX_FORCE_INLINE__
+int opx_is_rhf_empty(struct fi_opx_ep *opx_ep,
+			const uint64_t hdrq_mask,
+			const enum opx_hfi1_type hfi1_type)
+{
+	const uint64_t local_hdrq_mask = (hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME) ?
+		opx_ep->hfi->info.rxe.hdrq.rx_poll_mask :
+		hdrq_mask;
+	const uint64_t hdrq_offset = opx_ep->rx->state.hdrq.head & local_hdrq_mask;
+	volatile uint32_t *rhf_ptr = opx_ep->rx->hdrq.rhf_base + hdrq_offset;
+	const uint64_t rhf_rcvd = *((volatile uint64_t *)rhf_ptr);
+	const uint64_t rhf_seq = opx_ep->rx->state.hdrq.rhf_seq;
+
+	if (!OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type)) {
+		return 1;
+	}
+	return 0;
+}
+
+__OPX_FORCE_INLINE__
+void opx_handle_events(struct fi_opx_ep *opx_ep,
+			const uint64_t hdrq_mask,
+			const enum opx_hfi1_type hfi1_type)
+{
+	uint64_t events = *(uint64_t *)(opx_ep->hfi->ctrl->base_info.events_bufbase);
+	if (events & HFI1_EVENT_FROZEN) {
+		/* reset context only if RHF queue is empty */
+		if (opx_is_rhf_empty(opx_ep, hdrq_mask, hfi1_type)) {
+			opx_reset_context(opx_ep);
+			opx_hfi_ack_events(opx_ep->hfi->fd, events);
+		} else {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Context frozen: Not resetting because packets are present in receive queue\n");
+		}
+	}
+}
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_poll_many (struct fid_ep *ep,
@@ -787,28 +858,36 @@ void fi_opx_hfi1_poll_many (struct fid_ep *ep,
 			packets = fi_opx_hfi1_poll_once(ep, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, hfi1_type);
 		} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
 
+		struct fi_opx_reliability_service *service = &opx_ep->reliability->service;
+		union fi_opx_timer_state *timer = &service->tx.timer;
+		union fi_opx_timer_stamp *timestamp = &service->tx.timestamp;
+		uint64_t compare = fi_opx_timer_now(timestamp, timer);
 
+		//TODO: There needs to be feedback from the replay buffer pool into this following if as well
+		//		If the pool is getting full, then send pings out more frequently
 
-		if (reliability == OFI_RELIABILITY_KIND_ONLOAD) {	/* compile-time constant expression */
+		if (OFI_UNLIKELY(compare > service->usec_next)) {
+			// Drain all coalesced pings
+			fi_opx_hfi_rx_reliablity_process_requests(ep, PENDING_RX_RELIABLITY_COUNT_MAX);
+			fi_reliability_service_ping_remote(ep, service);
+			// Fetch the timer again as it could have taken us a while to get through reliability
+			compare = fi_opx_timer_now(timestamp, timer);
+			service->usec_next = fi_opx_timer_next_event_usec(timer, timestamp, service->usec_max);
+		} // End timer fired
 
-			struct fi_opx_reliability_service *service = opx_ep->reliability->state.service;
+		struct fi_opx_hfi1_context *context = opx_ep->hfi;
+		timer = &context->link_status_timer;
+		timestamp = &context->link_status_timestamp;
 
-			union fi_opx_timer_state *timer = &service->tx.timer;
-			union fi_opx_timer_stamp *timestamp = &service->tx.timestamp;
-			uint64_t compare = fi_opx_timer_now(timestamp, timer);
-
-			//TODO: There needs to be feedback from the replay buffer pool into this following if as well
-			//		If the pool is getting full, then send pings out more frequently
-
-			if (OFI_UNLIKELY(compare > service->usec_next)) {
-				// Drain all coalesced pings
-				fi_opx_hfi_rx_reliablity_process_requests(ep, PENDING_RX_RELIABLITY_COUNT_MAX);
-				fi_reliability_service_ping_remote(ep, service);
-				// Fetch the timer again as it could have taken us a while to get through reliability
-				fi_opx_timer_now(timestamp, timer);
-				service->usec_next = fi_opx_timer_next_event_usec(timer, timestamp, service->usec_max);
-			}// End timer fired
-
+		if (OFI_UNLIKELY(compare > context->status_check_next_usec)) {
+			int prev_link_status = context->status_lasterr;
+			int err = fi_opx_context_check_status(context);
+			// check for hfi event if link is moving from down to up
+			if ((prev_link_status != FI_SUCCESS) && (err == FI_SUCCESS)) {  // check for hfi event if
+				context->status_lasterr = FI_SUCCESS; /* clear error */
+				opx_handle_events(opx_ep, hdrq_mask, hfi1_type);
+			}
+			context->status_check_next_usec = fi_opx_timer_next_event_usec(timer, timestamp, OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC);
 		}
 	}
 
@@ -817,43 +896,5 @@ void fi_opx_hfi1_poll_many (struct fid_ep *ep,
 
 	return;
 }
-
-__OPX_FORCE_INLINE__
-void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
-{
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "===================================== SDMA POLL BEGIN\n");
-	struct fi_opx_hfi1_context *hfi = opx_ep->hfi;
-	uint16_t queue_size = hfi->info.sdma.queue_size;
-
-	while (hfi->info.sdma.available_counter < queue_size) {
-		volatile struct hfi1_sdma_comp_entry * entry =
-			&hfi->info.sdma.completion_queue[hfi->info.sdma.done_index];
-		if (entry->status == QUEUED) {
-			break;
-		}
-
-		// Update the status/errcode of the work entry who was using this index
-		assert(hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]);
-		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->status = entry->status;
-		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "SDMA_COMPLETE_%hu", hfi->info.sdma.done_index);
-		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->errcode = entry->errcode;
-		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index] = NULL;
-
-		assert(entry->status == COMPLETE || entry->status == FREE);
-		++hfi->info.sdma.available_counter;
-		hfi->info.sdma.done_index = (hfi->info.sdma.done_index + 1) % (queue_size);
-		if (hfi->info.sdma.done_index == hfi->info.sdma.fill_index) {
-			assert(hfi->info.sdma.available_counter == queue_size);
-		}
-	}
-	assert(hfi->info.sdma.available_counter >= opx_ep->tx->sdma_request_queue.slots_avail);
-	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "===================================== SDMA POLL COMPLETE\n");
-}
-
-
-
 
 #endif /* _FI_PROV_OPX_HFI1_PROGRESS_H_ */

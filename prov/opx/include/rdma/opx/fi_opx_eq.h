@@ -130,7 +130,7 @@ struct fi_opx_cq {
 
 	struct slist			pending;
 	struct slist			completed;
-	struct slist			err;		/* 'struct fi_opx_context_ext' element linked list */
+	struct slist			err;
 
 	struct {
 		uint64_t		ep_count;
@@ -139,7 +139,6 @@ struct fi_opx_cq {
 
 	struct fi_opx_progress_track	*progress_track;
 
-//	struct fi_opx_context_ext	*err_tail;
 	uint64_t			pad_1[9];
 
 	struct fi_opx_domain		*domain;
@@ -174,8 +173,8 @@ int fi_opx_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	fprintf(stderr,"%s:%s():%d   entry_id   = %u\n", __FILE__, __func__, __LINE__, (entry)->recv.entry_id);		\
 })
 
-int fi_opx_cq_enqueue_err (struct fi_opx_cq * opx_cq,
-		struct fi_opx_context_ext * ext,
+int fi_opx_cq_enqueue_err (struct fi_opx_cq *opx_cq,
+		struct opx_context *context,
 		const int lock_required);
 
 struct fi_ops_cq * fi_opx_cq_select_non_locking_2048_ops(const enum fi_cq_format format,
@@ -211,8 +210,8 @@ struct fi_ops_cq * fi_opx_cq_select_locking_runtime_ops(const enum fi_cq_format 
 void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 
 static inline
-int fi_opx_cq_enqueue_pending (struct fi_opx_cq * opx_cq,
-		union fi_opx_context * context,
+int fi_opx_cq_enqueue_pending (struct fi_opx_cq *opx_cq,
+		struct opx_context *context,
 		const int lock_required)
 {
 
@@ -225,8 +224,8 @@ int fi_opx_cq_enqueue_pending (struct fi_opx_cq * opx_cq,
 
 
 static inline
-int fi_opx_cq_enqueue_completed (struct fi_opx_cq * opx_cq,
-		union fi_opx_context * context,
+int fi_opx_cq_enqueue_completed (struct fi_opx_cq *opx_cq,
+		struct opx_context *context,
 		const int lock_required)
 {
 	assert(0 == context->byte_counter);
@@ -244,11 +243,10 @@ int fi_opx_cq_enqueue_completed (struct fi_opx_cq * opx_cq,
 
 
 static inline size_t fi_opx_cq_fill(uintptr_t output,
-		union fi_opx_context * context,
+		struct opx_context *context,
 		const enum fi_cq_format format)
 {
 	assert(!(context->flags & FI_OPX_CQ_CONTEXT_HMEM));
-	assert(!(context->flags & FI_OPX_CQ_CONTEXT_EXT));
 	const uint64_t is_multi_recv = context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV;
 
 	size_t return_size;
@@ -276,9 +274,9 @@ static inline size_t fi_opx_cq_fill(uintptr_t output,
 	}
 
 	if (OFI_LIKELY(!is_multi_recv)) {
-		entry->op_context = (void *)context;
+		entry->op_context = context->err_entry.op_context;
 	} else {
-		entry->op_context = (void *)context->multi_recv_context;
+		entry->op_context = ((struct opx_context *)context->multi_recv_context)->err_entry.op_context;
 	}
 
 	return return_size;
@@ -301,58 +299,64 @@ static ssize_t fi_opx_cq_poll_noinline (struct fi_opx_cq *opx_cq,
 	/* examine each context in the pending completion queue and, if the
 	 * operation is complete, initialize the cq entry in the application
 	 * buffer and remove the context from the queue. */
-	union fi_opx_context * pending_head = (union fi_opx_context *) opx_cq->pending.head;
-	union fi_opx_context * pending_tail = (union fi_opx_context *) opx_cq->pending.tail;
+	struct opx_context *pending_head = (struct opx_context *) opx_cq->pending.head;
+	struct opx_context *pending_tail = (struct opx_context *) opx_cq->pending.tail;
 
 	if (NULL != pending_head) {
-		union fi_opx_context * context = pending_head;
-		union fi_opx_context * prev = NULL;
+		struct opx_context *context = pending_head;
+		struct opx_context *prev = NULL;
 		while ((count - num_entries) > 0 && context != NULL) {
 
 			const uint64_t byte_counter = context->byte_counter;
 
 			if (byte_counter == 0) {
+				bool free_context;
 				if (context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV) {
 					assert(!(context->flags & FI_OPX_CQ_CONTEXT_HMEM));
-					assert(!(context->flags & FI_OPX_CQ_CONTEXT_EXT));
 
-					union fi_opx_context *multi_recv_context = context->multi_recv_context;
+					struct opx_context *multi_recv_context = context->multi_recv_context;
 					assert(multi_recv_context != NULL);
 					multi_recv_context->byte_counter-=1;
 					assert(((int64_t)multi_recv_context->byte_counter) >= 0);
 					// Reusing byte counter as pending flag
 					// re-using tag to store the min multi_receive
 					struct fi_opx_ep * opx_ep = (struct fi_opx_ep *)multi_recv_context->tag;
-					if(multi_recv_context->len < opx_ep->rx->min_multi_recv &&
-					   multi_recv_context->byte_counter == 0) {
+					if (multi_recv_context->len < opx_ep->rx->min_multi_recv &&
+					    multi_recv_context->byte_counter == 0) {
 						/* Signal the user to repost their buffers */
 						assert(multi_recv_context->next == NULL);
 						slist_insert_tail((struct slist_entry *) multi_recv_context,
 								  opx_ep->rx->cq_completed_ptr);
 					}
-				} else if (context->flags & FI_OPX_CQ_CONTEXT_EXT) {
-					struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) context;
-					context = (union fi_opx_context *) ext->msg.op_context;
-					*context = ext->opx_context;
-					context->flags &= ~(FI_OPX_CQ_CONTEXT_EXT | FI_OPX_CQ_CONTEXT_HMEM);
-					OPX_BUF_FREE(ext);
+					free_context = false;
+				} else {
+					free_context = true;
 				}
+				context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
 				output += fi_opx_cq_fill(output, context, format);
-				++ num_entries;
+				++num_entries;
 
-				if (prev)
+				if (prev) {
 					prev->next = context->next;
-				else
+				} else {
 					/* remove the head */
 					pending_head = context->next;
+				}
 
-				if (!(context->next))
+				struct opx_context *next = context->next;
+
+				if (!next) {
 					/* remove the tail */
 					pending_tail = prev;
-			}
-			else
+				}
+				if (free_context) {
+					OPX_BUF_FREE(context);
+				}
+				context = next;
+			} else {
 				prev = context;
-			context = context->next;
+				context = context->next;
+			}
 		}
 
 		/* save the updated pending head and pending tail pointers */
@@ -361,13 +365,17 @@ static ssize_t fi_opx_cq_poll_noinline (struct fi_opx_cq *opx_cq,
 	}
 
 
-	union fi_opx_context * head = (union fi_opx_context *) opx_cq->completed.head;
+	struct opx_context *head = (struct opx_context *) opx_cq->completed.head;
 	if (head) {
-		union fi_opx_context * context = head;
+		struct opx_context *context = head;
 		while ((count - num_entries) > 0 && context != NULL) {
 			output += fi_opx_cq_fill(output, context, format);
-			++ num_entries;
-			context = context->next;
+			++num_entries;
+			struct opx_context *next = context->next;
+			if (!(context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV)) {
+				OPX_BUF_FREE(context);
+			}
+			context = next;
 		}
 		opx_cq->completed.head = (struct slist_entry *) context;
 		if (!context) opx_cq->completed.tail = NULL;
@@ -464,11 +472,15 @@ ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
 	if (0 == (tmp_eh | tmp_ph)) {
 
 		uintptr_t output = (uintptr_t) buf;
-		union fi_opx_context * context = (union fi_opx_context *)tmp_ch;
+		struct opx_context *context = (struct opx_context *) tmp_ch;
 		while ((count - num_entries) > 0 && context != NULL) {
 			output += fi_opx_cq_fill(output, context, format);
 			++ num_entries;
-			context = context->next;
+			struct opx_context *next = context->next;
+			if (!(context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV)) {
+				OPX_BUF_FREE(context);
+			}
+			context = next;
 		}
 		opx_cq->completed.head = (struct slist_entry *) context;
 		if (!context) opx_cq->completed.tail = NULL;

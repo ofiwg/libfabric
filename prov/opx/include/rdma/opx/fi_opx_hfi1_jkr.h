@@ -95,6 +95,14 @@
 #define OPX_PBC_JKR_L2COMPRESSED_SHIFT 19
 #define OPX_PBC_JKR_L2COMPRESSED_MASK  0x1
 
+/* The 16B ICRC/TAIL and pad qwords are necessary for PIO but the values are not used.
+   Use a poison value for pad for debug - it should not be in receive memory */
+#define OPX_JKR_16B_PAD_QWORD  (uint64_t)0xDEAD00BEEF11DEAD
+
+/* 16B headers spill past the SOP cacheline by 1 qword.  There's room for
+   payload in that 2nd non-SOP cacheline */
+#define OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS (FI_OPX_CACHE_LINE_QWS - 1)
+
 /* Fields that unused on JKR (zero will be OR'd) */
 #define OPX_PBC_JKR_UNUSED            0UL
          

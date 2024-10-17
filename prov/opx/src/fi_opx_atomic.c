@@ -113,7 +113,6 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 				const uint64_t key,
 				const struct fi_opx_hmem_iov *fetch_iov,
 				const struct fi_opx_hmem_iov *compare_iov,
-				union fi_opx_context *opx_context,
 				const uint64_t tx_op_flags,
 				const struct fi_opx_cq *opx_cq,
 				const struct fi_opx_cntr *opx_cntr,
@@ -252,7 +251,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 				const union fi_opx_addr opx_dst_addr,
 				uint64_t addr, uint64_t key,
 				enum fi_datatype datatype, enum fi_op op,
-				void *context, struct fi_opx_completion_counter *cc,
+				struct fi_opx_completion_counter *cc,
 				const unsigned is_fetch, const void *fetch_vaddr,
 				const unsigned is_compare, const void *compare_vaddr,
 				const uint64_t tx_op_flags, const int lock_required,
@@ -274,7 +273,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 
 		cc->cntr = opx_ep->read_cntr;
 		fi_opx_readv_internal(opx_ep, &fetch_iov, 1, opx_dst_addr, &addr, &key,
-				      (union fi_opx_context *)context, opx_ep->tx->op_flags,
+				      opx_ep->tx->op_flags,
 				      opx_ep->rx->cq, opx_ep->read_cntr, cc,
 				      datatype, op, FI_OPX_HFI_DPUT_OPCODE_GET,
 				      lock_required, caps, reliability, hfi1_type);
@@ -308,10 +307,10 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 
 			fi_opx_atomic_op_internal(opx_ep, FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH,
 						&buf_iov, opx_dst_addr, addr, key, &fetch_iov,
-						NULL, (union fi_opx_context *)context,
-						opx_ep->tx->op_flags, opx_ep->rx->cq,
+						NULL, opx_ep->tx->op_flags, opx_ep->rx->cq,
 						opx_ep->read_cntr, cc, datatype, op,
-						lock_required, caps, reliability, is_hmem, is_intranode, hfi1_type);
+						lock_required, caps, reliability, is_hmem,
+						is_intranode, hfi1_type);
 
 		} else {
 			struct fi_opx_hmem_iov compare_iov;
@@ -325,10 +324,10 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 
 			fi_opx_atomic_op_internal(opx_ep, FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH,
 						&buf_iov, opx_dst_addr, addr, key, &fetch_iov,
-						&compare_iov, (union fi_opx_context *)context,
-						opx_ep->tx->op_flags, opx_ep->rx->cq,
+						&compare_iov, opx_ep->tx->op_flags, opx_ep->rx->cq,
 						opx_ep->read_cntr, cc, datatype, op,
-						lock_required, caps, reliability, is_hmem, is_intranode, hfi1_type);
+						lock_required, caps, reliability, is_hmem,
+						is_intranode, hfi1_type);
 		}
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== ATOMIC %s (end)\n",
@@ -347,10 +346,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 	uint64_t is_hmem = fi_opx_hmem_iov_init(buf, buf_len, NULL, &buf_iov);
 
 	fi_opx_write_internal(opx_ep, &buf_iov, 1, opx_dst_addr, addr, key,
-				(union fi_opx_context *)NULL, cc,
-				datatype, op, opx_ep->tx->op_flags,
-				is_hmem, lock_required, caps,
-				reliability,
+				cc, datatype, op, opx_ep->tx->op_flags,
+				is_hmem, lock_required, caps, reliability,
 				hfi1_type);
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		 "===================================== ATOMIC WRITE (end)\n");
@@ -361,9 +358,9 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 
 ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, fi_addr_t dst_addr,
 			      uint64_t addr, uint64_t key, enum fi_datatype datatype, enum fi_op op,
-			      void *context, const int lock_required, const enum fi_av_type av_type,
+			      void *user_context, const int lock_required, const enum fi_av_type av_type,
 			      const uint64_t caps, const enum ofi_reliability_kind reliability,
-				  const enum opx_hfi1_type hfi1_type)
+			      const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep;
 
@@ -387,23 +384,31 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 		return -FI_EAGAIN;
 	}
 
+	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
+	struct opx_context *context;
+	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_ATOMIC | FI_WRITE, &context) != FI_SUCCESS)) {
+		return -FI_ENOMEM;
+	}
+
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	if (OFI_UNLIKELY(cc == NULL)) {
+		if (context) {
+			OPX_BUF_FREE(context);
+		}
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		return -FI_ENOMEM;
+	}
+
 	cc->next = NULL;
 	cc->byte_counter = sizeofdt(datatype) * count;
 	cc->initial_byte_count = cc->byte_counter;
-	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) ||
-		  ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE) == FI_DELIVERY_COMPLETE)) ?
-			 opx_ep->rx->cq :
-			 NULL;
+	cc->cq = cq;
 	cc->context = context;
 	cc->hit_zero = fi_opx_hit_zero;
 
-	union fi_opx_context *opx_context = (union fi_opx_context *)cc->context;
-	if(opx_context && cc->cq) opx_context->flags = FI_ATOMIC | FI_WRITE;
-
 	size_t xfer __attribute__((unused));
 	xfer = fi_opx_atomic_internal(opx_ep, buf, count, opx_addr, addr, key, datatype, op,
-				      context, cc, 0, NULL, 0, NULL, opx_ep->tx->op_flags,
+				      cc, 0, NULL, 0, NULL, opx_ep->tx->op_flags,
 				      lock_required, av_type, caps, reliability, hfi1_type);
 	assert(xfer == count);
 
@@ -451,7 +456,21 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
 		return -FI_EAGAIN;
 	}
 
+	struct fi_opx_cq *cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
+	struct opx_context *context;
+	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, msg->context, cq, FI_ATOMIC | FI_WRITE, &context) != FI_SUCCESS)) {
+		return -FI_ENOMEM;
+	}
+
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	if (OFI_UNLIKELY(cc == NULL)) {
+		if (context) {
+			OPX_BUF_FREE(context);
+		}
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		return -FI_ENOMEM;
+	}
+
 	size_t index;
 	cc->next = NULL;
 	cc->byte_counter = 0;
@@ -460,11 +479,8 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
 	}
 	cc->initial_byte_count = cc->byte_counter;
 
-	cc->cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
-	cc->context = msg->context;
-	union fi_opx_context *opx_context = (union fi_opx_context *)cc->context;
-	if(opx_context && cc->cq) opx_context->flags = FI_ATOMIC | FI_WRITE;
-
+	cc->cq = cq;
+	cc->context = context;
 	cc->hit_zero = fi_opx_hit_zero;
 
 	const size_t dtsize = sizeofdt(datatype);
@@ -486,7 +502,7 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
 		const size_t count_transfered =
 			fi_opx_atomic_internal(opx_ep, (void *)msg_iov_vaddr, count_requested,
 					       opx_dst_addr, rma_iov_addr, rma_iov_key, datatype,
-					       op, NULL, cc, 0, NULL, 0, NULL, flags, lock_required,
+					       op, cc, 0, NULL, 0, NULL, flags, lock_required,
 					       av_type, caps, reliability, hfi1_type);
 
 		const size_t bytes_transfered = dtsize * count_transfered;
@@ -570,7 +586,21 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
 	uint64_t rst_iov_dtcount = resultv[rst_iov_index].count;
 	uintptr_t rst_iov_vaddr = (uintptr_t)resultv[rst_iov_index].addr;
 
+	struct fi_opx_cq *cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
+	struct opx_context *context;
+	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, msg->context, cq, FI_ATOMIC| FI_READ, &context) != FI_SUCCESS)) {
+		return -FI_ENOMEM;
+	}
+
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	if (OFI_UNLIKELY(cc == NULL)) {
+		if (context) {
+			OPX_BUF_FREE(context);
+		}
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		return -FI_ENOMEM;
+	}
+
 	cc->next = NULL;
 	cc->byte_counter = 0;
 	ssize_t index = 0;
@@ -578,12 +608,8 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
 		cc->byte_counter += sizeofdt(datatype) * msg->msg_iov[index].count;
 	}
 	cc->initial_byte_count = cc->byte_counter;
-	cc->cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
-	cc->context = msg->context;
-	union fi_opx_context *opx_context = (union fi_opx_context *)cc->context;
-	if(opx_context && cc->cq) opx_context->flags = FI_ATOMIC | FI_READ;
-
-
+	cc->cq = cq;
+	cc->context = context;
 	cc->hit_zero = fi_opx_hit_zero;
 
 	if (op != FI_ATOMIC_READ) { /* likely */
@@ -599,10 +625,10 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
 			const size_t count_transfered =
 				fi_opx_atomic_internal(opx_ep, (void *)msg_iov_vaddr,
 						       count_requested, opx_dst_addr, rma_iov_addr,
-						       rma_iov_key, datatype, op, NULL, cc, 1,
+						       rma_iov_key, datatype, op, cc, 1,
 						       (const void *)rst_iov_vaddr, 0, NULL, flags,
 						       lock_required, av_type, caps, reliability,
-							   hfi1_type);
+						       hfi1_type);
 
 			const size_t bytes_transfered = dtsize * count_transfered;
 
@@ -643,7 +669,7 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
 		while (rma_iov_dtcount != 0 && rst_iov_dtcount != 0) {
 			const size_t count_transfered = fi_opx_atomic_internal(
 				opx_ep, NULL, count_requested, opx_dst_addr, rma_iov_addr,
-				rma_iov_key, datatype, op, NULL, cc, 1, (const void *)rst_iov_vaddr,
+				rma_iov_key, datatype, op, cc, 1, (const void *)rst_iov_vaddr,
 				0, NULL, flags, lock_required, av_type, caps, reliability, hfi1_type);
 
 			const size_t bytes_transfered = dtsize * count_transfered;
@@ -742,7 +768,21 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep,
 	uint64_t cmp_iov_dtcount = comparev[cmp_iov_index].count;
 	uintptr_t cmp_iov_vaddr = (uintptr_t)comparev[cmp_iov_index].addr;
 
+	struct fi_opx_cq *cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
+	struct opx_context *context;
+	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, msg->context, cq, FI_ATOMIC | FI_READ, &context) != FI_SUCCESS)) {
+		return -FI_ENOMEM;
+	}
+
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	if (OFI_UNLIKELY(cc == NULL)) {
+		if (context) {
+			OPX_BUF_FREE(context);
+		}
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		return -FI_ENOMEM;
+	}
+
 	cc->next = NULL;
 	cc->byte_counter = 0;
 	ssize_t index;
@@ -750,11 +790,8 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep,
 		cc->byte_counter += sizeofdt(datatype)* msg->msg_iov[index].count;
 	}
 	cc->initial_byte_count = cc->byte_counter;
-	cc->cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
-	cc->context = msg->context;
-	union fi_opx_context *opx_context = (union fi_opx_context *)cc->context;
-	if(opx_context && cc->cq) opx_context->flags = FI_ATOMIC | FI_READ;
-
+	cc->cq = cq;
+	cc->context = context;
 	cc->hit_zero = fi_opx_hit_zero;
 
 	while (msg_iov_dtcount != 0 && rma_iov_dtcount != 0 && rst_iov_dtcount != 0 &&
@@ -765,7 +802,7 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep,
 		const size_t count_transfered =
 			fi_opx_atomic_internal(opx_ep, (void *)msg_iov_vaddr, count_requested,
 					       opx_dst_addr, rma_iov_addr, rma_iov_key, datatype,
-					       op, NULL, cc, 1, (const void *)rst_iov_vaddr, 1,
+					       op, cc, 1, (const void *)rst_iov_vaddr, 1,
 					       (const void *)cmp_iov_vaddr, flags, lock_required,
 					       av_type, caps, reliability, hfi1_type);
 
@@ -821,7 +858,7 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_fetch_compare_atomic_generic(
 	struct fid_ep *ep, const void *buf, size_t count, void *desc, const void *compare,
 	void *compare_desc, void *result, void *result_desc, fi_addr_t dest_addr, uint64_t addr,
-	uint64_t key, enum fi_datatype datatype, enum fi_op op, void *context, int lock_required,
+	uint64_t key, enum fi_datatype datatype, enum fi_op op, void *user_context, int lock_required,
 	const enum fi_av_type av_type, const uint64_t caps,
 	const enum ofi_reliability_kind reliability,
 	const enum opx_hfi1_type hfi1_type)
@@ -848,35 +885,44 @@ ssize_t fi_opx_fetch_compare_atomic_generic(
 		return -FI_EAGAIN;
 	}
 
+	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
+	struct opx_context *context;
+	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_ATOMIC | FI_WRITE, &context) != FI_SUCCESS)) {
+		return -FI_ENOMEM;
+	}
+
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	if (OFI_UNLIKELY(cc == NULL)) {
+		if (context) {
+			OPX_BUF_FREE(context);
+		}
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		return -FI_ENOMEM;
+	}
+
 	cc->next = NULL;
 	cc->byte_counter = sizeofdt(datatype) * count;
 	cc->initial_byte_count = cc->byte_counter;
-	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) ||
-		  ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE) == FI_DELIVERY_COMPLETE)) ?
-			 opx_ep->rx->cq :
-			 NULL;
+	cc->cq = cq;
 	cc->context = context;
 	cc->hit_zero = fi_opx_hit_zero;
 
-	union fi_opx_context *opx_context = (union fi_opx_context *)cc->context;
-	if(opx_context && cc->cq) opx_context->flags = FI_ATOMIC | FI_WRITE;
-
 	size_t xfer __attribute__((unused));
 	xfer = fi_opx_atomic_internal(opx_ep, buf, count, opx_addr, addr, key, datatype, op,
-				      context, cc, 1, result, compare!=NULL, compare, opx_ep->tx->op_flags,
+				      cc, 1, result, compare!=NULL, compare, opx_ep->tx->op_flags,
 				      lock_required, av_type, caps, reliability, hfi1_type);
 	assert(xfer == count);
 
 	return 0;
 }
+
 ssize_t fi_opx_fetch_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, void *desc,
 				    void *result, void *result_desc, fi_addr_t dest_addr,
 				    uint64_t addr, uint64_t key, enum fi_datatype datatype,
 				    enum fi_op op, void *context, const int lock_required,
 				    const enum fi_av_type av_type, const uint64_t caps,
 				    const enum ofi_reliability_kind reliability,
-					const enum opx_hfi1_type hfi1_type)
+				    const enum opx_hfi1_type hfi1_type)
 {
 	return fi_opx_fetch_compare_atomic_generic(ep, buf, count, desc, NULL, NULL, result,
 						   result_desc, dest_addr, addr, key, datatype, op,
@@ -892,7 +938,7 @@ ssize_t fi_opx_compare_atomic_generic(struct fid_ep *ep, const void *buf, size_t
 				      void *context, const int lock_required,
 				      const enum fi_av_type av_type, const uint64_t caps,
 				      const enum ofi_reliability_kind reliability,
-					  const enum opx_hfi1_type hfi1_type)
+				      const enum opx_hfi1_type hfi1_type)
 {
 	return fi_opx_fetch_compare_atomic_generic(ep, buf, count, desc, compare, compare_desc,
 						   result, result_desc, dest_addr, addr, key,
@@ -906,7 +952,7 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 				     const int lock_required, const enum fi_av_type av_type,
 				     const uint64_t caps,
 				     const enum ofi_reliability_kind reliability,
-					 const enum opx_hfi1_type hfi1_type)
+				     const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -933,6 +979,11 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	}
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	if (OFI_UNLIKELY(cc == NULL)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		return -FI_ENOMEM;
+	}
+
 	cc->next = NULL;
 	cc->byte_counter = sizeofdt(datatype) * count;
 	cc->initial_byte_count = cc->byte_counter;
@@ -948,7 +999,7 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	const uint64_t is_hmem = (const uint64_t)
 		fi_opx_hmem_iov_init(buf, count * sizeofdt(datatype), NULL, &iov);
 
-	fi_opx_write_internal(opx_ep, &iov, 1, opx_dst_addr, addr, key, NULL, cc,
+	fi_opx_write_internal(opx_ep, &iov, 1, opx_dst_addr, addr, key, cc,
 				datatype, op, opx_ep->tx->op_flags | FI_INJECT,
 				is_hmem, lock_required, caps, reliability, hfi1_type);
 
@@ -976,22 +1027,19 @@ ssize_t fi_opx_atomic(struct fid_ep *ep, const void *buf, size_t count, void *de
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
 		rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op,
-				     	context, FI_OPX_LOCK_NOT_REQUIRED,
-				     	opx_ep->av_type, 0x0018000000000000ull,
-				     	OPX_RELIABILITY,
-					 	OPX_HFI1_WFR);
+					   context, FI_OPX_LOCK_NOT_REQUIRED,
+					   opx_ep->av_type, 0x0018000000000000ull,
+					   OPX_RELIABILITY, OPX_HFI1_WFR);
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
 		rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op,
-				     	context, FI_OPX_LOCK_NOT_REQUIRED,
-				     	opx_ep->av_type, 0x0018000000000000ull,
-				     	OPX_RELIABILITY,
-					 	OPX_HFI1_JKR_9B);
+					   context, FI_OPX_LOCK_NOT_REQUIRED,
+					   opx_ep->av_type, 0x0018000000000000ull,
+					   OPX_RELIABILITY, OPX_HFI1_JKR_9B);
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
 		rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op,
-				     	context, FI_OPX_LOCK_NOT_REQUIRED,
-				     	opx_ep->av_type, 0x0018000000000000ull,
-				     	OPX_RELIABILITY,
-					 	OPX_HFI1_JKR);
+					   context, FI_OPX_LOCK_NOT_REQUIRED,
+					   opx_ep->av_type, 0x0018000000000000ull,
+					   OPX_RELIABILITY, OPX_HFI1_JKR);
 	} else {
 		rc = -FI_EPERM;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
@@ -1233,13 +1281,13 @@ ssize_t fi_opx_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *ms
 							    FI_AV_MAP,
 							    0x0018000000000000ull,
 							    OPX_RELIABILITY,
-								OPX_HFI1_WFR);
+							    OPX_HFI1_WFR);
 		} else {
 			rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
 							    FI_AV_TABLE,
 							    0x0018000000000000ull,
 							    OPX_RELIABILITY,
-								OPX_HFI1_WFR);
+							    OPX_HFI1_WFR);
 		}
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
 		if (opx_ep->av_type == FI_AV_MAP) {
@@ -1247,13 +1295,13 @@ ssize_t fi_opx_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *ms
 							    FI_AV_MAP,
 							    0x0018000000000000ull,
 							    OPX_RELIABILITY,
-								OPX_HFI1_JKR_9B);
+							    OPX_HFI1_JKR_9B);
 		} else {
 			rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
 							    FI_AV_TABLE,
 							    0x0018000000000000ull,
 							    OPX_RELIABILITY,
-								OPX_HFI1_JKR_9B);
+							    OPX_HFI1_JKR_9B);
 		}
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
 		if (opx_ep->av_type == FI_AV_MAP) {
@@ -1261,13 +1309,13 @@ ssize_t fi_opx_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *ms
 							    FI_AV_MAP,
 							    0x0018000000000000ull,
 							    OPX_RELIABILITY,
-								OPX_HFI1_JKR);
+							    OPX_HFI1_JKR);
 		} else {
 			rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
 							    FI_AV_TABLE,
 							    0x0018000000000000ull,
 							    OPX_RELIABILITY,
-								OPX_HFI1_JKR);
+							    OPX_HFI1_JKR);
 		}
 	} else {
 		rc = -FI_EPERM;

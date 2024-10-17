@@ -52,6 +52,7 @@
 
 #include "rdma/opx/opx_hfi1_sim.h"
 #include "rdma/opx/fi_opx_hfi1_version.h"
+#include "rdma/opx/fi_opx_timer.h"
 
 // #define FI_OPX_TRACE 1
 
@@ -97,7 +98,7 @@
 #elif HAVE_ROCR
 #define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT	(256)
 #else
-#define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT	(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT+1) 
+#define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT	(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT+1)
 #endif
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MIN		(FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min value */
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MAX		(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX+1) /* Max value */
@@ -124,16 +125,15 @@
    The payload itself will be FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE - 16
    */
 
-#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)  \
-                 ((hfi1_type & OPX_HFI1_JKR) ?      \
-		   (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 64 /* hdr */ + 8 /* tail */) - 16 /* payload */)) :\
-		   (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 56 /* hdr */) - 16 /* payload */)))
-                                                                    /* PAYLOAD BYTES CONSUMED */
+#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)								\
+		((hfi1_type & OPX_HFI1_JKR)									\
+		? (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 64 /* hdr */ + 8 /* tail */) - 16 /* payload */))	\
+		: (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 56 /* hdr */)                - 16 /* payload */)))
 
 #define FI_OPX_MP_EGR_CHUNK_CREDITS (FI_OPX_MP_EGR_CHUNK_SIZE >> 6) /* PACKET CREDITS TOTAL */
 #define FI_OPX_MP_EGR_CHUNK_DWS (FI_OPX_MP_EGR_CHUNK_SIZE >> 2)     /* PBC DWS */
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS(hfi1_type) \
-             ((FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) >> 3)   /* PAYLOAD QWS CONSUMED */
+		((FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) >> 3)   /* PAYLOAD QWS CONSUMED */
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL 16
 #define FI_OPX_MP_EGR_XFER_BYTES_TAIL 0x0010000000000000ull
 
@@ -206,21 +206,36 @@ static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX >= OPX_MP_EGR_MAX_PAYLOAD_BYTES_D
 
 /* Default for payload threshold size for SDMA */
 #ifndef FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT
-#if HAVE_CUDA
-#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(4096)
-#elif HAVE_ROCR
-#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(256)
-#else
-#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(16385)
-#endif
+	#if HAVE_CUDA
+		#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(4096)
+	#elif HAVE_ROCR
+		#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(256)
+	#else
+		#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT		(16385)
+	#endif
 #endif
 #define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN		(FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min Value */
 #define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX		(INT_MAX-1) /* Max Value */
 
+/* Default for payload threshold size for TID */
+#ifndef OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT
+	#if HAVE_CUDA
+		#define OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT		(4096)
+	#elif HAVE_ROCR
+		#define OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT		(4096)
+	#else
+		#define OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT		(4096)
+	#endif
+#endif
+#define OPX_TID_MIN_PAYLOAD_BYTES_MIN		(OPX_HFI1_TID_PAGESIZE)
+static_assert(OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT >= OPX_TID_MIN_PAYLOAD_BYTES_MIN,
+	      "OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT must be >= OPX_TID_MIN_PAYLOAD_BYTES_MIN!\n");
 
 
-static_assert(!(FI_OPX_HFI1_SDMA_MAX_COMP_INDEX & (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX - 1)), "FI_OPX_HFI1_SDMA_MAX_COMP_INDEX must be power of 2!\n");
-static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX, "FI_OPX_HFI1_SDMA_MAX_WE must be >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX!\n");
+static_assert(!(FI_OPX_HFI1_SDMA_MAX_COMP_INDEX & (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX - 1)),
+	      "FI_OPX_HFI1_SDMA_MAX_COMP_INDEX must be power of 2!\n");
+static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX,
+	      "FI_OPX_HFI1_SDMA_MAX_WE must be >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX!\n");
 
 /*
  * SDMA includes 8B sdma hdr, 8B PBC, and message header.
@@ -305,7 +320,7 @@ static inline void fi_opx_store_scb_qw(volatile uint64_t dest[8], const uint64_t
 
 */
 
-/* Only 8 QWs valid in 16 QW storage. */
+/* 8 QWs valid in 16 QW storage. */
 struct fi_opx_hfi1_txe_scb_9B {
 
 	union { /* 15 QWs union*/
@@ -323,28 +338,23 @@ struct fi_opx_hfi1_txe_scb_9B {
     uint64_t pad;            /* 1 QW pad (to 16 QWs) */
 } __attribute__((__aligned__(8))) __attribute__((packed));
 
-/* 16 QW valid in 16 QW storage.  */
+/* 9 QWs valid in 16 QW storage.  */
 struct fi_opx_hfi1_txe_scb_16B {
-	uint64_t          qw0;   /* PBC */
-	union opx_hfi1_packet_hdr	hdr;    /* 15 QWs 16B header */
+	uint64_t                        qw0;   /* PBC */
+	union opx_hfi1_packet_hdr	hdr;   /* 8 QWs 16B header + 7 QWs currently unused */
 } __attribute__((__aligned__(8))) __attribute__((packed));
 
-static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == sizeof(struct fi_opx_hfi1_txe_scb_16B)), "storge for scbs should match");
+static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == sizeof(struct fi_opx_hfi1_txe_scb_16B)), "storage for scbs should match");
 static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == (sizeof(uint64_t)*16)), "16 qw scb storage");
 
 /* Storage for a scb. Use HFI1 type to access the correct structure */
 union opx_hfi1_txe_scb_union {
 	struct fi_opx_hfi1_txe_scb_9B scb_9B;
 	struct fi_opx_hfi1_txe_scb_16B scb_16B;
-};
+} __attribute__((__aligned__(8))) __attribute__((packed));
 
-struct fi_opx_hfi1_rxe_hdr {
-
-	union opx_hfi1_packet_hdr	hdr;
-	uint64_t			rhf;
-
-} __attribute__((__aligned__(64)));
-
+static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == sizeof(union opx_hfi1_txe_scb_union)), "storage for scbs should match");
+static_assert((sizeof(struct fi_opx_hfi1_txe_scb_16B) == sizeof(union opx_hfi1_txe_scb_union)), "storage for scbs should match");
 
 
 
@@ -531,6 +541,11 @@ struct fi_opx_hfi1_context {
 	} daos_info;
 
 	int64_t				ref_cnt;
+	size_t				status_lasterr;
+	time_t				network_lost_time;
+	union fi_opx_timer_stamp	link_status_timestamp;
+	union fi_opx_timer_state	link_status_timer;
+	uint64_t 			status_check_next_usec;
 };
 
 struct fi_opx_hfi1_context_internal {
@@ -705,7 +720,7 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.queue_size          %#X\n",context->info.sdma.queue_size);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.sdma.completion_queue    %p errcode %#X status %#X\n",context->info.sdma.completion_queue,
 	       context->info.sdma.completion_queue->errcode,
-	       context->info.sdma.completion_queue->status); 
+	       context->info.sdma.completion_queue->status);
 /*	Not printing                                Context info.sdma.queued_entries);          */
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.base_addr       %p \n",context->info.rxe.hdrq.base_addr);
@@ -751,6 +766,66 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context daos_info.rank                %#X  \n",context->daos_info.rank);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context daos_info.rank_inst           %#X  \n",context->daos_info.rank_inst);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ref_cnt                       %#lX \n",context->ref_cnt);
+}
+
+void opx_reset_context(struct fi_opx_ep * opx_ep);
+
+#define OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC	250000 /* 250 ms*/
+
+__OPX_FORCE_INLINE__
+uint64_t opx_get_hw_status(struct fi_opx_hfi1_context *context)
+{
+	struct hfi1_status *status =
+	    (struct hfi1_status *) context->ctrl->base_info.status_bufbase;
+
+	return((status->dev & (HFI1_STATUS_INITTED | HFI1_STATUS_CHIP_PRESENT | HFI1_STATUS_HWERROR))
+        | (status->port & (HFI1_STATUS_IB_READY | HFI1_STATUS_IB_CONF)));
+}
+
+#define OPX_HFI1_HW_CHIP_STATUS  (HFI1_STATUS_CHIP_PRESENT | HFI1_STATUS_INITTED)
+#define OPX_HFI1_IB_STATUS       (HFI1_STATUS_IB_CONF | HFI1_STATUS_IB_READY)
+
+/* The linkup time duration for a system should allow the time needed
+   to complete 3 LNI passes which is:
+   50 seconds for a passive copper channel
+   65 seconds for optical channel.
+   (we add 5 seconds of margin.) */
+#define OPX_LINK_DOWN_MAX_SEC  70.0 
+
+__OPX_FORCE_INLINE__
+size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context)
+{
+	size_t err = FI_SUCCESS;
+	uint64_t status = opx_get_hw_status(context);
+
+	/* Fatal chip-related errors */
+	if (!((status & OPX_HFI1_HW_CHIP_STATUS) == OPX_HFI1_HW_CHIP_STATUS) ||
+	    (status & HFI1_STATUS_HWERROR)) {
+		err = FI_ENETUNREACH;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL, "HFI1 chip error detected\n");
+		abort();
+		return(err);
+	} else if (!((status & OPX_HFI1_IB_STATUS) == OPX_HFI1_IB_STATUS)) {
+		err = FI_ENETDOWN;
+		if (err != context->status_lasterr) {
+			context->network_lost_time = time(NULL);
+		} else {
+			time_t now = time(NULL);
+
+			if (difftime(now,context->network_lost_time) > OPX_LINK_DOWN_MAX_SEC)
+			{
+				fprintf(stderr, "Link has been down more than 70s. Aborting\n");
+				abort();
+				return(err);
+			}
+		}
+	}
+
+	if (err != FI_SUCCESS) {
+		context->status_lasterr = err;	/* record error */
+	}
+
+	return err;
 }
 
 #endif /* _FI_PROV_OPX_HFI1_H_ */

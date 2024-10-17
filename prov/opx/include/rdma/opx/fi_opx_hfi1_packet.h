@@ -64,17 +64,38 @@
 #define FI_OPX_HFI_BTH_OPCODE_ATOMIC			(0xC4)
 #define FI_OPX_HFI_BTH_OPCODE_ACK			(0xC5)
 #define FI_OPX_HFI_BTH_OPCODE_UD			(0xC6)	/* unreliabile datagram */
-/* opcodes (0xC7..0xEF) are unused */
-#define FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH		(0xF7)
-#define FI_OPX_HFI_BTH_OPCODE_MSG_INJECT		(0xF8)
-#define FI_OPX_HFI_BTH_OPCODE_MSG_EAGER			(0xF9)
-#define FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST	(0xFA)
-#define FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS		(0xFB)
-#define FI_OPX_HFI_BTH_OPCODE_TAG_INJECT		(0xFC)
-#define FI_OPX_HFI_BTH_OPCODE_TAG_EAGER			(0xFD)
-#define FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST	(0xFE)
-#define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS		(0xFF)
+/* opcodes (0xC7..0xEE) are unused */
 
+#define FI_OPX_HFI_BTH_OPCODE_CQ_BIT			(0x01)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_BIT			(0x02)
+#define FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode)					\
+	(opcode & ~(FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT))
+#define FI_OPX_HFI_BTH_OPCODE_WITHOUT_CQ(opcode)					\
+	(opcode & ~(FI_OPX_HFI_BTH_OPCODE_CQ_BIT))
+#define FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode)					\
+	((opcode & FI_OPX_HFI_BTH_OPCODE_CQ_BIT) ? FI_REMOTE_CQ_DATA : 0)
+#define FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode)					\
+	((opcode & FI_OPX_HFI_BTH_OPCODE_TAG_BIT) ? FI_TAGGED : FI_MSG)
+#define FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)						\
+	((opcode & FI_OPX_HFI_BTH_OPCODE_TAG_BIT) ? 1 : 0)
+
+#define FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH		(0xEF)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_INJECT		(0xF0)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_INJECT | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_INJECT		(FI_OPX_HFI_BTH_OPCODE_MSG_INJECT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_INJECT | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_EAGER			(0xF4)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_EAGER | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_EAGER			(FI_OPX_HFI_BTH_OPCODE_MSG_EAGER | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_EAGER | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST	(0xF8)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS		(0xFC)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS		(FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ		(FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
 
 static const char* FI_OPX_HFI_BTH_LOW_OPCODE_STRINGS[] = {
 	/* opcodes (0x00..0xBF) are reserved */
@@ -87,17 +108,46 @@ static const char* FI_OPX_HFI_BTH_LOW_OPCODE_STRINGS[] = {
 	"FI_OPX_HFI_BTH_OPCODE_UD                  " };
 
 static const char* FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS[] = {
-	/* opcodes (0xC7..0xEF) are unused */
-	"FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH        ",
-	"FI_OPX_HFI_BTH_OPCODE_MSG_INJECT          ",
-	"FI_OPX_HFI_BTH_OPCODE_MSG_EAGER           ",
-	"FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST  ",
-	"FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS         ",
-	"FI_OPX_HFI_BTH_OPCODE_TAG_INJECT          ",
-	"FI_OPX_HFI_BTH_OPCODE_TAG_EAGER           ",
-	"FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST  ",
-	"FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS         ",
-	"INVALID BTH OPCODE                        " };
+	/* opcodes (0xC7..0xEE) are unused */
+	"FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH          ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_INJECT            ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ         ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_INJECT            ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ         ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_EAGER             ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ          ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_EAGER             ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ          ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST    ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST    ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS           ",
+	"FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ        ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS           ",
+	"FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ        ",
+	"INVALID BTH OPCODE                          " };
+
+OPX_COMPILE_TIME_ASSERT((FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH == (FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ - sizeof(FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS)/sizeof(char*) + 2)), "FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH must be first in the high opcode array, or dependent code conditionals need updated");
+OPX_COMPILE_TIME_ASSERT((FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ == 0xFF), "FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ must be last in the high opcode array, or dependent code conditionals need updated");
+
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_INJECT ^ FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_INJECT and FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_EAGER ^ FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_EAGER and FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST ^ FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST and FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS ^ FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS and FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_TAG_INJECT ^ FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_TAG_INJECT and FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_TAG_EAGER ^ FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_TAG_EAGER and FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST ^ FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST and FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS ^ FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT), "FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS and FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_CQ_BIT");
+
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_INJECT ^ FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_INJECT and FI_OPX_HFI_BTH_OPCODE_TAG_INJECT must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ ^ FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ and FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_EAGER ^ FI_OPX_HFI_BTH_OPCODE_TAG_EAGER) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_EAGER and FI_OPX_HFI_BTH_OPCODE_TAG_EAGER must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ ^ FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ and FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST ^ FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST and FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ ^ FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ and FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS ^ FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS and FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
+OPX_COMPILE_TIME_ASSERT(((FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ ^ FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ) == FI_OPX_HFI_BTH_OPCODE_TAG_BIT), "FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ and FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ must only differ by FI_OPX_HFI_BTH_OPCODE_TAG_BIT");
 
 static inline const char* opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 {
@@ -106,7 +156,7 @@ static inline const char* opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 	    (opcode <= (uint16_t) FI_OPX_HFI_BTH_OPCODE_UD)) {
 		return FI_OPX_HFI_BTH_LOW_OPCODE_STRINGS[opcode-FI_OPX_HFI_BTH_OPCODE_INVALID];
 	} else if ((opcode >= (uint16_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH) &&
-		   (opcode <= (uint16_t) FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS)) {
+		   (opcode <= (uint16_t) FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ)) {
 		return FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS[opcode-FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH];
 	}
 	return FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS[sizeof(FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS)/sizeof(char*)-1]; /* INVALID */
@@ -288,19 +338,19 @@ struct fi_opx_hfi1_stl_packet_hdr_16B {
 		   formats, but in units of DWs for 9B formats.*/
 		   __le32 pktlen:11;
 		   __le32 b:1;
-		   
+
 		   __le32 dlid:20;   /* dw[1] */
 		   __le32 sc:5;
 		   __le32 rc:3;
 		   __le32 f:1;
 		   __le32 l2:2;
 		   __le32 lt:1;
-		   
+
 		   __le32 l4:8;      /* dw[2] qw[1] */
 		   __le32 slid20:4;
 		   __le32 dlid20:4;
 		   __le32 pkey:16;
-		   
+
 		   __le32 entropy:16;   /* dw[3] */
 		   __le32 age:3;
 		   __le32 cspec:5;
@@ -997,7 +1047,7 @@ union opx_hfi1_packet_hdr {
 		uint64_t	reserved_3[2]; 		/* QW[5-6] SW */
 
 		uint64_t	ofi_tag;		/* QW[7] SW last 9B quadword */
-		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+		uint64_t	reserved_n[7];          /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) match;
 
@@ -1022,7 +1072,7 @@ union opx_hfi1_packet_hdr {
 			uint64_t	app_data_u64[2];
 		};
 
-		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+		uint64_t	reserved_n[8];          /* QW[7-14] SW */
 
 	} __attribute__((__packed__)) inject;
 
@@ -1046,7 +1096,7 @@ union opx_hfi1_packet_hdr {
 		/* QW[6] SW */
 		uint64_t	xfer_tail;
 
-		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+		uint64_t	reserved_n[8];          /* QW[7-14] SW */
 
 	} __attribute__((__packed__)) send;
 
@@ -1069,7 +1119,7 @@ union opx_hfi1_packet_hdr {
 		/* QW[5-6] SW */
 		uint64_t	xfer_tail[2];
 
-		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+		uint64_t	reserved_n[8];          /* QW[7-14] SW */
 
 	} __attribute__((__packed__)) mp_eager_first;
 
@@ -1092,7 +1142,7 @@ union opx_hfi1_packet_hdr {
 		uint32_t	payload_offset;
 		uint32_t	mp_egr_uid;
 
-		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+		uint64_t	reserved_n[7];          /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) mp_eager_nth;
 
@@ -1117,7 +1167,7 @@ union opx_hfi1_packet_hdr {
 		/* QW[6] SW */
 		uint64_t	message_length;		/* total length in bytes of all non-contiguous buffers and immediate data */
 
-		uint64_t	reserved_n[7];          /* QW[7-14] SW */
+		uint64_t	reserved_n[8];          /* QW[7-14] SW */
 
 	} __attribute__((__packed__)) rendezvous;
 
@@ -1133,7 +1183,7 @@ union opx_hfi1_packet_hdr {
 		/* QW[3-4] BTH/KDETH */
 		uint64_t	reserved_3[2];
 
-		/* QW[5-14] SW */
+		/* QW[5-7] SW */
 		union {
 			uint8_t	opcode;
 			struct {
@@ -1176,7 +1226,7 @@ union opx_hfi1_packet_hdr {
 			} fence;
 		} target;
 
-		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+		uint64_t	reserved_n[7];          /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) cts;
 
@@ -1189,16 +1239,17 @@ union opx_hfi1_packet_hdr {
 		uint8_t		origin_rx;
 		uint8_t		reserved_o2;
 
-		/* == quadword 2 == */
+		/* QW[3] BTH/KDETH */
 		uint64_t	reserved_3;
 
-		/* == quadword 3 == */
+		/* QW[4] KDETH/SW */
 		uint64_t	reserved_4;
 
+		/* QW[5,6,7] KDETH/SW */
 		union {
-			/* QW[5] SW */
 			/*  Common fields   */
 			struct {
+				/* QW[5] KDETH/SW */
 				uint8_t		opcode;
 				uint8_t		origin_tx;
 				uint8_t		dt;
@@ -1206,6 +1257,7 @@ union opx_hfi1_packet_hdr {
 				uint16_t	last_bytes;
 				uint16_t	bytes;
 
+				/* QW[6,7] SW */
 				uint64_t	reserved[2]; /* op-specific */
 			};
 
@@ -1233,7 +1285,7 @@ union opx_hfi1_packet_hdr {
 				/* QW[5] SW */
 				uint64_t	reserved; /* Common fields */
 
-				/* QW[6-7] SW */
+				/* QW[6,7] SW */
 				uintptr_t	key;
 				uintptr_t	offset;
 			} mr;
@@ -1242,13 +1294,13 @@ union opx_hfi1_packet_hdr {
 				/* QW[5] SW */
 				uint64_t	reserved; /* Common fields */
 
-				/* QW[6-7] SW */
+				/* QW[6,7] SW */
 				uintptr_t	completion_counter;
 				uint64_t	bytes_to_fence;
 			} fence;
 		} target;
 
-		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+		uint64_t	reserved_n[7];          /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) dput;
 
@@ -1261,7 +1313,7 @@ union opx_hfi1_packet_hdr {
 		uint8_t		opcode;
 		uint8_t		reserved_2;
 
-		uint64_t	reserved_n[11];         /* QW[3-14] SW */
+		uint64_t	reserved_n[12];         /* QW[3-14] SW */
 
 	} __attribute__((__packed__)) ud;
 
@@ -1283,14 +1335,17 @@ union opx_hfi1_packet_hdr {
 		uint64_t	psn_start;
 		uint64_t	key;			/* fi_opx_reliability_service_flow_key */
 
-		uint64_t	reserved_n[6];          /* QW[8-14] SW */
+		uint64_t	reserved_n[7];          /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) service;		/* "reliability service" */
 }  __attribute__((__packed__)) __attribute__((__aligned__(8)));
 
+static_assert(sizeof(union opx_hfi1_packet_hdr) == sizeof(uint64_t[15]),
+		"sizeof(union opx_hfi1_packet_hdr) must be 15 qwords!");
+
 
 static inline
-fi_opx_uid_t fi_opx_hfi1_packet_hdr_uid (const union opx_hfi1_packet_hdr * const hdr, 
+fi_opx_uid_t fi_opx_hfi1_packet_hdr_uid (const union opx_hfi1_packet_hdr * const hdr,
 			const uint64_t slid) {
 	const union fi_opx_uid uid =
 	{
@@ -1310,18 +1365,26 @@ fi_opx_hfi1_packet_hdr_message_length (const union opx_hfi1_packet_hdr * const h
 	switch (hdr->bth.opcode) {
 		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
 			message_length = hdr->inject.message_length;
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ:
 			message_length = hdr->send.xfer_bytes_tail + hdr->send.payload_qws_total * sizeof(uint64_t);
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ:
 			message_length = hdr->mp_eager_first.payload_bytes_total & FI_OPX_HFI1_KDETH_VERSION_OFF_MASK;
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ:
 			//assert(hdr->rendezvous.niov == 1);
 			message_length = hdr->rendezvous.message_length;
 			break;
@@ -1394,7 +1457,7 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 	const pid_t pid = getpid();
 	//fi_opx_hfi1_dump_stl_packet_hdr (hdr, hfi1_type, fn, ln);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u ==== dump packet header @ %p [%016lx %016lx %016lx %016lx]\n", pid, fn, ln, hdr, qw[0], qw[1], qw[2], qw[3]);
-        if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.flags ...........     0x%04hx\n", pid, fn, ln, hdr->lrh_9B.flags);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.dlid ............     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.dlid, hdr->lrh_9B.dlid, ntohs(hdr->lrh_9B.dlid));
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.pktlen ..........     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.pktlen, hdr->lrh_9B.pktlen, ntohs(hdr->lrh_9B.pktlen));
@@ -1439,18 +1502,24 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .inject.message_length ...     0x%02x \n", pid, fn, ln, hdr->inject.message_length);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .inject.app_data_u64[0] ..     0x%016lx \n", pid, fn, ln, hdr->inject.app_data_u64[0]);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .inject.app_data_u64[1] ..     0x%016lx \n", pid, fn, ln, hdr->inject.app_data_u64[1]);
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ:
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .send.xfer_bytes_tail ....     0x%02x \n", pid, fn, ln, hdr->send.xfer_bytes_tail);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .send.payload_qws_total ..     0x%04x \n", pid, fn, ln, hdr->send.payload_qws_total);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .send.xfer_tail ..........     0x%016lx \n", pid, fn, ln, hdr->send.xfer_tail);
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:	/* calculate (?) total bytes to be transfered */
+		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ:	/* calculate (?) total bytes to be transfered */
 		case  FI_OPX_HFI_BTH_OPCODE_RZV_CTS:
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .cts.origin                 ..........     0x%x \n", pid, fn, ln, hdr->cts.origin_rx);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .cts.target.vaddr.ntidpairs ..........     0x%x \n", pid, fn, ln, hdr->cts.target.vaddr.ntidpairs);
@@ -1465,36 +1534,6 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 
 	return;
 }
-
-#define OPX_DEBUG_PRINT_HDR(__hdr,__hfi1_type)      		 \
-	if (__hfi1_type & OPX_HFI1_JKR) {      		         \
-		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0], 	 \
-				      __hdr->qw_16B[1]);	 \
-		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2], 	 \
-				      __hdr->qw_16B[3]);	 \
-	} else {						 \
-		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type,  \
-					    __func__, __LINE__); \
-	}
-
-#define OPX_DEBUG_PRINT_PBC_HDR(__pbc,__hdr,__hfi1_type)	\
-	if (__hfi1_type & OPX_HFI1_JKR) {			\
-		OPX_JKR_PRINT_16B_PBC(__pbc);			\
-		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0], 	\
-				      __hdr->qw_16B[1]);	\
-		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2], 	\
-				      __hdr->qw_16B[3]);	\
-	} else {						\
-		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type, \
-					    __func__, __LINE__);\
-	}
-
-#define OPX_DEBUG_PRINT_PBC_HDR_QW(q0,q1,q2,q3,q4,__hfi1_type)	\
-	if (__hfi1_type & OPX_HFI1_JKR) {			\
-		OPX_JKR_PRINT_16B_PBC(q0);			\
-		OPX_JKR_PRINT_16B_LRH(q1,q2);			\
-		OPX_JKR_PRINT_16B_BTH(q3,q4);			\
-	}
 
 #else
 // Disable the macros
@@ -1513,6 +1552,41 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 {
 	return;
 }
+
+#endif
+
+#ifdef OPX_JKR_DEBUG
+#define OPX_DEBUG_PRINT_HDR(__hdr,__hfi1_type)			\
+	if (__hfi1_type & OPX_HFI1_JKR) {			\
+		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0],		\
+				      __hdr->qw_16B[1]);	\
+		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2],		\
+				      __hdr->qw_16B[3]);	\
+	} else {						\
+		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type,	\
+					    __func__, __LINE__);\
+	}
+
+#define OPX_DEBUG_PRINT_PBC_HDR(__pbc,__hdr,__hfi1_type)	\
+	if (__hfi1_type & OPX_HFI1_JKR) {			\
+		OPX_JKR_PRINT_16B_PBC(__pbc);			\
+		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0],		\
+				      __hdr->qw_16B[1]);	\
+		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2],		\
+				      __hdr->qw_16B[3]);	\
+	} else {						\
+		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type,	\
+					    __func__, __LINE__);\
+	}
+
+#define OPX_DEBUG_PRINT_PBC_HDR_QW(q0,q1,q2,q3,q4,__hfi1_type)	\
+	if (__hfi1_type & OPX_HFI1_JKR) {			\
+		OPX_JKR_PRINT_16B_PBC(q0);			\
+		OPX_JKR_PRINT_16B_LRH(q1,q2);			\
+		OPX_JKR_PRINT_16B_BTH(q3,q4);			\
+	}
+
+#else
 
 #define OPX_DEBUG_PRINT_HDR(__hdr,__hfi1_type)
 #define OPX_DEBUG_PRINT_PBC_HDR(__pbc,__hdr,__hfi1_type)
@@ -1578,17 +1652,26 @@ struct fi_opx_hmem_iov {
 							  - (4 * sizeof(uint32_t)))		\
 				  / sizeof(uint32_t))
 
+#define OPX_IMMEDIATE_BYTE_COUNT_SHIFT	(5)
+#define OPX_IMMEDIATE_BYTE_COUNT_MASK	(0xE0)
+#define OPX_IMMEDIATE_QW_COUNT_SHIFT	(2)
+#define OPX_IMMEDIATE_QW_COUNT_MASK	(0x1C)
+#define OPX_IMMEDIATE_BLOCK_SHIFT	(1)
+#define OPX_IMMEDIATE_BLOCK_MASK	(0x02)
+#define OPX_IMMEDIATE_TAIL_SHIFT	(0)
+#define OPX_IMMEDIATE_TAIL_MASK		(0x01)
+#define OPX_IMMEDIATE_TAIL_BYTE_COUNT	(7)
+
 union fi_opx_hfi1_rzv_rts_immediate_info {
 	uint64_t	qw0;
 	struct {
-		uint8_t	byte_count;	/* only need 3 bits (0..7 bytes) */
-		uint8_t	qw_count;	/* only need 3 bits (0..7 quadwords) */
-		uint8_t	block_count;	/* only need 1 bits (0 or 1) */
-		uint8_t	end_block_count;/* only need 1 bits (0 or 1) */
-		uint32_t unused;
+		uint8_t tail_bytes[7];
+		uint8_t count;
 	};
 };
 
+static_assert(sizeof(((union fi_opx_hfi1_rzv_rts_immediate_info *)0)->tail_bytes) == OPX_IMMEDIATE_TAIL_BYTE_COUNT,
+		"sizeof(immediate_info->tail_bytes) must be equal to OPX_IMMEDIATE_TAIL_BYTE_COUNT!");
 
 /* Cache "blocked" payloads in 16B are currently "tricky".
  * The sender will always send 1 QW of header after SOP so STORE'ing
@@ -1602,124 +1685,49 @@ union fi_opx_hfi1_rzv_rts_immediate_info {
  * fi_opx_init_hfi_lookupoptionally STORE(icrc/tail) if no more immediate data
  *
  * STORE(full block of immediate fragment unaligned data)
- * STORe(full block of immediate data)
+ * STORE(full block of immediate data)
  * STORE(full block of immediate end data)
  * STORE(icrc/tail)
  */
-union fi_opx_hfi1_packet_payload_16B {
-	uint8_t				byte[FI_OPX_HFI1_PACKET_MTU];
-	uint64_t	                qw[FI_OPX_HFI1_PACKET_MTU>>3];
+
+struct opx_payload_rzv_contig {
+	/* ==== CACHE LINE 0 ==== */
+
+	uintptr_t		src_vaddr;
+	uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
+	uint64_t		src_device_id;
+	uint64_t		src_iface;
+	uint64_t		immediate_info;
+	uintptr_t		origin_byte_counter_vaddr;
+	uint64_t		unused;
+
+	/* ==== CACHE LINE 1 (WFR/9B only) ==== */
 	union {
 		struct {
-			/* ==== CACHE LINE 0 ==== */
+			uint8_t		immediate_byte[8];
+			uint64_t	immediate_qw[7];
+		};
 
-			uintptr_t		src_vaddr;
-			uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
-			uint64_t		src_device_id;
-			uint64_t		src_iface;
-			uint64_t		immediate_info;
-			uintptr_t		origin_byte_counter_vaddr;
-			uint64_t		unused[1];
+		union cacheline	cache_line_1;
+	};
 
-			/* Not cacheline aligned after the first block */
-			union {
-				struct {
-					uint8_t		immediate_byte[8];
-					uint64_t	immediate_qw[7];
-				};
+	/* ==== CACHE LINE 2-127 ==== */
 
-				union cacheline	cache_line_1;
-			};
+	union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
 
-			union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
-
-		} contiguous;
-		struct {
-			/* ==== CACHE LINE 0 ==== */
-
-			uintptr_t		src_vaddr;
-			uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
-			uint64_t		src_device_id;
-			uint64_t		src_iface;
-			uint64_t		immediate_info;
-			uintptr_t		origin_byte_counter_vaddr;
-			uint64_t		unused[1];
-
-			union {
-				struct {
-					uint8_t		immediate_byte[8];
-					uint64_t	immediate_qw[7];
-				};
-
-				union cacheline	cache_line_1;
-			};
-
-			union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
-
-		} contiguous_16B;
-		struct {
-			/* ==== CACHE LINE 0 ==== */
-
-			uintptr_t		origin_byte_counter_vaddr;
-			struct fi_opx_hmem_iov	iov[2];
-
-			/* ==== CACHE LINE 1-127 (for 8k mtu) ==== */
-			struct fi_opx_hmem_iov	iov_ext[FI_OPX_MAX_HMEM_IOV - 2];
-			size_t			unused;
-
-		} noncontiguous;
-	} rendezvous;
-
-	struct {
-		union fi_opx_hfi1_dput_iov	iov[FI_OPX_MAX_DPUT_IOV];
-	} cts;
-
-	/* tid_cts extends cts*/
-	struct {
-		/* ==== CACHE LINE 0 ==== */
-		union fi_opx_hfi1_dput_iov	iov[1];
-		uint32_t  tid_offset;
-		uint32_t  ntidpairs;
-		int32_t   origin_byte_counter_adjust;
-		uint32_t  unused;
-
-		/* ==== CACHE LINE 1 ==== */
-		uint32_t  tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
-	} tid_cts;
-
-} __attribute__((__aligned__(32)));
+};
 
 /* 9B and common payload structure */
 union fi_opx_hfi1_packet_payload {
 	uint8_t				byte[FI_OPX_HFI1_PACKET_MTU];
-	uint64_t	                qw[FI_OPX_HFI1_PACKET_MTU>>3];
+	uint64_t			qw[FI_OPX_HFI1_PACKET_MTU>>3];
 	union {
 		struct {
-			/* ==== CACHE LINE 0 ==== */
+			uint64_t			contig_9B_padding;
+			struct opx_payload_rzv_contig 	contiguous;
+		};
+		struct opx_payload_rzv_contig contiguous_16B;
 
-			uintptr_t		src_vaddr;
-			uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
-			uint64_t		src_device_id;
-			uint64_t		src_iface;
-			uint64_t		immediate_info;
-			uintptr_t		origin_byte_counter_vaddr;
-			uint64_t		unused[2];
-
-			/* ==== CACHE LINE 1 ==== */
-			union {
-				struct {
-					uint8_t		immediate_byte[8];
-					uint64_t	immediate_qw[7];
-				};
-
-				union cacheline	cache_line_1;
-			};
-
-			/* ==== CACHE LINE 2-127 ==== */
-
-			union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
-
-		} contiguous;
 		struct {
 			/* ==== CACHE LINE 0 ==== */
 
@@ -1749,8 +1757,6 @@ union fi_opx_hfi1_packet_payload {
 		/* ==== CACHE LINE 1 ==== */
 		uint32_t  tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 	} tid_cts;
-	/* Union with 16B payload */
-	union fi_opx_hfi1_packet_payload_16B payload_16B;
 } __attribute__((__aligned__(32)));
 
 static_assert(sizeof(union fi_opx_hfi1_packet_payload) <= FI_OPX_HFI1_PACKET_MTU,
@@ -1961,6 +1967,8 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
 			fprintf(stderr, "(%d) %s():%u .inject.message_length .............. 0x%02x\n",
 				pid, fn, ln, hdr->inject.message_length);
 			fprintf(stderr, "(%d) %s():%u .inject.app_data_u64[0]               0x%016lx\n",
@@ -1970,6 +1978,8 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER:
+		case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ:
 			fprintf(stderr, "(%d) %s():%u .send.xfer_bytes_tail ............... 0x%02x\n",
 				pid, fn, ln, hdr->send.xfer_bytes_tail);
 			fprintf(stderr, "(%d) %s():%u .send.payload_qws_total               0x%04x\n",
@@ -2027,6 +2037,8 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:	/* calculate (?) total bytes to be transfered */
+		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ:
+		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ:	/* calculate (?) total bytes to be transfered */
 			break;
 		default:
 			break;

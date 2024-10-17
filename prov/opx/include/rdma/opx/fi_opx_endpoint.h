@@ -66,17 +66,12 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 #define OPX_FLAGS_OVERRIDE_TRUE		(1)
 #define OPX_FLAGS_OVERRIDE_FALSE	(0)
 
-#define OPX_CONTEXT_EXTENDED_TRUE	(1)
-#define OPX_CONTEXT_EXTENDED_FALSE	(0)
-
 #define OPX_MULTI_RECV_TRUE		(1)
 #define OPX_MULTI_RECV_FALSE		(0)
 
 #define OPX_HMEM_TRUE			(1)
 #define OPX_HMEM_FALSE			(0)
 
-#define OPX_CANCEL_CONTEXT_TRUE		(1)
-#define OPX_CANCEL_CONTEXT_FALSE	(0)
 
 // #define FI_OPX_TRACE 1
 // #define FI_OPX_REMOTE_COMPLETION
@@ -137,6 +132,7 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 				dest_addr, 0, 0,				\
 				LOCK,	/* lock_required */			\
 				AV,	/* av_type */				\
+				0,	/* flags */				\
 				CAPS | FI_MSG,					\
 				RELIABILITY,					\
 				HFI1_TYPE);					\
@@ -161,7 +157,7 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 				AV,	/* av_type */				\
 				1,	/* is_contiguous */			\
 				0,	/* override_flags */			\
-				0,	/* flags */				\
+				FI_REMOTE_CQ_DATA,	/* flags */		\
 				CAPS | FI_MSG,					\
 				RELIABILITY,					\
 				HFI1_TYPE);					\
@@ -170,11 +166,12 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 	fi_opx_injectdata_ ## LOCK ## _ ## AV ## _ ## CAPS ## _ ## RELIABILITY ## _ ## HFI1_TYPE	\
 		(struct fid_ep *ep, const void *buf, size_t len,		\
 			uint64_t data, fi_addr_t dest_addr)			\
-			{							\
+	{									\
 		return fi_opx_ep_tx_inject(ep, buf, len,			\
 				dest_addr, 0, data,				\
 				LOCK,	/* lock_required */			\
 				AV,	/* av_type */				\
+				FI_REMOTE_CQ_DATA,	/* flags */		\
 				CAPS | FI_MSG,					\
 				RELIABILITY,					\
 				HFI1_TYPE);					\
@@ -321,9 +318,10 @@ struct fi_opx_ep_tx {
 	struct ofi_bufpool			*rma_request_pool;
 	struct ofi_bufpool			*sdma_work_pool;
 	uint32_t				sdma_min_payload_bytes;
+	uint32_t				tid_min_payload_bytes;
 	uint32_t				rzv_min_payload_bytes;
 	uint16_t				mp_eager_max_payload_bytes;
-	uint8_t					unused_cacheline6[6];
+	uint16_t				unused_cacheline6;
 
 	/* == CACHE LINE 16 == */
 	struct opx_sdma_queue			sdma_request_queue;
@@ -402,7 +400,7 @@ struct fi_opx_ep_rx {
 	struct slist *					cq_pending_ptr;
 	struct slist *					cq_completed_ptr;
 	struct ofi_bufpool *				ue_packet_pool;
-	struct ofi_bufpool *				ctx_ext_pool;
+	struct ofi_bufpool *				ctx_pool;
 
 	uint64_t					unused_cacheline_3[4];
 	/* == CACHE LINE 4 == */
@@ -611,22 +609,19 @@ struct fi_opx_sep {
 	struct fi_opx_av	*av;
 	struct fi_info		*info;
 	void			*memptr;
-    struct fi_opx_ep	*ep[FI_OPX_ADDR_SEP_RX_MAX];
-    struct fi_opx_hfi1_context *hfi1[FI_OPX_ADDR_SEP_RX_MAX];
-    struct fi_opx_ep_reliability *reliability[FI_OPX_ADDR_SEP_RX_MAX];
-    struct fi_opx_ep_tx *tx[FI_OPX_ADDR_SEP_RX_MAX];
-    struct fi_opx_ep_rx *rx[FI_OPX_ADDR_SEP_RX_MAX];
+	struct fi_opx_ep	*ep[FI_OPX_ADDR_SEP_RX_MAX];
+	struct fi_opx_hfi1_context *hfi1[FI_OPX_ADDR_SEP_RX_MAX];
+	struct fi_opx_ep_reliability *reliability[FI_OPX_ADDR_SEP_RX_MAX];
+	struct fi_opx_ep_tx *tx[FI_OPX_ADDR_SEP_RX_MAX];
+	struct fi_opx_ep_rx *rx[FI_OPX_ADDR_SEP_RX_MAX];
 
-        int64_t		ref_cnt;
+	int64_t		ref_cnt;
 
 } __attribute((aligned(L2_CACHE_LINE_SIZE)));
 
 
 struct fi_opx_rzv_completion {
-	union {
-		union fi_opx_context		*context;
-		struct fi_opx_context_ext	*extended_context;
-	};
+	struct opx_context	*context;
 	uint64_t		tid_length;
 	uint64_t		tid_vaddr;
 	uint64_t		tid_byte_counter;
@@ -647,8 +642,8 @@ struct fi_opx_rma_request {
 __attribute__((noinline))
 void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		const uint64_t static_flags,
-		union fi_opx_context * context,
-		const uint64_t rx_op_flags, const uint64_t is_context_ext,
+		struct opx_context *context,
+		const uint64_t rx_op_flags,
 		const uint64_t is_hmem,
 		const int lock_required, const enum fi_av_type av_type,
 		const enum ofi_reliability_kind reliability,
@@ -725,6 +720,7 @@ void fi_opx_ep_clear_credit_return(struct fi_opx_ep *opx_ep) {
 }
 
 #define FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep) fi_opx_ep_clear_credit_return(opx_ep)
+
 
 #include "rdma/opx/fi_opx_fabric_transport.h"
 
@@ -851,7 +847,7 @@ uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag,
 
 __OPX_FORCE_INLINE__
 struct fi_opx_hfi1_ue_packet *fi_opx_ep_find_matching_packet(struct fi_opx_ep *opx_ep,
-							     union fi_opx_context * context,
+							     struct opx_context *context,
 							     const uint64_t kind,
 							     const enum opx_hfi1_type hfi1_type)
 {
@@ -891,7 +887,7 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_find_matching_packet(struct fi_opx_ep *o
 __OPX_FORCE_INLINE__
 uint64_t is_match (struct fi_opx_ep * opx_ep,
 	const union opx_hfi1_packet_hdr * const hdr,
-	union fi_opx_context * context,
+	struct opx_context *context,
 	uint32_t rank, uint32_t rank_inst,
 	unsigned is_intranode,
 	const uint64_t slid)
@@ -966,52 +962,84 @@ uint32_t fi_opx_ep_get_u32_extended_rx (struct fi_opx_ep * opx_ep,
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_enqueue_completed(struct slist *queue,
-				void *context,
-				const uint64_t is_context_ext,
-				const int lock_required)
+void fi_opx_enqueue_completed(struct slist *queue, struct opx_context *context, const int lock_required)
 {
 	assert(!lock_required);
+	assert(context);
+	context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
+	slist_insert_tail((struct slist_entry *) context, queue);
+}
 
-	union fi_opx_context *real_context;
+__OPX_FORCE_INLINE__
+void opx_ep_copy_immediate_data(struct fi_opx_ep * opx_ep,
+				const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info,
+				struct opx_payload_rzv_contig *contiguous,
+				const uint64_t immediate_byte_count,
+				const uint64_t immediate_qw_count,
+				const uint64_t immediate_block,
+				const uint64_t immediate_tail,
+				const uint64_t immediate_total,
+				const size_t xfer_len,
+				const uint64_t is_hmem,
+				const enum fi_hmem_iface rbuf_iface,
+				const uint64_t rbuf_device,
+				const uint64_t hmem_handle,
+				uint8_t *rbuf_in)
+{
+	uint8_t *rbuf = is_hmem ? opx_ep->hmem_copy_buf : rbuf_in;
 
-	if (is_context_ext) {
-		struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) context;
-		real_context = (union fi_opx_context *) ext->msg.op_context;
-		*real_context = ext->opx_context;
-		real_context->flags &= ~(FI_OPX_CQ_CONTEXT_EXT | FI_OPX_CQ_CONTEXT_HMEM);
-		real_context->next = NULL;
-		OPX_BUF_FREE(ext);
-	} else {
-		real_context = (union fi_opx_context *) context;
+	for (int i = 0; i < immediate_byte_count; ++i) {
+		rbuf[i] = contiguous->immediate_byte[i];
+	}
+	rbuf += immediate_byte_count;
+
+	uint64_t * rbuf_qw = (uint64_t *)rbuf;
+	for (int i = 0; i < immediate_qw_count; ++i) {
+		rbuf_qw[i] = contiguous->immediate_qw[i];
+	}
+	rbuf += immediate_qw_count * sizeof(uint64_t);
+
+	if (immediate_block) {
+		const uint64_t immediate_fragment = (immediate_byte_count || immediate_qw_count) ? 1 : 0;
+		memcpy(rbuf, (void *) (&contiguous->cache_line_1 + immediate_fragment), FI_OPX_CACHE_LINE_SIZE);
 	}
 
-	slist_insert_tail((struct slist_entry *) real_context, queue);
+	if (is_hmem && immediate_total) {
+		opx_copy_to_hmem(rbuf_iface, rbuf_device, hmem_handle,
+			rbuf_in, opx_ep->hmem_copy_buf, immediate_total,
+			OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+	}
+
+	if (immediate_tail) {
+		uint8_t *rbuf_start = rbuf_in + xfer_len - OPX_IMMEDIATE_TAIL_BYTE_COUNT;
+
+		if (!is_hmem) {
+			for (int i = 0; i < OPX_IMMEDIATE_TAIL_BYTE_COUNT; ++i) {
+				rbuf_start[i] = immediate_info.tail_bytes[i];
+			}
+		} else {
+			opx_copy_to_hmem(rbuf_iface, rbuf_device, hmem_handle, rbuf_start,
+					immediate_info.tail_bytes, OPX_IMMEDIATE_TAIL_BYTE_COUNT,
+					OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+		}
+	}
 }
 
 __OPX_FORCE_INLINE__
 void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
-			     const union fi_opx_hfi1_packet_payload * const payload,
-			     struct fi_opx_ep * opx_ep,
-			     const uint64_t origin_tag,
-			     const uint8_t opcode,
-			     union fi_opx_context *context,
-			     const uint64_t is_context_ext,
-			     const uint64_t is_multi_receive,
-			     const unsigned is_intranode,
-			     const uint64_t is_hmem,
-			     const int lock_required,
-			     const enum ofi_reliability_kind reliability,
-			     const enum opx_hfi1_type hfi1_type,
-			     const uintptr_t origin_byte_counter_vaddr,
-			     const struct fi_opx_hmem_iov *iov,
-			     const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info,
-			     const struct fi_opx_hmem_iov *src_dst_iov,
-			     const uint8_t * const immediate_byte,
-			     const uint64_t * const immediate_qw,
-			     const union cacheline * const immediate_block)
+			    const union fi_opx_hfi1_packet_payload * const payload,
+			    struct fi_opx_ep * opx_ep,
+			    const uint64_t origin_tag,
+			    const uint8_t opcode,
+			    struct opx_context *context,
+			    const uint64_t is_multi_receive,
+			    const unsigned is_intranode,
+			    const uint64_t is_hmem,
+			    const int lock_required,
+			    const enum ofi_reliability_kind reliability,
+			    const enum opx_hfi1_type hfi1_type)
 {
-	assert( (opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) || (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS));
+	assert(FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV -- RENDEZVOUS RTS (%X) (begin) context %p is_multi_recv (%lu)\n",
@@ -1027,11 +1055,11 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 	const uint64_t recv_len = context->len;
 
 	if (is_multi_receive) {		/* compile-time constant expression */
-		assert(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS);
+		assert(FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode) == FI_MSG);
 		const uint8_t u8_rx = hdr->rendezvous.origin_rx;
 		const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->rendezvous.origin_rx);
-		union fi_opx_context * original_multi_recv_context = context;
-		context = (union fi_opx_context *)((uintptr_t)recv_buf - sizeof(union fi_opx_context));
+		struct opx_context * original_multi_recv_context = context;
+		context = (struct opx_context *)((uintptr_t)recv_buf - sizeof(struct opx_context));
 
 		assert((((uintptr_t)context) & 0x07) == 0);
 		context->flags = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV;
@@ -1050,14 +1078,14 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 						hdr,
 						payload,
 						u8_rx, niov,
-						origin_byte_counter_vaddr,
+						payload->rendezvous.noncontiguous.origin_byte_counter_vaddr,
 						context,
 						(uintptr_t)(rbuf),		/* receive buffer virtual address */
 						FI_HMEM_SYSTEM,			/* receive buffer iface */
 						0UL,				/* receive buffer device */
 						0UL,				/* immediate_data */
 						0UL,				/* immediate_end_block_count */
-						iov,
+						&payload->rendezvous.noncontiguous.iov[0],
 						FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG,
 						is_intranode,
 						reliability,			/* compile-time constant expression */
@@ -1066,16 +1094,35 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 		} else {
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.recv.multi_recv_rzv_contig);
 			assert(niov == 1);
-			const uint64_t immediate_byte_count = immediate_info.byte_count;
-			const uint64_t immediate_qw_count = immediate_info.qw_count;
-			const uint64_t immediate_block_count = immediate_info.block_count;
-			const uint64_t immediate_total = immediate_byte_count +
-							immediate_qw_count * sizeof(uint64_t) +
-							immediate_block_count * sizeof(union cacheline);
-			const uint64_t immediate_end_block_count = immediate_info.end_block_count;
+			struct opx_payload_rzv_contig *contiguous = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))
+				? (struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous
+				: (struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous_16B;
+			const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
+				.qw0 = contiguous->immediate_info
+			};
+			const uint64_t immediate_byte_count = (immediate_info.count & OPX_IMMEDIATE_BYTE_COUNT_MASK)
+								>> OPX_IMMEDIATE_BYTE_COUNT_SHIFT;
+			const uint64_t immediate_qw_count   = (immediate_info.count & OPX_IMMEDIATE_QW_COUNT_MASK)
+								>> OPX_IMMEDIATE_QW_COUNT_SHIFT;
+			const uint64_t immediate_block      = (immediate_info.count & OPX_IMMEDIATE_BLOCK_MASK)
+								>> OPX_IMMEDIATE_BLOCK_SHIFT;
+			const uint64_t immediate_tail       = (immediate_info.count & OPX_IMMEDIATE_TAIL_MASK)
+								>> OPX_IMMEDIATE_TAIL_SHIFT;
+			const uint64_t immediate_total      = immediate_byte_count +
+								immediate_qw_count * sizeof(uint64_t) +
+								immediate_block * sizeof(union cacheline);
+
+			const struct fi_opx_hmem_iov src_dst_iov[1] = {
+				{
+					.buf = contiguous->src_vaddr,
+					.len = (contiguous->src_blocks << 6),
+					.device = contiguous->src_device_id,
+					.iface = (enum fi_hmem_iface) contiguous->src_iface
+				}
+			};
 
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"IMMEDIATE  RZV_RTS immediate_total %#lX, immediate_byte_count %#lX, immediate_qw_count %#lX, immediate_block_count %#lX\n",
-					 immediate_total, immediate_byte_count, immediate_qw_count, immediate_block_count);
+					 immediate_total, immediate_byte_count, immediate_qw_count, immediate_block);
 
 			context->byte_counter -= immediate_total;
 
@@ -1083,13 +1130,13 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 						hdr,
 						payload,
 						u8_rx, niov,
-						origin_byte_counter_vaddr,
+						contiguous->origin_byte_counter_vaddr,
 						context,
 						(uintptr_t)(rbuf + immediate_total),	/* receive buffer virtual address */
 						FI_HMEM_SYSTEM,				/* receive buffer iface */
 						0UL,					/* receive buffer device */
 						immediate_total,
-						immediate_end_block_count,
+						immediate_tail,
 						src_dst_iov,
 						FI_OPX_HFI_DPUT_OPCODE_RZV,
 						is_intranode,
@@ -1097,44 +1144,13 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 						u32_ext_rx,
 						hfi1_type);
 
-			/*
-			 * copy the immediate payload data
-			 */
-			unsigned i;
-
-			if (immediate_byte_count) {
-				for (i=0; i<immediate_byte_count; ++i) {
-					rbuf[i] = immediate_byte[i];
-				}
-				rbuf += immediate_byte_count;
-			}
-
-			if (immediate_qw_count) {
-				uint64_t * rbuf_qw = (uint64_t *)rbuf;
-				for (i=0; i<immediate_qw_count; ++i) {
-					rbuf_qw[i] = immediate_qw[i];
-				}
-				rbuf += immediate_qw_count * sizeof(uint64_t);
-			}
-
-			if (immediate_block_count) {
-				union cacheline * rbuf_block = (union cacheline *)rbuf;
-				for (i=0; i<immediate_block_count; ++i) {
-					rbuf_block[i] = immediate_block[i];
-				};
-			}
-
-			/* up to 1 block of immediate end data after the immediate blocks
-				Copy this to the end of rbuf */
-			if (immediate_end_block_count) {
-				uint8_t *rbuf_start = (uint8_t *)recv_buf;
-				rbuf_start += xfer_len - (immediate_end_block_count << 6);
-				memcpy(rbuf_start, immediate_block[immediate_block_count].qw,
-						(immediate_end_block_count << 6));
-			}
+			opx_ep_copy_immediate_data(opx_ep, immediate_info, contiguous, immediate_byte_count,
+						immediate_qw_count, immediate_block, immediate_tail,
+						immediate_total, xfer_len, OPX_HMEM_FALSE, FI_HMEM_SYSTEM,
+						0ul, OPX_HMEM_NO_HANDLE, rbuf);
 		}
 
-		uint64_t bytes_consumed = ((xfer_len + 8) & (~0x07ull)) + sizeof(union fi_opx_context);
+		uint64_t bytes_consumed = ((xfer_len + 8) & (~0x07ull)) + sizeof(struct opx_context);
 		original_multi_recv_context->len -= bytes_consumed;
 		original_multi_recv_context->byte_counter++;  // re-using the byte counter as a "pending flag"
 		original_multi_recv_context->tag = (uintptr_t)opx_ep;  // re-using tag to store the ep
@@ -1149,8 +1165,9 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 		context->data = ofi_data;
 		context->tag = origin_tag;
 		context->next = NULL;
-		context->flags |= FI_RECV | FI_REMOTE_CQ_DATA |
-				((opcode == FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS) ? FI_TAGGED : FI_MSG);
+		context->flags |= FI_RECV |
+				FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
+				FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
 
 		const uint8_t u8_rx = hdr->rendezvous.origin_rx;
 		const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->rendezvous.origin_rx);
@@ -1162,18 +1179,17 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 			enum fi_hmem_iface rbuf_iface;
 			uint64_t hmem_handle;
 			if (is_hmem) {		/* Branch should compile out */
-				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
-				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
+				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
 				rbuf_device = hmem_info->device;
 				rbuf_iface = hmem_info->iface;
 				hmem_handle = hmem_info->hmem_dev_reg_handle;
 				FI_OPX_DEBUG_COUNTERS_INC_COND(is_intranode, opx_ep->debug_counters.hmem.intranode
-							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS)
-								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.kind[FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)
+								? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG]
 							.recv.rzv);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(!is_intranode, opx_ep->debug_counters.hmem.hfi
-							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS)
-								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.kind[FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)
+								? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG]
 							.recv.rzv);
 			} else {
 				rbuf_device = 0;
@@ -1182,29 +1198,48 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 			}
 			uint8_t * rbuf = (uint8_t *)recv_buf;
 
-			const uint64_t immediate_byte_count = immediate_info.byte_count;
-			const uint64_t immediate_qw_count = immediate_info.qw_count;
-			const uint64_t immediate_block_count = immediate_info.block_count;
-			const uint64_t immediate_total = immediate_byte_count +
-							immediate_qw_count * sizeof(uint64_t) +
-							immediate_block_count * sizeof(union cacheline);
-			const uint64_t immediate_end_block_count = immediate_info.end_block_count;
+			struct opx_payload_rzv_contig *contiguous = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))
+				? (struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous
+				: (struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous_16B;
+			const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
+				.qw0 = contiguous->immediate_info
+			};
+			const uint64_t immediate_byte_count = (immediate_info.count & OPX_IMMEDIATE_BYTE_COUNT_MASK)
+								>> OPX_IMMEDIATE_BYTE_COUNT_SHIFT;
+			const uint64_t immediate_qw_count   = (immediate_info.count & OPX_IMMEDIATE_QW_COUNT_MASK)
+								>> OPX_IMMEDIATE_QW_COUNT_SHIFT;
+			const uint64_t immediate_block      = (immediate_info.count & OPX_IMMEDIATE_BLOCK_MASK)
+								>> OPX_IMMEDIATE_BLOCK_SHIFT;
+			const uint64_t immediate_tail       = (immediate_info.count & OPX_IMMEDIATE_TAIL_MASK)
+								>> OPX_IMMEDIATE_TAIL_SHIFT;
+			const uint64_t immediate_total      = immediate_byte_count +
+								immediate_qw_count * sizeof(uint64_t) +
+								immediate_block * sizeof(union cacheline);
+
+			const struct fi_opx_hmem_iov src_dst_iov[1] = {
+				{
+					.buf = contiguous->src_vaddr,
+					.len = (contiguous->src_blocks << 6),
+					.device = contiguous->src_device_id,
+					.iface = (enum fi_hmem_iface) contiguous->src_iface
+				}
+			};
 
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"IMMEDIATE  RZV_RTS immediate_total %#lX, immediate_byte_count %#lX, immediate_qw_count %#lX, immediate_block_count %#lX\n",
-				     immediate_total, immediate_byte_count, immediate_qw_count, immediate_block_count);
+				     immediate_total, immediate_byte_count, immediate_qw_count, immediate_block);
 			context->byte_counter = xfer_len - immediate_total;
 
 			FI_OPX_FABRIC_RX_RZV_RTS(opx_ep,
 						 hdr,
 						 payload,
 						 u8_rx, 1,
-						 origin_byte_counter_vaddr,
+						 contiguous->origin_byte_counter_vaddr,
 						 context,
 						 (uintptr_t) (rbuf + immediate_total),
 						 rbuf_iface,
 						 rbuf_device,
 						 immediate_total,
-						 immediate_end_block_count,
+						 immediate_tail,
 						 src_dst_iov,
 						 FI_OPX_HFI_DPUT_OPCODE_RZV,
 						 is_intranode,
@@ -1212,63 +1247,10 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 						 u32_ext_rx,
 						 hfi1_type);
 
-			/*
-			 * copy the immediate payload data
-			 */
-			if (is_hmem) {
-				rbuf = opx_ep->hmem_copy_buf;
-			}
-			unsigned i;
-
-			if (immediate_byte_count) {
-				for (i=0; i<immediate_byte_count; ++i) {
-					rbuf[i] = immediate_byte[i];
-				}
-				rbuf += immediate_byte_count;
-			}
-
-			if (immediate_qw_count) {
-				uint64_t * rbuf_qw = (uint64_t *)rbuf;
-				for (i=0; i<immediate_qw_count; ++i) {
-					rbuf_qw[i] = immediate_qw[i];
-				}
-				rbuf += immediate_qw_count * sizeof(uint64_t);
-			}
-
-			if (immediate_block_count) {
-				union cacheline * rbuf_block = (union cacheline *)rbuf;
-				for (i=0; i<immediate_block_count; ++i) {
-					rbuf_block[i] = immediate_block[i];
-				};
-			}
-
-			if (is_hmem) {
-				uint64_t immediate_total = (rbuf - opx_ep->hmem_copy_buf) +
-							   (immediate_block_count * sizeof(union cacheline));
-				if (immediate_total) {
-					opx_copy_to_hmem(rbuf_iface, rbuf_device, hmem_handle,
-						recv_buf, opx_ep->hmem_copy_buf, immediate_total,
-						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
-				}
-			}
-
-			/* up to 1 block of immediate end data after the immediate blocks
-				Copy this to the end of rbuf */
-			if (immediate_end_block_count) {
-				uint8_t *rbuf_start = (uint8_t *)recv_buf;
-				rbuf_start += xfer_len - (immediate_end_block_count << 6);
-				if (!is_hmem) {
-					memcpy(rbuf_start,
-						immediate_block[immediate_block_count].qw,
-						(immediate_end_block_count << 6));
-				} else {
-					opx_copy_to_hmem(rbuf_iface, rbuf_device, hmem_handle, rbuf_start,
-						immediate_block[immediate_block_count].qw,
-						(immediate_end_block_count << 6),
-						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
-				}
-			}
-
+			opx_ep_copy_immediate_data(opx_ep, immediate_info, contiguous, immediate_byte_count,
+						immediate_qw_count, immediate_block, immediate_tail,
+						immediate_total, xfer_len, is_hmem, rbuf_iface,
+						rbuf_device, hmem_handle, rbuf);
 		} else {
 			/*fi_opx_hfi1_dump_packet_hdr(hdr, __func__, __LINE__); */
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1291,69 +1273,46 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 		context->tag = origin_tag;
 		context->next = NULL;
 		context->byte_counter = 0;
-		context->flags = FI_RECV | FI_REMOTE_CQ_DATA |
-				((opcode == FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS) ? FI_TAGGED : FI_MSG);
+		context->flags = FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
+					FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
 		const uint8_t u8_rx = hdr->rendezvous.origin_rx;
 		const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->rendezvous.origin_rx);
 
-		uint8_t * rbuf = (uint8_t *)recv_buf;
+		assert(payload != NULL);
 
-		FI_OPX_FABRIC_RX_RZV_RTS(opx_ep,
-					 hdr,
-					 payload,
-					 u8_rx, 1,
-					 origin_byte_counter_vaddr,
-					 context,
-					 (uintptr_t)(rbuf),		/* receive buffer virtual address */
-					 FI_HMEM_SYSTEM,		/* receive buffer iface */
-					 0UL,				/* receive buffer device */
-					 0UL,				/* immediate_data */
-					 0UL,				/* immediate_end_block_count */
-					 src_dst_iov,
-					 FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC,
-					 is_intranode,
-					 reliability,			/* compile-time constant expression */
-					 u32_ext_rx,
-					 hfi1_type);
-
-		if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-		slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
+		uintptr_t origin_byte_counter_vaddr = is_noncontig ?
+				payload->rendezvous.noncontiguous.origin_byte_counter_vaddr :
+				(hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ?
+					payload->rendezvous.contiguous.origin_byte_counter_vaddr :
+					payload->rendezvous.contiguous_16B.origin_byte_counter_vaddr;
+		FI_OPX_FABRIC_RX_RZV_RTS_ETRUNC(opx_ep,
+						(const void * const)hdr,
+						u8_rx,
+						origin_byte_counter_vaddr,
+						is_intranode,
+						reliability,			/* compile-time constant expression */
+						u32_ext_rx, hfi1_type);
 
 		/* Post a E_TRUNC to our local RX error queue because a client called receive
 		with too small a buffer.  Tell them about it via the error cq */
 
-		struct fi_opx_context_ext * ext = NULL;
-		if (is_context_ext) {
-			ext = (struct fi_opx_context_ext *)context;
-			ext->err_entry.op_context = ext->msg.op_context;
-		} else {
-			ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
-			if (OFI_UNLIKELY(ext == NULL)) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"Out of memory error.\n");
-				abort();
-			}
-			ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
-			ext->err_entry.op_context = context;
-		}
+		context->err_entry.flags = context->flags;
+		context->err_entry.len = recv_len;
+		context->err_entry.buf = recv_buf;
+		context->err_entry.data = ofi_data;
+		context->err_entry.tag = origin_tag;
+		context->err_entry.olen = xfer_len - recv_len;
+		context->err_entry.err = FI_ETRUNC;
+		context->err_entry.prov_errno = 0;
+		context->err_entry.err_data = NULL;
+		context->err_entry.err_data_size = 0;
 
-		ext->err_entry.flags = context->flags;
-		ext->err_entry.len = recv_len;
-		ext->err_entry.buf = recv_buf;
-		ext->err_entry.data = ofi_data;
-		ext->err_entry.tag = origin_tag;
-		ext->err_entry.olen = xfer_len - recv_len;
-		ext->err_entry.err = FI_ETRUNC;
-		ext->err_entry.prov_errno = 0;
-		ext->err_entry.err_data = NULL;
-		ext->err_entry.err_data_size = 0;
-
-		ext->opx_context.byte_counter = 0;
-		ext->opx_context.next = NULL;
+		context->byte_counter = 0;
+		context->next = NULL;
 
 		/* post an 'error' completion event */
 		if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-		slist_insert_tail((struct slist_entry *) ext, rx->cq_err_ptr);
+		slist_insert_tail((struct slist_entry *) context, rx->cq_err_ptr);
 	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS");
@@ -1370,13 +1329,12 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
  * \param[in,out]	entry	Completion entry
  */
 __OPX_FORCE_INLINE__
-void complete_receive_operation_internal (struct fid_ep *ep,
+void opx_ep_complete_receive_operation (struct fid_ep *ep,
 		const union opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
 		const uint64_t origin_tag,
-		union fi_opx_context ** context_ptr,
+		struct opx_context *context,
 		const uint8_t opcode,
-		const uint64_t is_context_ext,
 		const uint64_t is_multi_receive,
 		const unsigned is_intranode,
 		const uint64_t is_hmem,
@@ -1384,13 +1342,10 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type)
 {
-
-	assert((is_hmem && is_context_ext) || !is_hmem);
 	assert((is_multi_receive && !is_hmem) || !is_multi_receive);
 
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_rx * const rx = opx_ep->rx;
-	union fi_opx_context *context = *context_ptr;
 
 	const uint64_t recv_len = context->len;
 	/*
@@ -1403,7 +1358,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 	OPX_DEBUG_PRINT_HDR(hdr, hfi1_type);
 
-	if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT || opcode == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) {
+	if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) {
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- INJECT (begin)\n");
@@ -1420,8 +1375,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 			if (send_len) memcpy(recv_buf, (void*)&hdr->inject.app_data_u8[0], send_len);
 
-			union fi_opx_context * original_multi_recv_context = context;
-			context = (union fi_opx_context *)((uintptr_t)recv_buf - sizeof(union fi_opx_context));
+			struct opx_context * original_multi_recv_context = context;
+			context = (struct opx_context *)((uintptr_t)recv_buf - sizeof(struct opx_context));
 			assert((((uintptr_t)context) & 0x07) == 0);
 
 			context->flags = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV;
@@ -1434,7 +1389,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			context->next = NULL;
 
 			/* the next 'fi_opx_context' must be 8-byte aligned */
-			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(union fi_opx_context);
+			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(struct opx_context);
 			original_multi_recv_context->len -= bytes_consumed;
 			original_multi_recv_context->buf = (void*)((uintptr_t)(original_multi_recv_context->buf) + bytes_consumed);
 
@@ -1444,18 +1399,17 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 		} else if (OFI_LIKELY(send_len <= recv_len)) {
 			if (is_hmem && send_len) {
-				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
-				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
+				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
 				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
 						recv_buf, hdr->inject.app_data_u8, send_len,
 						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(is_intranode, opx_ep->debug_counters.hmem.intranode
-							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT)
-								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.kind[FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)
+								? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG]
 							.recv.inject);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(!is_intranode, opx_ep->debug_counters.hmem.hfi
-							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT)
-								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.kind[FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)
+								? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG]
 							.recv.inject);
 			} else {
 #pragma GCC diagnostic push
@@ -1501,8 +1455,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				"INJECT send_len %lu <= recv_len %lu; enqueue cq (completed) ofi_data = %ld tag = %ld\n",
 					 send_len, recv_len, ofi_data, origin_tag);
 
-			context->flags |= FI_RECV | FI_REMOTE_CQ_DATA |
-					((opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) ? FI_TAGGED : FI_MSG);
+			context->flags |= FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
+					FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
 			context->len = send_len;
 			context->data = ofi_data;
 			context->tag = origin_tag;
@@ -1510,52 +1464,37 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			context->next = NULL;
 
 			/* post a completion event for the individual receive */
-			fi_opx_enqueue_completed(rx->cq_completed_ptr, context, is_context_ext, lock_required);
+			fi_opx_enqueue_completed(rx->cq_completed_ptr, context, lock_required);
 
 		} else {	/* truncation - unlikely */
 
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"INJECT truncation - send_len %lu > recv_len %lu posting error\n", send_len, recv_len);
 
-			struct fi_opx_context_ext * ext = NULL;
-			if (is_context_ext) {
-				ext = (struct fi_opx_context_ext *)context;
-				ext->err_entry.op_context = ext->msg.op_context;
-			} else {
-				ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
-				if (OFI_UNLIKELY(ext == NULL)) {
-					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-						"Out of memory error.\n");
-					abort();
-				}
-				ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
-				ext->err_entry.op_context = context;
-			}
+			context->err_entry.flags = context->flags;
+			context->err_entry.len = recv_len;
+			context->err_entry.buf = recv_buf;
+			context->err_entry.data = ofi_data;
+			context->err_entry.tag = origin_tag;
+			context->err_entry.olen = send_len - recv_len;
+			context->err_entry.err = FI_ETRUNC;
+			context->err_entry.prov_errno = 0;
+			context->err_entry.err_data = NULL;
+			context->err_entry.err_data_size = 0;
 
-			ext->err_entry.flags = context->flags;
-			ext->err_entry.len = recv_len;
-			ext->err_entry.buf = recv_buf;
-			ext->err_entry.data = ofi_data;
-			ext->err_entry.tag = origin_tag;
-			ext->err_entry.olen = send_len - recv_len;
-			ext->err_entry.err = FI_ETRUNC;
-			ext->err_entry.prov_errno = 0;
-			ext->err_entry.err_data = NULL;
-			ext->err_entry.err_data_size = 0;
-
-			ext->opx_context.byte_counter = 0;
-			ext->opx_context.next = NULL;
+			context->byte_counter = 0;
+			context->next = NULL;
 
 			/* post an 'error' completion event for the receive */
 			if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-			slist_insert_tail((struct slist_entry *) ext, rx->cq_err_ptr);
+			slist_insert_tail((struct slist_entry *) context, rx->cq_err_ptr);
 		}
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-INJECT");
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- INJECT (end)\n");
 
-	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_EAGER || opcode == FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) {
+	} else if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) {
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- EAGER (begin)\n");
@@ -1574,9 +1513,9 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"EAGER is_multi_recv\n");
 
-			union fi_opx_context * original_multi_recv_context = context;
-			//assert(original_multi_recv_context->next == NULL);
-			context = (union fi_opx_context *)((uintptr_t)recv_buf - sizeof(union fi_opx_context));
+			struct opx_context *original_multi_recv_context = context;
+
+			context = (struct opx_context *)((uintptr_t)recv_buf - sizeof(struct opx_context));
 			assert((((uintptr_t)context) & 0x07) == 0);
 			context->flags = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV;
 			context->buf = recv_buf;
@@ -1602,7 +1541,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			}
 
 			/* the next 'fi_opx_context' must be 8-byte aligned */
-			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(union fi_opx_context);
+			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(struct opx_context);
 			original_multi_recv_context->len -= bytes_consumed;
 			original_multi_recv_context->buf = (void*)((uintptr_t)(original_multi_recv_context->buf) + bytes_consumed);
 
@@ -1636,19 +1575,17 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			}
 
 			if (is_hmem) {
-				assert(is_context_ext);
-				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
-				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
+				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
 				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
 						context->buf, opx_ep->hmem_copy_buf, send_len,
 						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(is_intranode, opx_ep->debug_counters.hmem.intranode
-							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_EAGER)
-								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.kind[FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)
+								? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG]
 							.recv.eager);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(!is_intranode, opx_ep->debug_counters.hmem.hfi
-							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_EAGER)
-								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.kind[FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)
+								? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG]
 							.recv.eager);
 			}
 
@@ -1657,8 +1594,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"EAGER send_len %lu <= recv_len %lu; enqueue cq (completed), tag %#lX/%#lX, ofi_data %#lX \n", send_len, recv_len, context->tag, origin_tag, ofi_data);
 
-			context->flags |= FI_RECV | FI_REMOTE_CQ_DATA |
-					((opcode == FI_OPX_HFI_BTH_OPCODE_TAG_EAGER) ? FI_TAGGED : FI_MSG);
+			context->flags |= FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
+					FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
 			context->len = send_len;
 			context->data = ofi_data;
 			context->tag = origin_tag;
@@ -1666,53 +1603,37 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			context->next = NULL;
 
 			/* post a completion event for the individual receive */
-			fi_opx_enqueue_completed(rx->cq_completed_ptr, context, is_context_ext, lock_required);
+			fi_opx_enqueue_completed(rx->cq_completed_ptr, context, lock_required);
 
 		} else {	/* truncation - unlikely */
 
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"EAGER truncation - send_len %lu > recv_len %lu posting error\n", send_len, recv_len);
 
-			struct fi_opx_context_ext * ext = NULL;
-			if (is_context_ext) {
-				ext = (struct fi_opx_context_ext *)context;
-				ext->err_entry.op_context = ext->msg.op_context;
-			} else {
-				ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
-				if (OFI_UNLIKELY(ext == NULL)) {
-					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-						"Out of memory error.\n");
-					abort();
-				}
-				ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
-				ext->err_entry.op_context = context;
-			}
+			context->err_entry.flags = context->flags;
+			context->err_entry.len = recv_len;
+			context->err_entry.buf = recv_buf;
+			context->err_entry.data = ofi_data;
+			context->err_entry.tag = origin_tag;
+			context->err_entry.olen = send_len - recv_len;
+			context->err_entry.err = FI_ETRUNC;
+			context->err_entry.prov_errno = 0;
+			context->err_entry.err_data = NULL;
+			context->err_entry.err_data_size = 0;
 
-			ext->err_entry.flags = context->flags;
-			ext->err_entry.len = recv_len;
-			ext->err_entry.buf = recv_buf;
-			ext->err_entry.data = ofi_data;
-			ext->err_entry.tag = origin_tag;
-			ext->err_entry.olen = send_len - recv_len;
-			ext->err_entry.err = FI_ETRUNC;
-			ext->err_entry.prov_errno = 0;
-			ext->err_entry.err_data = NULL;
-			ext->err_entry.err_data_size = 0;
-
-			ext->opx_context.byte_counter = 0;
-			ext->opx_context.next = NULL;
+			context->byte_counter = 0;
+			context->next = NULL;
 
 			/* post an 'error' completion event for the receive */
 			if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-			slist_insert_tail((struct slist_entry *) ext, rx->cq_err_ptr);
+			slist_insert_tail((struct slist_entry *) context, rx->cq_err_ptr);
 		}
 
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-EAGER");
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- EAGER (end)\n");
 
-	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST ||
-		   opcode == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST) {
+	} else if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST) {
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- MULTI PACKET EAGER FIRST (begin)\n");
@@ -1766,8 +1687,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				recv_buf_qw[i] = payload_qw[i];
 			}
 
-			context->flags |= FI_RECV | FI_REMOTE_CQ_DATA |
-					((opcode == FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST) ? FI_TAGGED : FI_MSG);
+			context->flags |= FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
+					FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
 			context->len = payload_total_len;
 			context->data = ofi_data;
 			context->tag = origin_tag;
@@ -1775,16 +1696,15 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			context->next = NULL;
 
 			if (is_hmem) {
-				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
-				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
+				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
 				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
 						recv_buf, opx_ep->hmem_copy_buf, packet_payload_len,
 						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 
 				/* MP Eager sends are never intranode */
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
-							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST)
-									? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.kind[FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)
+									? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG]
 							.recv.mp_eager);
 			}
 		} else {	/* truncation - unlikely */
@@ -1792,36 +1712,19 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"EAGER truncation - xfer_len %lu > recv_len %lu posting error\n", payload_total_len, recv_len);
 
-			struct fi_opx_context_ext * ext = NULL;
-			if (is_context_ext) {
-				ext = (struct fi_opx_context_ext *)context;
-				ext->err_entry.op_context = ext->msg.op_context;
-			} else {
-				ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
-				if (OFI_UNLIKELY(ext == NULL)) {
-					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-						"Out of memory error.");
-					abort();
-				}
-				ext->opx_context = *context;
-				ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
-				ext->err_entry.op_context = context;
-			}
+			context->err_entry.flags = context->flags;
+			context->err_entry.len = recv_len;
+			context->err_entry.buf = recv_buf;
+			context->err_entry.data = ofi_data;
+			context->err_entry.tag = origin_tag;
+			context->err_entry.olen = payload_total_len - recv_len;
+			context->err_entry.err = FI_ETRUNC;
+			context->err_entry.prov_errno = 0;
+			context->err_entry.err_data = NULL;
+			context->err_entry.err_data_size = 0;
 
-			ext->err_entry.flags = context->flags;
-			ext->err_entry.len = recv_len;
-			ext->err_entry.buf = recv_buf;
-			ext->err_entry.data = ofi_data;
-			ext->err_entry.tag = origin_tag;
-			ext->err_entry.olen = payload_total_len - recv_len;
-			ext->err_entry.err = FI_ETRUNC;
-			ext->err_entry.prov_errno = 0;
-			ext->err_entry.err_data = NULL;
-			ext->err_entry.err_data_size = 0;
-
-			ext->opx_context.byte_counter = payload_total_len - packet_payload_len;
-			ext->opx_context.next = NULL;
-			*context_ptr = (union fi_opx_context*)ext;
+			context->byte_counter = payload_total_len - packet_payload_len;
+			context->next = NULL;
 		}
 #ifndef NDEBUG
 		if (context->byte_counter == 0) {
@@ -1851,8 +1754,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 		/* If we flagged this context w/ an error, just decrement the byte counter that this
 		 * nth packet would have filled in */
-		if (OFI_UNLIKELY(is_context_ext &&
-				((struct fi_opx_context_ext *)context)->err_entry.err == FI_ETRUNC)) {
+		if (OFI_UNLIKELY(context->err_entry.err == FI_ETRUNC)) {
 			context->byte_counter -= send_len;
 			return;
 		}
@@ -1919,8 +1821,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 			if (is_hmem) {
 				recv_buf = (void*)((uint8_t*) context->buf + hdr->mp_eager_nth.payload_offset);
-				struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *)context;
-				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
+				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
 				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
 						recv_buf, opx_ep->hmem_copy_buf, send_len,
 						OPX_HMEM_DEV_REG_RECV_THRESHOLD);
@@ -1949,93 +1850,12 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-MP-EAGER-NTH");
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- MULTI PACKET EAGER NTH byte counter %lu (end)\n",context->byte_counter);
-	} else if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) { /* 9B rendezvous packet */
-		union fi_opx_hfi1_packet_payload *p = (union fi_opx_hfi1_packet_payload *) payload;
-
-		const uint64_t is_noncontig = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_NONCONTIG;
-
-		uintptr_t origin_byte_counter_vaddr = (is_noncontig == 1) ? p->rendezvous.noncontiguous.origin_byte_counter_vaddr :
-									p->rendezvous.contiguous.origin_byte_counter_vaddr;
-
-		struct fi_opx_hmem_iov *iov = &p->rendezvous.noncontiguous.iov[0];
-
-		const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
-					.qw0 = p->rendezvous.contiguous.immediate_info
-		};
-		const struct fi_opx_hmem_iov src_dst_iov = {
-					.buf = p->rendezvous.contiguous.src_vaddr,
-					.len = (p->rendezvous.contiguous.src_blocks << 6),
-					.device = p->rendezvous.contiguous.src_device_id,
-					.iface = (enum fi_hmem_iface) p->rendezvous.contiguous.src_iface
-		};
-		const uint8_t * const immediate_byte = p->rendezvous.contiguous.immediate_byte;
-		const uint64_t * const immediate_qw = p->rendezvous.contiguous.immediate_qw;
-		const uint64_t immediate_fragment = ((immediate_info.byte_count + immediate_info.byte_count + 63) >> 6);
-		const union cacheline * const immediate_block = &p->rendezvous.contiguous.cache_line_1 + immediate_fragment;
-
+	} else {
 		fi_opx_handle_recv_rts(hdr, payload, opx_ep, origin_tag, opcode,
-					context, is_context_ext, is_multi_receive, is_intranode, is_hmem,
-					lock_required, reliability, hfi1_type, origin_byte_counter_vaddr,
-					iov, immediate_info, &src_dst_iov, immediate_byte, immediate_qw, immediate_block);
-
-	} else { /* (hfi1_type & OPX_HFI1_JKR) 16B rendezvous packet */
-		union fi_opx_hfi1_packet_payload_16B *p = (union fi_opx_hfi1_packet_payload_16B *) payload;
-		const uint64_t is_noncontig = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_NONCONTIG;
-		uintptr_t origin_byte_counter_vaddr = (is_noncontig == 1) ? p->rendezvous.noncontiguous.origin_byte_counter_vaddr :
-									p->rendezvous.contiguous.origin_byte_counter_vaddr;
-		struct fi_opx_hmem_iov *iov = &p->rendezvous.noncontiguous.iov[0];
-		const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
-					.qw0 = p->rendezvous.contiguous.immediate_info
-		};
-
-		const struct fi_opx_hmem_iov src_dst_iov = {
-					.buf = p->rendezvous.contiguous.src_vaddr,
-					.len = (p->rendezvous.contiguous.src_blocks << 6),
-					.device = p->rendezvous.contiguous.src_device_id,
-					.iface = (enum fi_hmem_iface) p->rendezvous.contiguous.src_iface
-		};
-		const uint8_t * const immediate_byte = p->rendezvous.contiguous.immediate_byte;
-		const uint64_t * const immediate_qw = p->rendezvous.contiguous.immediate_qw;
-		const uint64_t immediate_fragment = ((immediate_info.byte_count + immediate_info.byte_count + 63) >> 6);
-		const union cacheline * const immediate_block = &p->rendezvous.contiguous.cache_line_1 + immediate_fragment;
-
-		fi_opx_handle_recv_rts(hdr, payload, opx_ep, origin_tag, opcode,
-					context, is_context_ext, is_multi_receive, is_intranode, is_hmem,
-					lock_required, reliability, hfi1_type, origin_byte_counter_vaddr,
-					iov, immediate_info, &src_dst_iov, immediate_byte, immediate_qw, immediate_block);
+					context, is_multi_receive, is_intranode, is_hmem,
+					lock_required, reliability, hfi1_type);
 	}
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "\n");
-}
-
-/**
- * \brief Complete a receive operation that has matched the packet header with
- * 		the match information
- *
- * \param[in]		rx	Receive endoint
- * \param[in]		hdr	MU packet header that matched
- * \param[in,out]	entry	Completion entry
- */
-__OPX_FORCE_INLINE__
-void complete_receive_operation(struct fid_ep *ep,
-				const union opx_hfi1_packet_hdr * const hdr,
-				const union fi_opx_hfi1_packet_payload * const payload,
-				const uint64_t origin_tag,
-				union fi_opx_context * context,
-				const uint8_t opcode,
-				const uint64_t is_context_ext,
-				const uint64_t is_multi_receive,
-				const unsigned is_intranode,
-				const uint64_t is_hmem,
-				const int lock_required,
-				const enum ofi_reliability_kind reliability,
-				const enum opx_hfi1_type hfi1_type)
-{
-	union fi_opx_context * original_context = context;
-	(void) original_context;
-	complete_receive_operation_internal(ep, hdr, payload, origin_tag, &context,
-					    opcode, is_context_ext, is_multi_receive,
-					    is_intranode, is_hmem, lock_required, reliability, hfi1_type);
-	assert(context == original_context);
 }
 
 __OPX_FORCE_INLINE__
@@ -2099,7 +1919,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV -- %s RENDEZVOUS CTS (begin)\n", is_intranode ? "SHM":"HFI");
 
-	assert(payload != NULL);
+	assert(payload != NULL || hdr->cts.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC);
 	const uint8_t u8_rx = hdr->cts.origin_rx;
 	const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->cts.origin_rx);
 
@@ -2234,7 +2054,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 	{
 		struct fi_opx_rzv_completion * rzv_comp = (struct fi_opx_rzv_completion *)(hdr->dput.target.rzv.completion_vaddr);
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-DATA-HFI-DPUT:%p", rzv_comp);
-		union fi_opx_context *target_context = rzv_comp->context;
+		struct opx_context *target_context = rzv_comp->context;
 		assert(target_context);
 		uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.rzv.rbuf);
 
@@ -2247,13 +2067,21 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.bytes;
 
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
-
+#ifndef NDEBUG
+		if (bytes == 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Received RZV (non-TID) data packet with 0-byte payload size. hdr->dput.target.last_bytes=%hd, hdr->dput.target.bytes=%hd. Based on PSN high bit (%s), bytes was set to %s\n",
+				hdr->dput.target.last_bytes,
+				hdr->dput.target.bytes,
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "ON" : "OFF",
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "last_bytes" : "bytes");
+			abort();
+		}
+#endif
 		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
 #ifdef OPX_HMEM
 		if (target_context->flags & FI_OPX_CQ_CONTEXT_HMEM) {
-			assert(target_context->flags & FI_OPX_CQ_CONTEXT_EXT);
-			struct fi_opx_context_ext *ext = rzv_comp->extended_context;
-			struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
+			struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) target_context->hmem_info_qws;
 			assert(hmem_info->iface > FI_HMEM_SYSTEM);
 			opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
 					rbuf_qws, sbuf_qws, bytes,
@@ -2284,7 +2112,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RX_PROCESS_HEADER_RZV_TID");
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_rcv_pkts);
 		struct fi_opx_rzv_completion * rzv_comp = (struct fi_opx_rzv_completion *)(hdr->dput.target.rzv.completion_vaddr);
-		union fi_opx_context *target_context = rzv_comp->context;
+		struct opx_context *target_context = rzv_comp->context;
 		assert(target_context);
 
 		/* TID packets are mixed 4k/8k packets and length adjusted,
@@ -2326,8 +2154,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 				"TID REPLAY rbuf_qws %p, sbuf_qws %p, bytes %u/%#x, target_context->byte_counter %p\n",
 				(void*)rbuf_qws, (void*)sbuf_qws, bytes, bytes, &target_context->byte_counter);
 			if (target_context->flags & FI_OPX_CQ_CONTEXT_HMEM) {
-				struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) target_context;
-				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
+				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) target_context->hmem_info_qws;
 				assert(hmem_info->iface > FI_HMEM_SYSTEM);
 				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
 						rbuf_qws, sbuf_qws, bytes,
@@ -2413,6 +2240,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.bytes;
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
 
+#ifndef NDEBUG
+		if (bytes == 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Received RMA PUT data packet with 0-byte payload size. hdr->dput.target.last_bytes=%hd, hdr->dput.target.bytes=%hd. Based on PSN high bit (%s), bytes was set to %s\n",
+				hdr->dput.target.last_bytes,
+				hdr->dput.target.bytes,
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "ON" : "OFF",
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "last_bytes" : "bytes");
+			abort();
+		}
+#endif
 		// Optimize Memcpy
 		if(hdr->dput.target.op == FI_NOOP - 1 &&
 			hdr->dput.target.dt == FI_VOID - 1) {
@@ -2448,6 +2286,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		assert(cc);
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
 
+#ifndef NDEBUG
+		if (bytes == 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Received RMA GET data packet with 0-byte payload size. hdr->dput.target.last_bytes=%hd, hdr->dput.target.bytes=%hd. Based on PSN high bit (%s), bytes was set to %s\n",
+				hdr->dput.target.last_bytes,
+				hdr->dput.target.bytes,
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "ON" : "OFF",
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "last_bytes" : "bytes");
+			abort();
+		}
+#endif
 		if (hdr->dput.target.dt == (FI_VOID - 1)) {
 			OPX_HMEM_COPY_TO(rbuf_qws, sbuf_qws, bytes, OPX_HMEM_NO_HANDLE,
 					 OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
@@ -2493,6 +2342,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.last_bytes :
 					hdr->dput.target.bytes;
 
+#ifndef NDEBUG
+		if (bytes == 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Received ATOMIC FETCH data packet with 0-byte payload size. hdr->dput.target.last_bytes=%hd, hdr->dput.target.bytes=%hd. Based on PSN high bit (%s), bytes was set to %s\n",
+				hdr->dput.target.last_bytes,
+				hdr->dput.target.bytes,
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "ON" : "OFF",
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "last_bytes" : "bytes");
+			abort();
+		}
+#endif
 		assert(bytes > sizeof(*dput_fetch));
 		uint64_t hmem_device;
 		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
@@ -2566,6 +2426,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.last_bytes :
 					hdr->dput.target.bytes;
 
+#ifndef NDEBUG
+		if (bytes == 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Received ATOMIC COMPARE FETCH data packet with 0-byte payload size. hdr->dput.target.last_bytes=%hd, hdr->dput.target.bytes=%hd. Based on PSN high bit (%s), bytes was set to %s\n",
+				hdr->dput.target.last_bytes,
+				hdr->dput.target.bytes,
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "ON" : "OFF",
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "last_bytes" : "bytes");
+			abort();
+		}
+#endif
 		assert(bytes > sizeof(*dput_fetch));
 		uint64_t hmem_device;
 		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
@@ -2707,7 +2578,7 @@ uint64_t fi_opx_mp_egr_id_from_nth_packet(const union opx_hfi1_packet_hdr *hdr,
 
 __OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
-				union fi_opx_context *context,
+				struct opx_context *context,
 				union fi_opx_mp_egr_id mp_egr_id,
 				const unsigned is_intranode,
 				const int lock_required,
@@ -2715,7 +2586,6 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
 				const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	const uint64_t is_context_ext = context->flags & FI_OPX_CQ_CONTEXT_EXT;
 	const uint64_t is_hmem = context->flags & FI_OPX_CQ_CONTEXT_HMEM;
 	struct fi_opx_hfi1_ue_packet *uepkt = opx_ep->rx->mp_egr_queue.ue.head;
 
@@ -2731,13 +2601,12 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
 
 		if (fi_opx_mp_egr_id_from_nth_packet(&uepkt->hdr, slid) == mp_egr_id.id) {
 
-			complete_receive_operation(ep,
+			opx_ep_complete_receive_operation(ep,
 				&uepkt->hdr,
 				&uepkt->payload,
 				0,	/* OFI Tag, N/A for multi-packet eager nth */
 				context,
 				FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
-				is_context_ext,
 				OPX_MULTI_RECV_FALSE,
 				OPX_INTRANODE_FALSE,
 				is_hmem,
@@ -2778,10 +2647,10 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "search the match queue\n");
 
 	const uint64_t kind = (static_flags & FI_TAGGED) ? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG;
-	assert((kind == FI_OPX_KIND_TAG && opcode == FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST) ||
-		(kind == FI_OPX_KIND_MSG && opcode == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST));
-	union fi_opx_context * context = (union fi_opx_context *) opx_ep->rx->queue[kind].mq.head;
-	union fi_opx_context * prev = NULL;
+	assert((kind == FI_OPX_KIND_TAG && FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)) ||
+		(kind == FI_OPX_KIND_MSG && !FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)));
+	struct opx_context *context = (struct opx_context *) opx_ep->rx->queue[kind].mq.head;
+	struct opx_context *prev = NULL;
 
 	while (
 		context &&
@@ -2802,7 +2671,7 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"did not find a match .. add this packet to the unexpected queue\n");
 
-		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST))
+		if (OFI_LIKELY(FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)))
 			fi_opx_ep_rx_append_ue_tag(opx_ep->rx, hdr, payload, payload_bytes,
 				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
 				opx_ep->daos_info.hfi_rank_enabled,
@@ -2821,13 +2690,12 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 		     (struct slist_entry *) context,
 		     (struct slist_entry *) prev);
 
-	uint64_t is_context_ext = context->flags & FI_OPX_CQ_CONTEXT_EXT;
 	uint64_t is_hmem = context->flags & FI_OPX_CQ_CONTEXT_HMEM;
+
 	/* Copy this packet's payload to the context's buffer. */
-	complete_receive_operation_internal(ep, hdr, payload,
-			hdr->match.ofi_tag, &context,
+	opx_ep_complete_receive_operation(ep, hdr, payload,
+			hdr->match.ofi_tag, context,
 			opcode,
-			is_context_ext,
 			OPX_MULTI_RECV_FALSE,
 			OPX_INTRANODE_FALSE,	/* Should always be false for mp_eager */
 			is_hmem,
@@ -2851,12 +2719,11 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 	} else {
 		context->next = NULL;
 
-		if (OFI_UNLIKELY(is_context_ext &&
-				((struct fi_opx_context_ext *)context)->err_entry.err == FI_ETRUNC)) {
+		if (OFI_UNLIKELY(context->err_entry.err == FI_ETRUNC)) {
 			slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_err_ptr);
 		} else {
 			fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context,
-						is_context_ext, lock_required);
+						lock_required);
 		}
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_completed_eager_first);
 	}
@@ -2883,8 +2750,8 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep,
 	/* Search mp-eager queue for the context w/ matching mp-eager ID */
 
 	const uint64_t mp_egr_id = fi_opx_mp_egr_id_from_nth_packet(hdr, slid);
-	union fi_opx_context *context = (union fi_opx_context *) opx_ep->rx->mp_egr_queue.mq.head;
-	union fi_opx_context *prev = NULL;
+	struct opx_context *context = (struct opx_context *) opx_ep->rx->mp_egr_queue.mq.head;
+	struct opx_context *prev = NULL;
 
 	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(length);
 
@@ -2911,14 +2778,12 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep,
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_nth_match);
 
 	/* We found a match!  */
-	const uint64_t is_context_ext = context->flags & FI_OPX_CQ_CONTEXT_EXT;
-	complete_receive_operation(ep,
+	opx_ep_complete_receive_operation(ep,
 				hdr,
 				payload,
 				0,		/* OFI Tag, N/A for multi-packet eager nth */
 				context,
 				opcode, 	// FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH
-				is_context_ext,
 				OPX_MULTI_RECV_FALSE,
 				is_intranode,
 				context->flags & FI_OPX_CQ_CONTEXT_HMEM,
@@ -2932,12 +2797,11 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep,
 			     (struct slist_entry *) context,
 			     (struct slist_entry *) prev);
 
-		if (OFI_UNLIKELY(is_context_ext &&
-				((struct fi_opx_context_ext *)context)->err_entry.err == FI_ETRUNC)) {
+		if (OFI_UNLIKELY(context->err_entry.err == FI_ETRUNC)) {
 			slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_err_ptr);
 		} else {
 			fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context,
-						is_context_ext, lock_required);
+						lock_required);
 		}
 
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_completed_eager_nth);
@@ -2968,8 +2832,7 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 						is_intranode,
 						lock_required, reliability, hfi1_type);
 		return;
-	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST ||
-		   opcode == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST) {
+	} else if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST) {
 		fi_opx_ep_rx_process_header_mp_eager_first(ep, hdr, payload, payload_bytes,
 							static_flags, opcode,
 							origin_rs,
@@ -2994,8 +2857,8 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 
 	assert(static_flags & (FI_TAGGED | FI_MSG));
 	const uint64_t kind = (static_flags & FI_TAGGED) ? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG;
-	union fi_opx_context * context = (union fi_opx_context *) opx_ep->rx->queue[kind].mq.head;
-	union fi_opx_context * prev = NULL;
+	struct opx_context *context = (struct opx_context *) opx_ep->rx->queue[kind].mq.head;
+	struct opx_context *prev = NULL;
 
 	while (OFI_LIKELY(context != NULL) &&
 		!is_match(opx_ep,
@@ -3050,9 +2913,8 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 
 		context->next = NULL;
 
-		complete_receive_operation(ep, hdr, payload,
+		opx_ep_complete_receive_operation(ep, hdr, payload,
 			hdr->match.ofi_tag, context, opcode,
-			rx_op_flags & FI_OPX_CQ_CONTEXT_EXT,
 			OPX_MULTI_RECV_FALSE,
 			is_intranode,
 			rx_op_flags & FI_OPX_CQ_CONTEXT_HMEM,
@@ -3061,7 +2923,6 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 			hfi1_type);
 
 		return;
-
 	}
 
 	/*
@@ -3071,12 +2932,10 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 	const uint64_t recv_len = context->len;
 	const uint64_t send_len = fi_opx_hfi1_packet_hdr_message_length(hdr);
 
-	assert(!(context->flags & FI_OPX_CQ_CONTEXT_EXT));
 	assert(!(context->flags & FI_OPX_CQ_CONTEXT_HMEM));
 	if (OFI_LIKELY(send_len <= recv_len)) {
-		complete_receive_operation(ep, hdr, payload,
+		opx_ep_complete_receive_operation(ep, hdr, payload,
 			0, context, opcode,
-			OPX_CONTEXT_EXTENDED_FALSE,
 			OPX_MULTI_RECV_TRUE,
 			is_intranode,
 			OPX_HMEM_FALSE,
@@ -3321,48 +3180,33 @@ void fi_opx_ep_rx_poll (struct fid_ep *ep,
 }
 
 __OPX_FORCE_INLINE__
-int fi_opx_ep_cancel_context(struct fi_opx_ep * opx_ep,
+int fi_opx_ep_cancel_context(struct fi_opx_ep *opx_ep,
 			const uint64_t cancel_context,
-			union fi_opx_context * context,
+			struct opx_context *context,
 			const uint64_t rx_op_flags,
-			const uint64_t is_context_ext,
 			const int lock_required)
 {
 	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "unimplemented; abort\n"); abort();
 
-	const uint64_t compare_context = is_context_ext ?
-		(uint64_t)(((struct fi_opx_context_ext *)context)->msg.op_context) :
-		(uint64_t)context;
+	const uint64_t compare_context = (uint64_t) context->err_entry.op_context;
 
 	if (compare_context == cancel_context) {
 
-		struct fi_opx_context_ext * ext;
-		if (is_context_ext) {
-			ext = (struct fi_opx_context_ext *)context;
-		} else {
-			ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
-			if (OFI_UNLIKELY(ext == NULL)) {
-				return -FI_ENOMEM;
-			}
-			ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
-		}
-
-		ext->opx_context.byte_counter = 0;
-		ext->err_entry.op_context = (void *)cancel_context;
-		ext->err_entry.flags = rx_op_flags;
-		ext->err_entry.len = 0;
-		ext->err_entry.buf = 0;
-		ext->err_entry.data = 0;
-		ext->err_entry.tag = context->tag;
-		ext->err_entry.olen = 0;
-		ext->err_entry.err = FI_ECANCELED;
-		ext->err_entry.prov_errno = 0;
-		ext->err_entry.err_data = NULL;
-		ext->err_entry.err_data_size = 0;
+		context->byte_counter = 0;
+		context->err_entry.flags = rx_op_flags;
+		context->err_entry.len = 0;
+		context->err_entry.buf = 0;
+		context->err_entry.data = 0;
+		context->err_entry.tag = context->tag;
+		context->err_entry.olen = 0;
+		context->err_entry.err = FI_ECANCELED;
+		context->err_entry.prov_errno = 0;
+		context->err_entry.err_data = NULL;
+		context->err_entry.err_data_size = 0;
 
 		/* post an 'error' completion event for the canceled receive */
 		if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-		slist_insert_tail((struct slist_entry *) ext, opx_ep->rx->cq_err_ptr);
+		slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_err_ptr);
 
 		return FI_ECANCELED;
 	}
@@ -3373,8 +3217,7 @@ int fi_opx_ep_cancel_context(struct fi_opx_ep * opx_ep,
 __OPX_FORCE_INLINE__
 int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 				const uint64_t static_flags,
-				union fi_opx_context * context,
-				const uint64_t is_context_ext,
+				struct opx_context * context,
 				const uint64_t is_hmem,
 				const int lock_required,
 				const enum ofi_reliability_kind reliability,
@@ -3405,24 +3248,22 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 	if (uepkt) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "UEPKT found a match, uepkt = %p\n", uepkt);
 
-		uint8_t is_mp_eager = (uepkt->hdr.bth.opcode == FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST ||
-					uepkt->hdr.bth.opcode == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST);
+		uint8_t is_mp_eager = (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(uepkt->hdr.bth.opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST);
 
 		const unsigned is_intranode = opx_lrh_is_intranode(&(uepkt->hdr), hfi1_type);
 		if (is_mp_eager) {
-			complete_receive_operation_internal(ep,
-							    &uepkt->hdr,
-							    &uepkt->payload,
-							    uepkt->hdr.match.ofi_tag,
-							    &context,
-							    uepkt->hdr.bth.opcode,
-							    is_context_ext,
-							    OPX_MULTI_RECV_FALSE,
-							    is_intranode,
-							    is_hmem,
-							    lock_required,
-							    reliability,
-								hfi1_type);
+			opx_ep_complete_receive_operation(ep,
+							 &uepkt->hdr,
+							 &uepkt->payload,
+							 uepkt->hdr.match.ofi_tag,
+							 context,
+							 uepkt->hdr.bth.opcode,
+							 OPX_MULTI_RECV_FALSE,
+							 is_intranode,
+							 is_hmem,
+							 lock_required,
+							 reliability,
+							 hfi1_type);
 
 			/* Since this is the first multi-packet eager packet,
 			   the uid portion of the mp_egr_id will be this packet's PSN */
@@ -3449,22 +3290,20 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_completed_process_context);
 
 				context->next = NULL;
-				if (OFI_UNLIKELY(is_context_ext &&
-						((struct fi_opx_context_ext *)context)->err_entry.err == FI_ETRUNC)) {
+				if (OFI_UNLIKELY(context->err_entry.err == FI_ETRUNC)) {
 					slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_err_ptr);
 				} else {
 					fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context,
-								is_context_ext, lock_required);
+								lock_required);
 				}
 			}
 		} else {
-			complete_receive_operation(ep,
+			opx_ep_complete_receive_operation(ep,
 						   &uepkt->hdr,
 						   &uepkt->payload,
 						   uepkt->hdr.match.ofi_tag,
 						   context,
 						   uepkt->hdr.bth.opcode,
-						   is_context_ext,
 						   OPX_MULTI_RECV_FALSE,
 						   is_intranode,
 						   is_hmem,
@@ -3499,12 +3338,10 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 }
 
 /* rx_op_flags is only checked for FI_PEEK | FI_CLAIM | FI_MULTI_RECV
- * rx_op_flags is only used if FI_PEEK | FI_CLAIM | cancel_context
- * is_context_ext is only used if FI_PEEK | cancel_context | iovec
+ * rx_op_flags is only used if FI_PEEK | FI_CLAIM
  *
  * The "normal" data movement functions, such as fi_[t]recv(), can safely
- * specify '0' for cancel_context, rx_op_flags, and is_context_ext, in
- * order to reduce code path.
+ * specify '0' for rx_op_flags in order to reduce code path.
  *
  * TODO - use payload pointer? keep data in hfi eager buffer as long
  * as possible to avoid memcpy?
@@ -3513,34 +3350,24 @@ __OPX_FORCE_INLINE__
 int fi_opx_ep_rx_process_context (
 		struct fi_opx_ep * opx_ep,
 		const uint64_t static_flags,
-		const uint64_t cancel_context, union fi_opx_context * context,
-		const uint64_t rx_op_flags, const uint64_t is_context_ext,
+		struct opx_context *context,
+		const uint64_t rx_op_flags,
 		const uint64_t is_hmem,
 		const int lock_required, const enum fi_av_type av_type,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type)
 {
 
-	if (cancel_context) {	/* branch should compile out */
-		int rc = fi_opx_ep_cancel_context(opx_ep, cancel_context, context,
-						rx_op_flags, is_context_ext, lock_required);
-
-		if (rc != FI_SUCCESS) return rc;
-	}
-
 	if (OFI_LIKELY((rx_op_flags & (FI_PEEK | FI_CLAIM | FI_MULTI_RECV)) == 0)) {
 		if (is_hmem) {	/* branch should compile out */
-			assert(is_context_ext);
 			return fi_opx_ep_process_context_match_ue_packets(opx_ep, static_flags, context,
-									  OPX_CONTEXT_EXTENDED_TRUE,
-									  OPX_HMEM_TRUE,
-									  lock_required, reliability, hfi1_type);
+									  OPX_HMEM_TRUE, lock_required,
+									  reliability, hfi1_type);
 		}
 
 		return fi_opx_ep_process_context_match_ue_packets(opx_ep, static_flags, context,
-								OPX_CONTEXT_EXTENDED_FALSE,
-								OPX_HMEM_FALSE,
-								lock_required, reliability, hfi1_type);
+								  OPX_HMEM_FALSE, lock_required,
+								  reliability, hfi1_type);
 	} else {
 
 		/*
@@ -3551,7 +3378,8 @@ int fi_opx_ep_rx_process_context (
 			"process peek, claim, or multi-receive context\n");
 
 		fi_opx_ep_rx_process_context_noinline(opx_ep, static_flags,
-			context, rx_op_flags, is_context_ext, is_hmem, lock_required, av_type, reliability, hfi1_type);
+			context, rx_op_flags, is_hmem, lock_required, av_type,
+			reliability, hfi1_type);
 	}
 
 	return 0;
@@ -3591,7 +3419,8 @@ fi_addr_t fi_opx_ep_get_src_addr(struct fi_opx_ep *opx_ep,
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 		void *buf, size_t len, void *desc,
-		fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context,
+		fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
+		void *user_context,
 		const int lock_required, const enum fi_av_type av_type,
 		const uint64_t static_flags,
 		const enum ofi_reliability_kind reliability,
@@ -3604,40 +3433,44 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_TAGGED, opx_ep->debug_counters.recv.posted_recv_tag);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== POST RECV: context = %p\n", context);
+		"===================================== POST RECV: context = %p\n",
+		user_context);
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "POST-RECV");
+
+	struct opx_context *context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+	if (OFI_UNLIKELY(context == NULL)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		return -FI_ENOMEM;
+	}
 
 	const uint64_t rx_op_flags = opx_ep->rx->op_flags;
 	uint64_t rx_caps = opx_ep->rx->caps;
 
-	assert(context);
-	assert(((uintptr_t)context & 0x07ull) == 0);	/* must be 8 byte aligned */
-	union fi_opx_context * opx_context = (union fi_opx_context *)context;
-	opx_context->flags = rx_op_flags;
-	opx_context->len = len;
-	opx_context->buf = buf;
+	context->next = NULL;
+	context->err_entry.err = 0;
+	context->err_entry.op_context = user_context;
+	context->flags = rx_op_flags;
+	context->len = len;
+	context->buf = buf;
+	context->src_addr = (rx_caps & FI_DIRECTED_RECV)
+		?  fi_opx_ep_get_src_addr(opx_ep, av_type, src_addr)
+		: FI_ADDR_UNSPEC;
+	context->tag = tag;
+	context->ignore = ignore;
+	context->byte_counter = (uint64_t)-1;
 
-	if (rx_caps & FI_DIRECTED_RECV) {
-		opx_context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, src_addr);
-	} else {
-		opx_context->src_addr = FI_ADDR_UNSPEC;
-	}
 
 #ifdef FI_OPX_TRACE
 	fprintf(stderr,"fi_opx_recv_generic from source addr:\n");
-	FI_OPX_ADDR_DUMP(&opx_context->src_addr);
+	FI_OPX_ADDR_DUMP(&context->src_addr);
 #endif
-
-	opx_context->tag = tag;
-	opx_context->ignore = ignore;
-	opx_context->byte_counter = (uint64_t)-1;
 
 	assert(IS_PROGRESS_MANUAL(opx_ep->domain));
 
 	if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
 
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"process context (check unexpected queue, append match queue)\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"process context (check unexpected queue, append match queue)\n");
 
 #ifdef OPX_HMEM
 	uint64_t hmem_device;
@@ -3645,29 +3478,17 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	if (hmem_iface != FI_HMEM_SYSTEM) {
 		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_MSG, opx_ep->debug_counters.hmem.posted_recv_msg);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_TAGGED, opx_ep->debug_counters.hmem.posted_recv_tag);
-		struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
-		if (OFI_UNLIKELY(ext == NULL)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"===================================== POST RECV RETURN FI_ENOMEM\n");
-			OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "POST-RECV");
-			return -FI_ENOMEM;
-		}
-		struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &ext->hmem_info_qws[0];
+		struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &context->hmem_info_qws[0];
 		hmem_info->iface = hmem_iface;
 		hmem_info->device = hmem_device;
 		hmem_info->hmem_dev_reg_handle = ((struct fi_opx_mr *)desc)->hmem_dev_reg_handle;
 
-		ext->err_entry.err = 0;
-		ext->opx_context = *opx_context;
-		ext->opx_context.flags = rx_op_flags | FI_OPX_CQ_CONTEXT_EXT | FI_OPX_CQ_CONTEXT_HMEM;
-		ext->msg.op_context = (struct fi_context2 *) context;
+		context->flags |= FI_OPX_CQ_CONTEXT_HMEM;
 
 		fi_opx_ep_rx_process_context(opx_ep,
 					static_flags,
-					OPX_CANCEL_CONTEXT_FALSE,
-					(union fi_opx_context *) ext,
+					context,
 					0, // rx_op_flags
-					OPX_CONTEXT_EXTENDED_TRUE,
 					OPX_HMEM_TRUE,
 					lock_required,
 					av_type,
@@ -3678,10 +3499,8 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	{
 		fi_opx_ep_rx_process_context(opx_ep,
 					static_flags,
-					OPX_CANCEL_CONTEXT_FALSE,
 					context,
 					0, // rx_op_flags
-					OPX_CONTEXT_EXTENDED_FALSE,
 					OPX_HMEM_FALSE,
 					lock_required,
 					av_type,
@@ -3690,7 +3509,8 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECV");
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"===================================== POST RECV RETURN\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== POST RECV RETURN\n");
 
 	return 0;
 }
@@ -3718,12 +3538,18 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 	FI_OPX_DEBUG_COUNTERS_INC_COND(!(flags & FI_MULTI_RECV), opx_ep->debug_counters.recv.posted_recv_msg);
 	FI_OPX_DEBUG_COUNTERS_INC_COND((flags & FI_MULTI_RECV), opx_ep->debug_counters.recv.posted_multi_recv);
 	assert(!lock_required);
-	assert(msg->context);
-	assert(((uintptr_t)msg->context & 0x07ull) == 0);	/* must be 8 byte aligned */
+
+	struct opx_context *context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+	if (OFI_UNLIKELY(context == NULL)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "POST-RECVMSG");
+		return -FI_ENOMEM;
+	}
+	context->next = NULL;
+	context->err_entry.err = 0;
+	context->err_entry.op_context = msg->context;
 
 	if (OFI_LIKELY(flags & FI_MULTI_RECV)) {
-		union fi_opx_context * opx_context = (union fi_opx_context *) msg->context;
-
 		uint64_t len = msg->msg_iov[0].iov_len;
 		void * base = msg->msg_iov[0].iov_base;
 
@@ -3735,49 +3561,43 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 			base = (void *)new_base;
 		}
 		assert(((uintptr_t)base & 0x07ull) == 0);
-		assert(len >= (sizeof(union fi_opx_context) + opx_ep->rx->min_multi_recv));
-		opx_context->flags = FI_MULTI_RECV;
-		opx_context->len = len - sizeof(union fi_opx_context);
-		opx_context->buf = (void *)((uintptr_t)base + sizeof(union fi_opx_context));
-		opx_context->next = NULL;
-		opx_context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, msg->addr);
-		opx_context->byte_counter = 0;
-		opx_context->multi_recv_next = (union fi_opx_context *)base;
-		opx_context->ignore = (uint64_t)-1;
+		assert(len >= (sizeof(struct opx_context) + opx_ep->rx->min_multi_recv));
+		context->flags = FI_MULTI_RECV;
+		context->len = len - sizeof(struct opx_context);
+		context->buf = (void *)((uintptr_t)base + sizeof(struct opx_context));
+		context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, msg->addr);
+		context->byte_counter = 0;
+		context->ignore = (uint64_t)-1;
 
 		ssize_t rc = fi_opx_ep_rx_process_context(opx_ep, FI_MSG,
-						OPX_CANCEL_CONTEXT_FALSE,
-						opx_context, flags,
-						OPX_CONTEXT_EXTENDED_FALSE,
+						context, flags,
 						OPX_HMEM_FALSE,
 						lock_required, av_type,
 						reliability,
 						hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== POST RECVMSG RETURN\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 		return rc;
 
 	} else if (msg->iov_count == 0) {
-		union fi_opx_context * opx_context = (union fi_opx_context *) msg->context;
-		opx_context->flags = flags;
-		opx_context->len = 0;
-		opx_context->buf = NULL;
-		opx_context->next = NULL;
-		opx_context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, msg->addr);
-		opx_context->tag = 0;
-		opx_context->ignore = (uint64_t)-1;
-		opx_context->byte_counter = (uint64_t)-1;
+		context->flags = flags;
+		context->len = 0;
+		context->buf = NULL;
+		context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, msg->addr);
+		context->tag = 0;
+		context->ignore = (uint64_t)-1;
+		context->byte_counter = (uint64_t)-1;
 
 		ssize_t rc = fi_opx_ep_rx_process_context(opx_ep, FI_MSG,
-						OPX_CANCEL_CONTEXT_FALSE,
-						opx_context, flags,
-						OPX_CONTEXT_EXTENDED_FALSE,
+						context, flags,
 						OPX_HMEM_FALSE,
 						lock_required, av_type,
 						reliability,
 						hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== POST RECVMSG RETURN\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 		return rc;
 	}
 
@@ -3802,103 +3622,74 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 #endif
 	if (hmem_iface != FI_HMEM_SYSTEM) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.posted_recv_msg);
-		struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
-		if (OFI_UNLIKELY(ext == NULL)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"===================================== POST RECVMSG (HMEM) RETURN FI_ENOMEM\n");
-			OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "POST-RECVMSG");
-			return -FI_ENOMEM;
-		}
+		context->flags = flags | FI_OPX_CQ_CONTEXT_HMEM;
+		context->len = msg->msg_iov[0].iov_len;
+		context->buf = msg->msg_iov[0].iov_base;
+		context->byte_counter = (uint64_t)-1;
+		context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, msg->addr);
+		context->tag = 0;
+		context->ignore = (uint64_t)-1;
+		context->msg.iov_count = msg->iov_count;
+		context->msg.iov = (struct iovec *)msg->msg_iov;
 
-		ext->err_entry.err = 0;
-		ext->opx_context.flags = flags | FI_OPX_CQ_CONTEXT_EXT | FI_OPX_CQ_CONTEXT_HMEM;
-		ext->opx_context.len = msg->msg_iov[0].iov_len;
-		ext->opx_context.buf = msg->msg_iov[0].iov_base;
-		ext->opx_context.byte_counter = (uint64_t)-1;
-		ext->opx_context.src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, msg->addr);
-		ext->opx_context.tag = 0;
-		ext->opx_context.ignore = (uint64_t)-1;
-		ext->msg.op_context = (struct fi_context2 *)msg->context;
-		ext->msg.iov_count = msg->iov_count;
-		ext->msg.iov = (struct iovec *)msg->msg_iov;
-
-		struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &ext->hmem_info_qws[0];
+		struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &context->hmem_info_qws[0];
 		hmem_info->iface = hmem_iface;
 		hmem_info->device = hmem_device;
 
 		ssize_t rc = fi_opx_ep_rx_process_context(opx_ep, FI_MSG,
-						OPX_CANCEL_CONTEXT_FALSE,
-						(union fi_opx_context *) ext, ext->opx_context.flags,
-						OPX_CONTEXT_EXTENDED_TRUE,
+						context, context->flags,
 						OPX_HMEM_TRUE,
 						lock_required, av_type,
 						reliability,
 						hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== POST RECVMSG (HMEM) RETURN\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 		return rc;
 	}
 #endif
 
 	if (msg->iov_count == 1) {
-		assert(msg->context);
-		assert(((uintptr_t)msg->context & 0x07ull) == 0);	/* must be 8 byte aligned */
-
-		union fi_opx_context * opx_context =
-			(union fi_opx_context *) msg->context;
-		opx_context->flags = flags;
-		opx_context->len = msg->msg_iov[0].iov_len;
-		opx_context->buf = msg->msg_iov[0].iov_base;
-		opx_context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, msg->addr);
-		opx_context->tag = 0;
-		opx_context->ignore = (uint64_t)-1;
-		opx_context->byte_counter = (uint64_t)-1;
+		context->flags = flags;
+		context->len = msg->msg_iov[0].iov_len;
+		context->buf = msg->msg_iov[0].iov_base;
+		context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, msg->addr);
+		context->tag = 0;
+		context->ignore = (uint64_t)-1;
+		context->byte_counter = (uint64_t)-1;
 
 		ssize_t rc = fi_opx_ep_rx_process_context(opx_ep, FI_MSG,
-						OPX_CANCEL_CONTEXT_FALSE,
-						opx_context, flags,
-						OPX_CONTEXT_EXTENDED_FALSE,
+						context, flags,
 						OPX_HMEM_FALSE,
 						lock_required, av_type,
 						reliability,
 						hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== POST RECVMSG RETURN\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 		return rc;
 	}
 
 	/* msg->iov_count > 1 */
 
-	struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
-	if (OFI_UNLIKELY(ext == NULL)) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,"===================================== POST RECVMSG RETURN FI_ENOMEM\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "POST-RECVMSG");
-		return -FI_ENOMEM;
-	}
-
-	ext->opx_context.flags = flags | FI_OPX_CQ_CONTEXT_EXT;
-	ext->opx_context.byte_counter = (uint64_t)-1;
-	ext->opx_context.src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, msg->addr);
-	ext->opx_context.tag = 0;
-	ext->opx_context.ignore = (uint64_t)-1;
-	ext->msg.op_context = (struct fi_context2 *)msg->context;
-	ext->msg.iov_count = msg->iov_count;
-	ext->msg.iov = (struct iovec *)msg->msg_iov;
+	context->flags = flags;
+	context->byte_counter = (uint64_t)-1;
+	context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, msg->addr);
+	context->tag = 0;
+	context->ignore = (uint64_t)-1;
+	context->msg.iov_count = msg->iov_count;
+	context->msg.iov = (struct iovec *)msg->msg_iov;
 
 	ssize_t rc = fi_opx_ep_rx_process_context(opx_ep, FI_MSG,
-					OPX_CANCEL_CONTEXT_FALSE,
-					(union fi_opx_context *) ext,
-					ext->opx_context.flags,
-					OPX_CONTEXT_EXTENDED_TRUE,
+					context, flags,
 					OPX_HMEM_FALSE,
 					lock_required, av_type,
 					reliability,
 					hfi1_type);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== POST RECVMSG RETURN\n");
-
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
 	return rc;
 }
 
@@ -3952,7 +3743,7 @@ void fi_opx_ep_tx_cq_completion_rzv(struct fid_ep *ep,
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	assert(context);
 	assert(((uintptr_t)context & 0x07ull) == 0);	/* must be 8 byte aligned */
-	union fi_opx_context * opx_context = (union fi_opx_context *)context;
+	struct opx_context *opx_context = (struct opx_context *) context;
 	opx_context->flags =  FI_SEND | (caps & (FI_TAGGED | FI_MSG));
 	opx_context->len = len;
 	opx_context->buf = NULL;	/* receive data buffer */
@@ -3996,7 +3787,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 	rc = fi_opx_hfi1_tx_send_mp_egr_first_common (opx_ep, (void **) &buf_bytes_ptr, len, desc,
 						      opx_ep->hmem_copy_buf, pbc_dlid, bth_rx, lrh_dlid,
 						      addr, tag, data, lock_required,
-						      caps, reliability, &first_packet_psn,
+						      tx_op_flags, caps, reliability, &first_packet_psn,
 						      hmem_iface, hmem_device, hfi1_type);
 
 	if (rc != FI_SUCCESS) {
@@ -4225,53 +4016,30 @@ ssize_t fi_opx_ep_tx_send_rzv(struct fid_ep *ep,
 			const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	union fi_opx_context * opx_context = (union fi_opx_context *)context;
-	uintptr_t byte_counter_ptr;
-	uint64_t *byte_counter;
-	uint64_t fake_cntr;
 	ssize_t rc;
-
-	if (OFI_LIKELY(do_cq_completion != 0)) {
-		assert(context);
-		assert(((uintptr_t)context & 0x07ull) == 0);	/* must be 8 byte aligned */
-		byte_counter_ptr = (uintptr_t) &opx_context->byte_counter;
-		byte_counter = (uint64_t *) &opx_context->byte_counter;
-	} else {
-		// Give a 'fake' counter here to 'value' part of the SEND_RZV.  This
-		// does look a bit weird, but it saves from a few if checks in
-		// SEND_RZV and won't store a pointer to the stack variable
-		// fake_cntr in the RZV protocol headers
-		byte_counter_ptr = (uintptr_t) NULL;
-		byte_counter = (uint64_t *) &fake_cntr;
-	}
 
 	do {
 		if (is_contiguous) {
 			rc = FI_OPX_FABRIC_TX_SEND_RZV(
 				ep, buf, len, desc, addr.fi, tag, context, data,
 				lock_required, override_flags, tx_op_flags, addr.hfi1_rx,
-				byte_counter_ptr,
-				byte_counter,
-				caps, reliability, hmem_iface, hmem_device, hfi1_type);
+				caps, reliability,
+				do_cq_completion,
+				hmem_iface, hmem_device, hfi1_type);
 		} else {
 			rc = FI_OPX_FABRIC_TX_SENDV_RZV(
 				ep, local_iov, niov, total_len, desc, addr.fi, tag,
 				context, data, lock_required, override_flags, tx_op_flags,
 				addr.hfi1_rx,
-				byte_counter_ptr,
-				byte_counter,
-				caps, reliability, hmem_iface, hmem_device, hfi1_type);
+				caps, reliability,
+				do_cq_completion,
+				hmem_iface, hmem_device, hfi1_type);
 		}
 
 		if (OFI_UNLIKELY(rc == -EAGAIN)) {
 			fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		}
 	} while (rc == -EAGAIN);
-
-	if (OFI_LIKELY(do_cq_completion)) {
-		fi_opx_ep_tx_cq_completion_rzv(ep, context, len,
-					lock_required, tag, caps);
-	}
 
 	return rc;
 }
@@ -4470,6 +4238,7 @@ ssize_t fi_opx_ep_tx_inject_internal (struct fid_ep *ep,
 		const uint32_t data,
 		const int lock_required,
 		const enum fi_av_type av_type,
+		uint64_t tx_op_flags,
 		const uint64_t caps,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type)
@@ -4516,7 +4285,7 @@ ssize_t fi_opx_ep_tx_inject_internal (struct fid_ep *ep,
 	const union fi_opx_addr addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,dest_addr);
 
 	const ssize_t rc = FI_OPX_FABRIC_TX_INJECT(ep, buf, len, addr.fi, tag, data,
-			lock_required, addr.hfi1_rx, caps, reliability, hfi1_type);
+			lock_required, addr.hfi1_rx, tx_op_flags, caps, reliability, hfi1_type);
 
 	if (OFI_UNLIKELY(rc == -EAGAIN)) {
 		// In this case we are probably out of replay buffers. To deal
@@ -4543,9 +4312,10 @@ ssize_t fi_opx_ep_tx_inject(struct fid_ep *ep,
 			    const uint32_t data,
 			    const int lock_required,
 			    const enum fi_av_type av_type,
+			    uint64_t tx_op_flags,
 			    const uint64_t caps,
 			    const enum ofi_reliability_kind reliability,
-				const enum opx_hfi1_type hfi1_type)
+			    const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -4553,7 +4323,7 @@ ssize_t fi_opx_ep_tx_inject(struct fid_ep *ep,
 
 	ssize_t rc = fi_opx_ep_tx_inject_internal(ep, buf, len, dest_addr, tag,
 						  data, FI_OPX_LOCK_NOT_REQUIRED, av_type,
-						  caps, reliability, hfi1_type);
+						  tx_op_flags, caps, reliability, hfi1_type);
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 
@@ -4567,7 +4337,7 @@ ssize_t fi_opx_recv_generic(struct fid_ep *ep,
 			    const int lock_required, const enum fi_av_type av_type,
 			    const uint64_t static_flags,
 			    const enum ofi_reliability_kind reliability,
-				const enum opx_hfi1_type hfi1_type)
+			    const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -4585,7 +4355,7 @@ ssize_t fi_opx_recvmsg_generic(struct fid_ep *ep,
 			       const struct fi_msg *msg, uint64_t flags,
 			       const int lock_required, const enum fi_av_type av_type,
 			       const enum ofi_reliability_kind reliability,
-				   const enum opx_hfi1_type hfi1_type )
+			       const enum opx_hfi1_type hfi1_type )
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 

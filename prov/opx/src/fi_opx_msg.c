@@ -194,22 +194,22 @@ FI_OPX_MSG_SPECIALIZED_FUNC(FI_OPX_LOCK_REQUIRED,     FI_AV_UNSPEC, 0x0010000000
 #define FI_OPX_MSG_OPS_STRUCT_NAME(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)					\
 	FI_OPX_MSG_OPS_STRUCT_NAME_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)
 
-#define FI_OPX_MSG_OPS_STRUCT_NAME_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)				\
+#define FI_OPX_MSG_OPS_STRUCT_NAME_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)					\
 	fi_opx_ops_msg_ ## LOCK ## _ ## AV ## _ ## CAPS ## _ ## RELIABILITY ## _ ## HFI1_TYPE
 
 #define FI_OPX_MSG_OPS_STRUCT(LOCK,AV,CAPS,RELIABILITY,HFI1_TYPE)						\
-static struct fi_ops_msg									\
+static struct fi_ops_msg											\
 	FI_OPX_MSG_OPS_STRUCT_NAME(LOCK,AV,CAPS,RELIABILITY, HFI1_TYPE) __attribute__ ((unused)) = {		\
-	.size		= sizeof(struct fi_ops_msg),						\
+	.size		= sizeof(struct fi_ops_msg),								\
 	.recv		= FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),	\
-	.recvv		= fi_no_msg_recvv,							\
+	.recvv		= fi_no_msg_recvv,									\
 	.recvmsg	= FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),	\
 	.send		= FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),	\
-	.sendv		= fi_opx_sendv,							\
-	.sendmsg	= fi_opx_sendmsg,							\
+	.sendv		= fi_opx_sendv,										\
+	.sendmsg	= fi_opx_sendmsg,									\
 	.inject		= FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),	\
 	.senddata	= FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),	\
-	.injectdata	= FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),\
+	.injectdata	= FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),	\
 }
 
 /* FI_LOCAL_COMM | FI_REMOTE_COMM = 0x0018000000000000ull */

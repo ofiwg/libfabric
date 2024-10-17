@@ -141,7 +141,7 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				opx_happy=0
 				])
 		])
-		AS_IF([test $opx_happy -eq 1 && test $have_cuda -eq 1],[
+		AS_IF([test $opx_happy -eq 1 && (test $have_cuda -eq 1 || test $have_rocr -eq 1)], [
 			save_CPPFLAGS=$CPPFLAGS
 			CPPFLAGS="-I/usr/include/uapi"
 			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
@@ -154,6 +154,10 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				AC_MSG_NOTICE([hfi1_user.h struct sdma_req_meminfo defined... no])
 				opx_happy=0
 				])
+			OPX_PRODUCTION_BUILD_OVERRIDE=${OPX_PRODUCTION_BUILD_OVERRIDE:-""}
+			AS_IF([test "x$OPX_PRODUCTION_BUILD_OVERRIDE" != "x"], [
+				AC_MSG_NOTICE([OPX_PRODUCTION_BUILD_OVERRIDE is set to $OPX_PRODUCTION_BUILD_OVERRIDE])
+    			])
 			CPPFLAGS=$save_CPPFLAGS
 			opx_hfi_version=$(/sbin/modinfo hfi1 -F version)
 			opx_hfi_version_sorted=$(echo -e "10.14.0.0\n$opx_hfi_version" | sort -V | tail -n 1)
@@ -164,15 +168,15 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				test $opx_hfi_version != $opx_hfi_version_sorted],[
 
 				opx_hfi_dev_override=$(echo $CPPFLAGS | grep -w "DOPX_DEV_OVERRIDE")
-				AS_IF([test "x$opx_hfi_dev_override" != "x"],[
-					AC_MSG_NOTICE([hfi1 driver version is CUDA-compatible... no, overridden])
+				AS_IF([test "x$opx_hfi_dev_override" != "x" -o "x$OPX_PRODUCTION_BUILD_OVERRIDE" != "x"],[
+					AC_MSG_NOTICE([hfi1 driver version is GPU-compatible... no, overridden])
 				],[
-					AC_MSG_NOTICE([hfi1 driver version is CUDA-compatible... no])
+					AC_MSG_NOTICE([hfi1 driver version is GPU-compatible... no])
 					opx_happy=0
 				])
 
 			],
-				[AC_MSG_NOTICE([hfi1 driver version is CUDA-compatible... yes])
+				[AC_MSG_NOTICE([hfi1 driver version is GPU-compatible... yes])
 			])
 			AS_IF([test $opx_happy -eq 1],[
 				AC_MSG_NOTICE([Appending OPX_HMEM to opx_CPPFLAGS])
