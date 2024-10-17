@@ -193,6 +193,9 @@ vrb_mr_ofi2ibv_access(uint64_t ofi_access, struct vrb_domain *domain)
 			      IBV_ACCESS_REMOTE_WRITE |
 			      IBV_ACCESS_REMOTE_ATOMIC;
 
+	if (domain->ext_flags & VRB_USE_RO)
+		ibv_access |= VRB_ACCESS_RELAXED_ORDERING;
+
 	return ibv_access;
 }
 
