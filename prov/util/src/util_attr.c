@@ -93,7 +93,7 @@ char *ofi_strdup_tail(const char *str)
 }
 */
 
-char *ofi_strdup_append(const char *head, const char *tail)
+char *ofi_strdup_append_work(const char *head, const char *tail, char delim)
 {
 	char *str;
 	size_t len;
@@ -101,8 +101,18 @@ char *ofi_strdup_append(const char *head, const char *tail)
 	len = strlen(head) + strlen(tail) + 2;
 	str = malloc(len);
 	if (str)
-		sprintf(str, "%s%c%s", head, OFI_NAME_DELIM, tail);
+		sprintf(str, "%s%c%s", head, delim, tail);
 	return str;
+}
+
+char *ofi_strdup_link_append(const char *head, const char *tail)
+{
+	return ofi_strdup_append_work(head, tail, OFI_NAME_LNX_DELIM);
+}
+
+char *ofi_strdup_append(const char *head, const char *tail)
+{
+	return ofi_strdup_append_work(head, tail, OFI_NAME_DELIM);
 }
 
 int ofi_exclude_prov_name(char **prov_name_list, const char *util_prov_name)

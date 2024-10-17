@@ -47,6 +47,7 @@
 #include "ofi_util.h"
 #include "ofi.h"
 #include "ofi_str.h"
+#include "ofi_lnx.h"
 #include "ofi_prov.h"
 #include "ofi_perf.h"
 #include "ofi_hmem.h"
@@ -57,7 +58,6 @@
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
 #endif
-
 
 struct ofi_prov {
 	struct ofi_prov		*next;
@@ -260,6 +260,11 @@ static int ofi_is_core_prov(const struct fi_provider *provider)
 static int ofi_is_hook_prov(const struct fi_provider *provider)
 {
 	return ofi_prov_ctx(provider)->type == OFI_PROV_HOOK;
+}
+
+static int ofi_is_lnx_prov(const struct fi_provider *provider)
+{
+	return ofi_prov_ctx(provider)->type == OFI_PROV_LNX;
 }
 
 int ofi_apply_filter(struct ofi_filter *filter, const char *name)
@@ -500,6 +505,8 @@ static void ofi_set_prov_type(struct fi_provider *provider)
 		ofi_prov_ctx(provider)->type = OFI_PROV_UTIL;
 	else if (ofi_has_offload_prefix(provider->name))
 		ofi_prov_ctx(provider)->type = OFI_PROV_OFFLOAD;
+	else if (ofi_is_lnx(provider->name))
+		ofi_prov_ctx(provider)->type = OFI_PROV_LNX;
 	else
 		ofi_prov_ctx(provider)->type = OFI_PROV_CORE;
 }
@@ -988,6 +995,7 @@ void fi_ini(void)
 	ofi_register_provider(SOCKETS_INIT, NULL);
 	ofi_register_provider(TCP_INIT, NULL);
 
+	ofi_register_provider(LNX_INIT, NULL);
 	ofi_register_provider(HOOK_PERF_INIT, NULL);
 	ofi_register_provider(HOOK_TRACE_INIT, NULL);
 	ofi_register_provider(HOOK_PROFILE_INIT, NULL);
@@ -1207,8 +1215,12 @@ static void ofi_set_prov_attr(struct fi_fabric_attr *attr,
 
 	core_name = attr->prov_name;
 	if (core_name) {
-		assert(ofi_is_util_prov(prov));
-		attr->prov_name = ofi_strdup_append(core_name, prov->name);
+		if (ofi_is_util_prov(prov))
+			attr->prov_name = ofi_strdup_append(core_name, prov->name);
+		else if (ofi_is_lnx_prov(prov))
+			attr->prov_name = ofi_strdup_link_append(core_name, prov->name);
+		else
+			assert(0);
 		free(core_name);
 	} else {
 		attr->prov_name = strdup(prov->name);
@@ -1542,6 +1554,26 @@ fail:
 DEFAULT_SYMVER(fi_dupinfo_, fi_dupinfo, FABRIC_1.8);
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+int DEFAULT_SYMVER_PRE(fi_link)(struct fi_info *prov_list,
+		struct fid_fabric **fabric, uint64_t caps, void *context)
+{
+	/* count number of providers */
+	int num_prov = 0;
+	struct fi_info *info;
+
+	for (info = prov_list; info; info = prov_list->next)
+		num_prov++;
+
+	if (num_prov == 1) {
+		return fi_fabric(prov_list->fabric_attr, fabric, context);
+	}
+
+	/* create a link between providers in the list */
+	return ofi_create_link(prov_list, fabric, caps, context);
+}
+DEFAULT_SYMVER(fi_link_, fi_link, FABRIC_1.7);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 		struct fid_fabric **fabric, void *context)
 {
@@ -1557,7 +1589,10 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 
 	fi_ini();
 
-	top_name = strrchr(attr->prov_name, OFI_NAME_DELIM);
+	ret = ofi_is_linked(attr->prov_name);
+	top_name = strrchr(attr->prov_name,
+			ret ?
+				OFI_NAME_LNX_DELIM : OFI_NAME_DELIM);
 	if (top_name)
 		top_name++;
 	else
