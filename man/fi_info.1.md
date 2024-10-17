@@ -216,6 +216,11 @@ fi_info:
             speed: 0
             state: FI_LINK_UP
             network_type: InfiniBand
+    fi_hmem_attr:
+        iface: FI_HMEM_SYSTEM
+        api_permitted: FI_HMEM_ATTR_UNSPEC
+        use_p2p: FI_HMEM_ATTR_UNSPEC
+        use_dev_reg_copy: FI_HMEM_ATTR_UNSPEC
 ```
 
 To see libfabric related environment variables `-e` option.
