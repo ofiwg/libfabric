@@ -40,7 +40,6 @@
 extern "C" {
 #endif
 
-typedef long double long_double;
 
 #define OFI_WRITE_OP_START	FI_MIN
 #define OFI_WRITE_OP_LAST	(FI_ATOMIC_WRITE + 1)
