@@ -110,7 +110,6 @@ struct efa_rdm_ope {
 	size_t iov_count;
 	struct iovec iov[EFA_RDM_IOV_LIMIT];
 	void *desc[EFA_RDM_IOV_LIMIT];
-	void *shm_desc[EFA_RDM_IOV_LIMIT];
 	struct fid_mr *mr[EFA_RDM_IOV_LIMIT];
 
 	size_t rma_iov_count;
@@ -144,8 +143,6 @@ struct efa_rdm_ope {
 	uint64_t bytes_copied;
 	uint64_t bytes_queued_blocking_copy;
 
-	/* linked to peer->rx_unexp_list or peer->rx_unexp_tagged_list */
-	struct dlist_entry peer_unexp_entry;
 #if ENABLE_DEBUG
 	/* linked with ope_recv_list in efa_rdm_ep */
 	struct dlist_entry pending_recv_entry;
