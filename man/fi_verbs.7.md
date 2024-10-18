@@ -157,6 +157,11 @@ The verbs provider checks for the following environment variables.
 
 ### Common variables:
 
+*FI_VERBS_TOS*
+: RDMA CM ToS value. If unset or set to -1, then the ToS will not be
+  explicitly set and the system default will be used. Valid range is -1
+  through 255.
+
 *FI_VERBS_TX_SIZE*
 :  Default maximum tx context size (default: 384)
 
