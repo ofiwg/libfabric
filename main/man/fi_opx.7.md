@@ -134,6 +134,18 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 
   Default setting is 64.
 
+*FI_OPX_RELIABILITY_MAX_UNCONGESTED_PINGS*
+: Integer. This setting controls how many PING requests the reliability/replay
+  function will issue per iteration of FI_OPX_RELIABILITY_SERVICE_USEC_MAX in situations
+  with less contending outgoing traffic from the HFI.
+  Default setting is 128. Range of valid values is 1-65535.
+
+*FI_OPX_RELIABILITY_MAX_CONGESTED_PINGS*
+: Integer. This setting controls how many PING requests the reliability/replay
+  function will issue per iteration of FI_OPX_RELIABILITY_SERVICE_USEC_MAX in situations
+  with more contending, outgoing traffic from the HFI.
+  Default setting is 4. Range of valid values is 1-65535.
+
 *FI_OPX_SELINUX*
 : Boolean (0/1, on/off, true/false, yes/no). Set to true if you're running a
   security-enhanced Linux. This enables updating the Jkey used based on system
@@ -206,6 +218,11 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 : Integer. The minimum length in bytes where SDMA will be used.
   For messages smaller than this threshold, the send will be completed using PIO.
   Value must be between 64 and 2147483646. Defaults to 16385.
+
+*FI_OPX_TID_MIN_PAYLOAD_BYTES*
+: Integer. The minimum length in bytes where TID (Expected Receive) will be used.
+  For messages smaller than this threshold, the send will be completed using Eager Receive.
+  Value must be between 4096 and 2147483646. Defaults to 4096.
 
 *FI_OPX_RZV_MIN_PAYLOAD_BYTES*
 : Integer. The minimum length in bytes where rendezvous will be used.
