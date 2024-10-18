@@ -775,8 +775,8 @@ static inline void *ft_get_page_end(const void *addr, size_t page_size)
 		int i, a = 0;					\
 		OFI_COMPLEX(type) *d = (dst);			\
 		for (i = 0; i < cnt; i++) {			\
-			ofi_complex_set_##type (&d[i],		\
-				*(OFI_COMPLEX(type) *) &integ_alphabet[a]); \
+			ofi_complex_fill_##type (&d[i], 	\
+					(type) integ_alphabet[a]); \
 			if (++a >= integ_alphabet_length)	\
 				a = 0;				\
 		}						\

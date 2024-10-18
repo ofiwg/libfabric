@@ -724,6 +724,7 @@ ofi_send_socket(SOCKET fd, const void *buf, size_t count, int flags)
 	return (ssize_t) send(fd, (const char*) buf, len, flags);
 }
 
+typedef long double long_double;
 
 /* complex operations implementation */
 #define OFI_COMPLEX(name) ofi_complex_##name
@@ -790,6 +791,11 @@ static inline void OFI_COMPLEX_OP(name, set)(OFI_COMPLEX(name) *v1, OFI_COMPLEX(
 {											\
 	v1->re = v2.re;									\
 	v1->im = v2.im;									\
+}											\
+static inline void OFI_COMPLEX_OP(name, fill)(OFI_COMPLEX(name) *v1, char v2)		\
+{											\
+	v1->re = v2;									\
+	v1->im = v2;									\
 }
 
 OFI_COMPLEX_OPS(float)

@@ -83,6 +83,8 @@ static inline int ofi_sockerr(void)
 	return errno;
 }
 
+typedef long double long_double;
+
 /* complex operations implementation */
 #define OFI_COMPLEX(name) ofi_complex_##name
 #define OFI_COMPLEX_OP(name, op) ofi_complex_##op##_##name
@@ -120,6 +122,10 @@ static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lxor)(OFI_COMPLEX(name) v1,
 static inline void OFI_COMPLEX_OP(name, set)(OFI_COMPLEX(name) *v1, OFI_COMPLEX(name) v2)	      \
 {												      \
 	*v1 = v2;										      \
+}												      \
+static inline void OFI_COMPLEX_OP(name, fill)(OFI_COMPLEX(name) *v1, name v2)			      \
+{												      \
+	*v1 = CMPLX(v2, v2);							  		      \
 }
 
 OFI_COMPLEX_OPS(float)
