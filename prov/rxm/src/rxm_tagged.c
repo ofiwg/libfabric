@@ -50,8 +50,9 @@ rxm_discard_recv(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf,
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Discarding message",
 			 rx_buf->unexp_msg.addr, rx_buf->unexp_msg.tag);
 
-	rxm_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
-		     0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+	ofi_peer_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
+			  0, NULL, rx_buf->pkt.hdr.data,
+			  rx_buf->pkt.hdr.tag, FI_ADDR_NOTAVAIL);
 	rxm_free_rx_buf(rx_buf);
 }
 
@@ -73,8 +74,8 @@ rxm_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 	rx_buf = rxm_get_unexp_msg(recv_queue, addr, tag, ignore);
 	if (!rx_buf) {
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Message not found\n");
-		ret = ofi_cq_write_error_peek(rxm_ep->util_ep.rx_cq, tag,
-					      context);
+		ret = ofi_peer_cq_write_error_peek(
+					rxm_ep->util_ep.rx_cq, tag, context);
 		if (ret)
 			FI_WARN(&rxm_prov, FI_LOG_CQ, "Error writing to CQ\n");
 		return;
@@ -94,9 +95,9 @@ rxm_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 		dlist_remove(&rx_buf->unexp_msg.entry);
 	}
 
-	rxm_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
-		     rx_buf->pkt.hdr.size, NULL,
-		     rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+	ofi_peer_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
+			  rx_buf->pkt.hdr.size, NULL, rx_buf->pkt.hdr.data,
+			  rx_buf->pkt.hdr.tag, FI_ADDR_NOTAVAIL);
 }
 
 static ssize_t

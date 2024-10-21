@@ -746,9 +746,8 @@ rxm_ep_sar_handle_segment_failure(struct rxm_deferred_tx_entry *def_tx_entry,
 {
 	rxm_ep_sar_tx_cleanup(def_tx_entry->rxm_ep, def_tx_entry->rxm_conn,
 			      def_tx_entry->sar_seg.cur_seg_tx_buf);
-	rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.tx_cq,
-			   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_TX],
-			   def_tx_entry->sar_seg.app_context, (int) ret);
+	rxm_cq_write_tx_error(def_tx_entry->rxm_ep, ofi_op_msg,
+			      def_tx_entry->sar_seg.app_context, (int) ret);
 }
 
 /* Returns FI_SUCCESS if the SAR deferred TX queue is empty,
@@ -843,10 +842,10 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			if (ret) {
 				if (ret == -FI_EAGAIN)
 					return;
-				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
-						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
-						   def_tx_entry->rndv_ack.rx_buf->
-						   recv_entry->context, (int) ret);
+				rxm_cq_write_rx_error(
+					def_tx_entry->rxm_ep, ofi_op_msg,
+					def_tx_entry->rndv_ack.rx_buf->
+					recv_entry->context, (int) ret);
 			}
 			if (def_tx_entry->rndv_ack.rx_buf->recv_entry->rndv
 				    .tx_buf->pkt.ctrl_hdr
@@ -868,9 +867,10 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			if (ret) {
 				if (ret == -FI_EAGAIN)
 					return;
-				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.tx_cq,
-						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_TX],
-						   def_tx_entry->rndv_done.tx_buf, (int) ret);
+				rxm_cq_write_tx_error(def_tx_entry->rxm_ep,
+						ofi_op_msg,
+						def_tx_entry->rndv_done.tx_buf,
+						(int) ret);
 			}
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA,
 					 def_tx_entry->rndv_done.tx_buf,
@@ -888,10 +888,10 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			if (ret) {
 				if (ret == -FI_EAGAIN)
 					return;
-				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
-						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
-						   def_tx_entry->rndv_read.rx_buf->
-							recv_entry->context, (int) ret);
+				rxm_cq_write_rx_error(
+					def_tx_entry->rxm_ep, ofi_op_msg,
+					def_tx_entry->rndv_read.rx_buf->
+					recv_entry->context, (int) ret);
 			}
 			break;
 		case RXM_DEFERRED_TX_RNDV_WRITE:
@@ -906,9 +906,10 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			if (ret) {
 				if (ret == -FI_EAGAIN)
 					return;
-				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
-						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
-						   def_tx_entry->rndv_write.tx_buf, (int) ret);
+				rxm_cq_write_rx_error(
+					def_tx_entry->rxm_ep, ofi_op_msg,
+					def_tx_entry->rndv_write.tx_buf,
+					(int) ret);
 			}
 			break;
 		case RXM_DEFERRED_TX_SAR_SEG:
@@ -939,11 +940,12 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 					 OFI_PRIORITY);
 			if (ret) {
 				if (ret != -FI_EAGAIN) {
-					rxm_cq_write_error(
-						def_tx_entry->rxm_ep->util_ep.rx_cq,
-						def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
+					rxm_cq_write_rx_error(
+						def_tx_entry->rxm_ep,
+						ofi_op_msg,
 						def_tx_entry->rndv_read.rx_buf->
-							recv_entry->context, (int) ret);
+						recv_entry->context,
+						(int) ret);
 				}
 				return;
 			}
