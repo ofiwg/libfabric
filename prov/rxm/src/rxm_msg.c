@@ -140,8 +140,8 @@ rxm_post_mrecv(struct rxm_ep *ep, const struct iovec *iov,
 
 	if ((cur_iov.iov_len < ep->min_multi_recv_size) ||
 	    (ret && cur_iov.iov_len != iov->iov_len)) {
-		rxm_cq_write(ep->util_ep.rx_cq, context, FI_MULTI_RECV,
-			     0, NULL, 0, 0);
+		ofi_peer_cq_write(ep->util_ep.rx_cq, context, FI_MULTI_RECV,
+				  0, NULL, 0, 0, FI_ADDR_NOTAVAIL);
 	}
 
 	return ret;
