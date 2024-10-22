@@ -3109,11 +3109,43 @@ void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * st
 }
 
 __OPX_FORCE_INLINE__
-struct fi_opx_reliability_rx_uepkt *fi_opx_reliability_allocate_uepkt(struct fi_opx_reliability_service *service,
+bool opx_reliability_rx_process_check(struct fi_opx_reliability_client_state * state,
+				      const uint8_t opcode,
+				      struct fid_ep *ep,
+				      const union opx_hfi1_packet_hdr * const hdr,
+				      const uint8_t * payload,
+				      const uint8_t origin_rx)
+{
+
+	/* Process some RZV DATA opcodes immediately/OOO. */
+	if ((opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) &&
+	    ((hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV) ||
+	     (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) ||
+	     (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG))) {
+
+		state->process_fn(ep, hdr, payload, origin_rx);
+
+#ifdef OPX_DEBUG_COUNTERS_RELIABILITY
+		struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.rzv_data_ooo);
+#endif
+
+		return true; /* processed */
+	}
+
+	return false; /* not processed */
+}
+
+__OPX_FORCE_INLINE__
+struct fi_opx_reliability_rx_uepkt *fi_opx_reliability_allocate_uepkt(struct fi_opx_reliability_client_state * state,
 								const union opx_hfi1_packet_hdr * const hdr,
 								const uint8_t * const payload,
-								const size_t payload_bytes_to_copy)
+								const size_t payload_bytes_to_copy,
+								const uint8_t opcode,
+								struct fid_ep *ep,
+								const uint8_t origin_rx)
 {
+	struct fi_opx_reliability_service *service = state->service;
 	struct fi_opx_reliability_rx_uepkt * tmp = ofi_buf_alloc(service->uepkt_pool);
 	assert(tmp);
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
@@ -3135,7 +3167,11 @@ struct fi_opx_reliability_rx_uepkt *fi_opx_reliability_allocate_uepkt(struct fi_
 		tmp->hdr.qw_16B[7] = hdr->qw_16B[7];
 	}
 
-	if (payload && payload_bytes_to_copy > 0)
+	/* We can process some opcodes immediately/OOO and no longer need the payload.
+	 * The uepkt bool will prevent this uepkt from being processed again from the queue. */
+	const bool processed = tmp->processed = opx_reliability_rx_process_check(state, opcode, ep, hdr, payload, origin_rx);
+
+	if (payload && (payload_bytes_to_copy > 0) && !processed)
 		memcpy((void*)&tmp->payload[0], (const void *)payload, payload_bytes_to_copy);
 
 	return tmp;
@@ -3144,7 +3180,8 @@ struct fi_opx_reliability_rx_uepkt *fi_opx_reliability_allocate_uepkt(struct fi_
 void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * state,
 		opx_lid_t slid, uint64_t origin_tx, uint32_t psn,
 		struct fid_ep *ep, const union opx_hfi1_packet_hdr * const hdr, const uint8_t * const payload,
-		const uint16_t pktlen, const enum opx_hfi1_type hfi1_type)
+		const uint16_t pktlen, const enum opx_hfi1_type hfi1_type,
+		const uint8_t opcode)
 {
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	uint16_t lrh_pktlen_le;
@@ -3217,7 +3254,9 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 
 			while ((uepkt != NULL) && (next_psn == uepkt->psn)) {
 
-				state->process_fn(ep, &uepkt->hdr, uepkt->payload, origin_rx);
+				if (!uepkt->processed) {
+					state->process_fn(ep, &uepkt->hdr, uepkt->payload, origin_rx);
+				}
 #ifdef OPX_RELIABILITY_DEBUG
 				fprintf(stderr, "(rx) packet %016lx %08lu delivered.\n", key.value, next_psn);
 #endif
@@ -3306,7 +3345,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		 */
 
 		struct fi_opx_reliability_rx_uepkt * uepkt =
-			fi_opx_reliability_allocate_uepkt(state->service, hdr, payload, payload_bytes_to_copy);
+			fi_opx_reliability_allocate_uepkt(state, hdr, payload, payload_bytes_to_copy, opcode, ep, origin_rx);
 
 		uepkt->prev = uepkt;
 		uepkt->next = uepkt;
@@ -3344,8 +3383,9 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		 * one when we received the first out of order packet.
 		 *
 		 */
+
 		struct fi_opx_reliability_rx_uepkt * tmp =
-			fi_opx_reliability_allocate_uepkt(state->service, hdr, payload, payload_bytes_to_copy);
+			fi_opx_reliability_allocate_uepkt(state, hdr, payload, payload_bytes_to_copy, opcode, ep, origin_rx);
 
 		tmp->psn = psn_64;
 
@@ -3377,10 +3417,10 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		 */
 
 #ifdef OPX_RELIABILITY_ENABLE_PRE_NACK
-		 uint64_t nack_start_psn = tail->psn + 1;
-		 uint64_t nack_count = MIN(psn_64 - nack_start_psn, OPX_RELIABILITY_RX_MAX_PRE_NACK);
+		uint64_t nack_start_psn = tail->psn + 1;
+		uint64_t nack_count = MIN(psn_64 - nack_start_psn, OPX_RELIABILITY_RX_MAX_PRE_NACK);
 
-		 if (nack_count) {
+		if (nack_count) {
 			rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid,
 					origin_rx,
 					nack_start_psn,
@@ -3388,12 +3428,12 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 					FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK,
 					hfi1_type);
 			INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, nack_count);
-		 }
-
+		}
 #endif
-		//ofi_spin_lock(&flow->lock);
+
 		struct fi_opx_reliability_rx_uepkt * tmp =
-			fi_opx_reliability_allocate_uepkt(state->service, hdr, payload, payload_bytes_to_copy);
+			fi_opx_reliability_allocate_uepkt(state, hdr, payload, payload_bytes_to_copy, opcode, ep, origin_rx);
+
 		tmp->prev = tail;
 		tmp->next = head;
 		tmp->psn = psn_64;
@@ -3435,7 +3475,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 
 			/* insert after this element */
 			struct fi_opx_reliability_rx_uepkt * tmp =
-				fi_opx_reliability_allocate_uepkt(state->service, hdr, payload, payload_bytes_to_copy);
+				fi_opx_reliability_allocate_uepkt(state, hdr, payload, payload_bytes_to_copy, opcode, ep, origin_rx);
 
 			tmp->prev = uepkt;
 			tmp->next = uepkt->next;

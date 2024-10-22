@@ -423,7 +423,9 @@ struct fi_opx_reliability_rx_uepkt {
 	struct fi_opx_reliability_rx_uepkt *	prev;
 	struct fi_opx_reliability_rx_uepkt *	next;
 	uint64_t				psn;
-	uint64_t				unused_0[5];
+	bool					processed;
+	uint8_t					unused_b[7];
+	uint64_t				unused_0[4];
 
 	/* == CACHE LINE == */
 
@@ -431,7 +433,6 @@ struct fi_opx_reliability_rx_uepkt {
 	union opx_hfi1_packet_hdr		hdr;	/* 56 bytes */
 
 	/* == CACHE LINE == */
-
 	uint8_t					payload[FI_OPX_HFI1_PACKET_MTU];
 
 } __attribute__((__packed__)) __attribute__((aligned(64)));
@@ -853,12 +854,15 @@ unsigned fi_opx_reliability_rx_check (struct fi_opx_reliability_client_state * s
 
 	if (((flow->next_psn & MAX_PSN) == psn) && (flow->uepkt == NULL)) {
 #ifdef OPX_RELIABILITY_DEBUG
-			fprintf(stderr, "(rx) packet %016lx %08u received.\n", key.value, psn);
+		fprintf(stderr, "(rx) packet %016lx %08u received.FI_OPX_RELIABILITY_EXPECTED\n", key.value, psn);
 #endif
 		*origin_rx = flow->origin_rx;
 		flow->next_psn += 1;
 		return FI_OPX_RELIABILITY_EXPECTED;
 	}
+#ifdef OPX_RELIABILITY_DEBUG
+	fprintf(stderr, "(rx) packet %016lx %08u received.FI_OPX_RELIABILITY_EXCEPTION\n", key.value, psn);
+#endif
 	return FI_OPX_RELIABILITY_EXCEPTION;
 }
 
@@ -879,7 +883,8 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * state,
 		opx_lid_t slid, uint64_t origin_tx, uint32_t psn,
 		struct fid_ep *ep, const union opx_hfi1_packet_hdr * const hdr, const uint8_t * const payload,
-		const uint16_t pktlen, const enum opx_hfi1_type hfi1_type);
+		const uint16_t pktlen, const enum opx_hfi1_type hfi1_type,
+		const uint8_t opcode);
 
 ssize_t fi_opx_hfi1_tx_reliability_inject (struct fid_ep *ep,
 		const uint64_t key, const opx_lid_t dlid, const uint64_t reliability_rx,

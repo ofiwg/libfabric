@@ -299,6 +299,7 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep,
 
 __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
+					const uint8_t opcode,
 					const union opx_hfi1_packet_hdr *const hdr,
 					const uint64_t rhf_seq, const uint64_t hdrq_offset,
 					uint8_t *origin_rx, const uint64_t rhf,
@@ -311,13 +312,13 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 	 */
 	const uint64_t origin_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(hdr);
 	const uint64_t psn = FI_OPX_HFI1_PACKET_PSN(hdr);
-
 	if (OFI_UNLIKELY(fi_opx_reliability_rx_check(&opx_ep->reliability->state, slid, origin_tx,
 						     psn, origin_rx) == FI_OPX_RELIABILITY_EXCEPTION)) {
 		if (!OPX_RHF_IS_USE_EGR_BUF(rhf,hfi1_type)) {
 			/* no payload */
 			fi_opx_reliability_rx_exception(&opx_ep->reliability->state, slid,
-							origin_tx, psn, &opx_ep->ep_fid, hdr, NULL, pktlen, hfi1_type);
+							origin_tx, psn, &opx_ep->ep_fid, hdr, NULL, pktlen, hfi1_type,
+							opcode);
 
 		} else {
 			/* has payload */
@@ -330,9 +331,11 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 					    egrbfr_offset * 64);
 
 			assert(payload != NULL);
+
 			fi_opx_reliability_rx_exception(&opx_ep->reliability->state, slid,
 							origin_tx, psn, &opx_ep->ep_fid, hdr,
-							payload, pktlen, hfi1_type);
+							payload, pktlen, hfi1_type,
+							opcode);
 
 			const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
 			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
@@ -520,10 +523,6 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 	 */
 	if (OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type)) {
 		const uint32_t rhf_msb = rhf_rcvd >> 32;
-#ifdef OPX_JKR_DEBUG
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "OPX_RHF_SEQ_MATCH = %d rhf_rcvd = %#lx rhf_seq = %#lx\n",
-			OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type), rhf_rcvd, rhf_seq);
-#endif
 
 		const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
@@ -589,8 +588,8 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			return rc;
 		}
 
-		rc = fi_opx_hfi1_handle_reliability(opx_ep, hdr,  rhf_seq,
-							hdrq_offset, &origin_rx, rhf_rcvd, slid, pktlen, hfi1_type);
+		rc = fi_opx_hfi1_handle_reliability(opx_ep, opcode, hdr,  rhf_seq,
+						    hdrq_offset, &origin_rx, rhf_rcvd, slid, pktlen, hfi1_type);
 		if (OFI_UNLIKELY(rc != -1)) {
 			return rc;
 		}

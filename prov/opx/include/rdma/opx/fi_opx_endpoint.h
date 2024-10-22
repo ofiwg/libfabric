@@ -1358,8 +1358,6 @@ void opx_ep_complete_receive_operation (struct fid_ep *ep,
 	 */
 	void * recv_buf = context->buf;
 
-	OPX_DEBUG_PRINT_HDR(hdr, hfi1_type);
-
 	if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) {
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2828,7 +2826,6 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 		const enum opx_hfi1_type hfi1_type,
 		const opx_lid_t slid)
 {
-
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 	if (OFI_UNLIKELY(opcode < FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH)) {

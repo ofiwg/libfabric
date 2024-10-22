@@ -1164,7 +1164,7 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 
 #endif
 
-#ifdef OPX_JKR_DEBUG
+/* Defined but unused.  Add as needed for debug */
 #define OPX_DEBUG_PRINT_HDR(__hdr,__hfi1_type)			\
 	if (__hfi1_type & OPX_HFI1_JKR) {			\
 		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0],		\
@@ -1194,15 +1194,6 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 		OPX_JKR_PRINT_16B_LRH(q1,q2);			\
 		OPX_JKR_PRINT_16B_BTH(q3,q4);			\
 	}
-
-#else
-
-#define OPX_DEBUG_PRINT_HDR(__hdr,__hfi1_type)
-#define OPX_DEBUG_PRINT_PBC_HDR(__pbc,__hdr,__hfi1_type)
-#define OPX_DEBUG_PRINT_PBC_HDR_QW(q0,q1,q2,q3,q4,__hfi1_type)
-
-#endif
-
 
 union cacheline {
 	uint64_t			qw[8];
