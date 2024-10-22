@@ -1054,12 +1054,13 @@ configure registration caches.
 : The cache monitor is responsible for detecting system memory (FI_HMEM_SYSTEM)
   changes made between the virtual addresses used by an application and the
   underlying physical pages. Valid monitor options are: userfaultfd, memhooks,
-  and disabled.  Selecting disabled will turn off the registration cache.
+  kdreg2, and disabled.  Selecting disabled will turn off the registration cache.
   Userfaultfd is a Linux kernel feature used to report virtual to physical
   address mapping changes to user space. Memhooks operates by intercepting
   relevant memory allocation and deallocation calls which may result in the
   mappings changing, such as malloc, mmap, free, etc.  Note that memhooks
-  operates at the elf linker layer, and does not use glibc memory hooks.
+  operates at the elf linker layer, and does not use glibc memory hooks. Kdreg2
+  is supplied as a loadable Linux kernel module.
 
 *FI_MR_CUDA_CACHE_MONITOR_ENABLED*
 : The CUDA cache monitor is responsible for detecting CUDA device memory
