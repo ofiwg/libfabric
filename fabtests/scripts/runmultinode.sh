@@ -1,7 +1,7 @@
 #!/bin/bash
 
-Options=$(getopt --options h:,n:,p:,I:,-x:,z: \
-				--longoptions hosts:,processes-per-node:,provider:,xfer-method:,iterations:,ci:,cleanup,help \
+Options=$(getopt --options h:,n:,p:,I:,-x:-E:,z: \
+				--longoptions hosts:,processes-per-node:,provider:,xfer-method:,env:,iterations:,ci:,cleanup,help \
 				-- "$@")
 
 eval set -- "$Options"
@@ -31,6 +31,13 @@ while true; do
 			cleanup=true; shift ;;
 		-x|--xfer-method)
 			xfer_method="$2"; shift 2 ;;
+		-E|--env)
+			delimiter="="
+			value=${2#*$delimiter}
+			var=${2:0:$(( ${#2} - ${#value} - ${#delimiter} ))}
+			EXPORT_STRING="export $var=\"$value\""
+			EXPORT_ENV="${EXPORT_ENV}${EXPORT_STRING}; "
+			shift 2 ;;
 		--ci)
 			ci="$2"; shift 2 ;;
 		--help)
@@ -45,11 +52,11 @@ if $help ; then
 	echo "multinode tests are run in performance mode"
 	echo "Options"
 	echo "\t-h,--hosts list of host names to run the tests on"
-	echo "\t-n,--processes-per-node number of processes to be run on each node.\
-				Total number of fi_mulinode tests run will be n*number of hosts"
+	echo "\t-n,--processes-per-node number of processes to be run on each node. Total number of fi_mulinode tests run will be n*number of hosts"
 	echo "\t-p,--provider libfabric provider to run the multinode tests on"
 	echo "\t-x,--xfer-method multinode transfer method/capability to use (rma or default: msg)"
-	echo "\t-I,-- iterations number of iterations for the multinode test \
+	echo "\t-E,--env export provided variable name and value"
+	echo "\t-I,--iterations number of iterations for the multinode test \
 				to run each pattern on"
 	echo "\t--cleanup end straggling processes. Does not rerun tests"
 	echo "\t--help show this message"
@@ -65,7 +72,7 @@ output="multinode_server_${num_hosts}_${ppn}.log"
 ret=0
 
 if ! $cleanup ; then
-	cmd="${ci}fi_multinode -n $ranks -s $server -p '$provider' -x $xfer_method $pattern -I $iterations -T"
+	cmd="${EXPORT_ENV} ${ci}fi_multinode -n $ranks -s $server -p '$provider' -x $xfer_method $pattern -I $iterations -T"
 	echo $cmd
 	for node in "${hosts[@]}"; do
 		for i in $(seq 1 $ppn); do
