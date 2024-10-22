@@ -220,6 +220,7 @@ struct fi_opx_debug_counters {
 		uint64_t	replay_rts;
 		uint64_t	replay_cts;
 		uint64_t	replay_rzv;
+		uint64_t	rzv_data_ooo;
 	} reliability;
 
 	struct {
@@ -486,6 +487,7 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters)
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability.replay_rts);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability.replay_cts);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability.replay_rzv);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability.rzv_data_ooo);
 	#endif
 
 	#ifdef OPX_DEBUG_COUNTERS_MATCH
