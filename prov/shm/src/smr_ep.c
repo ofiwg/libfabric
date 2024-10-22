@@ -223,7 +223,9 @@ int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
 		return id;
 
 	if (!ep->region->map->peers[id].region) {
+		ofi_spin_lock(&ep->region->map->lock);
 		ret = smr_map_to_region(&smr_prov, ep->region->map, id);
+		ofi_spin_unlock(&ep->region->map->lock);
 		if (ret)
 			return -1;
 	}

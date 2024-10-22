@@ -69,9 +69,12 @@ static void smr_map_cleanup(struct smr_map *map)
 {
 	int64_t i;
 
-	for (i = 0; i < SMR_MAX_PEERS; i++)
-		smr_map_del(map, i);
+	for (i = 0; i < SMR_MAX_PEERS; i++) {
+		if (map->peers[i].peer.id < 0)
+			continue;
 
+		smr_map_del(map, i);
+	}
 	ofi_rbmap_cleanup(&map->rbmap);
 }
 
@@ -210,7 +213,6 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 		dlist_foreach(&util_av->ep_list, av_entry) {
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
-			smr_unmap_from_endpoint(smr_ep->region, id);
 			if (smr_av->smr_map.num_peers > 0)
 				smr_ep->region->max_sar_buf_per_peer =
 					SMR_MAX_PEERS /
