@@ -356,6 +356,8 @@ void	smr_cleanup(void);
 int	smr_map_to_region(const struct fi_provider *prov, struct smr_map *map,
 			  int64_t id);
 void	smr_map_to_endpoint(struct smr_region *region, int64_t id);
+void	smr_unmap_region(const struct fi_provider *prov, struct smr_map *map,
+			  int64_t id, bool found);
 void	smr_unmap_from_endpoint(struct smr_region *region, int64_t id);
 void	smr_exchange_all_peers(struct smr_region *region);
 int	smr_map_add(const struct fi_provider *prov, struct smr_map *map,
