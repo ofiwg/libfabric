@@ -125,7 +125,7 @@ static inline void OFI_COMPLEX_OP(name, set)(OFI_COMPLEX(name) *v1, OFI_COMPLEX(
 }												      \
 static inline void OFI_COMPLEX_OP(name, fill)(OFI_COMPLEX(name) *v1, name v2)			      \
 {												      \
-	*v1 = CMPLX(v2, v2);							  		      \
+	*v1 = (OFI_COMPLEX(name))((name)(v2) + I * (name)(v2));			  		      \
 }
 
 OFI_COMPLEX_OPS(float)
