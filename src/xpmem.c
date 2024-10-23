@@ -65,7 +65,7 @@ int ofi_xpmem_init(void)
 	char buffer[1024];
 	uintptr_t address_max = 0;
 	FILE *fh;
-	uintptr_t low, high;
+	uintptr_t high;
 	char *tmp;
 
 	fi_param_define(&core_prov, "xpmem_memcpy_chunksize", FI_PARAM_SIZE_T,
@@ -87,7 +87,7 @@ int ofi_xpmem_init(void)
 	while (fgets(buffer, sizeof(buffer), fh)) {
 		/* each line of /proc/self/maps starts with low-high in
 		 * hexidecimal (without a 0x) */
-		low = strtoul(buffer, &tmp, 16);
+		(void) strtoul(buffer, &tmp, 16);
 		high = strtoul(tmp + 1, NULL, 16);
 		if (address_max < high)
 			address_max = high;
