@@ -165,7 +165,7 @@ rxm_put_peer_addr(struct rxm_av *av, fi_addr_t fi_addr)
 
 static int
 rxm_av_add_peers(struct rxm_av *av, const void *addr, size_t count,
-		 fi_addr_t *fi_addr)
+		 fi_addr_t *fi_addr, fi_addr_t *user_ids)
 {
 	struct util_peer_addr *peer;
 	const void *cur_addr;
@@ -178,8 +178,12 @@ rxm_av_add_peers(struct rxm_av *av, const void *addr, size_t count,
 		if (!peer)
 			goto err;
 
-		peer->fi_addr = fi_addr ? fi_addr[i] :
+		if (user_ids) {
+			peer->fi_addr = user_ids[i];
+		} else {
+			peer->fi_addr = fi_addr ? fi_addr[i] :
 				ofi_av_lookup_fi_addr(&av->util_av, cur_addr);
+		}
 
 		/* lookup can fail if prior AV insertion failed */
 		if (peer->fi_addr != FI_ADDR_NOTAVAIL)
@@ -276,21 +280,33 @@ static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			 fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct rxm_av *av;
+	fi_addr_t *user_ids = NULL;
 	int ret;
+
+	if (flags & FI_AV_USER_ID) {
+		assert(fi_addr);
+		user_ids = calloc(count, sizeof(*user_ids));
+		assert(user_ids);
+		memcpy(user_ids, fi_addr, sizeof(*fi_addr) * count);
+	}
 
 	av = container_of(av_fid, struct rxm_av, util_av.av_fid.fid);
 	ret = ofi_ip_av_insert(av_fid, addr, count, fi_addr, flags, context);
 	if (ret < 0)
-		return ret;
+		goto out;
 
 	count = ret;
 
-	ret = rxm_av_add_peers(av, addr, count, fi_addr);
+	ret = rxm_av_add_peers(av, addr, count, fi_addr, user_ids);
 	if (ret) {
 		rxm_av_remove(av_fid, fi_addr, count, flags);
-		return ret;
+		goto out;
 	}
 
+out:
+	free(user_ids);
+	if (ret)
+		return ret;
 	return (int) count;
 }
 
@@ -319,7 +335,7 @@ static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
 	if (ret > 0 && ret < count)
 		count = ret;
 
-	ret = rxm_av_add_peers(av, addr, count, fi_addr);
+	ret = rxm_av_add_peers(av, addr, count, fi_addr, NULL);
 	if (ret) {
 		rxm_av_remove(av_fid, fi_addr, count, flags);
 		return ret;
