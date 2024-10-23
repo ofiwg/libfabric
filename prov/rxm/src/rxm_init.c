@@ -262,6 +262,9 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 
 	core_info->rx_attr->op_flags &= ~FI_MULTI_RECV;
 
+	core_info->domain_attr->caps &= ~(FI_AV_USER_ID);
+	core_info->caps &= ~(FI_AV_USER_ID);
+
 	return 0;
 }
 
