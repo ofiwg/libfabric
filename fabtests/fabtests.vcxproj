@@ -239,7 +239,7 @@
     <ClCompile Include="functional\rdm_netdir.c" />
     <ClCompile Include="functional\scalable_ep.c" />
     <ClCompile Include="functional\inject_test.c" />
-    <ClCompile Include="functional\bw.c" />
+    <ClCompile Include="functional\flood.c" />
     <ClCompile Include="unit\av_test.c" />
     <ClCompile Include="unit\cntr_test.c" />
     <ClCompile Include="unit\common.c" />
