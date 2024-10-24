@@ -249,9 +249,12 @@ static int vrb_open_device_by_name(struct vrb_domain *domain, const char *name)
 		const char *rdma_name = ibv_get_device_name(dev_list[i]->device);
 		switch (domain->ep_type) {
 		case FI_EP_MSG:
-			ret = domain->ext_flags & VRB_USE_XRC ?
-				vrb_cmp_xrc_domain_name(name, rdma_name) :
-				strcmp(name, rdma_name);
+			if (domain->ext_flags & VRB_USE_XRC)
+				ret = vrb_cmp_xrc_domain_name(name, rdma_name);
+			else if (domain->ext_flags & VRB_USE_RO)
+				ret = vrb_cmp_ro_domain_name(name, rdma_name);
+			else
+				ret = strcmp(name, rdma_name);
 			break;
 		case FI_EP_DGRAM:
 			ret = strncmp(name, rdma_name,
@@ -347,6 +350,9 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	_domain->info = fi_dupinfo(info);
 	if (!_domain->info)
 		goto err2;
+
+	if (VRB_RO_ENABLED(info))
+		_domain->ext_flags |= VRB_USE_RO;
 
 	_domain->ep_type = VRB_EP_TYPE(info);
 	_domain->ext_flags |= vrb_is_xrc_info(info) ? VRB_USE_XRC : 0;
