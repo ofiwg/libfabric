@@ -767,55 +767,57 @@ OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_hfi1_dput_params, compare_iov) &
 
 struct fi_opx_hfi1_rx_rzv_rts_params {
 	/* == CACHE LINE 0 == */
-	struct fi_opx_work_elem work_elem;	// 40 bytes
-	struct fi_opx_ep *opx_ep;
-	uint64_t lrh_dlid;
-	uint64_t slid;
+	struct fi_opx_work_elem					work_elem;	// 40 bytes
+	struct fi_opx_ep					*opx_ep;
+	struct fi_opx_rzv_completion				*rzv_comp;
+	uint64_t						niov;
 
 	/* == CACHE LINE 1 == */
-	uint64_t niov;
-	uintptr_t origin_byte_counter_vaddr;
-	struct fi_opx_rzv_completion* rzv_comp;
-	uintptr_t dst_vaddr; /* bumped past immediate data */
+	uint64_t						lrh_dlid;
+	uint64_t						slid;
+	uint64_t						pbc_dlid;
+	uintptr_t						origin_byte_counter_vaddr;
+	uintptr_t						dst_vaddr; /* bumped past immediate data */
 
-	uint64_t pbc_dlid;
+	uint32_t						cur_iov;
+	uint32_t						u32_extended_rx;
+	unsigned						is_intranode;
+	enum ofi_reliability_kind				reliability;
 
-	uint32_t cur_iov;
-	uint32_t u32_extended_rx;
-	unsigned is_intranode;
-	enum ofi_reliability_kind reliability;
+	uint16_t						origin_rs;
+	uint16_t						origin_rx;
 
-	uint16_t origin_rs;
-	uint16_t origin_rx;
+	uint8_t							opcode;
+	uint8_t							u8_rx;
+	uint8_t							target_hfi_unit;
 
-	uint8_t opcode;
-	uint8_t u8_rx;
-	uint8_t	target_hfi_unit;
-	uint8_t unused;
+	/* === Data above here WILL be copied when this struct     === */
+	/* === is cloned for sending multiple CTS packets          === */
+	uint8_t							multi_cts_copy_boundary;
+	/* === Data below here will NOT be copied when this struct === */
+	/* === is cloned for sending multiple CTS packets          === */
 
 	/* == CACHE LINE 2 == */
-	/* This struct should reside immediately before the IOVs */
 	struct {
-		struct fi_opx_hmem_iov	cur_addr_range;
-		uint32_t 		npairs;
-		uint32_t		offset;
-		int32_t 		origin_byte_counter_adj;
+		struct fi_opx_hmem_iov				cur_addr_range;
+		uint32_t 					npairs;
+		uint32_t					offset;
+		int32_t 					origin_byte_counter_adj;
 	} tid_info;
+
+	union fi_opx_hfi1_dput_iov				elided_head;
+	union fi_opx_hfi1_dput_iov				elided_tail;
 
 	/* Either FI_OPX_MAX_DPUT_IOV iov's or
 	   1 iov and FI_OPX_MAX_DPUT_TIDPAIRS tidpairs */
 	union {
-		union fi_opx_hfi1_dput_iov dput_iov[FI_OPX_MAX_DPUT_IOV];
+		union fi_opx_hfi1_dput_iov			dput_iov[FI_OPX_MAX_DPUT_IOV];
 		struct {
-			union fi_opx_hfi1_dput_iov reserved;/* skip 1 iov */
-			uint32_t tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
+			union fi_opx_hfi1_dput_iov		reserved;/* skip 1 iov */
+			uint32_t				tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 		};
 	};
 };
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_hfi1_rx_rzv_rts_params, tid_info)
-			== (offsetof(struct fi_opx_hfi1_rx_rzv_rts_params, dput_iov) -
-				 sizeof(((struct fi_opx_hfi1_rx_rzv_rts_params *)0)->tid_info)),
-			"fi_opx_hfi1_rx_rzv_rts_params->tid_info should reside immediately before dput iovs!");
 OPX_COMPILE_TIME_ASSERT(sizeof(((struct fi_opx_hfi1_rx_rzv_rts_params *)0)->dput_iov)
 			< FI_OPX_HFI1_PACKET_MTU,
 			"sizeof(fi_opx_hfi1_rx_rzv_rts_params->dput_iov) should be < MAX PACKET MTU!");

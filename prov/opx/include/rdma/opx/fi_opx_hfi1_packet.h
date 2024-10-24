@@ -1694,7 +1694,7 @@ struct opx_payload_rzv_contig {
 	/* ==== CACHE LINE 0 ==== */
 
 	uintptr_t		src_vaddr;
-	uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
+	uint64_t		src_len;
 	uint64_t		src_device_id;
 	uint64_t		src_iface;
 	uint64_t		immediate_info;
