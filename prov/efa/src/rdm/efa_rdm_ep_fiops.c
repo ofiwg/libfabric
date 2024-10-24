@@ -434,7 +434,6 @@ static inline
 void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 {
 	enum fi_hmem_iface iface;
-	struct efa_hmem_info *hmem_info;
 	uint64_t unsupported_caps = FI_DIRECTED_RECV | FI_TAGGED | FI_ATOMIC;
 
 	ep->use_zcpy_rx = true;
@@ -482,11 +481,11 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 	}
 
 	/* Zero-copy receive requires P2P support. Disable it if any initialized HMEM iface does not support P2P. */
-	for (iface = FI_HMEM_SYSTEM; iface < OFI_HMEM_MAX; ++iface) {
-		hmem_info = &ep->base_ep.domain->hmem_info[iface];
-		if (hmem_info->initialized &&
-		    !hmem_info->p2p_disabled_by_user &&
-		    !hmem_info->p2p_supported_by_device) {
+	EFA_HMEM_IFACE_FOREACH(iface) {
+		if (g_efa_hmem_info[iface].initialized &&
+		    !ofi_hmem_p2p_disabled() &&
+		    ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED &&
+		    !g_efa_hmem_info[iface].p2p_supported_by_device) {
 			EFA_INFO(FI_LOG_EP_CTRL,
 			         "%s does not support P2P, zero-copy receive "
 			         "protocol will be disabled\n",
@@ -530,6 +529,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	struct efa_domain *efa_domain = NULL;
 	struct efa_rdm_ep *efa_rdm_ep = NULL;
 	int ret, retv, i;
+	enum fi_hmem_iface iface;
 
 	efa_rdm_ep = calloc(1, sizeof(*efa_rdm_ep));
 	if (!efa_rdm_ep)
@@ -606,6 +606,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	efa_rdm_ep_init_linked_lists(efa_rdm_ep);
 
+	efa_rdm_ep->cuda_api_permitted = (FI_VERSION_GE(info->fabric_attr->api_version, FI_VERSION(1, 18)));
 	/* Set hmem_p2p_opt */
 	efa_rdm_ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
 
@@ -615,16 +616,21 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	 * tighter requirements for the default p2p opt
 	 */
 	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
-		if (efa_rdm_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].initialized &&
-			efa_rdm_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].p2p_supported_by_device) {
-			efa_rdm_ep->hmem_p2p_opt = efa_rdm_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].p2p_required_by_impl
-				? FI_HMEM_P2P_REQUIRED
-				: FI_HMEM_P2P_PREFERRED;
+		iface = efa_hmem_ifaces[i];
+		if (g_efa_hmem_info[iface].initialized &&
+		    g_efa_hmem_info[iface].p2p_supported_by_device) {
+			/* If user is using libfabric API 1.18 or later, by default EFA
+	 		 * provider is permitted to use CUDA library to support CUDA
+	 		 * memory, therefore p2p is not required.
+	 		 */
+			efa_rdm_ep->hmem_p2p_opt =
+				(iface == FI_HMEM_CUDA && efa_rdm_ep->cuda_api_permitted) ?
+				FI_HMEM_P2P_PREFERRED :
+				FI_HMEM_P2P_REQUIRED;
 			break;
 		}
 	}
 
-	efa_rdm_ep->cuda_api_permitted = (FI_VERSION_GE(info->fabric_attr->api_version, FI_VERSION(1, 18)));
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = false;
 	efa_rdm_ep->write_in_order_aligned_128_bytes = false;
 
@@ -1413,7 +1419,9 @@ static int efa_rdm_ep_set_fi_hmem_p2p_opt(struct efa_rdm_ep *efa_rdm_ep, int opt
 	 * tighter restrictions on valid p2p options.
 	 */
 	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
-		err = efa_domain_hmem_validate_p2p_opt(efa_rdm_ep_domain(efa_rdm_ep), efa_hmem_ifaces[i], opt);
+		err = efa_hmem_validate_p2p_opt(
+			efa_hmem_ifaces[i], opt,
+			efa_rdm_ep->base_ep.info->fabric_attr->api_version);
 		if (err == -FI_ENODATA)
 			continue;
 
@@ -1449,7 +1457,7 @@ static int efa_rdm_ep_set_cuda_api_permitted(struct efa_rdm_ep *ep, bool cuda_ap
 	/* CUDA memory can be supported by using either peer to peer or CUDA API. If neither is
 	 * available, we cannot support CUDA memory
 	 */
-	if (!efa_rdm_ep_domain(ep)->hmem_info[FI_HMEM_CUDA].p2p_supported_by_device)
+	if (!g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device)
 		return -FI_EOPNOTSUPP;
 
 	ep->cuda_api_permitted = false;

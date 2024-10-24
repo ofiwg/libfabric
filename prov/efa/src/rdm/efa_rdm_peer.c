@@ -330,18 +330,16 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer,
 				  struct efa_rdm_ep *ep, struct efa_rdm_ope *ope)
 {
-	struct efa_hmem_info *hmem_info;
 	size_t runt_size;
 	size_t memory_alignment;
 	int iface;
 
-	hmem_info = efa_rdm_ep_domain(ep)->hmem_info;
 	iface = ope->desc[0] ? ((struct efa_mr*) ope->desc[0])->peer.iface : FI_HMEM_SYSTEM;
 
-	if (hmem_info[iface].runt_size < peer->num_runt_bytes_in_flight)
+	if (g_efa_hmem_info[iface].runt_size < peer->num_runt_bytes_in_flight)
 		return 0;
 
-	runt_size = MIN(hmem_info[iface].runt_size - peer->num_runt_bytes_in_flight, ope->total_len);
+	runt_size = MIN(g_efa_hmem_info[iface].runt_size - peer->num_runt_bytes_in_flight, ope->total_len);
 	memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
 	/*
 	 * runt size must be aligned because:
