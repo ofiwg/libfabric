@@ -624,8 +624,8 @@ struct fi_opx_rzv_completion {
 	struct opx_context	*context;
 	uint64_t		tid_length;
 	uint64_t		tid_vaddr;
-	uint64_t		tid_byte_counter;
-	uint64_t		tid_bytes_accumulated;
+	uint64_t		byte_counter;
+	uint64_t		bytes_accumulated;
 };
 
 struct fi_opx_rma_request {
@@ -1001,6 +1001,10 @@ void opx_ep_copy_immediate_data(struct fi_opx_ep * opx_ep,
 
 	if (immediate_block) {
 		const uint64_t immediate_fragment = (immediate_byte_count || immediate_qw_count) ? 1 : 0;
+		#if (defined __GNUC__) && (__GNUC__ > 10)
+			#pragma GCC diagnostic ignored "-Wstringop-overread"
+		#endif
+		#pragma GCC diagnostic ignored "-Warray-bounds"
 		memcpy(rbuf, (void *) (&contiguous->cache_line_1 + immediate_fragment), FI_OPX_CACHE_LINE_SIZE);
 	}
 
@@ -1115,7 +1119,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 			const struct fi_opx_hmem_iov src_dst_iov[1] = {
 				{
 					.buf = contiguous->src_vaddr,
-					.len = (contiguous->src_blocks << 6),
+					.len = contiguous->src_len,
 					.device = contiguous->src_device_id,
 					.iface = (enum fi_hmem_iface) contiguous->src_iface
 				}
@@ -1219,7 +1223,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 			const struct fi_opx_hmem_iov src_dst_iov[1] = {
 				{
 					.buf = contiguous->src_vaddr,
-					.len = (contiguous->src_blocks << 6),
+					.len = contiguous->src_len,
 					.device = contiguous->src_device_id,
 					.iface = (enum fi_hmem_iface) contiguous->src_iface
 				}
@@ -2092,14 +2096,21 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			memcpy(rbuf_qws, sbuf_qws, bytes);
 		}
 
-		const uint64_t value = target_context->byte_counter;
-		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, target_byte_counter = %p, %lu -> %lu\n",
-			hdr->dput.target.last_bytes, hdr->dput.target.bytes, bytes, &target_context->byte_counter, value, value - bytes);
-		assert(value >= bytes);
-		target_context->byte_counter = value - bytes;
+		assert(rzv_comp->byte_counter >= bytes);
+		rzv_comp->bytes_accumulated += bytes;
+		rzv_comp->byte_counter -= bytes;
 
-		if (value == bytes) {
+		if (rzv_comp->byte_counter == 0) {
+			assert(target_context->byte_counter >= rzv_comp->bytes_accumulated);
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, rzv_comp->bytes_accumulated=%lu, target_byte_counter = %p, %lu -> %lu\n",
+				hdr->dput.target.last_bytes, hdr->dput.target.bytes, bytes,
+				rzv_comp->bytes_accumulated, &target_context->byte_counter,
+				target_context->byte_counter,
+				target_context->byte_counter - rzv_comp->bytes_accumulated);
+
+			target_context->byte_counter -= rzv_comp->bytes_accumulated;
+
 			/* free the rendezvous completion structure */
 			OPX_BUF_FREE(rzv_comp);
 		}
@@ -2182,13 +2193,13 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			"hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, target_context->byte_counter = %p, %lu -> %lu\n",
 			hdr->dput.target.last_bytes, hdr->dput.target.bytes,
 			bytes, &target_context->byte_counter,
-			rzv_comp->tid_byte_counter, rzv_comp->tid_byte_counter - bytes);
-		assert(rzv_comp->tid_byte_counter >= bytes);
-		rzv_comp->tid_bytes_accumulated += bytes;
-		rzv_comp->tid_byte_counter -= bytes;
+			rzv_comp->byte_counter, rzv_comp->byte_counter - bytes);
+		assert(rzv_comp->byte_counter >= bytes);
+		rzv_comp->bytes_accumulated += bytes;
+		rzv_comp->byte_counter -= bytes;
 
 		/* On completion, decrement TID refcount and maybe free the TID cache */
-		if (rzv_comp->tid_byte_counter == 0) {
+		if (rzv_comp->byte_counter == 0) {
 			const uint64_t tid_vaddr = rzv_comp->tid_vaddr;
 			const uint64_t tid_length = rzv_comp->tid_length;
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2196,7 +2207,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 				(void *)tid_vaddr,
 				(void *)(tid_vaddr + tid_length),
 				tid_length, tid_length);
-			target_context->byte_counter -= rzv_comp->tid_bytes_accumulated;
+			target_context->byte_counter -= rzv_comp->bytes_accumulated;
 
 			opx_deregister_for_rzv(opx_ep, tid_vaddr, tid_length);
 
