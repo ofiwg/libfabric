@@ -417,13 +417,15 @@ struct rxm_pkt {
 	char data[];
 };
 
+enum rxm_sar_seg_type {
+	RXM_SAR_SEG_FIRST	= 1,
+	RXM_SAR_SEG_MIDDLE	= 2,
+	RXM_SAR_SEG_LAST	= 3,
+};
+
 union rxm_sar_ctrl_data {
 	struct {
-		enum rxm_sar_seg_type {
-			RXM_SAR_SEG_FIRST	= 1,
-			RXM_SAR_SEG_MIDDLE	= 2,
-			RXM_SAR_SEG_LAST	= 3,
-		} seg_type : 2;
+		enum rxm_sar_seg_type seg_type : 2;
 		uint32_t offset;
 	};
 	uint64_t align;
