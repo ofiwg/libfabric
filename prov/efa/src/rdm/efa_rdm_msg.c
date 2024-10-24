@@ -60,7 +60,6 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 	int tagged;
 	int eager_rtm, medium_rtm, longcts_rtm, readbase_rtm, iface;
 	size_t eager_rtm_max_data_size;
-	struct efa_hmem_info *hmem_info;
 	bool delivery_complete_requested;
 
 	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
@@ -68,7 +67,6 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 	assert(tagged == 0 || tagged == 1);
 
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
-	hmem_info = efa_rdm_ep_domain(efa_rdm_ep)->hmem_info;
 
 	if (txe->fi_flags & FI_INJECT || efa_both_support_zero_hdr_data_transfer(efa_rdm_ep, txe->peer))
 		delivery_complete_requested = false;
@@ -88,16 +86,16 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 
 	readbase_rtm = efa_rdm_peer_select_readbase_rtm(txe->peer, efa_rdm_ep, txe);
 
-	if (use_p2p && 
-		txe->total_len >= hmem_info[iface].min_read_msg_size &&
-		efa_rdm_interop_rdma_read(efa_rdm_ep, txe->peer) &&
-		(txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(efa_rdm_ep))))
+	if (use_p2p &&
+	    txe->total_len >= g_efa_hmem_info[iface].min_read_msg_size &&
+	    efa_rdm_interop_rdma_read(efa_rdm_ep, txe->peer) &&
+	    (txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(efa_rdm_ep))))
 		return readbase_rtm;
 
 	if (txe->total_len <= eager_rtm_max_data_size)
 		return eager_rtm;
 
-	if (txe->total_len <= hmem_info[iface].max_medium_msg_size)
+	if (txe->total_len <= g_efa_hmem_info[iface].max_medium_msg_size)
 		return medium_rtm;
 
 	return longcts_rtm;

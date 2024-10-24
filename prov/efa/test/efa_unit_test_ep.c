@@ -363,7 +363,7 @@ void test_efa_rdm_pke_get_available_copy_methods_align128(struct efa_resource **
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
 	
 	/* p2p is available */
-	efa_rdm_ep_domain(efa_rdm_ep)->hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
 	efa_rdm_ep->hmem_p2p_opt = FI_HMEM_P2P_ENABLED;
 
 	/* RDMA read is supported */
@@ -921,35 +921,30 @@ static void test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource,
                                              bool cuda_p2p_supported,
                                              bool expected_use_zcpy_rx)
 {
-	struct efa_domain *efa_domain;
 	struct efa_rdm_ep *ep;
 	size_t max_msg_size = 1000;
 	size_t inject_msg_size = 0;
 	size_t inject_rma_size = 0;
 	bool shm_permitted = false;
+	ofi_hmem_disable_p2p = cuda_p2p_disabled;
 
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
 	                                            resource->hints, false, true);
 
-	efa_domain = container_of(resource->domain, struct efa_domain,
-	                          util_domain.domain_fid.fid);
-
 	/* System memory P2P should always be enabled */
-	assert_true(efa_domain->hmem_info[FI_HMEM_SYSTEM].initialized);
-	assert_false(efa_domain->hmem_info[FI_HMEM_SYSTEM].p2p_disabled_by_user);
-	assert_true(efa_domain->hmem_info[FI_HMEM_SYSTEM].p2p_supported_by_device);
+	assert_true(g_efa_hmem_info[FI_HMEM_SYSTEM].initialized);
+	assert_true(g_efa_hmem_info[FI_HMEM_SYSTEM].p2p_supported_by_device);
 
 	/**
 	 * We want to be able to run this test on any platform:
 	 * 1. Fake CUDA support.
 	 * 2. Disable all other hmem ifaces.
 	 */
-	efa_domain->hmem_info[FI_HMEM_CUDA].initialized = true;
-	efa_domain->hmem_info[FI_HMEM_CUDA].p2p_disabled_by_user = cuda_p2p_disabled;
-	efa_domain->hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = cuda_p2p_supported;
+	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = cuda_p2p_supported;
 
-	efa_domain->hmem_info[FI_HMEM_NEURON].initialized = false;
-	efa_domain->hmem_info[FI_HMEM_SYNAPSEAI].initialized = false;
+	g_efa_hmem_info[FI_HMEM_NEURON].initialized = false;
+	g_efa_hmem_info[FI_HMEM_SYNAPSEAI].initialized = false;
 
 	ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
@@ -983,6 +978,8 @@ static void test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource,
 		assert_int_equal(inject_msg_size, resource->info->tx_attr->inject_size);
 		assert_int_equal(inject_rma_size, resource->info->tx_attr->inject_size);
 	}
+	/* restore global variable */
+	ofi_hmem_disable_p2p = 0;
 }
 
 /**

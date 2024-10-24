@@ -23,8 +23,6 @@ static const enum fi_hmem_iface efa_hmem_ifaces[] = {
 
 struct efa_hmem_info {
 	bool initialized; 	/* do we support it at all */
-	bool p2p_disabled_by_user;	/* Did the user disable p2p via FI_OPT_FI_HMEM_P2P? */
-	bool p2p_required_by_impl;	/* Is p2p required for this interface? */
 	bool p2p_supported_by_device;	/* do we support p2p with this device */
 
 	size_t max_medium_msg_size;
@@ -33,10 +31,12 @@ struct efa_hmem_info {
 	size_t min_read_write_size;
 };
 
+extern struct efa_hmem_info	g_efa_hmem_info[OFI_HMEM_MAX];
+
 struct efa_domain;
 
-int efa_domain_hmem_validate_p2p_opt(struct efa_domain *efa_domain, enum fi_hmem_iface iface, int p2p_opt);
-int efa_domain_hmem_info_init_all(struct efa_domain *efa_domain);
+int efa_hmem_validate_p2p_opt(enum fi_hmem_iface iface, int p2p_opt, uint32_t api_version);
+int efa_hmem_info_initialize();
 
 /**
  * @brief Copy data from a hmem device to a system buffer

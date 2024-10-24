@@ -192,7 +192,7 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 	}
 
 	if (efa_mr->domain->util_domain.info_domain_caps & FI_HMEM) {
-		if (efa_mr->domain->hmem_info[attr->iface].initialized) {
+		if (g_efa_hmem_info[attr->iface].initialized) {
 			efa_mr->peer.iface = attr->iface;
 		} else {
 			EFA_WARN(FI_LOG_MR,
@@ -813,7 +813,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	 * For FI_HMEM_CUDA iface when p2p is unavailable, skip ibv_reg_mr() and
 	 * generate proprietary mr_fid key.
 	 */
-	if (mr_attr.iface == FI_HMEM_CUDA && !efa_mr->domain->hmem_info[FI_HMEM_CUDA].p2p_supported_by_device) {
+	if (mr_attr.iface == FI_HMEM_CUDA && !g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device) {
 		efa_mr->mr_fid.key = efa_mr_cuda_non_p2p_keygen();
 	} else {
 		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(efa_mr, &mr_attr, fi_ibv_access, flags);

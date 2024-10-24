@@ -27,12 +27,10 @@ void test_efa_rdm_peer_get_runt_size_impl(
 	struct efa_mr mock_mr;
 	struct efa_rdm_ope mock_txe;
 	size_t runt_size;
-	struct efa_domain *efa_domain;
 	int ret;
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	efa_domain = efa_rdm_ep_domain(efa_rdm_ep);
-	efa_domain->hmem_info[iface].runt_size = total_runt_size;
+	g_efa_hmem_info[iface].runt_size = total_runt_size;
 
 	/* insert a fake peer */
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -296,13 +294,11 @@ void test_efa_rdm_peer_select_readbase_rtm_impl(
 	fi_addr_t addr;
 	struct efa_mr mock_mr;
 	struct efa_rdm_ope mock_txe;
-	struct efa_domain *efa_domain;
 	int readbase_rtm;
 	int ret;
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	efa_domain = efa_rdm_ep_domain(efa_rdm_ep);
-	efa_domain->hmem_info[iface].runt_size = total_runt_size;
+	g_efa_hmem_info[iface].runt_size = total_runt_size;
 
 	/* insert a fake peer */
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
