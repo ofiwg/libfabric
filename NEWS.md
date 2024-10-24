@@ -11,6 +11,7 @@ v2.0.0 beta, Fri Oct 25, 2024
 
 ## Core
 
+- xpmem: Fix compilation warning
 - Change the xpmem log level to info
 - Clarify FI_HMEM support of inject calls
 - Introduce Sub-MR
@@ -124,6 +125,7 @@ v2.0.0 beta, Fri Oct 25, 2024
 
 ## SHM
 
+- Add unmap_region function
 - Use owner-allocated srx
 - Fix incorrect capability set
 - Make progress errors ints instead of unit64
@@ -148,6 +150,9 @@ v2.0.0 beta, Fri Oct 25, 2024
 
 ## Fabtests
 
+- Fix compilation error about CMPLX with C99
+- Added -E/env option to multinode test script
+- Change xfer-method variable to xfer_method in runmultinode.sh
 - Fix complex fill cast
 - efa: Remove rnr cq error message check
 - efa: Loose assertion for read request counters
