@@ -145,7 +145,9 @@ const struct fi_ep_attr efa_ep_attr = {
 	.protocol		= FI_PROTO_EFA,
 	.protocol_version	= 1,
 	.msg_prefix_size	= 0,
+	.max_order_raw_size	= 0,
 	.max_order_war_size	= 0,
+	.max_order_waw_size	= 0,
 	.mem_tag_format		= 0,
 	.tx_ctx_cnt		= 1,
 	.rx_ctx_cnt		= 1,
@@ -187,8 +189,6 @@ void efa_prov_info_set_ep_attr(struct fi_info *prov_info,
 	}
 
 	prov_info->ep_attr->max_msg_size		= device->ibv_port_attr.max_msg_sz;
-	prov_info->ep_attr->max_order_raw_size	= device->ibv_port_attr.max_msg_sz;
-	prov_info->ep_attr->max_order_waw_size	= device->ibv_port_attr.max_msg_sz;
 }
 
 /**
@@ -579,6 +579,8 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 					- device->rdm_info->src_addrlen
 					- EFA_RDM_IOV_LIMIT * sizeof(struct fi_rma_iov);
 		prov_info_rdm->ep_attr->max_order_raw_size = max_atomic_size;
+		prov_info_rdm->ep_attr->max_order_war_size = max_atomic_size;
+		prov_info_rdm->ep_attr->max_order_waw_size = max_atomic_size;
 	}
 
 	/* update tx_attr */

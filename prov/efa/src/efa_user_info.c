@@ -361,8 +361,6 @@ bool efa_user_info_should_support_hmem(int version)
 static
 int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_info *hints)
 {
-	uint64_t atomic_ordering;
-
 	if (hints && (hints->caps & FI_HMEM)) {
 		/*
 		 * FI_HMEM is a primary capability, therefore only check
@@ -418,11 +416,14 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 			 * the default message order supported by the provider is returned.
 			 */
 			info->tx_attr->msg_order &= hints->tx_attr->msg_order;
-			atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
-					  FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
-			if (!(hints->tx_attr->msg_order & atomic_ordering)) {
+
+			/* If no atomic ordering is requested, set the max_order_*_size as 0 */
+			if (!(hints->tx_attr->msg_order & FI_ORDER_ATOMIC_RAW))
 				info->ep_attr->max_order_raw_size = 0;
-			}
+			if (!(hints->tx_attr->msg_order & FI_ORDER_ATOMIC_WAR))
+				info->ep_attr->max_order_war_size = 0;
+			if (!(hints->tx_attr->msg_order & FI_ORDER_ATOMIC_WAW))
+				info->ep_attr->max_order_waw_size = 0;
 		}
 
 		if (hints->rx_attr) {

@@ -157,6 +157,89 @@ void test_info_tx_rx_msg_order_dgram_order_sas(struct efa_resource **state)
 	test_info_tx_rx_msg_order_from_hints(resource->hints, -FI_ENODATA);
 }
 
+/**
+ * @brief Verify max order size is set correctly according to hints
+ * 
+ * @param hints hints
+ * @param expected_ret expected rc of fi_getinfo
+ * @param expected_size expected value of max_order_*_size. Ignored when expected_ret is non-zero.
+ */
+static void
+test_info_max_order_size_from_hints(struct fi_info *hints, int expected_ret, size_t expected_size)
+{
+	struct fi_info *info;
+	int err;
+
+	err = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), NULL, NULL, 0ULL, hints, &info);
+
+	assert_int_equal(err, expected_ret);
+
+	if (expected_ret == FI_SUCCESS) {
+		assert_true(info->ep_attr->max_order_raw_size == expected_size);
+		assert_true(info->ep_attr->max_order_war_size == expected_size);
+		assert_true(info->ep_attr->max_order_waw_size == expected_size);
+	}
+
+	fi_freeinfo(info);
+}
+
+/**
+ * DGRAM ep type doesn't support FI_ATOMIC, fi_getinfo should return
+ * ENODATA when FI_ATOMIC is requested in hints.
+ */
+void test_info_max_order_size_dgram_with_atomic(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_DGRAM);
+	assert_non_null(resource->hints);
+
+	resource->hints->caps = FI_ATOMIC;
+
+	test_info_max_order_size_from_hints(resource->hints, -FI_ENODATA, 0);
+}
+
+/**
+ * RDM ep type supports FI_ATOMIC. When FI_ORDER_ATOMIC_* is NOT requested,
+ * max_order_*_size should be 0
+ */
+void test_info_max_order_size_rdm_with_atomic_no_order(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+
+	resource->hints->caps = FI_ATOMIC;
+	resource->hints->domain_attr->mr_mode |= FI_MR_VIRT_ADDR | FI_MR_PROV_KEY;
+
+	test_info_max_order_size_from_hints(resource->hints, FI_SUCCESS, 0);
+}
+
+/**
+ * RDM ep type supports FI_ATOMIC. When FI_ORDER_ATOMIC_* is requested,
+ * max_order_*_size should be the max atomic size derived from mtu and headers
+ */
+void test_info_max_order_size_rdm_with_atomic_order(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	size_t max_atomic_size = g_device_list[0].rdm_info->ep_attr->max_msg_size
+					- sizeof(struct efa_rdm_rta_hdr)
+					- g_device_list[0].rdm_info->src_addrlen
+					- EFA_RDM_IOV_LIMIT * sizeof(struct fi_rma_iov);
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	resource->hints->caps = FI_ATOMIC;
+	resource->hints->domain_attr->mr_mode |= FI_MR_VIRT_ADDR | FI_MR_PROV_KEY;
+	resource->hints->tx_attr->msg_order |= FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW | FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
+	resource->hints->rx_attr->msg_order = resource->hints->tx_attr->msg_order;
+
+	test_info_max_order_size_from_hints(resource->hints, FI_SUCCESS, max_atomic_size);
+}
+
 void test_info_tx_rx_op_flags_rdm(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
