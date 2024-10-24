@@ -402,6 +402,13 @@ struct cxip_rxc *cxip_rxc_calloc(struct cxip_ep_obj *ep_obj, void *context)
 {
 	struct cxip_rxc *rxc = NULL;
 
+	/* 
+	 * It's possible the owner provider decides to turn off
+	 * hardware offload in cxi. If that happens we need to update the
+	 * rx_match_mode.
+	 */
+	cxip_set_env_rx_match_mode();
+
 	switch (ep_obj->protocol) {
 	case FI_PROTO_CXI:
 		rxc = calloc(1, sizeof(struct cxip_rxc_hpc));
