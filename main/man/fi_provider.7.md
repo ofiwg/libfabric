@@ -77,6 +77,10 @@ operating system support is available, etc.  This list is not exhaustive.
   hardware interface for inter-instance communication on EC2.
   See [`fi_efa`(7)](fi_efa.7.html) for more information.
 
+*LPP*
+: A provider runs on FabreX PCIe networks. See
+  [`fi_lpp`(7)](fi_lpp.7.html) for more information.
+
 *OPX*
 : Supports Omni-Path networking from Cornelis Networks.  See
   [`fi_opx`(7)](fi_opx.7.html) for more information.
@@ -155,6 +159,19 @@ is meant to be paired with other core and/or utility providers.
 An offload provider is intended to accelerate specific types of communication,
 generally by taking advantage of network services that have been offloaded
 into hardware, though actual hardware offload support is not a requirement.
+
+# LINKx (LNX) provider (Technology Preview)
+
+The LNX provider is designed to link two or more providers, allowing
+applications to seamlessly use multiple providers or NICs. This provider uses
+the libfabric peer infrastructure to aid in the use of the underlying providers.
+This version of the provider currently supports linking the libfabric
+shared memory provider for intra-node traffic and another provider for
+inter-node traffic. Future releases of the provider will allow linking any
+number of providers and provide the users with the ability to influence
+the way the providers are utilized for traffic load.
+
+See [`fi_lnx`(7)](fi_lnx.7.html) for more information.
 
 # SEE ALSO
 
