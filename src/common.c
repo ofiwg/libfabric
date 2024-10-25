@@ -1942,7 +1942,8 @@ void ofi_free_list_of_addr(struct slist *addr_list)
 }
 
 static inline
-void ofi_insert_loopback_addr(const struct fi_provider *prov, struct slist *addr_list)
+void ofi_insert_loopback_addr(const struct fi_provider *prov,
+			      struct slist *addr_list, int mtu)
 {
 	struct ofi_addr_list_entry *addr_entry;
 
@@ -1953,6 +1954,7 @@ void ofi_insert_loopback_addr(const struct fi_provider *prov, struct slist *addr
 	addr_entry->comm_caps = FI_LOCAL_COMM;
 	addr_entry->ipaddr.sin.sin_family = AF_INET;
 	addr_entry->ipaddr.sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr_entry->mtu = mtu;
 	ofi_straddr_log(prov, FI_LOG_INFO, FI_LOG_CORE,
 			"available addr: ", &addr_entry->ipaddr);
 
@@ -1968,6 +1970,7 @@ void ofi_insert_loopback_addr(const struct fi_provider *prov, struct slist *addr
 	addr_entry->comm_caps = FI_LOCAL_COMM;
 	addr_entry->ipaddr.sin6.sin6_family = AF_INET6;
 	addr_entry->ipaddr.sin6.sin6_addr = in6addr_loopback;
+	addr_entry->mtu = mtu;
 	ofi_straddr_log(prov, FI_LOG_INFO, FI_LOG_CORE,
 			"available addr: ", &addr_entry->ipaddr);
 
@@ -2062,7 +2065,7 @@ void ofi_set_netmask_str(char *netstr, size_t len, struct ifaddrs *ifa)
 void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			  struct slist *addr_list)
 {
-	int ret;
+	int ret, mtu = -1;
 	char *iface = NULL;
 	struct ofi_addr_list_entry *addr_entry;
 	struct ifaddrs *ifaddrs, *ifa;
@@ -2089,10 +2092,13 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 		if (ifa->ifa_addr == NULL ||
 			!(ifa->ifa_flags & IFF_UP) ||
 			!(ifa->ifa_flags & IFF_RUNNING) ||
-			(ifa->ifa_flags & IFF_LOOPBACK) ||
 			((ifa->ifa_addr->sa_family != AF_INET) &&
 			(ifa->ifa_addr->sa_family != AF_INET6)))
 			continue;
+		if (ifa->ifa_flags & IFF_LOOPBACK) {
+			mtu = ofi_ifaddr_get_mtu(ifa);
+			continue;
+		}
 		if (iface && strncmp(iface, ifa->ifa_name, strlen(iface) + 1)) {
 			FI_DBG(prov, FI_LOG_CORE,
 				"Skip (%s) interface\n", ifa->ifa_name);
@@ -2122,9 +2128,11 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 		}
 
 		addr_entry->speed = ofi_ifaddr_get_speed(ifa);
+		addr_entry->mtu = ofi_ifaddr_get_mtu(ifa);
 		FI_INFO(prov, FI_LOG_CORE, "Available addr: %s, "
-			"iface name: %s, speed: %zu\n",
-			addr_entry->ipstr, ifa->ifa_name, addr_entry->speed);
+			"iface name: %s, speed: %zu, mtu: %d\n",
+			addr_entry->ipstr, ifa->ifa_name, addr_entry->speed,
+			addr_entry->mtu);
 
 		slist_insert_before_first_match(addr_list, ofi_compare_addr_entry,
 						&addr_entry->entry);
@@ -2136,7 +2144,7 @@ insert_lo:
 	/* Always add loopback address at the end */
 	if (!iface || !strncmp(iface, "lo", strlen(iface) + 1) ||
 	    !strncmp(iface, "loopback", strlen(iface) + 1))
-		ofi_insert_loopback_addr(prov, addr_list);
+		ofi_insert_loopback_addr(prov, addr_list, mtu);
 }
 
 #elif defined HAVE_MIB_IPADDRTABLE
@@ -2174,6 +2182,7 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			addr_entry->ipaddr.sin.sin_family = AF_INET;
 			addr_entry->ipaddr.sin.sin_addr.s_addr =
 						iptbl->table[i].dwAddr;
+			addr_entry->mtu = -1;
 			inet_ntop(AF_INET, &iptbl->table[i].dwAddr,
 				  addr_entry->ipstr,
 				  sizeof(addr_entry->ipstr));
@@ -2182,7 +2191,7 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 	}
 
 	/* Always add loopback address at the end */
-	ofi_insert_loopback_addr(prov, addr_list);
+	ofi_insert_loopback_addr(prov, addr_list, -1);
 
 out:
 	if (iptbl != &_iptbl)
@@ -2194,7 +2203,7 @@ out:
 void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			  struct slist *addr_list)
 {
-	ofi_insert_loopback_addr(prov, addr_list);
+	ofi_insert_loopback_addr(prov, addr_list, -1);
 }
 #endif
 

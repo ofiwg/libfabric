@@ -34,8 +34,8 @@ struct ifaddrs {
 
 	char		   ad_name[16];
 	size_t		   speed;
+	int		   mtu;
 };
 
 int getifaddrs(struct ifaddrs **ifap);
 void freeifaddrs(struct ifaddrs *ifa);
-

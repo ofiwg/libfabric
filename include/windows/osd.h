@@ -1006,6 +1006,8 @@ static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
 
 size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa);
 
+int ofi_ifaddr_get_mtu(const struct ifaddrs *ifa);
+
 #define file2unix_time	10000000i64
 #define win2unix_epoch	116444736000000000i64
 #define CLOCK_REALTIME 0
