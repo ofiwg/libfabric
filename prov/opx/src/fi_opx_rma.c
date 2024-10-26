@@ -114,13 +114,15 @@ int fi_opx_do_readv_internal_intranode(union fi_opx_hfi1_deferred_work *work)
 		hdr->qw_9B[5] = (uintptr_t)params->rma_request;
 		hdr->qw_9B[6] = params->key;
 	} else {
+		const uint64_t bth_rx = params->bth_rx;
 		uint32_t lrh_dlid_16B = htons(FI_OPX_HFI1_LRH_DLID_TO_LID(params->lrh_dlid));
 		hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 						((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 						((uint64_t)params->lrh_dws << 20);
 		hdr->qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
-						((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
-		hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | params->bth_rx;
+						((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
+		hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx;
 		hdr->qw_16B[3] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[3];
 		hdr->qw_16B[4] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[4];
 		hdr->qw_16B[5] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov;
@@ -217,6 +219,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 		replay->payload[6] = temp[6];
 		replay->payload[7] = temp[7];
 	} else {
+		const uint64_t bth_rx = params->bth_rx;
 		uint32_t lrh_dlid_16B = htons(FI_OPX_HFI1_LRH_DLID_TO_LID(params->lrh_dlid));
 		fi_opx_store_and_copy_qw(scb, local_temp,
 				opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) |
@@ -225,8 +228,9 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 						((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 						((uint64_t)params->lrh_dws << 20),
 				opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
-						((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
-				opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | params->bth_rx,
+						((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
+				opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx,
 				opx_ep->rx->tx.cts_16B.hdr.qw_16B[3] | psn,
 				opx_ep->rx->tx.cts_16B.hdr.qw_16B[4],
 				opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov,

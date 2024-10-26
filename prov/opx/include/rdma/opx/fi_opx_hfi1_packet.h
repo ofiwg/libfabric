@@ -954,27 +954,27 @@ union opx_hfi1_packet_hdr {
 
 				struct {      /* 16B LRH  */
 					__le32 slid:20;
-				/* This is the packet length and is in units of flits (QWs) for 8B, 10B and 16B
-				   formats, but in units of DWs for 9B formats.*/
-				   __le32 pktlen:11;
-				   __le32 b:1;
+					/* This is the packet length and is in units of flits (QWs) for 8B, 10B and 16B
+				  	   formats, but in units of DWs for 9B formats.*/
+					__le32 pktlen:11;
+					__le32 b:1;
 
-				   __le32 dlid:20;
-				   __le32 sc:5;
-				   __le32 rc:3;
-				   __le32 f:1;
-				   __le32 l2:2;
-				   __le32 lt:1;
+					__le32 dlid:20;
+					__le32 sc:5;
+					__le32 rc:3;
+					__le32 f:1;
+					__le32 l2:2;
+					__le32 lt:1;
 
-				   __le32 l4:8;
-				   __le32 slid20:4;
-				   __le32 dlid20:4;
-				   __le32 pkey:16;
+					__le32 l4:8;
+					__le32 slid20:4;
+					__le32 dlid20:4;
+					__le32 pkey:16;
 
-				   __le32 entropy:16;
-				   __le32 age:3;
-				   __le32 cspec:5;
-				   __le32 r:8;
+					__le32 entropy:16;
+					__le32 age:3;
+					__le32 cspec:5;
+					__le32 r:8;
 				};
 			} lrh_16B;
 		} ;

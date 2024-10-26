@@ -327,11 +327,16 @@ void fi_opx_ep_tx_model_init_16B (struct fi_opx_hfi1_context * hfi,
 		OPX_PBC_JKR_INSERT_NON9B_ICRC;
 
 	/* LRH header */
+	/* static assert here because these are in different headers */
+	static_assert(OPX_BTH_RX_SHIFT >= OPX_LRH_JKR_ENTROPY_SHIFT_16B,
+		      "OPX_BTH_RX_SHIFT must be >= OPX_LRH_JKR_ENTROPY_SHIFT_16B!\n");
+
+
 	send_16B->hdr.lrh_16B.qw[0] = 0UL;
 	send_16B->hdr.lrh_16B.qw[1] = 0UL;
 
 	send_16B->hdr.lrh_16B.sc = hfi->sc;
-	send_16B->hdr.lrh_16B.entropy = 0;
+	send_16B->hdr.lrh_16B.entropy = hfi->ctrl->ctxt_info.send_ctxt;
 	send_16B->hdr.lrh_16B.lt = 0;   // need to add env variable to change
 	send_16B->hdr.lrh_16B.l2 = OPX_PBC_JKR_L2TYPE_16B;
 	send_16B->hdr.lrh_16B.l4 = 9;
@@ -1345,7 +1350,7 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.qw[1] = 0;
 
 		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.sc = hfi1->sc;
-		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.entropy = 0;
+		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.entropy =  hfi1->ctrl->ctxt_info.send_ctxt;
 		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.lt = 0;   // need to add env variable to change
 		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.l2 = OPX_PBC_JKR_L2TYPE_16B;
 		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.l4 = 9;

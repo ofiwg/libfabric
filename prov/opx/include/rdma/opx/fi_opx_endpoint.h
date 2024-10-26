@@ -3784,7 +3784,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 	assert (!fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps));
 	assert (len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type));
 
-	const uint64_t bth_rx = ((uint64_t)addr.hfi1_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)addr.hfi1_rx) << OPX_BTH_RX_SHIFT;
 	const uint64_t lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(dest_addr);
 	const uint64_t pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type);
 
