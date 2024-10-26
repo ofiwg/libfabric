@@ -92,7 +92,7 @@ OPX_PBC_WFR_LRH_DLID_TO_PBC_DLID(dlid) : OPX_PBC_JKR_LRH_DLID_TO_PBC_DLID(dlid))
      (OPX_PBC_WFR_DLID(_dlid) | OPX_PBC_WFR_PORTIDX(_pidx)) : \
  (OPX_PBC_JKR_DLID(_dlid) | OPX_PBC_JKR_PORTIDX(_pidx)))
 
-
+/* Common BTH defines */
 
 #define OPX_BTH_UNUSED 0  // Default unsupported values to 0
 
@@ -103,6 +103,10 @@ OPX_PBC_WFR_LRH_DLID_TO_PBC_DLID(dlid) : OPX_PBC_JKR_LRH_DLID_TO_PBC_DLID(dlid))
 #define OPX_BTH_CSPEC_DEFAULT  OPX_BTH_UNUSED // Cspec is not used in 9B header
 #define OPX_BTH_RC2_VAL(_hfi1_type)     ((_hfi1_type & OPX_HFI1_JKR) ?         \
     OPX_BTH_JKR_RC2_VAL     : OPX_BTH_UNUSED)
+
+#define OPX_BTH_RX_SHIFT  56
+
+/* Common RHF defines */
 
 #define OPX_RHF_SEQ_NOT_MATCH(_seq, _rhf, _hfi1_type)   ((_hfi1_type & OPX_HFI1_WFR) ?         \
     OPX_WFR_RHF_SEQ_NOT_MATCH(_seq, _rhf) : OPX_JKR_RHF_SEQ_NOT_MATCH(_seq, _rhf))

@@ -438,7 +438,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode (struct fid_ep *ep,
 	}
 
 	const uint64_t lrh_dlid = dlid << 16;
-	const uint64_t bth_rx = reliability_rx << 56;
+	const uint64_t bth_rx = reliability_rx << OPX_BTH_RX_SHIFT;
 
 	volatile uint64_t * const scb =
 		FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
@@ -463,9 +463,10 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode (struct fid_ep *ep,
 		OPX_HFI1_BAR_STORE(&scb[0], (model_16B.qw0 | OPX_PBC_CR(1, hfi1_type) |
 				OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type)));
 		OPX_HFI1_BAR_STORE(&scb[1], (model_16B.hdr.qw_16B[0] |
-				((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B)));
+					((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B)));
 		OPX_HFI1_BAR_STORE(&scb[2], (model_16B.hdr.qw_16B[1] |
-				((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)));
+					((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					(uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B));
 		OPX_HFI1_BAR_STORE(&scb[3], model_16B.hdr.qw_16B[2] | bth_rx);
 		OPX_HFI1_BAR_STORE(&scb[4], model_16B.hdr.qw_16B[3]);
 		OPX_HFI1_BAR_STORE(&scb[5], model_16B.hdr.qw_16B[4]);
@@ -674,7 +675,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject (struct fid_ep *ep,
 		FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
 	const uint64_t lrh_dlid = dlid << 16;
-	const uint64_t bth_rx = reliability_rx << 56;
+	const uint64_t bth_rx = reliability_rx << OPX_BTH_RX_SHIFT;
 
     if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		const struct fi_opx_hfi1_txe_scb_9B * const model =
@@ -712,7 +713,8 @@ ssize_t fi_opx_hfi1_tx_reliability_inject (struct fid_ep *ep,
 		OPX_HFI1_BAR_STORE(&scb[1], (model_16B->hdr.qw_16B[0] |
 				((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B)));
 		OPX_HFI1_BAR_STORE(&scb[2], (model_16B->hdr.qw_16B[1] |
-				((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)));
+				((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+				   (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B));
 		OPX_HFI1_BAR_STORE(&scb[3], model_16B->hdr.qw_16B[2] | bth_rx);
 		OPX_HFI1_BAR_STORE(&scb[4], model_16B->hdr.qw_16B[3]);
 		OPX_HFI1_BAR_STORE(&scb[5], model_16B->hdr.qw_16B[4]);
@@ -2446,7 +2448,7 @@ void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service * servi
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.qw[1] = 0UL;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.pktlen = lrh_qws;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.sc = hfi1->sc;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.entropy = 0;
+		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.entropy =  hfi1->ctrl->ctxt_info.send_ctxt;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.lt = 0;   // need to add env variable to change
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.l2 = OPX_PBC_JKR_L2TYPE_16B;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.l4 = 9;
@@ -3580,7 +3582,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_shm (struct fid_ep *ep,
 	if (!hdr) return rc;
 
 	const uint64_t lrh_dlid = dlid << 16;
-	const uint64_t bth_rx = u8_reliability_rx << 56;
+	const uint64_t bth_rx = u8_reliability_rx << OPX_BTH_RX_SHIFT;
 
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
@@ -3600,7 +3602,8 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_shm (struct fid_ep *ep,
 		    model.hdr.ud.opcode = opcode;
 
 		    hdr->qw_16B[0] = model.hdr.qw_16B[0] | ((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B);
-		    hdr->qw_16B[1] = model.hdr.qw_16B[1] | ((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B);
+		    hdr->qw_16B[1] = model.hdr.qw_16B[1] | ((uint64_t)(ntohs(dlid) & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
+					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
 		    hdr->qw_16B[2] = model.hdr.qw_16B[2] | bth_rx;
 		    hdr->qw_16B[3] = model.hdr.qw_16B[3];
 		    hdr->qw_16B[4] = model.hdr.qw_16B[4];

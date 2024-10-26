@@ -91,7 +91,7 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->key = (key == NULL) ? -1 : *key;
 	params->cc = cc;
 	params->dest_rx = opx_target_addr.hfi1_rx;
-	params->bth_rx = params->dest_rx << 56;
+	params->bth_rx = params->dest_rx << OPX_BTH_RX_SHIFT;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_target_addr.fi);
 	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid, hfi1_type);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {

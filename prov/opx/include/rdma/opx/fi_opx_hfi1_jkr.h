@@ -205,6 +205,10 @@ static inline int opx_bth_rc2_val()
 #define OPX_LRH_JKR_16B_RX_MASK_16B 0xFF
 #define OPX_LRH_JKR_16B_RX_SHIFT_16B (7*8) // 7 bytes
 
+#define OPX_LRH_JKR_ENTROPY_SHIFT_16B (OPX_MSB_SHIFT + 8) // rx is top 8 bits of entropy
+
+/* shift 8 bit bth.rx directly into entropy top bits */
+#define OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B (OPX_BTH_RX_SHIFT - OPX_LRH_JKR_ENTROPY_SHIFT_16B)
 
 /* RHF */
 /* JKR

@@ -1000,7 +1000,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_intranode(union fi_opx_hfi1_deferred_work *work
 	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 	const uint64_t lrh_dlid = params->lrh_dlid;
-	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << OPX_BTH_RX_SHIFT;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, SHM -- RENDEZVOUS RTS (begin)\n");
@@ -1055,7 +1055,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_intranode_16B(union fi_opx_hfi1_deferred_work *
 	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 	const uint64_t lrh_dlid = params->lrh_dlid;
-	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << OPX_BTH_RX_SHIFT;
 	const uint64_t lrh_dlid_16B = htons(lrh_dlid >> 16);
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1085,7 +1085,8 @@ int opx_hfi1_rx_rzv_rts_send_cts_intranode_16B(union fi_opx_hfi1_deferred_work *
 	hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 					((uint64_t)((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B));
 	hdr->qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
-					((uint64_t)((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
+					((uint64_t)((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
 	hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx;
 	hdr->qw_16B[3] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[3];
 	hdr->qw_16B[4] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[4];
@@ -1114,7 +1115,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
 	struct fi_opx_ep *opx_ep = params->opx_ep;
 	const uint64_t lrh_dlid = params->lrh_dlid;
-	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << OPX_BTH_RX_SHIFT;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, HFI -- RENDEZVOUS %s RTS (begin) (params=%p rzv_comp=%p context=%p)\n",
@@ -1262,7 +1263,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_ep *opx_ep = params->opx_ep;
 	const uint64_t lrh_dlid = params->lrh_dlid;
 	const uint64_t lrh_dlid_16B = htons(params->lrh_dlid >> 16);
-	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << OPX_BTH_RX_SHIFT;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV 16B, HFI -- RENDEZVOUS %s RTS (begin) (params=%p rzv_comp=%p context=%p)\n",
@@ -1347,8 +1348,8 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 				((uint64_t) lrh_qws << 20);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "lrh_qws = %d replay->scb_16B.hdr.lrh_16B.pktlen = %d\n", lrh_qws, replay->scb.scb_16B.hdr.lrh_16B.pktlen);
 	replay->scb.scb_16B.hdr.qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
-				((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
-
+				((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
 	replay->scb.scb_16B.hdr.qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx;
 	replay->scb.scb_16B.hdr.qw_16B[3] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[3] | psn;
 	replay->scb.scb_16B.hdr.qw_16B[4] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[4];
@@ -1839,7 +1840,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_intranode(union fi_opx_hfi1_deferred_work *w
 
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 	const uint64_t lrh_dlid = params->lrh_dlid;
-	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << OPX_BTH_RX_SHIFT;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, SHM -- RENDEZVOUS RTS ETRUNC (begin)\n");
@@ -1884,7 +1885,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_intranode_16B(union fi_opx_hfi1_deferred_wor
 	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 	const uint64_t lrh_dlid = params->lrh_dlid;
-	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << OPX_BTH_RX_SHIFT;
 	const uint64_t lrh_dlid_16B = htons(lrh_dlid >> 16);
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1913,7 +1914,8 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_intranode_16B(union fi_opx_hfi1_deferred_wor
 	tx_hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 					((uint64_t)((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B));
 	tx_hdr->qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
-					((uint64_t)((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
+					((uint64_t)((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
 	tx_hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx;
 	tx_hdr->qw_16B[3] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[3];
 	tx_hdr->qw_16B[4] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[4];
@@ -1933,7 +1935,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
 	struct fi_opx_ep *opx_ep = params->opx_ep;
 	const uint64_t lrh_dlid = params->lrh_dlid;
-	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << OPX_BTH_RX_SHIFT;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (begin)\n");
@@ -2017,7 +2019,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_ep *opx_ep = params->opx_ep;
 	const uint64_t lrh_dlid = params->lrh_dlid;
 	const uint64_t lrh_dlid_16B = htons(params->lrh_dlid >> 16);
-	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << OPX_BTH_RX_SHIFT;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (begin)\n");
@@ -2073,7 +2075,8 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 				((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B)  |
 				((uint64_t) lrh_qws << 20),
 		opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
-				((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
+				      ((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+				      (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
 		opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx,
 		opx_ep->rx->tx.cts_16B.hdr.qw_16B[3] | psn,
 		opx_ep->rx->tx.cts_16B.hdr.qw_16B[4],
@@ -2389,6 +2392,7 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 		hdr->qw_9B[5] = (uint64_t)params->cc;
 		hdr->qw_9B[6] = params->bytes_to_fence;
 	} else {
+		const uint64_t bth_rx = params->bth_rx;
 		const uint64_t pbc_dws = 2 + /* pbc */
 					 4 + /* lrh uncompressed */
 					 3 + /* bth */
@@ -2399,8 +2403,9 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 					((uint64_t)(params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 					((uint64_t)lrh_dws << 20);
 		hdr->qw_16B[1] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[1] |
-					((uint64_t)((params->lrh_dlid  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
-		hdr->qw_16B[2] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[2] | params->bth_rx;
+					((uint64_t)((params->lrh_dlid  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
+		hdr->qw_16B[2] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[2] | bth_rx;
 		hdr->qw_16B[3] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[3];
 		hdr->qw_16B[4] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[4];
 		hdr->qw_16B[5] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[5] | FI_OPX_HFI_DPUT_OPCODE_FENCE | (0ULL << 32);
@@ -2435,7 +2440,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 	else
 		params->lrh_dlid = hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid;
 
-	params->bth_rx = (uint64_t)u8_rx << 56;
+	params->bth_rx = (uint64_t)u8_rx << OPX_BTH_RX_SHIFT;
 	params->u8_rx = u8_rx;
 	params->u32_extended_rx = u32_extended_rx;
 	params->bytes_to_fence = hdr->dput.target.fence.bytes_to_fence;
@@ -2486,7 +2491,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 	/* use the slid from the lrh header of the incoming packet
 	 * as the dlid for the lrh header of the outgoing packet */
 	const uint64_t lrh_dlid = params->lrh_dlid;
-	const uint64_t bth_rx = ((uint64_t)u8_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)u8_rx) << OPX_BTH_RX_SHIFT;
 	const enum opx_hfi1_type hfi1_type = OPX_HFI1_TYPE;
 
 	enum fi_hmem_iface cbuf_iface = params->compare_iov.iface;
@@ -2802,7 +2807,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	/* use the slid from the lrh header of the incoming packet
 	 * as the dlid for the lrh header of the outgoing packet */
 	const uint64_t lrh_dlid = params->lrh_dlid;
-	const uint64_t bth_rx = ((uint64_t)u8_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)u8_rx) << OPX_BTH_RX_SHIFT;
 	assert ((opx_ep->tx->pio_max_eager_tx_bytes & 0x3fu) == 0);
 	unsigned i;
 	const void* sbuf_start = (opx_mr == NULL) ? 0 : opx_mr->iov.iov_base;
@@ -3095,7 +3100,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 	/* use the slid from the lrh header of the incoming packet
 	 * as the dlid for the lrh header of the outgoing packet */
 	const uint64_t lrh_dlid = params->lrh_dlid;
-	const uint64_t bth_rx = ((uint64_t)u8_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)u8_rx) << OPX_BTH_RX_SHIFT;
 	unsigned i;
 	const void* sbuf_start = (opx_mr == NULL) ? 0 : opx_mr->iov.iov_base;
 	const bool sdma_no_bounce_buf = params->sdma_no_bounce_buf;
@@ -3701,7 +3706,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const union fi_opx_addr addr = { .fi = dest_addr };
-	const uint64_t bth_rx = ((uint64_t)dest_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)dest_rx) << OPX_BTH_RX_SHIFT;
 	const uint64_t lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(addr.fi);
 	assert(niov <= MIN(FI_OPX_MAX_DPUT_IOV, FI_OPX_MAX_HMEM_IOV));
 
@@ -3793,7 +3798,8 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 					((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 					((uint64_t)lrh_dws << 20);
 			hdr->qw_16B[1] = opx_ep->tx->rzv_16B.hdr.qw_16B[1] |
-					((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
+					((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
 			hdr->qw_16B[2] = opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx |
 				((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) :
 						   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS));
@@ -3948,7 +3954,8 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 						((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 						((uint64_t)lrh_dws << 20),
 			opx_ep->tx->rzv_16B.hdr.qw_16B[1] |
-						((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
+						((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
 			opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx |
 				((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) :
 						   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ : FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS)),
@@ -4081,7 +4088,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	const uint64_t is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps);
 
-	const uint64_t bth_rx = ((uint64_t)dest_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)dest_rx) << OPX_BTH_RX_SHIFT;
 	const uint64_t lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(dest_addr);
 
 	const bool send_immed_data = (src_iface == FI_HMEM_SYSTEM);
@@ -4522,7 +4529,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 
 	const uint64_t is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps);
 
-	const uint64_t bth_rx = ((uint64_t)dest_rx) << 56;
+	const uint64_t bth_rx = ((uint64_t)dest_rx) << OPX_BTH_RX_SHIFT;
 	const uint64_t lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(dest_addr);
 	const uint64_t lrh_dlid_16B = ntohs(FI_OPX_HFI1_LRH_DLID_TO_LID(lrh_dlid));
 
@@ -4656,7 +4663,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 
 		hdr->qw_16B[1] = opx_ep->tx->rzv_16B.hdr.qw_16B[1] |
 			((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B)
-					>> OPX_LRH_JKR_16B_DLID20_SHIFT_16B));
+					>> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					(uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
 
 		hdr->qw_16B[2] = opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx | opcode;
 		hdr->qw_16B[3] = opx_ep->tx->rzv_16B.hdr.qw_16B[3];
@@ -4832,7 +4840,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B (struct fid_ep *ep,
 			((uint64_t)lrh_qws << 20),
 		opx_ep->tx->rzv_16B.hdr.qw_16B[1] |
 			((uint64_t)((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B)
-				>> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)),
+				>> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+				(uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
 		opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx | opcode,
 		opx_ep->tx->rzv_16B.hdr.qw_16B[3] | psn,
 		opx_ep->tx->rzv_16B.hdr.qw_16B[4] | (((uint64_t)data) << 32),
