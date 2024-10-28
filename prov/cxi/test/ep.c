@@ -295,17 +295,6 @@ Test(ep, ep_bind_stx_ctx)
 		     "TODO Add test for STX CTXs binding to the endpoint when implemented");
 }
 
-Test(ep, ep_bind_srx_ctx)
-{
-	int ret;
-	struct fi_rx_attr *attr = NULL;
-	void *context = NULL;
-
-	ret = fi_srx_context(cxit_domain, attr, NULL, context);
-	cr_assert_eq(ret, -FI_ENOSYS,
-		     "TODO Add test for SRX CTXs binding to the endpoint when implemented");
-}
-
 Test(ep, ep_bind_unhandled)
 {
 	int ret;
@@ -968,53 +957,6 @@ Test(ep, stx_ctx)
 
 	ret = fi_close(&stx->fid);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_close stx_ep. %d", ret);
-}
-
-Test(ep, srx_ctx_null_srx)
-{
-	int ret;
-	struct fi_rx_attr *attr = NULL;
-	void *context = NULL;
-
-	ret = fi_srx_context(cxit_domain, attr, NULL, context);
-	/* TODO Fix when fi_srx_context is implemented, should be -FI_EINVAL */
-	cr_assert_eq(ret, -FI_ENOSYS, "fi_srx_context null srx. %d", ret);
-}
-
-Test(ep, srx_ctx)
-{
-	int ret;
-	struct fi_rx_attr *attr = NULL;
-	struct fid_ep *srx;
-	struct cxip_ep *srx_ep;
-	void *context = &ret;
-	struct cxip_domain *dom;
-	struct cxip_rxc *rxc;
-	int refs;
-
-	dom = container_of(cxit_domain, struct cxip_domain,
-			   util_domain.domain_fid);
-	refs = ofi_atomic_get32(&dom->ref);
-
-	ret = fi_srx_context(cxit_domain, attr, &srx, context);
-	/* TODO Fix when fi_srx_context is implemented, should be FI_SUCCESS */
-	cr_assert_eq(ret, -FI_ENOSYS, "fi_stx_context failed. %d", ret);
-	if (ret == -FI_ENOSYS)
-		return;
-
-	srx_ep = container_of(srx, struct cxip_ep, ep);
-	rxc = srx_ep->ep_obj->rxc;
-
-	/* Validate stx */
-	cr_assert_eq(rxc->domain, dom);
-	cr_assert_eq(ofi_atomic_inc32(&dom->ref), refs + 1);
-	cr_assert_eq(srx_ep->ep.fid.fclass, FI_CLASS_RX_CTX);
-	cr_assert_eq(srx_ep->ep.fid.context, context);
-	cr_assert_eq(rxc->state, RXC_ENABLED);
-	cr_assert_eq(rxc->min_multi_recv, CXIP_EP_MIN_MULTI_RECV);
-
-	ret = fi_close(&srx->fid);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_close srx_ep. %d", ret);
 }
 
 TestSuite(ep_init, .timeout = CXIT_DEFAULT_TIMEOUT);
