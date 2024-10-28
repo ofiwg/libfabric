@@ -2385,13 +2385,19 @@ size_t ofi_vrb_speed(uint8_t speed, uint8_t width)
 		break;
 	case 4:
 	case 8:
-		speed_val = 8 * gbit_2_bit_coef;
+		speed_val = 10 * gbit_2_bit_coef;
 		break;
 	case 16:
 		speed_val = 14 * gbit_2_bit_coef;
 		break;
 	case 32:
 		speed_val = 25 * gbit_2_bit_coef;
+		break;
+	case 64:
+		speed_val = 50 * gbit_2_bit_coef;
+		break;
+	case 128:
+		speed_val = 100 * gbit_2_bit_coef;
 		break;
 	default:
 		speed_val = 0;
@@ -2410,6 +2416,9 @@ size_t ofi_vrb_speed(uint8_t speed, uint8_t width)
 		break;
 	case 8:
 		width_val = 12;
+		break;
+	case 16:
+		width_val = 2;
 		break;
 	default:
 		width_val = 0;
