@@ -782,6 +782,12 @@ static void cxip_env_init(void)
 	fi_param_get_bool(&cxip_prov, "disable_dmabuf_rocr",
 			  &cxip_env.disable_dmabuf_rocr);
 
+	/* Disable cuda DMABUF by default - honors the env if already set */
+	ret = setenv("FI_HMEM_CUDA_USE_DMABUF", "0", 0);
+	if (ret)
+		CXIP_INFO("Could not disable FI_HMEM_CUDA_USE_DMABUF ret:%d %s\n",
+			  ret, fi_strerror(errno));
+
 	fi_param_define(&cxip_prov, "ats_mlock_mode", FI_PARAM_STRING,
 			"Sets ATS mlock mode (off | all).");
 	fi_param_get_str(&cxip_prov, "ats_mlock_mode", &param_str);
