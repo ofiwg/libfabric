@@ -3843,7 +3843,7 @@ int ft_check_atomic(enum ft_atomic_opcodes atomic, enum fi_op op,
 		    void *cmp, void *res, size_t count)
 {
 	int ret = 0;
-	void *check_res = res, *check_buf, *check_comp;
+	void *check_res = res, *check_buf, *check_comp = cmp;
 
 	/*
 	 * If we don't have the test function, return > 0 to indicate
