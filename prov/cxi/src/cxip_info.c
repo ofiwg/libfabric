@@ -768,6 +768,11 @@ static void cxip_env_init(void)
 			"Enables the NIC IOTLB (default %d).", cxip_env.iotlb);
 	fi_param_get_bool(&cxip_prov, "iotlb", &cxip_env.iotlb);
 
+	/* Use ROCR DMABUF by default - honors the env if already set */
+	ret = setenv("FI_HMEM_ROCR_USE_DMABUF", "1", 0);
+	if (ret)
+		CXIP_INFO("Could not enable FI_HMEM_ROCR_USE_DMABUF ret:%d %s\n",
+			  ret, fi_strerror(errno));
 
 	/* Disable cuda DMABUF by default - honors the env if already set */
 	ret = setenv("FI_HMEM_CUDA_USE_DMABUF", "0", 0);
