@@ -28,12 +28,6 @@ static int cxip_dmabuf_hints(enum fi_hmem_iface iface, void *iov_base,
 		return -FI_ENOSYS;
 	}
 
-	if (iface == FI_HMEM_CUDA && cxip_env.disable_dmabuf_cuda)
-		return FI_SUCCESS;
-
-	if (iface == FI_HMEM_ROCR && cxip_env.disable_dmabuf_rocr)
-		return FI_SUCCESS;
-
 	ret = ofi_hmem_get_base_addr(iface, iov_base, len, (void*)&base, &size);
 	if (ret)
 		return ret;
