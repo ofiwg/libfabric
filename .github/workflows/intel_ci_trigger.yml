@@ -1,0 +1,20 @@
+---
+  name: 'Intel CI'
+
+  on:
+    workflow_dispatch:
+    pull_request:
+      branches:
+        - '**'
+
+  concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+  jobs:
+    launch_jenkins_job:
+      runs-on: [intel-ci]
+      steps:
+      - name: Set PR for Jenkins Job
+        run:
+          echo ${{ github.event.number }} >> ~/prs.txt
