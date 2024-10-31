@@ -762,8 +762,8 @@ static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 
 	if (!pend) {
 		comp_buf = rx_entry->iov[0].iov_base;
-		comp_flags = smr_rx_cq_flags(cmd->msg.hdr.op, rx_entry->flags,
-				     cmd->msg.hdr.op_flags);
+		comp_flags = smr_rx_cq_flags(rx_entry->flags,
+					     cmd->msg.hdr.op_flags);
 		if (err) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"error processing op\n");
@@ -822,8 +822,8 @@ static int smr_copy_saved(struct smr_cmd_ctx *cmd_ctx,
 	}
 	assert(!cmd_ctx->sar_entry);
 
-	comp_flags = smr_rx_cq_flags(cmd_ctx->cmd.msg.hdr.op,
-			rx_entry->flags, cmd_ctx->cmd.msg.hdr.op_flags);
+	comp_flags = smr_rx_cq_flags(rx_entry->flags,
+				     cmd_ctx->cmd.msg.hdr.op_flags);
 
 	ret = smr_complete_rx(cmd_ctx->ep, rx_entry->context,
 			      cmd_ctx->cmd.msg.hdr.op, comp_flags,
@@ -1106,14 +1106,14 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd,
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"error processing rma op\n");
 		ret = smr_write_err_comp(ep->util_ep.rx_cq, NULL,
-					 smr_rx_cq_flags(cmd->msg.hdr.op, 0,
-					 cmd->msg.hdr.op_flags), 0, -err);
+				smr_rx_cq_flags(0, cmd->msg.hdr.op_flags),
+				0, -err);
 	} else {
 		ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id,
-			      cmd->msg.hdr.op, smr_rx_cq_flags(cmd->msg.hdr.op,
-			      0, cmd->msg.hdr.op_flags), total_len,
-			      iov_count ? iov[0].iov_base : NULL,
-			      cmd->msg.hdr.id, 0, cmd->msg.hdr.data);
+				cmd->msg.hdr.op, smr_rx_cq_flags(0,
+				cmd->msg.hdr.op_flags), total_len,
+				iov_count ? iov[0].iov_base : NULL,
+				cmd->msg.hdr.id, 0, cmd->msg.hdr.data);
 	}
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -1191,13 +1191,12 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd,
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"error processing atomic op\n");
 		ret = smr_write_err_comp(ep->util_ep.rx_cq, NULL,
-					 smr_rx_cq_flags(cmd->msg.hdr.op, 0,
-					 cmd->msg.hdr.op_flags), 0, err);
+				smr_rx_cq_flags(0, cmd->msg.hdr.op_flags),
+				0, err);
 	} else {
 		ret = smr_complete_rx(ep, NULL, cmd->msg.hdr.op,
-				      smr_rx_cq_flags(cmd->msg.hdr.op, 0,
-				      cmd->msg.hdr.op_flags), total_len,
-				      ioc_count ? ioc[0].addr : NULL,
+				      smr_rx_cq_flags(0, cmd->msg.hdr.op_flags),
+				      total_len, ioc_count ? ioc[0].addr : NULL,
 				      cmd->msg.hdr.id, 0, cmd->msg.hdr.data);
 	}
 	if (ret) {
@@ -1304,13 +1303,11 @@ void smr_progress_ipc_list(struct smr_ep *ep)
 
 		if (ipc_entry->rx_entry) {
 			context = ipc_entry->rx_entry->context;
-			flags = smr_rx_cq_flags(ipc_entry->cmd.msg.hdr.op,
-					ipc_entry->rx_entry->flags,
+			flags = smr_rx_cq_flags(ipc_entry->rx_entry->flags,
 					ipc_entry->cmd.msg.hdr.op_flags);
 		} else {
 			context = NULL;
-			flags = smr_rx_cq_flags(ipc_entry->cmd.msg.hdr.op,
-					0, ipc_entry->cmd.msg.hdr.op_flags);
+			flags = smr_rx_cq_flags(0, ipc_entry->cmd.msg.hdr.op_flags);
 		}
 
 		ret = smr_complete_rx(ep, context, ipc_entry->cmd.msg.hdr.op,
@@ -1422,13 +1419,13 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 
 			if (sar_entry->rx_entry) {
 				comp_ctx = sar_entry->rx_entry->context;
-				comp_flags = smr_rx_cq_flags(sar_entry->cmd.msg.hdr.op,
+				comp_flags = smr_rx_cq_flags(
 						sar_entry->rx_entry->flags,
 						sar_entry->cmd.msg.hdr.op_flags);
 			} else {
 				comp_ctx = NULL;
-				comp_flags = smr_rx_cq_flags(sar_entry->cmd.msg.hdr.op,
-						0, sar_entry->cmd.msg.hdr.op_flags);
+				comp_flags = smr_rx_cq_flags(0,
+						sar_entry->cmd.msg.hdr.op_flags);
 			}
 			ret = smr_complete_rx(ep, comp_ctx,
 					sar_entry->cmd.msg.hdr.op, comp_flags,

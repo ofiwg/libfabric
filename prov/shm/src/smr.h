@@ -290,10 +290,8 @@ int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
 		    uint64_t flags, size_t len, void *buf, int64_t id,
 		    uint64_t tag, uint64_t data);
 
-static inline uint64_t smr_rx_cq_flags(uint32_t op, uint64_t rx_flags,
-				       uint16_t op_flags)
+static inline uint64_t smr_rx_cq_flags(uint64_t rx_flags, uint16_t op_flags)
 {
-	rx_flags |= ofi_rx_cq_flags(op);
 	if (op_flags & SMR_REMOTE_CQ_DATA)
 		rx_flags |= FI_REMOTE_CQ_DATA;
 	return rx_flags;
