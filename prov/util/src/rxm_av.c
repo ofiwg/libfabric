@@ -281,6 +281,8 @@ static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 {
 	struct rxm_av *av;
 	fi_addr_t *user_ids = NULL;
+	struct dlist_entry *av_entry;
+	struct util_ep *util_ep;
 	int ret;
 
 	if (flags & FI_AV_USER_ID) {
@@ -301,6 +303,14 @@ static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	if (ret) {
 		rxm_av_remove(av_fid, fi_addr, count, flags);
 		goto out;
+	}
+
+	if (!av->foreach_ep)
+		goto out;
+
+	dlist_foreach(&av->util_av.ep_list, av_entry) {
+		util_ep = container_of(av_entry, struct util_ep, av_entry);
+		av->foreach_ep(&av->util_av, util_ep);
 	}
 
 out:
@@ -420,7 +430,9 @@ static struct fi_ops_av rxm_av_ops = {
 int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		     struct fid_av **fid_av, void *context, size_t conn_size,
 		     void (*remove_handler)(struct util_ep *util_ep,
-					    struct util_peer_addr *peer))
+					    struct util_peer_addr *peer),
+		     void (*foreach_ep)(struct util_av *av, struct util_ep *ep))
+
 {
 	struct util_domain *domain;
 	struct util_av_attr util_attr;
@@ -457,6 +469,7 @@ int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	av->util_av.av_fid.fid.ops = &rxm_av_fi_ops;
 	av->util_av.av_fid.ops = &rxm_av_ops;
 	av->util_av.remove_handler = remove_handler;
+	av->foreach_ep = foreach_ep;
 	*fid_av = &av->util_av.av_fid;
 	return 0;
 

@@ -40,7 +40,8 @@
 		     OFI_RX_RMA_CAPS | FI_ATOMICS | FI_DIRECTED_RECV | \
 		     FI_MULTI_RECV)
 
-#define RXM_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM | FI_AV_USER_ID)
+#define RXM_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM | FI_AV_USER_ID | \
+			 FI_PEER)
 
 
 /* Since we are a layering provider, the attributes for which we rely on the
