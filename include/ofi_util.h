@@ -955,12 +955,15 @@ struct rxm_av {
 	struct fid_peer_av peer_av;
 	struct fid_av *util_coll_av;
 	struct fid_av *offload_coll_av;
+	void (*foreach_ep)(struct util_av *av, struct util_ep *util_ep);
 };
 
 int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		     struct fid_av **fid_av, void *context, size_t conn_size,
 		     void (*remove_handler)(struct util_ep *util_ep,
-					    struct util_peer_addr *peer));
+					    struct util_peer_addr *peer),
+		     void (*foreach_ep)(struct util_av *av,
+					struct util_ep *ep));
 size_t rxm_av_max_peers(struct rxm_av *av);
 void rxm_ref_peer(struct util_peer_addr *peer);
 void *rxm_av_alloc_conn(struct rxm_av *av);
