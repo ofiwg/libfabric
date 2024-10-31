@@ -96,7 +96,7 @@ static int efa_fork_support_is_enabled(struct fid_domain *domain_fid)
 
 	page_size = ofi_get_page_size();
 	if (page_size <= 0) {
-		EFA_WARN(FI_LOG_DOMAIN, "Unable to determine page size %ld\n",
+		EFA_WARN(FI_LOG_CORE, "Unable to determine page size %ld\n",
 			 page_size);
 		return -FI_EINVAL;
 	}
@@ -125,14 +125,14 @@ out:
 	if(buf) free(buf);
 	if(mr) ibv_dereg_mr(mr);
 	if (ret) {
-		EFA_WARN(FI_LOG_DOMAIN,
+		EFA_WARN(FI_LOG_CORE,
 			"Unexpected error during ibv_reg_mr in "
 			"efa_fork_support_is_enabled(): %s\n",strerror(ret));
 		return -FI_EINVAL;
 	}
 	if (ret_init == 0) return 0;
 	if (ret_init == EINVAL) return 1;
-	EFA_WARN(FI_LOG_DOMAIN,
+	EFA_WARN(FI_LOG_CORE,
 		"Unexpected error during ibv_fork_init in "
 		"efa_fork_support_is_enabled(): %s\n",strerror(ret_init));
 	return -FI_EINVAL;
@@ -236,7 +236,7 @@ int efa_fork_support_enable_if_requested(struct fid_domain* domain_fid)
 	if (g_efa_fork_status == EFA_FORK_SUPPORT_ON) {
 		ret = -ibv_fork_init();
 		if (ret) {
-			EFA_WARN(FI_LOG_DOMAIN,
+			EFA_WARN(FI_LOG_CORE,
 				 "Fork support requested but ibv_fork_init failed: %s\n",
 				 strerror(-ret));
 			return ret;
@@ -257,7 +257,7 @@ int efa_fork_support_enable_if_requested(struct fid_domain* domain_fid)
 		g_efa_fork_status = EFA_FORK_SUPPORT_ON;
 
 	if (g_efa_fork_status == EFA_FORK_SUPPORT_ON && getenv("RDMAV_HUGEPAGES_SAFE")) {
-			EFA_WARN(FI_LOG_DOMAIN,
+			EFA_WARN(FI_LOG_CORE,
 				 "Using libibverbs fork support and huge pages is not"
 				 " supported by the EFA provider.\n");
 		return -FI_EINVAL;
@@ -278,7 +278,7 @@ int efa_fork_support_enable_if_requested(struct fid_domain* domain_fid)
 		}
 
 		if (ret) {
-			EFA_WARN(FI_LOG_DOMAIN,
+			EFA_WARN(FI_LOG_CORE,
 				 "Unable to register atfork callback: %s\n",
 				 strerror(-ret));
 			return ret;
@@ -302,7 +302,7 @@ int efa_fork_support_enable_if_requested(struct fid_domain* domain_fid)
 int efa_fork_support_enable_if_requested(struct domain_fid* domain_fid)
 {
 	if (g_efa_fork_status == EFA_FORK_SUPPORT_ON) {
-		EFA_WARN(FI_LOG_DOMAIN,
+		EFA_WARN(FI_LOG_CORE,
 			 "Using fork support is not supported by the EFA provider on Windows\n");
 		return -FI_EINVAL;
 	}
