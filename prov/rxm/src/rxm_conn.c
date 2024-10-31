@@ -58,7 +58,7 @@ struct rxm_eq_cm_entry {
 static void rxm_close_conn(struct rxm_conn *conn)
 {
 	struct rxm_deferred_tx_entry *tx_entry;
-	struct rxm_recv_entry *rx_entry;
+	struct fi_peer_rx_entry *rx_entry;
 	struct rxm_rx_buf *buf;
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "closing conn %p\n", conn);
@@ -74,16 +74,13 @@ static void rxm_close_conn(struct rxm_conn *conn)
 
 	while (!dlist_empty(&conn->deferred_sar_segments)) {
 		buf = container_of(conn->deferred_sar_segments.next,
-				   struct rxm_rx_buf, unexp_msg.entry);
-		dlist_remove(&buf->unexp_msg.entry);
-		rxm_free_rx_buf(buf);
+				   struct rxm_rx_buf, unexp_entry);
+		dlist_remove(&buf->unexp_entry);
 	}
 
 	while (!dlist_empty(&conn->deferred_sar_msgs)) {
-		rx_entry = container_of(conn->deferred_sar_msgs.next,
-					struct rxm_recv_entry, sar.entry);
-		dlist_remove(&rx_entry->entry);
-		rxm_recv_entry_release(rx_entry);
+		rx_entry = (struct fi_peer_rx_entry*)conn->deferred_sar_msgs.next;
+		rx_entry->srx->owner_ops->free_entry(rx_entry);
 	}
 	fi_close(&conn->msg_ep->fid);
 	rxm_flush_msg_cq(conn->ep);
