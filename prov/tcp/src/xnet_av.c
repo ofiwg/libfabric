@@ -38,7 +38,7 @@ int xnet_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		 struct fid_av **fid_av, void *context)
 {
 	return rxm_util_av_open(domain_fid, attr, fid_av, context,
-				sizeof(struct xnet_conn), NULL);
+				sizeof(struct xnet_conn), NULL, NULL);
 }
 
 static int xnet_mplex_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
