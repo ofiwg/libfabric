@@ -445,14 +445,14 @@ faults but requires all buffers to be backed by physical memory. Copy-on-write
 semantics are broken when using pinned memory. See the Fork section for more
 information.
 
-The CXI provider supports DMABUF for device memory registration. If the ROCR
-and CUDA libraries support it, the CXI provider will default to use DMA-buf.
+The CXI provider supports DMABUF for device memory registration.
+DMABUF is supported in ROCm 5.6+ and Cuda 11.7+ with nvidia open source driver
+525+.
+Both *FI_HMEM_ROCR_USE_DMABUF* and *FI_HMEM_CUDA_USE_DMABUF are disabled by
+default in libfabric core but the CXI provider enables
+*FI_HMEM_ROCR_USE_DMABUF* by default if not specifically set.
 There may be situations with CUDA that may double the BAR consumption.
-Until this is fixed in the CUDA stack, the environment variable
-*FI_CXI_DISABLE_DMABUF_CUDA* can be used to fall back to the nvidia
-peer-memory interface.
-Also, *FI_CXI_DISABLE_DMABUF_ROCR* can be used to fall back to the amdgpu
-peer-memory interface.
+Until this is fixed in the CUDA stack, CUDA DMABUF will be disabled by default.
 
 ## Translation Cache
 
