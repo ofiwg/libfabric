@@ -60,7 +60,7 @@ static int efa_domain_hmem_info_init_protocol_thresholds(enum fi_hmem_iface ifac
 		fi_param_get_size_t(&efa_prov, "inter_min_read_message_size", &info->min_read_msg_size);
 		fi_param_get_size_t(&efa_prov, "inter_min_read_write_size", &info->min_read_write_size);
 		if (-FI_ENODATA != fi_param_get(&efa_prov, "inter_max_medium_message_size", &tmp_value)) {
-			EFA_WARN(FI_LOG_DOMAIN,
+			EFA_WARN(FI_LOG_CORE,
 			         "The environment variable FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE was set, "
 			         "but EFA HMEM via Cuda API only supports eager and runting read protocols. "
 			         "The variable will not modify CUDA memory run config.\n");
@@ -75,7 +75,7 @@ static int efa_domain_hmem_info_init_protocol_thresholds(enum fi_hmem_iface ifac
 		fi_param_get_size_t(&efa_prov, "inter_min_read_message_size", &info->min_read_msg_size);
 		fi_param_get_size_t(&efa_prov, "inter_min_read_write_size", &info->min_read_write_size);
 		if (-FI_ENODATA != fi_param_get(&efa_prov, "inter_max_medium_message_size", &tmp_value)) {
-			EFA_WARN(FI_LOG_DOMAIN,
+			EFA_WARN(FI_LOG_CORE,
 			         "The environment variable FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE was set, "
 			         "but EFA HMEM via Neuron API only supports eager and runting read protocols. "
 			         "The variable will not modify CUDA memory run config.\n");
@@ -90,7 +90,7 @@ static int efa_domain_hmem_info_init_protocol_thresholds(enum fi_hmem_iface ifac
 		    -FI_ENODATA != fi_param_get_size_t(&efa_prov, "inter_min_read_message_size", &tmp_value) ||
 		    -FI_ENODATA != fi_param_get_size_t(&efa_prov, "inter_min_read_write_size", &tmp_value) ||
 		    -FI_ENODATA != fi_param_get_size_t(&efa_prov, "runt_size", &tmp_value)) {
-			EFA_WARN(FI_LOG_DOMAIN,
+			EFA_WARN(FI_LOG_CORE,
 			        "One or more of the following environment variable(s) were set: ["
 			        "FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE, "
 			        "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE, "
@@ -120,7 +120,7 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 	cuda_ret = ofi_cudaMalloc(&ptr, len);
 	if (cuda_ret != cudaSuccess) {
 		info->initialized = false;
-		EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate CUDA buffer: %s\n",
+		EFA_WARN(FI_LOG_CORE, "Failed to allocate CUDA buffer: %s\n",
 			 ofi_cudaGetErrorString(cuda_ret));
 		return;
 	}
@@ -130,13 +130,13 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 		ibv_mr = ibv_reg_dmabuf_mr(g_device_list[0].ibv_pd, dmabuf_offset,
 					   len, (uint64_t)ptr, dmabuf_fd, ibv_access);
 		if (!ibv_mr) {
-			EFA_INFO(FI_LOG_DOMAIN,
+			EFA_INFO(FI_LOG_CORE,
 				"Unable to register CUDA device buffer via dmabuf: %s. "
 				"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
 			ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
 		}
 	} else {
-		EFA_INFO(FI_LOG_DOMAIN,
+		EFA_INFO(FI_LOG_CORE,
 			"Unable to retrieve dmabuf fd of CUDA device buffer: %d. "
 			"Fall back to ibv_reg_mr\n", ret);
 		ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
@@ -147,7 +147,7 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 
 	if (!ibv_mr) {
 		info->p2p_supported_by_device = false;
-		EFA_WARN(FI_LOG_DOMAIN,
+		EFA_WARN(FI_LOG_CORE,
 			 "Failed to register CUDA buffer with the EFA device, FI_HMEM transfers that require peer to peer support will fail.\n");
 		ofi_cudaFree(ptr);
 		return;
@@ -156,7 +156,7 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 	ret = ibv_dereg_mr(ibv_mr);
 	ofi_cudaFree(ptr);
 	if (ret) {
-		EFA_WARN(FI_LOG_DOMAIN,
+		EFA_WARN(FI_LOG_CORE,
 			 "Failed to deregister CUDA buffer: %s\n",
 			 fi_strerror(-ret));
 		return;
@@ -192,7 +192,7 @@ static inline void efa_hmem_info_check_p2p_support_neuron(struct efa_hmem_info *
 	 */
 	if (!ptr) {
 		info->initialized = false;
-		EFA_INFO(FI_LOG_DOMAIN, "Cannot allocate Neuron buffer\n");
+		EFA_INFO(FI_LOG_CORE, "Cannot allocate Neuron buffer\n");
 		return;
 	}
 
@@ -215,7 +215,7 @@ static inline void efa_hmem_info_check_p2p_support_neuron(struct efa_hmem_info *
 	if (!ibv_mr) {
 		info->p2p_supported_by_device = false;
 		/* We do not expect to support Neuron on non p2p systems */
-		EFA_WARN(FI_LOG_DOMAIN,
+		EFA_WARN(FI_LOG_CORE,
 		         "Failed to register Neuron buffer with the EFA device, "
 		         "FI_HMEM transfers that require peer to peer support will fail.\n");
 		neuron_free(&handle);
@@ -225,7 +225,7 @@ static inline void efa_hmem_info_check_p2p_support_neuron(struct efa_hmem_info *
 	ret = ibv_dereg_mr(ibv_mr);
 	neuron_free(&handle);
 	if (ret) {
-		EFA_WARN(FI_LOG_DOMAIN,
+		EFA_WARN(FI_LOG_CORE,
 			 "Failed to deregister Neuron buffer: %s\n",
 			 fi_strerror(-ret));
 		return;
@@ -248,14 +248,14 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 	struct efa_hmem_info *info = &g_efa_hmem_info[iface];
 
 	if (!ofi_hmem_is_initialized(iface)) {
-		EFA_INFO(FI_LOG_DOMAIN, "%s is not initialized\n",
+		EFA_INFO(FI_LOG_CORE, "%s is not initialized\n",
 		         fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
 		return;
 	}
 
 	if ((iface == FI_HMEM_SYNAPSEAI || iface == FI_HMEM_NEURON) &&
 	    !efa_device_support_rdma_read()) {
-		EFA_WARN(FI_LOG_DOMAIN,
+		EFA_WARN(FI_LOG_CORE,
 			 "No EFA RDMA read support, transfers using %s will fail.\n",
 			 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
 		return;
@@ -273,7 +273,7 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 		if (iface == FI_HMEM_NEURON)
 			efa_hmem_info_check_p2p_support_neuron(info);
 		if (!info->p2p_supported_by_device)
-			EFA_INFO(FI_LOG_DOMAIN, "%s P2P support is not available.\n", fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+			EFA_INFO(FI_LOG_CORE, "%s P2P support is not available.\n", fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
 	}
 
 	efa_domain_hmem_info_init_protocol_thresholds(iface);
