@@ -290,13 +290,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		efa_domain->util_domain.domain_fid.ops = &efa_ops_domain_dgram;
 	}
 
-	err = efa_fork_support_enable_if_requested(*domain_fid);
-	if (err) {
-		ret = err;
-		EFA_WARN(FI_LOG_DOMAIN, "Failed to initialize fork support. err: %d\n", ret);
-		goto err_free;
-	}
-
 	dlist_insert_tail(&efa_domain->list_entry, &g_efa_domain_list);
 	return 0;
 
