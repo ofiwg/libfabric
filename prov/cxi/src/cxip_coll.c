@@ -1820,16 +1820,25 @@ static void _post_coll_complete(struct cxip_coll_reduction *reduction)
 
 	/* convert Rosetta return codes to CXIP return codes */
 	if (reduction->accum.red_rc == CXIP_COLL_RC_SUCCESS ||
-	    reduction->accum.red_rc == CXIP_COLL_RC_FLT_INEXACT) {
+	    reduction->accum.red_rc == CXIP_COLL_RC_FLT_INEXACT ||
+	    reduction->accum.red_rc == CXIP_COLL_RC_FLT_INVALID ||
+	    reduction->accum.red_rc == CXIP_COLL_RC_FLT_OVERFLOW) {
+		switch (reduction->accum.red_rc) {
+		case CXIP_COLL_RC_FLT_INEXACT:
+			CXIP_WARN("coll reduce FLT result was rounded\n");
+			break;
+		case CXIP_COLL_RC_FLT_INVALID:
+			CXIP_WARN("coll reduce FLT invalid\n");
+			break;
+		case CXIP_COLL_RC_FLT_OVERFLOW:
+			CXIP_WARN("coll reduce FLT overflow\n");
+			break;
+		default:
+			break;
+		}
 		ret = cxip_cq_req_complete(req);
 	} else {
 		switch (reduction->accum.red_rc) {
-		case CXIP_COLL_RC_FLT_OVERFLOW:
-			prov = FI_CXI_ERRNO_RED_FLT_OVERFLOW;
-			break;
-		case CXIP_COLL_RC_FLT_INVALID:
-			prov = FI_CXI_ERRNO_RED_FLT_INVALID;
-			break;
 		case CXIP_COLL_RC_INT_OVERFLOW:
 			prov = FI_CXI_ERRNO_RED_INT_OVERFLOW;
 			break;
