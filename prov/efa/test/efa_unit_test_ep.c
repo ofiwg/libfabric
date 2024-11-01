@@ -948,6 +948,9 @@ static void test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource,
 
 	ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
+	if (cuda_p2p_supported)
+		ep->hmem_p2p_opt = FI_HMEM_P2P_ENABLED;
+
 	/* Set sufficiently small max_msg_size */
 	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_MAX_MSG_SIZE,
 			&max_msg_size, sizeof max_msg_size), 0);
@@ -1003,9 +1006,9 @@ void test_efa_rdm_ep_user_zcpy_rx_disabled(struct efa_resource **state)
 }
 
 /**
- * @brief Verify zcpy_rx is enabled if CUDA P2P is explictly disabled
+ * @brief Verify zcpy_rx is disabled if CUDA P2P is explictly disabled
  */
-void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_happy(struct efa_resource **state)
+void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_disabled(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -1015,7 +1018,7 @@ void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_happy(struct efa_resource **state)
 	resource->hints->mode = FI_MSG_PREFIX;
 	resource->hints->caps = FI_MSG;
 
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, true, false, true);
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, true, false, false);
 }
 
 /**
