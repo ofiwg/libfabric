@@ -481,11 +481,11 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 	}
 
 	/* Zero-copy receive requires P2P support. Disable it if any initialized HMEM iface does not support P2P. */
-	EFA_HMEM_IFACE_FOREACH(iface) {
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
 		if (g_efa_hmem_info[iface].initialized &&
-		    !ofi_hmem_p2p_disabled() &&
-		    ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED &&
-		    !g_efa_hmem_info[iface].p2p_supported_by_device) {
+		    (ofi_hmem_p2p_disabled() ||
+		    ep->hmem_p2p_opt == FI_HMEM_P2P_DISABLED ||
+		    !g_efa_hmem_info[iface].p2p_supported_by_device)) {
 			EFA_INFO(FI_LOG_EP_CTRL,
 			         "%s does not support P2P, zero-copy receive "
 			         "protocol will be disabled\n",
