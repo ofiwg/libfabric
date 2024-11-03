@@ -95,13 +95,11 @@
 
 #define OPX_BTH_UNUSED 0  // Default unsupported values to 0
 
-#define OPX_BTH_RC2(_rc2, _hfi1_type)    ((_hfi1_type & OPX_HFI1_JKR) ?         \
-	OPX_BTH_JKR_RC2(_rc2) : OPX_BTH_UNUSED)
 #define OPX_BTH_CSPEC(_cspec, _hfi1_type)   ((_hfi1_type & OPX_HFI1_JKR) ?         \
     OPX_BTH_JKR_CSPEC(_cspec) : OPX_BTH_UNUSED)
 #define OPX_BTH_CSPEC_DEFAULT  OPX_BTH_UNUSED // Cspec is not used in 9B header
-#define OPX_BTH_RC2_VAL(_hfi1_type)     ((_hfi1_type & OPX_HFI1_JKR) ?         \
-    OPX_BTH_JKR_RC2_VAL     : OPX_BTH_UNUSED)
+
+#define OPX_BTH_RC2_VAL(_hfi1_type) (opx_rate_control_value(_hfi1_type) & OPX_RC2_MASK)
 
 #define OPX_BTH_RX_SHIFT  56
 

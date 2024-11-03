@@ -729,7 +729,8 @@ OPX_INI
 		"The individual packet threshold where lengths above do not use a device registered copy when receiving data into GPU. Default is %d\n)", OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT);
 #endif
 	/* CN5000 only */
-	fi_param_define(&fi_opx_provider, "rate_control", FI_PARAM_INT,"Rate control (CN5000 only).  Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Default is %d\n", OPX_BTH_RC2_DEFAULT);
+	fi_param_define(&fi_opx_provider, "rate_control", FI_PARAM_INT,"Rate control.  Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Default is %d on OPA100 and %d on CN5000\n",
+			OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0);
 	// fi_param_define(&fi_opx_provider, "varname", FI_PARAM_*, "help");
 	fi_param_define(&fi_opx_provider, "mixed_network", FI_PARAM_INT, "Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when mixed network is used. Default is 0.\n");
 

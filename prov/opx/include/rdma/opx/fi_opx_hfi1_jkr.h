@@ -129,56 +129,63 @@ uint32_t opx_pbc_jkr_l2type(unsigned _type)
 
 /* BTH */
 
-/* JKR HAS 16B RC:
-   0 RC_IN_ORDER_0 Routing method 0 for in-order traffic
-   1 RC_IN_ORDER_1 Routing method 1 for in-order traffic
-   2 RC_IN_ORDER_2 Routing method 2 for in-order traffic
-   3 RC_IN_ORDER_3 Routing method 3 for in-order traffic
-   4 RC_OUT_OF_ORDER_0 Routing method 0 for out-of-order traffic. Often it is used for adaptive routing
-   5 RC_OUT_OF_ORDER_1 Routing method 1 for out-of-order traffic. Often it is used for adaptive routing.
-   6 RC_OUT_OF_ORDER_2 Routing method 2 for out-of-order traffic. Often it is used for adaptive routing.
-   7 RC_OUT_OF_ORDER_3 Routing method 3 for out-of-order traffic. Often it is used for adaptive routing.
- */
-#define OPX_RC_IN_ORDER_0      0
-#define OPX_RC_IN_ORDER_1      1
-#define OPX_RC_IN_ORDER_2      2
-#define OPX_RC_IN_ORDER_3      3
-#define OPX_RC_OUT_OF_ORDER_0  4
-#define OPX_RC_OUT_OF_ORDER_1  5
-#define OPX_RC_OUT_OF_ORDER_2  6
-#define OPX_RC_OUT_OF_ORDER_3  7
-#define OPX_RC2_MAX            OPX_RC_OUT_OF_ORDER_3
+#define OPX_RC_IN_ORDER_0     0 /* RC[2]=b'0, RC[1:0}=b'00 LLID: LMC, HLID:SDR (hash), min-hop, 9B default     */
+#define OPX_RC_IN_ORDER_1     1 /* RC[2]=b'0, RC[1:0}=b'01 SDR (hash), non-min-hop                             */
+#define OPX_RC_IN_ORDER_2     2 /* RC[2]=b'0, RC[1:0}=b'10                                                     */
+#define OPX_RC_IN_ORDER_3     3 /* RC[2]=b'0, RC[1:0}=b'11 LLID 16B packet (all other values are HLID)         */
 
-/* For 9B packets, RC[2] is carried in the BTH. The MSB bit, RC[2],
-   specifies whether it is for in-order or out-of-order traffic.
-   RC[1] and RC[0] do not appear in a 9B packet, but are considered
-   to be 0 for during 9B packet routing.
+#define OPX_RC_OUT_OF_ORDER_0 4 /* RC[2]=b'1, RC[1:0}=b'00 FGAR, min-hop only, 9B default                      */
+#define OPX_RC_OUT_OF_ORDER_1 5 /* RC[2]=b'1, RC[1:0}=b'01 FGAR, non min-hop only                              */
+#define OPX_RC_OUT_OF_ORDER_2 6 /* RC[2]=b'1, RC[1:0}=b'10 FGAR, biased, but min-hop or non min-hop are option */
+#define OPX_RC_OUT_OF_ORDER_3 7 /* RC[2]=b'1, RC[1:0}=b'11 FGAR, equal weighting for min-hop or non min-hop    */
+
+/* For 16B packets, the full RC[2:0] is carried in the LRH
+
+     All bits supported, values listed above.
+
+     Non min-hop is applicable only in megafly and dragonfly.
+
+     BTH RC[2] is ignored but should be set to match LRH RC[2]
+
+   For 9B packets, RC[2] is carried in the BTH.
+
+     The MSB bit, RC[2], specifies whether it is for in-order
+     or out-of-order traffic.
+
+     RC[1] and RC[0] do not appear in a 9B packet, but are considered
+     to be 0 for during 9B packet routing.
+
+     However MYR static configuration can be used outside OPX so that
+     all RC options are available on mixed (9B) CN5000 networks
+
  */
+#define OPX_RC_MASK  0b111
 #define OPX_RC2_MASK 0b100
-#define OPX_RC1_MASK 0b10
-#define OPX_RC0_MASK 0b1
+#define OPX_RC1_MASK  0b10
+#define OPX_RC0_MASK   0b1
 
 #define OPX_RC2_SHIFT 2
 #define OPX_RC1_SHIFT 1
 #define OPX_RC0_SHIFT 0
 
-#define OPX_BTH_RC2_IN_ORDER      ((OPX_RC_IN_ORDER_0 & OPX_RC2_MASK) >> OPX_RC2_SHIFT)
-#define OPX_BTH_RC2_OUT_OF_ORDER  ((OPX_RC_OUT_OF_ORDER_0 & OPX_RC2_MASK) >> OPX_RC2_SHIFT)
-#define OPX_BTH_GET_RC2_VAL(_rc)  ((_rc & OPX_RC2_MASK) >> OPX_RC2_SHIFT)
-
-#define OPX_BTH_RC2_DEFAULT  OPX_BTH_RC2_IN_ORDER
-
-static inline int opx_bth_rc2_val()
+/* RC[2] (3 bit) rate control value */
+static inline int opx_rate_control_value(const enum opx_hfi1_type hfi1_type)
 {
-    int rate_control;
-    FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Calling rate control\n");
-    if (fi_param_get_int(fi_opx_global.prov, "rate_control", &rate_control) == FI_SUCCESS) {
-        if (rate_control <= OPX_RC2_MAX) {
-            FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Rate control received = %d", rate_control);
-            return OPX_BTH_GET_RC2_VAL(rate_control);
-        }
-    }
-    return OPX_BTH_RC2_DEFAULT;
+	static int rate_control = -1;
+	/* Only called when initializing the models so not performance sensitive  */
+	if (rate_control == -1) { /* one time static check of env var */
+		if (fi_param_get_int(fi_opx_global.prov, "rate_control", &rate_control) == FI_SUCCESS) {
+			if ((rate_control >= OPX_RC_IN_ORDER_0) && (rate_control <= OPX_RC_OUT_OF_ORDER_3)) {
+				FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Rate control set to %d.", rate_control);
+				return rate_control;
+			} else {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Invalid rate control %d. Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Using default %d.\n",
+					rate_control, ((hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ? OPX_RC_OUT_OF_ORDER_0 : OPX_RC_IN_ORDER_0));
+			}
+		}
+		rate_control = ((hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ? OPX_RC_OUT_OF_ORDER_0 : OPX_RC_IN_ORDER_0) ;
+	}
+	return rate_control;
 }
 
 
@@ -192,7 +199,6 @@ static inline int opx_bth_rc2_val()
 
 #define OPX_BTH_JKR_CSPEC(_cspec) ((_cspec & OPX_BTH_JKR_CSPEC_MASK) << OPX_BTH_JKR_CSPEC_SHIFT)
 #define OPX_BTH_JKR_RC2(_rc2)     ((_rc2 & OPX_BTH_JKR_RC2_MASK) << OPX_BTH_JKR_RC2_SHIFT)
-#define OPX_BTH_JKR_RC2_VAL       opx_bth_rc2_val()
 
 
 /* LRH */
@@ -207,8 +213,10 @@ static inline int opx_bth_rc2_val()
 
 #define OPX_LRH_JKR_ENTROPY_SHIFT_16B (OPX_MSB_SHIFT + 8) // rx is top 8 bits of entropy
 
-/* shift 8 bit bth.rx directly into entropy top bits */
+/* shift 8 bit bth.rx directly into lrh entropy top bits */
 #define OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B (OPX_BTH_RX_SHIFT - OPX_LRH_JKR_ENTROPY_SHIFT_16B)
+
+#define OPX_LRH_JKR_16B_RC2 opx_rate_control_value(OPX_HFI1_JKR)
 
 /* RHF */
 /* JKR
