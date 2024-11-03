@@ -2455,7 +2455,7 @@ void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service * servi
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.lt = 0;   // need to add env variable to change
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.l2 = OPX_PBC_JKR_L2TYPE_16B;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.l4 = 9;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.rc = OPX_RC_IN_ORDER_0;
+		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.rc = OPX_LRH_JKR_16B_RC2;
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.cspec = OPX_BTH_CSPEC_DEFAULT; /*NOT BTH CSPEC*/
 		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.pkey = hfi1->pkey;
 
@@ -2467,7 +2467,7 @@ void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service * servi
 		service->tx.hfi1.ping_model_16B.hdr.bth.opcode = FI_OPX_HFI_BTH_OPCODE_UD;
 		service->tx.hfi1.ping_model_16B.hdr.bth.bth_1 = 0;
 		service->tx.hfi1.ping_model_16B.hdr.bth.pkey = hfi1->pkey;
-		service->tx.hfi1.ping_model_16B.hdr.bth.ecn = (uint8_t)(OPX_BTH_RC2((OPX_BTH_RC2_VAL(hfi1_type)), hfi1_type) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
+		service->tx.hfi1.ping_model_16B.hdr.bth.ecn = (uint8_t)((OPX_BTH_RC2_VAL(hfi1_type)) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT,hfi1_type));
 		service->tx.hfi1.ping_model_16B.hdr.bth.qp = hfi1->bthqp;
 		service->tx.hfi1.ping_model_16B.hdr.bth.unused = 0;
 		service->tx.hfi1.ping_model_16B.hdr.bth.rx = 0;			/* set at runtime */
@@ -2581,7 +2581,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 		service->tx.hfi1.ping_model_9B.hdr.bth.opcode = FI_OPX_HFI_BTH_OPCODE_UD;
 		service->tx.hfi1.ping_model_9B.hdr.bth.bth_1 = 0;
 		service->tx.hfi1.ping_model_9B.hdr.bth.pkey = htons(hfi1->pkey);
-		service->tx.hfi1.ping_model_9B.hdr.bth.ecn = (uint8_t) (OPX_BTH_RC2((OPX_BTH_RC2_VAL(hfi1_type)), hfi1_type) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
+		service->tx.hfi1.ping_model_9B.hdr.bth.ecn = (uint8_t)((OPX_BTH_RC2_VAL(hfi1_type)) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT,hfi1_type));
 		service->tx.hfi1.ping_model_9B.hdr.bth.qp = hfi1->bthqp;
 		service->tx.hfi1.ping_model_9B.hdr.bth.unused = 0;
 		service->tx.hfi1.ping_model_9B.hdr.bth.rx = 0;			/* set at runtime */

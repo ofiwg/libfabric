@@ -247,7 +247,7 @@ void fi_opx_ep_tx_model_init (struct fi_opx_hfi1_context * hfi,
 	send_9B->hdr.bth.opcode = 0;
 	send_9B->hdr.bth.bth_1 = 0;
 	send_9B->hdr.bth.pkey = htons(hfi->pkey);
-	send_9B->hdr.bth.ecn = (uint8_t)(OPX_BTH_RC2((OPX_BTH_RC2_VAL(hfi1_type)),hfi1_type) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT,hfi1_type));
+	send_9B->hdr.bth.ecn = (uint8_t)((OPX_BTH_RC2_VAL(hfi1_type)) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT,hfi1_type));
 	send_9B->hdr.bth.qp = hfi->bthqp;
 	send_9B->hdr.bth.unused = 0;
 	send_9B->hdr.bth.rx = 0;		/* set at runtime */
@@ -340,7 +340,7 @@ void fi_opx_ep_tx_model_init_16B (struct fi_opx_hfi1_context * hfi,
 	send_16B->hdr.lrh_16B.lt = 0;   // need to add env variable to change
 	send_16B->hdr.lrh_16B.l2 = OPX_PBC_JKR_L2TYPE_16B;
 	send_16B->hdr.lrh_16B.l4 = 9;
-	send_16B->hdr.lrh_16B.rc = OPX_RC_IN_ORDER_0;
+	send_16B->hdr.lrh_16B.rc = OPX_LRH_JKR_16B_RC2;
 	send_16B->hdr.lrh_16B.cspec = OPX_BTH_CSPEC_DEFAULT; /*NOT BTH CSPEC*/
 	send_16B->hdr.lrh_16B.pkey = hfi->pkey;
 
@@ -351,7 +351,7 @@ void fi_opx_ep_tx_model_init_16B (struct fi_opx_hfi1_context * hfi,
 	send_16B->hdr.bth.opcode = 0;
 	send_16B->hdr.bth.bth_1 = 0;
 	send_16B->hdr.bth.pkey = htons(hfi->pkey);
-	send_16B->hdr.bth.ecn = (uint8_t)(OPX_BTH_RC2((OPX_BTH_RC2_VAL(hfi1_type)),hfi1_type) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT,hfi1_type));
+	send_16B->hdr.bth.ecn = (uint8_t)((OPX_BTH_RC2_VAL(hfi1_type)) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT,hfi1_type));
 	send_16B->hdr.bth.qp = hfi->bthqp;
 	send_16B->hdr.bth.unused = 0;
 	send_16B->hdr.bth.rx = 0;		/* set at runtime */
@@ -1289,7 +1289,7 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 		opx_ep->rx->tx.cts_9B.hdr.bth.opcode = FI_OPX_HFI_BTH_OPCODE_RZV_CTS;
 		opx_ep->rx->tx.cts_9B.hdr.bth.bth_1 = 0;
 		opx_ep->rx->tx.cts_9B.hdr.bth.pkey = htons(hfi1->pkey);
-		opx_ep->rx->tx.cts_9B.hdr.bth.ecn = (uint8_t) (OPX_BTH_RC2((OPX_BTH_RC2_VAL(hfi1_type)), hfi1_type) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
+		opx_ep->rx->tx.cts_9B.hdr.bth.ecn = (uint8_t)((OPX_BTH_RC2_VAL(hfi1_type)) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT,hfi1_type));
 		opx_ep->rx->tx.cts_9B.hdr.bth.qp = hfi1->bthqp;
 		opx_ep->rx->tx.cts_9B.hdr.bth.unused = 0;
 		opx_ep->rx->tx.cts_9B.hdr.bth.rx = 0;		/* set at runtime */
@@ -1351,7 +1351,7 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.lt = 0;   // need to add env variable to change
 		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.l2 = OPX_PBC_JKR_L2TYPE_16B;
 		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.l4 = 9;
-		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.rc = OPX_RC_IN_ORDER_0;
+		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.rc = OPX_LRH_JKR_16B_RC2;
 		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.cspec = OPX_BTH_CSPEC_DEFAULT; /*NOT BTH CSPEC*/
 		opx_ep->rx->tx.cts_16B.hdr.lrh_16B.pkey = hfi1->pkey;
 
@@ -1362,7 +1362,7 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 		opx_ep->rx->tx.cts_16B.hdr.bth.opcode = FI_OPX_HFI_BTH_OPCODE_RZV_CTS;
 		opx_ep->rx->tx.cts_16B.hdr.bth.bth_1 = 0;
 		opx_ep->rx->tx.cts_16B.hdr.bth.pkey = htons(hfi1->pkey);
-		opx_ep->rx->tx.cts_16B.hdr.bth.ecn = (uint8_t) (OPX_BTH_RC2(OPX_BTH_RC2_VAL(hfi1_type), hfi1_type) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
+		opx_ep->rx->tx.cts_16B.hdr.bth.ecn = (uint8_t)((OPX_BTH_RC2_VAL(hfi1_type)) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT,hfi1_type));
 		opx_ep->rx->tx.cts_16B.hdr.bth.qp = hfi1->bthqp;
 		opx_ep->rx->tx.cts_16B.hdr.bth.unused = 0;
 		opx_ep->rx->tx.cts_16B.hdr.bth.rx = 0;		/* set at runtime */
