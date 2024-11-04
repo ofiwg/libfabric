@@ -370,9 +370,7 @@ struct fi_opx_ep_rx {
 	 * receive operations
 	 */
 	uint64_t			op_flags;
-	uint16_t			slid;
-	uint16_t			unused_u16[3];
-	uint64_t			unused_cacheline_0[4];
+	uint64_t			unused_cacheline_0[5];
 	uint64_t			av_count;
 	union fi_opx_addr *		av_addr;
 
@@ -659,7 +657,7 @@ void fi_opx_ep_rx_process_header_tag (struct fid_ep *ep,
 		const int lock_required,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hf1_type,
-		uint32_t slid);
+		opx_lid_t slid);
 
 void fi_opx_ep_rx_process_header_msg (struct fid_ep *ep,
 		const union opx_hfi1_packet_hdr * const hdr,
@@ -671,7 +669,7 @@ void fi_opx_ep_rx_process_header_msg (struct fid_ep *ep,
 		const int lock_required,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hf1_type,
-		uint32_t slid);
+		opx_lid_t slid);
 
 void fi_opx_ep_rx_reliability_process_packet (struct fid_ep *ep,
 		const union opx_hfi1_packet_hdr * const hdr,
@@ -686,7 +684,7 @@ void fi_opx_ep_rx_append_ue_msg (struct fi_opx_ep_rx * const rx,
 		const uint32_t rank_inst,
 		const bool daos_enabled,
 		struct fi_opx_debug_counters *debug_counters,
-		const uint64_t slid);
+		const opx_lid_t slid);
 
 void fi_opx_ep_rx_append_ue_tag (struct fi_opx_ep_rx * const rx,
 		const union opx_hfi1_packet_hdr * const hdr,
@@ -696,13 +694,13 @@ void fi_opx_ep_rx_append_ue_tag (struct fi_opx_ep_rx * const rx,
 		const uint32_t rank_inst,
 		const bool daos_enabled,
 		struct fi_opx_debug_counters *debug_counters,
-		const uint64_t slid);
+		const opx_lid_t slid);
 
 void fi_opx_ep_rx_append_ue_egr (struct fi_opx_ep_rx * const rx,
 		const union opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
 		const size_t payload_bytes,
-		const uint64_t slid);
+		const opx_lid_t slid);
 
 int fi_opx_ep_tx_check (struct fi_opx_ep_tx * tx, enum fi_av_type av_type);
 
@@ -734,27 +732,27 @@ static void fi_opx_dump_daos_av_addr_rank(struct fi_opx_ep *opx_ep,
 		int i = 0, found = 0;
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s Dump av_rank_hashmap (rank:%d LID:0x%x fi_addr:0x%08lx)\n",
-			title, opx_ep->daos_info.rank, find_addr.uid.lid, find_addr.fi);
+			title, opx_ep->daos_info.rank, find_addr.lid, find_addr.fi);
 
 		HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank) {
 			if (cur_av_rank) {
 				union fi_opx_addr addr;
 				addr.fi = cur_av_rank->fi_addr;
 
-				if ((addr.uid.lid == find_addr.uid.lid) && (cur_av_rank->key.rank == opx_ep->daos_info.rank)) {
+				if ((addr.lid == find_addr.lid) && (cur_av_rank->key.rank == opx_ep->daos_info.rank)) {
 					found = 1;
 					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Dump av_rank_hashmap[%d] = rank:%d LID:0x%x fi_addr:0x%08lx - Found.\n",
-						i++, cur_av_rank->key.rank, addr.uid.lid, addr.fi);
+						i++, cur_av_rank->key.rank, addr.lid, addr.fi);
 				} else {
 					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Dump av_rank_hashmap[%d] = rank:%d LID:0x%x fi:0x%08lx.\n",
-						i++, cur_av_rank->key.rank, addr.uid.lid, addr.fi);
+						i++, cur_av_rank->key.rank, addr.lid, addr.fi);
 				}
 			}
 		}
 
 		if (!found) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Dump av_rank_hashmap - rank:%d LID:0x%x fi_addr:0x%08lx - Not found.\n",
-				opx_ep->daos_info.rank, find_addr.uid.lid, find_addr.fi);
+				opx_ep->daos_info.rank, find_addr.lid, find_addr.fi);
 		}
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s Dump av_rank_hashmap (completed)\n\n", title);
 	}
@@ -788,7 +786,7 @@ static struct fi_opx_daos_av_rank * fi_opx_get_daos_av_rank(struct fi_opx_ep *op
 		addr.fi = av_rank->fi_addr;
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Found AV rank - rank:%d, LID:0x%x, fi_addr:%08lx.\n",
-			av_rank->key.rank, addr.uid.lid, addr.fi);
+			av_rank->key.rank, addr.lid, addr.fi);
 	} else if (opx_ep->daos_info.av_rank_hashmap) {
 		struct fi_opx_daos_av_rank *cur_av_rank = NULL;
 		struct fi_opx_daos_av_rank *tmp_av_rank = NULL;
@@ -804,7 +802,7 @@ static struct fi_opx_daos_av_rank * fi_opx_get_daos_av_rank(struct fi_opx_ep *op
 
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"GET Dump av_rank_hashmap[%d] = rank:%d LID:0x%x fi_addr:0x%08lx\n",
-					i++, cur_av_rank->key.rank, addr.uid.lid, addr.fi);
+					i++, cur_av_rank->key.rank, addr.lid, addr.fi);
 
 				if (cur_av_rank->key.rank == key.rank) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -821,7 +819,8 @@ static struct fi_opx_daos_av_rank * fi_opx_get_daos_av_rank(struct fi_opx_ep *op
 
 __OPX_FORCE_INLINE__
 uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag,
-				      const fi_opx_uid_t origin_uid_fi,
+				      const opx_lid_t origin_lid,
+				      const uint8_t origin_endpoint_id,
 				      const uint64_t ignore,
 				      const uint64_t target_tag_and_not_ignore,
 				      const uint64_t any_addr,
@@ -834,7 +833,7 @@ uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag,
 	return	(origin_tag_and_not_ignore == target_tag_and_not_ignore) &&
 		(
 			(any_addr)					||
-			(origin_uid_fi == src_addr.uid.fi)		||
+			((origin_lid == src_addr.lid) && (origin_endpoint_id == src_addr.endpoint_id))		||
 			(
 				opx_ep->daos_info.hfi_rank_enabled &&
 				is_intranode &&
@@ -865,7 +864,8 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_find_matching_packet(struct fi_opx_ep *o
 	const uint64_t any_addr = (context->src_addr == FI_ADDR_UNSPEC);
 
 	while (uepkt && !fi_opx_ep_is_matching_packet(uepkt->tag,
-						      uepkt->origin_uid_fi,
+						      uepkt->lid,
+						      uepkt->endpoint_id,
 						      ignore,
 						      target_tag_and_not_ignore,
 						      any_addr,
@@ -890,13 +890,10 @@ uint64_t is_match (struct fi_opx_ep * opx_ep,
 	struct opx_context *context,
 	uint32_t rank, uint32_t rank_inst,
 	unsigned is_intranode,
-	const uint64_t slid)
+	const opx_lid_t slid)
 {
 
 	const union fi_opx_addr src_addr = { .fi = context->src_addr };
-
-	const fi_opx_uid_t origin_uid_fi = fi_opx_hfi1_packet_hdr_uid(hdr, slid);
-
 	const uint64_t ignore = context->ignore;
 	const uint64_t target_tag = context->tag;
 	const uint64_t origin_tag = hdr->match.ofi_tag;
@@ -908,7 +905,7 @@ uint64_t is_match (struct fi_opx_ep * opx_ep,
 			(origin_tag_and_not_ignore == target_tag_and_not_ignore) &&
 			(
 				(context->src_addr == FI_ADDR_UNSPEC) 	||
-				(origin_uid_fi == src_addr.uid.fi)		||
+				((slid == src_addr.lid)	&& (hdr->reliability.origin_tx == src_addr.endpoint_id))	||
 				(
 					opx_ep->daos_info.hfi_rank_enabled &&
 					is_intranode &&
@@ -921,13 +918,14 @@ uint64_t is_match (struct fi_opx_ep * opx_ep,
 	fprintf(stderr, "%s:%s():%d context = %p, context->src_addr = 0x%016lx, context->ignore = 0x%016lx, context->tag = 0x%016lx, src_addr.uid.fi = 0x%08x\n", __FILE__, __func__, __LINE__,
 		context, context->src_addr, context->ignore, context->tag, src_addr.uid.fi);
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		fprintf(stderr, "%s:%s():%d hdr->match.slid = 0x%04x (%u), hdr->match.origin_tx = 0x%02x (%u), origin_uid_fi = 0x%08x\n", __FILE__, __func__, __LINE__,
-			hdr->lrh_9B.slid, hdr->lrh_9B.slid, hdr->match.origin_tx, hdr->match.origin_tx, origin_uid_fi);
+		fprintf(stderr, "%s:%s():%d hdr->match.slid = 0x%04x (%u), hdr->match.origin_tx = 0x%02x (%u), origin_lid = 0x%08x, origin_endpoint_id = 0x%x\n", __FILE__, __func__, __LINE__,
+			__be16_to_cpu24((__be16)hdr->lrh_9B.slid), __be16_to_cpu24((__be16)hdr->lrh_9B.slid),
+			hdr->match.origin_tx, hdr->match.origin_tx, slid, hdr->reliability.origin_tx);
 	} else {
-		fprintf(stderr, "%s:%s():%d hdr->match.slid = 0x%04x/0x%04lx (%u), hdr->match.origin_tx = 0x%02x (%u), origin_uid_fi = 0x%08x\n", __FILE__, __func__, __LINE__,
-			htonl((uint64_t)((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid))),((uint64_t)((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid))),
-			htonl((uint64_t)((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid))),
-			hdr->match.origin_tx, hdr->match.origin_tx, origin_uid_fi);
+		fprintf(stderr, "%s:%s():%d hdr->match.slid = 0x%lx (%u), hdr->match.origin_tx = 0x%02x (%u), origin_lid = 0x%08x, origin_endpoint_id = 0x%x\n", __FILE__, __func__, __LINE__,
+			__le24_to_cpu((opx_lid_t)((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid))),
+			__le24_to_cpu((opx_lid_t)((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid))),
+			hdr->match.origin_tx, hdr->match.origin_tx, slid, hdr->reliability.origin_tx);
 	}
 	fprintf(stderr, "%s:%s():%d hdr->match.ofi_tag = 0x%016lx, target_tag_and_not_ignore = 0x%016lx, origin_tag_and_not_ignore = 0x%016lx, FI_ADDR_UNSPEC = 0x%08lx\n", __FILE__, __func__, __LINE__,
 		hdr->match.ofi_tag, target_tag_and_not_ignore, origin_tag_and_not_ignore, FI_ADDR_UNSPEC);
@@ -2580,11 +2578,10 @@ void fi_opx_ep_rx_process_header_non_eager(struct fid_ep *ep,
 
 __OPX_FORCE_INLINE__
 uint64_t fi_opx_mp_egr_id_from_nth_packet(const union opx_hfi1_packet_hdr *hdr,
-					  const uint64_t slid)
+					  const opx_lid_t slid)
 {
 	return ((uint64_t) hdr->mp_eager_nth.mp_egr_uid) |
-		(((uint64_t)hdr->reliability.origin_tx) << 48) |
-		(((uint64_t)slid) << 32);
+		((uint64_t) ((slid << 8) | hdr->reliability.origin_tx) << 32);
 }
 
 __OPX_FORCE_INLINE__
@@ -2603,11 +2600,11 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
 	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(length);
 
 	while (uepkt && context->byte_counter) {
-		uint64_t slid;
+		opx_lid_t slid;
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			slid = (uint64_t)(uepkt->hdr.lrh_9B.slid);
+			slid = (opx_lid_t)__be16_to_cpu24(((__be16)(uepkt->hdr.lrh_9B.slid)));
 		} else {
-			slid = htons(((uepkt->hdr.lrh_16B.slid20 << 20) | (uepkt->hdr.lrh_16B.slid)));
+			slid = (opx_lid_t)__le24_to_cpu((uepkt->hdr.lrh_16B.slid20 << 20) | (uepkt->hdr.lrh_16B.slid));
 		}
 
 		if (fi_opx_mp_egr_id_from_nth_packet(&uepkt->hdr, slid) == mp_egr_id.id) {
@@ -2649,7 +2646,7 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 		const int lock_required,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type,
-		const uint64_t slid)
+		const opx_lid_t slid)
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -2716,9 +2713,7 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 
 	const union fi_opx_mp_egr_id mp_egr_id = {
 		.uid = hdr->reliability.psn,
-		.origin_tx = hdr->reliability.origin_tx,
-		.slid = slid,
-		.unused = 0};
+		.slid_origin_tx = (slid << 8) | hdr->reliability.origin_tx };
 
 	/* Process any other early arrival packets that are part of this multi-packet egr */
 	fi_opx_ep_rx_process_pending_mp_eager_ue(ep, context, mp_egr_id, is_intranode, lock_required, reliability, hfi1_type);
@@ -2752,7 +2747,7 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep,
 		const int lock_required,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type,
-		const uint64_t slid)
+		const opx_lid_t slid)
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -2831,7 +2826,7 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 		const int lock_required,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type,
-		const uint64_t slid)
+		const opx_lid_t slid)
 {
 
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -3278,17 +3273,15 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 
 			/* Since this is the first multi-packet eager packet,
 			   the uid portion of the mp_egr_id will be this packet's PSN */
-			uint64_t slid;
+			opx_lid_t slid;
 			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-				slid = (uint64_t)uepkt->hdr.lrh_9B.slid;
+				slid = (opx_lid_t)__be16_to_cpu24((__be16)uepkt->hdr.lrh_9B.slid);
 			} else {
-				slid = htons((uint64_t)((uepkt->hdr.lrh_16B.slid20 << 20) | (uepkt->hdr.lrh_16B.slid)));
+				slid = (opx_lid_t)__le24_to_cpu((__le24)(uepkt->hdr.lrh_16B.slid20 << 20) | (uepkt->hdr.lrh_16B.slid));
 			}
 			const union fi_opx_mp_egr_id mp_egr_id = {
 					.uid = uepkt->hdr.reliability.psn,
-					.origin_tx = uepkt->hdr.reliability.origin_tx,
-					.slid = slid,
-					.unused = 0
+					.slid_origin_tx = (slid << 8) | uepkt->hdr.reliability.origin_tx
 			};
 
 			fi_opx_ep_rx_process_pending_mp_eager_ue(ep, context, mp_egr_id, is_intranode,
@@ -3785,13 +3778,13 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 	assert (len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type));
 
 	const uint64_t bth_rx = ((uint64_t)addr.hfi1_rx) << OPX_BTH_RX_SHIFT;
-	const uint64_t lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(dest_addr);
-	const uint64_t pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type);
+	const uint64_t lrh_dlid = hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B) ? FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(addr.lid) : addr.lid;
+	const uint64_t pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type);
 
 	/* Write the first packet */
 	uint32_t first_packet_psn;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== SEND 16B, HFI -- MULTI-PACKET EAGER USER (begin)\n");
+		"===================================== SEND, HFI -- MULTI-PACKET EAGER USER (begin)\n");
 
 	uint8_t *buf_bytes_ptr = (uint8_t *) buf;
 	ssize_t rc;
@@ -3804,7 +3797,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 	if (rc != FI_SUCCESS) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_fall_back_to_rzv);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND 16B, HFI -- MULTI-PACKET EAGER USER (return %zd)\n", rc);
+			"===================================== SEND, HFI -- MULTI-PACKET EAGER USER (return %zd)\n", rc);
 
 		return rc;
 	}
@@ -3817,7 +3810,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 	buf_bytes_ptr += FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== SEND 16B, HFI -- MULTI-PACKET EAGER USER FIRST NTH (payload_remaining %zu)\n", payload_remaining);
+		"===================================== SEND, HFI -- MULTI-PACKET EAGER USER FIRST NTH (payload_remaining %zu)\n", payload_remaining);
 
 	/* Write all the full nth packets */
 	while (payload_remaining >= FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) {
@@ -3864,14 +3857,14 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 		buf_bytes_ptr += FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type);
 		payload_offset += FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND 16B, HFI -- MULTI-PACKET EAGER USER (payload_remaining %zu)\n", payload_remaining);
+			"===================================== SEND, HFI -- MULTI-PACKET EAGER USER (payload_remaining %zu)\n", payload_remaining);
 	}
 
 
 	/* Write all the last packet (if necessary) */
 	if (payload_remaining > 0) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND 16B, HFI -- MULTI-PACKET EAGER USER LAST (payload_remaining %zu)\n", payload_remaining);
+			"===================================== SEND, HFI -- MULTI-PACKET EAGER USER LAST (payload_remaining %zu)\n", payload_remaining);
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_last(opx_ep, (void *)buf_bytes_ptr, payload_offset,
 							payload_remaining,
@@ -3912,7 +3905,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 		}
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_packets);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND 16B, HFI -- MULTI-PACKET EAGER USER LAST (payload_remaining %zu)\n", payload_remaining);
+			"===================================== SEND, HFI -- MULTI-PACKET EAGER USER LAST (payload_remaining %zu)\n", payload_remaining);
 
 	}
 
@@ -3920,7 +3913,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 		fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required, tag, caps);
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== SEND 16B, HFI -- MULTI-PACKET EAGER USER (end)\n");
+		"===================================== SEND, HFI -- MULTI-PACKET EAGER USER (end)\n");
 
 	return FI_SUCCESS;
 }
@@ -4116,7 +4109,7 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 
 	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
 			&opx_ep->reliability->state,
-			addr.uid.lid,
+			addr.lid,
 			addr.hfi1_rx,
 			addr.reliability_rx,
 			reliability))) {

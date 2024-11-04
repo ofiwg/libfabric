@@ -80,9 +80,8 @@
 #define OPX_PBC_PORTIDX(pidx, _hfi1_type) ((_hfi1_type & OPX_HFI1_WFR) ?         \
     OPX_PBC_WFR_PORTIDX(pidx) : OPX_PBC_JKR_PORTIDX(pidx))
 
-#define OPX_PBC_LRH_DLID_TO_PBC_DLID(dlid, _hfi1_type)  ((_hfi1_type & OPX_HFI1_WFR) ?         \
-OPX_PBC_WFR_LRH_DLID_TO_PBC_DLID(dlid) : OPX_PBC_JKR_LRH_DLID_TO_PBC_DLID(dlid))
-
+#define OPX_PBC_DLID_TO_PBC_DLID(dlid, _hfi1_type)  ((_hfi1_type & OPX_HFI1_WFR) ?         \
+    OPX_PBC_WFR_DLID_TO_PBC_DLID(dlid) : OPX_PBC_JKR_DLID_TO_PBC_DLID(dlid))
 
 #define OPX_PBC_L2TYPE(type, _hfi1_type) ((_hfi1_type & OPX_HFI1_WFR) ? \
     	OPX_PBC_WFR_L2TYPE(type) : OPX_PBC_JKR_L2TYPE(type))

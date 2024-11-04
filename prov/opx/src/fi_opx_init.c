@@ -59,8 +59,8 @@ union fi_opx_addr opx_default_addr = {
 	.hfi1_rx = 0,
 	.hfi1_unit = 0xff,
 	.reliability_rx = 0,
-	.uid = {.lid = 0xffff, .lid_3B = 0xff, .endpoint_id = 0xff },
-	.rx_index = 0,
+	.lid = 0xffffff, 
+	.endpoint_id = 0xff,
 };
 
 static int fi_opx_init;

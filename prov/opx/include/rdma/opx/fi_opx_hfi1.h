@@ -513,7 +513,7 @@ struct fi_opx_hfi1_context {
 	} info;
 
 	int				fd;
-	uint32_t			lid;
+	opx_lid_t			lid;
 	struct _hfi_ctrl *		ctrl;
 	//struct hfi1_user_info_dep	user_info;
 	enum opx_hfi1_type		hfi_hfi1_type;
@@ -624,7 +624,7 @@ void fi_opx_consume_credits(union fi_opx_hfi1_pio_state *pio_state, size_t count
 
 
 __OPX_FORCE_INLINE__
-struct fi_opx_hfi_local_lookup * fi_opx_hfi1_get_lid_local(uint16_t hfi_lid)
+struct fi_opx_hfi_local_lookup * fi_opx_hfi1_get_lid_local(opx_lid_t hfi_lid)
 {
 	struct fi_opx_hfi_local_lookup_key key;
 	struct fi_opx_hfi_local_lookup *hfi_lookup = NULL;
@@ -638,7 +638,7 @@ struct fi_opx_hfi_local_lookup * fi_opx_hfi1_get_lid_local(uint16_t hfi_lid)
 }
 
 __OPX_FORCE_INLINE__
-int fi_opx_hfi1_get_lid_local_unit(uint16_t lid)
+int fi_opx_hfi1_get_lid_local_unit(opx_lid_t lid)
 {
 	struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(lid);
 
@@ -646,7 +646,7 @@ int fi_opx_hfi1_get_lid_local_unit(uint16_t lid)
 }
 
 __OPX_FORCE_INLINE__
-bool opx_lid_is_intranode(uint16_t lid)
+bool opx_lid_is_intranode(opx_lid_t lid)
 {
 	if (fi_opx_global.hfi_local_info.lid == lid) {
 		return true;
@@ -658,14 +658,14 @@ bool opx_lid_is_intranode(uint16_t lid)
 __OPX_FORCE_INLINE__
 bool opx_lrh_is_intranode(union opx_hfi1_packet_hdr *hdr, const enum opx_hfi1_type hfi1_type)
 {
-	uint32_t lid_be;
+	opx_lid_t lid;
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		lid_be = hdr->lrh_9B.slid;
+		lid = (opx_lid_t)__be16_to_cpu24((__be16)hdr->lrh_9B.slid);
 	} else {
-		lid_be = htons(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
+		lid = (opx_lid_t)__le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 	}
-	return opx_lid_is_intranode(lid_be);
+	return opx_lid_is_intranode(lid);
 }
 
 struct fi_opx_hfi1_context * fi_opx_hfi1_context_open (struct fid_ep *ep, uuid_t unique_job_key);

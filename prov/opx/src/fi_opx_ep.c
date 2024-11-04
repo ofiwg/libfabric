@@ -241,7 +241,7 @@ void fi_opx_ep_tx_model_init (struct fi_opx_hfi1_context * hfi,
 
 	send_9B->hdr.lrh_9B.dlid = 0;		/* set at runtime */
 	send_9B->hdr.lrh_9B.pktlen = 0;		/* set at runtime */
-	send_9B->hdr.lrh_9B.slid = htons((uint16_t)hfi->lid);
+	send_9B->hdr.lrh_9B.slid = __cpu24_to_be16((opx_lid_t)hfi->lid);
 
 	/* BTH header */
 	send_9B->hdr.bth.opcode = 0;
@@ -1244,18 +1244,15 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 	opx_ep->rx->egrq.head_register = hfi1->info.rxe.egrq.head_register;
 
 	opx_ep->rx->self.raw64b = 0;
-	opx_ep->rx->self.uid.lid = htons(hfi1->lid);   // lid needs to be changed to uint32
+	opx_ep->rx->self.lid = hfi1->lid;
 	opx_ep->rx->self.hfi1_rx = hfi1->info.rxe.id;
 	opx_ep->rx->self.hfi1_unit = (uint8_t)hfi1->hfi_unit;
-	opx_ep->rx->self.uid.endpoint_id = hfi1->send_ctxt;
-	opx_ep->rx->self.rx_index = hfi1->send_ctxt; /* Current driver send_ctxt and receive ctxt are 1-1 */
+	opx_ep->rx->self.endpoint_id = hfi1->send_ctxt;
 	opx_ep->rx->self.reliability_rx = opx_ep->reliability->rx;
-
-	opx_ep->rx->slid = opx_ep->rx->self.uid.lid;	/* copied for better cache layout */
 
 	/* Initialize hash table used to lookup info on any HFI units on the node */
 	fi_opx_global.hfi_local_info.hfi_unit = (uint8_t)hfi1->hfi_unit;
-	fi_opx_global.hfi_local_info.lid = htons(hfi1->lid);
+	fi_opx_global.hfi_local_info.lid = hfi1->lid;
 
 	fi_opx_init_hfi_lookup();
 
@@ -2797,7 +2794,7 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		while (uepkt != NULL) {
 			unsigned is_intranode = opx_lrh_is_intranode(&(uepkt->hdr), hfi1_type);
 
-			if (fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->origin_uid_fi,
+			if (fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->lid, uepkt->endpoint_id,
 							FI_OPX_MATCH_IGNORE_ALL,
 							FI_OPX_MATCH_TAG_ZERO,
 							any_addr, src_addr, opx_ep,
@@ -2892,7 +2889,7 @@ void fi_opx_ep_rx_process_header_tag (struct fid_ep * ep,
 		const int lock_required,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type,
-		uint32_t slid) {
+		opx_lid_t slid) {
 
 	fi_opx_ep_rx_process_header(ep, hdr,
 		(const union fi_opx_hfi1_packet_payload * const )payload,
@@ -2917,7 +2914,7 @@ void fi_opx_ep_rx_process_header_msg (struct fid_ep * ep,
 		const int lock_required,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type,
-		uint32_t slid) {
+		opx_lid_t slid) {
 
 	fi_opx_ep_rx_process_header(ep, hdr,
 		(const union fi_opx_hfi1_packet_payload * const )payload,
@@ -2945,7 +2942,7 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 	uint16_t lrh_pktlen_le;
 	size_t total_bytes;
 	size_t payload_bytes;
-	uint32_t slid;
+	opx_lid_t slid;
 
 
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
@@ -2953,12 +2950,12 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 		lrh_pktlen_le = ntohs(hdr->lrh_9B.pktlen);
 		total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
 		payload_bytes = total_bytes - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B);
-		slid = hdr->lrh_9B.slid;
+		slid = (opx_lid_t)__be16_to_cpu24((__be16)hdr->lrh_9B.slid);
 	} else {
 		lrh_pktlen_le = hdr->lrh_16B.pktlen;
 		total_bytes = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing icrc */
 		payload_bytes = total_bytes - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B);
-		slid = htons(((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid)));
+		slid = (opx_lid_t)__le24_to_cpu(((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid)));
 	}
 
 	if (OFI_LIKELY(opcode & FI_OPX_HFI_BTH_OPCODE_TAG_BIT)) {
@@ -2996,7 +2993,7 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * cons
 		const size_t payload_bytes,
 		const uint32_t rank,
 		const uint32_t rank_inst,
-		const uint64_t slid)
+		const opx_lid_t slid)
 {
 	struct fi_opx_hfi1_ue_packet *uepkt = ofi_buf_alloc(rx->ue_packet_pool);
 
@@ -3008,7 +3005,8 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * cons
 	}
 
 	uepkt->tag = hdr->match.ofi_tag;
-	uepkt->origin_uid_fi = fi_opx_hfi1_packet_hdr_uid(hdr, slid);
+	uepkt->lid = slid;
+	uepkt->endpoint_id = hdr->reliability.origin_tx;
 
 	/* DAOS Persistent Address Support:
 	 * Support: save rank information associated with this inbound packet.
@@ -3032,7 +3030,7 @@ void fi_opx_ep_rx_append_ue_msg (struct fi_opx_ep_rx * const rx,
 		const uint32_t rank_inst,
 		const bool daos_enabled,
 		struct fi_opx_debug_counters *debug_counters,
-		const uint64_t slid)
+		const opx_lid_t slid)
 {
 	fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_MSG].ue,
 				hdr, payload, payload_bytes, rank, rank_inst, slid);
@@ -3047,7 +3045,7 @@ void fi_opx_ep_rx_append_ue_tag (struct fi_opx_ep_rx * const rx,
 		const uint32_t rank_inst,
 		const bool daos_enabled,
 		struct fi_opx_debug_counters *debug_counters,
-		const uint64_t slid)
+		const opx_lid_t slid)
 {
 
 #ifndef FI_OPX_MATCH_HASH_DISABLE
@@ -3075,7 +3073,7 @@ void fi_opx_ep_rx_append_ue_egr (struct fi_opx_ep_rx * const rx,
 		const union opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
 		const size_t payload_bytes,
-		const uint64_t slid) {
+		const opx_lid_t slid) {
 	/* DAOS Persistent Address Support:
 	 * No need to retain rank related data for packets appended to the
 	 * MP Eager unexpected queue, because the mp_egr_id related data in

@@ -110,8 +110,8 @@ __OPX_FORCE_INLINE__
 void fi_opx_hfi1_handle_ud_eager_packet(struct fi_opx_ep *opx_ep,
 					const union opx_hfi1_packet_hdr *const hdr,
 					const uint64_t rhf,
-					const uint64_t slid,
-					const uint64_t dlid,
+					const opx_lid_t slid,
+					const opx_lid_t dlid,
 					const uint16_t pktlen,
 					const enum opx_hfi1_type hfi1_type)
 {
@@ -141,7 +141,7 @@ void fi_opx_hfi1_handle_ud_eager_packet(struct fi_opx_ep *opx_ep,
 static
 void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep,
 				const union opx_hfi1_packet_hdr *const hdr,
-				const uint64_t slid)
+				const opx_lid_t slid)
 {
 	struct fi_opx_reliability_service *service =
 		opx_ep->reliability->state.service;
@@ -213,10 +213,10 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 				      const union opx_hfi1_packet_hdr *const hdr,
 				      const uint64_t rhf_seq, const uint64_t hdrq_offset,
 				      const uint64_t rhf,
-					  const uint64_t slid,
-					  const uint64_t dlid,
-					  const uint16_t pktlen,
-					  const enum opx_hfi1_type hfi1_type)
+				      const opx_lid_t slid,
+				      const opx_lid_t dlid,
+				      const uint16_t pktlen,
+				      const enum opx_hfi1_type hfi1_type)
 {
 	/* "header only" packet - no payload */
 	if (OFI_LIKELY(!OPX_RHF_IS_USE_EGR_BUF(rhf, hfi1_type))) {
@@ -302,7 +302,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 					const union opx_hfi1_packet_hdr *const hdr,
 					const uint64_t rhf_seq, const uint64_t hdrq_offset,
 					uint8_t *origin_rx, const uint64_t rhf,
-					const uint64_t slid,
+					const opx_lid_t slid,
 					const uint16_t pktlen,
 					const enum opx_hfi1_type hfi1_type)
 {
@@ -361,7 +361,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 			       const uint8_t origin_rx,
 			       const uint64_t rhf,
 			       const enum opx_hfi1_type hfi1_type,
-			       const uint64_t slid,
+			       const opx_lid_t slid,
 			       const uint16_t pktlen)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -466,7 +466,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 	if (!(psn & opx_ep->reliability->service.preemptive_ack_rate_mask) && psn) {
 
 		fi_opx_hfi1_rx_reliability_send_pre_acks(&opx_ep->ep_fid,
-				opx_ep->reliability->state.lid_be,
+				opx_ep->reliability->state.lid,
 				opx_ep->reliability->state.rx,
 				psn - opx_ep->reliability->service.preemptive_ack_rate + 1, /* psn_start */
 				opx_ep->reliability->service.preemptive_ack_rate, /* psn_count */
@@ -481,7 +481,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 		assert(psn >= psn_count - 1);
 
 		fi_opx_hfi1_rx_reliability_send_pre_acks(&opx_ep->ep_fid,
-				opx_ep->reliability->state.lid_be,
+				opx_ep->reliability->state.lid,
 				opx_ep->reliability->state.rx,
 				psn - psn_count + 1, /* psn_start */
 				psn_count, /* psn_count */
@@ -510,7 +510,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 	volatile uint32_t *rhf_ptr = opx_ep->rx->hdrq.rhf_base + hdrq_offset;
 
 	const uint64_t rhf_rcvd = *((volatile uint64_t *)rhf_ptr);
-	uint32_t slid, dlid;
+	opx_lid_t slid, dlid;
 	uint16_t pktlen;
 
 	const uint64_t rhf_seq = opx_ep->rx->state.hdrq.rhf_seq;
@@ -559,13 +559,13 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 
 
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			slid = (uint32_t)hdr->lrh_9B.slid;
+			slid = (opx_lid_t)__be16_to_cpu24((__be16)hdr->lrh_9B.slid);
 			pktlen = (uint32_t)hdr->lrh_9B.pktlen; /* pass it down unchanged. lower layers handle BE/LE */
-			dlid = (uint32_t)hdr->lrh_9B.dlid;
+			dlid = (opx_lid_t)__be16_to_cpu24((__be16)hdr->lrh_9B.dlid);
 		} else {
-			slid = htons((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid)); /* BE for lower layers */
+			slid = (opx_lid_t)__le24_to_cpu((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid));
 			pktlen = (uint16_t) hdr->lrh_16B.pktlen; /* pass it down unchanged. lower layers handle BE/LE */
-			dlid = htons(((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid))); /* BE for lower layers */
+			dlid = (opx_lid_t)__le24_to_cpu(((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid)));
 		}
 
 
@@ -617,7 +617,7 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 	struct opx_shm_packet* packet = opx_shm_rx_next(&opx_ep->rx->shm, &pos);
 	union opx_hfi1_packet_hdr * hdr = (packet) ?
 		(union opx_hfi1_packet_hdr *) packet->data : NULL;
-	uint32_t slid;
+	opx_lid_t slid;
 
 	while (hdr != NULL) {
 		const uint8_t opcode = hdr->bth.opcode;
@@ -626,14 +626,13 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 		/* DAOS HFI Rank Support: */
 		if (!opx_ep->daos_info.hfi_rank_enabled) {
 #ifndef NDEBUG
-			uint32_t dlid __attribute__ ((unused));
+			opx_lid_t dlid __attribute__ ((unused));
 			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-				dlid = hdr->lrh_9B.dlid;
+				dlid = (opx_lid_t)__be16_to_cpu24((__be16)hdr->lrh_9B.dlid);
 			} else {
-				dlid = htons((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid));
+				dlid = (opx_lid_t)__le24_to_cpu((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid));
 			}
-
-			assert(dlid == opx_ep->rx->self.uid.lid);
+			assert(dlid == opx_ep->rx->self.lid);
 			assert(hdr->bth.rx == opx_ep->rx->self.hfi1_rx ||
 				hdr->bth.rx == opx_ep->rx->self.reliability_rx);
 #endif
@@ -658,12 +657,12 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 #ifndef NDEBUG
 			uint32_t dlid __attribute__ ((unused));
 			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-				dlid = hdr->lrh_9B.dlid;
+				dlid = (opx_lid_t)__be16_to_cpu24((__be16)hdr->lrh_9B.dlid);
 			} else {
-				dlid = htons(hdr->lrh_16B.dlid20 << 20 | hdr->lrh_16B.dlid);
+				dlid = (opx_lid_t)__le24_to_cpu(hdr->lrh_16B.dlid20 << 20 | hdr->lrh_16B.dlid);
 			}
 
-			assert(dlid == opx_ep->rx->self.uid.lid);
+			assert(dlid == opx_ep->rx->self.lid);
 #endif
 			/* origin_reliability_rx is HFI rank instead of HFI rx */
 			origin_reliability_rx = packet->origin_rank;
@@ -678,9 +677,9 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required,
 		}
 
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			slid = hdr->lrh_9B.slid;
+			slid = (opx_lid_t)__be16_to_cpu24((__be16)hdr->lrh_9B.slid);
 		} else {
-			slid = htons(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
+			slid = (opx_lid_t)__le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		}
 
 		if (FI_OPX_HFI_BTH_OPCODE_WITHOUT_CQ(opcode) == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {

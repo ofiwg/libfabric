@@ -157,14 +157,14 @@ struct fi_opx_hfi1_sdma_work_entry {
 	uint32_t				total_payload;
 	uint32_t				num_packets;
 
-	uint16_t				dlid;
+	opx_lid_t				dlid;
 
 	uint8_t					rs;
 	uint8_t					rx;
 	bool					in_use;
 	bool					use_bounce_buf;
 	bool					pending_bounce_buf;
-	uint8_t					unused_byte_padding[5];
+	uint8_t					unused_byte_padding[3];
 
 	uint64_t				unused_qw_padding;
 

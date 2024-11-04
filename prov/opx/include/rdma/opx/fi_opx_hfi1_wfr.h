@@ -43,7 +43,7 @@
 #define OPX_PBC_WFR_SCTXT(_ctx)      OPX_PBC_WFR_UNUSED
 #define OPX_PBC_WFR_L2COMPRESSED(_c) OPX_PBC_WFR_UNUSED
 #define OPX_PBC_WFR_PORTIDX(_pidx)   OPX_PBC_WFR_UNUSED
-#define OPX_PBC_WFR_LRH_DLID_TO_PBC_DLID(_dlid)    OPX_PBC_WFR_UNUSED
+#define OPX_PBC_WFR_DLID_TO_PBC_DLID(_dlid)    OPX_PBC_WFR_UNUSED
 
 #ifndef NDEBUG
 /* Debug only JKR definition for this sanity check */

@@ -92,8 +92,7 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->cc = cc;
 	params->dest_rx = opx_target_addr.hfi1_rx;
 	params->bth_rx = params->dest_rx << OPX_BTH_RX_SHIFT;
-	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_target_addr.fi);
-	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid, hfi1_type);
+	params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(opx_target_addr.lid, hfi1_type);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		params->pbc_dws = 2 + /* pbc */
 				2 + /* lrh */
@@ -101,6 +100,7 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 				9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 				16; /* one "struct fi_opx_hfi1_dput_iov", padded to cache line */
 		params->lrh_dws = htons(params->pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
+		params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(opx_target_addr.lid);
 	} else {
 		params->pbc_dws = 2 + /* pbc */
 				4 + /* lrh uncompressed */
@@ -109,6 +109,7 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 				16 + /* one "struct fi_opx_hfi1_dput_iov", padded to cache line */
 				2; /* ICRC/tail */
 		params->lrh_dws = (params->pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
+		params->lrh_dlid = opx_target_addr.lid;
 	}
 	params->is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_target_addr, caps);
 	params->reliability = reliability;
@@ -199,9 +200,13 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
 	params->work_elem.payload_copy = NULL;
 	params->work_elem.complete = false;
 	params->opx_ep = opx_ep;
-	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_dst_addr.fi);
-	params->pbc_dlid = OPX_PBC_LRH_DLID_TO_PBC_DLID(params->lrh_dlid, hfi1_type);
-	params->slid = opx_dst_addr.uid.lid;
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(opx_dst_addr.lid);
+	} else {
+		params->lrh_dlid = opx_dst_addr.lid;
+	}
+	params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(opx_dst_addr.lid, hfi1_type);
+	params->slid = opx_dst_addr.lid;
 	params->origin_rs = opx_dst_addr.reliability_rx;
 	params->dt = dt == FI_VOID ? FI_VOID-1 : dt;
 	params->op = op == FI_NOOP ? FI_NOOP-1 : op;

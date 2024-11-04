@@ -222,7 +222,11 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 		fprintf(stderr, "(%d) [%d] PBC: %#16.16lX\n",
 			pid, req_num, header_vec->scb.scb_9B.qw0);
 
-		fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_9B.hdr, OPX_HFI1_TYPE, func, line);
+		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_9B.hdr, OPX_HFI1_TYPE, func, line);
+		} else {
+			fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_16B.hdr, OPX_HFI1_TYPE, func, line);
+		}
 
 		fprintf(stderr, "(%d) [%d] req data iov=%p len=%lu\n",
 			pid, req_num, iov_ptr[1].iov_base, iov_ptr[1].iov_len);

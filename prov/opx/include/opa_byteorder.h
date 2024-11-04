@@ -117,7 +117,7 @@ static __inline__ __u64 __hfi_fswab64(__u64 x) {
 
 static __inline__ __u16 __cpu_to_le16(__le16)
     __attribute__ ((always_inline));
-static __inline__ __u32 __cpu_to_le24(__le24)
+static __inline__ __le24 __cpu_to_le24(__le24)
     __attribute__ ((always_inline));
 static __inline__ __u32 __cpu_to_le32(__le32)
     __attribute__ ((always_inline));
@@ -210,6 +210,10 @@ static __inline__ __be64 __cpu_to_be64(__u64 x) {
 	return __hfi_fswab64(x);
 }
 
+static __inline__ __u16 __cpu24_to_be16(__u32 x) {
+    return __hfi_fswab16((__u16)(x & 0x00ffff));
+}
+
 /*
  * __be*_to_cpu routines
  */
@@ -227,6 +231,10 @@ static __inline__ __u32 __be32_to_cpu(__be32 x) {
 
 static __inline__ __u64 __be64_to_cpu(__be64 x) {
 	return __hfi_fswab64(x);
+}
+
+static __inline__ __u32 __be16_to_cpu24(__be16 x) {
+    return __hfi_fswab16(x);
 }
 
 #elif __BYTE_ORDER == __BIG_ENDIAN
@@ -288,6 +296,10 @@ static __inline__ __be64 __cpu_to_be64(__u64 x) {
 	return x;
 }
 
+static __inline__ __u16 __cpu24_to_be16(__u32 x) {
+    return ((__u16)(x & 0x00ffff));
+}
+
 /*
  * __be*_to_cpu routines
  */
@@ -307,6 +319,10 @@ static __inline__ __u64 __be64_to_cpu(__be64 x) {
 	return x;
 }
 
+static __inline__ __u32 __be16_to_cpu24(__be16 x) {
+    return x;
+}
+
 #else
 #	error "unsupported BYTE_ORDER: " #BYTE_ORDER
 #endif
@@ -314,9 +330,5 @@ static __inline__ __u64 __be64_to_cpu(__be64 x) {
 #ifdef __cplusplus
 }				/* extern "C" */
 #endif
-
-static __inline__ __be24 __le24_to_be24(__le24 x) { return __hfi_fswab24((__u32)x); }
-static __inline__ __be24 __be24_to_le24(__be24 x) { return __hfi_fswab24((__u32)x); }
-
 
 #endif /* OPA_BYTEORDER_H */
