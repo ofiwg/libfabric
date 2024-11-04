@@ -39,41 +39,6 @@
 
 #include "rdma/fabric.h"	/* only for 'fi_addr_t' ... which is a typedef to uint64_t */
 
-
-
-typedef uint32_t fi_opx_uid_t;
-
-union fi_opx_uid {
-
-	fi_opx_uid_t			fi;
-	struct {
-		uint8_t 		endpoint_id;/* node-scoped endpoint identifier */
-		uint8_t 		lid_3B;     /* fabric-scoped node identifier   (3rd byte) */
-		uint16_t		lid;	    /* fabric-scoped node identifier (big-endian) */
-	} __attribute__((__packed__));
-	struct {
-		uint32_t		lid_32;	    /* fabric-scoped node identifier (big-endian) */
-	} __attribute__((__packed__));
-} __attribute__((__packed__));
-
-static inline void
-fi_opx_uid_dump (char * prefix, const union fi_opx_uid * const uid) {
-
-	fprintf(stderr, "%s [%p]: %08x\n", prefix, uid, uid->fi);
-	fprintf(stderr, "%s opx uid dump at %p (0x%08x)\n", prefix, (void*)uid, uid->fi);
-	fprintf(stderr, "%s   .endpoint_id ......... %u (0x%04x)\n", prefix, uid->endpoint_id, uid->endpoint_id);
-	fprintf(stderr, "%s   .lid ............. %u (0x%04x)\n", prefix, uid->lid, uid->lid);
-
-	fflush(stderr);
-}
-
-#define FI_OPX_UID_DUMP(uid)							\
-({										\
-	char prefix[1024];							\
-	snprintf(prefix, 1023, "%s:%s():%d", __FILE__, __func__, __LINE__);	\
-	fi_opx_uid_dump(prefix, (uid));					\
-})
-
 union fi_opx_addr {
 	fi_addr_t			fi;
 	uint64_t			raw64b;
@@ -83,8 +48,8 @@ union fi_opx_addr {
 		uint8_t			hfi1_rx;
 		uint8_t			hfi1_unit;
 		uint8_t			reliability_rx;	/* hfi1 rx id of reliability service */
-		union fi_opx_uid	uid;
-		uint8_t		    rx_index;
+		uint8_t			endpoint_id;	/* node-scoped endpoint identifier */
+		opx_lid_t		lid;			/* fabric-scoped node identifier */
 	} __attribute__((__packed__));
 } __attribute__((__packed__));
 
@@ -106,9 +71,7 @@ fi_opx_addr_dump (char * prefix, const union fi_opx_addr * const addr) {
 	fprintf(stderr, "%s   .hfi1_rx ....................................... %u\n", prefix, addr->hfi1_rx);
 	fprintf(stderr, "%s   .hfi1_unit ..................................... %u\n", prefix, addr->hfi1_unit);
 	fprintf(stderr, "%s   .reliability_rx ................................ %u\n", prefix, addr->reliability_rx);
-	fprintf(stderr, "%s   .uid.endpoint_id ............................... %u\n", prefix, addr->uid.endpoint_id);
-	fprintf(stderr, "%s   .uid.lid (big endian) .......................... %u (le: 0x%04hx, be: 0x%04hx)\n", prefix, addr->uid.lid, ntohs(addr->uid.lid), addr->uid.lid);
-	fprintf(stderr, "%s   .rx_index ...................................... %u\n", prefix, addr->rx_index);
+	fprintf(stderr, "%s   .lid ........................................... %d (le: %#x, be16: %#x)\n", prefix, addr->lid, __cpu_to_le24(addr->lid), __cpu24_to_be16(addr->lid));
 
 	fflush(stderr);
 }
@@ -120,11 +83,8 @@ fi_opx_addr_dump (char * prefix, const union fi_opx_addr * const addr) {
 	fi_opx_addr_dump(prefix, (addr));					\
 })
 
-#define FI_OPX_ADDR_TO_HFI1_LRH_DLID(fi_addr)					\
-	((fi_addr & 0x00FFFF0000000000ul) >> 24)
+#define FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(lid)					\
+	((uint64_t)__cpu24_to_be16(lid) << 16)
 
-
-#define FI_OPX_HFI1_LRH_DLID_TO_LID(hfi1_lrh_dlid)				\
-	(hfi1_lrh_dlid >> 16)
 
 #endif /* _FI_PROV_OPX_ADDR_H_ */

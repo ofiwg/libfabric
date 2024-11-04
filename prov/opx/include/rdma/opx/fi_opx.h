@@ -49,6 +49,7 @@
 #include <ofi_lock.h>
 #include <uthash.h>
 #include <ofi_list.h>
+#include <opa_byteorder.h>
 
 // #define FI_OPX_TRACE 1
 
@@ -102,6 +103,8 @@ struct fi_opx_daos_hfi_rank {
 	UT_hash_handle 	hh;         /* makes this structure hashable */
 };
 
+typedef uint32_t opx_lid_t;  /* only 3 bytes of lid is used */
+
 /* hfi1 type for bit logic */
 enum opx_hfi1_type {
 	OPX_HFI1_UNDEF		= 0,	// undefined
@@ -140,7 +143,7 @@ struct fi_opx_hfi_local_info {
 	struct fi_opx_hfi_local_lookup *hfi_local_lookup_hashmap;
 	enum opx_hfi1_type type;
 	int sim_fd;                     // simulator fd
-	uint16_t lid;
+	opx_lid_t lid;
 	uint8_t  hfi_unit;
 };
 
@@ -163,7 +166,7 @@ struct fi_opx_hfi_local_info {
 #define OPX_PRE_CN5000 1
 
 struct fi_opx_hfi_local_lookup_key {
-	uint16_t lid;
+	opx_lid_t lid;
 };
 
 struct fi_opx_hfi_local_lookup {

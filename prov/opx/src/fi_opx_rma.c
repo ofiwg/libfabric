@@ -115,14 +115,13 @@ int fi_opx_do_readv_internal_intranode(union fi_opx_hfi1_deferred_work *work)
 		hdr->qw_9B[6] = params->key;
 	} else {
 		const uint64_t bth_rx = params->bth_rx;
-		uint32_t lrh_dlid_16B = htons(FI_OPX_HFI1_LRH_DLID_TO_LID(params->lrh_dlid));
 		hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
-						((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
+						((uint64_t)(params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 						((uint64_t)params->lrh_dws << 20);
 		hdr->qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
-						((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
-					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
-		hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx;
+						((uint64_t)((params->lrh_dlid  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
+						(uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B));
+		hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | params->bth_rx;
 		hdr->qw_16B[3] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[3];
 		hdr->qw_16B[4] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[4];
 		hdr->qw_16B[5] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov;
@@ -161,7 +160,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 	const union fi_opx_addr addr = params->opx_target_addr;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.uid.lid, addr.hfi1_rx,
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, addr.hfi1_rx,
 				addr.reliability_rx, &psn_ptr, &replay, params->reliability, hfi1_type);
 
 	if (OFI_UNLIKELY(psn == -1)) {
@@ -220,15 +219,14 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 		replay->payload[7] = temp[7];
 	} else {
 		const uint64_t bth_rx = params->bth_rx;
-		uint32_t lrh_dlid_16B = htons(FI_OPX_HFI1_LRH_DLID_TO_LID(params->lrh_dlid));
 		fi_opx_store_and_copy_qw(scb, local_temp,
 				opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) |
 						credit_return | params->pbc_dlid,
 				opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
-						((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
+						((uint64_t)(params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 						((uint64_t)params->lrh_dws << 20),
 				opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
-						((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+						((uint64_t)((params->lrh_dlid  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
 					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
 				opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx,
 				opx_ep->rx->tx.cts_16B.hdr.qw_16B[3] | psn,
@@ -310,7 +308,7 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 
 	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
 			&opx_ep->reliability->state,
-			opx_dst_addr.uid.lid,
+			opx_dst_addr.lid,
 			opx_dst_addr.hfi1_rx,
 			opx_dst_addr.reliability_rx,
 			reliability))) {
@@ -553,7 +551,7 @@ void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep,
 		int found = 0;
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Get av_rank_hashmap - (DLID:0x%x fi:%08lx)\n",
-			dst_addr.uid.lid, dst_addr.fi);
+			dst_addr.lid, dst_addr.fi);
 
 		HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank) {
 			if (cur_av_rank) {
@@ -561,7 +559,7 @@ void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep,
 				addr.fi = cur_av_rank->fi_addr;
 
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Get av_rank_hashmap[%d] = rank:%d, LID:0x%x, fi:%08lx.\n",
-					i++, cur_av_rank->key.rank, addr.uid.lid, addr.fi);
+					i++, cur_av_rank->key.rank, addr.lid, addr.fi);
 
 				if (addr.fi == dst_addr.fi) {
 					found = 1;
@@ -569,7 +567,7 @@ void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep,
 					opx_ep->daos_info.rank_inst = cur_av_rank->key.rank_inst;
 
 					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Get av_rank_hashmap[%d] = rank:%d, LID:0x%x fi:%08lx - Found.\n",
-						(i - 1), opx_ep->daos_info.rank, addr.uid.lid, addr.fi);
+						(i - 1), opx_ep->daos_info.rank, addr.lid, addr.fi);
 					break;
 				}
 			}

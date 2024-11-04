@@ -506,382 +506,6 @@ void fi_opx_hfi1_dump_stl_packet_hdr (struct fi_opx_hfi1_stl_packet_hdr_9B * hdr
 #endif
 #endif
 
-
-/**
- * \brief HFI1 packet header
- *
- * The HFI1 packet header is consumed in many places and sometimes overloaded
- * for cache and memory allocation reasons.
- */
-union fi_opx_hfi1_packet_hdr_9B {
-
-
-	uint64_t				qw[7];
-
-	struct fi_opx_hfi1_stl_packet_hdr_9B	stl;
-
-	struct {
-		/* == quadword 0 == */
-		uint16_t			reserved_0[3];
-		uint16_t			_slid;
-
-		/* == quadword 1 == */
-		uint64_t			reserved_1;
-
-		/* == quadword 2 == */
-		uint32_t			psn		: 24;
-		uint32_t			origin_tx	:  8;
-		uint8_t				unused;
-		uint8_t				reserved_2[3];
-
-		/* == quadword 3,4,5,6 == */
-		uint64_t			reserved_n[4];
-
-	} __attribute__((__packed__)) reliability;
-
-
-	struct {
-		/* == quadword 0 == */
-		uint16_t	reserved_0[3];
-		uint16_t	_slid;			/* used for FI_DIRECTED_RECV; identifies the node - big-endian! */
-
-		/* == quadword 1 == */
-		uint64_t	reserved_1;
-
-		/* == quadword 2 == */
-		uint8_t		reserved_2[3];
-		uint8_t		origin_tx;		/* used for FI_DIRECTED_RECV; identifies the endpoint on the node */
-		uint8_t		reserved_3;
-		uint8_t		unused;
-		uint16_t	reserved_4;
-
-		/* == quadword 3 == */
-		uint32_t	reserved_5;
-		uint32_t	ofi_data;		/* used for FI_RX_CQ_DATA */
-
-		/* == quadword 4 == */
-		uint64_t	reserved_6;
-
-		/* == quadword 5 == */
-		uint64_t	reserved_7;
-
-		/* == quadword 6 == */
-		uint64_t	ofi_tag;
-
-	} __attribute__((__packed__)) match;
-
-
-	struct {
-		/* == quadword 0 == */
-		uint64_t	reserved_0;
-
-		/* == quadword 1 == */
-		uint16_t	reserved_1[3];
-		uint8_t		message_length;		/* only need 5 bits; maximum inject message size is 16 bytes */
-		uint8_t		reserved_2;
-
-		/* == quadword 2 == */
-		uint64_t	reserved_3;
-
-		/* == quadword 3 == */
-		uint64_t	reserved_4;
-
-		/* == quadword 4,5 == */
-		union {
-			uint8_t		app_data_u8[16];
-			uint16_t	app_data_u16[8];
-			uint32_t	app_data_u32[4];
-			uint64_t	app_data_u64[2];
-		};
-
-		/* == quadword 6 == */
-		uint64_t	reserved_6;
-
-	} __attribute__((__packed__)) inject;
-
-
-	struct {
-		/* == quadword 0 == */
-		uint64_t	reserved_0;
-
-		/* == quadword 1 == */
-		uint16_t	reserved_1[3];
-		uint8_t		xfer_bytes_tail;	/* only need 4 bits; maximum tail size is 8 bytes (or is it 7?) */
-		uint8_t		reserved_2;
-
-		/* == quadword 2 == */
-		uint64_t	reserved_3;
-
-		/* == quadword 3 == */
-		uint64_t	reserved_4;
-
-		/* == quadword 4 == */
-		uint16_t	unused[3];
-		uint16_t	payload_qws_total;	/* TODO - use stl.lrh.pktlen instead (num dws); only need 11 bits; maximum number of payload qw is 10240 / 8 = 1280 */
-
-		/* == quadword 5 == */
-		uint64_t	xfer_tail;
-
-		/* == quadword 6 == */
-		uint64_t	reserved_6;
-
-	} __attribute__((__packed__)) send;
-
-	struct {
-		/* == quadword 0 == */
-		uint64_t	reserved_0;
-
-		/* == quadword 1 == */
-		uint16_t	reserved_1[3];
-		uint8_t		xfer_bytes_tail;	/* Maximum tail size is 16 bytes */
-		uint8_t		reserved_2;
-
-		/* == quadword 2 == */
-		uint32_t	reserved_3;		/* stl.bth.psn */
-		uint32_t	payload_bytes_total;	/* stl.kdeth.offset_ver_tid (unused for eager packets),
-							   Total length of payload across all mp-eager packets */
-
-		/* == quadword 3 == */
-		uint64_t	reserved_4;		/* stl.kdeth.jkey & stl.kdeth.hcrc, match.ofi_data */
-
-		/* == quadword 4, 5 == */
-		uint64_t	xfer_tail[2];
-
-		/* == quadword 6 == */
-		uint64_t	reserved_6;		/* match.ofi_tag */
-
-	} __attribute__((__packed__)) mp_eager_first;
-
-	struct {
-		/* == quadword 0 == */
-		uint64_t	reserved_0;
-
-		/* == quadword 1 == */
-		uint16_t	reserved_1[3];
-		uint8_t		xfer_bytes_tail;	/* Maximum tail size is 16 bytes */
-		uint8_t		reserved_2;
-
-		/* == quadword 2 == */
-		uint64_t	reserved_3;		/* stl.bth.psn */
-
-		/* == quadword 3 == */
-		uint64_t	reserved_4;		/* stl.kdeth.jkey & stl.kdeth.hcrc */
-
-		/* == quadword 4, 5 == */
-		uint64_t	xfer_tail[2];
-
-		/* == quadword 6 == */
-		uint32_t	payload_offset;
-		uint32_t	mp_egr_uid;
-
-	} __attribute__((__packed__)) mp_eager_nth;
-
-	struct {
-		/* == quadword 0 == */
-		uint64_t	reserved_0;
-
-		/* == quadword 1 == */
-		uint16_t	reserved_1[3];
-		uint8_t		origin_rx;
-		uint8_t		reserved_2;
-
-		/* == quadword 2 == */
-		uint64_t	reserved_3;
-
-		/* == quadword 3 == */
-		uint64_t	reserved_4;
-
-		/* == quadword 4 == */
-		uint16_t	origin_rs;
-		uint8_t		flags;
-		uint8_t		unused[3];
-		uint16_t	niov;			/* number of non-contiguous buffers */
-
-		/* == quadword 5 == */
-		uint64_t	message_length;		/* total length in bytes of all non-contiguous buffers and immediate data */
-
-		/* == quadword 6 == */
-		uint64_t	reserved_6;
-
-	} __attribute__((__packed__)) rendezvous;
-
-
-	struct {
-		/* == quadword 0 == */
-		uint64_t	reserved_0;
-
-		/* == quadword 1 == */
-		uint16_t	reserved_1[3];
-		uint8_t		origin_rx;
-		uint8_t		reserved_2;
-
-		/* == quadword 2 == */
-		uint64_t	reserved_3;
-
-		/* == quadword 3 == */
-		uint64_t	reserved_4;
-
-		union {
-			uint8_t	opcode;
-			struct {
-				/* == quadword 4 == */
-				uint8_t		opcode;
-				uint8_t		unused0;
-				uint16_t	unused1;
-				uint16_t	ntidpairs;	/* number of tidpairs described in the packet payload */
-				uint16_t	niov;		/* number of non-contiguous buffers described in the packet payload */
-
-				/* == quadword 5,6 == */
-				uintptr_t	origin_byte_counter_vaddr;
-				uintptr_t	target_context_vaddr;
-			} vaddr;
-			struct {
-				/* == quadword 4 == */
-				uint8_t		opcode;
-				uint8_t		unused0;
-				uint16_t	unused1;
-				uint8_t		dt;
-				uint8_t		op;
-				uint16_t	niov;		/* number of non-contiguous buffers described in the packet payload */
-
-				/* == quadword 5,6 == */
-				uintptr_t	rma_request_vaddr;
-				uint64_t	key;
-			} mr;
-			struct {
-				/* == quadword 4 == */
-				uint8_t		opcode;
-				uint8_t		unused0;
-				uint16_t	unused1;
-				uint8_t		unused2;
-				uint8_t		unused3;
-				uint16_t	unused4;	/* number of non-contiguous buffers described in the packet payload */
-
-				/* == quadword 5,6 == */
-				uintptr_t	completion_counter;
-				uint64_t	bytes_to_fence;
-			} fence;
-		} target;
-
-	} __attribute__((__packed__)) cts;
-
-	struct {
-		/* == quadword 0 == */
-		uint64_t	reserved_0;
-
-		/* == quadword 1 == */
-		uint16_t	reserved_1[3];
-		uint8_t		origin_rx;
-		uint8_t		reserved_o2;
-
-		/* == quadword 2 == */
-		uint64_t	reserved_3;
-
-		/* == quadword 3 == */
-		uint64_t	reserved_4;
-
-		union {
-			/* == quadword 4 == */
-			/*  Common fields   */
-			struct {
-				uint8_t		opcode;
-				uint8_t		origin_tx;
-				uint8_t		dt;
-				uint8_t		op;
-				uint16_t	last_bytes;
-				uint16_t	bytes;
-
-				uint64_t	reserved[2]; /* op-specific */
-			};
-
-			struct {
-				/* == quadword 4 == */
-				uint64_t	reserved; /* Common fields */
-
-				/* == quadword 5 == */
-				uintptr_t	rma_request_vaddr;
-				/* == quadword 6 == */
-				uintptr_t	rbuf;
-			} get;
-
-			struct {
-				/* == quadword 4 == */
-				uint64_t	reserved; /* Common fields */
-
-				/* == quadword 5 == */
-				uintptr_t	completion_vaddr; /* struct fi_opx_rzv_completion * */
-				/* == quadword 6 == */
-				uintptr_t	rbuf;
-			} rzv;
-
-			struct {
-				/* == quadword 4 == */
-				uint64_t	reserved; /* Common fields */
-
-				/* == quadword 5,6 == */
-				uintptr_t	key;
-				uintptr_t	offset;
-			} mr;
-
-			struct {
-				/* == quadword 4 == */
-				uint64_t	reserved; /* Common fields */
-
-				/* == quadword 5,6 == */
-				uintptr_t	completion_counter;
-				uint64_t	bytes_to_fence;
-			} fence;
-		} target;
-
-	} __attribute__((__packed__)) dput;
-
-
-
-	struct {
-		/* == quadword 0 == */
-		uint64_t	reserved_0;
-
-		/* == quadword 1 == */
-		uint16_t	reserved_1[3];
-		uint8_t		opcode;
-		uint8_t		reserved_2;
-
-		/* == quadword 2,3,4,5,6 == */
-		uint64_t	reserved_n[5];
-
-	} __attribute__((__packed__)) ud;
-
-	struct {
-		/* == quadword 0 == */
-		uint16_t	reserved_0[3];
-		uint16_t	_slid;			/* stl.lrh.slid */
-
-		/* == quadword 1 == */
-		uint64_t	reserved_1;
-
-		/* == quadword 2 == */
-		uint32_t	range_count;		/* stl.bth.psn */
-		uint8_t		origin_reliability_rx;	/* stl.kdeth.offset */
-		uint8_t		reserved_2[3];
-
-		/* == quadword 3 == */
-		uint32_t	reserved_3;
-		uint32_t	unused;
-
-		/* == quadword 4,5,6 == */
-		uint64_t	psn_count;
-		uint64_t	psn_start;
-		uint64_t	key;			/* fi_opx_reliability_service_flow_key */
-
-	} __attribute__((__packed__)) service;		/* "reliability service" */
-} __attribute__((__aligned__(8)));
-
-
-static_assert(((offsetof(union fi_opx_hfi1_packet_hdr_9B, rendezvous.flags) % 8) * 8) == FI_OPX_PKT_RZV_FLAGS_SHIFT,
-		"struct opx_hfi1_packet_hdr.rendezvous.flags offset inconsistent with FLAGS_SHIFT!");
-
-
-
 /*
           HEADER  UNION             RX POLL
         =====================    =============
@@ -1343,21 +967,6 @@ union opx_hfi1_packet_hdr {
 static_assert(sizeof(union opx_hfi1_packet_hdr) == sizeof(uint64_t[15]),
 		"sizeof(union opx_hfi1_packet_hdr) must be 15 qwords!");
 
-
-static inline
-fi_opx_uid_t fi_opx_hfi1_packet_hdr_uid (const union opx_hfi1_packet_hdr * const hdr,
-			const uint64_t slid) {
-	const union fi_opx_uid uid =
-	{
-		.endpoint_id = hdr->reliability.origin_tx,	/* node-scoped endpoint id */
-		.lid_3B = 0,
-		.lid = slid                     /* job-scoped node id */
-	};
-
-	return uid.fi;
-}
-
-
 static inline size_t
 fi_opx_hfi1_packet_hdr_message_length (const union opx_hfi1_packet_hdr * const hdr)
 {
@@ -1426,9 +1035,9 @@ void fi_opx_hfi1_dump_stl_packet_hdr (const union opx_hfi1_packet_hdr * hdr,
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u ==== dump stl packet header @ %p [%016lx %016lx %016lx %016lx]\n", fn, ln, hdr, qw[0], qw[1], qw[2], qw[3]);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .lrh.flags .............     0x%04hx\n", fn, ln, hdr->lrh_9B.flags);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .lrh.dlid ..............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh_9B.dlid, hdr->lrh_9B.dlid, ntohs(hdr->lrh_9B.dlid));
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .lrh.dlid ..............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh_9B.dlid, hdr->lrh_9B.dlid, __be16_to_cpu24((__be16)(hdr->lrh_9B.dlid)));
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .lrh.pktlen ............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh_9B.pktlen, hdr->lrh_9B.pktlen, ntohs(hdr->lrh_9B.pktlen));
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .lrh.slid ..............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh_9B.slid, hdr->lrh_9B.slid, ntohs(hdr->lrh_9B.slid));
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .lrh.slid ..............     0x%04hx (be: %5hu, le: %5hu)\n", fn, ln, hdr->lrh_9B.slid, hdr->lrh_9B.slid, __be16_to_cpu24((__be16)hdr->lrh_9B.slid));
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u\n", fn, ln);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .bth.opcode ............       0x%02x \n", fn, ln, hdr->bth.opcode);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"%s():%u .bth.bth_1 .............       0x%02x \n", fn, ln, hdr->bth.bth_1);
@@ -1459,9 +1068,9 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u ==== dump packet header @ %p [%016lx %016lx %016lx %016lx]\n", pid, fn, ln, hdr, qw[0], qw[1], qw[2], qw[3]);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.flags ...........     0x%04hx\n", pid, fn, ln, hdr->lrh_9B.flags);
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.dlid ............     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.dlid, hdr->lrh_9B.dlid, ntohs(hdr->lrh_9B.dlid));
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.dlid ............     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.dlid, hdr->lrh_9B.dlid, __be16_to_cpu24((__be16)hdr->lrh_9B.dlid));
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.pktlen ..........     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.pktlen, hdr->lrh_9B.pktlen, ntohs(hdr->lrh_9B.pktlen));
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.slid ............     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.slid, hdr->lrh_9B.slid, ntohs(hdr->lrh_9B.slid));
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .lrh.slid ............     0x%04hx (be: %5hu, le: %5hu)\n", pid, fn, ln, hdr->lrh_9B.slid, hdr->lrh_9B.slid, __be16_to_cpu24((__be16)hdr->lrh_9B.slid));
 	} else {
 		OPX_JKR_PRINT_16B_LRH(hdr->qw_16B[0], hdr->qw_16B[1]);
 		OPX_JKR_PRINT_16B_BTH(hdr->qw_16B[2], hdr->qw_16B[2]);
@@ -1794,13 +1403,14 @@ struct fi_opx_hfi1_ue_packet {
 		uint32_t				rank_inst;
 	} daos_info;
 
-	/* Copies of tag and origin_uid_fi so that
+	/* Copies of tag, lid and endpoint_id so that
 	 * packet can be matched only accessing the
 	 * first cacheline */
 	uint64_t					tag;
-	fi_opx_uid_t					origin_uid_fi;
+	opx_lid_t					lid;
+	uint8_t						endpoint_id;
 
-	uint32_t					unused_cacheline0;
+	uint8_t						unused[3];
 
 	/* == CACHE LINE 1, 2 == */
 	uint64_t					unused_cacheline1;

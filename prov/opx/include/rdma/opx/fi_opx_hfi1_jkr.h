@@ -110,7 +110,7 @@
 #define OPX_PBC_JKR_SCTXT(_ctx) (((unsigned long long)(_ctx & OPX_PBC_JKR_SCTXT_MASK) << OPX_PBC_JKR_SCTXT_SHIFT) << OPX_MSB_SHIFT)
 #define OPX_PBC_JKR_L2COMPRESSED(_c)    OPX_PBC_JKR_UNUSED /* unused until 16B headers are optimized */
 #define OPX_PBC_JKR_PORTIDX(_pidx)  (((OPX_JKR_PHYS_PORT_TO_INDEX(_pidx)) & OPX_PBC_JKR_PORT_MASK) << OPX_PBC_JKR_PORT_SHIFT)
-#define OPX_PBC_JKR_LRH_DLID_TO_PBC_DLID(_dlid)    OPX_PBC_JKR_DLID(htons(_dlid >> 16))
+#define OPX_PBC_JKR_DLID_TO_PBC_DLID(_dlid)    OPX_PBC_JKR_DLID((uint64_t) _dlid)
 #define OPX_PBC_JKR_INSERT_NON9B_ICRC           (1<<24)
 
 #ifndef NDEBUG

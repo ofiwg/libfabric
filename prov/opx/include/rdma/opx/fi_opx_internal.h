@@ -55,9 +55,7 @@ union fi_opx_mp_egr_id {
 
 	struct {
 		uint32_t	uid;
-		uint16_t	slid;
-		uint8_t		origin_tx;
-		uint8_t		unused;
+		uint32_t	slid_origin_tx;   // first 3 bytes is slid and last byte is tx
 	};
 } __attribute__((__packed__));
 

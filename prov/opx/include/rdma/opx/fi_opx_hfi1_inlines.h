@@ -397,12 +397,11 @@ size_t opx_hfi1_dput_write_packet(struct fi_opx_ep *opx_ep,
 		hdr->qw_9B[2] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[2] | psn;
 		hdr->qw_9B[3] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[3];
 	} else {
-		uint32_t lrh_dlid_16B = htons(FI_OPX_HFI1_LRH_DLID_TO_LID(lrh_dlid));
 		hdr->qw_16B[0] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[0] | 
-					((uint64_t)(lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
+					((uint64_t)(lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 					((uint64_t)lrh_dws << 20);
 		hdr->qw_16B[1] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[1] |
-					((uint64_t)((lrh_dlid_16B  & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					((uint64_t)((lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >> OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
 					         (uint64_t)(bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
 		hdr->qw_16B[2] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[2] | bth_rx;
 		hdr->qw_16B[3] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[3] | psn;

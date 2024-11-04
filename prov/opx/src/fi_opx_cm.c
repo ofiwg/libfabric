@@ -107,10 +107,9 @@ int fi_opx_getname(fid_t fid, void *addr, size_t *addrlen)
 
 			union fi_opx_addr tmp;
 			tmp.raw64b = 0;
-			tmp.rx_index = 0;
-			tmp.uid.endpoint_id = opx_sep->ep[i]->hfi->send_ctxt;
+			tmp.endpoint_id = opx_sep->ep[i]->hfi->send_ctxt;
 			tmp.reliability_rx = opx_sep->ep[i]->hfi->info.rxe.id;
-			tmp.uid.lid = htons(opx_sep->ep[i]->hfi->lid);
+			tmp.lid = htons(opx_sep->ep[i]->hfi->lid);
 			tmp.hfi1_rx = opx_sep->ep[i]->rx->self.hfi1_rx;
 			tmp.hfi1_unit = opx_sep->ep[i]->rx->self.hfi1_unit;
 			memcpy(addr, (void*)&tmp, MIN(len, *addrlen));
