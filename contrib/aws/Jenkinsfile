@@ -81,24 +81,26 @@ def get_cluster_name(build_tag, os, instance_type) {
     return cluster_name
 }
 
-def get_single_node_windows_test_stage(stage_name) {
+def get_single_node_windows_test_stage_with_lock(stage_name, lock_label) {
     /*
      * Get Windows Stage
      */
     return {
         stage("${stage_name}") {
-            sh """
-                . venv/bin/activate;
-                cd PortaFiducia/scripts;
-                export PULL_REQUEST_ID=${env.CHANGE_ID};
-                env AWS_DEFAULT_REGION=us-west-2 ./test_orchestrator_windows.py --ci public --s3-bucket-name libfabric-ci-windows-prod-test-output --pull-request-id ${env.CHANGE_ID};
-            """
+            lock(label: lock_label, quantity: 1) {
+                sh """
+                    . venv/bin/activate;
+                    cd PortaFiducia/scripts;
+                    export PULL_REQUEST_ID=${env.CHANGE_ID};
+                    env AWS_DEFAULT_REGION=us-west-2 ./test_orchestrator_windows.py --ci public --s3-bucket-name libfabric-ci-windows-prod-test-output --pull-request-id ${env.CHANGE_ID};
+                """
+            }
         }
     }
 
 }
 
-def get_test_stage(stage_name, build_tag, os, instance_type, instance_count, region, test_config, addl_args) {
+def get_test_stage_with_lock(stage_name, build_tag, os, instance_type, instance_count, region, test_config, lock_label, addl_args) {
     /*
      * Generate a single test stage that run test_orchestrator.py with the given parameters.
      * param@ stage_name: the name of the stage
@@ -113,7 +115,9 @@ def get_test_stage(stage_name, build_tag, os, instance_type, instance_count, reg
      */
     return {
         stage("${stage_name}") {
-            this.run_test_orchestrator_once(stage_name, build_tag, os, instance_type, instance_count, region, test_config, addl_args)
+            lock(label: lock_label, quantity: instance_count) {
+                this.run_test_orchestrator_once(stage_name, build_tag, os, instance_type, instance_count, region, test_config, addl_args)
+            }
         }
     }
 }
@@ -167,45 +171,53 @@ pipeline {
                     // This needs the extra space at the end
                     // Set 9 hour timeout for all clusters
                     def addl_args_pr = "--timeout 540 --test-libfabric-pr $env.CHANGE_ID "
+                    // Use lockable resources to limit the number of jobs that can get executed in parallel
+                    def g4dn8x_lock_label = "g4dn8x"
+                    def g4dn12x_lock_label  = "g4dn12x"
+                    def c52x_lock_label  = "c52x"
+                    def hpc6a48x_lock_label  = "hpc6a48x"
+                    def c6gn16x_lock_label  = "c6gn16x"
+                    def c5n18x_lock_label  = "c5n18x"
+                    def c6g2x_lock_label  = "c6g2x"
 
                     // Single Node Tests - EFA
-                    stages["1_g4dn_alinux2-efa"] = get_test_stage("1_g4dn_alinux2_efa", env.BUILD_TAG, "alinux2", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr)
-                    stages["1_g4dn_alinux2023-efa"] = get_test_stage("1_g4dn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr)
-                    stages["1_g4dn_ubuntu2004-efa"] = get_test_stage("1_g4dn_ubuntu2004_efa", env.BUILD_TAG, "ubuntu2004", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr)
-                    stages["1_g4dn_rhel8-efa"] = get_test_stage("1_g4dn_rhel8_efa", env.BUILD_TAG, "rhel8", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr)
+                    stages["1_g4dn_alinux2-efa"] = get_test_stage_with_lock("1_g4dn_alinux2_efa", env.BUILD_TAG, "alinux2", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", g4dn8x_lock_label, addl_args_pr)
+                    stages["1_g4dn_alinux2023-efa"] = get_test_stage_with_lock("1_g4dn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", g4dn8x_lock_label, addl_args_pr)
+                    stages["1_g4dn_ubuntu2004-efa"] = get_test_stage_with_lock("1_g4dn_ubuntu2004_efa", env.BUILD_TAG, "ubuntu2004", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", g4dn8x_lock_label, addl_args_pr)
+                    stages["1_g4dn_rhel8-efa"] = get_test_stage_with_lock("1_g4dn_rhel8_efa", env.BUILD_TAG, "rhel8", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", g4dn8x_lock_label, addl_args_pr)
 
                     // Single Node Tests - SHM
-                    stages["1_g4dn_alinux2_shm"] = get_test_stage("1_g4dn_alinux2_shm", env.BUILD_TAG, "alinux2", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm")
-                    stages["1_g4dn_alinux2023_shm"] = get_test_stage("1_g4dn_alinux2023_shm", env.BUILD_TAG, "alinux2023", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm")
-                    stages["1_g4dn_ubuntu2004_shm"] = get_test_stage("1_g4dn_ubuntu2004_shm", env.BUILD_TAG, "ubuntu2004", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm")
-                    stages["1_c5_rhel8_shm"] = get_test_stage("1_c5_rhel8_shm", env.BUILD_TAG, "rhel8", "c5.2xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm --enable-efa false")
-                    stages["1_c5_ubuntu2004_shm_disable-cma"] = get_test_stage("1_c5_ubuntu2004_shm_disable-cma", env.BUILD_TAG, "ubuntu2004", "c5.2xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider shm --enable-cma false --enable-efa false")
+                    stages["1_g4dn_alinux2_shm"] = get_test_stage_with_lock("1_g4dn_alinux2_shm", env.BUILD_TAG, "alinux2", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", g4dn8x_lock_label, addl_args_pr + "--test-libfabric-provider shm")
+                    stages["1_g4dn_alinux2023_shm"] = get_test_stage_with_lock("1_g4dn_alinux2023_shm", env.BUILD_TAG, "alinux2023", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", g4dn8x_lock_label, addl_args_pr + "--test-libfabric-provider shm")
+                    stages["1_g4dn_ubuntu2004_shm"] = get_test_stage_with_lock("1_g4dn_ubuntu2004_shm", env.BUILD_TAG, "ubuntu2004", "g4dn.8xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", g4dn8x_lock_label, addl_args_pr + "--test-libfabric-provider shm")
+                    stages["1_c5_rhel8_shm"] = get_test_stage_with_lock("1_c5_rhel8_shm", env.BUILD_TAG, "rhel8", "c5.2xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", c52x_lock_label, addl_args_pr + "--test-libfabric-provider shm --enable-efa false")
+                    stages["1_c5_ubuntu2004_shm_disable-cma"] = get_test_stage_with_lock("1_c5_ubuntu2004_shm_disable-cma", env.BUILD_TAG, "ubuntu2004", "c5.2xlarge", 1, "us-east-1", "libfabric_pr_test.yaml", c52x_lock_label, addl_args_pr + "--test-libfabric-provider shm --enable-cma false --enable-efa false")
 
                     // Single Node Windows Test
-                    stages["EFA_Windows_Test"] = get_single_node_windows_test_stage("EFA_Windows_Test")
+                    stages["EFA_Windows_Test"] = get_single_node_windows_test_stage_with_lock("EFA_Windows_Test", c5n18x_lock_label)
 
                     // Multi Node Tests - EFA
-                    stages["2_hpc6a_alinux2_efa"] = get_test_stage("2_hpc6a_alinux2_efa", env.BUILD_TAG, "alinux2", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", addl_args_pr)
-                    stages["2_hpc6a_alinux2023_efa"] = get_test_stage("2_hpc6a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", addl_args_pr)
-                    stages["2_c6gn_alinux2_efa"] = get_test_stage("2_c6gn_alinux2_efa", env.BUILD_TAG, "alinux2", "c6gn.16xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", addl_args_pr)
-                    stages["2_c6gn_alinux2023_efa"] = get_test_stage("2_c6gn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "c6gn.16xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", addl_args_pr)
-                    stages["2_c5n_alinux2_efa"] = get_test_stage("2_c5n_alinux2_efa", env.BUILD_TAG, "alinux2", "c5n.18xlarge", 2, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr)
-                    stages["2_c5n_alinux2023_efa"] = get_test_stage("2_c5n_alinux2023_efa", env.BUILD_TAG, "alinux2023", "c5n.18xlarge", 2, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr)
-                    stages["2_hpc6a_ubuntu2004_efa"] = get_test_stage("2_hpc6a_ubuntu2004_efa", env.BUILD_TAG, "ubuntu2004", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", addl_args_pr)
-                    stages["2_hpc6a_rhel8_efa"] = get_test_stage("2_hpc6a_rhel8_efa", env.BUILD_TAG, "rhel8", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", addl_args_pr)
+                    stages["2_hpc6a_alinux2_efa"] = get_test_stage_with_lock("2_hpc6a_alinux2_efa", env.BUILD_TAG, "alinux2", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", hpc6a48x_lock_label, addl_args_pr)
+                    stages["2_hpc6a_alinux2023_efa"] = get_test_stage_with_lock("2_hpc6a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", hpc6a48x_lock_label, addl_args_pr)
+                    stages["2_c6gn_alinux2_efa"] = get_test_stage_with_lock("2_c6gn_alinux2_efa", env.BUILD_TAG, "alinux2", "c6gn.16xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", c6gn16x_lock_label, addl_args_pr)
+                    stages["2_c6gn_alinux2023_efa"] = get_test_stage_with_lock("2_c6gn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "c6gn.16xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", c6gn16x_lock_label, addl_args_pr)
+                    stages["2_c5n_alinux2_efa"] = get_test_stage_with_lock("2_c5n_alinux2_efa", env.BUILD_TAG, "alinux2", "c5n.18xlarge", 2, "us-east-1", "libfabric_pr_test.yaml", c5n18x_lock_label, addl_args_pr)
+                    stages["2_c5n_alinux2023_efa"] = get_test_stage_with_lock("2_c5n_alinux2023_efa", env.BUILD_TAG, "alinux2023", "c5n.18xlarge", 2, "us-east-1", "libfabric_pr_test.yaml", c5n18x_lock_label, addl_args_pr)
+                    stages["2_hpc6a_ubuntu2004_efa"] = get_test_stage_with_lock("2_hpc6a_ubuntu2004_efa", env.BUILD_TAG, "ubuntu2004", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", hpc6a48x_lock_label, addl_args_pr)
+                    stages["2_hpc6a_rhel8_efa"] = get_test_stage_with_lock("2_hpc6a_rhel8_efa", env.BUILD_TAG, "rhel8", "hpc6a.48xlarge", 2, "eu-north-1", "libfabric_pr_test.yaml", hpc6a48x_lock_label, addl_args_pr)
 
                     // Multi Node Tests - TCP
-                    stages["2_c6g_alinux2_tcp"] = get_test_stage("2_c6g_alinux2_tcp", env.BUILD_TAG, "alinux2", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider tcp --enable-efa false")
-                    stages["2_c6g_alinux2023_tcp"] = get_test_stage("2_c6g_alinux2023_tcp", env.BUILD_TAG, "alinux2023", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider tcp --enable-efa false")
-                    stages["2_c6g_ubuntu2004_tcp"] = get_test_stage("2_c6g_ubuntu2004_tcp", env.BUILD_TAG, "ubuntu2004", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider tcp --enable-efa false")
-                    stages["2_c6g_rhel8_tcp"] = get_test_stage("2_c6g_rhel8_tcp", env.BUILD_TAG, "rhel8", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider tcp --enable-efa false")
-                    stages["3_g4dn_alinux2_tcp"] = get_test_stage("3_g4dn_alinux2_tcp", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 3, "us-east-1", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider tcp --enable-efa false --test-list test_nccl_tests")
+                    stages["2_c6g_alinux2_tcp"] = get_test_stage_with_lock("2_c6g_alinux2_tcp", env.BUILD_TAG, "alinux2", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", c6g2x_lock_label, addl_args_pr + "--test-libfabric-provider tcp --enable-efa false")
+                    stages["2_c6g_alinux2023_tcp"] = get_test_stage_with_lock("2_c6g_alinux2023_tcp", env.BUILD_TAG, "alinux2023", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", c6g2x_lock_label, addl_args_pr + "--test-libfabric-provider tcp --enable-efa false")
+                    stages["2_c6g_ubuntu2004_tcp"] = get_test_stage_with_lock("2_c6g_ubuntu2004_tcp", env.BUILD_TAG, "ubuntu2004", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", c6g2x_lock_label, addl_args_pr + "--test-libfabric-provider tcp --enable-efa false")
+                    stages["2_c6g_rhel8_tcp"] = get_test_stage_with_lock("2_c6g_rhel8_tcp", env.BUILD_TAG, "rhel8", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", c6g2x_lock_label, addl_args_pr + "--test-libfabric-provider tcp --enable-efa false")
+                    stages["3_g4dn_alinux2_tcp"] = get_test_stage_with_lock("3_g4dn_alinux2_tcp", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 3, "us-east-1", "libfabric_pr_test.yaml", g4dn12x_lock_label, addl_args_pr + "--test-libfabric-provider tcp --enable-efa false --test-list test_nccl_tests")
 
                     // Multi Node Tests - SOCKETS
-                    stages["2_c6g_alinux2_sockets"] = get_test_stage("2_c6g_alinux2_sockets", env.BUILD_TAG, "alinux2", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider sockets --enable-efa false")
-                    stages["2_c6g_alinux2023_sockets"] = get_test_stage("2_c6g_alinux2023_sockets", env.BUILD_TAG, "alinux2023", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider sockets --enable-efa false")
-                    stages["2_c6g_ubuntu2004_sockets"] = get_test_stage("2_c6g_ubuntu2004_sockets", env.BUILD_TAG, "ubuntu2004", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider sockets --enable-efa false")
-                    stages["2_c6g_rhel8_sockets"] = get_test_stage("2_c6g_rhel8_sockets", env.BUILD_TAG, "rhel8", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", addl_args_pr + "--test-libfabric-provider sockets --enable-efa false")
+                    stages["2_c6g_alinux2_sockets"] = get_test_stage_with_lock("2_c6g_alinux2_sockets", env.BUILD_TAG, "alinux2", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", c6g2x_lock_label, addl_args_pr + "--test-libfabric-provider sockets --enable-efa false")
+                    stages["2_c6g_alinux2023_sockets"] = get_test_stage_with_lock("2_c6g_alinux2023_sockets", env.BUILD_TAG, "alinux2023", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", c6g2x_lock_label, addl_args_pr + "--test-libfabric-provider sockets --enable-efa false")
+                    stages["2_c6g_ubuntu2004_sockets"] = get_test_stage_with_lock("2_c6g_ubuntu2004_sockets", env.BUILD_TAG, "ubuntu2004", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", c6g2x_lock_label, addl_args_pr + "--test-libfabric-provider sockets --enable-efa false")
+                    stages["2_c6g_rhel8_sockets"] = get_test_stage_with_lock("2_c6g_rhel8_sockets", env.BUILD_TAG, "rhel8", "c6g.2xlarge", 2, "us-west-2", "libfabric_pr_test.yaml", c6g2x_lock_label, addl_args_pr + "--test-libfabric-provider sockets --enable-efa false")
 
                     parallel stages
                 }
