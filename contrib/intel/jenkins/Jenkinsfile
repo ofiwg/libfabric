@@ -93,11 +93,12 @@ def run_middleware(providers, stage_name, test, hw, partition, node_num,
   }
 }
 
-def run_ci(stage_name, config_name) {
+def run_ci(stage_name, config_name, additional_args=null) {
   sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
         python run.py \
         --output=${env.LOG_DIR}/${stage_name} \
-        --job=${config_name}
+        --job=${config_name} \
+        ${additional_args}
      """
 }
 
@@ -451,11 +452,7 @@ pipeline {
                             """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
                               --build_item=mpich --build_hw=water"""
                           )
-              slurm_batch("totodile", "1",
-                          "${env.LOG_DIR}/build_shmem_water_log",
-                          """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
-                              --build_item=shmem --build_hw=water"""
-                         )
+              run_ci("CI_shmem_grass", "pr_shmem_grass.json", "--build-only")
             }
           }
         }
@@ -468,11 +465,7 @@ pipeline {
                             """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
                               --build_item=mpich --build_hw=grass"""
                           )
-              slurm_batch("grass", "1",
-                          "${env.LOG_DIR}/build_shmem_grass_log",
-                          """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
-                              --build_item=shmem --build_hw=grass"""
-                         )
+              run_ci("CI_shmem_water", "pr_shmem_water.json", "--build-only")
             }
           }
         }
@@ -728,9 +721,8 @@ pipeline {
         stage('SHMEM_grass') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_middleware([["tcp", null]], "SHMEM", "shmem",
-                                "grass", "bulbasaur,chikorita", "2")
+              dir (CI_LOCATION) {
+                run_ci("CI_shmem_grass", "pr_shmem_grass.json")
               }
             }
           }
@@ -738,9 +730,8 @@ pipeline {
         stage('SHMEM_water') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_middleware([["verbs", "rxm"], ["sockets", null]], "SHMEM",
-                                "shmem", "water", "totodile", "2")
+              dir (CI_LOCATION) {
+                run_ci("CI_shmem_water", "pr_shmem_water.json")
               }
             }
           }
