@@ -2188,11 +2188,20 @@ err:
 	return -errno;
 }
 
-int fi_opx_check_rx_attr(struct fi_rx_attr *attr)
+int fi_opx_check_rx_attr(struct fi_rx_attr *rx_attr, uint64_t hinted_caps)
 {
-	/* TODO: more error checking of rx_attr */
-
+	if ((rx_attr) && ((rx_attr->caps | hinted_caps) != hinted_caps)) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "info->rx_attr->caps = 0x%016lx, info->caps = 0x%016lx, (info->rx_attr->caps | info->caps) = 0x%016lx, ((info->rx_attr->caps | info->caps) ^ info->caps) = 0x%016lx\n", rx_attr->caps, hinted_caps, (rx_attr->caps | hinted_caps), ((rx_attr->caps | hinted_caps) ^ hinted_caps));
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
+				"The rx_attr capabilities (0x%016lx) must be a subset of those requested of the associated endpoint (0x%016lx)",
+				rx_attr->caps, hinted_caps);
+		goto err;
+	}
 	return 0;
+err:
+
+	errno = FI_EINVAL;
+	return -errno;
 }
 
 int fi_opx_alloc_default_tx_attr(struct fi_tx_attr **tx_attr)
@@ -2220,15 +2229,22 @@ err:
 	return -errno;
 }
 
-int fi_opx_check_tx_attr(struct fi_tx_attr *attr)
+int fi_opx_check_tx_attr(struct fi_tx_attr *tx_attr, uint64_t hinted_caps)
 {
-	if (attr->inject_size > FI_OPX_HFI1_PACKET_IMM) {
+	if (tx_attr->inject_size > FI_OPX_HFI1_PACKET_IMM) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
 				"unavailable [bad inject_size (%lu)]",
-				attr->inject_size);
+				tx_attr->inject_size);
 		goto err;
 	}
-	/* TODO: more error checking of tx_attr */
+
+	if ((tx_attr) && ((tx_attr->caps | hinted_caps) != hinted_caps)) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "info->tx_attr->caps = 0x%016lx, info->caps = 0x%016lx, (info->tx_attr->caps | info->caps) = 0x%016lx, ((info->tx_attr->caps | info->caps) ^ info->caps) = 0x%016lx\n", tx_attr->caps, hinted_caps, (tx_attr->caps | hinted_caps), ((tx_attr->caps | hinted_caps) ^ hinted_caps));
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
+				"The tx_attr capabilities (0x%016lx) must be a subset of those requested of the associated endpoint (0x%016lx)",
+				tx_attr->caps, hinted_caps);
+		goto err;
+	}
 
 	return 0;
 err:

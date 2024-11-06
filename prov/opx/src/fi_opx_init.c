@@ -69,27 +69,24 @@ static int fi_opx_count;
 int fi_opx_check_info(const struct fi_info *info)
 {
 	int ret;
-	/* TODO: check caps, mode */
+	/* TODO: check mode */
+
+	/* Checking the general capabilities. OPX will bow out if it cannot support any requested primary or secondary caps */
+	if (info->caps == 0) {
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
+				"The application's capability hints are null. OPX is allowed to specify whatever capabilities it wishes\n");
+	} else {
+		// Check to make sure the hinted capabilites are a subset of what OPX can support
+		if ((info->caps & FI_OPX_SUPPORTED_CAPS) != info->caps) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+					"OPX does not support the requested capabilites required by the application\n");
+			goto err;
+		}
+	}
 
 	if (info->domain_attr == NULL) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
 				"The domain_attr structure is null, there must be an issue in provider initialization\n");
-		goto err;
-	}
-
-	if ((info->tx_attr) && ((info->tx_attr->caps | info->caps) != info->caps)) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "info->tx_attr->caps = 0x%016lx, info->caps = 0x%016lx\n", info->tx_attr->caps, info->caps);
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-				"The tx_attr capabilities (0x%016lx) must be a subset of those requested of the associated endpoint (0x%016lx)",
-				info->tx_attr->caps, info->caps);
-		goto err;
-	}
-
-	if ((info->rx_attr) && ((info->rx_attr->caps | info->caps) != info->caps)) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "info->rx_attr->caps = 0x%016lx, info->caps = 0x%016lx, (info->rx_attr->caps | info->caps) = 0x%016lx, ((info->rx_attr->caps | info->caps) ^ info->caps) = 0x%016lx\n", info->rx_attr->caps, info->caps, (info->rx_attr->caps | info->caps), ((info->rx_attr->caps | info->caps) ^ info->caps));
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-				"The rx_attr capabilities (0x%016lx) must be a subset of those requested of the associated endpoint (0x%016lx)",
-				info->rx_attr->caps, info->caps);
 		goto err;
 	}
 
@@ -119,13 +116,13 @@ int fi_opx_check_info(const struct fi_info *info)
 	}
 
 	if (info->tx_attr) {
-		ret = fi_opx_check_tx_attr(info->tx_attr);
+		ret = fi_opx_check_tx_attr(info->tx_attr, info->caps);
 		if (ret)
 			return ret;
 	}
 
 	if (info->rx_attr) {
-		ret = fi_opx_check_rx_attr(info->rx_attr);
+		ret = fi_opx_check_rx_attr(info->rx_attr, info->caps);
 		if (ret)
 			return ret;
 	}
@@ -161,7 +158,6 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 		uint64_t flags, enum fi_progress progress)
 {
 	int ret;
-	uint64_t caps;
 	union fi_opx_addr *addr;
 	uint32_t fmt;
 	size_t len;
@@ -173,7 +169,21 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 		goto err;
 
 	fi->next = NULL;
-	fi->caps = FI_OPX_DEFAULT_CAPS;
+
+
+	/* As a general rule, specifying a non-zero value for input hints indicates that
+	   a provider must support the requested value or fail the operation with -FI_ENODATA. */
+
+	if (hints && hints->caps) {
+		/*  In the function fi_opx_check_info, we ensure that hints is a subset of what OPX supports.
+			We would have already returned a bad return code to the getinfo call if OPX could not support what the app
+			is requesting. Thus, we are safe to assume we can support whatever the cap hints are asking for. */
+		fi->caps = hints->caps;
+	} else {
+		/* A zeroed hint value results in providers either returning a default value or a value that works best for their implementation */
+		/* TODO -> Make sure these Default capabilities are up-to-date and reflect our best performance */
+		fi->caps = FI_OPX_DEFAULT_CAPS;
+	}
 
 	/* set the mode that we require */
 	fi->mode = FI_ASYNC_IOV;
@@ -297,7 +307,6 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 
 	memcpy(fi->tx_attr, fi_opx_global.default_tx_attr, sizeof(*fi->tx_attr));
 	if (hints && hints->tx_attr) {
-
 		/*
 		 * man/fi_endpoint.3
 		 *
@@ -308,6 +317,12 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 		 */
 		if (hints->tx_attr->caps) {
 			fi->tx_attr->caps = hints->tx_attr->caps;
+		} else {
+			/* fi->caps is either:
+			   1) The caps value from the fi_info hints->caps structure
+			   2) The OPX defaults, which happens if the fi_info hints->caps is null
+			*/
+			fi->tx_attr->caps = fi->caps;
 		}
 
 		/* adjust parameters down from what requested if required */
@@ -336,6 +351,12 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 		 */
 		if (hints->rx_attr->caps) {
 			fi->rx_attr->caps = hints->rx_attr->caps;
+		} else {
+			/* fi->caps is either:
+			   1) The caps value from the fi_info hints->caps structure
+			   2) The OPX defaults, which happens if the fi_info hints->caps is null
+			*/
+			fi->rx_attr->caps = fi->caps;
 		}
 
 		/* adjust parameters down from what requested if required */
@@ -343,8 +364,6 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 	} else if (hints && hints->caps) {
 		fi->rx_attr->caps = hints->caps;
 	}
-
-	caps = fi->caps | fi->tx_attr->caps | fi->rx_attr->caps;
 
 	/*
 	 * man/fi_domain.3
@@ -365,7 +384,7 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 		}
 	}
 
-	ret = fi_opx_choose_domain(caps, fi->domain_attr,
+	ret = fi_opx_choose_domain(fi->caps, fi->domain_attr,
 		(hints)?(hints->domain_attr):NULL, progress);
 	if (ret) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
