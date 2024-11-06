@@ -18,6 +18,11 @@ struct efa_ibv_cq_poll_list_entry {
 	struct efa_ibv_cq	*cq;
 };
 
+/*
+ * Control header with completion data. CQ data length is static.
+ */
+#define EFA_CQ_DATA_SIZE (4)
+
 static inline
 int efa_ibv_cq_poll_list_match(struct dlist_entry *entry, const void *cq)
 {

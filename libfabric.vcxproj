@@ -884,9 +884,9 @@
     <ClCompile Include="prov\efa\src\efa_prov.c" />
     <ClCompile Include="prov\efa\src\efa_env.c" />
     <ClCompile Include="prov\efa\src\efa_cntr.c" />
+    <ClCompile Include="prov\efa\src\efa_msg.c" />
     <ClCompile Include="prov\efa\src\dgram\efa_dgram_ep.c" />
     <ClCompile Include="prov\efa\src\dgram\efa_dgram_cq.c" />
-    <ClCompile Include="prov\efa\src\dgram\efa_dgram_msg.c" />
     <ClCompile Include="prov\efa\src\dgram\efa_dgram_rma.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_ope.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_rxe_map.c" />
