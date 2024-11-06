@@ -51,6 +51,25 @@ Test(mr, invalid_fi_directed_recv_flag)
 	cr_assert_eq(ret, -FI_EINVAL, "fi_mr_regattr failed: %d", ret);
 }
 
+Test(mr, invalid_client_rkey)
+{
+	int ret;
+	struct fi_mr_attr attr = {};
+	struct iovec iov = {};
+	struct fid_mr *mr;
+
+	iov.iov_len = sizeof(ret);
+	iov.iov_base = (void *)&ret;
+
+	attr.mr_iov = &iov;
+	attr.iov_count = 1;
+	attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE;
+	attr.requested_key = ~1;
+
+	ret = fi_mr_regattr(cxit_domain, &attr, 0, &mr);
+	cr_assert_eq(ret, -FI_EKEYREJECTED, "fi_mr_regattr failed: %d", ret);
+}
+
 Test(mr, std_mrs, .timeout = 600, .disabled = true)
 {
 	int std_mr_cnt = 16*1024;
