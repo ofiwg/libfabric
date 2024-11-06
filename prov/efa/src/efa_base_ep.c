@@ -178,6 +178,9 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, 
 	if (!*qp)
 		return -FI_ENOMEM;
 
+	init_attr_ex->comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+	init_attr_ex->send_ops_flags |= IBV_QP_EX_WITH_SEND | IBV_QP_EX_WITH_SEND_WITH_IMM;
+
 	if (init_attr_ex->qp_type == IBV_QPT_UD) {
 		(*qp)->ibv_qp = ibv_create_qp_ex(init_attr_ex->pd->context,
 					      init_attr_ex);
@@ -341,8 +344,6 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 
 	base_ep->rnr_retry = efa_env.rnr_retry;
 
-	base_ep->xmit_more_wr_tail = &base_ep->xmit_more_wr_head;
-	base_ep->recv_more_wr_tail = &base_ep->recv_more_wr_head;
 	base_ep->efa_recv_wr_vec = calloc(sizeof(struct efa_recv_wr), EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV);
 	if (!base_ep->efa_recv_wr_vec) {
 		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for base_ep->efa_recv_wr_vec!\n");

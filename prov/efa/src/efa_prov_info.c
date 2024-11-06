@@ -75,7 +75,7 @@ const struct fi_domain_attr efa_domain_attr = {
 	.resource_mgmt		= FI_RM_DISABLED,
 	.mr_mode		= OFI_MR_BASIC_MAP | FI_MR_LOCAL | OFI_MR_BASIC,
 	.mr_key_size		= sizeof_field(struct ibv_sge, lkey),
-	.cq_data_size		= 0,
+	.cq_data_size		= EFA_CQ_DATA_SIZE,
 	.tx_ctx_cnt		= 1024,
 	.rx_ctx_cnt		= 1024,
 	.max_ep_tx_ctx		= 1,
@@ -184,6 +184,9 @@ void efa_prov_info_set_ep_attr(struct fi_info *prov_info,
 		 * a completion, therefore there is no way for dgram endpoint
 		 * to implement FI_INJECT. Because FI_INJECT is not an optional
 		 * feature, we had to set inject_size to 0.
+		 * 
+		 * TODO:
+		 * Remove this after implementing cq read for efa-raw
                  */
 		prov_info->tx_attr->inject_size = 0;
 	}
@@ -553,10 +556,6 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 		 * buffer. EFA RDM endpoint does not have this requirement, hence unset the flag
 		 */
 		prov_info_rdm->domain_attr->mr_mode &= ~FI_MR_LOCAL;
-
-		/* EFA RDM endpoint support writing CQ data by put it in packet header
-		 */
-		prov_info_rdm->domain_attr->cq_data_size = EFA_RDM_CQ_DATA_SIZE;
 	}
 
 	/* update ep_attr */
