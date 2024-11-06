@@ -434,8 +434,10 @@ struct fi_opx_ep_rx {
 	struct {
 		struct fi_opx_hfi1_txe_scb_9B	dput_9B;
 		struct fi_opx_hfi1_txe_scb_9B	cts_9B;
+		struct fi_opx_hfi1_txe_scb_9B	rma_rts_9B;
 		struct fi_opx_hfi1_txe_scb_16B	dput_16B;
 		struct fi_opx_hfi1_txe_scb_16B	cts_16B;
+		struct fi_opx_hfi1_txe_scb_16B	rma_rts_16B;
 	} tx;
 
 	/* -- non-critical -- */
@@ -627,7 +629,10 @@ struct fi_opx_rzv_completion {
 };
 
 struct fi_opx_rma_request {
-	struct fi_opx_completion_counter	*cc;
+	union {
+		struct fi_opx_completion_counter	*cc;
+		struct opx_context			*context;
+	};
 	uint64_t				hmem_device;
 	enum fi_hmem_iface			hmem_iface;
 	uint32_t				padding;
@@ -1064,7 +1069,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr * const hdr,
 		context = (struct opx_context *)((uintptr_t)recv_buf - sizeof(struct opx_context));
 
 		assert((((uintptr_t)context) & 0x07) == 0);
-		context->flags = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV;
+		context->flags = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode);
 		context->buf = recv_buf;
 		context->len = xfer_len;
 		context->data = ofi_data;
@@ -1379,7 +1384,7 @@ void opx_ep_complete_receive_operation (struct fid_ep *ep,
 			context = (struct opx_context *)((uintptr_t)recv_buf - sizeof(struct opx_context));
 			assert((((uintptr_t)context) & 0x07) == 0);
 
-			context->flags = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV;
+			context->flags = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode);
 			context->buf = recv_buf;
 			context->len = send_len;
 			context->data = ofi_data;
@@ -1517,7 +1522,7 @@ void opx_ep_complete_receive_operation (struct fid_ep *ep,
 
 			context = (struct opx_context *)((uintptr_t)recv_buf - sizeof(struct opx_context));
 			assert((((uintptr_t)context) & 0x07) == 0);
-			context->flags = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV;
+			context->flags = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode);
 			context->buf = recv_buf;
 			context->len = send_len;
 			context->data = ofi_data;
@@ -1917,7 +1922,8 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 				const enum opx_hfi1_type hfi1_type)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== RECV -- %s RENDEZVOUS CTS (begin)\n", is_intranode ? "SHM":"HFI");
+		"===================================== RECV -- %s RENDEZVOUS CTS (begin), opcode=%d\n", is_intranode ? "SHM":"HFI",
+		hdr->cts.target.opcode);
 
 	assert(payload != NULL || hdr->cts.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC);
 	const uint8_t u8_rx = hdr->cts.origin_rx;
@@ -2019,6 +2025,24 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 					 hfi1_type);
 	}
 	break;
+	case FI_OPX_HFI_DPUT_OPCODE_PUT_CQ:
+	{
+		const union fi_opx_hfi1_dput_iov * const dput_iov_ptr = payload->cts.iov;
+		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, NULL, hdr, (const void * const) payload, 0,
+					 u8_rx, origin_rs, hdr->cts.target.rma.niov, dput_iov_ptr,
+					 hdr->cts.target.rma.op,
+					 hdr->cts.target.rma.dt,
+					 hdr->cts.target.rma.origin_rma_request_vaddr,
+					 hdr->cts.target.rma.rma_request_vaddr,
+					 NULL, /* No origin byte counter here */
+					 FI_OPX_HFI_DPUT_OPCODE_PUT_CQ,
+					 NULL,
+					 is_intranode,	/* compile-time constant expression */
+					 reliability,	/* compile-time constant expression */
+					 u32_ext_rx,
+					 hfi1_type);
+	}
+	break;
 	case FI_OPX_HFI_DPUT_OPCODE_FENCE:
 	{
 		opx_hfi1_dput_fence(opx_ep, hdr, u8_rx, u32_ext_rx, hfi1_type);
@@ -2031,6 +2055,70 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV -- %s RENDEZVOUS CTS (end)\n", is_intranode ? "SHM":"HFI");
+}
+
+__OPX_FORCE_INLINE__
+void fi_opx_ep_rx_process_header_rma_rts(struct fi_opx_ep * opx_ep,
+				const union opx_hfi1_packet_hdr * const hdr,
+				const union fi_opx_hfi1_packet_payload * const payload,
+				const unsigned is_intranode,
+				const int lock_required,
+				const enum ofi_reliability_kind reliability,
+				const enum opx_hfi1_type hfi1_type)
+{
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== RECV -- RMA RTS (begin)\n");
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RMA-RTS");
+
+	struct fi_opx_ep_rx * const rx = opx_ep->rx;
+	assert(payload != NULL);
+
+	struct fi_opx_mr *opx_mr = NULL;
+	HASH_FIND(hh, opx_ep->domain->mr_hashmap,
+		&hdr->rma_rts.key,
+		sizeof(hdr->rma_rts.key),
+		opx_mr);
+
+	if (opx_mr == NULL) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"lookup of key (%ld) failed; packet dropped\n", hdr->rma_rts.key);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== RECV -- RMA RTS - failed (end)\n");
+		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "RECV-RMA-RTS");
+		assert(0);
+		return;
+	}
+
+	uint64_t* rbuf_qws = (uint64_t *)((uint8_t *)opx_mr->iov.iov_base + fi_opx_dput_rbuf_in(payload->rma_rts.iov[0].rbuf));
+	uint64_t rbuf_device;
+	enum fi_hmem_iface rbuf_iface = fi_opx_mr_get_iface(opx_mr, &rbuf_device);
+
+	struct opx_context *context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+	context->flags = FI_RECV | FI_REMOTE_CQ_DATA;
+	context->data = hdr->match.ofi_data;
+	context->buf = rbuf_qws;
+	context->next = NULL;
+
+	fi_opx_hfi1_rx_rma_rts(opx_ep,
+				hdr,
+				payload,
+				hdr->rma_rts.niov,
+				hdr->rma_rts.rma_request_vaddr,
+				context,
+				(uintptr_t)rbuf_qws,
+				rbuf_iface,
+				rbuf_device,
+				payload->rma_rts.iov,
+				is_intranode,
+				reliability,	/* compile-time constant expression */
+				hfi1_type);
+
+	/* post a pending completion event for when the PUT completes */
+	if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
+	slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
+
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RMA-RTS");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV -- RMA RTS (end) context %p\n",context);
 }
 
 void fi_opx_atomic_completion_action(union fi_opx_hfi1_deferred_work * work_state);
@@ -2270,6 +2358,65 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 						hdr->dput.target.dt,
 						hdr->dput.target.op,
 						hmem_iface, hmem_device);
+		}
+	}
+	break;
+	case FI_OPX_HFI_DPUT_OPCODE_PUT_CQ:
+	{
+		assert(payload != NULL);
+		struct fi_opx_rma_request *rma_req =
+			(struct fi_opx_rma_request *) hdr->dput.target.rma.rma_request_vaddr;
+		struct opx_context *context = rma_req->context;
+		uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.rma.offset);
+		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
+
+		/* In a multi-packet SDMA send, the driver sets the high bit on
+		 * in the PSN to indicate this is the last packet. The payload
+		 * size of the last packet may be smaller than the other packets
+		 * in the multi-packet send, so set the payload bytes accordingly */
+		const uint16_t bytes = (ntohl(hdr->bth.psn) & 0x80000000) ?
+					hdr->dput.target.last_bytes :
+					hdr->dput.target.bytes;
+		assert(context);
+		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
+
+#ifndef NDEBUG
+		if (bytes == 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Received RMA PUT data packet with 0-byte payload size. hdr->dput.target.last_bytes=%hd, hdr->dput.target.bytes=%hd. Based on PSN high bit (%s), bytes was set to %s\n",
+				hdr->dput.target.last_bytes,
+				hdr->dput.target.bytes,
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "ON" : "OFF",
+				(ntohl(hdr->bth.psn) & 0x80000000) ? "last_bytes" : "bytes");
+			abort();
+		}
+#endif
+		// Optimize Memcpy
+		if (hdr->dput.target.op == (FI_NOOP - 1) &&
+		    hdr->dput.target.dt == (FI_VOID - 1)) {
+			OPX_HMEM_COPY_TO(rbuf_qws, sbuf_qws, bytes,
+					OPX_HMEM_NO_HANDLE,
+					OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
+					rma_req->hmem_iface, rma_req->hmem_device);
+		} else {
+			OPX_HMEM_ATOMIC_DISPATCH(sbuf_qws, rbuf_qws, bytes,
+						hdr->dput.target.dt,
+						hdr->dput.target.op,
+						rma_req->hmem_iface, rma_req->hmem_device);
+		}
+
+		const uint64_t value = context->byte_counter;
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, byte_counter = %lu, %lu -> %lu\n",
+			hdr->dput.target.last_bytes, hdr->dput.target.bytes, bytes, context->byte_counter, value, value - bytes);
+		assert(value >= bytes);
+		context->byte_counter = value - bytes;
+
+		if (value == bytes) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"RENDEZVOUS DATA; enqueue cq (completed), ofi_data %#lX \n",
+				context->data);
+			OPX_BUF_FREE(rma_req);
 		}
 	}
 	break;
@@ -2548,10 +2695,11 @@ void fi_opx_ep_rx_process_header_non_eager(struct fid_ep *ep,
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"unimplemented opcode (%u); abort\n", opcode);
 		abort();
-	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_RMA) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"unimplemented opcode (%u); abort\n", opcode);
-		abort();
+	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_RMA_RTS) {
+		fi_opx_ep_rx_process_header_rma_rts(opx_ep, hdr, payload,
+						is_intranode,
+						lock_required, reliability,
+						hfi1_type);
 	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_ATOMIC) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"unimplemented opcode (%u); abort\n", opcode);
@@ -3697,7 +3845,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 __OPX_FORCE_INLINE__
 uint64_t fi_opx_ep_tx_do_cq_completion(struct fi_opx_ep *opx_ep,
 					const unsigned override_flags,
-					uint64_t tx_op_flags)
+					const uint64_t tx_op_flags)
 {
 	/*
 	 * ==== NOTE_SELECTIVE_COMPLETION ====
@@ -3760,7 +3908,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 		const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, uint64_t tag, void* context,
 		const uint32_t data, int lock_required,
-		const unsigned override_flags, uint64_t tx_op_flags,
+		const unsigned override_flags, const uint64_t tx_op_flags,
 		const uint64_t caps,
 		const enum ofi_reliability_kind reliability,
 		const uint64_t do_cq_completion,
@@ -3928,7 +4076,7 @@ ssize_t fi_opx_ep_tx_send_try_eager(struct fid_ep *ep,
 				const int lock_required,
 				const unsigned is_contiguous,
 				const unsigned override_flags,
-				uint64_t tx_op_flags,
+				const uint64_t tx_op_flags,
 				const uint64_t caps,
 				const enum ofi_reliability_kind reliability,
 				const uint64_t do_cq_completion,
@@ -4008,7 +4156,7 @@ ssize_t fi_opx_ep_tx_send_rzv(struct fid_ep *ep,
 			const int lock_required,
 			const unsigned is_contiguous,
 			const unsigned override_flags,
-			uint64_t tx_op_flags,
+			const uint64_t tx_op_flags,
 			const uint64_t caps,
 			const enum ofi_reliability_kind reliability,
 			const uint64_t do_cq_completion,
@@ -4054,7 +4202,7 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 		const enum fi_av_type av_type,
 		const unsigned is_contiguous,
 		const unsigned override_flags,
-		uint64_t tx_op_flags,
+		const uint64_t tx_op_flags,
 		const uint64_t caps,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type)
@@ -4209,7 +4357,7 @@ ssize_t fi_opx_ep_tx_send(struct fid_ep *ep,
 			  const enum fi_av_type av_type,
 			  const unsigned is_contiguous,
 			  const unsigned override_flags,
-			  uint64_t tx_op_flags,
+			  const uint64_t tx_op_flags,
 			  const uint64_t caps,
 			  const enum ofi_reliability_kind reliability,
 			  const enum opx_hfi1_type hfi1_type)
@@ -4239,7 +4387,7 @@ ssize_t fi_opx_ep_tx_inject_internal (struct fid_ep *ep,
 		const uint32_t data,
 		const int lock_required,
 		const enum fi_av_type av_type,
-		uint64_t tx_op_flags,
+		const uint64_t tx_op_flags,
 		const uint64_t caps,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type)
@@ -4313,7 +4461,7 @@ ssize_t fi_opx_ep_tx_inject(struct fid_ep *ep,
 			    const uint32_t data,
 			    const int lock_required,
 			    const enum fi_av_type av_type,
-			    uint64_t tx_op_flags,
+			    const uint64_t tx_op_flags,
 			    const uint64_t caps,
 			    const enum ofi_reliability_kind reliability,
 			    const enum opx_hfi1_type hfi1_type)

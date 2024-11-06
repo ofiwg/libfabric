@@ -790,7 +790,7 @@ uint64_t opx_get_hw_status(struct fi_opx_hfi1_context *context)
    50 seconds for a passive copper channel
    65 seconds for optical channel.
    (we add 5 seconds of margin.) */
-#define OPX_LINK_DOWN_MAX_SEC  70.0 
+#define OPX_LINK_DOWN_MAX_SEC  70.0
 
 __OPX_FORCE_INLINE__
 size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context)

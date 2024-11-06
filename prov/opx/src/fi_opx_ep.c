@@ -1308,6 +1308,12 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 		opx_ep->rx->tx.cts_9B.hdr.cts.target.opcode = FI_OPX_HFI_DPUT_OPCODE_RZV;
 	}
 
+	{	/* RMA RTS packet model */
+		opx_ep->rx->tx.rma_rts_9B = opx_ep->rx->tx.cts_9B;
+		opx_ep->rx->tx.rma_rts_9B.hdr.bth.opcode = FI_OPX_HFI_BTH_OPCODE_RMA_RTS;
+		opx_ep->rx->tx.rma_rts_9B.hdr.cts.target.opcode = FI_OPX_HFI_DPUT_OPCODE_PUT_CQ;
+	}
+
 	{	/* rendezvous DPUT packet model */
 
 		/* tagged model */
@@ -1379,6 +1385,12 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 		/* OFI header */
 		opx_ep->rx->tx.cts_16B.hdr.cts.origin_rx = hfi1->info.rxe.id;
 		opx_ep->rx->tx.cts_16B.hdr.cts.target.opcode = FI_OPX_HFI_DPUT_OPCODE_RZV;
+	}
+
+	{	/* RMA RTS packet model for 16B*/
+		opx_ep->rx->tx.rma_rts_16B = opx_ep->rx->tx.cts_16B;
+		opx_ep->rx->tx.rma_rts_16B.hdr.bth.opcode = FI_OPX_HFI_BTH_OPCODE_RMA_RTS;
+		opx_ep->rx->tx.rma_rts_16B.hdr.cts.target.opcode = FI_OPX_HFI_DPUT_OPCODE_PUT_CQ;
 	}
 
 	{	/* rendezvous DPUT packet model */

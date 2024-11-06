@@ -349,7 +349,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 	struct fi_opx_hmem_iov buf_iov;
 	uint64_t is_hmem = fi_opx_hmem_iov_init(buf, buf_len, NULL, &buf_iov);
 
-	fi_opx_write_internal(opx_ep, &buf_iov, 1, opx_dst_addr, addr, key,
+	fi_opx_write_internal(opx_ep, &buf_iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key,
 				cc, datatype, op, opx_ep->tx->op_flags,
 				is_hmem, lock_required, caps, reliability,
 				hfi1_type);
@@ -1003,7 +1003,7 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	const uint64_t is_hmem = (const uint64_t)
 		fi_opx_hmem_iov_init(buf, count * sizeofdt(datatype), NULL, &iov);
 
-	fi_opx_write_internal(opx_ep, &iov, 1, opx_dst_addr, addr, key, cc,
+	fi_opx_write_internal(opx_ep, &iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key, cc,
 				datatype, op, opx_ep->tx->op_flags | FI_INJECT,
 				is_hmem, lock_required, caps, reliability, hfi1_type);
 

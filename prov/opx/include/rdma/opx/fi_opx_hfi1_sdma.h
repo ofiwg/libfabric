@@ -274,6 +274,7 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
 				(is_hmem) ||
 				(params->opcode == FI_OPX_HFI_DPUT_OPCODE_GET) ||
 				(params->opcode == FI_OPX_HFI_DPUT_OPCODE_PUT) ||
+				(params->opcode == FI_OPX_HFI_DPUT_OPCODE_PUT_CQ) ||
 				(params->opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH) ||
 				(params->opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH);
 

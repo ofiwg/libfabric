@@ -46,22 +46,23 @@ size_t opx_hfi1_dput_write_header_and_payload_put(
 				const uint64_t op64,
 				const uint64_t dt64,
 				const size_t payload_bytes,
-				const uint64_t key,
+				const uint64_t key_or_rma_req,
 				uint8_t **sbuf,
 				const enum fi_hmem_iface sbuf_iface,
 				const uint64_t sbuf_device,
 				uintptr_t *rbuf,
-				const enum opx_hfi1_type hfi1_type)
+				const enum opx_hfi1_type hfi1_type,
+				const uint32_t opcode)
 {
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		hdr->qw_9B[4] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[4] | FI_OPX_HFI_DPUT_OPCODE_PUT |
+		hdr->qw_9B[4] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[4] | opcode |
 			(dt64 << 16) | (op64 << 24) | (payload_bytes << 48);
-		hdr->qw_9B[5] = key;
+		hdr->qw_9B[5] = key_or_rma_req;
 		hdr->qw_9B[6] = fi_opx_dput_rbuf_out(*rbuf);
 	} else {
-		hdr->qw_16B[5] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[5] | FI_OPX_HFI_DPUT_OPCODE_PUT |
+		hdr->qw_16B[5] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[5] | opcode |
 			(dt64 << 16) | (op64 << 24) | (payload_bytes << 48);
-		hdr->qw_16B[6] = key;
+		hdr->qw_16B[6] = key_or_rma_req;
 		hdr->qw_16B[7] = fi_opx_dput_rbuf_out(*rbuf);
 	}
 
@@ -397,7 +398,7 @@ size_t opx_hfi1_dput_write_packet(struct fi_opx_ep *opx_ep,
 		hdr->qw_9B[2] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[2] | psn;
 		hdr->qw_9B[3] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[3];
 	} else {
-		hdr->qw_16B[0] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[0] | 
+		hdr->qw_16B[0] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[0] |
 					((uint64_t)(lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 					((uint64_t)lrh_dws << 20);
 		hdr->qw_16B[1] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[1] |
@@ -427,7 +428,14 @@ size_t opx_hfi1_dput_write_packet(struct fi_opx_ep *opx_ep,
 		return opx_hfi1_dput_write_header_and_payload_put(
 				opx_ep, hdr, tx_payload,
 				iov, op64, dt64, payload_bytes,
-				key, sbuf, sbuf_iface, sbuf_device, rbuf, hfi1_type);
+				key, sbuf, sbuf_iface, sbuf_device, rbuf, hfi1_type, opcode);
+		break;
+	case FI_OPX_HFI_DPUT_OPCODE_PUT_CQ:
+		return opx_hfi1_dput_write_header_and_payload_put(
+				opx_ep, hdr, tx_payload,
+				iov, op64, dt64, payload_bytes,
+				target_byte_counter_vaddr, /* this is the remote rma_request */
+				sbuf, sbuf_iface, sbuf_device, rbuf, hfi1_type, opcode);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH:
 		return opx_hfi1_dput_write_header_and_payload_atomic_fetch(

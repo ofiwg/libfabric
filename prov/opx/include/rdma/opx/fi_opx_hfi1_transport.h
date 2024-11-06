@@ -721,7 +721,10 @@ struct fi_opx_hfi1_dput_params {
 	struct fi_opx_hfi1_sdma_work_entry *sdma_we;
 	struct slist sdma_reqs;
 	struct iovec tid_iov;
-	uintptr_t target_byte_counter_vaddr;
+	union {
+		uintptr_t target_byte_counter_vaddr;
+		uintptr_t target_rma_request_vaddr;
+	};
 	uintptr_t rma_request_vaddr;
 	uint64_t *origin_byte_counter;
 	uint64_t key;
@@ -754,6 +757,7 @@ struct fi_opx_hfi1_dput_params {
 
 	struct fi_opx_hmem_iov compare_iov;
 	uint8_t inject_data[FI_OPX_HFI1_PACKET_IMM];
+	uint32_t unused_padding;
 	/* Either FI_OPX_MAX_DPUT_IOV iov's or
 	   1 iov and FI_OPX_MAX_DPUT_TIDPAIRS tidpairs */
 	union {
@@ -827,6 +831,42 @@ OPX_COMPILE_TIME_ASSERT(sizeof(((struct fi_opx_hfi1_rx_rzv_rts_params *)0)->tidp
 			< (FI_OPX_HFI1_PACKET_MTU - sizeof(union fi_opx_hfi1_dput_iov)),
 			"sizeof(fi_opx_hfi1_rx_rzv_rts_params->tidpairs) should be < (MAX PACKET MTU - sizeof(dput iov)!");
 
+
+struct fi_opx_hfi1_rx_rma_rts_params {
+	/* == CACHE LINE 0 == */
+	struct fi_opx_work_elem	work_elem;	// 40 bytes
+	struct fi_opx_ep	*opx_ep;
+	uint64_t		lrh_dlid;
+	uint64_t		slid;
+
+	/* == CACHE LINE 1 == */
+	uint64_t			pbc_dlid;
+	uint64_t			niov;
+	struct fi_opx_rma_request	*rma_req;
+	struct fi_opx_rma_request	*origin_rma_req;
+	uint64_t			key;
+	uint32_t			data;
+	uint32_t			u32_extended_rx;
+	enum ofi_reliability_kind	reliability;
+	uint16_t			origin_rs;
+	uint16_t			origin_rx;
+
+	bool				is_intranode;
+	uint8_t 			opcode;
+	uint8_t				u8_rx;
+	uint8_t				dt;
+	uint8_t				op;
+	uint8_t				target_hfi_unit;
+	uint8_t				unused[2];
+
+	/* == CACHE LINE 2 == */
+	union fi_opx_hfi1_dput_iov dput_iov[FI_OPX_MAX_DPUT_IOV];
+};
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_hfi1_rx_rma_rts_params, dput_iov) == FI_OPX_CACHE_LINE_SIZE * 2,
+			"fi_opx_hfi1_rx_rma_rts_params->dput_iov should start on cacheline 2!");
+OPX_COMPILE_TIME_ASSERT(sizeof(((struct fi_opx_hfi1_rx_rma_rts_params *)0)->dput_iov) < FI_OPX_HFI1_PACKET_MTU,
+			"sizeof(fi_opx_hfi1_rx_rma_rts_params->dput_iov) should be < MAX PACKET MTU!");
+
 struct fi_opx_hfi1_rx_dput_fence_params {
 	struct fi_opx_work_elem work_elem;
 	struct fi_opx_ep *opx_ep;
@@ -868,6 +908,7 @@ union fi_opx_hfi1_deferred_work {
 	struct fi_opx_hfi1_rx_rzv_rts_params rx_rzv_rts;
 	struct fi_opx_hfi1_rx_dput_fence_params fence;
 	struct fi_opx_hfi1_rx_readv_params readv;
+	struct fi_opx_hfi1_rx_rma_rts_params rx_rma_rts;
 };
 
 int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work);
@@ -1037,7 +1078,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		const void *buf, size_t len, fi_addr_t dest_addr, uint64_t tag,
 		const uint32_t data, int lock_required,
 		const uint64_t dest_rx,
-		uint64_t tx_op_flags,
+		const uint64_t tx_op_flags,
 		const uint64_t caps,
 		const enum ofi_reliability_kind reliability,
 		const enum opx_hfi1_type hfi1_type)
@@ -1349,7 +1390,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_intranode(struct fid_ep *ep,
 					   const uint32_t data,
 					   int lock_required,
 					   const uint64_t dest_rx,
-					   uint64_t tx_op_flags,
+					   const uint64_t tx_op_flags,
 					   const uint64_t caps,
 					   const uint64_t do_cq_completion,
 					   const enum fi_hmem_iface iface,
@@ -1464,7 +1505,7 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t niov,
 				 size_t total_len, void *desc, fi_addr_t dest_addr, uint64_t tag,
 				 void *context, const uint32_t data, int lock_required,
-				 const unsigned override_flags, uint64_t tx_op_flags,
+				 const unsigned override_flags, const uint64_t tx_op_flags,
 				 const uint64_t dest_rx, const uint64_t caps,
 				 const enum ofi_reliability_kind reliability,
 				 const uint64_t do_cq_completion,
@@ -1655,7 +1696,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_intranode_16B(struct fid_ep *ep,
 					       const uint32_t data,
 					       int lock_required,
 					       const uint64_t dest_rx,
-					       uint64_t tx_op_flags,
+					       const uint64_t tx_op_flags,
 					       const uint64_t caps,
 					       const uint64_t do_cq_completion,
 					       const enum fi_hmem_iface iface,
@@ -1779,7 +1820,7 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, size_t niov,
 				     size_t total_len, void *desc, fi_addr_t dest_addr, uint64_t tag,
 				     void *context, const uint32_t data, int lock_required,
-				     const unsigned override_flags, uint64_t tx_op_flags,
+				     const unsigned override_flags, const uint64_t tx_op_flags,
 				     const uint64_t dest_rx, const uint64_t caps,
 				     const enum ofi_reliability_kind reliability,
 				     const uint64_t do_cq_completion,
@@ -1973,7 +2014,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_select(struct fid_ep *ep,
 					const struct iovec *iov, size_t niov, size_t total_len,
 					void *desc, fi_addr_t dest_addr, uint64_t tag,
 					void *context, const uint32_t data, int lock_required,
-					const unsigned override_flags, uint64_t tx_op_flags,
+					const unsigned override_flags, const uint64_t tx_op_flags,
 					const uint64_t dest_rx, const uint64_t caps,
 					const enum ofi_reliability_kind reliability,
 					const uint64_t do_cq_completion,
@@ -2037,7 +2078,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 					  const uint32_t data,
 					  int lock_required,
 					  const uint64_t dest_rx,
-					  uint64_t tx_op_flags,
+					  const uint64_t tx_op_flags,
 					  const uint64_t caps,
 					  const uint64_t do_cq_completion,
 					  const enum fi_hmem_iface iface,
@@ -2144,7 +2185,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode_16B(struct fid_ep *ep,
 					      const uint32_t data,
 					      int lock_required,
 					      const uint64_t dest_rx,
-					      uint64_t tx_op_flags,
+					      const uint64_t tx_op_flags,
 					      const uint64_t caps,
 					      const uint64_t do_cq_completion,
 					      const enum fi_hmem_iface iface,
@@ -2261,7 +2302,7 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(struct fi_opx_ep *opx_ep,
 					const uint32_t psn,
 					const uint32_t data,
 					const uint64_t tag,
-					uint64_t tx_op_flags,
+					const uint64_t tx_op_flags,
 					const uint64_t caps,
 					const enum opx_hfi1_type hfi1_type)
 {
@@ -2532,7 +2573,7 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 		const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, uint64_t tag, void* context,
 		const uint32_t data, int lock_required,
-		const unsigned override_flags, uint64_t tx_op_flags,
+		const unsigned override_flags, const uint64_t tx_op_flags,
 		const uint64_t dest_rx,
 		const uint64_t caps,
 		const enum ofi_reliability_kind reliability,
@@ -2679,7 +2720,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_16B(struct fid_ep *ep,
 				    const void *buf, size_t len, void *desc,
 				    fi_addr_t dest_addr, uint64_t tag, void* context,
 				    const uint32_t data, int lock_required,
-				    const unsigned override_flags, uint64_t tx_op_flags,
+				    const unsigned override_flags, const uint64_t tx_op_flags,
 				    const uint64_t dest_rx,
 				    const uint64_t caps,
 				    const enum ofi_reliability_kind reliability,
@@ -2853,7 +2894,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_select(struct fid_ep *ep,
 				       const void *buf, size_t len, void *desc,
 				       fi_addr_t dest_addr, uint64_t tag, void* context,
 				       const uint32_t data, int lock_required,
-				       const unsigned override_flags, uint64_t tx_op_flags,
+				       const unsigned override_flags, const uint64_t tx_op_flags,
 				       const uint64_t dest_rx,
 				       const uint64_t caps,
 				       const enum ofi_reliability_kind reliability,
@@ -2924,7 +2965,7 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(struct fi_opx_ep *opx_
 					const uint32_t psn,
 					const uint32_t data,
 					const uint64_t tag,
-					uint64_t tx_op_flags,
+					const uint64_t tx_op_flags,
 					const uint64_t caps,
 					const enum opx_hfi1_type hfi1_type)
 {
@@ -3156,7 +3197,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep,
 						uint64_t tag,
 						const uint32_t data,
 						int lock_required,
-						uint64_t tx_op_flags,
+						const uint64_t tx_op_flags,
 						const uint64_t caps,
 						const enum ofi_reliability_kind reliability,
 						uint32_t *psn_out,
@@ -3826,7 +3867,7 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep,
 ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_t niov,
 				size_t total_len, void *desc, fi_addr_t dest_addr, uint64_t tag,
 				void *user_context, const uint32_t data, int lock_required,
-				const unsigned override_flags, uint64_t tx_op_flags,
+				const unsigned override_flags, const uint64_t tx_op_flags,
 				const uint64_t dest_rx,
 				const uint64_t caps,
 				const enum ofi_reliability_kind reliability,
@@ -3838,7 +3879,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 ssize_t fi_opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 				fi_addr_t dest_addr, uint64_t tag, void *user_context,
 				const uint32_t data, int lock_required,
-				const unsigned override_flags, uint64_t tx_op_flags,
+				const unsigned override_flags, const uint64_t tx_op_flags,
 				const uint64_t dest_rx,
 				const uint64_t caps,
 				const enum ofi_reliability_kind reliability,
@@ -3850,7 +3891,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, 
 ssize_t fi_opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 				fi_addr_t dest_addr, uint64_t tag, void *user_context,
 				const uint32_t data, int lock_required,
-				const unsigned override_flags, uint64_t tx_op_flags,
+				const unsigned override_flags, const uint64_t tx_op_flags,
 				const uint64_t dest_rx,
 				const uint64_t caps,
 				const enum ofi_reliability_kind reliability,
@@ -3863,7 +3904,7 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 					fi_addr_t dest_addr, uint64_t tag, void *context,
 					const uint32_t data, int lock_required,
-					const unsigned override_flags, uint64_t tx_op_flags,
+					const unsigned override_flags, const uint64_t tx_op_flags,
 					const uint64_t dest_rx,
 					const uint64_t caps,
 					const enum ofi_reliability_kind reliability,
@@ -3891,5 +3932,19 @@ ssize_t fi_opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_
 	abort();
 	return (ssize_t)-1L;
 }
+
+void fi_opx_hfi1_rx_rma_rts (struct fi_opx_ep *opx_ep,
+			     const union opx_hfi1_packet_hdr * const hdr,
+			     const void * const payload,
+			     const uint64_t niov,
+			     uintptr_t origin_rma_req,
+			     struct opx_context *const target_context,
+			     const uintptr_t dst_vaddr,
+			     const enum fi_hmem_iface dst_iface,
+			     const uint64_t dst_device,
+			     const union fi_opx_hfi1_dput_iov *src_iovs,
+			     const unsigned is_intranode,
+			     const enum ofi_reliability_kind reliability,
+			     const enum opx_hfi1_type hfi1_type);
 
 #endif /* _FI_PROV_OPX_HFI1_TRANSPORT_H_ */
