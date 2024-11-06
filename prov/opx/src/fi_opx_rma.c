@@ -293,7 +293,7 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 	if (ret) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "INJECT_WRITE");
 		return ret;
-	}	
+	}
 #endif
 
 	if (lock_required) {
@@ -329,7 +329,7 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 	struct fi_opx_hmem_iov iov;
 	const uint64_t is_hmem = fi_opx_hmem_iov_init(buf, len, NULL, &iov);
 
-	fi_opx_write_internal(opx_ep, &iov, 1, opx_dst_addr, addr_offset, key,
+	fi_opx_write_internal(opx_ep, &iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr_offset, key,
 				cc, FI_VOID, FI_NOOP,
 				opx_ep->tx->op_flags | FI_INJECT,
 				is_hmem, lock_required, caps, reliability,
@@ -357,10 +357,11 @@ inline ssize_t fi_opx_inject_write_generic(struct fid_ep *ep, const void *buf, s
 }
 
 __OPX_FORCE_INLINE__
-ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc, const uint64_t data,
 		     fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key,
 		     void *user_context, int lock_required,
-		     const enum fi_av_type av_type, const uint64_t caps,
+		     const enum fi_av_type av_type, const uint64_t tx_op_flags,
+		     const uint64_t caps,
 		     const enum ofi_reliability_kind reliability,
 		     const enum opx_hfi1_type hfi1_type)
 {
@@ -385,10 +386,11 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	assert(dst_addr != FI_ADDR_UNSPEC);
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,dst_addr);
+	const uint64_t op_flags = opx_ep->tx->op_flags | (tx_op_flags & FI_REMOTE_CQ_DATA);
 
-	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
+	struct fi_opx_cq *cq = (op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE | FI_REMOTE_CQ_DATA)) ? opx_ep->tx->cq : NULL;
 	struct opx_context *context;
-	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_RMA | FI_WRITE, &context) != FI_SUCCESS)) {
+	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_RMA | FI_WRITE | (op_flags & FI_REMOTE_CQ_DATA), &context) != FI_SUCCESS)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITE");
 		return -FI_ENOMEM;
 	}
@@ -413,26 +415,26 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 
 	struct fi_opx_hmem_iov iov;
 	const uint64_t is_hmem = fi_opx_hmem_iov_init(buf, len, desc, &iov);
-	fi_opx_write_internal(opx_ep, &iov, 1, opx_dst_addr, addr_offset, key,
+	fi_opx_write_internal(opx_ep, &iov, 1, data, opx_dst_addr, addr_offset, key,
 			      cc, FI_VOID,
-			      FI_NOOP, opx_ep->tx->op_flags, is_hmem,
+			      FI_NOOP, op_flags, is_hmem,
 			      lock_required, caps, reliability, hfi1_type);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITE");
 	return 0;
 }
 
-inline ssize_t fi_opx_write_generic(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+inline ssize_t fi_opx_write_generic(struct fid_ep *ep, const void *buf, size_t len, void *desc, const uint64_t data,
 				    fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key,
 				    void *context, int lock_required, const enum fi_av_type av_type,
-				    const uint64_t caps,
+				    const uint64_t tx_op_flags, const uint64_t caps,
 				    const enum ofi_reliability_kind reliability,
 				    const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
-	ssize_t rc = fi_opx_write(ep, buf, len, desc, dst_addr, addr_offset, key, context,
-				  FI_OPX_LOCK_NOT_REQUIRED, av_type, caps, reliability, hfi1_type);
+	ssize_t rc = fi_opx_write(ep, buf, len, desc, data, dst_addr, addr_offset, key, context,
+				  FI_OPX_LOCK_NOT_REQUIRED, av_type, tx_op_flags, caps, reliability, hfi1_type);
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 
 	return rc;
@@ -456,7 +458,7 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 	if (ret) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITEV_INTERNAL");
 		return ret;
-	}	
+	}
 #endif
 
 	if (lock_required) {
@@ -512,7 +514,7 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 							      iov[index].iov_len,
 							      mr_ptr,
 							      &hmem_iov);
-		fi_opx_write_internal(opx_ep, &hmem_iov, 1, opx_dst_addr,
+		fi_opx_write_internal(opx_ep, &hmem_iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr,
 					addr_offset, key, cc, FI_VOID, FI_NOOP,
 					0, is_hmem, lock_required, caps,
 					reliability, hfi1_type);
@@ -611,9 +613,9 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,msg->addr);
 	fi_opx_get_daos_av_addr_rank(opx_ep, opx_dst_addr);
 
-	struct fi_opx_cq *cq = (flags & FI_COMPLETION) ? opx_ep->rx->cq : NULL;
+	struct fi_opx_cq *cq = (flags & (FI_COMPLETION | FI_REMOTE_CQ_DATA)) ? opx_ep->rx->cq : NULL;
 	struct opx_context *context;
-	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, msg->context, cq, FI_RMA | FI_WRITE, &context) != FI_SUCCESS)) {
+	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, msg->context, cq, (FI_RMA | FI_WRITE | (flags & FI_REMOTE_CQ_DATA)), &context) != FI_SUCCESS)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITEMSG_INTERNAL");
 		return -FI_ENOMEM;
 	}
@@ -667,8 +669,8 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 		size_t len = (msg_iov_bytes <= rma_iov_bytes) ? msg_iov_bytes : rma_iov_bytes;
 		iov.buf = msg_iov_vaddr;
 		iov.len = len;
-		fi_opx_write_internal(opx_ep, &iov, 1, opx_dst_addr, rma_iov_addr,
-				      rma_iov_key, cc, FI_VOID, FI_NOOP, 0,
+		fi_opx_write_internal(opx_ep, &iov, 1, msg->data, opx_dst_addr, rma_iov_addr,
+				      rma_iov_key, cc, FI_VOID, FI_NOOP, flags,
 				      is_hmem, lock_required, caps,
 				      reliability, hfi1_type);
 
@@ -1243,14 +1245,14 @@ static inline ssize_t fi_opx_rma_write(struct fid_ep *ep, const void *buf, size_
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
-		rc = fi_opx_write(ep, buf, len, desc, dst_addr, addr_offset, key, context,
-			FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_WFR);
+		rc = fi_opx_write(ep, buf, len, desc, OPX_NO_REMOTE_CQ_DATA, dst_addr, addr_offset, key, context,
+			FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0, caps, OPX_RELIABILITY, OPX_HFI1_WFR);
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
-		rc = fi_opx_write(ep, buf, len, desc, dst_addr, addr_offset, key, context,
-			FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
+		rc = fi_opx_write(ep, buf, len, desc, OPX_NO_REMOTE_CQ_DATA, dst_addr, addr_offset, key, context,
+			FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0, caps, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-		rc = fi_opx_write(ep, buf, len, desc, dst_addr, addr_offset, key, context,
-			FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_JKR);
+		rc = fi_opx_write(ep, buf, len, desc, OPX_NO_REMOTE_CQ_DATA, dst_addr, addr_offset, key, context,
+			FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0, caps, OPX_RELIABILITY, OPX_HFI1_JKR);
 	} else {
 		/* should never get here */
 		rc = -FI_EPERM;
@@ -1321,6 +1323,36 @@ static inline ssize_t fi_opx_rma_writemsg(struct fid_ep *ep, const struct fi_msg
 	return rc;
 }
 
+static inline ssize_t fi_opx_rma_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+					   const uint64_t data, fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key,
+					   void *context)
+{
+	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading, fi_opx_global.progress);
+	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
+	ssize_t rc;
+
+	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		rc = fi_opx_write(ep, buf, len, desc, data, dst_addr, addr_offset, key, context,
+			FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, FI_REMOTE_CQ_DATA, caps, OPX_RELIABILITY, OPX_HFI1_WFR);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+		rc = fi_opx_write(ep, buf, len, desc, data, dst_addr, addr_offset, key, context,
+			FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, FI_REMOTE_CQ_DATA, caps, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		rc = fi_opx_write(ep, buf, len, desc, data, dst_addr, addr_offset, key, context,
+			FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, FI_REMOTE_CQ_DATA, caps, OPX_RELIABILITY, OPX_HFI1_JKR);
+	} else {
+		/* should never get here */
+		rc = -FI_EPERM;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+		abort();
+	}
+	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
+	return rc;
+}
+
 static struct fi_ops_rma fi_opx_ops_rma_default = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = fi_opx_rma_read,
@@ -1330,7 +1362,7 @@ static struct fi_ops_rma fi_opx_ops_rma_default = {
 	.inject = fi_opx_rma_inject_write,
 	.writev = fi_opx_rma_writev,
 	.writemsg = fi_opx_rma_writemsg,
-	.writedata = fi_no_rma_writedata,
+	.writedata = fi_opx_rma_writedata,
 };
 
 int fi_opx_init_rma_ops(struct fid_ep *ep, struct fi_info *info)
@@ -1363,19 +1395,20 @@ FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_REQUIRED, OPX_AV, 0x0018000000000000ull,
 #define FI_OPX_RMA_OPS_STRUCT_NAME_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)                                   \
 	fi_opx_ops_rma_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE
 
-#define FI_OPX_RMA_OPS_STRUCT(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)                                         \
-	static struct fi_ops_rma FI_OPX_RMA_OPS_STRUCT_NAME(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE) = {       \
-		.size = sizeof(struct fi_ops_rma),                                                 \
-		.read = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),       \
-		.readv = fi_no_rma_readv,                                                          \
-		.readmsg = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE), \
-		.write = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),     \
-		.inject = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, LOCK, AV, CAPS,           \
-							   RELIABILITY, HFI1_TYPE),                           \
-		.writev = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(writev, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),   \
-		.writemsg =                                                                        \
-			FI_OPX_RMA_SPECIALIZED_FUNC_NAME(writemsg, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),   \
-		.writedata = fi_no_rma_writedata,                                                  \
+#define FI_OPX_RMA_OPS_STRUCT(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)						\
+	static struct fi_ops_rma FI_OPX_RMA_OPS_STRUCT_NAME(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE) = {		\
+		.size = sizeof(struct fi_ops_rma),								\
+		.read = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),		\
+		.readv = fi_no_rma_readv,									\
+		.readmsg = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),	\
+		.write = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),	\
+		.inject = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, LOCK, AV, CAPS,			\
+							   RELIABILITY, HFI1_TYPE),				\
+		.writev = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(writev, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),	\
+		.writemsg =											\
+			FI_OPX_RMA_SPECIALIZED_FUNC_NAME(writemsg, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),	\
+		.writedata =											\
+			FI_OPX_RMA_SPECIALIZED_FUNC_NAME(writedata, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE),	\
 	}
 
 FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR);

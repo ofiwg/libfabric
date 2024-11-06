@@ -60,7 +60,7 @@
 #define FI_OPX_HFI_BTH_OPCODE_INVALID			(0xC0)
 #define FI_OPX_HFI_BTH_OPCODE_RZV_CTS			(0xC1)
 #define FI_OPX_HFI_BTH_OPCODE_RZV_DATA			(0xC2)
-#define FI_OPX_HFI_BTH_OPCODE_RMA			(0xC3)
+#define FI_OPX_HFI_BTH_OPCODE_RMA_RTS			(0xC3)
 #define FI_OPX_HFI_BTH_OPCODE_ATOMIC			(0xC4)
 #define FI_OPX_HFI_BTH_OPCODE_ACK			(0xC5)
 #define FI_OPX_HFI_BTH_OPCODE_UD			(0xC6)	/* unreliabile datagram */
@@ -102,7 +102,7 @@ static const char* FI_OPX_HFI_BTH_LOW_OPCODE_STRINGS[] = {
 	"FI_OPX_HFI_BTH_OPCODE_INVALID             ",
 	"FI_OPX_HFI_BTH_OPCODE_RZV_CTS             ",
 	"FI_OPX_HFI_BTH_OPCODE_RZV_DATA            ",
-	"FI_OPX_HFI_BTH_OPCODE_RMA                 ",
+	"FI_OPX_HFI_BTH_OPCODE_RMA_RTS             ",
 	"FI_OPX_HFI_BTH_OPCODE_ATOMIC              ",
 	"FI_OPX_HFI_BTH_OPCODE_ACK                 ",
 	"FI_OPX_HFI_BTH_OPCODE_UD                  " };
@@ -216,8 +216,9 @@ static inline const char* opx_hfi1_ud_opcode_to_string(uint8_t opcode)
 #define FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG			(0x06)
 #define FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC			(0x07)
 #define FI_OPX_HFI_DPUT_OPCODE_RZV_TID				(0x08)
+#define FI_OPX_HFI_DPUT_OPCODE_PUT_CQ				(0x09)
 /* Add new DPUT Opcodes here, and increment LAST_INVALID accordingly */
-#define FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID			(0x09)
+#define FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID			(0x0A)
 
 static const char* FI_OPX_HFI_DPUT_OPCODE_STRINGS[] = {
 	[FI_OPX_HFI_DPUT_OPCODE_RZV] = "FI_OPX_HFI_DPUT_OPCODE_RZV",
@@ -229,6 +230,7 @@ static const char* FI_OPX_HFI_DPUT_OPCODE_STRINGS[] = {
 	[FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG] = "FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG",
 	[FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC] = "FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC",
 	[FI_OPX_HFI_DPUT_OPCODE_RZV_TID] = "FI_OPX_HFI_DPUT_OPCODE_RZV_TID",
+	[FI_OPX_HFI_DPUT_OPCODE_PUT_CQ] = "FI_OPX_HFI_DPUT_OPCODE_PUT_CQ",
 	[FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID] = "INVALID DPUT OPCODE"
 };
 
@@ -848,11 +850,52 @@ union opx_hfi1_packet_hdr {
 				uintptr_t	completion_counter;
 				uint64_t	bytes_to_fence;
 			} fence;
+			struct {
+				/* QW[5] SW */
+				uint8_t		opcode;
+				uint8_t		unused0;
+				uint16_t	unused1;
+				uint8_t		dt;
+				uint8_t		op;
+				uint16_t	niov;		/* number of non-contiguous buffers described in the packet payload */
+
+				/* QW[6-7] SW */
+				uintptr_t	origin_rma_request_vaddr;
+				uint64_t	rma_request_vaddr;
+			} rma;
 		} target;
 
 		uint64_t	reserved_n[7];          /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) cts;
+
+	/*    OPX RMA RTS HEADER                   */
+	struct {
+		uint64_t	reserved[2];            /* QW[0-1] */
+
+		/* QW[2] BTH (unused)*/
+		uint16_t	reserved_1[3];
+		uint8_t		origin_rx;
+		uint8_t		reserved_2;
+
+		/* QW[3-4] BTH/KDETH */
+		uint64_t	reserved_3[2];
+
+		/* QW[5] SW */
+		uint8_t		opcode;
+		uint8_t		unused0;
+		uint16_t	unused1;
+		uint8_t		dt;
+		uint8_t		op;
+		uint16_t	niov;		/* number of non-contiguous buffers described in the packet payload */
+
+		/* QW[6-7] SW */
+		uint64_t	key;
+		uintptr_t	rma_request_vaddr;
+
+		uint64_t	reserved_n[7];          /* QW[8-14] SW */
+
+	} __attribute__((__packed__)) rma_rts;
 
 	/*    OPX DPUT HEADER                   */
 	struct {
@@ -922,6 +965,15 @@ union opx_hfi1_packet_hdr {
 				uintptr_t	completion_counter;
 				uint64_t	bytes_to_fence;
 			} fence;
+			struct {
+				/* QW[5] SW */
+				uint64_t	reserved; /* Common fields */
+
+				/* QW[6] SW */
+				uintptr_t	rma_request_vaddr;
+				/* QW[7] SW */
+				uintptr_t	offset;
+			} rma;
 		} target;
 
 		uint64_t	reserved_n[7];          /* QW[8-14] SW */
@@ -1135,6 +1187,18 @@ void fi_opx_hfi1_dump_packet_hdr (const union opx_hfi1_packet_hdr * const hdr,
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .cts.target.opcode          ..........     0x%x (%s) \n", pid, fn, ln,
 				hdr->cts.target.opcode, opx_hfi1_dput_opcode_to_string(hdr->cts.target.opcode));
 			break;
+		case FI_OPX_HFI_BTH_OPCODE_RMA_RTS:
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .rma_rts.opcode .............. 0x%x\n",
+				pid, fn, ln, hdr->rma_rts.opcode);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .rma_rts.dt/op ............... 0x%x/0x%x\n",
+				pid, fn, ln, hdr->rma_rts.dt, hdr->rma_rts.op);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .rma_rts.niov ................ 0x%x\n",
+				pid, fn, ln, hdr->rma_rts.niov);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .rma_rts.key ................. 0x%16.16lx\n",
+				pid, fn, ln, hdr->rma_rts.key);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"(%d) %s():%u .rma_rts.rma_request_vaddr ... 0x%16.16lx\n",
+				pid, fn, ln, hdr->rma_rts.rma_request_vaddr);
+			break;
 		default:
 			break;
 	}
@@ -1340,6 +1404,10 @@ union fi_opx_hfi1_packet_payload {
 
 		} noncontiguous;
 	} rendezvous;
+
+	struct {
+		union fi_opx_hfi1_dput_iov	iov[FI_OPX_MAX_DPUT_IOV];
+	} rma_rts;
 
 	struct {
 		union fi_opx_hfi1_dput_iov	iov[FI_OPX_MAX_DPUT_IOV];
@@ -1627,6 +1695,13 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 				fprintf(stderr, "(%d) %s():%u .dput.target.get.rbuf ............... %p\n",
 					pid, fn, ln,
 					(void *) fi_opx_dput_rbuf_in(hdr->dput.target.get.rbuf));
+			} else if (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_PUT_CQ) {
+				fprintf(stderr, "(%d) %s():%u .dput.target.rma.rma_request_vaddr    %p\n",
+					pid, fn, ln,
+					(void *) hdr->dput.target.rma.rma_request_vaddr);
+				fprintf(stderr, "(%d) %s():%u .dput.target.rma.offset ............... %p\n",
+					pid, fn, ln,
+					(void *) fi_opx_dput_rbuf_in(hdr->dput.target.rma.offset));
 			} else if (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_PUT ||
 				   hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
 				   hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH) {
@@ -1640,6 +1715,18 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:	/* calculate (?) total bytes to be transfered */
 		case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ:	/* calculate (?) total bytes to be transfered */
+			break;
+		case FI_OPX_HFI_BTH_OPCODE_RMA_RTS:
+			fprintf(stderr, "(%d) %s():%u .rma_rts.opcode ......................... 0x%x\n",
+				pid, fn, ln, hdr->rma_rts.opcode);
+			fprintf(stderr, "(%d) %s():%u .rma_rts.target.vaddr.ntidpairs           0x%x\n",
+				pid, fn, ln, hdr->rma_rts.ntidpairs);
+			fprintf(stderr, "(%d) %s():%u .rma_rts.niov ........................... 0x%x\n",
+				pid, fn, ln, hdr->rma_rts.niov);
+			fprintf(stderr, "(%d) %s():%u .rma_rts.key ............................ 0x%x\n",
+				pid, fn, ln, hdr->rma_rts.key);
+			fprintf(stderr, "(%d) %s():%u .rma_rts.rma_request_vaddr .............. 0x%x\n",
+				pid, fn, ln, hdr->rma_rts.rma_request_vaddr);
 			break;
 		default:
 			break;
