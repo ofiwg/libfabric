@@ -12,7 +12,8 @@
 #include "ofi_util.h"
 #include "rdm/efa_rdm_protocol.h"
 
-#define EFA_QP_DEFAULT_SERVICE_LEVEL 8
+#define EFA_QP_DEFAULT_SERVICE_LEVEL 0
+#define EFA_QP_LOW_LATENCY_SERVICE_LEVEL 8
 
 struct efa_qp {
 	struct ibv_qp *ibv_qp;
