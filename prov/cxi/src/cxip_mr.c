@@ -758,6 +758,14 @@ static void cxip_mr_domain_remove(struct cxip_mr *mr)
 	ofi_spin_unlock(&mr->domain->mr_domain.lock);
 }
 
+static bool cxip_is_valid_mr_key(uint64_t key)
+{
+	if (key & ~CXIP_MR_KEY_MASK)
+		return false;
+
+	return true;
+}
+
 /*
  * cxip_mr_domain_insert() - Validate uniqueness and insert
  * client key in the domain hash table.
@@ -777,7 +785,7 @@ static int cxip_mr_domain_insert(struct cxip_mr *mr)
 
 	mr->key = mr->attr.requested_key;
 
-	if (!cxip_generic_is_valid_mr_key(mr->key))
+	if (!cxip_is_valid_mr_key(mr->key))
 		return -FI_EKEYREJECTED;
 
 	bucket = fasthash64(&mr->key, sizeof(mr->key), 0) %
@@ -849,14 +857,6 @@ static int cxip_prov_cache_init_mr_key(struct cxip_mr *mr,
 		 key.raw, key.lac, (uint64_t)key.lac_off);
 
 	return FI_SUCCESS;
-}
-
-static bool cxip_is_valid_mr_key(uint64_t key)
-{
-	if (key & ~CXIP_MR_KEY_MASK)
-		return false;
-
-	return true;
 }
 
 static bool cxip_is_valid_prov_mr_key(uint64_t key)
