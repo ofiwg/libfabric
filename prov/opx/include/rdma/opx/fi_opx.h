@@ -256,7 +256,10 @@ static const uint64_t FI_OPX_HDRQ_MASK_8192	= 0X000000000003FFE0UL;
 #define FI_OPX_DEFAULT_MODE							\
 	(FI_ASYNC_IOV)
 
-
+/* OPX used to only have "default caps". The goal of this additional #define is to differentiate between what we "support" and what our "default" is
+   TODO - Our default caps will be supplied to the application when they pass OPX no hints. The default caps should be our "optimal" configuration */
+#define FI_OPX_SUPPORTED_CAPS						\
+	(FI_OPX_DEFAULT_CAPS)
 
 #if 0
 /*
@@ -407,10 +410,10 @@ int fi_opx_alloc_default_ep_attr(struct fi_ep_attr **ep_attr);
 int fi_opx_check_ep_attr(struct fi_ep_attr *attr);
 
 int fi_opx_alloc_default_tx_attr(struct fi_tx_attr **tx_attr);
-int fi_opx_check_tx_attr(struct fi_tx_attr *attr);
+int fi_opx_check_tx_attr(struct fi_tx_attr *tx_attr, uint64_t hinted_caps);
 
 int fi_opx_alloc_default_rx_attr(struct fi_rx_attr **rx_attr);
-int fi_opx_check_rx_attr(struct fi_rx_attr *attr);
+int fi_opx_check_rx_attr(struct fi_rx_attr *rx_attr, uint64_t hinted_caps);
 
 int fi_opx_scalable_ep(struct fid_domain *dom, struct fi_info *info,
 		struct fid_ep **ep, void *context);
