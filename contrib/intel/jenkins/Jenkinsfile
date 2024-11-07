@@ -276,7 +276,7 @@ def build(item, mode=null, hw=null, additional_args=null) {
   run_python(PYTHON_VERSION, cmd)
 }
 
-def build_ci() {
+def bootstrap_ci() {
   sh "${CI_LOCATION}/${env.CI_MODULE}/bootstrap.sh"
 }
 
@@ -435,10 +435,10 @@ pipeline {
     stage ('parallel-builds') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
-        stage ('build-ci') {
+        stage ('bootstrap-ci') {
           steps {
             script {
-              build_ci()
+              bootstrap_ci()
             }
           }
         }
@@ -536,7 +536,7 @@ pipeline {
               dir (CUSTOM_WORKSPACE) {
                 build("logdir")
                 build("builddir")
-                build_ci()
+                bootstrap_ci()
                 slurm_build(BUILD_MODES, "fabrics-ci", "source", "ze", "gpu",
                             "--gpu")
               }
