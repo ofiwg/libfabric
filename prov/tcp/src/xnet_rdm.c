@@ -77,7 +77,7 @@ xnet_rdm_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -97,7 +97,7 @@ xnet_rdm_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -117,7 +117,7 @@ xnet_rdm_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, msg->addr, &conn);
+	ret = xnet_get_conn(rdm, msg->addr, &conn, flags);
 	if (ret)
 		goto unlock;
 
@@ -137,7 +137,7 @@ xnet_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -157,7 +157,7 @@ xnet_rdm_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -178,7 +178,7 @@ xnet_rdm_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -245,7 +245,7 @@ xnet_rdm_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -267,7 +267,7 @@ xnet_rdm_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -288,7 +288,7 @@ xnet_rdm_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, msg->addr, &conn);
+	ret = xnet_get_conn(rdm, msg->addr, &conn, flags);
 	if (ret)
 		goto unlock;
 
@@ -308,7 +308,7 @@ xnet_rdm_tinject(struct fid_ep *ep_fid, const void *buf,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -329,7 +329,7 @@ xnet_rdm_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -350,7 +350,7 @@ xnet_rdm_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -384,7 +384,7 @@ xnet_rdm_read(struct fid_ep *ep_fid, void *buf, size_t len,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, src_addr, &conn);
+	ret = xnet_get_conn(rdm, src_addr, &conn, rdm->util_ep.rx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -406,7 +406,7 @@ xnet_rdm_readv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, src_addr, &conn);
+	ret = xnet_get_conn(rdm, src_addr, &conn, rdm->util_ep.rx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -427,7 +427,7 @@ xnet_rdm_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, msg->addr, &conn);
+	ret = xnet_get_conn(rdm, msg->addr, &conn, flags);
 	if (ret)
 		goto unlock;
 
@@ -448,7 +448,7 @@ xnet_rdm_write(struct fid_ep *ep_fid, const void *buf,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -470,7 +470,7 @@ xnet_rdm_writev(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -491,7 +491,7 @@ xnet_rdm_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, msg->addr, &conn);
+	ret = xnet_get_conn(rdm, msg->addr, &conn, flags);
 	if (ret)
 		goto unlock;
 
@@ -512,7 +512,7 @@ xnet_rdm_inject_write(struct fid_ep *ep_fid, const void *buf,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -535,7 +535,7 @@ xnet_rdm_writedata(struct fid_ep *ep_fid, const void *buf,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 
@@ -557,7 +557,7 @@ xnet_rdm_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 
 	rdm = container_of(ep_fid, struct xnet_rdm, util_ep.ep_fid);
 	ofi_genlock_lock(&xnet_rdm2_progress(rdm)->rdm_lock);
-	ret = xnet_get_conn(rdm, dest_addr, &conn);
+	ret = xnet_get_conn(rdm, dest_addr, &conn, rdm->util_ep.tx_op_flags);
 	if (ret)
 		goto unlock;
 

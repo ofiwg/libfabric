@@ -32,6 +32,15 @@ The following features are supported
 *Shared Rx Context*
 : The tcp provider supports shared receive context
 
+# PROVIDER SPECIFIC OPERATION FLAGS
+: The tcp provider supports the following op flags
+
+*FI_TCP_NO_CONNECT*
+: This flag indicates that operations should fail if there is no
+  existing connection to the remote peer.  In such case, an FI_ENOTCONN
+  error should be expected.
+
+
 # RUNTIME PARAMETERS
 
 The tcp provider may be configured using several environment variables.  A
