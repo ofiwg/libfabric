@@ -170,6 +170,8 @@ struct fi_opx_mr {
 	struct fi_opx_cntr	*cntr;
 	struct fi_opx_ep	*ep;
 	uint64_t		hmem_dev_reg_handle;
+	uint8_t			hmem_unified;
+	uint8_t			unused[7];
 	UT_hash_handle		hh;
 };
 
@@ -181,27 +183,6 @@ fi_opx_domain_get_tx_max(struct fid_domain *domain) {
 static inline uint32_t
 fi_opx_domain_get_rx_max(struct fid_domain *domain) {
 	return 160;
-}
-
-static inline
-enum fi_hmem_iface fi_opx_mr_get_iface(struct fi_opx_mr *opx_mr, uint64_t *device)
-{
-#ifdef OPX_HMEM
-	switch (opx_mr->attr.iface) {
-		case FI_HMEM_CUDA:
-			*device = (uint64_t) opx_mr->attr.device.cuda;
-			break;
-		case FI_HMEM_ZE:
-			*device = (uint64_t) opx_mr->attr.device.ze;
-			break;
-		default:
-			*device = 0ul;
-	}
-	return opx_mr->attr.iface;
-#else
-	*device = 0ul;
-	return FI_HMEM_SYSTEM;
-#endif
 }
 
 #ifdef __cplusplus

@@ -741,7 +741,7 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 
 #ifdef OPX_HMEM
 	uint64_t hmem_device;
-	enum fi_hmem_iface hmem_iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
+	enum fi_hmem_iface hmem_iface = opx_hmem_get_mr_iface(desc, &hmem_device);
 #else
 	const enum fi_hmem_iface hmem_iface = FI_HMEM_SYSTEM;
 	const uint64_t hmem_device = 0;
@@ -890,7 +890,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			} else {
 				mr_ptr = NULL;
 			}
-			hmem_iface = fi_opx_hmem_get_iface(iov[index + i].iov_base, mr_ptr, &hmem_device);
+			hmem_iface = opx_hmem_get_mr_iface(mr_ptr, &hmem_device);
 			hmem_iovs[i].buf = (uintptr_t) iov[index + i].iov_base;
 			hmem_iovs[i].len = iov[index + i].iov_len;
 			hmem_iovs[i].iface = hmem_iface;
@@ -912,7 +912,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		} else {
 			mr_ptr = NULL;
 		}
-		hmem_iface = fi_opx_hmem_get_iface(iov[index + i].iov_base, mr_ptr, &hmem_device);
+		hmem_iface = opx_hmem_get_mr_iface(mr_ptr, &hmem_device);
 		hmem_iovs[i].buf = (uintptr_t) iov[index + i].iov_base;
 		hmem_iovs[i].len = iov[index + i].iov_len;
 		hmem_iovs[i].iface = hmem_iface;

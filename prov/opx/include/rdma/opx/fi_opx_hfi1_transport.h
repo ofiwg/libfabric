@@ -1107,7 +1107,8 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 #ifdef OPX_HMEM
 		if (buf && len) {
 			uint64_t hmem_device;
-			enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
+			uint64_t is_unified __attribute__((__unused__));
+			enum fi_hmem_iface iface = opx_hmem_get_ptr_iface(buf, &hmem_device, &is_unified);
 
 			if (iface != FI_HMEM_SYSTEM) {
 				opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf,
@@ -1199,7 +1200,8 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 #ifdef OPX_HMEM
 	if (buf && len) {
 		uint64_t hmem_device;
-		enum fi_hmem_iface iface = fi_opx_hmem_get_iface(buf, NULL, &hmem_device);
+		uint64_t is_unified __attribute__((__unused__));
+		enum fi_hmem_iface iface = opx_hmem_get_ptr_iface(buf, &hmem_device, &is_unified);
 
 		if (iface != FI_HMEM_SYSTEM) {
 			opx_copy_from_hmem(iface, hmem_device, OPX_HMEM_NO_HANDLE, opx_ep->hmem_copy_buf,

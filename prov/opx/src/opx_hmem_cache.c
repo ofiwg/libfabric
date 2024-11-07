@@ -478,15 +478,16 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache,
 	opx_mr->attr.offset = 0; // set in the normal path
 	opx_mr->attr.access = access;
 	opx_mr->attr.iface = entry->info.iface;
+	opx_mr->hmem_unified = 0;
 	opx_mr->flags = entry->info.flags;
 	opx_mr->attr.requested_key = 0;
 	struct opx_hmem_domain *hmem_domain = (struct opx_hmem_domain *)cache->domain;
 	opx_mr->domain = hmem_domain->opx_domain;
 
 	assert((opx_mr->attr.iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) || opx_mr->attr.iface == FI_HMEM_ROCR);
-	
+
 	(opx_mr->attr.iface == FI_HMEM_CUDA) ? (opx_mr->attr.device.cuda = entry->info.device) : (void)0;
-	
+
 	/* FLush the cache so that if there are entries on the dead region list
 	 * with the same page as we are about to register, they are unregistered first.
 	 */

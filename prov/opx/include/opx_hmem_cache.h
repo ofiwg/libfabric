@@ -52,8 +52,8 @@ extern "C" {
 int opx_hmem_cache_setup(struct ofi_mr_cache **cache,
 			struct opx_hmem_domain *domain);
 
-int opx_hmem_cache_add_region();
-void opx_hmem_cache_delete_region();
+int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry);
+void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry);
 
 #ifdef __cplusplus
 }
