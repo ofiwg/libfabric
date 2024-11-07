@@ -605,6 +605,19 @@ pipeline {
             }
           }
         }
+        stage('CI_fabtests_tcp-rxm') {
+           steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("CI_fabtests_tcp-rxm_reg",
+                       "pr_fabtests_tcp-rxm_reg.json")
+                run_ci("CI_fabtests_tcp-rxm_dbg",
+                       "pr_fabtests_tcp-rxm_dbg.json")
+                run_ci("CI_fabtests_tcp-rxm_dl", "pr_fabtests_tcp-rxm_dl.json")
+              }
+            }
+          }
+        }
         stage('CI_fabtests_sockets') {
            steps {
             script {
