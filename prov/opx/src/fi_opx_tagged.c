@@ -83,6 +83,9 @@ ssize_t fi_opx_trecvmsg_generic (struct fid_ep *ep,
 		context->len = 0;
 		context->buf = NULL;
 		context->byte_counter = (uint64_t)-1;
+		context->hmem_info_qws[0] = 0UL;
+		context->hmem_info_qws[1] = 0UL;
+		context->hmem_info_qws[2] = 0UL;
 
 		if ((flags & (FI_PEEK | FI_CLAIM)) != FI_CLAIM) {
 			/* do not overwrite state from a previous "peek|claim" operation */
@@ -100,17 +103,29 @@ ssize_t fi_opx_trecvmsg_generic (struct fid_ep *ep,
 
 #ifdef OPX_HMEM
 	/* NOTE: Assume that all IOVs reside in the same HMEM space */
+	struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
 	uint64_t hmem_device;
-	enum fi_hmem_iface hmem_iface = fi_opx_hmem_get_iface(msg->msg_iov[0].iov_base,
-							      msg->desc ? msg->desc[0] : NULL,
-							      &hmem_device);
+	enum fi_hmem_iface hmem_iface;
+	if (msg->desc && msg->desc[0]) {
+		hmem_iface = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device);
+		hmem_info->iface = hmem_iface;
+		hmem_info->device = hmem_device;
+		hmem_info->hmem_dev_reg_handle = ((struct fi_opx_mr *) msg->desc[0])->hmem_dev_reg_handle;
+		hmem_info->is_unified = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
+	} else {
+		hmem_iface = FI_HMEM_SYSTEM;
+		hmem_device = 0UL;
+		context->hmem_info_qws[0] = 0;
+		context->hmem_info_qws[1] = 0;
+		context->hmem_info_qws[2] = 0;
+	}
+
 #ifndef NDEBUG
 	if (msg->iov_count > 1) {
 		for (int i = 1; i < msg->iov_count; ++i) {
 			uint64_t tmp_hmem_device;
 			enum fi_hmem_iface tmp_hmem_iface =
-				fi_opx_hmem_get_iface(msg->msg_iov[i].iov_base,
-						      msg->desc ? msg->desc[i] : NULL,
+				opx_hmem_get_mr_iface(msg->desc ? msg->desc[i] : NULL,
 						      &tmp_hmem_device);
 			assert(tmp_hmem_iface == hmem_iface);
 			assert(tmp_hmem_device == hmem_device);
@@ -138,10 +153,6 @@ ssize_t fi_opx_trecvmsg_generic (struct fid_ep *ep,
 			context->tag = msg->tag;
 			context->ignore = msg->ignore;
 		}
-
-		struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-		hmem_info->iface = hmem_iface;
-		hmem_info->device = hmem_device;
 
 		return fi_opx_ep_rx_process_context(opx_ep, FI_TAGGED,
 						    context, flags,

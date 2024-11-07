@@ -1408,6 +1408,7 @@ int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep,
 				     const uint64_t immediate_data,
 				     const uint64_t immediate_tail,
 				     const uint64_t is_hmem,
+				     const uint64_t is_hmem_unified,
 				     const uint64_t is_intranode,
 				     const enum fi_hmem_iface iface,
 				     uint8_t opcode)
@@ -1418,6 +1419,7 @@ int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep,
 		|| (params->dput_iov[0].bytes < opx_ep->tx->tid_min_payload_bytes)
 		|| (opcode != FI_OPX_HFI_DPUT_OPCODE_RZV &&
 			opcode != FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG)
+		|| is_hmem_unified
 		|| !fi_opx_hfi1_sdma_use_sdma(opx_ep, params->dput_iov[0].bytes,
 						opcode, is_hmem, OPX_INTRANODE_FALSE)) {
 
@@ -2317,7 +2319,9 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	if (opx_hfi1_rx_rzv_rts_tid_eligible(opx_ep, params, niov,
 					immediate_data,
 					immediate_end_bytes,
-					is_hmem, is_intranode,
+					is_hmem,
+					((struct fi_opx_hmem_info *) target_context->hmem_info_qws)->is_unified,
+					is_intranode,
 					dst_iface, opcode)) {
 		if (params->elided_head.bytes || params->elided_tail.bytes) {
 			opx_hfi1_rx_rzv_rts_elided(opx_ep, work, params);
@@ -4504,9 +4508,8 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 		hmem_iov[i].buf = (uintptr_t) iov[i].iov_base;
 		hmem_iov[i].len = iov[i].iov_len;
 #ifdef OPX_HMEM
-		uint64_t device;
-		hmem_iov[i].iface = fi_opx_hmem_get_iface(iov[i].iov_base, desc, &device);
-		hmem_iov[i].device = device;
+		hmem_iov[i].iface = hmem_iface;
+		hmem_iov[i].device = hmem_device;
 		FI_OPX_DEBUG_COUNTERS_INC_COND(hmem_iov[i].iface != FI_HMEM_SYSTEM, hmem_non_system);
 #else
 		hmem_iov[i].iface = FI_HMEM_SYSTEM;

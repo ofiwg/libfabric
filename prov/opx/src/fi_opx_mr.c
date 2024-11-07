@@ -99,7 +99,6 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 			  const struct iovec *iov, size_t count,
 			  uint64_t access, uint64_t offset,
 			  uint64_t requested_key, uint64_t flags,
-			  int hmem_iface, uint64_t hmem_device,
 			  struct fid_mr **mr, void *context)
 {
 	if(!iov) {
@@ -155,9 +154,9 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 
 #ifdef OPX_HMEM
 	static uint64_t OPX_CUDA_MR_KEYGEN = 0;
-	if (hmem_iface == -1) {
-		hmem_iface = fi_opx_hmem_get_iface(iov->iov_base, NULL, &hmem_device);
-	}
+	uint64_t hmem_device;
+	uint64_t hmem_unified;
+	const enum fi_hmem_iface hmem_iface = opx_hmem_get_ptr_iface(iov->iov_base, &hmem_device, &hmem_unified);
 
 	if((hmem_iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) || hmem_iface == FI_HMEM_ROCR) {
 		struct ofi_mr_entry *entry;
@@ -216,8 +215,10 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 			opx_mr->attr.device.reserved = hmem_device;
 	}
 	opx_mr->attr.iface = (enum fi_hmem_iface) hmem_iface;
+	opx_mr->hmem_unified = hmem_unified ? 1 : 0;
 #else
 	opx_mr->attr.iface = FI_HMEM_SYSTEM;
+	opx_mr->hmem_unified = 0;
 #endif
 
 	opx_mr->mr_fid.mem_desc 	= opx_mr;
@@ -255,7 +256,7 @@ static int fi_opx_mr_regv(struct fid *fid,
 			  struct fid_mr **mr, void *context)
 {
 	return fi_opx_mr_reg_internal(fid, iov, count, access, offset,
-				      requested_key, flags, -1, 0ul, mr, context);
+				      requested_key, flags, mr, context);
 }
 
 static int fi_opx_mr_reg(struct fid *fid, const void *buf,
@@ -265,7 +266,7 @@ static int fi_opx_mr_reg(struct fid *fid, const void *buf,
 {
 	const struct iovec iov = { .iov_base = (void *) buf, .iov_len = len };
 	return fi_opx_mr_reg_internal(fid, &iov, FI_OPX_IOV_LIMIT, access, offset,
-				      requested_key, flags, -1, 0ul, mr, context);
+				      requested_key, flags, mr, context);
 }
 
 static int fi_opx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
@@ -275,20 +276,9 @@ static int fi_opx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		errno = FI_EINVAL;
 		return -errno;
 	}
-	uint64_t hmem_device;
-	switch (attr->iface) {
-		case FI_HMEM_CUDA:
-			hmem_device = attr->device.cuda;
-			break;
-		case FI_HMEM_ZE:
-			hmem_device = attr->device.ze;
-			break;
-		default:
-			hmem_device = 0;
-	}
 	return fi_opx_mr_reg_internal(fid, attr->mr_iov, attr->iov_count,
 			attr->access, attr->offset, attr->requested_key,
-			flags, attr->iface, hmem_device, mr, attr->context);
+			flags, mr, attr->context);
 }
 
 int fi_opx_bind_ep_mr(struct fid_ep *ep,
@@ -317,12 +307,12 @@ int fi_opx_init_mr_ops(struct fid_domain *domain, struct fi_info *info)
 
 	if (info->domain_attr->mr_mode == OFI_MR_UNSPEC) goto err;
 
-	opx_domain->domain_fid.mr	   = &fi_opx_mr_ops;
+	opx_domain->domain_fid.mr = &fi_opx_mr_ops;
 
 	opx_domain->mr_mode = info->domain_attr->mr_mode;
 
 	if (opx_domain->mr_mode & OFI_MR_SCALABLE) {
-            opx_domain->num_mr_keys = UINT64_MAX;
+		opx_domain->num_mr_keys = UINT64_MAX;
 	}
 	return 0;
 err:

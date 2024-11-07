@@ -1995,7 +1995,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 #ifdef OPX_HMEM
 		// Our MR code only supports 1 IOV per registration.
 		uint64_t hmem_device;
-		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
+		enum fi_hmem_iface hmem_iface = opx_hmem_get_mr_iface(opx_mr, &hmem_device);
 		assert(niov == 1);
 		const union fi_opx_hfi1_dput_iov dput_iov =  {
 			.rbuf = payload->cts.iov[0].rbuf,
@@ -2324,7 +2324,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		uint64_t* rbuf_qws = (uint64_t *)((uint8_t*)opx_mr->iov.iov_base +
 							fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset));
 		uint64_t hmem_device;
-		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
+		enum fi_hmem_iface hmem_iface = opx_hmem_get_mr_iface(opx_mr, &hmem_device);
 
 		/* In a multi-packet SDMA send, the driver sets the high bit on
 		 * in the PSN to indicate this is the last packet. The payload
@@ -2509,7 +2509,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 #endif
 		assert(bytes > sizeof(*dput_fetch));
 		uint64_t hmem_device;
-		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
+		enum fi_hmem_iface hmem_iface = opx_hmem_get_mr_iface(opx_mr, &hmem_device);
 
 		// rbuf_iface & rbuf_hmem are contained in the rma_request that
 		// resides in the originating endpoint, so can just be set to
@@ -2593,7 +2593,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 #endif
 		assert(bytes > sizeof(*dput_fetch));
 		uint64_t hmem_device;
-		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
+		enum fi_hmem_iface hmem_iface = opx_hmem_get_mr_iface(opx_mr, &hmem_device);
 
 		// rbuf_iface & rbuf_hmem are contained in the rma_request that
 		// resides in the originating endpoint, so can just be set to
@@ -3578,6 +3578,10 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	assert(((static_flags & (FI_TAGGED | FI_MSG)) == FI_TAGGED) ||
 		((static_flags & (FI_TAGGED | FI_MSG)) == FI_MSG));
 
+	assert(IS_PROGRESS_MANUAL(opx_ep->domain));
+
+	if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
+
 	FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_MSG, opx_ep->debug_counters.recv.posted_recv_msg);
 	FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_TAGGED, opx_ep->debug_counters.recv.posted_recv_tag);
 
@@ -3591,6 +3595,9 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
 		return -FI_ENOMEM;
 	}
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"process context (check unexpected queue, append match queue)\n");
 
 	const uint64_t rx_op_flags = opx_ep->rx->op_flags;
 	uint64_t rx_caps = opx_ep->rx->caps;
@@ -3608,26 +3615,15 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	context->ignore = ignore;
 	context->byte_counter = (uint64_t)-1;
 
-
-#ifdef FI_OPX_TRACE
-	fprintf(stderr,"fi_opx_recv_generic from source addr:\n");
-	FI_OPX_ADDR_DUMP(&context->src_addr);
-#endif
-
-	assert(IS_PROGRESS_MANUAL(opx_ep->domain));
-
-	if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
-
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"process context (check unexpected queue, append match queue)\n");
+	struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &context->hmem_info_qws[0];
+	hmem_info->is_unified = desc ? ((struct fi_opx_mr *)desc)->hmem_unified : 0;
 
 #ifdef OPX_HMEM
 	uint64_t hmem_device;
-	enum fi_hmem_iface hmem_iface = desc ? fi_opx_hmem_get_iface(buf, desc, &hmem_device) : FI_HMEM_SYSTEM;
+	enum fi_hmem_iface hmem_iface = opx_hmem_get_mr_iface(desc, &hmem_device);
 	if (hmem_iface != FI_HMEM_SYSTEM) {
 		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_MSG, opx_ep->debug_counters.hmem.posted_recv_msg);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_TAGGED, opx_ep->debug_counters.hmem.posted_recv_tag);
-		struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &context->hmem_info_qws[0];
 		hmem_info->iface = hmem_iface;
 		hmem_info->device = hmem_device;
 		hmem_info->hmem_dev_reg_handle = ((struct fi_opx_mr *)desc)->hmem_dev_reg_handle;
@@ -3646,6 +3642,9 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	} else
 #endif
 	{
+		hmem_info->iface = FI_HMEM_SYSTEM;
+		hmem_info->device = 0UL;
+		hmem_info->hmem_dev_reg_handle = OPX_HMEM_NO_HANDLE;
 		fi_opx_ep_rx_process_context(opx_ep,
 					static_flags,
 					context,
@@ -3717,6 +3716,9 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 		context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, msg->addr);
 		context->byte_counter = 0;
 		context->ignore = (uint64_t)-1;
+		context->hmem_info_qws[0] = 0ul;
+		context->hmem_info_qws[1] = 0ul;
+		context->hmem_info_qws[2] = 0ul;
 
 		ssize_t rc = fi_opx_ep_rx_process_context(opx_ep, FI_MSG,
 						context, flags,
@@ -3737,6 +3739,9 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 		context->tag = 0;
 		context->ignore = (uint64_t)-1;
 		context->byte_counter = (uint64_t)-1;
+		context->hmem_info_qws[0] = 0ul;
+		context->hmem_info_qws[1] = 0ul;
+		context->hmem_info_qws[2] = 0ul;
 
 		ssize_t rc = fi_opx_ep_rx_process_context(opx_ep, FI_MSG,
 						context, flags,
@@ -3752,17 +3757,29 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 
 #ifdef OPX_HMEM
 	/* NOTE: Assume that all IOVs reside in the same HMEM space */
+	struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &context->hmem_info_qws[0];
 	uint64_t hmem_device;
-	enum fi_hmem_iface hmem_iface = fi_opx_hmem_get_iface(msg->msg_iov[0].iov_base,
-							      msg->desc ? msg->desc[0] : NULL,
-							      &hmem_device);
+	enum fi_hmem_iface hmem_iface;
+	if (msg->desc && msg->desc[0]) {
+		hmem_iface = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device);
+		hmem_info->iface = hmem_iface;
+		hmem_info->device = hmem_device;
+		hmem_info->hmem_dev_reg_handle = ((struct fi_opx_mr *) msg->desc[0])->hmem_dev_reg_handle;
+		hmem_info->is_unified = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
+	} else {
+		hmem_iface = FI_HMEM_SYSTEM;
+		hmem_device = 0UL;
+		context->hmem_info_qws[0] = 0;
+		context->hmem_info_qws[1] = 0;
+		context->hmem_info_qws[2] = 0;
+	}
+
 #ifndef NDEBUG
 	if (msg->iov_count > 1) {
 		for (int i = 1; i < msg->iov_count; ++i) {
 			uint64_t tmp_hmem_device;
 			enum fi_hmem_iface tmp_hmem_iface =
-				fi_opx_hmem_get_iface(msg->msg_iov[i].iov_base,
-						      msg->desc ? msg->desc[i] : NULL,
+				opx_hmem_get_mr_iface(msg->desc ? msg->desc[i] : NULL,
 						      &tmp_hmem_device);
 			assert(tmp_hmem_iface == hmem_iface);
 			assert(tmp_hmem_device == hmem_device);
@@ -3780,10 +3797,6 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 		context->ignore = (uint64_t)-1;
 		context->msg.iov_count = msg->iov_count;
 		context->msg.iov = (struct iovec *)msg->msg_iov;
-
-		struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &context->hmem_info_qws[0];
-		hmem_info->iface = hmem_iface;
-		hmem_info->device = hmem_device;
 
 		ssize_t rc = fi_opx_ep_rx_process_context(opx_ep, FI_MSG,
 						context, context->flags,
@@ -4212,13 +4225,7 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND");
 
 	uint64_t hmem_device;
-	enum fi_hmem_iface hmem_iface;
-	if (desc) {
-		hmem_iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
-	} else {
-		hmem_iface = FI_HMEM_SYSTEM;
-		hmem_device = 0ul;
-	}
+	enum fi_hmem_iface hmem_iface = opx_hmem_get_mr_iface(desc, &hmem_device);
 
 	assert(is_contiguous == OPX_CONTIG_FALSE || is_contiguous == OPX_CONTIG_TRUE);
 

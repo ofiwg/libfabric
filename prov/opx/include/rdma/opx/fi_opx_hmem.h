@@ -54,34 +54,19 @@ struct fi_opx_hmem_info {
 	uint64_t			device;
 	uint64_t			hmem_dev_reg_handle;
 	enum fi_hmem_iface		iface;
-	uint32_t			unused;
+	uint8_t				is_unified;
+	uint8_t				unused[3];
 } __attribute__((__packed__)) __attribute__((aligned(8)));
 
 OPX_COMPILE_TIME_ASSERT((sizeof(struct fi_opx_hmem_info) & 0x7) == 0,
 			"sizeof(fi_opx_hmem_info) should be a multiple of 8");
 
 __OPX_FORCE_INLINE__
-enum fi_hmem_iface fi_opx_hmem_get_iface(const void *ptr,
-					 const struct fi_opx_mr *desc,
-					 uint64_t *device)
+enum fi_hmem_iface opx_hmem_get_ptr_iface(const void *ptr,
+					  uint64_t *device,
+					  uint64_t *is_unified)
 {
-	assert(ptr != NULL);
-
 #ifdef OPX_HMEM
-	if (desc) {
-		switch (desc->attr.iface) {
-			case FI_HMEM_CUDA:
-				*device = desc->attr.device.cuda;
-				break;
-			case FI_HMEM_ZE:
-				*device = desc->attr.device.ze;
-				break;
-			default:
-				*device = 0ul;
-		}
-		return desc->attr.iface;
-	}
-
 	#if HAVE_CUDA
 		unsigned mem_type;
 		unsigned is_managed;
@@ -103,9 +88,13 @@ enum fi_hmem_iface fi_opx_hmem_get_iface(const void *ptr,
 
 		if (cuda_rc == CUDA_SUCCESS) {
 
+			*is_unified = is_managed;
 			if (mem_type == CU_MEMORYTYPE_DEVICE && !is_managed) {
 				*device = device_ordinal;
 				return FI_HMEM_CUDA;
+			} else {
+				*device = 0UL;
+				return FI_HMEM_SYSTEM;
 			}
 		} else if (cuda_rc != CUDA_ERROR_INVALID_CONTEXT) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -113,11 +102,35 @@ enum fi_hmem_iface fi_opx_hmem_get_iface(const void *ptr,
 				cuda_rc);
 		}
 	#else
+		*is_unified = 0UL;
 		enum fi_hmem_iface iface = ofi_get_hmem_iface(ptr, device, NULL);
 		return iface;
 	#endif
 #endif
 
+	*is_unified = 0UL;
+	*device = 0UL;
+	return FI_HMEM_SYSTEM;
+}
+
+__OPX_FORCE_INLINE__
+enum fi_hmem_iface opx_hmem_get_mr_iface(const struct fi_opx_mr *desc, uint64_t *device)
+{
+#ifdef OPX_HMEM
+	if (desc && !desc->hmem_unified) {
+		switch (desc->attr.iface) {
+			case FI_HMEM_CUDA:
+				*device = desc->attr.device.cuda;
+				break;
+			case FI_HMEM_ZE:
+				*device = desc->attr.device.ze;
+				break;
+			default:
+				*device = 0ul;
+		}
+		return desc->attr.iface;
+	}
+#endif
 	*device = 0ul;
 	return FI_HMEM_SYSTEM;
 }
@@ -250,7 +263,13 @@ unsigned fi_opx_hmem_iov_init(const void *buf,
 	iov->len = len;
 #ifdef OPX_HMEM
 	uint64_t hmem_device;
-	enum fi_hmem_iface hmem_iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
+	enum fi_hmem_iface hmem_iface;
+	if (desc) {
+		hmem_iface = opx_hmem_get_mr_iface(desc, &hmem_device);
+	} else {
+		uint64_t is_unified __attribute__((__unused__));
+		hmem_iface = opx_hmem_get_ptr_iface(buf, &hmem_device, &is_unified);
+	}
 	iov->iface = hmem_iface;
 	iov->device = hmem_device;
 	return (hmem_iface != FI_HMEM_SYSTEM);
