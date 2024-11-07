@@ -93,12 +93,20 @@ def run_middleware(providers, stage_name, test, hw, partition, node_num,
   }
 }
 
-def run_ci(stage_name, config_name, additional_args=null) {
+def run_ci(stage_name, config_name, additional_args="") {
   sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
         python run.py \
         --output=${env.LOG_DIR}/${stage_name} \
         --job=${config_name} \
         ${additional_args}
+     """
+}
+
+def build_ci(stage_name, config_name) {
+  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+        python build.py \
+        --output=${env.LOG_DIR}/${stage_name} \
+        --job=${config_name}
      """
 }
 
@@ -281,6 +289,13 @@ def bootstrap_ci() {
   sh "${CI_LOCATION}/${env.CI_MODULE}/bootstrap.sh"
 }
 
+def checkout_tar(name) {
+  dir ("${env.CUSTOM_WORKSPACE}/${name}/libfabric") { checkout scm }
+  dir ("${env.CUSTOM_WORKSPACE}/${name}/") {
+    sh "tar -cvf libfabric.tar.gz libfabric/*"
+  }
+}
+
 def check_target() {
   echo "CHANGE_TARGET = ${env.CHANGE_TARGET}"
   if (changeRequest()) {
@@ -370,27 +385,7 @@ pipeline {
     stage ('checkout') {
       steps {
         script {
-          dir ("${CUSTOM_WORKSPACE}/source/libfabric") {
-            checkout scm
-          }
-          dir ("${CUSTOM_WORKSPACE}/grass/libfabric") {
-            checkout scm
-          }
-          dir ("${CUSTOM_WORKSPACE}/water/libfabric") {
-            checkout scm
-          }
-          dir ("${CUSTOM_WORKSPACE}/electric/libfabric") {
-            checkout scm
-          }
-          dir ("${CUSTOM_WORKSPACE}/ucx/libfabric") {
-            checkout scm
-          }
-          dir ("${CUSTOM_WORKSPACE}/cuda/libfabric") {
-            checkout scm
-          }
-          dir ("${CUSTOM_WORKSPACE}/iouring/libfabric") {
-            checkout scm
-          }
+          checkout_tar("source")
           dir (CUSTOM_WORKSPACE) {
             checkout_external_resources()
           }
@@ -433,72 +428,88 @@ pipeline {
         }
       }
     }
+    stage ('bootstrap-ci') {
+      steps {
+        script {
+          bootstrap_ci()
+        }
+      }
+    }
     stage ('parallel-builds') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
-        stage ('bootstrap-ci') {
-          steps {
-            script {
-              bootstrap_ci()
-            }
-          }
-        }
         stage ('build-water') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "totodile", "water", "water", "water")
-              slurm_batch("totodile", "1",
+              dir (CI_LOCATION) {
+                build_ci("CI_build_water", "pr_build_water.json")
+                build_ci("CI_shmem_water", "pr_shmem_1n2ppn_water.json")
+                slurm_batch("totodile", "1",
                             "${env.LOG_DIR}/build_mpich_water_log",
                             """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
                               --build_item=mpich --build_hw=water"""
                           )
-              run_ci("CI_shmem_grass", "pr_shmem_grass.json", "--build-only")
+              }
             }
           }
         }
         stage ('build-grass') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "grass", "grass", "grass", "grass")
-              slurm_batch("grass", "1",
+              dir (CI_LOCATION) {
+                build_ci("CI_build_grass", "pr_build_grass.json")
+                build_ci("CI_shmem_grass", "pr_shmem_1n2ppn_grass.json")
+                slurm_batch("grass", "1",
                             "${env.LOG_DIR}/build_mpich_grass_log",
                             """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
                               --build_item=mpich --build_hw=grass"""
                           )
-              run_ci("CI_shmem_water", "pr_shmem_water.json", "--build-only")
+              }
             }
           }
         }
         stage ('build-electric') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "electric", "electric", "electric",
-                          "electric")
+              dir (CI_LOCATION) {
+                build_ci("CI_build_electric", "pr_build_electric.json")
+              }
             }
           }
         }
         stage ('build-ucx') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "totodile", "ucx", "ucx", "ucx")
+              dir (CI_LOCATION) {
+                build_ci("CI_build_ucx", "pr_build_ucx.json")
+              }
             }
           }
         }
-        stage ('build-cuda') {
+        stage ('build-cyndaquil') {
           steps {
             script {
-              slurm_build(["reg"], "cyndaquil", "cuda", "cyndaquil",
-                          "cyndaquil", "--cuda")
-              slurm_build(["reg"], "quilava", "cuda", "quilava",
-                          "quilava", "--cuda")
+              dir (CI_LOCATION) {
+                build_ci("CI_build_cyndaquil", "pr_build_cyndaquil.json")
+              }
             }
           }
         }
-        stage ('build-iouring') {
+        stage ('build-quilava') {
           steps {
             script {
-              slurm_build(BUILD_MODES, "ivysaur", "iouring", "ivysaur",
-                          "ivysaur")
+              dir (CI_LOCATION) {
+                build_ci("CI_build_quilava", "pr_build_quilava.json")
+              }
+            }
+          }
+        }
+        stage ('build-ivysaur') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                build_ci("CI_build_ivysaur", "pr_build_ivysaur.json")
+              }
             }
           }
         }
@@ -512,17 +523,21 @@ pipeline {
           options { skipDefaultCheckout() }
           steps {
             script {
-              dir ("${CUSTOM_WORKSPACE}/source/libfabric") { checkout scm }
+              checkout_tar("source")
               checkout_external_resources()
               dir (CUSTOM_WORKSPACE) {
                 build("logdir")
-                build("libfabric", "reg", "daos")
-                build("fabtests", "reg", "daos")
+                // build("libfabric", "reg", "daos")
+                // build("fabtests", "reg", "daos")
+              }
+              bootstrap_ci()
+              dir (CI_LOCATION) {
+                build_ci("CI_build_daos", "pr_build_daos.json")
               }
             }
           }
         }
-        stage ('build-gpu') {
+        stage ('build-fire') {
           agent {
             node {
               label 'ze'
@@ -532,14 +547,17 @@ pipeline {
           options { skipDefaultCheckout() }
           steps {
             script {
-              dir ("${CUSTOM_WORKSPACE}/source/libfabric") { checkout scm }
+              checkout_tar("source")
               checkout_external_resources()
               dir (CUSTOM_WORKSPACE) {
                 build("logdir")
                 build("builddir")
-                bootstrap_ci()
-                slurm_build(BUILD_MODES, "fabrics-ci", "source", "ze", "gpu",
-                            "--gpu")
+                // slurm_build(BUILD_MODES, "fabrics-ci", "source", "ze", "gpu",
+                //             "--gpu")
+              }
+              bootstrap_ci()
+              dir (CI_LOCATION) {
+                build_ci("CI_build_fire", "pr_build_fire.json")
               }
             }
           }
@@ -775,16 +793,16 @@ pipeline {
             script {
               dir (RUN_LOCATION) {
                 run_middleware([["psm3", null]], "oneCCL-GPU-v3", "onecclgpu",
-                               "gpu", "torchic", "1", null, null,
+                               "fire", "torchic", "1", null, null,
                                "FI_HMEM_DISABLE_P2P=1")
                 run_middleware([["verbs", null]], "oneCCL-GPU-v3", "onecclgpu",
-                                "gpu", "torchic", "1", null, null,
+                                "fire", "torchic", "1", null, null,
                                 "FI_HMEM_DISABLE_P2P=1")
                 run_middleware([["tcp", null]], "oneCCL-GPU-v3", "onecclgpu",
-                               "gpu", "torchic", "1", null, null,
+                               "fire", "torchic", "1", null, null,
                                "FI_HMEM_DISABLE_P2P=1")
                 run_middleware([["shm", null]], "oneCCL-GPU-v3", "onecclgpu",
-                               "gpu", "torchic", "1", null, null,
+                               "fire", "torchic", "1", null, null,
                                "FI_HMEM_DISABLE_P2P=1")
               }
             }
