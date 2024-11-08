@@ -2090,7 +2090,7 @@ void fi_opx_ep_rx_process_header_rma_rts(struct fi_opx_ep * opx_ep,
 
 	uint64_t* rbuf_qws = (uint64_t *)((uint8_t *)opx_mr->iov.iov_base + fi_opx_dput_rbuf_in(payload->rma_rts.iov[0].rbuf));
 	uint64_t rbuf_device;
-	enum fi_hmem_iface rbuf_iface = fi_opx_mr_get_iface(opx_mr, &rbuf_device);
+	enum fi_hmem_iface rbuf_iface = opx_hmem_get_mr_iface(opx_mr, &rbuf_device);
 
 	struct opx_context *context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 	context->flags = FI_RECV | FI_REMOTE_CQ_DATA;
