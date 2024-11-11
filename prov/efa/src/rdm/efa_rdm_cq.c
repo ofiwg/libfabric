@@ -487,6 +487,12 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 				break;
 			case IBV_WC_RECV: /* fall through */
 			case IBV_WC_RECV_RDMA_WITH_IMM:
+				if (efa_rdm_cq_wc_is_unsolicited(ibv_cq->ibv_cq_ex)) {
+					EFA_WARN(FI_LOG_CQ, "Receive error %s (%d) for unsolicited write recv",
+						efa_strerror(prov_errno), prov_errno);
+					efa_base_ep_write_eq_error(&ep->base_ep, to_fi_errno(prov_errno), prov_errno);
+					break;
+				}
 				efa_rdm_pke_handle_rx_error(pkt_entry, prov_errno);
 				break;
 			default:

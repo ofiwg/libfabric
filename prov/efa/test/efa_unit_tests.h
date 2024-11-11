@@ -137,6 +137,8 @@ void test_rdm_cq_read_bad_send_status_unreachable_receiver();
 void test_rdm_cq_read_bad_send_status_invalid_qpn();
 void test_rdm_cq_read_bad_send_status_message_too_long();
 void test_ibv_cq_ex_read_bad_recv_status();
+void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_unsolicited_recv();
+void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_solicited_recv();
 void test_ibv_cq_ex_read_recover_forgotten_peer_ah();
 void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer();
 void test_ibv_cq_ex_read_ignore_removed_peer();
