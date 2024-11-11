@@ -61,6 +61,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 #endif
 		.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
 		.efa_rdm_pke_read = __real_efa_rdm_pke_read,
+		.efa_device_support_unsolicited_write_recv = __real_efa_device_support_unsolicited_write_recv,
 		.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,
 	};
 
@@ -122,6 +123,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_rdm_cq_read_bad_send_status_invalid_qpn, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_rdm_cq_read_bad_send_status_message_too_long, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_ibv_cq_ex_read_bad_recv_status, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_unsolicited_recv, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_solicited_recv, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_ibv_cq_ex_read_recover_forgotten_peer_ah, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_ibv_cq_ex_read_ignore_removed_peer, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
