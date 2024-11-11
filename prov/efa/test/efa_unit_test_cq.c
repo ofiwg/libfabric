@@ -329,6 +329,99 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 }
 
 /**
+ * @brief verify that fi_cq_read/fi_eq_read works properly when rdma-core return bad status for
+ * recv rdma with imm.
+ *
+ * When getting a wc error of op code IBV_WC_RECV_RDMA_WITH_IMM, libfabric cannot find the
+ * corresponding application operation to write a cq error.
+ * It will write an EQ error instead.
+ *
+ * @param[in]	state					struct efa_resource that is managed by the framework
+ * @param[in]	use_unsolicited_recv	whether to use unsolicited write recv
+ */
+void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource **state, bool use_unsolicited_recv)
+{
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_resource *resource = *state;
+	struct fi_cq_data_entry cq_entry;
+	struct fi_eq_err_entry eq_err_entry;
+	int ret;
+	struct efa_rdm_cq *efa_rdm_cq;
+
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, util_cq.cq_fid.fid);
+
+	efa_rdm_cq->ibv_cq.ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	efa_rdm_cq->ibv_cq.ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
+
+	will_return(efa_mock_ibv_start_poll_return_mock, 0);
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
+	/* efa_mock_ibv_read_opcode_return_mock() will be called once in release mode,
+	 * but will be called twice in debug mode. because there is an assertion that called ibv_read_opcode(),
+	 * therefore use will_return_always()
+	 */
+	will_return_always(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV_RDMA_WITH_IMM);
+	will_return_always(efa_mock_ibv_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
+	will_return(efa_mock_ibv_read_vendor_err_return_mock, EFA_IO_COMP_STATUS_FLUSHED);
+
+	g_efa_unit_test_mocks.efa_device_support_unsolicited_write_recv = &efa_mock_efa_device_support_unsolicited_write_recv;
+
+#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
+	if (use_unsolicited_recv) {
+		efadv_cq_from_ibv_cq_ex(efa_rdm_cq->ibv_cq.ibv_cq_ex)->wc_is_unsolicited = &efa_mock_efadv_wc_is_unsolicited;
+		will_return(efa_mock_efa_device_support_unsolicited_write_recv, true);
+		will_return(efa_mock_efadv_wc_is_unsolicited, true);
+		efa_rdm_cq->ibv_cq.ibv_cq_ex->wr_id = 0;
+	} else {
+		/*
+		 * For solicited write recv, it will consume an internal rx pkt
+		 */
+		will_return(efa_mock_efa_device_support_unsolicited_write_recv, false);
+		struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		assert_non_null(pkt_entry);
+		efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+		efa_rdm_cq->ibv_cq.ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	}
+#else
+	/*
+	 * Always test with solicited recv
+	 */
+	will_return(efa_mock_efa_device_support_unsolicited_write_recv, false);
+	struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+	efa_rdm_cq->ibv_cq.ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+#endif
+	/* the recv rdma with imm will not populate to application cq because it's an EFA internal error and
+	 * and not related to any application operations. Currently we can only read the error from eq.
+	 */
+	efa_rdm_cq->ibv_cq.ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	ret = fi_eq_readerr(resource->eq, &eq_err_entry, 0);
+	assert_int_equal(ret, sizeof(eq_err_entry));
+	assert_int_not_equal(eq_err_entry.err, FI_SUCCESS);
+	assert_int_equal(eq_err_entry.prov_errno, EFA_IO_COMP_STATUS_FLUSHED);
+}
+
+void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_unsolicited_recv(struct efa_resource **state)
+{
+	test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(state, true);
+}
+
+void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_solicited_recv(struct efa_resource **state)
+{
+	test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(state, false);
+}
+
+/**
  * @brief verify that fi_cq_read/fi_cq_readerr works properly when ibv_start_poll failed.
  *
  * When an ibv_start_poll() failed. Libfabric should write an EQ error.
