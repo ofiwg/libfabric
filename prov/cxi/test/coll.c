@@ -2032,7 +2032,7 @@ Test(coll_reduce_ops, fmin)
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed NAN\n");
 	ret = _check_rc(nodes, context, FI_CXI_ERRNO_RED_FLT_OVERFLOW);
-	cr_assert(!ret, "rc failed NAN\n");
+	cr_assert(ret, "rc NAN succeeded\n");
 
 	data[1].fval[1] = _snan64();
 	_predict_fmin(nodes, data, &check, true);
@@ -2041,7 +2041,7 @@ Test(coll_reduce_ops, fmin)
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");
 	ret = _check_rc(nodes, context, FI_CXI_ERRNO_RED_FLT_INVALID);
-	cr_assert(!ret, "rc failed sNAN\n");
+	cr_assert(ret, "rc sNAN succeeded\n");
 	STDCLEANUP
 }
 
@@ -2070,7 +2070,7 @@ Test(coll_reduce_ops, fmax)
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed NAN\n");
 	ret = _check_rc(nodes, context, FI_CXI_ERRNO_RED_FLT_OVERFLOW);
-	cr_assert(!ret, "rc failed NAN\n");
+	cr_assert(ret, "rc NAN succeeded\n");
 
 	data[1].fval[1] = _snan64();
 	_predict_fmax(nodes, data, &check, true);
@@ -2079,7 +2079,7 @@ Test(coll_reduce_ops, fmax)
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");
 	ret = _check_rc(nodes, context, FI_CXI_ERRNO_RED_FLT_INVALID);
-	cr_assert(!ret, "rc failed sNAN\n");
+	cr_assert(ret, "rc sNAN succeeded\n");
 	STDCLEANUP
 }
 
@@ -2134,7 +2134,7 @@ Test(coll_reduce_ops, fminmaxloc)
 	ret = _check_fminmax(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");
 	ret = _check_rc(nodes, context, FI_CXI_ERRNO_RED_FLT_INVALID);
-	cr_assert(!ret, "rc failed sNAN\n");
+	cr_assert(ret, "rc sNAN succeeded\n");
 	STDCLEANUP
 }
 
@@ -2166,7 +2166,7 @@ Test(coll_reduce_ops, fminnum)
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed NAN\n");
 	ret = _check_rc(nodes, context, FI_CXI_ERRNO_RED_FLT_OVERFLOW);
-	cr_assert(!ret, "rc failed NAN\n");
+	cr_assert(ret, "rc NAN succeeded\n");
 
 	/* number is given preference over NAN */
 	data[1].fval[1] = _snan64();
@@ -2177,7 +2177,7 @@ Test(coll_reduce_ops, fminnum)
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");
 	ret = _check_rc(nodes, context, FI_CXI_ERRNO_RED_FLT_INVALID);
-	cr_assert(!ret, "rc failed sNAN\n");
+	cr_assert(ret, "rc sNAN succeeded\n");
 	STDCLEANUP
 }
 
@@ -2209,7 +2209,7 @@ Test(coll_reduce_ops, fmaxnum)
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed NAN\n");
 	ret = _check_rc(nodes, context, FI_CXI_ERRNO_RED_FLT_OVERFLOW);
-	cr_assert(!ret, "rc failed NAN\n");
+	cr_assert(ret, "rc NAN succeeded\n");
 
 	/* SNAN is given preference over number */
 	data[1].fval[1] = _snan64();
@@ -2220,7 +2220,7 @@ Test(coll_reduce_ops, fmaxnum)
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");
 	ret = _check_rc(nodes, context, FI_CXI_ERRNO_RED_FLT_INVALID);
-	cr_assert(!ret, "rc failed sNAN\n");
+	cr_assert(ret, "rc sNAN succeeded\n");
 	STDCLEANUP
 }
 
@@ -2275,7 +2275,7 @@ Test(coll_reduce_ops, fminmaxnumloc)
 	ret = _check_fminmax(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");
 	ret = _check_rc(nodes, context, FI_CXI_ERRNO_RED_FLT_INVALID);
-	cr_assert(!ret, "rc failed sNAN\n");
+	cr_assert(ret, "rc sNAN succeeded\n");
 	STDCLEANUP
 }
 
