@@ -421,6 +421,16 @@ pipeline {
         }
       }
     }
+    stage ('health check') {
+      when { equals expected: true, actual: DO_RUN }
+      steps {
+        script {
+          dir (CI_LOCATION) {
+            sh "./temperature.sh"
+          }
+        }
+      }
+    }
     stage ('prepare build') {
       when { equals expected: true, actual: DO_RUN }
       steps {
