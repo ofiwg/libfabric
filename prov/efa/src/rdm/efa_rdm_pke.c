@@ -622,7 +622,7 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 {
 	struct efa_rdm_ep *ep;
 	struct ibv_recv_wr *bad_wr;
-	struct ibv_qp *qp;
+	struct efa_recv_wr *recv_wr;
 	int i, err;
 
 	assert(pke_cnt);
@@ -631,37 +631,83 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 	assert(ep);
 
 	for (i = 0; i < pke_cnt; ++i) {
-		ep->base_ep.efa_recv_wr_vec[i].wr.wr_id = (uintptr_t)pke_vec[i];
-		ep->base_ep.efa_recv_wr_vec[i].wr.num_sge = 1;
-		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list = ep->base_ep.efa_recv_wr_vec[i].sge;
-		if (pke_vec[i]->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL) {
-			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].addr = (uintptr_t) pke_vec[i]->payload;
-			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->payload_size;
-			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->payload_mr)->ibv_mr->lkey;
-		} else {
-			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->pkt_size;
-			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
-			ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
-		}
-		ep->base_ep.efa_recv_wr_vec[i].wr.next = NULL;
+		recv_wr = &ep->base_ep.efa_recv_wr_vec[i];
+		recv_wr->wr.wr_id = (uintptr_t)pke_vec[i];
+		recv_wr->wr.num_sge = 1;
+		recv_wr->wr.sg_list = recv_wr->sge;
+		recv_wr->wr.sg_list[0].length = pke_vec[i]->pkt_size;
+		recv_wr->wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
+		recv_wr->wr.sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
+		recv_wr->wr.next = NULL;
 		if (i > 0)
-			ep->base_ep.efa_recv_wr_vec[i-1].wr.next = &ep->base_ep.efa_recv_wr_vec[i].wr;
+			ep->base_ep.efa_recv_wr_vec[i-1].wr.next = &recv_wr->wr;
 #if HAVE_LTTNG
 		efa_tracepoint_wr_id_post_recv(pke_vec[i]);
 #endif
 	}
 
-	if (pke_vec[0]->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL) {
-		assert(ep->base_ep.user_recv_qp);
-		qp = ep->base_ep.user_recv_qp->ibv_qp;
-	} else {
-		qp = ep->base_ep.qp->ibv_qp;
+	err = ibv_post_recv(ep->base_ep.qp->ibv_qp, &ep->base_ep.efa_recv_wr_vec[0].wr, &bad_wr);
+	if (OFI_UNLIKELY(err))
+		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
+
+	return err;
+}
+
+/**
+ * @brief Post user receive requests to EFA device through user_recv_qp
+ *
+ * @param[in] pke_vec	packet entries that contains information of receive buffer
+ * @param[in] pke_cnt	Number of packet entries to post receive requests for
+ * @param[in] flags  	user supplied flags passed to fi_recv, support FI_MORE
+ * @return		0 on success
+ * 			On error, a negative value corresponding to fabric errno
+ */
+ssize_t efa_rdm_pke_user_recvv(struct efa_rdm_pke **pke_vec,
+			  int pke_cnt, uint64_t flags)
+{
+	struct efa_rdm_ep *ep;
+	struct ibv_recv_wr *bad_wr;
+	struct efa_recv_wr *recv_wr;
+	int i, err;
+	size_t wr_index;
+
+	assert(pke_cnt);
+
+	ep = pke_vec[0]->ep;
+	assert(ep);
+
+	wr_index = ep->base_ep.recv_wr_index;
+	assert(wr_index < ep->base_ep.info->rx_attr->size);
+
+	for (i = 0; i < pke_cnt; ++i) {
+		recv_wr = &ep->base_ep.user_recv_wr_vec[wr_index];
+		recv_wr->wr.wr_id = (uintptr_t) pke_vec[i];
+		recv_wr->wr.num_sge = 1;
+		recv_wr->wr.sg_list = recv_wr->sge;
+		recv_wr->wr.sg_list[0].addr = (uintptr_t) pke_vec[i]->payload;
+		recv_wr->wr.sg_list[0].length = pke_vec[i]->payload_size;
+		recv_wr->wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->payload_mr)->ibv_mr->lkey;
+		recv_wr->wr.next = NULL;
+		if (wr_index > 0)
+			ep->base_ep.user_recv_wr_vec[wr_index - 1].wr.next = &recv_wr->wr;
+#if HAVE_LTTNG
+		efa_tracepoint_wr_id_post_recv(pke_vec[i]);
+#endif
+		wr_index++;
 	}
 
-	err = ibv_post_recv(qp, &ep->base_ep.efa_recv_wr_vec[0].wr, &bad_wr);
-	if (OFI_UNLIKELY(err)) {
+	ep->base_ep.recv_wr_index = wr_index;
+
+	if (flags & FI_MORE)
+		return 0;
+
+	assert(ep->base_ep.user_recv_qp);
+	err = ibv_post_recv(ep->base_ep.user_recv_qp->ibv_qp, &ep->base_ep.user_recv_wr_vec[0].wr, &bad_wr);
+
+	if (OFI_UNLIKELY(err))
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
-	}
+
+	ep->base_ep.recv_wr_index = 0;
 
 	return err;
 }
