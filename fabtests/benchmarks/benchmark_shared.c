@@ -511,10 +511,20 @@ int bandwidth(void)
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			ret = ft_post_rx_buf(ep, opts.transfer_size,
-					     &rx_ctx_arr[j].context,
-					     rx_ctx_arr[j].buf, mr_desc,
-					     ft_tag);
+			if (opts.use_fi_more) {
+				flags = set_fi_more_flag(i, j, flags);
+				ret = ft_recvmsg(ep, remote_fi_addr,
+						 rx_ctx_arr[j].buf,
+						 MAX(opts.transfer_size,
+						     FT_MAX_CTRL_MSG) +
+							 ft_rx_prefix_size(),
+						 &rx_ctx_arr[j].context, flags);
+			} else {
+				ret = ft_post_rx_buf(ep, opts.transfer_size,
+						     &rx_ctx_arr[j].context,
+						     rx_ctx_arr[j].buf, mr_desc,
+						     ft_tag);
+			}
 			if (ret)
 				return ret;
 
