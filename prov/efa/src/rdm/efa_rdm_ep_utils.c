@@ -205,7 +205,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
  * @param[in]	rxe	rxe that contain user buffer information
  * @param[in]	flags		user supplied flags passed to fi_recv
  */
-int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe, size_t flags)
+int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe, uint64_t flags)
 {
 	struct efa_rdm_pke *pkt_entry = NULL;
 	size_t rx_iov_offset = 0;
@@ -242,7 +242,7 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	pkt_entry->payload_mr = rxe->desc[rx_iov_index];
 	pkt_entry->payload_size = ofi_total_iov_len(&rxe->iov[rx_iov_index], rxe->iov_count - rx_iov_index) - rx_iov_offset;
 
-	err = efa_rdm_pke_recvv(&pkt_entry, 1);
+	err = efa_rdm_pke_user_recvv(&pkt_entry, 1, flags);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"failed to post user supplied buffer %d (%s)\n", -err,

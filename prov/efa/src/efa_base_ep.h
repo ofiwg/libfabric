@@ -56,6 +56,7 @@ struct efa_base_ep {
 	struct ibv_recv_wr recv_more_wr_head;
 	struct ibv_recv_wr *recv_more_wr_tail;
 	struct efa_recv_wr *efa_recv_wr_vec;
+	size_t recv_wr_index;
 
 	size_t max_msg_size;		/**< #FI_OPT_MAX_MSG_SIZE */
 	size_t max_rma_size;		/**< #FI_OPT_MAX_RMA_SIZE */
@@ -64,6 +65,7 @@ struct efa_base_ep {
 
 	/* Only used by RDM ep type */
 	struct efa_qp *user_recv_qp; /* Separate qp to receive pkts posted by users */
+	struct efa_recv_wr *user_recv_wr_vec;
 };
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);

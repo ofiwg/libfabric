@@ -237,5 +237,8 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 			  int pke_cnt);
 
+ssize_t efa_rdm_pke_user_recvv(struct efa_rdm_pke **pke_vec,
+			  int pke_cnt, uint64_t flags);
+
 int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry);
 #endif
