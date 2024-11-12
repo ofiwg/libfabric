@@ -132,3 +132,12 @@ def test_rdm_bw_zcpy_recv(cmdline_args, memory_type, zcpy_recv_max_msg_size, zcp
     cmdline_args_copy.append_environ("FI_EFA_ENABLE_SHM_TRANSFER=0")
     efa_run_client_server_test(cmdline_args_copy, f"fi_rdm_bw --max-msg-size {zcpy_recv_max_msg_size}",
                                "short", "transmit_complete", memory_type, zcpy_recv_message_size)
+
+@pytest.mark.functional
+def test_rdm_bw_zcpy_recv_use_fi_more(cmdline_args, memory_type, zcpy_recv_max_msg_size, zcpy_recv_message_size):
+    if cmdline_args.server_id == cmdline_args.client_id:
+        pytest.skip("no zero copy recv for intra-node communication")
+    cmdline_args_copy = copy.copy(cmdline_args)
+    cmdline_args_copy.append_environ("FI_EFA_ENABLE_SHM_TRANSFER=0")
+    efa_run_client_server_test(cmdline_args_copy, f"fi_rdm_bw --use-fi-more --max-msg-size {zcpy_recv_max_msg_size}",
+                               "short", "transmit_complete", memory_type, zcpy_recv_message_size)
