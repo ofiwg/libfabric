@@ -2952,14 +2952,14 @@ int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 }
 
 
-int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
+int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr, void *buf,
 	       size_t size, void *ctx, int flags)
 {
 	struct fi_msg msg;
 	struct fi_msg_tagged tagged_msg;
 	struct iovec msg_iov;
 
-	msg_iov.iov_base = rx_buf;
+	msg_iov.iov_base = (char *) buf;
 	msg_iov.iov_len = size;
 
 	if (hints->caps & FI_TAGGED) {
@@ -2969,7 +2969,7 @@ int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		tagged_msg.addr = fi_addr;
 		tagged_msg.data = NO_CQ_DATA;
 		tagged_msg.context = ctx;
-		tagged_msg.tag = ft_tag ? ft_tag : tx_seq;
+		tagged_msg.tag = ft_tag ? ft_tag : rx_seq;
 		tagged_msg.ignore = 0;
 
 		FT_POST(fi_trecvmsg, ft_progress, rxcq, rx_seq,
