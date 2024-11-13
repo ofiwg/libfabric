@@ -67,7 +67,8 @@ Test(mr, invalid_client_rkey)
 	attr.requested_key = ~1;
 
 	ret = fi_mr_regattr(cxit_domain, &attr, 0, &mr);
-	cr_assert_eq(ret, -FI_EKEYREJECTED, "fi_mr_regattr failed: %d", ret);
+	if ((cxit_fi->domain_attr->mr_mode & FI_MR_PROV_KEY) != FI_MR_PROV_KEY)
+		cr_assert_eq(ret, -FI_EKEYREJECTED, "fi_mr_regattr failed: %d", ret);
 }
 
 Test(mr, std_mrs, .timeout = 600, .disabled = true)
