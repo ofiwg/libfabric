@@ -785,16 +785,24 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				"Detected user specfied ENV FI_OPX_PKEY, so set partition key to 0x%x\n", user_pkey);
 		}
 	} else {
-		rc = opx_hfi_set_pkey(ctrl, FI_OPX_HFI1_DEFAULT_P_KEY);
+		int default_pkey = opx_hfi_get_port_index2pkey(context->hfi_unit, context->hfi_port, 0);
+		if (default_pkey < 0) {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to get default Pkey. Please specify a different Pkey using FI_OPX_PKEY\n");
+			if (fd >= 0) {
+				opx_hfi_context_close(fd);
+			}
+			goto ctxt_open_err;
+		}
+		rc = opx_hfi_set_pkey(ctrl, default_pkey);
 		if (rc) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Default Pkey %#x not registered/valid. Please use FI_OPX_PKEY to specify the pkey\n",
-				FI_OPX_HFI1_DEFAULT_P_KEY);
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Error in setting default Pkey %#x. Please specify a different Pkey using FI_OPX_PKEY\n",
+				default_pkey);
 			if (fd >= 0) {
 				opx_hfi_context_close(fd);
 			}
 			goto ctxt_open_err;
 		} else {
-			context->pkey = FI_OPX_HFI1_DEFAULT_P_KEY;
+			context->pkey = default_pkey;
 		}
 	}
 
