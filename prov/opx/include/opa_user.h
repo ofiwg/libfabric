@@ -156,7 +156,6 @@ struct opx_hfi_kdeth {
 #define HFI_CRC_SIZE_IN_BYTES 4
 
 #define HFI_DEFAULT_SERVICE_ID 0x1000117500000000ULL
-#define HFI_DEFAULT_P_KEY 0x8001 /* fabric default pkey for app traffic */
 
 /* Receive Header Queue: receive type (from hfi) */
 #define RCVHQ_RCV_TYPE_EXPECTED  0

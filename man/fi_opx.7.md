@@ -247,7 +247,8 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Default is 1.
 
 *FI_OPX_PKEY*
-: Integer. Partition key, a 2 byte positive integer. Default is 0x8001
+: Integer. Partition key, a 2 byte positive integer. Default is the Pkey in the index 0 of the
+  Pkey table of the unit and port on which context is created.
 
 *FI_OPX_SL*
 : Integer. Service Level. This will also determine Service Class and Virtual Lane.  Default is 0

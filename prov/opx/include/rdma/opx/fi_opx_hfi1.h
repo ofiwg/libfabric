@@ -68,7 +68,6 @@
 #define FI_OPX_HFI1_LRH_SL_SHIFT		(4)		/* a.k.a. "HFI_LRH_SL_SHIFT" */
 #define FI_OPX_HFI1_LRH_SC_MASK			(0xf)		/* a.k.a. "HFI_LRH_SC_MASK" */
 #define FI_OPX_HFI1_LRH_SC_SHIFT		(12)		/* a.k.a. "HFI_LRH_SC_SHIFT" */
-#define FI_OPX_HFI1_DEFAULT_P_KEY		(0x8001)	/* a.k.a. "HFI_DEFAULT_P_KEY" */
 
 #define FI_OPX_HFI1_SL_DEFAULT		(0)	/* PSMI_SL_DEFAULT */
 #define FI_OPX_HFI1_SC_DEFAULT		(0)	/* PSMI_SC_DEFAULT */
