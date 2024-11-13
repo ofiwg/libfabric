@@ -1120,6 +1120,46 @@ void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
 }
 
 /**
+ * @brief When user posts more than rx size fi_recv, we should return eagain and make sure
+ * there is no rx entry leaked
+ */
+void test_efa_rdm_ep_zcpy_recv_eagain(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff recv_buff;
+	int i;
+	struct efa_rdm_ep *efa_rdm_ep;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+
+	resource->hints->caps = FI_MSG;
+
+	/* enable zero-copy recv mode in ep */
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, true, true);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Construct a recv buffer with mr */
+	efa_unit_test_buff_construct(&recv_buff, resource, 16);
+
+	for (i = 0; i < efa_rdm_ep->base_ep.info->rx_attr->size; i++)
+		assert_int_equal(fi_recv(resource->ep, recv_buff.buff, recv_buff.size, fi_mr_desc(recv_buff.mr), FI_ADDR_UNSPEC, NULL), 0);
+
+	/* we should have rx number of rx entry before and after the extra recv post */
+	assert_true(efa_unit_test_get_dlist_length(&efa_rdm_ep->rxe_list) == efa_rdm_ep->base_ep.info->rx_attr->size);
+	assert_int_equal(fi_recv(resource->ep, recv_buff.buff, recv_buff.size, fi_mr_desc(recv_buff.mr), FI_ADDR_UNSPEC, NULL), -FI_EAGAIN);
+	assert_true(efa_unit_test_get_dlist_length(&efa_rdm_ep->rxe_list) == efa_rdm_ep->base_ep.info->rx_attr->size);
+
+	/**
+	 * the buf is still posted to rdma-core, so unregistering mr can
+	 * return non-zero. Currently ignore this failure.
+	 */
+	(void) fi_close(&recv_buff.mr->fid);
+	free(recv_buff.buff);
+}
+
+/**
  * @brief when efa_rdm_ep_post_handshake_error failed due to pkt pool exhaustion, 
  * make sure both txe is cleaned
  *

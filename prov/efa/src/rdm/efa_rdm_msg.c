@@ -917,6 +917,9 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		}
 
 		ret = efa_rdm_ep_post_user_recv_buf(ep, rxe, flags);
+		if (OFI_UNLIKELY(ret))
+			efa_rdm_rxe_release(rxe);
+
 		ofi_genlock_unlock(srx_ctx->lock);
 	} else if (op == ofi_op_tagged) {
 		ret = util_srx_generic_trecv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
