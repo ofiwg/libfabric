@@ -620,7 +620,7 @@ err:
 	return -FI_EAGAIN;
 }
 
-static size_t
+static ssize_t
 vrb_eq_xrc_recip_conn_event(struct vrb_eq *eq,
 			       struct vrb_xrc_ep *ep,
 			       struct rdma_cm_event *cma_event,
@@ -787,7 +787,7 @@ vrb_eq_xrc_cm_err_event(struct vrb_eq *eq,
         return FI_SUCCESS;
 }
 
-static int
+static ssize_t
 vrb_eq_xrc_connected_event(struct vrb_eq *eq,
 			   struct rdma_cm_event *cma_event, int *acked,
 			   struct fi_eq_cm_entry *entry, size_t len,
@@ -795,7 +795,7 @@ vrb_eq_xrc_connected_event(struct vrb_eq *eq,
 {
 	struct vrb_xrc_ep *ep;
 	fid_t fid = cma_event->id->context;
-	int ret;
+	ssize_t ret;
 
 	ep = container_of(fid, struct vrb_xrc_ep, base_ep.util_ep.ep_fid);
 
