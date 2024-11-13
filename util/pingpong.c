@@ -982,7 +982,7 @@ static int generate_test_sizes(struct pp_opts *opts, size_t tx_size, int **sizes
 			n++;
 		}
 	} else {
-		for (i = 0;; i++) {
+		for (i = 0; i < 32; i++) {
 			power_of_two = (i == 0) ? 0 : (1 << i);
 			half_up =
 			    (i == 0) ? 1 : power_of_two + (power_of_two / 2);
