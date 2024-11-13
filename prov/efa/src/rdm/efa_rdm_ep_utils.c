@@ -214,10 +214,8 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	assert(rxe->iov_count > 0  && rxe->iov_count <= ep->base_ep.info->rx_attr->iov_limit);
 	assert(rxe->iov[0].iov_len >= ep->msg_prefix_size);
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->user_rx_pkt_pool, EFA_RDM_PKE_FROM_USER_RX_POOL);
-	if (OFI_UNLIKELY(!pkt_entry)) {
-		EFA_WARN(FI_LOG_EP_DATA, "Failed to allocate pkt_entry for user rx\n");
-		return -FI_ENOMEM;
-	}
+	if (OFI_UNLIKELY(!pkt_entry))
+		return -FI_EAGAIN;
 
 	pkt_entry->ope = rxe;
 	rxe->state = EFA_RDM_RXE_MATCHED;
@@ -838,16 +836,6 @@ int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep)
 		if (OFI_UNLIKELY(err)) {
 			EFA_WARN(FI_LOG_CQ,
 				 "cannot allocate memory for map entry pool. error: %s\n",
-				 strerror(-err));
-			return err;
-		}
-	}
-
-	if (ep->use_zcpy_rx) {
-		err = ofi_bufpool_grow(ep->user_rx_pkt_pool);
-		if (OFI_UNLIKELY(err)) {
-			EFA_WARN(FI_LOG_CQ,
-				 "cannot allocate memory for user recv pkt pool. error: %s\n",
 				 strerror(-err));
 			return err;
 		}

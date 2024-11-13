@@ -236,7 +236,9 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	ret = ofi_bufpool_create(&ep->user_rx_pkt_pool,
 			sizeof(struct efa_rdm_pke),
 			EFA_RDM_BUFPOOL_ALIGNMENT,
-			0, ep->base_ep.info->rx_attr->size, 0);
+			ep->base_ep.info->rx_attr->size,
+			ep->base_ep.info->rx_attr->size, /* max count==chunk_cnt means pool is not allowed to grow */
+			0);
 	if (ret)
 		goto err_free;
 
