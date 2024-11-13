@@ -169,8 +169,8 @@ pipeline {
                 script {
                     def stages = [:]
                     // This needs the extra space at the end
-                    // Set 9 hour timeout for all clusters
-                    def addl_args_pr = "--timeout 540 --test-libfabric-pr $env.CHANGE_ID "
+                    // Set 12 hour timeout for all clusters
+                    def addl_args_pr = "--timeout 720 --test-libfabric-pr $env.CHANGE_ID "
                     // Use lockable resources to limit the number of jobs that can get executed in parallel
                     def g4dn8x_lock_label = "g4dn8x"
                     def g4dn12x_lock_label  = "g4dn12x"
