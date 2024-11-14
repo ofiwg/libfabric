@@ -147,28 +147,10 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 	struct efa_cntr *efa_cntr;
 	struct efa_domain *efa_domain;
 	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
-	struct efa_rdm_ep *efa_rdm_ep;
-	struct fid_list_entry *fid_entry;
 
 	ofi_genlock_lock(&cntr->ep_list_lock);
 	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
 	efa_domain = container_of(efa_cntr->util_cntr.domain, struct efa_domain, util_domain);
-
-	/**
-	 * TODO: It's better to just post the initial batch of internal rx pkts during ep enable
-	 * so we don't have to iterate cntr->ep_list here.
-	 * However, it is observed that doing that will hurt performance if application opens
-	 * some idle endpoints and never poll completions for them. Move these initial posts to
-	 * the first polling before having a long term fix.
-	 */
-	if (!efa_cntr->initial_rx_to_all_eps_posted) {
-		dlist_foreach(&cntr->ep_list, item) {
-			fid_entry = container_of(item, struct fid_list_entry, entry);
-			efa_rdm_ep = container_of(fid_entry->fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-			efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
-		}
-		efa_cntr->initial_rx_to_all_eps_posted = true;
-	}
 
 	dlist_foreach(&efa_cntr->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
@@ -193,7 +175,6 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		return -FI_ENOMEM;
 
 	dlist_init(&cntr->ibv_cq_poll_list);
-	cntr->initial_rx_to_all_eps_posted = false;
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
 

@@ -137,18 +137,12 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	assert_int_equal(peer->host_id, 0);
 	assert_int_not_equal(peer->flags & EFA_RDM_PEER_HANDSHAKE_SENT, EFA_RDM_PEER_HANDSHAKE_SENT);
 
-	/*
-	 * The rx pkt entry should only be allocated and posted by the progress engine.
-	 * However, to mock a receive completion, we have to allocate an rx entry
-	 * and modify it out of band. The proess engine grow the rx pool in the first
-	 * call and set efa_rdm_ep->efa_rx_pkts_posted as the rx pool size. Here we
-	 * follow the progress engine to set the efa_rx_pkts_posted counter manually
-	 * TODO: modify the rx pkt as part of the ibv cq poll mock so we don't have to
-	 * allocate pkt entry and hack the pkt counters.
+	/**
+	 * At this time, pkt entry is already allocated and posted
+	 * Just grab the first pkt entry in the buffer pool.
 	 */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_rx_pkt_pool, 0);
 	assert_non_null(pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
 
 	pkt_attr.connid = include_connid ? raw_addr.qkey : 0;
 	pkt_attr.host_id = g_efa_unit_test_mocks.peer_host_id;

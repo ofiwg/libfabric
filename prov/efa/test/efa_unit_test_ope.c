@@ -321,7 +321,11 @@ void test_efa_rdm_rxe_post_local_read_or_queue_cleanup_txe(struct efa_resource *
 	/* Fake a rdma read enabled device */
 	efa_rdm_ep_domain(efa_rdm_ep)->device->max_rdma_size = efa_env.efa_read_segment_size;
 
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	/**
+	 * At this time, pkt entry is already allocated and posted
+	 * Just grab the first pkt entry in the buffer pool.
+	 */
+	pkt_entry = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_rx_pkt_pool, 0);
 	assert_non_null(pkt_entry);
 	pkt_entry->payload = pkt_entry->wiredata;
 

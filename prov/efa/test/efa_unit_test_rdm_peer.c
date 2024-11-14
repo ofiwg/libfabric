@@ -40,10 +40,8 @@ void test_efa_rdm_peer_reorder_msg_impl(struct efa_resource *resource,
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_rx_pkt_pool, 0);
 	assert_non_null(pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
 
 	pkt_attr.msg_id = msg_id;
 	pkt_attr.connid = raw_addr.qkey;
@@ -168,10 +166,8 @@ void test_efa_rdm_peer_move_overflow_pke_to_recvwin_impl(
 	*peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 	assert_non_null(*peer);
 
-	*pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	*pkt_entry = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_rx_pkt_pool, 0);
 	assert_non_null(*pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
 
 	pkt_attr.msg_id = msg_id;
 	pkt_attr.connid = raw_addr.qkey;
@@ -235,16 +231,14 @@ void test_efa_rdm_peer_keep_pke_in_overflow_list(struct efa_resource **state) {
 
 void alloc_pke_in_overflow_list(struct efa_rdm_ep *efa_rdm_ep,
 		     struct efa_rdm_pke **pkt_entry, struct efa_rdm_peer *peer,
-		     struct efa_ep_addr raw_addr, uint32_t msg_id)
+		     struct efa_ep_addr raw_addr, uint32_t msg_id, uint32_t pkt_id)
 {
 	struct efa_unit_test_eager_rtm_pkt_attr pkt_attr = {0};
 	struct efa_rdm_peer_overflow_pke_list_entry *overflow_pke_list_entry;
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 
-	*pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				       EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	*pkt_entry = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_rx_pkt_pool, pkt_id);
 	assert_non_null(*pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
 
 	pkt_attr.msg_id = msg_id;
 	pkt_attr.connid = raw_addr.qkey;
@@ -284,8 +278,8 @@ void test_efa_rdm_peer_append_overflow_pke_to_recvwin(struct efa_resource **stat
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
-	alloc_pke_in_overflow_list(efa_rdm_ep, &pkt_entry2, peer, raw_addr, 17000);
-	alloc_pke_in_overflow_list(efa_rdm_ep, &pkt_entry1, peer, raw_addr, 17000);
+	alloc_pke_in_overflow_list(efa_rdm_ep, &pkt_entry2, peer, raw_addr, 17000, 1);
+	alloc_pke_in_overflow_list(efa_rdm_ep, &pkt_entry1, peer, raw_addr, 17000, 0);
 	assert_int_equal(efa_unit_test_get_dlist_length(&peer->overflow_pke_list), 2);
 
 	/* overflow_pke_list has two pkt entries with msg_id 17000.

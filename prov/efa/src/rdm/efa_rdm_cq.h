@@ -12,7 +12,6 @@ struct efa_rdm_cq {
 	struct fid_cq *shm_cq;
 	struct efa_ibv_cq ibv_cq;
 	struct dlist_entry ibv_cq_poll_list;
-	bool initial_rx_to_all_eps_posted;
 };
 
 /*
