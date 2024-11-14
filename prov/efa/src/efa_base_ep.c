@@ -348,6 +348,11 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 	base_ep->efa_qp_enabled = false;
 	base_ep->qp = NULL;
 	base_ep->user_recv_qp = NULL;
+
+	base_ep->max_msg_size = info->ep_attr->max_msg_size;
+	base_ep->max_rma_size = info->ep_attr->max_msg_size;
+	base_ep->inject_msg_size = info->tx_attr->inject_size;
+	base_ep->inject_rma_size = info->tx_attr->inject_size;
 	return 0;
 }
 
