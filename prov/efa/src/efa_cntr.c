@@ -161,13 +161,13 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 	 * some idle endpoints and never poll completions for them. Move these initial posts to
 	 * the first polling before having a long term fix.
 	 */
-	if (!efa_cntr->initial_rx_to_all_eps_posted) {
+	if (efa_cntr->need_to_scan_ep_list) {
 		dlist_foreach(&cntr->ep_list, item) {
 			fid_entry = container_of(item, struct fid_list_entry, entry);
 			efa_rdm_ep = container_of(fid_entry->fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 			efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
 		}
-		efa_cntr->initial_rx_to_all_eps_posted = true;
+		efa_cntr->need_to_scan_ep_list = false;
 	}
 
 	dlist_foreach(&efa_cntr->ibv_cq_poll_list, item) {
@@ -193,7 +193,7 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		return -FI_ENOMEM;
 
 	dlist_init(&cntr->ibv_cq_poll_list);
-	cntr->initial_rx_to_all_eps_posted = false;
+	cntr->need_to_scan_ep_list = false;
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
 
