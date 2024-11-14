@@ -580,7 +580,8 @@ void test_efa_rdm_cq_post_initial_rx_pkts(struct efa_resource **state)
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, 0);
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, 0);
 
-	assert_false(efa_rdm_cq->initial_rx_to_all_eps_posted);
+	/* cq read need to scan the ep list since a ep is bind */
+	assert_true(efa_rdm_cq->need_to_scan_ep_list);
 	fi_cq_read(resource->cq, NULL, 0);
 
 	/* At this time, rx pool size number of rx pkts are posted */
@@ -588,7 +589,8 @@ void test_efa_rdm_cq_post_initial_rx_pkts(struct efa_resource **state)
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, 0);
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, 0);
 
-	assert_true(efa_rdm_cq->initial_rx_to_all_eps_posted);
+	/* scan is done */
+	assert_false(efa_rdm_cq->need_to_scan_ep_list);
 }
 #if HAVE_EFADV_CQ_EX
 /**

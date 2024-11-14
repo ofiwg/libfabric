@@ -121,7 +121,8 @@ void test_efa_cntr_post_initial_rx_pkts(struct efa_resource **state)
 
 	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr.cntr_fid);
 
-	assert_false(efa_cntr->initial_rx_to_all_eps_posted);
+	/* cntr read need to scan the ep list since a ep is bind */
+	assert_true(efa_cntr->need_to_scan_ep_list);
 
 	cnt = fi_cntr_read(cntr);
 	/* No completion should be read */
@@ -132,7 +133,8 @@ void test_efa_cntr_post_initial_rx_pkts(struct efa_resource **state)
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, 0);
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, 0);
 
-	assert_true(efa_cntr->initial_rx_to_all_eps_posted);
+	/* scan is done */
+	assert_false(efa_cntr->need_to_scan_ep_list);
 	/* ep must be closed before cq/av/eq... */
 	fi_close(&resource->ep->fid);
 	resource->ep = NULL;
