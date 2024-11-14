@@ -631,13 +631,13 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 	 * some idle endpoints and never poll completions for them. Move these initial posts to
 	 * the first cq read call before having a long term fix.
 	 */
-	if (!efa_rdm_cq->initial_rx_to_all_eps_posted) {
+	if (efa_rdm_cq->need_to_scan_ep_list) {
 		dlist_foreach(&cq->ep_list, item) {
 			fid_entry = container_of(item, struct fid_list_entry, entry);
 			efa_rdm_ep = container_of(fid_entry->fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 			efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
 		}
-		efa_rdm_cq->initial_rx_to_all_eps_posted = true;
+		efa_rdm_cq->need_to_scan_ep_list = false;
 	}
 
 	dlist_foreach(&efa_rdm_cq->ibv_cq_poll_list, item) {
@@ -683,7 +683,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	attr->size = MAX(efa_domain->rdm_cq_size, attr->size);
 
 	dlist_init(&cq->ibv_cq_poll_list);
-	cq->initial_rx_to_all_eps_posted = false;
+	cq->need_to_scan_ep_list = false;
 	ret = ofi_cq_init(&efa_prov, domain, attr, &cq->util_cq,
 			  &efa_rdm_cq_progress, context);
 

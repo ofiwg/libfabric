@@ -13,7 +13,7 @@ struct efa_cntr {
 	struct fid_cntr *shm_cntr;
 	struct dlist_entry ibv_cq_poll_list;
 	/* Only used by RDM EP type */
-	bool initial_rx_to_all_eps_posted;
+	bool need_to_scan_ep_list;
 };
 
 int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
