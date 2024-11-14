@@ -1283,6 +1283,15 @@ static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			break;
 		}
 
+		/* Zero length MRs do not have MD. */
+		if (mr->md &&
+		    ep->ep_obj->require_dev_reg_copy[mr->md->info.iface] &&
+		    !mr->md->handle_valid) {
+			CXIP_WARN("Cannot bind to endpoint without required dev reg support\n");
+			ret = -FI_EOPNOTSUPP;
+			break;
+		}
+
 		mr->ep = ep;
 		ofi_atomic_inc32(&ep->ep_obj->ref);
 		break;
@@ -1439,6 +1448,10 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		_mr->mr_fid.key = _mr->key;
 
 	if (_mr->len) {
+		/* Do not check whether cuda_api_permitted is set at this point,
+		 * because the mr is not bound to an endpoint.  Check instead in
+		 * cxip_mr_bind().
+		 */
 		ret = cxip_map(_mr->domain, (void *)_mr->buf, _mr->len, 0,
 			       &_mr->md);
 		if (ret) {

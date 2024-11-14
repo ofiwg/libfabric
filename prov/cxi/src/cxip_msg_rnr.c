@@ -1174,9 +1174,9 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 
 	if (send_req->send.len && !idc) {
 		if (!mr) {
-			ret = cxip_map(txc->domain, send_req->send.buf,
-				       send_req->send.len, 0,
-				       &send_req->send.send_md);
+			ret = cxip_ep_obj_map(txc->ep_obj, send_req->send.buf,
+					      send_req->send.len, 0,
+					      &send_req->send.send_md);
 			if (ret) {
 				TXC_WARN(txc,
 					 "Local buffer map failed: %d %s\n",

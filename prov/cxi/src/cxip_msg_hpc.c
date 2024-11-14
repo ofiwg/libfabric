@@ -629,8 +629,9 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 
 	/* Copy data out of overflow buffer. */
 	oflow_bytes = MIN(put_event->tgt_long.mlength, match_req->data_len);
-	cxip_copy_to_md(match_req->recv.recv_md, match_req->recv.recv_buf,
-			oflow_va, oflow_bytes);
+	cxip_ep_obj_copy_to_md(match_req->recv.rxc->ep_obj,
+			       match_req->recv.recv_md,
+			       match_req->recv.recv_buf, oflow_va, oflow_bytes);
 
 	if (oflow_req->type == CXIP_REQ_OFLOW)
 		oflow_req_put_bytes(oflow_req, put_event->tgt_long.mlength);

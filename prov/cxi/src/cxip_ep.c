@@ -1118,6 +1118,15 @@ int cxip_ep_getopt_priv(struct cxip_ep *ep, int level, int optname,
 		*optlen = sizeof(size_t);
 		break;
 
+	case FI_OPT_CUDA_API_PERMITTED:
+		if (!optval || !optlen)
+			return -FI_EINVAL;
+		if (*optlen < sizeof(bool))
+			return -FI_ETOOSMALL;
+
+		*(bool *)optval =
+			!ep->ep_obj->require_dev_reg_copy[FI_HMEM_CUDA];
+		break;
 	default:
 		return -FI_ENOPROTOOPT;
 	}
@@ -1140,6 +1149,7 @@ int cxip_ep_setopt_priv(struct cxip_ep *ep, int level, int optname,
 			const void *optval, size_t optlen)
 {
 	size_t min_multi_recv;
+	bool cuda_api_permitted;
 
 	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
@@ -1157,6 +1167,28 @@ int cxip_ep_setopt_priv(struct cxip_ep *ep, int level, int optname,
 			return -FI_EINVAL;
 		}
 		ep->ep_obj->rxc->min_multi_recv = min_multi_recv;
+		break;
+	/*
+	 * If GDRCopy is required by the application (ie. it has set
+	 * FI_OPT_CUDA_API_PERMITTED), and is not available, return not
+	 * supported.
+	 */
+	case FI_OPT_CUDA_API_PERMITTED:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+
+		if (!hmem_ops[FI_HMEM_CUDA].initialized) {
+			CXIP_WARN("FI_OPT_CUDA_API_PERMITTED cannot be set when CUDA library or CUDA device is not available\n");
+			return -FI_EOPNOTSUPP;
+		}
+
+		cuda_api_permitted = *(bool *)optval;
+
+		if (!cuda_api_permitted && !cuda_is_gdrcopy_enabled())
+			return -FI_EOPNOTSUPP;
+
+		ep->ep_obj->require_dev_reg_copy[FI_HMEM_CUDA] =
+			!cuda_api_permitted;
 		break;
 
 	default:
@@ -1260,6 +1292,12 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	ep_obj->src_addr.pid = pid;
 	ep_obj->fi_addr = FI_ADDR_NOTAVAIL;
 
+	/* Default to allowing non-dev reg copy APIs unless the caller
+	 * disables it.
+	 */
+	for (i = 0; i < OFI_HMEM_MAX; i++)
+		ep_obj->require_dev_reg_copy[i] = false;
+
 	ofi_atomic_initialize32(&ep_obj->txq_ref, 0);
 	ofi_atomic_initialize32(&ep_obj->tgq_ref, 0);
 
@@ -1330,6 +1368,26 @@ err:
 	free(ep_obj);
 
 	return ret;
+}
+
+int cxip_ep_obj_map(struct cxip_ep_obj *ep, const void *buf, unsigned long len,
+		    uint64_t flags, struct cxip_md **md)
+{
+	struct cxip_domain *dom = ep->domain;
+	int ret;
+
+	ret = cxip_map(dom, buf, len, flags, md);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	if (ep->require_dev_reg_copy[(*md)->info.iface] &&
+	    !((*md)->handle_valid)) {
+		CXIP_WARN("Required dev registration copy failed\n");
+		cxip_unmap(*md);
+		return -FI_EOPNOTSUPP;
+	}
+
+	return FI_SUCCESS;
 }
 
 /*

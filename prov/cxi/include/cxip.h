@@ -1963,13 +1963,16 @@ struct cxip_rxc_rnr {
 };
 
 static inline void cxip_copy_to_md(struct cxip_md *md, void *dest,
-				   const void *src, size_t size)
+				   const void *src, size_t size,
+				   bool require_dev_reg_copy)
 {
 	ssize_t ret __attribute__((unused));
 	struct iovec iov;
+	bool dev_reg_copy = require_dev_reg_copy ||
+		(md->handle_valid && size <= cxip_env.safe_devmem_copy_threshold);
 
-	/* Favor CPU store access instead of relying on HMEM copy functions. */
-	if (md->handle_valid && size <= cxip_env.safe_devmem_copy_threshold) {
+	/* Favor dev reg access instead of relying on HMEM copy functions. */
+	if (dev_reg_copy) {
 		ret = ofi_hmem_dev_reg_copy_to_hmem(md->info.iface, md->handle,
 						    dest, src, size);
 		assert(ret == FI_SUCCESS);
@@ -1985,13 +1988,16 @@ static inline void cxip_copy_to_md(struct cxip_md *md, void *dest,
 }
 
 static inline void cxip_copy_from_md(struct cxip_md *md, void *dest,
-				     const void *src, size_t size)
+				     const void *src, size_t size,
+				     bool require_dev_reg_copy)
 {
 	ssize_t ret __attribute__((unused));
 	struct iovec iov;
+	bool dev_reg_copy = require_dev_reg_copy ||
+		(md->handle_valid && size <= cxip_env.safe_devmem_copy_threshold);
 
-	/* Favor CPU store access instead of relying on HMEM copy functions. */
-	if (md->handle_valid && size <= cxip_env.safe_devmem_copy_threshold) {
+	/* Favor dev reg access instead of relying on HMEM copy functions. */
+	if (dev_reg_copy) {
 		ret = ofi_hmem_dev_reg_copy_from_hmem(md->info.iface,
 						      md->handle,
 						      dest, src, size);
@@ -2438,6 +2444,9 @@ struct cxip_ep_obj {
 	struct fi_tx_attr tx_attr;
 	struct fi_rx_attr rx_attr;
 
+	/* Require memcpy's via the dev reg APIs. */
+	bool require_dev_reg_copy[OFI_HMEM_MAX];
+
 	/* Collectives support */
 	struct cxip_ep_coll_obj coll;
 	struct cxip_ep_zbcoll_obj zbcoll;
@@ -2447,6 +2456,25 @@ struct cxip_ep_obj {
 	ofi_atomic32_t ref;
 	struct cxip_portals_table *ptable;
 };
+
+int cxip_ep_obj_map(struct cxip_ep_obj *ep, const void *buf, unsigned long len,
+		    uint64_t flags, struct cxip_md **md);
+
+static inline void
+cxip_ep_obj_copy_to_md(struct cxip_ep_obj *ep, struct cxip_md *md, void *dest,
+		       const void *src, size_t size)
+{
+	cxip_copy_to_md(md, dest, src, size,
+			ep->require_dev_reg_copy[md->info.iface]);
+}
+
+static inline void
+cxip_ep_obj_copy_from_md(struct cxip_ep_obj *ep, struct cxip_md *md, void *dest,
+			 const void *src, size_t size)
+{
+	cxip_copy_from_md(md, dest, src, size,
+			  ep->require_dev_reg_copy[md->info.iface]);
+}
 
 static inline void cxip_txc_otx_reqs_inc(struct cxip_txc *txc)
 {
@@ -3641,17 +3669,19 @@ cxip_txc_copy_from_hmem(struct cxip_txc *txc, struct cxip_md *hmem_md,
 	 */
 	if (!cxip_env.fork_safe_requested) {
 		if (!hmem_md) {
-			ret = cxip_map(domain, hmem_src, size, 0, &hmem_md);
+			ret = cxip_ep_obj_map(txc->ep_obj, hmem_src, size, 0,
+					      &hmem_md);
 			if (ret) {
-				TXC_WARN(txc, "cxip_map failed: %d:%s\n", ret,
-					 fi_strerror(-ret));
+				TXC_WARN(txc, "cxip_ep_obj_map failed: %d:%s\n",
+					 ret, fi_strerror(-ret));
 				return ret;
 			}
 
 			unmap_hmem_md = true;
 		}
 
-		cxip_copy_from_md(hmem_md, dest, hmem_src, size);
+		cxip_ep_obj_copy_from_md(txc->ep_obj, hmem_md, dest, hmem_src,
+					 size);
 		if (unmap_hmem_md)
 			cxip_unmap(hmem_md);
 

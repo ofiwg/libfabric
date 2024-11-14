@@ -132,8 +132,8 @@ cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 		}
 	}
 
-	ret = cxip_map(rxc->base.domain, buf->data, pool->attr.buf_size,
-		       OFI_MR_NOCACHE, &buf->md);
+	ret = cxip_ep_obj_map(rxc->base.ep_obj, buf->data, pool->attr.buf_size,
+			      OFI_MR_NOCACHE, &buf->md);
 	if (ret)
 		goto err_unreg_buf;
 
