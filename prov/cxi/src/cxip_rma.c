@@ -269,7 +269,8 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		} else {
 			assert(req != NULL);
 
-			ret = cxip_map(dom, buf, len, 0, &req->rma.local_md);
+			ret = cxip_ep_obj_map(txc->ep_obj, buf, len, 0,
+					      &req->rma.local_md);
 			if (ret) {
 				TXC_WARN(txc, "Failed to map buffer: %d:%s\n",
 					ret, fi_strerror(-ret));

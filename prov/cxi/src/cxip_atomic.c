@@ -612,8 +612,9 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 			if (result_mr) {
 				result_md = result_mr->md;
 			} else {
-				ret = cxip_map(dom, result, atomic_type_len, 0,
-					       &req->amo.result_md);
+				ret = cxip_ep_obj_map(txc->ep_obj, result,
+						      atomic_type_len, 0,
+						      &req->amo.result_md);
 				if (ret) {
 					TXC_WARN_RET(txc, ret,
 						     "Failed to map result buffer\n");
@@ -930,8 +931,9 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		/* Optionally register result MR. */
 		if (result) {
 			if (!result_mr) {
-				ret = cxip_map(dom, result, atomic_type_len, 0,
-					       &req->amo.result_md);
+				ret = cxip_ep_obj_map(txc->ep_obj, result,
+						      atomic_type_len, 0,
+						      &req->amo.result_md);
 				if (ret) {
 					TXC_WARN(txc,
 						 "Failed to map result buffer: %d:%s\n",
@@ -1017,8 +1019,9 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 			buf_md = buf_mr->md;
 		} else {
 			/* Map user operand buffer for DMA command. */
-			ret = cxip_map(dom, buf, atomic_type_len, 0,
-				       &req->amo.oper1_md);
+			ret = cxip_ep_obj_map(txc->ep_obj, buf,
+					      atomic_type_len, 0,
+					      &req->amo.oper1_md);
 			if (ret) {
 				TXC_WARN(txc,
 					 "Failed to map operand buffer: %d:%s\n",

@@ -60,7 +60,6 @@ int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
 			int (*recv_cb)(struct cxip_req *req,
 				       const union c_event *event))
 {
-	struct cxip_domain *dom = rxc->domain;
 	struct cxip_req *req;
 	struct cxip_md *recv_md = NULL;
 	int ret;
@@ -79,7 +78,8 @@ int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
 	if (len) {
 		/* If hybrid descriptor not passed, map for dma */
 		if (!md) {
-			ret = cxip_map(dom, (void *)buf, len, 0, &recv_md);
+			ret = cxip_ep_obj_map(rxc->ep_obj, (void *)buf, len, 0,
+					      &recv_md);
 			if (ret) {
 				RXC_WARN(rxc,
 					 "Map of recv buffer failed: %d, %s\n",
@@ -718,8 +718,8 @@ int cxip_send_buf_init(struct cxip_req *req)
 
 	/* Triggered operation always requires memory registration. */
 	if (req->triggered)
-		return cxip_map(txc->domain, req->send.buf, req->send.len, 0,
-			       &req->send.send_md);
+		return cxip_ep_obj_map(txc->ep_obj, req->send.buf,
+				       req->send.len, 0, &req->send.send_md);
 
 	/* FI_INJECT operations always require an internal bounce buffer. This
 	 * is needed to replay FI_INJECT operations which may experience flow
@@ -777,8 +777,8 @@ int cxip_send_buf_init(struct cxip_req *req)
 	}
 
 	/* Everything else requires memory registeration. */
-	return cxip_map(txc->domain, req->send.buf, req->send.len, 0,
-			&req->send.send_md);
+	return cxip_ep_obj_map(txc->ep_obj, req->send.buf, req->send.len, 0,
+			       &req->send.send_md);
 
 err_buf_fini:
 	cxip_send_buf_fini(req);
