@@ -186,6 +186,12 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, 
 					      init_attr_ex);
 	} else {
 		assert(init_attr_ex->qp_type == IBV_QPT_DRIVER);
+		if (efa_device_support_rdma_read())
+			init_attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+		if (efa_device_support_rdma_write()) {
+			init_attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
+			init_attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
+		}
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 		if (efa_rdm_use_unsolicited_write_recv())
 			efa_attr.flags |= EFADV_QP_FLAGS_UNSOLICITED_WRITE_RECV;
@@ -362,7 +368,9 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 	base_ep->max_msg_size = info->ep_attr->max_msg_size;
 	base_ep->max_rma_size = info->ep_attr->max_msg_size;
 	base_ep->inject_msg_size = info->tx_attr->inject_size;
-	base_ep->inject_rma_size = info->tx_attr->inject_size;
+	/* TODO: update inject_rma_size to inline size after firmware
+	 * supports inline rdma write */
+	base_ep->inject_rma_size = 0;
 	return 0;
 }
 

@@ -26,12 +26,6 @@ void efa_rdm_ep_construct_ibv_qp_init_attr_ex(struct efa_rdm_ep *ep,
 	attr_ex->cap.max_recv_sge = ep->base_ep.domain->device->rdm_info->rx_attr->iov_limit;
 	attr_ex->cap.max_inline_data = ep->base_ep.domain->device->efa_attr.inline_buf_size;
 	attr_ex->qp_type = IBV_QPT_DRIVER;
-	if (efa_device_support_rdma_read())
-		attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
-	if (efa_device_support_rdma_write()) {
-		attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
-		attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
-	}
 	attr_ex->pd = efa_rdm_ep_domain(ep)->ibv_pd;
 	attr_ex->qp_context = ep;
 	attr_ex->sq_sig_all = 1;
@@ -564,6 +558,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->max_atomic_size = info->ep_attr->max_msg_size;
 	efa_rdm_ep->inject_tagged_size = info->tx_attr->inject_size;
 	efa_rdm_ep->inject_atomic_size = info->tx_attr->inject_size;
+	efa_rdm_ep->base_ep.inject_rma_size = info->tx_attr->inject_size;
 	efa_rdm_ep->efa_max_outstanding_tx_ops = efa_domain->device->rdm_info->tx_attr->size;
 	efa_rdm_ep->efa_max_outstanding_rx_ops = efa_domain->device->rdm_info->rx_attr->size;
 	efa_rdm_ep->use_device_rdma = efa_rdm_get_use_device_rdma(info->fabric_attr->api_version);

@@ -48,9 +48,9 @@ _efa_files = \
 	prov/efa/src/efa_env.c	\
 	prov/efa/src/efa_cntr.c	\
 	prov/efa/src/efa_msg.c \
+	prov/efa/src/efa_rma.c \
 	prov/efa/src/dgram/efa_dgram_ep.c \
 	prov/efa/src/dgram/efa_dgram_cq.c \
-	prov/efa/src/dgram/efa_dgram_rma.c \
 	prov/efa/src/rdm/efa_rdm_peer.c	\
 	prov/efa/src/rdm/efa_rdm_cq.c \
 	prov/efa/src/rdm/efa_rdm_ep_utils.c \
