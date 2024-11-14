@@ -959,7 +959,7 @@ static void test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource,
 	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_SHARED_MEMORY_PERMITTED,
 			&shm_permitted, sizeof shm_permitted), 0);
 
-	assert_true(ep->max_msg_size == max_msg_size);
+	assert_true(ep->base_ep.max_msg_size == max_msg_size);
 
 	/* Enable EP */
 	assert_int_equal(fi_enable(resource->ep), 0);
@@ -968,11 +968,11 @@ static void test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource,
 
 	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
 			&inject_msg_size, &(size_t){sizeof inject_msg_size}), 0);
-	assert_int_equal(ep->inject_msg_size, inject_msg_size);
+	assert_int_equal(ep->base_ep.inject_msg_size, inject_msg_size);
 
 	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
 			&inject_rma_size, &(size_t){sizeof inject_rma_size}), 0);
-	assert_int_equal(ep->inject_rma_size, inject_rma_size);
+	assert_int_equal(ep->base_ep.inject_rma_size, inject_rma_size);
 
 	if (expected_use_zcpy_rx) {
 		assert_int_equal(inject_msg_size, efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size);
