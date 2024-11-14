@@ -1208,6 +1208,9 @@ int efa_rdm_ep_insert_cntr_ibv_cq_poll_list(struct efa_rdm_ep *ep)
 				if (ret)
 					return ret;
 			}
+			ofi_genlock_lock(&efa_cntr->util_cntr.ep_list_lock);
+			efa_cntr->need_to_scan_ep_list = true;
+			ofi_genlock_unlock(&efa_cntr->util_cntr.ep_list_lock);
 		}
 	}
 
@@ -1233,6 +1236,9 @@ int efa_rdm_ep_insert_cq_ibv_cq_poll_list(struct efa_rdm_ep *ep)
 			if (ret)
 				return ret;
 		}
+		ofi_genlock_lock(&tx_cq->util_cq.ep_list_lock);
+		tx_cq->need_to_scan_ep_list = true;
+		ofi_genlock_unlock(&tx_cq->util_cq.ep_list_lock);
 	}
 
 	if (rx_cq) {
@@ -1245,6 +1251,9 @@ int efa_rdm_ep_insert_cq_ibv_cq_poll_list(struct efa_rdm_ep *ep)
 			if (ret)
 				return ret;
 		}
+		ofi_genlock_lock(&rx_cq->util_cq.ep_list_lock);
+		rx_cq->need_to_scan_ep_list = true;
+		ofi_genlock_unlock(&rx_cq->util_cq.ep_list_lock);
 	}
 
 	return FI_SUCCESS;
