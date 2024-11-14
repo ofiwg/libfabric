@@ -202,27 +202,17 @@ def checkout_external_resources() {
   checkout_ci()
 }
 
-def generate_diff(def branch_name, def output_loc) {
-  sh """
-    git remote add mainRepo ${env.UPSTREAM}
-    git fetch mainRepo
-    git diff --name-only HEAD..mainRepo/${branch_name} > ${output_loc}/commit_id
-    git remote remove mainRepo
-  """
-}
+def git_diffs() {
+  dir ("${CUSTOM_WORKSPACE}/source/libfabric") {
+    sh """
+      git diff --name-only HEAD..upstream/${TARGET} > ./commit_id
+      git diff upstream/${TARGET}:Makefile.am Makefile.am > ./Makefile.am.diff
+      git diff upstream/${TARGET}:configure.ac configure.ac > ./configure.ac.diff
 
-def generate_release_num(def branch_name, def output_loc) {
-  sh """
-    git remote add mainRepo ${env.UPSTREAM}
-    git fetch mainRepo
-    git diff mainRepo/${branch_name}:Makefile.am Makefile.am > \
-        ${output_loc}/Makefile.am.diff
-    git diff mainRepo/${branch_name}:configure.ac configure.ac > \
-        ${output_loc}/configure.ac.diff
-    cat configure.ac | grep AC_INIT | cut -d ' ' -f 2 | \
-        cut -d '[' -f 2 | cut -d ']' -f 1 > ${output_loc}/release_num.txt
-    git remote remove mainRepo
-  """
+      cat configure.ac | grep AC_INIT | cut -d ' ' -f 2 | \
+      cut -d '[' -f 2 | cut -d ']' -f 1 > ./release_num.txt
+    """
+  }
 }
 
 def slurm_build(modes, partition, location, tag, hw=null, additional_args=null) {
@@ -283,7 +273,14 @@ def bootstrap_ci() {
 }
 
 def checkout_tar(name) {
-  dir ("${env.CUSTOM_WORKSPACE}/${name}/libfabric") { checkout scm }
+  dir ("${env.CUSTOM_WORKSPACE}/${name}/libfabric") {
+    checkout scm
+    TARGET=check_target()
+    sh """
+      git remote add upstream ${env.UPSTREAM}
+      git pull --rebase upstream ${TARGET}
+    """
+  }
   dir ("${env.CUSTOM_WORKSPACE}/${name}/") {
     sh "tar -cvf libfabric.tar.gz libfabric/*"
   }
@@ -388,12 +385,7 @@ pipeline {
     stage ('opt-out') {
       steps {
         script {
-          TARGET=check_target()
-          dir ("${CUSTOM_WORKSPACE}/source/libfabric") {
-            generate_diff("${TARGET}", "${env.WORKSPACE}/source/libfabric")
-            generate_release_num("${TARGET}", "${env.WORKSPACE}/source/libfabric")
-          }
-
+          git_diffs()
           if (env.WEEKLY == null) {
             weekly = false
           } else {
