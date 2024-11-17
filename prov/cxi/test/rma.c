@@ -1989,7 +1989,7 @@ Test(rma, invalid_read_target_opt_mr_key)
 
 /* Tests to verify FI_RM_ENABLED */
 
-static void mr_overrun(bool write)
+static void mr_overrun(bool write, bool use_cq)
 {
      int ret;
      uint8_t *local;
@@ -2018,11 +2018,16 @@ static void mr_overrun(bool write)
           cr_assert_eq(ret, FI_SUCCESS, "fi_read() failed (%d)", ret);
      }
 
-     /* Wait for async event indicating data has been sent */
-     ret = cxit_await_completion(cxit_tx_cq, &cqe);
-     cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
+     if (use_cq) {
+          /* Wait for async event indicating data has been sent */
+          ret = cxit_await_completion(cxit_tx_cq, &cqe);
+          cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
 
-     validate_tx_event(&cqe, FI_RMA | (write ? FI_WRITE : FI_READ), NULL);
+          validate_tx_event(&cqe, FI_RMA | (write ? FI_WRITE : FI_READ), NULL);
+     } else {
+          while (fi_cntr_read(write ? cxit_write_cntr : cxit_read_cntr) != 1)
+               ;
+     }
 
      /* Validate read data */
      for (int i = 0; i < good_len; i++)
@@ -2042,25 +2047,40 @@ static void mr_overrun(bool write)
           cr_assert_eq(ret, FI_SUCCESS, "fi_read() failed (%d)", ret);
      }
 
-     /* Wait for async event indicating data has been sent */
-     ret = cxit_await_completion(cxit_tx_cq, &cqe);
-     cr_assert_eq(ret, -FI_EAVAIL, "Unexpected RMA success %d", ret);
-     ret = fi_cq_readerr(cxit_tx_cq, &err, 1);
-     cr_assert(ret == 1);
-     cr_assert_eq(err.err, FI_EIO, "Error return %d", err.err);
+     if (use_cq) {
+          /* Wait for async event indicating data has been sent */
+          ret = cxit_await_completion(cxit_tx_cq, &cqe);
+          cr_assert_eq(ret, -FI_EAVAIL, "Unexpected RMA success %d", ret);
+          ret = fi_cq_readerr(cxit_tx_cq, &err, 1);
+          cr_assert(ret == 1);
+          cr_assert_eq(err.err, FI_EIO, "Error return %d", err.err);
+     } else {
+          while (fi_cntr_readerr(write ? cxit_write_cntr : cxit_read_cntr) != 1)
+               ;
+     }
 
      mr_destroy(&remote);
      free(local);
 }
 
-Test(rma, read_mr_overrun)
+Test(rma, read_mr_overrun_cq)
 {
-     mr_overrun(false);
+     mr_overrun(false, true);
 }
 
-Test(rma, write_mr_overrun)
+Test(rma, write_mr_overrun_cq)
 {
-     mr_overrun(true);
+     mr_overrun(true, true);
+}
+
+Test(rma, read_mr_overrun_cntr)
+{
+     mr_overrun(false, false);
+}
+
+Test(rma, write_mr_overrun_cntr)
+{
+     mr_overrun(true, false);
 }
 
 static void rma_hybrid_mr_desc_test_runner(bool write, bool cq_events)
