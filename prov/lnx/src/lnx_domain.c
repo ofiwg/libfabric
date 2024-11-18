@@ -72,6 +72,11 @@ static int lnx_cleanup_domains(struct local_prov *prov)
 				struct local_prov_ep, ep, entry) {
 		if (!ep->lpe_domain)
 			continue;
+
+		rc = fi_close(&ep->lpe_srx_ep->fid);
+		if (rc)
+			frc = rc;
+
 		rc = fi_close(&ep->lpe_domain->fid);
 		if (rc)
 			frc = rc;
@@ -463,7 +468,8 @@ static int lnx_open_core_domains(struct local_prov *prov,
 		if (!rc && srq_support) {
 			ep->lpe_srx.owner_ops = &lnx_srx_ops;
 			peer_srx.srx = &ep->lpe_srx;
-			rc = fi_srx_context(ep->lpe_domain, &attr, NULL, &peer_srx);
+			rc = fi_srx_context(ep->lpe_domain, &attr,
+					    &ep->lpe_srx_ep, &peer_srx);
 		}
 
 		/* if one of the constituent endpoints doesn't support shared

@@ -160,11 +160,12 @@ static int lnx_cq_open_core_prov(struct lnx_cq *cq, struct fi_cq_attr *attr)
 	int rc;
 	struct local_prov_ep *ep;
 	struct local_prov *entry;
+	struct fi_cq_attr peer_attr = {0};
 	struct dlist_entry *prov_table =
 		&cq->lnx_domain->ld_fabric->local_prov_table;
 
 	/* tell the core providers to import my CQ */
-	attr->flags |= FI_PEER;
+	peer_attr.flags |= FI_PEER;
 
 	/* create all the core provider completion queues */
 	dlist_foreach_container(prov_table, struct local_prov,
@@ -181,7 +182,7 @@ static int lnx_cq_open_core_prov(struct lnx_cq *cq, struct fi_cq_attr *attr)
 			cq_ctxt.cq = &ep->lpe_cq.lpc_cq;
 
 			/* pass my CQ into the open and get back the core's cq */
-			rc = fi_cq_open(ep->lpe_domain, attr, &core_cq, &cq_ctxt);
+			rc = fi_cq_open(ep->lpe_domain, &peer_attr, &core_cq, &cq_ctxt);
 			if (rc)
 				return rc;
 

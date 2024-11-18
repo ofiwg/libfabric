@@ -119,7 +119,7 @@ static int lnx_enable_core_eps(struct lnx_ep *lep)
 			struct local_prov_ep, ep, entry) {
 			if (srq_support) {
 				rc = fi_ep_bind(ep->lpe_ep,
-						&ep->lpe_srx.ep_fid.fid, 0);
+						&ep->lpe_srx_ep->fid, 0);
 				if (rc) {
 					FI_INFO(&lnx_prov, FI_LOG_CORE,
 						"%s doesn't support SRX (%d)\n",
