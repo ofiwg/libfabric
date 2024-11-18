@@ -574,7 +574,8 @@ ssize_t lnx_tsend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 
 	rc = fi_tsend(cep->lpe_ep, buf, len, mem_desc, core_addr, tag, context);
 
-	ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
+	if (mre)
+		ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
 
 	return rc;
 }
@@ -607,7 +608,8 @@ ssize_t lnx_tsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 	rc = fi_tsendv(cep->lpe_ep, iov, &mem_desc, count, core_addr, tag, context);
 
-	ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
+	if (mre)
+		ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
 
 	return rc;
 }
@@ -648,7 +650,8 @@ ssize_t lnx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 
 	rc = fi_tsendmsg(cep->lpe_ep, &core_msg, flags);
 
-	ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
+	if (mre)
+		ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
 
 	return rc;
 }
@@ -681,7 +684,8 @@ ssize_t lnx_tinject(struct fid_ep *ep, const void *buf, size_t len,
 
 	rc = fi_tinject(cep->lpe_ep, buf, len, core_addr, tag);
 
-	ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
+	if (mre)
+		ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
 
 	return rc;
 }
@@ -717,7 +721,8 @@ ssize_t lnx_tsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc
 	rc = fi_tsenddata(cep->lpe_ep, buf, len, mem_desc,
 			  data, core_addr, tag, context);
 
-	ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
+	if (mre)
+		ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
 
 	return rc;
 }
@@ -750,7 +755,8 @@ ssize_t lnx_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 
 	rc = fi_tinjectdata(cep->lpe_ep, buf, len, data, core_addr, tag);
 
-	ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
+	if (mre)
+		ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
 
 	return rc;
 }
@@ -792,7 +798,8 @@ lnx_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	rc = fi_read(core_ep, buf, len, mem_desc,
 		     core_addr, addr, key, context);
 
-	ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
+	if (mre)
+		ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
 out:
 	return rc;
 }
@@ -834,7 +841,8 @@ lnx_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	rc = fi_write(core_ep, buf, len, mem_desc,
 		      core_addr, addr, key, context);
 
-	ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
+	if (mre)
+		ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
 out:
 	return rc;
 }
@@ -878,7 +886,8 @@ lnx_atomic_write(struct fid_ep *ep,
 	rc = fi_atomic(core_ep, buf, count, mem_desc,
 		      core_addr, addr, key, datatype, op, context);
 
-	ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
+	if (mre)
+		ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
 out:
 	return rc;
 }
@@ -924,7 +933,8 @@ lnx_atomic_readwrite(struct fid_ep *ep,
 		      result, mem_desc, core_addr, addr, key,
 		      datatype, op, context);
 
-	ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
+	if (mre)
+		ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
 out:
 	return rc;
 }
@@ -971,7 +981,8 @@ lnx_atomic_compwrite(struct fid_ep *ep,
 		      compare, compare_desc, result, mem_desc,
 		      core_addr, addr, key, datatype, op, context);
 
-	ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
+	if (mre)
+		ofi_mr_cache_delete(&lep->le_domain->ld_mr_cache, mre);
 
 out:
 	return rc;

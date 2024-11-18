@@ -105,7 +105,7 @@ struct fi_domain_attr lnx_domain_attr = {
 	.control_progress 	= FI_PROGRESS_AUTO,
 	.data_progress 		= FI_PROGRESS_AUTO,
 	.resource_mgmt 		= FI_RM_ENABLED,
-	.av_type 		= FI_AV_UNSPEC,
+	.av_type 		= FI_AV_TABLE,
 	.mr_mode 		= FI_MR_RAW,
 	.mr_key_size		= SIZE_MAX,
 	.cq_data_size 		= SIZE_MAX,
@@ -410,6 +410,7 @@ static int lnx_form_info(struct fi_info *fi, struct fi_info **out)
 				rc = -FI_ENOMEM;
 				goto fail;
 			}
+			r->domain_attr->av_type = FI_AV_TABLE;
 			meta->lnx_rep = r;
 			meta->lnx_link = fi;
 			if (r->tx_attr)
@@ -531,7 +532,7 @@ int lnx_getinfo_helper(uint32_t version, char *prov, struct fi_info *lnx_hints)
 		lnx_hints->domain_attr->mr_mode |= (FI_MR_VIRT_ADDR | FI_MR_HMEM
 						| FI_MR_PROV_KEY);
 	}
-	rc = fi_getinfo(version, NULL, NULL, OFI_GETINFO_INTERNAL,
+	rc = fi_getinfo(version, NULL, NULL, OFI_GETINFO_HIDDEN,
 			lnx_hints, &core_info);
 
 	lnx_hints->fabric_attr->prov_name = orig_prov_name;

@@ -81,6 +81,7 @@ struct local_prov_ep {
 	struct fid_ep **lpe_txc;
 	struct fid_ep **lpe_rxc;
 	struct fid_av *lpe_av;
+	struct fid_ep *lpe_srx_ep;
 	struct lnx_peer_cq lpe_cq;
 	struct fi_info *lpe_fi_info;
 	struct fid_peer_srx lpe_srx;

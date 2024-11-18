@@ -630,11 +630,7 @@ int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (attr->name)
 		return -FI_ENOSYS;
 
-	if (attr->type != FI_AV_UNSPEC &&
-	    attr->type != FI_AV_TABLE)
-		return -FI_ENOSYS;
-
-	if (attr->type == FI_AV_UNSPEC)
+	if (attr->type != FI_AV_TABLE)
 		attr->type = FI_AV_TABLE;
 
 	peer_tbl = calloc(sizeof(*peer_tbl), 1);
