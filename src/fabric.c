@@ -1030,9 +1030,9 @@ FI_DESTRUCTOR(fi_fini(void))
 	}
 
 	ofi_free_filter(&prov_filter);
+	ofi_shm_p2p_cleanup();
 	ofi_monitors_cleanup();
 	ofi_hmem_cleanup();
-	ofi_shm_p2p_cleanup();
 	ofi_hook_fini();
 	ofi_mem_fini();
 	fi_log_fini();
