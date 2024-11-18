@@ -244,6 +244,19 @@ enum cxip_rdzv_proto {
 
 const char *cxip_rdzv_proto_to_str(enum cxip_rdzv_proto proto);
 
+enum cxip_mr_target_ordering {
+	/* Sets MR target ordering based on message and target RMA ordering
+	 * options.
+	 */
+	MR_ORDER_DEFAULT,
+
+	/* Force ordering to always be strict. */
+	MR_ORDER_STRICT,
+
+	/* Force ordering to always be relaxed. */
+	MR_ORDER_RELAXED,
+};
+
 struct cxip_environment {
 	/* Translation */
 	int odp;
@@ -323,6 +336,7 @@ struct cxip_environment {
 	size_t mr_cache_events_disable_poll_nsecs;
 	size_t mr_cache_events_disable_le_poll_nsecs;
 	int force_dev_reg_copy;
+	enum cxip_mr_target_ordering mr_target_ordering;
 };
 
 extern struct cxip_environment cxip_env;
@@ -2477,6 +2491,12 @@ cxip_ep_obj_copy_from_md(struct cxip_ep_obj *ep, struct cxip_md *md, void *dest,
 
 static inline bool cxip_ep_obj_mr_relaxed_order(struct cxip_ep_obj *ep)
 {
+	if (cxip_env.mr_target_ordering ==  MR_ORDER_STRICT)
+		return false;
+
+	if (cxip_env.mr_target_ordering ==  MR_ORDER_RELAXED)
+		return true;
+
 	if ((ep->rx_attr.msg_order & FI_ORDER_RMA_WAW) &&
 	     ep->ep_attr.max_order_waw_size != 0)
 		return false;

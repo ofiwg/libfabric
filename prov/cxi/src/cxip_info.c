@@ -670,6 +670,7 @@ struct cxip_environment cxip_env = {
 	.mr_cache_events_disable_le_poll_nsecs =
 		CXIP_MR_CACHE_EVENTS_DISABLE_LE_POLL_NSECS,
 	.force_dev_reg_copy = false,
+	.mr_target_ordering = MR_ORDER_DEFAULT,
 };
 
 static void cxip_env_init(void)
@@ -1288,6 +1289,24 @@ static void cxip_env_init(void)
 			cxip_env.force_dev_reg_copy);
 	fi_param_get_bool(&cxip_prov, "force_dev_reg_copy",
 			  &cxip_env.force_dev_reg_copy);
+
+	fi_param_define(&cxip_prov, "mr_target_ordering", FI_PARAM_STRING,
+			"MR target ordering (i.e. PCI ordering). Options: default, strict, or relaxed. Recommendation is to leave at default behavior.");
+	fi_param_get_str(&cxip_prov, "mr_target_ordering", &param_str);
+
+	if (param_str) {
+		if (!strcmp(param_str, "default"))
+			cxip_env.mr_target_ordering = MR_ORDER_DEFAULT;
+		else if (!strcmp(param_str, "strict"))
+			cxip_env.mr_target_ordering = MR_ORDER_STRICT;
+		else if (!strcmp(param_str, "relaxed"))
+			cxip_env.mr_target_ordering = MR_ORDER_RELAXED;
+		else
+			CXIP_WARN("Unrecognized mr_target_ordering: %s\n",
+				  param_str);
+
+		param_str = NULL;
+	}
 
 	set_system_page_size();
 }
