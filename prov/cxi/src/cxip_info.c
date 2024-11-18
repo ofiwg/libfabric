@@ -648,7 +648,6 @@ struct cxip_environment cxip_env = {
 	.disable_eq_hugetlb = false,
 	.zbcoll_radix = 2,
 	.cq_fill_percent = 50,
-	.enable_unrestricted_end_ro = true,
 	.rget_tc = FI_TC_UNSPEC,
 	.cacheline_size = CXIP_DEFAULT_CACHE_LINE_SIZE,
 	.coll_job_id = NULL,
@@ -742,11 +741,6 @@ static void cxip_env_init(void)
 			cxip_env.disable_host_register);
 	fi_param_get_bool(&cxip_prov, "disable_host_register",
 			  &cxip_env.disable_host_register);
-
-	fi_param_define(&cxip_prov, "enable_unrestricted_end_ro", FI_PARAM_BOOL,
-			"Default: %d", cxip_env.enable_unrestricted_end_ro);
-	fi_param_get_bool(&cxip_prov, "enable_unrestricted_end_ro",
-			  &cxip_env.enable_unrestricted_end_ro);
 
 	fi_param_define(&cxip_prov, "odp", FI_PARAM_BOOL,
 			"Enables on-demand paging (default %d).", cxip_env.odp);

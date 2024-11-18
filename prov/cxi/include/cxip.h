@@ -297,7 +297,6 @@ struct cxip_environment {
 	size_t ctrl_rx_eq_max_size;
 	char *device_name;
 	size_t cq_fill_percent;
-	int enable_unrestricted_end_ro;
 	int rget_tc;
 	int cacheline_size;
 
