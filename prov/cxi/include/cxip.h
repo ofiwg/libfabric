@@ -2476,6 +2476,19 @@ cxip_ep_obj_copy_from_md(struct cxip_ep_obj *ep, struct cxip_md *md, void *dest,
 			  ep->require_dev_reg_copy[md->info.iface]);
 }
 
+static inline bool cxip_ep_obj_mr_relaxed_order(struct cxip_ep_obj *ep)
+{
+	if ((ep->rx_attr.msg_order & FI_ORDER_RMA_WAW) &&
+	     ep->ep_attr.max_order_waw_size != 0)
+		return false;
+
+	if ((ep->rx_attr.msg_order & FI_ORDER_WAW) &&
+	    ep->ep_attr.max_order_waw_size != 0)
+		return false;
+
+	return true;
+}
+
 static inline void cxip_txc_otx_reqs_inc(struct cxip_txc *txc)
 {
 	assert(ofi_genlock_held(&txc->ep_obj->lock) == 1);
