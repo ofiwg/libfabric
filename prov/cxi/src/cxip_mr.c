@@ -314,7 +314,9 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	uint32_t le_flags;
 	uint64_t ib = 0;
 	int pid_idx;
+	bool target_relaxed_order;
 
+	target_relaxed_order = cxip_ep_obj_mr_relaxed_order(ep_obj);
 	mr->req.cb = cxip_mr_cb;
 
 	ret = cxip_pte_alloc_nomap(ep_obj->ptable, ep_obj->ctrl.tgt_evtq,
@@ -347,8 +349,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		goto err_pte_free;
 	}
 
-	le_flags = C_LE_EVENT_COMM_DISABLE | C_LE_EVENT_SUCCESS_DISABLE |
-		   C_LE_UNRESTRICTED_BODY_RO;
+	le_flags = C_LE_EVENT_COMM_DISABLE | C_LE_EVENT_SUCCESS_DISABLE;
 	if (mr->attr.access & FI_REMOTE_WRITE)
 		le_flags |= C_LE_OP_PUT;
 	if (mr->attr.access & FI_REMOTE_READ)
@@ -356,15 +357,10 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	if (mr->cntr)
 		le_flags |= C_LE_EVENT_CT_COMM;
 
-	/* When FI_FENCE is not requested, restricted operations can used PCIe
-	 * relaxed ordering. Unrestricted operations PCIe relaxed ordering is
-	 * controlled by an env for now.
-	 */
-	if (!(ep_obj->caps & FI_FENCE)) {
+	if (target_relaxed_order) {
 		ib = 1;
-
-		if (cxip_env.enable_unrestricted_end_ro)
-			le_flags |= C_LE_UNRESTRICTED_END_RO;
+		le_flags |= C_LE_UNRESTRICTED_END_RO |
+			C_LE_UNRESTRICTED_BODY_RO;
 	}
 
 	ret = cxip_pte_append(mr->pte,
@@ -475,7 +471,9 @@ static int cxip_mr_prov_cache_enable_opt(struct cxip_mr *mr)
 	struct cxip_mr *_mr;
 	uint32_t le_flags;
 	uint64_t ib = 0;
+	bool target_relaxed_order;
 
+	target_relaxed_order = cxip_ep_obj_mr_relaxed_order(ep_obj);
 	mr_cache = &ep_obj->ctrl.opt_mr_cache[lac];
 	ofi_atomic_inc32(&mr_cache->ref);
 
@@ -542,17 +540,12 @@ static int cxip_mr_prov_cache_enable_opt(struct cxip_mr *mr)
 	}
 
 	le_flags = C_LE_EVENT_COMM_DISABLE | C_LE_EVENT_SUCCESS_DISABLE |
-		   C_LE_UNRESTRICTED_BODY_RO | C_LE_OP_PUT | C_LE_OP_GET;
+		C_LE_OP_PUT | C_LE_OP_GET;
 
-	/* When FI_FENCE is not requested, restricted operations can used PCIe
-	 * relaxed ordering. Unrestricted operations PCIe relaxed ordering is
-	 * controlled by an env for now.
-	 */
-	if (!(ep_obj->caps & FI_FENCE)) {
+	if (target_relaxed_order) {
 		ib = 1;
-
-		if (cxip_env.enable_unrestricted_end_ro)
-			le_flags |= C_LE_UNRESTRICTED_END_RO;
+		le_flags |= C_LE_UNRESTRICTED_END_RO |
+			C_LE_UNRESTRICTED_BODY_RO;
 	}
 
 	ret = cxip_pte_append(_mr->pte, 0, -1ULL, lac,
@@ -634,6 +627,9 @@ static int cxip_mr_prov_cache_enable_std(struct cxip_mr *mr)
 	union cxip_match_bits mb;
 	union cxip_match_bits ib;
 	uint32_t le_flags;
+	bool target_relaxed_order;
+
+	target_relaxed_order = cxip_ep_obj_mr_relaxed_order(ep_obj);
 
 	/* TODO: Handle enabling for each bound endpoint */
 	mr_cache = &ep_obj->ctrl.std_mr_cache[lac];
@@ -676,8 +672,10 @@ static int cxip_mr_prov_cache_enable_std(struct cxip_mr *mr)
 	ib.mr_lac = 0;
 	ib.mr_cached = 0;
 
-	le_flags = C_LE_EVENT_SUCCESS_DISABLE | C_LE_UNRESTRICTED_BODY_RO |
-		   C_LE_OP_PUT | C_LE_OP_GET;
+	le_flags = C_LE_EVENT_SUCCESS_DISABLE | C_LE_OP_PUT | C_LE_OP_GET;
+	if (target_relaxed_order)
+		le_flags |= C_LE_UNRESTRICTED_END_RO |
+			C_LE_UNRESTRICTED_BODY_RO;
 
 	ret = cxip_pte_append(ep_obj->ctrl.pte, 0, -1ULL,
 			      mb.mr_lac, C_PTL_LIST_PRIORITY,
