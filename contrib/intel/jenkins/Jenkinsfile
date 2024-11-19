@@ -430,40 +430,28 @@ pipeline {
         }
       }
     }
-    stage ('parallel-builds') {
+    stage ('build-libfabric') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
-        stage ('build-water') {
+        stage ('water') {
           steps {
             script {
               dir (CI_LOCATION) {
                 run_ci("pre-build", "pr_build_water.json")
-                run_ci("pre-build", "pr_build_shmem_water.json")
-                slurm_batch("totodile", "1",
-                            "${env.LOG_DIR}/build_mpich_water_log",
-                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
-                              --build_item=mpich --build_hw=water"""
-                           )
               }
             }
           }
         }
-        stage ('build-grass') {
+        stage ('grass') {
           steps {
             script {
               dir (CI_LOCATION) {
                 run_ci("pre-build", "pr_build_grass.json")
-                run_ci("pre-build", "pr_build_shmem_grass.json")
-                slurm_batch("grass", "1",
-                            "${env.LOG_DIR}/build_mpich_grass_log",
-                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
-                              --build_item=mpich --build_hw=grass"""
-                           )
               }
             }
           }
         }
-        stage ('build-electric') {
+        stage ('electric') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -472,7 +460,7 @@ pipeline {
             }
           }
         }
-        stage ('build-ucx') {
+        stage ('ucx') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -481,7 +469,7 @@ pipeline {
             }
           }
         }
-        stage ('build-cyndaquil') {
+        stage ('cyndaquil') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -490,7 +478,7 @@ pipeline {
             }
           }
         }
-        stage ('build-quilava') {
+        stage ('quilava') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -499,7 +487,7 @@ pipeline {
             }
           }
         }
-        stage ('build-ivysaur') {
+        stage ('ivysaur') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -508,7 +496,7 @@ pipeline {
             }
           }
         }
-        stage ('build-daos') {
+        stage ('daos') {
           agent {
             node {
               label 'daos_head'
@@ -530,7 +518,7 @@ pipeline {
             }
           }
         }
-        stage ('build-fire') {
+        stage ('fire') {
           agent {
             node {
               label 'ze'
@@ -549,6 +537,55 @@ pipeline {
               bootstrap_ci()
               dir (CI_LOCATION) {
                 run_ci("pre-build", "pr_build_fire.json")
+              }
+            }
+          }
+        }
+      }
+    }
+    stage('build-middlewares') {
+      when { equals expected: true, actual: DO_RUN }
+      parallel {
+        stage ('shmem-water') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("pre-build", "pr_build_shmem_water.json")
+              }
+            }
+          }
+        }
+        stage ('shmem-grass') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("pre-build", "pr_build_shmem_grass.json")
+              }
+            }
+          }
+        }
+        stage ('mpich-water') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                slurm_batch("totodile", "1",
+                            "${env.LOG_DIR}/build_mpich_water_log",
+                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
+                              --build_item=mpich --build_hw=water"""
+                           )
+              }
+            }
+          }
+        }
+        stage ('mpich-grass') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                slurm_batch("grass", "1",
+                            "${env.LOG_DIR}/build_mpich_grass_log",
+                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
+                              --build_item=mpich --build_hw=grass"""
+                           )
               }
             }
           }
