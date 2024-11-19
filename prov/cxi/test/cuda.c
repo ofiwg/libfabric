@@ -431,3 +431,152 @@ Test(cuda, large_transfer)
 {
 	cuda_dev_memory_test(LARGE_XFER, 2, false, true);
 }
+
+static void verify_dev_reg_eopnotsupp_local_op(void)
+{
+	void *buf;
+	cudaError_t cuda_ret;
+	size_t buf_size = 1024;
+	int ret;
+
+	cuda_ret = cudaMalloc(&buf, buf_size);
+	cr_assert_eq(cuda_ret, cudaSuccess, "cudaMalloc failed: %d", cuda_ret);
+
+	ret = fi_recv(cxit_ep, buf, buf_size, NULL, cxit_ep_fi_addr, NULL);
+	cr_assert_eq(ret, -FI_EOPNOTSUPP,  "fi_recv failed: %d", ret);
+
+	cuda_ret = cudaFree(buf);
+	cr_assert_eq(cuda_ret, cudaSuccess, "cudaFree  failed: %d", cuda_ret);
+}
+
+static void verify_dev_reg_eopnotsupp_remote_mr(void)
+{
+	int ret;
+	void *buf;
+	cudaError_t cuda_ret;
+	size_t buf_size = 1024;
+	struct fid_mr *fid_mr;
+
+	cuda_ret = cudaMalloc(&buf, buf_size);
+	cr_assert_eq(cuda_ret, cudaSuccess, "cudaMalloc failed: %d", cuda_ret);
+
+	ret = fi_mr_reg(cxit_domain, buf, buf_size, FI_READ, 0, 0x123, 0,
+			&fid_mr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed: %d", ret);
+
+	ret = fi_mr_bind(fid_mr, &(cxit_ep->fid), 0);
+	cr_assert_eq(ret, -FI_EOPNOTSUPP,  "fi_mr_bind failed: %d", ret);
+
+	ret = fi_close(&fid_mr->fid);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_close MR failed: %d", ret);
+
+	cuda_ret = cudaFree(buf);
+	cr_assert_eq(cuda_ret, cudaSuccess, "cudaFree  failed: %d", cuda_ret);
+}
+
+Test(cuda, verify_fi_opt_cuda_api_permitted_local_operation)
+{
+	int ret;
+	bool optval = false;
+
+	ret = setenv("FI_CXI_DISABLE_HMEM_DEV_REGISTER", "1", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	cxit_setup_msg();
+
+	ret = fi_setopt(&(cxit_ep->fid), FI_OPT_ENDPOINT,
+			FI_OPT_CUDA_API_PERMITTED, &optval, sizeof(optval));
+	assert(ret == FI_SUCCESS);
+
+	verify_dev_reg_eopnotsupp_local_op();
+
+	cxit_teardown_msg();
+}
+
+Test(cuda, verify_fi_opt_cuda_api_permitted_remote_mr)
+{
+	int ret;
+	bool optval = false;
+
+	ret = setenv("FI_CXI_DISABLE_HMEM_DEV_REGISTER", "1", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	cxit_setup_msg();
+
+	ret = fi_setopt(&(cxit_ep->fid), FI_OPT_ENDPOINT,
+			FI_OPT_CUDA_API_PERMITTED, &optval, sizeof(optval));
+	assert(ret == FI_SUCCESS);
+
+	verify_dev_reg_eopnotsupp_remote_mr();
+
+	cxit_teardown_msg();
+}
+
+Test(cuda, verify_get_fi_opt_cuda_api_permitted)
+{
+	int ret;
+	bool optval = false;
+	size_t size = sizeof(optval);
+
+	ret = setenv("FI_CXI_DISABLE_HMEM_DEV_REGISTER", "1", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	cxit_setup_msg();
+
+	ret = fi_setopt(&(cxit_ep->fid), FI_OPT_ENDPOINT,
+			FI_OPT_CUDA_API_PERMITTED, &optval, sizeof(optval));
+	assert(ret == FI_SUCCESS);
+
+	optval = true;
+
+	ret = fi_getopt(&(cxit_ep->fid), FI_OPT_ENDPOINT,
+			FI_OPT_CUDA_API_PERMITTED, &optval, &size);
+	assert(ret == FI_SUCCESS);
+
+	assert(optval == false);
+
+	cxit_teardown_msg();
+}
+
+Test(cuda, verify_force_dev_reg_local)
+{
+	int ret;
+
+	ret = setenv("FI_CXI_DISABLE_HMEM_DEV_REGISTER", "1", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	ret = setenv("FI_CXI_FORCE_DEV_REG_COPY", "1", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	cxit_setup_getinfo();
+
+	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
+	cxit_av_attr.type = FI_AV_TABLE;
+
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+
+	cxit_fi_hints->tx_attr->size = 512;
+
+	cxit_setup_ep();
+
+	/* Set up RMA objects */
+	cxit_create_ep();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret != FI_SUCCESS, "ret is: %d\n", ret);
+
+	/* Tear down RMA objects */
+	cxit_destroy_ep(); /* EP must be destroyed before bound objects */
+
+	cxit_destroy_av();
+	cxit_destroy_cntrs();
+	cxit_destroy_cqs();
+	cxit_teardown_ep();
+}
