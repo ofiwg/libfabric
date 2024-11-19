@@ -1,0 +1,7 @@
+#!/bin/bash 
+
+DIR=$(cd $(dirname $0) && pwd)
+
+PRODUCT=slingshot-host-software-internal \
+CE_CONFIG_FILE=libfabric-cxi.yaml \
+  bash -x $DIR/build.sh -n $@

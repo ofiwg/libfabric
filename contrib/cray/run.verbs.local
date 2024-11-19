@@ -1,0 +1,8 @@
+#!/bin/bash 
+
+DIR=$(cd $(dirname $0) && pwd)
+
+SHS_LOCAL_BUILD=y \
+BRANCH_NAME=${BRANCH_NAME:-$(git rev-parse --abbrev-ref HEAD)} \
+CE_CONFIG_FILE=libfabric-verbs.yaml \
+  bash -x $DIR/build.sh $@

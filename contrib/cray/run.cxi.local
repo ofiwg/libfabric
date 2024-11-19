@@ -1,0 +1,9 @@
+#!/bin/bash 
+
+DIR=$(cd $(dirname $0) && pwd)
+
+SHS_LOCAL_BUILD=y \
+BRANCH_NAME=${BRANCH_NAME:-$(git rev-parse --abbrev-ref HEAD)} \
+PRODUCT=slingshot-host-software-internal \
+CE_CONFIG_FILE=libfabric-cxi.yaml \
+  bash -x $DIR/build.sh $@
