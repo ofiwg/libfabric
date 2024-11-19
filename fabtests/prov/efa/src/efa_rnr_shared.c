@@ -77,9 +77,13 @@ int ft_efa_rnr_init_fabric()
 	}
 
 	fprintf(stdout, "Setting RNR retry count to %zu ...\n", rnr_retry);
-	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_RNR_RETRY, &rnr_retry, sizeof(rnr_retry));
+	/* 
+	 * Cannot use setopt FI_OPT_EFA_RNR_RETRY here because it sets FI_RM_DISABLED, 
+	 * which conflicts with the queue/resend test that requires FI_RM_ENABLED.
+	 */
+	ret = setenv("FI_EFA_RNR_RETRY", "0", 1);
 	if (ret) {
-		FT_PRINTERR("fi_setopt", -ret);
+		FT_PRINTERR("setenv", -ret);
 		return ret;
 	}
 	fprintf(stdout, "RNR retry count has been set to %zu.\n", rnr_retry);

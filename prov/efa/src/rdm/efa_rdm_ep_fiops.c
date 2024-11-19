@@ -1697,6 +1697,12 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 			return -FI_ENOSYS;
 		}
 		efa_rdm_ep->base_ep.rnr_retry = *(size_t *)optval;
+		/*
+		 * If a user is explicitly asking for a retry count that means 
+		 * they also want to manage the resources themselves and the EFA 
+		 * provider should disable resource management to prevent implicit retries.
+		 */
+		efa_rdm_ep->handle_resource_management = FI_RM_DISABLED;
 		break;
 	case FI_OPT_FI_HMEM_P2P:
 		if (optlen != sizeof(int))

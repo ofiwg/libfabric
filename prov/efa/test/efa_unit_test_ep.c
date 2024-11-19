@@ -858,6 +858,31 @@ void test_efa_rdm_ep_setopt_shared_memory_permitted(struct efa_resource **state)
 	assert_null(ep->shm_ep);
 }
 
+/* Test resource management is disabled when user sets FI_OPT_EFA_RNR_RETRY */
+void test_efa_rdm_ep_setopt_rnr_retry(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	size_t rnr_retry = 5;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+
+	efa_unit_test_resource_construct_with_hints(
+		resource, FI_EP_RDM, FI_VERSION(1, 14), resource->hints, false,
+		true);
+
+	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
+				   FI_OPT_EFA_RNR_RETRY, &rnr_retry,
+				   sizeof(rnr_retry)), 0);
+
+	assert_int_equal(fi_enable(resource->ep), 0);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(ep->handle_resource_management, FI_RM_DISABLED);
+}
+
 /**
  * @brief Test fi_enable with different optval of fi_setopt for
  * FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES optname.
