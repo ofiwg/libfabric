@@ -1,0 +1,6 @@
+#!/usr/bin/env bash  
+
+DIR=$(cd $(dirname $0) && pwd)
+
+CE_CONFIG_FILE=libfabric-verbs.yaml \
+  bash $DIR/build.sh -n $@
