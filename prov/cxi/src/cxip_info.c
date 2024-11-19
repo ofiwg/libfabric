@@ -670,6 +670,7 @@ struct cxip_environment cxip_env = {
 		CXIP_MR_CACHE_EVENTS_DISABLE_POLL_NSECS,
 	.mr_cache_events_disable_le_poll_nsecs =
 		CXIP_MR_CACHE_EVENTS_DISABLE_LE_POLL_NSECS,
+	.force_dev_reg_copy = false,
 };
 
 static void cxip_env_init(void)
@@ -1287,6 +1288,12 @@ static void cxip_env_init(void)
 			cxip_env.mr_cache_events_disable_le_poll_nsecs);
 	fi_param_get_size_t(&cxip_prov, "mr_cache_events_disable_le_poll_nsecs",
 			    &cxip_env.mr_cache_events_disable_le_poll_nsecs);
+
+	fi_param_define(&cxip_prov, "force_dev_reg_copy", FI_PARAM_BOOL,
+			"Force device register copy operations. Default: %d",
+			cxip_env.force_dev_reg_copy);
+	fi_param_get_bool(&cxip_prov, "force_dev_reg_copy",
+			  &cxip_env.force_dev_reg_copy);
 
 	set_system_page_size();
 }

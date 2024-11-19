@@ -324,6 +324,7 @@ struct cxip_environment {
 	int hybrid_unexpected_msg_preemptive;
 	size_t mr_cache_events_disable_poll_nsecs;
 	size_t mr_cache_events_disable_le_poll_nsecs;
+	int force_dev_reg_copy;
 };
 
 extern struct cxip_environment cxip_env;
