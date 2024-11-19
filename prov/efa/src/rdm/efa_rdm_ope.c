@@ -1211,6 +1211,11 @@ ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe)
 	       pkt_entry->alloc_type == EFA_RDM_PKE_FROM_UNEXP_POOL ||
 	       pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL);
 
+	if (!txe->ep->rx_readcopy_pkt_pool) {
+		EFA_WARN(FI_LOG_CQ, "readcopy pkt pool does not exist for cloning pkts!");
+		return -FI_EAGAIN;
+	}
+
 	pkt_entry_copy = efa_rdm_pke_clone(pkt_entry,
 					   txe->ep->rx_readcopy_pkt_pool,
 					   EFA_RDM_PKE_FROM_READ_COPY_POOL);
