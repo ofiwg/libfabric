@@ -123,8 +123,11 @@ static inline void sock_av_report_success(struct sock_av *av, void *context,
 	eq_entry.fid = &av->av_fid.fid;
 	eq_entry.context = context;
 	eq_entry.data = num_done;
-	sock_eq_report_event(av->eq, FI_AV_COMPLETE,
-			     &eq_entry, sizeof(eq_entry), flags);
+	if (sock_eq_report_event(av->eq, FI_AV_COMPLETE,
+	    &eq_entry, sizeof(eq_entry), flags))
+		SOCK_LOG_ERROR("Error in writing to EQ\n");
+
+
 }
 
 static void sock_av_report_error(struct sock_av *av, fi_addr_t *fi_addr,
