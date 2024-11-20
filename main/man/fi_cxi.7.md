@@ -1301,6 +1301,10 @@ The CXI provider checks for the following environment variables:
 :   Max amount of time to poll when LE invalidate disabling an MR configured with MR
     match events.
 
+*FI_CXI_FORCE_DEV_REG_COPY*
+:   Force the CXI provider to use the HMEM device register copy routines. If not
+    supported, RDMA operations or memory registration will fail.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 
