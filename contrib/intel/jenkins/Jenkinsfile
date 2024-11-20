@@ -20,6 +20,7 @@ def slurm_batch(partition, node_num, output, command) {
   try {
     sh """sbatch --partition=${partition} -N ${node_num} \
           --wait -o ${output} --open-mode=append \
+          -J ${env.SLURM_JOB_NAME} \
           --wrap=\'env; timeout $TIMEOUT ${command}\'
        """
   } catch (Exception e) {
@@ -365,6 +366,7 @@ pipeline {
       WITH_ENV="'PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH'"
       CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
       DELETE_LOCATION="${env.CUSTOM_WORKSPACE}/middlewares"
+      SLURM_JOB_NAME="${env.JOB_NAME}_${env.BUILD_NUMBER}"
       RUN_LOCATION="${env.CUSTOM_WORKSPACE}/ci_resources/legacy_pipeline_scripts/"
       CI_LOCATION="${env.CUSTOM_WORKSPACE}/ci"
       LOG_DIR = "${env.CUSTOM_WORKSPACE}/log_dir"
@@ -983,6 +985,7 @@ pipeline {
       node ('ze') {
         dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
       }
+      sh "scancel --jobname=\"${SLURM_JOB_NAME}\""
       dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
     }
     success {
