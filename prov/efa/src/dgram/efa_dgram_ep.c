@@ -63,8 +63,6 @@ static int efa_dgram_ep_close(fid_t fid)
 
 	ep = container_of(fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid.fid);
 
-	ofi_bufpool_destroy(ep->recv_wr_pool);
-	ofi_bufpool_destroy(ep->send_wr_pool);
 	efa_dgram_ep_destroy(ep);
 
 	return 0;
@@ -444,16 +442,6 @@ int efa_dgram_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	 */
 	assert(user_info->tx_attr->iov_limit <= 2);
 
-	ret = ofi_bufpool_create(&ep->send_wr_pool,
-		sizeof(struct efa_send_wr), 16, 0, 1024, 0);
-	if (ret)
-		goto err_ep_destroy;
-
-	ret = ofi_bufpool_create(&ep->recv_wr_pool,
-		sizeof(struct efa_recv_wr), 16, 0, 1024, 0);
-	if (ret)
-		goto err_send_wr_destroy;
-
 	ep->base_ep.domain = domain;
 
 	*ep_fid = &ep->base_ep.util_ep.ep_fid;
@@ -468,8 +456,6 @@ int efa_dgram_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 
 	return 0;
 
-err_send_wr_destroy:
-	ofi_bufpool_destroy(ep->send_wr_pool);
 err_ep_destroy:
 	efa_dgram_ep_destroy(ep);
 	return ret;
