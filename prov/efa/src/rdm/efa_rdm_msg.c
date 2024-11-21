@@ -163,6 +163,9 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 	struct efa_rdm_ope *txe;
 	struct util_srx_ctx *srx_ctx;
 
+	efa_rdm_tracepoint(send_begin_msg_context,
+		    (size_t) msg->context, (size_t) msg->addr);
+
 	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
 
 	assert(msg->iov_count <= ep->base_ep.info->tx_attr->iov_limit);
@@ -192,8 +195,6 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 
 	efa_rdm_tracepoint(send_begin, txe->msg_id,
 		    (size_t) txe->cq_entry.op_context, txe->total_len);
-	efa_rdm_tracepoint(send_begin_msg_context,
-		    (size_t) msg->context, (size_t) msg->addr);
 
 	err = efa_rdm_msg_post_rtm(ep, txe);
 	if (OFI_UNLIKELY(err)) {
