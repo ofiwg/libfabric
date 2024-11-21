@@ -269,7 +269,8 @@ insert_prov:
 			dlist_init(&peer_prov->entry);
 			dlist_init(&peer_prov->lpp_map);
 
-			strncpy(peer_prov->lpp_prov_name, prov_name, FI_NAME_MAX);
+			memcpy(peer_prov->lpp_prov_name, prov_name,
+			       FI_NAME_MAX);
 
 			peer_prov->lpp_prov = entry;
 
