@@ -564,6 +564,24 @@ pipeline {
             }
           }
         }
+        stage ('ompi-water') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("pre-build", "pr_build_ompi_water.json")
+              }
+            }
+          }
+        }
+        stage ('ompi-grass') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("pre-build", "pr_build_ompi_grass.json")
+              }
+            }
+          }
+        }
         stage ('mpich-water') {
           steps {
             script {
