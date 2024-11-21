@@ -767,7 +767,7 @@ pipeline {
             script {
               dir (CI_LOCATION) {
                 run_ci("CI_shmem_grass", "pr_shmem_1n2ppn_grass.json")
-                run_ci("CI_shmem_water", "pr_shmem_2n1ppn_water.json")
+                run_ci("CI_shmem_grass", "pr_shmem_2n1ppn_grass.json")
               }
             }
           }
