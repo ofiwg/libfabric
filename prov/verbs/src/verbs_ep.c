@@ -191,7 +191,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 	}
 
 	if (vrb_wr_consumes_recv(wr)) {
-		if  (!ep->peer_rq_credits || 
+		if  (!ep->peer_rq_credits ||
 		     (ep->peer_rq_credits == 1 && !(flags & OFI_PRIORITY)))
 		/* Last credit is reserved for credit update */
 			goto freectx;
@@ -1161,7 +1161,7 @@ static struct fi_ops vrb_ep_ops = {
 	.close = vrb_ep_close,
 	.bind = vrb_ep_bind,
 	.control = vrb_ep_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = vrb_ep_ops_open,
 };
 
 static struct fi_ops_cm vrb_dgram_cm_ops = {
@@ -1394,7 +1394,6 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 	*ep_fid = &ep->util_ep.ep_fid;
 	ep->util_ep.ep_fid.fid.ops = &vrb_ep_ops;
 	ep->util_ep.ep_fid.ops = &vrb_ep_base_ops;
-	(*ep_fid)->fid.ops->ops_open = vrb_ep_ops_open;
 
 	vrb_prof_func_end("vrb_open_ep");
 
