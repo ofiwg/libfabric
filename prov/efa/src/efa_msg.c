@@ -151,7 +151,7 @@ static ssize_t efa_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, u
 {
 	struct efa_base_ep *base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 
-	return efa_post_recv(base_ep, msg, flags);
+	return efa_post_recv(base_ep, msg, flags | base_ep->util_ep.rx_msg_flags);
 }
 
 static ssize_t efa_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
@@ -164,7 +164,7 @@ static ssize_t efa_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, &desc, 1, src_addr, context, 0);
 
-	return efa_post_recv(base_ep, &msg, 0);
+	return efa_post_recv(base_ep, &msg, efa_rx_flags(base_ep));
 }
 
 static ssize_t efa_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
@@ -175,7 +175,7 @@ static ssize_t efa_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void
 
 	EFA_SETUP_MSG(msg, iov, desc, count, src_addr, context, 0);
 
-	return efa_post_recv(base_ep, &msg, 0);
+	return efa_post_recv(base_ep, &msg, efa_rx_flags(base_ep));
 }
 
 static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi_msg *msg, uint64_t flags)
@@ -266,7 +266,7 @@ static ssize_t efa_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, u
 {
 	struct efa_base_ep *base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 
-	return efa_post_send(base_ep, msg, flags);
+	return efa_post_send(base_ep, msg, flags | base_ep->util_ep.tx_msg_flags);
 }
 
 static ssize_t efa_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -275,13 +275,11 @@ static ssize_t efa_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct efa_base_ep *base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	struct fi_msg msg;
 	struct iovec iov;
-	uint64_t flags;
 
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, &desc, 1, dest_addr, context, 0);
-	flags = base_ep->info->tx_attr->op_flags;
 
-	return efa_post_send(base_ep, &msg, flags);
+	return efa_post_send(base_ep, &msg, efa_tx_flags(base_ep));
 }
 
 static ssize_t efa_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -290,14 +288,11 @@ static ssize_t efa_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 	struct efa_base_ep *base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	struct fi_msg msg;
 	struct iovec iov;
-	uint64_t flags;
 
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, &desc, 1, dest_addr, context, data);
 
-	flags = base_ep->info->tx_attr->op_flags | FI_REMOTE_CQ_DATA;
-
-	return efa_post_send(base_ep, &msg, flags);
+	return efa_post_send(base_ep, &msg, efa_tx_flags(base_ep) | FI_REMOTE_CQ_DATA);
 }
 
 static ssize_t efa_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
@@ -305,13 +300,10 @@ static ssize_t efa_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void
 {
 	struct efa_base_ep *base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	struct fi_msg msg;
-	uint64_t flags;
 
 	EFA_SETUP_MSG(msg, iov, desc, count, dest_addr, context, 0);
 
-	flags = base_ep->info->tx_attr->op_flags;
-
-	return efa_post_send(base_ep, &msg, flags);
+	return efa_post_send(base_ep, &msg, efa_tx_flags(base_ep));
 }
 
 static ssize_t efa_ep_msg_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -320,16 +312,13 @@ static ssize_t efa_ep_msg_inject(struct fid_ep *ep_fid, const void *buf, size_t 
 	struct efa_base_ep *base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	struct fi_msg msg;
 	struct iovec iov;
-	uint64_t flags;
 
 	assert(len <= base_ep->domain->device->efa_attr.inline_buf_size);
 
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, NULL, 1, dest_addr, NULL, 0);
 
-	flags = base_ep->info->tx_attr->op_flags | FI_INJECT;
-
-	return efa_post_send(base_ep, &msg, flags);
+	return efa_post_send(base_ep, &msg, FI_INJECT);
 }
 
 static ssize_t efa_ep_msg_injectdata(struct fid_ep *ep_fid, const void *buf,
@@ -339,16 +328,13 @@ static ssize_t efa_ep_msg_injectdata(struct fid_ep *ep_fid, const void *buf,
 	struct efa_base_ep *base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	struct fi_msg msg;
 	struct iovec iov;
-	uint64_t flags;
 
 	assert(len <= base_ep->domain->device->efa_attr.inline_buf_size);
 
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, NULL, 1, dest_addr, NULL, data);
 
-	flags = base_ep->info->tx_attr->op_flags | FI_REMOTE_CQ_DATA | FI_INJECT;
-
-	return efa_post_send(base_ep, &msg, flags);
+	return efa_post_send(base_ep, &msg, FI_REMOTE_CQ_DATA | FI_INJECT);
 }
 
 struct fi_ops_msg efa_msg_ops = {
