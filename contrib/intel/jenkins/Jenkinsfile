@@ -487,15 +487,6 @@ pipeline {
             }
           }
         }
-        stage ('ivysaur') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_ivysaur.json")
-              }
-            }
-          }
-        }
         stage ('daos') {
           agent {
             node {
@@ -706,13 +697,16 @@ pipeline {
             }
           }
         }
-        stage('CI_fabtests_ivysaur') {
+        stage('CI_fabtests_tcp_io_uring') {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("CI_fabtests_ivysaur_reg", "pr_fabtests_ivysaur_reg.json")
-                run_ci("CI_fabtests_ivysaur_dbg", "pr_fabtests_ivysaur_dbg.json")
-                run_ci("CI_fabtests_ivysaur_dl", "pr_fabtests_ivysaur_dl.json")
+                run_ci("CI_fabtests_tcp_io_uring_reg",
+                       "pr_fabtests_tcp_io_uring_reg.json")
+                run_ci("CI_fabtests_tcp_io_uring_dbg",
+                       "pr_fabtests_tcp_io_uring_dbg.json")
+                run_ci("CI_fabtests_tcp_io_uring_dl",
+                       "pr_fabtests_tcp_io_uring_dl.json")
               }
             }
           }
