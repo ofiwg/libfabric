@@ -2429,4 +2429,4 @@ size_t ofi_vrb_speed(uint8_t speed, uint8_t width)
 }
 
 /* log_prefix is used by fi_log and by prov/util */
-const char *log_prefix = "";
+_Thread_local const char *log_prefix = "";
