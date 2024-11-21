@@ -1243,8 +1243,8 @@ struct util_ns {
 	size_t		name_len;
 	size_t		service_len;
 
-	int		run;
-	int		is_initialized;
+	ofi_atomic32_t	run;
+	ofi_atomic32_t	is_initialized;
 	ofi_atomic32_t	ref;
 
 	ofi_ns_service_cmp_func_t	service_cmp;
