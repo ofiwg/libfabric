@@ -11,6 +11,7 @@
 #include "efa_rdm_rma.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_cntr.h"
+#include "efa_rdm_tracepoint.h"
 
 int efa_rdm_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma,
 			      size_t count, uint32_t flags,
@@ -173,6 +174,9 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	void *shm_desc[EFA_RDM_IOV_LIMIT];
 	void **tmp_desc;
 	struct util_srx_ctx *srx_ctx;
+
+	efa_rdm_tracepoint(read_begin_msg_context,
+			   (size_t) msg->context, (size_t) msg->addr);
 
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "read iov_len: %lu flags: %lx\n",
@@ -429,6 +433,9 @@ static inline ssize_t efa_rdm_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep,
 	ssize_t err;
 	struct efa_rdm_ope *txe;
 	struct util_srx_ctx *srx_ctx;
+
+	efa_rdm_tracepoint(write_begin_msg_context,
+			   (size_t) msg->context, (size_t) msg->addr);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
 
