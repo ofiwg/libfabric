@@ -1636,10 +1636,16 @@ int opx_tid_get_tids_for_range(struct fi_opx_ep *opx_ep,
 
 		/* opx_register_tid_region was done in add region, check result */
 		if (rc != FI_SUCCESS) {
-			OPX_TID_CACHE_DEBUG_FPRINTF("## %s:%u return %d (%s) errno=%d (%s)\n",
-				__func__, __LINE__,
-				rc, strerror(rc),
-				errno, strerror(errno));
+			if (rc >= 0) {
+				OPX_TID_CACHE_DEBUG_FPRINTF("## %s:%u return %d (%s) errno=%d (%s)\n",
+					__func__, __LINE__,
+					rc, strerror(rc),
+					errno, strerror(errno));
+			} else {
+				OPX_TID_CACHE_DEBUG_FPRINTF("## %s:%u return %d (negative error code) errno=%d (%s)\n",
+					__func__, __LINE__,
+					rc, errno, strerror(errno));
+			}
 			ret = -FI_EAGAIN;
 			goto register_end;
 		}

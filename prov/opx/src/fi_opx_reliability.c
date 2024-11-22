@@ -2810,7 +2810,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 			service_cpu_sub_str = strdup(service_cpu_str_iter);
 			service_cpu_sub_str_iter = strtok_r(service_cpu_sub_str, "-", &service_cpu_sub_str_save);
 
-			cpu_id_range_begin = strtoul(service_cpu_sub_str_iter, NULL, 10);
+			cpu_id_range_begin = service_cpu_sub_str_iter ? strtoul(service_cpu_sub_str_iter, NULL, 10) : 0;
 			cpu_id_range_end = cpu_id_range_begin;
 
 			service_cpu_sub_str_iter = strtok_r(NULL, "-", &service_cpu_sub_str_save);

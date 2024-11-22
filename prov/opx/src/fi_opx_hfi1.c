@@ -3971,7 +3971,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 					   calculated packet_bytes is ok. */
 					tidlen_remaining -= 2;
 					tidlen_consumed  += 2;
-				} else {
+				} else if (tidlen_remaining >= 1) {
 					/* only 1 page left or only 4k packet possible */
 					packet_bytes = MIN(packet_bytes, OPX_HFI1_TID_PAGESIZE);
 					tidlen_remaining -= 1;
