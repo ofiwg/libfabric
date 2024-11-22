@@ -687,7 +687,7 @@ static int fi_opx_close_ep(fid_t fid)
 			goto err_unlock;
 		}
 	}
-    // Placeholder functions to be uncommented when they do more than return 0
+	// Placeholder functions to be uncommented when they do more than return 0
 	/*
 	fi_opx_finalize_cm_ops(&opx_ep->ep_fid.fid);
 	fi_opx_finalize_msg_ops(&opx_ep->ep_fid);
@@ -1507,12 +1507,15 @@ static int fi_opx_apply_info_and_init_ops(struct fi_opx_ep *opx_ep) {
 				goto err;
 		return 0;
 err:
-		fi_opx_finalize_cm_ops(&opx_ep->ep_fid.fid);
-		fi_opx_finalize_msg_ops(&opx_ep->ep_fid);
-		fi_opx_finalize_rma_ops(&opx_ep->ep_fid);
-		fi_opx_finalize_tagged_ops(&opx_ep->ep_fid);
-		fi_opx_finalize_atomic_ops(&opx_ep->ep_fid);
-		return -1;
+	// Placeholder functions to be uncommented when they do more than return 0
+	/*
+	fi_opx_finalize_cm_ops(&opx_ep->ep_fid.fid);
+	fi_opx_finalize_msg_ops(&opx_ep->ep_fid);
+	fi_opx_finalize_rma_ops(&opx_ep->ep_fid);
+	fi_opx_finalize_tagged_ops(&opx_ep->ep_fid);
+	fi_opx_finalize_atomic_ops(&opx_ep->ep_fid);
+	*/
+	return -1;
 }
 
 static void fi_opx_update_counter(struct fi_opx_cntr *opx_cntr) {
@@ -1910,11 +1913,14 @@ unlock:
 	/* Unlock */
 	fi_opx_unlock(&opx_ep->lock);
 err:
+	// Placeholder functions to be uncommented when they do more than return 0
+	/*
 	fi_opx_finalize_cm_ops(&opx_ep->ep_fid.fid);
 	fi_opx_finalize_msg_ops(&opx_ep->ep_fid);
 	fi_opx_finalize_rma_ops(&opx_ep->ep_fid);
 	fi_opx_finalize_tagged_ops(&opx_ep->ep_fid);
 	fi_opx_finalize_atomic_ops(&opx_ep->ep_fid);
+	*/
 	return -1;
 }
 

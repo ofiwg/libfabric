@@ -442,7 +442,6 @@ int fi_opx_scalable_ep (struct fid_domain *domain,
 	memset(memptr, 0, sizeof(struct fi_opx_sep)+L2_CACHE_LINE_SIZE);
 	opx_sep = (struct fi_opx_sep *)(((uintptr_t)memptr+L2_CACHE_LINE_SIZE) & ~(L2_CACHE_LINE_SIZE-1));
 	opx_sep->memptr = memptr;
-	memptr = NULL;
 
 	opx_sep->domain = (struct fi_opx_domain *) domain;
 

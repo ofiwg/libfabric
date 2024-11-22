@@ -158,7 +158,7 @@ int fi_opx_fabric(struct fi_fabric_attr *attr,
 	opx_fabric->fabric_fid.fid.context = context;
 	opx_fabric->fabric_fid.fid.ops = &fi_opx_fi_ops;
 	opx_fabric->fabric_fid.ops = &fi_opx_ops_fabric;
-	opx_fabric->fabric_fid.api_version = attr->api_version;
+	opx_fabric->fabric_fid.api_version = attr ? attr->api_version : 0;
 	opx_fabric->tid_fabric = NULL;
 #ifdef OPX_HMEM
 	opx_fabric->hmem_fabric = NULL;
