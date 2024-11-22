@@ -509,6 +509,10 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
 	}
 
+#if HAVE_LTTNG
+	efa_tracepoint_wr_id_post_read((void *)pkt_entry);
+#endif
+
 	err = ibv_wr_complete(qp->ibv_qp_ex);
 
 	if (OFI_UNLIKELY(err))
@@ -596,6 +600,10 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
 	}
+
+#if HAVE_LTTNG
+	efa_tracepoint_wr_id_post_write((void *)pkt_entry);
+#endif
 
 	if (!(txe->fi_flags & FI_MORE)) {
 		err = ibv_wr_complete(qp->ibv_qp_ex);
