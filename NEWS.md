@@ -6,6 +6,95 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v2.0.0, Fri Dec 13, 2024
+========================
+
+## Core
+
+- xpmem: Cleanup xpmem before monitors
+- Remove redundant windows.h
+- hmem/cuda: Add env variable to enable/disable CUDA DMABUF
+- Update ofi_vrb_speed
+
+## CXI
+
+- Add FI_OPT_CUDA_API_PERMITTED tests
+- Define FI_CXI_FORCE_DEV_REG_COPY
+- Support FI_OPT_CUDA_API_PERMITTED
+- Testing FI_RM_ENABLED
+- Correct checking of MR test rc
+- Update unit test for collectives
+- Add test for invalid client RKEY
+- Fix broken client key check
+- Ignore FLT_OVERFLOW and FLT_INVALID errors
+- Update CXI man page.
+- Enable dmabuf for ROCR by default.
+- Remove disable_dmabuf_cuda and disable_dmabuf_rocr
+- Disable use of dmabuf by default for cuda
+- Remove use of deprecated FI_ORDER_NONE
+- Report RMA order used in debug output
+- Remove srx unittests
+- Add FI_PEER capability bit
+- Support shared receive queues
+- Implement shared Completion Queues
+
+## EFA
+
+- Add tracepoints for rma operations
+- Adjust the location of tracepoint
+- Implement the rma interface
+- Fix efa_msg flags
+- Remove efa_send_wr, send_wr_pool and recv_wr_pool from dgram_ep
+- Fix the read_bad_recv_status unit test
+- Implement efa_msg interface
+- Implement FI_MORE for fi_recv in zero copy recv mode
+- Fix the error path of zero copy recv
+- Move inject sizes from rdm ep to base ep
+- Fix the ep list scan in cq/cntr read
+- Fix the error handling for unsolicited recv
+- Fall back to zero sl when non-zero sl qp creation failed
+- Disable zero copy receive if p2p is not available
+- Initialize efa fork support in EFA_INI
+- Update efa_hmem and efa_fork_support log to FI_LOG_CORE
+- Make efa_hmem_info a global variable
+- Set max rma order size correctly
+
+## Hook
+
+Fix the preprocessor
+
+## LNX
+
+- Fix av strncpy
+- Fix various issues with initial commit
+
+## SHM
+
+- Cleanup op flags
+
+## Sockets
+
+- Fixed coverity issue for unchecked return value.
+
+## Util
+
+- Set srx completion flags and msg_len properly
+- fi_pingpong: Fix coverity issue about integer overflow
+
+## Verbs
+
+- Fix coverity issue about overflowed return value
+- Enable implicit dmabuf mr reg for more HMEM ifaces
+
+## Fabtests
+
+- Add FI_MORE pytest for fi_recv in zcpy recv mode
+- Allow tests with FI_MORE flag by using fi_recvmsg
+- New fabtest fi_flood to test over subscription of resources
+- test_configs/ofi_rxm/tcp.test: remove cntr RMA testing
+- Fix compiler warning about unitialized variable
+
+
 v2.0.0 beta, Fri Oct 25, 2024
 ==============================
 
