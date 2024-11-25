@@ -1522,11 +1522,6 @@ if (ret)
     error;
 ```
 
-When an endpoint does not support FI_FENCE (e.g. optimized MR), a provider
-specific transmit flag, FI_CXI_WEAK_FENCE, may be specified on an alias EP
-to issue a FENCE operation to create a data ordering point for the alias.
-This is supported for one-sided operations only.
-
 Alias EP must be closed prior to closing the original EP.
 
 ## PCIe Atomics
