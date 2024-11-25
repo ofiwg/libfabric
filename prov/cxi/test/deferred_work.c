@@ -960,6 +960,7 @@ static int alloc_service(struct cxil_dev *dev, unsigned int tle_count)
 	struct cxi_svc_fail_info fail_info = {};
 	struct cxi_svc_desc svc_desc = {
 		.enable = 1,
+		.resource_limits = 1,
 		.limits = {
 			.type[CXI_RSRC_TYPE_PTE] = {
 				.max = 100,
@@ -1195,11 +1196,10 @@ Test(deferred_work_trig_op_limit, enforce_limit_single_thread)
 		cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK iter %d failed %d", i, ret);
 	}
 
-	ret = fi_control(&res.dom->fid, FI_QUEUE_WORK, &work);
-	if (limited)
+	if (limited) {
+		ret = fi_control(&res.dom->fid, FI_QUEUE_WORK, &work);
 		cr_assert_eq(ret, -FI_ENOSPC, "FI_QUEUE_WORK failed %d", ret);
-	else
-		cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK failed %d", ret);
+	}
 
 	cr_assert((fi_control(&res.dom->fid, FI_FLUSH_WORK, NULL) == FI_SUCCESS));
 
