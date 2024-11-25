@@ -475,7 +475,14 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		pkt_entry = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
 		qp = efa_domain->qp_table[ibv_wc_read_qp_num(ibv_cq->ibv_cq_ex) & efa_domain->qp_table_sz_m1];
 		ep = container_of(qp->base_ep, struct efa_rdm_ep, base_ep);
+#if HAVE_LTTNG
 		efa_rdm_tracepoint(poll_cq, (size_t) ibv_cq->ibv_cq_ex->wr_id);
+		if (pkt_entry && pkt_entry->ope)
+			efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
+					   (size_t) pkt_entry->ope->cq_entry.op_context,
+					   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
+					   pkt_entry->ope->addr);
+#endif
 		opcode = ibv_wc_read_opcode(ibv_cq->ibv_cq_ex);
 		if (ibv_cq->ibv_cq_ex->status) {
 			prov_errno = efa_rdm_cq_get_prov_errno(ibv_cq->ibv_cq_ex);
