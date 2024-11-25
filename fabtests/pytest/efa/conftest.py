@@ -1,4 +1,5 @@
 import pytest
+from efa_common import has_rdma
 
 # The memory types for bi-directional tests.
 memory_type_list_bi_dir = [
@@ -33,6 +34,19 @@ def rma_bw_memory_type(memory_type, rma_operation_type):
     if is_test_bi_dir and (memory_type not in [_.values[0] for _ in memory_type_list_bi_dir]):
         pytest.skip("Duplicated memory type for bi-directional test")
     return memory_type
+
+@pytest.fixture(scope="function")
+def rma_bw_completion_semantic(cmdline_args, completion_semantic, rma_operation_type):
+    if completion_semantic != 'delivery_complete':
+        # There is no difference between DC and non-DC for read as it's
+        # not a transmission
+        if rma_operation_type == 'read':
+            pytest.skip("Duplicate completion semantic for fi_read test")
+        assert rma_operation_type in ['write', 'writedata']
+        # If device support rdma write, all the transmissions are DC
+        if has_rdma(cmdline_args, 'write'):
+            pytest.skip("Duplicate completion semantic for fi_write* test")
+    return completion_semantic
 
 
 @pytest.fixture(scope="module", params=["r:0,4,64",
