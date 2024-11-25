@@ -118,11 +118,10 @@ enum {
  */
 #define FI_CXI_UNRELIABLE (1ULL << 61)
 
-/*
- * Request a provider specific weak FENCE operation to facilitate an
- * EP alias ordering point, when the original EP utilizes PCIe RO=1.
- */
-#define FI_CXI_WEAK_FENCE (1ULL << 63)
+/* Depreciated. */
+#define FI_CXI_WEAK_FENCE \
+	_Pragma ("GCC warning \"'FI_CXI_WEAK_FENCE' macro is deprecated\"") \
+	(1ULL << 63)
 
 /*
  * Used in conjunction with the deferred work queue API. If a deferred work
