@@ -28,10 +28,11 @@ def rma_operation_type(request):
     return request.param
 
 @pytest.fixture(scope="module")
-def check_rma_bw_memory_type(memory_type, rma_operation_type):
+def rma_bw_memory_type(memory_type, rma_operation_type):
     is_test_bi_dir = False if rma_operation_type == "writedata" else True
     if is_test_bi_dir and (memory_type not in [_.values[0] for _ in memory_type_list_bi_dir]):
         pytest.skip("Duplicated memory type for bi-directional test")
+    return memory_type
 
 
 @pytest.fixture(scope="module", params=["r:0,4,64",
