@@ -128,6 +128,8 @@ void test_efa_rdm_ep_close_discard_posted_recv();
 void test_efa_rdm_ep_zcpy_recv_cancel();
 void test_efa_rdm_ep_zcpy_recv_eagain();
 void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion();
+void test_efa_rdm_ep_rx_refill_threshold_smaller_than_rx_size();
+void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size();
 void test_dgram_cq_read_empty_cq();
 void test_ibv_cq_ex_read_empty_cq();
 void test_ibv_cq_ex_read_failed_poll();
