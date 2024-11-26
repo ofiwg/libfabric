@@ -15,15 +15,10 @@ Write-Verbose "moving NetworkDirect headers.."
 move NetDirect\include\* include\windows
 Write-Verbose "done"
 
-$efaWinVersion="1.0.0"
-Write-Verbose "downloading efawin version ${efaWinVersion} files.."
-Invoke-WebRequest -Uri "https://github.com/aws/efawin/archive/refs/tags/v${efaWinVersion}.zip" -OutFile "efawin.zip"
-Write-Verbose "done"
-
-Write-Verbose "extracting efawin files.."
-$wd=$PWD.Path; & { Add-Type -A "System.IO.Compression.FileSystem"; [IO.Compression.ZipFile]::ExtractToDirectory("$wd\efawin.zip", "$wd"); }
+Write-Verbose "downloading efawin files.."
+git clone https://github.com/aws/efawin
 Write-Verbose "done"
 
 Write-Verbose "copying efawin files.."
-xcopy /s efawin-$efaWinVersion\interface\* prov\efa\src\windows\
+xcopy /s efawin\interface\* prov\efa\src\windows\
 Write-Verbose "done"
