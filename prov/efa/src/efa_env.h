@@ -79,6 +79,12 @@ struct efa_env {
 	int use_sm2;
 	enum efa_env_huge_page_setting huge_page_setting;
 	int use_unsolicited_write_recv;
+	/**
+	 * The threshold that EFA provider will refill the internal rx pkt pool.
+	 * When the number of internal rx pkts to post is lower than this threshold,
+	 * the refill will be skipped.
+	 */
+	size_t internal_rx_refill_threshold;
 };
 
 extern struct efa_env efa_env;
