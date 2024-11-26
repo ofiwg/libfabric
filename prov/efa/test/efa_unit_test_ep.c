@@ -1187,3 +1187,83 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(struct efa_res
 
 	free(pkt_entry_vec);
 }
+
+static
+void test_efa_rdm_ep_rx_refill_impl(struct efa_resource **state, int threshold, int rx_size)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry;
+	int i;
+	size_t threshold_orig;
+
+	if (threshold < 4 || rx_size < 4) {
+		fprintf(stderr, "Too small threshold or rx_size for this test\n");
+		fail();
+	}
+
+	threshold_orig = efa_env.internal_rx_refill_threshold;
+
+	efa_env.internal_rx_refill_threshold = threshold;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+	resource->hints->rx_attr->size = rx_size;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+	                                            resource->hints, true, true);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	assert_int_equal(efa_rdm_ep_get_rx_pool_size(efa_rdm_ep), rx_size);
+
+	/* Grow the rx pool and post rx pkts */
+	efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, efa_rdm_ep_get_rx_pool_size(efa_rdm_ep));
+
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, 0);
+	for (i = 0; i < 4; i++) {
+		pkt_entry = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_rx_pkt_pool, i);
+		assert_non_null(pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
+	}
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, 4);
+
+	efa_rdm_ep_bulk_post_internal_rx_pkts(efa_rdm_ep);
+
+	/**
+	 * efa_rx_pkts_to_post < FI_EFA_RX_REFILL_THRESHOLD
+	 * pkts should NOT be refilled
+	 */
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, 4);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, rx_size);
+
+	/* releasing more pkts to reach the threshold or rx_size*/
+	for (i = 4; i < MIN(rx_size, threshold); i++) {
+		pkt_entry = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_rx_pkt_pool, i);
+		assert_non_null(pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
+	}
+
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, i);
+
+	efa_rdm_ep_bulk_post_internal_rx_pkts(efa_rdm_ep);
+
+	/**
+	 * efa_rx_pkts_to_post == min(FI_EFA_RX_REFILL_THRESHOLD, FI_EFA_RX_SIZE)
+	 * pkts should be refilled
+	 */
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, 0);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, rx_size + i);
+
+	/* recover the original value */
+	efa_env.internal_rx_refill_threshold = threshold_orig;
+}
+
+void test_efa_rdm_ep_rx_refill_threshold_smaller_than_rx_size(struct efa_resource **state)
+{
+	test_efa_rdm_ep_rx_refill_impl(state, 8, 64);
+}
+
+void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size(struct efa_resource **state)
+{
+	test_efa_rdm_ep_rx_refill_impl(state, 128, 64);
+}
