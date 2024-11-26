@@ -338,7 +338,7 @@ def skip() {
   }
 
   echo "Changeset is: ${changeStrings.toArray()}"
-  if (changeStrings.toArray().every { it =~ /(?:fabtests\/pytests|man|prov\/efa|prov\/opx|contrib\/aws).*$/ }) {
+  if (changeStrings.toArray().every { it =~ /(?:fabtests\/pytests|man|prov\/efa|prov\/opx|prov\/cxi|prov\/lpp|contrib\/aws).*$/ }) {
     echo "DONT RUN!"
     return true
   }
