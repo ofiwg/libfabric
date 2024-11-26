@@ -460,15 +460,6 @@ pipeline {
             }
           }
         }
-        stage ('ucx') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_ucx.json")
-              }
-            }
-          }
-        }
         stage ('cyndaquil') {
           steps {
             script {
