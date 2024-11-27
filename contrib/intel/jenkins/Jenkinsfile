@@ -7,6 +7,7 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def BUILD_MODES=["reg", "dbg", "dl"]
 @Field def PYTHON_VERSION="3.9"
 @Field def TIMEOUT="7200"
+@Field def weekly=false
 
 def run_python(version, command, output=null) {
   if (output != null)
@@ -272,9 +273,17 @@ def bootstrap_ci() {
 }
 
 def checkout_tar(name) {
+  if (env.WEEKLY == null) {
+    weekly = false
+  } else {
+    weekly = env.WEEKLY.toBoolean()
+  }
   dir ("${env.CUSTOM_WORKSPACE}/${name}/libfabric") {
     checkout scm
     TARGET=check_target()
+    if (weekly) {
+      TARGET=env.WEEKLY_TARGET
+    }
     sh """
       git remote add upstream ${env.UPSTREAM}
       git pull --rebase upstream ${TARGET}
@@ -386,11 +395,6 @@ pipeline {
       steps {
         script {
           git_diffs()
-          if (env.WEEKLY == null) {
-            weekly = false
-          } else {
-            weekly = env.WEEKLY.toBoolean()
-          }
           if (weekly) {
             TIMEOUT="21600" 
           } 
