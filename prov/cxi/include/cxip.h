@@ -2957,6 +2957,9 @@ struct cxip_coll_mc {
 	int next_red_id;			// next available red_id
 	int max_red_id;				// limit total concurrency
 	int seqno;				// rolling seqno for packets
+	int close_state;			// the state of the close operation
+	bool has_closed;			// true after a mc close call
+	bool has_error;				// true if any error
 	bool is_multicast;			// true if multicast address
 	bool arm_disable;			// arm-disable for testing
 	bool retry_disable;			// retry-disable for testing
