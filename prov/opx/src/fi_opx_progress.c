@@ -38,19 +38,22 @@
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/fi_direct_eq.h"
 
-//based on psm2 implementation
+// based on psm2 implementation
 
 __OPX_FORCE_INLINE__
 int normalize_core_id(int core_id, int num_cores)
 {
-	if (core_id < 0)
+	if (core_id < 0) {
 		core_id += num_cores;
+	}
 
-	if (core_id < 0)
+	if (core_id < 0) {
 		core_id = 0;
+	}
 
-	if (core_id >= num_cores)
+	if (core_id >= num_cores) {
 		core_id = num_cores - 1;
+	}
 
 	return core_id;
 }
@@ -59,66 +62,68 @@ int normalize_core_id(int core_id, int num_cores)
 // No affinity is set by default
 void fi_opx_progress_set_affinity(char *affinity)
 {
-        int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
-        int core_id;
-        cpu_set_t cpuset;
-        char *triplet;
-        int n, start, end, stride;
-        int set_count = 0;
+	int	  num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+	int	  core_id;
+	cpu_set_t cpuset;
+	char	 *triplet;
+	int	  n, start, end, stride;
+	int	  set_count = 0;
 
-        if (!affinity) {
-                FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
-                        "progress thread affinity not set\n");
-                return;
-        }
+	if (!affinity) {
+		FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "progress thread affinity not set\n");
+		return;
+	}
 
-        CPU_ZERO(&cpuset);
+	CPU_ZERO(&cpuset);
 
-        for (triplet = affinity; triplet; triplet = strchr(triplet, 'c')) {
-                if (triplet[0] == ',')
-                        triplet++;
+	for (triplet = affinity; triplet; triplet = strchr(triplet, 'c')) {
+		if (triplet[0] == ',') {
+			triplet++;
+		}
 
-                stride = 1;
-                n = sscanf(triplet, "%d:%d:%d", &start, &end, &stride);
-                if (n < 1)
-                        continue;
+		stride = 1;
+		n      = sscanf(triplet, "%d:%d:%d", &start, &end, &stride);
+		if (n < 1) {
+			continue;
+		}
 
-                if (n < 2)
-                        end = start;
+		if (n < 2) {
+			end = start;
+		}
 
-                if (stride < 1)
-                        stride = 1;
+		if (stride < 1) {
+			stride = 1;
+		}
 
-                start = normalize_core_id(start, num_cores);
-                end = normalize_core_id(end, num_cores);
+		start = normalize_core_id(start, num_cores);
+		end   = normalize_core_id(end, num_cores);
 
-                for (core_id = start; core_id <= end; core_id += stride) {
-                        CPU_SET(core_id, &cpuset);
-                        set_count++;
-                }
+		for (core_id = start; core_id <= end; core_id += stride) {
+			CPU_SET(core_id, &cpuset);
+			set_count++;
+		}
 
-                FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
-                        "core set [%d:%d:%d] added to progress thread affinity set\n",
-                        start, end, stride);
-        }
+		FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "core set [%d:%d:%d] added to progress thread affinity set\n",
+			start, end, stride);
+	}
 
-        if (set_count)
-                pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-        else
-                FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
-                        "progress thread affinity not set due to invalid format\n");
-
+	if (set_count) {
+		pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+	} else {
+		FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "progress thread affinity not set due to invalid format\n");
+	}
 }
 
 // function the progress thread runs
-void* fi_opx_progress_func (void *args) {
-	struct progress_func_args *func_args = (struct progress_func_args *) args;
-	struct fid_cq *cq = func_args->cq;
-	char* prog_affinity = func_args->prog_affinity;
-	struct fi_opx_progress_track *progress_track = func_args->progress_track;
-	int progress_interval = func_args->progress_interval;
-	int sleep_usec;
-	struct timespec ts;
+void *fi_opx_progress_func(void *args)
+{
+	struct progress_func_args    *func_args		= (struct progress_func_args *) args;
+	struct fid_cq		     *cq		= func_args->cq;
+	char			     *prog_affinity	= func_args->prog_affinity;
+	struct fi_opx_progress_track *progress_track	= func_args->progress_track;
+	int			      progress_interval = func_args->progress_interval;
+	int			      sleep_usec;
+	struct timespec		      ts;
 
 	fi_opx_progress_set_affinity(prog_affinity);
 
@@ -128,7 +133,7 @@ void* fi_opx_progress_func (void *args) {
 		sleep_usec = progress_interval;
 	}
 
-	ts.tv_sec = sleep_usec / 1000000;
+	ts.tv_sec  = sleep_usec / 1000000;
 	ts.tv_nsec = (sleep_usec % 1000000) * 1000;
 
 	while (!cq || !cq->ops) {
@@ -144,41 +149,37 @@ void* fi_opx_progress_func (void *args) {
 }
 
 // start the progress thread
-void fi_opx_start_progress(struct fi_opx_progress_track *progress_track, struct fid_cq *cq, char* prog_affinity, int progress_interval)
+void fi_opx_start_progress(struct fi_opx_progress_track *progress_track, struct fid_cq *cq, char *prog_affinity,
+			   int progress_interval)
 {
-
 	progress_track->keep_running = true;
 
-        int err;
+	int			   err;
 	struct progress_func_args *args = malloc(sizeof(struct progress_func_args));
 
 	if (!args) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_CQ,
-			"Unable to create arguments needed for PROGRESS_AUTO");
+		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "Unable to create arguments needed for PROGRESS_AUTO");
 		goto err;
 	}
 
-	args->cq = cq;
+	args->cq		= cq;
 	args->progress_interval = progress_interval;
-	args->progress_track = progress_track;
-	args->prog_affinity = prog_affinity;
+	args->progress_track	= progress_track;
+	args->prog_affinity	= prog_affinity;
 
 	progress_track->progress_thread = malloc(sizeof(pthread_t));
-	if (!progress_track->progress_thread){
-		FI_WARN(fi_opx_global.prov, FI_LOG_CQ,
-			"Unable to created thread for PROGRESS_AUTO");
+	if (!progress_track->progress_thread) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "Unable to created thread for PROGRESS_AUTO");
 		goto err;
 	}
-        err = pthread_create(progress_track->progress_thread, NULL,
-                             fi_opx_progress_func, (void *)args);
-        if (err) {
+	err = pthread_create(progress_track->progress_thread, NULL, fi_opx_progress_func, (void *) args);
+	if (err) {
 		progress_track->keep_running = false;
-		FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
-			"pthread_create returns %d\n", err);
+		FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "pthread_create returns %d\n", err);
 		goto err;
-        } else {
-                FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "progress thread started\n");
-        }
+	} else {
+		FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "progress thread started\n");
+	}
 
 	return;
 

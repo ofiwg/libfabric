@@ -37,11 +37,11 @@
 #include "rdma/fi_eq.h"
 #include "rdma/opx/fi_opx_eq.h"
 
-#define FI_OPX_COMMS_NONE 0x0000000000000000ull
-#define FI_OPX_COMMS_LOCAL 0x0008000000000000ull
-#define FI_OPX_COMMS_REMOTE 0x0010000000000000ull
+#define FI_OPX_COMMS_NONE	  0x0000000000000000ull
+#define FI_OPX_COMMS_LOCAL	  0x0008000000000000ull
+#define FI_OPX_COMMS_REMOTE	  0x0010000000000000ull
 #define FI_OPX_COMMS_LOCAL_REMOTE 0x0018000000000000ull
-#define FI_OPX_COMMS_COUNT 4
+#define FI_OPX_COMMS_COUNT	  4
 
 /* Number of types in enum fi_cq_format */
 #define FI_CQ_FORMAT_COUNT 5
@@ -49,19 +49,17 @@
 /* Number of types in enum opx_hfi1_type */
 #define OPX_HFI1_TYPE_COUNT 3
 
-typedef struct fi_ops_cq op_matrix_t[FI_CQ_FORMAT_COUNT][1 /* OFI_RELIABILITY_KIND_ONLOAD */][FI_OPX_COMMS_COUNT][OPX_HFI1_TYPE_COUNT];
+typedef struct fi_ops_cq op_matrix_t[FI_CQ_FORMAT_COUNT][1 /* OFI_RELIABILITY_KIND_ONLOAD */][FI_OPX_COMMS_COUNT]
+				    [OPX_HFI1_TYPE_COUNT];
 
-static ssize_t
-fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
+static ssize_t fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "(begin)\n");
 
 	struct fi_opx_cq *opx_cq = container_of(cq, struct fi_opx_cq, cq_fid);
 
 	if (IS_PROGRESS_MANUAL(opx_cq->domain)) {
-
-		struct opx_context *context =
-			 (struct opx_context *) opx_cq->err.head;
+		struct opx_context *context = (struct opx_context *) opx_cq->err.head;
 
 		if ((context == NULL) || (context->byte_counter != 0)) {
 			/* perhaps an in-progress truncated rendezvous receive? */
@@ -70,12 +68,11 @@ fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags
 		}
 
 		const enum fi_threading threading = opx_cq->domain->threading;
-		const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
+		const int lock_required		  = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 		fi_opx_lock_if_required(&opx_cq->lock, lock_required);
-		ofi_cq_err_memcpy(opx_cq->domain->fabric->fabric_fid.api_version,
-				  buf, &context->err_entry);
-		slist_remove_head((struct slist *)&opx_cq->err);
+		ofi_cq_err_memcpy(opx_cq->domain->fabric->fabric_fid.api_version, buf, &context->err_entry);
+		slist_remove_head((struct slist *) &opx_cq->err);
 		OPX_BUF_FREE(context);
 		fi_opx_unlock_if_required(&opx_cq->lock, lock_required);
 
@@ -88,8 +85,7 @@ fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags
 	return 1;
 }
 
-static ssize_t
-fi_opx_cq_sread(struct fid_cq *cq, void *buf, size_t len, const void *cond, int timeout)
+static ssize_t fi_opx_cq_sread(struct fid_cq *cq, void *buf, size_t len, const void *cond, int timeout)
 {
 	FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n");
 	abort();
@@ -98,9 +94,8 @@ fi_opx_cq_sread(struct fid_cq *cq, void *buf, size_t len, const void *cond, int 
 	return -errno;
 }
 
-static ssize_t
-fi_opx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
-		   fi_addr_t *src_addr, const void *cond, int timeout)
+static ssize_t fi_opx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len, fi_addr_t *src_addr, const void *cond,
+				   int timeout)
 {
 	FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n");
 	abort();
@@ -109,28 +104,27 @@ fi_opx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
 	return -errno;
 }
 
-static const char *
-fi_opx_cq_strerror(struct fid_cq *cq, int prov_errno, const void *err_data,
-	       char *buf, size_t len)
+static const char *fi_opx_cq_strerror(struct fid_cq *cq, int prov_errno, const void *err_data, char *buf, size_t len)
 {
 	FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n");
 	errno = FI_ENOSYS;
 	return NULL;
 }
 
-#define FI_OPX_CQ_OPS_STRUCT_NAME(FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE)			\
-  fi_opx_ops_cq_ ## FORMAT ## _ ## LOCK ## _ ## RELIABILITY ## _ ## MASK ## _ ## CAPS ## _ ## HFI1_TYPE			\
+#define FI_OPX_CQ_OPS_STRUCT_NAME(FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE) \
+	fi_opx_ops_cq_##FORMAT##_##LOCK##_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE
 
-#define FI_OPX_CQ_OPS_STRUCT_INIT(FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE)			\
-  {										\
-    .size    = sizeof(struct fi_ops_cq),					\
-    .read      = FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE),		\
-    .readfrom  = FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE),	\
-    .readerr   = fi_opx_cq_readerr,						\
-    .sread     = fi_opx_cq_sread,						\
-    .sreadfrom = fi_opx_cq_sreadfrom,						\
-    .signal    = fi_no_cq_signal,						\
-    .strerror  = fi_opx_cq_strerror,						\
-  }
+#define FI_OPX_CQ_OPS_STRUCT_INIT(FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE)                                      \
+	{                                                                                                                \
+		.size	   = sizeof(struct fi_ops_cq),                                                                   \
+		.read	   = FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE), \
+		.readfrom  = FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, FORMAT, LOCK, RELIABILITY, MASK, CAPS,         \
+							     HFI1_TYPE),                                                 \
+		.readerr   = fi_opx_cq_readerr,                                                                          \
+		.sread	   = fi_opx_cq_sread,                                                                            \
+		.sreadfrom = fi_opx_cq_sreadfrom,                                                                        \
+		.signal	   = fi_no_cq_signal,                                                                            \
+		.strerror  = fi_opx_cq_strerror,                                                                         \
+	}
 
 #endif

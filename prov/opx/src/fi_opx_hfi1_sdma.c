@@ -74,7 +74,7 @@ void fi_opx_hfi1_sdma_bounce_buf_hit_zero(struct fi_opx_completion_counter *cc)
 int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
-	struct fi_opx_ep * opx_ep = params->opx_ep;
+	struct fi_opx_ep	       *opx_ep = params->opx_ep;
 
 	assert(params->work_elem.work_type == OPX_WORK_TYPE_LAST);
 
@@ -129,17 +129,12 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 	OPX_BUF_FREE(params->cc);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== PENDING DPUT %u COMPLETE\n", work->work_elem.complete);
+		     "===================================== PENDING DPUT %u COMPLETE\n", work->work_elem.complete);
 	return FI_SUCCESS;
 }
 
-void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
-				    int writev_rc,
-				    struct iovec *iovs,
-				    const int num_iovs,
-				    const char *file,
-				    const char *func,
-				    const int line)
+void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, int writev_rc, struct iovec *iovs, const int num_iovs,
+				    const char *file, const char *func, const int line)
 {
 	const pid_t pid = getpid();
 
@@ -151,11 +146,12 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 		}
 	}
 
-	fprintf(stderr, "(%d) %s:%s():%d ERROR: SDMA Abort errno=%d (%s)\n",
-		pid, file, func, line, errno, strerror(errno));
-	fprintf(stderr, "(%d) ===================================== SDMA_WE -- "
-			"called writev rc=%d Params were: "
-			"fd=%d iovecs=%p num_iovs=%d \n",
+	fprintf(stderr, "(%d) %s:%s():%d ERROR: SDMA Abort errno=%d (%s)\n", pid, file, func, line, errno,
+		strerror(errno));
+	fprintf(stderr,
+		"(%d) ===================================== SDMA_WE -- "
+		"called writev rc=%d Params were: "
+		"fd=%d iovecs=%p num_iovs=%d \n",
 		pid, writev_rc, opx_ep->hfi->fd, iovs, num_iovs);
 	fprintf(stderr, "(%d) hfi->info.sdma.queue_size == %0hu\n", pid, opx_ep->hfi->info.sdma.queue_size);
 	fprintf(stderr, "(%d) hfi->info.sdma.fill_index == %0hu\n", pid, opx_ep->hfi->info.sdma.fill_index);
@@ -164,42 +160,32 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 	fprintf(stderr, "(%d) hfi->info.sdma.completion_queue == %p\n", pid, opx_ep->hfi->info.sdma.completion_queue);
 
 	struct iovec *iov_ptr = iovs;
-	int req_num = 0;
+	int	      req_num = 0;
 
 	do {
 		struct fi_opx_hfi1_sdma_header_vec *header_vec =
 			(struct fi_opx_hfi1_sdma_header_vec *) iov_ptr[0].iov_base;
-		size_t header_vec_len = iov_ptr[0].iov_len;
-		uint8_t meminfo_set = (header_vec_len == OPX_SDMA_REQ_HDR_SIZE[1]) ? 1 : 0;
-		struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(header_vec, meminfo_set);
-		uint8_t req_info_iovs = (req_info->ctrl >> HFI1_SDMA_REQ_IOVCNT_SHIFT)
-						& HFI1_SDMA_REQ_IOVCNT_MASK;
+		size_t		      header_vec_len = iov_ptr[0].iov_len;
+		uint8_t		      meminfo_set    = (header_vec_len == OPX_SDMA_REQ_HDR_SIZE[1]) ? 1 : 0;
+		struct sdma_req_info *req_info	     = OPX_SDMA_REQ_INFO_PTR(header_vec, meminfo_set);
+		uint8_t req_info_iovs = (req_info->ctrl >> HFI1_SDMA_REQ_IOVCNT_SHIFT) & HFI1_SDMA_REQ_IOVCNT_MASK;
 		uint8_t req_info_meminfo_set =
 #ifdef OPX_HMEM
-			(req_info->ctrl >> HFI1_SDMA_REQ_MEMINFO_SHIFT)
-						& HFI1_SDMA_REQ_MEMINFO_MASK;
+			(req_info->ctrl >> HFI1_SDMA_REQ_MEMINFO_SHIFT) & HFI1_SDMA_REQ_MEMINFO_MASK;
 #else
 			0;
 #endif
-		uint8_t req_info_opcode = (req_info->ctrl >> HFI1_SDMA_REQ_OPCODE_SHIFT)
-						& HFI1_SDMA_REQ_OPCODE_MASK;
+		uint8_t req_info_opcode = (req_info->ctrl >> HFI1_SDMA_REQ_OPCODE_SHIFT) & HFI1_SDMA_REQ_OPCODE_MASK;
 
 		fprintf(stderr,
 			"(%d) [%d] header_vec=%p len=%lu meminfo_set=%hhu req_meminfo_set=%hhu req_iovs=%hhu req_opcode=%hhu/(%s)\n",
-			pid, req_num, header_vec, header_vec_len,
-			meminfo_set, req_info_meminfo_set, req_info_iovs,
-			req_info_opcode,
-			(req_info_opcode == EAGER) ? "EAGER (non-TID)" : "EXPECTED (TID)");
-		fprintf(stderr,
-			"(%d) [%d]    req.npkts=%hu req.fragsize=%hu req.cmp_idx=%hu req.ctrl=%#04hX\n",
-			pid, req_num,
-			req_info->npkts,
-			req_info->fragsize,
-			req_info->comp_idx,
-			req_info->ctrl);
+			pid, req_num, header_vec, header_vec_len, meminfo_set, req_info_meminfo_set, req_info_iovs,
+			req_info_opcode, (req_info_opcode == EAGER) ? "EAGER (non-TID)" : "EXPECTED (TID)");
+		fprintf(stderr, "(%d) [%d]    req.npkts=%hu req.fragsize=%hu req.cmp_idx=%hu req.ctrl=%#04hX\n", pid,
+			req_num, req_info->npkts, req_info->fragsize, req_info->comp_idx, req_info->ctrl);
 
-		enum fi_hmem_iface hmem_iface = FI_HMEM_SYSTEM;
-		uint64_t hmem_device = 0ul;
+		enum fi_hmem_iface hmem_iface  = FI_HMEM_SYSTEM;
+		uint64_t	   hmem_device = 0ul;
 #ifdef OPX_HMEM
 		if (meminfo_set) {
 			struct sdma_req_meminfo *meminfo = (struct sdma_req_meminfo *) (req_info + 1);
@@ -207,20 +193,17 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 			// We currently only ever use one payload IOV that would require
 			// setting meminfo, and it will be the fist one:
 			// index 0 (the first payload IOV, or iov[1]).
-			const unsigned meminfo_idx = 0;
+			const unsigned meminfo_idx   = 0;
 			const unsigned hfi1_mem_type = HFI1_MEMINFO_TYPE_ENTRY_GET(meminfo->types, meminfo_idx);
-			hmem_iface = (enum fi_hmem_iface) OPX_HMEM_OFI_MEM_TYPE[hfi1_mem_type];
-			hmem_device = meminfo->context[0];
-			fprintf(stderr, "(%d) [%d] hmem_iface=%u hmem_device=%lu meminfo->types=%#16.16llX meminfo->context[0]=%#16.16llX meminfo->context[15]=%#16.16llX\n",
-				pid, req_num,
-				hmem_iface, hmem_device,
-				meminfo->types,
-				meminfo->context[0],
+			hmem_iface		     = (enum fi_hmem_iface) OPX_HMEM_OFI_MEM_TYPE[hfi1_mem_type];
+			hmem_device		     = meminfo->context[0];
+			fprintf(stderr,
+				"(%d) [%d] hmem_iface=%u hmem_device=%lu meminfo->types=%#16.16llX meminfo->context[0]=%#16.16llX meminfo->context[15]=%#16.16llX\n",
+				pid, req_num, hmem_iface, hmem_device, meminfo->types, meminfo->context[0],
 				meminfo->context[15]);
 		}
 #endif
-		fprintf(stderr, "(%d) [%d] PBC: %#16.16lX\n",
-			pid, req_num, header_vec->scb.scb_9B.qw0);
+		fprintf(stderr, "(%d) [%d] PBC: %#16.16lX\n", pid, req_num, header_vec->scb.scb_9B.qw0);
 
 		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_9B.hdr, OPX_HFI1_TYPE, func, line);
@@ -228,56 +211,51 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 			fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_16B.hdr, OPX_HFI1_TYPE, func, line);
 		}
 
-		fprintf(stderr, "(%d) [%d] req data iov=%p len=%lu\n",
-			pid, req_num, iov_ptr[1].iov_base, iov_ptr[1].iov_len);
+		fprintf(stderr, "(%d) [%d] req data iov=%p len=%lu\n", pid, req_num, iov_ptr[1].iov_base,
+			iov_ptr[1].iov_len);
 
 		if (hmem_iface == FI_HMEM_SYSTEM) {
-			fprintf(stderr, "(%d) [%d] First 8 bytes of %p == %#16.16lX\n",
-				pid, req_num,
-				iov_ptr[1].iov_base,
-				*((uint64_t *) iov_ptr[1].iov_base));
+			fprintf(stderr, "(%d) [%d] First 8 bytes of %p == %#16.16lX\n", pid, req_num,
+				iov_ptr[1].iov_base, *((uint64_t *) iov_ptr[1].iov_base));
 		} else {
 			uint64_t first_qw;
-			opx_copy_from_hmem(hmem_iface, hmem_device, OPX_HMEM_NO_HANDLE, &first_qw,
-					iov_ptr[1].iov_base, sizeof(uint64_t), OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
-			fprintf(stderr, "(%d) [%d] First 8 bytes of %p == %#16.16lX\n",
-				pid, req_num, iov_ptr[1].iov_base, first_qw);
+			opx_copy_from_hmem(hmem_iface, hmem_device, OPX_HMEM_NO_HANDLE, &first_qw, iov_ptr[1].iov_base,
+					   sizeof(uint64_t), OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
+			fprintf(stderr, "(%d) [%d] First 8 bytes of %p == %#16.16lX\n", pid, req_num,
+				iov_ptr[1].iov_base, first_qw);
 		}
 
 		if (req_info_iovs > 2) {
 			if (req_info_opcode == EAGER) {
 				fprintf(stderr,
-					"(%d) [%d] ERROR: Request specifies 3 IOVs, but opcode is set to EAGER!\n",
-					pid, req_num);
+					"(%d) [%d] ERROR: Request specifies 3 IOVs, but opcode is set to EAGER!\n", pid,
+					req_num);
 			}
-			fprintf(stderr, "(%d) [%d] tid iov=%p len=%lu pairs=%lu\n",
-				pid, req_num, iov_ptr[2].iov_base, iov_ptr[2].iov_len,
-				iov_ptr[2].iov_len / sizeof(uint32_t));
+			fprintf(stderr, "(%d) [%d] tid iov=%p len=%lu pairs=%lu\n", pid, req_num, iov_ptr[2].iov_base,
+				iov_ptr[2].iov_len, iov_ptr[2].iov_len / sizeof(uint32_t));
 			if (iov_ptr[2].iov_len < sizeof(uint32_t)) {
 				fprintf(stderr,
 					"(%d) [%d] ERROR: Request opcode is set to EXPECTED (TID), but TID IOV's length is < minimum!\n",
 					pid, req_num);
 			}
-			uint32_t kdeth = (uint32_t) (header_vec->scb.scb_9B.hdr.qw_9B[2] >> 32);
-			uint32_t tidctrl = (kdeth >> FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT) & FI_OPX_HFI1_KDETH_TIDCTRL;
-			uint32_t tididx = (kdeth >> FI_OPX_HFI1_KDETH_TID_SHIFT) & FI_OPX_HFI1_KDETH_TID;
-			uint32_t tidOMshift = (kdeth >> KDETH_OM_SHIFT) & KDETH_OM_MASK;
-			uint32_t tidoffset = (kdeth >> KDETH_OFFSET_SHIFT) & KDETH_OFFSET_MASK;
-			uint32_t actual_offset = tidoffset << (tidOMshift ? KDETH_OM_LARGE_SHIFT
-									  : KDETH_OM_SMALL_SHIFT);
+			uint32_t kdeth	       = (uint32_t) (header_vec->scb.scb_9B.hdr.qw_9B[2] >> 32);
+			uint32_t tidctrl       = (kdeth >> FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT) & FI_OPX_HFI1_KDETH_TIDCTRL;
+			uint32_t tididx	       = (kdeth >> FI_OPX_HFI1_KDETH_TID_SHIFT) & FI_OPX_HFI1_KDETH_TID;
+			uint32_t tidOMshift    = (kdeth >> KDETH_OM_SHIFT) & KDETH_OM_MASK;
+			uint32_t tidoffset     = (kdeth >> KDETH_OFFSET_SHIFT) & KDETH_OFFSET_MASK;
+			uint32_t actual_offset = tidoffset
+						 << (tidOMshift ? KDETH_OM_LARGE_SHIFT : KDETH_OM_SMALL_SHIFT);
 
 			fprintf(stderr,
 				"(%d) [%d] kdeth=%08X tidctrl=%08X tididx=%08X tidOMshift=%08X tidoffset=%08X actual offset=%08X\n",
-				pid, req_num, kdeth, tidctrl, tididx, tidOMshift,
-				tidoffset, actual_offset);
+				pid, req_num, kdeth, tidctrl, tididx, tidOMshift, tidoffset, actual_offset);
 
-			uint32_t *tidpairs = (uint32_t*)iov_ptr[2].iov_base;
-			for (int j = 0; j < (iov_ptr[2].iov_len / sizeof(uint32_t)); ++j ) {
-				fprintf(stderr, "(%d) [%d] tid    [%u]=%#8.8X LEN %u, CTRL %u, IDX %u\n",
-					pid, req_num, j, tidpairs[j],
-					(int)FI_OPX_EXP_TID_GET((tidpairs[j]),LEN),
-					(int)FI_OPX_EXP_TID_GET((tidpairs[j]),CTRL),
-					(int)FI_OPX_EXP_TID_GET((tidpairs[j]),IDX));
+			uint32_t *tidpairs = (uint32_t *) iov_ptr[2].iov_base;
+			for (int j = 0; j < (iov_ptr[2].iov_len / sizeof(uint32_t)); ++j) {
+				fprintf(stderr, "(%d) [%d] tid    [%u]=%#8.8X LEN %u, CTRL %u, IDX %u\n", pid, req_num,
+					j, tidpairs[j], (int) FI_OPX_EXP_TID_GET((tidpairs[j]), LEN),
+					(int) FI_OPX_EXP_TID_GET((tidpairs[j]), CTRL),
+					(int) FI_OPX_EXP_TID_GET((tidpairs[j]), IDX));
 			}
 		} else if (req_info_opcode == EXPECTED) {
 			fprintf(stderr,
@@ -291,8 +269,8 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
 		if (retry_rc > 0) {
 			fprintf(stderr, "(%d) [%d] Retry succeeded!\n", pid, req_num);
 		} else {
-			fprintf(stderr, "(%d) [%d] Retry FAILED retry_rc=%ld errno=%d (%s)\n",
-			pid, req_num, retry_rc, errno, strerror(errno));
+			fprintf(stderr, "(%d) [%d] Retry FAILED retry_rc=%ld errno=%d (%s)\n", pid, req_num, retry_rc,
+				errno, strerror(errno));
 		}
 #endif
 		++req_num;
@@ -313,7 +291,8 @@ void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep)
 		assert(request->fill_index != OPX_SDMA_FILL_INDEX_INVALID);
 		assert(*request->comp_state == OPX_SDMA_COMP_QUEUED);
 		if (OFI_UNLIKELY(request->comp_entry.status == ERROR)) {
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			FI_DBG_TRACE(
+				fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== SDMA Request (%p) -- Found error in queued entry, status=%d, error=%d\n",
 				request, request->comp_entry.status, request->comp_entry.errcode);
 			*request->comp_state = OPX_SDMA_COMP_ERROR;
@@ -327,24 +306,17 @@ void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep)
 }
 
 __OPX_FORCE_INLINE__
-int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep,
-			struct iovec *iovecs,
-			int iovs_used,
-			uint16_t avail,
-			uint16_t fill_index,
-			const char *file,
-			const char *func,
-			const int line)
+int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep, struct iovec *iovecs, int iovs_used, uint16_t avail,
+			 uint16_t fill_index, const char *file, const char *func, const int line)
 {
-	opx_ep->hfi->info.sdma.fill_index = fill_index;
+	opx_ep->hfi->info.sdma.fill_index	 = fill_index;
 	opx_ep->hfi->info.sdma.available_counter = avail;
 
 #ifdef OPX_DEBUG_COUNTERS_SDMA
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.writev_count);
 
 	union fi_opx_timer_stamp timestamp;
-	uint64_t writev_start_ns =
-		fi_opx_timer_now(&timestamp, &opx_ep->reliability->state.service->tx.timer);
+	uint64_t writev_start_ns = fi_opx_timer_now(&timestamp, &opx_ep->reliability->state.service->tx.timer);
 #endif
 
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "WRITEV");
@@ -352,8 +324,7 @@ int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep,
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITEV");
 
 #ifdef OPX_DEBUG_COUNTERS_SDMA
-	uint64_t writev_end_ns =
-		fi_opx_timer_now(&timestamp, &opx_ep->reliability->state.service->tx.timer);
+	uint64_t writev_end_ns = fi_opx_timer_now(&timestamp, &opx_ep->reliability->state.service->tx.timer);
 
 	uint64_t writev_time_ns = writev_end_ns - writev_start_ns;
 
@@ -363,12 +334,11 @@ int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep,
 #endif
 
 	if (writev_rc <= 0) {
-		fi_opx_hfi1_sdma_handle_errors(opx_ep, writev_rc,
-			iovecs, iovs_used, __FILE__, __func__, __LINE__);
+		fi_opx_hfi1_sdma_handle_errors(opx_ep, writev_rc, iovecs, iovs_used, __FILE__, __func__, __LINE__);
 	}
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.writev_calls[iovs_used]);
-	return(writev_rc);
+	return (writev_rc);
 }
 
 void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
@@ -384,10 +354,10 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 	assert(!slist_empty(&queue->list));
 
 	struct iovec iovecs[OPX_SDMA_HFI_MAX_IOVS_PER_WRITE];
-	int iovs_used = 0;
-	int iovs_free = OPX_SDMA_HFI_MAX_IOVS_PER_WRITE;
-	uint16_t avail = opx_ep->hfi->info.sdma.available_counter;
-	uint16_t fill_index = opx_ep->hfi->info.sdma.fill_index;
+	int	     iovs_used	= 0;
+	int	     iovs_free	= OPX_SDMA_HFI_MAX_IOVS_PER_WRITE;
+	uint16_t     avail	= opx_ep->hfi->info.sdma.available_counter;
+	uint16_t     fill_index = opx_ep->hfi->info.sdma.fill_index;
 
 	while (!slist_empty(&queue->list) && avail) {
 		struct opx_sdma_request *request = (struct opx_sdma_request *) slist_remove_head(&queue->list);
@@ -403,11 +373,11 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 		if (iovs_free < request->num_iovs)
 #endif
 		{
-			int err = opx_hfi1_sdma_writev(opx_ep, iovecs, iovs_used, avail,
-					fill_index, __FILE__, __func__, __LINE__);
+			int err = opx_hfi1_sdma_writev(opx_ep, iovecs, iovs_used, avail, fill_index, __FILE__, __func__,
+						       __LINE__);
 			if (err < 0) {
 				/* Error occured in writev. Add the request back to queue */
-				slist_insert_head((struct slist_entry *)request, &queue->list);
+				slist_insert_head((struct slist_entry *) request, &queue->list);
 				return;
 			}
 			iovs_used = 0;
@@ -415,13 +385,13 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 		}
 
 		struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&request->header_vec, request->set_meminfo);
-		req_info->comp_idx = fill_index;
-		request->fill_index = fill_index;
+		req_info->comp_idx	       = fill_index;
+		request->fill_index	       = fill_index;
 		OPX_TRACER_TRACE_SDMA(OPX_TRACER_BEGIN, "SDMA_COMPLETE_%hu", fill_index);
 
 		assert(opx_ep->hfi->info.sdma.queued_entries[fill_index] == NULL);
-		request->comp_entry.status = QUEUED;
-		request->comp_entry.errcode = 0;
+		request->comp_entry.status			  = QUEUED;
+		request->comp_entry.errcode			  = 0;
 		opx_ep->hfi->info.sdma.queued_entries[fill_index] = &request->comp_entry;
 
 		fill_index = (fill_index + 1) % (opx_ep->hfi->info.sdma.queue_size);
@@ -437,14 +407,12 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 
 		*(request->comp_state) = OPX_SDMA_COMP_QUEUED;
 
-		slist_insert_tail((struct slist_entry *)request, &opx_ep->tx->sdma_pending_queue);
+		slist_insert_tail((struct slist_entry *) request, &opx_ep->tx->sdma_pending_queue);
 	}
 
 	assert(iovs_used);
 
-	opx_hfi1_sdma_writev(opx_ep, iovecs, iovs_used, avail,
-			fill_index, __FILE__, __func__, __LINE__);
+	opx_hfi1_sdma_writev(opx_ep, iovecs, iovs_used, avail, fill_index, __FILE__, __func__, __LINE__);
 
 	queue->slots_avail = avail;
 }
-

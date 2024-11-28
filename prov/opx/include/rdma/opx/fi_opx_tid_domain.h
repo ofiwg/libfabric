@@ -48,17 +48,16 @@ struct opx_tid_fabric {
 };
 
 struct opx_tid_domain {
-	struct util_domain util_domain;
+	struct util_domain     util_domain;
 	struct opx_tid_fabric *fabric;
-	struct ofi_mr_cache *tid_cache;
-	uint64_t key;
-	struct dlist_entry list_entry; /* linked to tid_domain_list */
+	struct ofi_mr_cache   *tid_cache;
+	uint64_t	       key;
+	struct dlist_entry     list_entry; /* linked to tid_domain_list */
 };
 
 int opx_close_tid_domain(struct opx_tid_domain *tid_domain, int locked);
-int opx_open_tid_domain(struct opx_tid_fabric *tid_fabric,
-		      struct fi_info *info,
-		      struct opx_tid_domain **opx_tid_domain);
+int opx_open_tid_domain(struct opx_tid_fabric *tid_fabric, struct fi_info *info,
+			struct opx_tid_domain **opx_tid_domain);
 
 int opx_close_tid_fabric(struct opx_tid_fabric *opx_tid_fabric);
 int opx_open_tid_fabric(struct opx_tid_fabric **opx_tid_fabric);

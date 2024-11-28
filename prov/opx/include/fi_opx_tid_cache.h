@@ -37,7 +37,6 @@
 #include "rdma/opx/fi_opx_tid_domain.h"
 #include "fi_opx_tid.h"
 
-
 /* @brief Setup the MR cache.
  *
  * This function enables the MR cache using the util MR cache code.
@@ -46,10 +45,9 @@
  * @param domain	The EFA domain where cache will be used.
  * @return 0 on success, fi_errno on failure.
  */
-int opx_tid_cache_setup(struct ofi_mr_cache **cache,
-			struct opx_tid_domain *domain);
+int opx_tid_cache_setup(struct ofi_mr_cache **cache, struct opx_tid_domain *domain);
 
-int opx_tid_cache_add_abort();
+int  opx_tid_cache_add_abort();
 void opx_tid_cache_delete_abort();
 
 enum opx_tid_cache_entry_status {
@@ -62,20 +60,19 @@ enum opx_tid_cache_entry_status {
 };
 
 struct opx_tid_cache_chain {
-	uint32_t		entry_count;
-	struct iovec		range;
-	struct ofi_mr_entry	*entries[OPX_MAX_TID_COUNT];
+	uint32_t	     entry_count;
+	struct iovec	     range;
+	struct ofi_mr_entry *entries[OPX_MAX_TID_COUNT];
 };
 
 /* Flush cache entries */
-int opx_tid_cache_flush_all(struct ofi_mr_cache *cache,const bool flush_lru,const bool flush_all);
+int opx_tid_cache_flush_all(struct ofi_mr_cache *cache, const bool flush_lru, const bool flush_all);
 
 __OPX_FORCE_INLINE__
 int opx_tid_cache_flush(struct ofi_mr_cache *cache, const bool flush_lru)
 {
 	/* Nothing to do, early exit */
-	if (dlist_empty(&cache->dead_region_list) &&
-	    (!flush_lru || dlist_empty(&cache->lru_list))) {
+	if (dlist_empty(&cache->dead_region_list) && (!flush_lru || dlist_empty(&cache->lru_list))) {
 		return 0;
 	}
 
@@ -95,14 +92,12 @@ void opx_tid_cache_purge_ep(struct ofi_mr_cache *cache, struct fi_opx_ep *opx_ep
 void opx_tid_cache_cleanup(struct ofi_mr_cache *cache);
 
 /* De-register (lazy, unless force is true) a memory region on TID rendezvous completion */
-void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
-			    const int64_t tid_length);
+void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr, const int64_t tid_length);
 
 /* Register a memory region for TID rendezvous,
  * return 0 on success
  * returns non-zero on failure
  */
-int opx_register_for_rzv(struct fi_opx_ep *opx_ep,
-			 struct fi_opx_hmem_iov *cur_addr_range,
+int opx_register_for_rzv(struct fi_opx_ep *opx_ep, struct fi_opx_hmem_iov *cur_addr_range,
 			 struct opx_tid_addr_block *tid_addr_block);
 #endif /* _FI_PROV_OPX_TID_CACHE_H_ */

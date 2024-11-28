@@ -60,105 +60,103 @@
 #define FI_OPX_PROTOCOL_VERSION (1)
 /* --- end */
 
-#define FI_OPX_PROVIDER_NAME		"opx"
+#define FI_OPX_PROVIDER_NAME "opx"
 // Optimized builds will crash if the provider version is something other than this
 // So it's hard to communicate that the Opx provider is PRE-GA via the version number
 // Delete this comment when OPX is GA-ed
-#define FI_OPX_PROVIDER_VERSION	(OFI_VERSION_DEF_PROV)
-#define FI_OPX_DEVICE_MAX_PATH_NAME	(32)
-#define FI_OPX_FABRIC_NAME		"OPX-100"
-#define FI_OPX_DOMAIN_NAME		"ib0"
-#define FI_OPX_DOMAIN_NAME_PREFIX	"ib"
+#define FI_OPX_PROVIDER_VERSION	    (OFI_VERSION_DEF_PROV)
+#define FI_OPX_DEVICE_MAX_PATH_NAME (32)
+#define FI_OPX_FABRIC_NAME	    "OPX-100"
+#define FI_OPX_DOMAIN_NAME	    "ib0"
+#define FI_OPX_DOMAIN_NAME_PREFIX   "ib"
 
-#define FI_OPX_CACHE_LINE_SIZE		(64)
-#define FI_OPX_CACHE_LINE_QWS		(FI_OPX_CACHE_LINE_SIZE/sizeof(uint64_t))
+#define FI_OPX_CACHE_LINE_SIZE (64)
+#define FI_OPX_CACHE_LINE_QWS  (FI_OPX_CACHE_LINE_SIZE / sizeof(uint64_t))
 
-#define FI_OPX_MAX_STRLEN		(64)
+#define FI_OPX_MAX_STRLEN (64)
 
 #define EXIT_FAILURE 1
 
 // TODO: This is needed until we complete the locking model.
-#define OPX_LOCK				0
+#define OPX_LOCK 0
 
 // These defines may change or disappear as we develop more capabilities.
-#define OPX_CQ_FORMAT			FI_CQ_FORMAT_TAGGED
-#define OPX_RELIABILITY		OFI_RELIABILITY_KIND_ONLOAD
-#define OPX_MASK				FI_OPX_HDRQ_MASK_RUNTIME
-#define OPX_CQ_CAPS			0x0000000000000000ull
-#define OPX_EP_CAPS			0x0018000000000000ull
-#define OPX_TAGGED_CAPS		0x0018000000000000ull
+#define OPX_CQ_FORMAT	FI_CQ_FORMAT_TAGGED
+#define OPX_RELIABILITY OFI_RELIABILITY_KIND_ONLOAD
+#define OPX_MASK	FI_OPX_HDRQ_MASK_RUNTIME
+#define OPX_CQ_CAPS	0x0000000000000000ull
+#define OPX_EP_CAPS	0x0018000000000000ull
+#define OPX_TAGGED_CAPS 0x0018000000000000ull
 
 // Uncomment to enabled Opx flight recorder
-//#define FLIGHT_RECORDER_ENABLE		(1)
+// #define FLIGHT_RECORDER_ENABLE		(1)
 
 extern struct fi_provider fi_opx_provider;
 struct fi_opx_daos_hfi_rank_key {
-	uint8_t		hfi_unit_number;
-	uint32_t	rank;
+	uint8_t	 hfi_unit_number;
+	uint32_t rank;
 };
 
 struct fi_opx_daos_hfi_rank {
 	struct fi_opx_daos_hfi_rank_key key;
-	uint32_t instance;
-	UT_hash_handle 	hh;         /* makes this structure hashable */
+	uint32_t			instance;
+	UT_hash_handle			hh; /* makes this structure hashable */
 };
 
-typedef uint32_t opx_lid_t;  /* only 3 bytes of lid is used */
+typedef uint32_t opx_lid_t; /* only 3 bytes of lid is used */
 
 /* hfi1 type for bit logic */
 enum opx_hfi1_type {
-	OPX_HFI1_UNDEF		= 0,	// undefined
-	OPX_HFI1_JKR_9B		= 1,    // CN5000 built for mixed network. Internal use
-	OPX_HFI1_WFR		= 2,	// Omni-path (all generations)
-	OPX_HFI1_JKR		= 4 	// CN5000 (initial generation)
+	OPX_HFI1_UNDEF	= 0, // undefined
+	OPX_HFI1_JKR_9B = 1, // CN5000 built for mixed network. Internal use
+	OPX_HFI1_WFR	= 2, // Omni-path (all generations)
+	OPX_HFI1_JKR	= 4  // CN5000 (initial generation)
 };
 
 /* Will remove after 16B SDMA support is finished */
-#define OPX_NO_9B_SUPPORT(_hfi1_type)       			             \
-do {       								     \
-	if(!(_hfi1_type & OPX_HFI1_JKR)) {                                   \
-		fprintf(stderr, "%s NO JKR 9B SUPPORT for %u %s\n", __func__,\
-		    _hfi1_type,                                              \
-		    _hfi1_type & OPX_HFI1_WFR ? "OPX_HFI1_WFR" :   	     \
-		    _hfi1_type & OPX_HFI1_JKR_9B ? "OPX_HFI1_JKR_9B" :       \
-		    "UNKNOWN" );                                             \
-		if(getenv("OPX_9B_ABORT")) abort();                          \
-	}								     \
-	assert(_hfi1_type != OPX_HFI1_UNDEF);                                \
-} while(0)
+#define OPX_NO_9B_SUPPORT(_hfi1_type)                                                             \
+	do {                                                                                      \
+		if (!(_hfi1_type & OPX_HFI1_JKR)) {                                               \
+			fprintf(stderr, "%s NO JKR 9B SUPPORT for %u %s\n", __func__, _hfi1_type, \
+				_hfi1_type &OPX_HFI1_WFR    ? "OPX_HFI1_WFR" :                    \
+				_hfi1_type &OPX_HFI1_JKR_9B ? "OPX_HFI1_JKR_9B" :                 \
+							      "UNKNOWN");                         \
+			if (getenv("OPX_9B_ABORT"))                                               \
+				abort();                                                          \
+		}                                                                                 \
+		assert(_hfi1_type != OPX_HFI1_UNDEF);                                             \
+	} while (0)
 
-
-#define OPX_NO_16B_SUPPORT(_hfi1_type)       			             \
-do {       								     \
-	if(!(_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {               \
-		fprintf(stderr, "%s NO 16B SUPPORT for %u %s\n", __func__,   \
-		    _hfi1_type, _hfi1_type & OPX_HFI1_JKR ? "OPX_HFI1_JKR" : \
-		    "UNKNOWN" );                                             \
-		if(getenv("OPX_16B_ABORT")) abort();                         \
-	}								     \
-	assert(_hfi1_type != OPX_HFI1_UNDEF);                                \
-} while(0)
+#define OPX_NO_16B_SUPPORT(_hfi1_type)                                                         \
+	do {                                                                                   \
+		if (!(_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {                        \
+			fprintf(stderr, "%s NO 16B SUPPORT for %u %s\n", __func__, _hfi1_type, \
+				_hfi1_type &OPX_HFI1_JKR ? "OPX_HFI1_JKR" : "UNKNOWN");        \
+			if (getenv("OPX_16B_ABORT"))                                           \
+				abort();                                                       \
+		}                                                                              \
+		assert(_hfi1_type != OPX_HFI1_UNDEF);                                          \
+	} while (0)
 
 struct fi_opx_hfi_local_info {
 	struct fi_opx_hfi_local_lookup *hfi_local_lookup_hashmap;
-	enum opx_hfi1_type type;
-	int sim_fd;                     // simulator fd
-	opx_lid_t lid;
-	uint8_t  hfi_unit;
+	enum opx_hfi1_type		type;
+	int				sim_fd; // simulator fd
+	opx_lid_t			lid;
+	uint8_t				hfi_unit;
 };
 
 #ifdef OPX_SIM
 /* Build L8SIM support */
-#define  OPX_SIM_ENABLED
+#define OPX_SIM_ENABLED
 #warning OPX_SIM enabled
 
 #else
 /* Build only "real" HFI1 support (default) */
-#undef  OPX_SIM_ENABLED
+#undef OPX_SIM_ENABLED
 #endif
 
 #define OPX_HFI1_TYPE fi_opx_global.hfi_local_info.type
-
 
 /* Default is both JKR and WFR runtime support (no constant),
    use a local or global variable */
@@ -171,38 +169,38 @@ struct fi_opx_hfi_local_lookup_key {
 
 struct fi_opx_hfi_local_lookup {
 	struct fi_opx_hfi_local_lookup_key key;
-	uint8_t  hfi_unit;
-	uint32_t instance;
-	UT_hash_handle 	hh;         /* makes this structure hashable */
+	uint8_t				   hfi_unit;
+	uint32_t			   instance;
+	UT_hash_handle			   hh; /* makes this structure hashable */
 };
 
 struct fi_opx_global_data {
-	struct fi_info		*info;
-	struct fi_domain_attr	*default_domain_attr;
-	struct fi_ep_attr	*default_ep_attr;
-	struct fi_tx_attr	*default_tx_attr;
-	struct fi_rx_attr	*default_rx_attr;
-	struct fi_provider 	*prov;
-	struct fi_opx_daos_hfi_rank	*daos_hfi_rank_hashmap;
-	enum fi_progress	progress;
-	struct dlist_entry	tid_domain_list;
+	struct fi_info		    *info;
+	struct fi_domain_attr	    *default_domain_attr;
+	struct fi_ep_attr	    *default_ep_attr;
+	struct fi_tx_attr	    *default_tx_attr;
+	struct fi_rx_attr	    *default_rx_attr;
+	struct fi_provider	    *prov;
+	struct fi_opx_daos_hfi_rank *daos_hfi_rank_hashmap;
+	enum fi_progress	     progress;
+	struct dlist_entry	     tid_domain_list;
 #ifdef OPX_HMEM
-	struct dlist_entry	hmem_domain_list;
+	struct dlist_entry hmem_domain_list;
 #endif
 	struct fi_opx_hfi_local_info hfi_local_info;
 };
 
 extern struct fi_opx_global_data fi_opx_global;
 
-static const uint64_t FI_OPX_MAX_MSG_SIZE		= ((uint64_t)-1);
-static const uint64_t FI_OPX_MAX_PREFIX_SIZE		= (0ULL);
-static const uint64_t FI_OPX_MAX_ORDER_RAW_SIZE	= SIZE_MAX;
-static const uint64_t FI_OPX_MAX_ORDER_WAR_SIZE	= SIZE_MAX;
-static const uint64_t FI_OPX_MAX_ORDER_WAW_SIZE	= SIZE_MAX;
-static const size_t   FI_OPX_REMOTE_CQ_DATA_SIZE	= 4;
+static const uint64_t FI_OPX_MAX_MSG_SIZE	 = ((uint64_t) -1);
+static const uint64_t FI_OPX_MAX_PREFIX_SIZE	 = (0ULL);
+static const uint64_t FI_OPX_MAX_ORDER_RAW_SIZE	 = SIZE_MAX;
+static const uint64_t FI_OPX_MAX_ORDER_WAR_SIZE	 = SIZE_MAX;
+static const uint64_t FI_OPX_MAX_ORDER_WAW_SIZE	 = SIZE_MAX;
+static const size_t   FI_OPX_REMOTE_CQ_DATA_SIZE = 4;
 
-static const uint64_t FI_OPX_MEM_TAG_FORMAT		= (0xFFFFFFFFFFFFFFFFULL);
-static const int      FI_OPX_MAX_HFIS				= 16;
+static const uint64_t FI_OPX_MEM_TAG_FORMAT = (0xFFFFFFFFFFFFFFFFULL);
+static const int      FI_OPX_MAX_HFIS	    = 16;
 
 /*
 Users may wish to change the depth of the Rx context ring.
@@ -216,50 +214,40 @@ Remember that fi_opx_hfi1_poll_once works in terms of 4 doublewords
 So for example, 2k ring length (0-based) mask is
 2047 * 32 = 0xFFE0
 */
-static const uint64_t FI_OPX_HDRQ_MASK_RUNTIME	= 0ULL;
-static const uint64_t FI_OPX_HDRQ_MASK_2048 	= 0X000000000000FFE0UL;
-static const uint64_t FI_OPX_HDRQ_MASK_8192	= 0X000000000003FFE0UL;
+static const uint64_t FI_OPX_HDRQ_MASK_RUNTIME = 0ULL;
+static const uint64_t FI_OPX_HDRQ_MASK_2048    = 0X000000000000FFE0UL;
+static const uint64_t FI_OPX_HDRQ_MASK_8192    = 0X000000000003FFE0UL;
 
+#define FI_OPX_DEFAULT_MSG_ORDER (FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW | FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW)
 
-#define FI_OPX_DEFAULT_MSG_ORDER						\
-		(FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW | FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW)
+#define FI_OPX_TXONLY_CAPS (FI_SEND | FI_READ | FI_WRITE | FI_REMOTE_WRITE)
 
-#define FI_OPX_TXONLY_CAPS							\
-	( FI_SEND | FI_READ | FI_WRITE | FI_REMOTE_WRITE )
-
-#define FI_OPX_RXONLY_CAPS							\
-	( FI_RECV | FI_DIRECTED_RECV | FI_MULTI_RECV | FI_REMOTE_READ )
+#define FI_OPX_RXONLY_CAPS (FI_RECV | FI_DIRECTED_RECV | FI_MULTI_RECV | FI_REMOTE_READ)
 
 #ifdef OPX_HMEM
-#define FI_OPX_BASE_CAPS							\
-	( FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM			\
-	| FI_SOURCE | FI_NAMED_RX_CTX | FI_RMA | FI_ATOMIC | FI_HMEM )
-#define FI_OPX_BASE_MR_MODE							\
-	( OPX_MR | FI_MR_HMEM )
+#define FI_OPX_BASE_CAPS                                                                                          \
+	(FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM | FI_SOURCE | FI_NAMED_RX_CTX | FI_RMA | FI_ATOMIC | \
+	 FI_HMEM)
+#define FI_OPX_BASE_MR_MODE (OPX_MR | FI_MR_HMEM)
 #else
-#define FI_OPX_BASE_CAPS							\
-	( FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM			\
-	| FI_SOURCE | FI_NAMED_RX_CTX | FI_RMA | FI_ATOMIC )
-#define FI_OPX_BASE_MR_MODE							\
-	( OPX_MR )
+#define FI_OPX_BASE_CAPS \
+	(FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM | FI_SOURCE | FI_NAMED_RX_CTX | FI_RMA | FI_ATOMIC)
+#define FI_OPX_BASE_MR_MODE (OPX_MR)
 #endif
 
-#define FI_OPX_DEFAULT_CAPS							\
-	(FI_OPX_BASE_CAPS | FI_OPX_TXONLY_CAPS | FI_OPX_RXONLY_CAPS)
+#define FI_OPX_DEFAULT_CAPS (FI_OPX_BASE_CAPS | FI_OPX_TXONLY_CAPS | FI_OPX_RXONLY_CAPS)
 
-#define FI_OPX_DEFAULT_TX_CAPS							\
-	(FI_OPX_BASE_CAPS | FI_OPX_TXONLY_CAPS)
+#define FI_OPX_DEFAULT_TX_CAPS (FI_OPX_BASE_CAPS | FI_OPX_TXONLY_CAPS)
 
-#define FI_OPX_DEFAULT_RX_CAPS							\
-	(FI_OPX_BASE_CAPS | FI_OPX_RXONLY_CAPS)
+#define FI_OPX_DEFAULT_RX_CAPS (FI_OPX_BASE_CAPS | FI_OPX_RXONLY_CAPS)
 
-#define FI_OPX_DEFAULT_MODE							\
-	(FI_ASYNC_IOV)
+#define FI_OPX_DEFAULT_MODE (FI_ASYNC_IOV)
 
-/* OPX used to only have "default caps". The goal of this additional #define is to differentiate between what we "support" and what our "default" is
-   TODO - Our default caps will be supplied to the application when they pass OPX no hints. The default caps should be our "optimal" configuration */
-#define FI_OPX_SUPPORTED_CAPS						\
-	(FI_OPX_DEFAULT_CAPS)
+/* OPX used to only have "default caps". The goal of this additional #define is to differentiate between what we
+   "support" and what our "default" is
+   TODO - Our default caps will be supplied to the application when they pass OPX no hints. The default caps should be
+   our "optimal" configuration */
+#define FI_OPX_SUPPORTED_CAPS (FI_OPX_DEFAULT_CAPS)
 
 #if 0
 /*
@@ -269,30 +257,27 @@ static const uint64_t FI_OPX_HDRQ_MASK_8192	= 0X000000000003FFE0UL;
 #define OPX_PROGRESS FI_PROGRESS_UNSPEC
 #endif
 
-#define IS_PROGRESS_MANUAL(domain_ptr)						\
-	((OPX_PROGRESS == FI_PROGRESS_MANUAL) ||			\
-	((OPX_PROGRESS == FI_PROGRESS_UNSPEC) &&			\
-		((domain_ptr)->data_progress == FI_PROGRESS_MANUAL)))
+#define IS_PROGRESS_MANUAL(domain_ptr)           \
+	((OPX_PROGRESS == FI_PROGRESS_MANUAL) || \
+	 ((OPX_PROGRESS == FI_PROGRESS_UNSPEC) && ((domain_ptr)->data_progress == FI_PROGRESS_MANUAL)))
 
-#define IS_PROGRESS_AUTO(domain_ptr)						\
-	((OPX_PROGRESS == FI_PROGRESS_AUTO) ||			\
-	((OPX_PROGRESS == FI_PROGRESS_UNSPEC) &&			\
-		((domain_ptr)->data_progress == FI_PROGRESS_AUTO)))
+#define IS_PROGRESS_AUTO(domain_ptr)           \
+	((OPX_PROGRESS == FI_PROGRESS_AUTO) || \
+	 ((OPX_PROGRESS == FI_PROGRESS_UNSPEC) && ((domain_ptr)->data_progress == FI_PROGRESS_AUTO)))
 #else
 
 #ifndef OPX_PROGRESS
 #define OPX_PROGRESS FI_PROGRESS_UNSPEC
 #endif
 
-#define IS_PROGRESS_MANUAL(domain_ptr)	(1)
-#define IS_PROGRESS_AUTO(domain_ptr)	(0)
+#define IS_PROGRESS_MANUAL(domain_ptr) (1)
+#define IS_PROGRESS_AUTO(domain_ptr)   (0)
 #endif
 
-static inline void always_assert (bool val, char *msg)
+static inline void always_assert(bool val, char *msg)
 {
 	if (!val) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-				"%s\n", msg);
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "%s\n", msg);
 		exit(EXIT_FAILURE);
 	}
 }
@@ -301,35 +286,36 @@ static inline void always_assert (bool val, char *msg)
 // compile-time tests. static_assert has existed since C11 so this
 // should be safe, but we have an else clause just in case.
 #if defined(static_assert)
-#define OPX_COMPILE_TIME_ASSERT(cond, msg) static_assert(cond,msg)
+#define OPX_COMPILE_TIME_ASSERT(cond, msg) static_assert(cond, msg)
 #else
-#define OPX_COMPILE_TIME_ASSERT(cond, msg) if(0){switch(0){case 0:case cond:;}}
+#define OPX_COMPILE_TIME_ASSERT(cond, msg) \
+	if (0) {                           \
+		switch (0) {               \
+		case 0:                    \
+		case cond:;                \
+		}                          \
+	}
 #endif
 
-static inline void fi_opx_ref_init (int64_t *ref, char *name)
+static inline void fi_opx_ref_init(int64_t *ref, char *name)
 {
 	*ref = 0;
-	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-			"initializing ref count for (%s) to (%d)\n",
-			name, 0);
+	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "initializing ref count for (%s) to (%d)\n", name, 0);
 
 	return;
 }
 
-static inline void fi_opx_ref_inc (int64_t *ref, char *name)
+static inline void fi_opx_ref_inc(int64_t *ref, char *name)
 {
 	(*ref) += 1;
 	return;
 }
 
-static inline int fi_opx_ref_dec (int64_t *ref, char *name)
+static inline int fi_opx_ref_dec(int64_t *ref, char *name)
 {
 	int64_t value = --(*ref);
 	if (value < 0) {
-
-		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-			"decrement ref for (%s) (ref_cnt %ld < 0)\n",
-			name, value);
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "decrement ref for (%s) (ref_cnt %ld < 0)\n", name, value);
 
 		errno = FI_EOTHER;
 		return -errno;
@@ -337,31 +323,27 @@ static inline int fi_opx_ref_dec (int64_t *ref, char *name)
 	return 0;
 }
 
-static inline int fi_opx_ref_finalize (int64_t *ref, char *name)
+static inline int fi_opx_ref_finalize(int64_t *ref, char *name)
 {
 	int64_t value = *ref;
 	if (value != 0) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-			"error ref for (%s) (ref_cnt %ld != 0)\n",
-			name, value);
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "error ref for (%s) (ref_cnt %ld != 0)\n", name, value);
 		errno = FI_EBUSY;
 		return -errno;
 	}
 	return 0;
 }
 
-static inline int fi_opx_fid_check (fid_t fid, int fid_class, char *name)
+static inline int fi_opx_fid_check(fid_t fid, int fid_class, char *name)
 {
 	if (!fid) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-				"NULL %s object", name);
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "NULL %s object", name);
 		errno = FI_EINVAL;
 		return -errno;
 	}
 	if (fid->fclass != fid_class) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-			"wrong type of object (%s) expected (%d), got (%zu)\n",
-			name, fid_class, fid->fclass);
+		       "wrong type of object (%s) expected (%d), got (%zu)\n", name, fid_class, fid->fclass);
 		errno = FI_EINVAL;
 		return -errno;
 	}
@@ -372,38 +354,27 @@ int fi_opx_set_default_info(void);
 
 int fi_opx_check_info(const struct fi_info *info);
 
-int fi_opx_fabric(struct fi_fabric_attr *attr,
-		struct fid_fabric **fabric, void *context);
+int fi_opx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context);
 
 int fi_opx_check_fabric_attr(struct fi_fabric_attr *attr);
 
-int fi_opx_domain(struct fid_fabric *fabric,
-		struct fi_info *info,
-		struct fid_domain **dom, void *context);
+int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_domain **dom, void *context);
 
 int fi_opx_check_domain_attr(struct fi_domain_attr *attr);
-int fi_opx_choose_domain(uint64_t caps,
-		struct fi_domain_attr *domain_attr,
-		struct fi_domain_attr *hints,
-		enum fi_progress progress);
+int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, struct fi_domain_attr *hints,
+			 enum fi_progress progress);
 
 int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr);
 
-int fi_opx_av_open(struct fid_domain *dom,
-		struct fi_av_attr *attr, struct fid_av **av,
-		void *context);
+int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_av **av, void *context);
 
-int fi_opx_stx_context(struct fid_domain *domain, struct fi_tx_attr *attr,
-                         struct fid_stx **stx, void *context);
+int fi_opx_stx_context(struct fid_domain *domain, struct fi_tx_attr *attr, struct fid_stx **stx, void *context);
 
-int fi_opx_cq_open(struct fid_domain *dom,
-		struct fi_cq_attr *attr,
-		struct fid_cq **eq, void *context);
+int fi_opx_cq_open(struct fid_domain *dom, struct fi_cq_attr *attr, struct fid_cq **eq, void *context);
 
 void fi_opx_cq_finalize_ops(struct fid_ep *ep);
 
-int fi_opx_endpoint(struct fid_domain *dom, struct fi_info *info,
-		struct fid_ep **ep, void *context);
+int fi_opx_endpoint(struct fid_domain *dom, struct fi_info *info, struct fid_ep **ep, void *context);
 
 int fi_opx_alloc_default_ep_attr(struct fi_ep_attr **ep_attr);
 
@@ -415,12 +386,9 @@ int fi_opx_check_tx_attr(struct fi_tx_attr *tx_attr, uint64_t hinted_caps);
 int fi_opx_alloc_default_rx_attr(struct fi_rx_attr **rx_attr);
 int fi_opx_check_rx_attr(struct fi_rx_attr *rx_attr, uint64_t hinted_caps);
 
-int fi_opx_scalable_ep(struct fid_domain *dom, struct fi_info *info,
-		struct fid_ep **ep, void *context);
+int fi_opx_scalable_ep(struct fid_domain *dom, struct fi_info *info, struct fid_ep **ep, void *context);
 
-int fi_opx_cntr_open(struct fid_domain *domain,
-		struct fi_cntr_attr *attr,
-		struct fid_cntr **cntr, void *context);
+int fi_opx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr, struct fid_cntr **cntr, void *context);
 
 int fi_opx_init_mr_ops(struct fid_domain *domain, struct fi_info *info);
 int fi_opx_finalize_mr_ops(struct fid_domain *domain);
@@ -441,18 +409,14 @@ int fi_opx_init_tagged_ops(struct fid_ep *ep, struct fi_info *info);
 int fi_opx_enable_tagged_ops(struct fid_ep *ep);
 int fi_opx_finalize_tagged_ops(struct fid_ep *ep);
 
-//int fi_opx_init_cm_ops(struct fi_opx_ep *opx_ep, struct fi_info *info);
+// int fi_opx_init_cm_ops(struct fi_opx_ep *opx_ep, struct fi_info *info);
 int fi_opx_init_cm_ops(fid_t fid, struct fi_info *info);
-//int fi_opx_finalize_cm_ops(struct fi_opx_ep *opx_ep);
+// int fi_opx_finalize_cm_ops(struct fi_opx_ep *opx_ep);
 int fi_opx_finalize_cm_ops(fid_t fid);
 
-int fi_opx_bind_ep_cq(struct fid_ep *ep,
-		struct fid_cq *cq, uint64_t flags);
-int fi_opx_bind_ep_cntr(struct fid_ep *ep,
-		struct fid_cntr *cntr, uint64_t flags);
-int fi_opx_bind_ep_mr(struct fid_ep *ep,
-		struct fid_mr *mr, uint64_t flags);
-int fi_opx_bind_ep_av(struct fid_ep *ep,
-		struct fid_av *av, uint64_t flags);
+int fi_opx_bind_ep_cq(struct fid_ep *ep, struct fid_cq *cq, uint64_t flags);
+int fi_opx_bind_ep_cntr(struct fid_ep *ep, struct fid_cntr *cntr, uint64_t flags);
+int fi_opx_bind_ep_mr(struct fid_ep *ep, struct fid_mr *mr, uint64_t flags);
+int fi_opx_bind_ep_av(struct fid_ep *ep, struct fid_av *av, uint64_t flags);
 
 #endif /* __FI_PROV_OPX_H__ */

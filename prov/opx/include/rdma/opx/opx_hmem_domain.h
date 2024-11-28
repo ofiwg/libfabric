@@ -41,8 +41,8 @@
 
 #define OPX_HMEM_NO_LOCK_ON_CLEANUP (0)
 
-#define OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT	(4096)
-#define OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT	(FI_OPX_HFI1_PACKET_MTU)
+#define OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT (4096)
+#define OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT (FI_OPX_HFI1_PACKET_MTU)
 #define OPX_HMEM_DEV_REG_THRESHOLD_MAX		(FI_OPX_HFI1_PACKET_MTU)
 #define OPX_HMEM_DEV_REG_THRESHOLD_MIN		(0)
 
@@ -55,17 +55,16 @@ struct opx_hmem_fabric {
 };
 
 struct opx_hmem_domain {
-	struct util_domain	util_domain;
-	struct ofi_mr_cache	*hmem_cache;
-	struct fi_opx_domain	*opx_domain;
-	struct dlist_entry	list_entry; /* linked to hmem_domain_list */
-	uint32_t		devreg_copy_from_threshold;
-	uint32_t		devreg_copy_to_threshold;
+	struct util_domain    util_domain;
+	struct ofi_mr_cache  *hmem_cache;
+	struct fi_opx_domain *opx_domain;
+	struct dlist_entry    list_entry; /* linked to hmem_domain_list */
+	uint32_t	      devreg_copy_from_threshold;
+	uint32_t	      devreg_copy_to_threshold;
 };
 
 int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked);
-int opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric,
-			 struct fi_info *info,
+int opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric, struct fi_info *info,
 			 struct opx_hmem_domain **opx_hmem_domain);
 
 int opx_hmem_close_fabric(struct opx_hmem_fabric *opx_hmem_fabric);

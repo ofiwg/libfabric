@@ -58,7 +58,7 @@ int opx_hmem_close_fabric(struct opx_hmem_fabric *opx_hmem_fabric)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "close hmem fabric\n");
 
-	free((void*)opx_hmem_fabric->util_fabric.name);
+	free((void *) opx_hmem_fabric->util_fabric.name);
 	opx_hmem_fabric->util_fabric.name = NULL;
 	free(opx_hmem_fabric);
 
@@ -72,47 +72,42 @@ static int opx_hmem_no_close_fabric(fid_t fid)
 	return -FI_ENOSYS;
 }
 
-static struct fi_ops opx_hmem_domain_fi_ops = { .size = sizeof(struct fi_ops),
-				       .close = opx_hmem_no_close_fabric,
-				       .bind = fi_no_bind,
-				       .control = fi_no_control,
-				       .ops_open = fi_no_ops_open,
-				       .tostr = fi_no_tostr,
-				       .ops_set = fi_no_ops_set };
+static struct fi_ops opx_hmem_domain_fi_ops = {.size	 = sizeof(struct fi_ops),
+					       .close	 = opx_hmem_no_close_fabric,
+					       .bind	 = fi_no_bind,
+					       .control	 = fi_no_control,
+					       .ops_open = fi_no_ops_open,
+					       .tostr	 = fi_no_tostr,
+					       .ops_set	 = fi_no_ops_set};
 
-static int opx_hmem_no_domain(struct fid_fabric *fabric, struct fi_info *info,
-				struct fid_domain **dom, void *context)
+static int opx_hmem_no_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_domain **dom, void *context)
 {
 	assert(0);
 	return -FI_ENOSYS;
 }
 
-static struct fi_ops_fabric opx_hmem_fabric_ops = {
-	.size = sizeof(struct fi_ops_fabric),
-	.domain = opx_hmem_no_domain,
-	.passive_ep = fi_no_passive_ep,
-	.eq_open = fi_no_eq_open,
-	.wait_open = fi_no_wait_open,
-	.trywait = fi_no_trywait
-};
+static struct fi_ops_fabric opx_hmem_fabric_ops = {.size       = sizeof(struct fi_ops_fabric),
+						   .domain     = opx_hmem_no_domain,
+						   .passive_ep = fi_no_passive_ep,
+						   .eq_open    = fi_no_eq_open,
+						   .wait_open  = fi_no_wait_open,
+						   .trywait    = fi_no_trywait};
 
 int opx_hmem_open_fabric(struct opx_hmem_fabric **hmem_fabric)
 {
 	struct opx_hmem_fabric *new_hmem_fabric;
 	new_hmem_fabric = calloc(1, sizeof(*new_hmem_fabric));
 	if (new_hmem_fabric == NULL) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-			"Couldn't create hmem fabric FI_ENOMEM\n");
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "Couldn't create hmem fabric FI_ENOMEM\n");
 		return -FI_ENOMEM;
 	}
 
-	new_hmem_fabric->util_fabric.fabric_fid.fid.fclass = FI_CLASS_FABRIC;
+	new_hmem_fabric->util_fabric.fabric_fid.fid.fclass  = FI_CLASS_FABRIC;
 	new_hmem_fabric->util_fabric.fabric_fid.fid.context = NULL;
-	new_hmem_fabric->util_fabric.fabric_fid.fid.ops = &opx_hmem_domain_fi_ops;
-	new_hmem_fabric->util_fabric.fabric_fid.ops = &opx_hmem_fabric_ops;
-	new_hmem_fabric->util_fabric.fabric_fid.api_version =
-		fi_opx_global.prov->fi_version;
-	new_hmem_fabric->util_fabric.prov = fi_opx_global.prov;
+	new_hmem_fabric->util_fabric.fabric_fid.fid.ops	    = &opx_hmem_domain_fi_ops;
+	new_hmem_fabric->util_fabric.fabric_fid.ops	    = &opx_hmem_fabric_ops;
+	new_hmem_fabric->util_fabric.fabric_fid.api_version = fi_opx_global.prov->fi_version;
+	new_hmem_fabric->util_fabric.prov		    = fi_opx_global.prov;
 	ofi_atomic_initialize32(&new_hmem_fabric->util_fabric.ref, 0);
 	dlist_init(&new_hmem_fabric->util_fabric.domain_list);
 	ofi_mutex_init(&new_hmem_fabric->util_fabric.lock);
@@ -121,7 +116,7 @@ int opx_hmem_open_fabric(struct opx_hmem_fabric **hmem_fabric)
 	} else {
 		new_hmem_fabric->util_fabric.name = strdup(FI_OPX_DOMAIN_NAME);
 	}
-	if (!new_hmem_fabric->util_fabric.name){
+	if (!new_hmem_fabric->util_fabric.name) {
 		free(new_hmem_fabric);
 		return -FI_ENOMEM;
 	}
@@ -139,7 +134,9 @@ int opx_hmem_open_fabric(struct opx_hmem_fabric **hmem_fabric)
 int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked)
 {
 	if (hmem_domain->hmem_cache) {
-		if (!locked) ofi_mr_cache_cleanup(hmem_domain->hmem_cache);
+		if (!locked) {
+			ofi_mr_cache_cleanup(hmem_domain->hmem_cache);
+		}
 		free(hmem_domain->hmem_cache);
 		hmem_domain->hmem_cache = NULL;
 	}
@@ -151,47 +148,42 @@ int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked)
 	return 0;
 }
 
-int opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric,
-		      struct fi_info *info,
-		      struct opx_hmem_domain **hmem_domain)
+int opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric, struct fi_info *info,
+			 struct opx_hmem_domain **hmem_domain)
 {
-	int ret;
-	struct opx_hmem_domain *new_hmem_domain =
-		calloc(1, sizeof(struct opx_hmem_domain));
+	int			ret;
+	struct opx_hmem_domain *new_hmem_domain = calloc(1, sizeof(struct opx_hmem_domain));
 	if (!new_hmem_domain) {
 		return -FI_ENOMEM;
 	}
 
-	ret = ofi_domain_init(&hmem_fabric->util_fabric.fabric_fid, info,
-			      &new_hmem_domain->util_domain, NULL, OFI_LOCK_NOOP);
+	ret = ofi_domain_init(&hmem_fabric->util_fabric.fabric_fid, info, &new_hmem_domain->util_domain, NULL,
+			      OFI_LOCK_NOOP);
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "Initalizing the util hmem domain is complete \n");
 	if (ret) {
 		free(new_hmem_domain);
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-			"init util domain failed %d (%s)\n", ret, strerror(ret));
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "init util domain failed %d (%s)\n", ret, strerror(ret));
 		return ret;
 	}
-	FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "cache %p, domain %p\n",
-		new_hmem_domain->hmem_cache, new_hmem_domain);
+	FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "cache %p, domain %p\n", new_hmem_domain->hmem_cache,
+		new_hmem_domain);
 	ret = opx_hmem_cache_setup(&new_hmem_domain->hmem_cache, new_hmem_domain);
 
 	/* Track HMEM domains so cache can be cleared on exit */
-	dlist_insert_tail(&new_hmem_domain->list_entry,
-			  &(fi_opx_global.hmem_domain_list));
+	dlist_insert_tail(&new_hmem_domain->list_entry, &(fi_opx_global.hmem_domain_list));
 
 	if (ret) {
 		free(new_hmem_domain);
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-			"init util domain failed %d (%s)\n", ret, strerror(ret));
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "init util domain failed %d (%s)\n", ret, strerror(ret));
 		return ret;
 	}
 
-	new_hmem_domain->util_domain.domain_fid.fid.fclass = FI_CLASS_DOMAIN;
+	new_hmem_domain->util_domain.domain_fid.fid.fclass  = FI_CLASS_DOMAIN;
 	new_hmem_domain->util_domain.domain_fid.fid.context = NULL;
 
 	new_hmem_domain->devreg_copy_from_threshold = OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT;
-	new_hmem_domain->devreg_copy_to_threshold = OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT;
+	new_hmem_domain->devreg_copy_to_threshold   = OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT;
 
 	*hmem_domain = new_hmem_domain;
 	return FI_SUCCESS;

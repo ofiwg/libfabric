@@ -85,63 +85,63 @@
 #include "opa_user.h"
 #include "ofi_mem.h"
 
-#define HFI_RHF_USE_EGRBFR_MASK 0x1
-#define HFI_RHF_USE_EGRBFR_SHIFT 15
-#define HFI_RHF_EGRBFR_INDEX_MASK 0x7FF
+#define HFI_RHF_USE_EGRBFR_MASK	   0x1
+#define HFI_RHF_USE_EGRBFR_SHIFT   15
+#define HFI_RHF_EGRBFR_INDEX_MASK  0x7FF
 #define HFI_RHF_EGRBFR_INDEX_SHIFT 16
 
-#define HFI_RHF_SEQ_MASK 0xF
-#define HFI_RHF_SEQ_SHIFT 28
-#define HFI_RHF_EGRBFR_OFFSET_MASK 0xFFF
+#define HFI_RHF_SEQ_MASK	    0xF
+#define HFI_RHF_SEQ_SHIFT	    28
+#define HFI_RHF_EGRBFR_OFFSET_MASK  0xFFF
 #define HFI_RHF_EGRBFR_OFFSET_SHIFT 0
-#define HFI_RHF_HDRQ_OFFSET_MASK 0x1FF
-#define HFI_RHF_HDRQ_OFFSET_SHIFT 12
-#define HFI_RHF_TIDERR     0x08000000
+#define HFI_RHF_HDRQ_OFFSET_MASK    0x1FF
+#define HFI_RHF_HDRQ_OFFSET_SHIFT   12
+#define HFI_RHF_TIDERR		    0x08000000
 
 /* TidFlow related bits */
-#define HFI_TF_SEQNUM_SHIFT                 0
-#define HFI_TF_SEQNUM_MASK                  0x7ff
+#define HFI_TF_SEQNUM_SHIFT 0
+#define HFI_TF_SEQNUM_MASK  0x7ff
 
-#define HFI_TF_GENVAL_SHIFT                 11
-#define HFI_TF_GENVAL_MASK                  0xfffff
+#define HFI_TF_GENVAL_SHIFT 11
+#define HFI_TF_GENVAL_MASK  0xfffff
 
-#define HFI_TF_FLOWVALID_SHIFT              32
-#define HFI_TF_FLOWVALID_MASK               0x1
-#define HFI_TF_HDRSUPP_ENABLED_SHIFT        33
-#define HFI_TF_HDRSUPP_ENABLED_MASK         0x1
+#define HFI_TF_FLOWVALID_SHIFT	     32
+#define HFI_TF_FLOWVALID_MASK	     0x1
+#define HFI_TF_HDRSUPP_ENABLED_SHIFT 33
+#define HFI_TF_HDRSUPP_ENABLED_MASK  0x1
 
-#define HFI_TF_KEEP_AFTER_SEQERR_SHIFT      34
-#define HFI_TF_KEEP_AFTER_SEQERR_MASK       0x1
-#define HFI_TF_KEEP_ON_GENERR_SHIFT         35
-#define HFI_TF_KEEP_ON_GENERR_MASK          0x1
+#define HFI_TF_KEEP_AFTER_SEQERR_SHIFT	    34
+#define HFI_TF_KEEP_AFTER_SEQERR_MASK	    0x1
+#define HFI_TF_KEEP_ON_GENERR_SHIFT	    35
+#define HFI_TF_KEEP_ON_GENERR_MASK	    0x1
 #define HFI_TF_KEEP_PAYLOAD_ON_GENERR_SHIFT 36
 #define HFI_TF_KEEP_PAYLOAD_ON_GENERR_MASK  0x1
-#define HFI_TF_STATUS_SEQMISMATCH_SHIFT     37
-#define HFI_TF_STATUS_SEQMISMATCH_MASK      0x1
-#define HFI_TF_STATUS_GENMISMATCH_SHIFT     38
-#define HFI_TF_STATUS_GENMISMATCH_MASK      0x1
+#define HFI_TF_STATUS_SEQMISMATCH_SHIFT	    37
+#define HFI_TF_STATUS_SEQMISMATCH_MASK	    0x1
+#define HFI_TF_STATUS_GENMISMATCH_SHIFT	    38
+#define HFI_TF_STATUS_GENMISMATCH_MASK	    0x1
 
 /* PBC bits */
-#define HFI_PBC_STATICRCC_SHIFT         0
-#define HFI_PBC_STATICRCC_MASK          0xffff
+#define HFI_PBC_STATICRCC_SHIFT 0
+#define HFI_PBC_STATICRCC_MASK	0xffff
 
-#define HFI_PBC_SC4_SHIFT               4
-#define HFI_PBC_SC4_MASK                0x1
+#define HFI_PBC_SC4_SHIFT 4
+#define HFI_PBC_SC4_MASK  0x1
 
-#define HFI_PBC_INTR_SHIFT              31
-#define HFI_PBC_DCINFO_SHIFT            30
-#define HFI_PBC_TESTEBP_SHIFT           29
-#define HFI_PBC_PACKETBYPASS_SHIFT      28
-#define HFI_PBC_INSERTHCRC_SHIFT        26
-#define HFI_PBC_INSERTHCRC_MASK         0x3
-#define HFI_PBC_CREDITRETURN_SHIFT      25
-#define HFI_PBC_INSERTBYPASSICRC_SHIFT  24
-#define HFI_PBC_TESTBADICRC_SHIFT       23
-#define HFI_PBC_FECN_SHIFT              22
-#define HFI_PBC_VL_SHIFT                12
-#define HFI_PBC_VL_MASK                 0xf
-#define HFI_PBC_LENGTHDWS_SHIFT         0
-#define HFI_PBC_LENGTHDWS_MASK          0xfff
+#define HFI_PBC_INTR_SHIFT	       31
+#define HFI_PBC_DCINFO_SHIFT	       30
+#define HFI_PBC_TESTEBP_SHIFT	       29
+#define HFI_PBC_PACKETBYPASS_SHIFT     28
+#define HFI_PBC_INSERTHCRC_SHIFT       26
+#define HFI_PBC_INSERTHCRC_MASK	       0x3
+#define HFI_PBC_CREDITRETURN_SHIFT     25
+#define HFI_PBC_INSERTBYPASSICRC_SHIFT 24
+#define HFI_PBC_TESTBADICRC_SHIFT      23
+#define HFI_PBC_FECN_SHIFT	       22
+#define HFI_PBC_VL_SHIFT	       12
+#define HFI_PBC_VL_MASK		       0xf
+#define HFI_PBC_LENGTHDWS_SHIFT	       0
+#define HFI_PBC_LENGTHDWS_MASK	       0xfff
 
 /* this portion only defines what we currently use */
 struct opx_hfi_pbc {
@@ -150,8 +150,8 @@ struct opx_hfi_pbc {
 	__u16 fill1;
 };
 
-typedef enum mapsize
-{	SC_CREDITS,
+typedef enum mapsize {
+	SC_CREDITS,
 	PIO_BUFBASE_SOP,
 	PIO_BUFBASE,
 	RCVHDR_BUFBASE,
@@ -168,25 +168,26 @@ typedef enum mapsize
 } mapsize_t;
 
 /* TODO: consider casting in the ALIGN() macro */
-#define ALIGN(x, a)				(((x)+(a)-1)&~((a)-1))
-#define ALIGNDOWN_PTR(x, a)			((void*)(((uintptr_t)(x))&~((uintptr_t)((a)-1))))
+#define ALIGN(x, a)	    (((x) + (a) - 1) & ~((a) - 1))
+#define ALIGNDOWN_PTR(x, a) ((void *) (((uintptr_t) (x)) & ~((uintptr_t) ((a) - 1))))
 
 /* using the same flags for all the mappings */
-#define HFI_MMAP_FLAGS				(MAP_SHARED|MAP_LOCKED)
-#define HFI_MMAP_PGSIZE				sysconf(_SC_PAGESIZE)
+#define HFI_MMAP_FLAGS	(MAP_SHARED | MAP_LOCKED)
+#define HFI_MMAP_PGSIZE sysconf(_SC_PAGESIZE)
 /* cast to uintptr_t as opposed to intptr_t which evaluates to a signed type
  *  * on which one should not perform bitwise operations (undefined behavior)
  *   */
-#define HFI_MMAP_PGMASK				(~(uintptr_t)(HFI_MMAP_PGSIZE-1))
+#define HFI_MMAP_PGMASK (~(uintptr_t) (HFI_MMAP_PGSIZE - 1))
 
 /* this is only an auxiliary macro for HFI_MMAP_ERRCHECK()
  * @off expected to be unsigned in order to AND with the page mask and avoid undefined behavior
  */
-#define U64_TO_OFF64_PGMASK(off)		((__off64_t)((off) & HFI_MMAP_PGMASK))
+#define U64_TO_OFF64_PGMASK(off) ((__off64_t) ((off) & HFI_MMAP_PGMASK))
 
-#define HFI_MMAP_ALIGNOFF(fd, off, size, prot)	opx_hfi_mmap64(0,(size),(prot),HFI_MMAP_FLAGS,(fd),U64_TO_OFF64_PGMASK((off)))
+#define HFI_MMAP_ALIGNOFF(fd, off, size, prot) \
+	opx_hfi_mmap64(0, (size), (prot), HFI_MMAP_FLAGS, (fd), U64_TO_OFF64_PGMASK((off)))
 /* complementary */
-#define HFI_MUNMAP(addr, size)			munmap((addr), (size))
+#define HFI_MUNMAP(addr, size) munmap((addr), (size))
 
 /* make sure uintmax_t can hold the result of unsigned int multiplication */
 #if UINT_MAX > (UINTMAX_MAX / UINT_MAX)
@@ -194,42 +195,42 @@ typedef enum mapsize
 #endif
 
 /* @member assumed to be of type u64 and validated to be so */
-#define HFI_MMAP_ERRCHECK(fd, binfo, member, size, prot) ({						\
-		typeof((binfo)->member) *__tptr = (__u64 *)NULL;					\
-		(void)__tptr;										\
-		void *__maddr = HFI_MMAP_ALIGNOFF((fd), (binfo)->member, (size), (prot));		\
-		do {											\
-			if (OFI_UNLIKELY(__maddr == MAP_FAILED)) {						\
-				uintmax_t outval = (uintmax_t)((binfo)->member);			\
-				_HFI_INFO("mmap of " #member " (0x%jx) size %zu failed: %s\n",		\
-					outval, size, strerror(errno));					\
-				goto err_mmap_##member;							\
-			}										\
-			(binfo)->member = (__u64)__maddr;						\
-			_HFI_VDBG(#member "mmap %jx successful\n", (uintmax_t)((binfo)->member));	\
-		} while(0);										\
-		__maddr;										\
-})
+#define HFI_MMAP_ERRCHECK(fd, binfo, member, size, prot)                                                     \
+	({                                                                                                   \
+		typeof((binfo)->member) *__tptr = (__u64 *) NULL;                                            \
+		(void) __tptr;                                                                               \
+		void *__maddr = HFI_MMAP_ALIGNOFF((fd), (binfo)->member, (size), (prot));                    \
+		do {                                                                                         \
+			if (OFI_UNLIKELY(__maddr == MAP_FAILED)) {                                           \
+				uintmax_t outval = (uintmax_t) ((binfo)->member);                            \
+				_HFI_INFO("mmap of " #member " (0x%jx) size %zu failed: %s\n", outval, size, \
+					  strerror(errno));                                                  \
+				goto err_mmap_##member;                                                      \
+			}                                                                                    \
+			(binfo)->member = (__u64) __maddr;                                                   \
+			_HFI_VDBG(#member "mmap %jx successful\n", (uintmax_t) ((binfo)->member));           \
+		} while (0);                                                                                 \
+		__maddr;                                                                                     \
+	})
 
 /* assigns 0 to the member after unmapping */
-#define HFI_MUNMAP_ERRCHECK(binfo, member, size)						\
-		do {	typeof((binfo)->member) *__tptr = (__u64 *)NULL;			\
-			(void)__tptr;								\
-			void *__addr = ALIGNDOWN_PTR((binfo)->member, HFI_MMAP_PGSIZE);		\
-			if (OFI_UNLIKELY( __addr == NULL || (munmap(__addr, (size)) == -1))) {	\
-				_HFI_INFO("unmap of " #member " (%p) failed: %s\n",		\
-					__addr, strerror(errno));				\
-			}									\
-			else {									\
-				_HFI_VDBG("unmap of " #member "(%p) succeeded\n", __addr);	\
-				(binfo)->member = 0;						\
-			}									\
-		} while(0)
+#define HFI_MUNMAP_ERRCHECK(binfo, member, size)                                                      \
+	do {                                                                                          \
+		typeof((binfo)->member) *__tptr = (__u64 *) NULL;                                     \
+		(void) __tptr;                                                                        \
+		void *__addr = ALIGNDOWN_PTR((binfo)->member, HFI_MMAP_PGSIZE);                       \
+		if (OFI_UNLIKELY(__addr == NULL || (munmap(__addr, (size)) == -1))) {                 \
+			_HFI_INFO("unmap of " #member " (%p) failed: %s\n", __addr, strerror(errno)); \
+		} else {                                                                              \
+			_HFI_VDBG("unmap of " #member "(%p) succeeded\n", __addr);                    \
+			(binfo)->member = 0;                                                          \
+		}                                                                                     \
+	} while (0)
 
 #define HFI_PCB_SIZE_IN_BYTES 8
 
 /* Usable bytes in header (hdrsize - lrh - bth) */
-#define HFI_MESSAGE_HDR_SIZE_HFI       (HFI_MESSAGE_HDR_SIZE-20)
+#define HFI_MESSAGE_HDR_SIZE_HFI (HFI_MESSAGE_HDR_SIZE - 20)
 
 /*
  * SDMA includes 8B sdma hdr, 8B PBC, and message header.
@@ -238,10 +239,10 @@ typedef enum mapsize
  * sdma hdr. We let the driver know of this 2 extra bytes
  * at runtime when we set the length for the iovecs.
  */
-#define HFI_SDMA_HDR_SIZE      (8+8+56)
+#define HFI_SDMA_HDR_SIZE (8 + 8 + 56)
 
 struct _hfi_ctrl {
-	int32_t fd;		/* device file descriptor */
+	int32_t	 fd; /* device file descriptor */
 	uint32_t __hfi_pg_sz;
 	/* tidflow valid */
 	uint32_t __hfi_tfvalid;
@@ -306,7 +307,7 @@ struct _hfi_ctrl *opx_hfi_userinit(int32_t, struct hfi1_user_info_dep *);
 
 /* don't inline these; it's all init code, and not inlining makes the */
 /* overall code shorter and easier to debug */
-void opx_hfi_touch_mmap(void *, size_t) __attribute__ ((noinline));
+void opx_hfi_touch_mmap(void *, size_t) __attribute__((noinline));
 
 /* set the BTH pkey to check for this process. */
 /* This is for receive checks, not for sends.  It isn't necessary
@@ -336,87 +337,77 @@ int opx_hfi_reset_context(int fd);
 int opx_hfi_ack_events(int fd, uint64_t ackbits);
 
 /*
-* Safe version of opx_hfi_[d/q]wordcpy that is guaranteed to only copy each byte once.
-*/
+ * Safe version of opx_hfi_[d/q]wordcpy that is guaranteed to only copy each byte once.
+ */
 #if defined(__x86_64__)
-void opx_hfi_dwordcpy_safe(volatile uint32_t *dest, const uint32_t *src,
-		       uint32_t ndwords);
-void opx_hfi_qwordcpy_safe(volatile uint64_t *dest, const uint64_t *src,
-		       uint32_t nqwords);
+void opx_hfi_dwordcpy_safe(volatile uint32_t *dest, const uint32_t *src, uint32_t ndwords);
+void opx_hfi_qwordcpy_safe(volatile uint64_t *dest, const uint64_t *src, uint32_t nqwords);
 #else
 #define opx_hfi_dwordcpy_safe opx_hfi_dwordcpy
 #define opx_hfi_qwordcpy_safe opx_hfi_qwordcpy
 #endif
 
-static __inline__ void opx_hfi_tidflow_set_entry(struct _hfi_ctrl *ctrl,
-					 uint32_t flowid, uint32_t genval,
-					 uint32_t seqnum)
+static __inline__ void opx_hfi_tidflow_set_entry(struct _hfi_ctrl *ctrl, uint32_t flowid, uint32_t genval,
+						 uint32_t seqnum)
 {
-/* For proper behavior with RSM interception of FECN packets for CCA,
- * the tidflow entry needs the KeepAfterSequenceError bit set.
- * A packet that is converted from expected to eager by RSM will not
- * trigger an update in the tidflow state.  This will cause the tidflow
- * to incorrectly report a sequence error on any non-FECN packets that
- * arrive after the RSM intercepted packets.  If the KeepAfterSequenceError
- * bit is set, PSM can properly detect this "false SeqErr" condition,
- * and recover without dropping packets.
- * Note that if CCA/RSM are not important, this change will slightly
- * increase the CPU load when packets are dropped.  If this is significant,
- * consider hiding this change behind a CCA/RSM environment variable.
- */
+	/* For proper behavior with RSM interception of FECN packets for CCA,
+	 * the tidflow entry needs the KeepAfterSequenceError bit set.
+	 * A packet that is converted from expected to eager by RSM will not
+	 * trigger an update in the tidflow state.  This will cause the tidflow
+	 * to incorrectly report a sequence error on any non-FECN packets that
+	 * arrive after the RSM intercepted packets.  If the KeepAfterSequenceError
+	 * bit is set, PSM can properly detect this "false SeqErr" condition,
+	 * and recover without dropping packets.
+	 * Note that if CCA/RSM are not important, this change will slightly
+	 * increase the CPU load when packets are dropped.  If this is significant,
+	 * consider hiding this change behind a CCA/RSM environment variable.
+	 */
 
 	ctrl->__hfi_rcvtidflow[flowid] = __cpu_to_le64(
 		((genval & HFI_TF_GENVAL_MASK) << HFI_TF_GENVAL_SHIFT) |
 		((seqnum & HFI_TF_SEQNUM_MASK) << HFI_TF_SEQNUM_SHIFT) |
-		((uint64_t)ctrl->__hfi_tfvalid << HFI_TF_FLOWVALID_SHIFT) |
-		(1ULL << HFI_TF_HDRSUPP_ENABLED_SHIFT) |
+		((uint64_t) ctrl->__hfi_tfvalid << HFI_TF_FLOWVALID_SHIFT) | (1ULL << HFI_TF_HDRSUPP_ENABLED_SHIFT) |
 		/* KeepAfterSequenceError = 1 -- previously was 0 */
-		(1ULL << HFI_TF_KEEP_AFTER_SEQERR_SHIFT) |
-		(1ULL << HFI_TF_KEEP_ON_GENERR_SHIFT) |
+		(1ULL << HFI_TF_KEEP_AFTER_SEQERR_SHIFT) | (1ULL << HFI_TF_KEEP_ON_GENERR_SHIFT) |
 		/* KeePayloadOnGenErr = 0 */
-		(1ULL << HFI_TF_STATUS_SEQMISMATCH_SHIFT) |
-		(1ULL << HFI_TF_STATUS_GENMISMATCH_SHIFT));
+		(1ULL << HFI_TF_STATUS_SEQMISMATCH_SHIFT) | (1ULL << HFI_TF_STATUS_GENMISMATCH_SHIFT));
 }
 
-static __inline__ void opx_hfi_tidflow_reset(struct _hfi_ctrl *ctrl,
-					 uint32_t flowid, uint32_t genval,
-					 uint32_t seqnum)
+static __inline__ void opx_hfi_tidflow_reset(struct _hfi_ctrl *ctrl, uint32_t flowid, uint32_t genval, uint32_t seqnum)
 {
-/*
- * If a tidflow table entry is set to "Invalid", we want to drop
- * header if payload is dropped, we want to get a header if the payload
- * is delivered.
- *
- * We set a tidflow table entry "Invalid" by setting FlowValid=1 and
- * GenVal=0x1FFF/0xFFFFF, this is a special generation number and no
- * packet will use this value. We don't care SeqNum but we set it to
- * 0x7FF. So if GenVal does not match, the payload is dropped because
- * KeepPayloadOnGenErr=0; for packet header, KeepOnGenErr=0 make sure
- * header is not generated. But if a packet happens to have the special
- * generation number, the payload is delivered, HdrSuppEnabled=0 make
- * sure header is generated if SeqNUm matches, if SeqNum does not match,
- * KeepAfterSeqErr=1 makes sure the header is generated.
- */
+	/*
+	 * If a tidflow table entry is set to "Invalid", we want to drop
+	 * header if payload is dropped, we want to get a header if the payload
+	 * is delivered.
+	 *
+	 * We set a tidflow table entry "Invalid" by setting FlowValid=1 and
+	 * GenVal=0x1FFF/0xFFFFF, this is a special generation number and no
+	 * packet will use this value. We don't care SeqNum but we set it to
+	 * 0x7FF. So if GenVal does not match, the payload is dropped because
+	 * KeepPayloadOnGenErr=0; for packet header, KeepOnGenErr=0 make sure
+	 * header is not generated. But if a packet happens to have the special
+	 * generation number, the payload is delivered, HdrSuppEnabled=0 make
+	 * sure header is generated if SeqNUm matches, if SeqNum does not match,
+	 * KeepAfterSeqErr=1 makes sure the header is generated.
+	 */
 	ctrl->__hfi_rcvtidflow[flowid] = __cpu_to_le64(
 		/* genval = 0x1FFF or 0xFFFFF */
 		((genval & HFI_TF_GENVAL_MASK) << HFI_TF_GENVAL_SHIFT) |
 		/* seqnum = 0x7FF */
 		((seqnum & HFI_TF_SEQNUM_MASK) << HFI_TF_SEQNUM_SHIFT) |
-		((uint64_t)ctrl->__hfi_tfvalid << HFI_TF_FLOWVALID_SHIFT) |
+		((uint64_t) ctrl->__hfi_tfvalid << HFI_TF_FLOWVALID_SHIFT) |
 		/* HdrSuppEnabled = 0 */
 		(1ULL << HFI_TF_KEEP_AFTER_SEQERR_SHIFT) |
 		/* KeepOnGenErr = 0 */
 		/* KeepPayloadOnGenErr = 0 */
-		(1ULL << HFI_TF_STATUS_SEQMISMATCH_SHIFT) |
-		(1ULL << HFI_TF_STATUS_GENMISMATCH_SHIFT));
+		(1ULL << HFI_TF_STATUS_SEQMISMATCH_SHIFT) | (1ULL << HFI_TF_STATUS_GENMISMATCH_SHIFT));
 }
 
 /*
  * This should only be used for debugging.
  * Normally, we shouldn't read the chip.
  */
-static __inline__ uint64_t opx_hfi_tidflow_get(struct _hfi_ctrl *ctrl,
-					   uint32_t flowid)
+static __inline__ uint64_t opx_hfi_tidflow_get(struct _hfi_ctrl *ctrl, uint32_t flowid)
 {
 	return __le64_to_cpu(ctrl->__hfi_rcvtidflow[flowid]);
 }
@@ -438,38 +429,32 @@ static __inline__ uint32_t opx_hfi_tidflow_get_flowvalid(uint64_t val)
 
 static __inline__ uint32_t opx_hfi_tidflow_get_enabled(uint64_t val)
 {
-	return (val >> HFI_TF_HDRSUPP_ENABLED_SHIFT) &
-	    HFI_TF_HDRSUPP_ENABLED_MASK;
+	return (val >> HFI_TF_HDRSUPP_ENABLED_SHIFT) & HFI_TF_HDRSUPP_ENABLED_MASK;
 }
 
 static __inline__ uint32_t opx_hfi_tidflow_get_keep_after_seqerr(uint64_t val)
 {
-	return (val >> HFI_TF_KEEP_AFTER_SEQERR_SHIFT) &
-	    HFI_TF_KEEP_AFTER_SEQERR_MASK;
+	return (val >> HFI_TF_KEEP_AFTER_SEQERR_SHIFT) & HFI_TF_KEEP_AFTER_SEQERR_MASK;
 }
 
 static __inline__ uint32_t opx_hfi_tidflow_get_keep_on_generr(uint64_t val)
 {
-	return (val >> HFI_TF_KEEP_ON_GENERR_SHIFT) &
-	    HFI_TF_KEEP_ON_GENERR_MASK;
+	return (val >> HFI_TF_KEEP_ON_GENERR_SHIFT) & HFI_TF_KEEP_ON_GENERR_MASK;
 }
 
 static __inline__ uint32_t opx_hfi_tidflow_get_keep_payload_on_generr(uint64_t val)
 {
-	return (val >> HFI_TF_KEEP_PAYLOAD_ON_GENERR_SHIFT) &
-	    HFI_TF_KEEP_PAYLOAD_ON_GENERR_MASK;
+	return (val >> HFI_TF_KEEP_PAYLOAD_ON_GENERR_SHIFT) & HFI_TF_KEEP_PAYLOAD_ON_GENERR_MASK;
 }
 
 static __inline__ uint32_t opx_hfi_tidflow_get_seqmismatch(uint64_t val)
 {
-	return (val >> HFI_TF_STATUS_SEQMISMATCH_SHIFT) &
-	    HFI_TF_STATUS_SEQMISMATCH_MASK;
+	return (val >> HFI_TF_STATUS_SEQMISMATCH_SHIFT) & HFI_TF_STATUS_SEQMISMATCH_MASK;
 }
 
 static __inline__ uint32_t opx_hfi_tidflow_get_genmismatch(uint64_t val)
 {
-	return (val >> HFI_TF_STATUS_GENMISMATCH_SHIFT) &
-	    HFI_TF_STATUS_GENMISMATCH_MASK;
+	return (val >> HFI_TF_STATUS_GENMISMATCH_SHIFT) & HFI_TF_STATUS_GENMISMATCH_MASK;
 }
 
 /*
@@ -478,32 +463,20 @@ static __inline__ uint32_t opx_hfi_tidflow_get_genmismatch(uint64_t val)
  */
 static __inline__ void opx_hfi_hdrset_use_egrbfr(__le32 *rbuf, uint32_t val)
 {
-	rbuf[0] =
-	    (rbuf[0] &
-	     __cpu_to_le32(~(HFI_RHF_USE_EGRBFR_MASK <<
-			     HFI_RHF_USE_EGRBFR_SHIFT))) |
-	    __cpu_to_le32((val & HFI_RHF_USE_EGRBFR_MASK) <<
-			  HFI_RHF_USE_EGRBFR_SHIFT);
+	rbuf[0] = (rbuf[0] & __cpu_to_le32(~(HFI_RHF_USE_EGRBFR_MASK << HFI_RHF_USE_EGRBFR_SHIFT))) |
+		  __cpu_to_le32((val & HFI_RHF_USE_EGRBFR_MASK) << HFI_RHF_USE_EGRBFR_SHIFT);
 }
 
 static __inline__ void opx_hfi_hdrset_egrbfr_index(__le32 *rbuf, uint32_t val)
 {
-	rbuf[0] =
-	    (rbuf[0] &
-	     __cpu_to_le32(~(HFI_RHF_EGRBFR_INDEX_MASK <<
-			     HFI_RHF_EGRBFR_INDEX_SHIFT))) |
-	    __cpu_to_le32((val & HFI_RHF_EGRBFR_INDEX_MASK) <<
-			  HFI_RHF_EGRBFR_INDEX_SHIFT);
+	rbuf[0] = (rbuf[0] & __cpu_to_le32(~(HFI_RHF_EGRBFR_INDEX_MASK << HFI_RHF_EGRBFR_INDEX_SHIFT))) |
+		  __cpu_to_le32((val & HFI_RHF_EGRBFR_INDEX_MASK) << HFI_RHF_EGRBFR_INDEX_SHIFT);
 }
 
 static __inline__ void opx_hfi_hdrset_egrbfr_offset(__le32 *rbuf, uint32_t val)
 {
-	rbuf[1] =
-	    (rbuf[1] &
-	     __cpu_to_le32(~(HFI_RHF_EGRBFR_OFFSET_MASK <<
-			     HFI_RHF_EGRBFR_OFFSET_SHIFT))) |
-	    __cpu_to_le32((val & HFI_RHF_EGRBFR_OFFSET_MASK) <<
-			  HFI_RHF_EGRBFR_OFFSET_SHIFT);
+	rbuf[1] = (rbuf[1] & __cpu_to_le32(~(HFI_RHF_EGRBFR_OFFSET_MASK << HFI_RHF_EGRBFR_OFFSET_SHIFT))) |
+		  __cpu_to_le32((val & HFI_RHF_EGRBFR_OFFSET_MASK) << HFI_RHF_EGRBFR_OFFSET_SHIFT);
 }
 
 /*
@@ -521,11 +494,8 @@ static __inline__ void opx_hfi_hdrset_err_flags(__le32 *rbuf, uint32_t val)
  */
 static __inline__ void opx_hfi_hdrset_seq(__le32 *rbuf, uint32_t val)
 {
-	rbuf[0] =
-	    (rbuf[0] &
-	     __cpu_to_le32(~(HFI_RHF_SEQ_MASK <<
-			     HFI_RHF_SEQ_SHIFT))) |
-	    __cpu_to_le32((val & HFI_RHF_SEQ_MASK) << HFI_RHF_SEQ_SHIFT);
+	rbuf[0] = (rbuf[0] & __cpu_to_le32(~(HFI_RHF_SEQ_MASK << HFI_RHF_SEQ_SHIFT))) |
+		  __cpu_to_le32((val & HFI_RHF_SEQ_MASK) << HFI_RHF_SEQ_SHIFT);
 }
 
 /* Manage TID entries.  It is possible that not all entries
@@ -541,10 +511,8 @@ static __inline__ void opx_hfi_hdrset_seq(__le32 *rbuf, uint32_t val)
 /* update length and tidcnt expected TID entries from the array pointed to by tidinfo. */
 /* Returns 0 on success, else -1 with errno set.
    See full description at declaration */
-static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl,
-					 uint64_t vaddr, uint32_t *length,
-					 uint64_t tidlist, uint32_t *tidcnt,
-					 uint64_t flags)
+static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl, uint64_t vaddr, uint32_t *length, uint64_t tidlist,
+					     uint32_t *tidcnt, uint64_t flags)
 {
 	struct hfi1_cmd cmd;
 
@@ -556,15 +524,15 @@ static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl,
 
 	int err;
 
-	tidinfo.vaddr = vaddr;		/* base address for this send to map */
-	tidinfo.length = *length;	/* length of vaddr */
+	tidinfo.vaddr  = vaddr;	  /* base address for this send to map */
+	tidinfo.length = *length; /* length of vaddr */
 
-	tidinfo.tidlist = tidlist;	/* driver copies tids back directly */
-	tidinfo.tidcnt = 0;		/* clear to zero */
+	tidinfo.tidlist = tidlist; /* driver copies tids back directly */
+	tidinfo.tidcnt	= 0;	   /* clear to zero */
 
 #ifdef OPX_HMEM
-	cmd.type = OPX_HFI_CMD_TID_UPDATE_V3;
-	tidinfo.flags = flags;
+	cmd.type	= OPX_HFI_CMD_TID_UPDATE_V3;
+	tidinfo.flags	= flags;
 	tidinfo.context = 0ull;
 #else
 	cmd.type = OPX_HFI_CMD_TID_UPDATE; /* HFI1_IOCTL_TID_UPDATE */
@@ -573,16 +541,15 @@ static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl,
 		"OPX_DEBUG_ENTRY update [%p - %p], length %u (pages %lu)\n",
 		(void*)vaddr, (void*) (vaddr + *length), *length, (*length) / page_sizes[OFI_PAGE_SIZE]);
 
-	cmd.len = sizeof(tidinfo);
+	cmd.len	 = sizeof(tidinfo);
 	cmd.addr = (__u64) &tidinfo;
 
 	errno = 0;
-	err = opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd));
+	err   = opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd));
 
 	if (err != -1) {
 		assert(err == 0);
-		struct hfi1_tid_info *rettidinfo =
-			(struct hfi1_tid_info *)cmd.addr;
+		struct hfi1_tid_info *rettidinfo = (struct hfi1_tid_info *) cmd.addr;
 		assert(rettidinfo->length);
 		assert(rettidinfo->tidcnt);
 
@@ -626,50 +593,50 @@ static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl,
 	return err;
 }
 
-static __inline__ int32_t opx_hfi_free_tid(struct _hfi_ctrl *ctrl,
-					 uint64_t tidlist, uint32_t tidcnt)
+static __inline__ int32_t opx_hfi_free_tid(struct _hfi_ctrl *ctrl, uint64_t tidlist, uint32_t tidcnt)
 {
-	struct hfi1_cmd cmd;
+	struct hfi1_cmd	     cmd;
 	struct hfi1_tid_info tidinfo;
-	int err;
+	int		     err;
 
-	tidinfo.tidlist = tidlist;	/* input to driver */
-	tidinfo.tidcnt = tidcnt;
+	tidinfo.tidlist = tidlist; /* input to driver */
+	tidinfo.tidcnt	= tidcnt;
 
 	cmd.type = OPX_HFI_CMD_TID_FREE; /* HFI1_IOCTL_TID_FREE */
-	cmd.len = sizeof(tidinfo);
+	cmd.len	 = sizeof(tidinfo);
 	cmd.addr = (__u64) &tidinfo;
-	FI_DBG(&fi_opx_provider, FI_LOG_MR,"OPX_DEBUG_ENTRY tidcnt %u\n", tidcnt);
-	errno = 0;
-	err = opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd));
+	FI_DBG(&fi_opx_provider, FI_LOG_MR, "OPX_DEBUG_ENTRY tidcnt %u\n", tidcnt);
+	errno					    = 0;
+	err					    = opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd));
 	__attribute__((__unused__)) int saved_errno = errno;
 
 	if (err == -1) {
-		FI_WARN(&fi_opx_provider, FI_LOG_MR,"FAILED ERR %d  errno %d \"%s\" tidcnt %u\n", err, saved_errno, strerror(saved_errno), tidcnt);
+		FI_WARN(&fi_opx_provider, FI_LOG_MR, "FAILED ERR %d  errno %d \"%s\" tidcnt %u\n", err, saved_errno,
+			strerror(saved_errno), tidcnt);
 	}
-	FI_DBG(&fi_opx_provider, FI_LOG_MR,"ERR %d  errno %d  \"%s\"\n", err, saved_errno, strerror(saved_errno));
+	FI_DBG(&fi_opx_provider, FI_LOG_MR, "ERR %d  errno %d  \"%s\"\n", err, saved_errno, strerror(saved_errno));
 
 	return err;
 }
 
-static __inline__ int32_t opx_hfi_get_invalidation(struct _hfi_ctrl *ctrl,
-					 uint64_t tidlist, uint32_t *tidcnt)
+static __inline__ int32_t opx_hfi_get_invalidation(struct _hfi_ctrl *ctrl, uint64_t tidlist, uint32_t *tidcnt)
 {
-	struct hfi1_cmd cmd;
+	struct hfi1_cmd	     cmd;
 	struct hfi1_tid_info tidinfo;
-	int err;
+	int		     err;
 
-	tidinfo.tidlist = tidlist;	/* driver copies tids back directly */
-	tidinfo.tidcnt = 0;		/* clear to zero */
+	tidinfo.tidlist = tidlist; /* driver copies tids back directly */
+	tidinfo.tidcnt	= 0;	   /* clear to zero */
 
 	cmd.type = OPX_HFI_CMD_TID_INVAL_READ;
-	cmd.len = sizeof(tidinfo);
+	cmd.len	 = sizeof(tidinfo);
 	cmd.addr = (__u64) &tidinfo;
 
 	err = opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd));
 
-	if (err != -1)
+	if (err != -1) {
 		*tidcnt = tidinfo.tidcnt;
+	}
 
 	return err;
 }
