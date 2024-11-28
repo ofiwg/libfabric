@@ -55,10 +55,7 @@ enum ofi_reliability_kind {
 	OFI_RELIABILITY_KIND_UNSET,
 };
 
-enum ofi_reliability_app_kind {
-	OFI_RELIABILITY_APP_KIND_MPI = 0,
-	OFI_RELIABILITY_APP_KIND_DAOS
-};
+enum ofi_reliability_app_kind { OFI_RELIABILITY_APP_KIND_MPI = 0, OFI_RELIABILITY_APP_KIND_DAOS };
 
 /* #define SKIP_RELIABILITY_PROTOCOL_RX */
 /* #define SKIP_RELIABILITY_PROTOCOL_TX */
@@ -66,234 +63,231 @@ enum ofi_reliability_app_kind {
 /* #define OPX_RELIABILITY_TEST */
 
 #ifdef OPX_RELIABILITY_TEST
-#define FI_OPX_RELIABILITY_RX_DROP_PACKET(x,y)	fi_opx_reliability_rx_drop_packet(x,y)
+#define FI_OPX_RELIABILITY_RX_DROP_PACKET(x, y) fi_opx_reliability_rx_drop_packet(x, y)
 #else
-#define FI_OPX_RELIABILITY_RX_DROP_PACKET(x,y)	(0)
+#define FI_OPX_RELIABILITY_RX_DROP_PACKET(x, y) (0)
 #endif
 
-#define PENDING_RX_RELIABLITY_COUNT_MAX (1024)  // Max depth of the pending Rx reliablity pool
+#define PENDING_RX_RELIABLITY_COUNT_MAX (1024) // Max depth of the pending Rx reliablity pool
 
 struct fi_opx_completion_counter {
-		struct fi_opx_completion_counter *next;
-		union {
-			uint64_t tag;
-			ssize_t initial_byte_count;
-		};
-		ssize_t byte_counter;
-		struct fi_opx_cntr *cntr;
-		struct fi_opx_cq *cq;
-		union {
-			struct opx_context *context;
-			void *container;
-		};
-		void (*hit_zero)(struct fi_opx_completion_counter*);
+	struct fi_opx_completion_counter *next;
+	union {
+		uint64_t tag;
+		ssize_t	 initial_byte_count;
+	};
+	ssize_t		    byte_counter;
+	struct fi_opx_cntr *cntr;
+	struct fi_opx_cq   *cq;
+	union {
+		struct opx_context *context;
+		void		   *container;
+	};
+	void (*hit_zero)(struct fi_opx_completion_counter *);
 };
 
 union fi_opx_reliability_deferred_work;
 struct fi_opx_reliability_work_elem {
 	struct slist_entry slist_entry;
-	ssize_t (*work_fn)(union fi_opx_reliability_deferred_work * work_state);
+	ssize_t (*work_fn)(union fi_opx_reliability_deferred_work *work_state);
 };
 
 struct fi_opx_reliability_tx_sdma_replay_params {
 	struct fi_opx_reliability_work_elem work_elem;
-	void *opx_ep;
-	struct slist sdma_reqs;
-	uint64_t flow_key;
+	void				   *opx_ep;
+	struct slist			    sdma_reqs;
+	uint64_t			    flow_key;
 };
 
-#define OPX_RELIABILITY_TX_MAX_REPLAYS		(32)
+#define OPX_RELIABILITY_TX_MAX_REPLAYS (32)
 struct fi_opx_reliability_tx_pio_replay_params {
-	struct fi_opx_reliability_work_elem work_elem;
-	void *opx_ep;
+	struct fi_opx_reliability_work_elem  work_elem;
+	void				    *opx_ep;
 	struct fi_opx_reliability_tx_replay *replays[OPX_RELIABILITY_TX_MAX_REPLAYS];
-	uint64_t flow_key;
-	uint16_t num_replays;
-	uint16_t start_index;
+	uint64_t			     flow_key;
+	uint16_t			     num_replays;
+	uint16_t			     start_index;
 };
 
 union fi_opx_reliability_deferred_work {
-	struct fi_opx_reliability_work_elem work_elem;
+	struct fi_opx_reliability_work_elem		work_elem;
 	struct fi_opx_reliability_tx_sdma_replay_params sdma_replay;
-	struct fi_opx_reliability_tx_pio_replay_params pio_replay;
+	struct fi_opx_reliability_tx_pio_replay_params	pio_replay;
 };
 
-#define OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MIN	(1)
-#define OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MAX	(65535)
-#define OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_DEFAULT	(128)
-#define OPX_RELIABILITY_MAX_CONGESTED_PINGS_MIN		(1)
-#define OPX_RELIABILITY_MAX_CONGESTED_PINGS_MAX		(65535)
-#define OPX_RELIABILITY_MAX_CONGESTED_PINGS_DEFAULT	(4)
+#define OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MIN     (1)
+#define OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MAX     (65535)
+#define OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_DEFAULT (128)
+#define OPX_RELIABILITY_MAX_CONGESTED_PINGS_MIN	      (1)
+#define OPX_RELIABILITY_MAX_CONGESTED_PINGS_MAX	      (65535)
+#define OPX_RELIABILITY_MAX_CONGESTED_PINGS_DEFAULT   (4)
 struct fi_opx_reliability_service {
-
-	struct fi_opx_atomic_fifo			fifo;		/* 27 qws = 216 bytes */
-	uint64_t					usec_next;
-	uint32_t					usec_max;
-	uint32_t					preemptive_ack_rate_mask;
+	struct fi_opx_atomic_fifo fifo; /* 27 qws = 216 bytes */
+	uint64_t		  usec_next;
+	uint32_t		  usec_max;
+	uint32_t		  preemptive_ack_rate_mask;
 
 	// ==== 232 bytes here, 24 bytes left in cacheline ======
 	struct {
-		union fi_opx_timer_stamp		timestamp;	/*  2 qws =  16 bytes */
-		union fi_opx_timer_state		timer;		/*  5 bytes           */
-		uint8_t					unused_padding[3];
+		union fi_opx_timer_stamp timestamp; /*  2 qws =  16 bytes */
+		union fi_opx_timer_state timer;	    /*  5 bytes           */
+		uint8_t			 unused_padding[3];
 
-	/* == CACHE LINE == */
-		RbtHandle				flow;		/*  1 qw  =   8 bytes */
-		uint64_t				ping_start_key;
-		uint16_t max_uncongested_pings;
-		uint16_t max_congested_pings;
-		uint8_t congested_flag;
-		uint8_t unused_padding2[3];
+		/* == CACHE LINE == */
+		RbtHandle flow; /*  1 qw  =   8 bytes */
+		uint64_t  ping_start_key;
+		uint16_t  max_uncongested_pings;
+		uint16_t  max_congested_pings;
+		uint8_t	  congested_flag;
+		uint8_t	  unused_padding2[3];
 
 		struct {
-			uint64_t			unused_cacheline_1;
-			union fi_opx_hfi1_pio_state *	pio_state;
-			volatile uint64_t *		pio_scb_sop_first;
-			volatile uint64_t *		pio_credits_addr;
-			volatile uint64_t *		pio_scb_first;
+			uint64_t		     unused_cacheline_1;
+			union fi_opx_hfi1_pio_state *pio_state;
+			volatile uint64_t	    *pio_scb_sop_first;
+			volatile uint64_t	    *pio_credits_addr;
+			volatile uint64_t	    *pio_scb_first;
 
-	/* == CACHE LINE == */
-			struct fi_opx_hfi1_txe_scb_9B	ping_model_9B;
-			struct fi_opx_hfi1_txe_scb_9B	ack_model_9B;
-			struct fi_opx_hfi1_txe_scb_9B	nack_model_9B;
-			struct fi_opx_hfi1_txe_scb_16B	ping_model_16B;
-			struct fi_opx_hfi1_txe_scb_16B	ack_model_16B;
-			struct fi_opx_hfi1_txe_scb_16B	nack_model_16B;
+			/* == CACHE LINE == */
+			struct fi_opx_hfi1_txe_scb_9B  ping_model_9B;
+			struct fi_opx_hfi1_txe_scb_9B  ack_model_9B;
+			struct fi_opx_hfi1_txe_scb_9B  nack_model_9B;
+			struct fi_opx_hfi1_txe_scb_16B ping_model_16B;
+			struct fi_opx_hfi1_txe_scb_16B ack_model_16B;
+			struct fi_opx_hfi1_txe_scb_16B nack_model_16B;
 		} hfi1;
-	} tx __attribute__((__packed__));;
+	} tx __attribute__((__packed__));
+	;
 
 	/* == CACHE LINE == */
 
 	struct {
-
-		RbtHandle				flow;		/*  1 qw  =   8 bytes */
+		RbtHandle flow; /*  1 qw  =   8 bytes */
 		struct {
-
-			struct fi_opx_hfi1_rxe_state	state;		/*  2 qws  =  16 bytes */
+			struct fi_opx_hfi1_rxe_state state; /*  2 qws  =  16 bytes */
 
 			struct {
-				uint32_t *		rhf_base;
-				volatile uint64_t *	head_register;
+				uint32_t	  *rhf_base;
+				volatile uint64_t *head_register;
 			} hdrq;
 
 			/* -- not critical; can be moved to another cacheline */
 
 			struct {
-				uint32_t *		base_addr;
-				uint32_t		elemsz;
-				uint32_t		last_egrbfr_index;
-				volatile uint64_t *	head_register;
+				uint32_t	  *base_addr;
+				uint32_t	   elemsz;
+				uint32_t	   last_egrbfr_index;
+				volatile uint64_t *head_register;
 			} egrq;
 		} hfi1;
 	} rx;
 
 	/* == CACHE LINE == */
 
-	struct fi_opx_hfi1_context *			context;
-	volatile uint64_t				enabled;
-	volatile uint64_t				active;
-	pthread_t					thread;				/* 1 qw =  8 bytes */
-	struct ofi_bufpool 				*pending_rx_reliability_pool;
-	struct fi_opx_pending_rx_reliability_op		*pending_rx_reliability_ops_hashmap;
-	uint64_t					backoff_period;
-	opx_lid_t					lid;
-	uint32_t					preemptive_ack_rate;
+	struct fi_opx_hfi1_context		*context;
+	volatile uint64_t			 enabled;
+	volatile uint64_t			 active;
+	pthread_t				 thread; /* 1 qw =  8 bytes */
+	struct ofi_bufpool			*pending_rx_reliability_pool;
+	struct fi_opx_pending_rx_reliability_op *pending_rx_reliability_ops_hashmap;
+	uint64_t				 backoff_period;
+	opx_lid_t				 lid;
+	uint32_t				 preemptive_ack_rate;
 
 	/* == CACHE LINE == */
-	RbtHandle			handshake_init;		/*  1 qw  =   8 bytes */
-	struct ofi_bufpool 		*uepkt_pool;
-	struct slist			work_pending;		/* 16 bytes */
-	struct ofi_bufpool 		*work_pending_pool;
-	struct ofi_bufpool 		*sdma_replay_request_pool;
+	RbtHandle	    handshake_init; /*  1 qw  =   8 bytes */
+	struct ofi_bufpool *uepkt_pool;
+	struct slist	    work_pending; /* 16 bytes */
+	struct ofi_bufpool *work_pending_pool;
+	struct ofi_bufpool *sdma_replay_request_pool;
 
-	int				is_backoff_enabled;
-	enum ofi_reliability_kind	reliability_kind;	/* 4 bytes */
-	uint16_t			unused[3];
-	uint8_t				fifo_max;
-	uint8_t				hfi1_max;
+	int			  is_backoff_enabled;
+	enum ofi_reliability_kind reliability_kind; /* 4 bytes */
+	uint16_t		  unused[3];
+	uint8_t			  fifo_max;
+	uint8_t			  hfi1_max;
 
 } __attribute__((__aligned__(64))) __attribute__((__packed__));
 
-
 union fi_opx_reliability_service_flow_key {
-	uint64_t		value;
-	uint32_t		value32b[2];
+	uint64_t value;
+	uint32_t value32b[2];
 	struct {
-		uint32_t	slid	: 24;
-		uint32_t	tx	:  8;
-		uint32_t	dlid	: 24;
-		uint32_t	rx	:  8;
+		uint32_t slid : 24;
+		uint32_t tx : 8;
+		uint32_t dlid : 24;
+		uint32_t rx : 8;
 	} __attribute__((__packed__));
 };
 
 struct fi_opx_reliability_flow {
-	//opx_spin_t				lock;
-	uint64_t					next_psn;
-	union fi_opx_reliability_service_flow_key	key;
-	struct fi_opx_reliability_rx_uepkt *		uepkt;
-	uint8_t						origin_rx;
+	// opx_spin_t				lock;
+	uint64_t				  next_psn;
+	union fi_opx_reliability_service_flow_key key;
+	struct fi_opx_reliability_rx_uepkt	 *uepkt;
+	uint8_t					  origin_rx;
 };
 
 struct fi_opx_pending_rx_reliability_op_key {
-	uint64_t		key;
-	uint64_t 		psn_start;
+	uint64_t key;
+	uint64_t psn_start;
 };
 
 struct fi_opx_pending_rx_reliability_op {
 	struct fi_opx_pending_rx_reliability_op_key key;
-	uint64_t 		psn_count;
-	uint64_t 		psn_count_coalesce;
-	opx_lid_t		slid;
-	uint32_t		unused;
-	uint64_t 		rx;
-	uint64_t		ud_opcode;  // Only needs to be uint8_t
-	UT_hash_handle 	hh;         /* makes this structure hashable */
+	uint64_t				    psn_count;
+	uint64_t				    psn_count_coalesce;
+	opx_lid_t				    slid;
+	uint32_t				    unused;
+	uint64_t				    rx;
+	uint64_t				    ud_opcode; // Only needs to be uint8_t
+	UT_hash_handle				    hh;	       /* makes this structure hashable */
 };
-
 
 struct fi_opx_reliability_tx_replay {
 	/* == CACHE LINE 0 == */
-	struct fi_opx_reliability_tx_replay		*next;
-	struct fi_opx_reliability_tx_replay		*prev;
-	uint64_t					target_reliability_rx;
-	union fi_opx_reliability_tx_psn			*psn_ptr;
-	struct fi_opx_completion_counter		*cc_ptr;
-	uint64_t					cc_dec;
+	struct fi_opx_reliability_tx_replay *next;
+	struct fi_opx_reliability_tx_replay *prev;
+	uint64_t			     target_reliability_rx;
+	union fi_opx_reliability_tx_psn	    *psn_ptr;
+	struct fi_opx_completion_counter    *cc_ptr;
+	uint64_t			     cc_dec;
 	union {
-		uint64_t				*payload;
-		struct iovec				*iov;
+		uint64_t     *payload;
+		struct iovec *iov;
 	};
-	uint16_t					unused1;
-	uint16_t					nack_count;
-	bool						acked;
-	bool						pinned;
-	bool						use_sdma;
-	bool						use_iov;
+	uint16_t unused1;
+	uint16_t nack_count;
+	bool	 acked;
+	bool	 pinned;
+	bool	 use_sdma;
+	bool	 use_iov;
 
 	/* == CACHE LINE 1 == */
-	void						*sdma_we;
-	uint32_t					sdma_we_use_count;
-	enum fi_hmem_iface				hmem_iface;
-	uint64_t					hmem_device;
-	uint64_t					unused3[5];
+	void		  *sdma_we;
+	uint32_t	   sdma_we_use_count;
+	enum fi_hmem_iface hmem_iface;
+	uint64_t	   hmem_device;
+	uint64_t	   unused3[5];
 
 #ifndef NDEBUG
 	/* == CACHE LINE == */
-	uint64_t					orig_payload[8];
+	uint64_t orig_payload[8];
 #endif
 
 	/* == CACHE LINE == */
 
 	/* --- MUST BE 64 BYTE ALIGNED --- */
-	union opx_hfi1_txe_scb_union            scb;
+	union opx_hfi1_txe_scb_union scb;
 
-	uint8_t						data[];
+	uint8_t data[];
 } __attribute__((__aligned__(64)));
 
-#define OPX_REPLAY_HDR(_replay)  OPX_REPLAY_HDR_TYPE(_replay, OPX_HFI1_TYPE)
+#define OPX_REPLAY_HDR(_replay) OPX_REPLAY_HDR_TYPE(_replay, OPX_HFI1_TYPE)
 
-#define OPX_REPLAY_HDR_TYPE(_replay,_hfi1_type)  ((_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))  ? \
-	                                      (&((_replay)->scb.scb_9B.hdr)) : (&((_replay)->scb.scb_16B.hdr)) )
+#define OPX_REPLAY_HDR_TYPE(_replay, _hfi1_type)                                            \
+	((_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ? (&((_replay)->scb.scb_9B.hdr)) : \
+							   (&((_replay)->scb.scb_16B.hdr)))
 
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_replay, sdma_we) == FI_OPX_CACHE_LINE_SIZE,
 			"Reliability Replay sdma_we should start on first cacheline!");
@@ -301,8 +295,8 @@ OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_reliability_tx_replay, scb) & (F
 			"Reliability Replay scb must be 64-byte aligned!");
 
 struct fi_opx_reliability_resynch_flow {
-	bool client_ep;
-	uint64_t resynch_counter;
+	bool					  client_ep;
+	uint64_t				  resynch_counter;
 	union fi_opx_reliability_service_flow_key key;
 	/* client related fields */
 	bool remote_ep_resynch_completed;
@@ -323,75 +317,87 @@ struct fi_opx_reliability_resynch_flow {
 typedef enum ofi_node_color NodeColor;
 
 typedef struct NodeTag {
-        struct NodeTag *left;       // left child
-        struct NodeTag *right;      // right child
-        struct NodeTag *parent;     // parent
-        NodeColor color;            // node color (BLACK, RED)
-        void *key;                  // key used for searching
-        void *val;                // user data
+	struct NodeTag *left;	// left child
+	struct NodeTag *right;	// right child
+	struct NodeTag *parent; // parent
+	NodeColor	color;	// node color (BLACK, RED)
+	void	       *key;	// key used for searching
+	void	       *val;	// user data
 } NodeType;
 
 typedef struct RbtTag {
-        NodeType *root;   // root of red-black tree
-        NodeType sentinel;
-        int (*compare)(void *a, void *b);    // compare keys
+	NodeType *root; // root of red-black tree
+	NodeType  sentinel;
+	int (*compare)(void *a, void *b); // compare keys
 } RbtType;
 
 __OPX_FORCE_INLINE__
-int fi_opx_reliability_compare (void *a, void *b) {
+int fi_opx_reliability_compare(void *a, void *b)
+{
+	const uintptr_t a_key = (uintptr_t) a;
+	const uintptr_t b_key = (uintptr_t) b;
 
-        const uintptr_t a_key = (uintptr_t)a;
-        const uintptr_t b_key = (uintptr_t)b;
+	if (a_key > b_key) {
+		return 1;
+	}
+	if (a_key < b_key) {
+		return -1;
+	}
 
-        if (a_key > b_key) return 1;
-        if (a_key < b_key) return -1;
-
-        return 0;
+	return 0;
 }
 
 __OPX_FORCE_INLINE__
-void *fi_opx_rbt_find(RbtHandle h, void *key) {
-        RbtType *rbt = h;
-        NodeType *current;
-        current = rbt->root;
-        while(current != &rbt->sentinel) {
-                int rc = fi_opx_reliability_compare(key, current->key);
-                if (rc == 0) return current;
-                current = (rc < 0) ? current->left : current->right;
-        }
-        return NULL;
+void *fi_opx_rbt_find(RbtHandle h, void *key)
+{
+	RbtType	 *rbt = h;
+	NodeType *current;
+	current = rbt->root;
+	while (current != &rbt->sentinel) {
+		int rc = fi_opx_reliability_compare(key, current->key);
+		if (rc == 0) {
+			return current;
+		}
+		current = (rc < 0) ? current->left : current->right;
+	}
+	return NULL;
 }
 
 __OPX_FORCE_INLINE__
-void ** fi_opx_rbt_value_ptr(RbtHandle h, RbtIterator it) {
-        NodeType *i = it;
+void **fi_opx_rbt_value_ptr(RbtHandle h, RbtIterator it)
+{
+	NodeType *i = it;
 
-        return &i->val;
+	return &i->val;
 }
 
 __OPX_FORCE_INLINE__
-RbtIterator fi_opx_rbt_begin(RbtHandle h) {
-        RbtType *rbt = h;
+RbtIterator fi_opx_rbt_begin(RbtHandle h)
+{
+	RbtType *rbt = h;
 
-        // return pointer to first value
-        NodeType *i;
-        for (i = rbt->root; i->left != &rbt->sentinel; i = i->left);
-        return i != &rbt->sentinel ? i : NULL;
+	// return pointer to first value
+	NodeType *i;
+	for (i = rbt->root; i->left != &rbt->sentinel; i = i->left)
+		;
+	return i != &rbt->sentinel ? i : NULL;
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_rbt_key(RbtIterator it, uint64_t *key) {
+void fi_opx_rbt_key(RbtIterator it, uint64_t *key)
+{
 	NodeType *i = it;
 
 	*key = (uint64_t) i->key;
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_rbt_key_value(RbtHandle h, RbtIterator it, void **key, void **val) {
-        NodeType *i = it;
+void fi_opx_rbt_key_value(RbtHandle h, RbtIterator it, void **key, void **val)
+{
+	NodeType *i = it;
 
-        *key = i->key;
-        *val = i->val;
+	*key = i->key;
+	*val = i->val;
 }
 
 /*
@@ -399,73 +405,70 @@ void fi_opx_rbt_key_value(RbtHandle h, RbtIterator it, void **key, void **val) {
  *
  * \return reliability service hfi1 rx identifier
  */
-uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * service, uuid_t unique_job_key,
-		struct fi_opx_hfi1_context * hfi1,
-		const enum ofi_reliability_kind reliability_kind);
-void fi_opx_reliability_model_init_16B (struct fi_opx_reliability_service * service,
-		struct fi_opx_hfi1_context * hfi1);
-void fi_opx_reliability_service_fini (struct fi_opx_reliability_service * service);
+uint8_t fi_opx_reliability_service_init(struct fi_opx_reliability_service *service, uuid_t unique_job_key,
+					struct fi_opx_hfi1_context     *hfi1,
+					const enum ofi_reliability_kind reliability_kind);
+void	fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service *service, struct fi_opx_hfi1_context *hfi1);
+void	fi_opx_reliability_service_fini(struct fi_opx_reliability_service *service);
 
-void fi_reliability_service_ping_remote (struct fid_ep *ep, struct fi_opx_reliability_service * service);
-unsigned fi_opx_reliability_service_poll_hfi1 (struct fid_ep *ep, struct fi_opx_reliability_service * service);
+void	 fi_reliability_service_ping_remote(struct fid_ep *ep, struct fi_opx_reliability_service *service);
+unsigned fi_opx_reliability_service_poll_hfi1(struct fid_ep *ep, struct fi_opx_reliability_service *service);
 
-void fi_opx_reliability_service_process_pending (struct fi_opx_reliability_service * service);
+void fi_opx_reliability_service_process_pending(struct fi_opx_reliability_service *service);
 
-#define RX_CMD	(0x0000000000000008ul)
-#define TX_CMD	(0x0000000000000010ul)
+#define RX_CMD (0x0000000000000008ul)
+#define TX_CMD (0x0000000000000010ul)
 
-
-#define FI_OPX_RELIABILITY_EXCEPTION	(0)
-#define FI_OPX_RELIABILITY_EXPECTED	(1)
-
+#define FI_OPX_RELIABILITY_EXCEPTION (0)
+#define FI_OPX_RELIABILITY_EXPECTED  (1)
 
 struct fi_opx_reliability_rx_uepkt {
-	struct fi_opx_reliability_rx_uepkt *	prev;
-	struct fi_opx_reliability_rx_uepkt *	next;
-	uint64_t				psn;
-	bool					processed;
-	uint8_t					unused_b[7];
-	uint64_t				unused_0[4];
+	struct fi_opx_reliability_rx_uepkt *prev;
+	struct fi_opx_reliability_rx_uepkt *next;
+	uint64_t			    psn;
+	bool				    processed;
+	uint8_t				    unused_b[7];
+	uint64_t			    unused_0[4];
 
 	/* == CACHE LINE == */
 
-	uint64_t				unused_1;
-	union opx_hfi1_packet_hdr		hdr;	/* 56 bytes */
+	uint64_t		  unused_1;
+	union opx_hfi1_packet_hdr hdr; /* 56 bytes */
 
 	/* == CACHE LINE == */
-	uint8_t					payload[FI_OPX_HFI1_PACKET_MTU];
+	uint8_t payload[FI_OPX_HFI1_PACKET_MTU];
 
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 
 union fi_opx_reliability_tx_psn {
 	uint64_t value;
 	struct {
-		uint64_t	psn:24;
-		uint64_t	throttle:8;
-		uint64_t	nack_count:8;
-		uint64_t	bytes_outstanding:24;
+		uint64_t psn : 24;
+		uint64_t throttle : 8;
+		uint64_t nack_count : 8;
+		uint64_t bytes_outstanding : 24;
 	} psn;
 } __attribute__((__packed__));
 
 // TODO - make these tunable.
 #define FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS	(2048)
-#define FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS	(8192)
-#define OPX_MAX_OUTSTANDING_REPLAYS	(FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS + FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS)
+#define FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS (8192)
+#define OPX_MAX_OUTSTANDING_REPLAYS		(FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS + FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS)
 
-#define OPX_REPLAY_BASE_SIZE			(sizeof(struct fi_opx_reliability_tx_replay))
-#define OPX_REPLAY_IOV_SIZE			(sizeof(struct iovec) << 1)
-#define OPX_REPLAY_PAYLOAD_SIZE			(FI_OPX_HFI1_PACKET_MTU + 64)
-#define OPX_RELIABILITY_TX_REPLAY_SIZE		(OPX_REPLAY_BASE_SIZE + OPX_REPLAY_PAYLOAD_SIZE)
-#define OPX_RELIABILITY_TX_REPLAY_IOV_SIZE	(OPX_REPLAY_BASE_SIZE + OPX_REPLAY_IOV_SIZE)
+#define OPX_REPLAY_BASE_SIZE		   (sizeof(struct fi_opx_reliability_tx_replay))
+#define OPX_REPLAY_IOV_SIZE		   (sizeof(struct iovec) << 1)
+#define OPX_REPLAY_PAYLOAD_SIZE		   (FI_OPX_HFI1_PACKET_MTU + 64)
+#define OPX_RELIABILITY_TX_REPLAY_SIZE	   (OPX_REPLAY_BASE_SIZE + OPX_REPLAY_PAYLOAD_SIZE)
+#define OPX_RELIABILITY_TX_REPLAY_IOV_SIZE (OPX_REPLAY_BASE_SIZE + OPX_REPLAY_IOV_SIZE)
 
 // Maximum PSNs to NACK when responding to a ping
 #ifndef OPX_RELIABILITY_RX_MAX_NACK
-#define OPX_RELIABILITY_RX_MAX_NACK		(32)
+#define OPX_RELIABILITY_RX_MAX_NACK (32)
 #endif
 
 // Maximum PSNs to NACK when receiving an out of order packet
 #ifndef OPX_RELIABILITY_RX_MAX_PRE_NACK
-#define OPX_RELIABILITY_RX_MAX_PRE_NACK		(1)
+#define OPX_RELIABILITY_RX_MAX_PRE_NACK (1)
 #endif
 
 /*
@@ -534,8 +537,8 @@ union fi_opx_reliability_tx_psn {
  * constrained.
  *
  */
-#define MAX_PSN		0x0000000000FFFFFFull
-#define MAX_PSN_MASK	0xFFFFFFFFFF000000ull
+#define MAX_PSN	     0x0000000000FFFFFFull
+#define MAX_PSN_MASK 0xFFFFFFFFFF000000ull
 
 #define PSN_WINDOW_SIZE 0x0000000001000000ull
 #define PSN_LOW_WINDOW	OPX_MAX_OUTSTANDING_REPLAYS
@@ -543,127 +546,109 @@ union fi_opx_reliability_tx_psn {
 #define PSN_AGE_LIMIT	0x0000000000F00000ull
 
 struct fi_opx_reliability_client_state {
-
 	union {
-		enum ofi_reliability_kind		kind;			/* runtime check for fi_cq_read(), etc */
-		uint64_t				pad;
+		enum ofi_reliability_kind kind; /* runtime check for fi_cq_read(), etc */
+		uint64_t		  pad;
 	};
 	// 8 bytes
-	struct fi_opx_atomic_fifo_producer		fifo;			/* 6 qws = 48 bytes; only for OFI_RELIABILITY_KIND_OFFLOAD */
+	struct fi_opx_atomic_fifo_producer fifo; /* 6 qws = 48 bytes; only for OFI_RELIABILITY_KIND_OFFLOAD */
 	// 56 bytes
-	RbtHandle					tx_flow_rbtree;
+	RbtHandle tx_flow_rbtree;
 	// 64 bytes
-	RbtHandle					rx_flow_rbtree;
+	RbtHandle rx_flow_rbtree;
 	// 72 bytes
-	struct ofi_bufpool *		replay_pool; // for main data path
-	struct ofi_bufpool *		replay_iov_pool; // for main data path
+	struct ofi_bufpool *replay_pool;     // for main data path
+	struct ofi_bufpool *replay_iov_pool; // for main data path
 	// 88 bytes
-	struct fi_opx_reliability_service *		service;
-	void (*process_fn)(struct fid_ep *ep,
-			   const union opx_hfi1_packet_hdr * const hdr,
-			   const uint8_t * const payload,
+	struct fi_opx_reliability_service *service;
+	void (*process_fn)(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr, const uint8_t *const payload,
 			   const uint8_t origin_rs);
 	// 104 bytes
-	opx_lid_t					lid;
-	uint8_t						tx;
-	uint8_t						rx;
+	opx_lid_t lid;
+	uint8_t	  tx;
+	uint8_t	  rx;
 	// 110 bytes
 	/* -- not critical; only for debug, init/fini, etc. -- */
-	uint16_t					drop_count;
-	uint16_t					drop_mask;
-	enum ofi_reliability_kind	reliability_kind;
+	uint16_t		  drop_count;
+	uint16_t		  drop_mask;
+	enum ofi_reliability_kind reliability_kind;
 	// 118 bytes
-	RbtHandle	flow_rbtree_resynch;
+	RbtHandle flow_rbtree_resynch;
 	// 126 bytes
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 
-void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * state,
-		struct fi_opx_reliability_service * service,
-		const uint8_t rx,
-		const uint8_t tx,
-		void (*process_fn)(struct fid_ep *ep,
-				   const union opx_hfi1_packet_hdr * const hdr,
-				   const uint8_t * const payload,
-				   const uint8_t origin_reliability_rx));
+void fi_opx_reliability_client_init(struct fi_opx_reliability_client_state *state,
+				    struct fi_opx_reliability_service *service, const uint8_t rx, const uint8_t tx,
+				    void (*process_fn)(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
+						       const uint8_t *const payload,
+						       const uint8_t	    origin_reliability_rx));
 
-void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * state);
+void fi_opx_reliability_client_fini(struct fi_opx_reliability_client_state *state);
 
 __OPX_FORCE_INLINE__
-unsigned fi_opx_reliability_client_active (struct fi_opx_reliability_client_state * state)
+unsigned fi_opx_reliability_client_active(struct fi_opx_reliability_client_state *state)
 {
 	return ((state->replay_pool && !ofi_bufpool_empty(state->replay_pool)) ||
-		 (state->replay_iov_pool && !ofi_bufpool_empty(state->replay_iov_pool)));
+		(state->replay_iov_pool && !ofi_bufpool_empty(state->replay_iov_pool)));
 }
 
-static inline
-void fi_reliability_service_process_command (struct fi_opx_reliability_client_state *state,
-					     struct fi_opx_reliability_tx_replay * replay,
-					     opx_lid_t slid, opx_lid_t dlid,
-					     uint8_t	tx, uint8_t	rx,
-					     const enum opx_hfi1_type hfi1_type)
+static inline void fi_reliability_service_process_command(struct fi_opx_reliability_client_state *state,
+							  struct fi_opx_reliability_tx_replay *replay, opx_lid_t slid,
+							  opx_lid_t dlid, uint8_t tx, uint8_t rx,
+							  const enum opx_hfi1_type hfi1_type)
 {
-	union fi_opx_reliability_service_flow_key key = {
-		.slid = slid,
-		.tx = tx,
-		.dlid = dlid,
-		.rx = rx
-	};
+	union fi_opx_reliability_service_flow_key key = {.slid = slid, .tx = tx, .dlid = dlid, .rx = rx};
 
-	void * itr = NULL;
+	void *itr = NULL;
 
 #ifdef OPX_RELIABILITY_DEBUG
-	fprintf(stderr, "(tx) packet %016lx %08u posted.\n", key.value, FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR_TYPE(replay, hfi1_type)));
+	fprintf(stderr, "(tx) packet %016lx %08u posted.\n", key.value,
+		FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR_TYPE(replay, hfi1_type)));
 #endif
 
 #ifndef NDEBUG
-	itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)key.value);
+	itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void *) key.value);
 	if (itr == NULL) {
-		fprintf(stderr, "(%d) %s:%s():%d [%016lX] [slid=%08X tx=%08X dlid=%08X rx=%0hhX] Error trying to register replay for flow with no handshake!\n",
-			getpid(), __FILE__, __func__, __LINE__,
-			key.value,
-			slid,
-			FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR_TYPE(replay, hfi1_type)),
-			dlid,
+		fprintf(stderr,
+			"(%d) %s:%s():%d [%016lX] [slid=%08X tx=%08X dlid=%08X rx=%0hhX] Error trying to register replay for flow with no handshake!\n",
+			getpid(), __FILE__, __func__, __LINE__, key.value, slid,
+			FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR_TYPE(replay, hfi1_type)), dlid,
 			OPX_REPLAY_HDR_TYPE(replay, hfi1_type)->bth.rx);
 		assert(itr);
 	}
 #endif
 	/* search for existing unack'd flows */
-	itr = fi_opx_rbt_find(state->service->tx.flow, (void*)key.value);
+	itr = fi_opx_rbt_find(state->service->tx.flow, (void *) key.value);
 	if (OFI_UNLIKELY((itr == NULL))) {
-
 		/* did not find an existing flow */
 		replay->prev = replay;
 		replay->next = replay;
 
-		rbtInsert(state->service->tx.flow, (void*)key.value, (void*)replay);
+		rbtInsert(state->service->tx.flow, (void *) key.value, (void *) replay);
 
 #ifdef OPX_RELIABILITY_DEBUG
-		fprintf(stderr,"\nNew flow: %016lx\n", key.value);
+		fprintf(stderr, "\nNew flow: %016lx\n", key.value);
 #endif
 		return;
-
 	}
 
-	struct fi_opx_reliability_tx_replay ** value_ptr =
+	struct fi_opx_reliability_tx_replay **value_ptr =
 		(struct fi_opx_reliability_tx_replay **) fi_opx_rbt_value_ptr(state->service->tx.flow, itr);
 
-	struct fi_opx_reliability_tx_replay * head = *value_ptr;
+	struct fi_opx_reliability_tx_replay *head = *value_ptr;
 
 	if (head == NULL) {
-
 		/* the existing flow does not have any un-ack'd replay buffers */
 		replay->prev = replay;
 		replay->next = replay;
-		*value_ptr = replay;
+		*value_ptr   = replay;
 
 	} else {
-
 		/* insert this replay at the end of the list */
-		replay->prev = head->prev;
-		replay->next = head;
+		replay->prev	 = head->prev;
+		replay->next	 = head;
 		head->prev->next = replay;
-		head->prev = replay;
+		head->prev	 = replay;
 	}
 }
 
@@ -672,9 +657,8 @@ void fi_reliability_service_process_command (struct fi_opx_reliability_client_st
 #define FI_PSN_TO_DROP 0xfffff0
 
 // Debugging tool that deliberately drops packets.
-static inline
-uint16_t fi_opx_reliability_rx_drop_packet (struct fi_opx_reliability_client_state * state,
-	const union opx_hfi1_packet_hdr *const hdr)
+static inline uint16_t fi_opx_reliability_rx_drop_packet(struct fi_opx_reliability_client_state *state,
+							 const union opx_hfi1_packet_hdr *const	 hdr)
 {
 /*
  * Two variations of when to drop packets. The first drops a percentage of the
@@ -687,9 +671,9 @@ uint16_t fi_opx_reliability_rx_drop_packet (struct fi_opx_reliability_client_sta
 	// drops a percentage of the packets based on drop_mask.
 	const uint16_t tmp = state->drop_count & state->drop_mask;
 
-	if (tmp == 0)
-		FI_WARN(fi_opx_global.prov,FI_LOG_EP_DATA,
-			"DEBUG: discarding packet %hu\n", state->drop_count);
+	if (tmp == 0) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "DEBUG: discarding packet %hu\n", state->drop_count);
+	}
 
 	state->drop_count = tmp + 1;
 	return !tmp;
@@ -702,7 +686,7 @@ uint16_t fi_opx_reliability_rx_drop_packet (struct fi_opx_reliability_client_sta
 		return 1;
 	} else if (psn == FI_PSN_TO_DROP) {
 		fprintf(stderr, "Allowing replay packet %lx\n", psn);
-		state->drop_count=0;
+		state->drop_count = 0;
 	}
 	return 0;
 #endif
@@ -713,18 +697,12 @@ uint16_t fi_opx_reliability_rx_drop_packet (struct fi_opx_reliability_client_sta
 void dump_ping_counts();
 #endif
 
-ssize_t fi_opx_hfi1_tx_reliability_inject_ud_init(struct fid_ep *ep,
-						const uint64_t key,
-						const opx_lid_t dlid,
-						const uint64_t reliability_rx,
-						const uint64_t opcode,
-						const enum opx_hfi1_type hfi1_type);
+ssize_t fi_opx_hfi1_tx_reliability_inject_ud_init(struct fid_ep *ep, const uint64_t key, const opx_lid_t dlid,
+						  const uint64_t reliability_rx, const uint64_t opcode,
+						  const enum opx_hfi1_type hfi1_type);
 
-ssize_t fi_opx_hfi1_tx_reliability_inject_ud_resynch(struct fid_ep *ep,
-						const uint64_t key,
-						const opx_lid_t dlid,
-						const uint64_t reliability_rx,
-						const uint64_t opcode);
+ssize_t fi_opx_hfi1_tx_reliability_inject_ud_resynch(struct fid_ep *ep, const uint64_t key, const opx_lid_t dlid,
+						     const uint64_t reliability_rx, const uint64_t opcode);
 
 __OPX_FORCE_INLINE__
 size_t fi_opx_reliability_replay_get_payload_size(struct fi_opx_reliability_tx_replay *replay)
@@ -737,86 +715,78 @@ size_t fi_opx_reliability_replay_get_payload_size(struct fi_opx_reliability_tx_r
 	/* Inlined but called from non-inlined functions with no const hfi1 type, so just use the runtime check */
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		const uint16_t lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
-		const size_t total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
+		const size_t   total_bytes   = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
 		return (total_bytes - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B));
 	} else {
 		const uint16_t lrh_pktlen_le = replay->scb.scb_16B.hdr.lrh_16B.pktlen;
-		const size_t total_bytes = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing icrc */
+		const size_t   total_bytes   = (lrh_pktlen_le - 1) * 8; /* do not copy the trailing icrc */
 		return (total_bytes - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B));
 	}
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_reliability_create_rx_flow(struct fi_opx_reliability_client_state * state,
-					const uint64_t key,
-					const uint8_t origin_rx)
+void fi_opx_reliability_create_rx_flow(struct fi_opx_reliability_client_state *state, const uint64_t key,
+				       const uint8_t origin_rx)
 {
 	/* TODO - allocate from a pool of flow objects instead for better memory utilization */
-	int rc __attribute__ ((unused));
-	struct fi_opx_reliability_flow * flow = NULL;
-	rc = posix_memalign((void **)&flow, 32, sizeof(*flow));
-	assert(rc==0);
+	int				rc __attribute__((unused));
+	struct fi_opx_reliability_flow *flow = NULL;
+	rc				     = posix_memalign((void **) &flow, 32, sizeof(*flow));
+	assert(rc == 0);
 
-	flow->next_psn = 0;
+	flow->next_psn	= 0;
 	flow->key.value = key;
-	flow->uepkt = NULL;
+	flow->uepkt	= NULL;
 	flow->origin_rx = origin_rx;
-	//ofi_spin_init(&flow->lock);
+	// ofi_spin_init(&flow->lock);
 
-	rbtInsert(state->rx_flow_rbtree, (void*)key, (void*)flow);
+	rbtInsert(state->rx_flow_rbtree, (void *) key, (void *) flow);
 
 	if (state->service->reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {
-		fi_opx_atomic_fifo_produce(&state->fifo, (uint64_t)flow | RX_CMD);
+		fi_opx_atomic_fifo_produce(&state->fifo, (uint64_t) flow | RX_CMD);
 	} else if (state->service->reliability_kind == OFI_RELIABILITY_KIND_ONLOAD) {
-		rbtInsert(state->service->rx.flow, (void*)flow->key.value, (void*)flow);
+		rbtInsert(state->service->rx.flow, (void *) flow->key.value, (void *) flow);
 	}
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_reliability_handle_ud_init(struct fid_ep *ep,
-					struct fi_opx_reliability_client_state *state,
-					const union opx_hfi1_packet_hdr *const hdr)
+void fi_opx_reliability_handle_ud_init(struct fid_ep *ep, struct fi_opx_reliability_client_state *state,
+				       const union opx_hfi1_packet_hdr *const hdr)
 {
-	union fi_opx_reliability_service_flow_key key = {
-		.value = hdr->service.key
-	};
+	union fi_opx_reliability_service_flow_key key = {.value = hdr->service.key};
 
 	uint8_t origin_rx = hdr->service.origin_reliability_rx;
 
-	void *itr = fi_opx_rbt_find(state->rx_flow_rbtree, (void*)key.value);
+	void *itr = fi_opx_rbt_find(state->rx_flow_rbtree, (void *) key.value);
 
 	if (itr == NULL) {
 		fi_opx_reliability_create_rx_flow(state, key.value, origin_rx);
 #ifdef OPX_RELIABILITY_DEBUG
-		fprintf(stderr, "(%d) %s:%s():%d [%016lX] Reliability Handshake RX Flow created!\n",
-			getpid(), __FILE__, __func__, __LINE__,
-			key.value);
+		fprintf(stderr, "(%d) %s:%s():%d [%016lX] Reliability Handshake RX Flow created!\n", getpid(), __FILE__,
+			__func__, __LINE__, key.value);
 #endif
 	}
 
-	fi_opx_hfi1_tx_reliability_inject_ud_init(ep, key.value, key.slid, origin_rx, FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK,
-		OPX_HFI1_TYPE);
+	fi_opx_hfi1_tx_reliability_inject_ud_init(ep, key.value, key.slid, origin_rx,
+						  FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK, OPX_HFI1_TYPE);
 }
 
 __OPX_FORCE_INLINE__
 void fi_opx_reliability_handle_ud_init_ack(struct fi_opx_reliability_client_state *state,
-					const union opx_hfi1_packet_hdr *const hdr)
+					   const union opx_hfi1_packet_hdr *const  hdr)
 {
 	/* Find the flow for this communication in flow_rbtree */
-	union fi_opx_reliability_service_flow_key key = {
-		.value = hdr->service.key
-	};
+	union fi_opx_reliability_service_flow_key key = {.value = hdr->service.key};
 
-	void * itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)key.value);
+	void *itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void *) key.value);
 
 	if (!itr) {
 		union fi_opx_reliability_tx_psn value;
 		value.value = 0; // Initializes the whole union.
-		rbtInsert(state->tx_flow_rbtree, (void*)key.value, (void*)value.value);
+		rbtInsert(state->tx_flow_rbtree, (void *) key.value, (void *) value.value);
 #ifdef OPX_RELIABILITY_DEBUG
-		fprintf(stderr, "(%d) %s:%s():%d [%016lX] Reliability Handshake Complete!\n",
-			getpid(), __FILE__, __func__, __LINE__,
-			key.value);
+		fprintf(stderr, "(%d) %s:%s():%d [%016lX] Reliability Handshake Complete!\n", getpid(), __FILE__,
+			__func__, __LINE__, key.value);
 #endif
 	}
 }
@@ -825,23 +795,19 @@ void fi_opx_reliability_handle_ud_init_ack(struct fi_opx_reliability_client_stat
  * returns !0 if this packet is expected (success)
  * returns 0 on exception
  */
-static inline
-unsigned fi_opx_reliability_rx_check (struct fi_opx_reliability_client_state * state,
-		opx_lid_t slid, uint64_t origin_tx, uint32_t psn,
-		uint8_t *origin_rx)
+static inline unsigned fi_opx_reliability_rx_check(struct fi_opx_reliability_client_state *state, opx_lid_t slid,
+						   uint64_t origin_tx, uint32_t psn, uint8_t *origin_rx)
 {
 	struct fi_opx_reliability_flow *flow;
 
 	void *itr, *key_ptr;
 
-	const union fi_opx_reliability_service_flow_key key = {
-		.slid = slid,
-		.tx = origin_tx,
-		.dlid = state->lid,
-		.rx = state->rx
-	};
+	const union fi_opx_reliability_service_flow_key key = {.slid = slid,
+							       .tx   = origin_tx,
+							       .dlid = state->lid,
+							       .rx   = state->rx};
 
-	itr = fi_opx_rbt_find(state->rx_flow_rbtree, (void*)key.value);
+	itr = fi_opx_rbt_find(state->rx_flow_rbtree, (void *) key.value);
 #ifdef OPX_RELIABILITY_DEBUG
 	if (!itr) {
 		fprintf(stderr, "(rx) packet %016lx %08u received but no flow for this found!\n", key.value, psn);
@@ -850,7 +816,7 @@ unsigned fi_opx_reliability_rx_check (struct fi_opx_reliability_client_state * s
 
 	assert(itr);
 
-	fi_opx_rbt_key_value(state->rx_flow_rbtree, itr, &key_ptr, (void **)&flow);
+	fi_opx_rbt_key_value(state->rx_flow_rbtree, itr, &key_ptr, (void **) &flow);
 
 	if (((flow->next_psn & MAX_PSN) == psn) && (flow->uepkt == NULL)) {
 #ifdef OPX_RELIABILITY_DEBUG
@@ -866,55 +832,42 @@ unsigned fi_opx_reliability_rx_check (struct fi_opx_reliability_client_state * s
 	return FI_OPX_RELIABILITY_EXCEPTION;
 }
 
-void fi_opx_hfi1_rx_reliability_ping (struct fid_ep *ep,
-		struct fi_opx_reliability_service * service,
-		const uint64_t key, uint64_t psn_count, uint64_t psn_start,
-		const opx_lid_t slid, const uint64_t rx);
+void fi_opx_hfi1_rx_reliability_ping(struct fid_ep *ep, struct fi_opx_reliability_service *service, const uint64_t key,
+				     uint64_t psn_count, uint64_t psn_start, const opx_lid_t slid, const uint64_t rx);
 
+void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability_service *service, const uint64_t key,
+				    const uint64_t psn_count, const uint64_t psn_start);
 
-void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
-		struct fi_opx_reliability_service * service,
-		const uint64_t key, const uint64_t psn_count, const uint64_t psn_start);
+void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliability_service *service, const uint64_t key,
+				     const uint64_t psn_count, const uint64_t psn_start);
 
-void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
-		struct fi_opx_reliability_service * service,
-		const uint64_t key, const uint64_t psn_count, const uint64_t psn_start);
+void fi_opx_reliability_rx_exception(struct fi_opx_reliability_client_state *state, opx_lid_t slid, uint64_t origin_tx,
+				     uint32_t psn, struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
+				     const uint8_t *const payload, const uint16_t pktlen,
+				     const enum opx_hfi1_type hfi1_type, const uint8_t opcode);
 
-void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * state,
-		opx_lid_t slid, uint64_t origin_tx, uint32_t psn,
-		struct fid_ep *ep, const union opx_hfi1_packet_hdr * const hdr, const uint8_t * const payload,
-		const uint16_t pktlen, const enum opx_hfi1_type hfi1_type,
-		const uint8_t opcode);
+ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const uint64_t key, const opx_lid_t dlid,
+					  const uint64_t reliability_rx, const uint64_t psn_start,
+					  const uint64_t psn_count, const uint64_t opcode,
+					  const enum opx_hfi1_type hfi1_type);
 
-ssize_t fi_opx_hfi1_tx_reliability_inject (struct fid_ep *ep,
-		const uint64_t key, const opx_lid_t dlid, const uint64_t reliability_rx,
-		const uint64_t psn_start, const uint64_t psn_count,
-		const uint64_t opcode, const enum opx_hfi1_type hfi1_type);
+void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const opx_lid_t dlid, const uint64_t reliability_rx,
+					      const uint64_t psn_start, const uint64_t psn_count,
+					      const union opx_hfi1_packet_hdr *const hdr, const uint8_t origin_rx,
+					      opx_lid_t slid, const enum opx_hfi1_type hfi1_type);
 
-void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const opx_lid_t dlid,
-					      const uint64_t reliability_rx, const uint64_t psn_start,
-					      const uint64_t psn_count,
-					      const union opx_hfi1_packet_hdr *const hdr,
-					      const uint8_t origin_rx,
-					      opx_lid_t slid,
-					      const enum opx_hfi1_type hfi1_type);
+void fi_opx_hfi1_rx_reliability_resynch(struct fid_ep *ep, struct fi_opx_reliability_service *service,
+					uint32_t origin_reliability_rx, const union opx_hfi1_packet_hdr *const hdr);
 
-void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
-		struct fi_opx_reliability_service * service,
-		uint32_t origin_reliability_rx,
-		const union opx_hfi1_packet_hdr *const hdr);
+void fi_opx_hfi1_rx_reliability_ack_resynch(struct fid_ep *ep, struct fi_opx_reliability_service *service,
+					    const union opx_hfi1_packet_hdr *const hdr);
 
-void fi_opx_hfi1_rx_reliability_ack_resynch (struct fid_ep *ep,
-		struct fi_opx_reliability_service * service,
-		const union opx_hfi1_packet_hdr *const hdr);
-
-void opx_reliability_handshake_init(struct fid_ep *ep,
-				    union fi_opx_reliability_service_flow_key key,
-				    const uint64_t target_reliability_rx,
-				    const enum opx_hfi1_type hfi1_type);
+void opx_reliability_handshake_init(struct fid_ep *ep, union fi_opx_reliability_service_flow_key key,
+				    const uint64_t target_reliability_rx, const enum opx_hfi1_type hfi1_type);
 
 __OPX_FORCE_INLINE__
-int32_t fi_opx_reliability_tx_max_outstanding () {
+int32_t fi_opx_reliability_tx_max_outstanding()
+{
 	// Eager buffer size is 32*262144
 	// We'll do 28 * 262144 as a starting point
 	// Empirically this survives a message rate test
@@ -930,11 +883,12 @@ int32_t fi_opx_reliability_tx_max_outstanding () {
 	// be adjusted back to it's base value.
 	// Either way, there should be knobs and controls
 	// to make this dynamic when packets are lost
-	return 28*262144;
+	return 28 * 262144;
 }
 
 __OPX_FORCE_INLINE__
-int32_t fi_opx_reliability_tx_max_nacks () {
+int32_t fi_opx_reliability_tx_max_nacks()
+{
 	// TODO, make this tunable.
 	return 0;
 }
@@ -944,26 +898,23 @@ void fi_opx_reliability_inc_throttle_nacks(struct fid_ep *ep);
 void fi_opx_reliability_inc_throttle_maxo(struct fid_ep *ep);
 
 __OPX_FORCE_INLINE__
-bool opx_reliability_ready(struct fid_ep *ep,
-			struct fi_opx_reliability_client_state * state,
-			const opx_lid_t dlid,
-			const uint64_t rx,
-			const uint64_t target_reliability_rx,
-			const enum ofi_reliability_kind reliability)
+bool opx_reliability_ready(struct fid_ep *ep, struct fi_opx_reliability_client_state *state, const opx_lid_t dlid,
+			   const uint64_t rx, const uint64_t target_reliability_rx,
+			   const enum ofi_reliability_kind reliability)
 {
-
 	/* Not using reliability, or it's Intranode */
-	if (opx_lid_is_intranode(dlid))
+	if (opx_lid_is_intranode(dlid)) {
 		return true;
+	}
 
 	union fi_opx_reliability_service_flow_key key = {
 		.slid = (uint32_t) state->lid,
-		.tx = (uint32_t) state->tx,
+		.tx   = (uint32_t) state->tx,
 		.dlid = (uint32_t) dlid,
-		.rx = (uint32_t) rx,
+		.rx   = (uint32_t) rx,
 	};
 
-	void * itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)key.value);
+	void *itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void *) key.value);
 	if (OFI_UNLIKELY(!itr)) {
 		/* Reliability handshake is incomplete, initiate it */
 		opx_reliability_handshake_init(ep, key, target_reliability_rx, OPX_HFI1_TYPE);
@@ -974,26 +925,23 @@ bool opx_reliability_ready(struct fid_ep *ep,
 }
 
 __OPX_FORCE_INLINE__
-int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
-					struct fi_opx_reliability_client_state * state,
-					const opx_lid_t lid,
-					const uint64_t rx,
-					const uint64_t target_reliability_rx,
-					union fi_opx_reliability_tx_psn **psn_ptr,
-					uint32_t psns_to_get,
-					uint32_t bytes_per_packet)
+int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_reliability_client_state *state,
+					     const opx_lid_t lid, const uint64_t rx,
+					     const uint64_t		       target_reliability_rx,
+					     union fi_opx_reliability_tx_psn **psn_ptr, uint32_t psns_to_get,
+					     uint32_t bytes_per_packet)
 {
 	OPX_TRACER_TRACE_SDMA(OPX_TRACER_BEGIN, "GET_PSNS");
 	assert(psns_to_get && psns_to_get <= 128);
 
 	union fi_opx_reliability_service_flow_key key = {
 		.slid = (uint32_t) state->lid,
-		.tx = (uint32_t) state->tx,
+		.tx   = (uint32_t) state->tx,
 		.dlid = (uint32_t) lid,
-		.rx = (uint32_t) rx,
+		.rx   = (uint32_t) rx,
 	};
 
-	void * itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)key.value);
+	void *itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void *) key.value);
 	if (OFI_UNLIKELY(!itr)) {
 		/* We've never sent to this receiver, so initiate a reliability handshake
 		with them. Once they create the receive flow on their end, and we receive
@@ -1003,7 +951,7 @@ int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
 		return -1;
 	}
 
-	*psn_ptr = (union fi_opx_reliability_tx_psn *)fi_opx_rbt_value_ptr(state->tx_flow_rbtree, itr);
+	*psn_ptr = (union fi_opx_reliability_tx_psn *) fi_opx_rbt_value_ptr(state->tx_flow_rbtree, itr);
 
 	/*
 	 * We can leverage the fact that every packet needs a packet sequence
@@ -1012,11 +960,11 @@ int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
 	 * If the throttle is on, or if the # of bytes outstanding exceeds
 	 * a threshold, return an error.
 	 */
-	if(OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
+	if (OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
 		OPX_TRACER_TRACE_SDMA(OPX_TRACER_INSTANT, "GET_PSN_THROTTLE");
 		return -1;
 	}
-	if(OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
+	if (OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_nacks(ep);
@@ -1024,7 +972,7 @@ int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
 		return -1;
 	}
 	uint32_t max_outstanding = fi_opx_reliability_tx_max_outstanding();
-	if(OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > max_outstanding)) {
+	if (OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > max_outstanding)) {
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_maxo(ep);
@@ -1038,25 +986,21 @@ int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
 }
 
 __OPX_FORCE_INLINE__
-int32_t fi_opx_reliability_tx_next_psn (struct fid_ep *ep,
-					struct fi_opx_reliability_client_state * state,
-					const opx_lid_t lid,
-					const uint64_t rx,
-					const uint64_t target_reliability_rx,
-					union fi_opx_reliability_tx_psn **psn_ptr,
-					uint32_t psns_to_get)
+int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliability_client_state *state,
+				       const opx_lid_t lid, const uint64_t rx, const uint64_t target_reliability_rx,
+				       union fi_opx_reliability_tx_psn **psn_ptr, uint32_t psns_to_get)
 {
 	assert(psns_to_get && psns_to_get <= 128);
 	uint32_t psn = 0;
 
 	union fi_opx_reliability_service_flow_key key = {
 		.slid = (uint32_t) state->lid,
-		.tx = (uint32_t) state->tx,
+		.tx   = (uint32_t) state->tx,
 		.dlid = (uint32_t) lid,
-		.rx = (uint32_t) rx,
+		.rx   = (uint32_t) rx,
 	};
 
-	void * itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)key.value);
+	void *itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void *) key.value);
 	if (OFI_UNLIKELY(!itr)) {
 		/* We've never sent to this receiver, so initiate a reliability handshake
 		   with them. Once they create the receive flow on their end, and we receive
@@ -1064,8 +1008,8 @@ int32_t fi_opx_reliability_tx_next_psn (struct fid_ep *ep,
 		opx_reliability_handshake_init(ep, key, target_reliability_rx, OPX_HFI1_TYPE);
 		return -1;
 	} else {
-		*psn_ptr = (union fi_opx_reliability_tx_psn *)fi_opx_rbt_value_ptr(state->tx_flow_rbtree, itr);
-		union fi_opx_reliability_tx_psn  psn_value = **psn_ptr;
+		*psn_ptr = (union fi_opx_reliability_tx_psn *) fi_opx_rbt_value_ptr(state->tx_flow_rbtree, itr);
+		union fi_opx_reliability_tx_psn psn_value = **psn_ptr;
 
 		/*
 		 * We can leverage the fact athat every packet needs a packet sequence
@@ -1074,24 +1018,23 @@ int32_t fi_opx_reliability_tx_next_psn (struct fid_ep *ep,
 		 * If the throttle is on, or if the # of bytes outstanding exceeds
 		 * a threshold, return an error.
 		 */
-		if(OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
+		if (OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
 			return -1;
 		}
-		if(OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
+		if (OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 			(*psn_ptr)->psn.throttle = 1;
 			fi_opx_reliability_inc_throttle_count(ep);
 			fi_opx_reliability_inc_throttle_nacks(ep);
 			return -1;
 		}
-		if(OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding >
-			fi_opx_reliability_tx_max_outstanding())) {
+		if (OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > fi_opx_reliability_tx_max_outstanding())) {
 			(*psn_ptr)->psn.throttle = 1;
 			fi_opx_reliability_inc_throttle_count(ep);
 			fi_opx_reliability_inc_throttle_maxo(ep);
 			return -1;
 		}
 
-		psn = psn_value.psn.psn;
+		psn		    = psn_value.psn.psn;
 		(*psn_ptr)->psn.psn = (psn_value.psn.psn + psns_to_get) & MAX_PSN;
 	}
 
@@ -1099,56 +1042,50 @@ int32_t fi_opx_reliability_tx_next_psn (struct fid_ep *ep,
 }
 __OPX_FORCE_INLINE__
 struct fi_opx_reliability_tx_replay *
-fi_opx_reliability_client_replay_allocate(struct fi_opx_reliability_client_state * state,
-	const bool use_iov)
+fi_opx_reliability_client_replay_allocate(struct fi_opx_reliability_client_state *state, const bool use_iov)
 {
-	struct fi_opx_reliability_tx_replay * return_value;
+	struct fi_opx_reliability_tx_replay *return_value;
 
 	if (!use_iov) {
-		return_value = (struct fi_opx_reliability_tx_replay *)ofi_buf_alloc(state->replay_pool);
+		return_value = (struct fi_opx_reliability_tx_replay *) ofi_buf_alloc(state->replay_pool);
 	} else {
-		return_value = (struct fi_opx_reliability_tx_replay *)ofi_buf_alloc(state->replay_iov_pool);
+		return_value = (struct fi_opx_reliability_tx_replay *) ofi_buf_alloc(state->replay_iov_pool);
 	}
 	if (OFI_LIKELY(return_value != NULL)) {
-			return_value->nack_count = 0;
-			return_value->pinned = false;
-			return_value->acked = false;
-			return_value->use_sdma = false;
-			return_value->use_iov = use_iov;
-			return_value->sdma_we = NULL;
+		return_value->nack_count = 0;
+		return_value->pinned	 = false;
+		return_value->acked	 = false;
+		return_value->use_sdma	 = false;
+		return_value->use_iov	 = use_iov;
+		return_value->sdma_we	 = NULL;
 #ifndef NDEBUG
-			memset(return_value->orig_payload, 0x2B, 64);
+		memset(return_value->orig_payload, 0x2B, 64);
 #endif
-			return_value->hmem_iface = FI_HMEM_SYSTEM;
-			return_value->hmem_device = 0;
+		return_value->hmem_iface  = FI_HMEM_SYSTEM;
+		return_value->hmem_device = 0;
 
-			// This will implicitly set return_value->iov correctly
-			return_value->payload = (uint64_t *) &return_value->data;
+		// This will implicitly set return_value->iov correctly
+		return_value->payload = (uint64_t *) &return_value->data;
 	}
 
 	return return_value;
 }
 
 __OPX_FORCE_INLINE__
-int32_t fi_opx_reliability_get_replay (struct fid_ep *ep,
-					struct fi_opx_reliability_client_state * state,
-					const opx_lid_t lid,
-					const uint64_t rx,
-					const uint64_t target_reliability_rx,
-					union fi_opx_reliability_tx_psn **psn_ptr,
-					struct fi_opx_reliability_tx_replay **replay,
-					const enum ofi_reliability_kind reliability,
-					const enum opx_hfi1_type hfi1_type)
+int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliability_client_state *state,
+				      const opx_lid_t lid, const uint64_t rx, const uint64_t target_reliability_rx,
+				      union fi_opx_reliability_tx_psn	  **psn_ptr,
+				      struct fi_opx_reliability_tx_replay **replay,
+				      const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
 {
-
 	union fi_opx_reliability_service_flow_key key = {
 		.slid = (uint32_t) state->lid,
-		.tx = (uint32_t) state->tx,
+		.tx   = (uint32_t) state->tx,
 		.dlid = (uint32_t) lid,
-		.rx = (uint32_t) rx,
+		.rx   = (uint32_t) rx,
 	};
 
-	void * itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)key.value);
+	void *itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void *) key.value);
 	if (OFI_UNLIKELY(!itr)) {
 		/* We've never sent to this receiver, so initiate a reliability handshake
 		   with them. Once they create the receive flow on their end, and we receive
@@ -1157,8 +1094,8 @@ int32_t fi_opx_reliability_get_replay (struct fid_ep *ep,
 		return -1;
 	}
 
-	*psn_ptr = (union fi_opx_reliability_tx_psn *)fi_opx_rbt_value_ptr(state->tx_flow_rbtree, itr);
-	union fi_opx_reliability_tx_psn  psn_value = **psn_ptr;
+	*psn_ptr = (union fi_opx_reliability_tx_psn *) fi_opx_rbt_value_ptr(state->tx_flow_rbtree, itr);
+	union fi_opx_reliability_tx_psn psn_value = **psn_ptr;
 
 	/*
 	 * We can leverage the fact athat every packet needs a packet sequence
@@ -1167,17 +1104,16 @@ int32_t fi_opx_reliability_get_replay (struct fid_ep *ep,
 	 * If the throttle is on, or if the # of bytes outstanding exceeds
 	 * a threshold, return an error.
 	 */
-	if(OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
+	if (OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
 		return -1;
 	}
-	if(OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
+	if (OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_nacks(ep);
 		return -1;
 	}
-	if(OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding >
-		fi_opx_reliability_tx_max_outstanding())) {
+	if (OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > fi_opx_reliability_tx_max_outstanding())) {
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_maxo(ep);
@@ -1190,15 +1126,15 @@ int32_t fi_opx_reliability_get_replay (struct fid_ep *ep,
 	}
 
 	uint32_t psn;
-	psn = psn_value.psn.psn;
+	psn		    = psn_value.psn.psn;
 	(*psn_ptr)->psn.psn = (psn_value.psn.psn + 1) & MAX_PSN;
 
 	return psn;
 }
 
-static inline
-void fi_opx_reliability_client_replay_deallocate(struct fi_opx_reliability_client_state *state __attribute__((unused)),
-	struct fi_opx_reliability_tx_replay * replay)
+static inline void fi_opx_reliability_client_replay_deallocate(struct fi_opx_reliability_client_state *state
+							       __attribute__((unused)),
+							       struct fi_opx_reliability_tx_replay *replay)
 {
 #ifdef OPX_RELIABILITY_DEBUG
 	replay->next = replay->prev = 0;
@@ -1206,30 +1142,31 @@ void fi_opx_reliability_client_replay_deallocate(struct fi_opx_reliability_clien
 	OPX_BUF_FREE(replay);
 }
 
-static inline
-void fi_opx_reliability_client_replay_register_no_update (struct fi_opx_reliability_client_state * state,
-		const uint8_t rs, const uint8_t rx, union fi_opx_reliability_tx_psn *psn_ptr,
-		struct fi_opx_reliability_tx_replay * replay,
-		const enum ofi_reliability_kind reliability_kind,
-		const enum opx_hfi1_type hfi1_type)
+static inline void fi_opx_reliability_client_replay_register_no_update(struct fi_opx_reliability_client_state *state,
+								       const uint8_t rs, const uint8_t rx,
+								       union fi_opx_reliability_tx_psn	   *psn_ptr,
+								       struct fi_opx_reliability_tx_replay *replay,
+								       const enum ofi_reliability_kind reliability_kind,
+								       const enum opx_hfi1_type	       hfi1_type)
 {
-	uint16_t lrh_pktlen_le;
-	size_t total_bytes;
+	uint16_t  lrh_pktlen_le;
+	size_t	  total_bytes;
 	opx_lid_t hdr_dlid;
-	uint8_t	hdr_tx;
-	uint8_t	hdr_rx;
+	uint8_t	  hdr_tx;
+	uint8_t	  hdr_rx;
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
-		total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
-		hdr_dlid = (opx_lid_t)__be16_to_cpu24((__be16)replay->scb.scb_9B.hdr.lrh_9B.dlid);
+		total_bytes   = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
+		hdr_dlid      = (opx_lid_t) __be16_to_cpu24((__be16) replay->scb.scb_9B.hdr.lrh_9B.dlid);
 		/* hardcoded replay hfi type for macros */
 		hdr_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR_9B)),
 		hdr_rx = OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR_9B)->bth.rx;
 	} else {
 		lrh_pktlen_le = replay->scb.scb_16B.hdr.lrh_16B.pktlen;
-		total_bytes = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing icrc */
-		hdr_dlid = (opx_lid_t)__le24_to_cpu(replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 | replay->scb.scb_16B.hdr.lrh_16B.dlid);
+		total_bytes   = (lrh_pktlen_le - 1) * 8; /* do not copy the trailing icrc */
+		hdr_dlid      = (opx_lid_t) __le24_to_cpu(replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 |
+							  replay->scb.scb_16B.hdr.lrh_16B.dlid);
 		/* hardcoded replay hfi type for macros */
 		hdr_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR));
 		hdr_rx = OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR)->bth.rx;
@@ -1237,7 +1174,7 @@ void fi_opx_reliability_client_replay_register_no_update (struct fi_opx_reliabil
 	psn_ptr->psn.bytes_outstanding += total_bytes;
 
 	replay->target_reliability_rx = rs;
-	replay->psn_ptr = psn_ptr;
+	replay->psn_ptr		      = psn_ptr;
 
 	replay->cc_ptr = NULL;
 	replay->cc_dec = 0;
@@ -1248,52 +1185,55 @@ void fi_opx_reliability_client_replay_register_no_update (struct fi_opx_reliabil
 	// be used instead.
 	assert(!replay->use_iov);
 
-	if (reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {			/* constant compile-time expression */
+	if (reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) { /* constant compile-time expression */
 
 #ifndef NDEBUG
-		if ((uint64_t)replay & TX_CMD) { fprintf(stderr, "%s():%d abort\n", __func__, __LINE__); abort(); }
+		if ((uint64_t) replay & TX_CMD) {
+			fprintf(stderr, "%s():%d abort\n", __func__, __LINE__);
+			abort();
+		}
 #endif
 		/*
 		 * ok to block .. the reliability service is completely non-blocking
 		 * and will always consume from this atomic fifo
 		 */
-		fi_opx_atomic_fifo_produce(&state->fifo, (uint64_t)replay | TX_CMD);
+		fi_opx_atomic_fifo_produce(&state->fifo, (uint64_t) replay | TX_CMD);
 
-	} else if (reliability_kind == OFI_RELIABILITY_KIND_ONLOAD  || reliability_kind == OFI_RELIABILITY_KIND_RUNTIME) {		/* constant compile-time expression */
+	} else if (reliability_kind == OFI_RELIABILITY_KIND_ONLOAD ||
+		   reliability_kind == OFI_RELIABILITY_KIND_RUNTIME) { /* constant compile-time expression */
 		fi_reliability_service_process_command(state, replay, state->lid, hdr_dlid, hdr_tx, hdr_rx, hfi1_type);
 	} else {
-		fprintf(stderr, "%s():%d abort\n", __func__, __LINE__); abort();
+		fprintf(stderr, "%s():%d abort\n", __func__, __LINE__);
+		abort();
 	}
 
 	return;
 }
 
-
-static inline
-void fi_opx_reliability_client_replay_register_with_update (struct fi_opx_reliability_client_state * state,
-		const opx_lid_t dlid, const uint8_t rs, const uint8_t rx, union fi_opx_reliability_tx_psn *psn_ptr,
-		struct fi_opx_reliability_tx_replay * replay,
-		struct fi_opx_completion_counter * counter, uint64_t value,
-		const enum ofi_reliability_kind reliability_kind)
+static inline void fi_opx_reliability_client_replay_register_with_update(
+	struct fi_opx_reliability_client_state *state, const opx_lid_t dlid, const uint8_t rs, const uint8_t rx,
+	union fi_opx_reliability_tx_psn *psn_ptr, struct fi_opx_reliability_tx_replay *replay,
+	struct fi_opx_completion_counter *counter, uint64_t value, const enum ofi_reliability_kind reliability_kind)
 {
-	uint16_t lrh_pktlen_le;
-	size_t total_bytes;
+	uint16_t  lrh_pktlen_le;
+	size_t	  total_bytes;
 	opx_lid_t hdr_dlid;
-	uint8_t	hdr_tx;
-	uint8_t	hdr_rx;
+	uint8_t	  hdr_tx;
+	uint8_t	  hdr_rx;
 
 	/* global note: runtime HFI1 type - may need macro/inlining/const parameter hfi1_type to be branchless */
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
-		total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
-		hdr_dlid = (opx_lid_t)__be16_to_cpu24((__be16)replay->scb.scb_9B.hdr.lrh_9B.dlid);
+		total_bytes   = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
+		hdr_dlid      = (opx_lid_t) __be16_to_cpu24((__be16) replay->scb.scb_9B.hdr.lrh_9B.dlid);
 		/* hardcoded replay hfi type for macros */
 		hdr_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR_9B)),
 		hdr_rx = OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR_9B)->bth.rx;
 	} else {
 		lrh_pktlen_le = replay->scb.scb_16B.hdr.lrh_16B.pktlen;
-		total_bytes = (lrh_pktlen_le - 1) * 8;	/* do not copy the trailing icrc */
-		hdr_dlid = (opx_lid_t)__le24_to_cpu(replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 | replay->scb.scb_16B.hdr.lrh_16B.dlid);
+		total_bytes   = (lrh_pktlen_le - 1) * 8; /* do not copy the trailing icrc */
+		hdr_dlid      = (opx_lid_t) __le24_to_cpu(replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 |
+							  replay->scb.scb_16B.hdr.lrh_16B.dlid);
 		/* hardcoded replay hfi type for macros */
 		hdr_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR));
 		hdr_rx = OPX_REPLAY_HDR_TYPE(replay, OPX_HFI1_JKR)->bth.rx;
@@ -1301,9 +1241,9 @@ void fi_opx_reliability_client_replay_register_with_update (struct fi_opx_reliab
 
 	psn_ptr->psn.bytes_outstanding += total_bytes;
 	replay->target_reliability_rx = rs;
-	replay->psn_ptr = psn_ptr;
-	replay->cc_ptr = counter;
-	replay->cc_dec = value;
+	replay->psn_ptr		      = psn_ptr;
+	replay->cc_ptr		      = counter;
+	replay->cc_dec		      = value;
 
 #ifndef NDEBUG
 	if (replay->use_iov && replay->hmem_iface == FI_HMEM_SYSTEM) {
@@ -1312,47 +1252,47 @@ void fi_opx_reliability_client_replay_register_with_update (struct fi_opx_reliab
 		 * user didn't alter the buffer */
 		uint32_t copy_payload_qws = MIN(8, value >> 3);
 		for (int i = 0; i < copy_payload_qws; ++i) {
-			replay->orig_payload[i] = ((uint64_t *)replay->iov->iov_base)[i];
+			replay->orig_payload[i] = ((uint64_t *) replay->iov->iov_base)[i];
 		}
 	}
 #endif
 	/* constant compile-time expression */
 	if (reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {
-
 #ifndef NDEBUG
-		if ((uint64_t)replay & TX_CMD) { fprintf(stderr, "%s():%d abort\n", __func__, __LINE__); abort(); }
+		if ((uint64_t) replay & TX_CMD) {
+			fprintf(stderr, "%s():%d abort\n", __func__, __LINE__);
+			abort();
+		}
 #endif
 		/*
 		 * ok to block .. the reliability service is completely non-blocking
 		 * and will always consume from this atomic fifo
 		 */
-		fi_opx_atomic_fifo_produce(&state->fifo, (uint64_t)replay | TX_CMD);
+		fi_opx_atomic_fifo_produce(&state->fifo, (uint64_t) replay | TX_CMD);
 
-	} else if (reliability_kind == OFI_RELIABILITY_KIND_ONLOAD  || reliability_kind == OFI_RELIABILITY_KIND_RUNTIME) {		/* constant compile-time expression */
-		fi_reliability_service_process_command(state, replay, state->lid, hdr_dlid, hdr_tx, hdr_rx, OPX_HFI1_TYPE);
+	} else if (reliability_kind == OFI_RELIABILITY_KIND_ONLOAD ||
+		   reliability_kind == OFI_RELIABILITY_KIND_RUNTIME) { /* constant compile-time expression */
+		fi_reliability_service_process_command(state, replay, state->lid, hdr_dlid, hdr_tx, hdr_rx,
+						       OPX_HFI1_TYPE);
 
 	} else {
-		fprintf(stderr, "%s():%d abort\n", __func__, __LINE__); abort();
+		fprintf(stderr, "%s():%d abort\n", __func__, __LINE__);
+		abort();
 	}
 
 	return;
 }
 
-ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
-						struct fi_opx_reliability_service *service,
-						struct fi_opx_reliability_tx_replay *start,
-						struct fi_opx_reliability_tx_replay *stop,
-						uint32_t num_replays);
+ssize_t fi_opx_reliability_service_do_replay_sdma(struct fid_ep *ep, struct fi_opx_reliability_service *service,
+						  struct fi_opx_reliability_tx_replay *start,
+						  struct fi_opx_reliability_tx_replay *stop, uint32_t num_replays);
 
-ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service * service,
-					struct fi_opx_reliability_tx_replay * replay);
-
+ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 *service,
+					     struct fi_opx_reliability_tx_replay *replay);
 
 void fi_opx_hfi_rx_reliablity_process_requests(struct fid_ep *ep, int max_to_send);
 
-ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
-	union fi_opx_addr dest_addr,
-	void *context,
-	const uint64_t caps);
+ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, union fi_opx_addr dest_addr, void *context,
+						const uint64_t caps);
 
 #endif /* _FI_PROV_OPX_RELIABILITY_H_ */

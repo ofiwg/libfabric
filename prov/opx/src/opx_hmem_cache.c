@@ -86,45 +86,34 @@
  */
 
 #define OPX_HMEM_CACHE_MAX_COUNT 2048
-#define OPX_HMEM_CACHE_MAX_SIZE  134217728
+#define OPX_HMEM_CACHE_MAX_SIZE	 134217728
 
 #ifndef NDEBUG
-#define OPX_DEBUG_EXIT(entryp)								\
-	do {										\
-		const uint64_t entry_vaddr = entryp ?					\
-			(uint64_t)(((struct fi_opx_mr *)(entryp)->data)->iov.iov_base) :\
-			0UL;								\
-		const uint64_t entry_length = entryp ?					\
-			((struct fi_opx_mr *)(entryp)->data)->iov.iov_len :		\
-			0UL;								\
-		const int32_t entry_use_cnt = entryp ?					\
-			((struct ofi_mr_entry *)(entryp))->use_cnt : 0X0BAD;		\
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,					\
-			"OPX_DEBUG_EXIT (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n",\
-			entryp, entryp ? entryp->data : NULL,				\
-			(void *)entry_vaddr, (void *)(entry_vaddr + entry_length),	\
-			entry_length, entry_length, entry_use_cnt);			\
+#define OPX_DEBUG_EXIT(entryp)                                                                                         \
+	do {                                                                                                           \
+		const uint64_t entry_vaddr =                                                                           \
+			entryp ? (uint64_t) (((struct fi_opx_mr *) (entryp)->data)->iov.iov_base) : 0UL;               \
+		const uint64_t entry_length  = entryp ? ((struct fi_opx_mr *) (entryp)->data)->iov.iov_len : 0UL;      \
+		const int32_t  entry_use_cnt = entryp ? ((struct ofi_mr_entry *) (entryp))->use_cnt : 0X0BAD;          \
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_DEBUG_EXIT (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n", \
+		       entryp, entryp ? entryp->data : NULL, (void *) entry_vaddr,                                     \
+		       (void *) (entry_vaddr + entry_length), entry_length, entry_length, entry_use_cnt);              \
 	} while (0)
 #else
 #define OPX_DEBUG_EXIT(entryp)
 #endif
 
 #ifndef NDEBUG
-#define OPX_DEBUG_ENTRY(entryp)								\
-	do {										\
-		const uint64_t entry_vaddr = entryp ?					\
-			(uint64_t)(((struct fi_opx_mr *)(entryp)->data)->iov.iov_base) :\
-			0UL;								\
-		const uint64_t entry_length = entryp ?					\
-			((struct fi_opx_mr *)(entryp)->data)->iov.iov_len :		\
-			0UL;								\
-		const int32_t entry_use_cnt = entryp ?					\
-			((struct ofi_mr_entry *)(entryp))->use_cnt : 0X0BAD;		\
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,					\
-			"OPX_DEBUG_ENTRY (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n",\
-			entryp, entryp ? entryp->data : NULL,				\
-			(void *)entry_vaddr, (void *)(entry_vaddr + entry_length),	\
-			entry_length, entry_length, entry_use_cnt);			\
+#define OPX_DEBUG_ENTRY(entryp)                                                                                   \
+	do {                                                                                                      \
+		const uint64_t entry_vaddr =                                                                      \
+			entryp ? (uint64_t) (((struct fi_opx_mr *) (entryp)->data)->iov.iov_base) : 0UL;          \
+		const uint64_t entry_length  = entryp ? ((struct fi_opx_mr *) (entryp)->data)->iov.iov_len : 0UL; \
+		const int32_t  entry_use_cnt = entryp ? ((struct ofi_mr_entry *) (entryp))->use_cnt : 0X0BAD;     \
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR,                                                             \
+		       "OPX_DEBUG_ENTRY (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n", entryp,                  \
+		       entryp ? entryp->data : NULL, (void *) entry_vaddr, (void *) (entry_vaddr + entry_length), \
+		       entry_length, entry_length, entry_use_cnt);                                                \
 	} while (0)
 #else
 #define OPX_DEBUG_ENTRY(entryp)
@@ -132,18 +121,18 @@
 
 static int opx_mr_cache_close(fid_t fid)
 {
-	struct fi_opx_mr *opx_mr = (struct fi_opx_mr *) fid;
-	struct ofi_mr_entry *entry = container_of(opx_mr, struct ofi_mr_entry, data);
+	struct fi_opx_mr    *opx_mr = (struct fi_opx_mr *) fid;
+	struct ofi_mr_entry *entry  = container_of(opx_mr, struct ofi_mr_entry, data);
 	ofi_mr_cache_delete(opx_mr->domain->hmem_domain->hmem_cache, entry);
 
 	return 0;
 }
 
 static struct fi_ops opx_mr_cache_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = opx_mr_cache_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.size	  = sizeof(struct fi_ops),
+	.close	  = opx_mr_cache_close,
+	.bind	  = fi_no_bind,
+	.control  = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
 
@@ -152,58 +141,53 @@ static struct fi_ops opx_mr_cache_ops = {
 static int opx_hmem_mr_find_within(struct ofi_rbmap *map, void *key, void *data)
 {
 	struct ofi_mr_entry *entry = data;
-	struct ofi_mr_info *info = key;
+	struct ofi_mr_info  *info  = key;
 
-	FI_DBG_TRACE(
-	    fi_opx_global.prov, FI_LOG_MR,
-	    "OPX_DEBUG_ENTRY KEY [%p - %p] (len: %zu,%#lX)  ENTRY [%p - %p] (len: %zu,%#lX)\n",
-	    info->iov.iov_base,
-	    (char *)(info->iov.iov_base) + info->iov.iov_len,
-	    info->iov.iov_len, info->iov.iov_len, entry->info.iov.iov_base,
-	    (char *)(entry->info.iov.iov_base) + entry->info.iov.iov_len,
-	    entry->info.iov.iov_len, entry->info.iov.iov_len);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_MR,
+		     "OPX_DEBUG_ENTRY KEY [%p - %p] (len: %zu,%#lX)  ENTRY [%p - %p] (len: %zu,%#lX)\n",
+		     info->iov.iov_base, (char *) (info->iov.iov_base) + info->iov.iov_len, info->iov.iov_len,
+		     info->iov.iov_len, entry->info.iov.iov_base,
+		     (char *) (entry->info.iov.iov_base) + entry->info.iov.iov_len, entry->info.iov.iov_len,
+		     entry->info.iov.iov_len);
 
-	if (ofi_iov_shifted_left(&info->iov, &entry->info.iov))
+	if (ofi_iov_shifted_left(&info->iov, &entry->info.iov)) {
 		return -1;
-	if (ofi_iov_shifted_right(&info->iov, &entry->info.iov))
+	}
+	if (ofi_iov_shifted_right(&info->iov, &entry->info.iov)) {
 		return 1;
+	}
 
 	return 0;
 }
 #endif
 
 // Derived from libfabric utility mr function util_mr_find_overlap
-static int opx_hmem_mr_find_overlap(struct ofi_rbmap *map, void *key,
-				    void *data)
+static int opx_hmem_mr_find_overlap(struct ofi_rbmap *map, void *key, void *data)
 {
 	struct ofi_mr_entry *entry = data;
-	struct ofi_mr_info *info = key;
+	struct ofi_mr_info  *info  = key;
 
-	FI_DBG_TRACE(
-	    fi_opx_global.prov, FI_LOG_MR,
-	    "OPX_DEBUG_ENTRY KEY [%p - %p] (len: %zu,%#lX)  ENTRY [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
-	    info->iov.iov_base,
-	    (char *)(info->iov.iov_base) + info->iov.iov_len,
-	    info->iov.iov_len, info->iov.iov_len, entry->info.iov.iov_base,
-	    (char *)(entry->info.iov.iov_base) + entry->info.iov.iov_len,
-	    entry->info.iov.iov_len, entry->info.iov.iov_len,
-	    entry->use_cnt);
-	if (ofi_iov_left(&info->iov, &entry->info.iov))
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_MR,
+		     "OPX_DEBUG_ENTRY KEY [%p - %p] (len: %zu,%#lX)  ENTRY [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
+		     info->iov.iov_base, (char *) (info->iov.iov_base) + info->iov.iov_len, info->iov.iov_len,
+		     info->iov.iov_len, entry->info.iov.iov_base,
+		     (char *) (entry->info.iov.iov_base) + entry->info.iov.iov_len, entry->info.iov.iov_len,
+		     entry->info.iov.iov_len, entry->use_cnt);
+	if (ofi_iov_left(&info->iov, &entry->info.iov)) {
 		return -1;
-	if (ofi_iov_right(&info->iov, &entry->info.iov))
+	}
+	if (ofi_iov_right(&info->iov, &entry->info.iov)) {
 		return 1;
+	}
 
 	OPX_DEBUG_EXIT(entry);
 
-	FI_DBG_TRACE(
-	    fi_opx_global.prov, FI_LOG_MR,
-	    "OPX_DEBUG_EXIT KEY [%p - %p] (len: %zu,%#lX)  ENTRY [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
-	    info->iov.iov_base,
-	    (char *)(info->iov.iov_base) + info->iov.iov_len,
-	    info->iov.iov_len, info->iov.iov_len, entry->info.iov.iov_base,
-	    (char *)(entry->info.iov.iov_base) + entry->info.iov.iov_len,
-	    entry->info.iov.iov_len, entry->info.iov.iov_len,
-	    entry->use_cnt);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_MR,
+		     "OPX_DEBUG_EXIT KEY [%p - %p] (len: %zu,%#lX)  ENTRY [%p - %p] (len: %zu,%#lX) use_cnt %x\n",
+		     info->iov.iov_base, (char *) (info->iov.iov_base) + info->iov.iov_len, info->iov.iov_len,
+		     info->iov.iov_len, entry->info.iov.iov_base,
+		     (char *) (entry->info.iov.iov_base) + entry->info.iov.iov_len, entry->info.iov.iov_len,
+		     entry->info.iov.iov_len, entry->use_cnt);
 	return 0;
 }
 
@@ -213,9 +197,7 @@ static int opx_hmem_mr_find_overlap(struct ofi_rbmap *map, void *key,
  * does not currently use this field.
  */
 __OPX_FORCE_INLINE__
-int opx_hmem_cache_init(struct util_domain *domain,
-			struct ofi_mem_monitor **monitors,
-			struct ofi_mr_cache *cache)
+int opx_hmem_cache_init(struct util_domain *domain, struct ofi_mem_monitor **monitors, struct ofi_mr_cache *cache)
 {
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-CACHE-INIT");
 	int ret;
@@ -229,37 +211,34 @@ int opx_hmem_cache_init(struct util_domain *domain,
 	pthread_mutex_init(&cache->lock, NULL);
 	dlist_init(&cache->lru_list);
 	dlist_init(&cache->dead_region_list);
-	cache->cached_cnt = 0;
-	cache->cached_size = 0;
-	cache->cached_max_cnt = cache_params.max_cnt;
+	cache->cached_cnt      = 0;
+	cache->cached_size     = 0;
+	cache->cached_max_cnt  = cache_params.max_cnt;
 	cache->cached_max_size = cache_params.max_size;
-	cache->uncached_cnt = 0;
-	cache->uncached_size = 0;
-	cache->search_cnt = 0;
-	cache->delete_cnt = 0;
-	cache->hit_cnt = 0;
-	cache->notify_cnt = 0;
-	cache->domain = domain;
-	cache->prov = &fi_opx_provider;
+	cache->uncached_cnt    = 0;
+	cache->uncached_size   = 0;
+	cache->search_cnt      = 0;
+	cache->delete_cnt      = 0;
+	cache->hit_cnt	       = 0;
+	cache->notify_cnt      = 0;
+	cache->domain	       = domain;
+	cache->prov	       = &fi_opx_provider;
 	ofi_atomic_inc32(&domain->ref);
 
 #ifndef NDEBUG
-	ofi_rbmap_init(&cache->tree, getenv("OPX_FIND_WITHIN") ?
-					opx_hmem_mr_find_within :
-					opx_hmem_mr_find_overlap);
+	ofi_rbmap_init(&cache->tree, getenv("OPX_FIND_WITHIN") ? opx_hmem_mr_find_within : opx_hmem_mr_find_overlap);
 #else
 	ofi_rbmap_init(&cache->tree, opx_hmem_mr_find_overlap);
 #endif
 	ret = ofi_monitors_add_cache(monitors, cache);
-	if (ret)
+	if (ret) {
 		goto destroy;
+	}
 
-	ret = ofi_bufpool_create(&cache->entry_pool,
-				 sizeof(struct ofi_mr_entry) +
-					 cache->entry_data_size,
-				 16, 0, 0, 0);
-	if (ret)
+	ret = ofi_bufpool_create(&cache->entry_pool, sizeof(struct ofi_mr_entry) + cache->entry_data_size, 16, 0, 0, 0);
+	if (ret) {
 		goto del;
+	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-CACHE-INIT");
 	return 0;
@@ -271,10 +250,9 @@ destroy:
 	ofi_atomic_dec32(&cache->domain->ref);
 	pthread_mutex_destroy(&cache->lock);
 	cache->domain = NULL;
-	cache->prov = NULL;
+	cache->prov   = NULL;
 	return ret;
 }
-
 
 /****************************************************
  * Main entry points for external callers
@@ -295,16 +273,14 @@ destroy:
  * Note: This is modeled after opx_tid_cache_setup.
  */
 
-int opx_hmem_cache_setup(struct ofi_mr_cache **cache,
-			 struct opx_hmem_domain *domain)
+int opx_hmem_cache_setup(struct ofi_mr_cache **cache, struct opx_hmem_domain *domain)
 {
-	FI_DBG(&fi_opx_provider, FI_LOG_MR, "cache %p, domain %p\n", *cache,
-	       domain);
+	FI_DBG(&fi_opx_provider, FI_LOG_MR, "cache %p, domain %p\n", *cache, domain);
 
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
 		[FI_HMEM_SYSTEM] = default_monitor,
-		[FI_HMEM_CUDA] = cuda_monitor,
-		[FI_HMEM_ROCR] = rocr_monitor,
+		[FI_HMEM_CUDA]	 = cuda_monitor,
+		[FI_HMEM_ROCR]	 = rocr_monitor,
 	};
 	int err;
 
@@ -370,8 +346,7 @@ int opx_hmem_cache_setup(struct ofi_mr_cache **cache,
 		 * code hasn't been audited to deal with a NULL
 		 * monitor.
 		 */
-		FI_WARN(&fi_opx_provider, FI_LOG_MR,
-			"No default SYSTEM monitor available.\n");
+		FI_WARN(&fi_opx_provider, FI_LOG_MR, "No default SYSTEM monitor available.\n");
 		return -FI_ENOSYS;
 	} else if (default_monitor == uffd_monitor) {
 		FI_DBG(&fi_opx_provider, FI_LOG_MR, "uffd_monitor\n");
@@ -380,73 +355,64 @@ int opx_hmem_cache_setup(struct ofi_mr_cache **cache,
 	} else if (default_monitor == rocr_monitor) {
 		FI_DBG(&fi_opx_provider, FI_LOG_MR, "rocr_monitor\n");
 	} else {
-		if (default_monitor == cuda_ipc_monitor)
-			FI_WARN(&fi_opx_provider, FI_LOG_MR,
-				"cuda_ipc_monitor is unsupported in opx\n");
-		else if (default_monitor == ze_monitor)
-			FI_WARN(&fi_opx_provider, FI_LOG_MR,
-				"ze_monitor is unsupported in opx\n");
-		else if (default_monitor == rocr_ipc_monitor)
-			FI_WARN(&fi_opx_provider, FI_LOG_MR,
-				"rocr_ipc_monitor is unsupported in opx\n");
-		else if (default_monitor == import_monitor)
-			FI_WARN(&fi_opx_provider, FI_LOG_MR,
-				"import_monitor enabled\n");
-		else
-			FI_WARN(&fi_opx_provider, FI_LOG_MR,
-				"unknown monitor is unsupported in opx\n");
+		if (default_monitor == cuda_ipc_monitor) {
+			FI_WARN(&fi_opx_provider, FI_LOG_MR, "cuda_ipc_monitor is unsupported in opx\n");
+		} else if (default_monitor == ze_monitor) {
+			FI_WARN(&fi_opx_provider, FI_LOG_MR, "ze_monitor is unsupported in opx\n");
+		} else if (default_monitor == rocr_ipc_monitor) {
+			FI_WARN(&fi_opx_provider, FI_LOG_MR, "rocr_ipc_monitor is unsupported in opx\n");
+		} else if (default_monitor == import_monitor) {
+			FI_WARN(&fi_opx_provider, FI_LOG_MR, "import_monitor enabled\n");
+		} else {
+			FI_WARN(&fi_opx_provider, FI_LOG_MR, "unknown monitor is unsupported in opx\n");
+		}
 		if (default_monitor != import_monitor) {
 			return -FI_ENOSYS;
 		}
 	}
 
-	*cache = (struct ofi_mr_cache *)calloc(1, sizeof(struct ofi_mr_cache));
-	if (!*cache)
+	*cache = (struct ofi_mr_cache *) calloc(1, sizeof(struct ofi_mr_cache));
+	if (!*cache) {
 		return -FI_ENOMEM;
+	}
 
 	/* Set size of an OPX entry->data :
 	 * struct ofi_mr_entry *entry;
 	 * struct fi_opx_mr *opx_mr = (struct fi_opx_mr *)entry->data;
 	 */
 	(*cache)->entry_data_size = sizeof(struct fi_opx_mr);
-	(*cache)->add_region = opx_hmem_cache_add_region;
-	(*cache)->delete_region = opx_hmem_cache_delete_region;
-	FI_DBG(&fi_opx_provider, FI_LOG_MR, "cache %p, domain %p\n", *cache,
-	       domain);
+	(*cache)->add_region	  = opx_hmem_cache_add_region;
+	(*cache)->delete_region	  = opx_hmem_cache_delete_region;
+	FI_DBG(&fi_opx_provider, FI_LOG_MR, "cache %p, domain %p\n", *cache, domain);
 	/* Override env vars we don't support */
 	if (!cache_params.max_cnt) {
-		FI_WARN(&fi_opx_provider, FI_LOG_MR,
-			"Overriding FI_MR_CACHE_MAX_COUNT 0 to be %zu\n",(size_t)OPX_HMEM_CACHE_MAX_COUNT);
+		FI_WARN(&fi_opx_provider, FI_LOG_MR, "Overriding FI_MR_CACHE_MAX_COUNT 0 to be %zu\n",
+			(size_t) OPX_HMEM_CACHE_MAX_COUNT);
 		cache_params.max_cnt = OPX_HMEM_CACHE_MAX_COUNT;
 	}
 	if (!cache_params.max_size) {
-		FI_WARN(&fi_opx_provider, FI_LOG_MR,
-			"Overriding FI_MR_CACHE_MAX_SIZE 0 to be %zu\n",(size_t)OPX_HMEM_CACHE_MAX_SIZE);
+		FI_WARN(&fi_opx_provider, FI_LOG_MR, "Overriding FI_MR_CACHE_MAX_SIZE 0 to be %zu\n",
+			(size_t) OPX_HMEM_CACHE_MAX_SIZE);
 		cache_params.max_size = OPX_HMEM_CACHE_MAX_SIZE;
 	}
 
 	err = opx_hmem_cache_init(&domain->util_domain, memory_monitors, *cache);
 	if (err) {
-		FI_WARN(&fi_opx_provider, FI_LOG_MR,
-			"OPX HMEM cache init failed: %s\n", fi_strerror(err));
+		FI_WARN(&fi_opx_provider, FI_LOG_MR, "OPX HMEM cache init failed: %s\n", fi_strerror(err));
 		free(*cache);
 		*cache = NULL;
 		return err;
 	}
 
-	FI_DBG(&fi_opx_provider, FI_LOG_MR,
-	       "OPX HMEM cache enabled, max_cnt: %zu max_size: %zu\n",
+	FI_DBG(&fi_opx_provider, FI_LOG_MR, "OPX HMEM cache enabled, max_cnt: %zu max_size: %zu\n",
 	       cache_params.max_cnt, cache_params.max_size);
 	FI_DBG(&fi_opx_provider, FI_LOG_MR,
 	       "cached_cnt    %zu, cached_size   %zu, uncached_cnt  %zu, uncached_size %zu, search_cnt    %zu, delete_cnt    %zu, hit_cnt       %zu, notify_cnt    %zu\n",
-	       (*cache)->cached_cnt, (*cache)->cached_size,
-	       (*cache)->uncached_cnt, (*cache)->uncached_size,
-	       (*cache)->search_cnt, (*cache)->delete_cnt, (*cache)->hit_cnt,
-	       (*cache)->notify_cnt);
+	       (*cache)->cached_cnt, (*cache)->cached_size, (*cache)->uncached_cnt, (*cache)->uncached_size,
+	       (*cache)->search_cnt, (*cache)->delete_cnt, (*cache)->hit_cnt, (*cache)->notify_cnt);
 
 	return 0;
 }
-
 
 /* @brief Initialize the fi_opx_mr for the HMEM MR cache.
  *
@@ -460,33 +426,32 @@ int opx_hmem_cache_setup(struct ofi_mr_cache **cache,
  * Note: efa_mr_cache_entry_reg was referenced when implementing this.
  */
 
-int opx_hmem_cache_add_region(struct ofi_mr_cache *cache,
-			struct ofi_mr_entry *entry)
+int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 {
-	int err;
-	uint64_t access = FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE;
-	struct fi_opx_mr *opx_mr = (struct fi_opx_mr *)entry->data;
+	int		  err;
+	uint64_t	  access = FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE;
+	struct fi_opx_mr *opx_mr = (struct fi_opx_mr *) entry->data;
 
-	opx_mr->mr_fid.mem_desc 	= opx_mr;
-	opx_mr->mr_fid.fid.fclass	= FI_CLASS_MR;
-	opx_mr->mr_fid.fid.context	= NULL;
-	opx_mr->mr_fid.fid.ops		= &opx_mr_cache_ops;
-	opx_mr->mr_fid.key		= FI_KEY_NOTAVAIL;
-	opx_mr->iov = entry->info.iov;
-	opx_mr->attr.mr_iov = &opx_mr->iov;
-	opx_mr->attr.iov_count = FI_OPX_IOV_LIMIT;
-	opx_mr->attr.offset = 0; // set in the normal path
-	opx_mr->attr.access = access;
-	opx_mr->attr.iface = entry->info.iface;
-	opx_mr->hmem_unified = 0;
-	opx_mr->flags = entry->info.flags;
-	opx_mr->attr.requested_key = 0;
-	struct opx_hmem_domain *hmem_domain = (struct opx_hmem_domain *)cache->domain;
-	opx_mr->domain = hmem_domain->opx_domain;
+	opx_mr->mr_fid.mem_desc		    = opx_mr;
+	opx_mr->mr_fid.fid.fclass	    = FI_CLASS_MR;
+	opx_mr->mr_fid.fid.context	    = NULL;
+	opx_mr->mr_fid.fid.ops		    = &opx_mr_cache_ops;
+	opx_mr->mr_fid.key		    = FI_KEY_NOTAVAIL;
+	opx_mr->iov			    = entry->info.iov;
+	opx_mr->attr.mr_iov		    = &opx_mr->iov;
+	opx_mr->attr.iov_count		    = FI_OPX_IOV_LIMIT;
+	opx_mr->attr.offset		    = 0; // set in the normal path
+	opx_mr->attr.access		    = access;
+	opx_mr->attr.iface		    = entry->info.iface;
+	opx_mr->hmem_unified		    = 0;
+	opx_mr->flags			    = entry->info.flags;
+	opx_mr->attr.requested_key	    = 0;
+	struct opx_hmem_domain *hmem_domain = (struct opx_hmem_domain *) cache->domain;
+	opx_mr->domain			    = hmem_domain->opx_domain;
 
 	assert((opx_mr->attr.iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) || opx_mr->attr.iface == FI_HMEM_ROCR);
 
-	(opx_mr->attr.iface == FI_HMEM_CUDA) ? (opx_mr->attr.device.cuda = entry->info.device) : (void)0;
+	(opx_mr->attr.iface == FI_HMEM_CUDA) ? (opx_mr->attr.device.cuda = entry->info.device) : (void) 0;
 
 	/* FLush the cache so that if there are entries on the dead region list
 	 * with the same page as we are about to register, they are unregistered first.
@@ -500,8 +465,8 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache,
 	if (OFI_UNLIKELY(err)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "HMEM-DEV-HANDLE-REGISTER");
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-			"Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
-			err, entry->info.iov.iov_base, entry->info.iov.iov_len);
+			"Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n", err,
+			entry->info.iov.iov_base, entry->info.iov.iov_len);
 		// When gdrcopy pin buf failed, fallback to cudaMemcpy and return without caching
 		opx_mr->hmem_dev_reg_handle = 0UL;
 	} else {
@@ -512,7 +477,6 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache,
 
 	return FI_SUCCESS;
 }
-
 
 /* @brief Cleanup the fi_opx_mr from the HMEM MR cache.
  *
@@ -525,37 +489,32 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache,
  * Note: efa_mr_cache_entry_reg was referenced when implementing this.
  */
 
-void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache,
-				  struct ofi_mr_entry *entry)
+void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 {
-	struct fi_opx_mr *opx_mr = (struct fi_opx_mr *)entry->data;
+	struct fi_opx_mr *opx_mr = (struct fi_opx_mr *) entry->data;
 
 	HASH_DEL(opx_mr->domain->mr_hashmap, opx_mr);
 
-	FI_DBG(cache->domain->prov, FI_LOG_MR,
-		"OPX_DEBUG_ENTRY entry %p, data %p opx_domain %p\n",
-		entry, opx_mr, opx_mr->domain);
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "OPX_DEBUG_ENTRY entry %p, data %p opx_domain %p\n", entry, opx_mr,
+	       opx_mr->domain);
 	OPX_DEBUG_ENTRY(entry);
 
 #ifndef NDEBUG
 	const void *const iov_base = entry->info.iov.iov_base;
-	const size_t iov_len = entry->info.iov.iov_len;
+	const size_t	  iov_len  = entry->info.iov.iov_len;
 #endif
 	assert(entry->use_cnt == 0);
 
 	/* Is this region current?  deregister it */
-	assert((opx_mr->iov.iov_len == iov_len) &&
-		(opx_mr->iov.iov_base == iov_base));
-	FI_DBG(cache->domain->prov, FI_LOG_MR,
-		"ENTRY cache %p, entry %p, data %p, iov_base %p, iov_len %zu\n",
-		cache, entry, opx_mr, iov_base, iov_len);
+	assert((opx_mr->iov.iov_len == iov_len) && (opx_mr->iov.iov_base == iov_base));
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "ENTRY cache %p, entry %p, data %p, iov_base %p, iov_len %zu\n", cache,
+	       entry, opx_mr, iov_base, iov_len);
 	if (opx_mr->hmem_dev_reg_handle) {
 		/* Hold the cache->lock across unregister call */
 		pthread_mutex_lock(&cache->lock);
 		assert(opx_mr->attr.iface == FI_HMEM_CUDA || opx_mr->attr.iface == FI_HMEM_ROCR);
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-DEV-UNREGISTER");
-		int err = ofi_hmem_dev_unregister(opx_mr->attr.iface,
-						opx_mr->hmem_dev_reg_handle);
+		int err = ofi_hmem_dev_unregister(opx_mr->attr.iface, opx_mr->hmem_dev_reg_handle);
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-DEV-UNREGISTER");
 		pthread_mutex_unlock(&cache->lock);
 		if (OFI_UNLIKELY(err)) {

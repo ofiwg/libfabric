@@ -39,24 +39,26 @@
 #include "rdma/opx/fi_opx_compiler.h"
 
 struct fi_opx_progress_track {
-	pthread_t				*progress_thread;
-	bool					keep_running;
-	void					*returned_value;
+	pthread_t *progress_thread;
+	bool	   keep_running;
+	void	  *returned_value;
 };
 
 struct progress_func_args {
-        struct fid_cq *cq;
-        char* prog_affinity;
+	struct fid_cq		     *cq;
+	char			     *prog_affinity;
 	struct fi_opx_progress_track *progress_track;
-	int progress_interval;
+	int			      progress_interval;
 };
 
 // init progress_track
 __OPX_FORCE_INLINE__
-void fi_opx_progress_init (struct fi_opx_progress_track *progress) {
+void fi_opx_progress_init(struct fi_opx_progress_track *progress)
+{
 	progress->progress_thread = NULL;
-	progress->returned_value = NULL;
+	progress->returned_value  = NULL;
 }
-void fi_opx_start_progress (struct fi_opx_progress_track *progress_track, struct fid_cq *cq, char* prog_affinity, int progress_interval);
-void fi_opx_stop_progress (struct fi_opx_progress_track *progress_track);
+void fi_opx_start_progress(struct fi_opx_progress_track *progress_track, struct fid_cq *cq, char *prog_affinity,
+			   int progress_interval);
+void fi_opx_stop_progress(struct fi_opx_progress_track *progress_track);
 #endif

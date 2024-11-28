@@ -31,7 +31,6 @@
  * SOFTWARE.
  */
 
-
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,17 +56,18 @@ static int fi_opx_close_domain(fid_t fid)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "close domain\n");
 
-	int ret;
-	struct fi_opx_domain *opx_domain =
-		container_of(fid, struct fi_opx_domain, domain_fid);
+	int		      ret;
+	struct fi_opx_domain *opx_domain = container_of(fid, struct fi_opx_domain, domain_fid);
 
 	ret = fi_opx_fid_check(fid, FI_CLASS_DOMAIN, "domain");
-	if (ret)
+	if (ret) {
 		return ret;
+	}
 
 	ret = fi_opx_finalize_mr_ops(&opx_domain->domain_fid);
-	if (ret)
+	if (ret) {
 		return ret;
+	}
 
 	opx_close_tid_domain(opx_domain->tid_domain, OPX_TID_NO_LOCK_ON_CLEANUP);
 	opx_domain->tid_domain = NULL;
@@ -77,45 +77,41 @@ static int fi_opx_close_domain(fid_t fid)
 #endif
 
 	ret = fi_opx_ref_finalize(&opx_domain->ref_cnt, "domain");
-	if (ret)
+	if (ret) {
 		return ret;
+	}
 
 	ret = fi_opx_ref_dec(&opx_domain->fabric->ref_cnt, "fabric");
-	if (ret)
+	if (ret) {
 		return ret;
-
+	}
 
 	free(opx_domain);
 
-	//opx_domain (the object passed in as fid) is now unusable
+	// opx_domain (the object passed in as fid) is now unusable
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "domain closed\n");
 	return 0;
 }
 
-static struct fi_ops fi_opx_fi_ops = {
-	.size		= sizeof(struct fi_ops),
-	.close		= fi_opx_close_domain,
-	.bind		= fi_no_bind,
-	.control	= fi_no_control,
-	.ops_open	= fi_no_ops_open
-};
+static struct fi_ops fi_opx_fi_ops = {.size	= sizeof(struct fi_ops),
+				      .close	= fi_opx_close_domain,
+				      .bind	= fi_no_bind,
+				      .control	= fi_no_control,
+				      .ops_open = fi_no_ops_open};
 
-static struct fi_ops_domain fi_opx_domain_ops = {
-	.size		= sizeof(struct fi_ops_domain),
-	.av_open	= fi_opx_av_open,
-	.cq_open	= fi_opx_cq_open,
-	.endpoint	= fi_opx_endpoint,
-	.scalable_ep = fi_opx_scalable_ep,
-	.cntr_open	= fi_opx_cntr_open,
-	.poll_open	= fi_no_poll_open,
-	.stx_ctx	= fi_opx_stx_context,
-	.srx_ctx	= fi_no_srx_context
-};
+static struct fi_ops_domain fi_opx_domain_ops = {.size	      = sizeof(struct fi_ops_domain),
+						 .av_open     = fi_opx_av_open,
+						 .cq_open     = fi_opx_cq_open,
+						 .endpoint    = fi_opx_endpoint,
+						 .scalable_ep = fi_opx_scalable_ep,
+						 .cntr_open   = fi_opx_cntr_open,
+						 .poll_open   = fi_no_poll_open,
+						 .stx_ctx     = fi_opx_stx_context,
+						 .srx_ctx     = fi_no_srx_context};
 
-
-static inline void
-opx_util_domain_cleanup(struct fi_opx_domain *opx_domain) {
+static inline void opx_util_domain_cleanup(struct fi_opx_domain *opx_domain)
+{
 	if (opx_domain->tid_domain) {
 		opx_close_tid_domain(opx_domain->tid_domain, OPX_TID_NO_LOCK_ON_CLEANUP);
 		opx_domain->tid_domain = NULL;
@@ -128,71 +124,72 @@ opx_util_domain_cleanup(struct fi_opx_domain *opx_domain) {
 #endif
 }
 
-
 int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 {
 	struct fi_domain_attr *attr;
 
 	attr = calloc(1, sizeof(*attr));
-	if (!attr)
+	if (!attr) {
 		goto err;
+	}
 
-	uint32_t ppn = 1; /* TODO */
+	uint32_t       ppn	  = 1; /* TODO */
 	const unsigned tx_ctx_cnt = 160 / ppn;
 	const unsigned rx_ctx_cnt = 160 / ppn;
 
-	attr->domain		= NULL;
-	attr->name  		= strdup(FI_OPX_DOMAIN_NAME);
+	attr->domain = NULL;
+	attr->name   = strdup(FI_OPX_DOMAIN_NAME);
 
-	attr->threading		= OPX_THREAD;
-	attr->control_progress 	= FI_PROGRESS_MANUAL;
-	attr->data_progress	= FI_PROGRESS_MANUAL;
-	attr->resource_mgmt	= FI_RM_DISABLED;
-	attr->av_type		= OPX_AV;
-	attr->mr_mode		= FI_OPX_BASE_MR_MODE;
-	attr->mr_key_size 	= sizeof(uint64_t);
-	attr->cq_data_size 	= FI_OPX_REMOTE_CQ_DATA_SIZE;
-	attr->cq_cnt		= (size_t)-1;
-	attr->ep_cnt		= 160/ppn;
-	attr->tx_ctx_cnt	= tx_ctx_cnt;
-	attr->rx_ctx_cnt	= rx_ctx_cnt;
+	attr->threading	       = OPX_THREAD;
+	attr->control_progress = FI_PROGRESS_MANUAL;
+	attr->data_progress    = FI_PROGRESS_MANUAL;
+	attr->resource_mgmt    = FI_RM_DISABLED;
+	attr->av_type	       = OPX_AV;
+	attr->mr_mode	       = FI_OPX_BASE_MR_MODE;
+	attr->mr_key_size      = sizeof(uint64_t);
+	attr->cq_data_size     = FI_OPX_REMOTE_CQ_DATA_SIZE;
+	attr->cq_cnt	       = (size_t) -1;
+	attr->ep_cnt	       = 160 / ppn;
+	attr->tx_ctx_cnt       = tx_ctx_cnt;
+	attr->rx_ctx_cnt       = rx_ctx_cnt;
 
-    // For now, keep these 1-1
-	attr->max_ep_tx_ctx	= FI_OPX_ADDR_SEP_RX_MAX;
-	attr->max_ep_rx_ctx	= FI_OPX_ADDR_SEP_RX_MAX;
+	// For now, keep these 1-1
+	attr->max_ep_tx_ctx = FI_OPX_ADDR_SEP_RX_MAX;
+	attr->max_ep_rx_ctx = FI_OPX_ADDR_SEP_RX_MAX;
 
-	attr->max_ep_stx_ctx	= SIZE_MAX;
-	attr->max_ep_srx_ctx	= SIZE_MAX;
-	attr->mr_iov_limit	= 1;
+	attr->max_ep_stx_ctx = SIZE_MAX;
+	attr->max_ep_srx_ctx = SIZE_MAX;
+	attr->mr_iov_limit   = 1;
 
 	*domain_attr = attr;
 
 	return 0;
 err:
 	*domain_attr = NULL;
-	errno = FI_ENOMEM;
+	errno	     = FI_ENOMEM;
 	return -1;
 }
 
-int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, struct fi_domain_attr *hints, enum fi_progress progress)
+int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, struct fi_domain_attr *hints,
+			 enum fi_progress progress)
 {
 	if (!domain_attr) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "missing domain attribute structure\n");
 		goto err;
 	}
 
-	*domain_attr = *fi_opx_global.default_domain_attr;
+	*domain_attr		   = *fi_opx_global.default_domain_attr;
 	domain_attr->data_progress = progress;
 
 #ifdef OPX_ENABLED
 	/* Set the data progress mode to the option used in the configure.
- 	 * Ignore any setting by the application.
- 	 */
+	 * Ignore any setting by the application.
+	 */
 
 	/* Set the mr_mode to the option used in the configure.
- 	 * Ignore any setting by the application - the checkinfo should have verified
- 	 * it was set to the same setting.
- 	 */
+	 * Ignore any setting by the application - the checkinfo should have verified
+	 * it was set to the same setting.
+	 */
 	domain_attr->mr_mode = OPX_MR;
 #endif
 
@@ -202,32 +199,60 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 
 	if (hints) {
 		if (hints->domain) {
-			struct fi_opx_domain *opx_domain = container_of(hints->domain, struct fi_opx_domain, domain_fid);
+			struct fi_opx_domain *opx_domain =
+				container_of(hints->domain, struct fi_opx_domain, domain_fid);
 
-			domain_attr->threading		= opx_domain->threading;
-			domain_attr->resource_mgmt	= opx_domain->resource_mgmt;
-			domain_attr->tx_ctx_cnt		= fi_opx_domain_get_tx_max(hints->domain);
-			domain_attr->rx_ctx_cnt		= fi_opx_domain_get_rx_max(hints->domain);
-			domain_attr->max_ep_tx_ctx	= fi_opx_domain_get_tx_max(hints->domain);
-			domain_attr->max_ep_rx_ctx	= fi_opx_domain_get_rx_max(hints->domain);
-			domain_attr->max_ep_stx_ctx	= fi_opx_domain_get_tx_max(hints->domain);
+			domain_attr->threading	    = opx_domain->threading;
+			domain_attr->resource_mgmt  = opx_domain->resource_mgmt;
+			domain_attr->tx_ctx_cnt	    = fi_opx_domain_get_tx_max(hints->domain);
+			domain_attr->rx_ctx_cnt	    = fi_opx_domain_get_rx_max(hints->domain);
+			domain_attr->max_ep_tx_ctx  = fi_opx_domain_get_tx_max(hints->domain);
+			domain_attr->max_ep_rx_ctx  = fi_opx_domain_get_rx_max(hints->domain);
+			domain_attr->max_ep_stx_ctx = fi_opx_domain_get_tx_max(hints->domain);
 
 		} else {
-
-			if (hints->threading)		domain_attr->threading = hints->threading;
-			if (hints->resource_mgmt)	domain_attr->resource_mgmt = hints->resource_mgmt;
-			if (hints->av_type)		domain_attr->av_type = hints->av_type;
-			if (hints->mr_key_size)		domain_attr->mr_key_size = hints->mr_key_size;
-			if (hints->cq_data_size)	domain_attr->cq_data_size = hints->cq_data_size;
-			if (hints->cq_cnt)		domain_attr->cq_cnt = hints->cq_cnt;
-			if (hints->ep_cnt)		domain_attr->ep_cnt = hints->ep_cnt;
-			if (hints->tx_ctx_cnt)		domain_attr->tx_ctx_cnt = hints->tx_ctx_cnt;
-			if (hints->rx_ctx_cnt)		domain_attr->rx_ctx_cnt = hints->rx_ctx_cnt;
-			if (hints->max_ep_tx_ctx)	domain_attr->max_ep_tx_ctx = hints->max_ep_tx_ctx;
-			if (hints->max_ep_rx_ctx)	domain_attr->max_ep_rx_ctx = hints->max_ep_rx_ctx;
-			if (hints->max_ep_stx_ctx)	domain_attr->max_ep_stx_ctx = hints->max_ep_stx_ctx;
-			if (hints->max_ep_srx_ctx)	domain_attr->max_ep_srx_ctx = hints->max_ep_srx_ctx;
-			if (hints->mr_iov_limit)	domain_attr->mr_iov_limit = hints->mr_iov_limit;
+			if (hints->threading) {
+				domain_attr->threading = hints->threading;
+			}
+			if (hints->resource_mgmt) {
+				domain_attr->resource_mgmt = hints->resource_mgmt;
+			}
+			if (hints->av_type) {
+				domain_attr->av_type = hints->av_type;
+			}
+			if (hints->mr_key_size) {
+				domain_attr->mr_key_size = hints->mr_key_size;
+			}
+			if (hints->cq_data_size) {
+				domain_attr->cq_data_size = hints->cq_data_size;
+			}
+			if (hints->cq_cnt) {
+				domain_attr->cq_cnt = hints->cq_cnt;
+			}
+			if (hints->ep_cnt) {
+				domain_attr->ep_cnt = hints->ep_cnt;
+			}
+			if (hints->tx_ctx_cnt) {
+				domain_attr->tx_ctx_cnt = hints->tx_ctx_cnt;
+			}
+			if (hints->rx_ctx_cnt) {
+				domain_attr->rx_ctx_cnt = hints->rx_ctx_cnt;
+			}
+			if (hints->max_ep_tx_ctx) {
+				domain_attr->max_ep_tx_ctx = hints->max_ep_tx_ctx;
+			}
+			if (hints->max_ep_rx_ctx) {
+				domain_attr->max_ep_rx_ctx = hints->max_ep_rx_ctx;
+			}
+			if (hints->max_ep_stx_ctx) {
+				domain_attr->max_ep_stx_ctx = hints->max_ep_stx_ctx;
+			}
+			if (hints->max_ep_srx_ctx) {
+				domain_attr->max_ep_srx_ctx = hints->max_ep_srx_ctx;
+			}
+			if (hints->mr_iov_limit) {
+				domain_attr->mr_iov_limit = hints->mr_iov_limit;
+			}
 		}
 	}
 
@@ -260,16 +285,14 @@ int fi_opx_check_domain_attr(struct fi_domain_attr *attr)
 
 	if (attr->mr_key_size) {
 		if (attr->mr_key_size > sizeof(uint64_t)) {
-			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN,
-					"memory key size too large\n");
+			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "memory key size too large\n");
 			goto err;
 		}
 	}
 	if (attr->cq_data_size) {
 		if (attr->cq_data_size > FI_OPX_REMOTE_CQ_DATA_SIZE) {
-			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN,
-					"max cq data supported is %zu\n",
-					FI_OPX_REMOTE_CQ_DATA_SIZE);
+			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "max cq data supported is %zu\n",
+			       FI_OPX_REMOTE_CQ_DATA_SIZE);
 			goto err;
 		}
 	}
@@ -283,9 +306,9 @@ err:
 
 int fi_opx_validate_affinity_str(char *str)
 {
-	int cols = 0;
+	int  cols      = 0;
 	bool recentCol = true;
-	int iter;
+	int  iter;
 
 	for (iter = 0; iter < strlen(str); iter++) {
 		if (!isdigit(str[iter]) && str[iter] != ':') {
@@ -297,46 +320,44 @@ int fi_opx_validate_affinity_str(char *str)
 		if (str[iter] == ':') {
 			if (recentCol) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-						"Progress Affinity improperly formatted. Must be a : separated triplet.\n");
+					"Progress Affinity improperly formatted. Must be a : separated triplet.\n");
 				return -1;
 			} else {
 				cols += 1;
 				recentCol = true;
 			}
-		} else
+		} else {
 			recentCol = false;
+		}
 	}
 
-	if (cols != 2){
+	if (cols != 2) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-				"Progress Affinity improperly formatted. Must be a : separated triplet.\n");
+			"Progress Affinity improperly formatted. Must be a : separated triplet.\n");
 		return -1;
 	}
 	return 0;
 }
 
-int fi_opx_domain(struct fid_fabric *fabric,
-		struct fi_info *info,
-		struct fid_domain **dom, void *context)
+int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_domain **dom, void *context)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "open domain\n");
 
-	int ret = 0;
-	int get_param_check = 0;
-	struct fi_opx_domain 	*opx_domain = NULL;
-	struct fi_opx_fabric 	*opx_fabric =
-		container_of(fabric, struct fi_opx_fabric, fabric_fid);
+	int		      ret	      = 0;
+	int		      get_param_check = 0;
+	struct fi_opx_domain *opx_domain      = NULL;
+	struct fi_opx_fabric *opx_fabric      = container_of(fabric, struct fi_opx_fabric, fabric_fid);
 
 	if (!info) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-				"no info supplied\n");
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "no info supplied\n");
 		errno = FI_EINVAL;
 		return -errno;
 	}
 
 	ret = fi_opx_fid_check(&fabric->fid, FI_CLASS_FABRIC, "fabric");
-	if (ret)
+	if (ret) {
 		return ret;
+	}
 
 	opx_domain = calloc(1, sizeof(struct fi_opx_domain));
 	if (!opx_domain) {
@@ -350,7 +371,8 @@ int fi_opx_domain(struct fid_fabric *fabric,
 
 	if (fi_opx_global.default_domain_attr == NULL) {
 		if (fi_opx_alloc_default_domain_attr(&fi_opx_global.default_domain_attr)) {
-			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "alloc function could not allocate block of memory\n");
+			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN,
+			       "alloc function could not allocate block of memory\n");
 			errno = FI_ENOMEM;
 			goto err;
 		}
@@ -359,7 +381,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	struct opx_tid_domain *opx_tid_domain;
 	struct opx_tid_fabric *opx_tid_fabric = opx_fabric->tid_fabric;
 
-	if(opx_open_tid_domain(opx_tid_fabric, info, &opx_tid_domain)) {
+	if (opx_open_tid_domain(opx_tid_fabric, info, &opx_tid_domain)) {
 		errno = FI_ENOMEM;
 		goto err;
 	}
@@ -369,46 +391,47 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	struct opx_hmem_domain *opx_hmem_domain;
 	struct opx_hmem_fabric *opx_hmem_fabric = opx_fabric->hmem_fabric;
 
-	if(opx_hmem_open_domain(opx_hmem_fabric, info, &opx_hmem_domain)) {
+	if (opx_hmem_open_domain(opx_hmem_fabric, info, &opx_hmem_domain)) {
 		errno = FI_ENOMEM;
 		goto err;
 	}
-	opx_domain->hmem_domain = opx_hmem_domain;
+	opx_domain->hmem_domain		    = opx_hmem_domain;
 	opx_domain->hmem_domain->opx_domain = opx_domain;
 
 	size_t env_var_threshold;
-	get_param_check = fi_param_get_size_t(fi_opx_global.prov, "dev_reg_send_threshold",
-						&env_var_threshold);
+	get_param_check = fi_param_get_size_t(fi_opx_global.prov, "dev_reg_send_threshold", &env_var_threshold);
 	if (get_param_check == FI_SUCCESS) {
 		if (env_var_threshold <= OPX_HMEM_DEV_REG_THRESHOLD_MAX) {
 			opx_domain->hmem_domain->devreg_copy_from_threshold = env_var_threshold;
 		} else {
 			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
 				"FI_OPX_DEV_REG_SEND_THRESHOLD must be an integer >= %u and <= %u. Using default value (%u) instead of %zu\n",
-				OPX_HMEM_DEV_REG_THRESHOLD_MIN, OPX_HMEM_DEV_REG_THRESHOLD_MAX, OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT, env_var_threshold);
+				OPX_HMEM_DEV_REG_THRESHOLD_MIN, OPX_HMEM_DEV_REG_THRESHOLD_MAX,
+				OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT, env_var_threshold);
 		}
 	}
 
-	get_param_check = fi_param_get_size_t(fi_opx_global.prov, "dev_reg_recv_threshold",
-						&env_var_threshold);
+	get_param_check = fi_param_get_size_t(fi_opx_global.prov, "dev_reg_recv_threshold", &env_var_threshold);
 	if (get_param_check == FI_SUCCESS) {
 		if (env_var_threshold <= OPX_HMEM_DEV_REG_THRESHOLD_MAX) {
 			opx_domain->hmem_domain->devreg_copy_to_threshold = env_var_threshold;
 		} else {
 			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
 				"FI_OPX_DEV_REG_RECV_THRESHOLD must be an integer >= %u and <= %u. Using default value (%u) instead of %zu\n",
-				OPX_HMEM_DEV_REG_THRESHOLD_MIN, OPX_HMEM_DEV_REG_THRESHOLD_MAX, OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT, env_var_threshold);
+				OPX_HMEM_DEV_REG_THRESHOLD_MIN, OPX_HMEM_DEV_REG_THRESHOLD_MAX,
+				OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT, env_var_threshold);
 		}
 	}
 #endif
 
 	/* fill in default domain attributes */
-	opx_domain->threading		= fi_opx_global.default_domain_attr->threading;
-	opx_domain->resource_mgmt	= fi_opx_global.default_domain_attr->resource_mgmt;
-	opx_domain->data_progress	= fi_opx_global.default_domain_attr->data_progress;
+	opx_domain->threading	  = fi_opx_global.default_domain_attr->threading;
+	opx_domain->resource_mgmt = fi_opx_global.default_domain_attr->resource_mgmt;
+	opx_domain->data_progress = fi_opx_global.default_domain_attr->data_progress;
 
 	int env_var_progress_interval = 0;
-	get_param_check = fi_param_get_int(fi_opx_global.prov, "auto_progress_interval_usec", &env_var_progress_interval);
+	get_param_check =
+		fi_param_get_int(fi_opx_global.prov, "auto_progress_interval_usec", &env_var_progress_interval);
 	if (get_param_check == FI_SUCCESS) {
 		if (env_var_progress_interval < 0) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
@@ -422,14 +445,14 @@ int fi_opx_domain(struct fid_fabric *fabric,
 
 	if (info->domain_attr) {
 		if (info->domain_attr->domain) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-					"domain cannot be supplied\n");
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "domain cannot be supplied\n");
 			goto err;
 		}
 		ret = fi_opx_check_domain_attr(info->domain_attr);
-		if (ret)
+		if (ret) {
 			goto err;
-		opx_domain->threading = info->domain_attr->threading;
+		}
+		opx_domain->threading	  = info->domain_attr->threading;
 		opx_domain->resource_mgmt = info->domain_attr->resource_mgmt;
 		if (fi_opx_global.progress == FI_PROGRESS_UNSPEC) {
 			opx_domain->data_progress = info->domain_attr->data_progress;
@@ -442,7 +465,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 
 	opx_domain->domain_fid.fid.fclass  = FI_CLASS_DOMAIN;
 	opx_domain->domain_fid.fid.context = context;
-	opx_domain->domain_fid.fid.ops     = &fi_opx_fi_ops;
+	opx_domain->domain_fid.fid.ops	   = &fi_opx_fi_ops;
 	opx_domain->domain_fid.ops	   = &fi_opx_domain_ops;
 
 	opx_domain->progress_affinity_str = NULL;
@@ -450,16 +473,16 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	if (get_param_check == FI_SUCCESS) {
 		if (fi_opx_validate_affinity_str(opx_domain->progress_affinity_str) != 0) {
 			opx_domain->progress_affinity_str = NULL;
-			errno = FI_EINVAL;
+			errno				  = FI_EINVAL;
 			goto err;
 		}
 	}
 
 	// Max UUID consists of 32 hex digits.
-	char * env_var_uuid = OPX_DEFAULT_JOB_KEY_STR;
-	get_param_check = fi_param_get_str(fi_opx_global.prov, "uuid", &env_var_uuid);
-	char * impi_uuid = getenv("I_MPI_HYDRA_UUID");
-	char * slurm_job_id = getenv("SLURM_JOB_ID");
+	char *env_var_uuid = OPX_DEFAULT_JOB_KEY_STR;
+	get_param_check	   = fi_param_get_str(fi_opx_global.prov, "uuid", &env_var_uuid);
+	char *impi_uuid	   = getenv("I_MPI_HYDRA_UUID");
+	char *slurm_job_id = getenv("SLURM_JOB_ID");
 
 	if (get_param_check == FI_SUCCESS) {
 		FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "Detected user specified FI_OPX_UUID\n");
@@ -480,7 +503,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	}
 
 	int i;
-	for (i=0; i < OPX_JOB_KEY_STR_SIZE && env_var_uuid[i] != 0; i++) {
+	for (i = 0; i < OPX_JOB_KEY_STR_SIZE && env_var_uuid[i] != 0; i++) {
 		if (!isxdigit(env_var_uuid[i])) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
 				"Invalid UUID. UUID must consist solely of hexadecimal digits.  Using default OPX uuid instead\n");
@@ -489,42 +512,36 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	}
 
 	// Copy the job key and guarantee null termination.
-	strncpy(opx_domain->unique_job_key_str, env_var_uuid, OPX_JOB_KEY_STR_SIZE-1);
-	opx_domain->unique_job_key_str[OPX_JOB_KEY_STR_SIZE-1] = '\0';
+	strncpy(opx_domain->unique_job_key_str, env_var_uuid, OPX_JOB_KEY_STR_SIZE - 1);
+	opx_domain->unique_job_key_str[OPX_JOB_KEY_STR_SIZE - 1] = '\0';
 
-	int elements_read = sscanf(opx_domain->unique_job_key_str, "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
-		&opx_domain->unique_job_key[0],
-		&opx_domain->unique_job_key[1],
-		&opx_domain->unique_job_key[2],
-		&opx_domain->unique_job_key[3],
-		&opx_domain->unique_job_key[4],
-		&opx_domain->unique_job_key[5],
-		&opx_domain->unique_job_key[6],
-		&opx_domain->unique_job_key[7],
-		&opx_domain->unique_job_key[8],
-		&opx_domain->unique_job_key[9],
-		&opx_domain->unique_job_key[10],
-		&opx_domain->unique_job_key[11],
-		&opx_domain->unique_job_key[12],
-		&opx_domain->unique_job_key[13],
-		&opx_domain->unique_job_key[14],
+	int elements_read = sscanf(
+		opx_domain->unique_job_key_str,
+		"%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
+		&opx_domain->unique_job_key[0], &opx_domain->unique_job_key[1], &opx_domain->unique_job_key[2],
+		&opx_domain->unique_job_key[3], &opx_domain->unique_job_key[4], &opx_domain->unique_job_key[5],
+		&opx_domain->unique_job_key[6], &opx_domain->unique_job_key[7], &opx_domain->unique_job_key[8],
+		&opx_domain->unique_job_key[9], &opx_domain->unique_job_key[10], &opx_domain->unique_job_key[11],
+		&opx_domain->unique_job_key[12], &opx_domain->unique_job_key[13], &opx_domain->unique_job_key[14],
 		&opx_domain->unique_job_key[15]);
 	if (elements_read == EOF) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error: sscanf encountered an input failure (EOF), unable to parse the unique job key string.\n");
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+			"Error: sscanf encountered an input failure (EOF), unable to parse the unique job key string.\n");
 		errno = FI_EINVAL;
 		goto err;
 	}
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "Domain unique job key set to %s\n", opx_domain->unique_job_key_str);
-	//TODO: Print out a summary of all domain settings wtih FI_INFO
+	// TODO: Print out a summary of all domain settings wtih FI_INFO
 
 	opx_domain->rx_count = 0;
 	opx_domain->tx_count = 0;
 	opx_domain->ep_count = 0;
 
 	ret = fi_opx_init_mr_ops(&opx_domain->domain_fid, info);
-	if (ret)
+	if (ret) {
 		goto err;
+	}
 
 	opx_domain->reliability_kind = OPX_DOMAIN_RELIABILITY;
 
