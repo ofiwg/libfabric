@@ -1,0 +1,9 @@
+---
+BasedOnStyle: InheritParentConfig
+InsertBraces: true
+ColumnLimit: 120
+AlignConsecutiveDeclarations: true
+AlignConsecutiveAssignments: true
+AlignTrailingComments: true
+SortIncludes: Never
+BreakStringLiterals: false
