@@ -191,7 +191,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 	}
 
 	if (vrb_wr_consumes_recv(wr)) {
-		if  (!ep->peer_rq_credits || 
+		if  (!ep->peer_rq_credits ||
 		     (ep->peer_rq_credits == 1 && !(flags & OFI_PRIORITY)))
 		/* Last credit is reserved for credit update */
 			goto freectx;
@@ -1156,7 +1156,7 @@ static int vrb_dgram_ep_getname(fid_t ep_fid, void *addr, size_t *addrlen)
 	return FI_SUCCESS;
 }
 
-static struct fi_ops vrb_ep_ops = {
+_Thread_local static struct fi_ops vrb_ep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = vrb_ep_close,
 	.bind = vrb_ep_bind,
