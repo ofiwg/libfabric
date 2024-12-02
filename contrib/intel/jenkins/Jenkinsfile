@@ -361,7 +361,7 @@ def skip() {
 pipeline {
   agent {
     node {
-      label 'main'
+      label 'cbj-main'
       customWorkspace "workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
     }
   }
