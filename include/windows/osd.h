@@ -871,11 +871,6 @@ static inline char * strndup(char const *src, size_t n)
 
 char *strcasestr(const char *haystack, const char *needle);
 
-static inline char *strtok_r(char *str, const char *delimiters, char **saveptr)
-{
-	return strtok_s(str, delimiters, saveptr);
-}
-
 #ifndef _SC_PAGESIZE
 #define _SC_PAGESIZE	0
 #endif
