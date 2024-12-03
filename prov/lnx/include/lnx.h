@@ -33,7 +33,6 @@
 #ifndef LNX_H
 #define LNX_H
 
-#define LNX_DEF_AV_SIZE 1024
 #define LNX_MAX_LOCAL_EPS 16
 #define LNX_IOV_LIMIT 4
 
@@ -180,6 +179,7 @@ struct lnx_peer_prov {
 struct lnx_peer {
 	/* true if peer can be reached over shared memory, false otherwise */
 	bool lp_local;
+	fi_addr_t lp_fi_addr;
 
 	/* Each provider that we can reach the peer on will have an entry
 	 * below. Each entry will contain all the local provider endpoints we
@@ -200,10 +200,9 @@ struct lnx_peer {
 struct lnx_peer_table {
 	struct util_av lpt_av;
 	int lpt_max_count;
-	int lpt_count;
 	struct lnx_domain *lpt_domain;
-	/* an array of peer entries */
-	struct lnx_peer **lpt_entries;
+	/* an array of peer entries of type struct lnx_peer */
+	struct ofi_bufpool *lpt_entries;
 };
 
 struct lnx_ctx {
@@ -293,6 +292,9 @@ int lnx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
 
+struct lnx_peer *
+lnx_av_lookup_addr(struct lnx_peer_table *peer_tbl, fi_addr_t addr);
+
 int lnx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq, void *context);
 
@@ -313,15 +315,6 @@ int lnx_queue_tag(struct fi_peer_rx_entry *entry);
 void lnx_free_entry(struct fi_peer_rx_entry *entry);
 void lnx_foreach_unspec_addr(struct fid_peer_srx *srx,
 	fi_addr_t (*get_addr)(struct fi_peer_rx_entry *));
-
-static inline struct lnx_peer *
-lnx_get_peer(struct lnx_peer **peers, fi_addr_t addr)
-{
-	if (!peers || addr == FI_ADDR_UNSPEC)
-		return NULL;
-
-	return peers[addr];
-}
 
 static inline
 void lnx_get_core_desc(struct lnx_mem_desc *desc, void **mem_desc)
