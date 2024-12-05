@@ -343,7 +343,7 @@ int lnx_create_mr(const struct iovec *iov, fi_addr_t addr,
 	struct fi_mr_attr attr = {};
 	struct fi_mr_attr cur_abi_attr;
 	struct ofi_mr_info info = {};
-	uint64_t flags;
+	uint64_t flags = 0;
 	int rc;
 
 	attr.iov_count = 1;
