@@ -105,6 +105,14 @@ def run_ci(stage_name, config_name) {
   )
 }
 
+def build_ci(config_name) {
+  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+        python run.py \
+        --output=${env.CUSTOM_WORKSPACE}/pre-build \
+        --job=${config_name}
+     """
+}
+
 def gather_logs(cluster, key, dest, source) {
   def address = "${env.USER}@${cluster}"
 
@@ -443,7 +451,7 @@ pipeline {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_water.json")
+                build_ci("pr_build_water.json")
               }
             }
           }
@@ -452,7 +460,7 @@ pipeline {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_grass.json")
+                build_ci("pr_build_grass.json")
               }
             }
           }
@@ -461,7 +469,7 @@ pipeline {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_electric.json")
+                build_ci("pr_build_electric.json")
               }
             }
           }
@@ -470,7 +478,7 @@ pipeline {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_cyndaquil.json")
+                build_ci("pr_build_cyndaquil.json")
               }
             }
           }
@@ -479,7 +487,7 @@ pipeline {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_quilava.json")
+                build_ci("pr_build_quilava.json")
               }
             }
           }
@@ -501,7 +509,7 @@ pipeline {
               }
               bootstrap_ci()
               dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_daos.json")
+                build_ci("pr_build_daos.json")
               }
             }
           }
@@ -524,7 +532,7 @@ pipeline {
               }
               bootstrap_ci()
               dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_fire.json")
+                build_ci("pr_build_fire.json")
               }
             }
           }
@@ -538,7 +546,7 @@ pipeline {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_shmem_water.json")
+                build_ci("pr_build_shmem_water.json")
               }
             }
           }
@@ -547,7 +555,7 @@ pipeline {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_shmem_grass.json")
+                build_ci("pr_build_shmem_grass.json")
               }
             }
           }
@@ -556,7 +564,7 @@ pipeline {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_ompi_water.json")
+                build_ci("pr_build_ompi_water.json")
               }
             }
           }
@@ -565,7 +573,7 @@ pipeline {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_ompi_grass.json")
+                build_ci("pr_build_ompi_grass.json")
               }
             }
           }
