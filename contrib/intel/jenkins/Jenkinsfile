@@ -7,6 +7,7 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def BUILD_MODES=["reg", "dbg", "dl"]
 @Field def PYTHON_VERSION="3.9"
 @Field def TIMEOUT="7200"
+@Field def weekly=false
 
 def run_python(version, command, output=null) {
   if (output != null)
@@ -20,6 +21,7 @@ def slurm_batch(partition, node_num, output, command) {
   try {
     sh """sbatch --partition=${partition} -N ${node_num} \
           --wait -o ${output} --open-mode=append \
+          -J ${env.SLURM_JOB_NAME} \
           --wrap=\'env; timeout $TIMEOUT ${command}\'
        """
   } catch (Exception e) {
@@ -273,9 +275,17 @@ def bootstrap_ci() {
 }
 
 def checkout_tar(name) {
+  if (env.WEEKLY == null) {
+    weekly = false
+  } else {
+    weekly = env.WEEKLY.toBoolean()
+  }
   dir ("${env.CUSTOM_WORKSPACE}/${name}/libfabric") {
     checkout scm
     TARGET=check_target()
+    if (weekly) {
+      TARGET=env.WEEKLY_TARGET
+    }
     sh """
       git remote add upstream ${env.UPSTREAM}
       git pull --rebase upstream ${TARGET}
@@ -337,7 +347,7 @@ def skip() {
   }
 
   echo "Changeset is: ${changeStrings.toArray()}"
-  if (changeStrings.toArray().every { it =~ /(?:fabtests\/pytests|man|prov\/efa|prov\/opx|contrib\/aws).*$/ }) {
+  if (changeStrings.toArray().every { it =~ /(?:fabtests\/pytests|man|prov\/efa|prov\/opx|prov\/cxi|prov\/lpp|contrib\/aws).*$/ }) {
     echo "DONT RUN!"
     return true
   }
@@ -353,7 +363,7 @@ def skip() {
 pipeline {
   agent {
     node {
-      label 'main'
+      label 'cbj-main'
       customWorkspace "workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
     }
   }
@@ -367,6 +377,7 @@ pipeline {
       WITH_ENV="'PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH'"
       CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
       DELETE_LOCATION="${env.CUSTOM_WORKSPACE}/middlewares"
+      SLURM_JOB_NAME="${env.JOB_NAME}_${env.BUILD_NUMBER}"
       RUN_LOCATION="${env.CUSTOM_WORKSPACE}/ci_resources/legacy_pipeline_scripts/"
       CI_LOCATION="${env.CUSTOM_WORKSPACE}/ci"
       LOG_DIR = "${env.CUSTOM_WORKSPACE}/log_dir"
@@ -386,11 +397,6 @@ pipeline {
       steps {
         script {
           git_diffs()
-          if (env.WEEKLY == null) {
-            weekly = false
-          } else {
-            weekly = env.WEEKLY.toBoolean()
-          }
           if (weekly) {
             TIMEOUT="21600" 
           } 
@@ -430,40 +436,28 @@ pipeline {
         }
       }
     }
-    stage ('parallel-builds') {
+    stage ('build-libfabric') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
-        stage ('build-water') {
+        stage ('water') {
           steps {
             script {
               dir (CI_LOCATION) {
                 run_ci("pre-build", "pr_build_water.json")
-                run_ci("pre-build", "pr_build_shmem_water.json")
-                slurm_batch("totodile", "1",
-                            "${env.LOG_DIR}/build_mpich_water_log",
-                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
-                              --build_item=mpich --build_hw=water"""
-                           )
               }
             }
           }
         }
-        stage ('build-grass') {
+        stage ('grass') {
           steps {
             script {
               dir (CI_LOCATION) {
                 run_ci("pre-build", "pr_build_grass.json")
-                run_ci("pre-build", "pr_build_shmem_grass.json")
-                slurm_batch("grass", "1",
-                            "${env.LOG_DIR}/build_mpich_grass_log",
-                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
-                              --build_item=mpich --build_hw=grass"""
-                           )
               }
             }
           }
         }
-        stage ('build-electric') {
+        stage ('electric') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -472,16 +466,7 @@ pipeline {
             }
           }
         }
-        stage ('build-ucx') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_ucx.json")
-              }
-            }
-          }
-        }
-        stage ('build-cyndaquil') {
+        stage ('cyndaquil') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -490,7 +475,7 @@ pipeline {
             }
           }
         }
-        stage ('build-quilava') {
+        stage ('quilava') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -499,16 +484,7 @@ pipeline {
             }
           }
         }
-        stage ('build-ivysaur') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("pre-build", "pr_build_ivysaur.json")
-              }
-            }
-          }
-        }
-        stage ('build-daos') {
+        stage ('daos') {
           agent {
             node {
               label 'daos_head'
@@ -530,7 +506,7 @@ pipeline {
             }
           }
         }
-        stage ('build-fire') {
+        stage ('fire') {
           agent {
             node {
               label 'ze'
@@ -549,6 +525,73 @@ pipeline {
               bootstrap_ci()
               dir (CI_LOCATION) {
                 run_ci("pre-build", "pr_build_fire.json")
+              }
+            }
+          }
+        }
+      }
+    }
+    stage('build-middlewares') {
+      when { equals expected: true, actual: DO_RUN }
+      parallel {
+        stage ('shmem-water') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("pre-build", "pr_build_shmem_water.json")
+              }
+            }
+          }
+        }
+        stage ('shmem-grass') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("pre-build", "pr_build_shmem_grass.json")
+              }
+            }
+          }
+        }
+        stage ('ompi-water') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("pre-build", "pr_build_ompi_water.json")
+              }
+            }
+          }
+        }
+        stage ('ompi-grass') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("pre-build", "pr_build_ompi_grass.json")
+              }
+            }
+          }
+        }
+        stage ('mpich-water') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                slurm_batch("totodile", "1",
+                            "${env.LOG_DIR}/build_mpich_water_log",
+                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
+                              --build_item=mpich --build_hw=water"""
+                           )
+              }
+            }
+          }
+        }
+        stage ('mpich-grass') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                slurm_batch("grass", "1",
+                            "${env.LOG_DIR}/build_mpich_grass_log",
+                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
+                              --build_item=mpich --build_hw=grass"""
+                           )
               }
             }
           }
@@ -651,13 +694,16 @@ pipeline {
             }
           }
         }
-        stage('CI_fabtests_ivysaur') {
+        stage('CI_fabtests_tcp_io_uring') {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("CI_fabtests_ivysaur_reg", "pr_fabtests_ivysaur_reg.json")
-                run_ci("CI_fabtests_ivysaur_dbg", "pr_fabtests_ivysaur_dbg.json")
-                run_ci("CI_fabtests_ivysaur_dl", "pr_fabtests_ivysaur_dl.json")
+                run_ci("CI_fabtests_tcp_io_uring_reg",
+                       "pr_fabtests_tcp_io_uring_reg.json")
+                run_ci("CI_fabtests_tcp_io_uring_dbg",
+                       "pr_fabtests_tcp_io_uring_dbg.json")
+                run_ci("CI_fabtests_tcp_io_uring_dl",
+                       "pr_fabtests_tcp_io_uring_dl.json")
               }
             }
           }
@@ -728,7 +774,7 @@ pipeline {
             script {
               dir (CI_LOCATION) {
                 run_ci("CI_shmem_grass", "pr_shmem_1n2ppn_grass.json")
-                run_ci("CI_shmem_water", "pr_shmem_2n1ppn_water.json")
+                run_ci("CI_shmem_grass", "pr_shmem_2n1ppn_grass.json")
               }
             }
           }
@@ -931,6 +977,7 @@ pipeline {
       node ('ze') {
         dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
       }
+      sh "scancel --jobname=\"${SLURM_JOB_NAME}\""
       dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
     }
     success {
