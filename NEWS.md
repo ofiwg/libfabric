@@ -67,6 +67,14 @@ Fix the preprocessor
 
 - Fix av strncpy
 - Fix various issues with initial commit
+- Initialize flags to 0
+- Convert peer table to use buffer pools
+
+## RXM
+- Replace rxm managed srx with util srx, support FI_PEER
+- Add rxm support for using a peer CQs and counters
+- Add FI_AV_USER_ID support
+- Fix definition of the rxm SAR segment enum
 
 ## SHM
 
