@@ -753,8 +753,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		}
 		rc = opx_hfi_set_pkey(ctrl, user_pkey);
 		if (rc) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-				"Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set.  This pkey is likely not registered/valid.\n",
+			fprintf(stderr,
+				"Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set. This pkey is likely not registered/valid.\n",
 				user_pkey);
 			if (fd >= 0) {
 				opx_hfi_context_close(fd);
@@ -768,7 +768,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	} else {
 		int default_pkey = opx_hfi_get_port_index2pkey(context->hfi_unit, context->hfi_port, 0);
 		if (default_pkey < 0) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+			fprintf(stderr,
 				"Unable to get default Pkey. Please specify a different Pkey using FI_OPX_PKEY\n");
 			if (fd >= 0) {
 				opx_hfi_context_close(fd);
@@ -777,7 +777,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		}
 		rc = opx_hfi_set_pkey(ctrl, default_pkey);
 		if (rc) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+			fprintf(stderr,
 				"Error in setting default Pkey %#x. Please specify a different Pkey using FI_OPX_PKEY\n",
 				default_pkey);
 			if (fd >= 0) {
