@@ -677,7 +677,7 @@ static struct fi_ops xnet_ep_fi_ops = {
 	.close = xnet_ep_close,
 	.bind = xnet_ep_bind,
 	.control = xnet_ep_ctrl,
-	.ops_open = fi_no_ops_open,
+	.ops_open = xnet_ep_ops_open,
 };
 
 static int xnet_ep_getopt(fid_t fid, int level, int optname,
@@ -828,7 +828,6 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->msg = &xnet_msg_ops;
 	(*ep_fid)->rma = &xnet_rma_ops;
 	(*ep_fid)->tagged = &xnet_tagged_ops;
-	(*ep_fid)->fid.ops->ops_open = xnet_ep_ops_open;
 	return 0;
 
 err3:
