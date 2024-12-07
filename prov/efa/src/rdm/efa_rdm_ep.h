@@ -263,6 +263,8 @@ struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
 
 void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep);
 
+int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep);
+
 /**
  * @brief return whether this endpoint should write error cq entry for RNR.
  *
