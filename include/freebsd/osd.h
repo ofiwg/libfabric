@@ -76,6 +76,11 @@ static inline size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa)
 	return 0;
 }
 
+static inline int ofi_ifaddr_get_mtu(const struct ifaddrs *ifa)
+{
+	return -1;
+}
+
 static inline ssize_t ofi_process_vm_readv(pid_t pid,
 			const struct iovec *local_iov,
 			unsigned long liovcnt,
@@ -185,5 +190,3 @@ ofi_recvv_socket(SOCKET fd, const struct iovec *iov, size_t cnt, int flags)
 }
 
 #endif /* _FREEBSD_OSD_H_ */
-
-
