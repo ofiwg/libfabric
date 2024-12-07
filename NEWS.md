@@ -11,6 +11,7 @@ v2.0.0, Fri Dec 13, 2024
 
 ## Core
 
+- Makefile.am: Keep using libfabric.so.1 as the soname
 - xpmem: Cleanup xpmem before monitors
 - Remove redundant windows.h
 - hmem/cuda: Add env variable to enable/disable CUDA DMABUF
@@ -61,16 +62,17 @@ v2.0.0, Fri Dec 13, 2024
 
 ## Hook
 
-Fix the preprocessor
+- Fix the preprocessor
 
 ## LNX
 
-- Fix av strncpy
-- Fix various issues with initial commit
 - Initialize flags to 0
 - Convert peer table to use buffer pools
+- Fix av strncpy
+- Fix various issues with initial commit
 
 ## RXM
+
 - Replace rxm managed srx with util srx, support FI_PEER
 - Add rxm support for using a peer CQs and counters
 - Add FI_AV_USER_ID support
@@ -83,6 +85,11 @@ Fix the preprocessor
 ## Sockets
 
 - Fixed coverity issue for unchecked return value.
+
+## UCX
+
+- Fix segfault in ucx_send_callback
+- Fix incorrect return value checking for fi_param_get()
 
 ## Util
 
