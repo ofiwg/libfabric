@@ -188,26 +188,6 @@ void cxip_ep_progress(struct fid *fid)
 }
 
 /*
- * cxip_ep_peek() - Peek at EP event queues
- *
- * Return whether the associated EP event queues are empty.
- */
-int cxip_ep_peek(struct fid *fid)
-{
-	struct cxip_ep *ep = container_of(fid, struct cxip_ep, ep.fid);
-	struct cxip_ep_obj *ep_obj = ep->ep_obj;
-
-	if (ep_obj->txc->tx_evtq.eq &&
-	    cxi_eq_peek_event(ep_obj->txc->tx_evtq.eq))
-		return -FI_EAGAIN;
-	if (ep_obj->rxc->rx_evtq.eq &&
-	    cxi_eq_peek_event(ep_obj->rxc->rx_evtq.eq))
-		return -FI_EAGAIN;
-
-	return FI_SUCCESS;
-}
-
-/*
  * fi_ep_get_unexpected_msgs() - Get unexpected message information, exposed
  * via domain open ops.
  */
@@ -492,6 +472,134 @@ out_unlock:
 }
 
 /*
+ * cxip_ep_destroy_priv_wait - Free an internal wait channel for the EP.
+ */
+static void cxip_ep_destroy_priv_wait(struct cxip_ep_obj *ep_obj)
+{
+	assert(ep_obj->priv_wait);
+
+	if (ep_obj->txc->send_cq && ep_obj->txc->send_cq->attr.wait_obj)
+		cxip_cq_del_wait_fd(ep_obj->txc->send_cq, ep_obj->wait_fd);
+
+	if (ep_obj->rxc->recv_cq && ep_obj->rxc->recv_cq->attr.wait_obj &&
+	    ep_obj->rxc->recv_cq != ep_obj->txc->send_cq)
+		cxip_cq_del_wait_fd(ep_obj->rxc->recv_cq, ep_obj->wait_fd);
+
+	cxil_destroy_wait_obj(ep_obj->priv_wait);
+
+	ep_obj->priv_wait = NULL;
+	ep_obj->wait_fd = -1;
+}
+
+/*
+ * cxip_ep_alloc_priv_wait - Allocate an internal wait channel for the EP.
+ */
+static int cxip_ep_alloc_priv_wait(struct cxip_ep_obj *ep_obj)
+{
+	bool tx_cq_added = false;
+	int ret;
+
+	assert(ep_obj->priv_wait == NULL);
+
+	ret = cxil_alloc_wait_obj(ep_obj->domain->lni->lni, &ep_obj->priv_wait);
+	if (ret) {
+		CXIP_WARN("Alloc of EP internal wait object failed %d\n",
+			  ret);
+		return ret;
+	}
+
+	ep_obj->wait_fd = cxil_get_wait_obj_fd(ep_obj->priv_wait);
+	ret = fi_fd_nonblock(ep_obj->wait_fd);
+	if (ret) {
+		CXIP_WARN("Unable to set EP wait non-blocking mode: %d\n", ret);
+		goto destroy_wait;
+	}
+
+	if (ep_obj->txc->send_cq && ep_obj->txc->send_cq->attr.wait_obj) {
+		ret = cxip_cq_add_wait_fd(ep_obj->txc->send_cq, ep_obj->wait_fd,
+					  EPOLLPRI | POLLERR);
+		if (ret)
+			goto destroy_wait;
+
+		tx_cq_added = true;
+	}
+
+	if (ep_obj->rxc->recv_cq && ep_obj->rxc->recv_cq->attr.wait_obj &&
+	    ep_obj->rxc->recv_cq != ep_obj->txc->send_cq) {
+		ret = cxip_cq_add_wait_fd(ep_obj->rxc->recv_cq, ep_obj->wait_fd,
+					  EPOLLPRI | POLLERR);
+		if (ret) {
+			if (tx_cq_added)
+				cxip_cq_del_wait_fd(ep_obj->txc->send_cq,
+						    ep_obj->wait_fd);
+			goto destroy_wait;
+		}
+	}
+
+	CXIP_DBG("Add EP private wait object, EP intr FD: %d\n",
+		 ep_obj->wait_fd);
+
+	return FI_SUCCESS;
+
+destroy_wait:
+	cxil_destroy_wait_obj(ep_obj->priv_wait);
+	ep_obj->priv_wait = NULL;
+	ep_obj->wait_fd = -1;
+
+	return ret;
+}
+
+/*
+ * cxip_ep_trywait() - Determine if hardware events are waiting to be processed
+ * for EP based on CQ.
+ */
+int cxip_ep_trywait(struct cxip_ep_obj *ep_obj, struct cxip_cq *cq)
+{
+	assert(ep_obj->priv_wait);
+
+	ofi_genlock_lock(&ep_obj->lock);
+	cxil_clear_wait_obj(ep_obj->priv_wait);
+
+	/* Enable any currently disabled EQ interrupts, if events are
+	 * ready shortcut and return.
+	 */
+	if ((ep_obj->txc->send_cq == cq ||
+	     ep_obj->rxc->recv_cq == cq) && ep_obj->txc->tx_evtq.eq) {
+		cxi_eq_int_enable(ep_obj->txc->tx_evtq.eq);
+		ep_obj->txc->tx_evtq.unacked_events = 0;
+
+		if (cxi_eq_peek_event(ep_obj->txc->tx_evtq.eq))
+			goto ready;
+	}
+
+	if (ep_obj->rxc->recv_cq == cq && ep_obj->rxc->rx_evtq.eq) {
+		cxi_eq_int_enable(ep_obj->rxc->rx_evtq.eq);
+		ep_obj->rxc->rx_evtq.unacked_events = 0;
+
+		if (cxi_eq_peek_event(ep_obj->rxc->rx_evtq.eq))
+			goto ready;
+	}
+
+	/* Side band control messages can also require progress */
+	cxi_eq_int_enable(ep_obj->ctrl.tx_evtq);
+	if (cxi_eq_peek_event(ep_obj->ctrl.tx_evtq))
+		goto ready;
+
+	cxi_eq_int_enable(ep_obj->ctrl.tgt_evtq);
+	if (cxi_eq_peek_event(ep_obj->ctrl.tgt_evtq))
+		goto ready;
+
+	ofi_genlock_unlock(&ep_obj->lock);
+
+	return FI_SUCCESS;
+
+ready:
+	ofi_genlock_unlock(&ep_obj->lock);
+
+	return -FI_EAGAIN;
+}
+
+/*
  * cxip_ep_enable() - Enable standard EP.
  */
 static int cxip_ep_enable(struct fid_ep *fid_ep)
@@ -504,10 +612,23 @@ static int cxip_ep_enable(struct fid_ep *fid_ep)
 	if (ep_obj->enabled)
 		goto unlock;
 
+	/* Allocate an EP internal wait object if a CQ is bound with a
+	 * wait object specified.
+	 */
+	if ((ep_obj->txc->send_cq && ep_obj->txc->send_cq->attr.wait_obj) ||
+	    (ep_obj->rxc->recv_cq && ep_obj->rxc->recv_cq->attr.wait_obj)) {
+		ret = cxip_ep_alloc_priv_wait(ep_obj);
+		if (ret) {
+			CXIP_WARN("EP internal wait alloc failed %s\n",
+				  fi_strerror(-ret));
+			goto unlock;
+		}
+	}
+
 	if (!ep_obj->av) {
 		CXIP_WARN("Endpoint must be bound to an AV\n");
 		ret = -FI_ENOAV;
-		goto unlock;
+		goto free_wait;
 	}
 
 	assert(ep_obj->domain->enabled);
@@ -517,7 +638,7 @@ static int cxip_ep_enable(struct fid_ep *fid_ep)
 		ret = cxip_av_auth_key_get_vnis(ep_obj->av, &ep_obj->vnis,
 						&ep_obj->vni_count);
 		if (ret)
-			goto unlock;
+			goto free_wait;
 
 		ret = cxip_portals_table_alloc(ep_obj->domain->lni,
 					       ep_obj->vnis, ep_obj->vni_count,
@@ -541,7 +662,7 @@ static int cxip_ep_enable(struct fid_ep *fid_ep)
 		if (ret != FI_SUCCESS) {
 			CXIP_WARN("Failed to allocate portals table: %d\n",
 				  ret);
-			goto unlock;
+			goto free_wait;
 		}
 	}
 
@@ -625,6 +746,10 @@ free_vnis:
 					  ep_obj->vni_count);
 		ep_obj->vnis = NULL;
 	}
+free_wait:
+	if (ep_obj->priv_wait)
+		cxip_ep_destroy_priv_wait(ep_obj);
+
 unlock:
 	ofi_genlock_unlock(&ep_obj->lock);
 
@@ -688,6 +813,8 @@ int cxip_free_endpoint(struct cxip_ep *ep)
 	cxip_txc_close(ep);
 	cxip_rxc_close(ep);
 	cxip_ep_disable(ep_obj);
+	if (ep_obj->priv_wait)
+		cxip_ep_destroy_priv_wait(ep_obj);
 	ofi_genlock_unlock(&ep_obj->lock);
 
 	ofi_atomic_dec32(&ep_obj->domain->ref);
@@ -695,6 +822,7 @@ int cxip_free_endpoint(struct cxip_ep *ep)
 
 	cxip_txc_free(ep_obj->txc);
 	cxip_rxc_free(ep_obj->rxc);
+
 	free(ep_obj);
 	ep->ep_obj = NULL;
 
@@ -1277,6 +1405,7 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	ep_obj->tgq_size = hints->rx_attr->size;
 	ep_obj->tx_attr = *hints->tx_attr;
 	ep_obj->rx_attr = *hints->rx_attr;
+	ep_obj->wait_fd = -1;
 
 	ep_obj->asic_ver = cxip_dom->iface->info->cassini_version;
 

@@ -774,6 +774,7 @@ void cxit_setup_enabled_ep_fd(void)
 
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	cxit_fi_hints->domain_attr->threading = FI_THREAD_SAFE;
 
 	cxit_setup_ep();
 

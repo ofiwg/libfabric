@@ -5475,7 +5475,262 @@ Test(tagged_src_err, addr)
 
 TestSuite(tagged_cq_wait, .init = cxit_setup_rma_fd,
 	  .fini = cxit_teardown_rma_fd,
-	  .timeout = CXIT_DEFAULT_TIMEOUT);
+	  .timeout = 20);
+
+Test(tagged_cq_wait, timeout_poll)
+{
+	struct fid *fids[1];
+	int cq_fd;
+	int ret;
+	struct pollfd fds;
+	int timeout = 100;
+	uint64_t end_ms;
+	uint64_t start_ms;
+
+	sleep(1);
+
+	ret = fi_control(&cxit_rx_cq->fid, FI_GETWAIT, &cq_fd);
+	cr_assert_eq(ret, FI_SUCCESS, "Get RX CQ wait FD %d", ret);
+
+	fids[0] = &cxit_rx_cq->fid;
+	ret = fi_trywait(cxit_fabric, fids, 1);
+	cr_assert_eq(ret, FI_SUCCESS, "Unexpected fi_trywait return %d\n",
+		     ret);
+
+	fds.fd = cq_fd;
+	fds.events = POLLIN;
+	start_ms = ofi_gettime_ms();
+	ret = poll(&fds, 1, timeout);
+	cr_assert_eq(ret, 0, "Poll did not timed out, %d", ret);
+	end_ms = ofi_gettime_ms();
+	cr_assert(end_ms >= start_ms + timeout,
+		  "Timeout too short %ld ms asked for %d ms",
+		  end_ms - start_ms, timeout);
+}
+
+Test(tagged_cq_wait, timeout_epoll)
+{
+	struct epoll_event ev = {
+		.events = EPOLLIN,
+		.data.u32 = 0,
+	};
+	int ret;
+	int epfd;
+	int waitfd;
+	struct fid *fids[1];
+	int timeout = 100;
+	uint64_t end_ms;
+	uint64_t start_ms;
+
+	sleep(1);
+
+	epfd = epoll_create1(0);
+	cr_assert(epfd >= 0, "epoll_create1() failed %s\n",
+		  strerror(errno));
+
+	ret = fi_control(&cxit_tx_cq->fid, FI_GETWAIT, &waitfd);
+	cr_assert(ret == FI_SUCCESS, "get FD for wait object failed %s\n",
+		  strerror(errno));
+
+	ret = epoll_ctl(epfd, EPOLL_CTL_ADD, waitfd, &ev);
+	cr_assert(ret == 0, "epoll_ctl failed %s\n", strerror(errno));
+
+	fids[0] = &cxit_tx_cq->fid;
+	ret = fi_trywait(cxit_fabric, fids, 1);
+	cr_assert(ret == FI_SUCCESS, "fi_trywait failed %s\n",
+		  fi_strerror(-ret));
+
+	/* Ensure timeout since events should not be outsanding */
+	memset(&ev, 0, sizeof(ev));
+	start_ms = ofi_gettime_ms();
+	ret = epoll_wait(epfd, &ev, 1, timeout);
+	cr_assert(ret == 0, "epoll_wait did not timeout\n");
+	end_ms = ofi_gettime_ms();
+	cr_assert(end_ms >= start_ms + timeout,
+		  "Timeout too short %ld ms asked for %d ms",
+		  end_ms - start_ms, timeout);
+
+	close(epfd);
+}
+
+Test(tagged_cq_wait, timeout_sread)
+{
+	int ret;
+	int timeout = 100;
+	struct fi_cq_tagged_entry rx_cqe;
+	uint64_t end_ms;
+	uint64_t start_ms = ofi_gettime_ms();
+
+	/* No events should be available. Timeout returns -FI_EAGAIN. */
+	ret = fi_cq_sread(cxit_rx_cq, &rx_cqe, 1, NULL, timeout);
+	cr_assert_eq(ret, -FI_EAGAIN, "Poll did not timed out, %s",
+		     fi_strerror(ret));
+	end_ms = ofi_gettime_ms();
+	cr_assert(end_ms >= start_ms + timeout,
+		  "Timeout too short %ld ms asked for %d ms",
+		  end_ms - start_ms, timeout);
+}
+
+struct simple_rx_wait {
+	bool epoll;
+	bool ux_msg;
+};
+
+static void *simple_rx_worker(void *data)
+{
+	struct simple_rx_wait *arg = (struct simple_rx_wait *) data;
+	struct fid *fids[1];
+	int ret;
+	int recv_len = 64;
+	uint8_t *recv_buf;
+	struct fi_cq_tagged_entry rx_cqe;
+	fi_addr_t from;
+	int cq_fd;
+	struct epoll_event ev = {
+		.events = EPOLLIN,
+		.data.u32 = 0,
+	};
+	int epfd;
+	struct pollfd fds;
+	int tries = 0;
+
+        recv_buf = aligned_alloc(s_page_size, recv_len);
+        cr_assert(recv_buf);
+        memset(recv_buf, 0, recv_len);
+
+	ret = fi_recv(cxit_ep, recv_buf, recv_len, NULL,
+		      FI_ADDR_UNSPEC, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+
+	ret = fi_control(&cxit_rx_cq->fid, FI_GETWAIT, &cq_fd);
+	cr_assert_eq(ret, FI_SUCCESS, "Get CQ wait FD %d", cq_fd);
+
+	fids[0] = &cxit_rx_cq->fid;
+
+	/* We want to block waiting for the recv event */
+	if (arg->epoll) {
+		epfd = epoll_create1(0);
+		cr_assert(epfd >= 0, "epoll_create1() failed %s",
+			  strerror(errno));
+
+		ev.data.fd = cq_fd;
+		ret = epoll_ctl(epfd, EPOLL_CTL_ADD, cq_fd, &ev);
+		cr_assert_eq(ret, 0, "epoll_ctl() failed %s", strerror(errno));
+	}
+
+	/* For UX message tests, trywait should return -FI_EAGAIN */
+cqe_not_ready:
+	ret = fi_trywait(cxit_fabric, fids, 1);
+	if (arg->ux_msg) {
+		cr_assert_eq(ret, -FI_EAGAIN, "UX event not ready, ret %s\n",
+			     fi_strerror(-ret));
+		do {
+			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, 1, "UX message not received\n");
+		goto done;
+	}
+
+	/* No event should be pending, nothing sent yet */
+	if (tries == 0)
+		cr_assert_eq(ret, FI_SUCCESS, "RX CQ event pending ret %d", ret);
+
+	/* Wait for message */
+	if (ret == FI_SUCCESS) {
+		if (arg->epoll) {
+			struct epoll_event evs[1] = {};
+
+			ret = epoll_wait(epfd, evs, 1, 5000);
+		} else {
+			fds.fd = cq_fd;
+			fds.events = POLLIN;
+			ret = poll(&fds, 1, 5000);
+		}
+		cr_assert(ret != 0, "RX poll timed out, ret %d\n", ret);
+		cr_assert(ret > 0, "Unexpected poll error %d\n", ret);
+	}
+
+	/* We can get woken up for the send event, so -FI_EAGAIN
+	 * is possible. Make sure no more than two wakeups occur.
+	 */
+	ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	if (ret == -FI_EAGAIN && ++tries < 2)
+		goto cqe_not_ready;
+
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+done:
+	free(recv_buf);
+	pthread_exit(NULL);
+}
+
+void simple_rx_wait(bool epoll, bool ux_msg)
+{
+	pthread_t rx_thread;
+	pthread_attr_t attr = {};
+	int ret;
+	int i;
+	int send_len = 64;
+	uint8_t *send_buf;
+	struct fi_cq_tagged_entry tx_cqe;
+	struct simple_rx_wait arg = {
+		.epoll = epoll,
+		.ux_msg = ux_msg,
+	};
+
+	send_buf = aligned_alloc(s_page_size, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	if (!arg.ux_msg) {
+		/* Start processing receives */
+		ret = pthread_create(&rx_thread, &attr, simple_rx_worker, &arg);
+		cr_assert_eq(ret, 0, "Receive thread create failed %d", ret);
+
+		/* Make sure receive is posted and thread is polling */
+		sleep(1);
+	}
+
+	/* Send 64 byte message to self */
+	ret = fi_send(cxit_ep, send_buf, send_len, NULL, cxit_ep_fi_addr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
+
+	if (arg.ux_msg) {
+		/* Start processing receives */
+		ret = pthread_create(&rx_thread, &attr, simple_rx_worker, &arg);
+		cr_assert_eq(ret, 0, "Receive thread create failed %d", ret);
+	}
+
+	ret = pthread_join(rx_thread, NULL);
+
+        /* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	free(send_buf);
+}
+
+Test(tagged_cq_wait, simple_rx_epoll)
+{
+	simple_rx_wait(true, false);
+}
+
+Test(tagged_cq_wait, simple_rx_epoll_ux)
+{
+	simple_rx_wait(true, true);
+}
+
+Test(tagged_cq_wait, simple_rx_poll)
+{
+	simple_rx_wait(false, false);
+}
+
+Test(tagged_cq_wait, simple_rx_poll_ux)
+{
+	simple_rx_wait(false, true);
+}
 
 struct fd_params {
 	size_t length;
@@ -5500,36 +5755,54 @@ static void *tagged_cq_wait_evt_worker(void *data)
 	struct fid *fids[1];
 	int cq_fd;
 	size_t completions = 0;
+	struct epoll_event ev = {
+		.events = EPOLLIN,
+		.data.u32 = 0,
+	};
+	int epfd;
 
 	args = (struct tagged_cq_wait_event_args *)data;
 
 	if (args->poll) {
+		epfd = epoll_create1(0);
+		cr_assert(epfd >= 0, "epoll_create1() failed %s",
+			  strerror(errno));
+
 		ret = fi_control(&args->cq->fid, FI_GETWAIT, &cq_fd);
 		cr_assert_eq(ret, FI_SUCCESS, "Get CQ wait FD %d", ret);
-		fids[0] = &args->cq->fid;
+
+		ev.data.fd = cq_fd;
+		ret = epoll_ctl(epfd, EPOLL_CTL_ADD, cq_fd, &ev);
+		cr_assert_eq(ret, 0, "epoll_ctl() failed %s",
+			     strerror(errno));
 	}
 
 	while (completions < args->io_num) {
 		if (args->poll) {
+			fids[0] = &args->cq->fid;
 			ret = fi_trywait(cxit_fabric, fids, 1);
 			if (ret == FI_SUCCESS) {
-				struct pollfd fds;
+				struct epoll_event evs[1] = {};
 
-				fds.fd = cq_fd;
-				fds.events = POLLIN;
-
-				ret = poll(&fds, 1, args->timeout);
-				cr_assert_neq(ret, 0, "Poll timed out");
+				ret = epoll_wait(epfd, evs, 1, args->timeout);
+				cr_assert_neq(ret, 0, "%s CQ poll timed out",
+					      args->cq == cxit_tx_cq ?
+					      "TX" : "RX");
 				cr_assert_eq(ret, 1, "Poll error");
 			}
+
 			ret = fi_cq_read(args->cq,
 					 &args->cqe[completions], 1);
 			if (ret == 1)
 				completions++;
+
+			sched_yield();
 		} else {
 			ret = fi_cq_sread(args->cq, &args->cqe[completions],
 					  1, NULL, args->timeout);
-			cr_assert_eq(ret, 1, "Completion not received\n");
+			cr_assert_eq(ret, 1,
+				     "%s completion not received ret %d\n",
+				     args->cq == cxit_tx_cq ? "TX" : "RX", ret);
 			completions++;
 		}
 	}
@@ -5577,7 +5850,7 @@ void do_cq_wait(struct fd_params *param)
 	struct tagged_thread_args *rx_args;
 	pthread_t tx_thread;
 	pthread_t rx_thread;
-	pthread_attr_t attr;
+	pthread_attr_t attr = {};
 	struct tagged_cq_wait_event_args tx_evt_args = {
 		.cq = cxit_tx_cq,
 		.io_num = param->num_ios,
@@ -5650,14 +5923,14 @@ void do_cq_wait(struct fd_params *param)
 
 	/* Sends last for expected messaging */
 	if (!param->ux_msg) {
-		/* Make sure receive has blocked */
+		/* Make RX process first */
 		sleep(1);
-		cq_wait_post_sends(tx_args, param);
 
 		/* Start processing Send events */
 		ret = pthread_create(&tx_thread, &attr,
 				     tagged_cq_wait_evt_worker,
 				     (void *)&tx_evt_args);
+		cq_wait_post_sends(tx_args, param);
 	}
 
 	/* Wait for the RX/TX event threads to complete */
@@ -5689,11 +5962,13 @@ void do_cq_wait(struct fd_params *param)
 	free(rx_args);
 }
 
+/* Test multiple threads using poll or sread on both CQ */
 ParameterizedTestParameters(tagged_cq_wait, wait_fd)
 {
 	size_t param_sz;
 
 	static struct fd_params params[] = {
+		/* Test direct FI_WAIT_FD polling */
 		{.length = 1024,
 		 .num_ios = 4,
 		 .timeout = 5000,
@@ -5702,6 +5977,7 @@ ParameterizedTestParameters(tagged_cq_wait, wait_fd)
 		 .num_ios = 4,
 		 .timeout = 5000,
 		 .poll = true},
+		/* Test indirect FI_WAIT_FD polling via fi_cq_sread */
 		{.length = 1024,
 		 .num_ios = 4,
 		 .timeout = 5000,

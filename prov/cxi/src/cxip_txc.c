@@ -328,7 +328,8 @@ int cxip_txc_enable(struct cxip_txc *txc)
 
 	num_events = cxip_txc_get_num_events(txc);
 
-	ret = cxip_evtq_init(&txc->tx_evtq, txc->send_cq, num_events, 0);
+	ret = cxip_evtq_init(&txc->tx_evtq, txc->send_cq, num_events, 0,
+			     txc->ep_obj->priv_wait);
 	if (ret) {
 		CXIP_WARN("Failed to initialize TX event queue: %d, %s\n",
 			  ret, fi_strerror(-ret));

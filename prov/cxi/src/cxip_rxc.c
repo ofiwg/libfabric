@@ -127,7 +127,8 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 
 	/* Base message initialization */
 	num_events = cxip_rxc_get_num_events(rxc);
-	ret = cxip_evtq_init(&rxc->rx_evtq, rxc->recv_cq, num_events, 1);
+	ret = cxip_evtq_init(&rxc->rx_evtq, rxc->recv_cq, num_events, 1,
+			     rxc->ep_obj->priv_wait);
 	if (ret) {
 		CXIP_WARN("Failed to initialize RXC event queue: %d, %s\n",
 			  ret, fi_strerror(-ret));

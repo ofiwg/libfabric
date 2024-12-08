@@ -80,7 +80,9 @@ The CXI provider supports FI_THREAD_SAFE and FI_THREAD_DOMAIN threading models.
 
 The CXI provider supports FI_WAIT_FD and FI_WAIT_POLLFD CQ wait object types.
 FI_WAIT_UNSPEC will default to FI_WAIT_FD. However FI_WAIT_NONE should achieve
-the lowest latency and reduce interrupt overhead.
+the lowest latency and reduce interrupt overhead. NOTE: A process may return
+from a epoll_wait/poll when provider progress is required and a CQ event may
+not be available.
 
 ## Additional Features
 

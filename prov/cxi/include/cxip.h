@@ -1420,8 +1420,8 @@ struct cxip_cq {
 	 */
 	struct ofi_genlock ep_list_lock;
 
-	/* Internal CXI wait object allocated only if required. */
-	struct cxil_wait_obj *priv_wait;
+	/* CXI CQ wait object EPs are maintained in epoll FD */
+	int ep_fd;
 
 	/* CXI specific fields. */
 	struct cxip_domain *domain;
@@ -2428,6 +2428,10 @@ struct cxip_ep_obj {
 	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
 
+	/* Internal support for CQ wait object */
+	struct cxil_wait_obj *priv_wait;
+	int wait_fd;
+
 	/* ASIC version associated with EP/Domain */
 	enum cassini_version asic_ver;
 
@@ -3148,7 +3152,8 @@ static inline bool cxip_cmdq_match(struct cxip_cmdq *cmdq, uint16_t vni,
 }
 
 int cxip_evtq_init(struct cxip_evtq *evtq, struct cxip_cq *cq,
-		   size_t num_events, size_t num_fc_events);
+		   size_t num_events, size_t num_fc_events,
+		   struct cxil_wait_obj *priv_wait);
 void cxip_evtq_fini(struct cxip_evtq *eq);
 
 int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
@@ -3228,6 +3233,9 @@ int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src);
 int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 		      int err, int prov_errno, void *err_data,
 		      size_t err_data_size, fi_addr_t src_addr);
+int cxip_cq_add_wait_fd(struct cxip_cq *cq, int wait_fd, int events);
+void cxip_cq_del_wait_fd(struct cxip_cq *cq, int wait_fd);
+
 int proverr2errno(int err);
 struct cxip_req *cxip_evtq_req_alloc(struct cxip_evtq *evtq,
 				     int remap, void *req_ctx);
@@ -3235,9 +3243,9 @@ void cxip_evtq_req_free(struct cxip_req *req);
 void cxip_evtq_progress(struct cxip_evtq *evtq);
 
 void cxip_ep_progress(struct fid *fid);
-int cxip_ep_peek(struct fid *fid);
 void cxip_ep_flush_trig_reqs(struct cxip_ep_obj *ep_obj);
 
+int cxip_cq_trywait(struct cxip_cq *cq);
 void cxip_cq_progress(struct cxip_cq *cq);
 void cxip_util_cq_progress(struct util_cq *util_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -3266,8 +3274,7 @@ void cxip_ep_tgt_ctrl_progress(struct cxip_ep_obj *ep_obj);
 void cxip_ep_tgt_ctrl_progress_locked(struct cxip_ep_obj *ep_obj);
 int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);
-void cxip_ep_ctrl_del_wait(struct cxip_ep_obj *ep_obj);
-int cxip_ep_ctrl_trywait(void *arg);
+int cxip_ep_trywait(struct cxip_ep_obj *ep_obj, struct cxip_cq *cq);
 
 int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	        struct fid_av_set **av_set_fid, void * context);
