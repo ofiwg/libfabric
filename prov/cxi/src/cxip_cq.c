@@ -184,37 +184,33 @@ static const char *cxip_cq_strerror(struct fid_cq *cq, int prov_errno,
 	return errmsg;
 }
 
-/*
- * cxip_cq_trywait - Return success if able to block waiting for CQ events.
- */
-static int cxip_cq_trywait(void *arg)
+int cxip_cq_trywait(struct cxip_cq *cq)
 {
-	struct cxip_cq *cq = (struct cxip_cq *)arg;
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
+	struct cxip_ep *ep;
 
-	assert(cq->util_cq.wait);
-
-	if (!cq->priv_wait) {
+	if (cq->ep_fd < 0) {
 		CXIP_WARN("No CXI wait object\n");
 		return -FI_EINVAL;
 	}
 
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
+	if (!ofi_cirque_isempty(cq->util_cq.cirq)) {
+		ofi_genlock_unlock(&cq->util_cq.cq_lock);
+		return -FI_EAGAIN;
+	}
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
+
 	ofi_genlock_lock(&cq->ep_list_lock);
 	dlist_foreach(&cq->util_cq.ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
-		if (cxip_ep_peek(fid_entry->fid)) {
-			ofi_genlock_unlock(&cq->ep_list_lock);
+		ep = container_of(fid_entry->fid, struct cxip_ep, ep.fid);
 
-			return -FI_EAGAIN;
-		}
-	}
+		if (!ep->ep_obj->priv_wait)
+			continue;
 
-	/* Clear wait, and check for any events */
-	cxil_clear_wait_obj(cq->priv_wait);
-	dlist_foreach(&cq->util_cq.ep_list, item) {
-		fid_entry = container_of(item, struct fid_list_entry, entry);
-		if (cxip_ep_peek(fid_entry->fid)) {
+		if (cxip_ep_trywait(ep->ep_obj, cq)) {
 			ofi_genlock_unlock(&cq->ep_list_lock);
 
 			return -FI_EAGAIN;
@@ -256,21 +252,12 @@ static int cxip_cq_close(struct fid *fid)
 {
 	struct cxip_cq *cq = container_of(fid, struct cxip_cq,
 					  util_cq.cq_fid.fid);
-	int ret;
 
 	if (ofi_atomic_get32(&cq->util_cq.ref))
 		return -FI_EBUSY;
 
-	if (cq->priv_wait) {
-		ret = ofi_wait_del_fd(cq->util_cq.wait,
-				      cxil_get_wait_obj_fd(cq->priv_wait));
-		if (ret)
-			CXIP_WARN("Wait FD delete error: %d\n", ret);
-
-		ret = cxil_destroy_wait_obj(cq->priv_wait);
-		if (ret)
-			CXIP_WARN("Release CXI wait object failed: %d\n", ret);
-	}
+	if (cq->ep_fd >= 0)
+		close(cq->ep_fd);
 
 	ofi_cq_cleanup(&cq->util_cq);
 	ofi_genlock_destroy(&cq->ep_list_lock);
@@ -281,12 +268,114 @@ static int cxip_cq_close(struct fid *fid)
 	return 0;
 }
 
+static int cxip_cq_signal(struct fid_cq *cq_fid)
+{
+	return -FI_ENOSYS;
+}
+
+static int cxip_cq_control(fid_t fid, int command, void *arg)
+{
+	struct cxip_cq *cq = container_of(fid, struct cxip_cq, util_cq.cq_fid);
+	struct fi_wait_pollfd *pollfd;
+	int ret;
+
+	switch (command) {
+	case FI_GETWAIT:
+		if (cq->ep_fd < 0) {
+			ret = -FI_ENODATA;
+			break;
+		}
+		if (cq->attr.wait_obj == FI_WAIT_FD) {
+			*(int *) arg = cq->ep_fd;
+			return FI_SUCCESS;
+		}
+
+		pollfd = arg;
+		if (pollfd->nfds >= 1) {
+			pollfd->fd[0].fd = cq->ep_fd;
+			pollfd->fd[0].events = POLLIN;
+			pollfd->nfds = 1;
+
+			ret = FI_SUCCESS;
+		} else {
+			ret = -FI_ETOOSMALL;
+		}
+		break;
+	case FI_GETWAITOBJ:
+		*(enum fi_wait_obj *) arg = cq->attr.wait_obj;
+		ret = FI_SUCCESS;
+		break;
+	default:
+		ret = -FI_ENOSYS;
+		break;
+	}
+
+	return ret;
+}
+
+static ssize_t cxip_cq_sreadfrom(struct fid_cq *cq_fid, void *buf,
+				 size_t count, fi_addr_t *src_addr,
+				 const void *cond, int timeout)
+{
+	struct cxip_cq *cq = container_of(cq_fid, struct cxip_cq,
+					  util_cq.cq_fid);
+	struct epoll_event ev;
+	uint64_t endtime;
+	ssize_t ret;
+
+	if (!cq->attr.wait_obj)
+		return -FI_EINVAL;
+
+	endtime = ofi_timeout_time(timeout);
+
+	do {
+		ret = fi_cq_readfrom(cq_fid, buf, count, src_addr);
+		if (ret != -FI_EAGAIN)
+			break;
+
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return -FI_EAGAIN;
+
+		ret = cxip_cq_trywait(cq);
+		if (ret == -FI_EAGAIN) {
+			ret = 0;
+			continue;
+		}
+		assert(ret == FI_SUCCESS);
+
+		memset(&ev, 0, sizeof(ev));
+		ret = epoll_wait(cq->ep_fd, &ev, 1, timeout);
+		if (ret > 0)
+			ret = 0;
+
+	} while (!ret);
+
+	return ret == -FI_ETIMEDOUT ? -FI_EAGAIN : ret;
+}
+
+static ssize_t cxip_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
+			     const void *cond, int timeout)
+{
+	return cxip_cq_sreadfrom(cq_fid, buf, count, NULL, cond, timeout);
+}
+
 static struct fi_ops cxip_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = cxip_cq_close,
 	.bind = fi_no_bind,
-	.control = ofi_cq_control,
+	.control = cxip_cq_control,
 	.ops_open = fi_no_ops_open,
+};
+
+static struct fi_ops_cq cxip_cq_ops = {
+	.size = sizeof(struct fi_ops_cq),
+	.read = ofi_cq_read,
+	.readfrom = ofi_cq_readfrom,
+	.readerr = ofi_cq_readerr,
+	.sread = cxip_cq_sread,
+	.sreadfrom = cxip_cq_sreadfrom,
+	.signal = cxip_cq_signal,
+	.strerror = ofi_cq_strerror,
 };
 
 static struct fi_cq_attr cxip_cq_def_attr = {
@@ -348,50 +437,35 @@ static int cxip_cq_verify_attr(struct fi_cq_attr *attr)
 	return FI_SUCCESS;
 }
 
-/*
- * cxip_cq_alloc_priv_wait - Allocate an internal wait channel for the CQ.
- */
-static int cxip_cq_alloc_priv_wait(struct cxip_cq *cq)
+/* EP adds wait FD to the CQ epoll FD */
+int cxip_cq_add_wait_fd(struct cxip_cq *cq, int wait_fd, int events)
 {
+	struct epoll_event ev = {
+		.events = events,
+	};
 	int ret;
-	int wait_fd;
 
-	assert(cq->domain);
+	ret = epoll_ctl(cq->ep_fd, EPOLL_CTL_ADD, wait_fd, &ev);
+	if (ret < 0) {
+		ret = errno;
+		CXIP_WARN("EP wait FD add to CQ failed %d\n", ret);
 
-	/* Not required or already created */
-	if (!cq->util_cq.wait || cq->priv_wait)
-		return FI_SUCCESS;
-
-	ret = cxil_alloc_wait_obj(cq->domain->lni->lni, &cq->priv_wait);
-	if (ret) {
-		CXIP_WARN("Allocation of internal wait object failed %d\n",
-			  ret);
-		return ret;
+		return -FI_EINVAL;
 	}
-
-	wait_fd = cxil_get_wait_obj_fd(cq->priv_wait);
-	ret = fi_fd_nonblock(wait_fd);
-	if (ret) {
-		CXIP_WARN("Unable to set CQ wait non-blocking mode: %d\n", ret);
-		goto destroy_wait;
-	}
-
-	ret = ofi_wait_add_fd(cq->util_cq.wait, wait_fd, POLLIN,
-			      cxip_cq_trywait, cq, &cq->util_cq.cq_fid.fid);
-	if (ret) {
-		CXIP_WARN("Add FD of internal wait object failed: %d\n", ret);
-		goto destroy_wait;
-	}
-
-	CXIP_DBG("Add CQ private wait object, CQ intr FD: %d\n", wait_fd);
 
 	return FI_SUCCESS;
+}
 
-destroy_wait:
-	cxil_destroy_wait_obj(cq->priv_wait);
-	cq->priv_wait = NULL;
+/* EP deletes wait FD from the CQ epoll FD */
+void cxip_cq_del_wait_fd(struct cxip_cq *cq, int wait_fd)
+{
+	int ret;
 
-	return ret;
+	ret = epoll_ctl(cq->ep_fd, EPOLL_CTL_DEL, wait_fd, NULL);
+	if (ret < 0) {
+		ret = errno;
+		CXIP_WARN("EP wait FD delete from CQ failed %d\n", ret);
+	}
 }
 
 /*
@@ -402,6 +476,7 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 {
 	struct cxip_domain *cxi_dom;
 	struct cxip_cq *cxi_cq;
+	struct fi_cq_attr temp_attr;
 	int ret;
 
 	if (!domain || !cq)
@@ -425,7 +500,10 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		cxi_cq->attr = *attr;
 	}
 
-	ret = ofi_cq_init(&cxip_prov, domain, &cxi_cq->attr, &cxi_cq->util_cq,
+	/* CXI does not use common code internal wait object */
+	temp_attr = cxi_cq->attr;
+	temp_attr.wait_obj = FI_WAIT_NONE;
+	ret = ofi_cq_init(&cxip_prov, domain, &temp_attr, &cxi_cq->util_cq,
 			  cxip_util_cq_progress, context);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("ofi_cq_init() failed: %d\n", ret);
@@ -434,9 +512,10 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cxi_cq->util_cq.cq_fid.ops->strerror = &cxip_cq_strerror;
 	cxi_cq->util_cq.cq_fid.fid.ops = &cxip_cq_fi_ops;
-
+	cxi_cq->util_cq.cq_fid.ops = &cxip_cq_ops;
 	cxi_cq->domain = cxi_dom;
 	cxi_cq->ack_batch_size = cxip_env.eq_ack_batch_size;
+	cxi_cq->ep_fd = -1;
 
 	/* Optimize locking when possible */
 	if (cxi_dom->util_domain.threading == FI_THREAD_DOMAIN ||
@@ -445,11 +524,11 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	else
 		ofi_genlock_init(&cxi_cq->ep_list_lock, OFI_LOCK_SPINLOCK);
 
-	if (cxi_cq->util_cq.wait) {
-		ret = cxip_cq_alloc_priv_wait(cxi_cq);
-		if (ret != FI_SUCCESS) {
-			CXIP_WARN("Unable to allocate CXI wait obj: %d\n",
-				  ret);
+	if (cxi_cq->attr.wait_obj) {
+		cxi_cq->ep_fd = epoll_create1(0);
+		if (cxi_cq->ep_fd < 0) {
+			CXIP_WARN("Unable to open epoll FD: %s\n",
+				  strerror(errno));
 			goto err_wait_alloc;
 		}
 	}

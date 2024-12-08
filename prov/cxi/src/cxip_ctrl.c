@@ -406,36 +406,6 @@ void cxip_ep_tgt_ctrl_progress_locked(struct cxip_ep_obj *ep_obj)
 	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq, false, true);
 }
 
-/*
- * cxip_ep_ctrl_trywait() - Return 0 if no events need to be progressed.
- */
-int cxip_ep_ctrl_trywait(void *arg)
-{
-	struct cxip_ep_obj *ep_obj = (struct cxip_ep_obj *)arg;
-
-	if (!ep_obj->ctrl.wait) {
-		CXIP_WARN("No CXI ep_obj wait object\n");
-		return -FI_EINVAL;
-	}
-
-	if (cxi_eq_peek_event(ep_obj->ctrl.tgt_evtq) ||
-	    cxi_eq_peek_event(ep_obj->ctrl.tx_evtq))
-		return -FI_EAGAIN;
-
-	ofi_genlock_lock(&ep_obj->lock);
-	cxil_clear_wait_obj(ep_obj->ctrl.wait);
-
-	if (cxi_eq_peek_event(ep_obj->ctrl.tgt_evtq) ||
-	    cxi_eq_peek_event(ep_obj->ctrl.tx_evtq)) {
-		ofi_genlock_unlock(&ep_obj->lock);
-
-		return -FI_EAGAIN;
-	}
-	ofi_genlock_unlock(&ep_obj->lock);
-
-	return FI_SUCCESS;
-}
-
 static void cxip_eq_ctrl_eq_free(void *eq_buf, struct cxi_md *eq_md,
 				 struct cxi_eq *eq)
 {
@@ -484,7 +454,7 @@ static int cxip_ep_ctrl_eq_alloc(struct cxip_ep_obj *ep_obj, size_t len,
 
 	/* ep_obj->ctrl.wait will be NULL if not required */
 	ret = cxil_alloc_evtq(ep_obj->domain->lni->lni, *eq_md, &eq_attr,
-			      ep_obj->ctrl.wait, NULL, eq);
+			      ep_obj->priv_wait, NULL, eq);
 	if (ret)
 		goto err_free_eq_md;
 
@@ -497,107 +467,6 @@ err_free_eq_md:
 err_free_eq_buf:
 	free(*eq_buf);
 err:
-	return ret;
-}
-
-/*
- * cxip_ep_wait_required() - return true if base EP wait object is required.
- */
-static bool cxip_ctrl_wait_required(struct cxip_ep_obj *ep_obj)
-{
-	if (ep_obj->rxc->recv_cq && ep_obj->rxc->recv_cq->priv_wait)
-		return true;
-
-	if (ep_obj->txc->send_cq && ep_obj->txc->send_cq->priv_wait)
-		return true;
-
-	return false;
-}
-
-/*
- * cxip_ep_ctrl_del_wait() - Delete control FD object
- */
-void cxip_ep_ctrl_del_wait(struct cxip_ep_obj *ep_obj)
-{
-	int wait_fd;
-
-	wait_fd = cxil_get_wait_obj_fd(ep_obj->ctrl.wait);
-
-	if (ep_obj->txc->send_cq) {
-		ofi_wait_del_fd(ep_obj->txc->send_cq->util_cq.wait, wait_fd);
-		CXIP_DBG("Deleted control HW EQ FD: %d from CQ: %p\n",
-			 wait_fd, ep_obj->txc->send_cq);
-	}
-
-	if (ep_obj->rxc->recv_cq &&
-	    ep_obj->rxc->recv_cq != ep_obj->txc->send_cq) {
-		ofi_wait_del_fd(ep_obj->rxc->recv_cq->util_cq.wait, wait_fd);
-		CXIP_DBG("Deleted control HW EQ FD: %d from CQ %p\n",
-			 wait_fd, ep_obj->rxc->recv_cq);
-	}
-}
-
-/*
- * cxip_ep_ctrl_add_wait() - Add control FD to CQ object
- */
-int cxip_ep_ctrl_add_wait(struct cxip_ep_obj *ep_obj)
-{
-	struct cxip_cq *cq;
-	int wait_fd;
-	int ret;
-
-	ret = cxil_alloc_wait_obj(ep_obj->domain->lni->lni,
-				  &ep_obj->ctrl.wait);
-	if (ret) {
-		CXIP_WARN("Control wait object allocation failed: %d\n", ret);
-		return -FI_ENOMEM;
-	}
-
-	wait_fd = cxil_get_wait_obj_fd(ep_obj->ctrl.wait);
-	ret = fi_fd_nonblock(wait_fd);
-	if (ret) {
-		CXIP_WARN("Unable to set control wait non-blocking: %d, %s\n",
-			  ret, fi_strerror(-ret));
-		goto err;
-	}
-
-	cq = ep_obj->txc->send_cq;
-	if (cq) {
-		ret = ofi_wait_add_fd(cq->util_cq.wait, wait_fd,
-				      POLLIN, cxip_ep_ctrl_trywait, ep_obj,
-				      &cq->util_cq.cq_fid.fid);
-		if (ret) {
-			CXIP_WARN("TX CQ add FD failed: %d, %s\n",
-				  ret, fi_strerror(-ret));
-			goto err;
-		}
-	}
-
-	if (ep_obj->rxc->recv_cq && ep_obj->rxc->recv_cq != cq) {
-		cq = ep_obj->rxc->recv_cq;
-
-		ret = ofi_wait_add_fd(cq->util_cq.wait, wait_fd,
-				      POLLIN, cxip_ep_ctrl_trywait, ep_obj,
-				      &cq->util_cq.cq_fid.fid);
-		if (ret) {
-			CXIP_WARN("RX CQ add FD failed: %d, %s\n",
-				  ret, fi_strerror(-ret));
-			goto err_add_fd;
-		}
-	}
-
-	CXIP_DBG("Added control EQ private wait object, intr FD: %d\n",
-		 wait_fd);
-
-	return FI_SUCCESS;
-
-err_add_fd:
-	if (ep_obj->txc->send_cq)
-		ofi_wait_del_fd(ep_obj->txc->send_cq->util_cq.wait, wait_fd);
-err:
-	cxil_destroy_wait_obj(ep_obj->ctrl.wait);
-	ep_obj->ctrl.wait = NULL;
-
 	return ret;
 }
 
@@ -623,20 +492,6 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	 */
 	if (ep_obj->domain->mr_match_events)
 		pt_opts.en_event_match = 1;
-
-	/* If CQ(s) are using a wait object, then control event
-	 * queues need to unblock CQ poll as well. CQ will add the
-	 * associated FD to the CQ FD list.
-	 */
-	if (cxip_ctrl_wait_required(ep_obj)) {
-		ret = cxil_alloc_wait_obj(ep_obj->domain->lni->lni,
-					  &ep_obj->ctrl.wait);
-		if (ret) {
-			CXIP_WARN("EP ctrl wait object alloc failed: %d\n",
-				  ret);
-			return ret;
-		}
-	}
 
 	ret = cxip_ep_ctrl_eq_alloc(ep_obj, 4 * sc_page_size,
 				    &ep_obj->ctrl.tx_evtq_buf,

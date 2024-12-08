@@ -457,7 +457,8 @@ static size_t cxip_evtq_get_queue_size(struct cxip_cq *cq, size_t num_events)
 
 #define MAP_HUGE_2MB    (21 << MAP_HUGE_SHIFT)
 int cxip_evtq_init(struct cxip_evtq *evtq, struct cxip_cq *cq,
-		   size_t num_events, size_t num_fc_events)
+		   size_t num_events, size_t num_fc_events,
+		   struct cxil_wait_obj *priv_wait)
 {
 	struct cxi_eq_attr eq_attr = {
 		.reserved_slots = num_fc_events,
@@ -561,7 +562,7 @@ mmap_success:
 
 	/* cq->priv_wait is NULL if not backed by wait object */
 	ret = cxil_alloc_evtq(cq->domain->lni->lni, evtq->md, &eq_attr,
-			      cq->priv_wait, NULL, &evtq->eq);
+			      priv_wait, NULL, &evtq->eq);
 	if (ret) {
 		CXIP_WARN("Failed to allocated EQ: %d\n", ret);
 		goto err_unmap_eq_buf;
