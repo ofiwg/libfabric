@@ -677,6 +677,7 @@ struct rxm_ep {
 	size_t			eager_limit;
 	size_t			sar_limit;
 	size_t			tx_credit;
+	size_t			min_multi_recv_size;
 
 	struct ofi_bufpool	*rx_pool;
 	struct ofi_bufpool	*tx_pool;
