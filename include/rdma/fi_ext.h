@@ -78,6 +78,11 @@ enum {
 	FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES, /* bool */
 };
 
+/* provider specific op flags range between 60-63 */
+enum {
+	FI_TCP_NO_CONNECT = (1ULL << 60)
+};
+
 struct fi_fid_export {
 	struct fid **fid;
 	uint64_t flags;
