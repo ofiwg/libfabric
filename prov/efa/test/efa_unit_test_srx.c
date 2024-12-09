@@ -18,21 +18,19 @@ void test_efa_srx_min_multi_recv_size(struct efa_resource **state)
         struct util_srx_ctx *srx_ctx;
         size_t min_multi_recv_size_new;
 
-        efa_unit_test_resource_construct(resource, FI_EP_RDM);
+        efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM);
 
         efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-        srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
-        /*
-         * After ep is enabled, the srx->min_multi_recv_size should be
-         * exactly the same with ep->min_multi_recv_size
-         */
-        assert_true(efa_rdm_ep->min_multi_recv_size == srx_ctx->min_multi_recv_size);
         /* Set a new min_multi_recv_size via setopt*/
         min_multi_recv_size_new = 1024;
         assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
 			&min_multi_recv_size_new, sizeof(min_multi_recv_size_new)), 0);
 
+        /* Enable EP */
+        assert_int_equal(fi_enable(resource->ep), FI_SUCCESS);
+
         /* Check whether srx->min_multi_recv_size is set correctly */
+        srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
         assert_true(srx_ctx->min_multi_recv_size == min_multi_recv_size_new);
 }
 
