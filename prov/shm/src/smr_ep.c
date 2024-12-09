@@ -128,14 +128,12 @@ int smr_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 {
 	struct smr_ep *smr_ep =
 		container_of(fid, struct smr_ep, util_ep.ep_fid);
-	struct util_srx_ctx *srx;
 
 	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
 
 	if (optname == FI_OPT_MIN_MULTI_RECV) {
-		srx = smr_ep->srx->ep_fid.fid.context;
-		srx->min_multi_recv_size = *(size_t *)optval;
+		smr_ep->min_multi_recv_size = *(size_t *)optval;
 		return FI_SUCCESS;
 	}
 
@@ -1146,7 +1144,7 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 					      util_domain.domain_fid);
 			ret = util_ep_srx_context(&domain->util_domain,
 					ep->rx_size, SMR_IOV_LIMIT,
-					SMR_INJECT_SIZE, &smr_update,
+					ep->min_multi_recv_size, &smr_update,
 					&ep->util_ep.lock, &srx);
 			if (ret)
 				return ret;
@@ -1307,6 +1305,8 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	dlist_init(&ep->sar_list);
 	dlist_init(&ep->ipc_cpy_pend_list);
+
+	ep->min_multi_recv_size = SMR_INJECT_SIZE;
 
 	ep->util_ep.ep_fid.fid.ops = &smr_ep_fi_ops;
 	ep->util_ep.ep_fid.ops = &smr_ep_ops;
