@@ -59,6 +59,7 @@ v2.0.0, Fri Dec 13, 2024
 - Update efa_hmem and efa_fork_support log to FI_LOG_CORE
 - Make efa_hmem_info a global variable
 - Set max rma order size correctly
+- Fix efa multi recv setopt segfault
 
 ## Hook
 
@@ -77,10 +78,12 @@ v2.0.0, Fri Dec 13, 2024
 - Add rxm support for using a peer CQs and counters
 - Add FI_AV_USER_ID support
 - Fix definition of the rxm SAR segment enum
+- Fix rxm multi recv setopt segfault
 
 ## SHM
 
 - Cleanup op flags
+- Fix shm multi recv setopt segfault
 
 ## Sockets
 
@@ -108,6 +111,7 @@ v2.0.0, Fri Dec 13, 2024
 - New fabtest fi_flood to test over subscription of resources
 - test_configs/ofi_rxm/tcp.test: remove cntr RMA testing
 - Fix compiler warning about unitialized variable
+- Add opts.min_multi_recv_size to set opt before enable
 
 
 v2.0.0 beta, Fri Oct 25, 2024
