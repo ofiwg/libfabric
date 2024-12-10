@@ -1463,7 +1463,8 @@ int ft_enable_ep(struct fid_ep *bind_ep, struct fid_eq *bind_eq, struct fid_av *
 	}
 
 	if (opts.max_msg_size) {
-		ret = fi_setopt(&bind_ep->fid, FI_OPT_ENDPOINT, FI_OPT_MAX_MSG_SIZE, &opts.max_msg_size, sizeof opts.max_msg_size);
+		ret = fi_setopt(&bind_ep->fid, FI_OPT_ENDPOINT, FI_OPT_MAX_MSG_SIZE,
+				&opts.max_msg_size, sizeof opts.max_msg_size);
 		if (ret && ret != -FI_EOPNOTSUPP) {
 			FT_PRINTERR("fi_setopt(FI_OPT_MAX_MSG_SIZE)", ret);
 			return ret;
@@ -1481,6 +1482,15 @@ int ft_enable_ep(struct fid_ep *bind_ep, struct fid_eq *bind_eq, struct fid_av *
 				&opts.inject_size, sizeof opts.inject_size);
 		if (ret && ret != -FI_EOPNOTSUPP) {
 			FT_PRINTERR("fi_setopt(FI_OPT_INJECT_RMA_SIZE)", ret);
+			return ret;
+		}
+	}
+
+	if (opts.min_multi_recv_size) {
+		ret = fi_setopt(&bind_ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+				&opts.min_multi_recv_size, sizeof opts.min_multi_recv_size);
+		if (ret && ret != -FI_EOPNOTSUPP) {
+			FT_PRINTERR("fi_setopt(FI_OPT_MIN_MULTI_RECV_SIZE)", ret);
 			return ret;
 		}
 	}
