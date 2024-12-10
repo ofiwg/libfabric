@@ -1156,7 +1156,7 @@ static int vrb_dgram_ep_getname(fid_t ep_fid, void *addr, size_t *addrlen)
 	return FI_SUCCESS;
 }
 
-static struct fi_ops vrb_ep_ops = {
+_Thread_local static struct fi_ops vrb_ep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = vrb_ep_close,
 	.bind = vrb_ep_bind,
