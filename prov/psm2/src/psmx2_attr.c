@@ -335,6 +335,7 @@ void psmx2_update_prov_info(struct fi_info *info,
 			    struct psmx2_ep_name *dest_addr)
 {
 	struct fi_info *p;
+	int ret;
 
 	for (p = info; p; p = p->next) {
 		psmx2_dup_addr(p->addr_format, src_addr,
@@ -363,10 +364,17 @@ void psmx2_update_prov_info(struct fi_info *info,
 		}
 
 		free(p->domain_attr->name);
-		if (unit == PSMX2_DEFAULT_UNIT)
+		if (unit == PSMX2_DEFAULT_UNIT) {
 			p->domain_attr->name = strdup(psmx2_hfi_info.default_domain_name);
-		else
-			asprintf(&p->domain_attr->name, "hfi1_%d", unit);
+		} else {
+			ret = asprintf(&p->domain_attr->name, "hfi1_%d", unit);
+			if (ret < 0) {
+				p->domain_attr->name = NULL;
+				FI_WARN(&psmx2_prov, FI_LOG_CORE,
+					"Failed to allocate domain name for HFI unit %d\n",
+					unit);
+			}
+		}
 
 		p->tx_attr->inject_size = psmx2_env.inject_size;
 	}
