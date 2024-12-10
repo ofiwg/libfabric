@@ -191,6 +191,7 @@ struct ft_opts {
 	size_t transfer_size;
 	size_t max_msg_size;
 	size_t inject_size;
+	size_t min_multi_recv_size;
 	int window_size;
 	int av_size;
 	int verbose;
