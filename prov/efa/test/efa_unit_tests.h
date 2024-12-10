@@ -130,6 +130,7 @@ void test_ibv_cq_ex_read_failed_poll();
 void test_rdm_cq_create_error_handling();
 void test_rdm_cq_read_bad_send_status_unresponsive_receiver();
 void test_rdm_cq_read_bad_send_status_unresponsive_receiver_missing_peer_host_id();
+void test_rdm_cq_read_bad_send_status_unreachable_receiver();
 void test_rdm_cq_read_bad_send_status_invalid_qpn();
 void test_rdm_cq_read_bad_send_status_message_too_long();
 void test_ibv_cq_ex_read_bad_recv_status();
