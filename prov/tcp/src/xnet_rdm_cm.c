@@ -317,28 +317,31 @@ xnet_alloc_conn(struct xnet_rdm *rdm, struct util_peer_addr *peer)
 	return conn;
 }
 
-static struct xnet_conn *
-xnet_add_conn(struct xnet_rdm *rdm, struct util_peer_addr *peer)
+static ssize_t
+xnet_add_conn(struct xnet_rdm *rdm, struct util_peer_addr *peer,
+	      struct xnet_conn **conn, uint64_t flags)
 {
-	struct xnet_conn *conn;
 
 	assert(xnet_progress_locked(xnet_rdm2_progress(rdm)));
-	conn = ofi_idm_lookup(&rdm->conn_idx_map, peer->index);
-	if (conn)
-		return conn;
+	*conn = ofi_idm_lookup(&rdm->conn_idx_map, peer->index);
+	if (*conn)
+		return 0;
 
-	conn = xnet_alloc_conn(rdm, peer);
-	if (!conn)
-		return NULL;
+	if (flags & TCP_NO_CONNECT)
+		return -FI_ENOTCONN;
 
-	if (ofi_idm_set(&rdm->conn_idx_map, peer->index, conn) < 0) {
-		xnet_free_conn(conn);
+	*conn = xnet_alloc_conn(rdm, peer);
+	if (!(*conn))
+		return -FI_ENOMEM;
+
+	if (ofi_idm_set(&rdm->conn_idx_map, peer->index, *conn) < 0) {
+		xnet_free_conn(*conn);
 		XNET_WARN_ERR(FI_LOG_EP_CTRL, "ofi_idm_set", -FI_ENOMEM);
-		return NULL;
+		return -FI_ENOMEM;
 	}
 
-	conn->flags |= XNET_CONN_INDEXED;
-	return conn;
+	(*conn)->flags |= XNET_CONN_INDEXED;
+	return 0;
 }
 
 /* The returned conn is only valid if the function returns success.
@@ -346,16 +349,16 @@ xnet_add_conn(struct xnet_rdm *rdm, struct util_peer_addr *peer)
  * we return that rather than int.
  */
 ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t addr,
-		      struct xnet_conn **conn)
+		      struct xnet_conn **conn, uint64_t flags)
 {
 	struct util_peer_addr **peer;
 	ssize_t ret;
 
 	assert(xnet_progress_locked(xnet_rdm2_progress(rdm)));
 	peer = ofi_av_addr_context(rdm->util_ep.av, addr);
-	*conn = xnet_add_conn(rdm, *peer);
-	if (!*conn)
-		return -FI_ENOMEM;
+	ret = xnet_add_conn(rdm, *peer, conn, flags);
+	if (ret)
+		return ret;
 
 	if (!(*conn)->ep) {
 		ret = xnet_rdm_connect(*conn);
@@ -444,8 +447,8 @@ static void xnet_process_connreq(struct fi_eq_cm_entry *cm_entry)
 		goto reject;
 	}
 
-	conn = xnet_add_conn(rdm, peer);
-	if (!conn)
+	ret = xnet_add_conn(rdm, peer, &conn, 0);
+	if (ret)
 		goto put;
 
 	FI_INFO(&xnet_prov, FI_LOG_EP_CTRL, "connreq for %p\n", conn);
