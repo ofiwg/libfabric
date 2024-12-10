@@ -263,27 +263,6 @@ struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
 
 void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep);
 
-/**
- * @brief return whether this endpoint should write error cq entry for RNR.
- *
- * For an endpoint to write RNR completion, two conditions must be met:
- *
- * First, the end point must be able to receive RNR completion from rdma-core,
- * which means rnr_etry must be less then EFA_RNR_INFINITE_RETRY.
- *
- * Second, the app need to request this feature when opening endpoint
- * (by setting info->domain_attr->resource_mgmt to FI_RM_DISABLED).
- * The setting was saved as efa_rdm_ep->handle_resource_management.
- *
- * @param[in]	ep	endpoint
- */
-static inline
-bool efa_rdm_ep_should_write_rnr_completion(struct efa_rdm_ep *ep)
-{
-	return (efa_env.rnr_retry < EFA_RNR_INFINITE_RETRY) &&
-		(ep->handle_resource_management == FI_RM_DISABLED);
-}
-
 /*
  * @brief: check whether we should use p2p for this transaction
  *
