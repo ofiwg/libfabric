@@ -47,7 +47,7 @@
 #include "ofi_mem.h"
 
 #include "fi_opx_hfi_select.h"
-#include "rdma/opx/opx_hfi1_pre_cn5000.h"
+#include "rdma/opx/opx_hfi1_cn5000.h"
 
 #include "rdma/opx/opx_tracer.h"
 
@@ -125,17 +125,17 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 {
 	int fd;
 
-	fd = opx_hfi_context_open(hfi_unit_number, 0, 0);
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "opx_hfi_context_open fd %d.\n", fd);
+	int	     port = opx_select_port_index(hfi_unit_number) + 1;
+	unsigned int user_version;
+	fd = opx_hfi1_wrapper_context_open(internal, hfi_unit_number, port, 0, &user_version);
+	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "opx_hfi_context_open fd %d.\n", fd);
 	if (fd < 0) {
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to open HFI unit %d.\n", hfi_unit_number);
 		fd = -1;
 	} else {
 		memset(&internal->user_info, 0, sizeof(internal->user_info));
-		opx_select_port_index(internal, hfi_unit_number);
 
-		internal->user_info.userversion =
-			HFI1_USER_SWMINOR | (opx_hfi_get_user_major_version() << HFI1_SWMAJOR_SHIFT);
+		internal->user_info.userversion = user_version;
 
 		/* do not share hfi contexts */
 		internal->user_info.subctxt_id	= 0;
@@ -143,7 +143,7 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 
 		memcpy(internal->user_info.uuid, unique_job_key, sizeof(internal->user_info.uuid));
 
-		*ctrl = opx_hfi_userinit(fd, &internal->user_info);
+		*ctrl = opx_hfi1_wrapper_userinit(fd, internal, hfi_unit_number, port);
 		if (!*ctrl) {
 			opx_hfi_context_close(fd);
 			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to open a context on HFI unit %d.\n",
@@ -162,7 +162,7 @@ void opx_reset_context(struct fi_opx_ep *opx_ep)
 	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
 	opx_ep->rx->state.hdrq.head    = 0;
 
-	if (opx_hfi_reset_context(opx_ep->hfi->fd)) {
+	if (opx_hfi1_wrapper_reset_context(opx_ep->hfi)) {
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Send context reset failed: %d.\n", errno);
 		abort();
 	}
@@ -292,7 +292,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 {
 	struct fi_opx_ep *opx_ep		= (ep == NULL) ? NULL : container_of(ep, struct fi_opx_ep, ep_fid);
 	int		  fd			= -1;
-	int		  hfi_unit_number	= -1;
+	int		  hfi_unit_number	= -6;
 	int		  hfi_context_rank	= -1;
 	int		  hfi_context_rank_inst = -1;
 	const int	  numa_node_id		= opx_get_current_proc_location();
@@ -488,11 +488,13 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		if (hfi_context_rank != -1) {
 			hfi_context_rank_inst = fi_opx_get_daos_hfi_rank_inst(hfi_unit_number, hfi_context_rank);
 
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+			FI_DBG_TRACE(
+				&fi_opx_provider, FI_LOG_FABRIC,
 				"Application-specified HFI selection set to %d rank %d.%d. Skipping HFI selection algorithm\n",
 				hfi_unit_number, hfi_context_rank, hfi_context_rank_inst);
 		} else {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+			FI_DBG_TRACE(
+				&fi_opx_provider, FI_LOG_FABRIC,
 				"Application-specified HFI selection set to %d. Skipping HFI selection algorithm\n",
 				hfi_unit_number);
 		}
@@ -670,8 +672,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 
 	opx_lid_t lid = 0;
 	lid	      = opx_hfi_get_port_lid(ctrl->__hfi_unit, ctrl->__hfi_port);
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "lid = %d ctrl->__hfi_unit %u, ctrl->__hfi_port %u\n", lid,
-		ctrl->__hfi_unit, ctrl->__hfi_port);
+	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "lid = %d ctrl->__hfi_unit %u, ctrl->__hfi_port %u\n", lid,
+		     ctrl->__hfi_unit, ctrl->__hfi_port);
 
 	assert(lid > 0);
 
@@ -751,7 +753,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			}
 			goto ctxt_open_err;
 		}
-		rc = opx_hfi_set_pkey(ctrl, user_pkey);
+		rc = opx_hfi1_wrapper_set_pkey(internal, user_pkey);
 		if (rc) {
 			fprintf(stderr,
 				"Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set. This pkey is likely not registered/valid.\n",
@@ -775,7 +777,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			}
 			goto ctxt_open_err;
 		}
-		rc = opx_hfi_set_pkey(ctrl, default_pkey);
+		rc = opx_hfi1_wrapper_set_pkey(internal, default_pkey);
 		if (rc) {
 			fprintf(stderr,
 				"Error in setting default Pkey %#x. Please specify a different Pkey using FI_OPX_PKEY\n",
@@ -792,16 +794,12 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Service Level: SL=%ld SC=%ld VL=%ld PKEY=0x%lx MTU=%d\n", context->sl,
 		context->sc, context->vl, context->pkey, context->mtu);
 
-	const struct hfi1_base_info *base_info = &ctrl->base_info;
-	const struct hfi1_ctxt_info *ctxt_info = &ctrl->ctxt_info;
-
-	context->hfi_hfi1_type = opx_hfi1_check_hwversion(base_info->hw_version);
-	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "opx_hfi1_check_hwversion HFI type %#X,%#X\n", context->hfi_hfi1_type,
-		OPX_HFI1_TYPE);
-
 	/*
 	 * Initialize the hfi tx context
 	 */
+
+	const struct hfi1_base_info *base_info = &ctrl->base_info;
+	const struct hfi1_ctxt_info *ctxt_info = &ctrl->ctxt_info;
 
 	context->bthqp	   = (uint8_t) base_info->bthqp;
 	context->jkey	   = base_info->jkey;
@@ -911,8 +909,6 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->info.rxe.egrq.base_addr = (uint32_t *) (uintptr_t) base_info->rcvegr_bufbase;
 	context->info.rxe.egrq.elemsz	 = ctxt_info->rcvegr_size;
 	context->info.rxe.egrq.size	 = ctxt_info->rcvegr_size * ctxt_info->egrtids;
-
-	context->info.rxe.hdrq.rhe_base = opx_hfi_mmap_rheq(context);
 
 	fi_opx_ref_init(&context->ref_cnt, "HFI context");
 	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Context configured with HFI=%d PORT=%d LID=0x%x JKEY=%d\n",
@@ -3725,6 +3721,8 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 					packet_bytes = MIN(packet_bytes, OPX_HFI1_TID_PAGESIZE);
 					tidlen_remaining -= 1;
 					tidlen_consumed += 1;
+				} else {
+					assert(tidlen_remaining);
 				}
 				if (tidlen_remaining == 0 && tididx < (params->ntidpairs - 1)) {
 #ifndef NDEBUG
@@ -5313,10 +5311,7 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep *opx_ep, volatile uint64
 {
 	/* We are assuming that we can process any error and consume this header,
 	   let reliability detect and replay it as needed. */
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "RECEIVE ERROR: rhf_msb = 0x%08x, rhf_lsb = 0x%08x, rhf_seq = 0x%lx\n",
-		rhf_msb, rhf_lsb, rhf_seq);
 
-	/* Unexpected errors on WFR */
 	(void) rhf_ptr; /* unused unless debug is turned on */
 
 	/* drop this packet and allow reliability protocol to retry */

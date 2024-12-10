@@ -178,12 +178,12 @@ int opx_register_tid_region(uint64_t tid_vaddr, uint64_t tid_length, enum fi_hme
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_updates);
 	FI_OPX_DEBUG_COUNTERS_INC_COND(tid_iface > FI_HMEM_SYSTEM, opx_ep->debug_counters.hmem.tid_update);
 
-	uint32_t tidcnt_chunk;
-	int	 ret = opx_hfi_update_tid(opx_ep->hfi->ctrl, tid_vaddr, /* input */
-					  &length_chunk,		/* input/output*/
-					  (uint64_t) tidlist,		/* input/output ptr cast as uint64_t */
-					  &tidcnt_chunk,		/* output */
-					  flags);
+	uint32_t tidcnt_chunk = FI_OPX_MAX_DPUT_TIDPAIRS;
+	int	 ret	      = opx_hfi1_wrapper_update_tid(opx_ep->hfi, tid_vaddr, /* input */
+							    &length_chunk,	    /* input/output*/
+							    (uint64_t) tidlist, /* input/output ptr cast as uint64_t */
+							    &tidcnt_chunk,	/* output */
+							    flags);
 
 	if (ret) { // ERROR, no TIDs were registered
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_update_fail);
@@ -211,13 +211,13 @@ void opx_deregister_tid_region(struct fi_opx_ep *opx_ep, struct opx_mr_tid_info 
 {
 	uint32_t  old_ntidinfo = tid_info->ninfo;
 	uint64_t *old_tidlist  = (uint64_t *) &tid_info->info[0];
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_DEBUG_ENTRY vaddr %p, length %lu, opx_hfi_free_tid %u tidpairs\n",
+	FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_DEBUG_ENTRY vaddr %p, length %lu, ninfo %u \n",
 	       (void *) tid_info->tid_vaddr, tid_info->tid_length, old_ntidinfo);
 
 	/* Assert precondition that the lock is held with a trylock assert */
 	assert(pthread_mutex_trylock(&opx_ep->tid_domain->tid_cache->lock) == EBUSY);
 
-	opx_hfi_free_tid(opx_ep->hfi->ctrl, (uint64_t) old_tidlist, old_ntidinfo);
+	opx_hfi1_wrapper_free_tid(opx_ep->hfi, (uint64_t) old_tidlist, old_ntidinfo);
 }
 
 /*

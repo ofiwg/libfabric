@@ -110,7 +110,7 @@ int fi_opx_check_info(const struct fi_info *info)
 	case FI_FORMAT_UNSPEC:
 		break;
 	default:
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "unavailable [bad info->addr_format (%u)]",
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "unavailable [bad info->addr_format (%u)]\n",
 		       info->addr_format);
 		goto err;
 	}
@@ -466,7 +466,12 @@ err:
 	return -errno;
 }
 
-struct fi_opx_global_data fi_opx_global;
+struct fi_opx_global_data fi_opx_global = {.hfi_local_info.type	  = OPX_HFI1_UNDEF,
+					   .opx_hfi1_type_strings = {[OPX_HFI1_UNDEF]  = "OPX_HFI1_UNDEF",
+								     [OPX_HFI1_JKR_9B] = "OPX_HFI1_JKR_9B",
+								     [OPX_HFI1_WFR]    = "OPX_HFI1_WFR",
+								     [3]	       = "ERROR",
+								     [OPX_HFI1_JKR]    = "OPX_HFI1_JKR"}};
 
 static int fi_opx_getinfo_hfi(int hfi, uint32_t version, const char *node, const char *service, uint64_t flags,
 			      const struct fi_info *hints, struct fi_info **info, struct fi_info **info_tail)
@@ -735,10 +740,10 @@ OPX_INI
 		&fi_opx_provider, "hfi_select", FI_PARAM_STRING,
 		"Overrides the normal algorithm used to choose which HFI a process will use. See the documentation for more information.");
 	fi_param_define(&fi_opx_provider, "mp_eager_disable", FI_PARAM_BOOL,
-			"Disables tx multi-packet eager use. Defaults to %d\n", OPX_MP_EGR_DISABLE_DEFAULT);
+			"Disables tx multi-packet eager use. Defaults to %d", OPX_MP_EGR_DISABLE_DEFAULT);
 	fi_param_define(
 		&fi_opx_provider, "rzv_min_payload_bytes", FI_PARAM_INT,
-		"The minimum length in bytes where rendezvous will be used. For messages smaller than this threshold, the send will first try to be completed using eager or multi-packet eager. Defaults to %d\n",
+		"The minimum length in bytes where rendezvous will be used. For messages smaller than this threshold, the send will first try to be completed using eager or multi-packet eager. Defaults to %d.",
 		OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT);
 	fi_param_define(&fi_opx_provider, "delivery_completion_threshold", FI_PARAM_INT,
 			"Will be deprecated. Please use FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD");
@@ -746,7 +751,8 @@ OPX_INI
 		&fi_opx_provider, "sdma_bounce_buf_threshold", FI_PARAM_INT,
 		"The maximum message length in bytes that will be copied to the SDMA bounce buffer. For messages larger than this threshold, the send will not be completed until receiver has ACKed. Value must be between %d and %d. Defaults to %d.",
 		OPX_SDMA_BOUNCE_BUF_MIN, OPX_SDMA_BOUNCE_BUF_MAX, OPX_SDMA_BOUNCE_BUF_THRESHOLD);
-	fi_param_define(&fi_opx_provider, "sdma_disable", FI_PARAM_INT, "Disables SDMA offload hardware. Default is 0");
+	fi_param_define(&fi_opx_provider, "sdma_disable", FI_PARAM_INT,
+			"Disables SDMA offload hardware. Default is 0.");
 	fi_param_define(
 		&fi_opx_provider, "sdma_min_payload_bytes", FI_PARAM_INT,
 		"The minimum message length in bytes where SDMA will be used. For messages smaller than this threshold, the send will be completed using PIO. Value must be between %d and %d. Defaults to %d.",
@@ -758,44 +764,42 @@ OPX_INI
 		OPX_TID_MIN_PAYLOAD_BYTES_MIN, OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT);
 	fi_param_define(&fi_opx_provider, "expected_receive_enable", FI_PARAM_BOOL,
 			"Enables expected receive rendezvous using Token ID (TID). Defaults to \"No\".");
-	fi_param_define(&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
-			"When set, specify the set of CPU cores to set the progress "
-			"thread affinity to. The format is "
-			"<start>:<end>:<stride>"
-			"where each triplet <start>:<end>:<stride> defines a block "
-			"Both <start> and <end> is a core_id.");
+	fi_param_define(
+		&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
+		"When set, specify the set of CPU cores to set the progress thread affinity to. The format is <start>:<end>:<stride> where each triplet <start>:<end>:<stride> defines a block Both <start> and <end> is a core_id.");
 	fi_param_define(&fi_opx_provider, "auto_progress_interval_usec", FI_PARAM_INT,
 			"Number of usec that the progress thread waits between polling. Default is 1.");
 	fi_param_define(
 		&fi_opx_provider, "pkey", FI_PARAM_INT,
-		"Partition key.  Should be a 2 byte positive integer. Default is the Pkey in the index 0 of the Pkey table of the unit and port on which context is created.\n");
+		"Partition key.  Should be a 2 byte positive integer. Default is the Pkey in the index 0 of the Pkey table of the unit and port on which context is created.");
 	fi_param_define(&fi_opx_provider, "sl", FI_PARAM_INT,
-			"Service Level.  This will also determine Service Class and Virtual Lane.  Default is %d\n",
+			"Service Level.  This will also determine Service Class and Virtual Lane.  Default is %d.",
 			FI_OPX_HFI1_SL_DEFAULT);
 	fi_param_define(NULL, "opx_tracer_out_path", FI_PARAM_STRING,
 			"Specify path to output per-process performance tracing log files (default: none)");
 	fi_param_define(
 		&fi_opx_provider, "shm_enable", FI_PARAM_BOOL,
-		"Enables shm across all ports and hfi units on the node. Setting it to NO disables shm except peers with same lid and same hfi1 (loopback).  Defaults to: \"YES\"");
+		"Enables shm across all ports and hfi units on the node. Setting it to NO disables shm except peers with same lid and same hfi1 (loopback). Defaults to: \"YES\".");
+	fi_param_define(
+		&fi_opx_provider, "port", FI_PARAM_INT,
+		"HFI1 port number.  If the specified port is not available, a default active port will be selected. Special value 0 indicates any available port. Defaults to port 1 on OPA100 and any port on CN5000.");
 #ifdef OPX_HMEM
 	fi_param_define(
 		&fi_opx_provider, "dev_reg_send_threshold", FI_PARAM_INT,
-		"The individual packet threshold where lengths above do not use a device registered copy when sending data from GPU. Default is %d\n)",
+		"The individual packet threshold where lengths above do not use a device registered copy when sending data from GPU. Default is %d.",
 		OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT);
 	fi_param_define(
 		&fi_opx_provider, "dev_reg_recv_threshold", FI_PARAM_INT,
-		"The individual packet threshold where lengths above do not use a device registered copy when receiving data into GPU. Default is %d\n)",
+		"The individual packet threshold where lengths above do not use a device registered copy when receiving data into GPU. Default is %d.",
 		OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT);
 #endif
-	/* CN5000 only */
 	fi_param_define(
-		&fi_opx_provider, "rate_control", FI_PARAM_INT,
-		"Rate control.  Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Default is %d on OPA100 and %d on CN5000\n",
+		&fi_opx_provider, "route_control", FI_PARAM_INT,
+		"Route control.  Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Default is %d on OPA100 and %d on CN5000.",
 		OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0);
-	// fi_param_define(&fi_opx_provider, "varname", FI_PARAM_*, "help");
 	fi_param_define(
 		&fi_opx_provider, "mixed_network", FI_PARAM_INT,
-		"Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when mixed network is used. Default is 0.\n");
+		"Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when mixed network is used. Default is 0.");
 
 	/* Track TID and HMEM domains so caches can be cleared on exit */
 	dlist_init(&fi_opx_global.tid_domain_list);
@@ -807,7 +811,7 @@ OPX_INI
 		Dl_info dl_info;
 		if (dladdr((void *) fi_opx_ini,
 			   &dl_info)) { // Use the OPX_INI function as the symbol to get runtime info
-			FI_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Using opx Provider: Library file location is %s\n",
+			FI_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Using opx Provider: Library file location is %s.",
 				 dl_info.dli_fname);
 		} else {
 			FI_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,

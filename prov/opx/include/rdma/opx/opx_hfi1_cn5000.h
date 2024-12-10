@@ -29,34 +29,39 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef _OPX_HFI1_PRE_CN5000_H_
-#define _OPX_HFI1_PRE_CN5000_H_
+#ifndef _OPX_HFI1_CN5000_H_
+#define _OPX_HFI1_CN5000_H_
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h>
 #include <sys/mman.h>
 
-#include "fi_opx_hfi1.h"
+#include "rdma/opx/fi_opx_hfi1.h"
 #include "ofi_mem.h"
 
-/* Implementation PRE-CN5000 */
-#ifdef OPX_PRE_CN5000
+/* CN5000 support (CDEV, HFI1-DIRECT) common support functions. */
 
-/* Get the port out of user info or the default */
+/* Get the port index from configuration */
 __OPX_FORCE_INLINE__
-void opx_select_port_index(struct fi_opx_hfi1_context_internal *internal, int hfi_unit_number)
+int opx_select_port_index(int unit)
 {
-	/* The environment variable is the user-visible "port" number (PSM2 legacy),
-	 * but the HFI1 wants a port index.
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] %s, unit %d\n",
+		     OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE), unit);
+
+	/* The environment variable is the user-visible "port" number (PSM2
+	 * legacy), but the HFI1 wants a port index.
 	 *
 	 * A "port index" is the "port" number - 1
 	 */
-	int port = OPX_PORT_NUM_ANY;
-	if (getenv("HFI_PORT")) {
-		/* calculate port index from requested port */
-		port = atoi(getenv("HFI_PORT"));
-		assert((port == 0) || (port == 1) || (port == 2));
+	int port;
+	if (fi_param_get_int(fi_opx_global.prov, "port", &port) == FI_SUCCESS) {
+		/* not validated, it will just default  */
+		if (!((port == 0) || (port == 1) || (port == 2))) {
+			port = OPX_PORT_NUM_ANY;
+		}
+	} else {
+		port = OPX_PORT_NUM_ANY;
 	}
 
 	int port_index; /* calculate from port */
@@ -68,11 +73,10 @@ void opx_select_port_index(struct fi_opx_hfi1_context_internal *internal, int hf
 		port_index = (pid & (pid_t) 0x1);
 		port	   = port_index + 1;
 		/* check if port is usable and swap if it's down,
-			   assuming here that at least one port is working */
-		if (opx_hfi_get_port_lid(hfi_unit_number, port) <= 0) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-				"OPX_PRE_CN5000 port index %d failed, use %d,  pid %d\n", port_index,
-				port_index ? 0 : 1, getpid());
+		   assuming here that at least one port is working */
+		if (opx_hfi_get_port_lid(unit, port) <= 0) {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "[HFI1-DIRECT] port index %d failed, use %d, pid %d\n",
+				port_index, port_index ? 0 : 1, getpid());
 			port_index = port_index ? 0 : 1;
 			port	   = port_index + 1;
 		}
@@ -80,25 +84,11 @@ void opx_select_port_index(struct fi_opx_hfi1_context_internal *internal, int hf
 		port_index = port - 1; /* User selected port */
 	}
 	/* Whatever we got from user or OPX_PORT_NUM_ANY better work now. */
-	assert(opx_hfi_get_port_lid(hfi_unit_number, port) > 0);
+	assert(opx_hfi_get_port_lid(unit, port) > 0);
 
-	/* Use ioctl pad field to request a port index on the context. */
-	internal->user_info.pad = port_index;
-	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC,
-		     "OPX_PRE_CN5000 userinfo pad/port index %d, hfi_port %u, pid %d\n", internal->user_info.pad,
-		     internal->context.hfi_port, getpid());
+	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "[HFI1-DIRECT] port index %d, pid %d\n", port_index, getpid());
 
-	return;
-}
-
-/* Select and validate a port, use HFI_PORT if specified*/
-__OPX_FORCE_INLINE__
-int opx_get_port(struct hfi1_user_info_dep *uinfo)
-{
-	/* The port index is already in the "pad" */
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "OPX_PRE_CN5000 pad/port index %d\n", uinfo->pad);
-	/* return port (port index + 1)*/
-	return ((int) uinfo->pad + 1);
+	return port_index;
 }
 
 /* Early support - needs driver updates */
@@ -131,35 +121,28 @@ int opx_get_port(struct hfi1_user_info_dep *uinfo)
 
 /* Map the RHEQ if it's available */
 __OPX_FORCE_INLINE__
-void *opx_hfi_mmap_rheq(struct fi_opx_hfi1_context *context)
+__off64_t opx_hfi_mmap_rheq_token(const struct hfi1_ctxt_info *ctxt_info)
 {
-	const struct _hfi_ctrl	    *ctrl      = context->ctrl;
-	const struct hfi1_ctxt_info *ctxt_info = &ctrl->ctxt_info;
-	__off64_t		     token = OPX_HFI1_MMAP_TOKEN(OPX_RCV_RHEQ, ctxt_info->ctxt, ctxt_info->subctxt, 0);
-
-	/* 10. Map the RHEQ page */
-	ssize_t sz = sizeof(uint64_t) * (size_t) ctxt_info->rcvhdrq_cnt;
-	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC,
-		     "OPX_PRE_CN5000 ctx %#x, subctxt %#x, token %#lX, fd %u, sz %zu\n", ctxt_info->ctxt,
-		     ctxt_info->subctxt, token, context->fd, sz);
-	void *maddr = HFI_MMAP_ALIGNOFF(context->fd, token, sz, PROT_READ);
-	if (OFI_UNLIKELY(maddr == MAP_FAILED)) {
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "OPX_PRE_CN5000 mmap of RHEQ size %zu failed: %s\n", sz,
-			strerror(errno));
-		return NULL;
-	}
-	return maddr;
+	__off64_t token = OPX_HFI1_MMAP_TOKEN(OPX_RCV_RHEQ, ctxt_info->ctxt, ctxt_info->subctxt, 0);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] %s ctxt %u, subctxt %u token %#lX\n",
+		     OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE), ctxt_info->ctxt, ctxt_info->subctxt, token);
+	return token;
 }
 
 __OPX_FORCE_INLINE__
 void opx_sw_trigger(void)
 {
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] %s\n", OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE));
+
 #ifdef OPX_TRIGGER
+	if (OPX_HFI1_TYPE == OPX_HFI1_WFR) {
+		return; /* not supported */
+	}
 	const char    *resource0path		= "/sys/class/infiniband/hfi1_0/device/resource0";
 	const unsigned misc_gpio_out_csr_offset = 0x500218;
 	int	       mmap_fd;
 	fprintf(stderr,
-		"======================================= do_jkr_trigger =======================================\n");
+		"======================================= opx_sw_trigger =======================================\n");
 
 	mmap_fd = open(resource0path, O_RDWR | O_SYNC);
 	if (mmap_fd < 0) {
@@ -179,35 +162,4 @@ void opx_sw_trigger(void)
 	return;
 }
 
-#else // !OPX_PRE_CN5000 - WFR or older JKR
-
-/* Get the port out of user info or the default */
-__OPX_FORCE_INLINE__
-int opx_get_port(struct hfi1_user_info_dep *uinfo)
-{
-	return OPX_PORT_NUM_ANY;
-}
-
-/* Select and validate a port, use HFI_PORT if specified */
-__OPX_FORCE_INLINE__
-void opx_select_port_index(struct fi_opx_hfi1_context_internal *internal, int hfi_unit_number)
-{
-	return;
-}
-
-/* Map the RHEQ if it's available */
-__OPX_FORCE_INLINE__
-void *opx_hfi_mmap_rheq(struct fi_opx_hfi1_context *context)
-{
-	return NULL;
-}
-
-__OPX_FORCE_INLINE__
-void opx_sw_trigger(void)
-{
-	return;
-}
-
-#endif // OPX_PRE_CN5000
-
-#endif // _OPX_HFI1_PRE_CN5000_H_
+#endif // _OPX_HFI1_CN5000_H_

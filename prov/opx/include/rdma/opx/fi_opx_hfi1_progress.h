@@ -726,7 +726,7 @@ void opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const
 		/* reset context only if RHF queue is empty */
 		if (opx_is_rhf_empty(opx_ep, hdrq_mask, hfi1_type)) {
 			opx_reset_context(opx_ep);
-			opx_hfi_ack_events(opx_ep->hfi->fd, events);
+			opx_hfi1_wrapper_ack_events(opx_ep->hfi, events);
 		} else {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				     "Context frozen: Not resetting because packets are present in receive queue\n");

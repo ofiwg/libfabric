@@ -71,13 +71,13 @@
 
 #include "opa_user_gen1.h"
 #include "opa_udebug.h"
-#include "rdma/opx/opx_hfi1_pre_cn5000.h"
+#include "rdma/opx/opx_hfi1_cn5000.h"
 
 #include <sched.h>
 
 size_t arrsz[MAPSIZE_MAX] = {0};
 
-static int map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt)
+int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *rheq, const enum opx_hfi1_type hfi1_type)
 {
 #define CREDITS_NUM 64
 	struct hfi1_ctxt_info *cinfo = &ctrl->ctxt_info;
@@ -197,6 +197,23 @@ static int map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt)
 	sz = HFI_MMAP_PGSIZE;
 	HFI_MMAP_ERRCHECK(fd, binfo, status_bufbase, sz, PROT_READ);
 	arrsz[STATUS_BUFBASE] = sz;
+
+	/* 10. Map the RHEQ page (JKR only) */
+	sz = sizeof(uint64_t) * (size_t) cinfo->rcvhdrq_cnt;
+	_HFI_PDBG("ctx %#hx, subctxt_cnt %#lx, rheq %#llX, fd %d, sz %zu/%zu\n", cinfo->ctxt, subctxt_cnt, *rheq, fd,
+		  sz, (size_t) cinfo->rcvhdrq_cnt);
+	errno = 0;
+	if (hfi1_type != OPX_HFI1_WFR) {
+		maddr = HFI_MMAP_ALIGNOFF(fd, *rheq, sz, PROT_READ);
+		if (OFI_UNLIKELY(maddr == MAP_FAILED)) {
+			_HFI_PDBG("JKR mmap of RHEQ size %zu failed: %s\n", sz, strerror(errno));
+			goto err_mmap_subctxt_rheq;
+		}
+		*rheq = (__u64) maddr;
+	} else { /* WFR is unused/na, so NULL it */
+		*rheq = 0ULL;
+	}
+	_HFI_PDBG("[HFI1-DIRECT] CONTEXT INIT RHEQ %#llX mapsize %zu\n", *rheq, sz);
 
 	if (!subctxt_cnt) {
 		_HFI_PDBG("CONTEXT INIT !subctxt_cnt mapsize SC_CREDITS         %zu \n", arrsz[SC_CREDITS]);
@@ -342,6 +359,12 @@ err_mmap_subctxt_rcvhdrbuf:
 	/* if we got it here, subctxt_cnt must be != 0 */
 	HFI_MUNMAP_ERRCHECK(binfo, subctxt_uregbase, arrsz[SUBCTXT_UREGBASE]);
 
+err_mmap_subctxt_rheq:
+	/* New field, special handling */
+	if (rheq && *rheq) {
+		HFI_MUNMAP((void *) *rheq, sizeof(uint64_t) * (size_t) cinfo->rcvhdrq_cnt);
+	}
+
 err_mmap_subctxt_uregbase:
 	HFI_MUNMAP_ERRCHECK(binfo, status_bufbase, arrsz[STATUS_BUFBASE]);
 
@@ -389,8 +412,11 @@ err_mmap_sc_credits_addr:
    struct _hfi_ctrl *.  The struct _hfi_ctrl * used for everything
    else is returned as part of hfi1_base_info.
 */
-static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity, struct hfi1_user_info_dep *uinfo)
+static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
+						   struct fi_opx_hfi1_context_internal *internal, int unit, int port)
 {
+	struct hfi1_user_info_dep *uinfo = &internal->user_info;
+
 	struct _hfi_ctrl      *spctrl = NULL;
 	struct hfi1_ctxt_info *cinfo;
 	struct hfi1_base_info *binfo;
@@ -400,6 +426,9 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity, s
 	/* for major version 6 of driver, we will use uinfo_new.  See below for details. */
 	struct hfi1_user_info uinfo_new = {0};
 #endif
+	/* New HFI1-DIRECT fields - special setup needed in cdev */
+	/* Use ioctl pad field to request a port index on the context. */
+	internal->user_info.pad = port - 1;
 
 	/* First get the page size */
 	__hfi_pg_sz = sysconf(_SC_PAGESIZE);
@@ -603,49 +632,36 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity, s
 			   binfo->sw_version & 0xffff);
 	}
 
-	if (map_hfi_mem(fd, spctrl, uinfo->subctxt_cnt) == -1) {
-		_HFI_ERROR("Failed to map HFI memory.\n");
+	internal->context.hfi1_type = opx_hfi1_check_hwversion(binfo->hw_version);
+	assert((internal->context.hfi1_type == OPX_HFI1_JKR) ||
+	       (internal->context.hfi1_type == OPX_HFI1_WFR)); /* OPX_HFI1_JKR_9B is determined later */
+
+	/* Need the global set early, may be changed later on mixed networks */
+	if (fi_opx_global.hfi_local_info.type == OPX_HFI1_UNDEF) {
+		fi_opx_global.hfi_local_info.type = internal->context.hfi1_type;
+	}
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "global type %d, opx_hfi1_check_hwversion base_info->hw_version %#X, %s\n",
+		     fi_opx_global.hfi_local_info.type, binfo->hw_version,
+		     OPX_HFI_TYPE_STRING(internal->context.hfi1_type));
+
+	/* Rheq is only on JKR rdma-core, we have to set the token manually */
+	__off64_t rheq_token = opx_hfi_mmap_rheq_token(cinfo);
+	if (opx_map_hfi_mem(fd, spctrl, uinfo->subctxt_cnt, (__u64 *) &rheq_token, internal->context.hfi1_type) == -1) {
+		_HFI_ERROR("[HFI1-DIRECT] Failed to map HFI memory.- errno %s\n", strerror(errno));
 		goto err_map_hfi_mem;
 	}
+	/* Save the new mmap (from the token) in the context */
+	internal->context.info.rxe.hdrq.rhe_base = (uint64_t *) rheq_token;
+	_HFI_PDBG("[HFI1-DIRECT] RHEQ %#lX\n", rheq_token);
 
 	/* Save some info. */
 	spctrl->fd	    = fd;
 	spctrl->__hfi_pg_sz = __hfi_pg_sz;
 	spctrl->__hfi_unit  = cinfo->unit;
 
-	/* Initial port configuration */
-	int port = opx_get_port(uinfo);
-
-	/* If not pre-selected, check envvar */
-	if ((port == OPX_PORT_NUM_ANY) && (getenv("HFI_PORT"))) {
-		port = atoi(getenv("HFI_PORT"));
-		/* No HFI1 checks here.
-		 * That will happen below where invalid
-		 * port (lids) should fail to lowest
-		 * working port (likely 1).
-		 */
-		_HFI_INFO("HFI_PORT %d/%s requested.\n", port, getenv("HFI_PORT"));
-	}
-
-	if (port == OPX_PORT_NUM_ANY) {
-		int p, rv;
-		/* Use first working port */
-		for (p = OPX_MIN_PORT; p <= OPX_MAX_PORT; p++) {
-			_HFI_DBG("units %d, port %d, MIN %d, MAX %d\n", spctrl->__hfi_unit, p, OPX_MIN_PORT,
-				 OPX_MAX_PORT);
-			if ((rv = opx_hfi_get_port_lid(spctrl->__hfi_unit, p)) > 0) {
-				port = p;
-				break;
-			}
-			_HFI_DBG("rv %d\n", rv);
-		}
-	}
-	if ((port > OPX_MAX_PORT) | (port < OPX_MIN_PORT)) {
-		_HFI_ERROR("Active port not found\n");
-		abort();
-	}
-
-	spctrl->__hfi_port	= port;
+	spctrl->__hfi_port	= ((int) internal->user_info.pad + 1); /* CDEV port index + 1 */
 	spctrl->__hfi_tidegrcnt = cinfo->egrtids;
 	spctrl->__hfi_tidexpcnt = cinfo->rcvtids - cinfo->egrtids;
 
@@ -683,7 +699,7 @@ err_calloc_hfi_ctrl:
 	return NULL;
 }
 
-struct _hfi_ctrl *opx_hfi_userinit(int fd, struct hfi1_user_info_dep *uinfo)
+struct _hfi_ctrl *opx_hfi_userinit(int fd, struct fi_opx_hfi1_context_internal *internal, int unit, int port)
 {
-	return opx_hfi_userinit_internal(fd, false, uinfo);
+	return opx_hfi_userinit_internal(fd, false, internal, unit, port);
 }

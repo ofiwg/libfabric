@@ -303,7 +303,13 @@ struct _hfi_ctrl {
    struct _hfi_ctrl *.  The struct _hfi_ctrl * used for everything
    else is returned by this routine.
 */
-struct _hfi_ctrl *opx_hfi_userinit(int32_t, struct hfi1_user_info_dep *);
+struct fi_opx_hfi1_context_internal;
+struct _hfi_ctrl *opx_hfi_userinit(int32_t, struct fi_opx_hfi1_context_internal *, int unit, int port);
+
+/* Map the hfi1 memory from tokens in structs hfi1_base_info
+   (rheq is new from hfi1_user_info_rsp) */
+int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *rheq,
+		    const enum opx_hfi1_type hfi1_type);
 
 /* don't inline these; it's all init code, and not inlining makes the */
 /* overall code shorter and easier to debug */
@@ -330,6 +336,7 @@ int opx_hfi_event_ack(struct _hfi_ctrl *ctrl, __u64 ackbits);
 /* set whether we want an interrupt on all packets, or just urgent ones */
 int opx_hfi_poll_type(struct _hfi_ctrl *ctrl, uint16_t poll_type);
 
+struct fi_opx_hfi1_context;
 /* reset halted send context, error if context is not halted. */
 int opx_hfi_reset_context(int fd);
 
@@ -507,117 +514,6 @@ static __inline__ void opx_hfi_hdrset_seq(__le32 *rbuf, uint32_t val)
    send by the same process, data corruption will probably occur,
    but only within that process, not for other processes.
 */
-
-/* update length and tidcnt expected TID entries from the array pointed to by tidinfo. */
-/* Returns 0 on success, else -1 with errno set.
-   See full description at declaration */
-static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl, uint64_t vaddr, uint32_t *length, uint64_t tidlist,
-					     uint32_t *tidcnt, uint64_t flags)
-{
-	struct hfi1_cmd cmd;
-
-#ifdef OPX_HMEM
-	struct hfi1_tid_info_v3 tidinfo;
-#else
-	struct hfi1_tid_info tidinfo;
-#endif
-
-	int err;
-
-	tidinfo.vaddr  = vaddr;	  /* base address for this send to map */
-	tidinfo.length = *length; /* length of vaddr */
-
-	tidinfo.tidlist = tidlist; /* driver copies tids back directly */
-	tidinfo.tidcnt	= 0;	   /* clear to zero */
-
-#ifdef OPX_HMEM
-	cmd.type	= OPX_HFI_CMD_TID_UPDATE_V3;
-	tidinfo.flags	= flags;
-	tidinfo.context = 0ull;
-#else
-	cmd.type = OPX_HFI_CMD_TID_UPDATE; /* HFI1_IOCTL_TID_UPDATE */
-#endif
-	FI_DBG(&fi_opx_provider, FI_LOG_MR,
-		"OPX_DEBUG_ENTRY update [%p - %p], length %u (pages %lu)\n",
-		(void*)vaddr, (void*) (vaddr + *length), *length, (*length) / page_sizes[OFI_PAGE_SIZE]);
-
-	cmd.len	 = sizeof(tidinfo);
-	cmd.addr = (__u64) &tidinfo;
-
-	errno = 0;
-	err   = opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd));
-
-	if (err != -1) {
-		assert(err == 0);
-		struct hfi1_tid_info *rettidinfo = (struct hfi1_tid_info *) cmd.addr;
-		assert(rettidinfo->length);
-		assert(rettidinfo->tidcnt);
-
-		if (rettidinfo->length != *length) {
-			FI_WARN(&fi_opx_provider, FI_LOG_MR,
-				"PARTIAL UPDATE errno %d  \"%s\" INPUTS vaddr [%p - %p] length %u (pages %lu), OUTPUTS vaddr [%p - %p] length %u (pages %lu), tidcnt %u\n",
-				errno, strerror(errno), (void*)vaddr,
-				(void*)(vaddr + *length), *length, (*length) / page_sizes[OFI_PAGE_SIZE],
-				(void*)rettidinfo->vaddr,(void*)(rettidinfo->vaddr + rettidinfo->length),
-				rettidinfo->length, rettidinfo->length / page_sizes[OFI_PAGE_SIZE],
-				rettidinfo->tidcnt);
-		}
-		/* Always update outputs, even on soft errors */
-		*length = rettidinfo->length;
-		*tidcnt = rettidinfo->tidcnt;
-
-		FI_DBG(&fi_opx_provider, FI_LOG_MR,
-			"TID UPDATE IOCTL returned %d errno %d  \"%s\" vaddr [%p - %p] length %u (pages %lu), tidcnt %u\n",
-			err, errno, strerror(errno), (void*)vaddr,
-			(void*)(vaddr + *length), *length, (*length) / page_sizes[OFI_PAGE_SIZE], *tidcnt);
-
-		return 0;
-	}
-
-	if (errno == ENOSPC) {
-		FI_DBG(&fi_opx_provider, FI_LOG_MR,
-			"IOCTL FAILED : No TIDs available, requested range=%p-%p (%u bytes, %lu pages)\n",
-			(void*)vaddr, (void*) (vaddr + *length), *length, (*length) / page_sizes[OFI_PAGE_SIZE]);
-		err = -FI_ENOSPC;
-	} else {
-		FI_WARN(&fi_opx_provider, FI_LOG_MR,
-			"IOCTL FAILED ERR %d errno %d \"%s\" requested range=%p-%p (%u bytes, %lu pages)\n",
-			err, errno, strerror(errno),
-			(void*)vaddr, (void*) (vaddr + *length), *length, (*length) / page_sizes[OFI_PAGE_SIZE]);
-	}
-
-	/* Hard error, we can't trust these */
-	*length = 0;
-	*tidcnt = 0;
-
-	return err;
-}
-
-static __inline__ int32_t opx_hfi_free_tid(struct _hfi_ctrl *ctrl, uint64_t tidlist, uint32_t tidcnt)
-{
-	struct hfi1_cmd	     cmd;
-	struct hfi1_tid_info tidinfo;
-	int		     err;
-
-	tidinfo.tidlist = tidlist; /* input to driver */
-	tidinfo.tidcnt	= tidcnt;
-
-	cmd.type = OPX_HFI_CMD_TID_FREE; /* HFI1_IOCTL_TID_FREE */
-	cmd.len	 = sizeof(tidinfo);
-	cmd.addr = (__u64) &tidinfo;
-	FI_DBG(&fi_opx_provider, FI_LOG_MR, "OPX_DEBUG_ENTRY tidcnt %u\n", tidcnt);
-	errno					    = 0;
-	err					    = opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd));
-	__attribute__((__unused__)) int saved_errno = errno;
-
-	if (err == -1) {
-		FI_WARN(&fi_opx_provider, FI_LOG_MR, "FAILED ERR %d  errno %d \"%s\" tidcnt %u\n", err, saved_errno,
-			strerror(saved_errno), tidcnt);
-	}
-	FI_DBG(&fi_opx_provider, FI_LOG_MR, "ERR %d  errno %d  \"%s\"\n", err, saved_errno, strerror(saved_errno));
-
-	return err;
-}
 
 static __inline__ int32_t opx_hfi_get_invalidation(struct _hfi_ctrl *ctrl, uint64_t tidlist, uint32_t *tidcnt)
 {

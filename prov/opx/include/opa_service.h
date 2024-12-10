@@ -196,8 +196,8 @@ int opx_hfi_get_unit_active(int unit);
 int opx_hfi_get_num_free_contexts(int unit);
 
 /* Open hfi device file, return -1 on error. */
-int opx_hfi_context_open(int unit, int port, uint64_t open_timeout);
-int opx_hfi_context_open_ex(int unit, int port, uint64_t open_timeout, char *dev_name, size_t dev_name_len);
+int opx_hfi_context_open(int unit, int port, uint64_t open_timeout, unsigned int *user_version);
+int opx_hfi_context_open_ex(int unit, int port, uint64_t open_timeout, unsigned int *user_version);
 
 uint32_t opx_hfi_check_non_dw_mul_sdma(void);
 

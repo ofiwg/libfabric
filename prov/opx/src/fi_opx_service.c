@@ -201,16 +201,16 @@ void opx_hfi_set_user_version(uint32_t version)
 	sw_version.version = version;
 }
 
-int opx_hfi_context_open(int unit, int port, uint64_t open_timeout)
+int opx_hfi_context_open(int unit, int port, uint64_t open_timeout, unsigned int *user_version)
 {
-	char dev_name_ignored[256];
-
-	return opx_hfi_context_open_ex(unit, port, open_timeout, dev_name_ignored, sizeof(dev_name_ignored));
+	return opx_hfi_context_open_ex(unit, port, open_timeout, user_version);
 }
 
-int opx_hfi_context_open_ex(int unit, int port, uint64_t open_timeout, char *dev_name, size_t dev_name_len)
+int opx_hfi_context_open_ex(int unit, int port, uint64_t open_timeout, unsigned int *user_version)
 {
-	int fd;
+	int	     fd;
+	const size_t dev_name_len = 255;
+	char	     dev_name[dev_name_len + 1];
 
 	if (unit != OPX_UNIT_ID_ANY && unit >= 0) {
 		snprintf(dev_name, dev_name_len, "%s_%u", OPX_DEVICE_PATH, unit);
@@ -219,14 +219,13 @@ int opx_hfi_context_open_ex(int unit, int port, uint64_t open_timeout, char *dev
 	}
 
 	if (opx_hfi_wait_for_device(dev_name, (long) open_timeout) == -1) {
-		_HFI_DBG("Could not find an HFI Unit on device "
-			 "%s (%lds elapsed)",
-			 dev_name, (long) open_timeout / 1000);
+		_HFI_DBG("Could not find an HFI Unit on device %s (%lds elapsed)\n", dev_name,
+			 (long) open_timeout / 1000);
 		return -1;
 	}
 
 	if ((fd = open(dev_name, O_RDWR)) == -1) {
-		_HFI_DBG("(host:Can't open %s for reading and writing", dev_name);
+		_HFI_DBG("(host:Can't open %s for reading and writing\n", dev_name);
 		return -1;
 	}
 
@@ -263,6 +262,7 @@ int opx_hfi_context_open_ex(int unit, int port, uint64_t open_timeout, char *dev
 			}
 		}
 	}
+	*user_version = HFI1_USER_SWMINOR | (opx_hfi_get_user_major_version() << HFI1_SWMAJOR_SHIFT);
 
 #endif
 	return fd;

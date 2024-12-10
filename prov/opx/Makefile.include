@@ -58,6 +58,7 @@ opx_files =									\
 		prov/opx/src/fi_opx_hfi1.c					\
 		prov/opx/src/fi_opx_hfi1_jkr.c					\
 		prov/opx/src/fi_opx_hfi1_wfr.c					\
+		prov/opx/src/opx_hfi1_rdma_core.c				\
 		prov/opx/src/fi_opx_hfi1_sdma.c					\
 		prov/opx/src/fi_opx_reliability.c				\
 		prov/opx/src/fi_opx_tagged.c					\
@@ -134,6 +135,7 @@ noinst_HEADERS = \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_addr.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_debug_counters.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/opx_tracer.h \
+	$(top_srcdir)/prov/opx/include/rdma/opx/opx_hfi1_rdma_core.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_hfi1_sdma.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_endpoint.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx.h \
@@ -148,7 +150,7 @@ noinst_HEADERS = \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_hfi1_jkr.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_hfi1_wfr.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_hfi1_version.h \
-	$(top_srcdir)/prov/opx/include/rdma/opx/opx_hfi1_pre_cn5000.h \
+	$(top_srcdir)/prov/opx/include/rdma/opx/opx_hfi1_cn5000.h \
 	$(top_srcdir)/prov/opx/include/rdma/fi_direct_trigger.h \
 	$(top_srcdir)/prov/opx/include/rdma/fi_direct_atomic.h \
 	$(top_srcdir)/prov/opx/include/rdma/fi_direct.h \
