@@ -263,11 +263,6 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
-			&tx_size, sizeof(tx_size));
-	if (ret)
-		return ret;
-
 	ret = post_multi_recv_buffer();
 	if (ret)
 		return ret;
@@ -327,6 +322,7 @@ int main(int argc, char **argv)
 		return EIO;
 	}
 
+	opts.min_multi_recv_size = opts.transfer_size;
 	hints->caps = FI_MSG | FI_MULTI_RECV;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;

@@ -229,6 +229,7 @@ struct smr_ep {
 	struct smr_tx_fs	*tx_fs;
 	struct dlist_entry	sar_list;
 	struct dlist_entry	ipc_cpy_pend_list;
+	size_t			min_multi_recv_size;
 
 	int			ep_idx;
 	enum ofi_shm_p2p_type	p2p_type;

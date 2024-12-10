@@ -295,8 +295,8 @@ static int rxm_ep_setopt(fid_t fid, int level, int optname,
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
-		return rxm_ep->srx->ep_fid.ops->setopt(&rxm_ep->srx->ep_fid.fid,
-						level, optname, optval, optlen);
+		rxm_ep->min_multi_recv_size = *(size_t *)optval;
+		return ret;
 	case FI_OPT_BUFFERED_MIN:
 		if (rxm_ep->rx_pool) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -1144,6 +1144,7 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 
 	assert(!rxm_ep->buffered_limit);
 	rxm_ep->buffered_limit = rxm_buffer_size;
+	rxm_ep->min_multi_recv_size = rxm_buffer_size;
 
 	rxm_config_direct_send(rxm_ep);
 	rxm_ep_init_proto(rxm_ep);
@@ -1364,7 +1365,7 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 					      util_domain.domain_fid);
 			ret = util_ep_srx_context(&domain->util_domain,
 					ep->rxm_info->rx_attr->size,
-					RXM_IOV_LIMIT, rxm_buffer_size,
+					RXM_IOV_LIMIT, ep->min_multi_recv_size,
 					&rxm_update, &ep->util_ep.lock,
 					&srx);
 			if (ret)

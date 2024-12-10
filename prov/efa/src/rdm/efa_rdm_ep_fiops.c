@@ -1650,7 +1650,6 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	int intval, ret;
-	struct util_srx_ctx *srx;
 
 	efa_rdm_ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
@@ -1663,8 +1662,6 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 			return -FI_EINVAL;
 
 		efa_rdm_ep->min_multi_recv_size = *(size_t *)optval;
-		srx = util_get_peer_srx(efa_rdm_ep->peer_srx_ep)->ep_fid.fid.context;
-		srx->min_multi_recv_size = *(size_t *)optval;
 		break;
 	case FI_OPT_EFA_RNR_RETRY:
 		if (optlen != sizeof(size_t))
