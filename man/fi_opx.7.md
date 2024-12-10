@@ -269,8 +269,8 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 : Integer. Indicates that the network is a mix of OPA100 and CN5000. Needs to be set to 1
   in case of mixed network. Default is 0.
 
-*FI_OPX_RATE_CONTROL*
-: Integer. Rate control (routing).  Values can range from 0-7.
+*FI_OPX_ROUTE_CONTROL*
+: Integer. Route control.  Values can range from 0-7.
   0-3 is used for in-order and 4-7 is used for out-of-order.
   Default is 0 on OPA100 and 4 on CN5000.
 

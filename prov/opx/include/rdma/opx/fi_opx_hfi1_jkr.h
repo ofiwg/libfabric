@@ -169,28 +169,29 @@ uint32_t opx_pbc_jkr_l2type(unsigned _type)
 #define OPX_RC1_SHIFT 1
 #define OPX_RC0_SHIFT 0
 
-/* RC[2] (3 bit) rate control value */
-static inline int opx_rate_control_value(const enum opx_hfi1_type hfi1_type)
+/* RC[2] (3 bit) route control value */
+static inline int opx_route_control_value(const enum opx_hfi1_type hfi1_type)
 {
-	static int rate_control = -1;
+	static int route_control = -1;
 	/* Only called when initializing the models so not performance sensitive  */
-	if (rate_control == -1) { /* one time static check of env var */
-		if (fi_param_get_int(fi_opx_global.prov, "rate_control", &rate_control) == FI_SUCCESS) {
-			if ((rate_control >= OPX_RC_IN_ORDER_0) && (rate_control <= OPX_RC_OUT_OF_ORDER_3)) {
-				FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Rate control set to %d.", rate_control);
-				return rate_control;
+	if (route_control == -1) { /* one time static check of env var */
+		if (fi_param_get_int(fi_opx_global.prov, "route_control", &route_control) == FI_SUCCESS) {
+			if ((route_control >= OPX_RC_IN_ORDER_0) && (route_control <= OPX_RC_OUT_OF_ORDER_3)) {
+				FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Route control set to %d.\n",
+					 route_control);
+				return route_control;
 			} else {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"Invalid rate control %d. Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Using default %d.\n",
-					rate_control,
+					"Invalid route control %d. Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Using default %d.\n",
+					route_control,
 					((hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ? OPX_RC_OUT_OF_ORDER_0 :
 											  OPX_RC_IN_ORDER_0));
 			}
 		}
-		rate_control =
+		route_control =
 			((hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ? OPX_RC_OUT_OF_ORDER_0 : OPX_RC_IN_ORDER_0);
 	}
-	return rate_control;
+	return route_control;
 }
 
 /* The bit shifts here are for the half word indicating the ECN field */
@@ -218,7 +219,7 @@ static inline int opx_rate_control_value(const enum opx_hfi1_type hfi1_type)
 /* shift 8 bit bth.rx directly into lrh entropy top bits */
 #define OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B (OPX_BTH_RX_SHIFT - OPX_LRH_JKR_ENTROPY_SHIFT_16B)
 
-#define OPX_LRH_JKR_16B_RC2 opx_rate_control_value(OPX_HFI1_JKR)
+#define OPX_LRH_JKR_16B_RC2 opx_route_control_value(OPX_HFI1_JKR)
 
 /* RHF */
 /* JKR
@@ -289,12 +290,16 @@ __OPX_FORCE_INLINE__ int opx_jkr_9B_rhf_check_header(const uint64_t			    rhf_rc
 {
 	/* RHF error */
 	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR))) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ERROR %s %#lX\n", OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE),
+			OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR));
 		return 1; /* error */
 	}
 
 	/* Bad packet header */
 	if (OFI_UNLIKELY((!OPX_JKR_RHF_IS_USE_EGR_BUF(rhf_rcvd)) && (ntohs(hdr->lrh_9B.pktlen) > 0x15) &&
 			 !(OPX_JKR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd)))) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ERROR %s %#lX\n", OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE),
+			OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR));
 		return opx_jkr_rhf_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
 	} else {
 		return 0; /* no error*/
@@ -307,12 +312,16 @@ __OPX_FORCE_INLINE__ int opx_jkr_16B_rhf_check_header(const uint64_t			     rhf_
 {
 	/* RHF error */
 	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR))) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ERROR %s %#lX\n", OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE),
+			OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR));
 		return 1; /* error */
 	}
 
 	/* Bad packet header */
 	if (OFI_UNLIKELY((!OPX_JKR_RHF_IS_USE_EGR_BUF(rhf_rcvd)) && (hdr->lrh_16B.pktlen > 0x9) &&
 			 !(OPX_JKR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd)))) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ERROR %s %#lX\n", OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE),
+			OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR));
 		return opx_jkr_rhf_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
 	} else {
 		return 0; /* no error*/

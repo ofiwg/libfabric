@@ -415,11 +415,9 @@ int fi_opx_stx_init(struct fi_opx_domain *opx_domain, struct fi_tx_attr *attr, s
 		return FI_EBUSY;
 	}
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"Opened hfi %p, HFI type %#X/%#X, unit %#X, port %#X, ref_cnt %#lX,"
-		" rcv ctxt %#X, send ctxt %#X, \n",
-		opx_stx->hfi, opx_stx->hfi->hfi_hfi1_type, OPX_HFI1_TYPE, opx_stx->hfi->hfi_unit,
-		opx_stx->hfi->hfi_port, opx_stx->hfi->ref_cnt, opx_stx->hfi->ctrl->ctxt_info.ctxt,
-		opx_stx->hfi->ctrl->ctxt_info.send_ctxt);
+		"Opened hfi %p, HFI type %#X/%#X, unit %#X, port %#X, ref_cnt %#lX, rcv ctxt %#X, send ctxt %#X, \n",
+		opx_stx->hfi, opx_stx->hfi->hfi1_type, OPX_HFI1_TYPE, opx_stx->hfi->hfi_unit, opx_stx->hfi->hfi_port,
+		opx_stx->hfi->ref_cnt, opx_stx->hfi->ctrl->ctxt_info.ctxt, opx_stx->hfi->ctrl->ctxt_info.send_ctxt);
 
 	/*
 	 * initialize the reliability service
@@ -805,8 +803,12 @@ static int fi_opx_close_ep(fid_t fid)
 	if (opx_ep->hfi) {
 		ret = fi_opx_ref_dec(&opx_ep->hfi->ref_cnt, "HFI context");
 		if (ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI context in use\n");
 			return ret; // Error
 		}
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI context not in use\n");
+		/* Close HFI1 Direct Verbs lib/context */
+		opx_hfi1_rdma_context_close(opx_ep->hfi->ibv_context);
 
 		if (opx_ep->hfi->ref_cnt == 0) {
 			// free memory allocated for _hfi_ctrl struct in opx_hfi_userinit_internal function in
@@ -914,7 +916,7 @@ static int fi_opx_check_ep(struct fi_opx_ep *opx_ep)
 		}
 		break;
 	default:
-		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Invalid EP class %lu", opx_ep->ep_fid.fid.fclass);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Invalid EP class %lu\n", opx_ep->ep_fid.fid.fclass);
 		goto err;
 	}
 
@@ -1586,22 +1588,20 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		}
 		fi_opx_ref_inc(&opx_ep->hfi->ref_cnt, "HFI context");
 
-		fi_opx_global.hfi_local_info.type = opx_ep->hfi->hfi_hfi1_type;
-
+		/* The global was set early (userinit), may be changed now on mixed networks */
 		int mixed_network = 0;
 		if (fi_param_get_int(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
 			if ((mixed_network == 1) && (fi_opx_global.hfi_local_info.type == OPX_HFI1_JKR)) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Runtime HFI type is 9B JKR\n");
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Mixed network: Set HFI type to 9B\n");
 				fi_opx_global.hfi_local_info.type = OPX_HFI1_JKR_9B;
-				opx_ep->hfi->hfi_hfi1_type	  = OPX_HFI1_JKR_9B;
+				opx_ep->hfi->hfi1_type		  = OPX_HFI1_JKR_9B;
 			}
 		}
 
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"Opened hfi %p, HFI type %#X/%#X, unit %#X, port %#X, ref_cnt %#lX,"
-			" rcv ctxt %#X, send ctxt %#X, \n",
-			opx_ep->hfi, opx_ep->hfi->hfi_hfi1_type, OPX_HFI1_TYPE, opx_ep->hfi->hfi_unit,
-			opx_ep->hfi->hfi_port, opx_ep->hfi->ref_cnt, opx_ep->hfi->ctrl->ctxt_info.ctxt,
+			"Opened hfi %p, HFI type %s, unit %#X, port %#X, ref_cnt %#lX, rcv ctxt %#X, send ctxt %#X, \n",
+			opx_ep->hfi, OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE), opx_ep->hfi->hfi_unit, opx_ep->hfi->hfi_port,
+			opx_ep->hfi->ref_cnt, opx_ep->hfi->ctrl->ctxt_info.ctxt,
 			opx_ep->hfi->ctrl->ctxt_info.send_ctxt);
 
 		if (OPX_HFI1_TYPE & OPX_HFI1_JKR || OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
@@ -2131,7 +2131,7 @@ int fi_opx_check_rx_attr(struct fi_rx_attr *rx_attr, uint64_t hinted_caps)
 			rx_attr->caps, hinted_caps, (rx_attr->caps | hinted_caps),
 			((rx_attr->caps | hinted_caps) ^ hinted_caps));
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-		       "The rx_attr capabilities (0x%016lx) must be a subset of those requested of the associated endpoint (0x%016lx)",
+		       "The rx_attr capabilities (0x%016lx) must be a subset of those requested of the associated endpoint (0x%016lx)\n",
 		       rx_attr->caps, hinted_caps);
 		goto err;
 	}
@@ -2171,7 +2171,7 @@ err:
 int fi_opx_check_tx_attr(struct fi_tx_attr *tx_attr, uint64_t hinted_caps)
 {
 	if (tx_attr->inject_size > FI_OPX_HFI1_PACKET_IMM) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad inject_size (%lu)]",
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad inject_size (%lu)]\n",
 		       tx_attr->inject_size);
 		goto err;
 	}
@@ -2183,7 +2183,7 @@ int fi_opx_check_tx_attr(struct fi_tx_attr *tx_attr, uint64_t hinted_caps)
 			tx_attr->caps, hinted_caps, (tx_attr->caps | hinted_caps),
 			((tx_attr->caps | hinted_caps) ^ hinted_caps));
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-		       "The tx_attr capabilities (0x%016lx) must be a subset of those requested of the associated endpoint (0x%016lx)",
+		       "The tx_attr capabilities (0x%016lx) must be a subset of those requested of the associated endpoint (0x%016lx)\n",
 		       tx_attr->caps, hinted_caps);
 		goto err;
 	}
@@ -2240,32 +2240,32 @@ int fi_opx_check_ep_attr(struct fi_ep_attr *check_attr)
 	case FI_PROTO_OPX:
 		break;
 	default:
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad protocol (%u)]",
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad protocol (%u)]\n",
 		       attr->protocol);
 		goto err;
 	}
 	if (attr->max_msg_size > FI_OPX_MAX_MSG_SIZE) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad max_msg_size (%lu)]",
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad max_msg_size (%lu)]\n",
 		       attr->max_msg_size);
 		goto err;
 	}
 	if (attr->max_order_raw_size > FI_OPX_MAX_ORDER_RAW_SIZE) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad max_order_raw_size (%lu)",
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad max_order_raw_size (%lu)\n",
 		       attr->max_order_raw_size);
 		goto err;
 	}
 	if (attr->max_order_war_size > FI_OPX_MAX_ORDER_WAR_SIZE) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad max_order_war_size (%lu)",
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad max_order_war_size (%lu)\n",
 		       attr->max_order_war_size);
 		goto err;
 	}
 	if (attr->max_order_waw_size > FI_OPX_MAX_ORDER_WAW_SIZE) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad max_order_waw_size (%lu)",
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad max_order_waw_size (%lu)\n",
 		       attr->max_order_waw_size);
 		goto err;
 	}
 	if (attr->mem_tag_format && attr->mem_tag_format & ~FI_OPX_MEM_TAG_FORMAT) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad mem_tag_format (%lx)",
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "unavailable [bad mem_tag_format (%lx)\n",
 		       attr->mem_tag_format);
 		goto err;
 	}

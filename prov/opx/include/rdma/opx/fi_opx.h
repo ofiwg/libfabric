@@ -114,28 +114,24 @@ enum opx_hfi1_type {
 };
 
 /* Will remove after 16B SDMA support is finished */
-#define OPX_NO_9B_SUPPORT(_hfi1_type)                                                             \
-	do {                                                                                      \
-		if (!(_hfi1_type & OPX_HFI1_JKR)) {                                               \
-			fprintf(stderr, "%s NO JKR 9B SUPPORT for %u %s\n", __func__, _hfi1_type, \
-				_hfi1_type &OPX_HFI1_WFR    ? "OPX_HFI1_WFR" :                    \
-				_hfi1_type &OPX_HFI1_JKR_9B ? "OPX_HFI1_JKR_9B" :                 \
-							      "UNKNOWN");                         \
-			if (getenv("OPX_9B_ABORT"))                                               \
-				abort();                                                          \
-		}                                                                                 \
-		assert(_hfi1_type != OPX_HFI1_UNDEF);                                             \
+#define OPX_NO_9B_SUPPORT(_hfi1_type)                                                                                \
+	do {                                                                                                         \
+		if (!(_hfi1_type & OPX_HFI1_JKR)) {                                                                  \
+			fprintf(stderr, "%s NO JKR 9B SUPPORT for %s\n", __func__, OPX_HFI_TYPE_STRING(_hfi1_type)); \
+			if (getenv("OPX_9B_ABORT"))                                                                  \
+				abort();                                                                             \
+		}                                                                                                    \
+		assert(_hfi1_type != OPX_HFI1_UNDEF);                                                                \
 	} while (0)
 
-#define OPX_NO_16B_SUPPORT(_hfi1_type)                                                         \
-	do {                                                                                   \
-		if (!(_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {                        \
-			fprintf(stderr, "%s NO 16B SUPPORT for %u %s\n", __func__, _hfi1_type, \
-				_hfi1_type &OPX_HFI1_JKR ? "OPX_HFI1_JKR" : "UNKNOWN");        \
-			if (getenv("OPX_16B_ABORT"))                                           \
-				abort();                                                       \
-		}                                                                              \
-		assert(_hfi1_type != OPX_HFI1_UNDEF);                                          \
+#define OPX_NO_16B_SUPPORT(_hfi1_type)                                                                            \
+	do {                                                                                                      \
+		if (!(_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {                                           \
+			fprintf(stderr, "%s NO 16B SUPPORT for %s\n", __func__, OPX_HFI_TYPE_STRING(_hfi1_type)); \
+			if (getenv("OPX_16B_ABORT"))                                                              \
+				abort();                                                                          \
+		}                                                                                                 \
+		assert(_hfi1_type != OPX_HFI1_UNDEF);                                                             \
 	} while (0)
 
 struct fi_opx_hfi_local_info {
@@ -188,7 +184,13 @@ struct fi_opx_global_data {
 	struct dlist_entry hmem_domain_list;
 #endif
 	struct fi_opx_hfi_local_info hfi_local_info;
+	char			    *opx_hfi1_type_strings[];
 };
+#define OPX_HFI_TYPE_STRING(_hfi_type)                                                       \
+	({                                                                                   \
+		assert((_hfi_type >= 0) && (_hfi_type <= OPX_HFI1_JKR) && (_hfi_type != 3)); \
+		fi_opx_global.opx_hfi1_type_strings[_hfi_type];                              \
+	})
 
 extern struct fi_opx_global_data fi_opx_global;
 

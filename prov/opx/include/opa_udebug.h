@@ -85,11 +85,11 @@
 		}                                                                       \
 	} while (0)
 
-#define _HFI_DBG(fmt, ...)                                                              \
-	do {                                                                            \
-		if (fi_opx_global.prov) {                                               \
-			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, fmt, ##__VA_ARGS__); \
-		}                                                                       \
+#define _HFI_DBG(fmt, ...)                                                             \
+	do {                                                                           \
+		if (fi_opx_global.prov) {                                              \
+			FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, fmt, ##__VA_ARGS__); \
+		}                                                                      \
 	} while (0)
 
 #define _HFI_PDBG(fmt, ...)                                                            \

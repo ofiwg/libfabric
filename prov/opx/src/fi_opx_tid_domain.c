@@ -165,13 +165,12 @@ int opx_open_tid_domain(struct opx_tid_fabric *tid_fabric, struct fi_info *info,
 	}
 
 	ret = ofi_domain_init(&tid_fabric->util_fabric.fabric_fid, info, &tid_domain->util_domain, NULL, OFI_LOCK_NOOP);
-	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "init util domain done\n");
 	if (ret) {
 		free(tid_domain);
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "init util domain failed %d\n", ret);
 		return ret;
 	}
-	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "cache %p, domain %p\n", tid_domain->tid_cache, tid_domain);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "cache %p, domain %p\n", tid_domain->tid_cache, tid_domain);
 	ret = opx_tid_cache_setup(&tid_domain->tid_cache, tid_domain);
 
 	/* Track TID domains so cache can be cleared on exit */

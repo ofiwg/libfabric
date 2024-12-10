@@ -54,6 +54,8 @@
 #include "rdma/opx/fi_opx_hfi1_version.h"
 #include "rdma/opx/fi_opx_timer.h"
 
+#include "rdma/opx/opx_hfi1_rdma_core.h"
+
 // #define FI_OPX_TRACE 1
 
 #define FI_OPX_HFI1_PBC_VL_MASK	     (0xf)    /* a.k.a. "HFI_PBC_VL_MASK" */
@@ -511,7 +513,7 @@ struct fi_opx_hfi1_context {
 	opx_lid_t	  lid;
 	struct _hfi_ctrl *ctrl;
 	// struct hfi1_user_info_dep	user_info;
-	enum opx_hfi1_type hfi_hfi1_type;
+	enum opx_hfi1_type hfi1_type;
 	uint32_t	   hfi_unit;
 	uint32_t	   hfi_port;
 	uint64_t	   gid_hi;
@@ -541,6 +543,8 @@ struct fi_opx_hfi1_context {
 	union fi_opx_timer_stamp link_status_timestamp;
 	union fi_opx_timer_state link_status_timer;
 	uint64_t		 status_check_next_usec;
+	/* struct ibv_context * for hfi1 direct/rdma-core only */
+	void *ibv_context;
 };
 
 struct fi_opx_hfi1_context_internal {
@@ -772,8 +776,7 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context fd                            %#X \n", context->fd);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context lid                           %#X \n", context->lid);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ctrl                          %p  \n", context->ctrl);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context hfi_hfi1_type                 %#X \n",
-	       context->hfi_hfi1_type);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context hfi1_type                     %#X \n", context->hfi1_type);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context hfi_unit                      %#X \n", context->hfi_unit);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context hfi_port                      %#X \n", context->hfi_port);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context gid_hi                        %#lX\n", context->gid_hi);
