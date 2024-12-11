@@ -11,6 +11,7 @@ v2.0.0, Fri Dec 13, 2024
 
 ## Core
 
+- hmem/cuda: avoid stub loading at runtime
 - Makefile.am: Keep using libfabric.so.1 as the soname
 - xpmem: Cleanup xpmem before monitors
 - Remove redundant windows.h
@@ -41,6 +42,8 @@ v2.0.0, Fri Dec 13, 2024
 
 ## EFA
 
+- Skip rx pkt refill under certain threshold
+- Fix efa multi recv setopt segfault
 - Add tracepoints for rma operations
 - Adjust the location of tracepoint
 - Implement the rma interface
@@ -59,7 +62,6 @@ v2.0.0, Fri Dec 13, 2024
 - Update efa_hmem and efa_fork_support log to FI_LOG_CORE
 - Make efa_hmem_info a global variable
 - Set max rma order size correctly
-- Fix efa multi recv setopt segfault
 
 ## Hook
 
@@ -72,18 +74,22 @@ v2.0.0, Fri Dec 13, 2024
 - Fix av strncpy
 - Fix various issues with initial commit
 
+## PSM2
+
+- Check return value of asprintf
+
 ## RXM
 
+- Fix rxm multi recv setopt segfault
 - Replace rxm managed srx with util srx, support FI_PEER
 - Add rxm support for using a peer CQs and counters
 - Add FI_AV_USER_ID support
 - Fix definition of the rxm SAR segment enum
-- Fix rxm multi recv setopt segfault
 
 ## SHM
 
-- Cleanup op flags
 - Fix shm multi recv setopt segfault
+- Cleanup op flags
 
 ## Sockets
 
@@ -106,12 +112,12 @@ v2.0.0, Fri Dec 13, 2024
 
 ## Fabtests
 
+- Add opts.min_multi_recv_size to set opt before enable
 - Add FI_MORE pytest for fi_recv in zcpy recv mode
 - Allow tests with FI_MORE flag by using fi_recvmsg
 - New fabtest fi_flood to test over subscription of resources
 - test_configs/ofi_rxm/tcp.test: remove cntr RMA testing
 - Fix compiler warning about unitialized variable
-- Add opts.min_multi_recv_size to set opt before enable
 
 
 v2.0.0 beta, Fri Oct 25, 2024
