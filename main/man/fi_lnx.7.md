@@ -132,7 +132,7 @@ The *LNX* provider checks for the following environment variables:
 : This environment variable is used to specify which providers to link. This
   must be set in order for the LNX provider to return a list of fi_info
   blocks in the fi_getinfo() call. The format which must be used is:
-  <prov1>+<prov2>+... As mentioned earlier currently LNX supports linking
+  \<prov1>+\<prov2>+... As mentioned earlier currently LNX supports linking
   only two providers the first of which is SHM followed by one other
   provider for inter-node operations
 
