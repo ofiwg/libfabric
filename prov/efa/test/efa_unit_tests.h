@@ -222,6 +222,15 @@ void test_efa_rdm_peer_move_overflow_pke_to_recvwin();
 void test_efa_rdm_peer_keep_pke_in_overflow_list();
 void test_efa_rdm_peer_append_overflow_pke_to_recvwin();
 void test_efa_rdm_pke_handle_longcts_rtm_send_completion();
+void test_efa_msg_fi_recv();
+void test_efa_msg_fi_recvv();
+void test_efa_msg_fi_recvmsg();
+void test_efa_msg_fi_send();
+void test_efa_msg_fi_sendv();
+void test_efa_msg_fi_sendmsg();
+void test_efa_msg_fi_senddata();
+void test_efa_msg_fi_inject();
+void test_efa_msg_fi_injectdata();
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)

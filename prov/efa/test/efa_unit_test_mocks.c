@@ -88,6 +88,12 @@ void efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr(struct 
 	return efa_mock_ibv_wr_send_save_wr(qp);
 }
 
+void efa_mock_ibv_wr_send_imm_save_wr(struct ibv_qp_ex *qp, __be32 imm_data)
+{
+	g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *)qp->wr_id;
+	g_ibv_submitted_wr_id_cnt++;
+}
+
 void efa_mock_ibv_wr_set_inline_data_list_no_op(struct ibv_qp_ex *qp,
 						size_t num_buf,
 						const struct ibv_data_buf *buf_list)
@@ -203,6 +209,12 @@ int efa_mock_efa_rdm_pke_read_return_mock(struct efa_rdm_ope *ope)
 }
 
 bool efa_mock_efa_device_support_unsolicited_write_recv()
+{
+	return mock();
+}
+
+int efa_mock_ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
+				struct ibv_recv_wr **bad_wr)
 {
 	return mock();
 }

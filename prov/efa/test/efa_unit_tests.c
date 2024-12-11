@@ -208,6 +208,15 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_keep_pke_in_overflow_list, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_append_overflow_pke_to_recvwin, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_handle_longcts_rtm_send_completion, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_msg_fi_recv, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_msg_fi_recvv, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_msg_fi_recvmsg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_msg_fi_send, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_msg_fi_sendv, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_msg_fi_sendmsg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_msg_fi_senddata, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_msg_fi_inject, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_msg_fi_injectdata, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);
