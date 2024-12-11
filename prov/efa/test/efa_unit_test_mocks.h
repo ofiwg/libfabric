@@ -74,6 +74,8 @@ uint32_t efa_mock_ibv_read_wc_flags_return_mock(struct ibv_cq_ex *current);
 
 bool efa_mock_efadv_wc_is_unsolicited(struct efadv_cq *efadv_cq);
 
+void efa_mock_ibv_wr_send_imm_save_wr(struct ibv_qp_ex *qp, __be32 imm_data);
+
 ssize_t __real_ofi_copy_from_hmem_iov(void *dest, size_t size,
 				      enum fi_hmem_iface hmem_iface, uint64_t device,
 				      const struct iovec *hmem_iov,
@@ -92,6 +94,9 @@ bool __real_efa_device_support_unsolicited_write_recv();
 int efa_mock_efa_rdm_pke_read_return_mock(struct efa_rdm_ope *ope);
 
 bool efa_mock_efa_device_support_unsolicited_write_recv(void);
+
+int efa_mock_ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
+			   struct ibv_recv_wr **bad_wr);
 
 struct efa_unit_test_mocks
 {
