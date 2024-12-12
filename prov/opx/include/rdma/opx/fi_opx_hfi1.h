@@ -787,9 +787,9 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context send_ctxt                     %#X \n", context->send_ctxt);
 	for (int s = 0; s < 32; ++s) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context sl2sc[%d]                     %#X \n", s,
-		       context->sl2sc[32]);
+		       context->sl2sc[s]);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context sc2vl[%d]                     %#X \n", s,
-		       context->sc2vl[32]);
+		       context->sc2vl[s]);
 	}
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context sl                            %#lX \n", context->sl);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context sc                            %#lX \n", context->sc);
