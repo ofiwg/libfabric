@@ -5145,7 +5145,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t l
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 	tmp.hdr.qw_16B[7] = tag;
-	fi_opx_copy_hdr16B_cacheline(&replay->scb.scb_16B, (uint64_t *) &tmp.qw0);
+	fi_opx_copy_hdr16B_cacheline(&replay->scb.scb_16B, (uint64_t *) &tmp);
 
 	/*
 	 * write the rendezvous payload "send control blocks"
