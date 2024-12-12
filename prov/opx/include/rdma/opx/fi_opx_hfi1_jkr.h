@@ -280,27 +280,29 @@ void opx_jkr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, vol
 #define OPX_JKR_RHF_RCV_TYPE_EAGER_RCV(_rhf)	((_rhf & 0x00001000ul) == 0x00001000ul)
 #define OPX_JKR_RHF_RCV_TYPE_OTHER(_rhf)	((_rhf & 0x00006000ul) != 0x00000000ul)
 
-/* Common (jkr) handler to WFR/JKR 9B (for now) */
-int opx_jkr_rhf_error_handler(const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
-			      const enum opx_hfi1_type hfi1_type);
+/* Common handler for WFR/JKR missing eager payload */
+int opx_rhf_missing_payload_error_handler(const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
+					  const enum opx_hfi1_type hfi1_type);
 
 __OPX_FORCE_INLINE__ int opx_jkr_9B_rhf_check_header(const uint64_t			    rhf_rcvd,
 						     const union opx_hfi1_packet_hdr *const hdr,
 						     const enum opx_hfi1_type		    hfi1_type)
 {
 	/* RHF error */
-	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR))) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ERROR %s %#lX\n", OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE),
-			OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR));
+	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type))) {
+		/* Warn later */
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HEADER ERROR %s %#lX\n",
+			     OPX_HFI_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
 		return 1; /* error */
 	}
 
 	/* Bad packet header */
 	if (OFI_UNLIKELY((!OPX_JKR_RHF_IS_USE_EGR_BUF(rhf_rcvd)) && (ntohs(hdr->lrh_9B.pktlen) > 0x15) &&
 			 !(OPX_JKR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd)))) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ERROR %s %#lX\n", OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE),
-			OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR));
-		return opx_jkr_rhf_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
+		/* Warn later */
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HEADER ERROR MISSING PAYLOAD %s %#lX\n",
+			     OPX_HFI_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
+		return opx_rhf_missing_payload_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
 	} else {
 		return 0; /* no error*/
 	}
@@ -311,18 +313,20 @@ __OPX_FORCE_INLINE__ int opx_jkr_16B_rhf_check_header(const uint64_t			     rhf_
 						      const enum opx_hfi1_type		     hfi1_type)
 {
 	/* RHF error */
-	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR))) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ERROR %s %#lX\n", OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE),
-			OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR));
+	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type))) {
+		/* Warn later */
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HEADER ERROR %s %#lX\n",
+			     OPX_HFI_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
 		return 1; /* error */
 	}
 
 	/* Bad packet header */
 	if (OFI_UNLIKELY((!OPX_JKR_RHF_IS_USE_EGR_BUF(rhf_rcvd)) && (hdr->lrh_16B.pktlen > 0x9) &&
 			 !(OPX_JKR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd)))) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ERROR %s %#lX\n", OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE),
-			OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, OPX_HFI1_JKR));
-		return opx_jkr_rhf_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
+		/* Warn later */
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HEADER ERROR MISSING PAYLOAD %s %#lX\n",
+			     OPX_HFI_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
+		return opx_rhf_missing_payload_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
 	} else {
 		return 0; /* no error*/
 	}

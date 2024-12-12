@@ -1591,10 +1591,22 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		/* The global was set early (userinit), may be changed now on mixed networks */
 		int mixed_network = 0;
 		if (fi_param_get_int(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
-			if ((mixed_network == 1) && (fi_opx_global.hfi_local_info.type == OPX_HFI1_JKR)) {
-				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Mixed network: Set HFI type to 9B\n");
-				fi_opx_global.hfi_local_info.type = OPX_HFI1_JKR_9B;
-				opx_ep->hfi->hfi1_type		  = OPX_HFI1_JKR_9B;
+			if (fi_opx_global.hfi_local_info.type == OPX_HFI1_JKR) {
+				if (mixed_network == 1) {
+					fi_opx_global.hfi_local_info.type = OPX_HFI1_JKR_9B;
+					opx_ep->hfi->hfi1_type		  = OPX_HFI1_JKR_9B;
+					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+						     "Mixed network: Set HFI type to %s.\n",
+						     OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
+				} else if (mixed_network == 0) {
+					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+						     "Not mixed network: Set HFI type to %s.\n",
+						     OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
+				} else {
+					FI_WARN(fi_opx_global.prov, FI_LOG_AV,
+						"Unsupported value (%d) for FI_OPX_MIXED_NETWORK, using default HFI type %s.\n",
+						mixed_network, OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
+				}
 			}
 		}
 

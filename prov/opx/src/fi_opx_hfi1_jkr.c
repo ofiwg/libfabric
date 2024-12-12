@@ -44,7 +44,8 @@ void opx_jkr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, vol
 #ifdef OPX_VERBOSE_TRIGGER				    // verbose output
 	fprintf(stderr,
 #else
-	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_DBG_TRACE(
+		fi_opx_global.prov, FI_LOG_EP_DATA,
 #endif
 		"ERROR %s RHF(%#16.16lX) RHE(%p)[%u]=%p RHE %#16.16lX is ERRORED %u, UseEgrBuf %u, EgrIndex %#X/%#X, EgrOffset %#X, %s%s%s %s %#16.16lX  %s%s%s%s%s%s%s%s%s%s%s \n",
 		OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE), rhf_rcvd, rhe_ptr, rhe_index, rhe, *rhe,
@@ -55,6 +56,24 @@ void opx_jkr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, vol
 		OPX_RHF_RCV_TYPE_EAGER_RCV(rhf_rcvd, hfi1_type) ? "EAGER_RCV" : "",
 		OPX_RHF_RCV_TYPE_OTHER(rhf_rcvd, hfi1_type) ? "OTHER RCV" : "",
 		((*rhe) & OPX_JKR_RHE_TAIL) ? "OPX_JKR_RHE_TAIL        " : "", ((*rhe) & OPX_JKR_RHE_TAIL),
+		((*rhe) & OPX_JKR_RHE_ICRCERR) ? "OPX_JKR_RHE_ICRCERR     " : "",
+		((*rhe) & OPX_JKR_RHE_TIDBYPASSERR) ? "OPX_JKR_RHE_TIDBYPASSERR" : "",
+		((*rhe) & OPX_JKR_RHE_ECCERR) ? "OPX_JKR_RHE_ECCERR      " : "",
+		((*rhe) & OPX_JKR_RHE_LENERR) ? "OPX_JKR_RHE_LENERR      " : "",
+		((*rhe) & OPX_JKR_RHE_TIDERR) ? "OPX_JKR_RHE_TIDERR      " : "",
+		((*rhe) & OPX_JKR_RHE_RCVTYPEERR) ? "OPX_JKR_RHE_RCVTYPEERR  " : "",
+		((*rhe) & OPX_JKR_RHE_CRKERR) ? "OPX_JKR_RHE_CRKERR      " : "",
+		((*rhe) & OPX_JKR_RHE_CRKUNCERR) ? "OPX_JKR_RHE_CRKUNCERR   " : "",
+		((*rhe) & OPX_JKR_RHE_KHDRLENERR) ? "OPX_JKR_RHE_KHDRLENERR  " : "",
+		((*rhe) & OPX_JKR_RHE_FLOWGENERR) ? "OPX_JKR_RHE_FLOWGENERR  " : "",
+		((*rhe) & OPX_JKR_RHE_FLOWSEQERR) ? "OPX_JKR_RHE_FLOWSEQERR  " : "");
+
+	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"%s HEADER ERROR RHF(%#16.16lX) RHE(%#16.16lX) %s%s%s  %s%s%s%s%s%s%s%s%s%s%s \n",
+		OPX_HFI_TYPE_STRING(hfi1_type), rhf_rcvd, *rhe,
+		OPX_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd, hfi1_type) ? "EXPECTED_RCV" : "",
+		OPX_RHF_RCV_TYPE_EAGER_RCV(rhf_rcvd, hfi1_type) ? "EAGER_RCV" : "",
+		OPX_RHF_RCV_TYPE_OTHER(rhf_rcvd, hfi1_type) ? "OTHER RCV" : "",
 		((*rhe) & OPX_JKR_RHE_ICRCERR) ? "OPX_JKR_RHE_ICRCERR     " : "",
 		((*rhe) & OPX_JKR_RHE_TIDBYPASSERR) ? "OPX_JKR_RHE_TIDBYPASSERR" : "",
 		((*rhe) & OPX_JKR_RHE_ECCERR) ? "OPX_JKR_RHE_ECCERR      " : "",
@@ -99,8 +118,8 @@ void opx_jkr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, vol
 	return;
 }
 
-int opx_jkr_rhf_error_handler(const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
-			      const enum opx_hfi1_type hfi1_type)
+int opx_rhf_missing_payload_error_handler(const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
+					  const enum opx_hfi1_type hfi1_type)
 {
 	const uint8_t opcode = hdr->bth.opcode;
 #ifdef OPX_VERBOSE_TRIGGER // verbose output
@@ -108,13 +127,14 @@ int opx_jkr_rhf_error_handler(const uint64_t rhf_rcvd, const union opx_hfi1_pack
 #else
 	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 #endif
-		"%s:%s():%d MISSING PAYLOAD opcode %#X, UseEgrBuf %u, pktlen %#X, type: %s%s%s\n", __FILE__, __func__,
-		__LINE__, opcode, OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd, hfi1_type), ntohs(hdr->lrh_9B.pktlen),
+		"MISSING PAYLOAD opcode %#X, UseEgrBuf %u, pktlen %#X, type: %s%s%s\n", opcode,
+		OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd, hfi1_type),
+		hfi1_type == OPX_HFI1_WFR ? (hdr->lrh_16B.pktlen > 0x9) : ntohs(hdr->lrh_9B.pktlen),
 		OPX_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd, hfi1_type) ? "EXPECTED_RCV" : "",
 		OPX_RHF_RCV_TYPE_EAGER_RCV(rhf_rcvd, hfi1_type) ? "EAGER_RCV" : "",
 		OPX_RHF_RCV_TYPE_OTHER(rhf_rcvd, hfi1_type) ? "OTHER RCV" : "");
 #ifdef OPX_VERBOSE_TRIGGER // verbose ouput
-	fi_opx_hfi1_dump_packet_hdr(hdr, OPX_HFI1_JKR, "MISSING PAYLOAD", __LINE__);
+	fi_opx_hfi1_dump_packet_hdr(hdr, hfi1_type, "MISSING PAYLOAD", __LINE__);
 #endif
 	opx_sw_trigger();
 	return 1;
