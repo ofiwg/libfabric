@@ -73,6 +73,8 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 #endif
 	int i, err = 0;
 
+	efa_tracepoint(read_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
+
 	assert(msg->iov_count > 0 &&
 	       msg->iov_count <= base_ep->domain->info->tx_attr->iov_limit);
 	assert(msg->rma_iov_count > 0 &&
@@ -104,6 +106,8 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	assert(conn && conn->ep_addr);
 	ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah, conn->ep_addr->qpn,
 			   conn->ep_addr->qkey);
+
+	efa_tracepoint(post_read, qp->ibv_qp_ex->wr_id, (uintptr_t)msg->context);
 
 	if (!(flags & FI_MORE)) {
 		err = ibv_wr_complete(qp->ibv_qp_ex);
@@ -205,6 +209,8 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	size_t len;
 	int i, err = 0;
 
+	efa_tracepoint(write_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
+
 	qp = base_ep->qp;
 	if (!base_ep->is_wr_started) {
 		ibv_wr_start(qp->ibv_qp_ex);
@@ -242,6 +248,8 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	assert(conn && conn->ep_addr);
 	ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah, conn->ep_addr->qpn,
 			   conn->ep_addr->qkey);
+
+	efa_tracepoint(post_write, qp->ibv_qp_ex->wr_id, (uintptr_t)msg->context);
 
 	if (!(flags & FI_MORE)) {
 		err = ibv_wr_complete(qp->ibv_qp_ex);
