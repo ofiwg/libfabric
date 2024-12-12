@@ -1251,8 +1251,8 @@ int opx_tid_cache_setup(struct ofi_mr_cache **cache, struct opx_tid_domain *doma
 	}
 	/* Default is 1024 and it is too small... but let other suspected overrides be used */
 	if (cache_params.max_cnt == 1024) {
-		FI_WARN(&fi_opx_provider, FI_LOG_MR, "Overriding FI_MR_CACHE_MAX_COUNT default==1024 to be %zu\n",
-			(size_t) OPX_MAX_TID_COUNT);
+		FI_DBG(&fi_opx_provider, FI_LOG_MR, "Overriding FI_MR_CACHE_MAX_COUNT default==1024 to be %zu\n",
+		       (size_t) OPX_MAX_TID_COUNT);
 		cache_params.max_cnt = OPX_MAX_TID_COUNT;
 	}
 	err = opx_tid_cache_init(&domain->util_domain, memory_monitors, *cache);

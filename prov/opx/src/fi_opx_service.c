@@ -883,18 +883,17 @@ int opx_hfi_ack_events(int fd, uint64_t ackbits)
 
 	cmd.type = OPX_HFI_CMD_ACK_EVENT;
 	cmd.len	 = 0;
-	cmd.addr = ackbits;
+	cmd.addr = ackbits; // 	uint64_t ackbits = *(uint64_t *) (opx_ep->hfi->ctrl->base_info.events_bufbase);
 
 retry:
 	if (opx_hfi_cmd_write(fd, &cmd, sizeof(cmd)) == -1) {
 		if (errno == ENOLCK) {
+			_HFI_ERROR("ack event failed: %s, retry\n", strerror(errno));
 			goto retry;
 		}
-
-		if (errno != EINVAL) {
-			_HFI_INFO("ack event failed: %s\n", strerror(errno));
-		}
+		_HFI_ERROR("ack event failed: %s\n", strerror(errno));
 		return -1;
 	}
+	_HFI_ERROR("%s", "ack event success \n");
 	return 0;
 }

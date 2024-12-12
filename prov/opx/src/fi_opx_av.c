@@ -424,21 +424,27 @@ int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_a
 
 	int		  ret;
 	struct fi_opx_av *opx_av = NULL;
-
+	int		  pof	 = 0; /* point of failure */
 	if (!attr) {
 		errno = FI_EINVAL;
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "AV error\n");
+		pof = 1;
 		goto err;
 	}
 
 	ret = fi_opx_fid_check(&dom->fid, FI_CLASS_DOMAIN, "domain");
 	if (ret) {
 		errno = ret;
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "AV error\n");
+		pof = 2;
 		goto err;
 	}
 
 	if (attr->name != NULL && (attr->flags & FI_READ)) {
 		/* named address vector not supported */
 		errno = FI_EOPNOTSUPP;
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "AV error\n");
+		pof = 3;
 		goto err;
 	}
 
@@ -447,12 +453,16 @@ int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_a
 		opx_av = calloc(1, sizeof(*opx_av));
 		if (!opx_av) {
 			errno = FI_ENOMEM;
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "AV error\n");
+			pof = 4;
 			goto err;
 		}
 	} else if ((attr->type == FI_AV_MAP) && (OPX_AV != FI_AV_TABLE)) {
 		opx_av = calloc(1, sizeof(*opx_av));
 		if (!opx_av) {
 			errno = FI_ENOMEM;
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "AV error\n");
+			pof = 5;
 			goto err;
 		}
 	} else if (attr->type == FI_AV_UNSPEC) {
@@ -461,11 +471,14 @@ int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_a
 		opx_av	   = calloc(1, sizeof(*opx_av));
 		if (!opx_av) {
 			errno = FI_ENOMEM;
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "AV error\n");
+			pof = 6;
 			goto err;
 		}
 	} else {
-		FI_DBG(fi_opx_global.prov, FI_LOG_AV, "Unsupported AV type requested\n");
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "Unsupported AV type requested\n");
 		errno = FI_EINVAL;
+		pof   = 7;
 		goto err;
 	}
 
@@ -498,7 +511,7 @@ int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_a
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "av opened\n");
 	return 0;
 err:
-	FI_WARN(fi_opx_global.prov, FI_LOG_AV, "errno %u\n", errno);
+	FI_WARN(fi_opx_global.prov, FI_LOG_AV, "POF %d, errno %u\n", pof, errno);
 	if (opx_av) {
 		free(opx_av);
 		opx_av = NULL;

@@ -93,20 +93,40 @@ uint64_t opx_sim_load(uint64_t offset)
 __OPX_FORCE_INLINE__
 void opx_open_sim_bar(unsigned unit)
 {
-	const char *sim_barfiles[2] = {
+	static const char *sim_barfiles[] = {
 		/* Typical sim bar files */
 		"/sys/devices/pcif00f:00/f00f:00:00.0/resource0", /* hfi_0 */
 		"/sys/devices/pcif00f:00/f00f:00:01.0/resource0", /* hfi_1 */
+		"/sys/devices/f00f:01:00.0/resource0",		  /* hfi_0 updated simpci */
+		"/sys/devices/f00f:02:00.0/resource0"		  /* hfi_1 updated simpci */
 	};
-	assert(unit < 2);
 
-	const char *filename = sim_barfiles[unit];
+	const char *filename = NULL;
+	static char filename_storage[256];
 
 	if (getenv("HFI_FNAME")) {
+		/* Arbitrary user specified file name*/
 		filename = getenv("HFI_FNAME");
+	} else if (getenv("FI_OPX_SIMPCI_V")) {
+		/* Old "standard" file names */
+		assert(unit < 2); /* simulation limit for this option */
+		int v = atoi(getenv("FI_OPX_SIMPCI_V"));
+		assert((v == 0) || (v == 1));
+		if (v) {
+			unit += 2;
+		}
+		filename = sim_barfiles[unit];
+	} else {
+		/* Calculate new expected path/filename */
+		snprintf(filename_storage, sizeof(filename_storage), "/sys/class/infiniband/hfi1_%d/device/resource0",
+			 unit);
+		filename = filename_storage;
 	}
+
 	fi_opx_global.hfi_local_info.sim_fd = open(filename, O_RDWR);
 	if (fi_opx_global.hfi_local_info.sim_fd < 0) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI_FNAME %s: filename %s\n", getenv("HFI_FNAME"),
+			filename);
 		perror("fi_opx_sim_open_bar Unable to open BAR\n");
 		sleep(5);
 		abort();

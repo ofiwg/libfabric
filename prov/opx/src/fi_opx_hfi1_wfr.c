@@ -60,6 +60,21 @@ void opx_wfr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, vol
 		rhf_msb & OPX_WFR_RHF_KHDRLENERR ? "OPX_WFR_RHF_KHDRLENERR" : "",
 		rhf_msb & OPX_WFR_RHF_RCVTYPEERR ? "OPX_WFR_RHF_RCVTYPEERR" : "");
 
+	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"%s HEADER ERROR RHF(%#16.16lX) RHE(%#8.8X) %s%s%s %s%s%s%s%s%s%s%s \n", OPX_HFI_TYPE_STRING(hfi1_type),
+		rhf_rcvd, rhf_msb & 0xBFE00000u,
+		OPX_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd, hfi1_type) ? "EXPECTED_RCV" : "",
+		OPX_RHF_RCV_TYPE_EAGER_RCV(rhf_rcvd, hfi1_type) ? "EAGER_RCV" : "",
+		OPX_RHF_RCV_TYPE_OTHER(rhf_rcvd, hfi1_type) ? "OTHER RCV" : "",
+		rhf_msb & OPX_WFR_RHF_ICRCERR ? "OPX_WFR_RHF_ICRCERR" : "",
+		rhf_msb & OPX_WFR_RHF_LENERR ? "OPX_WFR_RHF_LENERR" : "",
+		rhf_msb & OPX_WFR_RHF_ECCERR ? "OPX_WFR_RHF_ECCERR" : "",
+		rhf_msb & OPX_WFR_RHF_TIDERR ? "OPX_WFR_RHF_TIDERR" : "",
+		rhf_msb & OPX_WFR_RHF_DCERR ? "OPX_WFR_RHF_DCERR" : "",
+		rhf_msb & OPX_WFR_RHF_DCUNCERR ? "OPX_WFR_RHF_DCUNCERR" : "",
+		rhf_msb & OPX_WFR_RHF_KHDRLENERR ? "OPX_WFR_RHF_KHDRLENERR" : "",
+		rhf_msb & OPX_WFR_RHF_RCVTYPEERR ? "OPX_WFR_RHF_RCVTYPEERR" : "");
+
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.rhf.error);
 	FI_OPX_DEBUG_COUNTERS_INC_COND(rhf_msb & OPX_WFR_RHF_ICRCERR, opx_ep->debug_counters.rhf.icrcerr);
 	FI_OPX_DEBUG_COUNTERS_INC_COND(rhf_msb & OPX_WFR_RHF_LENERR, opx_ep->debug_counters.rhf.lenerr);

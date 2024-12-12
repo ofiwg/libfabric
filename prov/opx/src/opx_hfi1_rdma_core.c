@@ -149,8 +149,8 @@ bool opx_hfi1_direct_verbs_enabled(void)
 __OPX_FORCE_INLINE__
 int opx_open_hfi1_rdma_fallback(void)
 {
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] OPX_HFI1_DIRECT_VERBS ENABLED %u \n",
-		     opx_rdma_ops.hfi1_direct_verbs_enabled);
+	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] OPX_HFI1_DIRECT_VERBS ENABLED %u \n",
+		opx_rdma_ops.hfi1_direct_verbs_enabled);
 
 	/* reset tid funtions */
 	opx_fn_hfi1_free_tid   = opx_hfi_free_tid;
@@ -860,6 +860,7 @@ int opx_hfi1_wrapper_context_open(struct fi_opx_hfi1_context_internal *internal,
 				  uint64_t open_timeout, unsigned int *user_version)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] Attempt OPX_HFI1_DIRECT_VERBS\n");
+
 	if (opx_hfi1_rdma_op_initialize()) {
 		void *ibv_context = NULL;
 		int   fd	  = opx_hfi1_rdma_context_open(unit, port, open_timeout, user_version, &ibv_context);
@@ -881,14 +882,74 @@ int opx_hfi1_wrapper_context_open(struct fi_opx_hfi1_context_internal *internal,
 	return fd;
 }
 
+#ifndef NDEBUG
+
+static int opx_get_current_proc_core()
+{
+	int core_id;
+	core_id = sched_getcpu();
+	if (core_id < 0) {
+		return -EINVAL;
+	}
+	return core_id;
+}
+
+void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct _hfi_ctrl *ctrl)
+{
+	const int core_id   = opx_get_current_proc_core();
+	const int hfi_count = opx_hfi_get_num_units();
+
+	struct hfi1_ctxt_info *cinfo = &ctrl->ctxt_info;
+
+	const short int ctxt	  = cinfo->ctxt;      /* ctxt on unit assigned to caller */
+	const short int subctxt	  = cinfo->subctxt;   /* subctxt on unit assigned to caller */
+	const short int numa_node = cinfo->numa_node; /* NUMA node of the assigned device */
+	const short int rec_cpu	  = cinfo->rec_cpu;   /* cpu # for affinity (0xffff if none) */
+	const short int send_ctxt = cinfo->send_ctxt; /* send context in use by this user context */
+
+	struct hfi1_base_info *binfo = &ctrl->base_info;
+
+	const int hw_version = binfo->hw_version; /* version of hardware, for feature checking. */
+	const int sw_version = binfo->sw_version; /* version of software, for feature checking. */
+
+	const int unit	    = ctrl->__hfi_unit;
+	const int port	    = ctrl->__hfi_port;
+	const int num_ports = opx_hfi_get_num_ports(unit);
+
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "SW/HW version %#X/%#X. API version %#X. Core %d(%d). \n", sw_version,
+		hw_version, internal->user_info.userversion, rec_cpu, core_id);
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Selected HFI unit %d (%d units) and port %d (%d ports); \n", unit,
+		hfi_count, port, num_ports);
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Core %d(%d). NUMA domain is %d; HFI NUMA domain is %ld. \n", rec_cpu,
+		core_id, numa_node, opx_hfi_sysfs_unit_read_node_s64(unit));
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Receive context %d, sub-context %d, Send context %d\n", ctxt, subctxt,
+		send_ctxt);
+}
+
+/* Environment variable is not published */
+#define OPX_VERBOSE_SELECTION(_internal, _ctrl)          \
+	if (getenv("FI_OPX_VERBOSE_SELECTION")) {        \
+		opx_verbose_selection(_internal, _ctrl); \
+	}
+
+#else
+
+#define OPX_VERBOSE_SELECTION(_internal, _ctrl)
+
+#endif
+
 struct _hfi_ctrl *opx_hfi1_wrapper_userinit(int fd, struct fi_opx_hfi1_context_internal *internal, int unit, int port)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] fd %d\n", fd);
 	if (opx_hfi1_direct_verbs_enabled()) {
-		return opx_hfi1_rdma_userinit(fd, internal, unit, port);
+		struct _hfi_ctrl *ctrl = opx_hfi1_rdma_userinit(fd, internal, unit, port);
+		OPX_VERBOSE_SELECTION(internal, ctrl);
+		return ctrl;
 	}
 
-	return opx_hfi_userinit(fd, internal, unit, port);
+	struct _hfi_ctrl *ctrl = opx_hfi_userinit(fd, internal, unit, port);
+	OPX_VERBOSE_SELECTION(internal, ctrl);
+	return ctrl;
 }
 
 int opx_hfi1_wrapper_set_pkey(struct fi_opx_hfi1_context_internal *internal, uint16_t pkey)

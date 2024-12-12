@@ -726,10 +726,13 @@ void opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const
 		/* reset context only if RHF queue is empty */
 		if (opx_is_rhf_empty(opx_ep, hdrq_mask, hfi1_type)) {
 			opx_reset_context(opx_ep);
-			opx_hfi1_wrapper_ack_events(opx_ep->hfi, events);
+			int ret = opx_hfi1_wrapper_ack_events(opx_ep->hfi, events);
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ack event failed: %s\n", strerror(errno));
+			}
 		} else {
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				     "Context frozen: Not resetting because packets are present in receive queue\n");
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Context frozen: Not resetting because packets are present in receive queue\n");
 		}
 	}
 }
@@ -786,6 +789,9 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 			if ((prev_link_status != FI_SUCCESS) && (err == FI_SUCCESS)) { // check for hfi event if
 				context->status_lasterr = FI_SUCCESS;		       /* clear error */
 				opx_handle_events(opx_ep, hdrq_mask, hfi1_type);
+			} else if ((prev_link_status == FI_SUCCESS) && (err != FI_SUCCESS)) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Link down %d (%s) on unit %d, port %d\n",
+					err, strerror(err), context->hfi_unit, context->hfi_port);
 			}
 			context->status_check_next_usec =
 				fi_opx_timer_next_event_usec(timer, timestamp, OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC);

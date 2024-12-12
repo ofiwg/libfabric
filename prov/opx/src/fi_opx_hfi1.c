@@ -166,6 +166,7 @@ void opx_reset_context(struct fi_opx_ep *opx_ep)
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Send context reset failed: %d.\n", errno);
 		abort();
 	}
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Send context reset successfully.\n");
 
 	opx_ep->tx->pio_state->fill_counter   = 0;
 	opx_ep->tx->pio_state->scb_head_index = 0;
@@ -658,9 +659,16 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 
 	// Alert user if the final choice wasn't optimal.
 	if (opx_hfi_sysfs_unit_read_node_s64(hfi_unit_number) != numa_node_id) {
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-			"Selected HFI is %d. It does not appear to be local to this pid's numa domain which is %d\n",
-			hfi_unit_number, numa_node_id);
+		if (hfi_count == 1) {
+			/* No choice, not worth a warning */
+			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
+				"Selected HFI is %d. It does not appear to be local to this pid's numa domain which is %d\n",
+				hfi_unit_number, numa_node_id);
+		} else {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+				"Selected HFI is %d. It does not appear to be local to this pid's numa domain which is %d\n",
+				hfi_unit_number, numa_node_id);
+		}
 	} else {
 		FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Selected HFI unit %d in the same numa node as this pid.\n",
 			hfi_unit_number);
