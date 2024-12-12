@@ -69,6 +69,8 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 	ssize_t err, post_recv_err;
 	size_t i, wr_index = base_ep->recv_wr_index;
 
+	efa_tracepoint(recv_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
+
 	if (wr_index >= base_ep->info->rx_attr->size) {
 		EFA_INFO(FI_LOG_EP_DATA,
 			 "recv_wr_index exceeds the rx limit, "
@@ -118,6 +120,8 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 
 	if (flags & FI_MORE)
 		return 0;
+
+	efa_tracepoint(post_recv, wr->wr_id, (uintptr_t)msg->context);
 
 	err = ibv_post_recv(qp->ibv_qp, &base_ep->efa_recv_wr_vec[0].wr, &bad_wr);
 	if (OFI_UNLIKELY(err)) {
@@ -187,6 +191,8 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	size_t len, i;
 	int ret = 0;
 
+	efa_tracepoint(send_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
+
 	dump_msg(msg, "send");
 
 	conn = efa_av_addr_to_conn(base_ep->av, msg->addr);
@@ -248,9 +254,7 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah, conn->ep_addr->qpn,
 			   conn->ep_addr->qkey);
 
-#if HAVE_LTTNG
-	efa_tracepoint_wr_id_post_send((void *)msg->context);
-#endif
+	efa_tracepoint(post_send, qp->ibv_qp_ex->wr_id, (uintptr_t)msg->context);
 
 	if (!(flags & FI_MORE)) {
 		ret = ibv_wr_complete(qp->ibv_qp_ex);

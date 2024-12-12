@@ -439,7 +439,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 #endif
 
 #if HAVE_LTTNG
-		efa_tracepoint_wr_id_post_send((void *)pkt_entry);
+		efa_rdm_tracepoint_wr_id_post_send((void *)pkt_entry);
 #endif
 	}
 
@@ -510,7 +510,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 	}
 
 #if HAVE_LTTNG
-	efa_tracepoint_wr_id_post_read((void *)pkt_entry);
+	efa_rdm_tracepoint_wr_id_post_read((void *)pkt_entry);
 #endif
 
 	err = ibv_wr_complete(qp->ibv_qp_ex);
@@ -602,7 +602,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 	}
 
 #if HAVE_LTTNG
-	efa_tracepoint_wr_id_post_write((void *)pkt_entry);
+	efa_rdm_tracepoint_wr_id_post_write((void *)pkt_entry);
 #endif
 
 	if (!(txe->fi_flags & FI_MORE)) {
@@ -650,7 +650,7 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 		if (i > 0)
 			ep->base_ep.efa_recv_wr_vec[i-1].wr.next = &recv_wr->wr;
 #if HAVE_LTTNG
-		efa_tracepoint_wr_id_post_recv(pke_vec[i]);
+		efa_rdm_tracepoint_wr_id_post_recv(pke_vec[i]);
 #endif
 	}
 
@@ -699,7 +699,7 @@ ssize_t efa_rdm_pke_user_recvv(struct efa_rdm_pke **pke_vec,
 		if (wr_index > 0)
 			ep->base_ep.user_recv_wr_vec[wr_index - 1].wr.next = &recv_wr->wr;
 #if HAVE_LTTNG
-		efa_tracepoint_wr_id_post_recv(pke_vec[i]);
+		efa_rdm_tracepoint_wr_id_post_recv(pke_vec[i]);
 #endif
 		wr_index++;
 	}
