@@ -572,7 +572,7 @@ pipeline {
           steps {
             script {
               dir (CI_LOCATION) {
-                slurm_batch("totodile", "1",
+                slurm_batch("water", "1",
                             "${env.LOG_DIR}/build_mpich_water_log",
                             """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
                               --build_item=mpich --build_hw=water"""
@@ -761,7 +761,7 @@ pipeline {
                 }
                 for (def mpi in MPIS) {
                   run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
-                                 "grass", "bulbasaur", "2", "${mpi}")
+                                 "grass", "bulbasaur,ivysaur", "2", "${mpi}")
                 }
               }
             }
@@ -778,7 +778,8 @@ pipeline {
                 }
                 for (def mpi in MPIS) {
                   run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
-                                 "water", "totodile", "2", "${mpi}")
+                                 "water", "squirtle,wartortle,articuno", "2",
+                                 "${mpi}")
                 }
               }
             }
@@ -821,13 +822,15 @@ pipeline {
             script {
               dir (RUN_LOCATION) {
 		            run_middleware([["verbs", null]], "oneCCL",
-                               "oneccl", "water", "totodile", "2")
+                               "oneccl", "water",
+                               "squirtle,wartortle,articuno", "2")
 		            run_middleware([["shm", null]], "oneCCL",
-			                         "oneccl", "grass", "bulbasaur,chikorita", "1")
+			                         "oneccl", "grass", "bulbasaur,ivysaur", "1")
 		            run_middleware([["psm3", null]], "oneCCL",
-			                         "oneccl", "water", "totodile", "2")
+			                         "oneccl", "water",
+                               "squirtle,wartortle,articuno", "2")
 		            run_middleware([["tcp", null]], "oneCCL",
-			                         "oneccl", "grass", "bulbasaur,chikorita", "2")
+			                         "oneccl", "grass", "bulbasaur,ivysaur", "2")
                 run_middleware([["shm", null]], "oneCCL_DSA",
                                "oneccl", "electric", "pikachu", "1", null, null,
                                """CCL_ATL_SHM=1 FI_SHM_DISABLE_CMA=1 \
