@@ -60,6 +60,12 @@ void efa_unit_test_construct_tmsg(struct fi_msg_tagged *tmsg, struct iovec *iov,
 				  void **desc, uint64_t tag,
 				  uint64_t ignore);
 
+void efa_unit_test_construct_msg_rma(struct fi_msg_rma *msg, struct iovec *iov,
+				     void **desc, size_t iov_count,
+				     fi_addr_t addr, struct fi_rma_iov *rma_iov,
+				     size_t rma_iov_count, void *context,
+				     uint64_t data);
+
 void new_temp_file(char *template, size_t len);
 
 struct efa_unit_test_buff {
@@ -231,6 +237,15 @@ void test_efa_msg_fi_sendmsg();
 void test_efa_msg_fi_senddata();
 void test_efa_msg_fi_inject();
 void test_efa_msg_fi_injectdata();
+void test_efa_rma_read();
+void test_efa_rma_readv();
+void test_efa_rma_readmsg();
+void test_efa_rma_write();
+void test_efa_rma_writev();
+void test_efa_rma_writemsg();
+void test_efa_rma_writedata();
+void test_efa_rma_inject_write();
+void test_efa_rma_inject_writedata();
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)
