@@ -760,6 +760,8 @@
     <ClCompile Include="prov\util\src\rocr_ipc_monitor.c" />
     <ClCompile Include="prov\util\src\xpmem_monitor.c" />
     <ClCompile Include="prov\util\src\kdreg2_mem_monitor.c" />
+    <ClCompile Include="prov\util\src\uffd_mem_monitor.c" />
+    <ClCompile Include="prov\util\src\import_mem_monitor.c" />
     <ClCompile Include="prov\coll\src\coll_attr.c" />
     <ClCompile Include="prov\coll\src\coll_av.c" />
     <ClCompile Include="prov\coll\src\coll_av_set.c" />
