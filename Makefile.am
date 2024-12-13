@@ -92,6 +92,8 @@ common_srcs =				\
 	prov/util/src/ze_ipc_monitor.c	\
 	prov/util/src/xpmem_monitor.c	\
         prov/util/src/kdreg2_mem_monitor.c \
+	prov/util/src/uffd_mem_monitor.c \
+	prov/util/src/import_mem_monitor.c \
 	prov/util/src/util_profile.c \
 	prov/coll/src/coll_attr.c	\
 	prov/coll/src/coll_av.c		\
