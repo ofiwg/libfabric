@@ -98,6 +98,13 @@ bool efa_mock_efa_device_support_unsolicited_write_recv(void);
 int efa_mock_ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
 			   struct ibv_recv_wr **bad_wr);
 
+void efa_mock_ibv_wr_rdma_read_save_wr(struct ibv_qp_ex *qp, uint32_t rkey,
+				       uint64_t remote_addr);
+
+void efa_mock_ibv_wr_rdma_write_imm_save_wr(struct ibv_qp_ex *qp, uint32_t rkey,
+					    uint64_t remote_addr,
+					    __be32 imm_data);
+
 struct efa_unit_test_mocks
 {
 	uint64_t local_host_id;

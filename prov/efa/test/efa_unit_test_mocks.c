@@ -219,6 +219,21 @@ int efa_mock_ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
 	return mock();
 }
 
+void efa_mock_ibv_wr_rdma_read_save_wr(struct ibv_qp_ex *qp, uint32_t rkey,
+				       uint64_t remote_addr)
+{
+	g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *)qp->wr_id;
+	g_ibv_submitted_wr_id_cnt++;
+}
+
+void efa_mock_ibv_wr_rdma_write_imm_save_wr(struct ibv_qp_ex *qp, uint32_t rkey,
+					    uint64_t remote_addr,
+					    __be32 imm_data)
+{
+	g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *) qp->wr_id;
+	g_ibv_submitted_wr_id_cnt++;
+}
+
 struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.local_host_id = 0,
 	.peer_host_id = 0,
