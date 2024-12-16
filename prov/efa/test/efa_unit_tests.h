@@ -40,6 +40,8 @@ void efa_unit_test_resource_construct_ep_not_enabled(
 	struct efa_resource *resource, enum fi_ep_type ep_type);
 void efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(
 	struct efa_resource *resource, enum fi_ep_type ep_type);
+void efa_unit_test_resource_construct_no_av_no_cq_and_ep_not_enabled(
+	struct efa_resource *resource, enum fi_ep_type ep_type);
 void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 						 enum fi_ep_type ep_type,
 						 uint32_t fi_version, struct fi_info *hints,
@@ -100,6 +102,7 @@ void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct
 /* test cases */
 void test_av_insert_duplicate_raw_addr();
 void test_av_insert_duplicate_gid();
+void test_av_multiple_ep();
 void test_efa_device_construct_error_handling();
 void test_efa_rdm_ep_ignore_missing_host_id_file();
 void test_efa_rdm_ep_has_valid_host_id();
