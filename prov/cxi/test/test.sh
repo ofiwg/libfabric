@@ -149,6 +149,8 @@ fork_safe_kdreg2_test=(
 unlimited_triggered_ops_test=(
 	"FI_CXI_ENABLE_TRIG_OP_LIMIT=0 ./cxitest -j 1 --verbose --filter=\"deferred_work_trig_op_limit/*\" --tap=cxitest-disable-trig-op-limit.tap")
 
+mr_cache_test=("./cxitest --verbose --tap=cxitest-mr_cache_test.tap --filter=\"mr_cache/*\" -j 1")
+
 long_test_suite=(
 	"basic_test"
 	"swget_test"
@@ -174,6 +176,7 @@ long_test_suite=(
 	"fork_safe_memhooks_test"
 	"fork_safe_kdreg2_test"
 	"unlimited_triggered_ops_test"
+	"mr_cache_test"
 )
 
 # ################################################################
