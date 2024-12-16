@@ -641,6 +641,14 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 		fi_opx_global.hfi_local_info.type = internal->context.hfi1_type;
 	}
 
+#ifndef OPX_JKR_SUPPORT
+	if (internal->context.hfi1_type == OPX_HFI1_JKR) {
+		fprintf(stderr,
+			"OPX is not built with JKR supported headers in the include path. Please update the headers and build again\n");
+		abort();
+	}
+#endif
+
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "global type %d, opx_hfi1_check_hwversion base_info->hw_version %#X, %s\n",
 		     fi_opx_global.hfi_local_info.type, binfo->hw_version,

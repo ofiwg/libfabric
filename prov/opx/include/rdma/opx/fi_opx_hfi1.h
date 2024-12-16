@@ -543,6 +543,7 @@ struct fi_opx_hfi1_context {
 	union fi_opx_timer_stamp link_status_timestamp;
 	union fi_opx_timer_state link_status_timer;
 	uint64_t		 status_check_next_usec;
+	uint64_t		 link_down_wait_time_max_sec;
 	/* struct ibv_context * for hfi1 direct/rdma-core only */
 	void *ibv_context;
 };
@@ -809,13 +810,31 @@ void opx_reset_context(struct fi_opx_ep *opx_ep);
 #define OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC 250000 /* 250 ms*/
 
 __OPX_FORCE_INLINE__
-uint64_t opx_get_hw_status(struct fi_opx_hfi1_context *context)
+uint64_t opx_get_hw_status_wfr(struct fi_opx_hfi1_context *context)
 {
 	struct hfi1_status *status = (struct hfi1_status *) context->ctrl->base_info.status_bufbase;
 
 	return ((status->dev & (HFI1_STATUS_INITTED | HFI1_STATUS_CHIP_PRESENT | HFI1_STATUS_HWERROR)) |
 		(status->port & (HFI1_STATUS_IB_READY | HFI1_STATUS_IB_CONF)));
 }
+
+#ifdef OPX_JKR_SUPPORT
+__OPX_FORCE_INLINE__
+uint64_t opx_get_hw_status_jkr(struct fi_opx_hfi1_context *context)
+{
+	struct hfi1_status_v2 *status	  = (struct hfi1_status_v2 *) context->ctrl->base_info.status_bufbase;
+	uint32_t	       port_index = (context->hfi_port - 1);
+
+	return ((status->dev & (HFI1_STATUS_INITTED | HFI1_STATUS_CHIP_PRESENT | HFI1_STATUS_HWERROR)) |
+		(status->ports[port_index] & (HFI1_STATUS_IB_READY | HFI1_STATUS_IB_CONF)));
+}
+#else
+__OPX_FORCE_INLINE__
+uint64_t opx_get_hw_status_jkr(struct fi_opx_hfi1_context *context)
+{
+	return 0;
+}
+#endif
 
 #define OPX_HFI1_HW_CHIP_STATUS (HFI1_STATUS_CHIP_PRESENT | HFI1_STATUS_INITTED)
 #define OPX_HFI1_IB_STATUS	(HFI1_STATUS_IB_CONF | HFI1_STATUS_IB_READY)
@@ -825,13 +844,13 @@ uint64_t opx_get_hw_status(struct fi_opx_hfi1_context *context)
    50 seconds for a passive copper channel
    65 seconds for optical channel.
    (we add 5 seconds of margin.) */
-#define OPX_LINK_DOWN_MAX_SEC 70.0
+#define OPX_LINK_DOWN_WAIT_TIME_MAX_SEC_DEFAULT 70.0
 
 __OPX_FORCE_INLINE__
-size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context)
+size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context, const enum opx_hfi1_type hfi1_type)
 {
 	size_t	 err	= FI_SUCCESS;
-	uint64_t status = opx_get_hw_status(context);
+	uint64_t status = (hfi1_type & OPX_HFI1_WFR) ? opx_get_hw_status_wfr(context) : opx_get_hw_status_jkr(context);
 
 	/* Fatal chip-related errors */
 	if (!((status & OPX_HFI1_HW_CHIP_STATUS) == OPX_HFI1_HW_CHIP_STATUS) || (status & HFI1_STATUS_HWERROR)) {
@@ -846,8 +865,9 @@ size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context)
 		} else {
 			time_t now = time(NULL);
 
-			if (difftime(now, context->network_lost_time) > OPX_LINK_DOWN_MAX_SEC) {
-				fprintf(stderr, "Link has been down more than 70s. Aborting\n");
+			if (difftime(now, context->network_lost_time) > context->link_down_wait_time_max_sec) {
+				fprintf(stderr, "Link has been down more than %lds. Aborting\n",
+					context->link_down_wait_time_max_sec);
 				abort();
 				return (err);
 			}
