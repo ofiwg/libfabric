@@ -74,3 +74,39 @@ void test_av_insert_duplicate_gid(struct efa_resource **state)
 	assert_int_equal(num_addr, 1);
 	assert_int_not_equal(addr1, addr2);
 }
+
+/**
+ * @brief This test verifies that multiple endpoints can bind to the same AV
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_av_multiple_ep(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_ep *ep2, *ep3;
+	int ret;
+
+	/* Resource construct function creates and binds 1 EP to the AV */
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	/* Create and bind two new endpoints to the same AV */
+	fi_endpoint(resource->domain, resource->info, &ep2, NULL);
+	ret = fi_ep_bind(ep2, &resource->av->fid, 0);
+	assert_int_equal(ret, 0);
+
+	fi_endpoint(resource->domain, resource->info, &ep3, NULL);
+	ret = fi_ep_bind(ep3, &resource->av->fid, 0);
+	assert_int_equal(ret, 0);
+
+	/* Bind the two new endpoints to the same CQ and enable them */
+	fi_ep_bind(ep2, &resource->cq->fid, FI_SEND | FI_RECV);
+	ret = fi_enable(ep2);
+	assert_int_equal(ret, 0);
+
+	fi_ep_bind(ep3, &resource->cq->fid, FI_SEND | FI_RECV);
+	ret = fi_enable(ep3);
+	assert_int_equal(ret, 0);
+
+	fi_close(&ep2->fid);
+	fi_close(&ep3->fid);
+}
