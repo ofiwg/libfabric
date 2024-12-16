@@ -784,7 +784,7 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 
 		if (OFI_UNLIKELY(compare > context->status_check_next_usec)) {
 			int prev_link_status = context->status_lasterr;
-			int err		     = fi_opx_context_check_status(context);
+			int err		     = fi_opx_context_check_status(context, hfi1_type);
 			// check for hfi event if link is moving from down to up
 			if ((prev_link_status != FI_SUCCESS) && (err == FI_SUCCESS)) { // check for hfi event if
 				context->status_lasterr = FI_SUCCESS;		       /* clear error */

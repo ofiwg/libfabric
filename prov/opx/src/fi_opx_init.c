@@ -783,6 +783,9 @@ OPX_INI
 	fi_param_define(
 		&fi_opx_provider, "port", FI_PARAM_INT,
 		"HFI1 port number.  If the specified port is not available, a default active port will be selected. Special value 0 indicates any available port. Defaults to port 1 on OPA100 and any port on CN5000.");
+	fi_param_define(&fi_opx_provider, "link_down_wait_time_max_sec", FI_PARAM_INT,
+			"The maximum time in seconds to wait for a link to come back up. Default is %d\n",
+			OPX_LINK_DOWN_WAIT_TIME_MAX_SEC_DEFAULT);
 #ifdef OPX_HMEM
 	fi_param_define(
 		&fi_opx_provider, "dev_reg_send_threshold", FI_PARAM_INT,

@@ -208,6 +208,18 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				opx_CPPFLAGS="-DOPX_HMEM -I/usr/include/uapi"
 			])
 		])
+		AS_IF([test $opx_happy -eq 1],[
+			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+				[[#include <rdma/hfi/hfi1_user.h>]],
+				[[
+					struct hfi1_status_v2 status_v2;
+				]])],
+				[AC_MSG_NOTICE([hfi1_user.h hfi1_status_v2 defined... yes])
+				opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_JKR_SUPPORT"],
+				[
+				AC_MSG_NOTICE([hfi1_user.h hfi1_status_v2 defined... no, no support for JKR])
+				])
+		])
 	])
 
 	AC_SUBST(opx_CPPFLAGS)

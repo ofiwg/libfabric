@@ -925,6 +925,19 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->status_lasterr = 0;
 	context->status_check_next_usec =
 		fi_opx_timer_now(&context->link_status_timestamp, &context->link_status_timer);
+	context->link_down_wait_time_max_sec = OPX_LINK_DOWN_WAIT_TIME_MAX_SEC_DEFAULT;
+
+	int link_down_wait_time_max_sec;
+	if (fi_param_get_int(fi_opx_global.prov, "link_down_wait_time_max_sec", &link_down_wait_time_max_sec) ==
+	    FI_SUCCESS) {
+		if (link_down_wait_time_max_sec > 0) {
+			context->link_down_wait_time_max_sec = link_down_wait_time_max_sec;
+		} else {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+				"Error: Invalid link_down_wait_time_max_sec value %d.  Using default value of %f instead\n",
+				link_down_wait_time_max_sec, OPX_LINK_DOWN_WAIT_TIME_MAX_SEC_DEFAULT);
+		}
+	}
 
 	opx_print_context(context);
 
