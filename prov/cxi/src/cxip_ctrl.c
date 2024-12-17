@@ -694,7 +694,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	}
 
 	ret = cxip_pte_set_state(ep_obj->ctrl.pte, ep_obj->ctrl.tgq,
-				 C_PTLTE_ENABLED, 0);
+				 C_PTLTE_ENABLED, CXIP_PTE_IGNORE_DROPS);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
 		CXIP_WARN("Failed to enqueue command: %d\n", ret);

@@ -265,7 +265,7 @@ static int cxip_rdzv_base_pte_alloc(struct cxip_txc_hpc *txc,
 
 	/* Set to enable, event will be processed on link */
 	ret = cxip_pte_set_state(base_pte->pte, txc->rx_cmdq,
-				 C_PTLTE_ENABLED, 0);
+				 C_PTLTE_ENABLED, CXIP_PTE_IGNORE_DROPS);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to enqueue enable command: %d:%s\n", ret,
 			  fi_strerror(-ret));

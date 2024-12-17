@@ -3930,7 +3930,8 @@ static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
 	}
 
 	/* Start accepting Puts. */
-	ret = cxip_pte_set_state(rxc->base.rx_pte, rxc->base.rx_cmdq, state, 0);
+	ret = cxip_pte_set_state(rxc->base.rx_pte, rxc->base.rx_cmdq, state,
+				 CXIP_PTE_IGNORE_DROPS);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_pte_set_state returned: %d\n", ret);
 		goto free_oflow_buf;
