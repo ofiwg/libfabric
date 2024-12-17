@@ -382,7 +382,7 @@ static int cxip_rxc_rnr_msg_init(struct cxip_rxc *rxc_base)
 
 	/* Start accepting Puts. */
 	ret = cxip_pte_set_state(rxc->base.rx_pte, rxc->base.rx_cmdq,
-				 C_PTLTE_ENABLED, 0);
+				 C_PTLTE_ENABLED, CXIP_PTE_IGNORE_DROPS);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_pte_set_state returned: %d\n", ret);
 		goto free_pte;
