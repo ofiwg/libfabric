@@ -607,6 +607,41 @@ pipeline {
     stage('parallel-tests') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
+        stage('mpichtestsuite-tcp') {
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                def providers = [['tcp', null]]
+                def MPIS = ["mpich"]
+                if (env.WEEKLY.toBoolean()) {
+                  MPIS = ["impi", "mpich"]
+                }
+                for (def mpi in MPIS) {
+                  run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
+                                 "grass", "bulbasaur,ivysaur", "2", "${mpi}")
+                }
+              }
+            }
+          }
+        }
+        stage('mpichtestsuite-verbs') {
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                def providers = [["verbs","rxm"]]
+                def MPIS = ["mpich"]
+                if (env.WEEKLY.toBoolean()) {
+                  MPIS = ["impi", "mpich"]
+                }
+                for (def mpi in MPIS) {
+                  run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
+                                 "water", "squirtle,wartortle,articuno", "2",
+                                 "${mpi}")
+                }
+              }
+            }
+          }
+        }
         stage ('CI_mpi_verbs-rxm_imb') {
           steps {
             script {
@@ -754,41 +789,6 @@ pipeline {
                 run_ci("CI_fabtests_ucx_reg", "pr_fabtests_ucx_reg.json")
                 run_ci("CI_fabtests_ucx_dbg", "pr_fabtests_ucx_dbg.json")
                 run_ci("CI_fabtests_ucx_dl", "pr_fabtests_ucx_dl.json")
-              }
-            }
-          }
-        }
-        stage('mpichtestsuite-tcp') {
-          steps {
-            script {
-              dir (RUN_LOCATION) {
-                def providers = [['tcp', null]]
-                def MPIS = ["mpich"]
-                if (env.WEEKLY.toBoolean()) {
-                  MPIS = ["impi", "mpich"]
-                }
-                for (def mpi in MPIS) {
-                  run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
-                                 "grass", "bulbasaur,ivysaur", "2", "${mpi}")
-                }
-              }
-            }
-          }
-        }
-        stage('mpichtestsuite-verbs') {
-          steps {
-            script {
-              dir (RUN_LOCATION) {
-                def providers = [["verbs","rxm"]]
-                def MPIS = ["mpich"]
-                if (env.WEEKLY.toBoolean()) {
-                  MPIS = ["impi", "mpich"]
-                }
-                for (def mpi in MPIS) {
-                  run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
-                                 "water", "squirtle,wartortle,articuno", "2",
-                                 "${mpi}")
-                }
               }
             }
           }
