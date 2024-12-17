@@ -17,7 +17,6 @@ def run_python(version, command, output=null) {
 }
 
 def slurm_batch(partition, node_num, output, command) {
-  
   try {
     sh """sbatch --partition=${partition} -N ${node_num} \
           --wait -o ${output} --open-mode=append \
@@ -113,7 +112,6 @@ def build_ci(config_name) {
 
 def gather_logs(cluster, key, dest, source) {
   def address = "${env.USER}@${cluster}"
-
   try {
     sh "scp -r -i ${key} ${address}:${source}/* ${dest}/"
   } catch (Exception e) {
