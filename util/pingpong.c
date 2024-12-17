@@ -1868,12 +1868,12 @@ static void pp_free_res(struct ct_pingpong *ct)
 {
 	PP_DEBUG("Freeing resources of test suite\n");
 
-	if (ct->mr != &(ct->no_mr))
-		PP_CLOSE_FID(ct->mr);
 	PP_CLOSE_FID(ct->ep);
 	PP_CLOSE_FID(ct->pep);
 	PP_CLOSE_FID(ct->rxcq);
 	PP_CLOSE_FID(ct->txcq);
+	if (ct->mr != &(ct->no_mr))
+		PP_CLOSE_FID(ct->mr);
 	PP_CLOSE_FID(ct->av);
 	PP_CLOSE_FID(ct->eq);
 	PP_CLOSE_FID(ct->domain);
