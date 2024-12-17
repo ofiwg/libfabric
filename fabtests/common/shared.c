@@ -2923,7 +2923,7 @@ int ft_tx_msg(struct fid_ep *ep, fi_addr_t fi_addr, void *buf, size_t size, void
 }
 
 int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
-		void *buf, size_t size, void *ctx, int flags)
+		void *buf, size_t size, void *ctx, uint64_t flags)
 {
 	struct fi_msg msg;
 	struct fi_msg_tagged tagged_msg;
@@ -2963,7 +2963,7 @@ int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 
 
 int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr, void *buf,
-	       size_t size, void *ctx, int flags)
+	       size_t size, void *ctx, uint64_t flags)
 {
 	struct fi_msg msg;
 	struct fi_msg_tagged tagged_msg;
