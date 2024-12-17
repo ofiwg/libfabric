@@ -997,25 +997,6 @@ pipeline {
           summarize("all")
         }
       }
-    }
-    aborted {
-      node ('daos_head') {
-        dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
-      }
-      node ('ze') {
-        dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
-      }
-      sh "scancel --jobname=\"${SLURM_JOB_NAME}\""
-      dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
-    }
-    success {
-      script {
-        if (DO_RUN) {
-          CI_summarize(verbose=true)
-          summarize("all", verbose=true, release=false,
-          send_mail=env.WEEKLY.toBoolean())
-        }
-      }
       node ('daos_head') {
         dir("${env.WORKSPACE}") { deleteDir() }
         dir("${env.WORKSPACE}@tmp") { deleteDir() }
