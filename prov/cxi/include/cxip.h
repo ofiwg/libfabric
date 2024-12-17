@@ -1076,7 +1076,7 @@ struct cxip_eq {
 };
 
 #define CXIP_EQ_MAP_FLAGS \
-	(CXI_MAP_WRITE | CXI_MAP_PIN | CXI_MAP_IOVA_ALLOC)
+	(CXI_MAP_WRITE | CXI_MAP_PIN)
 
 /*
  * RMA request
