@@ -399,6 +399,23 @@ pipeline {
         }
       }
     }
+    stage ('bootstrap-ci') {
+      steps {
+        script {
+          bootstrap_ci()
+        }
+      }
+    }
+    stage('check-authorization') {
+      steps {
+        script {
+          sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+                python ${CI_LOCATION}/authorize.py \
+                --author=${env.CHANGE_AUTHOR}
+          """
+        }
+      }
+    }
     stage ('opt-out') {
       steps {
         script {
@@ -432,13 +449,6 @@ pipeline {
           build("builddir")
           echo "Copying log dirs."
           build("logdir")
-        }
-      }
-    }
-    stage ('bootstrap-ci') {
-      steps {
-        script {
-          bootstrap_ci()
         }
       }
     }
