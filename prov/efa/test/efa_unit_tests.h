@@ -251,6 +251,10 @@ void test_efa_rma_writemsg();
 void test_efa_rma_writedata();
 void test_efa_rma_inject_write();
 void test_efa_rma_inject_writedata();
+void test_efa_cq_read_send_success();
+void test_efa_cq_read_recv_success();
+void test_efa_cq_read_send_failure();
+void test_efa_cq_read_recv_failure();
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)

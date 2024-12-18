@@ -4,12 +4,11 @@
 
 #include "config.h"
 #include "efa_dgram_ep.h"
-#include "efa_dgram_cq.h"
 #include "efa.h"
 #include "efa_av.h"
+#include "efa_cq.h"
 
 #include <infiniband/efadv.h>
-#define efa_dgram_cq_PROGRESS_ENTRIES 500
 
 static int efa_dgram_ep_getopt(fid_t fid, int level, int optname,
 			 void *optval, size_t *optlen)
@@ -71,8 +70,9 @@ static int efa_dgram_ep_close(fid_t fid)
 static int efa_dgram_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct efa_dgram_ep *ep;
-	struct efa_dgram_cq *cq;
+	struct efa_cq *cq;
 	struct efa_av *av;
+	struct efa_domain *efa_domain;
 	struct util_eq *eq;
 	struct util_cntr *cntr;
 	int ret;
@@ -94,24 +94,15 @@ static int efa_dgram_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (!(flags & (FI_RECV | FI_TRANSMIT)))
 			return -FI_EBADFLAGS;
 
-		cq = container_of(bfid, struct efa_dgram_cq, util_cq.cq_fid);
-		if (ep->base_ep.domain != cq->domain)
+		cq = container_of(bfid, struct efa_cq, util_cq.cq_fid);
+		efa_domain = container_of(cq->util_cq.domain, struct efa_domain, util_domain);
+		if (ep->base_ep.domain != efa_domain)
 			return -FI_EINVAL;
 
 		ret = ofi_ep_bind_cq(&ep->base_ep.util_ep, &cq->util_cq, flags);
 		if (ret)
 			return ret;
 
-		if (flags & FI_RECV) {
-			if (ep->rcq)
-				return -EINVAL;
-			ep->rcq = cq;
-		}
-		if (flags & FI_TRANSMIT) {
-			if (ep->scq)
-				return -EINVAL;
-			ep->scq = cq;
-		}
 		break;
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct efa_av, util_av.av_fid.fid);
@@ -186,46 +177,47 @@ static int efa_dgram_ep_setflags(struct fid_ep *ep_fid, uint64_t flags)
 static int efa_dgram_ep_enable(struct fid_ep *ep_fid)
 {
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
-	struct ibv_pd *ibv_pd;
 	struct efa_dgram_ep *ep;
+	struct efa_cq *scq, *rcq;
 	int err;
 
 	ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
 
-	if (!ep->scq && !ep->rcq) {
+	scq = ep->base_ep.util_ep.tx_cq ? container_of(ep->base_ep.util_ep.tx_cq, struct efa_cq, util_cq) : NULL;
+	rcq = ep->base_ep.util_ep.rx_cq ? container_of(ep->base_ep.util_ep.rx_cq, struct efa_cq, util_cq) : NULL;
+
+	if (!scq && !rcq) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Endpoint is not bound to a send or receive completion queue\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!ep->scq && ofi_send_allowed(ep->base_ep.info->caps)) {
+	if (!scq && ofi_needs_tx(ep->base_ep.info->caps)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Endpoint is not bound to a send completion queue when it has transmit capabilities enabled (FI_SEND).\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!ep->rcq && ofi_recv_allowed(ep->base_ep.info->caps)) {
+	if (!rcq && ofi_needs_rx(ep->base_ep.info->caps)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Endpoint is not bound to a receive completion queue when it has receive capabilities enabled. (FI_RECV)\n");
 		return -FI_ENOCQ;
 	}
 
-	if (ep->scq) {
+	if (scq) {
 		attr_ex.cap.max_send_wr = ep->base_ep.info->tx_attr->size;
 		attr_ex.cap.max_send_sge = ep->base_ep.info->tx_attr->iov_limit;
-		attr_ex.send_cq = ibv_cq_ex_to_cq(ep->scq->ibv_cq_ex);
-		ibv_pd = ep->scq->domain->ibv_pd;
+		attr_ex.send_cq = ibv_cq_ex_to_cq(scq->ibv_cq.ibv_cq_ex);
 	} else {
-		attr_ex.send_cq = ibv_cq_ex_to_cq(ep->rcq->ibv_cq_ex);
-		ibv_pd = ep->rcq->domain->ibv_pd;
+		attr_ex.send_cq = ibv_cq_ex_to_cq(rcq->ibv_cq.ibv_cq_ex);
 	}
 
-	if (ep->rcq) {
+	if (rcq) {
 		attr_ex.cap.max_recv_wr = ep->base_ep.info->rx_attr->size;
 		attr_ex.cap.max_recv_sge = ep->base_ep.info->rx_attr->iov_limit;
-		attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->rcq->ibv_cq_ex);
+		attr_ex.recv_cq = ibv_cq_ex_to_cq(rcq->ibv_cq.ibv_cq_ex);
 	} else {
-		attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->scq->ibv_cq_ex);
+		attr_ex.recv_cq = ibv_cq_ex_to_cq(scq->ibv_cq.ibv_cq_ex);
 	}
 
 	attr_ex.cap.max_inline_data =
@@ -234,7 +226,7 @@ static int efa_dgram_ep_enable(struct fid_ep *ep_fid)
 	assert(EFA_EP_TYPE_IS_DGRAM(ep->base_ep.domain->info));
 	attr_ex.qp_type = IBV_QPT_UD;
 	attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD;
-	attr_ex.pd = ibv_pd;
+	attr_ex.pd = container_of(ep->base_ep.util_ep.domain, struct efa_domain, util_domain)->ibv_pd;
 
 	attr_ex.qp_context = ep;
 	attr_ex.sq_sig_all = 1;
@@ -277,87 +269,17 @@ static struct fi_ops efa_dgram_ep_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static void efa_dgram_ep_progress_internal(struct efa_dgram_ep *ep, struct efa_dgram_cq *efa_dgram_cq)
+/**
+ * @brief progress engine for the EFA dgram endpoint
+ *
+ * This function now a no-op.
+ *
+ * @param[in] util_ep The endpoint FID to progress
+ */
+static
+void efa_ep_progress_no_op(struct util_ep *util_ep)
 {
-	struct util_cq *cq;
-	struct fi_cq_tagged_entry cq_entry[efa_dgram_cq_PROGRESS_ENTRIES] = {0};
-	struct fi_cq_tagged_entry *temp_cq_entry;
-	struct fi_cq_err_entry cq_err_entry = {0};
-	fi_addr_t src_addr[efa_dgram_cq_PROGRESS_ENTRIES];
-	uint64_t flags;
-	int i;
-	ssize_t ret, err;
-
-	cq = &efa_dgram_cq->util_cq;
-	flags = ep->base_ep.util_ep.caps;
-
-	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(cq_entry));
-
-	ret = efa_dgram_cq_readfrom(&cq->cq_fid, cq_entry, efa_dgram_cq_PROGRESS_ENTRIES,
-			      (flags & FI_SOURCE) ? src_addr : NULL);
-	if (ret == -FI_EAGAIN)
-		return;
-
-	if (OFI_UNLIKELY(ret < 0)) {
-		if (OFI_UNLIKELY(ret != -FI_EAVAIL)) {
-			EFA_WARN(FI_LOG_CQ, "no error available errno: %ld\n", ret);
-			efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_DGRAM_CQ_READ);
-			return;
-		}
-
-		err = efa_dgram_cq_readerr(&cq->cq_fid, &cq_err_entry, flags);
-		if (OFI_UNLIKELY(err < 0)) {
-			EFA_WARN(FI_LOG_CQ, "unable to read error entry errno: %ld\n", err);
-			efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, cq_err_entry.prov_errno);
-			return;
-		}
-
-		ofi_cq_write_error(cq, &cq_err_entry);
-		return;
-	}
-
-	temp_cq_entry = (struct fi_cq_tagged_entry *)cq_entry;
-	for (i = 0; i < ret; i++) {
-		(flags & FI_SOURCE) ?
-			ofi_cq_write_src(cq, temp_cq_entry->op_context,
-					 temp_cq_entry->flags,
-					 temp_cq_entry->len,
-					 temp_cq_entry->buf,
-					 temp_cq_entry->data,
-					 temp_cq_entry->tag,
-					 src_addr[i]) :
-			ofi_cq_write(cq, temp_cq_entry->op_context,
-				     temp_cq_entry->flags,
-				     temp_cq_entry->len,
-				     temp_cq_entry->buf,
-				     temp_cq_entry->data,
-				     temp_cq_entry->tag);
-
-		temp_cq_entry = (struct fi_cq_tagged_entry *)
-				((uint8_t *)temp_cq_entry + efa_dgram_cq->entry_size);
-	}
 	return;
-}
-
-void efa_dgram_ep_progress(struct util_ep *ep)
-{
-	struct efa_dgram_ep *efa_dgram_ep;
-	struct efa_dgram_cq *rcq;
-	struct efa_dgram_cq *scq;
-
-	efa_dgram_ep = container_of(ep, struct efa_dgram_ep, base_ep.util_ep);
-	rcq = efa_dgram_ep->rcq;
-	scq = efa_dgram_ep->scq;
-
-	ofi_genlock_lock(&ep->lock);
-
-	if (rcq)
-		efa_dgram_ep_progress_internal(efa_dgram_ep, rcq);
-
-	if (scq && scq != rcq)
-		efa_dgram_ep_progress_internal(efa_dgram_ep, scq);
-
-	ofi_genlock_unlock(&ep->lock);
 }
 
 static struct fi_ops_atomic efa_dgram_ep_atomic_ops = {
@@ -433,7 +355,7 @@ int efa_dgram_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	if (!ep)
 		return -FI_ENOMEM;
 
-	ret = efa_base_ep_construct(&ep->base_ep, domain_fid, user_info, efa_dgram_ep_progress, context);
+	ret = efa_base_ep_construct(&ep->base_ep, domain_fid, user_info, efa_ep_progress_no_op, context);
 	if (ret)
 		goto err_ep_destroy;
 
