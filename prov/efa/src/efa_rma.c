@@ -90,7 +90,7 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 		ibv_wr_start(qp->ibv_qp_ex);
 		base_ep->is_wr_started = true;
 	}
-	qp->ibv_qp_ex->wr_id = (uintptr_t)msg->context;
+	qp->ibv_qp_ex->wr_id = (uintptr_t) ((flags & FI_COMPLETION) ? msg->context : NULL);
 
 	/* ep->domain->info->tx_attr->rma_iov_limit is set to 1 */
 	ibv_wr_rdma_read(qp->ibv_qp_ex, msg->rma_iov[0].key, msg->rma_iov[0].addr);
@@ -221,7 +221,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		ibv_wr_start(qp->ibv_qp_ex);
 		base_ep->is_wr_started = true;
 	}
-	qp->ibv_qp_ex->wr_id = (uintptr_t)msg->context;
+	qp->ibv_qp_ex->wr_id = (uintptr_t) ((flags & FI_COMPLETION) ? msg->context : NULL);
 
 	if (flags & FI_REMOTE_CQ_DATA) {
 		ibv_wr_rdma_write_imm(qp->ibv_qp_ex, msg->rma_iov[0].key,

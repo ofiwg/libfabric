@@ -99,9 +99,9 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 	}
 
 	wr = &base_ep->efa_recv_wr_vec[wr_index].wr;
-	wr->wr_id = (uintptr_t)msg->context;
 	wr->num_sge = msg->iov_count;
 	wr->sg_list = base_ep->efa_recv_wr_vec[wr_index].sge;
+	wr->wr_id = (uintptr_t) ((flags & FI_COMPLETION) ? msg->context : NULL);
 
 	for (i = 0; i < msg->iov_count; i++) {
 		addr = (uintptr_t)msg->msg_iov[i].iov_base;
@@ -224,7 +224,8 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		base_ep->is_wr_started = true;
 	}
 
-	qp->ibv_qp_ex->wr_id = (uintptr_t)msg->context;
+	qp->ibv_qp_ex->wr_id = (uintptr_t) ((flags & FI_COMPLETION) ? msg->context : NULL);
+
 	if (flags & FI_REMOTE_CQ_DATA) {
 		ibv_wr_send_imm(qp->ibv_qp_ex, msg->data);
 	} else {

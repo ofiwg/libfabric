@@ -178,6 +178,24 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 	ofi_genlock_unlock(&cntr->ep_list_lock);
 }
 
+static void efa_cntr_progress(struct util_cntr *cntr)
+{
+	struct util_ep *ep;
+	struct fid_list_entry *fid_entry;
+	struct dlist_entry *item;
+
+	ofi_genlock_lock(&cntr->ep_list_lock);
+	dlist_foreach(&cntr->ep_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
+		if (ep->tx_cq)
+			efa_cq_progress(ep->tx_cq);
+		if (ep->rx_cq && ep->rx_cq != ep->tx_cq)
+			efa_cq_progress(ep->rx_cq);
+	}
+	ofi_genlock_unlock(&cntr->ep_list_lock);
+}
+
 int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context)
 {
@@ -199,7 +217,7 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	cntr_progress_func = efa_domain->info->ep_attr->type == FI_EP_RDM
 		? efa_rdm_cntr_progress
-		: ofi_cntr_progress;
+		: efa_cntr_progress;
 	ret = ofi_cntr_init(&efa_prov, domain, attr, &cntr->util_cntr,
 			    cntr_progress_func, context);
 

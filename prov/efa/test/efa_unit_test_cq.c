@@ -3,8 +3,8 @@
 
 #include "efa_unit_tests.h"
 #include "dgram/efa_dgram_ep.h"
-#include "dgram/efa_dgram_cq.h"
 #include "rdm/efa_rdm_cq.h"
+#include "efa_av.h"
 
 /**
  * @brief implementation of test cases for fi_cq_read() works with empty device CQ for given endpoint type
@@ -27,7 +27,7 @@ void test_impl_cq_read_empty_cq(struct efa_resource *resource, enum fi_ep_type e
 		struct efa_dgram_ep *efa_dgram_ep;
 
 		efa_dgram_ep = container_of(resource->ep, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
-		ibv_cqx = efa_dgram_ep->rcq->ibv_cq_ex;
+		ibv_cqx = container_of(efa_dgram_ep->base_ep.util_ep.rx_cq, struct efa_cq, util_cq)->ibv_cq.ibv_cq_ex;
 	} else {
 		struct efa_rdm_ep *efa_rdm_ep;
 
@@ -811,3 +811,216 @@ void test_ibv_cq_ex_read_ignore_removed_peer()
 	skip();
 }
 #endif
+
+static void test_efa_cq_read(struct efa_resource *resource, fi_addr_t *addr,
+			     int ibv_wc_opcode, int status, int vendor_error)
+{
+	int ret;
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	struct efa_ep_addr raw_addr;
+	struct ibv_cq_ex *ibv_cqx;
+	struct ibv_qp_ex *ibv_qpx;
+	struct efa_base_ep *base_ep;
+
+	efa_unit_test_resource_construct(resource, FI_EP_DGRAM);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	ibv_qpx = base_ep->qp->ibv_qp_ex;
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, addr, 0 /* flags */, NULL /* context */);
+	assert_int_equal(ret, 1);
+
+	ibv_qpx->wr_start = &efa_mock_ibv_wr_start_no_op;
+	/* this mock will save the send work request (wr) in a global list */
+	ibv_qpx->wr_send = &efa_mock_ibv_wr_send_save_wr;
+	ibv_qpx->wr_set_sge_list = &efa_mock_ibv_wr_set_sge_list_no_op;
+	ibv_qpx->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
+	ibv_qpx->wr_complete = &efa_mock_ibv_wr_complete_no_op;
+
+	base_ep->qp->ibv_qp->context->ops.post_recv = &efa_mock_ibv_post_recv;
+	will_return_maybe(efa_mock_ibv_post_recv, 0);
+
+	if (ibv_wc_opcode == IBV_WC_RECV) {
+		ibv_cqx = container_of(base_ep->util_ep.rx_cq, struct efa_cq, util_cq)->ibv_cq.ibv_cq_ex;
+		ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
+		ibv_cqx->wr_id = (uintptr_t)12345;
+		will_return(efa_mock_ibv_start_poll_return_mock, 0);
+		ibv_cqx->status = status;
+	} else {
+		ibv_cqx = container_of(base_ep->util_ep.tx_cq, struct efa_cq, util_cq)->ibv_cq.ibv_cq_ex;
+		/* this mock will set ibv_cq_ex->wr_id to the wr_id of the head of global send_wr,
+		* and set ibv_cq_ex->status to mock value */
+		ibv_cqx->start_poll = &efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status;
+		will_return(efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status, status);
+	}
+
+	ibv_cqx->next_poll = &efa_mock_ibv_next_poll_return_mock;
+	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	ibv_cqx->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	ibv_cqx->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	ibv_cqx->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
+	will_return_maybe(efa_mock_ibv_end_poll_check_mock, NULL);
+	will_return_maybe(efa_mock_ibv_next_poll_return_mock, 0);
+	will_return_maybe(efa_mock_ibv_read_opcode_return_mock, ibv_wc_opcode);
+	will_return_maybe(efa_mock_ibv_read_qp_num_return_mock, base_ep->qp->qp_num);
+	will_return_maybe(efa_mock_ibv_read_vendor_err_return_mock, vendor_error);
+#if HAVE_EFADV_CQ_EX
+	ibv_cqx->read_byte_len = &efa_mock_ibv_read_byte_len_return_mock;
+	ibv_cqx->read_slid = &efa_mock_ibv_read_slid_return_mock;
+	ibv_cqx->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
+	ibv_cqx->read_wc_flags = &efa_mock_ibv_read_wc_flags_return_mock;
+	will_return_maybe(efa_mock_ibv_read_byte_len_return_mock, 4096);
+	will_return_maybe(efa_mock_ibv_read_slid_return_mock, efa_av_addr_to_conn(base_ep->av, *addr)->ah->ahn);
+	will_return_maybe(efa_mock_ibv_read_src_qp_return_mock, raw_addr.qpn);
+	will_return_maybe(efa_mock_ibv_read_wc_flags_return_mock, 0);
+#endif
+}
+
+/**
+ * @brief test EFA CQ's fi_cq_read() works properly when rdma-core return
+ * success status for send operation.
+ */
+void test_efa_cq_read_send_success(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct fi_cq_data_entry cq_entry;
+	fi_addr_t addr;
+	int ret;
+
+	test_efa_cq_read(resource, &addr, IBV_WC_SEND, IBV_WC_SUCCESS, 0);
+	efa_unit_test_buff_construct(&send_buff, resource, 4096 /* buff_size */);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_send(resource->ep, send_buff.buff, send_buff.size,
+		      fi_mr_desc(send_buff.mr), addr, (void *) 12345);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	/* fi_cq_read() called efa_mock_ibv_start_poll_use_saved_send_wr(), which pulled one send_wr from g_ibv_submitted_wr_idv=_vec */
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	assert_int_equal(ret, 1);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief test EFA CQ's fi_cq_read() works properly when rdma-core return
+ * success status for recv operation.
+ */
+void test_efa_cq_read_recv_success(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff recv_buff;
+	struct fi_cq_data_entry cq_entry;
+	fi_addr_t addr;
+	int ret;
+
+	test_efa_cq_read(resource, &addr, IBV_WC_RECV, IBV_WC_SUCCESS, 0);
+	efa_unit_test_buff_construct(&recv_buff, resource, 4096 /* buff_size */);
+
+	ret = fi_recv(resource->ep, recv_buff.buff, recv_buff.size,
+		      fi_mr_desc(recv_buff.mr), addr, NULL);
+	assert_int_equal(ret, 0);
+
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, 1);
+
+	efa_unit_test_buff_destruct(&recv_buff);
+}
+
+static void efa_cq_check_cq_err_entry(struct efa_resource *resource, int vendor_error) {
+	struct fi_cq_err_entry cq_err_entry = {0};
+	const char *strerror;
+	int ret;
+
+	/* Allocate memory to read CQ error */
+	cq_err_entry.err_data_size = EFA_ERROR_MSG_BUFFER_LENGTH;
+	cq_err_entry.err_data = malloc(cq_err_entry.err_data_size);
+	assert_non_null(cq_err_entry.err_data);
+
+	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
+	assert_true(cq_err_entry.err_data_size > 0);
+	strerror = fi_cq_strerror(resource->cq, cq_err_entry.prov_errno,
+				  cq_err_entry.err_data, NULL, 0);
+
+	assert_int_equal(ret, 1);
+	assert_int_not_equal(cq_err_entry.err, FI_SUCCESS);
+	assert_int_equal(cq_err_entry.prov_errno, vendor_error);
+	assert_true(strlen(strerror) > 0);
+}
+
+/**
+ * @brief test EFA CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core return bad status for send.
+ *
+ * When the send operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
+ * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
+ *
+ * @param[in]  state            struct efa_resource that is managed by the framework
+ */
+void test_efa_cq_read_send_failure(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct fi_cq_data_entry cq_entry;
+	fi_addr_t addr;
+	int ret;
+
+	test_efa_cq_read(resource, &addr, IBV_WC_SEND, IBV_WC_GENERAL_ERR,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+	efa_unit_test_buff_construct(&send_buff, resource, 4096 /* buff_size */);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_send(resource->ep, send_buff.buff, send_buff.size,
+		      fi_mr_desc(send_buff.mr), addr, (void *) 12345);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	/* fi_cq_read() called efa_mock_ibv_start_poll_use_saved_send_wr(), which pulled one send_wr from g_ibv_submitted_wr_idv=_vec */
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	assert_int_equal(ret, -FI_EAVAIL);
+
+	efa_cq_check_cq_err_entry(resource,
+				  EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief test EFA CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core return bad status for recv.
+ *
+ * When the recv operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
+ * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
+ *
+ * @param[in]  state            struct efa_resource that is managed by the framework
+ */
+void test_efa_cq_read_recv_failure(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff recv_buff;
+	struct fi_cq_data_entry cq_entry;
+	fi_addr_t addr;
+	int ret;
+
+	test_efa_cq_read(resource, &addr, IBV_WC_RECV, IBV_WC_GENERAL_ERR,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+	efa_unit_test_buff_construct(&recv_buff, resource, 4096 /* buff_size */);
+
+	ret = fi_recv(resource->ep, recv_buff.buff, recv_buff.size,
+		      fi_mr_desc(recv_buff.mr), addr, NULL);
+	assert_int_equal(ret, 0);
+
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, -FI_EAVAIL);
+
+	efa_cq_check_cq_err_entry(resource,
+				  EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+
+	efa_unit_test_buff_destruct(&recv_buff);
+}
