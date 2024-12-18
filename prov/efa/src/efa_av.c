@@ -53,7 +53,7 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *efa_av_entry;
 
-	if (OFI_UNLIKELY(fi_addr == FI_ADDR_UNSPEC))
+	if (OFI_UNLIKELY(fi_addr == FI_ADDR_UNSPEC || fi_addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
 	if (av->type == FI_AV_MAP) {
@@ -70,7 +70,7 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
 }
 
 /**
- * @brief find fi_addr for dgram endpoint
+ * @brief find fi_addr for efa endpoint
  *
  * @param[in]	av	address vector
  * @param[in]	ahn	address handle number
@@ -78,7 +78,7 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
  * @return	On success, return fi_addr to the peer who send the packet
  * 		If no such peer exist, return FI_ADDR_NOTAVAIL
  */
-fi_addr_t efa_av_reverse_lookup_dgram(struct efa_av *av, uint16_t ahn, uint16_t qpn)
+fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 {
 	struct efa_cur_reverse_av *cur_entry;
 	struct efa_cur_reverse_av_key cur_key;

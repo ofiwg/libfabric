@@ -12,7 +12,6 @@
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_atomic.h"
 #include "dgram/efa_dgram_ep.h"
-#include "dgram/efa_dgram_cq.h"
 
 
 struct dlist_entry g_efa_domain_list;
@@ -33,7 +32,7 @@ static struct fi_ops efa_ops_domain_fid = {
 static struct fi_ops_domain efa_ops_domain_dgram = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = efa_av_open,
-	.cq_open = efa_dgram_cq_open,
+	.cq_open = efa_cq_open,
 	.endpoint = efa_dgram_ep_open,
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = efa_cntr_open,

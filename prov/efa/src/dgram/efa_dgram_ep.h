@@ -8,9 +8,6 @@
 
 struct efa_dgram_ep {
 	struct efa_base_ep base_ep;
-
-	struct efa_dgram_cq	*rcq;
-	struct efa_dgram_cq	*scq;
 };
 
 int efa_dgram_ep_open(struct fid_domain *domain_fid, struct fi_info *info,

@@ -18,6 +18,11 @@ struct efa_ibv_cq_poll_list_entry {
 	struct efa_ibv_cq	*cq;
 };
 
+struct efa_cq {
+	struct util_cq		util_cq;
+	struct efa_ibv_cq	ibv_cq;
+};
+
 /*
  * Control header with completion data. CQ data length is static.
  */
@@ -177,6 +182,11 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 }
 #endif
 
+int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
+		struct fid_cq **cq_fid, void *context);
+
+void efa_cq_progress(struct util_cq *cq);
+
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 /**
  * @brief Check whether a completion consumes recv buffer
@@ -200,3 +210,62 @@ bool efa_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
 }
 
 #endif
+
+/**
+ * @brief Write the error message and return its byte length
+ * @param[in]    ep          EFA base endpoint
+ * @param[in]    addr        Remote peer fi_addr_t
+ * @param[in]    prov_errno  EFA provider * error code(must be positive)
+ * @param[out]   err_msg     Pointer to the address of error message written by
+ * this function
+ * @param[out]   buflen      Pointer to the returned error data size
+ * @return       A status code. 0 if the error data was written successfully,
+ * otherwise a negative FI error code.
+ */
+static inline int efa_write_error_msg(struct efa_base_ep *ep, fi_addr_t addr,
+				      int prov_errno, char *err_msg,
+				      size_t *buflen)
+{
+	char ep_addr_str[OFI_ADDRSTRLEN] = {0}, peer_addr_str[OFI_ADDRSTRLEN] = {0};
+	char peer_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
+	char local_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
+	const char *base_msg = efa_strerror(prov_errno);
+	size_t len = 0;
+	uint64_t local_host_id;
+
+	*buflen = 0;
+
+	len = sizeof(ep_addr_str);
+	efa_base_ep_raw_addr_str(ep, ep_addr_str, &len);
+	len = sizeof(peer_addr_str);
+	efa_base_ep_get_peer_raw_addr_str(ep, addr, peer_addr_str, &len);
+
+	local_host_id = efa_get_host_id(efa_env.host_id_file);
+	if (!local_host_id ||
+	    EFA_HOST_ID_STRING_LENGTH != snprintf(local_host_id_str,
+						  EFA_HOST_ID_STRING_LENGTH + 1,
+						  "i-%017lx", local_host_id)) {
+		strcpy(local_host_id_str, "N/A");
+	}
+
+	/* efa-raw cannot get peer host id without a handshake */
+	strcpy(peer_host_id_str, "N/A");
+
+	int ret = snprintf(err_msg, EFA_ERROR_MSG_BUFFER_LENGTH,
+			   "%s My EFA addr: %s My host id: %s Peer EFA addr: "
+			   "%s Peer host id: %s",
+			   base_msg, ep_addr_str, local_host_id_str,
+			   peer_addr_str, peer_host_id_str);
+
+	if (ret < 0 || ret > EFA_ERROR_MSG_BUFFER_LENGTH - 1) {
+		return -FI_EINVAL;
+	}
+
+	if (strlen(err_msg) >= EFA_ERROR_MSG_BUFFER_LENGTH) {
+		return -FI_ENOBUFS;
+	}
+
+	*buflen = EFA_ERROR_MSG_BUFFER_LENGTH;
+
+	return 0;
+}

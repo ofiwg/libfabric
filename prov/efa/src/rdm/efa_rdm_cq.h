@@ -9,8 +9,8 @@
 
 struct efa_rdm_cq {
 	struct util_cq util_cq;
-	struct fid_cq *shm_cq;
 	struct efa_ibv_cq ibv_cq;
+	struct fid_cq *shm_cq;
 	struct dlist_entry ibv_cq_poll_list;
 	bool need_to_scan_ep_list;
 };
