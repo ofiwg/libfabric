@@ -92,6 +92,7 @@
 #define SMR_FLAG_ATOMIC		(1 << 0)
 #define SMR_FLAG_DEBUG		(1 << 1)
 #define SMR_FLAG_HMEM_ENABLED	(1 << 3)
+#define SMR_FLAG_CMA_INIT	(1 << 4)
 
 //shm region defines
 #define SMR_CMD_SIZE		440	/* align with 64-byte cache line */
@@ -110,14 +111,6 @@ enum {
 	smr_proto_sar,		/* segmentation fallback protocol */
 	smr_proto_ipc,		/* device IPC handle protocol */
 	smr_proto_max,
-};
-
-/* CMA/XPMEM capability. Generic acronym used:
- * VMA: Virtual Memory Address */
-enum {
-	SMR_VMA_CAP_NA,
-	SMR_VMA_CAP_ON,
-	SMR_VMA_CAP_OFF,
 };
 
 /*
@@ -250,15 +243,16 @@ struct smr_region {
 	uint8_t			version;
 	uint8_t			resv;
 	uint16_t		flags;
-	int			pid;
-	uint8_t			cma_cap_peer;
-	uint8_t			cma_cap_self;
-	uint8_t			xpmem_cap_self;
-	uint8_t			resv2;
+	uint8_t			self_vma_caps;
+	uint8_t			peer_vma_caps;
 
-	uint32_t		max_sar_buf_per_peer;
+	uint16_t		max_sar_buf_per_peer;
 	struct ofi_xpmem_pinfo	xpmem_self;
 	struct ofi_xpmem_pinfo	xpmem_peer;
+
+	int			pid;
+	int			resv2;
+
 	void			*base_addr;
 
 	char			name[SMR_NAME_MAX];
@@ -273,6 +267,17 @@ struct smr_region {
 	size_t			sar_pool_offset;
 	size_t			peer_data_offset;
 };
+
+static inline void smr_set_vma_cap(uint8_t *vma_cap, uint8_t type, bool avail)
+{
+	(*vma_cap) &= ~(1 << type);
+	(*vma_cap) |= (uint8_t) avail << type;
+}
+
+static inline uint8_t smr_get_vma_cap(uint8_t vma_cap, uint8_t type)
+{
+	return vma_cap & (1 << type);
+}
 
 struct smr_inject_buf {
 	union {
@@ -615,12 +620,8 @@ void smr_ep_progress(struct util_ep *util_ep);
 static inline bool smr_vma_enabled(struct smr_ep *ep,
 				   struct smr_region *peer_smr)
 {
-	if (ep->region == peer_smr)
-		return (ep->region->cma_cap_self == SMR_VMA_CAP_ON ||
-			ep->region->xpmem_cap_self == SMR_VMA_CAP_ON);
-	else
-		return (ep->region->cma_cap_peer == SMR_VMA_CAP_ON ||
-			peer_smr->xpmem_cap_self == SMR_VMA_CAP_ON);
+	return ep->region == peer_smr ? ep->region->self_vma_caps :
+					ep->region->peer_vma_caps;
 }
 
 static inline void smr_set_ipc_valid(struct smr_ep *ep, uint64_t id)

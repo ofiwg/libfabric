@@ -808,8 +808,11 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 			return ret;
 
 		if (ep->util_ep.caps & FI_HMEM || smr_env.disable_cma) {
-			ep->region->cma_cap_peer = SMR_VMA_CAP_OFF;
-			ep->region->cma_cap_self = SMR_VMA_CAP_OFF;
+			smr_set_vma_cap(&ep->region->peer_vma_caps,
+					FI_SHM_P2P_CMA, false);
+			smr_set_vma_cap(&ep->region->self_vma_caps,
+					FI_SHM_P2P_CMA, false);
+			ep->region->flags |= SMR_FLAG_CMA_INIT;
 		}
 
 		if (ofi_hmem_any_ipc_enabled())
@@ -851,7 +854,8 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * endpoint p2p to XPMEM so it can be used on the fast
 		 * path
 		 */
-		if (ep->region->xpmem_cap_self == SMR_VMA_CAP_ON)
+		if (smr_get_vma_cap(ep->region->self_vma_caps,
+				    FI_SHM_P2P_XPMEM))
 			ep->p2p_type = FI_SHM_P2P_XPMEM;
 
 		break;
