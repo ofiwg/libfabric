@@ -183,7 +183,7 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, 
 			init_attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
 		}
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-		if (efa_rdm_use_unsolicited_write_recv())
+		if (efa_use_unsolicited_write_recv())
 			efa_attr.flags |= EFADV_QP_FLAGS_UNSOLICITED_WRITE_RECV;
 #endif
 		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;

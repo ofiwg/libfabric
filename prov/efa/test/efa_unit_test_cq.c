@@ -338,7 +338,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	efa_rdm_cq->ibv_cq.ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
 
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-	if (efa_rdm_use_unsolicited_write_recv()) {
+	if (efa_use_unsolicited_write_recv()) {
 		efadv_cq_from_ibv_cq_ex(efa_rdm_cq->ibv_cq.ibv_cq_ex)->wc_is_unsolicited = &efa_mock_efadv_wc_is_unsolicited;
 		will_return(efa_mock_efadv_wc_is_unsolicited, false);
 	}

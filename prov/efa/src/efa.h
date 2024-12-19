@@ -221,4 +221,10 @@ static inline void efa_perfset_end(struct efa_rdm_ep *ep, size_t index)
 #define efa_perfset_end(ep, index) do {} while (0)
 #endif
 
+static inline
+bool efa_use_unsolicited_write_recv()
+{
+	return efa_env.use_unsolicited_write_recv && efa_device_support_unsolicited_write_recv();
+}
+
 #endif /* EFA_H */
