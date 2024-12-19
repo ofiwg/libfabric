@@ -11,8 +11,11 @@ AC_DEFUN([FI_LPP_CONFIGURE],[
 	lpp_happy=0
 	have_lpp_thread_safe=1
 
+	AC_CHECK_DECL([HAVE_ATOMICS], [atomics_happy=1], [atomics_happy=0])
+
 	AS_IF([test "x$macos" = "x1"],[lpp_happy=0],
 	      [test x$host_cpu != xx86_64],[lpp_happy=0],
+	      [test x$atomics_happy == "x0"],[lpp_happy=0],
 	      [test x"$enable_lpp" != x"no"],[
 		lpp_happy=1
 		AC_SUBST(lpp_INCLUDES)
