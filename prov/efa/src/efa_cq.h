@@ -136,7 +136,7 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 	};
 
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-	if (efa_rdm_use_unsolicited_write_recv())
+	if (efa_use_unsolicited_write_recv())
 		efadv_cq_init_attr.wc_flags |= EFADV_WC_EX_WITH_IS_UNSOLICITED;
 #endif
 
@@ -175,4 +175,28 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 	return efa_cq_ibv_cq_ex_open_with_ibv_create_cq_ex(
 		&init_attr_ex, ibv_ctx, ibv_cq_ex, ibv_cq_ex_type);
 }
+#endif
+
+#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
+/**
+ * @brief Check whether a completion consumes recv buffer
+ *
+ * @param ibv_cq_ex extended ibv cq
+ * @return true the wc consumes a recv buffer
+ * @return false the wc doesn't consume a recv buffer
+ */
+static inline
+bool efa_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
+{
+	return efa_use_unsolicited_write_recv() && efadv_wc_is_unsolicited(efadv_cq_from_ibv_cq_ex(ibv_cq_ex));
+}
+
+#else
+
+static inline
+bool efa_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
+{
+	return false;
+}
+
 #endif
