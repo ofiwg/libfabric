@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -77,49 +77,45 @@ void smr_cma_check(struct smr_region *smr, struct smr_region *peer_smr)
 }
 
 size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
-				  size_t *cmd_offset, size_t *resp_offset,
-				  size_t *inject_offset, size_t *sar_offset,
-				  size_t *peer_offset, size_t *name_offset,
-				  size_t *sock_offset)
+				  size_t *cmd_offset, size_t *cs_offset,
+				  size_t *inject_offset, size_t *rq_offset,
+				  size_t *sar_offset, size_t *peer_offset)
 {
-	size_t cmd_queue_offset, resp_queue_offset, inject_pool_offset;
-	size_t sar_pool_offset, peer_data_offset, ep_name_offset;
-	size_t tx_size, rx_size, total_size, sock_name_offset;
+	size_t cmd_queue_offset, cmd_stack_offset, inject_pool_offset;
+	size_t ret_queue_offset, sar_pool_offset, peer_data_offset;
+	size_t tx_size, rx_size, total_size;
 
 	tx_size = roundup_power_of_two(tx_count);
 	rx_size = roundup_power_of_two(rx_count);
 
 	/* Align cmd_queue offset to cache line */
 	cmd_queue_offset = ofi_get_aligned_size(sizeof(struct smr_region), 64);
-	resp_queue_offset = cmd_queue_offset + sizeof(struct smr_cmd_queue) +
+	cmd_stack_offset = cmd_queue_offset + sizeof(struct smr_cmd_queue) +
 			    sizeof(struct smr_cmd_queue_entry) * rx_size;
-	inject_pool_offset = resp_queue_offset + sizeof(struct smr_resp_queue) +
-			     sizeof(struct smr_resp) * tx_size;
-	sar_pool_offset = inject_pool_offset +
-		freestack_size(sizeof(struct smr_inject_buf), rx_size);
+	inject_pool_offset = cmd_stack_offset +
+		freestack_size(sizeof(struct smr_cmd), tx_size);
+	ret_queue_offset = inject_pool_offset +
+		freestack_size(sizeof(struct smr_inject_buf), tx_size);
+	ret_queue_offset = ofi_get_aligned_size(ret_queue_offset, 64);
+	sar_pool_offset = ret_queue_offset + sizeof(struct smr_return_queue) +
+		sizeof(struct smr_return_queue_entry) * tx_size;
 	peer_data_offset = sar_pool_offset +
 		freestack_size(sizeof(struct smr_sar_buf), SMR_MAX_PEERS);
-	ep_name_offset = peer_data_offset + sizeof(struct smr_peer_data) *
+	total_size = peer_data_offset + sizeof(struct smr_peer_data) *
 		SMR_MAX_PEERS;
-
-	sock_name_offset = ep_name_offset + SMR_NAME_MAX;
 
 	if (cmd_offset)
 		*cmd_offset = cmd_queue_offset;
-	if (resp_offset)
-		*resp_offset = resp_queue_offset;
+	if (cs_offset)
+		*cs_offset = cmd_stack_offset;
 	if (inject_offset)
 		*inject_offset = inject_pool_offset;
+	if (rq_offset)
+		*rq_offset = ret_queue_offset;
 	if (sar_offset)
 		*sar_offset = sar_pool_offset;
 	if (peer_offset)
 		*peer_offset = peer_data_offset;
-	if (name_offset)
-		*name_offset = ep_name_offset;
-	if (sock_offset)
-		*sock_offset = sock_name_offset;
-
-	total_size = sock_name_offset + SMR_SOCK_NAME_MAX;
 
 	/*
  	 * Revisit later to see if we really need the size adjustment, or
@@ -169,29 +165,24 @@ err:
 	return -FI_EBUSY;
 }
 
-static void smr_lock_init(pthread_spinlock_t *lock)
-{
-	pthread_spin_init(lock, PTHREAD_PROCESS_SHARED);
-}
-
 /* TODO: Determine if aligning SMR data helps performance */
 int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	       const struct smr_attr *attr, struct smr_region *volatile *smr)
 {
 	struct smr_ep_name *ep_name;
-	size_t total_size, cmd_queue_offset, peer_data_offset;
-	size_t resp_queue_offset, inject_pool_offset, name_offset;
-	size_t sar_pool_offset, sock_name_offset;
+	size_t total_size, cmd_queue_offset, ret_queue_offset, peer_data_offset;
+	size_t cmd_stack_offset, inject_pool_offset, sar_pool_offset;
 	int fd, ret, i;
 	void *mapped_addr;
 	size_t tx_size, rx_size;
 
 	tx_size = roundup_power_of_two(attr->tx_count);
 	rx_size = roundup_power_of_two(attr->rx_count);
-	total_size = smr_calculate_size_offsets(tx_size, rx_size, &cmd_queue_offset,
-					&resp_queue_offset, &inject_pool_offset,
-					&sar_pool_offset, &peer_data_offset,
-					&name_offset, &sock_name_offset);
+	total_size = smr_calculate_size_offsets(
+				tx_size, rx_size, &cmd_queue_offset,
+				&cmd_stack_offset, &inject_pool_offset,
+				&ret_queue_offset, &sar_pool_offset,
+				&peer_data_offset);
 
 	fd = shm_open(attr->name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
@@ -252,9 +243,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	pthread_mutex_unlock(&ep_list_lock);
 
 	*smr = mapped_addr;
-	smr_lock_init(&(*smr)->lock);
 
-	(*smr)->map = map;
 	(*smr)->version = SMR_VERSION;
 
 	(*smr)->flags = attr->flags;
@@ -278,28 +267,30 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 
 	(*smr)->total_size = total_size;
 	(*smr)->cmd_queue_offset = cmd_queue_offset;
-	(*smr)->resp_queue_offset = resp_queue_offset;
+	(*smr)->cmd_stack_offset = cmd_stack_offset;
 	(*smr)->inject_pool_offset = inject_pool_offset;
+	(*smr)->ret_queue_offset = ret_queue_offset;
 	(*smr)->sar_pool_offset = sar_pool_offset;
 	(*smr)->peer_data_offset = peer_data_offset;
-	(*smr)->name_offset = name_offset;
-	(*smr)->sock_name_offset = sock_name_offset;
 	(*smr)->max_sar_buf_per_peer = SMR_BUF_BATCH_MAX;
 
 	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size);
-	smr_resp_queue_init(smr_resp_queue(*smr), tx_size);
+	smr_return_queue_init(smr_return_queue(*smr), tx_size);
+
+	smr_freestack_init(smr_cmd_stack(*smr), tx_size,
+			   sizeof(struct smr_cmd_entry));
 	smr_freestack_init(smr_inject_pool(*smr), rx_size,
 			sizeof(struct smr_inject_buf));
 	smr_freestack_init(smr_sar_pool(*smr), SMR_MAX_PEERS,
 			sizeof(struct smr_sar_buf));
 	for (i = 0; i < SMR_MAX_PEERS; i++) {
-		smr_peer_data(*smr)[i].addr.id = -1;
+		smr_peer_data(*smr)[i].id = -1;
 		smr_peer_data(*smr)[i].sar_status = 0;
 		smr_peer_data(*smr)[i].name_sent = 0;
 		smr_peer_data(*smr)[i].xpmem.cap = SMR_VMA_CAP_OFF;
 	}
 
-	strncpy((char *) smr_name(*smr), attr->name, total_size - name_offset);
+	strcpy((*smr)->name, attr->name);
 
 	/* Must be set last to signal full initialization to peers */
 	(*smr)->pid = getpid();
@@ -319,7 +310,7 @@ void smr_free(struct smr_region *smr)
 {
 	if (smr->flags & SMR_FLAG_HMEM_ENABLED)
 		(void) ofi_hmem_host_unregister(smr);
-	shm_unlink(smr_name(smr));
+	shm_unlink(smr->name);
 	munmap(smr, smr->total_size);
 }
 
@@ -341,7 +332,7 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_map *map,
 	int fd, ret = 0;
 	struct stat sts;
 	struct dlist_entry *entry;
-	const char *name = smr_no_prefix(peer_buf->peer.name);
+	const char *name = smr_no_prefix(peer_buf->name);
 	char tmp[SMR_PATH_MAX];
 
 	pthread_mutex_lock(&ep_list_lock);
@@ -418,7 +409,7 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_map *map,
 	dlist_foreach_container(&av->util_av.ep_list, struct util_ep, util_ep,
 				av_entry) {
 		smr_ep = container_of(util_ep, struct smr_ep, util_ep);
-		smr_map_to_endpoint(smr_ep->region, id);
+		smr_map_to_endpoint(smr_ep, id);
 	}
 
 out:
@@ -426,31 +417,37 @@ out:
 	return ret;
 }
 
-void smr_map_to_endpoint(struct smr_region *region, int64_t id)
+void smr_map_to_endpoint(struct smr_ep *ep, int64_t id)
 {
 	int ret;
 	struct smr_region *peer_smr;
+	struct smr_av *av;
 	struct smr_peer_data *local_peers;
 
-	assert(ofi_spin_held(&region->map->lock));
-	peer_smr = smr_peer_region(region, id);
-	if (region->map->peers[id].peer.id < 0 || !peer_smr)
+	av = container_of(ep->util_ep.av, struct smr_av, util_av);
+
+	assert(ofi_spin_held(&av->smr_map.lock));
+	peer_smr = smr_peer_region(ep, id);
+	if (!av->smr_map.peers[id].id_assigned || !peer_smr)
 	    return;
 
-	local_peers = smr_peer_data(region);
+	local_peers = smr_peer_data(ep->region);
+	local_peers[id].local_region = (uintptr_t) peer_smr;
 
-	if ((region != peer_smr && region->cma_cap_peer == SMR_VMA_CAP_NA) ||
-	    (region == peer_smr && region->cma_cap_self == SMR_VMA_CAP_NA))
-		smr_cma_check(region, peer_smr);
+	if ((ep->region != peer_smr &&
+	     ep->region->cma_cap_peer == SMR_VMA_CAP_NA) ||
+	    (ep->region == peer_smr &&
+	     ep->region->cma_cap_self == SMR_VMA_CAP_NA))
+		smr_cma_check(ep->region, peer_smr);
 
 	/* enable xpmem locally if the peer also has it enabled */
 	if (peer_smr->xpmem_cap_self == SMR_VMA_CAP_ON &&
-	    region->xpmem_cap_self == SMR_VMA_CAP_ON) {
+	    ep->region->xpmem_cap_self == SMR_VMA_CAP_ON) {
 		ret = ofi_xpmem_enable(&peer_smr->xpmem_self,
 				       &local_peers[id].xpmem);
 		if (ret) {
 			local_peers[id].xpmem.cap = SMR_VMA_CAP_OFF;
-			region->xpmem_cap_self = SMR_VMA_CAP_OFF;
+			ep->region->xpmem_cap_self = SMR_VMA_CAP_OFF;
 			return;
 		}
 		local_peers[id].xpmem.cap = SMR_VMA_CAP_ON;
@@ -459,7 +456,7 @@ void smr_map_to_endpoint(struct smr_region *region, int64_t id)
 		local_peers[id].xpmem.cap = SMR_VMA_CAP_OFF;
 	}
 
-	smr_set_ipc_valid(region, id);
+	smr_set_ipc_valid(ep, id);
 
 	return;
 }
@@ -484,7 +481,7 @@ void smr_unmap_region(const struct fi_provider *prov, struct smr_map *map,
 	dlist_foreach_container(&av->util_av.ep_list, struct util_ep, util_ep,
 				av_entry) {
 		smr_ep = container_of(util_ep, struct smr_ep, util_ep);
-		smr_unmap_from_endpoint(smr_ep->region, peer_id);
+		smr_unmap_from_endpoint(smr_ep, peer_id);
 	}
 
 	/* Don't unmap memory owned by this pid because the endpoint it belongs
@@ -509,36 +506,40 @@ void smr_unmap_region(const struct fi_provider *prov, struct smr_map *map,
 	peer->region = NULL;
 }
 
-void smr_unmap_from_endpoint(struct smr_region *region, int64_t id)
+void smr_unmap_from_endpoint(struct smr_ep *ep, int64_t id)
 {
 	struct smr_region *peer_smr;
+	struct smr_av *av;
 	struct smr_peer_data *local_peers, *peer_peers;
 	int64_t peer_id;
 
-	if (region->map->peers[id].peer.id < 0)
+	av = container_of(ep->util_ep.av, struct smr_av, util_av);
+	if (!av->smr_map.peers[id].id_assigned)
 		return;
 
-	peer_smr = smr_peer_region(region, id);
+	peer_smr = smr_peer_region(ep, id);
 	assert(peer_smr);
 	peer_peers = smr_peer_data(peer_smr);
-	peer_id = smr_peer_data(region)[id].addr.id;
+	peer_id = smr_peer_data(ep->region)[id].id;
 
-	peer_peers[peer_id].addr.id = -1;
+	peer_peers[peer_id].id = -1;
 	peer_peers[peer_id].name_sent = 0;
 
-	local_peers = smr_peer_data(region);
+	local_peers = smr_peer_data(ep->region);
 	ofi_xpmem_release(&local_peers[peer_id].xpmem);
 }
 
-void smr_exchange_all_peers(struct smr_region *region)
+void smr_exchange_all_peers(struct smr_ep *ep)
 {
+	struct smr_av *av;
 	int64_t i;
 
-	ofi_spin_lock(&region->map->lock);
+	av = container_of(ep->util_ep.av, struct smr_av, util_av);
+	ofi_spin_lock(&av->smr_map.lock);
 	for (i = 0; i < SMR_MAX_PEERS; i++)
-		smr_map_to_endpoint(region, i);
+		smr_map_to_endpoint(ep, i);
 
-	ofi_spin_unlock(&region->map->lock);
+	ofi_spin_unlock(&av->smr_map.lock);
 }
 
 int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
@@ -556,7 +557,7 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 		goto out;
 	}
 
-	while (map->peers[map->cur_id].peer.id != -1 && tries < SMR_MAX_PEERS) {
+	while (map->peers[map->cur_id].id_assigned && tries < SMR_MAX_PEERS) {
 		if (++map->cur_id == SMR_MAX_PEERS)
 			map->cur_id = 0;
 		tries++;
@@ -567,11 +568,11 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 	if (++map->cur_id == SMR_MAX_PEERS)
 		map->cur_id = 0;
 	node->data = (void *) (intptr_t) *id;
-	strncpy(map->peers[*id].peer.name, name, SMR_NAME_MAX);
-	map->peers[*id].peer.name[SMR_NAME_MAX - 1] = '\0';
+	strncpy(map->peers[*id].name, name, SMR_NAME_MAX);
+	map->peers[*id].name[SMR_NAME_MAX - 1] = '\0';
 	map->peers[*id].region = NULL;
 	map->num_peers++;
-	map->peers[*id].peer.id = *id;
+	map->peers[*id].id_assigned = true;
 
 out:
 	ofi_spin_unlock(&map->lock);
@@ -585,8 +586,9 @@ void smr_map_del(struct smr_map *map, int64_t id)
 
 	assert(id >= 0 && id < SMR_MAX_PEERS);
 	pthread_mutex_lock(&ep_list_lock);
-	dlist_foreach_container(&ep_name_list, struct smr_ep_name, name, entry) {
-		if (!strcmp(name->name, map->peers[id].peer.name)) {
+	dlist_foreach_container(&ep_name_list, struct smr_ep_name, name,
+				entry) {
+		if (!strcmp(name->name, map->peers[id].name)) {
 			local = true;
 			break;
 		}
@@ -595,9 +597,9 @@ void smr_map_del(struct smr_map *map, int64_t id)
 	ofi_spin_lock(&map->lock);
 	smr_unmap_region(&smr_prov, map, id, local);
 	map->peers[id].fiaddr = FI_ADDR_NOTAVAIL;
-	map->peers[id].peer.id = -1;
+	map->peers[id].id_assigned = false;
 	map->num_peers--;
-	ofi_rbmap_find_delete(&map->rbmap, map->peers[id].peer.name);
+	ofi_rbmap_find_delete(&map->rbmap, map->peers[id].name);
 	ofi_spin_unlock(&map->lock);
 }
 

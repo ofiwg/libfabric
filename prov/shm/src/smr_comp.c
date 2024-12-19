@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved
+ * Copyright (c) Intel Corporation. All rights reserved
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -63,6 +63,8 @@ int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
 		    uint64_t flags, size_t len, void *buf, int64_t id,
 		    uint64_t tag, uint64_t data)
 {
+	struct smr_av *av;
+
 	ofi_ep_peer_rx_cntr_inc(&ep->util_ep, op);
 
 	if (!(flags & (FI_REMOTE_CQ_DATA | FI_COMPLETION)))
@@ -70,6 +72,7 @@ int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
 
 	flags &= ~FI_COMPLETION;
 
+	av = container_of(ep->util_ep.av, struct smr_av, util_av);
 	return ofi_peer_cq_write(ep->util_ep.rx_cq, context, flags, len, buf,
-				 data, tag, ep->region->map->peers[id].fiaddr);
+				 data, tag, av->smr_map.peers[id].fiaddr);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2020 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,19 +32,13 @@
 
 #include "smr.h"
 
-static void smr_peer_addr_init(struct smr_addr *peer)
-{
-	memset(peer->name, 0, SMR_NAME_MAX);
-	peer->id = -1;
-}
-
 static int smr_name_compare(struct ofi_rbmap *map, void *key, void *data)
 {
 	struct smr_map *smr_map;
 
 	smr_map = container_of(map, struct smr_map, rbmap);
 
-	return strncmp(smr_map->peers[(uintptr_t) data].peer.name,
+	return strncmp(smr_map->peers[(uintptr_t) data].name,
 		       (char *) key, SMR_NAME_MAX);
 }
 
@@ -54,7 +48,8 @@ static int smr_map_init(const struct fi_provider *prov, struct smr_map *map,
 	int i;
 
 	for (i = 0; i < peer_count; i++) {
-		smr_peer_addr_init(&map->peers[i].peer);
+		memset(&map->peers[i].name, 0, SMR_NAME_MAX);
+		map->peers[i].id_assigned = 0;
 		map->peers[i].fiaddr = FI_ADDR_NOTAVAIL;
 	}
 	map->flags = flags;
@@ -70,10 +65,8 @@ static void smr_map_cleanup(struct smr_map *map)
 	int64_t i;
 
 	for (i = 0; i < SMR_MAX_PEERS; i++) {
-		if (map->peers[i].peer.id < 0)
-			continue;
-
-		smr_map_del(map, i);
+		if (map->peers[i].id_assigned)
+			smr_map_del(map, i);
 	}
 	ofi_rbmap_cleanup(&map->rbmap);
 }
@@ -100,15 +93,13 @@ static int smr_av_close(struct fid *fid)
 static fi_addr_t smr_get_addr(struct fi_peer_rx_entry *rx_entry)
 {
 	struct smr_cmd_ctx *cmd_ctx = rx_entry->peer_context;
+	struct smr_av *av;
 
-	return cmd_ctx->ep->region->map->peers[cmd_ctx->cmd.msg.hdr.id].fiaddr;
+	av = container_of(cmd_ctx->ep->util_ep.av, struct smr_av, util_av);
+
+	return av->smr_map.peers[cmd_ctx->cmd->hdr.id].fiaddr;
 }
 
-
-/*
- * Input address: smr name (string)
- * output address: index (fi_addr_t), the output from util_av
- */
 static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			 fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
@@ -145,7 +136,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			ret = -FI_ENOMEM;
 		}
 
-		FI_INFO(&smr_prov, FI_LOG_AV, "fi_addr: %" PRIu64 "\n", util_addr);
+		FI_INFO(&smr_prov, FI_LOG_AV, "fi_addr: %" PRIu64 "\n",
+			util_addr);
 
 		if (ret) {
 			if (fi_addr)
@@ -174,7 +166,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 					       av_entry);
         		smr_ep = container_of(util_ep, struct smr_ep, util_ep);
 			smr_ep->region->max_sar_buf_per_peer =
-				SMR_MAX_PEERS / smr_av->smr_map.num_peers;
+				MIN(SMR_BUF_BATCH_MAX,
+				    SMR_MAX_PEERS / smr_av->smr_map.num_peers);
 			smr_ep->srx->owner_ops->foreach_unspec_addr(smr_ep->srx,
 								&smr_get_addr);
 		}
@@ -184,8 +177,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	return succ_count;
 }
 
-static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count,
-			 uint64_t flags)
+static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
+			 size_t count, uint64_t flags)
 {
 	struct util_av *util_av;
 	struct util_ep *util_ep;
@@ -211,7 +204,8 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 
 		smr_map_del(&smr_av->smr_map, id);
 		dlist_foreach(&util_av->ep_list, av_entry) {
-			util_ep = container_of(av_entry, struct util_ep, av_entry);
+			util_ep = container_of(av_entry, struct util_ep,
+					       av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
 			if (smr_av->smr_map.num_peers > 0)
 				smr_ep->region->max_sar_buf_per_peer =
@@ -240,7 +234,7 @@ static int smr_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	smr_av = container_of(util_av, struct smr_av, util_av);
 
 	id = smr_addr_lookup(util_av, fi_addr);
-	name = smr_av->smr_map.peers[id].peer.name;
+	name = smr_av->smr_map.peers[id].name;
 
 	strncpy((char *) addr, name, *addrlen);
 
@@ -315,7 +309,8 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		goto out;
 	}
 
-	ret = ofi_av_init(util_domain, attr, &util_attr, &smr_av->util_av, context);
+	ret = ofi_av_init(util_domain, attr, &util_attr, &smr_av->util_av,
+			  context);
 	if (ret)
 		goto out;
 

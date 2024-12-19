@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2021 Intel Corporation. All rights reserved
+ * Copyright (c) Intel Corporation. All rights reserved
  * (C) Copyright 2021 Amazon.com, Inc. or its affiliates.
  *
  * This software is available to you under a choice of one of two
@@ -34,26 +34,27 @@
 #include "smr.h"
 
 static void smr_add_rma_cmd(struct smr_region *peer_smr,
-		const struct fi_rma_iov *rma_iov, size_t iov_count,
-		struct smr_cmd_entry *ce)
+			    const struct fi_rma_iov *rma_iov, size_t iov_count,
+			    struct smr_cmd *cmd)
 {
-	ce->rma_cmd.rma.rma_count = iov_count;
-	memcpy(ce->rma_cmd.rma.rma_iov, rma_iov, sizeof(*rma_iov) * iov_count);
+	cmd->rma.rma_count = iov_count;
+	memcpy(cmd->rma.rma_iov, rma_iov, sizeof(*rma_iov) * iov_count);
 }
 
 static void smr_format_rma_resp(struct smr_cmd *cmd, fi_addr_t peer_id,
 				const struct fi_rma_iov *rma_iov, size_t count,
-				size_t total_len, uint32_t op, uint64_t op_flags)
+				size_t total_len, uint32_t op,
+				uint64_t op_flags)
 {
 	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags);
-	cmd->msg.hdr.size = total_len;
+	cmd->hdr.size = total_len;
 }
 
 static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
-			const struct iovec *iov, size_t iov_count,
-			const struct fi_rma_iov *rma_iov, size_t rma_count,
-			void **desc, int peer_id, int id, void *context,
-			uint32_t op, uint64_t op_flags)
+			    const struct iovec *iov, size_t iov_count,
+			    const struct fi_rma_iov *rma_iov, size_t rma_count,
+			    void **desc, int peer_id, int id, void *context,
+			    uint32_t op, uint64_t op_flags)
 {
 	struct iovec vma_iovec[SMR_IOV_LIMIT], rma_iovec[SMR_IOV_LIMIT];
 	struct ofi_xpmem_client *xpmem;
@@ -88,22 +89,26 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 	smr_format_rma_resp(&ce->cmd, peer_id, rma_iov, rma_count, total_len,
 			    (op == ofi_op_write) ? ofi_op_write_async :
 			    ofi_op_read_async, op_flags);
+
+	ce->ptr = smr_peer_to_peer(ep, id, (uintptr_t) &ce->cmd);
 	smr_cmd_queue_commit(ce, pos);
 	return FI_SUCCESS;
 }
 
-static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
-	size_t iov_count, const struct fi_rma_iov *rma_iov, size_t rma_count,
-	void **desc, fi_addr_t addr, void *context, uint32_t op, uint64_t data,
-	uint64_t op_flags)
+static ssize_t smr_generic_rma(
+		struct smr_ep *ep, const struct iovec *iov,
+		size_t iov_count, const struct fi_rma_iov *rma_iov,
+		size_t rma_count, void **desc, fi_addr_t addr, void *context,
+		uint32_t op, uint64_t data, uint64_t op_flags)
 {
 	struct smr_domain *domain;
 	struct smr_region *peer_smr;
 	int64_t id, peer_id;
-	int cmds, err = 0, proto = smr_src_inline;
+	int cmds, err = 0, proto = smr_proto_inline;
 	ssize_t ret = 0;
 	size_t total_len;
 	struct smr_cmd_entry *ce;
+	struct smr_cmd *cmd;
 	int64_t pos;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
@@ -111,14 +116,15 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	assert(ofi_total_iov_len(iov, iov_count) ==
 	       ofi_total_rma_iov_len(rma_iov, rma_count));
 
-	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
+	domain = container_of(ep->util_ep.domain, struct smr_domain,
+			      util_domain);
 
 	id = smr_verify_peer(ep, addr);
 	if (id < 0)
 		return -FI_EAGAIN;
 
-	peer_id = smr_peer_data(ep->region)[id].addr.id;
-	peer_smr = smr_peer_region(ep->region, id);
+	peer_id = smr_peer_data(ep->region)[id].id;
+	peer_smr = smr_peer_region(ep, id);
 
 	cmds = 1 + !(domain->fast_rma && !(op_flags &
 		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
@@ -156,7 +162,6 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
 	if (ret == -FI_ENOENT) {
-		/* kick the peer to process any outstanding commands */
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
@@ -167,19 +172,34 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	proto = smr_select_proto(desc, iov_count, smr_vma_enabled(ep, peer_smr),
 	                         smr_ipc_valid(ep, peer_smr, id, peer_id), op,
 				 total_len, op_flags);
-
+	if (proto != smr_proto_inline) {
+		if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
+			smr_cmd_queue_discard(ce, pos);
+			ret = -FI_EAGAIN;
+			goto unlock;
+		}
+		cmd = smr_freestack_pop(smr_cmd_stack(ep->region));
+		assert(cmd);
+		ce->ptr = smr_local_to_peer(ep, id, peer_id, (uintptr_t) cmd);
+	} else {
+		cmd = &ce->cmd;
+		ce->ptr = smr_peer_to_peer(ep, id, (uintptr_t) &ce->cmd);
+	}
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, 0, data,
 				   op_flags, (struct ofi_mr **)desc, iov,
-				   iov_count, total_len, context, &ce->cmd);
+				   iov_count, total_len, context, cmd);
 	if (ret) {
+		if (proto != smr_proto_inline)
+			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
 		smr_cmd_queue_discard(ce, pos);
 		goto unlock;
 	}
 
-	smr_add_rma_cmd(peer_smr, rma_iov, rma_count, ce);
+	smr_add_rma_cmd(peer_smr, rma_iov, rma_count, cmd);
 	smr_cmd_queue_commit(ce, pos);
 
-	if (proto != smr_src_inline && proto != smr_src_inject)
+	if ((proto != smr_proto_inline && proto != smr_proto_inject) ||
+	    (op == ofi_op_read_req))
 		goto unlock;
 
 	ret = smr_complete_tx(ep, context, op, op_flags);
@@ -310,21 +330,23 @@ static ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	struct iovec iov;
 	struct fi_rma_iov rma_iov;
 	int64_t id, peer_id;
-	int cmds, proto = smr_src_inline;
+	int cmds, proto = smr_proto_inline;
 	ssize_t ret = 0;
+	struct smr_cmd *cmd;
 	struct smr_cmd_entry *ce;
 	int64_t pos;
 
 	assert(len <= SMR_INJECT_SIZE);
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
-	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
+	domain = container_of(ep->util_ep.domain, struct smr_domain,
+			      util_domain);
 
 	id = smr_verify_peer(ep, dest_addr);
 	if (id < 0)
 		return -FI_EAGAIN;
 
-	peer_id = smr_peer_data(ep->region)[id].addr.id;
-	peer_smr = smr_peer_region(ep->region, id);
+	peer_id = smr_peer_data(ep->region)[id].id;
+	peer_smr = smr_peer_region(ep, id);
 
 	cmds = 1 + !(domain->fast_rma && !(flags & FI_REMOTE_CQ_DATA) &&
 		     smr_vma_enabled(ep, peer_smr));
@@ -338,6 +360,8 @@ static ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	rma_iov.len = len;
 	rma_iov.key = key;
 
+	ofi_genlock_lock(&ep->util_ep.lock);
+
 	if (cmds == 1) {
 		ret = smr_rma_fast(ep, peer_smr, &iov, 1, &rma_iov, 1, NULL,
 				   peer_id, id, NULL, ofi_op_write, flags);
@@ -348,19 +372,37 @@ static ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	if (ret == -FI_ENOENT)
 		return -FI_EAGAIN;
 
-	proto = len <= SMR_MSG_DATA_LEN ? smr_src_inline : smr_src_inject;
+	if (len <= SMR_MSG_DATA_LEN) {
+		proto = smr_proto_inline;
+		cmd = &ce->cmd;
+		ce->ptr = smr_peer_to_peer(ep, id, (uintptr_t) &ce->cmd);
+	} else {
+		proto = smr_proto_inject;
+		if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
+			smr_cmd_queue_discard(ce, pos);
+			ret = -FI_EAGAIN;
+			goto unlock;
+		}
+
+		cmd = smr_freestack_pop(smr_cmd_stack(ep->region));
+		assert(cmd);
+		ce->ptr = smr_local_to_peer(ep, id, peer_id, (uintptr_t) cmd);
+	}
+
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, ofi_op_write, 0,
-			data, flags, NULL, &iov, 1, len, NULL, &ce->cmd);
+				   data, flags, NULL, &iov, 1, len, NULL, cmd);
 	if (ret) {
 		smr_cmd_queue_discard(ce, pos);
-		return -FI_EAGAIN;
+		goto unlock;
 	}
-	smr_add_rma_cmd(peer_smr, &rma_iov, 1, ce);
+	smr_add_rma_cmd(peer_smr, &rma_iov, 1, cmd);
 	smr_cmd_queue_commit(ce, pos);
 
 out:
 	if (!ret)
 		ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_write);
+unlock:
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -380,8 +422,8 @@ static ssize_t smr_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	rma_iov.len = len;
 	rma_iov.key = key;
 
-	return smr_generic_rma(ep, &iov, 1, &rma_iov, 1, &desc, dest_addr, context,
-			       ofi_op_write, data,
+	return smr_generic_rma(ep, &iov, 1, &rma_iov, 1, &desc, dest_addr,
+			       context, ofi_op_write, data,
 			       FI_REMOTE_CQ_DATA | smr_ep_tx_flags(ep));
 }
 
@@ -394,8 +436,9 @@ static ssize_t smr_rma_inject(struct fid_ep *ep_fid, const void *buf,
 }
 
 static ssize_t smr_inject_writedata(struct fid_ep *ep_fid, const void *buf,
-			size_t len, uint64_t data, fi_addr_t dest_addr,
-			uint64_t addr, uint64_t key)
+				    size_t len, uint64_t data,
+				    fi_addr_t dest_addr, uint64_t addr,
+				    uint64_t key)
 {
 	return smr_generic_rma_inject(ep_fid, buf, len, dest_addr, addr, key,
 				      data, FI_REMOTE_CQ_DATA);
