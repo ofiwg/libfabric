@@ -153,6 +153,9 @@
 #define VRB_EP_PROTO(info)						\
 	(((info) && (info)->ep_attr) ? (info)->ep_attr->protocol :	\
 					FI_PROTO_UNSPEC)
+#define VRB_RO_ENABLED(info)    \
+	((info)->tx_attr && !(info)->tx_attr->msg_order &&		\
+	 (info)->rx_attr && !(info)->rx_attr->msg_order)
 
 #define VRB_MEM_ALIGNMENT (64)
 #define VRB_BUF_ALIGNMENT (4096) /* TODO: Page or MTU size */
@@ -394,6 +397,7 @@ struct fi_ops_cm *vrb_pep_ops_cm(struct vrb_pep *pep);
 enum {
 	VRB_USE_XRC = BIT(0),
 	VRB_USE_ODP = BIT(1),
+	VRB_USE_RO  = BIT(2),
 };
 
 struct vrb_domain {
@@ -467,6 +471,12 @@ struct vrb_cq {
 int vrb_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		   struct fid_cq **cq, void *context);
 int vrb_cq_trywait(struct vrb_cq *cq);
+
+#if VERBS_HAVE_RELAXED_ORDERING_MR
+#define VRB_ACCESS_RELAXED_ORDERING IBV_ACCESS_RELAXED_ORDERING
+#else
+#define VRB_ACCESS_RELAXED_ORDERING 0
+#endif
 
 struct vrb_mem_desc {
 	struct fid_mr		mr_fid;
@@ -878,10 +888,12 @@ struct verbs_ep_domain {
 	char			*suffix;
 	enum fi_ep_type		type;
 	uint32_t		protocol;
+	bool			relaxed_ordering;
 };
 
 extern const struct verbs_ep_domain verbs_dgram_domain;
 extern const struct verbs_ep_domain verbs_msg_xrc_domain;
+extern const struct verbs_ep_domain verbs_msg_ro_domain;
 
 int vrb_check_ep_attr(const struct fi_info *hints,
 			 const struct fi_info *info);
@@ -894,6 +906,16 @@ static inline int vrb_cmp_xrc_domain_name(const char *domain_name,
 {
 	size_t domain_len = strlen(domain_name);
 	size_t suffix_len = strlen(verbs_msg_xrc_domain.suffix);
+
+	return domain_len > suffix_len ? strncmp(domain_name, rdma_name,
+						 domain_len - suffix_len) : -1;
+}
+
+static inline int vrb_cmp_ro_domain_name(const char *domain_name,
+					     const char *rdma_name)
+{
+	size_t domain_len = strlen(domain_name);
+	size_t suffix_len = strlen(verbs_msg_ro_domain.suffix);
 
 	return domain_len > suffix_len ? strncmp(domain_name, rdma_name,
 						 domain_len - suffix_len) : -1;
