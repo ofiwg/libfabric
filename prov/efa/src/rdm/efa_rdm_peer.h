@@ -75,6 +75,12 @@ struct efa_rdm_peer {
 	struct efa_rdm_peer_user_recv_qp user_recv_qp;
 };
 
+struct efa_rdm_peer_map_entry {
+	uint64_t key;
+	struct efa_rdm_peer efa_rdm_peer;
+	UT_hash_handle hh;
+};
+
 /**
  * @brief check for peer's RDMA_READ support, assuming HANDSHAKE has already occurred
  *
@@ -269,6 +275,12 @@ bool efa_both_support_zero_hdr_data_transfer(struct efa_rdm_ep *ep, struct efa_r
 		(peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP));
 }
 
+static inline
+void efa_rdm_peer_map_construct(struct efa_rdm_peer_map *peer_map)
+{
+	peer_map->head = NULL;
+}
+
 struct efa_conn;
 
 void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn);
@@ -286,5 +298,11 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
 
 int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
+
+struct efa_rdm_peer *efa_rdm_peer_map_insert(struct efa_rdm_peer_map *peer_map, fi_addr_t addr, struct efa_rdm_ep *ep);
+
+struct efa_rdm_peer *efa_rdm_peer_map_lookup(struct efa_rdm_peer_map *peer_map, fi_addr_t addr);
+
+void efa_rdm_peer_map_remove(struct efa_rdm_peer_map *peer_map, fi_addr_t addr, struct efa_rdm_peer *peer);
 
 #endif /* EFA_RDM_PEER_H */
