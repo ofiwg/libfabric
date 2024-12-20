@@ -660,6 +660,79 @@ void test_efa_rdm_ep_read_queue_before_handshake(struct efa_resource **state)
 }
 
 /**
+ * @brief When local support unsolicited write, but the peer doesn't, fi_writedata
+ * (use rdma-write with imm) should fail as FI_EINVAL
+ *
+ * @param state struct efa_resource that is managed by the framework
+ */
+void test_efa_rdm_ep_rma_inconsistent_unsolicited_write_recv(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t peer_addr;
+	int num_addr;
+	const int buf_len = 8;
+	char buf[8] = {0};
+	int err;
+	uint64_t rma_addr, rma_key;
+	struct efa_rdm_peer *peer;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	resource->hints->caps |= FI_MSG | FI_TAGGED | FI_RMA;
+	resource->hints->domain_attr->mr_mode |= FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_LOCAL;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 22),
+	                                            resource->hints, true, true);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/**
+	 * TODO: It's better to mock this function
+	 * so we can test on platform that doesn't
+	 * support rdma-write.
+	 */
+	if (!(efa_rdm_ep_support_rdma_write(efa_rdm_ep)))
+		skip();
+
+	/* Make local ep support unsolicited write recv */
+	efa_rdm_ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
+
+	/* create a fake peer */
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	num_addr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(num_addr, 1);
+
+	/* create a fake rma_key and address.  fi_read should return before
+	 * they are needed. */
+	rma_key = 0x1234;
+	rma_addr = (uint64_t) &buf;
+
+	/*
+	 * Fake a peer that has made handshake and
+	 * does not support unsolicited write recv
+	 */
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_WRITE;
+	peer->extra_info[0] &= ~EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
+	/* make sure shm is not used */
+	peer->is_local = false;
+
+	err = fi_writedata(resource->ep, buf, buf_len,
+			    NULL, /* desc, not required */
+			    0x1234,
+			    peer_addr,
+			    rma_addr,
+			    rma_key,
+			    NULL); /* context */
+	assert_int_equal(err, -FI_EOPNOTSUPP);
+}
+
+/**
  * @brief verify that when shm was used to send a small message (<4k), no copy was performed.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
@@ -1266,4 +1339,25 @@ void test_efa_rdm_ep_rx_refill_threshold_smaller_than_rx_size(struct efa_resourc
 void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size(struct efa_resource **state)
 {
 	test_efa_rdm_ep_rx_refill_impl(state, 128, 64);
+}
+
+/**
+ * @brief when unsolicited write recv is supported (by device + env),
+ * efa_rdm_ep_support_unsolicited_write_recv
+ * should return true, otherwise it should return false
+ *
+ * @param[in]	state			struct efa_resource that is managed by the framework
+ * @param[in]	is_supported	support status
+ */
+void test_efa_rdm_ep_support_unsolicited_write_recv(struct efa_resource **state)
+{
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_resource *resource = *state;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_int_equal(efa_rdm_use_unsolicited_write_recv(),
+			 efa_rdm_ep_support_unsolicited_write_recv(efa_rdm_ep));
 }

@@ -109,6 +109,23 @@ bool efa_rdm_peer_support_rdma_write(struct efa_rdm_peer *peer)
 	       (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_RDMA_WRITE);
 }
 
+/**
+ * @brief check for peer's unsolicited write support, assuming HANDSHAKE has already occurred
+ *
+ * @param[in] peer	A peer which we have already received a HANDSHAKE from
+ * @return bool		The peer's unsolicited write recv support
+ */
+static inline
+bool efa_rdm_peer_support_unsolicited_write_recv(struct efa_rdm_peer *peer)
+{
+	/* Unsolicited write recv is an extra feature defined in version 4 (the base version).
+	 * Because it is an extra feature, an EP will assume the peer does not support
+	 * it before a handshake packet was received.
+	 */
+	return (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) &&
+	       (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV);
+}
+
 static inline
 bool efa_rdm_peer_support_delivery_complete(struct efa_rdm_peer *peer)
 {
