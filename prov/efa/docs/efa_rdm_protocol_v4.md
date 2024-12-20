@@ -68,6 +68,12 @@ Chapter 4 "extra features/requests" describes the extra features/requests define
 
  *  Section 4.6 describe the extra feature: RDMA-Write based message transfer.
 
+ *  Section 4.7 describe the extra feature: Long read and runting read nack protocol.
+
+ *  Section 4.8 describe the extra feature: User receive QP.
+
+ *  Section 4.9 describe the extra feature: Unsolicited write recv.
+
 Chapter 5 "What's not covered?" describes the contents that are intentionally left out of
 this document because they are considered "implementation details".
 
@@ -323,6 +329,7 @@ Table: 2.1 a list of extra features/requests
 | 5  | RDMA-Write based data transfer   | extra feature | libfabric 1.18.0 | Section 4.6 |
 | 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 |
 | 7  | User recv QP            | extra feature & request| libfabric 1.22.0 | Section 4.8 |
+| 8  | Unsolicited write recv  | extra feature | libfabric 1.22.0 | Section 4.9 |
 
 How does protocol v4 maintain backward compatibility when extra features/requests are introduced?
 
@@ -1610,6 +1617,17 @@ calls fi_recv(). Currently such receive cannot be cancelled and fi_cancel() is n
 zero-copy receive mode.
 If a receiver gets RTM packets delivered to its default QP, it raises an error
 because it requests all RTM packets must be delivered to its user recv QP.
+
+### 4.9 Unsolicited write recv
+
+The "Unsolicited write recv" is an extra feature that was
+introduced with the libfabric 1.22.0.  When this feature is on, rdma-write
+with immediate data will not consume an rx buffer on the responder side. It is
+defined as an extra feature because there is a set of requirements (firmware,
+EFA kernel module and rdma-core) to be met before an endpoint can use the unsolicited
+write recv capability, therefore an endpoint cannot assume the other party supports
+unsolicited write recv. The rdma-write with immediate data cannot be issued if there
+is a discrepancy on this feature between local and peer.
 
 ## 5. What's not covered?
 

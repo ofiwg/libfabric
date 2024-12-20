@@ -40,7 +40,8 @@ struct efa_ep_addr {
 #define EFA_RDM_EXTRA_FEATURE_RDMA_WRITE		BIT_ULL(5)
 #define EFA_RDM_EXTRA_FEATURE_READ_NACK		BIT_ULL(6)
 #define EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP	BIT_ULL(7)
-#define EFA_RDM_NUM_EXTRA_FEATURE_OR_REQUEST		8
+#define EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV	BIT_ULL(8)
+#define EFA_RDM_NUM_EXTRA_FEATURE_OR_REQUEST		9
 /*
  * The length of 64-bit extra_info array used in efa_rdm_ep
  * and efa_rdm_peer
