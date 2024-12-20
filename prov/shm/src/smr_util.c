@@ -599,7 +599,7 @@ void smr_map_del(struct smr_map *map, int64_t id)
 	assert(id >= 0 && id < SMR_MAX_PEERS);
 	pthread_mutex_lock(&ep_list_lock);
 	dlist_foreach_container(&ep_name_list, struct smr_ep_name, name, entry) {
-		if (strcmp(name->name, map->peers[id].peer.name)) {
+		if (!strcmp(name->name, map->peers[id].peer.name)) {
 			local = true;
 			break;
 		}
