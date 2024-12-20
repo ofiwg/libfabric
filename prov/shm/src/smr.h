@@ -316,6 +316,7 @@ struct smr_ep {
 	const char		*name;
 	uint64_t		msg_id;
 	struct smr_region	*volatile region;
+	struct smr_map		*map;
 	struct fid_peer_srx	*srx;
 	struct ofi_bufpool	*cmd_ctx_pool;
 	struct ofi_bufpool	*unexp_buf_pool;
@@ -340,8 +341,7 @@ struct smr_av {
 
 static inline struct smr_region *smr_peer_region(struct smr_ep *ep, int i)
 {
-	return container_of(ep->util_ep.av, struct smr_av, util_av)->
-			    smr_map.peers[i].region;
+	return ep->map->peers[i].region;
 }
 static inline struct smr_cmd_queue *smr_cmd_queue(struct smr_region *smr)
 {
@@ -626,12 +626,8 @@ static inline bool smr_vma_enabled(struct smr_ep *ep,
 
 static inline void smr_set_ipc_valid(struct smr_ep *ep, uint64_t id)
 {
-	struct smr_av *av;
-
-	av = container_of(ep->util_ep.av, struct smr_av, util_av);
-
 	if (ofi_hmem_is_initialized(FI_HMEM_ZE) &&
-	    av->smr_map.peers[id].pid_fd == -1)
+	    ep->map->peers[id].pid_fd == -1)
 		smr_peer_data(ep->region)[id].ipc_valid = 0;
         else
 		smr_peer_data(ep->region)[id].ipc_valid = 1;

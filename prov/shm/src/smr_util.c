@@ -426,14 +426,11 @@ void smr_map_to_endpoint(struct smr_ep *ep, int64_t id)
 {
 	int ret;
 	struct smr_region *peer_smr;
-	struct smr_av *av;
 	struct smr_peer_data *local_peers;
 
-	av = container_of(ep->util_ep.av, struct smr_av, util_av);
-
-	assert(ofi_spin_held(&av->smr_map.lock));
+	assert(ofi_spin_held(&ep->map->lock));
 	peer_smr = smr_peer_region(ep, id);
-	if (!av->smr_map.peers[id].id_assigned || !peer_smr)
+	if (!ep->map->peers[id].id_assigned || !peer_smr)
 	    return;
 
 	local_peers = smr_peer_data(ep->region);
@@ -454,7 +451,8 @@ void smr_map_to_endpoint(struct smr_ep *ep, int64_t id)
 			return;
 		}
 		local_peers[id].xpmem.avail = true;
-		local_peers[id].xpmem.addr_max = peer_smr->xpmem_self.address_max;
+		local_peers[id].xpmem.addr_max =
+					peer_smr->xpmem_self.address_max;
 	} else {
 		local_peers[id].xpmem.avail = false;
 	}
@@ -465,7 +463,7 @@ void smr_map_to_endpoint(struct smr_ep *ep, int64_t id)
 }
 
 void smr_unmap_region(const struct fi_provider *prov, struct smr_map *map,
-		     int64_t peer_id, bool local)
+		      int64_t peer_id, bool local)
 {
 	struct smr_region *peer_region;
 	struct smr_peer *peer;
@@ -512,12 +510,10 @@ void smr_unmap_region(const struct fi_provider *prov, struct smr_map *map,
 void smr_unmap_from_endpoint(struct smr_ep *ep, int64_t id)
 {
 	struct smr_region *peer_smr;
-	struct smr_av *av;
 	struct smr_peer_data *local_peers, *peer_peers;
 	int64_t peer_id;
 
-	av = container_of(ep->util_ep.av, struct smr_av, util_av);
-	if (!av->smr_map.peers[id].id_assigned)
+	if (!ep->map->peers[id].id_assigned)
 		return;
 
 	peer_smr = smr_peer_region(ep, id);
@@ -534,15 +530,13 @@ void smr_unmap_from_endpoint(struct smr_ep *ep, int64_t id)
 
 void smr_exchange_all_peers(struct smr_ep *ep)
 {
-	struct smr_av *av;
 	int64_t i;
 
-	av = container_of(ep->util_ep.av, struct smr_av, util_av);
-	ofi_spin_lock(&av->smr_map.lock);
+	ofi_spin_lock(&ep->map->lock);
 	for (i = 0; i < SMR_MAX_PEERS; i++)
 		smr_map_to_endpoint(ep, i);
 
-	ofi_spin_unlock(&av->smr_map.lock);
+	ofi_spin_unlock(&ep->map->lock);
 }
 
 int smr_map_add(const struct fi_provider *prov, struct smr_map *map,

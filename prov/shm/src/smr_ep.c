@@ -190,11 +190,8 @@ static void smr_send_name(struct smr_ep *ep, int64_t id)
 
 int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
 {
-	struct smr_av *av;
 	int64_t id;
 	int ret;
-
-	av = container_of(ep->util_ep.av, struct smr_av, util_av);
 
 	id = smr_addr_lookup(ep->util_ep.av, fi_addr);
 	assert(id < SMR_MAX_PEERS);
@@ -204,10 +201,10 @@ int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
 	if (smr_peer_data(ep->region)[id].id >= 0)
 		return id;
 
-	if (!av->smr_map.peers[id].region) {
-		ofi_spin_lock(&av->smr_map.lock);
-		ret = smr_map_to_region(&smr_prov, &av->smr_map, id);
-		ofi_spin_unlock(&av->smr_map.lock);
+	if (!ep->map->peers[id].region) {
+		ofi_spin_lock(&ep->map->lock);
+		ret = smr_map_to_region(&smr_prov, ep->map, id);
+		ofi_spin_unlock(&ep->map->lock);
 		if (ret)
 			return -1;
 	}
@@ -755,6 +752,7 @@ static int smr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 				"duplicate AV binding\n");
 			return -FI_EINVAL;
 		}
+		ep->map = &container_of(av, struct smr_av, util_av)->smr_map;
 		break;
 	case FI_CLASS_CQ:
 		ret = smr_ep_bind_cq(ep, container_of(bfid, struct util_cq,
@@ -782,12 +780,10 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 	struct smr_attr attr;
 	struct smr_domain *domain;
 	struct smr_ep *ep;
-	struct smr_av *av;
 	struct fid_ep *srx;
 	int ret;
 
 	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
-	av = container_of(ep->util_ep.av, struct smr_av, util_av);
 
 	switch (command) {
 	case FI_ENABLE:
@@ -803,7 +799,7 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		attr.flags = ep->util_ep.caps & FI_HMEM ?
 				SMR_FLAG_HMEM_ENABLED : 0;
 
-		ret = smr_create(&smr_prov, &av->smr_map, &attr, &ep->region);
+		ret = smr_create(&smr_prov, ep->map, &attr, &ep->region);
 		if (ret)
 			return ret;
 

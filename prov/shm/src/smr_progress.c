@@ -535,16 +535,14 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 	ssize_t hmem_copy_ret;
 	struct ofi_mr_entry *mr_entry;
 	struct smr_domain *domain;
-	struct smr_av *av;
 	struct smr_pend_entry *ipc_entry;
 
 	domain = container_of(ep->util_ep.domain, struct smr_domain,
 			      util_domain);
 
-	av = container_of(ep->util_ep.av, struct smr_av, util_av);
 	if (cmd->data.ipc_info.iface == FI_HMEM_ZE)
 		ze_set_pid_fd((void **) &cmd->data.ipc_info.ipc_handle,
-			      av->smr_map.peers[cmd->hdr.id].pid_fd);
+			      ep->map->peers[cmd->hdr.id].pid_fd);
 
 	//TODO disable IPC if more than 1 interface is initialized
 	ret = ofi_ipc_cache_search(domain->ipc_cache, cmd->hdr.id,
@@ -864,14 +862,11 @@ int smr_unexp_start(struct fi_peer_rx_entry *rx_entry)
 
 static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 {
-	struct smr_av *av;
 	struct smr_region *peer_smr;
 	int64_t idx = -1;
 	int ret = 0;
 
-	av = container_of(ep->util_ep.av, struct smr_av, util_av);
-	ret = smr_map_add(&smr_prov, &av->smr_map, (char *) cmd->data.msg,
-			  &idx);
+	ret = smr_map_add(&smr_prov, ep->map, (char *) cmd->data.msg, &idx);
 	if (ret || idx < 0) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"Error processing mapping request\n");
@@ -880,9 +875,9 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 
 	peer_smr = smr_peer_region(ep, idx);
 	if (!peer_smr) {
-		ofi_spin_lock(&av->smr_map.lock);
-		ret = smr_map_to_region(&smr_prov, &av->smr_map, idx);
-		ofi_spin_unlock(&av->smr_map.lock);
+		ofi_spin_lock(&ep->map->lock);
+		ret = smr_map_to_region(&smr_prov, ep->map, idx);
+		ofi_spin_unlock(&ep->map->lock);
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"Could not map peer region\n");
@@ -896,10 +891,10 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 		/* TODO track and update/complete in error any transfers
 		 * to or from old mapping
 		 */
-		ofi_spin_lock(&av->smr_map.lock);
-		smr_unmap_region(&smr_prov, &av->smr_map, idx, false);
-		smr_map_to_region(&smr_prov, &av->smr_map, idx);
-		ofi_spin_unlock(&av->smr_map.lock);
+		ofi_spin_lock(&ep->map->lock);
+		smr_unmap_region(&smr_prov, ep->map, idx, false);
+		smr_map_to_region(&smr_prov, ep->map, idx);
+		ofi_spin_unlock(&ep->map->lock);
 		peer_smr = smr_peer_region(ep, idx);
 	}
 
@@ -907,9 +902,10 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 	smr_peer_data(peer_smr)[cmd->hdr.id].id = idx;
 	smr_peer_data(ep->region)[idx].id = cmd->hdr.id;
 
-	assert(av->smr_map.num_peers > 0);
-	ep->region->max_sar_buf_per_peer = MIN(SMR_BUF_BATCH_MAX,
-			SMR_MAX_PEERS / av->smr_map.num_peers);
+	assert(ep->map->num_peers > 0);
+	ep->region->max_sar_buf_per_peer = MIN(
+					SMR_BUF_BATCH_MAX,
+					SMR_MAX_PEERS / ep->map->num_peers);
 }
 
 static int smr_alloc_cmd_ctx(struct smr_ep *ep,
@@ -984,15 +980,12 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 {
 	struct fi_peer_match_attr attr;
 	struct fi_peer_rx_entry *rx_entry;
-	struct smr_av *av;
 	int ret;
 
 	if (cmd->hdr.rx_ctx)
 		return smr_progress_pending(ep, cmd);
 
-	av = container_of(ep->util_ep.av, struct smr_av, util_av);
-
-	attr.addr = av->smr_map.peers[cmd->hdr.id].fiaddr;
+	attr.addr = ep->map->peers[cmd->hdr.id].fiaddr;
 	attr.msg_size = cmd->hdr.size;
 	attr.tag = cmd->hdr.tag;
 	if (cmd->hdr.op == ofi_op_tagged) {
