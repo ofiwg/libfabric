@@ -231,7 +231,6 @@ struct smr_peer {
 #define SMR_MAX_PEERS	256
 
 struct smr_map {
-	ofi_spin_t		lock;
 	int64_t			cur_id;
 	int 			num_peers;
 	uint16_t		flags;
@@ -388,8 +387,8 @@ void smr_unmap_region(const struct fi_provider *prov, struct smr_map *map,
 		      int64_t id, bool found);
 void smr_unmap_from_endpoint(struct smr_ep *ep, int64_t id);
 void smr_exchange_all_peers(struct smr_ep *ep);
-int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
-		const char *name, int64_t *id);
+void smr_map_add(const struct fi_provider *prov, struct smr_map *map,
+		 const char *name, int64_t *id);
 void smr_map_del(struct smr_map *map, int64_t id);
 
 struct smr_region *smr_map_get(struct smr_map *map, int64_t id);

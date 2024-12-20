@@ -866,22 +866,16 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 	int64_t idx = -1;
 	int ret = 0;
 
-	ret = smr_map_add(&smr_prov, ep->map, (char *) cmd->data.msg, &idx);
-	if (ret || idx < 0) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"Error processing mapping request\n");
-		return;
-	}
+	ofi_mutex_lock(&ep->util_ep.av->lock);
+	smr_map_add(&smr_prov, ep->map, (char *) cmd->data.msg, &idx);
 
 	peer_smr = smr_peer_region(ep, idx);
 	if (!peer_smr) {
-		ofi_spin_lock(&ep->map->lock);
 		ret = smr_map_to_region(&smr_prov, ep->map, idx);
-		ofi_spin_unlock(&ep->map->lock);
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"Could not map peer region\n");
-			return;
+			goto out;
 		}
 		peer_smr = smr_peer_region(ep, idx);
 	}
@@ -891,10 +885,10 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 		/* TODO track and update/complete in error any transfers
 		 * to or from old mapping
 		 */
-		ofi_spin_lock(&ep->map->lock);
+		ofi_mutex_lock(&ep->util_ep.av->lock);
 		smr_unmap_region(&smr_prov, ep->map, idx, false);
 		smr_map_to_region(&smr_prov, ep->map, idx);
-		ofi_spin_unlock(&ep->map->lock);
+		ofi_mutex_unlock(&ep->util_ep.av->lock);
 		peer_smr = smr_peer_region(ep, idx);
 	}
 
@@ -906,6 +900,8 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 	ep->region->max_sar_buf_per_peer = MIN(
 					SMR_BUF_BATCH_MAX,
 					SMR_MAX_PEERS / ep->map->num_peers);
+out:
+	ofi_mutex_unlock(&ep->util_ep.av->lock);
 }
 
 static int smr_alloc_cmd_ctx(struct smr_ep *ep,
