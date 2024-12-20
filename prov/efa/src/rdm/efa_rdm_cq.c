@@ -399,7 +399,9 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
  *
  * @todo Currently, this only checks for unresponsive receiver
  * (#EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE) and attempts to promote it to
- * #FI_EFA_ERR_ESTABLISHED_RECV_UNRESP. This should be expanded to handle other
+ * #FI_EFA_ERR_ESTABLISHED_RECV_UNRESP if a handshake was made, or
+ * #FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP if the handshake failed. 
+ * This should be expanded to handle other
  * RDMA Core error codes (#EFA_IO_COMP_STATUSES) for the sake of more accurate
  * error reporting
  */
@@ -418,8 +420,9 @@ static int efa_rdm_cq_get_prov_errno(struct ibv_cq_ex *ibv_cq_ex) {
 
 	switch (vendor_err) {
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE: {
-		if (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)
-			vendor_err = FI_EFA_ERR_ESTABLISHED_RECV_UNRESP;
+		vendor_err = (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) ?
+			     FI_EFA_ERR_ESTABLISHED_RECV_UNRESP :
+			     FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP;
 		break;
 	}
 	default:
