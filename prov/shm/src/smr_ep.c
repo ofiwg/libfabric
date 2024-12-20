@@ -601,7 +601,7 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr,
 	return FI_SUCCESS;
 }
 
-smr_proto_func smr_proto_ops[smr_proto_max] = {
+smr_send_func smr_send_ops[smr_proto_max] = {
 	[smr_proto_inline] = &smr_do_inline,
 	[smr_proto_inject] = &smr_do_inject,
 	[smr_proto_iov] = &smr_do_iov,

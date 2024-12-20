@@ -126,9 +126,9 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 		ce->ptr = smr_peer_to_peer(ep, id, (uintptr_t) &ce->cmd);
 	}
 
-	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, tag, data,
-				   op_flags, (struct ofi_mr **) desc, iov,
-				   iov_count, total_len, context, cmd);
+	ret = smr_send_ops[proto](ep, peer_smr, id, peer_id, op, tag, data,
+				  op_flags, (struct ofi_mr **) desc, iov,
+				  iov_count, total_len, context, cmd);
 	if (ret) {
 		smr_cmd_queue_discard(ce, pos);
 		if (proto != smr_proto_inline)
@@ -249,8 +249,8 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 		ce->ptr = smr_local_to_peer(ep, id, peer_id, (uintptr_t) cmd);
 	}
 
-	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, tag, data,
-				   op_flags, NULL, &msg_iov, 1, len, NULL, cmd);
+	ret = smr_send_ops[proto](ep, peer_smr, id, peer_id, op, tag, data,
+				  op_flags, NULL, &msg_iov, 1, len, NULL, cmd);
 	if (ret) {
 		smr_cmd_queue_discard(ce, pos);
 		ret = -FI_EAGAIN;

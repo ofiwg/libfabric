@@ -185,9 +185,9 @@ static ssize_t smr_generic_rma(
 		cmd = &ce->cmd;
 		ce->ptr = smr_peer_to_peer(ep, id, (uintptr_t) &ce->cmd);
 	}
-	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, 0, data,
-				   op_flags, (struct ofi_mr **)desc, iov,
-				   iov_count, total_len, context, cmd);
+	ret = smr_send_ops[proto](ep, peer_smr, id, peer_id, op, 0, data,
+				  op_flags, (struct ofi_mr **)desc, iov,
+				  iov_count, total_len, context, cmd);
 	if (ret) {
 		if (proto != smr_proto_inline)
 			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
@@ -389,8 +389,8 @@ static ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 		ce->ptr = smr_local_to_peer(ep, id, peer_id, (uintptr_t) cmd);
 	}
 
-	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, ofi_op_write, 0,
-				   data, flags, NULL, &iov, 1, len, NULL, cmd);
+	ret = smr_send_ops[proto](ep, peer_smr, id, peer_id, ofi_op_write, 0,
+				  data, flags, NULL, &iov, 1, len, NULL, cmd);
 	if (ret) {
 		smr_cmd_queue_discard(ce, pos);
 		goto unlock;

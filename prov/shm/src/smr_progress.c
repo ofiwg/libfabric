@@ -214,77 +214,66 @@ static void smr_progress_return(struct smr_ep *ep)
 	ofi_genlock_unlock(&ep->util_ep.lock);
 }
 
-static int smr_progress_inline(struct smr_cmd *cmd, struct ofi_mr **mr,
-			       struct iovec *iov, size_t iov_count,
-			       size_t *total_len)
+ssize_t smr_progress_inline(struct smr_ep *ep, struct smr_cmd *cmd,
+			    struct fi_peer_rx_entry *rx_entry,
+			    struct ofi_mr **mr, struct iovec *iov,
+			    size_t iov_count)
 {
-	ssize_t hmem_copy_ret;
+	ssize_t ret;
 
-	hmem_copy_ret = ofi_copy_to_mr_iov(mr, iov, iov_count, 0,
-				cmd->data.msg, cmd->hdr.size);
-	if (hmem_copy_ret < 0) {
+	ret = ofi_copy_to_mr_iov(mr, iov, iov_count, 0, cmd->data.msg,
+				 cmd->hdr.size);
+	if (ret < 0) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"inline recv failed with code %d\n",
-			(int)(-hmem_copy_ret));
-		return hmem_copy_ret;
-	} else if (hmem_copy_ret != cmd->hdr.size) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"inline recv truncated\n");
+			"inline recv failed with code %d\n", (int)(-ret));
+		return ret;
+	}
+	if (ret != cmd->hdr.size) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "inline recv truncated\n");
 		return -FI_ETRUNC;
 	}
-
-	*total_len = hmem_copy_ret;
-
 	return FI_SUCCESS;
 }
 
-static int smr_progress_inject(struct smr_cmd *cmd, struct ofi_mr **mr,
-			       struct iovec *iov, size_t iov_count,
-			       size_t *total_len, struct smr_ep *ep, int err)
+ssize_t smr_progress_inject(struct smr_ep *ep, struct smr_cmd *cmd,
+			    struct fi_peer_rx_entry *rx_entry,
+			    struct ofi_mr **mr, struct iovec *iov,
+			    size_t iov_count)
 {
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
-	size_t inj_offset;
-	ssize_t hmem_copy_ret;
-
-	inj_offset = (size_t) cmd->hdr.proto_data;
+	ssize_t ret;
 
 	peer_smr = smr_peer_region(ep, cmd->hdr.id);
-	tx_buf = smr_get_ptr(peer_smr, inj_offset);
-	if (err)
-		goto out;
+	tx_buf = smr_get_ptr(peer_smr, (size_t) cmd->hdr.proto_data);
 
 	if (cmd->hdr.op == ofi_op_read_req) {
-		hmem_copy_ret = ofi_copy_from_mr_iov(tx_buf->data,
-						     cmd->hdr.size, mr, iov,
-						     iov_count, 0);
+		ret = ofi_copy_from_mr_iov(tx_buf->data, cmd->hdr.size, mr,
+					   iov, iov_count, 0);
 	} else {
-		hmem_copy_ret = ofi_copy_to_mr_iov(mr, iov, iov_count, 0,
-						   tx_buf->data, cmd->hdr.size);
+		ret = ofi_copy_to_mr_iov(mr, iov, iov_count, 0, tx_buf->data,
+					 cmd->hdr.size);
 	}
 
-	if (hmem_copy_ret < 0) {
+	if (ret < 0) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"inject recv failed with code %d\n",
-			(int)(-hmem_copy_ret));
-		err = hmem_copy_ret;
-	} else if (hmem_copy_ret != cmd->hdr.size) {
+			"inject recv failed with code %lu\n", ret);
+	} else if (ret != cmd->hdr.size) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"inject recv truncated\n");
-		err = -FI_ETRUNC;
+		ret = -FI_ETRUNC;
 	} else {
-		*total_len = hmem_copy_ret;
-		err = FI_SUCCESS;
+		ret = FI_SUCCESS;
 	}
 
-out:
+	cmd->hdr.status = ret;
 	smr_return_cmd(ep, cmd);
-	return err;
+	return ret;
 }
 
-static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
-			    size_t iov_count, size_t *total_len,
-			    struct smr_ep *ep)
+ssize_t smr_progress_iov(struct smr_ep *ep, struct smr_cmd *cmd,
+			 struct fi_peer_rx_entry *rx_entry, struct ofi_mr **mr,
+			 struct iovec *iov, size_t iov_count)
 {
 	struct smr_region *peer_smr;
 	struct ofi_xpmem_client *xpmem;
@@ -298,12 +287,8 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 			       cmd->data.iov_count, cmd->hdr.size,
 			       peer_smr->pid, cmd->hdr.op == ofi_op_read_req,
 			       xpmem);
-	if (!ret)
-		*total_len = cmd->hdr.size;
-
 	cmd->hdr.status = ret;
 	smr_return_cmd(ep, cmd);
-
 	return ret;
 }
 
@@ -418,16 +403,15 @@ static int smr_progress_pending(struct smr_ep *ep, struct smr_cmd *cmd)
 	}
 }
 
-static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
-			struct fi_peer_rx_entry *rx_entry, struct ofi_mr **mr,
-			struct iovec *iov, size_t iov_count,
-			size_t *total_len, struct smr_ep *ep)
+ssize_t smr_progress_sar(struct smr_ep *ep, struct smr_cmd *cmd,
+			 struct fi_peer_rx_entry *rx_entry, struct ofi_mr **mr,
+			 struct iovec *iov, size_t iov_count)
 {
 	struct smr_region *peer_smr;
 	struct smr_pend_entry *sar_entry = NULL;
 	struct iovec sar_iov[SMR_IOV_LIMIT];
 	size_t bytes_done = 0;
-	int ret;
+	ssize_t ret = FI_SUCCESS;
 
 	peer_smr = smr_peer_region(ep, cmd->hdr.id);
 
@@ -444,8 +428,7 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 	else
 		ret = smr_copy_from_sar(ep, smr_sar_pool(peer_smr), cmd,
 					mr, sar_iov, iov_count, &bytes_done);
-	if (ret)
-		cmd->hdr.status = ret;
+	cmd->hdr.status = ret;
 
 	if (bytes_done == cmd->hdr.size)
 		goto out;
@@ -462,18 +445,15 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 		memcpy(sar_entry->mr, mr, sizeof(*mr) * iov_count);
 	else
 		memset(sar_entry->mr, 0, sizeof(*mr) * iov_count);
-
-	*total_len = cmd->hdr.size;
 out:
 	smr_return_cmd(ep, cmd);
-	return sar_entry;
+	return ret;
 }
 
-static int smr_ipc_async_copy(struct smr_ep *ep, void *ptr,
+static int smr_ipc_async_copy(struct smr_ep *ep, struct smr_cmd *cmd,
 			      struct fi_peer_rx_entry *rx_entry,
-			      struct iovec *iov, size_t iov_count,
 			      struct ofi_mr_entry *mr_entry,
-			      struct smr_cmd *cmd, struct smr_pend_entry **pend)
+			      struct iovec *iov, size_t iov_count, void *ptr)
 {
 	struct smr_pend_entry *ipc_entry;
 	enum fi_hmem_iface iface = cmd->data.ipc_info.iface;
@@ -484,16 +464,13 @@ static int smr_ipc_async_copy(struct smr_ep *ep, void *ptr,
 	if (!ipc_entry)
 		return -FI_ENOMEM;
 
+	cmd->hdr.rx_ctx = (uintptr_t) ipc_entry;
 	ipc_entry->ipc_entry = mr_entry;
 	ipc_entry->bytes_done = 0;
 	ipc_entry->cmd = cmd;
 	memcpy(ipc_entry->iov, iov, sizeof(*iov) * iov_count);
 	ipc_entry->iov_count = iov_count;
 	ipc_entry->rx_entry = rx_entry;
-	if (rx_entry) {
-		if (cmd->hdr.op_flags & SMR_REMOTE_CQ_DATA)
-			ipc_entry->rx_entry->flags |= FI_REMOTE_CQ_DATA;
-	}
 
 	ret = ofi_create_async_copy_event(iface, device,
 					  &ipc_entry->async_event);
@@ -510,13 +487,10 @@ static int smr_ipc_async_copy(struct smr_ep *ep, void *ptr,
 						 0, ptr, cmd->hdr.size,
 						 ipc_entry->async_event);
 	}
-
 	if (ret < 0)
 		goto fail;
 
 	dlist_insert_tail(&ipc_entry->entry, &ep->ipc_cpy_pend_list);
-	*pend = ipc_entry;
-
 	return FI_SUCCESS;
 
 fail:
@@ -524,18 +498,14 @@ fail:
 	return ret;
 }
 
-static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
-			struct fi_peer_rx_entry *rx_entry,
-			struct ofi_mr **mr, struct iovec *iov,
-			size_t iov_count, size_t *total_len,
-			struct smr_ep *ep, int *err)
+ssize_t smr_progress_ipc(struct smr_ep *ep, struct smr_cmd *cmd,
+			 struct fi_peer_rx_entry *rx_entry, struct ofi_mr **mr,
+			 struct iovec *iov, size_t iov_count)
 {
 	void *ptr;
 	int ret;
-	ssize_t hmem_copy_ret;
 	struct ofi_mr_entry *mr_entry;
 	struct smr_domain *domain;
-	struct smr_pend_entry *ipc_entry;
 
 	domain = container_of(ep->util_ep.domain, struct smr_domain,
 			      util_domain);
@@ -554,47 +524,43 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 		(uintptr_t) cmd->data.ipc_info.offset;
 
 	if (cmd->data.ipc_info.iface == FI_HMEM_ROCR) {
-		*total_len = 0;
-		ipc_entry = NULL;
-
-		ret = smr_ipc_async_copy(ep, (char*)ptr, rx_entry, iov,
-					 iov_count, mr_entry, cmd,
-					 &ipc_entry);
-		if (ret) {
-			cmd->hdr.status = ret;
+		ret = smr_ipc_async_copy(ep, cmd, rx_entry, mr_entry, iov,
+					 iov_count, ptr);
+		if (ret)
 			goto uncache;
-		}
-
-		return ipc_entry;
+		return FI_SUCCESS;
 	}
 
 	if (cmd->hdr.op == ofi_op_read_req) {
-		hmem_copy_ret = ofi_copy_from_hmem_iov(ptr, cmd->hdr.size,
-					cmd->data.ipc_info.iface,
-					cmd->data.ipc_info.device, iov,
-					iov_count, 0);
+		ret = ofi_copy_from_hmem_iov(ptr, cmd->hdr.size,
+					     cmd->data.ipc_info.iface,
+					     cmd->data.ipc_info.device, iov,
+					     iov_count, 0);
 	} else {
-		hmem_copy_ret = ofi_copy_to_hmem_iov(cmd->data.ipc_info.iface,
-					cmd->data.ipc_info.device, iov,
-					iov_count, 0, ptr, cmd->hdr.size);
+		ret = ofi_copy_to_hmem_iov(cmd->data.ipc_info.iface,
+					   cmd->data.ipc_info.device, iov,
+					   iov_count, 0, ptr, cmd->hdr.size);
 	}
 
-	if (hmem_copy_ret < 0)
-		*err = hmem_copy_ret;
-	else if (hmem_copy_ret != cmd->hdr.size)
-		*err = -FI_ETRUNC;
-	else
-		*err = FI_SUCCESS;
-
-	*total_len = hmem_copy_ret;
-
+	if (ret == cmd->hdr.size)
+		ret = FI_SUCCESS;
+	else if (ret > 0)
+		ret = -FI_ETRUNC;
 uncache:
 	ofi_mr_cache_delete(domain->ipc_cache, mr_entry);
 out:
 	cmd->hdr.status = ret;
 	smr_return_cmd(ep, cmd);
-	return NULL;
+	return ret;
 }
+
+smr_progress_func smr_progress_ops[smr_proto_max] = {
+	[smr_proto_inline] = &smr_progress_inline,
+	[smr_proto_inject] = &smr_progress_inject,
+	[smr_proto_iov] = &smr_progress_iov,
+	[smr_proto_sar] = &smr_progress_sar,
+	[smr_proto_ipc] = &smr_progress_ipc,
+};
 
 static void smr_do_atomic(struct smr_cmd *cmd, void *src, struct ofi_mr *dst_mr,
 			  void *dst, void *cmp, enum fi_datatype datatype,
@@ -711,63 +677,33 @@ out:
 static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 		struct fi_peer_rx_entry *rx_entry)
 {
-	struct smr_pend_entry *pend = NULL;
-	size_t total_len = 0;
 	uint64_t comp_flags;
 	void *comp_buf;
 	int ret;
-	int err = 0;
 
-	switch (cmd->hdr.proto) {
-	case smr_proto_inline:
-		err = smr_progress_inline(cmd,
-				(struct ofi_mr **) rx_entry->desc,
-				rx_entry->iov, rx_entry->count, &total_len);
-		break;
-	case smr_proto_inject:
-		err = smr_progress_inject(cmd,
-				(struct ofi_mr **) rx_entry->desc,
-				rx_entry->iov, rx_entry->count, &total_len,
-				ep, 0);
-		break;
-	case smr_proto_iov:
-		err = smr_progress_iov(cmd, rx_entry->iov, rx_entry->count,
-				       &total_len, ep);
-		break;
-	case smr_proto_sar:
-		pend = smr_progress_sar(cmd, rx_entry,
-				       (struct ofi_mr **) rx_entry->desc,
-				       rx_entry->iov, rx_entry->count,
-				       &total_len, ep);
-		break;
-	case smr_proto_ipc:
-		pend = smr_progress_ipc(cmd, rx_entry,
-				(struct ofi_mr **) rx_entry->desc,
-				rx_entry->iov, rx_entry->count,
-				&total_len, ep, &err);
-		break;
-	default:
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"unidentified operation type\n");
-		err = -FI_EINVAL;
-	}
+	assert (cmd->hdr.proto < smr_proto_max);
+	ret = smr_progress_ops[cmd->hdr.proto](
+					ep, cmd, rx_entry,
+					(struct ofi_mr **) rx_entry->desc,
+					rx_entry->iov, rx_entry->count);
 
-	if (!pend) {
+	if (!cmd->hdr.rx_ctx) {
 		comp_buf = rx_entry->iov[0].iov_base;
 		comp_flags = smr_rx_cq_flags(rx_entry->flags,
 					     cmd->hdr.op_flags);
-		if (err) {
+		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"error processing op\n");
 			ret = smr_write_err_comp(ep->util_ep.rx_cq,
 						 rx_entry->context,
 						 comp_flags, rx_entry->tag,
-						 -err);
+						 ret);
 		} else {
 			ret = smr_complete_rx(ep, rx_entry->context,
 					      cmd->hdr.op, comp_flags,
-					      total_len, comp_buf, cmd->hdr.id,
-					      cmd->hdr.tag, cmd->hdr.cq_data);
+					      cmd->hdr.size, comp_buf,
+					      cmd->hdr.id, cmd->hdr.tag,
+					      cmd->hdr.cq_data);
 		}
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -1032,8 +968,8 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	struct smr_domain *domain;
 	struct iovec iov[SMR_IOV_LIMIT];
 	struct fi_rma_iov *rma_iov;
-	size_t iov_count, total_len = 0;
-	int err = 0, ret = 0;
+	size_t iov_count;
+	int ret = 0;
 	struct ofi_mr *mr[SMR_IOV_LIMIT];
 
 	if (cmd->hdr.rx_ctx)
@@ -1061,46 +997,19 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	if (ret)
 		goto out;
 
-	switch (cmd->hdr.proto) {
-	case smr_proto_inline:
-		err = smr_progress_inline(cmd, mr, iov, iov_count, &total_len);
-		break;
-	case smr_proto_inject:
-		err = smr_progress_inject(cmd, mr, iov, iov_count, &total_len,
-					  ep, ret);
-		if (cmd->hdr.op == ofi_op_read_req && cmd->hdr.cq_data)
-			cmd->hdr.status = err;
-		break;
-	case smr_proto_iov:
-		err = smr_progress_iov(cmd, iov, iov_count, &total_len, ep);
-		break;
-	case smr_proto_sar:
-		if (smr_progress_sar(cmd, NULL, mr, iov, iov_count, &total_len,
-				     ep))
-			return ret;
-		break;
-	case smr_proto_ipc:
-		if (smr_progress_ipc(cmd, NULL, mr, iov, iov_count, &total_len,
-				     ep, &ret))
-			return ret;
-		break;
-	default:
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"unidentified operation type\n");
-		err = -FI_EINVAL;
-	}
-
-	if (err) {
+	assert(cmd->hdr.proto < smr_proto_max);
+	ret = smr_progress_ops[cmd->hdr.proto](ep, cmd, NULL, mr, iov,
+					       iov_count);
+	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"error processing rma op\n");
 		ret = smr_write_err_comp(ep->util_ep.rx_cq, NULL,
 					 smr_rx_cq_flags(0, cmd->hdr.op_flags),
-					 0, -err);
+					 0, ret);
 	} else {
-		ret = smr_complete_rx(ep, (void *) cmd->hdr.tx_ctx,
-				      cmd->hdr.op,
+		ret = smr_complete_rx(ep, NULL, cmd->hdr.op,
 				      smr_rx_cq_flags(0, cmd->hdr.op_flags),
-				      total_len,
+				      cmd->hdr.size,
 				      iov_count ? iov[0].iov_base : NULL,
 				      cmd->hdr.id, 0, cmd->hdr.cq_data);
 	}
