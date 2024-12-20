@@ -518,10 +518,6 @@ struct smr_cmd_ctx {
 
 OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_tx_fs);
 
-struct smr_fabric {
-	struct util_fabric	util_fabric;
-};
-
 struct smr_domain {
 	struct util_domain	util_domain;
 	int			fast_rma;

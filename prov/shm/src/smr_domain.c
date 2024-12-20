@@ -157,7 +157,6 @@ int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 {
 	int ret;
 	struct smr_domain *smr_domain;
-	struct smr_fabric *smr_fabric;
 
 	ret = ofi_prov_check_info(&smr_util_prov, fabric->api_version, info);
 	if (ret)
@@ -174,12 +173,10 @@ int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		return ret;
 	}
 
-	smr_fabric = container_of(fabric, struct smr_fabric,
-				  util_fabric.fabric_fid);
-	ofi_mutex_lock(&smr_fabric->util_fabric.lock);
+	ofi_mutex_lock(&smr_domain->util_domain.fabric->lock);
 	smr_domain->fast_rma = smr_fast_rma_enabled(info->domain_attr->mr_mode,
 						    info->tx_attr->msg_order);
-	ofi_mutex_unlock(&smr_fabric->util_fabric.lock);
+	ofi_mutex_unlock(&smr_domain->util_domain.fabric->lock);
 
 	ret = ofi_ipc_cache_open(&smr_domain->ipc_cache,
 				 &smr_domain->util_domain);
