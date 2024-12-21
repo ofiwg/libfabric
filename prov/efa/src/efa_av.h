@@ -27,6 +27,7 @@ struct efa_conn {
 	fi_addr_t		fi_addr;
 	fi_addr_t		util_av_fi_addr;
 	struct efa_rdm_peer	rdm_peer;
+	fi_addr_t 		shm_fi_addr;
 };
 
 struct efa_av_entry {
@@ -60,7 +61,6 @@ struct efa_prv_reverse_av {
 struct efa_av {
 	struct fid_av *shm_rdm_av;
 	struct efa_domain *domain;
-	struct efa_base_ep *base_ep;
 	size_t used;
 	size_t shm_used;
 	enum fi_av_type type;
