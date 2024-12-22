@@ -1054,6 +1054,9 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
 
 	ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE;
 
+	if (efa_rdm_use_unsolicited_write_recv())
+		ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
+
 	if (ep->use_zcpy_rx) {
 		/*
 		 * When zcpy rx is enabled, an extra QP is created to
