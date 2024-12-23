@@ -214,7 +214,12 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		base_ep->is_wr_started = true;
 	}
 
-	qp->ibv_qp_ex->wr_id = (uintptr_t)msg->context;
+	if (!(flags & FI_COMPLETION)) {
+		qp->ibv_qp_ex->wr_id = (uintptr_t)NULL;
+	} else {
+		qp->ibv_qp_ex->wr_id = (uintptr_t)msg->context;
+	}
+
 	if (flags & FI_REMOTE_CQ_DATA) {
 		ibv_wr_send_imm(qp->ibv_qp_ex, msg->data);
 	} else {

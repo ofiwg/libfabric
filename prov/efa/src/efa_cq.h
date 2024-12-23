@@ -2,6 +2,10 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa.h"
+#include "efa_av.h"
+#include "efa_cntr.h"
+
+typedef void (*efa_cq_read_entry)(struct ibv_cq_ex *ibv_cqx, void *buf);
 
 enum ibv_cq_ex_type {
 	IBV_CQ,
@@ -18,10 +22,18 @@ struct efa_ibv_cq_poll_list_entry {
 	struct efa_ibv_cq	*cq;
 };
 
+struct efa_cq {
+	struct util_cq		util_cq;
+	struct efa_domain	*domain;
+	efa_cq_read_entry	read_entry;
+	struct ibv_cq_ex	*ibv_cq_ex;
+};
+
 /*
  * Control header with completion data. CQ data length is static.
  */
 #define EFA_CQ_DATA_SIZE (4)
+#define EFA_ERROR_MSG_BUFFER_LENGTH 1024
 
 static inline
 int efa_ibv_cq_poll_list_match(struct dlist_entry *entry, const void *cq)
@@ -136,7 +148,7 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 	};
 
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-	if (efa_rdm_use_unsolicited_write_recv())
+	if (efa_use_unsolicited_write_recv())
 		efadv_cq_init_attr.wc_flags |= EFADV_WC_EX_WITH_IS_UNSOLICITED;
 #endif
 
@@ -176,3 +188,106 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 		&init_attr_ex, ibv_ctx, ibv_cq_ex, ibv_cq_ex_type);
 }
 #endif
+
+int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
+		struct fid_cq **cq_fid, void *context);
+
+
+#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
+/**
+ * @brief Check whether a completion consumes recv buffer
+ *
+ * @param ibv_cq_ex extended ibv cq
+ * @return true the wc consumes a recv buffer
+ * @return false the wc doesn't consume a recv buffer
+ */
+static inline
+bool efa_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
+{
+	return efa_use_unsolicited_write_recv() && efadv_wc_is_unsolicited(efadv_cq_from_ibv_cq_ex(ibv_cq_ex));
+}
+
+#else
+
+static inline
+bool efa_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
+{
+	return false;
+}
+
+#endif
+
+static inline const char *efa_ep_raw_addr_str(struct efa_base_ep *base_ep, char *buf, size_t *buflen)
+{
+	return ofi_straddr(buf, buflen, FI_ADDR_EFA, &base_ep->src_addr);
+}
+
+static inline const char *efa_ep_get_peer_raw_addr_str(struct efa_base_ep *base_ep, fi_addr_t addr, char *buf, size_t *buflen)
+{
+	struct efa_conn *efa_conn;
+	efa_conn = efa_av_addr_to_conn(base_ep->av, addr);
+
+	return ofi_straddr(buf, buflen, FI_ADDR_EFA, efa_conn ? efa_conn->ep_addr : NULL);
+}
+
+/**
+ * @brief Write the error message and return its byte length
+ * @param[in]    ep          EFA base endpoint
+ * @param[in]    addr        Remote peer fi_addr_t
+ * @param[in]    prov_errno  EFA provider * error code(must be positive)
+ * @param[out]   buf         Pointer to the address of error data written by
+ * this function
+ * @param[out]   buflen      Pointer to the returned error data size
+ * @return       A status code. 0 if the error data was written successfully,
+ * otherwise a negative FI error code.
+ */
+static inline int efa_write_error_msg(struct efa_base_ep *ep, fi_addr_t addr,
+				      int prov_errno, void **buf,
+				      size_t *buflen)
+{
+	char ep_addr_str[OFI_ADDRSTRLEN] = {0}, peer_addr_str[OFI_ADDRSTRLEN] = {0};
+	char peer_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
+	char local_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
+	const char *base_msg = efa_strerror(prov_errno);
+	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH];
+	size_t len = 0;
+	uint64_t local_host_id;
+
+	*buf = NULL;
+	*buflen = 0;
+
+	len = sizeof(ep_addr_str);
+	efa_ep_raw_addr_str(ep, ep_addr_str, &len);
+	len = sizeof(peer_addr_str);
+	efa_ep_get_peer_raw_addr_str(ep, addr, peer_addr_str, &len);
+
+	local_host_id = efa_get_host_id(efa_env.host_id_file);
+	if (!local_host_id ||
+	    EFA_HOST_ID_STRING_LENGTH != snprintf(local_host_id_str,
+						  EFA_HOST_ID_STRING_LENGTH + 1,
+						  "i-%017lx", local_host_id)) {
+		strcpy(local_host_id_str, "N/A");
+	}
+
+	/* efa-raw cannot get peer host id without a handshake */
+	strcpy(peer_host_id_str, "N/A");
+
+	int ret = snprintf(err_msg, EFA_ERROR_MSG_BUFFER_LENGTH,
+			   "%s My EFA addr: %s My host id: %s Peer EFA addr: "
+			   "%s Peer host id: %s",
+			   base_msg, ep_addr_str, local_host_id_str,
+			   peer_addr_str, peer_host_id_str);
+
+	if (ret < 0 || ret > EFA_ERROR_MSG_BUFFER_LENGTH - 1) {
+		return -FI_EINVAL;
+	}
+
+	if (strlen(err_msg) >= EFA_ERROR_MSG_BUFFER_LENGTH) {
+		return -FI_ENOBUFS;
+	}
+
+	*buf = err_msg;
+	*buflen = EFA_ERROR_MSG_BUFFER_LENGTH;
+
+	return 0;
+}
