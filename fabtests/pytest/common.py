@@ -68,7 +68,7 @@ def num_cuda_devices(ip):
 @functools.lru_cache(10)
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def num_neuron_devices(ip):
-    proc = run("ssh {} neuron-ls -j".format(ip), shell=True,
+    proc = run("ssh {} /opt/aws/neuron/bin/neuron-ls -j".format(ip), shell=True,
                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                timeout=60, encoding="utf-8")
 
@@ -84,7 +84,7 @@ def num_neuron_devices(ip):
 @functools.lru_cache(10)
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def num_neuron_cores_on_device(ip, device_id):
-    proc = run("ssh {} neuron-ls -j".format(ip), shell=True,
+    proc = run("ssh {} /opt/aws/neuron/bin/neuron-ls -j".format(ip), shell=True,
                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                timeout=60, encoding="utf-8")
 
@@ -97,7 +97,7 @@ def num_neuron_cores_on_device(ip, device_id):
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def is_neuron_device_available(ip, device_id):
-    proc = run("ssh {} neuron-ls -j".format(ip), shell=True,
+    proc = run("ssh {} /opt/aws/neuron/bin/neuron-ls -j".format(ip), shell=True,
                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                timeout=60, encoding="utf-8")
 
@@ -455,19 +455,26 @@ class ClientServerTest:
         if "PYTEST_XDIST_WORKER" in os.environ:
             worker_id = int(os.environ["PYTEST_XDIST_WORKER"].replace("gw", ""))
             hmem_device_id = worker_id % num_hmem
-            if host_memory_type == "cuda":
-                command += " -i {}".format(hmem_device_id)
-            else:
-                assert host_memory_type == "neuron"
-                num_cores = num_neuron_cores_on_device(host_ip, hmem_device_id)
+        else:
+            hmem_device_id = 0
+
+        if host_memory_type == "cuda":
+            command += " -i {}".format(hmem_device_id)
+        else:
+            assert host_memory_type == "neuron"
+            num_cores = num_neuron_cores_on_device(host_ip, hmem_device_id)
+            if command_type == "server":
                 additional_environment = "NEURON_RT_VISIBLE_CORES={}".format(
                     hmem_device_id * num_cores)
-                wait_until_neuron_device_available(host_ip, hmem_device_id)
+            else:
+                additional_environment = "NEURON_RT_VISIBLE_CORES={}".format(
+                    hmem_device_id * num_cores + 1)
+            wait_until_neuron_device_available(host_ip, hmem_device_id)
 
-            if self._cmdline_args.provider == "efa":
-                import efa.efa_common
-                efa_device = efa.efa_common.get_efa_device_name_for_cuda_device(host_ip, hmem_device_id, num_hmem)
-                command += " -d {}-rdm".format(efa_device)
+        if self._cmdline_args.provider == "efa":
+            import efa.efa_common
+            efa_device = efa.efa_common.get_efa_device_name_for_cuda_device(host_ip, hmem_device_id, num_hmem)
+            command += " -d {}-rdm".format(efa_device)
 
         return command, additional_environment
 
