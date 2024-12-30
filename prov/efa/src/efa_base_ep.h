@@ -99,4 +99,13 @@ void efa_base_ep_write_eq_error(struct efa_base_ep *ep,
 				ssize_t err,
 				ssize_t prov_errno);
 
+const char *efa_base_ep_raw_addr_str(struct efa_base_ep *base_ep, char *buf,
+				     size_t *buflen);
+
+struct efa_ep_addr *efa_base_ep_get_peer_raw_addr(struct efa_base_ep *base_ep,
+						  fi_addr_t addr);
+
+const char *efa_base_ep_get_peer_raw_addr_str(struct efa_base_ep *base_ep,
+					      fi_addr_t addr, char *buf,
+					      size_t *buflen);
 #endif

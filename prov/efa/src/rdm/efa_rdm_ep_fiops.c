@@ -1344,7 +1344,7 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		efa_rdm_ep_set_extra_info(ep);
 
 		ep_addr_strlen = sizeof(ep_addr_str);
-		efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &ep_addr_strlen);
+		efa_base_ep_raw_addr_str(&ep->base_ep, ep_addr_str, &ep_addr_strlen);
 		EFA_INFO(FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
 			fi_tostr("1", FI_TYPE_VERSION), ep_addr_str);
 
