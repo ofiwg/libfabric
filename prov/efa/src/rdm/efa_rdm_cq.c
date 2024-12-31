@@ -139,7 +139,7 @@ void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 		EFA_WARN(FI_LOG_CQ,
 			"Unable to write a cq entry for remote for RECV_RDMA operation: %s\n",
 			fi_strerror(-ret));
-		efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_WRITE_SHM_CQ_ENTRY);
+		efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_WRITE_RECV_COMP);
 	}
 
 	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, flags);
