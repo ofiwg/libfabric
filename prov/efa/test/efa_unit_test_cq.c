@@ -155,7 +155,7 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	assert_int_equal(ret, -FI_EAVAIL);
 
 	/* Allocate memory to read CQ error */
-	cq_err_entry.err_data_size = EFA_RDM_ERROR_MSG_BUFFER_LENGTH;
+	cq_err_entry.err_data_size = EFA_ERROR_MSG_BUFFER_LENGTH;
 	cq_err_entry.err_data = malloc(cq_err_entry.err_data_size);
 	assert_non_null(cq_err_entry.err_data);
 

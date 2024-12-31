@@ -149,24 +149,22 @@ int efa_rdm_construct_msg_with_local_and_peer_information(struct efa_rdm_ep *ep,
  * @param[in]    ep          EFA RDM endpoint
  * @param[in]    addr        Remote peer fi_addr_t
  * @param[in]    prov_errno  EFA provider * error code(must be positive)
- * @param[out]   buf         Pointer to the address of error data written by this function
+ * @param[out]   err_msg         Pointer to the address of error message written by this function
  * @param[out]   buflen      Pointer to the returned error data size
  * @return       A status code. 0 if the error data was written successfully, otherwise a negative FI error code.
  */
-int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, fi_addr_t addr, int prov_errno, void **buf, size_t *buflen)
+int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, fi_addr_t addr, int prov_errno, char *err_msg, size_t *buflen)
 {
 	const char *base_msg = efa_strerror(prov_errno);
 	int ret;
 
-	*buf = NULL;
-	*buflen = 0;
+    *buflen = 0;
 
-	ret = efa_rdm_construct_msg_with_local_and_peer_information(ep, addr, ep->err_msg, base_msg, EFA_RDM_ERROR_MSG_BUFFER_LENGTH);
+	ret = efa_rdm_construct_msg_with_local_and_peer_information(ep, addr, err_msg, base_msg, EFA_ERROR_MSG_BUFFER_LENGTH);
 	if (ret)
 		return ret;
 
-	*buf = ep->err_msg;
-	*buflen = EFA_RDM_ERROR_MSG_BUFFER_LENGTH;
+	*buflen = EFA_ERROR_MSG_BUFFER_LENGTH;
 
 	return 0;
 }

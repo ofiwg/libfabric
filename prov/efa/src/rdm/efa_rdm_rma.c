@@ -360,6 +360,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	bool delivery_complete_requested;
 	int ctrl_type, iface, use_p2p;
 	size_t max_eager_rtw_data_size;
+	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 
 	/*
 	 * A handshake is required to choose the correct protocol (whether to use device write/read).
@@ -377,7 +378,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		 */
 		if ((txe->fi_flags & FI_REMOTE_CQ_DATA) &&
 			(efa_rdm_ep_support_unsolicited_write_recv(ep) != efa_rdm_peer_support_unsolicited_write_recv(txe->peer))) {
-			(void) efa_rdm_construct_msg_with_local_and_peer_information(ep, txe->addr, ep->err_msg, "", EFA_RDM_ERROR_MSG_BUFFER_LENGTH);
+			(void) efa_rdm_construct_msg_with_local_and_peer_information(ep, txe->addr, err_msg, "", EFA_ERROR_MSG_BUFFER_LENGTH);
 			EFA_WARN(FI_LOG_EP_DATA,
 				"Inconsistent support status detected on unsolicited write recv.\n"
 				"My support status: %d, peer support status: %d. %s.\n"
@@ -385,7 +386,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 				"Please use consistent software versions on both hosts, or disable the unsolicited write "
 				"recv feature by setting environment variable FI_EFA_USE_UNSOLICITED_WRITE_RECV=0\n",
 				efa_use_unsolicited_write_recv(), efa_rdm_peer_support_unsolicited_write_recv(txe->peer),
-				ep->err_msg);
+				err_msg);
 			return -FI_EOPNOTSUPP;
 		}
 		efa_rdm_ope_prepare_to_post_write(txe);

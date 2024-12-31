@@ -14,6 +14,7 @@
 
 #define EFA_QP_DEFAULT_SERVICE_LEVEL 0
 #define EFA_QP_LOW_LATENCY_SERVICE_LEVEL 8
+#define EFA_ERROR_MSG_BUFFER_LENGTH 1024
 
 #define efa_rx_flags(efa_base_ep) ((efa_base_ep)->util_ep.rx_op_flags)
 #define efa_tx_flags(efa_base_ep) ((efa_base_ep)->util_ep.tx_op_flags)
