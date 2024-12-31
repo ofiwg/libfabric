@@ -214,15 +214,16 @@ int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
 	return -1;
 }
 
-void smr_format_pend(struct smr_tx_entry *pend, void *context,
-		     struct ofi_mr **mr, const struct iovec *iov,
-		     uint32_t iov_count, uint64_t op_flags, int64_t id)
+void smr_format_tx_pend(struct smr_pend_entry *pend, void *context,
+			struct ofi_mr **mr, const struct iovec *iov,
+			uint32_t iov_count, uint64_t op_flags, int64_t id)
 {
-	pend->context = context;
+	pend->tx.context = context;
+	pend->tx.peer_id = id;
+	pend->tx.op_flags = op_flags;
+
 	memcpy(pend->iov, iov, sizeof(*iov) * iov_count);
 	pend->iov_count = iov_count;
-	pend->peer_id = id;
-	pend->op_flags = op_flags;
 	pend->bytes_done = 0;
 
 	if (mr)
@@ -366,7 +367,7 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 			  struct ofi_mr **mr, const struct iovec *iov,
 			  size_t count, size_t total_len,
 			  struct smr_region *smr, struct smr_region *peer_smr,
-			  int64_t id, struct smr_tx_entry *pending)
+			  int64_t id, struct smr_pend_entry *pending)
 {
 	int i, ret;
 
@@ -496,18 +497,18 @@ static ssize_t smr_do_inject(struct smr_ep *ep, struct smr_region *peer_smr,
 			     struct smr_cmd *cmd)
 {
 	struct smr_inject_buf *tx_buf;
-	struct smr_tx_entry *pend;
+	struct smr_pend_entry *pend;
 
 	tx_buf = smr_freestack_pop(smr_inject_pool(ep->region));
 	assert(tx_buf);
 
 	if (op == ofi_op_read_req) {
-		pend = ofi_freestack_pop(ep->tx_fs);
+		pend = ofi_buf_alloc(ep->pend_pool);
 		assert(pend);
 
 		cmd->hdr.tx_ctx = (uintptr_t) pend;
-		smr_format_pend(pend, context, desc, iov, iov_count, op_flags,
-				id);
+		smr_format_tx_pend(pend, context, desc, iov, iov_count,
+				   op_flags, id);
 	} else {
 		cmd->hdr.tx_ctx = 0;
 	}
@@ -525,16 +526,16 @@ static ssize_t smr_do_iov(struct smr_ep *ep, struct smr_region *peer_smr,
 			  size_t iov_count, size_t total_len, void *context,
 			  struct smr_cmd *cmd)
 {
-	struct smr_tx_entry *pend;
+	struct smr_pend_entry *pend;
 
-	pend = ofi_freestack_pop(ep->tx_fs);
+	pend = ofi_buf_alloc(ep->pend_pool);
 	assert(pend);
 
 	cmd->hdr.tx_ctx = (uintptr_t) pend;
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
 	smr_format_iov(cmd, iov, iov_count, total_len, ep->region);
 
-	smr_format_pend(pend, context, desc, iov, iov_count, op_flags, id);
+	smr_format_tx_pend(pend, context, desc, iov, iov_count, op_flags, id);
 
 	return FI_SUCCESS;
 }
@@ -546,23 +547,22 @@ static ssize_t smr_do_sar(struct smr_ep *ep, struct smr_region *peer_smr,
 			  size_t iov_count, size_t total_len, void *context,
 			  struct smr_cmd *cmd)
 {
-	struct smr_tx_entry *pend;
+	struct smr_pend_entry *pend;
 	int ret;
 
-	pend = ofi_freestack_pop(ep->tx_fs);
+	pend = ofi_buf_alloc(ep->pend_pool);
 	assert(pend);
 
 	cmd->hdr.tx_ctx = (uintptr_t) pend;
-	smr_format_pend(pend, context, desc, iov, iov_count, op_flags, id);
+	smr_format_tx_pend(pend, context, desc, iov, iov_count, op_flags, id);
 
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
 	ret = smr_format_sar(ep, cmd, desc, iov, iov_count, total_len,
 			     ep->region, peer_smr, id, pend);
 	if (ret) {
-		ofi_freestack_push(ep->tx_fs, pend);
+		ofi_buf_free(pend);
 		return ret;
 	}
-
 
 	return FI_SUCCESS;
 }
@@ -574,10 +574,10 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr,
 			  size_t iov_count, size_t total_len, void *context,
 			  struct smr_cmd *cmd)
 {
-	struct smr_tx_entry *pend;
+	struct smr_pend_entry *pend;
 	int ret = -FI_EAGAIN;
 
-	pend = ofi_freestack_pop(ep->tx_fs);
+	pend = ofi_buf_alloc(ep->pend_pool);
 	assert(pend);
 
 	cmd->hdr.tx_ctx = (uintptr_t) pend;
@@ -590,13 +590,13 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr,
 		FI_WARN_ONCE(&smr_prov, FI_LOG_EP_CTRL,
 			     "unable to use IPC for msg, "
 			     "fallback to using SAR\n");
-		ofi_freestack_push(ep->tx_fs, pend);
+		ofi_buf_free(pend);
 		return smr_do_sar(ep, peer_smr, id, peer_id, op, tag, data,
 				  op_flags, desc, iov, iov_count,
 				  total_len, context, cmd);
 	}
 
-	smr_format_pend(pend, context, desc, iov, iov_count, op_flags, id);
+	smr_format_tx_pend(pend, context, desc, iov, iov_count, op_flags, id);
 
 	return FI_SUCCESS;
 }
@@ -635,10 +635,8 @@ static int smr_ep_close(struct fid *fid)
 	if (ep->unexp_buf_pool)
 		ofi_bufpool_destroy(ep->unexp_buf_pool);
 
-	if (ep->pend_buf_pool)
-		ofi_bufpool_destroy(ep->pend_buf_pool);
-
-	smr_tx_fs_free(ep->tx_fs);
+	if (ep->pend_pool)
+		ofi_bufpool_destroy(ep->pend_pool);
 
 	free((void *)ep->name);
 	free(ep);
@@ -930,13 +928,14 @@ static int smr_create_pools(struct smr_ep *ep, struct fi_info *info)
 	if (ret)
 		goto free2;
 
-	ret = ofi_bufpool_create(&ep->pend_buf_pool,
+	ret = ofi_bufpool_create(&ep->pend_pool,
 				 sizeof(struct smr_pend_entry),
-				 16, 0, 4, OFI_BUFPOOL_NO_TRACK);
+				 16, 0, ep->tx_size, OFI_BUFPOOL_NO_TRACK);
 	if (ret)
 		goto free1;
 
 	return FI_SUCCESS;
+
 free1:
 	ofi_bufpool_destroy(ep->unexp_buf_pool);
 free2:
@@ -948,7 +947,7 @@ err:
 }
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
-		  struct fid_ep **ep_fid, void *context)
+		 struct fid_ep **ep_fid, void *context)
 {
 	struct smr_ep *ep;
 	int ret;
@@ -980,8 +979,6 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ret = smr_create_pools(ep, info);
 	if (ret)
 		goto ep;
-
-	ep->tx_fs = smr_tx_fs_create(info->tx_attr->size, NULL, NULL);
 
 	dlist_init(&ep->ipc_cpy_pend_list);
 	slist_init(&ep->overflow_list);

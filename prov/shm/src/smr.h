@@ -319,9 +319,8 @@ struct smr_ep {
 	struct fid_peer_srx	*srx;
 	struct ofi_bufpool	*cmd_ctx_pool;
 	struct ofi_bufpool	*unexp_buf_pool;
-	struct ofi_bufpool	*pend_buf_pool;
+	struct ofi_bufpool	*pend_pool;
 
-	struct smr_tx_fs	*tx_fs;
 	struct slist		overflow_list;
 	struct dlist_entry	ipc_cpy_pend_list;
 	size_t			min_multi_recv_size;
@@ -482,41 +481,36 @@ int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		     enum fi_op op, struct fi_atomic_attr *attr,
 		     uint64_t flags);
 
-struct smr_tx_entry {
-	int64_t			peer_id;
-	void			*context;
-	struct iovec		iov[SMR_IOV_LIMIT];
-	uint32_t		iov_count;
-	uint64_t		op_flags;
-	size_t			bytes_done;
-	void			*map_ptr;
-	struct smr_ep_name 	*map_name;
-	struct ofi_mr		*mr[SMR_IOV_LIMIT];
-};
-
 struct smr_pend_entry {
-	struct dlist_entry	entry;
-	struct smr_cmd		*cmd;
-	struct fi_peer_rx_entry	*rx_entry;
-	struct smr_cmd_ctx	*cmd_ctx;
-	size_t			bytes_done;
+	union {
+		struct {
+			int64_t			peer_id;
+			void			*context;
+			uint64_t		op_flags;
+		} tx;
+		struct {
+			struct dlist_entry	entry;
+			struct smr_cmd		*cmd;
+			struct fi_peer_rx_entry	*rx_entry;
+			struct ofi_mr_entry	*ipc_entry;
+			ofi_hmem_async_event_t	async_event;
+		} rx;
+	};
 	struct iovec		iov[SMR_IOV_LIMIT];
 	size_t			iov_count;
 	struct ofi_mr		*mr[SMR_IOV_LIMIT];
-	struct ofi_mr_entry	*ipc_entry;
-	ofi_hmem_async_event_t	async_event;
+	size_t			bytes_done;
 };
 
 struct smr_cmd_ctx {
-	struct dlist_entry entry;
-	struct smr_ep *ep;
-	struct smr_cmd *cmd;
-	struct smr_cmd cmd_cpy;
-	char msg[SMR_MSG_DATA_LEN];
-	struct slist buf_list;
+	struct dlist_entry	entry;
+	struct smr_ep		*ep;
+	struct smr_pend_entry	*pend;
+	struct smr_cmd		*cmd;
+	struct smr_cmd		cmd_cpy;
+	char			msg[SMR_MSG_DATA_LEN];
+	struct slist		buf_list;
 };
-
-OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_tx_fs);
 
 struct smr_domain {
 	struct util_domain	util_domain;
@@ -571,9 +565,9 @@ int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr);
 
-void smr_format_pend(struct smr_tx_entry *pend, void *context,
-		     struct ofi_mr **mr, const struct iovec *iov,
-		     uint32_t iov_count, uint64_t op_flags, int64_t id);
+void smr_format_tx_pend(struct smr_pend_entry *pend, void *context,
+			struct ofi_mr **mr, const struct iovec *iov,
+			uint32_t iov_count, uint64_t op_flags, int64_t id);
 void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags);
 size_t smr_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,

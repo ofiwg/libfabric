@@ -122,7 +122,7 @@ static ssize_t smr_do_atomic_inject(
 			uint16_t smr_flags, struct smr_cmd *cmd)
 {
 	struct smr_inject_buf *tx_buf;
-	struct smr_tx_entry *pend;
+	struct smr_pend_entry *pend;
 
 	tx_buf = smr_freestack_pop(smr_inject_pool(ep->region));
 	assert(tx_buf);
@@ -135,11 +135,11 @@ static ssize_t smr_do_atomic_inject(
 
 	if (op == ofi_op_atomic_fetch || op == ofi_op_atomic_compare ||
 	    atomic_op == FI_ATOMIC_READ || op_flags & FI_DELIVERY_COMPLETE) {
-		pend = ofi_freestack_pop(ep->tx_fs);
+		pend = ofi_buf_alloc(ep->pend_pool);
 		assert(pend);
 		cmd->hdr.tx_ctx = (uintptr_t) pend;
-		smr_format_pend(pend, context, res_desc, resultv,
-				result_count, op_flags, id);
+		smr_format_tx_pend(pend, context, res_desc, resultv,
+				   result_count, op_flags, id);
 	} else {
 		cmd->hdr.tx_ctx = 0;
 	}
