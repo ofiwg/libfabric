@@ -10,7 +10,6 @@
 #include "efa_base_ep.h"
 #include "efa_rdm_rxe_map.h"
 
-#define EFA_RDM_ERROR_MSG_BUFFER_LENGTH 1024
 
 /** @brief Information of a queued copy.
  *
@@ -186,7 +185,6 @@ struct efa_rdm_ep {
 
 	bool sendrecv_in_order_aligned_128_bytes; /**< whether to support in order send/recv of each aligned 128 bytes memory region */
 	bool write_in_order_aligned_128_bytes; /**< whether to support in order write of each aligned 128 bytes memory region */
-	char err_msg[EFA_RDM_ERROR_MSG_BUFFER_LENGTH]; /* A large enough buffer to store CQ/EQ error data used by e.g. fi_cq_readerr */
 	struct efa_rdm_pke **pke_vec;
 	struct dlist_entry entry;
 	/* the count of opes queued before handshake is made with their peers */
