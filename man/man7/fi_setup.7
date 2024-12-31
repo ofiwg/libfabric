@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_setup" "7" "2024\-12\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_setup" "7" "2024\-12\-31" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -173,9 +173,9 @@ fail the fi_getinfo request.
 A provider may optionally report non-requested secondary capabilities if
 doing so would not compromise performance or security.
 That is, a provider may grant an application a secondary capability,
-whether the application.
+regardless of whether the application requested it.
 The most commonly accessed secondary capability bits indicate if
-provider communication is restricted to the local node Ifor example, the
+provider communication is restricted to the local node (for example, the
 shared memory provider only supports local communication) and/or remote
 nodes (which can be the case for NICs that lack loopback support).
 Other secondary capability bits mostly deal with features targeting
