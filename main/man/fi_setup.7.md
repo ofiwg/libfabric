@@ -135,11 +135,11 @@ requested, a provider must support a capability if it is asked for or fail
 the fi_getinfo request.  A provider may optionally report non-requested
 secondary capabilities if doing so would not compromise performance or
 security.  That is, a provider may grant an application a secondary capability,
-whether the application.  The most commonly accessed secondary capability bits
-indicate if provider communication is restricted to the local node Ifor example,
-the shared memory provider only supports local communication) and/or remote
-nodes (which can be the case for NICs that lack loopback support).  Other
-secondary capability bits mostly deal with features targeting highly-scalable
+regardless of whether the application requested it.  The most commonly accessed
+secondary capability bits indicate if provider communication is restricted to the
+local node (for example, the shared memory provider only supports local communication)
+and/or remote nodes (which can be the case for NICs that lack loopback support).
+Other secondary capability bits mostly deal with features targeting highly-scalable
 applications, but may not be commonly supported across multiple providers.
 
 Because different providers support different sets of capabilities, applications
