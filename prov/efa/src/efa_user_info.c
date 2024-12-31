@@ -610,24 +610,6 @@ int efa_getinfo(uint32_t version, const char *node,
 	struct fi_info *dgram_info_list, *rdm_info_list;
 	int err;
 
-#ifndef _WIN32
-	/*
-	 * TODO:
-	 * It'd be better to install this during provider init (since that's
-	 * only invoked once) but fork() is currently called by nvml_init in 
-	 * other provider's ini (which calls ofi_hmem_init) after efa provider init. 
-	 * This can move to the provider init after we get rid of that fork() in 
-	 * ofi_hmem_init().
-	 */
-	err = efa_fork_support_install_fork_handler();
-	if (err) {
-		EFA_WARN(FI_LOG_CORE,
-			 "Unable to install fork handler: %s\n",
-			 strerror(-err));
-		return err;
-	}
-#endif
-
 	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_DGRAM)
 		return efa_user_info_get_dgram(version, node, service, flags, hints, info);
 
