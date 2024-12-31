@@ -130,7 +130,8 @@ struct  smr_cmd_hdr {
 	uint64_t		entry;
 	uint64_t		tx_ctx;
 	uint64_t		rx_ctx;
-	int64_t			id;
+	int64_t			rx_id;
+	int64_t			tx_id;
 	uint32_t		op;
 	uint16_t		proto;
 	uint16_t		op_flags;
@@ -191,12 +192,19 @@ struct smr_cmd {
 #define SMR_NAME_MAX	256
 #define SMR_PATH_MAX	(SMR_NAME_MAX + sizeof(SMR_DIR))
 
+enum smr_sar_status {
+	SMR_SAR_FREE = 0,
+	SMR_SAR_BUSY,
+	SMR_SAR_READY,
+};
+
 struct smr_peer_data {
 	int64_t			id;
-	uint32_t		sar_status;
-	uint16_t		name_sent;
-	uint16_t		ipc_valid;
 	uintptr_t		local_region;
+	uint8_t			sar_status;
+	uint8_t			name_sent;
+	uint8_t			ipc_valid;
+	uint8_t			resv[5];
 	struct ofi_xpmem_client xpmem;
 };
 
@@ -320,13 +328,13 @@ struct smr_ep {
 	struct ofi_bufpool	*pend_pool;
 
 	struct slist		overflow_list;
-	struct dlist_entry	ipc_cpy_pend_list;
+	struct dlist_entry	async_cpy_list;
 	size_t			min_multi_recv_size;
 
 	int			ep_idx;
 	enum ofi_shm_p2p_type	p2p_type;
 	void			*dsa_context;
-	void 			(*smr_progress_ipc_list)(struct smr_ep *ep);
+	void 			(*smr_progress_async_list)(struct smr_ep *ep);
 };
 
 struct smr_av {
@@ -430,8 +438,8 @@ static inline uintptr_t smr_peer_to_owner(struct smr_ep *ep,
 
 static inline void smr_return_cmd(struct smr_ep *ep, struct smr_cmd *cmd)
 {
-	struct smr_region *peer_smr = smr_peer_region(ep, cmd->hdr.id);
-	uintptr_t peer_ptr = smr_peer_to_owner(ep, cmd->hdr.id, (uintptr_t) cmd);
+	struct smr_region *peer_smr = smr_peer_region(ep, cmd->hdr.rx_id);
+	uintptr_t peer_ptr;
 	int64_t pos;
 	struct smr_return_entry *queue_entry;
 	int ret;
@@ -443,8 +451,10 @@ static inline void smr_return_cmd(struct smr_ep *ep, struct smr_cmd *cmd)
 		assert(0);
 	}
 
+	peer_ptr = smr_peer_to_owner(ep, cmd->hdr.rx_id, (uintptr_t) cmd);
 	assert(peer_ptr >= (uintptr_t) peer_smr->base_addr &&
-		peer_ptr < (uintptr_t) peer_smr->base_addr + peer_smr->total_size);
+	       peer_ptr < (uintptr_t) peer_smr->base_addr +
+	       peer_smr->total_size);
 	queue_entry->ptr = peer_ptr;
 
 	smr_return_queue_commit(queue_entry, pos);
@@ -485,25 +495,31 @@ int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		     enum fi_op op, struct fi_atomic_attr *attr,
 		     uint64_t flags);
 
+enum {
+	SMR_TX_ENTRY,
+	SMR_RX_ENTRY,
+};
+
 struct smr_pend_entry {
+	struct dlist_entry	entry;
 	union {
 		struct {
-			int64_t			peer_id;
-			void			*context;
-			uint64_t		op_flags;
-		} tx;
-		struct {
-			struct dlist_entry	entry;
-			struct smr_cmd		*cmd;
 			struct fi_peer_rx_entry	*rx_entry;
 			struct ofi_mr_entry	*ipc_entry;
 			ofi_hmem_async_event_t	async_event;
 		} rx;
 	};
+	uint8_t			type;
+	struct smr_cmd		*cmd;
 	struct iovec		iov[SMR_IOV_LIMIT];
 	size_t			iov_count;
 	struct ofi_mr		*mr[SMR_IOV_LIMIT];
 	size_t			bytes_done;
+	void			*comp_ctx;
+	uint64_t		comp_flags;
+	int			sar_dir;
+	ssize_t			(*sar_copy_fn)(struct smr_ep *ep,
+					       struct smr_pend_entry *pend);
 };
 
 struct smr_cmd_ctx {
@@ -571,23 +587,20 @@ int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr);
 
 void smr_format_tx_pend(struct smr_pend_entry *pend, void *context,
 			struct ofi_mr **mr, const struct iovec *iov,
-			uint32_t iov_count, uint64_t op_flags, int64_t id);
-void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
-			uint64_t tag, uint64_t data, uint64_t op_flags);
-size_t smr_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-		       struct smr_cmd *cmd, struct ofi_mr **mr,
-		       const struct iovec *iov, size_t count,
-		       size_t *bytes_done);
-size_t smr_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-			 struct smr_cmd *cmd, struct ofi_mr **mr,
-			 const struct iovec *iov, size_t count,
-			 size_t *bytes_done);
+			uint32_t iov_count, uint64_t op_flags);
+void smr_generic_format(struct smr_cmd *cmd, int64_t tx_id, int64_t rx_id,
+			uint32_t op, uint64_t tag, uint64_t data,
+			uint64_t op_flags);
+size_t smr_copy_to_sar(struct smr_ep *ep, struct smr_region *smr,
+		       struct smr_pend_entry *pend);
+size_t smr_copy_from_sar(struct smr_ep *ep, struct smr_region *smr,
+		         struct smr_pend_entry *pend);
 int smr_select_proto(void **desc, size_t iov_count, bool cma_avail,
 		     bool ipc_valid, uint32_t op, uint64_t total_len,
 		     uint64_t op_flags);
 typedef ssize_t (*smr_send_func)(
 		struct smr_ep *ep, struct smr_region *peer_smr,
-		int64_t id, int64_t peer_id, uint32_t op, uint64_t tag,
+		int64_t tx_id, int64_t rx_id, uint32_t op, uint64_t tag,
 		uint64_t data, uint64_t op_flags, struct ofi_mr **desc,
 		const struct iovec *iov, size_t iov_count, size_t total_len,
 		void *context, struct smr_cmd *cmd);
@@ -639,23 +652,28 @@ static inline bool smr_ipc_valid(struct smr_ep *ep, struct smr_region *peer_smr,
 		smr_peer_data(peer_smr)[peer_id].ipc_valid);
 }
 
+static inline struct smr_freestack *smr_pend_sar_pool(
+			struct smr_ep *ep, struct smr_pend_entry *pend)
+{
+	if (pend->type == SMR_TX_ENTRY)
+		return smr_sar_pool(ep->region);
+	return smr_sar_pool(smr_peer_region(ep, pend->cmd->hdr.rx_id));
+}
+
 int smr_unexp_start(struct fi_peer_rx_entry *rx_entry);
 
-void smr_progress_ipc_list(struct smr_ep *ep);
-static inline void smr_progress_ipc_list_noop(struct smr_ep *ep)
+void smr_progress_async_list(struct smr_ep *ep);
+static inline void smr_progress_async_list_noop(struct smr_ep *ep)
 {
 	// noop
 }
+ssize_t smr_copy_sar(struct smr_ep *ep, struct smr_pend_entry *pend);
+
 
 /* SMR FUNCTIONS FOR DSA SUPPORT */
 void smr_dsa_init(void);
 void smr_dsa_cleanup(void);
-size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-			   struct smr_cmd *cmd, const struct iovec *iov,
-			   size_t count, size_t *bytes_done);
-size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-			     struct smr_cmd *cmd, const struct iovec *iov,
-			     size_t count, size_t *bytes_done);
+ssize_t smr_dsa_copy_sar(struct smr_ep *ep, struct smr_pend_entry *pend);
 void smr_dsa_context_init(struct smr_ep *ep);
 void smr_dsa_context_cleanup(struct smr_ep *ep);
 void smr_dsa_progress(struct smr_ep *ep);

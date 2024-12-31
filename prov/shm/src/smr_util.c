@@ -287,7 +287,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 			   sizeof(struct smr_sar_buf));
 	for (i = 0; i < SMR_MAX_PEERS; i++) {
 		smr_peer_data(*smr)[i].id = -1;
-		smr_peer_data(*smr)[i].sar_status = 0;
+		smr_peer_data(*smr)[i].sar_status = SMR_SAR_FREE;
 		smr_peer_data(*smr)[i].name_sent = 0;
 		smr_peer_data(*smr)[i].xpmem.avail = false;
 	}

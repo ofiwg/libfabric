@@ -97,7 +97,7 @@ static fi_addr_t smr_get_addr(struct fi_peer_rx_entry *rx_entry)
 
 	av = container_of(cmd_ctx->ep->util_ep.av, struct smr_av, util_av);
 
-	return av->smr_map.peers[cmd_ctx->cmd->hdr.id].fiaddr;
+	return av->smr_map.peers[cmd_ctx->cmd->hdr.rx_id].fiaddr;
 }
 
 static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
