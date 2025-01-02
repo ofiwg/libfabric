@@ -72,29 +72,6 @@ static struct fi_ops efa_rdm_cq_fi_ops = {
 };
 
 
-#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-/**
- * @brief Check whether a completion consumes recv buffer
- *
- * @param ibv_cq_ex extended ibv cq
- * @return true the wc consumes a recv buffer
- * @return false the wc doesn't consume a recv buffer
- */
-static inline
-bool efa_rdm_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
-{
-	return efa_rdm_use_unsolicited_write_recv() && efadv_wc_is_unsolicited(efadv_cq_from_ibv_cq_ex(ibv_cq_ex));
-}
-
-#else
-
-static inline
-bool efa_rdm_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
-{
-	return false;
-}
-
-#endif
 /**
  * @brief handle rdma-core CQ completion resulted from IBV_WRITE_WITH_IMM
  *
@@ -139,7 +116,7 @@ void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 		EFA_WARN(FI_LOG_CQ,
 			"Unable to write a cq entry for remote for RECV_RDMA operation: %s\n",
 			fi_strerror(-ret));
-		efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_WRITE_SHM_CQ_ENTRY);
+		efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_WRITE_RECV_COMP);
 	}
 
 	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, flags);
@@ -148,7 +125,7 @@ void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 	 * For unsolicited wc, pkt_entry can be NULL, so we can only
 	 * access it for solicited wc.
 	 */
-	if (!efa_rdm_cq_wc_is_unsolicited(ibv_cq_ex)) {
+	if (!efa_cq_wc_is_unsolicited(ibv_cq_ex)) {
 		/**
 		 * Recv with immediate will consume a pkt_entry, but the pkt is not
 		 * filled, so free the pkt_entry and record we have one less posted
@@ -371,11 +348,11 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	 * QP and we cannot cancel that.
 	 */
 	if (OFI_UNLIKELY(ep->use_zcpy_rx && efa_rdm_pkt_type_is_rtm(pkt_type))) {
-		void *errbuf;
+		char errbuf[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 		size_t errbuf_len;
 
 		/* local & peer host-id & ep address will be logged by efa_rdm_write_error_msg */
-		if (!efa_rdm_write_error_msg(ep, pkt_entry->addr, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX, &errbuf, &errbuf_len))
+		if (!efa_rdm_write_error_msg(ep, pkt_entry->addr, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX, errbuf, &errbuf_len))
 			EFA_WARN(FI_LOG_CQ, "Error: %s\n", (const char *) errbuf);
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX);
 		efa_rdm_pke_release_rx(pkt_entry);
@@ -494,7 +471,7 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 				break;
 			case IBV_WC_RECV: /* fall through */
 			case IBV_WC_RECV_RDMA_WITH_IMM:
-				if (efa_rdm_cq_wc_is_unsolicited(ibv_cq->ibv_cq_ex)) {
+				if (efa_cq_wc_is_unsolicited(ibv_cq->ibv_cq_ex)) {
 					EFA_WARN(FI_LOG_CQ, "Receive error %s (%d) for unsolicited write recv",
 						efa_strerror(prov_errno), prov_errno);
 					efa_base_ep_write_eq_error(&ep->base_ep, to_fi_errno(prov_errno), prov_errno);

@@ -183,7 +183,7 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, 
 			init_attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
 		}
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-		if (efa_rdm_use_unsolicited_write_recv())
+		if (efa_use_unsolicited_write_recv())
 			efa_attr.flags |= EFADV_QP_FLAGS_UNSOLICITED_WRITE_RECV;
 #endif
 		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
@@ -471,4 +471,42 @@ void efa_base_ep_write_eq_error(struct efa_base_ep *ep, ssize_t err, ssize_t pro
 		err, fi_strerror(err),
 		prov_errno, efa_strerror(prov_errno));
 	abort();
+}
+
+const char *efa_base_ep_raw_addr_str(struct efa_base_ep *base_ep, char *buf, size_t *buflen)
+{
+	return ofi_straddr(buf, buflen, FI_ADDR_EFA, &base_ep->src_addr);
+}
+
+/**
+ * @brief return peer's raw address in #efa_ep_addr
+ *
+ * @param[in] ep		end point
+ * @param[in] addr 		libfabric address
+ * @returns
+ * If peer exists, return peer's raw addrress as pointer to #efa_ep_addr;
+ * Otherwise, return NULL
+ */
+struct efa_ep_addr *efa_base_ep_get_peer_raw_addr(struct efa_base_ep *base_ep, fi_addr_t addr)
+{
+	struct efa_av *efa_av;
+	struct efa_conn *efa_conn;
+
+	efa_av = base_ep->av;
+	efa_conn = efa_av_addr_to_conn(efa_av, addr);
+	return efa_conn ? efa_conn->ep_addr : NULL;
+}
+
+/**
+ * @brief return peer's raw address in a readable string
+ *
+ * @param[in] base_ep   end point
+ * @param[in] addr 		libfabric address
+ * @param[out] buf		a buffer to be used to store string
+ * @param[in,out] buflen	length of `buf` as input. length of the string as output.
+ * @return a string with peer's raw address
+ */
+const char *efa_base_ep_get_peer_raw_addr_str(struct efa_base_ep *base_ep, fi_addr_t addr, char *buf, size_t *buflen)
+{
+	return ofi_straddr(buf, buflen, FI_ADDR_EFA, efa_base_ep_get_peer_raw_addr(base_ep, addr));
 }

@@ -1390,6 +1390,6 @@ void test_efa_rdm_ep_support_unsolicited_write_recv(struct efa_resource **state)
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	assert_int_equal(efa_rdm_use_unsolicited_write_recv(),
+	assert_int_equal(efa_use_unsolicited_write_recv(),
 			 efa_rdm_ep_support_unsolicited_write_recv(efa_rdm_ep));
 }

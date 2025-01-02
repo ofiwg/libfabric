@@ -25,31 +25,6 @@ struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep)
 	return &ep->base_ep.src_addr;
 }
 
-const char *efa_rdm_ep_raw_addr_str(struct efa_rdm_ep *ep, char *buf, size_t *buflen)
-{
-	return ofi_straddr(buf, buflen, FI_ADDR_EFA, efa_rdm_ep_raw_addr(ep));
-}
-
-/**
- * @brief return peer's raw address in #efa_ep_addr
- *
- * @param[in] ep		end point
- * @param[in] addr 		libfabric address
- * @returns
- * If peer exists, return peer's raw addrress as pointer to #efa_ep_addr;
- * Otherwise, return NULL
- * @relates efa_rdm_peer
- */
-struct efa_ep_addr *efa_rdm_ep_get_peer_raw_addr(struct efa_rdm_ep *ep, fi_addr_t addr)
-{
-	struct efa_av *efa_av;
-	struct efa_conn *efa_conn;
-
-	efa_av = ep->base_ep.av;
-	efa_conn = efa_av_addr_to_conn(efa_av, addr);
-	return efa_conn ? efa_conn->ep_addr : NULL;
-}
-
 /**
  * @brief return peer's ahn
  *
@@ -67,21 +42,6 @@ int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr)
 	efa_av = ep->base_ep.av;
 	efa_conn = efa_av_addr_to_conn(efa_av, addr);
 	return efa_conn ? efa_conn->ah->ahn : -1;
-}
-
-/**
- * @brief return peer's raw address in a reable string
- *
- * @param[in] ep		end point
- * @param[in] addr 		libfabric address
- * @param[out] buf		a buffer tat to be used to store string
- * @param[in,out] buflen	length of `buf` as input. length of the string as output.
- * @relates efa_rdm_peer
- * @return a string with peer's raw address
- */
-const char *efa_rdm_ep_get_peer_raw_addr_str(struct efa_rdm_ep *ep, fi_addr_t addr, char *buf, size_t *buflen)
-{
-	return ofi_straddr(buf, buflen, FI_ADDR_EFA, efa_rdm_ep_get_peer_raw_addr(ep, addr));
 }
 
 /**

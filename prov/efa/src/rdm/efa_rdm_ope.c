@@ -556,6 +556,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
 	int write_cq_err;
+	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 
 	assert(rxe->type == EFA_RDM_RXE);
 
@@ -603,8 +604,10 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	err_entry.data = rxe->cq_entry.data;
 	err_entry.tag = rxe->cq_entry.tag;
 	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, rxe->addr, prov_errno,
-	                                         &err_entry.err_data, &err_entry.err_data_size))) {
+	                                         err_msg, &err_entry.err_data_size))) {
 		err_entry.err_data_size = 0;
+	} else {
+		err_entry.err_data = err_msg;
 	}
 
 	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n",
@@ -660,6 +663,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
 	int write_cq_err;
+	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 
 	ep = txe->ep;
 	memset(&err_entry, 0, sizeof(err_entry));
@@ -695,8 +699,10 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	err_entry.data = txe->cq_entry.data;
 	err_entry.tag = txe->cq_entry.tag;
 	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, txe->addr, prov_errno,
-	                                         &err_entry.err_data, &err_entry.err_data_size))) {
+	                                         err_msg, &err_entry.err_data_size))) {
 		err_entry.err_data_size = 0;
+	} else {
+		err_entry.err_data = err_msg;
 	}
 
 	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n",

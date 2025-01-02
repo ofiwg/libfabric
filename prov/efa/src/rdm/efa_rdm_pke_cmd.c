@@ -453,9 +453,9 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 				memset(&ep_addr_str, 0, sizeof(ep_addr_str));
 				memset(&peer_addr_str, 0, sizeof(peer_addr_str));
 				buflen = sizeof(ep_addr_str);
-				efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &buflen);
+				efa_base_ep_raw_addr_str(&ep->base_ep, ep_addr_str, &buflen);
 				buflen = sizeof(peer_addr_str);
-				efa_rdm_ep_get_peer_raw_addr_str(ep, pkt_entry->addr, peer_addr_str, &buflen);
+				efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, pkt_entry->addr, peer_addr_str, &buflen);
 				EFA_WARN(FI_LOG_CQ,
 					"While sending a handshake packet, an error occurred."
 					"  Our address: %s, peer address: %s\n",
@@ -712,7 +712,7 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 
 		memset(&ep_addr_str, 0, sizeof(ep_addr_str));
 		buflen = sizeof(ep_addr_str);
-		efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &buflen);
+		efa_base_ep_raw_addr_str(&ep->base_ep, ep_addr_str, &buflen);
 		EFA_WARN(FI_LOG_CQ,
 			"Packet receive error from non TX/RX packet.  Our address: %s\n",
 			ep_addr_str);
@@ -751,7 +751,7 @@ fi_addr_t efa_rdm_pke_insert_addr(struct efa_rdm_pke *pkt_entry, void *raw_addr)
 		char self_raw_addr_str[OFI_ADDRSTRLEN];
 		size_t buflen = OFI_ADDRSTRLEN;
 
-		efa_rdm_ep_raw_addr_str(ep, self_raw_addr_str, &buflen);
+		efa_base_ep_raw_addr_str(&ep->base_ep, self_raw_addr_str, &buflen);
 		EFA_WARN(FI_LOG_CQ,
 			"Host %s received a packet with invalid protocol version %d.\n"
 			"This host can only support protocol version %d and above.\n",
