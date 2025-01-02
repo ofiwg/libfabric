@@ -83,6 +83,9 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	       base_ep->domain->device->max_rdma_size);
 
 	qp = base_ep->qp;
+
+	ofi_genlock_lock(&base_ep->util_ep.lock);
+
 	if (!base_ep->is_wr_started) {
 		ibv_wr_start(qp->ibv_qp_ex);
 		base_ep->is_wr_started = true;
@@ -113,10 +116,9 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 		err = ibv_wr_complete(qp->ibv_qp_ex);
 		base_ep->is_wr_started = false;
 	}
-	if (OFI_UNLIKELY(err))
-		return err;
 
-	return 0;
+	ofi_genlock_unlock(&base_ep->util_ep.lock);
+	return err;
 }
 
 static
@@ -212,6 +214,9 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	efa_tracepoint(write_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
 	qp = base_ep->qp;
+
+	ofi_genlock_lock(&base_ep->util_ep.lock);
+
 	if (!base_ep->is_wr_started) {
 		ibv_wr_start(qp->ibv_qp_ex);
 		base_ep->is_wr_started = true;
@@ -256,10 +261,8 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		base_ep->is_wr_started = false;
 	}
 
-	if (OFI_UNLIKELY(err))
-		return err;
-
-	return 0;
+	ofi_genlock_unlock(&base_ep->util_ep.lock);
+	return err;
 }
 
 ssize_t efa_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
