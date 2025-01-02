@@ -267,23 +267,23 @@ void cxip_txc_close(struct cxip_ep *ep)
 	}
 
 	if (txc->send_cntr) {
-		fid_list_remove(&txc->send_cntr->ctx_list,
-				&txc->send_cntr->lock,
-				&ep->ep.fid);
+		fid_list_remove2(&txc->send_cntr->ctx_list,
+				 &txc->send_cntr->lock,
+				 &ep->ep.fid);
 		ofi_atomic_dec32(&txc->send_cntr->ref);
 	}
 
 	if (txc->read_cntr) {
-		fid_list_remove(&txc->read_cntr->ctx_list,
-				&txc->read_cntr->lock,
-				&ep->ep.fid);
+		fid_list_remove2(&txc->read_cntr->ctx_list,
+				 &txc->read_cntr->lock,
+				 &ep->ep.fid);
 		ofi_atomic_dec32(&txc->read_cntr->ref);
 	}
 
 	if (txc->write_cntr) {
-		fid_list_remove(&txc->write_cntr->ctx_list,
-				&txc->write_cntr->lock,
-				&ep->ep.fid);
+		fid_list_remove2(&txc->write_cntr->ctx_list,
+				 &txc->write_cntr->lock,
+				 &ep->ep.fid);
 		ofi_atomic_dec32(&txc->write_cntr->ref);
 	}
 
@@ -313,9 +313,9 @@ void cxip_rxc_close(struct cxip_ep *ep)
 	}
 
 	if (rxc->recv_cntr) {
-		fid_list_remove(&rxc->recv_cntr->ctx_list,
-				&rxc->recv_cntr->lock,
-				&ep->ep.fid);
+		fid_list_remove2(&rxc->recv_cntr->ctx_list,
+				 &rxc->recv_cntr->lock,
+				 &ep->ep.fid);
 		ofi_atomic_dec32(&rxc->recv_cntr->ref);
 	}
 
@@ -983,7 +983,7 @@ static int cxip_ep_bind_cntr(struct cxip_ep *ep, struct cxip_cntr *cntr,
 		return -FI_EINVAL;
 	}
 
-	ret = fid_list_insert(&cntr->ctx_list, &cntr->lock, &ep->ep.fid);
+	ret = fid_list_insert2(&cntr->ctx_list, &cntr->lock, &ep->ep.fid);
 	if (ret) {
 		CXIP_WARN("Add of EP to cntr EP list failed: %d:%s\n",
 			  ret, fi_strerror(-ret));

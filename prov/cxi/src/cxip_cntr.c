@@ -333,7 +333,7 @@ static int cxip_cntr_issue_ct_get(struct cxip_cntr *cntr, bool *issue_ct_get)
 	return FI_SUCCESS;
 
 err_unlock:
-	ofi_mutex_unlock(&cntr->lock);
+	ofi_genlock_unlock(&cntr->lock);
 
 	*issue_ct_get = false;
 	return ret;
@@ -397,13 +397,13 @@ static void cxip_cntr_progress(struct cxip_cntr *cntr)
 	 * CQ processing updates counters via doorbells, use of
 	 * cntr->lock is not required by CQ processing.
 	 */
-	ofi_mutex_lock(&cntr->lock);
+	ofi_genlock_lock(&cntr->lock);
 
 	dlist_foreach(&cntr->ctx_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		cxip_ep_progress(fid_entry->fid);
 	}
-	ofi_mutex_unlock(&cntr->lock);
+	ofi_genlock_unlock(&cntr->lock);
 }
 
 static void cxip_cntr_read_wb(struct cxip_cntr *cntr, struct c_ct_writeback *wb)
@@ -412,7 +412,7 @@ static void cxip_cntr_read_wb(struct cxip_cntr *cntr, struct c_ct_writeback *wb)
 
 	cxip_cntr_progress(cntr);
 
-	ofi_mutex_lock(&cntr->lock);
+	ofi_genlock_lock(&cntr->lock);
 	cxip_cntr_get(cntr, false);
 
 	do {
@@ -428,7 +428,7 @@ static void cxip_cntr_read_wb(struct cxip_cntr *cntr, struct c_ct_writeback *wb)
 		sched_yield();
 	} while (true);
 
-	ofi_mutex_unlock(&cntr->lock);
+	ofi_genlock_unlock(&cntr->lock);
 }
 
 /*
@@ -711,7 +711,7 @@ static int cxip_cntr_close(struct fid *fid)
 	else
 		CXIP_DBG("Counter disabled: %p\n", cntr);
 
-	ofi_mutex_destroy(&cntr->lock);
+	ofi_genlock_destroy(&cntr->lock);
 
 	cxip_domain_remove_cntr(cntr->domain, cntr);
 
@@ -753,11 +753,11 @@ int cxip_set_wb_buffer(struct fid *fid, void *buf, size_t len)
 	}
 
 	/* Force a counter writeback into the user's provider buffer. */
-	ofi_mutex_lock(&cntr->lock);
+	ofi_genlock_lock(&cntr->lock);
 	do {
 		ret = cxip_cntr_get(cntr, true);
 	} while (ret == -FI_EAGAIN);
-	ofi_mutex_unlock(&cntr->lock);
+	ofi_genlock_unlock(&cntr->lock);
 
 	return ret;
 }
@@ -868,7 +868,12 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	ofi_atomic_initialize32(&_cntr->ref, 0);
 	dlist_init(&_cntr->ctx_list);
 
-	ofi_mutex_init(&_cntr->lock);
+	/* Allow FI_THREAD_DOMAIN optimizaiton */
+	if (dom->util_domain.threading == FI_THREAD_DOMAIN ||
+	    dom->util_domain.threading == FI_THREAD_COMPLETION)
+		ofi_genlock_init(&_cntr->lock, OFI_LOCK_NONE);
+	else
+		ofi_genlock_init(&_cntr->lock, OFI_LOCK_SPINLOCK);
 
 	_cntr->cntr_fid.fid.fclass = FI_CLASS_CNTR;
 	_cntr->cntr_fid.fid.context = context;
