@@ -290,6 +290,16 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		efa_domain->util_domain.domain_fid.ops = &efa_ops_domain_dgram;
 	}
 
+#ifndef _WIN32
+	err = efa_fork_support_install_fork_handler();
+	if (err) {
+		EFA_WARN(FI_LOG_CORE,
+			 "Unable to install fork handler: %s\n",
+			 strerror(-err));
+		return err;
+	}
+#endif
+
 	dlist_insert_tail(&efa_domain->list_entry, &g_efa_domain_list);
 	return 0;
 
