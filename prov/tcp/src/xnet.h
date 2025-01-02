@@ -98,6 +98,9 @@ typedef void  xnet_profile_t;
 #define XNET_MIN_MULTI_RECV	16384
 #define XNET_PORT_MAX_RANGE	(USHRT_MAX)
 
+/* provider specific op flags */
+#define TCP_NO_CONNECT FI_TCP_NO_CONNECT
+
 extern struct fi_provider	xnet_prov;
 extern struct util_prov		xnet_util_prov;
 void xnet_init_infos(void);
@@ -304,8 +307,8 @@ struct xnet_rdm {
 
 int xnet_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep_fid, void *context);
-ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t dest_addr,
-		      struct xnet_conn **conn);
+ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t addr,
+		      struct xnet_conn **conn, uint64_t flags);
 struct xnet_ep *xnet_get_rx_ep(struct xnet_rdm *rdm, fi_addr_t addr);
 void xnet_freeall_conns(struct xnet_rdm *rdm);
 
