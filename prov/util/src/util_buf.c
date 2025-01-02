@@ -282,12 +282,18 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 {
 	struct ofi_bufpool_region *buf_region;
 	size_t i;
+	int count;
 
 	for (i = 0; i < pool->region_cnt; i++) {
 		buf_region = pool->region_table[i];
 
-		assert((pool->attr.flags & OFI_BUFPOOL_NO_TRACK) ||
-			!ofi_atomic_get32(&buf_region->use_cnt));
+		if (!(pool->attr.flags & OFI_BUFPOOL_NO_TRACK)) {
+			count = ofi_atomic_get32(&buf_region->use_cnt);
+			if (count) {
+				FI_WARN(&core_prov, FI_LOG_CORE,
+						"Bufpool use_cnt non-zero: %d\n", count);
+			}
+		}
 		if (pool->attr.free_fn)
 			pool->attr.free_fn(buf_region);
 
