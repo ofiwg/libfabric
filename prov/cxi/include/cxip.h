@@ -1466,7 +1466,7 @@ struct cxip_cntr {
 	/* Contexts to which counter is bound */
 	struct dlist_entry ctx_list;
 
-	ofi_mutex_t lock;
+	struct ofi_genlock lock;
 
 	struct cxi_ct *ct;
 	struct c_ct_writeback *wb;
