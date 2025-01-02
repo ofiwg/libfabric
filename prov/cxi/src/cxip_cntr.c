@@ -51,74 +51,45 @@ static int cxip_cntr_copy_ct_writeback(struct cxip_cntr *cntr,
 	return FI_SUCCESS;
 }
 
-static int cxip_cntr_get_ct_error(struct cxip_cntr *cntr, uint64_t *error)
+static int cxip_cntr_get_wb(struct cxip_cntr *cntr, struct c_ct_writeback *wb)
 {
-	struct c_ct_writeback wb_copy;
 	int ret;
 
 	if (cntr->wb_iface == FI_HMEM_SYSTEM) {
-		do {
-			if (cntr->wb->ct_writeback ||
-			    cntr->attr.flags & FI_CXI_CNTR_CACHED) {
-				*error = cntr->wb->ct_failure;
-				return -FI_SUCCESS;
-			}
-			sched_yield();
-		} while (true);
+		*wb = *cntr->wb;
+		return FI_SUCCESS;
 	}
 
 	/* Device memory requires a memcpy of the contents into
 	 * system memory.
 	 */
-	do {
-		ret = cxip_cntr_copy_ct_writeback(cntr, &wb_copy);
-		if (ret)
-			return ret;
+	ret = cxip_cntr_copy_ct_writeback(cntr, wb);
 
-		if (wb_copy.ct_writeback ||
-		    cntr->attr.flags & FI_CXI_CNTR_CACHED) {
-			*error = wb_copy.ct_failure;
-			return -FI_SUCCESS;
-		}
-		sched_yield();
-	} while (true);
+	return ret;
+}
 
-	return FI_SUCCESS;
+static int cxip_cntr_get_ct_error(struct cxip_cntr *cntr, uint64_t *error)
+{
+	struct c_ct_writeback wb;
+	int ret;
+
+	ret = cxip_cntr_get_wb(cntr, &wb);
+	if (ret == FI_SUCCESS)
+		*error = wb.ct_failure;
+
+	return ret;
 }
 
 static int cxip_cntr_get_ct_success(struct cxip_cntr *cntr, uint64_t *success)
 {
-	struct c_ct_writeback wb_copy;
+	struct c_ct_writeback wb;
 	int ret;
 
-	if (cntr->wb_iface == FI_HMEM_SYSTEM) {
-		do {
-			if (cntr->wb->ct_writeback ||
-			    cntr->attr.flags & FI_CXI_CNTR_CACHED) {
-				*success = cntr->wb->ct_success;
-				return FI_SUCCESS;
-			}
-			sched_yield();
-		} while (true);
-	}
+	ret = cxip_cntr_get_wb(cntr, &wb);
+	if (ret == FI_SUCCESS)
+		*success = wb.ct_success;
 
-	 /* Device memory requires a memcpy of the contents into
-	  * system memory.
-	  */
-	do {
-		ret = cxip_cntr_copy_ct_writeback(cntr, &wb_copy);
-		if (ret)
-			return ret;
-
-		if (wb_copy.ct_writeback ||
-		    cntr->attr.flags & FI_CXI_CNTR_CACHED) {
-			*success = wb_copy.ct_success;
-			return FI_SUCCESS;
-		}
-		sched_yield();
-	} while (true);
-
-	return FI_SUCCESS;
+	return ret;
 }
 
 #define CT_WRITEBACK_OFFSET 7U
@@ -435,29 +406,44 @@ static void cxip_cntr_progress(struct cxip_cntr *cntr)
 	ofi_mutex_unlock(&cntr->lock);
 }
 
+static void cxip_cntr_read_wb(struct cxip_cntr *cntr, struct c_ct_writeback *wb)
+{
+	int ret;
+
+	cxip_cntr_progress(cntr);
+
+	ofi_mutex_lock(&cntr->lock);
+	cxip_cntr_get(cntr, false);
+
+	do {
+		ret = cxip_cntr_get_wb(cntr, wb);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Failed to read counter: rc=%d\n", ret);
+			break;
+		}
+
+		if (wb->ct_writeback || (cntr->attr.flags & FI_CXI_CNTR_CACHED))
+			break;
+
+		sched_yield();
+	} while (true);
+
+	ofi_mutex_unlock(&cntr->lock);
+}
+
 /*
  * cxip_cntr_read() - fi_cntr_read() implementation.
  */
 static uint64_t cxip_cntr_read(struct fid_cntr *fid_cntr)
 {
 	struct cxip_cntr *cxi_cntr;
-	uint64_t success = 0;
-	int ret;
+	struct c_ct_writeback wb = {};
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
 
-	cxip_cntr_progress(cxi_cntr);
+	cxip_cntr_read_wb(cxi_cntr, &wb);
 
-	ofi_mutex_lock(&cxi_cntr->lock);
-	cxip_cntr_get(cxi_cntr, false);
-
-	ret = cxip_cntr_get_ct_success(cxi_cntr, &success);
-	ofi_mutex_unlock(&cxi_cntr->lock);
-
-	if (ret != FI_SUCCESS)
-		CXIP_WARN("Failed to read counter success: rc=%d\n", ret);
-
-	return success;
+	return wb.ct_success;
 }
 
 /*
@@ -466,23 +452,13 @@ static uint64_t cxip_cntr_read(struct fid_cntr *fid_cntr)
 static uint64_t cxip_cntr_readerr(struct fid_cntr *fid_cntr)
 {
 	struct cxip_cntr *cxi_cntr;
-	uint64_t error = 0;
-	int ret;
+	struct c_ct_writeback wb = {};
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
 
-	cxip_cntr_progress(cxi_cntr);
+	cxip_cntr_read_wb(cxi_cntr, &wb);
 
-	ofi_mutex_lock(&cxi_cntr->lock);
-	cxip_cntr_get(cxi_cntr, false);
-
-	ret = cxip_cntr_get_ct_error(cxi_cntr, &error);
-	ofi_mutex_unlock(&cxi_cntr->lock);
-
-	if (ret != FI_SUCCESS)
-		CXIP_WARN("Failed to read counter error: rc=%d\n", ret);
-
-	return error;
+	return wb.ct_failure;
 }
 
 /*
