@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2024 by Cornelis Networks.
+ * Copyright (C) 2021-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -922,9 +922,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Context configured with HFI=%d PORT=%d LID=0x%x JKEY=%d\n",
 		context->hfi_unit, context->hfi_port, context->lid, context->jkey);
 
-	context->status_lasterr = 0;
-	context->status_check_next_usec =
-		fi_opx_timer_now(&context->link_status_timestamp, &context->link_status_timer);
+	context->status_lasterr		     = 0;
+	context->status_check_next_usec	     = 0;
 	context->link_down_wait_time_max_sec = OPX_LINK_DOWN_WAIT_TIME_MAX_SEC_DEFAULT;
 
 	int link_down_wait_time_max_sec;

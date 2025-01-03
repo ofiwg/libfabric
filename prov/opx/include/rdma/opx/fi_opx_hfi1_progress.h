@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -779,8 +779,6 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 		} // End timer fired
 
 		struct fi_opx_hfi1_context *context = opx_ep->hfi;
-		timer				    = &context->link_status_timer;
-		timestamp			    = &context->link_status_timestamp;
 
 		if (OFI_UNLIKELY(compare > context->status_check_next_usec)) {
 			int prev_link_status = context->status_lasterr;
