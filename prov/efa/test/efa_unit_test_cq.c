@@ -2,7 +2,6 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
-#include "dgram/efa_dgram_ep.h"
 #include "rdm/efa_rdm_cq.h"
 #include "efa_av.h"
 
@@ -25,7 +24,6 @@ void test_impl_cq_read_empty_cq(struct efa_resource *resource, enum fi_ep_type e
 	efa_unit_test_resource_construct(resource, ep_type);
 
 	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
-
 	ibv_cqx = container_of(efa_base_ep->util_ep.rx_cq, struct efa_cq, util_cq)->ibv_cq.ibv_cq_ex;
 	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
 
