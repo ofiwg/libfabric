@@ -126,7 +126,7 @@ static int smr_progress_return_entry(struct smr_ep *ep, struct smr_cmd *cmd,
 		smr_try_send_cmd(ep, cmd);
 		return -FI_EAGAIN;
 	case smr_proto_inject:
-		tx_buf = smr_get_ptr(ep->region, cmd->hdr.proto_data);
+		tx_buf = smr_get_inject_buf(ep->region, cmd);
 		if (pending) {
 			if (pending->bytes_done != cmd->hdr.size &&
 			    cmd->hdr.op != ofi_op_atomic) {
@@ -155,7 +155,6 @@ static int smr_progress_return_entry(struct smr_ep *ep, struct smr_cmd *cmd,
 				}
 			}
 		}
-		smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
 		break;
 	default:
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -245,7 +244,7 @@ ssize_t smr_progress_inject(struct smr_ep *ep, struct smr_cmd *cmd,
 	ssize_t ret;
 
 	peer_smr = smr_peer_region(ep, cmd->hdr.id);
-	tx_buf = smr_get_ptr(peer_smr, (size_t) cmd->hdr.proto_data);
+	tx_buf = smr_get_inject_buf(peer_smr, cmd);
 
 	if (cmd->hdr.op == ofi_op_read_req) {
 		ret = ofi_copy_from_mr_iov(tx_buf->data, cmd->hdr.size, mr,
@@ -636,12 +635,11 @@ static int smr_progress_inject_atomic(struct smr_cmd *cmd, struct ofi_mr **mr,
 			struct smr_ep *ep, int err)
 {
 	struct smr_inject_buf *tx_buf;
-	size_t inj_offset;
 	uint8_t *src, *comp;
 	int i;
 
-	inj_offset = (size_t) cmd->hdr.proto_data;
-	tx_buf = smr_get_ptr(ep->region, inj_offset);
+	tx_buf = smr_get_inject_buf(smr_peer_region(ep, cmd->hdr.id), cmd);
+
 	if (err)
 		goto out;
 

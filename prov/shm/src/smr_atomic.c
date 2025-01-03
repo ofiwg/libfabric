@@ -67,38 +67,40 @@ static void smr_do_atomic_inline(struct smr_ep *ep, struct smr_region *peer_smr,
 	smr_format_inline_atomic(cmd, desc, iov, iov_count);
 }
 
-static void smr_format_inject_atomic(struct smr_cmd *cmd, struct ofi_mr **desc,
+static void smr_format_inject_atomic(
+			struct smr_cmd *cmd, struct ofi_mr **desc,
 			const struct iovec *iov, size_t count,
 			const struct iovec *resultv, size_t result_count,
 			struct ofi_mr **comp_desc, const struct iovec *compv,
-			size_t comp_count, struct smr_region *smr,
-			struct smr_inject_buf *tx_buf)
+			size_t comp_count, struct smr_region *smr)
 {
+	struct smr_inject_buf *tx_buf;
 	size_t comp_size;
 
 	cmd->hdr.proto = smr_proto_inject;
-	cmd->hdr.proto_data = smr_get_offset(smr, tx_buf);
 
+	tx_buf = smr_get_inject_buf(smr, cmd);
 	switch (cmd->hdr.op) {
 	case ofi_op_atomic:
-		cmd->hdr.size = ofi_copy_from_mr_iov(tx_buf->data,
-					SMR_INJECT_SIZE, desc, iov, count, 0);
+		cmd->hdr.size = ofi_copy_from_mr_iov(
+					tx_buf->data, SMR_INJECT_SIZE, desc,
+					iov, count, 0);
 		break;
 	case ofi_op_atomic_fetch:
 		if (cmd->hdr.atomic_op == FI_ATOMIC_READ)
 			cmd->hdr.size = ofi_total_iov_len(resultv,
 							  result_count);
 		else
-			cmd->hdr.size = ofi_copy_from_mr_iov(tx_buf->data,
-						SMR_INJECT_SIZE, desc, iov,
-						count, 0);
+			cmd->hdr.size = ofi_copy_from_mr_iov(
+						tx_buf->data, SMR_INJECT_SIZE,
+						desc, iov, count, 0);
 		break;
 	case ofi_op_atomic_compare:
 		cmd->hdr.size = ofi_copy_from_mr_iov(tx_buf->buf,
-						SMR_COMP_INJECT_SIZE,
-						desc, iov, count, 0);
-		comp_size = ofi_copy_from_mr_iov(tx_buf->comp,
-					SMR_COMP_INJECT_SIZE,
+						     SMR_COMP_INJECT_SIZE,
+						     desc, iov, count, 0);
+		comp_size = ofi_copy_from_mr_iov(
+					tx_buf->comp, SMR_COMP_INJECT_SIZE,
 					comp_desc, compv, comp_count, 0);
 		if (comp_size != cmd->hdr.size)
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -121,17 +123,13 @@ static ssize_t smr_do_atomic_inject(
 			size_t comp_count, size_t total_len, void *context,
 			uint16_t smr_flags, struct smr_cmd *cmd)
 {
-	struct smr_inject_buf *tx_buf;
 	struct smr_pend_entry *pend;
-
-	tx_buf = smr_freestack_pop(smr_inject_pool(ep->region));
-	assert(tx_buf);
 
 	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
 	smr_format_inject_atomic(cmd, desc, iov, iov_count, resultv,
 				 result_count, comp_desc, compv, comp_count,
-				 ep->region, tx_buf);
+				 ep->region);
 
 	if (op == ofi_op_atomic_fetch || op == ofi_op_atomic_compare ||
 	    atomic_op == FI_ATOMIC_READ || op_flags & FI_DELIVERY_COMPLETE) {

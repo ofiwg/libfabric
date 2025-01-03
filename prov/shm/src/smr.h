@@ -123,7 +123,6 @@ enum {
  * 	proto - msg src (ex. smr_src_inline, defined above)
  * 	op_flags - operation flags (ex. SMR_REMOTE_CQ_DATA, defined above)
  * 	size - size of data transfer
- * 	proto_data - src of additional protocol data (inject offset)
  * 	status - returned status of operation
  * 	cq_data - remote CQ data
  */
@@ -137,7 +136,6 @@ struct  smr_cmd_hdr {
 	uint16_t		op_flags;
 
 	uint64_t		size;
-	uint64_t		proto_data;
 	int64_t			status;
 	uint64_t		cq_data;
 	union {
@@ -349,9 +347,9 @@ static inline struct smr_freestack *smr_cmd_stack(struct smr_region *smr)
 {
 	return (struct smr_freestack *) ((char *) smr + smr->cmd_stack_offset);
 }
-static inline struct smr_freestack *smr_inject_pool(struct smr_region *smr)
+static inline struct smr_inject_buf *smr_inject_pool(struct smr_region *smr)
 {
-	return (struct smr_freestack *) ((char *) smr + smr->inject_pool_offset);
+	return (struct smr_inject_buf *) ((char *) smr + smr->inject_pool_offset);
 }
 static inline struct smr_return_queue *smr_return_queue(struct smr_region *smr)
 {
@@ -364,6 +362,12 @@ static inline struct smr_peer_data *smr_peer_data(struct smr_region *smr)
 static inline struct smr_freestack *smr_sar_pool(struct smr_region *smr)
 {
 	return (struct smr_freestack *) ((char *) smr + smr->sar_pool_offset);
+}
+static inline struct smr_inject_buf *smr_get_inject_buf(struct smr_region *smr,
+							struct smr_cmd *cmd)
+{
+	return &smr_inject_pool(smr)[smr_freestack_get_index(smr_cmd_stack(smr),
+							     (char *) cmd)];
 }
 
 struct smr_attr {

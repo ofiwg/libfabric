@@ -259,6 +259,14 @@ static inline void smr_freestack_push_by_offset(struct smr_freestack *fs,
                         fs->object_size);
 }
 
+/* Get entry index in fs */
+static inline int16_t smr_freestack_get_index(struct smr_freestack *fs,
+					      char *local_p)
+{
+	return (int16_t) (local_p - (char*) fs - fs->entry_base_offset) /
+		fs->object_size;
+}
+
 /* Push by object */
 static inline void smr_freestack_push(struct smr_freestack *fs, void *local_p)
 {

@@ -257,11 +257,14 @@ static void smr_format_inline(struct smr_cmd *cmd, struct ofi_mr **mr,
 }
 
 static void smr_format_inject(struct smr_cmd *cmd, struct ofi_mr **mr,
-		const struct iovec *iov, size_t count, struct smr_region *smr,
-		struct smr_inject_buf *tx_buf)
+			      const struct iovec *iov, size_t count,
+			      struct smr_region *smr)
 {
+	struct smr_inject_buf *tx_buf;
+
+	tx_buf = smr_get_inject_buf(smr, cmd);
+
 	cmd->hdr.proto = smr_proto_inject;
-	cmd->hdr.proto_data = smr_get_offset(smr, tx_buf);
 	if (cmd->hdr.op != ofi_op_read_req)
 		cmd->hdr.size = ofi_copy_from_mr_iov(tx_buf->data,
 						     SMR_INJECT_SIZE,
@@ -496,11 +499,7 @@ static ssize_t smr_do_inject(struct smr_ep *ep, struct smr_region *peer_smr,
 			     size_t iov_count, size_t total_len, void *context,
 			     struct smr_cmd *cmd)
 {
-	struct smr_inject_buf *tx_buf;
 	struct smr_pend_entry *pend;
-
-	tx_buf = smr_freestack_pop(smr_inject_pool(ep->region));
-	assert(tx_buf);
 
 	if (op == ofi_op_read_req) {
 		pend = ofi_buf_alloc(ep->pend_pool);
@@ -514,7 +513,7 @@ static ssize_t smr_do_inject(struct smr_ep *ep, struct smr_region *peer_smr,
 	}
 
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
-	smr_format_inject(cmd, desc, iov, iov_count, ep->region, tx_buf);
+	smr_format_inject(cmd, desc, iov, iov_count, ep->region);
 
 	return FI_SUCCESS;
 }
