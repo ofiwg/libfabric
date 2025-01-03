@@ -82,6 +82,9 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 
 int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
 
+int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
+		struct fid_ep **ep_fid, void *context);
+
 int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, uint32_t tclass);
 
 void efa_qp_destruct(struct efa_qp *qp);

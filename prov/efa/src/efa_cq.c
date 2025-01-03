@@ -6,7 +6,6 @@
 #include <string.h>
 #include "config.h"
 #include <ofi_mem.h>
-#include "dgram/efa_dgram_ep.h"
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_cntr.h"
