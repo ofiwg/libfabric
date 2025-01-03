@@ -491,6 +491,8 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 		return ret;
 	}
 
+	cntr = comp_cntr ? comp_cntr : rxc->recv_cntr;
+
 	ofi_genlock_lock(&rxc->ep_obj->lock);
 
 	if (mr && !(flags & (FI_COMPLETION | FI_MULTI_RECV |
@@ -508,6 +510,11 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 					  &req, cxip_rnr_recv_cb);
 		if (ret)
 			goto err;
+
+		if (cntr) {
+			req->recv.cntr = cntr;
+			cxip_cntr_progress_inc(req->recv.cntr);
+		}
 
 		recv_req = req;
 		recv_req->context = (uint64_t)context;
@@ -527,7 +534,7 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 		else
 			recv_req->recv.success_disable = false;
 	}
-	cntr = comp_cntr ? comp_cntr : rxc->recv_cntr;
+
 	recv_req->recv.match_id = match_id;
 	recv_req->recv.vni = vni;
 	recv_req->recv.tag = tag;
@@ -1128,6 +1135,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 				    txc_rnr->req_selective_comp_msg;
 		send_req->send.send_md = NULL;
 		send_req->send.hybrid_md = false;
+		send_req->send.cntr = triggered ? comp_cntr : txc->send_cntr;
 	} else {
 		req = cxip_evtq_req_alloc(&txc->tx_evtq, false, txc);
 		if (!req) {
@@ -1144,6 +1152,10 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		send_req->flags = FI_SEND |
 				  (flags & (FI_COMPLETION | FI_MATCH_COMPLETE));
 		send_req->send.success_disable = false;
+
+		send_req->send.cntr = triggered ? comp_cntr : txc->send_cntr;
+		if (send_req->send.cntr)
+			cxip_cntr_progress_inc(send_req->send.cntr);
 	}
 
 	/* Restrict outstanding success event requests to queue size */
@@ -1158,7 +1170,6 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 
 	/* Save Send parameters to replay */
 	send_req->send.tclass = tclass;
-	send_req->send.cntr = triggered ? comp_cntr : txc->send_cntr;
 	send_req->send.buf = buf;
 	send_req->send.len = len;
 	send_req->send.data = data;
@@ -1234,8 +1245,12 @@ free_map:
 	if (send_req->send.send_md && !send_req->send.hybrid_md)
 		cxip_unmap(send_req->send.send_md);
 free_req:
-	if (req)
+	if (req) {
+		if (req->send.cntr)
+			cxip_cntr_progress_dec(req->send.cntr);
+
 		cxip_evtq_req_free(req);
+	}
 unlock:
 	ofi_genlock_unlock(&txc->ep_obj->lock);
 

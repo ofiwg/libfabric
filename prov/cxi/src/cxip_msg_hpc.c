@@ -3395,6 +3395,9 @@ cxip_recv_req_init(struct cxip_rxc *rxc, void *buf, size_t len, fi_addr_t addr,
 		req->flags |= FI_MSG;
 
 	req->recv.cntr = comp_cntr ? comp_cntr : rxc->recv_cntr;
+	if (req->recv.cntr)
+		cxip_cntr_progress_inc(req->recv.cntr);
+
 	req->recv.match_id = match_id;
 	req->recv.tag = tag;
 	req->recv.ignore = ignore;

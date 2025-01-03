@@ -127,6 +127,9 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 
 	req->flags &= (FI_RMA | FI_READ | FI_WRITE);
 
+	if (req->rma.cntr)
+		cxip_cntr_progress_dec(req->rma.cntr);
+
 	if (req->rma.local_md)
 		cxip_unmap(req->rma.local_md);
 
@@ -329,6 +332,11 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		if (cntr) {
 			dma_cmd.event_ct_ack = 1;
 			dma_cmd.ct = cntr->ct->ctn;
+
+			if (req) {
+				req->rma.cntr = cntr;
+				cxip_cntr_progress_inc(cntr);
+			}
 		}
 
 		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
@@ -343,6 +351,11 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		if (cntr) {
 			dma_cmd.event_ct_reply = 1;
 			dma_cmd.ct = cntr->ct->ctn;
+
+			if (req) {
+				req->rma.cntr = cntr;
+				cxip_cntr_progress_inc(cntr);
+			}
 		}
 	}
 
@@ -446,6 +459,11 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	if (txc->write_cntr) {
 		cstate_cmd.event_ct_ack = 1;
 		cstate_cmd.ct = txc->write_cntr->ct->ctn;
+
+		if (req) {
+			req->rma.cntr = txc->write_cntr;
+			cxip_cntr_progress_inc(txc->write_cntr);
+		}
 	}
 
 	/* If the user has not request a completion, success events will be

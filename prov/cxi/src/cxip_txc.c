@@ -449,6 +449,10 @@ void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc)
 			cxip_txc_otx_reqs_dec(txc);
 			dlist_remove(&req->send.txc_entry);
 			cxip_unmap(req->send.send_md);
+
+			if (req->send.cntr)
+				cxip_cntr_progress_dec(req->send.cntr);
+
 			cxip_evtq_req_free(req);
 		}
 	}
