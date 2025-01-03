@@ -1104,6 +1104,7 @@ struct cxip_req_rma {
 	struct cxip_txc *txc;
 	struct cxip_md *local_md;	// RMA target buffer
 	void *ibuf;
+	struct cxip_cntr *cntr;
 };
 
 struct cxip_req_amo {
@@ -1118,7 +1119,7 @@ struct cxip_req_amo {
 	bool fetching_amo_flush;
 	uint8_t fetching_amo_flush_event_count;
 	unsigned int fetching_amo_flush_event_rc;
-	struct cxip_cntr *fetching_amo_flush_cntr;
+	struct cxip_cntr *cntr;
 };
 
 /* Used with receive request to maintain state associated
@@ -1477,7 +1478,40 @@ struct cxip_cntr {
 	struct c_ct_writeback lwb;
 
 	struct dlist_entry dom_entry;
+
+	/* Counter for number of operations which need progress. A separate lock
+	 * is needed since these functions may be called without counter lock held.
+	 */
+	struct ofi_genlock progress_count_lock;
+	int progress_count;
 };
+
+static inline void cxip_cntr_progress_inc(struct cxip_cntr *cntr)
+{
+	ofi_genlock_lock(&cntr->progress_count_lock);
+	assert(cntr->progress_count >= 0);
+	cntr->progress_count++;
+	ofi_genlock_unlock(&cntr->progress_count_lock);
+}
+
+static inline void cxip_cntr_progress_dec(struct cxip_cntr *cntr)
+{
+	ofi_genlock_lock(&cntr->progress_count_lock);
+	cntr->progress_count--;
+	assert(cntr->progress_count >= 0);
+	ofi_genlock_unlock(&cntr->progress_count_lock);
+}
+
+static inline unsigned int cxip_cntr_progress_get(struct cxip_cntr *cntr)
+{
+	unsigned int count;
+
+	ofi_genlock_lock(&cntr->progress_count_lock);
+	count = cntr->progress_count;
+	ofi_genlock_unlock(&cntr->progress_count_lock);
+
+	return count;
+}
 
 struct cxip_ux_send {
 	struct dlist_entry rxc_entry;

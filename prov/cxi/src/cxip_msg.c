@@ -125,6 +125,9 @@ void cxip_recv_req_free(struct cxip_req *req)
 
 	cxip_rxc_orx_reqs_dec(rxc);
 
+	if (req->recv.cntr)
+		cxip_cntr_progress_dec(req->recv.cntr);
+
 	if (req->recv.recv_md && !req->recv.hybrid_md)
 		cxip_unmap(req->recv.recv_md);
 
@@ -705,12 +708,20 @@ void cxip_send_buf_fini(struct cxip_req *req)
 		cxip_unmap(req->send.send_md);
 	if (req->send.ibuf)
 		cxip_txc_ibuf_free(req->send.txc, req->send.ibuf);
+	if (req->send.cntr)
+		cxip_cntr_progress_dec(req->send.cntr);
 }
 
 int cxip_send_buf_init(struct cxip_req *req)
 {
 	struct cxip_txc *txc = req->send.txc;
 	int ret;
+
+	/* Any request structures associated with a counter require counter
+	 * progression.
+	 */
+	if (req->send.cntr)
+		cxip_cntr_progress_inc(req->send.cntr);
 
 	/* Nothing to do for zero byte sends. */
 	if (!req->send.len)

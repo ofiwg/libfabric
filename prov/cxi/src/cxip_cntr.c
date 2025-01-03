@@ -392,18 +392,26 @@ static void cxip_cntr_progress(struct cxip_cntr *cntr)
 {
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
+	unsigned int progress_count;
 
-	/* Lock is used to protect bound context list. Note that
-	 * CQ processing updates counters via doorbells, use of
-	 * cntr->lock is not required by CQ processing.
-	 */
-	ofi_genlock_lock(&cntr->lock);
+	progress_count = cxip_cntr_progress_get(cntr);
 
-	dlist_foreach(&cntr->ctx_list, item) {
-		fid_entry = container_of(item, struct fid_list_entry, entry);
-		cxip_ep_progress(fid_entry->fid);
+	if (progress_count) {
+		/* Lock is used to protect bound context list. Note that
+		 * CQ processing updates counters via doorbells, use of
+		 * cntr->lock is not required by CQ processing.
+		 */
+		ofi_genlock_lock(&cntr->lock);
+
+		dlist_foreach(&cntr->ctx_list, item) {
+			fid_entry = container_of(item, struct fid_list_entry,
+						 entry);
+			cxip_ep_progress(fid_entry->fid);
+		}
+
+		ofi_genlock_unlock(&cntr->lock);
 	}
-	ofi_genlock_unlock(&cntr->lock);
+
 }
 
 static void cxip_cntr_read_wb(struct cxip_cntr *cntr, struct c_ct_writeback *wb)
@@ -700,6 +708,7 @@ static int cxip_cntr_close(struct fid *fid)
 		return -FI_EBUSY;
 
 	assert(dlist_empty(&cntr->ctx_list));
+	assert(cntr->progress_count == 0);
 
 	if (cntr->wb_iface != FI_HMEM_SYSTEM &&
 	    cntr->wb_handle_valid)
@@ -712,6 +721,7 @@ static int cxip_cntr_close(struct fid *fid)
 		CXIP_DBG("Counter disabled: %p\n", cntr);
 
 	ofi_genlock_destroy(&cntr->lock);
+	ofi_genlock_destroy(&cntr->progress_count_lock);
 
 	cxip_domain_remove_cntr(cntr->domain, cntr);
 
@@ -870,10 +880,13 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	/* Allow FI_THREAD_DOMAIN optimizaiton */
 	if (dom->util_domain.threading == FI_THREAD_DOMAIN ||
-	    dom->util_domain.threading == FI_THREAD_COMPLETION)
+	    dom->util_domain.threading == FI_THREAD_COMPLETION) {
 		ofi_genlock_init(&_cntr->lock, OFI_LOCK_NONE);
-	else
+		ofi_genlock_init(&_cntr->progress_count_lock, OFI_LOCK_NONE);
+	} else {
 		ofi_genlock_init(&_cntr->lock, OFI_LOCK_SPINLOCK);
+		ofi_genlock_init(&_cntr->progress_count_lock, OFI_LOCK_SPINLOCK);
+	}
 
 	_cntr->cntr_fid.fid.fclass = FI_CLASS_CNTR;
 	_cntr->cntr_fid.fid.context = context;
