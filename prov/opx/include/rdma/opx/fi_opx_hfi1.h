@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -537,13 +537,11 @@ struct fi_opx_hfi1_context {
 		int rank_inst;
 	} daos_info;
 
-	int64_t			 ref_cnt;
-	size_t			 status_lasterr;
-	time_t			 network_lost_time;
-	union fi_opx_timer_stamp link_status_timestamp;
-	union fi_opx_timer_state link_status_timer;
-	uint64_t		 status_check_next_usec;
-	uint64_t		 link_down_wait_time_max_sec;
+	int64_t	 ref_cnt;
+	size_t	 status_lasterr;
+	time_t	 network_lost_time;
+	uint64_t status_check_next_usec;
+	uint64_t link_down_wait_time_max_sec;
 	/* struct ibv_context * for hfi1 direct/rdma-core only */
 	void *ibv_context;
 };
