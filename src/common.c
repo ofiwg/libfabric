@@ -847,8 +847,9 @@ static int ofi_ifname_toaddr(const char *name, uint32_t *addr_format,
 		return ret;
 
 	for (ifa = ifaddrs; ifa; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr->sa_family != AF_INET &&
-		    ifa->ifa_addr->sa_family != AF_INET6)
+		if (ifa->ifa_addr == NULL ||
+		    (ifa->ifa_addr->sa_family != AF_INET &&
+		     ifa->ifa_addr->sa_family != AF_INET6))
 			continue;
 		if (!strcmp(name, ifa->ifa_name))
 			break;
