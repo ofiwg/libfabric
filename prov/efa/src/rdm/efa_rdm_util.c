@@ -98,6 +98,53 @@ void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc)
 }
 
 /**
+ * @brief Construct a message that contains the local and peer information,
+ * including the efa address and the host id.
+ *
+ * @param ep		EFA RDM endpoint
+ * @param addr		Remote peer fi_addr_t
+ * @param msg		the ptr of the msg to be constructed (needs to be allocated already!)
+ * @param base_msg	ptr to the base msg that will show at the beginning of msg
+ * @param msg_len	the length of the message
+ * @return int 0 on success, negative integer on failure
+ */
+int efa_rdm_construct_msg_with_local_and_peer_information(struct efa_rdm_ep *ep, fi_addr_t addr, char *msg, const char *base_msg, size_t msg_len)
+{
+	char ep_addr_str[OFI_ADDRSTRLEN] = {0}, peer_addr_str[OFI_ADDRSTRLEN] = {0};
+	char peer_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
+	char local_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
+	size_t len = 0;
+	int ret;
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(ep, addr);
+
+	len = sizeof(ep_addr_str);
+	efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &len);
+	len = sizeof(peer_addr_str);
+	efa_rdm_ep_get_peer_raw_addr_str(ep, addr, peer_addr_str, &len);
+
+	if (!ep->host_id || EFA_HOST_ID_STRING_LENGTH != snprintf(local_host_id_str, EFA_HOST_ID_STRING_LENGTH + 1, "i-%017lx", ep->host_id)) {
+		strcpy(local_host_id_str, "N/A");
+	}
+
+	if (!peer->host_id || EFA_HOST_ID_STRING_LENGTH != snprintf(peer_host_id_str, EFA_HOST_ID_STRING_LENGTH + 1, "i-%017lx", peer->host_id)) {
+		strcpy(peer_host_id_str, "N/A");
+	}
+
+	ret = snprintf(msg, msg_len, "%s My EFA addr: %s My host id: %s Peer EFA addr: %s Peer host id: %s",
+				base_msg, ep_addr_str, local_host_id_str, peer_addr_str, peer_host_id_str);
+
+	if (ret < 0 || ret > msg_len - 1) {
+		return -FI_EINVAL;
+	}
+
+	if (strlen(msg) >= msg_len) {
+		return -FI_ENOBUFS;
+	}
+
+	return FI_SUCCESS;
+}
+
+/**
  * @brief Write the error message and return its byte length
  * @param[in]    ep          EFA RDM endpoint
  * @param[in]    addr        Remote peer fi_addr_t
@@ -108,42 +155,18 @@ void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc)
  */
 int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, fi_addr_t addr, int prov_errno, void **buf, size_t *buflen)
 {
-    char ep_addr_str[OFI_ADDRSTRLEN] = {0}, peer_addr_str[OFI_ADDRSTRLEN] = {0};
-    char peer_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
-    char local_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
-    const char *base_msg = efa_strerror(prov_errno);
-    size_t len = 0;
-    struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(ep, addr);
+	const char *base_msg = efa_strerror(prov_errno);
+	int ret;
 
-    *buf = NULL;
-    *buflen = 0;
+	*buf = NULL;
+	*buflen = 0;
 
-    len = sizeof(ep_addr_str);
-    efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &len);
-    len = sizeof(peer_addr_str);
-    efa_rdm_ep_get_peer_raw_addr_str(ep, addr, peer_addr_str, &len);
+	ret = efa_rdm_construct_msg_with_local_and_peer_information(ep, addr, ep->err_msg, base_msg, EFA_RDM_ERROR_MSG_BUFFER_LENGTH);
+	if (ret)
+		return ret;
 
-    if (!ep->host_id || EFA_HOST_ID_STRING_LENGTH != snprintf(local_host_id_str, EFA_HOST_ID_STRING_LENGTH + 1, "i-%017lx", ep->host_id)) {
-        strcpy(local_host_id_str, "N/A");
-    }
+	*buf = ep->err_msg;
+	*buflen = EFA_RDM_ERROR_MSG_BUFFER_LENGTH;
 
-    if (!peer->host_id || EFA_HOST_ID_STRING_LENGTH != snprintf(peer_host_id_str, EFA_HOST_ID_STRING_LENGTH + 1, "i-%017lx", peer->host_id)) {
-        strcpy(peer_host_id_str, "N/A");
-    }
-
-    int ret = snprintf(ep->err_msg, EFA_RDM_ERROR_MSG_BUFFER_LENGTH, "%s My EFA addr: %s My host id: %s Peer EFA addr: %s Peer host id: %s",
-                       base_msg, ep_addr_str, local_host_id_str, peer_addr_str, peer_host_id_str);
-
-    if (ret < 0 || ret > EFA_RDM_ERROR_MSG_BUFFER_LENGTH - 1) {
-        return -FI_EINVAL;
-    }
-
-    if (strlen(ep->err_msg) >= EFA_RDM_ERROR_MSG_BUFFER_LENGTH) {
-        return -FI_ENOBUFS;
-    }
-
-    *buf = ep->err_msg;
-    *buflen = EFA_RDM_ERROR_MSG_BUFFER_LENGTH;
-
-    return 0;
+	return 0;
 }

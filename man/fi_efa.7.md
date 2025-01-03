@@ -338,6 +338,11 @@ for details.
 : Use device's unsolicited write recv functionality when it's available. (Default: 1).
 Setting this environment variable to 0 can disable this feature.
 
+*FI_EFA_INTERNAL_RX_REFILL_THRESHOLD*
+: The threshold that EFA provider will refill the internal rx pkt pool. (Default: 8).
+When the number of internal rx pkts to post is lower than this threshold,
+the refill will be skipped.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

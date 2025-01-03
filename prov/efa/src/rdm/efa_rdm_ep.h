@@ -263,6 +263,8 @@ struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
 
 void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep);
 
+int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep);
+
 /**
  * @brief return whether this endpoint should write error cq entry for RNR.
  *
@@ -444,6 +446,12 @@ static inline int efa_rdm_attempt_to_sync_memops_ioc(struct efa_rdm_ep *ep, stru
 	}
 
 	return err;
+}
+
+static inline
+bool efa_rdm_ep_support_unsolicited_write_recv(struct efa_rdm_ep *ep)
+{
+	return ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
 }
 
 #endif

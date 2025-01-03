@@ -39,6 +39,7 @@ struct efa_env efa_env = {
 	.use_sm2 = false,
 	.huge_page_setting = EFA_ENV_HUGE_PAGE_UNSPEC,
 	.use_unsolicited_write_recv = 1,
+	.internal_rx_refill_threshold = 8,
 };
 
 /**
@@ -132,6 +133,7 @@ void efa_env_param_get(void)
 			    &efa_mr_max_cached_size);
 	fi_param_get_size_t(&efa_prov, "tx_size", &efa_env.tx_size);
 	fi_param_get_size_t(&efa_prov, "rx_size", &efa_env.rx_size);
+	fi_param_get_size_t(&efa_prov, "internal_rx_refill_threshold", &efa_env.internal_rx_refill_threshold);
 	fi_param_get_bool(&efa_prov, "rx_copy_unexp",
 			  &efa_env.rx_copy_unexp);
 	fi_param_get_bool(&efa_prov, "rx_copy_ooo",
@@ -232,6 +234,8 @@ void efa_env_define()
 			"will use huge page unless FI_EFA_FORK_SAFE is set to 1/on/true.");
 	fi_param_define(&efa_prov, "use_unsolicited_write_recv", FI_PARAM_BOOL,
 			"Use device's unsolicited write recv functionality when it's available. (Default: true)");
+	fi_param_define(&efa_prov, "internal_rx_refill_threshold", FI_PARAM_SIZE_T,
+			"The threshold that EFA provider will refill the internal rx pkt pool. (Default: %zu)", efa_env.internal_rx_refill_threshold);
 }
 
 
