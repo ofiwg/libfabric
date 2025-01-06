@@ -251,6 +251,7 @@ void test_efa_rma_writemsg();
 void test_efa_rma_writedata();
 void test_efa_rma_inject_write();
 void test_efa_rma_inject_writedata();
+void test_efa_rma_writemsg_with_inject();
 void test_efa_cq_read_send_success();
 void test_efa_cq_read_recv_success();
 void test_efa_cq_read_send_failure();

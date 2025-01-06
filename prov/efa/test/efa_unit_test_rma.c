@@ -25,8 +25,6 @@ static void test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr)
 	ibv_qpx->wr_rdma_read = &efa_mock_ibv_wr_rdma_read_save_wr;
 	ibv_qpx->wr_rdma_write = &efa_mock_ibv_wr_rdma_write_save_wr;
 	ibv_qpx->wr_rdma_write_imm = &efa_mock_ibv_wr_rdma_write_imm_save_wr;
-	ibv_qpx->wr_set_inline_data_list =
-		&efa_mock_ibv_wr_set_inline_data_list_no_op;
 	ibv_qpx->wr_set_sge_list = &efa_mock_ibv_wr_set_sge_list_no_op;
 	ibv_qpx->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
 	ibv_qpx->wr_complete = &efa_mock_ibv_wr_complete_no_op;
@@ -241,11 +239,9 @@ void test_efa_rma_inject_write(struct efa_resource **state)
 	test_efa_rma_prep(resource, &dest_addr);
 	efa_unit_test_buff_construct(&local_buff, resource, 32 /* buff_size */);
 
-	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	ret = fi_inject_write(resource->ep, local_buff.buff, local_buff.size,
 			      dest_addr, remote_addr, remote_key);
-	assert_int_equal(ret, 0);
-	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+	assert_int_equal(ret, -FI_ENOSYS);
 
 	efa_unit_test_buff_destruct(&local_buff);
 }
@@ -262,12 +258,39 @@ void test_efa_rma_inject_writedata(struct efa_resource **state)
 	test_efa_rma_prep(resource, &dest_addr);
 	efa_unit_test_buff_construct(&local_buff, resource, 32 /* buff_size */);
 
-	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	ret = fi_inject_writedata(resource->ep, local_buff.buff,
 				  local_buff.size, 0, dest_addr, remote_addr,
 				  remote_key);
-	assert_int_equal(ret, 0);
-	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+	assert_int_equal(ret, -FI_ENOSYS);
+
+	efa_unit_test_buff_destruct(&local_buff);
+}
+
+void test_efa_rma_writemsg_with_inject(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff local_buff;
+	struct iovec iov;
+	struct fi_msg_rma msg = {0};
+	struct fi_rma_iov rma_iov;
+	fi_addr_t dest_addr;
+	void *desc;
+	int ret;
+
+	test_efa_rma_prep(resource, &dest_addr);
+	efa_unit_test_buff_construct(&local_buff, resource, 4096 /* buff_size */);
+
+	iov.iov_base = local_buff.buff;
+	iov.iov_len = local_buff.size;
+	desc = fi_mr_desc(local_buff.mr);
+	rma_iov.len = local_buff.size;
+	rma_iov.addr = 0x87654321;
+	rma_iov.key = 123456;
+	efa_unit_test_construct_msg_rma(&msg, &iov, &desc, 1, dest_addr, &rma_iov,
+					1, NULL, 0);
+
+	ret = fi_writemsg(resource->ep, &msg, FI_INJECT);
+	assert_int_equal(ret, -FI_ENOSYS);
 
 	efa_unit_test_buff_destruct(&local_buff);
 }
