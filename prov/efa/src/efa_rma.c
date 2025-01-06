@@ -200,7 +200,6 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	struct efa_conn *conn;
 #ifndef _WIN32
 	struct ibv_sge sge_list[msg->iov_count];
-	struct ibv_data_buf inline_data_list[msg->iov_count];
 #else
 	/* MSVC compiler does not support array declarations with runtime size, so hardcode
 	 * the expected iov_limit/max_sq_sge from the lower-level efa provider.
@@ -208,8 +207,13 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	struct ibv_sge sge_list[EFA_DEV_ATTR_MAX_WR_SGE];
 	struct ibv_data_buf inline_data_list[EFA_DEV_ATTR_MAX_WR_SGE];
 #endif
-	size_t len;
 	int i, err = 0;
+
+	if (flags & FI_INJECT) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_INJECT is not supported by efa rma yet.\n");
+		return -FI_ENOSYS;
+	}
 
 	efa_tracepoint(write_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
@@ -230,24 +234,13 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		ibv_wr_rdma_write(qp->ibv_qp_ex, msg->rma_iov[0].key, msg->rma_iov[0].addr);
 	}
 
-	len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
-	if (len <= base_ep->domain->device->efa_attr.inline_buf_size &&
-	    len <= base_ep->inject_rma_size &&
-	    (!msg->desc || !efa_mr_is_hmem(msg->desc[0]))) {
-		for (i = 0; i < msg->iov_count; i++) {
-			inline_data_list[i].addr = msg->msg_iov[i].iov_base;
-			inline_data_list[i].length = msg->msg_iov[i].iov_len;
-		}
-		ibv_wr_set_inline_data_list(qp->ibv_qp_ex, msg->iov_count, inline_data_list);
-	} else {
-		for (i = 0; i < msg->iov_count; ++i) {
-			sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
-			sge_list[i].length = msg->msg_iov[i].iov_len;
-			assert(msg->desc && msg->desc[i]);
-			sge_list[i].lkey = ((struct efa_mr *)msg->desc[i])->ibv_mr->lkey;
-		}
-		ibv_wr_set_sge_list(qp->ibv_qp_ex, msg->iov_count, sge_list);
+	for (i = 0; i < msg->iov_count; ++i) {
+		sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
+		sge_list[i].length = msg->msg_iov[i].iov_len;
+		assert(msg->desc && msg->desc[i]);
+		sge_list[i].lkey = ((struct efa_mr *)msg->desc[i])->ibv_mr->lkey;
 	}
+	ibv_wr_set_sge_list(qp->ibv_qp_ex, msg->iov_count, sge_list);
 
 	conn = efa_av_addr_to_conn(base_ep->av, msg->addr);
 	assert(conn && conn->ep_addr);
@@ -348,51 +341,6 @@ ssize_t efa_rma_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	return efa_rma_post_write(base_ep, &msg, FI_REMOTE_CQ_DATA | efa_tx_flags(base_ep));
 }
 
-ssize_t efa_rma_inject_write(struct fid_ep *ep_fid, const void *buf, size_t len,
-			     fi_addr_t dest_addr, uint64_t addr, uint64_t key)
-{
-	struct fi_msg_rma msg;
-	struct iovec iov;
-	struct fi_rma_iov rma_iov;
-	struct efa_base_ep *base_ep;
-	int err;
-
-	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
-	assert(len <= base_ep->inject_rma_size);
-	err = efa_rma_check_cap(base_ep);
-	if (err)
-		return err;
-
-	EFA_SETUP_IOV(iov, buf, len);
-	EFA_SETUP_RMA_IOV(rma_iov, addr, len, key);
-	EFA_SETUP_MSG_RMA(msg, &iov, NULL, 1, dest_addr, &rma_iov, 1, NULL, 0);
-
-	return efa_rma_post_write(base_ep, &msg, FI_INJECT);
-}
-
-ssize_t efa_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf,
-				 size_t len, uint64_t data, fi_addr_t dest_addr,
-				 uint64_t addr, uint64_t key)
-{
-	struct fi_msg_rma msg;
-	struct iovec iov;
-	struct fi_rma_iov rma_iov;
-	struct efa_base_ep *base_ep;
-	int err;
-
-	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
-	assert(len <= base_ep->inject_rma_size);
-	err = efa_rma_check_cap(base_ep);
-	if (err)
-		return err;
-
-	EFA_SETUP_IOV(iov, buf, len);
-	EFA_SETUP_RMA_IOV(rma_iov, addr, len, key);
-	EFA_SETUP_MSG_RMA(msg, &iov, NULL, 1, dest_addr, &rma_iov, 1, NULL, data);
-
-	return efa_rma_post_write(base_ep, &msg, FI_INJECT | FI_REMOTE_CQ_DATA);
-}
-
 struct fi_ops_rma efa_dgram_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = fi_no_rma_read,
@@ -414,7 +362,7 @@ struct fi_ops_rma efa_rma_ops = {
 	.write = efa_rma_write,
 	.writev = efa_rma_writev,
 	.writemsg = efa_rma_writemsg,
-	.inject = efa_rma_inject_write,
+	.inject = fi_no_rma_inject,
 	.writedata = efa_rma_writedata,
-	.injectdata = efa_rma_inject_writedata,
+	.injectdata = fi_no_rma_injectdata,
 };
