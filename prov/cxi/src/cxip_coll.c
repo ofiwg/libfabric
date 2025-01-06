@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
- * Copyright (c) 2020-2024 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2020-2025 Hewlett Packard Enterprise Development LP
  * Support for accelerated collective reductions.
  */
 
@@ -2021,7 +2021,9 @@ bool _is_red_timed_out(struct cxip_coll_reduction *reduction)
 			    reduction->red_id);
 		return true;
 	}
-	return _tsexp(&reduction->tv_expires);
+
+	/* disable timeout logic for now */
+	return false;
 }
 
 /* Root node state machine progress.
