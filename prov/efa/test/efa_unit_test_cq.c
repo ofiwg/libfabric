@@ -878,6 +878,12 @@ static void test_efa_cq_read(struct efa_resource *resource, fi_addr_t *addr,
 	will_return_maybe(efa_mock_ibv_read_src_qp_return_mock, raw_addr.qpn);
 	will_return_maybe(efa_mock_ibv_read_wc_flags_return_mock, 0);
 #endif
+#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
+	if (efa_use_unsolicited_write_recv()) {
+		efadv_cq_from_ibv_cq_ex(ibv_cqx)->wc_is_unsolicited = &efa_mock_efadv_wc_is_unsolicited;
+		will_return_maybe(efa_mock_efadv_wc_is_unsolicited, false);
+	}
+#endif
 }
 
 /**
