@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_cxi" "7" "2024\-12\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_cxi" "7" "2025\-01\-08" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -97,6 +97,8 @@ types.
 FI_WAIT_UNSPEC will default to FI_WAIT_FD.
 However FI_WAIT_NONE should achieve the lowest latency and reduce
 interrupt overhead.
+NOTE: A process may return from a epoll_wait/poll when provider progress
+is required and a CQ event may not be available.
 .SS Additional Features
 .PP
 The CXI provider also supports the following capabilities and features:
