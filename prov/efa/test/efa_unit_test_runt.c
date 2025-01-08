@@ -61,7 +61,7 @@ void test_efa_rdm_peer_get_runt_size_no_enough_runt(struct efa_resource **state)
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_length = 12000;
 	peer_num_runt_bytes_in_flight = 1001;
@@ -79,7 +79,7 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_smaller_than_alignment(struct e
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_length = 12000;
 	peer_num_runt_bytes_in_flight = 1000;
@@ -97,7 +97,7 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_exceeding_total_len(struct efa_
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_length = 12000;
 	peer_num_runt_bytes_in_flight = 0;
@@ -115,7 +115,7 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_normal(struct efa_resource **st
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_length = 12000;
 	peer_num_runt_bytes_in_flight = 10000;
@@ -135,7 +135,7 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_128_multiple_alignment(struct e
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
 
@@ -158,7 +158,7 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_non_128_multiple_alignment(stru
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
 
@@ -181,7 +181,7 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_smaller_than_128_alignment(stru
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
 
@@ -202,7 +202,7 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_exceeding_total_len_128_alignme
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
 
@@ -222,7 +222,7 @@ void test_efa_rdm_peer_get_runt_size_host_memory_smaller_than_alignment(struct e
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_length = 12000;
 	peer_num_runt_bytes_in_flight = 1000;
@@ -240,7 +240,7 @@ void test_efa_rdm_peer_get_runt_size_host_memory_exceeding_total_len(struct efa_
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_length = 1111;
 	peer_num_runt_bytes_in_flight = 0;
@@ -258,7 +258,7 @@ void test_efa_rdm_peer_get_runt_size_host_memory_normal(struct efa_resource **st
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_length = 12000;
 	peer_num_runt_bytes_in_flight = 10000;
@@ -330,7 +330,7 @@ void test_efa_rdm_peer_select_readbase_rtm_no_runt(struct efa_resource **state)
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_length = 12000;
 	peer_num_runt_bytes_in_flight = 1000;
@@ -347,7 +347,7 @@ void test_efa_rdm_peer_select_readbase_rtm_do_runt(struct efa_resource **state)
 	size_t peer_num_runt_bytes_in_flight;
 	size_t total_runt_size;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_length = 12000;
 	peer_num_runt_bytes_in_flight = 1000;
