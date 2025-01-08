@@ -1936,7 +1936,7 @@ void fi_opx_ep_rx_process_header_rma_rts(struct fi_opx_ep *opx_ep, const union o
 	}
 
 	uint64_t *rbuf_qws =
-		(uint64_t *) ((uint8_t *) opx_mr->iov.iov_base + fi_opx_dput_rbuf_in(payload->rma_rts.iov[0].rbuf));
+		(uint64_t *) (((uint8_t *) opx_mr->base_addr) + fi_opx_dput_rbuf_in(payload->rma_rts.iov[0].rbuf));
 	uint64_t	   rbuf_device;
 	enum fi_hmem_iface rbuf_iface = opx_hmem_get_mr_iface(opx_mr, &rbuf_device);
 
@@ -2143,7 +2143,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 			return;
 		}
 
-		uint64_t	  *rbuf_qws = (uint64_t *) ((uint8_t *) opx_mr->iov.iov_base +
+		uint64_t	  *rbuf_qws = (uint64_t *) (((uint8_t *) opx_mr->base_addr) +
 						    fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset));
 		uint64_t	   hmem_device;
 		enum fi_hmem_iface hmem_iface = opx_hmem_get_mr_iface(opx_mr, &hmem_device);
@@ -2278,7 +2278,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		HASH_FIND(hh, opx_ep->domain->mr_hashmap, &key, sizeof(key), opx_mr);
 		assert(opx_mr != NULL);
 		uintptr_t mr_offset = fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset);
-		uint64_t *rbuf_qws  = (uint64_t *) ((uint8_t *) opx_mr->iov.iov_base + mr_offset);
+		uint64_t *rbuf_qws  = (uint64_t *) (((uint8_t *) opx_mr->base_addr) + mr_offset);
 		const struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *) &payload->byte[0];
 
 		/* In a multi-packet SDMA send, the driver sets the high bit on
@@ -2343,7 +2343,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		HASH_FIND(hh, opx_ep->domain->mr_hashmap, &key, sizeof(key), opx_mr);
 		assert(opx_mr != NULL);
 		uintptr_t mr_offset = fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset);
-		uint64_t *rbuf_qws  = (uint64_t *) ((uint8_t *) opx_mr->iov.iov_base + mr_offset);
+		uint64_t *rbuf_qws  = (uint64_t *) (((uint8_t *) opx_mr->base_addr) + mr_offset);
 		const struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *) &payload->byte[0];
 
 		/* In a multi-packet SDMA send, the driver sets the high bit on
@@ -3821,6 +3821,8 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 							 hmem_device, mp_eager_fallback, hfi1_type);
 			if (OFI_LIKELY(rc == FI_SUCCESS)) {
 				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+					     "===================================== SEND (end)\n");
 				return rc;
 			}
 			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
@@ -3838,6 +3840,8 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 				tx_op_flags, caps, reliability, do_cq_completion, FI_HMEM_SYSTEM, 0ul, hfi1_type);
 			if (OFI_LIKELY(rc == FI_SUCCESS)) {
 				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+					     "===================================== SEND (end)\n");
 				return rc;
 			}
 			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");

@@ -161,7 +161,8 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					     .flags	   = flags};
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-CACHE-SEARCH");
 		if (!ofi_mr_cache_search(opx_domain->hmem_domain->hmem_cache, &info, &entry)) {
-			opx_mr = (struct fi_opx_mr *) entry->data;
+			opx_mr	      = (struct fi_opx_mr *) entry->data;
+			opx_mr->flags = flags;
 			/* Whenever we have a cache miss, we initalize the KEY to FI_KEY_NOTAVAIL.
 			 * Thus, we know a new entry was created if the key is not set. If the key is set,
 			 * we know it was a cache hit */
@@ -220,6 +221,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	}
 
 	opx_mr->iov	       = *iov;
+	opx_mr->base_addr      = opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : iov->iov_base;
 	opx_mr->attr.mr_iov    = &opx_mr->iov;
 	opx_mr->attr.iov_count = FI_OPX_IOV_LIMIT;
 	opx_mr->attr.offset    = offset;
