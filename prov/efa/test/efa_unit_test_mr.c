@@ -11,7 +11,7 @@ void test_efa_mr_reg_counters(struct efa_resource **state)
     char *buf;
     struct fid_mr *mr;
 
-    efa_unit_test_resource_construct(resource, FI_EP_RDM);
+    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
     efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
     assert_true(efa_domain->ibv_mr_reg_ct == 0);

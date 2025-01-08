@@ -22,6 +22,9 @@ extern struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list;
 extern struct efa_unit_test_mocks g_efa_unit_test_mocks;
 extern struct efa_env efa_env;
 
+#define EFA_DIRECT_PROV_NAME	"efa-direct"
+#define EFA_PROV_NAME			"efa"
+
 struct efa_resource {
 	struct fi_info *hints;
 	struct fi_info *info;
@@ -33,17 +36,17 @@ struct efa_resource {
 	struct fid_cq *cq;
 };
 
-struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type);
+struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type, char *prov_name);
 
-void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type);
+void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type, char *prov_name);
 void efa_unit_test_resource_construct_ep_not_enabled(
-	struct efa_resource *resource, enum fi_ep_type ep_type);
+	struct efa_resource *resource, enum fi_ep_type ep_type, char *prov_name);
 void efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(
-	struct efa_resource *resource, enum fi_ep_type ep_type);
+	struct efa_resource *resource, enum fi_ep_type ep_type, char *prov_name);
 void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 						 enum fi_ep_type ep_type,
 						 uint32_t fi_version, struct fi_info *hints,
-						 bool enable_ep, bool open_cq);
+						 bool enable_ep, bool open_cq, char *prov_name);
 
 void efa_unit_test_resource_construct_rdm_shm_disabled(struct efa_resource *resource);
 
@@ -138,6 +141,7 @@ void test_efa_rdm_ep_rx_refill_threshold_smaller_than_rx_size();
 void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size();
 void test_efa_rdm_ep_support_unsolicited_write_recv();
 void test_efa_rdm_ep_rma_inconsistent_unsolicited_write_recv();
+void test_efa_rdm_ep_default_sizes();
 void test_dgram_cq_read_empty_cq();
 void test_ibv_cq_ex_read_empty_cq();
 void test_ibv_cq_ex_read_failed_poll();
@@ -221,7 +225,7 @@ void test_efa_rdm_cq_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 void test_efa_rdm_cq_post_initial_rx_pkts();
 void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
-void test_efa_cntr_post_initial_rx_pkts();
+void test_efa_rdm_cntr_post_initial_rx_pkts();
 void test_efa_rdm_peer_reorder_expected_msg_id();
 void test_efa_rdm_peer_reorder_smaller_msg_id();
 void test_efa_rdm_peer_reorder_larger_msg_id();
@@ -253,6 +257,16 @@ void test_efa_cq_read_send_success();
 void test_efa_cq_read_recv_success();
 void test_efa_cq_read_send_failure();
 void test_efa_cq_read_recv_failure();
+void test_efa_ep_open();
+void test_efa_ep_cancel();
+void test_efa_ep_getopt();
+void test_efa_ep_setopt_use_device_rdma();
+void test_efa_ep_setopt_hmem_p2p();
+void test_efa_ep_setopt_rnr_retry();
+void test_efa_ep_setopt_sizes();
+void test_efa_ep_bind_and_enable();
+void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
+void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)

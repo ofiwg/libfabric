@@ -5,7 +5,6 @@
 #include "efa_unit_tests.h"
 #include "ofi_util.h"
 
-extern struct fi_ops_msg efa_msg_ops;
 
 static void test_efa_msg_recv_prep(struct efa_resource *resource,
 				   fi_addr_t *addr)
@@ -16,8 +15,7 @@ static void test_efa_msg_recv_prep(struct efa_resource *resource,
 	size_t raw_addr_len = sizeof(raw_addr);
 	int ret;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
-	resource->ep->msg = &efa_msg_ops;
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
 
 	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 	ibv_qp = base_ep->qp->ibv_qp;
@@ -108,8 +106,7 @@ static void test_efa_msg_send_prep(struct efa_resource *resource,
 	size_t raw_addr_len = sizeof(raw_addr);
 	int ret;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
-	resource->ep->msg = &efa_msg_ops;
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
 
 	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 	ibv_qpx = base_ep->qp->ibv_qp_ex;
