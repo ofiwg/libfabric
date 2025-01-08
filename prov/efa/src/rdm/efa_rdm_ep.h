@@ -40,10 +40,6 @@ struct efa_rdm_ep_queued_copy {
 #define EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND (4096)
 #define EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV (8192)
 
-struct efa_rdm_peer_map {
-	struct efa_rdm_peer_map_entry *head;
-};
-
 struct efa_rdm_ep {
 	struct efa_base_ep base_ep;
 
@@ -189,9 +185,6 @@ struct efa_rdm_ep {
 	struct dlist_entry entry;
 	/* the count of opes queued before handshake is made with their peers */
 	size_t ope_queued_before_handshake_cnt;
-
-	struct ofi_bufpool *peer_map_entry_pool; 	/* bufpool to hold fi_addr->efa_rdm_peer key-value pairs */
-	struct efa_rdm_peer_map fi_addr_to_peer_map; 		/* Hashmap to find efa_rdm_peer given fi_addr */
 };
 
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);

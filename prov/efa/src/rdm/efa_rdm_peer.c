@@ -31,11 +31,6 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	dlist_init(&peer->txe_list);
 	dlist_init(&peer->rxe_list);
 	dlist_init(&peer->overflow_pke_list);
-
-	if (conn->shm_fi_addr != FI_ADDR_NOTAVAIL) {
-		peer->shm_fiaddr = conn->shm_fi_addr;
-		peer->is_local = 1;
-	}
 }
 
 /**
@@ -114,41 +109,6 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(peer, sizeof(struct efa_rdm_peer));
 #endif
-}
-
-struct efa_rdm_peer *efa_rdm_peer_map_insert(struct efa_rdm_peer_map *peer_map, fi_addr_t addr, struct efa_rdm_ep *ep) {
-	struct efa_rdm_peer_map_entry *map_entry;
-	struct efa_rdm_peer *peer;
-
-	map_entry = ofi_buf_alloc(ep->peer_map_entry_pool);
-	if (OFI_UNLIKELY(!map_entry)) {
-		EFA_WARN(FI_LOG_CQ,
-			"Map entries for EFA AV to peer mapping exhausted.\n");
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_PEER_MAP_ENTRY_POOL_EXHAUSTED);
-		return NULL;
-	}
-
-	map_entry->key = addr;
-	peer = &map_entry->efa_rdm_peer;
-
-	HASH_ADD(hh, peer_map->head, key, sizeof(addr), map_entry);
-
-	return peer;
-}
-
-struct efa_rdm_peer *efa_rdm_peer_map_lookup(struct efa_rdm_peer_map *peer_map, fi_addr_t addr) {
-	struct efa_rdm_peer_map_entry *map_entry;
-
-	HASH_FIND(hh, peer_map->head, &addr, sizeof(addr), map_entry);
-	return map_entry ? &map_entry->efa_rdm_peer : NULL;
-}
-
-void efa_rdm_peer_map_remove(struct efa_rdm_peer_map *peer_map, fi_addr_t addr, struct efa_rdm_peer *peer) {
-	struct efa_rdm_peer_map_entry *map_entry;
-
-	HASH_FIND(hh, peer_map->head, &addr, sizeof(addr), map_entry);
-	HASH_DEL(peer_map->head, map_entry);
-	ofi_buf_free(map_entry);
 }
 
 /**

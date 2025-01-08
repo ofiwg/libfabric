@@ -243,6 +243,9 @@ void efa_ah_release(struct efa_av *av, struct efa_ah *ah)
 	}
 }
 
+static
+void efa_conn_release(struct efa_av *av, struct efa_conn *conn);
+
 /**
  * @brief initialize the rdm related resources of an efa_conn object
  *
@@ -263,11 +266,18 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn, bool insert_shm_
 	int err, ret;
 	char smr_name[EFA_SHM_NAME_MAX];
 	size_t smr_name_len;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
 
 	assert(av->ep_type == FI_EP_RDM);
 	assert(conn->ep_addr);
 
-	conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
+	/* currently multiple EP bind to same av is not supported */
+	assert(!dlist_empty(&av->util_av.ep_list));
+	efa_rdm_ep = container_of(av->util_av.ep_list.next, struct efa_rdm_ep, base_ep.util_ep.av_entry);
+
+	peer = &conn->rdm_peer;
+	efa_rdm_peer_construct(peer, efa_rdm_ep, conn);
 
 	/*
 	 * The efa_conn_rdm_init() call can be made in two situations:
@@ -305,8 +315,8 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn, bool insert_shm_
 		 * av. The efa provider should still use peer->shm_fiaddr for transmissions
 		 * through shm ep.
 		 */
-		conn->shm_fi_addr = conn->fi_addr;
-		ret = fi_av_insert(av->shm_rdm_av, smr_name, 1, &conn->shm_fi_addr, FI_AV_USER_ID, NULL);
+		peer->shm_fiaddr = conn->fi_addr;
+		ret = fi_av_insert(av->shm_rdm_av, smr_name, 1, &peer->shm_fiaddr, FI_AV_USER_ID, NULL);
 		if (OFI_UNLIKELY(ret != 1)) {
 			EFA_WARN(FI_LOG_AV,
 				 "Failed to insert address to shm provider's av: %s\n",
@@ -316,10 +326,11 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn, bool insert_shm_
 
 		EFA_INFO(FI_LOG_AV,
 			"Successfully inserted %s to shm provider's av. efa_fiaddr: %ld shm_fiaddr = %ld\n",
-			smr_name, conn->fi_addr, conn->shm_fi_addr);
+			smr_name, conn->fi_addr, peer->shm_fiaddr);
 
-		assert(conn->shm_fi_addr < efa_env.shm_av_size);
+		assert(peer->shm_fiaddr < efa_env.shm_av_size);
 		av->shm_used++;
+		peer->is_local = 1;
 	}
 
 	return 0;
@@ -339,29 +350,26 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	int err;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *ep;
-	struct dlist_entry *entry, *tmp;
 
 	assert(av->ep_type == FI_EP_RDM);
 
 	peer = &conn->rdm_peer;
-	if (conn->shm_fi_addr != FI_ADDR_NOTAVAIL && av->shm_rdm_av) {
-		err = fi_av_remove(av->shm_rdm_av, &conn->shm_fi_addr, 1, 0);
+	if (peer->is_local && av->shm_rdm_av) {
+		err = fi_av_remove(av->shm_rdm_av, &peer->shm_fiaddr, 1, 0);
 		if (err) {
 			EFA_WARN(FI_LOG_AV, "remove address from shm av failed! err=%d\n", err);
 		} else {
 			av->shm_used--;
-			assert(conn->shm_fi_addr < efa_env.shm_av_size);
+			assert(peer->shm_fiaddr < efa_env.shm_av_size);
 		}
 	}
 
-	dlist_foreach_safe(&av->util_av.ep_list, entry, tmp) {
-		ep = container_of(entry, struct efa_rdm_ep, base_ep.util_ep.av_entry);
-		peer = efa_rdm_peer_map_lookup(&ep->fi_addr_to_peer_map, conn->fi_addr);
-		if (peer) {
-			efa_rdm_peer_destruct(peer, ep);
-			efa_rdm_peer_map_remove(&ep->fi_addr_to_peer_map, conn->fi_addr, peer);
-		}
-	}
+	/*
+	 * We need peer->shm_fiaddr to remove shm address from shm av table,
+	 * so efa_rdm_peer_clear must be after removing shm av table.
+	 */
+	ep = dlist_empty(&av->util_av.ep_list) ? NULL : container_of(av->util_av.ep_list.next, struct efa_rdm_ep, base_ep.util_ep.av_entry);
+	efa_rdm_peer_destruct(peer, ep);
 }
 
 /*

@@ -8,6 +8,15 @@
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av)
 {
+	/*
+	 * Binding multiple endpoints to a single AV is currently not
+	 * supported.
+	 */
+	if (av->base_ep) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "Address vector already has endpoint bound to it.\n");
+		return -FI_ENOSYS;
+	}
 	if (base_ep->domain != av->domain) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			 "Address vector doesn't belong to same domain as EP.\n");
@@ -20,6 +29,7 @@ int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av)
 	}
 
 	base_ep->av = av;
+	base_ep->av->base_ep = base_ep;
 
 	return 0;
 }
