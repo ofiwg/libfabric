@@ -29,6 +29,8 @@
 
 #include "cxip.h"
 
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EQ, __VA_ARGS__)
+
 static int cxip_eq_close(struct fid *fid)
 {
 	struct cxip_eq *cxi_eq;
@@ -104,7 +106,7 @@ static struct fi_ops cxi_eq_fi_ops = {
 static struct fi_eq_attr cxip_eq_def_attr = {
 	.size = CXIP_EQ_DEF_SZ,
 	.flags = 0,
-	.wait_obj = FI_WAIT_FD,
+	.wait_obj = FI_WAIT_NONE,
 	.signaling_vector = 0,
 	.wait_set = NULL
 };
@@ -123,6 +125,14 @@ int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		cxi_eq->attr = cxip_eq_def_attr;
 	else
 		cxi_eq->attr = *attr;
+
+	if (cxi_eq->attr.wait_obj != FI_WAIT_NONE) {
+		CXIP_WARN("Unsupported EQ attribute wait obj %d\n",
+			  cxi_eq->attr.wait_obj);
+		ret = -FI_ENOSYS;
+
+		goto err0;
+	}
 
 	ret = ofi_eq_init(fabric, &cxi_eq->attr, &cxi_eq->util_eq.eq_fid,
 			  context);
