@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
+#ifndef _EFA_CQ_H
+#define _EFA_CQ_H
+
 #include "efa.h"
 
 enum ibv_cq_ex_type {
@@ -269,3 +272,7 @@ static inline int efa_write_error_msg(struct efa_base_ep *ep, fi_addr_t addr,
 
 	return 0;
 }
+
+void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
+
+#endif /* end of _EFA_CQ_H*/

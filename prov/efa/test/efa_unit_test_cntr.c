@@ -10,7 +10,7 @@
  * @return int the length of the ibv_cq_poll_list
  */
 static
-int test_efa_rdm_cntr_get_ibv_cq_poll_list_length(struct fid_cntr *cntr_fid)
+int test_efa_cntr_get_ibv_cq_poll_list_length(struct fid_cntr *cntr_fid)
 {
 	int i = 0;
 	struct dlist_entry *item;
@@ -30,13 +30,11 @@ int test_efa_rdm_cntr_get_ibv_cq_poll_list_length(struct fid_cntr *cntr_fid)
  *
  * @param state struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resource **state)
+static
+void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep_impl(struct efa_resource *resource)
 {
-	struct efa_resource *resource = *state;
     struct fid_cntr *cntr;
     struct fi_cntr_attr cntr_attr = {0};
-
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM);
 
     assert_int_equal(fi_cntr_open(resource->domain, &cntr_attr, &cntr, NULL), 0);
 
@@ -46,7 +44,7 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resou
     assert_int_equal(fi_enable(resource->ep), 0);
 
 	/* efa_unit_test_resource_construct binds single OFI CQ as both tx/rx cq of ep */
-	assert_int_equal(test_efa_rdm_cntr_get_ibv_cq_poll_list_length(cntr), 1);
+	assert_int_equal(test_efa_cntr_get_ibv_cq_poll_list_length(cntr), 1);
 
     /* ep must be closed before cq/av/eq... */
 	fi_close(&resource->ep->fid);
@@ -55,20 +53,34 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resou
     fi_close(&cntr->fid);
 }
 
+void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep_impl(resource);
+}
+
+void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_PROV_NAME);
+	test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep_impl(resource);
+}
+
 /**
  * @brief Check the length of ibv_cq_poll_list in cntr when separate tx/rx cq is bind to 1 ep.
  *
  * @param state struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_resource **state)
+static
+void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep_impl(struct efa_resource *resource)
 {
-	struct efa_resource *resource = *state;
 	struct fid_cq *txcq, *rxcq;
 	struct fi_cq_attr cq_attr = {0};
     struct fid_cntr *cntr;
     struct fi_cntr_attr cntr_attr = {0};
-
-	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM);
 
 	assert_int_equal(fi_cq_open(resource->domain, &cq_attr, &txcq, NULL), 0);
 
@@ -85,7 +97,7 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_r
 
 	assert_int_equal(fi_enable(resource->ep), 0);
 
-	assert_int_equal(test_efa_rdm_cntr_get_ibv_cq_poll_list_length(cntr), 2);
+	assert_int_equal(test_efa_cntr_get_ibv_cq_poll_list_length(cntr), 2);
 
 	/* ep must be closed before cq/av/eq... */
 	fi_close(&resource->ep->fid);
@@ -95,7 +107,23 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_r
     fi_close(&cntr->fid);
 }
 
-void test_efa_cntr_post_initial_rx_pkts(struct efa_resource **state)
+void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep_impl(resource);
+}
+
+void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_PROV_NAME);
+	test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep_impl(resource);
+}
+
+void test_efa_rdm_cntr_post_initial_rx_pkts(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -104,7 +132,7 @@ void test_efa_cntr_post_initial_rx_pkts(struct efa_resource **state)
 	struct efa_cntr *efa_cntr;
 	uint64_t cnt;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_PROV_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	/* At this time, rx pkts are not growed and posted */

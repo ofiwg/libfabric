@@ -15,24 +15,165 @@ extern struct fi_ops_rma efa_rma_ops;
 static int efa_ep_getopt(fid_t fid, int level, int optname,
 			 void *optval, size_t *optlen)
 {
-	switch (level) {
-	case FI_OPT_ENDPOINT:
+	struct efa_base_ep *ep;
+
+	ep = container_of(fid, struct efa_base_ep, util_ep.ep_fid.fid);
+
+	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
+
+	switch (optname) {
+	case FI_OPT_EFA_RNR_RETRY:
+		if (*optlen < sizeof(size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *)optval = ep->rnr_retry;
+		*optlen = sizeof(size_t);
+		break;
+	/* p2p is required for efa direct ep */
+	case FI_OPT_FI_HMEM_P2P:
+		if (*optlen < sizeof(int))
+			return -FI_ETOOSMALL;
+		*(int *)optval = FI_HMEM_P2P_REQUIRED;
+		*optlen = sizeof(int);
+		break;
+	case FI_OPT_MAX_MSG_SIZE:
+		if (*optlen < sizeof (size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *) optval = ep->max_msg_size;
+		*optlen = sizeof (size_t);
+		break;
+	case FI_OPT_MAX_RMA_SIZE:
+		if (*optlen < sizeof (size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *) optval = ep->max_rma_size;
+		*optlen = sizeof (size_t);
+		break;
+	case FI_OPT_INJECT_MSG_SIZE:
+		if (*optlen < sizeof (size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *) optval = ep->inject_msg_size;
+		*optlen = sizeof (size_t);
+		break;
+	case FI_OPT_INJECT_RMA_SIZE:
+		if (*optlen < sizeof (size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *) optval = ep->inject_rma_size;
+		*optlen = sizeof (size_t);
+		break;
+	/* Emulated read/write is NOT used for efa direct ep */
+	case FI_OPT_EFA_EMULATED_READ: /* fall through */
+	case FI_OPT_EFA_EMULATED_WRITE:
+		if (*optlen < sizeof(bool))
+			return -FI_ETOOSMALL;
+		*(bool *)optval = false;
+		*optlen = sizeof(bool);
+		break;
 	default:
+		EFA_INFO(FI_LOG_EP_CTRL, "Unknown / unsupported endpoint option\n");
 		return -FI_ENOPROTOOPT;
 	}
-	return 0;
+
+	return FI_SUCCESS;
 }
 
 static int efa_ep_setopt(fid_t fid, int level, int optname, const void *optval, size_t optlen)
 {
-	switch (level) {
-	case FI_OPT_ENDPOINT:
+	int ret, intval;
+	struct efa_base_ep *ep;
+
+	ep = container_of(fid, struct efa_base_ep, util_ep.ep_fid.fid);
+
+	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
+
+	switch (optname) {
+	case FI_OPT_EFA_RNR_RETRY:
+		if (optlen != sizeof(size_t))
+			return -FI_EINVAL;
+
+		/*
+		 * Application is required to call to fi_setopt before EP
+		 * enabled. If it's calling to fi_setopt after EP enabled,
+		 * fail the call.
+		 *
+		 * efa_ep->qp will be NULL before EP enabled, use it to check
+		 * if the call to fi_setopt is before or after EP enabled for
+		 * convience, instead of calling to ibv_query_qp
+		 */
+		if (ep->efa_qp_enabled) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				"The option FI_OPT_EFA_RNR_RETRY is required "
+				"to be set before EP enabled\n");
+			return -FI_EINVAL;
+		}
+
+		if (!efa_domain_support_rnr_retry_modify(ep->domain)) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				"RNR capability is not supported\n");
+			return -FI_ENOSYS;
+		}
+		ep->rnr_retry = *(size_t *)optval;
+		break;
+	case FI_OPT_FI_HMEM_P2P:
+		if (optlen != sizeof(int))
+			return -FI_EINVAL;
+
+		intval = *(int *)optval;
+
+		if (intval == FI_HMEM_P2P_DISABLED) {
+			EFA_WARN(FI_LOG_EP_CTRL, "p2p is required by implementation\n");
+			return -FI_EOPNOTSUPP;
+		}
+		break;
+	case FI_OPT_MAX_MSG_SIZE:
+		EFA_EP_SETOPT_THRESHOLD(MAX_MSG_SIZE, ep->max_msg_size, (size_t) ep->domain->device->ibv_port_attr.max_msg_sz)
+		break;
+	case FI_OPT_MAX_RMA_SIZE:
+		EFA_EP_SETOPT_THRESHOLD(MAX_RMA_SIZE, ep->max_rma_size, (size_t) ep->domain->device->max_rdma_size)
+		break;
+	case FI_OPT_INJECT_MSG_SIZE:
+		EFA_EP_SETOPT_THRESHOLD(INJECT_MSG_SIZE, ep->inject_msg_size, (size_t) ep->domain->device->efa_attr.inline_buf_size)
+		break;
+	case FI_OPT_INJECT_RMA_SIZE:
+		EFA_EP_SETOPT_THRESHOLD(INJECT_RMA_SIZE, ep->inject_rma_size, (size_t) 0)
+		break;
+	/* no op as efa direct ep will not use cuda api and shm in data transfer */
+	case FI_OPT_CUDA_API_PERMITTED: /* fall through */
+	case FI_OPT_SHARED_MEMORY_PERMITTED:
+		break;
+	/* no op as efa direct ep will always use rdma for rma operations in data transfer */
+	case FI_OPT_EFA_USE_DEVICE_RDMA:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		if (!(*(bool *)optval) && (ep->info->caps & FI_RMA)) {
+			EFA_WARN(FI_LOG_EP_CTRL, "Device rdma is required for rma operations\n");
+			return -FI_EOPNOTSUPP;
+		}
+		break;
+	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		if (*(bool *)optval) {
+			ret = efa_base_ep_check_qp_in_order_aligned_128_bytes(ep, IBV_WR_SEND);
+			if (ret)
+				return ret;
+		}
+		break;
+	case FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		if (*(bool *)optval) {
+			ret = efa_base_ep_check_qp_in_order_aligned_128_bytes(ep, IBV_WR_RDMA_WRITE);
+			if (ret)
+				return ret;
+		}
+		break;
 	default:
+		EFA_INFO(FI_LOG_EP_CTRL, "Unknown / unsupported endpoint option\n");
 		return -FI_ENOPROTOOPT;
 	}
-	return 0;
+
+	return FI_SUCCESS;
 }
 
 static struct fi_ops_ep efa_ep_base_ops = {
@@ -46,9 +187,18 @@ static struct fi_ops_ep efa_ep_base_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static void efa_ep_destroy(struct efa_base_ep *ep)
+static int efa_ep_close(fid_t fid)
 {
+	struct efa_base_ep *ep;
 	int ret;
+
+	ep = container_of(fid, struct efa_base_ep, util_ep.ep_fid.fid);
+
+	/* We need to free the util_ep first to avoid race conditions
+	 * with other threads progressing the cntr. */
+	efa_base_ep_close_util_ep(ep);
+
+	efa_base_ep_remove_cntr_ibv_cq_poll_list(ep);
 
 	ret = efa_base_ep_destruct(ep);
 	if (ret) {
@@ -56,15 +206,6 @@ static void efa_ep_destroy(struct efa_base_ep *ep)
 	}
 
 	free(ep);
-}
-
-static int efa_ep_close(fid_t fid)
-{
-	struct efa_base_ep *ep;
-
-	ep = container_of(fid, struct efa_base_ep, util_ep.ep_fid.fid);
-
-	efa_ep_destroy(ep);
 
 	return 0;
 }
@@ -108,6 +249,11 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct efa_av, util_av.av_fid.fid);
+		/* Bind util provider endpoint and av */
+		ret = ofi_ep_bind_av(&ep->util_ep, &av->util_av);
+		if (ret)
+			return ret;
+
 		ret = efa_base_ep_bind_av(ep, av);
 		if (ret)
 			return ret;
@@ -127,6 +273,7 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return ret;
 		break;
 	default:
+		EFA_WARN(FI_LOG_EP_CTRL, "invalid fid class\n");
 		return -EINVAL;
 	}
 
@@ -178,66 +325,20 @@ static int efa_ep_setflags(struct fid_ep *ep_fid, uint64_t flags)
 
 static int efa_ep_enable(struct fid_ep *ep_fid)
 {
-	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 	struct efa_base_ep *ep;
-	struct efa_cq *scq, *rcq;
 	int err;
 
 	ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 
-	scq = ep->util_ep.tx_cq ? container_of(ep->util_ep.tx_cq, struct efa_cq, util_cq) : NULL;
-	rcq = ep->util_ep.rx_cq ? container_of(ep->util_ep.rx_cq, struct efa_cq, util_cq) : NULL;
-
-	if (!scq && !rcq) {
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Endpoint is not bound to a send or receive completion queue\n");
-		return -FI_ENOCQ;
-	}
-
-	if (!scq && ofi_needs_tx(ep->info->caps)) {
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Endpoint is not bound to a send completion queue when it has transmit capabilities enabled (FI_SEND).\n");
-		return -FI_ENOCQ;
-	}
-
-	if (!rcq && ofi_needs_rx(ep->info->caps)) {
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Endpoint is not bound to a receive completion queue when it has receive capabilities enabled. (FI_RECV)\n");
-		return -FI_ENOCQ;
-	}
-
-	if (scq) {
-		attr_ex.cap.max_send_wr = ep->info->tx_attr->size;
-		attr_ex.cap.max_send_sge = ep->info->tx_attr->iov_limit;
-		attr_ex.send_cq = ibv_cq_ex_to_cq(scq->ibv_cq.ibv_cq_ex);
-	} else {
-		attr_ex.send_cq = ibv_cq_ex_to_cq(rcq->ibv_cq.ibv_cq_ex);
-	}
-
-	if (rcq) {
-		attr_ex.cap.max_recv_wr = ep->info->rx_attr->size;
-		attr_ex.cap.max_recv_sge = ep->info->rx_attr->iov_limit;
-		attr_ex.recv_cq = ibv_cq_ex_to_cq(rcq->ibv_cq.ibv_cq_ex);
-	} else {
-		attr_ex.recv_cq = ibv_cq_ex_to_cq(scq->ibv_cq.ibv_cq_ex);
-	}
-
-	attr_ex.cap.max_inline_data =
-		ep->domain->device->efa_attr.inline_buf_size;
-
-	assert(EFA_EP_TYPE_IS_DGRAM(ep->domain->info));
-	attr_ex.qp_type = IBV_QPT_UD;
-	attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD;
-	attr_ex.pd = container_of(ep->util_ep.domain, struct efa_domain, util_domain)->ibv_pd;
-
-	attr_ex.qp_context = ep;
-	attr_ex.sq_sig_all = 1;
-
-	err = efa_base_ep_create_qp(ep, &attr_ex);
+	err = efa_base_ep_create_and_enable_qp(ep, false);
 	if (err)
 		return err;
 
-	return efa_base_ep_enable(ep);
+	err = efa_base_ep_insert_cntr_ibv_cq_poll_list(ep);
+	if (err)
+		efa_base_ep_destruct_qp(ep);
+
+	return err;
 }
 
 static int efa_ep_control(struct fid *fid, int command, void *arg)
@@ -317,41 +418,8 @@ struct fi_ops_cm efa_ep_cm_ops = {
 int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		struct fid_ep **ep_fid, void *context)
 {
-	struct efa_domain *domain;
-	const struct fi_info *prov_info;
 	struct efa_base_ep *ep;
 	int ret;
-
-	domain = container_of(domain_fid, struct efa_domain,
-			      util_domain.domain_fid);
-
-	if (!user_info || !user_info->ep_attr || !user_info->domain_attr ||
-	    strncmp(domain->device->ibv_ctx->device->name, user_info->domain_attr->name,
-		    strlen(domain->device->ibv_ctx->device->name))) {
-		EFA_INFO(FI_LOG_DOMAIN, "Invalid info->domain_attr->name\n");
-		return -FI_EINVAL;
-	}
-
-	prov_info = efa_domain_get_prov_info(domain, user_info->ep_attr->type);
-	assert(prov_info);
-
-	assert(user_info->ep_attr);
-	ret = ofi_check_ep_attr(&efa_util_prov, user_info->fabric_attr->api_version, prov_info, user_info);
-	if (ret)
-		return ret;
-
-	if (user_info->tx_attr) {
-		ret = ofi_check_tx_attr(&efa_prov, prov_info->tx_attr,
-					user_info->tx_attr, user_info->mode);
-		if (ret)
-			return ret;
-	}
-
-	if (user_info->rx_attr) {
-		ret = ofi_check_rx_attr(&efa_prov, prov_info, user_info->rx_attr, user_info->mode);
-		if (ret)
-			return ret;
-	}
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
@@ -360,13 +428,6 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	ret = efa_base_ep_construct(ep, domain_fid, user_info, efa_ep_progress_no_op, context);
 	if (ret)
 		goto err_ep_destroy;
-
-	/* struct efa_send_wr and efa_recv_wr allocates memory for 2 IOV
-	 * So check with an assert statement that iov_limit is 2 or less
-	 */
-	assert(user_info->tx_attr->iov_limit <= 2);
-
-	ep->domain = domain;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.fclass = FI_CLASS_EP;
@@ -381,6 +442,8 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	return 0;
 
 err_ep_destroy:
-	efa_ep_destroy(ep);
+	efa_base_ep_destruct(ep);
+	if (ep)
+		free(ep);
 	return ret;
 }

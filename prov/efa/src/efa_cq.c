@@ -243,7 +243,7 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
  * A negative number means to poll until cq empty.
  * @param[in]   util_cq           util_cq
  */
-void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct util_cq *util_cq)
+void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 {
 	bool should_end_poll = false;
 	struct efa_base_ep *base_ep;
@@ -260,7 +260,7 @@ void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct util_cq *util_cq)
 	 */
 	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 
-	cq = container_of(util_cq, struct efa_cq, util_cq);
+	cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
 	efa_domain = container_of(cq->util_cq.domain, struct efa_domain, util_domain);
 
 	/* Call ibv_start_poll only once */
@@ -381,7 +381,9 @@ static struct fi_ops_cq efa_cq_ops = {
 
 void efa_cq_progress(struct util_cq *cq)
 {
-	efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, cq);
+	struct efa_cq *efa_cq = container_of(cq, struct efa_cq, util_cq);
+
+	efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, &efa_cq->ibv_cq);
 }
 
 static int efa_cq_close(fid_t fid)

@@ -15,7 +15,7 @@ void test_info_open_ep_with_wrong_info()
 	struct fid_ep *ep = NULL;
 	int err;
 
-	hints = efa_unit_test_alloc_hints(FI_EP_DGRAM);
+	hints = efa_unit_test_alloc_hints(FI_EP_DGRAM, EFA_PROV_NAME);
 
 	err = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, hints, &info);
 	assert_int_equal(err, 0);
@@ -113,7 +113,7 @@ void test_info_tx_rx_msg_order_rdm_order_none(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 	assert_non_null(resource->hints);
 
 	test_info_tx_rx_msg_order_from_hints(resource->hints, 0);
@@ -123,7 +123,7 @@ void test_info_tx_rx_msg_order_rdm_order_sas(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->tx_attr->msg_order = FI_ORDER_SAS;
@@ -135,7 +135,7 @@ void test_info_tx_rx_msg_order_dgram_order_none(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_DGRAM);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_DGRAM, EFA_PROV_NAME);
 	assert_non_null(resource->hints);
 
 	test_info_tx_rx_msg_order_from_hints(resource->hints, 0);
@@ -149,7 +149,7 @@ void test_info_tx_rx_msg_order_dgram_order_sas(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_DGRAM);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_DGRAM, EFA_PROV_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->tx_attr->msg_order = FI_ORDER_SAS;
@@ -191,7 +191,7 @@ void test_info_max_order_size_dgram_with_atomic(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_DGRAM);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_DGRAM, EFA_PROV_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->caps = FI_ATOMIC;
@@ -207,7 +207,7 @@ void test_info_max_order_size_rdm_with_atomic_no_order(struct efa_resource **sta
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 	assert_non_null(resource->hints);
 
 
@@ -229,7 +229,7 @@ void test_info_max_order_size_rdm_with_atomic_order(struct efa_resource **state)
 					- g_device_list[0].rdm_info->src_addrlen
 					- EFA_RDM_IOV_LIMIT * sizeof(struct fi_rma_iov);
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->caps = FI_ATOMIC;
@@ -244,7 +244,7 @@ void test_info_tx_rx_op_flags_rdm(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->tx_attr->op_flags = FI_DELIVERY_COMPLETE;
@@ -256,7 +256,7 @@ void test_info_tx_rx_size_rdm(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->tx_attr->size = 16;
@@ -317,7 +317,7 @@ void test_info_check_shm_info_hmem()
 {
 	struct fi_info *hints;
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 
 	hints->caps |= FI_HMEM;
 	test_info_check_shm_info_from_hints(hints);
@@ -330,7 +330,7 @@ void test_info_check_shm_info_op_flags()
 {
 	struct fi_info *hints;
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 
 	hints->tx_attr->op_flags |= FI_COMPLETION;
 	hints->rx_attr->op_flags |= FI_COMPLETION;
@@ -345,7 +345,7 @@ void test_info_check_shm_info_threading()
 {
 	struct fi_info *hints;
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
 	test_info_check_shm_info_from_hints(hints);
@@ -363,7 +363,7 @@ void test_info_check_hmem_cuda_support_on_api_lt_1_18()
 	if (!hmem_ops[FI_HMEM_CUDA].initialized)
 		skip();
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 
 	hints->caps |= FI_HMEM;
 	hints->domain_attr->mr_mode |= FI_MR_HMEM;
@@ -402,7 +402,7 @@ void test_info_check_hmem_cuda_support_on_api_ge_1_18()
 	if (!hmem_ops[FI_HMEM_CUDA].initialized)
 		skip();
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 
 	hints->caps |= FI_HMEM;
 	hints->domain_attr->mr_mode |= FI_MR_HMEM;
@@ -429,7 +429,7 @@ void test_info_check_no_hmem_support_when_not_requested()
 	struct fi_info *hints, *info = NULL;
 	int err;
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 
 	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info);
 	assert_int_equal(err, 0);
@@ -467,7 +467,7 @@ void test_use_device_rdma( const int env_val,
 		unsetenv("FI_EFA_USE_DEVICE_RDMA");
 	}
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 
 	ret = fi_getinfo(api_version, NULL, NULL, 0ULL, hints, &info);
 	assert_int_equal(ret, 0);
@@ -531,7 +531,7 @@ static int get_first_nic_name(char **name) {
 	char *nic_name = NULL;
 	struct fi_info *hints, *info;
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 	ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, hints, &info);
 	fi_freeinfo(hints);
 	if (ret)
@@ -566,7 +566,7 @@ static void test_efa_nic_selection(const char *filter, const char *expect_first_
 	struct fi_info *hints, *info;
 
 	efa_env.iface = (char *) filter;
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
 	ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, hints, &info);
 	fi_freeinfo(hints);
 	if (expect_first_name) {

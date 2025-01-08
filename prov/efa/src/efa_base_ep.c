@@ -5,6 +5,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_cq.h"
+#include "efa_cntr.h"
 #include "rdm/efa_rdm_protocol.h"
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av)
@@ -366,9 +367,10 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 	base_ep->qp = NULL;
 	base_ep->user_recv_qp = NULL;
 
-	base_ep->max_msg_size = info->ep_attr->max_msg_size;
-	base_ep->max_rma_size = info->ep_attr->max_msg_size;
-	base_ep->inject_msg_size = info->tx_attr->inject_size;
+	/* Use device's native limit as the default value of base ep*/
+	base_ep->max_msg_size = (size_t) base_ep->domain->device->ibv_port_attr.max_msg_sz;
+	base_ep->max_rma_size = (size_t) base_ep->domain->device->max_rdma_size;
+	base_ep->inject_msg_size = (size_t) base_ep->domain->device->efa_attr.inline_buf_size;
 	/* TODO: update inject_rma_size to inline size after firmware
 	 * supports inline rdma write */
 	base_ep->inject_rma_size = 0;
@@ -530,4 +532,214 @@ struct efa_cq *efa_base_ep_get_tx_cq(struct efa_base_ep *ep)
 struct efa_cq *efa_base_ep_get_rx_cq(struct efa_base_ep *ep)
 {
 	return ep->util_ep.rx_cq ? container_of(ep->util_ep.rx_cq, struct efa_cq, util_cq) : NULL;
+}
+
+/**
+ * @brief Construct the ibv qp init attr for given ep and cq
+ *
+ * @param ep a ptr to the efa_base_ep
+ * @param attr_ex the constructed qp attr
+ * @param tx_cq tx cq
+ * @param rx_cq rx cq
+ */
+static inline
+void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
+					struct ibv_qp_init_attr_ex *attr_ex,
+					struct ibv_cq_ex *tx_cq,
+					struct ibv_cq_ex *rx_cq)
+{
+	struct fi_info *info;
+
+	if (ep->info->ep_attr->type == FI_EP_RDM) {
+		attr_ex->qp_type = IBV_QPT_DRIVER;
+		info = ep->domain->device->rdm_info;
+	} else {
+		assert(ep->info->ep_attr->type == FI_EP_DGRAM);
+		attr_ex->qp_type = IBV_QPT_UD;
+		info = ep->domain->device->dgram_info;
+	}
+	attr_ex->cap.max_send_wr = info->tx_attr->size;
+	attr_ex->cap.max_send_sge = info->tx_attr->iov_limit;
+	attr_ex->cap.max_recv_wr = info->rx_attr->size;
+	attr_ex->cap.max_recv_sge = info->rx_attr->iov_limit;
+	attr_ex->cap.max_inline_data = ep->domain->device->efa_attr.inline_buf_size;
+	attr_ex->pd = ep->domain->ibv_pd;
+	attr_ex->qp_context = ep;
+	attr_ex->sq_sig_all = 1;
+
+	attr_ex->send_cq = ibv_cq_ex_to_cq(tx_cq);
+	attr_ex->recv_cq = ibv_cq_ex_to_cq(rx_cq);
+}
+
+/**
+ * @brief check the in order aligned 128 bytes support for a given ibv_wr_op code
+ *
+ * @param ep efa_base_ep
+ * @param op_code ibv wr op code
+ * @return int 0 if in order aligned 128 bytes is supported, -FI_EOPNOTSUPP if
+ * it is not supported. Other negative integer for other errors.
+ */
+int efa_base_ep_check_qp_in_order_aligned_128_bytes(struct efa_base_ep *ep,
+						     enum ibv_wr_opcode op_code)
+{
+	struct efa_qp *qp = NULL;
+	struct ibv_qp_init_attr_ex attr_ex = {0};
+	int ret, retv;
+	struct ibv_cq_ex *ibv_cq_ex = NULL;
+	enum ibv_cq_ex_type ibv_cq_ex_type;
+	struct fi_cq_attr cq_attr = {0};
+
+	ret = efa_cq_ibv_cq_ex_open(&cq_attr, ep->domain->device->ibv_ctx, &ibv_cq_ex, &ibv_cq_ex_type);
+	if (ret) {
+		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %d\n", ret);
+		ret = -FI_EINVAL;
+		goto out;
+	}
+
+	/* Create a dummy qp for query only */
+	efa_base_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, ibv_cq_ex, ibv_cq_ex);
+
+	ret = efa_qp_create(&qp, &attr_ex, FI_TC_UNSPEC);
+	if (ret)
+		goto out;
+
+	if (!efa_qp_support_op_in_order_aligned_128_bytes(qp, op_code))
+		ret = -FI_EOPNOTSUPP;
+
+out:
+	if (qp)
+		efa_qp_destruct(qp);
+
+	if (ibv_cq_ex) {
+		retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(ibv_cq_ex));
+		if (retv)
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close ibv cq: %s\n",
+				fi_strerror(-retv));
+	}
+	return ret;
+}
+
+/**
+ * @brief Insert tx/rx cq into the cntrs the ep is bind to
+ *
+ * @param ep efa_base_ep
+ * @return int 0 on success, negative integer on failure
+ */
+int efa_base_ep_insert_cntr_ibv_cq_poll_list(struct efa_base_ep *ep)
+{
+	int i, ret;
+	struct efa_cntr *efa_cntr;
+	struct util_cntr *util_cntr;
+	struct efa_cq *tx_cq, *rx_cq;
+
+	tx_cq = efa_base_ep_get_tx_cq(ep);
+	rx_cq = efa_base_ep_get_rx_cq(ep);
+
+	for (i = 0; i < CNTR_CNT; i++) {
+		util_cntr = ep->util_ep.cntrs[i];
+		if (util_cntr) {
+			efa_cntr = container_of(util_cntr, struct efa_cntr, util_cntr);
+			if (tx_cq) {
+				ret = efa_ibv_cq_poll_list_insert(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &tx_cq->ibv_cq);
+				if (ret)
+					return ret;
+			}
+			if (rx_cq) {
+				ret = efa_ibv_cq_poll_list_insert(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &rx_cq->ibv_cq);
+				if (ret)
+					return ret;
+			}
+			ofi_genlock_lock(&efa_cntr->util_cntr.ep_list_lock);
+			efa_cntr->need_to_scan_ep_list = true;
+			ofi_genlock_unlock(&efa_cntr->util_cntr.ep_list_lock);
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+/**
+ * @brief Remove tx/rx cq from the cntr that ep is bind to
+ *
+ * @param ep efa_base_ep
+ */
+void efa_base_ep_remove_cntr_ibv_cq_poll_list(struct efa_base_ep *ep)
+{
+	int i;
+	struct efa_cntr *efa_cntr;
+	struct util_cntr *util_cntr;
+	struct efa_cq *tx_cq, *rx_cq;
+
+	tx_cq = efa_base_ep_get_tx_cq(ep);
+	rx_cq = efa_base_ep_get_rx_cq(ep);
+
+	for (i = 0; i< CNTR_CNT; i++) {
+		util_cntr = ep->util_ep.cntrs[i];
+		if (util_cntr) {
+			efa_cntr = container_of(util_cntr, struct efa_cntr, util_cntr);
+			if (tx_cq && !ofi_atomic_get32(&tx_cq->util_cq.ref))
+				efa_ibv_cq_poll_list_remove(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &tx_cq->ibv_cq);
+
+			if (rx_cq && !ofi_atomic_get32(&rx_cq->util_cq.ref))
+				efa_ibv_cq_poll_list_remove(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &rx_cq->ibv_cq);
+		}
+	}
+}
+
+/**
+ * @brief Create and enable the IBV QP that backs the EP
+ *
+ * @param ep efa_base_ep
+ * @param create_user_recv_qp whether to create the user_recv_qp. This boolean
+ * is only true for the zero copy recv mode in the efa-rdm endpoint
+ *
+ * @return int 0 on success, negative integer on failure
+ */
+int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_recv_qp)
+{
+	struct ibv_qp_init_attr_ex attr_ex = { 0 };
+	struct efa_cq *scq, *rcq;
+	struct ibv_cq_ex *tx_ibv_cq, *rx_ibv_cq;
+	int err;
+
+	scq = efa_base_ep_get_tx_cq(ep);
+	rcq = efa_base_ep_get_rx_cq(ep);
+
+	if (!scq && !rcq) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Endpoint is not bound to a send or receive completion queue\n");
+		return -FI_ENOCQ;
+	}
+
+	if (!scq && ofi_needs_tx(ep->info->caps)) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Endpoint is not bound to a send completion queue when it has transmit capabilities enabled (FI_SEND).\n");
+		return -FI_ENOCQ;
+	}
+
+	if (!rcq && ofi_needs_rx(ep->info->caps)) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Endpoint is not bound to a receive completion queue when it has receive capabilities enabled. (FI_RECV)\n");
+		return -FI_ENOCQ;
+	}
+
+	tx_ibv_cq = scq ? scq->ibv_cq.ibv_cq_ex : rcq->ibv_cq.ibv_cq_ex;
+	rx_ibv_cq = rcq ? rcq->ibv_cq.ibv_cq_ex : scq->ibv_cq.ibv_cq_ex;
+
+	efa_base_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, tx_ibv_cq, rx_ibv_cq);
+
+	err = efa_base_ep_create_qp(ep, &attr_ex);
+	if (err)
+		return err;
+
+	if (create_user_recv_qp) {
+		err = efa_qp_create(&ep->user_recv_qp, &attr_ex, ep->info->tx_attr->tclass);
+		if (err) {
+			efa_base_ep_destruct_qp(ep);
+			return err;
+		}
+		ep->user_recv_qp->base_ep = ep;
+	}
+
+	return efa_base_ep_enable(ep);
 }

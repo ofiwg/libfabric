@@ -227,4 +227,21 @@ bool efa_use_unsolicited_write_recv()
 	return efa_env.use_unsolicited_write_recv && efa_device_support_unsolicited_write_recv();
 }
 
+/**
+ * Convenience macro for setopt with an enforced threshold
+ */
+#define EFA_EP_SETOPT_THRESHOLD(opt, field, threshold) { \
+	size_t _val = *(size_t *) optval; \
+	if (optlen != sizeof field) \
+		return -FI_EINVAL; \
+	if (_val > threshold) { \
+		EFA_WARN(FI_LOG_EP_CTRL, \
+			"Requested size of %zu for FI_OPT_" #opt " " \
+			"exceeds the maximum (%zu)\n", \
+			_val, threshold); \
+		return -FI_EINVAL; \
+	} \
+	field = _val; \
+}
+
 #endif /* EFA_H */

@@ -81,7 +81,7 @@ void test_efa_rdm_peer_reorder_expected_msg_id(struct efa_resource **state) {
 	uint32_t msg_id, exp_msg_id;
 	int expected_ret;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_id = 0;
 	exp_msg_id = 0;
@@ -96,7 +96,7 @@ void test_efa_rdm_peer_reorder_smaller_msg_id(struct efa_resource **state) {
 	uint32_t msg_id, exp_msg_id;
 	int expected_ret;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_id = 1;
 	exp_msg_id = 10;
@@ -110,7 +110,7 @@ void test_efa_rdm_peer_reorder_larger_msg_id(struct efa_resource **state) {
 	uint32_t msg_id, exp_msg_id;
 	int expected_ret;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_id = 10;
 	exp_msg_id = 0;
@@ -125,7 +125,7 @@ void test_efa_rdm_peer_reorder_overflow_msg_id(struct efa_resource **state) {
 	uint32_t msg_id, exp_msg_id;
 	int expected_ret;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	msg_id = 16384;
 	exp_msg_id = 0;
@@ -192,7 +192,7 @@ void test_efa_rdm_peer_move_overflow_pke_to_recvwin(struct efa_resource **state)
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_pke *pkt_entry;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	/* overflow_pke_list has a pkt entry with msg_id 18000.
 	 * After calling efa_rdm_peer_move_overflow_pke_to_recvwin when exp_msg_id = 16384,
@@ -213,7 +213,7 @@ void test_efa_rdm_peer_keep_pke_in_overflow_list(struct efa_resource **state) {
 	struct efa_rdm_peer_overflow_pke_list_entry *overflow_pke_list_entry;
 	struct dlist_entry *tmp;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	/* overflow_pke_list has a pkt entry with msg_id 33000.
 	 * After calling efa_rdm_peer_move_overflow_pke_to_recvwin when exp_msg_id = 16384,
@@ -269,7 +269,7 @@ void test_efa_rdm_peer_append_overflow_pke_to_recvwin(struct efa_resource **stat
 	struct efa_rdm_ep *efa_rdm_ep;
 	int ret;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
 				  base_ep.util_ep.ep_fid);

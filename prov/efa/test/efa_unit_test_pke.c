@@ -24,7 +24,7 @@ void test_efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_resource **s
     int err, numaddr;
     struct efa_rdm_ope *txe;
 
-    efa_unit_test_resource_construct(resource, FI_EP_RDM);
+    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
     efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 

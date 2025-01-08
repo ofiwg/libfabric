@@ -117,4 +117,13 @@ struct efa_cq *efa_base_ep_get_tx_cq(struct efa_base_ep *ep);
 
 struct efa_cq *efa_base_ep_get_rx_cq(struct efa_base_ep *ep);
 
+int efa_base_ep_check_qp_in_order_aligned_128_bytes(struct efa_base_ep *base_ep,
+						   enum ibv_wr_opcode op_code);
+
+int efa_base_ep_insert_cntr_ibv_cq_poll_list(struct efa_base_ep *ep);
+
+void efa_base_ep_remove_cntr_ibv_cq_poll_list(struct efa_base_ep *ep);
+
+int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_recv_qp);
+
 #endif
