@@ -131,6 +131,7 @@ pipeline {
     options {
         buildDiscarder(logRotator(daysToKeepStr: "90"))
         timeout(time: 10, unit: 'HOURS')
+        skipDefaultCheckout()
     }
     environment {
         // AWS region where the cluster is created
