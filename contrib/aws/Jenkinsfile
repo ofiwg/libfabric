@@ -152,7 +152,6 @@ pipeline {
         stage("Download and extract PortaFiducia") {
             steps {
                 script {
-                    sh 'printenv'
                     download_and_extract_portafiducia('PortaFiducia')
                 }
             }
