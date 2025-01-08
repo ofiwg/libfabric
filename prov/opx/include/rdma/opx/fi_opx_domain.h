@@ -169,6 +169,7 @@ struct fi_opx_mr {
 	uint8_t		      hmem_unified;
 	uint8_t		      unused[7];
 	UT_hash_handle	      hh;
+	void		     *base_addr;
 };
 
 static inline uint32_t fi_opx_domain_get_tx_max(struct fid_domain *domain)

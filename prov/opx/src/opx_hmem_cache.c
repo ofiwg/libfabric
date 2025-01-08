@@ -448,6 +448,7 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 	opx_mr->attr.requested_key	    = 0;
 	struct opx_hmem_domain *hmem_domain = (struct opx_hmem_domain *) cache->domain;
 	opx_mr->domain			    = hmem_domain->opx_domain;
+	opx_mr->base_addr = hmem_domain->opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : entry->info.iov.iov_base;
 
 	assert((opx_mr->attr.iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) || opx_mr->attr.iface == FI_HMEM_ROCR);
 

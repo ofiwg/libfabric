@@ -97,7 +97,7 @@ static inline int fi_opx_check_atomic(struct fi_opx_ep *opx_ep, enum fi_datatype
 void fi_opx_atomic_completion_action(union fi_opx_hfi1_deferred_work *work_state)
 {
 	struct fi_opx_hfi1_dput_params *params = &work_state->dput;
-	uint64_t       *rbuf_qws = (uint64_t *) ((uint8_t *) params->opx_mr->iov.iov_base + params->dput_iov->sbuf);
+	uint64_t       *rbuf_qws = (uint64_t *) (((uint8_t *) params->opx_mr->base_addr) + params->dput_iov->sbuf);
 	const uint64_t *sbuf_qws =
 		(uint64_t *) &work_state->work_elem.payload_copy->byte[sizeof(struct fi_opx_hfi1_dput_fetch)];
 	assert(params->op != (FI_NOOP - 1));
