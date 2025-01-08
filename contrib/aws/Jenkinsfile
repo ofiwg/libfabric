@@ -61,6 +61,14 @@ def get_random_string(len) {
     return s
 }
 
+def get_cluster_name_prefix(build_tag) {
+    prefix = sh(
+                script: "echo ${build_tag} | sed \"s/^jenkins-//g\" | sed \"s/ //g\" | tr -d '.\\n'",
+                returnStdout: true
+            )
+    return prefix.take(28)
+}
+
 def get_cluster_name(build_tag, os, instance_type) {
     /*
      * Compose the cluster name. Pcluster requires a cluster name under 60 characters.
@@ -68,13 +76,10 @@ def get_cluster_name(build_tag, os, instance_type) {
      * Jenkins does not allow groovy to use the replace() method
      * of string. Therefore we used shell command sed to replace "." with ""
      */
-    build_tag = sh(
-                        script: "echo ${build_tag} | sed \"s/^jenkins-//g\" | sed \"s/ //g\"",
-                        returnStdout: true
-                )
+    build_tag = get_cluster_name_prefix(build_tag)
 
     def cluster_name = sh(
-                        script: "echo '${build_tag.take(28)}-${os.take(10)}-${instance_type.take(10)}-'${get_random_string(8)} | tr -d '.\\n'",
+                        script: "echo '${build_tag}-${os.take(10)}-${instance_type.take(10)}-'${get_random_string(8)} | tr -d '.\\n'",
                         returnStdout: true
                      )
 
@@ -132,10 +137,6 @@ pipeline {
         buildDiscarder(logRotator(daysToKeepStr: "90"))
         timeout(time: 10, unit: 'HOURS')
         skipDefaultCheckout()
-    }
-    environment {
-        // AWS region where the cluster is created
-        REGION="us-west-2"
     }
     stages {
         // Cleanup workspace before job start.
@@ -241,17 +242,20 @@ pipeline {
             sh 'find PortaFiducia/tests/outputs -name "*.xml" | xargs du -shc'
             junit testResults: 'PortaFiducia/tests/outputs/**/*.xml', keepLongStdio: false
             archiveArtifacts artifacts: 'PortaFiducia/tests/outputs/**/*.*'
+            script {
+                // Try To Cleanup Resources
+                def regions = ["us-east-1", "eu-north-1", "us-west-2"]
+                cluster_name_prefix = get_cluster_name_prefix(env.BUILD_TAG)
+                regions.each { region ->
+                    sh ". venv/bin/activate; ./PortaFiducia/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
+                }
+                // Windows Cluster, has a different name
+                sh """
+                    . venv/bin/activate
+                    ./PortaFiducia/scripts/delete_manual_cluster.py --cluster-name WindowsLibfabricCi_${env.CHANGE_ID}_*
+                """
+            }
         }
-        failure {
-            sh '''
-                . venv/bin/activate
-                ./PortaFiducia/scripts/delete_manual_cluster.py --cluster-name WindowsLibfabricCi_${env.CHANGE_ID}_*
-            '''
-        }
-        aborted {
-            sh '. venv/bin/activate; ./PortaFiducia/scripts/delete_manual_cluster.py --cluster-name "$BUILD_TAG"\'*\' --region $REGION'
-        }
-        // Cleanup workspace after job completes.
         cleanup {
             deleteDir()
         }
