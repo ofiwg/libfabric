@@ -38,6 +38,7 @@
 #include <sys/mman.h>
 
 #include "fi_opx_hfi1.h"
+#include "ofi_mem.h"
 
 /* Implementation PRE-CN5000 */
 #ifdef OPX_PRE_CN5000
@@ -116,7 +117,7 @@ int opx_get_port(struct hfi1_user_info_dep *uinfo)
 
 #define OPX_HFI1_MMAP_MAGIC         0xdabbad00
 
-#define opx_offset_in_page(p)	((unsigned long)(p) & ~PAGE_MASK)
+#define opx_offset_in_page(p)	((unsigned long)(p) & (page_sizes[OFI_PAGE_SIZE]-1))
 
 #define OPX_HFI1_MMAP_TOKEN_SET(field, val)                                     \
 	(((val) & OPX_HFI1_MMAP_##field##_MASK) << OPX_HFI1_MMAP_##field##_SHIFT)
