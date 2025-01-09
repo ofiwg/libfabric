@@ -137,7 +137,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	}
 	smr_cmd_queue_commit(ce, pos);
 
-	if (proto != smr_proto_inline && proto != smr_proto_inject)
+	if (proto != smr_proto_inline)
 		goto unlock;
 
 	ret = smr_complete_tx(ep, context, op, op_flags);
@@ -230,8 +230,6 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 		goto unlock;
 	}
 
-	ce->ptr = smr_peer_to_peer(ep, tx_id, (uintptr_t) &ce->cmd);
-
 	if (len <= SMR_MSG_DATA_LEN) {
 		proto = smr_proto_inline;
 		cmd = &ce->cmd;
@@ -257,7 +255,9 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 		goto unlock;
 	}
 	smr_cmd_queue_commit(ce, pos);
-	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, op);
+
+	if (proto == smr_proto_inline)
+		ofi_ep_peer_tx_cntr_inc(&ep->util_ep, op);
 
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);

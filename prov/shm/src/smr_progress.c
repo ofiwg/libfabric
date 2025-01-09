@@ -137,7 +137,7 @@ static int smr_progress_return_entry(struct smr_ep *ep, struct smr_cmd *cmd,
 							pending->mr,
 							pending->iov,
 							pending->iov_count,
-							0, src,cmd->hdr.size);
+							0, src, cmd->hdr.size);
 
 				if (hmem_copy_ret < 0) {
 					FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -434,10 +434,6 @@ ssize_t smr_progress_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	struct iovec sar_iov[SMR_IOV_LIMIT];
 	ssize_t ret = FI_SUCCESS;
 
-	/* Nothing to do for 0 byte transfer */
-	if (!cmd->hdr.size)
-		goto out;
-
 	memcpy(sar_iov, iov, sizeof(*iov) * iov_count);
 	(void) ofi_truncate_iov(sar_iov, &iov_count, cmd->hdr.size);
 
@@ -458,7 +454,7 @@ ssize_t smr_progress_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 		cmd->hdr.rx_ctx = 0;
 		ofi_buf_free(pend);
 	}
-out:
+
 	smr_return_cmd(ep, cmd);
 	return ret;
 }
@@ -838,7 +834,7 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 	}
 
 	smr_set_ipc_valid(ep, idx);
-	smr_peer_data(peer_smr)[cmd->hdr.rx_id].id = idx;
+	smr_peer_data(peer_smr)[cmd->hdr.tx_id].id = idx;
 	smr_peer_data(ep->region)[idx].id = cmd->hdr.rx_id;
 
 	assert(ep->map->num_peers > 0);

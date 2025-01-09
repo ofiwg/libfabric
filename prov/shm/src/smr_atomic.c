@@ -136,7 +136,7 @@ static ssize_t smr_do_atomic_inject(
 		pend = ofi_buf_alloc(ep->pend_pool);
 		assert(pend);
 		cmd->hdr.tx_ctx = (uintptr_t) pend;
-		smr_format_tx_pend(pend, context, res_desc, resultv,
+		smr_format_tx_pend(pend, cmd, context, res_desc, resultv,
 				   result_count, op_flags);
 	} else {
 		cmd->hdr.tx_ctx = 0;
@@ -345,6 +345,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	int64_t id, peer_id, pos;
 	ssize_t ret = -FI_EAGAIN;
 	size_t total_len;
+	int proto;
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
@@ -379,12 +380,14 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	rma_ioc.key = key;
 
 	if (total_len <= SMR_MSG_DATA_LEN) {
+		proto = smr_proto_inline;
 		cmd = &ce->cmd;
 		ce->ptr = smr_peer_to_peer(ep, id, (uintptr_t) cmd);
 		smr_do_atomic_inline(ep, peer_smr, id, peer_id, ofi_op_atomic,
 				     0, datatype, op, NULL, &iov, 1, total_len,
 				     &ce->cmd);
 	} else {
+		proto = smr_proto_inject;
 		if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
 			smr_cmd_queue_discard(ce, pos);
 			ret = -FI_EAGAIN;
@@ -406,7 +409,9 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	smr_format_rma_ioc(cmd, &rma_ioc, 1);
 	smr_cmd_queue_commit(ce, pos);
-	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_atomic);
+
+	if (proto == smr_proto_inline)
+		ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_atomic);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;

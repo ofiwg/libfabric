@@ -214,11 +214,13 @@ int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
 	return -1;
 }
 
-void smr_format_tx_pend(struct smr_pend_entry *pend, void *context,
-			struct ofi_mr **mr, const struct iovec *iov,
-			uint32_t iov_count, uint64_t op_flags)
+void smr_format_tx_pend(struct smr_pend_entry *pend, struct smr_cmd *cmd,
+			void *context, struct ofi_mr **mr,
+			const struct iovec *iov, uint32_t iov_count,
+			uint64_t op_flags)
 {
 	pend->type = SMR_TX_ENTRY;
+	pend->cmd = cmd;
 	pend->comp_ctx = context;
 	pend->comp_flags = op_flags;
 
@@ -259,30 +261,33 @@ static void smr_format_inline(struct smr_cmd *cmd, struct ofi_mr **mr,
 					     mr, iov, count, 0);
 }
 
-static void smr_format_inject(struct smr_cmd *cmd, struct ofi_mr **mr,
-			      const struct iovec *iov, size_t count,
-			      struct smr_region *smr)
+
+static void smr_format_inject(struct smr_ep *ep, struct smr_cmd *cmd,
+			      struct smr_pend_entry *pend)
 {
 	struct smr_inject_buf *tx_buf;
 
-	tx_buf = smr_get_inject_buf(smr, cmd);
+	tx_buf = smr_get_inject_buf(ep->region, cmd);
 
 	cmd->hdr.proto = smr_proto_inject;
-	if (cmd->hdr.op != ofi_op_read_req)
+	if (cmd->hdr.op != ofi_op_read_req) {
 		cmd->hdr.size = ofi_copy_from_mr_iov(tx_buf->data,
 						     SMR_INJECT_SIZE,
-						     mr, iov, count, 0);
-	else
-		cmd->hdr.size = ofi_total_iov_len(iov, count);
+						     pend->mr, pend->iov,
+						     pend->iov_count, 0);
+		pend->bytes_done = cmd->hdr.size;
+	} else {
+		cmd->hdr.size = ofi_total_iov_len(pend->iov, pend->iov_count);
+		pend->bytes_done = 0;
+	}
 }
 
-static void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov,
-		size_t count, size_t total_len, struct smr_region *smr)
+static void smr_format_iov(struct smr_cmd *cmd, struct smr_pend_entry *pend)
 {
 	cmd->hdr.proto = smr_proto_iov;
-	cmd->data.iov_count = count;
-	cmd->hdr.size = total_len;
-	memcpy(cmd->data.iov, iov, sizeof(*iov) * count);
+	cmd->data.iov_count = pend->iov_count;
+	cmd->hdr.size = ofi_total_iov_len(pend->iov, pend->iov_count);
+	memcpy(cmd->data.iov, pend->iov, sizeof(*pend->iov) * pend->iov_count);
 }
 
 static int smr_format_ipc(struct smr_cmd *cmd, void *ptr, size_t len,
@@ -367,8 +372,8 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	//probably remove this - we should never have a 0 byte SAR now that
 	//injects can be delivery complete
 	/* Nothing to copy for 0 byte transfer */
-	// if (!cmd->hdr.size)
-	// 	goto out;
+	//  if (!cmd->hdr.size)
+	//  	goto out;
 
 	if (cmd->hdr.op != ofi_op_read_req) {
 		ret = pend->sar_copy_fn(ep, pend);
@@ -427,10 +432,9 @@ int smr_select_proto(void **desc, size_t iov_count, bool vma_avail,
 		return total_len <= SMR_MSG_DATA_LEN ? smr_proto_inline :
 						       smr_proto_inject;
 
-	if (op_flags & FI_INJECT) {
-		assert(total_len <= SMR_INJECT_SIZE);
+	if (op_flags & FI_INJECT || total_len <= SMR_INJECT_SIZE) {
 		if (op_flags & FI_DELIVERY_COMPLETE)
-			return smr_proto_sar;
+			return smr_proto_inject;
 		return total_len <= SMR_MSG_DATA_LEN ?
 				smr_proto_inline : smr_proto_inject;
 	}
@@ -438,20 +442,7 @@ int smr_select_proto(void **desc, size_t iov_count, bool vma_avail,
 	if (use_ipc)
 		return smr_proto_ipc;
 
-	if (total_len > SMR_INJECT_SIZE)
-		return vma_avail ? smr_proto_iov: smr_proto_sar;
-
-	if (op_flags & FI_DELIVERY_COMPLETE)
-		return smr_proto_sar;
-
-	if (total_len <= SMR_MSG_DATA_LEN)
-		return smr_proto_inline;
-
-	if (total_len <= SMR_INJECT_SIZE)
-		return smr_proto_inject;
-
-	return smr_proto_sar;
-
+	return vma_avail ? smr_proto_iov: smr_proto_sar;
 }
 
 static ssize_t smr_do_inline(struct smr_ep *ep, struct smr_region *peer_smr,
@@ -477,19 +468,14 @@ static ssize_t smr_do_inject(struct smr_ep *ep, struct smr_region *peer_smr,
 {
 	struct smr_pend_entry *pend;
 
-	if (op == ofi_op_read_req) {
-		pend = ofi_buf_alloc(ep->pend_pool);
-		assert(pend);
+	pend = ofi_buf_alloc(ep->pend_pool);
+	assert(pend);
 
-		cmd->hdr.tx_ctx = (uintptr_t) pend;
-		smr_format_tx_pend(pend, context, desc, iov, iov_count,
-				   op_flags);
-	} else {
-		cmd->hdr.tx_ctx = 0;
-	}
+	cmd->hdr.tx_ctx = (uintptr_t) pend;
+	smr_format_tx_pend(pend, cmd, context, desc, iov, iov_count, op_flags);
 
 	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, op_flags);
-	smr_format_inject(cmd, desc, iov, iov_count, ep->region);
+	smr_format_inject(ep, cmd, pend);
 
 	return FI_SUCCESS;
 }
@@ -507,10 +493,10 @@ static ssize_t smr_do_iov(struct smr_ep *ep, struct smr_region *peer_smr,
 	assert(pend);
 
 	cmd->hdr.tx_ctx = (uintptr_t) pend;
-	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, op_flags);
-	smr_format_iov(cmd, iov, iov_count, total_len, ep->region);
+	smr_format_tx_pend(pend, cmd, context, desc, iov, iov_count, op_flags);
 
-	smr_format_tx_pend(pend, context, desc, iov, iov_count, op_flags);
+	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, op_flags);
+	smr_format_iov(cmd, pend);
 
 	return FI_SUCCESS;
 }
@@ -529,8 +515,9 @@ static ssize_t smr_do_sar(struct smr_ep *ep, struct smr_region *peer_smr,
 	assert(pend);
 
 	cmd->hdr.tx_ctx = (uintptr_t) pend;
-	smr_format_tx_pend(pend, context, desc, iov, iov_count, op_flags);
-	pend->sar_dir = pend->cmd->hdr.op == ofi_op_read_req ?
+	smr_format_tx_pend(pend, cmd, context, desc, iov, iov_count, op_flags);
+
+	pend->sar_dir = op == ofi_op_read_req ?
 			OFI_COPY_BUF_TO_IOV : OFI_COPY_IOV_TO_BUF;
 
 	if (smr_env.use_dsa_sar && ofi_mr_all_host(pend->mr, pend->iov_count))
@@ -576,7 +563,7 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr,
 				  total_len, context, cmd);
 	}
 
-	smr_format_tx_pend(pend, context, desc, iov, iov_count, op_flags);
+	smr_format_tx_pend(pend, cmd, context, desc, iov, iov_count, op_flags);
 
 	return FI_SUCCESS;
 }

@@ -282,7 +282,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	smr_return_queue_init(smr_return_queue(*smr), tx_size);
 
 	smr_freestack_init(smr_cmd_stack(*smr), tx_size,
-			   sizeof(struct smr_cmd_entry));
+			   sizeof(struct smr_cmd));
 	smr_freestack_init(smr_sar_pool(*smr), SMR_MAX_PEERS,
 			   sizeof(struct smr_sar_buf));
 	for (i = 0; i < SMR_MAX_PEERS; i++) {

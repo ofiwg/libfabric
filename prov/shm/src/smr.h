@@ -585,9 +585,10 @@ int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr);
 
-void smr_format_tx_pend(struct smr_pend_entry *pend, void *context,
-			struct ofi_mr **mr, const struct iovec *iov,
-			uint32_t iov_count, uint64_t op_flags);
+void smr_format_tx_pend(struct smr_pend_entry *pend, struct smr_cmd *cmd,
+			void *context, struct ofi_mr **mr,
+			const struct iovec *iov, uint32_t iov_count,
+			uint64_t op_flags);
 void smr_generic_format(struct smr_cmd *cmd, int64_t tx_id, int64_t rx_id,
 			uint32_t op, uint64_t tag, uint64_t data,
 			uint64_t op_flags);
