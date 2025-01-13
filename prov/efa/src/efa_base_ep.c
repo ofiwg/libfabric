@@ -4,6 +4,7 @@
 #include <sys/time.h>
 #include "efa.h"
 #include "efa_av.h"
+#include "efa_cq.h"
 #include "rdm/efa_rdm_protocol.h"
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av)
@@ -519,4 +520,14 @@ struct efa_ep_addr *efa_base_ep_get_peer_raw_addr(struct efa_base_ep *base_ep, f
 const char *efa_base_ep_get_peer_raw_addr_str(struct efa_base_ep *base_ep, fi_addr_t addr, char *buf, size_t *buflen)
 {
 	return ofi_straddr(buf, buflen, FI_ADDR_EFA, efa_base_ep_get_peer_raw_addr(base_ep, addr));
+}
+
+struct efa_cq *efa_base_ep_get_tx_cq(struct efa_base_ep *ep)
+{
+	return ep->util_ep.tx_cq ? container_of(ep->util_ep.tx_cq, struct efa_cq, util_cq) : NULL;
+}
+
+struct efa_cq *efa_base_ep_get_rx_cq(struct efa_base_ep *ep)
+{
+	return ep->util_ep.rx_cq ? container_of(ep->util_ep.rx_cq, struct efa_cq, util_cq) : NULL;
 }
