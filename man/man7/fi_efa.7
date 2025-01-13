@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2024\-12\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2025\-01\-13" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -56,8 +56,12 @@ maximum message size of the MTU of the underlying hardware
 (approximately 8 KiB).
 .TP
 \f[I]Address vectors\f[R]
-The provider supports \f[I]FI_AV_TABLE\f[R] and \f[I]FI_AV_MAP\f[R]
-address vector types.
+The provider supports \f[I]FI_AV_TABLE\f[R].
+\f[I]FI_AV_MAP\f[R] was deprecated in Libfabric 2.x.
+Applications can still use \f[I]FI_AV_MAP\f[R] to create an address
+vector.
+But the EFA provider implementation will print a warning and switch to
+\f[I]FI_AV_TABLE\f[R].
 \f[I]FI_EVENT\f[R] is unsupported.
 .TP
 \f[I]Completion events\f[R]
