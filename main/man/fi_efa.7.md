@@ -39,7 +39,9 @@ The following features are supported:
   message size of the MTU of the underlying hardware (approximately 8 KiB).
 
 *Address vectors*
-: The provider supports *FI_AV_TABLE* and *FI_AV_MAP* address vector types.
+: The provider supports *FI_AV_TABLE*. *FI_AV_MAP* was deprecated in Libfabric 2.x.
+  Applications can still use *FI_AV_MAP* to create an address vector. But the EFA
+  provider implementation will print a warning and switch to *FI_AV_TABLE*.
   *FI_EVENT* is unsupported.
 
 *Completion events*
