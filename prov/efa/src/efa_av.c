@@ -56,10 +56,6 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
 	if (OFI_UNLIKELY(fi_addr == FI_ADDR_UNSPEC || fi_addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
-	if (av->type == FI_AV_MAP) {
-		return (struct efa_conn *)fi_addr;
-	}
-
 	assert(av->type == FI_AV_TABLE);
 	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, fi_addr);
 	if (!util_av_entry)
@@ -475,8 +471,8 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	conn = &efa_av_entry->conn;
 	memset(conn, 0, sizeof(*conn));
 	conn->ep_addr = (struct efa_ep_addr *)efa_av_entry->ep_addr;
-	assert(av->type == FI_AV_MAP || av->type == FI_AV_TABLE);
-	conn->fi_addr = (av->type == FI_AV_MAP) ? (uintptr_t)(void *)conn : util_av_fi_addr;
+	assert(av->type == FI_AV_TABLE);
+	conn->fi_addr = util_av_fi_addr;
 	conn->util_av_fi_addr = util_av_fi_addr;
 
 	conn->ah = efa_ah_alloc(av, raw_addr->raw);
@@ -691,7 +687,7 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	struct efa_av *av = container_of(av_fid, struct efa_av, util_av.av_fid);
 	struct efa_conn *conn = NULL;
 
-	if (av->type != FI_AV_MAP && av->type != FI_AV_TABLE)
+	if (av->type != FI_AV_TABLE)
 		return -FI_EINVAL;
 
 	if (fi_addr == FI_ADDR_NOTAVAIL)
@@ -744,7 +740,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		return -FI_EINVAL;
 
 	av = container_of(av_fid, struct efa_av, util_av.av_fid);
-	if (av->type != FI_AV_MAP && av->type != FI_AV_TABLE)
+	if (av->type != FI_AV_TABLE)
 		return -FI_EINVAL;
 
 	ofi_mutex_lock(&av->util_av.lock);
@@ -897,6 +893,10 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (!av)
 		return -FI_ENOMEM;
 
+	if (attr->type == FI_AV_MAP) {
+		EFA_WARN(FI_LOG_AV, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
+					"EFA provider will now switch to using FI_AV_TABLE.\n");
+	}
 	attr->type = FI_AV_TABLE;
 
 	efa_domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
