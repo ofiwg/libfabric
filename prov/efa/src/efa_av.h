@@ -22,8 +22,6 @@ struct efa_ah {
 struct efa_conn {
 	struct efa_ah		*ah;
 	struct efa_ep_addr	*ep_addr;
-	/* for FI_AV_TABLE, fi_addr is same as util_av_fi_addr,
-	 * for FI_AV_MAP, fi_addr is pointer to efa_conn; */
 	fi_addr_t		fi_addr;
 	fi_addr_t		util_av_fi_addr;
 	struct efa_rdm_peer	rdm_peer;
