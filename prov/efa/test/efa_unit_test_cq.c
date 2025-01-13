@@ -20,22 +20,13 @@ void test_impl_cq_read_empty_cq(struct efa_resource *resource, enum fi_ep_type e
 	struct ibv_cq_ex *ibv_cqx;
 	struct fi_cq_data_entry cq_entry;
 	int ret;
+	struct efa_base_ep *efa_base_ep;
 
 	efa_unit_test_resource_construct(resource, ep_type);
 
-	if (ep_type == FI_EP_DGRAM) {
-		struct efa_dgram_ep *efa_dgram_ep;
+	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 
-		efa_dgram_ep = container_of(resource->ep, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
-		ibv_cqx = container_of(efa_dgram_ep->base_ep.util_ep.rx_cq, struct efa_cq, util_cq)->ibv_cq.ibv_cq_ex;
-	} else {
-		struct efa_rdm_ep *efa_rdm_ep;
-
-		efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-		assert(efa_rdm_ep->base_ep.util_ep.rx_cq);
-		ibv_cqx = container_of(efa_rdm_ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, util_cq)->ibv_cq.ibv_cq_ex;
-	}
-
+	ibv_cqx = container_of(efa_base_ep->util_ep.rx_cq, struct efa_cq, util_cq)->ibv_cq.ibv_cq_ex;
 	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
 
 	/* ibv_start_poll to return ENOENT means device CQ is empty */
@@ -110,8 +101,8 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	efa_rdm_ep->host_id = local_host_id;
 	ibv_qpx = efa_rdm_ep->base_ep.qp->ibv_qp_ex;
 
-	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, util_cq.cq_fid.fid);
-	ibv_cqx = efa_rdm_cq->ibv_cq.ibv_cq_ex;
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	ibv_cqx = efa_rdm_cq->efa_cq.ibv_cq.ibv_cq_ex;
 
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(ret, 0);
@@ -296,6 +287,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	struct fi_eq_err_entry eq_err_entry;
 	int ret;
 	struct efa_rdm_cq *efa_rdm_cq;
+	struct ibv_cq_ex *ibv_cqx;
 
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
@@ -314,13 +306,14 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
 
-	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, util_cq.cq_fid.fid);
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	ibv_cqx = efa_rdm_cq->efa_cq.ibv_cq.ibv_cq_ex;
 
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
+	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	ibv_cqx->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	ibv_cqx->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	ibv_cqx->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
 
 	will_return(efa_mock_ibv_start_poll_return_mock, 0);
 	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
@@ -334,12 +327,12 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	/* the recv error will not populate to application cq because it's an EFA internal error and
 	 * and not related to any application recv. Currently we can only read the error from eq.
 	 */
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
+	ibv_cqx->wr_id = (uintptr_t)pkt_entry;
+	ibv_cqx->status = IBV_WC_GENERAL_ERR;
 
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 	if (efa_use_unsolicited_write_recv()) {
-		efadv_cq_from_ibv_cq_ex(efa_rdm_cq->ibv_cq.ibv_cq_ex)->wc_is_unsolicited = &efa_mock_efadv_wc_is_unsolicited;
+		efadv_cq_from_ibv_cq_ex(ibv_cqx)->wc_is_unsolicited = &efa_mock_efadv_wc_is_unsolicited;
 		will_return(efa_mock_efadv_wc_is_unsolicited, false);
 	}
 #endif
@@ -372,18 +365,20 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	struct fi_eq_err_entry eq_err_entry;
 	int ret;
 	struct efa_rdm_cq *efa_rdm_cq;
+	struct ibv_cq_ex *ibv_cqx;
 
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, util_cq.cq_fid.fid);
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	ibv_cqx = efa_rdm_cq->efa_cq.ibv_cq.ibv_cq_ex;
 
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
+	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	ibv_cqx->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	ibv_cqx->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	ibv_cqx->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
 
 	will_return(efa_mock_ibv_start_poll_return_mock, 0);
 	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
@@ -399,10 +394,10 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 	if (use_unsolicited_recv) {
-		efadv_cq_from_ibv_cq_ex(efa_rdm_cq->ibv_cq.ibv_cq_ex)->wc_is_unsolicited = &efa_mock_efadv_wc_is_unsolicited;
+		efadv_cq_from_ibv_cq_ex(ibv_cqx)->wc_is_unsolicited = &efa_mock_efadv_wc_is_unsolicited;
 		will_return(efa_mock_efa_device_support_unsolicited_write_recv, true);
 		will_return(efa_mock_efadv_wc_is_unsolicited, true);
-		efa_rdm_cq->ibv_cq.ibv_cq_ex->wr_id = 0;
+		ibv_cqx->wr_id = 0;
 	} else {
 		/*
 		 * For solicited write recv, it will consume an internal rx pkt
@@ -411,7 +406,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 		struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert_non_null(pkt_entry);
 		efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
-		efa_rdm_cq->ibv_cq.ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+		ibv_cqx->wr_id = (uintptr_t)pkt_entry;
 	}
 #else
 	/*
@@ -421,12 +416,12 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	ibv_cqx->wr_id = (uintptr_t)pkt_entry;
 #endif
 	/* the recv rdma with imm will not populate to application cq because it's an EFA internal error and
 	 * and not related to any application operations. Currently we can only read the error from eq.
 	 */
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
+	ibv_cqx->status = IBV_WC_GENERAL_ERR;
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 	assert_int_equal(ret, -FI_EAGAIN);
 
@@ -460,13 +455,16 @@ void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
 	struct fi_cq_err_entry cq_err_entry;
 	int ret;
 	struct efa_rdm_cq *efa_rdm_cq;
+	struct ibv_cq_ex *ibv_cqx;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 
-	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, util_cq.cq_fid.fid);
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	ibv_cqx = efa_rdm_cq->efa_cq.ibv_cq.ibv_cq_ex;
+
+	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	ibv_cqx->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
 
 	will_return(efa_mock_ibv_start_poll_return_mock, EFAULT);
 	will_return(efa_mock_ibv_read_vendor_err_return_mock, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
@@ -536,7 +534,7 @@ int test_efa_rdm_cq_get_ibv_cq_poll_list_length(struct fid_cq *cq_fid)
 {
 	struct efa_rdm_cq *cq;
 
-	cq = container_of(cq_fid, struct efa_rdm_cq, util_cq.cq_fid.fid);
+	cq = container_of(cq_fid, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 	return efa_unit_test_get_dlist_length(&cq->ibv_cq_poll_list);
 }
 
@@ -598,7 +596,7 @@ void test_efa_rdm_cq_post_initial_rx_pkts(struct efa_resource **state)
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, util_cq.cq_fid.fid);
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 
 	/* At this time, rx pkts are not growed and posted */
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, 0);
@@ -641,6 +639,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	struct efa_unit_test_buff recv_buff;
 	int ret;
 	struct efa_rdm_cq *efa_rdm_cq;
+	struct ibv_cq_ex *ibv_cqx;
 
 	/*
 	 * Always use mocked efadv_create_cq instead of the real one.
@@ -659,7 +658,8 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, util_cq.cq_fid.fid);
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	ibv_cqx = efa_rdm_cq->efa_cq.ibv_cq.ibv_cq_ex;
 
 	/* Construct a minimal recv buffer */
 	efa_unit_test_buff_construct(&recv_buff, resource, efa_rdm_ep->min_multi_recv_size);
@@ -698,19 +698,19 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	efa_unit_test_eager_msgrtm_pkt_construct(pkt_entry, &pkt_attr);
 
 	/* Setup CQ */
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->next_poll = &efa_mock_ibv_next_poll_check_function_called_and_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_slid = &efa_mock_ibv_read_slid_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_byte_len = &efa_mock_ibv_read_byte_len_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_wc_flags = &efa_mock_ibv_read_wc_flags_return_mock;
-	efa_rdm_cq->ibv_cq.ibv_cq_ex->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
+	ibv_cqx->wr_id = (uintptr_t)pkt_entry;
+	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	ibv_cqx->next_poll = &efa_mock_ibv_next_poll_check_function_called_and_return_mock;
+	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	ibv_cqx->read_slid = &efa_mock_ibv_read_slid_return_mock;
+	ibv_cqx->read_byte_len = &efa_mock_ibv_read_byte_len_return_mock;
+	ibv_cqx->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	ibv_cqx->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
+	ibv_cqx->read_wc_flags = &efa_mock_ibv_read_wc_flags_return_mock;
+	ibv_cqx->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
 
 	if (support_efadv_cq) {
-		efadv_cq = efadv_cq_from_ibv_cq_ex(efa_rdm_cq->ibv_cq.ibv_cq_ex);
+		efadv_cq = efadv_cq_from_ibv_cq_ex(ibv_cqx);
 		assert_non_null(efadv_cq);
 		efadv_cq->wc_read_sgid = &efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid;
 

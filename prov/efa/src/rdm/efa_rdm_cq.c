@@ -36,16 +36,16 @@ int efa_rdm_cq_close(struct fid *fid)
 
 	retv = 0;
 
-	cq = container_of(fid, struct efa_rdm_cq, util_cq.cq_fid.fid);
+	cq = container_of(fid, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 
-	if (cq->ibv_cq.ibv_cq_ex) {
-		ret = -ibv_destroy_cq(ibv_cq_ex_to_cq(cq->ibv_cq.ibv_cq_ex));
+	if (cq->efa_cq.ibv_cq.ibv_cq_ex) {
+		ret = -ibv_destroy_cq(ibv_cq_ex_to_cq(cq->efa_cq.ibv_cq.ibv_cq_ex));
 		if (ret) {
 			EFA_WARN(FI_LOG_CQ, "Unable to close ibv cq: %s\n",
 				fi_strerror(-ret));
 			return ret;
 		}
-		cq->ibv_cq.ibv_cq_ex = NULL;
+		cq->efa_cq.ibv_cq.ibv_cq_ex = NULL;
 	}
 
 	if (cq->shm_cq) {
@@ -56,7 +56,7 @@ int efa_rdm_cq_close(struct fid *fid)
 		}
 	}
 
-	ret = ofi_cq_cleanup(&cq->util_cq);
+	ret = ofi_cq_cleanup(&cq->efa_cq.util_cq);
 	if (ret)
 		return ret;
 	free(cq);
@@ -435,13 +435,13 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	int prov_errno;
 	struct efa_rdm_ep *ep = NULL;
 	struct fi_cq_err_entry err_entry;
-	struct efa_rdm_cq *efa_rdm_cq;
+	struct efa_cq *efa_cq;
 	struct efa_domain *efa_domain;
 	struct efa_qp *qp;
 	struct dlist_entry rx_progressed_ep_list, *tmp;
 
-	efa_rdm_cq = container_of(ibv_cq, struct efa_rdm_cq, ibv_cq);
-	efa_domain = container_of(efa_rdm_cq->util_cq.domain, struct efa_domain, util_domain);
+	efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
+	efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
 	dlist_init(&rx_progressed_ep_list);
 
 	/* Call ibv_start_poll only once */
@@ -538,7 +538,7 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			.prov_errno = prov_errno,
 			.op_context = NULL
 		};
-		ofi_cq_write_error(&efa_rdm_cq->util_cq, &err_entry);
+		ofi_cq_write_error(&efa_cq->util_cq, &err_entry);
 	}
 
 	if (should_end_poll)
@@ -559,9 +559,9 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 	ssize_t ret;
 	struct efa_domain *domain;
 
-	cq = container_of(cq_fid, struct efa_rdm_cq, util_cq.cq_fid.fid);
+	cq = container_of(cq_fid, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 
-	domain = container_of(cq->util_cq.domain, struct efa_domain, util_domain);
+	domain = container_of(cq->efa_cq.util_cq.domain, struct efa_domain, util_domain);
 
 	ofi_genlock_lock(&domain->srx_lock);
 
@@ -573,13 +573,13 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 		 * completion to efa. Use ofi_cq_read_entries to get the number of
 		 * shm completions without progressing efa ep again.
 		 */
-		ret = ofi_cq_read_entries(&cq->util_cq, buf, count, src_addr);
+		ret = ofi_cq_read_entries(&cq->efa_cq.util_cq, buf, count, src_addr);
 
 		if (ret > 0)
 			goto out;
 	}
 
-	ret = ofi_cq_readfrom(&cq->util_cq.cq_fid, buf, count, src_addr);
+	ret = ofi_cq_readfrom(&cq->efa_cq.util_cq.cq_fid, buf, count, src_addr);
 
 out:
 	ofi_genlock_unlock(&domain->srx_lock);
@@ -608,8 +608,8 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 	struct fid_list_entry *fid_entry;
 
 	ofi_genlock_lock(&cq->ep_list_lock);
-	efa_rdm_cq = container_of(cq, struct efa_rdm_cq, util_cq);
-	efa_domain = container_of(efa_rdm_cq->util_cq.domain, struct efa_domain, util_domain);
+	efa_rdm_cq = container_of(cq, struct efa_rdm_cq, efa_cq.util_cq);
+	efa_domain = container_of(efa_rdm_cq->efa_cq.util_cq.domain, struct efa_domain, util_domain);
 
 	/**
 	 * TODO: It's better to just post the initial batch of internal rx pkts during ep enable
@@ -671,19 +671,19 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	dlist_init(&cq->ibv_cq_poll_list);
 	cq->need_to_scan_ep_list = false;
-	ret = ofi_cq_init(&efa_prov, domain, attr, &cq->util_cq,
+	ret = ofi_cq_init(&efa_prov, domain, attr, &cq->efa_cq.util_cq,
 			  &efa_rdm_cq_progress, context);
 
 	if (ret)
 		goto free;
 
-	ret = efa_cq_ibv_cq_ex_open(attr, efa_domain->device->ibv_ctx, &cq->ibv_cq.ibv_cq_ex, &cq->ibv_cq.ibv_cq_ex_type);
+	ret = efa_cq_ibv_cq_ex_open(attr, efa_domain->device->ibv_ctx, &cq->efa_cq.ibv_cq.ibv_cq_ex, &cq->efa_cq.ibv_cq.ibv_cq_ex_type);
 	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", fi_strerror(ret));
 		goto close_util_cq;
 	}
 
-	*cq_fid = &cq->util_cq.cq_fid;
+	*cq_fid = &cq->efa_cq.util_cq.cq_fid;
 	(*cq_fid)->fid.ops = &efa_rdm_cq_fi_ops;
 	(*cq_fid)->ops = &efa_rdm_cq_ops;
 
@@ -693,7 +693,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		/* Bind ep with shm provider's cq */
 		shm_cq_attr.flags |= FI_PEER;
 		peer_cq_context.size = sizeof(peer_cq_context);
-		peer_cq_context.cq = cq->util_cq.peer_cq;
+		peer_cq_context.cq = cq->efa_cq.util_cq.peer_cq;
 		ret = fi_cq_open(efa_domain->shm_domain, &shm_cq_attr,
 				 &cq->shm_cq, &peer_cq_context);
 		if (ret) {
@@ -704,12 +704,12 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	return 0;
 destroy_ibv_cq:
-	retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(cq->ibv_cq.ibv_cq_ex));
+	retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(cq->efa_cq.ibv_cq.ibv_cq_ex));
 	if (retv)
 		EFA_WARN(FI_LOG_CQ, "Unable to close ibv cq: %s\n",
 			 fi_strerror(-retv));
 close_util_cq:
-	retv = ofi_cq_cleanup(&cq->util_cq);
+	retv = ofi_cq_cleanup(&cq->efa_cq.util_cq);
 	if (retv)
 		EFA_WARN(FI_LOG_CQ, "Unable to close util cq: %s\n",
 			 fi_strerror(-retv));

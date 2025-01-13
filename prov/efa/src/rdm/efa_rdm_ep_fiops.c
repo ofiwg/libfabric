@@ -37,13 +37,13 @@ void efa_rdm_ep_construct_ibv_qp_init_attr_ex(struct efa_rdm_ep *ep,
 static inline
 struct efa_rdm_cq *efa_rdm_ep_get_tx_rdm_cq(struct efa_rdm_ep *ep)
 {
-	return ep->base_ep.util_ep.tx_cq ? container_of(ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, util_cq) : NULL;
+	return ep->base_ep.util_ep.tx_cq ? container_of(ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, efa_cq.util_cq) : NULL;
 }
 
 static inline
 struct efa_rdm_cq *efa_rdm_ep_get_rx_rdm_cq(struct efa_rdm_ep *ep)
 {
-	return ep->base_ep.util_ep.rx_cq ? container_of(ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, util_cq) : NULL;
+	return ep->base_ep.util_ep.rx_cq ? container_of(ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, efa_cq.util_cq) : NULL;
 }
 
 /**
@@ -58,33 +58,33 @@ static
 int efa_rdm_ep_create_base_ep_ibv_qp(struct efa_rdm_ep *ep)
 {
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
-	struct efa_rdm_cq *tx_rdm_cq, *rx_rdm_cq;
+	struct efa_cq *tx_cq, *rx_cq;
 	struct ibv_cq_ex *tx_ibv_cq, *rx_ibv_cq;
 	int ret;
 
-	tx_rdm_cq = efa_rdm_ep_get_tx_rdm_cq(ep);
-	rx_rdm_cq = efa_rdm_ep_get_rx_rdm_cq(ep);
+	tx_cq = efa_base_ep_get_tx_cq(&ep->base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(&ep->base_ep);
 
-	if (!tx_rdm_cq && !rx_rdm_cq) {
+	if (!tx_cq && !rx_cq) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Endpoint is not bound to a send or receive completion queue\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!tx_rdm_cq && ofi_needs_tx(ep->base_ep.info->caps)) {
+	if (!tx_cq && ofi_needs_tx(ep->base_ep.info->caps)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Endpoint is not bound to a send completion queue when it has transmit capabilities enabled (FI_SEND).\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!rx_rdm_cq && ofi_needs_rx(ep->base_ep.info->caps)) {
+	if (!rx_cq && ofi_needs_rx(ep->base_ep.info->caps)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Endpoint is not bound to a receive completion queue when it has receive capabilities enabled (FI_RECV).\n");
 		return -FI_ENOCQ;
 	}
 
-	tx_ibv_cq = tx_rdm_cq ? tx_rdm_cq->ibv_cq.ibv_cq_ex : rx_rdm_cq->ibv_cq.ibv_cq_ex;
-	rx_ibv_cq = rx_rdm_cq ? rx_rdm_cq->ibv_cq.ibv_cq_ex : tx_rdm_cq->ibv_cq.ibv_cq_ex;
+	tx_ibv_cq = tx_cq ? tx_cq->ibv_cq.ibv_cq_ex : rx_cq->ibv_cq.ibv_cq_ex;
+	rx_ibv_cq = rx_cq ? rx_cq->ibv_cq.ibv_cq_ex : tx_cq->ibv_cq.ibv_cq_ex;
 
 	efa_rdm_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, tx_ibv_cq, rx_ibv_cq);
 
@@ -699,9 +699,9 @@ static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		}
 		break;
 	case FI_CLASS_CQ:
-		cq = container_of(bfid, struct efa_rdm_cq, util_cq.cq_fid.fid);
+		cq = container_of(bfid, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 
-		ret = ofi_ep_bind_cq(&efa_rdm_ep->base_ep.util_ep, &cq->util_cq, flags);
+		ret = ofi_ep_bind_cq(&efa_rdm_ep->base_ep.util_ep, &cq->efa_cq.util_cq, flags);
 		if (ret)
 			return ret;
 
@@ -873,12 +873,12 @@ bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
 static inline
 void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 {
-	struct efa_rdm_cq *tx_cq, *rx_cq;
+	struct efa_cq *tx_cq, *rx_cq;
 
 	ofi_genlock_lock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
 
-	tx_cq = efa_rdm_ep_get_tx_rdm_cq(efa_rdm_ep);
-	rx_cq = efa_rdm_ep_get_rx_rdm_cq(efa_rdm_ep);
+	tx_cq = efa_base_ep_get_tx_cq(&efa_rdm_ep->base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(&efa_rdm_ep->base_ep);
 
 	while (efa_rdm_ep_has_unfinished_send(efa_rdm_ep)) {
 		/* poll cq until empty */
@@ -898,10 +898,10 @@ void efa_rdm_ep_remove_cntr_ibv_cq_poll_list(struct efa_rdm_ep *ep)
 	int i;
 	struct efa_cntr *efa_cntr;
 	struct util_cntr *util_cntr;
-	struct efa_rdm_cq *tx_cq, *rx_cq;
+	struct efa_cq *tx_cq, *rx_cq;
 
-	tx_cq = efa_rdm_ep_get_tx_rdm_cq(ep);
-	rx_cq = efa_rdm_ep_get_rx_rdm_cq(ep);
+	tx_cq = efa_base_ep_get_tx_cq(&ep->base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(&ep->base_ep);
 
 	for (i = 0; i< CNTR_CNT; i++) {
 		util_cntr = ep->base_ep.util_ep.cntrs[i];
@@ -928,16 +928,16 @@ void efa_rdm_ep_remove_cq_ibv_cq_poll_list(struct efa_rdm_ep *ep)
 	 * It must happen after ofi_endpoint_close
 	 * so we have cq's reference counters updated.
 	 */
-	if (tx_cq && !ofi_atomic_get32(&tx_cq->util_cq.ref)) {
-		efa_ibv_cq_poll_list_remove(&tx_cq->ibv_cq_poll_list, &tx_cq->util_cq.ep_list_lock, &tx_cq->ibv_cq);
+	if (tx_cq && !ofi_atomic_get32(&tx_cq->efa_cq.util_cq.ref)) {
+		efa_ibv_cq_poll_list_remove(&tx_cq->ibv_cq_poll_list, &tx_cq->efa_cq.util_cq.ep_list_lock, &tx_cq->efa_cq.ibv_cq);
 		if (rx_cq)
-			efa_ibv_cq_poll_list_remove(&rx_cq->ibv_cq_poll_list, &rx_cq->util_cq.ep_list_lock, &tx_cq->ibv_cq);
+			efa_ibv_cq_poll_list_remove(&rx_cq->ibv_cq_poll_list, &rx_cq->efa_cq.util_cq.ep_list_lock, &tx_cq->efa_cq.ibv_cq);
 	}
 
-	if (rx_cq && !ofi_atomic_get32(&rx_cq->util_cq.ref)) {
-		efa_ibv_cq_poll_list_remove(&rx_cq->ibv_cq_poll_list, &rx_cq->util_cq.ep_list_lock, &rx_cq->ibv_cq);
+	if (rx_cq && !ofi_atomic_get32(&rx_cq->efa_cq.util_cq.ref)) {
+		efa_ibv_cq_poll_list_remove(&rx_cq->ibv_cq_poll_list, &rx_cq->efa_cq.util_cq.ep_list_lock, &rx_cq->efa_cq.ibv_cq);
 		if (tx_cq)
-			efa_ibv_cq_poll_list_remove(&tx_cq->ibv_cq_poll_list, &tx_cq->util_cq.ep_list_lock, &rx_cq->ibv_cq);
+			efa_ibv_cq_poll_list_remove(&tx_cq->ibv_cq_poll_list, &tx_cq->efa_cq.util_cq.ep_list_lock, &rx_cq->efa_cq.ibv_cq);
 	}
 }
 
@@ -1099,7 +1099,7 @@ static void efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 		efa_av->shm_rdm_av = NULL;
 	}
 
-	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, util_cq);
+	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, efa_cq.util_cq);
 	if (efa_rdm_cq->shm_cq) {
 		ret = fi_close(&efa_rdm_cq->shm_cq->fid);
 		if (ret)
@@ -1107,7 +1107,7 @@ static void efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 		efa_rdm_cq->shm_cq = NULL;
 	}
 
-	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, util_cq);
+	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, efa_cq.util_cq);
 	if (efa_rdm_cq->shm_cq) {
 		ret = fi_close(&efa_rdm_cq->shm_cq->fid);
 		if (ret)
@@ -1187,9 +1187,9 @@ int efa_rdm_ep_insert_cntr_ibv_cq_poll_list(struct efa_rdm_ep *ep)
 	int i, ret;
 	struct efa_cntr *efa_cntr;
 	struct util_cntr *util_cntr;
-	struct efa_rdm_cq *tx_cq, *rx_cq;
-	tx_cq = efa_rdm_ep_get_tx_rdm_cq(ep);
-	rx_cq = efa_rdm_ep_get_rx_rdm_cq(ep);
+	struct efa_cq *tx_cq, *rx_cq;
+	tx_cq = efa_base_ep_get_tx_cq(&ep->base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(&ep->base_ep);
 
 	for (i = 0; i < CNTR_CNT; i++) {
 		util_cntr = ep->base_ep.util_ep.cntrs[i];
@@ -1224,33 +1224,33 @@ int efa_rdm_ep_insert_cq_ibv_cq_poll_list(struct efa_rdm_ep *ep)
 	rx_cq = efa_rdm_ep_get_rx_rdm_cq(ep);
 
 	if (tx_cq) {
-		ret = efa_ibv_cq_poll_list_insert(&tx_cq->ibv_cq_poll_list, &tx_cq->util_cq.ep_list_lock, &tx_cq->ibv_cq);
+		ret = efa_ibv_cq_poll_list_insert(&tx_cq->ibv_cq_poll_list, &tx_cq->efa_cq.util_cq.ep_list_lock, &tx_cq->efa_cq.ibv_cq);
 		if (ret)
 			return ret;
 
 		if (rx_cq) {
-			ret = efa_ibv_cq_poll_list_insert(&tx_cq->ibv_cq_poll_list, &tx_cq->util_cq.ep_list_lock, &rx_cq->ibv_cq);
+			ret = efa_ibv_cq_poll_list_insert(&tx_cq->ibv_cq_poll_list, &tx_cq->efa_cq.util_cq.ep_list_lock, &rx_cq->efa_cq.ibv_cq);
 			if (ret)
 				return ret;
 		}
-		ofi_genlock_lock(&tx_cq->util_cq.ep_list_lock);
+		ofi_genlock_lock(&tx_cq->efa_cq.util_cq.ep_list_lock);
 		tx_cq->need_to_scan_ep_list = true;
-		ofi_genlock_unlock(&tx_cq->util_cq.ep_list_lock);
+		ofi_genlock_unlock(&tx_cq->efa_cq.util_cq.ep_list_lock);
 	}
 
 	if (rx_cq) {
-		ret = efa_ibv_cq_poll_list_insert(&rx_cq->ibv_cq_poll_list, &rx_cq->util_cq.ep_list_lock, &rx_cq->ibv_cq);
+		ret = efa_ibv_cq_poll_list_insert(&rx_cq->ibv_cq_poll_list, &rx_cq->efa_cq.util_cq.ep_list_lock, &rx_cq->efa_cq.ibv_cq);
 		if (ret)
 			return ret;
 
 		if (tx_cq) {
-			ret = efa_ibv_cq_poll_list_insert(&rx_cq->ibv_cq_poll_list, &rx_cq->util_cq.ep_list_lock, &tx_cq->ibv_cq);
+			ret = efa_ibv_cq_poll_list_insert(&rx_cq->ibv_cq_poll_list, &rx_cq->efa_cq.util_cq.ep_list_lock, &tx_cq->efa_cq.ibv_cq);
 			if (ret)
 				return ret;
 		}
-		ofi_genlock_lock(&rx_cq->util_cq.ep_list_lock);
+		ofi_genlock_lock(&rx_cq->efa_cq.util_cq.ep_list_lock);
 		rx_cq->need_to_scan_ep_list = true;
-		ofi_genlock_unlock(&rx_cq->util_cq.ep_list_lock);
+		ofi_genlock_unlock(&rx_cq->efa_cq.util_cq.ep_list_lock);
 	}
 
 	return FI_SUCCESS;

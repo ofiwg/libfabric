@@ -109,4 +109,9 @@ struct efa_ep_addr *efa_base_ep_get_peer_raw_addr(struct efa_base_ep *base_ep,
 const char *efa_base_ep_get_peer_raw_addr_str(struct efa_base_ep *base_ep,
 					      fi_addr_t addr, char *buf,
 					      size_t *buflen);
+
+struct efa_cq *efa_base_ep_get_tx_cq(struct efa_base_ep *ep);
+
+struct efa_cq *efa_base_ep_get_rx_cq(struct efa_base_ep *ep);
+
 #endif
