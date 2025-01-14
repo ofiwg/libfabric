@@ -444,7 +444,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	struct util_av_entry *util_av_entry = NULL;
 	struct efa_av_entry *efa_av_entry = NULL;
 	struct efa_conn *conn;
-	fi_addr_t util_av_fi_addr;
+	fi_addr_t fi_addr;
 	int err;
 
 	if (flags & FI_SYNC_ERR)
@@ -456,7 +456,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		return NULL;
 	}
 
-	err = ofi_av_insert_addr(&av->util_av, raw_addr, &util_av_fi_addr);
+	err = ofi_av_insert_addr(&av->util_av, raw_addr, &fi_addr);
 	if (err) {
 		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n",
 			 fi_strerror(err));
@@ -464,7 +464,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	}
 
 	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool,
-					     util_av_fi_addr);
+					     fi_addr);
 	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
 	assert(efa_is_same_addr(raw_addr, (struct efa_ep_addr *)efa_av_entry->ep_addr));
 
@@ -472,8 +472,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	memset(conn, 0, sizeof(*conn));
 	conn->ep_addr = (struct efa_ep_addr *)efa_av_entry->ep_addr;
 	assert(av->type == FI_AV_TABLE);
-	conn->fi_addr = util_av_fi_addr;
-	conn->util_av_fi_addr = util_av_fi_addr;
+	conn->fi_addr = fi_addr;
 
 	conn->ah = efa_ah_alloc(av, raw_addr->raw);
 	if (!conn->ah)
@@ -502,7 +501,7 @@ err_release:
 		efa_ah_release(av, conn->ah);
 
 	conn->ep_addr = NULL;
-	err = ofi_av_remove_addr(&av->util_av, util_av_fi_addr);
+	err = ofi_av_remove_addr(&av->util_av, fi_addr);
 	if (err)
 		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed! err=%d\n",
 			 err);
@@ -552,11 +551,11 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 
 	efa_ah_release(av, conn->ah);
 
-	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, conn->util_av_fi_addr);
+	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, conn->fi_addr);
 	assert(util_av_entry);
 	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
 
-	err = ofi_av_remove_addr(&av->util_av, conn->util_av_fi_addr);
+	err = ofi_av_remove_addr(&av->util_av, conn->fi_addr);
 	if (err) {
 		EFA_WARN(FI_LOG_AV, "ofi_av_remove_addr failed! err=%d\n", err);
 	}
