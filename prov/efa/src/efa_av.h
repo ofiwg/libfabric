@@ -23,7 +23,6 @@ struct efa_conn {
 	struct efa_ah		*ah;
 	struct efa_ep_addr	*ep_addr;
 	fi_addr_t		fi_addr;
-	fi_addr_t		util_av_fi_addr;
 	struct efa_rdm_peer	rdm_peer;
 };
 
