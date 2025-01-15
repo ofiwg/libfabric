@@ -2459,6 +2459,7 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 		if (total_credits_available < total_credits_needed) {
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RMA-CTS-HFI:%p", params->rma_req);
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			       "===================================== RECV, HFI -- RMA RTS (EAGAIN credits) (params=%p rzv_comp=%p context=%p)\n",
 			       params, params->rma_req, params->rma_req->context);
@@ -2473,6 +2474,7 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,
 					    params->origin_rs, &psn_ptr, &replay, params->reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
+		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RMA-CTS-HFI:%p", params->rma_req);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== RECV, HFI -- RMA RTS (EAGAIN psn/replay) (params=%p rzv_comp=%p context=%p)\n",
 		       params, params->rma_req, params->rma_req->context);
@@ -2558,7 +2560,7 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rs,
 							    params->origin_rx, psn_ptr, replay, params->reliability,
 							    hfi1_type);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RMA-CTS-HFI:%p", params->rma_comp);
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RMA-CTS-HFI:%p", params->rma_req);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RMA RTS (end) (params=%p rma_req=%p context=%p)\n",
 	       params, params->rma_req, params->rma_req->context);
@@ -2696,7 +2698,7 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			       "===================================== SEND, HFI -- RMA RTS (EAGAIN credits) (params=%p origin_rma_req=%p cc=%p)\n",
 			       params, params->origin_rma_req, params->origin_rma_req->cc);
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "RECV-RMA-RTS-HFI:%ld", hdr->qw_9B[6]);
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RMA-RTS-HFI:%p", params->origin_rma_req);
 			return -FI_EAGAIN;
 		}
 	}
@@ -2711,7 +2713,7 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== SEND, HFI -- RMA RTS (EAGAIN psn/replay) (params=%p origin_rma_req=%p cc=%p) opcode=%d\n",
 		       params, params->origin_rma_req, params->origin_rma_req->cc, params->opcode);
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "RECV-RMA-RTS-HFI:%p", params->origin_rma_req);
+		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RMA-RTS-HFI:%p", params->origin_rma_req);
 		return -FI_EAGAIN;
 	}
 
