@@ -375,7 +375,7 @@ static struct fi_ops_cq cxip_cq_ops = {
 	.sread = cxip_cq_sread,
 	.sreadfrom = cxip_cq_sreadfrom,
 	.signal = cxip_cq_signal,
-	.strerror = ofi_cq_strerror,
+	.strerror = cxip_cq_strerror,
 };
 
 static struct fi_cq_attr cxip_cq_def_attr = {
@@ -510,7 +510,6 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err_util_cq;
 	}
 
-	cxi_cq->util_cq.cq_fid.ops->strerror = &cxip_cq_strerror;
 	cxi_cq->util_cq.cq_fid.fid.ops = &cxip_cq_fi_ops;
 	cxi_cq->util_cq.cq_fid.ops = &cxip_cq_ops;
 	cxi_cq->domain = cxi_dom;
