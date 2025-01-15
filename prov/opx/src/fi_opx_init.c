@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -797,9 +797,11 @@ OPX_INI
 		OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT);
 #endif
 	fi_param_define(
-		&fi_opx_provider, "route_control", FI_PARAM_INT,
-		"Route control.  Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Default is %d on OPA100 and %d on CN5000.",
-		OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0);
+		&fi_opx_provider, "route_control", FI_PARAM_STRING,
+		"Specify the route control for each packet type. The format is <inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>. Each value can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Default is \"%d:%d:%d:%d:%d:%d\" on OPA100 and \"%d:%d:%d:%d:%d:%d\" on CN5000",
+		OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0,
+		OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0, OPX_RC_OUT_OF_ORDER_0, OPX_RC_OUT_OF_ORDER_0,
+		OPX_RC_OUT_OF_ORDER_0, OPX_RC_OUT_OF_ORDER_0, OPX_RC_OUT_OF_ORDER_0);
 	fi_param_define(
 		&fi_opx_provider, "mixed_network", FI_PARAM_INT,
 		"Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when mixed network is used. Default is 0.");

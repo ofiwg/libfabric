@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 by Cornelis Networks.
+ * Copyright (C) 2021-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -111,6 +111,17 @@ enum opx_hfi1_type {
 	OPX_HFI1_JKR_9B = 1, // CN5000 built for mixed network. Internal use
 	OPX_HFI1_WFR	= 2, // Omni-path (all generations)
 	OPX_HFI1_JKR	= 4  // CN5000 (initial generation)
+};
+
+/* Arbitrary packet "types" that can be differentiated as needed (route control) */
+enum opx_hfi1_packet_type {
+	OPX_HFI1_INJECT		  = 0, // Inject packets
+	OPX_HFI1_EAGER		  = 1, // Eager eager packets
+	OPX_HFI1_MP_EAGER	  = 2, // MP Eager eager packets
+	OPX_HFI1_DPUT		  = 3, // DPUT  packets
+	OPX_HFI1_RZV_CTRL	  = 4, // Rendezvous RTS/CTS control packets
+	OPX_HFI1_RZV_DATA	  = 5, // Rendezvoud data packets
+	OPX_HFI1_NUM_PACKET_TYPES = 6
 };
 
 /* Will remove after 16B SDMA support is finished */

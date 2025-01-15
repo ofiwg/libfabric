@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2024 by Cornelis Networks.
+ * Copyright (C) 2022-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -262,11 +262,11 @@ size_t opx_hfi1_dput_write_header_and_payload_rzv(struct fi_opx_ep *opx_ep, unio
 						  enum opx_hfi1_type hfi1_type)
 {
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		hdr->qw_9B[4] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[4] | (opcode) | (payload_bytes << 48);
+		hdr->qw_9B[4] = opx_ep->rx->tx.rzv_dput_9B.hdr.qw_9B[4] | (opcode) | (payload_bytes << 48);
 		hdr->qw_9B[5] = target_byte_counter_vaddr;
 		hdr->qw_9B[6] = fi_opx_dput_rbuf_out(*rbuf);
 	} else {
-		hdr->qw_16B[5] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[5] | (opcode) | (payload_bytes << 48);
+		hdr->qw_16B[5] = opx_ep->rx->tx.rzv_dput_16B.hdr.qw_16B[5] | (opcode) | (payload_bytes << 48);
 		hdr->qw_16B[6] = target_byte_counter_vaddr;
 		hdr->qw_16B[7] = fi_opx_dput_rbuf_out(*rbuf);
 	}
@@ -301,23 +301,42 @@ size_t opx_hfi1_dput_write_packet(struct fi_opx_ep *opx_ep, union opx_hfi1_packe
 	uint64_t psn = (uint64_t) htonl((uint32_t) psn_orig);
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		hdr->qw_9B[0] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32);
-		hdr->qw_9B[1] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[1] | bth_rx;
-		hdr->qw_9B[2] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[2] | psn;
-		hdr->qw_9B[3] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[3];
+		union opx_hfi1_packet_hdr *model_hdr;
+		if ((opcode == FI_OPX_HFI_DPUT_OPCODE_RZV) || (opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) ||
+		    (opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG)) {
+			/* RZV DPUT */
+			model_hdr = &(opx_ep->rx->tx.rzv_dput_9B.hdr);
+		} else {
+			/* Other DPUT messaging */
+			model_hdr = &(opx_ep->rx->tx.dput_9B.hdr);
+		}
+		hdr->qw_9B[0] = model_hdr->qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32);
+		hdr->qw_9B[1] = model_hdr->qw_9B[1] | bth_rx;
+		hdr->qw_9B[2] = model_hdr->qw_9B[2] | psn;
+		hdr->qw_9B[3] = model_hdr->qw_9B[3];
 	} else {
+		union opx_hfi1_packet_hdr *model_hdr;
+		if ((opcode == FI_OPX_HFI_DPUT_OPCODE_RZV) || (opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) ||
+		    (opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG)) {
+			/* RZV DPUT */
+			model_hdr = &(opx_ep->rx->tx.rzv_dput_16B.hdr);
+		} else {
+			/* Other DPUT messaging */
+			model_hdr = &(opx_ep->rx->tx.dput_16B.hdr);
+		}
 		hdr->qw_16B[0] =
-			opx_ep->rx->tx.dput_16B.hdr.qw_16B[0] |
+			model_hdr->qw_16B[0] |
 			((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 			((uint64_t) lrh_dws << 20);
-		hdr->qw_16B[1] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[1] |
+		hdr->qw_16B[1] = model_hdr->qw_16B[1] |
 				 ((uint64_t) ((lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
 					      OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
 				 (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
-		hdr->qw_16B[2] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[2] | bth_rx;
-		hdr->qw_16B[3] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[3] | psn;
-		hdr->qw_16B[4] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[4];
+		hdr->qw_16B[2] = model_hdr->qw_16B[2] | bth_rx;
+		hdr->qw_16B[3] = model_hdr->qw_16B[3] | psn;
+		hdr->qw_16B[4] = model_hdr->qw_16B[4];
 	}
+
 	switch (opcode) {
 	case FI_OPX_HFI_DPUT_OPCODE_RZV:
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_TID:

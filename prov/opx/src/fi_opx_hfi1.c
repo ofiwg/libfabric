@@ -3216,7 +3216,7 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work)
 	   that it can be OR'd into the correct position in the packet header */
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		assert(__cpu24_to_be16(params->slid) == (lrh_dlid >> 16));
-		assert(opx_ep->rx->tx.dput_9B.hdr.lrh_9B.slid != params->slid);
+		assert(opx_ep->rx->tx.rzv_dput_9B.hdr.lrh_9B.slid != params->slid);
 	} else {
 		assert(params->slid == lrh_dlid);
 	}
@@ -3387,11 +3387,11 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work)
 				assert(replay != NULL);
 
 				if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-					replay->scb.scb_16B.qw0 = opx_ep->rx->tx.dput_16B.qw0 |
+					replay->scb.scb_16B.qw0 = opx_ep->rx->tx.rzv_dput_16B.qw0 |
 								  OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) |
 								  params->pbc_dlid;
 				} else {
-					replay->scb.scb_9B.qw0 = opx_ep->rx->tx.dput_9B.qw0 |
+					replay->scb.scb_9B.qw0 = opx_ep->rx->tx.rzv_dput_9B.qw0 |
 								 OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) | params->pbc_dlid;
 				}
 
@@ -3489,7 +3489,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 	   that it can be OR'd into the correct position in the packet header */
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		assert(__cpu24_to_be16(params->slid) == (lrh_dlid >> 16));
-		assert(opx_ep->rx->tx.dput_9B.hdr.lrh_9B.slid != params->slid);
+		assert(opx_ep->rx->tx.rzv_dput_9B.hdr.lrh_9B.slid != params->slid);
 	} else {
 		assert(params->slid == lrh_dlid);
 	}
@@ -3802,11 +3802,11 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 				assert(replay != NULL);
 
 				if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-					replay->scb.scb_16B.qw0 = opx_ep->rx->tx.dput_16B.qw0 |
+					replay->scb.scb_16B.qw0 = opx_ep->rx->tx.rzv_dput_16B.qw0 |
 								  OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) |
 								  params->pbc_dlid;
 				} else {
-					replay->scb.scb_9B.qw0 = opx_ep->rx->tx.dput_9B.qw0 |
+					replay->scb.scb_9B.qw0 = opx_ep->rx->tx.rzv_dput_9B.qw0 |
 								 OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) | params->pbc_dlid;
 				}
 

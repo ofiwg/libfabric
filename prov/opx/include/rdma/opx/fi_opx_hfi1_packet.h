@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1082,6 +1082,10 @@ static inline size_t fi_opx_hfi1_packet_hdr_message_length(const union opx_hfi1_
 
 #ifndef NDEBUG
 
+#ifndef OPX_RC2_MASK
+#define OPX_RC2_MASK 0b100
+#endif
+
 #define OPX_JKR_PRINT_16B_PBC(a)    opx_jkr_print_16B_pbc((a), __func__)
 #define OPX_JKR_PRINT_16B_LRH(a, b) opx_jkr_print_16B_lrh((a), (b), __func__)
 #define OPX_JKR_PRINT_16B_BTH(a, b) opx_jkr_print_16B_bth((a), (b), __func__)
@@ -1123,8 +1127,8 @@ static inline void fi_opx_hfi1_dump_stl_packet_hdr(const union opx_hfi1_packet_h
 		     hdr->bth.bth_1);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s():%u .bth.pkey ..............     0x%04hx \n", fn, ln,
 		     hdr->bth.pkey);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s():%u .bth.ecn ...............       0x%02x \n", fn, ln,
-		     hdr->bth.ecn);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s():%u .bth.ecn ...............       0x%02x, RC2 %u \n", fn,
+		     ln, hdr->bth.ecn, (hdr->bth.ecn & OPX_RC2_MASK) >> 2);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s():%u .bth.qp ................       0x%02x \n", fn, ln,
 		     hdr->bth.qp);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s():%u .bth.unused ............       0x%02x \n", fn, ln,
@@ -1181,8 +1185,8 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 		     ln, hdr->bth.bth_1);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .bth.pkey   ..........     0x%04hx\n", pid, fn,
 		     ln, hdr->bth.pkey);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .bth.ecn    ..........     0x%02x \n", pid, fn,
-		     ln, hdr->bth.ecn);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .bth.ecn    ..........     0x%02x, RC2 %u \n",
+		     pid, fn, ln, hdr->bth.ecn, (hdr->bth.ecn & OPX_RC2_MASK) >> 2);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .bth.qp     ..........     0x%02x \n", pid, fn,
 		     ln, hdr->bth.qp);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .bth.unused ..........     0x%02x \n", pid, fn,

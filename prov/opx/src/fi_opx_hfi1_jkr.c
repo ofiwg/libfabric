@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 Cornelis Networks.
+ * Copyright (C) 2024-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -217,7 +217,8 @@ void opx_jkr_print_16B_bth(uint64_t bth1, uint64_t bth2, const char *func)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.opcode = %#x\n", func, hdr.bth.opcode);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.bth_1 = %#x\n", func, hdr.bth.bth_1);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.pkey = %#x\n", func, hdr.bth.pkey);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.ecn = %#x\n", func, hdr.bth.ecn);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.ecn = %#x, RC2 %d\n", func, hdr.bth.ecn,
+		     (hdr.bth.ecn & OPX_RC2_MASK) >> 2);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.qp = %#x\n", func, hdr.bth.qp);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.unused  = %#x\n", func, hdr.bth.unused);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.rx = %#x\n", func, hdr.bth.rx);

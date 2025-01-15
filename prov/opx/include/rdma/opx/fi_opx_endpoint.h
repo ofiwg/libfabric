@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -238,18 +238,24 @@ struct fi_opx_ep_tx {
 	struct fi_opx_hfi1_txe_scb_9B send_9B;
 
 	/* == CACHE LINE 5,6 == */
-	struct fi_opx_hfi1_txe_scb_9B rzv_9B;
+	struct fi_opx_hfi1_txe_scb_9B send_mp_9B;
 
 	/* == CACHE LINE 7,8 == */
-	struct fi_opx_hfi1_txe_scb_16B inject_16B;
+	struct fi_opx_hfi1_txe_scb_9B rzv_9B;
 
 	/* == CACHE LINE 9,10 == */
-	struct fi_opx_hfi1_txe_scb_16B send_16B;
+	struct fi_opx_hfi1_txe_scb_16B inject_16B;
 
 	/* == CACHE LINE 11,12 == */
+	struct fi_opx_hfi1_txe_scb_16B send_16B;
+
+	/* == CACHE LINE 13,14 == */
+	struct fi_opx_hfi1_txe_scb_16B send_mp_16B;
+
+	/* == CACHE LINE 15,16 == */
 	struct fi_opx_hfi1_txe_scb_16B rzv_16B;
 
-	/* == CACHE LINE 13 == */
+	/* == CACHE LINE 17 == */
 
 	union fi_opx_addr *av_addr;  /* only FI_ADDR_TABLE */
 	uint64_t	   av_count; /* only FI_ADDR_TABLE */
@@ -260,11 +266,11 @@ struct fi_opx_ep_tx {
 	struct fi_opx_cq  *cq;
 	struct slist	  *cq_pending_ptr; /* only rendezvous (typically) */
 
-	/* == CACHE LINE 14 == */
+	/* == CACHE LINE 18 == */
 
 	struct slist work_pending[OPX_WORK_TYPE_LAST];
 
-	/* == CACHE LINE 15 == */
+	/* == CACHE LINE 19 == */
 
 	struct slist	    work_pending_completion;
 	struct ofi_bufpool *work_pending_pool;
@@ -277,13 +283,13 @@ struct fi_opx_ep_tx {
 	uint16_t	    mp_eager_max_payload_bytes;
 	uint16_t	    unused_cacheline6;
 
-	/* == CACHE LINE 16 == */
+	/* == CACHE LINE 20 == */
 	struct opx_sdma_queue sdma_request_queue;
 	struct slist	      sdma_pending_queue;
 	struct ofi_bufpool   *sdma_request_pool;
 	uint64_t	      unused_cacheline7[2];
 
-	/* == CACHE LINE 17, ... == */
+	/* == CACHE LINE 21, ... == */
 	int64_t		   ref_cnt;
 	struct fi_opx_stx *stx;
 	// struct opx_shm_tx is very large and should go last!
@@ -295,24 +301,28 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, inject_9B) == (FI_OPX_CACH
 			"Offset of fi_opx_ep_tx->inject_9B should start at cacheline 1!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_9B) == (FI_OPX_CACHE_LINE_SIZE * 3),
 			"Offset of fi_opx_ep_tx->send_9B should start at cacheline 3!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv_9B) == (FI_OPX_CACHE_LINE_SIZE * 5),
-			"Offset of fi_opx_ep_tx->rzv_9B should start at cacheline 5!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, inject_16B) == (FI_OPX_CACHE_LINE_SIZE * 7),
-			"Offset of fi_opx_ep_tx->inject_16B should start at cacheline 7!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_16B) == (FI_OPX_CACHE_LINE_SIZE * 9),
-			"Offset of fi_opx_ep_tx->send_16B should start at cacheline 9!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv_16B) == (FI_OPX_CACHE_LINE_SIZE * 11),
-			"Offset of fi_opx_ep_tx->rzv_16B should start at cacheline 11!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, av_addr) == (FI_OPX_CACHE_LINE_SIZE * 13),
-			"Offset of fi_opx_ep_tx->av_addr should start at cacheline 13!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_CACHE_LINE_SIZE * 14),
-			"Offset of fi_opx_ep_tx->work_pending should start at cacheline 14!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) == (FI_OPX_CACHE_LINE_SIZE * 15),
-			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 15!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, sdma_request_queue) == (FI_OPX_CACHE_LINE_SIZE * 16),
-			"Offset of fi_opx_ep_tx->sdma_request_queue should start at cacheline 16!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, ref_cnt) == (FI_OPX_CACHE_LINE_SIZE * 17),
-			"Offset of fi_opx_ep_tx->ref_cnt should start at cacheline 17!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_mp_9B) == (FI_OPX_CACHE_LINE_SIZE * 5),
+			"Offset of fi_opx_ep_tx->send_mp_9B should start at cacheline 5!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv_9B) == (FI_OPX_CACHE_LINE_SIZE * 7),
+			"Offset of fi_opx_ep_tx->rzv_9B should start at cacheline 7!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, inject_16B) == (FI_OPX_CACHE_LINE_SIZE * 9),
+			"Offset of fi_opx_ep_tx->inject_16B should start at cacheline 9!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_16B) == (FI_OPX_CACHE_LINE_SIZE * 11),
+			"Offset of fi_opx_ep_tx->send_16B should start at cacheline 11!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_mp_16B) == (FI_OPX_CACHE_LINE_SIZE * 13),
+			"Offset of fi_opx_ep_tx->send_mp_16B should start at cacheline 13!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv_16B) == (FI_OPX_CACHE_LINE_SIZE * 15),
+			"Offset of fi_opx_ep_tx->rzv_16B should start at cacheline 15!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, av_addr) == (FI_OPX_CACHE_LINE_SIZE * 17),
+			"Offset of fi_opx_ep_tx->av_addr should start at cacheline 17!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_CACHE_LINE_SIZE * 18),
+			"Offset of fi_opx_ep_tx->work_pending should start at cacheline 18!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) == (FI_OPX_CACHE_LINE_SIZE * 19),
+			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 19!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, sdma_request_queue) == (FI_OPX_CACHE_LINE_SIZE * 20),
+			"Offset of fi_opx_ep_tx->sdma_request_queue should start at cacheline 20!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, ref_cnt) == (FI_OPX_CACHE_LINE_SIZE * 21),
+			"Offset of fi_opx_ep_tx->ref_cnt should start at cacheline 21!");
 
 struct fi_opx_ep_rx {
 	/* == CACHE LINE 0 == */
@@ -385,9 +395,11 @@ struct fi_opx_ep_rx {
 	 */
 	struct {
 		struct fi_opx_hfi1_txe_scb_9B  dput_9B;
+		struct fi_opx_hfi1_txe_scb_9B  rzv_dput_9B;
 		struct fi_opx_hfi1_txe_scb_9B  cts_9B;
 		struct fi_opx_hfi1_txe_scb_9B  rma_rts_9B;
 		struct fi_opx_hfi1_txe_scb_16B dput_16B;
+		struct fi_opx_hfi1_txe_scb_16B rzv_dput_16B;
 		struct fi_opx_hfi1_txe_scb_16B cts_16B;
 		struct fi_opx_hfi1_txe_scb_16B rma_rts_16B;
 	} tx;
