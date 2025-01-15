@@ -36,7 +36,10 @@ static void efa_cq_construct_cq_entry(struct ibv_cq_ex *ibv_cqx,
 				      struct fi_cq_tagged_entry *entry)
 {
 	entry->op_context = (void *)ibv_cqx->wr_id;
-	entry->flags = efa_cq_opcode_to_fi_flags(ibv_wc_read_opcode(ibv_cqx));
+	if (ibv_cqx->wr_id)
+		entry->flags = ((struct efa_context *) ibv_cqx->wr_id)->completion_flags;
+	else
+		entry->flags = efa_cq_opcode_to_fi_flags(ibv_wc_read_opcode(ibv_cqx));
 	entry->len = ibv_wc_read_byte_len(ibv_cqx);
 	entry->buf = NULL;
 	entry->data = 0;
@@ -81,8 +84,7 @@ static void efa_cq_handle_error(struct efa_base_ep *base_ep,
 	err_entry.prov_errno = prov_errno;
 
 	if (is_tx)
-		// TODO: get correct peer addr for TX operation
-		addr = FI_ADDR_NOTAVAIL;
+		addr = ibv_cq_ex->wr_id ? ((struct efa_context *)ibv_cq_ex->wr_id)->addr : FI_ADDR_NOTAVAIL;
 	else
 		addr = efa_av_reverse_lookup(base_ep->av,
 					     ibv_wc_read_slid(ibv_cq_ex),

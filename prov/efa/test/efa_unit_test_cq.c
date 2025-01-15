@@ -813,7 +813,8 @@ void test_ibv_cq_ex_read_ignore_removed_peer()
 #endif
 
 static void test_efa_cq_read(struct efa_resource *resource, fi_addr_t *addr,
-			     int ibv_wc_opcode, int status, int vendor_error)
+			     int ibv_wc_opcode, int status, int vendor_error,
+			     struct efa_context *ctx)
 {
 	int ret;
 	size_t raw_addr_len = sizeof(struct efa_ep_addr);
@@ -847,7 +848,7 @@ static void test_efa_cq_read(struct efa_resource *resource, fi_addr_t *addr,
 	if (ibv_wc_opcode == IBV_WC_RECV) {
 		ibv_cqx = container_of(base_ep->util_ep.rx_cq, struct efa_cq, util_cq)->ibv_cq.ibv_cq_ex;
 		ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
-		ibv_cqx->wr_id = (uintptr_t)12345;
+		ctx->completion_flags = FI_RECV | FI_MSG;
 		will_return(efa_mock_ibv_start_poll_return_mock, 0);
 		ibv_cqx->status = status;
 	} else {
@@ -855,8 +856,11 @@ static void test_efa_cq_read(struct efa_resource *resource, fi_addr_t *addr,
 		/* this mock will set ibv_cq_ex->wr_id to the wr_id of the head of global send_wr,
 		* and set ibv_cq_ex->status to mock value */
 		ibv_cqx->start_poll = &efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status;
+		ctx->completion_flags = FI_SEND | FI_MSG;
 		will_return(efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status, status);
 	}
+	ctx->addr = *addr;
+	ibv_cqx->wr_id = (uintptr_t) ctx;
 
 	ibv_cqx->next_poll = &efa_mock_ibv_next_poll_return_mock;
 	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
@@ -894,18 +898,28 @@ void test_efa_cq_read_send_success(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
+	struct efa_base_ep *base_ep;
+	struct efa_context *efa_context;
+	struct fi_context2 ctx;
 	struct fi_cq_data_entry cq_entry;
 	fi_addr_t addr;
 	int ret;
 
-	test_efa_cq_read(resource, &addr, IBV_WC_SEND, IBV_WC_SUCCESS, 0);
+	test_efa_cq_read(resource, &addr, IBV_WC_SEND, IBV_WC_SUCCESS, 0,
+			 (struct efa_context *) &ctx);
 	efa_unit_test_buff_construct(&send_buff, resource, 4096 /* buff_size */);
 
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	ret = fi_send(resource->ep, send_buff.buff, send_buff.size,
-		      fi_mr_desc(send_buff.mr), addr, (void *) 12345);
+		      fi_mr_desc(send_buff.mr), addr, &ctx);
 	assert_int_equal(ret, 0);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	efa_context = (struct efa_context *) base_ep->qp->ibv_qp_ex->wr_id;
+	assert_true(efa_context->completion_flags & FI_SEND);
+	assert_true(efa_context->completion_flags & FI_MSG);
+	assert_true(efa_context->addr == addr);
 
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 	/* fi_cq_read() called efa_mock_ibv_start_poll_use_saved_send_wr(), which pulled one send_wr from g_ibv_submitted_wr_idv=_vec */
@@ -923,16 +937,26 @@ void test_efa_cq_read_recv_success(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff recv_buff;
+	struct efa_base_ep *base_ep;
+	struct efa_context *efa_context;
 	struct fi_cq_data_entry cq_entry;
+	struct fi_context2 ctx;
 	fi_addr_t addr;
 	int ret;
 
-	test_efa_cq_read(resource, &addr, IBV_WC_RECV, IBV_WC_SUCCESS, 0);
+	test_efa_cq_read(resource, &addr, IBV_WC_RECV, IBV_WC_SUCCESS, 0,
+			 (struct efa_context *) &ctx);
 	efa_unit_test_buff_construct(&recv_buff, resource, 4096 /* buff_size */);
 
 	ret = fi_recv(resource->ep, recv_buff.buff, recv_buff.size,
-		      fi_mr_desc(recv_buff.mr), addr, NULL);
+		      fi_mr_desc(recv_buff.mr), addr, &ctx);
 	assert_int_equal(ret, 0);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	efa_context = (struct efa_context *) base_ep->efa_recv_wr_vec[base_ep->recv_wr_index].wr.wr_id;
+	assert_true(efa_context->completion_flags & FI_RECV);
+	assert_true(efa_context->completion_flags & FI_MSG);
+	assert_true(efa_context->addr == addr);
 
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 	assert_int_equal(ret, 1);
@@ -973,19 +997,28 @@ void test_efa_cq_read_send_failure(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
+	struct efa_base_ep *base_ep;
+	struct efa_context *efa_context;
 	struct fi_cq_data_entry cq_entry;
+	struct fi_context2 ctx;
 	fi_addr_t addr;
 	int ret;
 
 	test_efa_cq_read(resource, &addr, IBV_WC_SEND, IBV_WC_GENERAL_ERR,
-			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, (struct efa_context *) &ctx);
 	efa_unit_test_buff_construct(&send_buff, resource, 4096 /* buff_size */);
 
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	ret = fi_send(resource->ep, send_buff.buff, send_buff.size,
-		      fi_mr_desc(send_buff.mr), addr, (void *) 12345);
+		      fi_mr_desc(send_buff.mr), addr, &ctx);
 	assert_int_equal(ret, 0);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	efa_context = (struct efa_context *) base_ep->qp->ibv_qp_ex->wr_id;
+	assert_true(efa_context->completion_flags & FI_SEND);
+	assert_true(efa_context->completion_flags & FI_MSG);
+	assert_true(efa_context->addr == addr);
 
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 	/* fi_cq_read() called efa_mock_ibv_start_poll_use_saved_send_wr(), which pulled one send_wr from g_ibv_submitted_wr_idv=_vec */
@@ -1010,17 +1043,26 @@ void test_efa_cq_read_recv_failure(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff recv_buff;
+	struct efa_base_ep *base_ep;
+	struct efa_context *efa_context;
 	struct fi_cq_data_entry cq_entry;
+	struct fi_context2 ctx;
 	fi_addr_t addr;
 	int ret;
 
 	test_efa_cq_read(resource, &addr, IBV_WC_RECV, IBV_WC_GENERAL_ERR,
-			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, (struct efa_context *) &ctx);
 	efa_unit_test_buff_construct(&recv_buff, resource, 4096 /* buff_size */);
 
 	ret = fi_recv(resource->ep, recv_buff.buff, recv_buff.size,
-		      fi_mr_desc(recv_buff.mr), addr, NULL);
+		      fi_mr_desc(recv_buff.mr), addr, &ctx);
 	assert_int_equal(ret, 0);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	efa_context = (struct efa_context *) base_ep->efa_recv_wr_vec[base_ep->recv_wr_index].wr.wr_id;
+	assert_true(efa_context->completion_flags & FI_RECV);
+	assert_true(efa_context->completion_flags & FI_MSG);
+	assert_true(efa_context->addr == addr);
 
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 	assert_int_equal(ret, -FI_EAVAIL);
