@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -472,7 +472,9 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode(struct fid_ep *ep, const uin
 		OPX_HFI1_BAR_STORE(&scb[5], model_16B.hdr.qw_16B[4]);
 		OPX_HFI1_BAR_STORE(&scb[6], 0UL);
 		OPX_HFI1_BAR_STORE(&scb[7], 0UL);
-		FI_OPX_HFI1_CONSUME_CREDITS(pio_state, 1);
+
+		/* consume one credit for the packet header first cacheline */
+		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 
 		volatile uint64_t *const scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
@@ -485,7 +487,9 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode(struct fid_ep *ep, const uin
 		OPX_HFI1_BAR_STORE(&scb_payload[5], OPX_JKR_16B_PAD_QWORD);
 		OPX_HFI1_BAR_STORE(&scb_payload[6], OPX_JKR_16B_PAD_QWORD);
 		OPX_HFI1_BAR_STORE(&scb_payload[7], OPX_JKR_16B_PAD_QWORD);
-		FI_OPX_HFI1_CONSUME_CREDITS(pio_state, 1);
+
+		/* consume one credit for the packet header second (padded) cacheline */
+		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 	}
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
@@ -2341,85 +2345,85 @@ void * pthread_start_routine (void * arg) {
 void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service *service, struct fi_opx_hfi1_context *hfi1)
 {
 	/* Ping model */
-	{
-		/* PBC */
-		const uint64_t pbc_dws = 2 + /* pbc */
-					 4 + /* lrh uncompressed */
-					 3 + /* bth */
-					 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-					 2;  /* ICRC/tail */
+	/* PBC */
+	const uint64_t pbc_dws = 2 + /* pbc */
+				 4 + /* lrh uncompressed */
+				 3 + /* bth */
+				 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+				 2;  /* ICRC/tail */
 
-		/* Setup the 16B models whether or not they'll be used */
-		enum opx_hfi1_type __attribute__((unused)) hfi1_type = OPX_HFI1_JKR;
+	/* Setup the 16B models whether or not they'll be used */
+	enum opx_hfi1_type __attribute__((unused)) hfi1_type = OPX_HFI1_JKR;
 
-		service->tx.hfi1.ping_model_16B.qw0 =
-			OPX_PBC_LEN(pbc_dws, hfi1_type) | OPX_PBC_VL(hfi1->vl, hfi1_type) |
-			OPX_PBC_SC(hfi1->sc, hfi1_type) | OPX_PBC_L2TYPE(OPX_PBC_JKR_L2TYPE_16B, hfi1_type) |
-			OPX_PBC_L2COMPRESSED(0, hfi1_type) | OPX_PBC_PORTIDX(hfi1->hfi_port, hfi1_type) |
-			OPX_PBC_SCTXT(hfi1->send_ctxt, hfi1_type) | OPX_PBC_JKR_INSERT_NON9B_ICRC;
+	service->tx.hfi1.ping_model_16B.qw0 =
+		OPX_PBC_LEN(pbc_dws, hfi1_type) | OPX_PBC_VL(hfi1->vl, hfi1_type) | OPX_PBC_SC(hfi1->sc, hfi1_type) |
+		OPX_PBC_L2TYPE(OPX_PBC_JKR_L2TYPE_16B, hfi1_type) | OPX_PBC_L2COMPRESSED(0, hfi1_type) |
+		OPX_PBC_PORTIDX(hfi1->hfi_port, hfi1_type) | OPX_PBC_SCTXT(hfi1->send_ctxt, hfi1_type) |
+		OPX_PBC_JKR_INSERT_NON9B_ICRC;
 
-		/* LRH */
-		/* (LRH QW) does not include pbc (8 bytes) */
-		const uint32_t packetLength = (pbc_dws - 2) * 4;
-		const uint32_t lrh_qws	    = (packetLength >> 3) + ((packetLength & 0x07u) != 0);
+	/* LRH */
+	/* (LRH QW) does not include pbc (8 bytes) */
+	const uint32_t packetLength = (pbc_dws - 2) * 4;
+	const uint32_t lrh_qws	    = (packetLength >> 3) + ((packetLength & 0x07u) != 0);
 
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.qw[0]   = 0UL;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.qw[1]   = 0UL;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.pktlen  = lrh_qws;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.sc	    = hfi1->sc;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.entropy = hfi1->ctrl->ctxt_info.send_ctxt;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.lt	    = 0; // need to add env variable to change
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.l2	    = OPX_PBC_JKR_L2TYPE_16B;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.l4	    = 9;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.rc	    = OPX_LRH_JKR_16B_RC2;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.cspec   = OPX_BTH_CSPEC_DEFAULT; /*NOT BTH CSPEC*/
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.pkey    = hfi1->pkey;
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.qw[0]   = 0UL;
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.qw[1]   = 0UL;
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.pktlen  = lrh_qws;
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.sc	    = hfi1->sc;
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.entropy = hfi1->ctrl->ctxt_info.send_ctxt;
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.lt	    = 0; // need to add env variable to change
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.l2	    = OPX_PBC_JKR_L2TYPE_16B;
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.l4	    = 9;
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.rc	    = OPX_LRH_JKR_16B_RC(OPX_HFI1_INJECT);
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.cspec   = OPX_BTH_CSPEC_DEFAULT; /*NOT BTH CSPEC*/
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.pkey    = hfi1->pkey;
 
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.slid   = hfi1->lid & 0xFFFFF;
-		service->tx.hfi1.ping_model_16B.hdr.lrh_16B.slid20 = (hfi1->lid) >> 20;
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.slid   = hfi1->lid & 0xFFFFF;
+	service->tx.hfi1.ping_model_16B.hdr.lrh_16B.slid20 = (hfi1->lid) >> 20;
 
-		/* BTH */
-		service->tx.hfi1.ping_model_16B.hdr.bth.opcode = FI_OPX_HFI_BTH_OPCODE_UD;
-		service->tx.hfi1.ping_model_16B.hdr.bth.bth_1  = 0;
-		service->tx.hfi1.ping_model_16B.hdr.bth.pkey   = hfi1->pkey;
-		service->tx.hfi1.ping_model_16B.hdr.bth.ecn =
-			(uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type)) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
-		service->tx.hfi1.ping_model_16B.hdr.bth.qp     = hfi1->bthqp;
-		service->tx.hfi1.ping_model_16B.hdr.bth.unused = 0;
-		service->tx.hfi1.ping_model_16B.hdr.bth.rx     = 0; /* set at runtime */
-		service->tx.hfi1.ping_model_16B.hdr.bth.psn    = 0;
+	/* BTH */
+	service->tx.hfi1.ping_model_16B.hdr.bth.opcode = FI_OPX_HFI_BTH_OPCODE_UD;
+	service->tx.hfi1.ping_model_16B.hdr.bth.bth_1  = 0;
+	service->tx.hfi1.ping_model_16B.hdr.bth.pkey   = hfi1->pkey;
+	service->tx.hfi1.ping_model_16B.hdr.bth.ecn    = (uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_INJECT)) |
+								    OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
+	service->tx.hfi1.ping_model_16B.hdr.bth.qp     = hfi1->bthqp;
+	service->tx.hfi1.ping_model_16B.hdr.bth.unused = 0;
+	service->tx.hfi1.ping_model_16B.hdr.bth.rx     = 0; /* set at runtime */
+	service->tx.hfi1.ping_model_16B.hdr.bth.psn    = 0;
 
-		/* KDETH */
-		service->tx.hfi1.ping_model_16B.hdr.kdeth.offset_ver_tid = FI_OPX_HFI1_KDETH_VERSION
-									   << FI_OPX_HFI1_KDETH_VERSION_SHIFT;
-		service->tx.hfi1.ping_model_16B.hdr.kdeth.jkey	 = hfi1->jkey;
-		service->tx.hfi1.ping_model_16B.hdr.kdeth.hcrc	 = 0;
-		service->tx.hfi1.ping_model_16B.hdr.kdeth.unused = 0;
+	/* KDETH */
+	service->tx.hfi1.ping_model_16B.hdr.kdeth.offset_ver_tid = FI_OPX_HFI1_KDETH_VERSION
+								   << FI_OPX_HFI1_KDETH_VERSION_SHIFT;
+	service->tx.hfi1.ping_model_16B.hdr.kdeth.jkey	 = hfi1->jkey;
+	service->tx.hfi1.ping_model_16B.hdr.kdeth.hcrc	 = 0;
+	service->tx.hfi1.ping_model_16B.hdr.kdeth.unused = 0;
 
-		/* reliability service */
-		union opx_hfi1_packet_hdr *hdr = &service->tx.hfi1.ping_model_16B.hdr;
+	/* reliability service */
+	union opx_hfi1_packet_hdr *hdr = &service->tx.hfi1.ping_model_16B.hdr;
 
-		hdr->ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING;
+	hdr->ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING;
 
-		hdr->service.origin_reliability_rx = hfi1->info.rxe.id;
-		hdr->service.range_count	   = 0;
-		hdr->service.unused		   = 0;
-		hdr->service.psn_count		   = 0;
-		hdr->service.psn_start		   = 0;
-		hdr->service.key		   = 0;
-	}
+	hdr->service.origin_reliability_rx = hfi1->info.rxe.id;
+	hdr->service.range_count	   = 0;
+	hdr->service.unused		   = 0;
+	hdr->service.psn_count		   = 0;
+	hdr->service.psn_start		   = 0;
+	hdr->service.key		   = 0;
+
+	OPX_DEBUG_PRINT_HDR((hdr), hfi1_type);
 
 	/* 'ack' pio send model */
-	{
-		service->tx.hfi1.ack_model_16B		     = service->tx.hfi1.ping_model_16B;
-		service->tx.hfi1.ack_model_16B.hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK;
-	}
+	service->tx.hfi1.ack_model_16B		     = service->tx.hfi1.ping_model_16B;
+	service->tx.hfi1.ack_model_16B.hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK;
+
+	OPX_DEBUG_PRINT_HDR((&(service->tx.hfi1.ack_model_16B.hdr)), hfi1_type);
 
 	/* 'nack' pio send model */
-	{
-		service->tx.hfi1.nack_model_16B		      = service->tx.hfi1.ping_model_16B;
-		service->tx.hfi1.nack_model_16B.hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK;
-	}
+	service->tx.hfi1.nack_model_16B		      = service->tx.hfi1.ping_model_16B;
+	service->tx.hfi1.nack_model_16B.hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK;
+
+	OPX_DEBUG_PRINT_HDR((&(service->tx.hfi1.nack_model_16B.hdr)), hfi1_type);
 }
 
 uint8_t fi_opx_reliability_service_init(struct fi_opx_reliability_service *service, uuid_t unique_job_key,
@@ -2496,7 +2500,8 @@ uint8_t fi_opx_reliability_service_init(struct fi_opx_reliability_service *servi
 		service->tx.hfi1.ping_model_9B.hdr.bth.bth_1  = 0;
 		service->tx.hfi1.ping_model_9B.hdr.bth.pkey   = htons(hfi1->pkey);
 		service->tx.hfi1.ping_model_9B.hdr.bth.ecn =
-			(uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type)) | OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
+			(uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_INJECT)) |
+				   OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
 		service->tx.hfi1.ping_model_9B.hdr.bth.qp     = hfi1->bthqp;
 		service->tx.hfi1.ping_model_9B.hdr.bth.unused = 0;
 		service->tx.hfi1.ping_model_9B.hdr.bth.rx     = 0; /* set at runtime */
@@ -2519,18 +2524,20 @@ uint8_t fi_opx_reliability_service_init(struct fi_opx_reliability_service *servi
 		hdr->service.psn_count		   = 0;
 		hdr->service.psn_start		   = 0;
 		hdr->service.key		   = 0;
-	}
 
-	/* 'ack' pio send model */
-	{
+		OPX_DEBUG_PRINT_HDR((hdr), hfi1_type);
+
+		/* 'ack' pio send model */
 		service->tx.hfi1.ack_model_9B		    = service->tx.hfi1.ping_model_9B;
 		service->tx.hfi1.ack_model_9B.hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK;
-	}
 
-	/* 'nack' pio send model */
-	{
+		OPX_DEBUG_PRINT_HDR((&(service->tx.hfi1.ack_model_9B.hdr)), hfi1_type);
+
+		/* 'nack' pio send model */
 		service->tx.hfi1.nack_model_9B		     = service->tx.hfi1.ping_model_9B;
 		service->tx.hfi1.nack_model_9B.hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK;
+
+		OPX_DEBUG_PRINT_HDR((&(service->tx.hfi1.nack_model_9B.hdr)), hfi1_type);
 	}
 
 	fi_opx_timer_init(&service->tx.timer);

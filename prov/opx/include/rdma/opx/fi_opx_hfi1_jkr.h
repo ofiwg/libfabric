@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 Cornelis Networks.
+ * Copyright (C) 2024-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -169,29 +169,67 @@ uint32_t opx_pbc_jkr_l2type(unsigned _type)
 #define OPX_RC1_SHIFT 1
 #define OPX_RC0_SHIFT 0
 
-/* RC[2] (3 bit) route control value */
-static inline int opx_route_control_value(const enum opx_hfi1_type hfi1_type)
+/* RC (3 bits) route control value for different packet types */
+#define OPX_ROUTE_CONTROL_VALUE(_hfi1_type, _pkt_type) \
+	opx_route_control_value(_hfi1_type, _pkt_type, __func__, __LINE__)
+
+static inline int opx_route_control_value(const enum opx_hfi1_type hfi1_type, enum opx_hfi1_packet_type pkt_type,
+					  const char *func, const int line)
 {
-	static int route_control = -1;
+	static int  opx_route_control[OPX_HFI1_NUM_PACKET_TYPES]   = {-1, -1, -1, -1, -1, -1};
+	const char *opx_hfi1_packet_str[OPX_HFI1_NUM_PACKET_TYPES] = {// debug strings only
+								      "OPX_HFI1_INJECT",   "OPX_HFI1_EAGER",
+								      "OPX_HFI1_MP_EAGER", "OPX_HFI1_DPUT",
+								      "OPX_HFI1_RZV_CTRL", "OPX_HFI1_RZV_DATA"};
+
+	assert(pkt_type < OPX_HFI1_NUM_PACKET_TYPES);
+	const int default_route_control =
+		((hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ? OPX_RC_OUT_OF_ORDER_0 : OPX_RC_IN_ORDER_0);
 	/* Only called when initializing the models so not performance sensitive  */
-	if (route_control == -1) { /* one time static check of env var */
-		if (fi_param_get_int(fi_opx_global.prov, "route_control", &route_control) == FI_SUCCESS) {
-			if ((route_control >= OPX_RC_IN_ORDER_0) && (route_control <= OPX_RC_OUT_OF_ORDER_3)) {
-				FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Route control set to %d.\n",
-					 route_control);
-				return route_control;
-			} else {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"Invalid route control %d. Values can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Using default %d.\n",
-					route_control,
-					((hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ? OPX_RC_OUT_OF_ORDER_0 :
-											  OPX_RC_IN_ORDER_0));
+	if (opx_route_control[0] == -1) { /* almost (per .c) one time static check */
+		char *env_route_control;
+		// <inject packet type value>:<eager packet type value>:<rendezvous control packet value>:<rendezvous
+		// data packet value>
+		if (fi_param_get_str(fi_opx_global.prov, "route_control", &env_route_control) == FI_SUCCESS) {
+			char *env_string	       = NULL;
+			char *next_route_control_value = strtok_r(env_route_control, ":", &env_string);
+
+			for (int i = 0; i < OPX_HFI1_NUM_PACKET_TYPES; ++i) {
+				if (next_route_control_value) {
+					int route_control_value = atoi(next_route_control_value);
+					if ((route_control_value >= OPX_RC_IN_ORDER_0) &&
+					    (route_control_value <= OPX_RC_OUT_OF_ORDER_3)) {
+						opx_route_control[i] = route_control_value;
+						FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+							 "%s route control set to %d.\n", opx_hfi1_packet_str[i],
+							 opx_route_control[i]);
+
+					} else {
+						opx_route_control[i] = default_route_control;
+						FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+							"%s route control %d not allowed, defaulting to %d.\n",
+							opx_hfi1_packet_str[i], route_control_value,
+							opx_route_control[i]);
+					}
+				} else {
+					opx_route_control[i] = default_route_control;
+					FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+						 "%s route control defaulting to %d.\n", opx_hfi1_packet_str[i],
+						 opx_route_control[i]);
+				}
+				next_route_control_value = strtok_r(NULL, ":", &env_string);
 			}
+		} else {
+			for (int i = 0; i < OPX_HFI1_NUM_PACKET_TYPES; ++i) {
+				opx_route_control[i] = default_route_control;
+			}
+			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				 "All packet types using default route control value %d.\n", default_route_control);
 		}
-		route_control =
-			((hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ? OPX_RC_OUT_OF_ORDER_0 : OPX_RC_IN_ORDER_0);
 	}
-	return route_control;
+	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[%s:%d] Return %s route control %d.\n", func, line,
+		 opx_hfi1_packet_str[pkt_type], opx_route_control[pkt_type]);
+	return opx_route_control[pkt_type];
 }
 
 /* The bit shifts here are for the half word indicating the ECN field */
@@ -219,7 +257,8 @@ static inline int opx_route_control_value(const enum opx_hfi1_type hfi1_type)
 /* shift 8 bit bth.rx directly into lrh entropy top bits */
 #define OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B (OPX_BTH_RX_SHIFT - OPX_LRH_JKR_ENTROPY_SHIFT_16B)
 
-#define OPX_LRH_JKR_16B_RC2 opx_route_control_value(OPX_HFI1_JKR)
+/* Full RC (3 bits) is in the 16B header */
+#define OPX_LRH_JKR_16B_RC(_pkt_type) OPX_ROUTE_CONTROL_VALUE(OPX_HFI1_JKR, _pkt_type)
 
 /* RHF */
 /* JKR

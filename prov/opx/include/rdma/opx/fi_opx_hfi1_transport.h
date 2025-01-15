@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -2785,33 +2785,33 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		fi_opx_store_and_copy_qw(
 			scb, local_storage,
-			opx_ep->tx->send_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+			opx_ep->tx->send_mp_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) | pbc_dlid,
-			opx_ep->tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
-			opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | FI_OPX_MP_EGR_XFER_BYTES_TAIL |
+			opx_ep->tx->send_mp_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
+			opx_ep->tx->send_mp_9B.hdr.qw_9B[1] | bth_rx | FI_OPX_MP_EGR_XFER_BYTES_TAIL |
 				((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 							    (uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ :
 							    (uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST) :
 						   ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 							    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ :
 							    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST)),
-			opx_ep->tx->send_9B.hdr.qw_9B[2] | (payload_bytes_total << 32) | psn,
-			opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32), *((uint64_t *) buf),
+			opx_ep->tx->send_mp_9B.hdr.qw_9B[2] | (payload_bytes_total << 32) | psn,
+			opx_ep->tx->send_mp_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32), *((uint64_t *) buf),
 			*((uint64_t *) buf + 1), tag);
 	} else {
 		fi_opx_store_and_copy_qw(
 			scb, local_storage,
-			opx_ep->tx->send_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+			opx_ep->tx->send_mp_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) | pbc_dlid,
-			opx_ep->tx->send_16B.hdr.qw_16B[0] |
+			opx_ep->tx->send_mp_16B.hdr.qw_16B[0] |
 				((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 				 << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 				((uint64_t) lrh_dws << 20),
-			opx_ep->tx->send_16B.hdr.qw_16B[1] |
+			opx_ep->tx->send_mp_16B.hdr.qw_16B[1] |
 				((uint64_t) ((lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
 					     OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
 				(uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
-			opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | FI_OPX_MP_EGR_XFER_BYTES_TAIL |
+			opx_ep->tx->send_mp_16B.hdr.qw_16B[2] | bth_rx | FI_OPX_MP_EGR_XFER_BYTES_TAIL |
 				((caps & FI_MSG) ? /* compile-time constant expression */
 					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ :
@@ -2819,8 +2819,8 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(
 					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ :
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST)),
-			opx_ep->tx->send_16B.hdr.qw_16B[3] | psn | (payload_bytes_total << 32),
-			opx_ep->tx->send_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32), *((uint64_t *) buf),
+			opx_ep->tx->send_mp_16B.hdr.qw_16B[3] | psn | (payload_bytes_total << 32),
+			opx_ep->tx->send_mp_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32), *((uint64_t *) buf),
 			*((uint64_t *) buf + 1));
 	}
 
@@ -2881,30 +2881,31 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(struct fi_opx_ep *opx_ep, 
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		fi_opx_store_and_copy_qw(scb, local_storage,
-					 opx_ep->tx->send_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+					 opx_ep->tx->send_mp_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						 OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) | pbc_dlid,
-					 opx_ep->tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
-					 opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
+					 opx_ep->tx->send_mp_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
+					 opx_ep->tx->send_mp_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
 						 (uint64_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
-					 opx_ep->tx->send_9B.hdr.qw_9B[2] | psn, opx_ep->tx->send_9B.hdr.qw_9B[3],
+					 opx_ep->tx->send_mp_9B.hdr.qw_9B[2] | psn, opx_ep->tx->send_mp_9B.hdr.qw_9B[3],
 					 *((uint64_t *) buf), *((uint64_t *) buf + 1),
 					 (((uint64_t) mp_egr_uid) << 32) | payload_offset);
 	} else {
 		fi_opx_store_and_copy_qw(scb, local_storage,
-					 opx_ep->tx->send_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+					 opx_ep->tx->send_mp_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						 OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) | pbc_dlid,
-					 opx_ep->tx->send_16B.hdr.qw_16B[0] |
+					 opx_ep->tx->send_mp_16B.hdr.qw_16B[0] |
 						 ((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 						  << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 						 ((uint64_t) lrh_dws << 20),
-					 opx_ep->tx->send_16B.hdr.qw_16B[1] |
+					 opx_ep->tx->send_mp_16B.hdr.qw_16B[1] |
 						 ((uint64_t) ((lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
 							      OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
 						 (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
-					 opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
+					 opx_ep->tx->send_mp_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
 						 (uint64_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
-					 opx_ep->tx->send_16B.hdr.qw_16B[3] | psn, opx_ep->tx->send_16B.hdr.qw_16B[4],
-					 *((uint64_t *) buf), *((uint64_t *) buf + 1));
+					 opx_ep->tx->send_mp_16B.hdr.qw_16B[3] | psn,
+					 opx_ep->tx->send_mp_16B.hdr.qw_16B[4], *((uint64_t *) buf),
+					 *((uint64_t *) buf + 1));
 	}
 
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(*pio_state);
@@ -2929,13 +2930,13 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		fi_opx_store_inject_and_copy_scb_9B(
 			scb, local_storage,
-			opx_ep->tx->send_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+			opx_ep->tx->send_mp_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) | pbc_dlid,
-			opx_ep->tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
-			opx_ep->tx->send_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
+			opx_ep->tx->send_mp_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
+			opx_ep->tx->send_mp_9B.hdr.qw_9B[1] | bth_rx | (xfer_bytes_tail << 48) |
 				(uint64_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
-			opx_ep->tx->send_9B.hdr.qw_9B[2] | psn, opx_ep->tx->send_9B.hdr.qw_9B[3], buf, xfer_bytes_tail,
-			(((uint64_t) mp_egr_uid) << 32) | payload_offset);
+			opx_ep->tx->send_mp_9B.hdr.qw_9B[2] | psn, opx_ep->tx->send_mp_9B.hdr.qw_9B[3], buf,
+			xfer_bytes_tail, (((uint64_t) mp_egr_uid) << 32) | payload_offset);
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(*pio_state);
 		FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
@@ -2944,19 +2945,19 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(
 		// 1st cacheline
 		fi_opx_store_inject_and_copy_scb_16B(
 			scb, local_storage,
-			opx_ep->tx->send_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+			opx_ep->tx->send_mp_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) | pbc_dlid,
-			opx_ep->tx->send_16B.hdr.qw_16B[0] |
+			opx_ep->tx->send_mp_16B.hdr.qw_16B[0] |
 				((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 				 << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 				((uint64_t) lrh_dws << 20),
-			opx_ep->tx->send_16B.hdr.qw_16B[1] |
+			opx_ep->tx->send_mp_16B.hdr.qw_16B[1] |
 				((uint64_t) ((lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
 					     OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
 				(uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
-			opx_ep->tx->send_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
+			opx_ep->tx->send_mp_16B.hdr.qw_16B[2] | bth_rx | (xfer_bytes_tail << 48) |
 				(uint64_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
-			opx_ep->tx->send_16B.hdr.qw_16B[3] | psn, opx_ep->tx->send_16B.hdr.qw_16B[4], buf,
+			opx_ep->tx->send_mp_16B.hdr.qw_16B[3] | psn, opx_ep->tx->send_mp_16B.hdr.qw_16B[4], buf,
 			xfer_bytes_tail);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(*pio_state);

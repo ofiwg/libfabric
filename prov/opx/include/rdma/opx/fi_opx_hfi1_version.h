@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 Cornelis Networks.
+ * Copyright (C) 2024-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -94,7 +94,8 @@
 #define OPX_BTH_CSPEC(_cspec, _hfi1_type) ((_hfi1_type & OPX_HFI1_JKR) ? OPX_BTH_JKR_CSPEC(_cspec) : OPX_BTH_UNUSED)
 #define OPX_BTH_CSPEC_DEFAULT		  OPX_BTH_UNUSED // Cspec is not used in 9B header
 
-#define OPX_BTH_RC2_VAL(_hfi1_type) (opx_route_control_value(_hfi1_type) & OPX_RC2_MASK)
+/* "RC[2]" is MSB bit of the 3 bit RC value. It is in the bth */
+#define OPX_BTH_RC2_VAL(_hfi1_type, _pkt_type) (OPX_ROUTE_CONTROL_VALUE(_hfi1_type, _pkt_type) & OPX_RC2_MASK)
 
 #define OPX_BTH_RX_SHIFT 56
 
