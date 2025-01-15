@@ -115,7 +115,8 @@ provider for AWS Neuron or Habana SynapseAI.
   these operations are assisted by hardware support (return value is false).
 
 *FI_OPT_EFA_USE_DEVICE_RDMA - bool*
-: Only available if the application selects a libfabric API version >= 1.18.
+: These option only applies to the fi_setopt() call.
+  Only available if the application selects a libfabric API version >= 1.18.
   This option allows an application to change libfabric's behavior
   with respect to RDMA transfers.  Note that there is also an environment
   variable FI_EFA_USE_DEVICE_RDMA which the user may set as well.  If the
@@ -131,7 +132,8 @@ provider for AWS Neuron or Habana SynapseAI.
   revisions.
 
 *FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES - bool*
-: It is used to force the endpoint to use in-order send/recv operation for each 128 bytes
+: These option only applies to the fi_setopt() call.
+  It is used to force the endpoint to use in-order send/recv operation for each 128 bytes
   aligned block. Enabling the option will guarantee data inside each 128 bytes
   aligned block being sent and received in order, it will also guarantee data
   to be delivered to the receive buffer only once. If endpoint is not able to
@@ -139,7 +141,8 @@ provider for AWS Neuron or Habana SynapseAI.
 
 
 *FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES - bool*
-: It is used to set the endpoint to use in-order RDMA write operation for each 128 bytes
+: These option only applies to the fi_setopt() call..
+  It is used to set the endpoint to use in-order RDMA write operation for each 128 bytes
   aligned block. Enabling the option will guarantee data inside each 128 bytes
   aligned block being written in order, it will also guarantee data to be
   delivered to the target buffer only once. If endpoint is not able to support

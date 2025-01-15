@@ -892,9 +892,6 @@ void test_efa_rdm_ep_getopt(struct efa_resource **state, size_t opt_len, int exp
 		FI_OPT_EFA_EMULATED_READ,
 		FI_OPT_EFA_EMULATED_WRITE,
 		FI_OPT_EFA_EMULATED_ATOMICS,
-		FI_OPT_EFA_USE_DEVICE_RDMA,
-		FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES,
-		FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES
 	};
 	size_t num_opt_names = sizeof(opt_names) / sizeof(int);
 
