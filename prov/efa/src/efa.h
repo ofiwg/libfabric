@@ -107,6 +107,41 @@ struct efa_fabric {
 #endif
 };
 
+struct efa_context {
+	uint64_t completion_flags;
+	fi_addr_t addr;
+};
+
+#if defined(static_assert)
+static_assert(sizeof(struct efa_context) <= sizeof(struct fi_context2),
+	      "efa_context must not be larger than fi_context2");
+#endif
+
+/**
+ * Prepare and return a pointer to an EFA context structure.
+ *
+ * @param context           Pointer to the msg context.
+ * @param addr              Peer address associated with the operation.
+ * @param flags             Operation flags (e.g., FI_COMPLETION).
+ * @param completion_flags  Completion flags reported in the cq entry.
+ * @return A pointer to an initialized EFA context structure,
+ *  or NULL if context is invalid or FI_COMPLETION is not set.
+ */
+static inline struct efa_context *efa_fill_context(const void *context,
+						   fi_addr_t addr,
+						   uint64_t flags,
+						   uint64_t completion_flags)
+{
+	if (!context || !(flags & FI_COMPLETION))
+		return NULL;
+
+	struct efa_context *efa_context = (struct efa_context *) context;
+	efa_context->completion_flags = completion_flags;
+	efa_context->addr = addr;
+
+	return efa_context;
+}
+
 static inline
 int efa_str_to_ep_addr(const char *node, const char *service, struct efa_ep_addr *addr)
 {
