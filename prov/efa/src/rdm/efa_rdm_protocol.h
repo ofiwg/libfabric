@@ -16,18 +16,7 @@
 
 #define EFA_RDM_PROTOCOL_VERSION	(4)
 
-/* raw address format. (section 1.4) */
-#define EFA_GID_LEN	16
 
-struct efa_ep_addr {
-	uint8_t			raw[EFA_GID_LEN];
-	uint16_t		qpn;
-	uint16_t		pad;
-	uint32_t		qkey;
-	struct efa_ep_addr	*next;
-};
-
-#define EFA_EP_ADDR_LEN sizeof(struct efa_ep_addr)
 
 /*
  * Extra Feature/Request Flags (section 2.1)
