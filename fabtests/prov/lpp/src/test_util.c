@@ -413,7 +413,7 @@ void util_validate_cq_entry(struct rank_info *ri,
 	free(flags_str);
 	free(entry_flags_str);
 
-	if (flags & FI_REMOTE_CQ_DATA && tentry->data != data){
+	if (flags & FI_REMOTE_CQ_DATA && tentry && tentry->data != data) {
 		ERRORX(ri,
 		       "FI_REMOTE_CQ_DATA not properly set, expected: 0x%lx, got 0x%lx",
 		       data, tentry->data);
