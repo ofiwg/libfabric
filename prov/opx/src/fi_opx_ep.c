@@ -63,9 +63,8 @@
 #define OPX_MODINFO_DRV_VERS	     OPX_MODINFO_PATH " hfi1 -F version"
 #define OPX_MODINFO_SRC_VERS	     OPX_MODINFO_PATH " hfi1 -F srcversion"
 
-#define OPX_EXPECTED_RECEIVE_ENABLE_ON	    1
-#define OPX_EXPECTED_RECEIVE_ENABLE_OFF	    0
-#define OPX_EXPECTED_RECEIVE_ENABLE_DEFAULT OPX_EXPECTED_RECEIVE_ENABLE_OFF
+#define OPX_TID_ENABLE_ON  1
+#define OPX_TID_ENABLE_OFF 0
 
 enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep)
 {
@@ -1129,13 +1128,12 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	}
 
 	int sdma_disable;
-	if (fi_param_get_int(fi_opx_global.prov, "sdma_disable", &sdma_disable) == FI_SUCCESS) {
+	if (fi_param_get_bool(fi_opx_global.prov, "sdma_disable", &sdma_disable) == FI_SUCCESS) {
 		opx_ep->tx->use_sdma = !sdma_disable;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
-				   "sdma_disable parm specified as %0X; opx_ep->tx->use_sdma set to %0hhX\n",
-				   sdma_disable, opx_ep->tx->use_sdma);
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "sdma_disable parm specified as %s.\n",
+				   sdma_disable ? "TRUE" : "FALSE");
 	} else {
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "sdma_disable parm not specified; using SDMA\n");
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_DISABLE not specified; using SDMA\n");
 		opx_ep->tx->use_sdma = 1;
 	}
 
@@ -1189,8 +1187,8 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	opx_ep->tx->sdma_request_queue.max_iovs	   = OPX_SDMA_HFI_MAX_IOVS_PER_WRITE * OPX_SDMA_MAX_WRITEVS_PER_CYCLE;
 	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
 	slist_init(&opx_ep->tx->sdma_pending_queue);
-	ofi_bufpool_create(&opx_ep->tx->work_pending_pool, sizeof(union fi_opx_hfi1_deferred_work), 0, UINT_MAX, 2048,
-			   0);
+	ofi_bufpool_create(&opx_ep->tx->work_pending_pool, sizeof(union fi_opx_hfi1_deferred_work), L2_CACHE_LINE_SIZE,
+			   UINT_MAX, 2048, 0);
 
 	ofi_bufpool_create(&opx_ep->tx->rma_payload_pool, sizeof(union fi_opx_hfi1_packet_payload), 0, UINT_MAX, 16, 0);
 
@@ -2567,48 +2565,50 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 	   the TID domain directly in each endpoint */
 	opx_ep->tid_domain = opx_ep->domain->tid_domain;
 
-	/*
-	  fi_info -e output:
-
-	  # FI_OPX_EXPECTED_RECEIVE_ENABLE: Boolean (0/1, on/off, true/false, yes/no)
-	  # opx: Enables expected receive rendezvous using Token ID (TID). Defaults to "No"
-
-	 */
-
 	/* enable/disable receive side (CTS) expected receive (TID) */
-	int expected_receive_enable_env; /* get bool takes an int */
+	int tid_disable_env;
+	int tid_disable_specified =
+		(fi_param_get_bool(fi_opx_global.prov, "tid_disable", &tid_disable_env) == FI_SUCCESS);
+	if (tid_disable_specified) {
+		if (tid_disable_env) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FI_OPX_TID_DISABLE specified as TRUE, disabling TID.\n");
+			opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_OFF;
+		} else {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FI_OPX_TID_DISABLE specified as FALSE (default option), enabling TID.\n");
+			opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_ON;
+		}
+	} else {
+		opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_ON;
+	}
+
+	int expected_receive_enable_env;
 	if (fi_param_get_bool(fi_opx_global.prov, "expected_receive_enable", &expected_receive_enable_env) ==
 	    FI_SUCCESS) {
-#ifdef OPX_DEV_OVERRIDE
-		opx_ep->use_expected_tid_rzv = expected_receive_enable_env;
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Override set for TID\n");
-#else
-		opx_ep->use_expected_tid_rzv = expected_receive_enable_env;
-		if (expected_receive_enable_env == OPX_EXPECTED_RECEIVE_ENABLE_ON) {
-			if (opx_is_tid_allowed() == 0) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"Expected receive (TID) cannot be enabled. Unsupported driver version.\n");
-				fprintf(stderr,
-					"Expected receive (TID) set with FI_OPX_EXPECTED_RECEIVE_ENABLE env var but driver version does not support it.\n");
-				fprintf(stderr,
-					"Upgrade Omnipath driver or remove FI_OPX_EXPECTED_RECEIVE_ENABLE env var.\n");
-				if (OPX_EXPECTED_RECEIVE_ENABLE_DEFAULT == OPX_EXPECTED_RECEIVE_ENABLE_OFF) {
-					abort();
-				} else {
-					opx_ep->use_expected_tid_rzv = OPX_EXPECTED_RECEIVE_ENABLE_OFF;
-				}
-			}
+		if (tid_disable_specified) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FI_OPX_EXPECTED_RECEIVE_ENABLE is deprecated. Ignoring because replacement environment variable FI_OPX_TID_DISABLE was specified and takes precedence.\n");
+		} else if (!expected_receive_enable_env) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FI_OPX_EXPECTED_RECEIVE_ENABLE was specified as OFF, but is deprecated. Expected receive (TID) will be disabled, but please use FI_OPX_TID_DISABLE=1 in the future.\n");
+			opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_OFF;
+		} else {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FI_OPX_EXPECTED_RECEIVE_ENABLE was specified as ON, but is deprecated. Expected receive (TID) is enabled by default. Ignoring.\n");
 		}
-#endif
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"expected_receive_enable parm specified as %0X; "
-			"opx_ep->use_expected_tid_rzv = set to %0hhX\n",
-			expected_receive_enable_env, opx_ep->use_expected_tid_rzv);
-	} else {
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"expected_receive_enable parm not specified; disabled expected receive rendezvous\n");
-		opx_ep->use_expected_tid_rzv = OPX_EXPECTED_RECEIVE_ENABLE_DEFAULT;
 	}
+
+#ifndef OPX_DEV_OVERRIDE
+	if (opx_ep->use_expected_tid_rzv == OPX_TID_ENABLE_ON && !opx_is_tid_allowed()) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Expected receive (TID) cannot be enabled due to unsupported driver version. Upgrade Omnipath driver to enable this feature. Disabling TID.\n");
+		opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_OFF;
+	}
+#endif
+
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Expected receive (TID) is %s.\n",
+		opx_ep->use_expected_tid_rzv ? "enabled" : "disabled");
 
 #if defined(OPX_HMEM) && !defined(OPX_DEV_OVERRIDE)
 	if (!opx_hfi_drv_version_check("10.14")) {

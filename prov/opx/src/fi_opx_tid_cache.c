@@ -732,7 +732,7 @@ enum opx_tid_cache_entry_status opx_tid_cache_find(struct fi_opx_ep *opx_ep, con
 		 * and this code goes away. */
 		if (opx_ep->use_expected_tid_rzv) {
 			OPX_TID_CACHE_DEBUG_FPRINTF(
-				"## %s:%u OPX_TID_CACHE_DEBUG Unsupported: OPX_ENTRY_IN_USE by another endpoint. Disabling expected receive rendezvous (FI_OPX_EXPECTED_RECEIVE_ENABLE) on this endpoint\n",
+				"## %s:%u OPX_TID_CACHE_DEBUG Unsupported: OPX_ENTRY_IN_USE by another endpoint. Disabling TID (FI_OPX_TID_DISABLE) on this endpoint\n",
 				__func__, __LINE__);
 		}
 		opx_ep->use_expected_tid_rzv = 0;
