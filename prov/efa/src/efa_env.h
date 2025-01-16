@@ -6,12 +6,6 @@
 
 #include "efa_prov.h"
 
-/**
- * Setting ibv_qp_attr.rnr_retry to this number when modifying qp
- * to cause firmware to retry indefinitely.
- */
-#define EFA_RNR_INFINITE_RETRY 7
-
 enum efa_env_huge_page_setting
 {
 	EFA_ENV_HUGE_PAGE_UNSPEC, /**< user did not set FI_EFA_USE_HUGE_PAGE, provider will decide whether to use huge page*/
@@ -48,17 +42,6 @@ struct efa_env {
 	size_t efa_max_gdrcopy_msg_size;
 	size_t efa_read_segment_size;
 	size_t efa_write_segment_size;
-	/* If first attempt to send a packet failed,
-	 * this value controls how many times firmware
-	 * retries the send before it report an RNR error
-	 * (via rdma-core error cq entry).
-	 *
-	 * The valid number is from
-	 *      0 (no retry)
-	 * to
-	 *      EFA_RNR_INFINITY_RETRY (retry infinitely)
-	 */
-	int rnr_retry;
 	/**
 	 * The absolute path to a file that contains an EC2 instance id-like string.
 	 * If host_id_file is provided, the program will attempt to read the
