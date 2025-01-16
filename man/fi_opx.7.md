@@ -113,7 +113,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   The default UUID is 00112233445566778899aabbccddeeff.
 
 *FI_OPX_FORCE_CPUAFFINITY*
-: Boolean (0/1, on/off, true/false, yes/no). Causes the thread to bind
+: Boolean (1/0, on/off, true/false, yes/no). Causes the thread to bind
   itself to the cpu core it is running on. Defaults to "No"
 
 *FI_OPX_RELIABILITY_SERVICE_USEC_MAX*
@@ -147,7 +147,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Default setting is 4. Range of valid values is 1-65535.
 
 *FI_OPX_SELINUX*
-: Boolean (0/1, on/off, true/false, yes/no). Set to true if you're running a
+: Boolean (1/0, on/off, true/false, yes/no). Set to true if you're running a
   security-enhanced Linux. This enables updating the Jkey used based on system
   settings. Defaults to "No"
 
@@ -212,7 +212,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   has ACKed. Value must be between 16385 and 2147483646. Defaults to 16385.
 
 *FI_OPX_SDMA_DISABLE*
-: Integer. Disables SDMA offload hardware. Default is 0
+: Boolean (1/0, on/off, true/false, yes/no). Disables SDMA offload hardware. Default is 0.
 
 *FI_OPX_SDMA_MIN_PAYLOAD_BYTES*
 : Integer. The minimum length in bytes where SDMA will be used.
@@ -230,11 +230,13 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Value must be between 64 and 65536. Defaults to 16385.
 
 *FI_OPX_MP_EAGER_DISABLE*
-: Integer. Disables multi-packet eager. Defaults to 0.
+: Boolean (1/0, on/off, true/false, yes/no). Disables multi-packet eager. Defaults to 0.
+
+*FI_OPX_TID_DISABLE*
+: Boolean (1/0, on/off, true/false, yes/no). Disables using Token ID (TID). Defaults to 0.
 
 *FI_OPX_EXPECTED_RECEIVE_ENABLE*
-: Boolean (0/1, on/off, true/false, yes/no). Enables expected receive rendezvous using Token ID (TID).
-  Defaults to "No". This feature is not currently supported.
+: Deprecated. Use FI_OPX_TID_DISABLE instead.
 
 *FI_OPX_PROG_AFFINITY*
 : String. This sets the affinity to be used for any progress threads. Set as a colon-separated
@@ -275,7 +277,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Default is 0 on OPA100 and 4 on CN5000.
 
 *FI_OPX_SHM_ENABLE*
-: Boolean (0/1, on/off, true/false, yes/no). Enables shm across all ports and hfi units
+: Boolean (1/0, on/off, true/false, yes/no). Enables shm across all ports and hfi units
   on the node. Setting it to NO disables shm except peers with same lid and same
   hfi1 (loopback).  Defaults to: "YES"
 

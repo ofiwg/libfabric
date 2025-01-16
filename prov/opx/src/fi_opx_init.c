@@ -717,7 +717,7 @@ OPX_INI
 		"Globally unique ID for preventing OPX jobs from conflicting either in shared memory or over the OPX fabric. Defaults to the Slurm job ID if one exists, otherwise defaults to Intel MPI UUID if one exists, otherwise defaults to \"%s\"",
 		OPX_DEFAULT_JOB_KEY_STR);
 	fi_param_define(&fi_opx_provider, "force_cpuaffinity", FI_PARAM_BOOL,
-			"Causes the thread to bind itself to the cpu core it is running on. Defaults to \"No\"");
+			"Causes the thread to bind itself to the cpu core it is running on. Defaults to FALSE.");
 	fi_param_define(&fi_opx_provider, "reliability_service_usec_max", FI_PARAM_INT,
 			"The number of microseconds between pings for un-acknowledged packets. Defaults to 500 usec.");
 	fi_param_define(
@@ -735,12 +735,13 @@ OPX_INI
 		"The number of packets to receive from a particular sender before preemptively acknowledging them without waiting for a ping. Valid values are powers of 2 in the range of 0-32,768, where 0 indicates no preemptive acking. Defaults to 64.");
 	fi_param_define(
 		&fi_opx_provider, "selinux", FI_PARAM_BOOL,
-		"Set to true if you're running a security-enhanced Linux. This enables updating the Jkey used based on system settings. Defaults to \"No\"");
+		"Set to TRUE if you're running a security-enhanced Linux. This enables updating the Jkey used based on system settings. Defaults to FALSE.");
 	fi_param_define(
 		&fi_opx_provider, "hfi_select", FI_PARAM_STRING,
 		"Overrides the normal algorithm used to choose which HFI a process will use. See the documentation for more information.");
 	fi_param_define(&fi_opx_provider, "mp_eager_disable", FI_PARAM_BOOL,
-			"Disables tx multi-packet eager use. Defaults to %d", OPX_MP_EGR_DISABLE_DEFAULT);
+			"Disables tx multi-packet eager use. Defaults to %s.",
+			OPX_MP_EGR_DISABLE_DEFAULT ? "TRUE" : "FALSE");
 	fi_param_define(
 		&fi_opx_provider, "rzv_min_payload_bytes", FI_PARAM_INT,
 		"The minimum length in bytes where rendezvous will be used. For messages smaller than this threshold, the send will first try to be completed using eager or multi-packet eager. Defaults to %d.",
@@ -751,8 +752,8 @@ OPX_INI
 		&fi_opx_provider, "sdma_bounce_buf_threshold", FI_PARAM_INT,
 		"The maximum message length in bytes that will be copied to the SDMA bounce buffer. For messages larger than this threshold, the send will not be completed until receiver has ACKed. Value must be between %d and %d. Defaults to %d.",
 		OPX_SDMA_BOUNCE_BUF_MIN, OPX_SDMA_BOUNCE_BUF_MAX, OPX_SDMA_BOUNCE_BUF_THRESHOLD);
-	fi_param_define(&fi_opx_provider, "sdma_disable", FI_PARAM_INT,
-			"Disables SDMA offload hardware. Default is 0.");
+	fi_param_define(&fi_opx_provider, "sdma_disable", FI_PARAM_BOOL,
+			"Disables SDMA offload hardware. Default is FALSE (SDMA Enabled).");
 	fi_param_define(
 		&fi_opx_provider, "sdma_min_payload_bytes", FI_PARAM_INT,
 		"The minimum message length in bytes where SDMA will be used. For messages smaller than this threshold, the send will be completed using PIO. Value must be between %d and %d. Defaults to %d.",
@@ -762,8 +763,10 @@ OPX_INI
 		&fi_opx_provider, "tid_min_payload_bytes", FI_PARAM_INT,
 		"The minimum message length in bytes where TID will be used. Value must be >= %d. Defaults to %d.",
 		OPX_TID_MIN_PAYLOAD_BYTES_MIN, OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT);
+	fi_param_define(&fi_opx_provider, "tid_disable", FI_PARAM_BOOL,
+			"Disables using Token ID (TID). Defaults to FALSE (TID Enabled).");
 	fi_param_define(&fi_opx_provider, "expected_receive_enable", FI_PARAM_BOOL,
-			"Enables expected receive rendezvous using Token ID (TID). Defaults to \"No\".");
+			"Deprecated. Use FI_OPX_TID_DISABLE instead.");
 	fi_param_define(
 		&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
 		"When set, specify the set of CPU cores to set the progress thread affinity to. The format is <start>:<end>:<stride> where each triplet <start>:<end>:<stride> defines a block Both <start> and <end> is a core_id.");
@@ -779,7 +782,7 @@ OPX_INI
 			"Specify path to output per-process performance tracing log files (default: none)");
 	fi_param_define(
 		&fi_opx_provider, "shm_enable", FI_PARAM_BOOL,
-		"Enables shm across all ports and hfi units on the node. Setting it to NO disables shm except peers with same lid and same hfi1 (loopback). Defaults to: \"YES\".");
+		"Enables SHM across all ports and hfi units on the node. Setting it to FALSE disables SHM except peers with same lid and same hfi1 (loopback). Defaults to TRUE.");
 	fi_param_define(
 		&fi_opx_provider, "port", FI_PARAM_INT,
 		"HFI1 port number.  If the specified port is not available, a default active port will be selected. Special value 0 indicates any available port. Defaults to port 1 on OPA100 and any port on CN5000.");
