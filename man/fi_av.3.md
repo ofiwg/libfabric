@@ -436,6 +436,11 @@ fi_av_set_user_id.
 
   See the user ID section below.
 
+- *FI_NO_CONNECT*
+: This flag indicates that AV insertion operations should fail if there
+  is not an existing connection to the peer. In such a case, an
+  FI_EHOSTUNREACH should be expected.
+
 ## fi_av_insertsvc
 
 The fi_av_insertsvc call behaves similar to fi_av_insert, but allows the
