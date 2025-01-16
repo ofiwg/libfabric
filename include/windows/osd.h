@@ -1141,6 +1141,23 @@ ofi_cpuid(unsigned func, unsigned subfunc, unsigned cpuinfo[4])
 
 #endif /* defined(_M_X64) || defined(_M_AMD64) */
 
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 202311L)
+    // C23 and above: use thread_local directly
+    #define OFI_THREAD_LOCAL thread_local
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201102L) && defined(_Thread_local)
+    // C11: use _Thread_local
+    #define OFI_THREAD_LOCAL _Thread_local
+#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__SUNPRO_CC) || defined(__IBMCPP__) || defined(__clang__)
+    // GCC/Clang/Intel/SunPro/IBM compilers
+    #define OFI_THREAD_LOCAL __thread
+#elif defined(_MSC_VER)
+    // Microsoft Visual C++ compiler
+    #define OFI_THREAD_LOCAL __declspec(thread)
+#else
+    // Unsupported compiler
+    #warning "Thread-local storage is not supported on this platform"
+	#define OFI_THREAD_LOCAL
+#endif
 
 #ifdef __cplusplus
 }
