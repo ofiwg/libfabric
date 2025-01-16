@@ -504,6 +504,7 @@ void ofi_monitor_flush(struct ofi_mem_monitor *monitor)
 	}
 }
 
+/* For each new cached MR cache entry, subscribed is called. */
 int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 			  const void *addr, size_t len,
 			  union ofi_mr_hmem_info *hmem_info)
@@ -522,6 +523,13 @@ int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 	return ret;
 }
 
+/* For each cached MR entry freed, unsubscribe is called.
+
+ * If a memory monitor does not have a context per subscribe (e.g., a single
+ * monitored region servering multiple MRs), the memory monitor must implement
+ * unsubscribe as a noop. This may result in extra notification events, but is
+ * harmless to correct operation.
+ */
 void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 			     const void *addr, size_t len,
 			     union ofi_mr_hmem_info *hmem_info)

@@ -67,6 +67,9 @@ struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 #include <linux/userfaultfd.h>
 
 static void ofi_uffd_pagefault_handler(struct uffd_msg *msg);
+static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
+				 const void *addr, size_t len,
+				 union ofi_mr_hmem_info *hmem_info);
 
 /* The userfault fd monitor requires for events that could
  * trigger it to be handled outside of the monitor functions
@@ -108,7 +111,7 @@ static void *ofi_uffd_handler(void *arg)
 
 		switch (msg.event) {
 		case UFFD_EVENT_REMOVE:
-			ofi_monitor_unsubscribe(&uffd.monitor,
+			ofi_uffd_unsubscribe(&uffd.monitor,
 				(void *) (uintptr_t) msg.arg.remove.start,
 				(size_t) (msg.arg.remove.end -
 					  msg.arg.remove.start), NULL);
@@ -388,7 +391,13 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 	}
 
 	uffd.monitor.subscribe = ofi_uffd_subscribe;
-	uffd.monitor.unsubscribe = ofi_uffd_unsubscribe;
+
+	/* Since UFFD may have many MR cache entries for the same VA range and
+	 * ofi_monitor_unsubscribe() is called for every MR cache entry being
+	 * freed, UFFD unsubscribe needs to be a noop. Else, MR cache entries
+	 * may no longer be monitored.
+	 */
+	uffd.monitor.unsubscribe = ofi_monitor_unsubscribe_no_op;
 	uffd.monitor.valid = ofi_uffd_valid;
 
 	FI_INFO(&core_prov, FI_LOG_MR,
