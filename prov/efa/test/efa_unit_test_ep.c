@@ -1415,6 +1415,7 @@ void test_efa_rdm_ep_default_sizes(struct efa_resource **state)
 	assert_int_equal(efa_rdm_ep->base_ep.max_rma_size, resource->info->ep_attr->max_msg_size);
 	assert_int_equal(efa_rdm_ep->base_ep.inject_msg_size, resource->info->tx_attr->inject_size);
 	assert_int_equal(efa_rdm_ep->base_ep.inject_rma_size, resource->info->tx_attr->inject_size);
+	assert_int_equal(efa_rdm_ep->base_ep.rnr_retry, EFA_RDM_DEFAULT_RNR_RETRY);
 
 	/* efa_rdm_ep's own fields */
 	assert_int_equal(efa_rdm_ep->max_tagged_size, resource->info->ep_attr->max_msg_size);
@@ -1448,6 +1449,7 @@ void test_efa_ep_open(struct efa_resource **state)
 	/* TODO: update inject_rma_size to inline size after firmware
 	 * supports inline rdma write */
 	assert_true(efa_ep->inject_rma_size == 0);
+	assert_int_equal(efa_ep->rnr_retry, EFA_RNR_INFINITE_RETRY);
 }
 
 /**

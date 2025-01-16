@@ -487,6 +487,11 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->base_ep.max_rma_size = info->ep_attr->max_msg_size;
 	efa_rdm_ep->base_ep.inject_msg_size = info->tx_attr->inject_size;
 	efa_rdm_ep->base_ep.inject_rma_size = info->tx_attr->inject_size;
+	/*
+	 * base ep is configured as infinite retry, use a different default
+	 * for efa_rdm_ep to allow libfabric level retry.
+	 */
+	efa_rdm_ep->base_ep.rnr_retry = EFA_RDM_DEFAULT_RNR_RETRY;
 
 	/* efa_rdm_ep's own fields */
 	efa_rdm_ep->max_tagged_size = info->ep_attr->max_msg_size;
