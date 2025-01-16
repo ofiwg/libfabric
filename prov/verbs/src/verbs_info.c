@@ -111,6 +111,15 @@ const struct fi_rx_attr verbs_rx_attr = {
 	.msg_order		= VERBS_MSG_ORDER,
 };
 
+const struct fi_rx_attr verbs_ro_rx_attr = {
+	.caps			= VERBS_MSG_RX_CAPS,
+	.mode			= VERBS_RX_MODE,
+	.op_flags		= FI_COMPLETION,
+	.msg_order		= 0,
+	.comp_order		= FI_ORDER_STRICT,
+	.total_buffered_recv	= 0,
+};
+
 const struct fi_rx_attr verbs_dgram_rx_attr = {
 	.caps			= VERBS_DGRAM_RX_CAPS,
 	.mode			= VERBS_DGRAM_RX_MODE | VERBS_RX_MODE,
@@ -123,6 +132,16 @@ const struct fi_tx_attr verbs_tx_attr = {
 	.mode			= 0,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
+	.inject_size		= 0,
+	.rma_iov_limit		= 1,
+};
+
+const struct fi_tx_attr verbs_ro_tx_attr = {
+	.caps			= VERBS_MSG_TX_CAPS,
+	.mode			= 0,
+	.op_flags		= VERBS_TX_OP_FLAGS,
+	.msg_order		= 0,
+	.comp_order		= FI_ORDER_STRICT,
 	.inject_size		= 0,
 	.rma_iov_limit		= 1,
 };
@@ -140,18 +159,28 @@ const struct verbs_ep_domain verbs_msg_domain = {
 	.suffix			= "",
 	.type			= FI_EP_MSG,
 	.protocol		= FI_PROTO_UNSPEC,
+	.relaxed_ordering	= false,
+};
+
+const struct verbs_ep_domain verbs_msg_ro_domain = {
+	.suffix			= "-ro",
+	.type			= FI_EP_MSG,
+	.protocol		= FI_PROTO_UNSPEC,
+	.relaxed_ordering	= true,
 };
 
 const struct verbs_ep_domain verbs_msg_xrc_domain = {
 	.suffix			= "-xrc",
 	.type			= FI_EP_MSG,
 	.protocol		= FI_PROTO_RDMA_CM_IB_XRC,
+	.relaxed_ordering	= false,
 };
 
 const struct verbs_ep_domain verbs_dgram_domain = {
 	.suffix			= "-dgram",
 	.type			= FI_EP_DGRAM,
 	.protocol		= FI_PROTO_UNSPEC,
+	.relaxed_ordering	= false,
 };
 
 /* The list (not thread safe) is populated once when the provider is initialized */
@@ -766,8 +795,13 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	switch (ep_dom->type) {
 	case FI_EP_MSG:
 		fi->caps = VERBS_MSG_CAPS;
-		*(fi->tx_attr) = verbs_tx_attr;
-		*(fi->rx_attr) = verbs_rx_attr;
+		if (ep_dom->relaxed_ordering) {
+			*(fi->tx_attr) = verbs_ro_tx_attr;
+			*(fi->rx_attr) = verbs_ro_rx_attr;
+		} else {
+			*(fi->tx_attr) = verbs_tx_attr;
+			*(fi->rx_attr) = verbs_rx_attr;
+		}
 		fi->addr_format = FI_SOCKADDR_IB;
 		break;
 	case FI_EP_DGRAM:
@@ -1347,7 +1381,7 @@ static int vrb_device_has_ipoib_addr(const char *dev_name)
 	return 0;
 }
 
-#define VERBS_NUM_DOMAIN_TYPES		3
+#define VERBS_NUM_DOMAIN_TYPES		4
 
 static int vrb_init_info(const struct fi_info **all_infos)
 {
@@ -1398,12 +1432,14 @@ static int vrb_init_info(const struct fi_info **all_infos)
 	if (!vrb_gl_data.iface)
 		vrb_get_sib(&verbs_devs);
 
-	if (dlist_empty(&verbs_devs))
+	if (dlist_empty(&verbs_devs)) {
 		FI_WARN(&vrb_prov, FI_LOG_FABRIC,
 			"no valid IPoIB interfaces found, FI_EP_MSG endpoint "
 			"type would not be available\n");
-	else
+	} else {
 		ep_type[dom_count++] = &verbs_msg_domain;
+		ep_type[dom_count++] = &verbs_msg_ro_domain;
+	}
 
 	if (!vrb_gl_data.msg.prefer_xrc && VERBS_HAVE_XRC)
 		ep_type[dom_count++] = &verbs_msg_xrc_domain;
@@ -1584,6 +1620,10 @@ int vrb_get_matching_info(uint32_t version, const struct fi_info *hints,
 				       "XRC FI_EP_MSG endpoints\n");
 				continue;
 			}
+
+			if (VRB_RO_ENABLED(hints) && (check_info->tx_attr->msg_order ||
+			    check_info->rx_attr->msg_order))
+				continue;
 		}
 
 		if ((check_info->ep_attr->type == FI_EP_MSG) && passive) {
