@@ -62,6 +62,11 @@ static bool rocr_mm_valid(struct ofi_mem_monitor *monitor,
 			   const struct ofi_mr_info *info,
 			   struct ofi_mr_entry *entry);
 
+/* Since ROCR may have many MR cache entries for the same VA range and
+ * ofi_monitor_unsubscribe() is called for every MR cache entry being freed,
+ * ROCR unsubscribe needs to be a noop. Else, MR cache entries may no longer
+ * be monitored.
+ */
 static struct rocr_mm rocr_mm = {
 	.mm = {
 		.iface = FI_HMEM_ROCR,
@@ -70,7 +75,7 @@ static struct rocr_mm rocr_mm = {
 		.start = rocr_mm_start,
 		.stop = rocr_mm_stop,
 		.subscribe = rocr_mm_subscribe,
-		.unsubscribe = rocr_mm_unsubscribe,
+		.unsubscribe = ofi_monitor_unsubscribe_no_op,
 		.valid = rocr_mm_valid,
 		.name = "rocr",
 	},
@@ -136,7 +141,7 @@ static void rocr_mm_dealloc_cb(void *addr, void *user_data)
 
 	pthread_rwlock_rdlock(&mm_list_rwlock);
 	pthread_mutex_lock(&mm_lock);
-	ofi_monitor_unsubscribe(rocr_monitor, addr, len, NULL);
+	rocr_mm_unsubscribe(rocr_monitor, addr, len, NULL);
 	pthread_mutex_unlock(&mm_lock);
 	pthread_rwlock_unlock(&mm_list_rwlock);
 }
@@ -381,12 +386,6 @@ static int rocr_mm_subscribe(struct ofi_mem_monitor *monitor, const void *addr,
 	return -FI_ENOSYS;
 }
 
-static void rocr_mm_unsubscribe(struct ofi_mem_monitor *monitor,
-				const void *addr, size_t len,
-				union ofi_mr_hmem_info *hmem_info)
-{
-}
-
 static bool rocr_mm_valid(struct ofi_mem_monitor *monitor,
 			  const struct ofi_mr_info *info,
 			  struct ofi_mr_entry *entry)
@@ -401,7 +400,7 @@ static struct ofi_mem_monitor rocr_mm = {
 	.start = rocr_mm_start,
 	.stop = rocr_mm_stop,
 	.subscribe = rocr_mm_subscribe,
-	.unsubscribe = rocr_mm_unsubscribe,
+	.unsubscribe = ofi_monitor_unsubscribe_no_op,
 	.valid = rocr_mm_valid,
 	.name = "rocr",
 };
