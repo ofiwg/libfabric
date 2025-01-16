@@ -194,7 +194,7 @@ static ssize_t efa_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void
 static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi_msg *msg, uint64_t flags)
 {
 	struct efa_qp *qp = base_ep->qp;
-	struct efa_conn *conn;
+	struct efa_base_av_entry *av_entry;
 	struct ibv_sge sg_list[2];  /* efa device support up to 2 iov */
 	struct ibv_data_buf inline_data_list[2];
 	size_t len, i;
@@ -204,8 +204,8 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 
 	dump_msg(msg, "send");
 
-	conn = efa_av_addr_to_conn(base_ep->av, msg->addr);
-	assert(conn && conn->ep_addr);
+	av_entry = efa_av_addr_to_base_av_entry(base_ep->av, msg->addr);
+	assert(av_entry);
 
 	assert(msg->iov_count <= base_ep->info->tx_attr->iov_limit);
 
@@ -262,8 +262,8 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		ibv_wr_set_sge_list(qp->ibv_qp_ex, msg->iov_count, sg_list);
 	}
 
-	ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah, conn->ep_addr->qpn,
-			   conn->ep_addr->qkey);
+	ibv_wr_set_ud_addr(qp->ibv_qp_ex, av_entry->ah->ibv_ah, av_entry->ep_addr.qpn,
+			   av_entry->ep_addr.qkey);
 
 	efa_tracepoint(post_send, qp->ibv_qp_ex->wr_id, (uintptr_t)msg->context);
 

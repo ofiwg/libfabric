@@ -7,6 +7,7 @@
 #include <infiniband/verbs.h>
 #include "rdm/efa_rdm_protocol.h"
 #include "rdm/efa_rdm_peer.h"
+#include "efa_base_ep.h"
 
 #define EFA_MIN_AV_SIZE (16384)
 #define EFA_SHM_MAX_AV_COUNT       (256)
@@ -31,6 +32,12 @@ struct efa_av_entry {
 	struct efa_conn		conn;
 };
 
+struct efa_base_av_entry {
+	struct efa_ep_addr	ep_addr;
+	struct efa_ah		*ah;
+	fi_addr_t		fi_addr;
+};
+
 struct efa_cur_reverse_av_key {
 	uint16_t ahn;
 	uint16_t qpn;
@@ -39,6 +46,12 @@ struct efa_cur_reverse_av_key {
 struct efa_cur_reverse_av {
 	struct efa_cur_reverse_av_key key;
 	struct efa_conn *conn;
+	UT_hash_handle hh;
+};
+
+struct efa_dgram_reverse_av {
+	struct efa_cur_reverse_av_key key;
+	struct efa_base_av_entry *av_entry;
 	UT_hash_handle hh;
 };
 
@@ -67,6 +80,7 @@ struct efa_av {
 	 */
 	struct efa_cur_reverse_av *cur_reverse_av;
 	struct efa_prv_reverse_av *prv_reverse_av;
+	struct efa_dgram_reverse_av *dgram_reverse_av;
 	struct efa_ah *ah_map;
 	struct util_av util_av;
 	enum fi_ep_type ep_type;
@@ -80,6 +94,9 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 		      bool insert_shm_av);
 
 struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
+
+
+struct efa_base_av_entry *efa_av_addr_to_base_av_entry(struct efa_av *av, fi_addr_t fi_addr);
 
 fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qpn, struct efa_rdm_pke *pkt_entry);
 
