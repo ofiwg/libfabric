@@ -1883,24 +1883,6 @@ static int efa_rdm_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*(bool *)optval = true;
 		*optlen = sizeof(bool);
 		break;
-	case FI_OPT_EFA_USE_DEVICE_RDMA:
-		if (*optlen < sizeof(bool))
-			return -FI_ETOOSMALL;
-		*(bool *)optval = efa_rdm_ep->use_device_rdma;
-		*optlen = sizeof(bool);
-		break;
-	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
-		if (*optlen < sizeof(bool))
-			return -FI_ETOOSMALL;
-		*(bool *)optval = efa_rdm_ep->sendrecv_in_order_aligned_128_bytes;
-		*optlen = sizeof(bool);
-		break;
-	case FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES:
-		if (*optlen < sizeof(bool))
-			return -FI_ETOOSMALL;
-		*(bool *)optval = efa_rdm_ep->write_in_order_aligned_128_bytes;
-		*optlen = sizeof(bool);
-		break;
 	default:
 		EFA_INFO(FI_LOG_EP_CTRL, "Unknown endpoint option\n");
 		return -FI_ENOPROTOOPT;

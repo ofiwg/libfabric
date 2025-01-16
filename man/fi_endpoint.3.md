@@ -537,7 +537,8 @@ The following option levels and option names and parameters are defined.
   All providers that support FI_HMEM capability implement this option.
 
 - *FI_OPT_SHARED_MEMORY_PERMITTED - bool*
-: This option controls the use of shared memory for intra-node communication.
+: This option only applies to the fi_setopt call.
+  This option controls the use of shared memory for intra-node communication.
   Setting it to true will allow the use of shared memory. When set to false,
   shared memory will not be used and the implementation of intra-node communication
   is provider dependent.
