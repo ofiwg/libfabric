@@ -16,6 +16,26 @@
 #define EFA_QP_LOW_LATENCY_SERVICE_LEVEL 8
 #define EFA_ERROR_MSG_BUFFER_LENGTH 1024
 
+/* Default rnr_retry for efa-rdm ep.
+ * If first attempt to send a packet failed,
+ * this value controls how many times firmware
+ * retries the send before it report an RNR error
+ * (via rdma-core error cq entry).
+ * The valid number is from
+ *      0 (no retry)
+ * to
+ *      EFA_RNR_INFINITY_RETRY (retry infinitely)
+ */
+#define EFA_RDM_DEFAULT_RNR_RETRY	(3)
+/**
+ * Infinite retry.
+ * NOTICE: this is the default rnr_retry
+ * mode for SRD qp. So modifying qp_attr.rnr_retry
+ * to this value has the same behavior as
+ * not modifying qp's rnr_retry attribute
+ */
+#define EFA_RNR_INFINITE_RETRY		(7)
+
 #define efa_rx_flags(efa_base_ep) ((efa_base_ep)->util_ep.rx_op_flags)
 #define efa_tx_flags(efa_base_ep) ((efa_base_ep)->util_ep.tx_op_flags)
 
