@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -446,7 +446,7 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, dst_addr);
 
-	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
+	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_RMA | FI_WRITE, &context) != FI_SUCCESS)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITEV_INTERNAL");
@@ -582,7 +582,7 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, msg->addr);
 	fi_opx_get_daos_av_addr_rank(opx_ep, opx_dst_addr);
 
-	struct fi_opx_cq   *cq = (flags & (FI_COMPLETION | FI_REMOTE_CQ_DATA)) ? opx_ep->rx->cq : NULL;
+	struct fi_opx_cq   *cq = (flags & (FI_COMPLETION | FI_REMOTE_CQ_DATA)) ? opx_ep->tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, msg->context, cq,
 					     (FI_RMA | FI_WRITE | (flags & FI_REMOTE_CQ_DATA)),
@@ -720,7 +720,7 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, src_addr);
 	fi_opx_get_daos_av_addr_rank(opx_ep, opx_addr);
 
-	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
+	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_RMA | FI_READ, &context) != FI_SUCCESS)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READ");
@@ -745,7 +745,7 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	fi_opx_readv_internal(opx_ep, &iov, 1, opx_addr, &addr_offset, &key, opx_ep->tx->op_flags, opx_ep->rx->cq,
+	fi_opx_readv_internal(opx_ep, &iov, 1, opx_addr, &addr_offset, &key, opx_ep->tx->op_flags, opx_ep->tx->cq,
 			      opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps,
 			      reliability, hfi1_type);
 
@@ -795,7 +795,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, src_addr);
 
-	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
+	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_RMA | FI_READ, &context) != FI_SUCCESS)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READV");
@@ -872,7 +872,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 		hmem_iovs[i].iface  = hmem_iface;
 		hmem_iovs[i].device = hmem_device;
 	}
-	fi_opx_readv_internal(opx_ep, hmem_iovs, partial_ndesc, opx_addr, addr_v, key_v, tx_op_flags, opx_ep->rx->cq,
+	fi_opx_readv_internal(opx_ep, hmem_iovs, partial_ndesc, opx_addr, addr_v, key_v, tx_op_flags, opx_ep->tx->cq,
 			      opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps,
 			      reliability, hfi1_type);
 
@@ -922,7 +922,7 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	const union fi_opx_addr opx_src_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, msg->addr);
 	fi_opx_get_daos_av_addr_rank(opx_ep, opx_src_addr);
 
-	struct fi_opx_cq   *cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
+	struct fi_opx_cq   *cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, msg->context, cq, FI_RMA | FI_READ, &context) != FI_SUCCESS)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READMSG_INTERNAL");

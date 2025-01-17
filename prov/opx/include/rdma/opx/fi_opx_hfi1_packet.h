@@ -906,7 +906,7 @@ union opx_hfi1_packet_hdr {
 		/* QW[5] SW */
 		uint8_t	 opcode;
 		uint8_t	 unused0;
-		uint16_t unused1;
+		uint16_t origin_rs;
 		uint8_t	 dt;
 		uint8_t	 op;
 		uint16_t niov; /* number of non-contiguous buffers described in the packet payload */

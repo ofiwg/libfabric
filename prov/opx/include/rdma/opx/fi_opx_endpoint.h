@@ -1947,16 +1947,18 @@ void fi_opx_ep_rx_process_header_rma_rts(struct fi_opx_ep *opx_ep, const union o
 		return;
 	}
 
-	uint64_t *rbuf_qws =
-		(uint64_t *) (((uint8_t *) opx_mr->base_addr) + fi_opx_dput_rbuf_in(payload->rma_rts.iov[0].rbuf));
+	uint64_t	  *rbuf_qws = (uint64_t *) (((uint8_t *) opx_mr->base_addr) + payload->rma_rts.iov[0].rbuf);
 	uint64_t	   rbuf_device;
 	enum fi_hmem_iface rbuf_iface = opx_hmem_get_mr_iface(opx_mr, &rbuf_device);
 
-	struct opx_context *context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
-	context->flags		    = FI_RECV | FI_REMOTE_CQ_DATA;
-	context->data		    = hdr->match.ofi_data;
-	context->buf		    = rbuf_qws;
-	context->next		    = NULL;
+	struct opx_context *context   = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+	context->flags		      = FI_REMOTE_CQ_DATA | FI_RMA | FI_REMOTE_WRITE;
+	context->data		      = hdr->match.ofi_data;
+	context->buf		      = rbuf_qws;
+	context->next		      = NULL;
+	context->tag		      = 0;
+	context->err_entry.err	      = 0;
+	context->err_entry.op_context = NULL;
 
 	fi_opx_hfi1_rx_rma_rts(opx_ep, hdr, payload, hdr->rma_rts.niov, hdr->rma_rts.rma_request_vaddr, context,
 			       (uintptr_t) rbuf_qws, rbuf_iface, rbuf_device, payload->rma_rts.iov, is_intranode,
