@@ -1518,11 +1518,13 @@ static int fi_opx_apply_info_and_init_ops(struct fi_opx_ep *opx_ep)
 
 	opx_ep->tx->caps |= info->tx_attr ? info->tx_attr->caps : info->caps;
 	opx_ep->tx->mode |= info->tx_attr ? info->tx_attr->mode : 0;
-	opx_ep->tx->op_flags |= info->tx_attr ? info->tx_attr->op_flags : 0;
+	opx_ep->tx->op_flags |= (info->tx_attr ? info->tx_attr->op_flags : 0) |
+				(opx_ep->tx_cq_bflags & FI_SELECTIVE_COMPLETION ? 0 : FI_COMPLETION);
 
 	opx_ep->rx->caps |= info->rx_attr ? info->rx_attr->caps : info->caps;
 	opx_ep->rx->mode |= info->rx_attr ? info->rx_attr->mode : 0;
-	opx_ep->rx->op_flags |= info->rx_attr ? info->rx_attr->op_flags : 0;
+	opx_ep->rx->op_flags |= (info->rx_attr ? info->rx_attr->op_flags : 0) |
+				(opx_ep->rx_cq_bflags & FI_SELECTIVE_COMPLETION ? 0 : FI_COMPLETION);
 
 	// Init oprations per endpoint
 	int ret;
