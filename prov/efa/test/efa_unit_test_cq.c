@@ -813,7 +813,8 @@ void test_ibv_cq_ex_read_ignore_removed_peer()
 #endif
 
 static void test_efa_cq_read(struct efa_resource *resource, fi_addr_t *addr,
-			     int ibv_wc_opcode, int status, int vendor_error)
+			     int ibv_wc_opcode, int status, int vendor_error,
+			     struct efa_context *ctx)
 {
 	int ret;
 	size_t raw_addr_len = sizeof(struct efa_ep_addr);
@@ -847,7 +848,9 @@ static void test_efa_cq_read(struct efa_resource *resource, fi_addr_t *addr,
 	if (ibv_wc_opcode == IBV_WC_RECV) {
 		ibv_cqx = container_of(base_ep->util_ep.rx_cq, struct efa_cq, util_cq)->ibv_cq.ibv_cq_ex;
 		ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
-		ibv_cqx->wr_id = (uintptr_t)12345;
+		ctx->completion_flags = FI_RECV | FI_MSG;
+		ctx->addr = 0x12345678;
+		ibv_cqx->wr_id = (uintptr_t) ctx;
 		will_return(efa_mock_ibv_start_poll_return_mock, 0);
 		ibv_cqx->status = status;
 	} else {
@@ -894,16 +897,19 @@ void test_efa_cq_read_send_success(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
+	struct fi_context2 *ctx;
 	struct fi_cq_data_entry cq_entry;
 	fi_addr_t addr;
 	int ret;
 
-	test_efa_cq_read(resource, &addr, IBV_WC_SEND, IBV_WC_SUCCESS, 0);
+	ctx = malloc(sizeof(struct fi_context2));
+	assert_non_null(ctx);
+	test_efa_cq_read(resource, &addr, IBV_WC_SEND, IBV_WC_SUCCESS, 0, (struct efa_context *)ctx);
 	efa_unit_test_buff_construct(&send_buff, resource, 4096 /* buff_size */);
 
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	ret = fi_send(resource->ep, send_buff.buff, send_buff.size,
-		      fi_mr_desc(send_buff.mr), addr, (void *) 12345);
+		      fi_mr_desc(send_buff.mr), addr, ctx);
 	assert_int_equal(ret, 0);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
@@ -913,6 +919,7 @@ void test_efa_cq_read_send_success(struct efa_resource **state)
 	assert_int_equal(ret, 1);
 
 	efa_unit_test_buff_destruct(&send_buff);
+	free(ctx);
 }
 
 /**
@@ -924,20 +931,24 @@ void test_efa_cq_read_recv_success(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff recv_buff;
 	struct fi_cq_data_entry cq_entry;
+	struct fi_context2 *ctx;
 	fi_addr_t addr;
 	int ret;
 
-	test_efa_cq_read(resource, &addr, IBV_WC_RECV, IBV_WC_SUCCESS, 0);
+	ctx = malloc(sizeof(struct fi_context2));
+	assert_non_null(ctx);
+	test_efa_cq_read(resource, &addr, IBV_WC_RECV, IBV_WC_SUCCESS, 0, (struct efa_context *)ctx);
 	efa_unit_test_buff_construct(&recv_buff, resource, 4096 /* buff_size */);
 
 	ret = fi_recv(resource->ep, recv_buff.buff, recv_buff.size,
-		      fi_mr_desc(recv_buff.mr), addr, NULL);
+		      fi_mr_desc(recv_buff.mr), addr, ctx);
 	assert_int_equal(ret, 0);
 
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 	assert_int_equal(ret, 1);
 
 	efa_unit_test_buff_destruct(&recv_buff);
+	free(ctx);
 }
 
 static void efa_cq_check_cq_err_entry(struct efa_resource *resource, int vendor_error) {
@@ -974,16 +985,19 @@ void test_efa_cq_read_send_failure(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
 	struct fi_cq_data_entry cq_entry;
+	struct fi_context2 *ctx;
 	fi_addr_t addr;
 	int ret;
 
+	ctx = malloc(sizeof(struct fi_context2));
+	assert_non_null(ctx);
 	test_efa_cq_read(resource, &addr, IBV_WC_SEND, IBV_WC_GENERAL_ERR,
-			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, (struct efa_context *)ctx);
 	efa_unit_test_buff_construct(&send_buff, resource, 4096 /* buff_size */);
 
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	ret = fi_send(resource->ep, send_buff.buff, send_buff.size,
-		      fi_mr_desc(send_buff.mr), addr, (void *) 12345);
+		      fi_mr_desc(send_buff.mr), addr, ctx);
 	assert_int_equal(ret, 0);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
@@ -996,6 +1010,7 @@ void test_efa_cq_read_send_failure(struct efa_resource **state)
 				  EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 
 	efa_unit_test_buff_destruct(&send_buff);
+	free(ctx);
 }
 
 /**
@@ -1011,15 +1026,18 @@ void test_efa_cq_read_recv_failure(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff recv_buff;
 	struct fi_cq_data_entry cq_entry;
+	struct fi_context2 *ctx;
 	fi_addr_t addr;
 	int ret;
 
+	ctx = malloc(sizeof(struct fi_context2));
+	assert_non_null(ctx);
 	test_efa_cq_read(resource, &addr, IBV_WC_RECV, IBV_WC_GENERAL_ERR,
-			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, (struct efa_context *)ctx);
 	efa_unit_test_buff_construct(&recv_buff, resource, 4096 /* buff_size */);
 
 	ret = fi_recv(resource->ep, recv_buff.buff, recv_buff.size,
-		      fi_mr_desc(recv_buff.mr), addr, NULL);
+		      fi_mr_desc(recv_buff.mr), addr, ctx);
 	assert_int_equal(ret, 0);
 
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
@@ -1029,4 +1047,5 @@ void test_efa_cq_read_recv_failure(struct efa_resource **state)
 				  EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 
 	efa_unit_test_buff_destruct(&recv_buff);
+	free(ctx);
 }
