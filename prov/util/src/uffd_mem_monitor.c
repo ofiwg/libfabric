@@ -46,6 +46,12 @@
 
 static int ofi_uffd_start(struct ofi_mem_monitor *monitor);
 static void ofi_uffd_stop(struct ofi_mem_monitor *monitor);
+static int ofi_uffd_subscribe(struct ofi_mem_monitor *monitor,
+			      const void *addr, size_t len,
+			      union ofi_mr_hmem_info *hmem_info);
+static bool ofi_uffd_valid(struct ofi_mem_monitor *monitor,
+			   const struct ofi_mr_info *info,
+			   struct ofi_mr_entry *entry);
 
 static struct ofi_uffd uffd = {
 	.monitor.iface = FI_HMEM_SYSTEM,
@@ -53,6 +59,15 @@ static struct ofi_uffd uffd = {
 	.monitor.cleanup = ofi_monitor_cleanup,
 	.monitor.start = ofi_uffd_start,
 	.monitor.stop = ofi_uffd_stop,
+	.monitor.subscribe = ofi_uffd_subscribe,
+
+	/* Since UFFD may have many MR cache entries for the same VA range and
+	 * ofi_monitor_unsubscribe() is called for every MR cache entry being
+	 * freed, UFFD unsubscribe needs to be a noop. Else, MR cache entries
+	 * may no longer be monitored.
+	 */
+	.monitor.unsubscribe = ofi_monitor_unsubscribe_no_op,
+	.monitor.valid = ofi_uffd_valid,
 	.monitor.name = "uffd",
 	.fd = -1,
 	.exit_pipe = { -1, -1 },
@@ -390,16 +405,6 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 		goto close_fd;
 	}
 
-	uffd.monitor.subscribe = ofi_uffd_subscribe;
-
-	/* Since UFFD may have many MR cache entries for the same VA range and
-	 * ofi_monitor_unsubscribe() is called for every MR cache entry being
-	 * freed, UFFD unsubscribe needs to be a noop. Else, MR cache entries
-	 * may no longer be monitored.
-	 */
-	uffd.monitor.unsubscribe = ofi_monitor_unsubscribe_no_op;
-	uffd.monitor.valid = ofi_uffd_valid;
-
 	FI_INFO(&core_prov, FI_LOG_MR,
 		"Memory monitor uffd started.\n");
 
@@ -454,6 +459,20 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 
 static void ofi_uffd_stop(struct ofi_mem_monitor *monitor)
 {
+}
+
+static int ofi_uffd_subscribe(struct ofi_mem_monitor *monitor,
+			      const void *addr, size_t len,
+			      union ofi_mr_hmem_info *hmem_info)
+{
+	return -FI_ENOSYS;
+}
+
+static bool ofi_uffd_valid(struct ofi_mem_monitor *monitor,
+			   const struct ofi_mr_info *info,
+			   struct ofi_mr_entry *entry)
+{
+	return false;
 }
 
 #endif /* HAVE_UFFD_MONITOR */
