@@ -195,7 +195,7 @@ struct efa_rdm_pke {
 	_Alignas(EFA_RDM_PKE_ALIGNMENT) char wiredata[0];
 };
 
-#if defined(static_assert) && defined(__x86_64__)
+#if defined(static_assert)
 static_assert(sizeof (struct efa_rdm_pke) % EFA_RDM_PKE_ALIGNMENT == 0, "efa_rdm_pke alignment check");
 #endif
 
