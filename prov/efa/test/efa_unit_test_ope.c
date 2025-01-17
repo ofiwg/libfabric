@@ -65,7 +65,7 @@ void test_efa_rdm_ope_prepare_to_post_send_with_no_enough_tx_pkts(struct efa_res
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->efa_outstanding_tx_ops = efa_rdm_ep->efa_max_outstanding_tx_ops - 1;
@@ -88,7 +88,7 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory(struct efa_resource **sta
 	int expected_pkt_entry_cnt;
 	int expected_pkt_entry_data_size_vec[1024];
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	/* data size should be aligned and evenly distributed.
 	 * alignment for host memory is 8 byte by default.
@@ -137,7 +137,7 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128(struct efa_resou
 	int expected_pkt_entry_cnt;
 	int expected_pkt_entry_data_size_vec[1024];
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = true;
 
@@ -186,7 +186,7 @@ void test_efa_rdm_ope_prepare_to_post_send_cuda_memory(struct efa_resource **sta
 	int expected_pkt_entry_cnt;
 	int expected_pkt_entry_data_size_vec[1024];
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	/* default alignment of cuda memory is 64 bytes */
 	msg_length = 12000;
@@ -211,7 +211,7 @@ void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128(struct efa_resou
 	int expected_pkt_entry_cnt;
 	int expected_pkt_entry_data_size_vec[1024];
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = true;
 
@@ -243,7 +243,7 @@ void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
 	fi_addr_t addr;
 	int ret, err;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(ret, 0);
@@ -314,7 +314,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_cleanup_txe(struct efa_resource *
 	 */
 	g_efa_unit_test_mocks.efa_rdm_pke_read = &efa_mock_efa_rdm_pke_read_return_mock;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 

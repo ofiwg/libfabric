@@ -50,7 +50,7 @@ _efa_files = \
 	prov/efa/src/efa_msg.c \
 	prov/efa/src/efa_rma.c \
 	prov/efa/src/efa_cq.c \
-	prov/efa/src/dgram/efa_dgram_ep.c \
+	prov/efa/src/efa_ep.c \
 	prov/efa/src/rdm/efa_rdm_peer.c	\
 	prov/efa/src/rdm/efa_rdm_cq.c \
 	prov/efa/src/rdm/efa_rdm_ep_utils.c \
@@ -94,7 +94,6 @@ _efa_headers = \
 	prov/efa/src/efa_prov.h \
 	prov/efa/src/efa_env.h \
 	prov/efa/src/fi_ext_efa.h \
-	prov/efa/src/dgram/efa_dgram_ep.h \
 	prov/efa/src/rdm/efa_rdm_peer.h	\
 	prov/efa/src/rdm/efa_rdm_cq.h \
 	prov/efa/src/rdm/efa_rdm_ep.h \
@@ -187,7 +186,6 @@ endif ENABLE_EFA_UNIT_TEST
 
 efa_CPPFLAGS += \
 	-I$(top_srcdir)/prov/efa/src/ \
-	-I$(top_srcdir)/prov/efa/src/dgram/ \
 	-I$(top_srcdir)/prov/efa/src/rdm/
 
 rdmainclude_HEADERS += \

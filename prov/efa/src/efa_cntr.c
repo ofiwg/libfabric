@@ -180,18 +180,16 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 
 static void efa_cntr_progress(struct util_cntr *cntr)
 {
-	struct util_ep *ep;
-	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
+	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
+	struct efa_cntr *efa_cntr;
+
+	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
 
 	ofi_genlock_lock(&cntr->ep_list_lock);
-	dlist_foreach(&cntr->ep_list, item) {
-		fid_entry = container_of(item, struct fid_list_entry, entry);
-		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
-		if (ep->tx_cq)
-			efa_cq_progress(ep->tx_cq);
-		if (ep->rx_cq && ep->rx_cq != ep->tx_cq)
-			efa_cq_progress(ep->rx_cq);
+	dlist_foreach(&efa_cntr->ibv_cq_poll_list, item) {
+		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
+		efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 	}
 	ofi_genlock_unlock(&cntr->ep_list_lock);
 }

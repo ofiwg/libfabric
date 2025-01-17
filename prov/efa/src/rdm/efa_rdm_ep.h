@@ -274,7 +274,7 @@ int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep);
 static inline
 bool efa_rdm_ep_should_write_rnr_completion(struct efa_rdm_ep *ep)
 {
-	return (efa_env.rnr_retry < EFA_RNR_INFINITE_RETRY) &&
+	return (ep->base_ep.rnr_retry < EFA_RNR_INFINITE_RETRY) &&
 		(ep->handle_resource_management == FI_RM_DISABLED);
 }
 

@@ -34,7 +34,6 @@ struct efa_env efa_env = {
 	.efa_max_gdrcopy_msg_size = 32768,
 	.efa_read_segment_size = 1073741824,
 	.efa_write_segment_size = 1073741824, /* need to confirm this constant. */
-	.rnr_retry = 3, /* Setting this value to EFA_RNR_INFINITE_RETRY makes the firmware retry indefinitey */
 	.host_id_file = "/sys/devices/virtual/dmi/id/board_asset_tag", /* Available on EC2 instances and containers */
 	.use_sm2 = false,
 	.huge_page_setting = EFA_ENV_HUGE_PAGE_UNSPEC,

@@ -16,6 +16,26 @@
 #define EFA_QP_LOW_LATENCY_SERVICE_LEVEL 8
 #define EFA_ERROR_MSG_BUFFER_LENGTH 1024
 
+/* Default rnr_retry for efa-rdm ep.
+ * If first attempt to send a packet failed,
+ * this value controls how many times firmware
+ * retries the send before it report an RNR error
+ * (via rdma-core error cq entry).
+ * The valid number is from
+ *      0 (no retry)
+ * to
+ *      EFA_RNR_INFINITY_RETRY (retry infinitely)
+ */
+#define EFA_RDM_DEFAULT_RNR_RETRY	(3)
+/**
+ * Infinite retry.
+ * NOTICE: this is the default rnr_retry
+ * mode for SRD qp. So modifying qp_attr.rnr_retry
+ * to this value has the same behavior as
+ * not modifying qp's rnr_retry attribute
+ */
+#define EFA_RNR_INFINITE_RETRY		(7)
+
 #define efa_rx_flags(efa_base_ep) ((efa_base_ep)->util_ep.rx_op_flags)
 #define efa_tx_flags(efa_base_ep) ((efa_base_ep)->util_ep.tx_op_flags)
 
@@ -94,6 +114,9 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 
 int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
 
+int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
+		struct fid_ep **ep_fid, void *context);
+
 int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, uint32_t tclass);
 
 void efa_qp_destruct(struct efa_qp *qp);
@@ -125,5 +148,14 @@ const char *efa_base_ep_get_peer_raw_addr_str(struct efa_base_ep *base_ep,
 struct efa_cq *efa_base_ep_get_tx_cq(struct efa_base_ep *ep);
 
 struct efa_cq *efa_base_ep_get_rx_cq(struct efa_base_ep *ep);
+
+int efa_base_ep_check_qp_in_order_aligned_128_bytes(struct efa_base_ep *base_ep,
+						   enum ibv_wr_opcode op_code);
+
+int efa_base_ep_insert_cntr_ibv_cq_poll_list(struct efa_base_ep *ep);
+
+void efa_base_ep_remove_cntr_ibv_cq_poll_list(struct efa_base_ep *ep);
+
+int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_recv_qp);
 
 #endif

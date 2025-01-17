@@ -20,7 +20,7 @@ void test_efa_hmem_info_update_neuron(struct efa_resource **state)
         uint32_t efa_device_caps_orig;
         bool neuron_initialized_orig;
 
-        resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+        resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
         assert_non_null(resource->hints);
 
         ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, resource->hints, &resource->info);
@@ -58,7 +58,7 @@ void test_efa_hmem_info_disable_p2p_neuron(struct efa_resource **state)
 
         ofi_hmem_disable_p2p = 1;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
         assert_non_null(resource->hints);
 
         ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, resource->hints, &resource->info);
@@ -109,7 +109,7 @@ void test_efa_hmem_info_disable_p2p_cuda(struct efa_resource **state)
 
         ofi_hmem_disable_p2p = 1;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
         assert_non_null(resource->hints);
 
         ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, resource->hints, &resource->info);
