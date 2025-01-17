@@ -104,7 +104,7 @@
 #define EFA_RDM_RUNT_PKT_END		148
 #define EFA_RDM_EXTRA_REQ_PKT_END   	148
 
-#if defined(static_assert) && defined(__x86_64__)
+#if defined(static_assert)
 #define EFA_RDM_ENSURE_HEADER_SIZE(hdr, size)	\
 	static_assert(sizeof (struct hdr) == (size), #hdr " size check")
 #else
