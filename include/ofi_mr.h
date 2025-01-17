@@ -118,9 +118,12 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 	}
 }
 
-
 /* Single lock used by all memory monitors and MR caches. */
 extern pthread_mutex_t mm_lock;
+
+/* Lock used to coordinate monitor states. */
+extern pthread_mutex_t mm_state_lock;
+
 /* The read-write lock is an additional lock used to protect the dlist_entry
  * list of ofi_mem_monitor. Due to the necessity of releasing the mm_lock
  * while walking the dlist in ofi_monitor_notify, we need a separate lock to

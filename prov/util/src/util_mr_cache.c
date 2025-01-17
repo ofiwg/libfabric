@@ -125,14 +125,17 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
 					  struct ofi_mr_entry *entry)
 {
-	/* Without subscription context, we might unsubscribe from
-	 * an address range in use by another region. As a result,
-	 * we remain subscribed. This may result in extra
-	 * notification events, but is harmless to correct operation.
-	 */
+	enum fi_hmem_iface iface = entry->info.iface;
+	struct ofi_mem_monitor *monitor = cache->monitors[iface];
 
 	ofi_rbmap_delete(&cache->tree, entry->node);
 	entry->node = NULL;
+
+	/* Some memory monitors have a subscription context per MR. These
+	 * memory monitors require ofi_monitor_unsubscribe() to be called.
+	 */
+	ofi_monitor_unsubscribe(monitor, entry->info.iov.iov_base,
+				entry->info.iov.iov_len, &entry->hmem_info);
 
 	cache->cached_cnt--;
 	cache->cached_size -= entry->info.iov.iov_len;
