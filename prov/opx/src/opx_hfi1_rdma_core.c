@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 by Cornelis Networks.
+ * Copyright (C) 2024-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1030,12 +1030,12 @@ int32_t opx_hfi_update_tid(struct fi_opx_hfi1_context *context, uint64_t vaddr, 
 		assert(rettidinfo->tidcnt);
 
 		if (rettidinfo->length != *length) {
-			FI_WARN(&fi_opx_provider, FI_LOG_MR,
-				"PARTIAL UPDATE errno %d  \"%s\" INPUTS vaddr [%p - %p] length %u (pages %lu), OUTPUTS vaddr [%p - %p] length %u (pages %lu), tidcnt %u\n",
-				errno, strerror(errno), (void *) vaddr, (void *) (vaddr + *length), *length,
-				(*length) / PAGE_SIZE, (void *) rettidinfo->vaddr,
-				(void *) (rettidinfo->vaddr + rettidinfo->length), rettidinfo->length,
-				rettidinfo->length / PAGE_SIZE, rettidinfo->tidcnt);
+			FI_DBG(&fi_opx_provider, FI_LOG_MR,
+			       "PARTIAL UPDATE errno %d  \"%s\" INPUTS vaddr [%p - %p] length %u (pages %lu), OUTPUTS vaddr [%p - %p] length %u (pages %lu), tidcnt %u\n",
+			       errno, strerror(errno), (void *) vaddr, (void *) (vaddr + *length), *length,
+			       (*length) / PAGE_SIZE, (void *) rettidinfo->vaddr,
+			       (void *) (rettidinfo->vaddr + rettidinfo->length), rettidinfo->length,
+			       rettidinfo->length / PAGE_SIZE, rettidinfo->tidcnt);
 		}
 		/* Always update outputs, even on soft errors */
 		*length = rettidinfo->length;
