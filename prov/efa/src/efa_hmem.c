@@ -129,6 +129,7 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 	if (ret == FI_SUCCESS) {
 		ibv_mr = ibv_reg_dmabuf_mr(g_device_list[0].ibv_pd, dmabuf_offset,
 					   len, (uint64_t)ptr, dmabuf_fd, ibv_access);
+		(void)close(dmabuf_fd);
 		if (!ibv_mr) {
 			EFA_INFO(FI_LOG_CORE,
 				"Unable to register CUDA device buffer via dmabuf: %s. "
