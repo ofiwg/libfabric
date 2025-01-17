@@ -183,6 +183,7 @@ static inline int opx_route_control_value(const enum opx_hfi1_type hfi1_type, en
 								      "OPX_HFI1_RZV_CTRL", "OPX_HFI1_RZV_DATA"};
 
 	assert(pkt_type < OPX_HFI1_NUM_PACKET_TYPES);
+	/* HFI specific default (except OPX_HFI1_RZV_CTRL which always defaults to OPX_RC_IN_ORDER_0) */
 	const int default_route_control =
 		((hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ? OPX_RC_OUT_OF_ORDER_0 : OPX_RC_IN_ORDER_0);
 	/* Only called when initializing the models so not performance sensitive  */
@@ -205,14 +206,16 @@ static inline int opx_route_control_value(const enum opx_hfi1_type hfi1_type, en
 							 opx_route_control[i]);
 
 					} else {
-						opx_route_control[i] = default_route_control;
+						opx_route_control[i] = (i == OPX_HFI1_RZV_CTRL) ? OPX_RC_IN_ORDER_0 :
+												  default_route_control;
 						FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 							"%s route control %d not allowed, defaulting to %d.\n",
 							opx_hfi1_packet_str[i], route_control_value,
 							opx_route_control[i]);
 					}
 				} else {
-					opx_route_control[i] = default_route_control;
+					opx_route_control[i] =
+						(i == OPX_HFI1_RZV_CTRL) ? OPX_RC_IN_ORDER_0 : default_route_control;
 					FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 						 "%s route control defaulting to %d.\n", opx_hfi1_packet_str[i],
 						 opx_route_control[i]);
@@ -221,10 +224,12 @@ static inline int opx_route_control_value(const enum opx_hfi1_type hfi1_type, en
 			}
 		} else {
 			for (int i = 0; i < OPX_HFI1_NUM_PACKET_TYPES; ++i) {
-				opx_route_control[i] = default_route_control;
+				opx_route_control[i] =
+					(i == OPX_HFI1_RZV_CTRL) ? OPX_RC_IN_ORDER_0 : default_route_control;
 			}
 			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				 "All packet types using default route control value %d.\n", default_route_control);
+				 "All packet types using %s default route control values.\n",
+				 OPX_HFI_TYPE_STRING(hfi1_type));
 		}
 	}
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[%s:%d] Return %s route control %d.\n", func, line,

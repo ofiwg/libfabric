@@ -272,9 +272,13 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   in case of mixed network. Default is 0.
 
 *FI_OPX_ROUTE_CONTROL*
-: Integer. Route control.  Values can range from 0-7.
-  0-3 is used for in-order and 4-7 is used for out-of-order.
-  Default is 0 on OPA100 and 4 on CN5000.
+: Integer. Specify the route control for each packet type. The format is
+  - `<inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>`. 
+
+  Each value can range from 0-7. 0-3 is used for in-order and
+  4-7 is used for out-of-order. 
+
+  Default is `0:0:0:0:0:0 ` on OPA100 and  `4:4:4:4:0:4 ` on CN5000.
 
 *FI_OPX_SHM_ENABLE*
 : Boolean (1/0, on/off, true/false, yes/no). Enables shm across all ports and hfi units
