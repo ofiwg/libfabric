@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2024 by Cornelis Networks.
+ * Copyright (C) 2022-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -334,7 +334,7 @@ int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep, struct iovec *iovecs, int iov
 #endif
 
 	if (writev_rc <= 0) {
-		fi_opx_hfi1_sdma_handle_errors(opx_ep, writev_rc, iovecs, iovs_used, __FILE__, __func__, __LINE__);
+		fi_opx_hfi1_sdma_handle_errors(opx_ep, writev_rc, iovecs, iovs_used, file, func, line);
 	}
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.writev_calls[iovs_used]);

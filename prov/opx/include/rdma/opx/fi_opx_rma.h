@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -202,6 +202,9 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 
 		struct fi_opx_hfi1_rx_rma_rts_params *params = &work->rx_rma_rts;
 		params->work_elem.slist_entry.next	     = NULL;
+		params->work_elem.completion_action	     = NULL;
+		params->work_elem.payload_copy		     = NULL;
+		params->work_elem.complete		     = false;
 		params->opx_ep				     = opx_ep;
 		params->lrh_dlid			     = lrh_dlid;
 		params->slid				     = slid;
