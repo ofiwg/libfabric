@@ -131,6 +131,7 @@ struct ofi_hmem_ops {
 				      const void *src, size_t size);
 	int (*get_dmabuf_fd)(const void *addr, uint64_t size, int *fd,
 			     uint64_t *offset);
+	int (*put_dmabuf_fd)(int fd);
 };
 
 extern struct ofi_hmem_ops hmem_ops[];
@@ -357,6 +358,11 @@ static inline int ofi_hmem_no_get_dmabuf_fd(const void *addr, uint64_t size,
 	return -FI_ENOSYS;
 }
 
+static inline int ofi_hmem_no_put_dmabuf_fd(int fd)
+{
+	return -FI_ENOSYS;
+}
+
 static inline bool ofi_hmem_p2p_disabled(void)
 {
 	return ofi_hmem_disable_p2p;
@@ -450,5 +456,6 @@ int ofi_hmem_dev_reg_copy_from_hmem(enum fi_hmem_iface iface, uint64_t handle,
 				    void *dest, const void *src, size_t size);
 int ofi_hmem_get_dmabuf_fd(enum fi_hmem_iface, const void *addr, uint64_t size,
 			   int *fd, uint64_t *offset);
+int ofi_hmem_put_dmabuf_fd(enum fi_hmem_iface iface, int fd);
 
 #endif /* _OFI_HMEM_H_ */
