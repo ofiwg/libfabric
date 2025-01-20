@@ -189,28 +189,44 @@ int cxip_curl_load_symbols(void)
 	if (cxip_curlhandle)
 		return 0;
 
+	char *curl_libpath = NULL;
+	#ifdef FI_CXI_CURL_LIB_PATH
+		curl_libpath = strdup(FI_CXI_CURL_LIB_PATH "/%s/libcurl.so.%d");
+		TRACE_CURL("FI_CXI_CURL_LIB_PATH set to '%s'\n", curl_libpath);
+	#else
+		curl_libpath = strdup("/usr/%s/libcurl.so.%d");
+	#endif
+
 	/* Try to find latest usable version */
 	// TODO test earlier versions
 	for (version = 4; version >= 4; version--) {
-		sprintf(libfile, "/usr/lib64/libcurl.so.%d", version);
-		libpath = realpath(libfile, NULL);
-		if (!libpath) {
-			TRACE_CURL("could not expand '%s'\n", libfile);
-			CXIP_INFO("could not expand '%s'\n", libfile);
-			continue;
-		}
-		TRACE_CURL("dlopen '%s'\n", libpath);
-		h = dlopen(libpath, RTLD_NOW);
-		if (!h) {
-			TRACE_CURL("%s not found\n", libpath);
-			CXIP_INFO("%s not found\n", libpath);
+		const char *lib_dirs[] = {"lib", "lib64"};
+		for (int i = 0; i < 2; i++) {
+			sprintf(libfile, curl_libpath, lib_dirs[i], version);
+			TRACE_CURL("Checking libcurl at '%s'\n", libfile);
+			libpath = realpath(libfile, NULL);
+			if (!libpath) {
+				TRACE_CURL("could not expand '%s'\n", libfile);
+				CXIP_INFO("could not expand '%s'\n", libfile);
+				continue;
+			}
+			TRACE_CURL("dlopen '%s'\n", libpath);
+			h = dlopen(libpath, RTLD_NOW);
+			if (!h) {
+				TRACE_CURL("%s not found\n", libpath);
+				CXIP_INFO("%s not found\n", libpath);
+				free(libpath);
+				continue;
+			}
+			TRACE_CURL("%s found\n", libpath);
 			free(libpath);
-			continue;
+			break;
 		}
-		TRACE_CURL("%s found\n", libpath);
-		free(libpath);
-		break;
+		if (h) {
+			break;
+		}
 	}
+	free(curl_libpath);
 	if (!h) {
 		TRACE_CURL("libcurl not supported\n");
 		CXIP_WARN("libcurl not supported\n");
