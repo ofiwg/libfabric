@@ -130,6 +130,7 @@ struct hsa_ops {
 #if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
 	hsa_status_t (*hsa_amd_portable_export_dmabuf)(const void* ptr, size_t size,
 						       int* dmabuf, uint64_t* offset);
+	hsa_status_t (*hsa_amd_portable_close_dmabuf)(int dmabuf);
 #endif
 };
 
@@ -183,6 +184,7 @@ static struct hsa_ops hsa_ops = {
 	.hsa_iterate_agents = hsa_iterate_agents,
 #if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
 	.hsa_amd_portable_export_dmabuf = hsa_amd_portable_export_dmabuf,
+	.hsa_amd_portable_close_dmabuf = hsa_amd_portable_close_dmabuf,
 #endif
 	.hsa_system_get_info = hsa_system_get_info,
 };
@@ -863,6 +865,13 @@ static int rocr_hmem_dl_init(void)
 			"Failed to find hsa_amd_portable_export_dmabuf\n");
 		goto err;
 	}
+
+	hsa_ops.hsa_amd_portable_close_dmabuf = dlsym(hsa_handle, "hsa_amd_portable_close_dmabuf");
+	if (!hsa_ops.hsa_amd_portable_close_dmabuf) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_amd_portable_close_dmabuf\n");
+		goto err;
+	}
 #endif
 
 	return FI_SUCCESS;
@@ -1184,6 +1193,25 @@ int rocr_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *dmabuf_fd,
 	return FI_SUCCESS;
 }
 
+int rocr_hmem_put_dmabuf_fd(int fd)
+{
+#if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
+	hsa_status_t hsa_ret;
+
+	hsa_ret = hsa_ops.hsa_amd_portable_close_dmabuf(fd);
+	if (hsa_ret != HSA_STATUS_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to close dmabuf handle: %s\n",
+			ofi_hsa_status_to_string(hsa_ret));
+		return -FI_EIO;
+	}
+
+	return FI_SUCCESS;
+#else
+	return -FI_ENOSYS;
+#endif
+}
+
 #else
 
 int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
@@ -1306,6 +1334,11 @@ int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 
 int rocr_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *dmabuf_fd,
 			     uint64_t *offset)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_hmem_put_dmabuf_fd(int fd)
 {
 	return -FI_ENOSYS;
 }

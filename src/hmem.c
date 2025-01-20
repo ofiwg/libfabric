@@ -195,7 +195,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_reg_copy_to_hmem = rocr_dev_reg_copy_to_hmem,
 		.dev_reg_copy_from_hmem = rocr_dev_reg_copy_from_hmem,
 		.get_dmabuf_fd = rocr_hmem_get_dmabuf_fd,
-		.put_dmabuf_fd = ofi_hmem_no_put_dmabuf_fd,
+		.put_dmabuf_fd = rocr_hmem_put_dmabuf_fd,
 	},
 	[FI_HMEM_ZE] = {
 		.initialized = false,
