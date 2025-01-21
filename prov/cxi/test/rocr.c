@@ -806,3 +806,40 @@ Test(hsa, dmabuf_offset)
 
 	cxit_teardown_msg();
 }
+
+Test(hsa, dmabuf_stress)
+{
+	hsa_status_t hsa_ret;
+	int ret;
+	int i;
+	void *buf;
+	size_t size = 1024 * 1024;
+	struct fid_mr *mr;
+
+	ret = setenv("FI_HMEM_ROCR_USE_DMABUF", "1", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	ret = setenv("FI_MR_ROCR_CACHE_MONITOR_ENABLED", "0", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	hsa_ret = hsa_memory_allocate(coarse_grain, size, &buf);
+	cr_assert_eq(hsa_ret, HSA_STATUS_SUCCESS, "hsaMalloc failed: %d",
+		     hsa_ret);
+
+	cxit_setup_msg();
+
+	for (i = 0; i < 2048; i++) {
+		ret = fi_mr_reg(cxit_domain, buf, size, FI_READ | FI_WRITE,
+				0, 0, 0, &mr, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed: %d", ret);
+
+		ret = fi_close(&mr->fid);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_close MR failed: %d", ret);
+	}
+
+	cxit_teardown_msg();
+
+	hsa_ret = hsa_memory_free(buf);
+	cr_assert_eq(hsa_ret, HSA_STATUS_SUCCESS, "hsaFree  failed: %d",
+		     hsa_ret);
+}
