@@ -821,8 +821,10 @@ struct cxip_md {
 	struct cxi_md *md;
 	struct ofi_mr_info info;
 	uint64_t handle;
+	int dmabuf_fd;
 	bool handle_valid;
 	bool cached;
+	bool dmabuf_fd_valid;
 };
 
 #define CXIP_MR_DOMAIN_HT_BUCKETS 16
