@@ -761,3 +761,48 @@ Test(hsa, verify_hmemDevReg_fine)
 
 	verify_dev_reg_handle(true, FINE);
 }
+
+Test(hsa, dmabuf_offset)
+{
+	hsa_status_t hsa_ret;
+	void *bufs[2];
+	int ret;
+	int i;
+	struct fid_mr *mrs[2];
+	size_t size = 1024 * 1024;
+
+	ret = setenv("FI_HMEM_ROCR_USE_DMABUF", "1", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	ret = setenv("FI_MR_ROCR_CACHE_MONITOR_ENABLED", "0", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	cxit_setup_msg();
+
+	hsa_ret = hsa_memory_allocate(coarse_grain, size, &bufs[0]);
+	cr_assert_eq(hsa_ret, HSA_STATUS_SUCCESS, "hsaMalloc failed: %d",
+		     hsa_ret);
+
+	ret = fi_mr_reg(cxit_domain, bufs[0], size, FI_READ | FI_WRITE, 0, 0, 0,
+			&mrs[0], NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed: %d", ret);
+
+	hsa_ret = hsa_memory_allocate(coarse_grain, size, &bufs[1]);
+	cr_assert_eq(hsa_ret, HSA_STATUS_SUCCESS, "hsaMalloc failed: %d",
+		     hsa_ret);
+
+	ret = fi_mr_reg(cxit_domain, bufs[1], size, FI_READ | FI_WRITE, 0, 0, 0,
+			&mrs[1], NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed: %d", ret);
+
+	for (i = 0; i < 2; i++) {
+		ret = fi_close(&(mrs[i]->fid));
+		cr_assert_eq(ret, FI_SUCCESS, "fi_close MR failed: %d", ret);
+
+		hsa_ret = hsa_memory_free(bufs[i]);
+		cr_assert_eq(hsa_ret, HSA_STATUS_SUCCESS, "hsaFree  failed: %d",
+			     hsa_ret);
+	}
+
+	cxit_teardown_msg();
+}
