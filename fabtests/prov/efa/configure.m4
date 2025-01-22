@@ -28,5 +28,10 @@ AS_IF([test x"$have_efadv" = x"1"], [
             [],
             [efa_rdma_checker_happy=0],
             [[#include <infiniband/efadv.h>]])
+
+        AC_CHECK_DECL(EFADV_DEVICE_ATTR_CAPS_UNSOLICITED_WRITE_RECV,
+            [],
+            [efa_rdma_checker_happy=0],
+            [[#include <infiniband/efadv.h>]])
 ])
 AM_CONDITIONAL([BUILD_EFA_RDMA_CHECKER], [test $efa_rdma_checker_happy -eq 1])

@@ -74,7 +74,7 @@ def has_rdma(cmdline_args, operation):
     operation: rdma operation name, allowed values are read and write
     return: a boolean
     """
-    assert operation in ["read", "write"]
+    assert operation in ["read", "write", "writedata"]
     binpath = cmdline_args.binpath or ""
     cmd = "timeout " + str(cmdline_args.timeout) \
           + " " + os.path.join(binpath, f"fi_efa_rdma_checker -o {operation}")

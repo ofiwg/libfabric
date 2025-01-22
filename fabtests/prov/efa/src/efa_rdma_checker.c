@@ -14,6 +14,7 @@
 enum rdma_op {
 	READ,
 	WRITE,
+	UNSOLICITED_WRITE_RECV,
 };
 
 /*
@@ -37,8 +38,10 @@ int main(int argc, char *argv[])
 				op = READ;
 			} else if (!strcasecmp(optarg, "write")) {
 				op = WRITE;
+			} else if (!strcasecmp(optarg, "writedata")) {
+				op = UNSOLICITED_WRITE_RECV;
 			} else {
-				fprintf(stderr, "Unknown operation '%s. Allowed: read | write'\n", optarg);
+				fprintf(stderr, "Unknown operation '%s. Allowed: read | write | writedata '\n", optarg);
 				return EXIT_FAILURE;
 			}
 			break;
@@ -46,7 +49,7 @@ int main(int argc, char *argv[])
 		case 'h':
 		default:
 			fprintf(stderr, "Usage:\n");
-			FT_PRINT_OPTS_USAGE("fi_efa_rdma_checker -o <op>", "rdma operation type: read|write");
+			FT_PRINT_OPTS_USAGE("fi_efa_rdma_checker -o <op>", "rdma operation type: read | write | writedata");
 			return EXIT_FAILURE;
         }
 	}
@@ -86,11 +89,25 @@ int main(int argc, char *argv[])
 	if (op == READ)
 		goto out;
 
-	if (efadv_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE) {
-		fprintf(stdout, "rdma write is enabled \n");
-	} else {
-		fprintf(stderr, "rdma write is NOT enabled \n");
-		err = op == WRITE ? 1 : 0;
+	if (op == WRITE) {
+		if (efadv_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE) {
+			fprintf(stdout, "rdma write is enabled \n");
+		} else {
+			fprintf(stderr, "rdma write is NOT enabled \n");
+			err = 1;
+		}
+		goto out;
+	}
+
+	if (op == UNSOLICITED_WRITE_RECV) {
+		if (efadv_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_UNSOLICITED_WRITE_RECV) {
+			fprintf(stdout,
+				"rdma unsolicited write recv is enabled \n");
+		} else {
+			fprintf(stderr, "rdma unsolicited write recv is NOT "
+					"enabled \n");
+			err = 1;
+		}
 	}
 
 out:
