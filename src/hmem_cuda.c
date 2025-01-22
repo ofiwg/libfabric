@@ -748,6 +748,16 @@ int cuda_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 #endif /* HAVE_CUDA_DMABUF */
 }
 
+int cuda_put_dmabuf_fd(int fd)
+{
+#if HAVE_CUDA_DMABUF
+	close(fd);
+	return FI_SUCCESS;
+#else
+	return -FI_ENOSYS;
+#endif /* HAVE_CUDA_DMABUF */
+}
+
 int cuda_hmem_init(void)
 {
 	int ret;
@@ -1043,6 +1053,11 @@ bool cuda_is_dmabuf_supported(void)
 
 int cuda_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 		       uint64_t *offset)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_put_dmabuf_fd(int fd)
 {
 	return -FI_ENOSYS;
 }
