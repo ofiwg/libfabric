@@ -195,6 +195,7 @@ bool cuda_is_gdrcopy_enabled(void);
 bool cuda_is_dmabuf_supported(void);
 int cuda_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 		       uint64_t *offset);
+int cuda_put_dmabuf_fd(int fd);
 
 void cuda_gdrcopy_to_dev(uint64_t handle, void *dev,
 			 const void *host, size_t size);
