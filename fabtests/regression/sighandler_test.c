@@ -80,7 +80,7 @@ int main(int argc, char **argv)
 			}
 		}
 		hints->caps = FI_MSG;
-		hints->mode = FI_CONTEXT;
+		hints->mode = FI_CONTEXT | FI_CONTEXT2;
 		if (ft_init_fabric()) {
 			ft_freehints(hints);
 			exit(EXIT_FAILURE);

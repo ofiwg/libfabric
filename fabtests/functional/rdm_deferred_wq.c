@@ -633,7 +633,7 @@ int main(int argc, char **argv)
 		 tested_op == FI_OP_COMPARE_ATOMIC)
 		hints->caps |= FI_ATOMIC;
 
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;
 

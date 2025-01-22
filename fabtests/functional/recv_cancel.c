@@ -76,7 +76,7 @@ static int recv_cancel_host(void)
 	int ret = 0;
 	int retries = 0;
 	struct fi_cq_err_entry recv_completion, cancel_error_entry;
-	struct fi_context cancel_recv_ctx, standard_recv_ctx;
+	struct fi_context2 cancel_recv_ctx, standard_recv_ctx;
 
 	memset(&cancel_error_entry, 0, sizeof(cancel_error_entry));
 
@@ -246,7 +246,7 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->caps = FI_TAGGED;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;
 

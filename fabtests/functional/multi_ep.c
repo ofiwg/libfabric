@@ -53,8 +53,8 @@ static char **send_bufs, **recv_bufs;
 static struct fid_mr **send_mrs, **recv_mrs;
 static void **send_descs, **recv_descs;
 static struct fi_rma_iov *peer_iovs;
-static struct fi_context *recv_ctx;
-static struct fi_context *send_ctx;
+static struct fi_context2 *recv_ctx;
+static struct fi_context2 *send_ctx;
 static struct fid_cq **txcqs, **rxcqs;
 static struct fid_av **avs;
 static fi_addr_t *remote_fiaddr;
@@ -657,7 +657,7 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->caps = FI_MSG | FI_RMA;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;
 

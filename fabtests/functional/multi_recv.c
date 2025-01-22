@@ -41,7 +41,7 @@
 #define MAX_XFER_SIZE (1 << 20)
 
 static struct fid_mr *mr_multi_recv;
-struct fi_context ctx_multi_recv[2];
+struct fi_context2 ctx_multi_recv[2];
 static int use_recvmsg, comp_per_buf;
 
 
@@ -324,7 +324,7 @@ int main(int argc, char **argv)
 
 	opts.min_multi_recv_size = opts.transfer_size;
 	hints->caps = FI_MSG | FI_MULTI_RECV;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->rx_attr->op_flags = FI_MULTI_RECV;
 	hints->addr_format = opts.address_format;

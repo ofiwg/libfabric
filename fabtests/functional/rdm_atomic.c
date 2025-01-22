@@ -44,7 +44,7 @@ static void *cpy_dst;
 
 static struct fid_mr *mr_result;
 static struct fid_mr *mr_compare;
-static struct fi_context fi_ctx_atomic;
+static struct fi_context2 fi_ctx_atomic;
 
 static enum fi_datatype datatype;
 static int run_all_ops = 1, run_all_datatypes = 1;
@@ -591,7 +591,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_ATOMICS;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	ret = run();

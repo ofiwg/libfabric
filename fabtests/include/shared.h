@@ -251,7 +251,7 @@ extern size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
 extern int tx_fd, rx_fd;
 extern int timeout;
 
-extern struct fi_context tx_ctx, rx_ctx;
+extern struct fi_context2 tx_ctx, rx_ctx;
 extern uint64_t remote_cq_data;
 
 extern uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;

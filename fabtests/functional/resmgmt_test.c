@@ -47,7 +47,7 @@ int delay, tagged;
 static int send_loop(size_t size) {
 	int q_opts = 0;
 	int ret;
-	struct fi_context send_ctx[max_opts];
+	struct fi_context2 send_ctx[max_opts];
 
 	while (q_opts < max_opts) {
 		do {
@@ -91,7 +91,7 @@ static int receive_loop(size_t size)
 {
 	int ret;
 	int q_opts = 0;
-	struct fi_context recv_ctx[max_opts];
+	struct fi_context2 recv_ctx[max_opts];
 
 	while (q_opts < max_opts) {
 		do {
@@ -262,7 +262,7 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->caps = FI_MSG;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->addr_format = opts.address_format;
 

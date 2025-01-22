@@ -87,7 +87,7 @@ static int multi_setup_fabric(int argc, char **argv)
 	struct fi_rma_iov remote;
 
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	if (pm_job.transfer_method == multi_msg) {

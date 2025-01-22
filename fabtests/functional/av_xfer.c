@@ -235,7 +235,7 @@ int main(int argc, char **argv)
 
 	hints->caps = hints->ep_attr->type == FI_EP_RDM ?
 		      FI_TAGGED : FI_MSG;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;
 	base_hints = hints;

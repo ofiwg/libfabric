@@ -86,7 +86,7 @@ static int send_msg(int sendmsg, size_t size)
 static int receive_msg(size_t size)
 {
 	int ret;
-	struct fi_context inj_ctx;
+	struct fi_context2 inj_ctx;
 	ft_tag = 0xabcd;
 
 	ret = ft_post_rx(ep, size, &inj_ctx);
@@ -194,7 +194,7 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->caps = FI_TAGGED;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->domain_attr->mr_mode = opts.mr_mode;
