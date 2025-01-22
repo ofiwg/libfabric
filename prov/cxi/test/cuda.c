@@ -580,3 +580,38 @@ Test(cuda, verify_force_dev_reg_local)
 	cxit_destroy_cqs();
 	cxit_teardown_ep();
 }
+
+Test(cuda, dmabuf_stress)
+{
+	int ret;
+	int i;
+	void *buf;
+	size_t size = 1024 * 1024;
+	struct fid_mr *mr;
+	cudaError_t cuda_ret;
+
+	ret = setenv("FI_HMEM_CUDA_USE_DMABUF", "1", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	ret = setenv("FI_MR_CUDA_CACHE_MONITOR_ENABLED", "0", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	cuda_ret = cudaMalloc(&buf, size);
+	cr_assert_eq(cuda_ret, cudaSuccess, "cudaMalloc failed: %d", cuda_ret);
+
+	cxit_setup_msg();
+
+	for (i = 0; i < 2048; i++) {
+		ret = fi_mr_reg(cxit_domain, buf, size, FI_READ | FI_WRITE,
+				0, 0, 0, &mr, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed: %d", ret);
+
+		ret = fi_close(&mr->fid);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_close MR failed: %d", ret);
+	}
+
+	cxit_teardown_msg();
+
+	cuda_ret = cudaFree(buf);
+	cr_assert_eq(cuda_ret, cudaSuccess, "cudaFree  failed: %d", cuda_ret);
+}
