@@ -712,7 +712,7 @@ found:
 	return rx_entry;
 }
 
-static bool
+bool
 xnet_srx_cancel_rx(struct xnet_srx *srx, struct slist *queue, void *context)
 {
 	struct slist_entry *cur, *prev;
