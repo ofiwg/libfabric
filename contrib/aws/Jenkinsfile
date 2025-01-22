@@ -244,7 +244,7 @@ pipeline {
                     stages["2_c6g_alinux2023_tcp"] = get_test_stage_with_lock("2_c6g_alinux2023_tcp", env.BUILD_TAG, "alinux2023", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
                     stages["2_c6g_ubuntu2004_tcp"] = get_test_stage_with_lock("2_c6g_ubuntu2004_tcp", env.BUILD_TAG, "ubuntu2004", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
                     stages["2_c6g_rhel8_tcp"] = get_test_stage_with_lock("2_c6g_rhel8_tcp", env.BUILD_TAG, "rhel8", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
-                    stages["3_g4dn_alinux2_tcp"] = get_test_stage_with_lock("3_g4dn_alinux2_tcp", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 3, "us-east-1", g4dn12x_lock_label, addl_args_tcp + " --test-list test_nccl_tests")
+                    stages["3_g4dn_alinux2_tcp"] = get_test_stage_with_lock("3_g4dn_alinux2_tcp", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 3, "us-east-1", g4dn12x_lock_label, addl_args_tcp + " --test-list test_nccl_tests --test-iterations fastest")
 
                     // Multi Node Tests - SOCKETS
                     stages["2_c6g_alinux2_sockets"] = get_test_stage_with_lock("2_c6g_alinux2_sockets", env.BUILD_TAG, "alinux2", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_sockets)
