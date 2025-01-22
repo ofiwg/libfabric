@@ -180,7 +180,7 @@ struct curlfunc curlary[] = {
 int cxip_curl_load_symbols(void)
 {
 	struct curlfunc *funcptr;
-	char libfile[256], *libpath;
+	char *libfile = NULL, *libpath;
 	int version;
 	int errcnt;
 	void *h;
@@ -202,12 +202,19 @@ int cxip_curl_load_symbols(void)
 	for (version = 4; version >= 4; version--) {
 		const char *lib_dirs[] = {"lib", "lib64"};
 		for (int i = 0; i < 2; i++) {
-			sprintf(libfile, curl_libpath, lib_dirs[i], version);
+			int len = snprintf(NULL, 0, curl_libpath, lib_dirs[i], version) + 1;
+			libfile = malloc(len);
+			if (!libfile) {
+				free(curl_libpath);
+				return -FI_ENOMEM;
+			}
+			snprintf(libfile, len, curl_libpath, lib_dirs[i], version);
 			TRACE_CURL("Checking libcurl at '%s'\n", libfile);
 			libpath = realpath(libfile, NULL);
 			if (!libpath) {
 				TRACE_CURL("could not expand '%s'\n", libfile);
 				CXIP_INFO("could not expand '%s'\n", libfile);
+				free(libfile);
 				continue;
 			}
 			TRACE_CURL("dlopen '%s'\n", libpath);
@@ -216,10 +223,12 @@ int cxip_curl_load_symbols(void)
 				TRACE_CURL("%s not found\n", libpath);
 				CXIP_INFO("%s not found\n", libpath);
 				free(libpath);
+				free(libfile);
 				continue;
 			}
 			TRACE_CURL("%s found\n", libpath);
 			free(libpath);
+			free(libfile);
 			break;
 		}
 		if (h) {
