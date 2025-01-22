@@ -645,7 +645,7 @@ static int test_caps_regression(char *node, char *service, uint64_t flags,
 
 	/* Limit mode bits to common, older options only */
 	hints->caps |= fi->caps;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	fi_freeinfo(*info);

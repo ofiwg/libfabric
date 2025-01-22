@@ -146,7 +146,7 @@ static int trigger_rnr_queue_resend(enum fi_op atomic_op, void *result, void *co
 				    struct fid_mr *mr_result, struct fid_mr *mr_compare)
 {
 	int i, ret;
-	struct fi_context fi_ctx_atomic;
+	struct fi_context2 fi_ctx_atomic;
 
 	if (opts.rma_op) {
 		for (i = 0; i < global_expected_rnr_error; i++) {
@@ -434,7 +434,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps |= FI_MSG | FI_RMA | FI_ATOMICS;
-	hints->mode |= FI_CONTEXT;
+	hints->mode |= FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	/* FI_RM_ENABLED to is required for queue/resend logic to happen in RNR case */

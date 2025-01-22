@@ -178,7 +178,7 @@ static int init_multi_mr_res(void)
 static int mr_key_test()
 {
 	int i, ret = 0;
-	struct fi_context rma_ctx;
+	struct fi_context2 rma_ctx;
 
 	for (i = 0; i < mr_count; i++) {
 		tx_buf = (char *)mr_res_array[i].buf;
@@ -319,7 +319,7 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->caps = FI_RMA | FI_RMA_EVENT | FI_MSG;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;
 

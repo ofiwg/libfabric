@@ -39,8 +39,8 @@
 
 struct fi_rma_iov local;
 
-struct fi_context fi_ctx_write;
-struct fi_context fi_ctx_read;
+struct fi_context2 fi_ctx_write;
+struct fi_context2 fi_ctx_read;
 
 static int run_test(void)
 {
@@ -126,7 +126,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_RMA | FI_RMA_EVENT;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;
 

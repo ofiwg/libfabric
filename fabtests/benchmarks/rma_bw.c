@@ -93,7 +93,7 @@ int main(int argc, char **argv)
 
 	hints->caps = FI_MSG | FI_RMA;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
 	hints->addr_format = opts.address_format;
 

@@ -42,7 +42,7 @@
 #define BASE_TAG 0x900d
 #define SEND_CNT 10
 
-static struct fi_context fi_context;
+static struct fi_context2 fi_context;
 
 static int wait_for_send_comp(int count)
 {
@@ -355,7 +355,7 @@ int main(int argc, char **argv)
 	hints->rx_attr->msg_order = FI_ORDER_SAS;
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_TAGGED;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;
 

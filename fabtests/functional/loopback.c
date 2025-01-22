@@ -90,7 +90,7 @@ int main(int argc, char **argv)
 	opts.src_addr = "127.0.0.1";
 	hints->caps = FI_LOCAL_COMM | FI_MSG | FI_TAGGED;
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 
 	while ((op = getopt(argc, argv, "h" INFO_OPTS)) != -1) {
 		switch (op) {

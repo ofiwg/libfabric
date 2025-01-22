@@ -164,7 +164,7 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->domain_attr->cq_data_size = 4;  /* required minimum */
-	hints->mode |= FI_CONTEXT | FI_RX_CQ_DATA;
+	hints->mode |= FI_CONTEXT | FI_CONTEXT2 | FI_RX_CQ_DATA;
 
 	hints->caps = FI_MSG;
 	if (opts.cqdata_op == FT_CQDATA_WRITEDATA)

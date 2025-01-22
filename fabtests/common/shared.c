@@ -73,7 +73,7 @@ struct fid_eq *eq;
 struct fid_mc *mc;
 
 struct fid_mr no_mr;
-struct fi_context tx_ctx, rx_ctx;
+struct fi_context2 tx_ctx, rx_ctx;
 struct ft_context *tx_ctx_arr = NULL, *rx_ctx_arr = NULL;
 uint64_t remote_cq_data = 0;
 
@@ -3231,7 +3231,7 @@ int ft_wait_child(void)
 int ft_finalize_ep(struct fid_ep *ep)
 {
 	int ret;
-	struct fi_context ctx;
+	struct fi_context2 ctx;
 
 	ret = ft_sendmsg(ep, remote_fi_addr, tx_buf, 4, &ctx, FI_TRANSMIT_COMPLETE);
 	if (ret)

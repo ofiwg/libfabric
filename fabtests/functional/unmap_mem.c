@@ -170,7 +170,7 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->caps = FI_MSG;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 

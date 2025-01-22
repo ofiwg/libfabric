@@ -55,7 +55,7 @@ struct test_domain {
 	struct fid_av *av;
 	struct fid_mr *mr;
 	struct fid_cq *tx_cq;
-	struct fi_context *rma_ctx;
+	struct fi_context2 *rma_ctx;
 };
 
 struct test_domain *domain_res_array;
@@ -274,7 +274,7 @@ static void free_domain_res()
 }
 
 static int write_data(void *buffer, size_t size, int dom_idx,
-		int remote_dom_idx, struct fi_context *rma_ctx)
+		int remote_dom_idx, struct fi_context2 *rma_ctx)
 {
 	int ret = -FI_EAGAIN;
 
@@ -427,7 +427,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_RMA | FI_RMA_EVENT | FI_MSG;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;
 

@@ -339,7 +339,7 @@ The following keys and respective key values may be used in the config file.
   FI_WRITE, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_TAGGED, FI_DIRECTED_RECV
 
 *mode - values OR'ed together*
-: FI_CONTEXT, FI_RX_CQ_DATA
+: FI_CONTEXT, FI_CONTEXT2, FI_RX_CQ_DATA
 
 *ep_type*
 : FI_EP_MSG, FI_EP_DGRAM, FI_EP_RDM
