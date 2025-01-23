@@ -122,18 +122,19 @@ def gather_logs(cluster, key, dest, source) {
 }
 
 def CI_summarize(verbose=false) {
+  cmd = """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+           python ${CI_LOCATION}/summarize.py \
+           --log_directory=${env.LOG_DIR}
+        """
   if (verbose) {
-    sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
-               python ${CI_LOCATION}/summarize.py \
-               --log_directory=${env.LOG_DIR} \
-               -v
-       """
-  } else {
-    sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
-               python ${CI_LOCATION}/summarize.py \
-               --log_directory=${env.LOG_DIR}
-       """
+    cmd = "${cmd} -v"
   }
+
+  if (weekly || RELEASE) {
+    cmd = "${cmd} --send-mail"
+  }
+
+  sh "${cmd}"
 }
 
 def summarize(item, verbose=false, release=false, send_mail=false) {
