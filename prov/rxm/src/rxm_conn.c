@@ -460,6 +460,9 @@ ssize_t rxm_get_conn(struct rxm_ep *ep, fi_addr_t addr, struct rxm_conn **conn)
 		return 0;
 	}
 
+	if ((*peer)->av_flags & FI_FIREWALL_ADDR)
+		return -FI_EHOSTUNREACH;
+
 	ret = rxm_connect(*conn);
 
 	/* If the progress function encounters an error trying to establish
@@ -657,9 +660,9 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 	ofi_addr_set_port(&peer_addr.sa, cm_entry->data.connect.port);
 
 	av = container_of(ep->util_ep.av, struct rxm_av, util_av);
-	peer = util_get_peer(av, &peer_addr);
-	if (!peer) {
-		RXM_WARN_ERR(FI_LOG_EP_CTRL, "util_get_peer", -FI_ENOMEM);
+	ret = util_get_peer(av, &peer_addr, &peer, 0);
+	if (ret) {
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "util_get_peer", ret);
 		goto reject;
 	}
 

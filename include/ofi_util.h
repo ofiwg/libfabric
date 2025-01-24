@@ -923,6 +923,7 @@ struct util_av_attr {
  */
 struct util_peer_addr {
 	struct rxm_av *av;
+	uint64_t av_flags;
 	fi_addr_t fi_addr;
 	struct ofi_rbnode *node;
 	int index;
@@ -930,7 +931,8 @@ struct util_peer_addr {
 	union ofi_sock_ip addr;
 };
 
-struct util_peer_addr *util_get_peer(struct rxm_av *av, const void *addr);
+int util_get_peer(struct rxm_av *av, const void *addr, struct util_peer_addr **peer,
+		  uint64_t flags);
 void util_put_peer(struct util_peer_addr *peer);
 
 /* All peer addresses, whether they've been inserted into the AV

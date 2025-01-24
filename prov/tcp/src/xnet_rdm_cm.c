@@ -358,6 +358,8 @@ ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t addr,
 		return -FI_ENOMEM;
 
 	if (!(*conn)->ep) {
+		if ((*peer)->av_flags & FI_FIREWALL_ADDR)
+			return -FI_EHOSTUNREACH;
 		ret = xnet_rdm_connect(*conn);
 		if (ret)
 			return ret;
@@ -438,9 +440,9 @@ static void xnet_process_connreq(struct fi_eq_cm_entry *cm_entry)
 	ofi_addr_set_port(&peer_addr.sa, ntohs(msg->port));
 
 	av = container_of(rdm->util_ep.av, struct rxm_av, util_av);
-	peer = util_get_peer(av, &peer_addr);
-	if (!peer) {
-		XNET_WARN_ERR(FI_LOG_EP_CTRL, "util_get_peer", -FI_ENOMEM);
+	ret = util_get_peer(av, &peer_addr, &peer, 0);
+	if (ret) {
+		XNET_WARN_ERR(FI_LOG_EP_CTRL, "util_get_peer", ret);
 		goto reject;
 	}
 
