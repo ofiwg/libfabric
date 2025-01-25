@@ -270,8 +270,17 @@ static int rxm_ep_getopt(fid_t fid, int level, int optname, void *optval,
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
-		return rxm_ep->srx->ep_fid.ops->getopt(&rxm_ep->srx->ep_fid.fid,
-						level, optname, optval, optlen);
+		if (rxm_ep->srx) {
+			return rxm_ep->srx->ep_fid.ops->getopt(
+				&rxm_ep->srx->ep_fid.fid, level, optname,
+				optval, optlen);
+		} else {
+			assert(sizeof(rxm_ep->min_multi_recv_size) ==
+			       sizeof(size_t));
+			*(size_t *)optval = rxm_ep->min_multi_recv_size;
+			*optlen = sizeof(size_t);
+			break;
+		}
 	case FI_OPT_BUFFERED_MIN:
 		assert(sizeof(rxm_ep->buffered_min) == sizeof(size_t));
 		*(size_t *)optval = rxm_ep->buffered_min;
