@@ -915,6 +915,10 @@ static int util_cancel_entry(struct util_srx_ctx *srx, uint64_t flags,
 
 	err_entry.op_context = rx_entry->peer_entry.context;
 	err_entry.flags = flags;
+	if (rx_entry->peer_entry.flags & FI_MULTI_RECV) {
+		assert(rx_entry->multi_recv_ref == 0);
+		err_entry.flags |= FI_MULTI_RECV;
+	}
 	err_entry.tag = rx_entry->peer_entry.tag;
 	err_entry.err = FI_ECANCELED;
 	err_entry.prov_errno = -FI_ECANCELED;
@@ -1027,8 +1031,8 @@ static struct fi_ops util_srx_fid_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static bool util_cancel_recv(struct util_srx_ctx *srx, struct slist *queue,
-			     uint64_t flags, void *context)
+static int util_cancel_recv(struct util_srx_ctx *srx, struct slist *queue,
+			    uint64_t flags, void *context)
 {
 	struct slist_entry *item, *prev;
 	struct util_rx_entry *rx_entry;
@@ -1037,12 +1041,19 @@ static bool util_cancel_recv(struct util_srx_ctx *srx, struct slist *queue,
 	slist_foreach(queue, item, prev) {
 		rx_entry = container_of(item, struct util_rx_entry, peer_entry);
 		if (rx_entry->peer_entry.context == context) {
+			/* With multi-recv, cancellation can only be processed
+			 * if the multi-recv buffer is no longer in use. If the
+			 * buffer is still in use, return EAGAIN back for user
+			 * to retry cancel request. */
+			if (rx_entry->peer_entry.flags & FI_MULTI_RECV &&
+			    rx_entry->multi_recv_ref)
+				return -FI_EAGAIN;
 			slist_remove(queue, item, prev);
 			util_cancel_entry(srx, flags, rx_entry);
-			return true;
+			return FI_SUCCESS;
 		}
 	}
-	return false;
+	return -FI_ENOENT;
 }
 
 static int util_cancel_src(struct ofi_dyn_arr *arr, void *list, void *context)
@@ -1056,31 +1067,36 @@ static int util_cancel_src(struct ofi_dyn_arr *arr, void *list, void *context)
 	flags = arr == &srx->src_trecv_queues ?
 		FI_TAGGED | FI_RECV : FI_MSG | FI_RECV;
 
-	return (int) util_cancel_recv(srx, queue, flags, context);
+	return (int) (util_cancel_recv(srx, queue, flags, context) == FI_SUCCESS);
 }
 
 static ssize_t util_srx_cancel(fid_t ep_fid, void *context)
 {
 	struct util_srx_ctx *srx;
+	ssize_t ret;
 
 	srx = container_of(ep_fid, struct util_srx_ctx, peer_srx.ep_fid);
 
 	ofi_genlock_lock(srx->lock);
-	if (util_cancel_recv(srx, &srx->tag_queue, FI_TAGGED | FI_RECV,
-			     context))
+	ret = util_cancel_recv(srx, &srx->tag_queue, FI_TAGGED | FI_RECV,
+			       context);
+	if (ret != -FI_ENOENT)
 		goto out;
 
-	if (util_cancel_recv(srx, &srx->msg_queue, FI_MSG | FI_RECV, context))
+	ret = util_cancel_recv(srx, &srx->msg_queue, FI_MSG | FI_RECV, context);
+	if (ret != -FI_ENOENT)
 		goto out;
 
-	if (ofi_array_iter(&srx->src_trecv_queues, context, util_cancel_src))
-		goto out;
+	if (ofi_array_iter(&srx->src_trecv_queues, context, util_cancel_src) ||
+	    ofi_array_iter(&srx->src_recv_queues, context, util_cancel_src)) {
+		/* nothing to do, always return success */
+	}
 
-	(void) ofi_array_iter(&srx->src_recv_queues, context, util_cancel_src);
+	ret = FI_SUCCESS;
 
 out:
 	ofi_genlock_unlock(srx->lock);
-	return FI_SUCCESS;
+	return ret;
 }
 
 static int util_srx_getopt(fid_t fid, int level, int optname,
