@@ -84,7 +84,7 @@ No support for counters for the DGRAM endpoint.
 
 No support for inject.
 
-## [zero-copy receive mode](../prov/efa/docs/efa_rdm_protocol_v4.md#48-user-receive-qp-feature--request-and-zero-copy-receive)
+## Zero-copy receive mode
 - The receive operation cannot be cancelled via `fi_cancel()`.
 - Zero-copy receive mode can be enabled only if SHM transfer is disabled.
 - Unless the application explicitly disables P2P, e.g. via FI_HMEM_P2P_DISABLED,
