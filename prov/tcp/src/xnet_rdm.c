@@ -1013,7 +1013,7 @@ static struct fi_ops xnet_rdm_fid_ops = {
 	.close = xnet_rdm_close,
 	.bind = ofi_ep_fid_bind,
 	.control = xnet_rdm_ctrl,
-	.ops_open = fi_no_ops_open,
+	.ops_open = xnet_rdm_ops_open,
 };
 
 static int xnet_init_rdm(struct xnet_rdm *rdm, struct fi_info *info)
@@ -1101,7 +1101,6 @@ int xnet_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->rma = &xnet_rdm_rma_ops;
 	(*ep_fid)->tagged = &xnet_rdm_tagged_ops;
 	(*ep_fid)->atomic = &xnet_rdm_atomic_ops;
-	(*ep_fid)->fid.ops->ops_open = xnet_rdm_ops_open;
 
 	return 0;
 
