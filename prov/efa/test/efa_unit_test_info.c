@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "efa_prov_info.h"
 
 /**
  * @brief test that when a wrong fi_info was used to open resource, the error is handled
@@ -112,6 +113,47 @@ void test_info_direct_attributes()
 		assert_int_equal(info->ep_attr->max_msg_size, g_device_list[0].max_rdma_size);
 	}
 }
+
+/**
+ * @brief Verify that efa direct only supports HMEM with p2p
+ */
+#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+void test_info_direct_hmem_support_p2p()
+{
+	struct fi_info *info;
+
+	info = fi_allocinfo();
+
+	memset(g_efa_hmem_info, 0, OFI_HMEM_MAX * sizeof(struct efa_hmem_info));
+
+	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
+	hmem_ops[FI_HMEM_CUDA].initialized = true;
+
+	efa_prov_info_set_hmem_flags(info, EFA_INFO_DIRECT);
+	assert_true(info->caps & FI_HMEM);
+	assert_true(info->tx_attr->caps & FI_HMEM);
+	assert_true(info->rx_attr->caps & FI_HMEM);
+	hmem_ops[FI_HMEM_CUDA].initialized = false;
+	fi_freeinfo(info);
+
+	info = fi_allocinfo();
+	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = false;
+	hmem_ops[FI_HMEM_CUDA].initialized = true;
+
+	efa_prov_info_set_hmem_flags(info, EFA_INFO_DIRECT);
+	assert_false(info->caps & FI_HMEM);
+	assert_false(info->tx_attr->caps & FI_HMEM);
+	assert_false(info->rx_attr->caps & FI_HMEM);
+	hmem_ops[FI_HMEM_CUDA].initialized = false;
+	fi_freeinfo(info);
+}
+#else
+void test_info_direct_hmem_support_p2p()
+{
+}
+#endif
 
 /**
  * @brief Verify info->tx/rx_attr->msg_order is set according to hints.

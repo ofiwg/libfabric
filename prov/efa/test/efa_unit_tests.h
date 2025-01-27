@@ -160,6 +160,7 @@ void test_info_open_ep_with_wrong_info();
 void test_info_rdm_attributes();
 void test_info_dgram_attributes();
 void test_info_direct_attributes();
+void test_info_direct_hmem_support_p2p();
 void test_info_tx_rx_msg_order_rdm_order_none();
 void test_info_tx_rx_msg_order_rdm_order_sas();
 void test_info_tx_rx_msg_order_dgram_order_none();
