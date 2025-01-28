@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016-2018 Intel Corporation. All rights reserved.
- * Copyright (c) 2021-2024 Cornelis Networks.
+ * Copyright (c) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -64,7 +64,7 @@
 #ifdef OPX_DAOS
 #define OPX_SHM_MAX_CONN_NUM 0xffff
 #else
-/* FI_OPX_MAX_HFIS * 256 */
+/* OPX_MAX_HFIS * 256 */
 #define OPX_SHM_MAX_CONN_NUM  (0x1000)
 #define OPX_SHM_MAX_CONN_MASK (OPX_SHM_MAX_CONN_NUM - 1)
 #endif

@@ -1422,7 +1422,7 @@ static_assert(sizeof(((union fi_opx_hfi1_rzv_rts_immediate_info *) 0)->tail_byte
  * For example, contiguous rzv:
  *
  * STORE(tag + 7 qw's of CACHELINE 0 unused[1], not unused[2] as in 9B above)
- * fi_opx_init_hfi_lookupoptionally STORE(icrc/tail) if no more immediate data
+ * optionally STORE(icrc/tail) if no more immediate data
  *
  * STORE(full block of immediate fragment unaligned data)
  * STORE(full block of immediate data)

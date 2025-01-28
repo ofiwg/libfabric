@@ -210,43 +210,31 @@ static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const ui
 	return hfi_rank->instance;
 }
 
-void process_hfi_lookup(int hfi_unit, unsigned int lid)
+void process_hfi_lookup(const int hfi_unit, const opx_lid_t lid)
 {
-	struct fi_opx_hfi_local_lookup_key key;
-	key.lid					   = (opx_lid_t) lid;
-	struct fi_opx_hfi_local_lookup *hfi_lookup = NULL;
+	int lid_index = opx_local_lid_index(lid);
 
-	HASH_FIND(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, &key, sizeof(key), hfi_lookup);
+	if (lid_index != -1) {
+		fi_opx_global.hfi_local_info.local_lid_entries[lid_index].instance++;
 
-	if (hfi_lookup) {
-		hfi_lookup->instance++;
-
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI %d LID 0x%x again: %d.\n", hfi_lookup->hfi_unit,
-			     key.lid, hfi_lookup->instance);
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI %d LID 0x%x again: %d.\n",
+			     fi_opx_global.hfi_local_info.local_lid_entries[lid_index].hfi_unit, lid,
+			     fi_opx_global.hfi_local_info.local_lid_entries[lid_index].instance);
 	} else {
-		int rc __attribute__((unused));
-		rc = posix_memalign((void **) &hfi_lookup, 32, sizeof(*hfi_lookup));
-		assert(rc == 0);
+		assert(fi_opx_global.hfi_local_info.local_lids_size < OPX_MAX_HFIS);
+		int new_index = fi_opx_global.hfi_local_info.local_lids_size++;
+		fi_opx_global.hfi_local_info.local_lid_entries[new_index].hfi_unit = hfi_unit;
+		fi_opx_global.hfi_local_info.local_lid_entries[new_index].instance = 0;
+		fi_opx_global.hfi_local_info.local_lid_ids[new_index]		   = lid;
 
-		if (!hfi_lookup) {
-			FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA, "Unable to allocate HFI lookup entry.\n");
-			return;
-		}
-		hfi_lookup->key	     = key;
-		hfi_lookup->hfi_unit = hfi_unit;
-		hfi_lookup->instance = 0;
-		HASH_ADD(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, key, sizeof(hfi_lookup->key),
-			 hfi_lookup);
-
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI %hhu LID 0x%hx entry created.\n",
-			     hfi_lookup->hfi_unit, key.lid);
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI %hhu LID 0x%hx entry created.\n", hfi_unit, lid);
 	}
 }
 
 void fi_opx_init_hfi_lookup()
 {
 	int hfi_unit  = 0;
-	int hfi_units = MIN(opx_hfi_get_num_units(), FI_OPX_MAX_HFIS);
+	int hfi_units = MIN(opx_hfi_get_num_units(), OPX_MAX_HFIS);
 
 	if (hfi_units == 0) {
 		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA, "No HFI units found.\n");
@@ -259,27 +247,23 @@ void fi_opx_init_hfi_lookup()
 		shm_enable_env = OPX_SHM_ENABLE_DEFAULT;
 	}
 
-	if (shm_enable_env == OPX_SHM_ENABLE_ON) {
-		for (hfi_unit = 0; hfi_unit < hfi_units; hfi_unit++) {
-			int num_ports = opx_hfi_get_num_ports(hfi_unit);
-			for (int port = OPX_MIN_PORT; port <= num_ports; port++) {
-				opx_lid_t lid = opx_hfi_get_port_lid(hfi_unit, port);
-				if (lid > 0) {
-					if (lid == fi_opx_global.hfi_local_info.lid) {
-						/* This is the HFI and port to be used by the EP.  No need to add to the
-						 * HFI hashmap.
-						 */
-						FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-							     "EP HFI %d LID 0x%x found.\n", hfi_unit, lid);
-						continue;
-					} else {
-						process_hfi_lookup(hfi_unit, lid);
-					}
-				} else {
-					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-						"No LID found for HFI unit %d of %d units and port %d of %d ports: ret = %d, %s.\n",
-						hfi_unit, hfi_units, port, num_ports, lid, strerror(errno));
-				}
+	/* Always insert an entry for self */
+	process_hfi_lookup(fi_opx_global.hfi_local_info.hfi_unit, fi_opx_global.hfi_local_info.lid);
+
+	if (shm_enable_env != OPX_SHM_ENABLE_ON) {
+		return;
+	}
+
+	for (hfi_unit = 0; hfi_unit < hfi_units; hfi_unit++) {
+		int num_ports = opx_hfi_get_num_ports(hfi_unit);
+		for (int port = OPX_MIN_PORT; port <= num_ports; port++) {
+			opx_lid_t lid = opx_hfi_get_port_lid(hfi_unit, port);
+			if (lid > 0) {
+				process_hfi_lookup(hfi_unit, lid);
+			} else {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"No LID found for HFI unit %d of %d units and port %d of %d ports: ret = %d, %s.\n",
+					hfi_unit, hfi_units, port, num_ports, lid, strerror(errno));
 			}
 		}
 	}
@@ -299,18 +283,18 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	const int	  numa_node_id		= opx_get_current_proc_location();
 	const int	  core_id		= opx_get_current_proc_core();
 	const int	  hfi_count		= opx_hfi_get_num_units();
-	int		  hfi_candidates[FI_OPX_MAX_HFIS];
-	int		  hfi_distances[FI_OPX_MAX_HFIS];
-	int		  hfi_freectxs[FI_OPX_MAX_HFIS];
+	int		  hfi_candidates[OPX_MAX_HFIS];
+	int		  hfi_distances[OPX_MAX_HFIS];
+	int		  hfi_freectxs[OPX_MAX_HFIS];
 	int		  hfi_candidates_count = 0;
 	int		  hfi_candidate_index  = -1;
 	struct _hfi_ctrl *ctrl		       = NULL;
 	bool		  use_default_logic    = true;
 	int		  dirfd		       = -1;
 
-	memset(hfi_candidates, 0, sizeof(*hfi_candidates) * FI_OPX_MAX_HFIS);
-	memset(hfi_distances, 0, sizeof(*hfi_distances) * FI_OPX_MAX_HFIS);
-	memset(hfi_freectxs, 0, sizeof(*hfi_freectxs) * FI_OPX_MAX_HFIS);
+	memset(hfi_candidates, 0, sizeof(*hfi_candidates) * OPX_MAX_HFIS);
+	memset(hfi_distances, 0, sizeof(*hfi_distances) * OPX_MAX_HFIS);
+	memset(hfi_freectxs, 0, sizeof(*hfi_freectxs) * OPX_MAX_HFIS);
 
 	struct fi_opx_hfi1_context_internal *internal = calloc(1, sizeof(struct fi_opx_hfi1_context_internal));
 	if (!internal) {
@@ -2042,14 +2026,7 @@ void fi_opx_hfi1_rx_rzv_rts_etrunc(struct fi_opx_ep *opx_ep, const union opx_hfi
 			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_intranode_16B;
 		}
 		params->work_elem.work_type = OPX_WORK_TYPE_SHM;
-
-		if (lid == opx_ep->rx->self.lid) {
-			params->target_hfi_unit = opx_ep->rx->self.hfi1_unit;
-		} else {
-			struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(lid);
-			assert(hfi_lookup);
-			params->target_hfi_unit = hfi_lookup->hfi_unit;
-		}
+		params->target_hfi_unit	    = fi_opx_hfi1_get_lid_local_unit(lid);
 	} else {
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc;
@@ -2146,14 +2123,7 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_intranode_16B;
 		}
 		params->work_elem.work_type = OPX_WORK_TYPE_SHM;
-
-		if (lid == opx_ep->rx->self.lid) {
-			params->target_hfi_unit = opx_ep->rx->self.hfi1_unit;
-		} else {
-			struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(lid);
-			assert(hfi_lookup);
-			params->target_hfi_unit = hfi_lookup->hfi_unit;
-		}
+		params->target_hfi_unit	    = fi_opx_hfi1_get_lid_local_unit(lid);
 	} else {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_ep->use_expected_tid_rzv=%u niov=%lu opcode=%X\n",
 		       opx_ep->use_expected_tid_rzv, niov, opcode);
@@ -2337,13 +2307,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 		slid = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 	}
 
-	if (slid == opx_ep->rx->self.lid) {
-		params->target_hfi_unit = opx_ep->rx->self.hfi1_unit;
-	} else {
-		struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(slid);
-		assert(hfi_lookup);
-		params->target_hfi_unit = hfi_lookup->hfi_unit;
-	}
+	params->target_hfi_unit = fi_opx_hfi1_get_lid_local_unit(slid);
 
 	int rc = opx_hfi1_do_dput_fence(work);
 
@@ -2619,15 +2583,7 @@ void fi_opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 	if (is_intranode) {
 		params->work_elem.work_fn   = opx_hfi1_rx_rma_rts_send_cts_intranode;
 		params->work_elem.work_type = OPX_WORK_TYPE_SHM;
-
-		const uint64_t lid = params->slid;
-		if (lid == opx_ep->rx->self.lid) {
-			params->target_hfi_unit = opx_ep->rx->self.hfi1_unit;
-		} else {
-			struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(lid);
-			assert(hfi_lookup);
-			params->target_hfi_unit = hfi_lookup->hfi_unit;
-		}
+		params->target_hfi_unit	    = fi_opx_hfi1_get_lid_local_unit(params->slid);
 	} else {
 		params->work_elem.work_fn   = opx_hfi1_rx_rma_rts_send_cts;
 		params->work_elem.work_type = OPX_WORK_TYPE_PIO;
@@ -3948,17 +3904,7 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, struct fi_opx_mr *opx_mr, const
 	params->dt			  = dt;
 	params->is_intranode		  = is_intranode;
 	params->reliability		  = reliability;
-	if (is_intranode) {
-		if (params->slid == opx_ep->rx->self.lid) {
-			params->target_hfi_unit = opx_ep->rx->self.hfi1_unit;
-		} else {
-			struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(params->slid);
-			assert(hfi_lookup);
-			params->target_hfi_unit = hfi_lookup->hfi_unit;
-		}
-	} else {
-		params->target_hfi_unit = 0xFF;
-	}
+	params->target_hfi_unit		  = is_intranode ? fi_opx_hfi1_get_lid_local_unit(params->slid) : 0xFF;
 
 	uint64_t is_hmem	 = 0;
 	uint64_t iov_total_bytes = 0;

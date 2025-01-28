@@ -1772,7 +1772,7 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode, struct fi_opx
 		return FI_SUCCESS;
 	}
 
-	assert(hfi1_unit < FI_OPX_MAX_HFIS);
+	assert(hfi1_unit < OPX_MAX_HFIS);
 	assert(rx_id < OPX_SHM_MAX_CONN_NUM);
 
 #ifdef OPX_DAOS

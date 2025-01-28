@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2024 by Cornelis Networks.
+ * Copyright (C) 2021-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,8 +37,8 @@
 #include "rdma/opx/fi_opx_internal.h"
 #include "opx_shm.h"
 
-OPX_COMPILE_TIME_ASSERT(OPX_SHM_MAX_CONN_NUM >= (16 * 256),
-			"OPX_SHM_MAX_CONN_NUM must be at least 4096 (FI_OPX_MAX_HFIS per node * 256 contexts per HFI)");
+OPX_COMPILE_TIME_ASSERT(OPX_SHM_MAX_CONN_NUM >= (OPX_MAX_HFIS * 256),
+			"OPX_SHM_MAX_CONN_NUM must be at least 4096 (OPX_MAX_HFIS per node * 256 contexts per HFI)");
 
 /*
  * Used by signal handler to free shared memory files.
