@@ -56,6 +56,11 @@
 
 #include "rdma/opx/opx_hfi1_rdma_core.h"
 
+#if defined(__SSE2__) || (defined(_MSC_VER) && (defined(_M_X64) || defined(_M_AMD64)))
+#define OPX_HAS_SSE2
+#include <x86intrin.h> // For SIMD instructions
+#endif
+
 // #define FI_OPX_TRACE 1
 
 #define FI_OPX_HFI1_PBC_VL_MASK	     (0xf)    /* a.k.a. "HFI_PBC_VL_MASK" */
@@ -630,35 +635,80 @@ void fi_opx_consume_credits(union fi_opx_hfi1_pio_state *pio_state, size_t count
 #define FI_OPX_HFI1_CONSUME_CREDITS(pio_state, count)	     fi_opx_consume_credits(&pio_state, count)
 #define FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state)	     FI_OPX_HFI1_CONSUME_CREDITS(pio_state, 1)
 
+#ifdef OPX_HAS_SSE2
+
+/* SIMD version (preferred, fastest) */
 __OPX_FORCE_INLINE__
-struct fi_opx_hfi_local_lookup *fi_opx_hfi1_get_lid_local(opx_lid_t hfi_lid)
+int opx_local_lid_index(opx_lid_t lid)
 {
-	struct fi_opx_hfi_local_lookup_key key;
-	struct fi_opx_hfi_local_lookup	  *hfi_lookup = NULL;
+	// Create a 4-element vector populated with the lid we're looking for
+	__m128i target = _mm_set1_epi32(lid);
 
-	key.lid = hfi_lid;
+	// Iterate through the array of lids, examining 4 entries at once. Since
+	// we know unused entries are zero, and lids will be non-zero, it's safe
+	// to include unused entries beyond local_lids_size in our comparison
+	for (int i = 0; i < fi_opx_global.hfi_local_info.local_lids_size; i += 4) {
+		__m128i current = _mm_load_si128((__m128i *) &fi_opx_global.hfi_local_info.local_lid_ids[i]);
+		__m128i compare = _mm_cmpeq_epi32(current, target);
+		int	mask	= _mm_movemask_ps((__m128) compare);
+		if (mask) {
+			// Return the array index into local_lid_ids where the match was found
+			return i + __builtin_ctz(mask);
+		}
+	}
 
-	HASH_FIND(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, &key, sizeof(key), hfi_lookup);
+	return -1;
+}
 
-	return hfi_lookup;
+#else
+
+/* Loop unrolled version */
+__OPX_FORCE_INLINE__
+int opx_local_lid_index(opx_lid_t lid)
+{
+	// Iterate through the array of lids, examining 4 entries at once. Since
+	// we know unused entries are zero, and lids will be non-zero, it's safe
+	// to include unused entries beyond local_lids_size in our comparison
+	for (int i = 0; i < fi_opx_global.hfi_local_info.local_lids_size; i += 4) {
+		if (fi_opx_global.hfi_local_info.local_lid_ids[i] == lid) {
+			return i;
+		}
+		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 1] == lid) {
+			return i + 1;
+		}
+		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 2] == lid) {
+			return i + 2;
+		}
+		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 3] == lid) {
+			return i + 3;
+		}
+	}
+
+	return -1;
+}
+#endif
+
+__OPX_FORCE_INLINE__
+struct opx_hfi_local_entry *fi_opx_hfi1_get_lid_local(opx_lid_t lid)
+{
+	int lid_index = opx_local_lid_index(lid);
+
+	// We should only ever be calling this function for lids that are intranode
+	assert(lid_index != -1);
+
+	return &fi_opx_global.hfi_local_info.local_lid_entries[lid_index];
 }
 
 __OPX_FORCE_INLINE__
 int fi_opx_hfi1_get_lid_local_unit(opx_lid_t lid)
 {
-	struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(lid);
-
-	return (hfi_lookup) ? hfi_lookup->hfi_unit : fi_opx_global.hfi_local_info.hfi_unit;
+	return fi_opx_hfi1_get_lid_local(lid)->hfi_unit;
 }
 
 __OPX_FORCE_INLINE__
 bool opx_lid_is_intranode(opx_lid_t lid)
 {
-	if (fi_opx_global.hfi_local_info.lid == lid) {
-		return true;
-	}
-
-	return fi_opx_hfi1_get_lid_local(lid);
+	return (fi_opx_global.hfi_local_info.lid == lid) || (opx_local_lid_index(lid) != -1);
 }
 
 __OPX_FORCE_INLINE__

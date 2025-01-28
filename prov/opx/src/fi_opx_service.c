@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2024 Cornelis Networks.
+  Copyright(c) 2021-2025 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -23,7 +23,7 @@
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2024 Cornelis Networks.
+  Copyright(c) 2021-2025 Cornelis Networks.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -823,7 +823,7 @@ int opx_hfi_get_hfi1_count()
 	char	    hfi1_pathname[256];
 	int	    hfi1_count = 0;
 
-	for (int i = 0; i < FI_OPX_MAX_HFIS; i++) {
+	for (int i = 0; i < OPX_MAX_HFIS; i++) {
 		snprintf(hfi1_pathname, sizeof(hfi1_pathname), "%s_%u", OPX_DEVICE_PATH, i);
 		ret = stat(hfi1_pathname, &st);
 		if (!ret) {

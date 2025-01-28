@@ -514,6 +514,7 @@ inline ssize_t fi_opx_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 __OPX_FORCE_INLINE__
 void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep, const union fi_opx_addr dst_addr)
 {
+#ifdef OPX_DAOS
 	if (opx_ep->daos_info.av_rank_hashmap) {
 		struct fi_opx_daos_av_rank     *cur_av_rank = NULL;
 		struct fi_opx_daos_av_rank     *tmp_av_rank = NULL;
@@ -551,6 +552,7 @@ void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep, const union fi_opx_a
 				dst_addr.fi);
 		}
 	}
+#endif
 }
 
 __OPX_FORCE_INLINE__

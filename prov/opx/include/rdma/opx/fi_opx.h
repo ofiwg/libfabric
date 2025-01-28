@@ -91,6 +91,21 @@
 // Uncomment to enabled Opx flight recorder
 // #define FLIGHT_RECORDER_ENABLE		(1)
 
+// Useful for checking that structures are the correct size and other
+// compile-time tests. static_assert has existed since C11 so this
+// should be safe, but we have an else clause just in case.
+#if defined(static_assert)
+#define OPX_COMPILE_TIME_ASSERT(cond, msg) static_assert(cond, msg)
+#else
+#define OPX_COMPILE_TIME_ASSERT(cond, msg) \
+	if (0) {                           \
+		switch (0) {               \
+		case 0:                    \
+		case cond:;                \
+		}                          \
+	}
+#endif
+
 extern struct fi_provider fi_opx_provider;
 struct fi_opx_daos_hfi_rank_key {
 	uint8_t	 hfi_unit_number;
@@ -145,13 +160,35 @@ enum opx_hfi1_packet_type {
 		assert(_hfi1_type != OPX_HFI1_UNDEF);                                                             \
 	} while (0)
 
-struct fi_opx_hfi_local_info {
-	struct fi_opx_hfi_local_lookup *hfi_local_lookup_hashmap;
-	enum opx_hfi1_type		type;
-	int				sim_fd; // simulator fd
-	opx_lid_t			lid;
-	uint8_t				hfi_unit;
-};
+#define OPX_MAX_HFIS (16)
+OPX_COMPILE_TIME_ASSERT((OPX_MAX_HFIS & 3) == 0, "OPX_MAX_HFIS must be a multiple of 4!\n");
+
+struct opx_hfi_local_entry {
+	uint32_t instance;
+	uint8_t	 hfi_unit;
+	uint8_t	 unused[3];
+} __attribute__((__packed__)) __attribute__((aligned(8)));
+
+struct opx_hfi_local_info {
+	/* == CACHE LINE 0 == */
+	uint32_t	   local_lids_size;
+	enum opx_hfi1_type type;
+	int		   sim_fd; // simulator fd
+	opx_lid_t	   lid;
+	uint8_t		   hfi_unit;
+	uint8_t		   unused_bytes[7];
+	uint64_t	   unused_qws[5];
+
+	/* == CACHE LINE 1 == */
+	opx_lid_t local_lid_ids[OPX_MAX_HFIS];
+
+	/* == CACHE LINE 2 == */
+	struct opx_hfi_local_entry local_lid_entries[OPX_MAX_HFIS];
+} __attribute__((__packed__)) __attribute__((aligned(64)));
+OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi_local_info, local_lid_ids) == (FI_OPX_CACHE_LINE_SIZE * 1),
+			"Offset of opx_hfi_local_info->local_lid_ids should start at cacheline 1!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi_local_info, local_lid_entries) == (FI_OPX_CACHE_LINE_SIZE * 2),
+			"Offset of opx_hfi_local_info->local_lid_entries should start at cacheline 2!");
 
 #ifdef OPX_SIM
 /* Build L8SIM support */
@@ -170,33 +207,32 @@ struct fi_opx_hfi_local_info {
 
 #define OPX_PRE_CN5000 1
 
-struct fi_opx_hfi_local_lookup_key {
-	opx_lid_t lid;
-};
-
-struct fi_opx_hfi_local_lookup {
-	struct fi_opx_hfi_local_lookup_key key;
-	uint8_t				   hfi_unit;
-	uint32_t			   instance;
-	UT_hash_handle			   hh; /* makes this structure hashable */
-};
-
 struct fi_opx_global_data {
-	struct fi_info		    *info;
-	struct fi_domain_attr	    *default_domain_attr;
-	struct fi_ep_attr	    *default_ep_attr;
-	struct fi_tx_attr	    *default_tx_attr;
-	struct fi_rx_attr	    *default_rx_attr;
-	struct fi_provider	    *prov;
+	/* == CACHE LINE 0 == */
+	struct fi_info	      *info;
+	struct fi_domain_attr *default_domain_attr;
+	struct fi_ep_attr     *default_ep_attr;
+	struct fi_tx_attr     *default_tx_attr;
+	struct fi_rx_attr     *default_rx_attr;
+	struct fi_provider    *prov;
+	struct dlist_entry     tid_domain_list;
+
+	/* == CACHE LINE 1 == */
+	struct dlist_entry	     hmem_domain_list;
 	struct fi_opx_daos_hfi_rank *daos_hfi_rank_hashmap;
 	enum fi_progress	     progress;
-	struct dlist_entry	     tid_domain_list;
-#ifdef OPX_HMEM
-	struct dlist_entry hmem_domain_list;
-#endif
-	struct fi_opx_hfi_local_info hfi_local_info;
-	char			    *opx_hfi1_type_strings[];
-};
+	uint32_t		     unused_dw;
+	uint64_t		     unused_qw[4];
+
+	/* == CACHE LINE 2+ == */
+	struct opx_hfi_local_info hfi_local_info;
+	char			 *opx_hfi1_type_strings[];
+} __attribute__((__packed__)) __attribute__((aligned(64)));
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_global_data, hmem_domain_list) == (FI_OPX_CACHE_LINE_SIZE * 1),
+			"Offset of fi_opx_global_data->hmem_domain_list should start at cacheline 1!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_global_data, hfi_local_info) == (FI_OPX_CACHE_LINE_SIZE * 2),
+			"Offset of fi_opx_global_data->hfi_local_info should start at cacheline 2!");
+
 #define OPX_HFI_TYPE_STRING(_hfi_type)                                                       \
 	({                                                                                   \
 		assert((_hfi_type >= 0) && (_hfi_type <= OPX_HFI1_JKR) && (_hfi_type != 3)); \
@@ -213,7 +249,6 @@ static const uint64_t FI_OPX_MAX_ORDER_WAW_SIZE	 = SIZE_MAX;
 static const size_t   FI_OPX_REMOTE_CQ_DATA_SIZE = 4;
 
 static const uint64_t FI_OPX_MEM_TAG_FORMAT = (0xFFFFFFFFFFFFFFFFULL);
-static const int      FI_OPX_MAX_HFIS	    = 16;
 
 /*
 Users may wish to change the depth of the Rx context ring.
@@ -294,21 +329,6 @@ static inline void always_assert(bool val, char *msg)
 		exit(EXIT_FAILURE);
 	}
 }
-
-// Useful for checking that structures are the correct size and other
-// compile-time tests. static_assert has existed since C11 so this
-// should be safe, but we have an else clause just in case.
-#if defined(static_assert)
-#define OPX_COMPILE_TIME_ASSERT(cond, msg) static_assert(cond, msg)
-#else
-#define OPX_COMPILE_TIME_ASSERT(cond, msg) \
-	if (0) {                           \
-		switch (0) {               \
-		case 0:                    \
-		case cond:;                \
-		}                          \
-	}
-#endif
 
 static inline void fi_opx_ref_init(int64_t *ref, char *name)
 {
