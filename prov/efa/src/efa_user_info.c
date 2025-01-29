@@ -186,7 +186,7 @@ bool efa_user_info_should_support_hmem(int version)
 
 #endif
 /**
- * @brief update an info to match user hints
+ * @brief update RDM info to match user hints
  *
  * the input info is a duplicate of prov info, which matches
  * the capability of the EFA device. This function tailor it
@@ -332,7 +332,72 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 }
 
 /**
- * @brief get a list of rdm info the fit user's requirements
+ * @brief update EFA direct info to match user hints
+ *
+ * the input info is a duplicate of prov info, which matches
+ * the capability of the EFA device. This function tailor it
+ * so it matches user provided hints
+ *
+ * @param	version[in]	libfabric API version
+ * @param	info[in,out]	info to be updated
+ * @param	hints[in]	user provided hints
+ * @return	0 on success
+ * 		negative libfabric error code on failure
+ */
+static
+int efa_user_info_alter_direct(int version, struct fi_info *info, const struct fi_info *hints)
+{
+	/*
+	 * FI_HMEM is a primary capability, therefore only check
+	 * and claim support when explicitly requested
+	 */
+	if (hints && (hints->caps & FI_HMEM))
+		info->caps |= FI_HMEM;
+	else
+		info->caps &= ~FI_HMEM;
+
+	if (info->caps & FI_HMEM) {
+		/* Add FI_MR_HMEM to mr_mode when claiming support of FI_HMEM
+		 * because EFA provider's HMEM support rely on
+		 * application to provide descriptor for device buffer.
+		 */
+		if (hints->domain_attr &&
+		    !(hints->domain_attr->mr_mode & FI_MR_HMEM)) {
+			EFA_WARN(FI_LOG_CORE,
+			        "FI_HMEM capability requires device registrations (FI_MR_HMEM)\n");
+			return -FI_ENODATA;
+		}
+
+		info->domain_attr->mr_mode |= FI_MR_HMEM;
+	}
+
+	/*
+	 * Handle user-provided hints and adapt the info object passed back up
+	 * based on EFA-specific constraints.
+	 */
+	if (hints) {
+		/* EFA direct cannot make use of message prefix */
+		if (hints->mode & FI_MSG_PREFIX) {
+			EFA_INFO(FI_LOG_CORE,
+				"FI_MSG_PREFIX supported by application but EFA direct cannot "
+				"use prefix. Setting prefix size to 0.\n");
+			info->ep_attr->msg_prefix_size = 0;
+			EFA_INFO(FI_LOG_CORE,
+				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
+		}
+	}
+
+	/* Print a warning and use FI_AV_TABLE if the app requests FI_AV_MAP */
+	if (hints && hints->domain_attr && hints->domain_attr->av_type == FI_AV_MAP)
+		EFA_WARN(FI_LOG_CORE, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
+					"EFA direct provider will now switch to using FI_AV_TABLE.\n");
+	info->domain_attr->av_type = FI_AV_TABLE;
+
+	return 0;
+}
+
+/**
+ * @brief get a list of fi_info objects the fit user's requirements
  *
  * @param	node[in]	node from user's call to fi_getinfo()
  * @param	service[in]	service from user's call to fi_getinfo()
@@ -393,10 +458,11 @@ int efa_get_user_info(uint32_t version, const char *node,
 
 		dupinfo->fabric_attr->api_version = version;
 
-		if (prov_info->ep_attr->type == FI_EP_RDM) {
+		if (EFA_INFO_TYPE_IS_RDM(prov_info)) {
 			ret = efa_user_info_alter_rdm(version, dupinfo, hints);
 			if (ret)
 				goto free_info;
+
 			/* If application asked for FI_REMOTE_COMM but not FI_LOCAL_COMM, it
 			 * does not want to use shm. In this case, we honor the request by
 			 * unsetting the FI_LOCAL_COMM flag in info. This way efa_rdm_ep_open()
@@ -404,6 +470,12 @@ int efa_get_user_info(uint32_t version, const char *node,
 			 */
 			if (hints && hints->caps & FI_REMOTE_COMM && !(hints->caps & FI_LOCAL_COMM))
 				dupinfo->caps &= ~FI_LOCAL_COMM;
+		}
+
+		if (EFA_INFO_TYPE_IS_DIRECT(prov_info)) {
+			ret = efa_user_info_alter_direct(version, dupinfo, hints);
+			if (ret)
+				goto free_info;
 		}
 
 		ofi_alter_info(dupinfo, hints, version);

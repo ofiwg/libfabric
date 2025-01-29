@@ -58,10 +58,22 @@
 
 #define SHM_MAX_INJECT_SIZE 4096
 
+#define EFA_FABRIC_NAME 	"efa"
+#define EFA_DIRECT_FABRIC_NAME "efa-direct"
+
 #define EFA_EP_TYPE_IS_RDM(_info) \
 	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM))
 
 #define EFA_EP_TYPE_IS_DGRAM(_info) \
+	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_DGRAM))
+
+#define EFA_INFO_TYPE_IS_RDM(_info) \
+	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM) && !strcasecmp(_info->fabric_attr->name, EFA_FABRIC_NAME))
+
+#define EFA_INFO_TYPE_IS_DIRECT(_info) \
+	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM) && !strcasecmp(_info->fabric_attr->name, EFA_DIRECT_FABRIC_NAME))
+
+#define EFA_INFO_TYPE_IS_DGRAM(_info) \
 	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_DGRAM))
 
 #define EFA_DGRAM_CONNID (0x0)

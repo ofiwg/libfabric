@@ -222,7 +222,7 @@ void efa_unit_test_resource_construct_rdm_shm_disabled(struct efa_resource *reso
 	int ret;
 	bool shm_permitted = false;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	if (!resource->hints)
 		goto err;
 
