@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,6 +33,8 @@
 #ifndef _FI_OPX_TIMER_H_
 #define _FI_OPX_TIMER_H_
 
+#include <sched.h>
+#include <stdio.h>
 #include <time.h>
 
 #define FI_OPX_TIMER_NEXT_EVENT_USEC_DEFAULT 1000000
@@ -72,6 +74,55 @@ __attribute__((always_inline)) static inline uint64_t fi_opx_timer_get_cycles()
 #error "Cycle timer not defined for this platform"
 #endif
 
+static inline int opx_timer_get_cpu_socket(int cpu_id)
+{
+	char file_path[256];
+	snprintf(file_path, sizeof(file_path), "/sys/devices/system/cpu/cpu%d/topology/physical_package_id", cpu_id);
+	FILE *f = fopen(file_path, "r");
+	if (!f) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error opening file %s\n", file_path);
+		return -1;
+	}
+
+	int socket_id;
+	if (fscanf(f, "%d", &socket_id) != 1) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error reading socket ID for CPU %d from file %s\n", cpu_id,
+			file_path);
+		socket_id = -1;
+	}
+	fclose(f);
+
+	return socket_id;
+}
+
+static inline bool opx_timer_cpus_same_socket()
+{
+	cpu_set_t cpuset;
+	if (sched_getaffinity(0, sizeof(cpu_set_t), &cpuset) == -1) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Affinity detection error\n");
+		abort();
+	}
+
+	int first_socket_id = -1;
+
+	for (int i = 0; i < CPU_SETSIZE; i++) {
+		if (CPU_ISSET(i, &cpuset)) {
+			int socket_id = opx_timer_get_cpu_socket(i);
+
+			if (socket_id == -1) {
+				return false;
+			}
+
+			if (first_socket_id == -1) {
+				first_socket_id = socket_id;
+			} else if (socket_id != first_socket_id) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 static inline void fi_opx_timespec_diff(struct timespec *start, struct timespec *stop, struct timespec *result)
 {
 	if ((stop->tv_nsec - start->tv_nsec) < 0) {
@@ -101,19 +152,7 @@ static inline void fi_opx_timer_init(union fi_opx_timer_state *state)
 	/* picos_per_cycle = ((nanoseconds) * (picos per ns)) / (cycles) */
 	state->cycle_timer.picos_per_cycle = (tpresult.tv_nsec * 1000) / cycles;
 
-	cpu_set_t cpuset;
-	if (sched_getaffinity(0, sizeof(cpu_set_t), &cpuset) == -1) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Affinity detection error\n");
-		abort();
-	}
-
-	int i, ncpus = 0;
-	for (i = 0; i < CPU_SETSIZE; i++) {
-		if (CPU_ISSET(i, &cpuset)) {
-			ncpus++;
-		}
-	}
-	if (ncpus == 1) {
+	if (opx_timer_cpus_same_socket()) {
 		state->cycle_timer.use_cycle_timer = true;
 		FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "CPU affinitized to a single core, using cycle timer\n");
 	} else {
