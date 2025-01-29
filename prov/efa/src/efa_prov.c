@@ -67,7 +67,6 @@ struct fi_provider efa_prov = {
 
 struct util_prov efa_util_prov = {
 	.prov = &efa_prov,
-	.flags = 0,
 };
 
 /**
@@ -79,10 +78,33 @@ struct util_prov efa_util_prov = {
 static int efa_util_prov_initialize()
 {
 	int i, err;
-	struct fi_info *head, *tail, *prov_info_rdm, *prov_info_dgram;
+	struct fi_info *head, *tail, *prov_info_rdm, *prov_info_dgram, *prov_info_direct;
 
 	head = NULL;
 	tail = NULL;
+
+	/*
+	* EFA direct provider is more performant if the application can use it
+	* Therefore, the efa-direct info objects should be returned _before_ efa rdm or dgram
+	* So we populate the efa-direct info objects first
+	*/
+	for (i = 0; i < g_device_cnt; ++i) {
+		prov_info_direct = fi_dupinfo(g_device_list[i].direct_info);
+		if (!prov_info_direct) {
+			EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate prov_info for EFA direct\n");
+			continue;
+		}
+
+		if (!head) {
+			head = prov_info_direct;
+		} else {
+			assert(tail);
+			tail->next = prov_info_direct;
+		}
+
+		tail = prov_info_direct;
+	}
+
 	for (i = 0; i < g_device_cnt; ++i) {
 		err = efa_prov_info_alloc_for_rdm(&prov_info_rdm, &g_device_list[i]);
 		if (err) {
@@ -202,4 +224,3 @@ static void efa_prov_finalize(void)
 	ofi_mem_fini();
 #endif
 }
-

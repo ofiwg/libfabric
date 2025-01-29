@@ -28,7 +28,7 @@ static struct fi_ops efa_ops_domain_fid = {
 	.ops_open = efa_domain_ops_open,
 };
 
-static struct fi_ops_domain efa_ops_domain_dgram = {
+static struct fi_ops_domain efa_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = efa_av_open,
 	.cq_open = efa_cq_open,
@@ -42,7 +42,7 @@ static struct fi_ops_domain efa_ops_domain_dgram = {
 	.query_collective = fi_no_query_collective,
 };
 
-static struct fi_ops_domain efa_ops_domain_rdm = {
+static struct fi_ops_domain efa_domain_ops_rdm = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = efa_av_open,
 	.cq_open = efa_rdm_cq_open,
@@ -67,11 +67,11 @@ static struct fi_ops_domain efa_ops_domain_rdm = {
  */
 static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
                                          const char *domain_name,
-                                         enum fi_ep_type ep_type)
+                                         enum efa_info_type info_type)
 {
 	int i;
 	char *device_name = NULL;
-	const char *domain_name_suffix = efa_domain_name_suffix(ep_type);
+	const char *domain_name_suffix = efa_domain_name_suffix(info_type);
 
 	if (!domain_name)
 		return -FI_EINVAL;
@@ -183,6 +183,9 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 {
 	struct efa_domain *efa_domain;
 	int ret = 0, err;
+	enum efa_info_type efa_info_type;
+
+	efa_info_type = efa_info_type_from_fi_info(info);
 
 	efa_domain = calloc(1, sizeof(struct efa_domain));
 	if (!efa_domain)
@@ -230,19 +233,31 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 
 	efa_domain->mr_local = ofi_mr_local(info);
-	if (EFA_EP_TYPE_IS_DGRAM(info) && !efa_domain->mr_local) {
-		EFA_WARN(FI_LOG_EP_DATA, "dgram require FI_MR_LOCAL, but application does not support it\n");
+	if ((EFA_INFO_TYPE_IS_DGRAM(info) || EFA_INFO_TYPE_IS_DIRECT(info)) && !efa_domain->mr_local) {
+		EFA_WARN(FI_LOG_EP_DATA, "EFA direct and dgram require FI_MR_LOCAL, but application does not support it\n");
 		ret = -FI_ENODATA;
 		goto err_free;
 	}
 
-	err = efa_domain_init_device_and_pd(efa_domain, info->domain_attr->name, info->ep_attr->type);
+	err = efa_domain_init_device_and_pd(efa_domain, info->domain_attr->name, efa_info_type);
 	if (err) {
 		ret = err;
 		goto err_free;
 	}
 
-	efa_domain->info = fi_dupinfo(EFA_EP_TYPE_IS_RDM(info) ? efa_domain->device->rdm_info : efa_domain->device->dgram_info);
+	switch (efa_info_type) {
+		case EFA_INFO_RDM:
+			efa_domain->info = fi_dupinfo(efa_domain->device->rdm_info);
+			break;
+		case EFA_INFO_DGRAM:
+			efa_domain->info = fi_dupinfo(efa_domain->device->dgram_info);
+			break;
+		case EFA_INFO_DIRECT:
+			efa_domain->info = fi_dupinfo(efa_domain->device->direct_info);
+			break;
+		default:
+			assert(NULL);
+	}
 	if (!efa_domain->info) {
 		ret = -FI_ENOMEM;
 		goto err_free;
@@ -274,7 +289,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 
 	efa_domain->util_domain.domain_fid.fid.ops = &efa_ops_domain_fid;
-	if (EFA_EP_TYPE_IS_RDM(info)) {
+	if (EFA_INFO_TYPE_IS_RDM(info)) {
 		err = efa_domain_init_rdm(efa_domain, info);
 		if (err) {
 			EFA_WARN(FI_LOG_DOMAIN,
@@ -282,10 +297,10 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 				 -err);
 			goto err_free;
 		}
-		efa_domain->util_domain.domain_fid.ops = &efa_ops_domain_rdm;
+		efa_domain->util_domain.domain_fid.ops = &efa_domain_ops_rdm;
 	} else {
-		assert(EFA_EP_TYPE_IS_DGRAM(info));
-		efa_domain->util_domain.domain_fid.ops = &efa_ops_domain_dgram;
+		assert(EFA_INFO_TYPE_IS_DGRAM(info) || EFA_INFO_TYPE_IS_DIRECT(info));
+		efa_domain->util_domain.domain_fid.ops = &efa_domain_ops;
 	}
 
 #ifndef _WIN32

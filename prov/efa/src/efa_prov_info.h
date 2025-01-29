@@ -8,7 +8,7 @@
 
 int efa_prov_info_alloc(struct fi_info **prov_info,
 			struct efa_device *device,
-			enum fi_ep_type ep_type);
+			enum efa_info_type info_type);
 
 int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm,
 				struct efa_device *device);

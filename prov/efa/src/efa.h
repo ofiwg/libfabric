@@ -58,12 +58,6 @@
 
 #define SHM_MAX_INJECT_SIZE 4096
 
-#define EFA_EP_TYPE_IS_RDM(_info) \
-	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM))
-
-#define EFA_EP_TYPE_IS_DGRAM(_info) \
-	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_DGRAM))
-
 #define EFA_DGRAM_CONNID (0x0)
 
 #define EFA_DEF_POOL_ALIGNMENT (8)

@@ -37,7 +37,7 @@ void test_efa_rdm_ep_host_id(struct efa_resource **state, bool file_exists, char
 		efa_env.host_id_file = host_id_file;
 	}
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
@@ -272,7 +272,7 @@ void test_efa_rdm_ep_pkt_pool_flags(struct efa_resource **state) {
 	struct efa_resource *resource = *state;
 
 	efa_env.huge_page_setting = EFA_ENV_HUGE_PAGE_DISABLED;
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	check_ep_pkt_pool_flags(resource->ep, OFI_BUFPOOL_NONSHARED);
 }
 
@@ -290,7 +290,7 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	efa_env.huge_page_setting = EFA_ENV_HUGE_PAGE_DISABLED;
 	ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
@@ -321,7 +321,7 @@ void test_efa_rdm_read_copy_pkt_pool_128_alignment(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain = NULL;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	/* rx_readcopy_pkt_pool is only created when application requested FI_HMEM */
 	efa_domain = container_of(resource->domain, struct efa_domain,
@@ -358,7 +358,7 @@ void test_efa_rdm_pke_get_available_copy_methods_align128(struct efa_resource **
 	struct efa_resource *resource = *state;
 	bool local_read_available, gdrcopy_available, cuda_memcpy_available;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_mr.peer.iface = FI_HMEM_CUDA;
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -593,7 +593,7 @@ void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	resource->hints->caps |= FI_MSG | FI_TAGGED | FI_RMA;
 	resource->hints->domain_attr->mr_mode |= MR_MODE_BITS;
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
@@ -681,7 +681,7 @@ void test_efa_rdm_ep_rma_inconsistent_unsolicited_write_recv(struct efa_resource
 	uint64_t rma_addr, rma_key;
 	struct efa_rdm_peer *peer;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	resource->hints->caps |= FI_MSG | FI_TAGGED | FI_RMA;
 	resource->hints->domain_attr->mr_mode |= MR_MODE_BITS;
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 22),
@@ -750,7 +750,7 @@ void test_efa_rdm_ep_send_with_shm_no_copy(struct efa_resource **state)
 	char buff[8] = {0};
 	int err;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	/* create a fake peer */
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -789,7 +789,7 @@ void test_efa_rdm_ep_rma_without_caps(struct efa_resource **state)
 	int err;
 	uint64_t rma_addr, rma_key;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	resource->hints->caps |= FI_MSG | FI_TAGGED;
 	resource->hints->caps &= ~FI_RMA;
 	resource->hints->domain_attr->mr_mode |= MR_MODE_BITS;
@@ -840,7 +840,7 @@ void test_efa_rdm_ep_atomic_without_caps(struct efa_resource **state)
 	int err;
 	uint64_t rma_addr, rma_key;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	resource->hints->caps |= FI_MSG | FI_TAGGED;
 	resource->hints->caps &= ~FI_ATOMIC;
 	resource->hints->domain_attr->mr_mode |= MR_MODE_BITS;
@@ -895,7 +895,7 @@ void test_efa_rdm_ep_getopt(struct efa_resource **state, size_t opt_len, int exp
 	};
 	size_t num_opt_names = sizeof(opt_names) / sizeof(int);
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	for (i = 0; i < num_opt_names; i++) {
 		opt_len_temp = opt_len;
@@ -941,7 +941,7 @@ void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(struct efa_reso
 {
 	struct efa_resource *resource = *state;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	/* fi_setopt should always succeed */
 	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
@@ -1068,7 +1068,7 @@ void test_efa_rdm_ep_user_zcpy_rx_disabled(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->mode = FI_MSG_PREFIX;
@@ -1084,7 +1084,7 @@ void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_disabled(struct efa_resource **sta
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->mode = FI_MSG_PREFIX;
@@ -1100,7 +1100,7 @@ void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(struct efa_resource **state
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->tx_attr->msg_order = FI_ORDER_SAS;
@@ -1118,7 +1118,7 @@ void test_efa_rdm_ep_user_p2p_not_supported_zcpy_rx_happy(struct efa_resource **
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->mode = FI_MSG_PREFIX;
@@ -1134,7 +1134,7 @@ void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_no_mr_local(struct efa_resource
 {
 	struct efa_resource *resource = *state;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->caps = FI_MSG;
@@ -1148,7 +1148,7 @@ void test_efa_rdm_ep_close_discard_posted_recv(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	char buf[16];
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	/* Post recv and then close ep */
 	assert_int_equal(fi_recv(resource->ep, (void *) buf, 16, NULL, FI_ADDR_UNSPEC, NULL), 0);
@@ -1168,7 +1168,7 @@ void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
 	struct fi_context cancel_context = {0};
 	struct efa_unit_test_buff recv_buff;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->caps = FI_MSG;
@@ -1202,7 +1202,7 @@ void test_efa_rdm_ep_zcpy_recv_eagain(struct efa_resource **state)
 	int i;
 	struct efa_rdm_ep *efa_rdm_ep;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->caps = FI_MSG;
@@ -1310,7 +1310,7 @@ void test_efa_rdm_ep_rx_refill_impl(struct efa_resource **state, int threshold, 
 
 	efa_env.internal_rx_refill_threshold = threshold;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);
 	resource->hints->rx_attr->size = rx_size;
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
@@ -1385,7 +1385,7 @@ void test_efa_rdm_ep_support_unsolicited_write_recv(struct efa_resource **state)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
@@ -1403,7 +1403,7 @@ void test_efa_rdm_ep_default_sizes(struct efa_resource **state)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
@@ -1433,7 +1433,7 @@ void test_efa_ep_open(struct efa_resource **state)
 	struct efa_base_ep *efa_ep;
 	struct efa_domain *efa_domain;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 	efa_domain = container_of(resource->domain, struct efa_domain,
@@ -1460,7 +1460,7 @@ void test_efa_ep_cancel(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	int ret;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	ret = fi_cancel((struct fid *)resource->ep, NULL);
 	assert_int_equal(ret, -FI_ENOSYS);
@@ -1480,7 +1480,7 @@ void test_efa_ep_getopt(struct efa_resource **state)
 	size_t optlen;
 	struct efa_base_ep *efa_ep;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 
@@ -1525,7 +1525,7 @@ void test_efa_ep_setopt_use_device_rdma(struct efa_resource **state)
 	bool optval;
 	struct efa_base_ep *efa_ep;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 
@@ -1555,7 +1555,7 @@ void test_efa_ep_setopt_hmem_p2p(struct efa_resource **state)
 	size_t num_optvals = sizeof(optvals) / sizeof(int);
 	int i, expected_return;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	/* FI_HMEM_P2P_DISABLED is not allowed */
 	for (i = 0; i < num_optvals; i++) {
@@ -1575,7 +1575,7 @@ void test_efa_ep_setopt_rnr_retry(struct efa_resource **state)
 	size_t optval;
 	struct efa_base_ep *efa_ep;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 	assert_false(efa_ep->efa_qp_enabled);
@@ -1602,7 +1602,7 @@ void test_efa_ep_setopt_sizes(struct efa_resource **state)
 	size_t optval;
 	struct efa_base_ep *efa_ep;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 
@@ -1644,7 +1644,7 @@ void test_efa_ep_bind_and_enable(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *efa_ep;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 

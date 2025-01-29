@@ -21,6 +21,7 @@ struct efa_device {
 	struct ibv_pd		*ibv_pd;
 	struct fi_info		*rdm_info;
 	struct fi_info		*dgram_info;
+	struct fi_info     	*direct_info;
 };
 
 int efa_device_list_initialize(void);

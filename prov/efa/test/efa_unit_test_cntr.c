@@ -57,7 +57,7 @@ void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resource 
 {
 	struct efa_resource *resource = *state;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep_impl(resource);
 }
 
@@ -65,7 +65,7 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resou
 {
 	struct efa_resource *resource = *state;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep_impl(resource);
 }
 
@@ -111,7 +111,7 @@ void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_resou
 {
 	struct efa_resource *resource = *state;
 
-	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep_impl(resource);
 }
 
@@ -119,7 +119,7 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_r
 {
 	struct efa_resource *resource = *state;
 
-	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep_impl(resource);
 }
 
@@ -132,7 +132,7 @@ void test_efa_rdm_cntr_post_initial_rx_pkts(struct efa_resource **state)
 	struct efa_cntr *efa_cntr;
 	uint64_t cnt;
 
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	/* At this time, rx pkts are not growed and posted */

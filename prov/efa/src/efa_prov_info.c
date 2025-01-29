@@ -9,22 +9,23 @@
 #include "rdm/efa_rdm_pkt_type.h"
 
 #define EFA_FABRIC_PREFIX "EFA-"
-#define EFA_FABRIC_NAME "efa"
 #define EFA_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 #define EFA_RDM_TX_CAPS (OFI_TX_MSG_CAPS)
 #define EFA_RDM_RX_CAPS (OFI_RX_MSG_CAPS | FI_SOURCE)
 #define EFA_DGRM_TX_CAPS (OFI_TX_MSG_CAPS)
 #define EFA_DGRM_RX_CAPS (OFI_RX_MSG_CAPS | FI_SOURCE)
+#define EFA_DIRECT_TX_CAPS (OFI_TX_MSG_CAPS)
+#define EFA_DIRECT_RX_CAPS (OFI_RX_MSG_CAPS | FI_SOURCE)
 #define EFA_RDM_CAPS (EFA_RDM_TX_CAPS | EFA_RDM_RX_CAPS | EFA_DOMAIN_CAPS)
 #define EFA_DGRM_CAPS (EFA_DGRM_TX_CAPS | EFA_DGRM_RX_CAPS | EFA_DOMAIN_CAPS)
+#define EFA_DIRECT_CAPS (EFA_DIRECT_TX_CAPS | EFA_DIRECT_RX_CAPS | EFA_DOMAIN_CAPS)
 
 #define EFA_TX_OP_FLAGS (FI_TRANSMIT_COMPLETE)
 
 #define EFA_RX_MODE (0)
 
-#define EFA_RX_RDM_OP_FLAGS (0)
-#define EFA_RX_DGRM_OP_FLAGS (0)
+#define EFA_RX_OP_FLAGS (0)
 
 #define EFA_MSG_ORDER (0)
 
@@ -49,18 +50,23 @@ const struct fi_fabric_attr efa_fabric_attr = {
  * 		-FI_ENOMEM if memory allocation failed
  */
 static
-int efa_prov_info_set_fabric_attr(struct fi_info *prov_info, struct efa_device *device)
+int efa_prov_info_set_fabric_attr(struct fi_info *prov_info, struct efa_device *device, enum efa_info_type info_type)
 {
-	size_t name_len = strlen(EFA_FABRIC_NAME);
+	char *fabric_name;
+
+	if (info_type == EFA_INFO_DIRECT)
+		fabric_name = EFA_DIRECT_FABRIC_NAME;
+	else
+		fabric_name = EFA_FABRIC_NAME;
 
 	*prov_info->fabric_attr	= efa_fabric_attr;
 
-	name_len = strlen(EFA_FABRIC_NAME);
+	size_t name_len = strlen(fabric_name);
 	prov_info->fabric_attr->name = calloc(1, name_len + 1);
 	if (!prov_info->fabric_attr->name)
 		return -FI_ENOMEM;
 
-	strcpy(prov_info->fabric_attr->name, EFA_FABRIC_NAME);
+	strcpy(prov_info->fabric_attr->name, fabric_name);
 	return 0;
 }
 
@@ -88,14 +94,14 @@ const struct fi_domain_attr efa_domain_attr = {
  *
  * @param 	prov_info[out]		pointer to prov_info object
  * @param	device[in]		pointer to an efa_device struct, which contains device attributes
- * @param	ep_type[in]		endpoint type, can be FI_EP_RDM or FI_EP_DGRAM
+ * @param	info_type[in]		EFA info type
  * @return	0 on sucessess
  * 		negative libfabric error code on failure
  */
 static
 int efa_prov_info_set_domain_attr(struct fi_info *prov_info,
 				  struct efa_device *device,
-				  enum fi_ep_type ep_type)
+				  enum efa_info_type info_type)
 {
 	size_t name_len;
 
@@ -103,14 +109,14 @@ int efa_prov_info_set_domain_attr(struct fi_info *prov_info,
 	prov_info->domain_attr->av_type = FI_AV_UNSPEC;
 
 	/* set domain name */
-	name_len = strlen(device->ibv_ctx->device->name) + strlen(efa_domain_name_suffix(ep_type));
+	name_len = strlen(device->ibv_ctx->device->name) + strlen(efa_domain_name_suffix(info_type));
 	prov_info->domain_attr->name = malloc(name_len + 1);
 	if (!prov_info->domain_attr->name) {
 		return -FI_ENOMEM;
 	}
 
 	snprintf(prov_info->domain_attr->name, name_len + 1, "%s%s",
-		 device->ibv_ctx->device->name, efa_domain_name_suffix(ep_type));
+		 device->ibv_ctx->device->name, efa_domain_name_suffix(info_type));
 	prov_info->domain_attr->name[name_len] = '\0';
 
 	/* set domain attributes using device attributes */
@@ -158,40 +164,35 @@ const struct fi_ep_attr efa_ep_attr = {
  *
  * @param	prov_info[out]		prov_info pointer
  * @param	device[in]		pointer to an efa_device struct, which contains device attributes
- * @param	ep_type			endpoint_type, can be FI_EP_RDM or FI_EP_DGRAM
+ * @param	info_type			EFA info type
  */
 static
 void efa_prov_info_set_ep_attr(struct fi_info *prov_info,
 			       struct efa_device *device,
-			       enum fi_ep_type ep_type)
+			       enum efa_info_type info_type)
 {
 
 	*prov_info->ep_attr = efa_ep_attr;
-	if (ep_type == FI_EP_DGRAM) {
-		prov_info->mode |= FI_MSG_PREFIX;
-		prov_info->ep_attr->msg_prefix_size = 40;
-	}
-
 	prov_info->ep_attr->protocol	= FI_PROTO_EFA;
-	prov_info->ep_attr->type	= ep_type;
+	prov_info->ep_attr->max_msg_size = device->ibv_port_attr.max_msg_sz;
 
-	if (prov_info->ep_attr->type == FI_EP_RDM) {
-		prov_info->tx_attr->inject_size = device->efa_attr.inline_buf_size;
-	} else {
-		assert(prov_info->ep_attr->type == FI_EP_DGRAM);
-                /*
-		 * Currently, there is no mechanism for device to discard
-		 * a completion, therefore there is no way for dgram endpoint
-		 * to implement FI_INJECT. Because FI_INJECT is not an optional
-		 * feature, we had to set inject_size to 0.
-		 * 
-		 * TODO:
-		 * Remove this after implementing cq read for efa-raw
-                 */
-		prov_info->tx_attr->inject_size = 0;
+	switch (info_type) {
+		case EFA_INFO_RDM:
+			prov_info->ep_attr->type = FI_EP_RDM;
+			/* max_msg_size for RDM path is set in efa_prov_info_alloc_for_rdm */
+			break;
+		case EFA_INFO_DIRECT:
+			prov_info->ep_attr->type = FI_EP_RDM;
+			/* max_msg_size in ep_attr should be the maximum of send/recv and RMA sizes */
+			prov_info->ep_attr->max_msg_size = MAX(device->ibv_port_attr.max_msg_sz, device->max_rdma_size);
+			break;
+		case EFA_INFO_DGRAM:
+			prov_info->ep_attr->type = FI_EP_DGRAM;
+			prov_info->ep_attr->msg_prefix_size = 40;
+			break;
+		default:
+			assert(NULL);
 	}
-
-	prov_info->ep_attr->max_msg_size		= device->ibv_port_attr.max_msg_sz;
 }
 
 /**
@@ -212,7 +213,7 @@ const struct fi_tx_attr efa_dgrm_tx_attr = {
 const struct fi_rx_attr efa_dgrm_rx_attr = {
 	.caps			= EFA_DGRM_RX_CAPS,
 	.mode			= FI_MSG_PREFIX | EFA_RX_MODE,
-	.op_flags		= EFA_RX_DGRM_OP_FLAGS,
+	.op_flags		= EFA_RX_OP_FLAGS,
 	.msg_order		= EFA_MSG_ORDER,
 	.iov_limit		= 1
 };
@@ -235,7 +236,30 @@ const struct fi_tx_attr efa_rdm_tx_attr = {
 const struct fi_rx_attr efa_rdm_rx_attr = {
 	.caps			= EFA_RDM_RX_CAPS,
 	.mode			= EFA_RX_MODE,
-	.op_flags		= EFA_RX_RDM_OP_FLAGS,
+	.op_flags		= EFA_RX_OP_FLAGS,
+	.msg_order		= EFA_MSG_ORDER,
+	.iov_limit		= 1
+};
+
+/**
+ * @brief default TX attributes for efa-direct end point
+ */
+const struct fi_tx_attr efa_direct_tx_attr = {
+	.caps			= EFA_RDM_TX_CAPS,
+	.mode			= 0,
+	.op_flags		= EFA_TX_OP_FLAGS,
+	.msg_order		= EFA_MSG_ORDER,
+	.inject_size		= 0,
+	.rma_iov_limit		= 1,
+};
+
+/**
+ * @brief default RX attributes for rdm end point
+ */
+const struct fi_rx_attr efa_direct_rx_attr = {
+	.caps			= EFA_RDM_RX_CAPS,
+	.mode			= EFA_RX_MODE,
+	.op_flags		= EFA_RX_OP_FLAGS,
 	.msg_order		= EFA_MSG_ORDER,
 	.iov_limit		= 1
 };
@@ -249,17 +273,26 @@ const struct fi_rx_attr efa_rdm_rx_attr = {
 static
 void efa_prov_info_set_tx_rx_attr(struct fi_info *prov_info,
 				  struct efa_device *device,
-				  enum fi_ep_type ep_type)
+				  enum efa_info_type info_type)
 {
-	if (ep_type == FI_EP_RDM) {
-		*prov_info->tx_attr	= efa_rdm_tx_attr;
-		*prov_info->rx_attr	= efa_rdm_rx_attr;
-	} else {
-		assert(ep_type == FI_EP_DGRAM);
-		*prov_info->tx_attr	= efa_dgrm_tx_attr;
-		*prov_info->rx_attr	= efa_dgrm_rx_attr;
+	switch (info_type) {
+		case EFA_INFO_RDM:
+			*prov_info->tx_attr	= efa_rdm_tx_attr;
+			*prov_info->rx_attr	= efa_rdm_rx_attr;
+			break;
+		case EFA_INFO_DGRAM:
+			*prov_info->tx_attr	= efa_dgrm_tx_attr;
+			*prov_info->rx_attr	= efa_dgrm_rx_attr;
+			break;
+		case EFA_INFO_DIRECT:
+			*prov_info->tx_attr	= efa_direct_tx_attr;
+			*prov_info->rx_attr	= efa_direct_rx_attr;
+			break;
+		default:
+			assert(NULL);
 	}
 
+	prov_info->tx_attr->inject_size = device->efa_attr.inline_buf_size;
 	prov_info->tx_attr->iov_limit = device->efa_attr.max_sq_sge;
 	prov_info->tx_attr->size = rounddown_power_of_two(device->efa_attr.max_sq_wr);
 	prov_info->rx_attr->iov_limit = device->efa_attr.max_rq_sge;
@@ -375,7 +408,7 @@ static int efa_prov_info_set_nic_attr(struct fi_info *prov_info, struct efa_devi
 		goto err_free;
 	}
 
-	link_attr->mtu = device->ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size();
+	link_attr->mtu = device->ibv_port_attr.max_msg_sz;
 	link_attr->speed = ofi_vrb_speed(device->ibv_port_attr.active_speed,
 	                                 device->ibv_port_attr.active_width);
 
@@ -438,7 +471,7 @@ void efa_prov_info_set_hmem_flags(struct fi_info *prov_info)
  *
  * @param	prov_info[out]	info object to be allocated
  * @param	device[in]	efa_device that contains device's information
- * @param	ep_type[in]	either FI_EP_RDM or FI_EP_DGRAM
+ * @param	info_type[in]	EFA info type: either EFA_INFO_RDM, EFA_INFO_DGRAM or EFA_INFO_DIRECT
  * @return	0 on success
  * 		negative libfabric error code on failure. Possible errors are:
  * 		-FI_ENOMEM	cannot allocate memory for the info object
@@ -446,7 +479,7 @@ void efa_prov_info_set_hmem_flags(struct fi_info *prov_info)
  */
 int efa_prov_info_alloc(struct fi_info **prov_info_ptr,
 			struct efa_device *device,
-			enum fi_ep_type ep_type)
+			enum efa_info_type info_type)
 {
 	struct fi_info *prov_info;
 	int err;
@@ -455,13 +488,25 @@ int efa_prov_info_alloc(struct fi_info **prov_info_ptr,
 	if (!prov_info)
 		return -FI_ENOMEM;
 
-	if (ep_type != FI_EP_RDM && ep_type != FI_EP_DGRAM) {
-		EFA_WARN(FI_LOG_DOMAIN, "Unsupported endpoint type: %d\n",
-			 ep_type);
-		return -FI_ENODATA;
+	switch (info_type) {
+		case EFA_INFO_DIRECT:
+			prov_info->caps	= EFA_DIRECT_CAPS;
+			prov_info->mode |= FI_CONTEXT2; 	/* EFA direct path requires FI_CONTEXT2 mode */
+			break;
+		case EFA_INFO_RDM:
+			prov_info->caps	= EFA_RDM_CAPS;
+			break;
+		case EFA_INFO_DGRAM:
+			prov_info->caps	= EFA_DGRM_CAPS;
+			prov_info->mode |= FI_CONTEXT2; 	/* EFA dgram path requires FI_CONTEXT2 mode */
+			prov_info->mode |= FI_MSG_PREFIX;
+			break;
+		default:
+			EFA_WARN(FI_LOG_DOMAIN, "Unsupported EFA info type: %d\n",
+				 info_type);
+			return -FI_ENODATA;
 	}
 
-	prov_info->caps	= (ep_type == FI_EP_RDM) ? EFA_RDM_CAPS : EFA_DGRM_CAPS;
 	prov_info->handle = NULL;
 	prov_info->addr_format = FI_ADDR_EFA;
 	prov_info->src_addr = calloc(1, EFA_EP_ADDR_LEN);
@@ -472,19 +517,19 @@ int efa_prov_info_alloc(struct fi_info **prov_info_ptr,
 	prov_info->src_addrlen = EFA_EP_ADDR_LEN;
 	memcpy(prov_info->src_addr, &device->ibv_gid, sizeof(device->ibv_gid));
 
-	err = efa_prov_info_set_fabric_attr(prov_info, device);
+	err = efa_prov_info_set_fabric_attr(prov_info, device, info_type);
 	if (err) {
 		goto err_free;
 	}
 
-	err = efa_prov_info_set_domain_attr(prov_info, device, ep_type);
+	err = efa_prov_info_set_domain_attr(prov_info, device, info_type);
 	if (err) {
 		goto err_free;
 	}
 
-	efa_prov_info_set_ep_attr(prov_info, device, ep_type);
+	efa_prov_info_set_ep_attr(prov_info, device, info_type);
 
-	efa_prov_info_set_tx_rx_attr(prov_info, device, ep_type);
+	efa_prov_info_set_tx_rx_attr(prov_info, device, info_type);
 
 	err = efa_prov_info_set_nic_attr(prov_info, device);
 	if (err) {

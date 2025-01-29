@@ -100,15 +100,23 @@ int efa_device_construct(struct efa_device *efa_device,
 	efa_device->device_caps = 0;
 #endif
 	efa_device->rdm_info = NULL;
-	err = efa_prov_info_alloc(&efa_device->rdm_info, efa_device, FI_EP_RDM);
+	err = efa_prov_info_alloc(&efa_device->rdm_info, efa_device, EFA_INFO_RDM);
 	if (err) {
 		EFA_WARN(FI_LOG_DOMAIN, "failed to allocate device info for RDM. err: %d\n",
 			 -err);
 		goto err_close;
 	}
 
+	efa_device->direct_info = NULL;
+	err = efa_prov_info_alloc(&efa_device->direct_info, efa_device, EFA_INFO_DIRECT);
+	if (err) {
+		EFA_WARN(FI_LOG_DOMAIN, "failed to allocate device info for EFA direct. err: %d\n",
+			 -err);
+		goto err_close;
+	}
+
 	efa_device->dgram_info = NULL;
-	err = efa_prov_info_alloc(&efa_device->dgram_info, efa_device, FI_EP_DGRAM);
+	err = efa_prov_info_alloc(&efa_device->dgram_info, efa_device, EFA_INFO_DGRAM);
 	if (err) {
 		EFA_WARN(FI_LOG_DOMAIN, "failed to allocate device info for DGRAM. err: %d\n",
 			 -err);
