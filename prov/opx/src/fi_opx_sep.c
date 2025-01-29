@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2023 Cornelis Networks.
+ * Copyright (C) 2023-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -320,7 +320,8 @@ static int fi_opx_rx_ctx(struct fid_ep *sep, int index, struct fi_rx_attr *attr,
 	if (index > 0) {
 		unsigned i;
 		for (i = 0; i < index; ++i) {
-			if (opx_sep->ep[i]->rx->self.hfi1_rx + 1 != opx_sep->ep[i + 1]->rx->self.hfi1_rx) {
+			if (opx_sep->ep[i]->rx->self.hfi1_subctxt_rx + 1 !=
+			    opx_sep->ep[i + 1]->rx->self.hfi1_subctxt_rx) {
 				fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 				abort();
 			}

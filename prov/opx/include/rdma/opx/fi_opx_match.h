@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Cornelis Networks.
+ * Copyright (C) 2023-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -174,15 +174,14 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_ue_hash_remove(struct fi_opx_hfi1_ue_
 }
 
 __OPX_FORCE_INLINE__
-uint64_t fi_opx_match_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const uint8_t origin_endpoint_id,
+uint64_t fi_opx_match_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const uint8_t origin_rx,
 			     const uint64_t target_tag, const uint64_t ignore_bits,
 			     const union fi_opx_addr src_opx_addr, const fi_addr_t ctx_src_addr)
 {
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore_bits;
-	const uint64_t answer =
-		(origin_tag_and_not_ignore == target_tag) &&
-		((ctx_src_addr == FI_ADDR_UNSPEC) ||
-		 ((origin_lid == src_opx_addr.lid) && (origin_endpoint_id == src_opx_addr.endpoint_id)));
+	const uint64_t answer			 = (origin_tag_and_not_ignore == target_tag) &&
+				((ctx_src_addr == FI_ADDR_UNSPEC) ||
+				 ((origin_lid == src_opx_addr.lid) && (origin_rx == src_opx_addr.hfi1_subctxt_rx)));
 	return answer;
 }
 
@@ -198,8 +197,8 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_find_uepkt_linear(struct fi_opx_match
 
 	FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_linear_searches);
 
-	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, uepkt->endpoint_id, target_tag, ignore_bits,
-					     src_opx_addr, ctx_src_addr)) {
+	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, uepkt->rx, target_tag, ignore_bits, src_opx_addr,
+					     ctx_src_addr)) {
 		FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_linear_misses);
 		uepkt = uepkt->next;
 	}
@@ -221,8 +220,8 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_find_uepkt_by_tag(struct fi_opx_match
 
 	FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_tag_searches);
 
-	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, uepkt->endpoint_id, target_tag, ignore_bits,
-					     src_opx_addr, ctx_src_addr)) {
+	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, uepkt->rx, target_tag, ignore_bits, src_opx_addr,
+					     ctx_src_addr)) {
 		FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_tag_misses);
 		uepkt = uepkt->tag_ht.next;
 	}

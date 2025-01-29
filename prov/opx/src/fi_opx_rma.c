@@ -160,8 +160,8 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 	const union fi_opx_addr addr = params->opx_target_addr;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, addr.hfi1_rx,
-					    addr.reliability_rx, &psn_ptr, &replay, params->reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid,
+					    addr.hfi1_subctxt_rx, &psn_ptr, &replay, params->reliability, hfi1_type);
 
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "DO_READV");
@@ -254,9 +254,8 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 		replay->payload[6] = temp[7];
 	}
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state,
-							    params->opx_target_addr.reliability_rx, params->dest_rx,
-							    psn_ptr, replay, params->reliability, OPX_HFI1_TYPE);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->dest_rx, psn_ptr,
+							    replay, params->reliability, OPX_HFI1_TYPE);
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
@@ -293,8 +292,8 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, dst_addr);
 
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid, opx_dst_addr.hfi1_rx,
-						opx_dst_addr.reliability_rx, reliability))) {
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid,
+						opx_dst_addr.hfi1_subctxt_rx, reliability))) {
 		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "INJECT_WRITE");
 		return -FI_EAGAIN;

@@ -85,7 +85,7 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 	params->opx_target_addr = opx_target_addr;
 	params->key		= (key == NULL) ? -1 : *key;
 	params->cc		= cc;
-	params->dest_rx		= opx_target_addr.hfi1_rx;
+	params->dest_rx		= opx_target_addr.hfi1_subctxt_rx;
 	params->bth_rx		= params->dest_rx << OPX_BTH_RX_SHIFT;
 	params->pbc_dlid	= OPX_PBC_DLID_TO_PBC_DLID(opx_target_addr.lid, hfi1_type);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
@@ -184,8 +184,8 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 	union fi_opx_hfi1_deferred_work *work =
 		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work != NULL);
-	const uint64_t is_intranode    = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_dst_addr, caps);
-	uint32_t       u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, opx_dst_addr.hfi1_rx);
+	const uint64_t is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_dst_addr, caps);
+	uint32_t u32_extended_rx    = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, opx_dst_addr.hfi1_subctxt_rx);
 
 	uint64_t lrh_dlid;
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
@@ -236,11 +236,11 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 
 		params->u32_extended_rx = u32_extended_rx;
 		params->reliability	= reliability;
-		params->origin_rs	= opx_dst_addr.reliability_rx;
-		params->origin_rx	= opx_dst_addr.hfi1_rx;
+		params->origin_rs	= opx_dst_addr.hfi1_subctxt_rx;
+		params->origin_rx	= opx_dst_addr.hfi1_subctxt_rx;
 		params->is_intranode	= is_intranode;
 		params->opcode		= FI_OPX_HFI_BTH_OPCODE_RMA_RTS;
-		params->u8_rx		= opx_dst_addr.hfi1_rx;
+		params->u8_rx		= opx_dst_addr.hfi1_subctxt_rx;
 		params->dt		= dt == FI_VOID ? FI_VOID - 1 : dt;
 		params->op		= op == FI_NOOP ? FI_NOOP - 1 : op;
 		params->target_hfi_unit = opx_dst_addr.hfi1_unit;
@@ -257,7 +257,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 		params->lrh_dlid		    = lrh_dlid;
 		params->pbc_dlid		    = pbc_dlid;
 		params->slid			    = slid;
-		params->origin_rs		    = opx_dst_addr.reliability_rx;
+		params->origin_rs		    = opx_dst_addr.hfi1_subctxt_rx;
 		params->dt			    = dt == FI_VOID ? FI_VOID - 1 : dt;
 		params->op			    = op == FI_NOOP ? FI_NOOP - 1 : op;
 		params->key			    = key;
@@ -274,8 +274,8 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 		params->dput_iov		    = &params->iov[0];
 		params->opcode			    = FI_OPX_HFI_DPUT_OPCODE_PUT;
 		params->is_intranode		    = is_intranode;
-		params->u8_rx			    = opx_dst_addr.hfi1_rx; // dest_rx, also used for bth_rx
-		params->u32_extended_rx		    = u32_extended_rx;	    // dest_rx, also used for bth_rx
+		params->u8_rx			    = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
+		params->u32_extended_rx		    = u32_extended_rx;		    // dest_rx, also used for bth_rx
 		params->reliability		    = reliability;
 		params->cur_iov			    = 0;
 		params->bytes_sent		    = 0;

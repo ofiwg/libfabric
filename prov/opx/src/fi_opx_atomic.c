@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -143,10 +143,10 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	}
 	params->pbc_dlid		  = OPX_PBC_DLID_TO_PBC_DLID(opx_dst_addr.lid, hfi1_type);
 	params->slid			  = opx_dst_addr.lid;
-	params->origin_rs		  = opx_dst_addr.reliability_rx;
+	params->origin_rs		  = opx_dst_addr.hfi1_subctxt_rx;
 	params->dt			  = dt == FI_VOID ? FI_VOID - 1 : dt;
 	params->op			  = op == FI_NOOP ? FI_NOOP - 1 : op;
-	params->u8_rx			  = opx_dst_addr.hfi1_rx; // dest_rx, also used for bth_rx
+	params->u8_rx			  = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
 	params->key			  = key;
 	params->niov			  = 1;
 	params->iov[0].bytes		  = buf_iov->len;
@@ -170,7 +170,8 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	params->fetch_vaddr		  = (void *) fetch_iov->buf;
 	params->target_byte_counter_vaddr = (const uintptr_t) cc;
 	params->target_hfi_unit		  = opx_dst_addr.hfi1_unit;
-	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, opx_dst_addr.hfi1_rx);
+	params->u32_extended_rx =
+		fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, opx_dst_addr.hfi1_subctxt_rx);
 
 	if (compare_iov) {
 		params->compare_vaddr = (void *) compare_iov->buf;
@@ -345,8 +346,8 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, dst_addr);
 
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_addr.lid, opx_addr.hfi1_rx,
-						opx_addr.reliability_rx, reliability))) {
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_addr.lid, opx_addr.hfi1_subctxt_rx,
+						reliability))) {
 		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}
@@ -408,8 +409,8 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep, const struct fi_msg_at
 	assert((FI_AV_TABLE == av_type) || (FI_AV_MAP == av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, msg->addr);
 
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid, opx_dst_addr.hfi1_rx,
-						opx_dst_addr.reliability_rx, reliability))) {
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid,
+						opx_dst_addr.hfi1_subctxt_rx, reliability))) {
 		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}
@@ -516,8 +517,8 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 	assert((FI_AV_TABLE == av_type) || (FI_AV_MAP == av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, msg->addr);
 
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid, opx_dst_addr.hfi1_rx,
-						opx_dst_addr.reliability_rx, reliability))) {
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid,
+						opx_dst_addr.hfi1_subctxt_rx, reliability))) {
 		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}
@@ -676,8 +677,8 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 	assert((FI_AV_TABLE == av_type) || (FI_AV_MAP == av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, msg->addr);
 
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid, opx_dst_addr.hfi1_rx,
-						opx_dst_addr.reliability_rx, reliability))) {
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid,
+						opx_dst_addr.hfi1_subctxt_rx, reliability))) {
 		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}
@@ -808,8 +809,8 @@ ssize_t fi_opx_fetch_compare_atomic_generic(struct fid_ep *ep, const void *buf, 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, dest_addr);
 
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_addr.lid, opx_addr.hfi1_rx,
-						opx_addr.reliability_rx, reliability))) {
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_addr.lid, opx_addr.hfi1_subctxt_rx,
+						reliability))) {
 		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}
@@ -888,8 +889,8 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, dest_addr);
 
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid, opx_dst_addr.hfi1_rx,
-						opx_dst_addr.reliability_rx, reliability))) {
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid,
+						opx_dst_addr.hfi1_subctxt_rx, reliability))) {
 		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
 		return -FI_EAGAIN;
 	}

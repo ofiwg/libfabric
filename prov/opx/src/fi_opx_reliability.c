@@ -750,10 +750,10 @@ void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const opx_lid_t
 {
 	OPX_TRACER_TRACE_RELI(OPX_TRACER_BEGIN, "RX_RELI_SEND_PRE_ACKS");
 
-	const union fi_opx_reliability_service_flow_key key = {.slid = slid,
-							       .tx   = FI_OPX_HFI1_PACKET_ORIGIN_TX(hdr),
-							       .dlid = dlid,
-							       .rx   = reliability_rx};
+	const union fi_opx_reliability_service_flow_key key = {.slid   = slid,
+							       .src_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr),
+							       .dlid   = dlid,
+							       .dst_rx = reliability_rx};
 
 	ssize_t rc __attribute__((unused));
 	rc = fi_opx_hfi1_tx_reliability_inject(ep, (uint64_t) key.value, slid, origin_rx, psn_start, psn_count,
@@ -1414,8 +1414,8 @@ ssize_t fi_opx_reliability_service_do_replay_sdma(struct fid_ep *ep, struct fi_o
 		key.dlid = (opx_lid_t) __le24_to_cpu(start_replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 |
 						     start_replay->scb.scb_16B.hdr.lrh_16B.dlid);
 	}
-	key.tx = (uint32_t) (OPX_REPLAY_HDR(start_replay)->reliability.origin_tx);
-	key.rx = (uint32_t) (OPX_REPLAY_HDR(start_replay)->bth.rx);
+	key.src_rx = (uint32_t) (OPX_REPLAY_HDR(start_replay)->reliability.origin_rx);
+	key.dst_rx = (uint32_t) (OPX_REPLAY_HDR(start_replay)->bth.rx);
 #endif
 
 	uint32_t replayed = 0;
@@ -1498,8 +1498,8 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 		key.dlid = (opx_lid_t) __le24_to_cpu(replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 |
 						     replay->scb.scb_16B.hdr.lrh_16B.dlid);
 	}
-	key.tx = (uint32_t) FI_OPX_HFI1_PACKET_ORIGIN_TX(OPX_REPLAY_HDR(replay));
-	key.rx = (uint32_t) (OPX_REPLAY_HDR(replay)->bth.rx);
+	key.src_rx = (uint32_t) FI_OPX_HFI1_PACKET_ORIGIN_RX(OPX_REPLAY_HDR(replay));
+	key.dst_rx = (uint32_t) (OPX_REPLAY_HDR(replay)->bth.rx);
 #endif
 	/* runtime checks for non-inlined functions */
 	const enum opx_hfi1_type hfi1_type = OPX_HFI1_TYPE;
@@ -2933,7 +2933,7 @@ void fi_opx_reliability_service_fini(struct fi_opx_reliability_service *service)
 }
 
 void fi_opx_reliability_client_init(struct fi_opx_reliability_client_state *state,
-				    struct fi_opx_reliability_service *service, const uint8_t rx, const uint8_t tx,
+				    struct fi_opx_reliability_service *service, const uint8_t rx,
 				    void (*process_fn)(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 						       const uint8_t *const payload,
 						       const uint8_t	    origin_reliability_rx))
@@ -2954,7 +2954,6 @@ void fi_opx_reliability_client_init(struct fi_opx_reliability_client_state *stat
 	state->rx	      = rx;
 
 	/* ---- tx only ---- */
-	state->tx	      = tx;
 	state->tx_flow_rbtree = rbtNew(fi_opx_reliability_compare);
 
 	/* ---- resynch only ---- */
@@ -3110,10 +3109,10 @@ struct fi_opx_reliability_rx_uepkt *fi_opx_reliability_allocate_uepkt(struct fi_
 	return tmp;
 }
 
-void fi_opx_reliability_rx_exception(struct fi_opx_reliability_client_state *state, opx_lid_t slid, uint64_t origin_tx,
-				     uint32_t psn, struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
-				     const uint8_t *const payload, const uint16_t pktlen,
-				     const enum opx_hfi1_type hfi1_type, const uint8_t opcode)
+void fi_opx_reliability_rx_exception(struct fi_opx_reliability_client_state *state, opx_lid_t slid,
+				     uint64_t src_origin_rx, uint32_t psn, struct fid_ep *ep,
+				     const union opx_hfi1_packet_hdr *const hdr, const uint8_t *const payload,
+				     const uint16_t pktlen, const enum opx_hfi1_type hfi1_type, const uint8_t opcode)
 {
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	uint16_t lrh_pktlen_le;
@@ -3130,10 +3129,10 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_client_state *sta
 	}
 
 	union fi_opx_reliability_service_flow_key key;
-	key.slid = slid;
-	key.tx	 = origin_tx;
-	key.dlid = state->lid;
-	key.rx	 = state->rx;
+	key.slid   = slid;
+	key.src_rx = src_origin_rx;
+	key.dlid   = state->lid;
+	key.dst_rx = state->rx;
 
 	void *itr = fi_opx_rbt_find(state->rx_flow_rbtree, (void *) key.value);
 
@@ -3696,14 +3695,14 @@ void fi_opx_hfi1_rx_reliability_resynch(struct fid_ep *ep, struct fi_opx_reliabi
 	struct fi_opx_reliability_client_state *state  = &opx_ep->reliability->state;
 
 	union fi_opx_reliability_service_flow_key rx_key	      = {.value = hdr->service.key};
-	union fi_opx_reliability_service_flow_key tx_key	      = {.slid = rx_key.dlid,
-									 .tx   = state->tx,
-									 .dlid = rx_key.slid,
-									 .rx   = state->rx};
-	union fi_opx_reliability_service_flow_key tx_local_client_key = {.slid = rx_key.dlid,
-									 .tx   = state->tx,
-									 .dlid = rx_key.slid,
-									 .rx   = origin_reliability_rx};
+	union fi_opx_reliability_service_flow_key tx_key	      = {.slid	 = rx_key.dlid,
+									 .src_rx = state->rx,
+									 .dlid	 = rx_key.slid,
+									 .dst_rx = state->rx};
+	union fi_opx_reliability_service_flow_key tx_local_client_key = {.slid	 = rx_key.dlid,
+									 .src_rx = state->rx,
+									 .dlid	 = rx_key.slid,
+									 .dst_rx = origin_reliability_rx};
 
 	/*
 	 * INTRA-NODE:
@@ -3878,10 +3877,10 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, union fi_opx_
 		slid = (opx_lid_t) __le24_to_cpu(opx_ep->tx->send_9B.hdr.lrh_16B.slid20 << 20 |
 						 opx_ep->tx->send_9B.hdr.lrh_16B.slid);
 	}
-	union fi_opx_reliability_service_flow_key tx_key = {.slid = slid,
-							    .tx	  = opx_ep->tx->send_9B.hdr.reliability.origin_tx,
-							    .dlid = dest_addr.lid,
-							    .rx	  = dest_addr.hfi1_rx};
+	union fi_opx_reliability_service_flow_key tx_key = {.slid   = slid,
+							    .src_rx = opx_ep->tx->send_9B.hdr.reliability.origin_rx,
+							    .dlid   = dest_addr.lid,
+							    .dst_rx = dest_addr.hfi1_subctxt_rx};
 
 	if (!opx_ep->reliability || opx_ep->reliability->state.kind != OFI_RELIABILITY_KIND_ONLOAD) {
 		/* Nothing to do */
@@ -3927,7 +3926,7 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, union fi_opx_
 		unsigned rx_index =
 			(opx_ep->daos_info.hfi_rank_enabled) ?
 				opx_shm_daos_rank_index(opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst) :
-				dest_addr.hfi1_rx;
+				dest_addr.hfi1_subctxt_rx;
 
 		/*
 		 * Check whether RESYNCH request has been received from the remote EP.
@@ -3981,9 +3980,9 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, union fi_opx_
 			}
 
 			inject_done = true;
-			rc = fi_opx_hfi1_tx_reliability_inject_shm(ep, tx_key.value, dest_addr.lid, dest_addr.hfi1_rx,
-								   dest_addr.hfi1_unit, rx_index,
-								   FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH);
+			rc	    = fi_opx_hfi1_tx_reliability_inject_shm(ep, tx_key.value, dest_addr.lid,
+									    dest_addr.hfi1_subctxt_rx, dest_addr.hfi1_unit,
+									    rx_index, FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH);
 			if (rc) {
 				return -FI_EAGAIN;
 			}
@@ -4046,7 +4045,7 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, union fi_opx_
 			inject_done = true;
 
 			fi_opx_hfi1_tx_reliability_inject_ud_resynch(ep, tx_key.value, tx_key.dlid,
-								     dest_addr.reliability_rx,
+								     dest_addr.hfi1_subctxt_rx,
 								     FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH);
 		}
 	}

@@ -56,11 +56,9 @@
 #include "opx_hmem_cache.h"
 
 union fi_opx_addr opx_default_addr = {
-	.hfi1_rx	= 0,
-	.hfi1_unit	= 0xff,
-	.reliability_rx = 0,
-	.lid		= 0xffffff,
-	.endpoint_id	= 0xff,
+	.hfi1_subctxt_rx = 0xffff,
+	.hfi1_unit	 = 0xff,
+	.lid		 = 0xffffff,
 };
 
 static int fi_opx_init;

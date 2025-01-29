@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2021,2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -104,12 +104,10 @@ int fi_opx_getname(fid_t fid, void *addr, size_t *addrlen)
 			}
 
 			union fi_opx_addr tmp;
-			tmp.raw64b	   = 0;
-			tmp.endpoint_id	   = opx_sep->ep[i]->hfi->send_ctxt;
-			tmp.reliability_rx = opx_sep->ep[i]->hfi->info.rxe.id;
-			tmp.lid		   = htons(opx_sep->ep[i]->hfi->lid);
-			tmp.hfi1_rx	   = opx_sep->ep[i]->rx->self.hfi1_rx;
-			tmp.hfi1_unit	   = opx_sep->ep[i]->rx->self.hfi1_unit;
+			tmp.raw64b	    = 0;
+			tmp.lid		    = htons(opx_sep->ep[i]->hfi->lid);
+			tmp.hfi1_subctxt_rx = opx_sep->ep[i]->rx->self.hfi1_subctxt_rx;
+			tmp.hfi1_unit	    = opx_sep->ep[i]->rx->self.hfi1_unit;
 			memcpy(addr, (void *) &tmp, MIN(len, *addrlen));
 		}
 

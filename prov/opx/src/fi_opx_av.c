@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2023 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -352,14 +352,14 @@ static const char *fi_opx_av_straddr(struct fid_av *av, const void *addr, char *
 	if (opx_av->ep_tx[0] == NULL || !opx_av->ep_tx[0]->daos_info.hfi_rank_enabled) {
 		union fi_opx_addr *opx_addr = (union fi_opx_addr *) addr;
 		/* Parse address with standard address format */
-		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%02x.%02x.%02x.%02x", opx_addr->lid, opx_addr->endpoint_id,
-				 opx_addr->hfi1_rx, opx_addr->hfi1_unit, opx_addr->reliability_rx);
+		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%02x.%02x", opx_addr->lid, opx_addr->hfi1_subctxt_rx,
+				 opx_addr->hfi1_unit);
 	} else {
 		struct fi_opx_extended_addr *opx_addr = (struct fi_opx_extended_addr *) addr;
 		/* Parse address with extended address format - FI_ADDRESS.inst:rank*/
-		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%02x.%02x.%02x.%02x.%04x:%d", opx_addr->addr.lid,
-				 opx_addr->addr.endpoint_id, opx_addr->addr.hfi1_rx, opx_addr->addr.hfi1_unit,
-				 opx_addr->addr.reliability_rx, opx_addr->rank_inst, opx_addr->rank);
+		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%02x.%02x.%04x:%d", opx_addr->addr.lid,
+				 opx_addr->addr.hfi1_subctxt_rx, opx_addr->addr.hfi1_unit, opx_addr->rank_inst,
+				 opx_addr->rank);
 	}
 
 	memcpy(buf, tmp, MIN(n, *len));
