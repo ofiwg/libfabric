@@ -1181,8 +1181,8 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, fi
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(ep, &opx_ep->reliability->state, addr.lid, dest_rx, addr.reliability_rx,
-					    &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(ep, &opx_ep->reliability->state, addr.lid, dest_rx, &psn_ptr, &replay,
+					    reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-INJECT-HFI");
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
@@ -1282,8 +1282,8 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, fi
 		fi_opx_copy_hdr16B_cacheline(&replay->scb.scb_16B, local_temp);
 	}
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.reliability_rx, dest_rx,
-							    psn_ptr, replay, reliability, hfi1_type);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
+							    reliability, hfi1_type);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-INJECT-HFI");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== INJECT, HFI (end)\n");
@@ -1554,8 +1554,8 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(ep, &opx_ep->reliability->state, addr.lid, dest_rx, addr.reliability_rx,
-					    &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(ep, &opx_ep->reliability->state, addr.lid, dest_rx, &psn_ptr, &replay,
+					    reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		return -FI_EAGAIN;
 	}
@@ -1628,8 +1628,8 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 						   &iov_base_offset)) { /* In/Out:  start offset, returns offset */
 	} // copy until done
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.reliability_rx, dest_rx,
-							    psn_ptr, replay, reliability, hfi1_type);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
+							    reliability, hfi1_type);
 
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
 
@@ -1840,8 +1840,8 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov,
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(ep, &opx_ep->reliability->state, addr.lid, dest_rx, addr.reliability_rx,
-					    &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(ep, &opx_ep->reliability->state, addr.lid, dest_rx, &psn_ptr, &replay,
+					    reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		return -FI_EAGAIN;
 	}
@@ -1920,8 +1920,8 @@ ssize_t fi_opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov,
 						   &iov_base_offset)) { /* In/Out:  start offset, returns offset */
 	} // copy until done
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.reliability_rx, dest_rx,
-							    psn_ptr, replay, reliability, hfi1_type);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
+							    reliability, hfi1_type);
 
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
 
@@ -2428,8 +2428,8 @@ void fi_opx_hfi1_tx_send_egr_write_replay_data(struct fi_opx_ep *opx_ep, const u
 		payload[i] = buf_qws[i];
 	}
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.reliability_rx,
-							    addr.hfi1_rx, psn_ptr, replay, reliability, hfi1_type);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.hfi1_subctxt_rx, psn_ptr,
+							    replay, reliability, hfi1_type);
 }
 
 __OPX_FORCE_INLINE__
@@ -2501,8 +2501,8 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, 
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int32_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, dest_rx,
-					    addr.reliability_rx, &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, dest_rx, &psn_ptr,
+					    &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		return -FI_EAGAIN;
 	}
@@ -2647,8 +2647,8 @@ ssize_t fi_opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t l
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int32_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, dest_rx,
-					    addr.reliability_rx, &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, dest_rx, &psn_ptr,
+					    &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		return -FI_EAGAIN;
 	}
@@ -3005,8 +3005,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first_common(
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int32_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, addr.hfi1_rx,
-					    addr.reliability_rx, &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid,
+					    addr.hfi1_subctxt_rx, &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		return -FI_EAGAIN;
 	}
@@ -3123,8 +3123,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, const void *buf
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int32_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, addr.hfi1_rx,
-					    addr.reliability_rx, &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid,
+					    addr.hfi1_subctxt_rx, &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		return -FI_EAGAIN;
 	}
@@ -3190,8 +3190,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, const void 
 	struct fi_opx_reliability_tx_replay *replay;
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int32_t				     psn;
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, addr.hfi1_rx,
-					    addr.reliability_rx, &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid,
+					    addr.hfi1_subctxt_rx, &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		return -FI_EAGAIN;
 	}
@@ -3303,8 +3303,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last(struct fi_opx_ep *opx_ep, const void *bu
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int32_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, addr.hfi1_rx,
-					    addr.reliability_rx, &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid,
+					    addr.hfi1_subctxt_rx, &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-MP-EAGER-NTH-LAST");
 		return -FI_EAGAIN;
@@ -3439,8 +3439,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last_16B(struct fi_opx_ep *opx_ep, const void
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int32_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, addr.hfi1_rx,
-					    addr.reliability_rx, &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid,
+					    addr.hfi1_subctxt_rx, &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-MP-EAGER-NTH-LAST");
 		return -FI_EAGAIN;

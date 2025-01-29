@@ -194,9 +194,9 @@ static inline const char *opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 						  1]; /* INVALID */
 }
 
-#define FI_OPX_HFI1_PACKET_ORIGIN_TX(packet_hdr)                                                              \
-	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? (packet_hdr)->dput.target.origin_tx : \
-									(packet_hdr)->reliability.origin_tx)
+#define FI_OPX_HFI1_PACKET_ORIGIN_RX(packet_hdr)                                                              \
+	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? (packet_hdr)->dput.target.origin_rx : \
+									(packet_hdr)->reliability.origin_rx)
 
 #define FI_OPX_HFI1_PACKET_PSN(packet_hdr)                                                                          \
 	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? ntohl((packet_hdr)->bth.psn) & 0x00FFFFFF : \
@@ -672,7 +672,7 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[3] BTH/KDETH (psn,offset_ver_tid)*/
 		uint32_t psn : 24;
-		uint32_t origin_tx : 8;
+		uint32_t origin_rx : 8;
 		uint8_t	 unused; /* WHY? unused but zeroed in model */
 		uint8_t	 reserved_1[3];
 
@@ -686,7 +686,7 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[3] BTH/KDETH (psn) */
 		uint8_t	 reserved_0[3];
-		uint8_t	 origin_tx; /* used for FI_DIRECTED_RECV; identifies the endpoint on the node */
+		uint8_t	 origin_rx; /* used for FI_DIRECTED_RECV; identifies the endpoint on the node */
 		uint32_t reserved_1;
 
 		/* QW[4] KDETH (unused) */
@@ -940,7 +940,7 @@ union opx_hfi1_packet_hdr {
 			struct {
 				/* QW[5] KDETH/SW */
 				uint8_t	 opcode;
-				uint8_t	 origin_tx;
+				uint8_t	 origin_rx;
 				uint8_t	 dt;
 				uint8_t	 op;
 				uint16_t last_bytes;
@@ -1210,8 +1210,8 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 		     fn, ln, hdr->qw_9B[6]);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u\n", pid, fn, ln);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .match.origin_tx .....     0x%02x \n", pid, fn,
-		     ln, hdr->match.origin_tx);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .match.origin_rx .....     0x%02x \n", pid, fn,
+		     ln, hdr->match.origin_rx);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .match.ofi_data ......     0x%08x \n", pid, fn,
 		     ln, hdr->match.ofi_data);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .match.ofi_tag .......     0x%016lx \n", pid, fn,
@@ -1540,12 +1540,12 @@ struct fi_opx_hfi1_ue_packet {
 		uint32_t rank_inst;
 	} daos_info;
 
-	/* Copies of tag, lid and endpoint_id so that
+	/* Copies of tag, lid and rx so that
 	 * packet can be matched only accessing the
 	 * first cacheline */
 	uint64_t  tag;
 	opx_lid_t lid;
-	uint8_t	  endpoint_id;
+	uint8_t	  rx;
 
 	uint8_t unused[3];
 
@@ -1697,8 +1697,8 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 	fprintf(stderr, "(%d) %s():%u\n", pid, fn, ln);
 	fprintf(stderr, "(%d) %s():%u .match.slid ......................... 0x%04x\n",
 		pid, fn, ln, hdr->match.slid);
-	fprintf(stderr, "(%d) %s():%u .match.origin_tx                      0x%02x\n",
-		pid, fn, ln, hdr->match.origin_tx);
+	fprintf(stderr, "(%d) %s():%u .match.origin_rx                      0x%02x\n",
+		pid, fn, ln, hdr->match.origin_rx);
 	fprintf(stderr, "(%d) %s():%u .match.ofi_data ..................... 0x%08x\n",
 		pid, fn, ln, hdr->match.ofi_data);
 	fprintf(stderr, "(%d) %s():%u .match.ofi_tag                        0x%016lx\n",

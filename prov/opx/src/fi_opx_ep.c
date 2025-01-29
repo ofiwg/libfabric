@@ -244,7 +244,7 @@ void fi_opx_ep_tx_model_init(struct fi_opx_hfi1_context *hfi, const uint8_t reli
 	send_9B->hdr.bth.rx	= 0; /* set at runtime */
 
 	send_9B->hdr.reliability.psn	   = 0;
-	send_9B->hdr.reliability.origin_tx = hfi->send_ctxt;
+	send_9B->hdr.reliability.origin_rx = hfi->info.rxe.id;
 
 	/* KDETH header */
 	send_9B->hdr.kdeth.offset_ver_tid = FI_OPX_HFI1_KDETH_VERSION << FI_OPX_HFI1_KDETH_VERSION_SHIFT; /* no flags */
@@ -359,7 +359,7 @@ void fi_opx_ep_tx_model_init_16B(struct fi_opx_hfi1_context *hfi, const uint8_t 
 	send_16B->hdr.bth.rx	 = 0; /* set at runtime */
 
 	send_16B->hdr.reliability.psn	    = 0;
-	send_16B->hdr.reliability.origin_tx = hfi->send_ctxt;
+	send_16B->hdr.reliability.origin_rx = hfi->info.rxe.id;
 
 	/* KDETH header */
 	send_16B->hdr.kdeth.offset_ver_tid = FI_OPX_HFI1_KDETH_VERSION
@@ -465,7 +465,6 @@ int fi_opx_stx_init(struct fi_opx_domain *opx_domain, struct fi_tx_attr *attr, s
 	 */
 	fi_opx_reliability_client_init(&opx_stx->reliability_state, &opx_stx->reliability_service,
 				       opx_stx->hfi->info.rxe.id, /* rx */
-				       opx_stx->hfi->send_ctxt,	  /* tx */
 				       fi_opx_ep_rx_reliability_process_packet);
 
 	/*
@@ -1246,12 +1245,10 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 	opx_ep->rx->egrq.last_egrbfr_index = 0;
 	opx_ep->rx->egrq.head_register	   = hfi1->info.rxe.egrq.head_register;
 
-	opx_ep->rx->self.raw64b		= 0;
-	opx_ep->rx->self.lid		= hfi1->lid;
-	opx_ep->rx->self.hfi1_rx	= hfi1->info.rxe.id;
-	opx_ep->rx->self.hfi1_unit	= (uint8_t) hfi1->hfi_unit;
-	opx_ep->rx->self.endpoint_id	= hfi1->send_ctxt;
-	opx_ep->rx->self.reliability_rx = opx_ep->reliability->rx;
+	opx_ep->rx->self.raw64b		 = 0;
+	opx_ep->rx->self.lid		 = hfi1->lid;
+	opx_ep->rx->self.hfi1_subctxt_rx = hfi1->info.rxe.id;
+	opx_ep->rx->self.hfi1_unit	 = (uint8_t) hfi1->hfi_unit;
 
 	/* Initialize hash table used to lookup info on any HFI units on the node */
 	fi_opx_global.hfi_local_info.hfi_unit = (uint8_t) hfi1->hfi_unit;
@@ -1297,7 +1294,7 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 		opx_ep->rx->tx.cts_9B.hdr.bth.rx     = 0; /* set at runtime */
 
 		opx_ep->rx->tx.cts_9B.hdr.reliability.psn	= 0;
-		opx_ep->rx->tx.cts_9B.hdr.reliability.origin_tx = hfi1->send_ctxt;
+		opx_ep->rx->tx.cts_9B.hdr.reliability.origin_rx = hfi1->info.rxe.id;
 
 		/* KDETH header */
 		opx_ep->rx->tx.cts_9B.hdr.kdeth.offset_ver_tid = FI_OPX_HFI1_KDETH_VERSION
@@ -1323,8 +1320,8 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 
 		/* tagged model */
 		opx_ep->rx->tx.dput_9B				  = opx_ep->rx->tx.cts_9B;
-		opx_ep->rx->tx.dput_9B.hdr.reliability.origin_tx  = 0;
-		opx_ep->rx->tx.dput_9B.hdr.dput.target.origin_tx  = hfi1->send_ctxt;
+		opx_ep->rx->tx.dput_9B.hdr.reliability.origin_rx  = 0;
+		opx_ep->rx->tx.dput_9B.hdr.dput.target.origin_rx  = hfi1->info.rxe.id;
 		opx_ep->rx->tx.dput_9B.hdr.dput.target.dt	  = 0;
 		opx_ep->rx->tx.dput_9B.hdr.dput.target.op	  = 0;
 		opx_ep->rx->tx.dput_9B.hdr.dput.target.last_bytes = 0;
@@ -1340,8 +1337,8 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 
 		/* tagged model */
 		opx_ep->rx->tx.rzv_dput_9B			      = opx_ep->rx->tx.cts_9B;
-		opx_ep->rx->tx.rzv_dput_9B.hdr.reliability.origin_tx  = 0;
-		opx_ep->rx->tx.rzv_dput_9B.hdr.dput.target.origin_tx  = hfi1->send_ctxt;
+		opx_ep->rx->tx.rzv_dput_9B.hdr.reliability.origin_rx  = 0;
+		opx_ep->rx->tx.rzv_dput_9B.hdr.dput.target.origin_rx  = hfi1->info.rxe.id;
 		opx_ep->rx->tx.rzv_dput_9B.hdr.dput.target.dt	      = 0;
 		opx_ep->rx->tx.rzv_dput_9B.hdr.dput.target.op	      = 0;
 		opx_ep->rx->tx.rzv_dput_9B.hdr.dput.target.last_bytes = 0;
@@ -1395,7 +1392,7 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 		opx_ep->rx->tx.cts_16B.hdr.bth.rx     = 0; /* set at runtime */
 
 		opx_ep->rx->tx.cts_16B.hdr.reliability.psn	 = 0;
-		opx_ep->rx->tx.cts_16B.hdr.reliability.origin_tx = hfi1->send_ctxt;
+		opx_ep->rx->tx.cts_16B.hdr.reliability.origin_rx = hfi1->info.rxe.id;
 
 		/* KDETH header */
 		opx_ep->rx->tx.cts_16B.hdr.kdeth.offset_ver_tid = FI_OPX_HFI1_KDETH_VERSION
@@ -1421,8 +1418,8 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 
 		/* tagged model */
 		opx_ep->rx->tx.dput_16B				   = opx_ep->rx->tx.cts_16B;
-		opx_ep->rx->tx.dput_16B.hdr.reliability.origin_tx  = 0;
-		opx_ep->rx->tx.dput_16B.hdr.dput.target.origin_tx  = hfi1->send_ctxt;
+		opx_ep->rx->tx.dput_16B.hdr.reliability.origin_rx  = 0;
+		opx_ep->rx->tx.dput_16B.hdr.dput.target.origin_rx  = hfi1->info.rxe.id;
 		opx_ep->rx->tx.dput_16B.hdr.dput.target.dt	   = 0;
 		opx_ep->rx->tx.dput_16B.hdr.dput.target.op	   = 0;
 		opx_ep->rx->tx.dput_16B.hdr.dput.target.last_bytes = 0;
@@ -1439,8 +1436,8 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 
 		/* tagged model */
 		opx_ep->rx->tx.rzv_dput_16B			       = opx_ep->rx->tx.cts_16B;
-		opx_ep->rx->tx.rzv_dput_16B.hdr.reliability.origin_tx  = 0;
-		opx_ep->rx->tx.rzv_dput_16B.hdr.dput.target.origin_tx  = hfi1->send_ctxt;
+		opx_ep->rx->tx.rzv_dput_16B.hdr.reliability.origin_rx  = 0;
+		opx_ep->rx->tx.rzv_dput_16B.hdr.dput.target.origin_rx  = hfi1->info.rxe.id;
 		opx_ep->rx->tx.rzv_dput_16B.hdr.dput.target.dt	       = 0;
 		opx_ep->rx->tx.rzv_dput_16B.hdr.dput.target.op	       = 0;
 		opx_ep->rx->tx.rzv_dput_16B.hdr.dput.target.last_bytes = 0;
@@ -1733,7 +1730,6 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			fi_opx_reliability_client_init(&opx_ep->reliability->state,
 						       &opx_domain->reliability_service_offload,
 						       opx_ep->hfi->info.rxe.id, /* rx */
-						       opx_ep->hfi->send_ctxt,	 /* tx */
 						       fi_opx_ep_rx_reliability_process_packet);
 		} else if (OFI_RELIABILITY_KIND_ONLOAD == opx_ep->reliability->state.kind) {
 			fi_opx_reliability_service_init(&opx_ep->reliability->service, opx_domain->unique_job_key,
@@ -1742,7 +1738,6 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			opx_ep->reliability->rx = opx_ep->hfi->info.rxe.id;
 			fi_opx_reliability_client_init(&opx_ep->reliability->state, &opx_ep->reliability->service,
 						       opx_ep->hfi->info.rxe.id, /* rx */
-						       opx_ep->hfi->send_ctxt,	 /* tx */
 						       fi_opx_ep_rx_reliability_process_packet);
 		}
 
@@ -2846,10 +2841,10 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 		while (uepkt != NULL) {
 			unsigned is_intranode = opx_lrh_is_intranode(&(uepkt->hdr), hfi1_type);
 
-			if (fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->lid, uepkt->endpoint_id,
-							 FI_OPX_MATCH_IGNORE_ALL, FI_OPX_MATCH_TAG_ZERO, any_addr,
-							 src_addr, opx_ep, uepkt->daos_info.rank,
-							 uepkt->daos_info.rank_inst, is_intranode)) {
+			if (fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->lid, uepkt->rx, FI_OPX_MATCH_IGNORE_ALL,
+							 FI_OPX_MATCH_TAG_ZERO, any_addr, src_addr, opx_ep,
+							 uepkt->daos_info.rank, uepkt->daos_info.rank_inst,
+							 is_intranode)) {
 				FI_OPX_DEBUG_COUNTERS_INC(found_packet);
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_hits);
 
@@ -2996,9 +2991,9 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_append_ue(struct fi_opx_ep_rx *const	
 		memcpy((void *) &uepkt->payload.byte[0], payload, payload_bytes);
 	}
 
-	uepkt->tag	   = hdr->match.ofi_tag;
-	uepkt->lid	   = slid;
-	uepkt->endpoint_id = hdr->reliability.origin_tx;
+	uepkt->tag = hdr->match.ofi_tag;
+	uepkt->lid = slid;
+	uepkt->rx  = hdr->reliability.origin_rx;
 
 	/* DAOS Persistent Address Support:
 	 * Support: save rank information associated with this inbound packet.

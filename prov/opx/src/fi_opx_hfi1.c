@@ -460,7 +460,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		memset(&addr, 0, sizeof(addr));
 		memcpy(&addr.fi, opx_ep->common_info->src_addr, opx_ep->common_info->src_addrlen);
 
-		uint32_t uid = addr.lid << 8 | addr.endpoint_id;
+		uint32_t uid = addr.lid << 8 | addr.hfi1_subctxt_rx;
 
 		if (addr.lid != UINT32_MAX) {
 			hfi_context_rank = uid;
@@ -963,7 +963,7 @@ ssize_t fi_opx_hfi1_tx_connect(struct fi_opx_ep *opx_ep, fi_addr_t peer)
 			addr.raw64b = (uint64_t) peer;
 
 			uint8_t	 hfi_unit = addr.hfi1_unit;
-			unsigned rx_index = addr.hfi1_rx;
+			unsigned rx_index = addr.hfi1_subctxt_rx;
 			int	 inst	  = 0;
 
 			assert(rx_index < 256);
@@ -1155,7 +1155,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	int64_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,
-					    params->origin_rs, &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
+					    &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (EAGAIN psn/replay) (params=%p rzv_comp=%p context=%p)\n",
@@ -1217,9 +1217,8 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 #endif
 
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rs,
-							    params->origin_rx, psn_ptr, replay, params->reliability,
-							    OPX_HFI1_TYPE);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rx, psn_ptr,
+							    replay, params->reliability, OPX_HFI1_TYPE);
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (end) (params=%p rzv_comp=%p context=%p)\n",
@@ -1277,7 +1276,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 	int64_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,
-					    params->origin_rs, &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
+					    &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (EAGAIN psn/replay) (params=%p rzv_comp=%p context=%p)\n",
@@ -1339,9 +1338,8 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 		     "fi_opx_reliability_service_do_replay &opx_ep->reliability->service %p, replay %p\n",
 		     &opx_ep->reliability->service, replay);
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rs,
-							    params->origin_rx, psn_ptr, replay, params->reliability,
-							    OPX_HFI1_TYPE);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rx, psn_ptr,
+							    replay, params->reliability, OPX_HFI1_TYPE);
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (end) (params=%p rzv_comp=%p context=%p)\n",
@@ -1876,7 +1874,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc(union fi_opx_hfi1_deferred_work *work)
 	int64_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,
-					    params->origin_rs, &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
+					    &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (EAGAIN psn/replay)\n");
@@ -1903,9 +1901,8 @@ int opx_hfi1_rx_rzv_rts_send_etrunc(union fi_opx_hfi1_deferred_work *work)
 	/* save the updated txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rs,
-							    params->origin_rx, psn_ptr, replay, params->reliability,
-							    OPX_HFI1_TYPE);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rx, psn_ptr,
+							    replay, params->reliability, OPX_HFI1_TYPE);
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (end)");
@@ -1949,7 +1946,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 	int64_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,
-					    params->origin_rs, &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
+					    &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (EAGAIN psn/replay)\n");
@@ -1988,9 +1985,8 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 	/* save the updated txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rs,
-							    params->origin_rx, psn_ptr, replay, params->reliability,
-							    OPX_HFI1_TYPE);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rx, psn_ptr,
+							    replay, params->reliability, OPX_HFI1_TYPE);
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (end)");
@@ -2438,7 +2434,7 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	int64_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,
-					    params->origin_rs, &psn_ptr, &replay, params->reliability, hfi1_type);
+					    &psn_ptr, &replay, params->reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RMA-CTS-HFI:%p", params->rma_req);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2526,9 +2522,8 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 #endif
 
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rs,
-							    params->origin_rx, psn_ptr, replay, params->reliability,
-							    hfi1_type);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rx, psn_ptr,
+							    replay, params->reliability, hfi1_type);
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RMA-CTS-HFI:%p", params->rma_req);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RMA RTS (end) (params=%p rma_req=%p context=%p)\n",
@@ -2665,7 +2660,7 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 	int64_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,
-					    params->origin_rs, &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
+					    &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== SEND, HFI -- RMA RTS (EAGAIN psn/replay) (params=%p origin_rma_req=%p cc=%p) opcode=%d\n",
@@ -2752,9 +2747,8 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 		     "fi_opx_reliability_service_do_replay &opx_ep->reliability->service %p, replay %p\n",
 		     &opx_ep->reliability->service, replay);
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rs,
-							    params->u8_rx, psn_ptr, replay, params->reliability,
-							    OPX_HFI1_TYPE);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->u8_rx, psn_ptr, replay,
+							    params->reliability, OPX_HFI1_TYPE);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RMA-RTS-HFI:%p", params->origin_rma_req);
 	FI_DBG_TRACE(
@@ -3008,8 +3002,8 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work)
 				int64_t				     psn;
 
 				psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state,
-								    params->slid, u8_rx, params->origin_rs, &psn_ptr,
-								    &replay, reliability, hfi1_type);
+								    params->slid, u8_rx, &psn_ptr, &replay, reliability,
+								    hfi1_type);
 				if (OFI_UNLIKELY(psn == -1)) {
 					return -FI_EAGAIN;
 				}
@@ -3065,9 +3059,9 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work)
 					fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
 					fi_opx_compiler_msync_writes();
 
-					fi_opx_reliability_client_replay_register_no_update(
-						&opx_ep->reliability->state, params->origin_rs, u8_rx, psn_ptr, replay,
-						reliability, hfi1_type);
+					fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state,
+											    u8_rx, psn_ptr, replay,
+											    reliability, hfi1_type);
 				}
 			}
 
@@ -3256,7 +3250,7 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work)
 
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(
 				&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,
-				params->origin_rs, &params->sdma_we->psn_ptr, packet_count, max_eager_bytes);
+				&params->sdma_we->psn_ptr, packet_count, max_eager_bytes);
 
 			if (psns_avail < (int64_t) packet_count) {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
@@ -3576,7 +3570,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 			}
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(
 				&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,
-				params->origin_rs, &params->sdma_we->psn_ptr, packet_count, max_dput_bytes);
+				&params->sdma_we->psn_ptr, packet_count, max_dput_bytes);
 
 			if (psns_avail < (int64_t) packet_count) {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
@@ -4203,8 +4197,8 @@ ssize_t	 fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, si
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, dest_rx,
-					    addr.reliability_rx, &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, dest_rx, &psn_ptr,
+					    &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		if (OFI_LIKELY(do_cq_completion)) {
 			OPX_BUF_FREE(context);
@@ -4349,8 +4343,8 @@ ssize_t	 fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, si
 	assert(credits_consumed == total_credits_needed);
 #endif
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.reliability_rx, dest_rx,
-							    psn_ptr, replay, reliability, hfi1_type);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
+							    reliability, hfi1_type);
 
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
@@ -4602,8 +4596,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, 
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, dest_rx,
-					    addr.reliability_rx, &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, dest_rx, &psn_ptr,
+					    &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		if (OFI_LIKELY(do_cq_completion)) {
 			OPX_BUF_FREE(context);
@@ -4755,8 +4749,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, 
 #endif
 	}
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.reliability_rx, dest_rx,
-							    psn_ptr, replay, reliability, hfi1_type);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
+							    reliability, hfi1_type);
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 #ifndef NDEBUG
@@ -5037,8 +5031,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t l
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, dest_rx,
-					    addr.reliability_rx, &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid, dest_rx, &psn_ptr,
+					    &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		if (OFI_LIKELY(do_cq_completion)) {
 			OPX_BUF_FREE(context);
@@ -5250,8 +5244,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t l
 #endif
 	}
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.reliability_rx, dest_rx,
-							    psn_ptr, replay, reliability, hfi1_type);
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
+							    reliability, hfi1_type);
 #ifndef NDEBUG
 	assert(credits_consumed == total_credits_needed);
 #endif

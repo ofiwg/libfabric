@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021,2024 Cornelis Networks.
+ * Copyright (C) 2021,2024-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -45,10 +45,10 @@ union fi_opx_addr {
 	uint32_t  raw32b[2];
 	uint8_t	  raw8b[8];
 	struct {
-		uint8_t	  hfi1_rx;
-		uint8_t	  hfi1_unit;
-		uint8_t	  reliability_rx; /* hfi1 rx id of reliability service */
-		uint8_t	  endpoint_id;	  /* node-scoped endpoint identifier */
+		uint8_t	 hfi1_unit;
+		uint8_t	 unused;
+		uint16_t hfi1_subctxt_rx; /* WFR and JKR: bits 10:8 is subctxt and 7:0 is rx id
+					       CYR: bits 10:9 is subctxt and 8:0 is rx id */
 		opx_lid_t lid;		  /* fabric-scoped node identifier */
 	} __attribute__((__packed__));
 } __attribute__((__packed__));
@@ -69,9 +69,8 @@ static inline void fi_opx_addr_dump(char *prefix, const union fi_opx_addr *const
 		addr->raw8b[1], addr->raw8b[2], addr->raw8b[3], addr->raw8b[4], addr->raw8b[5], addr->raw8b[6],
 		addr->raw8b[7]);
 
-	fprintf(stderr, "%s   .hfi1_rx ....................................... %u\n", prefix, addr->hfi1_rx);
+	fprintf(stderr, "%s   .hfi1_subctxt_rx ............................... %u\n", prefix, addr->hfi1_subctxt_rx);
 	fprintf(stderr, "%s   .hfi1_unit ..................................... %u\n", prefix, addr->hfi1_unit);
-	fprintf(stderr, "%s   .reliability_rx ................................ %u\n", prefix, addr->reliability_rx);
 	fprintf(stderr, "%s   .lid ........................................... %d (le: %#x, be16: %#x)\n", prefix,
 		addr->lid, __cpu_to_le24(addr->lid), __cpu24_to_be16(addr->lid));
 

@@ -273,13 +273,13 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, const uint8_t 
 	/*
 	 * Check for 'reliability' exceptions
 	 */
-	const uint64_t origin_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(hdr);
-	const uint64_t psn	 = FI_OPX_HFI1_PACKET_PSN(hdr);
-	if (OFI_UNLIKELY(fi_opx_reliability_rx_check(&opx_ep->reliability->state, slid, origin_tx, psn, origin_rx) ==
-			 FI_OPX_RELIABILITY_EXCEPTION)) {
+	const uint64_t pkt_origin_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
+	const uint64_t psn	     = FI_OPX_HFI1_PACKET_PSN(hdr);
+	if (OFI_UNLIKELY(fi_opx_reliability_rx_check(&opx_ep->reliability->state, slid, pkt_origin_rx, psn,
+						     origin_rx) == FI_OPX_RELIABILITY_EXCEPTION)) {
 		if (!OPX_RHF_IS_USE_EGR_BUF(rhf, hfi1_type)) {
 			/* no payload */
-			fi_opx_reliability_rx_exception(&opx_ep->reliability->state, slid, origin_tx, psn,
+			fi_opx_reliability_rx_exception(&opx_ep->reliability->state, slid, pkt_origin_rx, psn,
 							&opx_ep->ep_fid, hdr, NULL, pktlen, hfi1_type, opcode);
 
 		} else {
@@ -293,7 +293,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, const uint8_t 
 
 			assert(payload != NULL);
 
-			fi_opx_reliability_rx_exception(&opx_ep->reliability->state, slid, origin_tx, psn,
+			fi_opx_reliability_rx_exception(&opx_ep->reliability->state, slid, pkt_origin_rx, psn,
 							&opx_ep->ep_fid, hdr, payload, pktlen, hfi1_type, opcode);
 
 			const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
@@ -556,8 +556,7 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 				dlid = (opx_lid_t) __le24_to_cpu((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid));
 			}
 			assert(dlid == opx_ep->rx->self.lid);
-			assert(hdr->bth.rx == opx_ep->rx->self.hfi1_rx ||
-			       hdr->bth.rx == opx_ep->rx->self.reliability_rx);
+			assert(hdr->bth.rx == opx_ep->rx->self.hfi1_subctxt_rx);
 #endif
 		} else {
 			/* DAOS Persistent Address Support:
