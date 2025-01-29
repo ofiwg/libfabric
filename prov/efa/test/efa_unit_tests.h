@@ -22,9 +22,6 @@ extern struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list;
 extern struct efa_unit_test_mocks g_efa_unit_test_mocks;
 extern struct efa_env efa_env;
 
-#define EFA_DIRECT_PROV_NAME	"efa-direct"
-#define EFA_PROV_NAME			"efa"
-
 struct efa_resource {
 	struct fi_info *hints;
 	struct fi_info *info;

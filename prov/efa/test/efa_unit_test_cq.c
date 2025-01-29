@@ -21,7 +21,7 @@ void test_impl_cq_read_empty_cq(struct efa_resource *resource, enum fi_ep_type e
 	int ret;
 	struct efa_base_ep *efa_base_ep;
 
-	efa_unit_test_resource_construct(resource, ep_type, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, ep_type, EFA_FABRIC_NAME);
 
 	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 	ibv_cqx = container_of(efa_base_ep->util_ep.rx_cq, struct efa_cq, util_cq)->ibv_cq.ibv_cq_ex;
@@ -288,7 +288,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	struct ibv_cq_ex *ibv_cqx;
 
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	/*
@@ -366,7 +366,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	struct ibv_cq_ex *ibv_cqx;
 
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
@@ -455,7 +455,7 @@ void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
 	struct efa_rdm_cq *efa_rdm_cq;
 	struct ibv_cq_ex *ibv_cqx;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 	ibv_cqx = efa_rdm_cq->efa_cq.ibv_cq.ibv_cq_ex;
@@ -498,7 +498,7 @@ void test_rdm_cq_create_error_handling(struct efa_resource **state)
 	}
 	efa_device_construct(&efa_device, 0, ibv_device_list[0]);
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);
 	assert_int_equal(fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, resource->hints, &resource->info), 0);
 	assert_int_equal(fi_fabric(resource->info->fabric_attr, &resource->fabric, NULL), 0);
@@ -546,7 +546,7 @@ void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resourc
 {
 	struct efa_resource *resource = *state;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	/* efa_unit_test_resource_construct binds single OFI CQ as both tx/rx cq of ep */
 	assert_int_equal(test_efa_rdm_cq_get_ibv_cq_poll_list_length(resource->cq), 1);
@@ -563,7 +563,7 @@ void test_efa_rdm_cq_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_res
 	struct fid_cq *txcq, *rxcq;
 	struct fi_cq_attr cq_attr = {0};
 
-	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	assert_int_equal(fi_cq_open(resource->domain, &cq_attr, &txcq, NULL), 0);
 
@@ -592,7 +592,7 @@ void test_efa_rdm_cq_post_initial_rx_pkts(struct efa_resource **state)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_cq *efa_rdm_cq;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 
@@ -653,7 +653,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 		expect_function_call(efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null);
 	}
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
@@ -821,7 +821,7 @@ static void test_efa_cq_read(struct efa_resource *resource, fi_addr_t *addr,
 	struct ibv_qp_ex *ibv_qpx;
 	struct efa_base_ep *base_ep;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_PROV_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 	ibv_qpx = base_ep->qp->ibv_qp_ex;

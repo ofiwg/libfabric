@@ -18,7 +18,7 @@ void test_efa_srx_min_multi_recv_size(struct efa_resource **state)
         struct util_srx_ctx *srx_ctx;
         size_t min_multi_recv_size_new;
 
-        efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_PROV_NAME);
+        efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
         efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
         /* Set a new min_multi_recv_size via setopt*/
@@ -42,7 +42,7 @@ void test_efa_srx_cq(struct efa_resource **state)
         struct efa_rdm_ep *efa_rdm_ep;
         struct util_srx_ctx *srx_ctx;
 
-        efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+        efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
         efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
         srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
@@ -57,7 +57,7 @@ void test_efa_srx_lock(struct efa_resource **state)
         struct util_srx_ctx *srx_ctx;
         struct efa_domain *efa_domain;
 
-        efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+        efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
         efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
         srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);

@@ -10,7 +10,7 @@ void test_efa_domain_open_ops_wrong_name(struct efa_resource **state)
     int ret;
     struct fi_efa_ops_domain *efa_domain_ops;
 
-    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
     ret = fi_open_ops(&resource->domain->fid, "arbitrary name", 0, (void **)&efa_domain_ops, NULL);
     assert_int_equal(ret, -FI_EINVAL);
@@ -61,7 +61,7 @@ void test_efa_domain_open_ops_mr_query(struct efa_resource **state)
 {
     struct efa_resource *resource = *state;
 
-    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
     /* set recv_ic_id as 0 */
     g_efa_unit_test_mocks.efadv_query_mr = &efa_mock_efadv_query_mr_recv_ic_id_0;
@@ -114,7 +114,7 @@ void test_efa_domain_open_ops_mr_query(struct efa_resource **state)
 {
     struct efa_resource *resource = *state;
 
-    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
     test_efa_domain_open_ops_mr_query_common(
                                 resource,
