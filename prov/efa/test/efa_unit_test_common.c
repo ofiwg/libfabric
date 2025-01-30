@@ -52,7 +52,7 @@ void efa_unit_test_construct_msg_rma(struct fi_msg_rma *msg, struct iovec *iov,
 	msg->data = data;
 }
 
-struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type, char *prov_name)
+struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type, char *fabric_name)
 {
 	struct fi_info *hints;
 
@@ -60,29 +60,33 @@ struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type, char *prov_na
 	if (!hints)
 		return NULL;
 
-	hints->fabric_attr->prov_name = strdup(prov_name);
+	if (fabric_name)
+		hints->fabric_attr->name = strdup(fabric_name);
 	hints->ep_attr->type = ep_type;
 
 	/* Use a minimal caps that efa / efa-direct should always support */
 	hints->domain_attr->mr_mode = MR_MODE_BITS;
+
+	/* EFA direct and dgram paths require FI_CONTEXT2 */
+	if (!fabric_name || !strcasecmp(fabric_name, EFA_DIRECT_FABRIC_NAME))
+		hints->mode |= FI_CONTEXT2;
+
 	if (ep_type == FI_EP_DGRAM) {
-		hints->mode |= FI_MSG_PREFIX;
+		hints->mode |= FI_MSG_PREFIX | FI_CONTEXT2;
 	}
 
 	return hints;
 }
 
-/* TODO: remove use_efa_direct after we have efa_direct implemented in fi_info */
 void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 						 enum fi_ep_type ep_type,
 						 uint32_t fi_version, struct fi_info *hints,
-						 bool enable_ep, bool open_cq, char* prov_name)
+						 bool enable_ep, bool open_cq)
 {
 	int ret = 0;
 	struct fi_av_attr av_attr = {0};
 	struct fi_cq_attr cq_attr = {0};
 	struct fi_eq_attr eq_attr = {0};
-	struct efa_domain *efa_domain;
 
 	ret = fi_getinfo(fi_version, NULL, NULL, 0ULL, hints, &resource->info);
 	if (ret)
@@ -95,17 +99,6 @@ void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 	ret = fi_domain(resource->fabric, resource->info, &resource->domain, NULL);
 	if (ret)
 		goto err;
-
-	/*
-	 * TODO: Remove this function pointer override when we have it assigned
-	 * for efa-direct correctly.
-	 */
-	if (!strcmp(EFA_DIRECT_PROV_NAME, prov_name)) {
-		efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
-
-		efa_domain->util_domain.domain_fid.ops->endpoint = efa_ep_open;
-		efa_domain->util_domain.domain_fid.ops->cq_open = efa_cq_open;
-	}
 
 	ret = fi_endpoint(resource->domain, resource->info, &resource->ep, NULL);
 	if (ret)
@@ -146,19 +139,18 @@ err:
 	assert_int_equal(ret, 0);
 }
 
-void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type, char *prov_name)
+void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type, char *fabric_name)
 {
 
-	/* TODO use prov_name here when efa-direct fi_info is implemented */
-	resource->hints = efa_unit_test_alloc_hints(ep_type, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(ep_type, fabric_name);
 	if (!resource->hints)
 		goto err;
-	if (!strcmp(EFA_DIRECT_PROV_NAME, prov_name))
+	if (!strcmp(EFA_DIRECT_FABRIC_NAME, fabric_name))
 		efa_unit_test_resource_construct_with_hints(resource, ep_type, FI_VERSION(2, 0),
-							    resource->hints, true, true, prov_name);
+							    resource->hints, true, true);
 	else
 		efa_unit_test_resource_construct_with_hints(resource, ep_type, FI_VERSION(1, 14),
-							    resource->hints, true, true, prov_name);
+							    resource->hints, true, true);
 	return;
 
 err:
@@ -169,19 +161,18 @@ err:
 }
 
 void efa_unit_test_resource_construct_ep_not_enabled(struct efa_resource *resource,
-				      enum fi_ep_type ep_type, char *prov_name)
+				      enum fi_ep_type ep_type, char *fabric_name)
 {
-	/* TODO use prov_name here when efa-direct fi_info is implemented */
-	resource->hints = efa_unit_test_alloc_hints(ep_type, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(ep_type, fabric_name);
 	if (!resource->hints)
 		goto err;
 
-	if (!strcmp(EFA_DIRECT_PROV_NAME, prov_name))
+	if (!strcmp(EFA_DIRECT_FABRIC_NAME, fabric_name))
 		efa_unit_test_resource_construct_with_hints(resource, ep_type, FI_VERSION(2, 0),
-							    resource->hints, false, true, prov_name);
+							    resource->hints, false, true);
 	else
 		efa_unit_test_resource_construct_with_hints(resource, ep_type, FI_VERSION(1, 14),
-							    resource->hints, false, true, prov_name);
+							    resource->hints, false, true);
 	return;
 
 err:
@@ -192,19 +183,18 @@ err:
 }
 
 void efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(struct efa_resource *resource,
-				      enum fi_ep_type ep_type, char *prov_name)
+				      enum fi_ep_type ep_type, char *fabric_name)
 {
-	/* TODO use prov_name here when efa-direct fi_info is implemented */
-	resource->hints = efa_unit_test_alloc_hints(ep_type, EFA_PROV_NAME);
+	resource->hints = efa_unit_test_alloc_hints(ep_type, fabric_name);
 	if (!resource->hints)
 		goto err;
 
-	if (!strcmp(EFA_DIRECT_PROV_NAME, prov_name))
+	if (!strcmp(EFA_DIRECT_FABRIC_NAME, fabric_name))
 		efa_unit_test_resource_construct_with_hints(resource, ep_type, FI_VERSION(2, 0),
-							    resource->hints, false, false, prov_name);
+							    resource->hints, false, false);
 	else
 		efa_unit_test_resource_construct_with_hints(resource, ep_type, FI_VERSION(1, 14),
-							    resource->hints, false, false, prov_name);
+							    resource->hints, false, false);
 	return;
 
 err:
@@ -227,7 +217,7 @@ void efa_unit_test_resource_construct_rdm_shm_disabled(struct efa_resource *reso
 		goto err;
 
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
-						    resource->hints, false, true, EFA_PROV_NAME);
+						    resource->hints, false, true);
 
 	ret = fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
 			FI_OPT_SHARED_MEMORY_PERMITTED, &shm_permitted,

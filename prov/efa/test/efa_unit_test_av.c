@@ -2,6 +2,39 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "efa_av.h"
+
+/**
+ * @brief Verify the ep type in struct efa_av for efa RDM path
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_av_ep_type_efa_rdm(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_av *efa_av;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_check_mock;
+	efa_av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	assert(efa_av->ep_type == FI_EP_RDM);
+}
+
+/**
+ * @brief Verify the ep type in struct efa_av for efa direct path
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_av_ep_type_efa_direct(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_av *efa_av;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_check_mock;
+	efa_av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	assert(efa_av->ep_type == FI_EP_RDM);
+}
 
 /**
  * @brief Only works on nodes with EFA devices

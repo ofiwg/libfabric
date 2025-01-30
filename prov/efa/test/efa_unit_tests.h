@@ -33,17 +33,17 @@ struct efa_resource {
 	struct fid_cq *cq;
 };
 
-struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type, char *prov_name);
+struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type, char *fabric_name);
 
-void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type, char *prov_name);
+void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type, char *fabric_name);
 void efa_unit_test_resource_construct_ep_not_enabled(
-	struct efa_resource *resource, enum fi_ep_type ep_type, char *prov_name);
+	struct efa_resource *resource, enum fi_ep_type ep_type, char *fabric_name);
 void efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(
-	struct efa_resource *resource, enum fi_ep_type ep_type, char *prov_name);
+	struct efa_resource *resource, enum fi_ep_type ep_type, char *fabric_name);
 void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 						 enum fi_ep_type ep_type,
 						 uint32_t fi_version, struct fi_info *hints,
-						 bool enable_ep, bool open_cq, char *prov_name);
+						 bool enable_ep, bool open_cq);
 
 void efa_unit_test_resource_construct_rdm_shm_disabled(struct efa_resource *resource);
 
@@ -98,8 +98,14 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, str
 void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr);
 
 /* test cases */
+
+/* begin efa_unit_test_av.c */
+void test_av_ep_type_efa_rdm();
+void test_av_ep_type_efa_direct();
 void test_av_insert_duplicate_raw_addr();
 void test_av_insert_duplicate_gid();
+/* end efa_unit_test_av.c */
+
 void test_efa_device_construct_error_handling();
 void test_efa_rdm_ep_ignore_missing_host_id_file();
 void test_efa_rdm_ep_has_valid_host_id();
@@ -154,7 +160,13 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_solicited_recv();
 void test_ibv_cq_ex_read_recover_forgotten_peer_ah();
 void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer();
 void test_ibv_cq_ex_read_ignore_removed_peer();
+
+/* begin efa_unit_test_info.c */
 void test_info_open_ep_with_wrong_info();
+void test_info_rdm_attributes();
+void test_info_dgram_attributes();
+void test_info_direct_attributes();
+void test_info_direct_hmem_support_p2p();
 void test_info_tx_rx_msg_order_rdm_order_none();
 void test_info_tx_rx_msg_order_rdm_order_sas();
 void test_info_tx_rx_msg_order_dgram_order_none();
@@ -170,6 +182,8 @@ void test_info_check_shm_info_threading();
 void test_info_check_hmem_cuda_support_on_api_lt_1_18();
 void test_info_check_hmem_cuda_support_on_api_ge_1_18();
 void test_info_check_no_hmem_support_when_not_requested();
+void test_info_direct_unsupported();
+void test_info_direct_ordering();
 void test_efa_hmem_info_update_neuron();
 void test_efa_hmem_info_disable_p2p_neuron();
 void test_efa_hmem_info_disable_p2p_cuda();
@@ -187,6 +201,8 @@ void test_efa_use_device_rdma_opt0();
 void test_efa_use_device_rdma_env1();
 void test_efa_use_device_rdma_env0();
 void test_efa_use_device_rdma_opt_old();
+/* end efa_unit_test_info.c */
+
 void test_efa_srx_min_multi_recv_size();
 void test_efa_srx_cq();
 void test_efa_srx_lock();
