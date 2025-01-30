@@ -732,7 +732,7 @@ ssize_t util_srx_generic_trecv(struct fid_ep *ep_fid, const struct iovec *iov,
 		}
 	}
 	util_init_rx_entry(rx_entry, iov, desc, iov_count, addr, context, tag,
-			   flags);
+			   flags | FI_TAGGED | FI_RECV);
 
 	srx->update_func(srx, rx_entry);
 	ret = rx_entry->peer_entry.srx->peer_ops->start_tag(
@@ -778,7 +778,7 @@ ssize_t util_srx_generic_recv(struct fid_ep *ep_fid, const struct iovec *iov,
 	}
 
 	util_init_rx_entry(rx_entry, iov, desc, iov_count, addr, context, 0,
-			   flags);
+			   flags | FI_MSG | FI_RECV);
 
 	srx->update_func(srx, rx_entry);
 	ret = rx_entry->peer_entry.srx->peer_ops->start_msg(
