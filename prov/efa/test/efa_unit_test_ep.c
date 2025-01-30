@@ -597,7 +597,7 @@ void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int
 	resource->hints->caps |= FI_MSG | FI_TAGGED | FI_RMA;
 	resource->hints->domain_attr->mr_mode |= MR_MODE_BITS;
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
-	                                            resource->hints, true, true, EFA_PROV_NAME);
+	                                            resource->hints, true, true);
 
 	/* ensure we don't have RMA capability. */
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -685,7 +685,7 @@ void test_efa_rdm_ep_rma_inconsistent_unsolicited_write_recv(struct efa_resource
 	resource->hints->caps |= FI_MSG | FI_TAGGED | FI_RMA;
 	resource->hints->domain_attr->mr_mode |= MR_MODE_BITS;
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 22),
-	                                            resource->hints, true, true, EFA_PROV_NAME);
+	                                            resource->hints, true, true);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
@@ -794,7 +794,7 @@ void test_efa_rdm_ep_rma_without_caps(struct efa_resource **state)
 	resource->hints->caps &= ~FI_RMA;
 	resource->hints->domain_attr->mr_mode |= MR_MODE_BITS;
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
-	                                            resource->hints, true, true, EFA_PROV_NAME);
+	                                            resource->hints, true, true);
 
 	/* ensure we don't have RMA capability. */
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -845,7 +845,7 @@ void test_efa_rdm_ep_atomic_without_caps(struct efa_resource **state)
 	resource->hints->caps &= ~FI_ATOMIC;
 	resource->hints->domain_attr->mr_mode |= MR_MODE_BITS;
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
-	                                            resource->hints, true, true, EFA_PROV_NAME);
+	                                            resource->hints, true, true);
 
 	/* ensure we don't have ATOMIC capability. */
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -1001,7 +1001,7 @@ static void test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource,
 	ofi_hmem_disable_p2p = cuda_p2p_disabled;
 
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
-	                                            resource->hints, false, true, EFA_PROV_NAME);
+	                                            resource->hints, false, true);
 
 	/* System memory P2P should always be enabled */
 	assert_true(g_efa_hmem_info[FI_HMEM_SYSTEM].initialized);
@@ -1314,7 +1314,7 @@ void test_efa_rdm_ep_rx_refill_impl(struct efa_resource **state, int threshold, 
 	assert_non_null(resource->hints);
 	resource->hints->rx_attr->size = rx_size;
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
-	                                            resource->hints, true, true, EFA_PROV_NAME);
+	                                            resource->hints, true, true);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	assert_int_equal(efa_rdm_ep_get_rx_pool_size(efa_rdm_ep), rx_size);
