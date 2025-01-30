@@ -11,7 +11,7 @@ import pytest
     pytest.param("cuda_to_cuda", "gdrcopy", marks=pytest.mark.cuda_memory),
     pytest.param("cuda_to_cuda", "localread", marks=pytest.mark.cuda_memory),
     pytest.param("neuron_to_neuron", None, marks=pytest.mark.neuron_memory)])
-def test_runt_read_functional(cmdline_args, memory_type, copy_method):
+def test_runt_read_functional(cmdline_args, memory_type, copy_method, fabric):
     """
     Verify runt reading protocol is working as expected by sending 1 message of 256 KB.
     64 KB of the message will be transfered using EFA device's send capability
@@ -45,7 +45,8 @@ def test_runt_read_functional(cmdline_args, memory_type, copy_method):
                                completion_semantic="transmit_complete",
                                memory_type=memory_type,
                                message_size="262144",
-                               warmup_iteration_type="0")
+                               warmup_iteration_type="0",
+                               fabric=fabric)
 
     server_read_wrs_after_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_wrs")
     server_read_bytes_after_test =efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_bytes")
