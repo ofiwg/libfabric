@@ -74,6 +74,11 @@ def zcpy_recv_message_size(request):
 def zcpy_recv_max_msg_size(request):
     return 8192
 
+# TODO - add efa-direct tests
+@pytest.fixture(scope="module", params=["efa"])
+def fabric(request):
+    return request.param
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_collection_modifyitems(session, config, items):
     # Called after collection has been performed, may filter or re-order the items in-place
