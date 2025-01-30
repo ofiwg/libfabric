@@ -2002,6 +2002,7 @@ static void pp_pingpong_usage(struct ct_pingpong *ct, char *name, char *desc)
 		"destination control port number (client: 47592)");
 
 	fprintf(stderr, " %-20s %s\n", "-d <domain>", "domain name");
+	fprintf(stderr, " %-20s %s\n", "-f <fabric>", "fabric name");
 	fprintf(stderr, " %-20s %s\n", "-s <source address>",
 		"source address associated with domain name");
 	fprintf(stderr, " %-20s %s\n", "-p <provider>",
@@ -2039,6 +2040,11 @@ static void pp_parse_opts(struct ct_pingpong *ct, int op, char *optarg)
 		 * initialization.
 		 */
 		ct->hints->fabric_attr->prov_name = strdup(optarg);
+		break;
+
+	/* Fabric */
+	case 'f':
+		ct->hints->fabric_attr->name = strdup(optarg);
 		break;
 
 	/* Endpoint */
@@ -2327,7 +2333,7 @@ int main(int argc, char **argv)
 
 	ofi_osd_init();
 
-	while ((op = getopt(argc, argv, "hvd:p:e:I:S:s:B:P:cm:6")) != -1) {
+	while ((op = getopt(argc, argv, "hvd:p:f:e:I:S:s:B:P:cm:6")) != -1) {
 		switch (op) {
 		default:
 			pp_parse_opts(&ct, op, optarg);
