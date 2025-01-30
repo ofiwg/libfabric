@@ -90,10 +90,9 @@ while test $i -lt $i_max; do
     i=`expr $i + 1`
 done
 
-status=0
 if test $i -lt $i_max; then
     # rebase the commit onto the base branch
-    gh pr merge $pr_num -r --admin
+    gh pr merge $pr_num -r --auto --delete-branch
 
     # command to do it by hand when "hub" was used which didn't have command
     # to merge a PR. keep it here for reference.
@@ -101,11 +100,15 @@ if test $i -lt $i_max; then
     #    -XPUT \
     #    -H "Authorization: token $GITHUB_TOKEN" \
     #    https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_num/merge
+
+    status=0
 else
     echo "Sad panda; DCO CI didn't complete -- did not merge $url"
+
+    # Delete the remote branch
+    git push origin --delete $branch_name
+
     status=1
 fi
 
-# Delete the remote branch
-git push origin --delete $branch_name
 exit $status
