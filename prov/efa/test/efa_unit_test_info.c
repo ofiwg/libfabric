@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "efa_prov_info.h"
 
 /**
  * @brief test that when a wrong fi_info was used to open resource, the error is handled
@@ -21,7 +22,7 @@ void test_info_open_ep_with_wrong_info()
 	assert_int_equal(err, 0);
 
 	/* dgram endpoint require FI_MSG_PREFIX */
-	assert_int_equal(info->mode, FI_MSG_PREFIX);
+	assert_int_equal(info->mode, FI_MSG_PREFIX | FI_CONTEXT2);
 
 	/* make the info wrong by setting the mode to 0 */
 	info->mode = 0;
@@ -43,6 +44,129 @@ void test_info_open_ep_with_wrong_info()
 	err = fi_close(&fabric->fid);
 	assert_int_equal(err, 0);
 }
+
+/**
+ * @brief Verify that efa rdm path fi_info objects have some expected values
+ */
+void test_info_rdm_attributes()
+{
+	struct fi_info *hints, *info = NULL, *info_head = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(hints);
+
+	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info_head);
+	assert_int_equal(err, 0);
+	assert_non_null(info_head);
+
+	for (info = info_head; info; info = info->next) {
+		assert_true(!strcmp(info->fabric_attr->name, EFA_FABRIC_NAME));
+		assert_true(strstr(info->domain_attr->name, "rdm"));
+		assert_int_equal(info->ep_attr->max_msg_size, UINT64_MAX);
+#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+		assert_true(info->caps | FI_HMEM);
+#endif
+	}
+}
+
+/**
+ * @brief Verify that efa dgram path fi_info objects have some expected values
+ */
+void test_info_dgram_attributes()
+{
+	struct fi_info *hints, *info = NULL, *info_head = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_DGRAM, EFA_FABRIC_NAME);
+	assert_non_null(hints);
+
+	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info_head);
+	assert_int_equal(err, 0);
+	assert_non_null(info_head);
+
+	for (info = info_head; info; info = info->next) {
+		assert_true(!strcmp(info->fabric_attr->name, EFA_FABRIC_NAME));
+		assert_true(strstr(info->domain_attr->name, "dgrm"));
+	}
+}
+
+/**
+ * @brief Verify that efa direct path fi_info objects have some expected values
+ */
+void test_info_direct_attributes()
+{
+	struct fi_info *hints, *info = NULL, *info_head = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+
+	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	assert_non_null(info);
+	for (info = info_head; info; info = info->next) {
+		assert_true(!strcmp(info->fabric_attr->name, EFA_DIRECT_FABRIC_NAME));
+		assert_true(strstr(info->domain_attr->name, "rdm"));
+		assert_false(info->caps & (FI_ATOMIC | FI_TAGGED));
+		assert_false(info->tx_attr->msg_order & FI_ORDER_SAS);
+		assert_int_equal(info->ep_attr->max_msg_size, g_device_list[0].max_rdma_size);
+	}
+}
+
+/**
+ * @brief Verify that efa direct only supports HMEM with p2p
+ */
+#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+void test_info_direct_hmem_support_p2p()
+{
+	struct fi_info *info;
+	bool hmem_ops_cuda_init;
+
+	info = fi_allocinfo();
+
+	memset(g_efa_hmem_info, 0, OFI_HMEM_MAX * sizeof(struct efa_hmem_info));
+
+	/* Save current value of hmem_ops[FI_HMEM_CUDA].initialized to reset later
+	 * hmem_ops is populated in ofi_hmem_init and only runs once
+	 *
+	 * CUDA iface will be initialized on Nvidia GPU platforms but not on others
+	 * Force setting hmem_ops[FI_HMEM_CUDA].initialized allows this test to
+	 * run on all instance types
+	*/
+	hmem_ops_cuda_init = hmem_ops[FI_HMEM_CUDA].initialized;
+	hmem_ops[FI_HMEM_CUDA].initialized = true;
+
+	/* g_efa_hmem_info is populated in efa_hmem_info_initialize which runs on
+	 * every fi_getinfo call. So no need to save and reset these fields
+	 */
+	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
+
+	efa_prov_info_set_hmem_flags(info, FI_EP_RDM);
+	assert_true(info->caps & FI_HMEM);
+	assert_true(info->tx_attr->caps & FI_HMEM);
+	assert_true(info->rx_attr->caps & FI_HMEM);
+	fi_freeinfo(info);
+
+	info = fi_allocinfo();
+	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = false;
+
+	efa_prov_info_set_hmem_flags(info, FI_EP_RDM);
+	assert_false(info->caps & FI_HMEM);
+	assert_false(info->tx_attr->caps & FI_HMEM);
+	assert_false(info->rx_attr->caps & FI_HMEM);
+	fi_freeinfo(info);
+
+	/* Reset hmem_ops[FI_HMEM_CUDA].initialized */
+	hmem_ops[FI_HMEM_CUDA].initialized = hmem_ops_cuda_init;
+}
+#else
+void test_info_direct_hmem_support_p2p()
+{
+}
+#endif
 
 /**
  * @brief Verify info->tx/rx_attr->msg_order is set according to hints.
@@ -420,22 +544,92 @@ void test_info_check_hmem_cuda_support_on_api_ge_1_18()
 	fi_freeinfo(info);
 }
 
-/**
- * @brief Check that EFA does not claim support of FI_HMEM when
- *        it is not requested
- */
-void test_info_check_no_hmem_support_when_not_requested()
+void check_no_hmem_support_when_not_requested(char *fabric_name)
 {
 	struct fi_info *hints, *info = NULL;
 	int err;
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, fabric_name);
 
 	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info);
 	assert_int_equal(err, 0);
 	assert_non_null(info);
 	assert_false(info->caps & FI_HMEM);
 	fi_freeinfo(info);
+}
+
+/**
+ * @brief Check that EFA does not claim support of FI_HMEM when
+ *        it is not requested
+ */
+void test_info_check_no_hmem_support_when_not_requested() {
+	check_no_hmem_support_when_not_requested(EFA_FABRIC_NAME);
+	check_no_hmem_support_when_not_requested(EFA_DIRECT_FABRIC_NAME);
+}
+
+/**
+ * @brief Check that EFA direct info object is not returned when atomic
+ *        or ordering capabilities are requested
+ */
+void test_info_direct_unsupported()
+{
+	struct fi_info *hints, *info = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+
+	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	assert_non_null(info);
+
+	hints->caps |= FI_ATOMIC;
+	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, -FI_ENODATA);
+	assert_null(info);
+
+	hints->caps &= ~FI_ATOMIC;
+	hints->tx_attr->msg_order = FI_ORDER_SAS;
+	hints->rx_attr->msg_order = FI_ORDER_SAS;
+	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, -FI_ENODATA);
+	assert_null(info);
+}
+
+/**
+ * @brief Verify that efa-direct fi_info objects are returned before efa info objects
+ */
+void test_info_direct_ordering()
+{
+	struct fi_info *hints, *info = NULL, *info_head = NULL;
+	bool efa_direct_returned = false, efa_returned = false;
+	bool efa_direct_returned_after_efa = false, efa_returned_after_efa_direct = false;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, NULL);
+	assert_non_null(hints);
+
+	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info_head);
+	assert_int_equal(err, 0);
+	assert_non_null(info_head);
+
+	for (info = info_head; info; info = info->next) {
+		if (!strcmp(info->fabric_attr->name, EFA_DIRECT_FABRIC_NAME)) {
+			efa_direct_returned = true;
+			if (efa_returned)
+				efa_direct_returned_after_efa = true;
+		}
+		if (!strcmp(info->fabric_attr->name, EFA_FABRIC_NAME)) {
+			efa_returned = true;
+			if (efa_direct_returned)
+				efa_returned_after_efa_direct = true;
+		}
+	}
+
+	assert_true(efa_direct_returned);
+	assert_true(efa_returned);
+	assert_true(efa_returned_after_efa_direct);
+	assert_false(efa_direct_returned_after_efa);
 }
 
 /**
@@ -561,12 +755,12 @@ static int get_first_nic_name(char **name) {
  * @param[in]	filter			The value that would be set for FI_EFA_IFACE
  * @param[in]	expect_first_name	The expected name of the "first" NIC	
  */
-static void test_efa_nic_selection(const char *filter, const char *expect_first_name) {
+static void test_efa_nic_selection(const char *filter, const char *expect_first_name, char *fabric_name) {
 	int ret;
 	struct fi_info *hints, *info;
 
 	efa_env.iface = (char *) filter;
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_PROV_NAME);
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, fabric_name);
 	ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, hints, &info);
 	fi_freeinfo(hints);
 	if (expect_first_name) {
@@ -588,7 +782,8 @@ void test_efa_nic_select_all_devices_matches() {
 	ret = get_first_nic_name(&nic_name);
 	assert_int_equal(ret, FI_SUCCESS);
 
-	test_efa_nic_selection("all", nic_name);
+	test_efa_nic_selection("all", nic_name, EFA_FABRIC_NAME);
+	test_efa_nic_selection("all", nic_name, EFA_DIRECT_FABRIC_NAME);
 
 	free(nic_name);
 }
@@ -603,7 +798,8 @@ void test_efa_nic_select_first_device_matches() {
 	ret = get_first_nic_name(&nic_name);
 	assert_int_equal(ret, FI_SUCCESS);
 
-	test_efa_nic_selection(nic_name, nic_name);
+	test_efa_nic_selection(nic_name, nic_name, EFA_FABRIC_NAME);
+	test_efa_nic_selection(nic_name, nic_name, EFA_DIRECT_FABRIC_NAME);
 
 	free(nic_name);
 }
@@ -626,7 +822,8 @@ void test_efa_nic_select_first_device_with_surrounding_comma_matches() {
 	strcat(filter, nic_name);
 	strcat(filter, ",");
 
-	test_efa_nic_selection(filter, nic_name);
+	test_efa_nic_selection(filter, nic_name, EFA_FABRIC_NAME);
+	test_efa_nic_selection(filter, nic_name, EFA_DIRECT_FABRIC_NAME);
 
 	free(filter);
 	free(nic_name);
@@ -646,7 +843,8 @@ void test_efa_nic_select_first_device_first_letter_no_match() {
 	filter[0] = nic_name[0];
 	filter[1] = '\0';
 
-	test_efa_nic_selection(filter, NULL);
+	test_efa_nic_selection(filter, NULL, EFA_FABRIC_NAME);
+	test_efa_nic_selection(filter, NULL, EFA_DIRECT_FABRIC_NAME);
 
 	free(nic_name);
 }
@@ -655,7 +853,8 @@ void test_efa_nic_select_first_device_first_letter_no_match() {
  * Verify that empty NIC names will not select any NIC
  */
 void test_efa_nic_select_empty_device_no_match() {
-	test_efa_nic_selection(",", NULL);
+	test_efa_nic_selection(",", NULL, EFA_FABRIC_NAME);
+	test_efa_nic_selection(",", NULL, EFA_DIRECT_FABRIC_NAME);
 }
 
 /* indicates the test shouldn't set the setopt or environment
