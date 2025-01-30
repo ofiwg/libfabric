@@ -92,11 +92,8 @@ done
 
 status=0
 if test $i -lt $i_max; then
-    # approve the PR
-    gh pr review $pr_num --approve
-
     # rebase the commit onto the base branch
-    gh pr merge $pr_num -r
+    gh pr merge $pr_num -r --admin
 
     # command to do it by hand when "hub" was used which didn't have command
     # to merge a PR. keep it here for reference.
