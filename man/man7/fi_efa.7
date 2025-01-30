@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2025\-01\-13" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2025\-01\-30" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -111,7 +111,7 @@ No support for selective completions.
 No support for counters for the DGRAM endpoint.
 .PP
 No support for inject.
-.SS zero-copy receive mode
+.SS Zero-copy receive mode
 .IP \[bu] 2
 The receive operation cannot be cancelled via \f[V]fi_cancel()\f[R].
 .IP \[bu] 2
@@ -144,6 +144,7 @@ if these operations are assisted by hardware support (return value is
 false).
 .TP
 \f[I]FI_OPT_EFA_USE_DEVICE_RDMA - bool\f[R]
+These option only applies to the fi_setopt() call.
 Only available if the application selects a libfabric API version >=
 1.18.
 This option allows an application to change libfabric\[cq]s behavior
@@ -164,6 +165,7 @@ For API<1.18, RDMA is enabled by default only on certain newer hardware
 revisions.
 .TP
 \f[I]FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES - bool\f[R]
+These option only applies to the fi_setopt() call.
 It is used to force the endpoint to use in-order send/recv operation for
 each 128 bytes aligned block.
 Enabling the option will guarantee data inside each 128 bytes aligned
@@ -173,6 +175,7 @@ If endpoint is not able to support this feature, it will return
 -FI_EOPNOTSUPP for the call to fi_setopt().
 .TP
 \f[I]FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES - bool\f[R]
+These option only applies to the fi_setopt() call..
 It is used to set the endpoint to use in-order RDMA write operation for
 each 128 bytes aligned block.
 Enabling the option will guarantee data inside each 128 bytes aligned

@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_endpoint" "3" "2024\-12\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_endpoint" "3" "2025\-01\-30" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -610,6 +610,7 @@ All providers that support FI_HMEM capability implement this option.
 \[bu] .RS 2
 .TP
 \f[I]FI_OPT_SHARED_MEMORY_PERMITTED - bool\f[R]
+This option only applies to the fi_setopt call.
 This option controls the use of shared memory for intra-node
 communication.
 Setting it to true will allow the use of shared memory.
