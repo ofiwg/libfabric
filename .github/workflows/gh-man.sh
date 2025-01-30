@@ -79,6 +79,9 @@ done
 
 status=0
 if test $i -lt $i_max; then
+    # approve the PR
+    gh pr review $pr_num --approve
+
     # rebase the commit onto the base branch
     gh pr merge $pr_num -r
 
