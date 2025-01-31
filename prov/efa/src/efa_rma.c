@@ -75,6 +75,11 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 
 	efa_tracepoint(read_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
+	EFA_DBG(FI_LOG_EP_DATA,
+		"total len: %zu, addr: %lu, context: %lx, flags: %lx\n",
+		ofi_total_iov_len(msg->msg_iov, msg->iov_count),
+		msg->addr, (size_t) msg->context, flags);
+
 	assert(msg->iov_count > 0 &&
 	       msg->iov_count <= base_ep->domain->info->tx_attr->iov_limit);
 	assert(msg->rma_iov_count > 0 &&
@@ -218,6 +223,11 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	}
 
 	efa_tracepoint(write_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
+
+	EFA_DBG(FI_LOG_EP_DATA,
+		"total len: %zu, addr: %lu, context: %lx, flags: %lx\n",
+		ofi_total_iov_len(msg->msg_iov, msg->iov_count),
+		msg->addr, (size_t) msg->context, flags);
 
 	qp = base_ep->qp;
 

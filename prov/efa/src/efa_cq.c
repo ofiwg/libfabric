@@ -308,6 +308,9 @@ void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		}
 
 		efa_cq_construct_cq_entry(cq->ibv_cq.ibv_cq_ex, &cq_entry);
+		EFA_DBG(FI_LOG_CQ,
+			"Write cq entry of context: %lx, flags: %lx\n",
+			(size_t) cq_entry.op_context, cq_entry.flags);
 
 		switch (opcode) {
 		case IBV_WC_SEND: /* fall through */
