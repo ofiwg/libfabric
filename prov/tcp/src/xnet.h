@@ -228,6 +228,8 @@ struct xnet_srx {
 	xnet_profile_t *profile;
 };
 
+bool
+xnet_srx_cancel_rx(struct xnet_srx *srx, struct slist *queue, void *context);
 int xnet_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		     struct fid_ep **rx_ep, void *context);
 
