@@ -904,7 +904,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err;
 
-	if (EFA_EP_TYPE_IS_RDM(efa_domain->info)) {
+	if (EFA_INFO_TYPE_IS_RDM(efa_domain->info)) {
 		av->ep_type = FI_EP_RDM;
 
 		av_attr = *attr;

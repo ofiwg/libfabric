@@ -2,7 +2,7 @@ import pytest
 import copy
 
 @pytest.mark.functional
-def test_rnr_read_cq_error(cmdline_args):
+def test_rnr_read_cq_error(cmdline_args, fabric):
     from common import ClientServerTest
 
     if cmdline_args.server_id == cmdline_args.client_id:
@@ -15,7 +15,7 @@ def test_rnr_read_cq_error(cmdline_args):
     # in this case.
     cmdline_args_copy = copy.copy(cmdline_args)
     cmdline_args_copy.strict_fabtests_mode = False
-    test = ClientServerTest(cmdline_args_copy, "fi_efa_rnr_read_cq_error")
+    test = ClientServerTest(cmdline_args_copy, "fi_efa_rnr_read_cq_error", fabric=fabric)
     test.run()
 
 packet_type_option_map = {
@@ -50,7 +50,7 @@ packet_type_option_map = {
 
 @pytest.mark.functional
 @pytest.mark.parametrize("packet_type", packet_type_option_map.keys())
-def test_rnr_queue_resend(cmdline_args, packet_type):
+def test_rnr_queue_resend(cmdline_args, packet_type, fabric):
     from common import ClientServerTest
 
     if cmdline_args.server_id == cmdline_args.client_id:
@@ -64,5 +64,5 @@ def test_rnr_queue_resend(cmdline_args, packet_type):
     cmdline_args_copy = copy.copy(cmdline_args)
     cmdline_args_copy.strict_fabtests_mode = False
     test = ClientServerTest(cmdline_args_copy,
-            "fi_efa_rnr_queue_resend " + packet_type_option_map[packet_type])
+            "fi_efa_rnr_queue_resend " + packet_type_option_map[packet_type], fabric=fabric)
     test.run()

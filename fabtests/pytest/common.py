@@ -342,7 +342,8 @@ class ClientServerTest:
                  memory_type="host_to_host",
                  timeout=None,
                  warmup_iteration_type=None,
-                 completion_type="queue"):
+                 completion_type="queue",
+                 fabric=None):
 
         self._cmdline_args = cmdline_args
         self._timeout = timeout or cmdline_args.timeout
@@ -350,12 +351,12 @@ class ClientServerTest:
                                                               completion_semantic, prefix_type,
                                                               datacheck_type, message_size,
                                                               memory_type, warmup_iteration_type,
-                                                              completion_type)
+                                                              completion_type, fabric)
         self._client_base_command, client_additonal_environment = self.prepare_base_command("client", executable, iteration_type,
                                                               completion_semantic, prefix_type,
                                                               datacheck_type, message_size,
                                                               memory_type, warmup_iteration_type,
-                                                              completion_type)
+                                                              completion_type, fabric)
 
 
         self._server_command = self._cmdline_args.populate_command(self._server_base_command, "server", self._timeout, server_additonal_environment)
@@ -369,7 +370,8 @@ class ClientServerTest:
                              message_size=None,
                              memory_type="host_to_host",
                              warmup_iteration_type=None,
-                             completion_type="queue"):
+                             completion_type="queue",
+                             fabric=None):
         if executable == "fi_ubertest":
             return "fi_ubertest", None
 
@@ -381,6 +383,7 @@ class ClientServerTest:
                 -v: data verification (no data verification if not specified)
                 -S: message size
                 -w: number of warmup iterations
+                -f: fabric name to test
             this function will construct a command with these options
         '''
 
@@ -403,6 +406,9 @@ class ClientServerTest:
             command += " -U"
         else:
             assert completion_semantic == "transmit_complete"
+
+        if fabric:
+            command += f" -f {fabric}"
 
         # Most fabtests actually run as -t queue by default.
         # However, not all fabtests binaries support -t option.

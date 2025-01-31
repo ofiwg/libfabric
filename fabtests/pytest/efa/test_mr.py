@@ -18,7 +18,7 @@ def test_mr_host(cmdline_args):
         pytest.param("neuron", marks=pytest.mark.neuron_memory),
     ],
 )
-def test_mr_hmem(cmdline_args, hmem_type):
+def test_mr_hmem(cmdline_args, hmem_type, fabric):
     if hmem_type == "cuda" and not has_cuda(cmdline_args.server_id):
         pytest.skip("no cuda device")
     if hmem_type == "neuron" and not has_neuron(cmdline_args.server_id):
@@ -26,7 +26,7 @@ def test_mr_hmem(cmdline_args, hmem_type):
 
     cmdline_args_copy = copy.copy(cmdline_args)
 
-    test_command = f"fi_mr_test -D {hmem_type}"
+    test_command = f"fi_mr_test -D {hmem_type} -f {fabric}"
 
     if cmdline_args.do_dmabuf_reg_for_hmem:
         test_command += " -R"

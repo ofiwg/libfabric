@@ -5,6 +5,7 @@
 #define EFA_DOMAIN_H
 
 #include <infiniband/verbs.h>
+#include "efa.h"
 #include "efa_device.h"
 #include "efa_hmem.h"
 #include "efa_env.h"
@@ -71,10 +72,18 @@ static inline bool efa_is_cache_available(struct efa_domain *efa_domain)
  * @return	a string to be append to domain name
  */
 static inline
-const char *efa_domain_name_suffix(enum fi_ep_type ep_type)
+const char *efa_domain_name_suffix(enum efa_info_type info_type)
 {
-	assert(ep_type == FI_EP_RDM || ep_type == FI_EP_DGRAM);
-	return (ep_type == FI_EP_RDM) ? "-rdm" : "-dgrm";
+	switch (info_type) {
+		case EFA_INFO_RDM:		/* fall through */
+		case EFA_INFO_DIRECT:
+			return "-rdm";
+		case EFA_INFO_DGRAM:
+			return "-dgrm";
+		default:
+			assert(0);
+	}
+	return NULL;
 }
 
 /**

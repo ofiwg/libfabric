@@ -6,7 +6,7 @@ from common import ClientServerTest
 # This test must be run in serial mode because it checks the hw counter
 @pytest.mark.serial
 @pytest.mark.functional
-def test_efa_device_selection(cmdline_args):
+def test_efa_device_selection(cmdline_args, fabric):
 
     if cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("EFA device selection test requires 2 nodes")
@@ -46,7 +46,7 @@ def test_efa_device_selection(cmdline_args):
             cmdline_args_copy.additional_client_arguments = "-d " + client_domain_name
             cmdline_args_copy.strict_fabtests_mode = strict_fabtests_mode
 
-            test = ClientServerTest(cmdline_args_copy, command, message_size="1000", prefix_type=prefix_type, timeout=300)
+            test = ClientServerTest(cmdline_args_copy, command, message_size="1000", prefix_type=prefix_type, timeout=300, fabric=fabric)
             test.run()
 
             server_tx_bytes_after_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "tx_bytes", server_device_name)

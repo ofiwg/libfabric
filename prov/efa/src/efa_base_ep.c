@@ -8,6 +8,17 @@
 #include "efa_cntr.h"
 #include "rdm/efa_rdm_protocol.h"
 
+enum efa_info_type efa_info_type_from_fi_info(struct fi_info *info) {
+	if (EFA_INFO_TYPE_IS_RDM(info))
+		return EFA_INFO_RDM;
+
+	if (EFA_INFO_TYPE_IS_DGRAM(info))
+		return EFA_INFO_DGRAM;
+
+	assert(EFA_INFO_TYPE_IS_DIRECT(info));
+	return EFA_INFO_DIRECT;
+}
+
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av)
 {
 	/*

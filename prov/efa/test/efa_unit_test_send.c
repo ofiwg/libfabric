@@ -20,7 +20,7 @@ void test_efa_rdm_msg_send_to_local_peer_with_null_desc(struct efa_resource **st
         struct fi_msg msg = {0};
         struct fi_msg_tagged tmsg = {0};
 
-        efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_PROV_NAME);
+        efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
         ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(ret, 0);

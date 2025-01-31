@@ -39,6 +39,26 @@
 #define efa_rx_flags(efa_base_ep) ((efa_base_ep)->util_ep.rx_op_flags)
 #define efa_tx_flags(efa_base_ep) ((efa_base_ep)->util_ep.tx_op_flags)
 
+#define EFA_FABRIC_NAME 		"efa"
+#define EFA_DIRECT_FABRIC_NAME 	"efa-direct"
+
+#define EFA_INFO_TYPE_IS_RDM(_info) \
+	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM) && !strcasecmp(_info->fabric_attr->name, EFA_FABRIC_NAME))
+
+#define EFA_INFO_TYPE_IS_DIRECT(_info) \
+	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM) && !strcasecmp(_info->fabric_attr->name, EFA_DIRECT_FABRIC_NAME))
+
+#define EFA_INFO_TYPE_IS_DGRAM(_info) \
+	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_DGRAM))
+
+enum efa_info_type {
+	EFA_INFO_RDM = 0,
+	EFA_INFO_DGRAM,
+	EFA_INFO_DIRECT,
+};
+
+enum efa_info_type efa_info_type_from_fi_info(struct fi_info *info);
+
 struct efa_qp {
 	struct ibv_qp *ibv_qp;
 	struct ibv_qp_ex *ibv_qp_ex;
