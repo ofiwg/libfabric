@@ -1704,7 +1704,9 @@ required by the application.
 
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.  For fi_cancel, a return value of 0
-indicates that the cancel request was submitted for processing.
+indicates that the cancel request was submitted for processing,
+a return value of -FI_EAGAIN indicates that the request could not be
+submitted and that it should be retried once progress has been made.
 For fi_setopt/fi_getopt, a return value of -FI_ENOPROTOOPT
 indicates the provider does not support the requested option.
 
