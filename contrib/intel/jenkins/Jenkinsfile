@@ -615,6 +615,22 @@ pipeline {
             }
           }
         }
+        stage ('oneccl-fire') {
+          agent {
+            node {
+              label 'ze'
+              customWorkspace CUSTOM_WORKSPACE
+            }
+          }
+          options { skipDefaultCheckout() }
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                build_ci("pr_build_oneccl_fire.json")
+              }
+            }
+          }
+        }
         stage ('mpich-water') {
           steps {
             script {
@@ -892,24 +908,13 @@ pipeline {
             }
           }
         }
-        stage ('oneCCL-GPU-v3') {
+        stage ('oneCCL-fire') {
           agent { node { label 'ze' } }
           options { skipDefaultCheckout() }
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_middleware([["psm3", null]], "oneCCL-GPU-v3", "onecclgpu",
-                               "fire", "torchic", "1", null, null,
-                               "FI_HMEM_DISABLE_P2P=1")
-                run_middleware([["verbs", null]], "oneCCL-GPU-v3", "onecclgpu",
-                                "fire", "torchic", "1", null, null,
-                                "FI_HMEM_DISABLE_P2P=1")
-                run_middleware([["tcp", null]], "oneCCL-GPU-v3", "onecclgpu",
-                               "fire", "torchic", "1", null, null,
-                               "FI_HMEM_DISABLE_P2P=1")
-                run_middleware([["shm", null]], "oneCCL-GPU-v3", "onecclgpu",
-                               "fire", "torchic", "1", null, null,
-                               "FI_HMEM_DISABLE_P2P=1")
+              dir (CI_LOCATION) {
+                run_ci("CI_oneccl_fire", "pr_oneccl_fire.json")
               }
             }
           }
