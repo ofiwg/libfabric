@@ -51,7 +51,7 @@ done
 git config --global user.name "OFIWG Bot"
 git config --global user.email "ofiwg@lists.openfabrics.org"
 
-branch_name=pr/update-nroff-generated-man-pages-$BASE_REF
+branch_name=pr/update-nroff-generated-man-pages-$BASE_REF-`date +%s`
 git checkout -b $branch_name
 
 set +e
@@ -69,6 +69,10 @@ fi
 git push --set-upstream origin $branch_name
 url=`gh pr create --base $BASE_REF --title 'Update nroff-generated man pages' --body ''`
 pr_num=`echo $url | cut -d/ -f7`
+
+# skip the remaining steps for now since merge now requires
+# appproval which cannot be done automatically.
+exit 0
 
 # Wait for the required "DCO" CI to complete
 i=0
