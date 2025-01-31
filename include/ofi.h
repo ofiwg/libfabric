@@ -274,6 +274,8 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 #define IFFLAGSTRN2(flags, SYMVAL, SYMNAME, N) \
 	do { if (flags & SYMVAL) ofi_strncatf(buf, N, #SYMNAME ", "); } while(0)
 
+#define STATIC_ASSERT(cond, name) \
+	typedef char static_assertion_##name[(cond) ? 1 : -1]
 
 /*
  * CPU specific features
