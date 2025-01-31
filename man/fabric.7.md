@@ -15,7 +15,7 @@ fabric \- Fabric Interface Library
 #include <rdma/fabric.h>
 ```
 
-Libfabric is a high-performance fabric software library designed to
+Libfabric is a high-performance fabric software library designed to XXX
 provide low-latency interfaces to fabric hardware.  For an in-depth
 discussion of the motivation and design see [`fi_guide`(7)](fi_guide.7.html).
 
