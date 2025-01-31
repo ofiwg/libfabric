@@ -122,19 +122,20 @@ def gather_logs(cluster, key, dest, source) {
 }
 
 def CI_summarize(verbose=false) {
-  cmd = """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
-           python ${CI_LOCATION}/summarize.py \
-           --log_directory=${env.LOG_DIR}
-        """
+  def options = ""
   if (verbose) {
-    cmd = "${cmd} -v"
+    options = "${options} -v"
   }
 
   if (weekly || RELEASE) {
-    cmd = "${cmd} --send-mail"
+    options = "${options} --send-mail"
   }
 
-  sh "${cmd}"
+  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+        python ${CI_LOCATION}/summarize.py \
+        --log_directory=${env.LOG_DIR} \
+        ${options}
+     """
 }
 
 def summarize(item, verbose=false, release=false, send_mail=false) {
@@ -587,6 +588,33 @@ pipeline {
             }
           }
         }
+        stage ('oneccl-water') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                build_ci("pr_build_oneccl_water.json")
+              }
+            }
+          }
+        }
+        stage ('oneccl-grass') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                build_ci("pr_build_oneccl_grass.json")
+              }
+            }
+          }
+        }
+        stage ('oneccl-electric') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                build_ci("pr_build_oneccl_electric.json")
+              }
+            }
+          }
+        }
         stage ('mpich-water') {
           steps {
             script {
@@ -836,24 +864,30 @@ pipeline {
             }
           }
         }
-	      stage ('oneCCL') {
+        stage ('oneccl_grass') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-		            run_middleware([["verbs", null]], "oneCCL",
-                               "oneccl", "water",
-                               "squirtle,wartortle,articuno", "2")
-		            run_middleware([["shm", null]], "oneCCL",
-			                         "oneccl", "grass", "bulbasaur,ivysaur", "1")
-		            run_middleware([["psm3", null]], "oneCCL",
-			                         "oneccl", "water",
-                               "squirtle,wartortle,articuno", "2")
-		            run_middleware([["tcp", null]], "oneCCL",
-			                         "oneccl", "grass", "bulbasaur,ivysaur", "2")
-                run_middleware([["shm", null]], "oneCCL_DSA",
-                               "oneccl", "electric", "pikachu", "1", null, null,
-                               """CCL_ATL_SHM=1 FI_SHM_DISABLE_CMA=1 \
-                               FI_SHM_USE_DSA_SAR=1 FI_LOG_LEVEL=warn""")
+              dir (CI_LOCATION) {
+                run_ci("CI_oneccl_grass", "pr_oneccl_grass_tcp.json")
+                run_ci("CI_oneccl_grass", "pr_oneccl_grass_shm.json")
+              }
+            }
+          }
+        }
+        stage ('oneccl_water') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("CI_oneccl_water", "pr_oneccl_water.json")
+              }
+            }
+          }
+        }
+        stage ('oneccl_electric') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("CI_oneccl_electric", "pr_oneccl_electric.json")
               }
             }
           }
