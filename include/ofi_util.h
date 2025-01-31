@@ -930,7 +930,8 @@ struct util_peer_addr {
 	union ofi_sock_ip addr;
 };
 
-struct util_peer_addr *util_get_peer(struct rxm_av *av, const void *addr);
+int util_get_peer(struct rxm_av *av, const void *addr, struct util_peer_addr **peer,
+		  uint64_t flags);
 void util_put_peer(struct util_peer_addr *peer);
 
 /* All peer addresses, whether they've been inserted into the AV
