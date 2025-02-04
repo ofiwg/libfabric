@@ -86,11 +86,59 @@ ssize_t cxip_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 	return ret;
 }
 
+static ssize_t cxip_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
+			     size_t len, int timeout, uint64_t flags)
+{
+	struct cxip_eq *eq = container_of(eq_fid, struct cxip_eq,
+					  util_eq.eq_fid);
+	uint64_t endtime;
+	ssize_t ret;
+
+	if (eq->attr.wait_obj == FI_WAIT_NONE)
+		return -FI_ENOSYS;
+
+	assert(eq->attr.wait_obj == FI_WAIT_YIELD);
+
+	endtime = ofi_timeout_time(timeout);
+	do {
+		/* Read initiates EQ progress if empty */
+		ret = cxip_eq_read(eq_fid, event, buf, len, flags);
+		if (ret != -FI_EAGAIN)
+			break;
+
+		/* On timeout return -FI_EAGAIN */
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return -FI_EAGAIN;
+
+		sched_yield();
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
+}
+
+static int cxip_eq_control(struct fid *fid, int command, void *arg)
+{
+	struct cxip_eq *eq = container_of(fid, struct cxip_eq, util_eq.eq_fid);
+	int ret;
+
+	switch (command) {
+	case FI_GETWAITOBJ:
+		*(enum fi_wait_obj *) arg = eq->attr.wait_obj;
+		ret = FI_SUCCESS;
+		break;
+	default:
+		CXIP_WARN("Unsupported EQ control command: %d\n", command);
+		ret = -FI_ENOSYS;
+	};
+
+	return ret;
+}
+
 static struct fi_ops_eq cxi_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = cxip_eq_read,		// customized
 	.readerr = ofi_eq_readerr,
-	.sread = ofi_eq_sread,
+	.sread = cxip_eq_sread,		// customized
 	.write = ofi_eq_write,
 	.strerror = cxip_eq_strerror,	// customized
 };
@@ -99,7 +147,7 @@ static struct fi_ops cxi_eq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = cxip_eq_close,		// customized
 	.bind = fi_no_bind,
-	.control = ofi_eq_control,
+	.control = cxip_eq_control,	// customized
 	.ops_open = fi_no_ops_open,
 };
 
@@ -111,11 +159,42 @@ static struct fi_eq_attr cxip_eq_def_attr = {
 	.wait_set = NULL
 };
 
+static int cxip_eq_verify_attr(struct fi_eq_attr *attr)
+{
+	if (!attr)
+		return FI_SUCCESS;
+
+	/* Applications should set wait_obj == FI_WAIT_NONE for best
+	 * performance. If a wait_obj is required, only FI_WAIT_YIELD
+	 * is supported. This is due to collectives not currently
+	 * exposing the next internal timeout duration.
+	 */
+	switch (attr->wait_obj) {
+	case FI_WAIT_UNSPEC:
+		attr->wait_obj = FI_WAIT_YIELD;
+		break;
+	case FI_WAIT_NONE:
+	case FI_WAIT_YIELD:
+		break;
+	default:
+		CXIP_WARN("Unsupported EQ wait object: %d\n",
+			  attr->wait_obj);
+		return -FI_ENOSYS;
+	}
+
+	return FI_SUCCESS;
+}
+
 int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context)
 {
 	struct cxip_eq *cxi_eq;
+	struct fi_eq_attr temp_attr;
 	int ret;
+
+	ret = cxip_eq_verify_attr(attr);
+	if (ret != FI_SUCCESS)
+		return ret;
 
 	cxi_eq = calloc(1, sizeof(*cxi_eq));
 	if (!cxi_eq)
@@ -126,16 +205,10 @@ int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	else
 		cxi_eq->attr = *attr;
 
-	if (cxi_eq->attr.wait_obj != FI_WAIT_NONE) {
-		CXIP_WARN("Unsupported EQ attribute wait obj %d\n",
-			  cxi_eq->attr.wait_obj);
-		ret = -FI_ENOSYS;
-
-		goto err0;
-	}
-
-	ret = ofi_eq_init(fabric, &cxi_eq->attr, &cxi_eq->util_eq.eq_fid,
-			  context);
+	/* CXI does not use common code internal wait object */
+	temp_attr = cxi_eq->attr;
+	temp_attr.wait_obj = FI_WAIT_NONE;
+	ret = ofi_eq_init(fabric, &temp_attr, &cxi_eq->util_eq.eq_fid, context);
 	if (ret != FI_SUCCESS)
 		goto err0;
 
