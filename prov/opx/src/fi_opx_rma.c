@@ -292,13 +292,6 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, dst_addr);
 
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid,
-						opx_dst_addr.hfi1_subctxt_rx, reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "INJECT_WRITE");
-		return -FI_EAGAIN;
-	}
-
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->next			     = NULL;
 	cc->initial_byte_count		     = len;

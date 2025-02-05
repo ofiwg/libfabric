@@ -684,9 +684,9 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 union fi_opx_hfi1_deferred_work *
 fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, struct fi_opx_mr *opx_mr, const union opx_hfi1_packet_hdr *const hdr,
 		       const void *const payload, size_t payload_bytes_to_copy, const uint8_t u8_rx,
-		       const uint8_t origin_rs, const uint32_t niov, const union fi_opx_hfi1_dput_iov *const dput_iov,
-		       const uint8_t op, const uint8_t dt, const uintptr_t rma_request_vaddr,
-		       const uintptr_t target_byte_counter_vaddr, uint64_t *origin_byte_counter, uint32_t op_kind,
+		       const uint32_t niov, const union fi_opx_hfi1_dput_iov *const dput_iov, const uint8_t op,
+		       const uint8_t dt, const uintptr_t rma_request_vaddr, const uintptr_t target_byte_counter_vaddr,
+		       uint64_t *origin_byte_counter, uint32_t op_kind,
 		       void (*completion_action)(union fi_opx_hfi1_deferred_work *work_state),
 		       const unsigned is_intranode, const enum ofi_reliability_kind reliability,
 		       const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type);
@@ -736,9 +736,9 @@ struct fi_opx_hfi1_dput_params {
 	uint32_t		  tidlen_consumed;
 	uint32_t		  tidlen_remaining;
 	uint32_t		  u32_extended_rx;
-	uint32_t		  unused;
 	enum ofi_reliability_kind reliability;
-	uint16_t		  origin_rs;
+	uint32_t		  unused;
+	uint16_t		  unused_also;
 	uint16_t		  sdma_reqs_used;
 
 	bool	is_intranode;
@@ -786,7 +786,7 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	enum ofi_reliability_kind reliability;
 	uint32_t		  unused;
 
-	uint16_t origin_rs;
+	uint16_t unused_also;
 	uint16_t origin_rx;
 
 	uint8_t opcode;
@@ -846,7 +846,6 @@ struct fi_opx_hfi1_rx_rma_rts_params {
 	uint32_t		   data;
 	uint32_t		   u32_extended_rx;
 	enum ofi_reliability_kind  reliability;
-	uint16_t		   origin_rs;
 	uint16_t		   origin_rx;
 
 	bool	is_intranode;
@@ -855,7 +854,7 @@ struct fi_opx_hfi1_rx_rma_rts_params {
 	uint8_t dt;
 	uint8_t op;
 	uint8_t target_hfi_unit;
-	uint8_t unused[2];
+	uint8_t unused[4];
 
 	/* == CACHE LINE 2 == */
 	union fi_opx_hfi1_dput_iov dput_iov[FI_OPX_MAX_DPUT_IOV];

@@ -608,18 +608,18 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 
 void fi_opx_ep_rx_process_header_tag(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 				     const uint8_t *const payload, const size_t payload_bytes, const uint8_t opcode,
-				     const uint8_t origin_rs, const unsigned is_intranode, const int lock_required,
+				     const unsigned is_intranode, const int lock_required,
 				     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hf1_type,
 				     opx_lid_t slid);
 
 void fi_opx_ep_rx_process_header_msg(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 				     const uint8_t *const payload, const size_t payload_bytes, const uint8_t opcode,
-				     const uint8_t origin_rs, const unsigned is_intranode, const int lock_required,
+				     const unsigned is_intranode, const int lock_required,
 				     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hf1_type,
 				     opx_lid_t slid);
 
 void fi_opx_ep_rx_reliability_process_packet(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
-					     const uint8_t *const payload, const uint8_t origin_rs);
+					     const uint8_t *const payload);
 
 void fi_opx_ep_rx_append_ue_msg(struct fi_opx_ep_rx *const rx, const union opx_hfi1_packet_hdr *const hdr,
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
@@ -1813,7 +1813,7 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode, struct fi_opx
 
 __OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
-					 const union fi_opx_hfi1_packet_payload *const payload, const uint8_t origin_rs,
+					 const union fi_opx_hfi1_packet_payload *const payload,
 					 const unsigned is_intranode, const int lock_required,
 					 const enum ofi_reliability_kind reliability,
 					 const enum opx_hfi1_type	 hfi1_type)
@@ -1834,8 +1834,8 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 		const uint32_t	niov				 = hdr->cts.target.vaddr.niov;
 		uint64_t       *origin_byte_counter = (uint64_t *) hdr->cts.target.vaddr.origin_byte_counter_vaddr;
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-CTS-HFI:%p", (void *) target_context_vaddr);
-		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, NULL, hdr, (const void *const) payload, 0, u8_rx, origin_rs, niov,
-					 dput_iov, (const uint8_t)(FI_NOOP - 1), (const uint8_t)(FI_VOID - 1),
+		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, NULL, hdr, (const void *const) payload, 0, u8_rx, niov, dput_iov,
+					 (const uint8_t)(FI_NOOP - 1), (const uint8_t)(FI_VOID - 1),
 					 (uintptr_t) NULL, /* No RMA Request */
 					 target_context_vaddr, origin_byte_counter, hdr->cts.target.opcode, NULL,
 					 is_intranode, /* compile-time constant expression */
@@ -1848,8 +1848,8 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 		const uintptr_t target_context_vaddr		 = hdr->cts.target.vaddr.target_context_vaddr;
 		const uint32_t	niov				 = hdr->cts.target.vaddr.niov;
 		uint64_t       *origin_byte_counter = (uint64_t *) hdr->cts.target.vaddr.origin_byte_counter_vaddr;
-		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, NULL, hdr, (const void *const) payload, 0, u8_rx, origin_rs, niov,
-					 dput_iov, (const uint8_t)(FI_NOOP - 1), (const uint8_t)(FI_VOID - 1),
+		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, NULL, hdr, (const void *const) payload, 0, u8_rx, niov, dput_iov,
+					 (const uint8_t)(FI_NOOP - 1), (const uint8_t)(FI_VOID - 1),
 					 (uintptr_t) NULL, /* No RMA Request */
 					 target_context_vaddr, origin_byte_counter,
 					 FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG, NULL,
@@ -1888,8 +1888,8 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 #else
 		const union fi_opx_hfi1_dput_iov *const dput_iov_ptr = payload->cts.iov;
 #endif
-		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, hdr, (const void *const) payload, 0, u8_rx, origin_rs, niov,
-					 dput_iov_ptr, hdr->cts.target.mr.op, hdr->cts.target.mr.dt, rma_request_vaddr,
+		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, hdr, (const void *const) payload, 0, u8_rx, niov, dput_iov_ptr,
+					 hdr->cts.target.mr.op, hdr->cts.target.mr.dt, rma_request_vaddr,
 					 (uintptr_t) NULL, /* Target completion counter is in rma_request */
 					 NULL,		   /* No origin byte counter here */
 					 FI_OPX_HFI_DPUT_OPCODE_GET, NULL,
@@ -1899,7 +1899,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 	} break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT_CQ: {
 		const union fi_opx_hfi1_dput_iov *const dput_iov_ptr = payload->cts.iov;
-		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, NULL, hdr, (const void *const) payload, 0, u8_rx, origin_rs,
+		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, NULL, hdr, (const void *const) payload, 0, u8_rx,
 					 hdr->cts.target.rma.niov, dput_iov_ptr, hdr->cts.target.rma.op,
 					 hdr->cts.target.rma.dt, hdr->cts.target.rma.origin_rma_request_vaddr,
 					 hdr->cts.target.rma.rma_request_vaddr, NULL, /* No origin byte counter here */
@@ -1983,10 +1983,9 @@ void fi_opx_atomic_completion_action(union fi_opx_hfi1_deferred_work *work_state
 __OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
 					  const union fi_opx_hfi1_packet_payload *const payload,
-					  const size_t payload_bytes, const uint8_t origin_rs,
-					  const unsigned is_intranode, const int lock_required,
-					  const enum ofi_reliability_kind reliability,
-					  const enum opx_hfi1_type	  hfi1_type)
+					  const size_t payload_bytes, const unsigned is_intranode,
+					  const int lock_required, const enum ofi_reliability_kind reliability,
+					  const enum opx_hfi1_type hfi1_type)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== RECV -- %s RENDEZVOUS DATA Opcode=%0hhX (begin)\n",
@@ -2333,7 +2332,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 
 		// Do the FETCH part of this atomic fetch operation
 		union fi_opx_hfi1_deferred_work *work = FI_OPX_FABRIC_RX_RZV_CTS(
-			opx_ep, opx_mr, hdr, (const void *const) payload, bytes, u8_rx, origin_rs, 1, &dput_iov,
+			opx_ep, opx_mr, hdr, (const void *const) payload, bytes, u8_rx, 1, &dput_iov,
 			hdr->dput.target.op, hdr->dput.target.dt, dput_fetch->rma_request_vaddr,
 			(uintptr_t) NULL, /* target byte counter is in rma_request */
 			NULL,		  /* No origin byte counter here */
@@ -2398,7 +2397,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 
 		// Do the FETCH part of this atomic fetch operation
 		union fi_opx_hfi1_deferred_work *work = FI_OPX_FABRIC_RX_RZV_CTS(
-			opx_ep, opx_mr, hdr, (const void *const) payload, bytes, u8_rx, origin_rs, 1, &dput_iov,
+			opx_ep, opx_mr, hdr, (const void *const) payload, bytes, u8_rx, 1, &dput_iov,
 			hdr->dput.target.op, hdr->dput.target.dt, dput_fetch->rma_request_vaddr,
 			(uintptr_t) NULL, /* Target completion counter is in rma request */
 			NULL,		  /* No origin byte counter here */
@@ -2441,18 +2440,18 @@ __OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_non_eager(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 					   const union fi_opx_hfi1_packet_payload *const payload,
 					   const size_t payload_bytes, const uint64_t static_flags,
-					   const uint8_t opcode, const uint8_t origin_rs, const unsigned is_intranode,
-					   const int lock_required, const enum ofi_reliability_kind reliability,
-					   const enum opx_hfi1_type hfi1_type)
+					   const uint8_t opcode, const unsigned is_intranode, const int lock_required,
+					   const enum ofi_reliability_kind reliability,
+					   const enum opx_hfi1_type	   hfi1_type)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 	if (opcode == FI_OPX_HFI_BTH_OPCODE_RZV_CTS) {
-		fi_opx_ep_rx_process_header_rzv_cts(opx_ep, hdr, payload, origin_rs, is_intranode, lock_required,
-						    reliability, hfi1_type);
+		fi_opx_ep_rx_process_header_rzv_cts(opx_ep, hdr, payload, is_intranode, lock_required, reliability,
+						    hfi1_type);
 	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) {
-		fi_opx_ep_rx_process_header_rzv_data(opx_ep, hdr, payload, payload_bytes, origin_rs, is_intranode,
-						     lock_required, reliability, hfi1_type);
+		fi_opx_ep_rx_process_header_rzv_data(opx_ep, hdr, payload, payload_bytes, is_intranode, lock_required,
+						     reliability, hfi1_type);
 	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_ACK) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "unimplemented opcode (%u); abort\n", opcode);
 		abort();
@@ -2523,9 +2522,8 @@ __OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 						const union fi_opx_hfi1_packet_payload *const payload,
 						const size_t payload_bytes, const uint64_t static_flags,
-						const uint8_t opcode, const uint8_t origin_rs,
-						const unsigned is_intranode, const int lock_required,
-						const enum ofi_reliability_kind reliability,
+						const uint8_t opcode, const unsigned is_intranode,
+						const int lock_required, const enum ofi_reliability_kind reliability,
 						const enum opx_hfi1_type hfi1_type, const opx_lid_t slid)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -2601,9 +2599,8 @@ __OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 					      const union fi_opx_hfi1_packet_payload *const payload,
 					      const size_t payload_bytes, const uint64_t static_flags,
-					      const uint8_t opcode, const uint8_t origin_rs,
-					      const unsigned is_intranode, const int lock_required,
-					      const enum ofi_reliability_kind reliability,
+					      const uint8_t opcode, const unsigned is_intranode,
+					      const int lock_required, const enum ofi_reliability_kind reliability,
 					      const enum opx_hfi1_type hfi1_type, const opx_lid_t slid)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -2665,27 +2662,24 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep, const union opx
 static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 					       const union fi_opx_hfi1_packet_payload *const payload,
 					       const size_t payload_bytes, const uint64_t static_flags,
-					       const uint8_t opcode, const uint8_t origin_rs,
-					       const unsigned is_intranode, const int lock_required,
-					       const enum ofi_reliability_kind reliability,
+					       const uint8_t opcode, const unsigned is_intranode,
+					       const int lock_required, const enum ofi_reliability_kind reliability,
 					       const enum opx_hfi1_type hfi1_type, const opx_lid_t slid)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 	if (OFI_UNLIKELY(opcode < FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH)) {
-		fi_opx_ep_rx_process_header_non_eager(ep, hdr, payload, payload_bytes, static_flags, opcode, origin_rs,
+		fi_opx_ep_rx_process_header_non_eager(ep, hdr, payload, payload_bytes, static_flags, opcode,
 						      is_intranode, lock_required, reliability, hfi1_type);
 		return;
 	} else if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST) {
 		fi_opx_ep_rx_process_header_mp_eager_first(ep, hdr, payload, payload_bytes, static_flags, opcode,
-							   origin_rs, is_intranode, lock_required, reliability,
-							   hfi1_type, slid);
+							   is_intranode, lock_required, reliability, hfi1_type, slid);
 
 		return;
 	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH) {
 		fi_opx_ep_rx_process_header_mp_eager_nth(ep, hdr, payload, payload_bytes, static_flags, opcode,
-							 origin_rs, is_intranode, lock_required, reliability, hfi1_type,
-							 slid);
+							 is_intranode, lock_required, reliability, hfi1_type, slid);
 		return;
 	}
 
@@ -3794,6 +3788,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 	ssize_t rc = 0;
 
+#ifdef OPX_DAOS
 	/* Resynch of all the Reliability Protocol(RP) related data maintained by the
 	 * remote EP, must be done first before any other RP related operations are
 	 * done with the remote EP.
@@ -3805,13 +3800,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			return rc;
 		}
 	}
-
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, addr.lid, addr.hfi1_subctxt_rx,
-						reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
-		return -FI_EAGAIN;
-	}
+#endif
 
 	size_t		    total_len = len;
 	const struct iovec *local_iov = NULL;

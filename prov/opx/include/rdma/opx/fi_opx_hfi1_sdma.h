@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2024 by Cornelis Networks.
+ * Copyright (C) 2022-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -155,12 +155,11 @@ struct fi_opx_hfi1_sdma_work_entry {
 
 	opx_lid_t dlid;
 
-	uint8_t rs;
 	uint8_t rx;
 	bool	in_use;
 	bool	use_bounce_buf;
 	bool	pending_bounce_buf;
-	uint8_t unused_byte_padding[3];
+	uint8_t unused_byte_padding[4];
 
 	uint64_t unused_qw_padding;
 
@@ -373,11 +372,10 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_init_we(struct fi_opx_hfi1_sdma_work_entry *we, struct fi_opx_completion_counter *cc,
-			      uint16_t dlid, uint8_t rs, uint8_t rx, enum fi_hmem_iface iface, int hmem_device)
+			      uint16_t dlid, uint8_t rx, enum fi_hmem_iface iface, int hmem_device)
 {
 	we->cc		= cc;
 	we->dlid	= dlid;
-	we->rs		= rs;
 	we->rx		= rx;
 	we->comp_state	= OPX_SDMA_COMP_FREE;
 	we->hmem.iface	= iface;
@@ -524,7 +522,7 @@ int opx_hfi1_sdma_enqueue_replay(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sd
 
 __OPX_FORCE_INLINE__
 uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry *we,
-					enum ofi_reliability_kind reliability)
+					const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_completion_counter *cc;
 	void				 *replay_back_ptr;
@@ -546,13 +544,13 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 	   the send we're about to do, we shouldn't need to check the
 	   returned PSN here before proceeding */
 	int32_t psn;
-	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, &opx_ep->reliability->state, we->dlid, we->rx, we->rs,
+	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, &opx_ep->reliability->state, we->dlid, we->rx,
 					     &we->psn_ptr, we->num_packets);
 
 	uint32_t fragsize = 0;
 	for (int i = 0; i < we->num_packets; ++i) {
 		fragsize = MAX(fragsize, we->packets[i].length);
-		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			we->packets[i].replay->scb.scb_9B.hdr.qw_9B[2] |= (uint64_t) htonl((uint32_t) psn);
 		} else {
 			we->packets[i].replay->scb.scb_16B.hdr.qw_16B[3] |= (uint64_t) htonl((uint32_t) psn);
@@ -562,9 +560,9 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 		we->packets[i].replay->sdma_we		 = replay_back_ptr;
 		we->packets[i].replay->hmem_iface	 = we->hmem.iface;
 		we->packets[i].replay->hmem_device	 = we->hmem.device;
-		fi_opx_reliability_client_replay_register_with_update(&opx_ep->reliability->state, we->dlid, we->rs,
-								      we->rx, we->psn_ptr, we->packets[i].replay, cc,
-								      we->packets[i].length, reliability);
+		fi_opx_reliability_client_replay_register_with_update(&opx_ep->reliability->state, we->rx, we->psn_ptr,
+								      we->packets[i].replay, cc, we->packets[i].length,
+								      reliability, hfi1_type);
 		psn = (psn + 1) & MAX_PSN;
 	}
 
@@ -635,7 +633,8 @@ void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 __OPX_FORCE_INLINE__
 void opx_hfi1_sdma_flush(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry *we, struct slist *sdma_reqs,
 			 const bool use_tid, struct iovec *tid_iov, uint32_t start_tid_idx, uint32_t end_tid_idx,
-			 uint32_t tidOMshift, uint32_t tidoffset, enum ofi_reliability_kind reliability)
+			 uint32_t tidOMshift, uint32_t tidoffset, enum ofi_reliability_kind reliability,
+			 const enum opx_hfi1_type hfi1_type)
 {
 	assert(we->comp_state == OPX_SDMA_COMP_FREE);
 	assert(we->num_packets > 0);
@@ -643,7 +642,7 @@ void opx_hfi1_sdma_flush(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_
 	/* no padding for tid, should have been aligned.*/
 	assert(!use_tid || (use_tid && we->total_payload == ((we->total_payload) & -4)));
 
-	uint32_t fragsize	   = opx_hfi1_sdma_register_replays(opx_ep, we, reliability);
+	uint32_t fragsize	   = opx_hfi1_sdma_register_replays(opx_ep, we, reliability, hfi1_type);
 	uint64_t last_packet_bytes = we->packets[we->num_packets - 1].length;
 
 	assert(last_packet_bytes != 0);
