@@ -503,7 +503,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->use_device_rdma = efa_rdm_get_use_device_rdma(info->fabric_attr->api_version);
 	efa_rdm_ep->shm_permitted = true;
 	efa_rdm_ep->msg_prefix_size = info->ep_attr->msg_prefix_size;
-	efa_rdm_ep->mtu_size = efa_domain->device->rdm_info->ep_attr->max_msg_size;
+	efa_rdm_ep->mtu_size = efa_domain->device->ibv_port_attr.max_msg_sz;
 
 	efa_rdm_ep->max_data_payload_size = efa_rdm_ep->mtu_size - sizeof(struct efa_rdm_ctsdata_hdr) - sizeof(struct efa_rdm_ctsdata_opt_connid_hdr);
 	efa_rdm_ep->min_multi_recv_size = efa_rdm_ep->mtu_size - efa_rdm_pkt_type_get_max_hdr_size();
