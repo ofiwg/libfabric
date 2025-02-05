@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_endpoint" "3" "2025\-01\-30" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_endpoint" "3" "2025\-02\-05" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -1893,7 +1893,9 @@ by the application.
 Returns 0 on success.
 On error, a negative value corresponding to fabric errno is returned.
 For fi_cancel, a return value of 0 indicates that the cancel request was
-submitted for processing.
+submitted for processing, a return value of -FI_EAGAIN indicates that
+the request could not be submitted and that it should be retried once
+progress has been made.
 For fi_setopt/fi_getopt, a return value of -FI_ENOPROTOOPT indicates the
 provider does not support the requested option.
 .PP
