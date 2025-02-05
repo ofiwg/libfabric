@@ -602,7 +602,7 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 		/*
 		 * EFA RDM endpoint implemented emulated atomic, hence set atomic size
 		 */
-		max_atomic_size = device->rdm_info->ep_attr->max_msg_size
+		max_atomic_size = device->ibv_port_attr.max_msg_sz
 					- sizeof(struct efa_rdm_rta_hdr)
 					- device->rdm_info->src_addrlen
 					- EFA_RDM_IOV_LIMIT * sizeof(struct fi_rma_iov);
@@ -637,10 +637,10 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 		 *    pkt_entry_size - maximum_header_size.
 		 */
 		if (efa_env.enable_shm_transfer)
-			min_pkt_size = MIN(device->rdm_info->ep_attr->max_msg_size - efa_rdm_pkt_type_get_max_hdr_size(),
+			min_pkt_size = MIN(device->ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size(),
 					   SHM_MAX_INJECT_SIZE);
 		else
-			min_pkt_size = device->rdm_info->ep_attr->max_msg_size - efa_rdm_pkt_type_get_max_hdr_size();
+			min_pkt_size = device->ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size();
 
 		if (min_pkt_size < efa_rdm_pkt_type_get_max_hdr_size()) {
 			prov_info_rdm->tx_attr->inject_size = 0;

@@ -11,7 +11,7 @@ struct efa_hmem_info g_efa_hmem_info[OFI_HMEM_MAX];
 static size_t efa_max_eager_msg_size_with_largest_header() {
 	int mtu_size;
 
-	mtu_size = g_device_list[0].rdm_info->ep_attr->max_msg_size;
+	mtu_size = g_device_list[0].ibv_port_attr.max_msg_sz;
 
 	return mtu_size - efa_rdm_pkt_type_get_max_hdr_size();
 }
