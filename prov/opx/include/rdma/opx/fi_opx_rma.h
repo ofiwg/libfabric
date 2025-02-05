@@ -236,7 +236,6 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 
 		params->u32_extended_rx = u32_extended_rx;
 		params->reliability	= reliability;
-		params->origin_rs	= opx_dst_addr.hfi1_subctxt_rx;
 		params->origin_rx	= opx_dst_addr.hfi1_subctxt_rx;
 		params->is_intranode	= is_intranode;
 		params->opcode		= FI_OPX_HFI_BTH_OPCODE_RMA_RTS;
@@ -257,7 +256,6 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 		params->lrh_dlid		    = lrh_dlid;
 		params->pbc_dlid		    = pbc_dlid;
 		params->slid			    = slid;
-		params->origin_rs		    = opx_dst_addr.hfi1_subctxt_rx;
 		params->dt			    = dt == FI_VOID ? FI_VOID - 1 : dt;
 		params->op			    = op == FI_NOOP ? FI_NOOP - 1 : op;
 		params->key			    = key;

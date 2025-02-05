@@ -143,7 +143,6 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	}
 	params->pbc_dlid		  = OPX_PBC_DLID_TO_PBC_DLID(opx_dst_addr.lid, hfi1_type);
 	params->slid			  = opx_dst_addr.lid;
-	params->origin_rs		  = opx_dst_addr.hfi1_subctxt_rx;
 	params->dt			  = dt == FI_VOID ? FI_VOID - 1 : dt;
 	params->op			  = op == FI_NOOP ? FI_NOOP - 1 : op;
 	params->u8_rx			  = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
@@ -346,12 +345,6 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, dst_addr);
 
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_addr.lid, opx_addr.hfi1_subctxt_rx,
-						reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
-		return -FI_EAGAIN;
-	}
-
 	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_ATOMIC | FI_WRITE, &context) != FI_SUCCESS)) {
@@ -408,12 +401,6 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep, const struct fi_msg_at
 	   with constant FI_AV_MAP or FI_AV_TABLE based on the endpoint */
 	assert((FI_AV_TABLE == av_type) || (FI_AV_MAP == av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, msg->addr);
-
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid,
-						opx_dst_addr.hfi1_subctxt_rx, reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
-		return -FI_EAGAIN;
-	}
 
 	struct fi_opx_cq   *cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
 	struct opx_context *context;
@@ -516,12 +503,6 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 	   with constant FI_AV_MAP or FI_AV_TABLE based on the endpoint */
 	assert((FI_AV_TABLE == av_type) || (FI_AV_MAP == av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, msg->addr);
-
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid,
-						opx_dst_addr.hfi1_subctxt_rx, reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
-		return -FI_EAGAIN;
-	}
 
 	const size_t dtsize = sizeofdt(datatype);
 
@@ -677,12 +658,6 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 	assert((FI_AV_TABLE == av_type) || (FI_AV_MAP == av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, msg->addr);
 
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid,
-						opx_dst_addr.hfi1_subctxt_rx, reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
-		return -FI_EAGAIN;
-	}
-
 	const size_t dtsize = sizeofdt(datatype);
 
 	size_t	     rma_iov_index   = 0;
@@ -809,12 +784,6 @@ ssize_t fi_opx_fetch_compare_atomic_generic(struct fid_ep *ep, const void *buf, 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, dest_addr);
 
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_addr.lid, opx_addr.hfi1_subctxt_rx,
-						reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
-		return -FI_EAGAIN;
-	}
-
 	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_ATOMIC | FI_WRITE, &context) != FI_SUCCESS)) {
@@ -888,12 +857,6 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	assert(dest_addr != FI_ADDR_UNSPEC);
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, dest_addr);
-
-	if (OFI_UNLIKELY(!opx_reliability_ready(ep, &opx_ep->reliability->state, opx_dst_addr.lid,
-						opx_dst_addr.hfi1_subctxt_rx, reliability))) {
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
-		return -FI_EAGAIN;
-	}
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	if (OFI_UNLIKELY(cc == NULL)) {

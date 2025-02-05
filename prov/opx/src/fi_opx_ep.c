@@ -205,9 +205,9 @@ static struct fi_ops_ep fi_opx_stx_ep_ops = {.size   = sizeof(struct fi_ops_ep),
 					     .tx_ctx = fi_no_tx_ctx,
 					     .rx_ctx = fi_no_rx_ctx};
 
-void fi_opx_ep_tx_model_init(struct fi_opx_hfi1_context *hfi, const uint8_t reliability_rx,
-			     struct fi_opx_hfi1_txe_scb_9B *inject_9B, struct fi_opx_hfi1_txe_scb_9B *send_9B,
-			     struct fi_opx_hfi1_txe_scb_9B *send_mp_9B, struct fi_opx_hfi1_txe_scb_9B *rendezvous_9B)
+void fi_opx_ep_tx_model_init(struct fi_opx_hfi1_context *hfi, struct fi_opx_hfi1_txe_scb_9B *inject_9B,
+			     struct fi_opx_hfi1_txe_scb_9B *send_9B, struct fi_opx_hfi1_txe_scb_9B *send_mp_9B,
+			     struct fi_opx_hfi1_txe_scb_9B *rendezvous_9B)
 {
 	/*
 	 * fi_send*() model - eager
@@ -259,19 +259,17 @@ void fi_opx_ep_tx_model_init(struct fi_opx_hfi1_context *hfi, const uint8_t reli
 	OPX_DEBUG_PRINT_HDR((&(send_9B->hdr)), hfi1_type);
 
 	/* MP Eager model */
-	*send_mp_9B			     = *send_9B;
-	send_mp_9B->hdr.rendezvous.origin_rs = reliability_rx;
-	send_mp_9B->hdr.bth.ecn		     = (uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_MP_EAGER)) |
-						  OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
+	*send_mp_9B		= *send_9B;
+	send_mp_9B->hdr.bth.ecn = (uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_MP_EAGER)) |
+					     OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
 
 	OPX_DEBUG_PRINT_HDR((&(send_mp_9B->hdr)), hfi1_type);
 	/*
 	 * fi_send*() model - rendezvous
 	 */
-	*rendezvous_9B				= *send_9B;
-	rendezvous_9B->hdr.rendezvous.origin_rs = reliability_rx;
-	rendezvous_9B->hdr.bth.ecn		= (uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_RZV_CTRL)) |
-						     OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
+	*rendezvous_9B		   = *send_9B;
+	rendezvous_9B->hdr.bth.ecn = (uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_RZV_CTRL)) |
+						OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
 
 	OPX_DEBUG_PRINT_HDR((&(rendezvous_9B->hdr)), hfi1_type);
 
@@ -305,9 +303,8 @@ void fi_opx_ep_tx_model_init(struct fi_opx_hfi1_context *hfi, const uint8_t reli
 	OPX_DEBUG_PRINT_HDR((&(inject_9B->hdr)), hfi1_type);
 }
 
-void fi_opx_ep_tx_model_init_16B(struct fi_opx_hfi1_context *hfi, const uint8_t reliability_rx,
-				 struct fi_opx_hfi1_txe_scb_16B *inject_16B, struct fi_opx_hfi1_txe_scb_16B *send_16B,
-				 struct fi_opx_hfi1_txe_scb_16B *send_mp_16B,
+void fi_opx_ep_tx_model_init_16B(struct fi_opx_hfi1_context *hfi, struct fi_opx_hfi1_txe_scb_16B *inject_16B,
+				 struct fi_opx_hfi1_txe_scb_16B *send_16B, struct fi_opx_hfi1_txe_scb_16B *send_mp_16B,
 				 struct fi_opx_hfi1_txe_scb_16B *rendezvous_16B)
 {
 	/*
@@ -385,11 +382,10 @@ void fi_opx_ep_tx_model_init_16B(struct fi_opx_hfi1_context *hfi, const uint8_t 
 	/*
 	 * fi_send*() model - rendezvous
 	 */
-	*rendezvous_16B				 = *send_16B;
-	rendezvous_16B->hdr.lrh_16B.rc		 = OPX_LRH_JKR_16B_RC(OPX_HFI1_RZV_CTRL);
-	rendezvous_16B->hdr.rendezvous.origin_rs = reliability_rx;
-	rendezvous_16B->hdr.bth.ecn		 = (uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_RZV_CTRL)) |
-						      OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
+	*rendezvous_16B		       = *send_16B;
+	rendezvous_16B->hdr.lrh_16B.rc = OPX_LRH_JKR_16B_RC(OPX_HFI1_RZV_CTRL);
+	rendezvous_16B->hdr.bth.ecn    = (uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_RZV_CTRL)) |
+						    OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
 
 	OPX_DEBUG_PRINT_HDR((&(rendezvous_16B->hdr)), hfi1_type);
 
@@ -471,12 +467,11 @@ int fi_opx_stx_init(struct fi_opx_domain *opx_domain, struct fi_tx_attr *attr, s
 	 * initialize the models
 	 */
 	struct fi_opx_hfi1_txe_scb_9B dummy; /* no MP eager model*/
-	fi_opx_ep_tx_model_init(opx_stx->hfi, opx_stx->reliability_rx, &opx_stx->tx.inject, &opx_stx->tx.send, &dummy,
-				&opx_stx->tx.rzv);
+	fi_opx_ep_tx_model_init(opx_stx->hfi, &opx_stx->tx.inject, &opx_stx->tx.send, &dummy, &opx_stx->tx.rzv);
 
 	struct fi_opx_hfi1_txe_scb_16B dummy_16B; /* no MP eager model*/
-	fi_opx_ep_tx_model_init_16B(opx_stx->hfi, opx_stx->reliability_rx, &opx_stx->tx.inject_16B,
-				    &opx_stx->tx.send_16B, &dummy_16B, &opx_stx->tx.rzv_16B);
+	fi_opx_ep_tx_model_init_16B(opx_stx->hfi, &opx_stx->tx.inject_16B, &opx_stx->tx.send_16B, &dummy_16B,
+				    &opx_stx->tx.rzv_16B);
 
 	fi_opx_ref_inc(&opx_domain->ref_cnt, "domain");
 	fi_opx_ref_init(&opx_stx->ref_cnt, "shared transmit context");
@@ -991,11 +986,11 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	opx_ep->tx->pio_state = &hfi->state.pio;
 
 	/* initialize the models */
-	fi_opx_ep_tx_model_init(hfi, opx_ep->reliability->rx, &opx_ep->tx->inject_9B, &opx_ep->tx->send_9B,
-				&opx_ep->tx->send_mp_9B, &opx_ep->tx->rzv_9B);
+	fi_opx_ep_tx_model_init(hfi, &opx_ep->tx->inject_9B, &opx_ep->tx->send_9B, &opx_ep->tx->send_mp_9B,
+				&opx_ep->tx->rzv_9B);
 
-	fi_opx_ep_tx_model_init_16B(hfi, opx_ep->reliability->rx, &opx_ep->tx->inject_16B, &opx_ep->tx->send_16B,
-				    &opx_ep->tx->send_mp_16B, &opx_ep->tx->rzv_16B);
+	fi_opx_ep_tx_model_init_16B(hfi, &opx_ep->tx->inject_16B, &opx_ep->tx->send_16B, &opx_ep->tx->send_mp_16B,
+				    &opx_ep->tx->rzv_16B);
 
 	opx_ep->tx->inject_9B.hdr.reliability.unused = 0;
 	opx_ep->tx->rzv_9B.hdr.reliability.unused    = 0;
@@ -2918,28 +2913,26 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 
 void fi_opx_ep_rx_process_header_tag(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 				     const uint8_t *const payload, const size_t payload_bytes, const uint8_t opcode,
-				     const uint8_t origin_rs, const unsigned is_intranode, const int lock_required,
+				     const unsigned is_intranode, const int lock_required,
 				     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
 				     opx_lid_t slid)
 {
 	fi_opx_ep_rx_process_header(ep, hdr, (const union fi_opx_hfi1_packet_payload *const) payload, payload_bytes,
-				    FI_TAGGED, opcode, origin_rs, is_intranode, lock_required, reliability, hfi1_type,
-				    slid);
+				    FI_TAGGED, opcode, is_intranode, lock_required, reliability, hfi1_type, slid);
 }
 
 void fi_opx_ep_rx_process_header_msg(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 				     const uint8_t *const payload, const size_t payload_bytes, const uint8_t opcode,
-				     const uint8_t origin_rs, const unsigned is_intranode, const int lock_required,
+				     const unsigned is_intranode, const int lock_required,
 				     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
 				     opx_lid_t slid)
 {
 	fi_opx_ep_rx_process_header(ep, hdr, (const union fi_opx_hfi1_packet_payload *const) payload, payload_bytes,
-				    FI_MSG, opcode, origin_rs, is_intranode, lock_required, reliability, hfi1_type,
-				    slid);
+				    FI_MSG, opcode, is_intranode, lock_required, reliability, hfi1_type, slid);
 }
 
 void fi_opx_ep_rx_reliability_process_packet(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
-					     const uint8_t *const payload, const uint8_t origin_rs)
+					     const uint8_t *const payload)
 {
 	OPX_LOG_PKT(FI_LOG_DEBUG, FI_LOG_EP_DATA, "================ received a packet from the reliability service\n");
 
@@ -2966,11 +2959,11 @@ void fi_opx_ep_rx_reliability_process_packet(struct fid_ep *ep, const union opx_
 
 	if (OFI_LIKELY(opcode & FI_OPX_HFI_BTH_OPCODE_TAG_BIT)) {
 		fi_opx_ep_rx_process_header(ep, hdr, (const union fi_opx_hfi1_packet_payload *const) payload,
-					    payload_bytes, FI_TAGGED, opcode, origin_rs, OPX_INTRANODE_FALSE,
+					    payload_bytes, FI_TAGGED, opcode, OPX_INTRANODE_FALSE,
 					    FI_OPX_LOCK_NOT_REQUIRED, OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_TYPE, slid);
 	} else {
 		fi_opx_ep_rx_process_header(ep, hdr, (const union fi_opx_hfi1_packet_payload *const) payload,
-					    payload_bytes, FI_MSG, opcode, origin_rs, OPX_INTRANODE_FALSE,
+					    payload_bytes, FI_MSG, opcode, OPX_INTRANODE_FALSE,
 					    FI_OPX_LOCK_NOT_REQUIRED, OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_TYPE, slid);
 	}
 }

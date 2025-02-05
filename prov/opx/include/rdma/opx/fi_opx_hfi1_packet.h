@@ -206,21 +206,17 @@ static inline const char *opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING	     (0x01)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK	     (0x02)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK	     (0x03)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT	     (0x04)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK    (0x05)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH     (0x06)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK (0x07)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP	     (0x08)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH     (0x04)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK (0x05)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP	     (0x06)
 /* Add new UD Opcodes here, and increment LAST_INVALID accordingly */
-#define FI_OPX_HFI_UD_OPCODE_LAST_INVALID (0x09)
+#define FI_OPX_HFI_UD_OPCODE_LAST_INVALID (0x07)
 
 static const char *FI_OPX_HFI_UD_OPCODE_STRINGS[] = {
 	[FI_OPX_HFI_UD_OPCODE_FIRST_INVALID]	       = "INVALID UD OPCODE",
 	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING]	       = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING",
 	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK]	       = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK",
 	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK]	       = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK",
-	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT]	       = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT",
-	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK]    = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK",
 	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH]     = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH",
 	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK] = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK",
 	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP]	       = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP"};
@@ -807,9 +803,9 @@ union opx_hfi1_packet_hdr {
 		uint64_t reserved_3[2];
 
 		/* QW[5] SW */
-		uint16_t origin_rs;
+		uint16_t unused;
 		uint8_t	 flags;
-		uint8_t	 unused[3];
+		uint8_t	 unused_2[3];
 		uint16_t niov; /* number of non-contiguous buffers */
 
 		/* QW[6] SW */
@@ -905,8 +901,7 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[5] SW */
 		uint8_t	 opcode;
-		uint8_t	 unused0;
-		uint16_t origin_rs;
+		uint8_t	 unused0[3];
 		uint8_t	 dt;
 		uint8_t	 op;
 		uint16_t niov; /* number of non-contiguous buffers described in the packet payload */
@@ -1078,6 +1073,24 @@ static inline size_t fi_opx_hfi1_packet_hdr_message_length(const union opx_hfi1_
 	}
 
 	return message_length;
+}
+
+static inline size_t opx_hfi1_packet_hdr_payload_bytes(const union opx_hfi1_packet_hdr *const hdr,
+						       const enum opx_hfi1_type		      hfi1_type)
+{
+	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
+	uint16_t lrh_pktlen_le;
+	size_t	 total_bytes_to_copy;
+
+	if (hfi1_type == OPX_HFI1_JKR) {
+		lrh_pktlen_le	    = (uint16_t) hdr->lrh_16B.pktlen;
+		total_bytes_to_copy = (lrh_pktlen_le - 1) * 8; /* do not copy the trailing tail/icrc QW*/
+		return total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B);
+	}
+
+	lrh_pktlen_le	    = ntohs(hdr->lrh_9B.pktlen);
+	total_bytes_to_copy = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
+	return total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B);
 }
 
 #ifndef NDEBUG
