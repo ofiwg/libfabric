@@ -5678,6 +5678,9 @@ void simple_rx_wait(bool epoll, bool ux_msg)
 		.ux_msg = ux_msg,
 	};
 
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
 	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
