@@ -90,7 +90,7 @@ jobs:
             --form description="`$PWD/install/bin/fi_info -l`" \
             https://scan.coverity.com/builds?project=ofiwg%2Flibfabric
       - name: Upload build logs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverity-build-log.txt
           path: cov-int/build-log.txt
