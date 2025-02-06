@@ -872,10 +872,10 @@ pipeline {
           steps {
             script {
               dir (RUN_LOCATION) {
-                run_middleware([["tcp", null],["sockets", null]],
-			       "multinode_performance", "multinode", "grass", "bulbasaur,ivysaur", "2")
-		run_middleware([["verbs", "rxm"]], "multinode_performance",
-			       "multinode", "water", "squirtle,wartortle,articuno", "2")
+                run_ci("CI_multinode_performance_grass",
+                       "pr_multinode_performance_grass.json")
+                run_ci("CI_multinode_performance_water",
+                       "pr_multinode_performance_water.json")
               }
             }
           }
