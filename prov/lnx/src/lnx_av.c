@@ -59,123 +59,47 @@
 #include "lnx.h"
 
 struct lnx_peer *
-lnx_av_lookup_addr(struct lnx_peer_table *peer_tbl, fi_addr_t addr)
+lnx_av_lookup_addr(struct lnx_av *av, fi_addr_t addr)
 {
-	struct lnx_peer *entry;
+	struct lnx_peer *lp, **lpp;
 
 	if (addr == FI_ADDR_UNSPEC)
 		return NULL;
 
-	ofi_genlock_lock(&peer_tbl->lpt_domain->ld_domain.lock);
+	ofi_genlock_lock(&av->lav_av.lock);
 
-	entry = ofi_bufpool_get_ibuf(peer_tbl->lpt_entries, addr);
+	lpp = ofi_av_get_addr(&av->lav_av, addr);
+	lp = *lpp;
 
-	ofi_genlock_unlock(&peer_tbl->lpt_domain->ld_domain.lock);
+	ofi_genlock_unlock(&av->lav_av.lock);
 
-	if (!entry)
+	if (!lp)
 		FI_WARN(&lnx_prov, FI_LOG_CORE,
 			"Invalid fi_addr %#lx\n", addr);
 
-	return entry;
-}
-
-static int lnx_peer_av_remove(struct lnx_peer *lp)
-{
-	int rc, frc = 0;
-	struct lnx_peer_prov *lpp;
-	struct lnx_local2peer_map *lpm;
-
-	dlist_foreach_container(&lp->lp_provs,
-			struct lnx_peer_prov, lpp, entry) {
-		/* if this is a remote peer then we didn't insert its shm address
-		 * into our local shm endpoint, so no need to remove it
-		 */
-		if (!strncasecmp(lpp->lpp_prov_name, "shm", 3) &&
-			!lp->lp_local)
-			continue;
-
-		/* remove these address from all local providers */
-		dlist_foreach_container(&lpp->lpp_map,
-			struct lnx_local2peer_map, lpm, entry) {
-			if (lpm->addr_count > 0) {
-				rc = fi_av_remove(lpm->local_ep->lpe_av, lpm->peer_addrs,
-						  lpm->addr_count, lpp->lpp_flags);
-				if (rc)
-					frc = rc;
-			}
-		}
-	}
-
-	return frc;
-}
-
-static int lnx_peer_remove(struct lnx_peer_table *tbl, fi_addr_t addr)
-{
-	struct lnx_peer *lp = NULL;
-	int rc = 0;
-
-	ofi_genlock_lock(&tbl->lpt_domain->ld_domain.lock);
-	lp = ofi_bufpool_get_ibuf(tbl->lpt_entries, addr);
-	if (!lp)
-		goto out;
-
-	rc = lnx_peer_av_remove(lp);
-
-	ofi_ibuf_free(lp);
-
-out:
-	ofi_genlock_unlock(&tbl->lpt_domain->ld_domain.lock);
-	return rc;
-}
-
-static int lnx_cleanup_avs(struct local_prov *prov)
-{
-	int rc, frc = 0;
-	struct local_prov_ep *ep;
-
-	dlist_foreach_container(&prov->lpv_prov_eps,
-		struct local_prov_ep, ep, entry) {
-		rc = fi_close(&ep->lpe_av->fid);
-		if (rc)
-			frc = rc;
-	}
-
-	return frc;
-}
-
-static inline void lnx_free_peer_tbl(struct lnx_peer_table *peer_tbl)
-{
-	ofi_bufpool_destroy(peer_tbl->lpt_entries);
-	free(peer_tbl);
+	return lp;
 }
 
 int lnx_av_close(struct fid *fid)
 {
-	int rc;
-	struct local_prov *entry;
-	struct lnx_fabric *fabric;
-	struct lnx_peer_table *peer_tbl;
+	int i, rc, frc = 0;
+	struct lnx_core_av *core_av;
+	struct lnx_av *lav;
 
-	peer_tbl = container_of(fid, struct lnx_peer_table, lpt_av.av_fid.fid);
-	fabric = peer_tbl->lpt_domain->ld_fabric;
+	lav = container_of(fid, struct lnx_av, lav_av.av_fid.fid);
 
-	/* walk through the rest of the core providers and open their
-	 * respective address vector tables
-	 */
-	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
-				entry, lpv_entry) {
-		rc = lnx_cleanup_avs(entry);
-		if (rc) {
-			FI_INFO(&lnx_prov, FI_LOG_CORE, "Failed to close av for %s\n",
-					entry->lpv_prov_name);
-		}
+	for (i = 0; i < lav->lav_domain->ld_num_doms; i++) {
+		core_av = &lav->lav_core_avs[i];
+		rc = fi_close(&core_av->cav_av->fid);
+		if (rc)
+			frc = rc;
 	}
 
-	ofi_av_close_lightweight(&peer_tbl->lpt_av);
+	ofi_av_close(&lav->lav_av);
+	free(lav->lav_core_avs);
+	free(lav);
 
-	free(peer_tbl);
-
-	return 0;
+	return frc;
 }
 
 static struct fi_ops lnx_av_fi_ops = {
@@ -186,146 +110,6 @@ static struct fi_ops lnx_av_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int lnx_get_or_create_peer_prov(struct dlist_entry *prov_table,
-				       struct lnx_peer *lp, char *prov_name,
-				       struct lnx_peer_prov **lpp)
-{
-	bool shm = false;
-	struct local_prov *entry;
-	struct lnx_peer_prov *peer_prov;
-
-	if (!strcmp(prov_name, "shm")) {
-		if (lp->lp_shm_prov)
-			return -FI_ENOENT;
-		shm = true;
-		goto insert_prov;
-	}
-
-	/* check if we already have a peer provider */
-	dlist_foreach_container(&lp->lp_provs,
-			struct lnx_peer_prov, peer_prov, entry) {
-		if (!strncasecmp(peer_prov->lpp_prov_name, prov_name, FI_NAME_MAX)) {
-			*lpp = peer_prov;
-			return 0;
-		}
-	}
-
-insert_prov:
-	dlist_foreach_container(prov_table, struct local_prov,
-				entry, lpv_entry) {
-		if (!strncasecmp(entry->lpv_prov_name, prov_name, FI_NAME_MAX)) {
-			peer_prov = calloc(sizeof(*peer_prov), 1);
-			if (!peer_prov)
-				return -FI_ENOMEM;
-
-			dlist_init(&peer_prov->entry);
-			dlist_init(&peer_prov->lpp_map);
-
-			memcpy(peer_prov->lpp_prov_name, prov_name,
-			       FI_NAME_MAX);
-
-			peer_prov->lpp_prov = entry;
-
-			if (shm)
-				lp->lp_shm_prov = peer_prov;
-			else
-				dlist_insert_tail(&peer_prov->entry, &lp->lp_provs);
-
-			*lpp = peer_prov;
-			return 0;
-		}
-	}
-
-	return -FI_ENOENT;
-}
-
-static inline struct lnx_address_prov *
-next_prov(struct lnx_address_prov *prov)
-{
-	uint8_t *ptr;
-
-	ptr = (uint8_t*) prov;
-
-	ptr += (sizeof(*prov) + (prov->lap_addr_count * prov->lap_addr_size));
-
-	return (struct lnx_address_prov*)ptr;
-}
-
-static inline size_t
-get_lnx_addresses_size(struct lnx_addresses *addrs)
-{
-	int i;
-	size_t s = sizeof(*addrs);
-	struct lnx_address_prov *prov;
-
-	prov = addrs->la_addr_prov;
-	for (i = 0; i < addrs->la_prov_count; i++) {
-		s += sizeof(*prov) + (prov->lap_addr_count * prov->lap_addr_size);
-		prov = next_prov(prov);
-	}
-
-	return s;
-}
-
-static inline struct lnx_addresses *
-next_peer(struct lnx_addresses *addrs)
-{
-	uint8_t *ptr;
-
-	ptr = (uint8_t*)addrs + get_lnx_addresses_size(addrs);
-
-	return (struct lnx_addresses *)ptr;
-}
-
-static struct lnx_address_prov *
-lnx_get_peer_shm_addr(struct lnx_addresses *addrs)
-{
-	int i;
-	struct lnx_address_prov *prov;
-
-	prov = addrs->la_addr_prov;
-	for (i = 0; i < addrs->la_prov_count; i++) {
-		if (!strcmp(prov->lap_prov, "shm"))
-			return prov;
-		prov = next_prov(prov);
-	}
-
-	return NULL;
-}
-
-static int is_local_addr(struct local_prov **shm_prov, struct lnx_addresses *la)
-{
-	int rc;
-	char hostname[FI_NAME_MAX];
-	struct lnx_address_prov *lap_shm;
-
-	/* check the hostname and compare it to mine
-	 * TODO: Is this good enough? or do we need a better way of
-	 * determining if the address is local?
-	 */
-	rc = gethostname(hostname, FI_NAME_MAX);
-	if (rc == -1) {
-		FI_INFO(&lnx_prov, FI_LOG_CORE, "failed to get hostname\n");
-		return -FI_EPERM;
-	}
-
-	lap_shm = lnx_get_peer_shm_addr(la);
-	if (!lap_shm)
-		return -FI_EOPNOTSUPP;
-
-	/* Shared memory address not provided or not local*/
-	if ((lap_shm->lap_addr_count == 0) ||
-		strncasecmp(hostname, la->la_hostname, FI_NAME_MAX))
-		return -FI_EOPNOTSUPP;
-
-	/* badly formed address */
-	if (*shm_prov && (lap_shm->lap_addr_count > 1 ||
-			  lap_shm->lap_addr_count < 0))
-		return -FI_EPROTO;
-
-	return 0;
-}
-
 static void
 lnx_update_msg_entries(struct lnx_qpair *qp,
 		       fi_addr_t (*get_addr)(struct fi_peer_rx_entry *))
@@ -334,183 +118,315 @@ lnx_update_msg_entries(struct lnx_qpair *qp,
 	struct lnx_rx_entry *rx_entry;
 	struct dlist_entry *item;
 
-	ofi_spin_lock(&q->lq_qlock);
 	dlist_foreach(&q->lq_queue, item) {
 		rx_entry = (struct lnx_rx_entry *) item;
 		if (rx_entry->rx_entry.addr == FI_ADDR_UNSPEC)
 			rx_entry->rx_entry.addr = get_addr(&rx_entry->rx_entry);
 	}
-	ofi_spin_unlock(&q->lq_qlock);
 }
 
 void
 lnx_foreach_unspec_addr(struct fid_peer_srx *srx,
 			fi_addr_t (*get_addr)(struct fi_peer_rx_entry *))
 {
-	struct lnx_srx_context *ctxt;
+	struct lnx_ep *lep;
+	struct lnx_core_ep *cep;
 
-	ctxt = (struct lnx_srx_context *) srx->ep_fid.fid.context;
+	cep = (struct lnx_core_ep *) srx->ep_fid.fid.context;
+	lep = cep->cep_parent;
 
-	lnx_update_msg_entries(&ctxt->srx_lep->le_srq.lps_trecv, get_addr);
-	lnx_update_msg_entries(&ctxt->srx_lep->le_srq.lps_recv, get_addr);
+	lnx_update_msg_entries(&lep->le_srq.lps_trecv, get_addr);
+	lnx_update_msg_entries(&lep->le_srq.lps_recv, get_addr);
 }
 
-static int lnx_peer_map_addrs(struct dlist_entry *prov_table,
-			      struct lnx_peer *lp, struct lnx_addresses *la,
-			      uint64_t flags, void *context)
+static int lnx_peer_av_remove(struct lnx_peer *lp)
 {
-	int i, j, rc;
-	struct lnx_peer_prov *lpp;
-	struct lnx_address_prov *lap;
-	struct local_prov_ep *lpe;
-	struct dlist_entry *eps;
+	int i, j, rc, frc = 0;
+	struct lnx_core_av *cav;
+	struct lnx_peer_map *map_addr;
 
-	lap = &la->la_addr_prov[0];
-
-	for (i = 0; i < la->la_prov_count; i++) {
-		if (lap->lap_addr_count > LNX_MAX_LOCAL_EPS)
-			return -FI_EPROTO;
-
-		rc = lnx_get_or_create_peer_prov(prov_table, lp, lap->lap_prov,
-						 &lpp);
-		if (rc)
-			return rc;
-
-		lpp->lpp_flags = flags;
-
-		eps = &lpp->lpp_prov->lpv_prov_eps;
-		dlist_foreach_container(eps, struct local_prov_ep, lpe,
-					entry) {
-			struct lnx_local2peer_map *lpm;
-
-			/* if this is a remote peer, don't insert the shm address
-			 * since we will never talk to that peer over shm
-			 */
-			if (!strncasecmp(lpe->lpe_fabric_name, "shm", 3) &&
-				!lp->lp_local)
-				continue;
-
-			lpm = calloc(sizeof(*lpm), 1);
-			if (!lpm)
-				return -FI_ENOMEM;
-
-			dlist_init(&lpm->entry);
-			dlist_insert_tail(&lpm->entry, &lpp->lpp_map);
-
-			lpm->local_ep = lpe;
-			lpm->addr_count = lap->lap_addr_count;
-			for (j = 0; j < LNX_MAX_LOCAL_EPS; j++)
-				lpm->peer_addrs[j] = FI_ADDR_NOTAVAIL;
-			/* fi_av_insert returns the number of addresses inserted */
-			rc = fi_av_insert(lpe->lpe_av, (void*)lap->lap_addrs,
-					  lap->lap_addr_count,
-					  lpm->peer_addrs, flags, context);
-			if (rc < 0)
-				return rc;
-
-			/* should only insert the number of addresses indicated */
-			assert(rc == lap->lap_addr_count);
+	for (i = 0; i < lp->lp_av_count; i++) {
+		cav = lp->lp_avs[i];
+		if (!cav)
+			break;
+		map_addr = ofi_bufpool_get_ibuf(cav->cav_map, lp->lp_addr);
+		for (j = 0; j < map_addr->map_count; j++) {
+			rc = fi_av_remove(cav->cav_av, &map_addr->map_addrs[j], 1, 0);
+			if (rc)
+				frc = rc;
 		}
-
-		lap = next_prov(lap);
 	}
 
-	return 0;
+	return frc;
 }
 
-/*
- * count: number of LNX addresses
- * addr: an array of addresses
- * fi_addr: an out array of fi_addr)t
- *
- * Each LNX address can have multiple core provider addresses
- * Check the hostname provided in each address to see if it's the same as
- * me. If so, then we'll use the SHM address if available.
- *
- * ASSUMPTION: fi_av_insert() is called exactly once per peer.
- * We're not handling multiple av_inserts on the same peer. If that
- * happens then we will create multiple peers entries.
- */
-int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
-		  fi_addr_t *fi_addr, uint64_t flags, void *context)
+static void
+lnx_free_src_eps(struct lnx_peer_ep_map *src_eps, int count)
 {
-	int i, rc, idx;
-	int disable_shm = 0;
-	struct lnx_peer *lp;
-	struct dlist_entry *prov_table;
-	struct lnx_peer_table *peer_tbl;
-	struct lnx_addresses *la = (struct lnx_addresses *)addr;
+	int i;
 
-	fi_param_get_bool(&lnx_prov, "disable_shm", &disable_shm);
-
-	peer_tbl = container_of(av, struct lnx_peer_table, lpt_av.av_fid.fid);
-	prov_table = &peer_tbl->lpt_domain->ld_fabric->local_prov_table;
-
-	/* each entry represents a separate peer */
 	for (i = 0; i < count; i++) {
-		/* can't have more providers than LNX_MAX_LOCAL_EPS */
-		if (la->la_prov_count >= LNX_MAX_LOCAL_EPS ||
-			la->la_prov_count <= 0)
-			return -FI_EPROTO;
-
-		ofi_genlock_lock(&peer_tbl->lpt_domain->ld_domain.lock);
-		lp = ofi_ibuf_alloc(peer_tbl->lpt_entries);
-		if (!lp) {
-			ofi_genlock_unlock(&peer_tbl->lpt_domain->ld_domain.lock);
-			return -FI_ENOMEM;
-		}
-		idx = ofi_buf_index(lp);
-		ofi_genlock_unlock(&peer_tbl->lpt_domain->ld_domain.lock);
-
-		dlist_init(&lp->lp_provs);
-
-		rc = is_local_addr(&peer_tbl->lpt_domain->ld_fabric->shm_prov,
-				   la);
-		if (!rc) {
-			lp->lp_local = !disable_shm;
-		} else if (rc == -FI_EOPNOTSUPP) {
-			lp->lp_local = false;
-		} else if (rc) {
-			FI_INFO(&lnx_prov, FI_LOG_CORE, "failed to identify address\n");
-			return rc;
-		}
-
-		rc = lnx_peer_map_addrs(prov_table, lp, la, flags, context);
-		if (rc) {
-			ofi_genlock_lock(&peer_tbl->lpt_domain->ld_domain.lock);
-			ofi_ibuf_free(lp);
-			ofi_genlock_unlock(&peer_tbl->lpt_domain->ld_domain.lock);
-			return rc;
-		}
-
-		if (flags & FI_AV_USER_ID)
-			lp->lp_fi_addr = fi_addr[i];
-		else
-			lp->lp_fi_addr = idx;
-
-		fi_addr[i] = idx;
-
-		la = next_peer(la);
+		if (src_eps[i].pem_eps)
+			free(src_eps[i].pem_eps);
 	}
+	free(src_eps);
+}
 
-	return i;
+static int lnx_peer_remove(struct lnx_av *lav, fi_addr_t addr)
+{
+	struct lnx_peer *lp, **lpp;
+	int rc = 0;
+
+	ofi_genlock_lock(&lav->lav_av.lock);
+	lpp = ofi_av_get_addr(&lav->lav_av, addr);
+	if (!lpp)
+		goto out;
+
+	lp = *lpp;
+
+	rc = lnx_peer_av_remove(lp);
+
+	rc = ofi_av_remove_addr(&lav->lav_av, addr);
+
+	lnx_free_src_eps(lp->lp_src_eps, lp->lp_ep_count);
+	free(lp->lp_avs);
+	free(lp);
+
+out:
+	ofi_genlock_unlock(&lav->lav_av.lock);
+	return rc;
 }
 
 int lnx_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 		  uint64_t flags)
 {
-	struct lnx_peer_table *peer_tbl;
+	struct lnx_av *lav;
 	int frc = 0, rc, i;
 
-	peer_tbl = container_of(av, struct lnx_peer_table, lpt_av.av_fid.fid);
+	lav = container_of(av, struct lnx_av, lav_av.av_fid.fid);
 
 	for (i = 0; i < count; i++) {
-		rc = lnx_peer_remove(peer_tbl, (int)fi_addr[i]);
+		rc = lnx_peer_remove(lav, fi_addr[i]);
 		if (rc)
 			frc = rc;
 	}
 
 	return frc;
+}
+
+static int
+lnx_setup_ep_mapping(struct lnx_peer *lp,
+		    struct lnx_core_ep *ceps[][LNX_MAX_LOCAL_EPS])
+{
+	int i = 0, j = 0;
+	size_t size;
+	int counts[LNX_MAX_LOCAL_EPS] = {0};
+
+	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++)  {
+		if (ceps[i][0] == NULL)
+			break;
+		for (j = 0; j < LNX_MAX_LOCAL_EPS; j++) {
+			if (ceps[i][j] == NULL)
+				break;
+			counts[i]++;
+		}
+		lp->lp_ep_count++;
+	}
+
+	size = sizeof(struct lnx_peer_ep_map) * i;
+
+	lp->lp_src_eps = calloc(size, 1);
+	if (!lp->lp_src_eps)
+		return -FI_ENOMEM;
+
+	for (j = 0; j < i; j++) {
+		lp->lp_src_eps[j].pem_eps = calloc(sizeof(struct lnx_core_ep *)*counts[j], 1);
+		if (!lp->lp_src_eps[j].pem_eps) {
+			lnx_free_src_eps(lp->lp_src_eps, lp->lp_ep_count);
+			return -FI_ENOMEM;
+		}
+		lp->lp_src_eps[j].pem_num_eps = counts[j];
+	}
+
+	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++)  {
+		if (ceps[i][0] == NULL)
+			break;
+		for (j = 0; j < LNX_MAX_LOCAL_EPS; j++) {
+			if (ceps[i][j] == NULL)
+				break;
+			lp->lp_src_eps[i].pem_eps[j] = ceps[i][j];
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+static int
+lnx_insert_addr(struct lnx_core_av *core_av, struct lnx_ep_addr *addr,
+		struct lnx_peer *lp,
+		struct lnx_core_ep *cep_tmp[][LNX_MAX_LOCAL_EPS], bool local)
+{
+	int i, rc;
+	bool present;
+	char *prov_name;
+	void *core_addr = (char*) addr + sizeof(*addr);
+	struct lnx_core_av *cav;
+	struct lnx_core_ep *cep;
+	struct lnx_ep *lep;
+	fi_addr_t core_fi_addr;
+	struct lnx_peer_map *map_addr;
+
+	prov_name = core_av->cav_domain->cd_info->fabric_attr->name;
+	/* only insert into AVs belonging to compatible domains */
+	if (strcmp(prov_name, addr->lea_prov))
+		return FI_SUCCESS;
+	if (!local && !strcmp(addr->lea_prov, "shm"))
+		return FI_SUCCESS;
+
+	/* cache the endpoint information */
+	dlist_foreach_container(&core_av->cav_endpoints, struct lnx_core_ep, cep,
+				cep_av_entry) {
+		lep = cep->cep_parent;
+		present = false;
+		i = 0;
+		while (cep_tmp[lep->le_idx][i] != NULL) {
+			if (cep_tmp[lep->le_idx][i] == cep) {
+				present = true;
+				break;
+			}
+			i++;
+		}
+		if (!present)
+			cep_tmp[lep->le_idx][i] = cep;
+	}
+
+	/* create the address maps. The reason for the lp_avs is that we
+	 * can tell whether we inserted the peer on a particular map.
+	 * bufpool doesn't have a mechanism to find if an index is already
+	 * inserted in the pool or not
+	 */
+	for (i = 0; i < lp->lp_av_count; i++) {
+		cav = lp->lp_avs[i];
+		if (!cav)
+			break;
+		if (cav == core_av) {
+			map_addr = ofi_bufpool_get_ibuf(core_av->cav_map, lp->lp_addr);
+			goto insert;
+		}
+	}
+
+	lp->lp_avs[i] = core_av;
+	map_addr = ofi_ibuf_alloc_at(core_av->cav_map, lp->lp_addr);
+	memset(map_addr, 0, sizeof(*map_addr));
+	ofi_atomic_initialize32(&map_addr->map_rr, 0);
+
+insert:
+	core_fi_addr = lnx_encode_fi_addr(lp->lp_addr, map_addr->map_count);
+
+	rc = fi_av_insert(core_av->cav_av, core_addr, 1, &core_fi_addr, FI_AV_USER_ID, NULL);
+	if (rc <= 0)
+		return rc;
+
+	map_addr->map_addrs[map_addr->map_count++] = core_fi_addr;
+
+	return FI_SUCCESS;
+}
+
+int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
+		  fi_addr_t *fi_addr, uint64_t flags, void *context)
+{
+	int i, j, k, rc;
+	bool local, once;
+	int disable_shm = 0;
+	struct lnx_peer *lp;
+	char hostname[FI_NAME_MAX];
+	struct lnx_av *lav;
+	struct lnx_address *la;
+	struct lnx_ep_addr *lea;
+	struct lnx_core_av *core_av;
+
+	if (flags & FI_AV_USER_ID)
+		return -FI_ENOSYS;
+
+	fi_param_get_bool(&lnx_prov, "disable_shm", &disable_shm);
+
+	lav = container_of(av, struct lnx_av, lav_av.av_fid.fid);
+
+	rc = gethostname(hostname, FI_NAME_MAX);
+
+	/* if address insertion fails the assumption is the caller will
+	 * properly close the av table, which will do proper clean up
+	 */
+	la = (struct lnx_address *) addr;
+	for (i = 0; i < count; i++) {
+		struct lnx_core_ep *
+			cep_tmp[LNX_MAX_LOCAL_EPS][LNX_MAX_LOCAL_EPS] = {0};
+		once = false;
+		local = false;
+
+		lea = (struct lnx_ep_addr *) ((char*)la + sizeof(*la));
+		lp = calloc(sizeof(*lp), 1);
+		if (!lp)
+			return -FI_ENOMEM;
+
+		lp->lp_avs = calloc(sizeof(struct lnx_core_av *) *
+				    lav->lav_domain->ld_num_doms, 1);
+		lp->lp_av_count = lav->lav_domain->ld_num_doms;
+		ofi_atomic_initialize32(&lp->lp_ep_rr, 0);
+
+		/* if the shm address exists then it'll be the first
+		 * entry. Only insert the shm address for local peers as
+		 * we're only going to talk to the local peer over
+		 * shm. The assumption is that shm will always out perform
+		 * inter-node providers
+		 */
+		if (!strcmp(hostname, la->la_hostname) &&
+		    !strcmp(lea->lea_prov, "shm") && !disable_shm)
+			local = true;
+
+		ofi_genlock_lock(&lav->lav_av.lock);
+		rc = ofi_av_insert_addr(&lav->lav_av, &lp, &lp->lp_addr);
+		ofi_genlock_unlock(&lav->lav_av.lock);
+		if (rc) {
+			free(lp->lp_avs);
+			free(lp);
+			return rc;
+		}
+
+		if (fi_addr)
+			fi_addr[i] = lp->lp_addr;
+
+		for (j = 0; j < la->la_ep_count; j++) {
+			if (once)
+				goto skip;
+			for (k = 0; k < lav->lav_domain->ld_num_doms; k++) {
+				core_av = &lav->lav_core_avs[k];
+
+				rc = lnx_insert_addr(core_av, lea, lp, cep_tmp, local);
+				if (rc) {
+					(void) lnx_av_remove(&lav->lav_av.av_fid,
+							     &lp->lp_addr, 1, 0);
+					return rc;
+				}
+				if (local) {
+					once = true;
+					break;
+				}
+			}
+skip:
+			lea = (struct lnx_ep_addr *)
+				((char*)lea + sizeof(*lea) + lea->lea_addr_size);
+		}
+		rc = lnx_setup_ep_mapping(lp, cep_tmp);
+		if (rc) {
+			(void) lnx_av_remove(&lav->lav_av.av_fid,
+						&lp->lp_addr, 1, 0);
+			return rc;
+		}
+		la = (struct lnx_address *) lea;
+	}
+
+	return i;
 }
 
 static const char *
@@ -539,48 +455,21 @@ static struct fi_ops_av lnx_av_ops = {
 	.straddr = lnx_av_straddr,
 };
 
-static void lnx_get_core_av_attr(struct local_prov_ep *ep,
-				 struct fi_av_attr *attr)
-{
-	memset(attr, 0, sizeof(*attr));
-	attr->type = ep->lpe_fi_info->domain_attr->av_type;
-}
-
-static int lnx_open_avs(struct local_prov *prov, struct fi_av_attr *attr,
-			void *context)
-{
-	int rc = 0;
-	struct local_prov_ep *ep;
-	struct fi_av_attr core_attr;
-
-	dlist_foreach_container(&prov->lpv_prov_eps,
-		struct local_prov_ep, ep, entry) {
-		lnx_get_core_av_attr(ep, &core_attr);
-		if (ep->lpe_local)
-			core_attr.count = ep->lpe_fi_info->domain_attr->ep_cnt;
-		else
-			core_attr.count = attr->count;
-		rc = fi_av_open(ep->lpe_domain, &core_attr,
-					    &ep->lpe_av, context);
-		if (rc)
-			return rc;
-	}
-
-	return 0;
-}
-
 int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-		struct fid_av **av, void *context)
+		struct fid_av **av_out, void *context)
 {
-	struct lnx_fabric *fabric;
+	struct fi_info *fi;
 	struct lnx_domain *lnx_domain;
-	struct lnx_peer_table *peer_tbl;
-	struct local_prov *entry;
+	struct lnx_core_domain *cd;
+	struct lnx_av *av;
+	struct lnx_core_av *core_av;
+	struct util_av_attr util_attr = {0};
 	size_t table_sz;
-	int rc = 0;
+	int i, rc = 0;
 	struct ofi_bufpool_attr pool_attr = {
-		.size = sizeof(struct lnx_peer),
+		.size = sizeof(struct lnx_peer_map),
 		.flags = OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_INDEXED,
+		.chunk_cnt = 64,
 	};
 
 	if (!attr)
@@ -589,68 +478,72 @@ int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (attr->name)
 		return -FI_ENOSYS;
 
-	if (attr->type != FI_AV_TABLE)
-		attr->type = FI_AV_TABLE;
+	if (attr->type != FI_AV_TABLE && attr->type != FI_AV_UNSPEC)
+		return -FI_ENOSYS;
+
+	attr->type = FI_AV_TABLE;
 
 	lnx_domain = container_of(domain, struct lnx_domain,
 				  ld_domain.domain_fid.fid);
-	fabric = lnx_domain->ld_fabric;
 
-	peer_tbl = calloc(sizeof(*peer_tbl), 1);
-	if (!peer_tbl)
+	av = calloc(sizeof(*av), 1);
+	if (!av)
 		return -FI_ENOMEM;
+
+	av->lav_core_avs = calloc(sizeof(*av->lav_core_avs),
+				  lnx_domain->ld_num_doms);
+	if (!av->lav_core_avs) {
+		free(av);
+		return -FI_ENOMEM;
+	}
 
 	table_sz = attr->count ? attr->count : ofi_universe_size;
 	table_sz = roundup_power_of_two(table_sz);
 	pool_attr.chunk_cnt = table_sz;
 
-	rc = ofi_bufpool_create_attr(&pool_attr, &peer_tbl->lpt_entries);
-	if (rc) {
-		rc = -FI_ENOMEM;
-		goto failed;
-	}
-
-	rc = ofi_av_init_lightweight(&lnx_domain->ld_domain, attr,
-				     &peer_tbl->lpt_av, context);
+	util_attr.addrlen = sizeof(struct lnx_peer *);
+	rc = ofi_av_init(&lnx_domain->ld_domain, attr,
+			 &util_attr, &av->lav_av, context);
 	if (rc) {
 		FI_WARN(&lnx_prov, FI_LOG_CORE,
 			"failed to initialize AV: %d\n", rc);
-		goto failed;
+		goto out;
 	}
 
-	peer_tbl->lpt_max_count = table_sz;
-	peer_tbl->lpt_domain = lnx_domain;
-	peer_tbl->lpt_av.av_fid.fid.ops = &lnx_av_fi_ops;
-	peer_tbl->lpt_av.av_fid.ops = &lnx_av_ops;
-
-	assert(fabric->lnx_peer_tbl == NULL);
-
-	/* need this to handle memory registration vi fi_mr_regattr(). We need
-	 * to be able to access the peer table to determine which endpoint
-	 * we'll be using based on the source/destination address */
-	fabric->lnx_peer_tbl = peer_tbl;
+	av->lav_max_count = table_sz;
+	av->lav_domain = lnx_domain;
+	av->lav_av.av_fid.fid.ops = &lnx_av_fi_ops;
+	av->lav_av.av_fid.ops = &lnx_av_ops;
 
 	/* walk through the rest of the core providers and open their
 	 * respective address vector tables
 	 */
-	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
-				entry, lpv_entry) {
-		rc = lnx_open_avs(entry, attr, context);
-		if (rc) {
-			FI_INFO(&lnx_prov, FI_LOG_CORE, "Failed to initialize domain for %s\n",
-					entry->lpv_prov_name);
-			goto close;
-		}
+	for (i = 0; i < lnx_domain->ld_num_doms; i++) {
+		cd = &lnx_domain->ld_core_domains[i];
+
+		core_av = &av->lav_core_avs[i];
+		dlist_init(&core_av->cav_endpoints);
+		core_av->cav_domain = cd;
+		fi = cd->cd_info;
+		attr->type = FI_AV_TABLE;
+		attr->count = fi->domain_attr->ep_cnt;
+		rc = fi_av_open(cd->cd_domain, attr, &core_av->cav_av, context);
+		if (rc)
+			goto failed;
+
+		/* the cav_map is indexed by the lnx peer addr */
+		rc = ofi_bufpool_create_attr(&pool_attr, &core_av->cav_map);
+		if (rc)
+			goto failed;
 	}
 
-	*av = &peer_tbl->lpt_av.av_fid;
+	*av_out = &av->lav_av.av_fid;
 
 	return 0;
 
-close:
-	ofi_av_close_lightweight(&peer_tbl->lpt_av);
 failed:
-	lnx_free_peer_tbl(peer_tbl);
+	lnx_av_close(&av->lav_av.av_fid.fid);
+out:
 	return rc;
 }
 
