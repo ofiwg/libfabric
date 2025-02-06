@@ -333,7 +333,7 @@ int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 			if (rma_op == FT_RMA_WRITE)
 				*(tx_buf + opts.transfer_size - 1) = (char)i;
 
-			if (opts.transfer_size <= inject_size)
+			if (opts.transfer_size && opts.transfer_size <= inject_size)
 				ret = ft_inject_rma(rma_op, remote, ep,
 						    remote_fi_addr,
 						    opts.transfer_size);
@@ -359,7 +359,7 @@ int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 			if (rma_op == FT_RMA_WRITE)
 				*(tx_buf + opts.transfer_size - 1) = (char)i;
 
-			if (opts.transfer_size <= inject_size)
+			if (opts.transfer_size && opts.transfer_size <= inject_size)
 				ret = ft_inject_rma(rma_op, remote, ep,
 						remote_fi_addr,
 						opts.transfer_size);
@@ -629,7 +629,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 		}
 		switch (rma_op) {
 		case FT_RMA_WRITE:
-			if (opts.transfer_size <= inject_size) {
+			if (opts.transfer_size && opts.transfer_size <= inject_size) {
 				ret = ft_post_rma_inject(FT_RMA_WRITE, tx_buf + offset,
 						opts.transfer_size, remote);
 			} else if (opts.use_fi_more) {
@@ -656,7 +656,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 					rx_seq++;
 
 			} else {
-				if (opts.transfer_size <= inject_size) {
+				if (opts.transfer_size && opts.transfer_size <= inject_size) {
 					ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
 							tx_buf + offset,
 							opts.transfer_size,
