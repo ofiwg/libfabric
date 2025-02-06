@@ -1199,11 +1199,6 @@ static inline int ofi_is_lnx(const char *str)
 	return !strncasecmp(str, OFI_LNX, strlen(OFI_LNX));
 }
 
-static inline int ofi_is_linked(const char *str)
-{
-	return (strcasestr(str, OFI_LNX)) ? 1 : 0;
-}
-
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
 		      const struct fi_info *util_hints,
