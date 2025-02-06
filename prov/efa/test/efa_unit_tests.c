@@ -195,6 +195,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_ep_lock_type_no_op, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_ep_lock_type_mutex, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_shm_ep_different_info, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_ep.c */
 
 		/* begin efa_unit_test_cq.c */
@@ -265,6 +266,10 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_opt1, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_opt0, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_opt_old, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_info_direct_rma_when_no_unsolicited_write_recv_and_rx_cq_data, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_info_direct_rma_when_no_rx_cq_data_and_zero_cq_data_size, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_info_direct_rma_when_unsolicited_write_recv_on_and_no_rx_cq_data, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_info_direct_rma_when_no_unsolicited_write_recv_and_nonzero_cq_data_size_and_no_rx_cq_data, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_info.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_update_neuron, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

@@ -229,6 +229,10 @@ void test_efa_use_device_rdma_opt0();
 void test_efa_use_device_rdma_env1();
 void test_efa_use_device_rdma_env0();
 void test_efa_use_device_rdma_opt_old();
+void test_info_direct_rma_when_no_unsolicited_write_recv_and_rx_cq_data();
+void test_info_direct_rma_when_no_rx_cq_data_and_zero_cq_data_size();
+void test_info_direct_rma_when_unsolicited_write_recv_on_and_no_rx_cq_data();
+void test_info_direct_rma_when_no_unsolicited_write_recv_and_nonzero_cq_data_size_and_no_rx_cq_data();
 /* end efa_unit_test_info.c */
 
 void test_efa_srx_min_multi_recv_size();
@@ -393,6 +397,7 @@ void test_efa_rdm_ep_data_path_direct_disabled();
 void test_efa_ep_lock_type_no_op();
 void test_efa_ep_lock_type_mutex();
 void test_efa_rdm_ep_shm_ep_different_info();
+void test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data();
 
 /* begin efa_unit_test_data_path_direct.c */
 void test_efa_data_path_direct_rdma_read_multiple_sge_fail();
