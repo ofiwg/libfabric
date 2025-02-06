@@ -1907,3 +1907,26 @@ void test_efa_rdm_ep_shm_ep_different_info(struct efa_resource **state)
 	fi_close(&ep2->fid);
 	fi_freeinfo(info2);
 }
+
+/**
+ * @brief Test that unsolicited write recv is disabled when FI_RX_CQ_DATA mode is set
+ */
+void test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_base_ep;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(resource->hints);
+
+	/* Set FI_RX_CQ_DATA mode */
+	resource->hints->mode |= FI_RX_CQ_DATA;
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 18),
+	                                            resource->hints, true, true);
+
+	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+
+	/* When FI_RX_CQ_DATA is set, unsolicited write recv should be disabled */
+	assert_false(efa_base_ep->qp->unsolicited_write_recv_enabled);
+}
