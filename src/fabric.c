@@ -1217,13 +1217,11 @@ static void ofi_set_prov_attr(struct fi_fabric_attr *attr,
 
 	core_name = attr->prov_name;
 	if (core_name) {
-		if (ofi_is_lnx_prov(prov)) {
-			attr->prov_name = ofi_strdup_link_append(core_name, prov->name);
-		} else {
+		if (!ofi_is_lnx_prov(prov)) {
 			assert(ofi_is_util_prov(prov));
 			attr->prov_name = ofi_strdup_append(core_name, prov->name);
+			free(core_name);
 		}
-		free(core_name);
 	} else {
 		attr->prov_name = strdup(prov->name);
 	}
@@ -1571,9 +1569,7 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 
 	fi_ini();
 
-	ret = ofi_is_linked(attr->prov_name);
-	top_name = strrchr(attr->prov_name,
-			   ret ? OFI_NAME_LNX_DELIM : OFI_NAME_DELIM);
+	top_name = strrchr(attr->prov_name, OFI_NAME_DELIM);
 	if (top_name)
 		top_name++;
 	else

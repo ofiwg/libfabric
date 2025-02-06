@@ -38,6 +38,7 @@ _lnx_files = \
 	prov/lnx/src/lnx_ep.c		\
 	prov/lnx/src/lnx_init.c		\
 	prov/lnx/src/lnx_ops.c		\
+	prov/lnx/src/lnx_mr.c		\
 	prov/lnx/src/lnx_av.c
 
 _lnx_headers = \

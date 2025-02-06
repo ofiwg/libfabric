@@ -49,84 +49,32 @@
 #include "rdma/fi_ext.h"
 #include "lnx.h"
 
-ssize_t lnx_peer_cq_write(struct fid_peer_cq *cq, void *context, uint64_t flags,
-			size_t len, void *buf, uint64_t data, uint64_t tag,
-			fi_addr_t src)
+static int lnx_cq_close(struct fid *fid)
 {
-	struct lnx_peer_cq *lnx_cq;
-	int rc;
+	int i, rc, frc = 0;
+	struct lnx_cq *lnx_cq;
+	struct lnx_core_cq *core_cq;
 
-	lnx_cq = container_of(cq, struct lnx_peer_cq, lpc_cq);
+	lnx_cq = container_of(fid, struct lnx_cq, lcq_util_cq.cq_fid.fid);
 
-	rc = ofi_cq_write(&lnx_cq->lpc_shared_cq->util_cq, context,
-			  flags, len, buf, data, tag);
+	/* Kick the core provider endpoints to progress */
+	for (i = 0; i < lnx_cq->lcq_lnx_domain->ld_num_doms; i++) {
+		core_cq = &lnx_cq->lcq_core_cqs[i];
 
-	return rc;
-}
-
-ssize_t lnx_peer_cq_writeerr(struct fid_peer_cq *cq,
-			const struct fi_cq_err_entry *err_entry)
-{
-	struct lnx_peer_cq *lnx_cq;
-	int rc;
-
-	lnx_cq = container_of(cq, struct lnx_peer_cq, lpc_cq);
-
-	rc = ofi_cq_write_error(&lnx_cq->lpc_shared_cq->util_cq, err_entry);
-
-	return rc;
-}
-
-static int lnx_cleanup_cqs(struct local_prov *prov)
-{
-	int rc, frc = 0;
-	struct local_prov_ep *ep;
-
-	dlist_foreach_container(&prov->lpv_prov_eps,
-				struct local_prov_ep, ep, entry) {
-		rc = fi_close(&ep->lpe_cq.lpc_core_cq->fid);
+		rc = fi_close(&core_cq->cc_cq->fid);
 		if (rc)
 			frc = rc;
-		ep->lpe_cq.lpc_core_cq = NULL;
 	}
+
+	rc = ofi_cq_cleanup(&lnx_cq->lcq_util_cq);
+	if (rc)
+		frc = rc;
+
+	free(lnx_cq->lcq_core_cqs);
+	free(lnx_cq);
 
 	return frc;
 }
-
-static int lnx_cq_close(struct fid *fid)
-{
-	int rc;
-	struct lnx_cq *lnx_cq;
-	struct local_prov *entry;
-	struct dlist_entry *prov_table;
-
-	lnx_cq = container_of(fid, struct lnx_cq, util_cq.cq_fid);
-	prov_table = &lnx_cq->lnx_domain->ld_fabric->local_prov_table;
-
-	/* close all the open core cqs */
-	dlist_foreach_container(prov_table, struct local_prov,
-				entry, lpv_entry) {
-		rc = lnx_cleanup_cqs(entry);
-		if (rc) {
-			FI_WARN(&lnx_prov, FI_LOG_CORE, "Failed to close domain for %s\n",
-				entry->lpv_prov_name);
-			return rc;
-		}
-	}
-
-	rc = ofi_cq_cleanup(&lnx_cq->util_cq);
-	if (rc)
-		return rc;
-
-	free(lnx_cq);
-	return 0;
-}
-
-struct fi_ops_cq_owner lnx_cq_write = {
-	.size = sizeof(lnx_cq_write),
-	.write = lnx_peer_cq_write,
-	.writeerr = lnx_peer_cq_writeerr,
-};
 
 static struct fi_ops lnx_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
@@ -138,61 +86,48 @@ static struct fi_ops lnx_cq_fi_ops = {
 
 static void lnx_cq_progress(struct util_cq *cq)
 {
+	int i;
 	struct lnx_cq *lnx_cq;
-	struct local_prov_ep *ep;
-	struct local_prov *entry;
-	struct dlist_entry *prov_table;
+	struct lnx_core_cq *core_cq;
+	struct ofi_genlock *gen_lock;
 
-	lnx_cq = container_of(cq, struct lnx_cq, util_cq);
-	prov_table = &lnx_cq->lnx_domain->ld_fabric->local_prov_table;
+	lnx_cq = container_of(cq, struct lnx_cq, lcq_util_cq);
+	gen_lock = &lnx_cq->lcq_lnx_domain->ld_domain.lock;
 
+	ofi_genlock_lock(gen_lock);
 	/* Kick the core provider endpoints to progress */
-	dlist_foreach_container(prov_table, struct local_prov,
-				entry, lpv_entry) {
-		dlist_foreach_container(&entry->lpv_prov_eps,
-					struct local_prov_ep, ep, entry)
-			fi_cq_read(ep->lpe_cq.lpc_core_cq, NULL, 0);
+	for (i = 0; i < lnx_cq->lcq_lnx_domain->ld_num_doms; i++) {
+		core_cq = &lnx_cq->lcq_core_cqs[i];
+		fi_cq_read(core_cq->cc_cq, NULL, 0);
 	}
+	ofi_genlock_unlock(gen_lock);
 }
 
-static int lnx_cq_open_core_prov(struct lnx_cq *cq, struct fi_cq_attr *attr)
+static int lnx_open_core_cqs(struct lnx_cq *lnx_cq, struct fi_cq_attr *attr)
 {
-	int rc;
-	struct local_prov_ep *ep;
-	struct local_prov *entry;
+	int i, rc;
 	struct fi_cq_attr peer_attr = {0};
-	struct dlist_entry *prov_table =
-		&cq->lnx_domain->ld_fabric->local_prov_table;
+	struct lnx_core_domain *cd;
+	struct lnx_core_cq *core_cq;
+	struct fi_peer_cq_context cq_ctxt;
 
 	/* tell the core providers to import my CQ */
 	peer_attr.flags |= FI_PEER;
 
 	/* create all the core provider completion queues */
-	dlist_foreach_container(prov_table, struct local_prov,
-				entry, lpv_entry) {
-		dlist_foreach_container(&entry->lpv_prov_eps,
-					struct local_prov_ep, ep, entry) {
-			struct fid_cq *core_cq;
-			struct fi_peer_cq_context cq_ctxt;
+	for (i = 0; i < lnx_cq->lcq_lnx_domain->ld_num_doms; i++) {
+		cd = &lnx_cq->lcq_lnx_domain->ld_core_domains[i];
+		core_cq = &lnx_cq->lcq_core_cqs[i];
 
-			ep->lpe_cq.lpc_shared_cq = cq;
-			ep->lpe_cq.lpc_cq.owner_ops = &lnx_cq_write;
+		cq_ctxt.size = sizeof(cq_ctxt);
+		cq_ctxt.cq = lnx_cq->lcq_util_cq.peer_cq;
 
-			cq_ctxt.size = sizeof(cq_ctxt);
-			cq_ctxt.cq = &ep->lpe_cq.lpc_cq;
+		/* pass my CQ into the open and get back the core's cq */
+		rc = fi_cq_open(cd->cd_domain, &peer_attr, &core_cq->cc_cq, &cq_ctxt);
+		if (rc)
+			return rc;
 
-			/* pass my CQ into the open and get back the core's cq */
-			rc = fi_cq_open(ep->lpe_domain, &peer_attr, &core_cq, &cq_ctxt);
-			if (rc)
-				return rc;
-
-			/* before the fi_cq_open() returns the core provider should
-			 * have called fi_export_fid() and got a pointer to the peer
-			 * CQ which we have allocated for this core provider
-			 */
-
-			ep->lpe_cq.lpc_core_cq = core_cq;
-		}
+		core_cq->cc_domain = cd;
 	}
 
 	return 0;
@@ -205,27 +140,34 @@ int lnx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct lnx_domain *lnx_dom;
 	int rc;
 
+	lnx_dom = container_of(domain, struct lnx_domain,
+			       ld_domain.domain_fid);
+
 	lnx_cq = calloc(1, sizeof(*lnx_cq));
 	if (!lnx_cq)
 		return -FI_ENOMEM;
 
+	lnx_cq->lcq_core_cqs = calloc(sizeof(*lnx_cq->lcq_core_cqs),
+				  lnx_dom->ld_num_doms);
+	if (!lnx_cq->lcq_core_cqs) {
+		free(lnx_cq);
+		return -FI_ENOMEM;
+	}
+
 	/* this is going to be a standard CQ from the read side. From the
 	 * write side, it'll use the peer_cq callbacks to write 
 	 */
-	rc = ofi_cq_init(&lnx_prov, domain, attr, &lnx_cq->util_cq,
+	rc = ofi_cq_init(&lnx_prov, domain, attr, &lnx_cq->lcq_util_cq,
 			 &lnx_cq_progress, context);
 	if (rc)
 		goto free;
 
-	lnx_dom = container_of(domain, struct lnx_domain,
-			       ld_domain.domain_fid);
-
-	lnx_cq->lnx_domain = lnx_dom;
-	lnx_cq->util_cq.cq_fid.fid.ops = &lnx_cq_fi_ops;
-	(*cq_fid) = &lnx_cq->util_cq.cq_fid;
+	lnx_cq->lcq_lnx_domain = lnx_dom;
+	lnx_cq->lcq_util_cq.cq_fid.fid.ops = &lnx_cq_fi_ops;
+	(*cq_fid) = &lnx_cq->lcq_util_cq.cq_fid;
 
 	/* open core CQs and tell them to import my CQ */
-	rc = lnx_cq_open_core_prov(lnx_cq, attr);
+	rc = lnx_open_core_cqs(lnx_cq, attr);
 
 	return rc;
 
