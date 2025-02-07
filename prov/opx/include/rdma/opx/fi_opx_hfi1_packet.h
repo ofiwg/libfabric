@@ -1559,8 +1559,9 @@ struct fi_opx_hfi1_ue_packet {
 	uint64_t  tag;
 	opx_lid_t lid;
 	uint8_t	  rx;
+	uint8_t	  is_intranode;
 
-	uint8_t unused[3];
+	uint8_t unused[2];
 
 	/* == CACHE LINE 1, 2 == */
 	uint64_t		  unused_cacheline1;

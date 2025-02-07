@@ -711,19 +711,6 @@ bool opx_lid_is_intranode(opx_lid_t lid)
 	return (fi_opx_global.hfi_local_info.lid == lid) || (opx_local_lid_index(lid) != -1);
 }
 
-__OPX_FORCE_INLINE__
-bool opx_lrh_is_intranode(union opx_hfi1_packet_hdr *hdr, const enum opx_hfi1_type hfi1_type)
-{
-	opx_lid_t lid;
-
-	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		lid = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
-	} else {
-		lid = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
-	}
-	return opx_lid_is_intranode(lid);
-}
-
 struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t unique_job_key);
 
 int init_hfi1_rxe_state(struct fi_opx_hfi1_context *context, struct fi_opx_hfi1_rxe_state *rxe_state);

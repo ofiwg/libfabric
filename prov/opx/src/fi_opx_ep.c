@@ -2802,7 +2802,7 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 
 		struct fi_opx_hfi1_ue_packet *claimed_pkt = context->claim;
 
-		const unsigned is_intranode = opx_lrh_is_intranode(&(claimed_pkt->hdr), hfi1_type);
+		const unsigned is_intranode = claimed_pkt->is_intranode;
 
 		opx_ep_complete_receive_operation(
 			ep, &claimed_pkt->hdr, (union fi_opx_hfi1_packet_payload *) &claimed_pkt->payload,
@@ -2834,7 +2834,7 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 		const union fi_opx_addr src_addr = {.fi = context->src_addr};
 
 		while (uepkt != NULL) {
-			unsigned is_intranode = opx_lrh_is_intranode(&(uepkt->hdr), hfi1_type);
+			const unsigned is_intranode = uepkt->is_intranode;
 
 			if (fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->lid, uepkt->rx, FI_OPX_MATCH_IGNORE_ALL,
 							 FI_OPX_MATCH_TAG_ZERO, any_addr, src_addr, opx_ep,
@@ -2969,12 +2969,11 @@ void fi_opx_ep_rx_reliability_process_packet(struct fid_ep *ep, const union opx_
 }
 
 __OPX_FORCE_INLINE__
-struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_append_ue(struct fi_opx_ep_rx *const			   rx,
-						     struct fi_opx_hfi1_ue_packet_slist		  *ue,
-						     const union opx_hfi1_packet_hdr *const	   hdr,
-						     const union fi_opx_hfi1_packet_payload *const payload,
-						     const size_t payload_bytes, const uint32_t rank,
-						     const uint32_t rank_inst, const opx_lid_t slid)
+struct fi_opx_hfi1_ue_packet *
+fi_opx_ep_rx_append_ue(struct fi_opx_ep_rx *const rx, struct fi_opx_hfi1_ue_packet_slist *ue,
+		       const union opx_hfi1_packet_hdr *const	     hdr,
+		       const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
+		       const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst, const opx_lid_t slid)
 {
 	struct fi_opx_hfi1_ue_packet *uepkt = ofi_buf_alloc(rx->ue_packet_pool);
 
@@ -2988,11 +2987,17 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_append_ue(struct fi_opx_ep_rx *const	
 	uepkt->lid = slid;
 	uepkt->rx  = hdr->reliability.origin_rx;
 
+#ifdef OPX_DAOS
 	/* DAOS Persistent Address Support:
 	 * Support: save rank information associated with this inbound packet.
 	 * */
 	uepkt->daos_info.rank	   = rank;
 	uepkt->daos_info.rank_inst = rank_inst;
+#else
+	uepkt->daos_info.rank	   = 0xFFFFFFFF;
+	uepkt->daos_info.rank_inst = 0xFFFFFFFF;
+#endif
+	uepkt->is_intranode = is_intranode;
 
 	uepkt->next = NULL;
 	uepkt->prev = NULL;
@@ -3004,27 +3009,30 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_append_ue(struct fi_opx_ep_rx *const	
 
 void fi_opx_ep_rx_append_ue_msg(struct fi_opx_ep_rx *const rx, const union opx_hfi1_packet_hdr *const hdr,
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
-				const uint32_t rank, const uint32_t rank_inst, const bool daos_enabled,
-				struct fi_opx_debug_counters *debug_counters, const opx_lid_t slid)
+				const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst,
+				const bool daos_enabled, struct fi_opx_debug_counters *debug_counters,
+				const opx_lid_t slid)
 {
-	fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_MSG].ue, hdr, payload, payload_bytes, rank, rank_inst, slid);
+	fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_MSG].ue, hdr, payload, payload_bytes, is_intranode, rank,
+			       rank_inst, slid);
 	FI_OPX_DEBUG_COUNTERS_MAX_OF(debug_counters->match.default_max_length, rx->queue[FI_OPX_KIND_MSG].ue.length);
 }
 
 void fi_opx_ep_rx_append_ue_tag(struct fi_opx_ep_rx *const rx, const union opx_hfi1_packet_hdr *const hdr,
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
-				const uint32_t rank, const uint32_t rank_inst, const bool daos_enabled,
-				struct fi_opx_debug_counters *debug_counters, const opx_lid_t slid)
+				const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst,
+				const bool daos_enabled, struct fi_opx_debug_counters *debug_counters,
+				const opx_lid_t slid)
 {
 #ifndef FI_OPX_MATCH_HASH_DISABLE
 	if (!daos_enabled && (rx->match_ue_tag_hash->ue.head ||
 			      rx->queue[FI_OPX_KIND_TAG].ue.length >= FI_OPX_MATCH_DEFAULT_UE_LIST_MAX_LENGTH)) {
-		struct fi_opx_hfi1_ue_packet *uepkt =
-			fi_opx_ep_rx_append_ue(rx, &rx->match_ue_tag_hash->ue, hdr, payload, payload_bytes, 0, 0, slid);
+		struct fi_opx_hfi1_ue_packet *uepkt = fi_opx_ep_rx_append_ue(
+			rx, &rx->match_ue_tag_hash->ue, hdr, payload, payload_bytes, is_intranode, 0, 0, slid);
 		fi_opx_match_ue_hash_append(uepkt, rx->match_ue_tag_hash, debug_counters);
 	} else {
-		fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_TAG].ue, hdr, payload, payload_bytes, rank, rank_inst,
-				       slid);
+		fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_TAG].ue, hdr, payload, payload_bytes, is_intranode,
+				       rank, rank_inst, slid);
 	}
 #else
 	fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_TAG].ue, hdr, payload, payload_bytes, rank, rank_inst, slid);
@@ -3041,7 +3049,7 @@ void fi_opx_ep_rx_append_ue_egr(struct fi_opx_ep_rx *const rx, const union opx_h
 	 * MP Eager unexpected queue, because the mp_egr_id related data in
 	 * the packet is referenced instead.
 	 */
-	fi_opx_ep_rx_append_ue(rx, &rx->mp_egr_queue.ue, hdr, payload, payload_bytes, 0, 0, slid);
+	fi_opx_ep_rx_append_ue(rx, &rx->mp_egr_queue.ue, hdr, payload, payload_bytes, OPX_INTRANODE_FALSE, 0, 0, slid);
 }
 
 static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
