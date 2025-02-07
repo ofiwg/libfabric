@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2021 Intel Corporation. All rights reserved
+ * Copyright (c) Intel Corporation. All rights reserved
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,18 +30,10 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <sys/uio.h>
-
-#include "ofi_iov.h"
-#include "ofi_hmem.h"
-#include "ofi_mr.h"
-#include "ofi_mb.h"
-#include "smr_signal.h"
 #include "smr.h"
 #include "smr_dsa.h"
-#include "ofi_xpmem.h"
+#include "smr_signal.h"
+#include "ofi_mb.h"
 
 extern struct fi_ops_msg smr_msg_ops, smr_no_recv_msg_ops;
 extern struct fi_ops_tagged smr_tag_ops, smr_no_recv_tag_ops;

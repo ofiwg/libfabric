@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Intel Corporation. All rights reserved
+ * Copyright (c) Intel Corporation. All rights reserved
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,19 +30,13 @@
  * SOFTWARE.
  */
 
-#ifndef _DSA_SHM_H_
-#define _DSA_SHM_H_
+#ifndef _SMR_DSA_H_
+#define _SMR_DSA_H_
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#if HAVE_CONFIG_H
-#  include <config.h>
-#endif /* HAVE_CONFIG_H */
-
-#include <stddef.h>
-#include <stdint.h>
 #include "smr.h"
 
 /* SMR FUNCTIONS FOR DSA SUPPORT */
@@ -63,4 +57,4 @@ void smr_dsa_progress(struct smr_ep *ep);
 #ifdef __cplusplus
 }
 #endif
-#endif /* _DSA_SHM_H_ */
+#endif /* _SMR_DSA_H_ */
