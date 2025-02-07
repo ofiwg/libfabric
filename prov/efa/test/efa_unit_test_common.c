@@ -85,7 +85,9 @@ void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 {
 	int ret = 0;
 	struct fi_av_attr av_attr = {0};
-	struct fi_cq_attr cq_attr = {0};
+	struct fi_cq_attr cq_attr = {
+		.format = FI_CQ_FORMAT_DATA
+	};
 	struct fi_eq_attr eq_attr = {0};
 
 	ret = fi_getinfo(fi_version, NULL, NULL, 0ULL, hints, &resource->info);
