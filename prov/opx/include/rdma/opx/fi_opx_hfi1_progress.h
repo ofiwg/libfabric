@@ -330,7 +330,8 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "================ received a packet from the fabric\n");
 
 	if (!OPX_RHF_IS_USE_EGR_BUF(rhf, hfi1_type)) {
-		if (OFI_LIKELY(FI_OPX_HFI_BTH_OPCODE_WITHOUT_CQ(opcode) == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)) {
+		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA ||
+			       FI_OPX_HFI_BTH_OPCODE_WITHOUT_CQ(opcode) == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)) {
 			/* "header only" packet - no payload */
 			fi_opx_ep_rx_process_header(&opx_ep->ep_fid, hdr, NULL, 0, FI_TAGGED, opcode,
 						    OPX_INTRANODE_FALSE, lock_required, reliability, hfi1_type, slid);
