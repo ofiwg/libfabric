@@ -72,6 +72,8 @@ uint32_t efa_mock_ibv_read_qp_num_return_mock(struct ibv_cq_ex *current);
 
 uint32_t efa_mock_ibv_read_wc_flags_return_mock(struct ibv_cq_ex *current);
 
+uint32_t efa_mock_ibv_wc_read_imm_data_return_mock(struct ibv_cq_ex *current);
+
 bool efa_mock_efadv_wc_is_unsolicited(struct efadv_cq *efadv_cq);
 
 void efa_mock_ibv_wr_send_imm_save_wr(struct ibv_qp_ex *qp, __be32 imm_data);

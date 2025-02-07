@@ -188,6 +188,11 @@ uint32_t efa_mock_ibv_read_wc_flags_return_mock(struct ibv_cq_ex *current)
 	return mock();
 }
 
+uint32_t efa_mock_ibv_wc_read_imm_data_return_mock(struct ibv_cq_ex *current)
+{
+	return mock();
+}
+
 bool efa_mock_efadv_wc_is_unsolicited(struct efadv_cq *efadv_cq)
 {
 	return mock();
