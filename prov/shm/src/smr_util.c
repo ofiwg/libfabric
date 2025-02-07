@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,20 +30,8 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-
-#include <stdint.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <ofi_xpmem.h>
-
-#include "smr_util.h"
 #include "smr.h"
+#include <sys/stat.h>
 
 struct dlist_entry ep_name_list;
 DEFINE_LIST(ep_name_list);

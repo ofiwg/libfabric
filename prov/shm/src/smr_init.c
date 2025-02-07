@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2021 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,13 +30,10 @@
  * SOFTWARE.
  */
 
-#include <rdma/fi_errno.h>
-
-#include <ofi_prov.h>
 #include "smr.h"
-#include "smr_signal.h"
 #include "smr_dsa.h"
-#include <ofi_hmem.h>
+#include "ofi_prov.h"
+#include <sys/statvfs.h>
 
 struct sigaction *old_action = NULL;
 
