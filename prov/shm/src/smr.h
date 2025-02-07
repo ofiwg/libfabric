@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2021 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,47 +30,12 @@
  * SOFTWARE.
  */
 
-#if HAVE_CONFIG_H
-#  include <config.h>
-#endif /* HAVE_CONFIG_H */
-
-#include <sys/types.h>
-#include <sys/statvfs.h>
-#include <pthread.h>
-#include <stdint.h>
-#include <stddef.h>
-
-#include <rdma/fabric.h>
-#include <rdma/fi_atomic.h>
-#include <rdma/fi_cm.h>
-#include <rdma/fi_domain.h>
-#include <rdma/fi_endpoint.h>
-#include <rdma/fi_eq.h>
-#include <rdma/fi_errno.h>
-#include <rdma/fi_rma.h>
-#include <rdma/fi_tagged.h>
-#include <rdma/fi_trigger.h>
-#include <rdma/providers/fi_prov.h>
-#include <rdma/providers/fi_peer.h>
-
-#include <ofi.h>
-#include <ofi_enosys.h>
-#include <ofi_shm_p2p.h>
-#include <ofi_rbuf.h>
-#include <ofi_list.h>
-#include <ofi_signal.h>
-#include <ofi_epoll.h>
-#include <ofi_util.h>
-#include <ofi_atomic.h>
-#include <ofi_iov.h>
-#include <ofi_mr.h>
-#include <ofi_lock.h>
-#include <ofi_hmem.h>
-
-#include "smr_util.h"
-
 #ifndef _SMR_H_
 #define _SMR_H_
+
+#include "smr_util.h"
+#include "ofi_shm_p2p.h"
+#include "ofi_util.h"
 
 struct smr_env {
 	size_t sar_threshold;
