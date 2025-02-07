@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Intel Corporation. All rights reserved
+ * Copyright (c) Intel Corporation. All rights reserved
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,29 +30,16 @@
  * SOFTWARE.
  */
 
-#if HAVE_CONFIG_H
-#  include <config.h>
-#endif /* HAVE_CONFIG_H */
-
-#include "smr.h"
+#include "smr_dsa.h"
 
 #if SHM_HAVE_DSA
 
+#include <accel-config/libaccel_config.h>
 #include <dlfcn.h>
 #include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdatomic.h>
-#include <sys/un.h>
-#include <accel-config/libaccel_config.h>
+#include <immintrin.h> // _mm_pause
 #include <linux/idxd.h>
 #include <numa.h>
-#include <immintrin.h> // _mm_pause
-#include "smr_util.h"
-#include "smr_dsa.h"
 
 #define MAX_WQS_PER_EP 4
 #define GENCAP_CACHE_CTRL_MEM 0x4
