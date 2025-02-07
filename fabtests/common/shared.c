@@ -94,7 +94,7 @@ void *dev_host_buf = NULL, *dev_host_comp = NULL, *dev_host_res = NULL;
 
 char **tx_mr_bufs = NULL, **rx_mr_bufs = NULL;
 size_t buf_size, tx_buf_size, rx_buf_size;
-size_t tx_size, rx_size, tx_mr_size, rx_mr_size;
+size_t tx_size, rx_size, tx_mr_size, rx_mr_size, rx_msg_size;
 int rx_fd = -1, tx_fd = -1;
 char default_port[8] = "9228";
 static char default_oob_port[8] = "3000";
@@ -536,7 +536,7 @@ static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
 	return 0;
 }
 
-static void ft_set_tx_rx_sizes(size_t *set_tx, size_t *set_rx)
+static void ft_set_tx_rx_sizes(size_t *set_tx, size_t *set_rx, size_t *set_rx_msg_size)
 {
 	*set_tx = opts.options & FT_OPT_SIZE ?
 		  opts.transfer_size : test_size[TEST_CNT - 1].size;
@@ -544,6 +544,11 @@ static void ft_set_tx_rx_sizes(size_t *set_tx, size_t *set_rx)
 		*set_tx = fi->ep_attr->max_msg_size;
 	*set_rx = *set_tx + ft_rx_prefix_size();
 	*set_tx += ft_tx_prefix_size();
+	*set_rx_msg_size = *set_rx;
+	if (ep)
+		(void) fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MAX_MSG_SIZE,
+				 set_rx_msg_size,
+				 &(size_t) {sizeof *set_rx_msg_size});
 }
 
 void ft_free_host_bufs(void)
@@ -591,13 +596,13 @@ int ft_alloc_msgs(void)
 		return 0;
 
 	if (opts.options & FT_OPT_ALLOC_MULT_MR) {
-		ft_set_tx_rx_sizes(&tx_mr_size, &rx_mr_size);
+		ft_set_tx_rx_sizes(&tx_mr_size, &rx_mr_size, &rx_msg_size);
 		rx_size = FT_MAX_CTRL_MSG + ft_rx_prefix_size();
 		tx_size = FT_MAX_CTRL_MSG + ft_tx_prefix_size();
 		rx_buf_size = rx_size;
 		tx_buf_size = tx_size;
 	} else {
-		ft_set_tx_rx_sizes(&tx_size, &rx_size);
+		ft_set_tx_rx_sizes(&tx_size, &rx_size, &rx_msg_size);
 		tx_mr_size = 0;
 		rx_mr_size = 0;
 		rx_buf_size = MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
@@ -995,7 +1000,7 @@ int ft_accept_next_client() {
 
 	if (!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) && (fi->caps & (FI_MSG | FI_TAGGED))) {
 		/* Initial receive will get remote address for unconnected EPs */
-		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
+		ret = ft_post_rx(ep, MAX(rx_msg_size, FT_MAX_CTRL_MSG), &rx_ctx);
 		if (ret)
 			return ret;
 	}
@@ -1519,7 +1524,7 @@ int ft_enable_ep_recv(void)
 	if (!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) &&
 	    (fi->caps & (FI_MSG | FI_TAGGED))) {
 		/* Initial receive will get remote address for unconnected EPs */
-		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
+		ret = ft_post_rx(ep, MAX(rx_msg_size, FT_MAX_CTRL_MSG), &rx_ctx);
 		if (ret)
 			return ret;
 	}
@@ -1670,7 +1675,7 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		if (ret)
 			return ret;
 
-		ret = ft_post_rx(ep, rx_size, &rx_ctx);
+		ret = ft_post_rx(ep, rx_msg_size, &rx_ctx);
 		if (ret)
 			return ret;
 
@@ -1840,7 +1845,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 	if (ret)
 		return ret;
 
-	ret = ft_post_rx(ep, rx_size, &rx_ctx);
+	ret = ft_post_rx(ep, rx_msg_size, &rx_ctx);
 	if (ret)
 		return ret;
 
@@ -1949,7 +1954,7 @@ void ft_free_res(void)
 		if (ret)
 			FT_PRINTERR("ft_hmem_free", ret);
 		buf = rx_buf = tx_buf = NULL;
-		buf_size = rx_size = tx_size = tx_mr_size = rx_mr_size = 0;
+		buf_size = rx_size = tx_size = tx_mr_size = rx_mr_size = rx_msg_size = 0;
 	}
 	ft_free_host_bufs();
 
@@ -2601,7 +2606,7 @@ ssize_t ft_rx(struct fid_ep *ep, size_t size)
 	 * sizes. ft_sync() makes use of ft_rx() and gets called in tests just before
 	 * message size is updated. The recvs posted are always for the next incoming
 	 * message */
-	ret = ft_post_rx(ep, rx_size, &rx_ctx);
+	ret = ft_post_rx(ep, rx_msg_size, &rx_ctx);
 	return ret;
 }
 
@@ -3111,7 +3116,7 @@ int ft_sync_inband(bool repost_rx)
 	}
 
 	if (repost_rx) {
-		ret = ft_post_rx(ep, rx_size, &rx_ctx);
+		ret = ft_post_rx(ep, rx_msg_size, &rx_ctx);
 		if (ret)
 			return ret;
 	}
