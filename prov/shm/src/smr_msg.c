@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2021 Intel Corporation. All rights reserved
+ * Copyright (c) Intel Corporation. All rights reserved
  * (C) Copyright 2021 Amazon.com, Inc. or its affiliates.
  *
  * This software is available to you under a choice of one of two
@@ -31,11 +31,6 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <sys/uio.h>
-
-#include "ofi_iov.h"
 #include "smr.h"
 
 static ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,

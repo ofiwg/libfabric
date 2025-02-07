@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates.
- * Copyright (c) 2020-2021 Intel Corporation.
+ * Copyright (c) Intel Corporation.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -34,9 +34,9 @@
 
 #ifndef _SMR_SIGNAL_H_
 #define _SMR_SIGNAL_H_
-#include <signal.h>
-#include "smr_util.h"
+
 #include "smr.h"
+#include <signal.h>
 
 extern struct sigaction *old_action;
 

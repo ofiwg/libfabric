@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved
+ * Copyright (c) Intel Corporation. All rights reserved
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,11 +30,6 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <sys/uio.h>
-
-#include "ofi_iov.h"
 #include "smr.h"
 
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
