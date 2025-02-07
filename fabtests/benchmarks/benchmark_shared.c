@@ -227,7 +227,7 @@ int pingpong(void)
 				return ret;
 		} else {
 			/* Repost RX buffers to support inband sync. */
-			ret = ft_post_rx(ep, rx_size, &rx_ctx);
+			ret = ft_post_rx(ep, rx_msg_size, &rx_ctx);
 			if (ret)
 				return ret;
 
