@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2020 Intel Corporation. All rights reserved
+ * Copyright (c) Intel Corporation. All rights reserved
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,18 +30,10 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <sys/uio.h>
-
-#include "ofi_iov.h"
-#include "ofi_hmem.h"
-#include "ofi_atom.h"
-#include "ofi_mb.h"
-#include "ofi_mr.h"
-#include "ofi_shm_p2p.h"
 #include "smr.h"
 #include "smr_dsa.h"
+#include "ofi_atomic.h"
+#include "ofi_mb.h"
 
 static inline void
 smr_try_progress_to_sar(struct smr_ep *ep, struct smr_region *smr,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,25 +30,12 @@
  * SOFTWARE.
  */
 
-#ifndef _OFI_SHM_H_
-#define _OFI_SHM_H_
+#ifndef _SMR_UTIL_H_
+#define _SMR_UTIL_H_
 
-#include "config.h"
-
-#include <stdint.h>
-#include <stddef.h>
-#include <sys/un.h>
-
-#include <ofi_xpmem.h>
-#include <ofi_atom.h>
-#include <ofi_proto.h>
-#include <ofi_mem.h>
-#include <ofi_rbuf.h>
-#include <ofi_tree.h>
-#include <ofi_hmem.h>
-#include <ofi_atomic_queue.h>
-
-#include <rdma/providers/fi_prov.h>
+#include "ofi.h"
+#include "ofi_atomic_queue.h"
+#include "ofi_xpmem.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -364,4 +351,4 @@ void	smr_free(struct smr_region *smr);
 }
 #endif
 
-#endif /* _OFI_SHM_H_ */
+#endif /* _SMR_UTIL_H_ */
