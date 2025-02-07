@@ -623,13 +623,15 @@ void fi_opx_ep_rx_reliability_process_packet(struct fid_ep *ep, const union opx_
 
 void fi_opx_ep_rx_append_ue_msg(struct fi_opx_ep_rx *const rx, const union opx_hfi1_packet_hdr *const hdr,
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
-				const uint32_t rank, const uint32_t rank_inst, const bool daos_enabled,
-				struct fi_opx_debug_counters *debug_counters, const opx_lid_t slid);
+				const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst,
+				const bool daos_enabled, struct fi_opx_debug_counters *debug_counters,
+				const opx_lid_t slid);
 
 void fi_opx_ep_rx_append_ue_tag(struct fi_opx_ep_rx *const rx, const union opx_hfi1_packet_hdr *const hdr,
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
-				const uint32_t rank, const uint32_t rank_inst, const bool daos_enabled,
-				struct fi_opx_debug_counters *debug_counters, const opx_lid_t slid);
+				const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst,
+				const bool daos_enabled, struct fi_opx_debug_counters *debug_counters,
+				const opx_lid_t slid);
 
 void fi_opx_ep_rx_append_ue_egr(struct fi_opx_ep_rx *const rx, const union opx_hfi1_packet_hdr *const hdr,
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
@@ -698,6 +700,7 @@ static void fi_opx_dump_daos_av_addr_rank(struct fi_opx_ep *opx_ep, const union 
 }
 #endif
 
+#ifdef OPX_DAOS
 static struct fi_opx_daos_av_rank *fi_opx_get_daos_av_rank(struct fi_opx_ep *opx_ep, uint32_t rank, uint32_t rank_inst)
 {
 	struct fi_opx_daos_av_rank_key key;
@@ -755,6 +758,8 @@ static struct fi_opx_daos_av_rank *fi_opx_get_daos_av_rank(struct fi_opx_ep *opx
 	return av_rank;
 }
 
+#endif
+
 __OPX_FORCE_INLINE__
 uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const uint8_t origin_rx,
 				      const uint64_t ignore, const uint64_t target_tag_and_not_ignore,
@@ -763,10 +768,14 @@ uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag, const opx_lid_t
 				      const unsigned is_intranode)
 {
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore;
+
 	return (origin_tag_and_not_ignore == target_tag_and_not_ignore) &&
-	       ((any_addr) || ((origin_lid == src_addr.lid) && (origin_rx == src_addr.hfi1_subctxt_rx)) ||
-		(opx_ep->daos_info.hfi_rank_enabled && is_intranode &&
-		 fi_opx_get_daos_av_rank(opx_ep, rank, rank_inst)));
+	       ((any_addr) || ((origin_lid == src_addr.lid) && (origin_rx == src_addr.hfi1_subctxt_rx))
+#ifdef OPX_DAOS
+		||
+		(opx_ep->daos_info.hfi_rank_enabled && is_intranode && fi_opx_get_daos_av_rank(opx_ep, rank, rank_inst))
+#endif
+	       );
 }
 
 __OPX_FORCE_INLINE__
@@ -786,10 +795,10 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_find_matching_packet(struct fi_opx_ep *o
 	const uint64_t		target_tag_and_not_ignore = context->tag & ~ignore;
 	const uint64_t		any_addr		  = (context->src_addr == FI_ADDR_UNSPEC);
 
-	while (uepkt && !fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->lid, uepkt->rx, ignore,
-						      target_tag_and_not_ignore, any_addr, src_addr, opx_ep,
-						      uepkt->daos_info.rank, uepkt->daos_info.rank_inst,
-						      opx_lrh_is_intranode(&(uepkt->hdr), hfi1_type))) {
+	while (uepkt &&
+	       !fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->lid, uepkt->rx, ignore, target_tag_and_not_ignore,
+					     any_addr, src_addr, opx_ep, uepkt->daos_info.rank,
+					     uepkt->daos_info.rank_inst, uepkt->is_intranode)) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_misses);
 		uepkt = uepkt->next;
 	}
@@ -811,12 +820,14 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 	const uint64_t		target_tag_and_not_ignore = target_tag & ~ignore;
 	const uint64_t		origin_tag_and_not_ignore = origin_tag & ~ignore;
 
-	const uint64_t answer =
-		((origin_tag_and_not_ignore == target_tag_and_not_ignore) &&
-		 ((context->src_addr == FI_ADDR_UNSPEC) ||
-		  ((slid == src_addr.lid) && (hdr->reliability.origin_rx == src_addr.hfi1_subctxt_rx)) ||
-		  (opx_ep->daos_info.hfi_rank_enabled && is_intranode &&
-		   fi_opx_get_daos_av_rank(opx_ep, rank, rank_inst))));
+	const uint64_t answer = ((origin_tag_and_not_ignore == target_tag_and_not_ignore) &&
+				 ((context->src_addr == FI_ADDR_UNSPEC) ||
+				  ((slid == src_addr.lid) && (hdr->reliability.origin_rx == src_addr.hfi1_subctxt_rx))
+#ifdef OPX_DAOS
+				  || (opx_ep->daos_info.hfi_rank_enabled && is_intranode &&
+				      fi_opx_get_daos_av_rank(opx_ep, rank, rank_inst))
+#endif
+					  ));
 
 #ifdef IS_MATCH_DEBUG
 	fprintf(stderr,
@@ -2550,12 +2561,14 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep, const union o
 			     "did not find a match .. add this packet to the unexpected queue\n");
 
 		if (OFI_LIKELY(FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode))) {
-			fi_opx_ep_rx_append_ue_tag(opx_ep->rx, hdr, payload, payload_bytes, opx_ep->daos_info.rank,
-						   opx_ep->daos_info.rank_inst, opx_ep->daos_info.hfi_rank_enabled,
+			fi_opx_ep_rx_append_ue_tag(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
+						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
+						   opx_ep->daos_info.hfi_rank_enabled,
 						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
 		} else {
-			fi_opx_ep_rx_append_ue_msg(opx_ep->rx, hdr, payload, payload_bytes, opx_ep->daos_info.rank,
-						   opx_ep->daos_info.rank_inst, opx_ep->daos_info.hfi_rank_enabled,
+			fi_opx_ep_rx_append_ue_msg(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
+						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
+						   opx_ep->daos_info.hfi_rank_enabled,
 						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
 		}
 
@@ -2704,12 +2717,14 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 			     "did not find a match .. add this packet to the unexpected queue\n");
 
 		if (OFI_LIKELY(kind == FI_OPX_KIND_TAG)) {
-			fi_opx_ep_rx_append_ue_tag(opx_ep->rx, hdr, payload, payload_bytes, opx_ep->daos_info.rank,
-						   opx_ep->daos_info.rank_inst, opx_ep->daos_info.hfi_rank_enabled,
+			fi_opx_ep_rx_append_ue_tag(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
+						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
+						   opx_ep->daos_info.hfi_rank_enabled,
 						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
 		} else {
-			fi_opx_ep_rx_append_ue_msg(opx_ep->rx, hdr, payload, payload_bytes, opx_ep->daos_info.rank,
-						   opx_ep->daos_info.rank_inst, opx_ep->daos_info.hfi_rank_enabled,
+			fi_opx_ep_rx_append_ue_msg(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
+						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
+						   opx_ep->daos_info.hfi_rank_enabled,
 						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
 		}
 
@@ -3046,7 +3061,7 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep *opx_ep, const u
 		uint8_t is_mp_eager = (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(uepkt->hdr.bth.opcode) ==
 				       FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST);
 
-		const unsigned is_intranode = opx_lrh_is_intranode(&(uepkt->hdr), hfi1_type);
+		const unsigned is_intranode = uepkt->is_intranode;
 		if (is_mp_eager) {
 			opx_ep_complete_receive_operation(ep, &uepkt->hdr, &uepkt->payload, uepkt->hdr.match.ofi_tag,
 							  context, uepkt->hdr.bth.opcode, OPX_MULTI_RECV_FALSE,
