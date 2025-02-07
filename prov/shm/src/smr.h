@@ -183,33 +183,6 @@ static inline void *smr_get_ptr(void *base, uint64_t offset)
 	return (char *) base + (uintptr_t) offset;
 }
 
-struct smr_sock_name {
-	char name[SMR_SOCK_NAME_MAX];
-	struct dlist_entry entry;
-};
-
-enum smr_cmap_state {
-	SMR_CMAP_INIT = 0,
-	SMR_CMAP_SUCCESS,
-	SMR_CMAP_FAILED,
-};
-
-struct smr_cmap_entry {
-	enum smr_cmap_state	state;
-	int			*device_fds;
-};
-
-struct smr_sock_info {
-	char			name[SMR_SOCK_NAME_MAX];
-	int			listen_sock;
-	ofi_epoll_t		epollfd;
-	struct fd_signal	signal;
-	pthread_t		listener_thread;
-	int			*my_fds;
-	int			nfds;
-	struct smr_cmap_entry	peers[SMR_MAX_PEERS];
-};
-
 struct smr_unexp_buf {
 	struct slist_entry entry;
 	char buf[SMR_SAR_SIZE];
@@ -235,7 +208,6 @@ struct smr_ep {
 
 	int			ep_idx;
 	enum ofi_shm_p2p_type	p2p_type;
-	struct smr_sock_info	*sock_info;
 	void			*dsa_context;
 	void 			(*smr_progress_ipc_list)(struct smr_ep *ep);
 };
