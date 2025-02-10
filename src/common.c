@@ -1421,6 +1421,9 @@ int ofi_bsock_async_done(const struct fi_provider *prov,
 	msg.msg_controllen = sizeof(ctrl);
 	ret = recvmsg(bsock->sock, &msg, MSG_ERRQUEUE);
 	if (ret < 0) {
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(errno))
+			return 0;
+
 		FI_WARN(prov, FI_LOG_EP_DATA,
 			"Error reading MSG_ERRQUEUE (%s)\n", strerror(errno));
 		return -errno;
