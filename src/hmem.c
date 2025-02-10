@@ -419,9 +419,9 @@ static ssize_t ofi_dev_reg_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint
 	return done;
 }
 
-static ssize_t ofi_copy_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
-		size_t iov_count, size_t offset, void *buf,
-		size_t size, int dir)
+ssize_t ofi_copy_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
+			size_t iov_count, size_t offset, void *buf,
+			size_t size, int dir)
 {
 	uint64_t done = 0, len;
 	uint64_t hmem_iface, hmem_device, hmem_flags;
