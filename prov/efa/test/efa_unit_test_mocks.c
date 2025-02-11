@@ -202,6 +202,11 @@ int efa_mock_efa_rdm_pke_read_return_mock(struct efa_rdm_ope *ope)
 	return mock();
 }
 
+ssize_t efa_mock_efa_rdm_pke_proc_matched_rtm_no_op(struct efa_rdm_pke *pkt_entry)
+{
+	return FI_SUCCESS;
+}
+
 bool efa_mock_efa_device_support_unsolicited_write_recv()
 {
 	return mock();
@@ -220,6 +225,7 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 #endif
 	.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
 	.efa_rdm_pke_read = __real_efa_rdm_pke_read,
+	.efa_rdm_pke_proc_matched_rtm = __real_efa_rdm_pke_proc_matched_rtm,
 	.efa_device_support_unsolicited_write_recv = __real_efa_device_support_unsolicited_write_recv,
 	.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,
 #if HAVE_EFADV_QUERY_MR
@@ -334,6 +340,11 @@ ssize_t __wrap_ofi_copy_from_hmem_iov(void *dest, size_t size,
 int __wrap_efa_rdm_pke_read(struct efa_rdm_ope *ope)
 {
 	return g_efa_unit_test_mocks.efa_rdm_pke_read(ope);
+}
+
+int __wrap_efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
+{
+	return g_efa_unit_test_mocks.efa_rdm_pke_proc_matched_rtm(pkt_entry);
 }
 
 bool __wrap_efa_device_support_unsolicited_write_recv(void)
