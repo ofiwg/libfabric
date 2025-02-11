@@ -394,46 +394,44 @@ void efa_prov_info_set_hmem_flags(struct fi_info *prov_info, enum fi_ep_type ep_
 	int i;
 	enum fi_hmem_iface iface;
 	struct efa_hmem_info *hmem_info;
-	bool enable_hmem = false;
 
 	if (ep_type != FI_EP_RDM)
 		return;
 
-	/* EFA direct only supports HMEM when p2p support is available */
-	if ((ofi_hmem_is_initialized(FI_HMEM_CUDA) ||
-	     ofi_hmem_is_initialized(FI_HMEM_NEURON) ||
-	     ofi_hmem_is_initialized(FI_HMEM_SYNAPSEAI))) {
+	/* Check if FI_HMEM_P2P_DISABLED is set */
+	if (ofi_hmem_p2p_disabled()) {
+		EFA_WARN(FI_LOG_CORE,
+			"FI_HMEM capability requires peer to peer "
+			"support, which is disabled because "
+			"FI_HMEM_P2P_DISABLED was set to 1/on/true.\n");
+		return;
+	}
 
-		/* Check if FI_HMEM_P2P_DISABLED is set */
-		if (ofi_hmem_p2p_disabled()) {
-			EFA_WARN(FI_LOG_CORE,
-				"FI_HMEM capability requires peer to peer "
-				"support, which is disabled because "
-				"FI_HMEM_P2P_DISABLED was set to 1/on/true.\n");
+	/* Check if HMEM libraries are available at runtime */
+	if (!ofi_hmem_is_initialized(FI_HMEM_CUDA) &&
+	    !ofi_hmem_is_initialized(FI_HMEM_NEURON) &&
+	    !ofi_hmem_is_initialized(FI_HMEM_SYNAPSEAI)) {
 			return;
-		}
-
-		EFA_HMEM_IFACE_FOREACH(i) {
-			iface = efa_hmem_ifaces[i];
-			hmem_info = &g_efa_hmem_info[iface];
-			if (hmem_info->initialized && !hmem_info->p2p_supported_by_device) {
-				EFA_INFO(FI_LOG_CORE,
-					"EFA direct provider was compiled with support for %s HMEM interface "
-					"but the interface does not support p2p transfers. "
-					"EFA direct provider does not support HMEM transfers without p2p support. "
-					"HMEM support will be disabled.\n", fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
-					return;
-			}
-		}
-		enable_hmem = true;
 	}
 
-	if (enable_hmem) {
-		prov_info->caps			|= FI_HMEM;
-		prov_info->tx_attr->caps		|= FI_HMEM;
-		prov_info->rx_attr->caps		|= FI_HMEM;
-		prov_info->domain_attr->mr_mode	|= FI_MR_HMEM;
+	/* EFA direct only supports HMEM when p2p support is available */
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
+		iface = efa_hmem_ifaces[i];
+		hmem_info = &g_efa_hmem_info[iface];
+		if (hmem_info->initialized && !hmem_info->p2p_supported_by_device) {
+			EFA_INFO(FI_LOG_CORE,
+				"EFA direct provider was compiled with support for %s HMEM interface "
+				"but the interface does not support p2p transfers. "
+				"EFA direct provider does not support HMEM transfers without p2p support. "
+				"HMEM support will be disabled.\n", fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+				return;
+		}
 	}
+
+	prov_info->caps			|= FI_HMEM;
+	prov_info->tx_attr->caps	|= FI_HMEM;
+	prov_info->rx_attr->caps	|= FI_HMEM;
+	prov_info->domain_attr->mr_mode	|= FI_MR_HMEM;
 }
 #else
 void efa_prov_info_set_hmem_flags(struct fi_info *prov_info, enum fi_ep_type ep_type)
