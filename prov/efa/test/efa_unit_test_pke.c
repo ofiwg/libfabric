@@ -68,3 +68,43 @@ void test_efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_resource **s
 
     efa_rdm_pke_release_tx(pkt_entry);
 }
+
+/**
+ * @brief Test the efa_rdm_pke_release_rx_list function
+ *
+ * @param state
+ */
+void test_efa_rdm_pke_release_rx_list(struct efa_resource **state)
+{
+    struct efa_resource *resource = *state;
+    struct efa_rdm_ep *efa_rdm_ep;
+    struct efa_rdm_pke *pke, *curr;
+    int i;
+
+    efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+    efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+    /* Fake a rx pkt entry */
+    pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+    assert_non_null(pke);
+    efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+
+    /* link multiple pkes to this pke */
+    for (i = 1; i < 10; i++) {
+        curr = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+        assert_non_null(curr);
+        efa_rdm_pke_append(pke, curr);
+    }
+
+    /* Release all entries in the linked list */
+    efa_rdm_pke_release_rx_list(pke);
+
+    /**
+     * Now the rx pkt buffer pool should be empty so we can destroy it
+     * Otherwise there will be an assertion error on the use cnt is
+     * is non-zero
+     */
+    ofi_bufpool_destroy(efa_rdm_ep->efa_rx_pkt_pool);
+    efa_rdm_ep->efa_rx_pkt_pool = NULL;
+}
