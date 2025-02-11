@@ -130,7 +130,7 @@ void xnet_report_success(struct xnet_xfer_entry *xfer_entry)
 	uint64_t flags, data, tag;
 	size_t len;
 
-	if (xfer_entry->ctrl_flags & (XNET_INTERNAL_XFER | XNET_SAVED_XFER))
+	if (xfer_entry->ctrl_flags & (XNET_INTERNAL_XFER | XNET_SAVED_XFER | XNET_UNEXP_XFER))
 		return;
 
 	if (xfer_entry->cntr)

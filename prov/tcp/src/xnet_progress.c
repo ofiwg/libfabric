@@ -104,6 +104,44 @@ static bool xnet_save_and_cont(struct xnet_ep *ep)
 }
 
 static struct xnet_xfer_entry *
+xnet_get_unexp_rx(struct xnet_ep *ep, uint64_t tag)
+{
+	struct xnet_progress *progress;
+	struct xnet_xfer_entry *rx_entry;
+
+	progress = xnet_ep2_progress(ep);
+	assert(xnet_progress_locked(progress));
+	assert(ep->cur_rx.hdr_done == ep->cur_rx.hdr_len &&
+	       !ep->cur_rx.claim_ctx);
+
+	FI_DBG(&xnet_prov, FI_LOG_EP_DATA, "Unexp msg tag 0x%zx src %zu\n",
+	       tag, ep->peer->fi_addr);
+	rx_entry = xnet_alloc_xfer(xnet_srx2_progress(ep->srx));
+	if (!rx_entry)
+		return NULL;
+
+	rx_entry->saving_ep = NULL;
+	rx_entry->tag = tag;
+	rx_entry->ignore = 0;
+	rx_entry->ctrl_flags = XNET_UNEXP_XFER;
+
+	if (ep->cur_rx.data_left <= xnet_buf_size) {
+		rx_entry->user_buf = NULL;
+		rx_entry->iov[0].iov_base = &rx_entry->msg_data;
+		rx_entry->iov[0].iov_len = xnet_buf_size;
+		rx_entry->iov_cnt = 1;
+	} else if (xnet_alloc_xfer_buf(rx_entry, ep->cur_rx.data_left)) {
+		goto free_xfer;
+	}
+
+	return rx_entry;
+
+free_xfer:
+	xnet_free_xfer(progress, rx_entry);
+	return NULL;
+}
+
+static struct xnet_xfer_entry *
 xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 {
 	struct xnet_progress *progress;
@@ -828,6 +866,10 @@ static int xnet_handle_tag(struct xnet_ep *ep)
 		ret = xnet_update_pollflag(ep, POLLIN, false);
 		if (ret)
 			return ret;
+
+		rx_entry = xnet_get_unexp_rx(ep, tag);
+		if (rx_entry)
+		  return xnet_start_recv(ep, rx_entry);
 	}
 	return -FI_EAGAIN;
 }
@@ -1102,7 +1144,7 @@ static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
 			goto cq_error;
 	}
 
-	if (!(rx_entry->ctrl_flags & XNET_SAVED_XFER)) {
+	if (!(rx_entry->ctrl_flags & XNET_SAVED_XFER) || (rx_entry->ctrl_flags & XNET_UNEXP_XFER)) {
 		xnet_report_success(rx_entry);
 		xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	} else {
