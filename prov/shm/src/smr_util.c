@@ -291,7 +291,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 		smr_peer_data(*smr)[i].addr.id = -1;
 		smr_peer_data(*smr)[i].sar_status = 0;
 		smr_peer_data(*smr)[i].name_sent = 0;
-		smr_peer_data(*smr)[i].xpmem.cap = SMR_VMA_CAP_OFF;
+		smr_peer_data(*smr)[i].xpmem.avail = false;
 	}
 
 	strncpy((char *) smr_name(*smr), attr->name, total_size - name_offset);
@@ -444,14 +444,14 @@ void smr_map_to_endpoint(struct smr_region *region, int64_t id)
 		ret = ofi_xpmem_enable(&peer_smr->xpmem_self,
 				       &local_peers[id].xpmem);
 		if (ret) {
-			local_peers[id].xpmem.cap = SMR_VMA_CAP_OFF;
+			local_peers[id].xpmem.avail = false;
 			region->xpmem_cap_self = SMR_VMA_CAP_OFF;
 			return;
 		}
-		local_peers[id].xpmem.cap = SMR_VMA_CAP_ON;
+		local_peers[id].xpmem.avail = true;
 		local_peers[id].xpmem.addr_max = peer_smr->xpmem_self.address_max;
 	} else {
-		local_peers[id].xpmem.cap = SMR_VMA_CAP_OFF;
+		local_peers[id].xpmem.avail = false;
 	}
 
 	smr_set_ipc_valid(region, id);
