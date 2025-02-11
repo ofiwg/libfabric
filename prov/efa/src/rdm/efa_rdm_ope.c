@@ -586,7 +586,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		dlist_remove(&rxe->queued_entry);
 
 	if (rxe->unexp_pkt) {
-		efa_rdm_pke_release_rx(rxe->unexp_pkt);
+		efa_rdm_pke_release_rx_list(rxe->unexp_pkt);
 		rxe->unexp_pkt = NULL;
 	}
 

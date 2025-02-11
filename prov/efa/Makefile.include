@@ -161,6 +161,7 @@ prov_efa_test_efa_unit_test_LDFLAGS = $(cmocka_rpath) $(efa_LDFLAGS) $(cmocka_LD
 					-Wl,--wrap=efadv_query_device \
 					-Wl,--wrap=ofi_copy_from_hmem_iov \
 					-Wl,--wrap=efa_rdm_pke_read \
+					-Wl,--wrap=efa_rdm_pke_proc_matched_rtm \
 					-Wl,--wrap=efa_device_support_unsolicited_write_recv
 
 if HAVE_EFADV_CQ_EX
