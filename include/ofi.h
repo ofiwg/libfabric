@@ -361,6 +361,11 @@ struct ipc_info {
 
 static inline uint64_t roundup_power_of_two(uint64_t n)
 {
+#if defined(__GNUC__)
+	if (n < 2)
+		return n;
+	return 2ULL << (63 - __builtin_clzll(n - 1));
+#else
 	if (!n || !(n & (n - 1)))
 		return n;
 	n--;
@@ -372,6 +377,7 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 	n |= n >> 32;
 	n++;
 	return n;
+#endif
 }
 
 static inline uint64_t rounddown_power_of_two(uint64_t n)
