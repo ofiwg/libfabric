@@ -96,7 +96,11 @@ static int efa_util_prov_initialize()
 			continue;
 		}
 
-		efa_prov_info_set_fabric_name(prov_info_direct, EFA_DIRECT_FABRIC_NAME);
+		err = efa_prov_info_set_fabric_name(prov_info_direct, EFA_DIRECT_FABRIC_NAME);
+		if (err) {
+			EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate fabric name. error: %d\n", err);
+			continue;
+		}
 
 		if (!head) {
 			head = prov_info_direct;
@@ -116,7 +120,11 @@ static int efa_util_prov_initialize()
 			continue;
 		}
 
-		efa_prov_info_set_fabric_name(prov_info_rdm, EFA_FABRIC_NAME);
+		err = efa_prov_info_set_fabric_name(prov_info_rdm, EFA_FABRIC_NAME);
+		if (err) {
+			EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate fabric name. error: %d\n", err);
+			continue;
+		}
 
 		if (!head) {
 			head = prov_info_rdm;
@@ -135,7 +143,11 @@ static int efa_util_prov_initialize()
 			continue;
 		}
 
-		efa_prov_info_set_fabric_name(prov_info_dgram, EFA_FABRIC_NAME);
+		err = efa_prov_info_set_fabric_name(prov_info_dgram, EFA_FABRIC_NAME);
+		if (err) {
+			EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate fabric name. error: %d\n", err);
+			continue;
+		}
 
 		if (!head) {
 			head = prov_info_dgram;
