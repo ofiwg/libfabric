@@ -201,6 +201,23 @@ EFA_INI
 	 */
 	efa_env_initialize();
 
+	/*
+	 * efa_fork_support_enable_if_requested must be called before
+	 * efa_hmem_info_initialize.
+	 *
+	 * efa_hmem_info_initialize calls ibv_reg_mr to test for p2p support.
+	 *
+	 * On older kernels (without support for IBV_FORK_UNNEEDED),
+	 * efa_fork_support_enable_if_requested calls ibv_fork_init,
+	 * when fork support is requested.
+	 *
+	 * If ibv_fork_init is called, it must be called before any
+	 * ibv_reg_mr calls. Otherwise, ibv_fork_init will return EINVAL.
+	 */
+	err = efa_fork_support_enable_if_requested();
+	if (err)
+		goto err_free;
+
 	err = efa_hmem_info_initialize();
 	if (err)
 		goto err_free;
@@ -212,11 +229,6 @@ EFA_INI
 	err = efa_util_prov_initialize();
 	if (err)
 		goto err_free;
-
-	err = efa_fork_support_enable_if_requested();
-	if (err) {
-		goto err_free;
-	}
 
 	dlist_init(&g_efa_domain_list);
 
