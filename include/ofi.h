@@ -368,7 +368,6 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 #else
 	if (!n || !(n & (n - 1)))
 		return n;
-	n--;
 	n |= n >> 1;
 	n |= n >> 2;
 	n |= n >> 4;
