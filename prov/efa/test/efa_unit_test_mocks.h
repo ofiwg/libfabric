@@ -95,6 +95,10 @@ bool __real_efa_device_support_unsolicited_write_recv();
 
 int efa_mock_efa_rdm_pke_read_return_mock(struct efa_rdm_ope *ope);
 
+ssize_t __real_efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry);
+
+ssize_t efa_mock_efa_rdm_pke_proc_matched_rtm_no_op(struct efa_rdm_pke *pkt_entry);
+
 bool efa_mock_efa_device_support_unsolicited_write_recv(void);
 
 int efa_mock_ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
@@ -137,6 +141,8 @@ struct efa_unit_test_mocks
 					  size_t hmem_iov_count, uint64_t hmem_iov_offset);
 
 	int (*efa_rdm_pke_read)(struct efa_rdm_ope *ope);
+
+	ssize_t (*efa_rdm_pke_proc_matched_rtm)(struct efa_rdm_pke *pkt_entry);
 
 	bool (*efa_device_support_unsolicited_write_recv)(void);
 
