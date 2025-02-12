@@ -128,16 +128,19 @@ static inline void name ## _init(struct name *aq, size_t size)	\
 	aq->size_mask = aq->size - 1;				\
 	ofi_atomic_initialize64(&aq->write_pos, 0);		\
 	ofi_atomic_initialize64(&aq->read_pos, 0);		\
-	for (i = 0; i < size; i++)				\
+	for (i = 0; i < size; i++) {				\
 		ofi_atomic_initialize64(&aq->entry[i].seq, i);	\
+		aq->entry[i].noop = false;			\
+	}							\
 }								\
 								\
 static inline struct name * name ## _create(size_t size)	\
 {								\
 	struct name *aq;					\
-	aq = (struct name*) calloc(1, sizeof(*aq) +		\
-		sizeof(struct name ## _entry) *			\
-		(roundup_power_of_two(size)));			\
+	aq = (struct name *) aligned_alloc(			\
+			OFI_CACHE_LINE_SIZE, sizeof(*aq) +	\
+			sizeof(struct name ## _entry) *		\
+			(roundup_power_of_two(size)));		\
 	if (aq)							\
 		name ##_init(aq, roundup_power_of_two(size));	\
 	return aq;						\
