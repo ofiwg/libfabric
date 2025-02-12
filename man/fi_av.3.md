@@ -436,6 +436,16 @@ fi_av_set_user_id.
 
   See the user ID section below.
 
+- *FI_FIREWALL_ADDR*
+: This flag indicates that the address is behind a firewall and outgoing
+  connections are not allowed. If there is not an existing connection and the
+  provider is unable to circumvent the firewall, an FI_EHOSTUNREACH error
+  should be expected. If multiple addresses are being inserted simultaneously,
+  the flag applies to all of them. Additionally, it is possible that a
+  connection is available at insertion time, but is later torn down. Future
+  reconnects triggered by operations on the ep (fi_send, for example) may also
+  fail with the same error.
+
 ## fi_av_insertsvc
 
 The fi_av_insertsvc call behaves similar to fi_av_insert, but allows the
