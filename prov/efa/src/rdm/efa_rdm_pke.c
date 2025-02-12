@@ -165,6 +165,27 @@ void efa_rdm_pke_release_rx(struct efa_rdm_pke *pkt_entry)
 	efa_rdm_pke_release(pkt_entry);
 }
 
+/**
+ * @brief Release all rx packet entries that are linked
+ * This can happen when medium / runting protocol is used.
+ * This function will unlink the pkt entries in the list before
+ * releasing each pkt entry as it is required by efa_rdm_pke_release_rx
+ * (see above).
+ * @param pkt_entry the head of the pkt entry linked list
+ */
+void efa_rdm_pke_release_rx_list(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_pke *curr, *next;
+
+	curr = pkt_entry;
+	while (curr) {
+		next = curr->next;
+		curr->next = NULL;
+		efa_rdm_pke_release_rx(curr);
+		curr = next;
+	}
+}
+
 void efa_rdm_pke_copy(struct efa_rdm_pke *dest,
 		      struct efa_rdm_pke *src)
 {

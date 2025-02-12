@@ -215,6 +215,8 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_release_rx(struct efa_rdm_pke *pkt_entry);
 
+void efa_rdm_pke_release_rx_list(struct efa_rdm_pke *pkt_entry);
+
 void efa_rdm_pke_release(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_append(struct efa_rdm_pke *dst,
