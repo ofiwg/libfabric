@@ -221,7 +221,8 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		efa_mr->needs_sync = true;
 		efa_mr->peer.device.cuda = attr->device.cuda;
 
-		if (!(flags & FI_MR_DMABUF) && cuda_is_gdrcopy_enabled()) {
+		/* Only attempt GDRCopy registrations for efa rdm path */
+		if (efa_mr->domain->rdm_ep && !(flags & FI_MR_DMABUF) && cuda_is_gdrcopy_enabled()) {
 			mr_iov = *attr->mr_iov;
 			err = ofi_hmem_dev_register(FI_HMEM_CUDA, mr_iov.iov_base, mr_iov.iov_len,
 						    (uint64_t *)&efa_mr->peer.hmem_data);

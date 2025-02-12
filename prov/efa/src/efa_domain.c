@@ -114,6 +114,9 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	int err;
 	bool enable_shm = efa_env.enable_shm_transfer;
 
+	assert(EFA_INFO_TYPE_IS_RDM(info));
+	efa_domain->rdm_ep = true;
+
 	/* App provided hints supercede environmental variables.
 	 *
 	 * Using the shm provider comes with some overheads, so avoid
