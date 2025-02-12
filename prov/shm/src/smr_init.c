@@ -104,8 +104,8 @@ static int smr_shm_space_check(size_t tx_count, size_t rx_count)
 	}
 	shm_size_needed = num_of_core *
 			  smr_calculate_size_offsets(tx_count, rx_count,
-						     NULL, NULL, NULL,
-						     NULL, NULL, NULL);
+						     NULL, NULL, NULL, NULL,
+						     NULL, NULL);
 	err = statvfs(shm_fs, &stat);
 	if (err) {
 		FI_WARN(&smr_prov, FI_LOG_CORE,
@@ -128,8 +128,7 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 {
 	struct fi_info *cur;
 	uint64_t mr_mode, msg_order;
-	int fast_rma;
-	int ret;
+	int fast_rma, ret;
 
 	mr_mode = hints && hints->domain_attr ? hints->domain_attr->mr_mode :
 						FI_MR_VIRT_ADDR;
@@ -141,7 +140,8 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
-	ret = smr_shm_space_check((*info)->tx_attr->size, (*info)->rx_attr->size);
+	ret = smr_shm_space_check((*info)->tx_attr->size,
+				  (*info)->rx_attr->size);
 	if (ret) {
 		fi_freeinfo(*info);
 		return ret;
@@ -149,15 +149,18 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 
 	for (cur = *info; cur; cur = cur->next) {
 		if (!(flags & FI_SOURCE) && !cur->dest_addr)
-			smr_resolve_addr(node, service, (char **) &cur->dest_addr,
+			smr_resolve_addr(node, service,
+					 (char **) &cur->dest_addr,
 					 &cur->dest_addrlen);
 
 		if (!cur->src_addr) {
 			if (flags & FI_SOURCE)
-				smr_resolve_addr(node, service, (char **) &cur->src_addr,
+				smr_resolve_addr(node, service,
+						 (char **) &cur->src_addr,
 						 &cur->src_addrlen);
 			else
-				smr_resolve_addr(NULL, NULL, (char **) &cur->src_addr,
+				smr_resolve_addr(NULL, NULL,
+						 (char **) &cur->src_addr,
 						 &cur->src_addrlen);
 		}
 		if (fast_rma) {
