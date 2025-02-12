@@ -78,6 +78,18 @@ struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type, char *fabric_
 	return hints;
 }
 
+struct fi_info *efa_unit_test_alloc_hints_hmem(enum fi_ep_type ep_type, char *fabric_name)
+{
+	struct fi_info *hints;
+
+	hints = efa_unit_test_alloc_hints(ep_type, fabric_name);
+
+	hints->caps |= FI_HMEM;
+	hints->domain_attr->mr_mode |= FI_MR_HMEM;
+
+	return hints;
+}
+
 void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 						 enum fi_ep_type ep_type,
 						 uint32_t fi_version, struct fi_info *hints,

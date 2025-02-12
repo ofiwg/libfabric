@@ -275,6 +275,12 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_ep_bind_and_enable, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+
+		/* begin efa_unit_test_mr.c */
+		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_reg_host_memory, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_reg_cuda_memory, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_direct_mr_reg_no_gdrcopy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		/* end efa_unit_test_mr.c */
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);

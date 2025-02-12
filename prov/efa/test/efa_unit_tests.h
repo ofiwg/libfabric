@@ -34,6 +34,7 @@ struct efa_resource {
 };
 
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type, char *fabric_name);
+struct fi_info *efa_unit_test_alloc_hints_hmem(enum fi_ep_type ep_type, char *fabric_name);
 
 void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type, char *fabric_name);
 void efa_unit_test_resource_construct_ep_not_enabled(
@@ -287,6 +288,12 @@ void test_efa_ep_setopt_sizes();
 void test_efa_ep_bind_and_enable();
 void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
+
+/* begin efa_unit_test_mr.c */
+void test_efa_rdm_mr_reg_host_memory();
+void test_efa_rdm_mr_reg_cuda_memory();
+void test_efa_direct_mr_reg_no_gdrcopy();
+/* end efa_unit_test_mr.c */
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)

@@ -33,6 +33,7 @@ struct efa_domain {
 	size_t ibv_mr_reg_sz;
 
 	/* Only valid for RDM EP type */
+	bool			rdm_ep;		/* Set to true for RDM domain. False otherwise. */
 	uint64_t		rdm_mode;
 	size_t			rdm_cq_size;
 	/* number of rdma-read messages in flight */
@@ -46,7 +47,6 @@ struct efa_domain {
 	struct dlist_entry peer_backoff_list;
 	/* list of #efa_rdm_peer that will retry posting handshake pkt */
 	struct dlist_entry handshake_queued_peer_list;
-
 };
 
 extern struct dlist_entry g_efa_domain_list;
