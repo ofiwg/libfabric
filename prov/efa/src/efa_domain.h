@@ -34,7 +34,6 @@ struct efa_domain {
 
 	/* Only valid for RDM EP type */
 	bool			rdm_ep;		/* Set to true for RDM domain. False otherwise. */
-	uint64_t		rdm_mode;
 	size_t			rdm_cq_size;
 	/* number of rdma-read messages in flight */
 	uint64_t		num_read_msg_in_flight;
