@@ -135,9 +135,10 @@ static inline void name ## _init(struct name *aq, size_t size)	\
 static inline struct name * name ## _create(size_t size)	\
 {								\
 	struct name *aq;					\
-	aq = (struct name*) calloc(1, sizeof(*aq) +		\
-		sizeof(struct name ## _entry) *			\
-		(roundup_power_of_two(size)));			\
+	aq = (struct name *) aligned_alloc(			\
+			OFI_CACHE_LINE_SIZE, sizeof(*aq) +	\
+			sizeof(struct name ## _entry) *		\
+			(roundup_power_of_two(size)));		\
 	if (aq)							\
 		name ##_init(aq, roundup_power_of_two(size));	\
 	return aq;						\
