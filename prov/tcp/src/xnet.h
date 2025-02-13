@@ -264,6 +264,7 @@ struct xnet_ep {
 	void (*hdr_bswap)(struct xnet_ep *ep, struct xnet_base_hdr *hdr);
 
 	short			pollflags;
+	bool			tagged_rpc;
 
 	xnet_profile_t *profile;
 };

@@ -860,16 +860,20 @@ static int xnet_handle_tag(struct xnet_ep *ep)
 		if (rx_entry)
 			return xnet_start_recv(ep, rx_entry);
 	}
+
+	if (ep->tagged_rpc) {
+		/* receive and discard this unexpected message for tagged rpc */
+		rx_entry = xnet_get_unexp_rx(ep, tag);
+		if (rx_entry)
+			return xnet_start_recv(ep, rx_entry);
+	}
+
 	if (dlist_empty(&ep->unexp_entry)) {
 		dlist_insert_tail(&ep->unexp_entry,
 				  &xnet_ep2_progress(ep)->unexp_tag_list);
 		ret = xnet_update_pollflag(ep, POLLIN, false);
 		if (ret)
 			return ret;
-
-		rx_entry = xnet_get_unexp_rx(ep, tag);
-		if (rx_entry)
-		  return xnet_start_recv(ep, rx_entry);
 	}
 	return -FI_EAGAIN;
 }
