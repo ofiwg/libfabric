@@ -1114,6 +1114,8 @@ static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
 cq_error:
 	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
 		"msg recv failed ret = %zd (%s)\n", ret, fi_strerror((int)-ret));
+	if (rx_entry->ctrl_flags & XNET_MULTI_RECV)
+		xnet_srx_cancel_rx(ep->srx, &ep->srx->rx_queue, rx_entry->context);
 	xnet_cntr_incerr(rx_entry);
 	xnet_report_error(rx_entry, (int) -ret);
 	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
