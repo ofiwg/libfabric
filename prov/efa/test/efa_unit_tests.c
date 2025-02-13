@@ -4,15 +4,21 @@
 #include "efa_unit_tests.h"
 
 struct efa_env orig_efa_env = {0};
+struct efa_hmem_info g_efa_hmem_info_backup[OFI_HMEM_MAX];
 
 /* Runs once before all tests */
 static int efa_unit_test_mocks_group_setup(void **state)
 {
 	struct efa_resource *resource;
+	struct fi_info *info;
 	resource = calloc(1, sizeof(struct efa_resource));
 	*state = resource;
 
 	orig_efa_env = efa_env;
+
+	/* run fi_getinfo to populate g_efa_hmem_info and copy it */
+	fi_getinfo(FI_VERSION(2, 0), NULL, NULL, 0, NULL, &info);
+	memcpy(g_efa_hmem_info_backup, g_efa_hmem_info, sizeof(g_efa_hmem_info));
 
 	return 0;
 }
@@ -40,6 +46,9 @@ static int efa_unit_test_mocks_setup(void **state)
 static int efa_unit_test_mocks_teardown(void **state)
 {
 	struct efa_resource *resource = *state;
+
+	/* Reset the contents of g_efa_hmem_info from backup */
+	memcpy(g_efa_hmem_info, g_efa_hmem_info_backup, sizeof(g_efa_hmem_info));
 
 	efa_unit_test_resource_destruct(resource);
 

@@ -137,8 +137,8 @@ void test_info_direct_hmem_support_p2p()
 	hmem_ops_cuda_init = hmem_ops[FI_HMEM_CUDA].initialized;
 	hmem_ops[FI_HMEM_CUDA].initialized = true;
 
-	/* g_efa_hmem_info is populated in efa_hmem_info_initialize which runs on
-	 * every fi_getinfo call. So no need to save and reset these fields
+	/* g_efa_hmem_info is backed up and reset after every test in
+	 * efa_unit_test_mocks_teardown. So no need to save and reset these fields
 	 */
 	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
 	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
