@@ -22,12 +22,15 @@ export FI_LOG_PROV=cxi
 #fi
 
 # Run tests with constrained LE count - Using Flow Control recovery
-MAX_ALLOC=`csrutil dump csr le_pools[63] |grep max_alloc |awk '{print $3}'`
-csrutil store csr le_pools[] max_alloc=10 > /dev/null
+MAX_ALLOC=`cxiutil dump csr le_pools[63] |grep max_alloc |awk '{print $3}'`
+cxiutil store csr le_pools[0] max_alloc=10 > /dev/null  
+cxiutil store csr le_pools[16] max_alloc=10 > /dev/null 
+cxiutil store csr le_pools[32] max_alloc=10 > /dev/null  
+cxiutil store csr le_pools[48] max_alloc=10 > /dev/null
 echo "running;FI_CXI_RX_MATCH_MODE=hardware ./cxitest --verbose --filter=\"tagged/fc*\" --tap=cxitest-fc.tap -j1 > $TEST_OUTPUT 2>&1"
 FI_CXI_RX_MATCH_MODE=hardware ./cxitest --verbose --filter="tagged/fc*" --tap=cxitest-fc.tap -j1 > $TEST_OUTPUT 2>&1
 cxitest_exit_status=$?
-csrutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
+cxiutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
 if [[ $cxitest_exit_status -ne 0 ]]; then
     echo "cxitest return non-zero exit code. Possible failures in test teardown"
     exit 1
@@ -35,12 +38,15 @@ fi
 
 # Run tests with constrained LE count - Using hybrid operation instead
 # of flow control recovery
-MAX_ALLOC=`csrutil dump csr le_pools[63] |grep max_alloc |awk '{print $3}'`
-csrutil store csr le_pools[] max_alloc=10 > /dev/null
+MAX_ALLOC=`cxiutil dump csr le_pools[63] |grep max_alloc |awk '{print $3}'`
+cxiutil store csr le_pools[0] max_alloc=10 > /dev/null  
+cxiutil store csr le_pools[16] max_alloc=10 > /dev/null 
+cxiutil store csr le_pools[32] max_alloc=10 > /dev/null  
+cxiutil store csr le_pools[48] max_alloc=10 > /dev/null
 echo "running;FI_CXI_RX_MATCH_MODE=hybrid FI_CXI_RDZV_GET_MIN=0 ./cxitest --verbose --filter=\"tagged/fc*\" --tap=cxitest-sw-transition.tap -j1 >> $TEST_OUTPUT 2>&1"
 FI_CXI_RX_MATCH_MODE=hybrid FI_CXI_RDZV_GET_MIN=0 ./cxitest --verbose --filter="tagged/fc*" --tap=cxitest-sw-transition.tap -j1 >> $TEST_OUTPUT 2>&1
 cxitest_exit_status=$?
-csrutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
+cxiutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
 if [[ $cxitest_exit_status -ne 0 ]]; then
     echo "cxitest return non-zero exit code. Possible failures in test teardown"
     exit 1
@@ -48,22 +54,29 @@ fi
 
 # Run HW to SW hybrid test with constrained LE count and forcing both
 # eager and rendezvous processing
-MAX_ALLOC=`csrutil dump csr le_pools[63] |grep max_alloc |awk '{print $3}'`
-csrutil store csr le_pools[] max_alloc=60 > /dev/null
+MAX_ALLOC=`cxiutil dump csr le_pools[63] |grep max_alloc |awk '{print $3}'`
+cxiutil store csr le_pools[0] max_alloc=60 > /dev/null  
+cxiutil store csr le_pools[16] max_alloc=60 > /dev/null 
+cxiutil store csr le_pools[32] max_alloc=60 > /dev/null  
+cxiutil store csr le_pools[48] max_alloc=60 > /dev/null
 echo "running;FI_CXI_RX_MATCH_MODE=hybrid FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose --filter=\"tagged/hw2sw_*\" --tap=cxitest-hw2sw-transition.tap -j1 >> $TEST_OUTPUT 2>&1"
 FI_CXI_RX_MATCH_MODE=hybrid FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose --filter="tagged/hw2sw_*" --tap=cxitest-hw2sw-transition.tap -j1 >> $TEST_OUTPUT 2>&1
-csrutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
+cxiutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
 if [[ $cxitest_exit_status -ne 0 ]]; then
     echo "cxitest return non-zero exit code. Possible failures in test teardown"
     exit 1
 fi
 
 # Run HW to SW hybrid test with constrained LE count and forcing only eager processing
-MAX_ALLOC=`csrutil dump csr le_pools[63] |grep max_alloc |awk '{print $3}'`
+MAX_ALLOC=`cxiutil dump csr le_pools[63] |grep max_alloc |awk '{print $3}'`
+cxiutil store csr le_pools[0] max_alloc=60 > /dev/null  
+cxiutil store csr le_pools[16] max_alloc=60 > /dev/null 
+cxiutil store csr le_pools[32] max_alloc=60 > /dev/null  
+cxiutil store csr le_pools[48] max_alloc=60 > /dev/null
 echo "running;FI_CXI_RX_MATCH_MODE=hybrid FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=16384 ./cxitest --verbose --filter=\"tagged/hw2sw_*\" --tap=cxitest-hw2sw-eager-transition.tap -j1 >> $TEST_OUTPUT 2>&1"
 FI_CXI_RX_MATCH_MODE=hybrid FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=16384 ./cxitest --verbose --filter="tagged/hw2sw_*" --tap=cxitest-hw2sw-transition.tap -j1 >> $TEST_OUTPUT 2>&1
 cxitest_exit_status=$?
-csrutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
+cxiutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
 if [[ $cxitest_exit_status -ne 0 ]]; then
     echo "cxitest return non-zero exit code. Possible failures in test teardown"
     exit 1
