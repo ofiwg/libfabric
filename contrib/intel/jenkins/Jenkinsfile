@@ -4,84 +4,7 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def DO_RUN=true
 @Field def TARGET="main"
 @Field def RELEASE=false
-@Field def BUILD_MODES=["reg", "dbg", "dl"]
-@Field def PYTHON_VERSION="3.9"
-@Field def TIMEOUT="7200"
 @Field def weekly=false
-
-def run_ci(stage_name, config_name) {
-  return sh(returnStatus: true,
-            script: """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
-                      python run.py \
-                      --output=${env.LOG_DIR}/${stage_name} \
-                      --job=${config_name}
-                    """
-  )
-}
-
-def build_ci(config_name) {
-  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
-        python run.py \
-        --output=${env.CUSTOM_WORKSPACE}/pre-build \
-        --job=${config_name}
-     """
-}
-
-def gather_logs(cluster, key, dest, source) {
-  def address = "${env.USER}@${cluster}"
-  try {
-    sh "scp -r -i ${key} ${address}:${source}/* ${dest}/"
-  } catch (Exception e) {
-    echo "Caught exception ${e} when transfering files from ${cluster}"
-  }
-}
-
-def CI_summarize(verbose=false) {
-  def options = ""
-  if (verbose) {
-    options = "${options} -v"
-  }
-
-  if (weekly || RELEASE) {
-    options = "${options} --send-mail"
-  }
-
-  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
-        python ${CI_LOCATION}/summarize.py \
-        --log_directory=${env.LOG_DIR} \
-        ${options}
-     """
-}
-
-def summarize(item, verbose=false, release=false, send_mail=false) {
-  def cmd = "${RUN_LOCATION}/summary.py --summary_item=all"
-  if (verbose) {
-    cmd = "${cmd} -v "
-  }
-  if (release) {
-    cmd = "${cmd} --release "
-  }
-  if (send_mail.toBoolean()) {
-    cmd = "${cmd} --send_mail "
-  }
-
-  sh "python3.9 ${cmd}"
-}
-
-def save_summary() {
-  sh """
-    mkdir -p ${env.WORKSPACE}/internal
-    rm -rf ${env.WORKSPACE}/internal/*
-    git clone https://${env.PAT}@github.com/${env.INTERNAL} ${env.WORKSPACE}/internal
-    cd ${env.WORKSPACE}/internal
-    mkdir -p ${env.WORKSPACE}/internal/summaries
-    cp ${env.WORKSPACE}/summary_*.log ${env.WORKSPACE}/internal/summaries/
-    git add ${env.WORKSPACE}/internal/summaries/
-    git commit -am \"add ${env.JOB_NAME}'s summary\"
-    git pull -r origin master
-    git push origin master
-  """
-}
 
 def checkout_upstream() {
   def loc = "${env.WORKSPACE}/upstream/libfabric"
@@ -127,35 +50,74 @@ def checkout_external_resources() {
   checkout_ci()
 }
 
-def git_diffs() {
-  dir ("${CUSTOM_WORKSPACE}/source/libfabric") {
-    sh """
-      git diff --name-only HEAD..upstream/${TARGET} > ./commit_id
-      git diff upstream/${TARGET}:Makefile.am Makefile.am > ./Makefile.am.diff
-      git diff upstream/${TARGET}:configure.ac configure.ac > ./configure.ac.diff
-
-      cat configure.ac | grep AC_INIT | cut -d ' ' -f 2 | \
-      cut -d '[' -f 2 | cut -d ']' -f 1 > ./release_num.txt
-    """
-  }
-}
-
 def bootstrap_ci() {
   sh "${CI_LOCATION}/${env.CI_MODULE}/bootstrap.sh"
 }
 
-def checkout_tar(name) {
-  if (env.WEEKLY == null) {
-    weekly = false
-  } else {
-    weekly = env.WEEKLY.toBoolean()
+def build_ci(config_name) {
+  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+        python run.py \
+        --output=${env.CUSTOM_WORKSPACE}/pre-build \
+        --job=${config_name}
+     """
+}
+
+def run_ci(stage_name, config_name) {
+  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+        python run.py \
+        --output=${env.LOG_DIR}/${stage_name} \
+        --job=${config_name}
+     """
+}
+
+def gather_logs(cluster, key, dest, source) {
+  def address = "${env.USER}@${cluster}"
+  try {
+    sh "scp -r -i ${key} ${address}:${source}/* ${dest}/"
+  } catch (Exception e) {
+    echo "Caught exception ${e} when transfering files from ${cluster}"
   }
+}
+
+def CI_summarize(verbose=false) {
+  def options = ""
+  if (verbose) {
+    options = "${options} -v"
+  }
+
+  if (weekly || RELEASE) {
+    options = "${options} --send-mail"
+  }
+
+  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+        python ${CI_LOCATION}/summarize.py \
+        --log_directory=${env.LOG_DIR} \
+        ${options}
+     """
+}
+
+def summarize(item, verbose=false, release=false, send_mail=false) {
+  def cmd = "${RUN_LOCATION}/summary.py --summary_item=all"
+  if (verbose) {
+    cmd = "${cmd} -v "
+  }
+  if (release) {
+    cmd = "${cmd} --release "
+  }
+  if (send_mail.toBoolean()) {
+    cmd = "${cmd} --send_mail "
+  }
+
+  sh "python3.9 ${cmd}"
+}
+
+def checkout_tar(name) {
+  weekly = env.WEEKLY != null ? env.WEEKLY.toBoolean() : false
+  def weekly_target = env.WEEKLY_TARGET != null ? env.WEEKLY_TARGET : "main"
+  def change_target = env.CHANGE_TARGET != null ? env.CHANGE_TARGET : "main"
   dir ("${env.CUSTOM_WORKSPACE}/${name}/libfabric") {
     checkout scm
-    TARGET=check_target()
-    if (weekly) {
-      TARGET=env.WEEKLY_TARGET
-    }
+    TARGET = weekly ? weekly_target : change_target
     sh """
       git remote add upstream ${env.UPSTREAM}
       git pull --rebase upstream ${TARGET}
@@ -166,24 +128,21 @@ def checkout_tar(name) {
   }
 }
 
-def check_target() {
-  echo "CHANGE_TARGET = ${env.CHANGE_TARGET}"
-  if (changeRequest()) {
-    TARGET = env.CHANGE_TARGET
+def git_diffs() {
+  dir ("${CUSTOM_WORKSPACE}/source/libfabric") {
+    sh "git diff --name-only HEAD..upstream/${TARGET} > ./commit_id"
+    sh "git diff upstream/${TARGET}:Makefile.am Makefile.am > ./Makefile.am.diff"
+    sh "git diff upstream/${TARGET}:configure.ac configure.ac > ./configure.ac.diff"
+    sh "cat configure.ac | grep AC_INIT | cut -d ' ' -f 2 | cut -d '[' -f 2 | cut -d ']' -f 1 > ./release_num.txt"
   }
-
-  if (TARGET) {
-    return TARGET
-  }
-
-  return "main"
 }
 
 def release() {
-  def file = "${env.WORKSPACE}/commit_id"
+  def file = "${CUSTOM_WORKSPACE}/source/libfabric/commit_id"
   if (!fileExists(file)) {
+    echo "file ${file} does not exist"
     echo "CI Run has not rebased with ofiwg/libfabric. Please Rebase."
-    return 1
+    return false
   }
 
   def changes = readFile file
@@ -203,11 +162,9 @@ def release() {
 }
 
 def skip() {
-  def file = "${env.WORKSPACE}/source/libfabric/commit_id"
-  if (!fileExists(file)) {
-    echo "CI Run has not rebased with ofiwg/libfabric. Please Rebase."
-    return 1
-  }
+  def file = "${CUSTOM_WORKSPACE}/source/libfabric/commit_id"
+  if (!fileExists(file))
+    error("CI Run has not rebased with ofiwg/libfabric. Please Rebase.")
 
   def changes = readFile file
   def changeStrings = new ArrayList<String>()
@@ -245,9 +202,7 @@ pipeline {
   }
   environment {
       JOB_CADENCE = 'PR'
-      WITH_ENV="'PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH'"
       CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
-      DELETE_LOCATION="${env.CUSTOM_WORKSPACE}/middlewares"
       SLURM_JOB_NAME="${env.JOB_NAME}_${env.BUILD_NUMBER}"
       RUN_LOCATION="${env.CUSTOM_WORKSPACE}/ci_resources/legacy_pipeline_scripts/"
       CI_LOCATION="${env.CUSTOM_WORKSPACE}/ci"
@@ -264,7 +219,17 @@ pipeline {
         }
       }
     }
+    stage ('opt_out') {
+      steps {
+        script {
+          git_diffs()
+          RELEASE = release()
+          DO_RUN = skip() && !weekly ? false : true
+        }
+      }
+    }
     stage ('bootstrap_ci') {
+      when { equals expected: true, actual: DO_RUN }
       steps {
         script {
           bootstrap_ci()
@@ -272,27 +237,13 @@ pipeline {
       }
     }
     stage('check_authorization') {
+      when { equals expected: true, actual: DO_RUN }
       steps {
         script {
           sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
                 python ${CI_LOCATION}/authorize.py \
                 --author=${env.CHANGE_AUTHOR}
           """
-        }
-      }
-    }
-    stage ('opt_out') {
-      steps {
-        script {
-          git_diffs()
-          if (weekly) {
-            TIMEOUT="21600" 
-          } 
-          skip = skip()
-          RELEASE = release()
-          if (skip && !weekly) {
-            DO_RUN=false
-          }
         }
       }
     }
@@ -309,7 +260,7 @@ pipeline {
     stage ('prepare_build') {
       when { equals expected: true, actual: DO_RUN }
       steps {
-        script {  
+        script {
           echo "Copying build dirs."
           sh "python3.9 ${RUN_LOCATION}/build.py --build_item=builddir"
           echo "Copying log dirs."
@@ -545,7 +496,7 @@ pipeline {
                 if (env.WEEKLY.toBoolean()) {
                   run_ci("CI_mpi_tcp_impi_mpichtestsuite", "pr_impi_mpichtestsuite_grass.json")
                 }
-              } 
+              }
             }
           }
         }
@@ -911,9 +862,6 @@ pipeline {
           CI_summarize(verbose=false)
           summarize("all", verbose=false, release=RELEASE,
                     send_mail=env.WEEKLY.toBoolean())
-          if (RELEASE) {
-            save_summary()
-          }
         }
       }
     }
