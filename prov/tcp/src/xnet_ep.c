@@ -283,6 +283,7 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 	    (paramlen > XNET_MAX_CM_DATA_SIZE))
 		return -FI_EINVAL;
 
+	ep->tagged_rpc = conn->pep->info->ep_attr->mem_tag_format == FI_TAG_RPC;
 	ep->conn = NULL;
 
 	assert(ep->cm_msg);
