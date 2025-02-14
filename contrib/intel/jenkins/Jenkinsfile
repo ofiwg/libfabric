@@ -120,19 +120,20 @@ def gather_logs(cluster, key, dest, source) {
 }
 
 def CI_summarize(verbose=false) {
-  cmd = """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
-           python ${CI_LOCATION}/summarize.py \
-           --log_directory=${env.LOG_DIR}
-        """
+  def options = ""
   if (verbose) {
-    cmd = "${cmd} -v"
+    options = "${options} -v"
   }
 
   if (weekly || RELEASE) {
-    cmd = "${cmd} --send-mail"
+    options = "${options} --send-mail"
   }
 
-  sh "${cmd}"
+  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+        python ${CI_LOCATION}/summarize.py \
+        --log_directory=${env.LOG_DIR} \
+        ${options}
+     """
 }
 
 def summarize(item, verbose=false, release=false, send_mail=false) {
@@ -352,7 +353,7 @@ def skip() {
   }
 
   echo "Changeset is: ${changeStrings.toArray()}"
-  if (changeStrings.toArray().every { it =~ /(?:fabtests\/pytests|man|prov\/efa|prov\/opx|prov\/cxi|prov\/lpp|contrib\/aws).*$/ }) {
+  if (changeStrings.toArray().every { it =~ /(?:fabtests\/pytests|man|prov\/efa|prov\/opx|prov\/cxi|prov\/lpp|contrib\/aws|.github).*$/ }) {
     echo "DONT RUN!"
     return true
   }
@@ -585,28 +586,81 @@ pipeline {
             }
           }
         }
-        stage ('mpich-water') {
+        stage ('oneccl-water') {
           steps {
             script {
               dir (CI_LOCATION) {
-                slurm_batch("water", "1",
-                            "${env.LOG_DIR}/build_mpich_water_log",
-                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
-                              --build_item=mpich --build_hw=water"""
-                           )
+                build_ci("pr_build_oneccl_water.json")
               }
             }
           }
         }
-        stage ('mpich-grass') {
+        stage ('oneccl-grass') {
           steps {
             script {
               dir (CI_LOCATION) {
-                slurm_batch("grass", "1",
-                            "${env.LOG_DIR}/build_mpich_grass_log",
-                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
-                              --build_item=mpich --build_hw=grass"""
-                           )
+                build_ci("pr_build_oneccl_grass.json")
+              }
+            }
+          }
+        }
+        stage ('oneccl-electric') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                build_ci("pr_build_oneccl_electric.json")
+              }
+            }
+          }
+        }
+        stage ('oneccl-fire') {
+          agent {
+            node {
+              label 'ze'
+              customWorkspace CUSTOM_WORKSPACE
+            }
+          }
+          options { skipDefaultCheckout() }
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                build_ci("pr_build_oneccl_fire.json")
+              }
+            }
+          }
+        }
+        stage ('mpich_grass') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                build_ci("pr_build_mpich_grass.json")
+              }
+            }
+          }
+        }
+        stage ('mpich_water') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                build_ci("pr_build_mpich_water.json")
+              }
+            }
+          }
+        }
+        stage ('impi_grass') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                build_ci("pr_build_impi_grass.json")
+              }
+            }
+          }
+        }
+        stage ('impi_water') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                build_ci("pr_build_impi_water.json")
               }
             }
           }
@@ -619,33 +673,22 @@ pipeline {
         stage('mpichtestsuite-tcp') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                def providers = [['tcp', null]]
-                def MPIS = ["mpich"]
+              dir (CI_LOCATION) {
+                run_ci("CI_mpi_tcp_mpich_mpichtestsuite", "pr_mpich_mpichtestsuite_grass.json")
                 if (env.WEEKLY.toBoolean()) {
-                  MPIS = ["impi", "mpich"]
+                  run_ci("CI_mpi_tcp_impi_mpichtestsuite", "pr_impi_mpichtestsuite_grass.json")
                 }
-                for (def mpi in MPIS) {
-                  run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
-                                 "grass", "bulbasaur,ivysaur", "2", "${mpi}")
-                }
-              }
+              } 
             }
           }
         }
-        stage('mpichtestsuite-verbs') {
+        stage('mpichtestsuite-verbs-rxm') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-                def providers = [["verbs","rxm"]]
-                def MPIS = ["mpich"]
+              dir (CI_LOCATION) {
+                run_ci("CI_mpi_verbs-rxm_mpich_mpichtestsuite", "pr_mpich_mpichtestsuite_water.json")
                 if (env.WEEKLY.toBoolean()) {
-                  MPIS = ["impi", "mpich"]
-                }
-                for (def mpi in MPIS) {
-                  run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
-                                 "water", "squirtle,wartortle,articuno", "2",
-                                 "${mpi}")
+                  run_ci("CI_mpi_verbs-rxm_impi_mpichtestsuite", "pr_impi_mpichtestsuite_water.json")
                 }
               }
             }
@@ -834,46 +877,41 @@ pipeline {
             }
           }
         }
-	      stage ('oneCCL') {
+        stage ('oneccl_grass') {
           steps {
             script {
-              dir (RUN_LOCATION) {
-		            run_middleware([["verbs", null]], "oneCCL",
-                               "oneccl", "water",
-                               "squirtle,wartortle,articuno", "2")
-		            run_middleware([["shm", null]], "oneCCL",
-			                         "oneccl", "grass", "bulbasaur,ivysaur", "1")
-		            run_middleware([["psm3", null]], "oneCCL",
-			                         "oneccl", "water",
-                               "squirtle,wartortle,articuno", "2")
-		            run_middleware([["tcp", null]], "oneCCL",
-			                         "oneccl", "grass", "bulbasaur,ivysaur", "2")
-                run_middleware([["shm", null]], "oneCCL_DSA",
-                               "oneccl", "electric", "pikachu", "1", null, null,
-                               """CCL_ATL_SHM=1 FI_SHM_DISABLE_CMA=1 \
-                               FI_SHM_USE_DSA_SAR=1 FI_LOG_LEVEL=warn""")
+              dir (CI_LOCATION) {
+                run_ci("CI_oneccl_grass", "pr_oneccl_grass_tcp.json")
+                run_ci("CI_oneccl_grass", "pr_oneccl_grass_shm.json")
               }
             }
           }
         }
-        stage ('oneCCL-GPU-v3') {
+        stage ('oneccl_water') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("CI_oneccl_water", "pr_oneccl_water.json")
+              }
+            }
+          }
+        }
+        stage ('oneccl_electric') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                run_ci("CI_oneccl_electric", "pr_oneccl_electric.json")
+              }
+            }
+          }
+        }
+        stage ('oneCCL-fire') {
           agent { node { label 'ze' } }
           options { skipDefaultCheckout() }
           steps {
             script {
-              dir (RUN_LOCATION) {
-                run_middleware([["psm3", null]], "oneCCL-GPU-v3", "onecclgpu",
-                               "fire", "torchic", "1", null, null,
-                               "FI_HMEM_DISABLE_P2P=1")
-                run_middleware([["verbs", null]], "oneCCL-GPU-v3", "onecclgpu",
-                                "fire", "torchic", "1", null, null,
-                                "FI_HMEM_DISABLE_P2P=1")
-                run_middleware([["tcp", null]], "oneCCL-GPU-v3", "onecclgpu",
-                               "fire", "torchic", "1", null, null,
-                               "FI_HMEM_DISABLE_P2P=1")
-                run_middleware([["shm", null]], "oneCCL-GPU-v3", "onecclgpu",
-                               "fire", "torchic", "1", null, null,
-                               "FI_HMEM_DISABLE_P2P=1")
+              dir (CI_LOCATION) {
+                run_ci("CI_oneccl_fire", "pr_oneccl_fire.json")
               }
             }
           }
