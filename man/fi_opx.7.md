@@ -203,6 +203,10 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   - `FI_OPX_HFI_SELECT=core:1:0,fixed:0` callers local to CPU core 0 will use HFI 1, and all others will use HFI 0.
   - `FI_OPX_HFI_SELECT=default,core:1:0` all callers will use default HFI selection logic.
 
+*FI_OPX_PORT*
+: Integer. HFI1 port number.  If the specified port is not available, a default active port will be selected.
+  Special value 0 indicates any available port. Defaults to port 1 on OPA100 and any port on CN5000.
+
 *FI_OPX_DELIVERY_COMPLETION_THRESHOLD*
 : Integer. Will be deprecated. Please use FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD.
 
@@ -276,7 +280,8 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   - `<inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>`. 
 
   Each value can range from 0-7. 0-3 is used for in-order and
-  4-7 is used for out-of-order. 
+  4-7 is used for out-of-order. If Token ID (TID) is enabled
+  the out-of-order route controls are disabled.
 
   Default is `0:0:0:0:0:0 ` on OPA100 and  `4:4:4:4:0:4 ` on CN5000.
 
