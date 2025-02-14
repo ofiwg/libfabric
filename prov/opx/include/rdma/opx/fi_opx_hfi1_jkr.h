@@ -169,74 +169,84 @@ uint32_t opx_pbc_jkr_l2type(unsigned _type)
 #define OPX_RC1_SHIFT 1
 #define OPX_RC0_SHIFT 0
 
+/* ROUTE CONTROL table for each packet type */
+extern int opx_route_control[OPX_HFI1_NUM_PACKET_TYPES];
+
+/* Convert route_control to "in order" if "out of order" is disabled */
+#define OPX_CHECK_OUT_OF_ORDER(ooo_disabled, rc) \
+	(((rc >= OPX_RC_OUT_OF_ORDER_0) && ooo_disabled) ? OPX_RC_IN_ORDER_0 : rc)
+
 /* RC (3 bits) route control value for different packet types */
+#ifndef NDEBUG
 #define OPX_ROUTE_CONTROL_VALUE(_hfi1_type, _pkt_type) \
 	opx_route_control_value(_hfi1_type, _pkt_type, __func__, __LINE__)
 
 static inline int opx_route_control_value(const enum opx_hfi1_type hfi1_type, enum opx_hfi1_packet_type pkt_type,
 					  const char *func, const int line)
 {
-	static int  opx_route_control[OPX_HFI1_NUM_PACKET_TYPES]   = {-1, -1, -1, -1, -1, -1};
-	const char *opx_hfi1_packet_str[OPX_HFI1_NUM_PACKET_TYPES] = {// debug strings only
-								      "OPX_HFI1_INJECT",   "OPX_HFI1_EAGER",
-								      "OPX_HFI1_MP_EAGER", "OPX_HFI1_DPUT",
-								      "OPX_HFI1_RZV_CTRL", "OPX_HFI1_RZV_DATA"};
-
+	assert(OPX_HFI1_TYPE != OPX_HFI1_UNDEF);
 	assert(pkt_type < OPX_HFI1_NUM_PACKET_TYPES);
+	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[%s:%d] Return %s route control %d.\n", func, line,
+		 OPX_HFI1_PACKET_STR[pkt_type], opx_route_control[pkt_type]);
+	return opx_route_control[pkt_type];
+}
+#else
+#define OPX_ROUTE_CONTROL_VALUE(_hfi1_type, _pkt_type) opx_route_control[_pkt_type]
+#endif
+
+static inline void opx_set_route_control_value(const bool disabled)
+{
+	assert(OPX_HFI1_TYPE != OPX_HFI1_UNDEF);
+
 	/* HFI specific default (except OPX_HFI1_RZV_CTRL which always defaults to OPX_RC_IN_ORDER_0) */
-	const int default_route_control =
-		((hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ? OPX_RC_OUT_OF_ORDER_0 : OPX_RC_IN_ORDER_0);
-	/* Only called when initializing the models so not performance sensitive  */
-	if (opx_route_control[0] == -1) { /* almost (per .c) one time static check */
-		char *env_route_control;
-		// <inject packet type value>:<eager packet type value>:<rendezvous control packet value>:<rendezvous
-		// data packet value>
-		if (fi_param_get_str(fi_opx_global.prov, "route_control", &env_route_control) == FI_SUCCESS) {
-			char *env_string	       = NULL;
-			char *next_route_control_value = strtok_r(env_route_control, ":", &env_string);
+	const int default_route_control = ((OPX_HFI1_TYPE & (OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ?
+						   OPX_CHECK_OUT_OF_ORDER(disabled, OPX_RC_OUT_OF_ORDER_0) :
+						   OPX_RC_IN_ORDER_0);
+	char	 *env_route_control;
 
-			for (int i = 0; i < OPX_HFI1_NUM_PACKET_TYPES; ++i) {
-				if (next_route_control_value) {
-					int route_control_value = atoi(next_route_control_value);
-					if ((route_control_value >= OPX_RC_IN_ORDER_0) &&
-					    (route_control_value <= OPX_RC_OUT_OF_ORDER_3)) {
-						opx_route_control[i] = route_control_value;
-						FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-							 "%s route control set to %d.\n", opx_hfi1_packet_str[i],
-							 opx_route_control[i]);
+	if (fi_param_get_str(fi_opx_global.prov, "route_control", &env_route_control) == FI_SUCCESS) {
+		char *env_string	       = NULL;
+		char *next_route_control_value = strtok_r(env_route_control, ":", &env_string);
 
-					} else {
-						opx_route_control[i] = (i == OPX_HFI1_RZV_CTRL) ? OPX_RC_IN_ORDER_0 :
-												  default_route_control;
+		for (int i = 0; i < OPX_HFI1_NUM_PACKET_TYPES; ++i) {
+			if (next_route_control_value) {
+				int route_control_value = atoi(next_route_control_value);
+				if ((route_control_value >= OPX_RC_IN_ORDER_0) &&
+				    (route_control_value <= OPX_RC_OUT_OF_ORDER_3)) {
+					opx_route_control[i] = OPX_CHECK_OUT_OF_ORDER(disabled, route_control_value);
+					if (route_control_value !=
+					    OPX_CHECK_OUT_OF_ORDER(disabled, route_control_value)) {
+						/* Only warn when overriding an explicit user choice */
 						FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-							"%s route control %d not allowed, defaulting to %d.\n",
-							opx_hfi1_packet_str[i], route_control_value,
-							opx_route_control[i]);
+							"TID enabled, out_of_order RC is not allowed.\n");
 					}
+					FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s route control set to %d.\n",
+						 OPX_HFI1_PACKET_STR[i], opx_route_control[i]);
+
 				} else {
 					opx_route_control[i] =
 						(i == OPX_HFI1_RZV_CTRL) ? OPX_RC_IN_ORDER_0 : default_route_control;
-					FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-						 "%s route control defaulting to %d.\n", opx_hfi1_packet_str[i],
-						 opx_route_control[i]);
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"%s route control %d not allowed, defaulting to %d.\n",
+						OPX_HFI1_PACKET_STR[i], route_control_value, opx_route_control[i]);
 				}
-				next_route_control_value = strtok_r(NULL, ":", &env_string);
-			}
-		} else {
-			for (int i = 0; i < OPX_HFI1_NUM_PACKET_TYPES; ++i) {
+			} else {
 				opx_route_control[i] =
 					(i == OPX_HFI1_RZV_CTRL) ? OPX_RC_IN_ORDER_0 : default_route_control;
+				FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s route control defaulting to %d.\n",
+					 OPX_HFI1_PACKET_STR[i], opx_route_control[i]);
 			}
-			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				 "All packet types using %s default route control values.\n",
-				 OPX_HFI_TYPE_STRING(hfi1_type));
+			next_route_control_value = strtok_r(NULL, ":", &env_string);
 		}
+	} else {
+		for (int i = 0; i < OPX_HFI1_NUM_PACKET_TYPES; ++i) {
+			opx_route_control[i] = (i == OPX_HFI1_RZV_CTRL) ? OPX_RC_IN_ORDER_0 : default_route_control;
+		}
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			 "All packet types using %s default route control values.\n",
+			 OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE));
 	}
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[%s:%d] Return %s route control %d.\n", func, line,
-		 opx_hfi1_packet_str[pkt_type], opx_route_control[pkt_type]);
-	return opx_route_control[pkt_type];
 }
-
 /* The bit shifts here are for the half word indicating the ECN field */
 #define OPX_BTH_JKR_CSPEC_SHIFT 3
 #define OPX_BTH_JKR_CSPEC_MASK	0b111

@@ -139,6 +139,11 @@ enum opx_hfi1_packet_type {
 	OPX_HFI1_NUM_PACKET_TYPES = 6
 };
 
+static const char *const OPX_HFI1_PACKET_STR[] = {
+	[OPX_HFI1_INJECT] = "OPX_HFI1_INJECT",	   [OPX_HFI1_EAGER] = "OPX_HFI1_EAGER",
+	[OPX_HFI1_MP_EAGER] = "OPX_HFI1_MP_EAGER", [OPX_HFI1_DPUT] = "OPX_HFI1_DPUT",
+	[OPX_HFI1_RZV_CTRL] = "OPX_HFI1_RZV_CTRL", [OPX_HFI1_RZV_DATA] = "OPX_HFI1_RZV_DATA"};
+
 /* Will remove after 16B SDMA support is finished */
 #define OPX_NO_9B_SUPPORT(_hfi1_type)                                                                                \
 	do {                                                                                                         \
@@ -201,11 +206,6 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi_local_info, local_lid_entries) =
 #endif
 
 #define OPX_HFI1_TYPE fi_opx_global.hfi_local_info.type
-
-/* Default is both JKR and WFR runtime support (no constant),
-   use a local or global variable */
-
-#define OPX_PRE_CN5000 1
 
 struct fi_opx_global_data {
 	/* == CACHE LINE 0 == */

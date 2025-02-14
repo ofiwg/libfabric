@@ -470,6 +470,8 @@ struct fi_opx_global_data fi_opx_global = {.hfi_local_info.type	  = OPX_HFI1_UND
 								     [OPX_HFI1_WFR]    = "OPX_HFI1_WFR",
 								     [3]	       = "ERROR",
 								     [OPX_HFI1_JKR]    = "OPX_HFI1_JKR"}};
+/* ROUTE CONTROL table for each packet type */
+int opx_route_control[OPX_HFI1_NUM_PACKET_TYPES];
 
 static int fi_opx_getinfo_hfi(int hfi, uint32_t version, const char *node, const char *service, uint64_t flags,
 			      const struct fi_info *hints, struct fi_info **info, struct fi_info **info_tail)
@@ -785,7 +787,7 @@ OPX_INI
 #endif
 	fi_param_define(
 		&fi_opx_provider, "route_control", FI_PARAM_STRING,
-		"Specify the route control for each packet type. The format is <inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>. Each value can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. Default is \"%d:%d:%d:%d:%d:%d\" on OPA100 and \"%d:%d:%d:%d:%d:%d\" on CN5000",
+		"Specify the route control for each packet type. The format is <inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>. Each value can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. If Token ID (TID) is enabled the out-of-order route controls are disabled. Default is \"%d:%d:%d:%d:%d:%d\" on OPA100 and \"%d:%d:%d:%d:%d:%d\" on CN5000",
 		OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0,
 		OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0, OPX_RC_OUT_OF_ORDER_0, OPX_RC_OUT_OF_ORDER_0,
 		OPX_RC_OUT_OF_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0);

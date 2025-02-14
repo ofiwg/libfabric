@@ -1704,6 +1704,11 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is WFR (Omni-path)\n");
 		}
 
+		/* Set route_control after hfi1 type is selected and before any models are initialized
+		 * Note that "out of order" route control will be disabled if tid is enabled*
+		 */
+		opx_set_route_control_value(opx_ep->use_expected_tid_rzv);
+
 		void *mem = NULL;
 		mem	  = malloc(sizeof(struct fi_opx_ep_reliability) + FI_OPX_CACHE_LINE_SIZE);
 		if (!mem) {
