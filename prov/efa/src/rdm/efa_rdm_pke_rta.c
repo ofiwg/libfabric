@@ -98,10 +98,10 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rta_rxe(struct efa_rdm_pke *pkt_entry, int
 		return NULL;
 	}
 
-	if (op == ofi_op_atomic) {
-		rxe->addr = pkt_entry->addr;
+	rxe->internal_flags |= EFA_RDM_OPE_INTERNAL;
+
+	if (op == ofi_op_atomic)
 		return rxe;
-	}
 
 	rta_hdr = (struct efa_rdm_rta_hdr *)pkt_entry->wiredata;
 	rxe->atomic_hdr.atomic_op = rta_hdr->atomic_op;

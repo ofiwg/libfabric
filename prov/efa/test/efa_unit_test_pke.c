@@ -1,5 +1,9 @@
 #include "efa_unit_tests.h"
 #include "rdm/efa_rdm_pke_rtm.h"
+#include "rdm/efa_rdm_pke_rta.h"
+#include "rdm/efa_rdm_pke_rtw.h"
+#include "rdm/efa_rdm_pke_utils.h"
+
 
 /**
  * @brief When handling a long cts rtm as read nack fallback,
@@ -107,4 +111,138 @@ void test_efa_rdm_pke_release_rx_list(struct efa_resource **state)
      */
     ofi_bufpool_destroy(efa_rdm_ep->efa_rx_pkt_pool);
     efa_rdm_ep->efa_rx_pkt_pool = NULL;
+}
+
+void test_efa_rdm_pke_alloc_rta_rxe(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_ope *rxe;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
+
+	/* Fake a rx pkt entry */
+	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pke);
+	efa_rdm_ep->efa_rx_pkts_posted =
+		efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+
+	/* Create and register a fake peer */
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	pke->addr = peer_addr;
+
+	rxe = efa_rdm_pke_alloc_rta_rxe(pke, ofi_op_atomic);
+	assert_true(rxe->internal_flags & EFA_RDM_OPE_INTERNAL);
+
+	efa_rdm_rxe_release(rxe);
+	efa_rdm_pke_release_rx(pke);
+}
+
+void test_efa_rdm_pke_alloc_rtw_rxe(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_ope *rxe;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct efa_rdm_base_hdr *base_hdr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
+
+	/* Fake a rx pkt entry */
+	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pke);
+	efa_rdm_ep->efa_rx_pkts_posted =
+		efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+
+	/* Create and register a fake peer */
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	base_hdr = efa_rdm_pke_get_base_hdr(pke);
+	/* Clean the flags to avoid having garbage value */
+	base_hdr->flags = 0;
+	pke->addr = peer_addr;
+
+	rxe = efa_rdm_pke_alloc_rtw_rxe(pke);
+
+	assert_true(rxe->internal_flags & EFA_RDM_OPE_INTERNAL);
+	assert_int_equal(rxe->bytes_received, 0);
+	assert_int_equal(rxe->bytes_copied, 0);
+
+	efa_rdm_rxe_release(rxe);
+	efa_rdm_pke_release_rx(pke);
+}
+
+void test_efa_rdm_pke_alloc_rtr_rxe(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_ope *rxe;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct efa_rdm_base_hdr *base_hdr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
+
+	/* Fake a rx pkt entry */
+	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pke);
+	efa_rdm_ep->efa_rx_pkts_posted =
+		efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+
+	/* Create and register a fake peer */
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	base_hdr = efa_rdm_pke_get_base_hdr(pke);
+	/* Clean the flags to avoid having garbage value */
+	base_hdr->flags = 0;
+	pke->addr = peer_addr;
+
+	rxe = efa_rdm_pke_alloc_rtw_rxe(pke);
+
+	assert_true(rxe->internal_flags & EFA_RDM_OPE_INTERNAL);
+	assert_int_equal(rxe->bytes_received, 0);
+	assert_int_equal(rxe->bytes_copied, 0);
+
+	efa_rdm_rxe_release(rxe);
+	efa_rdm_pke_release_rx(pke);
 }
