@@ -615,6 +615,13 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	 */
 	//efa_rdm_rxe_release(rxe);
 
+	if (rxe->internal_flags & EFA_RDM_OPE_INTERNAL) {
+		EFA_WARN(FI_LOG_CQ,
+			"Writing eq error for rxe from internal operations\n");
+		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
+		return;
+	}
+
 	efa_cntr_report_error(&ep->base_ep.util_ep, err_entry.flags);
 	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
 	if (write_cq_err) {
@@ -708,6 +715,13 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	 * be freed once all packets are accounted for.
 	 */
 	//efa_rdm_txe_release(txe);
+
+	if (txe->internal_flags & EFA_RDM_OPE_INTERNAL) {
+		EFA_WARN(FI_LOG_CQ,
+			"Writing eq error for txe from internal operations\n");
+		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
+		return;
+	}
 
 	efa_cntr_report_error(&ep->base_ep.util_ep, txe->cq_entry.flags);
 	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
@@ -1659,6 +1673,7 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 	}
 
 	txe->local_read_pkt_entry = pkt_entry;
+	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
 	err = efa_rdm_ope_post_remote_read_or_queue(txe);
 	/* The rx pkts are held until the local read completes */
 	if (err)

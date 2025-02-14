@@ -60,7 +60,6 @@ ssize_t efa_rdm_pke_init_rtw_common(struct efa_rdm_pke *pkt_entry,
  * pointer to the newly allocated RX entry.
  * NULL when OP entry pool has been exhausted.
  */
-static
 struct efa_rdm_ope *efa_rdm_pke_alloc_rtw_rxe(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
@@ -76,9 +75,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rtw_rxe(struct efa_rdm_pke *pkt_entry)
 		rxe->cq_entry.data = efa_rdm_pke_get_req_cq_data(pkt_entry);
 	}
 
-	rxe->addr = pkt_entry->addr;
-	rxe->bytes_received = 0;
-	rxe->bytes_copied = 0;
+	rxe->internal_flags |= EFA_RDM_OPE_INTERNAL;
 	return rxe;
 }
 
