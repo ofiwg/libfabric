@@ -323,3 +323,46 @@ void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct
         APPEND_OPT_HANDSHAKE_FIELD(host_id,		EFA_RDM_HANDSHAKE_HOST_ID_HDR);
         APPEND_OPT_HANDSHAKE_FIELD(device_version,	EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR);
 }
+
+
+struct efa_rdm_ope *efa_unit_test_alloc_txe(struct efa_resource *resource, uint32_t op)
+{
+	fi_addr_t peer_addr = 0;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_peer *peer;
+	struct fi_msg msg = {0};
+	struct efa_rdm_ep *efa_rdm_ep;
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Create and register a fake peer */
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+
+	return efa_rdm_ep_alloc_txe(efa_rdm_ep, peer, &msg, op, 0, 0);
+}
+
+struct efa_rdm_ope *efa_unit_test_alloc_rxe(struct efa_resource *resource, uint32_t op)
+{
+	fi_addr_t peer_addr = 0;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_ep *efa_rdm_ep;
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Create and register a fake peer */
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+
+	return efa_rdm_ep_alloc_rxe(efa_rdm_ep, peer_addr, op);
+}
