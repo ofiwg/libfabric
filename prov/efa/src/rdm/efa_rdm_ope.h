@@ -276,6 +276,17 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  */
 #define EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE	BIT_ULL(14)
 
+/**
+ * @brief flag to indicate that the ope was created
+ * for internal operations, so it should not generate
+ * any cq entry or err entry.
+ * NOTICE: the ope->internal_flags is uint16_t, so
+ * to introduce more bits for internal flags, the
+ * internal_flags needs to be changed to uint32_t
+ * or larger.
+ */
+#define EFA_RDM_OPE_INTERNAL			BIT_ULL(15)
+
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);

@@ -3,6 +3,8 @@
 
 #include "efa_unit_tests.h"
 
+typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
+
 void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
 						enum fi_hmem_iface iface,
 						size_t total_len,
@@ -291,15 +293,15 @@ void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
  * make sure there is no txe leak in efa_rdm_rxe_post_local_read_or_queue
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
+ * @param[in]	efa_rdm_pke_read_return	return code of efa_rdm_pke_read
  */
-void test_efa_rdm_rxe_post_local_read_or_queue_cleanup_txe(struct efa_resource **state)
+static
+void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resource, int efa_rdm_pke_read_return)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
-	struct efa_resource *resource = *state;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_ope *rxe;
 	struct efa_mr cuda_mr = {0};
-	int expected_err = -FI_ENOMR;
 	char buf[16];
 	struct iovec iov = {
 		.iov_base = buf,
@@ -313,8 +315,6 @@ void test_efa_rdm_rxe_post_local_read_or_queue_cleanup_txe(struct efa_resource *
 	 * prov/efa/test/README.md's mocking session
 	 */
 	g_efa_unit_test_mocks.efa_rdm_pke_read = &efa_mock_efa_rdm_pke_read_return_mock;
-
-	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
@@ -334,10 +334,146 @@ void test_efa_rdm_rxe_post_local_read_or_queue_cleanup_txe(struct efa_resource *
 	pkt_entry->ope = rxe;
 
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
-	will_return(efa_mock_efa_rdm_pke_read_return_mock, expected_err);
-	assert_int_equal(efa_rdm_rxe_post_local_read_or_queue(rxe, 0, pkt_entry, pkt_entry->payload, 16), expected_err);
+
+	will_return(efa_mock_efa_rdm_pke_read_return_mock, efa_rdm_pke_read_return);
+
+	assert_int_equal(efa_rdm_rxe_post_local_read_or_queue(rxe, 0, pkt_entry, pkt_entry->payload, 16), efa_rdm_pke_read_return);
+
+	/* Clean up the rx entry no matter what returns */
+	efa_rdm_pke_release_rx(pkt_entry);
+}
+
+void test_efa_rdm_rxe_post_local_read_or_queue_unhappy(struct efa_resource **state)
+{
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_resource *resource = *state;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	test_efa_rdm_rxe_post_local_read_or_queue_impl(resource, -FI_ENOMR);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
 	/* Make sure txe is cleaned for a failed read */
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+}
 
-	efa_rdm_pke_release_rx(pkt_entry);
+void test_efa_rdm_rxe_post_local_read_or_queue_happy(struct efa_resource **state)
+{
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_resource *resource = *state;
+	struct efa_rdm_pke *tx_pkt_entry;
+	struct efa_rdm_ope *txe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	test_efa_rdm_rxe_post_local_read_or_queue_impl(resource, FI_SUCCESS);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	/* Now we should have a txe allocated */
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list),  1);
+	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
+	assert_true(txe->internal_flags & EFA_RDM_OPE_INTERNAL);
+
+	/* We also have a tx pkt allocated inside efa_rdm_ope_read
+	 * and we need to clean it */
+	tx_pkt_entry = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_tx_pkt_pool, 0);
+	efa_rdm_pke_release(tx_pkt_entry);
+}
+
+static
+void test_efa_rdm_ope_handle_error_impl(
+	struct efa_resource *resource,
+	efa_rdm_ope_handle_error_func_t efa_rdm_ope_handle_error,
+	struct efa_rdm_ope *ope, bool expect_cq_error)
+{
+	struct fi_cq_data_entry cq_entry;
+	struct fi_cq_err_entry cq_err_entry = {0};
+	struct fi_eq_err_entry eq_err_entry;
+
+	efa_rdm_ope_handle_error(ope, FI_ENOTCONN,
+				 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+
+	if (expect_cq_error) {
+		assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1),
+				 -FI_EAVAIL);
+		assert_int_equal(fi_cq_readerr(resource->cq, &cq_err_entry, 0),
+				 1);
+		assert_int_equal(cq_err_entry.err, FI_ENOTCONN);
+		assert_int_equal(cq_err_entry.prov_errno,
+				 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+	} else {
+		/* We should expect an empty cq and an eq error */
+		assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1),
+				 -FI_EAGAIN);
+		assert_int_equal(fi_eq_readerr(resource->eq, &eq_err_entry, 0),
+				 sizeof(eq_err_entry));
+		assert_int_equal(eq_err_entry.err, FI_ENOTCONN);
+		assert_int_equal(eq_err_entry.prov_errno,
+				 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+	}
+}
+
+void test_efa_rdm_txe_handle_error_write_cq(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_write);
+	assert_non_null(txe);
+
+	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_txe_handle_error, txe, true);
+
+	efa_rdm_txe_release(txe);
+}
+
+void test_efa_rdm_txe_handle_error_not_write_cq(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_write);
+	assert_non_null(txe);
+
+	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
+
+	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_txe_handle_error, txe, false);
+
+	efa_rdm_txe_release(txe);
+}
+
+void test_efa_rdm_rxe_handle_error_write_cq(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_tagged);
+	assert_non_null(rxe);
+
+	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_rxe_handle_error, rxe, true);
+
+	efa_rdm_rxe_release(rxe);
+}
+
+void test_efa_rdm_rxe_handle_error_not_write_cq(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_tagged);
+	assert_non_null(rxe);
+
+	rxe->internal_flags |= EFA_RDM_OPE_INTERNAL;
+
+	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_rxe_handle_error, rxe, false);
+
+	efa_rdm_rxe_release(rxe);
 }
