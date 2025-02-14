@@ -91,6 +91,10 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, str
 
 void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr);
 
+struct efa_rdm_ope *efa_unit_test_alloc_txe(struct efa_resource *resource, uint32_t op);
+
+struct efa_rdm_ope *efa_unit_test_alloc_rxe(struct efa_resource *resource, uint32_t op);
+
 /* test cases */
 void test_av_insert_duplicate_raw_addr();
 void test_av_insert_duplicate_gid();
@@ -112,6 +116,7 @@ void test_efa_rdm_ep_dc_send_queue_before_handshake();
 void test_efa_rdm_ep_dc_send_queue_limit_before_handshake();
 void test_efa_rdm_ep_write_queue_before_handshake();
 void test_efa_rdm_ep_read_queue_before_handshake();
+void test_efa_rdm_ep_trigger_handshake();
 void test_efa_rdm_read_copy_pkt_pool_128_alignment();
 void test_efa_rdm_ep_send_with_shm_no_copy();
 void test_efa_rdm_ep_rma_without_caps();
@@ -191,7 +196,12 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128();
 void test_efa_rdm_ope_prepare_to_post_send_cuda_memory();
 void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128();
 void test_efa_rdm_ope_post_write_0_byte();
-void test_efa_rdm_rxe_post_local_read_or_queue_cleanup_txe();
+void test_efa_rdm_rxe_post_local_read_or_queue_unhappy();
+void test_efa_rdm_rxe_post_local_read_or_queue_happy();
+void test_efa_rdm_txe_handle_error_write_cq();
+void test_efa_rdm_txe_handle_error_not_write_cq();
+void test_efa_rdm_rxe_handle_error_write_cq();
+void test_efa_rdm_rxe_handle_error_not_write_cq();
 void test_efa_rdm_msg_send_to_local_peer_with_null_desc();
 void test_efa_fork_support_request_initialize_when_ibv_fork_support_is_needed();
 void test_efa_fork_support_request_initialize_when_ibv_fork_support_is_unneeded();
@@ -226,6 +236,9 @@ void test_efa_rdm_peer_keep_pke_in_overflow_list();
 void test_efa_rdm_peer_append_overflow_pke_to_recvwin();
 void test_efa_rdm_pke_handle_longcts_rtm_send_completion();
 void test_efa_rdm_pke_release_rx_list();
+void test_efa_rdm_pke_alloc_rta_rxe();
+void test_efa_rdm_pke_alloc_rtw_rxe();
+void test_efa_rdm_pke_alloc_rtr_rxe();
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)

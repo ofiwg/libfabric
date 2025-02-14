@@ -660,6 +660,67 @@ void test_efa_rdm_ep_read_queue_before_handshake(struct efa_resource **state)
 }
 
 /**
+ * @brief Test the efa_rdm_ep_trigger_handshake function
+ * with different peer setup and check the txe flags
+ *
+ * @param state efa_resource
+ */
+void test_efa_rdm_ep_trigger_handshake(struct efa_resource **state)
+{
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_resource *resource = *state;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+
+	g_efa_unit_test_mocks.efa_rdm_ope_post_send = &efa_mock_efa_rdm_ope_post_send_return_mock;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	will_return_always(efa_mock_efa_rdm_ope_post_send_return_mock, FI_SUCCESS);
+
+	/* Create and register a fake peer */
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+
+	/* No txe should have been allocated yet */
+	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+
+	/*
+	 * When the peer already has made , the function should be a no-op
+	 * and no txe is allocated
+	 */
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED | EFA_RDM_PEER_REQ_SENT;
+	assert_int_equal(efa_rdm_ep_trigger_handshake(efa_rdm_ep, peer), FI_SUCCESS);
+	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+
+	/*
+	 * Reset the peer flags to 0, now we should expect a txe allocated
+	 */
+	peer->flags = 0;
+	assert_int_equal(efa_rdm_ep_trigger_handshake(efa_rdm_ep, peer), FI_SUCCESS);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list),  1);
+
+	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
+
+	assert_true(txe->fi_flags & EFA_RDM_TXE_NO_COMPLETION);
+	assert_true(txe->fi_flags & EFA_RDM_TXE_NO_COUNTER);
+	assert_true(txe->internal_flags & EFA_RDM_OPE_INTERNAL);
+
+	efa_rdm_txe_release(txe);
+}
+
+/**
  * @brief When local support unsolicited write, but the peer doesn't, fi_writedata
  * (use rdma-write with imm) should fail as FI_EINVAL
  *

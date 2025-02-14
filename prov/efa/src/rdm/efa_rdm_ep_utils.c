@@ -561,6 +561,7 @@ ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer 
 	 */
 	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
 	txe->msg_id = -1;
+	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
 
 	err = efa_rdm_ope_post_send(txe, EFA_RDM_EAGER_RTW_PKT);
 
@@ -599,6 +600,7 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	 * reset to desired flags (remove things like FI_DELIVERY_COMPLETE, and FI_COMPLETION)
 	 */
 	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
+	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry)) {
