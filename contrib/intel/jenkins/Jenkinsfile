@@ -187,34 +187,6 @@ def slurm_build(modes, partition, location, tag, hw=null, additional_args=null) 
   slurm_batch(partition, "1", "${env.LOG_DIR}/libfabric_${tag}", cmd)
 }
 
-def build(item, mode=null, hw=null, additional_args=null) {
-  def cmd = "${RUN_LOCATION}/build.py --build_item=${item}"
-
-  if (item == "fabtests") {
-    cmd ="${cmd} --build_loc=${CUSTOM_WORKSPACE}/source/libfabric/fabtests"
-  } else {
-    cmd ="${cmd} --build_loc=${CUSTOM_WORKSPACE}/source/libfabric"
-  }
-
-  if (mode) {
-    cmd = "${cmd} --ofi_build_mode=${mode} "
-  }
-
-  if (hw) {
-    cmd = "${cmd} --build_hw=${hw} "
-  }
-
-  if (RELEASE) {
-    cmd = "${cmd} --release "
-  }
-
-  if (additional_args) {
-    cmd = "${cmd} ${additional_args} "
-  }
-
-  run_python(PYTHON_VERSION, cmd)
-}
-
 def bootstrap_ci() {
   sh "${CI_LOCATION}/${env.CI_MODULE}/bootstrap.sh"
 }
@@ -386,9 +358,9 @@ pipeline {
       steps {
         script {  
           echo "Copying build dirs."
-          build("builddir")
+          sh "python3.9 ${RUN_LOCATION}/build.py --build_item=builddir"
           echo "Copying log dirs."
-          build("logdir")
+          sh "python3.9 ${RUN_LOCATION}/build.py --build_item=logdir"
         }
       }
     }
@@ -453,7 +425,7 @@ pipeline {
               checkout_tar("source")
               checkout_external_resources()
               dir (CUSTOM_WORKSPACE) {
-                build("logdir")
+                sh "python3.9 ${RUN_LOCATION}/build.py --build_item=logdir"
               }
               bootstrap_ci()
               dir (CI_LOCATION) {
@@ -475,8 +447,10 @@ pipeline {
               checkout_tar("source")
               checkout_external_resources()
               dir (CUSTOM_WORKSPACE) {
-                build("logdir")
-                build("builddir")
+                echo "Copying log dirs."
+                sh "python3.9 ${RUN_LOCATION}/build.py --build_item=logdir"
+                echo "Copying build dirs."
+                sh "python3.9 ${RUN_LOCATION}/build.py --build_item=builddir"
               }
               bootstrap_ci()
               dir (CI_LOCATION) {
