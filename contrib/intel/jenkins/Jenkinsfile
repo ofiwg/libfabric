@@ -9,13 +9,6 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def TIMEOUT="7200"
 @Field def weekly=false
 
-def run_python(version, command, output=null) {
-  if (output != null)
-    sh "python$version $command >> $output"
-  else
-    sh "python$version $command"
-}
-
 def slurm_batch(partition, node_num, output, command) {
   try {
     sh """sbatch --partition=${partition} -N ${node_num} \
@@ -85,7 +78,7 @@ def summarize(item, verbose=false, release=false, send_mail=false) {
     cmd = "${cmd} --send_mail "
   }
 
-  run_python(PYTHON_VERSION, cmd)
+  sh "python3.9 ${cmd}"
 }
 
 def save_summary() {
@@ -834,10 +827,13 @@ pipeline {
           steps {
             script {
               dir (RUN_LOCATION) {
-                run_python(PYTHON_VERSION,
-                           """runtests.py --prov='tcp' --util='rxm' \
-                           --test=daos --build_hw=daos \
-                           --log_file=${env.LOG_DIR}/daos_tcp-rxm_reg""")
+                sh """python3.9 runtests.py \
+                  --prov='tcp' \
+                  --util='rxm' \
+                  --test=daos \
+                  --build_hw=daos \
+                  --log_file=${env.LOG_DIR}/daos_tcp-rxm_reg
+                """
               }
             }
           }
@@ -848,10 +844,13 @@ pipeline {
           steps {
             script {
               dir (RUN_LOCATION) {
-                run_python(PYTHON_VERSION,
-                           """runtests.py --prov='verbs' --util='rxm' \
-                           --test=daos --build_hw=daos \
-                           --log_file=${env.LOG_DIR}/daos_verbs-rxm_reg""")
+                sh """python3.9 runtests.py \
+                  --prov='verbs' \
+                  --util='rxm' \
+                  --test=daos \
+                  --build_hw=daos \
+                  --log_file=${env.LOG_DIR}/daos_verbs-rxm_reg
+                """
               }
             }
           }
