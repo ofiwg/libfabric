@@ -31,33 +31,6 @@ def slurm_batch(partition, node_num, output, command) {
   sh "cat ${output}"
 }
 
-def run_fabtests(stage_name, hw, partition, node_num, prov, util=null,
-                 user_env=null, way=null) {
-  def command = "python3.9 ${RUN_LOCATION}/runtests.py --build_hw=${hw}"
-  def opts = "--prov=${prov} --test=fabtests"
-  def modes = BUILD_MODES
-  if (util)
-    opts = "${opts} --util=${util}"
-
-  if (user_env)
-    opts = "${opts} --user_env ${user_env}"
-
-  if (way) {
-    opts = "${opts} --way ${way}"
-    stage_name = "${stage_name}_${way}"
-    modes = ["reg"]
-  }
-
-  for (mode in modes) {
-    echo "Running $stage_name fabtests $mode"
-    slurm_batch("${partition}", "${node_num}",
-                "${env.LOG_DIR}/${stage_name}_fabtests_${mode}",
-                "${command} ${opts} --ofi_build_mode=${mode}")
-  }
-
-  echo "${stage_name} completed."
-}
-
 def run_ci(stage_name, config_name) {
   sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
         python run.py \
