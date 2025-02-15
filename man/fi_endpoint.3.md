@@ -919,6 +919,16 @@ wire protocols.  The following tag formats are defined:
   Applications that use the CCL format pass in the payload identifier
   directly as the tag and set ignore bits to 0.
 
+*FI_TAG_RPC*
+
+: The FI_TAG_RPC flag is used to indicate that tags are being utilized to match RPC
+  replies with requests. When specified via fi_getinfo, the caller ensures that
+  a receive buffer with a corresponding tag to receive an RPC reply has been posted
+  prior to sending an RPC request.  As a result, unexpected message handling may be
+  optimized.
+
+  When FI_TAG_RPC is specified, unmatched received messages must be discarded.
+
 *FI_TAG_MAX_FORMAT*
 : If the value of mem_tag_format is >= FI_TAG_MAX_FORMAT, the tag format
   is treated as a set of bit fields.  The behavior is functionally the same

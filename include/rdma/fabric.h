@@ -346,6 +346,7 @@ enum {
 	FI_TAG_BITS,
 	FI_TAG_MPI,
 	FI_TAG_CCL,
+	FI_TAG_RPC,
 	FI_TAG_MAX_FORMAT = (1ULL << 16),
 };
 
