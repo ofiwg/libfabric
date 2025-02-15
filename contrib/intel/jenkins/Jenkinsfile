@@ -262,14 +262,14 @@ pipeline {
         }
       }
     }
-    stage ('bootstrap-ci') {
+    stage ('bootstrap_ci') {
       steps {
         script {
           bootstrap_ci()
         }
       }
     }
-    stage('check-authorization') {
+    stage('check_authorization') {
       steps {
         script {
           sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
@@ -279,7 +279,7 @@ pipeline {
         }
       }
     }
-    stage ('opt-out') {
+    stage ('opt_out') {
       steps {
         script {
           git_diffs()
@@ -294,7 +294,7 @@ pipeline {
         }
       }
     }
-    stage ('health check') {
+    stage ('health_check') {
       when { equals expected: true, actual: DO_RUN }
       steps {
         script {
@@ -304,7 +304,7 @@ pipeline {
         }
       }
     }
-    stage ('prepare build') {
+    stage ('prepare_build') {
       when { equals expected: true, actual: DO_RUN }
       steps {
         script {  
@@ -315,7 +315,7 @@ pipeline {
         }
       }
     }
-    stage ('build-libfabric') {
+    stage ('build_libfabric') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
         stage ('water') {
@@ -412,10 +412,10 @@ pipeline {
         }
       }
     }
-    stage('build-middlewares') {
+    stage('build_middlewares') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
-        stage ('shmem-water') {
+        stage ('shmem_water') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -424,7 +424,7 @@ pipeline {
             }
           }
         }
-        stage ('shmem-grass') {
+        stage ('shmem_grass') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -433,7 +433,7 @@ pipeline {
             }
           }
         }
-        stage ('ompi-water') {
+        stage ('ompi_water') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -442,7 +442,7 @@ pipeline {
             }
           }
         }
-        stage ('ompi-grass') {
+        stage ('ompi_grass') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -451,7 +451,7 @@ pipeline {
             }
           }
         }
-        stage ('oneccl-water') {
+        stage ('oneccl_water') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -460,7 +460,7 @@ pipeline {
             }
           }
         }
-        stage ('oneccl-grass') {
+        stage ('oneccl_grass') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -469,7 +469,7 @@ pipeline {
             }
           }
         }
-        stage ('oneccl-electric') {
+        stage ('oneccl_electric') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -478,7 +478,7 @@ pipeline {
             }
           }
         }
-        stage ('oneccl-fire') {
+        stage ('oneccl_fire') {
           agent {
             node {
               label 'ze'
@@ -532,10 +532,10 @@ pipeline {
         }
       }
     }
-    stage('parallel-tests') {
+    stage('parallel_tests') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
-        stage('mpichtestsuite-tcp') {
+        stage('CI_mpichtestsuite_tcp') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -547,7 +547,7 @@ pipeline {
             }
           }
         }
-        stage('mpichtestsuite-verbs-rxm') {
+        stage('CI_mpichtestsuite_verbs-rxm') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -710,7 +710,7 @@ pipeline {
             }
           }
         }
-        stage('SHMEM_grass') {
+        stage('CI_shmem_grass') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -720,7 +720,7 @@ pipeline {
             }
           }
         }
-        stage('SHMEM_water') {
+        stage('CI_shmem_water') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -730,7 +730,7 @@ pipeline {
             }
           }
         }
-        stage ('multinode_performance') {
+        stage ('CI_multinode_performance') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -742,7 +742,7 @@ pipeline {
             }
           }
         }
-        stage ('oneccl_grass') {
+        stage ('CI_oneccl_grass') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -752,7 +752,7 @@ pipeline {
             }
           }
         }
-        stage ('oneccl_water') {
+        stage ('CI_oneccl_water') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -761,7 +761,7 @@ pipeline {
             }
           }
         }
-        stage ('oneccl_electric') {
+        stage ('CI_oneccl_electric') {
           steps {
             script {
               dir (CI_LOCATION) {
@@ -770,7 +770,7 @@ pipeline {
             }
           }
         }
-        stage ('oneCCL-fire') {
+        stage ('CI_oneccl_fire') {
           agent { node { label 'ze' } }
           options { skipDefaultCheckout() }
           steps {
