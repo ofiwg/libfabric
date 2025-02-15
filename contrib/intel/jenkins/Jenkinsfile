@@ -58,42 +58,6 @@ def run_fabtests(stage_name, hw, partition, node_num, prov, util=null,
   echo "${stage_name} completed."
 }
 
-def run_middleware(providers, stage_name, test, hw, partition, node_num,
-                   mpi=null, imb_grp=null, user_env=null) {
-  def base_cmd = "python3.9 ${RUN_LOCATION}/runtests.py --test=${test} --build_hw=${hw}"
-  def opts = ""
-  def prefix = "${env.LOG_DIR}/${stage_name}_"
-  def suffix = "_${test}_reg"
-  if (mpi) {
-    base_cmd = "${base_cmd} --mpi=${mpi}"
-    suffix = "_${mpi}${suffix}"
-  }
-
-  if (imb_grp)
-    base_cmd = "${base_cmd} --imb_grp=${imb_grp}"
-
-  if (env.WEEKLY.toBoolean())
-    base_cmd = "${base_cmd} --weekly=${env.WEEKLY}"
-  
-  if (user_env)
-    base_cmd = "${base_cmd} --user_env ${user_env}"
-
-  for (prov in providers) {
-    if (prov[1]) {
-      echo "Running ${prov[0]}-${prov[1]} ${stage_name}"
-      opts = "--prov=${prov[0]} --util=${prov[1]}"
-      output = "${prefix}${prov[0]}-${prov[1]}${suffix}"
-    } else {
-      echo "Running ${prov[0]} ${stage_name}"
-      opts = "--prov=${prov[0]}"
-      output = "${prefix}${prov[0]}${suffix}"
-    }
-
-    slurm_batch("${partition}", "${node_num}", "${output}",
-                "${base_cmd} ${opts}")
-  }
-}
-
 def run_ci(stage_name, config_name) {
   sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
         python run.py \
