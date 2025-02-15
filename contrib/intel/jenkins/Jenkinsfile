@@ -9,21 +9,6 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def TIMEOUT="7200"
 @Field def weekly=false
 
-def slurm_batch(partition, node_num, output, command) {
-  try {
-    sh """sbatch --partition=${partition} -N ${node_num} \
-          --wait -o ${output} --open-mode=append \
-          -J ${env.SLURM_JOB_NAME} \
-          --wrap=\'env; timeout $TIMEOUT ${command}\'
-       """
-  } catch (Exception e) {
-    sh "scancel \$(cat ${output} | grep SLURM_JOBID | cut -d \"=\" -f 2)"
-    sh "cat ${output}"
-    error("Build failed ${e}")
-  }
-  sh "cat ${output}"
-}
-
 def run_ci(stage_name, config_name) {
   sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
         python run.py \
@@ -151,31 +136,6 @@ def git_diffs() {
       cut -d '[' -f 2 | cut -d ']' -f 1 > ./release_num.txt
     """
   }
-}
-
-def slurm_build(modes, partition, location, tag, hw=null, additional_args=null) {
-  def cmd = "pwd; "
-  def prefix = "python${PYTHON_VERSION} ${RUN_LOCATION}/build.py"
-  def libfabric = "--build_item=libfabric --build_loc=${CUSTOM_WORKSPACE}/${location}/libfabric"
-  def fabtests = "--build_item=fabtests --build_loc=${CUSTOM_WORKSPACE}/${location}/libfabric/fabtests"
-  if (RELEASE) {
-    prefix = "${prefix} --release"
-  }
-
-  if (hw) {
-    prefix = "${prefix} --build_hw=${hw}"
-  }
-
-  if (additional_args) {
-    prefix = "${prefix} ${additional_args} "
-  }
-
-  for (mode in modes) {
-    cmd = "${cmd} ${prefix} ${libfabric} --ofi_build_mode=${mode};"
-    cmd = "${cmd} ${prefix} ${fabtests} --ofi_build_mode=${mode};"
-  }
-
-  slurm_batch(partition, "1", "${env.LOG_DIR}/libfabric_${tag}", cmd)
 }
 
 def bootstrap_ci() {
@@ -861,11 +821,25 @@ pipeline {
           steps {
             script {
               dir (RUN_LOCATION) {
-                dmabuf_output = "${LOG_DIR}/DMABUF-Tests_verbs-rxm_dmabuf"
-                cmd = """ python3.9 runtests.py --test=dmabuf \
-                           --prov=verbs --util=rxm --build_hw=fire"""
-                slurm_batch("torchic", "1", "${dmabuf_output}_reg",
-                            "${cmd}")
+                output = "${LOG_DIR}/DMABUF-Tests_verbs-rxm_dmabuf"
+                cmd = """python3.9 runtests.py --test=dmabuf \
+                         --prov=verbs --util=rxm --build_hw=fire"""
+                try {
+                  sh """sbatch \
+                        --partition=torchic \
+                        -N 1 \
+                        --wait \
+                        -o ${output} \
+                        --open-mode=append \
+                        -J ${env.SLURM_JOB_NAME} \
+                        --wrap=\'env; timeout 7200 ${cmd}\'
+                    """
+                } catch (Exception e) {
+                  sh "scancel \$(cat ${output} | grep SLURM_JOBID | cut -d \"=\" -f 2)"
+                  sh "cat ${output}"
+                  error("Build failed ${e}")
+                }
+                sh "cat ${output}"
               }
             }
           }
