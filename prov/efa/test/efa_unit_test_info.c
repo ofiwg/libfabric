@@ -64,6 +64,8 @@ void test_info_rdm_attributes()
 		assert_true(!strcmp(info->fabric_attr->name, EFA_FABRIC_NAME));
 		assert_true(strstr(info->domain_attr->name, "rdm"));
 		assert_int_equal(info->ep_attr->max_msg_size, UINT64_MAX);
+		assert_int_equal(info->domain_attr->progress, FI_PROGRESS_MANUAL);
+		assert_int_equal(info->domain_attr->control_progress, FI_PROGRESS_MANUAL);
 #if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
 		assert_true(info->caps | FI_HMEM);
 #endif
