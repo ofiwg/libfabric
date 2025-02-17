@@ -190,10 +190,7 @@ EFA_INI
 
 	err = efa_device_list_initialize();
 	if (err)
-		return NULL;
-
-	if (g_device_cnt <= 0)
-		return NULL;
+		return &efa_prov;
 
 	/*
 	 * efa_env_initialize uses g_efa_device_list
@@ -236,7 +233,7 @@ EFA_INI
 
 err_free:
 	efa_prov_finalize();
-	return NULL;
+	return &efa_prov;
 }
 
 /**
