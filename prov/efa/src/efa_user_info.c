@@ -281,11 +281,6 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 						 "Libfabric can proceed but it is recommended to align the tx and rx msg order.\n",
 						 info->tx_attr->msg_order, info->rx_attr->msg_order);
 
-		/* We only support manual progress for RMA operations */
-		if (hints->caps & FI_RMA) {
-			info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
-		}
-
 		/*
 		 * The provider does not force applications to register buffers
 		 * with the device, but if an application is able to, reuse

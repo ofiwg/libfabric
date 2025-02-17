@@ -44,7 +44,7 @@ const struct fi_domain_attr efa_domain_attr = {
 	.caps			= EFA_DOMAIN_CAPS,
 	.threading		= FI_THREAD_DOMAIN,
 	.control_progress	= FI_PROGRESS_AUTO,
-	.data_progress		= FI_PROGRESS_AUTO,
+	.progress		= FI_PROGRESS_AUTO,
 	.resource_mgmt		= FI_RM_DISABLED,
 	.mr_mode		= OFI_MR_BASIC_MAP | FI_MR_LOCAL | OFI_MR_BASIC,
 	.mr_key_size		= sizeof_field(struct ibv_sge, lkey),
@@ -583,6 +583,12 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 		 * buffer. EFA RDM endpoint does not have this requirement, hence unset the flag
 		 */
 		prov_info_rdm->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+		/*
+		 * EFA RDM path requires manual progress for connection management
+		 * and data transfers
+		 */
+		prov_info_rdm->domain_attr->control_progress = FI_PROGRESS_MANUAL;
+		prov_info_rdm->domain_attr->progress = FI_PROGRESS_MANUAL;
 	}
 
 	/* update ep_attr */
