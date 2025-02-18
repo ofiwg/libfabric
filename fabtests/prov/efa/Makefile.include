@@ -33,7 +33,9 @@
 if ENABLE_EFA
 bin_PROGRAMS += prov/efa/src/fi_efa_rnr_read_cq_error \
 		prov/efa/src/fi_efa_rnr_queue_resend \
-		prov/efa/src/fi_efa_info_test
+		prov/efa/src/fi_efa_info_test \
+		prov/efa/src/fi_efa_rdm_remote_exit_early
+
 if HAVE_VERBS_DEVEL
 bin_PROGRAMS += prov/efa/src/fi_efa_exhaust_mr_reg_rdm_pingpong
 if BUILD_EFA_RDMA_CHECKER
@@ -58,6 +60,11 @@ prov_efa_src_fi_efa_rnr_queue_resend_LDADD = libfabtests.la
 prov_efa_src_fi_efa_info_test_SOURCES = \
 	prov/efa/src/efa_info_test.c
 prov_efa_src_fi_efa_info_test_LDADD = libfabtests.la
+
+prov_efa_src_fi_efa_rdm_remote_exit_early_SOURCES = \
+	prov/efa/src/rdm_remote_exit_early.c \
+	$(efa_rnr_srcs)
+prov_efa_src_fi_efa_rdm_remote_exit_early_LDADD = libfabtests.la
 
 if HAVE_VERBS_DEVEL
 efa_exhaust_mr_reg_srcs = \
