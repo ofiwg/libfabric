@@ -30,6 +30,9 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     if not has_cuda(cmdline_args.client_id) or not has_cuda(cmdline_args.server_id):
         pytest.skip("Client and server both need a Cuda device")
 
+    if fabtest_name == "fi_rdm_tagged_bw" and fabric == "efa-direct":
+        pytest.skip("efa-direct does not support tagged")
+
     message_size = 1024
 
     cmdline_args_copy = copy.copy(cmdline_args)
