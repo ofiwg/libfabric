@@ -74,10 +74,30 @@ def zcpy_recv_message_size(request):
 def zcpy_recv_max_msg_size(request):
     return 8192
 
-# TODO - add efa-direct tests
-@pytest.fixture(scope="module", params=["efa"])
+@pytest.fixture(scope="module", params=["r:0,4,32",
+                                        "r:0,1024,8192",])
+def direct_message_size(request):
+    return request.param
+
+# TODO: Include 0 byte test when we support 0 byte rma inject
+@pytest.fixture(scope="module", params=["r:1,4,32",
+                                        "r:1,1024,8192",])
+def direct_rma_size(request):
+    return request.param
+
+@pytest.fixture(scope="module", params=["efa", "efa-direct"])
 def fabric(request):
     return request.param
+
+@pytest.fixture(scope="function")
+def rma_fabric(cmdline_args, fabric):
+    if fabric == 'efa-direct' and (
+        not has_rdma(cmdline_args, 'read') or
+        not has_rdma(cmdline_args, 'write') or
+        not has_rdma(cmdline_args, 'writedata')
+    ):
+        pytest.skip("FI_RMA is not supported. Skip rma tests on efa-direct.")
+    return fabric
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_collection_modifyitems(session, config, items):
