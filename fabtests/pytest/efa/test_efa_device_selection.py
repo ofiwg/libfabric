@@ -26,6 +26,8 @@ def test_efa_device_selection(cmdline_args, fabric):
         client_device_name = client_device_names[client_device_idx]
 
         for suffix in ["rdm", "dgrm"]:
+            if fabric == "efa-direct" and suffix == "dgrm":
+                continue
             server_tx_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "tx_bytes", server_device_name)
             client_tx_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "tx_bytes", client_device_name)
 
