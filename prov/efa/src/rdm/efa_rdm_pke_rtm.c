@@ -281,7 +281,7 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 
 	rtm_hdr = (struct efa_rdm_rtm_base_hdr *)pkt_entry->wiredata;
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
-		rxe = efa_rdm_rxe_map_lookup(&ep->rxe_map, pkt_entry);
+		rxe = efa_rdm_rxe_map_lookup(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry), pkt_entry->addr);
 		rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 	} else {
 		rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
@@ -329,7 +329,7 @@ ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 
 	rtm_hdr = (struct efa_rdm_rtm_base_hdr *) pkt_entry->wiredata;
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
-		rxe = efa_rdm_rxe_map_lookup(&ep->rxe_map, pkt_entry);
+		rxe = efa_rdm_rxe_map_lookup(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry), pkt_entry->addr);
 		rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 	} else {
 		rxe = efa_rdm_msg_alloc_rxe_for_tagrtm(ep, &pkt_entry);
@@ -446,7 +446,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 		struct efa_rdm_ope *rxe;
 		struct efa_rdm_pke *unexp_pkt_entry;
 
-		rxe = efa_rdm_rxe_map_lookup(&pkt_entry->ep->rxe_map, pkt_entry);
+		rxe = efa_rdm_rxe_map_lookup(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry), pkt_entry->addr);
 		if (rxe) {
 			if (rxe->state == EFA_RDM_RXE_MATCHED) {
 				pkt_entry->ope = rxe;

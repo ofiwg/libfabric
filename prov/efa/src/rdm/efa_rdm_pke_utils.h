@@ -7,6 +7,7 @@
 #include "efa_rdm_pke.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pkt_type.h"
+#include "efa_rdm_pke_rtm.h"
 #include "efa_mr.h"
 
 /**
@@ -160,7 +161,7 @@ send_nack:
 	}
 
 	if (efa_rdm_pkt_type_is_rtm(pkt_type)) {
-		efa_rdm_rxe_map_insert(&ep->rxe_map, pkt_entry, rxe);
+		efa_rdm_rxe_map_insert(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry), pkt_entry->addr, rxe);
 	}
 
 	return efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_READ_NACK_PKT);

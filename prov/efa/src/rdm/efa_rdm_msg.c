@@ -797,7 +797,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 
 	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
-		efa_rdm_rxe_map_insert(&ep->rxe_map, *pkt_entry_ptr, rxe);
+		efa_rdm_rxe_map_insert(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(*pkt_entry_ptr), (*pkt_entry_ptr)->addr, rxe);
 
 	return rxe;
 }
@@ -874,7 +874,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 
 	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
-		efa_rdm_rxe_map_insert(&ep->rxe_map, *pkt_entry_ptr, rxe);
+		efa_rdm_rxe_map_insert(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(*pkt_entry_ptr), (*pkt_entry_ptr)->addr, rxe);
 
 	return rxe;
 }
