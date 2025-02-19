@@ -105,7 +105,7 @@ int opx_select_port_index(int unit)
 
 #define OPX_HFI1_MMAP_MAGIC 0xdabbad00
 
-#define opx_offset_in_page(p)	((unsigned long)(p) & (page_sizes[OFI_PAGE_SIZE]-1))
+#define opx_offset_in_page(p) ((unsigned long) (p) & (page_sizes[OFI_PAGE_SIZE] - 1))
 
 #define OPX_HFI1_MMAP_TOKEN_SET(field, val) (((val) & OPX_HFI1_MMAP_##field##_MASK) << OPX_HFI1_MMAP_##field##_SHIFT)
 
