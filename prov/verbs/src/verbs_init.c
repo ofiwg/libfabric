@@ -807,9 +807,6 @@ VERBS_INI
 #endif
 	ofi_mutex_init(&vrb_init_mutex);
 
-	if (vrb_os_ini())
-		return NULL;
-
 	vrb_prof_init();
 
 	return &vrb_prov;

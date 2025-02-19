@@ -1366,6 +1366,13 @@ static int vrb_init_info(const struct fi_info **all_infos)
 	initialized = true;
 	*all_infos = NULL;
 
+	if (vrb_os_ini()) {
+		FI_WARN(&vrb_prov, FI_LOG_FABRIC,
+			"failed in OS specific device initialization\n");
+		ret = -FI_ENODATA;
+		goto done;
+	}
+
 	vrb_prof_func_start("vrb_os_mem_support");
 	vrb_os_mem_support(&vrb_gl_data.peer_mem_support,
 			   &vrb_gl_data.dmabuf_support);
