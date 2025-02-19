@@ -164,6 +164,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
 	rxe->op = op;
 	rxe->peer_rxe = NULL;
 	rxe->unexp_pkt = NULL;
+	rxe->rxe_map = NULL;
 	rxe->atomrsp_data = NULL;
 	rxe->bytes_read_total_len = 0;
 
