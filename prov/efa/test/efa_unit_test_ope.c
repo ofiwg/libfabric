@@ -477,3 +477,38 @@ void test_efa_rdm_rxe_handle_error_not_write_cq(struct efa_resource **state)
 
 	efa_rdm_rxe_release(rxe);
 }
+
+void test_efa_rdm_rxe_map(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_ep *efa_rdm_ep;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_tagged);
+	rxe->msg_id = 1;
+	assert_non_null(rxe);
+
+	/* rxe has not been inserted to any rxe_map yet */
+	assert_null(rxe->rxe_map);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
+
+	efa_rdm_rxe_map_insert(&efa_rdm_ep->rxe_map, rxe->msg_id, rxe->addr,
+			       rxe);
+	assert_true(rxe->rxe_map == &efa_rdm_ep->rxe_map);
+	assert_true(rxe == efa_rdm_rxe_map_lookup(rxe->rxe_map, rxe->msg_id,
+						  rxe->addr));
+
+	efa_rdm_rxe_release(rxe);
+
+	/**
+	 * Now the map_entry_pool should be empty so we can destroy it
+	 * Otherwise there will be an assertion error on the use cnt is
+	 * is non-zero
+	 */
+	ofi_bufpool_destroy(efa_rdm_ep->map_entry_pool);
+	efa_rdm_ep->map_entry_pool = NULL;
+}

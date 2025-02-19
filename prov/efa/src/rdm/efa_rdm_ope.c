@@ -157,6 +157,9 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 
 	dlist_remove(&rxe->ep_entry);
 
+	if (rxe->rxe_map)
+		efa_rdm_rxe_map_remove(rxe->rxe_map, rxe->msg_id, rxe->addr, rxe);
+
 	for (i = 0; i < rxe->iov_count; i++) {
 		if (rxe->mr[i]) {
 			err = fi_close((struct fid *)rxe->mr[i]);
@@ -1072,12 +1075,6 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 		assert(rxe->op == ofi_op_msg || rxe->op == ofi_op_tagged);
 
 		efa_rdm_rxe_report_completion(rxe);
-	}
-
-	if (ope->internal_flags & EFA_RDM_OPE_READ_NACK) {
-		assert(ope->type == EFA_RDM_RXE);
-		/* Apply to both DC and non-DC */
-		efa_rdm_rxe_map_remove(&ope->ep->rxe_map, ope->msg_id, ope->peer->efa_fiaddr, ope);
 	}
 
 	/* As can be seen, this function does not release rxe when
