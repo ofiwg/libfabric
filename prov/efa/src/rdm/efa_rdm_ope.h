@@ -153,6 +153,8 @@ struct efa_rdm_ope {
 	struct efa_rdm_pke *unexp_pkt;
 	char *atomrsp_data;
 	enum efa_rdm_cuda_copy_method cuda_copy_method;
+	/* the rxe_map that the rxe is ever inserted */
+	struct efa_rdm_rxe_map *rxe_map;
 	/* end of RX related variables */
 	/* the following variables are for TX operation only */
 	uint64_t bytes_acked;

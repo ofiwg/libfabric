@@ -226,6 +226,7 @@ void test_efa_rdm_txe_handle_error_write_cq();
 void test_efa_rdm_txe_handle_error_not_write_cq();
 void test_efa_rdm_rxe_handle_error_write_cq();
 void test_efa_rdm_rxe_handle_error_not_write_cq();
+void test_efa_rdm_rxe_map();
 void test_efa_rdm_msg_send_to_local_peer_with_null_desc();
 void test_efa_fork_support_request_initialize_when_ibv_fork_support_is_needed();
 void test_efa_fork_support_request_initialize_when_ibv_fork_support_is_unneeded();
