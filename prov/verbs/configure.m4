@@ -95,6 +95,16 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([VERBS_HAVE_DMABUF_MR],[$VERBS_HAVE_DMABUF_MR],
 		[Whether infiniband/verbs.h has ibv_reg_dmabuf_mr() support or not])
 
+	#See if we have rdma-core IBV_ACCESS_RELAXED_ORDERING mr support
+	VERBS_HAVE_RELAXED_ORDERING_MR=0
+	AS_IF([test $verbs_ibverbs_happy -eq 1],[
+		AC_CHECK_DECL([IBV_ACCESS_RELAXED_ORDERING],
+			[VERBS_HAVE_RELAXED_ORDERING_MR=1],[],
+			[#include <infiniband/verbs.h>])
+		])
+	AC_DEFINE_UNQUOTED([VERBS_HAVE_RELAXED_ORDERING_MR],[$VERBS_HAVE_RELAXED_ORDERING_MR],
+		[Whether infiniband/verbs.h has IBV_ACCESS_RELAXED_ORDERING support or not])
+
 	CPPFLAGS=$fi_verbs_configure_save_CPPFLAGS
 
 	# Technically, verbs_ibverbs_CPPFLAGS and
