@@ -751,6 +751,9 @@ LNX_INI
 	fi_param_define(&lnx_prov, "disable_shm", FI_PARAM_BOOL,
 			"Turn off SHM support. Defaults to 0");
 
+	fi_param_define(&lnx_prov, "dump_stats", FI_PARAM_BOOL,
+			"Dump LNX stats on shutdown. Defaults to 0");
+
 	dlist_init(&lnx_links);
 
 	if (!global_recv_bp) {

@@ -65,16 +65,61 @@ static struct fi_ops_srx_owner lnx_srx_ops = {
 	.foreach_unspec_addr = lnx_foreach_unspec_addr,
 };
 
+static inline void lnx_dump_core_ep_stats(struct lnx_core_ep *cep)
+{
+	struct lnx_t_traffic_stats *tstats;
+
+	tstats = &cep->cep_t_stats;
+
+	FI_TRACE(&lnx_prov, FI_LOG_DOMAIN, "%s,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld\n",
+		 cep->cep_domain->cd_info->domain_attr->name,
+		 tstats->st_num_tsend, tstats->st_num_tsendv,
+		 tstats->st_num_tsendmsg, tstats->st_num_tsenddata,
+		 tstats->st_num_tinject, tstats->st_num_tinjectdata,
+		 tstats->st_num_posted_recvs, tstats->st_num_unexp_msgs);
+}
+
+static inline void
+lnx_dump_srx_queue_stats(struct lnx_ep *lep)
+{
+	static bool header;
+
+	if (!header) {
+		FI_TRACE(&lnx_prov, FI_LOG_DOMAIN,
+			 "Domain name,tsend,tsendv,tsendmsg,tsenddata,"
+			 "tinject,tinjectdata,posted_recvs,unexp_msgs,max_queue,avg_queue\n");
+		header = true;
+	}
+
+	FI_TRACE(&lnx_prov, FI_LOG_DOMAIN,
+		 "RECVQ,-,-,-,-,-,-,-,-,%lu,%lu\n",
+		 lep->le_srq.lps_trecv.lqp_recvq.lq_max,
+		 lep->le_srq.lps_trecv.lqp_recvq.lq_rolling_avg);
+	FI_TRACE(&lnx_prov, FI_LOG_DOMAIN,
+		 "UNEXQ,-,-,-,-,-,-,-,-,%lu,%lu\n",
+		 lep->le_srq.lps_trecv.lqp_unexq.lq_max,
+		 lep->le_srq.lps_trecv.lqp_unexq.lq_rolling_avg);
+}
+
 int lnx_ep_close(struct fid *fid)
 {
 	int i, rc, frc = FI_SUCCESS;
 	struct lnx_ep *lep;
 	struct lnx_core_ep *cep;
+	int dump_stats;
 
 	lep = container_of(fid, struct lnx_ep, le_ep.ep_fid.fid);
 
+	fi_param_get_bool(&lnx_prov, "dump_stats", &dump_stats);
+
+	if (dump_stats)
+		lnx_dump_srx_queue_stats(lep);
+
 	for (i = 0; i < lep->le_domain->ld_num_doms; i++) {
 		cep = &lep->le_core_eps[i];
+
+		if (dump_stats)
+			lnx_dump_core_ep_stats(cep);
 
 		rc = fi_close(&cep->cep_ep->fid);
 		if (rc)
