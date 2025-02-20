@@ -71,12 +71,11 @@ static int lnx_domain_close(struct fid *fid)
 
 	domain = container_of(fid, struct lnx_domain, ld_domain.domain_fid.fid);
 
+
 	/* close all the open core domains */
 	for (i = 0; i < domain->ld_num_doms; i++) {
 		cd = &domain->ld_core_domains[i];
 
-		if (dump_stats)
-			lnx_dump_core_domain_stats(cd);
 		rc = fi_close(&cd->cd_domain->fid);
 		if (rc)
 			frc = rc;
