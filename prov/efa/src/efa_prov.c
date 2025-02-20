@@ -23,6 +23,7 @@ int efa_win_lib_initialize(void)
 
 #include "efawin.h"
 
+static bool efa_win_initialized = false;
 /**
  * @brief open efawin.dll and load the symbols on windows platform
  *
@@ -37,10 +38,11 @@ int efa_win_lib_initialize(void)
 	* functions from efawin dll
 	*/
 	int err = efa_load_efawin_lib();
-	if (err) {
+	if (err)
 		EFA_WARN(FI_LOG_CORE, "Failed to load efawin dll. error: %d\n",
 			 err);
-	}
+	else
+		efa_win_initialized = true;
 	return err;
 }
 
@@ -50,7 +52,9 @@ int efa_win_lib_initialize(void)
  * This function is a no-op on windows
  */
 void efa_win_lib_finalize(void) {
-	efa_free_efawin_lib();
+	if (efa_win_initialized)
+		efa_free_efawin_lib();
+	efa_win_initialized = false;
 }
 
 #endif // _WIN32
@@ -171,7 +175,8 @@ static void efa_util_prov_finalize()
 	struct fi_info *prov_info;
 
 	prov_info = (struct fi_info *)efa_util_prov.info;
-	fi_freeinfo(prov_info);
+	if (prov_info)
+		fi_freeinfo(prov_info);
 	efa_util_prov.info = NULL;
 }
 
