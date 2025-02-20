@@ -112,6 +112,8 @@ static void test_info_direct_attributes_impl(struct fi_info *hints,
 		assert_true(strstr(info->domain_attr->name, "rdm"));
 		assert_false(info->caps & (FI_ATOMIC | FI_TAGGED));
 		assert_false(info->tx_attr->msg_order & FI_ORDER_SAS);
+		assert_int_equal(info->domain_attr->progress, FI_PROGRESS_AUTO);
+		assert_int_equal(info->domain_attr->control_progress, FI_PROGRESS_AUTO);
 		assert_int_equal(
 			info->ep_attr->max_msg_size,
 			(hints->caps & FI_RMA) ?
