@@ -96,24 +96,62 @@ void test_info_dgram_attributes()
 /**
  * @brief Verify that efa direct path fi_info objects have some expected values
  */
-void test_info_direct_attributes()
+static void test_info_direct_attributes_impl(struct fi_info *hints,
+					     int expected_return)
 {
-	struct fi_info *hints, *info = NULL, *info_head = NULL;
+	struct fi_info *info = NULL, *info_head = NULL;
 	int err;
+
+	err = fi_getinfo(FI_VERSION(1, 6), NULL, NULL, 0, hints, &info_head);
+	assert_int_equal(err, expected_return);
+	if (expected_return)
+		return;
+
+	assert_non_null(info_head);
+	for (info = info_head; info; info = info->next) {
+		assert_true(!strcmp(info->fabric_attr->name,
+				    EFA_DIRECT_FABRIC_NAME));
+		assert_true(strstr(info->domain_attr->name, "rdm"));
+		assert_false(info->caps & (FI_ATOMIC | FI_TAGGED));
+		assert_false(info->tx_attr->msg_order & FI_ORDER_SAS);
+		assert_int_equal(
+			info->ep_attr->max_msg_size,
+			(hints->caps & FI_RMA) ?
+				g_device_list[0].max_rdma_size :
+				g_device_list[0].ibv_port_attr.max_msg_sz);
+	}
+
+	fi_freeinfo(info_head);
+}
+
+void test_info_direct_attributes_no_rma()
+{
+	struct fi_info *hints;
 
 	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	assert_non_null(hints);
 
-	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info);
-	assert_int_equal(err, 0);
-	assert_non_null(info);
-	for (info = info_head; info; info = info->next) {
-		assert_true(!strcmp(info->fabric_attr->name, EFA_DIRECT_FABRIC_NAME));
-		assert_true(strstr(info->domain_attr->name, "rdm"));
-		assert_false(info->caps & (FI_ATOMIC | FI_TAGGED));
-		assert_false(info->tx_attr->msg_order & FI_ORDER_SAS);
-		assert_int_equal(info->ep_attr->max_msg_size, g_device_list[0].max_rdma_size);
-	}
+	/* The default hints for efa-direct only has FI_MSG cap, so it should
+	 * succeed anyway */
+	test_info_direct_attributes_impl(hints, FI_SUCCESS);
+	fi_freeinfo(hints);
+}
+
+void test_info_direct_attributes_rma()
+{
+	struct fi_info *hints;
+	bool support_fi_rma = (efa_device_support_rdma_read() &&
+			       efa_device_support_rdma_write() &&
+			       efa_device_support_unsolicited_write_recv());
+
+	int expected_return = support_fi_rma ? FI_SUCCESS : -FI_ENODATA;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+
+	hints->caps |= FI_RMA;
+	test_info_direct_attributes_impl(hints, expected_return);
+	fi_freeinfo(hints);
 }
 
 /**
