@@ -385,6 +385,11 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 			EFA_INFO(FI_LOG_CORE,
 				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
 		}
+		/* When user requests FI_RMA and it's supported, the max_msg_size should be returned
+		 * as the maximum of both MSG and RMA operations
+		 */
+		if (hints->caps & FI_RMA)
+			info->ep_attr->max_msg_size = MAX(g_device_list[0].ibv_port_attr.max_msg_sz, g_device_list[0].max_rdma_size);
 	}
 
 	/* Print a warning and use FI_AV_TABLE if the app requests FI_AV_MAP */
