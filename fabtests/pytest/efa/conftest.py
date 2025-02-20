@@ -74,8 +74,17 @@ def zcpy_recv_message_size(request):
 def zcpy_recv_max_msg_size(request):
     return 8192
 
-# TODO - add efa-direct tests
-@pytest.fixture(scope="module", params=["efa"])
+@pytest.fixture(scope="module", params=["r:0,4,32",
+                                        "r:0,1024,8192",])
+def direct_message_size(request):
+    return request.param
+
+@pytest.fixture(scope="module", params=["r:1,4,32",
+                                        "r:1,1024,8192",])
+def direct_rma_size(request):
+    return request.param
+
+@pytest.fixture(scope="module", params=["efa", "efa-direct"])
 def fabric(request):
     return request.param
 

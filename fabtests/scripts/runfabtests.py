@@ -132,6 +132,22 @@ def add_common_arguments(parser, shared_options):
                                 dest=option_name, type=getattr(builtins, option_type),
                                 help=option_helpmsg, default=option_default)
 
+def support_fi_rma(server_id):
+    """
+    determine whether a host supports FI_RMA by checking unsolicited write recv
+    return: a boolean
+    """
+    import subprocess
+    binpath = os.getcwd()
+    cmd = "timeout 360 " + os.path.join(binpath, "fi_efa_rdma_checker -o writedata")
+    proc = subprocess.run("ssh {} {}".format(server_id, cmd),
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT,
+                          shell=True,
+                          universal_newlines=True)
+
+    return proc.returncode == 0
+
 def fabtests_args_to_pytest_args(fabtests_args, shared_options, run_mode):
     pytest_args = []
 
@@ -167,6 +183,8 @@ def fabtests_args_to_pytest_args(fabtests_args, shared_options, run_mode):
     pytest_args.append(markers)
 
     if fabtests_args.expression:
+        if not support_fi_rma(fabtests_args.server_id):
+            fabtests_args.expression += " and not efa-direct"
         pytest_args.append("-k")
         pytest_args.append(fabtests_args.expression)
 
