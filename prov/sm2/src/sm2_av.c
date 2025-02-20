@@ -94,11 +94,11 @@ static int sm2_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		if (ret)
 			continue;
 
-		ofi_mutex_lock(&util_av->lock);
+		ofi_genlock_lock(&util_av->lock);
 		ret = ofi_av_insert_addr(util_av, &gid, &util_addr);
 
 		if (ret) {
-			ofi_mutex_unlock(&util_av->lock);
+			ofi_genlock_unlock(&util_av->lock);
 			continue;
 		}
 
@@ -110,7 +110,7 @@ static int sm2_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		if (fi_addr)
 			fi_addr[i] = util_addr;
 
-		ofi_mutex_unlock(&util_av->lock);
+		ofi_genlock_unlock(&util_av->lock);
 		succ_count++;
 	}
 
@@ -137,7 +137,7 @@ static int sm2_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	util_av = container_of(av_fid, struct util_av, av_fid);
 	sm2_av = container_of(util_av, struct sm2_av, util_av);
 
-	ofi_mutex_lock(&util_av->lock);
+	ofi_genlock_lock(&util_av->lock);
 	for (i = 0; i < count; i++) {
 		gid = *((sm2_gid_t *) ofi_av_get_addr(util_av, fi_addr[i]));
 		if (gid > 0 && gid < SM2_MAX_UNIVERSE_SIZE)
@@ -151,7 +151,7 @@ static int sm2_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		}
 	}
 
-	ofi_mutex_unlock(&util_av->lock);
+	ofi_genlock_unlock(&util_av->lock);
 	return ret;
 }
 
@@ -169,9 +169,9 @@ static int sm2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	util_av = container_of(av, struct util_av, av_fid);
 	sm2_av = container_of(util_av, struct sm2_av, util_av);
 
-	ofi_mutex_lock(&util_av->lock);
+	ofi_genlock_lock(&util_av->lock);
 	gid = *((sm2_gid_t *) ofi_av_get_addr(util_av, fi_addr));
-	ofi_mutex_unlock(&util_av->lock);
+	ofi_genlock_unlock(&util_av->lock);
 
 	if (gid >= SM2_MAX_UNIVERSE_SIZE) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_DATA,
