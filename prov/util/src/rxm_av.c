@@ -38,26 +38,26 @@ size_t rxm_av_max_peers(struct rxm_av *av)
 {
 	size_t cnt;
 
-	ofi_mutex_lock(&av->util_av.lock);
+	ofi_genlock_lock(&av->util_av.lock);
 	cnt = av->peer_pool->entry_cnt;
-	ofi_mutex_unlock(&av->util_av.lock);
+	ofi_genlock_unlock(&av->util_av.lock);
 	return cnt;
 }
 
 void *rxm_av_alloc_conn(struct rxm_av *av)
 {
 	void *conn_ctx;
-	ofi_mutex_lock(&av->util_av.lock);
+	ofi_genlock_lock(&av->util_av.lock);
 	conn_ctx = ofi_buf_alloc(av->conn_pool);
-	ofi_mutex_unlock(&av->util_av.lock);
+	ofi_genlock_unlock(&av->util_av.lock);
 	return conn_ctx;
 }
 
 void rxm_av_free_conn(struct rxm_av *av, void *conn_ctx)
 {
-	ofi_mutex_lock(&av->util_av.lock);
+	ofi_genlock_lock(&av->util_av.lock);
 	ofi_buf_free(conn_ctx);
-	ofi_mutex_unlock(&av->util_av.lock);
+	ofi_genlock_unlock(&av->util_av.lock);
 }
 
 static int rxm_addr_compare(struct ofi_rbmap *map, void *key, void *data)
@@ -71,7 +71,7 @@ rxm_alloc_peer(struct rxm_av *av, const void *addr)
 {
 	struct util_peer_addr *peer;
 
-	assert(ofi_mutex_held(&av->util_av.lock));
+	assert(ofi_genlock_held(&av->util_av.lock));
 	peer = ofi_ibuf_alloc(av->peer_pool);
 	if (!peer)
 		return NULL;
@@ -92,7 +92,7 @@ rxm_alloc_peer(struct rxm_av *av, const void *addr)
 
 static void rxm_free_peer(struct util_peer_addr *peer)
 {
-	assert(ofi_mutex_held(&peer->av->util_av.lock));
+	assert(ofi_genlock_held(&peer->av->util_av.lock));
 	assert(!peer->refcnt);
 	ofi_rbmap_delete(&peer->av->addr_map, peer->node);
 	ofi_ibuf_free(peer);
@@ -104,7 +104,7 @@ util_get_peer(struct rxm_av *av, const void *addr)
 	struct util_peer_addr *peer;
 	struct ofi_rbnode *node;
 
-	ofi_mutex_lock(&av->util_av.lock);
+	ofi_genlock_lock(&av->util_av.lock);
 	node = ofi_rbmap_find(&av->addr_map, (void *) addr);
 	if (node) {
 		peer = node->data;
@@ -113,13 +113,13 @@ util_get_peer(struct rxm_av *av, const void *addr)
 		peer = rxm_alloc_peer(av, addr);
 	}
 
-	ofi_mutex_unlock(&av->util_av.lock);
+	ofi_genlock_unlock(&av->util_av.lock);
 	return peer;
 }
 
 static void util_deref_peer(struct util_peer_addr *peer)
 {
-	assert(ofi_mutex_held(&peer->av->util_av.lock));
+	assert(ofi_genlock_held(&peer->av->util_av.lock));
 	if (--peer->refcnt == 0)
 		rxm_free_peer(peer);
 }
@@ -129,16 +129,16 @@ void util_put_peer(struct util_peer_addr *peer)
 	struct rxm_av *av;
 
 	av = peer->av;
-	ofi_mutex_lock(&av->util_av.lock);
+	ofi_genlock_lock(&av->util_av.lock);
 	util_deref_peer(peer);
-	ofi_mutex_unlock(&av->util_av.lock);
+	ofi_genlock_unlock(&av->util_av.lock);
 }
 
 void rxm_ref_peer(struct util_peer_addr *peer)
 {
-	ofi_mutex_lock(&peer->av->util_av.lock);
+	ofi_genlock_lock(&peer->av->util_av.lock);
 	peer->refcnt++;
-	ofi_mutex_unlock(&peer->av->util_av.lock);
+	ofi_genlock_unlock(&peer->av->util_av.lock);
 }
 
 static void
@@ -201,9 +201,9 @@ err:
 							    cur_addr);
 		}
 		if (cur_fi_addr != FI_ADDR_NOTAVAIL) {
-			ofi_mutex_lock(&av->util_av.lock);
+			ofi_genlock_lock(&av->util_av.lock);
 			rxm_put_peer_addr(av, cur_fi_addr);
-			ofi_mutex_unlock(&av->util_av.lock);
+			ofi_genlock_unlock(&av->util_av.lock);
 		}
 	}
 	return -FI_ENOMEM;
@@ -230,7 +230,7 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	 * added -- i.e. fi_addr passed in here was also passed into insert.
 	 * Thus, we walk through the array backwards.
 	 */
-	ofi_mutex_lock(&av->util_av.lock);
+	ofi_genlock_lock(&av->util_av.lock);
 	for (i = count - 1; i >= 0; i--) {
 		FI_INFO(av->util_av.prov, FI_LOG_AV,
 			"fi_addr %" PRIu64 "\n", fi_addr[i]);
@@ -251,7 +251,7 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			*/
 			peer = ofi_av_addr_context(&av->util_av, fi_addr[i]);
 			(*peer)->refcnt++;
-			ofi_mutex_unlock(&av->util_av.lock);
+			ofi_genlock_unlock(&av->util_av.lock);
 
 			ofi_genlock_lock(&av->util_av.ep_list_lock);
 			dlist_foreach(&av->util_av.ep_list, item) {
@@ -261,7 +261,7 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			}
 			ofi_genlock_unlock(&av->util_av.ep_list_lock);
 
-			ofi_mutex_lock(&av->util_av.lock);
+			ofi_genlock_lock(&av->util_av.lock);
 			util_deref_peer(*peer);
 		}
 
@@ -271,7 +271,7 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			ofi_ibuf_free(av_entry);
 		}
 	}
-	ofi_mutex_unlock(&av->util_av.lock);
+	ofi_genlock_unlock(&av->util_av.lock);
 
 	return 0;
 }

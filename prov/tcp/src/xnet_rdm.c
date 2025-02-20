@@ -722,9 +722,9 @@ static int xnet_mplex_av_dup(struct util_ep *ep, struct xnet_mplex_av *mplex_av,
 		if (ret)
 			continue;
 
-		ofi_mutex_lock(&subav->lock);
+		ofi_genlock_lock(&subav->lock);
 		ret = ofi_av_insert_addr_at(subav, addr, i);
-		ofi_mutex_unlock(&subav->lock);
+		ofi_genlock_unlock(&subav->lock);
 		if (ret)
 			return ret;
 	}

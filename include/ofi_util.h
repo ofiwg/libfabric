@@ -880,7 +880,7 @@ struct util_av {
 	struct fid_av		av_fid;
 	struct util_domain	*domain;
 	ofi_atomic32_t		ref;
-	ofi_mutex_t		lock;
+	struct ofi_genlock	lock;
 	const struct fi_provider *prov;
 
 	struct util_av_entry	*hash;

@@ -275,7 +275,7 @@ int ofi_av_insert_addr_at(struct util_av *av, const void *addr, fi_addr_t fi_add
 {
 	struct util_av_entry *entry = NULL;
 
-	assert(ofi_mutex_held(&av->lock));
+	assert(ofi_genlock_held(&av->lock));
 	ofi_av_straddr_log(av, FI_LOG_INFO, "inserting addr", addr);
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	if (entry) {
@@ -302,7 +302,7 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 {
 	struct util_av_entry *entry = NULL;
 
-	assert(ofi_mutex_held(&av->lock));
+	assert(ofi_genlock_held(&av->lock));
 	ofi_av_straddr_log(av, FI_LOG_INFO, "inserting addr", addr);
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	if (entry) {
@@ -334,7 +334,7 @@ int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 {
 	struct util_av_entry *av_entry;
 
-	assert(ofi_mutex_held(&av->lock));
+	assert(ofi_genlock_held(&av->lock));
 	av_entry = ofi_bufpool_get_ibuf(av->av_entry_pool, fi_addr);
 	if (!av_entry)
 		return -FI_ENOENT;
@@ -359,9 +359,9 @@ fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr)
 fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr)
 {
 	fi_addr_t fi_addr;
-	ofi_mutex_lock(&av->lock);
+	ofi_genlock_lock(&av->lock);
 	fi_addr = ofi_av_lookup_fi_addr_unsafe(av, addr);
-	ofi_mutex_unlock(&av->lock);
+	ofi_genlock_unlock(&av->lock);
 	return fi_addr;
 }
 
@@ -388,7 +388,7 @@ int ofi_av_close_lightweight(struct util_av *av)
 	ofi_genlock_destroy(&av->ep_list_lock);
 
 	ofi_atomic_dec32(&av->domain->ref);
-	ofi_mutex_destroy(&av->lock);
+	ofi_genlock_destroy(&av->lock);
 
 	return 0;
 }
@@ -397,16 +397,16 @@ int ofi_av_close(struct util_av *av)
 {
 	int ret;
 
-	ofi_mutex_lock(&av->lock);
+	ofi_genlock_lock(&av->lock);
 	if (av->av_set) {
 		ret = fi_close(&av->av_set->av_set_fid.fid);
 		if (ret) {
-			ofi_mutex_unlock(&av->lock);
+			ofi_genlock_unlock(&av->lock);
 			return ret;
 		}
 		av->av_set = NULL;
 	}
-	ofi_mutex_unlock(&av->lock);
+	ofi_genlock_unlock(&av->lock);
 
 	ret = ofi_av_close_lightweight(av);
 	if (ret)
@@ -518,15 +518,14 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 			    struct util_av *av, void *context)
 {
 	int ret;
-	enum ofi_lock_type ep_list_lock_type;
+	enum ofi_lock_type av_lock_type, ep_list_lock_type;
 
 	ret = util_verify_av_attr(domain, attr);
 	if (ret)
 		return ret;
 
-	av->prov = domain->prov;
 	ofi_atomic_initialize32(&av->ref, 0);
-	ofi_mutex_init(&av->lock);
+
 	av->av_fid.fid.fclass = FI_CLASS_AV;
 	/*
 	 * ops set by provider
@@ -535,10 +534,21 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 	 */
 	av->context = context;
 	av->domain = domain;
+	av->prov = domain->prov;
 
+	av_lock_type = domain->threading == FI_THREAD_DOMAIN &&
+				       domain->control_progress ==
+					       FI_PROGRESS_CONTROL_UNIFIED ?
+			       OFI_LOCK_NOOP :
+			       OFI_LOCK_MUTEX;
 
-	ep_list_lock_type = ofi_progress_lock_type(av->domain->threading,
-						   av->domain->control_progress);
+	ret = ofi_genlock_init(&av->lock, av_lock_type);
+	if (ret)
+		return ret;
+
+	ep_list_lock_type = ofi_progress_lock_type(domain->threading,
+						   domain->control_progress);
+
 	ret = ofi_genlock_init(&av->ep_list_lock, ep_list_lock_type);
 	if (ret)
 		return ret;
@@ -580,9 +590,9 @@ static int ip_av_insert_addr(struct util_av *av, const void *addr,
 	int ret;
 
 	if (ofi_valid_dest_ipaddr(addr)) {
-		ofi_mutex_lock(&av->lock);
+		ofi_genlock_lock(&av->lock);
 		ret = ofi_av_insert_addr(av, addr, fi_addr);
-		ofi_mutex_unlock(&av->lock);
+		ofi_genlock_unlock(&av->lock);
 	} else {
 		ret = -FI_EADDRNOTAVAIL;
 		if (fi_addr)
@@ -881,9 +891,9 @@ int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	 * Thus, we walk through the array backwards.
 	 */
 	for (i = count - 1; i >= 0; i--) {
-		ofi_mutex_lock(&av->lock);
+		ofi_genlock_lock(&av->lock);
 		ret = ofi_av_remove_addr(av, fi_addr[i]);
-		ofi_mutex_unlock(&av->lock);
+		ofi_genlock_unlock(&av->lock);
 		if (ret) {
 			FI_WARN(av->prov, FI_LOG_AV,
 				"removal of fi_addr %"PRIu64" failed\n",
