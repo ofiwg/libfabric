@@ -230,6 +230,7 @@ void efa_device_list_finalize(void)
 			efa_device_destruct(&g_device_list[i]);
 
 		free(g_device_list);
+		g_device_list = NULL;
 	}
 
 	g_device_cnt = 0;
