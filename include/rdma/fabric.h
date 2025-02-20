@@ -159,6 +159,7 @@ typedef struct fid *fid_t;
 #define FI_PEER_TRANSFER	(1ULL << 36)
 /* #define FI_MR_DMABUF		(1ULL << 40) */
 #define FI_AV_USER_ID		(1ULL << 41)
+#define FI_FIREWALL_ADDR	(1ULL << 42)
 #define FI_PEER			(1ULL << 43)
 /* #define FI_XPU_TRIGGER		(1ULL << 44) */
 
