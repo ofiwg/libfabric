@@ -162,8 +162,8 @@ static void efa_device_destruct(struct efa_device *device)
 	device->ibv_ctx = NULL;
 }
 
-struct efa_device *g_device_list;
-int g_device_cnt;
+struct efa_device *g_device_list = NULL;
+int g_device_cnt = 0;
 
 /**
  * @brief initialize the global variables g_device_list and g_device_cnt
@@ -232,6 +232,7 @@ void efa_device_list_finalize(void)
 		free(g_device_list);
 	}
 
+	g_device_list = NULL;
 	g_device_cnt = 0;
 }
 
