@@ -78,7 +78,7 @@ static int post_rx_sync(void)
 {
 	int ret;
 
-	ret = ft_post_rx(ep, rx_size, &rx_ctx);
+	ret = ft_post_rx(ep, rx_msg_size, &rx_ctx);
 	if (ret)
 		return ret;
 

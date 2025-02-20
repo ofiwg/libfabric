@@ -247,7 +247,7 @@ extern char *buf, *tx_buf, *rx_buf;
 extern void *dev_host_buf;
 extern struct ft_context *tx_ctx_arr, *rx_ctx_arr;
 extern char **tx_mr_bufs, **rx_mr_bufs;
-extern size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
+extern size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size, rx_msg_size;
 extern int tx_fd, rx_fd;
 extern int timeout;
 
