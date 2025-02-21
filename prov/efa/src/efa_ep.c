@@ -227,12 +227,6 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
-		if (flags & FI_SELECTIVE_COMPLETION) {
-			EFA_WARN(FI_LOG_EP_CTRL,
-				 "Endpoint cannot be bound with selective completion.\n");
-			return -FI_EBADFLAGS;
-		}
-
 		/* Must bind a CQ to either RECV or SEND completions */
 		if (!(flags & (FI_RECV | FI_TRANSMIT)))
 			return -FI_EBADFLAGS;
