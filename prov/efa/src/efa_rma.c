@@ -121,6 +121,8 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 
 	if (!(flags & FI_MORE)) {
 		err = ibv_wr_complete(qp->ibv_qp_ex);
+		if (OFI_UNLIKELY(err))
+			err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 		base_ep->is_wr_started = false;
 	}
 
@@ -265,6 +267,8 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 
 	if (!(flags & FI_MORE)) {
 		err = ibv_wr_complete(qp->ibv_qp_ex);
+		if (OFI_UNLIKELY(err))
+			err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 		base_ep->is_wr_started = false;
 	}
 
