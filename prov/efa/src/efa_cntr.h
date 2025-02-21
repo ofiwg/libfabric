@@ -19,6 +19,9 @@ struct efa_cntr {
 int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context);
 
+int efa_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+		      struct fid_cntr **cntr_fid, void *context);
+
 void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags);
 
 void efa_cntr_report_rx_completion(struct util_ep *ep, uint64_t flags);

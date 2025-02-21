@@ -199,10 +199,40 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 {
 	int ret;
 	struct efa_cntr *cntr;
+
+	cntr = calloc(1, sizeof(*cntr));
+	if (!cntr)
+		return -FI_ENOMEM;
+
+	dlist_init(&cntr->ibv_cq_poll_list);
+	cntr->need_to_scan_ep_list = false;
+
+	ret = ofi_cntr_init(&efa_prov, domain, attr, &cntr->util_cntr,
+			    efa_cntr_progress, context);
+
+	if (ret)
+		goto free;
+
+	*cntr_fid = &cntr->util_cntr.cntr_fid;
+	cntr->util_cntr.cntr_fid.ops = &efa_cntr_ops;
+	cntr->util_cntr.cntr_fid.fid.ops = &efa_cntr_fi_ops;
+
+	return FI_SUCCESS;
+
+free:
+	free(cntr);
+	return ret;
+}
+
+
+int efa_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+		      struct fid_cntr **cntr_fid, void *context)
+{
+	int ret;
+	struct efa_cntr *cntr;
 	struct efa_domain *efa_domain;
 	struct fi_cntr_attr shm_cntr_attr = {0};
 	struct fi_peer_cntr_context peer_cntr_context = {0};
-	ofi_cntr_progress_func cntr_progress_func;
 
 	cntr = calloc(1, sizeof(*cntr));
 	if (!cntr)
@@ -213,11 +243,8 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
 
-	cntr_progress_func = efa_domain->info->ep_attr->type == FI_EP_RDM
-		? efa_rdm_cntr_progress
-		: efa_cntr_progress;
 	ret = ofi_cntr_init(&efa_prov, domain, attr, &cntr->util_cntr,
-			    cntr_progress_func, context);
+			    efa_rdm_cntr_progress, context);
 
 	if (ret)
 		goto free;
