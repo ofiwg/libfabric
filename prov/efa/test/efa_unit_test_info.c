@@ -117,6 +117,11 @@ static void test_info_direct_attributes_impl(struct fi_info *hints,
 		assert_int_equal(info->domain_attr->progress, FI_PROGRESS_AUTO);
 		assert_int_equal(info->domain_attr->control_progress, FI_PROGRESS_AUTO);
 		assert_int_equal(
+			g_device_list[0].rdm_info->ep_attr->max_msg_size,
+			(info->caps & FI_RMA) ?
+				g_device_list[0].max_rdma_size :
+				g_device_list[0].ibv_port_attr.max_msg_sz);
+		assert_int_equal(
 			info->ep_attr->max_msg_size,
 			(hints->caps & FI_RMA) ?
 				g_device_list[0].max_rdma_size :
