@@ -814,7 +814,7 @@ void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 {
 	struct efa_cq *tx_cq, *rx_cq;
 
-	ofi_genlock_lock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_lock(&efa_rdm_ep_domain(efa_rdm_ep)->progress_lock);
 
 	tx_cq = efa_base_ep_get_tx_cq(&efa_rdm_ep->base_ep);
 	rx_cq = efa_base_ep_get_rx_cq(&efa_rdm_ep->base_ep);
@@ -828,7 +828,7 @@ void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 		efa_domain_progress_rdm_peers_and_queues(efa_rdm_ep_domain(efa_rdm_ep));
 	}
 
-	ofi_genlock_unlock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_unlock(&efa_rdm_ep_domain(efa_rdm_ep)->progress_lock);
 }
 
 static inline

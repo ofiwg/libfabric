@@ -427,7 +427,7 @@ int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
 
 /**
  * @brief allocate an efa_conn object
- * caller of this function must obtain av->domain->srx_lock
+ * caller of this function must obtain av->domain->progress_lock
  *
  * @param[in]	av		efa address vector
  * @param[in]	raw_addr	raw efa address
@@ -515,7 +515,7 @@ err_release:
 
 /**
  * @brief release an efa conn object
- * Caller of this function must obtain av->domain->srx_lock
+ * Caller of this function must obtain av->domain->progress_lock
  *
  * @param[in]	av	address vector
  * @param[in]	conn	efa_conn object pointer
@@ -647,7 +647,7 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	struct efa_ep_addr *addr_i;
 	fi_addr_t fi_addr_res;
 
-	ofi_genlock_lock(&av->domain->srx_lock);
+	ofi_genlock_lock(&av->domain->progress_lock);
 
 	if (av->util_av.flags & FI_EVENT)
 		goto out;
@@ -684,7 +684,7 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	}
 
 out:
-	ofi_genlock_unlock(&av->domain->srx_lock);
+	ofi_genlock_unlock(&av->domain->progress_lock);
 	return success_cnt;
 }
 
@@ -695,7 +695,7 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	struct efa_conn *conn = NULL;
 	int ret = 0;
 
-	ofi_genlock_lock(&av->domain->srx_lock);
+	ofi_genlock_lock(&av->domain->progress_lock);
 
 	if (fi_addr == FI_ADDR_NOTAVAIL) {
 		ret = -FI_EINVAL;
@@ -714,7 +714,7 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 		*addrlen = EFA_EP_ADDR_LEN;
 
 out:
-	ofi_genlock_unlock(&av->domain->srx_lock);
+	ofi_genlock_unlock(&av->domain->progress_lock);
 	return ret;
 }
 
@@ -758,7 +758,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	if (av->type != FI_AV_TABLE)
 		return -FI_EINVAL;
 
-	ofi_genlock_lock(&av->domain->srx_lock);
+	ofi_genlock_lock(&av->domain->progress_lock);
 	for (i = 0; i < count; i++) {
 		conn = efa_av_addr_to_conn(av, fi_addr[i]);
 		if (!conn) {
@@ -774,7 +774,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		assert(err);
 	}
 
-	ofi_genlock_unlock(&av->domain->srx_lock);
+	ofi_genlock_unlock(&av->domain->progress_lock);
 	return err;
 }
 
@@ -816,7 +816,7 @@ static int efa_av_close(struct fid *fid)
 
 	av = container_of(fid, struct efa_av, util_av.av_fid.fid);
 
-	ofi_genlock_lock(&av->domain->srx_lock);
+	ofi_genlock_lock(&av->domain->progress_lock);
 
 	efa_av_close_reverse_av(av);
 
@@ -835,7 +835,7 @@ static int efa_av_close(struct fid *fid)
 			}
 		}
 	}
-	ofi_genlock_unlock(&av->domain->srx_lock);
+	ofi_genlock_unlock(&av->domain->progress_lock);
 	free(av);
 
 	return err;

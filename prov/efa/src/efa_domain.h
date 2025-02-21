@@ -26,7 +26,7 @@ struct efa_domain {
 	size_t			addrlen;
 	bool 			mr_local;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
-	struct ofi_genlock	srx_lock; /* shared among peer providers */
+	struct ofi_genlock	progress_lock; /* shared among peer providers */
 	/* Total count of ibv memory registrations */
 	size_t ibv_mr_reg_ct;
 	/* Total size of memory registrations (in bytes) */

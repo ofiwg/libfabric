@@ -161,7 +161,7 @@ int efa_rdm_peer_srx_construct(struct efa_rdm_ep *ep)
 				ep->base_ep.info->rx_attr->size, EFA_RDM_IOV_LIMIT,
 				ep->min_multi_recv_size,
 				&efa_rdm_srx_update_mr,
-				&efa_rdm_ep_domain(ep)->srx_lock,
+				&efa_rdm_ep_domain(ep)->progress_lock,
 				&ep->peer_srx_ep);
 	if (ret) {
 		EFA_WARN(FI_LOG_EP_CTRL, "util_ep_srx_context failed, err: %d\n", ret);

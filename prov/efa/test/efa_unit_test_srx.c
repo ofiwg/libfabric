@@ -50,8 +50,8 @@ void test_efa_srx_cq(struct efa_resource **state)
         assert_true((void *) &srx_ctx->cq->cq_fid == (void *) resource->cq);
 }
 
-/* This test verified that srx_lock created in efa_domain is correctly passed to srx */
-void test_efa_srx_lock(struct efa_resource **state)
+/* This test verified that progress_lock created in efa_domain is correctly passed to srx */
+void test_efa_progress_lock(struct efa_resource **state)
 {
         struct efa_resource *resource = *state;
         struct efa_rdm_ep *efa_rdm_ep;
@@ -64,7 +64,7 @@ void test_efa_srx_lock(struct efa_resource **state)
         srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
         efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid.fid);
-        assert_true(((void *) srx_ctx->lock == (void *) &efa_domain->srx_lock));
+        assert_true(((void *) srx_ctx->lock == (void *) &efa_domain->progress_lock));
 }
 
 

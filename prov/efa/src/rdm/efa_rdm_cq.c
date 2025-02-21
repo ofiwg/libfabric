@@ -563,7 +563,7 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 
 	domain = container_of(cq->efa_cq.util_cq.domain, struct efa_domain, util_domain);
 
-	ofi_genlock_lock(&domain->srx_lock);
+	ofi_genlock_lock(&domain->progress_lock);
 
 	if (cq->shm_cq) {
 		fi_cq_read(cq->shm_cq, NULL, 0);
@@ -582,7 +582,7 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 	ret = ofi_cq_readfrom(&cq->efa_cq.util_cq.cq_fid, buf, count, src_addr);
 
 out:
-	ofi_genlock_unlock(&domain->srx_lock);
+	ofi_genlock_unlock(&domain->progress_lock);
 
 	return ret;
 }

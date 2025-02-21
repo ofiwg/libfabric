@@ -20,7 +20,7 @@ static int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 	domain = container_of(cntr->domain, struct efa_domain, util_domain);
 
-	ofi_genlock_lock(&domain->srx_lock);
+	ofi_genlock_lock(&domain->progress_lock);
 
 	assert(cntr->wait);
 	errcnt = ofi_atomic_get64(&cntr->err);
@@ -54,7 +54,7 @@ static int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 	}
 
 unlock:
-	ofi_genlock_unlock(&domain->srx_lock);
+	ofi_genlock_unlock(&domain->progress_lock);
 	return ret;
 }
 
@@ -68,13 +68,13 @@ static uint64_t efa_cntr_read(struct fid_cntr *cntr_fid)
 
 	domain = container_of(efa_cntr->util_cntr.domain, struct efa_domain, util_domain);
 
-	ofi_genlock_lock(&domain->srx_lock);
+	ofi_genlock_lock(&domain->progress_lock);
 
 	if (efa_cntr->shm_cntr)
 		fi_cntr_read(efa_cntr->shm_cntr);
 	ret = ofi_cntr_read(cntr_fid);
 
-	ofi_genlock_unlock(&domain->srx_lock);
+	ofi_genlock_unlock(&domain->progress_lock);
 
 	return ret;
 }
@@ -89,12 +89,12 @@ static uint64_t efa_cntr_readerr(struct fid_cntr *cntr_fid)
 
 	domain = container_of(efa_cntr->util_cntr.domain, struct efa_domain, util_domain);
 
-	ofi_genlock_lock(&domain->srx_lock);
+	ofi_genlock_lock(&domain->progress_lock);
 	if (efa_cntr->shm_cntr)
 		fi_cntr_read(efa_cntr->shm_cntr);
 	ret = ofi_cntr_readerr(cntr_fid);
 
-	ofi_genlock_unlock(&domain->srx_lock);
+	ofi_genlock_unlock(&domain->progress_lock);
 
 	return ret;
 }

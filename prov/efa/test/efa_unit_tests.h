@@ -212,7 +212,7 @@ void test_efa_use_device_rdma_opt_old();
 
 void test_efa_srx_min_multi_recv_size();
 void test_efa_srx_cq();
-void test_efa_srx_lock();
+void test_efa_progress_lock();
 void test_efa_srx_unexp_pkt();
 void test_efa_rnr_queue_and_resend();
 void test_efa_rdm_ope_prepare_to_post_send_with_no_enough_tx_pkts();
