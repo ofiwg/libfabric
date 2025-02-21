@@ -147,8 +147,8 @@ set standard_tests=^
 	"rdm_tagged_bw -v -U"
 
 set multinode_tests=^
-	"multinode -C msg"^
-	"multinode -C rma"
+	"multinode -x msg"^
+	"multinode -x rma"
 
 
 goto :global_main

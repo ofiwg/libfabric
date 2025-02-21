@@ -56,7 +56,7 @@ void multi_timer_stop(struct multi_timer *timer)
 
 static inline void print_timer(struct multi_timer timer, char* info)
 {
-	printf("rank: %i, start: %ld, end: %ld, %s\n",
+	PRINTF("rank: %i, start: %ld, end: %ld, %s\n",
 		timer.rank, timer.start, timer.end, info);
 }
 
@@ -83,7 +83,7 @@ int multi_timer_analyze(struct multi_timer *timers, int timer_count)
 		goto out;
 	}
 
-	printf("%-10s %16s %16s %16s %16s\n",
+	PRINTF("%-10s %16s %16s %16s %16s\n",
 		"Iteration", "Min Send (ns)", "Max Send (ns)",
 		"Pattern Time(ns)", "Average Send(ns)");
 
@@ -114,7 +114,7 @@ int multi_timer_analyze(struct multi_timer *timers, int timer_count)
 					min[i] = duration;
 
 			}
-			printf("%-10i %16ld %16ld %16ld %16.3f\n",
+			PRINTF("%-10i %16ld %16ld %16ld %16.3f\n",
 				i, min[i], max[i], last_end[i] - first_start[i],
 				sum_time[i] / iter_timer_count);
 
@@ -128,7 +128,7 @@ int multi_timer_analyze(struct multi_timer *timers, int timer_count)
 	}
 
 	if (pm_job.my_rank == 0)
-		printf("%-10s %16.3lf %16.3lf %16.3lf %16.3lf\n", "Average",
+		PRINTF("%-10s %16.3lf %16.3lf %16.3lf %16.3lf\n", "Average",
 			total_min / iterations, total_max / iterations,
 			total_duration / iterations,
 			total_sum_time / total_timers);
@@ -189,7 +189,7 @@ int multi_timer_iter_gather(struct multi_timer *gather_timers,
 
 	ret = multi_timer_gather(gather_timers, iter_timers, pm_job.num_ranks);
 	if (ret < 0)
-		printf("gather timer error: %i\n", ret);
+		PRINTF("gather timer error: %i\n", ret);
 
 	pm_barrier();
 

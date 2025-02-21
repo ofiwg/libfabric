@@ -32,8 +32,11 @@
 
 #pragma once
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_trigger.h>
@@ -54,6 +57,12 @@ enum multi_pattern {
 	PATTERN_RING,
 	PATTERN_GATHER,
 	PATTERN_BROADCAST,
+};
+
+enum multi_pm_type {
+	PM_NONE,
+	PM_PMIX,
+	PM_PMI,
 };
 
 struct multi_xfer_method {
@@ -77,6 +86,7 @@ struct pm_job_info {
 	fi_addr_t	*fi_addrs;
 	enum multi_xfer transfer_method;
 	enum multi_pattern pattern;
+	enum multi_pm_type pm;
 };
 
 struct multinode_xfer_state {
@@ -105,6 +115,28 @@ static inline int timer_index(int iter, int dest_rank)
 {
     return iter * pm_job.num_ranks + dest_rank;
 }
+
+#ifndef _WIN32
+static inline void log_print(FILE *f, char *fmt, ...)
+{
+	va_list args;
+
+	if (!pm_job.clients)
+		return;
+	va_start(args, fmt);
+	vfprintf(f, fmt, args);
+	va_end(args);
+}
+
+#define PRINTF(fmt, args...) log_print(stdout, fmt, ## args)
+#define EPRINTF(fmt, args...) log_print(stderr, fmt, ## args)
+
+#else
+
+#define PRINTF(fmt, ...) fprintf(stdout, fmt, __VA_ARGS__)
+#define EPRINTF(fmt, ...) fprintf(stderr, fmt, __VA_ARGS__)
+
+#endif /* _WIN32 */
 
 int multinode_run_tests(int argc, char **argv);
 int pm_allgather(void *my_item, void *items, int item_size);

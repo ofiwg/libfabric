@@ -244,8 +244,8 @@ complex_tests=(
 )
 
 multinode_tests=(
-	"fi_multinode -C msg"
-	"fi_multinode -C rma"
+	"fi_multinode -x msg"
+	"fi_multinode -x rma"
 	"fi_multinode_coll"
 )
 
