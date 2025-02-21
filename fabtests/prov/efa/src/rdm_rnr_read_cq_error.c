@@ -36,6 +36,7 @@
 #include <getopt.h>
 
 #include <shared.h>
+#include "efa_shared.h"
 #include "efa_rnr_shared.h"
 
 
@@ -48,11 +49,17 @@ static int rnr_read_cq_error(void)
 	rnr_flag = 0;
 	/*
 	 * In order for the sender to get RNR error, we need to first consume
-	 * all pre-posted receive buffer (in efa provider, fi->rx_attr->size
-	 * receiving buffer are pre-posted) on the receiver side, the subsequent
-	 * sends (expected_rnr_error) will then get RNR errors.
+	 * all pre-posted receive buffer.
+	 * For efa-rdm, it pre-posted fi->rx_attr->size receive buffers during 1st cq read
+	 * For efa-direct, it posted whatever application posts. ft_enable_ep_recv already
+	 * posts 1.
 	 */
-	total_send = fi->rx_attr->size + expected_rnr_error;
+	if (EFA_INFO_TYPE_IS_RDM(fi)) {
+		total_send = fi->rx_attr->size + expected_rnr_error;
+	} else {
+		assert(EFA_INFO_TYPE_IS_DIRECT(fi));
+		total_send = expected_rnr_error + 1;
+	}
 
 	for (i = 0; i < total_send; i++) {
 		do {

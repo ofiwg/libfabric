@@ -42,6 +42,7 @@ endif BUILD_EFA_RDMA_CHECKER
 endif HAVE_VERBS_DEVEL
 
 efa_rnr_srcs = \
+	prov/efa/src/efa_shared.h \
 	prov/efa/src/efa_rnr_shared.h \
 	prov/efa/src/efa_rnr_shared.c
 
