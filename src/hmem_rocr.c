@@ -830,6 +830,30 @@ static int rocr_hmem_dl_init(void)
 		goto err;
 	}
 
+	hsa_ops.hsa_signal_store_screlease = dlsym(hsa_handle,
+						   "hsa_signal_store_screlease");
+	if (!hsa_ops.hsa_signal_store_screlease) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_signal_store_screlease\n");
+		goto err;
+	}
+
+	hsa_ops.hsa_signal_load_scacquire = dlsym(hsa_handle,
+						  "hsa_signal_load_scacquire");
+	if (!hsa_ops.hsa_signal_load_scacquire) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_signal_load_scacquire\n");
+		goto err;
+	}
+
+	hsa_ops.hsa_amd_agents_allow_access = dlsym(hsa_handle,
+						    "hsa_amd_agents_allow_access");
+	if (!hsa_ops.hsa_amd_agents_allow_access) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_amd_agents_allow_access\n");
+		goto err;
+	}
+
 	hsa_ops.hsa_signal_create = dlsym(hsa_handle, "hsa_signal_create");
 	if (!hsa_ops.hsa_signal_create) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
