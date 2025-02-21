@@ -1418,6 +1418,20 @@ int ofi_bsock_async_done(const struct fi_provider *prov,
 	uint8_t ctrl[CMSG_SPACE(sizeof(*serr) * 2)];
 	int ret;
 
+	int val = 0;
+	socklen_t len = sizeof(val);
+	ret = getsockopt(bsock->sock, SOL_SOCKET, SO_ERROR, &val, &len);
+	if (ret < 0) {
+		FI_WARN(prov, FI_LOG_EP_DATA,
+			"Error reading socket error (%s)\n", strerror(errno));
+		return -errno;
+	}
+	if (val != 0) {
+		FI_WARN(prov, FI_LOG_EP_DATA,
+			"Socket error (%s)\n", strerror(val));
+		return -val;
+	}
+
 	msg.msg_control = &ctrl;
 	msg.msg_controllen = sizeof(ctrl);
 	ret = recvmsg(bsock->sock, &msg, MSG_ERRQUEUE);
