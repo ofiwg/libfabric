@@ -616,7 +616,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt_long(argc, argv, "c:vhAQ" ADDR_OPTS INFO_OPTS,
+	while ((op = getopt_long(argc, argv, "c:vhAQ" ADDR_OPTS INFO_OPTS CS_OPTS,
 				 long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		default:
@@ -624,6 +624,7 @@ int main(int argc, char **argv)
 				continue;
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
+			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case 'c':
 			num_eps = atoi(optarg);
