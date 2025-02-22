@@ -540,6 +540,7 @@ static void ft_set_tx_rx_sizes(size_t *set_tx, size_t *set_rx)
 {
 	*set_tx = opts.options & FT_OPT_SIZE ?
 		  opts.transfer_size : test_size[TEST_CNT - 1].size;
+	*set_tx = MAX(*set_tx, FT_MAX_CTRL_MSG);
 	if (*set_tx > fi->ep_attr->max_msg_size)
 		*set_tx = fi->ep_attr->max_msg_size;
 	*set_rx = *set_tx + ft_rx_prefix_size();
@@ -600,8 +601,8 @@ int ft_alloc_msgs(void)
 		ft_set_tx_rx_sizes(&tx_size, &rx_size);
 		tx_mr_size = 0;
 		rx_mr_size = 0;
-		rx_buf_size = MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
-		tx_buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size;
+		rx_buf_size = rx_size * opts.window_size;
+		tx_buf_size = tx_size * opts.window_size;
 	}
 
 	/* Allow enough space for RMA to operate in a distinct memory
