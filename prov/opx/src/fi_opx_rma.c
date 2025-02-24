@@ -302,11 +302,12 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 	cc->hit_zero			     = fi_opx_hit_zero;
 
 	struct fi_opx_hmem_iov iov;
-	const uint64_t	       is_hmem = fi_opx_hmem_iov_init(buf, len, NULL, &iov);
+	uint64_t	       handle;
+	const uint64_t	       is_hmem = opx_hmem_iov_init(buf, len, NULL, &iov, &handle);
 
-	fi_opx_write_internal(opx_ep, &iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr_offset, key, cc, FI_VOID,
-			      FI_NOOP, opx_ep->tx->op_flags | FI_INJECT, is_hmem, lock_required, caps, reliability,
-			      hfi1_type);
+	opx_write_internal(opx_ep, &iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr_offset, key, cc, FI_VOID, FI_NOOP,
+			   opx_ep->tx->op_flags | FI_INJECT, is_hmem, handle, lock_required, caps, reliability,
+			   hfi1_type);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "INJECT_WRITE");
 	return 0;
@@ -390,9 +391,10 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	cc->hit_zero	       = fi_opx_hit_zero;
 
 	struct fi_opx_hmem_iov iov;
-	const uint64_t	       is_hmem = fi_opx_hmem_iov_init(buf, len, desc, &iov);
-	fi_opx_write_internal(opx_ep, &iov, 1, data, opx_dst_addr, addr_offset, key, cc, FI_VOID, FI_NOOP, op_flags,
-			      is_hmem, lock_required, caps, reliability, hfi1_type);
+	uint64_t	       handle;
+	const uint64_t	       is_hmem = opx_hmem_iov_init(buf, len, desc, &iov, &handle);
+	opx_write_internal(opx_ep, &iov, 1, data, opx_dst_addr, addr_offset, key, cc, FI_VOID, FI_NOOP, op_flags,
+			   is_hmem, handle, lock_required, caps, reliability, hfi1_type);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITE");
 	return 0;
@@ -483,10 +485,11 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 			mr_ptr = NULL;
 		}
 		struct fi_opx_hmem_iov hmem_iov;
+		uint64_t	       handle;
 		const uint64_t	       is_hmem =
-			fi_opx_hmem_iov_init(iov[index].iov_base, iov[index].iov_len, mr_ptr, &hmem_iov);
-		fi_opx_write_internal(opx_ep, &hmem_iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr_offset, key, cc,
-				      FI_VOID, FI_NOOP, 0, is_hmem, lock_required, caps, reliability, hfi1_type);
+			opx_hmem_iov_init(iov[index].iov_base, iov[index].iov_len, mr_ptr, &hmem_iov, &handle);
+		opx_write_internal(opx_ep, &hmem_iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr_offset, key, cc,
+				   FI_VOID, FI_NOOP, 0, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
 
 		addr_offset += iov[index].iov_len;
 	}
@@ -638,12 +641,13 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 		} else {
 			mr_ptr = NULL;
 		}
-		uint64_t is_hmem = fi_opx_hmem_iov_init((void *) msg_iov_vaddr, msg_iov_bytes, mr_ptr, &iov);
+		uint64_t handle;
+		uint64_t is_hmem = opx_hmem_iov_init((void *) msg_iov_vaddr, msg_iov_bytes, mr_ptr, &iov, &handle);
 		size_t	 len	 = (msg_iov_bytes <= rma_iov_bytes) ? msg_iov_bytes : rma_iov_bytes;
 		iov.buf		 = msg_iov_vaddr;
 		iov.len		 = len;
-		fi_opx_write_internal(opx_ep, &iov, 1, msg->data, opx_dst_addr, rma_iov_addr, rma_iov_key, cc, FI_VOID,
-				      FI_NOOP, flags, is_hmem, lock_required, caps, reliability, hfi1_type);
+		opx_write_internal(opx_ep, &iov, 1, msg->data, opx_dst_addr, rma_iov_addr, rma_iov_key, cc, FI_VOID,
+				   FI_NOOP, flags, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
 
 		msg_iov_bytes -= len;
 		msg_iov_vaddr += len;
@@ -652,7 +656,7 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 			++msg_iov_index;
 			msg_iov_bytes = msg->msg_iov[msg_iov_index].iov_len;
 			msg_iov_vaddr = (uintptr_t) msg->msg_iov[msg_iov_index].iov_base;
-			is_hmem	      = fi_opx_hmem_iov_init((void *) msg_iov_vaddr, msg_iov_bytes, mr_ptr, &iov);
+			is_hmem	      = opx_hmem_iov_init((void *) msg_iov_vaddr, msg_iov_bytes, mr_ptr, &iov, &handle);
 		}
 
 		rma_iov_bytes -= len;
@@ -712,10 +716,12 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 
 #ifdef OPX_HMEM
 	uint64_t	   hmem_device;
-	enum fi_hmem_iface hmem_iface = opx_hmem_get_mr_iface(desc, &hmem_device);
+	uint64_t	   hmem_handle;
+	enum fi_hmem_iface hmem_iface = opx_hmem_get_mr_iface(desc, &hmem_device, &hmem_handle);
 #else
 	const enum fi_hmem_iface hmem_iface  = FI_HMEM_SYSTEM;
 	const uint64_t		 hmem_device = 0;
+	const uint64_t		 hmem_handle = OPX_HMEM_NO_HANDLE;
 #endif
 
 	struct fi_opx_hmem_iov iov = {.buf = (uintptr_t) buf, .len = len, .iface = hmem_iface, .device = hmem_device};
@@ -750,9 +756,9 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	fi_opx_readv_internal(opx_ep, &iov, 1, opx_addr, &addr_offset, &key, opx_ep->tx->op_flags, opx_ep->tx->cq,
-			      opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps,
-			      reliability, hfi1_type);
+	opx_readv_internal(opx_ep, &iov, 1, &hmem_handle, opx_addr, &addr_offset, &key, opx_ep->tx->op_flags,
+			   opx_ep->tx->cq, opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
+			   lock_required, caps, reliability, hfi1_type);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "READ");
 	return FI_SUCCESS;
@@ -839,6 +845,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 
 	uint64_t	       hmem_device;
 	enum fi_hmem_iface     hmem_iface;
+	uint64_t	       hmem_handle[8];
 	struct fi_opx_hmem_iov hmem_iovs[8];
 
 	/* max 8 descriptors (iovecs) per readv_internal */
@@ -853,17 +860,18 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 			} else {
 				mr_ptr = NULL;
 			}
-			hmem_iface	    = opx_hmem_get_mr_iface(mr_ptr, &hmem_device);
+			hmem_iface	    = opx_hmem_get_mr_iface(mr_ptr, &hmem_device, &hmem_handle[i]);
 			hmem_iovs[i].buf    = (uintptr_t) iov[index + i].iov_base;
 			hmem_iovs[i].len    = iov[index + i].iov_len;
 			hmem_iovs[i].iface  = hmem_iface;
 			hmem_iovs[i].device = hmem_device;
 		}
-		fi_opx_readv_internal(opx_ep, hmem_iovs, 8, opx_addr, addr_v, key_v, 0, NULL, NULL, cc, FI_VOID,
-				      FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps, reliability, hfi1_type);
+		opx_readv_internal(opx_ep, hmem_iovs, 8, hmem_handle, opx_addr, addr_v, key_v, 0, NULL, NULL, cc,
+				   FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps, reliability,
+				   hfi1_type);
 	}
 
-	/* if 'partial_ndesc' is zero, the fi_opx_readv_internal() will fence */
+	/* if 'partial_ndesc' is zero, the opx_readv_internal() will fence */
 	const size_t partial_ndesc = count & 0x07ull;
 	for (int i = 0; i < partial_ndesc; ++i) {
 		struct fi_opx_mr *mr_ptr;
@@ -873,15 +881,15 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 		} else {
 			mr_ptr = NULL;
 		}
-		hmem_iface	    = opx_hmem_get_mr_iface(mr_ptr, &hmem_device);
+		hmem_iface	    = opx_hmem_get_mr_iface(mr_ptr, &hmem_device, &hmem_handle[i]);
 		hmem_iovs[i].buf    = (uintptr_t) iov[index + i].iov_base;
 		hmem_iovs[i].len    = iov[index + i].iov_len;
 		hmem_iovs[i].iface  = hmem_iface;
 		hmem_iovs[i].device = hmem_device;
 	}
-	fi_opx_readv_internal(opx_ep, hmem_iovs, partial_ndesc, opx_addr, addr_v, key_v, tx_op_flags, opx_ep->tx->cq,
-			      opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps,
-			      reliability, hfi1_type);
+	opx_readv_internal(opx_ep, hmem_iovs, partial_ndesc, hmem_handle, opx_addr, addr_v, key_v, tx_op_flags,
+			   opx_ep->tx->cq, opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
+			   lock_required, caps, reliability, hfi1_type);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "READV");
 	return 0;
@@ -955,6 +963,7 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	struct fi_opx_hmem_iov iov[8];
 	uint64_t	       addr[8];
 	uint64_t	       key[8];
+	uint64_t	       hmem_handle[8];
 
 	ssize_t				  index;
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
@@ -997,7 +1006,7 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 				mr_ptr = NULL;
 			}
 			const size_t len = (dst_iov_bytes <= src_iov_bytes) ? dst_iov_bytes : src_iov_bytes;
-			fi_opx_hmem_iov_init(dst_iov_vaddr, len, mr_ptr, &iov[niov]);
+			opx_hmem_iov_init(dst_iov_vaddr, len, mr_ptr, &iov[niov], &hmem_handle[niov]);
 			addr[niov] = src_iov_addr;
 			key[niov]  = src_iov_key;
 
@@ -1021,10 +1030,10 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 					}
 					assert(totsize_issued <= totsize);
 #endif
-					fi_opx_readv_internal(opx_ep, iov, niov + 1, opx_src_addr, addr, key, flags, cq,
-							      opx_ep->read_cntr, /* enable_cq, enable_cntr */
-							      cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
-							      lock_required, caps, reliability, hfi1_type);
+					opx_readv_internal(opx_ep, iov, niov + 1, hmem_handle, opx_src_addr, addr, key,
+							   flags, cq, opx_ep->read_cntr, /* enable_cq, enable_cntr */
+							   cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
+							   lock_required, caps, reliability, hfi1_type);
 
 					OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "READMSG_INTERNAL");
 					return 0;
@@ -1069,9 +1078,10 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		}
 		assert(totsize_issued <= totsize);
 #endif
-		fi_opx_readv_internal(
-			opx_ep, iov, 8, opx_src_addr, addr, key, 0, NULL, NULL, /* disable_cq, disable_cntr */
-			cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps, reliability, hfi1_type);
+		opx_readv_internal(opx_ep, iov, 8, hmem_handle, opx_src_addr, addr, key, 0, NULL,
+				   NULL, /* disable_cq, disable_cntr */
+				   cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps, reliability,
+				   hfi1_type);
 
 	} /* end while */
 

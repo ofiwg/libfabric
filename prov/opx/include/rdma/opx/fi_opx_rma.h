@@ -62,13 +62,13 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work);
 int opx_hfi1_tx_rma_rts_intranode(union fi_opx_hfi1_deferred_work *work);
 
 __OPX_FORCE_INLINE__
-void fi_opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *iov, const size_t niov,
-			   const union fi_opx_addr opx_target_addr, const uint64_t *addr_offset, const uint64_t *key,
-			   const uint64_t tx_op_flags, const struct fi_opx_cq *opx_cq,
-			   const struct fi_opx_cntr *opx_cntr, struct fi_opx_completion_counter *cc,
-			   enum fi_datatype dt, enum fi_op op, const uint32_t opcode, const int lock_required,
-			   const uint64_t caps, const enum ofi_reliability_kind reliability,
-			   const enum opx_hfi1_type hfi1_type)
+void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *iov, const size_t niov,
+			const uint64_t *hmem_handle, const union fi_opx_addr opx_target_addr,
+			const uint64_t *addr_offset, const uint64_t *key, const uint64_t tx_op_flags,
+			const struct fi_opx_cq *opx_cq, const struct fi_opx_cntr *opx_cntr,
+			struct fi_opx_completion_counter *cc, enum fi_datatype dt, enum fi_op op, const uint32_t opcode,
+			const int lock_required, const uint64_t caps, const enum ofi_reliability_kind reliability,
+			const enum opx_hfi1_type hfi1_type)
 {
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "READV_INTERNAL");
 
@@ -93,18 +93,18 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 				  2 + /* lrh */
 				  3 + /* bth */
 				  9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-				  16; /* one "struct fi_opx_hfi1_dput_iov", padded to cache line */
+				  16; /* one "struct opx_hfi1_dput_iov" */
 		params->lrh_dws =
 			htons(params->pbc_dws - 2 +
 			      1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 		params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(opx_target_addr.lid);
 	} else {
-		params->pbc_dws = 2 +  /* pbc */
-				  4 +  /* lrh uncompressed */
-				  3 +  /* bth */
-				  9 +  /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-				  16 + /* one "struct fi_opx_hfi1_dput_iov", padded to cache line */
-				  2;   /* ICRC/tail */
+		params->pbc_dws = 2 +			       /* pbc */
+				  4 +			       /* lrh uncompressed */
+				  3 +			       /* bth */
+				  9 +			       /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+				  16 +			       /* one "struct opx_hfi1_dput_iov" */
+				  2;			       /* ICRC/tail */
 		params->lrh_dws	 = (params->pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 		params->lrh_dlid = opx_target_addr.lid;
 	}
@@ -124,14 +124,16 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 	params->dput_iov.bytes	     = iov->len;
 	params->dput_iov.rbuf_iface  = iov->iface;
 	params->dput_iov.rbuf_device = iov->device;
-	params->dput_iov.sbuf_iface  = FI_HMEM_SYSTEM; // TBD by remote node
-	params->dput_iov.sbuf_device = 0;	       // TBD by remote node
+	params->dput_iov.sbuf_iface  = FI_HMEM_SYSTEM;	   // TBD by remote node
+	params->dput_iov.sbuf_device = 0;		   // TBD by remote node
+	params->dput_iov.sbuf_handle = OPX_HMEM_NO_HANDLE; // TBD by remote node
 
 	params->rma_request = ofi_buf_alloc(opx_ep->tx->rma_request_pool);
 	assert(params->rma_request != NULL);
 	params->rma_request->cc		 = cc;
 	params->rma_request->hmem_iface	 = iov->iface;
 	params->rma_request->hmem_device = iov->device;
+	params->rma_request->hmem_handle = hmem_handle[0];
 
 	if (params->is_intranode) {
 		params->work_elem.work_fn   = fi_opx_do_readv_internal_intranode;
@@ -169,12 +171,12 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *iov, const size_t niov,
-			   const uint64_t data, const union fi_opx_addr opx_dst_addr, uint64_t addr_offset,
-			   const uint64_t key, struct fi_opx_completion_counter *cc, enum fi_datatype dt, enum fi_op op,
-			   const uint64_t tx_op_flags, const uint64_t is_hmem, const int lock_required,
-			   const uint64_t caps, const enum ofi_reliability_kind reliability,
-			   const enum opx_hfi1_type hfi1_type)
+void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *iov, const size_t niov,
+			const uint64_t data, const union fi_opx_addr opx_dst_addr, uint64_t addr_offset,
+			const uint64_t key, struct fi_opx_completion_counter *cc, enum fi_datatype dt, enum fi_op op,
+			const uint64_t tx_op_flags, const uint64_t is_hmem, const uint64_t handle, int lock_required,
+			const uint64_t caps, const enum ofi_reliability_kind reliability,
+			const enum opx_hfi1_type hfi1_type)
 {
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "WRITE_INTERNAL");
 	assert(niov == 1); // TODO, support something ... bigger
@@ -200,15 +202,15 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 		struct fi_opx_rma_request *rma_req = ofi_buf_alloc(opx_ep->tx->rma_request_pool);
 		assert(rma_req != NULL);
 
-		struct fi_opx_hfi1_rx_rma_rts_params *params = &work->rx_rma_rts;
-		params->work_elem.slist_entry.next	     = NULL;
-		params->work_elem.completion_action	     = NULL;
-		params->work_elem.payload_copy		     = NULL;
-		params->work_elem.complete		     = false;
-		params->opx_ep				     = opx_ep;
-		params->lrh_dlid			     = lrh_dlid;
-		params->slid				     = slid;
-		params->pbc_dlid			     = pbc_dlid;
+		struct opx_hfi1_rx_rma_rts_params *params = &work->rx_rma_rts;
+		params->work_elem.slist_entry.next	  = NULL;
+		params->work_elem.completion_action	  = NULL;
+		params->work_elem.payload_copy		  = NULL;
+		params->work_elem.complete		  = false;
+		params->opx_ep				  = opx_ep;
+		params->lrh_dlid			  = lrh_dlid;
+		params->slid				  = slid;
+		params->pbc_dlid			  = pbc_dlid;
 
 		params->niov	       = niov;
 		rma_req->cc	       = cc;
@@ -216,10 +218,11 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 		params->key	       = key;
 		params->data	       = data;
 
-		// params->iov[0].rbuf_iface = FI_HMEM_SYSTEM;	// TBD on remote node
-		// params->iov[0].rbuf_device = 0;		// TBD on remote node
+		// params->iov[0].rbuf_iface = FI_HMEM_SYSTEM;		// TBD on remote node
+		// params->iov[0].rbuf_device = 0;			// TBD on remote node
 		params->dput_iov[0].sbuf_iface	= iov[0].iface;
 		params->dput_iov[0].sbuf_device = iov[0].device;
+		params->dput_iov[0].sbuf_handle = handle;
 		params->dput_iov[0].rbuf	= addr_offset;
 		params->dput_iov[0].sbuf	= iov[0].buf;
 		params->dput_iov[0].bytes	= iov[0].len;
@@ -267,6 +270,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 		params->iov[0].sbuf		    = iov->buf;
 		params->iov[0].sbuf_iface	    = iov->iface;
 		params->iov[0].sbuf_device	    = iov->device;
+		params->iov[0].sbuf_handle	    = handle;
 		params->iov[0].rbuf_iface	    = FI_HMEM_SYSTEM; // TBD on remote node
 		params->iov[0].rbuf_device	    = 0;	      // TBD on remote node
 		params->dput_iov		    = &params->iov[0];
@@ -277,7 +281,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_io
 		params->reliability		    = reliability;
 		params->cur_iov			    = 0;
 		params->bytes_sent		    = 0;
-		params->opx_mr			    = NULL;
+		params->src_base_addr		    = NULL;
 		params->origin_byte_counter	    = NULL;
 		params->payload_bytes_for_iovec	    = 0;
 		params->target_hfi_unit		    = opx_dst_addr.hfi1_unit;

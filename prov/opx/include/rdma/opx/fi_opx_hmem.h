@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024 by Cornelis Networks.
+ * Copyright (C) 2023-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -106,7 +106,7 @@ enum fi_hmem_iface opx_hmem_get_ptr_iface(const void *ptr, uint64_t *device, uin
 }
 
 __OPX_FORCE_INLINE__
-enum fi_hmem_iface opx_hmem_get_mr_iface(const struct fi_opx_mr *desc, uint64_t *device)
+enum fi_hmem_iface opx_hmem_get_mr_iface(const struct fi_opx_mr *desc, uint64_t *device, uint64_t *handle)
 {
 #ifdef OPX_HMEM
 	if (desc && !desc->hmem_unified) {
@@ -120,10 +120,12 @@ enum fi_hmem_iface opx_hmem_get_mr_iface(const struct fi_opx_mr *desc, uint64_t 
 		default:
 			*device = 0ul;
 		}
+		*handle = desc->hmem_dev_reg_handle;
 		return desc->attr.iface;
 	}
 #endif
 	*device = 0ul;
+	*handle = OPX_HMEM_NO_HANDLE;
 	return FI_HMEM_SYSTEM;
 }
 
@@ -139,8 +141,7 @@ int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_ha
 
 	int ret;
 
-	assert((hmem_handle == OPX_HMEM_NO_HANDLE && threshold == OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET) ||
-	       (hmem_handle != OPX_HMEM_NO_HANDLE && threshold != OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET));
+	assert(hmem_handle == OPX_HMEM_NO_HANDLE || threshold != OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
 
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "COPY-TO-HMEM");
 	switch (iface) {
@@ -198,8 +199,7 @@ int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_
 
 	int ret;
 
-	assert((hmem_handle == OPX_HMEM_NO_HANDLE && threshold == OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET) ||
-	       (hmem_handle != OPX_HMEM_NO_HANDLE && threshold != OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET));
+	assert(hmem_handle == OPX_HMEM_NO_HANDLE || threshold != OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
 
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "COPY-FROM-HMEM");
 	switch (iface) {
@@ -246,7 +246,8 @@ int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_
 }
 
 __OPX_FORCE_INLINE__
-unsigned fi_opx_hmem_iov_init(const void *buf, const size_t len, const void *desc, struct fi_opx_hmem_iov *iov)
+unsigned opx_hmem_iov_init(const void *buf, const size_t len, const void *desc, struct fi_opx_hmem_iov *iov,
+			   uint64_t *handle)
 {
 	iov->buf = (uintptr_t) buf;
 	iov->len = len;
@@ -254,10 +255,11 @@ unsigned fi_opx_hmem_iov_init(const void *buf, const size_t len, const void *des
 	uint64_t	   hmem_device;
 	enum fi_hmem_iface hmem_iface;
 	if (desc) {
-		hmem_iface = opx_hmem_get_mr_iface(desc, &hmem_device);
+		hmem_iface = opx_hmem_get_mr_iface(desc, &hmem_device, handle);
 	} else {
 		uint64_t is_unified __attribute__((__unused__));
 		hmem_iface = opx_hmem_get_ptr_iface(buf, &hmem_device, &is_unified);
+		*handle	   = OPX_HMEM_NO_HANDLE;
 	}
 	iov->iface  = hmem_iface;
 	iov->device = hmem_device;
@@ -265,6 +267,7 @@ unsigned fi_opx_hmem_iov_init(const void *buf, const size_t len, const void *des
 #else
 	iov->iface  = FI_HMEM_SYSTEM;
 	iov->device = 0ul;
+	*handle	    = OPX_HMEM_NO_HANDLE;
 	return 0;
 #endif
 }
