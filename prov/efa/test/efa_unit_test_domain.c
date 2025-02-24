@@ -3,6 +3,36 @@
 
 #include "efa_unit_tests.h"
 
+/**
+ * @brief Verify the info type in struct efa_domain for efa RDM path
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_info_type_efa_rdm(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	assert(efa_domain->info_type == EFA_INFO_RDM);
+}
+
+/**
+ * @brief Verify the info type in struct efa_domain for efa direct path
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_info_type_efa_direct(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	assert(efa_domain->info_type == EFA_INFO_DIRECT);
+}
+
 /* test fi_open_ops with a wrong name */
 void test_efa_domain_open_ops_wrong_name(struct efa_resource **state)
 {

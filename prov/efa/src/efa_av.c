@@ -265,7 +265,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn, bool insert_shm_
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 
-	assert(av->ep_type == FI_EP_RDM);
+	assert(av->domain->info_type == EFA_INFO_RDM);
 	assert(conn->ep_addr);
 
 	/* currently multiple EP bind to same av is not supported */
@@ -347,7 +347,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *ep;
 
-	assert(av->ep_type == FI_EP_RDM);
+	assert(av->domain->info_type == EFA_INFO_RDM);
 
 	peer = &conn->rdm_peer;
 	if (peer->is_local && av->shm_rdm_av) {
@@ -408,7 +408,7 @@ int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	/* We used a static connid for all dgram endpoints, therefore cur_entry should always be NULL,
 	 * and only RDM endpoint can reach here. hence the following assertion
 	 */
-	assert(av->ep_type == FI_EP_RDM);
+	assert(av->domain->info_type == EFA_INFO_RDM);
 	prv_entry = malloc(sizeof(*prv_entry));
 	if (!prv_entry) {
 		EFA_WARN(FI_LOG_AV, "Cannot allocate memory for prv_reverse_av entry\n");
@@ -478,7 +478,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	if (!conn->ah)
 		goto err_release;
 
-	if (av->ep_type == FI_EP_RDM) {
+	if (av->domain->info_type == EFA_INFO_RDM) {
 		err = efa_conn_rdm_init(av, conn, insert_shm_av);
 		if (err) {
 			errno = -err;
@@ -488,7 +488,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 
 	err = efa_av_update_reverse_av(av, raw_addr, conn);
 	if (err) {
-		if (av->ep_type == FI_EP_RDM)
+		if (av->domain->info_type == EFA_INFO_RDM)
 			efa_conn_rdm_deinit(av, conn);
 		goto err_release;
 	}
@@ -546,7 +546,7 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 		free(prv_reverse_av_entry);
 	}
 
-	if (av->ep_type == FI_EP_RDM)
+	if (av->domain->info_type == EFA_INFO_RDM)
 		efa_conn_rdm_deinit(av, conn);
 
 	efa_ah_release(av, conn->ah);
@@ -590,7 +590,7 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 	fi_addr_t efa_fiaddr;
 	int ret = 0;
 
-	if (av->ep_type == FI_EP_DGRAM)
+	if (av->domain->info_type == EFA_INFO_DGRAM)
 		addr->qkey = EFA_DGRAM_CONNID;
 
 	ofi_genlock_lock(&av->util_av.lock);
@@ -811,7 +811,7 @@ static int efa_av_close(struct fid *fid)
 			fi_strerror(err));
 	}
 
-	if (av->ep_type == FI_EP_RDM) {
+	if (av->domain->info_type == EFA_INFO_RDM) {
 		if (av->shm_rdm_av) {
 			err = fi_close(&av->shm_rdm_av->fid);
 			if (OFI_UNLIKELY(err)) {
@@ -904,9 +904,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err;
 
-	if (EFA_EP_TYPE_IS_RDM(efa_domain->info)) {
-		av->ep_type = FI_EP_RDM;
-
+	if (efa_domain->info_type == EFA_INFO_RDM) {
 		av_attr = *attr;
 		if (efa_domain->fabric && efa_domain->fabric->shm_fabric) {
 			/*
@@ -928,8 +926,6 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			if (ret)
 				goto err_close_util_av;
 		}
-	} else {
-		av->ep_type = FI_EP_DGRAM;
 	}
 
 	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 "\n",
