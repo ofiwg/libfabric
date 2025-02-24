@@ -1206,16 +1206,6 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		}
 	}
 
-#ifdef HAVE_CUDA
-	if (params->dput_iov[0].rbuf_iface == FI_HMEM_CUDA) {
-		int err = cuda_set_sync_memops((void *) params->dput_iov[0].rbuf);
-		if (OFI_UNLIKELY(err != 0)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "cuda_set_sync_memops(%p) FAILED (returned %d)\n",
-				(void *) params->dput_iov[0].rbuf, err);
-		}
-	}
-#endif
-
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
 	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rx, psn_ptr,
 							    replay, params->reliability, OPX_HFI1_TYPE);
@@ -2503,16 +2493,6 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	for (int i = 0; i < params->niov; i++) {
 		tx_payload->cts.iov[i] = params->dput_iov[i];
 	}
-
-#ifdef HAVE_CUDA
-	if (params->dput_iov[0].rbuf_iface == FI_HMEM_CUDA) {
-		int err = cuda_set_sync_memops((void *) params->dput_iov[0].rbuf);
-		if (OFI_UNLIKELY(err != 0)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "cuda_set_sync_memops(%p) FAILED (returned %d)\n",
-				(void *) params->dput_iov[0].rbuf, err);
-		}
-	}
-#endif
 
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
 	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->origin_rx, psn_ptr,

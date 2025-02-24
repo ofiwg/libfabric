@@ -174,6 +174,16 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 				}
 				opx_mr->attr.requested_key = opx_mr->mr_fid.key;
 
+#ifdef HAVE_CUDA
+				if (hmem_iface == FI_HMEM_CUDA) {
+					int err = cuda_set_sync_memops((void *) iov->iov_base);
+					if (OFI_UNLIKELY(err != 0)) {
+						FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+							"cuda_set_sync_memops(%p) FAILED (returned %d)\n",
+							(void *) iov->iov_base, err);
+					}
+				}
+#endif
 				if (opx_mr->domain->mr_mode & OFI_MR_SCALABLE) {
 					fi_opx_ref_inc(&opx_mr->domain->ref_cnt, "domain");
 				}
@@ -198,6 +208,11 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	switch (hmem_iface) {
 	case FI_HMEM_CUDA:
 		opx_mr->attr.device.cuda = (int) hmem_device;
+		int err			 = cuda_set_sync_memops((void *) iov->iov_base);
+		if (OFI_UNLIKELY(err != 0)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "cuda_set_sync_memops(%p) FAILED (returned %d)\n",
+				(void *) iov->iov_base, err);
+		}
 		break;
 	case FI_HMEM_ZE:
 		opx_mr->attr.device.ze = (int) hmem_device;
