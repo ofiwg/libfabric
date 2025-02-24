@@ -105,8 +105,6 @@ struct efa_rdm_ope *efa_unit_test_alloc_rxe(struct efa_resource *resource, uint3
 /* test cases */
 
 /* begin efa_unit_test_av.c */
-void test_av_ep_type_efa_rdm();
-void test_av_ep_type_efa_direct();
 void test_av_insert_duplicate_raw_addr();
 void test_av_insert_duplicate_gid();
 /* end efa_unit_test_av.c */
@@ -245,8 +243,14 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_exceeding_total_len_128_alignme
 void test_efa_rdm_peer_select_readbase_rtm_no_runt();
 void test_efa_rdm_peer_select_readbase_rtm_do_runt();
 void test_efa_rdm_pke_get_available_copy_methods_align128();
+
+/* begin efa_unit_test_domain.c */
+void test_efa_domain_info_type_efa_direct();
+void test_efa_domain_info_type_efa_rdm();
 void test_efa_domain_open_ops_wrong_name();
 void test_efa_domain_open_ops_mr_query();
+/* end efa_unit_test_domain.c */
+
 void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cq_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 void test_efa_rdm_cq_post_initial_rx_pkts();

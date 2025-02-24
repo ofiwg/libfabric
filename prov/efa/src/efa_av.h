@@ -69,7 +69,6 @@ struct efa_av {
 	struct efa_prv_reverse_av *prv_reverse_av;
 	struct efa_ah *ah_map;
 	struct util_av util_av;
-	enum fi_ep_type ep_type;
 };
 
 int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
