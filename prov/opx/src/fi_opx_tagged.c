@@ -97,12 +97,13 @@ ssize_t fi_opx_trecvmsg_generic(struct fid_ep *ep, const struct fi_msg_tagged *m
 	/* NOTE: Assume that all IOVs reside in the same HMEM space */
 	struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
 	uint64_t		 hmem_device;
+	uint64_t		 hmem_handle;
 	enum fi_hmem_iface	 hmem_iface;
 	if (msg->desc && msg->desc[0]) {
-		hmem_iface		       = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device);
+		hmem_iface		       = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device, &hmem_handle);
 		hmem_info->iface	       = hmem_iface;
 		hmem_info->device	       = hmem_device;
-		hmem_info->hmem_dev_reg_handle = ((struct fi_opx_mr *) msg->desc[0])->hmem_dev_reg_handle;
+		hmem_info->hmem_dev_reg_handle = hmem_handle;
 		hmem_info->is_unified	       = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
 	} else {
 		hmem_iface		  = FI_HMEM_SYSTEM;
@@ -117,7 +118,7 @@ ssize_t fi_opx_trecvmsg_generic(struct fid_ep *ep, const struct fi_msg_tagged *m
 		for (int i = 1; i < msg->iov_count; ++i) {
 			uint64_t	   tmp_hmem_device;
 			enum fi_hmem_iface tmp_hmem_iface =
-				opx_hmem_get_mr_iface(msg->desc ? msg->desc[i] : NULL, &tmp_hmem_device);
+				opx_hmem_get_mr_iface(msg->desc ? msg->desc[i] : NULL, &tmp_hmem_device, &hmem_handle);
 			assert(tmp_hmem_iface == hmem_iface);
 			assert(tmp_hmem_device == hmem_device);
 		}

@@ -96,9 +96,9 @@ static inline int fi_opx_check_atomic(struct fi_opx_ep *opx_ep, enum fi_datatype
 
 void fi_opx_atomic_completion_action(union fi_opx_hfi1_deferred_work *work_state)
 {
-	struct fi_opx_hfi1_dput_params *params = &work_state->dput;
-	uint64_t       *rbuf_qws = (uint64_t *) (((uint8_t *) params->opx_mr->base_addr) + params->dput_iov->sbuf);
-	const uint64_t *sbuf_qws =
+	struct fi_opx_hfi1_dput_params *params	 = &work_state->dput;
+	uint64_t		       *rbuf_qws = (uint64_t *) (params->src_base_addr + params->dput_iov->sbuf);
+	const uint64_t		       *sbuf_qws =
 		(uint64_t *) &work_state->work_elem.payload_copy->byte[sizeof(struct fi_opx_hfi1_dput_fetch)];
 	assert(params->op != (FI_NOOP - 1));
 	assert(params->dt != (FI_VOID - 1));
@@ -163,7 +163,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	params->bytes_sent		  = 0;
 	params->cc			  = NULL;
 	params->user_cc			  = NULL;
-	params->opx_mr			  = NULL;
+	params->src_base_addr		  = NULL;
 	params->origin_byte_counter	  = NULL;
 	params->payload_bytes_for_iovec	  = sizeof(struct fi_opx_hfi1_dput_fetch);
 	params->fetch_vaddr		  = (void *) fetch_iov->buf;
@@ -254,12 +254,13 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== ATOMIC READ (begin)\n");
 		struct fi_opx_hmem_iov fetch_iov;
-		fi_opx_hmem_iov_init(fetch_vaddr, buf_len, NULL, &fetch_iov);
+		uint64_t	       hmem_handle;
+		opx_hmem_iov_init(fetch_vaddr, buf_len, NULL, &fetch_iov, &hmem_handle);
 
 		cc->cntr = opx_ep->read_cntr;
-		fi_opx_readv_internal(opx_ep, &fetch_iov, 1, opx_dst_addr, &addr, &key, opx_ep->tx->op_flags,
-				      opx_ep->rx->cq, opx_ep->read_cntr, cc, datatype, op, FI_OPX_HFI_DPUT_OPCODE_GET,
-				      lock_required, caps, reliability, hfi1_type);
+		opx_readv_internal(opx_ep, &fetch_iov, 1, &hmem_handle, opx_dst_addr, &addr, &key, opx_ep->tx->op_flags,
+				   opx_ep->rx->cq, opx_ep->read_cntr, cc, datatype, op, FI_OPX_HFI_DPUT_OPCODE_GET,
+				   lock_required, caps, reliability, hfi1_type);
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== ATOMIC READ (end)\n");
 		return count;
@@ -272,14 +273,16 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 
 		const uint64_t	       is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_dst_addr, caps);
 		struct fi_opx_hmem_iov fetch_iov;
-		fi_opx_hmem_iov_init(fetch_vaddr, buf_len, NULL, &fetch_iov);
+		uint64_t	       fetch_handle;
+		opx_hmem_iov_init(fetch_vaddr, buf_len, NULL, &fetch_iov, &fetch_handle);
 
 		/* Note that is_hmem is only used to indicate if either of the send
 		   buffers are HMEM, as that's what we care about for determining
 		   the best way to send out the data. Whether or not the fetch_iov
 		   buffer is HMEM doesn't matter here and can be ignored. */
 		struct fi_opx_hmem_iov buf_iov;
-		uint64_t	       is_hmem = fi_opx_hmem_iov_init(buf, buf_len, NULL, &buf_iov);
+		uint64_t	       handle;
+		uint64_t	       is_hmem = opx_hmem_iov_init(buf, buf_len, NULL, &buf_iov, &handle);
 
 		if (!is_compare) {
 			FI_OPX_DEBUG_COUNTERS_INC_COND((is_hmem || fetch_iov.iface != FI_HMEM_SYSTEM) && is_intranode,
@@ -294,7 +297,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 
 		} else {
 			struct fi_opx_hmem_iov compare_iov;
-			is_hmem |= fi_opx_hmem_iov_init(compare_vaddr, buf_len, NULL, &compare_iov);
+			uint64_t	       handle;
+			is_hmem |= opx_hmem_iov_init(compare_vaddr, buf_len, NULL, &compare_iov, &handle);
 			buf_iov.len <<= 1;
 
 			FI_OPX_DEBUG_COUNTERS_INC_COND((is_hmem || fetch_iov.iface != FI_HMEM_SYSTEM) && is_intranode,
@@ -319,10 +323,11 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC WRITE (begin)\n");
 	cc->cntr = opx_ep->write_cntr;
 	struct fi_opx_hmem_iov buf_iov;
-	uint64_t	       is_hmem = fi_opx_hmem_iov_init(buf, buf_len, NULL, &buf_iov);
+	uint64_t	       handle;
+	uint64_t	       is_hmem = opx_hmem_iov_init(buf, buf_len, NULL, &buf_iov, &handle);
 
-	fi_opx_write_internal(opx_ep, &buf_iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key, cc, datatype, op,
-			      opx_ep->tx->op_flags, is_hmem, lock_required, caps, reliability, hfi1_type);
+	opx_write_internal(opx_ep, &buf_iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key, cc, datatype, op,
+			   opx_ep->tx->op_flags, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC WRITE (end)\n");
 
 	return count;
@@ -876,10 +881,13 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 		 "===================================== ATOMIC INJECT WRITE (begin)\n");
 
 	struct fi_opx_hmem_iov iov;
-	const uint64_t is_hmem = (const uint64_t) fi_opx_hmem_iov_init(buf, count * sizeofdt(datatype), NULL, &iov);
+	uint64_t	       handle;
+	const uint64_t	       is_hmem =
+		(const uint64_t) opx_hmem_iov_init(buf, count * sizeofdt(datatype), NULL, &iov, &handle);
 
-	fi_opx_write_internal(opx_ep, &iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key, cc, datatype, op,
-			      opx_ep->tx->op_flags | FI_INJECT, is_hmem, lock_required, caps, reliability, hfi1_type);
+	opx_write_internal(opx_ep, &iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key, cc, datatype, op,
+			   opx_ep->tx->op_flags | FI_INJECT, is_hmem, handle, lock_required, caps, reliability,
+			   hfi1_type);
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		 "===================================== ATOMIC INJECT WRITE (end)\n");

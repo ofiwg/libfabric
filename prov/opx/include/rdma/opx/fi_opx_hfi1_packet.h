@@ -1355,8 +1355,8 @@ union cacheline {
 	uint8_t	 byte[64];
 };
 
-union fi_opx_hfi1_dput_iov {
-	uint64_t qw[6];
+union opx_hfi1_dput_iov {
+	uint64_t qw[8];
 	struct {
 		uintptr_t	   rbuf;
 		uintptr_t	   sbuf;
@@ -1365,6 +1365,8 @@ union fi_opx_hfi1_dput_iov {
 		uint64_t	   sbuf_device;
 		enum fi_hmem_iface rbuf_iface;
 		enum fi_hmem_iface sbuf_iface;
+		uint64_t	   pad;
+		uint64_t	   sbuf_handle;
 	};
 };
 
@@ -1400,10 +1402,10 @@ struct fi_opx_hmem_iov {
 } __attribute__((__packed__));
 
 #define FI_OPX_MAX_HMEM_IOV ((FI_OPX_HFI1_PACKET_MTU - sizeof(uintptr_t)) / sizeof(struct fi_opx_hmem_iov))
-#define FI_OPX_MAX_DPUT_IOV ((FI_OPX_HFI1_PACKET_MTU / sizeof(union fi_opx_hfi1_dput_iov) - 4) + 3)
+#define FI_OPX_MAX_DPUT_IOV ((FI_OPX_HFI1_PACKET_MTU / sizeof(union opx_hfi1_dput_iov) - 4) + 3)
 
 #define FI_OPX_MAX_DPUT_TIDPAIRS \
-	((FI_OPX_HFI1_PACKET_MTU - sizeof(union fi_opx_hfi1_dput_iov) - (4 * sizeof(uint32_t))) / sizeof(uint32_t))
+	((FI_OPX_HFI1_PACKET_MTU - sizeof(union opx_hfi1_dput_iov) - (4 * sizeof(uint32_t))) / sizeof(uint32_t))
 
 #define OPX_IMMEDIATE_BYTE_COUNT_SHIFT (5)
 #define OPX_IMMEDIATE_BYTE_COUNT_MASK  (0xE0)
@@ -1494,23 +1496,23 @@ union fi_opx_hfi1_packet_payload {
 	} rendezvous;
 
 	struct {
-		union fi_opx_hfi1_dput_iov iov[FI_OPX_MAX_DPUT_IOV];
+		union opx_hfi1_dput_iov iov[FI_OPX_MAX_DPUT_IOV];
 	} rma_rts;
 
 	struct {
-		union fi_opx_hfi1_dput_iov iov[FI_OPX_MAX_DPUT_IOV];
+		union opx_hfi1_dput_iov iov[FI_OPX_MAX_DPUT_IOV];
 	} cts;
 
 	/* tid_cts extends cts*/
 	struct {
 		/* ==== CACHE LINE 0 ==== */
-		union fi_opx_hfi1_dput_iov iov[1];
-		uint32_t		   tid_offset;
-		uint32_t		   ntidpairs;
-		int32_t			   origin_byte_counter_adjust;
-		uint32_t		   unused;
-
+		union opx_hfi1_dput_iov iov[1];
 		/* ==== CACHE LINE 1 ==== */
+		uint32_t tid_offset;
+		uint32_t ntidpairs;
+		int32_t	 origin_byte_counter_adjust;
+		uint32_t unused;
+
 		uint32_t tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 	} tid_cts;
 } __attribute__((__aligned__(32)));

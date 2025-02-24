@@ -43,8 +43,8 @@ size_t opx_hfi1_dput_write_header_and_payload_put(struct fi_opx_ep *opx_ep, unio
 						  const uint64_t op64, const uint64_t dt64, const size_t payload_bytes,
 						  const uint64_t key_or_rma_req, uint8_t **sbuf,
 						  const enum fi_hmem_iface sbuf_iface, const uint64_t sbuf_device,
-						  uintptr_t *rbuf, const enum opx_hfi1_type hfi1_type,
-						  const uint32_t opcode)
+						  const uint64_t sbuf_handle, uintptr_t *rbuf,
+						  const enum opx_hfi1_type hfi1_type, const uint32_t opcode)
 {
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		hdr->qw_9B[4] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[4] | opcode | (dt64 << 16) | (op64 << 24) |
@@ -60,8 +60,8 @@ size_t opx_hfi1_dput_write_header_and_payload_put(struct fi_opx_ep *opx_ep, unio
 
 	if (tx_payload) {
 		assert(!iov);
-		OPX_HMEM_COPY_FROM((void *) tx_payload, (const void *) *sbuf, payload_bytes, OPX_HMEM_NO_HANDLE,
-				   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET, sbuf_iface, sbuf_device);
+		OPX_HMEM_COPY_FROM((void *) tx_payload, (const void *) *sbuf, payload_bytes, sbuf_handle,
+				   OPX_HMEM_DEV_REG_SEND_THRESHOLD, sbuf_iface, sbuf_device);
 	} else {
 		assert(iov);
 		iov->iov_base = (void *) *sbuf;
@@ -217,7 +217,8 @@ size_t opx_hfi1_dput_write_header_and_payload_get(struct fi_opx_ep *opx_ep, unio
 						  const uint64_t dt64, const size_t payload_bytes,
 						  const uintptr_t rma_request_vaddr, uint8_t **sbuf,
 						  const enum fi_hmem_iface sbuf_iface, const uint64_t sbuf_device,
-						  uintptr_t *rbuf, const enum opx_hfi1_type hfi1_type)
+						  const uint64_t sbuf_handle, uintptr_t *rbuf,
+						  const enum opx_hfi1_type hfi1_type)
 {
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		hdr->qw_9B[4] = opx_ep->rx->tx.dput_9B.hdr.qw_9B[4] | FI_OPX_HFI_DPUT_OPCODE_GET | (dt64 << 16) |
@@ -234,8 +235,8 @@ size_t opx_hfi1_dput_write_header_and_payload_get(struct fi_opx_ep *opx_ep, unio
 	if (tx_payload) {
 		assert(!iov);
 		if (dt64 == (FI_VOID - 1)) {
-			OPX_HMEM_COPY_FROM((void *) tx_payload, (const void *) *sbuf, payload_bytes, OPX_HMEM_NO_HANDLE,
-					   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET, sbuf_iface, sbuf_device);
+			OPX_HMEM_COPY_FROM((void *) tx_payload, (const void *) *sbuf, payload_bytes, sbuf_handle,
+					   OPX_HMEM_DEV_REG_SEND_THRESHOLD, sbuf_iface, sbuf_device);
 		} else {
 			OPX_HMEM_ATOMIC_DISPATCH((void *) *sbuf, (void *) tx_payload, payload_bytes, dt64,
 						 FI_ATOMIC_WRITE, sbuf_iface, sbuf_device);
@@ -258,8 +259,8 @@ size_t opx_hfi1_dput_write_header_and_payload_rzv(struct fi_opx_ep *opx_ep, unio
 						  const uint64_t op64, const uint64_t dt64, const size_t payload_bytes,
 						  const uint32_t opcode, const uintptr_t target_byte_counter_vaddr,
 						  uint8_t **sbuf, const enum fi_hmem_iface sbuf_iface,
-						  const uint64_t sbuf_device, uintptr_t *rbuf,
-						  enum opx_hfi1_type hfi1_type)
+						  const uint64_t sbuf_device, const uint64_t sbuf_handle,
+						  uintptr_t *rbuf, enum opx_hfi1_type hfi1_type)
 {
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		hdr->qw_9B[4] = opx_ep->rx->tx.rzv_dput_9B.hdr.qw_9B[4] | (opcode) | (payload_bytes << 48);
@@ -273,8 +274,8 @@ size_t opx_hfi1_dput_write_header_and_payload_rzv(struct fi_opx_ep *opx_ep, unio
 
 	if (tx_payload) {
 		assert(!iov);
-		OPX_HMEM_COPY_FROM((void *) tx_payload, (const void *) *sbuf, payload_bytes, OPX_HMEM_NO_HANDLE,
-				   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET, sbuf_iface, sbuf_device);
+		OPX_HMEM_COPY_FROM((void *) tx_payload, (const void *) *sbuf, payload_bytes, sbuf_handle,
+				   OPX_HMEM_DEV_REG_SEND_THRESHOLD, sbuf_iface, sbuf_device);
 	} else {
 		assert(iov);
 		iov->iov_base = (void *) *sbuf;
@@ -294,9 +295,9 @@ size_t opx_hfi1_dput_write_packet(struct fi_opx_ep *opx_ep, union opx_hfi1_packe
 				  const uint64_t bth_rx, const size_t payload_bytes, const uint64_t key,
 				  const uint64_t fetch_vaddr, const uintptr_t target_byte_counter_vaddr,
 				  const uintptr_t rma_request_vaddr, uint64_t bytes_sent, uint8_t **sbuf,
-				  const enum fi_hmem_iface sbuf_iface, const uint64_t sbuf_device, uint8_t **cbuf,
-				  const enum fi_hmem_iface cbuf_iface, const uint64_t cbuf_device, uintptr_t *rbuf,
-				  const enum opx_hfi1_type hfi1_type)
+				  const enum fi_hmem_iface sbuf_iface, const uint64_t sbuf_device,
+				  const uint64_t sbuf_handle, uint8_t **cbuf, const enum fi_hmem_iface cbuf_iface,
+				  const uint64_t cbuf_device, uintptr_t *rbuf, const enum opx_hfi1_type hfi1_type)
 {
 	uint64_t psn = (uint64_t) htonl((uint32_t) psn_orig);
 
@@ -341,25 +342,25 @@ size_t opx_hfi1_dput_write_packet(struct fi_opx_ep *opx_ep, union opx_hfi1_packe
 	case FI_OPX_HFI_DPUT_OPCODE_RZV:
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_TID:
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG:
-		return opx_hfi1_dput_write_header_and_payload_rzv(opx_ep, hdr, tx_payload, iov, op64, dt64,
-								  payload_bytes, opcode, target_byte_counter_vaddr,
-								  sbuf, sbuf_iface, sbuf_device, rbuf, hfi1_type);
+		return opx_hfi1_dput_write_header_and_payload_rzv(
+			opx_ep, hdr, tx_payload, iov, op64, dt64, payload_bytes, opcode, target_byte_counter_vaddr,
+			sbuf, sbuf_iface, sbuf_device, sbuf_handle, rbuf, hfi1_type);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_GET:
 		return opx_hfi1_dput_write_header_and_payload_get(opx_ep, hdr, tx_payload, iov, dt64, payload_bytes,
 								  rma_request_vaddr, sbuf, sbuf_iface, sbuf_device,
-								  rbuf, hfi1_type);
+								  sbuf_handle, rbuf, hfi1_type);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT:
 		return opx_hfi1_dput_write_header_and_payload_put(opx_ep, hdr, tx_payload, iov, op64, dt64,
 								  payload_bytes, key, sbuf, sbuf_iface, sbuf_device,
-								  rbuf, hfi1_type, opcode);
+								  sbuf_handle, rbuf, hfi1_type, opcode);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT_CQ:
 		return opx_hfi1_dput_write_header_and_payload_put(
 			opx_ep, hdr, tx_payload, iov, op64, dt64, payload_bytes,
 			target_byte_counter_vaddr, /* this is the remote rma_request */
-			sbuf, sbuf_iface, sbuf_device, rbuf, hfi1_type, opcode);
+			sbuf, sbuf_iface, sbuf_device, sbuf_handle, rbuf, hfi1_type, opcode);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH:
 		return opx_hfi1_dput_write_header_and_payload_atomic_fetch(
@@ -384,13 +385,13 @@ size_t opx_hfi1_dput_write_header_and_payload(
 	const uint64_t lrh_dlid, const uint64_t bth_rx, const size_t payload_bytes, const uint64_t key,
 	const uint64_t fetch_vaddr, const uintptr_t target_byte_counter_vaddr, const uintptr_t rma_request_vaddr,
 	uint64_t bytes_sent, uint8_t **sbuf, const enum fi_hmem_iface sbuf_iface, const uint64_t sbuf_device,
-	uint8_t **cbuf, const enum fi_hmem_iface cbuf_iface, const uint64_t cbuf_device, uintptr_t *rbuf,
-	const enum opx_hfi1_type hfi1_type)
+	const uint64_t sbuf_handle, uint8_t **cbuf, const enum fi_hmem_iface cbuf_iface, const uint64_t cbuf_device,
+	uintptr_t *rbuf, const enum opx_hfi1_type hfi1_type)
 {
 	return opx_hfi1_dput_write_packet(opx_ep, hdr, tx_payload, NULL, opcode, psn_orig, lrh_dws, op64, dt64,
 					  lrh_dlid, bth_rx, payload_bytes, key, fetch_vaddr, target_byte_counter_vaddr,
-					  rma_request_vaddr, bytes_sent, sbuf, sbuf_iface, sbuf_device, cbuf,
-					  cbuf_iface, cbuf_device, rbuf, hfi1_type);
+					  rma_request_vaddr, bytes_sent, sbuf, sbuf_iface, sbuf_device, sbuf_handle,
+					  cbuf, cbuf_iface, cbuf_device, rbuf, hfi1_type);
 }
 
 __OPX_FORCE_INLINE__
@@ -408,7 +409,7 @@ size_t opx_hfi1_dput_write_header_and_iov(struct fi_opx_ep *opx_ep, union opx_hf
 	 */
 	return opx_hfi1_dput_write_packet(opx_ep, hdr, NULL, iov, opcode, 0, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
 					  payload_bytes, key, fetch_vaddr, target_byte_counter_vaddr, rma_request_vaddr,
-					  bytes_sent, sbuf, FI_HMEM_SYSTEM, 0ul, cbuf, FI_HMEM_SYSTEM, 0ul, rbuf,
-					  hfi1_type);
+					  bytes_sent, sbuf, FI_HMEM_SYSTEM, 0ul, OPX_HMEM_NO_HANDLE, cbuf,
+					  FI_HMEM_SYSTEM, 0ul, rbuf, hfi1_type);
 }
 #endif
