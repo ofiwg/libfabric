@@ -90,8 +90,6 @@ int main(void)
 	/* Requires an EFA device to work */
 	const struct CMUnitTest efa_unit_tests[] = {
 		/* begin efa_unit_test_av.c */
-		cmocka_unit_test_setup_teardown(test_av_ep_type_efa_rdm, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_av_ep_type_efa_direct, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_insert_duplicate_raw_addr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_insert_duplicate_gid, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_av.c */
@@ -234,8 +232,14 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_alloc_rta_rxe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_alloc_rtw_rxe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_alloc_rtr_rxe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+
+		/* begin efa_unit_test_domain.c */
+		cmocka_unit_test_setup_teardown(test_efa_domain_info_type_efa_direct, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_info_type_efa_rdm, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_open_ops_wrong_name, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_open_ops_mr_query, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		/* end efa_unit_test_domain.c */
+
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_ibv_cq_poll_list_separate_tx_rx_cq_single_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_post_initial_rx_pkts, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
