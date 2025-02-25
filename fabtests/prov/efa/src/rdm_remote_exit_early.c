@@ -65,7 +65,7 @@ static int run()
 		 */
 		ret = ft_exchange_keys(&remote);
 		if (ret) {
-			FT_PRINTERR("ft_exchange_keys()", -ret);
+			FT_PRINTERR("ft_exchange_keys", -ret);
 			goto out;
 		}
 	} else {
@@ -93,12 +93,21 @@ static int run()
 		 * cq error as client exit early in a long protocol
 		 */
 		if (post_rx) {
-			if (hints->caps & FI_TAGGED)
+			if (hints->caps & FI_TAGGED) {
 				ret = fi_trecv(ep, rx_buf, rx_size, mr_desc,
-				      FI_ADDR_UNSPEC, ft_tag, 0x0, &rx_ctx);
-			else
+					       FI_ADDR_UNSPEC, ft_tag, 0x0, &rx_ctx);
+				if (ret) {
+					FT_PRINTERR("fi_trecv", -ret);
+					goto out;
+				}
+			} else {
 				ret = fi_recv(ep, rx_buf, rx_size, mr_desc,
-				      FI_ADDR_UNSPEC, &rx_ctx);
+					      FI_ADDR_UNSPEC, &rx_ctx);
+				if (ret) {
+					FT_PRINTERR("fi_recv", -ret);
+					goto out;
+				}
+			}
 			printf("server posts recv\n");
 		}
 
