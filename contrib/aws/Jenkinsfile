@@ -175,11 +175,13 @@ pipeline {
                     def libfabric_tests = "test_efa_ut test_fabtests_functional test_fork_support test_backward_compatibility"
                     def one_sided_tests = "'test_imb and not collective'"
                     def libfabric_and_onesided_tests = "${libfabric_tests} ${one_sided_tests}"
+                    def efa_direct_tests = "'test_fabtests_functional and efa-direct'"
 
                     def efa_provider = "--test-libfabric-provider efa"
                     def addl_args_efa_libfabric_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${mpi_collective_tests} ${libfabric_and_onesided_tests}"
                     def addl_args_efa_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${mpi_collective_tests}"
                     def addl_args_efa_libfabric_and_onesided_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${libfabric_and_onesided_tests}"
+                    def addl_args_efa_direct = "${timeout} ${generic_pf} ${efa_provider} --test-list ${efa_direct_tests}" 
 
                     def shm_provider = "--test-libfabric-provider shm"
                     def addl_args_shm = "${timeout} ${generic_pf} ${shm_provider} --test-list ${mpi_collective_tests} ${libfabric_and_onesided_tests}"
@@ -195,6 +197,7 @@ pipeline {
                     def c6gn16x_lock_label  = "c6gn16x"
                     def c5n18x_lock_label  = "c5n18x"
                     def c6g2x_lock_label  = "c6g2x"
+                    def trn132x_lock_label  = "trn132x"
 
                     // Single Node Tests - EFA
                     stages["1_g4dn_alinux2-efa"] = get_test_stage_with_lock("1_g4dn_alinux2_efa", env.BUILD_TAG, "alinux2", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_efa_libfabric_mpi)
@@ -227,6 +230,8 @@ pipeline {
                     stages["2_hpc6a_ubuntu2004_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_hpc6a_ubuntu2004_efa_libfabric_and_one_sided", env.BUILD_TAG, "ubuntu2004", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
                     stages["2_hpc6a_rhel8_efa_mpi"] = get_test_stage_with_lock("2_hpc6a_rhel8_efa_mpi", env.BUILD_TAG, "rhel8", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_mpi)
                     stages["2_hpc6a_rhel8_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_hpc6a_rhel8_efa_libfabric_and_one_sided", env.BUILD_TAG, "rhel8", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
+                    def addl_args_trn1_odcr_efa_direct = " --odcr cr-097fd3374f511c972 ${addl_args_efa_direct}"
+                    stages["2_trn1_ubuntu2004_efa_direct"] = get_test_stage_with_lock("2_trn1_ubuntu2004_efa_direct", env.BUILD_TAG, "ubuntu2004", "trn1.32xlarge", 2, "us-west-2", trn132x_lock_label, addl_args_trn1_odcr_efa_direct)
 
                     // cg6n AL2 builds are the slowest b/c they have asan turned on with debug, and have slower memcpy speeds
                     // split "libfabric tests" into "fabtests", and imb
