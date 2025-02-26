@@ -63,7 +63,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 	util_av_entry = ofi_bufpool_get_ibuf(ep->base_ep.util_ep.av->av_entry_pool,
 	                                     addr);
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
-	return av_entry->conn.ep_addr ? &av_entry->conn.rdm_peer : NULL;
+	return av_entry->conn.ep_addr ? av_entry->conn.rdm_peer : NULL;
 }
 
 /**
