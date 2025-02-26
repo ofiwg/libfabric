@@ -23,7 +23,7 @@ struct efa_conn {
 	struct efa_ah		*ah;
 	struct efa_ep_addr	*ep_addr;
 	fi_addr_t		fi_addr;
-	struct efa_rdm_peer	rdm_peer;
+	struct efa_rdm_peer	*rdm_peer;
 };
 
 struct efa_av_entry {
@@ -69,6 +69,7 @@ struct efa_av {
 	struct efa_prv_reverse_av *prv_reverse_av;
 	struct efa_ah *ah_map;
 	struct util_av util_av;
+	struct ofi_bufpool *rdm_peer_pool;
 };
 
 int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
