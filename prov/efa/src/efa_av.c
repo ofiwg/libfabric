@@ -272,8 +272,13 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn, bool insert_shm_
 	assert(!dlist_empty(&av->util_av.ep_list));
 	efa_rdm_ep = container_of(av->util_av.ep_list.next, struct efa_rdm_ep, base_ep.util_ep.av_entry);
 
-	peer = &conn->rdm_peer;
-	efa_rdm_peer_construct(peer, efa_rdm_ep, conn);
+	peer = (struct efa_rdm_peer *) ofi_buf_alloc(av->rdm_peer_pool);
+	if (!peer) {
+		EFA_WARN(FI_LOG_AV, "Unable to allocate memory for peer struct");
+		return -FI_ENOMEM;
+	}
+	conn->rdm_peer = peer;
+	efa_rdm_peer_construct(conn->rdm_peer, efa_rdm_ep, conn);
 
 	/*
 	 * The efa_conn_rdm_init() call can be made in two situations:
@@ -349,7 +354,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 
 	assert(av->domain->info_type == EFA_INFO_RDM);
 
-	peer = &conn->rdm_peer;
+	peer = conn->rdm_peer;
 	if (peer->is_local && av->shm_rdm_av) {
 		err = fi_av_remove(av->shm_rdm_av, &peer->shm_fiaddr, 1, 0);
 		if (err) {
@@ -366,6 +371,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	 */
 	ep = dlist_empty(&av->util_av.ep_list) ? NULL : container_of(av->util_av.ep_list.next, struct efa_rdm_ep, base_ep.util_ep.av_entry);
 	efa_rdm_peer_destruct(peer, ep);
+	ofi_buf_free(peer);
 }
 
 /*
@@ -819,6 +825,8 @@ static int efa_av_close(struct fid *fid)
 					fi_strerror(err));
 			}
 		}
+		if (av->rdm_peer_pool)
+			ofi_bufpool_destroy(av->rdm_peer_pool);
 	}
 	free(av);
 	return err;
@@ -848,11 +856,6 @@ int efa_av_init_util_av(struct efa_domain *efa_domain,
 			void *context)
 {
 	struct util_av_attr util_attr;
-	size_t universe_size;
-
-	if (fi_param_get_size_t(NULL, "universe_size",
-				&universe_size) == FI_SUCCESS)
-		attr->count = MAX(attr->count, universe_size);
 
 	util_attr.addrlen = EFA_EP_ADDR_LEN;
 	util_attr.context_len = sizeof(struct efa_av_entry) - EFA_EP_ADDR_LEN;
@@ -868,6 +871,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	struct efa_av *av;
 	struct fi_av_attr av_attr = { 0 };
 	int ret, retv;
+	size_t universe_size;
 
 	if (!attr)
 		return -FI_EINVAL;
@@ -900,12 +904,32 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	efa_domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
 
+	if (fi_param_get_size_t(NULL, "universe_size",
+				&universe_size) == FI_SUCCESS)
+		attr->count = MAX(attr->count, universe_size);
+
 	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av, context);
 	if (ret)
 		goto err;
 
 	if (efa_domain->info_type == EFA_INFO_RDM) {
 		av_attr = *attr;
+		/* In the rdm path, we need a bufpool for the rdm peer entries */
+		struct ofi_bufpool_attr rdm_peer_pool_attr = {
+			.size = sizeof(struct efa_rdm_peer),
+			.alignment = 16,
+			.chunk_cnt = attr->count,
+			.max_cnt = 0,
+			/* Don't track buffer use because user can close
+			 * the AV without removing addresses */
+			.flags = OFI_BUFPOOL_NO_TRACK,
+		};
+
+		ret = ofi_bufpool_create_attr(&rdm_peer_pool_attr,
+					      &av->rdm_peer_pool);
+		if (ret)
+			goto err_close_util_av;
+
 		if (efa_domain->fabric && efa_domain->fabric->shm_fabric) {
 			/*
 			 * shm av supports maximum 256 entries
@@ -917,14 +941,14 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 				EFA_WARN(FI_LOG_AV, "The requested av size is beyond"
 					 " shm supported maximum av size: %s\n",
 					 fi_strerror(-ret));
-				goto err_close_util_av;
+				goto err_destroy_peer_bufpool;
 			}
 			av_attr.count = efa_env.shm_av_size;
 			assert(av_attr.type == FI_AV_TABLE);
 			ret = fi_av_open(efa_domain->shm_domain, &av_attr,
 					&av->shm_rdm_av, context);
 			if (ret)
-				goto err_close_util_av;
+				goto err_destroy_peer_bufpool;
 		}
 	}
 
@@ -944,6 +968,10 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	return 0;
 
+err_destroy_peer_bufpool:
+	if (av->rdm_peer_pool)
+		ofi_bufpool_destroy(av->rdm_peer_pool);
+
 err_close_util_av:
 	retv = ofi_av_close(&av->util_av);
 	if (retv)
@@ -953,4 +981,3 @@ err:
 	free(av);
 	return ret;
 }
-
