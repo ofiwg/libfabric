@@ -1869,6 +1869,76 @@ Test(coll_reduce_ops, bxor)
 	STDCLEANUP
 }
 
+/* Test logical OR */
+Test(coll_reduce_ops, lor)
+{
+	STDINTSETUP
+	/* max nodes == 32 under NETSIM */
+	for (i = 0; i < nodes; i++) {
+		data[i].ival[0] = 1 << i;
+		data[i].ival[1] = i << 2*i;
+		data[i].ival[2] = i;
+		data[i].ival[3] = 2*i;
+	}
+	memcpy(&check, &data[0], sizeof(check));
+	for (i = 1; i < nodes; i++)
+		for (j = 0; j < 4; j++)
+			check.ival[j] = (check.ival[j] || data[i].ival[j]);
+
+	ret = _allreduceop(FI_LOR, FI_UINT64, 0L, data, rslt, 4, context);
+	cr_assert(!ret, "_allreduceop() failed\n");
+	ret = _check_ival(nodes, rslt, &check);
+	cr_assert(!ret, "compare failed\n");
+	STDCLEANUP
+}
+
+/* Test logical AND */
+Test(coll_reduce_ops, land)
+{
+	STDINTSETUP
+	/* max nodes == 32 under NETSIM */
+	for (i = 0; i < nodes; i++) {
+		data[i].ival[0] = ~(1 << i);
+		data[i].ival[1] = ~(i << 2*i);
+		data[i].ival[2] = ~i;
+		data[i].ival[3] = ~(2*i);
+	}
+	memcpy(&check, &data[0], sizeof(check));
+	for (i = 1; i < nodes; i++)
+		for (j = 0; j < 4; j++)
+			check.ival[j] = (check.ival[j] && data[i].ival[j]);
+
+	ret = _allreduceop(FI_LAND, FI_UINT64, 0L, data, rslt, 4, context);
+	cr_assert(!ret, "_allreduceop() failed = %d\n", ret);
+	ret = _check_ival(nodes, rslt, &check);
+	cr_assert(!ret, "compare failed\n");
+	STDCLEANUP
+}
+
+/* Test logical XOR */
+Test(coll_reduce_ops, lxor)
+{
+	STDINTSETUP
+	/* max nodes == 32 under NETSIM */
+	for (i = 0; i < nodes; i++) {
+		data[i].ival[0] = 1 << i;
+		data[i].ival[1] = ~(i << i);
+		data[i].ival[2] = i;
+		data[i].ival[3] = ~i;
+	}
+	memcpy(&check, &data[0], sizeof(check));
+	for (i = 1; i < nodes; i++)
+		for (j = 0; j < 4; j++)
+			check.ival[j] = ((check.ival[j] && !data[i].ival[j]) ||
+			                 (!check.ival[j] && data[i].ival[j]));
+
+	ret = _allreduceop(FI_LXOR, FI_UINT64, 0L, data, rslt, 4, context);
+	cr_assert(!ret, "_allreduceop() failed\n");
+	ret = _check_ival(nodes, rslt, &check);
+	cr_assert(!ret, "compare failed\n");
+	STDCLEANUP
+}
+
 /* Tests int64 minimum */
 Test(coll_reduce_ops, imin)
 {
