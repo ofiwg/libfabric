@@ -482,12 +482,17 @@ transfer operation.
   operations, or attempt to access outside of the target memory region
   will fail, resulting in a transmit error.
 
-When a resource management error occurs on an endpoint, the endpoint is
-transitioned into a disabled state.  Any operations which have not
-already completed will fail and be discarded.  For connectionless endpoints,
-the endpoint must be re-enabled before it will accept new data transfer
-operations.  For connected endpoints, the connection is torn down and
-must be re-established.
+When a resource management error occurs on an a connected endpoint, the endpoint
+will transition into a disabled state and the connection torn down. A disabled
+endpoint will drop any queued or inflight operations.
+
+The behavior of resource management errors on connectionless endpoints depends
+on the type of error. If RM is disabled and one of the following errors occur,
+the endpoint will be disabled: Tx Ctx, Rx Ctx, Tx CQ, or Rx CQ. For other errors
+(Target EP, No Rx Buffer, etc.), the operation may fail, but the endpoint will
+remain enabled. A disabled endpoint will drop or fail any queued or inflight
+operations. In addition, a disabled endpoint must be re-enabled before it will
+accept new data transfer operations.
 
 There is one notable restriction on the protections offered by resource
 management.  This occurs when resource management is enabled on an
