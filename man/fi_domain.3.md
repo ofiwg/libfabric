@@ -413,17 +413,18 @@ the endpoint is reliable or unreliable, as well as provider and protocol
 specific implementation details, as shown in the following table.  The
 table assumes that all peers enable or disable RM the same.
 
-| Resource | DGRAM EP-no RM | DGRAM EP-with RM | RDM/MSG EP-no RM | RDM/MSG EP-with RM |
-|:--------:|:-------------------:|:-------------------:|:------------------:|:-----------------:|
-| Tx Ctx         | undefined error  | EAGAIN           | undefined error   | EAGAIN             |
-| Rx Ctx         | undefined error  | EAGAIN           | undefined error   | EAGAIN             |
-| Tx CQ          | undefined error  | EAGAIN           | undefined error   | EAGAIN             |
-| Rx CQ          | undefined error  | EAGAIN           | undefined error   | EAGAIN             |
-| Target EP      | dropped          | dropped          | transmit error    | retried            |
-| No Rx Buffer   | dropped          | dropped          | transmit error    | retried            |
-| Rx Buf Overrun | truncate or drop | truncate or drop | truncate or error | truncate or error  |
-| Unmatched RMA  | not applicable   | not applicable   | transmit error    | transmit error     |
-| RMA Overrun    | not applicable   | not applicable   | transmit error    | transmit error     |
+| Resource | DGRAM EP-no RM | DGRAM EP-with RM | MSG EP-no RM | MSG EP-with RM | RDM EP-no RM | RDM EP-with RM |
+|:--------:|:-------------------:|:-------------------:|:------------------:|:-----------------:| :------------------:|:-----------------:|
+| Tx Ctx         | undefined error  | EAGAIN           | undefined error   | EAGAIN             | undefined error   | EAGAIN             |
+| Rx Ctx         | undefined error  | EAGAIN           | undefined error   | EAGAIN             | undefined error   | EAGAIN             |
+| Tx CQ          | undefined error  | EAGAIN           | undefined error   | EAGAIN             | undefined error   | EAGAIN             |
+| Rx CQ          | undefined error  | EAGAIN           | undefined error   | EAGAIN             | undefined error   | EAGAIN             |
+| Target EP      | dropped          | dropped          | transmit error    | retried            | transmit error    | retried            |
+| No Rx Buffer   | dropped          | dropped          | transmit error    | retried            | transmit error    | retried            |
+| Rx Buf Overrun | truncate or drop | truncate or drop | truncate or error | truncate or error  | truncate or error | truncate or error  |
+| Unmatched RMA  | not applicable   | not applicable   | transmit error    | transmit error     | transmit error    | transmit error     |
+| RMA Overrun    | not applicable   | not applicable   | transmit error    | transmit error     | transmit error    | transmit error     |
+| Unreachable EP | dropped          | dropped          | not applicable    | not applicable     | transmit error    | transmit error     |
 
 The resource column indicates the resource being accessed by a data
 transfer operation.
@@ -481,6 +482,14 @@ transfer operation.
   to access a memory address that is either not registered for such
   operations, or attempt to access outside of the target memory region
   will fail, resulting in a transmit error.
+
+*Unreachable EP*
+: Unreachable endpoint is a connectionless specific scenario where transmit
+  operations are issued to unreachable target endpoints. Such scenarios include
+  no-route-to-host or down target NIC. For FI_EP_DGRAM endpoints, transmit
+  operations targeting an unreachable endpoint will have operation dropped. For
+  FI_EP_RDM, target operations targeting an unreachable endpoint will result in
+  a transmit error.
 
 When a resource management error occurs on an a connected endpoint, the endpoint
 will transition into a disabled state and the connection torn down. A disabled
