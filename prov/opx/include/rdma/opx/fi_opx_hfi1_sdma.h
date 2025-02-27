@@ -351,7 +351,8 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 	struct fi_opx_hfi1_sdma_work_entry *prev = NULL;
 
 	while (sdma_we && sdma_we != current) {
-		if (sdma_we->comp_state == OPX_SDMA_COMP_COMPLETE && !sdma_we->pending_bounce_buf) {
+		if ((sdma_we->comp_state == OPX_SDMA_COMP_COMPLETE || sdma_we->comp_state == OPX_SDMA_COMP_ERROR) &&
+		    !sdma_we->pending_bounce_buf) {
 			slist_remove(sdma_reqs, (struct slist_entry *) sdma_we, (struct slist_entry *) prev);
 			sdma_we->next	       = NULL;
 			sdma_we->comp_state    = OPX_SDMA_COMP_FREE;
