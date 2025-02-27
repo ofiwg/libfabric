@@ -900,20 +900,38 @@ static int efa_rdm_ep_close(struct fid *fid)
 {
 	int ret, retv = 0;
 	struct efa_rdm_ep *efa_rdm_ep;
+	struct dlist_entry *entry, *tmp;
+	struct efa_rdm_ope *rxe;
+	struct util_srx_ctx *srx_ctx;
 
 	efa_rdm_ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
 	if (efa_rdm_ep->base_ep.efa_qp_enabled)
 		efa_rdm_ep_wait_send(efa_rdm_ep);
 
-	/*
-	 * util_srx_close will clean all efa_rdm_rxes that are
-	 * associated with peer_rx_entries in unexp msg/tag lists.
-	 * It also decrements the ref count of rx cq. So it must
-	 * be called before we clean up the ibv cq poll list which
-	 * relies on the correct ref count of tx/rx cq.
-	 */
 	if (efa_rdm_ep->peer_srx_ep) {
+		/*
+		* Release matched rxe before calling util_srx_close.
+		* If the sender exits early, there might still be unreleased rxe
+		* in the srx->rx_pool during util_srx_close, which will cause an
+		* assertion error when the rx_pool is destroyed.
+		*/
+		srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
+		ofi_genlock_lock(srx_ctx->lock);
+		dlist_foreach_safe (&efa_rdm_ep->rxe_list, entry, tmp) {
+			rxe = container_of(entry, struct efa_rdm_ope, ep_entry);
+			EFA_INFO(FI_LOG_EP_CTRL, "Closing ep with unreleased rxe\n");
+			if (rxe->state != EFA_RDM_RXE_UNEXP)
+				efa_rdm_rxe_release(rxe);
+		}
+		ofi_genlock_unlock(srx_ctx->lock);
+		/*
+		* util_srx_close will clean all efa_rdm_rxes that are
+		* associated with peer_rx_entries in unexp msg/tag lists.
+		* It also decrements the ref count of rx cq. So it must
+		* be called before we clean up the ibv cq poll list which
+		* relies on the correct ref count of tx/rx cq.
+		*/
 		util_srx_close(&efa_rdm_ep->peer_srx_ep->fid);
 		efa_rdm_ep->peer_srx_ep = NULL;
 	}
