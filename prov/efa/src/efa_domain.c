@@ -115,7 +115,6 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	bool enable_shm = efa_env.enable_shm_transfer;
 
 	assert(EFA_INFO_TYPE_IS_RDM(info));
-	efa_domain->rdm_ep = true;
 
 	/* App provided hints supercede environmental variables.
 	 *
@@ -275,8 +274,17 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
 	}
 
-	efa_domain->util_domain.domain_fid.fid.ops = &efa_ops_domain_fid;
 	if (EFA_INFO_TYPE_IS_RDM(info)) {
+		efa_domain->info_type = EFA_INFO_RDM;
+	} else if (EFA_INFO_TYPE_IS_DIRECT(info)) {
+		efa_domain->info_type = EFA_INFO_DIRECT;
+	} else {
+		assert(EFA_INFO_TYPE_IS_DGRAM(info));
+		efa_domain->info_type = EFA_INFO_DGRAM;
+	}
+
+	efa_domain->util_domain.domain_fid.fid.ops = &efa_ops_domain_fid;
+	if (efa_domain->info_type == EFA_INFO_RDM) {
 		err = efa_domain_init_rdm(efa_domain, info);
 		if (err) {
 			EFA_WARN(FI_LOG_DOMAIN,
@@ -286,7 +294,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		}
 		efa_domain->util_domain.domain_fid.ops = &efa_domain_ops_rdm;
 	} else {
-		assert(EFA_INFO_TYPE_IS_DGRAM(info) || EFA_INFO_TYPE_IS_DIRECT(info));
+		assert(efa_domain->info_type == EFA_INFO_DIRECT || efa_domain->info_type == EFA_INFO_DGRAM);
 		efa_domain->util_domain.domain_fid.ops = &efa_domain_ops;
 	}
 
