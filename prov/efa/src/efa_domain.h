@@ -11,6 +11,12 @@
 #include "ofi_hmem.h"
 #include "ofi_util.h"
 
+enum efa_domain_info_type {
+	EFA_INFO_RDM,
+	EFA_INFO_DIRECT,
+	EFA_INFO_DGRAM,
+};
+
 struct efa_domain {
 	struct util_domain	util_domain;
 	struct fi_info		*shm_info;
@@ -31,9 +37,10 @@ struct efa_domain {
 	size_t ibv_mr_reg_ct;
 	/* Total size of memory registrations (in bytes) */
 	size_t ibv_mr_reg_sz;
+	/* info_type is used to distinguish between the rdm, dgram and
+	 * efa-direct paths */
+	enum efa_domain_info_type info_type;
 
-	/* Only valid for RDM EP type */
-	bool			rdm_ep;		/* Set to true for RDM domain. False otherwise. */
 	size_t			rdm_cq_size;
 	/* number of rdma-read messages in flight */
 	uint64_t		num_read_msg_in_flight;
