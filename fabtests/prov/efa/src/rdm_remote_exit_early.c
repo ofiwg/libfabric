@@ -34,7 +34,9 @@
 #include <shared.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #include <rdma/fi_tagged.h>
+#include <rdma/fi_ext.h>
 
 static bool post_rx = false;
 
@@ -45,11 +47,19 @@ enum {
 static int run()
 {
 	int ret;
+	bool use_emulated_read;
 
 	ret = ft_init_fabric();
 	if (ret) {
 		FT_PRINTERR("ft_init_fabric", -ret);
 		return ret;
+	}
+
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_EMULATED_READ,
+			&use_emulated_read, &(size_t) {sizeof use_emulated_read});
+	if (ret) {
+		FT_PRINTERR("fi_getopt(FI_OPT_EFA_EMULATED_READ)", ret);
+		goto out;
 	}
 
 	/*
@@ -125,18 +135,31 @@ static int run()
 			}
 
 			ft_stop();
-			/* When server posts a recv, we expect to
-			 * get a cq entry or cq error.
-			 * If no recv is posted, it should just
-			 * poll some cq in the timeout range
-			 * and exit.
-			 */
 			if ((end.tv_sec - start.tv_sec) > timeout) {
 				if (post_rx) {
-					fprintf(stderr, "%ds timeout expired\n",
-						timeout);
-					ret = -FI_ENODATA;
+					if (use_emulated_read || opts.transfer_size < 1048576) {
+						/*
+						 * RDMA read is not available. If long CTS is used and
+						 * sender exits before sending CTS data, receiver is
+						 * expected to timeout after sending the CTS packet
+						 * without getting a cq entry or cq error.
+						 */
+						printf("server timeout\n");
+						ret = 0;
+					} else {
+						/*
+						 * RDMA read is available.
+						 * When server posts a recv, it is expected
+						 * to get a cq entry or cq error.
+						 */
+						fprintf(stderr, "%ds timeout expired\n", timeout);
+						ret = -FI_ENODATA;
+					}
 				} else {
+					/*
+					 * If no recv is posted, it should just
+					 * poll some cq in the timeout range and exit.
+					 */
 					printf("server polls cq and exits\n");
 					ret = 0;
 				}
