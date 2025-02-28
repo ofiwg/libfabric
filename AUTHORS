@@ -65,6 +65,8 @@ Cody Mann <cody.mann@cornelisnetworks.com>
 Coni Gehler <cgehler@cray.com>
 ct-clmsn <ct.clmsn@gmail.com>
 Dardo D Kleiner <dkleiner@cmf.nrl.navy.mil>
+Dariusz Sciebura <dariusz.sciebura@gmail.com>
+Dariusz Sciebura <dariuszs@graphcore.ai>
 dariuszsciebura <93722774+dariuszsciebura@users.noreply.github.com>
 Darryl Abbate <drl@amazon.com>
 Dave Goodell <dgoodell@cisco.com>
@@ -72,10 +74,12 @@ David Noel <david.noel19@gmail.com>
 Denis Maryin <denis.maryin@intel.com>
 dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
 Derek Shinaberry <dshinaberry@mru.medical.canon>
+Di Wang <ddiwang@google.com>
 Dipti Kothari <dkothar@amazon.com>
 Dmitry Durnov <dmitry.durnov@intel.com>
 Dmitry Gladkov <dmitry.gladkov@intel.com>
 Doug Oucharek <dougso@me.com>
+dsciebu <dariusz.sciebura@gmail.com>
 Edgar Gabriel <Edgar.Gabriel@amd.com>
 Elias Kozah <elias.elkozah@cornelisnetworks.com>
 Elias Kozah <Elias.Kozah@cornelisnetworks.com>
@@ -126,6 +130,7 @@ Jeff Hammond <jeff.science@gmail.com>
 Jeff Squyres <jsquyres@cisco.com>
 Jerome Berryhill <Jerome.Berryhill@Intel.com>
 Jerome Boyd Berryhill <JeromeBerryhill@Intel.com>
+Jerome Soumagne <jerome.soumagne@hpe.com>
 Jerome Soumagne <jsoumagne@hdfgroup.org>
 Jessie Yang <jiaxiyan@amazon.com>
 Jiakun Yan <jiakunyan1998@gmail.com>
@@ -171,6 +176,7 @@ Luke Robison <lrbison@amazon.com>
 Marcin Salnik <marcin.salnik@intel.com>
 Martin Kontsek <mkontsek@cisco.com>
 Matt Koop <mkoop@amazon.com>
+Md Bulbul Sharif <md-bulbul.sharif@hpe.com>
 Miao Luo <miao.luo@intel.com>
 Michael Blocksome <michael.blocksome@intel.com>
 Michael Chuvelev <michael.chuvelev@intel.com>
@@ -218,7 +224,9 @@ Peter Gottesman <pgottesm@cisco.com>
 Phil Carns <carns@mcs.anl.gov>
 Philip Davis <philipdavis01@gmail.com>
 Pierre Roux <piroux@cisco.com>
+Piotr Chmiel <piotrc@graphcore.ai>
 Prankur Gupta <prankgup@cisco.com>
+PukNgae Cryolitia <Cryolitia@gmail.com>
 Quentin Boyer <quentin.boyer@eviden.com>
 Quincey Koziol <qkoziol@amazon.com>
 Raghu Raja <craghun@amazon.com>
@@ -230,6 +238,7 @@ Reese Faucette <rfaucett@cisco.com>
 Rich Welch <rlwelch@amazon.com>
 Richard Halkyard <rhalkyard@cray.com>
 Robert Wespetal <wesper@amazon.com>
+Roger Connaughty <roger.connaughty@hpe.com>
 Rohit Zambre <rzambre@uci.edu>
 Ryan Hankins <rqh@amazon.com>
 Ryan Hankins <rqh@dev-dsk-rqh-1d-28b29c44.us-east-1.amazon.com>
@@ -240,14 +249,17 @@ Sannikov, Alexander <alexander.sannikov@intel.com>
 Sayantan Sur <sayantan.sur@intel.com>
 Scott Breyer <scott.breyer@intel.com>
 Sean Hefty <sean.hefty@intel.com>
+Sean Pollard <sean.pollard@hpe.com>
 Sergey Fedorov <vital.had@gmail.com>
 Sergey Oblomov <sergey.oblomov@intel.com>
 Seth Zegelstein <szegel@amazon.com>
 Shantonu Hossain <shantonu.hossain@intel.com>
 Shi Jin <53314885+shijin-aws@users.noreply.github.com>
 Shi Jin <sjina@amazon.com>
+Siarhei Volkau <lis8215@gmail.com>
 soblomov <sergey.oblomov@intel.com>
 Solovyev, Dmitriy <dmitriy.solovyev@intel.com>
+Soumendu Satapathy <soumendu.satapathy@hpe.com>
 Spruit, Neil R <neil.r.spruit@intel.com>
 Srdjan Milakovic <srdjan@rice.edu>
 Srikrishna Gurugubelli <gurugubs@amazon.com>
@@ -255,11 +267,13 @@ Stan Smith <stan.smith@intel.com>
 Stephen Oost <stephen.oost@intel.com>
 Steve Welch <swelch@systemfabricworks.com>
 Steve Welch <welch@hpe.com>
+Steven Dashevsky <sdashevsky@habana.ai>
 Steven Vormwald <sdvormwa@cray.com>
 Sung-Eun Choi <sungeun@cray.com>
 Sung-Eun Choi <sungeunchoi@users.noreply.github.com>
 Sylvain Didelot <didelot.sylvain@gmail.com>
 Sylvain Didelot <sdidelot@ddn.com>
+szegel <szegel@ip-10-0-2-236.corp.pcluster.com>
 Tadeusz Struk <tstruk@gigaio.com>
 Tang, Jingyin <jytang@amazon.com>
 Thananon Patinyasakdikul <apatinya@cisco.com>

@@ -6,11 +6,215 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v2.1.0, Sat Mar 15, 2025
+========================
+
+## Core
+
+- hmem: Fix missing rocr dlopen function assignments
+- Fix data race on log_prefix
+- hmem: Define ofi_hmem_put_dmabuf_fd and add support for cuda and rocr
+- Fix a few minor man page issues
+
+## CXI
+
+- Fix peer CQ support
+- Added collectives logical operators
+- Fix bug in constrained LE test cases in test.sh and test_sw.sh
+- Fix unit test missing pthread initialization
+- Add FI_WAIT_YIELD EQ support
+- Make string setup of FI_CXI_CURL_LIB_PATH safe
+- Add FI_CXI_CURL_LIB_PATH #define from autoconf
+- Test CUDA with DMA buf FD recycling
+- Test ROCR with DMA buf FD recycling
+- Test ROCR with DMA buf offset
+- Integrate with ofi_hmem_put_dmabuf_fd
+- Test monitor unsubscribe
+- Fix fi_cq_strerror
+- Cxi EQ do not support wait objects
+- Fix CQ wait FD logic
+- Disable retry logic for experimental collectives
+- Ignore drop count during init
+- Remove CXI_MAP_IOVA_ALLOC flag.
+- Synchronous fi_close on collective multicast
+- Fix deferred work test
+- Depreciate FI_CXI_WEAK_FENCE
+- Update message and target ordering doc
+- Define FI_CXI_MR_TARGET_ORDERING
+- Remove FI_CXI_ENABLE_UNRESTRICTED_RO
+- Set MR relax order on EP order size
+- Fix RMA/AMO network ordering
+- Update CXI provider max order size
+
+## EFA
+
+- Release matched rxe before destroying the srx rx_pool
+- Fix the error code from ibv wr API
+- Fix the clean up issue for efa_util_prov
+- Fix the cntr interface for efa-direct
+- Add unit test for efa-direct progress model
+- Fix the max_msg_size reporting for efa-direct
+- Clean up rxe map during rxe release
+- rdm: Do not claim support for FI_PROGRESS_AUTO
+- Always return efa_prov in EFA_INI
+- Do not write cq error for ope from internal operations
+- Remove unused field efa_domain->mr_mode
+- Do GDRCopy registrations only in the EFA RDM path
+- Reset g_efa_hmem_info after each test
+- Fix the unexp_pkt clean up.
+- Call efa_fork_support_enable_if_requested earlier
+- Check efa_prov_info_set_fabric_name return code
+- Clean up efa_prov_info_set_hmem_flags
+- Bug fix in the RDM path with FI_MSG_PREFIX mode
+- Rework the efa_cq unit tests
+- Improve efa_cq's completion report
+- Unit test additions and fixes for efa-direct
+- Remove incorrect usage of rdm_info->ep_attr->max_msg_size
+- Add new efa-direct fi_info objects
+- Cleanup efa_user_info
+- Add debug log for efa-direct data transfer
+- Use cuda_put_dmabuf_fd
+- Fix leak of dmabuf fd in cuda p2p probe
+- Implement FI_CONTEXT2 in EFA Direct
+- Remove x86-64 architecture check for static_assert
+- Do infinite rnr retry for base ep by default
+- Extend efa_ep interface
+- Migrate efa_dgram_ep to efa_ep
+- Adjust the logging level for unreleased rxe
+- Regulate the usage of optnames
+- Move struct efa_ep_addr to efa_base_ep
+- Remove util_av_fi_addr from efa_conn
+- Make efa_rdm_cq use efa_cq
+- Deprecate FI_AV_MAP
+- Remove inline write logic for rma inject
+- Add missing mock for wc_is_unsolicited in unit test
+- Implement the cq progress
+- Remove err_msg from efa_rdm_ep
+- Move raw addr functions
+- Move efa_rdm_cq_wc_is_unsolicited to efa_cq
+- Correct the error code for IBV_WC_RECV_RDMA_WITH_IMM
+- Add missing locks in efa_msg and efa_rma
+- Move fork handler installation to efa_domain_open
+- Detect unsolicited write recv support status on both sides
+- Add unit tests for efa_rma
+- Add tracepoints for efa_msg and efa_rma
+- Add unit tests for efa_msg
+- Add tracepoint for poll cq ope
+- Adjust the error code for flushed receive
+
+## LPP
+
+- Add check for atomics
+
+## OPX
+
+- Move CUDA sync attribute setting to mr registration
+- Add HMEM handle for GDRCopy in GET/PUT
+- Add newline to trace entry
+- Add debug trace messages to RMA functions
+- Disable out of order RC if TID is enabled
+- Unexpected packet processing modifications
+- Use inlined call to process_header for payloadless RZV_DATA (TID) packets
+- Run opx-format on upstream opx provider change
+- Remove reliability handshake
+- Add PR close event to Cornelis Networks internal workflow triggers
+- Use cycle timer as long as all set CPUs are same socket
+- fi_opx_addr changes as pre-context sharing and pre-CYR
+- Replace intranode hashmap with array
+- Default RTS/CTS to in-order route control
+- Write CQ entry for successful data transfer operation by default
+- Resolve OPX fi_writedata() reliability errors
+- Remove extraneous warning
+- Enable TID by default.
+- Fixed OPX trace points
+- Set route control based on packet type
+- Implement FI_MR_VIRT_ADDR in OPX
+- Use reliability timer for link bounce status check
+- Link bounce for JKR
+- Fix debug print array indexing
+- Resolve new Coverity scan defects
+- Enhanced simulation and debug support
+- Add HFI1 Direct Verbs support
+- Making pkey related failures more obvious
+- Reformat full OPX provider
+- Add .clang-format file for OPX provider
+- Identify and resolve new Coverity scan defects
+- Changing default pkey to fetch from pkey table index 0
+- Fix wrong function name for getting hmem iface.
+- Handle Cuda Managed/Unified memory
+- Fix OPX hint checking and capability setting
+- Implement fi_writedata()
+- Set rate control defaults
+- Process RZV payload immediately
+- CN5000/JKR 16B: 3B Lid changes
+- Set entropy to rx/tx pair
+- Don't send immediate data in send_rzv when send buffer is not host memory
+- Use `page_sizes[OFI_PAGE_SIZE]-1` instead of `PAGE_MASK`
+
+## RXM
+
+- Fix rxm multi recv getopt segfault
+
+## SHM
+
+- Remove prefix from map inserts
+- Fix name compare bug
+
+## TCP
+
+- Only disable ep if the failure can not be retried
+- Fix data race caused by parallel access to xnet_rdm_fid_ops
+- Fix FI_MULTI_RECV not set on error
+- Fix race in writing to xnet_ep_fi_ops
+
+## Util
+
+- Change util_av lock to genlock
+- Roundup_power_of_two remove unnecessary decrement
+- Enchance performace of roundup_power_of_two
+- Fix FI_MULTI_RECV not set on FI_ECANCELED
+- Fix flag initialization for generic receive of unexpected entry
+- Add fabric argument to pingpong test
+- Statically set uffd callbacks
+- Fix ROCR and memhooks deadlock
+- Support mem monitors with per sub ctx
+- Separate uffd and import mem monitors
+- pingpong: close mr after ep close
+
+## Verbs
+
+- Always return vrb_prov in VERBS_INI
+- Fix data race vrb_open_ep function
+
+## Fabtests
+
+- efa: Add remote exit early test with post recv
+- Do not require FI_TAGGED for fi_av_xfer test
+- efa: print err for recv failure
+- efa: Add fabtests for efa-direct
+- Set the min of tx/rx_mr_size
+- efa: Add remote exit early test
+- efa: Fix the rnr read cq error test for efa-direct
+- multi_ep: Support customized transfer size
+- Re-enable psm3 rdm_tagged_peek
+- Disable multi_recv
+- Run efa tests with efa fabric name
+- Add fabric argument to ClientServerTest
+- efa: add rdma check for unsolicited write recv
+- Add support for FI_CONTEXT2
+- Bugfixes for neuron
+- Corrected flags argument type in ft_sendmsg/ft_recvmsg functions
+- pytest/efa: Avoid duiplicate completion semantic for RMA test
+- pytest/efa: merge memory_type and check_rma_bw_memory_type
+
+
 v2.0.0, Fri Dec 13, 2024
 ========================
 
 ## Core
 
+- hmem/cuda: avoid stub loading at runtime
+- Makefile.am: Keep using libfabric.so.1 as the soname
 - xpmem: Cleanup xpmem before monitors
 - Remove redundant windows.h
 - hmem/cuda: Add env variable to enable/disable CUDA DMABUF
@@ -40,6 +244,8 @@ v2.0.0, Fri Dec 13, 2024
 
 ## EFA
 
+- Skip rx pkt refill under certain threshold
+- Fix efa multi recv setopt segfault
 - Add tracepoints for rma operations
 - Adjust the location of tracepoint
 - Implement the rma interface
@@ -61,12 +267,26 @@ v2.0.0, Fri Dec 13, 2024
 
 ## Hook
 
-Fix the preprocessor
+- Fix the preprocessor
 
 ## LNX
 
+- Initialize flags to 0
+- Convert peer table to use buffer pools
 - Fix av strncpy
 - Fix various issues with initial commit
+
+## PSM2
+
+- Check return value of asprintf
+
+## RXM
+
+- Fix rxm multi recv setopt segfault
+- Replace rxm managed srx with util srx, support FI_PEER
+- Add rxm support for using a peer CQs and counters
+- Add FI_AV_USER_ID support
+- Fix definition of the rxm SAR segment enum
 
 ## SHM
 
@@ -75,6 +295,11 @@ Fix the preprocessor
 ## Sockets
 
 - Fixed coverity issue for unchecked return value.
+
+## UCX
+
+- Fix segfault in ucx_send_callback
+- Fix incorrect return value checking for fi_param_get()
 
 ## Util
 
@@ -88,6 +313,7 @@ Fix the preprocessor
 
 ## Fabtests
 
+- Add opts.min_multi_recv_size to set opt before enable
 - Add FI_MORE pytest for fi_recv in zcpy recv mode
 - Allow tests with FI_MORE flag by using fi_recvmsg
 - New fabtest fi_flood to test over subscription of resources
