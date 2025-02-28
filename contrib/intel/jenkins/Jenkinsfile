@@ -686,7 +686,7 @@ pipeline {
         stage ('CI_multinode_performance') {
           steps {
             script {
-              dir (RUN_LOCATION) {
+              dir (CI_LOCATION) {
                 run_ci("CI_multinode_performance_grass",
                        "pr_multinode_performance_grass.json")
                 run_ci("CI_multinode_performance_water",
