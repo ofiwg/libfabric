@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_opx" "7" "2024\-12\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_opx" "7" "2025\-02\-28" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .PP
 {%include JB/setup %}
@@ -137,7 +137,7 @@ This variable can be set with FI_OPX_UUID=${RANDOM} The default UUID is
 00112233445566778899aabbccddeeff.
 .TP
 \f[I]FI_OPX_FORCE_CPUAFFINITY\f[R]
-Boolean (0/1, on/off, true/false, yes/no).
+Boolean (1/0, on/off, true/false, yes/no).
 Causes the thread to bind itself to the cpu core it is running on.
 Defaults to \[lq]No\[rq]
 .TP
@@ -180,7 +180,7 @@ Default setting is 4.
 Range of valid values is 1-65535.
 .TP
 \f[I]FI_OPX_SELINUX\f[R]
-Boolean (0/1, on/off, true/false, yes/no).
+Boolean (1/0, on/off, true/false, yes/no).
 Set to true if you\[cq]re running a security-enhanced Linux.
 This enables updating the Jkey used based on system settings.
 Defaults to \[lq]No\[rq]
@@ -255,6 +255,14 @@ default selection logic.
 - \f[V]FI_OPX_HFI_SELECT=default,core:1:0\f[R] all callers will use
 default HFI selection logic.
 .TP
+\f[I]FI_OPX_PORT\f[R]
+Integer.
+HFI1 port number.
+If the specified port is not available, a default active port will be
+selected.
+Special value 0 indicates any available port.
+Defaults to port 1 on OPA100 and any port on CN5000.
+.TP
 \f[I]FI_OPX_DELIVERY_COMPLETION_THRESHOLD\f[R]
 Integer.
 Will be deprecated.
@@ -270,9 +278,9 @@ Value must be between 16385 and 2147483646.
 Defaults to 16385.
 .TP
 \f[I]FI_OPX_SDMA_DISABLE\f[R]
-Integer.
+Boolean (1/0, on/off, true/false, yes/no).
 Disables SDMA offload hardware.
-Default is 0
+Default is 0.
 .TP
 \f[I]FI_OPX_SDMA_MIN_PAYLOAD_BYTES\f[R]
 Integer.
@@ -299,15 +307,18 @@ Value must be between 64 and 65536.
 Defaults to 16385.
 .TP
 \f[I]FI_OPX_MP_EAGER_DISABLE\f[R]
-Integer.
+Boolean (1/0, on/off, true/false, yes/no).
 Disables multi-packet eager.
 Defaults to 0.
 .TP
+\f[I]FI_OPX_TID_DISABLE\f[R]
+Boolean (1/0, on/off, true/false, yes/no).
+Disables using Token ID (TID).
+Defaults to 0.
+.TP
 \f[I]FI_OPX_EXPECTED_RECEIVE_ENABLE\f[R]
-Boolean (0/1, on/off, true/false, yes/no).
-Enables expected receive rendezvous using Token ID (TID).
-Defaults to \[lq]No\[rq].
-This feature is not currently supported.
+Deprecated.
+Use FI_OPX_TID_DISABLE instead.
 .TP
 \f[I]FI_OPX_PROG_AFFINITY\f[R]
 String.
@@ -327,7 +338,8 @@ Default is 1.
 \f[I]FI_OPX_PKEY\f[R]
 Integer.
 Partition key, a 2 byte positive integer.
-Default is 0x8001
+Default is the Pkey in the index 0 of the Pkey table of the unit and
+port on which context is created.
 .TP
 \f[I]FI_OPX_SL\f[R]
 Integer.
@@ -356,6 +368,32 @@ Integer.
 Indicates that the network is a mix of OPA100 and CN5000.
 Needs to be set to 1 in case of mixed network.
 Default is 0.
+.TP
+\f[I]FI_OPX_ROUTE_CONTROL\f[R]
+Integer.
+Specify the route control for each packet type.
+The format is -
+\f[V]<inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>\f[R].
+.PP
+Each value can range from 0-7.
+0-3 is used for in-order and 4-7 is used for out-of-order.
+If Token ID (TID) is enabled the out-of-order route controls are
+disabled.
+.PP
+Default is \f[V]0:0:0:0:0:0\f[R] on OPA100 and \f[V]4:4:4:4:0:4\f[R] on
+CN5000.
+.TP
+\f[I]FI_OPX_SHM_ENABLE\f[R]
+Boolean (1/0, on/off, true/false, yes/no).
+Enables shm across all ports and hfi units on the node.
+Setting it to NO disables shm except peers with same lid and same hfi1
+(loopback).
+Defaults to: \[lq]YES\[rq]
+.TP
+\f[I]FI_OPX_LINK_DOWN_WAIT_TIME_MAX_SEC\f[R]
+Integer.
+The maximum time in seconds to wait for a link to come back up.
+Default is 70 seconds.
 .SH SEE ALSO
 .PP
 \f[V]fabric\f[R](7), \f[V]fi_provider\f[R](7), \f[V]fi_getinfo\f[R](7),
