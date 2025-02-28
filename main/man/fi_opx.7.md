@@ -113,7 +113,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   The default UUID is 00112233445566778899aabbccddeeff.
 
 *FI_OPX_FORCE_CPUAFFINITY*
-: Boolean (0/1, on/off, true/false, yes/no). Causes the thread to bind
+: Boolean (1/0, on/off, true/false, yes/no). Causes the thread to bind
   itself to the cpu core it is running on. Defaults to "No"
 
 *FI_OPX_RELIABILITY_SERVICE_USEC_MAX*
@@ -147,7 +147,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Default setting is 4. Range of valid values is 1-65535.
 
 *FI_OPX_SELINUX*
-: Boolean (0/1, on/off, true/false, yes/no). Set to true if you're running a
+: Boolean (1/0, on/off, true/false, yes/no). Set to true if you're running a
   security-enhanced Linux. This enables updating the Jkey used based on system
   settings. Defaults to "No"
 
@@ -203,6 +203,10 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   - `FI_OPX_HFI_SELECT=core:1:0,fixed:0` callers local to CPU core 0 will use HFI 1, and all others will use HFI 0.
   - `FI_OPX_HFI_SELECT=default,core:1:0` all callers will use default HFI selection logic.
 
+*FI_OPX_PORT*
+: Integer. HFI1 port number.  If the specified port is not available, a default active port will be selected.
+  Special value 0 indicates any available port. Defaults to port 1 on OPA100 and any port on CN5000.
+
 *FI_OPX_DELIVERY_COMPLETION_THRESHOLD*
 : Integer. Will be deprecated. Please use FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD.
 
@@ -212,7 +216,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   has ACKed. Value must be between 16385 and 2147483646. Defaults to 16385.
 
 *FI_OPX_SDMA_DISABLE*
-: Integer. Disables SDMA offload hardware. Default is 0
+: Boolean (1/0, on/off, true/false, yes/no). Disables SDMA offload hardware. Default is 0.
 
 *FI_OPX_SDMA_MIN_PAYLOAD_BYTES*
 : Integer. The minimum length in bytes where SDMA will be used.
@@ -230,11 +234,13 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Value must be between 64 and 65536. Defaults to 16385.
 
 *FI_OPX_MP_EAGER_DISABLE*
-: Integer. Disables multi-packet eager. Defaults to 0.
+: Boolean (1/0, on/off, true/false, yes/no). Disables multi-packet eager. Defaults to 0.
+
+*FI_OPX_TID_DISABLE*
+: Boolean (1/0, on/off, true/false, yes/no). Disables using Token ID (TID). Defaults to 0.
 
 *FI_OPX_EXPECTED_RECEIVE_ENABLE*
-: Boolean (0/1, on/off, true/false, yes/no). Enables expected receive rendezvous using Token ID (TID).
-  Defaults to "No". This feature is not currently supported.
+: Deprecated. Use FI_OPX_TID_DISABLE instead.
 
 *FI_OPX_PROG_AFFINITY*
 : String. This sets the affinity to be used for any progress threads. Set as a colon-separated
@@ -247,7 +253,8 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Default is 1.
 
 *FI_OPX_PKEY*
-: Integer. Partition key, a 2 byte positive integer. Default is 0x8001
+: Integer. Partition key, a 2 byte positive integer. Default is the Pkey in the index 0 of the
+  Pkey table of the unit and port on which context is created.
 
 *FI_OPX_SL*
 : Integer. Service Level. This will also determine Service Class and Virtual Lane.  Default is 0
@@ -267,7 +274,25 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_MIXED_NETWORK*
 : Integer. Indicates that the network is a mix of OPA100 and CN5000. Needs to be set to 1
   in case of mixed network. Default is 0.
-  
+
+*FI_OPX_ROUTE_CONTROL*
+: Integer. Specify the route control for each packet type. The format is
+  - `<inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>`. 
+
+  Each value can range from 0-7. 0-3 is used for in-order and
+  4-7 is used for out-of-order. If Token ID (TID) is enabled
+  the out-of-order route controls are disabled.
+
+  Default is `0:0:0:0:0:0 ` on OPA100 and  `4:4:4:4:0:4 ` on CN5000.
+
+*FI_OPX_SHM_ENABLE*
+: Boolean (1/0, on/off, true/false, yes/no). Enables shm across all ports and hfi units
+  on the node. Setting it to NO disables shm except peers with same lid and same
+  hfi1 (loopback).  Defaults to: "YES"
+
+*FI_OPX_LINK_DOWN_WAIT_TIME_MAX_SEC*
+: Integer. The maximum time in seconds to wait for a link to come back up. Default is 70 seconds.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
