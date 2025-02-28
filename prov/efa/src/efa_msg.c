@@ -114,7 +114,13 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 
 		/* Set RX buffer desc from SGE */
 		wr->sg_list[i].length = msg->msg_iov[i].iov_len;
-		assert(msg->desc && msg->desc[i]);
+		if (OFI_UNLIKELY(!msg->desc || !msg->desc[i])) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "EFA direct requires FI_MR_LOCAL but "
+				 "application does not provide a valid desc\n");
+			err = -FI_EINVAL;
+			goto out_err;
+		}
 		efa_mr = (struct efa_mr *)msg->desc[i];
 		wr->sg_list[i].lkey = efa_mr->ibv_mr->lkey;
 		wr->sg_list[i].addr = addr;
@@ -260,7 +266,13 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	} else {
 		for (i = 0; i < msg->iov_count; i++) {
 			/* Set TX buffer desc from SGE */
-			assert (msg->desc && msg->desc[i]);
+			if (OFI_UNLIKELY(!msg->desc || !msg->desc[i])) {
+				EFA_WARN(FI_LOG_EP_CTRL,
+					 "EFA direct requires FI_MR_LOCAL but "
+					 "application does not provide a valid desc\n");
+				ret = -FI_EINVAL;
+				goto out_err;
+			}
 			sg_list[i].lkey = ((struct efa_mr *)msg->desc[i])->ibv_mr->lkey;
 			sg_list[i].addr = (uintptr_t)msg->msg_iov[i].iov_base;
 			sg_list[i].length = msg->msg_iov[i].iov_len;
@@ -286,6 +298,7 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		base_ep->is_wr_started = false;
 	}
 
+out_err:
 	ofi_genlock_unlock(&base_ep->util_ep.lock);
 	return ret;
 }
