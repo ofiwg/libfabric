@@ -105,7 +105,13 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	for (i = 0; i < msg->iov_count; ++i) {
 		sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
 		sge_list[i].length = msg->msg_iov[i].iov_len;
-		assert(msg->desc && msg->desc[i]);
+		if (OFI_UNLIKELY(!msg->desc || !msg->desc[i])) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "EFA direct requires FI_MR_LOCAL but "
+				 "application does not provide a valid desc\n");
+			err = -FI_EINVAL;
+			goto out_err;
+		}
 		efa_mr = (struct efa_mr *)msg->desc[i];
 		sge_list[i].lkey = efa_mr->ibv_mr->lkey;
 	}
@@ -126,6 +132,7 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 		base_ep->is_wr_started = false;
 	}
 
+out_err:
 	ofi_genlock_unlock(&base_ep->util_ep.lock);
 	return err;
 }
@@ -253,7 +260,13 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	for (i = 0; i < msg->iov_count; ++i) {
 		sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
 		sge_list[i].length = msg->msg_iov[i].iov_len;
-		assert(msg->desc && msg->desc[i]);
+		if (OFI_UNLIKELY(!msg->desc || !msg->desc[i])) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "EFA direct requires FI_MR_LOCAL but "
+				 "application does not provide a valid desc\n");
+			err = -FI_EINVAL;
+			goto out_err;
+		}
 		sge_list[i].lkey = ((struct efa_mr *)msg->desc[i])->ibv_mr->lkey;
 	}
 	ibv_wr_set_sge_list(qp->ibv_qp_ex, msg->iov_count, sge_list);
@@ -272,6 +285,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		base_ep->is_wr_started = false;
 	}
 
+out_err:
 	ofi_genlock_unlock(&base_ep->util_ep.lock);
 	return err;
 }
