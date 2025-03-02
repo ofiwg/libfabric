@@ -712,7 +712,7 @@ int fts_info_is_valid(void)
 			return 0;
 	}
 	if (test_info.test_class & (FI_MSG | FI_TAGGED) &&
-	    !ft_check_rx_completion(test_info) &&
+	    !ft_check_rx_completion() &&
 	    !ft_use_comp_cntr(test_info.comp_type))
 		return 0;
 	if (test_info.test_type == FT_TEST_UNIT &&
