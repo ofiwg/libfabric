@@ -362,7 +362,7 @@ int ft_check_rx_completion();
 int ft_check_tx_completion();
 
 int ft_send_sync_msg();
-int ft_recv_n_msg();
+int ft_recv_n_msg(int n);
 int ft_recv_msg();
 int ft_send_msg();
 int ft_send_dgram();
