@@ -852,6 +852,7 @@ int smr_unexp_start(struct fi_peer_rx_entry *rx_entry)
 	else
 		ret = smr_start_common(cmd_ctx->ep, &cmd_ctx->cmd, rx_entry);
 
+	dlist_remove(&cmd_ctx->entry);
 	ofi_buf_free(cmd_ctx);
 
 	return ret;
@@ -926,6 +927,7 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 		return -FI_ENOMEM;
 	}
 	cmd_ctx->ep = ep;
+	cmd_ctx->rx_entry = rx_entry;
 
 	rx_entry->msg_size = cmd->msg.hdr.size;
 	if (cmd->msg.hdr.op_flags & SMR_REMOTE_CQ_DATA) {
@@ -976,6 +978,7 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 		memcpy(&cmd_ctx->cmd, cmd, sizeof(*cmd));
 	}
 
+	dlist_insert_tail(&cmd_ctx->entry, &ep->unexp_cmd_list);
 	rx_entry->peer_context = cmd_ctx;
 	return FI_SUCCESS;
 }
