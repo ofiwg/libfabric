@@ -790,6 +790,8 @@ static void smr_free_sock_info(struct smr_ep *ep)
 static int smr_ep_close(struct fid *fid)
 {
 	struct smr_ep *ep;
+	struct smr_pend_entry *pend;
+	struct smr_cmd_ctx *cmd_ctx;
 
 	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
 
@@ -803,6 +805,21 @@ static int smr_ep_close(struct fid *fid)
 		unlink(ep->sock_info->name);
 		smr_cleanup_epoll(ep->sock_info);
 		smr_free_sock_info(ep);
+	}
+
+	while (!dlist_empty(&ep->sar_list)) {
+		dlist_pop_front(&ep->sar_list, struct smr_pend_entry, pend,
+				entry);
+		if (pend->rx_entry)
+			ep->srx->owner_ops->free_entry(pend->rx_entry);
+		ofi_buf_free(pend);
+	}
+
+	while (!dlist_empty(&ep->unexp_cmd_list)) {
+		dlist_pop_front(&ep->unexp_cmd_list, struct smr_cmd_ctx,
+				cmd_ctx, entry);
+		ep->srx->owner_ops->free_entry(cmd_ctx->rx_entry);
+		ofi_buf_free(cmd_ctx);
 	}
 
 	if (ep->srx) {
@@ -1041,6 +1058,7 @@ static int smr_discard(struct fi_peer_rx_entry *rx_entry)
 		resp->status = SMR_STATUS_SUCCESS;
 	}
 
+	dlist_remove(&cmd_ctx->entry);
 	ofi_buf_free(cmd_ctx);
 
 	return FI_SUCCESS;
@@ -1305,6 +1323,7 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	dlist_init(&ep->sar_list);
 	dlist_init(&ep->ipc_cpy_pend_list);
+	dlist_init(&ep->unexp_cmd_list);
 
 	ep->min_multi_recv_size = SMR_INJECT_SIZE;
 

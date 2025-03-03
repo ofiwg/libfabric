@@ -142,6 +142,7 @@ struct smr_pend_entry {
 
 struct smr_cmd_ctx {
 	struct dlist_entry entry;
+	struct fi_peer_rx_entry *rx_entry;
 	struct smr_ep *ep;
 	struct smr_cmd cmd;
 	struct smr_pend_entry *sar_entry;
@@ -229,6 +230,7 @@ struct smr_ep {
 	struct smr_tx_fs	*tx_fs;
 	struct dlist_entry	sar_list;
 	struct dlist_entry	ipc_cpy_pend_list;
+	struct dlist_entry	unexp_cmd_list;
 	size_t			min_multi_recv_size;
 
 	int			ep_idx;
