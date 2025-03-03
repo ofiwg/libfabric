@@ -263,7 +263,7 @@ fail:
 #endif /* HAVE_PSM3_DL */
 
 static uint64_t psmx3_check_fi_hmem_cap(void) {
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	/* if parses as empty or invalid use default of 0 */
 	/* psm3 below us will provide warning as needed when it parses it */
 	int gpu = 0;
@@ -278,7 +278,7 @@ static uint64_t psmx3_check_fi_hmem_cap(void) {
 							0, UINT_MAX);
 	if ((gpu || gpudirect) && !ofi_hmem_p2p_disabled())
 		return FI_HMEM;
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 	return 0;
 }
 
@@ -319,28 +319,30 @@ static uint64_t get_max_inject_size(void) {
 			thresh_rv = temp;
 	}
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	if (psmx3_prov_info.caps & FI_HMEM) {
 		if (have_nic) {
 			// GPU ips rendezvous threshold
-			// sockets HAL avoids rendezvous, so this may be overly restrictive
-			temp = PSM3_GPU_THRESH_RNDV;
-			// PSM3_CUDA_THRESH_RNDV depricated, use PSM3_GPU_THRESH_RNDV if set
-			psm3_parse_str_uint(psm3_env_get("PSM3_CUDA_THRESH_RNDV"), &temp,
-								0, UINT_MAX);
-			psm3_parse_str_uint(psm3_env_get("PSM3_GPU_THRESH_RNDV"), &temp,
-								0, UINT_MAX);
-			if (thresh_rv > temp)
-				thresh_rv = temp;
+			uint32_t out;
+			if (psm3_info_query(PSM2_INFO_QUERY_GPU_THRESH_RNDV, &out, 0, NULL)) {
+				PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
+					"Unable to get PSM3_GPU_THRESH_RNDV.\n");
+			} else if (thresh_rv > out) {
+				thresh_rv = out;
+			}
 		}
 
 		if (have_shm) {
 			// GPU shm rendezvous threshold
-			temp = PSM3_MQ_RNDV_SHM_GPU_THRESH;
-			psm3_parse_str_uint(psm3_env_get("PSM3_MQ_RNDV_SHM_GPU_THRESH"), &temp,
-								0, UINT_MAX);
-			if (thresh_rv > temp)
-				thresh_rv = temp;
+			// we only have default, real value may be overriden at MQ init
+			// when open PSM3 endpoint
+			uint32_t out;
+			if (psm3_info_query(PSM2_INFO_QUERY_MQ_RNDV_SHM_GPU_THRESH_DEFAULT, &out, 0, NULL)) {
+				PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
+					"Unable to get PSM3_MQ_RNDV_SHM_GPU_THRESH default.\n");
+			} else if (thresh_rv > out) {
+				thresh_rv = out;
+			}
 		}
 	}
 #endif

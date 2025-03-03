@@ -222,7 +222,7 @@ psm2_error_t psm3_verbs_recvhdrq_progress(struct ips_recvhdrq *recvq)
 				break;
 			else if_pf (err < 0) {
 				if (errno == EAGAIN || errno == EWOULDBLOCK
-				    || errno == EBUSY || errno = EINTR)
+				    || errno == EBUSY || errno == EINTR)
 					break;
 				_HFI_ERROR("failed ibv_poll_cq '%s' (%d) on %s port %u epid %s\n",
 					strerror(errno), errno, ep->dev_name, ep->portnum, psm3_epid_fmt_internal(ep->epid, 0));
@@ -360,7 +360,7 @@ repost:
 			break;
 		}
 #if VERBS_RECV_CQE_BATCH > 1
-	} while(! done);
+	} while(ep->verbs_ep.recv_wc_count || !done);
 #else
 	}
 #endif

@@ -293,8 +293,8 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 	int copied_chunks = 0;
 	uint32_t dsa_cp_len;
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	if (n && PSMI_IS_GPU_ENABLED && (PSMI_IS_GPU_MEM(dest) || PSMI_IS_GPU_MEM((void *) src))) {
+#ifdef PSM_HAVE_GPU
+	if (n && (PSM3_IS_GPU_MEM(dest) || PSM3_IS_GPU_MEM((void *) src))) {
 		_HFI_VDBG("GPU copy from %p to %p for %u\n", src, dest, n);
 		PSM3_GPU_MEMCPY(dest, src, n);
 		return;

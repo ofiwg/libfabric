@@ -143,7 +143,7 @@ AS_IF([test "x$enable_psm3_rc" = "xcheck"],
 AS_IF([test "x$enable_psm3_rc" = "xyes"],
       [
        AS_IF([test "x$enable_psm3_verbs" = "xyes"],
-             [CPPFLAGS="$CPPFLAGS -DUSE_RC"],
+             [CPPFLAGS="$CPPFLAGS -DUSE_RC -DUSE_RDMA_READ"],
              [AC_MSG_ERROR([User RC QPs requires Verbs HAL active])])
       ])
 AS_IF([test "x$enable_psm3_src" = "xyes"],
@@ -690,12 +690,14 @@ AS_IF([test "$have_oneapi_ze" = "1"],
         LIBS="$LIBS $ze_LIBS"
 
         dnl - Check for zeMemPutIpcHandle after ZE added to LIBS/*FLAGS
+        save_LDFLAGS="$LDFLAGS"
+        LDFLAGS="$LDFLAGS -lze_loader"
         AC_MSG_CHECKING([for zeMemPutIpcHandle support in level-zero])
         AC_LINK_IFELSE(
             [AC_LANG_PROGRAM([[
                     #include <level_zero/ze_api.h>
                 ]],[[
-                    ze_context_handle_t hContext;
+                    ze_context_handle_t hContext = NULL;
                     ze_ipc_mem_handle_t handle;
                     (void)zeMemPutIpcHandle(hContext, handle);
                 ]])
@@ -703,8 +705,10 @@ AS_IF([test "$have_oneapi_ze" = "1"],
                 AC_MSG_RESULT(yes)
                 have_oneapi_zeMemPutIpcHandle=1
                 CPPFLAGS="$CPPFLAGS -DPSM_HAVE_ONEAPI_ZE_PUT_IPCHANDLE"
+                LDFLAGS="$save_LDFLAGS"
             ],[
                 AC_MSG_RESULT(no)
+                LDFLAGS="$save_LDFLAGS"
             ])
     ])
 
@@ -910,12 +914,9 @@ AS_IF([test ! -z "$CC" && ( test "x${CC%% *}" = "xicc" || test "x${CC%% *}" = "x
       [ dnl ICC/ICX
         CFLAGS="$CFLAGS -Werror -xATOM_SSE4.2 -DPSM_AVX512 -fpic -fPIC -D_GNU_SOURCE -DPACK_STRUCT_STL=packed,"
         LDFLAGS="$LDFLAGS -Wc,-static-intel"
-        PSM3_MARCH="avx2"
       ], [ dnl GCC/other
-        CFLAGS="$CFLAGS -Werror -mavx2 -fpic -fPIC -funwind-tables -Wformat -Wformat-security"
-        PSM3_MARCH="avx2"
+        CFLAGS="$CFLAGS -Werror -msse4.2 -fpic -fPIC -funwind-tables -Wformat -Wformat-security"
       ])
-AC_DEFINE_UNQUOTED([PSM3_MARCH], ["$PSM3_MARCH"], [PSM3 built with instruction set])
 AS_IF([test ! -z "$PSM_CPPFLAGS"], [CPPFLAGS="$CPPFLAGS $PSM_CPPFLAGS"], [])
 AS_IF([test ! -z "$PSM_CFLAGS"], [CFLAGS="$CFLAGS $PSM_CFLAGS"], [])
 
@@ -936,12 +937,10 @@ AC_DEFINE([HAVE_XPMEM], 0, [Ignore HAVE_XPMEM])
 
 dnl Provider-specific checks
 dnl FI_PROVIDER_INIT
-AC_DEFINE([HAVE_BGQ], 0, [Ignore HAVE_BGQ])
-AC_DEFINE([HAVE_BGQ_DL], 0, [Ignore HAVE_BGQ_DL])
+AC_DEFINE([HAVE_CXI], 0, [Ignore HAVE_CXI])
+AC_DEFINE([HAVE_CXI_DL], 0, [Ignore HAVE_CXI_DL])
 AC_DEFINE([HAVE_EFA], 0, [Ignore HAVE_EFA])
 AC_DEFINE([HAVE_EFA_DL], 0, [Ignore HAVE_EFA_DL])
-AC_DEFINE([HAVE_GNI], 0, [Ignore HAVE_GNI])
-AC_DEFINE([HAVE_GNI_DL], 0, [Ignore HAVE_GNI_DL])
 AC_DEFINE([HAVE_MRAIL], 0, [Ignore HAVE_MRAIL])
 AC_DEFINE([HAVE_MRAIL_DL], 0, [Ignore HAVE_MRAIL_DL])
 AC_DEFINE([HAVE_NET], 0, [Ignore HAVE_NET])
@@ -954,8 +953,6 @@ AC_DEFINE([HAVE_PSM2_DL], 0, [Ignore HAVE_PSM2_DL])
 dnl FI_PROVIDER_SETUP([psm3])
 AC_DEFINE([HAVE_OPX], 0, [Ignore HAVE_OPX])
 AC_DEFINE([HAVE_OPX_DL], 0, [Ignore HAVE_OPX_DL])
-AC_DEFINE([HAVE_RSTREAM], 0, [Ignore HAVE_RSTREAM])
-AC_DEFINE([HAVE_RSTREAM_DL], 0, [Ignore HAVE_RSTREAM_DL])
 AC_DEFINE([HAVE_RXD], 0, [Ignore HAVE_RXD])
 AC_DEFINE([HAVE_RXD_DL], 0, [Ignore HAVE_RXD_DL])
 AC_DEFINE([HAVE_RXM], 0, [Ignore HAVE_RXM])
@@ -974,8 +971,6 @@ AC_DEFINE([HAVE_UCX], 0, [Ignore HAVE_UCX])
 AC_DEFINE([HAVE_UCX_DL], 0, [Ignore HAVE_UCX_DL])
 AC_DEFINE([HAVE_UDP], 0, [Ignore HAVE_UDP])
 AC_DEFINE([HAVE_UDP_DL], 0, [Ignore HAVE_UDP_DL])
-AC_DEFINE([HAVE_USNIC], 0, [Ignore HAVE_USNIC])
-AC_DEFINE([HAVE_USNIC_DL], 0, [Ignore HAVE_USNIC_DL])
 AC_DEFINE([HAVE_VERBS], 0, [Ignore HAVE_VERBS])
 AC_DEFINE([HAVE_VERBS_DL], 0, [Ignore HAVE_VERBS_DL])
 dnl FI_PROVIDER_FINI
@@ -991,8 +986,12 @@ AM_COND_IF([HAVE_PSM3_SRC],
         AS_IF([test -z "${PSM3_IEFS_VERSION}"], [PSM3_IEFS_VERSION="${PACKAGE_VERSION}$(whoami)"])
         PSM3_IEFS_VERSION=$(echo "${PSM3_IEFS_VERSION}" | tr '.' '_')
         PSM3_GIT_HASH="$(git rev-parse HEAD)"
-        RPM_RELEASE=$(echo "${PSM3_IEFS_VERSION}" | cut -d'_' -f5)
-        RELEASE_VER=$(echo "${PSM3_IEFS_VERSION}" | cut -d'_' -f1-4 | sed 's/_/./g')
+        RPM_RELEASE=$(echo "${PSM3_IEFS_VERSION}" | tr -s '@<:@A-Z@:>@' '_' | cut -d'_' -f5)
+        RELEASE_VER=$(echo "${PSM3_IEFS_VERSION}" | tr -s '@<:@A-Z@:>@' '_' | cut -d'_' -f1-4 | sed 's/_/./g')
+        char=$(echo "${PSM3_IEFS_VERSION}" | tr -dc '@<:@A-Z@:>@' | tr '@<:@A-Z@:>@' '@<:@a-z@:>@')
+        AS_IF([test -n "$char"], [
+            RPM_RELEASE="0${char}${RPM_RELEASE}"
+        ])
         AS_IF([test x"${RELEASE_VER}" = x"${PACKAGE_VERSION}"], [], [
             AC_MSG_NOTICE([Release Tag does not match VERSION file])
             AC_MSG_NOTICE([${RELEASE_VER} != ${PACKAGE_VERSION}])

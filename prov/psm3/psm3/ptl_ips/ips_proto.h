@@ -94,8 +94,8 @@ struct ips_epinfo {
 	uint8_t ep_lmc;
 	enum psm3_ibv_rate ep_link_rate;
 	uint16_t ep_sl;		/* PSM3_NIC_SL only when path record not used */
-	uint32_t ep_mtu;	// PSM payload after potential hdr & PSM3_MTU decrease
-				// or TCP increase beyond wire size
+	uint32_t ep_mtu;	// PSM payload after potential hdr & PSM3_MTU adjustment
+	                	// for TCP and RC it can be beyond wire size
 	uint16_t ep_pkey;	/* PSM3_PKEY only when path record not used */
 	uint64_t ep_timeout_ack;	/* PSM3_ERRCHK_TIMEOUT if no path record */
 	uint64_t ep_timeout_ack_max;
@@ -356,7 +356,7 @@ struct ips_proto {
 	uint32_t iovec_thresh_eager_blocking;
 #endif
 #ifdef PSM_HAVE_REG_MR
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	uint32_t iovec_gpu_thresh_eager;
 	uint32_t iovec_gpu_thresh_eager_blocking;
 #endif
@@ -431,21 +431,12 @@ struct ips_proto {
 	void *opp_ctxt;
 	struct opp_api opp_fn;
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	struct ips_gpu_hostbuf_mpool_cb_context gpu_hostbuf_send_cfg;
 	struct ips_gpu_hostbuf_mpool_cb_context gpu_hostbuf_small_send_cfg;
 	mpool_t gpu_hostbuf_pool_send;
 	mpool_t gpu_hostbuf_pool_small_send;
-#endif
-
-#ifdef PSM_CUDA
-	CUstream cudastream_send;
-#elif defined(PSM_ONEAPI)
-	/* Will not be used if psm3_oneapi_immed_async_copy */
-	ze_command_queue_handle_t cq_sends[MAX_ZE_DEVICES];
-#endif
-
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	union ips_proto_gpu_specific gpu_specific;
 	unsigned gpu_prefetch_limit;
 #endif
 /*
@@ -656,6 +647,21 @@ struct ips_epaddr {
 			uint32_t use_max_inline_data;
 
 			uint8_t rc_connected;
+
+			// MR for flow->recv_seq_num
+			struct ibv_mr *recv_seq_mr;
+			// remote flow->recv_seq_num addr and rkey
+			uint64_t remote_recv_seq_addr;
+			uint32_t remote_recv_seq_rkey;
+			// psn num of remote flow->recv_seq_num
+			uint32_t remote_recv_psn;
+			// MR for remote flow->recv_seq_num storage
+			struct ibv_mr *remote_recv_psn_mr;
+			// indicare whether we have outstanding RDMA Read for
+			// remote flow->recv_seq_num
+			uint8_t remote_seq_outstanding;
+			// congestion control count
+			uint16_t cc_count;
 #endif /* USE_RC */
 		} verbs;
 #endif /* PSM_VERBS */
@@ -838,7 +844,7 @@ MOCK_DCL_EPILOGUE(psm3_ips_ibta_init);
 psm2_error_t psm3_ips_ibta_fini(struct ips_proto *proto);
 
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 PSMI_ALWAYS_INLINE(
 uint32_t ips_gpu_next_window(uint32_t max_window, uint32_t offset,
 			      uint32_t len))

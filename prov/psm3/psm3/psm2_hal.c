@@ -97,7 +97,7 @@ void psm3_hal_register_instance(psmi_hal_instance_t *psm_hi)
 	REJECT_IMPROPER_HI(hfp_mq_init_defaults);
 	REJECT_IMPROPER_HI(hfp_ep_open_opts_get_defaults);
 	REJECT_IMPROPER_HI(hfp_context_initstats);
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	REJECT_IMPROPER_HI(hfp_gdr_open);
 #endif
 
@@ -147,10 +147,10 @@ void psm3_hal_register_instance(psmi_hal_instance_t *psm_hi)
 	REJECT_IMPROPER_HI(hfp_ips_ibta_init);
 	REJECT_IMPROPER_HI(hfp_ips_path_rec_init);
 	REJECT_IMPROPER_HI(hfp_ips_ptl_pollintr);
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	REJECT_IMPROPER_HI(hfp_gdr_close);
 	REJECT_IMPROPER_HI(hfp_gdr_convert_gpu_to_host_addr);
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 	REJECT_IMPROPER_HI(hfp_get_port_index2pkey);
 	REJECT_IMPROPER_HI(hfp_poll_type);
 

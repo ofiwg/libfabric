@@ -231,19 +231,38 @@ psm3_ep_open_verbs(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid_t
 	// HFI_TF_NFLOWS (32) limits receiver side concurrent tidflows (aka inbound
 	// RDMA w/immed).
 	// For USER RC Eager without SRQ we can have num_recv_wqes/FRACTION per
-	// QP in which case theoretical need could be huge.  We add 4000 as a
-	// swag to cover most cases and user can always tune higher as needed
+	// QP, and we calculate the total size based on the total QPs required.
+	// The CQ size for the UD QP is covered by hfi_num_recv_wqes.
 	// For USER RC Eager with SRQ worse case is num_recv_wqes so we
 	// add that to allow up to num_recv_wqes on UD QP and SRQ each and keep
 	// the HFI_TF_NFLOWS+1000 as headroom.
 	if (! ep->verbs_ep.hfi_num_recv_cqes) {
 		ep->verbs_ep.hfi_num_recv_cqes = ep->verbs_ep.hfi_num_recv_wqes+HFI_TF_NFLOWS+1000;
+#ifdef USE_RC
 		if ((ep->rdmamode&IPS_PROTOEXP_FLAG_RDMA_MASK) == IPS_PROTOEXP_FLAG_RDMA_USER_RC) {
-			if (ep->verbs_ep.srq)
+			if (ep->verbs_ep.srq) {
 				ep->verbs_ep.hfi_num_recv_cqes += ep->verbs_ep.hfi_num_recv_wqes;
-			else
-				ep->verbs_ep.hfi_num_recv_cqes += 4000;
+			} else {
+				int tot_cnt = psm3_get_myrank_count();
+				int loc_cnt = psm3_get_mylocalrank_count();
+				uint32_t rem_cnt;
+				uint32_t cqes_per_qp;
+
+				/*
+				 * Check to see if MPI is used. If yes, we will calculate the total
+				 * number of RC QPs. Otherwise, we use a arbitrary large number to
+				 * accomodate up to 128 remote connections
+				 */
+				if (tot_cnt > 0 && loc_cnt > 0)
+					rem_cnt = (uint32_t)(tot_cnt - loc_cnt);
+				else
+					rem_cnt = 128;
+
+				cqes_per_qp = ep->verbs_ep.hfi_num_recv_wqes / VERBS_RECV_QP_FRACTION;
+				ep->verbs_ep.hfi_num_recv_cqes += rem_cnt * cqes_per_qp;
+			}
 		}
+#endif
 	}
 	ep->verbs_ep.recv_cq = ibv_create_cq(ep->verbs_ep.context,
 						 ep->verbs_ep.hfi_num_recv_cqes,
@@ -354,7 +373,7 @@ psm3_verbs_parse_params(psm2_ep_t ep)
 			"Number of recv CQEs to allocate\n"
 			"(0 will calculate as PSM3_NUM_RECV_WQES+1032 for PSM3_RDMA=0-2\n"
 			"for PSM3_RDMA=3 with SRQ, allow an additional PSM3_NUM_RECV_WQES\n"
-			"for PSM3_RDMA=3 without SRQ, allow an additional 4000) [0]",
+			"for PSM3_RDMA=3 without SRQ, calculate based on total QPs) [0]",
 			PSMI_ENVVAR_LEVEL_USER,
 			PSMI_ENVVAR_TYPE_UINT,
 			(union psmi_envvar_val)0, &envvar_val);
@@ -408,7 +427,7 @@ psm3_verbs_parse_params(psm2_ep_t ep)
 	// 		(HFI_TF_NFLOWS + ep->hfi_num_send_rdma)
 	//		* psm3_mq_max_window_rv(mq, 0)
 	// and automatically increase with warning if not?
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	ep->rv_gpu_cache_size = psmi_parse_gpudirect_rv_gpu_cache_size(0);
 	// TBD - we could check gpu_cache_size >= minimum based on:
 	// 		(HFI_TF_NFLOWS + ep->hfi_num_send_rdma)
@@ -458,7 +477,7 @@ psm3_verbs_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 	// PSM3_* env for SDMA are parsed later in psm3_ips_proto_init.
 	proto->iovec_thresh_eager = 8192;
 	proto->iovec_thresh_eager_blocking = 8192;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	proto->iovec_gpu_thresh_eager = 128;
 	proto->iovec_gpu_thresh_eager_blocking = 128;
 #endif
@@ -469,37 +488,64 @@ psm3_verbs_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 	// at this point ep->mtu is our HW capability found during open
 	// and adjusted to allow for PSM headers so ep->mtu reflects maximum
 	// PSM payload (not yet adjusted for optional cksum_sz)
-	/* See if user specifies a lower MTU to use */
-	if (!psm3_getenv("PSM3_MTU",
-		"Upper bound on packet MTU (<=0 uses port MTU): 1-5,256,512,1024,2048,4096]",
-	     PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
-	     (union psmi_envvar_val)-1, &env_mtu)) {
+	char help[128];
+
+	if ((ep->rdmamode & IPS_PROTOEXP_FLAG_RDMA_MASK) == IPS_PROTOEXP_FLAG_RDMA_USER_RC) {
+		snprintf(help, sizeof(help), "Upper bound on PSM3 payload (<=0 uses port MTU): 1-7, 1024-PSM3_MQ_RNDV_NIC_THRESH(%u)", ep->mq->rndv_nic_thresh);
+	} else {
+		snprintf(help, sizeof(help), "Upper bound on packet MTU (<=0 uses port MTU): 1-5,256,512,1024,2048,4096,8192");
+	}
+	/* See if user specifies a MTU to use */
+	if (!psm3_getenv("PSM3_MTU", help,
+		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
+		(union psmi_envvar_val)-1, &env_mtu)) {
+		uint32_t mtu; // in bytes
 		// use OPA_MTU_MAX so we don't round down to min MTU when
 		// OPA enum values mistakenly used here.
-		if (env_mtu.e_int >= IBTA_MTU_MIN && env_mtu.e_int <= OPA_MTU_MAX) //enum
-			env_mtu.e_int = opa_mtu_enum_to_int((enum opa_mtu)env_mtu.e_int);
-		else if (env_mtu.e_int < IBTA_MTU_MIN) // pick default
-			env_mtu.e_int = 8192; // default high, will use wire MTU
-		else // wash through enum to force round up to next valid MTU
-			env_mtu.e_int = opa_mtu_enum_to_int(opa_mtu_int_to_enum(env_mtu.e_int));
+		if (env_mtu.e_int >= IBTA_MTU_MIN && env_mtu.e_int <= OPA_MTU_MAX) { //enum
+			mtu = opa_mtu_enum_to_int((enum opa_mtu)env_mtu.e_int);
+		} else if (env_mtu.e_int < IBTA_MTU_MIN) { // pick default
+			mtu = ep->mtu + MAX_PSM_HEADER; // use wire MTU
+		} else if ((ep->rdmamode & IPS_PROTOEXP_FLAG_RDMA_MASK) == IPS_PROTOEXP_FLAG_RDMA_USER_RC) { // use as local PSM3 MTU
+			// Under RDMA3 mode, UD is used for ctr msg only that shall be smaller than
+			// wire MTU. It's safe to increase PSM3 MTU beyond wire MTU because RC will be
+			// used, and the NIC driver will segment a msg into multiple packets to ensure 
+			// each pkt size is within wire MTU. 
+
+			mtu = env_mtu.e_int;
+			// only apply PSM3_MTU on eager messages
+			if (env_mtu.e_int > ep->mq->rndv_nic_thresh)
+				mtu = ep->mq->rndv_nic_thresh;
+			if (env_mtu.e_int < opa_mtu_enum_to_int(IBTA_MTU_MIN))
+				mtu = opa_mtu_enum_to_int(IBTA_MTU_MIN);
+			// round down to nearest multiple of 64
+			mtu = ROUNDDOWNP2(mtu, 64);
+			proto->epinfo.ep_mtu = mtu - MAX_PSM_HEADER;
+		} else { // walk through enum to force round up to next valid MTU
+			mtu = opa_mtu_enum_to_int(opa_mtu_int_to_enum(env_mtu.e_int));
+		}
+
 		// only allow MTU decrease
 		// PSM3_MTU specified ends up being used as max verbs payload
 		// so decrease by PSM HEADER size (and cksum below)
-		if (ep->mtu > env_mtu.e_int - MAX_PSM_HEADER)
-			ep->mtu = env_mtu.e_int - MAX_PSM_HEADER;
+		if (ep->mtu > mtu - MAX_PSM_HEADER)
+			ep->mtu = mtu - MAX_PSM_HEADER;
 	}
+
 	/* allow space for optional software managed checksum (for debug) */
 	ep->mtu -= cksum_sz;
-	// ep->mtu is our final choice of local PSM payload we can support
-	proto->epinfo.ep_mtu = ep->mtu;
+	// if proto->epinfo.ep_mtu is not set, use ep->mtu as our final choice 
+	// of local PSM payload we can support
+	if (!proto->epinfo.ep_mtu)
+		proto->epinfo.ep_mtu = ep->mtu;
 
 	if (PSM2_OK != psm_verbs_alloc_send_pool(ep, ep->verbs_ep.pd, &ep->verbs_ep.send_pool, 
 				// save 1 send WQE just to be paranoid (should be unnecessary)
 				min(ep->verbs_ep.hfi_num_send_wqes, ep->verbs_ep.qp_cap.max_send_wr-1),
 				// want to end up with multiple of cache line (64)
-				// ep->mtu+MAX_PSM_HEADERS will be power of 2 verbs MTU
+				// proto->epinfo.ep_mtu+MAX_PSM_HEADERS will be power of 2 verbs MTU
 				// be conservative (+BUFFER_HEADROOM)
-				ep->mtu + MAX_PSM_HEADER + BUFFER_HEADROOM
+				proto->epinfo.ep_mtu + MAX_PSM_HEADER + BUFFER_HEADROOM
 		)) {
 		_HFI_ERROR( "Unable to allocate UD send buffer pool\n");
 		goto fail;
@@ -516,9 +562,9 @@ psm3_verbs_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 	if (PSM2_OK != psm_verbs_alloc_recv_pool(ep, 0, ep->verbs_ep.qp, &ep->verbs_ep.recv_pool,
 				min(ep->verbs_ep.hfi_num_recv_wqes, ep->verbs_ep.qp_cap.max_recv_wr),
 				// want to end up with multiple of cache line (64)
-				// ep->mtu+MAX_PSM_HEADERS will be power of 2 verbs MTU
+				// proto->epinfo.ep_mtu+MAX_PSM_HEADERS will be power of 2 verbs MTU
 				// be conservative (+BUFFER_HEADROOM)
-				ep->mtu + MAX_PSM_HEADER + BUFFER_HEADROOM
+				proto->epinfo.ep_mtu + MAX_PSM_HEADER + BUFFER_HEADROOM
 		)) {
 		_HFI_ERROR( "Unable to allocate UD recv buffer pool\n");
 		goto fail;
@@ -529,9 +575,9 @@ psm3_verbs_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 					ep->verbs_ep.hfi_num_recv_wqes,
 					 (proto->ep->rdmamode == IPS_PROTOEXP_FLAG_RDMA_USER)? 0
 					// want to end up with multiple of cache line (64)
-					// ep->mtu+MAX_PSM_HEADERS will be power of 2 verbs MTU
+					// proto->epinfo.ep_mtu+MAX_PSM_HEADERS will be power of 2 verbs MTU
 					// be conservative (+BUFFER_HEADROOM)
-					: (ep->mtu + MAX_PSM_HEADER + BUFFER_HEADROOM)
+					: (proto->epinfo.ep_mtu + MAX_PSM_HEADER + BUFFER_HEADROOM)
 			)) {
 			_HFI_ERROR( "Unable to allocate SRQ recv buffer pool\n");
 			goto fail;
@@ -545,10 +591,10 @@ psm3_verbs_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 
 	// no send segmentation, max_segs will constrain
 	ep->chunk_max_segs = 1;
-	ep->chunk_max_size = ep->mtu;
+	ep->chunk_max_size = proto->epinfo.ep_mtu;
 #ifdef PSM_BYTE_FLOW_CREDITS
 	// let flow_credits be the control
-	proto->flow_credit_bytes = ep->mtu * proto->max_credits;
+	proto->flow_credit_bytes = proto->epinfo.ep_mtu * proto->max_credits;
 	_HFI_DBG("initial flow_credits %d bytes %d\n",
 				proto->flow_credits, proto->flow_credit_bytes);
 #else
@@ -874,25 +920,9 @@ psm2_error_t psm_verbs_alloc_send_pool(psm2_ep_t ep, struct ibv_pd *pd,
 			_HFI_ERROR( "can't alloc send buffers");
 			goto fail;
 		}
-#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
-		// By registering memory with Cuda, we make
-		// cuMemcpy run faster for copies from
-		// GPU to the send buffer.
-		if (PSMI_IS_GPU_ENABLED && check_have_cuda_ctxt())
-			PSMI_CUDA_CALL(cuMemHostRegister,
-				pool->send_buffers,
-				pool->send_total*pool->send_buffer_size,
-				CU_MEMHOSTALLOC_PORTABLE);
-#endif
-#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
-		// By registering memory with Level Zero, we make
-		// zeCommandListAppendMemoryCopy run faster for copies from
-		// GPU to the send buffer.
-		if (PSMI_IS_GPU_ENABLED)
-			PSMI_ONEAPI_ZE_CALL(zexDriverImportExternalPointer,
-				ze_driver, pool->send_buffers,
+		// This can allows faster copies from GPU to the send buffer
+		PSM3_GPU_REGISTER_HOSTMEM( pool->send_buffers,
 				pool->send_total*pool->send_buffer_size);
-#endif
 
 		_HFI_PRDBG("send pool: buffers: %p size %u\n",  pool->send_buffers, pool->send_buffer_size);
 		pool->send_bufs = (struct verbs_sbuf *)psmi_calloc(ep, NETWORK_BUFFERS,
@@ -993,25 +1023,9 @@ psm2_error_t psm_verbs_alloc_recv_pool(psm2_ep_t ep, uint32_t for_srq,
 				_HFI_ERROR( "can't alloc recv buffers");
 				goto fail;
 			}
-#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
-			// By registering memory with Cuda, we make
-			// cuMemcpy run faster for copies from
-			// recv buffer to GPU
-			if (PSMI_IS_GPU_ENABLED && check_have_cuda_ctxt())
-				PSMI_CUDA_CALL(cuMemHostRegister,
-					pool->recv_buffers,
-					pool->recv_total*pool->recv_buffer_size,
-					CU_MEMHOSTALLOC_PORTABLE);
-#endif
-#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
-			// By registering memory with Level Zero, we make
-			// zeCommandListAppendMemoryCopy run faster for copies from
-			// recv buffer to GPU
-			if (PSMI_IS_GPU_ENABLED)
-				PSMI_ONEAPI_ZE_CALL(zexDriverImportExternalPointer,
-					ze_driver, pool->recv_buffers,
-					pool->recv_total*pool->recv_buffer_size);
-#endif
+			// This can allow faster copies from recv buffer to GPU
+			PSM3_GPU_REGISTER_HOSTMEM(pool->recv_buffers,
+				pool->recv_total*pool->recv_buffer_size);
 			//printf("recv pool: buffers: %p size %u\n",  pool->recv_buffers, pool->recv_buffer_size);
 #ifdef USE_RC
 			pool->recv_bufs = (struct verbs_rbuf *)psmi_calloc(ep, NETWORK_BUFFERS,
@@ -1104,38 +1118,7 @@ void psm_verbs_free_send_pool(psm3_verbs_send_pool_t pool)
 		pool->send_bufs = NULL;
 	}
 	if (pool->send_buffers) {
-#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
-		if (PSMI_IS_GPU_ENABLED && cu_ctxt) {
-			/* ignore NOT_REGISTERED in case cuda initialized late */
-			/* ignore other errors as context could be destroyed before this */
-			CUresult cudaerr;
-			//PSMI_CUDA_CALL_EXCEPT(CUDA_ERROR_HOST_MEMORY_NOT_REGISTERED,
-			//		cuMemHostUnregister, pool->send_buffers);
-			psmi_count_cuMemHostUnregister++;
-			cudaerr = psmi_cuMemHostUnregister(pool->send_buffers);
-			if (cudaerr) {
-				const char *pStr = NULL;
-				psmi_count_cuGetErrorString++;
-				psmi_cuGetErrorString(cudaerr, &pStr);
-				_HFI_DBG("CUDA failure: cuMemHostUnregister returned %d: %s\n",
-						cudaerr, pStr?pStr:"Unknown");
-			}
-
-		}
-#endif
-#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
-		if (PSMI_IS_GPU_ENABLED) {
-			ze_result_t result;
-			//PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer,
-			//		 ze_driver, pool->send_buffers);
-			psmi_count_zexDriverReleaseImportedPointer++;
-			result = psmi_zexDriverReleaseImportedPointer(ze_driver,
-					pool->send_buffers);
-			if (result != ZE_RESULT_SUCCESS) {
-				_HFI_DBG("OneAPI Level Zero failure: zexDriverReleaseImportedPointer returned %d: %s\n", result, psmi_oneapi_ze_result_to_string(result));
-			}
-		}
-#endif
+		PSM3_GPU_UNREGISTER_HOSTMEM(pool->send_buffers);
 		psmi_free(pool->send_buffers);
 		pool->send_buffers = NULL;
 	}
@@ -1156,37 +1139,7 @@ void psm_verbs_free_recv_pool(psm3_verbs_recv_pool_t pool)
 	}
 #endif
 	if (pool->recv_buffers) {
-#if defined(PSM_CUDA) && !defined(PSM3_NO_CUDA_REGISTER)
-		if (PSMI_IS_GPU_ENABLED && cu_ctxt) {
-			/* ignore NOT_REGISTERED in case cuda initialized late */
-			/* ignore other errors as context could be destroyed before this */
-			CUresult cudaerr;
-			//PSMI_CUDA_CALL_EXCEPT(CUDA_ERROR_HOST_MEMORY_NOT_REGISTERED,
-			//		cuMemHostUnregister, pool->recv_buffers);
-			psmi_count_cuMemHostUnregister++;
-			cudaerr = psmi_cuMemHostUnregister(pool->recv_buffers);
-			if (cudaerr) {
-				const char *pStr = NULL;
-				psmi_count_cuGetErrorString++;
-				psmi_cuGetErrorString(cudaerr, &pStr);
-				_HFI_DBG("CUDA failure: cuMemHostUnregister returned %d: %s\n",
-						cudaerr, pStr?pStr:"Unknown");
-			}
-		}
-#endif
-#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
-		if (PSMI_IS_GPU_ENABLED) {
-			ze_result_t result;
-			//PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer,
-			//		 ze_driver, pool->recv_buffers);
-			psmi_count_zexDriverReleaseImportedPointer++;
-			result = psmi_zexDriverReleaseImportedPointer(ze_driver,
-					pool->recv_buffers);
-			if (result != ZE_RESULT_SUCCESS) {
-				_HFI_DBG("OneAPI Level Zero failure: zexDriverReleaseImportedPointer returned %d: %s\n", result, psmi_oneapi_ze_result_to_string(result));
-			}
-		}
-#endif
+		PSM3_GPU_UNREGISTER_HOSTMEM(pool->recv_buffers);
 		psmi_free(pool->recv_buffers);
 		pool->recv_buffers = NULL;
 	}
@@ -1667,7 +1620,7 @@ extern int ips_protoexp_rdma_write_completion( uint64_t wr_id);
 psm2_error_t
 psm3_verbs_completion_update(psm2_ep_t ep, int drain)
 {
-	#define CQE_BATCH 10	// reap a few at a time, hopefully faster this way
+	#define CQE_BATCH 32	// reap a few at a time, hopefully faster this way
 	//#define CQE_BATCH 8 or 18	// reap a few at a time, hopefully faster this way
 							// 18*COALLESE > default reap threshold so we
 							// should get away with one poll_q
@@ -1677,6 +1630,9 @@ psm3_verbs_completion_update(psm2_ep_t ep, int drain)
 							// alloca(sizeof(ibv_wc) & batch)
 	struct ibv_wc wc[CQE_BATCH];
 	int ne;
+#ifdef USE_RC
+	struct ips_epaddr *ipsaddr;
+#endif
 
 	PSMI_LOCK_ASSERT(ep->mq->progress_lock);
 	// TBD - when coallescing completions we'll tend to fall through to poll_cq
@@ -1737,6 +1693,12 @@ psm3_verbs_completion_update(psm2_ep_t ep, int drain)
 				ep->verbs_ep.send_rdma_outstanding--;
 				ips_protoexp_rdma_write_completion(
 							 wc[i].wr_id & ~VERBS_SQ_WR_ID_MASK);
+				break;
+			case IBV_WC_RDMA_READ:
+				ipsaddr = (struct ips_epaddr *)wc[i].wr_id;
+
+				ipsaddr->verbs.remote_seq_outstanding = 0;
+				_HFI_VDBG("Got remote_recv_psn=%d\n", ipsaddr->verbs.remote_recv_psn);
 				break;
 #endif
 			default:
@@ -2197,15 +2159,15 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 	// we always fill in everything we might need in loc_info
 	// in some modes, some of the fields are not used by RV
 	loc_info.mr_cache_size = ep->rv_mr_cache_size;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	/* gpu_cache_size ignored unless RV_RDMA_MODE_GPU */
 	loc_info.gpu_cache_size = ep->rv_gpu_cache_size;
 #endif
 	loc_info.rdma_mode = IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode)?
 					RV_RDMA_MODE_KERNEL: RV_RDMA_MODE_USER;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	if (PSMI_IS_GPU_ENABLED) {
-		// when Cuda is enabled we will have larger window_sz and
+#ifdef PSM_HAVE_GPU
+	if (PSM3_GPU_IS_ENABLED) {
+		// when GPU is enabled we will have larger window_sz and
 		// need to upsize the caches we will use for priority MRs
 		if (ep->rdmamode & IPS_PROTOEXP_FLAG_ENABLED) {
 			// priority window_sz reg_mr for CPU
@@ -2214,9 +2176,9 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
  		if (psmi_parse_gpudirect()) {
 			// When GPU Direct is enabled we need a GPU Cache
 			loc_info.rdma_mode |= RV_RDMA_MODE_GPU;
-#ifdef PSM_ONEAPI
-			psm3_oneapi_ze_can_use_zemem();
-#endif
+
+			PSM3_GPU_USING_RV_FOR_MRS();
+
 			if ((ep->rdmamode & IPS_PROTOEXP_FLAG_ENABLED)
 				&& (psmi_parse_gpudirect_rdma_send_limit(1)
 				|| psmi_parse_gpudirect_rdma_recv_limit(1))) {
@@ -2267,7 +2229,7 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 	}
 	// parallel hal_gen1/gen1_hal_inline_i.h handling HFI1_CAP_GPUDIRECT_OT
 #ifndef RV_CAP_GPU_DIRECT
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 #error "Inconsistent build.  RV_CAP_GPU_DIRECT must be defined for GPU builds. Must use GPU enabled rv headers"
 #else
 // lifted from rv_user_ioctls.h
@@ -2281,15 +2243,12 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 		psmi_hal_add_cap(PSM_HAL_CAP_GPUDIRECT_SDMA);
 		psmi_hal_add_cap(PSM_HAL_CAP_GPUDIRECT_RDMA);
 	}
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	if (loc_info.capability & RV_CAP_NVIDIA_GPU)
-		psmi_hal_add_cap(PSM_HAL_CAP_NVIDIA_GPU);
-	if (loc_info.capability & RV_CAP_INTEL_GPU)
-		psmi_hal_add_cap(PSM_HAL_CAP_INTEL_GPU);
+#ifdef PSM_HAVE_GPU
+	PSM3_GPU_RV_SET_HAL_CAP(loc_info.capability);
 #endif
 	ep->verbs_ep.rv_index = loc_info.rv_index;
 	ep->rv_mr_cache_size = loc_info.mr_cache_size;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	ep->rv_gpu_cache_size = loc_info.gpu_cache_size;
 #endif
 	ep->verbs_ep.rv_q_depth = loc_info.q_depth;
@@ -2442,6 +2401,25 @@ static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, int addr_in
 				psm3_gid128_fmt(ep->gid, 2));
 	}
 
+#if defined(USE_RDMA_READ)
+#if defined(USE_RC)
+	{
+		struct ibv_device_attr dev_attr;
+		// get RDMA capabilities of device
+		if (ibv_query_device(ep->verbs_ep.context, &dev_attr)) {
+			_HFI_ERROR("Unable to query device %s: %s\n", ep->dev_name,
+						strerror(errno));
+			err = PSM2_INTERNAL_ERR;
+			goto fail;
+		}
+		ep->verbs_ep.max_qp_rd_atom = dev_attr.max_qp_rd_atom;
+		ep->verbs_ep.max_qp_init_rd_atom = dev_attr.max_qp_init_rd_atom;
+		_HFI_PRDBG("got device attr: rd_atom %u init_rd_atom %u\n",
+						dev_attr.max_qp_rd_atom, dev_attr.max_qp_init_rd_atom);
+		// TBD could have an env variable to reduce requested values
+	}
+#endif // USE_RC
+#endif
 #ifdef RNDV_MOD
 	if (IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode)
 		|| ep->mr_cache_mode == MR_CACHE_MODE_KERNEL ) {
@@ -2774,6 +2752,9 @@ psm2_error_t modify_rc_qp_to_init(psm2_ep_t ep, struct ibv_qp *qp)
 	//attr.qkey = ep->verbs_ep.qkey;
 	//flags |= IBV_QP_QKEY;	// only allowed for UD
 	attr.qp_access_flags = 0;
+#ifdef USE_RDMA_READ
+	attr.qp_access_flags |= IBV_ACCESS_REMOTE_READ;
+#endif
 	attr.qp_access_flags |= IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
 	//attr.qp_access_flags |= IBV_ACCESS_REMOTE_ATOMIC;
 	flags |= IBV_QP_ACCESS_FLAGS;
@@ -2804,11 +2785,15 @@ psm2_error_t modify_rc_qp_to_rtr(psm2_ep_t ep, struct ibv_qp *qp,
 	// TBD - we already factored in req vs pr to update pr no need
 	// for modify_cq_qp_to_rtr to repeat it
 	// pr_mtu is max PSM payload in bytes and req_attr_mtu is IB enum
-	attr.path_mtu = MIN(ibv_mtu_int_to_enum(path_rec->pr_mtu), req_attr->mtu);
+	attr.path_mtu = MIN(ibv_mtu_int_to_enum(ep->mtu), req_attr->mtu);
 	attr.dest_qp_num = req_attr->qpn;
 	attr.rq_psn = initpsn;
 	flags |= (IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN);
 
+#ifdef USE_RDMA_READ
+	attr.max_dest_rd_atomic = min(ep->verbs_ep.max_qp_rd_atom,
+									req_attr->initiator_depth);
+#endif
 	_HFI_PRDBG("set max_dest_rd_atomic to %u\n", attr.max_dest_rd_atomic);
 	attr.min_rnr_timer = 12;	// TBD well known
 	flags |= (IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC);
@@ -2818,7 +2803,7 @@ psm2_error_t modify_rc_qp_to_rtr(psm2_ep_t ep, struct ibv_qp *qp,
 					ep->dev_name, strerror(errno));
 		return PSM2_INTERNAL_ERR;
 	}
-	_HFI_PRDBG("moved %d to RTR\n", qp->qp_num);
+	_HFI_PRDBG("moved %d to RTR with MTU=%d\n", qp->qp_num, attr.path_mtu);
 
 	return PSM2_OK;
 }
@@ -2836,6 +2821,10 @@ psm2_error_t modify_rc_qp_to_rts(psm2_ep_t ep, struct ibv_qp *qp,
 	attr.sq_psn = initpsn;	// value we told other side
 	flags |= IBV_QP_SQ_PSN;
 
+#ifdef USE_RDMA_READ
+	attr.max_rd_atomic = min(ep->verbs_ep.max_qp_init_rd_atom,
+									req_attr->responder_resources);
+#endif
 	_HFI_PRDBG("set max_rd_atomic to %u\n", attr.max_rd_atomic);
 	flags |=  IBV_QP_MAX_QP_RD_ATOMIC;
 
@@ -2886,9 +2875,9 @@ unsigned psm3_verbs_parse_rdmamode(int reload)
 	if (psm3_rv_available()) {
 		default_value = IPS_PROTOEXP_FLAG_RDMA_KERNEL;
 	}
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	// GPUDIRECT causes default_value of RDMA=1
-	if (PSMI_IS_GPU_ENABLED && psmi_parse_gpudirect())
+	if (PSM3_GPU_IS_ENABLED && psmi_parse_gpudirect())
 		default_value = IPS_PROTOEXP_FLAG_RDMA_KERNEL;
 #endif
 #endif
@@ -2950,8 +2939,8 @@ unsigned psm3_verbs_parse_mr_cache_mode(unsigned rdmamode, int reload)
 	// PSM_HAL_CAP_GPUDIRECT_* flags not known until after HAL device open,
 	// so we test SDMA and RDMA here as prereqs for GPUDIRECT_SDMA and RDMA.
 	if (! (rdmamode & IPS_PROTOEXP_FLAG_ENABLED)
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-		&& (PSMI_IS_GPU_DISABLED || ! psmi_parse_gpudirect()
+#ifdef PSM_HAVE_GPU
+		&& (! PSM3_GPU_IS_ENABLED || ! psmi_parse_gpudirect()
 			//verbs always has these HAL capabilities set
 			//|| (!psmi_hal_has_cap(PSM_HAL_CAP_SDMA)
 			//	&& !psmi_hal_has_cap(PSM_HAL_CAP_RDMA)))
@@ -2962,9 +2951,9 @@ unsigned psm3_verbs_parse_mr_cache_mode(unsigned rdmamode, int reload)
 	} else if (IPS_PROTOEXP_FLAG_KERNEL_QP(rdmamode)) {
 		// RDMA enabled in kernel mode.  Must use rv MR cache
 		envval.e_uint = MR_CACHE_MODE_RV;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 #ifdef PSM_HAVE_RNDV_MOD
-	} else if (PSMI_IS_GPU_ENABLED && psmi_parse_gpudirect()) {
+	} else if (PSM3_GPU_IS_ENABLED && psmi_parse_gpudirect()) {
 		// GPU Direct (RDMA, send DMA and/or gdrcopy) must
 		// use kernel MR cache in RV
 		envval.e_uint = MR_CACHE_MODE_KERNEL;

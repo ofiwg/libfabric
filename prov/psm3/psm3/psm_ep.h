@@ -96,6 +96,11 @@
 	node->mctxt_next = node->mctxt_prev = node; \
 	node->mctxt_master = NULL
 
+#define PSM_EP_FOR_EACH_MCTXT(root, iter) \
+	for ( struct psm2_ep *iter = (root)->mctxt_master \
+	    ; iter \
+	    ; iter = iter->mctxt_next == iter->mctxt_master ? NULL : iter->mctxt_next)
+
 struct psm2_ep {
 	psm2_epid_t epid;	    /**> This endpoint's Endpoint ID */
 	psm2_epaddr_t epaddr;	    /**> This ep's ep address */
@@ -108,6 +113,9 @@ struct psm2_ep {
 		struct psm3_sockets_ep sockets_ep;
 #endif
 	};
+#ifdef PSM_HAVE_GPU
+	union psm2_ep_gpu_specific gpu_specific;
+#endif
 
 	/* unit_id and portnum are set to 0 when ptl_ips not enabled */
 	int unit_id;
@@ -136,7 +144,7 @@ struct psm2_ep {
 #ifdef PSM_HAVE_RNDV_MOD
 	psm3_rv_t rv;   // rendezvous module open handle
 	uint32_t rv_mr_cache_size; /** PSM3_RV_MR_CACHE_SIZE */
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	uint32_t rv_gpu_cache_size; /** PSM3_RV_GPU_CACHE_SIZE */
 #endif
 #endif /* PSM_HAVE_RNDV_MOD */
@@ -144,14 +152,6 @@ struct psm2_ep {
 	uint32_t hfi_num_descriptors;/** Number of allocated scb descriptors*/
 #ifdef PSM_HAVE_REG_MR
 	uint32_t hfi_num_send_rdma;/** Number of concurrent RDMA*/
-#endif
-#ifdef PSM_ONEAPI
-#ifndef PSM_HAVE_PIDFD
-	// TBD - move to ptl_am
-	int ze_ipc_socket;	// AF_UNIX listener sock to recv GPU Dev FDs
-	char *listen_sockname;	// /dev/shm filename for ze_ipc_socket
-	int need_dev_fds_poll;	// are there outstanding dev_fds to be polled
-#endif
 #endif
 	uint8_t wiremode; /* EPID protocol specific basic modes
 			   * For RoCE/IB reflects
@@ -275,7 +275,7 @@ struct psm2_epaddr {
 int psm3_ep_device_is_enabled(const psm2_ep_t ep, int devid);
 
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 extern int64_t psm3_gpu_evict_some(psm2_ep_t ep, uint64_t length, int access);
 #endif
 #endif
