@@ -17,14 +17,11 @@ noinst_LTLIBRARIES += \
 	psm3/libptl_self.la \
 	psm3/libhal_verbs.la \
 	psm3/libhal_sockets.la \
+	psm3/libgpu.la \
 	psm3/libpsm3i.la
 
 psm3_libptl_am_la_SOURCES = \
 	psm3/ptl_am/am_config.h \
-	psm3/ptl_am/am_cuda_memhandle_cache.c \
-	psm3/ptl_am/am_cuda_memhandle_cache.h \
-	psm3/ptl_am/am_oneapi_memhandle_cache.c \
-	psm3/ptl_am/am_oneapi_memhandle_cache.h \
 	psm3/ptl_am/am_reqrep.c \
 	psm3/ptl_am/am_reqrep_shmem.c \
 	psm3/ptl_am/cmarw.h \
@@ -156,6 +153,17 @@ psm3_libhal_sockets_la_CPPFLAGS = \
 psm3_libhal_sockets_la_CFLAGS = \
 	$(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
 
+psm3_libgpu_la_SOURCES = \
+	psm3/gpu/psm_gpu_hal.c \
+	psm3/gpu/psm_gpu_hal.h \
+	psm3/gpu/psm_gpu_cuda.c \
+	psm3/gpu/psm_gpu_oneapi_ze.c
+psm3_libgpu_la_CPPFLAGS = \
+	-I$(top_srcdir)/psm3/gpu/ \
+	$(AM_CPPFLAGS) $(psm3_CPPFLAGS) $(_psm3_cppflags)
+psm3_libgpu_la_CFLAGS = \
+	$(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
+
 psm3_libpsm3i_la_SOURCES = \
 	psm3/psm.c \
 	psm3/psm_am.c \
@@ -183,7 +191,6 @@ psm3_libpsm3i_la_SOURCES = \
 	psm3/psm_netutils.h \
 	psm3/psm_nic_select.c \
 	psm3/psm_nic_select.h \
-	psm3/psm_oneapi_ze.c \
 	psm3/psm_perf.c \
 	psm3/psm_perf.h \
 	psm3/psm_rndv_mod.c \
@@ -228,6 +235,7 @@ psm3_libpsm3i_la_LIBADD = \
 	psm3/libptl_ips.la \
 	psm3/libptl_self.la \
 	psm3/libhal_verbs.la \
+	psm3/libgpu.la \
 	psm3/libhal_sockets.la
 
 psm3_libpsm3i_la_DEPENDENCIES = \
@@ -236,6 +244,7 @@ psm3_libpsm3i_la_DEPENDENCIES = \
 	psm3/libptl_ips.la \
 	psm3/libptl_self.la \
 	psm3/libhal_verbs.la \
+	psm3/libgpu.la \
 	psm3/libhal_sockets.la
 
 _psm3_extra_dist = \
@@ -252,5 +261,6 @@ chksum_srcs += \
 	$(psm3_libutils_la_SOURCES) \
 	$(psm3_libhal_verbs_la_SOURCES) \
 	$(psm3_libhal_sockets_la_SOURCES) \
+	$(psm3_libgpu_la_SOURCES) \
 	$(psm3_libpsm3i_la_SOURCES) \
 	$(_psm3_extra_dist)

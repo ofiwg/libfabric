@@ -853,6 +853,7 @@ struct psmx3_env {
 	char	*tag_layout;
 #endif
 	int	yield_mode;
+	int	wait_enable;
 };
 
 #define PSMX3_MAX_UNITS	PSMI_MAX_RAILS /* from psm_config.h */

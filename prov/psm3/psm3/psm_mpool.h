@@ -80,7 +80,7 @@ MOCKABLE(psm3_mpool_create)(size_t obj_size, uint32_t num_obj_per_chunk,
 			  non_empty_callback_fn_t cb, void *context);
 MOCK_DCL_EPILOGUE(psm3_mpool_create);
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 mpool_t psm3_mpool_create_for_gpu(size_t obj_size, uint32_t num_obj_per_chunk,
 				  uint32_t num_obj_max_total, int flags,
 				  psmi_memtype_t statstype,

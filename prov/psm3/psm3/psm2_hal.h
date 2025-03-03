@@ -253,16 +253,6 @@ typedef struct _psmi_hal_params
 	char **unit_driver;
 } psmi_hal_params_t;
 
-
-#define PSM_HAL_ALG_ACROSS     0
-#define PSM_HAL_ALG_WITHIN     1
-#define PSM_HAL_ALG_ACROSS_ALL 2
-#define PSM_HAL_ALG_CPU_CENTRIC 3
-#ifdef PSM_HAVE_GPU_CENTRIC_AFFINITY
-#define PSM_HAL_ALG_GPU_CENTRIC 4
-#endif
-
-
 typedef enum {
 	PSMI_HAL_POLL_TYPE_NONE = 0,
 	PSMI_HAL_POLL_TYPE_URGENT = 1,
@@ -314,7 +304,7 @@ struct _psmi_hal_instance
 	/* Initialize PSM3_PRINT_STATS stats for given ep */
 	void (*hfp_context_initstats)(psm2_ep_t ep);
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	void (*hfp_gdr_open)(void);
 #endif
 
@@ -414,12 +404,12 @@ struct _psmi_hal_instance
 				int next_timeout,
 				uint64_t *pollok, uint64_t *pollcyc, uint64_t *pollintr);
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	/* Direct GPU Copy */
 	void (*hfp_gdr_close)(void);
 	void* (*hfp_gdr_convert_gpu_to_host_addr)(unsigned long buf,
                                 size_t size, int flags, psm2_ep_t ep);
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 	/* Given an open context and index, return an error, or the
 	 * corresponding pkey for the index as programmed by the SM */
 	/* Returns an int, so -1 indicates an error. */
@@ -432,7 +422,7 @@ struct _psmi_hal_instance
 				       uint32_t *payload, uint32_t length,
 				       uint32_t isCtrlMsg, uint32_t cksum_valid,
 				       uint32_t cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 				, uint32_t is_gpu_payload
 #endif
 		);
@@ -441,7 +431,7 @@ struct _psmi_hal_instance
 				       uint32_t *payload, uint32_t length,
 				       uint32_t isCtrlMsg, uint32_t cksum_valid,
 				       uint32_t cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 				, uint32_t is_gpu_payload
 #endif
 		);
@@ -556,7 +546,7 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 #define psmi_hal_mq_init_defaults(...)		                PSMI_HAL_DISPATCH_FUNC(mq_init_defaults,__VA_ARGS__)
 #define psmi_hal_ep_open_opts_get_defaults(...)	                PSMI_HAL_DISPATCH_FUNC(ep_open_opts_get_defaults,__VA_ARGS__)
 #define psmi_hal_context_initstats(...)				PSMI_HAL_DISPATCH_FUNC(context_initstats,__VA_ARGS__)
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 #define psmi_hal_gdr_open(...)                                  PSMI_HAL_DISPATCH_FUNC(gdr_open,__VA_ARGS__)
 #endif
 #define psmi_hal_finalize_(...)                                 PSMI_HAL_DISPATCH_FUNC(finalize_,__VA_ARGS__)
@@ -603,10 +593,10 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 #define psmi_hal_ips_ibta_init(...)                             PSMI_HAL_DISPATCH(ips_ibta_init,__VA_ARGS__)
 #define psmi_hal_ips_path_rec_init(...)                         PSMI_HAL_DISPATCH(ips_path_rec_init,__VA_ARGS__)
 #define psmi_hal_ips_ptl_pollintr(...)                          PSMI_HAL_DISPATCH(ips_ptl_pollintr,__VA_ARGS__)
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 #define psmi_hal_gdr_close(...)                                 PSMI_HAL_DISPATCH(gdr_close,__VA_ARGS__)
 #define psmi_hal_gdr_convert_gpu_to_host_addr(...)              PSMI_HAL_DISPATCH(gdr_convert_gpu_to_host_addr,__VA_ARGS__)
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 
 #define psmi_hal_get_port_index2pkey(...)			PSMI_HAL_DISPATCH(get_port_index2pkey,__VA_ARGS__)
 #define psmi_hal_poll_type(...)					PSMI_HAL_DISPATCH(poll_type,__VA_ARGS__)

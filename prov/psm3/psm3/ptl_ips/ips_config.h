@@ -69,6 +69,10 @@
 #define IPS_PROTO_FLOW_CREDITS_MAX_DEFAULT 128
 #define IPS_PROTO_FLOW_CREDITS_STEP_DEFAULT 16
 
+#define IPS_PROTO_FLOW_CREDITS_RC_MIN_DEFAULT 768
+#define IPS_PROTO_FLOW_CREDITS_RC_MAX_DEFAULT 960
+#define IPS_PROTO_FLOW_CREDITS_RC_MAX 2048
+
 /* Send retransmission */
 #define IPS_PROTO_SPIO_RETRY_US_DEFAULT	2	/* in uS */
 
@@ -116,7 +120,7 @@
 #define IPS_FAULTINJ_UFFD_REGISTER 1000	/* 1 every X uffd REGISTER ENOMEM */
 #endif
 #endif /* PSM_HAVE_REG_MR */
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 #define IPS_FAULTINJ_GDRMMAP	100	/* 1 every X GPU pin and mmap ENOMEM */
 #define IPS_FAULTINJ_GPU_REG_MR	100	/* 1 every X GPU reg_mr */
 #endif

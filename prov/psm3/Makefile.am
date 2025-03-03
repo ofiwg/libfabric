@@ -1,6 +1,6 @@
 #
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
-# Copyright (c) 2017-2018 Intel Corporation, Inc. All right reserved.
+# Copyright (c) 2017-2024 Intel Corporation, Inc. All right reserved.
 # Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
 # (C) Copyright 2020 Hewlett Packard Enterprise Development LP
 #
@@ -96,6 +96,7 @@ common_srcs = \
 	shared/log.c \
 	shared/var.c \
 	shared/abi_1_0.c
+
 
 if MACOS
 common_srcs += shared/osx/osd.c
@@ -230,7 +231,7 @@ src_libpsm3_fi_la_LDFLAGS += -lpsm2
 endif !HAVE_PSM3_SRC
 
 if !EMBEDDED
-src_libpsm3_fi_la_LDFLAGS += -version-info 24:0:23
+src_libpsm3_fi_la_LDFLAGS += -version-info 25:0:24
 endif
 
 prov_install_man_pages = man/man7/fi_psm3.7

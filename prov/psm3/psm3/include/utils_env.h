@@ -146,6 +146,11 @@ MOCKABLE(psm3_getenv)(const char *name, const char *descr, int level,
 		union psmi_envvar_val *newval);
 MOCK_DCL_EPILOGUE(psm3_getenv);
 
+// NOTE: This function writes the entire output union pointed to by newval. as a
+// result, the backing storage for the pointer must be at least the size of the
+// full union type, not simply the size of the type indicated by the type
+// parameter.
+//
 int MOCKABLE(psm3_getenv_range)(const char *name, const char *descr,
 		const char *help, unsigned level_flags,
 		int type, union psmi_envvar_val defval, union psmi_envvar_val min,

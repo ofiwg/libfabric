@@ -246,7 +246,7 @@ struct psm2_mr_cache {
 	uint32_t limit_nonpri_inuse;
 	uint64_t limit_nonpri_inuse_bytes;
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	uint64_t limit_nonpri_gpu_inuse_bytes;
 #endif
 	psm3_rv_t rv;
@@ -309,7 +309,7 @@ struct psm2_mr_cache {
 	uint64_t inuse_send_bytes;
 	uint64_t max_inuse_send_bytes;
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	uint64_t gpu_inuse_bytes;
 	uint64_t max_gpu_inuse_bytes;
 	uint64_t gpu_inuse_recv_bytes;
@@ -323,7 +323,7 @@ struct psm2_mr_cache {
 #ifdef PSM_HAVE_RNDV_MOD
 	struct psm3_rv_cache_stats rv_stats;	// statistics from rv module
 									// will remain 0 if rv not open
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	struct psm3_rv_gpu_cache_stats rv_gpu_stats;	// GPU statistics from rv module
 									// will remain 0 if rv not open
 #endif
@@ -393,13 +393,11 @@ static int mr_cache_key_cmp(const struct psm3_verbs_mr *a,
 		return -1;
 	else if (a->access > b->access)
 		return 1;
-#ifdef PSM_ONEAPI
-	if (a->alloc_id < b->alloc_id)
-		return -1;
-	else if (a->alloc_id > b->alloc_id)
-		return 1;
-#endif
+#ifdef PSM_HAVE_GPU
+	return PSM3_GPU_CMP_MR(&a->gpu_specific, &b->gpu_specific);
+#else
 	return 0;
+#endif
 }
 
 // rbtree.c uses these defines to establish some of it's code and
@@ -766,7 +764,7 @@ static void update_stats_inc_inuse(psm2_mr_cache_t cache, uint64_t length,
 {
 	INC_STAT(cache, inuse, max_inuse);
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	if (access & IBV_ACCESS_IS_GPU_ADDR)
 		ADD_STAT(cache, length, gpu_inuse_bytes, max_gpu_inuse_bytes);
 	else
@@ -778,7 +776,7 @@ static void update_stats_inc_inuse(psm2_mr_cache_t cache, uint64_t length,
 	if (access & IBV_ACCESS_REMOTE_WRITE) {
 		INC_STAT(cache, inuse_recv, max_inuse_recv);
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		if (access & IBV_ACCESS_IS_GPU_ADDR)
 			ADD_STAT(cache, length, gpu_inuse_recv_bytes, max_gpu_inuse_recv_bytes);
 		else
@@ -788,7 +786,7 @@ static void update_stats_inc_inuse(psm2_mr_cache_t cache, uint64_t length,
 	} else {
 		INC_STAT(cache, inuse_send, max_inuse_send);
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		if (access & IBV_ACCESS_IS_GPU_ADDR)
 			ADD_STAT(cache, length, gpu_inuse_send_bytes, max_gpu_inuse_send_bytes);
 		else
@@ -805,7 +803,7 @@ static void update_stats_dec_inuse(psm2_mr_cache_t cache, uint64_t length,
 {
 	cache->inuse--;
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	if (access & IBV_ACCESS_IS_GPU_ADDR)
 		cache->gpu_inuse_bytes -= length;
 	else
@@ -817,7 +815,7 @@ static void update_stats_dec_inuse(psm2_mr_cache_t cache, uint64_t length,
 	if (access & IBV_ACCESS_REMOTE_WRITE) {
 		cache->inuse_recv--;
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		if (access & IBV_ACCESS_IS_GPU_ADDR)
 			cache->gpu_inuse_recv_bytes -= length;
 		else
@@ -827,7 +825,7 @@ static void update_stats_dec_inuse(psm2_mr_cache_t cache, uint64_t length,
 	} else {
 		cache->inuse_send--;
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		if (access & IBV_ACCESS_IS_GPU_ADDR)
 			cache->gpu_inuse_send_bytes -= length;
 		else
@@ -869,7 +867,7 @@ static void update_stats_inc_full(psm2_mr_cache_t cache, bool priority,
 psm2_error_t set_cache_limit_nonpri_rv_kern(psm2_mr_cache_t cache,
 							uint32_t limit_entries,
 							uint32_t pri_entries, uint64_t pri_size
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 							, uint64_t gpu_pri_size
 #endif
 							)
@@ -885,20 +883,20 @@ psm2_error_t set_cache_limit_nonpri_rv_kern(psm2_mr_cache_t cache,
 		return PSM2_PARAM_ERR;
 	}
 	cache->limit_nonpri_inuse_bytes = (uint64_t)ep->rv_mr_cache_size*MEGABYTE - pri_size;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	if (PSMI_IS_GPU_ENABLED) {
+#ifdef PSM_HAVE_GPU
+	if (PSM3_GPU_IS_ENABLED) {
 		// For GPU, due to GdrCopy, we can't undersize cache.
 		// Otherwise RDMA MRs could consume all the
 		// cache space and leave a gdrcopy pin/mmap stuck
 		// retrying indefinitely.  If we want to allow undersize
 		// GPU cache, we need to have gdrcopy pin/mmap failures
 		// also invoke progress functions to release MRs
-		if (psm3_min_gpu_bar_size()) {
-			uint64_t max_recommend = psm3_min_gpu_bar_size() - 32*MEGABYTE;
+		if (PSM3_GPU_MIN_BAR_SIZE()) {
+			uint64_t max_recommend = PSM3_GPU_MIN_BAR_SIZE() - 32*MEGABYTE;
 			if ((uint64_t)ep->rv_gpu_cache_size*MEGABYTE >= max_recommend) {
 				_HFI_INFO("Warning: PSM3_RV_GPU_CACHE_SIZE=%u too large for smallest GPU's BAR size of %"PRIu64" (< %"PRIu64" total of endpoint-rail-qp recommended)\n",
 					ep->rv_gpu_cache_size,
-					(psm3_min_gpu_bar_size() + MEGABYTE-1)/MEGABYTE,
+					(PSM3_GPU_MIN_BAR_SIZE() + MEGABYTE-1)/MEGABYTE,
 					max_recommend/MEGABYTE);
 			}
 		}
@@ -911,7 +909,7 @@ psm2_error_t set_cache_limit_nonpri_rv_kern(psm2_mr_cache_t cache,
 	}
 	_HFI_MMDBG("CPU cache %u GPU cache %u\n", ep->rv_mr_cache_size,
 					ep->rv_gpu_cache_size);
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 	return PSM2_OK;
 }
 #endif // PSM_HAVE_RNDV_MOD
@@ -924,14 +922,14 @@ psm2_error_t set_cache_limit_nonpri_rv_kern(psm2_mr_cache_t cache,
 psm2_error_t set_cache_limit_nonpri_user(psm2_mr_cache_t cache,
 							uint32_t limit_entries,
 							uint32_t pri_entries, uint64_t pri_size
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 							, uint64_t gpu_pri_size
 #endif
 							)
 {
 	cache->limit_nonpri_inuse_bytes = cache->limit_bytes - pri_size;
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	// N/A to GPU
 	cache->limit_nonpri_gpu_inuse_bytes = 0;
 #endif
@@ -944,14 +942,14 @@ psm2_error_t set_cache_limit_nonpri_user(psm2_mr_cache_t cache,
 psm2_error_t set_cache_limit_nonpri_none(psm2_mr_cache_t cache,
 							uint32_t limit_entries,
 							uint32_t pri_entries, uint64_t pri_size
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 							, uint64_t gpu_pri_size
 #endif
 							)
 {
 	cache->limit_nonpri_inuse_bytes = UINT64_MAX;
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	// N/A to GPU
 	cache->limit_nonpri_gpu_inuse_bytes = 0;
 #endif
@@ -964,7 +962,7 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 							uint32_t limit_entries, uint8_t cache_mode,
 							uint32_t limit_size_mb,
 							uint32_t pri_entries, uint64_t pri_size
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 							, uint64_t gpu_pri_size
 #endif
 							)
@@ -1010,7 +1008,7 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 		cache->reg_mr_fn = psm3_verbs_reg_mr_not_user;
 		cache->release_mr_fn = psm3_verbs_release_mr_not_user;
 		err = set_cache_limit_nonpri_none(cache, limit_entries, pri_entries, pri_size
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 										, gpu_pri_size
 #endif
 										);
@@ -1021,7 +1019,7 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 		cache->reg_mr_fn = psm3_verbs_reg_mr_not_user;
 		cache->release_mr_fn = psm3_verbs_release_mr_not_user;
 		err = set_cache_limit_nonpri_rv_kern(cache, limit_entries, pri_entries, pri_size
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 										, gpu_pri_size
 #endif
 										);
@@ -1032,7 +1030,7 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 		cache->reg_mr_fn = psm3_verbs_reg_mr_user;
 		cache->release_mr_fn = psm3_verbs_release_mr_user;
 		err = set_cache_limit_nonpri_user(cache, limit_entries, pri_entries, pri_size
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 										, gpu_pri_size
 #endif
 										);
@@ -1042,7 +1040,7 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 		cache->reg_mr_fn = psm3_verbs_reg_mr_not_user;
 		cache->release_mr_fn = psm3_verbs_release_mr_user_noinval;
 		err = set_cache_limit_nonpri_user(cache, limit_entries, pri_entries, pri_size
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 										, gpu_pri_size
 #endif
 										);
@@ -1060,7 +1058,7 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 	cache->cmd_fd = ep->cmd_fd;
 #endif // PSM_HAVE_RNDV_MOD
 	cache->pd = ep->pd;
-#if defined(PSM_HAVE_RNDV_MOD) && (defined(PSM_CUDA) || defined(PSM_ONEAPI))
+#if defined(PSM_HAVE_RNDV_MOD) && defined(PSM_HAVE_GPU)
 	_HFI_MMDBG("cache alloc: limit_entries=%u limit_bytes=%"PRIu64" limit_nonpri_inuse=%u limit_nonpri_inuse_bytes=%"PRIu64" limit_nonpri_gpu_inuse_bytes=%"PRIu64", pri_entries=%u pri_size=%"PRIu64" gpu_pri_size=%"PRIu64"\n",
 			cache->limit_entries, cache->limit_bytes, cache->limit_nonpri_inuse,
 			cache->limit_nonpri_inuse_bytes, cache->limit_nonpri_gpu_inuse_bytes,
@@ -1128,7 +1126,7 @@ int psm3_verbs_mr_cache_allows_user_mr(psm2_mr_cache_t cache)
 static inline int have_nonpri_space(psm2_mr_cache_t cache, uint64_t length, int access)
 {
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	if (access & IBV_ACCESS_IS_GPU_ADDR)
 		return (cache->inuse < cache->limit_nonpri_inuse
 			&& cache->gpu_inuse_bytes + length < cache->limit_nonpri_gpu_inuse_bytes);
@@ -1356,13 +1354,13 @@ static psm3_verbs_mr_t prep_and_reg_mr(psm2_mr_cache_t cache,
 		// user space QPs for everything
 		mrc->mr.rv_mr = psm3_rv_reg_mem(cache->rv, cache->cmd_fd, cache->pd,
 										key->addr, key->length, key->access
-#ifdef PSM_ONEAPI
-										, key->alloc_id
+#ifdef PSM_HAVE_GPU
+										, &key->gpu_specific
 #endif
 										);
 		if (! mrc->mr.rv_mr) {
 			save_errno = errno;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 			if (save_errno == ENOMEM && priority)
 				(void)psm3_gpu_evict_some(cache->ep, key->length, key->access);
 #endif
@@ -1377,13 +1375,13 @@ static psm3_verbs_mr_t prep_and_reg_mr(psm2_mr_cache_t cache,
 										(key->access&IBV_ACCESS_RDMA)?NULL
 													:cache->pd,
 										key->addr, key->length, key->access
-#ifdef PSM_ONEAPI
-										, key->alloc_id
+#ifdef PSM_HAVE_GPU
+										, &key->gpu_specific
 #endif
 										);
 		if (! mrc->mr.rv_mr) {
 			save_errno = errno;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 			if (save_errno == ENOMEM && priority)
 				(void)psm3_gpu_evict_some(cache->ep, key->length, key->access);
 #endif
@@ -1411,8 +1409,8 @@ static psm3_verbs_mr_t prep_and_reg_mr(psm2_mr_cache_t cache,
 	mrc->addr = key->addr;
 	mrc->length = key->length;
 	mrc->access = key->access;
-#ifdef PSM_ONEAPI
-	mrc->alloc_id = key->alloc_id;
+#ifdef PSM_HAVE_GPU
+	mrc->gpu_specific = key->gpu_specific;
 #endif
 	ADD_STAT(cache, mrc->length, registered_bytes, max_registered_bytes);
 	/* Reset the fail counter */
@@ -1636,80 +1634,21 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 		return NULL;
 	}
 #else
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	psmi_assert(!!(access & IBV_ACCESS_IS_GPU_ADDR) == (PSMI_IS_GPU_ENABLED && PSMI_IS_GPU_MEM(addr)));
-#ifdef PSM_ONEAPI
-	if (access & IBV_ACCESS_IS_GPU_ADDR) {
-#define MAX_USER_MR_SIZE (32 * 1024)
-		void *base;
-		size_t len;
-		PSMI_ONEAPI_ZE_CALL(zeMemGetAddressRange, ze_context,
-				    (const void *)addr, &base, &len);
-		/*
-		 * Need to register MR with base address and total length.
-		 * However, for Mellanox cards, the max buffer size for a
-		 * user MR registered through the rv module is 32k bytes.
-		 * Otherwise, it will fail with IB_WC_MW_BIND_ERR. For fast
-		 * registration MR through RV (kernel MR and GPU MR), there
-		 * is also a upper limit (max_fast_reg_page_list_len) imposed
-		 * by the underlying RDMA device (eg 256MB for mlx5).
-		 */
-		if (strncasecmp(cache->ep->dev_name, "mlx5_0", 3) == 0 &&
-		    !(access & IBV_ACCESS_KERNEL)) {
-			if (len > MAX_USER_MR_SIZE) {
-				/*
-				 * Change only if the buffer stays in the first
-				 * 32k
-				 */
-				if (((char *)addr + length) <=
-					((char *)base + MAX_USER_MR_SIZE)) {
-					addr = base;
-					length = MAX_USER_MR_SIZE;
-				}
-			} else {
-				addr = base;
-				length = len;
-			}
-		} else {
-			uint64_t start, end;
-			uint64_t mr_len;
-			uint64_t offset;
-			uint64_t limit = cache->ep->verbs_ep.max_fmr_size;
-
-			/* Buffer end + 1 */
-			end = (uint64_t)base + len;
-			/* Offset of the requested buffer chunk */
-			offset = (uint64_t)addr - (uint64_t)base;
-			/* Start address of next MR */
-			start = (uint64_t)base + (offset / limit) * limit;
-			mr_len = end - start;
-			if (mr_len > limit)
-				mr_len = limit;
-			/*
-			 * Change only if the chunk does not cross the
-			 * (start + mr_len) boundary, Otherwise,
-			 * Just register the requested chunk.
-			 */
-			if (((uint64_t)addr + length) <= (start + mr_len))
-			{
-				addr = (void *)start;
-				length = mr_len;
-			}
-		}
-	}
-#endif /* PSM_ONEAPI */
-#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#ifdef PSM_HAVE_GPU
+	psmi_assert(!!(access & IBV_ACCESS_IS_GPU_ADDR) == (PSM3_IS_GPU_MEM(addr)));
+	if (access & IBV_ACCESS_IS_GPU_ADDR)
+		PSM3_GPU_ROUNDUP_RV_REG_MR(cache->ep, &addr, &length, access);
+#endif /* PSM_HAVE_GPU */
 #endif /* PSM_HAVE_RNDV_MOD */
 
 	struct psm3_verbs_mr key = { // our search key
 		.addr = addr,
 		.length = length,
 		.access = access,
-#ifdef PSM_ONEAPI
-		.alloc_id = (access & IBV_ACCESS_IS_GPU_ADDR)?
-			psm3_oneapi_ze_get_alloc_id(addr, NULL) : 0
-#endif
 	};
+#ifdef PSM_HAVE_GPU
+	PSM3_GPU_INIT_MR(addr, length, access, &key.gpu_specific);
+#endif
 	_HFI_MMDBG("pri %d "MRC_FMT"\n", priority, MR_OUT_MRC(&key));
 
 	return (*cache->reg_mr_fn)(cache, priority, &key);
@@ -1817,9 +1756,9 @@ void psm3_verbs_release_mr(struct psm3_verbs_mr *mrc)
 void psm3_verbs_free_mr_cache(psm2_mr_cache_t cache)
 {
 	// don't pollute stats with our shutdown activity
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 #ifdef PSM_HAVE_RNDV_MOD
-	if (cache->rv && PSMI_IS_GPU_ENABLED)
+	if (cache->rv && PSM3_GPU_IS_ENABLED)
 		psm3_stats_deregister_type(PSMI_STATSTYPE_MR_CACHE,
 					&cache->rv_gpu_stats);
 #endif
@@ -2310,11 +2249,11 @@ static uint64_t mr_cache_rv_miss_rate(void *context)
 		return 0;
 }
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 static uint64_t mr_cache_rv_gpu_limit_size(void *context)
 {
 	psm2_mr_cache_t cache = container_of(context, struct psm2_mr_cache, rv_gpu_stats);
-	if (cache->rv && PSMI_IS_GPU_ENABLED ) {
+	if (cache->rv && PSM3_GPU_IS_ENABLED ) {
 		// this is a little sly, we know the stats processing routines will
 		// call the accessors in the order from the entries list
 		// so we use the 1st of the rv statistics accessors to get
@@ -2447,7 +2386,7 @@ static uint64_t mr_cache_rv_gpu_miss_rate_mmap(void *context)
 	else
 		return 0;
 }
-#endif // PSM_CUDA || PSM_ONEAPI
+#endif /* PSM_HAVE_GPU */
 
 #endif // PSM_HAVE_RNDV_MOD
 
@@ -2478,7 +2417,7 @@ static void register_cache_stats(psm2_mr_cache_t cache)
 				MPSPAWN_STATS_REDUCTION_ALL,
 				NULL, &cache->limit_nonpri_inuse_bytes),
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		PSMI_STATS_DECL("limit_nonpri_gpu_inuse_bytes",
 				"Limit of total registered non-priority GPU MR bytes in cache",
 				MPSPAWN_STATS_REDUCTION_ALL,
@@ -2572,7 +2511,7 @@ static void register_cache_stats(psm2_mr_cache_t cache)
 				&cache->umr_cache.stats.max_dereg_queued_cnt),
 #endif /* UMR_CACHE */
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		PSMI_STATS_DECLU64("gpu_inuse_bytes",
 				"Current registered GPU MR bytes with an active IO",
 				&cache->gpu_inuse_bytes),
@@ -2778,7 +2717,7 @@ static void register_cache_stats(psm2_mr_cache_t cache)
 					PSMI_HOWMANY(entries),
 					psm3_epid_fmt_internal(cache->ep->epid, 0), cache,
 					cache->ep->dev_name);
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 #ifdef PSM_HAVE_RNDV_MOD
 	struct psmi_stats_entry gpu_entries[] = {
 		PSMI_STATS_DECL_HELP("Kernel RV GPU Cache Configuration:"),
@@ -3009,7 +2948,7 @@ static void register_cache_stats(psm2_mr_cache_t cache)
 				"Number of GPU RDMA write bytes successfully posted",
 				(uint64_t*)&cache->rv_gpu_stats.gpu_post_write_bytes),
 	};
-	if (cache->rv && PSMI_IS_GPU_ENABLED && cache->ep->rv_gpu_cache_size) {
+	if (cache->rv && PSM3_GPU_IS_ENABLED && cache->ep->rv_gpu_cache_size) {
 		psm3_stats_register_type("MR_GPU_Cache_Statistics",
 			"Kernel RV GPU MR and mmap cache for an endpoint in the process\n"
 			"When Direct GPU transfers are enabled, an additional "
@@ -3031,7 +2970,7 @@ static void register_cache_stats(psm2_mr_cache_t cache)
 					&cache->rv_gpu_stats, cache->ep->dev_name);
 	}
 #endif /* PSM_HAVE_RNDV_MOD */
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 }
 
 #endif /* PSM_HAVE_REG_MR */

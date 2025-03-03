@@ -20,7 +20,6 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
 
      PSM3_HAL_INST=""
      PSM3_HAL_CNT=0
-     PSM3_MARCH=""
 
      psm3_happy=1
      AS_IF([test x"$enable_psm3" != x"no"],
@@ -57,7 +56,7 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
         AS_IF([test "x$enable_psm3_rc" = "xyes"],
               [
             AS_IF([test "x$enable_psm3_verbs" = "xyes"],
-                  [psm3_CPPFLAGS="$psm3_CPPFLAGS -DUSE_RC"],
+                  [psm3_CPPFLAGS="$psm3_CPPFLAGS -DUSE_RC -DUSE_RDMA_READ"],
                   [AC_MSG_ERROR([User RC QPs requires Verbs HAL active])])
               ])
 
@@ -121,39 +120,16 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
             ],[
                 AC_MSG_RESULT([yes])
                 PSM3_ARCH_CFLAGS="-msse4.2"
-                PSM3_MARCH="sse4.2"
             ],[
                 psm3_happy=0
                 AC_MSG_RESULT([no])
-                AC_MSG_NOTICE([psm3 requires minimum of avx instruction set to build])
+                AC_MSG_NOTICE([psm3 requires minimum of sse4.2 instruction set to build])
             ])
         CFLAGS=$save_CFLAGS
 
-        AC_MSG_CHECKING([for -mavx support])
+        AC_MSG_CHECKING([for -mavx2 support (recommended)])
         save_CFLAGS=$CFLAGS
-        CFLAGS="$PSM3_STRIP_OPTFLAGS -mavx -O0"
-        AC_LINK_IFELSE(
-            [AC_LANG_PROGRAM(
-                [[#include <immintrin.h>]],
-                [[unsigned long long _a[4] = {1ULL,2ULL,3ULL,4ULL};
-                  __m256i vA = _mm256_loadu_si256((__m256i *)_a);
-                  __m256i vB;
-                  _mm256_store_si256(&vB, vA);
-                  return 0;]])
-            ],[
-                AC_MSG_RESULT([yes])
-                PSM3_ARCH_CFLAGS="-mavx"
-                PSM3_MARCH="avx"
-            ],[
-                psm3_happy=0
-                AC_MSG_RESULT([no])
-                AC_MSG_NOTICE([psm3 requires minimum of avx instruction set to build])
-            ])
-        CFLAGS=$save_CFLAGS
-
-        AC_MSG_CHECKING([for -mavx2 support])
-        save_CFLAGS=$CFLAGS
-        CFLAGS="$PSM3_STRIP_OPTFLAGS -mavx2 -O0"
+        CFLAGS="$PSM3_STRIP_OPTFLAGS -O0"
         AC_LINK_IFELSE(
             [AC_LANG_PROGRAM(
                 [[#include <immintrin.h>]],
@@ -164,10 +140,9 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
                   return 0;]])
             ],[
                 AC_MSG_RESULT([yes])
-                PSM3_ARCH_CFLAGS="-mavx2"
-                PSM3_MARCH="avx2"
             ],[
                 AC_MSG_RESULT([no])
+                AC_MSG_NOTICE([psm3 recommends minimum of avx2 instruction set for best performance])
             ])
         CFLAGS=$save_CFLAGS
 
@@ -227,20 +202,24 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
 
         AS_IF([test "$have_oneapi_ze" = "1"],
             [
+                save_LDFLAGS="$LDFLAGS"
+                LDFLAGS="$LDFLAGS -lze_loader"
                 AC_MSG_CHECKING([for zeMemPutIpcHandle support in level-zero])
                 AC_LINK_IFELSE(
                     [AC_LANG_PROGRAM([[
                             #include <level_zero/ze_api.h>
                         ]],[[
-                            ze_context_handle_t hContext;
+                            ze_context_handle_t hContext = NULL;
                             ze_ipc_mem_handle_t handle;
                             (void)zeMemPutIpcHandle(hContext, handle);
                         ]])
                     ],[
                         AC_MSG_RESULT(yes)
                         psm3_CPPFLAGS="$psm3_CPPFLAGS -DPSM_HAVE_ONEAPI_ZE_PUT_IPCHANDLE"
+                        LDFLAGS="$save_LDFLAGS"
                     ],[
                         AC_MSG_RESULT(no)
+                        LDFLAGS="$save_LDFLAGS"
                     ])
             ])
 
@@ -413,8 +392,6 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
      AC_SUBST(psm3_LIBS)
      AC_SUBST(PSM3_HAL_CNT)
      AC_SUBST(PSM3_HAL_INST)
-     AC_DEFINE_UNQUOTED([PSM3_MARCH], ["$PSM3_MARCH"], [PSM3 built with instruction set])
-     AC_SUBST(PSM3_MARCH)
 
      PSM3_IEFS_VERSION=m4_normalize(m4_esyscmd([cat prov/psm3/VERSION]))
      AC_SUBST(PSM3_IEFS_VERSION)
