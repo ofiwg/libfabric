@@ -315,6 +315,9 @@ psm3_ips_proto_process_ack(struct ips_recvhdrq_event *rcv_ev)
 	ips_scb_t *scb;
 
 	ack_seq_num.psn_num = p_hdr->ack_seq_num;
+#ifdef USE_RC
+	ipsaddr->verbs.remote_recv_psn = ack_seq_num.psn_num;
+#endif
 	// check actual psn acked (ack_seq_num-1), we only want to process acks
 	// for packets we never got an ack for
 	if ((flowid = ips_proto_flowid(p_hdr)) < EP_NUM_FLOW_ENTRIES) {

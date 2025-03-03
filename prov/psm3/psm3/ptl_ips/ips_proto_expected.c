@@ -102,7 +102,7 @@ static psm2_error_t ips_tid_recv_free(struct ips_tid_recv_desc *tidrecvc);
 #endif // PSM_HAVE_RDMA
 static psm2_error_t ips_tid_send_exp(struct ips_tid_send_desc *tidsendc);
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 static
 void psmi_gpu_run_prefetcher(struct ips_protoexp *protoexp,
 			     struct ips_tid_send_desc *tidsendc);
@@ -252,8 +252,8 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 #endif
 #endif
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	if (PSMI_IS_GPU_ENABLED) {
+#ifdef PSM_HAVE_GPU
+	if (PSM3_GPU_IS_ENABLED) {
 		struct psmi_rlimit_mpool rlim = GPU_HOSTBUFFER_LIMITS;
 		uint32_t maxsz, chunksz, max_elements;
 		uint32_t pool_num_obj_max_total;
@@ -323,7 +323,7 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 	return err;
 
 fail:
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	if (protoexp != NULL && protoexp->gpu_hostbuf_pool_recv != NULL)
 		psm3_mpool_destroy(protoexp->gpu_hostbuf_pool_recv);
 	if (protoexp != NULL && protoexp->gpu_hostbuf_pool_small_recv != NULL)
@@ -346,9 +346,8 @@ psm2_error_t psm3_ips_protoexp_fini(struct ips_protoexp *protoexp)
 {
 	psm2_error_t err = PSM2_OK;
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	if(PSMI_IS_GPU_ENABLED &&
-		 !(protoexp->proto->flags & IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV)) {
+#ifdef PSM_HAVE_GPU
+	if (PSM3_GPU_IS_ENABLED) {
 		psm3_mpool_destroy(protoexp->gpu_hostbuf_pool_small_recv);
 		psm3_mpool_destroy(protoexp->gpu_hostbuf_pool_recv);
 		PSM3_GPU_SHUTDOWN_HTOD_MEMCPYS(protoexp);
@@ -483,12 +482,12 @@ psm3_ips_protoexp_tid_get_from_token(struct ips_protoexp *protoexp,
 	getreq->tidgr_bytesdone = 0;
 	getreq->tidgr_flags = flags;
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	if ((req->is_buf_gpu_mem &&
 	    !(protoexp->proto->flags & IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV)) ||
 	    ((req->is_buf_gpu_mem &&
 	     (protoexp->proto->flags & IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV) &&
-	     (length > gpudirect_rdma_recv_limit
+	     (length > psm3_gpu_gpudirect_rdma_recv_limit
 		|| length & 0x03 || (uintptr_t)buf & 0x03
  		)))) {
 		getreq->gpu_hostbuf_used = 1;
@@ -505,14 +504,14 @@ psm3_ips_protoexp_tid_get_from_token(struct ips_protoexp *protoexp,
 #endif
 			protoexp->proto->strat_stats.rndv_rdma_cpu_recv++;
 			protoexp->proto->strat_stats.rndv_rdma_cpu_recv_bytes += length;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		}
 	}
 #endif
 
 	/* nbytes is the bytes each channel should transfer. */
 	count = ((ips_epaddr_t *) epaddr)->msgctl->ipsaddr_count;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	if (req->is_buf_gpu_mem)
 		nbytes = PSMI_ALIGNUP((length + count - 1) / count, PSMI_GPU_PAGESIZE);
 	else
@@ -632,7 +631,7 @@ psm3_ips_protoexp_send_tid_grant(struct ips_tid_recv_desc *tidrecvc)
 }
 
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 void psm3_ips_deallocate_send_chb(struct ips_gpu_hostbuf* chb, int reset)
 {
 	if (chb->is_tempbuf) {
@@ -672,7 +671,7 @@ ips_protoexp_tidsendc_complete(struct ips_tid_send_desc *tidsendc)
 	}
 #endif
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	if (req->gpu_hostbuf_used) {
 		if (tidsendc->gpu_num_buf == 1) {
 			tidsendc->gpu_hostbuf[0]->bytes_read +=
@@ -1237,7 +1236,7 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 	}
 #endif
 	if (_HFI_PDBG_ON) {
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		if (tidrecvc->is_ptr_gpu_backed)
 			_HFI_PDBG_DUMP_GPU_ALWAYS(tidrecvc->buffer, len);
 		else
@@ -1269,7 +1268,7 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 
 
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 static
 psm2_error_t
 psmi_gpu_reclaim_hostbufs(struct ips_tid_get_request *getreq)
@@ -1565,7 +1564,7 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 	_HFI_MMDBG("tidsendc created userbuf %p buffer %p length %u\n",
 			tidsendc->userbuf,  tidsendc->buffer, tidsendc->length);
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	/* Matching on previous prefetches and initiating next prefetch */
 	struct ips_gpu_hostbuf *chb = NULL, *chb_next = NULL;
 	psm2_chb_match_type_t rc = PSMI_GPU_CONTINUE;
@@ -1638,7 +1637,7 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 		protoexp->proto->strat_stats.rndv_rdma_gdr_send++;
 		protoexp->proto->strat_stats.rndv_rdma_gdr_send_bytes += tid_list->tsess_length;
 	} else
-#endif // PSM_CUDA || PSM_ONEAPI
+#endif /* PSM_HAVE_GPU */
 	{
 		protoexp->proto->strat_stats.rndv_rdma_cpu_send++;
 		protoexp->proto->strat_stats.rndv_rdma_cpu_send_bytes += tid_list->tsess_length;
@@ -1716,7 +1715,7 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 		// no need to register again
 		err = PSM2_OK;
 	} else if (
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		! tidsendc->mqreq->gpu_hostbuf_used &&
 #endif
 			// separate MR cache's per EP, so this confirms we have the same EP
@@ -1730,7 +1729,7 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 		_HFI_MMDBG("CTS send chunk register send: %p %u bytes\n", tidsendc->buffer , tidsendc->length);
 		tidsendc->mr = psm3_verbs_reg_mr(proto->mr_cache, 1,
                          tidsendc->buffer, tidsendc->length, IBV_ACCESS_RDMA
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 						| (PSM3_GPU_ADDR_SEND_MR(tidsendc->mqreq)
 							?IBV_ACCESS_IS_GPU_ADDR:0)
 #endif
@@ -1775,7 +1774,7 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 	}
 	if (err == PSM2_OK) {
 		if (_HFI_PDBG_ON) {
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 			if (tidsendc->mqreq->is_buf_gpu_mem && !tidsendc->mqreq->gpu_hostbuf_used)
 				_HFI_PDBG_DUMP_GPU_ALWAYS(tidsendc->buffer, tidsendc->tid_list.tsess_length);
 			else
@@ -1803,7 +1802,7 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 	}
 	if (err == PSM2_OK) {
 		if (_HFI_PDBG_ON) {
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 			if (tidsendc->mqreq->is_buf_gpu_mem && !tidsendc->mqreq->gpu_hostbuf_used)
 				_HFI_PDBG_DUMP_GPU_ALWAYS(tidsendc->buffer, tidsendc->tid_list.tsess_length);
 			else
@@ -1840,12 +1839,12 @@ static
 psm2_error_t ips_tid_send_exp(struct ips_tid_send_desc *tidsendc)
 {
 	psm2_error_t err = PSM2_OK;
-#if   defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	struct ips_protoexp *protoexp = tidsendc->protoexp;
 #endif
 
 	_HFI_MMDBG("ips_tid_send_exp\n");
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	struct ips_gpu_hostbuf *chb, *chb_next;
 	uint32_t offset_in_chb, i;
 	// wait for async copies into needed prefetcher chb's to finish
@@ -2005,7 +2004,7 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 	ips_scb_t *grantscb;
 #ifdef PSM_VERBS
 	psm2_mq_req_t req = getreq->tidgr_req;
-#elif defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#elif defined(PSM_HAVE_GPU)
 	psm2_mq_req_t req = getreq->tidgr_req;
 #endif
 #if defined(PSM_VERBS)
@@ -2046,7 +2045,7 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 	tidrecvc->mr = NULL;	// be safe,but should be NULL since clear on release
 #endif
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
        if (req->is_buf_gpu_mem)
                tidrecvc->is_ptr_gpu_backed = !getreq->gpu_hostbuf_used;
        else
@@ -2095,17 +2094,17 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 					    getreq->tidgr_offset);
 		tidrecvc->gpu_hostbuf = NULL;
 	}
-#else // PSM_CUDA || PSM_ONEAPI
+#else /* PSM_HAVE_GPU */
 	tidrecvc->buffer =
 	    (void *)((uintptr_t) getreq->tidgr_lbuf + getreq->tidgr_offset);
-#endif // PSM_CUDA || PSM_ONEAPI
+#endif /* PSM_HAVE_GPU */
 
 #if defined(PSM_SOCKETS) && PSMI_HAL_INST_CNT == 1
 	psmi_assert_always(0);	// should not get here
 #elif defined(PSM_VERBS)
 	// separate MR cache's per EP, so this confirms we have the same EP
 	if (
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		! getreq->gpu_hostbuf_used &&
 #endif
 		req->mr && req->mr->cache == proto->mr_cache) {
@@ -2115,12 +2114,12 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 		_HFI_MMDBG("CTS chunk register recv: %p %u bytes\n", tidrecvc->buffer, nbytes_this);
 		tidrecvc->mr = psm3_verbs_reg_mr(proto->mr_cache, 1,
                         tidrecvc->buffer, nbytes_this, IBV_ACCESS_RDMA|IBV_ACCESS_REMOTE_WRITE
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-                                       | (PSM3_GPU_ADDR_RECV_MR(tidrecvc, getreq)?IBV_ACCESS_IS_GPU_ADDR:0)
+#ifdef PSM_HAVE_GPU
+                                       | (PSM3_GPU_ADDR_RECV_MR(tidrecvc, getreq->gpu_hostbuf_used)?IBV_ACCESS_IS_GPU_ADDR:0)
 #endif
 						);
 		if (! tidrecvc->mr) {
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 			if (chb)
 				psm3_mpool_put(chb);
 #endif
@@ -2220,7 +2219,7 @@ ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current)
 #endif
 #endif
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	/* due to unaligned recv using hostbuf, must always do this */
 	{
 		/* Before processing pending TID requests, first try to free up
@@ -2289,7 +2288,7 @@ ipsaddr_next:
 			}
 		}
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		if (getreq->gpu_hostbuf_used) {
 			/* If this is a large transfer, we may be able to
 			 * start reclaiming before all of the data is sent. */
@@ -2322,7 +2321,7 @@ ipsaddr_next:
 		 * async cuda copies to fill it, so the extra CTS is minimal
 		 * impact to the sender.
 		 */
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		psm2_mq_req_t req = getreq->tidgr_req;
 		if (req->is_buf_gpu_mem){
 			if (((getreq->tidgr_offset + nbytes_this) <
@@ -2392,7 +2391,7 @@ ipsaddr_next:
 				    getreq->tidgr_length);
 
 			if (getreq->tidgr_offset == getreq->tidgr_length) {
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 				if (getreq->gpu_hostbuf_used) {
 					/* this completes the tid xfer setup.
 					   move to the pending cuda ops queue,
@@ -2446,7 +2445,7 @@ ipsaddr_next:
 }
 
 #ifdef PSM_HAVE_RDMA
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 static
 void psmi_cudamemcpy_tid_to_device(struct ips_tid_recv_desc *tidrecvc)
 {
@@ -2463,7 +2462,7 @@ void psmi_cudamemcpy_tid_to_device(struct ips_tid_recv_desc *tidrecvc)
 	tidrecvc->gpu_hostbuf = NULL;
 	ips_tid_pendtids_timer_callback(&tidrecvc->getreq->tidgr_protoexp->timer_getreqs,0);
 }
-#endif // PSM_CUDA || PSM_ONEAPI
+#endif /* PSM_HAVE_GPU */
 #endif // PSM_HAVE_RDMA
 
 #ifdef PSM_HAVE_RDMA
@@ -2479,7 +2478,7 @@ psm2_error_t ips_tid_recv_free(struct ips_tid_recv_desc *tidrecvc)
 	psmi_assert(getreq != NULL);
 	psmi_assert(tidrecvc->state == TIDRECVC_STATE_BUSY);
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	if (tidrecvc->gpu_hostbuf)
 		psmi_cudamemcpy_tid_to_device(tidrecvc);
 #endif
@@ -2502,7 +2501,7 @@ psm2_error_t ips_tid_recv_free(struct ips_tid_recv_desc *tidrecvc)
 	psm3_ips_tf_deallocate(&protoexp->tfc, tidrecvc->rdescid._desc_idx, 1);
 
 	if (getreq->tidgr_bytesdone == getreq->tidgr_length) {
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		/* if cuda, we handle callbacks when the cuda xfer is done */
 		if (!getreq->gpu_hostbuf_used) {
 			if (getreq->tidgr_callback)

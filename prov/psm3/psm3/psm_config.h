@@ -81,6 +81,11 @@
 /* #define INTEL_GPU_DIRECT */
 #endif
 
+// define here so pxmx3 and psm_user.h can use this define
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#define PSM_HAVE_GPU
+#endif
+
 #ifndef PSM3_BRAKE_DEBUG
 /* #define PSM3_BRAKE_DEBUG */
 #endif
@@ -164,46 +169,29 @@
 
 #endif // PSM_CUDA
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 #define GPU_WINDOW_PREFETCH_DEFAULT	2
 #define GPU_SMALLHOSTBUF_SZ	(256*1024)
 #define GPU_PAGE_OFFSET_MASK (PSMI_GPU_PAGESIZE -1)
 #define GPU_PAGE_MASK ~GPU_PAGE_OFFSET_MASK
-/* All GPU transfers beyond this threshold use
- * RNDV protocol. It is mostly a send side knob.
- */
-#define PSM3_GPU_THRESH_RNDV 8000
 
 #define GPUDIRECT_THRESH_RV 3
 
 #define GDR_COPY_LIMIT_SEND 128
 #define GDR_COPY_LIMIT_RECV 64000
 
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 
 
 #define PSM_MQ_NIC_MAX_TINY		8	/* max TINY payload allowed */
 #define PSM3_MQ_RNDV_NIC_THRESH	 	64000
 #define PSM_CPU_NIC_RNDV_WINDOW_STR "131072"
-#ifdef PSM_CUDA
-#define PSM_GPU_NIC_RNDV_WINDOW_STR "2097152"
-#elif defined(PSM_ONEAPI)
-#define PSM_GPU_NIC_RNDV_WINDOW_STR "131072:524287,262144:1048575,524288"
-#endif
 #define PSM3_MQ_RNDV_NIC_WINDOW_MAX	(4 * 1024 * 1024) /* max rndv window */
 
 /*
  * Rendezvous threshold is same for CMA, scale-up or LONG_DATA mechanisms
  */
 #define PSM3_MQ_RNDV_SHM_THRESH 16000
-
-#if defined(PSM_CUDA)
-/* Threshold for GPU rendezvous (aka scale-up transfer vs via CPU shared mem */
-#define PSM3_MQ_RNDV_SHM_GPU_THRESH 63
-#elif defined(PSM_ONEAPI)
-/* Threshold for GPU rendezvous (aka scale-up transfer vs via CPU shared mem */
-#define PSM3_MQ_RNDV_SHM_GPU_THRESH 127
-#endif
 
 // LEARN_HASH_SELECTOR has PSM3 dynamically learn the combinations
 // of src_addr presence and tagsel used by a given middleware.  This
@@ -245,7 +233,11 @@
 #define PSMI_DEVICES_DEFAULT	"self,shm,nic"
 
 /* Lock */
+#if defined(__x86_64__) || defined(__i386__)
 #define PSMI_USE_PTHREAD_SPINLOCKS	0
+#else /* non-Intel arch */
+#define PSMI_USE_PTHREAD_SPINLOCKS	1
+#endif
 
 /* Utils */
 #define PSMI_EPID_TABSIZE_CHUNK		128

@@ -182,7 +182,7 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 #define PSMX3_BXOR(dst,src)	(dst) ^= (src)
 #define PSMX3_COPY(dst,src)	(dst) = (src)
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 /* res is always CPU address, dst could be GPU address */
 #define PSMX3_ATOMIC_READ(dst,res,cnt,TYPE) \
 		do { \
@@ -195,7 +195,7 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			psm3_memcpy(r, d, sizeof(TYPE)*cnt); \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
-#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#else /* PSM_HAVE_GPU */
 #define PSMX3_ATOMIC_READ(dst,res,cnt,TYPE) \
 		do { \
 			int i; \
@@ -206,9 +206,9 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 				r[i] = d[i]; \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
-#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#endif /* PSM_HAVE_GPU */
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 /* src is always CPU address, dst could be GPU address */
 #define PSMX3_ATOMIC_WRITE(dst,src,cnt,OP,TYPE) \
 		do { \
@@ -228,7 +228,7 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			} \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
-#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#else /* PSM_HAVE_GPU */
 #define PSMX3_ATOMIC_WRITE(dst,src,cnt,OP,TYPE) \
 		do { \
 			int i; \
@@ -239,9 +239,9 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 				OP(d[i],s[i]); \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
-#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#endif /* PSM_HAVE_GPU */
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 /* src is always CPU address, dst could be GPU address */
 // optimized to avoid unnecessary read and compare, OP==PSMX3_COPY and not used
 #define PSMX3_ATOMIC_WRITE_COPY(dst,src,cnt,OP,TYPE) \
@@ -255,12 +255,12 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			psm3_memcpy(d, s, sizeof(TYPE)*cnt); \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
-#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#else /* PSM_HAVE_GPU */
 #define PSMX3_ATOMIC_WRITE_COPY(dst,src,cnt,OP,TYPE) \
 	PSMX3_ATOMIC_WRITE(dst,src,cnt,OP,TYPE)
-#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#endif /* PSM_HAVE_GPU */
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 /* src, res are always CPU address, dst could be GPU address */
 #define PSMX3_ATOMIC_READWRITE(dst,src,res,cnt,OP,TYPE) \
 		do { \
@@ -281,7 +281,7 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			} \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
-#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#else /* PSM_HAVE_GPU */
 #define PSMX3_ATOMIC_READWRITE(dst,src,res,cnt,OP,TYPE) \
 		do { \
 			int i; \
@@ -295,9 +295,9 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			} \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
-#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#endif /* PSM_HAVE_GPU */
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 /* src, cmp, res are always CPU address, dst could be GPU address */
 #define PSMX3_ATOMIC_CSWAP(dst,src,cmp,res,cnt,CMP_OP,TYPE) \
 		do { \
@@ -320,7 +320,7 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			} \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
-#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#else /* PSM_HAVE_GPU */
 #define PSMX3_ATOMIC_CSWAP(dst,src,cmp,res,cnt,CMP_OP,TYPE) \
 		do { \
 			int i; \
@@ -336,9 +336,9 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			} \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
-#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#endif /* PSM_HAVE_GPU */
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 /* src, cmp, res are always CPU address, dst could be GPU address */
 #define PSMX3_ATOMIC_MSWAP(dst,src,cmp,res,cnt,TYPE) \
 		do { \
@@ -359,7 +359,7 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			} \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
-#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#else /* PSM_HAVE_GPU */
 #define PSMX3_ATOMIC_MSWAP(dst,src,cmp,res,cnt,TYPE) \
 		do { \
 			int i; \
@@ -374,7 +374,7 @@ static inline size_t psmx3_ioc_size(const struct fi_ioc *ioc, size_t count,
 			} \
 			psmx3_unlock(&psmx3_atomic_lock, 1); \
 		} while (0)
-#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+#endif /* PSM_HAVE_GPU */
 
 static int psmx3_atomic_do_write(void *dest, void *src,
 				 int datatype, int op, int count)

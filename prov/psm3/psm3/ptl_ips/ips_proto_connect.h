@@ -123,15 +123,21 @@ struct ips_connect_reqrep {
 			uint8_t reserved[16];	// 64b aligned
 			// fields below can be zero depending on rdmamode
 
-			// TBD - we could combine the RDMA=1 and RDMA=2,3
-			// sets of fields below into a union and save space
-			// or make room for more reserved space
-
-			// For rndv module connection establishment, PSM3_RDMA=1
-			// zero if no rndv mod RDMA
-			union ibv_gid gid; // sender's gid
-			uint32_t rv_index; // senders process index
-			uint32_t resv;	// alignment
+			union {
+				struct {
+					// For rndv module connection establishment, PSM3_RDMA=1
+					// zero if no rndv mod RDMA
+					union ibv_gid gid; // sender's gid
+					uint32_t rv_index; // senders process index
+					uint32_t resv;	// alignment
+				} rv;
+				struct {
+					// For PSM3_RDMA=3 only
+					uint64_t recv_addr;
+					uint32_t recv_rkey;
+					uint8_t resv[12];
+				} urc; // user space RC
+			};
 
 			// For user space RC QP connection establishment
 			// only set for USE_RC with PSM3_RDMA=2 or 3

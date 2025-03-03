@@ -678,9 +678,9 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 	ep->hfi_num_send_rdma = 0;
 #endif
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	ep->rv_gpu_cache_size = 0;
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 #endif /* PSM_HAVE_RNDV_MOD */
 
 	/* See how many iterations we want to spin before yielding */
@@ -747,10 +747,7 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 	if (! mq->ep)	// only call on 1st EP within MQ
 		psm3_mq_initstats(mq, ep->epid);
 
-#ifdef PSM_CUDA
-	if (PSMI_IS_GPU_ENABLED)
-		verify_device_support_unified_addr();
-#endif
+	PSM3_GPU_VERIFY_CAPABILITIES();
 
 	_HFI_VDBG("start ptl device init...\n");
 	if (psm3_ep_device_is_enabled(ep, PTL_DEVID_SELF)) {
@@ -827,15 +824,7 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 		return PSM2_TOO_MANY_ENDPOINTS;
 	}
 
-#if defined(PSM_ONEAPI)
-	/* Make sure ze_context and command queue/list are available.
-	 * They could be destroyed when there is no more endpoints.
-	 * If another endpoint is created after that, the code here can
-	 * recreate the context, command queue and list.
-	 */
-	if (PSMI_IS_GPU_ENABLED && !cur_ze_dev)
-		psmi_oneapi_cmd_create_all();
-#endif //PSM_ONEAPI
+	PSM3_GPU_EP_OPEN();
 
 	/* Matched Queue initialization.  We do this early because we have to
 	 * make sure ep->mq exists and is valid before calling ips_do_work.
@@ -869,11 +858,12 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 			opts.addr_index = multirail_config.addr_indexes[0];
 		}
 	}
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	// if HAL doesn't support GDR Copy, it may disable Gdr Copy
-	// by zeroing is_gdr_copy_enabled, gdr_copy_limit_send, and
-	// gdr_copy_limit_recv during gdr_open
-	if (PSMI_IS_GDR_COPY_ENABLED)
+	// by zeroing psm3_gpu_is_gdr_copy_enabled,
+	// psm3_gpu_gdr_copy_limit_send, and
+	// psm3_gpu_gdr_copy_limit_recv during gdr_open
+	if (PSM3_GPU_IS_GDR_COPY_ENABLED)
 		psmi_hal_gdr_open();
 #endif
 
@@ -982,12 +972,8 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 fail:
 	fflush(stdout);
 	PSMI_UNLOCK(psm3_creation_lock);
-#if defined(PSM_ONEAPI)
-	if (PSMI_IS_GPU_ENABLED && psm3_opened_endpoint_count == 0) {
-		psmi_oneapi_putqueue_free();
-		psmi_oneapi_cmd_destroy_all();
-	}
-#endif //PSM_ONEAPI
+	if (psm3_opened_endpoint_count == 0)
+		PSM3_GPU_EP_CLOSE();
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
@@ -1005,14 +991,14 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 	}
 #endif
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	/*
 	 * The close on the gdr fd needs to be called before the
 	 * close on the hfi fd as the the gdr device will hold
 	 * reference count on the hfi device which will make the close
 	 * on the hfi fd return without actually closing the fd.
 	 */
-	if (PSMI_IS_GDR_COPY_ENABLED)
+	if (PSM3_GPU_IS_GDR_COPY_ENABLED)
 		psmi_hal_gdr_close();
 #endif
 	union psmi_envvar_val timeout_intval;
@@ -1202,17 +1188,8 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 				 (double)cycles_to_nanosecs(get_cycles() -
 				 t_start) / SEC_ULL);
 	}
-#if defined(PSM_ONEAPI)
-	/*
-	 * It would be ideal to destroy the global command list, queue, and
-	 * context in psm3_finalize(). Unfortunately, it will cause segfaults
-	 * in Level-zero library.
-	 */
-	if (PSMI_IS_GPU_ENABLED && psm3_opened_endpoint_count == 0) {
-		psmi_oneapi_putqueue_free();
-		psmi_oneapi_cmd_destroy_all();
-	}
-#endif //PSM_ONEAPI
+	if (psm3_opened_endpoint_count == 0)
+		PSM3_GPU_EP_CLOSE();
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
@@ -1376,7 +1353,7 @@ int psm3_ep_device_is_enabled(const psm2_ep_t ep, int devid)
 }
 
 #ifdef PSM_HAVE_RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 // used for GdrCopy
 
 // given an ep this returns the "next one".
@@ -1517,5 +1494,5 @@ done:
 	}
 	return evicted;
 }
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 #endif /* PSM_HAVE_RNDV_MOD */

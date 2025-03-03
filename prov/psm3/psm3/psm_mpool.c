@@ -99,7 +99,7 @@ struct mpool {
 	non_empty_callback_fn_t mp_non_empty_cb;
 	void *mp_non_empty_cb_context;
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	alloc_dealloc_callback_fn_t mp_alloc_dealloc_cb;
 	void *mp_alloc_dealloc_cb_context;
 #endif
@@ -232,7 +232,7 @@ MOCKABLE(psm3_mpool_create)(size_t obj_size, uint32_t num_obj_per_chunk,
 }
 MOCK_DEF_EPILOGUE(psm3_mpool_create);
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 mpool_t
 psm3_mpool_create_for_gpu(size_t obj_size, uint32_t num_obj_per_chunk,
 			  uint32_t num_obj_max_total, int flags,
@@ -259,7 +259,7 @@ psm3_mpool_create_for_gpu(size_t obj_size, uint32_t num_obj_per_chunk,
 
 	return mp;
 }
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 
 /**
  * psm3_mpool_get()
@@ -413,7 +413,7 @@ void *psm3_mpool_find_obj_by_index(mpool_t mp, int index)
 	return (void *)((uintptr_t) me + sizeof(struct mpool_element));
 }
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 /**
  * psmi_mpool_chunk_dealloc()
  * <mp>	    memory pool
@@ -430,7 +430,7 @@ void psmi_mpool_chunk_dealloc(mpool_t mp, int idx)
 					j * mp->mp_elm_size +
 					sizeof(struct mpool_element)));
 }
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 
 /**
  * psm3_mpool_destroy()
@@ -447,7 +447,7 @@ void psm3_mpool_destroy(mpool_t mp)
 
 	for (i = 0; i < mp->mp_elm_vector_size; i++) {
 		if (mp->mp_elm_vector[i]) {
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 			if (mp->mp_alloc_dealloc_cb)
 				psmi_mpool_chunk_dealloc(mp, i);
 #endif
@@ -494,7 +494,7 @@ static int psmi_mpool_allocate_chunk(mpool_t mp)
 	if (num_to_allocate == 0)
 		return PSM2_NO_MEMORY;
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	if (mp->mp_alloc_dealloc_cb)
 		chunk = psmi_calloc(PSMI_EP_NONE, mp->mp_memtype,
 				    num_to_allocate, mp->mp_elm_size);
@@ -504,7 +504,7 @@ static int psmi_mpool_allocate_chunk(mpool_t mp)
 #else
 	chunk = psmi_malloc(PSMI_EP_NONE, mp->mp_memtype,
 			    num_to_allocate * mp->mp_elm_size);
-#endif /* PSM_CUDA || PSM_ONEAPI) */
+#endif /* PSM_HAVE_GPU */
 	if (chunk == NULL) {
 		fprintf(stderr,
 			"Failed to allocate memory for memory pool chunk: %s\n",
@@ -513,13 +513,13 @@ static int psmi_mpool_allocate_chunk(mpool_t mp)
 	}
 
 	for (i = 0; i < num_to_allocate; i++) {
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		if (mp->mp_alloc_dealloc_cb)
 			mp->mp_alloc_dealloc_cb(1 /* is alloc */,
 						mp->mp_alloc_dealloc_cb_context,
 						(void *)((uintptr_t)chunk + i * mp->mp_elm_size +
 						sizeof(struct mpool_element)));
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 		elm = (struct mpool_element *)((uintptr_t) chunk +
 					       i * mp->mp_elm_size +
 					       mp->mp_elm_offset);

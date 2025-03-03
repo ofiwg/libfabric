@@ -96,32 +96,12 @@ static const char* psm3_hfp_verbs_identify(void)
 	static char buf[100];
 
 #ifdef RNDV_MOD
-/* we test NVIDIA_GPU_DIRECT here instead of PSM_CUDA since that define
- * controls the rv module ioctl header file interface
- */
-#ifdef NVIDIA_GPU_DIRECT
-	snprintf(buf, sizeof(buf), "HAL: %s (%s) built against rv interface v%d.%d gpu v%d.%d cuda",
+	snprintf(buf, sizeof(buf), "HAL: %s (%s) built against rv interface v%u.%u" PSM3_GPU_FMT_RV_GPU_VER,
 			psmi_hal_get_hal_instance_name(),
 			psmi_hal_get_hal_instance_description(),
 			psm3_rv_get_user_major_bldtime_version(),
-			psm3_rv_get_user_minor_bldtime_version(),
-			psm3_rv_get_gpu_user_major_bldtime_version(),
-			psm3_rv_get_gpu_user_minor_bldtime_version());
-#elif defined(INTEL_GPU_DIRECT)
-	snprintf(buf, sizeof(buf), "HAL: %s (%s) built against rv interface v%d.%d gpu v%d.%d oneapi-ze",
-			psmi_hal_get_hal_instance_name(),
-			psmi_hal_get_hal_instance_description(),
-			psm3_rv_get_user_major_bldtime_version(),
-			psm3_rv_get_user_minor_bldtime_version(),
-			psm3_rv_get_gpu_user_major_bldtime_version(),
-			psm3_rv_get_gpu_user_minor_bldtime_version());
-#else
-	snprintf(buf, sizeof(buf), "HAL: %s (%s) built against rv interface v%d.%d",
-			psmi_hal_get_hal_instance_name(),
-			psmi_hal_get_hal_instance_description(),
-			psm3_rv_get_user_major_bldtime_version(),
-			psm3_rv_get_user_minor_bldtime_version());
-#endif
+			psm3_rv_get_user_minor_bldtime_version()
+			PSM3_GPU_OUT_RV_GPU_VER);
 #else /* RNDV_MOD */
 	snprintf(buf, sizeof(buf), "HAL: %s (%s)",
 			psmi_hal_get_hal_instance_name(),
@@ -174,15 +154,14 @@ static void psm3_hfp_verbs_mq_init_defaults(struct psm2_mq *mq)
 		mq->rndv_nic_thresh = (~(uint32_t)0); // disable rendezvous
 	}
 	mq->hfi_thresh_tiny = PSM_MQ_NIC_MAX_TINY;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	if (PSMI_IS_GPU_ENABLED)
-		mq->ips_gpu_window_rv_str = PSM_GPU_NIC_RNDV_WINDOW_STR;
+#ifdef PSM_HAVE_GPU
+	mq->ips_gpu_window_rv_str = psm3_gpu_rndv_nic_window_default;
 #endif
 	// we parse mr_cache_mode and rv_gpu_cache_size here so we can cache it
 	// once per EP open, even if multi-rail or multi-QP
 	(void)psm3_verbs_parse_mr_cache_mode(rdmamode, 1);
 #ifdef RNDV_MOD
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 	(void)psmi_parse_gpudirect_rv_gpu_cache_size(1);
 #endif
 #endif
@@ -196,7 +175,7 @@ static void psm3_hfp_verbs_ep_open_opts_get_defaults(struct psm3_ep_open_opts *o
 	opts->imm_size = VERBS_SEND_MAX_INLINE; // PSM header size is 56
 }
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 static void psm3_hfp_verbs_gdr_open(void)
 {
 }
@@ -249,13 +228,7 @@ static hfp_verbs_t psm3_verbs_hi = {
 	/* start of public psmi_hal_instance_t data */
 	.phi = {
 		.hal_index				  = PSM_HAL_INDEX_VERBS,
-		.description				  = "RDMA Verbs"
-#ifdef PSM_CUDA
-								" (cuda)"
-#elif defined(PSM_ONEAPI)
-								" (oneapi-ze)"
-#endif
-									,
+		.description				  = "RDMA Verbs" PSM3_GPU_TYPES,
 		.nic_sys_class_path			  = "/sys/class/infiniband",
 		.nic_sys_port_path_fmt			  = PSM3_PORT_PATH_TYPE_IB,
 		.params					  = {0},
@@ -274,7 +247,7 @@ static hfp_verbs_t psm3_verbs_hi = {
 		.hfp_mq_init_defaults			  = psm3_hfp_verbs_mq_init_defaults,
 		.hfp_ep_open_opts_get_defaults		  = psm3_hfp_verbs_ep_open_opts_get_defaults,
 		.hfp_context_initstats			  = psm3_hfp_verbs_context_initstats,
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		.hfp_gdr_open				  = psm3_hfp_verbs_gdr_open,
 #endif
 
@@ -316,10 +289,10 @@ static hfp_verbs_t psm3_verbs_hi = {
 		.hfp_ips_ibta_init			  = psm3_hfp_verbs_ips_ibta_init,
 		.hfp_ips_path_rec_init			  = psm3_hfp_verbs_ips_path_rec_init,
 		.hfp_ips_ptl_pollintr			  = psm3_hfp_verbs_ips_ptl_pollintr,
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		.hfp_gdr_close				  = psm3_hfp_verbs_gdr_close,
 		.hfp_gdr_convert_gpu_to_host_addr	  = psm3_hfp_verbs_gdr_convert_gpu_to_host_addr,
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 		.hfp_get_port_index2pkey		  = psm3_hfp_verbs_get_port_index2pkey,
 		.hfp_poll_type				  = psm3_hfp_verbs_poll_type,
 		.hfp_spio_transfer_frame		  = psm3_hfp_verbs_spio_transfer_frame,

@@ -560,14 +560,15 @@ psm3_ips_ptl_disconnect(ptl_t *ptl_gen, int force, int numep,
 }
 
 /* Only symbol we expose out of here */
-struct ptl_ctl_init
-psm3_ptl_ips = {
-	ips_ptl_sizeof, ips_ptl_init, ips_ptl_fini, ips_ptl_setopt,
-	    ips_ptl_getopt
+struct ptl_ctl_init psm3_ptl_ips = {
+	.sizeof_ptl = ips_ptl_sizeof,
+	.init = ips_ptl_init,
+	.fini = ips_ptl_fini,
+	.setopt = ips_ptl_setopt,
+	.getopt = ips_ptl_getopt,
 };
 
-struct ptl_ctl_rcvthread
-psm3_ptl_ips_rcvthread = {
-	ips_ptl_rcvthread_is_enabled,
-	psm3_ips_ptl_rcvthread_transfer_ownership,
+struct ptl_ctl_rcvthread psm3_ptl_ips_rcvthread = {
+	.is_enabled = ips_ptl_rcvthread_is_enabled,
+	.transfer_ownership = psm3_ips_ptl_rcvthread_transfer_ownership,
 };
