@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 by Cornelis Networks.
+ * Copyright (C) 2021-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -434,20 +434,6 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	opx_domain->threading	  = fi_opx_global.default_domain_attr->threading;
 	opx_domain->resource_mgmt = fi_opx_global.default_domain_attr->resource_mgmt;
 	opx_domain->data_progress = fi_opx_global.default_domain_attr->data_progress;
-
-	int env_var_progress_interval = 0;
-	get_param_check =
-		fi_param_get_int(fi_opx_global.prov, "auto_progress_interval_usec", &env_var_progress_interval);
-	if (get_param_check == FI_SUCCESS) {
-		if (env_var_progress_interval < 0) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-				"FI_OPX_AUTO_PROGRESS_INTERVAL_USEC must be an integer >= 0 using default value\n");
-			env_var_progress_interval = 0;
-		}
-	} else {
-		env_var_progress_interval = 0;
-	}
-	opx_domain->auto_progress_interval = env_var_progress_interval;
 
 	if (info->domain_attr) {
 		if (info->domain_attr->domain) {

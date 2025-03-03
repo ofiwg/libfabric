@@ -756,8 +756,9 @@ OPX_INI
 	fi_param_define(
 		&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
 		"When set, specify the set of CPU cores to set the progress thread affinity to. The format is <start>:<end>:<stride> where each triplet <start>:<end>:<stride> defines a block Both <start> and <end> is a core_id.");
-	fi_param_define(&fi_opx_provider, "auto_progress_interval_usec", FI_PARAM_INT,
-			"Number of usec that the progress thread waits between polling. Default is 1.");
+	fi_param_define(
+		&fi_opx_provider, "auto_progress_interval_usec", FI_PARAM_INT,
+		"Deprecated/ignored. Auto progress threads are now interrupt-driven and only poll when data is available.");
 	fi_param_define(
 		&fi_opx_provider, "pkey", FI_PARAM_INT,
 		"Partition key.  Should be a 2 byte positive integer. Default is the Pkey in the index 0 of the Pkey table of the unit and port on which context is created.");
