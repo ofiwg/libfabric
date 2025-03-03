@@ -70,7 +70,7 @@ jobs:
           $PWD/install/bin/fi_info -l
       - name: Upload build logs
         if: failure()
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: ${{ matrix.os }}-${{ matrix.cc }}-config.log
           path: config.log
@@ -115,7 +115,7 @@ jobs:
           $PWD/install/bin/fi_info -c FI_HMEM
       - name: Upload build logs
         if: failure()
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: hmem-config.log
           path: config.log
@@ -139,7 +139,7 @@ jobs:
           make -j2
       - name: Upload build logs
         if: failure()
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: macos-config.log
           path: config.log
