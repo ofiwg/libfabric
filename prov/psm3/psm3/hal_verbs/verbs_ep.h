@@ -107,7 +107,7 @@
 									// if 1, post as we recv them
 #define VERBS_SEND_CQ_REAP 256	// check for completions when this many unreaped
 #define VERBS_PORT 1			// default port if not specified
-#define VERBS_RECV_CQE_BATCH 1	// how many CQEs to ask for at a time
+#define VERBS_RECV_CQE_BATCH 32	// how many CQEs to ask for at a time
 #define UD_ADDITION (40)		// extra bytes at start of UD recv buffer
 								// defined in verbs API to accomidate IB GRH
 #define BUFFER_HEADROOM 0		// how much extra to allocate in buffers
@@ -310,19 +310,25 @@ struct psm3_verbs_ep {
 	uint32_t qkey;
 	//uint8_t link_layer;         // IBV_LINK_LAYER_ETHERNET or other
 	uint8_t active_rate;
+#if defined(USE_RDMA_READ)
+#if defined(USE_RC)
+	uint8_t max_qp_rd_atom;
+	uint8_t max_qp_init_rd_atom;
+#endif // USE_RC
+#endif
 	struct psm3_verbs_send_pool send_pool;
 	struct psm3_verbs_send_allocator send_allocator;
 	uint32_t send_rdma_outstanding;	// number of outstanding RDMAs
 	uint32_t send_reap_thresh;	// TBD if should be here or in pool
 	struct psm3_verbs_recv_pool recv_pool;
+#ifdef USE_RC
+	struct psm3_verbs_recv_pool srq_recv_pool;
+#endif
 #if VERBS_RECV_CQE_BATCH > 1
 	struct ibv_wc recv_wc_list[VERBS_RECV_CQE_BATCH];
 	int recv_wc_count;	// number left in recv_wc_list
 	int recv_wc_next;	// next index
 #else
-#ifdef USE_RC
-	struct psm3_verbs_recv_pool srq_recv_pool;
-#endif
 	// if asked to revisit a packet we save it here
 	rbuf_t revisit_buf;
 	uint32_t revisit_payload_size;

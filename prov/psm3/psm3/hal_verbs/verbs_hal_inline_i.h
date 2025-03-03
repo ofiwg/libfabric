@@ -238,12 +238,12 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_ips_ipsaddr_set_req_params(
 				const struct ips_connect_reqrep *req)
 {
 #ifdef RNDV_MOD
-	ipsaddr->verbs.remote_gid = req->verbs.gid;
-	ipsaddr->verbs.remote_rv_index = req->verbs.rv_index;
+	ipsaddr->verbs.remote_gid = req->verbs.rv.gid;
+	ipsaddr->verbs.remote_rv_index = req->verbs.rv.rv_index;
 	if (ipsaddr->verbs.rv_conn) {
 		psmi_assert(IPS_PROTOEXP_FLAG_KERNEL_QP(proto->ep->rdmamode));
 		psmi_assert(proto->ep->rv);
-		if (!  psm3_nonzero_gid(&req->verbs.gid)) {
+		if (!  psm3_nonzero_gid(&req->verbs.rv.gid)) {
 			_HFI_ERROR("mismatched PSM3_RDMA config, remote end not in mode 1\n");
 			return PSM2_INTERNAL_ERR;
 			// TBD - if we wanted to allow mismatched config to run in UD mode
@@ -266,7 +266,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_ips_ipsaddr_set_req_params(
 				ipsaddr->pathgrp->pg_path[0][IPS_PATH_LOW_PRIORITY]->verbs.pr_connecting = 1;
 			}
 		}
-	// } else if (psm3_nonzero_gid(&req->verbs.gid)) {
+	// } else if (psm3_nonzero_gid(&req->verbs.rv.gid)) {
 	//	 We could fail here, but we just let remote end decide
 	//	_HFI_ERROR("mismatched PSM3_RDMA config, remote end in mode 1\n");
 	//	return PSM2_INTERNAL_ERR;
@@ -304,6 +304,9 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_ips_ipsaddr_set_req_params(
 					return PSM2_INTERNAL_ERR;
 				}
 			}
+
+			ipsaddr->verbs.remote_recv_seq_addr = req->verbs.urc.recv_addr;
+			ipsaddr->verbs.remote_recv_seq_rkey = req->verbs.urc.recv_rkey;
 
 			if (modify_rc_qp_to_init(proto->ep, ipsaddr->verbs.rc_qp)) {
 				_HFI_ERROR("qp_to_init failed\n");
@@ -383,27 +386,41 @@ static PSMI_HAL_INLINE void psm3_hfp_verbs_ips_proto_build_connect_message(
 		// only supply gid if we want to use kernel rv
 		if (IPS_PROTOEXP_FLAG_KERNEL_QP(proto->ep->rdmamode)
 				&& proto->ep->rv) {
-			req->verbs.gid = proto->ep->verbs_ep.lgid;
-			req->verbs.rv_index = proto->ep->verbs_ep.rv_index;
+			req->verbs.rv.gid = proto->ep->verbs_ep.lgid;
+			req->verbs.rv.rv_index = proto->ep->verbs_ep.rv_index;
 		} else
 #endif
 		{
-			memset(&req->verbs.gid, 0, sizeof(req->verbs.gid));
-			req->verbs.rv_index = 0;
+			memset(&req->verbs.rv.gid, 0, sizeof(req->verbs.rv.gid));
+			req->verbs.rv.rv_index = 0;
 		}
 #if defined(USE_RC)
 		if (ipsaddr->verbs.rc_qp) {
 			psmi_assert(IPS_PROTOEXP_FLAG_USER_RC_QP(proto->ep->rdmamode));
 			req->initpsn = proto->runid_key;// pid, not ideal, better than const
 			req->verbs.qp_attr.qpn = ipsaddr->verbs.rc_qp->qp_num;
-			req->verbs.qp_attr.mtu = opa_mtu_int_to_enum(req->mtu);
+			req->verbs.qp_attr.mtu = opa_mtu_int_to_enum(proto->ep->mtu);
 			req->verbs.qp_attr.srq = 0;
 			req->verbs.qp_attr.resv = 0;
 			req->verbs.qp_attr.target_ack_delay = 0; // TBD; - from local device
 			req->verbs.qp_attr.resv2 = 0;
+#ifdef USE_RDMA_READ
+			// Send our RDMA Read capabilities
+			req->verbs.qp_attr.responder_resources = proto->ep->verbs_ep.max_qp_rd_atom;
+			req->verbs.qp_attr.initiator_depth = proto->ep->verbs_ep.max_qp_init_rd_atom;
+#else
 			req->verbs.qp_attr.responder_resources = 0;
 			req->verbs.qp_attr.initiator_depth = 0;
+#endif
 			memset(&req->verbs.qp_attr.resv3, 0, sizeof(req->verbs.qp_attr.resv3));
+
+			if (IPS_PROTOEXP_FLAG_RDMA_QP(proto->ep->rdmamode) == IPS_PROTOEXP_FLAG_RDMA_USER_RC) {
+				req->verbs.urc.recv_addr = (uintptr_t)ipsaddr->verbs.recv_seq_mr->addr;
+				req->verbs.urc.recv_rkey = ipsaddr->verbs.recv_seq_mr->rkey;
+			} else {
+				req->verbs.urc.recv_addr = 0;
+				req->verbs.urc.recv_rkey = 0;
+			}
 		} else
 #endif // USE_RC
 			memset(&req->verbs.qp_attr, 0, sizeof(req->verbs.qp_attr));
@@ -489,6 +506,28 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_ips_ipsaddr_init_connections(
 	ipsaddr->verbs.use_allocator =  &proto->ep->verbs_ep.send_allocator;
 	ipsaddr->verbs.use_qp =  proto->ep->verbs_ep.qp;
 	ipsaddr->verbs.use_max_inline_data = proto->ep->verbs_ep.qp_cap.max_inline_data;
+
+	if (IPS_PROTOEXP_FLAG_RDMA_QP(proto->ep->rdmamode) == IPS_PROTOEXP_FLAG_RDMA_USER_RC) {
+		struct ips_flow *flow = &ipsaddr->flows[EP_FLOW_GO_BACK_N_PIO];
+
+		ipsaddr->verbs.recv_seq_mr = ibv_reg_mr(proto->ep->verbs_ep.pd,
+			&flow->recv_seq_num, sizeof(flow->recv_seq_num),
+			IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ);
+		if (!ipsaddr->verbs.recv_seq_mr) {
+			_HFI_ERROR("Unable register recv_seq_num MR on %s: %s\n",
+						proto->ep->dev_name, strerror(errno));
+			goto fail;
+		}
+
+		ipsaddr->verbs.remote_recv_psn_mr = ibv_reg_mr(proto->ep->verbs_ep.pd,
+			&ipsaddr->verbs.remote_recv_psn, sizeof(ipsaddr->verbs.remote_recv_psn),
+			IBV_ACCESS_LOCAL_WRITE);
+		if (!ipsaddr->verbs.remote_recv_psn_mr) {
+			_HFI_ERROR("Unable register remote_recv_psn MR on %s: %s\n",
+						proto->ep->dev_name, strerror(errno));
+			goto fail;
+		}
+	}
 #endif
 
 #ifdef RNDV_MOD
@@ -542,6 +581,14 @@ fail:
                 rc_qp_destroy(ipsaddr->verbs.rc_qp);
                 ipsaddr->verbs.rc_qp = NULL;
         }
+		if (ipsaddr->verbs.recv_seq_mr) {
+			ibv_dereg_mr(ipsaddr->verbs.recv_seq_mr);
+			ipsaddr->verbs.recv_seq_mr = NULL;
+		}
+		if (ipsaddr->verbs.remote_recv_psn_mr) {
+			ibv_dereg_mr(ipsaddr->verbs.remote_recv_psn_mr);
+			ipsaddr->verbs.remote_recv_psn_mr = NULL;
+		}
 #endif
 	return err;
 }
@@ -650,7 +697,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_ips_ptl_pollintr(
 					 next_timeout, pollok, pollcyc, pollintr);
 }
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 static PSMI_HAL_INLINE void psm3_hfp_verbs_gdr_close(void)
 {
 }
@@ -661,7 +708,7 @@ static PSMI_HAL_INLINE void* psm3_hfp_verbs_gdr_convert_gpu_to_host_addr(unsigne
 	return psm3_verbs_gdr_convert_gpu_to_host_addr(buf, size, flags,
                                 ep);
 }
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 
 #include "verbs_spio.c"
 
@@ -670,7 +717,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_spio_transfer_frame(struct ip
 					uint32_t *payload, uint32_t length,
 					uint32_t isCtrlMsg, uint32_t cksum_valid,
 					uint32_t cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 				, uint32_t is_gpu_payload
 #endif
 	)
@@ -678,7 +725,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_spio_transfer_frame(struct ip
 	return psm3_verbs_spio_transfer_frame(proto, flow, scb,
 					 payload, length, isCtrlMsg,
 					 cksum_valid, cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 				, is_gpu_payload
 #endif
 	);
@@ -689,7 +736,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_transfer_frame(struct ips_pro
 					uint32_t *payload, uint32_t length,
 					uint32_t isCtrlMsg, uint32_t cksum_valid,
 					uint32_t cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 				, uint32_t is_gpu_payload
 #endif
 	)
@@ -697,7 +744,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_transfer_frame(struct ips_pro
 	return psm3_verbs_spio_transfer_frame(proto, flow, scb,
 					 payload, length, isCtrlMsg,
 					 cksum_valid, cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 				, is_gpu_payload
 #endif
 	);

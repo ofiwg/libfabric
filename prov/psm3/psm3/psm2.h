@@ -314,8 +314,8 @@ enum psm2_error {
 	/*! PSM2 is finalized */
 	PSM2_IS_FINALIZED = 13,
 
-	/*! TCP data send is successful */
-	PSM2_TCP_DATA_SENT = 14,
+	/*! data was sent reliably */
+	PSM2_RELIABLE_DATA_SENT = 14,
 
 	/*! Endpoint was closed */
 	PSM2_EP_WAS_CLOSED = 20,
@@ -1325,6 +1325,15 @@ void *psm3_epaddr_getctxt(psm2_epaddr_t epaddr);
    * option value: Context associated with PSM2 endpoint address.
    */
 
+/* PSM2 endpoint CUDA_PERMITTED flag */
+#define PSM2_CORE_OPT_EP_CUDA_PERMITTED   0x103
+  /**< [@b uint32_t ] Set/Get the CUDA_PERMITTED flag associated with a PSM2
+   * endpoint (psm2_ep_t).
+   *
+   * component object: PSM2 endpoint (@ref psm2_ep_t).
+   * option value: Boolean flag.
+   */
+
 /* PSM2_COMPONENT_IB options */
 /* Default service level to use to communicate with remote endpoints */
 #define PSM2_IB_OPT_DF_SL 0x201
@@ -1717,6 +1726,14 @@ typedef enum psm2_info_query_et
        Output parameter: char*, description: name of the device's address. */
 	PSM2_INFO_QUERY_UNIT_ADDR_NAME,
 
+/*! Required input arguments 0
+   Output parameter: uint32_t*, description: configured PSM3_GPU_THRESH_RNDV */
+	PSM2_INFO_QUERY_GPU_THRESH_RNDV,
+
+/*! Required input arguments 0
+   Output parameter: uint32_t*, description: default for PSM3_MQ_RNDV_SHM_GPU_THRESH */
+	PSM2_INFO_QUERY_MQ_RNDV_SHM_GPU_THRESH_DEFAULT,
+
 	PSM2_INFO_QUERY_LAST, /* must appear last, and the info query
 				 constants are used as an index. */
 } psm2_info_query_t;
@@ -1772,14 +1789,14 @@ psm2_error_t psm3_info_query(psm2_info_query_t, void *out,
  * Used to support interrupt driven progress with CPU release when
  * >1 process per core
  *
- * @param[in] int timeout  timeout in milliseconds.  <0 is infinite timeout
+ * @param[in] int timeout_ms  timeout in milliseconds.  <0 is infinite timeout
  *
  * @returns PSM2_OK if wait completed and some progress may have been made
  * @returns PSM2_TIMEOUT if wait timeout exceeded with no progress made
  * @returns PSM2_INTERNAL_ERR if wait mode not allowed for given HAL
  * @returns PSM2_PARAM_ERR if not allowed for use with current PSM settings/mode
  */
-psm2_error_t psm3_wait(int timeout);
+psm2_error_t psm3_wait(int timeout_ms);
 
 /** @brief PSM2 env initialization
  *
@@ -1905,6 +1922,7 @@ int psm3_getenv_str(const char *name, const char *descr, int visible,
  * @param[in] unint32_t parameter copy length
  */
 void psm3_memcpy(void *dest, const void *src, uint32_t len);
+void psm3_ep_memcpy(psm2_ep_t ep, void *dest, const void *src, uint32_t len);
 
 /*! @} */
 

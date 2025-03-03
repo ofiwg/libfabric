@@ -449,7 +449,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_ptl_pollintr(
 					 next_timeout, pollok, pollcyc, pollintr);
 }
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 static PSMI_HAL_INLINE void psm3_hfp_sockets_gdr_close(void)
 {
 }
@@ -460,7 +460,7 @@ static PSMI_HAL_INLINE void* psm3_hfp_sockets_gdr_convert_gpu_to_host_addr(unsig
 	return psm3_sockets_gdr_convert_gpu_to_host_addr(buf, size, flags,
                                 ep);
 }
-#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* PSM_HAVE_GPU */
 
 #include "sockets_spio.c"
 
@@ -469,7 +469,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_spio_transfer_frame(struct 
 					uint32_t *payload, uint32_t length,
 					uint32_t isCtrlMsg, uint32_t cksum_valid,
 					uint32_t cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 				, uint32_t is_gpu_payload
 #endif
 	)
@@ -490,7 +490,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_spio_transfer_frame(struct 
 		return psm3_sockets_udp_spio_transfer_frame(proto, flow, scb,
 					payload, length, isCtrlMsg,
 					cksum_valid, cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 					, is_gpu_payload
 #endif
 					);
@@ -499,7 +499,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_spio_transfer_frame(struct 
 		return psm3_sockets_tcp_spio_transfer_frame(proto, flow, scb,
 					payload, length, isCtrlMsg,
 					cksum_valid, cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 					, is_gpu_payload
 #endif
 					);
@@ -510,7 +510,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_transfer_frame(struct ips_p
 					uint32_t *payload, uint32_t length,
 					uint32_t isCtrlMsg, uint32_t cksum_valid,
 					uint32_t cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 				, uint32_t is_gpu_payload
 #endif
 	)
@@ -518,7 +518,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_transfer_frame(struct ips_p
 	return psm3_hfp_sockets_spio_transfer_frame(proto, flow, scb,
 					payload, length, isCtrlMsg,
 					cksum_valid, cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 					, is_gpu_payload
 #endif
 					);

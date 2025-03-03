@@ -67,6 +67,44 @@
 #include "ips_proto_internal.h"
 #include "ips_proto_params.h"
 
+#ifdef USE_RC
+static inline psm2_error_t
+psm3_verbs_get_remote_psn(psm2_ep_t ep, struct ips_epaddr *ipsaddr) {
+	psm2_error_t ret = PSM2_OK;
+
+	struct ibv_send_wr wr;
+	struct ibv_send_wr *bad_wr;
+	struct ibv_sge list;
+
+	// set local location to store received data
+	list.addr = (uintptr_t)ipsaddr->verbs.remote_recv_psn_mr->addr;
+	list.length = sizeof(ipsaddr->verbs.remote_recv_psn);
+	list.lkey = ipsaddr->verbs.remote_recv_psn_mr->lkey;
+
+	wr.next = NULL; // just post 1
+	wr.wr_id = (uintptr_t)ipsaddr;
+	wr.sg_list = &list;
+	wr.num_sge = 1; // size of sg_list
+	wr.opcode = IBV_WR_RDMA_READ;
+
+	// set remote location where to read data from
+	wr.wr.rdma.remote_addr = ipsaddr->verbs.remote_recv_seq_addr;
+	wr.wr.rdma.rkey = ipsaddr->verbs.remote_recv_seq_rkey;
+	wr.send_flags = IBV_SEND_SIGNALED;
+
+	if_pf (ibv_post_send(ipsaddr->verbs.rc_qp, &wr, &bad_wr)) {
+		if (errno != EBUSY && errno != EAGAIN && errno != ENOMEM)
+			_HFI_ERROR("failed to get remote psn num on %s port %u: %s\n",
+					ep->dev_name, ep->portnum, strerror(errno));
+		return PSM2_EP_NO_RESOURCES;
+	}
+	ipsaddr->verbs.remote_seq_outstanding = 1;
+	_HFI_VDBG("posted remote_recv_psn RDMA READ: from 0x%"PRIx64" to 0x%"PRIx64" len %u rkey 0x%x\n",
+		wr.wr.rdma.remote_addr, list.addr, list.length, wr.wr.rdma.rkey);
+	return ret;
+}
+#endif
+
 // TBD we could get also get scb->cksum out of scb
 // when called:
 //		scb->ips_lrh has fixed size PSM header including OPA LRH
@@ -100,7 +138,7 @@ psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 			struct ips_scb *scb, uint32_t *payload,
 			uint32_t length, uint32_t isCtrlMsg,
 			uint32_t cksum_valid, uint32_t cksum
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 			, uint32_t is_gpu_payload
 #endif
 			)
@@ -148,6 +186,36 @@ psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 #endif // PSM_FI
 	PSMI_LOCK_ASSERT(proto->mq->progress_lock);
 	psmi_assert_always(! cksum_valid);	// no software checksum yet
+
+#ifdef USE_RC
+	if (!isCtrlMsg && flow->ipsaddr->verbs.use_qp->qp_type == IBV_QPT_RC && proto->max_credits < IPS_PROTO_FLOW_CREDITS_RC_MAX) {
+		if (flow->ipsaddr->verbs.remote_seq_outstanding) {
+			psm3_verbs_completion_update(proto->ep, 1);
+			if (flow->ipsaddr->verbs.remote_seq_outstanding)
+				return PSM2_EP_NO_RESOURCES;
+		}
+
+		// NOTE: the remote_recv_psn is the actual received pkt psn + 1 (see ips_proto_is_expected_or_nak())
+		//       and the scb psn_num is the pkt we are going to send out. So we have below diff calculation
+		int diff = scb->seq_num.psn_num - flow->ipsaddr->verbs.remote_recv_psn;
+
+		_HFI_VDBG("pkt psn=%d remote recv psn=%d diff=%d cc_count=%d\n",
+			scb->seq_num.psn_num, flow->ipsaddr->verbs.remote_recv_psn, diff,
+			flow->ipsaddr->verbs.cc_count);
+		if (diff < 0)
+			diff += proto->psn_mask + 1;
+		if (diff >= proto->max_credits || (flow->ipsaddr->verbs.cc_count && diff >= proto->min_credits)) {
+			psm3_verbs_get_remote_psn(proto->ep, flow->ipsaddr);
+			// cc_count is congestion control count. right now we use it to indicate whether is
+			// under congestion control. The count can potentially used in dynamic CC adjustment
+			// in the future
+			flow->ipsaddr->verbs.cc_count += 1;
+			return PSM2_EP_NO_RESOURCES;
+		}
+
+		flow->ipsaddr->verbs.cc_count = 0;
+	}
+#endif
 	// allocate a send buffer
 	// if we have no buffers, we can return PSM2_EP_NO_RESOURCES and caller
 	// will try again later
@@ -161,9 +229,17 @@ psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 	}
 	if_pf (! sbuf) {
 		_HFI_VDBG("out of send buffers\n");
+		// try to poll send completion and see if we can free some sbuf
+		psm3_verbs_completion_update(proto->ep, 1);
 		return PSM2_EP_NO_RESOURCES;
 	}
 	_HFI_VDBG("got sbuf %p index %lu\n", sbuf_to_buffer(sbuf), send_buffer_index(sbuf_pool(ep, sbuf), sbuf_to_buffer(sbuf)));
+
+	uint8_t is_reliable = USE_QP->qp_type == IBV_QPT_RC && scb == STAILQ_FIRST(&flow->scb_unacked);
+	if (is_reliable) {
+		// no explicit ack for RC because RC already has its own ack
+		ips_lrh->bth[2] &= __cpu_to_be32(~IPS_SEND_FLAG_ACKREQ);
+	}
 	// TBD - we should be able to skip sending some headers such as OPA lrh and
 	// perhaps bth (does PSM use bth to hold PSNs?)
 	// copy scb->ips_lrh to send buffer
@@ -171,7 +247,7 @@ psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 	memcpy(sbuf_to_buffer(sbuf), ips_lrh, sizeof(*ips_lrh));
 	if (!send_dma) {
 		// copy payload to send buffer, length could be zero, be safe
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_HAVE_GPU
 		if (is_gpu_payload) {
 			_HFI_VDBG("copy gpu payload %p %u\n",  payload, length);
 			PSM3_GPU_MEMCPY_DTOH(sbuf_to_buffer(sbuf) + sizeof(*ips_lrh),
@@ -287,7 +363,7 @@ psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 		psm3_ep_verbs_unalloc_sbuf(USE_ALLOCATOR, sbuf, prev_sbuf);
 		ret = PSM2_EP_NO_RESOURCES;
 	}
-	_HFI_VDBG("done ud_transfer_frame: len %u, remote qpn %u\n",
+	_HFI_VDBG("done spio_transfer_frame: len %u, remote qpn %u\n",
 		list[0].length +list[1].length,
 #ifdef USE_RC
 		(USE_QP->qp_type != IBV_QPT_UD)? flow->ipsaddr->verbs.remote_qpn :
@@ -297,7 +373,7 @@ psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 	err = psm3_verbs_completion_update(proto->ep, 0);
 	if_pf (err != PSM2_OK)
 		return err;
-	return ret;
+	return is_reliable ? PSM2_RELIABLE_DATA_SENT : ret;
 #undef USE_ALLOCATOR
 #undef USE_QP
 #undef USE_MAX_INLINE
