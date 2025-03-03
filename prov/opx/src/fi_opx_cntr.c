@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 by Cornelis Networks.
+ * Copyright (C) 2021-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -259,7 +259,7 @@ int fi_opx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr, struc
 	opx_cntr->ep_bind_count	    = 0;
 	opx_cntr->progress.ep_count = 0;
 	unsigned i;
-	for (i = 0; i < 64; ++i) { /* TODO - check this array size */
+	for (i = 0; i < OPX_CNTR_MAX_ENDPOINTS; ++i) {
 		opx_cntr->ep[i]		 = NULL;
 		opx_cntr->progress.ep[i] = NULL;
 	}

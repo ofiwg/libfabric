@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022-2024 Cornelis Networks.
+ * Copyright (C) 2022-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -40,7 +40,6 @@
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_hfi1.h"
-#include "rdma/opx/fi_opx_progress.h"
 
 /* Macro indirection in order to support other macros as arguments
  * C requires another indirection for expanding macros since
@@ -88,6 +87,8 @@
 extern "C" {
 #endif
 
+#define OPX_CQ_MAX_ENDPOINTS   (64)
+#define OPX_CNTR_MAX_ENDPOINTS (64)
 struct fi_opx_cntr {
 	struct fid_cntr cntr_fid;
 
@@ -96,11 +97,11 @@ struct fi_opx_cntr {
 
 	struct {
 		uint64_t	  ep_count;
-		struct fi_opx_ep *ep[64]; /* TODO - check this array size */
+		struct fi_opx_ep *ep[OPX_CNTR_MAX_ENDPOINTS]; /* TODO - check this array size */
 	} progress;
 
 	uint64_t	  ep_bind_count;
-	struct fi_opx_ep *ep[64]; /* TODO - check this array size */
+	struct fi_opx_ep *ep[OPX_CNTR_MAX_ENDPOINTS]; /* TODO - check this array size */
 
 	struct fi_cntr_attr  *attr;
 	struct fi_opx_domain *domain;
@@ -112,37 +113,42 @@ struct fi_opx_cntr {
  * "FI_PROGRESS_MANUAL + inject" poll scenario.
  */
 struct fi_opx_cq {
-	struct fid_cq cq_fid; /* must be the first field in the structure; 24 + 64 bytes */
-	uint64_t      pad_0[5];
-
-	/* == CACHE LINE == */
-
-	struct slist pending;
-	struct slist completed;
-	struct slist err;
-
-	struct {
-		uint64_t	  ep_count;
-		struct fi_opx_ep *ep[64]; /* TODO - check this array size */
-	} progress;
-
-	struct fi_opx_progress_track *progress_track;
-
-	uint64_t pad_1[9];
-
+	/* == CACHE LINE 0 == */
+	/* NOTE: The fields in this cacheline are typically read-only
+		 once the cq is initialized. Don't add anything to this
+		 cacheline that gets updated frequently */
+	struct fid_cq	      cq_fid; /* must be the first field in the structure; 32 bytes */
 	struct fi_opx_domain *domain;
 	uint64_t	      bflags; /* fi_opx_bind_ep_cq() */
 	size_t		      size;
 	enum fi_cq_format     format;
+	uint32_t	      unused_0;
+
+	/* == CACHE LINE 1 == */
+	struct slist pending;
+	struct slist completed;
+	struct slist err;
+	void	    *progress_thread;
+	uint64_t     unused_1;
+
+	/* == CACHE LINE 2+ == */
+	struct {
+		uint64_t	  ep_count;
+		struct fi_opx_ep *ep[OPX_CQ_MAX_ENDPOINTS]; /* TODO - check this array size */
+	} progress;
 
 	uint64_t	  ep_bind_count;
-	struct fi_opx_ep *ep[64]; /* TODO - check this array size */
+	struct fi_opx_ep *ep[OPX_CQ_MAX_ENDPOINTS]; /* TODO - check this array size */
 
 	uint64_t ep_comm_caps;
 
 	int64_t	   ref_cnt;
 	ofi_spin_t lock;
 };
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_cq, pending) == (FI_OPX_CACHE_LINE_SIZE * 1),
+			"struct fi_opx_cq.pending should start at cacheline 1!\n");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_cq, progress) == (FI_OPX_CACHE_LINE_SIZE * 2),
+			"struct fi_opx_cq.progress should start at cacheline 2!\n");
 
 int fi_opx_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr, struct fid_eq **eq, void *context);
 

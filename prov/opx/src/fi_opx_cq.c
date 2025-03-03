@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 by Cornelis Networks.
+ * Copyright (C) 2021-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,6 +33,7 @@
 #include <ofi.h>
 
 #include "rdma/opx/fi_opx_eq.h"
+#include "rdma/opx/fi_opx_progress.h"
 
 #define FI_OPX_DEFAULT_CQ_DEPTH (8192)
 #define FI_OPX_MAXIMUM_CQ_DEPTH (8192)
@@ -168,10 +169,9 @@ static int fi_opx_close_cq(fid_t fid)
 		fi_opx_unlock(&opx_cq->lock);
 	}
 
-	if (opx_cq->progress_track) {
-		fi_opx_stop_progress(opx_cq->progress_track);
-		free(opx_cq->progress_track);
-		opx_cq->progress_track = NULL;
+	if (opx_cq->progress_thread) {
+		opx_progress_stop(opx_cq->progress_thread);
+		opx_cq->progress_thread = NULL;
 	}
 
 	ofi_spin_destroy(&opx_cq->lock);
@@ -340,7 +340,7 @@ int fi_opx_cq_open(struct fid_domain *dom, struct fi_cq_attr *attr, struct fid_c
 	opx_cq->ep_bind_count	  = 0;
 	opx_cq->progress.ep_count = 0;
 	unsigned i;
-	for (i = 0; i < 64; ++i) { /* TODO - check this array size */
+	for (i = 0; i < OPX_CQ_MAX_ENDPOINTS; ++i) {
 		opx_cq->ep[i]	       = NULL;
 		opx_cq->progress.ep[i] = NULL;
 	}
@@ -353,23 +353,13 @@ int fi_opx_cq_open(struct fid_domain *dom, struct fi_cq_attr *attr, struct fid_c
 	*cq = &opx_cq->cq_fid;
 
 	if (fi_opx_global.progress == FI_PROGRESS_AUTO) {
-		FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "Trying to start a PROGRESS_AUTO thread\n");
-		opx_cq->progress_track = malloc(sizeof(struct fi_opx_progress_track));
-		if (opx_cq->progress_track) {
-			fi_opx_progress_init(opx_cq->progress_track);
-			fi_opx_start_progress(opx_cq->progress_track, &opx_cq->cq_fid,
-					      opx_cq->domain->progress_affinity_str,
-					      opx_cq->domain->auto_progress_interval);
-			if (!opx_cq->progress_track->progress_thread) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "Failed to start PROGRESS_AUTO thread\n");
-				goto err;
-			}
-		} else {
+		FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "Starting autoprogress thread\n");
+
+		opx_cq->progress_thread = opx_progress_init(opx_cq, opx_cq->domain->progress_affinity_str);
+		if (OFI_UNLIKELY(opx_cq->progress_thread == NULL)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "Failed to setup PROGRESS_AUTO\n");
 			goto err;
 		}
-	} else {
-		opx_cq->progress_track = NULL;
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "cq opened\n");

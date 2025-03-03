@@ -249,8 +249,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   no affinity is set.
 
 *FI_OPX_AUTO_PROGRESS_INTERVAL_USEC*
-: Integer. This setting controls the time (in usecs) between polls for auto progress threads.
-  Default is 1.
+: Deprecated/ignored. Auto progress threads are now interrupt-driven and only poll when data is available.
 
 *FI_OPX_PKEY*
 : Integer. Partition key, a 2 byte positive integer. Default is the Pkey in the index 0 of the
