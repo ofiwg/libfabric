@@ -515,7 +515,7 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	}
 
 	cxi_cq->util_cq.cq_fid.fid.ops = &cxip_cq_fi_ops;
-	if (!(attr->flags & FI_PEER))
+	if (!(cxi_cq->attr.flags & FI_PEER))
 		cxi_cq->util_cq.cq_fid.ops = &cxip_cq_ops;
 	cxi_cq->domain = cxi_dom;
 	cxi_cq->ack_batch_size = cxip_env.eq_ack_batch_size;
