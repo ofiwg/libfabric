@@ -119,11 +119,27 @@ typedef atomic_long	ofi_atomic_int64_t;
 								 memory_order_acq_rel) + val;		\
 	}												\
 	static inline											\
+	int##radix##_t ofi_atomic_add_explicit##radix(ofi_atomic##radix##_t *atomic,			\
+						      int##radix##_t val,				\
+						      int memmodel)					\
+	{												\
+		ATOMIC_IS_INITIALIZED(atomic);								\
+		return (int##radix##_t)atomic_fetch_add_explicit(&atomic->val, val, memmodel);		\
+	}												\
+	static inline											\
 	int##radix##_t ofi_atomic_sub##radix(ofi_atomic##radix##_t *atomic, int##radix##_t val)		\
 	{												\
 		ATOMIC_IS_INITIALIZED(atomic);								\
 		return (int##radix##_t)atomic_fetch_sub_explicit(&atomic->val, val,			\
 								 memory_order_acq_rel) - val;		\
+	}												\
+	static inline											\
+	int##radix##_t ofi_atomic_sub_explicit##radix(ofi_atomic##radix##_t *atomic,			\
+						      int##radix##_t val,				\
+						      int memmodel)					\
+	{												\
+		ATOMIC_IS_INITIALIZED(atomic);								\
+		return (int##radix##_t)atomic_fetch_sub_explicit(&atomic->val, val, memmodel);		\
 	}												\
 	/**												\
 	 *  Compare and swap, strong version								\
