@@ -175,27 +175,31 @@ void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
  * @brief process a RTM that has been matched to a RX entry
  *
  * @param[in,out]	pkt_entry	RTM packet entry
- * @param[in,out]	rxe		RX entry that matches the RTM
+ * @param[in,out]	rxe			RX entry that matches the RTM
+ * @param[in]		peer		efa_rdm_peer struct of receiver
  *
  * @returns
  * 0 on success
  * negative libfabric error code on failure
  */
-ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
 {
-	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
 	int pkt_type;
 	ssize_t ret;
 
+#if ENABLE_DEBUG
+	struct efa_rdm_ep *ep;
 	ep = pkt_entry->ep;
+#endif
+
 	rxe = pkt_entry->ope;
 	assert(rxe && rxe->state == EFA_RDM_RXE_MATCHED);
 
 	efa_rdm_tracepoint(rx_pke_proc_matched_msg_begin, (size_t) pkt_entry, pkt_entry->payload_size, rxe->msg_id, (size_t) rxe->cq_entry.op_context, rxe->total_len);
 	if (!rxe->peer) {
 		rxe->addr = pkt_entry->addr;
-		rxe->peer = efa_rdm_ep_get_peer(ep, rxe->addr);
+		rxe->peer = peer;
 		assert(rxe->peer);
 		dlist_insert_tail(&rxe->peer_entry, &rxe->peer->rxe_list);
 	}
@@ -235,7 +239,7 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
 		return efa_rdm_pke_proc_matched_longread_rtm(pkt_entry);
 
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
-		return efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
+		return efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry, peer);
 
 	if (pkt_type == EFA_RDM_EAGER_MSGRTM_PKT ||
 	    pkt_type == EFA_RDM_EAGER_TAGRTM_PKT ||
@@ -268,8 +272,10 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
  * @brief process a received non-tagged RTM packet
  *
  * @param[in,out]	pkt_entry	non-tagged RTM packet entry
+ * @param[in]		peer		efa_rdm_peer struct of sender
  */
-ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
+static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry,
+				       struct efa_rdm_peer *peer)
 {
 	ssize_t err;
 	struct efa_rdm_ep *ep;
@@ -297,7 +303,7 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 	pkt_entry->ope = rxe;
 
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
-		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
+		err = efa_rdm_pke_proc_matched_rtm(pkt_entry, peer);
 		if (OFI_UNLIKELY(err)) {
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_MSGRTM);
 			efa_rdm_pke_release_rx(pkt_entry);
@@ -316,8 +322,10 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
  * @brief process a received tagged RTM packet
  *
  * @param[in,out]	pkt_entry	non-tagged RTM packet entry
+ * @param[in]	peer	efa_rdm_peer struct of sender
  */
-ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
+static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry,
+				       struct efa_rdm_peer *peer)
 {
 	ssize_t err;
 	struct efa_rdm_ep *ep;
@@ -345,7 +353,7 @@ ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 	pkt_entry->ope = rxe;
 
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
-		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
+		err = efa_rdm_pke_proc_matched_rtm(pkt_entry, peer);
 		if (OFI_UNLIKELY(err)) {
 			if (err == -FI_ENOMR)
 				return err;
@@ -370,8 +378,9 @@ ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
  * by msg_id in the packet header
  *
  * @param[in,out]	pkt_entry	received RTM or RTA packet entry
+ * @param[in]	peer	efa_rdm_peer struct of the sender
  */
-ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_base_hdr *base_hdr;
@@ -389,7 +398,7 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-		return efa_rdm_pke_proc_msgrtm(pkt_entry);
+		return efa_rdm_pke_proc_msgrtm(pkt_entry, peer);
 	case EFA_RDM_EAGER_TAGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
@@ -398,7 +407,7 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		return efa_rdm_pke_proc_tagrtm(pkt_entry);
+		return efa_rdm_pke_proc_tagrtm(pkt_entry, peer);
 	case EFA_RDM_WRITE_RTA_PKT:
 		return efa_rdm_pke_proc_write_rta(pkt_entry);
 	case EFA_RDM_DC_WRITE_RTA_PKT:
@@ -426,18 +435,20 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry)
  * Otherwise, process it then process packet in the re-order buffer.
  *
  * @param[in,out]	pkt_entry	received RTM or RTA packet entry
+ * @param[in]	peer	efa_rdm_peer struct corresponding to the sender
  */
-void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_base_hdr *base_hdr;
-	struct efa_rdm_peer *peer;
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	bool slide_recvwin;
 	int ret;
 	uint32_t msg_id, exp_msg_id;
 
 	ep = pkt_entry->ep;
+
+	assert(peer);
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	assert(base_hdr->type >= EFA_RDM_BASELINE_REQ_PKT_BEGIN);
@@ -450,7 +461,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 		if (rxe) {
 			if (rxe->state == EFA_RDM_RXE_MATCHED) {
 				pkt_entry->ope = rxe;
-				efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
+				efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry, peer);
 			} else {
 				assert(rxe->unexp_pkt);
 				unexp_pkt_entry = efa_rdm_pke_get_unexp(&pkt_entry);
@@ -461,9 +472,6 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 			return;
 		}
 	}
-
-	peer = efa_rdm_ep_get_peer(pkt_entry->ep, pkt_entry->addr);
-	assert(peer);
 
 	msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
 	ret = efa_rdm_peer_reorder_msg(peer, pkt_entry->ep, pkt_entry);
@@ -507,7 +515,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 	 * efa_rdm_pke_proc_rtm_rta() will write error cq entry if needed,
 	 * thus we do not write error cq entry
 	 */
-	ret = efa_rdm_pke_proc_rtm_rta(pkt_entry);
+	ret = efa_rdm_pke_proc_rtm_rta(pkt_entry, peer);
 	if (OFI_UNLIKELY(ret))
 		return;
 
@@ -851,8 +859,9 @@ void efa_rdm_pke_handle_medium_rtm_send_completion(struct efa_rdm_pke *pkt_entry
  * RTM and 2 types of RUNTREAD RTM.
  *
  * @param[in,out]	pkt_entry	packet entry
+ * @param[in]	peer	efa_rdm_peer struct of the sender
  */
-ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;

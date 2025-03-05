@@ -90,9 +90,8 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	return 0;
 }
 
-void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
 {
-	struct efa_rdm_peer *peer;
 	struct efa_rdm_handshake_hdr *handshake_pkt;
 	uint64_t *host_id_ptr;
 
@@ -100,7 +99,6 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 	EFA_DBG(FI_LOG_CQ,
 		"HANDSHAKE received from %" PRIu64 "\n", pkt_entry->addr);
 
-	peer = efa_rdm_ep_get_peer(pkt_entry->ep, pkt_entry->addr);
 	assert(peer);
 
 	handshake_pkt = (struct efa_rdm_handshake_hdr *)pkt_entry->wiredata;
@@ -568,8 +566,9 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
  *
  * @param ep[in,out]			Endpoint
  * @param context_pkt_entry[in,out]	The "Packet" which serves as context
+ * @param peer[in]			struct efa_rdm_peer of peer
  */
-void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
+void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry, struct efa_rdm_peer *peer)
 {
 	struct efa_rdm_ope *txe = NULL;
 	struct efa_rdm_rma_context_pkt *rma_context_pkt;
@@ -599,7 +598,7 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 		assert(0 && "invalid EFA_RDM_RMA_CONTEXT_PKT rma_context_type\n");
 	}
 
-	efa_rdm_ep_record_tx_op_completed(context_pkt_entry->ep, context_pkt_entry);
+	efa_rdm_ep_record_tx_op_completed(context_pkt_entry->ep, context_pkt_entry, peer);
 	efa_rdm_pke_release_tx(context_pkt_entry);
 }
 
