@@ -217,7 +217,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
 
 void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
+void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer);
 
 static inline size_t efa_rdm_ep_get_rx_pool_size(struct efa_rdm_ep *ep)
 {
@@ -245,9 +245,9 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 
 struct efa_rdm_peer;
 
-void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
-			      struct dlist_entry *list,
-			      struct efa_rdm_pke *pkt_entry);
+void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct dlist_entry *list,
+			      struct efa_rdm_pke *pkt_entry,
+			      struct efa_rdm_peer *peer);
 
 ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 				    struct dlist_entry *pkts);
