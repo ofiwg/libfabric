@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_domain" "3" "2025\-01\-30" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_domain" "3" "2025\-03\-06" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -444,7 +444,7 @@ The table assumes that all peers enable or disable RM the same.
 .PP
 .TS
 tab(@);
-cw(7.7n) cw(16.2n) cw(16.2n) cw(15.4n) cw(14.6n).
+cw(5.4n) cw(11.3n) cw(11.3n) cw(10.8n) cw(10.2n) cw(10.8n) cw(10.2n).
 T{
 Resource
 T}@T{
@@ -452,13 +452,21 @@ DGRAM EP-no RM
 T}@T{
 DGRAM EP-with RM
 T}@T{
-RDM/MSG EP-no RM
+MSG EP-no RM
 T}@T{
-RDM/MSG EP-with RM
+MSG EP-with RM
+T}@T{
+RDM EP-no RM
+T}@T{
+RDM EP-with RM
 T}
 _
 T{
 Tx Ctx
+T}@T{
+undefined error
+T}@T{
+EAGAIN
 T}@T{
 undefined error
 T}@T{
@@ -478,9 +486,17 @@ T}@T{
 undefined error
 T}@T{
 EAGAIN
+T}@T{
+undefined error
+T}@T{
+EAGAIN
 T}
 T{
 Tx CQ
+T}@T{
+undefined error
+T}@T{
+EAGAIN
 T}@T{
 undefined error
 T}@T{
@@ -500,6 +516,10 @@ T}@T{
 undefined error
 T}@T{
 EAGAIN
+T}@T{
+undefined error
+T}@T{
+EAGAIN
 T}
 T{
 Target EP
@@ -507,6 +527,10 @@ T}@T{
 dropped
 T}@T{
 dropped
+T}@T{
+transmit error
+T}@T{
+retried
 T}@T{
 transmit error
 T}@T{
@@ -522,6 +546,10 @@ T}@T{
 transmit error
 T}@T{
 retried
+T}@T{
+transmit error
+T}@T{
+retried
 T}
 T{
 Rx Buf Overrun
@@ -529,6 +557,10 @@ T}@T{
 truncate or drop
 T}@T{
 truncate or drop
+T}@T{
+truncate or error
+T}@T{
+truncate or error
 T}@T{
 truncate or error
 T}@T{
@@ -544,9 +576,32 @@ T}@T{
 transmit error
 T}@T{
 transmit error
+T}@T{
+transmit error
+T}@T{
+transmit error
 T}
 T{
 RMA Overrun
+T}@T{
+not applicable
+T}@T{
+not applicable
+T}@T{
+transmit error
+T}@T{
+transmit error
+T}@T{
+transmit error
+T}@T{
+transmit error
+T}
+T{
+Unreachable EP
+T}@T{
+dropped
+T}@T{
+dropped
 T}@T{
 not applicable
 T}@T{
@@ -627,15 +682,30 @@ Unlike send operations, RMA operations that attempt to access a memory
 address that is either not registered for such operations, or attempt to
 access outside of the target memory region will fail, resulting in a
 transmit error.
+.TP
+\f[I]Unreachable EP\f[R]
+Unreachable endpoint is a connectionless specific scenario where
+transmit operations are issued to unreachable target endpoints.
+Such scenarios include no-route-to-host or down target NIC.
+For FI_EP_DGRAM endpoints, transmit operations targeting an unreachable
+endpoint will have operation dropped.
+For FI_EP_RDM, target operations targeting an unreachable endpoint will
+result in a transmit error.
 .PP
-When a resource management error occurs on an endpoint, the endpoint is
-transitioned into a disabled state.
-Any operations which have not already completed will fail and be
-discarded.
-For connectionless endpoints, the endpoint must be re-enabled before it
-will accept new data transfer operations.
-For connected endpoints, the connection is torn down and must be
-re-established.
+When a resource management error occurs on an a connected endpoint, the
+endpoint will transition into a disabled state and the connection torn
+down.
+A disabled endpoint will drop any queued or inflight operations.
+.PP
+The behavior of resource management errors on connectionless endpoints
+depends on the type of error.
+If RM is disabled and one of the following errors occur, the endpoint
+will be disabled: Tx Ctx, Rx Ctx, Tx CQ, or Rx CQ.
+For other errors (Target EP, No Rx Buffer, etc.), the operation may
+fail, but the endpoint will remain enabled.
+A disabled endpoint will drop or fail any queued or inflight operations.
+In addition, a disabled endpoint must be re-enabled before it will
+accept new data transfer operations.
 .PP
 There is one notable restriction on the protections offered by resource
 management.
