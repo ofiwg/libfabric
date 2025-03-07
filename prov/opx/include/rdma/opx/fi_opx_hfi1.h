@@ -547,6 +547,13 @@ struct fi_opx_hfi1_context {
 	time_t	 network_lost_time;
 	uint64_t status_check_next_usec;
 	uint64_t link_down_wait_time_max_sec;
+	union {
+		volatile uint64_t		       *credits_addr;
+		volatile union fi_opx_hfi1_txe_credits *credits;
+	} credits_addr_copy;
+
+	uint64_t dummy_free_credits;
+
 	/* struct ibv_context * for hfi1 direct/rdma-core only */
 	void *ibv_context;
 };
@@ -581,7 +588,7 @@ static inline void fi_opx_hfi1_check_credits_for_error(volatile uint64_t *credit
 __OPX_FORCE_INLINE__
 uint16_t fi_opx_credits_in_use(union fi_opx_hfi1_pio_state *pio_state)
 {
-	assert((pio_state->fill_counter - pio_state->free_counter_shadow) <= pio_state->credits_total);
+	assert(((pio_state->fill_counter - pio_state->free_counter_shadow) & 0x07FFu) <= pio_state->credits_total);
 	return ((pio_state->fill_counter - pio_state->free_counter_shadow) & 0x07FFu);
 }
 
@@ -842,6 +849,10 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 
 void opx_reset_context(struct fi_opx_ep *opx_ep);
 
+void opx_link_down_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep);
+
+void opx_link_up_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep);
+
 #define OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC 250000 /* 250 ms*/
 
 __OPX_FORCE_INLINE__
@@ -882,7 +893,8 @@ uint64_t opx_get_hw_status_jkr(struct fi_opx_hfi1_context *context)
 #define OPX_LINK_DOWN_WAIT_TIME_MAX_SEC_DEFAULT 70.0
 
 __OPX_FORCE_INLINE__
-size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context, const enum opx_hfi1_type hfi1_type)
+size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context, const enum opx_hfi1_type hfi1_type,
+				   struct fi_opx_ep *opx_ep)
 {
 	size_t	 err	= FI_SUCCESS;
 	uint64_t status = (hfi1_type & OPX_HFI1_WFR) ? opx_get_hw_status_wfr(context) : opx_get_hw_status_jkr(context);
@@ -897,6 +909,8 @@ size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context, const en
 		err = FI_ENETDOWN;
 		if (err != context->status_lasterr) {
 			context->network_lost_time = time(NULL);
+			/* Point the pio credit addr to a dummy pointer */
+			opx_link_down_update_pio_credit_addr(context, opx_ep);
 		} else {
 			time_t now = time(NULL);
 
