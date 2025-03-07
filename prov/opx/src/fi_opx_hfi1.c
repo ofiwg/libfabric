@@ -159,8 +159,9 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 void opx_reset_context(struct fi_opx_ep *opx_ep)
 {
 	fi_opx_compiler_msync_writes();
-	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
-	opx_ep->rx->state.hdrq.head    = 0;
+	opx_ep->rx->state.hdrq.rhf_seq	   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
+	opx_ep->rx->state.hdrq.head	   = 0;
+	opx_ep->rx->egrq.last_egrbfr_index = 0;
 
 	if (opx_hfi1_wrapper_reset_context(opx_ep->hfi)) {
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Send context reset failed: %d.\n", errno);
@@ -170,12 +171,39 @@ void opx_reset_context(struct fi_opx_ep *opx_ep)
 
 	opx_ep->tx->pio_state->fill_counter   = 0;
 	opx_ep->tx->pio_state->scb_head_index = 0;
+
+	opx_link_up_update_pio_credit_addr(opx_ep->hfi, opx_ep);
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 	fi_opx_hfi1_poll_sdma_completion(opx_ep);
 	opx_hfi1_sdma_process_pending(opx_ep);
+}
+
+/* When the link is down, prevent reading the mmaped free_counters because the value is not reliable.
+   Hence point the addr to a dummy location which always creates a credit full condition */
+void opx_link_down_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep)
+{
+	context->credits_addr_copy.credits_addr = context->info.pio.credits_addr;
+
+	context->dummy_free_credits			      = context->state.pio.free_counter_shadow;
+	context->info.pio.credits_addr			      = &(context->dummy_free_credits);
+	opx_ep->tx->pio_credits_addr			      = context->info.pio.credits_addr;
+	opx_ep->reliability->service.tx.hfi1.pio_credits_addr = context->info.pio.credits_addr;
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Pointing credit addr to dummy field dummy_free_counter = %ld\n",
+	       context->dummy_free_credits);
+}
+
+/* When the link comes back up, reset the credits pointer to the valid mmaped location */
+void opx_link_up_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep)
+{
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Pointing credit addr back to actual addr %p\n",
+	       context->credits_addr_copy.credits_addr);
+	context->info.pio.credits_addr			      = context->credits_addr_copy.credits_addr;
+	opx_ep->tx->pio_credits_addr			      = context->info.pio.credits_addr;
+	opx_ep->reliability->service.tx.hfi1.pio_credits_addr = context->info.pio.credits_addr;
 }
 
 static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const uint32_t rank)
@@ -802,7 +830,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		OPX_HFI1_INIT_PIO_SOP(context->send_ctxt, (volatile uint64_t *) (ptrdiff_t) base_info->pio_bufbase_sop);
 	context->info.pio.scb_first =
 		OPX_HFI1_INIT_PIO(context->send_ctxt, (volatile uint64_t *) (ptrdiff_t) base_info->pio_bufbase);
-	context->info.pio.credits_addr = (volatile uint64_t *) (ptrdiff_t) base_info->sc_credits_addr;
+	context->info.pio.credits_addr		= (volatile uint64_t *) (ptrdiff_t) base_info->sc_credits_addr;
+	context->credits_addr_copy.credits_addr = context->info.pio.credits_addr;
 
 	const uint64_t credit_return	       = *(context->info.pio.credits_addr);
 	context->state.pio.free_counter_shadow = (uint16_t) (credit_return & 0x00000000000007FFul);
