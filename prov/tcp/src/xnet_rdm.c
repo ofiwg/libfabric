@@ -1044,6 +1044,8 @@ static int xnet_init_rdm(struct xnet_rdm *rdm, struct fi_info *info)
 	msg_info->tx_attr->op_flags = info->tx_attr->op_flags;
 	msg_info->rx_attr->caps &= info->rx_attr->caps;
 	msg_info->rx_attr->op_flags = info->rx_attr->op_flags;
+	if (info->ep_attr)
+		msg_info->ep_attr->mem_tag_format = info->ep_attr->mem_tag_format;
 
 	ret = fi_srx_context(&rdm->util_ep.domain->domain_fid, info->rx_attr,
 			     &srx, rdm);
