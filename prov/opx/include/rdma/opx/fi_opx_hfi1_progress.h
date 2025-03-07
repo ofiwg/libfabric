@@ -675,7 +675,8 @@ void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
 		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]	  = NULL;
 
 		assert(entry->status == COMPLETE || entry->status == FREE ||
-		       (entry->status == ERROR && entry->errcode != ECOMM)); // If it is a network error, retry
+		       (entry->status == ERROR &&
+			(entry->errcode != ECOMM || entry->errcode != -ENOENT))); // If it is a network error, retry
 		++hfi->info.sdma.available_counter;
 		hfi->info.sdma.done_index = (hfi->info.sdma.done_index + 1) % (queue_size);
 		if (hfi->info.sdma.done_index == hfi->info.sdma.fill_index) {
@@ -704,7 +705,7 @@ int opx_is_rhf_empty(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const e
 }
 
 __OPX_FORCE_INLINE__
-void opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
+bool opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
 {
 	uint64_t events = *(uint64_t *) (opx_ep->hfi->ctrl->base_info.events_bufbase);
 	if (events & HFI1_EVENT_FROZEN) {
@@ -715,11 +716,13 @@ void opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const
 			if (ret) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ack event failed: %s\n", strerror(errno));
 			}
+			return true;
 		} else {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"Context frozen: Not resetting because packets are present in receive queue\n");
 		}
 	}
+	return false;
 }
 
 __OPX_FORCE_INLINE__
@@ -751,6 +754,21 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 		union fi_opx_timer_stamp	  *timestamp = &service->tx.timestamp;
 		uint64_t			   compare   = fi_opx_timer_now(timestamp, timer);
 
+		struct fi_opx_hfi1_context *context = opx_ep->hfi;
+
+		if (OFI_UNLIKELY(compare > context->status_check_next_usec)) {
+			int err = fi_opx_context_check_status(context, hfi1_type, opx_ep);
+
+			if (context->status_lasterr != FI_SUCCESS && err == FI_SUCCESS) {
+				if (opx_handle_events(opx_ep, hdrq_mask, hfi1_type)) {
+					context->status_lasterr = FI_SUCCESS; /* clear error */
+				}
+			}
+			compare = fi_opx_timer_now(timestamp, timer);
+			context->status_check_next_usec =
+				fi_opx_timer_next_event_usec(timer, timestamp, OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC);
+		}
+
 		// TODO: There needs to be feedback from the replay buffer pool into this following if as well
 		//		If the pool is getting full, then send pings out more frequently
 
@@ -762,23 +780,6 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 			compare		   = fi_opx_timer_now(timestamp, timer);
 			service->usec_next = fi_opx_timer_next_event_usec(timer, timestamp, service->usec_max);
 		} // End timer fired
-
-		struct fi_opx_hfi1_context *context = opx_ep->hfi;
-
-		if (OFI_UNLIKELY(compare > context->status_check_next_usec)) {
-			int prev_link_status = context->status_lasterr;
-			int err		     = fi_opx_context_check_status(context, hfi1_type);
-			// check for hfi event if link is moving from down to up
-			if ((prev_link_status != FI_SUCCESS) && (err == FI_SUCCESS)) { // check for hfi event if
-				context->status_lasterr = FI_SUCCESS;		       /* clear error */
-				opx_handle_events(opx_ep, hdrq_mask, hfi1_type);
-			} else if ((prev_link_status == FI_SUCCESS) && (err != FI_SUCCESS)) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Link down %d (%s) on unit %d, port %d\n",
-					err, strerror(err), context->hfi_unit, context->hfi_port);
-			}
-			context->status_check_next_usec =
-				fi_opx_timer_next_event_usec(timer, timestamp, OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC);
-		}
 	}
 
 	fi_opx_compiler_msync_writes(); // Workaround for STL-62043

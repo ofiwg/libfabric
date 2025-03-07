@@ -138,8 +138,8 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, int writev_rc, str
 {
 	const pid_t pid = getpid();
 
-	if (errno == ECOMM || errno == EINTR) {
-		int err = fi_opx_context_check_status(opx_ep->hfi, OPX_HFI1_TYPE);
+	if (errno == ECOMM || errno == EINTR || errno == EFAULT) {
+		int err = fi_opx_context_check_status(opx_ep->hfi, OPX_HFI1_TYPE, opx_ep);
 		if (err != FI_SUCCESS) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Link down detected\n");
 			return;
