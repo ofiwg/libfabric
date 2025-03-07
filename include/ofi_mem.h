@@ -327,6 +327,7 @@ enum {
 	OFI_BUFPOOL_NO_TRACK		= 1 << 2,
 	OFI_BUFPOOL_HUGEPAGES		= 1 << 3,
 	OFI_BUFPOOL_NONSHARED		= 1 << 4,
+	OFI_BUFPOOL_NO_ZERO		= 1 << 5,
 };
 
 struct ofi_bufpool_region;
