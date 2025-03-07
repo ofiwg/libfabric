@@ -170,95 +170,71 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
-	uint64_t local_temp[16] = {0};
-	uint64_t niov		= params->niov << 48;
-	uint64_t op64		= params->op << 40;
-	uint64_t dt64		= params->dt << 32;
-	uint64_t credit_return	= OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type);
+	uint64_t niov	       = params->niov << 48;
+	uint64_t op64	       = params->op << 40;
+	uint64_t dt64	       = params->dt << 32;
+	uint64_t credit_return = OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type);
 	assert(FI_OPX_HFI_DPUT_OPCODE_GET == params->opcode); // double check packet type
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		fi_opx_store_and_copy_qw(scb, local_temp,
-					 opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) |
-						 credit_return | params->pbc_dlid,
-					 opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | params->lrh_dlid |
-						 (params->lrh_dws << 32),
-					 opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | params->bth_rx,
-					 opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn, opx_ep->rx->tx.cts_9B.hdr.qw_9B[3],
-					 opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode | dt64 | op64 | niov,
-					 (uintptr_t) params->rma_request,
-					 params->key); // key
+		opx_cacheline_copy_qw_vol(scb, replay->scb.qws,
+					  opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) |
+						  credit_return | params->pbc_dlid,
+					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | params->lrh_dlid |
+						  (params->lrh_dws << 32),
+					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | params->bth_rx,
+					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn, opx_ep->rx->tx.cts_9B.hdr.qw_9B[3],
+					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode | dt64 | op64 | niov,
+					  (uintptr_t) params->rma_request,
+					  params->key); // key
 		/* consume one credit for the packet header */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
 		FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
-
-		fi_opx_copy_hdr9B_cacheline(&replay->scb.scb_9B, local_temp);
 
 		/* write the CTS payload "send control block"  */
 		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-		uint64_t	   temp[8];
-		fi_opx_store_and_copy_qw(scb_payload, temp, params->dput_iov.qw[0], params->dput_iov.qw[1],
-					 params->dput_iov.qw[2], params->dput_iov.qw[3], params->dput_iov.qw[4],
-					 params->dput_iov.qw[5], 0, 0);
+		opx_cacheline_copy_qw_vol(scb_payload, replay->payload, params->dput_iov.qw[0], params->dput_iov.qw[1],
+					  params->dput_iov.qw[2], params->dput_iov.qw[3], params->dput_iov.qw[4],
+					  params->dput_iov.qw[5], 0, 0);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-
-		replay->payload[0] = temp[0];
-		replay->payload[1] = temp[1];
-		replay->payload[2] = temp[2];
-		replay->payload[3] = temp[3];
-		replay->payload[4] = temp[4];
-		replay->payload[5] = temp[5];
-		replay->payload[6] = temp[6];
-		replay->payload[7] = temp[7];
 	} else {
 		const uint64_t bth_rx = params->bth_rx;
-		fi_opx_store_and_copy_qw(scb, local_temp,
-					 opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) |
-						 credit_return | params->pbc_dlid,
-					 opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
-						 ((uint64_t) (params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
-						  << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
-						 ((uint64_t) params->lrh_dws << 20),
-					 opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
-						 ((uint64_t) ((params->lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
-							      OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
-						 (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
-					 opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx,
-					 opx_ep->rx->tx.cts_16B.hdr.qw_16B[3] | psn,
-					 opx_ep->rx->tx.cts_16B.hdr.qw_16B[4],
-					 opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov,
-					 (uintptr_t) params->rma_request);
+		opx_cacheline_copy_qw_vol(scb, replay->scb.qws,
+					  opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) |
+						  credit_return | params->pbc_dlid,
+					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
+						  ((uint64_t) (params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
+						   << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
+						  ((uint64_t) params->lrh_dws << 20),
+					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
+						  ((uint64_t) ((params->lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
+							       OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+						  (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
+					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx,
+					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[3] | psn,
+					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[4],
+					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov,
+					  (uintptr_t) params->rma_request);
 		/* consume one credit for the packet header */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
 		FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
 		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-		uint64_t	   temp[16]    = {0};
-		fi_opx_store_and_copy_qw(scb_payload, temp, params->key, params->dput_iov.qw[0], params->dput_iov.qw[1],
-					 params->dput_iov.qw[2], params->dput_iov.qw[3], params->dput_iov.qw[4],
-					 params->dput_iov.qw[5], 0UL);
+		opx_cacheline_copy_qw_vol(scb_payload, &replay->scb.qws[8], params->key, params->dput_iov.qw[0],
+					  params->dput_iov.qw[1], params->dput_iov.qw[2], params->dput_iov.qw[3],
+					  params->dput_iov.qw[4], params->dput_iov.qw[5], 0UL);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-		local_temp[8] = temp[0];
-		fi_opx_copy_hdr16B_cacheline(&replay->scb.scb_16B, local_temp);
-
-		replay->payload[0] = temp[1];
-		replay->payload[1] = temp[2];
-		replay->payload[2] = temp[3];
-		replay->payload[3] = temp[4];
-		replay->payload[4] = temp[5];
-		replay->payload[5] = temp[6];
-		replay->payload[6] = temp[7];
 	}
-
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->dest_rx, psn_ptr,
-							    replay, params->reliability, OPX_HFI1_TYPE);
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->dest_rx, psn_ptr,
+							    replay, params->reliability, OPX_HFI1_TYPE);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "DO_READV");
 	return FI_SUCCESS;

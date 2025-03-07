@@ -349,6 +349,11 @@ struct fi_opx_hfi1_txe_scb_9B {
 
 	uint64_t pad; /* 1 QW pad (to 16 QWs) */
 } __attribute__((__aligned__(8))) __attribute__((packed));
+static_assert(offsetof(struct fi_opx_hfi1_txe_scb_9B, qw0) == 0,
+	      "Offset of fi_opx_hfi1_txe_scb_9B.hdr.qw_9B[0] should immediately follow fi_opx_hfi1_txe_scb_9B.qw0!\n");
+static_assert(offsetof(struct fi_opx_hfi1_txe_scb_9B, hdr.qw_9B[0]) ==
+		      (offsetof(struct fi_opx_hfi1_txe_scb_9B, qw0) + sizeof(uint64_t)),
+	      "Offset of fi_opx_hfi1_txe_scb_9B.hdr.qw_9B[0] should immediately follow fi_opx_hfi1_txe_scb_9B.qw0!\n");
 
 /* 9 QWs valid in 16 QW storage.  */
 struct fi_opx_hfi1_txe_scb_16B {
@@ -362,14 +367,22 @@ static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == (sizeof(uint64_t) * 16))
 
 /* Storage for a scb. Use HFI1 type to access the correct structure */
 union opx_hfi1_txe_scb_union {
+	uint64_t		       qws[16];
 	struct fi_opx_hfi1_txe_scb_9B  scb_9B;
 	struct fi_opx_hfi1_txe_scb_16B scb_16B;
 } __attribute__((__aligned__(8))) __attribute__((packed));
-
 static_assert((sizeof(struct fi_opx_hfi1_txe_scb_9B) == sizeof(union opx_hfi1_txe_scb_union)),
 	      "storage for scbs should match");
 static_assert((sizeof(struct fi_opx_hfi1_txe_scb_16B) == sizeof(union opx_hfi1_txe_scb_union)),
 	      "storage for scbs should match");
+static_assert(offsetof(struct fi_opx_hfi1_txe_scb_9B, qw0) == offsetof(union opx_hfi1_txe_scb_union, qws[0]),
+	      "Offset of fi_opx_hfi1_txe_scb_9B.hdr.qw0 should be same as opx_hfi1_txe_scb_union.qws[0]!\n");
+static_assert(offsetof(struct fi_opx_hfi1_txe_scb_16B, qw0) == offsetof(union opx_hfi1_txe_scb_union, qws[0]),
+	      "Offset of fi_opx_hfi1_txe_scb_16B.hdr.qw0 should be same as opx_hfi1_txe_scb_union.qws[0]!\n");
+static_assert(offsetof(struct fi_opx_hfi1_txe_scb_9B, hdr.qw_9B[0]) == offsetof(union opx_hfi1_txe_scb_union, qws[1]),
+	      "Offset of fi_opx_hfi1_txe_scb_9B.hdr.qw_9B[0] should be same as opx_hfi1_txe_scb_union.qws[1]!\n");
+static_assert(offsetof(struct fi_opx_hfi1_txe_scb_16B, hdr.qw_16B[0]) == offsetof(union opx_hfi1_txe_scb_union, qws[1]),
+	      "Offset of fi_opx_hfi1_txe_scb_16B.hdr.qw_16B[0] should be same as opx_hfi1_txe_scb_union.qws[1]!\n");
 
 #define HFI_TXE_CREDITS_COUNTER(credits)	((credits.raw16b[0] >> 0) & 0x07FFu)
 #define HFI_TXE_CREDITS_STATUS(credits)		((credits.raw16b[0] >> 11) & 0x01u)

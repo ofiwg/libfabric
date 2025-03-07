@@ -1902,19 +1902,16 @@ int opx_hfi1_rx_rzv_rts_send_etrunc(union fi_opx_hfi1_deferred_work *work)
 
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
-	fi_opx_store_and_copy_scb_9B(scb, &replay->scb.scb_9B,
-				     opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid,
-				     opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32),
-				     opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx,
-				     opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn, opx_ep->rx->tx.cts_9B.hdr.qw_9B[3],
-				     opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode,
-				     params->origin_byte_counter_vaddr, 0);
-
-	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
+	opx_cacheline_copy_qw_vol(
+		scb, replay->scb.qws, opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid,
+		opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32),
+		opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx, opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn,
+		opx_ep->rx->tx.cts_9B.hdr.qw_9B[3], opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode,
+		params->origin_byte_counter_vaddr, 0);
 
 	/* consume one credit */
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
 	/* save the updated txe state */
@@ -1974,9 +1971,8 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
-	fi_opx_store_and_copy_scb_16B(
-		scb, &replay->scb.scb_16B,
-		opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid,
+	opx_cacheline_copy_qw_vol(
+		scb, replay->scb.qws, opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid,
 		opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 			((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 			((uint64_t) lrh_qws << 20),
@@ -1988,17 +1984,15 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 		opx_ep->rx->tx.cts_16B.hdr.qw_16B[4], opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode,
 		params->origin_byte_counter_vaddr);
 
-	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
-
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
 	// 2nd cacheline
 	volatile uint64_t *const scb2 = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
-	fi_opx_store_and_copy_qw(scb2, &replay->scb.scb_16B.hdr.qw_16B[7], 0, 0, 0, 0, 0, 0, 0, 0);
+	opx_cacheline_store_qw_vol(scb2, 0, 0, 0, 0, 0, 0, 0, 0);
 
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
 	/* save the updated txe state */
@@ -4289,13 +4283,12 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 	assert(opx_ep->tx->rzv_9B.qw0 == 0);
 	const uint64_t force_credit_return = OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type);
 
-	volatile uint64_t *const scb		= FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
-	uint64_t		 local_temp[16] = {0};
+	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		const uint64_t lrh_dlid_9B = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(addr.lid);
-		fi_opx_store_and_copy_qw(
-			scb, local_temp,
+		opx_cacheline_copy_qw_vol(
+			scb, replay->scb.qws,
 			opx_ep->tx->rzv_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
 				OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32),
@@ -4310,11 +4303,10 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 			opx_ep->tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[4] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK, total_len,
 			tag);
-		fi_opx_copy_hdr9B_cacheline(&replay->scb.scb_9B, local_temp);
 	} else {
 		const uint64_t lrh_dlid_16B = addr.lid;
-		fi_opx_store_and_copy_qw(
-			scb, local_temp,
+		opx_cacheline_copy_qw_vol(
+			scb, replay->scb.qws,
 			opx_ep->tx->rzv_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
 				OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type),
 			opx_ep->tx->rzv_16B.hdr.qw_16B[0] |
@@ -4348,18 +4340,25 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 #endif
 
 	/* write the payload */
+	uint64_t *replay_payload = replay->payload;
+	assert(!replay->use_iov);
+	assert(((uint8_t *) replay_payload) == ((uint8_t *) &replay->data));
+	uint64_t	   rem_payload_size;
 	uint64_t	  *iov_qws     = (uint64_t *) &hmem_iov[0];
 	volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
-	uint64_t local_temp_payload[16] = {0};
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		fi_opx_store_and_copy_qw(scb_payload, local_temp_payload, origin_byte_counter_vaddr, iov_qws[0],
-					 iov_qws[1], iov_qws[2], iov_qws[3], iov_qws[4], iov_qws[5], iov_qws[6]);
+		opx_cacheline_copy_qw_vol(scb_payload, replay_payload, origin_byte_counter_vaddr, iov_qws[0],
+					  iov_qws[1], iov_qws[2], iov_qws[3], iov_qws[4], iov_qws[5], iov_qws[6]);
 		iov_qws += 7;
+		replay_payload += FI_OPX_CACHE_LINE_QWS;
+		rem_payload_size = sizeof(struct fi_opx_hmem_iov) * (niov - 2);
 	} else {
-		fi_opx_store_and_copy_qw(scb_payload, local_temp_payload, tag, origin_byte_counter_vaddr, iov_qws[0],
-					 iov_qws[1], iov_qws[2], iov_qws[3], iov_qws[4], iov_qws[5]);
+		opx_cacheline_copy_qw_vol(scb_payload, &replay->scb.qws[8], tag, origin_byte_counter_vaddr, iov_qws[0],
+					  iov_qws[1], iov_qws[2], iov_qws[3], iov_qws[4], iov_qws[5]);
 		iov_qws += 6;
+		rem_payload_size =
+			(sizeof(struct fi_opx_hmem_iov) * (niov - 2)) + 8; // overflow 8 bytes from 2nd cacheline
 	}
 
 	/* consume one credit for the rendezvous payload metadata */
@@ -4368,23 +4367,6 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 #ifndef NDEBUG
 	++credits_consumed;
 #endif
-
-	uint64_t *replay_payload = replay->payload;
-	assert(!replay->use_iov);
-	assert(((uint8_t *) replay_payload) == ((uint8_t *) &replay->data));
-	uint64_t rem_payload_size;
-	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		fi_opx_copy_cacheline(replay_payload, local_temp_payload);
-		replay_payload += FI_OPX_CACHE_LINE_QWS;
-		rem_payload_size = sizeof(struct fi_opx_hmem_iov) * (niov - 2);
-	} else {
-		local_temp[7] = local_temp_payload[0];
-		fi_opx_copy_hdr16B_cacheline(&replay->scb.scb_16B, local_temp);
-		fi_opx_copy_cacheline(replay_payload, &local_temp_payload[1]);
-		replay_payload += 7;
-		rem_payload_size =
-			(sizeof(struct fi_opx_hmem_iov) * (niov - 2) + 8); // overflow 8 bytes from 2nd cacheline
-	}
 
 	if (payload_blocks_total > 1) {
 		assert(niov > 2);
@@ -4398,16 +4380,17 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 		memcpy(replay_payload, iov_qws, rem_payload_size);
 	}
 
-	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 #ifndef NDEBUG
 	assert(credits_consumed == total_credits_needed);
 #endif
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
-							    reliability, hfi1_type);
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
+							    reliability, hfi1_type);
 
 	if (OFI_LIKELY(do_cq_completion)) {
 		fi_opx_ep_tx_cq_completion_rzv(ep, context, total_len, lock_required, tag, caps);
@@ -4586,7 +4569,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 				sbuf_qw += immediate_qw_count;
 				uint64_t *payload_cacheline =
 					(uint64_t *) (&contiguous->cache_line_1 + immediate_fragment);
-				fi_opx_copy_cacheline(payload_cacheline, sbuf_qw);
+				opx_cacheline_store_block(payload_cacheline, sbuf_qw);
 			}
 		}
 
@@ -4694,16 +4677,14 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
-	uint64_t temp[8];
-
-	fi_opx_store_and_copy_qw(scb, temp,
-				 opx_ep->tx->rzv_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
-					 OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type),
-				 opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32),
-				 opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx | opcode,
-				 opx_ep->tx->rzv_9B.hdr.qw_9B[2] | psn,
-				 opx_ep->tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32),
-				 opx_ep->tx->rzv_9B.hdr.qw_9B[4] | (1ull << 48), len, tag);
+	opx_cacheline_copy_qw_vol(scb, replay->scb.qws,
+				  opx_ep->tx->rzv_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
+					  OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type),
+				  opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32),
+				  opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx | opcode,
+				  opx_ep->tx->rzv_9B.hdr.qw_9B[2] | psn,
+				  opx_ep->tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32),
+				  opx_ep->tx->rzv_9B.hdr.qw_9B[4] | (1ull << 48), len, tag);
 
 	/* consume one credit for the packet header */
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -4713,18 +4694,21 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
-	fi_opx_copy_hdr9B_cacheline(&replay->scb.scb_9B, temp);
+	uint64_t *replay_payload = replay->payload;
+
+	assert(!replay->use_iov);
+	assert(((uint8_t *) replay_payload) == ((uint8_t *) &replay->data));
 
 	/*
 	 * write the rendezvous payload "send control blocks"
 	 */
 
 	volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-	fi_opx_store_and_copy_qw(scb_payload, temp, 0,		    /* contig_9B_padding */
-				 (uintptr_t) buf + immediate_total, /* src_vaddr */
-				 (len - immediate_total),	    /* src_len */
-				 src_device_id, (uint64_t) src_iface, immediate_info.qw0, origin_byte_counter_vaddr,
-				 0 /* unused */);
+	opx_cacheline_copy_qw_vol(scb_payload, replay->payload, 0,   /* contig_9B_padding */
+				  (uintptr_t) buf + immediate_total, /* src_vaddr */
+				  (len - immediate_total),	     /* src_len */
+				  src_device_id, (uint64_t) src_iface, immediate_info.qw0, origin_byte_counter_vaddr,
+				  0 /* unused */);
 
 	/* consume one credit for the rendezvous payload metadata */
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -4732,11 +4716,6 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 	++credits_consumed;
 #endif
 
-	uint64_t *replay_payload = replay->payload;
-
-	assert(!replay->use_iov);
-	assert(((uint8_t *) replay_payload) == ((uint8_t *) &replay->data));
-	fi_opx_copy_cacheline(replay_payload, temp);
 	replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 	uint8_t *sbuf;
@@ -4766,7 +4745,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 
 	uint64_t *sbuf_qw = (uint64_t *) (sbuf + immediate_byte_count);
 	if (immediate_fragment) {
-		struct tmp_payload_t *tmp_payload = (void *) temp;
+		struct tmp_payload_t *tmp_payload = (struct tmp_payload_t *) replay_payload;
 
 		for (int i = 0; i < immediate_byte_count; ++i) {
 			tmp_payload->immediate_byte[i] = sbuf[i];
@@ -4775,10 +4754,9 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 		for (int i = 0; i < immediate_qw_count; ++i) {
 			tmp_payload->immediate_qw[i] = sbuf_qw[i];
 		}
-		fi_opx_store_scb_qw(scb_payload, temp);
+		opx_cacheline_store_block_vol(scb_payload, replay_payload);
 		sbuf_qw += immediate_qw_count;
 
-		fi_opx_copy_cacheline(replay_payload, temp);
 		replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 		/* consume one credit for the rendezvous payload immediate data */
@@ -4790,8 +4768,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 
 	if (immediate_block) {
 		scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-		fi_opx_store_scb_qw(scb_payload, sbuf_qw);
-		fi_opx_copy_cacheline(replay_payload, sbuf_qw);
+		opx_cacheline_copy_block_vol(scb_payload, replay_payload, sbuf_qw);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 #ifndef NDEBUG
@@ -4799,16 +4776,16 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 #endif
 	}
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
-							    reliability, hfi1_type);
-
-	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 #ifndef NDEBUG
 	assert(credits_consumed == total_credits_needed);
 #endif
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
+							    reliability, hfi1_type);
 
 	if (OFI_LIKELY(do_cq_completion)) {
 		fi_opx_ep_tx_cq_completion_rzv(ep, context, len, lock_required, tag, caps);
@@ -5013,7 +4990,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				sbuf_qw += immediate_qw_count;
 				uint64_t *payload_cacheline =
 					(uint64_t *) (&contiguous->cache_line_1 + immediate_fragment);
-				fi_opx_copy_cacheline(payload_cacheline, sbuf_qw);
+				opx_cacheline_store_block(payload_cacheline, sbuf_qw);
 			}
 		}
 
@@ -5119,10 +5096,8 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
-	struct fi_opx_hfi1_txe_scb_16B tmp;
-
-	fi_opx_store_and_copy_scb_16B(
-		scb, &tmp,
+	opx_cacheline_copy_qw_vol(
+		scb, replay->scb.qws,
 		opx_ep->tx->rzv_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
 			OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type),
 		opx_ep->tx->rzv_16B.hdr.qw_16B[0] |
@@ -5141,31 +5116,26 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 #ifndef NDEBUG
 	unsigned credits_consumed = 1;
 #endif
-	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
-	tmp.hdr.qw_16B[7] = tag;
-	fi_opx_copy_hdr16B_cacheline(&replay->scb.scb_16B, (uint64_t *) &tmp);
 
 	/*
 	 * write the rendezvous payload "send control blocks"
 	 */
 
 	volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-	uint64_t	   temp[8];
 
-	fi_opx_store_and_copy_qw(scb_payload, temp, tag, /* end of header */
-				 /* start of receiver payload/cacheline                                             */
-				 (uintptr_t) buf + immediate_total, /* rzv.contiguous.src_vaddr                 */
-				 (len - immediate_total),	    /* rzv.contiguous.src_len                   */
-				 src_device_id,			    /* rzv.contiguous.src_device_id             */
-				 (uint64_t) src_iface,		    /* rzv.contiguous.src_iface                 */
-				 immediate_info.qw0,		    /* rzv.contiguous.immediate_info            */
-				 origin_byte_counter_vaddr,	    /* rzv.contiguous.origin_byte_counter_vaddr */
-				 -1UL /* unused */);		    /* rzv.contiguous.unused[0]                 */
+	opx_cacheline_copy_qw_vol(scb_payload, &replay->scb.qws[8], tag, /* end of header */
+				  /* start of receiver payload/cacheline                                             */
+				  (uintptr_t) buf + immediate_total, /* rzv.contiguous.src_vaddr                 */
+				  (len - immediate_total),	     /* rzv.contiguous.src_len                   */
+				  src_device_id,		     /* rzv.contiguous.src_device_id             */
+				  (uint64_t) src_iface,		     /* rzv.contiguous.src_iface                 */
+				  immediate_info.qw0,		     /* rzv.contiguous.immediate_info            */
+				  origin_byte_counter_vaddr,	     /* rzv.contiguous.origin_byte_counter_vaddr */
+				  -1UL /* unused */);		     /* rzv.contiguous.unused[0]                 */
 
 	/* consume one credit for the rendezvous payload metadata */
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 #ifndef NDEBUG
 	++credits_consumed;
 #endif
@@ -5176,13 +5146,13 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	assert(((uint8_t *) replay_payload) == ((uint8_t *) &replay->data));
 
 	/* temp is hdr (1 QW) + payload (7 QW) */
-	replay_payload[0] = temp[1];
-	replay_payload[1] = temp[2];
-	replay_payload[2] = temp[3];
-	replay_payload[3] = temp[4];
-	replay_payload[4] = temp[5];
-	replay_payload[5] = temp[6];
-	replay_payload[6] = temp[7];
+	replay_payload[0] = replay->scb.qws[9];
+	replay_payload[1] = replay->scb.qws[10];
+	replay_payload[2] = replay->scb.qws[11];
+	replay_payload[3] = replay->scb.qws[12];
+	replay_payload[4] = replay->scb.qws[13];
+	replay_payload[5] = replay->scb.qws[14];
+	replay_payload[6] = replay->scb.qws[15];
 
 	replay_payload += OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS;
 
@@ -5211,7 +5181,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	uint64_t *sbuf_qw = (uint64_t *) (sbuf + immediate_byte_count);
 	if (immediate_fragment) {
-		struct tmp_payload_t *tmp_payload = (void *) temp;
+		struct tmp_payload_t *tmp_payload = (struct tmp_payload_t *) replay_payload;
 
 		for (int i = 0; i < immediate_byte_count; ++i) {
 			tmp_payload->immediate_byte[i] = sbuf[i];
@@ -5221,10 +5191,9 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 			tmp_payload->immediate_qw[i] = sbuf_qw[i];
 		}
 		scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-		fi_opx_store_scb_qw(scb_payload, temp);
+		opx_cacheline_store_block_vol(scb_payload, replay_payload);
 		sbuf_qw += immediate_qw_count;
 
-		fi_opx_copy_cacheline(replay_payload, temp);
 		replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 		/* consume one credit for the rendezvous payload immediate data */
@@ -5241,8 +5210,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 			uint64_t temp_0[8] = {-2UL};
 			scb_payload	   = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
-			fi_opx_store_scb_qw(scb_payload, temp_0);
-			fi_opx_copy_cacheline(replay_payload, temp_0);
+			opx_cacheline_copy_block_vol(scb_payload, replay_payload, temp_0);
 			replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 			FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -5265,8 +5233,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 		/* Tail will be it's own block */
 		assert(icrc_end_block && !icrc_fragment_block && !icrc_fragment);
 		scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-		fi_opx_store_scb_qw(scb_payload, sbuf_qw);
-		fi_opx_copy_cacheline(replay_payload, sbuf_qw);
+		opx_cacheline_copy_block_vol(scb_payload, replay_payload, sbuf_qw);
 		replay_payload += FI_OPX_CACHE_LINE_QWS;
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -5276,8 +5243,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 		/* Write another block to accomodate the ICRC and tail */
 		uint64_t temp_0[8] = {-3UL};
 		scb_payload	   = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-		fi_opx_store_scb_qw(scb_payload, temp_0);
-		fi_opx_copy_cacheline(replay_payload, temp_0);
+		opx_cacheline_copy_block_vol(scb_payload, replay_payload, temp_0);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 #ifndef NDEBUG
@@ -5285,8 +5251,6 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 #endif
 	}
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
-							    reliability, hfi1_type);
 #ifndef NDEBUG
 	assert(credits_consumed == total_credits_needed);
 #endif
@@ -5295,6 +5259,9 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, dest_rx, psn_ptr, replay,
+							    reliability, hfi1_type);
 
 	if (OFI_LIKELY(do_cq_completion)) {
 		fi_opx_ep_tx_cq_completion_rzv(ep, context, len, lock_required, tag, caps);

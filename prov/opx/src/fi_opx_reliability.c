@@ -442,15 +442,11 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode(struct fid_ep *ep, const uin
 	if ((hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {
 		struct fi_opx_hfi1_txe_scb_9B model_9B = opx_ep->reliability->service.tx.hfi1.ping_model_9B;
 		model_9B.hdr.ud.opcode		       = opcode;
-		OPX_HFI1_BAR_STORE(&scb[0], (model_9B.qw0 | OPX_PBC_CR(0x1, hfi1_type) |
-					     OPX_PBC_DLID_TO_PBC_DLID(dlid, hfi1_type)));
-		OPX_HFI1_BAR_STORE(&scb[1], (model_9B.hdr.qw_9B[0] | lrh_dlid_9B));
-		OPX_HFI1_BAR_STORE(&scb[2], (model_9B.hdr.qw_9B[1] | bth_rx));
-		OPX_HFI1_BAR_STORE(&scb[3], model_9B.hdr.qw_9B[2]);
-		OPX_HFI1_BAR_STORE(&scb[4], model_9B.hdr.qw_9B[3]);
-		OPX_HFI1_BAR_STORE(&scb[5], 0UL);
-		OPX_HFI1_BAR_STORE(&scb[6], 0UL);
-		OPX_HFI1_BAR_STORE(&scb[7], key);
+
+		opx_cacheline_store_qw_vol(
+			scb, model_9B.qw0 | OPX_PBC_CR(0x1, hfi1_type) | OPX_PBC_DLID_TO_PBC_DLID(dlid, hfi1_type),
+			model_9B.hdr.qw_9B[0] | lrh_dlid_9B, model_9B.hdr.qw_9B[1] | bth_rx, model_9B.hdr.qw_9B[2],
+			model_9B.hdr.qw_9B[3], 0UL, 0UL, key);
 
 		/* consume one credit for the packet header */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -458,35 +454,24 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode(struct fid_ep *ep, const uin
 		struct fi_opx_hfi1_txe_scb_16B model_16B = opx_ep->reliability->service.tx.hfi1.ping_model_16B;
 		model_16B.hdr.ud.opcode			 = opcode;
 
-		OPX_HFI1_BAR_STORE(&scb[0], (model_16B.qw0 | OPX_PBC_CR(1, hfi1_type) |
-					     OPX_PBC_DLID_TO_PBC_DLID(dlid, hfi1_type)));
-		OPX_HFI1_BAR_STORE(&scb[1],
-				   (model_16B.hdr.qw_16B[0] | ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
-							       << OPX_LRH_JKR_16B_DLID_SHIFT_16B)));
-		OPX_HFI1_BAR_STORE(&scb[2], (model_16B.hdr.qw_16B[1] |
-					     ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
-					      OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
-						    (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B));
-		OPX_HFI1_BAR_STORE(&scb[3], model_16B.hdr.qw_16B[2] | bth_rx);
-		OPX_HFI1_BAR_STORE(&scb[4], model_16B.hdr.qw_16B[3]);
-		OPX_HFI1_BAR_STORE(&scb[5], model_16B.hdr.qw_16B[4]);
-		OPX_HFI1_BAR_STORE(&scb[6], 0UL);
-		OPX_HFI1_BAR_STORE(&scb[7], 0UL);
+		opx_cacheline_store_qw_vol(
+			scb, model_16B.qw0 | OPX_PBC_CR(1, hfi1_type) | OPX_PBC_DLID_TO_PBC_DLID(dlid, hfi1_type),
+			model_16B.hdr.qw_16B[0] | ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
+						   << OPX_LRH_JKR_16B_DLID_SHIFT_16B),
+			model_16B.hdr.qw_16B[1] |
+				((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
+				 OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
+				bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B,
+			model_16B.hdr.qw_16B[2] | bth_rx, model_16B.hdr.qw_16B[3], model_16B.hdr.qw_16B[4], 0UL, 0UL);
 
 		/* consume one credit for the packet header first cacheline */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 
 		volatile uint64_t *const scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
-		OPX_HFI1_BAR_STORE(&scb_payload[0], key);
-		OPX_HFI1_BAR_STORE(&scb_payload[1], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb_payload[2], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb_payload[3], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb_payload[4], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb_payload[5], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb_payload[6], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb_payload[7], OPX_JKR_16B_PAD_QWORD);
+		opx_cacheline_store_qw_vol(scb_payload, key, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
+					   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
+					   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD);
 
 		/* consume one credit for the packet header second (padded) cacheline */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -618,22 +603,15 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const uint64_t key,
 					 &opx_ep->reliability->service.tx.hfi1.ack_model_9B :
 					 &opx_ep->reliability->service.tx.hfi1.nack_model_9B);
 
-		OPX_HFI1_BAR_STORE(
-			&scb[0], (model->qw0 | OPX_PBC_CR(0x1, hfi1_type) | OPX_PBC_DLID_TO_PBC_DLID(dlid, hfi1_type)));
-		OPX_HFI1_BAR_STORE(&scb[1], (model->hdr.qw_9B[0] | lrh_dlid_9B));
-		OPX_HFI1_BAR_STORE(&scb[2], (model->hdr.qw_9B[1] | bth_rx));
-		OPX_HFI1_BAR_STORE(&scb[3], model->hdr.qw_9B[2]);
-		OPX_HFI1_BAR_STORE(&scb[4], model->hdr.qw_9B[3]);
-		OPX_HFI1_BAR_STORE(&scb[5], psn_count_24);
-		OPX_HFI1_BAR_STORE(&scb[6], psn_start_24);
-		OPX_HFI1_BAR_STORE(&scb[7], key); /* service.key */
+		opx_cacheline_store_qw_vol(
+			scb, model->qw0 | OPX_PBC_CR(0x1, hfi1_type) | OPX_PBC_DLID_TO_PBC_DLID(dlid, hfi1_type),
+			model->hdr.qw_9B[0] | lrh_dlid_9B, model->hdr.qw_9B[1] | bth_rx, model->hdr.qw_9B[2],
+			model->hdr.qw_9B[3], psn_count_24, psn_start_24, key); /* service.key */
 
 		// fi_opx_hfi1_dump_stl_packet_hdr((struct fi_opx_hfi1_stl_packet_hdr_9B *)&tmp[1], __func__, __LINE__);
 
 		/* consume one credit for the packet header */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-
-		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	} else {
 		const uint64_t				    lrh_dlid_16B = dlid;
 		const struct fi_opx_hfi1_txe_scb_16B *const model_16B =
@@ -642,20 +620,17 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const uint64_t key,
 				(opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK ?
 					 &opx_ep->reliability->service.tx.hfi1.ack_model_16B :
 					 &opx_ep->reliability->service.tx.hfi1.nack_model_16B);
-		OPX_HFI1_BAR_STORE(&scb[0], (model_16B->qw0 | OPX_PBC_CR(1, hfi1_type) |
-					     OPX_PBC_DLID_TO_PBC_DLID(dlid, hfi1_type)));
-		OPX_HFI1_BAR_STORE(
-			&scb[1], (model_16B->hdr.qw_16B[0] | ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
-							      << OPX_LRH_JKR_16B_DLID_SHIFT_16B)));
-		OPX_HFI1_BAR_STORE(&scb[2], (model_16B->hdr.qw_16B[1] |
-					     ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
-					      OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
-						    (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B));
-		OPX_HFI1_BAR_STORE(&scb[3], model_16B->hdr.qw_16B[2] | bth_rx);
-		OPX_HFI1_BAR_STORE(&scb[4], model_16B->hdr.qw_16B[3]);
-		OPX_HFI1_BAR_STORE(&scb[5], model_16B->hdr.qw_16B[4]);
-		OPX_HFI1_BAR_STORE(&scb[6], psn_count_24);
-		OPX_HFI1_BAR_STORE(&scb[7], psn_start_24);
+
+		opx_cacheline_store_qw_vol(
+			scb, model_16B->qw0 | OPX_PBC_CR(1, hfi1_type) | OPX_PBC_DLID_TO_PBC_DLID(dlid, hfi1_type),
+			model_16B->hdr.qw_16B[0] | ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
+						    << OPX_LRH_JKR_16B_DLID_SHIFT_16B),
+			model_16B->hdr.qw_16B[1] |
+				((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
+				 OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
+				(uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
+			model_16B->hdr.qw_16B[2] | bth_rx, model_16B->hdr.qw_16B[3], model_16B->hdr.qw_16B[4],
+			psn_count_24, psn_start_24);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
@@ -663,19 +638,14 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const uint64_t key,
 
 		volatile uint64_t *const scb2 = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
-		OPX_HFI1_BAR_STORE(&scb2[0], key);
-		OPX_HFI1_BAR_STORE(&scb2[1], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb2[2], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb2[3], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb2[4], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb2[5], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb2[6], OPX_JKR_16B_PAD_QWORD);
-		OPX_HFI1_BAR_STORE(&scb2[7], OPX_JKR_16B_PAD_QWORD);
+		opx_cacheline_store_qw_vol(scb2, key, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
+					   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
+					   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	}
 
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	/* save the updated txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 	return FI_SUCCESS;
@@ -1533,45 +1503,18 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 	} else {
 		buf_qws = replay->payload;
 	}
-#ifndef NDEBUG
-	unsigned consumed_credits = 0;
-#endif
 
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.hfi1.pio_scb_sop_first, pio_state);
-	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		OPX_HFI1_BAR_STORE(&scb[0], replay->scb.scb_9B.qw0);
-		OPX_HFI1_BAR_STORE(&scb[1], replay->scb.scb_9B.hdr.qw_9B[0]);
-		OPX_HFI1_BAR_STORE(&scb[2], replay->scb.scb_9B.hdr.qw_9B[1]);
-		OPX_HFI1_BAR_STORE(&scb[3], replay->scb.scb_9B.hdr.qw_9B[2]);
-		OPX_HFI1_BAR_STORE(&scb[4], replay->scb.scb_9B.hdr.qw_9B[3]);
-		OPX_HFI1_BAR_STORE(&scb[5], replay->scb.scb_9B.hdr.qw_9B[4]);
-		OPX_HFI1_BAR_STORE(&scb[6], replay->scb.scb_9B.hdr.qw_9B[5]);
-		OPX_HFI1_BAR_STORE(&scb[7], replay->scb.scb_9B.hdr.qw_9B[6]);
+	opx_cacheline_store_block_vol(scb, replay->scb.qws);
 
-		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR((service->tx.hfi1.pio_credits_addr));
-
-		/* consume one credit for the packet header */
-		--total_credits_available;
-		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+	/* consume one credit for the packet header */
+	--total_credits_available;
+	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 #ifndef NDEBUG
-		consumed_credits = 1;
+	unsigned consumed_credits = 1;
 #endif
-	} else {
-		OPX_HFI1_BAR_STORE(&scb[0], replay->scb.scb_16B.qw0);
-		OPX_HFI1_BAR_STORE(&scb[1], replay->scb.scb_16B.hdr.qw_16B[0]);
-		OPX_HFI1_BAR_STORE(&scb[2], replay->scb.scb_16B.hdr.qw_16B[1]);
-		OPX_HFI1_BAR_STORE(&scb[3], replay->scb.scb_16B.hdr.qw_16B[2]);
-		OPX_HFI1_BAR_STORE(&scb[4], replay->scb.scb_16B.hdr.qw_16B[3]);
-		OPX_HFI1_BAR_STORE(&scb[5], replay->scb.scb_16B.hdr.qw_16B[4]);
-		OPX_HFI1_BAR_STORE(&scb[6], replay->scb.scb_16B.hdr.qw_16B[5]);
-		OPX_HFI1_BAR_STORE(&scb[7], replay->scb.scb_16B.hdr.qw_16B[6]);
 
-		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR((service->tx.hfi1.pio_credits_addr));
-
-		/* consume one credit for the packet header */
-		--total_credits_available;
-		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-
+	if (hfi1_type & OPX_HFI1_JKR) {
 		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.hfi1.pio_scb_first, pio_state);
 
 		// spill from 1st cacheline (SOP)
@@ -1586,8 +1529,6 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 		for (i = payload_qw_to_copy_with_header + 1; i <= 7; ++i) {
 			OPX_HFI1_BAR_STORE(&scb_payload[i], OPX_JKR_16B_PAD_QWORD);
 		}
-
-		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR((service->tx.hfi1.pio_credits_addr));
 
 		/* consume one credit for the packet header+payload */
 		--total_credits_available;
@@ -1610,14 +1551,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 
 		uint16_t i;
 		for (i = 0; i < contiguous_full_blocks_to_write; ++i) {
-			OPX_HFI1_BAR_STORE(&scb_payload[0], buf_qws[0]);
-			OPX_HFI1_BAR_STORE(&scb_payload[1], buf_qws[1]);
-			OPX_HFI1_BAR_STORE(&scb_payload[2], buf_qws[2]);
-			OPX_HFI1_BAR_STORE(&scb_payload[3], buf_qws[3]);
-			OPX_HFI1_BAR_STORE(&scb_payload[4], buf_qws[4]);
-			OPX_HFI1_BAR_STORE(&scb_payload[5], buf_qws[5]);
-			OPX_HFI1_BAR_STORE(&scb_payload[6], buf_qws[6]);
-			OPX_HFI1_BAR_STORE(&scb_payload[7], buf_qws[7]);
+			opx_cacheline_store_block_vol(scb_payload, buf_qws);
 
 			scb_payload += FI_OPX_CACHE_LINE_QWS;
 			buf_qws += FI_OPX_CACHE_LINE_QWS;
@@ -1665,8 +1599,6 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 			scb_payload += 1;
 		}
 
-		FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR((service->tx.hfi1.pio_credits_addr));
-
 		/* consume one credit for the tail partial block payload */
 		--total_credits_available;
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -1679,11 +1611,10 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 	assert(consumed_credits == total_credits_needed);
 #endif
 
-	FI_OPX_HFI1_UPDATE_CREDITS(pio_state, service->tx.hfi1.pio_credits_addr);
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(service->tx.hfi1.pio_credits_addr);
 
 	/* save the updated txe state */
 	service->tx.hfi1.pio_state->qw0 = pio_state.qw0;
-	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(service->tx.hfi1.pio_credits_addr);
 
 	return FI_SUCCESS;
 }
