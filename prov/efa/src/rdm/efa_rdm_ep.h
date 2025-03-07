@@ -8,7 +8,6 @@
 #include "efa.h"
 #include "efa_tp.h"
 #include "efa_base_ep.h"
-#include "efa_rdm_rxe_map.h"
 
 
 /** @brief Information of a queued copy.
@@ -106,8 +105,6 @@ struct efa_rdm_ep {
 	struct ofi_bufpool *overflow_pke_pool;
 	/* data structure to maintain pkt rx map */
 	struct ofi_bufpool *map_entry_pool;
-	/** a map between sender address + msg_id to RX entry */
-	struct efa_rdm_rxe_map rxe_map;
 	/*
 	 * buffer pool for atomic response data, used by
 	 * emulated fetch and compare atomic.
