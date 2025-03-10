@@ -55,6 +55,9 @@ static int run()
 		return ret;
 	}
 
+	/* Bind eq to ep so it can write eq error for EFA_RDM_OPE_INTERNAL */
+	FT_EP_BIND(ep, eq, 0);
+
 	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_EMULATED_READ,
 			&use_emulated_read, &(size_t) {sizeof use_emulated_read});
 	if (ret) {
