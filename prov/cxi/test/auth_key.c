@@ -873,8 +873,7 @@ Test(auth_key, ss_plugin_auth_key_priority)
 	struct fi_info *hints;
 	char svc_id_str[256];
 	struct cxi_auth_key auth_key = {
-		.svc_id = CXI_DEFAULT_SVC_ID,
-		.vni = 1,
+		.vni = 2,
 	};
 	struct fid_fabric *fab;
 	struct fid_domain *dom;
@@ -891,6 +890,7 @@ Test(auth_key, ss_plugin_auth_key_priority)
 	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
 	cr_assert_gt(ret, 0, "cxil_alloc_svc failed: %d", ret);
 	svc_desc.svc_id = ret;
+	auth_key.svc_id = ret;
 
 	ret = setenv("SLINGSHOT_VNIS", "1", 1);
 	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
