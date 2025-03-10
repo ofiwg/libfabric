@@ -47,8 +47,8 @@
  */
 int opx_tid_cache_setup(struct ofi_mr_cache **cache, struct opx_tid_domain *domain);
 
-int  opx_tid_cache_add_abort();
-void opx_tid_cache_delete_abort();
+int  opx_tid_cache_add_abort(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry);
+void opx_tid_cache_delete_abort(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry);
 
 enum opx_tid_cache_entry_status {
 	OPX_TID_CACHE_ENTRY_NOT_FOUND = 0,
