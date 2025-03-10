@@ -94,7 +94,7 @@
 // Useful for checking that structures are the correct size and other
 // compile-time tests. static_assert has existed since C11 so this
 // should be safe, but we have an else clause just in case.
-#if defined(static_assert)
+#if __STDC_VERSION__ >= 201112L
 #define OPX_COMPILE_TIME_ASSERT(cond, msg) static_assert(cond, msg)
 #else
 #define OPX_COMPILE_TIME_ASSERT(cond, msg) \
