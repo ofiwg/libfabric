@@ -1787,14 +1787,14 @@ void opx_tid_cache_cleanup(struct ofi_mr_cache *cache)
 	assert(cache->uncached_size == 0);
 }
 
-int opx_tid_cache_add_abort()
+int opx_tid_cache_add_abort(struct ofi_mr_cache *, struct ofi_mr_entry *)
 {
 	fprintf(stderr, "%s unexpected function call\n", __func__);
 	abort();
 	return 0;
 }
 
-void opx_tid_cache_delete_abort()
+void opx_tid_cache_delete_abort(struct ofi_mr_cache *, struct ofi_mr_entry *)
 {
 	fprintf(stderr, "%s unexpected function call\n", __func__);
 	abort();
