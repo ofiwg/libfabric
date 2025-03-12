@@ -59,7 +59,6 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
-		FT_COMP_CNTR,
 	],
 	mr_mode: [],
 	progress: [
