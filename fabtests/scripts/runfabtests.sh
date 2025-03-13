@@ -262,6 +262,15 @@ multinode_tests=(
 	"fi_multinode_coll"
 )
 
+threaded_tests=(
+	"fi_rdm_bw_mt -n 8"
+	"fi_rdm_bw_mt -n 8 -g"
+	"fi_rdm_bw_mt -n 16"
+	"fi_rdm_bw_mt -n 16 -g"
+	"fi_rdm_bw_mt -n 32"
+	"fi_rdm_bw_mt -n 32 -g"
+)
+
 prov_efa_tests=( \
 	"fi_efa_rnr_read_cq_error"
 	"fi_efa_rnr_queue_resend -c 0 -S 1048576"
@@ -792,7 +801,7 @@ function main {
 		local -r tests="complex"
 		complex_type=$1
 	else
-		local -r tests=$(echo $1 | sed 's/all/unit,regression,functional,standard,complex,multinode/g' | tr ',' ' ')
+		local -r tests=$(echo $1 | sed 's/all/unit,regression,functional,standard,complex,multinode,threaded/g' | tr ',' ' ')
 		if [[ $1 == "all" || $1 == "complex" ]]; then
 			complex_type="all"
 		fi
@@ -850,6 +859,11 @@ function main {
 					multinode_test "$test" 3
 			done
 		;;
+		threaded)
+			for test in "${threaded_tests[@]}"; do
+				cs_test "$test"
+			done
+		;;
 		*)
 			errcho "Unknown test set: ${ts}"
 			exit 1
@@ -891,7 +905,7 @@ function usage {
 	errcho -e " -v\tprint output of failing"
 	errcho -e " -vv\tprint output of failing/notrun"
 	errcho -e " -vvv\tprint output of failing/notrun/passing"
-	errcho -e " -t\ttest set(s): all,quick,unit,functional,standard,short,complex (default quick)"
+	errcho -e " -t\ttest set(s): all,quick,unit,functional,standard,short,complex,threaded (default quick)"
 	errcho -e " -e\texclude tests: comma delimited list of test names /
 			 regex patterns e.g. \"dgram,rma.*write\""
 	errcho -e " -E\texport provided variable name and value to ssh client and server processes.
