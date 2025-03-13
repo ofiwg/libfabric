@@ -767,7 +767,9 @@ struct fi_opx_reliability_flow *fi_opx_reliability_create_rx_flow(struct fi_opx_
 
 	if (OFI_UNLIKELY(rbt_rc != RBT_STATUS_OK)) {
 		void *itr = fi_opx_rbt_find(state->rx_flow_rbtree, (void *) key);
-		rbtErase(state->rx_flow_rbtree, itr);
+		if (itr) {
+			rbtErase(state->rx_flow_rbtree, itr);
+		}
 		free(flow);
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error creating RX Flow: Could not insert flow into rx.flow, rbtInsert() returned %d\n",
