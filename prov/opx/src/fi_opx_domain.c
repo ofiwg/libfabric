@@ -197,13 +197,13 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 	domain_attr->mr_mode |= FI_MR_HMEM;
 #endif
 
-	if (hints->mr_mode & FI_MR_VIRT_ADDR) {
-		FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN,
-			"Application requests FI_MR_VIRT_ADDR, OPX is turning on that mr_mode bit\n");
-		domain_attr->mr_mode |= FI_MR_VIRT_ADDR;
-	}
-
 	if (hints) {
+		if (hints->mr_mode & FI_MR_VIRT_ADDR) {
+			FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN,
+				"Application requests FI_MR_VIRT_ADDR, OPX is turning on that mr_mode bit\n");
+			domain_attr->mr_mode |= FI_MR_VIRT_ADDR;
+		}
+
 		if (hints->domain) {
 			struct fi_opx_domain *opx_domain =
 				container_of(hints->domain, struct fi_opx_domain, domain_fid);

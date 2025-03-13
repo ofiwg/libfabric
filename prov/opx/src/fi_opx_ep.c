@@ -2273,7 +2273,7 @@ int fi_opx_check_tx_attr(struct fi_tx_attr *tx_attr, uint64_t hinted_caps)
 		goto err;
 	}
 
-	if ((tx_attr) && ((tx_attr->caps | hinted_caps) != hinted_caps)) {
+	if ((tx_attr->caps | hinted_caps) != hinted_caps) {
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"info->tx_attr->caps = 0x%016lx, info->caps = 0x%016lx, (info->tx_attr->caps | info->caps) = 0x%016lx, ((info->tx_attr->caps | info->caps) ^ info->caps) = 0x%016lx\n",
