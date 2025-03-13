@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(C) 2021-2024 Cornelis Networks.
+  Copyright(C) 2021-2025 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -200,6 +200,9 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 
 	/* 10. Map the RHEQ page (JKR only) */
 	sz = sizeof(uint64_t) * (size_t) cinfo->rcvhdrq_cnt;
+	if (!rheq) { /* should never happen */
+		return -1;
+	}
 	_HFI_PDBG("ctx %#hx, subctxt_cnt %#lx, rheq %#llX, fd %d, sz %zu/%zu\n", cinfo->ctxt, subctxt_cnt, *rheq, fd,
 		  sz, (size_t) cinfo->rcvhdrq_cnt);
 	errno = 0;
@@ -357,13 +360,12 @@ err_mmap_subctxt_rcvegrbuf:
 
 err_mmap_subctxt_rcvhdrbuf:
 	/* if we got it here, subctxt_cnt must be != 0 */
-	HFI_MUNMAP_ERRCHECK(binfo, subctxt_uregbase, arrsz[SUBCTXT_UREGBASE]);
-
+	if (rheq && *rheq) {
+		HFI_MUNMAP_ERRCHECK(binfo, subctxt_uregbase, arrsz[SUBCTXT_UREGBASE]);
+	}
 err_mmap_subctxt_rheq:
 	/* New field, special handling */
-	if (rheq && *rheq) {
-		HFI_MUNMAP((void *) *rheq, sizeof(uint64_t) * (size_t) cinfo->rcvhdrq_cnt);
-	}
+	HFI_MUNMAP((void *) *rheq, sizeof(uint64_t) * (size_t) cinfo->rcvhdrq_cnt);
 
 err_mmap_subctxt_uregbase:
 	HFI_MUNMAP_ERRCHECK(binfo, status_bufbase, arrsz[STATUS_BUFBASE]);

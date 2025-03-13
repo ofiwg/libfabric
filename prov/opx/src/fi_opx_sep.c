@@ -358,11 +358,15 @@ err:
 	if (info.tx_attr) {
 		free(info.tx_attr);
 	}
+	if (info.rx_attr) {
+		free(info.rx_attr);
+	}
 
 	info.fabric_attr = NULL;
 	info.domain_attr = NULL;
 	info.ep_attr	 = NULL;
 	info.tx_attr	 = NULL;
+	info.rx_attr	 = NULL;
 
 	return -errno;
 }
