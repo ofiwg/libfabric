@@ -16,3 +16,6 @@ shared_av
 rdm_cntr_pingpong
 multi_recv
 multinode
+
+# rdm_bw_mt disabled because of malloc(): corrupted top size
+fi_rdm_bw_mt

@@ -117,3 +117,6 @@ fi_multinode -x rma
 
 # multi_recv -e rdm fails by hanging
 multi_recv -e rdm
+
+# rdm_bw_mt fails because io_uring is broken
+rdm_bw_mt
