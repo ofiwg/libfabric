@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_opx" "7" "2025\-02\-28" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_opx" "7" "2025\-03\-14" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .PP
 {%include JB/setup %}
@@ -330,10 +330,9 @@ for progress threads.
 By default no affinity is set.
 .TP
 \f[I]FI_OPX_AUTO_PROGRESS_INTERVAL_USEC\f[R]
-Integer.
-This setting controls the time (in usecs) between polls for auto
-progress threads.
-Default is 1.
+Deprecated/ignored.
+Auto progress threads are now interrupt-driven and only poll when data
+is available.
 .TP
 \f[I]FI_OPX_PKEY\f[R]
 Integer.
