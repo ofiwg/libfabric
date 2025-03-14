@@ -20,6 +20,7 @@ v2.1.0, Sat Mar 15, 2025
 
 ## CXI
 
+- Fix ss_plugin_auth_key_priority test
 - Bump internal CXI version to support 2.1
 - Fix possible cq_open segfault
 - Fix peer CQ support
@@ -115,6 +116,10 @@ v2.1.0, Sat Mar 15, 2025
 
 ## OPX
 
+- Adding changes to resolve Coverity Scan Defects
+- Link bounce fixes
+- SDMA error handling fix
+- Fix build with GCC 15
 - Move CUDA sync attribute setting to mr registration
 - Add HMEM handle for GDRCopy in GET/PUT
 - Add newline to trace entry
@@ -200,6 +205,7 @@ v2.1.0, Sat Mar 15, 2025
 
 ## Fabtests
 
+- efa: Bind eq to ep in remote exits early test
 - Fix some test function prototypes
 - efa: Add remote exit early test with post recv
 - Do not require FI_TAGGED for fi_av_xfer test
