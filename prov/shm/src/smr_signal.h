@@ -62,7 +62,6 @@ static void smr_handle_signal(int signum, siginfo_t *info, void *ucontext)
 		old_action[signum].sa_sigaction(signum, info, ucontext);
 	else
 		raise(signum);
-
 }
 
 static inline void smr_reg_sig_handler(int signum)
