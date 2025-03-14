@@ -897,7 +897,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		return -FI_ENOMEM;
 
 	if (attr->type == FI_AV_MAP) {
-		EFA_WARN(FI_LOG_AV, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
+		EFA_INFO(FI_LOG_AV, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
 					"EFA provider will now switch to using FI_AV_TABLE.\n");
 	}
 	attr->type = FI_AV_TABLE;
