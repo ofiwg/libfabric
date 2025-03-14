@@ -264,6 +264,7 @@ struct xnet_ep {
 	void (*hdr_bswap)(struct xnet_ep *ep, struct xnet_base_hdr *hdr);
 
 	short			pollflags;
+	bool			tagged_rpc;
 
 	xnet_profile_t *profile;
 };
@@ -428,6 +429,7 @@ static inline void xnet_signal_progress(struct xnet_progress *progress)
 #define XNET_COPY_RECV		BIT(9)
 #define XNET_CLAIM_RECV		BIT(10)
 #define XNET_NEED_CTS		BIT(11)
+#define XNET_UNEXP_XFER		BIT(12)
 #define XNET_MULTI_RECV		FI_MULTI_RECV /* BIT(16) */
 
 struct xnet_mrecv {
