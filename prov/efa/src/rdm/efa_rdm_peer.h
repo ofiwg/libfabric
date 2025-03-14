@@ -7,6 +7,7 @@
 #include "ofi_recvwin.h"
 #include "efa_rdm_ep.h"
 #include "efa_rdm_protocol.h"
+#include "efa_rdm_rxe_map.h"
 
 #define EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE	(16384)
 
@@ -73,6 +74,7 @@ struct efa_rdm_peer {
 	 * only valid when (extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) is non-zero
 	 */
 	struct efa_rdm_peer_user_recv_qp user_recv_qp;
+	struct efa_rdm_rxe_map rxe_map;
 };
 
 /**

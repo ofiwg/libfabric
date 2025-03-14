@@ -7,7 +7,7 @@
 #include "efa_rdm_pke_rtm.h"
 
 /**
- * @brief find an RX entry for a received RTM packet entry's sender address and msg_id
+ * @brief find an RX entry for a received RTM packet entry's msg_id
  *
  * @param[in]		rxe_map		RX entry map
  * @param[in]		pkt_entry	received packet entry
@@ -15,15 +15,10 @@
  * pointer to an RX entry. If such RX entry does not exist, return NULL
 */
 struct efa_rdm_ope *efa_rdm_rxe_map_lookup(struct efa_rdm_rxe_map *rxe_map,
-					   uint64_t msg_id, fi_addr_t addr)
+					   uint64_t msg_id)
 {
 	struct efa_rdm_rxe_map_entry *entry = NULL;
-	struct efa_rdm_rxe_map_key key;
-
-	memset(&key, 0, sizeof(key));
-	key.msg_id = msg_id;
-	key.addr = addr;
-	HASH_FIND(hh, rxe_map->head, &key, sizeof(struct efa_rdm_rxe_map_key), entry);
+	HASH_FIND(hh, rxe_map->head, &msg_id, sizeof(msg_id), entry);
 	return entry ? entry->rxe : NULL;
 }
 
@@ -31,7 +26,7 @@ struct efa_rdm_ope *efa_rdm_rxe_map_lookup(struct efa_rdm_rxe_map *rxe_map,
  * @brief insert an RX entry into an RX entry map
  *
  * @details
- * the insertion will use the combination of packet entry sender address and msg_id as key.
+ * the insertion will use the msg_id as key
  * Caller is responsible to make sure the key does not exist in the map.
  *
  * @param[in,out]	rxe_map		RX entry map
@@ -39,8 +34,7 @@ struct efa_rdm_ope *efa_rdm_rxe_map_lookup(struct efa_rdm_rxe_map *rxe_map,
  * @param[in]		rxe		RX entry
 */
 void efa_rdm_rxe_map_insert(struct efa_rdm_rxe_map *rxe_map,
-			    uint64_t msg_id, fi_addr_t addr,
-			    struct efa_rdm_ope *rxe)
+			    uint64_t msg_id, struct efa_rdm_ope *rxe)
 {
 	struct efa_rdm_rxe_map_entry *entry;
 
@@ -52,21 +46,19 @@ void efa_rdm_rxe_map_insert(struct efa_rdm_rxe_map *rxe_map,
 		return;
 	}
 
-	memset(&entry->key, 0, sizeof(entry->key));
-	entry->key.msg_id = msg_id;
-	entry->key.addr = addr;
+	entry->msg_id = msg_id;
 
 #if ENABLE_DEBUG
 	{
 		struct efa_rdm_rxe_map_entry *existing_entry = NULL;
 
-		HASH_FIND(hh, rxe_map->head, &entry->key, sizeof(struct efa_rdm_rxe_map_key), existing_entry);
+		HASH_FIND(hh, rxe_map->head, &entry->msg_id, sizeof(msg_id), existing_entry);
 		assert(!existing_entry);
 	}
 #endif
 
 	entry->rxe = rxe;
-	HASH_ADD(hh, rxe_map->head, key, sizeof(struct efa_rdm_rxe_map_key), entry);
+	HASH_ADD(hh, rxe_map->head, msg_id, sizeof(msg_id), entry);
 	rxe->rxe_map = rxe_map;
 }
 
@@ -74,7 +66,7 @@ void efa_rdm_rxe_map_insert(struct efa_rdm_rxe_map *rxe_map,
  * @brief remove an RX entry from the RX entry map
  *
  * @details
- * the removal will use the combination of packet entry sender address and msg_id as key.
+ * the removal will use the msg_id as key.
  * Caller is responsible to make sure the key does exist in the map.
  *
  * @param[in,out]	rxe_map		RX entry map
@@ -83,16 +75,10 @@ void efa_rdm_rxe_map_insert(struct efa_rdm_rxe_map *rxe_map,
  * @param[in]		rxe		RX entry
  */
 void efa_rdm_rxe_map_remove(struct efa_rdm_rxe_map *rxe_map, uint64_t msg_id,
-			    fi_addr_t addr, struct efa_rdm_ope *rxe)
+			    struct efa_rdm_ope *rxe)
 {
 	struct efa_rdm_rxe_map_entry *entry;
-	struct efa_rdm_rxe_map_key key;
-
-	memset(&key, 0, sizeof(key));
-	key.msg_id = msg_id;
-	key.addr = addr;
-
-	HASH_FIND(hh, rxe_map->head, &key, sizeof(key), entry);
+	HASH_FIND(hh, rxe_map->head, &msg_id, sizeof(msg_id), entry);
 	assert(entry && entry->rxe == rxe);
 	HASH_DEL(rxe_map->head, entry);
 	ofi_buf_free(entry);
