@@ -429,6 +429,9 @@ ssize_t ofi_copy_from_mr_iov(void *dest, size_t size, struct ofi_mr **mr,
 ssize_t ofi_copy_to_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
 			   size_t iov_count, uint64_t iov_offset,
 			   const void *src, size_t size);
+ssize_t ofi_copy_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
+			size_t iov_count, size_t offset, void *buf,
+			size_t size, int dir);
 
 int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr,
 			size_t size, void **handle);
