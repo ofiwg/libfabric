@@ -375,7 +375,7 @@ static void rx_op_comp_spool_cb(struct lpp_ep *lpp_epp, void *data, int status)
 static void rx_comp(struct lpp_ep *lpp_epp, struct klpp_msg_hdr *hdr,
 		    struct lpp_rx_op *rx_op, int status)
 {
-	struct klpp_msg_hdr cmpl_hdr;
+	struct klpp_msg_hdr cmpl_hdr = { 0 };
 	struct lpp_rx_op *rx_op_heap;
 	int ret;
 
@@ -470,7 +470,7 @@ static void recv_eager(struct lpp_ep *lpp_epp, struct lpp_rx_entry *rx_entry,
 static void recv_rdzv(struct lpp_ep *lpp_epp, struct lpp_rx_entry *rx_entry,
 		      struct klpp_msg_hdr *hdr, struct lpp_rx_op *rx_op)
 {
-	struct klpp_umc_u2k u2k;
+	struct klpp_umc_u2k u2k = { 0 };
 	int ret;
 
 	if (!(rx_entry->lpp_flags & LPP_RX_ENTRY_MR)) {
