@@ -11,6 +11,8 @@ v2.1.0, Sat Mar 15, 2025
 
 ## Core
 
+- man/fi_domain: Define resource mgmt unreachable EP
+- man/fi_domain: Update connectionless EP disable
 - hmem: Fix missing rocr dlopen function assignments
 - Fix data race on log_prefix
 - hmem: Define ofi_hmem_put_dmabuf_fd and add support for cuda and rocr
@@ -18,6 +20,9 @@ v2.1.0, Sat Mar 15, 2025
 
 ## CXI
 
+- Fix ss_plugin_auth_key_priority test
+- Bump internal CXI version to support 2.1
+- Fix possible cq_open segfault
 - Fix peer CQ support
 - Added collectives logical operators
 - Fix bug in constrained LE test cases in test.sh and test_sw.sh
@@ -48,6 +53,9 @@ v2.1.0, Sat Mar 15, 2025
 
 ## EFA
 
+- Do not allocate rdm_peer struct for efa-direct and dgram paths
+- Remove efa_av->ep_type in favor of efa_domain->info_type
+- Replace domain->rdm_ep with domain->info_type
 - Release matched rxe before destroying the srx rx_pool
 - Fix the error code from ibv wr API
 - Fix the clean up issue for efa_util_prov
@@ -108,6 +116,10 @@ v2.1.0, Sat Mar 15, 2025
 
 ## OPX
 
+- Adding changes to resolve Coverity Scan Defects
+- Link bounce fixes
+- SDMA error handling fix
+- Fix build with GCC 15
 - Move CUDA sync attribute setting to mr registration
 - Add HMEM handle for GDRCopy in GET/PUT
 - Add newline to trace entry
@@ -151,12 +163,17 @@ v2.1.0, Sat Mar 15, 2025
 - Don't send immediate data in send_rzv when send buffer is not host memory
 - Use `page_sizes[OFI_PAGE_SIZE]-1` instead of `PAGE_MASK`
 
+## PSM3
+
+- Update provider to sync with IEFS 12.0.0.0.36
+
 ## RXM
 
 - Fix rxm multi recv getopt segfault
 
 ## SHM
 
+- Free all pending srx entries on ep close
 - Remove prefix from map inserts
 - Fix name compare bug
 
@@ -188,6 +205,8 @@ v2.1.0, Sat Mar 15, 2025
 
 ## Fabtests
 
+- efa: Bind eq to ep in remote exits early test
+- Fix some test function prototypes
 - efa: Add remote exit early test with post recv
 - Do not require FI_TAGGED for fi_av_xfer test
 - efa: print err for recv failure
