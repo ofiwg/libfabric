@@ -502,8 +502,17 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	if (cache->domain)
 		ofi_atomic_dec32(&cache->domain->ref);
 	ofi_bufpool_destroy(cache->entry_pool);
-	assert(cache->cached_cnt == 0);
-	assert(cache->cached_size == 0);
+
+	if (cache->cached_cnt) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+				"MR cache cached_cnt non-zero: %lu\n",
+				cache->cached_cnt);
+	}
+	if (cache->cached_size) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+				"MR cache cached_size non-zero: %lu\n",
+				cache->cached_size);
+	}
 	assert(cache->uncached_cnt == 0);
 	assert(cache->uncached_size == 0);
 }

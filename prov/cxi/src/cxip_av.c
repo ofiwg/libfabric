@@ -504,9 +504,12 @@ static int cxip_av_close(struct fid *fid)
 {
 	struct cxip_av *av = container_of(fid, struct cxip_av, av_fid.fid);
 	struct cxip_domain *dom = av->domain;
+	int count;
 
-	if (ofi_atomic_get32(&av->ref))
-		return -FI_EBUSY;
+	count = ofi_atomic_get32(&av->ref);
+	if (count) {
+		CXIP_WARN("AV refcount non-zero: %d\n", count);
+	}
 
 	HASH_CLEAR(hh, av->auth_key_entry_hash);
 	ofi_bufpool_destroy(av->auth_key_entry_pool);

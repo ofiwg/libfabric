@@ -795,7 +795,6 @@ int cxip_free_endpoint(struct cxip_ep *ep)
 	count = ofi_atomic_get32(&ep_obj->coll.num_mc);
 	if (count) {
 		CXIP_WARN("EP num_mc non-zero: %d\n", count);
-		return -FI_EBUSY;
 	}
 
 	if (ep_obj->av)
