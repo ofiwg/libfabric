@@ -156,8 +156,6 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 
 	efa_domain->mtu_size = efa_domain->device->ibv_port_attr.max_msg_sz;
 	efa_domain->addrlen = (info->src_addr) ? info->src_addrlen : info->dest_addrlen;
-	efa_domain->rdm_cq_size = MAX(info->rx_attr->size + info->tx_attr->size,
-				  efa_env.cq_size);
 	efa_domain->num_read_msg_in_flight = 0;
 
 	dlist_init(&efa_domain->ope_queued_list);
@@ -282,6 +280,9 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		assert(EFA_INFO_TYPE_IS_DGRAM(info));
 		efa_domain->info_type = EFA_INFO_DGRAM;
 	}
+
+	efa_domain->cq_size = MAX(info->rx_attr->size + info->tx_attr->size,
+				  efa_env.cq_size);
 
 	efa_domain->util_domain.domain_fid.fid.ops = &efa_ops_domain_fid;
 	if (efa_domain->info_type == EFA_INFO_RDM) {

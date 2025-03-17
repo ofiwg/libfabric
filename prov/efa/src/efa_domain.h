@@ -41,7 +41,7 @@ struct efa_domain {
 	 * efa-direct paths */
 	enum efa_domain_info_type info_type;
 
-	size_t			rdm_cq_size;
+	size_t			cq_size;
 	/* number of rdma-read messages in flight */
 	uint64_t		num_read_msg_in_flight;
 	/* queued op entries */

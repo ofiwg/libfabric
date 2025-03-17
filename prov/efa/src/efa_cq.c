@@ -429,6 +429,11 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	if (!cq)
 		return -FI_ENOMEM;
 
+	efa_domain = container_of(domain_fid, struct efa_domain,
+				  util_domain.domain_fid);
+	/* Override user cq size if it's less than recommended cq size */
+	attr->size = MAX(efa_domain->cq_size, attr->size);
+
 	err = ofi_cq_init(&efa_prov, domain_fid, attr, &cq->util_cq,
 			  &efa_cq_progress, context);
 	if (err) {
@@ -436,8 +441,6 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		goto err_free_cq;
 	}
 
-	efa_domain = container_of(cq->util_cq.domain, struct efa_domain,
-				  util_domain);
 	err = efa_cq_ibv_cq_ex_open(attr, efa_domain->device->ibv_ctx,
 				    &cq->ibv_cq.ibv_cq_ex,
 				    &cq->ibv_cq.ibv_cq_ex_type);
