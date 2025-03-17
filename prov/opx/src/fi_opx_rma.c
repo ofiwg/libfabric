@@ -148,8 +148,9 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
-	ssize_t credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, 2);
-	if (OFI_UNLIKELY(credits_available < 2)) {
+	const int credits_needed    = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ? 2 : 3;
+	ssize_t	  credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, credits_needed);
+	if (OFI_UNLIKELY(credits_available < 0)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "DO_READV");
 		return -FI_EAGAIN;
 	}
@@ -227,6 +228,10 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 					  params->dput_iov.qw[1], params->dput_iov.qw[2], params->dput_iov.qw[3],
 					  params->dput_iov.qw[4], params->dput_iov.qw[5], 0UL);
 
+		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
+		scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
+		opx_cacheline_store_qw_vol(scb_payload, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL);
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 	}
 
