@@ -439,6 +439,7 @@ void test_efa_rdm_ep_dc_atomic_queue_before_handshake(struct efa_resource **stat
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	peer->is_local = false;
 
+	assert_false(efa_rdm_ep->homogeneous_peers);
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 	err = fi_atomicmsg(resource->ep, &msg, FI_DELIVERY_COMPLETE);
 	/* DC has been reuquested, but ep do not know whether peer supports it, therefore
@@ -499,6 +500,7 @@ void test_efa_rdm_ep_dc_send_queue_before_handshake(struct efa_resource **state)
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	peer->is_local = false;
 
+	assert_false(efa_rdm_ep->homogeneous_peers);
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 	err = fi_sendmsg(resource->ep, &msg, FI_DELIVERY_COMPLETE);
 	/* DC has been reuquested, but ep do not know whether peer supports it, therefore
@@ -560,6 +562,7 @@ void test_efa_rdm_ep_dc_send_queue_limit_before_handshake(struct efa_resource **
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	peer->is_local = false;
 
+	assert_false(efa_rdm_ep->homogeneous_peers);
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 
 	for (i = 0; i < EFA_RDM_MAX_QUEUED_OPE_BEFORE_HANDSHAKE; i++) {
@@ -622,7 +625,7 @@ void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	peer->is_local = false;
-
+	assert_false(efa_rdm_ep->homogeneous_peers);
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 
 	if (op == ofi_op_read_req) {
@@ -785,6 +788,7 @@ void test_efa_rdm_ep_rma_inconsistent_unsolicited_write_recv(struct efa_resource
 	/* make sure shm is not used */
 	peer->is_local = false;
 
+	assert_false(efa_rdm_ep->homogeneous_peers);
 	err = fi_writedata(resource->ep, buf, buf_len,
 			    NULL, /* desc, not required */
 			    0x1234,
@@ -989,6 +993,24 @@ void test_efa_rdm_ep_setopt_shared_memory_permitted(struct efa_resource **state)
 			  base_ep.util_ep.ep_fid);
 
 	assert_null(ep->shm_ep);
+}
+
+void test_efa_rdm_ep_setopt_homogeneous_peers(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	bool optval = true;
+	
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+		base_ep.util_ep.ep_fid);
+	assert_false(ep->homogeneous_peers);
+	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
+				   FI_OPT_EFA_HOMOGENEOUS_PEERS, &optval,
+				   sizeof(optval)),
+			 FI_SUCCESS);
+	assert_true(ep->homogeneous_peers);
 }
 
 /**
