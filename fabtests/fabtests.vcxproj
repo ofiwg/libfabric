@@ -193,6 +193,7 @@
     <ClCompile Include="benchmarks\rdm_tagged_bw.c" />
     <ClCompile Include="benchmarks\rdm_tagged_pingpong.c" />
     <ClCompile Include="benchmarks\rma_bw.c" />
+    <ClCompile Include="benchmarks\rdm_bw_mt.c" />
     <ClCompile Include="common\hmem.c" />
     <ClCompile Include="common\hmem_cuda.c" />
     <ClCompile Include="common\hmem_rocr.c" />
@@ -269,6 +270,7 @@
     <ClInclude Include="include\windows\netinet\tcp.h" />
     <ClInclude Include="include\windows\osd.h" />
     <ClInclude Include="include\windows\poll.h" />
+    <ClInclude Include="include\windows\pthread.h" />
     <ClInclude Include="include\windows\sys\socket.h" />
     <ClInclude Include="include\windows\sys\uio.h" />
     <ClInclude Include="include\windows\sys\wait.h" />
