@@ -125,7 +125,7 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	 * For local read (read from self ep), such handshake is not needed because we only
 	 * need to check the local ep's capabilities.
 	 */
-	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+	if (!ep->homogeneous_peers && !(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 
 	/* Check p2p support. Cannot use device read when p2p is not available. */
@@ -362,7 +362,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	 * For local write (writing it self), this handshake is not required because we only need to
 	 * check one-side capability
 	 */
-	if (!(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+	if (!ep->homogeneous_peers && !(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 
 	if (efa_rdm_rma_should_write_using_rdma(ep, txe, txe->peer)) {
@@ -371,7 +371,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		 * imm not consume an rx buffer on the responder side, and this
 		 * feature requires consistent support status on both sides.
 		 */
-		if ((txe->fi_flags & FI_REMOTE_CQ_DATA) &&
+		if (!ep->homogeneous_peers && (txe->fi_flags & FI_REMOTE_CQ_DATA) && 
 			(efa_rdm_ep_support_unsolicited_write_recv(ep) != efa_rdm_peer_support_unsolicited_write_recv(txe->peer))) {
 			(void) efa_rdm_construct_msg_with_local_and_peer_information(ep, txe->addr, ep->err_msg, "", EFA_RDM_ERROR_MSG_BUFFER_LENGTH);
 			EFA_WARN(FI_LOG_EP_DATA,
@@ -401,7 +401,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		 * handshake for write earlier.
 		 */
 
-		if (!(txe->peer->is_self) && !efa_rdm_peer_support_delivery_complete(txe->peer))
+		if (!ep->homogeneous_peers && !(txe->peer->is_self) && !efa_rdm_peer_support_delivery_complete(txe->peer))
 			return -FI_EOPNOTSUPP;
 
 		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_DC_EAGER_RTW_PKT);
