@@ -222,16 +222,19 @@ void ofi_mr_map_close(struct ofi_mr_map *map)
 int ofi_mr_close(struct fid *fid)
 {
 	struct ofi_mr *mr;
-	int ret;
+	int ret = 0;
 
 	mr = container_of(fid, struct ofi_mr, mr_fid.fid);
+
+	if (mr->key == FI_KEY_NOTAVAIL)
+		goto free_mr;
 
 	ofi_genlock_lock(&mr->domain->lock);
 	ret = ofi_mr_map_remove(&mr->domain->mr_map, mr->key);
 	ofi_genlock_unlock(&mr->domain->lock);
 	if (ret)
 		return ret;
-
+free_mr:
 	ofi_atomic_dec32(&mr->domain->ref);
 	free(mr);
 	return 0;
@@ -343,10 +346,14 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	mr->device = cur_abi_attr.device.reserved;
 	mr->hmem_data = cur_abi_attr.hmem_data;
 
-	ret = ofi_mr_map_insert(&domain->mr_map, &cur_abi_attr, &key, mr, flags);
-	if (ret) {
-		free(mr);
-		goto out;
+	if (cur_abi_attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE)) {
+		ret = ofi_mr_map_insert(&domain->mr_map, &cur_abi_attr, &key, mr, flags);
+		if (ret) {
+			free(mr);
+			goto out;
+		}
+	} else {
+		key = FI_KEY_NOTAVAIL;
 	}
 
 	mr->mr_fid.key = mr->key = key;
