@@ -186,6 +186,9 @@
     <ClCompile Include="benchmarks\rma_bw.c">
       <Filter>Source Files\benchmarks</Filter>
     </ClCompile>
+    <ClCompile Include="benchmarks\rdm_bw_mt.c">
+      <Filter>Source Files\benchmarks</Filter>
+    </ClCompile>
     <ClCompile Include="functional\rdm_netdir.c">
       <Filter>Source Files\functional</Filter>
     </ClCompile>
@@ -279,6 +282,9 @@
       <Filter>Header Files\osd</Filter>
     </ClInclude>
     <ClInclude Include="include\windows\poll.h">
+      <Filter>Header Files\osd</Filter>
+    </ClInclude>
+    <ClInclude Include="include\windows\pthread.h">
       <Filter>Header Files\osd</Filter>
     </ClInclude>
     <ClInclude Include="include\windows\unistd.h">
