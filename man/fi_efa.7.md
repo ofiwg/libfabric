@@ -115,7 +115,7 @@ provider for AWS Neuron or Habana SynapseAI.
   these operations are assisted by hardware support (return value is false).
 
 *FI_OPT_EFA_USE_DEVICE_RDMA - bool*
-: These option only applies to the fi_setopt() call.
+: This option only applies to the fi_setopt() call.
   Only available if the application selects a libfabric API version >= 1.18.
   This option allows an application to change libfabric's behavior
   with respect to RDMA transfers.  Note that there is also an environment
@@ -132,7 +132,7 @@ provider for AWS Neuron or Habana SynapseAI.
   revisions.
 
 *FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES - bool*
-: These option only applies to the fi_setopt() call.
+: This option only applies to the fi_setopt() call.
   It is used to force the endpoint to use in-order send/recv operation for each 128 bytes
   aligned block. Enabling the option will guarantee data inside each 128 bytes
   aligned block being sent and received in order, it will also guarantee data
@@ -141,12 +141,21 @@ provider for AWS Neuron or Habana SynapseAI.
 
 
 *FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES - bool*
-: These option only applies to the fi_setopt() call..
+: This option only applies to the fi_setopt() call.
   It is used to set the endpoint to use in-order RDMA write operation for each 128 bytes
   aligned block. Enabling the option will guarantee data inside each 128 bytes
   aligned block being written in order, it will also guarantee data to be
   delivered to the target buffer only once. If endpoint is not able to support
   this feature, it will return -FI_EOPNOTSUPP for the call to fi_setopt().
+
+*FI_OPT_EFA_HOMOGENEOUS_PEERS - bool*
+: This option only applies to the fi_setopt() call for RDM endpoints on efa fabric. 
+  RDM endpoints on efa-direct fabric are unaffected by this option. 
+  When set to true, it indicates all peers are homogeneous, meaning they run on the 
+  same platform, use the same software versions, and share identical capabilities.
+  It accelerates the initial communication setup as interoperability between peers
+  is guaranteed. 
+  The default value is false.
 
 # PROVIDER SPECIFIC DOMAIN OPS
 The efa provider exports extensions for operations
