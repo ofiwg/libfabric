@@ -168,6 +168,9 @@ static int efa_ep_setopt(fid_t fid, int level, int optname, const void *optval, 
 				return ret;
 		}
 		break;
+	/* no op as efa direct ep will not handshake with peers */
+	case FI_OPT_EFA_HOMOGENEOUS_PEERS:
+		break;
 	default:
 		EFA_INFO(FI_LOG_EP_CTRL, "Unknown / unsupported endpoint option\n");
 		return -FI_ENOPROTOOPT;
