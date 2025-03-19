@@ -96,7 +96,7 @@ struct util_prov vrb_util_prov = {
 };
 
 /* mutex for guarding the initialization of vrb_util_prov.info */
-ofi_mutex_t vrb_init_mutex;
+ofi_mutex_t vrb_info_mutex;
 
 int vrb_sockaddr_len(struct sockaddr *addr)
 {
@@ -791,7 +791,7 @@ static void vrb_fini(void)
 	ofi_hmem_cleanup();
 	ofi_mem_fini();
 #endif
-	ofi_mutex_destroy(&vrb_init_mutex);
+	ofi_mutex_destroy(&vrb_info_mutex);
 	fi_freeinfo((void *)vrb_util_prov.info);
 	verbs_devs_free();
 	vrb_os_fini();
@@ -805,7 +805,7 @@ VERBS_INI
 	ofi_hmem_init();
 	ofi_monitors_init();
 #endif
-	ofi_mutex_init(&vrb_init_mutex);
+	ofi_mutex_init(&vrb_info_mutex);
 
 	vrb_prof_init();
 
