@@ -152,6 +152,9 @@ set multinode_tests=^
 	"multinode -x msg"^
 	"multinode -x rma"
 
+set threaded_tests=^
+	"fi_rdm_bw_mt -n 8"^
+	"fi_rdm_bw_mt -n 8 -g"
 
 goto :global_main
 
@@ -544,7 +547,7 @@ goto :global_main
 
 	set tests=
 	if /i "%~1" == "quick" set tests=unit,functional,short
-	if /i "%~1" == "all" set tests=unit,functional,standard,multinode
+	if /i "%~1" == "all" set tests=unit,functional,standard,multinode,threaded
 	if /i "%tests%" == "" set tests=%~1
 	set tests=%tests:,= %
 
@@ -583,6 +586,11 @@ goto :global_main
 :set-multinode
 			for %%t in (%multinode_tests%) do (
 				call :multinode_test %%t 3
+			)
+			goto :EOF
+:set-threaded
+			for %%t in (%threaded_tests%) do (
+				call :cs_test %%t
 			)
 			goto :EOF
 :set-
@@ -630,7 +638,7 @@ goto :global_main
 	echo.  -v       print output of failing 1>&2
 	echo.  -v -v    print output of failing/notrun 1>&2
 	echo.  -v -v -v print output of failing/notrun/passing 1>&2
-	echo.  -t       test set(s): all,quick,unit,functional,standard,short,complex (default quick) 1>&2
+	echo.  -t       test set(s): all,quick,unit,functional,standard,short,complex,threaded (default quick) 1>&2
 	echo.  -N       skip negative unit tests 1>&2
 	echo.  -p       path to test bins (default PATH) 1>&2
 	echo.  -c       client interface 1>&2
