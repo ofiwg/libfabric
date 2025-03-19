@@ -186,7 +186,8 @@ struct cxip_coll_hdr {
  * properly for network transmission.
  */
 struct red_pkt {
-	uint8_t pad[5];			/* size  5b offset  0b */
+	uint8_t pad[1];			/* size  1b offset  0b */
+	uint32_t sender_rank;		/* size  4b offset  1b */
 	struct cxip_coll_hdr hdr;	/* size 12b offset  5b */
 	uint8_t data[32];		/* size 32b offset 17b */
 } __attribute__((__packed__));		/* size 49b */
@@ -262,9 +263,15 @@ void check_red_pkt(void)
 		err++;
 	}
 	len = sizeof(pkt.pad);
-	exp = 5;
+	exp = 1;
 	if (len != exp) {
 		TRACE_PKT("sizeof(pkt.pad) = %ld, exp %ld\n", len, exp);
+		err++;
+	}
+	len = sizeof(pkt.sender_rank);
+	exp = 4;
+	if (len != exp) {
+		TRACE_PKT("sizeof(pkt.sender_rank) = %ld, exp %ld\n", len, exp);
 		err++;
 	}
 	len = sizeof(pkt.hdr);
@@ -988,7 +995,6 @@ static void _coll_rx_progress(struct cxip_req *req,
 	req->coll.isred = true;
 	req->discard = mc_obj->rx_discard;
 	reduction = &mc_obj->reduction[pkt->hdr.cookie.red_id];
-	TRACE_PKT("Valid reduction packet\n");
 
 #if ENABLE_DEBUG
 	/* Test case, simulate packet dropped in-flight */
@@ -1002,6 +1008,8 @@ static void _coll_rx_progress(struct cxip_req *req,
 		CXIP_INFO("pre-rearm pkt dropped\n");
 		return;
 	}
+
+	TRACE_PKT("valid reduction packet from rank %u\n", pkt->sender_rank);
 
 	/* Progress the reduction */
 	_dump_red_pkt(pkt, "recv");
@@ -1790,6 +1798,7 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 	pkt->hdr.cookie.mcast_id = reduction->mc_obj->mcast_addr;
 	pkt->hdr.cookie.red_id = reduction->red_id;
 	pkt->hdr.cookie.magic = MAGIC;
+	pkt->sender_rank = reduction->mc_obj->mynode_idx;
 
 	if (coll_data) {
 		pkt->hdr.redcnt = coll_data->red_cnt;
