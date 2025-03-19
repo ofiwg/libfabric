@@ -1358,7 +1358,6 @@ static int vrb_init_info(const struct fi_info **all_infos)
 	static bool initialized = false;
 
 	vrb_prof_func_start(__func__);
-	ofi_mutex_lock(&vrb_info_mutex);
 
 	if (initialized)
 		goto done;
@@ -1487,7 +1486,6 @@ static int vrb_init_info(const struct fi_info **all_infos)
 	rdma_free_devices(ctx_list);
 done:
 	vrb_prof_func_end(__func__);
-	ofi_mutex_unlock(&vrb_info_mutex);
 	return ret;
 }
 
@@ -1920,13 +1918,17 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 	int ret;
 
 	vrb_prof_func_start(__func__);
+	ofi_mutex_lock(&vrb_info_mutex);
 	ret = vrb_init_info(&vrb_util_prov.info);
-	if (ret)
+	if (ret) {
+		ofi_mutex_unlock(&vrb_info_mutex);
 		goto out;
+	}
 
 	ret = vrb_get_match_infos(version, node, service,
 				     flags, hints,
 				     &vrb_util_prov.info, info);
+	ofi_mutex_unlock(&vrb_info_mutex);
 	if (ret)
 		goto out;
 
