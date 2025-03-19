@@ -313,10 +313,14 @@ vrb_get_verbs_info(const char *domain_name)
 {
 	const struct fi_info *fi;
 
+	ofi_mutex_lock(&vrb_info_mutex);
 	for (fi = vrb_util_prov.info; fi; fi = fi->next) {
-		if (!strcmp(fi->domain_attr->name, domain_name))
+		if (!strcmp(fi->domain_attr->name, domain_name)) {
+			ofi_mutex_unlock(&vrb_info_mutex);
 			return fi_dupinfo(fi);
+		}
 	}
+	ofi_mutex_unlock(&vrb_info_mutex);
 
 	return NULL;
 }
@@ -523,13 +527,15 @@ int vrb_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		  void *context)
 {
 	struct vrb_fabric *fab;
-	const struct fi_info *cur, *info = vrb_util_prov.info;
+	const struct fi_info *cur, *info;
 	int ret = FI_SUCCESS;
 
 	fab = calloc(1, sizeof(*fab));
 	if (!fab)
 		return -FI_ENOMEM;
 
+	ofi_mutex_lock(&vrb_info_mutex);
+	info = vrb_util_prov.info;
 	for (cur = info; cur; cur = info->next) {
 		ret = ofi_fabric_init(&vrb_prov, cur->fabric_attr, attr,
 				      &fab->util_fabric, context);
@@ -537,11 +543,13 @@ int vrb_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			break;
 	}
 	if (ret) {
+		ofi_mutex_unlock(&vrb_info_mutex);
 		free(fab);
 		return ret;
 	}
 
 	fab->info = fi_dupinfo(cur);
+	ofi_mutex_unlock(&vrb_info_mutex);
 
 	*fabric = &fab->util_fabric.fabric_fid;
 	(*fabric)->fid.fclass = FI_CLASS_FABRIC;
