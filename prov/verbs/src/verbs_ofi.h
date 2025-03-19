@@ -172,7 +172,7 @@ typedef void  vrb_profile_t;
 
 extern struct fi_provider vrb_prov;
 extern struct util_prov vrb_util_prov;
-extern ofi_mutex_t vrb_init_mutex;
+extern ofi_mutex_t vrb_info_mutex;
 extern struct dlist_entry verbs_devs;
 
 extern struct vrb_gl_data {

@@ -1358,7 +1358,7 @@ static int vrb_init_info(const struct fi_info **all_infos)
 	static bool initialized = false;
 
 	vrb_prof_func_start(__func__);
-	ofi_mutex_lock(&vrb_init_mutex);
+	ofi_mutex_lock(&vrb_info_mutex);
 
 	if (initialized)
 		goto done;
@@ -1487,7 +1487,7 @@ static int vrb_init_info(const struct fi_info **all_infos)
 	rdma_free_devices(ctx_list);
 done:
 	vrb_prof_func_end(__func__);
-	ofi_mutex_unlock(&vrb_init_mutex);
+	ofi_mutex_unlock(&vrb_info_mutex);
 	return ret;
 }
 
