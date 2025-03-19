@@ -767,23 +767,6 @@ int vrb_read_params(void)
 	return FI_SUCCESS;
 }
 
-static void verbs_devs_free(void)
-{
-	struct verbs_dev_info *dev;
-	struct verbs_addr *addr;
-
-	while (!dlist_empty(&verbs_devs)) {
-		dlist_pop_front(&verbs_devs, struct verbs_dev_info, dev, entry);
-		while (!dlist_empty(&dev->addrs)) {
-			dlist_pop_front(&dev->addrs, struct verbs_addr, addr, entry);
-			rdma_freeaddrinfo(addr->rai);
-			free(addr);
-		}
-		free(dev->name);
-		free(dev);
-	}
-}
-
 static void vrb_fini(void)
 {
 #if HAVE_VERBS_DL
@@ -793,7 +776,6 @@ static void vrb_fini(void)
 #endif
 	ofi_mutex_destroy(&vrb_info_mutex);
 	fi_freeinfo((void *)vrb_util_prov.info);
-	verbs_devs_free();
 	vrb_os_fini();
 	vrb_util_prov.info = NULL;
 }
