@@ -230,7 +230,8 @@ int cxip_coll_trace_attr cxip_coll_trace(const char *fmt, ...)
 	len = vasprintf(&str, fmt, args);
 	va_end(args);
 	if (len >= 0) {
-		len = fprintf(cxip_coll_trace_fid, "[%2d|%2d] %s", cxip_coll_trace_rank,
+		len = fprintf(cxip_coll_trace_fid, "[%lu][%2d|%2d] %s",
+			      ofi_gettime_ns(), cxip_coll_trace_rank,
 			      cxip_coll_trace_numranks, str);
 		free(str);
 	}
