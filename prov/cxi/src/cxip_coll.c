@@ -2141,6 +2141,9 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 		if (ret)
 			SET_RED_RC(reduction->accum.red_rc,
 				   CXIP_COLL_RC_TX_FAILURE);
+	} else {
+		TRACE_DEBUG("incomplete reduction (recvd: %d, expected: %lu)\n",
+			    reduction->accum.red_cnt, mc_obj->av_set_obj->fi_addr_cnt);
 	}
 
 post_complete:
