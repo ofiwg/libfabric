@@ -44,14 +44,14 @@ struct vrb_sidr_conn_key {
 	bool			recip;
 };
 
-const struct fi_info *
+struct fi_info *
 vrb_get_verbs_info(const struct fi_info *ilist, const char *domain_name)
 {
 	const struct fi_info *fi;
 
 	for (fi = ilist; fi; fi = fi->next) {
 		if (!strcmp(fi->domain_attr->name, domain_name))
-			return fi;
+			return fi_dupinfo(fi);
 	}
 
 	return NULL;
