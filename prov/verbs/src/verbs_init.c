@@ -97,6 +97,7 @@ struct util_prov vrb_util_prov = {
 
 /* mutex for guarding the initialization of vrb_util_prov.info */
 ofi_mutex_t vrb_info_mutex;
+DEFINE_LIST(vrb_devs);
 
 int vrb_sockaddr_len(struct sockaddr *addr)
 {
@@ -634,7 +635,7 @@ static int vrb_get_param_str(const char *param_name,
 	return 0;
 }
 
-int vrb_read_params(void)
+static int vrb_read_params(void)
 {
 	/* Common parameters */
 	if (vrb_get_param_int("tx_size", "Default maximum tx context size",
@@ -767,21 +768,25 @@ int vrb_read_params(void)
 	return FI_SUCCESS;
 }
 
-static void verbs_devs_free(void)
+int vrb_init()
 {
-	struct verbs_dev_info *dev;
-	struct verbs_addr *addr;
-
-	while (!dlist_empty(&verbs_devs)) {
-		dlist_pop_front(&verbs_devs, struct verbs_dev_info, dev, entry);
-		while (!dlist_empty(&dev->addrs)) {
-			dlist_pop_front(&dev->addrs, struct verbs_addr, addr, entry);
-			rdma_freeaddrinfo(addr->rai);
-			free(addr);
-		}
-		free(dev->name);
-		free(dev);
+	if (vrb_os_ini()) {
+		FI_WARN(&vrb_prov, FI_LOG_FABRIC,
+			"failed in OS specific device initialization\n");
+		return -FI_ENODATA;
 	}
+
+	vrb_prof_func_start("vrb_os_mem_support");
+	vrb_os_mem_support(&vrb_gl_data.peer_mem_support,
+				&vrb_gl_data.dmabuf_support);
+	vrb_prof_func_end("vrb_os_mem_support");
+
+	if (vrb_read_params()) {
+		VRB_INFO(FI_LOG_FABRIC, "failed to read parameters\n");
+		return -FI_ENODATA;
+	}
+
+	return FI_SUCCESS;
 }
 
 static void vrb_fini(void)
@@ -793,7 +798,6 @@ static void vrb_fini(void)
 #endif
 	ofi_mutex_destroy(&vrb_info_mutex);
 	fi_freeinfo(vrb_util_prov.info);
-	verbs_devs_free();
 	vrb_os_fini();
 	vrb_util_prov.info = NULL;
 }
