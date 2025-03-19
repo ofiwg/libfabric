@@ -325,19 +325,21 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct vrb_fabric *fab =
 		 container_of(fabric, struct vrb_fabric,
 			      util_fabric.fabric_fid);
-	const struct fi_info *fi = vrb_get_verbs_info(vrb_util_prov.info,
-							 info->domain_attr->name);
+	struct fi_info *fi = vrb_get_verbs_info(vrb_util_prov.info,
+						info->domain_attr->name);
 	if (!fi)
 		return -FI_EINVAL;
 
 	ret = ofi_check_domain_attr(&vrb_prov, fabric->api_version,
 				    fi->domain_attr, info);
 	if (ret)
-		return ret;
+		goto err0;
 
 	_domain = calloc(1, sizeof *_domain);
-	if (!_domain)
-		return -FI_ENOMEM;
+	if (!_domain) {
+		ret = -FI_ENOMEM;
+		goto err0;
+	}
 
 	ret = ofi_domain_init(fabric, info, &_domain->util_domain, context,
 			      OFI_LOCK_MUTEX);
@@ -438,6 +440,8 @@ err2:
 		VRB_WARN(FI_LOG_DOMAIN, "ofi_domain_close fails");
 err1:
 	free(_domain);
+err0:
+	fi_freeinfo(fi);
 	return ret;
 }
 
@@ -481,6 +485,7 @@ static int vrb_fabric_close(fid_t fid)
 	ret = ofi_fabric_close(&fab->util_fabric);
 	if (ret)
 		return ret;
+	fi_freeinfo(fab->info);
 	free(fab);
 
 	return 0;
@@ -525,7 +530,7 @@ int vrb_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		return ret;
 	}
 
-	fab->info = cur;
+	fab->info = fi_dupinfo(cur);
 
 	*fabric = &fab->util_fabric.fabric_fid;
 	(*fabric)->fid.fclass = FI_CLASS_FABRIC;
