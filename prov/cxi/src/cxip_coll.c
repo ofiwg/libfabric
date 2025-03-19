@@ -930,6 +930,7 @@ static void _coll_rx_req_report(struct cxip_req *req)
 			req->coll.coll_pte->buf_low_water = cnt;
 		if (cnt <= 0) {
 			CXIP_WARN("COLL buffers exhausted\n");
+			TRACE_DEBUG("COLL buffers exhausted\n");
 			// TODO set flag to shut this down
 		}
 		ofi_atomic_inc32(&coll_pte->buf_swap_cnt);
