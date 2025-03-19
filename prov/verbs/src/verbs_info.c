@@ -154,9 +154,6 @@ const struct verbs_ep_domain verbs_dgram_domain = {
 	.protocol		= FI_PROTO_UNSPEC,
 };
 
-/* The list (not thread safe) is populated once when the provider is initialized */
-DEFINE_LIST(verbs_devs);
-
 int vrb_check_ep_attr(const struct fi_info *hints,
 			 const struct fi_info *info)
 {
@@ -877,7 +874,7 @@ err:
 	return ret;
 }
 
-static void verbs_devs_print(void)
+static void verbs_devs_print(struct dlist_entry *verbs_devs)
 {
 	struct verbs_dev_info *dev;
 	struct verbs_addr *addr;
@@ -886,7 +883,7 @@ static void verbs_devs_print(void)
 
 	FI_INFO(&vrb_prov, FI_LOG_FABRIC,
 		"list of verbs devices found for FI_EP_MSG:\n");
-	dlist_foreach_container(&verbs_devs, struct verbs_dev_info,
+	dlist_foreach_container(verbs_devs, struct verbs_dev_info,
 				dev, entry) {
 		FI_INFO(&vrb_prov, FI_LOG_FABRIC,
 			"#%d %s - IPoIB addresses:\n", ++i, dev->name);
@@ -1186,7 +1183,7 @@ static int vrb_getifaddrs(struct dlist_entry *verbs_devs)
 		num_verbs_ifs++;
 	}
 
-	verbs_devs_print();
+	verbs_devs_print(verbs_devs);
 
 	freeifaddrs(ifaddr);
 	return num_verbs_ifs ? 0 : -FI_ENODATA;
@@ -1237,7 +1234,8 @@ static inline int vrb_cmp_domain_and_dev_name(const char *domain_name,
 	return strncmp(domain_name, dev_name, cmp_len);
 }
 
-static int vrb_get_srcaddr_devs(struct fi_info **info)
+static int vrb_get_srcaddr_devs(struct dlist_entry *verbs_devs,
+				struct fi_info **info)
 {
 	struct verbs_dev_info *dev;
 	struct fi_info *fi;
@@ -1246,7 +1244,7 @@ static int vrb_get_srcaddr_devs(struct fi_info **info)
 	for (fi = *info; fi; fi = fi->next) {
 		if (fi->ep_attr->type == FI_EP_DGRAM)
 			continue;
-		dlist_foreach_container(&verbs_devs, struct verbs_dev_info,
+		dlist_foreach_container(verbs_devs, struct verbs_dev_info,
 					dev, entry) {
 			if (!vrb_cmp_domain_and_dev_name(fi->domain_attr->name,
 						         dev->name)) {
@@ -1299,7 +1297,8 @@ static int vrb_set_info_addrs(struct fi_info *info,
 	return FI_SUCCESS;
 }
 
-static int vrb_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
+static int vrb_fill_addr(struct dlist_entry *verbs_devs,
+			    struct rdma_addrinfo *rai, struct fi_info **info,
 			    struct rdma_cm_id *id)
 {
 	struct sockaddr *local_addr;
@@ -1313,7 +1312,7 @@ static int vrb_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 		goto rai_to_fi;
 
 	if (!id->verbs)
-		return vrb_get_srcaddr_devs(info);
+		return vrb_get_srcaddr_devs(verbs_devs, info);
 
 	/* Handle the case when rdma_cm doesn't fill src address even
 	 * though it fills the destination address (presence of id->verbs
@@ -1336,11 +1335,12 @@ rai_to_fi:
 				     NULL, NULL);
 }
 
-static int vrb_device_has_ipoib_addr(const char *dev_name)
+static int vrb_device_has_ipoib_addr(struct dlist_entry *verbs_devs,
+				     const char *dev_name)
 {
 	struct verbs_dev_info *dev;
 
-	dlist_foreach_container(&verbs_devs, struct verbs_dev_info, dev, entry) {
+	dlist_foreach_container(verbs_devs, struct verbs_dev_info, dev, entry) {
 		if (!strcmp(dev_name, dev->name))
 			return 1;
 	}
@@ -1349,39 +1349,19 @@ static int vrb_device_has_ipoib_addr(const char *dev_name)
 
 #define VERBS_NUM_DOMAIN_TYPES		3
 
-static int vrb_init_info(struct fi_info **all_infos)
+static int vrb_init_info(struct dlist_entry *verbs_devs,
+			 struct fi_info **all_infos)
 {
 	struct ibv_context **ctx_list;
 	struct fi_info *fi = NULL, *tail = NULL;
 	const struct verbs_ep_domain *ep_type[VERBS_NUM_DOMAIN_TYPES];
 	int ret = 0, i, j, num_devices, dom_count = 0;
-	static bool initialized = false;
 
 	vrb_prof_func_start(__func__);
 
-	if (initialized)
-		goto done;
-
-	initialized = true;
+	vrb_devs_free(verbs_devs);
+	fi_freeinfo(*all_infos);
 	*all_infos = NULL;
-
-	if (vrb_os_ini()) {
-		FI_WARN(&vrb_prov, FI_LOG_FABRIC,
-			"failed in OS specific device initialization\n");
-		ret = -FI_ENODATA;
-		goto done;
-	}
-
-	vrb_prof_func_start("vrb_os_mem_support");
-	vrb_os_mem_support(&vrb_gl_data.peer_mem_support,
-			   &vrb_gl_data.dmabuf_support);
-	vrb_prof_func_end("vrb_os_mem_support");
-
-	if (vrb_read_params()) {
-		VRB_INFO(FI_LOG_FABRIC, "failed to read parameters\n");
-		ret = -FI_ENODATA;
-		goto done;
-	}
 
 	if (!vrb_have_device()) {
 		VRB_INFO(FI_LOG_FABRIC, "no RDMA devices found\n");
@@ -1398,13 +1378,14 @@ static int vrb_init_info(struct fi_info **all_infos)
 				"XRC not built into provider, skip allocating "
 				"fi_info for XRC FI_EP_MSG endpoints\n");
 	}
+
 	vrb_prof_func_start("vrb_getifaddrs");
-	vrb_getifaddrs(&verbs_devs);
+	vrb_getifaddrs(verbs_devs);
 	vrb_prof_func_end("vrb_getifaddrs");
 	if (!vrb_gl_data.iface)
-		vrb_get_sib(&verbs_devs);
+		vrb_get_sib(verbs_devs);
 
-	if (dlist_empty(&verbs_devs))
+	if (dlist_empty(verbs_devs))
 		FI_WARN(&vrb_prov, FI_LOG_FABRIC,
 			"no valid IPoIB interfaces found, FI_EP_MSG endpoint "
 			"type would not be available\n");
@@ -1435,7 +1416,7 @@ static int vrb_init_info(struct fi_info **all_infos)
 
 		for (j = 0; j < dom_count; j++) {
 			if (ep_type[j]->type == FI_EP_MSG &&
-			    !vrb_device_has_ipoib_addr(ctx_list[i]->device->name)) {
+			    !vrb_device_has_ipoib_addr(verbs_devs, ctx_list[i]->device->name)) {
 				FI_INFO(&vrb_prov, FI_LOG_FABRIC,
 					"skipping device: %s for FI_EP_MSG, "
 					"it may have a filtered IPoIB interface"
@@ -1788,7 +1769,8 @@ out:
 	return ret;
 }
 
-static int vrb_handle_sock_addr(const char *node, const char *service,
+static int vrb_handle_sock_addr(struct dlist_entry *verbs_devs,
+				   const char *node, const char *service,
 				   uint64_t flags, const struct fi_info *hints,
 				   struct fi_info **info)
 {
@@ -1807,7 +1789,7 @@ static int vrb_handle_sock_addr(const char *node, const char *service,
 			goto out;
 	}
 
-	ret = vrb_fill_addr(rai, info, id);
+	ret = vrb_fill_addr(verbs_devs, rai, info, id);
 out:
 	rdma_freeaddrinfo(rai);
 	if (rdma_destroy_id(id))
@@ -1815,7 +1797,8 @@ out:
 	return ret;
 }
 
-static int vrb_get_match_infos(uint32_t version, const char *node,
+static int vrb_get_match_infos(struct dlist_entry *verbs_devs,
+				  uint32_t version, const char *node,
 				  const char *service, uint64_t flags,
 				  const struct fi_info *hints,
 				  const struct fi_info *raw_info,
@@ -1832,7 +1815,7 @@ static int vrb_get_match_infos(uint32_t version, const char *node,
 
 	if (!hints || !hints->ep_attr || hints->ep_attr->type == FI_EP_MSG ||
 	    hints->ep_attr->type == FI_EP_UNSPEC) {
-		ret_sock_addr = vrb_handle_sock_addr(node, service, flags, hints, info);
+		ret_sock_addr = vrb_handle_sock_addr(verbs_devs, node, service, flags, hints, info);
 		if (ret_sock_addr) {
 			VRB_INFO(FI_LOG_FABRIC,
 				   "handling of the socket address fails - %d\n",
@@ -1911,21 +1894,50 @@ static void vrb_filter_info_by_addr_format(struct fi_info **info, int addr_forma
 	}
 }
 
+void vrb_devs_free(struct dlist_entry *verbs_devs)
+{
+	struct verbs_dev_info *dev;
+	struct verbs_addr *addr;
+
+	while (!dlist_empty(verbs_devs)) {
+		dlist_pop_front(verbs_devs, struct verbs_dev_info, dev, entry);
+		while (!dlist_empty(&dev->addrs)) {
+			dlist_pop_front(&dev->addrs, struct verbs_addr, addr, entry);
+			rdma_freeaddrinfo(addr->rai);
+			free(addr);
+		}
+		free(dev->name);
+		free(dev);
+	}
+}
+
 int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
 		   struct fi_info **info)
 {
+	static bool init_done = false;
 	int ret;
 
 	vrb_prof_func_start(__func__);
 	ofi_mutex_lock(&vrb_info_mutex);
-	ret = vrb_init_info(&vrb_util_prov.info);
-	if (ret) {
-		ofi_mutex_unlock(&vrb_info_mutex);
-		goto out;
+	if (!init_done || flags & FI_RESCAN) {
+		if (!init_done) {
+			ret = vrb_init();
+			if (ret) {
+				ofi_mutex_unlock(&vrb_info_mutex);
+				goto out;
+			}
+			init_done = true;
+		}
+
+		ret = vrb_init_info(&vrb_devs, &vrb_util_prov.info);
+		if (ret) {
+			ofi_mutex_unlock(&vrb_info_mutex);
+			goto out;
+		}
 	}
 
-	ret = vrb_get_match_infos(version, node, service,
+	ret = vrb_get_match_infos(&vrb_devs, version, node, service,
 				     flags, hints,
 				     vrb_util_prov.info, info);
 	ofi_mutex_unlock(&vrb_info_mutex);
