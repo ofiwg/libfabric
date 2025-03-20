@@ -119,6 +119,8 @@ int fi_hmem_ze_device(int driver_index, int device_index);
 *requested_key*
 : Requested remote key associated with registered buffers.  Parameter
   is ignored if FI_MR_PROV_KEY flag is set in the domain mr_mode bits.
+  Parameter may be ignored if remote access permissions are not asked
+  for.
 
 *attr*
 : Memory region attributes
@@ -720,6 +722,10 @@ used by the provider.  This allows applications to use well known key
 values, which can avoid applications needing to exchange and store keys.
 Support for user requested keys is provider specific and is determined
 by the the FI_MR_PROV_KEY flag in the mr_mode domain attribute field.
+Depending on the provider, the user requested key may be ignored if the
+memory region is for local access only.  A provider may be unable to
+do so if the hardware supports user requested keys and the same key is
+used for both local and remote access.
 
 ## context
 
