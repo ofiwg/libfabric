@@ -755,9 +755,11 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 	struct fi_peer_match_attr attr;
 	struct fi_peer_rx_entry *peer_rxe;
 	struct efa_rdm_ope *rxe;
+	struct efa_rdm_peer *peer;
 	int ret;
 	int pkt_type;
 
+	peer = efa_rdm_ep_get_peer(ep, (*pkt_entry_ptr)->addr);
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 
 	attr.addr = (*pkt_entry_ptr)->addr;
@@ -797,7 +799,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 
 	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
-		efa_rdm_rxe_map_insert(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(*pkt_entry_ptr), (*pkt_entry_ptr)->addr, rxe);
+		efa_rdm_rxe_map_insert(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(*pkt_entry_ptr), rxe);
 
 	return rxe;
 }
@@ -824,8 +826,11 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 	struct fi_peer_match_attr attr;
 	struct fi_peer_rx_entry *peer_rxe;
 	struct efa_rdm_ope *rxe;
+	struct efa_rdm_peer *peer;
 	int ret;
 	int pkt_type;
+
+	peer = efa_rdm_ep_get_peer(ep, (*pkt_entry_ptr)->addr);
 
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 	attr.addr = (*pkt_entry_ptr)->addr;
@@ -874,7 +879,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 
 	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
-		efa_rdm_rxe_map_insert(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(*pkt_entry_ptr), (*pkt_entry_ptr)->addr, rxe);
+		efa_rdm_rxe_map_insert(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(*pkt_entry_ptr), rxe);
 
 	return rxe;
 }
