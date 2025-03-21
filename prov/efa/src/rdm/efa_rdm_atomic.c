@@ -118,11 +118,13 @@ ssize_t efa_rdm_atomic_post_atomic(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm
 		 * the information whether the peer
 		 * support it or not.
 		 */
-		if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
-			return efa_rdm_ep_enforce_handshake_for_txe(efa_rdm_ep, txe);
+		if (!efa_rdm_ep->homogeneous_peers) {
+			if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+				return efa_rdm_ep_enforce_handshake_for_txe(efa_rdm_ep, txe);
 
-		if (!(txe->peer->is_self) && !efa_rdm_peer_support_delivery_complete(txe->peer))
-			return -FI_EOPNOTSUPP;
+			if (!(txe->peer->is_self) && !efa_rdm_peer_support_delivery_complete(txe->peer))
+				return -FI_EOPNOTSUPP;
+		}
 	}
 
 	if (delivery_complete_requested && txe->op == ofi_op_atomic) {

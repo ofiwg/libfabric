@@ -185,6 +185,7 @@ struct efa_rdm_ep {
 	struct dlist_entry entry;
 	/* the count of opes queued before handshake is made with their peers */
 	size_t ope_queued_before_handshake_cnt;
+	bool homogeneous_peers; /* peers always support the same capabilities in extra_info as this ep */
 };
 
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);
