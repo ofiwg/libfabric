@@ -293,6 +293,8 @@ int ofi_mr_map_init(const struct fi_provider *in_prov, int mode,
 		    struct ofi_mr_map *map);
 void ofi_mr_map_close(struct ofi_mr_map *map);
 
+struct fi_mr_attr *ofi_mr_dup_attr(const struct fi_mr_attr *attr,
+				   uint64_t flags);
 int ofi_mr_map_insert(struct ofi_mr_map *map,
 		      const struct fi_mr_attr *attr,
 		      uint64_t *key, void *context,
