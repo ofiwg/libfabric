@@ -87,4 +87,13 @@ def test_rdm_tagged_bw(cmdline_args, iteration_type, datacheck_type, completion_
                             completion_semantic, datacheck_type=datacheck_type)
     test.run()
 
+@pytest.mark.parametrize("iteration_type",
+                         [pytest.param("short", marks=pytest.mark.short),
+                          pytest.param("standard", marks=pytest.mark.standard)])
+def test_rdm_bw_mt(cmdline_args, iteration_type, datacheck_type, completion_semantic):
+    from common import ClientServerTest
+    test = ClientServerTest(cmdline_args, "fi_rdm_bw_mt -n 4", iteration_type,
+                            completion_semantic, datacheck_type=datacheck_type)
+    test.run()
+
 
