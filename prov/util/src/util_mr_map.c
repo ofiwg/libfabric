@@ -37,9 +37,8 @@
 #include "ofi_hmem.h"
 #include <assert.h>
 
-
-static struct fi_mr_attr *
-dup_mr_attr(const struct fi_mr_attr *attr, uint64_t flags)
+struct fi_mr_attr *ofi_mr_dup_attr(const struct fi_mr_attr *attr,
+				   uint64_t flags)
 {
 	struct fi_mr_attr *dup_attr;
 
@@ -52,7 +51,7 @@ dup_mr_attr(const struct fi_mr_attr *attr, uint64_t flags)
 	dup_attr->mr_iov = (struct iovec *) (dup_attr + 1);
 
 	/*
-	 * dup_mr_attr is only used insided ofi_mr_map_insert.
+	 * ofi_mr_dup_attr is only used insided ofi_mr_map_insert.
 	 * dmabuf must be converted to iov before the attr
 	 * is inserted to the mr_map
 	 */
@@ -72,7 +71,7 @@ int ofi_mr_map_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
 	struct fi_mr_attr *item;
 	int ret;
 
-	item = dup_mr_attr(attr, flags);
+	item = ofi_mr_dup_attr(attr, flags);
 	if (!item)
 		return -FI_ENOMEM;
 

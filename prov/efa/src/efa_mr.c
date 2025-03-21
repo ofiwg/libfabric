@@ -557,6 +557,43 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 			mr_attr->mr_iov->iov_len, access);
 }
 
+/* 
+ * efa_mr_map_insert inserts all buffers into the rb tree.
+ * ofi_mr_map_insert only inserts buffers with FI_REMOTE_READ 
+ * and FI_REMOTE_WRITE access flags.
+ */
+static int efa_mr_map_insert(struct ofi_mr_map *map,
+			     const struct fi_mr_attr *attr, uint64_t *key,
+			     void *context, uint64_t flags)
+{
+	struct fi_mr_attr *item;
+	int ret;
+
+	item = ofi_mr_dup_attr(attr, flags);
+	if (!item)
+		return -FI_ENOMEM;
+
+	if (!(map->mode & FI_MR_VIRT_ADDR))
+		item->offset = (uintptr_t) attr->mr_iov[0].iov_base;
+
+	if (map->mode & FI_MR_PROV_KEY)
+		item->requested_key = map->key++;
+
+	ret = ofi_rbmap_insert(map->rbtree, &item->requested_key, item, NULL);
+	if (ret) {
+		if (ret == -FI_EALREADY)
+			ret = -FI_ENOKEY;
+		goto err;
+	}
+	*key = item->requested_key;
+	item->context = context;
+
+	return 0;
+err:
+	free(item);
+	return ret;
+}
+
 #if HAVE_CUDA
 static inline
 int efa_mr_is_cuda_memory_freed(struct efa_mr *efa_mr, bool *freed)
@@ -612,7 +649,7 @@ int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_att
 
 	mr_attr->requested_key = efa_mr->mr_fid.key;
 	ofi_genlock_lock(&efa_mr->domain->util_domain.lock);
-	err = ofi_mr_map_insert(&efa_mr->domain->util_domain.mr_map, mr_attr,
+	err = efa_mr_map_insert(&efa_mr->domain->util_domain.mr_map, mr_attr,
 				&efa_mr->mr_fid.key, &efa_mr->mr_fid, flags);
 	ofi_genlock_unlock(&efa_mr->domain->util_domain.lock);
 	if (!err)
@@ -699,7 +736,7 @@ int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_att
 	 * which should remove the staled entry from MR map. So insert again here.
 	 */
 	ofi_genlock_lock(&efa_mr->domain->util_domain.lock);
-	err = ofi_mr_map_insert(&efa_mr->domain->util_domain.mr_map, mr_attr,
+	err = efa_mr_map_insert(&efa_mr->domain->util_domain.mr_map, mr_attr,
 				&efa_mr->mr_fid.key, &efa_mr->mr_fid, flags);
 	ofi_genlock_unlock(&efa_mr->domain->util_domain.lock);
 	if (err) {
@@ -726,7 +763,7 @@ int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_att
 
 	mr_attr->requested_key = efa_mr->mr_fid.key;
 	ofi_genlock_lock(&efa_mr->domain->util_domain.lock);
-	err = ofi_mr_map_insert(&efa_mr->domain->util_domain.mr_map, mr_attr,
+	err = efa_mr_map_insert(&efa_mr->domain->util_domain.mr_map, mr_attr,
 				&efa_mr->mr_fid.key, &efa_mr->mr_fid, flags);
 	ofi_genlock_unlock(&efa_mr->domain->util_domain.lock);
 	if (err) {
