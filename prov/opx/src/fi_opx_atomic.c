@@ -141,29 +141,30 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	} else {
 		params->lrh_dlid = opx_dst_addr.lid;
 	}
-	params->pbc_dlid		  = OPX_PBC_DLID_TO_PBC_DLID(opx_dst_addr.lid, hfi1_type);
-	params->slid			  = opx_dst_addr.lid;
-	params->dt			  = dt == FI_VOID ? FI_VOID - 1 : dt;
-	params->op			  = op == FI_NOOP ? FI_NOOP - 1 : op;
-	params->u8_rx			  = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
-	params->key			  = key;
-	params->niov			  = 1;
-	params->iov[0].bytes		  = buf_iov->len;
-	params->iov[0].rbuf		  = addr_offset;
-	params->iov[0].sbuf		  = buf_iov->buf;
-	params->iov[0].rbuf_iface	  = FI_HMEM_SYSTEM;
-	params->iov[0].sbuf_iface	  = buf_iov->iface;
-	params->iov[0].rbuf_device	  = 0;
-	params->iov[0].sbuf_device	  = buf_iov->device;
-	params->dput_iov		  = &params->iov[0];
-	params->opcode			  = opcode;
-	params->is_intranode		  = is_intranode;
-	params->reliability		  = reliability;
-	params->cur_iov			  = 0;
-	params->bytes_sent		  = 0;
-	params->cc			  = NULL;
-	params->user_cc			  = NULL;
-	params->src_base_addr		  = NULL;
+	params->pbc_dlid	   = OPX_PBC_DLID_TO_PBC_DLID(opx_dst_addr.lid, hfi1_type);
+	params->slid		   = opx_dst_addr.lid;
+	params->dt		   = dt == FI_VOID ? FI_VOID - 1 : dt;
+	params->op		   = op == FI_NOOP ? FI_NOOP - 1 : op;
+	params->u8_rx		   = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
+	params->key		   = key;
+	params->niov		   = 1;
+	params->iov[0].bytes	   = buf_iov->len;
+	params->iov[0].rbuf	   = addr_offset;
+	params->iov[0].sbuf	   = buf_iov->buf;
+	params->iov[0].rbuf_iface  = FI_HMEM_SYSTEM;
+	params->iov[0].sbuf_iface  = buf_iov->iface;
+	params->iov[0].rbuf_device = 0;
+	params->iov[0].sbuf_device = buf_iov->device;
+	params->iov[0].sbuf_handle = 0; // This will change to a valid gdrcopy when we implement gdrcopy in atomic paths
+	params->dput_iov	   = &params->iov[0];
+	params->opcode		   = opcode;
+	params->is_intranode	   = is_intranode;
+	params->reliability	   = reliability;
+	params->cur_iov		   = 0;
+	params->bytes_sent	   = 0;
+	params->cc		   = NULL;
+	params->user_cc		   = NULL;
+	params->src_base_addr	   = NULL;
 	params->origin_byte_counter	  = NULL;
 	params->payload_bytes_for_iovec	  = sizeof(struct fi_opx_hfi1_dput_fetch);
 	params->fetch_vaddr		  = (void *) fetch_iov->buf;
@@ -228,6 +229,8 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 		params->iov[0].sbuf	   = (uintptr_t) params->inject_data;
 		params->iov[0].sbuf_iface  = FI_HMEM_SYSTEM;
 		params->iov[0].sbuf_device = 0;
+		params->iov[0].sbuf_handle =
+			0; // This will change to a valid gdrcopy when we implement gdrcopy in atomic paths
 	}
 
 	/* Try again later*/
