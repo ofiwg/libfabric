@@ -1426,6 +1426,7 @@ int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep, struct fi_opx_hfi
 		params->elided_head.sbuf	= params->dput_iov[0].sbuf;
 		params->elided_head.sbuf_iface	= params->dput_iov[0].sbuf_iface;
 		params->elided_head.sbuf_device = params->dput_iov[0].sbuf_device;
+		params->elided_head.sbuf_handle = params->dput_iov[0].sbuf_handle;
 
 		params->dst_vaddr	 = vaddr_aligned64;
 		params->dput_iov[0].rbuf = vaddr_aligned64;
@@ -1455,6 +1456,7 @@ int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep, struct fi_opx_hfi
 		params->elided_tail.rbuf_device = params->dput_iov[0].rbuf_device;
 		params->elided_tail.sbuf_iface	= params->dput_iov[0].sbuf_iface;
 		params->elided_tail.sbuf_device = params->dput_iov[0].sbuf_device;
+		params->elided_tail.sbuf_handle = params->dput_iov[0].sbuf_handle;
 	} else {
 		// If elided_tail_bytes was non-zero, then it must be the case
 		// that we had immediate_tail data and don't need to request those
@@ -1525,6 +1527,7 @@ union fi_opx_hfi1_deferred_work *opx_hfi1_rx_rzv_rts_tid_prep_cts(union fi_opx_h
 	cts_params->dput_iov[0].rbuf_device = params->dput_iov[params->cur_iov].rbuf_device;
 	cts_params->dput_iov[0].sbuf_iface  = params->dput_iov[params->cur_iov].sbuf_iface;
 	cts_params->dput_iov[0].sbuf_device = params->dput_iov[params->cur_iov].sbuf_device;
+	cts_params->dput_iov[0].sbuf_handle = params->dput_iov[params->cur_iov].sbuf_handle;
 	cts_params->dput_iov[0].rbuf	    = params->tid_info.cur_addr_range.buf;
 	cts_params->dput_iov[0].sbuf	    = adjusted_source_buf;
 	cts_params->dput_iov[0].bytes	    = cur_addr_range_tid_len;
@@ -2111,6 +2114,7 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 		params->dput_iov[i].rbuf_iface	= dst_iface;
 		params->dput_iov[i].rbuf_device = dst_device;
 		params->dput_iov[i].bytes	= src_iov->len;
+		params->dput_iov[i].sbuf_handle = 0; // Set this properly after implementing gdrcopy intranode fallback
 		rbuf_offset += src_iov->len;
 		++src_iov;
 	}
