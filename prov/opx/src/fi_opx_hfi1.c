@@ -1269,7 +1269,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 				 2;				     /* ICRC/tail */
 	const uint16_t		    lrh_qws   = (pbc_dws - 2) >> 1;  /* (LRH QW) does not include pbc (8 bytes) */
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
-	const uint16_t		    total_credits_needed = 1 +		   /* packet header */
+	const uint16_t		    total_credits_needed = 2 +		   /* packet header */
 					      ((payload_bytes + 63) >> 6); /* payload blocks needed */
 	uint64_t total_credits_available =
 		FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, total_credits_needed);
@@ -2417,7 +2417,7 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RMA-CTS-HFI:%p", params->rma_req);
 	const uint64_t		    payload_bytes	 = (params->niov * sizeof(union opx_hfi1_dput_iov));
 	union fi_opx_hfi1_pio_state pio_state		 = *opx_ep->tx->pio_state;
-	const uint16_t		    total_credits_needed = 1 +		   /* packet header */
+	const uint16_t		    total_credits_needed = ((hfi1_type == OPX_HFI1_JKR) ? 2 : 1) + /* packet header */
 					      ((payload_bytes + 63) >> 6); /* payload blocks needed */
 	uint64_t total_credits_available =
 		FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, total_credits_needed);
