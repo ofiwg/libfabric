@@ -48,8 +48,16 @@ static int xnet_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **info)
 {
-	return ofi_ip_getinfo(&xnet_util_prov, version, node, service, flags,
-			     hints, info);
+	int ret;
+
+	ret = ofi_ip_getinfo(&xnet_util_prov, version, node, service, flags, hints, info);
+	if (ret)
+		return ret;
+
+	if (hints->ep_attr && hints->ep_attr->mem_tag_format && (*info)->ep_attr)
+		(*info)->ep_attr->mem_tag_format = hints->ep_attr->mem_tag_format;
+
+	return 0;
 }
 
 struct xnet_port_range xnet_ports = {
