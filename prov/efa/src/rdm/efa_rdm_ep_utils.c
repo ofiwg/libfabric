@@ -798,16 +798,6 @@ int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep)
 		}
 	}
 
-	if (ep->map_entry_pool) {
-		err = ofi_bufpool_grow(ep->map_entry_pool);
-		if (OFI_UNLIKELY(err)) {
-			EFA_WARN(FI_LOG_CQ,
-				 "cannot allocate memory for map entry pool. error: %s\n",
-				 strerror(-err));
-			return err;
-		}
-	}
-
 	return 0;
 }
 
