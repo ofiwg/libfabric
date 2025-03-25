@@ -31,6 +31,8 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	dlist_init(&peer->txe_list);
 	dlist_init(&peer->rxe_list);
 	dlist_init(&peer->overflow_pke_list);
+
+	efa_rdm_rxe_map_construct(&peer->rxe_map);
 }
 
 /**
@@ -302,7 +304,7 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 		EFA_DBG(FI_LOG_EP_CTRL,
 		       "Processing msg_id %d from robuf\n", msg_id);
 		/* efa_rdm_pke_proc_rtm_rta will write error cq entry if needed */
-		ret = efa_rdm_pke_proc_rtm_rta(pending_pkt);
+		ret = efa_rdm_pke_proc_rtm_rta(pending_pkt, peer);
 		*ofi_recvwin_get_next_msg((&peer->robuf)) = NULL;
 
 		exp_msg_id = ofi_recvwin_next_exp_id((&peer->robuf));
