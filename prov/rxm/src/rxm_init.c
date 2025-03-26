@@ -59,6 +59,7 @@ int rxm_passthru = 0; /* disable by default, need to analyze performance */
 int force_auto_progress;
 int rxm_use_write_rndv;
 int rxm_detect_hmem_iface;
+int rxm_rescan = -1;
 enum fi_wait_obj def_wait_obj = FI_WAIT_FD, def_tcp_wait_obj = FI_WAIT_UNSPEC;
 
 char *rxm_proto_state_str[] = {
@@ -552,6 +553,10 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
+	if (rxm_rescan > 0) /* Explicitly enabled */
+		flags |= FI_RESCAN;
+	else if (!rxm_rescan) /* Explicitly disabled */
+		flags &= ~FI_RESCAN;
 	ret = ofix_getinfo(version, node, service, flags, &rxm_util_prov, hints,
 			   rxm_info_to_core, rxm_info_to_rxm, info);
 	if (ret)
@@ -703,6 +708,11 @@ RXM_INI
 			"in. This allows such buffers be copied or registered "
 			"internally by RxM. (default: false).");
 
+	fi_param_define(&rxm_prov, "rescan", FI_PARAM_BOOL,
+			"Force or disable rescanning for network interface changes. "
+			"Setting this to true will force rescanning on each fi_getinfo() invocation; "
+			"setting it to false will disable rescanning. (default: unset)");
+
 	/* passthru supported disabled - to re-enable would need to fix call to
 	 * fi_cq_read to pass in the correct data structure.  However, passthru
 	 * will not be needed at all with in-work tcp changes.
@@ -729,6 +739,7 @@ RXM_INI
 			"level would be set to FI_THREAD_SAFE\n");
 
 	fi_param_get_bool(&rxm_prov, "detect_hmem_iface", &rxm_detect_hmem_iface);
+	fi_param_get_bool(&rxm_prov, "rescan", &rxm_rescan);
 
 #if HAVE_RXM_DL
 	ofi_mem_init();
