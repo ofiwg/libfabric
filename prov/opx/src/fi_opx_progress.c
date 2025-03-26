@@ -115,10 +115,14 @@ int opx_progress_set_poll_fds(struct fi_opx_cq *cq, int event_fd, struct pollfd 
 	fi_opx_lock(&cq->lock);
 
 	int i;
-	for (i = 0; i < cq->progress.ep_count; ++i) {
+	for (i = 0; i < (cq->progress.ep_count << 1); i += 2) {
 		poll_fd[i].fd	   = cq->progress.ep[i]->hfi->fd;
 		poll_fd[i].events  = POLLIN;
 		poll_fd[i].revents = 0;
+
+		poll_fd[i + 1].fd      = cq->progress.ep[i]->rx->shm.segment_fd;
+		poll_fd[i + 1].events  = POLLIN;
+		poll_fd[i + 1].revents = 0;
 	}
 
 	fi_opx_unlock(&cq->lock);
@@ -134,7 +138,7 @@ void *opx_progress_func(void *args)
 {
 	struct opx_progress_thread *progress_thr = (struct opx_progress_thread *) args;
 	struct fi_opx_cq	   *cq		 = progress_thr->cq;
-	struct pollfd		    poll_fds[OPX_CQ_MAX_ENDPOINTS + 1];
+	struct pollfd		    poll_fds[(OPX_CQ_MAX_ENDPOINTS * 2) + 1];
 	uint64_t		    event_buf = 0;
 	int			    event_fd  = progress_thr->event_fd;
 	ssize_t			    read_rc;

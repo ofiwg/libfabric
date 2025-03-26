@@ -106,6 +106,8 @@ struct opx_shm_rx {
 	struct opx_shm_fifo_segment *fifo_segment;
 	void			    *segment_ptr;
 	size_t			     segment_size;
+	int			     segment_fd;
+	uint32_t		     unused_padding;
 	char			     segment_key[OPX_SHM_SEGMENT_NAME_MAX_LENGTH];
 
 	struct opx_shm_resynch resynch_connection[OPX_SHM_MAX_CONN_NUM];
@@ -226,12 +228,11 @@ static inline ssize_t opx_shm_rx_init(struct opx_shm_rx *rx, struct fi_provider 
 
 	rx->segment_ptr	 = segment_ptr;
 	rx->segment_size = segment_size;
+	rx->segment_fd	 = segment_fd;
 
 	dlist_insert_head(&rx->list_entry, &shm_rx_list); // add to signal handler list.
 
 	ofi_atomic_set64(&rx->fifo_segment->initialized_, 1);
-
-	close(segment_fd); /* safe to close now */
 
 	FI_LOG(prov, FI_LOG_INFO, FI_LOG_FABRIC, "SHM creation of %u context passed. Segment (%s)\n", rx_id,
 	       rx->segment_key);
@@ -248,6 +249,8 @@ static inline ssize_t opx_shm_rx_fini(struct opx_shm_rx *rx)
 	if (rx->segment_ptr != NULL) {
 		munmap(rx->segment_ptr, rx->segment_size);
 		shm_unlink(rx->segment_key);
+
+		close(rx->segment_fd);
 
 		return FI_SUCCESS;
 	}
