@@ -43,6 +43,7 @@ struct rxd_env rxd_env = {
 	.retry		= 1,
 	.max_peers	= 1024,
 	.max_unacked	= 128,
+	.rescan		= -1,
 };
 
 char *rxd_pkt_type_str[] = {
@@ -55,6 +56,7 @@ static void rxd_init_env(void)
 	fi_param_get_bool(&rxd_prov, "retry", &rxd_env.retry);
 	fi_param_get_int(&rxd_prov, "max_peers", &rxd_env.max_peers);
 	fi_param_get_int(&rxd_prov, "max_unacked", &rxd_env.max_unacked);
+	fi_param_get_bool(&rxd_prov, "rescan", &rxd_env.rescan);
 }
 
 void rxd_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
@@ -119,6 +121,10 @@ static int rxd_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **info)
 {
+	if (rxd_env.rescan > 0) /* Explicitly enabled */
+		flags |= FI_RESCAN;
+	else if (!rxd_env.rescan) /* Explicitly disabled */
+		flags &= ~FI_RESCAN;
 	return ofix_getinfo(version, node, service, flags, &rxd_util_prov,
 			    hints, rxd_info_to_core, rxd_info_to_rxd, info);
 }
@@ -147,6 +153,10 @@ RXD_INI
 			"Maximum number of peers to track (default: 1024)");
 	fi_param_define(&rxd_prov, "max_unacked", FI_PARAM_INT,
 			"Maximum number of packets to send at once (default: 128)");
+	fi_param_define(&rxd_prov, "rescan", FI_PARAM_BOOL,
+			"Force or disable rescanning for network interface changes. "
+			"Setting this to true will force rescanning on each fi_getinfo() invocation; "
+			"setting it to false will disable rescanning. (default: unset)");
 
 	rxd_init_env();
 
