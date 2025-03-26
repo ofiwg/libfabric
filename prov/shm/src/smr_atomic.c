@@ -175,7 +175,7 @@ static ssize_t smr_generic_atomic(
 	struct iovec compare_iov[SMR_IOV_LIMIT];
 	struct iovec result_iov[SMR_IOV_LIMIT];
 	uint16_t smr_flags = 0;
-	int64_t tx_id, rx_id, pos;
+	int64_t tx_id, rx_id;
 	int proto;
 	ssize_t ret = -FI_EAGAIN;
 	size_t total_len;
@@ -196,8 +196,8 @@ static ssize_t smr_generic_atomic(
 	if (smr_peer_data(ep->region)[tx_id].sar_status)
 		goto unlock;
 
-	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
-	if (ret == -FI_ENOENT) {
+	ce = smr_cmd_queue_claim_assign(smr_cmd_queue(peer_smr));
+	if (!ce) {
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
@@ -240,7 +240,7 @@ static ssize_t smr_generic_atomic(
 				     total_len, cmd);
 	} else {
 		if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
-			smr_cmd_queue_discard(ce, pos);
+			smr_cmd_queue_cancel(ce);
 			ret = -FI_EAGAIN;
 			goto unlock;
 		}
@@ -258,7 +258,7 @@ static ssize_t smr_generic_atomic(
 					   compare_iov, compare_count,
 					   total_len, context, smr_flags, cmd);
 		if (ret) {
-			smr_cmd_queue_discard(ce, pos);
+			smr_cmd_queue_cancel(ce);
 			goto unlock;
 		}
 	}
@@ -272,7 +272,7 @@ static ssize_t smr_generic_atomic(
 	}
 
 	smr_format_rma_ioc(cmd, rma_ioc, rma_count);
-	smr_cmd_queue_commit(ce, pos);
+	smr_cmd_queue_commit(ce);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
@@ -350,7 +350,7 @@ static ssize_t smr_atomic_inject(
 	struct smr_region *peer_smr;
 	struct iovec iov;
 	struct fi_rma_ioc rma_ioc;
-	int64_t id, peer_id, pos;
+	int64_t id, peer_id;
 	ssize_t ret = -FI_EAGAIN;
 	size_t total_len;
 	int proto;
@@ -368,8 +368,9 @@ static ssize_t smr_atomic_inject(
 	if (smr_peer_data(ep->region)[id].sar_status)
 		goto unlock;
 
-	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
-	if (ret == -FI_ENOENT) {
+
+	ce = smr_cmd_queue_claim_assign(smr_cmd_queue(peer_smr));
+	if (!ce) {
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
@@ -393,7 +394,7 @@ static ssize_t smr_atomic_inject(
 	} else {
 		proto = smr_proto_inject;
 		if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
-			smr_cmd_queue_discard(ce, pos);
+			smr_cmd_queue_cancel(ce);
 			ret = -FI_EAGAIN;
 			goto unlock;
 		}
@@ -407,13 +408,13 @@ static ssize_t smr_atomic_inject(
 					   &iov, 1, NULL, NULL, 0, NULL, NULL,
 					   0, total_len, NULL, 0, cmd);
 		if (ret) {
-			smr_cmd_queue_discard(ce, pos);
+			smr_cmd_queue_cancel(ce);
 			goto unlock;
 		}
 	}
 
 	smr_format_rma_ioc(cmd, &rma_ioc, 1);
-	smr_cmd_queue_commit(ce, pos);
+	smr_cmd_queue_commit(ce);
 
 	if (proto == smr_proto_inline)
 		ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_atomic);

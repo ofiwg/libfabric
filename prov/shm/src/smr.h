@@ -50,7 +50,6 @@ struct smr_ep {
 	struct ofi_bufpool	*unexp_buf_pool;
 	struct ofi_bufpool	*pend_pool;
 
-	struct slist		overflow_list;
 	struct dlist_entry	sar_list;
 	struct dlist_entry	async_cpy_list;
 	struct dlist_entry	unexp_cmd_list;
@@ -121,13 +120,11 @@ static inline void smr_return_cmd(struct smr_ep *ep, struct smr_cmd *cmd)
 {
 	struct smr_region *peer_smr = smr_peer_region(ep, cmd->hdr.rx_id);
 	uintptr_t peer_ptr;
-	int64_t pos;
 	struct smr_return_entry *queue_entry;
-	int ret;
 
-	ret = smr_return_queue_next(smr_return_queue(peer_smr), &queue_entry,
-				    &pos);
-	if (ret == -FI_ENOENT) {
+	//return queue has built in claim
+	queue_entry = smr_return_queue_assign(smr_return_queue(peer_smr));
+	if (!queue_entry) {
 		/* return queue runs in parallel to command stack
 		 * ie we will never run out of space
 		 */
@@ -141,8 +138,10 @@ static inline void smr_return_cmd(struct smr_ep *ep, struct smr_cmd *cmd)
 	       peer_smr->total_size);
 	queue_entry->ptr = peer_ptr;
 
-	smr_return_queue_commit(queue_entry, pos);
+	smr_return_queue_commit(queue_entry);
 }
+
+void smr_resend_cmd(struct smr_ep *ep, struct smr_cmd *cmd);
 
 struct smr_env {
 	int	disable_cma;
@@ -338,8 +337,6 @@ static inline struct smr_freestack *smr_pend_sar_pool(
 }
 void smr_free_sar_bufs(struct smr_ep *ep, struct smr_cmd *cmd,
 		       struct smr_pend_entry *pending);
-
-void smr_try_send_cmd(struct smr_ep *ep, struct smr_cmd *cmd);
 
 int smr_unexp_start(struct fi_peer_rx_entry *rx_entry);
 

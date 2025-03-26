@@ -645,7 +645,7 @@ static void dsa_complete_tx_work(struct smr_ep *ep, struct smr_pend_entry *pend)
 			ofi_buf_free(pend);
 			return;
 		} else {
-			smr_try_send_cmd(ep, pend->cmd);
+			smr_resend_cmd(ep, pend->cmd);
 		}
 	}
 

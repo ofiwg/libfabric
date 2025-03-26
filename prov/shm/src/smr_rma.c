@@ -61,10 +61,9 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 	struct smr_cmd_entry *ce;
 	size_t total_len;
 	int ret, i;
-	int64_t pos;
 
-	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
-	if (ret == -FI_ENOENT)
+	ce = smr_cmd_queue_claim_assign(smr_cmd_queue(peer_smr));
+	if (!ce)
 		return -FI_EAGAIN;
 
 	memcpy(vma_iovec, iov, sizeof(*iov) * iov_count);
@@ -85,7 +84,7 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "error doing fast RMA\n");
 		ret = smr_write_err_comp(ep->util_ep.rx_cq, NULL, op_flags, 0,
 					 ret);
-		smr_cmd_queue_discard(ce, pos);
+		smr_cmd_queue_cancel(ce);
 		return -FI_EAGAIN;
 	}
 
@@ -93,7 +92,7 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 			    (op == ofi_op_write) ? ofi_op_write_async :
 			    ofi_op_read_async, op_flags);
 
-	smr_cmd_queue_commit(ce, pos);
+	smr_cmd_queue_commit(ce);
 
 	ret = smr_complete_tx(ep, context, op, op_flags);
 	if (ret) {
@@ -133,7 +132,6 @@ static ssize_t smr_generic_rma(
 	size_t total_len;
 	struct smr_cmd_entry *ce;
 	struct smr_cmd *cmd;
-	int64_t pos;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 	assert(rma_count <= SMR_IOV_LIMIT);
@@ -159,8 +157,8 @@ static ssize_t smr_generic_rma(
 		goto unlock;
 	}
 
-	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
-	if (ret == -FI_ENOENT) {
+	ce = smr_cmd_queue_claim_assign(smr_cmd_queue(peer_smr));
+	if (!ce) {
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
@@ -172,7 +170,7 @@ static ssize_t smr_generic_rma(
 				 total_len, op_flags);
 	if (proto != smr_proto_inline) {
 		if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
-			smr_cmd_queue_discard(ce, pos);
+			smr_cmd_queue_cancel(ce);
 			ret = -FI_EAGAIN;
 			goto unlock;
 		}
@@ -189,12 +187,12 @@ static ssize_t smr_generic_rma(
 	if (ret) {
 		if (proto != smr_proto_inline)
 			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
-		smr_cmd_queue_discard(ce, pos);
+		smr_cmd_queue_cancel(ce);
 		goto unlock;
 	}
 
 	smr_add_rma_cmd(peer_smr, rma_iov, rma_count, cmd);
-	smr_cmd_queue_commit(ce, pos);
+	smr_cmd_queue_commit(ce);
 
 	if (proto != smr_proto_inline || op == ofi_op_read_req)
 		goto unlock;
@@ -331,7 +329,6 @@ static ssize_t smr_generic_rma_inject(
 	ssize_t ret = -FI_EAGAIN;
 	struct smr_cmd *cmd;
 	struct smr_cmd_entry *ce;
-	int64_t pos;
 
 	assert(len <= SMR_INJECT_SIZE);
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
@@ -353,8 +350,8 @@ static ssize_t smr_generic_rma_inject(
 	rma_iov.len = len;
 	rma_iov.key = key;
 
-	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
-	if (ret == -FI_ENOENT) {
+	ce = smr_cmd_queue_claim_assign(smr_cmd_queue(peer_smr));
+	if (!ce) {
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
@@ -365,7 +362,7 @@ static ssize_t smr_generic_rma_inject(
 	} else {
 		proto = smr_proto_inject;
 		if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
-			smr_cmd_queue_discard(ce, pos);
+			smr_cmd_queue_cancel(ce);
 			ret = -FI_EAGAIN;
 			goto unlock;
 		}
@@ -381,11 +378,11 @@ static ssize_t smr_generic_rma_inject(
 	if (ret) {
 		if (proto != smr_proto_inline)
 			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
-		smr_cmd_queue_discard(ce, pos);
+		smr_cmd_queue_cancel(ce);
 		goto unlock;
 	}
 	smr_add_rma_cmd(peer_smr, &rma_iov, 1, cmd);
-	smr_cmd_queue_commit(ce, pos);
+	smr_cmd_queue_commit(ce);
 
 	if (proto == smr_proto_inline)
 		ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_write);
