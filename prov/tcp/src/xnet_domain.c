@@ -190,6 +190,17 @@ xnet_mplex_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	mr = container_of(*mr_fid, struct ofi_mr, mr_fid.fid);
 	mr->mr_fid.fid.ops = &xnet_mplex_mr_fi_ops;
 
+	/*
+	 * registering onto subdomains is only important for rma and
+	 * we rely on the fid being in the mr map for all close paths, which
+	 * will only be triggered on the rma case.
+	 * xnet does not require any special mr modes, so local access to
+	 * mr fids is not needed. If xnet is expanded to require local
+	 * registration (including FI_MR_HMEM), this must be changed. 
+	 */
+	if (!(attr->access & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
+		return 0;
+
 	ofi_genlock_lock(&domain->subdomain_list_lock);
 	dlist_foreach_container(&domain->subdomain_list,
 				struct fid_list_entry, item, entry) {
@@ -204,7 +215,6 @@ xnet_mplex_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			break;
 		}
 	}
-
 	ofi_genlock_unlock(&domain->subdomain_list_lock);
 	return ret;
 }
