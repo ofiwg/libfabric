@@ -308,6 +308,18 @@ static struct fi_ops_domain vrb_dgram_domain_ops = {
 	.query_collective = fi_no_query_collective,
 };
 
+static struct fi_info *
+vrb_get_verbs_info(const char *domain_name)
+{
+	const struct fi_info *fi;
+
+	for (fi = vrb_util_prov.info; fi; fi = fi->next) {
+		if (!strcmp(fi->domain_attr->name, domain_name))
+			return fi_dupinfo(fi);
+	}
+
+	return NULL;
+}
 
 static int
 vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
@@ -325,8 +337,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct vrb_fabric *fab =
 		 container_of(fabric, struct vrb_fabric,
 			      util_fabric.fabric_fid);
-	struct fi_info *fi = vrb_get_verbs_info(vrb_util_prov.info,
-						info->domain_attr->name);
+	struct fi_info *fi = vrb_get_verbs_info(info->domain_attr->name);
 	if (!fi)
 		return -FI_EINVAL;
 

@@ -862,8 +862,6 @@ int vrb_read_params(void);
 int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
 		   struct fi_info **info);
-struct fi_info *vrb_get_verbs_info(const struct fi_info *ilist,
-				   const char *domain_name);
 int vrb_set_rai(uint32_t addr_format, void *src_addr, size_t src_addrlen,
 		void *dest_addr, size_t dest_addrlen, uint64_t flags,
 		struct rdma_addrinfo *rai);
