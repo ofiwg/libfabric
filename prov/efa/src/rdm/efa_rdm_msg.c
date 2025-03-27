@@ -148,10 +148,10 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	 *
 	 * Check handshake packet from peer to verify support status.
 	 */
-	if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+	if (!ep->homogeneous_peers && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 
-	if (!efa_rdm_pkt_type_is_supported_by_peer(rtm_type, txe->peer))
+	if (!ep->homogeneous_peers && !efa_rdm_pkt_type_is_supported_by_peer(rtm_type, txe->peer))
 		return -FI_EOPNOTSUPP;
 
 	return efa_rdm_ope_post_send(txe, rtm_type);

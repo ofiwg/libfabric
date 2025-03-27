@@ -627,6 +627,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->cuda_api_permitted = (FI_VERSION_GE(info->fabric_attr->api_version, FI_VERSION(1, 18)));
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = false;
 	efa_rdm_ep->write_in_order_aligned_128_bytes = false;
+	efa_rdm_ep->homogeneous_peers = false;
 
 	efa_rdm_ep->pke_vec = calloc(sizeof(struct efa_rdm_pke *), EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV);
 	if (!efa_rdm_ep->pke_vec) {
@@ -1730,6 +1731,11 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 				return ret;
 		}
 		efa_rdm_ep->write_in_order_aligned_128_bytes = *(bool *)optval;
+		break;
+	case FI_OPT_EFA_HOMOGENEOUS_PEERS:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		efa_rdm_ep->homogeneous_peers = *(bool *)optval;
 		break;
 	default:
 		EFA_INFO(FI_LOG_EP_CTRL, "Unknown endpoint option\n");
