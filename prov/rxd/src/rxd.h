@@ -92,6 +92,7 @@ struct rxd_env {
 	int retry;
 	int max_peers;
 	int max_unacked;
+	int always_rescan;
 };
 
 extern struct rxd_env rxd_env;
