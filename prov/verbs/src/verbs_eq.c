@@ -44,19 +44,6 @@ struct vrb_sidr_conn_key {
 	bool			recip;
 };
 
-struct fi_info *
-vrb_get_verbs_info(const struct fi_info *ilist, const char *domain_name)
-{
-	const struct fi_info *fi;
-
-	for (fi = ilist; fi; fi = fi->next) {
-		if (!strcmp(fi->domain_attr->name, domain_name))
-			return fi_dupinfo(fi);
-	}
-
-	return NULL;
-}
-
 static ssize_t
 vrb_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 		  uint64_t flags)
