@@ -1176,6 +1176,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		if (!mr) {
 			ret = cxip_ep_obj_map(txc->ep_obj, send_req->send.buf,
 					      send_req->send.len, 0,
+					      CXI_MAP_READ,
 					      &send_req->send.send_md);
 			if (ret) {
 				TXC_WARN(txc,

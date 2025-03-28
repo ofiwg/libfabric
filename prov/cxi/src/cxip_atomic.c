@@ -613,7 +613,8 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 				result_md = result_mr->md;
 			} else {
 				ret = cxip_ep_obj_map(txc->ep_obj, result,
-						      atomic_type_len, 0,
+						      atomic_type_len,
+						      CXI_MAP_WRITE, 0,
 						      &req->amo.result_md);
 				if (ret) {
 					TXC_WARN_RET(txc, ret,
@@ -932,7 +933,8 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		if (result) {
 			if (!result_mr) {
 				ret = cxip_ep_obj_map(txc->ep_obj, result,
-						      atomic_type_len, 0,
+						      atomic_type_len,
+						      CXI_MAP_WRITE, 0,
 						      &req->amo.result_md);
 				if (ret) {
 					TXC_WARN(txc,
@@ -1020,7 +1022,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		} else {
 			/* Map user operand buffer for DMA command. */
 			ret = cxip_ep_obj_map(txc->ep_obj, buf,
-					      atomic_type_len, 0,
+					      atomic_type_len, CXI_MAP_READ, 0,
 					      &req->amo.oper1_md);
 			if (ret) {
 				TXC_WARN(txc,

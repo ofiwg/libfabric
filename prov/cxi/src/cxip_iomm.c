@@ -388,10 +388,11 @@ static int cxip_map_cache(struct cxip_domain *dom, struct ofi_mr_info *info,
 }
 
 static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
-			    uint64_t hmem_flags, struct cxip_md **md)
+			    uint64_t access, uint64_t hmem_flags,
+			    struct cxip_md **md)
 {
 	struct cxip_md *uncached_md;
-	uint32_t map_flags = CXI_MAP_READ | CXI_MAP_WRITE;
+	uint32_t map_flags = access;
 	int ret;
 	struct cxi_md_hints hints;
 
@@ -517,7 +518,7 @@ static void cxip_map_get_mem_region_size(const void *buf, unsigned long len,
  * mapping has been established, create one and cache it.
  */
 int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
-	     uint64_t flags, struct cxip_md **md)
+	     uint64_t access, uint64_t flags, struct cxip_md **md)
 {
 	struct iovec iov = {
 		.iov_base = (void *)buf,
@@ -574,7 +575,7 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 		return cxip_map_cache(dom, &mr_info, md);
 	}
 
-	return cxip_map_nocache(dom, &attr, flags, md);
+	return cxip_map_nocache(dom, &attr, access, flags, md);
 }
 
 static void cxip_unmap_cache(struct cxip_md *md)

@@ -1502,12 +1502,12 @@ err:
 }
 
 int cxip_ep_obj_map(struct cxip_ep_obj *ep, const void *buf, unsigned long len,
-		    uint64_t flags, struct cxip_md **md)
+		    uint64_t access, uint64_t flags, struct cxip_md **md)
 {
 	struct cxip_domain *dom = ep->domain;
 	int ret;
 
-	ret = cxip_map(dom, buf, len, flags, md);
+	ret = cxip_map(dom, buf, len, access, flags, md);
 	if (ret != FI_SUCCESS)
 		return ret;
 

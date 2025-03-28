@@ -209,6 +209,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	struct cxip_domain *dom = txc->domain;
 	struct cxip_cntr *cntr;
 	void *inject_req;
+	uint64_t access = write ? CXI_MAP_READ : CXI_MAP_WRITE;
 
 	/* MR desc cannot be value unless hybrid MR desc is enabled. */
 	if (!dom->hybrid_mr_desc)
@@ -269,7 +270,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		} else {
 			assert(req != NULL);
 
-			ret = cxip_ep_obj_map(txc->ep_obj, buf, len, 0,
+			ret = cxip_ep_obj_map(txc->ep_obj, buf, len, access, 0,
 					      &req->rma.local_md);
 			if (ret) {
 				TXC_WARN(txc, "Failed to map buffer: %d:%s\n",
