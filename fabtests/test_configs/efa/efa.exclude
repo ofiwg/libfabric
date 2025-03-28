@@ -86,3 +86,5 @@ dgram_bw
 # Multinode tests failing with an unsupported address format
 multinode
 
+# rdm_bw_mt not supported yet
+rdm_bw_mt
