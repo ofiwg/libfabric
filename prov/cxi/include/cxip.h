@@ -820,6 +820,7 @@ struct cxip_md {
 	struct cxip_domain *dom;
 	struct cxi_md *md;
 	struct ofi_mr_info info;
+	uint64_t map_flags;
 	uint64_t handle;
 	int dmabuf_fd;
 	bool handle_valid;

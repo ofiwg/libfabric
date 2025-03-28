@@ -104,14 +104,27 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	if (!cxip_env.iotlb)
 		map_flags |= CXI_MAP_NOCACHE;
 
+again:
 	ret = cxil_map(dom->lni->lni, entry->info.iov.iov_base,
 		       entry->info.iov.iov_len, map_flags, &hints, &md->md);
 	if (ret) {
+		/* For cache memory registrations, CXI_MAP_WRITE | CXI_MAP_READ
+		 * is the default behavior. But, this results in read-only VMA
+		 * memory registration to fail. To handle this, demote the
+		 * access from read/write to just read and try again.
+		 */
+		if (ret == -EINVAL && map_flags & CXI_MAP_WRITE) {
+			map_flags = map_flags & ~CXI_MAP_WRITE;
+			goto again;
+		}
+
 		CXIP_WARN(MAP_FAIL_MSG, dom->lni->lni->id,
 			  entry->info.iov.iov_base, entry->info.iov.iov_len,
 			  map_flags,  ret, fi_strerror(-ret));
 		goto err_free_dmabuf;
 	}
+
+	md->map_flags = map_flags;
 
 	/* If the md len is larger than the iov_len, the VA and len have
 	 * been aligned to a larger page size. Note, that GPU memory cannot be
@@ -369,9 +382,10 @@ void cxip_iomm_fini(struct cxip_domain *dom)
 }
 
 static int cxip_map_cache(struct cxip_domain *dom, struct ofi_mr_info *info,
-			  struct cxip_md **md)
+			  uint64_t access, struct cxip_md **md)
 {
 	struct ofi_mr_entry *entry;
+	struct cxip_md *_md;
 	int ret;
 
 	ret = ofi_mr_cache_search(&dom->iomm, info, &entry);
@@ -381,9 +395,16 @@ static int cxip_map_cache(struct cxip_domain *dom, struct ofi_mr_info *info,
 		return ret;
 	}
 
-	*md = (struct cxip_md *)entry->data;
+	_md = (struct cxip_md *)entry->data;
+	if ((_md->map_flags & access) == access) {
+		*md = _md;
+		return FI_SUCCESS;
+	}
 
-	return FI_SUCCESS;
+	ofi_mr_cache_delete(&dom->iomm, entry);
+	CXIP_WARN("Cached MR access control mismatch: flags=0x%lx access=0x%lx\n",
+		  _md->map_flags, access);
+	return -FI_EACCES;
 }
 
 static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
@@ -510,6 +531,30 @@ static void cxip_map_get_mem_region_size(const void *buf, unsigned long len,
 		 *out_len);
 }
 
+static int cxip_map_cache_find(struct cxip_domain *dom, struct fi_mr_attr *attr,
+			       uint64_t access, struct cxip_md **md)
+{
+	struct ofi_mr_entry *entry;
+	struct cxip_md *_md;
+
+	entry = ofi_mr_cache_find(&dom->iomm, attr, 0);
+	if (!entry)
+		return -FI_ENODATA;
+
+	/* Verify that access flags align with request. Else evict entry. */
+	_md = (struct cxip_md *)entry->data;
+	if ((_md->map_flags & access) == access) {
+		*md = _md;
+		return FI_SUCCESS;
+	}
+
+	ofi_mr_cache_notify(&dom->iomm, attr->mr_iov->iov_base,
+			    attr->mr_iov->iov_len);
+	ofi_mr_cache_delete(&dom->iomm, entry);
+
+	return -FI_ENODATA;
+}
+
 /*
  * cxip_map() - Acquire IO mapping for buf.
  *
@@ -529,7 +574,7 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	};
 	struct ofi_mr_info mr_info = {};
 	uint64_t hmem_flags = 0;
-	struct ofi_mr_entry *entry;
+	int ret;
 	bool cache = !(flags & OFI_MR_NOCACHE);
 
 	/* TODO: ATS (scalable MD) can only support CPU page sizes and should be
@@ -546,11 +591,9 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	 * corresponding entry is in the cache.
 	 */
 	if (cache && cxip_domain_mr_cache_enabled(dom)) {
-		entry = ofi_mr_cache_find(&dom->iomm, &attr, 0);
-		if (entry) {
-			*md = (struct cxip_md *)entry->data;
-			return FI_SUCCESS;
-		}
+		ret = cxip_map_cache_find(dom, &attr, access, md);
+		if (ret == FI_SUCCESS)
+			return ret;
 	}
 
 	/* Since the MR cache search will allocate a new entry, the MR iface
@@ -571,7 +614,7 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 		/* Overload IPC addr to pass in HMEM flags. */
 		mr_info.flags = hmem_flags;
 
-		return cxip_map_cache(dom, &mr_info, md);
+		return cxip_map_cache(dom, &mr_info, access, md);
 	}
 
 	return cxip_map_nocache(dom, &attr, access, flags, md);
