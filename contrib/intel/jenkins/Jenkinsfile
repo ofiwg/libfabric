@@ -2,7 +2,6 @@ import groovy.transform.Field
 
 properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def DO_RUN=true
-@Field def TARGET="main"
 @Field def RELEASE=false
 @Field def weekly=false
 
@@ -15,7 +14,7 @@ def checkout_upstream() {
       rm -rf ${env.WORKSPACE}/upstream && mkdir -p ${loc}
     fi
 
-    git clone --branch ${TARGET} ${env.UPSTREAM} ${loc}
+    git clone --branch ${env.TARGET} ${env.UPSTREAM} ${loc}
   """
 }
 
@@ -117,10 +116,10 @@ def checkout_tar(name) {
   def change_target = env.CHANGE_TARGET != null ? env.CHANGE_TARGET : "main"
   dir ("${env.CUSTOM_WORKSPACE}/${name}/libfabric") {
     checkout scm
-    TARGET = weekly ? weekly_target : change_target
+    env.TARGET = weekly ? weekly_target : change_target
     sh """
       git remote add upstream ${env.UPSTREAM}
-      git pull --rebase upstream ${TARGET}
+      git pull --rebase upstream ${env.TARGET}
     """
   }
   dir ("${env.CUSTOM_WORKSPACE}/${name}/") {
@@ -130,9 +129,9 @@ def checkout_tar(name) {
 
 def git_diffs() {
   dir ("${CUSTOM_WORKSPACE}/source/libfabric") {
-    sh "git diff --name-only HEAD..upstream/${TARGET} > ./commit_id"
-    sh "git diff upstream/${TARGET}:Makefile.am Makefile.am > ./Makefile.am.diff"
-    sh "git diff upstream/${TARGET}:configure.ac configure.ac > ./configure.ac.diff"
+    sh "git diff --name-only HEAD..upstream/${env.TARGET} > ./commit_id"
+    sh "git diff upstream/${env.TARGET}:Makefile.am Makefile.am > ./Makefile.am.diff"
+    sh "git diff upstream/${env.TARGET}:configure.ac configure.ac > ./configure.ac.diff"
     sh "cat configure.ac | grep AC_INIT | cut -d ' ' -f 2 | cut -d '[' -f 2 | cut -d ']' -f 1 > ./release_num.txt"
   }
 }
@@ -207,6 +206,7 @@ pipeline {
       RUN_LOCATION="${env.CUSTOM_WORKSPACE}/ci_resources/legacy_pipeline_scripts/"
       CI_LOCATION="${env.CUSTOM_WORKSPACE}/ci"
       LOG_DIR = "${env.CUSTOM_WORKSPACE}/log_dir"
+      TARGET="main"
   }
   stages {
     stage ('checkout') {
@@ -844,6 +844,25 @@ pipeline {
                 run_ci("CI_fabtests_electric_reg", "pr_fabtests_electric_reg.json")
                 run_ci("CI_fabtests_electric_dbg", "pr_fabtests_electric_dbg.json")
                 run_ci("CI_fabtests_electric_dl", "pr_fabtests_electric_dl.json")
+              }
+            }
+          }
+        }
+        /* TODO: simplify this into one stage that only runs providers listed in
+         * the changeset.
+         */
+        stage('CI_water_performance_regression') {
+          steps {
+            script {
+              dir (CI_LOCATION) {
+                def reg_file = "${env.LOG_DIR}/${env.WATER_REGRESSION_FILE}"
+                run_ci("CI_perf_regression_water", "pr_imb_perf_water.json")
+                sh """if [[ \$(wc -c < ${reg_file}) -gt 1 ]]; then \
+                      cat ${reg_file}
+                      echo \"Performance regression detected\"
+                      exit 1
+                    fi \
+                   """
               }
             }
           }
