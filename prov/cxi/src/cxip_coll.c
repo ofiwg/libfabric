@@ -1271,7 +1271,8 @@ static int _coll_add_buffers(struct cxip_coll_pte *coll_pte, size_t size,
 			goto out;
 		}
 		ret = cxip_ep_obj_map(coll_pte->ep_obj, (void *)buf->buffer,
-				      size, 0, &buf->cxi_md);
+				      size, CXI_MAP_READ | CXI_MAP_WRITE, 0,
+				      &buf->cxi_md);
 		if (ret)
 			goto del_msg;
 		buf->bufsiz = size;

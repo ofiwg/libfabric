@@ -2477,7 +2477,7 @@ struct cxip_ep_obj {
 };
 
 int cxip_ep_obj_map(struct cxip_ep_obj *ep, const void *buf, unsigned long len,
-		    uint64_t flags, struct cxip_md **md);
+		    uint64_t access, uint64_t flags, struct cxip_md **md);
 
 static inline void
 cxip_ep_obj_copy_to_md(struct cxip_ep_obj *ep, struct cxip_md *md, void *dest,
@@ -3264,7 +3264,7 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 int cxip_iomm_init(struct cxip_domain *dom);
 void cxip_iomm_fini(struct cxip_domain *dom);
 int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
-	     uint64_t flags, struct cxip_md **md);
+	     uint64_t access, uint64_t flags, struct cxip_md **md);
 void cxip_unmap(struct cxip_md *md);
 
 int cxip_ctrl_msg_send(struct cxip_ctrl_req *req);
@@ -3713,8 +3713,8 @@ cxip_txc_copy_from_hmem(struct cxip_txc *txc, struct cxip_md *hmem_md,
 	 */
 	if (!cxip_env.fork_safe_requested) {
 		if (!hmem_md) {
-			ret = cxip_ep_obj_map(txc->ep_obj, hmem_src, size, 0,
-					      &hmem_md);
+			ret = cxip_ep_obj_map(txc->ep_obj, hmem_src, size,
+					      CXI_MAP_READ, 0, &hmem_md);
 			if (ret) {
 				TXC_WARN(txc, "cxip_ep_obj_map failed: %d:%s\n",
 					 ret, fi_strerror(-ret));

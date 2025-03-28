@@ -1403,6 +1403,18 @@ static int cxip_mr_init(struct cxip_mr *mr, struct cxip_domain *dom,
 	return FI_SUCCESS;
 }
 
+static uint64_t ofi_access_to_cxi_access(uint64_t access)
+{
+	uint64_t cxi_access = 0;
+
+	if (access & (FI_WRITE | FI_SEND | FI_REMOTE_READ))
+		cxi_access |= CXI_MAP_READ;
+	if (access & (FI_RECV | FI_READ | FI_REMOTE_WRITE))
+		cxi_access |= CXI_MAP_WRITE;
+
+	return cxi_access;
+}
+
 /*
  * Libfabric MR creation APIs
  */
@@ -1413,6 +1425,7 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct cxip_domain *dom;
 	struct cxip_mr *_mr;
 	int ret;
+	uint64_t access;
 
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0)
 		return -FI_EINVAL;
@@ -1447,12 +1460,14 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		_mr->mr_fid.key = _mr->key;
 
 	if (_mr->len) {
+		access = ofi_access_to_cxi_access(attr->access);
+
 		/* Do not check whether cuda_api_permitted is set at this point,
 		 * because the mr is not bound to an endpoint.  Check instead in
 		 * cxip_mr_bind().
 		 */
-		ret = cxip_map(_mr->domain, (void *)_mr->buf, _mr->len, 0,
-			       &_mr->md);
+		ret = cxip_map(_mr->domain, (void *)_mr->buf, _mr->len,
+			       access, 0, &_mr->md);
 		if (ret) {
 			CXIP_WARN("Failed to map MR buffer: %d\n", ret);
 			goto err_remove_mr;
