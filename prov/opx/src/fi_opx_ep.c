@@ -1690,6 +1690,13 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 						mixed_network, OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
 				}
 			}
+		} else if (fi_opx_global.hfi_local_info.type == OPX_HFI1_JKR) {
+			// Default to 9B unless the environment variable was set.
+			fi_opx_global.hfi_local_info.type = OPX_HFI1_JKR_9B;
+			opx_ep->hfi->hfi1_type		  = OPX_HFI1_JKR_9B;
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				     "Defaulting to mixed network: Set HFI type to %s.\n",
+				     OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
 		}
 
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
