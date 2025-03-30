@@ -90,3 +90,6 @@ fabtests/pytest/*/__pycache__
 prov/efa/docs/doxygen/html
 prov/efa/docs/doxygen/latex
 
+# Clang's compilation database file and directory.
+/.cache
+/compile_commands.json
