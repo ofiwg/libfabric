@@ -1292,9 +1292,32 @@ out:
 	return ret;
 }
 
+static void vrb_eq_process_async_events(struct vrb_eq *eq)
+{
+	int ret;
+	struct vrb_domain *domain;
+	struct ibv_async_event async_event;
+
+	ofi_mutex_lock(&eq->fab->util_fabric.lock);
+	dlist_foreach_container(&eq->fab->util_fabric.domain_list,
+				struct vrb_domain, domain,
+				util_domain.list_entry) {
+		do {
+			ret = ibv_get_async_event(domain->verbs, &async_event);
+			if (!ret) {
+				VRB_WARN(FI_LOG_DOMAIN, "Async event for %s: %s\n",
+					 eq->fab->info->domain_attr->name,
+					 ibv_event_type_str(async_event.event_type));
+				ibv_ack_async_event(&async_event);
+			}
+		} while (!ret);
+	}
+	ofi_mutex_unlock(&eq->fab->util_fabric.lock);
+}
+
 static ssize_t
 vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
-	       void *buf, size_t len, uint64_t flags)
+	    void *buf, size_t len, uint64_t flags)
 {
 	struct vrb_eq *eq;
 	struct rdma_cm_event *cma_event;
@@ -1320,7 +1343,8 @@ vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 		vrb_prof_func_end("rdma_get_cm_event");
 		if (ret) {
 			ofi_mutex_unlock(&eq->event_lock);
-			return -errno;
+			ret = -errno;
+			goto out;
 		}
 		vrb_prof_func_start("vrb_eq_cm_process_event");
 		ret = vrb_eq_cm_process_event(eq, cma_event, event, buf, len);
@@ -1331,7 +1355,9 @@ vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 
 	if (ret > 0 && flags & FI_PEEK)
 		ret = vrb_eq_write_event(eq, *event, buf, ret);
-
+out:
+	if (ret <= 0)
+		vrb_eq_process_async_events(eq);
 	vrb_prof_func_end(__func__);
 	return ret;
 }
@@ -1425,7 +1451,9 @@ static int vrb_eq_close(fid_t fid)
 	struct vrb_eq_entry *entry;
 
 	eq = container_of(fid, struct vrb_eq, eq_fid.fid);
-	/* TODO: use util code, if possible, and add ref counting */
+	/* TODO: use util code, if possible */
+	if (ofi_atomic_get32(&eq->ref))
+		return -FI_EBUSY;
 
 	if (!ofi_rbmap_empty(&eq->xrc.sidr_conn_rbmap))
 		VRB_WARN(FI_LOG_EP_CTRL, "SIDR connection RBmap not empty\n");
@@ -1538,6 +1566,8 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	_eq->eq_fid.fid.ops = &vrb_eq_fi_ops;
 	_eq->eq_fid.ops = &vrb_eq_ops;
 
+	ofi_atomic_initialize32(&_eq->ref, 0);
+
 	*eq = &_eq->eq_fid;
 	return 0;
 err4:
@@ -1556,3 +1586,23 @@ err0:
 	return ret;
 }
 
+int vrb_eq_attach_domain(struct vrb_eq *eq, struct vrb_domain *domain)
+{
+	if (ofi_epoll_add(eq->epollfd, domain->verbs->async_fd,
+			  OFI_EPOLL_IN, domain))
+		return -errno;
+
+	domain->eq = eq;
+	ofi_atomic_inc32(&eq->ref);
+	return 0;
+}
+
+int vrb_eq_detach_domain(struct vrb_domain *domain)
+{
+	if (ofi_epoll_del(domain->eq->epollfd, domain->verbs->async_fd))
+		return -errno;
+
+	ofi_atomic_dec32(&domain->eq->ref);
+	domain->eq = NULL;
+	return 0;
+}
