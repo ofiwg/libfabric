@@ -329,6 +329,8 @@ struct vrb_eq {
 
 	ofi_epoll_t		epollfd;
 	enum fi_wait_obj	wait_obj;
+	ofi_atomic32_t		ref;
+
 
 	struct {
 		/* The connection key map is used during the XRC connection
@@ -435,6 +437,9 @@ struct vrb_domain {
 	/* for profiling */
 	vrb_profile_t		*profile;
 };
+
+int vrb_eq_attach_domain(struct vrb_eq *eq, struct vrb_domain *domain);
+int vrb_eq_detach_domain(struct vrb_domain *domain);
 
 struct vrb_cq;
 

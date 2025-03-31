@@ -137,6 +137,33 @@ const char *ibv_get_device_name(struct ibv_device *device)
 	return device->name;
 }
 
+/*
+ * async event methods are implemented for compatibility
+ * but are not currently supported
+*/
+
+int ibv_get_async_event(struct ibv_context *context,
+			struct ibv_async_event *event)
+{
+	VRB_TRACE(FI_LOG_FABRIC, "\n");
+	/*
+	* Normally we use ENOSYS for unsupported features
+	* but ibv_get_async_event returns only -1 for any error.
+	*/
+	return -1;
+}
+
+void ibv_ack_async_event(struct ibv_async_event *event)
+{
+	VRB_TRACE(FI_LOG_FABRIC, "\n");
+}
+
+const char *ibv_event_type_str(enum ibv_event_type event)
+{
+	VRB_TRACE(FI_LOG_FABRIC, "\n");
+	return NULL;
+}
+
 // infiniband/verbs.h defines ibv_query_port to be ___ibv_query_port
 int ___ibv_query_port(struct ibv_context *context, uint8_t port_num,
 		      struct ibv_port_attr *port_attr)
