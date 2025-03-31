@@ -150,6 +150,7 @@ static int vrb_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct vrb_domain *domain;
 	struct vrb_eq *eq;
+	int ret;
 
 	domain = container_of(fid, struct vrb_domain,
 			      util_domain.domain_fid.fid);
@@ -158,9 +159,12 @@ static int vrb_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_EQ:
 		switch (domain->ep_type) {
 		case FI_EP_MSG:
-			eq = container_of(bfid, struct vrb_eq, eq_fid);
-			domain->eq = eq;
 			domain->eq_flags = flags;
+
+			eq = container_of(bfid, struct vrb_eq, eq_fid);
+			ret = vrb_eq_attach_domain(eq, domain);
+			if (ret)
+				return ret;
 			break;
 		case FI_EP_DGRAM:
 			return -FI_EINVAL;
@@ -222,6 +226,12 @@ static int vrb_domain_close(fid_t fid)
 		if (ret)
 			return -ret;
 		domain->pd = NULL;
+	}
+
+	if (domain->eq) {
+		ret = vrb_eq_detach_domain(domain);
+		if (ret)
+			return -ret;
 	}
 
 	ret = ofi_domain_close(&domain->util_domain);
@@ -309,6 +319,18 @@ static struct fi_ops_domain vrb_dgram_domain_ops = {
 };
 
 
+static void vrb_domain_enable_async_events(struct vrb_domain *domain)
+{
+	assert(domain->verbs);
+	int ret = fi_fd_nonblock(domain->verbs->async_fd);
+	if(ret) {
+		VRB_INFO(FI_LOG_DOMAIN, "Failed to enable async events for %s: %s\n",
+			 domain->info->domain_attr->name, strerror(-errno));
+		vrb_gl_data.log_async_events = false;
+		return;
+	}
+}
+
 static int
 vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_domain **domain, void *context)
@@ -354,6 +376,9 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	ret = vrb_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)
 		goto err3;
+
+	if (vrb_gl_data.log_async_events)
+		vrb_domain_enable_async_events(_domain);
 
 	_domain->pd = ibv_alloc_pd(_domain->verbs);
 	if (!_domain->pd) {
@@ -439,6 +464,18 @@ err2:
 err1:
 	free(_domain);
 	return ret;
+}
+
+void vrb_domain_process_async_event(struct vrb_domain *domain)
+{
+	struct ibv_async_event event;
+	
+	if (ibv_get_async_event(domain->verbs, &event))
+		return;
+
+	VRB_WARN(FI_LOG_DOMAIN, "Async event: %s\n",
+			ibv_event_type_str(event.event_type));
+	ibv_ack_async_event(&event);
 }
 
 static int vrb_trywait(struct fid_fabric *fabric, struct fid **fids, int count)

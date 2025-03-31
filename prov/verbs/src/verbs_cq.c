@@ -137,16 +137,26 @@ vrb_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 static inline int
 vrb_poll_events(struct vrb_cq *_cq, int timeout)
 {
-	int ret, rc;
+	int ret, rc, nfds;
 	void *context;
-	struct pollfd fds[2];
+	struct pollfd fds[3];
+	struct vrb_domain *domain = NULL;
 
+	nfds=2;
 	fds[0].fd = _cq->channel->fd;
 	fds[1].fd = fd_signal_get(&_cq->signal);
 
 	fds[0].events = fds[1].events = POLLIN;
 
-	rc = poll(fds, 2, timeout);
+	if (vrb_gl_data.log_async_events) {
+		domain = container_of(_cq->util_cq.domain, struct vrb_domain,
+				      util_domain);
+		fds[2].fd = domain->verbs->async_fd;
+		fds[2].events = POLLIN;
+		nfds+=1;
+	}
+
+	rc = poll(fds, nfds, timeout);
 	if (rc == 0)
 		return -FI_EAGAIN;
 	else if (rc < 0)
@@ -163,6 +173,10 @@ vrb_poll_events(struct vrb_cq *_cq, int timeout)
 	if (fds[1].revents & POLLIN) {
 		fd_signal_reset(&_cq->signal);
 		ret = -FI_EAGAIN;
+		rc--;
+	}
+	if ((fds[2].revents & POLLIN) && domain) {
+		vrb_domain_process_async_event(domain);
 		rc--;
 	}
 	if (rc) {
@@ -476,12 +490,33 @@ static struct fi_ops vrb_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static inline void
+vrb_cq_poll_async_events(struct vrb_cq *cq)
+{
+	int ret;
+	struct pollfd fds;
+	struct vrb_domain *domain;
+
+	domain = container_of(cq->util_cq.domain, struct vrb_domain, util_domain);
+	fds.fd = domain->verbs->async_fd;
+	fds.events = POLLIN;
+
+	ret = poll(&fds, 1, 0);
+	if (ret <= 0)
+		return;
+
+	vrb_domain_process_async_event(domain);
+}
+
 static void vrb_cq_progress(struct util_cq *util_cq)
 {
 	struct vrb_cq *cq;
 
 	cq = container_of(util_cq, struct vrb_cq, util_cq);
 	vrb_flush_cq(cq);
+
+	if (vrb_gl_data.log_async_events)
+		vrb_cq_poll_async_events(cq);
 }
 
 int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
