@@ -187,6 +187,7 @@ extern struct vrb_gl_data {
 	char	*iface;
 	int	gid_idx;
 	char	*device_name;
+	bool 	log_async_events;
 
 	struct {
 		int	buffer_num;
@@ -376,6 +377,7 @@ struct vrb_pep {
 	int			bound;
 	size_t			src_addrlen;
 	struct fi_info		*info;
+	bool			log_async_events;
 
 	/* for profiling */
 	vrb_profile_t		*profile;

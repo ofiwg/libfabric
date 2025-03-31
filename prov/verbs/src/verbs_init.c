@@ -55,6 +55,7 @@ struct vrb_gl_data vrb_gl_data = {
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
 	.gid_idx		= 0,
+	.log_async_events	= true,
 	.dgram			= {
 		.use_name_server	= 1,
 		.name_server_port	= 5678,
