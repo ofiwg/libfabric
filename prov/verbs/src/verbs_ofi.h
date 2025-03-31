@@ -187,6 +187,7 @@ extern struct vrb_gl_data {
 	char	*iface;
 	int	gid_idx;
 	char	*device_name;
+	int 	log_async_events;
 
 	struct {
 		int	buffer_num;
@@ -328,6 +329,7 @@ struct vrb_eq {
 	uint64_t		flags;
 	struct fi_eq_err_entry	err;
 
+	ofi_atomic32_t		ref;
 	ofi_epoll_t		epollfd;
 	enum fi_wait_obj	wait_obj;
 
@@ -406,6 +408,8 @@ struct vrb_domain {
 	enum fi_ep_type			ep_type;
 	struct fi_info			*info;
 
+	ofi_epoll_t			epoll_fd;
+
 	/* The EQ is utilized by verbs/MSG */
 	struct vrb_eq			*eq;
 	uint64_t			eq_flags;
@@ -436,6 +440,10 @@ struct vrb_domain {
 	/* for profiling */
 	vrb_profile_t		*profile;
 };
+
+void vrb_domain_process_async_events(struct vrb_domain *domain, int nfds);
+int vrb_eq_attach_domain(struct vrb_eq *eq, struct vrb_domain *domain);
+int vrb_eq_detach_domain(struct vrb_domain *domain);
 
 struct vrb_cq;
 

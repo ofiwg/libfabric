@@ -158,9 +158,10 @@ static int vrb_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_EQ:
 		switch (domain->ep_type) {
 		case FI_EP_MSG:
-			eq = container_of(bfid, struct vrb_eq, eq_fid);
-			domain->eq = eq;
 			domain->eq_flags = flags;
+
+			eq = container_of(bfid, struct vrb_eq, eq_fid);
+			vrb_eq_attach_domain(eq, domain);
 			break;
 		case FI_EP_DGRAM:
 			return -FI_EINVAL;
@@ -222,6 +223,12 @@ static int vrb_domain_close(fid_t fid)
 		if (ret)
 			return -ret;
 		domain->pd = NULL;
+	}
+
+	if (domain->eq) {
+		ret = vrb_eq_detach_domain(domain);
+		if (ret)
+			return -ret;
 	}
 
 	ret = ofi_domain_close(&domain->util_domain);
@@ -355,6 +362,34 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err3;
 
+	if (!vrb_gl_data.log_async_events)
+		goto skip_async;
+
+	ret = fi_fd_nonblock(_domain->verbs->async_fd);
+	if(ret) {
+		VRB_INFO(FI_LOG_DOMAIN, "Failed to enable async events for %s: %s\n",
+				_domain->info->domain_attr->name, strerror(-errno));
+		goto skip_async;
+	}
+
+	ret = ofi_epoll_create(&_domain->epoll_fd);
+	if (ret) {
+		VRB_INFO(FI_LOG_DOMAIN, "Failed to create epoll fd: %s\n",
+				strerror(-errno));
+		_domain->epoll_fd = 0;
+		goto skip_async;
+	}
+
+	ret = ofi_epoll_add(_domain->epoll_fd, _domain->verbs->async_fd,
+				OFI_EPOLL_IN, _domain);
+	if (ret) {
+		VRB_INFO(FI_LOG_DOMAIN, "Failed to add async event fd to epoll: %s\n",
+				strerror(-errno));
+		ofi_epoll_close(_domain->epoll_fd);
+		_domain->epoll_fd = 0;
+	}
+
+skip_async:
 	_domain->pd = ibv_alloc_pd(_domain->verbs);
 	if (!_domain->pd) {
 		ret = -errno;
@@ -439,6 +474,19 @@ err2:
 err1:
 	free(_domain);
 	return ret;
+}
+
+void vrb_domain_process_async_events(struct vrb_domain *domain, int num_events)
+{
+	struct ibv_async_event event;
+	int i;
+
+	for (i=0; i<num_events; i++) {
+		ibv_get_async_event(domain->verbs, &event);
+		VRB_WARN(FI_LOG_DOMAIN, "Async event: %s\n",
+			 ibv_event_type_str(event.event_type));
+		ibv_ack_async_event(&event);
+	}
 }
 
 static int vrb_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
