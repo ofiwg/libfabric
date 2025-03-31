@@ -78,6 +78,7 @@ enum {
 	FI_OPT_INJECT_TAGGED_SIZE,	/* size_t */
 	FI_OPT_INJECT_RMA_SIZE,		/* size_t */
 	FI_OPT_INJECT_ATOMIC_SIZE,	/* size_t */
+	FI_OPT_FIREWALL_ADDR,           /* bool */
 };
 
 /*
