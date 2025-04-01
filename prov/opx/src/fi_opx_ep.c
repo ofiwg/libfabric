@@ -2606,7 +2606,7 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 #ifndef OPX_DEV_OVERRIDE
 	if (opx_ep->use_expected_tid_rzv == OPX_TID_ENABLE_ON && !opx_is_tid_allowed()) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"Expected receive (TID) cannot be enabled due to unsupported driver version. Upgrade Omnipath driver to enable this feature. Disabling TID.\n");
+			"Expected receive (TID) cannot be enabled due to unsupported driver version. Upgrade Omni-path driver to enable this feature. Disabling TID.\n");
 		opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_OFF;
 	}
 #endif

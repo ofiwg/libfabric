@@ -4465,7 +4465,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 			 (immediate_block << OPX_IMMEDIATE_BLOCK_SHIFT) | (immediate_tail << OPX_IMMEDIATE_TAIL_SHIFT),
 		.tail_bytes = {}};
 
-	assert(((len - immediate_total) & 0x003Fu) == 0);
+	assert(!send_immed_data || ((len - immediate_total) & 0x003Fu) == 0);
 
 	const uint64_t payload_blocks_total = 1 + /* rzv metadata */
 					      immediate_fragment + immediate_block;
