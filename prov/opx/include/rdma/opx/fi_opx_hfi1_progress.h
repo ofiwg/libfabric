@@ -207,7 +207,8 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep, const union opx_
 #ifdef OPX_DAOS
 		case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH:
 			fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid, opx_ep->reliability->state.service,
-							   hdr->service.origin_reliability_rx, hdr);
+							   hdr->service.origin_reliability_rx, hdr,
+							   OPX_IS_CTX_SHARING_ENABLED);
 			break;
 		case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK:
 			fi_opx_hfi1_rx_reliability_ack_resynch(&opx_ep->ep_fid, opx_ep->reliability->state.service,
@@ -263,7 +264,7 @@ __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 					const union opx_hfi1_packet_hdr *const hdr, const uint64_t rhf_seq,
 					const uint64_t hdrq_offset, const uint64_t rhf, const opx_lid_t slid,
-					const enum opx_hfi1_type hfi1_type)
+					const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	/*
 	 * Check for 'reliability' exceptions
@@ -289,7 +290,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, const uint8_t 
 	if (!OPX_RHF_IS_USE_EGR_BUF(rhf, hfi1_type)) {
 		/* no payload */
 		fi_opx_reliability_rx_exception(&opx_ep->reliability->state, flow, slid, pkt_origin_rx, psn,
-						&opx_ep->ep_fid, hdr, NULL, hfi1_type, opcode);
+						&opx_ep->ep_fid, hdr, NULL, hfi1_type, opcode, ctx_sharing);
 
 	} else {
 		/* has payload */
@@ -303,7 +304,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, const uint8_t 
 		assert(payload != NULL);
 
 		fi_opx_reliability_rx_exception(&opx_ep->reliability->state, flow, slid, pkt_origin_rx, psn,
-						&opx_ep->ep_fid, hdr, payload, hfi1_type, opcode);
+						&opx_ep->ep_fid, hdr, payload, hfi1_type, opcode, ctx_sharing);
 
 		const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
@@ -325,7 +326,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 			       const union opx_hfi1_packet_hdr *const hdr, const uint64_t rhf_seq,
 			       const uint64_t hdrq_offset, const int lock_required,
 			       const enum ofi_reliability_kind reliability, const uint64_t rhf,
-			       const enum opx_hfi1_type hfi1_type, const opx_lid_t slid)
+			       const enum opx_hfi1_type hfi1_type, const opx_lid_t slid, const bool ctx_sharing)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "================ received a packet from the fabric\n");
 
@@ -402,7 +403,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 			&opx_ep->ep_fid, opx_ep->reliability->state.lid, opx_ep->reliability->state.rx,
 			psn - opx_ep->reliability->service.preemptive_ack_rate + 1, /* psn_start */
 			opx_ep->reliability->service.preemptive_ack_rate,	    /* psn_count */
-			hdr, slid, hfi1_type);
+			hdr, slid, hfi1_type, ctx_sharing);
 
 	} else if (hdr->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA && (ntohl(hdr->bth.psn) & 0x80000000)) {
 		/* Send preemptive ACKs on Rendezvous Data packets when
@@ -415,7 +416,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 							 opx_ep->reliability->state.rx,
 							 psn - psn_count + 1, /* psn_start */
 							 psn_count,	      /* psn_count */
-							 hdr, slid, hfi1_type);
+							 hdr, slid, hfi1_type, ctx_sharing);
 	}
 }
 
@@ -426,7 +427,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
  */
 __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const enum ofi_reliability_kind reliability,
-			       const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
+			       const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const uint64_t	  local_hdrq_mask =
@@ -507,13 +508,13 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 		}
 
 		rc = fi_opx_hfi1_handle_reliability(opx_ep, opcode, hdr, rhf_seq, hdrq_offset, rhf_rcvd, slid,
-						    hfi1_type);
+						    hfi1_type, ctx_sharing);
 		if (OFI_UNLIKELY(rc != -1)) {
 			return rc;
 		}
 
 		fi_opx_hfi1_handle_packet(opx_ep, opcode, hdr, rhf_seq, hdrq_offset, lock_required, reliability,
-					  rhf_rcvd, hfi1_type, slid);
+					  rhf_rcvd, hfi1_type, slid, ctx_sharing);
 		return 1; /* one packet was processed */
 	}
 	return 0;
@@ -596,7 +597,8 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 
 			if (ud_opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH) {
 				fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid, opx_ep->reliability->state.service,
-								   origin_reliability_rx, hdr);
+								   origin_reliability_rx, hdr,
+								   OPX_IS_CTX_SHARING_ENABLED);
 
 			} else if (ud_opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK) {
 				fi_opx_hfi1_rx_reliability_ack_resynch(&opx_ep->ep_fid,
@@ -728,7 +730,7 @@ bool opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uint64_t caps,
 			   const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask,
-			   const enum opx_hfi1_type hfi1_type)
+			   const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	/* All callers to this function should have already obtained the necessary lock */
 	assert(!lock_required);
@@ -745,8 +747,8 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 
 	if ((caps & FI_REMOTE_COMM) || (caps == 0)) {
 		do {
-			packets =
-				fi_opx_hfi1_poll_once(ep, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, hfi1_type);
+			packets = fi_opx_hfi1_poll_once(ep, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, hfi1_type,
+							ctx_sharing);
 		} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
 
 		struct fi_opx_reliability_service *service   = &opx_ep->reliability->service;

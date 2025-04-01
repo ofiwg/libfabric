@@ -418,7 +418,7 @@ void fi_reliability_service_print_replay_ring (struct fi_opx_reliability_tx_repl
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode(struct fid_ep *ep, const uint64_t key, const opx_lid_t dlid,
 						    const uint64_t reliability_rx, const uint64_t opcode,
-						    const enum opx_hfi1_type hfi1_type)
+						    const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -490,7 +490,8 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_resynch(struct fid_ep *ep, const ui
 	assert(opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH ||
 	       opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK);
 
-	ssize_t rc = fi_opx_hfi1_tx_reliability_inject_ud_opcode(ep, key, dlid, reliability_rx, opcode, OPX_HFI1_TYPE);
+	ssize_t rc = fi_opx_hfi1_tx_reliability_inject_ud_opcode(ep, key, dlid, reliability_rx, opcode, OPX_HFI1_TYPE,
+								 OPX_IS_CTX_SHARING_ENABLED);
 
 	if (OFI_UNLIKELY(rc)) {
 #ifdef OPX_RELIABILITY_DEBUG
@@ -519,7 +520,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_resynch(struct fid_ep *ep, const ui
 ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const uint64_t key, const opx_lid_t dlid,
 					  const uint64_t reliability_rx, const uint64_t psn_start,
 					  const uint64_t psn_count, const uint64_t opcode,
-					  const enum opx_hfi1_type hfi1_type)
+					  const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -654,7 +655,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const uint64_t key,
 void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const opx_lid_t dlid, const uint64_t reliability_rx,
 					      const uint64_t psn_start, const uint64_t psn_count,
 					      const union opx_hfi1_packet_hdr *const hdr, const opx_lid_t slid,
-					      const enum opx_hfi1_type hfi1_type)
+					      const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	OPX_TRACER_TRACE_RELI(OPX_TRACER_BEGIN, "RX_RELI_SEND_PRE_ACKS");
 
@@ -665,7 +666,7 @@ void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const opx_lid_t
 
 	ssize_t rc __attribute__((unused));
 	rc = fi_opx_hfi1_tx_reliability_inject(ep, (uint64_t) key.value, slid, key.src_rx, psn_start, psn_count,
-					       FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK, hfi1_type);
+					       FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK, hfi1_type, ctx_sharing);
 	INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_ACKS_SENT, key.value, psn_start, psn_count);
 	OPX_TRACER_TRACE_RELI(OPX_TRACER_END_SUCCESS, "RX_RELI_SEND_PRE_ACKS");
 }
@@ -690,7 +691,7 @@ ssize_t fi_opx_hfi1_rx_reliability_ping_response(struct fid_ep *ep, const uint64
 		const uint64_t psn_count_24 = MIN(psn_count, (MAX_PSN - psn_start_24) + 1);
 
 		rc = fi_opx_hfi1_tx_reliability_inject(ep, key, slid, rx, psn_start_24, psn_count_24, opcode,
-						       OPX_HFI1_TYPE);
+						       OPX_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
 		INC_PING_STAT_COND(rc == FI_SUCCESS,
 				   opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK ? ACKS_SENT : NACKS_SENT, key,
 				   psn_start_24, psn_count_24);
@@ -721,7 +722,8 @@ void fi_opx_hfi1_rx_reliability_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 		ssize_t rc __attribute__((unused));
 		rc = fi_opx_hfi1_tx_reliability_inject(ep, key, slid, rx, 0, /* psn_start */
 						       1,		     /* psn_count */
-						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, OPX_HFI1_TYPE);
+						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, OPX_HFI1_TYPE,
+						       OPX_IS_CTX_SHARING_ENABLED);
 		INC_PING_STAT_COND(rc == FI_SUCCESS, NACKS_SENT, key, 0, 1);
 		OPX_TRACER_TRACE_RELI(OPX_TRACER_END_ERROR, "RX_RELI_PING");
 		return;
@@ -1916,7 +1918,8 @@ ssize_t fi_opx_reliability_send_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 
 	// Send one ping to cover the entire replay range.
 	ssize_t rc = fi_opx_hfi1_tx_reliability_inject(ep, key_value, dlid, rx, psn_start, psn_count,
-						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING, OPX_HFI1_TYPE);
+						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING, OPX_HFI1_TYPE,
+						       OPX_IS_CTX_SHARING_ENABLED);
 
 	INC_PING_STAT_COND(rc == FI_SUCCESS, PINGS_SENT, key_value, psn_start, psn_count);
 
@@ -2969,7 +2972,7 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_client_state *sta
 				     struct fi_opx_reliability_flow *flow, opx_lid_t slid, uint64_t src_origin_rx,
 				     uint32_t psn, struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 				     const uint8_t *const payload, const enum opx_hfi1_type hfi1_type,
-				     const uint8_t opcode)
+				     const uint8_t opcode, const bool ctx_sharing)
 {
 	uint64_t next_psn = flow->next_psn;
 
@@ -2994,7 +2997,7 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_client_state *sta
 								 psn - state->service->preemptive_ack_rate +
 									 1,			      /* psn_start */
 								 state->service->preemptive_ack_rate, /* psn_count */
-								 hdr, slid, hfi1_type);
+								 hdr, slid, hfi1_type, ctx_sharing);
 		}
 
 		next_psn += 1;
@@ -3018,7 +3021,7 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_client_state *sta
 					ep, state->lid, state->rx,
 					psn - state->service->preemptive_ack_rate + 1, /* psn_start */
 					state->service->preemptive_ack_rate,	       /* psn_count */
-					hdr, slid, hfi1_type);
+					hdr, slid, hfi1_type, ctx_sharing);
 			}
 
 			++next_psn;
@@ -3075,7 +3078,7 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_client_state *sta
 		rc = fi_opx_hfi1_tx_reliability_inject(ep, flow->key.value, flow->key.slid, src_origin_rx,
 						       psn, /* psn_start */
 						       1,   /* psn_count */
-						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK, hfi1_type);
+						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK, hfi1_type, ctx_sharing);
 		INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_ACKS_SENT, flow->key.value, psn, 1);
 
 		return;
@@ -3111,7 +3114,7 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_client_state *sta
 #ifdef OPX_RELIABILITY_ENABLE_PRE_NACK
 		uint64_t nack_count = MIN(psn_64 - next_psn, OPX_RELIABILITY_RX_MAX_PRE_NACK);
 		rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid, src_origin_rx, next_psn, nack_count,
-						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, hfi1_type);
+						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, hfi1_type, ctx_sharing);
 		INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, nack_count);
 #endif
 #ifdef OPX_RELIABILITY_DEBUG
@@ -3173,7 +3176,7 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_client_state *sta
 		if (nack_count) {
 			rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid, src_origin_rx, nack_start_psn,
 							       nack_count, FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK,
-							       hfi1_type);
+							       hfi1_type, ctx_sharing);
 			INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, nack_count);
 		}
 #endif
@@ -3509,7 +3512,8 @@ void fi_opx_reliability_resynch_tx_flow_reset(struct fi_opx_ep *opx_ep, struct f
 }
 
 void fi_opx_hfi1_rx_reliability_resynch(struct fid_ep *ep, struct fi_opx_reliability_service *service,
-					uint32_t origin_reliability_rx, const union opx_hfi1_packet_hdr *const hdr)
+					uint32_t origin_reliability_rx, const union opx_hfi1_packet_hdr *const hdr,
+					const bool ctx_sharing)
 {
 	struct fi_opx_ep		       *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_reliability_client_state *state  = &opx_ep->reliability->state;
@@ -3890,7 +3894,8 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, union fi_opx_
 		uint64_t next = fi_opx_timer_next_event_usec(timer, &start, FI_OPX_TIMER_NEXT_EVENT_USEC_DEFAULT);
 
 		while (compare < next) {
-			fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, OPX_HFI1_TYPE);
+			fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, OPX_HFI1_TYPE,
+					  OPX_IS_CTX_SHARING_ENABLED);
 			compare = fi_opx_timer_now(timestamp, timer);
 
 			if (resynch_flow->remote_ep_resynch_completed) {

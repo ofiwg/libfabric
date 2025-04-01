@@ -77,6 +77,9 @@
 
 #define EXIT_FAILURE 1
 
+#define OPX_CTX_SHARING_OFF 0
+#define OPX_CTX_SHARING_ON  1
+
 // TODO: This is needed until we complete the locking model.
 #define OPX_LOCK 0
 
@@ -207,6 +210,8 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi_local_info, local_lid_entries) =
 
 #define OPX_HFI1_TYPE fi_opx_global.hfi_local_info.type
 
+#define OPX_IS_CTX_SHARING_ENABLED fi_opx_global.ctx_sharing_enabled
+
 struct fi_opx_global_data {
 	/* == CACHE LINE 0 == */
 	struct fi_info	      *info;
@@ -221,12 +226,14 @@ struct fi_opx_global_data {
 	struct dlist_entry	     hmem_domain_list;
 	struct fi_opx_daos_hfi_rank *daos_hfi_rank_hashmap;
 	enum fi_progress	     progress;
-	uint32_t		     unused_dw;
+	bool			     ctx_sharing_enabled;
+	uint8_t			     unused[3];
 	uint64_t		     unused_qw[4];
 
 	/* == CACHE LINE 2+ == */
 	struct opx_hfi_local_info hfi_local_info;
-	char			 *opx_hfi1_type_strings[];
+
+	char *opx_hfi1_type_strings[];
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_global_data, hmem_domain_list) == (FI_OPX_CACHE_LINE_SIZE * 1),
 			"Offset of fi_opx_global_data->hmem_domain_list should start at cacheline 1!");

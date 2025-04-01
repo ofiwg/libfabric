@@ -178,8 +178,8 @@ void *opx_progress_func(void *args)
 		} else {
 			fi_opx_lock(&cq->lock);
 			fi_opx_cq_poll_inline(&cq->cq_fid, NULL, 0, NULL, FI_CQ_FORMAT_UNSPEC, FI_OPX_LOCK_REQUIRED,
-					      OFI_RELIABILITY_KIND_ONLOAD, FI_OPX_HDRQ_MASK_RUNTIME, 0UL,
-					      OPX_HFI1_TYPE);
+					      OFI_RELIABILITY_KIND_ONLOAD, FI_OPX_HDRQ_MASK_RUNTIME, 0UL, OPX_HFI1_TYPE,
+					      OPX_IS_CTX_SHARING_ENABLED);
 			fi_opx_unlock(&cq->lock);
 		}
 	}

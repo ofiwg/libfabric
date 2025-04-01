@@ -229,7 +229,7 @@ int fi_opx_cq_enqueue_err(struct fi_opx_cq *opx_cq, struct opx_context *context,
 struct fi_ops_cq *fi_opx_cq_select_ops(const enum fi_cq_format format, const enum fi_threading threading,
 				       const enum ofi_reliability_kind reliability, const uint64_t rcvhdrcnt,
 				       const uint64_t caps, const enum fi_progress progress,
-				       const enum opx_hfi1_type hfi1_type)
+				       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "(called)\n");
 
@@ -252,47 +252,62 @@ struct fi_ops_cq *fi_opx_cq_select_ops(const enum fi_cq_format format, const enu
 	if (hfi1_type & OPX_HFI1_WFR) {
 		switch (rcvhdrcnt) {
 		case 2048:
-			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 0) :
-					       fi_opx_cq_select_non_locking_2048_ops(format, reliability, comm_caps, 0);
+			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 0,
+										 ctx_sharing) :
+					       fi_opx_cq_select_non_locking_2048_ops(format, reliability, comm_caps, 0,
+										     ctx_sharing);
 		case 8192:
-			return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps, 0) :
-					       fi_opx_cq_select_non_locking_8192_ops(format, reliability, comm_caps, 0);
+			return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps, 0,
+										 ctx_sharing) :
+					       fi_opx_cq_select_non_locking_8192_ops(format, reliability, comm_caps, 0,
+										     ctx_sharing);
 		default:
 			FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
 				"WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");
-			return lock_required ?
-				       fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 0) :
-				       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps, 0);
+			return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 0,
+										    ctx_sharing) :
+					       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps,
+											0, ctx_sharing);
 		}
 	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
 		switch (rcvhdrcnt) {
 		case 2048:
-			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 1) :
-					       fi_opx_cq_select_non_locking_2048_ops(format, reliability, comm_caps, 1);
+			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 1,
+										 ctx_sharing) :
+					       fi_opx_cq_select_non_locking_2048_ops(format, reliability, comm_caps, 1,
+										     ctx_sharing);
 		case 8192:
-			return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps, 1) :
-					       fi_opx_cq_select_non_locking_8192_ops(format, reliability, comm_caps, 1);
+			return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps, 1,
+										 ctx_sharing) :
+					       fi_opx_cq_select_non_locking_8192_ops(format, reliability, comm_caps, 1,
+										     ctx_sharing);
 		default:
 			FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
 				"WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");
-			return lock_required ?
-				       fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 1) :
-				       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps, 1);
+			return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 1,
+										    ctx_sharing) :
+					       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps,
+											1, ctx_sharing);
 		}
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		switch (rcvhdrcnt) {
 		case 2048:
-			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 2) :
-					       fi_opx_cq_select_non_locking_2048_ops(format, reliability, comm_caps, 2);
+			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 2,
+										 ctx_sharing) :
+					       fi_opx_cq_select_non_locking_2048_ops(format, reliability, comm_caps, 2,
+										     ctx_sharing);
 		case 8192:
-			return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps, 2) :
-					       fi_opx_cq_select_non_locking_8192_ops(format, reliability, comm_caps, 2);
+			return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps, 2,
+										 ctx_sharing) :
+					       fi_opx_cq_select_non_locking_8192_ops(format, reliability, comm_caps, 2,
+										     ctx_sharing);
 		default:
 			FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
 				"WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");
-			return lock_required ?
-				       fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 2) :
-				       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps, 2);
+			return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 2,
+										    ctx_sharing) :
+					       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps,
+											2, ctx_sharing);
 		}
 	} else {
 		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "Invalid HFI type %d\n", hfi1_type);
@@ -410,18 +425,18 @@ void				 fi_opx_cq_finalize_ops(struct fid_ep *ep)
 	struct fi_opx_cq *opx_cq = opx_ep->rx->cq;
 
 	if (opx_cq) {
-		opx_cq->cq_fid.ops =
-			fi_opx_cq_select_ops(opx_cq->format, opx_cq->domain->threading,
-					     fi_opx_select_reliability(opx_ep), opx_ep->hfi->info.rxe.hdrq.elemcnt,
-					     opx_cq->ep_comm_caps, opx_cq->domain->data_progress, OPX_HFI1_TYPE);
+		opx_cq->cq_fid.ops = fi_opx_cq_select_ops(
+			opx_cq->format, opx_cq->domain->threading, fi_opx_select_reliability(opx_ep),
+			opx_ep->hfi->info.rxe.hdrq.elemcnt, opx_cq->ep_comm_caps, opx_cq->domain->data_progress,
+			OPX_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
 	}
 
 	if (opx_ep->tx->cq && (opx_ep->tx->cq != opx_ep->rx->cq)) {
-		opx_cq = opx_ep->tx->cq;
-		opx_cq->cq_fid.ops =
-			fi_opx_cq_select_ops(opx_cq->format, opx_cq->domain->threading,
-					     fi_opx_select_reliability(opx_ep), opx_ep->hfi->info.rxe.hdrq.elemcnt,
-					     opx_cq->ep_comm_caps, opx_cq->domain->data_progress, OPX_HFI1_TYPE);
+		opx_cq		   = opx_ep->tx->cq;
+		opx_cq->cq_fid.ops = fi_opx_cq_select_ops(
+			opx_cq->format, opx_cq->domain->threading, fi_opx_select_reliability(opx_ep),
+			opx_ep->hfi->info.rxe.hdrq.elemcnt, opx_cq->ep_comm_caps, opx_cq->domain->data_progress,
+			OPX_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "(end)\n");

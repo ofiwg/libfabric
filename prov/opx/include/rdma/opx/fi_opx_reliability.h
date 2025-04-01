@@ -841,20 +841,21 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_client_state *sta
 				     struct fi_opx_reliability_flow *flow, opx_lid_t slid, uint64_t origin_rx,
 				     uint32_t psn, struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 				     const uint8_t *const payload, const enum opx_hfi1_type hfi1_type,
-				     const uint8_t opcode);
+				     const uint8_t opcode, const bool ctx_sharing);
 
 ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const uint64_t key, const opx_lid_t dlid,
 					  const uint64_t reliability_rx, const uint64_t psn_start,
 					  const uint64_t psn_count, const uint64_t opcode,
-					  const enum opx_hfi1_type hfi1_type);
+					  const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
 
 void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const opx_lid_t dlid, const uint64_t reliability_rx,
 					      const uint64_t psn_start, const uint64_t psn_count,
 					      const union opx_hfi1_packet_hdr *const hdr, opx_lid_t slid,
-					      const enum opx_hfi1_type hfi1_type);
+					      const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
 
 void fi_opx_hfi1_rx_reliability_resynch(struct fid_ep *ep, struct fi_opx_reliability_service *service,
-					uint32_t origin_reliability_rx, const union opx_hfi1_packet_hdr *const hdr);
+					uint32_t origin_reliability_rx, const union opx_hfi1_packet_hdr *const hdr,
+					const bool ctx_sharing);
 
 void fi_opx_hfi1_rx_reliability_ack_resynch(struct fid_ep *ep, struct fi_opx_reliability_service *service,
 					    const union opx_hfi1_packet_hdr *const hdr);
