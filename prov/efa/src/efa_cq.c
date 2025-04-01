@@ -271,6 +271,9 @@ void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	should_end_poll = !err;
 
 	while (!err) {
+		/* rdma-core locks the CQs while QPs are removed from the table,
+		 * so we do not need to add a lock.
+		 */
 		base_ep = efa_domain->qp_table[ibv_wc_read_qp_num(cq->ibv_cq.ibv_cq_ex) & efa_domain->qp_table_sz_m1]->base_ep;
 		opcode = ibv_wc_read_opcode(cq->ibv_cq.ibv_cq_ex);
 		if (cq->ibv_cq.ibv_cq_ex->status) {
