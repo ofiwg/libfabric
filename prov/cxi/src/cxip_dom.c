@@ -1642,10 +1642,10 @@ static int cxip_query_collective(struct fid_domain *domain,
 {
 	int ext_op;
 
-#if ENABLE_COLL_DLOPEN
+#if ENABLE_COLLECTIVES
 	CXIP_WARN("%s: Collectives are enabled\n", __func__);
 #else
-	CXIP_WARN("%s: Collectives are disabled, --enable-coll-dlopen needs to be set to enable collectives\n", __func__);
+	CXIP_WARN("%s: Collectives are disabled, --enable-collectives needs to be set\n", __func__);
 	return -FI_EOPNOTSUPP;
 #endif
 

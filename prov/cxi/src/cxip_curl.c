@@ -179,7 +179,7 @@ struct curlfunc curlary[] = {
 
 static int cxip_curl_load_symbols(void)
 {
-#if ENABLE_COLL_DLOPEN
+#if ENABLE_COLLECTIVES
 	struct curlfunc *funcptr;
 	char *libfile = NULL, *libpath;
 	int version;
@@ -267,9 +267,8 @@ static int cxip_curl_load_symbols(void)
 #else	/* Collectives are disabled, log it */ 
 	TRACE_CURL("Accelerated collectives cannot be enabled, libcurl not supported\n");
 	CXIP_WARN("Accelerated collectives cannot be enabled, libcurl not supported\n");
-	CXIP_WARN("Accelerated collectives cannot be enabled, libcurl not supported\n");
 	return -FI_EOPNOTSUPP;
-#endif	/* end ENABLE_COLL_DLOPEN */
+#endif	/* end ENABLE_COLLECTIVES */
 	return 0;
 }
 

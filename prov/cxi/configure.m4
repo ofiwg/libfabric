@@ -44,17 +44,15 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 	AC_ARG_WITH([json-c],
 		[AS_HELP_STRING([--with-json-c=DIR], [Install directory for json-c])])
 
-	# Support for collectives dlopen/dlsym of curl libs.
-	coll_dlopen=0
-	AC_ARG_ENABLE([coll-dlopen],
-        [AS_HELP_STRING([--enable-coll-dlopen], [Enable collectives and dlopen of required curl libraries @<:@default=no@:>@])],
+        # Support for collectives dlopen/dlsym of curl libs.
+        coll_enable=0
+        AC_ARG_ENABLE([collectives],
+        [AS_HELP_STRING([--enable-collectives], [Enable collectives and dlopen of required curl libraries @<:@default=no@:>@])],
         [
-               # Fail if --with_dlopen is not set
-               AS_IF([test "$with_dlopen" = "no"], [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-	       AS_IF([test "$enable_coll_dlopen" != "no"], [coll_dlopen=1])
+               AS_IF([test "$enable_collectives" != "no"], [coll_enable=1])
         ])
-        # define and set ENABLE_COLL_DLOPEN
-        AC_DEFINE_UNQUOTED([ENABLE_COLL_DLOPEN], [$coll_dlopen], [dlopen curl libraries for collectives])
+        # define and set ENABLE_COLLECTIVES
+        AC_DEFINE_UNQUOTED([ENABLE_COLLECTIVES], [$coll_enable], [Enable collectives and dlopen curl libraries])
 
 	AS_IF([test x"$enable_cxi" != x"no"],
 		[

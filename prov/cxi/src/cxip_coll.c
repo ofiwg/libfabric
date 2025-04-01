@@ -4022,10 +4022,10 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	bool link_zb;
 	int ret;
 
-#if ENABLE_COLL_DLOPEN
+#if ENABLE_COLLECTIVES
 	TRACE_JOIN("%s: Collectives are enabled\n", __func__);
 #else
-	TRACE_JOIN("%s: Collectives are disabled, --enable-coll-dlopen needs to be set to enable collectives\n", __func__);
+	TRACE_JOIN("%s: Collectives are disabled, --enable-collectives needs to be set\n", __func__);
 	return -FI_EOPNOTSUPP;
 #endif
 
