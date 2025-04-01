@@ -1818,13 +1818,13 @@ out:
 static int vrb_get_match_infos(uint32_t version, const char *node,
 				  const char *service, uint64_t flags,
 				  const struct fi_info *hints,
-				  const struct fi_info **raw_info,
+				  const struct fi_info *raw_info,
 				  struct fi_info **info)
 {
 	int ret, ret_sock_addr = -FI_ENODATA, ret_ib_ud_addr = -FI_ENODATA;
 
 	// TODO check for AF_IB addr
-	ret = vrb_get_matching_info(version, hints, info, *raw_info,
+	ret = vrb_get_matching_info(version, hints, info, raw_info,
 				       ofi_is_wildcard_listen_addr(node, service,
 								   flags, hints));
 	if (ret)
@@ -1927,7 +1927,7 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 
 	ret = vrb_get_match_infos(version, node, service,
 				     flags, hints,
-				     &vrb_util_prov.info, info);
+				     vrb_util_prov.info, info);
 	ofi_mutex_unlock(&vrb_info_mutex);
 	if (ret)
 		goto out;
