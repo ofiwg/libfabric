@@ -2004,7 +2004,7 @@ check_datatype:
 #endif
 		break;
 	default:
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	}
 
 	attr->size = ofi_datatype_size(datatype);
@@ -2136,7 +2136,7 @@ vrb_msg_ep_atomic_readwrite(struct fid_ep *ep_fid, const void *buf, size_t count
 	case FI_SUM:
 		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
 		wr.wr.atomic.remote_addr = addr;
-		wr.wr.atomic.compare_add = (uintptr_t)buf;
+		wr.wr.atomic.compare_add = *(uint64_t *)buf;
 		wr.wr.atomic.swap = 0;
 		wr.wr.atomic.rkey = (uint32_t)(uintptr_t)key;
 		break;
@@ -2197,7 +2197,7 @@ vrb_msg_ep_atomic_readwritemsg(struct fid_ep *ep_fid,
 	case FI_SUM:
 		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
 		wr.wr.atomic.remote_addr = msg->rma_iov->addr;
-		wr.wr.atomic.compare_add = (uintptr_t) msg->addr;
+		wr.wr.atomic.compare_add = *(uint64_t *)msg->msg_iov->addr;
 		wr.wr.atomic.swap = 0;
 		wr.wr.atomic.rkey = (uint32_t) (uintptr_t) msg->rma_iov->key;
 		break;
@@ -2227,8 +2227,8 @@ vrb_msg_ep_atomic_compwrite(struct fid_ep *ep_fid, const void *buf, size_t count
 		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
 		.opcode = IBV_WR_ATOMIC_CMP_AND_SWP,
 		.wr.atomic.remote_addr = addr,
-		.wr.atomic.compare_add = (uintptr_t)compare,
-		.wr.atomic.swap = (uintptr_t)buf,
+		.wr.atomic.compare_add = *(uint64_t *)compare,
+		.wr.atomic.swap = *(uint64_t *)buf,
 		.wr.atomic.rkey = (uint32_t)(uintptr_t)key,
 		.send_flags = IBV_SEND_FENCE,
 	};
@@ -2282,8 +2282,8 @@ vrb_msg_ep_atomic_compwritemsg(struct fid_ep *ep_fid,
 		.wr_id = VERBS_COMP_FLAGS(ep, flags, (uintptr_t)msg->context),
 		.opcode = IBV_WR_ATOMIC_CMP_AND_SWP,
 		.wr.atomic.remote_addr = msg->rma_iov->addr,
-		.wr.atomic.compare_add = (uintptr_t)comparev->addr,
-		.wr.atomic.swap = (uintptr_t)msg->addr,
+		.wr.atomic.compare_add = *(uint64_t *)comparev->addr,
+		.wr.atomic.swap = *(uint64_t *)msg->msg_iov->addr,
 		.wr.atomic.rkey = (uint32_t)(uintptr_t)msg->rma_iov->key,
 		.send_flags = IBV_SEND_FENCE,
 	};
@@ -2437,7 +2437,7 @@ vrb_msg_xrc_ep_atomic_readwrite(struct fid_ep *ep_fid, const void *buf,
 	case FI_SUM:
 		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
 		wr.wr.atomic.remote_addr = addr;
-		wr.wr.atomic.compare_add = (uintptr_t)buf;
+		wr.wr.atomic.compare_add = *(uint64_t *)buf;
 		wr.wr.atomic.swap = 0;
 		wr.wr.atomic.rkey = (uint32_t)(uintptr_t)key;
 		break;
@@ -2485,7 +2485,7 @@ vrb_msg_xrc_ep_atomic_readwritemsg(struct fid_ep *ep_fid,
 	case FI_SUM:
 		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
 		wr.wr.atomic.remote_addr = msg->rma_iov->addr;
-		wr.wr.atomic.compare_add = (uintptr_t) msg->addr;
+		wr.wr.atomic.compare_add = *(uint64_t *)msg->msg_iov->addr;
 		wr.wr.atomic.swap = 0;
 		wr.wr.atomic.rkey = (uint32_t) (uintptr_t) msg->rma_iov->key;
 		break;
@@ -2515,8 +2515,8 @@ vrb_msg_xrc_ep_atomic_compwrite(struct fid_ep *ep_fid, const void *buf, size_t c
 		.wr_id = VERBS_COMP(&ep->base_ep, (uintptr_t)context),
 		.opcode = IBV_WR_ATOMIC_CMP_AND_SWP,
 		.wr.atomic.remote_addr = addr,
-		.wr.atomic.compare_add = (uintptr_t)compare,
-		.wr.atomic.swap = (uintptr_t)buf,
+		.wr.atomic.compare_add = *(uint64_t *)compare,
+		.wr.atomic.swap = *(uint64_t *)buf,
 		.wr.atomic.rkey = (uint32_t)(uintptr_t)key,
 		.send_flags = IBV_SEND_FENCE,
 	};
@@ -2553,8 +2553,8 @@ vrb_msg_xrc_ep_atomic_compwritemsg(struct fid_ep *ep_fid,
 					  (uintptr_t)msg->context),
 		.opcode = IBV_WR_ATOMIC_CMP_AND_SWP,
 		.wr.atomic.remote_addr = msg->rma_iov->addr,
-		.wr.atomic.compare_add = (uintptr_t)comparev->addr,
-		.wr.atomic.swap = (uintptr_t)msg->addr,
+		.wr.atomic.compare_add = *(uint64_t *)comparev->addr,
+		.wr.atomic.swap = *(uint64_t *)msg->msg_iov->addr,
 		.wr.atomic.rkey = (uint32_t)(uintptr_t)msg->rma_iov->key,
 		.send_flags = IBV_SEND_FENCE,
 	};
