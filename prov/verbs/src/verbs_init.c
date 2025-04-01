@@ -792,7 +792,7 @@ static void vrb_fini(void)
 	ofi_mem_fini();
 #endif
 	ofi_mutex_destroy(&vrb_info_mutex);
-	fi_freeinfo((void *)vrb_util_prov.info);
+	fi_freeinfo(vrb_util_prov.info);
 	verbs_devs_free();
 	vrb_os_fini();
 	vrb_util_prov.info = NULL;

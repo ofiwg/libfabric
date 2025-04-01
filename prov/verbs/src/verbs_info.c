@@ -1349,7 +1349,7 @@ static int vrb_device_has_ipoib_addr(const char *dev_name)
 
 #define VERBS_NUM_DOMAIN_TYPES		3
 
-static int vrb_init_info(const struct fi_info **all_infos)
+static int vrb_init_info(struct fi_info **all_infos)
 {
 	struct ibv_context **ctx_list;
 	struct fi_info *fi = NULL, *tail = NULL;
