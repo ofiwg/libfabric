@@ -1,0 +1,6 @@
+---
+layout: page
+title: All-in-one Man Page
+tagline: Libfabric Programmer's Manual
+---
+

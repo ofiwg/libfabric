@@ -34,11 +34,10 @@ sections are:
     object-model and their related operations
 
 *Setup [`fi_setup`(7)](fi_setup.7.html)*
+:   This provides basic bootstrapping and setup for using the libfabric
+    API.
 
-:   ## This provides basic bootstrapping and setup for using the libfabric API.
-
-    layout: page title: fi_intro(7) tagline: Libfabric Programmer's
-    Guide - Introduction --- {% include JB/setup %}
+{% include JB/setup %}
 
 # NAME
 
@@ -1254,9 +1253,9 @@ utilization.
 
 Libfabric is well architected to support the previously discussed
 features. For further information on the libfabric architecture, see the
-next programmer's guide section: [`fi_arch`(7)](fi_arch.7.html). ---
-layout: page title: fi_arch(7) tagline: Libfabric Programmer's Guide -
-Architecture --- {% include JB/setup %}
+next programmer's guide section: [`fi_arch`(7)](fi_arch.7.html).
+
+{% include JB/setup %}
 
 # NAME
 
@@ -1830,8 +1829,9 @@ network acceleration features for implementing collectives to
 higher-level libraries and applications. It is recommended that
 applications needing collective communication target higher-level
 libraries, such as MPI, instead of using libfabric collective APIs for
-that purpose. --- layout: page title: fi_setup(7) tagline: Libfabric
-Programmer's Guide - Setup --- {% include JB/setup %}
+that purpose.
+
+{% include JB/setup %}
 
 # NAME
 
@@ -3021,8 +3021,9 @@ and the providers. Note that in the release build of libfabric, debug
 output from data path operations (transmit, receive, and completion
 processing) may not be available. The FI_PROVIDER variable can be used
 to enable or disable specific providers. This is useful to ensure that a
-given provider will be used. --- layout: page title: fabric(7) tagline:
-Libfabric Programmer's Manual --- {% include JB/setup %}
+given provider will be used.
+
+{% include JB/setup %}
 
 # NAME
 
@@ -3490,9 +3491,9 @@ Added new fields to the following attributes:
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html), [`fi_av`(3)](fi_av.3.html),
 [`fi_eq`(3)](fi_eq.3.html), [`fi_cq`(3)](fi_cq.3.html),
-[`fi_cntr`(3)](fi_cntr.3.html), [`fi_mr`(3)](fi_mr.3.html) --- layout:
-page title: fi_direct(7) tagline: Libfabric Programmer's Manual --- {%
-include JB/setup %}
+[`fi_cntr`(3)](fi_cntr.3.html), [`fi_mr`(3)](fi_mr.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -3562,9 +3563,9 @@ features.
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
-[`fi_domain`(3)](fi_domain.3.html) --- layout: page title:
-fi_provider(7) tagline: Libfabric Programmer's Manual --- {% include
-JB/setup %}
+[`fi_domain`(3)](fi_domain.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -3737,9 +3738,9 @@ See [`fi_lnx`(7)](fi_lnx.7.html) for more information.
 
 # SEE ALSO
 
-[`fabric`(7)](fabric.7.html) [`fi_provider`(3)](fi_provider.3.html) ---
-layout: page title: fi_atomic(3) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+[`fabric`(7)](fabric.7.html) [`fi_provider`(3)](fi_provider.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -4424,8 +4425,9 @@ further details and message size restrictions.
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html), [`fi_cq`(3)](fi_cq.3.html),
-[`fi_rma`(3)](fi_rma.3.html) --- layout: page title: fi_av(3) tagline:
-Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_rma`(3)](fi_rma.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -5151,9 +5153,9 @@ in `rdma/fi_errno.h`.
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
-[`fi_domain`(3)](fi_domain.3.html), [`fi_eq`(3)](fi_eq.3.html) ---
-layout: page title: fi_av_set(3) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+[`fi_domain`(3)](fi_domain.3.html), [`fi_eq`(3)](fi_eq.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -5414,8 +5416,8 @@ errno is returned. Fabric errno values are defined in `rdma/fi_errno.h`.
 # SEE ALSO
 
 [`fi_av`(3)](fi_av.3.html), [`fi_collective`(3)](fi_collective.3.html)
---- layout: page title: fi_cm(3) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+
+{% include JB/setup %}
 
 # NAME
 
@@ -5687,9 +5689,9 @@ the case of a rejected connection.
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
-[`fi_domain`(3)](fi_domain.3.html), [`fi_eq`(3)](fi_eq.3.html) ---
-layout: page title: fi_cntr(3) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+[`fi_domain`(3)](fi_domain.3.html), [`fi_eq`(3)](fi_eq.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -5985,8 +5987,9 @@ reflected in the observed value of the counter.
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html), [`fi_eq`(3)](fi_eq.3.html),
-[`fi_poll`(3)](fi_poll.3.html) --- layout: page title: fi_collective(3)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_poll`(3)](fi_poll.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -6534,9 +6537,9 @@ atomic and collective operations.
 # SEE ALSO
 
 [`fi_getinfo`(3)](fi_getinfo.3.html), [`fi_av`(3)](fi_av.3.html),
-[`fi_atomic`(3)](fi_atomic.3.html), [`fi_cm`(3)](fi_cm.3.html) ---
-layout: page title: fi_control(3) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+[`fi_atomic`(3)](fi_atomic.3.html), [`fi_cm`(3)](fi_cm.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -6587,8 +6590,9 @@ details.
 
 [`fi_endpoint`(3)](fi_endpoint.3.html), [`fi_cm`(3)](fi_cm.3.html),
 [`fi_cntr`(3)](fi_cntr.3.html), [`fi_cq`(3)](fi_cq.3.html),
-[`fi_eq`(3)](fi_eq.3.html), --- layout: page title: fi_cq(3) tagline:
-Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_eq`(3)](fi_eq.3.html),
+
+{% include JB/setup %}
 
 # NAME
 
@@ -7632,9 +7636,9 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html), [`fi_eq`(3)](fi_eq.3.html),
-[`fi_cntr`(3)](fi_cntr.3.html), [`fi_poll`(3)](fi_poll.3.html) ---
-layout: page title: fi_domain(3) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+[`fi_cntr`(3)](fi_cntr.3.html), [`fi_poll`(3)](fi_poll.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -8507,8 +8511,9 @@ appropriately for the installed provider(s).
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html), [`fi_av`(3)](fi_av.3.html),
 [`fi_eq`(3)](fi_eq.3.html), [`fi_mr`(3)](fi_mr.3.html)
-[`fi_peer`(3)](fi_peer.3.html) --- layout: page title: fi_endpoint(3)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_peer`(3)](fi_peer.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -10254,9 +10259,9 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_domain`(3)](fi_domain.3.html), [`fi_cq`(3)](fi_cq.3.html)
 [`fi_msg`(3)](fi_msg.3.html), [`fi_tagged`(3)](fi_tagged.3.html),
-[`fi_rma`(3)](fi_rma.3.html) [`fi_peer`(3)](fi_peer.3.html) --- layout:
-page title: fi_eq(3) tagline: Libfabric Programmer's Manual --- {%
-include JB/setup %}
+[`fi_rma`(3)](fi_rma.3.html) [`fi_peer`(3)](fi_peer.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -10776,8 +10781,9 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html), [`fi_cntr`(3)](fi_cntr.3.html),
-[`fi_poll`(3)](fi_poll.3.html) --- layout: page title: fi_errno(3)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_poll`(3)](fi_poll.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -10962,10 +10968,9 @@ const char *fi_strerror(int errno);
 
 # SEE ALSO
 
-## [`fabric`(7)](fabric.7.html)
+[`fabric`(7)](fabric.7.html)
 
-layout: page title: fi_fabric(3) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+{% include JB/setup %}
 
 # NAME
 
@@ -11230,9 +11235,9 @@ to fabric errno is returned. Fabric errno values are defined in
 
 [`fabric`(7)](fabric.7.html), [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_domain`(3)](fi_domain.3.html), [`fi_eq`(3)](fi_eq.3.html),
-[`fi_endpoint`(3)](fi_endpoint.3.html) --- layout: page title:
-fi_getinfo(3) tagline: Libfabric Programmer's Manual --- {% include
-JB/setup %}
+[`fi_endpoint`(3)](fi_endpoint.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -11983,8 +11988,9 @@ requirement for serialization.
 
 [`fi_open`(3)](fi_open.3.html), [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html), [`fi_nic`(3)](fi_nic.3.html)
-[`fi_trigger`(3)](fi_trigger.3.html) --- layout: page title: fi_msg(3)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_trigger`(3)](fi_trigger.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -12332,8 +12338,8 @@ execution.
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
-[`fi_domain`(3)](fi_domain.3.html), [`fi_cq`(3)](fi_cq.3.html) ---
-layout: page title: fi_mr(3) tagline: Libfabric Programmer's Manual ---
+[`fi_domain`(3)](fi_domain.3.html), [`fi_cq`(3)](fi_cq.3.html)
+
 {% include JB/setup %}
 
 # NAME
@@ -13461,8 +13467,8 @@ possible through the above mentioned environment variables.
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html), [`fi_rma`(3)](fi_rma.3.html),
-[`fi_msg`(3)](fi_msg.3.html), [`fi_atomic`(3)](fi_atomic.3.html) ---
-layout: page title: fi_nic(3) tagline: Libfabric Programmer's Manual ---
+[`fi_msg`(3)](fi_msg.3.html), [`fi_atomic`(3)](fi_atomic.3.html)
+
 {% include JB/setup %}
 
 # NAME
@@ -13616,10 +13622,9 @@ of calling [`fi_freeinfo`(3)](fi_freeinfo.3.html)
 
 # SEE ALSO
 
-## [`fi_getinfo`(3)](fi_getinfo.3.html)
+[`fi_getinfo`(3)](fi_getinfo.3.html)
 
-layout: page title: fi_peer(3) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+{% include JB/setup %}
 
 # NAME
 
@@ -14743,8 +14748,9 @@ accessing wait objects directly.
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_domain`(3)](fi_domain.3.html), [`fi_cntr`(3)](fi_cntr.3.html),
-[`fi_eq`(3)](fi_eq.3.html) --- layout: page title: fi_provider(3)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_eq`(3)](fi_eq.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -15003,8 +15009,9 @@ to fabric errno is returned. Fabric errno values are defined in
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_getinfo`(3)](fi_getinfo.3.html)
-[`fi_mr`(3)](fi_mr.3.html), --- layout: page title: fi_rma(3) tagline:
-Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_mr`(3)](fi_mr.3.html),
+
+{% include JB/setup %}
 
 # NAME
 
@@ -15288,9 +15295,9 @@ errno is returned. Fabric errno values are defined in `rdma/fi_errno.h`.
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
-[`fi_domain`(3)](fi_domain.3.html), [`fi_cq`(3)](fi_cq.3.html) ---
-layout: page title: fi_tagged(3) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+[`fi_domain`(3)](fi_domain.3.html), [`fi_cq`(3)](fi_cq.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -15671,9 +15678,9 @@ errno values are defined in `fi_errno.h`.
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
-[`fi_domain`(3)](fi_domain.3.html), [`fi_cq`(3)](fi_cq.3.html) ---
-layout: page title: fi_trigger(3) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+[`fi_domain`(3)](fi_domain.3.html), [`fi_cq`(3)](fi_cq.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -15864,9 +15871,9 @@ provider, it will fail the operation with -FI_ENOSYS.
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html), [`fi_mr`(3)](fi_mr.3.html),
-[`fi_alias`(3)](fi_alias.3.html), [`fi_cntr`(3)](fi_cntr.3.html) ---
-layout: page title: fi_version(3) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+[`fi_alias`(3)](fi_alias.3.html), [`fi_cntr`(3)](fi_cntr.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -15902,8 +15909,8 @@ the minor number.
 
 # SEE ALSO
 
-[`fabric`(7)](fabric.7.html), [`fi_getinfo`(3)](fi_getinfo.3.html) ---
-layout: page title: fi_efa(7) tagline: Libfabric Programmer's Manual ---
+[`fabric`(7)](fabric.7.html), [`fi_getinfo`(3)](fi_getinfo.3.html)
+
 {% include JB/setup %}
 
 # NAME
@@ -16318,8 +16325,9 @@ FI_OPT_SHARED_MEMORY_PERMITTED setopt call will fail with -FI_EINVAL.
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
-[`fi_getinfo`(3)](fi_getinfo.3.html) --- layout: page title: fi_hook(7)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_getinfo`(3)](fi_getinfo.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -16478,9 +16486,9 @@ will likely crash.
 
 # SEE ALSO
 
-[`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html) ---
-layout: page title: fi_mrail(7) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+[`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -16583,8 +16591,9 @@ The ofi_mrail provider checks for the following environment variables.
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
-[`fi_getinfo`(3)](fi_getinfo.3.html) --- layout: page title: fi_opx(7)
-tagline: Libfabric Programmer's Manual --- {%include JB/setup %}
+[`fi_getinfo`(3)](fi_getinfo.3.html)
+
+{%include JB/setup %}
 
 # NAME
 
@@ -16896,8 +16905,9 @@ Default is `0:0:0:0:0:0` on OPA100 and `4:4:4:4:0:4` on CN5000.
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
-[`fi_getinfo`(7)](fi_getinfo.7.html), --- layout: page title: fi_psm2(7)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_getinfo`(7)](fi_getinfo.7.html),
+
+{% include JB/setup %}
 
 # NAME
 
@@ -17188,8 +17198,9 @@ Valid parameter names are defined in the header file
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
-[`fi_psm3`(7)](fi_psm3.7.html), --- layout: page title: fi_psm3(7)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_psm3`(7)](fi_psm3.7.html),
+
+{% include JB/setup %}
 
 # NAME
 
@@ -17464,8 +17475,9 @@ at compile time and this runtime option will be disabled.
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
-[`fi_psm2`(7)](fi_psm2.7.html), --- layout: page title: fi_rxd(7)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_psm2`(7)](fi_psm2.7.html),
+
+{% include JB/setup %}
 
 # NAME
 
@@ -17529,8 +17541,9 @@ The *rxd* provider checks for the following environment variables:
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
-[`fi_getinfo`(3)](fi_getinfo.3.html) --- layout: page title: fi_rxm(7)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_getinfo`(3)](fi_getinfo.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -17763,8 +17776,9 @@ for the MSG provider (FI_OFI_RXM_USE_SRX=1) or reduce eager message size
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
-[`fi_getinfo`(3)](fi_getinfo.3.html) --- layout: page title: fi_shm(7)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_getinfo`(3)](fi_getinfo.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -17945,9 +17959,9 @@ The *shm* provider checks for the following environment variables:
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
-[`fi_getinfo`(3)](fi_getinfo.3.html) --- layout: page title:
-fi_sockets(7) tagline: Libfabric Programmer's Manual --- {% include
-JB/setup %}
+[`fi_getinfo`(3)](fi_getinfo.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -18073,8 +18087,9 @@ are *FI_SOCKETS_MAX_CONN_RETRY*, *FI_SOCKETS_DEF_CONN_MAP_SZ*,
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
-[`fi_getinfo`(3)](fi_getinfo.3.html) --- layout: page title: fi_tcp(7)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_getinfo`(3)](fi_getinfo.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -18178,8 +18193,9 @@ This will provide the best performance.
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
-[`fi_getinfo`(3)](fi_getinfo.3.html) --- layout: page title: fi_ucx(7)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_getinfo`(3)](fi_getinfo.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -18235,8 +18251,8 @@ Threading
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
---- layout: page title: fi_udp(7) tagline: Libfabric Programmer's Manual
---- {% include JB/setup %}
+
+{% include JB/setup %}
 
 # NAME
 
@@ -18292,8 +18308,9 @@ No runtime parameters are currently defined.
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
-[`fi_getinfo`(3)](fi_getinfo.3.html) --- layout: page title: fi_usnic(7)
-tagline: Libfabric Programmer's Manual --- {% include JB/setup %}
+[`fi_getinfo`(3)](fi_getinfo.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -18622,9 +18639,9 @@ one to use based on the version passed to `fi_getinfo`:
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_open_ops`(3)](fi_open_ops.3.html),
-[`fi_provider`(7)](fi_provider.7.html), --- layout: page title:
-fi_verbs(7) tagline: Libfabric Programmer's Manual --- {% include
-JB/setup %}
+[`fi_provider`(7)](fi_provider.7.html),
+
+{% include JB/setup %}
 
 # NAME
 
@@ -18904,8 +18921,8 @@ the CQ. CQ overruns can make the MSG endpoints unusable.
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
---- layout: page title: fi_info(1) tagline: Libfabric Programmer's
-Manual --- {% include JB/setup %}
+
+{% include JB/setup %}
 
 # NAME
 
@@ -19165,9 +19182,9 @@ option.
 # SEE ALSO
 
 [`fi_getinfo(3)`](fi_getinfo.3.html),
-[`fi_endpoint(3)`](fi_endpoint.3.html) --- layout: page title:
-fi_pingpong(1) tagline: Libfabric Programmer's Manual --- {% include
-JB/setup %}
+[`fi_endpoint(3)`](fi_endpoint.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
@@ -19341,9 +19358,9 @@ the displayed statistics at the end are :
 # SEE ALSO
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
-[`fi_endpoint`(3)](fi_endpoint.3.html) [`fabric`(7)](fabric.7.html), ---
-layout: page title: fi_strerror(1) tagline: Libfabric Programmer's
-Manual --- {% include JB/setup %}
+[`fi_endpoint`(3)](fi_endpoint.3.html) [`fabric`(7)](fabric.7.html),
+
+{% include JB/setup %}
 
 # NAME
 
@@ -19365,9 +19382,9 @@ This is primarily a convenience tool for developers.
 
 # SEE ALSO
 
-[`fabric`(7)](fabric.7.html) [`fi_errno`(3)](fi_errno.3.html) ---
-layout: page title: fabtests(7) tagline: Fabtests Programmer's Manual
---- {% include JB/setup %}
+[`fabric`(7)](fabric.7.html) [`fi_errno`(3)](fi_errno.3.html)
+
+{% include JB/setup %}
 
 # NAME
 
