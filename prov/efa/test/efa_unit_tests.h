@@ -261,6 +261,9 @@ void test_efa_domain_info_type_efa_direct();
 void test_efa_domain_info_type_efa_rdm();
 void test_efa_domain_open_ops_wrong_name();
 void test_efa_domain_open_ops_mr_query();
+void test_efa_domain_rdm_attr_mr_allocated();
+void test_efa_domain_dgram_attr_mr_allocated();
+void test_efa_domain_direct_attr_mr_allocated();
 /* end efa_unit_test_domain.c */
 
 void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
