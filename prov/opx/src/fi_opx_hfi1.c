@@ -4045,7 +4045,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 			       const uint64_t dest_rx, const uint64_t caps, const enum ofi_reliability_kind reliability,
 			       const uint64_t do_cq_completion, const enum fi_hmem_iface hmem_iface,
 			       const uint64_t hmem_device, const uint64_t hmem_handle,
-			       const enum opx_hfi1_type hfi1_type)
+			       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	// We should already have grabbed the lock prior to calling this function
 	assert(!lock_required);
@@ -4411,7 +4411,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 			     const uint64_t tx_op_flags, const uint64_t dest_rx, const uint64_t caps,
 			     const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 			     const enum fi_hmem_iface src_iface, const uint64_t src_device_id,
-			     const uint64_t src_handle, const enum opx_hfi1_type hfi1_type)
+			     const uint64_t src_handle, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	// We should already have grabbed the lock prior to calling this function
 	assert(!lock_required);
@@ -4809,7 +4809,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				 const uint64_t caps, const enum ofi_reliability_kind reliability,
 				 const uint64_t do_cq_completion, const enum fi_hmem_iface src_iface,
 				 const uint64_t src_device_id, const uint64_t src_handle,
-				 const enum opx_hfi1_type hfi1_type)
+				 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	// We should already have grabbed the lock prior to calling this function
 	assert(!lock_required);

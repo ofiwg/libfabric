@@ -615,7 +615,8 @@ static int fi_opx_close_ep(fid_t fid)
 				fi_reliability_service_ping_remote(&opx_ep->ep_fid, service);
 				service->usec_next = fi_opx_timer_next_event_usec(timer, timestamp, service->usec_max);
 			}
-			fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, OPX_HFI1_TYPE);
+			fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, OPX_HFI1_TYPE,
+					  OPX_IS_CTX_SHARING_ENABLED);
 			compare = fi_opx_timer_now(timestamp, timer);
 		}
 	}
@@ -3192,27 +3193,53 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_op
 	return rc;
 }
 
-FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_WFR)
-FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_JKR_9B)
-FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_JKR)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_ON)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_JKR_9B, OPX_CTX_SHARING_ON)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_ON)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_JKR_9B, OPX_CTX_SHARING_OFF)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)
 
 ssize_t fi_opx_send_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t len, void *desc, fi_addr_t dest_addr,
 				  void *context)
 {
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
-	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_WFR)(ep, buf, len, desc, dest_addr, context);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR_9B)(ep, buf, len, desc, dest_addr, context);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR)(ep, buf, len, desc, dest_addr, context);
+	if (OPX_IS_CTX_SHARING_ENABLED) {
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(ep, buf, len, desc,
+												  dest_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B, OPX_CTX_SHARING_ON)(
+				ep, buf, len, desc, dest_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(ep, buf, len, desc,
+												  dest_addr, context);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	} else {
-		/* should never get here */
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
-		abort();
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(ep, buf, len, desc,
+												   dest_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B, OPX_CTX_SHARING_OFF)(
+				ep, buf, len, desc, dest_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(ep, buf, len, desc,
+												   dest_addr, context);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	}
 	return (ssize_t) -FI_EPERM;
 }
@@ -3221,19 +3248,42 @@ ssize_t fi_opx_recv_FABRIC_DIRECT(struct fid_ep *ep, void *buf, size_t len, void
 				  void *context)
 {
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
-	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_WFR)(ep, buf, len, desc, src_addr, context);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR_9B)(ep, buf, len, desc, src_addr, context);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR)(ep, buf, len, desc, src_addr, context);
+	if (OPX_IS_CTX_SHARING_ENABLED) {
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(ep, buf, len, desc,
+												  src_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B, OPX_CTX_SHARING_ON)(ep, buf, len, desc,
+												     src_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(ep, buf, len, desc,
+												  src_addr, context);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	} else {
-		/* should never get here */
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
-		abort();
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(ep, buf, len, desc,
+												   src_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B, OPX_CTX_SHARING_OFF)(
+				ep, buf, len, desc, src_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(ep, buf, len, desc,
+												   src_addr, context);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	}
 	return (ssize_t) -FI_EPERM;
 }
@@ -3241,19 +3291,42 @@ ssize_t fi_opx_recv_FABRIC_DIRECT(struct fid_ep *ep, void *buf, size_t len, void
 ssize_t fi_opx_inject_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr)
 {
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
-	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_WFR)(ep, buf, len, dest_addr);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR_9B)(ep, buf, len, dest_addr);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR)(ep, buf, len, dest_addr);
+	if (OPX_IS_CTX_SHARING_ENABLED) {
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_WFR,
+								OPX_CTX_SHARING_ON)(ep, buf, len, dest_addr);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B,
+								OPX_CTX_SHARING_ON)(ep, buf, len, dest_addr);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR,
+								OPX_CTX_SHARING_ON)(ep, buf, len, dest_addr);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	} else {
-		/* should never get here */
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
-		abort();
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_WFR,
+								OPX_CTX_SHARING_OFF)(ep, buf, len, dest_addr);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B,
+								OPX_CTX_SHARING_OFF)(ep, buf, len, dest_addr);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR,
+								OPX_CTX_SHARING_OFF)(ep, buf, len, dest_addr);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	}
 	return (ssize_t) -FI_EPERM;
 }
@@ -3261,19 +3334,36 @@ ssize_t fi_opx_inject_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t l
 ssize_t fi_opx_recvmsg_FABRIC_DIRECT(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
-	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_WFR)(ep, msg, flags);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR_9B)(ep, msg, flags);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR)(ep, msg, flags);
+	if (OPX_IS_CTX_SHARING_ENABLED) {
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(ep, msg, flags);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B, OPX_CTX_SHARING_ON)(ep, msg, flags);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(ep, msg, flags);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	} else {
-		/* should never get here */
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
-		abort();
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(ep, msg, flags);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR_9B, OPX_CTX_SHARING_OFF)(ep, msg, flags);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
+								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(ep, msg, flags);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	}
 	return (ssize_t) -FI_EPERM;
 }
@@ -3282,19 +3372,42 @@ ssize_t fi_opx_senddata_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t
 				      fi_addr_t dest_addr, void *context)
 {
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
-	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_WFR)(ep, buf, len, desc, data, dest_addr, context);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR_9B)(ep, buf, len, desc, data, dest_addr, context);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR)(ep, buf, len, desc, data, dest_addr, context);
+	if (OPX_IS_CTX_SHARING_ENABLED) {
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(
+				ep, buf, len, desc, data, dest_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_JKR_9B, OPX_CTX_SHARING_ON)(
+				ep, buf, len, desc, data, dest_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(
+				ep, buf, len, desc, data, dest_addr, context);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	} else {
-		/* should never get here */
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
-		abort();
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(
+				ep, buf, len, desc, data, dest_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_JKR_9B, OPX_CTX_SHARING_OFF)(
+				ep, buf, len, desc, data, dest_addr, context);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(
+				ep, buf, len, desc, data, dest_addr, context);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	}
 	return (ssize_t) -FI_EPERM;
 }
@@ -3303,19 +3416,42 @@ ssize_t fi_opx_injectdata_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size
 					fi_addr_t dest_addr)
 {
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
-	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_WFR)(ep, buf, len, data, dest_addr);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR_9B)(ep, buf, len, data, dest_addr);
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-		return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY,
-							OPX_HFI1_JKR)(ep, buf, len, data, dest_addr);
+	if (OPX_IS_CTX_SHARING_ENABLED) {
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_WFR,
+								OPX_CTX_SHARING_ON)(ep, buf, len, data, dest_addr);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_JKR_9B,
+								OPX_CTX_SHARING_ON)(ep, buf, len, data, dest_addr);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_JKR,
+								OPX_CTX_SHARING_ON)(ep, buf, len, data, dest_addr);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	} else {
-		/* should never get here */
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
-		abort();
+		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_WFR,
+								OPX_CTX_SHARING_OFF)(ep, buf, len, data, dest_addr);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_JKR_9B,
+								OPX_CTX_SHARING_OFF)(ep, buf, len, data, dest_addr);
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_AV, OPX_EP_CAPS,
+								OPX_RELIABILITY, OPX_HFI1_JKR,
+								OPX_CTX_SHARING_OFF)(ep, buf, len, data, dest_addr);
+		} else {
+			/* should never get here */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
+			abort();
+		}
 	}
 	return (ssize_t) -FI_EPERM;
 }
