@@ -39,7 +39,7 @@ env:
     --enable-verbs=$PWD/rdma-core/build
     --enable-lpp
   RDMA_CORE_PATH: '$PWD/rdma-core/build'
-  RDMA_CORE_VERSION: v34.1
+  RDMA_CORE_VERSION: v35.0
 jobs:
   linux:
     runs-on: '${{ matrix.os }}'
