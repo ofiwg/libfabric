@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2025\-01\-06" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2025\-04\-02" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -140,6 +140,7 @@ if these operations are assisted by hardware support (return value is
 false).
 .TP
 \f[I]FI_OPT_EFA_USE_DEVICE_RDMA - bool\f[R]
+This option only applies to the fi_setopt() call.
 Only available if the application selects a libfabric API version >=
 1.18.
 This option allows an application to change libfabric\[cq]s behavior
@@ -160,6 +161,7 @@ For API<1.18, RDMA is enabled by default only on certain newer hardware
 revisions.
 .TP
 \f[I]FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES - bool\f[R]
+This option only applies to the fi_setopt() call.
 It is used to force the endpoint to use in-order send/recv operation for
 each 128 bytes aligned block.
 Enabling the option will guarantee data inside each 128 bytes aligned
@@ -169,6 +171,7 @@ If endpoint is not able to support this feature, it will return
 -FI_EOPNOTSUPP for the call to fi_setopt().
 .TP
 \f[I]FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES - bool\f[R]
+This option only applies to the fi_setopt() call.
 It is used to set the endpoint to use in-order RDMA write operation for
 each 128 bytes aligned block.
 Enabling the option will guarantee data inside each 128 bytes aligned
@@ -176,6 +179,17 @@ block being written in order, it will also guarantee data to be
 delivered to the target buffer only once.
 If endpoint is not able to support this feature, it will return
 -FI_EOPNOTSUPP for the call to fi_setopt().
+.TP
+\f[I]FI_OPT_EFA_HOMOGENEOUS_PEERS - bool\f[R]
+This option only applies to the fi_setopt() call for RDM endpoints on
+efa fabric.
+RDM endpoints on efa-direct fabric are unaffected by this option.
+When set to true, it indicates all peers are homogeneous, meaning they
+run on the same platform, use the same software versions, and share
+identical capabilities.
+It accelerates the initial communication setup as interoperability
+between peers is guaranteed.
+The default value is false.
 .SH PROVIDER SPECIFIC DOMAIN OPS
 .PP
 The efa provider exports extensions for operations that are not provided
