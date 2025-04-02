@@ -63,7 +63,7 @@ xnet_recv_cm_msg(SOCKET sock, struct xnet_cm_msg *msg)
 			"Failed to read cm header, ret: %zd, sockerr: %d\n",
 			ret, ofi_sockerr());
 		msg->hdr.seg_size = 0;
-		return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
+		return ret >= 0 ? -FI_EIO : -ofi_sockerr();
 	}
 
 	return 0;
@@ -105,7 +105,7 @@ xnet_handle_cm_msg(SOCKET sock, struct xnet_cm_msg *msg, uint8_t exp_msg)
 			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 				"Failed to read cm data, ret: %zd, sockerr: %d\n",
 				ret, ofi_sockerr());
-			ret = ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
+			ret = ret >= 0 ? -FI_EIO : -ofi_sockerr();
 			goto err;
 		}
 	}
