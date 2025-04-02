@@ -6,7 +6,7 @@ on:
 
 permissions:
   contents: read
-  
+
 env:
   APT_PACKAGES: >-
     abi-compliance-checker
@@ -43,7 +43,7 @@ env:
     --enable-sm2
     --enable-lpp
   RDMA_CORE_PATH: 'rdma-core/build'
-  RDMA_CORE_VERSION: v34.1
+  RDMA_CORE_VERSION: v35.0
 jobs:
   coverity:
     runs-on: ubuntu-20.04
