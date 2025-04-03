@@ -123,6 +123,15 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   OPX fabric.
   Default setting is 500.
 
+*FI_OPX_RELIABILITY_SERVICE_MAX_OUTSTANDING_BYTES*
+: Integer. This setting controls the maximum number of bytes allowed to be
+  in-flight (sent but un-ACK'd by receiver) per reliability flow (one-way
+  communication between two endpoints).
+
+  Valid values are in the range of 8192-150,994,944 (8KB-144MB), inclusive.
+
+  Default setting is 7,340,032 (7MB).
+
 *FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE*
 : Integer. This setting controls how frequently a receiving rank will send ACKs
   for packets it has received without being prompted through a PING request.
@@ -222,6 +231,22 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 : Integer. The minimum length in bytes where SDMA will be used.
   For messages smaller than this threshold, the send will be completed using PIO.
   Value must be between 64 and 2147483646. Defaults to 16385.
+
+*FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE*
+: Integer. The maximum number of times writev will be called during a single poll cycle.
+  Value must be between 1 and 1024. Defaults to 1.
+
+*FI_OPX_SDMA_MAX_IOVS_PER_WRITEV*
+: Integer. The maximum number of IOVs passed to each writev call.
+  Value must be between 3 and 128. Defaults to 64.
+
+*FI_OPX_SDMA_MAX_PACKETS*
+: Integer. The maximum number of packets transmitted per SDMA request when expected receive (TID) is NOT being used.
+  Value must be between 1 and 128. Defaults to 32.
+
+*FI_OPX_SDMA_MAX_PACKETS_TID*
+: Integer. The maximum number of packets transmitted per SDMA request when expected receive (TID) is being used.
+  Value must be between 1 and 512. Defaults to 64.
 
 *FI_OPX_TID_MIN_PAYLOAD_BYTES*
 : Integer. The minimum length in bytes where TID (Expected Receive) will be used.

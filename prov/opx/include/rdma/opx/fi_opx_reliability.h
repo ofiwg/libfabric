@@ -41,7 +41,6 @@
 #include <ofi_mem.h>
 #include "uthash.h"
 
-#include "rdma/opx/fi_opx_atomic_fifo.h"
 #include "rdma/opx/fi_opx_timer.h"
 
 #include "rdma/opx/opx_tracer.h"
@@ -69,6 +68,34 @@ enum ofi_reliability_app_kind { OFI_RELIABILITY_APP_KIND_MPI = 0, OFI_RELIABILIT
 #endif
 
 #define PENDING_RX_RELIABLITY_COUNT_MAX (1024) // Max depth of the pending Rx reliablity pool
+
+/* Eager buffer size is 32*262144
+ * We'll do 28 * 262144 (i.e. 7MB) as a starting point
+ * Empirically this survives a message rate test
+ * with no packet loss with a single pair
+ * in biband
+ * TODO:  fetch this from the context info
+ * TODO:  This buffer should be dynamically adjusted
+ * back when we get a nack, and dyamically adjusted
+ * forward when we have nothing outstanding as
+ * a starting point for per destination windowing
+ * max outstanding could be adjusted to zero until
+ * all the packets are replayed, then this can
+ * be adjusted back to it's base value.
+ * Either way, there should be knobs and controls
+ * to make this dynamic when packets are lost
+ */
+#ifndef OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_DEFAULT
+#define OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_DEFAULT (7u << 20)
+#endif
+
+/*
+ * Absolute max outstanding =
+     (16K IOV Replays + 2K non-IOV Replays) * (8K MAX_MTU) = 144MB
+ */
+#ifndef OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_MAX
+#define OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_MAX (144u << 20)
+#endif
 
 struct fi_opx_completion_counter {
 	struct fi_opx_completion_counter *next;
@@ -122,27 +149,27 @@ union fi_opx_reliability_deferred_work {
 #define OPX_RELIABILITY_MAX_CONGESTED_PINGS_MAX	      (65535)
 #define OPX_RELIABILITY_MAX_CONGESTED_PINGS_DEFAULT   (4)
 struct fi_opx_reliability_service {
-	struct fi_opx_atomic_fifo fifo; /* 27 qws = 216 bytes */
-	uint64_t		  usec_next;
-	uint32_t		  usec_max;
-	uint32_t		  preemptive_ack_rate_mask;
+	uint64_t max_outstanding_bytes;
+	uint64_t usec_next;
+	uint32_t usec_max;
+	uint32_t preemptive_ack_rate_mask;
 
-	// ==== 232 bytes here, 24 bytes left in cacheline ======
 	struct {
 		union fi_opx_timer_stamp timestamp; /*  2 qws =  16 bytes */
 		union fi_opx_timer_state timer;	    /*  5 bytes           */
 		uint8_t			 unused_padding[3];
 
-		/* == CACHE LINE == */
 		RbtHandle flow; /*  1 qw  =   8 bytes */
 		uint64_t  ping_start_key;
-		uint16_t  max_uncongested_pings;
-		uint16_t  max_congested_pings;
-		uint8_t	  congested_flag;
-		uint8_t	  unused_padding2[3];
+
+		/* == CACHE LINE == */
+		uint16_t max_uncongested_pings;
+		uint16_t max_congested_pings;
+		uint8_t	 congested_flag;
+		uint8_t	 unused_padding2[3];
 
 		struct {
-			uint64_t		     unused_cacheline_1;
+			uint64_t		     unused_cacheline_1[3];
 			union fi_opx_hfi1_pio_state *pio_state;
 			volatile uint64_t	    *pio_scb_sop_first;
 			volatile uint64_t	    *pio_credits_addr;
@@ -157,7 +184,6 @@ struct fi_opx_reliability_service {
 			struct fi_opx_hfi1_txe_scb_16B nack_model_16B;
 		} hfi1;
 	} tx __attribute__((__packed__));
-	;
 
 	/* == CACHE LINE == */
 
@@ -203,8 +229,6 @@ struct fi_opx_reliability_service {
 	int			  is_backoff_enabled;
 	enum ofi_reliability_kind reliability_kind; /* 4 bytes */
 	uint16_t		  unused[3];
-	uint8_t			  fifo_max;
-	uint8_t			  hfi1_max;
 
 } __attribute__((__aligned__(64))) __attribute__((__packed__));
 
@@ -543,35 +567,34 @@ union fi_opx_reliability_tx_psn {
 #define PSN_AGE_LIMIT	0x0000000000F00000ull
 
 struct fi_opx_reliability_client_state {
-	union {
-		enum ofi_reliability_kind kind; /* runtime check for fi_cq_read(), etc */
-		uint64_t		  pad;
-	};
-	// 8 bytes
-	struct fi_opx_atomic_fifo_producer fifo; /* 6 qws = 48 bytes; only for OFI_RELIABILITY_KIND_OFFLOAD */
-	// 56 bytes
+	/* == CACHE LINE 0 == */
+	enum ofi_reliability_kind kind; /* runtime check for fi_cq_read(), etc */
+	uint32_t		  pad;
+
 	RbtHandle tx_flow_rbtree;
-	// 64 bytes
 	RbtHandle rx_flow_rbtree;
-	// 72 bytes
+
 	struct ofi_bufpool *replay_pool;     // for main data path
 	struct ofi_bufpool *replay_iov_pool; // for main data path
-	// 88 bytes
+
 	struct fi_opx_reliability_service *service;
 	void (*process_fn)(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr, const uint8_t *const payload);
-	// 104 bytes
+
 	opx_lid_t lid;
-	uint8_t	  unused1;
 	uint8_t	  rx;
-	// 110 bytes
+	uint8_t	  unused1[3];
+
+	/* == CACHE LINE 1 == */
 	/* -- not critical; only for debug, init/fini, etc. -- */
 	uint16_t		  drop_count;
 	uint16_t		  drop_mask;
 	enum ofi_reliability_kind reliability_kind;
-	// 118 bytes
+
 	RbtHandle flow_rbtree_resynch;
-	// 126 bytes
+	// 80 bytes
 } __attribute__((__packed__)) __attribute__((aligned(64)));
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_client_state, drop_count) == FI_OPX_CACHE_LINE_SIZE,
+			"Reliability state->drop_count should start on cacheline 1!");
 
 void fi_opx_reliability_client_init(struct fi_opx_reliability_client_state *state,
 				    struct fi_opx_reliability_service *service, const uint8_t rx,
@@ -861,27 +884,6 @@ void fi_opx_hfi1_rx_reliability_ack_resynch(struct fid_ep *ep, struct fi_opx_rel
 					    const union opx_hfi1_packet_hdr *const hdr);
 
 __OPX_FORCE_INLINE__
-int32_t fi_opx_reliability_tx_max_outstanding()
-{
-	// Eager buffer size is 32*262144
-	// We'll do 28 * 262144 as a starting point
-	// Empirically this survives a message rate test
-	// with no packet loss with a single pair
-	// in biband
-	// TODO:  fetch this from the context info
-	// TODO:  This buffer should be dynamically adjusted
-	// back when we get a nack, and dyamically adjusted
-	// forward when we have nothing outstanding as
-	// a starting point for per destination windowing
-	// max outstanding could be adjusted to zero until
-	// all the packets are replayed, then this can
-	// be adjusted back to it's base value.
-	// Either way, there should be knobs and controls
-	// to make this dynamic when packets are lost
-	return 28 * 262144;
-}
-
-__OPX_FORCE_INLINE__
 int32_t fi_opx_reliability_tx_max_nacks()
 {
 	// TODO, make this tunable.
@@ -899,8 +901,7 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 					     uint32_t bytes_per_packet)
 {
 	OPX_TRACER_TRACE_SDMA(OPX_TRACER_BEGIN, "GET_PSNS");
-	assert(psns_to_get && psns_to_get <= 128);
-
+	assert(psns_to_get && psns_to_get <= MAX(OPX_HFI1_SDMA_MAX_PACKETS_TID, OPX_HFI1_SDMA_MAX_PACKETS));
 	union fi_opx_reliability_service_flow_key key = {
 		.slid	= (uint32_t) state->lid,
 		.src_rx = (uint32_t) state->rx,
@@ -937,7 +938,7 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_EAGAIN_SDMA_PSNS_MAX_NACKS, "GET_PSNS");
 		return -1;
 	}
-	uint32_t max_outstanding = fi_opx_reliability_tx_max_outstanding();
+	uint32_t max_outstanding = state->service->max_outstanding_bytes;
 	if (OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > max_outstanding)) {
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
@@ -956,7 +957,7 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
 				       const opx_lid_t lid, const uint64_t rx,
 				       union fi_opx_reliability_tx_psn **psn_ptr, uint32_t psns_to_get)
 {
-	assert(psns_to_get && psns_to_get <= 128);
+	assert(psns_to_get && psns_to_get <= MAX(OPX_HFI1_SDMA_MAX_PACKETS_TID, OPX_HFI1_SDMA_MAX_PACKETS));
 	uint32_t psn = 0;
 
 	union fi_opx_reliability_service_flow_key key = {
@@ -992,7 +993,7 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
 			fi_opx_reliability_inc_throttle_nacks(ep);
 			return -1;
 		}
-		if (OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > fi_opx_reliability_tx_max_outstanding())) {
+		if (OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > state->service->max_outstanding_bytes)) {
 			(*psn_ptr)->psn.throttle = 1;
 			fi_opx_reliability_inc_throttle_count(ep);
 			fi_opx_reliability_inc_throttle_maxo(ep);
@@ -1076,7 +1077,7 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 		fi_opx_reliability_inc_throttle_nacks(ep);
 		return -1;
 	}
-	if (OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > fi_opx_reliability_tx_max_outstanding())) {
+	if (OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > state->service->max_outstanding_bytes)) {
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_maxo(ep);

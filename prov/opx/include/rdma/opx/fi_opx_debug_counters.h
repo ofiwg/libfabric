@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -53,7 +53,7 @@
 #define OPX_DEBUG_COUNTERS_RELIABILITY_PING
 #endif
 
-#define OPX_DEBUG_COUNTERS_WRITEV_MAX (65)
+#define OPX_DEBUG_COUNTERS_WRITEV_MAX (129)
 
 static inline void fi_opx_debug_counters_print_counter(pid_t pid, char *name, uint64_t value)
 {

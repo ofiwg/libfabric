@@ -39,25 +39,41 @@
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_hfi1_transport.h"
 
-#define OPX_SDMA_FILL_INDEX_INVALID	(0xFFFF)
-#define OPX_SDMA_REQUEST_IOVS		(FI_OPX_HFI1_SDMA_WE_IOVS + 1)
-#define OPX_SDMA_TID_DATA_IOV_COUNT	(2)
-#define OPX_SDMA_TID_IOV_COUNT		(OPX_SDMA_TID_DATA_IOV_COUNT + 1)
-#define OPX_SDMA_NONTID_DATA_IOV_COUNT	(1)
-#define OPX_SDMA_NONTID_IOV_COUNT	(OPX_SDMA_NONTID_DATA_IOV_COUNT + 1)
-#define OPX_SDMA_REPLAY_DATA_IOV_COUNT	(1)
-#define OPX_SDMA_REPLAY_IOV_COUNT	(OPX_SDMA_REPLAY_DATA_IOV_COUNT + 1)
-#define OPX_SDMA_HFI_MAX_IOVS_PER_WRITE (64)
+#define OPX_SDMA_FILL_INDEX_INVALID	    (0xFFFF)
+#define OPX_SDMA_REQUEST_IOVS		    (FI_OPX_HFI1_SDMA_WE_IOVS + 1)
+#define OPX_SDMA_TID_DATA_IOV_COUNT	    (2)
+#define OPX_SDMA_TID_IOV_COUNT		    (OPX_SDMA_TID_DATA_IOV_COUNT + 1)
+#define OPX_SDMA_NONTID_DATA_IOV_COUNT	    (1)
+#define OPX_SDMA_NONTID_IOV_COUNT	    (OPX_SDMA_NONTID_DATA_IOV_COUNT + 1)
+#define OPX_SDMA_REPLAY_DATA_IOV_COUNT	    (1)
+#define OPX_SDMA_REPLAY_IOV_COUNT	    (OPX_SDMA_REPLAY_DATA_IOV_COUNT + 1)
+#define OPX_SDMA_HFI_MAX_IOVS_PER_WRITE	    (128)
+#define OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE (64)
 
-OPX_COMPILE_TIME_ASSERT((OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1) == OPX_DEBUG_COUNTERS_WRITEV_MAX,
+OPX_COMPILE_TIME_ASSERT((OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1) <= OPX_DEBUG_COUNTERS_WRITEV_MAX,
 			"OPX_DEBUG_COUNTERS_WRITEV_MAX should be OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1!\n");
+OPX_COMPILE_TIME_ASSERT((OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE + 1) <= OPX_SDMA_HFI_MAX_IOVS_PER_WRITE,
+			"OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE should be <= OPX_SDMA_HFI_MAX_IOVS_PER_WRITE!\n");
 
 // Driver limit of the number of TIDs that can be used in a single SDMA request
 #define OPX_SDMA_MAX_TIDS_PER_REQUEST (1024)
 
-#ifndef OPX_SDMA_MAX_WRITEVS_PER_CYCLE
-#define OPX_SDMA_MAX_WRITEVS_PER_CYCLE (1)
+#ifndef OPX_SDMA_MAX_PKTS_BOUNCE_BUF
+#define OPX_SDMA_MAX_PKTS_BOUNCE_BUF (32)
 #endif
+
+#ifndef OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE
+#define OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE (1)
+#endif
+
+#ifndef OPX_SDMA_MAX_WRITEVS_PER_CYCLE
+#define OPX_SDMA_MAX_WRITEVS_PER_CYCLE (1024)
+#endif
+
+/*
+ * Length of bounce buffer in a single SDMA Work Entry.
+ */
+#define FI_OPX_HFI1_SDMA_WE_BUF_LEN (OPX_SDMA_MAX_PKTS_BOUNCE_BUF * FI_OPX_HFI1_PACKET_MTU)
 
 #define OPX_SDMA_MEMINFO_SIZE	  (136)
 #define OPX_SDMA_MEMINFO_SIZE_QWS (OPX_SDMA_MEMINFO_SIZE >> 3)
@@ -164,7 +180,7 @@ struct fi_opx_hfi1_sdma_work_entry {
 	uint64_t unused_qw_padding;
 
 	/* ==== CACHELINE 1 ==== */
-	struct fi_opx_hfi1_sdma_packet packets[FI_OPX_HFI1_SDMA_MAX_PACKETS_TID];
+	struct fi_opx_hfi1_sdma_packet packets[OPX_SDMA_MAX_PKTS_BOUNCE_BUF];
 
 	struct {
 		struct fi_opx_completion_counter cc;
@@ -388,7 +404,7 @@ void fi_opx_hfi1_sdma_add_packet(struct fi_opx_hfi1_sdma_work_entry *we, struct 
 				 uint64_t payload_bytes)
 {
 	assert(payload_bytes <= FI_OPX_HFI1_PACKET_MTU);
-	assert(we->num_packets < FI_OPX_HFI1_SDMA_MAX_PACKETS_TID);
+	assert(we->num_packets < OPX_HFI1_SDMA_MAX_PACKETS_TID);
 
 	we->packets[we->num_packets].replay = replay;
 	we->packets[we->num_packets].length = payload_bytes;

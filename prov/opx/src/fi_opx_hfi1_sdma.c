@@ -355,7 +355,7 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 
 	struct iovec iovecs[OPX_SDMA_HFI_MAX_IOVS_PER_WRITE];
 	int	     iovs_used	= 0;
-	int	     iovs_free	= OPX_SDMA_HFI_MAX_IOVS_PER_WRITE;
+	int	     iovs_free	= opx_ep->tx->sdma_max_iovs_per_writev;
 	uint16_t     avail	= opx_ep->hfi->info.sdma.available_counter;
 	uint16_t     fill_index = opx_ep->hfi->info.sdma.fill_index;
 
@@ -381,7 +381,7 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 				return;
 			}
 			iovs_used = 0;
-			iovs_free = OPX_SDMA_HFI_MAX_IOVS_PER_WRITE;
+			iovs_free = opx_ep->tx->sdma_max_iovs_per_writev;
 		}
 
 		struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&request->header_vec, request->set_meminfo);

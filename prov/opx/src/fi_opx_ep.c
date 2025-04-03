@@ -1153,6 +1153,76 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 				   opx_ep->tx->sdma_min_payload_bytes);
 	}
 
+	int l_sdma_max_writevs_per_cycle;
+	rc = fi_param_get_int(fi_opx_global.prov, "sdma_max_writevs_per_cycle", &l_sdma_max_writevs_per_cycle);
+	if (rc != FI_SUCCESS) {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+				   "FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE not set. Using default setting of %d\n",
+				   OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE);
+		opx_ep->tx->sdma_max_writevs_per_cycle = OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE;
+	} else if (l_sdma_max_writevs_per_cycle < 1 || l_sdma_max_writevs_per_cycle > OPX_SDMA_MAX_WRITEVS_PER_CYCLE) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
+			1, OPX_SDMA_MAX_WRITEVS_PER_CYCLE, OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE);
+		opx_ep->tx->sdma_max_writevs_per_cycle = OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE;
+	} else {
+		opx_ep->tx->sdma_max_writevs_per_cycle = l_sdma_max_writevs_per_cycle;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE was specified. Set to %d\n",
+				   opx_ep->tx->sdma_max_writevs_per_cycle);
+	}
+
+	int l_sdma_max_iovs_per_writev;
+	rc = fi_param_get_int(fi_opx_global.prov, "sdma_max_iovs_per_writev", &l_sdma_max_iovs_per_writev);
+	if (rc != FI_SUCCESS) {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+				   "FI_OPX_SDMA_MAX_IOVS_PER_WRITEV not set. Using default setting of %d\n",
+				   OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE);
+		opx_ep->tx->sdma_max_iovs_per_writev = OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE;
+	} else if (l_sdma_max_iovs_per_writev < 3 || l_sdma_max_iovs_per_writev > OPX_SDMA_HFI_MAX_IOVS_PER_WRITE) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_SDMA_MAX_IOVS_PER_WRITEV was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
+			3, OPX_SDMA_HFI_MAX_IOVS_PER_WRITE, OPX_SDMA_HFI_MAX_IOVS_PER_WRITE);
+		opx_ep->tx->sdma_max_iovs_per_writev = OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE;
+	} else {
+		opx_ep->tx->sdma_max_iovs_per_writev = l_sdma_max_iovs_per_writev;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_IOVS_PER_WRITEV was specified. Set to %d\n",
+				   opx_ep->tx->sdma_max_iovs_per_writev);
+	}
+
+	int l_sdma_max_pkts_tid;
+	rc = fi_param_get_int(fi_opx_global.prov, "sdma_max_pkts_tid", &l_sdma_max_pkts_tid);
+	if (rc != FI_SUCCESS) {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PKTS_TID not set. Using default setting of %d\n",
+				   OPX_HFI1_SDMA_DEFAULT_PACKETS_TID);
+		opx_ep->tx->sdma_max_pkts_tid = OPX_HFI1_SDMA_DEFAULT_PACKETS_TID;
+	} else if (l_sdma_max_pkts_tid < 1 || l_sdma_max_pkts_tid > OPX_HFI1_SDMA_MAX_PACKETS_TID) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_SDMA_MAX_PKTS_TID was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
+			1, OPX_HFI1_SDMA_MAX_PACKETS_TID, OPX_HFI1_SDMA_DEFAULT_PACKETS_TID);
+		opx_ep->tx->sdma_max_pkts_tid = OPX_HFI1_SDMA_DEFAULT_PACKETS_TID;
+	} else {
+		opx_ep->tx->sdma_max_pkts_tid = l_sdma_max_pkts_tid;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PACKETS_TID was specified. Set to %d\n",
+				   opx_ep->tx->sdma_max_pkts_tid);
+	}
+
+	int l_sdma_max_pkts;
+	rc = fi_param_get_int(fi_opx_global.prov, "sdma_max_pkts", &l_sdma_max_pkts);
+	if (rc != FI_SUCCESS) {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PKTS not set. Using default setting of %d\n",
+				   OPX_HFI1_SDMA_DEFAULT_PACKETS);
+		opx_ep->tx->sdma_max_pkts = OPX_HFI1_SDMA_DEFAULT_PACKETS;
+	} else if (l_sdma_max_pkts < 1 || l_sdma_max_pkts > OPX_HFI1_SDMA_MAX_PACKETS) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_SDMA_MAX_PKTS was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
+			1, OPX_HFI1_SDMA_MAX_PACKETS, OPX_HFI1_SDMA_DEFAULT_PACKETS);
+		opx_ep->tx->sdma_max_pkts = OPX_HFI1_SDMA_DEFAULT_PACKETS;
+	} else {
+		opx_ep->tx->sdma_max_pkts = l_sdma_max_pkts;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PACKETS was specified. Set to %d\n",
+				   opx_ep->tx->sdma_max_pkts);
+	}
+
 	int l_tid_min_payload_bytes;
 	rc = fi_param_get_int(fi_opx_global.prov, "tid_min_payload_bytes", &l_tid_min_payload_bytes);
 	if (rc != FI_SUCCESS) {
@@ -1177,9 +1247,10 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_TID_SETUP]);
 	slist_init(&opx_ep->tx->work_pending_completion);
 	slist_init(&opx_ep->tx->sdma_request_queue.list);
-	opx_ep->tx->sdma_request_queue.num_reqs	   = 0;
-	opx_ep->tx->sdma_request_queue.num_iovs	   = 0;
-	opx_ep->tx->sdma_request_queue.max_iovs	   = OPX_SDMA_HFI_MAX_IOVS_PER_WRITE * OPX_SDMA_MAX_WRITEVS_PER_CYCLE;
+	opx_ep->tx->sdma_request_queue.num_reqs = 0;
+	opx_ep->tx->sdma_request_queue.num_iovs = 0;
+	opx_ep->tx->sdma_request_queue.max_iovs =
+		opx_ep->tx->sdma_max_iovs_per_writev * opx_ep->tx->sdma_max_writevs_per_cycle;
 	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
 	slist_init(&opx_ep->tx->sdma_pending_queue);
 	ofi_bufpool_create(&opx_ep->tx->work_pending_pool, sizeof(union fi_opx_hfi1_deferred_work), L2_CACHE_LINE_SIZE,
