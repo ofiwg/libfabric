@@ -156,3 +156,49 @@ void test_efa_domain_open_ops_mr_query(struct efa_resource **state)
 }
 
 #endif /* HAVE_EFADV_QUERY_MR */
+
+/**
+ * @brief Verify FI_MR_ALLOCATED is set for efa rdm path
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_rdm_attr_mr_allocated(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	assert(efa_domain->device->rdm_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
+}
+
+/**
+ * @brief Verify FI_MR_ALLOCATED is set for efa dgram path
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_dgram_attr_mr_allocated(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_DGRAM, EFA_FABRIC_NAME);
+
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	assert(efa_domain->device->dgram_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
+}
+
+/**
+ * @brief Verify FI_MR_ALLOCATED is set for efa direct path
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_direct_attr_mr_allocated(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	assert(efa_domain->device->rdm_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
+}
