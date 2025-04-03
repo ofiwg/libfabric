@@ -3286,21 +3286,7 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work)
 				(sdma_we_bytes / max_dput_bytes) + ((sdma_we_bytes % max_dput_bytes) ? 1 : 0);
 
 			assert(packet_count > 0);
-			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS);
 
-			int32_t psns_avail = fi_opx_reliability_tx_available_psns(
-				&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,
-				&params->sdma_we->psn_ptr, packet_count, max_eager_bytes);
-
-			if (psns_avail < (int64_t) packet_count) {
-				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
-				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-				       "%p:===================================== SEND DPUT SDMA, !PSN FI_EAGAIN\n",
-				       params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p",
-						 (void *) target_byte_counter_vaddr);
-				return -FI_EAGAIN;
-			}
 			/* In the unlikely event that we'll be sending a single
 			 * packet who's payload size is not a multiple of 4,
 			 * we'll need to add padding, in which case we'll need
@@ -3319,6 +3305,25 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work)
 			params->sdma_we->use_bounce_buf =
 				(!sdma_no_bounce_buf || opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
 				 opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH || need_padding);
+
+			const uint64_t max_pkts_per_req = params->sdma_we->use_bounce_buf ?
+								  OPX_SDMA_MAX_PKTS_BOUNCE_BUF :
+								  opx_ep->tx->sdma_max_pkts;
+			packet_count			= MIN(packet_count, max_pkts_per_req);
+
+			int32_t psns_avail = fi_opx_reliability_tx_available_psns(
+				&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,
+				&params->sdma_we->psn_ptr, packet_count, max_eager_bytes);
+
+			if (psns_avail < (int64_t) packet_count) {
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				       "%p:===================================== SEND DPUT SDMA, !PSN FI_EAGAIN\n",
+				       params);
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p",
+						 (void *) target_byte_counter_vaddr);
+				return -FI_EAGAIN;
+			}
 
 			uint8_t *sbuf_tmp;
 			bool	 replay_use_sdma;
@@ -3481,6 +3486,8 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 	unsigned       i;
 	const void    *sbuf_start	  = params->src_base_addr;
 	const bool     sdma_no_bounce_buf = params->sdma_no_bounce_buf;
+	const uint64_t max_pkts_per_req = sdma_no_bounce_buf ? opx_ep->tx->sdma_max_pkts_tid : OPX_SDMA_BOUNCE_BUF_MAX;
+
 	assert(params->ntidpairs != 0);
 	assert(niov == 1);
 
@@ -3607,11 +3614,11 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 				(bytes_to_send / max_dput_bytes) + ((bytes_to_send % max_dput_bytes) ? 1 : 0);
 
 			assert(packet_count > 0);
-			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS_TID);
+			packet_count = MIN(packet_count, max_pkts_per_req);
 
-			if (packet_count < FI_OPX_HFI1_SDMA_MAX_PACKETS_TID) {
+			if (packet_count < opx_ep->tx->sdma_max_pkts_tid) {
 				packet_count = (bytes_to_send + (OPX_HFI1_TID_PAGESIZE - 1)) / OPX_HFI1_TID_PAGESIZE;
-				packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS_TID);
+				packet_count = MIN(packet_count, max_pkts_per_req);
 			}
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(
 				&opx_ep->ep_fid, &opx_ep->reliability->state, params->slid, params->u8_rx,

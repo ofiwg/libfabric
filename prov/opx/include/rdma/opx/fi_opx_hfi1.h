@@ -161,14 +161,26 @@ static_assert(
 /*
  * The maximum number of packets to send for a single SDMA call to writev.
  */
-#ifndef FI_OPX_HFI1_SDMA_MAX_PACKETS
-#define FI_OPX_HFI1_SDMA_MAX_PACKETS (32)
+#ifndef OPX_HFI1_SDMA_MAX_PACKETS
+#define OPX_HFI1_SDMA_MAX_PACKETS (128)
 #endif
 
-#ifndef FI_OPX_HFI1_SDMA_MAX_PACKETS_TID
-#define FI_OPX_HFI1_SDMA_MAX_PACKETS_TID (32)
+#ifndef OPX_HFI1_SDMA_DEFAULT_PACKETS
+#define OPX_HFI1_SDMA_DEFAULT_PACKETS (32)
 #endif
 
+#ifndef OPX_HFI1_SDMA_MAX_PACKETS_TID
+#define OPX_HFI1_SDMA_MAX_PACKETS_TID (512)
+#endif
+
+#ifndef OPX_HFI1_SDMA_DEFAULT_PACKETS_TID
+#define OPX_HFI1_SDMA_DEFAULT_PACKETS_TID (64)
+#endif
+
+static_assert(OPX_HFI1_SDMA_DEFAULT_PACKETS <= OPX_HFI1_SDMA_MAX_PACKETS,
+	      "OPX_HFI1_SDMA_DEFAULT_PACKETS must be less than or equal to OPX_HFI1_SDMA_MAX_PACKETS!");
+static_assert(OPX_HFI1_SDMA_DEFAULT_PACKETS_TID <= OPX_HFI1_SDMA_MAX_PACKETS_TID,
+	      "OPX_HFI1_SDMA_DEFAULT_PACKETS_TID must be less than or equal to OPX_HFI1_SDMA_MAX_PACKETS_TID!");
 /*
  * The number of SDMA requests (SDMA work entries) available.
  * Each of these will use a single comp index entry in the SDMA ring buffer
@@ -204,17 +216,6 @@ static_assert(
  * 1 payload data vec, 1 TID mapping.
  */
 #define FI_OPX_HFI1_SDMA_WE_IOVS (2)
-
-/*
- * The number of iovecs for SDMA replay - 2 iovec per packet
- * (with no header auto-generation support)
- */
-#define FI_OPX_HFI1_SDMA_REPLAY_WE_IOVS (FI_OPX_HFI1_SDMA_MAX_PACKETS * 2)
-
-/*
- * Length of bounce buffer in a single SDMA Work Entry.
- */
-#define FI_OPX_HFI1_SDMA_WE_BUF_LEN (FI_OPX_HFI1_SDMA_MAX_PACKETS * FI_OPX_HFI1_PACKET_MTU)
 
 #define FI_OPX_HFI1_SDMA_MAX_COMP_INDEX (128) // This should what opx_ep->hfi->info.sdma.queue_size is set to.
 
@@ -746,10 +747,10 @@ void fi_opx_init_hfi_lookup();
 #define FI_OPX_SHM_PACKET_SIZE (FI_OPX_HFI1_PACKET_MTU + sizeof(union opx_hfi1_packet_hdr))
 
 #ifndef NDEBUG
-#define OPX_BUF_FREE(x)                      \
-	do {                                 \
-		memset(x, 0x3C, sizeof(*x)); \
-		ofi_buf_free(x);             \
+#define OPX_BUF_FREE(x)                                \
+	do {                                           \
+		memset(x, 0x3C, MIN(512, sizeof(*x))); \
+		ofi_buf_free(x);                       \
 	} while (0)
 #else
 #define OPX_BUF_FREE(x) ofi_buf_free(x)

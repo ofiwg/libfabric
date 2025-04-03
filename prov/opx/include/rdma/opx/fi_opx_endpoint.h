@@ -287,7 +287,11 @@ struct fi_opx_ep_tx {
 	struct opx_sdma_queue sdma_request_queue;
 	struct slist	      sdma_pending_queue;
 	struct ofi_bufpool   *sdma_request_pool;
-	uint64_t	      unused_cacheline7[2];
+	uint16_t	      sdma_max_writevs_per_cycle;
+	uint16_t	      sdma_max_iovs_per_writev;
+	uint16_t	      sdma_max_pkts_tid;
+	uint16_t	      sdma_max_pkts;
+	uint64_t	      unused_cacheline7[1];
 
 	/* == CACHE LINE 21, ... == */
 	int64_t		   ref_cnt;

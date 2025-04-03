@@ -41,6 +41,7 @@
 #include "ofi_prov.h"
 #include "opa_service.h"
 #include "rdma/opx/fi_opx_hfi1_version.h"
+#include "rdma/opx/fi_opx_hfi1_sdma.h"
 
 #include "rdma/opx/fi_opx_addr.h"
 
@@ -707,6 +708,9 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "reliability_service_usec_max", FI_PARAM_INT,
 			"The number of microseconds between pings for un-acknowledged packets. Defaults to 500 usec.");
 	fi_param_define(
+		&fi_opx_provider, "reliability_service_max_oustanding_bytes", FI_PARAM_INT,
+		"This setting controls the maximum number of bytes allowed to be in-flight (sent but un-ACK'd by receiver) per reliability flow (one-way communication between two endpoints). Valid values are in the range of 8192-150,994,944 (8KB-144MB), inclusive. Default setting is 7,340,032 (7MB).");
+	fi_param_define(
 		&fi_opx_provider, "reliability_max_uncongested_pings", FI_PARAM_INT,
 		"The maximum number of reliability pings sent in a single timer iteration when the network link is uncongested. Value must be between %d and %d. Defaults to %d.",
 		OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MIN, OPX_RELIABILITY_MAX_UNCONGESTED_PINGS_MAX,
@@ -745,6 +749,22 @@ OPX_INI
 		"The minimum message length in bytes where SDMA will be used. For messages smaller than this threshold, the send will be completed using PIO. Value must be between %d and %d. Defaults to %d.",
 		FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN, FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX,
 		FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT);
+	fi_param_define(
+		&fi_opx_provider, "sdma_max_writevs_per_cycle", FI_PARAM_INT,
+		"The maximum number of times that writev will be called during a single poll cycle. Value must be between %d and %d. Defaults to %d.",
+		1, OPX_SDMA_MAX_WRITEVS_PER_CYCLE, OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE);
+	fi_param_define(
+		&fi_opx_provider, "sdma_max_iovs_per_writev", FI_PARAM_INT,
+		"The maximum number of IOVs passed to each writev call. Value must be between %d and %d. Defaults to %d.",
+		3, OPX_SDMA_HFI_MAX_IOVS_PER_WRITE, OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE);
+	fi_param_define(
+		&fi_opx_provider, "sdma_max_pkts_tid", FI_PARAM_INT,
+		"The maximum number of packets transmitted per SDMA request when expected receive (TID) is being used. Value must be between 1 and %d. Defaults to %d.",
+		OPX_HFI1_SDMA_MAX_PACKETS_TID, OPX_HFI1_SDMA_DEFAULT_PACKETS_TID);
+	fi_param_define(
+		&fi_opx_provider, "sdma_max_pkts", FI_PARAM_INT,
+		"The maximum number of packets transmitted per SDMA request when expected receive (TID) is NOT being used. Value must be between 1 and %d. Defaults to %d.",
+		OPX_HFI1_SDMA_MAX_PACKETS, OPX_HFI1_SDMA_DEFAULT_PACKETS);
 	fi_param_define(
 		&fi_opx_provider, "tid_min_payload_bytes", FI_PARAM_INT,
 		"The minimum message length in bytes where TID will be used. Value must be >= %d. Defaults to %d.",

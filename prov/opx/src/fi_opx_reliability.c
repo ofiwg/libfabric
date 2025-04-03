@@ -2490,6 +2490,31 @@ uint8_t fi_opx_reliability_service_init(struct fi_opx_reliability_service *servi
 		fi_opx_timer_next_event_usec(&service->tx.timer, &service->tx.timestamp, service->usec_max);
 
 	/*
+	 * Max outstanding bytes for a given flow
+	 */
+	int max_outstanding;
+	rc = fi_param_get_int(fi_opx_global.prov, "reliability_service_max_outstanding_bytes", &max_outstanding);
+	if (rc == FI_SUCCESS) {
+		if (max_outstanding < FI_OPX_HFI1_PACKET_MTU ||
+		    max_outstanding > OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_MAX) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Error: FI_OPX_RELIABILITY_SERVICE_MAX_OUTSTANDING_BYTES was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
+				FI_OPX_HFI1_PACKET_MTU, OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_MAX,
+				OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_DEFAULT);
+			service->max_outstanding_bytes = OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_DEFAULT;
+		} else {
+			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				 "FI_OPX_RELIABILITY_SERVICE_MAX_OUTSTANDING_BYTES set to %d\n", max_outstanding);
+			service->max_outstanding_bytes = max_outstanding;
+		}
+	} else {
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			 "FI_OPX_RELIABILITY_SERVICE_MAX_OUTSTANDING_BYTES not specified, using default value of %d\n",
+			 OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_DEFAULT);
+		service->max_outstanding_bytes = OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_DEFAULT;
+	}
+
+	/*
 	 * Initialize send ping flag(s)
 	 *
 	 * ONLOAD only
@@ -2549,36 +2574,6 @@ uint8_t fi_opx_reliability_service_init(struct fi_opx_reliability_service *servi
 		max_congested_pings = OPX_RELIABILITY_MAX_CONGESTED_PINGS_DEFAULT;
 	}
 	service->tx.max_congested_pings = max_congested_pings;
-
-	/*
-	 * Maximum number of commands to process from atomic fifo before
-	 * stopping to do something else
-	 *
-	 * OFFLOAD only
-	 */
-	env		  = getenv("FI_OPX_RELIABILITY_SERVICE_FIFO_MAX");
-	service->fifo_max = 1;
-	if (env) {
-		unsigned long max = strtoul(env, NULL, 10);
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_FIFO_MAX = '%s' (%lu)\n", env,
-			 max);
-		service->fifo_max = (uint8_t) max;
-	}
-
-	/*
-	 * Maximum number of packets to process from hfi1 rx fifo before
-	 * stopping to do something else
-	 *
-	 * OFFLOAD only
-	 */
-	env		  = getenv("FI_OPX_RELIABILITY_SERVICE_HFI1_MAX");
-	service->hfi1_max = 1; // TODO: Make this a define.
-	if (env) {
-		unsigned long max = strtoul(env, NULL, 10);
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_HFI1_MAX = '%s' (%lu)\n", env,
-			 max);
-		service->hfi1_max = (uint8_t) max;
-	}
 
 	/*
 	 * Placement of reliability service thread
@@ -2764,10 +2759,6 @@ void fi_opx_reliability_service_fini(struct fi_opx_reliability_service *service)
 		// fi_opx_compiler_msync_reads();
 	}
 
-	if (service->reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {
-		fi_opx_atomic_fifo_fini(&service->fifo);
-	}
-
 	if (service->pending_rx_reliability_pool) {
 		ofi_bufpool_destroy(service->pending_rx_reliability_pool);
 	}
@@ -2805,9 +2796,6 @@ void fi_opx_reliability_client_init(struct fi_opx_reliability_client_state *stat
 	state->service = service;
 
 	/* ---- rx and tx ----*/
-	if (service->reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {
-		fi_opx_atomic_fifo_producer_init(&state->fifo, &service->fifo);
-	}
 	state->lid = service->lid;
 
 	/* ---- rx only ---- */
@@ -2868,18 +2856,6 @@ void fi_opx_reliability_client_fini(struct fi_opx_reliability_client_state *stat
 #ifdef OPX_DEBUG_COUNTERS_RELIABILITY_PING
 	dump_ping_counts();
 #endif
-
-	if (state->reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {
-		fi_opx_atomic_fifo_producer_fini(&state->fifo);
-
-		/* wait until all replay buffers are ack'd because the reliability
-		 * service maintains pointers to unack'd reply buffers and can't
-		 * free until service is finished
-		 */
-		while (fi_opx_reliability_client_active(state)) {
-			// fi_opx_compiler_msync_reads();
-		}
-	}
 
 	if (state->replay_pool) {
 		ofi_bufpool_destroy(state->replay_pool);
