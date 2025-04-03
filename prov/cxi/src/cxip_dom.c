@@ -1642,6 +1642,13 @@ static int cxip_query_collective(struct fid_domain *domain,
 {
 	int ext_op;
 
+#if ENABLE_COLL_DLOPEN
+	CXIP_WARN("%s: Collectives are enabled\n", __func__);
+#else
+	CXIP_WARN("%s: Collectives are disabled, --enable-coll-dlopen needs to be set to enable collectives\n", __func__);
+	return -FI_EOPNOTSUPP;
+#endif
+
 	/* BARRIER does not require attr */
 	if (coll == FI_BARRIER && !attr)
 		return FI_SUCCESS;
