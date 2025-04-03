@@ -342,7 +342,7 @@ pipeline {
         stage ('fire') {
           agent {
             node {
-              label 'ze'
+              label 'level-zero'
               customWorkspace CUSTOM_WORKSPACE
             }
           }
@@ -351,12 +351,6 @@ pipeline {
             script {
               checkout_tar("source")
               checkout_external_resources()
-              dir (CUSTOM_WORKSPACE) {
-                echo "Copying log dirs."
-                sh "python3.9 ${RUN_LOCATION}/build.py --build_item=logdir"
-                echo "Copying build dirs."
-                sh "python3.9 ${RUN_LOCATION}/build.py --build_item=builddir"
-              }
               bootstrap_ci()
               dir (CI_LOCATION) {
                 build_ci("pr_build_fire.json")
@@ -435,7 +429,7 @@ pipeline {
         stage ('oneccl_fire') {
           agent {
             node {
-              label 'ze'
+              label 'level-zero'
               customWorkspace CUSTOM_WORKSPACE
             }
           }
@@ -725,7 +719,7 @@ pipeline {
           }
         }
         stage ('CI_oneccl_fire') {
-          agent { node { label 'ze' } }
+          agent { node { label 'level-zero' } }
           options { skipDefaultCheckout() }
           steps {
             script {
@@ -770,30 +764,13 @@ pipeline {
           }
         }
         stage ('DMABUF-Tests') {
-          agent { node { label 'ze' } }
+          agent { node { label 'level-zero' } }
           options { skipDefaultCheckout() }
           steps {
             script {
-              dir (RUN_LOCATION) {
-                output = "${LOG_DIR}/DMABUF-Tests_verbs-rxm_dmabuf"
-                cmd = """python3.9 runtests.py --test=dmabuf \
-                         --prov=verbs --util=rxm --build_hw=fire"""
-                try {
-                  sh """sbatch \
-                        --partition=torchic \
-                        -N 1 \
-                        --wait \
-                        -o ${output} \
-                        --open-mode=append \
-                        -J ${env.SLURM_JOB_NAME} \
-                        --wrap=\'env; timeout 7200 ${cmd}\'
-                    """
-                } catch (Exception e) {
-                  sh "scancel \$(cat ${output} | grep SLURM_JOBID | cut -d \"=\" -f 2)"
-                  sh "cat ${output}"
-                  error("Build failed ${e}")
-                }
-                sh "cat ${output}"
+              dir (CI_LOCATION) {
+                run_ci("CI_dmabuf_fire_1_node", "pr_dmabuf_1_node.json")
+                run_ci("CI_dmabuf_fire_2_node", "pr_dmabuf_2_node.json")
               }
             }
           }
@@ -823,7 +800,7 @@ pipeline {
           }
         }
         stage ('CI_fabtests_charizard') {
-          agent { node { label 'ze' } }
+          agent { node { label 'level-zero' } }
           options { skipDefaultCheckout() }
           steps {
             script {
@@ -878,7 +855,7 @@ pipeline {
         script {
           gather_logs("${env.DAOS_ADDR}", "${env.DAOS_KEY}", "${env.LOG_DIR}",
                       "${env.LOG_DIR}")
-          gather_logs("${env.ZE_ADDR}", "${env.ZE_KEY}", "${env.LOG_DIR}",
+          gather_logs("${env.LZE_ADDR}", "${env.LZE_KEY}", "${env.LOG_DIR}",
                       "${env.LOG_DIR}")
 
           CI_summarize(verbose=false)
@@ -903,7 +880,7 @@ pipeline {
         dir("${env.WORKSPACE}") { deleteDir() }
         dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
-      node ('ze') {
+      node ('level-zero') {
         dir("${env.WORKSPACE}") { deleteDir() }
         dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
