@@ -404,7 +404,7 @@ void fi_opx_hfi1_sdma_add_packet(struct fi_opx_hfi1_sdma_work_entry *we, struct 
 				 uint64_t payload_bytes)
 {
 	assert(payload_bytes <= FI_OPX_HFI1_PACKET_MTU);
-	assert(we->num_packets < OPX_HFI1_SDMA_MAX_PACKETS_TID);
+	assert(we->num_packets < OPX_HFI1_SDMA_MAX_PKTS_TID);
 
 	we->packets[we->num_packets].replay = replay;
 	we->packets[we->num_packets].length = payload_bytes;

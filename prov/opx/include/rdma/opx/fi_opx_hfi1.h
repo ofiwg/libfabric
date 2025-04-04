@@ -161,26 +161,26 @@ static_assert(
 /*
  * The maximum number of packets to send for a single SDMA call to writev.
  */
-#ifndef OPX_HFI1_SDMA_MAX_PACKETS
-#define OPX_HFI1_SDMA_MAX_PACKETS (128)
+#ifndef OPX_HFI1_SDMA_MAX_PKTS
+#define OPX_HFI1_SDMA_MAX_PKTS (128)
 #endif
 
-#ifndef OPX_HFI1_SDMA_DEFAULT_PACKETS
-#define OPX_HFI1_SDMA_DEFAULT_PACKETS (32)
+#ifndef OPX_HFI1_SDMA_DEFAULT_PKTS
+#define OPX_HFI1_SDMA_DEFAULT_PKTS (32)
 #endif
 
-#ifndef OPX_HFI1_SDMA_MAX_PACKETS_TID
-#define OPX_HFI1_SDMA_MAX_PACKETS_TID (512)
+#ifndef OPX_HFI1_SDMA_MAX_PKTS_TID
+#define OPX_HFI1_SDMA_MAX_PKTS_TID (512)
 #endif
 
-#ifndef OPX_HFI1_SDMA_DEFAULT_PACKETS_TID
-#define OPX_HFI1_SDMA_DEFAULT_PACKETS_TID (64)
+#ifndef OPX_HFI1_SDMA_DEFAULT_PKTS_TID
+#define OPX_HFI1_SDMA_DEFAULT_PKTS_TID (64)
 #endif
 
-static_assert(OPX_HFI1_SDMA_DEFAULT_PACKETS <= OPX_HFI1_SDMA_MAX_PACKETS,
-	      "OPX_HFI1_SDMA_DEFAULT_PACKETS must be less than or equal to OPX_HFI1_SDMA_MAX_PACKETS!");
-static_assert(OPX_HFI1_SDMA_DEFAULT_PACKETS_TID <= OPX_HFI1_SDMA_MAX_PACKETS_TID,
-	      "OPX_HFI1_SDMA_DEFAULT_PACKETS_TID must be less than or equal to OPX_HFI1_SDMA_MAX_PACKETS_TID!");
+static_assert(OPX_HFI1_SDMA_DEFAULT_PKTS <= OPX_HFI1_SDMA_MAX_PKTS,
+	      "OPX_HFI1_SDMA_DEFAULT_PKTS must be less than or equal to OPX_HFI1_SDMA_MAX_PKTS!");
+static_assert(OPX_HFI1_SDMA_DEFAULT_PKTS_TID <= OPX_HFI1_SDMA_MAX_PKTS_TID,
+	      "OPX_HFI1_SDMA_DEFAULT_PKTS_TID must be less than or equal to OPX_HFI1_SDMA_MAX_PKTS_TID!");
 /*
  * The number of SDMA requests (SDMA work entries) available.
  * Each of these will use a single comp index entry in the SDMA ring buffer

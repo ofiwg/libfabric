@@ -240,11 +240,11 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 : Integer. The maximum number of IOVs passed to each writev call.
   Value must be between 3 and 128. Defaults to 64.
 
-*FI_OPX_SDMA_MAX_PACKETS*
+*FI_OPX_SDMA_MAX_PKTS*
 : Integer. The maximum number of packets transmitted per SDMA request when expected receive (TID) is NOT being used.
   Value must be between 1 and 128. Defaults to 32.
 
-*FI_OPX_SDMA_MAX_PACKETS_TID*
+*FI_OPX_SDMA_MAX_PKTS_TID*
 : Integer. The maximum number of packets transmitted per SDMA request when expected receive (TID) is being used.
   Value must be between 1 and 512. Defaults to 64.
 
