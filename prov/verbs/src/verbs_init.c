@@ -55,6 +55,7 @@ struct vrb_gl_data vrb_gl_data = {
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
 	.gid_idx		= 0,
+	.log_async_events	= 0,
 	.dgram			= {
 		.use_name_server	= 1,
 		.name_server_port	= 5678,
@@ -735,6 +736,13 @@ int vrb_read_params(void)
 	}
 	VRB_INFO(FI_LOG_CORE, "dmabuf support is %s\n",
 		 vrb_gl_data.dmabuf_support ? "enabled" : "disabled");
+
+	if (vrb_get_param_bool("log_async_events",
+			       "Enable logging of ibv_async_events.",
+			       &vrb_gl_data.log_async_events)) {
+		VRB_WARN(FI_LOG_CORE, "Invalid value of log_async_events\n");
+		return -FI_EINVAL;
+	}
 
 	/* MSG-specific parameter */
 	if (vrb_get_param_str("iface", "The prefix or the full name of the "

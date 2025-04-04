@@ -1305,8 +1305,8 @@ out:
 }
 
 static ssize_t
-vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
-	       void *buf, size_t len, uint64_t flags)
+vrb_eq_read_internal(struct fid_eq *eq_fid, uint32_t *event,
+		     void *buf, size_t len, uint64_t flags)
 {
 	struct vrb_eq *eq;
 	struct rdma_cm_event *cma_event;
@@ -1353,13 +1353,14 @@ vrb_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 		void *buf, size_t len, int timeout, uint64_t flags)
 {
 	struct vrb_eq *eq;
+	struct vrb_domain *domain;
 	struct ofi_epollfds_event fdevent;
 	ssize_t ret;
 
 	eq = container_of(eq_fid, struct vrb_eq, eq_fid.fid);
 
 	while (1) {
-		ret = vrb_eq_read(eq_fid, event, buf, len, flags);
+		ret = vrb_eq_read_internal(eq_fid, event, buf, len, flags);
 		if (ret && (ret != -FI_EAGAIN))
 			return ret;
 
@@ -1368,7 +1369,19 @@ vrb_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 			return -FI_EAGAIN;
 		else if (ret < 0)
 			return -errno;
+
+		if (fdevent.data.ptr) {
+			domain = fdevent.data.ptr;
+			vrb_domain_process_async_events(domain, 1);
+		}
 	}
+}
+
+static ssize_t
+vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
+	     void *buf, size_t len, uint64_t flags)
+{
+	return vrb_eq_sread(eq_fid, event, buf, len, 0, flags);
 }
 
 static const char *
@@ -1438,6 +1451,8 @@ static int vrb_eq_close(fid_t fid)
 
 	eq = container_of(fid, struct vrb_eq, eq_fid.fid);
 	/* TODO: use util code, if possible, and add ref counting */
+	if (ofi_atomic_get32(&eq->ref))
+		return -FI_EBUSY;
 
 	if (!ofi_rbmap_empty(&eq->xrc.sidr_conn_rbmap))
 		VRB_WARN(FI_LOG_EP_CTRL, "SIDR connection RBmap not empty\n");
@@ -1485,6 +1500,8 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	_eq = calloc(1, sizeof *_eq);
 	if (!_eq)
 		return -ENOMEM;
+
+	ofi_atomic_initialize32(&_eq->ref, 0);
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
@@ -1566,5 +1583,29 @@ err1:
 err0:
 	free(_eq);
 	return ret;
+}
+
+int vrb_eq_attach_domain(struct vrb_eq *eq, struct vrb_domain *domain)
+{
+	if (vrb_gl_data.log_async_events &&
+	    ofi_epoll_add(eq->epollfd, domain->verbs->async_fd,
+			  OFI_EPOLL_IN, domain))
+		return -errno;
+
+	domain->eq = eq;
+	ofi_atomic_inc32(&eq->ref);
+	return 0;
+}
+
+int vrb_eq_detach_domain(struct vrb_domain *domain)
+{
+	if (vrb_gl_data.log_async_events &&
+	    ofi_epoll_del(domain->eq->epollfd, domain->verbs->async_fd))
+		return -errno;
+
+	domain->eq = NULL;
+	ofi_atomic_dec32(&domain->eq->ref);
+
+	return 0;
 }
 

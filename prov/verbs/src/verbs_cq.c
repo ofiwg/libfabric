@@ -479,9 +479,20 @@ static struct fi_ops vrb_cq_fi_ops = {
 static void vrb_cq_progress(struct util_cq *util_cq)
 {
 	struct vrb_cq *cq;
+	struct vrb_domain *domain;
+	struct ofi_epollfds_event event;
+	int nfds;
 
 	cq = container_of(util_cq, struct vrb_cq, util_cq);
 	vrb_flush_cq(cq);
+
+	domain = container_of(util_cq->domain, struct vrb_domain, util_domain);
+	if (!domain->epoll_fd)
+		return;
+
+	nfds = ofi_epoll_wait(domain->epoll_fd, &event, 1, 0);
+	if (nfds > 0)
+		vrb_domain_process_async_events(domain, nfds);
 }
 
 int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
