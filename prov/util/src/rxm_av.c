@@ -98,23 +98,32 @@ static void rxm_free_peer(struct util_peer_addr *peer)
 	ofi_ibuf_free(peer);
 }
 
-struct util_peer_addr *
-util_get_peer(struct rxm_av *av, const void *addr)
+
+int
+util_get_peer(struct rxm_av *av, const void *addr, struct util_peer_addr **peer,
+	      uint64_t flags)
 {
-	struct util_peer_addr *peer;
 	struct ofi_rbnode *node;
+	int ret = FI_SUCCESS;
 
 	ofi_genlock_lock(&av->util_av.lock);
 	node = ofi_rbmap_find(&av->addr_map, (void *) addr);
 	if (node) {
-		peer = node->data;
-		peer->refcnt++;
+		*peer = node->data;
+		(*peer)->refcnt++;
+		(*peer)->av_flags |= flags;
+	} else if (flags & FI_FIREWALL_ADDR) {
+		*peer = NULL;
+		ret = -FI_EHOSTUNREACH;
 	} else {
-		peer = rxm_alloc_peer(av, addr);
+		*peer = rxm_alloc_peer(av, addr);
+		if (!*peer)
+			ret = -FI_ENOMEM;
+		else
+			(*peer)->av_flags = flags;
 	}
-
 	ofi_genlock_unlock(&av->util_av.lock);
-	return peer;
+	return ret;
 }
 
 static void util_deref_peer(struct util_peer_addr *peer)
@@ -165,17 +174,17 @@ rxm_put_peer_addr(struct rxm_av *av, fi_addr_t fi_addr)
 
 static int
 rxm_av_add_peers(struct rxm_av *av, const void *addr, size_t count,
-		 fi_addr_t *fi_addr, fi_addr_t *user_ids)
+		 fi_addr_t *fi_addr, fi_addr_t *user_ids, uint64_t flags)
 {
 	struct util_peer_addr *peer;
 	const void *cur_addr;
 	fi_addr_t cur_fi_addr;
-	size_t i;
+	size_t i, ret;
 
 	for (i = 0; i < count; i++) {
 		cur_addr = ((char *) addr + i * av->util_av.addrlen);
-		peer = util_get_peer(av, cur_addr);
-		if (!peer)
+		ret = util_get_peer(av, cur_addr, &peer, flags);
+		if (ret)
 			goto err;
 
 		if (user_ids) {
@@ -206,7 +215,7 @@ err:
 			ofi_genlock_unlock(&av->util_av.lock);
 		}
 	}
-	return -FI_ENOMEM;
+	return ret;
 }
 
 static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
@@ -299,7 +308,7 @@ static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 
 	count = ret;
 
-	ret = rxm_av_add_peers(av, addr, count, fi_addr, user_ids);
+	ret = rxm_av_add_peers(av, addr, count, fi_addr, user_ids, flags);
 	if (ret) {
 		rxm_av_remove(av_fid, fi_addr, count, flags);
 		goto out;
@@ -345,7 +354,7 @@ static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
 	if (ret > 0 && ret < count)
 		count = ret;
 
-	ret = rxm_av_add_peers(av, addr, count, fi_addr, NULL);
+	ret = rxm_av_add_peers(av, addr, count, fi_addr, NULL, flags);
 	if (ret) {
 		rxm_av_remove(av_fid, fi_addr, count, flags);
 		return ret;
