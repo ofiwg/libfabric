@@ -151,6 +151,14 @@ requires the use of shared receive contexts. See [`fi_rxm`(7)](fi_rxm.7.html).
 To enable XRC, the following environment variables must usually be set:
 FI_VERBS_PREFER_XRC and FI_OFI_RXM_USE_SRX.
 
+### Atomics
+Verbs hardware has limited support for atomics on little-endian machines as the
+result buffer will be delivered back to the caller in big-endian, requiring the
+caller to handle the conversion back into little-endian for use. This limitation
+is exposed in OFI as well which uses the verbs atomic support directly. Use of
+atomics on little-endian machines is allowed but users should make note of this
+verbs limitation.
+
 # RUNTIME PARAMETERS
 
 The verbs provider checks for the following environment variables.
