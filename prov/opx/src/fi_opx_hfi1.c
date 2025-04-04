@@ -156,12 +156,18 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 	return fd;
 }
 
-void opx_reset_context(struct fi_opx_ep *opx_ep)
+void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx_hfi1_type hfi1_type)
 {
 	fi_opx_compiler_msync_writes();
-	opx_ep->rx->state.hdrq.rhf_seq	   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
-	opx_ep->rx->state.hdrq.head	   = 0;
-	opx_ep->rx->egrq.last_egrbfr_index = 0;
+
+	/* When there is a HFI1_EVENT_FROZEN event, both Tx and Rx contexts are halted by the driver.
+	   However, for a HFI1_EVENT_LINK_DOWN, only the Tx is halted, Rx continues without changes.
+	   Hence there is no need to reset the Rx related variables */
+	if (events & HFI1_EVENT_FROZEN) {
+		opx_ep->rx->state.hdrq.rhf_seq	   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
+		opx_ep->rx->state.hdrq.head	   = 0;
+		opx_ep->rx->egrq.last_egrbfr_index = 0;
+	}
 
 	if (opx_hfi1_wrapper_reset_context(opx_ep->hfi)) {
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Send context reset failed: %d.\n", errno);

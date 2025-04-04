@@ -710,10 +710,14 @@ __OPX_FORCE_INLINE__
 bool opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
 {
 	uint64_t events = *(uint64_t *) (opx_ep->hfi->ctrl->base_info.events_bufbase);
-	if (events & HFI1_EVENT_FROZEN) {
+	/* In WFR, on a link down, driver/HW always enters a SPC freeze state. It always triggers a HFI1_EVENT_FROZEN.
+		Hence, HFI1_EVENT_LINKDOWN can be ignored
+	   In JKR, there is no freeze event because there are two ports. If one port is down, the other still functions.
+	    Hence, handle HFI1_EVENT_LINKDOWN. */
+	if (events & HFI1_EVENT_FROZEN || (events & HFI1_EVENT_LINKDOWN && !(hfi1_type & OPX_HFI1_WFR))) {
 		/* reset context only if RHF queue is empty */
 		if (opx_is_rhf_empty(opx_ep, hdrq_mask, hfi1_type)) {
-			opx_reset_context(opx_ep);
+			opx_reset_context(opx_ep, events, hfi1_type);
 			int ret = opx_hfi1_wrapper_ack_events(opx_ep->hfi, events);
 			if (ret) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ack event failed: %s\n", strerror(errno));
@@ -724,6 +728,7 @@ bool opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const
 				"Context frozen: Not resetting because packets are present in receive queue\n");
 		}
 	}
+
 	return false;
 }
 
