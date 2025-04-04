@@ -653,6 +653,14 @@ static int xnet_rdm_getopt(struct fid *fid, int level, int optname,
 		*((size_t *) optval) = rdm->srx->min_multi_recv_size;
 		*optlen = sizeof(size_t);
 		break;
+	case FI_OPT_FIREWALL_ADDR:
+		if (*optlen < sizeof(int)) {
+			*optlen = sizeof(int);
+			return -FI_ETOOSMALL;
+		}
+		*((int *) optval) = xnet_firewall_addr;
+		*optlen = sizeof(int);
+		break;
 	default:
 		return -FI_ENOPROTOOPT;
 	}

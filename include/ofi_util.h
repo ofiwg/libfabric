@@ -928,9 +928,12 @@ struct util_peer_addr {
 	int index;
 	int refcnt;
 	union ofi_sock_ip addr;
+	char str_addr[OFI_ADDRSTRLEN];
+	bool firewall_addr;
 };
 
-struct util_peer_addr *util_get_peer(struct rxm_av *av, const void *addr);
+struct util_peer_addr *util_get_peer(struct rxm_av *av, const void *addr,
+				     uint64_t flags);
 void util_put_peer(struct util_peer_addr *peer);
 
 /* All peer addresses, whether they've been inserted into the AV
