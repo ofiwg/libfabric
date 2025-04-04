@@ -4022,6 +4022,13 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	bool link_zb;
 	int ret;
 
+#if ENABLE_CXI_COLLECTIVES
+	TRACE_JOIN("%s: CXI Collectives are enabled\n", __func__);
+#else
+	TRACE_JOIN("%s: CXI Collectives are disabled, --enable-cxi-collectives needs to be set\n", __func__);
+	return -FI_EOPNOTSUPP;
+#endif
+
 	check_red_pkt();
 
 	TRACE_JOIN("%s: entry\n", __func__);
