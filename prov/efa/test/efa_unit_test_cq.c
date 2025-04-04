@@ -74,7 +74,7 @@ void test_ibv_cq_ex_read_empty_cq(struct efa_resource **state)
  */
 static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
                                              uint64_t local_host_id, uint64_t peer_host_id,
-                                             int vendor_error)
+                                             int vendor_error, int efa_error)
 {
 	const char *strerror;
 	fi_addr_t addr;
@@ -154,7 +154,7 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 
 	assert_int_equal(ret, 1);
 	assert_int_not_equal(cq_err_entry.err, FI_SUCCESS);
-	assert_int_equal(cq_err_entry.prov_errno, vendor_error);
+	assert_int_equal(cq_err_entry.prov_errno, efa_error);
 
 	/* Reset value */
 	memset(host_id_str, 0, sizeof(host_id_str));
@@ -196,7 +196,7 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver(struct efa_resource 
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0x8765432187654321,
-					 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+					 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP);
 }
 
 /**
@@ -213,7 +213,7 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver_missing_peer_host_id
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0,
-					 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+					 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP);
 }
 
 /**
@@ -230,7 +230,7 @@ void test_rdm_cq_read_bad_send_status_unreachable_receiver(struct efa_resource *
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0x8765432187654321,
-					 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+					 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
 }
 
 /**
@@ -248,7 +248,7 @@ void test_rdm_cq_read_bad_send_status_invalid_qpn(struct efa_resource **state)
 
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0x8765432187654321,
-					 EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN);
+					 EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN, EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN);
 }
 
 /**
@@ -265,7 +265,7 @@ void test_rdm_cq_read_bad_send_status_message_too_long(struct efa_resource **sta
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0x8765432187654321,
-					 EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH);
+					 EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH, EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH);
 }
 
 /**
@@ -286,6 +286,10 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	int ret;
 	struct efa_rdm_cq *efa_rdm_cq;
 	struct ibv_cq_ex *ibv_cqx;
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	int err, numaddr;
 
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
@@ -306,6 +310,13 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 	ibv_cqx = efa_rdm_cq->efa_cq.ibv_cq.ibv_cq_ex;
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(numaddr, 1);
 
 	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
 	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
@@ -341,7 +352,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	ret = fi_eq_readerr(resource->eq, &eq_err_entry, 0);
 	assert_int_equal(ret, sizeof(eq_err_entry));
 	assert_int_not_equal(eq_err_entry.err, FI_SUCCESS);
-	assert_int_equal(eq_err_entry.prov_errno, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+	assert_int_equal(eq_err_entry.prov_errno, FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP);
 }
 
 /**
@@ -364,13 +375,23 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	int ret;
 	struct efa_rdm_cq *efa_rdm_cq;
 	struct ibv_cq_ex *ibv_cqx;
-
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	int err, numaddr;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 	ibv_cqx = efa_rdm_cq->efa_cq.ibv_cq.ibv_cq_ex;
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(numaddr, 1);
 
 	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
 	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
