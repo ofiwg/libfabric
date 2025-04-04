@@ -691,6 +691,10 @@ input flags.  Valid flags include the following.
   the node and/or service parameter must be non-NULL.  This flag is
   often used with passive endpoints.
 
+*FI_RESCAN*
+: Indicates that the provider should rescan available network interfaces.
+  This operation may be computationally expensive.
+
 # RETURN VALUE
 
 fi_getinfo() returns 0 on success. On error, fi_getinfo() returns a
