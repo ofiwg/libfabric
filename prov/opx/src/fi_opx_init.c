@@ -760,11 +760,11 @@ OPX_INI
 	fi_param_define(
 		&fi_opx_provider, "sdma_max_pkts_tid", FI_PARAM_INT,
 		"The maximum number of packets transmitted per SDMA request when expected receive (TID) is being used. Value must be between 1 and %d. Defaults to %d.",
-		OPX_HFI1_SDMA_MAX_PACKETS_TID, OPX_HFI1_SDMA_DEFAULT_PACKETS_TID);
+		OPX_HFI1_SDMA_MAX_PKTS_TID, OPX_HFI1_SDMA_DEFAULT_PKTS_TID);
 	fi_param_define(
 		&fi_opx_provider, "sdma_max_pkts", FI_PARAM_INT,
 		"The maximum number of packets transmitted per SDMA request when expected receive (TID) is NOT being used. Value must be between 1 and %d. Defaults to %d.",
-		OPX_HFI1_SDMA_MAX_PACKETS, OPX_HFI1_SDMA_DEFAULT_PACKETS);
+		OPX_HFI1_SDMA_MAX_PKTS, OPX_HFI1_SDMA_DEFAULT_PKTS);
 	fi_param_define(
 		&fi_opx_provider, "tid_min_payload_bytes", FI_PARAM_INT,
 		"The minimum message length in bytes where TID will be used. Value must be >= %d. Defaults to %d.",

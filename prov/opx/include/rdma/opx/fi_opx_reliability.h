@@ -901,7 +901,7 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 					     uint32_t bytes_per_packet)
 {
 	OPX_TRACER_TRACE_SDMA(OPX_TRACER_BEGIN, "GET_PSNS");
-	assert(psns_to_get && psns_to_get <= MAX(OPX_HFI1_SDMA_MAX_PACKETS_TID, OPX_HFI1_SDMA_MAX_PACKETS));
+	assert(psns_to_get && psns_to_get <= MAX(OPX_HFI1_SDMA_MAX_PKTS_TID, OPX_HFI1_SDMA_MAX_PKTS));
 	union fi_opx_reliability_service_flow_key key = {
 		.slid	= (uint32_t) state->lid,
 		.src_rx = (uint32_t) state->rx,
@@ -957,7 +957,7 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
 				       const opx_lid_t lid, const uint64_t rx,
 				       union fi_opx_reliability_tx_psn **psn_ptr, uint32_t psns_to_get)
 {
-	assert(psns_to_get && psns_to_get <= MAX(OPX_HFI1_SDMA_MAX_PACKETS_TID, OPX_HFI1_SDMA_MAX_PACKETS));
+	assert(psns_to_get && psns_to_get <= MAX(OPX_HFI1_SDMA_MAX_PKTS_TID, OPX_HFI1_SDMA_MAX_PKTS));
 	uint32_t psn = 0;
 
 	union fi_opx_reliability_service_flow_key key = {

@@ -1193,16 +1193,16 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	rc = fi_param_get_int(fi_opx_global.prov, "sdma_max_pkts_tid", &l_sdma_max_pkts_tid);
 	if (rc != FI_SUCCESS) {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PKTS_TID not set. Using default setting of %d\n",
-				   OPX_HFI1_SDMA_DEFAULT_PACKETS_TID);
-		opx_ep->tx->sdma_max_pkts_tid = OPX_HFI1_SDMA_DEFAULT_PACKETS_TID;
-	} else if (l_sdma_max_pkts_tid < 1 || l_sdma_max_pkts_tid > OPX_HFI1_SDMA_MAX_PACKETS_TID) {
+				   OPX_HFI1_SDMA_DEFAULT_PKTS_TID);
+		opx_ep->tx->sdma_max_pkts_tid = OPX_HFI1_SDMA_DEFAULT_PKTS_TID;
+	} else if (l_sdma_max_pkts_tid < 1 || l_sdma_max_pkts_tid > OPX_HFI1_SDMA_MAX_PKTS_TID) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_SDMA_MAX_PKTS_TID was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
-			1, OPX_HFI1_SDMA_MAX_PACKETS_TID, OPX_HFI1_SDMA_DEFAULT_PACKETS_TID);
-		opx_ep->tx->sdma_max_pkts_tid = OPX_HFI1_SDMA_DEFAULT_PACKETS_TID;
+			1, OPX_HFI1_SDMA_MAX_PKTS_TID, OPX_HFI1_SDMA_DEFAULT_PKTS_TID);
+		opx_ep->tx->sdma_max_pkts_tid = OPX_HFI1_SDMA_DEFAULT_PKTS_TID;
 	} else {
 		opx_ep->tx->sdma_max_pkts_tid = l_sdma_max_pkts_tid;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PACKETS_TID was specified. Set to %d\n",
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PKTS_TID was specified. Set to %d\n",
 				   opx_ep->tx->sdma_max_pkts_tid);
 	}
 
@@ -1210,16 +1210,16 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	rc = fi_param_get_int(fi_opx_global.prov, "sdma_max_pkts", &l_sdma_max_pkts);
 	if (rc != FI_SUCCESS) {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PKTS not set. Using default setting of %d\n",
-				   OPX_HFI1_SDMA_DEFAULT_PACKETS);
-		opx_ep->tx->sdma_max_pkts = OPX_HFI1_SDMA_DEFAULT_PACKETS;
-	} else if (l_sdma_max_pkts < 1 || l_sdma_max_pkts > OPX_HFI1_SDMA_MAX_PACKETS) {
+				   OPX_HFI1_SDMA_DEFAULT_PKTS);
+		opx_ep->tx->sdma_max_pkts = OPX_HFI1_SDMA_DEFAULT_PKTS;
+	} else if (l_sdma_max_pkts < 1 || l_sdma_max_pkts > OPX_HFI1_SDMA_MAX_PKTS) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_SDMA_MAX_PKTS was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
-			1, OPX_HFI1_SDMA_MAX_PACKETS, OPX_HFI1_SDMA_DEFAULT_PACKETS);
-		opx_ep->tx->sdma_max_pkts = OPX_HFI1_SDMA_DEFAULT_PACKETS;
+			1, OPX_HFI1_SDMA_MAX_PKTS, OPX_HFI1_SDMA_DEFAULT_PKTS);
+		opx_ep->tx->sdma_max_pkts = OPX_HFI1_SDMA_DEFAULT_PKTS;
 	} else {
 		opx_ep->tx->sdma_max_pkts = l_sdma_max_pkts;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PACKETS was specified. Set to %d\n",
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PKTS was specified. Set to %d\n",
 				   opx_ep->tx->sdma_max_pkts);
 	}
 
