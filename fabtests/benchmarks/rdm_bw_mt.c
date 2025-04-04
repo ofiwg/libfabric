@@ -133,7 +133,7 @@ static void cleanup_ofi(void)
 	}
 
 	if (fabric) {
-		fi_close(&fabric->fid);
+		ret = fi_close(&fabric->fid);
 		if (ret)
 			printf("fi_close(fabric) failed: %d\n", ret);
 	}
@@ -545,10 +545,18 @@ static int run_size(void)
 
 out:
 	for (i = 0; i < num_eps; i++) {
-		if (targs[i].tx_mr)
-			fi_close(&targs[i].tx_mr->fid);
-		if (targs[i].rx_mr)
-			fi_close(&targs[i].rx_mr->fid);
+		if (targs[i].tx_mr) {
+			err = fi_close(&targs[i].tx_mr->fid);
+			if (err)
+				printf("fi_close(targs[%d].tx_mr) failed: %d\n",
+					i, err);
+		}
+		if (targs[i].rx_mr) {
+			err = fi_close(&targs[i].rx_mr->fid);
+			if (err)
+				printf("fi_close(targs[%d].rx_mr) failed: %d\n",
+					i, err);
+		}
 		if (targs[i].tx_buf) {
 			err = ft_hmem_free(opts.iface, targs[i].tx_buf);
 			if (err)
