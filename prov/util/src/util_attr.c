@@ -454,7 +454,7 @@ int ofi_check_fabric_attr(const struct fi_provider *prov,
 /*
  * Threading models ranked by order of parallelism.
  */
-static int fi_thread_level(enum fi_threading thread_model)
+int ofi_thread_level(enum fi_threading thread_model)
 {
 	switch (thread_model) {
 	case FI_THREAD_SAFE:
@@ -588,8 +588,8 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 {
 	const struct fi_domain_attr *user_attr = user_info->domain_attr;
 
-	if (fi_thread_level(user_attr->threading) <
-	    fi_thread_level(prov_attr->threading)) {
+	if (ofi_thread_level(user_attr->threading) <
+	    ofi_thread_level(prov_attr->threading)) {
 		FI_INFO(prov, FI_LOG_CORE, "Invalid threading model\n");
 		return -FI_ENODATA;
 	}

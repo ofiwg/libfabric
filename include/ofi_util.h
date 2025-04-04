@@ -1403,6 +1403,8 @@ ofi_progress_lock_type(enum fi_threading threading, enum fi_progress control)
 		control == FI_PROGRESS_CONTROL_UNIFIED ? OFI_LOCK_NOOP : OFI_LOCK_MUTEX;
 }
 
+int ofi_thread_level(enum fi_threading thread_model);
+
 #ifdef __cplusplus
 }
 #endif
