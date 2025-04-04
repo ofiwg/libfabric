@@ -861,7 +861,7 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ref_cnt                       %#lX \n", context->ref_cnt);
 }
 
-void opx_reset_context(struct fi_opx_ep *opx_ep);
+void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx_hfi1_type hfi1_type);
 
 void opx_link_down_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep);
 
