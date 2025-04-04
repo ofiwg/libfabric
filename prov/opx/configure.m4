@@ -208,18 +208,39 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				opx_CPPFLAGS="-DOPX_HMEM -I/usr/include/uapi"
 			])
 		])
-		AS_IF([test $opx_happy -eq 1],[
-			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+
+		AS_IF([test $opx_happy -eq 1], [
+		    # Check if hfi1_status_v2 is present in /usr/include/uapi/rdma/hfi/hfi1_user.h
+		    AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+			[[#include <uapi/rdma/hfi/hfi1_user.h>]],
+			[[
+			    struct hfi1_status_v2 status_v2;
+			]])],
+			[
+			    # hfi1_status_v2 found in /usr/include/uapi/rdma/hfi/hfi1_user.h
+			    AC_MSG_NOTICE([hfi1_user.h hfi1_status_v2 defined... yes (uapi)])
+			    opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_JKR_SUPPORT -I/usr/include/uapi"
+			],
+			[
+			    # Check if hfi1_status_v2 is present in /usr/include/rdma/hfi/hfi1_user.h
+			    AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
 				[[#include <rdma/hfi/hfi1_user.h>]],
 				[[
-					struct hfi1_status_v2 status_v2;
+				    struct hfi1_status_v2 status_v2;
 				]])],
-				[AC_MSG_NOTICE([hfi1_user.h hfi1_status_v2 defined... yes])
-				opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_JKR_SUPPORT"],
 				[
-				AC_MSG_NOTICE([hfi1_user.h hfi1_status_v2 defined... no, no support for JKR])
-				])
-		])
+				    # hfi1_status_v2 found in /usr/include/rdma/hfi/hfi1_user.h
+				    AC_MSG_NOTICE([hfi1_ioctl.h hfi1_status_v2 defined... yes])
+				    opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_JKR_SUPPORT"
+				],
+				[
+				    # hfi1_status_v2 not found in either location
+				    AC_MSG_NOTICE([hfi1_status_v2 defined... no, no support for CN5000])
+				]
+			    )
+			]
+		    ])
+		)
 	])
 
 	AC_SUBST(opx_CPPFLAGS)
