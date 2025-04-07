@@ -36,6 +36,32 @@ int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av)
 	return 0;
 }
 
+static inline void efa_base_ep_lock_cq(struct efa_base_ep *base_ep)
+{
+	struct efa_cq *tx_cq, *rx_cq;
+
+	tx_cq = efa_base_ep_get_tx_cq(base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(base_ep);
+
+	if (rx_cq)
+		ofi_genlock_lock(&rx_cq->util_cq.ep_list_lock);
+	if (tx_cq && tx_cq != rx_cq)
+		ofi_genlock_lock(&tx_cq->util_cq.ep_list_lock);
+}
+
+static inline void efa_base_ep_unlock_cq(struct efa_base_ep *base_ep)
+{
+	struct efa_cq *tx_cq, *rx_cq;
+
+	tx_cq = efa_base_ep_get_tx_cq(base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(base_ep);
+
+	if (tx_cq && tx_cq != rx_cq)
+		ofi_genlock_unlock(&tx_cq->util_cq.ep_list_lock);
+	if (rx_cq)
+		ofi_genlock_unlock(&rx_cq->util_cq.ep_list_lock);
+}
+
 int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 {
 	struct efa_domain *domain;
@@ -44,14 +70,19 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 
 	if (qp) {
 		domain = qp->base_ep->domain;
+		/* Acquire the lock to prevent race conditions when CQ polling accesses the qp_table */
+		efa_base_ep_lock_cq(base_ep);
 		domain->qp_table[qp->qp_num & domain->qp_table_sz_m1] = NULL;
+		efa_base_ep_unlock_cq(base_ep);
 		efa_qp_destruct(qp);
 		base_ep->qp = NULL;
 	}
 
 	if (user_recv_qp) {
 		domain = user_recv_qp->base_ep->domain;
+		efa_base_ep_lock_cq(base_ep);
 		domain->qp_table[user_recv_qp->qp_num & domain->qp_table_sz_m1] = NULL;
+		efa_base_ep_unlock_cq(base_ep);
 		efa_qp_destruct(user_recv_qp);
 		base_ep->user_recv_qp = NULL;
 	}
@@ -256,7 +287,12 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 		return err;
 
 	qp->qp_num = qp->ibv_qp->qp_num;
+
+	/* Acquire the lock to prevent race conditions when CQ polling accesses the qp_table */
+	efa_base_ep_lock_cq(base_ep);
 	base_ep->domain->qp_table[qp->qp_num & base_ep->domain->qp_table_sz_m1] = qp;
+	efa_base_ep_unlock_cq(base_ep);
+	
 	EFA_INFO(FI_LOG_EP_CTRL, "QP enabled! qp_n: %d qkey: %d\n", qp->qp_num, qp->qkey);
 
 	return err;
