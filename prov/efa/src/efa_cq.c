@@ -377,7 +377,10 @@ void efa_cq_progress(struct util_cq *cq)
 {
 	struct efa_cq *efa_cq = container_of(cq, struct efa_cq, util_cq);
 
+	/* Acquire the lock to prevent race conditions when qp_table is being updated */
+	ofi_genlock_lock(&cq->ep_list_lock);
 	efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, &efa_cq->ibv_cq);
+	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 
 static int efa_cq_close(fid_t fid)
