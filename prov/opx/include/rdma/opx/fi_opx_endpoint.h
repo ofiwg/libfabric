@@ -912,12 +912,15 @@ void opx_ep_copy_immediate_data(struct fi_opx_ep *opx_ep, const union fi_opx_hfi
 	rbuf += immediate_qw_count * sizeof(uint64_t);
 
 	if (immediate_block) {
-		const uint64_t immediate_fragment = (immediate_byte_count || immediate_qw_count) ? 1 : 0;
 #if (defined __GNUC__) && (__GNUC__ > 10)
 #pragma GCC diagnostic ignored "-Wstringop-overread"
 #endif
 #pragma GCC diagnostic ignored "-Warray-bounds"
-		memcpy(rbuf, (void *) (&contiguous->cache_line_1 + immediate_fragment), FI_OPX_CACHE_LINE_SIZE);
+		if (immediate_byte_count || immediate_qw_count) { // immediate fragment
+			memcpy(rbuf, (void *) (&contiguous->immediate_block), FI_OPX_CACHE_LINE_SIZE);
+		} else {
+			memcpy(rbuf, (void *) (&contiguous->cache_line_1), FI_OPX_CACHE_LINE_SIZE);
+		}
 	}
 
 	if (is_hmem && immediate_total) {
