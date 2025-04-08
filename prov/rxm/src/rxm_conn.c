@@ -461,7 +461,7 @@ ssize_t rxm_get_conn(struct rxm_ep *ep, fi_addr_t addr, struct rxm_conn **conn)
 	}
 
 	if ((*peer)->firewall_addr)
-		return -FI_EHOSTUNREACH;
+		return -FI_EFIREWALLADDR;
 
 	ret = rxm_connect(*conn);
 

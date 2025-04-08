@@ -187,6 +187,9 @@ const char *fi_strerror(int errno);
 *FI_ENOMR*
 : Memory registration limit exceeded
 
+*FI_EFIREWALLADDR*
+: Host address unreachable due to firewall
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html)
