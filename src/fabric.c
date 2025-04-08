@@ -1658,6 +1658,7 @@ static const char *const errstr[] = {
 	[FI_EOVERRUN - FI_ERRNO_OFFSET] = "Queue has been overrun",
 	[FI_ENORX - FI_ERRNO_OFFSET] = "Receiver not ready, no receive buffers available",
 	[FI_ENOMR - FI_ERRNO_OFFSET] = "Memory registration limit exceeded",
+	[FI_EFIREWALLADDR - FI_ERRNO_OFFSET] = "Host unreacheable due to firewall",
 };
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))

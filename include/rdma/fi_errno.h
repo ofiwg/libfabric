@@ -195,6 +195,7 @@ enum {
 	FI_EOVERRUN	 = 268, /* Queue has been overrun */
 	FI_ENORX	 = 269, /* Receiver not ready, no receive buffers available */
 	FI_ENOMR	 = 270, /* No more memory registrations available */
+	FI_EFIREWALLADDR = 271, /* Host unreachable because it is behind firewall */
 	FI_ERRNO_MAX
 };
 

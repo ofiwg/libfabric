@@ -375,7 +375,7 @@ ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t addr,
 				"warn: peer %s is behind firewall\n",
 				(*peer)->str_addr);
 
-			return -FI_EHOSTUNREACH;
+			return -FI_EFIREWALLADDR;
 		}
 
 		ret = xnet_rdm_connect(*conn);
