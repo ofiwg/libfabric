@@ -1409,6 +1409,9 @@ struct cxip_evtq {
 	unsigned int ack_batch_size;
 	struct c_eq_status prev_eq_status;
 	bool eq_saturated;
+	/* Reference to wait_obj allocated outside scope of event queue */
+	struct cxil_wait_obj *event_wait_obj;
+	struct cxil_wait_obj *status_wait_obj;
 
 	/* Point back to CQ */
 	struct cxip_cq *cq;
@@ -1844,7 +1847,7 @@ struct cxip_rxc_ops {
 			       void *desc, fi_addr_t src_add, uint64_t tag,
 			       uint64_t ignore, void *context, uint64_t flags,
 			       bool tagged, struct cxip_cntr *comp_cntr);
-	void (*progress)(struct cxip_rxc *rxc);
+	void (*progress)(struct cxip_rxc *rxc, bool internal);
 	void (*recv_req_tgt_event)(struct cxip_req *req,
 				   const union c_event *event);
 	int (*cancel_msg_recv)(struct cxip_req *req);
@@ -2219,7 +2222,7 @@ struct cxip_txc_ops {
 			       bool triggered, uint64_t trig_thresh,
 			       struct cxip_cntr *trig_cntr,
 			       struct cxip_cntr *comp_cntr);
-	void (*progress)(struct cxip_txc *txc);
+	void (*progress)(struct cxip_txc *txc, bool internal);
 	int (*cancel_msg_send)(struct cxip_req *req);
 	void (*init_struct)(struct cxip_txc *txc, struct cxip_ep_obj *ep_obj);
 	void (*fini_struct)(struct cxip_txc *txc);
@@ -3263,7 +3266,7 @@ int proverr2errno(int err);
 struct cxip_req *cxip_evtq_req_alloc(struct cxip_evtq *evtq,
 				     int remap, void *req_ctx);
 void cxip_evtq_req_free(struct cxip_req *req);
-void cxip_evtq_progress(struct cxip_evtq *evtq);
+void cxip_evtq_progress(struct cxip_evtq *evtq, bool internal);
 
 void cxip_ep_progress(struct fid *fid);
 void cxip_ep_flush_trig_reqs(struct cxip_ep_obj *ep_obj);
@@ -3289,12 +3292,13 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 void cxip_unmap(struct cxip_md *md);
 
 int cxip_ctrl_msg_send(struct cxip_ctrl_req *req, uint64_t data);
-void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj);
-void cxip_ep_ctrl_progress_locked(struct cxip_ep_obj *ep_obj);
-void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj);
-void cxip_ep_tx_ctrl_progress_locked(struct cxip_ep_obj *ep_obj);
-void cxip_ep_tgt_ctrl_progress(struct cxip_ep_obj *ep_obj);
-void cxip_ep_tgt_ctrl_progress_locked(struct cxip_ep_obj *ep_obj);
+void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj, bool internal);
+void cxip_ep_ctrl_progress_locked(struct cxip_ep_obj *ep_obj, bool internal);
+void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj, bool internal);
+void cxip_ep_tx_ctrl_progress_locked(struct cxip_ep_obj *ep_obj, bool internal);
+void cxip_ep_tgt_ctrl_progress(struct cxip_ep_obj *ep_obj, bool internal);
+void cxip_ep_tgt_ctrl_progress_locked(struct cxip_ep_obj *ep_obj,
+				      bool internal);
 int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);
 int cxip_ep_trywait(struct cxip_ep_obj *ep_obj, struct cxip_cq *cq);

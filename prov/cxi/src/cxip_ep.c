@@ -170,7 +170,9 @@ struct fi_ops_cm cxip_ep_cm_ops = {
 };
 
 /*
- * cxip_ep_progress() - Progress an endpoint.
+ * cxip_ep_progress() - Progress an endpoint. Libfabric API calls
+ * that initiate/require progress call this routine to initiate
+ * progress of an endpoint.
  */
 void cxip_ep_progress(struct fid *fid)
 {
@@ -180,9 +182,9 @@ void cxip_ep_progress(struct fid *fid)
 	if (ep_obj->enabled) {
 
 		ofi_genlock_lock(&ep_obj->lock);
-		ep_obj->rxc->ops.progress(ep_obj->rxc);
-		ep_obj->txc->ops.progress(ep_obj->txc);
-		cxip_ep_ctrl_progress_locked(ep_obj);
+		ep_obj->rxc->ops.progress(ep_obj->rxc, false);
+		ep_obj->txc->ops.progress(ep_obj->txc, false);
+		cxip_ep_ctrl_progress_locked(ep_obj, false);
 		ofi_genlock_unlock(&ep_obj->lock);
 	}
 }

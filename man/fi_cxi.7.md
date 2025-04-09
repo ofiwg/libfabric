@@ -79,10 +79,20 @@ The CXI provider supports FI_THREAD_SAFE and FI_THREAD_DOMAIN threading models.
 ## Wait Objects
 
 The CXI provider supports FI_WAIT_FD and FI_WAIT_POLLFD CQ wait object types.
-FI_WAIT_UNSPEC will default to FI_WAIT_FD. However FI_WAIT_NONE should achieve
-the lowest latency and reduce interrupt overhead. NOTE: A process may return
-from a epoll_wait/poll when provider progress is required and a CQ event may
-not be available.
+Using FI_WAIT_UNSPEC will default to FI_WAIT_FD. When a wait object is not
+required FI_WAIT_NONE should be specified and will achieve the lowest latency
+and reduce interrupt overhead.
+
+It is intended the application marshal multi-thread access to waiting and CQ
+progress. There is a natural race window that can occur between the application
+fi_trywait() call and subsequent epoll_wait() call and another thread progressing
+events and creating a CQ entry. The provider implementation has chosen normal
+case performance over completely closing the race with internal progress, which
+could be done with updating another FD on every CQ write. Therefore, it is
+suggested the epoll_wait() timeout be reasonably small.
+
+NOTE: A process may return from a epoll_wait() when provider progress is
+required and a CQ event may not be available.
 
 ## Additional Features
 

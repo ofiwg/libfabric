@@ -5592,9 +5592,9 @@ static void *simple_rx_worker(void *data)
 		.events = EPOLLIN,
 		.data.u32 = 0,
 	};
+	struct epoll_event evs[1] = {};
 	int epfd;
 	struct pollfd fds;
-	int tries = 0;
 
         recv_buf = aligned_alloc(s_page_size, recv_len);
         cr_assert(recv_buf);
@@ -5609,23 +5609,21 @@ static void *simple_rx_worker(void *data)
 
 	fids[0] = &cxit_rx_cq->fid;
 
+	epfd = epoll_create1(0);
+	cr_assert(epfd >= 0, "epoll_create1() failed %s", strerror(errno));
+
 	/* We want to block waiting for the recv event */
 	if (arg->epoll) {
-		epfd = epoll_create1(0);
-		cr_assert(epfd >= 0, "epoll_create1() failed %s",
-			  strerror(errno));
-
 		ev.data.fd = cq_fd;
 		ret = epoll_ctl(epfd, EPOLL_CTL_ADD, cq_fd, &ev);
 		cr_assert_eq(ret, 0, "epoll_ctl() failed %s", strerror(errno));
 	}
 
-	/* For UX message tests, trywait should return -FI_EAGAIN */
 cqe_not_ready:
 	ret = fi_trywait(cxit_fabric, fids, 1);
+
+	/* For UX message tests, trywait should return -FI_EAGAIN */
 	if (arg->ux_msg) {
-		cr_assert_eq(ret, -FI_EAGAIN, "UX event not ready, ret %s\n",
-			     fi_strerror(-ret));
 		do {
 			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
 		} while (ret == -FI_EAGAIN);
@@ -5633,14 +5631,11 @@ cqe_not_ready:
 		goto done;
 	}
 
-	/* No event should be pending, nothing sent yet */
-	if (tries == 0)
-		cr_assert_eq(ret, FI_SUCCESS, "RX CQ event pending ret %d", ret);
-
 	/* Wait for message */
 	if (ret == FI_SUCCESS) {
 		if (arg->epoll) {
-			struct epoll_event evs[1] = {};
+			evs[0].events = 0;
+			evs[0].data.u32 = 0;
 
 			ret = epoll_wait(epfd, evs, 1, 5000);
 		} else {
@@ -5656,12 +5651,15 @@ cqe_not_ready:
 	 * is possible. Make sure no more than two wakeups occur.
 	 */
 	ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
-	if (ret == -FI_EAGAIN && ++tries < 2)
+	if (ret == -FI_EAGAIN) {
+		sched_yield();
 		goto cqe_not_ready;
+	}
 
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
 done:
+	close(epfd);
 	free(recv_buf);
 	pthread_exit(NULL);
 }
@@ -5737,6 +5735,309 @@ Test(tagged_cq_wait, simple_rx_poll_ux)
 	simple_rx_wait(false, true);
 }
 
+struct waitfd_rx_waiter {
+	pthread_mutex_t *progress_mutex;
+	bool recv_cqe;
+	size_t len;
+	int num_msgs;
+	int thread;
+};
+
+static void *simple_rx_waiter(void *data)
+{
+	struct waitfd_rx_waiter *args = (struct waitfd_rx_waiter *) data;
+	struct fi_cq_tagged_entry *cqe;
+	struct fid *fids[1];
+	fi_addr_t from;
+	int ret;
+	int cq_fd;
+	struct epoll_event ev = {
+		.events = EPOLLIN,
+		.data.u32 = 0,
+	};
+	struct epoll_event evs[1] = {};
+	int epfd;
+
+	ret = fi_control(&cxit_rx_cq->fid, FI_GETWAIT, &cq_fd);
+	cr_assert_eq(ret, FI_SUCCESS, "Get CQ wait FD %d", cq_fd);
+	fids[0] = &cxit_rx_cq->fid;
+
+
+	epfd = epoll_create1(0);
+	cr_assert(epfd >= 0, "epoll_create1() failed %s", strerror(errno));
+	ev.data.fd = cq_fd;
+	ret = epoll_ctl(epfd, EPOLL_CTL_ADD, cq_fd, &ev);
+	cr_assert_eq(ret, 0, "epoll_ctl() failed %s", strerror(errno));
+
+	/* If not reading a completion let everyone enter epoll to
+	 * demonstrate that all threads will wake up.
+	 */
+	if (!args->recv_cqe) {
+		ret = fi_trywait(cxit_fabric, fids, 1);
+		cr_assert_eq(ret, FI_SUCCESS, "Unexpected fi_trywait err %s",
+			     fi_strerror(-ret));
+
+		/* Timeout must be greater than sender delay of 1 second */
+		ret = epoll_wait(epfd, evs, 1, 3000);
+		cr_assert(ret != 0, "Thread did not wake up, epoll %d", ret);
+		cr_assert(ret > 0, "Epoll error %d", ret);
+
+		goto done;
+	}
+
+	pthread_mutex_lock(args->progress_mutex);
+trywait:
+	ret = fi_trywait(cxit_fabric, fids, 1);
+	if (ret == -FI_EAGAIN) {
+		ret = fi_cq_readfrom(cxit_rx_cq, &cqe, 1, &from);
+		if (ret == -FI_EAGAIN)
+			goto trywait;
+
+		/* Read our event while not blocked */
+		cr_assert_eq(ret, 1, "Error trywait progress %d\n", ret);
+		pthread_mutex_unlock(args->progress_mutex);
+
+		goto done;
+	}
+	cr_assert_eq(ret, FI_SUCCESS, "Unexpected fi_trywait err %s",
+		     fi_strerror(-ret));
+	evs[0].events = 0;
+	evs[0].data.u32 = 0;
+
+	/* Timeout must be greater than sender delay of 1 second */
+	ret = epoll_wait(epfd, evs, 1, 3000);
+	cr_assert(ret != 0, "RX thread waiter timed out, epoll %d", ret);
+
+	ret = fi_cq_readfrom(cxit_rx_cq, &cqe, 1, &from);
+	if (ret == -FI_EAGAIN)
+		goto trywait;
+
+	cr_assert_eq(ret, 1, "Unexpected CQ read return  %d\n", ret);
+	pthread_mutex_unlock(args->progress_mutex);
+
+done:
+	close(epfd);
+	pthread_exit(NULL);
+}
+
+void waitfd_rx_waiters(bool post_recv, size_t len, bool ux)
+{
+	pthread_t rx_thread[6];
+	pthread_attr_t attr[6];
+	pthread_mutexattr_t mutex_attr;
+	pthread_mutex_t progress_mutex;
+	int ret;
+	int i;
+	int send_len = len;
+	uint8_t *send_buf;
+	uint8_t *recv_buf[6];
+	struct fi_cq_tagged_entry tx_cqe;
+	struct waitfd_rx_waiter arg = {
+		.recv_cqe = post_recv,
+	};
+
+	ret = pthread_mutexattr_init(&mutex_attr);
+	cr_assert_eq(ret, 0, "Mutex attribute init failure %d", ret);
+	ret = pthread_mutex_init(&progress_mutex, &mutex_attr);
+	cr_assert_eq(ret, 0, "Mutex init failure %d", ret);
+
+	arg.progress_mutex = &progress_mutex;
+
+	send_buf = aligned_alloc(s_page_size, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	for (i = 0; i < 6; i++) {
+		pthread_attr_init(&attr[i]);
+		pthread_attr_setdetachstate(&attr[i], PTHREAD_CREATE_JOINABLE);
+
+		/* Start processing receives */
+		ret = pthread_create(&rx_thread[i], &attr[i],
+				     simple_rx_waiter, &arg);
+		cr_assert_eq(ret, 0, "Receive thread create failed %d", ret);
+	}
+
+	/* Make sure all RX threads are started */
+	sleep(1);
+
+	if (!ux) {
+		for (i = 0; i < 6; i++) {
+			if (post_recv) {
+				recv_buf[i] = aligned_alloc(s_page_size, len);
+				cr_assert(recv_buf[i]);
+			} else {
+				recv_buf[i] = NULL;
+			}
+			ret = fi_recv(cxit_ep, recv_buf[i], len, NULL,
+				      FI_ADDR_UNSPEC, NULL);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+		}
+	}
+
+	/* Send at least one message to self to generate RX events to
+	 * wakeup waiter threads.
+	 */
+	for (i = 0; i < (post_recv ? 6 : 1); i++) {
+		ret = fi_send(cxit_ep, send_buf, send_len, NULL,
+			      cxit_ep_fi_addr, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
+	}
+
+	if (ux) {
+		for (i = 0; i < 6; i++) {
+			if (post_recv) {
+				recv_buf[i] = aligned_alloc(s_page_size, len);
+				cr_assert(recv_buf[i]);
+			} else {
+				recv_buf[i] = NULL;
+			}
+			ret = fi_recv(cxit_ep, recv_buf[i], len, NULL,
+				      FI_ADDR_UNSPEC, NULL);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+		}
+	}
+
+	/* Wait for all RX threads to be awoken and terminate */
+	for (i = 0; i < 6; i++)
+		ret = pthread_join(rx_thread[i], NULL);
+
+        /* Wait for async event(s) indicating data has been sent */
+	for (i = 0; i < (post_recv ? 6 : 1); i++) {
+		ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+	}
+
+	free(send_buf);
+
+	for (i = 0; i < 6; i++)
+		free(recv_buf[i]);
+
+	pthread_mutex_destroy(&progress_mutex);
+	pthread_mutexattr_destroy(&mutex_attr);
+}
+
+Test(tagged_cq_wait, wake_all)
+{
+	waitfd_rx_waiters(false, 0, false);
+}
+
+Test(tagged_cq_wait, wake_mt_rx)
+{
+	waitfd_rx_waiters(true, 256, false);
+}
+
+Test(tagged_cq_wait, wake_mt_rx_ux)
+{
+	waitfd_rx_waiters(true, 256, true);
+}
+
+static void *simple_tx_waiter(void *data)
+{
+	struct waitfd_rx_waiter *args = (struct waitfd_rx_waiter *) data;
+	struct fi_cq_tagged_entry tx_cqe;
+	uint8_t *send_buf;
+	int ret;
+	int i;
+
+	send_buf = aligned_alloc(s_page_size, args->len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < args->len; i++)
+		send_buf[i] = (i & 0x0F) | args->thread << 4;
+
+	for (i = 0; i < args->num_msgs; i++) {
+		ret = fi_send(cxit_ep, send_buf, args->len, NULL,
+			      cxit_ep_fi_addr, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
+	}
+
+        /* Wait for async event(s) indicating data has been sent */
+	for (i = 0; i < args->num_msgs; i++) {
+		pthread_mutex_lock(args->progress_mutex);
+		ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+		pthread_mutex_unlock(args->progress_mutex);
+		sched_yield();
+	}
+
+	free(send_buf);
+
+	pthread_exit(NULL);
+}
+
+void waitfd_txrx_waiters(bool post_recv, size_t len)
+{
+	pthread_t rx_thread[6];
+	pthread_attr_t rx_attr[6];
+	pthread_t tx_thread[6];
+	pthread_attr_t tx_attr[6];
+	pthread_mutexattr_t mutex_attr;
+	pthread_mutex_t progress_mutex;
+	struct waitfd_rx_waiter arg[6];
+	int ret;
+	int i;
+	uint8_t *recv_buf[6];
+
+	ret = pthread_mutexattr_init(&mutex_attr);
+	cr_assert_eq(ret, 0, "Mutex attribute init failure %d", ret);
+	ret = pthread_mutex_init(&progress_mutex, &mutex_attr);
+	cr_assert_eq(ret, 0, "Mutex init failure %d", ret);
+
+	for (i = 0; i < 6; i++) {
+		arg[i].progress_mutex = &progress_mutex,
+		arg[i].recv_cqe = post_recv;
+		arg[i].len = len;
+		arg[i].num_msgs = 1;
+		arg[i].thread = i;
+
+		pthread_attr_init(&rx_attr[i]);
+		pthread_attr_setdetachstate(&rx_attr[i],
+					    PTHREAD_CREATE_JOINABLE);
+
+		/* Start processing receives */
+		ret = pthread_create(&rx_thread[i], &rx_attr[i],
+				     simple_rx_waiter, &arg[i]);
+		cr_assert_eq(ret, 0, "Receive thread create failed %d", ret);
+
+		recv_buf[i] = aligned_alloc(s_page_size, len);
+		cr_assert(recv_buf[i]);
+		ret = fi_recv(cxit_ep, recv_buf[i], len, NULL,
+			      FI_ADDR_UNSPEC, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+	}
+
+	sleep(1);
+
+	for (i = 0; i < 6; i++) {
+		pthread_attr_init(&tx_attr[i]);
+		pthread_attr_setdetachstate(&tx_attr[i],
+					    PTHREAD_CREATE_JOINABLE);
+
+		/* Start processing receives */
+		ret = pthread_create(&tx_thread[i], &tx_attr[i],
+				     simple_tx_waiter, &arg[i]);
+		cr_assert_eq(ret, 0, "Transmit thread create failed %d", ret);
+	}
+
+	/* Wait for all RX threads to be awoken and terminate */
+	for (i = 0; i < 6; i++)
+		ret = pthread_join(rx_thread[i], NULL);
+
+	/* Wait for all TX threads to be awoken and terminate */
+	for (i = 0; i < 6; i++)
+		ret = pthread_join(tx_thread[i], NULL);
+
+	pthread_mutex_destroy(&progress_mutex);
+	pthread_mutexattr_destroy(&mutex_attr);
+}
+
+Test(tagged_cq_wait, wake_tx_rx)
+{
+     waitfd_txrx_waiters(true, 256);
+}
+
 struct fd_params {
 	size_t length;
 	size_t num_ios;
@@ -5748,6 +6049,7 @@ struct fd_params {
 struct tagged_cq_wait_event_args {
 	struct fid_cq *cq;
 	struct fi_cq_tagged_entry *cqe;
+	pthread_mutex_t *progress_mutex;
 	size_t io_num;
 	int timeout;
 	bool poll;
@@ -5764,14 +6066,15 @@ static void *tagged_cq_wait_evt_worker(void *data)
 		.events = EPOLLIN,
 		.data.u32 = 0,
 	};
+	struct epoll_event evs[1] = {};
 	int epfd;
 
 	args = (struct tagged_cq_wait_event_args *)data;
 
+	epfd = epoll_create1(0);
+	cr_assert(epfd >= 0, "epoll_create1() failed %s", strerror(errno));
+
 	if (args->poll) {
-		epfd = epoll_create1(0);
-		cr_assert(epfd >= 0, "epoll_create1() failed %s",
-			  strerror(errno));
 
 		ret = fi_control(&args->cq->fid, FI_GETWAIT, &cq_fd);
 		cr_assert_eq(ret, FI_SUCCESS, "Get CQ wait FD %d", ret);
@@ -5784,10 +6087,13 @@ static void *tagged_cq_wait_evt_worker(void *data)
 
 	while (completions < args->io_num) {
 		if (args->poll) {
+
+			pthread_mutex_lock(args->progress_mutex);
 			fids[0] = &args->cq->fid;
 			ret = fi_trywait(cxit_fabric, fids, 1);
 			if (ret == FI_SUCCESS) {
-				struct epoll_event evs[1] = {};
+				evs[0].events = 0;
+				evs[0].data.u32 = 0;
 
 				ret = epoll_wait(epfd, evs, 1, args->timeout);
 				cr_assert_neq(ret, 0, "%s CQ poll timed out",
@@ -5800,18 +6106,24 @@ static void *tagged_cq_wait_evt_worker(void *data)
 					 &args->cqe[completions], 1);
 			if (ret == 1)
 				completions++;
+			pthread_mutex_unlock(args->progress_mutex);
 
 			sched_yield();
 		} else {
+
+			pthread_mutex_lock(args->progress_mutex);
 			ret = fi_cq_sread(args->cq, &args->cqe[completions],
 					  1, NULL, args->timeout);
 			cr_assert_eq(ret, 1,
 				     "%s completion not received ret %d\n",
 				     args->cq == cxit_tx_cq ? "TX" : "RX", ret);
+			pthread_mutex_unlock(args->progress_mutex);
+
 			completions++;
 		}
 	}
 
+	close(epfd);
 	pthread_exit(NULL);
 }
 
@@ -5830,16 +6142,19 @@ static void cq_wait_post_sends(struct tagged_thread_args *tx_args,
 		for (size_t i = 0; i < buf_len; i++)
 			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
 
-		do {
-			ret = fi_tsend(cxit_ep, tx_args[tx_io].buf,
-				       tx_args[tx_io].len, NULL,
-				       cxit_ep_fi_addr, tx_args[tx_io].tag,
-				       NULL);
-			if (ret == -FI_EAGAIN) {
+try_send:
+		ret = fi_tsend(cxit_ep, tx_args[tx_io].buf, tx_args[tx_io].len,
+			       NULL, cxit_ep_fi_addr, tx_args[tx_io].tag, NULL);
+		if (ret == -FI_EAGAIN) {
+			/* For UX we can progress without mutex, otherwise wait
+			 * for WAIT_FD progress
+			 */
+			if (param->ux_msg) {
 				fi_cq_read(cxit_tx_cq, NULL, 0);
 				fi_cq_read(cxit_rx_cq, NULL, 0);
 			}
-		} while (ret == -FI_EAGAIN);
+			goto try_send;
+		}
 		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend %ld: unexpected ret %d",
 			     tx_io, ret);
 	}
@@ -5853,6 +6168,8 @@ void do_cq_wait(struct fd_params *param)
 	struct fi_cq_tagged_entry *tx_cqe;
 	struct tagged_thread_args *tx_args;
 	struct tagged_thread_args *rx_args;
+	pthread_mutexattr_t mutex_attr;
+	pthread_mutex_t progress_mutex;
 	pthread_t tx_thread;
 	pthread_t rx_thread;
 	pthread_attr_t attr = {};
@@ -5862,12 +6179,21 @@ void do_cq_wait(struct fd_params *param)
 		.timeout = param->timeout,
 		.poll = param->poll,
 	};
+
 	struct tagged_cq_wait_event_args rx_evt_args = {
 		.cq = cxit_rx_cq,
 		.io_num = param->num_ios,
 		.timeout = param->timeout,
 		.poll = param->poll,
 	};
+
+	ret = pthread_mutexattr_init(&mutex_attr);
+	cr_assert_eq(ret, 0, "Mutex attribute init failure %d", ret);
+	ret = pthread_mutex_init(&progress_mutex, &mutex_attr);
+	cr_assert_eq(ret, 0, "Mutex init failure %d", ret);
+
+	tx_evt_args.progress_mutex = &progress_mutex;
+	rx_evt_args.progress_mutex = &progress_mutex;
 
 	tx_cqe = calloc(param->num_ios, sizeof(struct fi_cq_tagged_entry));
 	cr_assert_not_null(tx_cqe);
@@ -5914,6 +6240,10 @@ void do_cq_wait(struct fd_params *param)
 				       rx_args[rx_io].len, NULL,
 				       FI_ADDR_UNSPEC, rx_args[rx_io].tag,
 				       0, NULL);
+
+			/* We can progress if needed since RX threads have
+			 * not started yet.
+			 */
 			if (ret == -FI_EAGAIN)
 				fi_cq_read(cxit_rx_cq, NULL, 0);
 		} while (ret == -FI_EAGAIN);
@@ -5935,6 +6265,7 @@ void do_cq_wait(struct fd_params *param)
 		ret = pthread_create(&tx_thread, &attr,
 				     tagged_cq_wait_evt_worker,
 				     (void *)&tx_evt_args);
+
 		cq_wait_post_sends(tx_args, param);
 	}
 
@@ -5960,6 +6291,8 @@ void do_cq_wait(struct fd_params *param)
 		free(rx_args[io].buf);
 	}
 
+	pthread_mutex_destroy(&progress_mutex);
+	pthread_mutexattr_destroy(&mutex_attr);
 	pthread_attr_destroy(&attr);
 	free(rx_cqe);
 	free(tx_cqe);

@@ -1929,7 +1929,7 @@ static void cxip_fc_progress_ctrl(struct cxip_rxc_hpc *rxc)
 	rxc->drop_count = rxc->base.ep_obj->asic_ver < CASSINI_2_0 ? -1 : 0;
 
 	while ((ret = cxip_recv_resume(rxc)) == -FI_EAGAIN)
-		cxip_ep_tx_ctrl_progress_locked(rxc->base.ep_obj);
+		cxip_ep_tx_ctrl_progress_locked(rxc->base.ep_obj, true);
 
 	assert(ret == FI_SUCCESS);
 }
@@ -3142,7 +3142,7 @@ int cxip_build_ux_entry_info(struct cxip_ep *ep,
 
 	RXC_DBG(rxc, "Search for ULE dump initiated, req %p\n", req);
 	do {
-		cxip_evtq_progress(&rxc->base.rx_evtq);
+		cxip_evtq_progress(&rxc->base.rx_evtq, true);
 		sched_yield();
 	} while (!ux_dump->done);
 
@@ -3196,7 +3196,8 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 				break;
 
 			ofi_atomic_dec32(&rxc->orx_tx_reqs);
-			cxip_evtq_progress(&rxc->base.ep_obj->txc->tx_evtq);
+			cxip_evtq_progress(&rxc->base.ep_obj->txc->tx_evtq,
+					   true);
 		} while (true);
 
 		do {
@@ -3205,7 +3206,8 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 			if (ret == FI_SUCCESS)
 				break;
 
-			cxip_evtq_progress(&rxc->base.ep_obj->txc->tx_evtq);
+			cxip_evtq_progress(&rxc->base.ep_obj->txc->tx_evtq,
+					   true);
 		} while (true);
 
 		/* If multi-recv, a child request was created from
@@ -3353,7 +3355,7 @@ cxip_recv_req_init(struct cxip_rxc *rxc, void *buf, size_t len, fi_addr_t addr,
 	/* HW to SW PtlTE transition, ensure progress is made */
 	if (rxc->state != RXC_ENABLED && rxc->state != RXC_ENABLED_SOFTWARE) {
 		/* EP lock is held */
-		rxc->ops.progress(rxc);
+		rxc->ops.progress(rxc, true);
 		ret = -FI_EAGAIN;
 		goto err;
 	}
@@ -3691,9 +3693,9 @@ err_dequeue_req:
 	return -FI_EAGAIN;
 }
 
-static void cxip_rxc_hpc_progress(struct cxip_rxc *rxc)
+static void cxip_rxc_hpc_progress(struct cxip_rxc *rxc, bool internal)
 {
-	cxip_evtq_progress(&rxc->rx_evtq);
+	cxip_evtq_progress(&rxc->rx_evtq, internal);
 }
 
 static void cxip_rxc_hpc_recv_req_tgt_event(struct cxip_req *req,
@@ -3977,7 +3979,7 @@ static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
 	/* Wait for PTE state change */
 	do {
 		sched_yield();
-		cxip_evtq_progress(&rxc->base.rx_evtq);
+		cxip_evtq_progress(&rxc->base.rx_evtq, true);
 	} while (rxc->base.rx_pte->state != state);
 
 	CXIP_DBG("RXC HPC messaging enabled: %p, pid_bits: %d\n",
@@ -5160,7 +5162,7 @@ static int cxip_send_req_queue(struct cxip_txc_hpc *txc, struct cxip_req *req)
 			/* Peer is disabled. Progress control EQs so future
 			 * cxip_send_req_queue() may succeed.
 			 */
-			cxip_ep_ctrl_progress_locked(txc->base.ep_obj);
+			cxip_ep_ctrl_progress_locked(txc->base.ep_obj, true);
 
 			return -FI_EAGAIN;
 		}
@@ -5201,10 +5203,10 @@ static int cxip_send_req_dequeue(struct cxip_txc_hpc *txc, struct cxip_req *req)
 	return FI_SUCCESS;
 }
 
-static void cxip_txc_hpc_progress(struct cxip_txc *txc)
+static void cxip_txc_hpc_progress(struct cxip_txc *txc, bool internal)
 {
 	cxip_coll_progress_cq_poll(txc->ep_obj);
-	cxip_evtq_progress(&txc->tx_evtq);
+	cxip_evtq_progress(&txc->tx_evtq, internal);
 }
 
 static int cxip_txc_hpc_cancel_msg_send(struct cxip_req *req)

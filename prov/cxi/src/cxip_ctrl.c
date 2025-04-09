@@ -324,8 +324,8 @@ static void cxip_ep_return_ctrl_tx_credits(struct cxip_ep_obj *ep_obj,
 }
 
 void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
-			      struct cxi_eq *ctrl_evtq, bool tx_evtq,
-			      bool ep_obj_locked)
+			      struct cxi_eq *ctrl_evtq, bool internal,
+			      bool tx_evtq, bool ep_obj_locked)
 {
 	const union c_event *event;
 	struct cxip_ctrl_req *req;
@@ -337,6 +337,14 @@ void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
 
 	if (!ep_obj_locked)
 		ofi_genlock_lock(&ep_obj->lock);
+
+	/* If a EP supports wait object and progress is driven
+	 * by application CQ processing, disable interrupts if
+	 * enabled.
+	 */
+	if (ep_obj->priv_wait && !internal &&
+	    !ctrl_evtq->sw_state.event_int_disable)
+		cxi_eq_int_disable(ctrl_evtq);
 
 	while ((event = cxi_eq_peek_event(ctrl_evtq))) {
 		req = cxip_ep_ctrl_event_req(ep_obj, event);
@@ -363,49 +371,56 @@ void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
 		ofi_genlock_unlock(&ep_obj->lock);
 }
 
-void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj)
+void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj, bool internal)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tx_evtq, true, false);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tx_evtq,
+				 internal, true, false);
 }
 
-void cxip_ep_tx_ctrl_progress_locked(struct cxip_ep_obj *ep_obj)
+void cxip_ep_tx_ctrl_progress_locked(struct cxip_ep_obj *ep_obj, bool internal)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tx_evtq, true, true);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tx_evtq,
+				 internal, true, true);
 }
 
 /*
  * cxip_ep_ctrl_progress() - Progress operations using the control EQ.
  */
-void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj)
+void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj, bool internal)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq, false, false);
-	cxip_ep_tx_ctrl_progress(ep_obj);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq,
+				 internal, false, false);
+	cxip_ep_tx_ctrl_progress(ep_obj, internal);
 }
 
 /*
  * cxip_ep_ctrl_progress_locked() - Progress operations using the control EQ.
  */
-void cxip_ep_ctrl_progress_locked(struct cxip_ep_obj *ep_obj)
+void cxip_ep_ctrl_progress_locked(struct cxip_ep_obj *ep_obj, bool internal)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq, false, true);
-	cxip_ep_tx_ctrl_progress_locked(ep_obj);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq,
+				 internal, false, true);
+	cxip_ep_tx_ctrl_progress_locked(ep_obj, internal);
 }
 
 /*
  * cxip_ep_tgt_ctrl_progress() - Progress TGT operations using the control EQ.
  */
-void cxip_ep_tgt_ctrl_progress(struct cxip_ep_obj *ep_obj)
+void cxip_ep_tgt_ctrl_progress(struct cxip_ep_obj *ep_obj, bool internal)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq, false, false);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq,
+				 internal, false, false);
 }
 
 /*
  * cxip_ep_tgt_ctrl_progress_locked() - Progress operations using the control
  * EQ.
  */
-void cxip_ep_tgt_ctrl_progress_locked(struct cxip_ep_obj *ep_obj)
+void cxip_ep_tgt_ctrl_progress_locked(struct cxip_ep_obj *ep_obj,
+				      bool internal)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq, false, true);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl.tgt_evtq,
+				 internal, false, true);
 }
 
 static void cxip_eq_ctrl_eq_free(void *eq_buf, struct cxi_md *eq_md,
