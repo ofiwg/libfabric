@@ -245,7 +245,7 @@ void cxip_rxc_recv_req_cleanup(struct cxip_rxc *rxc)
 	start = ofi_gettime_ms();
 	while (cxip_rxc_orx_reqs_get(rxc)) {
 		sched_yield();
-		cxip_evtq_progress(&rxc->rx_evtq);
+		cxip_evtq_progress(&rxc->rx_evtq, false);
 
 		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
 			CXIP_WARN("Timeout waiting for outstanding requests.\n");

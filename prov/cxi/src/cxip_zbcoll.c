@@ -792,7 +792,7 @@ static void zbsend(struct cxip_ep_obj *ep_obj, uint32_t dstnic, uint32_t dstpid,
 	do {
 		ret =  cxip_ctrl_msg_send(req, 0);
 		if (ret == -FI_EAGAIN)
-			cxip_ep_ctrl_progress_locked(ep_obj);
+			cxip_ep_ctrl_progress_locked(ep_obj, true);
 	} while (ret == -FI_EAGAIN);
 	if (ret) {
 		CXIP_WARN("failed CTRL message send\n");
@@ -1609,7 +1609,7 @@ void cxip_ep_zbcoll_progress(struct cxip_ep_obj *ep_obj)
 	zbcoll = &ep_obj->zbcoll;
 	while (true) {
 		/* progress the underlying ctrl transfers */
-		cxip_ep_ctrl_progress_locked(ep_obj);
+		cxip_ep_ctrl_progress_locked(ep_obj, true);
 
 		/* see if there is a zb ready to be advanced */
 		zb = NULL;

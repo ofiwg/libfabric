@@ -229,9 +229,9 @@ static int cxip_rnr_recv_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
-static void cxip_rxc_rnr_progress(struct cxip_rxc *rxc)
+static void cxip_rxc_rnr_progress(struct cxip_rxc *rxc, bool internal)
 {
-	cxip_evtq_progress(&rxc->rx_evtq);
+	cxip_evtq_progress(&rxc->rx_evtq, internal);
 }
 
 static void cxip_rxc_rnr_recv_req_tgt_event(struct cxip_req *req,
@@ -391,7 +391,7 @@ static int cxip_rxc_rnr_msg_init(struct cxip_rxc *rxc_base)
 	/* Wait for PTE state change */
 	do {
 		sched_yield();
-		cxip_evtq_progress(&rxc->base.rx_evtq);
+		cxip_evtq_progress(&rxc->base.rx_evtq, true);
 	} while (rxc->base.rx_pte->state != C_PTLTE_ENABLED);
 
 	return FI_SUCCESS;
@@ -870,14 +870,14 @@ reset_min_time_wait:
 	return ret;
 }
 
-static void cxip_txc_rnr_progress(struct cxip_txc *txc_base)
+static void cxip_txc_rnr_progress(struct cxip_txc *txc_base, bool internal)
 {
 	struct cxip_txc_rnr *txc = container_of(txc_base, struct cxip_txc_rnr,
 						base);
 
 	assert(txc->base.protocol == FI_PROTO_CXI_RNR);
 
-	cxip_evtq_progress(&txc->base.tx_evtq);
+	cxip_evtq_progress(&txc->base.tx_evtq, internal);
 	cxip_process_rnr_time_wait(txc);
 }
 
@@ -1109,12 +1109,12 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	ofi_genlock_lock(&txc->ep_obj->lock);
 	/* If RNR list is not empty, check if the first retry entry time
 	 * wait has expired, and if so force progress to initiate any
-	 * read retry/retries.
+	 * read retry/retries but do not disable interrupts.
 	 */
 	if (txc_rnr->next_retry_wait_us != UINT64_MAX &&
 	    ofi_atomic_get32(&txc_rnr->time_wait_reqs)) {
 		if (ofi_gettime_us() >= txc_rnr->next_retry_wait_us)
-			cxip_txc_rnr_progress(txc);
+			cxip_txc_rnr_progress(txc, true);
 	}
 
 	idc = cxip_rnr_req_uses_idc(txc_rnr, len, triggered);

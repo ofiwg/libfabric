@@ -355,7 +355,7 @@ void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool)
 	}
 
 	do {
-		cxip_evtq_progress(&rxc->base.rx_evtq);
+		cxip_evtq_progress(&rxc->base.rx_evtq, true);
 	} while (ofi_atomic_get32(&pool->bufs_linked));
 
 	cxip_ptelist_buf_dlist_free(&pool->active_bufs);

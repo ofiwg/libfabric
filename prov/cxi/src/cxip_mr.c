@@ -130,7 +130,7 @@ static int cxip_mr_wait_append(struct cxip_ep_obj *ep_obj,
 	/* Wait for PTE LE append status update */
 	do {
 		sched_yield();
-		cxip_ep_tgt_ctrl_progress_locked(ep_obj);
+		cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
 	} while (mr->mr_state != CXIP_MR_LINKED &&
 		 mr->mr_state != CXIP_MR_LINK_ERR);
 
@@ -217,7 +217,7 @@ static bool cxip_mr_disable_check_count_events(struct cxip_mr *mr,
 			return false;
 
 		sched_yield();
-		cxip_ep_tgt_ctrl_progress_locked(ep_obj);
+		cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
 	}
 }
 
@@ -240,7 +240,7 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 
 	do {
 		sched_yield();
-		cxip_ep_tgt_ctrl_progress_locked(ep_obj);
+		cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
 	} while (mr->mr_state != CXIP_MR_UNLINKED);
 
 	if (mr->count_events) {
@@ -411,7 +411,7 @@ static int cxip_mr_disable_opt(struct cxip_mr *mr)
 
 	do {
 		sched_yield();
-		cxip_ep_tgt_ctrl_progress_locked(ep_obj);
+		cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
 	} while (mr->mr_state != CXIP_MR_UNLINKED);
 
 cleanup:
@@ -1039,7 +1039,7 @@ void cxip_ctrl_mr_cache_flush(struct cxip_ep_obj *ep_obj)
 
 		do {
 			sched_yield();
-			cxip_ep_tgt_ctrl_progress_locked(ep_obj);
+			cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
 		} while (mr_cache->ctrl_req->mr.mr->mr_state !=
 			 CXIP_MR_UNLINKED);
 
@@ -1075,7 +1075,7 @@ void cxip_ctrl_mr_cache_flush(struct cxip_ep_obj *ep_obj)
 
 		do {
 			sched_yield();
-			cxip_ep_tgt_ctrl_progress_locked(ep_obj);
+			cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
 		} while (mr_cache->ctrl_req->mr.mr->mr_state !=
 			 CXIP_MR_UNLINKED);
 

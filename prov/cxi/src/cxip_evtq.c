@@ -360,7 +360,7 @@ static struct cxip_req *cxip_evtq_event_req(struct cxip_evtq *evtq,
  *
  * Caller must hold ep_obj->lock.
  */
-void cxip_evtq_progress(struct cxip_evtq *evtq)
+void cxip_evtq_progress(struct cxip_evtq *evtq, bool internal)
 {
 	const union c_event *event;
 	struct cxip_req *req;
@@ -373,6 +373,16 @@ void cxip_evtq_progress(struct cxip_evtq *evtq)
 	 * determine if the OFI completion queue is saturated.
 	 */
 	evtq->prev_eq_status = *evtq->eq->status;
+
+	/* When external progress and using wait objectss disable interrupts.
+	 * By our definition, only the waiter can be making progress.
+	 * Interrupts will be re-enabled on fi_trywait().
+	 */
+	if (!internal && evtq->event_wait_obj &&
+	    !evtq->eq->sw_state.event_int_disable) {
+		cxi_eq_int_disable(evtq->eq);
+		evtq->unacked_events = 0;
+	}
 
 	while ((event = cxi_eq_peek_event(evtq->eq))) {
 

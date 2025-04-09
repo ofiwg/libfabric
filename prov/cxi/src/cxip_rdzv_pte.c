@@ -37,7 +37,7 @@ static int cxip_rdzv_pte_wait_append(struct cxip_rdzv_pte *pte,
 
 	/* Poll until the LE is linked or a failure occurs. */
 	do {
-		cxip_evtq_progress(&pte->txc->base.tx_evtq);
+		cxip_evtq_progress(&pte->txc->base.tx_evtq, true);
 		sched_yield();
 	} while (!cxip_rdzv_pte_append_done(pte, expected_count));
 
@@ -196,7 +196,7 @@ static void cxip_rdzv_pte_free(struct cxip_rdzv_pte *pte)
 	/* Flush the CQ to ensure any events referencing the rendezvous requests
 	 * are processed.
 	 */
-	cxip_evtq_progress(&pte->txc->base.tx_evtq);
+	cxip_evtq_progress(&pte->txc->base.tx_evtq, true);
 }
 
 void cxip_rdzv_match_pte_free(struct cxip_rdzv_match_pte *pte)
