@@ -39,9 +39,6 @@
 #include <ofi_util.h>
 #include "rxm.h"
 
-
-static void *rxm_cm_progress(void *arg);
-static void *rxm_cm_atomic_progress(void *arg);
 static void rxm_flush_msg_cq(struct rxm_ep *rxm_ep);
 
 
@@ -905,53 +902,7 @@ static void rxm_flush_msg_cq(struct rxm_ep *ep)
 	} while (ret > 0);
 }
 
-static void *rxm_cm_progress(void *arg)
-{
-	struct rxm_ep *ep = container_of(arg, struct rxm_ep, util_ep);
-	struct rxm_eq_cm_entry cm_entry;
-	uint32_t event;
-	ssize_t ret;
-
-	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Starting auto-progress thread\n");
-
-	ofi_genlock_lock(&ep->util_ep.lock);
-	while (ep->do_progress) {
-		ofi_genlock_unlock(&ep->util_ep.lock);
-
-		/* We must retrieve any event after we acquire the ep lock.
-		 * Otherwise, we could obtain an event for a msg ep that
-		 * another thread could be closing.  If we try to process that
-		 * event, we can access freed memory.  So, we use FI_PEEK here
-		 * to wait until an event is ready, then read any event after
-		 * we hold the ep lock.  Because closing an ep will free any
-		 * events queued on the eq, the event we find here may be gone
-		 * by the time we call read below.  This is what we want as it
-		 * avoids processing the stale event.
-		 */
-		ret = fi_eq_sread(ep->msg_eq, &event, &cm_entry,
-				  sizeof(cm_entry), -1, FI_PEEK);
-
-		ofi_genlock_lock(&ep->util_ep.lock);
-		if (ret > 0) {
-			ret = fi_eq_read(ep->msg_eq, &event, &cm_entry,
-					 sizeof(cm_entry), 0);
-		}
-		if (ret > 0) {
-			rxm_handle_event(ep, event, &cm_entry, ret);
-		} else if (ret == -FI_EAVAIL) {
-			rxm_handle_error(ep);
-		} else if (ret && ret != -FI_EAGAIN) {
-			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_eq_read", ret);
-			break;
-		}
-	}
-	ofi_genlock_unlock(&ep->util_ep.lock);
-
-	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Stopping auto-progress thread\n");
-	return NULL;
-}
-
-static void *rxm_cm_atomic_progress(void *arg)
+static void *rxm_cm_data_progress(void *arg)
 {
 	struct rxm_ep *ep = container_of(arg, struct rxm_ep, util_ep);
 	struct rxm_fabric *fabric;
@@ -1038,12 +989,10 @@ int rxm_start_listen(struct rxm_ep *ep)
 
 	if (ep->util_ep.domain->data_progress == FI_PROGRESS_AUTO ||
 	    force_auto_progress) {
-
 		assert(ep->util_ep.domain->threading == FI_THREAD_SAFE);
 		ep->do_progress = true;
-		ret = pthread_create(&ep->cm_thread, 0,
-				     ep->rxm_info->caps & FI_ATOMIC ?
-				     rxm_cm_atomic_progress : rxm_cm_progress, ep);
+		ret = pthread_create(&ep->cm_thread, 0, rxm_cm_data_progress,
+				     ep);
 		if (ret) {
 			RXM_WARN_ERR(FI_LOG_EP_CTRL, "pthread_create", -ret);
 			return -ret;

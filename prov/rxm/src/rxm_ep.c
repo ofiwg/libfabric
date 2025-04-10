@@ -983,24 +983,17 @@ static int rxm_ep_wait_fd_add(struct rxm_ep *rxm_ep, struct util_wait *wait)
 
 	ret = ofi_wait_add_fid(wait, &rxm_ep->msg_cq->fid, POLLIN,
 			       rxm_ep_trywait_cq);
-
-	if (ret || (rxm_ep->util_ep.domain->data_progress == FI_PROGRESS_AUTO &&
-	    !(rxm_ep->util_ep.caps & FI_ATOMIC)))
+	if (ret ||
+	    rxm_ep->rxm_info->domain_attr->data_progress == FI_PROGRESS_AUTO)
 		return ret;
 
 	return ofi_wait_add_fid(wait, &rxm_ep->msg_eq->fid, POLLIN,
 				rxm_ep_trywait_eq);
 }
 
-static bool rxm_needs_atomic_progress(const struct fi_info *info)
-{
-	return (info->caps & FI_ATOMIC) && info->domain_attr &&
-		info->domain_attr->data_progress == FI_PROGRESS_AUTO;
-}
-
 static int rxm_msg_cq_fd_needed(struct rxm_ep *rxm_ep)
 {
-	return (rxm_needs_atomic_progress(rxm_ep->rxm_info) ||
+	return  (rxm_ep->rxm_info->domain_attr->data_progress == FI_PROGRESS_AUTO ||
 		(rxm_ep->util_ep.tx_cq && rxm_ep->util_ep.tx_cq->wait) ||
 		(rxm_ep->util_ep.rx_cq && rxm_ep->util_ep.rx_cq->wait) ||
 		(rxm_ep->util_ep.cntrs[CNTR_TX] && rxm_ep->util_ep.cntrs[CNTR_TX]->wait) ||
@@ -1343,12 +1336,11 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		/* Ensure atomics progress thread isn't started at this point.
-		 * The progress thread should be started only after MSG CQ is
+		/* The progress thread should be started only after MSG CQ is
 		 * opened to keep it simple (avoids progressing only MSG EQ first
 		 * and then progressing both MSG EQ and MSG CQ once the latter
 		 * is opened) */
-		assert(!(ep->rxm_info->caps & FI_ATOMIC) || !ep->cm_thread);
+		assert(!ep->cm_thread);
 
 		ret = rxm_ep_msg_cq_open(ep);
 		if (ret)
