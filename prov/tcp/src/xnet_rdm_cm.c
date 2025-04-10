@@ -575,7 +575,7 @@ static void xnet_process_connected(struct fi_eq_cm_entry *cm_entry)
 	conn->remote_pid = ntohl(msg->pid);
 	xnet_set_protocol(conn->ep, msg);
 
-	FI_INFO(&xnet_prov, FI_LOG_EP_CTRL, "peer %s feautre supported: %x\n",
+	FI_INFO(&xnet_prov, FI_LOG_EP_CTRL, "peer %s feature supported: %x\n",
 		conn->peer->str_addr, msg->features);
 }
 
