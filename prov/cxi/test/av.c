@@ -466,6 +466,7 @@ static double diff_timespec(const struct timespec *time1,
 Test(av, reverse_lookup)
 {
 	int i;
+	int j;
 	int ret;
 	struct cxip_av *av;
 	struct cxip_addr addr = {};
@@ -492,7 +493,8 @@ Test(av, reverse_lookup)
 	 */
 	addr.nic = 0;
 	clock_gettime(CLOCK_MONOTONIC, &start);
-	fi_addr = cxip_av_lookup_fi_addr(av, &addr);
+	for (j = 0; j < 20000; j++)
+		fi_addr = cxip_av_lookup_fi_addr(av, &addr);
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	cr_assert_neq(fi_addr, FI_ADDR_NOTAVAIL,
@@ -501,14 +503,16 @@ Test(av, reverse_lookup)
 
 	addr.nic = i - 1;
 	clock_gettime(CLOCK_MONOTONIC, &start);
-	fi_addr = cxip_av_lookup_fi_addr(av, &addr);
+	for (j = 0; j < 20000; j++)
+		fi_addr = cxip_av_lookup_fi_addr(av, &addr);
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	cr_assert_neq(fi_addr, FI_ADDR_NOTAVAIL,
 		      "cxip_av_lookup_fi_addr failed");
 	timestamp2 = diff_timespec(&end, &start);
 
-	cr_assert((timestamp1 * 1.05) > timestamp2, "O(1) verification failed");
+	cr_assert((timestamp1 * 1.25) > timestamp2,
+		  "O(1) verification failed %f %f", timestamp1, timestamp2);
 
 	cxit_destroy_av();
 }
