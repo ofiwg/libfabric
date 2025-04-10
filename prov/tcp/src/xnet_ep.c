@@ -272,7 +272,7 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 	struct xnet_progress *progress;
 	struct xnet_ep *ep;
 	struct xnet_conn_handle *conn;
-	struct fi_eq_cm_entry cm_entry;
+	struct xnet_cm_entry cm_entry;
 	int ret;
 
 	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "accepting endpoint connection\n");
@@ -313,6 +313,8 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 
 	cm_entry.fid = &ep->util_ep.ep_fid.fid;
 	cm_entry.info = NULL;
+	if (paramlen)
+		memcpy(cm_entry.data, param, paramlen);
 	ret = xnet_eq_write(ep->util_ep.eq, FI_CONNECTED, &cm_entry,
 			    sizeof(cm_entry), 0);
 	if (ret < 0) {

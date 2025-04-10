@@ -270,6 +270,13 @@ struct xnet_ep {
 	xnet_profile_t *profile;
 };
 
+/* Must be castable to struct fi_eq_cm_entry */
+struct xnet_cm_entry {
+	fid_t fid;
+	struct fi_info *info;
+	uint8_t data[XNET_MAX_CM_DATA_SIZE];
+};
+
 struct xnet_event {
 	struct slist_entry list_entry;
 	struct xnet_rdm *rdm;

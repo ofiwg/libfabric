@@ -38,14 +38,6 @@
 #include <sys/types.h>
 #include <ofi_util.h>
 
-
-/* Must be castable to struct fi_eq_cm_entry */
-struct xnet_cm_entry {
-	fid_t			fid;
-	struct fi_info		*info;
-	uint8_t			data[XNET_MAX_CM_DATA_SIZE];
-};
-
 /* The underlying socket has the POLLIN event set.  The entire
  * CM message should be readable, as it fits within a single MTU
  * and is the first data transferred over the socket.
