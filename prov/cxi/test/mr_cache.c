@@ -71,8 +71,7 @@ Test(mr_cache, cache_full)
 	}
 
 	/* create the domain */
-	cxit_setup_domain();
-	cxit_create_domain();
+	cxit_setup_msg();
 
 	/* Register the max number of regions */
 	for (i = 0; i < num_regions; i++) {
@@ -117,5 +116,8 @@ Test(mr_cache, cache_full)
 		  "Cache has uncached entries: %zu",
 		  cache->uncached_cnt);
 
-	cxit_teardown_domain();
+	ret = fi_close(&region_data[num_regions].mr->fid);
+	cr_assert_eq(ret, FI_SUCCESS, "Failed to close mr: %d", ret);
+
+	cxit_teardown_msg();
 }
