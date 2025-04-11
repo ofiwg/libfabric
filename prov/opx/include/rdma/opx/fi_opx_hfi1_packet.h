@@ -1566,15 +1566,15 @@ struct fi_opx_hfi1_ue_packet {
 	uint8_t unused[2];
 
 	/* == CACHE LINE 1, 2 == */
-	uint64_t		  unused_cacheline1;
+	uint64_t		  recv_time_ns;
 	union opx_hfi1_packet_hdr hdr;
 
 	/* == CACHE LINE 3 == */
 	union fi_opx_hfi1_packet_payload payload;
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 
-static_assert(offsetof(struct fi_opx_hfi1_ue_packet, unused_cacheline1) == 64,
-	      "struct fi_opx_hfi1_ue_packet->unused_cacheline1 should be aligned on cache boundary!");
+static_assert(offsetof(struct fi_opx_hfi1_ue_packet, recv_time_ns) == 64,
+	      "struct fi_opx_hfi1_ue_packet->recv_time_ns should be aligned on cache boundary!");
 
 static_assert(offsetof(struct fi_opx_hfi1_ue_packet, payload) == 192,
 	      "struct fi_opx_hfi1_ue_packet->payload should be aligned on cache boundary!");

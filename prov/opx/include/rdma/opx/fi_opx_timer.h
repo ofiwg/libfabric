@@ -143,14 +143,15 @@ static inline void fi_opx_timer_init(union fi_opx_timer_state *state)
 	clock_gettime(CLOCK_MONOTONIC, &tpi);
 	uint64_t cycles = fi_opx_timer_get_cycles();
 	usleep(1000);
-	cycles = fi_opx_timer_get_cycles() - cycles;
+	uint64_t cycles2 = fi_opx_timer_get_cycles();
 	clock_gettime(CLOCK_MONOTONIC, &tpf);
 	fi_opx_timespec_diff(&tpi, &tpf, &tpresult);
+	uint64_t elapsed_cycles = cycles2 - cycles;
 
 	assert(tpresult.tv_sec == 0);
 
 	/* picos_per_cycle = ((nanoseconds) * (picos per ns)) / (cycles) */
-	state->cycle_timer.picos_per_cycle = (tpresult.tv_nsec * 1000) / cycles;
+	state->cycle_timer.picos_per_cycle = (tpresult.tv_nsec * 1000) / elapsed_cycles;
 
 	if (opx_timer_cpus_same_socket()) {
 		state->cycle_timer.use_cycle_timer = true;
@@ -168,6 +169,19 @@ __attribute__((always_inline)) static inline uint64_t fi_opx_timer_now(union fi_
 {
 	if (state->cycle_timer.use_cycle_timer) {
 		return now->cycle_timer.cycles = fi_opx_timer_get_cycles();
+	} else {
+		clock_gettime(CLOCK_MONOTONIC, &now->tp);
+		uint64_t ns = now->tp.tv_sec * 1e9 + now->tp.tv_nsec;
+		return ns;
+	}
+}
+
+__attribute__((always_inline)) static inline uint64_t fi_opx_timer_now_ns(union fi_opx_timer_stamp *now,
+									  union fi_opx_timer_state *state)
+{
+	if (state->cycle_timer.use_cycle_timer) {
+		return now->cycle_timer.cycles =
+			       (fi_opx_timer_get_cycles() * state->cycle_timer.picos_per_cycle) / 1000;
 	} else {
 		clock_gettime(CLOCK_MONOTONIC, &now->tp);
 		uint64_t ns = now->tp.tv_sec * 1e9 + now->tp.tv_nsec;

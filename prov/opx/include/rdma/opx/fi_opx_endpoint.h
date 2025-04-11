@@ -631,13 +631,13 @@ void fi_opx_ep_rx_append_ue_msg(struct fi_opx_ep_rx *const rx, const union opx_h
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
 				const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst,
 				const bool daos_enabled, struct fi_opx_debug_counters *debug_counters,
-				const opx_lid_t slid);
+				const opx_lid_t slid, const uint64_t rcv_time_ns);
 
 void fi_opx_ep_rx_append_ue_tag(struct fi_opx_ep_rx *const rx, const union opx_hfi1_packet_hdr *const hdr,
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
 				const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst,
 				const bool daos_enabled, struct fi_opx_debug_counters *debug_counters,
-				const opx_lid_t slid);
+				const opx_lid_t slid, const uint64_t rcv_time_ns);
 
 void fi_opx_ep_rx_append_ue_egr(struct fi_opx_ep_rx *const rx, const union opx_hfi1_packet_hdr *const hdr,
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
@@ -2581,12 +2581,12 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep, const union o
 			fi_opx_ep_rx_append_ue_tag(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
 						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
 						   opx_ep->daos_info.hfi_rank_enabled,
-						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid, 0UL);
 		} else {
 			fi_opx_ep_rx_append_ue_msg(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
 						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
 						   opx_ep->daos_info.hfi_rank_enabled,
-						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid, 0UL);
 		}
 
 		return;
@@ -2733,16 +2733,27 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "did not find a match .. add this packet to the unexpected queue\n");
 
+		uint64_t ue_pkt_rcv_ns;
+#ifdef OPX_DEBUG_COUNTERS_RECV
+		uint8_t ue_opcode = FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(hdr->bth.opcode);
+		if (ue_opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) {
+			OPX_COUNTERS_TIME_NS(ue_pkt_rcv_ns, &opx_ep->debug_counters);
+		} else
+#endif
+		{
+			ue_pkt_rcv_ns = 0UL;
+		}
+
 		if (OFI_LIKELY(kind == FI_OPX_KIND_TAG)) {
 			fi_opx_ep_rx_append_ue_tag(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
 						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
 						   opx_ep->daos_info.hfi_rank_enabled,
-						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid, ue_pkt_rcv_ns);
 		} else {
 			fi_opx_ep_rx_append_ue_msg(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
 						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
 						   opx_ep->daos_info.hfi_rank_enabled,
-						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid, ue_pkt_rcv_ns);
 		}
 
 		return;
@@ -2752,6 +2763,15 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "found a match\n");
 
+#ifdef OPX_DEBUG_COUNTERS_RECV
+	uint8_t ue_opcode = FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(hdr->bth.opcode);
+	if (ue_opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) {
+		uint64_t match_time_ns;
+		OPX_COUNTERS_TIME_NS(match_time_ns, &opx_ep->debug_counters);
+		OPX_COUNTERS_RECORD_MEASURE(match_time_ns - context->byte_counter,
+					    opx_ep->debug_counters.recv.rzv_rts_rcv_early);
+	}
+#endif
 	if (OFI_LIKELY((static_flags & FI_TAGGED) || /* branch will compile out for tag */
 		       ((rx_op_flags & FI_MULTI_RECV) == 0))) {
 		assert((prev == NULL) || (prev->next == context));
@@ -3092,6 +3112,15 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep *opx_ep, const u
 		uint8_t is_mp_eager = (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(uepkt->hdr.bth.opcode) ==
 				       FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST);
 
+#ifdef OPX_DEBUG_COUNTERS_RECV
+		uint8_t ue_opcode = FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(uepkt->hdr.bth.opcode);
+		if (ue_opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) {
+			uint64_t match_time_ns;
+			OPX_COUNTERS_TIME_NS(match_time_ns, &opx_ep->debug_counters);
+			OPX_COUNTERS_RECORD_MEASURE(match_time_ns - uepkt->recv_time_ns,
+						    opx_ep->debug_counters.recv.rzv_rts_pkt_early);
+		}
+#endif
 		const unsigned is_intranode = uepkt->is_intranode;
 		if (is_mp_eager) {
 			opx_ep_complete_receive_operation(ep, &uepkt->hdr, &uepkt->payload, uepkt->hdr.match.ofi_tag,
@@ -3152,6 +3181,13 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep *opx_ep, const u
 	 * no unexpected headers were matched; add this match information
 	 * (context) to the appropriate match queue
 	 */
+
+	// Use the context's byte_counter to store the timestamp of when the recv
+	// was posted, so we can later record how long it took for the receive to
+	// be matched with a packet. This should be safe since byte_counter is not
+	// used elsewhere until after the match occurs.
+	OPX_COUNTERS_TIME_NS(context->byte_counter, &opx_ep->debug_counters);
+
 	context->next = NULL;
 	slist_insert_tail((struct slist_entry *) context, &opx_ep->rx->queue[kind].mq);
 
