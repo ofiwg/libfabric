@@ -2686,13 +2686,23 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Expected receive (TID) is %s.\n",
 		opx_ep->use_expected_tid_rzv ? "enabled" : "disabled");
 
-#if defined(OPX_HMEM) && !defined(OPX_DEV_OVERRIDE)
+#ifdef OPX_HMEM
+#ifndef OPX_DEV_OVERRIDE
 	if (!opx_hfi_drv_version_check("10.14")) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_HMEM is enabled, but the installed HFI driver is not HMEM enabled!\n");
 		errno = FI_EOPNOTSUPP;
 		goto err;
+	} else {
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			 "OPX has HMEM support; compatible HFI driver found, HMEM is enabled.\n");
 	}
+#else
+	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		 "OPX has HMEM support; driver version check was skipped due to override.\n");
+#endif
+#else
+	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "OPX was not built with HMEM support.\n");
 #endif
 
 #if defined(OPX_HMEM) && HAVE_CUDA
