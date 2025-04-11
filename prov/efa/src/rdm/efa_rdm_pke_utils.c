@@ -42,7 +42,6 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 {
 	int tx_iov_index, ret;
 	bool mr_p2p_available;
-	bool use_inline_buf;
 	size_t tx_iov_offset, copied;
 	struct efa_mr *iov_mr;
 
@@ -63,16 +62,12 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 	assert(tx_iov_offset < ope->iov[tx_iov_index].iov_len);
 	iov_mr = ope->desc[tx_iov_index];
 	mr_p2p_available = false;
-	use_inline_buf = false;
 
 	if (iov_mr) {
 		ret = efa_rdm_ep_use_p2p(pke->ep, iov_mr);
 		if (ret < 0)
 			return ret;
 		mr_p2p_available = ret;
-	} else if (!efa_mr_is_hmem(iov_mr) &&
-	           payload_offset + data_size <= efa_rdm_ep_domain(pke->ep)->device->efa_attr.inline_buf_size) {
-		use_inline_buf = true;
 	}
 
 	/*
@@ -84,8 +79,10 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 	 * immediately after function returns, so unless using inline,
 	 * a copy from the user buffer to the internal bounce buffer is needed.
 	 */
+	/* TODO: Disable copies when total packet size with payload is smaller
+	 * than device inline size */
 	if (tx_iov_offset + data_size <= ope->iov[tx_iov_index].iov_len &&
-	    (use_inline_buf || (mr_p2p_available && !(ope->fi_flags & FI_INJECT)))) {
+	    mr_p2p_available && !(ope->fi_flags & FI_INJECT)) {
 		pke->payload = (char *)ope->iov[tx_iov_index].iov_base + tx_iov_offset;
 		pke->payload_size = data_size;
 		pke->payload_mr = ope->desc[tx_iov_index];
