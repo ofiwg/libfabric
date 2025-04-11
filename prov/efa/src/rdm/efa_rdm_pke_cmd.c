@@ -968,6 +968,75 @@ void efa_rdm_pke_print_cts(char *prefix, struct efa_rdm_cts_hdr *cts_hdr)
 	       cts_hdr->send_id, cts_hdr->recv_id, cts_hdr->recv_length);
 }
 
+static void efa_rdm_pke_print_eager_tag_rtm(char *prefix,
+					    struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_rtm_base_hdr *base_hdr;
+	struct efa_rdm_eager_tagrtm_hdr *tag_rtm_hdr;
+	struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
+	char str[EFA_RDM_PKE_DUMP_DATA_LEN * 4];
+	size_t str_len = EFA_RDM_PKE_DUMP_DATA_LEN * 4, l;
+	char raw_gid_str[INET6_ADDRSTRLEN];
+	char *opt_hdr;
+	uint8_t *data;
+	int i;
+
+	str[str_len - 1] = '\0';
+
+	base_hdr = (struct efa_rdm_rtm_base_hdr *) pkt_entry->wiredata;
+	tag_rtm_hdr = (struct efa_rdm_eager_tagrtm_hdr *) pkt_entry->wiredata;
+
+	EFA_DBG(FI_LOG_EP_DATA,
+		"%s EFA RDM RTM packet - type: %" PRIu32 "  version: %" PRIu8
+		" flags: %x peer: %" PRIu64 " msg_id: %" PRIu32 " tag: %" PRIu64
+		"\n",
+		prefix, base_hdr->type, base_hdr->version, base_hdr->flags,
+		pkt_entry->addr, base_hdr->msg_id, tag_rtm_hdr->tag);
+
+	/* logic copied from efa_rdm_pke_init_req_hdr_common */
+	opt_hdr = (char *) base_hdr +
+		  efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
+		raw_addr_hdr = (struct efa_rdm_req_opt_raw_addr_hdr *) opt_hdr;
+		if (!inet_ntop(AF_INET6, raw_addr_hdr->raw_addr, raw_gid_str,
+			       INET6_ADDRSTRLEN)) {
+			EFA_DBG(FI_LOG_EP_DATA,
+				"could not parse raw address \n");
+		} else {
+			EFA_DBG(FI_LOG_EP_DATA, "raw addr len: %d gid %s\n",
+				raw_addr_hdr->addr_len, raw_gid_str);
+		}
+		opt_hdr += EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE;
+	}
+
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR) {
+		struct efa_rdm_req_opt_cq_data_hdr *cq_data_hdr;
+		cq_data_hdr = (struct efa_rdm_req_opt_cq_data_hdr *) opt_hdr;
+		EFA_DBG(FI_LOG_EP_DATA, "cq_data %lu\n", cq_data_hdr->cq_data);
+		opt_hdr += sizeof(*cq_data_hdr);
+	}
+
+	if (base_hdr->flags & EFA_RDM_PKT_CONNID_HDR) {
+		struct efa_rdm_req_opt_connid_hdr *connid_hdr;
+		connid_hdr = (struct efa_rdm_req_opt_connid_hdr *) opt_hdr;
+		EFA_DBG(FI_LOG_EP_DATA, "sender_connid: %d\n",
+			connid_hdr->connid);
+		opt_hdr += sizeof(*connid_hdr);
+	}
+
+	if (pkt_entry->payload) {
+		data = (uint8_t *) pkt_entry->payload;
+	} else {
+		data = (uint8_t *) opt_hdr;
+	}
+
+	l = snprintf(str, str_len, ("\tdata:    "));
+	for (i = 0; i < MIN(pkt_entry->payload_size, EFA_RDM_PKE_DUMP_DATA_LEN);
+	     i++)
+		l += snprintf(str + l, str_len - l, "%02x ", data[i]);
+	EFA_DBG(FI_LOG_EP_DATA, "%s\n", str);
+}
+
 static
 void efa_rdm_pke_print_data(char *prefix, struct efa_rdm_pke *pkt_entry)
 {
@@ -1024,12 +1093,14 @@ void efa_rdm_pke_print(struct efa_rdm_pke *pkt_entry, char *prefix)
 	case EFA_RDM_CTSDATA_PKT:
 		efa_rdm_pke_print_data(prefix, pkt_entry);
 		break;
+	case EFA_RDM_EAGER_TAGRTM_PKT:
+		efa_rdm_pke_print_eager_tag_rtm(prefix, pkt_entry);
+		break;
 	default:
-		EFA_WARN(FI_LOG_CQ, "invalid ctl pkt type %d\n",
+		EFA_WARN(FI_LOG_CQ, "Cannot print pkt type %d\n",
 			 hdr->type);
 		assert(0);
 		return;
 	}
 }
 #endif
-
