@@ -466,6 +466,13 @@ union fi_opx_hfi1_sdma_state {
 	//	};
 };
 
+struct opx_sdma_comp_entry {
+	uint32_t status;
+	uint32_t errcode;
+	uint64_t start_time_ns;
+	uint64_t end_time_ns;
+};
+
 /* This 'static' information will not change after it is set by the driver
  * and can be safely copied into other structures to improve cache layout */
 struct fi_opx_hfi1_sdma_static {
@@ -474,7 +481,7 @@ struct fi_opx_hfi1_sdma_static {
 	uint16_t			      done_index;
 	uint16_t			      queue_size;
 	volatile struct hfi1_sdma_comp_entry *completion_queue;
-	struct hfi1_sdma_comp_entry	     *queued_entries[FI_OPX_HFI1_SDMA_MAX_COMP_INDEX];
+	struct opx_sdma_comp_entry	     *queued_entries[FI_OPX_HFI1_SDMA_MAX_COMP_INDEX];
 };
 
 struct fi_opx_hfi1_rxe_state {

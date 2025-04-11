@@ -1041,6 +1041,17 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 					tmp, key, "Received ACK for packet where source buffer has changed!", __FILE__,
 					__func__, __LINE__);
 #endif
+#ifdef OPX_DEBUG_COUNTERS_SDMA
+				if (tmp->use_iov && tmp->sdma_we) {
+					struct fi_opx_hfi1_sdma_work_entry *sdma_we =
+						(struct fi_opx_hfi1_sdma_work_entry *) tmp->sdma_we;
+					if (sdma_we->first_ack_time_ns == 0 &&
+					    sdma_we->comp_state == OPX_SDMA_COMP_QUEUED) {
+						OPX_COUNTERS_TIME_NS(sdma_we->first_ack_time_ns,
+								     &opx_ep->debug_counters);
+					}
+				}
+#endif
 				cc_ptr->byte_counter -= dec;
 				assert(cc_ptr->byte_counter >= 0);
 				if (cc_ptr->byte_counter == 0) {
@@ -1193,6 +1204,15 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 			fi_opx_hfi1_reliability_iov_payload_check(
 				tmp, key, "Received ACK for packet where source buffer has changed!", __FILE__,
 				__func__, __LINE__);
+#endif
+#ifdef OPX_DEBUG_COUNTERS_SDMA
+			if (tmp->use_iov && tmp->sdma_we) {
+				struct fi_opx_hfi1_sdma_work_entry *sdma_we =
+					(struct fi_opx_hfi1_sdma_work_entry *) tmp->sdma_we;
+				if (sdma_we->first_ack_time_ns == 0 && sdma_we->comp_state == OPX_SDMA_COMP_QUEUED) {
+					OPX_COUNTERS_TIME_NS(sdma_we->first_ack_time_ns, &opx_ep->debug_counters);
+				}
+			}
 #endif
 			cc_ptr->byte_counter -= dec;
 			assert(cc_ptr->byte_counter >= 0);

@@ -32,6 +32,7 @@
 #ifndef _FI_PROV_OPX_DEBUG_COUNTERS_H_
 #define _FI_PROV_OPX_DEBUG_COUNTERS_H_
 
+#include <locale.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -53,27 +54,103 @@
 #define OPX_DEBUG_COUNTERS_RELIABILITY_PING
 #endif
 
-#define OPX_DEBUG_COUNTERS_WRITEV_MAX (129)
+#define OPX_COUNTERS_WRITEV_MAX (129)
+#define OPX_COUNTERS_NS_PER_SEC (1000000000ul)
+#define OPX_COUNTERS_MB		(1000000.0)
+#define OPX_COUNTERS_MIB	(1048756.0)
 
-static inline void fi_opx_debug_counters_print_counter(pid_t pid, char *name, uint64_t value)
+enum opx_counters_unit {
+	OPX_COUNTERS_UNIT_NONE = 0,
+	OPX_COUNTERS_UNIT_NS,
+	OPX_COUNTERS_UNIT_BW_MB,
+	OPX_COUNTERS_UNIT_LAST
+};
+
+static const char *OPX_COUNTERS_UNIT_SFX[] = {
+	[OPX_COUNTERS_UNIT_NONE]  = "",
+	[OPX_COUNTERS_UNIT_NS]	  = "ns",
+	[OPX_COUNTERS_UNIT_BW_MB] = "MB/s",
+};
+
+struct opx_counters_measurement {
+	uint64_t n;
+	uint64_t sum;
+	uint64_t min;
+	uint64_t max;
+	uint64_t avg;
+};
+
+static inline void opx_counters_print_unit(pid_t pid, char *name, uint64_t value, enum opx_counters_unit unit)
 {
 #ifdef OPX_DEBUG_COUNTERS_NONZERO
 	if (value)
 #endif
-		fprintf(stderr, "(%d) ### %-50s %lu\n", pid, name, value);
+		fprintf(stderr, "(%d) ### %-50s %'15lu %s\n", pid, name, value, OPX_COUNTERS_UNIT_SFX[unit]);
 }
 
-#define FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, name) fi_opx_debug_counters_print_counter(pid, #name, counters->name)
-#define FI_OPX_DEBUG_COUNTERS_PRINT_VAL(pid, name)     fi_opx_debug_counters_print_counter(pid, #name, name)
+#define OPX_COUNTERS_PRINT_UNIT(pid, name, unit) opx_counters_print_unit(pid, #name, counters->name, unit)
+#define FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, name) \
+	opx_counters_print_unit(pid, #name, counters->name, OPX_COUNTERS_UNIT_NONE)
+#define FI_OPX_DEBUG_COUNTERS_PRINT_VAL(pid, name) opx_counters_print_unit(pid, #name, name, OPX_COUNTERS_UNIT_NONE)
 
-#define FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, name, size)                        \
-	{                                                                               \
-		char n[32];                                                             \
-		for (int i = 0; i < (size); ++i) {                                      \
-			sprintf(n, "%s[%d]", #name, i);                                 \
-			fi_opx_debug_counters_print_counter(pid, n, counters->name[i]); \
-		}                                                                       \
+#define FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, name, size)                                    \
+	{                                                                                           \
+		char n[32];                                                                         \
+		for (int i = 0; i < (size); ++i) {                                                  \
+			sprintf(n, "%s[%d]", #name, i);                                             \
+			opx_counters_print_unit(pid, n, counters->name[i], OPX_COUNTERS_UNIT_NONE); \
+		}                                                                                   \
 	}
+
+#define OPX_COUNTERS_PRINT_MEASURE_BW(pid, name)                                                                      \
+	do {                                                                                                          \
+		fprintf(stderr, "(%d) ### %-50s %'15.2f MB/s (%'.2f MiB/s)\n", pid, #name ".min",                     \
+			(double) ((counters->name.min == UINT64_MAX) ? 0.0 : (counters->name.min / OPX_COUNTERS_MB)), \
+			(double) ((counters->name.min == UINT64_MAX) ? 0.0 :                                          \
+								       (counters->name.min / OPX_COUNTERS_MIB)));     \
+		fprintf(stderr, "(%d) ### %-50s %'15.2f MB/s (%'.2f MiB/s)\n", pid, #name ".max",                     \
+			(counters->name.max / OPX_COUNTERS_MB), (counters->name.max / OPX_COUNTERS_MIB));             \
+		fprintf(stderr, "(%d) ### %-50s %'15.2f MB/s (%'.2f MiB/s)\n", pid, #name ".avg",                     \
+			(counters->name.avg / OPX_COUNTERS_MB), (counters->name.avg / OPX_COUNTERS_MIB));             \
+	} while (0)
+
+#define OPX_COUNTERS_PRINT_MEASURE(pid, name, unit)                                 \
+	do {                                                                        \
+		if (counters->name.n == 0) {                                        \
+			counters->name.min = 0;                                     \
+			counters->name.avg = 0;                                     \
+		} else {                                                            \
+			counters->name.avg = counters->name.sum / counters->name.n; \
+		}                                                                   \
+		OPX_COUNTERS_PRINT_UNIT(pid, name.n, OPX_COUNTERS_UNIT_NONE);       \
+		OPX_COUNTERS_PRINT_UNIT(pid, name.min, unit);                       \
+		OPX_COUNTERS_PRINT_UNIT(pid, name.max, unit);                       \
+		OPX_COUNTERS_PRINT_UNIT(pid, name.avg, unit);                       \
+		OPX_COUNTERS_PRINT_UNIT(pid, name.sum, unit);                       \
+	} while (0)
+
+#define OPX_COUNTERS_PRINT_MEASURE_ARR(pid, name, size, unit)                                                    \
+	do {                                                                                                     \
+		char indexed_name[32];                                                                           \
+		for (int i = 0; i < (size); ++i) {                                                               \
+			if (counters->name[i].n == 0) {                                                          \
+				counters->name[i].min = 0;                                                       \
+				counters->name[i].avg = 0;                                                       \
+			} else {                                                                                 \
+				counters->name[i].avg = counters->name[i].sum / counters->name[i].n;             \
+			}                                                                                        \
+			sprintf(indexed_name, "%s[%d].n", #name, i);                                             \
+			opx_counters_print_unit(pid, indexed_name, counters->name[i].n, OPX_COUNTERS_UNIT_NONE); \
+			sprintf(indexed_name, "%s[%d].min", #name, i);                                           \
+			opx_counters_print_unit(pid, indexed_name, counters->name[i].min, unit);                 \
+			sprintf(indexed_name, "%s[%d].max", #name, i);                                           \
+			opx_counters_print_unit(pid, indexed_name, counters->name[i].max, unit);                 \
+			sprintf(indexed_name, "%s[%d].avg", #name, i);                                           \
+			opx_counters_print_unit(pid, indexed_name, counters->name[i].avg, unit);                 \
+			sprintf(indexed_name, "%s[%d].sum", #name, i);                                           \
+			opx_counters_print_unit(pid, indexed_name, counters->name[i].sum, unit);                 \
+		}                                                                                                \
+	} while (0)
 
 struct fi_opx_debug_counters_send {
 	uint64_t inject;
@@ -117,6 +194,10 @@ struct fi_opx_debug_counters_typed_txr {
 	} while (0)
 
 struct fi_opx_debug_counters {
+	union fi_opx_timer_stamp timestamp; /*  2 qws =  16 bytes */
+	union fi_opx_timer_state timer;	    /*  5 bytes           */
+	uint8_t			 padding[3];
+
 	struct {
 		uint64_t send_first_packets;
 		uint64_t send_nth_packets;
@@ -158,7 +239,6 @@ struct fi_opx_debug_counters {
 	} reliability_ping;
 
 	struct {
-		uint64_t writev_calls[OPX_DEBUG_COUNTERS_WRITEV_MAX];
 		uint64_t writev_count;
 		uint64_t writev_time_ns_total;
 		uint64_t writev_time_ns_min;
@@ -177,7 +257,41 @@ struct fi_opx_debug_counters {
 		uint64_t eagain_sdma_we_none_free;
 		uint64_t eagain_sdma_we_max_used;
 		uint64_t eagain_pending_writev;
+		uint64_t eagain_pending_sdma_completion;
 		uint64_t eagain_pending_dc;
+
+		/**
+		 * @brief Record instances where we receive an ACK for a packet
+		 * before the driver has marked the SDMA send as complete.
+		 * This will also record the elapsed time between receiving the
+		 * ACK and when we first see the SDMA send marked complete.
+		 */
+		struct opx_counters_measurement early_acks_delta;
+
+		/**
+		 * @brief The calculated send bandwidth we get via SDMA.
+		 * Note that this calculation is an estimate only.
+		 */
+		struct opx_counters_measurement send_bw;
+
+		/**
+		 * @brief The number of calls to and time spent in writev(),
+		 * based on the number of IOVs we passed to writev().
+		 */
+		struct opx_counters_measurement writev[OPX_COUNTERS_WRITEV_MAX];
+
+		/**
+		 * @brief The aggregate number of calls to and time spent in writev(),
+		 * regardless of the number of IOVs we passed to writev().
+		 */
+		struct opx_counters_measurement writev_all;
+
+		/**
+		 * @brief The number of SDMA requests made, and time taken
+		 * from when we initiated the send to when we see the SDMA
+		 * send as marked complete.
+		 */
+		struct opx_counters_measurement completion;
 	} sdma;
 
 	struct {
@@ -255,6 +369,21 @@ struct fi_opx_debug_counters {
 		uint64_t multi_recv_eager;
 		uint64_t multi_recv_rzv_noncontig;
 		uint64_t multi_recv_rzv_contig;
+
+		/**
+		 * @brief The number of Rendezvous RTS packets received that
+		 * did not match to a posted receive, and were added to the
+		 * unexpected packed (ue) queue for later matching, and the
+		 * time spent waiting to be matched to a posted receive.
+		 */
+		struct opx_counters_measurement rzv_rts_pkt_early;
+
+		/**
+		 * @brief The number of posted receives that did not match
+		 * any rendezvous RTS packets on the unexpected queue, and
+		 * the time spent waiting for the RTS packet to arrive and match.
+		 */
+		struct opx_counters_measurement rzv_rts_rcv_early;
 	} recv;
 
 	struct {
@@ -390,19 +519,13 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_sdma_we_none_free);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_sdma_we_max_used);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_pending_writev);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_pending_sdma_completion);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_pending_dc);
-	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.writev_count);
-	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.writev_time_ns_total);
-	if (counters->sdma.writev_count == 0) {
-		counters->sdma.writev_time_ns_min = 0;
-		counters->sdma.writev_time_ns_avg = 0;
-	} else {
-		counters->sdma.writev_time_ns_avg = counters->sdma.writev_time_ns_total / counters->sdma.writev_count;
-	}
-	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.writev_time_ns_min);
-	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.writev_time_ns_max);
-	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.writev_time_ns_avg);
-	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, sdma.writev_calls, OPX_DEBUG_COUNTERS_WRITEV_MAX);
+	OPX_COUNTERS_PRINT_MEASURE_ARR(pid, sdma.writev, OPX_COUNTERS_WRITEV_MAX, OPX_COUNTERS_UNIT_NS);
+	OPX_COUNTERS_PRINT_MEASURE(pid, sdma.writev_all, OPX_COUNTERS_UNIT_NS);
+	OPX_COUNTERS_PRINT_MEASURE(pid, sdma.completion, OPX_COUNTERS_UNIT_NS);
+	OPX_COUNTERS_PRINT_MEASURE_BW(pid, sdma.send_bw);
+	OPX_COUNTERS_PRINT_MEASURE(pid, sdma.early_acks_delta, OPX_COUNTERS_UNIT_NS);
 #endif
 
 #ifdef OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
@@ -455,6 +578,8 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_eager);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_rzv_noncontig);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_rzv_contig);
+	OPX_COUNTERS_PRINT_MEASURE(pid, recv.rzv_rts_rcv_early, OPX_COUNTERS_UNIT_NS);
+	OPX_COUNTERS_PRINT_MEASURE(pid, recv.rzv_rts_pkt_early, OPX_COUNTERS_UNIT_NS);
 #endif
 
 #ifdef OPX_DEBUG_COUNTERS_RHF
@@ -569,9 +694,22 @@ static void opx_debug_counters_handle_sig(int signum)
 
 static inline void fi_opx_debug_counters_init(struct fi_opx_debug_counters *counters)
 {
+	setlocale(LC_NUMERIC, "en_US.UTF-8");
 	memset(counters, 0, sizeof(struct fi_opx_debug_counters));
-	counters->sdma.writev_time_ns_min = UINT64_MAX;
-	opx_debug_sig_counters		  = counters;
+
+	/* Set min values to UINT64_MAX so they'll correctly pick up new min values */
+	for (int i = 0; i < OPX_COUNTERS_WRITEV_MAX; i++) {
+		counters->sdma.writev[i].min = UINT64_MAX;
+	}
+	counters->sdma.writev_all.min	     = UINT64_MAX;
+	counters->sdma.send_bw.min	     = UINT64_MAX;
+	counters->sdma.early_acks_delta.min  = UINT64_MAX;
+	counters->sdma.completion.min	     = UINT64_MAX;
+	counters->recv.rzv_rts_rcv_early.min = UINT64_MAX;
+	counters->recv.rzv_rts_pkt_early.min = UINT64_MAX;
+
+	fi_opx_timer_init(&counters->timer);
+	opx_debug_sig_counters = counters;
 	signal(SIGUSR1, opx_debug_counters_handle_sig);
 }
 
@@ -604,6 +742,26 @@ static inline void fi_opx_debug_counters_init(struct fi_opx_debug_counters *coun
 	} while (0)
 
 #define FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep) (&((opx_ep)->debug_counters))
+#define OPX_COUNTERS_RECORD_MEASURE(_val, _target)     \
+	do {                                           \
+		_target.n++;                           \
+		_target.sum += _val;                   \
+		_target.min = MIN(_target.min, _val);  \
+		_target.max = MAX(_target.max, _val);  \
+		_target.avg = _target.sum / _target.n; \
+	} while (0)
+
+#define OPX_COUNTERS_TIME_NS(_target, _counters)                                                 \
+	do {                                                                                     \
+		_target = fi_opx_timer_now_ns(&((_counters)->timestamp), &((_counters)->timer)); \
+                                                                                                 \
+	} while (0)
+
+#define OPX_COUNTERS_STORE_VAL(_target, _val) \
+	do {                                  \
+		_target = _val;               \
+                                              \
+	} while (0)
 #else
 
 #define FI_OPX_DEBUG_COUNTERS_DECLARE_COUNTERS
@@ -617,6 +775,9 @@ static inline void fi_opx_debug_counters_init(struct fi_opx_debug_counters *coun
 #define FI_OPX_DEBUG_COUNTERS_MAX_OF(x, y)
 #define FI_OPX_DEBUG_COUNTERS_MIN_OF(x, y)
 #define FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep) (NULL)
+#define OPX_COUNTERS_RECORD_MEASURE(_val, _target)
+#define OPX_COUNTERS_TIME_NS(_target, _counters)
+#define OPX_COUNTERS_STORE_VAL(_target, _val)
 #endif
 
 #endif

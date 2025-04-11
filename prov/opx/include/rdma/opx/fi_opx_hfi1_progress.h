@@ -662,6 +662,9 @@ void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
 	struct fi_opx_hfi1_context *hfi	       = opx_ep->hfi;
 	uint16_t		    queue_size = hfi->info.sdma.queue_size;
 
+	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(sdma_end_ns);
+	OPX_COUNTERS_TIME_NS(sdma_end_ns, &opx_ep->debug_counters);
+
 	while (hfi->info.sdma.available_counter < queue_size) {
 		volatile struct hfi1_sdma_comp_entry *entry =
 			&hfi->info.sdma.completion_queue[hfi->info.sdma.done_index];
@@ -671,10 +674,13 @@ void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
 
 		// Update the status/errcode of the work entry who was using this index
 		assert(hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]);
-		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->status = entry->status;
-		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "SDMA_COMPLETE_%hu", hfi->info.sdma.done_index);
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->status  = entry->status;
 		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->errcode = entry->errcode;
-		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]	  = NULL;
+		OPX_COUNTERS_STORE_VAL(hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->end_time_ns,
+				       sdma_end_ns);
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index] = NULL;
+
+		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "SDMA_COMPLETE_%hu", hfi->info.sdma.done_index);
 
 		assert(entry->status == COMPLETE || entry->status == FREE ||
 		       (entry->status == ERROR &&

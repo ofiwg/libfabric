@@ -3053,11 +3053,13 @@ void fi_opx_ep_rx_reliability_process_packet(struct fid_ep *ep, const union opx_
 }
 
 __OPX_FORCE_INLINE__
-struct fi_opx_hfi1_ue_packet *
-fi_opx_ep_rx_append_ue(struct fi_opx_ep_rx *const rx, struct fi_opx_hfi1_ue_packet_slist *ue,
-		       const union opx_hfi1_packet_hdr *const	     hdr,
-		       const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
-		       const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst, const opx_lid_t slid)
+struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_append_ue(struct fi_opx_ep_rx *const			   rx,
+						     struct fi_opx_hfi1_ue_packet_slist		  *ue,
+						     const union opx_hfi1_packet_hdr *const	   hdr,
+						     const union fi_opx_hfi1_packet_payload *const payload,
+						     const size_t payload_bytes, const unsigned is_intranode,
+						     const uint32_t rank, const uint32_t rank_inst,
+						     const opx_lid_t slid, const uint64_t rcv_time_ns)
 {
 	struct fi_opx_hfi1_ue_packet *uepkt = ofi_buf_alloc(rx->ue_packet_pool);
 
@@ -3083,6 +3085,8 @@ fi_opx_ep_rx_append_ue(struct fi_opx_ep_rx *const rx, struct fi_opx_hfi1_ue_pack
 #endif
 	uepkt->is_intranode = is_intranode;
 
+	uepkt->recv_time_ns = rcv_time_ns;
+
 	uepkt->next = NULL;
 	uepkt->prev = NULL;
 
@@ -3095,10 +3099,10 @@ void fi_opx_ep_rx_append_ue_msg(struct fi_opx_ep_rx *const rx, const union opx_h
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
 				const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst,
 				const bool daos_enabled, struct fi_opx_debug_counters *debug_counters,
-				const opx_lid_t slid)
+				const opx_lid_t slid, const uint64_t rcv_time_ns)
 {
 	fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_MSG].ue, hdr, payload, payload_bytes, is_intranode, rank,
-			       rank_inst, slid);
+			       rank_inst, slid, rcv_time_ns);
 	FI_OPX_DEBUG_COUNTERS_MAX_OF(debug_counters->match.default_max_length, rx->queue[FI_OPX_KIND_MSG].ue.length);
 }
 
@@ -3106,20 +3110,22 @@ void fi_opx_ep_rx_append_ue_tag(struct fi_opx_ep_rx *const rx, const union opx_h
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
 				const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst,
 				const bool daos_enabled, struct fi_opx_debug_counters *debug_counters,
-				const opx_lid_t slid)
+				const opx_lid_t slid, const uint64_t rcv_time_ns)
 {
 #ifndef FI_OPX_MATCH_HASH_DISABLE
 	if (!daos_enabled && (rx->match_ue_tag_hash->ue.head ||
 			      rx->queue[FI_OPX_KIND_TAG].ue.length >= FI_OPX_MATCH_DEFAULT_UE_LIST_MAX_LENGTH)) {
-		struct fi_opx_hfi1_ue_packet *uepkt = fi_opx_ep_rx_append_ue(
-			rx, &rx->match_ue_tag_hash->ue, hdr, payload, payload_bytes, is_intranode, 0, 0, slid);
+		struct fi_opx_hfi1_ue_packet *uepkt =
+			fi_opx_ep_rx_append_ue(rx, &rx->match_ue_tag_hash->ue, hdr, payload, payload_bytes,
+					       is_intranode, 0, 0, slid, rcv_time_ns);
 		fi_opx_match_ue_hash_append(uepkt, rx->match_ue_tag_hash, debug_counters);
 	} else {
 		fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_TAG].ue, hdr, payload, payload_bytes, is_intranode,
-				       rank, rank_inst, slid);
+				       rank, rank_inst, slid, rcv_time_ns);
 	}
 #else
-	fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_TAG].ue, hdr, payload, payload_bytes, rank, rank_inst, slid);
+	fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_TAG].ue, hdr, payload, payload_bytes, is_intranode, rank,
+			       rank_inst, slid, rcv_time_ns);
 #endif
 	FI_OPX_DEBUG_COUNTERS_MAX_OF(debug_counters->match.default_max_length, rx->queue[FI_OPX_KIND_TAG].ue.length);
 }
@@ -3133,7 +3139,8 @@ void fi_opx_ep_rx_append_ue_egr(struct fi_opx_ep_rx *const rx, const union opx_h
 	 * MP Eager unexpected queue, because the mp_egr_id related data in
 	 * the packet is referenced instead.
 	 */
-	fi_opx_ep_rx_append_ue(rx, &rx->mp_egr_queue.ue, hdr, payload, payload_bytes, OPX_INTRANODE_FALSE, 0, 0, slid);
+	fi_opx_ep_rx_append_ue(rx, &rx->mp_egr_queue.ue, hdr, payload, payload_bytes, OPX_INTRANODE_FALSE, 0, 0, slid,
+			       0UL);
 }
 
 static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)

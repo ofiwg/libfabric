@@ -84,14 +84,16 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 		// the hit_zero to mark the work element as complete. The replay
 		// iovecs are pointing to the SDMA WE bounce buffers, so we can't
 		// free the SDMA WEs until the replays are cleared.
-		if (!params->work_elem.complete && we->use_bounce_buf) {
-			FI_OPX_DEBUG_COUNTERS_INC(work->dput.opx_ep->debug_counters.sdma.eagain_pending_dc);
-			return -FI_EAGAIN;
-		}
-
-		if (we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV || we->comp_state == OPX_SDMA_COMP_QUEUED) {
+		if (we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV) {
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_pending_writev);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
+			return -FI_EAGAIN;
+		} else if (we->comp_state == OPX_SDMA_COMP_QUEUED) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_pending_sdma_completion);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
+			return -FI_EAGAIN;
+		} else if (!params->work_elem.complete && we->use_bounce_buf) {
+			FI_OPX_DEBUG_COUNTERS_INC(work->dput.opx_ep->debug_counters.sdma.eagain_pending_dc);
 			return -FI_EAGAIN;
 		}
 		assert(we->comp_state == OPX_SDMA_COMP_COMPLETE || we->comp_state == OPX_SDMA_COMP_ERROR);
@@ -285,6 +287,15 @@ void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep)
 {
 	struct slist *queue = &opx_ep->tx->sdma_pending_queue;
 
+#ifdef OPX_DEBUG_COUNTERS_SDMA
+	static uint64_t current_bps	    = 0;
+	static uint64_t current_start_ns    = 0;
+	static uint64_t current_end_ns	    = 0;
+	static uint64_t current_total_ns    = 0;
+	static uint64_t current_total_bytes = 0;
+	static uint64_t current_count	    = 0;
+#endif
+
 	struct opx_sdma_request *request = (struct opx_sdma_request *) queue->head;
 	while (request && request->comp_entry.status != QUEUED) {
 		slist_remove_head(queue);
@@ -299,6 +310,88 @@ void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep)
 		} else {
 			assert(request->comp_entry.status == COMPLETE);
 			*request->comp_state = OPX_SDMA_COMP_COMPLETE;
+#ifdef OPX_DEBUG_COUNTERS_SDMA
+			assert(request->comp_entry.start_time_ns >= current_start_ns);
+			assert(request->comp_entry.end_time_ns >= current_end_ns);
+			assert(request->comp_entry.end_time_ns >= request->comp_entry.start_time_ns);
+			OPX_COUNTERS_RECORD_MEASURE(request->comp_entry.end_time_ns - request->comp_entry.start_time_ns,
+						    opx_ep->debug_counters.sdma.completion);
+			if (request->comp_entry.start_time_ns != current_start_ns) {
+				if (request->comp_entry.start_time_ns >= current_end_ns) {
+					// No overlap, record current interval and start new one
+					// |----- Interval 1 ------|
+					//                         |---- Interval 2 -----|
+					if (current_count) {
+						current_bps = (current_total_bytes * OPX_COUNTERS_NS_PER_SEC) /
+							      current_total_ns;
+						OPX_COUNTERS_RECORD_MEASURE(current_bps,
+									    opx_ep->debug_counters.sdma.send_bw);
+					}
+
+					current_start_ns    = request->comp_entry.start_time_ns;
+					current_end_ns	    = request->comp_entry.end_time_ns;
+					current_total_ns    = current_end_ns - current_start_ns;
+					current_count	    = 1;
+					current_total_bytes = request->iovecs[1].iov_len;
+				} else {
+					//  Case 1: request->comp_entry.end_time_ns == current_end_ns
+					//  Overlap, shorter interval.
+					//  |----- Interval 1 ------|
+					//  |--X--|---- Interval 2 -|
+					//
+					//  Case 2: request->comp_entry.end_time_ns > current_end_ns
+					//  Overlapping, shifted interval
+					//  |----- Interval 1 ------|
+					//  |--X--|----- Interval 2 ------|
+					//
+					//  Record bytes sent over interval X, and start a
+					//  new interval initialized with the bytes sent so
+					//  far for the overlap of Intervals 1 & 2.
+					double current_interval_bytes_per_ns =
+						((double) current_total_bytes) / current_total_ns;
+					uint64_t record_interval_ns =
+						request->comp_entry.start_time_ns - current_start_ns;
+					uint64_t record_interval_bytes =
+						current_interval_bytes_per_ns * record_interval_ns;
+					uint64_t record_interval_bps =
+						(record_interval_bytes * OPX_COUNTERS_NS_PER_SEC) / record_interval_ns;
+					OPX_COUNTERS_RECORD_MEASURE(record_interval_bps,
+								    opx_ep->debug_counters.sdma.send_bw);
+
+					current_start_ns = request->comp_entry.start_time_ns;
+					current_end_ns	 = request->comp_entry.end_time_ns;
+					current_total_ns = current_end_ns - current_start_ns;
+					current_count	 = 1;
+					current_total_bytes -= record_interval_bytes;
+					current_total_bytes += request->iovecs[1].iov_len;
+				}
+			} else {
+				//  Case 1: request->comp_entry.end_time_ns != current_end_ns
+				// New longer interval
+				// |----- Interval 1 ------|
+				// |----------- Interval 2 -----------|
+				//
+				//  Case 2: request->comp_entry.end_time_ns == current_end_ns
+				// |----- Interval 1 ------|
+				// |----- Interval 2 ------|
+				// Just add count/bytes
+				current_end_ns	 = request->comp_entry.end_time_ns;
+				current_total_ns = current_end_ns - current_start_ns;
+				++current_count;
+				current_total_bytes += request->iovecs[1].iov_len;
+			}
+			if (request->is_sdma_we) {
+				struct fi_opx_hfi1_sdma_work_entry *sdma_we =
+					(struct fi_opx_hfi1_sdma_work_entry *) request->requester;
+				if (sdma_we->first_ack_time_ns) {
+					assert(sdma_we->first_ack_time_ns > request->comp_entry.start_time_ns);
+					assert(sdma_we->first_ack_time_ns < request->comp_entry.end_time_ns);
+					OPX_COUNTERS_RECORD_MEASURE(request->comp_entry.end_time_ns -
+									    sdma_we->first_ack_time_ns,
+								    opx_ep->debug_counters.sdma.early_acks_delta);
+				}
+			}
+#endif
 		}
 		OPX_BUF_FREE(request);
 		request = (struct opx_sdma_request *) queue->head;
@@ -312,32 +405,26 @@ int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep, struct iovec *iovecs, int iov
 	opx_ep->hfi->info.sdma.fill_index	 = fill_index;
 	opx_ep->hfi->info.sdma.available_counter = avail;
 
-#ifdef OPX_DEBUG_COUNTERS_SDMA
-	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.writev_count);
+	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(writev_start_ns);
+	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(writev_end_ns);
+	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(writev_time_ns);
 
-	union fi_opx_timer_stamp timestamp;
-	uint64_t writev_start_ns = fi_opx_timer_now(&timestamp, &opx_ep->reliability->state.service->tx.timer);
-#endif
+	OPX_COUNTERS_TIME_NS(writev_start_ns, &opx_ep->debug_counters);
 
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "WRITEV");
 	ssize_t writev_rc = writev(opx_ep->hfi->fd, iovecs, iovs_used);
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITEV");
 
-#ifdef OPX_DEBUG_COUNTERS_SDMA
-	uint64_t writev_end_ns = fi_opx_timer_now(&timestamp, &opx_ep->reliability->state.service->tx.timer);
+	OPX_COUNTERS_TIME_NS(writev_end_ns, &opx_ep->debug_counters);
+	OPX_COUNTERS_STORE_VAL(writev_time_ns, writev_end_ns - writev_start_ns);
 
-	uint64_t writev_time_ns = writev_end_ns - writev_start_ns;
-
-	FI_OPX_DEBUG_COUNTERS_INC_N(writev_time_ns, opx_ep->debug_counters.sdma.writev_time_ns_total);
-	FI_OPX_DEBUG_COUNTERS_MAX_OF(opx_ep->debug_counters.sdma.writev_time_ns_max, writev_time_ns);
-	FI_OPX_DEBUG_COUNTERS_MIN_OF(opx_ep->debug_counters.sdma.writev_time_ns_min, writev_time_ns);
-#endif
+	OPX_COUNTERS_RECORD_MEASURE(writev_time_ns, opx_ep->debug_counters.sdma.writev[iovs_used]);
+	OPX_COUNTERS_RECORD_MEASURE(writev_time_ns, opx_ep->debug_counters.sdma.writev_all);
 
 	if (writev_rc <= 0) {
 		fi_opx_hfi1_sdma_handle_errors(opx_ep, writev_rc, iovecs, iovs_used, file, func, line);
 	}
 
-	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.writev_calls[iovs_used]);
 	return (writev_rc);
 }
 
@@ -358,6 +445,9 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 	int	     iovs_free	= opx_ep->tx->sdma_max_iovs_per_writev;
 	uint16_t     avail	= opx_ep->hfi->info.sdma.available_counter;
 	uint16_t     fill_index = opx_ep->hfi->info.sdma.fill_index;
+
+	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(sdma_start_ns);
+	OPX_COUNTERS_TIME_NS(sdma_start_ns, &opx_ep->debug_counters);
 
 	while (!slist_empty(&queue->list) && avail) {
 		struct opx_sdma_request *request = (struct opx_sdma_request *) slist_remove_head(&queue->list);
@@ -382,6 +472,7 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 			}
 			iovs_used = 0;
 			iovs_free = opx_ep->tx->sdma_max_iovs_per_writev;
+			OPX_COUNTERS_TIME_NS(sdma_start_ns, &opx_ep->debug_counters);
 		}
 
 		struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&request->header_vec, request->set_meminfo);
@@ -390,9 +481,10 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 		OPX_TRACER_TRACE_SDMA(OPX_TRACER_BEGIN, "SDMA_COMPLETE_%hu", fill_index);
 
 		assert(opx_ep->hfi->info.sdma.queued_entries[fill_index] == NULL);
-		request->comp_entry.status			  = QUEUED;
-		request->comp_entry.errcode			  = 0;
-		opx_ep->hfi->info.sdma.queued_entries[fill_index] = &request->comp_entry;
+		request->comp_entry.status  = QUEUED;
+		request->comp_entry.errcode = 0;
+		OPX_COUNTERS_STORE_VAL(request->comp_entry.start_time_ns, sdma_start_ns);
+		opx_ep->hfi->info.sdma.queued_entries[fill_index] = (void *) &request->comp_entry;
 
 		fill_index = (fill_index + 1) % (opx_ep->hfi->info.sdma.queue_size);
 		--avail;
