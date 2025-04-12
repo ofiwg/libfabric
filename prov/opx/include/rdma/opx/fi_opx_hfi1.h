@@ -195,7 +195,11 @@ static_assert(OPX_HFI1_SDMA_DEFAULT_PKTS_TID <= OPX_HFI1_SDMA_MAX_PKTS_TID,
  *       on too much SDMA work at once.
  */
 #ifndef FI_OPX_HFI1_SDMA_MAX_WE
+#ifndef OPX_JKR_SUPPORT
 #define FI_OPX_HFI1_SDMA_MAX_WE (256)
+#else
+#define FI_OPX_HFI1_SDMA_MAX_WE (1024)
+#endif
 #endif
 
 /*

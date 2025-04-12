@@ -2754,17 +2754,18 @@ uint8_t fi_opx_reliability_service_init(struct fi_opx_reliability_service *servi
 
 	// PENDING_RX_RELIABLITY
 	ofi_bufpool_create(&service->pending_rx_reliability_pool, sizeof(struct fi_opx_pending_rx_reliability_op), 0,
-			   UINT_MAX, PENDING_RX_RELIABLITY_COUNT_MAX, 0);
+			   UINT_MAX, PENDING_RX_RELIABLITY_COUNT_MAX, OFI_BUFPOOL_NO_ZERO);
 
 	service->pending_rx_reliability_ops_hashmap = NULL;
 
-	ofi_bufpool_create(&service->uepkt_pool, sizeof(struct fi_opx_reliability_rx_uepkt), 64, UINT_MAX, 1024, 0);
+	ofi_bufpool_create(&service->uepkt_pool, sizeof(struct fi_opx_reliability_rx_uepkt), 64, UINT_MAX, 1024,
+			   OFI_BUFPOOL_NO_ZERO);
 
 	ofi_bufpool_create(&service->work_pending_pool, sizeof(union fi_opx_reliability_deferred_work), 0, UINT_MAX,
-			   1024, 0);
+			   1024, OFI_BUFPOOL_NO_ZERO);
 
 	ofi_bufpool_create(&service->sdma_replay_request_pool, sizeof(struct fi_opx_hfi1_sdma_replay_work_entry), 8,
-			   UINT_MAX, 1024, 0);
+			   UINT_MAX, 1024, OFI_BUFPOOL_NO_ZERO);
 
 	slist_init(&service->work_pending);
 
@@ -2836,17 +2837,17 @@ void fi_opx_reliability_client_init(struct fi_opx_reliability_client_state *stat
 	 * by returning an EAGAIN until the # of outstanding packets falls.
 	 */
 	(void) ofi_bufpool_create(&(state->replay_pool),
-				  OPX_RELIABILITY_TX_REPLAY_SIZE,      // element size
-				  sizeof(void *),		       // byte alignment
-				  FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS, // max # of elements
-				  FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS, // # of elements to allocate at once
-				  OFI_BUFPOOL_NO_TRACK);	       // flags
+				  OPX_RELIABILITY_TX_REPLAY_SIZE,	       // element size
+				  FI_OPX_CACHE_LINE_SIZE,		       // byte alignment
+				  FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS,	       // max # of elements
+				  FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS,	       // # of elements to allocate at once
+				  OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_NO_ZERO); // flags
 	(void) ofi_bufpool_create(&(state->replay_iov_pool),
-				  OPX_RELIABILITY_TX_REPLAY_IOV_SIZE,	   // element size
-				  sizeof(void *),			   // byte alignment
-				  FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS, // max # of elements
-				  FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS, // # of elements to allocate at once
-				  OFI_BUFPOOL_NO_TRACK);		   // flags
+				  OPX_RELIABILITY_TX_REPLAY_IOV_SIZE,	       // element size
+				  FI_OPX_CACHE_LINE_SIZE,		       // byte alignment
+				  FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS,     // max # of elements
+				  FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS,     // # of elements to allocate at once
+				  OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_NO_ZERO); // flags
 #ifdef OPX_RELIABILITY_DEBUG
 	fprintf(stderr, "%s:%s():%d replay_pool = %p\n", __FILE__, __func__, __LINE__, state->replay_pool);
 	fprintf(stderr, "%s:%s():%d replay_iov_pool = %p\n", __FILE__, __func__, __LINE__, state->replay_iov_pool);
