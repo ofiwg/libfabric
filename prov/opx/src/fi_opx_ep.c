@@ -1254,17 +1254,20 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
 	slist_init(&opx_ep->tx->sdma_pending_queue);
 	ofi_bufpool_create(&opx_ep->tx->work_pending_pool, sizeof(union fi_opx_hfi1_deferred_work), L2_CACHE_LINE_SIZE,
-			   UINT_MAX, 2048, 0);
+			   UINT_MAX, 2048, OFI_BUFPOOL_NO_ZERO);
 
-	ofi_bufpool_create(&opx_ep->tx->rma_payload_pool, sizeof(union fi_opx_hfi1_packet_payload), 0, UINT_MAX, 16, 0);
+	ofi_bufpool_create(&opx_ep->tx->rma_payload_pool, sizeof(union fi_opx_hfi1_packet_payload), 0, UINT_MAX, 16,
+			   OFI_BUFPOOL_NO_ZERO);
 
-	ofi_bufpool_create(&opx_ep->tx->rma_request_pool, sizeof(struct fi_opx_rma_request), 0, UINT_MAX, 16, 0);
+	ofi_bufpool_create(&opx_ep->tx->rma_request_pool, sizeof(struct fi_opx_rma_request), 0, UINT_MAX, 16,
+			   OFI_BUFPOOL_NO_ZERO);
 
 	if (opx_ep->tx->use_sdma) {
-		ofi_bufpool_create(&opx_ep->tx->sdma_work_pool, sizeof(struct fi_opx_hfi1_sdma_work_entry), 64,
-				   FI_OPX_HFI1_SDMA_MAX_WE, FI_OPX_HFI1_SDMA_MAX_WE, 0);
-		ofi_bufpool_create(&opx_ep->tx->sdma_request_pool, sizeof(struct opx_sdma_request), 64, UINT_MAX,
-				   FI_OPX_HFI1_SDMA_MAX_WE, 0);
+		ofi_bufpool_create(&opx_ep->tx->sdma_work_pool, sizeof(struct fi_opx_hfi1_sdma_work_entry),
+				   FI_OPX_CACHE_LINE_SIZE, FI_OPX_HFI1_SDMA_MAX_WE, FI_OPX_HFI1_SDMA_MAX_WE,
+				   OFI_BUFPOOL_NO_ZERO);
+		ofi_bufpool_create(&opx_ep->tx->sdma_request_pool, sizeof(struct opx_sdma_request),
+				   FI_OPX_CACHE_LINE_SIZE, UINT_MAX, FI_OPX_HFI1_SDMA_MAX_WE, OFI_BUFPOOL_NO_ZERO);
 	} else {
 		opx_ep->tx->sdma_work_pool    = NULL;
 		opx_ep->tx->sdma_request_pool = NULL;
@@ -1279,7 +1282,7 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 
 	opx_ep->rx->ue_packet_pool = NULL;
 	if (ofi_bufpool_create(&opx_ep->rx->ue_packet_pool, sizeof(struct fi_opx_hfi1_ue_packet), 64, UINT_MAX,
-			       FI_OPX_EP_RX_UEPKT_BLOCKSIZE, 0)) {
+			       FI_OPX_EP_RX_UEPKT_BLOCKSIZE, OFI_BUFPOOL_NO_ZERO)) {
 		goto err;
 	}
 
@@ -1289,7 +1292,7 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 
 	opx_ep->rx->ctx_pool = NULL;
 	if (ofi_bufpool_create(&opx_ep->rx->ctx_pool, sizeof(struct opx_context), 64, UINT_MAX, OPX_EP_RX_CTX_BLOCKSIZE,
-			       0)) {
+			       OFI_BUFPOOL_NO_ZERO)) {
 		goto err;
 	}
 	struct fi_opx_domain *opx_domain = opx_ep->domain;
@@ -2626,9 +2629,11 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 	opx_ep->domain = opx_domain;
 	opx_ep->type   = info->ep_attr->type;
 
-	ofi_bufpool_create(&opx_ep->rma_counter_pool, sizeof(struct fi_opx_completion_counter), 0, UINT_MAX, 2048, 0);
+	ofi_bufpool_create(&opx_ep->rma_counter_pool, sizeof(struct fi_opx_completion_counter), 0, UINT_MAX, 2048,
+			   OFI_BUFPOOL_NO_ZERO);
 
-	ofi_bufpool_create(&opx_ep->rzv_completion_pool, sizeof(struct fi_opx_rzv_completion), 0, UINT_MAX, 2048, 0);
+	ofi_bufpool_create(&opx_ep->rzv_completion_pool, sizeof(struct fi_opx_rzv_completion), 0, UINT_MAX, 2048,
+			   OFI_BUFPOOL_NO_ZERO);
 
 	ofi_spin_init(&opx_ep->lock);
 
