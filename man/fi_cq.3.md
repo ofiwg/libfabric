@@ -214,6 +214,25 @@ struct fi_cq_tagged_entry {
 };
 ```
 
+- *FI_CQ_FORMAT_RPC*
+: Expands completion data to include support for RPC message
+  interfaces.
+
+```c
+struct fi_cq_rpc_entry {
+	void     *op_context; /* operation context */
+	uint64_t flags;       /* completion flags */
+	size_t   len;         /* size of received data */
+	void     *buf;        /* receive data buffer */
+	uint64_t data;        /* completion data */
+	union {
+		uint64_t tag;         /* received tag */
+		uint64_t rpc_id;      /* RPC ID */
+	};
+	int	timeout;      /* RPC timeout value */
+};
+```
+
 *wait_obj*
 : CQ's may be associated with a specific wait object.  Wait objects
   allow applications to block until the wait object is signaled,
@@ -409,8 +428,14 @@ struct fi_cq_err_entry {
 	size_t   len;         /* size of received data */
 	void     *buf;        /* receive data buffer */
 	uint64_t data;        /* completion data */
-	uint64_t tag;         /* message tag */
-	size_t   olen;        /* overflow length */
+	union {
+		uint64_t tag;     /* message tag */
+		uint64_t rpc_id;  /* RPC id */
+	};
+	union {
+		size_t   olen;    /* overflow length */
+		int      timeout; /* RPC timeout */
+	};
 	int      err;         /* positive error code */
 	int      prov_errno;  /* provider error code */
 	void    *err_data;    /*  error data */
@@ -418,6 +443,11 @@ struct fi_cq_err_entry {
 	fi_addr_t src_addr; /* error source address */
 };
 ```
+
+The `rpc_id` and `timeout` fields in the unions allow the struct
+be used as fi_cq_rpc_entry instead of an error entry.  When reporting
+an error, the `olen` field is always used. That means error entries
+for received RPC requests won't report the timeout values.
 
 The general reason for the error is provided through the err field.
 Provider specific error information may also be available through the

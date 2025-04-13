@@ -442,7 +442,6 @@ struct fi_opx_ep_daos_info {
 struct fi_opx_ep {
 	/* == CACHE LINE 0,1 == */
 	struct fid_ep			   ep_fid; /* 10 qws */
-	uint64_t			   rpc_reserved;
 	struct fi_opx_ep_tx		  *tx;
 	struct fi_opx_ep_rx		  *rx;
 	struct fi_opx_reliability_service *reli_service; /* ONLOAD only */

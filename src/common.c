@@ -240,7 +240,7 @@ bool ofi_rma_target_allowed(uint64_t caps)
 
 bool ofi_needs_tx(uint64_t caps)
 {
-	return ofi_send_allowed(caps) || ofi_rma_initiate_allowed(caps);
+	return ofi_send_allowed(caps) || ofi_rma_initiate_allowed(caps) || (caps & FI_RPC);
 }
 
 bool ofi_needs_rx(uint64_t caps)

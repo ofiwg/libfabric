@@ -237,9 +237,10 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fi_domain.h \
 	$(top_srcdir)/include/rdma/fi_eq.h \
 	$(top_srcdir)/include/rdma/fi_ext.h \
-	$(top_srcdir)/include/rdma/fi_rma.h \
 	$(top_srcdir)/include/rdma/fi_endpoint.h \
 	$(top_srcdir)/include/rdma/fi_errno.h \
+	$(top_srcdir)/include/rdma/fi_rma.h \
+	$(top_srcdir)/include/rdma/fi_rpc.h \
 	$(top_srcdir)/include/rdma/fi_tagged.h \
 	$(top_srcdir)/include/rdma/fi_trigger.h \
 	$(top_srcdir)/include/rdma/fi_profile.h
@@ -291,6 +292,7 @@ real_man_pages = \
 	man/man3/fi_nic.3 \
         man/man3/fi_poll.3 \
         man/man3/fi_rma.3 \
+        man/man3/fi_rpc.3 \
         man/man3/fi_tagged.3 \
         man/man3/fi_trigger.3 \
         man/man3/fi_version.3 \
@@ -401,6 +403,12 @@ dummy_man_pages = \
         man/man3/fi_recvv.3 \
         man/man3/fi_reduce_scatter.3 \
         man/man3/fi_reject.3 \
+	man/man3/fi_rpcv.3 \
+	man/man3/fi_rpcmsg.3 \
+	man/man3/fi_rpc_resp.3 \
+	man/man3/fi_rpc_respv.3 \
+	man/man3/fi_rpc_respmsg.3 \
+	man/man3/fi_rpc_discard.3 \
         man/man3/fi_rx_addr.3 \
         man/man3/fi_rx_size_left.3 \
         man/man3/fi_scalable_ep_bind.3 \
