@@ -198,7 +198,6 @@ pipeline {
       timestamps()
       timeout(activity: true, time: 6, unit: 'HOURS')
       skipDefaultCheckout()
-      parallelsAlwaysFailFast()
   }
   environment {
       JOB_CADENCE = 'PR'
