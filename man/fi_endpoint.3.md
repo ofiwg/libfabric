@@ -264,9 +264,12 @@ return -FI_EBUSY.
 
 Outstanding operations posted to the endpoint when fi_close is
 called will be discarded.  Discarded operations will silently be dropped,
-with no completions reported.  Additionally, a provider may discard previously
-completed operations from the associated completion queue(s).  The
-behavior to discard completed operations is provider specific.
+with no completions reported. Memory buffers that the user associated with
+the endpoint by calling libfabric's transmission interfaces must not be released,
+deregistered, or reused until either a completion is generated or fi_close on the
+respective endpoint returns. Additionally, a provider may discard
+previously completed operations from the associated completion queue(s).
+The behavior to discard completed operations is provider specific.
 
 ## fi_ep_bind
 
