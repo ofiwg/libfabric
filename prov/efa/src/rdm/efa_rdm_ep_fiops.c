@@ -770,68 +770,6 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		ofi_bufpool_destroy(efa_rdm_ep->rx_atomrsp_pool);
 }
 
-/*
- * @brief determine whether an endpoint has unfinished send
- *
- * Unfinished send includes queued ctrl packets, queued
- * RNR packets and inflight TX packets.
- *
- * @param[in]  efa_rdm_ep      endpoint
- * @return     a boolean
- */
-static
-bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
-{
-	struct dlist_entry *entry, *tmp;
-	struct efa_rdm_ope *ope;
-	/* Only flush the opes queued due to rnr and ctrl */
-	uint64_t queued_ope_flags = EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_RNR;
-
-	if (efa_rdm_ep->efa_outstanding_tx_ops > 0)
-		return true;
-
-	dlist_foreach_safe(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list, entry, tmp) {
-		ope = container_of(entry, struct efa_rdm_ope,
-					queued_entry);
-		if (ope->ep == efa_rdm_ep && (ope->internal_flags & queued_ope_flags)) {
-			return true;
-		}
-	}
-
-    return false;
-}
-
-/*
- * @brief wait for send to finish
- *
- * Wait for queued packet to be sent, and inflight send to
- * complete.
- *
- * @param[in]	efa_rdm_ep		endpoint
- * @return 	no return
- */
-static inline
-void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
-{
-	struct efa_cq *tx_cq, *rx_cq;
-
-	ofi_genlock_lock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
-
-	tx_cq = efa_base_ep_get_tx_cq(&efa_rdm_ep->base_ep);
-	rx_cq = efa_base_ep_get_rx_cq(&efa_rdm_ep->base_ep);
-
-	while (efa_rdm_ep_has_unfinished_send(efa_rdm_ep)) {
-		/* poll cq until empty */
-		if (tx_cq)
-			efa_rdm_cq_poll_ibv_cq(-1, &tx_cq->ibv_cq);
-		if (rx_cq)
-			efa_rdm_cq_poll_ibv_cq(-1, &rx_cq->ibv_cq);
-		efa_domain_progress_rdm_peers_and_queues(efa_rdm_ep_domain(efa_rdm_ep));
-	}
-
-	ofi_genlock_unlock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
-}
-
 static inline
 void efa_rdm_ep_remove_cq_ibv_cq_poll_list(struct efa_rdm_ep *ep)
 {
@@ -906,9 +844,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 	struct util_srx_ctx *srx_ctx;
 
 	efa_rdm_ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-
-	if (efa_rdm_ep->base_ep.efa_qp_enabled)
-		efa_rdm_ep_wait_send(efa_rdm_ep);
 
 	if (efa_rdm_ep->peer_srx_ep) {
 		/*
