@@ -1282,7 +1282,7 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 
 	opx_ep->rx->ue_packet_pool = NULL;
 	if (ofi_bufpool_create(&opx_ep->rx->ue_packet_pool, sizeof(struct fi_opx_hfi1_ue_packet), 64, UINT_MAX,
-			       FI_OPX_EP_RX_UEPKT_BLOCKSIZE, OFI_BUFPOOL_NO_ZERO)) {
+			       FI_OPX_EP_RX_UEPKT_BLOCKSIZE, 0)) {
 		goto err;
 	}
 
@@ -1292,7 +1292,7 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 
 	opx_ep->rx->ctx_pool = NULL;
 	if (ofi_bufpool_create(&opx_ep->rx->ctx_pool, sizeof(struct opx_context), 64, UINT_MAX, OPX_EP_RX_CTX_BLOCKSIZE,
-			       OFI_BUFPOOL_NO_ZERO)) {
+			       0)) {
 		goto err;
 	}
 	struct fi_opx_domain *opx_domain = opx_ep->domain;
