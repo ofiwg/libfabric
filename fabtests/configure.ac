@@ -141,6 +141,7 @@ AC_ARG_WITH([libfabric],
 dnl Check for CUDA support. Require fabtests to dlopen CUDA runtime.
 have_cuda=0
 have_cuda_dmabuf=0
+have_cuda_dmabuf_mapping_type_pcie=0
 AC_ARG_WITH([cuda],
             [AS_HELP_STRING([--with-cuda=DIR],
                             [Provide path to where the CUDA development
@@ -176,9 +177,17 @@ AS_IF([test x"$have_cuda" = x"1"],
 		      [],
 		      [have_cuda_dmabuf=0],
 		      [[#include <cuda.h>]])
+            
+            have_cuda_dmabuf_mapping_type_pcie=1
+            AC_CHECK_DECL([CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE],
+			[],
+			[have_cuda_dmabuf_mapping_type_pcie=0],
+			[[#include <cuda.h>]])
       ])
 
 AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF], [$have_cuda_dmabuf], [CUDA dmabuf support])
+
+AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF_MAPPING_TYPE_PCIE], [$have_cuda_dmabuf_mapping_type_pcie], [CUDA dmabuf PCIe BAR1 support])
 
 dnl Check for ROCR support. Require fabtests to dlopen ROCR.
 have_rocr=0
