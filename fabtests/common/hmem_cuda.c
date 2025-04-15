@@ -436,6 +436,7 @@ int ft_cuda_get_dmabuf_fd(void *buf, size_t len,
 	size_t host_page_size = sysconf(_SC_PAGESIZE);
 	void *base_addr;
 	size_t total_size;
+	unsigned long long flags;
 
 	if (!dmabuf_supported) {
 		FT_LOG("warn", "dmabuf is not supported\n");
@@ -450,11 +451,16 @@ int ft_cuda_get_dmabuf_fd(void *buf, size_t len,
 	aligned_size = (uintptr_t) ft_get_page_end((void *) ((uintptr_t) base_addr + total_size - 1),
 						    host_page_size) - (uintptr_t) aligned_ptr + 1;
 
+# if HAVE_CUDA_DMABUF_MAPPING_TYPE_PCIE
+	flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+# else
+	flags = 0;
+# endif /* HAVE_CUDA_DMABUF_MAPPING_TYPE_PCIE */
 	cuda_ret = cuda_ops.cuMemGetHandleForAddressRange(
 						(void *)dmabuf_fd,
 						aligned_ptr, aligned_size,
 						CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
-						0);
+						flags);
 	if (cuda_ret != CUDA_SUCCESS) {
 		ft_cuda_driver_api_print_error(cuda_ret,
 				"cuMemGetHandleForAddressRange");
