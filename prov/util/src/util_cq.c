@@ -74,6 +74,7 @@ int ofi_cq_write_overflow(struct util_cq *cq, void *context, uint64_t flags,
 	entry->comp.buf = buf;
 	entry->comp.data = data;
 	entry->comp.tag = tag;
+	entry->comp.timeout = -1;
 	entry->comp.err = 0;
 	entry->src = src;
 
@@ -195,6 +196,7 @@ int ofi_check_cq_attr(const struct fi_provider *prov,
 	case FI_CQ_FORMAT_MSG:
 	case FI_CQ_FORMAT_DATA:
 	case FI_CQ_FORMAT_TAGGED:
+	case FI_CQ_FORMAT_RPC:
 		break;
 	default:
 		FI_WARN(prov, FI_LOG_CQ, "unsupported format\n");
@@ -258,6 +260,12 @@ static void util_cq_read_tagged(void **dst, void *src)
 {
 	*(struct fi_cq_tagged_entry *) *dst = *(struct fi_cq_tagged_entry *) src;
 	*(char **)dst += sizeof(struct fi_cq_tagged_entry);
+}
+
+static void util_cq_read_rpc(void **dst, void *src)
+{
+	*(struct fi_cq_rpc_entry *) *dst = *(struct fi_cq_rpc_entry *) src;
+	*(char **)dst += sizeof(struct fi_cq_rpc_entry);
 }
 
 ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
@@ -667,6 +675,9 @@ static int util_init_peer_cq(struct util_cq *cq, struct fi_cq_attr *attr)
 		break;
 	case FI_CQ_FORMAT_TAGGED:
 		cq->read_entry = util_cq_read_tagged;
+		break;
+	case FI_CQ_FORMAT_RPC:
+		cq->read_entry = util_cq_read_rpc;
 		break;
 	default:
 		assert(0);

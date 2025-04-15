@@ -489,13 +489,13 @@ int ofi_wait_yield_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 typedef void (*fi_cq_read_func)(void **dst, void *src);
 
 struct util_cq_aux_entry {
-	struct fi_cq_tagged_entry	*cq_slot;
+	struct fi_cq_rpc_entry		*cq_slot;
 	struct fi_cq_err_entry		comp;
 	fi_addr_t			src;
 	struct slist_entry		list_entry;
 };
 
-OFI_DECLARE_CIRQUE(struct fi_cq_tagged_entry, util_comp_cirq);
+OFI_DECLARE_CIRQUE(struct fi_cq_rpc_entry, util_comp_cirq);
 
 typedef void (*ofi_cq_progress_func)(struct util_cq *cq);
 
@@ -557,7 +557,7 @@ static inline
 ssize_t ofi_cq_read_entries(struct util_cq *cq, void *buf, size_t count,
 			fi_addr_t *src_addr)
 {
-	struct fi_cq_tagged_entry *entry;
+	struct fi_cq_rpc_entry *entry;
 	struct util_cq_aux_entry *aux_entry;
 	ssize_t i;
 
@@ -621,13 +621,14 @@ static inline void
 ofi_cq_write_entry(struct util_cq *cq, void *context, uint64_t flags,
 		   size_t len, void *buf, uint64_t data, uint64_t tag)
 {
-	struct fi_cq_tagged_entry *comp = ofi_cirque_next(cq->cirq);
+	struct fi_cq_rpc_entry *comp = ofi_cirque_next(cq->cirq);
 	comp->op_context = context;
 	comp->flags = flags;
 	comp->len = len;
 	comp->buf = buf;
 	comp->data = data;
 	comp->tag = tag;
+	comp->timeout = -1;
 	ofi_cirque_commit(cq->cirq);
 }
 
