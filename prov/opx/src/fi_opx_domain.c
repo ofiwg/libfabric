@@ -104,10 +104,10 @@ static struct fi_ops_domain fi_opx_domain_ops = {.size	      = sizeof(struct fi_
 						 .av_open     = fi_opx_av_open,
 						 .cq_open     = fi_opx_cq_open,
 						 .endpoint    = fi_opx_endpoint,
-						 .scalable_ep = fi_opx_scalable_ep,
+						 .scalable_ep = fi_no_scalable_ep,
 						 .cntr_open   = fi_opx_cntr_open,
 						 .poll_open   = fi_no_poll_open,
-						 .stx_ctx     = fi_opx_stx_context,
+						 .stx_ctx     = fi_no_stx_context,
 						 .srx_ctx     = fi_no_srx_context};
 
 static inline void opx_util_domain_cleanup(struct fi_opx_domain *opx_domain)
@@ -534,8 +534,6 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	if (ret) {
 		goto err;
 	}
-
-	opx_domain->reliability_kind = OPX_DOMAIN_RELIABILITY;
 
 	fi_opx_ref_inc(&opx_fabric->ref_cnt, "fabric");
 

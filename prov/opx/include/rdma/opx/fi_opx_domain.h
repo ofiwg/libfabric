@@ -47,29 +47,6 @@
 
 #include "rdma/opx/opx_hmem_domain.h"
 
-// #define OFI_RELIABILITY_CONFIG_STATIC_NONE
-// #define OFI_RELIABILITY_CONFIG_STATIC_OFFLOAD
-// #define OFI_RELIABILITY_CONFIG_STATIC_ONLOAD
-
-#if defined(OFI_RELIABILITY_CONFIG_STATIC_NONE)
-#define OPX_DOMAIN_RELIABILITY OFI_RELIABILITY_KIND_NONE
-
-#elif defined(OFI_RELIABILITY_CONFIG_STATIC_OFFLOAD)
-#define OPX_DOMAIN_RELIABILITY OFI_RELIABILITY_KIND_OFFLOAD
-
-#elif defined(OFI_RELIABILITY_CONFIG_STATIC_ONLOAD)
-#define OPX_DOMAIN_RELIABILITY OFI_RELIABILITY_KIND_ONLOAD
-
-#else
-
-#ifndef OPX_DOMAIN_RELIABILITY
-// #define OPX_DOMAIN_RELIABILITY OFI_RELIABILITY_KIND_NONE
-// #define OPX_DOMAIN_RELIABILITY OFI_RELIABILITY_KIND_OFFLOAD
-#define OPX_DOMAIN_RELIABILITY OFI_RELIABILITY_KIND_ONLOAD
-#endif
-
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -120,10 +97,6 @@ struct fi_opx_domain {
 
 	uint64_t	  num_mr_keys;
 	struct fi_opx_mr *mr_hashmap;
-
-	struct fi_opx_reliability_service reliability_service_offload; /* OFFLOAD only */
-	uint8_t				  reliability_rx_offload;      /* OFFLOAD only */
-	enum ofi_reliability_kind	  reliability_kind;
 
 	struct opx_tid_domain *tid_domain;
 #ifdef OPX_HMEM

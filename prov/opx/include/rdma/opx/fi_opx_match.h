@@ -174,7 +174,7 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_ue_hash_remove(struct fi_opx_hfi1_ue_
 }
 
 __OPX_FORCE_INLINE__
-uint64_t fi_opx_match_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const uint8_t origin_rx,
+uint64_t fi_opx_match_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const uint16_t origin_rx,
 			     const uint64_t target_tag, const uint64_t ignore_bits,
 			     const union fi_opx_addr src_opx_addr, const fi_addr_t ctx_src_addr)
 {
@@ -197,8 +197,8 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_find_uepkt_linear(struct fi_opx_match
 
 	FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_linear_searches);
 
-	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, uepkt->rx, target_tag, ignore_bits, src_opx_addr,
-					     ctx_src_addr)) {
+	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, uepkt->subctxt_rx, target_tag, ignore_bits,
+					     src_opx_addr, ctx_src_addr)) {
 		FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_linear_misses);
 		uepkt = uepkt->next;
 	}
@@ -220,8 +220,8 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_find_uepkt_by_tag(struct fi_opx_match
 
 	FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_tag_searches);
 
-	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, uepkt->rx, target_tag, ignore_bits, src_opx_addr,
-					     ctx_src_addr)) {
+	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, uepkt->subctxt_rx, target_tag, ignore_bits,
+					     src_opx_addr, ctx_src_addr)) {
 		FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_tag_misses);
 		uepkt = uepkt->tag_ht.next;
 	}

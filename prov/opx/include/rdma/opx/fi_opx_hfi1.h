@@ -145,7 +145,7 @@
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS(hfi1_type) \
 	((FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) >> 3) /* PAYLOAD QWS CONSUMED */
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL 16
-#define FI_OPX_MP_EGR_XFER_BYTES_TAIL	 0x0010000000000000ull
+#define FI_OPX_MP_EGR_XFER_BYTES_TAIL	 0x0080000000000000ull
 
 static_assert(!(FI_OPX_MP_EGR_CHUNK_SIZE & 0x3F), "FI_OPX_MP_EGR_CHUNK_SIZE Must be a multiple of 64!");
 static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT > FI_OPX_MP_EGR_CHUNK_SIZE,
@@ -499,14 +499,17 @@ struct fi_opx_hfi1_rxe_state {
 struct fi_opx_hfi1_rxe_static {
 	struct {
 		uint32_t *base_addr;
-		uint32_t  rhf_off;
 
+		uint32_t rhf_off;
 		uint32_t elemsz;
+
 		uint32_t elemlast;
 		uint32_t elemcnt;
+
 		uint64_t rx_poll_mask;
 
 		uint32_t *rhf_base;
+
 		uint64_t *rhe_base;
 
 		volatile uint64_t *head_register;
@@ -515,14 +518,16 @@ struct fi_opx_hfi1_rxe_static {
 
 	struct {
 		uint32_t *base_addr;
-		uint32_t  elemsz;
-		uint32_t  size;
+
+		uint32_t elemsz;
+		uint32_t size;
 
 		volatile uint64_t *head_register;
 
 	} egrq;
 
 	uint8_t id; /* hfi receive context id [0..159] */
+	uint8_t unused[7];
 };
 
 struct fi_opx_hfi1_context {
@@ -539,19 +544,21 @@ struct fi_opx_hfi1_context {
 
 	} info;
 
-	int		  fd;
-	opx_lid_t	  lid;
-	struct _hfi_ctrl *ctrl;
-	// struct hfi1_user_info_dep	user_info;
+	int		   fd;
+	opx_lid_t	   lid;
+	struct _hfi_ctrl  *ctrl;
 	enum opx_hfi1_type hfi1_type;
 	uint32_t	   hfi_unit;
 	uint32_t	   hfi_port;
-	uint64_t	   gid_hi;
-	uint64_t	   gid_lo;
-	uint16_t	   mtu;
-	uint8_t		   bthqp;
-	uint16_t	   jkey;
-	uint16_t	   send_ctxt;
+	uint32_t	   unused;
+
+	uint64_t gid_hi;
+	uint64_t gid_lo;
+	uint16_t mtu;
+	uint8_t	 bthqp;
+	uint8_t	 subctxt;
+	uint16_t jkey;
+	uint16_t send_ctxt;
 
 	uint16_t sl2sc[32];
 	uint16_t sc2vl[32];

@@ -189,16 +189,14 @@ ssize_t fi_opx_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
 		rc = fi_opx_trecvmsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED, av_type,
-					     opx_ep->reliability->state.kind, opx_ep->domain->data_progress,
-					     OPX_HFI1_WFR);
+					     opx_ep->reli_service->kind, opx_ep->domain->data_progress, OPX_HFI1_WFR);
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
 		rc = fi_opx_trecvmsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED, av_type,
-					     opx_ep->reliability->state.kind, opx_ep->domain->data_progress,
+					     opx_ep->reli_service->kind, opx_ep->domain->data_progress,
 					     OPX_HFI1_JKR_9B);
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
 		rc = fi_opx_trecvmsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED, av_type,
-					     opx_ep->reliability->state.kind, opx_ep->domain->data_progress,
-					     OPX_HFI1_JKR);
+					     opx_ep->reli_service->kind, opx_ep->domain->data_progress, OPX_HFI1_JKR);
 	}
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
@@ -224,25 +222,25 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint
 		if (!msg->context) {
 			rc = fi_opx_ep_tx_inject_internal(ep, 0, 0, msg->addr, msg->tag, msg->data,
 							  FI_OPX_LOCK_NOT_REQUIRED, av_type, flags, caps | FI_TAGGED,
-							  opx_ep->reliability->state.kind, OPX_HFI1_TYPE,
+							  opx_ep->reli_service->kind, OPX_HFI1_TYPE,
 							  OPX_IS_CTX_SHARING_ENABLED);
 		} else {
 			rc = fi_opx_ep_tx_send_internal(ep, 0, 0, msg->desc, msg->addr, msg->tag, msg->context,
 							msg->data, FI_OPX_LOCK_NOT_REQUIRED, av_type, OPX_CONTIG_TRUE,
 							OPX_FLAGS_OVERRIDE_TRUE, flags, caps | FI_TAGGED,
-							opx_ep->reliability->state.kind, OPX_HFI1_TYPE,
+							opx_ep->reli_service->kind, OPX_HFI1_TYPE,
 							OPX_IS_CTX_SHARING_ENABLED);
 		}
 	} else if (niov == 1) {
-		rc = fi_opx_ep_tx_send_internal(
-			ep, msg->msg_iov->iov_base, msg->msg_iov->iov_len, msg->desc, msg->addr, msg->tag, msg->context,
-			msg->data, FI_OPX_LOCK_NOT_REQUIRED, av_type, OPX_CONTIG_TRUE, OPX_FLAGS_OVERRIDE_TRUE, flags,
-			caps | FI_TAGGED, opx_ep->reliability->state.kind, OPX_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
+		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov->iov_base, msg->msg_iov->iov_len, msg->desc, msg->addr,
+						msg->tag, msg->context, msg->data, FI_OPX_LOCK_NOT_REQUIRED, av_type,
+						OPX_CONTIG_TRUE, OPX_FLAGS_OVERRIDE_TRUE, flags, caps | FI_TAGGED,
+						opx_ep->reli_service->kind, OPX_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
 	} else {
-		rc = fi_opx_ep_tx_send_internal(
-			ep, msg->msg_iov, msg->iov_count, msg->desc, msg->addr, msg->tag, msg->context, msg->data,
-			FI_OPX_LOCK_NOT_REQUIRED, av_type, OPX_CONTIG_FALSE, OPX_FLAGS_OVERRIDE_TRUE, flags,
-			caps | FI_TAGGED, opx_ep->reliability->state.kind, OPX_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
+		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov, msg->iov_count, msg->desc, msg->addr, msg->tag,
+						msg->context, msg->data, FI_OPX_LOCK_NOT_REQUIRED, av_type,
+						OPX_CONTIG_FALSE, OPX_FLAGS_OVERRIDE_TRUE, flags, caps | FI_TAGGED,
+						opx_ep->reli_service->kind, OPX_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
 	}
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	return rc;
@@ -810,9 +808,9 @@ int fi_opx_enable_tagged_ops(struct fid_ep *ep)
 		return 0;
 	}
 
-	if (OFI_UNLIKELY(opx_ep->reliability->state.kind != OFI_RELIABILITY_KIND_ONLOAD)) {
+	if (OFI_UNLIKELY(opx_ep->reli_service->kind != OFI_RELIABILITY_KIND_ONLOAD)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Invalid reliability kind %u\n",
-			opx_ep->reliability->state.kind);
+			opx_ep->reli_service->kind);
 		return -FI_EINVAL;
 	}
 
