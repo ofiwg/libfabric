@@ -99,6 +99,8 @@
 #define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ \
 	(FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
 
+#define FI_OPX_HFI_DPUT_GET_OPCODE(_opcode) ((_opcode & 0x00F0) >> 4)
+
 static const char *FI_OPX_HFI_BTH_LOW_OPCODE_STRINGS[] = {
 	/* opcodes (0x00..0xBF) are reserved */
 	"FI_OPX_HFI_BTH_OPCODE_INVALID             ", "FI_OPX_HFI_BTH_OPCODE_RZV_CTS             ",
@@ -194,37 +196,50 @@ static inline const char *opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 						  1]; /* INVALID */
 }
 
-#define FI_OPX_HFI1_PACKET_ORIGIN_RX(packet_hdr)                                                              \
-	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? (packet_hdr)->dput.target.origin_rx : \
-									(packet_hdr)->reliability.origin_rx)
+#define FI_OPX_HFI1_PACKET_ORIGIN_RX(packet_hdr)                                          \
+	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ?                   \
+		 ((packet_hdr)->dput.target.opcode_origin_rx & OPX_BTH_SUBCTXT_RX_MASK) : \
+		 (packet_hdr)->reliability.origin_rx)
 
 #define FI_OPX_HFI1_PACKET_PSN(packet_hdr)                                                                          \
 	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? ntohl((packet_hdr)->bth.psn) & 0x00FFFFFF : \
 									(packet_hdr)->reliability.psn)
 
+#define FI_OPX_HFI_UD_OPCODE_MASK (0xf0)
+
 #define FI_OPX_HFI_UD_OPCODE_FIRST_INVALID	     (0x00)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING	     (0x01)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK	     (0x02)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK	     (0x03)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH     (0x04)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK (0x05)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP	     (0x06)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING	     (0x10)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK	     (0x20)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK	     (0x30)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH     (0x40)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK (0x50)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP	     (0x60)
 /* Add new UD Opcodes here, and increment LAST_INVALID accordingly */
-#define FI_OPX_HFI_UD_OPCODE_LAST_INVALID (0x07)
+#define FI_OPX_HFI_UD_OPCODE_LAST_INVALID (0x70)
+
+#define FI_OPX_HFI_UD_OPCODE_FIRST_INVALID_INDEX	   (FI_OPX_HFI_UD_OPCODE_FIRST_INVALID >> 4)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING_INDEX	   (FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING >> 4)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK_INDEX	   (FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK >> 4)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK_INDEX	   (FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK >> 4)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_INDEX	   (FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH >> 4)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK_INDEX (FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK >> 4)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP_INDEX	   (FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP >> 4)
 
 static const char *FI_OPX_HFI_UD_OPCODE_STRINGS[] = {
-	[FI_OPX_HFI_UD_OPCODE_FIRST_INVALID]	       = "INVALID UD OPCODE",
-	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING]	       = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING",
-	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK]	       = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK",
-	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK]	       = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK",
-	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH]     = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH",
-	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK] = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK",
-	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP]	       = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP"};
+	[FI_OPX_HFI_UD_OPCODE_FIRST_INVALID_INDEX]	     = "INVALID UD OPCODE",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING_INDEX]	     = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK_INDEX]	     = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK_INDEX]	     = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_INDEX]     = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK_INDEX] = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK",
+	[FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP_INDEX]	     = "FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP"};
 
 static inline const char *opx_hfi1_ud_opcode_to_string(uint8_t opcode)
 {
-	if (opcode > FI_OPX_HFI_UD_OPCODE_FIRST_INVALID && opcode < FI_OPX_HFI_UD_OPCODE_LAST_INVALID) {
-		return FI_OPX_HFI_UD_OPCODE_STRINGS[opcode];
+	const uint8_t ud_opcode = FI_OPX_HFI_UD_OPCODE_MASK & opcode;
+
+	if (ud_opcode > FI_OPX_HFI_UD_OPCODE_FIRST_INVALID && ud_opcode < FI_OPX_HFI_UD_OPCODE_LAST_INVALID) {
+		return FI_OPX_HFI_UD_OPCODE_STRINGS[ud_opcode >> 4];
 	}
 	return FI_OPX_HFI_UD_OPCODE_STRINGS[FI_OPX_HFI_UD_OPCODE_FIRST_INVALID];
 }
@@ -516,7 +531,7 @@ void fi_opx_hfi1_dump_stl_packet_hdr (struct fi_opx_hfi1_stl_packet_hdr_9B * hdr
 	fprintf(stderr, "%s():%u .bth.ecn ...............       0x%02x \n", fn, ln, hdr->bth.ecn);
 	fprintf(stderr, "%s():%u .bth.qp ................       0x%02x \n", fn, ln, hdr->bth.qp);
 	fprintf(stderr, "%s():%u .bth.unused ............       0x%02x \n", fn, ln, hdr->bth.unused);
-	fprintf(stderr, "%s():%u .bth.rx ................       0x%02x \n", fn, ln, hdr->bth.rx);
+	fprintf(stderr, "%s():%u .bth.subctxt_rx ........       0x%02x \n", fn, ln, hdr->bth.subctxt_rx);
 	fprintf(stderr, "%s():%u\n", fn, ln);
 	fprintf(stderr, "%s():%u .bth.psn ............... 0x%08x \n", fn, ln, hdr->bth.psn);
 	fprintf(stderr, "%s():%u .kdeth.offset_ver_tid .. 0x%08x\n", fn, ln, hdr->kdeth.offset_ver_tid);
@@ -634,8 +649,7 @@ union opx_hfi1_packet_hdr {
 			uint16_t pkey;
 			uint8_t	 ecn; /* (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
 			uint8_t	 qp;
-			uint8_t	 unused;
-			uint8_t	 rx;
+			uint16_t subctxt_rx;
 
 			/* QW[3] starts */
 			uint32_t psn;
@@ -668,9 +682,9 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[3] BTH/KDETH (psn,offset_ver_tid)*/
 		uint32_t psn : 24;
-		uint32_t origin_rx : 8;
-		uint8_t	 unused; /* WHY? unused but zeroed in model */
-		uint8_t	 reserved_1[3];
+		uint32_t psn_reserved : 8;
+		uint16_t origin_rx;
+		uint16_t reserved_1;
 
 		uint64_t reserved_n[10]; /* QW[4-14] KDETH/SW */
 
@@ -681,9 +695,9 @@ union opx_hfi1_packet_hdr {
 		uint64_t reserved[3]; /* QW[0-2] */
 
 		/* QW[3] BTH/KDETH (psn) */
-		uint8_t	 reserved_0[3];
-		uint8_t	 origin_rx; /* used for FI_DIRECTED_RECV; identifies the endpoint on the node */
-		uint32_t reserved_1;
+		uint32_t reserved_0;
+		uint16_t origin_rx;
+		uint16_t reserved_1;
 
 		/* QW[4] KDETH (unused) */
 		uint32_t reserved_2;
@@ -702,8 +716,9 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[2] BTH (unused)*/
 		uint16_t reserved_1[3];
-		uint8_t	 message_length; /* only need 5 bits; maximum inject message size is 16 bytes */
-		uint8_t	 reserved_2;
+		uint8_t subctxt_message_length; /* lower 3 bits is subctxt. higher 5 bit is inject message (max value 16
+						   bytes) */
+		uint8_t reserved_2;
 
 		/* QW[3-4] BTH/KDETH*/
 		uint64_t reserved_3[2];
@@ -726,7 +741,7 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[2] BTH (unused)*/
 		uint16_t reserved_1[3];
-		uint8_t	 xfer_bytes_tail; /* only need 4 bits; maximum tail size is 8 bytes (or is it 7?) */
+		uint8_t	 subctxt_xfer_bytes_tail; /* lower 3 bits is subctxt. higher 4 bits is xfer_bytes_tail */
 		uint8_t	 reserved_2;
 
 		/* QW[3-4] BTH/KDETH*/
@@ -750,12 +765,16 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[2] BTH (unused)*/
 		uint16_t reserved_1[3];
-		uint8_t	 xfer_bytes_tail; /* Maximum tail size is 16 bytes */
+		uint8_t	 subctxt_xfer_bytes_tail; /* lower 3 bits is subctxt. higher 4 bits is xfer_bytes_tail */
 		uint8_t	 reserved_2;
 
 		/* QW[3] BTH/KDETH (offset_ver_tid) */
-		uint32_t reserved_3;
-		uint32_t payload_bytes_total; /* Total length of payload across all mp-eager packets */
+		uint32_t reserved3 : 24;
+		uint32_t payload_bytes_total_msb : 8; /* Total length of payload across all mp-eager packets higher
+							 byte*/
+		uint16_t reserved1;
+		uint8_t	 payload_bytes_total_lsb; /* Total length of payload across all mp-eager packets lower byte*/
+		uint8_t	 reserved4;
 
 		/* QW[4] KDETH */
 		uint64_t reserved_4;
@@ -773,7 +792,7 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[2] BTH (unused)*/
 		uint16_t reserved_1[3];
-		uint8_t	 xfer_bytes_tail; /* Maximum tail size is 16 bytes */
+		uint8_t	 subctxt_xfer_bytes_tail; /* lower 3 bits is subctxt. higher 5 bits is xfer_bytes_tail */
 		uint8_t	 reserved_2;
 
 		/* QW[3-4] BTH/KDETH */
@@ -795,17 +814,15 @@ union opx_hfi1_packet_hdr {
 		uint64_t reserved[2]; /* QW[0-1] */
 
 		/* QW[2] BTH (unused)*/
-		uint16_t reserved_1[3];
-		uint8_t	 origin_rx;
-		uint8_t	 reserved_2;
+		uint64_t reserved_1;
 
 		/* QW[3-4] BTH/KDETH */
-		uint64_t reserved_3[2];
+		uint64_t reserved_2[2];
 
 		/* QW[5] SW */
-		uint16_t unused;
+		uint16_t origin_rx;
 		uint8_t	 flags;
-		uint8_t	 unused_2[3];
+		uint8_t	 unused_1[3];
 		uint16_t niov; /* number of non-contiguous buffers */
 
 		/* QW[6] SW */
@@ -817,15 +834,7 @@ union opx_hfi1_packet_hdr {
 
 	/*    OPX CTS HEADER                   */
 	struct {
-		uint64_t reserved[2]; /* QW[0-1] */
-
-		/* QW[2] BTH (unused)*/
-		uint16_t reserved_1[3];
-		uint8_t	 origin_rx;
-		uint8_t	 reserved_2;
-
-		/* QW[3-4] BTH/KDETH */
-		uint64_t reserved_3[2];
+		uint64_t reserved[5]; /* QW[0-4] */
 
 		/* QW[5-7] SW */
 		union {
@@ -919,9 +928,7 @@ union opx_hfi1_packet_hdr {
 		uint64_t reserved[2]; /* QW[0-1] */
 
 		/* QW[2] BTH (unused)*/
-		uint16_t reserved_1[3];
-		uint8_t	 origin_rx;
-		uint8_t	 reserved_o2;
+		uint64_t reserved_1;
 
 		/* QW[3] BTH/KDETH */
 		uint64_t reserved_3;
@@ -934,8 +941,7 @@ union opx_hfi1_packet_hdr {
 			/*  Common fields   */
 			struct {
 				/* QW[5] KDETH/SW */
-				uint8_t	 opcode;
-				uint8_t	 origin_rx;
+				uint16_t opcode_origin_rx;
 				uint8_t	 dt;
 				uint8_t	 op;
 				uint16_t last_bytes;
@@ -1015,13 +1021,13 @@ union opx_hfi1_packet_hdr {
 		uint64_t reserved[3]; /* QW[0-2] */
 
 		/* QW[3] BTH/KDETH (psn,offset_ver_tid) */
-		uint32_t range_count;
-		uint8_t	 origin_reliability_rx;
-		uint8_t	 reserved_1[3];
+		uint32_t reserved_3;
+		uint16_t origin_reliability_subctxt_rx;
+		uint8_t	 reserved_1[2];
 
 		/* QW[4] KDETH (unused) */
 		uint32_t reserved_2;
-		uint32_t unused; /* WHY? unused but zeroed in model */
+		uint32_t key_dw_suffix;
 
 		/* QW[5-7] SW */
 		uint64_t psn_count;
@@ -1044,19 +1050,21 @@ static inline size_t fi_opx_hfi1_packet_hdr_message_length(const union opx_hfi1_
 	case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
 	case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
-		message_length = hdr->inject.message_length;
+		message_length = hdr->inject.subctxt_message_length >> 3;
 		break;
 	case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER:
 	case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ:
-		message_length = hdr->send.xfer_bytes_tail + hdr->send.payload_qws_total * sizeof(uint64_t);
+		message_length =
+			(hdr->send.subctxt_xfer_bytes_tail >> 3) + hdr->send.payload_qws_total * sizeof(uint64_t);
 		break;
 	case FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST:
 	case FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ:
-		message_length = hdr->mp_eager_first.payload_bytes_total & FI_OPX_HFI1_KDETH_VERSION_OFF_MASK;
+		message_length = ((size_t) hdr->mp_eager_first.payload_bytes_total_msb << 8) |
+				 hdr->mp_eager_first.payload_bytes_total_lsb;
 		break;
 	case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:
@@ -1144,10 +1152,8 @@ static inline void fi_opx_hfi1_dump_stl_packet_hdr(const union opx_hfi1_packet_h
 		     ln, hdr->bth.ecn, (hdr->bth.ecn & OPX_RC2_MASK) >> 2);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s():%u .bth.qp ................       0x%02x \n", fn, ln,
 		     hdr->bth.qp);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s():%u .bth.unused ............       0x%02x \n", fn, ln,
-		     hdr->bth.unused);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s():%u .bth.rx ................       0x%02x \n", fn, ln,
-		     hdr->bth.rx);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s():%u .bth.subctxt_rx ........       0x%04x \n", fn, ln,
+		     hdr->bth.subctxt_rx);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s():%u\n", fn, ln);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s():%u .bth.psn ............... 0x%08x \n", fn, ln,
 		     hdr->bth.psn);
@@ -1202,10 +1208,8 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 		     pid, fn, ln, hdr->bth.ecn, (hdr->bth.ecn & OPX_RC2_MASK) >> 2);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .bth.qp     ..........     0x%02x \n", pid, fn,
 		     ln, hdr->bth.qp);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .bth.unused ..........     0x%02x \n", pid, fn,
-		     ln, hdr->bth.unused);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .bth.rx     ..........     0x%02x \n", pid, fn,
-		     ln, hdr->bth.rx);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .bth.subctxt_rx ......     0x%04x \n", pid, fn,
+		     ln, hdr->bth.subctxt_rx);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .bth.psn    ..........     0x%08x \n", pid, fn,
 		     ln, hdr->bth.psn);
 
@@ -1223,7 +1227,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 		     fn, ln, hdr->qw_9B[6]);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u\n", pid, fn, ln);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .match.origin_rx .....     0x%02x \n", pid, fn,
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .match.origin_rx .....     0x%04x \n", pid, fn,
 		     ln, hdr->match.origin_rx);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .match.ofi_data ......     0x%08x \n", pid, fn,
 		     ln, hdr->match.ofi_data);
@@ -1232,7 +1236,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u\n", pid, fn, ln);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .inject.message_length     0x%04x \n", pid, fn,
-		     ln, hdr->inject.message_length);
+		     ln, hdr->inject.subctxt_message_length);
 
 	switch (hdr->bth.opcode) {
 	case FI_OPX_HFI_BTH_OPCODE_UD:
@@ -1245,7 +1249,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 	case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "(%d) %s():%u .inject.message_length ...     0x%02x \n", pid, fn, ln,
-			     hdr->inject.message_length);
+			     hdr->inject.subctxt_message_length);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "(%d) %s():%u .inject.app_data_u64[0] ..     0x%016lx \n", pid, fn, ln,
 			     hdr->inject.app_data_u64[0]);
@@ -1259,7 +1263,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 	case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ:
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "(%d) %s():%u .send.xfer_bytes_tail ....     0x%02x \n", pid, fn, ln,
-			     hdr->send.xfer_bytes_tail);
+			     hdr->send.subctxt_xfer_bytes_tail);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "(%d) %s():%u .send.payload_qws_total ..     0x%04x \n", pid, fn, ln,
 			     hdr->send.payload_qws_total);
@@ -1272,9 +1276,6 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 	case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ: /* calculate (?) total bytes to be transfered */
 	case FI_OPX_HFI_BTH_OPCODE_RZV_CTS:
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			     "(%d) %s():%u .cts.origin                 ..........     0x%x \n", pid, fn, ln,
-			     hdr->cts.origin_rx);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "(%d) %s():%u .cts.target.vaddr.ntidpairs ..........     0x%x \n", pid, fn, ln,
 			     hdr->cts.target.vaddr.ntidpairs);
@@ -1560,10 +1561,10 @@ struct fi_opx_hfi1_ue_packet {
 	 * first cacheline */
 	uint64_t  tag;
 	opx_lid_t lid;
-	uint8_t	  rx;
+	uint16_t  subctxt_rx;
 	uint8_t	  is_intranode;
 
-	uint8_t unused[2];
+	uint8_t unused;
 
 	/* == CACHE LINE 1, 2 == */
 	uint64_t		  recv_time_ns;
@@ -1713,7 +1714,7 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 	fprintf(stderr, "(%d) %s():%u\n", pid, fn, ln);
 	fprintf(stderr, "(%d) %s():%u .match.slid ......................... 0x%04x\n",
 		pid, fn, ln, hdr->match.slid);
-	fprintf(stderr, "(%d) %s():%u .match.origin_rx                      0x%02x\n",
+	fprintf(stderr, "(%d) %s():%u .match.origin_rx                      0x%04x\n",
 		pid, fn, ln, hdr->match.origin_rx);
 	fprintf(stderr, "(%d) %s():%u .match.ofi_data ..................... 0x%08x\n",
 		pid, fn, ln, hdr->match.ofi_data);
@@ -1758,45 +1759,46 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 				opx_hfi1_dput_opcode_to_string(hdr->cts.target.opcode));
 			break;
 		case FI_OPX_HFI_BTH_OPCODE_RZV_DATA:
-			fprintf(stderr, "(%d) %s():%u .dput.target.opcode ................. 0x%x (%s)\n",
-				pid, fn, ln, hdr->dput.target.opcode,
-				opx_hfi1_dput_opcode_to_string(hdr->dput.target.opcode));
+			const uint8_t opcode = FI_OPX_HFI_DPUT_GET_OPCODE(hdr->dput.target.opcode_origin_rx);
+			fprintf(stderr, "(%d) %s():%u .dput.target.opcode_origin_rx ................. 0x%x (%s)\n",
+				pid, fn, ln, opcode,
+				opx_hfi1_dput_opcode_to_string(opcode));
 			fprintf(stderr, "(%d) %s():%u .dput.target.bytes                    0x%x\n",
 				pid, fn, ln, hdr->dput.target.bytes);
 			fprintf(stderr, "(%d) %s():%u .dput.target.last_bytes ............. 0x%x\n",
 				pid, fn, ln, hdr->dput.target.last_bytes);
-			if (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV ||
-			    hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG ||
-			    hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) {
+			if (opcode == FI_OPX_HFI_DPUT_OPCODE_RZV ||
+			    opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG ||
+				opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) {
 				fprintf(stderr, "(%d) %s():%u .dput.target.rzv.completion_vaddr     %p\n",
 					pid, fn, ln,
 					(void *) hdr->dput.target.rzv.completion_vaddr);
 				fprintf(stderr, "(%d) %s():%u .dput.target.rzv.rbuf ............... %p\n",
 					pid, fn, ln,
 					(void *) fi_opx_dput_rbuf_in(hdr->dput.target.rzv.rbuf));
-			} else if (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_FENCE) {
+			} else if (opcode == FI_OPX_HFI_DPUT_OPCODE_FENCE) {
 				fprintf(stderr, "(%d) %s():%u .dput.target.fence.completion_counter %p\n",
 					pid, fn, ln,
 					(void *) hdr->dput.target.fence.completion_counter);
 				fprintf(stderr, "(%d) %s():%u .dput.target.fence.bytes_to_fence ... %lu\n",
 					pid, fn, ln, hdr->dput.target.fence.bytes_to_fence);
-			} else if (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_GET) {
+			} else if (opcode == FI_OPX_HFI_DPUT_OPCODE_GET) {
 				fprintf(stderr, "(%d) %s():%u .dput.target.get.rma_request_vaddr    %p\n",
 					pid, fn, ln,
 					(void *) hdr->dput.target.get.rma_request_vaddr);
 				fprintf(stderr, "(%d) %s():%u .dput.target.get.rbuf ............... %p\n",
 					pid, fn, ln,
 					(void *) fi_opx_dput_rbuf_in(hdr->dput.target.get.rbuf));
-			} else if (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_PUT_CQ) {
+			} else if (opcode == FI_OPX_HFI_DPUT_OPCODE_PUT_CQ) {
 				fprintf(stderr, "(%d) %s():%u .dput.target.rma.rma_request_vaddr    %p\n",
 					pid, fn, ln,
 					(void *) hdr->dput.target.rma.rma_request_vaddr);
 				fprintf(stderr, "(%d) %s():%u .dput.target.rma.offset ............... %p\n",
 					pid, fn, ln,
 					(void *) fi_opx_dput_rbuf_in(hdr->dput.target.rma.offset));
-			} else if (hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_PUT ||
-				   hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
-				   hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH) {
+			} else if (opcode == FI_OPX_HFI_DPUT_OPCODE_PUT ||
+				   opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
+				   opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH) {
 				fprintf(stderr, "(%d) %s():%u .dput.target.mr.key                   0x%016lx\n",
 					pid, fn, ln, hdr->dput.target.mr.key);
 				fprintf(stderr, "(%d) %s():%u .dput.target.mr.offset .............. 0x%016lx\n",

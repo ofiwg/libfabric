@@ -97,7 +97,11 @@
 /* "RC[2]" is MSB bit of the 3 bit RC value. It is in the bth */
 #define OPX_BTH_RC2_VAL(_hfi1_type, _pkt_type) (OPX_ROUTE_CONTROL_VALUE(_hfi1_type, _pkt_type) & OPX_RC2_MASK)
 
-#define OPX_BTH_RX_SHIFT 56
+#define OPX_BTH_SUBCTXT_RX_SHIFT 48
+#define OPX_BTH_SUBCTXT_RX_MASK	 0xFF07
+
+#define OPX_BTH_INJECT_MSG_LENGTH(_val)	   (_val >> 3)
+#define OPX_BTH_SEND_XFER_BYTES_TAIL(_val) (_val >> 3)
 
 /* Common RHF defines */
 

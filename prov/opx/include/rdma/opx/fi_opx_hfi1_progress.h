@@ -131,10 +131,14 @@ void fi_opx_hfi1_handle_ud_eager_packet(struct fi_opx_ep *opx_ep, const union op
 static void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
 				       const opx_lid_t slid)
 {
-	struct fi_opx_reliability_service	   *service = opx_ep->reliability->state.service;
+	const uint64_t				    psn_start = hdr->service.psn_start;
+	const uint64_t				    psn_count = hdr->service.psn_count;
+	struct fi_opx_reliability_service	   *service   = opx_ep->reli_service;
 	struct fi_opx_pending_rx_reliability_op_key lookup_key;
-	lookup_key.key					 = hdr->service.key;
-	lookup_key.psn_start				 = hdr->service.psn_start;
+	lookup_key.flow_key.qw_prefix			 = hdr->service.key;
+	lookup_key.flow_key.dw_suffix			 = hdr->service.key_dw_suffix;
+	lookup_key.psn_start				 = psn_start;
+	lookup_key.unused				 = 0;
 	struct fi_opx_pending_rx_reliability_op *ping_op = NULL;
 
 	HASH_FIND(hh, service->pending_rx_reliability_ops_hashmap, &lookup_key, sizeof(lookup_key), ping_op);
@@ -144,21 +148,23 @@ static void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep, const union opx
 	 * pending ops
 	 */
 	if (ping_op) {
-		ping_op->psn_count_coalesce = MAX(ping_op->psn_count_coalesce, hdr->service.psn_count);
+		ping_op->psn_count_coalesce = MAX(ping_op->psn_count_coalesce, psn_count);
 	} else {
-		// Send the first ping right away, it might be an RMA fence event
-		fi_opx_hfi1_rx_reliability_ping(&opx_ep->ep_fid, service, hdr->service.key, hdr->service.psn_count,
+		// Send the first ACK/NACK right away, it might be an RMA fence event
+		fi_opx_hfi1_rx_reliability_ping(&opx_ep->ep_fid, service, &lookup_key.flow_key, psn_count,
 						hdr->service.psn_start, slid,
-						(uint64_t) hdr->service.origin_reliability_rx);
-		ping_op = ofi_buf_alloc(opx_ep->reliability->state.service->pending_rx_reliability_pool);
+						hdr->service.origin_reliability_subctxt_rx);
+
+		ping_op = ofi_buf_alloc(service->rx.pending_rx_reliability_pool);
 		if (ping_op) {
-			ping_op->ud_opcode	    = hdr->ud.opcode;
+			ping_op->ud_opcode	    = hdr->ud.opcode & FI_OPX_HFI_UD_OPCODE_MASK;
 			ping_op->slid		    = slid;
-			ping_op->rx		    = (uint64_t) hdr->service.origin_reliability_rx;
-			ping_op->key.key	    = hdr->service.key;
-			ping_op->psn_count	    = hdr->service.psn_count;
+			ping_op->subctxt_rx	    = hdr->service.origin_reliability_subctxt_rx;
+			ping_op->key.flow_key	    = lookup_key.flow_key;
+			ping_op->psn_count	    = psn_count;
 			ping_op->psn_count_coalesce = 0;
 			ping_op->key.psn_start	    = hdr->service.psn_start;
+			ping_op->key.unused	    = 0;
 
 			HASH_ADD(hh, service->pending_rx_reliability_ops_hashmap, key, sizeof(ping_op->key), ping_op);
 		}
@@ -168,21 +174,23 @@ static void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep, const union opx
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_handle_ud_ack(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr)
 {
-	const uint64_t key	 = hdr->service.key;
-	const uint64_t psn_count = hdr->service.psn_count;
-	const uint64_t psn_start = hdr->service.psn_start;
+	const union fi_opx_reliability_service_flow_key key	  = {.qw_prefix = hdr->service.key,
+								     .dw_suffix = hdr->service.key_dw_suffix};
+	const uint64_t					psn_count = hdr->service.psn_count;
+	const uint64_t					psn_start = hdr->service.psn_start;
 
-	fi_opx_hfi1_rx_reliability_ack(&opx_ep->ep_fid, opx_ep->reliability->state.service, key, psn_count, psn_start);
+	fi_opx_hfi1_rx_reliability_ack(&opx_ep->ep_fid, opx_ep->reli_service, &key, psn_count, psn_start);
 }
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_handle_ud_nack(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr)
 {
-	const uint64_t key	 = hdr->service.key;
-	const uint64_t psn_count = hdr->service.psn_count;
-	const uint64_t psn_start = hdr->service.psn_start;
+	const union fi_opx_reliability_service_flow_key key	  = {.qw_prefix = hdr->service.key,
+								     .dw_suffix = hdr->service.key_dw_suffix};
+	const uint64_t					psn_count = hdr->service.psn_count;
+	const uint64_t					psn_start = hdr->service.psn_start;
 
-	fi_opx_hfi1_rx_reliability_nack(&opx_ep->ep_fid, opx_ep->reliability->state.service, key, psn_count, psn_start);
+	fi_opx_hfi1_rx_reliability_nack(&opx_ep->ep_fid, opx_ep->reli_service, &key, psn_count, psn_start);
 }
 
 __OPX_FORCE_INLINE__
@@ -192,7 +200,8 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep, const union opx_
 {
 	/* "header only" packet - no payload */
 	if (OFI_LIKELY(!OPX_RHF_IS_USE_EGR_BUF(rhf, hfi1_type))) {
-		switch (hdr->ud.opcode) {
+		const uint8_t ud_opcode = FI_OPX_HFI_UD_OPCODE_MASK & hdr->ud.opcode;
+		switch (ud_opcode) {
 		case FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING:
 			fi_opx_hfi1_handle_ud_ping(opx_ep, hdr, slid);
 			break;
@@ -207,7 +216,7 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep, const union opx_
 #ifdef OPX_DAOS
 		case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH:
 			fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid, opx_ep->reliability->state.service,
-							   hdr->service.origin_reliability_rx, hdr,
+							   hdr->service.origin_reliability_subctxt_rx, hdr,
 							   OPX_IS_CTX_SHARING_ENABLED);
 			break;
 		case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK:
@@ -239,7 +248,7 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep, const union opx_hfi1
 	/*
 	 * Error injection .. purposefully drop packet
 	 */
-	if (OFI_UNLIKELY(FI_OPX_RELIABILITY_RX_DROP_PACKET(&opx_ep->reliability->state, hdr))) {
+	if (OFI_UNLIKELY(FI_OPX_RELIABILITY_RX_DROP_PACKET(opx_ep->reli_service, hdr))) {
 		opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq, OPX_HFI1_TYPE);
 		opx_ep->rx->state.hdrq.head    = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
@@ -272,9 +281,9 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, const uint8_t 
 	const uint64_t pkt_origin_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
 	const uint64_t psn	     = FI_OPX_HFI1_PACKET_PSN(hdr);
 
-	struct fi_opx_reliability_flow *flow;
-	enum opx_reliability_status	rc =
-		fi_opx_reliability_rx_check(&opx_ep->reliability->state, slid, pkt_origin_rx, psn, &flow);
+	struct fi_opx_reliability_rx_flow *flow;
+	enum opx_reliability_status	   rc =
+		fi_opx_reliability_rx_check(opx_ep->reli_service, slid, pkt_origin_rx, psn, &flow);
 
 	if (OFI_LIKELY(rc == OPX_RELIABILITY_SUCCESS)) {
 		return -1;
@@ -289,8 +298,8 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, const uint8_t 
 
 	if (!OPX_RHF_IS_USE_EGR_BUF(rhf, hfi1_type)) {
 		/* no payload */
-		fi_opx_reliability_rx_exception(&opx_ep->reliability->state, flow, slid, pkt_origin_rx, psn,
-						&opx_ep->ep_fid, hdr, NULL, hfi1_type, opcode, ctx_sharing);
+		fi_opx_reliability_rx_exception(opx_ep->reli_service, flow, slid, pkt_origin_rx, psn, &opx_ep->ep_fid,
+						hdr, NULL, hfi1_type, opcode, ctx_sharing);
 
 	} else {
 		/* has payload */
@@ -303,8 +312,8 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, const uint8_t 
 
 		assert(payload != NULL);
 
-		fi_opx_reliability_rx_exception(&opx_ep->reliability->state, flow, slid, pkt_origin_rx, psn,
-						&opx_ep->ep_fid, hdr, payload, hfi1_type, opcode, ctx_sharing);
+		fi_opx_reliability_rx_exception(opx_ep->reli_service, flow, slid, pkt_origin_rx, psn, &opx_ep->ep_fid,
+						hdr, payload, hfi1_type, opcode, ctx_sharing);
 
 		const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
@@ -398,22 +407,22 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 	 */
 
 	uint32_t psn = FI_OPX_HFI1_PACKET_PSN(hdr);
-	if (!(psn & opx_ep->reliability->service.preemptive_ack_rate_mask) && psn) {
+	if (!(psn & opx_ep->reli_service->preemptive_ack_rate_mask) && psn) {
 		fi_opx_hfi1_rx_reliability_send_pre_acks(
-			&opx_ep->ep_fid, opx_ep->reliability->state.lid, opx_ep->reliability->state.rx,
-			psn - opx_ep->reliability->service.preemptive_ack_rate + 1, /* psn_start */
-			opx_ep->reliability->service.preemptive_ack_rate,	    /* psn_count */
+			&opx_ep->ep_fid, opx_ep->reli_service->lid, opx_ep->reli_service->subctxt_rx,
+			psn - opx_ep->reli_service->preemptive_ack_rate + 1, /* psn_start */
+			opx_ep->reli_service->preemptive_ack_rate,	     /* psn_count */
 			hdr, slid, hfi1_type, ctx_sharing);
 
 	} else if (hdr->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA && (ntohl(hdr->bth.psn) & 0x80000000)) {
 		/* Send preemptive ACKs on Rendezvous Data packets when
 		 * the high bit of the PSN - the Acknowledge Request bit - is set
 		 */
-		uint32_t psn_count = MAX(MIN(opx_ep->reliability->service.preemptive_ack_rate, psn), 1);
+		uint32_t psn_count = MAX(MIN(opx_ep->reli_service->preemptive_ack_rate, psn), 1);
 		assert(psn >= psn_count - 1);
 
-		fi_opx_hfi1_rx_reliability_send_pre_acks(&opx_ep->ep_fid, opx_ep->reliability->state.lid,
-							 opx_ep->reliability->state.rx,
+		fi_opx_hfi1_rx_reliability_send_pre_acks(&opx_ep->ep_fid, opx_ep->reli_service->lid,
+							 opx_ep->reli_service->subctxt_rx,
 							 psn - psn_count + 1, /* psn_start */
 							 psn_count,	      /* psn_count */
 							 hdr, slid, hfi1_type, ctx_sharing);
@@ -554,7 +563,7 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 		}
 
 #ifndef OPX_DAOS
-		assert(hdr->bth.rx == opx_ep->rx->self.hfi1_subctxt_rx);
+		assert((hdr->bth.subctxt_rx & OPX_BTH_SUBCTXT_RX_MASK) == opx_ep->rx->self.hfi1_subctxt_rx);
 #else
 		uint32_t origin_reliability_rx;
 
@@ -572,7 +581,7 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 			 * is used to drive all communication between EPs.  DAOS often stops/restarts
 			 * EPs while reusing the same unique internal-proprietary rank value as part
 			 * of the Persistent Address Support.  This causes the fi_addr associated
-			 * with a rank to change.   The stl.bth.rx & hdr->stl.lrh.dlid fields of the
+			 * with a rank to change.   The stl.bth.subctxt_rx & hdr->stl.lrh.dlid fields of the
 			 * inbound packet header are set from fields in the fi_addr, which sometimes
 			 * change due to support for Persistent Addressing.  The only reliable field
 			 * in the fi_addr is the hfi1_unit.
@@ -589,7 +598,7 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 				     "================ SHM received a packet from %u Segment (%s)\n",
 				     opx_ep->daos_info.rank, opx_ep->rx->shm.segment_key);
 		} else {
-			origin_reliability_rx = hdr->service.origin_reliability_rx;
+			origin_reliability_rx = hdr->service.origin_reliability_subctxt_rx;
 		}
 
 		if (opcode == FI_OPX_HFI_BTH_OPCODE_UD) {
@@ -762,9 +771,9 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 							ctx_sharing);
 		} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
 
-		struct fi_opx_reliability_service *service   = &opx_ep->reliability->service;
-		union fi_opx_timer_state	  *timer     = &service->tx.timer;
-		union fi_opx_timer_stamp	  *timestamp = &service->tx.timestamp;
+		struct fi_opx_reliability_service *service   = opx_ep->reli_service;
+		union fi_opx_timer_state	  *timer     = &service->timer;
+		union fi_opx_timer_stamp	  *timestamp = &service->timestamp;
 		uint64_t			   compare   = fi_opx_timer_now(timestamp, timer);
 
 		struct fi_opx_hfi1_context *context = opx_ep->hfi;

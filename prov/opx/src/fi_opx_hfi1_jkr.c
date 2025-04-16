@@ -220,8 +220,7 @@ void opx_jkr_print_16B_bth(uint64_t bth1, uint64_t bth2, const char *func)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.ecn = %#x, RC2 %d\n", func, hdr.bth.ecn,
 		     (hdr.bth.ecn & OPX_RC2_MASK) >> 2);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.qp = %#x\n", func, hdr.bth.qp);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.unused  = %#x\n", func, hdr.bth.unused);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.rx = %#x\n", func, hdr.bth.rx);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: bth.subctxt_rx = %#x\n", func, hdr.bth.subctxt_rx);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: BTH.psn = %#x\n", func, hdr.bth.psn);
 }

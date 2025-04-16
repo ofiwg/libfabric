@@ -84,7 +84,7 @@ int fi_opx_do_readv_internal_intranode(union fi_opx_hfi1_deferred_work *work)
 	 * exceeds the max value of the legacy u8_rx field.  Use the dest_rx field
 	 * which can support the larger values.
 	 */
-	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, params->u32_extended_rx,
+	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, params->dest_subctxt_rx,
 						   params->opx_target_addr.hfi1_unit);
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
@@ -94,7 +94,7 @@ int fi_opx_do_readv_internal_intranode(union fi_opx_hfi1_deferred_work *work)
 	/* DAOS support - rank_inst field has been depricated and will be phased out.
 	 * The value is always zero.*/
 	union opx_hfi1_packet_hdr *hdr =
-		opx_shm_tx_next(&opx_ep->tx->shm, params->opx_target_addr.hfi1_unit, params->dest_rx, &pos,
+		opx_shm_tx_next(&opx_ep->tx->shm, params->opx_target_addr.hfi1_unit, params->dest_subctxt_rx, &pos,
 				opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx, 0, &rc);
 	if (OFI_UNLIKELY(hdr == NULL)) {
 		return rc;
@@ -106,23 +106,22 @@ int fi_opx_do_readv_internal_intranode(union fi_opx_hfi1_deferred_work *work)
 	assert(params->dt == (FI_VOID - 1) || params->dt < FI_DATATYPE_LAST);
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		hdr->qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | params->lrh_dlid | (params->lrh_dws << 32);
-		hdr->qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | params->bth_rx;
+		hdr->qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | params->bth_subctxt_rx;
 		hdr->qw_9B[2] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[2];
 		hdr->qw_9B[3] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[3];
-		hdr->qw_9B[4] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode | dt64 | op64 | niov;
+		hdr->qw_9B[4] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | (params->opcode) | dt64 | op64 | niov;
 		hdr->qw_9B[5] = (uintptr_t) params->rma_request;
 		hdr->qw_9B[6] = params->key;
 	} else {
-		const uint64_t bth_rx = params->bth_rx;
-		hdr->qw_16B[0]	      = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
+		hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 				 ((uint64_t) (params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 				  << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 				 ((uint64_t) params->lrh_dws << 20);
 		hdr->qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
 				 ((uint64_t) ((params->lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
 					      OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
-				  (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B));
-		hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | params->bth_rx;
+				  (uint64_t) (params->bth_subctxt_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B));
+		hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | params->bth_subctxt_rx;
 		hdr->qw_16B[3] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[3];
 		hdr->qw_16B[4] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[4];
 		hdr->qw_16B[5] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov;
@@ -161,8 +160,8 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 	const union fi_opx_addr addr = params->opx_target_addr;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.lid,
-					    addr.hfi1_subctxt_rx, &psn_ptr, &replay, params->reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.lid, addr.hfi1_subctxt_rx,
+					    &psn_ptr, &replay, params->reliability, hfi1_type);
 
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "DO_READV");
@@ -183,7 +182,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 						  credit_return | params->pbc_dlid,
 					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | params->lrh_dlid |
 						  (params->lrh_dws << 32),
-					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | params->bth_rx,
+					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | params->bth_subctxt_rx,
 					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn, opx_ep->rx->tx.cts_9B.hdr.qw_9B[3],
 					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode | dt64 | op64 | niov,
 					  (uintptr_t) params->rma_request,
@@ -201,23 +200,22 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 	} else {
-		const uint64_t bth_rx = params->bth_rx;
-		opx_cacheline_copy_qw_vol(scb, replay->scb.qws,
-					  opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) |
-						  credit_return | params->pbc_dlid,
-					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
-						  ((uint64_t) (params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
-						   << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
-						  ((uint64_t) params->lrh_dws << 20),
-					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
-						  ((uint64_t) ((params->lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
-							       OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
-						  (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
-					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx,
-					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[3] | psn,
-					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[4],
-					  opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov,
-					  (uintptr_t) params->rma_request);
+		opx_cacheline_copy_qw_vol(
+			scb, replay->scb.qws,
+			opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) | credit_return |
+				params->pbc_dlid,
+			opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
+				((uint64_t) (params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
+				 << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
+				((uint64_t) params->lrh_dws << 20),
+			opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
+				((uint64_t) ((params->lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
+					     OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+				(uint64_t) (params->bth_subctxt_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
+			opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | params->bth_subctxt_rx,
+			opx_ep->rx->tx.cts_16B.hdr.qw_16B[3] | psn, opx_ep->rx->tx.cts_16B.hdr.qw_16B[4],
+			opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov,
+			(uintptr_t) params->rma_request);
 		/* consume one credit for the packet header */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
@@ -238,8 +236,8 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
-	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, params->dest_rx, psn_ptr,
-							    replay, params->reliability, OPX_HFI1_TYPE);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
+							     OPX_HFI1_TYPE);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "DO_READV");
 	return FI_SUCCESS;

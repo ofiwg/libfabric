@@ -172,11 +172,11 @@ struct fi_opx_hfi1_sdma_work_entry {
 
 	opx_lid_t dlid;
 
-	uint8_t rx;
-	bool	in_use;
-	bool	use_bounce_buf;
-	bool	pending_bounce_buf;
-	uint8_t unused_byte_padding[4];
+	uint16_t subctxt_rx;
+	bool	 in_use;
+	bool	 use_bounce_buf;
+	bool	 pending_bounce_buf;
+	uint8_t	 unused_byte_padding[3];
 
 	uint64_t first_ack_time_ns;
 
@@ -391,15 +391,14 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_init_we(struct fi_opx_hfi1_sdma_work_entry *we, struct fi_opx_completion_counter *cc,
-			      uint16_t dlid, uint8_t rx, enum fi_hmem_iface iface, int hmem_device)
+			      uint16_t dlid, uint16_t subctxt_rx, enum fi_hmem_iface iface, int hmem_device)
 {
-	we->cc		      = cc;
-	we->dlid	      = dlid;
-	we->rx		      = rx;
-	we->comp_state	      = OPX_SDMA_COMP_FREE;
-	we->hmem.iface	      = iface;
-	we->hmem.device	      = hmem_device;
-	we->first_ack_time_ns = 0;
+	we->cc		= cc;
+	we->dlid	= dlid;
+	we->subctxt_rx	= subctxt_rx;
+	we->comp_state	= OPX_SDMA_COMP_FREE;
+	we->hmem.iface	= iface;
+	we->hmem.device = hmem_device;
 }
 
 __OPX_FORCE_INLINE__
@@ -566,7 +565,7 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 	   the send we're about to do, we shouldn't need to check the
 	   returned PSN here before proceeding */
 	int32_t psn;
-	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, &opx_ep->reliability->state, we->dlid, we->rx,
+	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, opx_ep->reli_service, we->dlid, we->subctxt_rx,
 					     &we->psn_ptr, we->num_packets);
 
 	uint32_t fragsize = 0;
@@ -582,9 +581,9 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 		we->packets[i].replay->sdma_we		 = replay_back_ptr;
 		we->packets[i].replay->hmem_iface	 = we->hmem.iface;
 		we->packets[i].replay->hmem_device	 = we->hmem.device;
-		fi_opx_reliability_client_replay_register_with_update(&opx_ep->reliability->state, we->rx, we->psn_ptr,
-								      we->packets[i].replay, cc, we->packets[i].length,
-								      reliability, hfi1_type);
+		fi_opx_reliability_service_replay_register_with_update(opx_ep->reli_service, we->psn_ptr,
+								       we->packets[i].replay, cc, we->packets[i].length,
+								       reliability, hfi1_type);
 		psn = (psn + 1) & MAX_PSN;
 	}
 

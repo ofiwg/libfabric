@@ -44,7 +44,7 @@ ssize_t fi_opx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t fla
 	struct fi_opx_ep	       *opx_ep	    = container_of(ep, struct fi_opx_ep, ep_fid);
 	const enum fi_threading		threading   = opx_ep->threading;
 	const enum fi_av_type		av_type	    = opx_ep->av_type;
-	const enum ofi_reliability_kind reliability = opx_ep->reliability->state.kind;
+	const enum ofi_reliability_kind reliability = opx_ep->reli_service->kind;
 
 	const uint64_t caps	     = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 	const int      lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
@@ -67,7 +67,7 @@ ssize_t fi_opx_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 	struct fi_opx_ep	       *opx_ep	    = container_of(ep, struct fi_opx_ep, ep_fid);
 	const enum fi_threading		threading   = opx_ep->threading;
 	const enum fi_av_type		av_type	    = opx_ep->av_type;
-	const enum ofi_reliability_kind reliability = opx_ep->reliability->state.kind;
+	const enum ofi_reliability_kind reliability = opx_ep->reli_service->kind;
 
 	const uint64_t caps	     = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 	const int      lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
@@ -648,7 +648,7 @@ int fi_opx_enable_msg_ops(struct fid_ep *ep)
 	}
 
 	const int lock_required			    = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
-	const enum ofi_reliability_kind reliability = opx_ep->reliability->state.kind;
+	const enum ofi_reliability_kind reliability = opx_ep->reli_service->kind;
 	if (OFI_UNLIKELY(reliability != OFI_RELIABILITY_KIND_ONLOAD)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Invalid reliability kind %u\n", reliability);
 		return -FI_EINVAL;

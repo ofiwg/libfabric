@@ -145,7 +145,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	params->slid		   = opx_dst_addr.lid;
 	params->dt		   = dt == FI_VOID ? FI_VOID - 1 : dt;
 	params->op		   = op == FI_NOOP ? FI_NOOP - 1 : op;
-	params->u8_rx		   = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
+	params->origin_rx	   = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
 	params->key		   = key;
 	params->niov		   = 1;
 	params->iov[0].bytes	   = buf_iov->len;

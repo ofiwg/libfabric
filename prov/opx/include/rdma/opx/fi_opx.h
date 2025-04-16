@@ -408,8 +408,6 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr);
 
 int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_av **av, void *context);
 
-int fi_opx_stx_context(struct fid_domain *domain, struct fi_tx_attr *attr, struct fid_stx **stx, void *context);
-
 int fi_opx_cq_open(struct fid_domain *dom, struct fi_cq_attr *attr, struct fid_cq **eq, void *context);
 
 void fi_opx_cq_finalize_ops(struct fid_ep *ep);
