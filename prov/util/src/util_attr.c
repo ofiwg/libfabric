@@ -454,7 +454,7 @@ int ofi_check_fabric_attr(const struct fi_provider *prov,
 /*
  * Threading models ranked by order of parallelism.
  */
-static int fi_thread_level(enum fi_threading thread_model)
+int fi_thread_level(enum fi_threading thread_model)
 {
 	switch (thread_model) {
 	case FI_THREAD_SAFE:
