@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_endpoint" "3" "2025\-02\-05" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_endpoint" "3" "2025\-04\-16" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -291,6 +291,10 @@ Outstanding operations posted to the endpoint when fi_close is called
 will be discarded.
 Discarded operations will silently be dropped, with no completions
 reported.
+Memory buffers that the user associated with the endpoint by calling
+libfabric\[cq]s transmission interfaces must not be released,
+deregistered, or reused until either a completion is generated or
+fi_close on the respective endpoint returns.
 Additionally, a provider may discard previously completed operations
 from the associated completion queue(s).
 The behavior to discard completed operations is provider specific.
