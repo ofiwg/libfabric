@@ -184,14 +184,14 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 		goto out;
 	}
 
-	EFA_DBG(FI_LOG_EP_DATA,
-	       "iov_len: %lu tag: %lx op: %x flags: %lx\n",
-	       txe->total_len,
-	       tag, op, flags);
-
 	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
 
 	txe->msg_id = peer->next_msg_id++;
+
+	EFA_DBG(FI_LOG_EP_DATA,
+		"peer: %" PRIu64
+		": size %lu tag: %lx op: %x flags: %lx msg_id: %" PRIu32 "\n",
+		peer->efa_fiaddr, txe->total_len, tag, op, flags, txe->msg_id);
 
 	efa_rdm_tracepoint(send_begin, txe->msg_id,
 		    (size_t) txe->cq_entry.op_context, txe->total_len);
@@ -897,9 +897,10 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	efa_perfset_start(ep, perf_efa_recv);
 
 	EFA_DBG(FI_LOG_EP_DATA,
-		"iov_len: %lu tag: %lx ignore: %lx op: %x flags: %lx\n",
-		ofi_total_iov_len(msg->msg_iov, msg->iov_count),
-		tag, ignore, op, flags);
+		"peer: %lu iov_len: %lu tag: %lx ignore: %lx op: %x flags: "
+		"%lx\n",
+		msg->addr, ofi_total_iov_len(msg->msg_iov, msg->iov_count), tag,
+		ignore, op, flags);
 
 	efa_rdm_tracepoint(recv_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 

@@ -785,9 +785,12 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 	cq_flags = (ep->base_ep.util_ep.rx_msg_flags == FI_COMPLETION) ? 0 : FI_SELECTIVE_COMPLETION;
 	if (OFI_UNLIKELY(rxe->cq_entry.len < rxe->total_len)) {
 		EFA_WARN(FI_LOG_CQ,
-			"Message truncated! tag: %"PRIu64" incoming message size: %"PRIu64" receiving buffer size: %zu\n",
-			rxe->cq_entry.tag,	rxe->total_len,
-			rxe->cq_entry.len);
+			 "Message truncated! from peer %" PRIu64
+			 " rx_id: %" PRIu32 " msg_id: %" PRIu32 " tag: %" PRIu64
+			 " incoming message size: %" PRIu64
+			 " receiving buffer size: %zu\n",
+			 rxe->addr, rxe->rx_id, rxe->msg_id, rxe->cq_entry.tag,
+			 rxe->total_len, rxe->cq_entry.len);
 
 		ret = ofi_cq_write_error_trunc(ep->base_ep.util_ep.rx_cq,
 					       rxe->cq_entry.op_context,
