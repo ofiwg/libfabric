@@ -161,6 +161,8 @@
 #define VERBS_ANY_DOMAIN "verbs_any_domain"
 #define VERBS_ANY_FABRIC "verbs_any_fabric"
 
+#define VERBS_TOS_UNSET	(-1)
+
 #ifdef HAVE_FABRIC_PROFILE
 struct vrb_profile;
 typedef struct vrb_profile    vrb_profile_t;
@@ -176,6 +178,7 @@ extern ofi_mutex_t vrb_init_mutex;
 extern struct dlist_entry verbs_devs;
 
 extern struct vrb_gl_data {
+	int	tos;
 	int	def_tx_size;
 	int	def_rx_size;
 	int	def_tx_iov_limit;
@@ -1048,6 +1051,16 @@ vrb_free_recv_wr(struct vrb_progress *progress, struct vrb_recv_wr *wr)
 {
 	assert(ofi_genlock_held(progress->active_lock));
 	ofi_buf_free(wr);
+}
+
+static inline int vrb_rdma_set_tos(struct rdma_cm_id *id)
+{
+	if (vrb_gl_data.tos == VERBS_TOS_UNSET)
+		return 0;
+
+	uint8_t tos = vrb_gl_data.tos;
+	return rdma_set_option(id, RDMA_OPTION_ID, RDMA_OPTION_ID_TOS, &tos,
+			       sizeof(tos));
 }
 
 int vrb_ep_ops_open(struct fid *fid, const char *name,
