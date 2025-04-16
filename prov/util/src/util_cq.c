@@ -260,6 +260,12 @@ static void util_cq_read_tagged(void **dst, void *src)
 	*(char **)dst += sizeof(struct fi_cq_tagged_entry);
 }
 
+static void util_cq_read_rpc(void **dst, void *src)
+{
+	*(struct fi_cq_rpc_entry *) *dst = *(struct fi_cq_rpc_entry *) src;
+	*(char **)dst += sizeof(struct fi_cq_rpc_entry);
+}
+
 ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			fi_addr_t *src_addr)
 {
@@ -667,6 +673,9 @@ static int util_init_peer_cq(struct util_cq *cq, struct fi_cq_attr *attr)
 		break;
 	case FI_CQ_FORMAT_TAGGED:
 		cq->read_entry = util_cq_read_tagged;
+		break;
+	case FI_CQ_FORMAT_RPC:
+		cq->read_entry = util_cq_read_rpc;
 		break;
 	default:
 		assert(0);

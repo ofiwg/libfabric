@@ -408,6 +408,11 @@ additional optimizations.
   completion semantics.  This flag requires that FI_RMA be set.
   This capability is experimental.
 
+*FI_RPC*
+: Specifies that the endpoint should support RPC operations.  Endpoints
+  supporting this capability supports operations defined by
+  struct fi_ops_rpc.
+
 *FI_SEND*
 : Indicates that the user requires an endpoint capable of sending
   message data transfers.  Message transfers include base message
@@ -478,7 +483,7 @@ would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_MULTICAST,
 FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TAGGED_DIRECTED_RECV, FI_HMEM,
-FI_COLLECTIVE, FI_XPU, FI_AV_USER_ID, FI_PEER
+FI_COLLECTIVE, FI_XPU, FI_AV_USER_ID, FI_PEER, FI_RPC
 
 Primary modifiers: FI_READ, FI_WRITE, FI_RECV, FI_SEND,
 FI_REMOTE_READ, FI_REMOTE_WRITE

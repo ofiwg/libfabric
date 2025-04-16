@@ -214,6 +214,25 @@ struct fi_cq_tagged_entry {
 };
 ```
 
+- *FI_CQ_FORMAT_RPC*
+: Expands completion data to include support for RPC message
+  interfaces.
+
+```c
+struct fi_cq_rpc_entry {
+	void     *op_context; /* operation context */
+	uint64_t flags;       /* completion flags */
+	size_t   len;         /* size of received data */
+	void     *buf;        /* receive data buffer */
+	uint64_t data;        /* completion data */
+	union {
+		uint64_t tag;         /* received tag */
+		uint64_t rpc_id;      /* RPC ID */
+	};
+	int	timeout;       /* timeout value */
+};
+```
+
 *wait_obj*
 : CQ's may be associated with a specific wait object.  Wait objects
   allow applications to block until the wait object is signaled,
