@@ -172,8 +172,8 @@ typedef void  vrb_profile_t;
 
 extern struct fi_provider vrb_prov;
 extern struct util_prov vrb_util_prov;
-extern ofi_mutex_t vrb_init_mutex;
-extern struct dlist_entry verbs_devs;
+extern ofi_mutex_t vrb_info_mutex;
+extern struct dlist_entry vrb_devs;
 
 extern struct vrb_gl_data {
 	int	def_tx_size;
@@ -270,10 +270,9 @@ struct verbs_dev_info {
 	struct dlist_entry addrs;
 };
 
-
 struct vrb_fabric {
 	struct util_fabric	util_fabric;
-	const struct fi_info	*info;
+	struct fi_info		*info;
 	struct util_ns		name_server;
 };
 
@@ -859,12 +858,11 @@ int vrb_ep_destroy_xrc_qp(struct vrb_xrc_ep *ep);
 
 int vrb_xrc_close_srq(struct vrb_srx *srx);
 
-int vrb_read_params(void);
+int vrb_init(void);
+void vrb_devs_free(struct dlist_entry *verbs_devs);
 int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
 		   struct fi_info **info);
-const struct fi_info *vrb_get_verbs_info(const struct fi_info *ilist,
-					    const char *domain_name);
 int vrb_set_rai(uint32_t addr_format, void *src_addr, size_t src_addrlen,
 		void *dest_addr, size_t dest_addrlen, uint64_t flags,
 		struct rdma_addrinfo *rai);
