@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -43,12 +43,14 @@
 			 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)
 #define SMR_RX_OP_FLAGS (FI_COMPLETION | FI_MULTI_RECV)
 
+#define SMR_TX_SIZE 1024
+
 struct fi_tx_attr smr_tx_attr = {
 	.caps = SMR_TX_CAPS,
 	.op_flags = SMR_TX_OP_FLAGS,
 	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
 	.inject_size = SMR_INJECT_SIZE,
-	.size = 1024,
+	.size = SMR_TX_SIZE,
 	.iov_limit = SMR_IOV_LIMIT,
 	.rma_iov_limit = SMR_IOV_LIMIT
 };
@@ -57,7 +59,7 @@ struct fi_rx_attr smr_rx_attr = {
 	.caps = SMR_RX_CAPS,
 	.op_flags = SMR_RX_OP_FLAGS,
 	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
-	.size = 1024,
+	.size = SMR_TX_SIZE,
 	.iov_limit = SMR_IOV_LIMIT
 };
 
@@ -66,7 +68,7 @@ struct fi_tx_attr smr_hmem_tx_attr = {
 	.op_flags = SMR_TX_OP_FLAGS,
 	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
 	.inject_size = 0,
-	.size = 1024,
+	.size = SMR_TX_SIZE,
 	.iov_limit = SMR_IOV_LIMIT,
 	.rma_iov_limit = SMR_IOV_LIMIT
 };
@@ -75,7 +77,7 @@ struct fi_rx_attr smr_hmem_rx_attr = {
 	.caps = SMR_HMEM_RX_CAPS,
 	.op_flags = SMR_RX_OP_FLAGS,
 	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
-	.size = 1024,
+	.size = SMR_TX_SIZE,
 	.iov_limit = SMR_IOV_LIMIT
 };
 
@@ -101,7 +103,7 @@ struct fi_domain_attr smr_domain_attr = {
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = OFI_MR_BASIC | OFI_MR_SCALABLE,
 	.mr_key_size = sizeof_field(struct fi_rma_iov, key),
-	.cq_data_size = sizeof_field(struct smr_msg_hdr, data),
+	.cq_data_size = sizeof_field(struct smr_cmd_hdr, cq_data),
 	.cq_cnt = (1 << 10),
 	.ep_cnt = SMR_MAX_PEERS,
 	.tx_ctx_cnt = (1 << 10),
@@ -121,7 +123,7 @@ struct fi_domain_attr smr_hmem_domain_attr = {
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_HMEM,
 	.mr_key_size = sizeof_field(struct fi_rma_iov, key),
-	.cq_data_size = sizeof_field(struct smr_msg_hdr, data),
+	.cq_data_size = sizeof_field(struct smr_cmd_hdr, cq_data),
 	.cq_cnt = (1 << 10),
 	.ep_cnt = SMR_MAX_PEERS,
 	.tx_ctx_cnt = (1 << 10),
