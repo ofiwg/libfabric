@@ -92,6 +92,8 @@ static inline int ofi_hugepage_enabled(void)
 
 size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa);
 
+int ofi_ifaddr_get_mtu(const struct ifaddrs *ifa);
+
 #ifndef __NR_process_vm_readv
 # define __NR_process_vm_readv 310
 #endif
