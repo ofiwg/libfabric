@@ -399,6 +399,8 @@ rxm_alloc_conn(struct rxm_ep *ep, struct util_peer_addr *peer)
 	conn->state = RXM_CM_IDLE;
 	conn->remote_index = -1;
 	conn->flags = 0;
+	conn->flow_ctrl = false;
+	conn->peer_flow_ctrl = false;
 	dlist_init(&conn->deferred_entry);
 	dlist_init(&conn->deferred_tx_queue);
 	dlist_init(&conn->deferred_sar_msgs);
@@ -484,11 +486,11 @@ static void rxm_set_peer_flow_ctrl(struct rxm_conn *conn, int cm_flow_ctrl_flag)
 		break;
 
 	case RXM_CM_FLOW_CTRL_PEER_ON:
-		conn->peer_flow_ctrl = 1;
+		conn->peer_flow_ctrl = true;
 		break;
 
 	case RXM_CM_FLOW_CTRL_PEER_OFF:
-		conn->peer_flow_ctrl = 0;
+		conn->peer_flow_ctrl = false;
 		break;
 	}
 }
@@ -511,7 +513,7 @@ void rxm_process_connect(struct rxm_eq_cm_entry *cm_entry)
 		rxm_set_peer_flow_ctrl(conn, cm_entry->data.accept.flow_ctrl);
 	}
 
-	if (conn->flow_ctrl & conn->peer_flow_ctrl) {
+	if (conn->flow_ctrl && conn->peer_flow_ctrl) {
 		domain = container_of(conn->ep->util_ep.domain,
 				      struct rxm_domain, util_domain);
 		domain->flow_ctrl_ops->enable(conn->msg_ep,
