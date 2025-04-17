@@ -241,8 +241,8 @@ struct rxm_conn {
 	int remote_index;
 	uint32_t remote_pid;
 	uint8_t flags;
-	uint8_t flow_ctrl;
-	uint8_t peer_flow_ctrl;
+	bool flow_ctrl;
+	bool peer_flow_ctrl;
 
 	struct dlist_entry deferred_entry;
 	struct dlist_entry deferred_tx_queue;
