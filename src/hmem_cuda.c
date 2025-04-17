@@ -722,16 +722,27 @@ int cuda_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 	aligned_size = (uintptr_t) ofi_get_page_end((void *) ((uintptr_t) base_addr + total_size - 1),
 						    host_page_size) - (uintptr_t) aligned_ptr + 1;
 
-# if HAVE_CUDA_DMABUF_MAPPING_TYPE_PCIE
-	flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
-# else
 	flags = 0;
+#if HAVE_CUDA_DMABUF_MAPPING_TYPE_PCIE
+	flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
 # endif /* HAVE_CUDA_DMABUF_MAPPING_TYPE_PCIE */
 	cuda_ret = cuda_ops.cuMemGetHandleForAddressRange(
 						(void *)fd,
 						aligned_ptr, aligned_size,
 						CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
 						flags);
+
+	if (cuda_ret == CUDA_ERROR_INVALID_VALUE && flags != 0) {
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"cuMemGetHandleForAddressRange failed with flags: %llu, "
+			"invalid argument. Retrying with no flags.\n", flags);
+		cuda_ret = cuda_ops.cuMemGetHandleForAddressRange(
+						(void *) fd,
+						aligned_ptr, aligned_size,
+						CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
+						0);
+	}
+
 	if (cuda_ret != CUDA_SUCCESS) {
 		CUDA_DRIVER_LOG_ERR(cuda_ret, "cuMemGetHandleForAddressRange");
 		return -FI_EIO;
