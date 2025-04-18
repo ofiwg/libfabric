@@ -366,8 +366,8 @@ struct fi_opx_hfi1_dput_params {
 	uint32_t		  ntidpairs;
 	uint32_t		  tidoffset;
 	uint32_t		  tididx;
-	uint32_t		  tidlen_consumed;
-	uint32_t		  tidlen_remaining;
+	uint32_t		  tidbytes_consumed;
+	uint32_t		  tidbytes_remaining;
 	uint32_t		  u32_extended_rx;
 	uint32_t		  unused;
 	enum ofi_reliability_kind reliability;
