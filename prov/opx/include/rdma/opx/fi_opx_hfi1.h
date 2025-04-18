@@ -123,8 +123,14 @@
 
    NOTE: This value MUST be a multiple of 64!
    */
-#define FI_OPX_MP_EGR_CHUNK_SIZE (4160)
 
+#ifndef FI_OPX_MP_EGR_CHUNK_SIZE
+#ifndef OPX_JKR_SUPPORT
+#define FI_OPX_MP_EGR_CHUNK_SIZE (4160)
+#else
+#define FI_OPX_MP_EGR_CHUNK_SIZE (FI_OPX_HFI1_PACKET_MTU)
+#endif
+#endif
 /* For full MP-Eager chunks, we pack 16 bytes of payload data in the
    packet header.
 

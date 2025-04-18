@@ -3522,13 +3522,13 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 	for (i = params->cur_iov; i < niov; ++i) {
 		uint32_t *tidpairs = (uint32_t *) params->tid_iov.iov_base;
 		uint32_t  tididx   = params->tididx;
-		uint32_t  tidlen_consumed;
-		uint32_t  tidlen_remaining;
-		uint32_t  prev_tididx		= 0;
-		uint32_t  prev_tidlen_consumed	= 0;
-		uint32_t  prev_tidlen_remaining = 0;
-		uint32_t  tidoffset		= 0;
-		uint32_t  tidOMshift		= 0;
+		uint32_t  tidbytes_consumed;
+		uint32_t  tidbytes_remaining;
+		uint32_t  prev_tididx		  = 0;
+		uint32_t  prev_tidbytes_consumed  = 0;
+		uint32_t  prev_tidbytes_remaining = 0;
+		uint32_t  tidoffset		  = 0;
+		uint32_t  tidOMshift		  = 0;
 		if (tididx == -1U) { /* first time */
 			FI_OPX_DEBUG_COUNTERS_INC_COND_N(
 				(opx_ep->debug_counters.expected_receive.first_tidpair_minoffset == 0),
@@ -3538,32 +3538,19 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 			FI_OPX_DEBUG_COUNTERS_MAX_OF(opx_ep->debug_counters.expected_receive.first_tidpair_maxoffset,
 						     params->tidoffset);
 
-			tididx		 = 0;
-			tidlen_remaining = FI_OPX_EXP_TID_GET(tidpairs[0], LEN);
-			/* When reusing TIDs we can offset <n> pages into the TID
-			   so "consume" that */
-			tidlen_consumed =
-				(params->tidoffset & -(int32_t) OPX_HFI1_TID_PAGESIZE) / OPX_HFI1_TID_PAGESIZE;
-			tidlen_remaining -= tidlen_consumed;
-			if (tidlen_consumed) {
+			tididx		  = 0;
+			tidbytes_consumed = params->tidoffset;
+			tidbytes_remaining =
+				(FI_OPX_EXP_TID_GET(tidpairs[0], LEN) * OPX_HFI1_TID_PAGESIZE) - tidbytes_consumed;
+			if (tidbytes_consumed) {
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 				       "params->tidoffset %u, tidlen_consumed %u, tidlen_remaining %u, length  %llu\n",
-				       params->tidoffset, tidlen_consumed, tidlen_remaining,
+				       params->tidoffset, tidbytes_consumed, tidbytes_remaining,
 				       FI_OPX_EXP_TID_GET(tidpairs[0], LEN));
 			}
 		} else { /* eagain retry, restore previous TID state */
-			tidlen_consumed	 = params->tidlen_consumed;
-			tidlen_remaining = params->tidlen_remaining;
-		}
-
-		uint32_t first_tidoffset;
-		uint32_t first_tidoffset_page_adj;
-		if (tididx == 0) {
-			first_tidoffset		 = params->tidoffset;
-			first_tidoffset_page_adj = first_tidoffset & (OPX_HFI1_TID_PAGESIZE - 1);
-		} else {
-			first_tidoffset		 = 0;
-			first_tidoffset_page_adj = 0;
+			tidbytes_consumed  = params->tidbytes_consumed;
+			tidbytes_remaining = params->tidbytes_remaining;
 		}
 
 		uint32_t starting_tid_idx = tididx;
@@ -3579,10 +3566,9 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 		       params->bytes_sent, params->bytes_sent, bytes_to_send, bytes_to_send,
 		       params->origin_byte_counter ? *(params->origin_byte_counter) : -1UL);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-		       " rbuf %p, dput_iov[%u].rbuf %p, dput_iov[i].bytes %lu/%#lX, bytes sent %lu/%#lX, bytes_to_send %lu/%#lX, first_tidoffset %u/%#X first_tidoffset_page_adj %u/%#X \n",
+		       " rbuf %p, dput_iov[%u].rbuf %p, dput_iov[i].bytes %lu/%#lX, bytes sent %lu/%#lX, bytes_to_send %lu/%#lX\n",
 		       (void *) rbuf, i, (void *) dput_iov[i].rbuf, dput_iov[i].bytes, dput_iov[i].bytes,
-		       params->bytes_sent, params->bytes_sent, bytes_to_send, bytes_to_send, first_tidoffset,
-		       first_tidoffset, first_tidoffset_page_adj, first_tidoffset_page_adj);
+		       params->bytes_sent, params->bytes_sent, bytes_to_send, bytes_to_send);
 		while (bytes_to_send > 0) {
 			if (!fi_opx_hfi1_sdma_queue_has_room(opx_ep, OPX_SDMA_TID_IOV_COUNT)) {
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -3620,7 +3606,8 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 			assert(packet_count > 0);
 			packet_count = MIN(packet_count, max_pkts_per_req);
 
-			if (packet_count < opx_ep->tx->sdma_max_pkts_tid) {
+			if (packet_count < max_pkts_per_req) {
+				/* Calc worst case based on single page length TIDs (4k packets) */
 				packet_count = (bytes_to_send + (OPX_HFI1_TID_PAGESIZE - 1)) / OPX_HFI1_TID_PAGESIZE;
 				packet_count = MIN(packet_count, max_pkts_per_req);
 			}
@@ -3700,82 +3687,52 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 						tidOMshift   = 0;
 						offset_shift = KDETH_OM_SMALL_SHIFT;
 					}
-					tidoffset = ((tidlen_consumed * OPX_HFI1_TID_PAGESIZE) +
-						     first_tidoffset_page_adj) >>
-						    offset_shift;
-					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-					       "%p:tidoffset %#X/%#X, first_tid_offset %#X, first_tidoffset_page_adj %#X\n",
-					       params, tidoffset, tidoffset << offset_shift, first_tidoffset,
-					       first_tidoffset_page_adj);
+					tidoffset = tidbytes_consumed >> offset_shift;
+					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "%p:tidoffset %#X/%#X\n", params,
+					       tidoffset, tidoffset << offset_shift);
 				}
 
 				/* Save current values in case we can't process this packet (!REPLAY)
 					   and need to restore state */
-				prev_tididx	      = tididx;
-				prev_tidlen_consumed  = tidlen_consumed;
-				prev_tidlen_remaining = tidlen_remaining;
+				prev_tididx		= tididx;
+				prev_tidbytes_consumed	= tidbytes_consumed;
+				prev_tidbytes_remaining = tidbytes_remaining;
 				/* If we offset into this TID, SDMA header auto-generation will have sent
 				 * 4k/8k packets but now we have to adjust our length on the last packet
 				 * to not exceed the pinned pages (subtract the offset from the last
 				 * packet) like SDMA header auto-generation will do.
 				 */
-				if (first_tidoffset && (tidlen_remaining < 3)) {
-					if (tidlen_remaining == 1) {
-						packet_bytes = MIN(packet_bytes,
-								   OPX_HFI1_TID_PAGESIZE - first_tidoffset_page_adj);
-					} else {
-						packet_bytes = MIN(packet_bytes,
-								   FI_OPX_HFI1_PACKET_MTU - first_tidoffset_page_adj);
-					}
-					assert(tididx == 0);
-					first_tidoffset		 = 0; /* offset ONLY for first tid from cts*/
-					first_tidoffset_page_adj = 0;
-				}
+				packet_bytes = MIN(packet_bytes, tidbytes_remaining);
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-				       "%p:tid[%u], tidlen_remaining %u, packet_bytes %#lX, first_tid_offset %#X, first_tidoffset_page_adj %#X, packet_count %lu\n",
-				       params, tididx, tidlen_remaining, packet_bytes, first_tidoffset,
-				       first_tidoffset_page_adj, packet_count);
+				       "%p:tid[%u], tidlen_remaining %u, packet_bytes %#lX, packet_count %lu\n", params,
+				       tididx, tidbytes_remaining, packet_bytes, packet_count);
 
-				/* Check tid for each packet and determine if SDMA header auto-generation will
-				   use 4k or 8k packet */
-				/* Assume any CTRL 3 tidpair optimizations were already done, or are not wanted,
-				   so only a single tidpair per packet is possible. */
-				if (packet_bytes > OPX_HFI1_TID_PAGESIZE && tidlen_remaining >= 2) {
-					/* at least 2 pages, 8k mapped by this tidpair,
-					   calculated packet_bytes is ok. */
-					tidlen_remaining -= 2;
-					tidlen_consumed += 2;
-				} else if (tidlen_remaining >= 1) {
-					/* only 1 page left or only 4k packet possible */
-					packet_bytes = MIN(packet_bytes, OPX_HFI1_TID_PAGESIZE);
-					tidlen_remaining -= 1;
-					tidlen_consumed += 1;
-				} else {
-					assert(tidlen_remaining);
-				}
-				if (tidlen_remaining == 0 && tididx < (params->ntidpairs - 1)) {
+				tidbytes_remaining -= packet_bytes;
+				tidbytes_consumed += packet_bytes;
+				if (tidbytes_remaining == 0 && tididx < (params->ntidpairs - 1)) {
 #ifndef NDEBUG
 					if (tididx == 0) {
 						first_tid_last_packet = true; /* First tid even though tididx ++*/
 					}
 #endif
 					tididx++;
-					tidlen_remaining = FI_OPX_EXP_TID_GET(tidpairs[tididx], LEN);
-					tidlen_consumed	 = 0;
+					tidbytes_remaining =
+						FI_OPX_EXP_TID_GET(tidpairs[tididx], LEN) * OPX_HFI1_TID_PAGESIZE;
+					tidbytes_consumed = 0;
 				}
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-				       "%p:tid[%u/%u], tidlen_remaining %u, packet_bytes %#lX, first_tid_offset %#X, first_tidoffset_page_adj %#X, packet_count %lu\n",
-				       params, tididx, params->ntidpairs, tidlen_remaining, packet_bytes,
-				       first_tidoffset, first_tidoffset_page_adj, packet_count);
+				       "%p:tid[%u/%u], tidlen_remaining %u, packet_bytes %#lX, packet_count %lu\n",
+				       params, tididx, params->ntidpairs, tidbytes_remaining, packet_bytes,
+				       packet_count);
 
 				struct fi_opx_reliability_tx_replay *replay;
 				replay = fi_opx_reliability_service_replay_allocate(opx_ep->reli_service, true);
 				if (OFI_UNLIKELY(replay == NULL)) {
 					/* Restore previous values in case since we can't process this
 					 * packet. We may or may not -FI_EAGAIN later (!REPLAY).*/
-					tididx		 = prev_tididx;
-					tidlen_consumed	 = prev_tidlen_consumed;
-					tidlen_remaining = prev_tidlen_remaining;
+					tididx		   = prev_tididx;
+					tidbytes_consumed  = prev_tidbytes_consumed;
+					tidbytes_remaining = prev_tidbytes_remaining;
 					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					       "%p:!REPLAY on packet %u out of %lu, params->sdma_we->num_packets %u\n",
 					       params, p, packet_count, params->sdma_we->num_packets);
@@ -3854,9 +3811,6 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 				return -FI_EAGAIN;
 			}
 
-			/* after first tid, should have made necessary adjustments and zeroed it */
-			assert(((first_tidoffset == 0) && (first_tidoffset_page_adj == 0)) || (tididx == 0));
-
 			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 				opx_hfi1_sdma_flush(opx_ep, params->sdma_we, &params->sdma_reqs, 1, /* use tid */
 						    &params->tid_iov, starting_tid_idx, tididx, tidOMshift, tidoffset,
@@ -3868,9 +3822,9 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 			}
 			params->sdma_we = NULL;
 			/* save our 'done' tid state incase we return EAGAIN next loop */
-			params->tididx		 = tididx;
-			params->tidlen_consumed	 = tidlen_consumed;
-			params->tidlen_remaining = tidlen_remaining;
+			params->tididx		   = tididx;
+			params->tidbytes_consumed  = tidbytes_consumed;
+			params->tidbytes_remaining = tidbytes_remaining;
 
 		} /* while bytes_to_send */
 

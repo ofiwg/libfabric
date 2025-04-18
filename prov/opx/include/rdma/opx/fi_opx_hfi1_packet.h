@@ -51,8 +51,16 @@
 #endif
 
 #define FI_OPX_ADDR_SEP_RX_MAX (4)
+
+#ifndef FI_OPX_HFI1_PACKET_MTU
+#ifndef OPX_JKR_SUPPORT
 #define FI_OPX_HFI1_PACKET_MTU (8192)
-#define OPX_HFI1_TID_PAGESIZE  (PAGE_SIZE) /* assume 4K, no hugepages*/
+#else
+#define FI_OPX_HFI1_PACKET_MTU (10240)
+#endif
+#endif
+
+#define OPX_HFI1_TID_PAGESIZE (PAGE_SIZE) /* assume 4K, no hugepages*/
 
 #define FI_OPX_HFI1_PACKET_IMM (16)
 
@@ -1402,8 +1410,9 @@ struct fi_opx_hmem_iov {
 	enum fi_hmem_iface iface;
 } __attribute__((__packed__));
 
-#define FI_OPX_MAX_HMEM_IOV ((FI_OPX_HFI1_PACKET_MTU - sizeof(uintptr_t)) / sizeof(struct fi_opx_hmem_iov))
-#define FI_OPX_MAX_DPUT_IOV ((FI_OPX_HFI1_PACKET_MTU / sizeof(union opx_hfi1_dput_iov) - 4) + 3)
+#define FI_OPX_MAX_HMEM_IOV	    ((FI_OPX_HFI1_PACKET_MTU - sizeof(uintptr_t)) / sizeof(struct fi_opx_hmem_iov))
+#define FI_OPX_RZV_NONCONTIG_UNUSED (FI_OPX_HFI1_PACKET_MTU - 8 - (((FI_OPX_HFI1_PACKET_MTU - 8) / 28) * 28))
+#define FI_OPX_MAX_DPUT_IOV	    ((FI_OPX_HFI1_PACKET_MTU / sizeof(union opx_hfi1_dput_iov) - 4) + 3)
 
 #define FI_OPX_MAX_DPUT_TIDPAIRS \
 	((FI_OPX_HFI1_PACKET_MTU - sizeof(union opx_hfi1_dput_iov) - (4 * sizeof(uint32_t))) / sizeof(uint32_t))
@@ -1491,7 +1500,9 @@ union fi_opx_hfi1_packet_payload {
 
 			/* ==== CACHE LINE 1-127 (for 8k mtu) ==== */
 			struct fi_opx_hmem_iov iov_ext[FI_OPX_MAX_HMEM_IOV - 2];
-			size_t		       unused;
+#if FI_OPX_RZV_NONCONTIG_UNUSED
+			uint8_t unused[FI_OPX_RZV_NONCONTIG_UNUSED];
+#endif
 
 		} noncontiguous;
 	} rendezvous;
@@ -1521,18 +1532,25 @@ union fi_opx_hfi1_packet_payload {
 static_assert(sizeof(union fi_opx_hfi1_packet_payload) <= FI_OPX_HFI1_PACKET_MTU,
 	      "sizeof(union fi_opx_hfi1_packet_payload) must be <= FI_OPX_HFI1_PACKET_MTU!");
 static_assert(
-	offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_byte) == 64,
+	offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_byte) == FI_OPX_CACHE_LINE_SIZE,
 	"struct fi_opx_hfi1_packet_payload.rendezvous.contiguous.immediate_byte should be aligned on cacheline 1!");
 static_assert(
-	offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_block) == 128,
+	offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_block) == 2 * FI_OPX_CACHE_LINE_SIZE,
 	"struct fi_opx_hfi1_packet_payload.rendezvous.contiguous.immediate_block should be aligned on cacheline 2!");
 static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.iov) == 8,
 	      "struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.iov should be 8 bytes into cacheline 0!");
-static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.iov_ext) == 64,
+static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.iov_ext) == FI_OPX_CACHE_LINE_SIZE,
 	      "struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.iov_ext should be aligned on cacheline 1!");
-static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.unused) ==
-		      (FI_OPX_HFI1_PACKET_MTU - 8),
+static_assert(
+	FI_OPX_HFI1_PACKET_MTU - sizeof(uintptr_t) - ((FI_OPX_MAX_HMEM_IOV) * sizeof(struct fi_opx_hmem_iov)) ==
+		FI_OPX_RZV_NONCONTIG_UNUSED,
+	"FI_OPX_RZV_NONCONTIG_UNUSED should be based on struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous!");
+#if FI_OPX_RZV_NONCONTIG_UNUSED
+static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.unused) +
+			      FI_OPX_RZV_NONCONTIG_UNUSED ==
+		      FI_OPX_HFI1_PACKET_MTU,
 	      "struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.unused should end at packet MTU!");
+#endif
 static_assert(
 	(offsetof(union fi_opx_hfi1_packet_payload, tid_cts.tidpairs) +
 	 sizeof(((union fi_opx_hfi1_packet_payload *) 0)->tid_cts.tidpairs)) == FI_OPX_HFI1_PACKET_MTU,
@@ -1574,10 +1592,10 @@ struct fi_opx_hfi1_ue_packet {
 	union fi_opx_hfi1_packet_payload payload;
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 
-static_assert(offsetof(struct fi_opx_hfi1_ue_packet, recv_time_ns) == 64,
+static_assert(offsetof(struct fi_opx_hfi1_ue_packet, recv_time_ns) == FI_OPX_CACHE_LINE_SIZE,
 	      "struct fi_opx_hfi1_ue_packet->recv_time_ns should be aligned on cache boundary!");
 
-static_assert(offsetof(struct fi_opx_hfi1_ue_packet, payload) == 192,
+static_assert(offsetof(struct fi_opx_hfi1_ue_packet, payload) == 3 * FI_OPX_CACHE_LINE_SIZE,
 	      "struct fi_opx_hfi1_ue_packet->payload should be aligned on cache boundary!");
 
 struct fi_opx_hfi1_ue_packet_slist {
