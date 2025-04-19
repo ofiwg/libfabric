@@ -85,8 +85,8 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	params->opx_target_addr = opx_target_addr;
 	params->key		= (key == NULL) ? -1 : *key;
 	params->cc		= cc;
-	params->dest_rx		= opx_target_addr.hfi1_subctxt_rx;
-	params->bth_rx		= params->dest_rx << OPX_BTH_RX_SHIFT;
+	params->dest_subctxt_rx = opx_target_addr.hfi1_subctxt_rx;
+	params->bth_subctxt_rx	= params->dest_subctxt_rx << OPX_BTH_SUBCTXT_RX_SHIFT;
 	params->pbc_dlid	= OPX_PBC_DLID_TO_PBC_DLID(opx_target_addr.lid, hfi1_type);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		params->pbc_dws = 2 + /* pbc */
@@ -153,7 +153,7 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	 * can support the larger values, in order to maintain consistency with other
 	 * deferred work operations, continue to use the u32_extended_rx field.
 	 */
-	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, params->dest_rx);
+	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, params->dest_subctxt_rx);
 
 	int rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {
@@ -242,7 +242,6 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->origin_rx	= opx_dst_addr.hfi1_subctxt_rx;
 		params->is_intranode	= is_intranode;
 		params->opcode		= FI_OPX_HFI_BTH_OPCODE_RMA_RTS;
-		params->u8_rx		= opx_dst_addr.hfi1_subctxt_rx;
 		params->dt		= dt == FI_VOID ? FI_VOID - 1 : dt;
 		params->op		= op == FI_NOOP ? FI_NOOP - 1 : op;
 		params->target_hfi_unit = opx_dst_addr.hfi1_unit;
@@ -276,7 +275,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->dput_iov		    = &params->iov[0];
 		params->opcode			    = FI_OPX_HFI_DPUT_OPCODE_PUT;
 		params->is_intranode		    = is_intranode;
-		params->u8_rx			    = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
+		params->origin_rx		    = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
 		params->u32_extended_rx		    = u32_extended_rx;		    // dest_rx, also used for bth_rx
 		params->reliability		    = reliability;
 		params->cur_iov			    = 0;

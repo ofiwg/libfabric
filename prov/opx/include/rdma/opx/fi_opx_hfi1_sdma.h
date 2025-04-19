@@ -39,25 +39,41 @@
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_hfi1_transport.h"
 
-#define OPX_SDMA_FILL_INDEX_INVALID	(0xFFFF)
-#define OPX_SDMA_REQUEST_IOVS		(FI_OPX_HFI1_SDMA_WE_IOVS + 1)
-#define OPX_SDMA_TID_DATA_IOV_COUNT	(2)
-#define OPX_SDMA_TID_IOV_COUNT		(OPX_SDMA_TID_DATA_IOV_COUNT + 1)
-#define OPX_SDMA_NONTID_DATA_IOV_COUNT	(1)
-#define OPX_SDMA_NONTID_IOV_COUNT	(OPX_SDMA_NONTID_DATA_IOV_COUNT + 1)
-#define OPX_SDMA_REPLAY_DATA_IOV_COUNT	(1)
-#define OPX_SDMA_REPLAY_IOV_COUNT	(OPX_SDMA_REPLAY_DATA_IOV_COUNT + 1)
-#define OPX_SDMA_HFI_MAX_IOVS_PER_WRITE (64)
+#define OPX_SDMA_FILL_INDEX_INVALID	    (0xFFFF)
+#define OPX_SDMA_REQUEST_IOVS		    (FI_OPX_HFI1_SDMA_WE_IOVS + 1)
+#define OPX_SDMA_TID_DATA_IOV_COUNT	    (2)
+#define OPX_SDMA_TID_IOV_COUNT		    (OPX_SDMA_TID_DATA_IOV_COUNT + 1)
+#define OPX_SDMA_NONTID_DATA_IOV_COUNT	    (1)
+#define OPX_SDMA_NONTID_IOV_COUNT	    (OPX_SDMA_NONTID_DATA_IOV_COUNT + 1)
+#define OPX_SDMA_REPLAY_DATA_IOV_COUNT	    (1)
+#define OPX_SDMA_REPLAY_IOV_COUNT	    (OPX_SDMA_REPLAY_DATA_IOV_COUNT + 1)
+#define OPX_SDMA_HFI_MAX_IOVS_PER_WRITE	    (128)
+#define OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE (64)
 
-OPX_COMPILE_TIME_ASSERT((OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1) == OPX_DEBUG_COUNTERS_WRITEV_MAX,
-			"OPX_DEBUG_COUNTERS_WRITEV_MAX should be OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1!\n");
+OPX_COMPILE_TIME_ASSERT((OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1) <= OPX_COUNTERS_WRITEV_MAX,
+			"OPX_COUNTERS_WRITEV_MAX should be OPX_SDMA_HFI_MAX_IOVS_PER_WRITE + 1!\n");
+OPX_COMPILE_TIME_ASSERT((OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE + 1) <= OPX_SDMA_HFI_MAX_IOVS_PER_WRITE,
+			"OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE should be <= OPX_SDMA_HFI_MAX_IOVS_PER_WRITE!\n");
 
 // Driver limit of the number of TIDs that can be used in a single SDMA request
 #define OPX_SDMA_MAX_TIDS_PER_REQUEST (1024)
 
-#ifndef OPX_SDMA_MAX_WRITEVS_PER_CYCLE
-#define OPX_SDMA_MAX_WRITEVS_PER_CYCLE (1)
+#ifndef OPX_SDMA_MAX_PKTS_BOUNCE_BUF
+#define OPX_SDMA_MAX_PKTS_BOUNCE_BUF (32)
 #endif
+
+#ifndef OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE
+#define OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE (1)
+#endif
+
+#ifndef OPX_SDMA_MAX_WRITEVS_PER_CYCLE
+#define OPX_SDMA_MAX_WRITEVS_PER_CYCLE (1024)
+#endif
+
+/*
+ * Length of bounce buffer in a single SDMA Work Entry.
+ */
+#define FI_OPX_HFI1_SDMA_WE_BUF_LEN (OPX_SDMA_MAX_PKTS_BOUNCE_BUF * FI_OPX_HFI1_PACKET_MTU)
 
 #define OPX_SDMA_MEMINFO_SIZE	  (136)
 #define OPX_SDMA_MEMINFO_SIZE_QWS (OPX_SDMA_MEMINFO_SIZE >> 3)
@@ -116,16 +132,17 @@ enum opx_sdma_comp_state {
 
 struct opx_sdma_request {
 	/* ==== CACHELINE 0 ==== */
-	struct opx_sdma_request	   *next;
-	void			   *requester;
-	enum opx_sdma_comp_state   *comp_state;
-	struct hfi1_sdma_comp_entry comp_entry; // 8 bytes
-	uint32_t		    unused_0;
-	uint16_t		    fill_index;
-	uint8_t			    num_iovs;
-	uint8_t			    set_meminfo;
+	struct opx_sdma_request	  *next;
+	void			  *requester;
+	enum opx_sdma_comp_state  *comp_state;
+	struct opx_sdma_comp_entry comp_entry;
+	uint8_t			   is_sdma_we;
+	uint8_t			   unused_0[3];
+	uint16_t		   fill_index;
+	uint8_t			   num_iovs;
+	uint8_t			   set_meminfo;
 
-	uint64_t unused_1[3];
+	uint64_t unused_1;
 
 	/* ==== CACHELINE 1 ==== */
 	struct iovec			   iovecs[OPX_SDMA_REQUEST_IOVS];
@@ -155,16 +172,16 @@ struct fi_opx_hfi1_sdma_work_entry {
 
 	opx_lid_t dlid;
 
-	uint8_t rx;
-	bool	in_use;
-	bool	use_bounce_buf;
-	bool	pending_bounce_buf;
-	uint8_t unused_byte_padding[4];
+	uint16_t subctxt_rx;
+	bool	 in_use;
+	bool	 use_bounce_buf;
+	bool	 pending_bounce_buf;
+	uint8_t	 unused_byte_padding[3];
 
-	uint64_t unused_qw_padding;
+	uint64_t first_ack_time_ns;
 
 	/* ==== CACHELINE 1 ==== */
-	struct fi_opx_hfi1_sdma_packet packets[FI_OPX_HFI1_SDMA_MAX_PACKETS_TID];
+	struct fi_opx_hfi1_sdma_packet packets[OPX_SDMA_MAX_PKTS_BOUNCE_BUF];
 
 	struct {
 		struct fi_opx_completion_counter cc;
@@ -354,11 +371,12 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 		if ((sdma_we->comp_state == OPX_SDMA_COMP_COMPLETE || sdma_we->comp_state == OPX_SDMA_COMP_ERROR) &&
 		    !sdma_we->pending_bounce_buf) {
 			slist_remove(sdma_reqs, (struct slist_entry *) sdma_we, (struct slist_entry *) prev);
-			sdma_we->next	       = NULL;
-			sdma_we->comp_state    = OPX_SDMA_COMP_FREE;
-			sdma_we->num_packets   = 0;
-			sdma_we->total_payload = 0;
-			sdma_we->psn_ptr       = NULL;
+			sdma_we->next		   = NULL;
+			sdma_we->comp_state	   = OPX_SDMA_COMP_FREE;
+			sdma_we->num_packets	   = 0;
+			sdma_we->total_payload	   = 0;
+			sdma_we->psn_ptr	   = NULL;
+			sdma_we->first_ack_time_ns = 0;
 			++sdma_we->bounce_buf.use_count;
 			OPX_TRACER_TRACE_SDMA(OPX_TRACER_INSTANT, "GET_REUSED_WE");
 			return sdma_we;
@@ -373,11 +391,11 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_init_we(struct fi_opx_hfi1_sdma_work_entry *we, struct fi_opx_completion_counter *cc,
-			      uint16_t dlid, uint8_t rx, enum fi_hmem_iface iface, int hmem_device)
+			      uint16_t dlid, uint16_t subctxt_rx, enum fi_hmem_iface iface, int hmem_device)
 {
 	we->cc		= cc;
 	we->dlid	= dlid;
-	we->rx		= rx;
+	we->subctxt_rx	= subctxt_rx;
 	we->comp_state	= OPX_SDMA_COMP_FREE;
 	we->hmem.iface	= iface;
 	we->hmem.device = hmem_device;
@@ -388,7 +406,7 @@ void fi_opx_hfi1_sdma_add_packet(struct fi_opx_hfi1_sdma_work_entry *we, struct 
 				 uint64_t payload_bytes)
 {
 	assert(payload_bytes <= FI_OPX_HFI1_PACKET_MTU);
-	assert(we->num_packets < FI_OPX_HFI1_SDMA_MAX_PACKETS_TID);
+	assert(we->num_packets < OPX_HFI1_SDMA_MAX_PKTS_TID);
 
 	we->packets[we->num_packets].replay = replay;
 	we->packets[we->num_packets].length = payload_bytes;
@@ -442,7 +460,7 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
 				  union opx_hfi1_txe_scb_union *source_scb, struct iovec *iovs, const uint16_t num_iovs,
 				  const uint16_t num_packets, const uint16_t frag_size, const uint16_t req_control_bits,
 				  const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
-				  const uint64_t last_packet_bytes, const uint32_t kdeth)
+				  const uint64_t last_packet_bytes, const uint32_t kdeth, const uint8_t is_sdma_we)
 {
 	assert(!(frag_size & 0x3F)); // frag_size should be multiple of 64
 	assert(num_iovs <= FI_OPX_HFI1_SDMA_WE_IOVS && num_iovs > 0);
@@ -467,6 +485,7 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
 
 	request->num_iovs    = num_iovs + 1;
 	request->requester   = requester;
+	request->is_sdma_we  = is_sdma_we;
 	request->comp_state  = requester_comp_state;
 	request->fill_index  = OPX_SDMA_FILL_INDEX_INVALID;
 	request->set_meminfo = set_meminfo;
@@ -517,7 +536,8 @@ int opx_hfi1_sdma_enqueue_replay(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sd
 		(payload_bytes + 63) & 0xFFC0, // Frag_size
 		FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, replay->hmem_iface, replay->hmem_device,
 		replay->scb.scb_9B.hdr.dput.target.bytes, // last packet bytes
-		0					  // kdeth tid info unused for replays
+		0,					  // kdeth tid info unused for replays
+		0					  // Not an SDMA WE
 	);
 }
 
@@ -545,7 +565,7 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 	   the send we're about to do, we shouldn't need to check the
 	   returned PSN here before proceeding */
 	int32_t psn;
-	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, &opx_ep->reliability->state, we->dlid, we->rx,
+	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, opx_ep->reli_service, we->dlid, we->subctxt_rx,
 					     &we->psn_ptr, we->num_packets);
 
 	uint32_t fragsize = 0;
@@ -561,9 +581,9 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 		we->packets[i].replay->sdma_we		 = replay_back_ptr;
 		we->packets[i].replay->hmem_iface	 = we->hmem.iface;
 		we->packets[i].replay->hmem_device	 = we->hmem.device;
-		fi_opx_reliability_client_replay_register_with_update(&opx_ep->reliability->state, we->rx, we->psn_ptr,
-								      we->packets[i].replay, cc, we->packets[i].length,
-								      reliability, hfi1_type);
+		fi_opx_reliability_service_replay_register_with_update(opx_ep->reli_service, we->psn_ptr,
+								       we->packets[i].replay, cc, we->packets[i].length,
+								       reliability, hfi1_type);
 		psn = (psn + 1) & MAX_PSN;
 	}
 
@@ -587,7 +607,8 @@ void opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdm
 				      OPX_SDMA_NONTID_DATA_IOV_COUNT, we->num_packets, fragsize,
 				      FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, we->hmem.iface, we->hmem.device,
 				      last_packet_bytes,
-				      0); // kdeth tid info unused
+				      0,  // kdeth tid info unused
+				      1); // This is an SDMA work entry
 }
 
 __OPX_FORCE_INLINE__
@@ -628,7 +649,8 @@ void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 	opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state, &we->packets[0].replay->scb, payload_tid_iovs,
 				      OPX_SDMA_TID_DATA_IOV_COUNT, we->num_packets, fragsize,
 				      FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS, we->hmem.iface, we->hmem.device,
-				      last_packet_bytes, kdeth);
+				      last_packet_bytes, kdeth,
+				      1); // This is an SDMA work entry
 }
 
 __OPX_FORCE_INLINE__

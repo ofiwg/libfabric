@@ -77,6 +77,9 @@
 
 #define EXIT_FAILURE 1
 
+#define OPX_CTX_SHARING_OFF 0
+#define OPX_CTX_SHARING_ON  1
+
 // TODO: This is needed until we complete the locking model.
 #define OPX_LOCK 0
 
@@ -207,6 +210,8 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi_local_info, local_lid_entries) =
 
 #define OPX_HFI1_TYPE fi_opx_global.hfi_local_info.type
 
+#define OPX_IS_CTX_SHARING_ENABLED fi_opx_global.ctx_sharing_enabled
+
 struct fi_opx_global_data {
 	/* == CACHE LINE 0 == */
 	struct fi_info	      *info;
@@ -221,12 +226,14 @@ struct fi_opx_global_data {
 	struct dlist_entry	     hmem_domain_list;
 	struct fi_opx_daos_hfi_rank *daos_hfi_rank_hashmap;
 	enum fi_progress	     progress;
-	uint32_t		     unused_dw;
+	bool			     ctx_sharing_enabled;
+	uint8_t			     unused[3];
 	uint64_t		     unused_qw[4];
 
 	/* == CACHE LINE 2+ == */
 	struct opx_hfi_local_info hfi_local_info;
-	char			 *opx_hfi1_type_strings[];
+
+	char *opx_hfi1_type_strings[];
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_global_data, hmem_domain_list) == (FI_OPX_CACHE_LINE_SIZE * 1),
 			"Offset of fi_opx_global_data->hmem_domain_list should start at cacheline 1!");
@@ -400,8 +407,6 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr);
 
 int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_av **av, void *context);
-
-int fi_opx_stx_context(struct fid_domain *domain, struct fi_tx_attr *attr, struct fid_stx **stx, void *context);
 
 int fi_opx_cq_open(struct fid_domain *dom, struct fi_cq_attr *attr, struct fid_cq **eq, void *context);
 

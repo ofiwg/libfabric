@@ -42,47 +42,51 @@
  * C requires another indirection for expanding macros since
  * operands of the token pasting operator are not expanded */
 
-#define FI_OPX_ATOMIC_SPECIALIZED_FUNC(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE) \
-	FI_OPX_ATOMIC_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)
+#define FI_OPX_ATOMIC_SPECIALIZED_FUNC(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING) \
+	FI_OPX_ATOMIC_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING)
 
-#define FI_OPX_ATOMIC_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)                                        \
-	static inline ssize_t fi_opx_atomic_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                      \
+#define FI_OPX_ATOMIC_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING)                           \
+	static inline ssize_t fi_opx_atomic_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(      \
 		struct fid_ep *ep, const void *buf, size_t count, void *desc, fi_addr_t dst_addr, uint64_t addr,       \
 		uint64_t key, enum fi_datatype datatype, enum fi_op op, void *context)                                 \
 	{                                                                                                              \
 		return fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op, context, LOCK, AV,     \
-					     CAPS, RELIABILITY, HFI1_TYPE);                                            \
+					     CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING);                               \
 	}                                                                                                              \
-	static inline ssize_t fi_opx_inject_atomic_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(               \
-		struct fid_ep *ep, const void *buf, size_t count, fi_addr_t dst_addr, uint64_t addr, uint64_t key,     \
-		enum fi_datatype datatype, enum fi_op op)                                                              \
+	static inline ssize_t                                                                                          \
+		fi_opx_inject_atomic_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(             \
+			struct fid_ep *ep, const void *buf, size_t count, fi_addr_t dst_addr, uint64_t addr,           \
+			uint64_t key, enum fi_datatype datatype, enum fi_op op)                                        \
 	{                                                                                                              \
 		return fi_opx_inject_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op, LOCK, AV, CAPS, \
-						    RELIABILITY, HFI1_TYPE);                                           \
+						    RELIABILITY, HFI1_TYPE, CTX_SHARING);                              \
 	}                                                                                                              \
-	static inline ssize_t fi_opx_fetch_atomic_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                \
-		struct fid_ep *ep, const void *buf, size_t count, void *desc, void *result, void *result_desc,         \
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key, enum fi_datatype datatype, enum fi_op op,            \
-		void *context)                                                                                         \
+	static inline ssize_t                                                                                          \
+		fi_opx_fetch_atomic_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(              \
+			struct fid_ep *ep, const void *buf, size_t count, void *desc, void *result, void *result_desc, \
+			fi_addr_t dest_addr, uint64_t addr, uint64_t key, enum fi_datatype datatype, enum fi_op op,    \
+			void *context)                                                                                 \
 	{                                                                                                              \
 		return fi_opx_fetch_atomic_generic(ep, buf, count, desc, result, result_desc, dest_addr, addr, key,    \
-						   datatype, op, context, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE);     \
+						   datatype, op, context, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE,      \
+						   CTX_SHARING);                                                       \
 	}                                                                                                              \
-	static inline ssize_t fi_opx_compare_atomic_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(              \
-		struct fid_ep *ep, const void *buf, size_t count, void *desc, const void *compare, void *compare_desc, \
-		void *result, void *result_desc, fi_addr_t dest_addr, uint64_t addr, uint64_t key,                     \
-		enum fi_datatype datatype, enum fi_op op, void *context)                                               \
+	static inline ssize_t                                                                                          \
+		fi_opx_compare_atomic_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(            \
+			struct fid_ep *ep, const void *buf, size_t count, void *desc, const void *compare,             \
+			void *compare_desc, void *result, void *result_desc, fi_addr_t dest_addr, uint64_t addr,       \
+			uint64_t key, enum fi_datatype datatype, enum fi_op op, void *context)                         \
 	{                                                                                                              \
 		return fi_opx_compare_atomic_generic(ep, buf, count, desc, compare, compare_desc, result, result_desc, \
 						     dest_addr, addr, key, datatype, op, context, LOCK, AV, CAPS,      \
-						     RELIABILITY, HFI1_TYPE);                                          \
+						     RELIABILITY, HFI1_TYPE, CTX_SHARING);                             \
 	}
 
-#define FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE) \
-	FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)
+#define FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING) \
+	FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING)
 
-#define FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE) \
-	fi_opx_##TYPE##_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE
+#define FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING) \
+	fi_opx_##TYPE##_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING
 
 #ifdef __cplusplus
 extern "C" {
@@ -116,19 +120,21 @@ ssize_t fi_opx_fetch_atomic_generic(struct fid_ep *ep, const void *buf, size_t c
 				    void *result_desc, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 				    enum fi_datatype datatype, enum fi_op op, void *context, const int lock_required,
 				    const enum fi_av_type av_type, const uint64_t caps,
-				    const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type);
+				    const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
+				    const bool ctx_sharing);
 
 ssize_t fi_opx_compare_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, void *desc, const void *compare,
 				      void *compare_desc, void *result, void *result_desc, fi_addr_t dest_addr,
 				      uint64_t addr, uint64_t key, enum fi_datatype datatype, enum fi_op op,
 				      void *context, int lock_required, const enum fi_av_type av_type,
 				      const uint64_t caps, const enum ofi_reliability_kind reliability,
-				      const enum opx_hfi1_type hfi1_type);
+				      const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
 
 ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, fi_addr_t dest_addr,
 				     uint64_t addr, uint64_t key, enum fi_datatype datatype, enum fi_op op,
 				     int lock_required, const enum fi_av_type av_type, const uint64_t caps,
-				     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type);
+				     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
+				     const bool ctx_sharing);
 
 #ifdef __cplusplus
 }

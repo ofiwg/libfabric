@@ -64,8 +64,7 @@
 #ifdef OPX_DAOS
 #define OPX_SHM_MAX_CONN_NUM 0xffff
 #else
-/* OPX_MAX_HFIS * 256 */
-#define OPX_SHM_MAX_CONN_NUM  (0x1000)
+#define OPX_SHM_MAX_CONN_NUM  (0x8000)
 #define OPX_SHM_MAX_CONN_MASK (OPX_SHM_MAX_CONN_NUM - 1)
 #endif
 static_assert((OPX_SHM_MAX_CONN_NUM & OPX_SHM_MAX_CONN_MASK) == 0, "OPX_SHM_MAX_CONN_NUM must be a power of 2!");
@@ -74,7 +73,8 @@ static_assert((OPX_SHM_MAX_CONN_NUM & OPX_SHM_MAX_CONN_MASK) == 0, "OPX_SHM_MAX_
 #define OPX_SHM_SEGMENT_NAME_PREFIX	"/opx.shm."
 #define OPX_SHM_FILE_NAME_PREFIX_FORMAT "%s-%02hhX.%d"
 
-#define OPX_SHM_SEGMENT_INDEX(hfi_unit, rx_id) ((uint16_t) ((((uint16_t) hfi_unit) << 8) | ((uint8_t) rx_id)))
+#define OPX_SHM_SEGMENT_INDEX(hfi_unit, rx_id) \
+	((uint32_t) ((((uint32_t) __be16_to_cpu(rx_id) & 0x000007ff) << 4) | (uint32_t) hfi_unit))
 
 #define opx_shm_compiler_barrier() __asm__ __volatile__("" ::: "memory")
 #define opx_shm_x86_pause()	   __asm__ __volatile__("pause")
@@ -106,6 +106,8 @@ struct opx_shm_rx {
 	struct opx_shm_fifo_segment *fifo_segment;
 	void			    *segment_ptr;
 	size_t			     segment_size;
+	int			     segment_fd;
+	uint32_t		     unused_padding;
 	char			     segment_key[OPX_SHM_SEGMENT_NAME_MAX_LENGTH];
 
 	struct opx_shm_resynch resynch_connection[OPX_SHM_MAX_CONN_NUM];
@@ -157,7 +159,7 @@ struct opx_shm_fifo_segment {
 int opx_shm_match(struct dlist_entry *item, const void *arg);
 
 static inline ssize_t opx_shm_rx_init(struct opx_shm_rx *rx, struct fi_provider *prov, const char *const unique_job_key,
-				      const unsigned rx_id, const unsigned fifo_size, const unsigned packet_size)
+				      const uint16_t subctxt_rx, const unsigned fifo_size, const unsigned packet_size)
 {
 	__attribute__((__unused__)) int err	    = 0;
 	int				segment_fd  = 0;
@@ -172,10 +174,11 @@ static inline ssize_t opx_shm_rx_init(struct opx_shm_rx *rx, struct fi_provider 
 		rx->resynch_connection[i].counter   = 0;
 	}
 
-	snprintf(rx->segment_key, OPX_SHM_SEGMENT_NAME_MAX_LENGTH, OPX_SHM_SEGMENT_NAME_PREFIX "%s.%d", unique_job_key,
-		 rx_id);
+	snprintf(rx->segment_key, OPX_SHM_SEGMENT_NAME_MAX_LENGTH, OPX_SHM_SEGMENT_NAME_PREFIX "%s.%hu", unique_job_key,
+		 subctxt_rx);
 
-	FI_LOG(prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "SHM creating of %u context Segment (%s)\n", rx_id, rx->segment_key);
+	FI_LOG(prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "SHM creating of %hu context Segment (%s)\n", subctxt_rx,
+	       rx->segment_key);
 	/* to ensure 64-byte alignment of fifo */
 	size_t segment_size = sizeof(struct opx_shm_fifo_segment) + 64;
 
@@ -226,14 +229,13 @@ static inline ssize_t opx_shm_rx_init(struct opx_shm_rx *rx, struct fi_provider 
 
 	rx->segment_ptr	 = segment_ptr;
 	rx->segment_size = segment_size;
+	rx->segment_fd	 = segment_fd;
 
 	dlist_insert_head(&rx->list_entry, &shm_rx_list); // add to signal handler list.
 
 	ofi_atomic_set64(&rx->fifo_segment->initialized_, 1);
 
-	close(segment_fd); /* safe to close now */
-
-	FI_LOG(prov, FI_LOG_INFO, FI_LOG_FABRIC, "SHM creation of %u context passed. Segment (%s)\n", rx_id,
+	FI_LOG(prov, FI_LOG_INFO, FI_LOG_FABRIC, "SHM creation of %hu context passed. Segment (%s)\n", subctxt_rx,
 	       rx->segment_key);
 
 	return FI_SUCCESS;
@@ -248,6 +250,8 @@ static inline ssize_t opx_shm_rx_fini(struct opx_shm_rx *rx)
 	if (rx->segment_ptr != NULL) {
 		munmap(rx->segment_ptr, rx->segment_size);
 		shm_unlink(rx->segment_key);
+
+		close(rx->segment_fd);
 
 		return FI_SUCCESS;
 	}
@@ -276,7 +280,7 @@ static inline ssize_t opx_shm_tx_init(struct opx_shm_tx *tx, struct fi_provider 
 }
 
 static inline ssize_t opx_shm_tx_connect(struct opx_shm_tx *tx, const char *const unique_job_key,
-					 const uint32_t segment_index, const unsigned rx_id, const unsigned fifo_size,
+					 const uint32_t segment_index, const uint16_t rx_id, const unsigned fifo_size,
 					 const unsigned packet_size)
 {
 	assert(segment_index < OPX_SHM_MAX_CONN_NUM);
@@ -285,7 +289,7 @@ static inline ssize_t opx_shm_tx_connect(struct opx_shm_tx *tx, const char *cons
 	void *segment_ptr = tx->connection[segment_index].segment_ptr;
 	if (segment_ptr == NULL) {
 		char segment_key[OPX_SHM_SEGMENT_NAME_MAX_LENGTH];
-		snprintf(segment_key, OPX_SHM_SEGMENT_NAME_MAX_LENGTH, OPX_SHM_SEGMENT_NAME_PREFIX "%s.%d",
+		snprintf(segment_key, OPX_SHM_SEGMENT_NAME_MAX_LENGTH, OPX_SHM_SEGMENT_NAME_PREFIX "%s.%hu",
 			 unique_job_key, rx_id);
 
 		int segment_fd = shm_open(segment_key, O_RDWR, 0600);
@@ -324,7 +328,7 @@ static inline ssize_t opx_shm_tx_connect(struct opx_shm_tx *tx, const char *cons
 	tx->fifo_segment[segment_index] = fifo_segment;
 
 	FI_LOG(tx->prov, FI_LOG_INFO, FI_LOG_FABRIC,
-	       "SHM connection to %u context passed. Segment (%s), segment (%p) size %zu segment_index %u\n", rx_id,
+	       "SHM connection to %hu context passed. Segment (%s), segment (%p) size %zu segment_index %u\n", rx_id,
 	       tx->connection[segment_index].segment_key, segment_ptr, tx->connection[segment_index].segment_size,
 	       segment_index);
 
@@ -376,7 +380,7 @@ static inline unsigned opx_shm_daos_rank_index(unsigned rank, unsigned rank_inst
 	return index;
 }
 
-static inline void *opx_shm_tx_next(struct opx_shm_tx *tx, uint8_t peer_hfi_unit, uint8_t peer_rx_index, uint64_t *pos,
+static inline void *opx_shm_tx_next(struct opx_shm_tx *tx, uint8_t peer_hfi_unit, uint16_t peer_rx_index, uint64_t *pos,
 				    bool use_rank, unsigned rank, unsigned rank_inst, ssize_t *rc)
 {
 #ifdef OPX_DAOS

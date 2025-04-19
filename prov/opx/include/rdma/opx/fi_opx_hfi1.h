@@ -123,8 +123,14 @@
 
    NOTE: This value MUST be a multiple of 64!
    */
-#define FI_OPX_MP_EGR_CHUNK_SIZE (4160)
 
+#ifndef FI_OPX_MP_EGR_CHUNK_SIZE
+#ifndef OPX_JKR_SUPPORT
+#define FI_OPX_MP_EGR_CHUNK_SIZE (4160)
+#else
+#define FI_OPX_MP_EGR_CHUNK_SIZE (FI_OPX_HFI1_PACKET_MTU)
+#endif
+#endif
 /* For full MP-Eager chunks, we pack 16 bytes of payload data in the
    packet header.
 
@@ -145,7 +151,7 @@
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS(hfi1_type) \
 	((FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) >> 3) /* PAYLOAD QWS CONSUMED */
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL 16
-#define FI_OPX_MP_EGR_XFER_BYTES_TAIL	 0x0010000000000000ull
+#define FI_OPX_MP_EGR_XFER_BYTES_TAIL	 0x0080000000000000ull
 
 static_assert(!(FI_OPX_MP_EGR_CHUNK_SIZE & 0x3F), "FI_OPX_MP_EGR_CHUNK_SIZE Must be a multiple of 64!");
 static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT > FI_OPX_MP_EGR_CHUNK_SIZE,
@@ -161,14 +167,26 @@ static_assert(
 /*
  * The maximum number of packets to send for a single SDMA call to writev.
  */
-#ifndef FI_OPX_HFI1_SDMA_MAX_PACKETS
-#define FI_OPX_HFI1_SDMA_MAX_PACKETS (32)
+#ifndef OPX_HFI1_SDMA_MAX_PKTS
+#define OPX_HFI1_SDMA_MAX_PKTS (128)
 #endif
 
-#ifndef FI_OPX_HFI1_SDMA_MAX_PACKETS_TID
-#define FI_OPX_HFI1_SDMA_MAX_PACKETS_TID (32)
+#ifndef OPX_HFI1_SDMA_DEFAULT_PKTS
+#define OPX_HFI1_SDMA_DEFAULT_PKTS (32)
 #endif
 
+#ifndef OPX_HFI1_SDMA_MAX_PKTS_TID
+#define OPX_HFI1_SDMA_MAX_PKTS_TID (512)
+#endif
+
+#ifndef OPX_HFI1_SDMA_DEFAULT_PKTS_TID
+#define OPX_HFI1_SDMA_DEFAULT_PKTS_TID (64)
+#endif
+
+static_assert(OPX_HFI1_SDMA_DEFAULT_PKTS <= OPX_HFI1_SDMA_MAX_PKTS,
+	      "OPX_HFI1_SDMA_DEFAULT_PKTS must be less than or equal to OPX_HFI1_SDMA_MAX_PKTS!");
+static_assert(OPX_HFI1_SDMA_DEFAULT_PKTS_TID <= OPX_HFI1_SDMA_MAX_PKTS_TID,
+	      "OPX_HFI1_SDMA_DEFAULT_PKTS_TID must be less than or equal to OPX_HFI1_SDMA_MAX_PKTS_TID!");
 /*
  * The number of SDMA requests (SDMA work entries) available.
  * Each of these will use a single comp index entry in the SDMA ring buffer
@@ -183,7 +201,11 @@ static_assert(
  *       on too much SDMA work at once.
  */
 #ifndef FI_OPX_HFI1_SDMA_MAX_WE
+#ifndef OPX_JKR_SUPPORT
 #define FI_OPX_HFI1_SDMA_MAX_WE (256)
+#else
+#define FI_OPX_HFI1_SDMA_MAX_WE (1024)
+#endif
 #endif
 
 /*
@@ -204,17 +226,6 @@ static_assert(
  * 1 payload data vec, 1 TID mapping.
  */
 #define FI_OPX_HFI1_SDMA_WE_IOVS (2)
-
-/*
- * The number of iovecs for SDMA replay - 2 iovec per packet
- * (with no header auto-generation support)
- */
-#define FI_OPX_HFI1_SDMA_REPLAY_WE_IOVS (FI_OPX_HFI1_SDMA_MAX_PACKETS * 2)
-
-/*
- * Length of bounce buffer in a single SDMA Work Entry.
- */
-#define FI_OPX_HFI1_SDMA_WE_BUF_LEN (FI_OPX_HFI1_SDMA_MAX_PACKETS * FI_OPX_HFI1_PACKET_MTU)
 
 #define FI_OPX_HFI1_SDMA_MAX_COMP_INDEX (128) // This should what opx_ep->hfi->info.sdma.queue_size is set to.
 
@@ -465,6 +476,13 @@ union fi_opx_hfi1_sdma_state {
 	//	};
 };
 
+struct opx_sdma_comp_entry {
+	uint32_t status;
+	uint32_t errcode;
+	uint64_t start_time_ns;
+	uint64_t end_time_ns;
+};
+
 /* This 'static' information will not change after it is set by the driver
  * and can be safely copied into other structures to improve cache layout */
 struct fi_opx_hfi1_sdma_static {
@@ -473,7 +491,7 @@ struct fi_opx_hfi1_sdma_static {
 	uint16_t			      done_index;
 	uint16_t			      queue_size;
 	volatile struct hfi1_sdma_comp_entry *completion_queue;
-	struct hfi1_sdma_comp_entry	     *queued_entries[FI_OPX_HFI1_SDMA_MAX_COMP_INDEX];
+	struct opx_sdma_comp_entry	     *queued_entries[FI_OPX_HFI1_SDMA_MAX_COMP_INDEX];
 };
 
 struct fi_opx_hfi1_rxe_state {
@@ -487,14 +505,17 @@ struct fi_opx_hfi1_rxe_state {
 struct fi_opx_hfi1_rxe_static {
 	struct {
 		uint32_t *base_addr;
-		uint32_t  rhf_off;
 
+		uint32_t rhf_off;
 		uint32_t elemsz;
+
 		uint32_t elemlast;
 		uint32_t elemcnt;
+
 		uint64_t rx_poll_mask;
 
 		uint32_t *rhf_base;
+
 		uint64_t *rhe_base;
 
 		volatile uint64_t *head_register;
@@ -503,14 +524,16 @@ struct fi_opx_hfi1_rxe_static {
 
 	struct {
 		uint32_t *base_addr;
-		uint32_t  elemsz;
-		uint32_t  size;
+
+		uint32_t elemsz;
+		uint32_t size;
 
 		volatile uint64_t *head_register;
 
 	} egrq;
 
 	uint8_t id; /* hfi receive context id [0..159] */
+	uint8_t unused[7];
 };
 
 struct fi_opx_hfi1_context {
@@ -527,19 +550,21 @@ struct fi_opx_hfi1_context {
 
 	} info;
 
-	int		  fd;
-	opx_lid_t	  lid;
-	struct _hfi_ctrl *ctrl;
-	// struct hfi1_user_info_dep	user_info;
+	int		   fd;
+	opx_lid_t	   lid;
+	struct _hfi_ctrl  *ctrl;
 	enum opx_hfi1_type hfi1_type;
 	uint32_t	   hfi_unit;
 	uint32_t	   hfi_port;
-	uint64_t	   gid_hi;
-	uint64_t	   gid_lo;
-	uint16_t	   mtu;
-	uint8_t		   bthqp;
-	uint16_t	   jkey;
-	uint16_t	   send_ctxt;
+	uint32_t	   unused;
+
+	uint64_t gid_hi;
+	uint64_t gid_lo;
+	uint16_t mtu;
+	uint8_t	 bthqp;
+	uint8_t	 subctxt;
+	uint16_t jkey;
+	uint16_t send_ctxt;
 
 	uint16_t sl2sc[32];
 	uint16_t sc2vl[32];
@@ -746,10 +771,10 @@ void fi_opx_init_hfi_lookup();
 #define FI_OPX_SHM_PACKET_SIZE (FI_OPX_HFI1_PACKET_MTU + sizeof(union opx_hfi1_packet_hdr))
 
 #ifndef NDEBUG
-#define OPX_BUF_FREE(x)                      \
-	do {                                 \
-		memset(x, 0x3C, sizeof(*x)); \
-		ofi_buf_free(x);             \
+#define OPX_BUF_FREE(x)                                \
+	do {                                           \
+		memset(x, 0x3C, MIN(512, sizeof(*x))); \
+		ofi_buf_free(x);                       \
 	} while (0)
 #else
 #define OPX_BUF_FREE(x) ofi_buf_free(x)
@@ -860,7 +885,7 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ref_cnt                       %#lX \n", context->ref_cnt);
 }
 
-void opx_reset_context(struct fi_opx_ep *opx_ep);
+void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx_hfi1_type hfi1_type);
 
 void opx_link_down_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep);
 

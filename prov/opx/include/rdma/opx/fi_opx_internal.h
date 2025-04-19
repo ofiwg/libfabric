@@ -50,14 +50,8 @@
 
 #define OPX_HMEM_SIZE_QWS (3)
 
-union fi_opx_mp_egr_id {
-	uint64_t id;
-
-	struct {
-		uint32_t uid;
-		uint32_t slid_origin_rx; // first 3 bytes is slid and last byte is rx
-	};
-} __attribute__((__packed__));
+#define OPX_GET_MP_EGR_ID(psn, slid, origin_rx) \
+	(((uint64_t) psn) << 40 | ((uint64_t) slid) << 16 | (uint64_t) origin_rx)
 
 struct opx_context {
 	/**** CACHELINE 0 ****/
@@ -73,10 +67,10 @@ struct opx_context {
 
 	uint64_t tag; /* fi_cq_tagged_entry::tag */
 	union {
-		uint64_t	       ignore;		   /* only for tagged receive */
-		void		      *claim;		   /* only for peek/claim */
-		void		      *multi_recv_context; /* only for individual FI_MULTI_RECV's */
-		union fi_opx_mp_egr_id mp_egr_id;
+		uint64_t ignore;	     /* only for tagged receive */
+		void	*claim;		     /* only for peek/claim */
+		void	*multi_recv_context; /* only for individual FI_MULTI_RECV's */
+		uint64_t mp_egr_id;
 	};
 
 	volatile uint64_t byte_counter;

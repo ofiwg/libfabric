@@ -50,7 +50,7 @@
 #define OPX_HFI1_TYPE_COUNT 3
 
 typedef struct fi_ops_cq op_matrix_t[FI_CQ_FORMAT_COUNT][1 /* OFI_RELIABILITY_KIND_ONLOAD */][FI_OPX_COMMS_COUNT]
-				    [OPX_HFI1_TYPE_COUNT];
+				    [OPX_HFI1_TYPE_COUNT][2 /* CTX_SHARING ON or OFF */];
 
 static ssize_t fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
 {
@@ -111,20 +111,21 @@ static const char *fi_opx_cq_strerror(struct fid_cq *cq, int prov_errno, const v
 	return NULL;
 }
 
-#define FI_OPX_CQ_OPS_STRUCT_NAME(FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE) \
-	fi_opx_ops_cq_##FORMAT##_##LOCK##_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE
+#define FI_OPX_CQ_OPS_STRUCT_NAME(FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING) \
+	fi_opx_ops_cq_##FORMAT##_##LOCK##_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING
 
-#define FI_OPX_CQ_OPS_STRUCT_INIT(FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE)                                      \
-	{                                                                                                                \
-		.size	   = sizeof(struct fi_ops_cq),                                                                   \
-		.read	   = FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE), \
-		.readfrom  = FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, FORMAT, LOCK, RELIABILITY, MASK, CAPS,         \
-							     HFI1_TYPE),                                                 \
-		.readerr   = fi_opx_cq_readerr,                                                                          \
-		.sread	   = fi_opx_cq_sread,                                                                            \
-		.sreadfrom = fi_opx_cq_sreadfrom,                                                                        \
-		.signal	   = fi_no_cq_signal,                                                                            \
-		.strerror  = fi_opx_cq_strerror,                                                                         \
+#define FI_OPX_CQ_OPS_STRUCT_INIT(FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING)                        \
+	{                                                                                                               \
+		.size	   = sizeof(struct fi_ops_cq),                                                                  \
+		.read	   = FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, \
+							     CTX_SHARING),                                              \
+		.readfrom  = FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, FORMAT, LOCK, RELIABILITY, MASK, CAPS,        \
+							     HFI1_TYPE, CTX_SHARING),                                   \
+		.readerr   = fi_opx_cq_readerr,                                                                         \
+		.sread	   = fi_opx_cq_sread,                                                                           \
+		.sreadfrom = fi_opx_cq_sreadfrom,                                                                       \
+		.signal	   = fi_no_cq_signal,                                                                           \
+		.strerror  = fi_opx_cq_strerror,                                                                        \
 	}
 
 #endif

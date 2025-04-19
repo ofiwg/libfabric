@@ -91,11 +91,11 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
  * C requires another indirection for expanding macros since
  * operands of the token pasting operator are not expanded */
 
-#define FI_OPX_MSG_SPECIALIZED_FUNC(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE) \
-	FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)
+#define FI_OPX_MSG_SPECIALIZED_FUNC(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING) \
+	FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING)
 
-#define FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)                                           \
-	static inline ssize_t fi_opx_send_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                        \
+#define FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING)                              \
+	static inline ssize_t fi_opx_send_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(        \
 		struct fid_ep *ep, const void *buf, size_t len, void *desc, fi_addr_t dest_addr, void *context)        \
 	{                                                                                                              \
 		return fi_opx_ep_tx_send(ep, buf, len, desc, dest_addr, 0, context, 0, LOCK, /* lock_required */       \
@@ -103,28 +103,28 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 					 1,						     /* is_contiguous */       \
 					 0,						     /* override_flags */      \
 					 0,						     /* flags */               \
-					 CAPS | FI_MSG, RELIABILITY, HFI1_TYPE);                                       \
+					 CAPS | FI_MSG, RELIABILITY, HFI1_TYPE, CTX_SHARING);                          \
 	}                                                                                                              \
-	static inline ssize_t fi_opx_recv_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                        \
+	static inline ssize_t fi_opx_recv_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(        \
 		struct fid_ep *ep, void *buf, size_t len, void *desc, fi_addr_t src_addr, void *context)               \
 	{                                                                                                              \
 		return fi_opx_recv_generic(ep, buf, len, desc, src_addr, 0, (uint64_t) - 1, context, LOCK, AV, FI_MSG, \
-					   RELIABILITY, HFI1_TYPE);                                                    \
+					   RELIABILITY, HFI1_TYPE, CTX_SHARING);                                       \
 	}                                                                                                              \
-	static inline ssize_t fi_opx_inject_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                      \
+	static inline ssize_t fi_opx_inject_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(      \
 		struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr)                                   \
 	{                                                                                                              \
 		return fi_opx_ep_tx_inject(ep, buf, len, dest_addr, 0, 0, LOCK, /* lock_required */                    \
 					   AV,					/* av_type */                          \
 					   0,					/* flags */                            \
-					   CAPS | FI_MSG, RELIABILITY, HFI1_TYPE);                                     \
+					   CAPS | FI_MSG, RELIABILITY, HFI1_TYPE, CTX_SHARING);                        \
 	}                                                                                                              \
-	static inline ssize_t fi_opx_recvmsg_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                     \
+	static inline ssize_t fi_opx_recvmsg_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(     \
 		struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)                                           \
 	{                                                                                                              \
-		return fi_opx_recvmsg_generic(ep, msg, flags, LOCK, AV, RELIABILITY, HFI1_TYPE);                       \
+		return fi_opx_recvmsg_generic(ep, msg, flags, LOCK, AV, RELIABILITY, HFI1_TYPE, CTX_SHARING);          \
 	}                                                                                                              \
-	static inline ssize_t fi_opx_senddata_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                    \
+	static inline ssize_t fi_opx_senddata_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(    \
 		struct fid_ep *ep, const void *buf, size_t len, void *desc, uint64_t data, fi_addr_t dest_addr,        \
 		void *context)                                                                                         \
 	{                                                                                                              \
@@ -133,22 +133,22 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 					 1,							/* is_contiguous */    \
 					 0,							/* override_flags */   \
 					 FI_REMOTE_CQ_DATA,					/* flags */            \
-					 CAPS | FI_MSG, RELIABILITY, HFI1_TYPE);                                       \
+					 CAPS | FI_MSG, RELIABILITY, HFI1_TYPE, CTX_SHARING);                          \
 	}                                                                                                              \
-	static inline ssize_t fi_opx_injectdata_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE(                  \
+	static inline ssize_t fi_opx_injectdata_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(  \
 		struct fid_ep *ep, const void *buf, size_t len, uint64_t data, fi_addr_t dest_addr)                    \
 	{                                                                                                              \
 		return fi_opx_ep_tx_inject(ep, buf, len, dest_addr, 0, data, LOCK, /* lock_required */                 \
 					   AV,					   /* av_type */                       \
 					   FI_REMOTE_CQ_DATA,			   /* flags */                         \
-					   CAPS | FI_MSG, RELIABILITY, HFI1_TYPE);                                     \
+					   CAPS | FI_MSG, RELIABILITY, HFI1_TYPE, CTX_SHARING);                        \
 	}
 
-#define FI_OPX_MSG_SPECIALIZED_FUNC_NAME(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE) \
-	FI_OPX_MSG_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)
+#define FI_OPX_MSG_SPECIALIZED_FUNC_NAME(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING) \
+	FI_OPX_MSG_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING)
 
-#define FI_OPX_MSG_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE) \
-	fi_opx_##TYPE##_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE
+#define FI_OPX_MSG_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING) \
+	fi_opx_##TYPE##_##LOCK##_##AV##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING
 
 enum fi_opx_ep_state { FI_OPX_EP_UNINITIALIZED = 0, FI_OPX_EP_INITITALIZED_DISABLED, FI_OPX_EP_INITITALIZED_ENABLED };
 
@@ -167,38 +167,6 @@ static const char *const OPX_WORK_TYPE_STR[] = {[OPX_WORK_TYPE_SDMA]	  = "SDMA",
 						[OPX_WORK_TYPE_SHM]	  = "SHM",
 						[OPX_WORK_TYPE_TID_SETUP] = "TID_SETUP",
 						[OPX_WORK_TYPE_LAST]	  = "LAST"};
-
-struct fi_opx_stx {
-	/* == CACHE LINE 0,1,2 == */
-
-	struct fid_stx		    stx_fid; /* 80 bytes */
-	struct fi_opx_domain	   *domain;
-	struct fi_tx_attr	    attr; /* 72 bytes */
-	struct fi_opx_hfi1_context *hfi;
-	uint64_t		    unused_cacheline_2[2];
-
-	/* == CACHE LINE 3 == */
-
-	struct fi_opx_reliability_client_state reliability_state;   /* 56 bytes */
-	struct fi_opx_reliability_service      reliability_service; /* ONLOAD only */
-	uint8_t				       reliability_rx;	    /* ONLOAD only */
-
-	/* == CACHE LINE 4-9 == */
-
-	struct {
-		struct fi_opx_hfi1_txe_scb_9B  inject;
-		struct fi_opx_hfi1_txe_scb_9B  send;
-		struct fi_opx_hfi1_txe_scb_9B  rzv;
-		struct fi_opx_hfi1_txe_scb_16B inject_16B;
-		struct fi_opx_hfi1_txe_scb_16B send_16B;
-		struct fi_opx_hfi1_txe_scb_16B rzv_16B;
-	} tx;
-
-	/* == CACHE LINE 10 == */
-
-	struct fi_opx_hfi1_rxe_state rxe_state; /* ignored for ofi tx */
-	int64_t			     ref_cnt;
-};
 
 /*
  * This structure layout ensures that the 'fi_tinject()' function will only
@@ -287,11 +255,14 @@ struct fi_opx_ep_tx {
 	struct opx_sdma_queue sdma_request_queue;
 	struct slist	      sdma_pending_queue;
 	struct ofi_bufpool   *sdma_request_pool;
-	uint64_t	      unused_cacheline7[2];
+	uint16_t	      sdma_max_writevs_per_cycle;
+	uint16_t	      sdma_max_iovs_per_writev;
+	uint16_t	      sdma_max_pkts_tid;
+	uint16_t	      sdma_max_pkts;
+	uint64_t	      unused_cacheline7[1];
 
 	/* == CACHE LINE 21, ... == */
-	int64_t		   ref_cnt;
-	struct fi_opx_stx *stx;
+	int64_t ref_cnt;
 	// struct opx_shm_tx is very large and should go last!
 	struct opx_shm_tx shm;
 	void		 *mem;
@@ -431,14 +402,6 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, state) == (FI_OPX_CACHE_LI
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, tx) == (FI_OPX_CACHE_LINE_SIZE * 5),
 			"Offset of fi_opx_ep_rx->tx should start at cacheline 5!");
 
-struct fi_opx_ep_reliability {
-	struct fi_opx_reliability_client_state state;	/* 14 qws = 112 bytes */
-	struct fi_opx_reliability_service      service; /* ONLOAD only */
-	uint8_t				       rx;	/* ONLOAD only */
-	void				      *mem;
-	int64_t				       ref_cnt;
-};
-
 struct fi_opx_daos_av_rank_key {
 	uint32_t rank;
 	uint32_t rank_inst;
@@ -478,13 +441,13 @@ struct fi_opx_ep_daos_info {
  */
 struct fi_opx_ep {
 	/* == CACHE LINE 0,1 == */
-	struct fid_ep		      ep_fid; /* 10 qws */
-	uint64_t		      rpc_reserved;
-	struct fi_opx_ep_tx	     *tx;
-	struct fi_opx_ep_rx	     *rx;
-	struct fi_opx_ep_reliability *reliability;
-	struct fi_opx_cntr	     *read_cntr;
-	struct fi_opx_cntr	     *write_cntr;
+	struct fid_ep			   ep_fid; /* 10 qws */
+	uint64_t			   rpc_reserved;
+	struct fi_opx_ep_tx		  *tx;
+	struct fi_opx_ep_rx		  *rx;
+	struct fi_opx_reliability_service *reli_service; /* ONLOAD only */
+	struct fi_opx_cntr		  *read_cntr;
+	struct fi_opx_cntr		  *write_cntr;
 
 	/* == CACHE LINE 2 == */
 	struct fi_opx_cntr    *recv_cntr;
@@ -541,7 +504,7 @@ struct fi_opx_ep {
 
 	FI_OPX_DEBUG_COUNTERS_DECLARE_COUNTERS;
 
-	void		      *mem;
+	void *mem;
 } __attribute((aligned(L2_CACHE_LINE_SIZE)));
 
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, recv_cntr) == (FI_OPX_CACHE_LINE_SIZE * 2),
@@ -627,13 +590,13 @@ void fi_opx_ep_rx_append_ue_msg(struct fi_opx_ep_rx *const rx, const union opx_h
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
 				const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst,
 				const bool daos_enabled, struct fi_opx_debug_counters *debug_counters,
-				const opx_lid_t slid);
+				const opx_lid_t slid, const uint64_t rcv_time_ns);
 
 void fi_opx_ep_rx_append_ue_tag(struct fi_opx_ep_rx *const rx, const union opx_hfi1_packet_hdr *const hdr,
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
 				const unsigned is_intranode, const uint32_t rank, const uint32_t rank_inst,
 				const bool daos_enabled, struct fi_opx_debug_counters *debug_counters,
-				const opx_lid_t slid);
+				const opx_lid_t slid, const uint64_t rcv_time_ns);
 
 void fi_opx_ep_rx_append_ue_egr(struct fi_opx_ep_rx *const rx, const union opx_hfi1_packet_hdr *const hdr,
 				const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
@@ -763,7 +726,7 @@ static struct fi_opx_daos_av_rank *fi_opx_get_daos_av_rank(struct fi_opx_ep *opx
 #endif
 
 __OPX_FORCE_INLINE__
-uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const uint8_t origin_rx,
+uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const uint16_t origin_rx,
 				      const uint64_t ignore, const uint64_t target_tag_and_not_ignore,
 				      const uint64_t any_addr, const union fi_opx_addr src_addr,
 				      struct fi_opx_ep *opx_ep, uint32_t rank, uint32_t rank_inst,
@@ -798,9 +761,9 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_find_matching_packet(struct fi_opx_ep *o
 	const uint64_t		any_addr		  = (context->src_addr == FI_ADDR_UNSPEC);
 
 	while (uepkt &&
-	       !fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->lid, uepkt->rx, ignore, target_tag_and_not_ignore,
-					     any_addr, src_addr, opx_ep, uepkt->daos_info.rank,
-					     uepkt->daos_info.rank_inst, uepkt->is_intranode)) {
+	       !fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->lid, uepkt->subctxt_rx, ignore,
+					     target_tag_and_not_ignore, any_addr, src_addr, opx_ep,
+					     uepkt->daos_info.rank, uepkt->daos_info.rank_inst, uepkt->is_intranode)) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_misses);
 		uepkt = uepkt->next;
 	}
@@ -872,9 +835,13 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 }
 
 __OPX_FORCE_INLINE__
-uint32_t fi_opx_ep_get_u32_extended_rx(struct fi_opx_ep *opx_ep, const unsigned is_intranode, const uint8_t origin_rx)
+uint32_t fi_opx_ep_get_u32_extended_rx(struct fi_opx_ep *opx_ep, const unsigned is_intranode, const uint16_t origin_rx)
 {
+#ifdef OPX_DAOS
 	return (is_intranode && opx_ep->daos_info.hfi_rank_enabled) ? opx_ep->daos_info.rank : origin_rx;
+#else
+	return origin_rx;
+#endif
 }
 
 __OPX_FORCE_INLINE__
@@ -908,12 +875,15 @@ void opx_ep_copy_immediate_data(struct fi_opx_ep *opx_ep, const union fi_opx_hfi
 	rbuf += immediate_qw_count * sizeof(uint64_t);
 
 	if (immediate_block) {
-		const uint64_t immediate_fragment = (immediate_byte_count || immediate_qw_count) ? 1 : 0;
 #if (defined __GNUC__) && (__GNUC__ > 10)
 #pragma GCC diagnostic ignored "-Wstringop-overread"
 #endif
 #pragma GCC diagnostic ignored "-Warray-bounds"
-		memcpy(rbuf, (void *) (&contiguous->cache_line_1 + immediate_fragment), FI_OPX_CACHE_LINE_SIZE);
+		if (immediate_byte_count || immediate_qw_count) { // immediate fragment
+			memcpy(rbuf, (void *) (&contiguous->immediate_block), FI_OPX_CACHE_LINE_SIZE);
+		} else {
+			memcpy(rbuf, (void *) (&contiguous->cache_line_1), FI_OPX_CACHE_LINE_SIZE);
+		}
 	}
 
 	if (is_hmem && immediate_total) {
@@ -958,12 +928,11 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 	void			  *recv_buf	= context->buf;
 	struct fi_opx_ep_rx *const rx		= opx_ep->rx;
 	const uint64_t		   recv_len	= context->len;
+	const uint16_t		   origin_rx	= FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
 
 	if (is_multi_receive) { /* compile-time constant expression */
 		assert(FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode) == FI_MSG);
-		const uint8_t  u8_rx = hdr->rendezvous.origin_rx;
-		const uint32_t u32_ext_rx =
-			fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->rendezvous.origin_rx);
+		const uint32_t	    u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, origin_rx);
 		struct opx_context *original_multi_recv_context = context;
 		context = (struct opx_context *) ((uintptr_t) recv_buf - sizeof(struct opx_context));
 
@@ -981,7 +950,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 
 		if (OFI_LIKELY(is_noncontig)) {
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.recv.multi_recv_rzv_noncontig);
-			FI_OPX_FABRIC_RX_RZV_RTS(opx_ep, hdr, payload, u8_rx, niov,
+			FI_OPX_FABRIC_RX_RZV_RTS(opx_ep, hdr, payload, origin_rx, niov,
 						 payload->rendezvous.noncontiguous.origin_byte_counter_vaddr, context,
 						 (uintptr_t) (rbuf), /* receive buffer virtual address */
 						 FI_HMEM_SYSTEM,     /* receive buffer iface */
@@ -1026,7 +995,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			context->byte_counter -= immediate_total;
 
 			FI_OPX_FABRIC_RX_RZV_RTS(
-				opx_ep, hdr, payload, u8_rx, niov, contiguous->origin_byte_counter_vaddr, context,
+				opx_ep, hdr, payload, origin_rx, niov, contiguous->origin_byte_counter_vaddr, context,
 				(uintptr_t) (rbuf + immediate_total), /* receive buffer virtual address */
 				FI_HMEM_SYSTEM,			      /* receive buffer iface */
 				0UL,				      /* receive buffer device */
@@ -1061,9 +1030,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 		context->flags |= FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
 				  FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
 
-		const uint8_t  u8_rx = hdr->rendezvous.origin_rx;
-		const uint32_t u32_ext_rx =
-			fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->rendezvous.origin_rx);
+		const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, origin_rx);
 
 		if (OFI_LIKELY(niov == 1)) {
 			assert(!is_noncontig);
@@ -1124,12 +1091,12 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 				immediate_total, immediate_byte_count, immediate_qw_count, immediate_block);
 			context->byte_counter = xfer_len - immediate_total;
 
-			FI_OPX_FABRIC_RX_RZV_RTS(opx_ep, hdr, payload, u8_rx, 1, contiguous->origin_byte_counter_vaddr,
-						 context, (uintptr_t) (rbuf + immediate_total), rbuf_iface, rbuf_device,
-						 immediate_total, immediate_tail, src_dst_iov,
-						 FI_OPX_HFI_DPUT_OPCODE_RZV, is_intranode,
-						 reliability, /* compile-time constant expression */
-						 u32_ext_rx, hfi1_type);
+			FI_OPX_FABRIC_RX_RZV_RTS(
+				opx_ep, hdr, payload, origin_rx, 1, contiguous->origin_byte_counter_vaddr, context,
+				(uintptr_t) (rbuf + immediate_total), rbuf_iface, rbuf_device, immediate_total,
+				immediate_tail, src_dst_iov, FI_OPX_HFI_DPUT_OPCODE_RZV, is_intranode,
+				reliability, /* compile-time constant expression */
+				u32_ext_rx, hfi1_type);
 
 			opx_ep_copy_immediate_data(opx_ep, immediate_info, contiguous, immediate_byte_count,
 						   immediate_qw_count, immediate_block, immediate_tail, immediate_total,
@@ -1161,9 +1128,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 		context->byte_counter = 0;
 		context->flags	      = FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
 				 FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
-		const uint8_t  u8_rx = hdr->rendezvous.origin_rx;
-		const uint32_t u32_ext_rx =
-			fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->rendezvous.origin_rx);
+		const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, origin_rx);
 
 		assert(payload != NULL);
 
@@ -1172,7 +1137,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			(hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ?
 				       payload->rendezvous.contiguous.origin_byte_counter_vaddr :
 				       payload->rendezvous.contiguous_16B.origin_byte_counter_vaddr;
-		FI_OPX_FABRIC_RX_RZV_RTS_ETRUNC(opx_ep, (const void *const) hdr, u8_rx, origin_byte_counter_vaddr,
+		FI_OPX_FABRIC_RX_RZV_RTS_ETRUNC(opx_ep, (const void *const) hdr, origin_rx, origin_byte_counter_vaddr,
 						is_intranode, reliability, /* compile-time constant expression */
 						u32_ext_rx, hfi1_type);
 
@@ -1242,7 +1207,7 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-INJECT");
 
 		const uint64_t ofi_data = hdr->match.ofi_data;
-		const uint64_t send_len = hdr->inject.message_length;
+		const uint64_t send_len = OPX_BTH_INJECT_MSG_LENGTH(hdr->inject.subctxt_message_length);
 
 		if (is_multi_receive) { /* branch should compile out */
 
@@ -1399,12 +1364,13 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			     "===================================== RECV -- EAGER (begin)\n");
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-EAGER");
 
-		const uint64_t ofi_data = hdr->match.ofi_data;
-		const uint64_t send_len = hdr->send.xfer_bytes_tail + hdr->send.payload_qws_total * sizeof(uint64_t);
+		const uint64_t ofi_data	       = hdr->match.ofi_data;
+		uint8_t	       xfer_bytes_tail = OPX_BTH_SEND_XFER_BYTES_TAIL(hdr->send.subctxt_xfer_bytes_tail);
+		const uint64_t send_len	       = xfer_bytes_tail + hdr->send.payload_qws_total * sizeof(uint64_t);
 
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-		       "hdr->send.xfer_bytes_tail = %u, hdr->send.payload_qws_total = %u, send_len = %lu\n",
-		       hdr->send.xfer_bytes_tail, hdr->send.payload_qws_total, send_len);
+		       "hdr->send.subctxt_xfer_bytes_tail = %u, hdr->send.payload_qws_total = %u, send_len = %lu\n",
+		       xfer_bytes_tail, hdr->send.payload_qws_total, send_len);
 
 		if (is_multi_receive) { /* branch should compile out */
 
@@ -1425,9 +1391,9 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			context->byte_counter	    = 0;
 			context->next		    = NULL;
 
-			if (hdr->send.xfer_bytes_tail) {
-				memcpy(recv_buf, (void *) &hdr->send.xfer_tail, hdr->send.xfer_bytes_tail);
-				recv_buf = (void *) ((uintptr_t) recv_buf + hdr->send.xfer_bytes_tail);
+			if (xfer_bytes_tail) {
+				memcpy(recv_buf, (void *) &hdr->send.xfer_tail, xfer_bytes_tail);
+				recv_buf = (void *) ((uintptr_t) recv_buf + xfer_bytes_tail);
 			}
 
 			if (payload) {
@@ -1454,8 +1420,6 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			slist_insert_tail((struct slist_entry *) context, rx->cq_completed_ptr);
 
 		} else if (OFI_LIKELY(send_len <= recv_len)) {
-			const size_t xfer_bytes_tail = hdr->send.xfer_bytes_tail;
-
 			if (is_hmem) {
 				recv_buf = (void *) opx_ep->hmem_copy_buf;
 			}
@@ -1558,18 +1522,21 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 		} else {
 			payload_qws_total = (uint64_t) (hdr->lrh_16B.pktlen - 9);
 		}
-		const uint64_t packet_payload_len = hdr->mp_eager_first.xfer_bytes_tail + (payload_qws_total << 3);
-		const uint64_t payload_total_len =
-			hdr->mp_eager_first.payload_bytes_total & FI_OPX_HFI1_KDETH_VERSION_OFF_MASK;
+		const uint64_t packet_payload_len =
+			OPX_BTH_SEND_XFER_BYTES_TAIL(hdr->mp_eager_first.subctxt_xfer_bytes_tail) +
+			(payload_qws_total << 3);
+		const uint64_t payload_total_len = (hdr->mp_eager_first.payload_bytes_total_msb << 8) |
+						   hdr->mp_eager_first.payload_bytes_total_lsb;
 
 		assert(packet_payload_len < payload_total_len);
 
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "hdr->mp_eager_first.xfer_bytes_tail = %u, "
-		       "hdr->mp_eager_first.payload_bytes_total = %u, send_len = %lu, xfer_len = %lu\n",
-		       hdr->mp_eager_first.xfer_bytes_tail,
-		       hdr->mp_eager_first.payload_bytes_total & FI_OPX_HFI1_KDETH_VERSION_OFF_MASK, packet_payload_len,
-		       payload_total_len);
+		       "hdr->mp_eager_first.payload_bytes_total_msb = %u, "
+		       "hdr->mp_eager_first.payload_bytes_total_lsb = %u send_len = %lu, xfer_len = %lu\n",
+		       OPX_BTH_SEND_XFER_BYTES_TAIL(hdr->mp_eager_first.subctxt_xfer_bytes_tail),
+		       hdr->mp_eager_first.payload_bytes_total_msb, hdr->mp_eager_first.payload_bytes_total_lsb,
+		       packet_payload_len, payload_total_len);
 
 		if (OFI_UNLIKELY(is_multi_receive)) { /* branch should compile out */
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1665,7 +1632,8 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 		} else {
 			payload_qws_total = (uint64_t) hdr->lrh_16B.pktlen - 9;
 		}
-		const uint64_t send_len = hdr->mp_eager_nth.xfer_bytes_tail + (payload_qws_total << 3);
+		const uint64_t send_len = OPX_BTH_SEND_XFER_BYTES_TAIL(hdr->mp_eager_nth.subctxt_xfer_bytes_tail) +
+					  (payload_qws_total << 3);
 		const uint64_t xfer_len = send_len + hdr->mp_eager_nth.payload_offset;
 
 		assert(xfer_len <= context->len);
@@ -1678,8 +1646,9 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 		}
 
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-		       "hdr->mp_eager_nth.xfer_bytes_tail = %u, hdr->mp_eager_nth.payload_offset = %u, send_len = %lu, xfer_len = %lu\n",
-		       hdr->mp_eager_nth.xfer_bytes_tail, hdr->mp_eager_nth.payload_offset, send_len, xfer_len);
+		       "hdr->mp_eager_nth.subctxt_xfer_bytes_tail = %u, hdr->mp_eager_nth.payload_offset = %u, send_len = %lu, xfer_len = %lu\n",
+		       OPX_BTH_SEND_XFER_BYTES_TAIL(hdr->mp_eager_nth.subctxt_xfer_bytes_tail),
+		       hdr->mp_eager_nth.payload_offset, send_len, xfer_len);
 
 		if (OFI_UNLIKELY(is_multi_receive)) { /* branch should compile out */
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1708,9 +1677,10 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			}
 #endif
 
-			const size_t xfer_bytes_tail = hdr->mp_eager_nth.xfer_bytes_tail;
-			recv_buf		     = is_hmem ? (void *) opx_ep->hmem_copy_buf :
-								 (void *) ((uint8_t *) recv_buf + hdr->mp_eager_nth.payload_offset);
+			const size_t xfer_bytes_tail =
+				OPX_BTH_SEND_XFER_BYTES_TAIL(hdr->mp_eager_nth.subctxt_xfer_bytes_tail);
+			recv_buf = is_hmem ? (void *) opx_ep->hmem_copy_buf :
+					     (void *) ((uint8_t *) recv_buf + hdr->mp_eager_nth.payload_offset);
 
 			/* We'll never *not* have some bytes in the tail */
 			if (OFI_LIKELY(xfer_bytes_tail == 16)) {
@@ -1779,7 +1749,7 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 }
 
 __OPX_FORCE_INLINE__
-ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode, struct fi_opx_ep *opx_ep, const unsigned rx_id,
+ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode, struct fi_opx_ep *opx_ep, const uint16_t rx_id,
 				      const uint8_t hfi1_unit)
 {
 	if (!is_intranode) {
@@ -1787,7 +1757,6 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode, struct fi_opx
 	}
 
 	assert(hfi1_unit < OPX_MAX_HFIS);
-	assert(rx_id < OPX_SHM_MAX_CONN_NUM);
 
 #ifdef OPX_DAOS
 	uint32_t segment_index;
@@ -1835,9 +1804,10 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 		     "===================================== RECV -- %s RENDEZVOUS CTS (begin), opcode=%d\n",
 		     is_intranode ? "SHM" : "HFI", hdr->cts.target.opcode);
 
+	uint16_t origin_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
+
 	assert(payload != NULL || hdr->cts.target.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC);
-	const uint8_t  u8_rx	  = hdr->cts.origin_rx;
-	const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->cts.origin_rx);
+	const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, origin_rx);
 
 	switch (hdr->cts.target.opcode) {
 	case FI_OPX_HFI_DPUT_OPCODE_RZV:
@@ -1847,7 +1817,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 		const uint32_t			     niov		  = hdr->cts.target.vaddr.niov;
 		uint64_t *origin_byte_counter = (uint64_t *) hdr->cts.target.vaddr.origin_byte_counter_vaddr;
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-CTS-HFI:%p", (void *) target_context_vaddr);
-		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, hdr, (const void *const) payload, 0, u8_rx, niov, dput_iov, NULL,
+		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, hdr, (const void *const) payload, 0, origin_rx, niov, dput_iov, NULL,
 					 (const uint8_t)(FI_NOOP - 1), (const uint8_t)(FI_VOID - 1),
 					 (uintptr_t) NULL, /* No RMA Request */
 					 target_context_vaddr, origin_byte_counter, hdr->cts.target.opcode, NULL,
@@ -1861,7 +1831,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 		const uintptr_t			     target_context_vaddr = hdr->cts.target.vaddr.target_context_vaddr;
 		const uint32_t			     niov		  = hdr->cts.target.vaddr.niov;
 		uint64_t *origin_byte_counter = (uint64_t *) hdr->cts.target.vaddr.origin_byte_counter_vaddr;
-		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, hdr, (const void *const) payload, 0, u8_rx, niov, dput_iov, NULL,
+		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, hdr, (const void *const) payload, 0, origin_rx, niov, dput_iov, NULL,
 					 (const uint8_t)(FI_NOOP - 1), (const uint8_t)(FI_VOID - 1),
 					 (uintptr_t) NULL, /* No RMA Request */
 					 target_context_vaddr, origin_byte_counter,
@@ -1904,7 +1874,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 		const union opx_hfi1_dput_iov *const dput_iov_ptr = payload->cts.iov;
 #endif
 		FI_OPX_FABRIC_RX_RZV_CTS(
-			opx_ep, hdr, (const void *const) payload, 0, u8_rx, niov, dput_iov_ptr, opx_mr->base_addr,
+			opx_ep, hdr, (const void *const) payload, 0, origin_rx, niov, dput_iov_ptr, opx_mr->base_addr,
 			hdr->cts.target.mr.op, hdr->cts.target.mr.dt, rma_request_vaddr,
 			(uintptr_t) NULL, /* Target completion counter is in rma_request */
 			NULL,		  /* No origin byte counter here */
@@ -1914,9 +1884,9 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 	} break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT_CQ: {
 		const union opx_hfi1_dput_iov *const dput_iov_ptr = payload->cts.iov;
-		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, hdr, (const void *const) payload, 0, u8_rx, hdr->cts.target.rma.niov,
-					 dput_iov_ptr, NULL, hdr->cts.target.rma.op, hdr->cts.target.rma.dt,
-					 hdr->cts.target.rma.origin_rma_request_vaddr,
+		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, hdr, (const void *const) payload, 0, origin_rx,
+					 hdr->cts.target.rma.niov, dput_iov_ptr, NULL, hdr->cts.target.rma.op,
+					 hdr->cts.target.rma.dt, hdr->cts.target.rma.origin_rma_request_vaddr,
 					 hdr->cts.target.rma.rma_request_vaddr, NULL, /* No origin byte counter here */
 					 FI_OPX_HFI_DPUT_OPCODE_PUT_CQ, NULL,
 					 is_intranode, /* compile-time constant expression */
@@ -1924,7 +1894,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 					 u32_ext_rx, hfi1_type);
 	} break;
 	case FI_OPX_HFI_DPUT_OPCODE_FENCE: {
-		opx_hfi1_dput_fence(opx_ep, hdr, u8_rx, u32_ext_rx, hfi1_type);
+		opx_hfi1_dput_fence(opx_ep, hdr, origin_rx, u32_ext_rx, hfi1_type);
 	} break;
 	default:
 		abort();
@@ -2003,10 +1973,12 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 					  const int lock_required, const enum ofi_reliability_kind reliability,
 					  const enum opx_hfi1_type hfi1_type)
 {
+	const uint8_t  opcode	 = FI_OPX_HFI_DPUT_GET_OPCODE(hdr->dput.target.opcode_origin_rx);
+	const uint16_t origin_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== RECV -- %s RENDEZVOUS DATA Opcode=%0hhX (begin)\n",
-		     is_intranode ? "SHM" : "HFI", hdr->dput.target.opcode);
-	switch (hdr->dput.target.opcode) {
+		     is_intranode ? "SHM" : "HFI", opcode);
+	switch (opcode) {
 	case FI_OPX_HFI_DPUT_OPCODE_RZV:
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG: {
 		struct fi_opx_rzv_completion *rzv_comp =
@@ -2301,8 +2273,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		}
 	} break;
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH: {
-		const uint8_t	  u8_rx	     = hdr->dput.origin_rx;
-		const uint32_t	  u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->dput.origin_rx);
+		const uint32_t	  u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, origin_rx);
 		struct fi_opx_mr *opx_mr     = NULL;
 
 		uint64_t key = hdr->dput.target.mr.key;
@@ -2351,7 +2322,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 
 		// Do the FETCH part of this atomic fetch operation
 		union fi_opx_hfi1_deferred_work *work = FI_OPX_FABRIC_RX_RZV_CTS(
-			opx_ep, hdr, (const void *const) payload, bytes, u8_rx, 1, &dput_iov, opx_mr->base_addr,
+			opx_ep, hdr, (const void *const) payload, bytes, origin_rx, 1, &dput_iov, opx_mr->base_addr,
 			hdr->dput.target.op, hdr->dput.target.dt, dput_fetch->rma_request_vaddr,
 			(uintptr_t) NULL, /* target byte counter is in rma_request */
 			NULL,		  /* No origin byte counter here */
@@ -2368,8 +2339,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		// be done upon FETCH completion via fi_opx_atomic_completion_action
 	} break;
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH: {
-		const uint8_t	  u8_rx	     = hdr->dput.origin_rx;
-		const uint32_t	  u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->dput.origin_rx);
+		const uint32_t	  u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, origin_rx);
 		struct fi_opx_mr *opx_mr     = NULL;
 
 		uint64_t key = hdr->dput.target.mr.key;
@@ -2418,7 +2388,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 
 		// Do the FETCH part of this atomic fetch operation
 		union fi_opx_hfi1_deferred_work *work = FI_OPX_FABRIC_RX_RZV_CTS(
-			opx_ep, hdr, (const void *const) payload, bytes, u8_rx, 1, &dput_iov, opx_mr->base_addr,
+			opx_ep, hdr, (const void *const) payload, bytes, origin_rx, 1, &dput_iov, opx_mr->base_addr,
 			hdr->dput.target.op, hdr->dput.target.dt, dput_fetch->rma_request_vaddr,
 			(uintptr_t) NULL, /* Target completion counter is in rma request */
 			NULL,		  /* No origin byte counter here */
@@ -2498,15 +2468,15 @@ void fi_opx_ep_rx_process_header_non_eager(struct fid_ep *ep, const union opx_hf
 __OPX_FORCE_INLINE__
 uint64_t fi_opx_mp_egr_id_from_nth_packet(const union opx_hfi1_packet_hdr *hdr, const opx_lid_t slid)
 {
-	return ((uint64_t) hdr->mp_eager_nth.mp_egr_uid) |
-	       ((uint64_t) ((slid << 8) | hdr->reliability.origin_rx) << 32);
+	return ((((uint64_t) hdr->mp_eager_nth.mp_egr_uid) << 40) | ((uint64_t) slid << 16) |
+		(uint64_t) hdr->reliability.origin_rx);
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep, struct opx_context *context,
-					      union fi_opx_mp_egr_id mp_egr_id, const unsigned is_intranode,
-					      const int lock_required, const enum ofi_reliability_kind reliability,
-					      const enum opx_hfi1_type hfi1_type)
+void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep, struct opx_context *context, uint64_t mp_egr_id,
+					      const unsigned is_intranode, const int lock_required,
+					      const enum ofi_reliability_kind reliability,
+					      const enum opx_hfi1_type	      hfi1_type)
 {
 	struct fi_opx_ep	     *opx_ep  = container_of(ep, struct fi_opx_ep, ep_fid);
 	const uint64_t		      is_hmem = context->flags & FI_OPX_CQ_CONTEXT_HMEM;
@@ -2522,7 +2492,7 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep, struct opx_cont
 			slid = (opx_lid_t) __le24_to_cpu((uepkt->hdr.lrh_16B.slid20 << 20) | (uepkt->hdr.lrh_16B.slid));
 		}
 
-		if (fi_opx_mp_egr_id_from_nth_packet(&uepkt->hdr, slid) == mp_egr_id.id) {
+		if (fi_opx_mp_egr_id_from_nth_packet(&uepkt->hdr, slid) == mp_egr_id) {
 			opx_ep_complete_receive_operation(
 				ep, &uepkt->hdr, &uepkt->payload, 0, /* OFI Tag, N/A for multi-packet eager nth */
 				context, FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH, OPX_MULTI_RECV_FALSE, OPX_INTRANODE_FALSE,
@@ -2547,7 +2517,8 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep, const union o
 						const int lock_required, const enum ofi_reliability_kind reliability,
 						const enum opx_hfi1_type hfi1_type, const opx_lid_t slid)
 {
-	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+	struct fi_opx_ep *opx_ep    = container_of(ep, struct fi_opx_ep, ep_fid);
+	const uint16_t	  origin_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_first_packets);
 
@@ -2574,12 +2545,12 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep, const union o
 			fi_opx_ep_rx_append_ue_tag(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
 						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
 						   opx_ep->daos_info.hfi_rank_enabled,
-						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid, 0UL);
 		} else {
 			fi_opx_ep_rx_append_ue_msg(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
 						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
 						   opx_ep->daos_info.hfi_rank_enabled,
-						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid, 0UL);
 		}
 
 		return;
@@ -2595,8 +2566,7 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep, const union o
 					  OPX_INTRANODE_FALSE, /* Should always be false for mp_eager */
 					  is_hmem, lock_required, reliability, hfi1_type);
 
-	const union fi_opx_mp_egr_id mp_egr_id = {.uid		  = hdr->reliability.psn,
-						  .slid_origin_rx = (slid << 8) | hdr->reliability.origin_rx};
+	const uint64_t mp_egr_id = OPX_GET_MP_EGR_ID(hdr->reliability.psn, slid, origin_rx);
 
 	/* Process any other early arrival packets that are part of this multi-packet egr */
 	fi_opx_ep_rx_process_pending_mp_eager_ue(ep, context, mp_egr_id, is_intranode, lock_required, reliability,
@@ -2638,7 +2608,7 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep, const union opx
 
 	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(length);
 
-	while (context && context->mp_egr_id.id != mp_egr_id) {
+	while (context && context->mp_egr_id != mp_egr_id) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "process_header_mp_eager_nth: Searching mp_egr match queue, context = %p\n", context);
 		prev	= context;
@@ -2726,16 +2696,27 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "did not find a match .. add this packet to the unexpected queue\n");
 
+		uint64_t ue_pkt_rcv_ns;
+#ifdef OPX_DEBUG_COUNTERS_RECV
+		uint8_t ue_opcode = FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(hdr->bth.opcode);
+		if (ue_opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) {
+			OPX_COUNTERS_TIME_NS(ue_pkt_rcv_ns, &opx_ep->debug_counters);
+		} else
+#endif
+		{
+			ue_pkt_rcv_ns = 0UL;
+		}
+
 		if (OFI_LIKELY(kind == FI_OPX_KIND_TAG)) {
 			fi_opx_ep_rx_append_ue_tag(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
 						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
 						   opx_ep->daos_info.hfi_rank_enabled,
-						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid, ue_pkt_rcv_ns);
 		} else {
 			fi_opx_ep_rx_append_ue_msg(opx_ep->rx, hdr, payload, payload_bytes, is_intranode,
 						   opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
 						   opx_ep->daos_info.hfi_rank_enabled,
-						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid);
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep), slid, ue_pkt_rcv_ns);
 		}
 
 		return;
@@ -2745,6 +2726,15 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "found a match\n");
 
+#ifdef OPX_DEBUG_COUNTERS_RECV
+	uint8_t ue_opcode = FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(hdr->bth.opcode);
+	if (ue_opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) {
+		uint64_t match_time_ns;
+		OPX_COUNTERS_TIME_NS(match_time_ns, &opx_ep->debug_counters);
+		OPX_COUNTERS_RECORD_MEASURE(match_time_ns - context->byte_counter,
+					    opx_ep->debug_counters.recv.rzv_rts_rcv_early);
+	}
+#endif
 	if (OFI_LIKELY((static_flags & FI_TAGGED) || /* branch will compile out for tag */
 		       ((rx_op_flags & FI_MULTI_RECV) == 0))) {
 		assert((prev == NULL) || (prev->next == context));
@@ -2959,7 +2949,7 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 
 __OPX_FORCE_INLINE__
 void fi_opx_ep_rx_poll_internal(struct fid_ep *ep, const uint64_t caps, const enum ofi_reliability_kind reliability,
-				const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
+				const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -2968,39 +2958,49 @@ void fi_opx_ep_rx_poll_internal(struct fid_ep *ep, const uint64_t caps, const en
 
 	if (OFI_LIKELY(hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME)) { /* constant compile-time expression */
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps, OFI_RELIABILITY_KIND_ONLOAD,
-					FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
+					FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
 	} else if (hdrq_mask == FI_OPX_HDRQ_MASK_2048) { /* constant compile-time expression */
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps, OFI_RELIABILITY_KIND_ONLOAD,
-					FI_OPX_HDRQ_MASK_2048, hfi1_type);
+					FI_OPX_HDRQ_MASK_2048, hfi1_type, ctx_sharing);
 	} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192) { /* constant compile-time expression */
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps, OFI_RELIABILITY_KIND_ONLOAD,
-					FI_OPX_HDRQ_MASK_8192, hfi1_type);
+					FI_OPX_HDRQ_MASK_8192, hfi1_type, ctx_sharing);
 	} else {
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps, OFI_RELIABILITY_KIND_ONLOAD, hdrq_mask,
-					hfi1_type);
+					hfi1_type, ctx_sharing);
 	}
 
 	fi_opx_ep_do_pending_work(opx_ep);
 
-	if (!slist_empty(&opx_ep->reliability->service.work_pending)) {
+	if (!slist_empty(&opx_ep->reli_service->rx.work_pending)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== RELIABILITY SERVICE WORK PENDING\n");
-		fi_opx_reliability_service_process_pending(&opx_ep->reliability->service);
+		fi_opx_reliability_service_process_pending(opx_ep->reli_service);
 	}
 }
 
 static inline void fi_opx_ep_rx_poll(struct fid_ep *ep, const uint64_t caps,
 				     const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask,
-				     const enum opx_hfi1_type hfi1_type)
+				     const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
-	if (hfi1_type & OPX_HFI1_WFR) {
-		fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_WFR);
-	} else if (hfi1_type & OPX_HFI1_JKR) {
-		fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR);
-	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
-		fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR_9B);
+	if (ctx_sharing) {
+		if (hfi1_type & OPX_HFI1_WFR) {
+			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_WFR, OPX_CTX_SHARING_ON);
+		} else if (hfi1_type & OPX_HFI1_JKR) {
+			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR, OPX_CTX_SHARING_ON);
+		} else {
+			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR_9B,
+						   OPX_CTX_SHARING_ON);
+		}
 	} else {
-		abort();
+		if (hfi1_type & OPX_HFI1_WFR) {
+			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF);
+		} else if (hfi1_type & OPX_HFI1_JKR) {
+			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF);
+		} else {
+			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR_9B,
+						   OPX_CTX_SHARING_OFF);
+		}
 	}
 }
 
@@ -3071,6 +3071,15 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep *opx_ep, const u
 		uint8_t is_mp_eager = (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(uepkt->hdr.bth.opcode) ==
 				       FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST);
 
+#ifdef OPX_DEBUG_COUNTERS_RECV
+		uint8_t ue_opcode = FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(uepkt->hdr.bth.opcode);
+		if (ue_opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) {
+			uint64_t match_time_ns;
+			OPX_COUNTERS_TIME_NS(match_time_ns, &opx_ep->debug_counters);
+			OPX_COUNTERS_RECORD_MEASURE(match_time_ns - uepkt->recv_time_ns,
+						    opx_ep->debug_counters.recv.rzv_rts_pkt_early);
+		}
+#endif
 		const unsigned is_intranode = uepkt->is_intranode;
 		if (is_mp_eager) {
 			opx_ep_complete_receive_operation(ep, &uepkt->hdr, &uepkt->payload, uepkt->hdr.match.ofi_tag,
@@ -3086,9 +3095,8 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep *opx_ep, const u
 				slid = (opx_lid_t) __le24_to_cpu((__le24) (uepkt->hdr.lrh_16B.slid20 << 20) |
 								 (uepkt->hdr.lrh_16B.slid));
 			}
-			const union fi_opx_mp_egr_id mp_egr_id = {.uid		  = uepkt->hdr.reliability.psn,
-								  .slid_origin_rx = (slid << 8) |
-										    uepkt->hdr.reliability.origin_rx};
+			const uint64_t mp_egr_id =
+				OPX_GET_MP_EGR_ID(uepkt->hdr.reliability.psn, slid, uepkt->subctxt_rx);
 
 			fi_opx_ep_rx_process_pending_mp_eager_ue(ep, context, mp_egr_id, is_intranode, lock_required,
 								 reliability, hfi1_type);
@@ -3131,6 +3139,13 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep *opx_ep, const u
 	 * no unexpected headers were matched; add this match information
 	 * (context) to the appropriate match queue
 	 */
+
+	// Use the context's byte_counter to store the timestamp of when the recv
+	// was posted, so we can later record how long it took for the receive to
+	// be matched with a packet. This should be safe since byte_counter is not
+	// used elsewhere until after the match occurs.
+	OPX_COUNTERS_TIME_NS(context->byte_counter, &opx_ep->debug_counters);
+
 	context->next = NULL;
 	slist_insert_tail((struct slist_entry *) context, &opx_ep->rx->queue[kind].mq);
 
@@ -3519,7 +3534,8 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 				    const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
 				    const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 				    const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
-				    const uint64_t hmem_handle, const enum opx_hfi1_type hfi1_type)
+				    const uint64_t hmem_handle, const enum opx_hfi1_type hfi1_type,
+				    const bool ctx_sharing)
 {
 	struct fi_opx_ep       *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const union fi_opx_addr addr   = {.fi = dest_addr};
@@ -3527,7 +3543,7 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	assert(!fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps));
 	assert(len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type));
 
-	const uint64_t bth_rx = ((uint64_t) addr.hfi1_subctxt_rx) << OPX_BTH_RX_SHIFT;
+	const uint64_t bth_subctxt_rx = ((uint64_t) addr.hfi1_subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	const uint64_t lrh_dlid =
 		hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B) ? FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(addr.lid) : addr.lid;
 	const uint64_t pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type);
@@ -3540,9 +3556,9 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	uint8_t *buf_bytes_ptr = (uint8_t *) buf;
 	ssize_t	 rc;
 	rc = opx_hfi1_tx_send_mp_egr_first_common(opx_ep, (void **) &buf_bytes_ptr, len, opx_ep->hmem_copy_buf,
-						  pbc_dlid, bth_rx, lrh_dlid, addr, tag, data, lock_required,
+						  pbc_dlid, bth_subctxt_rx, lrh_dlid, addr, tag, data, lock_required,
 						  tx_op_flags, caps, reliability, &first_packet_psn, hmem_iface,
-						  hmem_device, hmem_handle, hfi1_type);
+						  hmem_device, hmem_handle, hfi1_type, ctx_sharing);
 
 	if (rc != FI_SUCCESS) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_fall_back_to_rzv);
@@ -3570,42 +3586,45 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	while (payload_remaining >= FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) {
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf_bytes_ptr, payload_offset,
-							    first_packet_psn, pbc_dlid, bth_rx, lrh_dlid, addr,
-							    lock_required, reliability, hfi1_type);
+							    first_packet_psn, pbc_dlid, bth_subctxt_rx, lrh_dlid, addr,
+							    lock_required, reliability, hfi1_type, ctx_sharing);
 		} else {
-			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(opx_ep, (void *) buf_bytes_ptr, payload_offset,
-								first_packet_psn, pbc_dlid, bth_rx, lrh_dlid, addr,
-								lock_required, reliability, hfi1_type);
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
+				opx_ep, (void *) buf_bytes_ptr, payload_offset, first_packet_psn, pbc_dlid,
+				bth_subctxt_rx, lrh_dlid, addr, lock_required, reliability, hfi1_type, ctx_sharing);
 		}
 
 		if (rc != FI_SUCCESS) {
 			if (rc == -FI_ENOBUFS) {
 				/* Insufficient credits. Try forcing a credit return and retry. */
-				fi_opx_force_credit_return(ep, addr.fi, addr.hfi1_subctxt_rx, caps, hfi1_type);
+				fi_opx_force_credit_return(ep, addr.fi, addr.hfi1_subctxt_rx, caps, hfi1_type,
+							   ctx_sharing);
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_force_cr);
 			} else {
-				fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
+				fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
+						  ctx_sharing);
 				FI_OPX_DEBUG_COUNTERS_INC(
 					opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
 			}
 
 			do {
 				if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-					rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf_bytes_ptr,
-									    payload_offset, first_packet_psn, pbc_dlid,
-									    bth_rx, lrh_dlid, addr, lock_required,
-									    reliability, hfi1_type);
+					rc = fi_opx_hfi1_tx_send_mp_egr_nth(
+						opx_ep, (void *) buf_bytes_ptr, payload_offset, first_packet_psn,
+						pbc_dlid, bth_subctxt_rx, lrh_dlid, addr, lock_required, reliability,
+						hfi1_type, ctx_sharing);
 				} else {
-					rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(opx_ep, (void *) buf_bytes_ptr,
-										payload_offset, first_packet_psn,
-										pbc_dlid, bth_rx, lrh_dlid, addr,
-										lock_required, reliability, hfi1_type);
+					rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
+						opx_ep, (void *) buf_bytes_ptr, payload_offset, first_packet_psn,
+						pbc_dlid, bth_subctxt_rx, lrh_dlid, addr, lock_required, reliability,
+						hfi1_type, ctx_sharing);
 				}
 
 				if (rc == -FI_EAGAIN) {
 					FI_OPX_DEBUG_COUNTERS_INC(
 						opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
-					fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
+					fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
+							  ctx_sharing);
 				}
 			} while (rc != FI_SUCCESS);
 		}
@@ -3628,21 +3647,25 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 			payload_remaining);
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_last(opx_ep, (void *) buf_bytes_ptr, payload_offset,
-							     payload_remaining, first_packet_psn, pbc_dlid, bth_rx,
-							     lrh_dlid, addr, lock_required, reliability, hfi1_type);
+							     payload_remaining, first_packet_psn, pbc_dlid,
+							     bth_subctxt_rx, lrh_dlid, addr, lock_required, reliability,
+							     hfi1_type, ctx_sharing);
 		} else {
 			rc = fi_opx_hfi1_tx_send_mp_egr_last_16B(opx_ep, (void *) buf_bytes_ptr, payload_offset,
-								 payload_remaining, first_packet_psn, pbc_dlid, bth_rx,
-								 lrh_dlid, addr, lock_required, reliability, hfi1_type);
+								 payload_remaining, first_packet_psn, pbc_dlid,
+								 bth_subctxt_rx, lrh_dlid, addr, lock_required,
+								 reliability, hfi1_type, ctx_sharing);
 		}
 
 		if (rc != FI_SUCCESS) {
 			if (rc == -FI_ENOBUFS) {
 				/* Insufficient credits. Try forcing a credit return and retry. */
-				fi_opx_force_credit_return(ep, addr.fi, addr.hfi1_subctxt_rx, caps, hfi1_type);
+				fi_opx_force_credit_return(ep, addr.fi, addr.hfi1_subctxt_rx, caps, hfi1_type,
+							   ctx_sharing);
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_force_cr);
 			} else {
-				fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
+				fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
+						  ctx_sharing);
 				FI_OPX_DEBUG_COUNTERS_INC(
 					opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
 			}
@@ -3651,18 +3674,19 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 				if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 					rc = fi_opx_hfi1_tx_send_mp_egr_last(
 						opx_ep, (void *) buf_bytes_ptr, payload_offset, payload_remaining,
-						first_packet_psn, pbc_dlid, bth_rx, lrh_dlid, addr, lock_required,
-						reliability, hfi1_type);
+						first_packet_psn, pbc_dlid, bth_subctxt_rx, lrh_dlid, addr,
+						lock_required, reliability, hfi1_type, ctx_sharing);
 				} else {
 					rc = fi_opx_hfi1_tx_send_mp_egr_last_16B(
 						opx_ep, (void *) buf_bytes_ptr, payload_offset, payload_remaining,
-						first_packet_psn, pbc_dlid, bth_rx, lrh_dlid, addr, lock_required,
-						reliability, hfi1_type);
+						first_packet_psn, pbc_dlid, bth_subctxt_rx, lrh_dlid, addr,
+						lock_required, reliability, hfi1_type, ctx_sharing);
 				}
 				if (rc == -FI_EAGAIN) {
 					FI_OPX_DEBUG_COUNTERS_INC(
 						opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
-					fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
+					fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
+							  ctx_sharing);
 				}
 			} while (rc != FI_SUCCESS);
 		}
@@ -3695,17 +3719,17 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 				 const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 				 const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
 				 const uint64_t hmem_handle, const bool mp_eager_fallback,
-				 const enum opx_hfi1_type hfi1_type)
+				 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	ssize_t rc;
 	if (is_contiguous) {
 		rc = OPX_FABRIC_TX_SEND_EGR(ep, buf, len, addr.fi, tag, context, data, lock_required, override_flags,
-					    tx_op_flags, addr.hfi1_subctxt_rx, caps, reliability, do_cq_completion,
-					    hmem_iface, hmem_device, hmem_handle, hfi1_type);
+					    tx_op_flags, caps, reliability, do_cq_completion, hmem_iface, hmem_device,
+					    hmem_handle, hfi1_type, ctx_sharing);
 	} else {
 		rc = OPX_FABRIC_TX_SENDV_EGR(ep, local_iov, niov, total_len, addr.fi, tag, context, data, lock_required,
-					     override_flags, tx_op_flags, addr.hfi1_subctxt_rx, caps, reliability,
-					     do_cq_completion, hmem_iface, hmem_device, hmem_handle, hfi1_type);
+					     override_flags, tx_op_flags, caps, reliability, do_cq_completion,
+					     hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
 	}
 	if (OFI_LIKELY(rc == FI_SUCCESS)) {
 		return rc;
@@ -3721,11 +3745,11 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 
 	if (rc == -FI_ENOBUFS) {
 		/* Insufficient credits. Try forcing a credit return and retry. */
-		fi_opx_force_credit_return(ep, addr.fi, addr.hfi1_subctxt_rx, caps, hfi1_type);
+		fi_opx_force_credit_return(ep, addr.fi, addr.hfi1_subctxt_rx, caps, hfi1_type, ctx_sharing);
 	} else {
 		/* Likely full replay buffers or waiting for reliability handshake init.
 		   A poll might help */
-		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
+		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
 	}
 
 	/* Note that we'll only iterate this loop more than once if we got here
@@ -3734,16 +3758,15 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 	do {
 		if (is_contiguous) {
 			rc = OPX_FABRIC_TX_SEND_EGR(ep, buf, len, addr.fi, tag, context, data, lock_required,
-						    override_flags, tx_op_flags, addr.hfi1_subctxt_rx, caps,
-						    reliability, do_cq_completion, hmem_iface, hmem_device, hmem_handle,
-						    hfi1_type);
+						    override_flags, tx_op_flags, caps, reliability, do_cq_completion,
+						    hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
 		} else {
 			rc = OPX_FABRIC_TX_SENDV_EGR(ep, local_iov, niov, total_len, addr.fi, tag, context, data,
-						     lock_required, override_flags, tx_op_flags, addr.hfi1_subctxt_rx,
-						     caps, reliability, do_cq_completion, hmem_iface, hmem_device,
-						     hmem_handle, hfi1_type);
+						     lock_required, override_flags, tx_op_flags, caps, reliability,
+						     do_cq_completion, hmem_iface, hmem_device, hmem_handle, hfi1_type,
+						     ctx_sharing);
 		}
-		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
+		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
 	} while (rc == -FI_ENOBUFS && loop++ < FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES);
 
 	return rc;
@@ -3756,7 +3779,7 @@ ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const
 			   const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
 			   const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 			   const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device, const uint64_t hmem_handle,
-			   const enum opx_hfi1_type hfi1_type)
+			   const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	ssize_t		  rc;
@@ -3766,16 +3789,17 @@ ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const
 			rc = OPX_FABRIC_TX_SEND_RZV(ep, buf, len, addr.fi, tag, context, data, lock_required,
 						    override_flags, tx_op_flags, addr.hfi1_subctxt_rx, caps,
 						    reliability, do_cq_completion, hmem_iface, hmem_device, hmem_handle,
-						    hfi1_type);
+						    hfi1_type, ctx_sharing);
 		} else {
 			rc = OPX_FABRIC_TX_SENDV_RZV(ep, local_iov, niov, total_len, addr.fi, tag, context, data,
 						     lock_required, override_flags, tx_op_flags, addr.hfi1_subctxt_rx,
 						     caps, reliability, do_cq_completion, hmem_iface, hmem_device,
-						     hmem_handle, hfi1_type);
+						     hmem_handle, hfi1_type, ctx_sharing);
 		}
 
 		if (OFI_UNLIKELY(rc == -EAGAIN)) {
-			fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
+			fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
+					  ctx_sharing);
 		}
 	} while (rc == -EAGAIN);
 
@@ -3788,7 +3812,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 						 const unsigned is_contiguous, const unsigned override_flags,
 						 const uint64_t tx_op_flags, const uint64_t caps,
 						 const enum ofi_reliability_kind reliability,
-						 const enum opx_hfi1_type	 hfi1_type)
+						 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== SEND (begin)\n");
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND");
@@ -3854,7 +3878,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			rc = opx_ep_tx_send_try_eager(ep, buf, len, addr, tag, context, local_iov, niov, total_len,
 						      data, lock_required, is_contiguous, override_flags, tx_op_flags,
 						      caps, reliability, do_cq_completion, hmem_iface, hmem_device,
-						      hmem_handle, mp_eager_fallback, hfi1_type);
+						      hmem_handle, mp_eager_fallback, hfi1_type, ctx_sharing);
 			if (OFI_LIKELY(rc == FI_SUCCESS)) {
 				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -3874,7 +3898,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			rc = opx_hfi1_tx_send_try_mp_egr(ep, buf, len, addr.fi, tag, context, data, lock_required,
 							 override_flags, tx_op_flags, caps, reliability,
 							 do_cq_completion, FI_HMEM_SYSTEM, 0ul, OPX_HMEM_NO_HANDLE,
-							 hfi1_type);
+							 hfi1_type, ctx_sharing);
 			if (OFI_LIKELY(rc == FI_SUCCESS)) {
 				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -3900,7 +3924,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 	rc = opx_ep_tx_send_rzv(ep, buf, len, addr, tag, context, local_iov, niov, total_len, data, lock_required,
 				is_contiguous, override_flags, tx_op_flags, caps, reliability, do_cq_completion,
-				hmem_iface, hmem_device, hmem_handle, hfi1_type);
+				hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== SEND (end)\n");
@@ -3913,7 +3937,7 @@ ssize_t fi_opx_ep_tx_send(struct fid_ep *ep, const void *buf, size_t len, void *
 			  void *context, const uint32_t data, const int lock_required, const enum fi_av_type av_type,
 			  const unsigned is_contiguous, const unsigned override_flags, const uint64_t tx_op_flags,
 			  const uint64_t caps, const enum ofi_reliability_kind reliability,
-			  const enum opx_hfi1_type hfi1_type)
+			  const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -3921,7 +3945,7 @@ ssize_t fi_opx_ep_tx_send(struct fid_ep *ep, const void *buf, size_t len, void *
 
 	ssize_t rc = fi_opx_ep_tx_send_internal(ep, buf, len, desc, dest_addr, tag, context, data,
 						FI_OPX_LOCK_NOT_REQUIRED, av_type, is_contiguous, override_flags,
-						tx_op_flags, caps, reliability, hfi1_type);
+						tx_op_flags, caps, reliability, hfi1_type, ctx_sharing);
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 
@@ -3932,7 +3956,8 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr, uint64_t tag,
 				     const uint32_t data, const int lock_required, const enum fi_av_type av_type,
 				     const uint64_t tx_op_flags, const uint64_t caps,
-				     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
+				     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
+				     const bool ctx_sharing)
 {
 	// Exactly one of FI_MSG or FI_TAGGED should be on
 	assert((caps & (FI_MSG | FI_TAGGED)) && ((caps & (FI_MSG | FI_TAGGED)) != (FI_MSG | FI_TAGGED)));
@@ -3949,7 +3974,7 @@ ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t 
 						  0,	// data
 						  lock_required, av_type, OPX_CONTIG_TRUE, OPX_FLAGS_OVERRIDE_TRUE,
 						  FI_SELECTIVE_COMPLETION, // op flags to turn off context
-						  caps, reliability, hfi1_type);
+						  caps, reliability, hfi1_type, ctx_sharing);
 	} else {
 		assert(len <= FI_OPX_HFI1_PACKET_IMM);
 	}
@@ -3970,15 +3995,16 @@ ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t 
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr addr = FI_OPX_EP_AV_ADDR(av_type, opx_ep, dest_addr);
 
-	const ssize_t rc = FI_OPX_FABRIC_TX_INJECT(ep, buf, len, addr.fi, tag, data, lock_required,
-						   addr.hfi1_subctxt_rx, tx_op_flags, caps, reliability, hfi1_type);
+	const ssize_t rc = FI_OPX_FABRIC_TX_INJECT(ep, buf, len, addr.fi, tag, data, lock_required, tx_op_flags, caps,
+						   reliability, hfi1_type, ctx_sharing);
 
 	if (OFI_UNLIKELY(rc == -EAGAIN)) {
 		// In this case we are probably out of replay buffers. To deal
 		// with this, we do a poll which may send a ping and will
 		// process any incoming ACKs, hopefully releasing a buffer for
 		// reuse.
-		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type);
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
+				  ctx_sharing);
 	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "INJECT");
@@ -3991,14 +4017,15 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_ep_tx_inject(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr, uint64_t tag,
 			    const uint32_t data, const int lock_required, const enum fi_av_type av_type,
 			    const uint64_t tx_op_flags, const uint64_t caps,
-			    const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
+			    const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
+			    const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
 	ssize_t rc = fi_opx_ep_tx_inject_internal(ep, buf, len, dest_addr, tag, data, FI_OPX_LOCK_NOT_REQUIRED, av_type,
-						  tx_op_flags, caps, reliability, hfi1_type);
+						  tx_op_flags, caps, reliability, hfi1_type, ctx_sharing);
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 
@@ -4009,7 +4036,7 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_recv_generic(struct fid_ep *ep, void *buf, size_t len, void *desc, fi_addr_t src_addr, uint64_t tag,
 			    uint64_t ignore, void *context, const int lock_required, const enum fi_av_type av_type,
 			    const uint64_t static_flags, const enum ofi_reliability_kind reliability,
-			    const enum opx_hfi1_type hfi1_type)
+			    const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -4025,7 +4052,7 @@ ssize_t fi_opx_recv_generic(struct fid_ep *ep, void *buf, size_t len, void *desc
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_recvmsg_generic(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags, const int lock_required,
 			       const enum fi_av_type av_type, const enum ofi_reliability_kind reliability,
-			       const enum opx_hfi1_type hfi1_type)
+			       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
