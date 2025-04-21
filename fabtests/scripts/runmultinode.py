@@ -24,7 +24,7 @@ def parse_args():
 
 def parse_config(config):
 	with open(config, "r") as f:
-		yconf = yaml.load(f, Loader=yaml.FullLoader)
+		yconf = yaml.safe_load(f)
 	return yconf
 
 def mpi_env(config):
