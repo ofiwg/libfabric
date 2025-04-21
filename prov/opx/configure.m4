@@ -209,38 +209,38 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			])
 		])
 
+
 		AS_IF([test $opx_happy -eq 1], [
-		    # Check if hfi1_status_v2 is present in /usr/include/uapi/rdma/hfi/hfi1_user.h
+		    save_CPPFLAGS=$CPPFLAGS
+		    CPPFLAGS="-I/usr/include/uapi"
 		    AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
 			[[#include <uapi/rdma/hfi/hfi1_user.h>]],
-			[[
-			    struct hfi1_status_v2 status_v2;
-			]])],
-			[
-			    # hfi1_status_v2 found in /usr/include/uapi/rdma/hfi/hfi1_user.h
+			[[struct hfi1_status_v2 s;]])],
+			[hfi1_status_v2_found=uapi],
+			[hfi1_status_v2_found=no])
+		    CPPFLAGS=$save_CPPFLAGS
+
+		    AS_IF([test "x$hfi1_status_v2_found" = "xno"], [
+			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+			    [[#include <rdma/hfi/hfi1_user.h>]],
+			    [[struct hfi1_status_v2 s;]])],
+			    [hfi1_status_v2_found=regular],
+			    [hfi1_status_v2_found=no])
+		    ])
+
+		    AS_CASE([$hfi1_status_v2_found],
+			[uapi], [
 			    AC_MSG_NOTICE([hfi1_user.h hfi1_status_v2 defined... yes (uapi)])
 			    opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_JKR_SUPPORT -I/usr/include/uapi"
 			],
+			[regular], [
+			    AC_MSG_NOTICE([hfi1_user.h hfi1_status_v2 defined... yes])
+			    opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_JKR_SUPPORT"
+			],
 			[
-			    # Check if hfi1_status_v2 is present in /usr/include/rdma/hfi/hfi1_user.h
-			    AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
-				[[#include <rdma/hfi/hfi1_user.h>]],
-				[[
-				    struct hfi1_status_v2 status_v2;
-				]])],
-				[
-				    # hfi1_status_v2 found in /usr/include/rdma/hfi/hfi1_user.h
-				    AC_MSG_NOTICE([hfi1_ioctl.h hfi1_status_v2 defined... yes])
-				    opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_JKR_SUPPORT"
-				],
-				[
-				    # hfi1_status_v2 not found in either location
-				    AC_MSG_NOTICE([hfi1_status_v2 defined... no, no support for CN5000])
-				]
-			    )
-			]
-		    ])
-		)
+			    AC_MSG_NOTICE([hfi1_status_v2 defined... no, no support for CN5000])
+			])
+		])
 	])
 
 	AC_SUBST(opx_CPPFLAGS)
@@ -251,3 +251,4 @@ dnl A separate macro for AM CONDITIONALS, since they cannot be invoked
 dnl conditionally
 AC_DEFUN([FI_OPX_CONDITIONALS],[
 ])
+
