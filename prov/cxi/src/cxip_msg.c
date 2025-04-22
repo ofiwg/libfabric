@@ -34,7 +34,7 @@ fi_addr_t cxip_recv_req_src_addr(struct cxip_rxc *rxc,
 	 * physical address in the EQ event to logical FI address.
 	 */
 	if ((rxc->attr.caps & FI_SOURCE) || force) {
-		struct cxip_addr addr = {};
+		struct cxip_addr addr = {0};
 
 		if (rxc->ep_obj->av->symmetric)
 			return CXI_MATCH_ID_EP(rxc->pid_bits, init);
