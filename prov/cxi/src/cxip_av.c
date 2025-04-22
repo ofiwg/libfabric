@@ -85,10 +85,9 @@ static int cxip_av_insert_addr(struct cxip_av *av, struct cxip_addr *addr,
 {
 	struct cxip_av_entry *entry;
 	struct cxip_av_auth_key_entry *auth_key_entry = NULL;
-	struct cxip_addr auth_key_addr = {
-		.nic = addr->nic,
-		.pid = addr->pid
-	};
+	struct cxip_addr auth_key_addr = {0};
+	auth_key_addr.nic = addr->nic;
+	auth_key_addr.pid = addr->pid;
 
 	if (flags & FI_AUTH_KEY) {
 		auth_key_entry =
