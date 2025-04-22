@@ -362,6 +362,7 @@ static inline bool cxip_software_pte_allowed(void)
 struct cxip_addr {
 	uint32_t pid		: C_DFA_PID_BITS_MAX;
 	uint32_t nic		: C_DFA_NIC_BITS;
+	uint32_t pad		: 3;
 	uint16_t vni;
 };
 
