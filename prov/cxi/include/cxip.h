@@ -3010,6 +3010,7 @@ enum curl_ops {
 	CURL_DELETE,
 	CURL_MAX
 };
+extern bool cxip_collectives_supported;
 int cxip_curl_init(void);
 void cxip_curl_fini(void);
 const char *cxip_curl_opname(enum curl_ops op);

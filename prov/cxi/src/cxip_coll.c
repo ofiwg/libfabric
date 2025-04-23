@@ -4022,6 +4022,14 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	struct cxip_zbcoll_obj *zb;
 	bool link_zb;
 	int ret;
+	
+	if(cxip_collectives_supported) {
+		TRACE_JOIN("%s: CXI Collectives are supported\n", __func__);
+	}
+	else {
+		TRACE_JOIN("%s: CXI Collectives are not supported\n", __func__);
+		return -FI_EOPNOTSUPP;
+	}
 
 	check_red_pkt();
 
