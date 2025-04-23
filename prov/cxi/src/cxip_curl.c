@@ -11,12 +11,10 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <curl/curl.h>
-#include <dlfcn.h>
 #include <sys/stat.h>
-
 #include <ofi.h>
-
 #include "cxip.h"
+
 static void *cxip_curlhandle;
 static CURLM *cxip_curlm;
 static int cxip_curl_count;
@@ -134,136 +132,170 @@ static size_t write_callback(void *curl_rcvd, size_t size, size_t nmemb,
  * (concurrent calls).
  */
 
-/* Each of these should be referenced in curlary[] below */
-CURLcode (*dl_curl_global_init)(long);
-void	 (*dl_curl_global_cleanup)(void);
-CURL *	 (*dl_curl_easy_init)(void);
-void	 (*dl_curl_easy_cleanup)(CURL *);
-CURLcode (*dl_curl_easy_getinfo)(CURL *, CURLINFO, ...);
-CURLcode (*dl_curl_easy_setopt)(CURL *, CURLoption, ...);
-const char *(*dl_curl_easy_strerror)(CURLcode);
-CURLcode (*dl_curl_easy_perform)(CURL *);
-CURLM *	 (*dl_curl_multi_init)(void);
-CURLMcode (*dl_curl_multi_cleanup)(CURLM *);
-CURLMcode (*dl_curl_multi_add_handle)(CURLM *multi_handle, CURL *);
-CURLMsg * (*dl_curl_multi_info_read)(CURLM *multi_handle, int *);
-CURLMcode (*dl_curl_multi_perform)(CURLM *multi_handle, int *);
-const char *(*dl_curl_multi_strerror)(CURLMcode);
-struct curl_slist *(*dl_curl_slist_append)(struct curl_slist *, const char *);
-void	  (*dl_curl_slist_free_all)(struct curl_slist *);
-
-struct curlfunc {
-	void **fptr;
-	char *name;
+struct curldl_ops {
+	CURLcode (*dl_curl_global_init)(long);
+	void	 (*dl_curl_global_cleanup)(void);
+	CURL *	 (*dl_curl_easy_init)(void);
+	void	 (*dl_curl_easy_cleanup)(CURL *);
+	CURLcode (*dl_curl_easy_getinfo)(CURL *, CURLINFO, ...);
+	CURLcode (*dl_curl_easy_setopt)(CURL *, CURLoption, ...);
+	const char *(*dl_curl_easy_strerror)(CURLcode);
+	CURLcode (*dl_curl_easy_perform)(CURL *);
+	CURLM *	 (*dl_curl_multi_init)(void);
+	CURLMcode (*dl_curl_multi_cleanup)(CURLM *);
+	CURLMcode (*dl_curl_multi_add_handle)(CURLM *multi_handle, CURL *);
+	CURLMsg * (*dl_curl_multi_info_read)(CURLM *multi_handle, int *);
+	CURLMcode (*dl_curl_multi_perform)(CURLM *multi_handle, int *);
+	const char *(*dl_curl_multi_strerror)(CURLMcode);
+	struct curl_slist *(*dl_curl_slist_append)(struct curl_slist *, const char *);
+	void	  (*dl_curl_slist_free_all)(struct curl_slist *);
 };
+/* dynamic bind of symbols with dlopen()/dlsym() */
+#if ENABLE_CXI_CURL_DLOPEN
 
-struct curlfunc curlary[] = {
-	{(void **)&dl_curl_global_init, "curl_global_init"},
-	{(void **)&dl_curl_global_cleanup, "curl_global_cleanup"},
-	{(void **)&dl_curl_easy_init, "curl_easy_init"},
-	{(void **)&dl_curl_easy_cleanup, "curl_easy_cleanup"},
-	{(void **)&dl_curl_easy_getinfo, "curl_easy_getinfo"},
-	{(void **)&dl_curl_easy_setopt, "curl_easy_setopt"},
-	{(void **)&dl_curl_easy_strerror, "curl_easy_strerror"},
-	{(void **)&dl_curl_easy_perform, "curl_easy_perform"},
-	{(void **)&dl_curl_multi_init, "curl_multi_init"},
-	{(void **)&dl_curl_multi_cleanup, "curl_multi_cleanup"},
-	{(void **)&dl_curl_multi_add_handle, "curl_multi_add_handle"},
-	{(void **)&dl_curl_multi_info_read, "curl_multi_info_read"},
-	{(void **)&dl_curl_multi_perform, "curl_multi_perform"},
-	{(void **)&dl_curl_multi_strerror, "curl_multi_strerror"},
-	{(void **)&dl_curl_slist_append, "curl_slist_append"},
-	{(void **)&dl_curl_slist_free_all, "curl_slist_free_all"},
-	{NULL, NULL}
+#include <dlfcn.h>
+static struct curldl_ops curldl_ops;
+
+#else /* static bind of symbols */
+static struct curldl_ops curldl_ops = {
+	.dl_curl_global_init = curl_global_init,
+	.dl_curl_global_cleanup = curl_global_cleanup,
+	.dl_curl_easy_init = curl_easy_init,
+	.dl_curl_easy_cleanup = curl_easy_cleanup,
+	.dl_curl_easy_getinfo = curl_easy_getinfo,
+	.dl_curl_easy_setopt = curl_easy_setopt,
+	.dl_curl_easy_strerror = curl_easy_strerror,
+	.dl_curl_easy_perform = curl_easy_perform,
+	.dl_curl_multi_init = curl_multi_init,
+	.dl_curl_multi_cleanup = curl_multi_cleanup,
+	.dl_curl_multi_add_handle = curl_multi_add_handle,
+	.dl_curl_multi_info_read = curl_multi_info_read,
+	.dl_curl_multi_perform = curl_multi_perform,
+	.dl_curl_multi_strerror = curl_multi_strerror,
+	.dl_curl_slist_append = curl_slist_append,
+	.dl_curl_slist_free_all = curl_slist_free_all,
 };
+#endif
 
-int cxip_curl_load_symbols(void)
+static int cxip_curl_dl_init(void)
 {
-	struct curlfunc *funcptr;
-	char *libfile = NULL, *libpath;
-	int version;
-	int errcnt;
-	void *h;
+#if ENABLE_CXI_CURL_DLOPEN
+	char *curl_libpath = NULL;
+	char *lib_name = "libcurl.so";
 
 	/* load successfully only once */
 	if (cxip_curlhandle)
 		return 0;
 
-	char *curl_libpath = NULL;
-	#ifdef FI_CXI_CURL_LIB_PATH
-		curl_libpath = strdup(FI_CXI_CURL_LIB_PATH "/%s/libcurl.so.%d");
-		TRACE_CURL("FI_CXI_CURL_LIB_PATH set to '%s'\n", curl_libpath);
-	#else
-		curl_libpath = strdup("/usr/%s/libcurl.so.%d");
-	#endif
+/*
+ * Check for non standard search path
+ */
+#ifdef FI_CXI_CURL_LIB_PATH
+        curl_libpath = strdup(FI_CXI_CURL_LIB_PATH);
+        TRACE_CURL("FI_CXI_CURL_LIB_PATH set to %s\n", curl_libpath);
+#else/* standard lookup of libcurl.so */
+        curl_libpath = strdup(lib_name);
+        TRACE_CURL("libcurl path set to %s\n", curl_libpath);
+#endif
 
-	/* Try to find latest usable version */
-	// TODO test earlier versions
-	for (version = 4; version >= 4; version--) {
-		const char *lib_dirs[] = {"lib", "lib64"};
-		for (int i = 0; i < 2; i++) {
-			int len = snprintf(NULL, 0, curl_libpath, lib_dirs[i], version) + 1;
-			libfile = malloc(len);
-			if (!libfile) {
-				free(curl_libpath);
-				return -FI_ENOMEM;
-			}
-			snprintf(libfile, len, curl_libpath, lib_dirs[i], version);
-			TRACE_CURL("Checking libcurl at '%s'\n", libfile);
-			libpath = realpath(libfile, NULL);
-			if (!libpath) {
-				TRACE_CURL("could not expand '%s'\n", libfile);
-				CXIP_INFO("could not expand '%s'\n", libfile);
-				free(libfile);
-				continue;
-			}
-			TRACE_CURL("dlopen '%s'\n", libpath);
-			h = dlopen(libpath, RTLD_NOW);
-			if (!h) {
-				TRACE_CURL("%s not found\n", libpath);
-				CXIP_INFO("%s not found\n", libpath);
-				free(libpath);
-				free(libfile);
-				continue;
-			}
-			TRACE_CURL("%s found\n", libpath);
-			free(libpath);
-			free(libfile);
-			break;
-		}
-		if (h) {
-			break;
-		}
+	cxip_curlhandle = dlopen(curl_libpath, RTLD_NOW);
+	if (!cxip_curlhandle) {
+		TRACE_CURL("Unable to dlopen libcurl - file path = %s\n", curl_libpath);
+		free(curl_libpath);
+		return -FI_ENOSYS;
+	}
+	curldl_ops.dl_curl_global_init = dlsym(cxip_curlhandle, "curl_global_init");
+	if (!curldl_ops.dl_curl_global_init) {
+		TRACE_CURL("Failed to find curl_global_init\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_global_cleanup = dlsym(cxip_curlhandle, "curl_global_cleanup");
+	if (!curldl_ops.dl_curl_global_cleanup) {
+		TRACE_CURL("Failed to find curl_global_cleanup\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_easy_init = dlsym(cxip_curlhandle, "curl_easy_init");
+	if (!curldl_ops.dl_curl_easy_init) {
+		TRACE_CURL("Failed to find curl_easy_init\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_easy_cleanup = dlsym(cxip_curlhandle, "curl_easy_cleanup");
+	if (!curldl_ops.dl_curl_easy_cleanup) {
+		TRACE_CURL("Failed to find curl_easy_cleanup\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_easy_getinfo = dlsym(cxip_curlhandle, "curl_easy_getinfo");
+	if (!curldl_ops.dl_curl_easy_getinfo) {
+		TRACE_CURL("Failed to find curl_easy_getinfo\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_easy_setopt = dlsym(cxip_curlhandle, "curl_easy_setopt");
+	if (!curldl_ops.dl_curl_easy_setopt) {
+		TRACE_CURL("Failed to find curl_easy_setopt\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_easy_strerror = dlsym(cxip_curlhandle, "curl_easy_strerror");
+	if (!curldl_ops.dl_curl_easy_strerror) {
+		TRACE_CURL("Failed to find curl_easy_strerror\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_easy_perform = dlsym(cxip_curlhandle, "curl_easy_perform");
+	if (!curldl_ops.dl_curl_easy_init) {
+		TRACE_CURL("Failed to find curl_easy_init\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_multi_init = dlsym(cxip_curlhandle, "curl_multi_init");
+	if (!curldl_ops.dl_curl_multi_init) {
+		TRACE_CURL("Failed to find curl_multi_init\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_multi_cleanup = dlsym(cxip_curlhandle, "curl_multi_cleanup");
+	if (!curldl_ops.dl_curl_multi_cleanup) {
+		TRACE_CURL("Failed to find curl_multi_cleanup\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_multi_add_handle = dlsym(cxip_curlhandle, "curl_multi_add_handle");
+	if (!curldl_ops.dl_curl_multi_add_handle) {
+		TRACE_CURL("Failed to find curl_multi_add_handle\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_multi_info_read = dlsym(cxip_curlhandle, "curl_multi_info_read");
+	if (!curldl_ops.dl_curl_multi_info_read) {
+		TRACE_CURL("Failed to find curl_multi_info_read\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_multi_perform = dlsym(cxip_curlhandle, "curl_multi_perform");
+	if (!curldl_ops.dl_curl_multi_perform) {
+		TRACE_CURL("Failed to find curl_multi_perform\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_multi_strerror = dlsym(cxip_curlhandle, "curl_multi_strerror");
+	if (!curldl_ops.dl_curl_multi_strerror) {
+		TRACE_CURL("Failed to find curl_multi_strerror\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_slist_append = dlsym(cxip_curlhandle, "curl_slist_append");
+	if (!curldl_ops.dl_curl_slist_append) {
+		TRACE_CURL("Failed to find curl_slist_append\n");
+		goto err;
+	}
+	curldl_ops.dl_curl_slist_free_all= dlsym(cxip_curlhandle, "curl_slist_free_all");
+	if (!curldl_ops.dl_curl_slist_free_all) {
+		TRACE_CURL("Failed to find curl_slist_free_all\n");
+		goto err;
 	}
 	free(curl_libpath);
-	if (!h) {
-		TRACE_CURL("libcurl not supported\n");
-		CXIP_WARN("libcurl not supported\n");
-		CXIP_WARN("Accelerated collectives cannot be enabled\n");
-		return -FI_EOPNOTSUPP;
-	}
-	/* Load all the necessary functions, or none */
-	errcnt = 0;
-	funcptr = curlary;
-	while (funcptr->fptr) {
-		*funcptr->fptr = dlsym(h, funcptr->name);
-		if (!(*funcptr->fptr)) {
-			CXIP_WARN("curl function '%s' not found\n",
-				  funcptr->name);
-			errcnt++;
-		}
-		funcptr++;
-	}
-	if (errcnt) {
-		funcptr = curlary;
-		while (funcptr->fptr)
-			*funcptr->fptr = NULL;
-		CXIP_WARN("libcurl incomplete support\n");
-		return -FI_EOPNOTSUPP;
-	}
-	/* record handle to prevent reloading */
-	cxip_curlhandle = h;
-	return 0;
+	TRACE_CURL("DLOPEN SUCCESS\n");
+	return FI_SUCCESS;
+err:
+	TRACE_CURL("DLOPEN FAILURE\n");
+	dlclose(cxip_curlhandle);
+	free(curl_libpath);
+	return -FI_ENODATA;
+#else
+	TRACE_CURL("DLOPEN UNAVAILABLE\n");
+	return FI_SUCCESS;
+#endif
 }
 
 int cxip_curl_init(void)
@@ -271,17 +303,16 @@ int cxip_curl_init(void)
 	CURLcode res;
 	int ret;
 
-	/* can be safely called multiple times */
-	ret = cxip_curl_load_symbols();
+	ret = cxip_curl_dl_init();
 	if (ret)
 		return ret;
 
-	if (!cxip_curlm) {
-		res = (*dl_curl_global_init)(CURL_GLOBAL_DEFAULT);
+	if(!cxip_curlm) {
+		res = curldl_ops.dl_curl_global_init(CURL_GLOBAL_DEFAULT);
 		if (res == CURLE_OK) {
-			cxip_curlm = (*dl_curl_multi_init)();
+			cxip_curlm = curldl_ops.dl_curl_multi_init();
 			if (!cxip_curlm) {
-				(*dl_curl_global_cleanup)();
+				curldl_ops.dl_curl_global_cleanup();
 				ret = -FI_EINVAL;
 			}
 		} else
@@ -297,8 +328,8 @@ void cxip_curl_fini(void)
 {
 	cxip_curl_count = 0;
 	if (cxip_curlm) {
-		(*dl_curl_multi_cleanup)(cxip_curlm);
-		(*dl_curl_global_cleanup)();
+		curldl_ops.dl_curl_multi_cleanup(cxip_curlm);
+		curldl_ops.dl_curl_global_cleanup();
 		cxip_curlm = NULL;
 	}
 }
@@ -417,19 +448,18 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	handle->usrfunc = usrfunc;
 	handle->usrptr = usrptr;
 
-	curl = (*dl_curl_easy_init)();
+	curl = curldl_ops.dl_curl_easy_init();
 	if (!curl) {
-		CXIP_WARN("(*dl_curl_easy_init)() failed\n");
+		CXIP_WARN("curldl_ops.dl_curl_easy_init() failed\n");
 		ret = -FI_ECONNREFUSED;
 		goto fail;
 	}
-
 	/* HTTP 1.1 assumed */
 	headers = NULL;
-	headers = (*dl_curl_slist_append)(headers, "Expect:");
-	headers = (*dl_curl_slist_append)(headers, "Accept: application/json");
-	headers = (*dl_curl_slist_append)(headers, "Content-Type: application/json");
-	headers = (*dl_curl_slist_append)(headers, "charset: utf-8");
+	headers = curldl_ops.dl_curl_slist_append(headers, "Expect:");
+	headers = curldl_ops.dl_curl_slist_append(headers, "Accept: application/json");
+	headers = curldl_ops.dl_curl_slist_append(headers, "Content-Type: application/json");
+	headers = curldl_ops.dl_curl_slist_append(headers, "charset: utf-8");
 	token = NULL;
 	if (sessionToken) {
 		ret = asprintf(&token, "Authorization: Bearer %s",
@@ -439,28 +469,28 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 			ret = -FI_ENOMEM;
 			goto fail;
 		}
-		headers = (*dl_curl_slist_append)(headers, token);
+		headers = curldl_ops.dl_curl_slist_append(headers, token);
 	}
 	handle->headers = (void *)headers;
 
-	(*dl_curl_easy_setopt)(curl, CURLOPT_URL, handle->endpoint);
+	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_URL, handle->endpoint);
 	if (op == CURL_GET) {
-		(*dl_curl_easy_setopt)(curl, CURLOPT_HTTPGET, 1L);
+		curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
 	} else if (op == CURL_DELETE) {
-		(*dl_curl_easy_setopt)(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
+		curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
 	} else {
-		(*dl_curl_easy_setopt)(curl, CURLOPT_POST, 1L);
-		(*dl_curl_easy_setopt)(curl, CURLOPT_POSTFIELDS, handle->request);
-		(*dl_curl_easy_setopt)(curl, CURLOPT_POSTFIELDSIZE,
+		curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_POST, 1L);
+		curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_POSTFIELDS, handle->request);
+		curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,
 				 strlen(handle->request));
 	}
-	(*dl_curl_easy_setopt)(curl, CURLOPT_STDERR, stderr);
-	(*dl_curl_easy_setopt)(curl, CURLOPT_HTTPHEADER, headers);
-	(*dl_curl_easy_setopt)(curl, CURLOPT_WRITEFUNCTION, write_callback);
-	(*dl_curl_easy_setopt)(curl, CURLOPT_WRITEDATA, handle->recv);
-	(*dl_curl_easy_setopt)(curl, CURLOPT_PRIVATE, (void *)handle);
-	(*dl_curl_easy_setopt)(curl, CURLOPT_VERBOSE, (long)verbose);
-	(*dl_curl_easy_setopt)(curl, CURLOPT_CUSTOMREQUEST, cxip_curl_opname(op));
+	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_STDERR, stderr);
+	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_WRITEDATA, handle->recv);
+	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)handle);
+	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_VERBOSE, (long)verbose);
+	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, cxip_curl_opname(op));
 
 	/* Value of fm_cacert variable in slurmctld configuration */
 	/* If set to 'yes' or a path, the CACERT will be validated and used for the connection */
@@ -487,25 +517,25 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 
 	if (!verify) {
 		/* These are needed to work with self-signed certificates */
-		(*dl_curl_easy_setopt)(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-		(*dl_curl_easy_setopt)(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+		curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+		curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 	} else {
 		/* FI_CXI_COLL_FABRIC_MGR_CACERT is "yes" or a pathname */
-		(*dl_curl_easy_setopt)(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-		(*dl_curl_easy_setopt)(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+		curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+		curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
 	}
 
 	/* If certificate file/dir specified, use it */
 	if (isdir)
-		(*dl_curl_easy_setopt)(curl, CURLOPT_CAPATH, cert_env_var);
+		curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_CAPATH, cert_env_var);
 	else if (isfile)
-		(*dl_curl_easy_setopt)(curl, CURLOPT_CAINFO, cert_env_var);
+		curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_CAINFO, cert_env_var);
 
-	(*dl_curl_multi_add_handle)(cxip_curlm, curl);
-	mres = (*dl_curl_multi_perform)(cxip_curlm, &running);
+	curldl_ops.dl_curl_multi_add_handle(cxip_curlm, curl);
+	mres = curldl_ops.dl_curl_multi_perform(cxip_curlm, &running);
 	if (mres != CURLM_OK) {
-		CXIP_WARN("(*dl_curl_multi_perform)() failed: %s\n",
-			  (*dl_curl_multi_strerror)(mres));
+		CXIP_WARN("curldl_ops.dl_curl_multi_perform)() failed: %s\n",
+			  curldl_ops.dl_curl_multi_strerror(mres));
 		ret = -FI_ECONNREFUSED;
 		goto fail;
 	}
@@ -581,15 +611,15 @@ int cxip_curl_progress(struct cxip_curl_handle **handleptr)
 		return -FI_ENODATA;
 
 	/* running returns the number of curls running */
-	mres = (*dl_curl_multi_perform)(cxip_curlm, &running);
+	mres = curldl_ops.dl_curl_multi_perform(cxip_curlm, &running);
 	if (mres != CURLM_OK) {
-		CXIP_WARN("(*dl_curl_multi_perform)() failed: %s\n",
-			  (*dl_curl_multi_strerror)(mres));
+		CXIP_WARN("curldl_ops.dl_curl_multi_perform() failed: %s\n",
+			  curldl_ops.dl_curl_multi_strerror(mres));
 		return -FI_ECONNREFUSED;
 	}
 
 	/* messages returns the number of additional curls finished */
-	msg = (*dl_curl_multi_info_read)(cxip_curlm, &messages);
+	msg = curldl_ops.dl_curl_multi_info_read(cxip_curlm, &messages);
 	if (!msg || msg->msg != CURLMSG_DONE) {
 		return (running) ? -FI_EAGAIN : -FI_ENODATA;
 	}
@@ -601,36 +631,36 @@ int cxip_curl_progress(struct cxip_curl_handle **handleptr)
 		CXIP_WARN("CURL unknown result %d\n", msg->data.result);
 	} else if (msg->data.result > CURLE_OK) {
 		CXIP_WARN("CURL error '%s'\n",
-			  (*dl_curl_easy_strerror)(msg->data.result));
+			  curldl_ops.dl_curl_easy_strerror(msg->data.result));
 	}
 
 	/* retrieve our handle from the private pointer */
 	handle = NULL;
-	res = (*dl_curl_easy_getinfo)(msg->easy_handle,
+	res = curldl_ops.dl_curl_easy_getinfo(msg->easy_handle,
 				CURLINFO_PRIVATE, (char **)&handle);
 	if (res != CURLE_OK) {
-		TRACE_CURL("(*dl_curl_easy_getinfo)(%s) failed: %s\n",
-			   "CURLINFO_PRIVATE", (*dl_curl_easy_strerror)(res));
-		CXIP_WARN("(*dl_curl_easy_getinfo)(%s) failed: %s\n",
-			  "CURLINFO_PRIVATE", (*dl_curl_easy_strerror)(res));
+		TRACE_CURL("curldl_ops.dl_curl_easy_getinfo(%s) failed: %s\n",
+			   "CURLINFO_PRIVATE",curldl_ops.dl_curl_easy_strerror(res));
+		CXIP_WARN("curldl_ops.dl_curl_easy_getinfo(%s) failed: %s\n",
+			  "CURLINFO_PRIVATE",curldl_ops.dl_curl_easy_strerror(res));
 		return -FI_ECONNREFUSED;
 	}
 	/* handle is now valid, must eventually be freed */
 	/* retrieve the status code, should not fail */
-	res = (*dl_curl_easy_getinfo)(msg->easy_handle,
+	res = curldl_ops.dl_curl_easy_getinfo(msg->easy_handle,
 				CURLINFO_RESPONSE_CODE, &status);
 	if (res != CURLE_OK) {
-		TRACE_CURL("(*dl_curl_easy_getinfo)(%s) failed: %s\n",
-			   "CURLINFO_RESPONSE_CODE", (*dl_curl_easy_strerror)(res));
-		CXIP_WARN("(*dl_curl_easy_getinfo)(%s) failed: %s\n",
-			  "CURLINFO_RESPONSE_CODE", (*dl_curl_easy_strerror)(res));
+		TRACE_CURL("curldl.dl_curl_easy_getinfo(%s) failed: %s\n",
+			   "CURLINFO_RESPONSE_CODE",curldl_ops.dl_curl_easy_strerror(res));
+		CXIP_WARN("curldl_ops.dl_curl_easy_getinfo(%s) failed: %s\n",
+			  "CURLINFO_RESPONSE_CODE",curldl_ops.dl_curl_easy_strerror(res));
 		/* continue, handle->status should show zero */
 	}
-	TRACE_CURL("(*dl_curl_easy_getinfo)() success\n");
+	TRACE_CURL("curldl_ops.dl_curl_easy_getinfo)() success\n");
 
 	/* we can recover resources now */
-	(*dl_curl_slist_free_all)((struct curl_slist *)handle->headers);
-	(*dl_curl_easy_cleanup)(msg->easy_handle);
+	curldl_ops.dl_curl_slist_free_all((struct curl_slist *)handle->headers);
+	curldl_ops.dl_curl_easy_cleanup(msg->easy_handle);
 	handle->headers = NULL;
 
 	/* make sure response string is terminated */

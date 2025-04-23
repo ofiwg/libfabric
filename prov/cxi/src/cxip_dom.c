@@ -1641,6 +1641,14 @@ static int cxip_query_collective(struct fid_domain *domain,
 				 uint64_t flags)
 {
 	int ext_op;
+	
+	if(cxip_collectives_supported) {
+		CXIP_WARN("%s: CXI Collectives are supported\n", __func__);
+	}
+	else {
+		CXIP_WARN("%s: CXI Collectives are not supported\n", __func__);
+		return -FI_EOPNOTSUPP;
+	}
 
 	/* BARRIER does not require attr */
 	if (coll == FI_BARRIER && !attr)

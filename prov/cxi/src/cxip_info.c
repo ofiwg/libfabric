@@ -12,6 +12,7 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_FABRIC, __VA_ARGS__)
+bool cxip_collectives_supported = true;
 
 char cxip_prov_name[] = "cxi";
 
@@ -1316,9 +1317,18 @@ static void cxip_env_init(void)
  */
 CXI_INI
 {
+	int ret = 0;
 	cxip_env_init();
-
-	cxip_curl_init();
+	/* 
+	 * Check to see if we had any issues when binding the curl symbols or during multi init
+	 * If we failed, then collective support will be removed from the CXI provider fi_info
+	 */
+	ret = cxip_curl_init();
+	if(ret != FI_SUCCESS) {
+		CXIP_WARN("cxip_curl_init() failed! in %s()\n", __func__);
+		CXIP_WARN("removing collective support from CXI prov fi_getinfo()", __func__);
+		cxip_collectives_supported = false;
+	}
 
 	cxip_if_init();
 
@@ -1349,12 +1359,17 @@ static void cxip_alter_caps(struct fi_info *info, const struct fi_info *hints)
 	 * FI_MSG for send and receive if not already enabled.
 	 */
 	if (hints && hints->caps && (hints->caps & FI_COLLECTIVE)) {
-		if (!(info->caps & (FI_MSG | FI_TAGGED))) {
+		if(!cxip_collectives_supported) {
+			CXIP_WARN("Collectives are not supported - %s\n", __func__);
+			info->caps &= ~FI_COLLECTIVE;
+		} else if (!(info->caps & (FI_MSG | FI_TAGGED))) {
 			info->caps |= FI_MSG | FI_SEND | FI_RECV;
 			info->tx_attr->caps |= FI_MSG | FI_SEND;
 			info->rx_attr->caps |= FI_MSG | FI_RECV;
 		}
+
 	}
+	
 }
 
 static void cxip_alter_tx_attr(struct fi_tx_attr *attr,

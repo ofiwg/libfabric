@@ -44,6 +44,17 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 	AC_ARG_WITH([json-c],
 		[AS_HELP_STRING([--with-json-c=DIR], [Install directory for json-c])])
 
+    # Support for collectives dlopen/dlsym of curl libs.
+    coll_dlopen=0
+    AC_ARG_ENABLE([cxi-curl-dlopen],
+    [AS_HELP_STRING([--enable-cxi-curl-dlopen], [Enable collectives dlopen of curl libraries @<:@default=no@:>@])],
+    [
+            AS_IF([test "$with_dlopen" = "no"], [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+            AS_IF([test "$enable_cxi_curl_dlopen" != "no"], [coll_dlopen=1])
+    ])
+    # define and set ENABLE_CXI_CURL_DLOPEN
+    AC_DEFINE_UNQUOTED([ENABLE_CXI_CURL_DLOPEN], [$coll_dlopen], [Enable collectives dlopen of curl libraries])
+
 	AS_IF([test x"$enable_cxi" != x"no"],
 		[
 			AC_CHECK_HEADER(cxi_prov_hw.h,
@@ -96,8 +107,9 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 
 			cxi_CPPFLAGS="$cxi_CPPFLAGS $libcurl_CPPFLAGS"
 			cxi_LDFLAGS="$cxi_LDFLAGS $libcurl_LDFLAGS"
-			cxi_LIBS="$cxi_LIBS $libcurl_LIBS"
-
+			# check to see if we are dynamically linking the curl symbols
+			AS_IF([test "$coll_dlopen" = "0"], [cxi_LIBS="$cxi_LIBS $libcurl_LIBS"])
+			AC_MSG_NOTICE([After coll_dlopen check, cxi_LIBS = $cxi_LIBS])
 			# Add on json if installed in non-default location.
 			if test "$with_json_c" != "" && test "$with_json_c" != "no"; then
 				FI_CHECK_PREFIX_DIR([$with_json_c], [json])
