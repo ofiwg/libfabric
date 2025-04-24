@@ -10,6 +10,7 @@
 #include "efa_env.h"
 #include "ofi_hmem.h"
 #include "ofi_util.h"
+#include "ofi_lock.h"
 
 enum efa_domain_info_type {
 	EFA_INFO_RDM,
@@ -56,6 +57,7 @@ struct efa_domain {
 };
 
 extern struct dlist_entry g_efa_domain_list;
+extern ofi_mutex_t g_efa_domain_list_lock;
 
 /*
  * efa_is_cache_available() is a check to see whether a memory registration
