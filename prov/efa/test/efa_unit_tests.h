@@ -87,7 +87,6 @@ struct efa_unit_test_handshake_pkt_attr {
 };
 
 int efa_device_construct(struct efa_device *efa_device,
-			 int device_idx,
 			 struct ibv_device *ibv_device);
 
 void efa_unit_test_buff_construct(struct efa_unit_test_buff *buff, struct efa_resource *resource, size_t buff_size);
