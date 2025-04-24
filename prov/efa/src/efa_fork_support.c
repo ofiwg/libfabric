@@ -196,6 +196,7 @@ void efa_atfork_callback_flush_mr_cache()
 	struct efa_domain *efa_domain;
 	bool flush_lru = true;
 
+	ofi_mutex_lock(&g_efa_domain_list_lock);
 	dlist_foreach_container_safe(&g_efa_domain_list,
 				     struct efa_domain,
 				     efa_domain, list_entry, tmp) {
@@ -203,6 +204,7 @@ void efa_atfork_callback_flush_mr_cache()
 			while(ofi_mr_cache_flush(efa_domain->cache, flush_lru));
 		}
 	}
+	ofi_mutex_unlock(&g_efa_domain_list_lock);
 }
 
 #ifndef _WIN32
