@@ -30,8 +30,8 @@ static bool efa_is_local_peer(struct efa_av *av, const void *addr)
 	}
 	EFA_INFO(FI_LOG_AV, "The peer's GID is %s.\n", raw_gid_str);
 #endif
-	for (i = 0; i < g_device_cnt; ++i) {
-		if (!memcmp(raw_gid, g_device_list[i].ibv_gid.raw, EFA_GID_LEN)) {
+	for (i = 0; i < g_efa_ibv_gid_cnt; ++i) {
+		if (!memcmp(raw_gid, g_efa_ibv_gid_list[i].raw, EFA_GID_LEN)) {
 			EFA_INFO(FI_LOG_AV, "The peer is local.\n");
 			return 1;
 		}

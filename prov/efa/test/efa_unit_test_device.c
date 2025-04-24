@@ -21,7 +21,7 @@ void test_efa_device_construct_error_handling()
 	g_efa_unit_test_mocks.efadv_query_device = &efa_mock_efadv_query_device_return_mock;
 	will_return(efa_mock_efadv_query_device_return_mock, ibv_err);
 
-	efa_device_construct(&efa_device, ibv_device_list[0]);
+	efa_device_construct_gid(&efa_device, ibv_device_list[0]);
 
 	/* when error happend, resources in efa_device should be NULL */
 	assert_null(efa_device.ibv_ctx);

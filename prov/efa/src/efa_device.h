@@ -26,9 +26,13 @@ int efa_device_list_initialize(void);
 
 void efa_device_list_finalize(void);
 
-extern struct efa_device *g_device_list;
+extern struct efa_device *g_efa_selected_device_list;
 
-extern int g_device_cnt;
+extern int g_efa_selected_device_cnt;
+
+extern union ibv_gid *g_efa_ibv_gid_list;
+
+extern int g_efa_ibv_gid_cnt;
 
 bool efa_device_support_rdma_read(void);
 
