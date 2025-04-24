@@ -10,7 +10,6 @@
 #include <stdbool.h>
 
 struct efa_device {
-	int			device_idx;
 	struct ibv_context	*ibv_ctx;
 	struct ibv_device_attr	ibv_attr;
 	struct efadv_device_attr efa_attr;

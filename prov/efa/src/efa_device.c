@@ -30,19 +30,15 @@
  * @brief initialize data members of a struct of efa_device
  *
  * @param	efa_device[in,out]	pointer to a struct efa_device
- * @param	device_idx[in]		device index
  * @param	ibv_device[in]		pointer to a struct ibv_device, which is used
  * 					to query attributes of the EFA device
  * @return	0 on success
  * 		a negative libfabric error code on failure.
  */
 int efa_device_construct(struct efa_device *efa_device,
-			 int device_idx,
 			 struct ibv_device *ibv_device)
 {
 	int err;
-
-	efa_device->device_idx = device_idx;
 
 	efa_device->ibv_ctx = ibv_open_device(ibv_device);
 	if (!efa_device->ibv_ctx) {
@@ -198,7 +194,7 @@ int efa_device_list_initialize(void)
 	}
 
 	for (device_idx = 0; device_idx < g_device_cnt; device_idx++) {
-		err = efa_device_construct(&g_device_list[device_idx], device_idx, ibv_device_list[device_idx]);
+		err = efa_device_construct(&g_device_list[device_idx], ibv_device_list[device_idx]);
 		if (err) {
 			ret = err;
 			goto err_free;
