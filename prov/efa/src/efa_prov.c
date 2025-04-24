@@ -193,15 +193,16 @@ EFA_INI
 	if (err)
 		goto err_free;
 
+	efa_env_initialize();
+
+	/*
+	 * efa_device_list_initialize uses FI_EFA_IFACE, so
+	 * efa_device_list_initialize must be called after efa_env_initialize
+	 */
 	err = efa_device_list_initialize();
 	if (err)
 		return &efa_prov;
 
-	/*
-	 * efa_env_initialize uses g_efa_device_list
-	 * so it must be called after efa_device_list_initialize()
-	 */
-	efa_env_initialize();
 
 	/*
 	 * efa_fork_support_enable_if_requested must be called before
