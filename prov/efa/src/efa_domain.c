@@ -308,7 +308,10 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 #endif
 
+	ofi_mutex_lock(&g_efa_domain_list_lock);
 	dlist_insert_tail(&efa_domain->list_entry, &g_efa_domain_list);
+	ofi_mutex_unlock(&g_efa_domain_list_lock);
+
 	return 0;
 
 err_free:
