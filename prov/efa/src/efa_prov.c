@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include <ofi_prov.h>
+#include <ofi_lock.h>
 #include "efa.h"
 #include "efa_prov.h"
 #include "efa_prov_info.h"
@@ -73,6 +74,8 @@ struct fi_provider efa_prov = {
 struct util_prov efa_util_prov = {
 	.prov = &efa_prov,
 };
+
+ofi_mutex_t g_efa_domain_list_lock;
 
 /**
  * @brief initialize global variable: efa_util_prov
@@ -232,6 +235,7 @@ EFA_INI
 	if (err)
 		goto err_free;
 
+	ofi_mutex_init(&g_efa_domain_list_lock);
 	dlist_init(&g_efa_domain_list);
 
 	return &efa_prov;
