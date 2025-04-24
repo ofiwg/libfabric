@@ -50,23 +50,34 @@ def checkout_external_resources() {
   checkout_ci()
 }
 
-def bootstrap_ci() {
-  sh "${CI_LOCATION}/${env.CI_MODULE}/bootstrap.sh"
+def initialize() {
+  checkout_tar("source")
+  dir (CUSTOM_WORKSPACE) {
+    checkout_external_resources()
+    sh "mkdir -p ${CUSTOM_WORKSPACE}/log_dir"
+    sh "${CI_LOCATION}/bootstrap.sh"
+  }
 }
 
 def build_ci(config_name) {
-  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
-        python run.py \
+  sh """${CI_LOCATION}/venv/bin/python run.py \
         --output=${env.CUSTOM_WORKSPACE}/pre-build \
         --job=${config_name}
      """
 }
 
 def run_ci(stage_name, config_name) {
-  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
-        python run.py \
+  sh """${CI_LOCATION}/venv/bin/python run.py \
         --output=${env.LOG_DIR}/${stage_name} \
         --job=${config_name}
+     """
+}
+
+def run_red(config_name) {
+  sh """PATH=${CI_LOCATION}/venv/bin/:${env.PATH} red \
+        --output ${CUSTOM_WORKSPACE} \
+        --config "${CI_LOCATION}/red_configs/${config_name}.json" \
+        -v 2
      """
 }
 
@@ -89,7 +100,7 @@ def CI_summarize(verbose=false) {
     options = "${options} --send-mail"
   }
 
-  sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+  sh """source ${CI_LOCATION}/venv/bin/activate;\
         python ${CI_LOCATION}/summarize.py \
         --log_directory=${env.LOG_DIR} \
         ${options}
@@ -209,12 +220,31 @@ pipeline {
       TARGET="main"
   }
   stages {
-    stage ('checkout') {
-      steps {
-        script {
-          checkout_tar("source")
-          dir (CUSTOM_WORKSPACE) {
-            checkout_external_resources()
+    stage ('init') {
+      parallel {
+        stage ('main') {
+          steps {
+            script {
+              initialize()
+            }
+          }
+        }
+        stage ('level-zero') {
+          agent { node { label 'level-zero' } }
+          options { skipDefaultCheckout() }
+          steps {
+            script {
+              initialize()
+            }
+          }
+        }
+        stage ('daos') {
+          agent { node { label 'daos_head' } }
+          options { skipDefaultCheckout() }
+          steps {
+            script {
+              initialize()
+            }
           }
         }
       }
@@ -228,19 +258,11 @@ pipeline {
         }
       }
     }
-    stage ('bootstrap_ci') {
+    stage('auth_check') {
       when { equals expected: true, actual: DO_RUN }
       steps {
         script {
-          bootstrap_ci()
-        }
-      }
-    }
-    stage('check_authorization') {
-      when { equals expected: true, actual: DO_RUN }
-      steps {
-        script {
-          sh """source ${CI_LOCATION}/${env.CI_MODULE}/venv/bin/activate;\
+          sh """source ${CI_LOCATION}/venv/bin/activate;\
                 python ${CI_LOCATION}/authorize.py \
                 --author=${env.CHANGE_AUTHOR}
           """
@@ -257,473 +279,43 @@ pipeline {
         }
       }
     }
-    stage ('prepare_build') {
-      when { equals expected: true, actual: DO_RUN }
+    stage ('build_daos') {
+      agent {
+        node {
+          label 'daos_head'
+          customWorkspace CUSTOM_WORKSPACE
+        }
+      }
+      options { skipDefaultCheckout() }
       steps {
         script {
-          echo "Copying build dirs."
-          sh "python3.9 ${RUN_LOCATION}/build.py --build_item=builddir"
-          echo "Copying log dirs."
-          sh "python3.9 ${RUN_LOCATION}/build.py --build_item=logdir"
-        }
-      }
-    }
-    stage ('build_libfabric') {
-      when { equals expected: true, actual: DO_RUN }
-      parallel {
-        stage ('water') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_water.json")
-              }
-            }
-          }
-        }
-        stage ('grass') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_grass.json")
-              }
-            }
-          }
-        }
-        stage ('electric') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_electric.json")
-              }
-            }
-          }
-        }
-        stage ('cyndaquil') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_cyndaquil.json")
-              }
-            }
-          }
-        }
-        stage ('quilava') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_quilava.json")
-              }
-            }
-          }
-        }
-        stage ('daos') {
-          agent {
-            node {
-              label 'daos_head'
-              customWorkspace CUSTOM_WORKSPACE
-            }
-          }
-          options { skipDefaultCheckout() }
-          steps {
-            script {
-              checkout_tar("source")
-              checkout_external_resources()
-              dir (CUSTOM_WORKSPACE) {
-                sh "python3.9 ${RUN_LOCATION}/build.py --build_item=logdir"
-              }
-              bootstrap_ci()
-              dir (CI_LOCATION) {
-                build_ci("pr_build_daos.json")
-              }
-            }
-          }
-        }
-        stage ('fire') {
-          agent {
-            node {
-              label 'level-zero'
-              customWorkspace CUSTOM_WORKSPACE
-            }
-          }
-          options { skipDefaultCheckout() }
-          steps {
-            script {
-              checkout_tar("source")
-              checkout_external_resources()
-              bootstrap_ci()
-              dir (CI_LOCATION) {
-                build_ci("pr_build_fire.json")
-              }
-            }
+          dir (CI_LOCATION) {
+            build_ci("pr_build_daos.json")
           }
         }
       }
     }
-    stage('build_middlewares') {
+    stage ('run') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
-        stage ('shmem_water') {
+        stage ('main') {
           steps {
             script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_shmem_water.json")
-              }
-            }
-          }
-        }
-        stage ('shmem_grass') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_shmem_grass.json")
-              }
-            }
-          }
-        }
-        stage ('ompi_water') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_ompi_water.json")
-              }
-            }
-          }
-        }
-        stage ('ompi_grass') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_ompi_grass.json")
-              }
-            }
-          }
-        }
-        stage ('oneccl_water') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_oneccl_water.json")
-              }
-            }
-          }
-        }
-        stage ('oneccl_grass') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_oneccl_grass.json")
-              }
-            }
-          }
-        }
-        stage ('oneccl_electric') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_oneccl_electric.json")
-              }
-            }
-          }
-        }
-        stage ('oneccl_fire') {
-          agent {
-            node {
-              label 'level-zero'
-              customWorkspace CUSTOM_WORKSPACE
-            }
-          }
-          options { skipDefaultCheckout() }
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_oneccl_fire.json")
-              }
-            }
-          }
-        }
-        stage ('mpich_grass') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_mpich_grass.json")
-              }
-            }
-          }
-        }
-        stage ('mpich_water') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_mpich_water.json")
-              }
-            }
-          }
-        }
-        stage ('impi_grass') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_impi_grass.json")
-              }
-            }
-          }
-        }
-        stage ('impi_water') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                build_ci("pr_build_impi_water.json")
-              }
-            }
-          }
-        }
-      }
-    }
-    stage('parallel_tests') {
-      when { equals expected: true, actual: DO_RUN }
-      parallel {
-        stage('CI_mpichtestsuite_tcp') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_mpi_tcp_mpich_mpichtestsuite", "pr_mpich_mpichtestsuite_grass.json")
-                if (env.WEEKLY.toBoolean()) {
-                  run_ci("CI_mpi_tcp_impi_mpichtestsuite", "pr_impi_mpichtestsuite_grass.json")
+              withEnv(["TARGET=CTARGET"]) {
+                dir (CI_LOCATION) {
+                  run_red("${env.MAIN_CONFIG}")
                 }
               }
             }
           }
         }
-        stage('CI_mpichtestsuite_verbs-rxm') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_mpi_verbs-rxm_mpich_mpichtestsuite", "pr_mpich_mpichtestsuite_water.json")
-                if (env.WEEKLY.toBoolean()) {
-                  run_ci("CI_mpi_verbs-rxm_impi_mpichtestsuite", "pr_impi_mpichtestsuite_water.json")
-                }
-              }
-            }
-          }
-        }
-        stage ('CI_mpi_verbs-rxm_imb') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_mpi_verbs-rxm_imb", "pr_imb_water.json")
-              }
-            }
-          }
-        }
-        stage ('CI_mpi_verbs-rxm_osu') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_mpi_verbs-rxm_osu", "pr_osu_water.json")
-              }
-            }
-          }
-        }
-        stage ('CI_mpi_tcp_imb') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_mpi_tcp_imb", "pr_imb_grass.json")
-              }
-            }
-          }
-        }
-        stage ('CI_mpi_tcp_osu') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_mpi_tcp_osu", "pr_osu_grass.json")
-              }
-            }
-          }
-        }
-        stage('CI_fabtests_tcp') {
-           steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_tcp_reg", "pr_fabtests_tcp_reg.json")
-                run_ci("CI_fabtests_tcp_dbg", "pr_fabtests_tcp_dbg.json")
-                run_ci("CI_fabtests_tcp_dl", "pr_fabtests_tcp_dl.json")
-              }
-            }
-          }
-        }
-        stage('CI_fabtests_tcp-rxm') {
-           steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_tcp-rxm_reg",
-                       "pr_fabtests_tcp-rxm_reg.json")
-                run_ci("CI_fabtests_tcp-rxm_dbg",
-                       "pr_fabtests_tcp-rxm_dbg.json")
-                run_ci("CI_fabtests_tcp-rxm_dl", "pr_fabtests_tcp-rxm_dl.json")
-              }
-            }
-          }
-        }
-        stage('CI_fabtests_sockets') {
-           steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_sockets_reg", "pr_fabtests_sockets_reg.json")
-                run_ci("CI_fabtests_sockets_dbg", "pr_fabtests_sockets_dbg.json")
-                run_ci("CI_fabtests_sockets_dl", "pr_fabtests_sockets_dl.json")
-              }
-            }
-          }
-        }
-        stage('CI_fabtests_udp') {
-           steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_udp_reg", "pr_fabtests_udp_reg.json")
-                run_ci("CI_fabtests_udp_dbg", "pr_fabtests_udp_dbg.json")
-                run_ci("CI_fabtests_udp_dl", "pr_fabtests_udp_dl.json")
-              }
-            }
-          }
-        }
-        stage('CI_fabtests_shm') {
-           steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_shm_reg", "pr_fabtests_shm_reg.json")
-                run_ci("CI_fabtests_shm_dbg", "pr_fabtests_shm_dbg.json")
-                run_ci("CI_fabtests_shm_dl", "pr_fabtests_shm_dl.json")
-              }
-            }
-          }
-        }
-        stage('CI_fabtests_tcp_io_uring') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_tcp_io_uring_reg",
-                       "pr_fabtests_tcp_io_uring_reg.json")
-                run_ci("CI_fabtests_tcp_io_uring_dbg",
-                       "pr_fabtests_tcp_io_uring_dbg.json")
-                run_ci("CI_fabtests_tcp_io_uring_dl",
-                       "pr_fabtests_tcp_io_uring_dl.json")
-              }
-            }
-          }
-        }
-        stage('CI_fabtests_verbs_rxm') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_verbs_reg", "pr_fabtests_verbs_rxm_reg.json")
-                run_ci("CI_fabtests_verbs_dbg", "pr_fabtests_verbs_rxm_dbg.json")
-                run_ci("CI_fabtests_verbs_dl", "pr_fabtests_verbs_rxm_dl.json")
-              }
-            }
-          }
-        }
-        stage('CI_fabtests_verbs_rxd') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_verbs_reg", "pr_fabtests_verbs_rxd_reg.json")
-                run_ci("CI_fabtests_verbs_dbg", "pr_fabtests_verbs_rxd_dbg.json")
-                run_ci("CI_fabtests_verbs_dl", "pr_fabtests_verbs_rxd_dl.json")
-              }
-            }
-          }
-        }
-        stage('CI_fabtests_psm3') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_psm3_reg", "pr_fabtests_psm3_reg.json")
-                run_ci("CI_fabtests_psm3_dbg", "pr_fabtests_psm3_dbg.json")
-                run_ci("CI_fabtests_psm3_dl", "pr_fabtests_psm3_dl.json")
-              }
-            }
-          }
-        }
-        stage('CI_fabtests_ucx') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_ucx_reg", "pr_fabtests_ucx_reg.json")
-                run_ci("CI_fabtests_ucx_dbg", "pr_fabtests_ucx_dbg.json")
-                run_ci("CI_fabtests_ucx_dl", "pr_fabtests_ucx_dl.json")
-              }
-            }
-          }
-        }
-        stage('CI_shmem_grass') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_shmem_grass", "pr_shmem_1n2ppn_grass.json")
-                run_ci("CI_shmem_grass", "pr_shmem_2n1ppn_grass.json")
-              }
-            }
-          }
-        }
-        stage('CI_shmem_water') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_shmem_water", "pr_shmem_1n2ppn_water.json")
-                run_ci("CI_shmem_water", "pr_shmem_2n1ppn_water.json")
-              }
-            }
-          }
-        }
-        stage ('CI_multinode_performance') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_multinode_performance_grass",
-                       "pr_multinode_performance_grass.json")
-                run_ci("CI_multinode_performance_water",
-                       "pr_multinode_performance_water.json")
-              }
-            }
-          }
-        }
-        stage ('CI_oneccl_grass') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_oneccl_grass", "pr_oneccl_grass_tcp.json")
-                run_ci("CI_oneccl_grass", "pr_oneccl_grass_shm.json")
-              }
-            }
-          }
-        }
-        stage ('CI_oneccl_water') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_oneccl_water", "pr_oneccl_water.json")
-              }
-            }
-          }
-        }
-        stage ('CI_oneccl_electric') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_oneccl_electric", "pr_oneccl_electric.json")
-              }
-            }
-          }
-        }
-        stage ('CI_oneccl_fire') {
+        stage ('level-zero') {
           agent { node { label 'level-zero' } }
           options { skipDefaultCheckout() }
           steps {
             script {
               dir (CI_LOCATION) {
-                run_ci("CI_oneccl_fire", "pr_oneccl_fire.json")
+                run_red("${env.LEVEL_ZERO_CONFIG}")
               }
             }
           }
@@ -745,7 +337,7 @@ pipeline {
             }
           }
         }
-         stage('daos_verbs') {
+        stage('daos_verbs') {
           agent { node { label 'daos_verbs' } }
           options { skipDefaultCheckout() }
           steps {
@@ -758,90 +350,6 @@ pipeline {
                   --build_hw=daos \
                   --log_file=${env.LOG_DIR}/daos_verbs-rxm_reg
                 """
-              }
-            }
-          }
-        }
-        stage ('DMABUF-Tests') {
-          agent { node { label 'level-zero' } }
-          options { skipDefaultCheckout() }
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_dmabuf_fire_1_node", "pr_dmabuf_1_node.json")
-                run_ci("CI_dmabuf_fire_2_node", "pr_dmabuf_2_node.json")
-              }
-            }
-          }
-        }
-        stage ('CI_fabtests_cyndaquil') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_cyndaquil_h2d_reg",
-                       "pr_fabtests_cyndaquil_h2d_reg.json")
-                run_ci("CI_fabtests_cyndaquil_d2d_reg",
-                       "pr_fabtests_cyndaquil_d2d_reg.json")
-              }
-            }
-          }
-        }
-        stage ('CI_fabtests_quilava') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_quilava_h2d_reg",
-                       "pr_fabtests_quilava_h2d_reg.json")
-                run_ci("CI_fabtests_quilava_d2d_reg",
-                       "pr_fabtests_quilava_d2d_reg.json")
-              }
-            }
-          }
-        }
-        stage ('CI_fabtests_charizard') {
-          agent { node { label 'level-zero' } }
-          options { skipDefaultCheckout() }
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_charizard_h2d_reg",
-                       "pr_fabtests_charizard_h2d_reg.json")
-                run_ci("CI_fabtests_charizard_d2d_reg",
-                       "pr_fabtests_charizard_d2d_reg.json")
-                run_ci("CI_fabtests_charizard_xd2d_reg",
-                       "pr_fabtests_charizard_xd2d_reg.json")
-              }
-            }
-          }
-        }
-        stage('CI_fabtests_electric') {
-          steps {
-            script {
-              dir (CI_LOCATION) {
-                run_ci("CI_fabtests_electric_reg", "pr_fabtests_electric_reg.json")
-                run_ci("CI_fabtests_electric_dbg", "pr_fabtests_electric_dbg.json")
-                run_ci("CI_fabtests_electric_dl", "pr_fabtests_electric_dl.json")
-              }
-            }
-          }
-        }
-        /* TODO: simplify this into one stage that only runs providers listed in
-         * the changeset.
-         */
-        stage('CI_water_performance_regression') {
-          steps {
-            script {
-              withEnv(["TARGET=CTARGET"]) {
-                dir (CI_LOCATION) {
-                  def reg_file = "${env.LOG_DIR}/${env.WATER_REGRESSION_FILE}"
-                  run_ci("CI_perf_regression_water", "pr_imb_perf_water.json")
-                  sh """if [[ \$(wc -c < ${reg_file}) -gt 1 ]]; then \
-                        cat ${reg_file}
-                        echo \"Performance regression detected\"
-                        exit 1
-                      fi \
-                      """
-                }
               }
             }
           }
