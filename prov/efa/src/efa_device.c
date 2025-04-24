@@ -61,7 +61,11 @@ int efa_device_construct_gid(struct efa_device *efa_device,
 				 sizeof(efa_device->efa_attr));
 	if (err) {
 		err = -err;
-		EFA_INFO_ERRNO(FI_LOG_FABRIC, "efadv_query_device", err);
+		if (err == -EOPNOTSUPP) {
+			EFA_INFO(FI_LOG_FABRIC, "Not an EFA device. Will not initialize.\n");
+		} else {
+			EFA_INFO_ERRNO(FI_LOG_FABRIC, "efadv_query_device", err);
+		}
 		goto err_close;
 	}
 
@@ -253,6 +257,11 @@ int efa_device_list_initialize(void)
 					   ibv_device_list[device_idx]);
 
 		if (err) {
+
+			/* efa_device_construct returns -EOPNOTSUPP for non-EFA devices */
+			if (err == -EOPNOTSUPP)
+				continue;
+
 			ret = err;
 			goto err_free;
 		}
