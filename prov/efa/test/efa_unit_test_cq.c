@@ -496,7 +496,8 @@ void test_rdm_cq_create_error_handling(struct efa_resource **state)
 		skip();
 		return;
 	}
-	efa_device_construct(&efa_device, ibv_device_list[0]);
+	efa_device_construct_gid(&efa_device, ibv_device_list[0]);
+	efa_device_construct_pd(&efa_device, ibv_device_list[0]);
 
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);

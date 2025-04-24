@@ -17,6 +17,7 @@
 #include <errno.h>
 
 #include <rdma/fi_errno.h>
+#include <infiniband/verbs.h>
 
 #include "efa.h"
 #include "efa_device.h"
@@ -27,15 +28,15 @@
 #endif
 
 /**
- * @brief initialize data members of a struct of efa_device
+ * @brief initialize data members of a struct of efa_device until the gid
  *
  * @param	efa_device[in,out]	pointer to a struct efa_device
- * @param	ibv_device[in]		pointer to a struct ibv_device, which is used
- * 					to query attributes of the EFA device
+ * @param	ibv_device[in]		pointer to a struct ibv_device, which is
+ * used to query attributes of the EFA device
  * @return	0 on success
  * 		a negative libfabric error code on failure.
  */
-int efa_device_construct(struct efa_device *efa_device,
+int efa_device_construct_gid(struct efa_device *efa_device,
 			 struct ibv_device *ibv_device)
 {
 	int err;
@@ -80,6 +81,32 @@ int efa_device_construct(struct efa_device *efa_device,
 		goto err_close;
 	}
 
+	return 0;
+
+err_close:
+	ibv_close_device(efa_device->ibv_ctx);
+	efa_device->ibv_ctx = NULL;
+
+	return err;
+}
+
+/**
+ * @brief initialize data members of a struct of efa_device after the gid
+ * including the protection domain and prov info
+ *
+ * @param	efa_device[in,out]	pointer to a struct efa_device
+ * @param	ibv_device[in]		pointer to a struct ibv_device, which is
+ * used to query attributes of the EFA device
+ * @return	0 on success
+ * 		a negative libfabric error code on failure.
+ */
+int efa_device_construct_pd(struct efa_device *efa_device,
+			 struct ibv_device *ibv_device)
+{
+	int err;
+
+	assert(efa_device->ibv_ctx);
+
 	efa_device->ibv_pd = ibv_alloc_pd(efa_device->ibv_ctx);
 	if (!efa_device->ibv_pd) {
 		EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_alloc_pd",
@@ -114,6 +141,13 @@ int efa_device_construct(struct efa_device *efa_device,
 	return 0;
 
 err_close:
+	if (efa_device->ibv_pd) {
+		err = ibv_dealloc_pd(efa_device->ibv_pd);
+		if (err)
+			EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd",
+			               err);
+	}
+
 	ibv_close_device(efa_device->ibv_ctx);
 	efa_device->ibv_ctx = NULL;
 
@@ -158,18 +192,33 @@ static void efa_device_destruct(struct efa_device *device)
 	device->ibv_ctx = NULL;
 }
 
-struct efa_device *g_device_list = NULL;
-int g_device_cnt = 0;
+/*
+ * g_efa_selected_device_list stores the initialized efa devices
+ * that match the filter in FI_EFA_IFACE
+ */
+struct efa_device *g_efa_selected_device_list = NULL;
+int g_efa_selected_device_cnt = 0;
+
+/*
+ * Store GIDs of all EFA devices in g_efa_ibv_gid_list including the ones that
+ * don't match FI_EFA_IFACE g_efa_ibv_gid_list is used in the AV insertion path
+ * to check if a peer is local. Local peers are allocated SHM provider resources
+ */
+union ibv_gid *g_efa_ibv_gid_list = NULL;
+int g_efa_ibv_gid_cnt = 0;
+
 
 /**
- * @brief initialize the global variables g_device_list and g_device_cnt
+ * @brief initialize the global variables g_efa_selected_device_list,
+ * g_efa_selected_device_cnt, g_efa_ibv_gid_list and g_efa_ibv_gid_cnt
  * @return	0 on success.
  * 		negative libfabric error code on failure.
  */
 int efa_device_list_initialize(void)
 {
+	struct efa_device cur_device = {0};
 	struct ibv_device **ibv_device_list;
-	int device_idx;
+	int device_idx, total_device_cnt;
 	int ret, err;
 	static bool initialized = false;
 
@@ -178,34 +227,69 @@ int efa_device_list_initialize(void)
 
 	initialized = true;
 
-	ibv_device_list = ibv_get_device_list(&g_device_cnt);
+	ibv_device_list = ibv_get_device_list(&total_device_cnt);
 	if (ibv_device_list == NULL)
 		return -FI_ENOMEM;
 
-	if (g_device_cnt <= 0) {
+	if (total_device_cnt <= 0) {
 		ibv_free_device_list(ibv_device_list);
 		return -FI_ENODEV;
 	}
 
-	g_device_list = calloc(g_device_cnt, sizeof(struct efa_device));
-	if (!g_device_list) {
+	g_efa_selected_device_list = calloc(total_device_cnt, sizeof(struct efa_device));
+	if (!g_efa_selected_device_list) {
 		ret = -FI_ENOMEM;
 		goto err_free;
 	}
 
-	for (device_idx = 0; device_idx < g_device_cnt; device_idx++) {
-		err = efa_device_construct(&g_device_list[device_idx], ibv_device_list[device_idx]);
+	g_efa_ibv_gid_list = calloc(total_device_cnt, sizeof(union ibv_gid));
+	if (!g_efa_ibv_gid_list) {
+		ret = -FI_ENOMEM;
+		goto err_free;
+	}
+
+	for (device_idx = 0; device_idx < total_device_cnt; device_idx++) {
+		err = efa_device_construct_gid(&cur_device,
+					   ibv_device_list[device_idx]);
+
 		if (err) {
 			ret = err;
 			goto err_free;
 		}
+
+		memcpy(&g_efa_ibv_gid_list[g_efa_ibv_gid_cnt], cur_device.ibv_gid.raw, sizeof(union ibv_gid));
+		g_efa_ibv_gid_cnt++;
+
+		/*
+		 * Read the environment variable FI_EFA_IFACE and only proceed
+		 * with the rest of the initialization for device names that
+		 * match the FI_EFA_IFACE filter
+		 */
+		if (!efa_env_allows_nic(ibv_device_list[device_idx]->name)) {
+			efa_device_destruct(&cur_device);
+			continue;
+
+		}
+
+		err = efa_device_construct_pd(&cur_device, ibv_device_list[device_idx]);
+		if (err) {
+			ret = err;
+			goto err_free;
+		}
+
+		memcpy(&g_efa_selected_device_list[g_efa_selected_device_cnt], &cur_device, sizeof(struct efa_device));
+		g_efa_selected_device_cnt++;
+	}
+
+	if (g_efa_selected_device_cnt == 0) {
+		ret = -FI_ENODEV;
+		goto err_free;
 	}
 
 	ibv_free_device_list(ibv_device_list);
 	return 0;
 
 err_free:
-
 	efa_device_list_finalize();
 
 	assert(ibv_device_list);
@@ -215,21 +299,27 @@ err_free:
 }
 
 /**
- * @brief release the resources in g_device_list, and set g_device_cnt to 0
+ * @brief release global resources that store EFA device and GID information
  */
 void efa_device_list_finalize(void)
 {
 	int i;
 
-	if (g_device_list) {
-		for (i = 0; i < g_device_cnt; i++)
-			efa_device_destruct(&g_device_list[i]);
+	if (g_efa_selected_device_list) {
+		for (i = 0; i < g_efa_selected_device_cnt; i++)
+			efa_device_destruct(&g_efa_selected_device_list[i]);
 
-		free(g_device_list);
+		free(g_efa_selected_device_list);
+		g_efa_selected_device_list = NULL;
 	}
 
-	g_device_list = NULL;
-	g_device_cnt = 0;
+	g_efa_selected_device_cnt = 0;
+
+	if (g_efa_ibv_gid_list) {
+		free(g_efa_ibv_gid_list);
+		g_efa_ibv_gid_list = NULL;
+	}
+	g_efa_ibv_gid_cnt = 0;
 }
 
 /**
@@ -239,9 +329,9 @@ void efa_device_list_finalize(void)
  */
 bool efa_device_support_rdma_read(void)
 {
-	assert(g_device_cnt > 0);
+	assert(g_efa_selected_device_cnt > 0);
 
-	return g_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+	return g_efa_selected_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
 }
 
 /**
@@ -252,9 +342,9 @@ bool efa_device_support_rdma_read(void)
 #if HAVE_CAPS_RDMA_WRITE
 bool efa_device_support_rdma_write(void)
 {
-	assert(g_device_cnt > 0);
+	assert(g_efa_selected_device_cnt > 0);
 
-	return g_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
+	return g_efa_selected_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
 }
 #else
 bool efa_device_support_rdma_write(void)
@@ -271,9 +361,9 @@ bool efa_device_support_rdma_write(void)
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 bool efa_device_support_unsolicited_write_recv(void)
 {
-	assert(g_device_cnt > 0);
+	assert(g_efa_selected_device_cnt > 0);
 
-	return g_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_UNSOLICITED_WRITE_RECV;
+	return g_efa_selected_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_UNSOLICITED_WRITE_RECV;
 }
 #else
 bool efa_device_support_unsolicited_write_recv(void)
