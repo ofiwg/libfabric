@@ -53,10 +53,10 @@ static int send_loop(size_t size) {
 		do {
 			ft_tag = q_opts + 1;
 			if (tagged)
-				ret = fi_tsend(ep, tx_buf, size, NULL, remote_fi_addr,
+				ret = fi_tsend(ep, tx_buf, size, mr_desc, remote_fi_addr,
 					ft_tag, (void *) &send_ctx[q_opts]);
 			else
-				ret = fi_send(ep, tx_buf, size, NULL, remote_fi_addr,
+				ret = fi_send(ep, tx_buf, size, mr_desc, remote_fi_addr,
 					(void *) &send_ctx[q_opts]);
 
 			if (ret == FI_SUCCESS) {
@@ -97,10 +97,10 @@ static int receive_loop(size_t size)
 		do {
 			ft_tag = q_opts + 1;
 			if (tagged)
-				ret = fi_trecv(ep, rx_buf, size, NULL, remote_fi_addr,
+				ret = fi_trecv(ep, rx_buf, size, mr_desc, remote_fi_addr,
 					ft_tag, 0x0, (void *) &recv_ctx[q_opts]);
 			else
-				ret = fi_recv(ep, rx_buf, size, NULL, remote_fi_addr,
+				ret = fi_recv(ep, rx_buf, size, mr_desc, remote_fi_addr,
 					(void *) &recv_ctx[q_opts]);
 
 			if (ret == FI_SUCCESS) {
@@ -263,6 +263,7 @@ int main(int argc, char **argv)
 
 	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT | FI_CONTEXT2;
+	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->addr_format = opts.address_format;
 
