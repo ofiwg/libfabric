@@ -73,7 +73,7 @@ OPX_COMPILE_TIME_ASSERT((OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE + 1) <= OPX_SDMA_HF
 /*
  * Length of bounce buffer in a single SDMA Work Entry.
  */
-#define FI_OPX_HFI1_SDMA_WE_BUF_LEN (OPX_SDMA_MAX_PKTS_BOUNCE_BUF * FI_OPX_HFI1_PACKET_MTU)
+#define FI_OPX_HFI1_SDMA_WE_BUF_LEN (OPX_SDMA_MAX_PKTS_BOUNCE_BUF * OPX_HFI1_MAX_PKT_SIZE)
 
 #define OPX_SDMA_MEMINFO_SIZE	  (136)
 #define OPX_SDMA_MEMINFO_SIZE_QWS (OPX_SDMA_MEMINFO_SIZE >> 3)
@@ -405,7 +405,7 @@ __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_add_packet(struct fi_opx_hfi1_sdma_work_entry *we, struct fi_opx_reliability_tx_replay *replay,
 				 uint64_t payload_bytes)
 {
-	assert(payload_bytes <= FI_OPX_HFI1_PACKET_MTU);
+	assert(payload_bytes <= OPX_HFI1_PKT_SIZE);
 	assert(we->num_packets < OPX_HFI1_SDMA_MAX_PKTS_TID);
 
 	we->packets[we->num_packets].replay = replay;

@@ -464,7 +464,7 @@ struct fi_opx_reliability_rx_uepkt {
 	union opx_hfi1_packet_hdr hdr; /* 56 bytes */
 
 	/* == CACHE LINE == */
-	uint8_t payload[FI_OPX_HFI1_PACKET_MTU];
+	uint8_t payload[OPX_HFI1_MAX_PKT_SIZE];
 
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 
@@ -498,7 +498,7 @@ union fi_opx_reliability_tx_psn {
 
 #define OPX_REPLAY_BASE_SIZE		   (sizeof(struct fi_opx_reliability_tx_replay))
 #define OPX_REPLAY_IOV_SIZE		   (sizeof(struct iovec) << 1)
-#define OPX_REPLAY_PAYLOAD_SIZE		   (FI_OPX_HFI1_PACKET_MTU + 64)
+#define OPX_REPLAY_PAYLOAD_SIZE		   (OPX_HFI1_MAX_PKT_SIZE + 64)
 #define OPX_RELIABILITY_TX_REPLAY_SIZE	   (OPX_REPLAY_BASE_SIZE + OPX_REPLAY_PAYLOAD_SIZE)
 #define OPX_RELIABILITY_TX_REPLAY_IOV_SIZE (OPX_REPLAY_BASE_SIZE + OPX_REPLAY_IOV_SIZE)
 

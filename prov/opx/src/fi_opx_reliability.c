@@ -2356,11 +2356,11 @@ void fi_opx_reliability_service_init(struct fi_opx_reliability_service *service,
 	int max_outstanding;
 	rc = fi_param_get_int(fi_opx_global.prov, "reliability_service_max_outstanding_bytes", &max_outstanding);
 	if (rc == FI_SUCCESS) {
-		if (max_outstanding < FI_OPX_HFI1_PACKET_MTU ||
+		if (max_outstanding < OPX_HFI1_PKT_SIZE ||
 		    max_outstanding > OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_MAX) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"Error: FI_OPX_RELIABILITY_SERVICE_MAX_OUTSTANDING_BYTES was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
-				FI_OPX_HFI1_PACKET_MTU, OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_MAX,
+				OPX_HFI1_PKT_SIZE, OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_MAX,
 				OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_DEFAULT);
 			service->max_outstanding_bytes = OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_DEFAULT;
 		} else {

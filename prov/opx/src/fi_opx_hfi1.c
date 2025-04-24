@@ -1201,7 +1201,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		return -FI_EAGAIN;
 	}
 
-	assert(payload_bytes <= FI_OPX_HFI1_PACKET_MTU);
+	assert(payload_bytes <= OPX_HFI1_PKT_SIZE);
 
 	// The "memcopy first" code is here as an alternative to the more complicated
 	// direct write to pio followed by memory copy of the reliability buffer
@@ -1312,7 +1312,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 		return -FI_EAGAIN;
 	}
 
-	assert(payload_bytes <= FI_OPX_HFI1_PACKET_MTU);
+	assert(payload_bytes <= OPX_HFI1_PKT_SIZE);
 
 	// The "memcopy first" code is here as an alternative to the more complicated
 	// direct write to pio followed by memory copy of the reliability buffer
@@ -2458,7 +2458,7 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		return -FI_EAGAIN;
 	}
 
-	assert(payload_bytes <= FI_OPX_HFI1_PACKET_MTU);
+	assert(payload_bytes <= OPX_HFI1_PKT_SIZE);
 
 	// The "memcopy first" code is here as an alternative to the more complicated
 	// direct write to pio followed by memory copy of the reliability buffer
@@ -2680,7 +2680,7 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 		return -FI_EAGAIN;
 	}
 
-	assert(payload_bytes <= FI_OPX_HFI1_PACKET_MTU);
+	assert(payload_bytes <= OPX_HFI1_PKT_SIZE);
 
 	const enum opx_hfi1_type hfi1_type = OPX_HFI1_TYPE;
 
@@ -2910,7 +2910,7 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work)
 			return -FI_EAGAIN;
 		}
 
-		max_bytes_per_packet = FI_OPX_HFI1_PACKET_MTU;
+		max_bytes_per_packet = OPX_HFI1_PKT_SIZE;
 	} else {
 		max_bytes_per_packet = opx_ep->tx->pio_flow_eager_tx_bytes;
 	}
@@ -3351,7 +3351,7 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work)
 			for (int p = 0; (p < packet_count) && sdma_we_bytes; ++p) {
 				uint64_t packet_bytes =
 					MIN(sdma_we_bytes, max_dput_bytes) + params->payload_bytes_for_iovec;
-				assert(packet_bytes <= FI_OPX_HFI1_PACKET_MTU);
+				assert(packet_bytes <= OPX_HFI1_PKT_SIZE);
 
 				struct fi_opx_reliability_tx_replay *replay;
 				replay = fi_opx_reliability_service_replay_allocate(opx_ep->reli_service, true);
@@ -3512,8 +3512,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 	// With SDMA replay we can support MTU packet sizes even
 	// on credit-constrained systems with smaller PIO packet
 	// sizes. Ignore pio_max_eager_tx_bytes
-	uint64_t       max_eager_bytes = FI_OPX_HFI1_PACKET_MTU;
-	const uint64_t max_dput_bytes  = max_eager_bytes;
+	const uint64_t max_dput_bytes = OPX_HFI1_PKT_SIZE;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "%p:===================================== SEND DPUT SDMA TID, opcode %X -- (begin)\n", params, opcode);
@@ -3667,13 +3666,9 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 			// to send packet_count packets. The only limit now is how
 			// many replays can we get.
 			for (int p = 0; (p < packet_count) && bytes_to_send; ++p) {
-#ifndef NDEBUG
-				bool first_tid_last_packet = false; /* for debug assert only */
-#endif
 				assert(tididx < params->ntidpairs);
 
 				uint64_t packet_bytes = MIN(bytes_to_send, max_dput_bytes);
-				assert(packet_bytes <= FI_OPX_HFI1_PACKET_MTU);
 				if (p == 0) { /* First packet header is user's responsibility even with SDMA header
 						 auto-generation*/
 					/* set fields for first header */
@@ -3710,11 +3705,6 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 				tidbytes_remaining -= packet_bytes;
 				tidbytes_consumed += packet_bytes;
 				if (tidbytes_remaining == 0 && tididx < (params->ntidpairs - 1)) {
-#ifndef NDEBUG
-					if (tididx == 0) {
-						first_tid_last_packet = true; /* First tid even though tididx ++*/
-					}
-#endif
 					tididx++;
 					tidbytes_remaining =
 						FI_OPX_EXP_TID_GET(tidpairs[tididx], LEN) * OPX_HFI1_TID_PAGESIZE;
@@ -3788,11 +3778,6 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 						params->bytes_sent, &sbuf_tmp, NULL, &rbuf, OPX_HFI1_JKR);
 				}
 
-				/* tid packets are page aligned and 4k/8k length except
-				   first TID and last (remnant) packet */
-				assert((tididx == 0) || (first_tid_last_packet) ||
-				       (bytes_to_send < FI_OPX_HFI1_PACKET_MTU) || ((rbuf & 0xFFF) == 0) ||
-				       ((bytes_sent & 0xFFF) == 0));
 				fi_opx_hfi1_sdma_add_packet(params->sdma_we, replay, packet_bytes);
 
 				bytes_to_send -= bytes_sent;
@@ -4037,7 +4022,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 	const uint64_t icrc_and_tail_block = ((hfi1_type == OPX_HFI1_JKR) ? 1 : 0);
 	const uint64_t payload_blocks_total =
 		((niov * sizeof(struct fi_opx_hmem_iov)) + sizeof(uintptr_t) + icrc_and_tail_block + 63) >> 6;
-	assert(payload_blocks_total > 0 && payload_blocks_total < (FI_OPX_HFI1_PACKET_MTU >> 6));
+	assert(payload_blocks_total > 0 && payload_blocks_total < (OPX_HFI1_PKT_SIZE >> 6));
 
 	uint64_t pbc_dws;
 	uint16_t lrh_dws;
@@ -4395,7 +4380,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 	const bool send_immed_data = (src_iface == FI_HMEM_SYSTEM);
 
 #ifndef NDEBUG
-	const uint64_t max_immediate_block_count = (FI_OPX_HFI1_PACKET_MTU >> 6) - 2;
+	const uint64_t max_immediate_block_count = (OPX_HFI1_PKT_SIZE >> 6) - 2;
 #endif
 	/* Expected tid needs to send a leading data block and trailing data
 	 * for alignment. TID writes must start on a 64-byte boundary, so we
@@ -4793,7 +4778,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	const bool send_immed_data = (src_iface == FI_HMEM_SYSTEM);
 
 #ifndef NDEBUG
-	const uint64_t max_immediate_block_count = (FI_OPX_HFI1_PACKET_MTU >> 6) - 2;
+	const uint64_t max_immediate_block_count = (OPX_HFI1_PKT_SIZE >> 6) - 2;
 #endif
 	/* Expected tid needs to send a leading data block and trailing data
 	 * for alignment. TID writes must start on a 64-byte boundary, so we

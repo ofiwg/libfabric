@@ -227,6 +227,12 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_SDMA_DISABLE*
 : Boolean (1/0, on/off, true/false, yes/no). Disables SDMA offload hardware. Default is 0.
 
+*FI_OPX_MAX_PKT_SIZE*
+: Integer. Set the maximum packet size which must be less than or equal to the driver's
+  MTU (Maximum Transmission Unit) size.  Valid values: 2048, 4096, 8192, 10240.
+  Default is set to 10240 for libraries built on CN5000 systems and set to 8192 for
+  libraries built on OPA100 systems.
+
 *FI_OPX_SDMA_MIN_PAYLOAD_BYTES*
 : Integer. The minimum length in bytes where SDMA will be used.
   For messages smaller than this threshold, the send will be completed using PIO.

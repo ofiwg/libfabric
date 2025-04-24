@@ -1995,7 +1995,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		const uint16_t bytes =
 			(ntohl(hdr->bth.psn) & 0x80000000) ? hdr->dput.target.last_bytes : hdr->dput.target.bytes;
 
-		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
+		assert(bytes <= OPX_HFI1_PKT_SIZE);
 #ifndef NDEBUG
 		if (bytes == 0) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2065,7 +2065,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 			bytes = (uint16_t) ((total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B)));
 		}
 
-		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
+		assert(bytes <= OPX_HFI1_PKT_SIZE);
 
 		/* SDMA expected receive w/TID will use CTRL 1, 2 or 3.
 		   Replays should indicate we are not using TID (CTRL 0) */
@@ -2157,7 +2157,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		 * in the multi-packet send, so set the payload bytes accordingly */
 		const uint16_t bytes =
 			(ntohl(hdr->bth.psn) & 0x80000000) ? hdr->dput.target.last_bytes : hdr->dput.target.bytes;
-		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
+		assert(bytes <= OPX_HFI1_PKT_SIZE);
 
 #ifndef NDEBUG
 		if (bytes == 0) {
@@ -2193,7 +2193,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		const uint16_t bytes =
 			(ntohl(hdr->bth.psn) & 0x80000000) ? hdr->dput.target.last_bytes : hdr->dput.target.bytes;
 		assert(context);
-		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
+		assert(bytes <= OPX_HFI1_PKT_SIZE);
 
 #ifndef NDEBUG
 		if (bytes == 0) {
@@ -2244,7 +2244,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 			(ntohl(hdr->bth.psn) & 0x80000000) ? hdr->dput.target.last_bytes : hdr->dput.target.bytes;
 
 		assert(cc);
-		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
+		assert(bytes <= OPX_HFI1_PKT_SIZE);
 
 #ifndef NDEBUG
 		if (bytes == 0) {
@@ -2316,7 +2316,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 						    .rbuf_device = 0,
 						    .sbuf_device = hmem_device,
 						    .sbuf_handle = hmem_handle};
-		assert(dput_iov.bytes <= FI_OPX_HFI1_PACKET_MTU - sizeof(*dput_fetch));
+		assert(dput_iov.bytes <= OPX_HFI1_PKT_SIZE - sizeof(*dput_fetch));
 		assert(hdr->dput.target.op != (FI_NOOP - 1));
 		assert(hdr->dput.target.dt != (FI_VOID - 1));
 
@@ -2382,7 +2382,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 						    .rbuf_device = 0,
 						    .sbuf_device = hmem_device,
 						    .sbuf_handle = hmem_handle};
-		assert(dput_iov.bytes <= ((FI_OPX_HFI1_PACKET_MTU - sizeof(*dput_fetch)) >> 1));
+		assert(dput_iov.bytes <= ((OPX_HFI1_PKT_SIZE - sizeof(*dput_fetch)) >> 1));
 		assert(hdr->dput.target.op != (FI_NOOP - 1));
 		assert(hdr->dput.target.dt != (FI_VOID - 1));
 

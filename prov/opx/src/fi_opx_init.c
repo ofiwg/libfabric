@@ -466,6 +466,7 @@ err:
 }
 
 struct fi_opx_global_data fi_opx_global = {.hfi_local_info.type	  = OPX_HFI1_UNDEF,
+					   .pkt_size		  = OPX_HFI1_DEFAULT_PKT_SIZE,
 					   .opx_hfi1_type_strings = {[OPX_HFI1_UNDEF]  = "OPX_HFI1_UNDEF",
 								     [OPX_HFI1_JKR_9B] = "OPX_HFI1_JKR_9B",
 								     [OPX_HFI1_WFR]    = "OPX_HFI1_WFR",
@@ -815,6 +816,13 @@ OPX_INI
 	fi_param_define(
 		&fi_opx_provider, "mixed_network", FI_PARAM_INT,
 		"Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when mixed network is used. Default is 0.");
+
+	assert(OPX_HFI1_N_PKT_SIZES == 4);
+	fi_param_define(
+		&fi_opx_provider, "max_pkt_size", FI_PARAM_INT,
+		"Set the maximum packet size which must be less than or equal to the driver's MTU (Maximum Transmission Unit) size.  Valid values: %u, %u, %u, %u. Default is %u.",
+		opx_valid_pkt_sizes[0], opx_valid_pkt_sizes[1], opx_valid_pkt_sizes[2], opx_valid_pkt_sizes[3],
+		OPX_HFI1_DEFAULT_PKT_SIZE);
 
 	/* Track TID and HMEM domains so caches can be cleared on exit */
 	dlist_init(&fi_opx_global.tid_domain_list);
