@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_opx" "7" "2025\-03\-14" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_opx" "7" "2025\-04\-24" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .PP
 {%include JB/setup %}
@@ -148,6 +148,17 @@ will issue PING requests to a remote connection.
 Reducing this value may improve performance at the expense of increased
 traffic on the OPX fabric.
 Default setting is 500.
+.TP
+\f[I]FI_OPX_RELIABILITY_SERVICE_MAX_OUTSTANDING_BYTES\f[R]
+Integer.
+This setting controls the maximum number of bytes allowed to be
+in-flight (sent but un-ACK\[cq]d by receiver) per reliability flow
+(one-way communication between two endpoints).
+.PP
+Valid values are in the range of 8192-150,994,944 (8KB-144MB),
+inclusive.
+.PP
+Default setting is 7,340,032 (7MB).
 .TP
 \f[I]FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE\f[R]
 Integer.
@@ -289,6 +300,33 @@ For messages smaller than this threshold, the send will be completed
 using PIO.
 Value must be between 64 and 2147483646.
 Defaults to 16385.
+.TP
+\f[I]FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE\f[R]
+Integer.
+The maximum number of times writev will be called during a single poll
+cycle.
+Value must be between 1 and 1024.
+Defaults to 1.
+.TP
+\f[I]FI_OPX_SDMA_MAX_IOVS_PER_WRITEV\f[R]
+Integer.
+The maximum number of IOVs passed to each writev call.
+Value must be between 3 and 128.
+Defaults to 64.
+.TP
+\f[I]FI_OPX_SDMA_MAX_PKTS\f[R]
+Integer.
+The maximum number of packets transmitted per SDMA request when expected
+receive (TID) is NOT being used.
+Value must be between 1 and 128.
+Defaults to 32.
+.TP
+\f[I]FI_OPX_SDMA_MAX_PKTS_TID\f[R]
+Integer.
+The maximum number of packets transmitted per SDMA request when expected
+receive (TID) is being used.
+Value must be between 1 and 512.
+Defaults to 64.
 .TP
 \f[I]FI_OPX_TID_MIN_PAYLOAD_BYTES\f[R]
 Integer.
