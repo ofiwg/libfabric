@@ -41,29 +41,6 @@ struct efa_env efa_env = {
 	.internal_rx_refill_threshold = 8,
 };
 
-/**
- * @brief Define FI_EFA_USE_DEVICE_RDMA as a configuration parameter
- *
- * This function fetches the default value of using EFA device's
- * RDMA capability and defines it as a configuration parameter.
- */
-void efa_env_define_use_device_rdma()
-{
-	char *str = "";
-
-	/* Specify the help info about the usage of RDMA in the device. */
-	if (!efa_device_support_rdma_read()) {
-		str = "  EFA device on your system does not support RDMA,"
-			" so this variable cannot be set to 1.";
-	}
-
-	fi_param_define(&efa_prov, "use_device_rdma", FI_PARAM_BOOL,
-			"Specifies whether to use device's RDMA functionality"
-			" for one-sided and two-sided transfers.%s",
-			str);
-}
-
-
 /* @brief Read and store the FI_EFA_* environment variables.
  */
 void efa_env_param_get(void)
@@ -165,7 +142,10 @@ void efa_env_param_get(void)
 
 void efa_env_define()
 {
-	efa_env_define_use_device_rdma();
+	fi_param_define(&efa_prov, "use_device_rdma", FI_PARAM_BOOL,
+			"Specifies whether to use device's RDMA functionality"
+			" for one-sided and two-sided transfers if supported "
+			"by the EFA device on the instance.");
 	fi_param_define(&efa_prov, "iface", FI_PARAM_STRING,
 			"A comma delimited list of case-sensitive names to restrict eligible EFA NICs (Default: all).");
 	fi_param_define(&efa_prov, "tx_min_credits", FI_PARAM_INT,
