@@ -814,9 +814,8 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	 * RTS/CTS With max credits, there should be enough PIO Eager buffer to send 1 full-size message and 1 credit
 	 * leftover for min reliability.
 	 */
-	uint64_t l_pio_max_eager_tx_bytes =
-		MIN(FI_OPX_HFI1_PACKET_MTU,
-		    ((hfi->state.pio.credits_total - FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS) * 64));
+	uint64_t l_pio_max_eager_tx_bytes = MIN(
+		OPX_HFI1_PKT_SIZE, ((hfi->state.pio.credits_total - FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS) * 64));
 
 	assert(l_pio_max_eager_tx_bytes < ((2 << 15) - 1)); // Make sure the value won't wrap a uint16_t
 	assert(l_pio_max_eager_tx_bytes != 0);
@@ -834,7 +833,7 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	 * TODO: multiply by user_credit_return_threshold from the hfi1 driver parms.  Default is 33
 	 */
 	uint64_t l_pio_flow_eager_tx_bytes = MIN(
-		FI_OPX_HFI1_PACKET_MTU,
+		OPX_HFI1_PKT_SIZE,
 		((uint16_t) ((hfi->state.pio.credits_total - FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS) * .66) * 64));
 
 	assert((l_pio_flow_eager_tx_bytes & 0x3f) == 0);     // Make sure the value is 64 byte aligned
@@ -1498,6 +1497,36 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	}
 	fi_opx_ref_inc(&opx_ep->hfi->ref_cnt, "HFI context");
 
+	int max_pkt_size;
+
+	if (fi_param_get_int(fi_opx_global.prov, "max_pkt_size", &max_pkt_size) == FI_SUCCESS) {
+		bool valid = false;
+		for (int i = 0; i < OPX_HFI1_N_PKT_SIZES; ++i) {
+			if (max_pkt_size == opx_valid_pkt_sizes[i]) {
+				OPX_HFI1_PKT_SIZE = max_pkt_size;
+				valid		  = true;
+				break;
+			}
+		}
+		if (!valid) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+				"Unsupported packet size %u specified in FI_OPX_MAX_PKT_SIZE.  Defaulting to %u\n",
+				max_pkt_size, OPX_HFI1_PKT_SIZE);
+		}
+	}
+	if (OPX_HFI1_PKT_SIZE > opx_ep->hfi->mtu) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+			"Packet size %u is larger than driver MTU size %u. Defaulting to the current MTU size %u\n",
+			OPX_HFI1_PKT_SIZE, opx_ep->hfi->mtu, opx_ep->hfi->mtu);
+		OPX_HFI1_PKT_SIZE = opx_ep->hfi->mtu;
+	}
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Global OPX packet size %u\n", OPX_HFI1_PKT_SIZE);
+
+	assert(!(FI_OPX_MP_EGR_CHUNK_SIZE & 0x3F));
+	assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT > FI_OPX_MP_EGR_CHUNK_SIZE);
+	assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX > FI_OPX_MP_EGR_CHUNK_SIZE);
+	assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX >= OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT);
+
 	/* The global was set early (userinit), may be changed now on mixed networks */
 	int mixed_network = 0;
 	if (fi_param_get_int(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
@@ -1505,14 +1534,14 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			if (mixed_network == 1) {
 				fi_opx_global.hfi_local_info.type = OPX_HFI1_JKR_9B;
 				opx_ep->hfi->hfi1_type		  = OPX_HFI1_JKR_9B;
-				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Mixed network: Set HFI type to %s.\n",
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Mixed network: Set HFI type to %s.\n",
 					     OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
 			} else if (mixed_network == 0) {
-				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,
 					     "Not mixed network: Set HFI type to %s.\n",
 					     OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
 			} else {
-				FI_WARN(fi_opx_global.prov, FI_LOG_AV,
+				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
 					"Unsupported value (%d) for FI_OPX_MIXED_NETWORK, using default HFI type %s.\n",
 					mixed_network, OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
 			}
@@ -1521,11 +1550,11 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		// Default to 9B unless the environment variable was set.
 		fi_opx_global.hfi_local_info.type = OPX_HFI1_JKR_9B;
 		opx_ep->hfi->hfi1_type		  = OPX_HFI1_JKR_9B;
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Defaulting to mixed network: Set HFI type to %s.\n",
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Defaulting to mixed network: Set HFI type to %s.\n",
 			     OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
 	}
 
-	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_INFO(fi_opx_global.prov, FI_LOG_FABRIC,
 		"Opened hfi %p, HFI type %s, unit %#X, port %#X, ref_cnt %#lX, rcv ctxt %#X, send ctxt %#X, \n",
 		opx_ep->hfi, OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE), opx_ep->hfi->hfi_unit, opx_ep->hfi->hfi_port,
 		opx_ep->hfi->ref_cnt, opx_ep->hfi->ctrl->ctxt_info.ctxt, opx_ep->hfi->ctrl->ctxt_info.send_ctxt);

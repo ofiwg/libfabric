@@ -52,13 +52,27 @@
 
 #define FI_OPX_ADDR_SEP_RX_MAX (4)
 
-#ifndef FI_OPX_HFI1_PACKET_MTU
+/* OPX runtime default packet size. Runtime checked against driver MTU */
+#ifndef OPX_HFI1_DEFAULT_PKT_SIZE
 #ifndef OPX_JKR_SUPPORT
-#define FI_OPX_HFI1_PACKET_MTU (8192)
+#define OPX_HFI1_DEFAULT_PKT_SIZE (8192)
 #else
-#define FI_OPX_HFI1_PACKET_MTU (10240)
+#define OPX_HFI1_DEFAULT_PKT_SIZE (10240)
 #endif
 #endif
+
+/* OPX absolute max for storage allocation/structs. Driver MTU can vary. */
+#define OPX_HFI1_MAX_PKT_SIZE (10240)
+
+#define OPX_HFI1_N_PKT_SIZES 4 /* num of valid packet sizes */
+
+static const uint16_t opx_valid_pkt_sizes[OPX_HFI1_N_PKT_SIZES] = {2048, 4096, 8192, 10240};
+
+static_assert(((OPX_HFI1_DEFAULT_PKT_SIZE == 2048) || (OPX_HFI1_DEFAULT_PKT_SIZE == 4096) ||
+	       (OPX_HFI1_DEFAULT_PKT_SIZE == 8192) || (OPX_HFI1_DEFAULT_PKT_SIZE == 10240)),
+	      "OPX_HFI1_DEFAULT_PKT_SIZE must be one of 2048, 4096, 8192, or 10240");
+
+#define OPX_HFI1_PKT_SIZE (fi_opx_global.pkt_size) /* Runtime checked against driver MTU. */
 
 #define OPX_HFI1_TID_PAGESIZE (PAGE_SIZE) /* assume 4K, no hugepages*/
 
@@ -1410,12 +1424,12 @@ struct fi_opx_hmem_iov {
 	enum fi_hmem_iface iface;
 } __attribute__((__packed__));
 
-#define FI_OPX_MAX_HMEM_IOV	    ((FI_OPX_HFI1_PACKET_MTU - sizeof(uintptr_t)) / sizeof(struct fi_opx_hmem_iov))
-#define FI_OPX_RZV_NONCONTIG_UNUSED (FI_OPX_HFI1_PACKET_MTU - 8 - (((FI_OPX_HFI1_PACKET_MTU - 8) / 28) * 28))
-#define FI_OPX_MAX_DPUT_IOV	    ((FI_OPX_HFI1_PACKET_MTU / sizeof(union opx_hfi1_dput_iov) - 4) + 3)
+#define FI_OPX_MAX_HMEM_IOV	    ((OPX_HFI1_MAX_PKT_SIZE - sizeof(uintptr_t)) / sizeof(struct fi_opx_hmem_iov))
+#define FI_OPX_RZV_NONCONTIG_UNUSED (OPX_HFI1_MAX_PKT_SIZE - 8 - (((OPX_HFI1_MAX_PKT_SIZE - 8) / 28) * 28))
+#define FI_OPX_MAX_DPUT_IOV	    ((OPX_HFI1_MAX_PKT_SIZE / sizeof(union opx_hfi1_dput_iov) - 4) + 3)
 
 #define FI_OPX_MAX_DPUT_TIDPAIRS \
-	((FI_OPX_HFI1_PACKET_MTU - sizeof(union opx_hfi1_dput_iov) - (4 * sizeof(uint32_t))) / sizeof(uint32_t))
+	((OPX_HFI1_MAX_PKT_SIZE - sizeof(union opx_hfi1_dput_iov) - (4 * sizeof(uint32_t))) / sizeof(uint32_t))
 
 #define OPX_IMMEDIATE_BYTE_COUNT_SHIFT (5)
 #define OPX_IMMEDIATE_BYTE_COUNT_MASK  (0xE0)
@@ -1478,13 +1492,13 @@ struct opx_payload_rzv_contig {
 
 	/* ==== CACHE LINE 2-127 ==== */
 
-	union cacheline immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
+	union cacheline immediate_block[OPX_HFI1_MAX_PKT_SIZE / sizeof(union cacheline) - 2];
 };
 
 /* 9B and common payload structure */
 union fi_opx_hfi1_packet_payload {
-	uint8_t	 byte[FI_OPX_HFI1_PACKET_MTU];
-	uint64_t qw[FI_OPX_HFI1_PACKET_MTU >> 3];
+	uint8_t	 byte[OPX_HFI1_MAX_PKT_SIZE];
+	uint64_t qw[OPX_HFI1_MAX_PKT_SIZE >> 3];
 	union {
 		struct {
 			uint64_t		      contig_9B_padding;
@@ -1498,7 +1512,7 @@ union fi_opx_hfi1_packet_payload {
 			uintptr_t	       origin_byte_counter_vaddr;
 			struct fi_opx_hmem_iov iov[2];
 
-			/* ==== CACHE LINE 1-127 (for 8k mtu) ==== */
+			/* ==== CACHE LINE 1-127 (for max pkt size) ==== */
 			struct fi_opx_hmem_iov iov_ext[FI_OPX_MAX_HMEM_IOV - 2];
 #if FI_OPX_RZV_NONCONTIG_UNUSED
 			uint8_t unused[FI_OPX_RZV_NONCONTIG_UNUSED];
@@ -1529,8 +1543,8 @@ union fi_opx_hfi1_packet_payload {
 	} tid_cts;
 } __attribute__((__aligned__(32)));
 
-static_assert(sizeof(union fi_opx_hfi1_packet_payload) <= FI_OPX_HFI1_PACKET_MTU,
-	      "sizeof(union fi_opx_hfi1_packet_payload) must be <= FI_OPX_HFI1_PACKET_MTU!");
+static_assert(sizeof(union fi_opx_hfi1_packet_payload) <= OPX_HFI1_MAX_PKT_SIZE,
+	      "sizeof(union fi_opx_hfi1_packet_payload) must be <= OPX_HFI1_MAX_PKT_SIZE!");
 static_assert(
 	offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_byte) == FI_OPX_CACHE_LINE_SIZE,
 	"struct fi_opx_hfi1_packet_payload.rendezvous.contiguous.immediate_byte should be aligned on cacheline 1!");
@@ -1542,20 +1556,20 @@ static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguou
 static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.iov_ext) == FI_OPX_CACHE_LINE_SIZE,
 	      "struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.iov_ext should be aligned on cacheline 1!");
 static_assert(
-	FI_OPX_HFI1_PACKET_MTU - sizeof(uintptr_t) - ((FI_OPX_MAX_HMEM_IOV) * sizeof(struct fi_opx_hmem_iov)) ==
+	OPX_HFI1_MAX_PKT_SIZE - sizeof(uintptr_t) - ((FI_OPX_MAX_HMEM_IOV) * sizeof(struct fi_opx_hmem_iov)) ==
 		FI_OPX_RZV_NONCONTIG_UNUSED,
 	"FI_OPX_RZV_NONCONTIG_UNUSED should be based on struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous!");
 #if FI_OPX_RZV_NONCONTIG_UNUSED
 static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.unused) +
 			      FI_OPX_RZV_NONCONTIG_UNUSED ==
-		      FI_OPX_HFI1_PACKET_MTU,
+		      OPX_HFI1_MAX_PKT_SIZE,
 	      "struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.unused should end at packet MTU!");
 #endif
 static_assert(
 	(offsetof(union fi_opx_hfi1_packet_payload, tid_cts.tidpairs) +
-	 sizeof(((union fi_opx_hfi1_packet_payload *) 0)->tid_cts.tidpairs)) == FI_OPX_HFI1_PACKET_MTU,
+	 sizeof(((union fi_opx_hfi1_packet_payload *) 0)->tid_cts.tidpairs)) == OPX_HFI1_MAX_PKT_SIZE,
 	"offsetof(fi_opx_hfi1_packet_payload.tid_cts.tidpairs) + sizeof(...tid_cts.tidpairs) should equal packet MTU! "
-	"If you added/removed fields in struct tid_cts, you need to adjust FI_OPX_MAX_DPUT_TIDPAIRS!");
+	"If you added/removed fields in struct tid_cts, you need to adjust OPX_HFI1_MAX_PKT_SIZE!");
 
 struct fi_opx_hfi1_ue_packet_slist;
 struct fi_opx_hfi1_ue_packet {

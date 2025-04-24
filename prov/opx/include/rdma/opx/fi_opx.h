@@ -227,7 +227,8 @@ struct fi_opx_global_data {
 	struct fi_opx_daos_hfi_rank *daos_hfi_rank_hashmap;
 	enum fi_progress	     progress;
 	bool			     ctx_sharing_enabled;
-	uint8_t			     unused[3];
+	uint16_t		     pkt_size;
+	uint8_t			     unused[1];
 	uint64_t		     unused_qw[4];
 
 	/* == CACHE LINE 2+ == */

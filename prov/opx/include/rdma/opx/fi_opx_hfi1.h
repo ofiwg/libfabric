@@ -128,7 +128,7 @@
 #ifndef OPX_JKR_SUPPORT
 #define FI_OPX_MP_EGR_CHUNK_SIZE (4160)
 #else
-#define FI_OPX_MP_EGR_CHUNK_SIZE (FI_OPX_HFI1_PACKET_MTU)
+#define FI_OPX_MP_EGR_CHUNK_SIZE (OPX_HFI1_PKT_SIZE)
 #endif
 #endif
 /* For full MP-Eager chunks, we pack 16 bytes of payload data in the
@@ -152,15 +152,6 @@
 	((FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) >> 3) /* PAYLOAD QWS CONSUMED */
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL 16
 #define FI_OPX_MP_EGR_XFER_BYTES_TAIL	 0x0080000000000000ull
-
-static_assert(!(FI_OPX_MP_EGR_CHUNK_SIZE & 0x3F), "FI_OPX_MP_EGR_CHUNK_SIZE Must be a multiple of 64!");
-static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT > FI_OPX_MP_EGR_CHUNK_SIZE,
-	      "OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT must be greater than FI_OPX_MP_EGR_CHUNK_SIZE!");
-static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX > FI_OPX_MP_EGR_CHUNK_SIZE,
-	      "OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX must be greater than FI_OPX_MP_EGR_CHUNK_SIZE!");
-static_assert(
-	OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX >= OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT,
-	"OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX must be greater than or equal to OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT!");
 
 /* SDMA tuning constants */
 
@@ -768,7 +759,7 @@ void fi_opx_init_hfi_lookup();
 #define FI_OPX_SHM_FIFO_SIZE   (1024)
 #define FI_OPX_SHM_BUFFER_MASK (FI_OPX_SHM_FIFO_SIZE - 1)
 
-#define FI_OPX_SHM_PACKET_SIZE (FI_OPX_HFI1_PACKET_MTU + sizeof(union opx_hfi1_packet_hdr))
+#define FI_OPX_SHM_PACKET_SIZE (OPX_HFI1_MAX_PKT_SIZE + sizeof(union opx_hfi1_packet_hdr))
 
 #ifndef NDEBUG
 #define OPX_BUF_FREE(x)                                \
