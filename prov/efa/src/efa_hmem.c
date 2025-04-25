@@ -11,7 +11,7 @@ struct efa_hmem_info g_efa_hmem_info[OFI_HMEM_MAX];
 static size_t efa_max_eager_msg_size_with_largest_header() {
 	int mtu_size;
 
-	mtu_size = g_device_list[0].ibv_port_attr.max_msg_sz;
+	mtu_size = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz;
 
 	return mtu_size - efa_rdm_pkt_type_get_max_hdr_size();
 }
@@ -127,23 +127,23 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 #if HAVE_EFA_DMABUF_MR
 	ret = cuda_get_dmabuf_fd(ptr, len, &dmabuf_fd, &dmabuf_offset);
 	if (ret == FI_SUCCESS) {
-		ibv_mr = ibv_reg_dmabuf_mr(g_device_list[0].ibv_pd, dmabuf_offset,
+		ibv_mr = ibv_reg_dmabuf_mr(g_efa_selected_device_list[0].ibv_pd, dmabuf_offset,
 					   len, (uint64_t)ptr, dmabuf_fd, ibv_access);
 		(void)cuda_put_dmabuf_fd(dmabuf_fd);
 		if (!ibv_mr) {
 			EFA_INFO(FI_LOG_CORE,
 				"Unable to register CUDA device buffer via dmabuf: %s. "
 				"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
-			ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
+			ibv_mr = ibv_reg_mr(g_efa_selected_device_list[0].ibv_pd, ptr, len, ibv_access);
 		}
 	} else {
 		EFA_INFO(FI_LOG_CORE,
 			"Unable to retrieve dmabuf fd of CUDA device buffer: %d. "
 			"Fall back to ibv_reg_mr\n", ret);
-		ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
+		ibv_mr = ibv_reg_mr(g_efa_selected_device_list[0].ibv_pd, ptr, len, ibv_access);
 	}
 #else
-	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
+	ibv_mr = ibv_reg_mr(g_efa_selected_device_list[0].ibv_pd, ptr, len, ibv_access);
 #endif
 
 	if (!ibv_mr) {
@@ -181,7 +181,7 @@ static inline void efa_hmem_info_check_p2p_support_neuron(struct efa_hmem_info *
 	uint64_t offset;
 	int ret;
 
-	if (g_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
+	if (g_efa_selected_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
 		ibv_access |= IBV_ACCESS_REMOTE_READ;
 	}
 
@@ -201,16 +201,16 @@ static inline void efa_hmem_info_check_p2p_support_neuron(struct efa_hmem_info *
 	ret = neuron_get_dmabuf_fd(ptr, (uint64_t)len, &dmabuf_fd, &offset);
 	if (ret == FI_SUCCESS) {
 		ibv_mr = ibv_reg_dmabuf_mr(
-					g_device_list[0].ibv_pd, offset,
+					g_efa_selected_device_list[0].ibv_pd, offset,
 					len, (uint64_t)ptr, dmabuf_fd, ibv_access);
 	} else if (ret == -FI_EOPNOTSUPP) {
 		EFA_INFO(FI_LOG_MR,
 			"Unable to retrieve dmabuf fd of Neuron device buffer, "
 			"Fall back to ibv_reg_mr\n");
-		ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
+		ibv_mr = ibv_reg_mr(g_efa_selected_device_list[0].ibv_pd, ptr, len, ibv_access);
 	}
 #else
-	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
+	ibv_mr = ibv_reg_mr(g_efa_selected_device_list[0].ibv_pd, ptr, len, ibv_access);
 #endif
 
 	if (!ibv_mr) {
@@ -346,7 +346,7 @@ int efa_hmem_info_initialize()
 {
 	int ret = 0, i = 0;
 
-	if(g_device_cnt <= 0) {
+	if(g_efa_selected_device_cnt <= 0) {
 		return -FI_ENODEV;
 	}
 

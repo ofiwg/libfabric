@@ -384,7 +384,7 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		 * as the MSG only as RMA will not be used.
 		 */
 		if (!(hints->caps & FI_RMA))
-			info->ep_attr->max_msg_size = g_device_list[0].ibv_port_attr.max_msg_sz;
+			info->ep_attr->max_msg_size = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz;
 	}
 
 	/* Print a warning and use FI_AV_TABLE if the app requests FI_AV_MAP */
