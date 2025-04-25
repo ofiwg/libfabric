@@ -732,7 +732,7 @@ int cuda_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 						CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
 						flags);
 
-	if (cuda_ret == CUDA_ERROR_INVALID_VALUE && flags != 0) {
+	if ((cuda_ret == CUDA_ERROR_INVALID_VALUE || cuda_ret == CUDA_ERROR_NOT_SUPPORTED) && flags != 0) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
 			"cuMemGetHandleForAddressRange failed with flags: %llu, "
 			"invalid argument. Retrying with no flags.\n", flags);
