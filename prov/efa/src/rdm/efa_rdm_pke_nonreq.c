@@ -72,7 +72,7 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	 * devices. I.e. the PCI bus will only contain EFA devices with the same
 	 * vendor_part_id (0xEFA0, 0xEFA1, etc)
 	 */
-	device_version_hdr->device_version = g_device_list[0].ibv_attr.vendor_part_id;
+	device_version_hdr->device_version = g_efa_selected_device_list[0].ibv_attr.vendor_part_id;
 	handshake_hdr->flags |= EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR;
 	pkt_entry->pkt_size += sizeof (struct efa_rdm_handshake_opt_device_version_hdr);
 

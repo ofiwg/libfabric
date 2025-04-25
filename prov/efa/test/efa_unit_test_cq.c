@@ -491,7 +491,7 @@ void test_rdm_cq_create_error_handling(struct efa_resource **state)
 	struct verbs_context *vctx = NULL;
 	struct fi_cq_attr cq_attr = {0};
 
-	ibv_device_list = ibv_get_device_list(&g_device_cnt);
+	ibv_device_list = ibv_get_device_list(&g_efa_selected_device_cnt);
 	if (ibv_device_list == NULL) {
 		skip();
 		return;

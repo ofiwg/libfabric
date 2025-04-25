@@ -12,7 +12,7 @@ void test_efa_device_construct_error_handling()
 	struct ibv_device **ibv_device_list;
 	struct efa_device efa_device = {0};
 
-	ibv_device_list = ibv_get_device_list(&g_device_cnt);
+	ibv_device_list = ibv_get_device_list(&g_efa_selected_device_cnt);
 	if (ibv_device_list == NULL) {
 		skip();
 		return;

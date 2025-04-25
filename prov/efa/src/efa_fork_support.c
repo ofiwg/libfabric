@@ -101,7 +101,7 @@ static int efa_fork_support_is_enabled()
 	if (!buf)
 		return -FI_ENOMEM;
 
-	mr = ibv_reg_mr(g_device_list[0].ibv_pd, buf, page_size, 0);
+	mr = ibv_reg_mr(g_efa_selected_device_list[0].ibv_pd, buf, page_size, 0);
 	if (mr == NULL) {
 		ret = errno;
 		goto out;

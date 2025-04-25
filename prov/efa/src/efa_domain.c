@@ -76,19 +76,19 @@ static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
 	if (!domain_name)
 		return -FI_EINVAL;
 
-	for (i = 0; i < g_device_cnt; i++) {
-		device_name = g_device_list[i].ibv_ctx->device->name;
+	for (i = 0; i < g_efa_selected_device_cnt; i++) {
+		device_name = g_efa_selected_device_list[i].ibv_ctx->device->name;
 		if (strstr(domain_name, device_name) == domain_name &&
 		    strlen(domain_name) - strlen(device_name) ==
 		            strlen(domain_name_suffix) &&
 		    strcmp((const char *) (domain_name + strlen(device_name)),
 		           domain_name_suffix) == 0) {
-			efa_domain->device = &g_device_list[i];
+			efa_domain->device = &g_efa_selected_device_list[i];
 			break;
 		}
 	}
 
-	if (i == g_device_cnt)
+	if (i == g_efa_selected_device_cnt)
 		return -FI_ENODEV;
 
 	EFA_INFO(FI_LOG_DOMAIN, "Domain %s selected device %s\n", domain_name, device_name);
