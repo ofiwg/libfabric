@@ -96,8 +96,8 @@ static int efa_util_prov_initialize()
 	* Therefore, the efa-direct info objects should be returned _before_ efa rdm or dgram
 	* So we populate the efa-direct info objects first
 	*/
-	for (i = 0; i < g_device_cnt; ++i) {
-		prov_info_direct = fi_dupinfo(g_device_list[i].rdm_info);
+	for (i = 0; i < g_efa_selected_device_cnt; ++i) {
+		prov_info_direct = fi_dupinfo(g_efa_selected_device_list[i].rdm_info);
 		if (!prov_info_direct) {
 			EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate prov_info for EFA direct\n");
 			continue;
@@ -119,8 +119,8 @@ static int efa_util_prov_initialize()
 		tail = prov_info_direct;
 	}
 
-	for (i = 0; i < g_device_cnt; ++i) {
-		err = efa_prov_info_alloc_for_rdm(&prov_info_rdm, &g_device_list[i]);
+	for (i = 0; i < g_efa_selected_device_cnt; ++i) {
+		err = efa_prov_info_alloc_for_rdm(&prov_info_rdm, &g_efa_selected_device_list[i]);
 		if (err) {
 			EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate prov_info for rdm. error: %d\n",
 				 err);
@@ -143,8 +143,8 @@ static int efa_util_prov_initialize()
 		tail = prov_info_rdm;
 	}
 
-	for (i = 0; i < g_device_cnt; ++i) {
-		prov_info_dgram = fi_dupinfo(g_device_list[i].dgram_info);
+	for (i = 0; i < g_efa_selected_device_cnt; ++i) {
+		prov_info_dgram = fi_dupinfo(g_efa_selected_device_list[i].dgram_info);
 		if (!prov_info_dgram) {
 			EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate prov_info for dgram\n");
 			continue;
