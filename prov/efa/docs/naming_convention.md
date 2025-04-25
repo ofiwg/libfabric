@@ -6,7 +6,7 @@ Libfabric provider.
 ## Variable naming conventions
 
 Global variables' names must start with `g_` prefix. For example,
-`g_device_list` is a global variable that is an array of `struct efa_device`.
+`g_efa_selected_device_list` is a global variable that is an array of `struct efa_device`.
 
 ## Function naming conventions
 
@@ -50,7 +50,7 @@ Typical actions include:
 - `release` works in the opposite direction of `alloc`, and is used on objects
   that `alloc` is used on.
 - `initialize` is used to initialize global variables. For example,
-  `efa_device_list_initialize` initializes the global variables `g_device_list`
-  and `g_device_cnt`.
+  `efa_device_list_initialize` initializes the global variables `g_efa_selected_device_list`
+  and `g_efa_selected_device_cnt`.
 - `finalize` works in the opposite direction of `initialize`, which means it is
   used to release resources associated with global variables.
