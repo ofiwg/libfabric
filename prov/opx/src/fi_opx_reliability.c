@@ -1413,7 +1413,7 @@ ssize_t fi_opx_reliability_service_do_replay_sdma(struct fid_ep *ep, struct fi_o
 	return replayed;
 }
 
-ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 *service,
+ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_service *service,
 					     struct fi_opx_reliability_tx_replay *replay)
 {
 #if defined(OPX_RELIABILITY_DEBUG) || !defined(NDEBUG)
@@ -1466,8 +1466,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 		}
 	}
 
-	union fi_opx_hfi1_pio_state pio_state = *service->tx.pio_state;
-	FI_OPX_HFI1_UPDATE_CREDITS(pio_state, service->tx.pio_credits_addr);
+	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	const uint16_t credits_needed	    = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ? 1 : 2;
@@ -1477,13 +1476,13 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 					      last_partial_block;      /* last partial block  */
 	uint16_t total_credits_available = FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state);
 	if (total_credits_available < total_credits_needed) {
-		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, service->tx.pio_credits_addr);
+		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
 		total_credits_available = FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state);
 		if (total_credits_available < total_credits_needed) {
 			OPX_RELIABILITY_DEBUG_LOG(&key, "(tx) packet psn=%08u Couldn't do replay (no credits)\n",
 						  (uint32_t) FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(replay)));
 
-			service->tx.pio_state->qw0 = pio_state.qw0;
+			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 			return -FI_EAGAIN;
 		}
@@ -1528,7 +1527,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 		buf_qws = replay->payload;
 	}
 
-	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.pio_scb_sop_first, pio_state);
+	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 	opx_cacheline_store_block_vol(scb, replay->scb.qws);
 
 	/* consume one credit for the packet header */
@@ -1539,7 +1538,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 #endif
 
 	if (hfi1_type & OPX_HFI1_JKR) {
-		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.pio_scb_first, pio_state);
+		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
 		// spill from 1st cacheline (SOP)
 		OPX_HFI1_BAR_STORE(&scb_payload[0], replay->scb.scb_16B.hdr.qw_16B[7]); // header
@@ -1563,7 +1562,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 	}
 	/* Copy full blocks of payload */
 	while (payload_credits_needed) {
-		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.pio_scb_first, pio_state);
+		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
 		const uint16_t contiguous_scb_until_wrap =
 			(uint16_t) (pio_state.credits_total - pio_state.scb_head_index);
@@ -1593,7 +1592,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 		int16_t payload_tail_bytes = (payload_bytes_to_copy & 0x3Ful); /* not icrc/pad */
 
 		/* We have a credit so we don't have to worry about this wrapping on one block */
-		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(service->tx.pio_scb_first, pio_state);
+		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
 		uint16_t i = 0;
 		for (; payload_tail_bytes >= 8; payload_tail_bytes -= 8) {
@@ -1635,10 +1634,10 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 
 	assert(consumed_credits == total_credits_needed);
 #endif
 
-	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(service->tx.pio_credits_addr);
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 
 	/* save the updated txe state */
-	service->tx.pio_state->qw0 = pio_state.qw0;
+	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 	return FI_SUCCESS;
 }
@@ -1663,7 +1662,7 @@ ssize_t fi_opx_reliability_pio_replay(union fi_opx_reliability_deferred_work *wo
 			continue;
 		}
 
-		ssize_t rc = fi_opx_reliability_service_do_replay(opx_ep->reli_service, params->replays[i]);
+		ssize_t rc = fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, params->replays[i]);
 		if (rc == FI_SUCCESS) {
 			params->replays[i]->pinned = false;
 			params->replays[i]	   = NULL;
@@ -1797,6 +1796,7 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 	union fi_opx_reliability_deferred_work	       *work	       = NULL;
 	struct fi_opx_reliability_tx_pio_replay_params *params	       = NULL;
 	bool						queing_replays = false;
+	struct fi_opx_ep			       *opx_ep	       = container_of(ep, struct fi_opx_ep, ep_fid);
 
 	/* We'll attempt to send each replay on the spot as long as sending the replay
 	   succeeds. As soon as replaying fails, we'll queue the failed replay and
@@ -1810,7 +1810,6 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 		if (!replay->use_sdma) {
 			if (!queing_replays) {
 #ifdef OPX_DEBUG_COUNTERS_RELIABILITY
-				struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 				if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(OPX_REPLAY_HDR(replay)->bth.opcode) ==
 				    FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) {
 					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_rts);
@@ -1820,7 +1819,7 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_rzv);
 				}
 #endif
-				if (fi_opx_reliability_service_do_replay(service, replay) != FI_SUCCESS) {
+				if (fi_opx_reliability_service_do_replay(opx_ep, service, replay) != FI_SUCCESS) {
 					queing_replays = true;
 
 					work = ofi_buf_alloc(service->rx.work_pending_pool);
@@ -2219,15 +2218,9 @@ void fi_opx_reliability_service_init(struct fi_opx_reliability_service *service,
 	assert(service != NULL);
 	assert(process_fn != NULL);
 
-	service->lid	      = hfi1->lid;
-	service->tx.pio_state = &hfi1->state.pio;
-	service->kind	      = reliability_kind;
-	service->process_fn   = process_fn;
-
-	/* the 'info' fields do not change; the values can be safely copied */
-	service->tx.pio_scb_sop_first = hfi1->info.pio.scb_sop_first;
-	service->tx.pio_scb_first     = hfi1->info.pio.scb_first;
-	service->tx.pio_credits_addr  = hfi1->info.pio.credits_addr;
+	service->lid	    = hfi1->lid;
+	service->kind	    = reliability_kind;
+	service->process_fn = process_fn;
 
 	service->subctxt_rx = (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ?
 				      __cpu_to_be16(hfi1->subctxt << 8 | hfi1->info.rxe.id) :
