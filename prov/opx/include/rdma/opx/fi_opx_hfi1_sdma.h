@@ -258,10 +258,16 @@ void fi_opx_hfi1_sdma_init_cc(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dput_
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dput_params *params, const uint64_t length,
 				const uint32_t tidoffset, const uint32_t ntidpairs, const uint32_t *const tidpairs,
-				const uint64_t is_hmem)
+				const uint64_t is_hmem, const enum opx_hfi1_type hfi1_type)
 {
 	if (!fi_opx_hfi1_sdma_use_sdma(opx_ep, length, params->opcode, is_hmem, params->is_intranode)) {
-		params->work_elem.work_fn   = fi_opx_hfi1_do_dput;
+		if (hfi1_type == OPX_HFI1_JKR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_jkr;
+		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_jkr_9B;
+		} else if (hfi1_type == OPX_HFI1_WFR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_wfr;
+		}
 		params->work_elem.work_type = params->is_intranode ? OPX_WORK_TYPE_SHM : OPX_WORK_TYPE_PIO;
 		return;
 	}
@@ -294,9 +300,21 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dpu
 		}
 		OPX_DEBUG_TIDS("CTS tid_iov", ntidpairs, params->tidpairs);
 
-		params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid;
+		if (hfi1_type == OPX_HFI1_JKR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid_jkr;
+		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid_jkr_9B;
+		} else if (hfi1_type == OPX_HFI1_WFR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid_wfr;
+		}
 	} else {
-		params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma;
+		if (hfi1_type == OPX_HFI1_JKR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_jkr;
+		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_jkr_9B;
+		} else if (hfi1_type == OPX_HFI1_WFR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_wfr;
+		}
 	}
 	params->work_elem.work_type = OPX_WORK_TYPE_SDMA;
 }
