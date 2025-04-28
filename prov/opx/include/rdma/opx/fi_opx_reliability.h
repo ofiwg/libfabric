@@ -202,11 +202,7 @@ struct fi_opx_reliability_service {
 		struct ofi_bufpool *replay_pool;
 		RbtHandle	    tx_flow_outstanding_pkts_rbtree;
 		RbtHandle	    tx_flow_rbtree;
-
-		union fi_opx_hfi1_pio_state *pio_state;
-		volatile uint64_t	    *pio_scb_sop_first;
-		volatile uint64_t	    *pio_credits_addr;
-		volatile uint64_t	    *pio_scb_first;
+		uint64_t	    unused[4];
 	} tx;
 
 	/* == CACHE LINE 2 == */
@@ -1148,7 +1144,7 @@ ssize_t fi_opx_reliability_service_do_replay_sdma(struct fid_ep *ep, struct fi_o
 						  struct fi_opx_reliability_tx_replay *end_replay, uint32_t num_replays,
 						  const union fi_opx_reliability_service_flow_key *flow_key);
 
-ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 *service,
+ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_service *service,
 					     struct fi_opx_reliability_tx_replay *replay);
 
 void fi_opx_hfi_rx_reliablity_process_requests(struct fid_ep *ep, int max_to_send);

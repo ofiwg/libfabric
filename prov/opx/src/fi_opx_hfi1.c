@@ -193,10 +193,9 @@ void opx_link_down_update_pio_credit_addr(struct fi_opx_hfi1_context *context, s
 {
 	context->credits_addr_copy.credits_addr = context->info.pio.credits_addr;
 
-	context->dummy_free_credits		  = context->state.pio.free_counter_shadow;
-	context->info.pio.credits_addr		  = &(context->dummy_free_credits);
-	opx_ep->tx->pio_credits_addr		  = context->info.pio.credits_addr;
-	opx_ep->reli_service->tx.pio_credits_addr = context->info.pio.credits_addr;
+	context->dummy_free_credits    = context->state.pio.free_counter_shadow;
+	context->info.pio.credits_addr = &(context->dummy_free_credits);
+	opx_ep->tx->pio_credits_addr   = context->info.pio.credits_addr;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Pointing credit addr to dummy field dummy_free_counter = %ld\n",
 	       context->dummy_free_credits);
@@ -207,9 +206,8 @@ void opx_link_up_update_pio_credit_addr(struct fi_opx_hfi1_context *context, str
 {
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Pointing credit addr back to actual addr %p\n",
 	       context->credits_addr_copy.credits_addr);
-	context->info.pio.credits_addr		  = context->credits_addr_copy.credits_addr;
-	opx_ep->tx->pio_credits_addr		  = context->info.pio.credits_addr;
-	opx_ep->reli_service->tx.pio_credits_addr = context->info.pio.credits_addr;
+	context->info.pio.credits_addr = context->credits_addr_copy.credits_addr;
+	opx_ep->tx->pio_credits_addr   = context->info.pio.credits_addr;
 }
 
 static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const uint32_t rank)
@@ -1243,7 +1241,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		}
 	}
 
-	fi_opx_reliability_service_do_replay(opx_ep->reli_service, replay);
+	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
 							     OPX_HFI1_TYPE);
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
@@ -1364,7 +1362,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "fi_opx_reliability_service_do_replay opx_ep->reli_service %p, replay %p\n", opx_ep->reli_service,
 		     replay);
-	fi_opx_reliability_service_do_replay(opx_ep->reli_service, replay);
+	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
 							     OPX_HFI1_TYPE);
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
@@ -2527,7 +2525,7 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		tx_payload->cts.iov[i] = params->dput_iov[i];
 	}
 
-	fi_opx_reliability_service_do_replay(opx_ep->reli_service, replay);
+	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
 							     hfi1_type);
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RMA-CTS-HFI:%p", params->rma_req);
@@ -2758,7 +2756,7 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "fi_opx_reliability_service_do_replay opx_ep->reli_service %p, replay %p\n", opx_ep->reli_service,
 		     replay);
-	fi_opx_reliability_service_do_replay(opx_ep->reli_service, replay);
+	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay,
 								     params->reliability, OPX_HFI1_WFR);
@@ -3095,9 +3093,9 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work)
 							reliability, OPX_HFI1_JKR);
 					}
 
-					fi_opx_reliability_service_do_replay(opx_ep->reli_service, replay);
+					fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 				} else {
-					fi_opx_reliability_service_do_replay(opx_ep->reli_service, replay);
+					fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 					fi_opx_compiler_msync_writes();
 
 					if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {

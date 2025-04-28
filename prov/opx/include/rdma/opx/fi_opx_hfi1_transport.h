@@ -1257,7 +1257,7 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
 							     hfi1_type);
 
-	fi_opx_reliability_service_do_replay(opx_ep->reli_service, replay);
+	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
@@ -1547,7 +1547,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
 							     hfi1_type);
 
-	fi_opx_reliability_service_do_replay(opx_ep->reli_service, replay);
+	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
