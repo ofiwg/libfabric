@@ -545,10 +545,17 @@ int  opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work);
 void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr, const uint16_t origin_rx,
 			 const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type);
 
-int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work);
-int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work);
-int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_hfi1_do_dput_wfr(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_hfi1_do_dput_jkr(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_hfi1_do_dput_jkr_9B(union fi_opx_hfi1_deferred_work *work);
 
+int fi_opx_hfi1_do_dput_sdma_wfr(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_hfi1_do_dput_sdma_jkr(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_hfi1_do_dput_sdma_jkr_9B(union fi_opx_hfi1_deferred_work *work);
+
+int fi_opx_hfi1_do_dput_sdma_tid_wfr(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_hfi1_do_dput_sdma_tid_jkr(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_hfi1_do_dput_sdma_tid_jkr_9B(union fi_opx_hfi1_deferred_work *work);
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_memcpy8(void *restrict dest, const void *restrict src, size_t n)
 {

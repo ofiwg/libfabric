@@ -2857,7 +2857,8 @@ int opx_hfi1_tx_rma_rts_intranode(union fi_opx_hfi1_deferred_work *work)
 	return FI_SUCCESS;
 }
 
-int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work)
+__OPX_FORCE_INLINE__
+int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_hfi1_dput_params	    *params		       = &work->dput;
 	struct fi_opx_ep		    *opx_ep		       = params->opx_ep;
@@ -2875,9 +2876,8 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work)
 	const enum ofi_reliability_kind	     reliability	       = params->reliability;
 	/* use the slid from the lrh header of the incoming packet
 	 * as the dlid for the lrh header of the outgoing packet */
-	const enum opx_hfi1_type hfi1_type	= OPX_HFI1_TYPE;
-	const uint64_t		 lrh_dlid	= params->lrh_dlid;
-	const uint64_t		 bth_subctxt_rx = ((uint64_t) subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
+	const uint64_t lrh_dlid	      = params->lrh_dlid;
+	const uint64_t bth_subctxt_rx = ((uint64_t) subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 
 	enum fi_hmem_iface cbuf_iface  = params->compare_iov.iface;
 	uint64_t	   cbuf_device = params->compare_iov.device;
@@ -3139,6 +3139,20 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work)
 	return FI_SUCCESS;
 }
 
+int fi_opx_hfi1_do_dput_wfr(union fi_opx_hfi1_deferred_work *work)
+{
+	return fi_opx_hfi1_do_dput(work, OPX_HFI1_WFR);
+}
+
+int fi_opx_hfi1_do_dput_jkr(union fi_opx_hfi1_deferred_work *work)
+{
+	return fi_opx_hfi1_do_dput(work, OPX_HFI1_JKR);
+}
+
+int fi_opx_hfi1_do_dput_jkr_9B(union fi_opx_hfi1_deferred_work *work)
+{
+	return fi_opx_hfi1_do_dput(work, OPX_HFI1_JKR_9B);
+}
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_dput_copy_to_bounce_buf(uint32_t opcode, uint8_t *target_buf, uint8_t *source_buf,
 					 uint8_t *compare_buf, void *fetch_vaddr, uintptr_t target_byte_counter_vaddr,
@@ -3186,7 +3200,8 @@ void fi_opx_hfi1_dput_copy_to_bounce_buf(uint32_t opcode, uint8_t *target_buf, u
 	}
 }
 
-int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work)
+__OPX_FORCE_INLINE__
+int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_hfi1_dput_params	    *params		       = &work->dput;
 	struct fi_opx_ep		    *opx_ep		       = params->opx_ep;
@@ -3201,9 +3216,9 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work)
 	const enum ofi_reliability_kind	     reliability	       = params->reliability;
 	/* use the slid from the lrh header of the incoming packet
 	 * as the dlid for the lrh header of the outgoing packet */
-	const enum opx_hfi1_type hfi1_type	= OPX_HFI1_TYPE;
-	const uint64_t		 lrh_dlid	= params->lrh_dlid;
-	const uint64_t		 bth_subctxt_rx = ((uint64_t) subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
+
+	const uint64_t lrh_dlid	      = params->lrh_dlid;
+	const uint64_t bth_subctxt_rx = ((uint64_t) subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	assert((opx_ep->tx->pio_max_eager_tx_bytes & 0x3fu) == 0);
 	unsigned    i;
 	const void *sbuf_start	       = params->src_base_addr;
@@ -3467,7 +3482,23 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work)
 	return -FI_EAGAIN;
 }
 
-int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
+int fi_opx_hfi1_do_dput_sdma_wfr(union fi_opx_hfi1_deferred_work *work)
+{
+	return fi_opx_hfi1_do_dput_sdma(work, OPX_HFI1_WFR);
+}
+
+int fi_opx_hfi1_do_dput_sdma_jkr(union fi_opx_hfi1_deferred_work *work)
+{
+	return fi_opx_hfi1_do_dput_sdma(work, OPX_HFI1_JKR);
+}
+
+int fi_opx_hfi1_do_dput_sdma_jkr_9B(union fi_opx_hfi1_deferred_work *work)
+{
+	return fi_opx_hfi1_do_dput_sdma(work, OPX_HFI1_JKR_9B);
+}
+
+__OPX_FORCE_INLINE__
+int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_hfi1_dput_params	    *params		       = &work->dput;
 	struct fi_opx_ep		    *opx_ep		       = params->opx_ep;
@@ -3480,7 +3511,6 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 	uint64_t			     dt64		       = params->dt;
 	uint32_t			     opcode		       = params->opcode;
 	const enum ofi_reliability_kind	     reliability	       = params->reliability;
-	const enum opx_hfi1_type	     hfi1_type		       = OPX_HFI1_TYPE;
 	/* use the slid from the lrh header of the incoming packet
 	 * as the dlid for the lrh header of the outgoing packet */
 	const uint64_t lrh_dlid	      = params->lrh_dlid;
@@ -3845,6 +3875,20 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work)
 	return -FI_EAGAIN;
 }
 
+int fi_opx_hfi1_do_dput_sdma_tid_wfr(union fi_opx_hfi1_deferred_work *work)
+{
+	return fi_opx_hfi1_do_dput_sdma_tid(work, OPX_HFI1_WFR);
+}
+
+int fi_opx_hfi1_do_dput_sdma_tid_jkr(union fi_opx_hfi1_deferred_work *work)
+{
+	return fi_opx_hfi1_do_dput_sdma_tid(work, OPX_HFI1_JKR);
+}
+
+int fi_opx_hfi1_do_dput_sdma_tid_jkr_9B(union fi_opx_hfi1_deferred_work *work)
+{
+	return fi_opx_hfi1_do_dput_sdma_tid(work, OPX_HFI1_JKR_9B);
+}
 union fi_opx_hfi1_deferred_work *
 fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr, const void *const payload,
 		       size_t payload_bytes_to_copy, const uint16_t origin_rx, const uint32_t niov,
@@ -3935,14 +3979,21 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 	}
 	assert((ntidpairs == 0) || (niov == 1));
 	assert(origin_byte_counter == NULL || iov_total_bytes <= *origin_byte_counter);
-	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, tidoffset, ntidpairs, tidpairs, is_hmem);
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, tidoffset, ntidpairs, tidpairs, is_hmem, hfi1_type);
 
 	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_intranode, opx_ep->debug_counters.hmem.dput_rzv_intranode);
-	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !is_intranode && params->work_elem.work_fn == fi_opx_hfi1_do_dput,
+	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !is_intranode &&
+					       (params->work_elem.work_fn == fi_opx_hfi1_do_dput_wfr ||
+						params->work_elem.work_fn == fi_opx_hfi1_do_dput_jkr ||
+						params->work_elem.work_fn == fi_opx_hfi1_do_dput_jkr_9B),
 				       opx_ep->debug_counters.hmem.dput_rzv_pio);
-	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && params->work_elem.work_fn == fi_opx_hfi1_do_dput_sdma,
+	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && (params->work_elem.work_fn == fi_opx_hfi1_do_dput_sdma_wfr ||
+						   params->work_elem.work_fn == fi_opx_hfi1_do_dput_sdma_jkr ||
+						   params->work_elem.work_fn == fi_opx_hfi1_do_dput_sdma_jkr_9B),
 				       opx_ep->debug_counters.hmem.dput_rzv_sdma);
-	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && params->work_elem.work_fn == fi_opx_hfi1_do_dput_sdma_tid,
+	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && (params->work_elem.work_fn == fi_opx_hfi1_do_dput_sdma_tid_wfr ||
+						   params->work_elem.work_fn == fi_opx_hfi1_do_dput_sdma_tid_jkr ||
+						   params->work_elem.work_fn == fi_opx_hfi1_do_dput_sdma_tid_jkr_9B),
 				       opx_ep->debug_counters.hmem.dput_rzv_tid);
 
 	// We can't/shouldn't start this work until any pending work is finished.

@@ -285,7 +285,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->payload_bytes_for_iovec	    = 0;
 		params->target_hfi_unit		    = opx_dst_addr.hfi1_unit;
 
-		fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov->len, 0, 0, NULL, is_hmem);
+		fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov->len, 0, 0, NULL, is_hmem, hfi1_type);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_intranode,
 					       opx_ep->debug_counters.hmem.rma_write_intranode);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !is_intranode, opx_ep->debug_counters.hmem.rma_write_hfi);
