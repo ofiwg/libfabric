@@ -258,7 +258,7 @@ static int opx_hfi1_rdma_context_open(int unit, int port, uint64_t open_timeout,
 		return opx_open_hfi1_rdma_fallback();
 	}
 
-	if (unit >= num_devices) {
+	if (unit >= OPX_MAX_HFIS) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] Invalid HFI_UNIT=%d\n", unit);
 		return opx_open_hfi1_rdma_fallback();
 	}

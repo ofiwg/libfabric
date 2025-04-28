@@ -382,11 +382,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				break;
 			}
 
-			if (selector.unit >= hfi_count) {
-				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-					"Error: selector unit %d >= number of HFIs %d\n", selector.unit, hfi_count);
-				goto ctxt_open_err;
-			} else if (!opx_hfi_get_unit_active(selector.unit)) {
+			if (!opx_hfi_get_unit_active(selector.unit)) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Error: selected unit %d is not active\n",
 					selector.unit);
 				goto ctxt_open_err;
