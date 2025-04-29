@@ -86,6 +86,7 @@ void cxit_teardown_ep(void);
 #define cxit_teardown_av cxit_teardown_ep
 void cxit_setup_enabled_ep(void);
 void cxit_setup_enabled_ep_fd(void);
+void cxit_setup_enabled_rnr_ep_fd(void);
 void cxit_setup_enabled_ep_eq_yield(void);
 void cxit_setup_rma(void);
 void cxit_setup_rma_fd(void);
