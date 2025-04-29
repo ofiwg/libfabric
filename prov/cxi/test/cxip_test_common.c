@@ -812,6 +812,48 @@ void cxit_setup_enabled_ep_fd(void)
 	cr_assert(addrlen == sizeof(cxit_ep_addr));
 }
 
+void cxit_setup_enabled_rnr_ep_fd(void)
+{
+	int ret;
+	size_t addrlen = sizeof(cxit_ep_addr);
+
+	cxit_setup_getinfo();
+
+	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
+	cxit_rx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
+	cxit_tx_cq_attr.wait_obj = FI_WAIT_FD;
+	cxit_rx_cq_attr.wait_obj = FI_WAIT_FD;
+	cxit_av_attr.type = FI_AV_TABLE;
+
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	cxit_fi_hints->domain_attr->threading = FI_THREAD_SAFE;
+
+	/* Indicate we want to use the CS protocol */
+	cxit_fi_hints->ep_attr->protocol = FI_PROTO_CXI_RNR;
+
+	cxit_setup_ep();
+
+	/* Set up RMA objects */
+	cxit_create_ep();
+	cxit_create_eq();
+	cxit_bind_eq();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS, "ret is: %d\n", ret);
+
+	/* Find assigned Endpoint address. Address is assigned during enable. */
+	ret = fi_getname(&cxit_ep->fid, &cxit_ep_addr, &addrlen);
+	cr_assert(ret == FI_SUCCESS, "ret is %d\n", ret);
+	cr_assert(addrlen == sizeof(cxit_ep_addr));
+}
+
 void cxit_setup_enabled_ep_eq_yield(void)
 {
 	int ret;

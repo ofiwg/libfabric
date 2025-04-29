@@ -5479,7 +5479,7 @@ TestSuite(tagged_cq_wait, .init = cxit_setup_rma_fd,
 	  .fini = cxit_teardown_rma_fd,
 	  .timeout = 20);
 
-Test(tagged_cq_wait, timeout_poll)
+void timeout_poll(void)
 {
 	struct fid *fids[1];
 	int cq_fd;
@@ -5510,7 +5510,12 @@ Test(tagged_cq_wait, timeout_poll)
 		  end_ms - start_ms, timeout);
 }
 
-Test(tagged_cq_wait, timeout_epoll)
+Test(tagged_cq_wait, timeout_poll)
+{
+	timeout_poll();
+}
+
+void timeout_epoll(void)
 {
 	struct epoll_event ev = {
 		.events = EPOLLIN,
@@ -5555,7 +5560,12 @@ Test(tagged_cq_wait, timeout_epoll)
 	close(epfd);
 }
 
-Test(tagged_cq_wait, timeout_sread)
+Test(tagged_cq_wait, timeout_epoll)
+{
+	timeout_epoll();
+}
+
+void timeout_sread(void)
 {
 	int ret;
 	int timeout = 100;
@@ -5571,6 +5581,11 @@ Test(tagged_cq_wait, timeout_sread)
 	cr_assert(end_ms >= start_ms + timeout,
 		  "Timeout too short %ld ms asked for %d ms",
 		  end_ms - start_ms, timeout);
+}
+
+Test(tagged_cq_wait, timeout_sread)
+{
+	timeout_sread();
 }
 
 struct simple_rx_wait {
@@ -6332,6 +6347,102 @@ ParameterizedTestParameters(tagged_cq_wait, wait_fd)
 }
 
 ParameterizedTest(struct fd_params *param, tagged_cq_wait, wait_fd,
+		  .timeout = 60)
+{
+	do_cq_wait(param);
+}
+
+TestSuite(rnr_tagged_cq_wait, .init = cxit_setup_rma_fd,
+	  .fini = cxit_teardown_rma_fd,
+	  .timeout = 20);
+
+Test(rnr_tagged_cq_wait, timeout_poll)
+{
+	timeout_poll();
+}
+
+Test(rnr_tagged_cq_wait, timeout_epoll)
+{
+	timeout_epoll();
+}
+
+Test(rnr_tagged_cq_wait, timeout_sread)
+{
+	timeout_sread();
+}
+
+Test(rnr_tagged_cq_wait, simple_rx_epoll)
+{
+	simple_rx_wait(true, false);
+}
+
+Test(rnr_tagged_cq_wait, simple_rx_epoll_ux)
+{
+	simple_rx_wait(true, true);
+}
+
+Test(rnr_tagged_cq_wait, simple_rx_poll)
+{
+	simple_rx_wait(false, false);
+}
+
+Test(rnr_tagged_cq_wait, simple_rx_poll_ux)
+{
+	simple_rx_wait(false, true);
+}
+
+Test(rnr_tagged_cq_wait, wake_all)
+{
+	waitfd_rx_waiters(false, 0, false);
+}
+
+Test(rnr_tagged_cq_wait, wake_mt_rx)
+{
+	waitfd_rx_waiters(true, 256, false);
+}
+
+Test(rnr_tagged_cq_wait, wake_mt_rx_ux)
+{
+	waitfd_rx_waiters(true, 256, true);
+}
+
+Test(rnr_tagged_cq_wait, wake_tx_rx)
+{
+     waitfd_txrx_waiters(true, 256);
+}
+
+/* Test multiple threads using poll or sread on both CQ */
+ParameterizedTestParameters(rnr_tagged_cq_wait, wait_fd)
+{
+	size_t param_sz;
+
+	static struct fd_params params[] = {
+		/* Test direct FI_WAIT_FD polling */
+		{.length = 1024,
+		 .num_ios = 4,
+		 .timeout = 5000,
+		 .poll = true},
+		{.length = 8192,
+		 .num_ios = 4,
+		 .timeout = 5000,
+		 .poll = true},
+		/* Test indirect FI_WAIT_FD polling via fi_cq_sread */
+		{.length = 1024,
+		 .num_ios = 4,
+		 .timeout = 5000,
+		 .poll = false},
+		{.length = 8192,
+		 .num_ios = 4,
+		 .timeout = 5000,
+		 .poll = false},
+	};
+
+	param_sz = ARRAY_SIZE(params);
+	return cr_make_param_array(struct fd_params, params,
+				   param_sz);
+}
+
+ParameterizedTest(struct fd_params *param, rnr_tagged_cq_wait, wait_fd,
 		  .timeout = 60)
 {
 	do_cq_wait(param);

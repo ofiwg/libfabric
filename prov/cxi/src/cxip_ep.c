@@ -557,9 +557,19 @@ destroy_wait:
  */
 int cxip_ep_trywait(struct cxip_ep_obj *ep_obj, struct cxip_cq *cq)
 {
+	struct cxip_txc_rnr *txc_rnr = container_of(ep_obj->txc,
+						    struct cxip_txc_rnr, base);
+
 	assert(ep_obj->priv_wait);
 
 	ofi_genlock_lock(&ep_obj->lock);
+
+	/* Keep progressing if RNR retry queues are not null */
+	if (ep_obj->protocol == FI_PROTO_CXI_RNR &&
+	    txc_rnr->next_retry_wait_us != UINT64_MAX &&
+	    ofi_atomic_get32(&txc_rnr->time_wait_reqs))
+		goto ready;
+
 	cxil_clear_wait_obj(ep_obj->priv_wait);
 
 	/* Enable any currently disabled EQ interrupts, if events are
