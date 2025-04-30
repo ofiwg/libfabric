@@ -90,6 +90,16 @@ show all environment variables defined for the tcp provider.
   through the standard socket APIs (i.e. connect, accept, send, recv).
   Default: disabled.
 
+# CONTROL OPERATIONS
+
+The tcp provider supports the following control operations (see [`fi_control`(3)](fi_control.3.html)):
+
+*FI_GET_FD*
+: Retrieve the underlying socket file descriptor associated with an active endpoint.
+  The argument must point to an integer where the descriptor will be stored.
+  This allows applications to tune socket options not exposed through the
+  libfabric API (SO_SNDBUF, SO_RCVBUF, SO_BUSY_POLL, etc).
+
 # NOTES
 
 The tcp provider supports both msg and rdm endpoints directly.  Support

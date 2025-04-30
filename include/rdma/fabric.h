@@ -691,6 +691,7 @@ enum {
 	FI_GET_VAL,		/* struct fi_fid_var */
 	FI_SET_VAL,		/* struct fi_fid_var */
 	FI_EXPORT_FID,		/* struct fi_fid_export */
+	FI_GET_FD, 		/* int */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)
