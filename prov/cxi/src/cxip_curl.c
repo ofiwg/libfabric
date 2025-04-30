@@ -16,8 +16,10 @@
 #include "cxip.h"
 
 static void *cxip_curlhandle;
+static void *cxip_jsonhandle;
 static CURLM *cxip_curlm;
 static int cxip_curl_count;
+static int cxip_json_dl_init(void);
 
 #define	TRACE_CURL(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_COLL_CURL, fmt, \
 						##__VA_ARGS__)
@@ -304,6 +306,10 @@ int cxip_curl_init(void)
 	int ret;
 
 	ret = cxip_curl_dl_init();
+	if (ret)
+		return ret;
+
+	ret = cxip_json_dl_init();
 	if (ret)
 		return ret;
 
@@ -682,6 +688,137 @@ int cxip_curl_progress(struct cxip_curl_handle **handleptr)
 	return FI_SUCCESS;
 }
 
+struct jsondl_ops {
+        enum json_type (*dl_json_object_get_type)(const struct json_object *);
+        size_t (*dl_json_object_array_length)(const struct json_object *);
+        struct json_object * (*dl_json_object_array_get_idx)(const struct json_object *, size_t);
+        json_bool (*dl_json_object_object_get_ex)(const struct json_object *, const char *, struct json_object **);
+        json_bool (*dl_json_object_get_boolean)(const struct json_object *);
+        int32_t (*dl_json_object_get_int)(const struct json_object *);
+        int64_t (*dl_json_object_get_int64)(const struct json_object *);
+        double  (*dl_json_object_get_double)(const struct json_object *);
+        const char * (*dl_json_object_get_string)(struct json_object *);
+	struct json_object * (*dl_json_tokener_parse)(const char *);
+	void (*dl_json_object_put)(struct json_object *);
+};
+
+/* dynamic bind of symbols with dlopen()/dlsym() */
+#if ENABLE_CXI_JSON_DLOPEN
+
+#include <dlfcn.h>
+static struct jsondl_ops jsondl_ops;
+
+#else /* static bind of symbols */
+static struct jsondl_ops jsondl_ops = {
+        .dl_json_object_get_type = json_object_get_type,
+        .dl_json_object_array_length = json_object_array_length,
+        .dl_json_object_array_get_idx = json_object_array_get_idx,
+        .dl_json_object_object_get_ex = json_object_object_get_ex,
+        .dl_json_object_get_boolean = json_object_get_boolean,
+        .dl_json_object_get_int = json_object_get_int,
+        .dl_json_object_get_int64 = json_object_get_int64,
+        .dl_json_object_get_double = json_object_get_double,
+        .dl_json_object_get_string = json_object_get_string,
+	.dl_json_tokener_parse = json_tokener_parse,
+	.dl_json_object_put = json_object_put,
+};
+#endif
+
+static int cxip_json_dl_init(void)
+{
+#if ENABLE_CXI_JSON_DLOPEN
+	char *json_libpath = NULL;
+	char *lib_name = "libjson-c.so";
+
+	/* load successfully only once */
+	if (cxip_jsonhandle)
+		return FI_SUCCESS;
+/*
+ * Check for non standard search path
+ */
+#ifdef FI_CXI_JSON_LIB_PATH
+        json_libpath = strdup(FI_CXI_JSON_LIB_PATH);
+        TRACE_CURL("FI_CXI_JSON_LIB_PATH set to %s\n", json_libpath);
+#else/* standard lookup of libjson-c.so */
+        json_libpath = strdup(lib_name);
+        TRACE_CURL("libjson-c path set to %s\n", json_libpath);
+#endif
+	cxip_jsonhandle = dlopen(lib_name, RTLD_NOW);
+	if (!cxip_jsonhandle) {
+		TRACE_CURL("Unable to dlopen libjson - lib_name = %s\n", lib_name);
+		free(json_libpath);
+		return -FI_ENOSYS;
+	}
+	jsondl_ops.dl_json_object_get_type = dlsym(cxip_jsonhandle, "json_object_get_type");
+	if (!jsondl_ops.dl_json_object_get_type) {
+		TRACE_CURL("Failed to find json_object_get_type\n");
+		goto err;
+	}
+	jsondl_ops.dl_json_object_array_length = dlsym(cxip_jsonhandle, "json_object_array_length");
+	if (!jsondl_ops.dl_json_object_array_length) {
+		TRACE_CURL("Failed to find json_object_array_length\n");
+		goto err;
+	}
+	jsondl_ops.dl_json_object_array_get_idx = dlsym(cxip_jsonhandle, "json_object_array_get_idx");
+	if (!jsondl_ops.dl_json_object_array_get_idx) {
+		TRACE_CURL("Failed to find json_object_array_get_idx\n");
+		goto err;
+	}
+	jsondl_ops.dl_json_object_object_get_ex = dlsym(cxip_jsonhandle, "json_object_object_get_ex");
+	if (!jsondl_ops.dl_json_object_object_get_ex) {
+		TRACE_CURL("Failed to find json_object_object_get_ex\n");
+		goto err;
+	}
+	jsondl_ops.dl_json_object_get_boolean = dlsym(cxip_jsonhandle, "json_object_get_boolean");
+	if (!jsondl_ops.dl_json_object_get_boolean) {
+		TRACE_CURL("Failed to find json_object_get_boolean\n");
+		goto err;
+	}
+	jsondl_ops.dl_json_object_get_int = dlsym(cxip_jsonhandle, "json_object_get_int");
+	if (!jsondl_ops.dl_json_object_get_int) {
+		TRACE_CURL("Failed to find json_object_get_int\n");
+		goto err;
+	}
+	jsondl_ops.dl_json_object_get_int64 = dlsym(cxip_jsonhandle, "json_object_get_int64");
+	if (!jsondl_ops.dl_json_object_get_int64) {
+		TRACE_CURL("Failed to find json_object_get_int64\n");
+		goto err;
+	}
+	jsondl_ops.dl_json_object_get_double = dlsym(cxip_jsonhandle, "json_object_get_double");
+	if (!jsondl_ops.dl_json_object_get_double) {
+		TRACE_CURL("Failed to find json_object_get_double\n");
+		goto err;
+	}
+	jsondl_ops.dl_json_object_get_string = dlsym(cxip_jsonhandle, "json_object_get_string");
+	if (!jsondl_ops.dl_json_object_get_string) {
+		TRACE_CURL("Failed to find json_object_get_string\n");
+		goto err;
+	}
+	jsondl_ops.dl_json_tokener_parse = dlsym(cxip_jsonhandle, "json_tokener_parse");
+	if (!jsondl_ops.dl_json_tokener_parse) {
+		TRACE_CURL("Failed to find json_tokener_parse\n");
+		goto err;
+	}
+	jsondl_ops.dl_json_object_put = dlsym(cxip_jsonhandle, "json_object_put");
+	if (!jsondl_ops.dl_json_object_put) {
+		TRACE_CURL("Failed to find json_object_put\n");
+		goto err;
+	}
+
+	TRACE_CURL("JSON DLOPEN SUCCESS\n");
+	free(json_libpath);
+	return FI_SUCCESS;
+err:
+	TRACE_CURL("JSON DLOPEN FAILURE\n");
+	free(json_libpath);
+	dlclose(cxip_jsonhandle);
+	return -FI_ENODATA;
+#else
+	TRACE_CURL("JSON DLOPEN UNAVAILABLE\n");
+	return FI_SUCCESS;
+#endif
+}
+
 /**
  * @brief Simplified search for JSON objects.
  *
@@ -737,7 +874,7 @@ enum json_type cxip_json_extract(const char *desc, struct json_object *jobj,
 
 	beg = desc;
 	jo = jobj;
-	jt = json_object_get_type(jo);
+	jt = jsondl_ops.dl_json_object_get_type(jo);
 	while (*beg) {
 		if (*beg == '[') {
 			/* expect "[<integer>]" */
@@ -754,12 +891,12 @@ enum json_type cxip_json_extract(const char *desc, struct json_object *jobj,
 			if (*(beg++) != ']')
 				return json_type_null;
 			/* check index validity */
-			len = json_object_array_length(jo);
+			len = jsondl_ops.dl_json_object_array_length(jo);
 			if (idx >= len)
 				return json_type_null;
 			/* get the indexed object and continue */
-			jo = json_object_array_get_idx(jo, idx);
-			jt = json_object_get_type(jo);
+			jo = jsondl_ops.dl_json_object_array_get_idx(jo, idx);
+			jt = jsondl_ops.dl_json_object_get_type(jo);
 			continue;
 		}
 		if (beg == desc || *beg == '.') {
@@ -777,9 +914,9 @@ enum json_type cxip_json_extract(const char *desc, struct json_object *jobj,
 				*p++ = *beg++;
 			*p = 0;
 			/* extract the associated value */
-			if (!json_object_object_get_ex(jo, key, &jo))
+			if (!jsondl_ops.dl_json_object_object_get_ex(jo, key, &jo))
 				return json_type_null;
-			jt = json_object_get_type(jo);
+			jt = jsondl_ops.dl_json_object_get_type(jo);
 			continue;
 		}
 	}
@@ -802,7 +939,7 @@ int cxip_json_bool(const char *desc, struct json_object *jobj, bool *val)
 	struct json_object *jval;
 	if (json_type_boolean != cxip_json_extract(desc, jobj, &jval))
 		return -EINVAL;
-	*val = json_object_get_boolean(jval);
+	*val = jsondl_ops.dl_json_object_get_boolean(jval);
 	return 0;
 }
 
@@ -811,7 +948,7 @@ int cxip_json_int(const char *desc, struct json_object *jobj, int *val)
 	struct json_object *jval;
 	if (json_type_int != cxip_json_extract(desc, jobj, &jval))
 		return -EINVAL;
-	*val = json_object_get_int(jval);
+	*val = jsondl_ops.dl_json_object_get_int(jval);
 	return 0;
 }
 
@@ -820,7 +957,7 @@ int cxip_json_int64(const char *desc, struct json_object *jobj, int64_t *val)
 	struct json_object *jval;
 	if (json_type_int != cxip_json_extract(desc, jobj, &jval))
 		return -EINVAL;
-	*val = json_object_get_int64(jval);
+	*val = jsondl_ops.dl_json_object_get_int64(jval);
 	return 0;
 }
 
@@ -829,7 +966,7 @@ int cxip_json_double(const char *desc, struct json_object *jobj, double *val)
 	struct json_object *jval;
 	if (json_type_double != cxip_json_extract(desc, jobj, &jval))
 		return -EINVAL;
-	*val = json_object_get_double(jval);
+	*val = jsondl_ops.dl_json_object_get_double(jval);
 	return 0;
 }
 
@@ -839,6 +976,16 @@ int cxip_json_string(const char *desc, struct json_object *jobj,
 	struct json_object *jval;
 	if (json_type_string != cxip_json_extract(desc, jobj, &jval))
 		return -EINVAL;
-	*val = json_object_get_string(jval);
+	*val = jsondl_ops.dl_json_object_get_string(jval);
 	return 0;
+}
+
+struct json_object *cxip_json_tokener_parse(const char *str)
+{
+	return jsondl_ops.dl_json_tokener_parse(str);
+}
+
+void cxip_json_object_put(struct json_object *obj)
+{
+	jsondl_ops.dl_json_object_put(obj);
 }

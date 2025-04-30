@@ -3186,7 +3186,7 @@ static void _cxip_delete_mcast_cb(struct cxip_curl_handle *handle)
 	const char *errmsg = "";
 
 	/* note: allocates space for strings, free at end */
-	json_obj = json_tokener_parse(handle->response);
+	json_obj = cxip_json_tokener_parse(handle->response);
 	if (json_obj) {
 		if (cxip_json_string("message", json_obj, &errmsg))
 			errmsg = "";
@@ -3232,7 +3232,7 @@ static void _cxip_delete_mcast_cb(struct cxip_curl_handle *handle)
 		break;
 	}
 	/* free json memory */
-	json_object_put(json_obj);
+	cxip_json_object_put(json_obj);
 	free(curl_usrptr);
 }
 
@@ -3387,7 +3387,7 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 	int i, ret;
 
 	/* note: allocates space for strings, free at end */
-	json_obj = json_tokener_parse(handle->response);
+	json_obj = cxip_json_tokener_parse(handle->response);
 	if (json_obj) {
 		if (cxip_json_string("message", json_obj, &message))
 			message = "";
@@ -3520,7 +3520,7 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 	}
 	TRACE_JOIN("jstate->prov_errno = %d\n", jstate->prov_errno);
 	/* free json memory */
-	json_object_put(json_obj);
+	cxip_json_object_put(json_obj);
 	free(curl_usrptr);
 }
 
