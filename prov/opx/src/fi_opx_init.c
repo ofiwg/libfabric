@@ -72,6 +72,7 @@ int fi_opx_check_info(const struct fi_info *info)
 
 	/* Checking the general capabilities. OPX will bow out if it cannot support any requested primary or secondary
 	 * caps */
+
 	if (info->caps == 0) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
 		       "The application's capability hints are null. OPX is allowed to specify whatever capabilities it wishes\n");
@@ -95,11 +96,29 @@ int fi_opx_check_info(const struct fi_info *info)
 		 * because OPX provider's HMEM support performance relies on
 		 * application to provide descriptor for device buffer.
 		 */
-		if (info->domain_attr && !(info->domain_attr->mr_mode & FI_MR_HMEM)) {
+
+		/* IntelMPI is not properly setting their capabilities. They always request
+			FI_HMEM support in their caps even when you try to disable HMEM using
+			their environment variable I_MPI_OFFLOAD. Because of this, OPX is adding
+			a workaround that will disable checking for FI_MR_HMEM, which is a hard
+			requirement for OPX when FI_HMEM is requested.
+		*/
+
+		char *hmem_str		= NULL;
+		bool  enforce_hmem_caps = true;
+
+		if (fi_param_get_str(NULL, "hmem", &hmem_str) == FI_SUCCESS && hmem_str) {
+			if (strlen(hmem_str) == 5 && strncmp(hmem_str, "system", 5) == 0) { // if string matches system
+				enforce_hmem_caps = false;				    // disable FI_MR_HMEM check
+			}
+		}
+
+		if (enforce_hmem_caps && info->domain_attr && !(info->domain_attr->mr_mode & FI_MR_HMEM)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 				"FI_HMEM capability requires device registrations (FI_MR_HMEM)\n");
 			goto err;
 		}
+
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "FI_HMEM capability has been successfully enforced by OPX\n");
 	}
