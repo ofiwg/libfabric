@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_getinfo" "3" "2024\-12\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_getinfo" "3" "2025\-04\-30" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -770,6 +770,10 @@ Indicates that the node and service parameters specify the local source
 address to associate with an endpoint.
 If specified, either the node and/or service parameter must be non-NULL.
 This flag is often used with passive endpoints.
+.TP
+\f[I]FI_RESCAN\f[R]
+Indicates that the provider should rescan available network interfaces.
+This operation may be computationally expensive.
 .SH RETURN VALUE
 .PP
 fi_getinfo() returns 0 on success.
