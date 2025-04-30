@@ -620,6 +620,9 @@ static int xnet_ep_ctrl(struct fid *fid, int command, void *arg)
 
 	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
 	switch (command) {
+	case FI_GET_FD:
+		*((int *)arg) = ep->bsock.sock;
+		break;
 	case FI_ENABLE:
 		if ((ofi_needs_rx(ep->util_ep.caps) && !ep->util_ep.rx_cq) ||
 		    (ofi_needs_tx(ep->util_ep.caps) && !ep->util_ep.tx_cq)) {
