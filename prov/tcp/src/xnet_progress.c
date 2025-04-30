@@ -1121,64 +1121,6 @@ cq_error:
 	xnet_ep_disable(ep, 0, NULL, 0);
 }
 
-struct cancel_rxs_arg {
-	struct xnet_ep *ep;
-	int ret;
-};
-
-static int
-xnet_srx_cancel_rxs(struct ofi_dyn_arr *arr, void *list, void *context)
-{
-	struct xnet_srx *srx;
-	struct slist *queue = list;
-	struct cancel_rxs_arg *arg = context;
-	struct xnet_ep *ep = arg->ep;
-	int ret = arg->ret;
-	struct slist tmp = { 0 };
-	struct xnet_xfer_entry *xfer_entry;
-	struct slist_entry *entry;
-
-	srx = container_of(arr, struct xnet_srx, src_tag_queues);
-	while (!slist_empty(queue)) {
-		entry = slist_remove_head(queue);
-		xfer_entry = container_of(entry, struct xnet_xfer_entry, entry);
-
-		if (ep->peer->fi_addr != xfer_entry->src_addr ||
-		    xfer_entry->cq == NULL ||
-		    (xfer_entry->cq_flags & xnet_rx_completion_flag(ep))) {
-			slist_insert_head(entry, &tmp);
-			continue;
-		}
-
-		xnet_report_error(xfer_entry, ret);
-		xnet_free_xfer(xnet_srx2_progress(srx), xfer_entry);
-	}
-
-	while (!slist_empty(&tmp)) {
-		entry = slist_remove_head(&tmp);
-		slist_insert_head(entry, queue);
-
-		xfer_entry = container_of(entry, struct xnet_xfer_entry, entry);
-	}
-
-	return 0;
-}
-
-static ssize_t xnet_ep_tag_cancel(struct xnet_ep *ep, int ret)
-{
-	struct xnet_conn *conn = ep->util_ep.ep_fid.fid.context;
-	struct xnet_rdm *rdm = conn->rdm;
-	struct cancel_rxs_arg arg;
-
-	if (ep->peer == NULL)
-		return 0;
-
-	arg.ep = ep;
-	arg.ret = ret;
-	ofi_array_iter(&rdm->srx->src_tag_queues, &arg, xnet_srx_cancel_rxs);
-	return 0;
-}
-
 void xnet_progress_rx(struct xnet_ep *ep)
 {
 	int ret;
@@ -1198,10 +1140,8 @@ void xnet_progress_rx(struct xnet_ep *ep)
 
 		if (ep->cur_rx.entry)
 			xnet_complete_rx(ep, ret);
-		else if (ret) {
+		else if (ret)
 			xnet_ep_disable(ep, 0, NULL, 0);
-			xnet_ep_tag_cancel(ep, -ret);
-		}
 	} while (!ret && ofi_bsock_readable(&ep->bsock));
 
 	if (xnet_io_uring) {

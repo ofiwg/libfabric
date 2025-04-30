@@ -418,6 +418,7 @@ static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 	}
 	xnet_reset_rx(ep);
 	xnet_flush_xfer_queue(progress, &ep->rx_queue, NULL);
+	xnet_srx_cancel_tag_queue(ep);
 	ep->rx_avail = 0;
 	ofi_bsock_discard(&ep->bsock);
 }
