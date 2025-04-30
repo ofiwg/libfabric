@@ -399,8 +399,8 @@ static struct _hfi_ctrl *opx_hfi1_rdma_userinit(int fd, struct fi_opx_hfi1_conte
 		     context->hfi_unit, user_info_rsp.hw_version, user_info_rsp.sw_version);
 
 	context->hfi1_type = opx_hfi1_check_hwversion(user_info_rsp.hw_version);
-	assert((context->hfi1_type == OPX_HFI1_JKR) ||
-	       (context->hfi1_type == OPX_HFI1_WFR)); /* OPX_HFI1_JKR_9B is determined later */
+	assert(context->hfi1_type &
+	       (OPX_HFI1_CYR | OPX_HFI1_JKR | OPX_HFI1_WFR)); /* OPX_HFI1_JKR_9B is determined later */
 
 	/* Need the global set early, may be changed later on mixed networks */
 	if (fi_opx_global.hfi_local_info.type == OPX_HFI1_UNDEF) {

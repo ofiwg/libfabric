@@ -1530,6 +1530,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	/* The global was set early (userinit), may be changed now on mixed networks */
 	int mixed_network = 0;
 	if (fi_param_get_int(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
+		/* Only JKR supports OPA100 "mixed" network */
 		if (fi_opx_global.hfi_local_info.type == OPX_HFI1_JKR) {
 			if (mixed_network == 1) {
 				fi_opx_global.hfi_local_info.type = OPX_HFI1_JKR_9B;
@@ -1545,6 +1546,10 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 					"Unsupported value (%d) for FI_OPX_MIXED_NETWORK, using default HFI type %s.\n",
 					mixed_network, OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
 			}
+		} else if (fi_opx_global.hfi_local_info.type != OPX_HFI1_WFR) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+				"%s does not support a mixed networks with OPA100.\n",
+				OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
 		}
 	} else if (fi_opx_global.hfi_local_info.type == OPX_HFI1_JKR) {
 		// Default to 9B unless the environment variable was set.
@@ -1560,9 +1565,11 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		opx_ep->hfi->ref_cnt, opx_ep->hfi->ctrl->ctxt_info.ctxt, opx_ep->hfi->ctrl->ctxt_info.send_ctxt);
 
 	if (OPX_HFI1_TYPE & OPX_HFI1_JKR || OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is JKR (CN5000)\n");
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is CN5000\n");
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_CYR) {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is CN6000\n");
 	} else {
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is WFR (Omni-path)\n");
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is OPA100\n");
 	}
 
 	/* Set route_control after hfi1 type is selected and before any models are initialized
