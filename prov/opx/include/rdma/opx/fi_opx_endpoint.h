@@ -1848,8 +1848,9 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 		const uintptr_t	  rma_request_vaddr = hdr->cts.target.mr.rma_request_vaddr;
 		struct fi_opx_mr *opx_mr	    = NULL;
 		const uint32_t	  niov		    = hdr->cts.target.mr.niov;
-		HASH_FIND(hh, opx_ep->domain->mr_hashmap, &hdr->cts.target.mr.key, sizeof(hdr->cts.target.mr.key),
-			  opx_mr);
+		uint64_t	  temp_key[2]	    = {[0] = hdr->cts.target.mr.key, [1] = 0ul};
+
+		HASH_FIND(hh, opx_ep->domain->mr_hashmap, &temp_key[0], sizeof(hdr->cts.target.mr.key), opx_mr);
 		// Permissions (TODO)
 		// check MR permissions
 		// nack on failed lookup
@@ -1920,8 +1921,10 @@ void fi_opx_ep_rx_process_header_rma_rts(struct fi_opx_ep *opx_ep, const union o
 	struct fi_opx_ep_rx *const rx = opx_ep->rx;
 	assert(payload != NULL);
 
+	uint64_t temp_key[2] = {[0] = hdr->rma_rts.key, [1] = 0ul};
+
 	struct fi_opx_mr *opx_mr = NULL;
-	HASH_FIND(hh, opx_ep->domain->mr_hashmap, &hdr->rma_rts.key, sizeof(hdr->rma_rts.key), opx_mr);
+	HASH_FIND(hh, opx_ep->domain->mr_hashmap, &temp_key[0], sizeof(hdr->rma_rts.key), opx_mr);
 
 	if (opx_mr == NULL) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "lookup of key (%ld) failed; packet dropped\n",
@@ -2131,10 +2134,10 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 	} break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT: {
 		assert(payload != NULL);
-		const uint64_t	 *sbuf_qws = (uint64_t *) &payload->byte[0];
-		struct fi_opx_mr *opx_mr   = NULL;
-		HASH_FIND(hh, opx_ep->domain->mr_hashmap, &hdr->dput.target.mr.key, sizeof(hdr->dput.target.mr.key),
-			  opx_mr);
+		const uint64_t	 *sbuf_qws    = (uint64_t *) &payload->byte[0];
+		struct fi_opx_mr *opx_mr      = NULL;
+		uint64_t	  temp_key[2] = {[0] = hdr->dput.target.mr.key, [1] = 0ul};
+		HASH_FIND(hh, opx_ep->domain->mr_hashmap, &temp_key[0], sizeof(hdr->dput.target.mr.key), opx_mr);
 
 		if (opx_mr == NULL) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "lookup of key (%ld) failed; packet dropped\n",
