@@ -23,7 +23,7 @@
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2024 Cornelis Networks.
+  Copyright(c) 2021-2025 Cornelis Networks.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -145,7 +145,7 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	if (OPX_HFI1_WFR == opx_hfi1_check_hwversion(binfo->hw_version)) {
 		sz = HFI_MMAP_PGSIZE;
 	} else {
-		/* JKR prefers 8K page alignment for possible
+		/* Post WFR prefers 8K page alignment for possible
 		   future work with 8K virtual memory pages */
 		sz = 2 * HFI_MMAP_PGSIZE;
 	}
@@ -209,7 +209,7 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	if (hfi1_type != OPX_HFI1_WFR) {
 		maddr = HFI_MMAP_ALIGNOFF(fd, *rheq, sz, PROT_READ);
 		if (OFI_UNLIKELY(maddr == MAP_FAILED)) {
-			_HFI_PDBG("JKR mmap of RHEQ size %zu failed: %s\n", sz, strerror(errno));
+			_HFI_PDBG("mmap of RHEQ size %zu failed: %s\n", sz, strerror(errno));
 			goto err_mmap_subctxt_rheq;
 		}
 		*rheq = (__u64) maddr;
@@ -637,8 +637,8 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	}
 
 	internal->context.hfi1_type = opx_hfi1_check_hwversion(binfo->hw_version);
-	assert((internal->context.hfi1_type == OPX_HFI1_JKR) ||
-	       (internal->context.hfi1_type == OPX_HFI1_WFR)); /* OPX_HFI1_JKR_9B is determined later */
+	assert(internal->context.hfi1_type &
+	       (OPX_HFI1_CYR | OPX_HFI1_JKR | OPX_HFI1_WFR)); /* OPX_HFI1_JKR_9B is determined later */
 
 	/* Need the global set early, may be changed later on mixed networks */
 	if (fi_opx_global.hfi_local_info.type == OPX_HFI1_UNDEF) {
@@ -646,9 +646,9 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	}
 
 #ifndef OPX_JKR_SUPPORT
-	if (internal->context.hfi1_type == OPX_HFI1_JKR) {
+	if (internal->context.hfi1_type != OPX_HFI1_WFR) {
 		fprintf(stderr,
-			"OPX is not built with JKR supported headers in the include path. Please update the headers and build again\n");
+			"OPX was built with OPA100 headers in the include path. Please update the headers and build again\n");
 		abort();
 	}
 #endif

@@ -128,7 +128,8 @@ enum opx_hfi1_type {
 	OPX_HFI1_UNDEF	= 0, // undefined
 	OPX_HFI1_JKR_9B = 1, // CN5000 built for mixed network. Internal use
 	OPX_HFI1_WFR	= 2, // Omni-path (all generations)
-	OPX_HFI1_JKR	= 4  // CN5000 (initial generation)
+	OPX_HFI1_JKR	= 4, // CN5000 (initial generation)
+	OPX_HFI1_CYR	= 8  // CN6000 (initial generation)
 };
 
 /* Arbitrary packet "types" that can be differentiated as needed (route control) */
@@ -148,14 +149,14 @@ static const char *const OPX_HFI1_PACKET_STR[] = {
 	[OPX_HFI1_RZV_CTRL] = "OPX_HFI1_RZV_CTRL", [OPX_HFI1_RZV_DATA] = "OPX_HFI1_RZV_DATA"};
 
 /* Will remove after 16B SDMA support is finished */
-#define OPX_NO_9B_SUPPORT(_hfi1_type)                                                                                \
-	do {                                                                                                         \
-		if (!(_hfi1_type & OPX_HFI1_JKR)) {                                                                  \
-			fprintf(stderr, "%s NO JKR 9B SUPPORT for %s\n", __func__, OPX_HFI_TYPE_STRING(_hfi1_type)); \
-			if (getenv("OPX_9B_ABORT"))                                                                  \
-				abort();                                                                             \
-		}                                                                                                    \
-		assert(_hfi1_type != OPX_HFI1_UNDEF);                                                                \
+#define OPX_NO_9B_SUPPORT(_hfi1_type)                                                                            \
+	do {                                                                                                     \
+		if (!(_hfi1_type & OPX_HFI1_JKR)) {                                                              \
+			fprintf(stderr, "%s NO 9B SUPPORT for %s\n", __func__, OPX_HFI_TYPE_STRING(_hfi1_type)); \
+			if (getenv("OPX_9B_ABORT"))                                                              \
+				abort();                                                                         \
+		}                                                                                                \
+		assert(_hfi1_type != OPX_HFI1_UNDEF);                                                            \
 	} while (0)
 
 #define OPX_NO_16B_SUPPORT(_hfi1_type)                                                                            \
@@ -241,10 +242,10 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_global_data, hmem_domain_list) ==
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_global_data, hfi_local_info) == (FI_OPX_CACHE_LINE_SIZE * 2),
 			"Offset of fi_opx_global_data->hfi_local_info should start at cacheline 2!");
 
-#define OPX_HFI_TYPE_STRING(_hfi_type)                                                       \
-	({                                                                                   \
-		assert((_hfi_type >= 0) && (_hfi_type <= OPX_HFI1_JKR) && (_hfi_type != 3)); \
-		fi_opx_global.opx_hfi1_type_strings[_hfi_type];                              \
+#define OPX_HFI_TYPE_STRING(_hfi_type)                                   \
+	({                                                               \
+		assert((_hfi_type >= 0) && (_hfi_type <= OPX_HFI1_CYR)); \
+		fi_opx_global.opx_hfi1_type_strings[_hfi_type];          \
 	})
 
 extern struct fi_opx_global_data fi_opx_global;

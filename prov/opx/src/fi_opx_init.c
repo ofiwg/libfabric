@@ -468,10 +468,14 @@ err:
 struct fi_opx_global_data fi_opx_global = {.hfi_local_info.type	  = OPX_HFI1_UNDEF,
 					   .pkt_size		  = OPX_HFI1_DEFAULT_PKT_SIZE,
 					   .opx_hfi1_type_strings = {[OPX_HFI1_UNDEF]  = "OPX_HFI1_UNDEF",
-								     [OPX_HFI1_JKR_9B] = "OPX_HFI1_JKR_9B",
-								     [OPX_HFI1_WFR]    = "OPX_HFI1_WFR",
+								     [OPX_HFI1_JKR_9B] = "CN5000-mixed",
+								     [OPX_HFI1_WFR]    = "OPA100",
 								     [3]	       = "ERROR",
-								     [OPX_HFI1_JKR]    = "OPX_HFI1_JKR"}};
+								     [OPX_HFI1_JKR]    = "CN5000",
+								     [5]	       = "ERROR",
+								     [6]	       = "ERROR",
+								     [7]	       = "ERROR",
+								     [OPX_HFI1_CYR]    = "CN6000"}};
 /* ROUTE CONTROL table for each packet type */
 int opx_route_control[OPX_HFI1_NUM_PACKET_TYPES];
 
@@ -815,7 +819,7 @@ OPX_INI
 		OPX_RC_OUT_OF_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0);
 	fi_param_define(
 		&fi_opx_provider, "mixed_network", FI_PARAM_INT,
-		"Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when mixed network is used. Default is 0.");
+		"Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when a mixed network is used. Default is 0.");
 
 	assert(OPX_HFI1_N_PKT_SIZES == 4);
 	fi_param_define(
