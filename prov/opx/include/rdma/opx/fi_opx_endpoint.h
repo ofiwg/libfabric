@@ -1518,25 +1518,18 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 
 		uint64_t payload_qws_total;
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			payload_qws_total = (((uint64_t) ntohs(hdr->lrh_9B.pktlen)) - 15) >> 1;
+			payload_qws_total = (((uint64_t) __be16_to_cpu(hdr->lrh_9B.pktlen)) - 15) >> 1;
 		} else {
 			payload_qws_total = (uint64_t) (hdr->lrh_16B.pktlen - 9);
 		}
-		const uint64_t packet_payload_len =
-			OPX_BTH_SEND_XFER_BYTES_TAIL(hdr->mp_eager_first.subctxt_xfer_bytes_tail) +
-			(payload_qws_total << 3);
-		const uint64_t payload_total_len = (hdr->mp_eager_first.payload_bytes_total_msb << 8) |
-						   hdr->mp_eager_first.payload_bytes_total_lsb;
+		const uint64_t packet_payload_len = (payload_qws_total << 3);
+		const uint64_t payload_total_len  = hdr->mp_eager_first.payload_bytes_total;
 
 		assert(packet_payload_len < payload_total_len);
 
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-		       "hdr->mp_eager_first.xfer_bytes_tail = %u, "
-		       "hdr->mp_eager_first.payload_bytes_total_msb = %u, "
-		       "hdr->mp_eager_first.payload_bytes_total_lsb = %u send_len = %lu, xfer_len = %lu\n",
-		       OPX_BTH_SEND_XFER_BYTES_TAIL(hdr->mp_eager_first.subctxt_xfer_bytes_tail),
-		       hdr->mp_eager_first.payload_bytes_total_msb, hdr->mp_eager_first.payload_bytes_total_lsb,
-		       packet_payload_len, payload_total_len);
+		       "hdr->mp_eager_first.payload_bytes_total = %u send_len = %lu, xfer_len = %lu\n",
+		       hdr->mp_eager_first.payload_bytes_total, packet_payload_len, payload_total_len);
 
 		if (OFI_UNLIKELY(is_multi_receive)) { /* branch should compile out */
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1551,16 +1544,8 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 				memset(recv_buf, 0xAA, payload_total_len);
 			}
 #endif
-			/* For the first MP-Eager packet, we expect all tail bytes in the packet
-			   header to be used, as well as a full payload chunk */
-
 			uint64_t *recv_buf_qw = is_hmem ? (uint64_t *) opx_ep->hmem_copy_buf : (uint64_t *) recv_buf;
 
-			/* Tail size is 16 bytes for an eager first packet */
-			recv_buf_qw[0] = hdr->mp_eager_first.xfer_tail[0];
-			recv_buf_qw[1] = hdr->mp_eager_first.xfer_tail[1];
-
-			recv_buf_qw += 2;
 			uint64_t *payload_qw = (uint64_t *) payload;
 
 			for (unsigned i = 0; i < payload_qws_total; ++i) {
@@ -1628,7 +1613,7 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 
 		uint64_t payload_qws_total;
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			payload_qws_total = (((uint64_t) ntohs(hdr->lrh_9B.pktlen)) - 15) >> 1;
+			payload_qws_total = (((uint64_t) __be16_to_cpu(hdr->lrh_9B.pktlen)) - 15) >> 1;
 		} else {
 			payload_qws_total = (uint64_t) hdr->lrh_16B.pktlen - 9;
 		}
@@ -1682,27 +1667,24 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			recv_buf = is_hmem ? (void *) opx_ep->hmem_copy_buf :
 					     (void *) ((uint8_t *) recv_buf + hdr->mp_eager_nth.payload_offset);
 
-			/* We'll never *not* have some bytes in the tail */
-			if (OFI_LIKELY(xfer_bytes_tail == 16)) {
-				uint64_t *recv_buf_qw = (uint64_t *) recv_buf;
-				recv_buf_qw[0]	      = hdr->mp_eager_nth.xfer_tail[0];
-				recv_buf_qw[1]	      = hdr->mp_eager_nth.xfer_tail[1];
-				recv_buf	      = (void *) (recv_buf_qw + 2);
-			} else {
-				memcpy(recv_buf, hdr->mp_eager_nth.xfer_tail, xfer_bytes_tail);
-				recv_buf = (void *) ((uint8_t *) recv_buf + xfer_bytes_tail);
-			}
-
 			assert(is_hmem || ((uint8_t *) recv_buf) <= orig_recv_buf_end);
 
+			uint64_t *recv_buf_qw = (uint64_t *) recv_buf;
 			if (OFI_LIKELY(send_len > xfer_bytes_tail)) {
-				uint64_t *recv_buf_qw = (uint64_t *) recv_buf;
-				uint64_t *payload_qw  = (uint64_t *) payload;
+				uint64_t *payload_qw = (uint64_t *) payload;
 
 				unsigned i;
 				for (i = 0; i < payload_qws_total; ++i) {
 					recv_buf_qw[i] = payload_qw[i];
 					assert(is_hmem || ((uint8_t *) &recv_buf_qw[i]) <= orig_recv_buf_end);
+				}
+			}
+
+			if (xfer_bytes_tail) {
+				uint8_t *recv_tail    = (uint8_t *) &recv_buf_qw[payload_qws_total];
+				uint8_t *payload_tail = (uint8_t *) &hdr->mp_eager_nth.xfer_tail;
+				for (int i = 0; i < xfer_bytes_tail; ++i) {
+					recv_tail[i] = payload_tail[i];
 				}
 			}
 
@@ -2059,7 +2041,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		uint16_t bytes;
 
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			lrh_pktlen_le	    = ntohs(hdr->lrh_9B.pktlen);
+			lrh_pktlen_le	    = __be16_to_cpu(hdr->lrh_9B.pktlen);
 			total_bytes_to_copy = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
 			bytes = (uint16_t) (total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B));
 		} else {
@@ -3532,6 +3514,74 @@ void fi_opx_ep_tx_cq_completion_rzv(struct fid_ep *ep, void *context, const size
 }
 
 __OPX_FORCE_INLINE__
+ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, uint8_t **buf_ptr, uint32_t *payload_offset,
+					  ssize_t *payload_remaining, const uint32_t mp_egr_id, const size_t chunk_size,
+					  const uint64_t pbc_dlid, const uint64_t bth_rx, const uint64_t lrh_dlid,
+					  const union fi_opx_addr addr, const enum ofi_reliability_kind reliability,
+					  const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+{
+	ssize_t	 remaining = *payload_remaining;
+	uint32_t offset	   = *payload_offset;
+	uint8_t *buf	   = *buf_ptr;
+	ssize_t	 rc;
+
+	while (remaining >= chunk_size) {
+		if (hfi1_type == OPX_HFI1_WFR) {
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, chunk_size, mp_egr_id,
+							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
+							    reliability, OPX_HFI1_WFR, ctx_sharing);
+		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, chunk_size, mp_egr_id,
+							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
+							    reliability, OPX_HFI1_JKR_9B, ctx_sharing);
+		} else {
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
+				opx_ep, (void *) buf, offset, chunk_size, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid, addr,
+				FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR, ctx_sharing);
+		}
+
+		if (rc != FI_SUCCESS) {
+			goto mp_egr_eagain;
+		}
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_packets);
+
+		remaining -= chunk_size;
+		offset += chunk_size;
+		buf += chunk_size;
+	}
+
+	if (remaining > 0) {
+		if (hfi1_type == OPX_HFI1_WFR) {
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, remaining, mp_egr_id,
+							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
+							    reliability, OPX_HFI1_WFR, ctx_sharing);
+		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, remaining, mp_egr_id,
+							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
+							    reliability, OPX_HFI1_JKR_9B, ctx_sharing);
+		} else {
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
+				opx_ep, (void *) buf, offset, remaining, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid, addr,
+				FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR, ctx_sharing);
+		}
+		if (rc != FI_SUCCESS) {
+			goto mp_egr_eagain;
+		}
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_packets);
+	}
+
+	return FI_SUCCESS;
+
+mp_egr_eagain:
+
+	(*payload_remaining) = remaining;
+	(*buf_ptr)	     = buf;
+	(*payload_offset)    = offset;
+
+	return rc;
+}
+
+__OPX_FORCE_INLINE__
 ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr, uint64_t tag,
 				    void *context, const uint32_t data, int lock_required,
 				    const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
@@ -3553,22 +3603,26 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 
 	/* Write the first packet */
 	uint32_t first_packet_psn;
+	size_t	 payload_bytes_sent;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "===================================== SEND, HFI -- MULTI-PACKET EAGER USER (begin)\n");
+		     "===================================== SEND, HFI -- MULTI-PACKET EAGER (begin)\n");
 
 	uint8_t *buf_bytes_ptr = (uint8_t *) buf;
 	ssize_t	 rc;
-	rc = opx_hfi1_tx_send_mp_egr_first_common(opx_ep, (void **) &buf_bytes_ptr, len, opx_ep->hmem_copy_buf,
-						  pbc_dlid, bth_subctxt_rx, lrh_dlid, addr, tag, data, lock_required,
-						  tx_op_flags, caps, reliability, &first_packet_psn, hmem_iface,
-						  hmem_device, hmem_handle, hfi1_type, ctx_sharing);
+	rc = opx_hfi1_tx_send_mp_egr_first_common(
+		opx_ep, (void **) &buf_bytes_ptr, len, opx_ep->hmem_copy_buf, pbc_dlid, bth_subctxt_rx, lrh_dlid, addr,
+		tag, data, lock_required, tx_op_flags, caps, reliability, &first_packet_psn, &payload_bytes_sent,
+		hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
 
 	if (rc != FI_SUCCESS) {
+		FI_OPX_DEBUG_COUNTERS_INC_COND(rc == -FI_ENOBUFS,
+					       opx_ep->debug_counters.mp_eager.send_first_eagain_credits);
+		FI_OPX_DEBUG_COUNTERS_INC_COND(rc != -FI_ENOBUFS,
+					       opx_ep->debug_counters.mp_eager.send_first_eagain_reliability);
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_fall_back_to_rzv);
-		FI_DBG_TRACE(
-			fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND, HFI -- MULTI-PACKET EAGER USER (return %zd)\n",
-			rc);
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			     "===================================== SEND, HFI -- MULTI-PACKET EAGER EAGAIN (%s)\n",
+			     (rc == -FI_ENOBUFS) ? "credits" : "reliability");
 
 		return rc;
 	}
@@ -3576,141 +3630,43 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_first_packets);
 
 	/* The first packet was successful. We're now committed to finishing this */
-	ssize_t	 payload_remaining = len - FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type);
-	uint32_t payload_offset	   = FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type);
-	buf_bytes_ptr += FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type);
+	const size_t chunk_size	       = FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type);
+	ssize_t	     payload_remaining = len - payload_bytes_sent;
+	uint32_t     payload_offset    = payload_bytes_sent;
+	buf_bytes_ptr += payload_bytes_sent;
 
-	FI_DBG_TRACE(
-		fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== SEND, HFI -- MULTI-PACKET EAGER USER FIRST NTH (payload_remaining %zu)\n",
-		payload_remaining);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SEND, HFI -- MULTI-PACKET EAGER SEND REMAINING (%zu)\n",
+		     payload_remaining);
 
-	/* Write all the full nth packets */
-	while (payload_remaining >= FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) {
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf_bytes_ptr, payload_offset,
-							    first_packet_psn, pbc_dlid, bth_subctxt_rx, lrh_dlid, addr,
-							    lock_required, reliability, hfi1_type, ctx_sharing);
-		} else {
-			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
-				opx_ep, (void *) buf_bytes_ptr, payload_offset, first_packet_psn, pbc_dlid,
-				bth_subctxt_rx, lrh_dlid, addr, lock_required, reliability, hfi1_type, ctx_sharing);
-		}
+	rc = opx_hfi1_tx_send_mp_egr_remaining(opx_ep, &buf_bytes_ptr, &payload_offset, &payload_remaining,
+					       first_packet_psn, chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid, addr,
+					       reliability, hfi1_type, ctx_sharing);
 
-		if (rc != FI_SUCCESS) {
-			if (rc == -FI_ENOBUFS) {
-				/* Insufficient credits. Try forcing a credit return and retry. */
-				fi_opx_force_credit_return(ep, addr.fi, addr.hfi1_subctxt_rx, caps, hfi1_type,
-							   ctx_sharing);
-				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_force_cr);
-			} else {
-				fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
-						  ctx_sharing);
-				FI_OPX_DEBUG_COUNTERS_INC(
-					opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
-			}
+	while (rc != FI_SUCCESS) {
+		FI_OPX_DEBUG_COUNTERS_INC_COND(rc == -FI_ENOBUFS,
+					       opx_ep->debug_counters.mp_eager.send_nth_eagain_credits);
+		FI_OPX_DEBUG_COUNTERS_INC_COND(rc != -FI_ENOBUFS,
+					       opx_ep->debug_counters.mp_eager.send_nth_eagain_reliability);
 
-			do {
-				if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-					rc = fi_opx_hfi1_tx_send_mp_egr_nth(
-						opx_ep, (void *) buf_bytes_ptr, payload_offset, first_packet_psn,
-						pbc_dlid, bth_subctxt_rx, lrh_dlid, addr, lock_required, reliability,
-						hfi1_type, ctx_sharing);
-				} else {
-					rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
-						opx_ep, (void *) buf_bytes_ptr, payload_offset, first_packet_psn,
-						pbc_dlid, bth_subctxt_rx, lrh_dlid, addr, lock_required, reliability,
-						hfi1_type, ctx_sharing);
-				}
+		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
 
-				if (rc == -FI_EAGAIN) {
-					FI_OPX_DEBUG_COUNTERS_INC(
-						opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
-					fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
-							  ctx_sharing);
-				}
-			} while (rc != FI_SUCCESS);
-		}
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_packets);
-
-		payload_remaining -= FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type);
-		buf_bytes_ptr += FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type);
-		payload_offset += FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type);
-		FI_DBG_TRACE(
-			fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND, HFI -- MULTI-PACKET EAGER USER (payload_remaining %zu)\n",
-			payload_remaining);
-	}
-
-	/* Write all the last packet (if necessary) */
-	if (payload_remaining > 0) {
-		FI_DBG_TRACE(
-			fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND, HFI -- MULTI-PACKET EAGER USER LAST (payload_remaining %zu)\n",
-			payload_remaining);
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			rc = fi_opx_hfi1_tx_send_mp_egr_last(opx_ep, (void *) buf_bytes_ptr, payload_offset,
-							     payload_remaining, first_packet_psn, pbc_dlid,
-							     bth_subctxt_rx, lrh_dlid, addr, lock_required, reliability,
-							     hfi1_type, ctx_sharing);
-		} else {
-			rc = fi_opx_hfi1_tx_send_mp_egr_last_16B(opx_ep, (void *) buf_bytes_ptr, payload_offset,
-								 payload_remaining, first_packet_psn, pbc_dlid,
-								 bth_subctxt_rx, lrh_dlid, addr, lock_required,
-								 reliability, hfi1_type, ctx_sharing);
-		}
-
-		if (rc != FI_SUCCESS) {
-			if (rc == -FI_ENOBUFS) {
-				/* Insufficient credits. Try forcing a credit return and retry. */
-				fi_opx_force_credit_return(ep, addr.fi, addr.hfi1_subctxt_rx, caps, hfi1_type,
-							   ctx_sharing);
-				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_force_cr);
-			} else {
-				fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
-						  ctx_sharing);
-				FI_OPX_DEBUG_COUNTERS_INC(
-					opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
-			}
-
-			do {
-				if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-					rc = fi_opx_hfi1_tx_send_mp_egr_last(
-						opx_ep, (void *) buf_bytes_ptr, payload_offset, payload_remaining,
-						first_packet_psn, pbc_dlid, bth_subctxt_rx, lrh_dlid, addr,
-						lock_required, reliability, hfi1_type, ctx_sharing);
-				} else {
-					rc = fi_opx_hfi1_tx_send_mp_egr_last_16B(
-						opx_ep, (void *) buf_bytes_ptr, payload_offset, payload_remaining,
-						first_packet_psn, pbc_dlid, bth_subctxt_rx, lrh_dlid, addr,
-						lock_required, reliability, hfi1_type, ctx_sharing);
-				}
-				if (rc == -FI_EAGAIN) {
-					FI_OPX_DEBUG_COUNTERS_INC(
-						opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
-					fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
-							  ctx_sharing);
-				}
-			} while (rc != FI_SUCCESS);
-		}
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_packets);
-		FI_DBG_TRACE(
-			fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND, HFI -- MULTI-PACKET EAGER USER LAST (payload_remaining %zu)\n",
-			payload_remaining);
+		rc = opx_hfi1_tx_send_mp_egr_remaining(opx_ep, &buf_bytes_ptr, &payload_offset, &payload_remaining,
+						       first_packet_psn, chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid,
+						       addr, reliability, hfi1_type, ctx_sharing);
 	}
 
 	if (OFI_LIKELY(do_cq_completion)) {
 		fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required, tag, caps);
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "===================================== SEND, HFI -- MULTI-PACKET EAGER USER (end)\n");
+		     "===================================== SEND, HFI -- MULTI-PACKET EAGER (end)\n");
 
 	return FI_SUCCESS;
 }
 
 #ifndef FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES
-#define FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES 0x200000
+#define FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES (1)
 #endif
 
 __OPX_FORCE_INLINE__
@@ -3734,31 +3690,19 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 					     override_flags, tx_op_flags, caps, reliability, do_cq_completion,
 					     hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
 	}
-	if (OFI_LIKELY(rc == FI_SUCCESS)) {
-		return rc;
 
-#ifndef FI_OPX_MP_EGR_DISABLE
-	} else if (rc == -FI_ENOBUFS && mp_eager_fallback) {
-		/* Insufficient credits. If the payload is big enough,
-		   fall back to Multi-packet eager to try sending this in
-		   smaller chunks. */
+	/* Success or insufficient credits. If the payload is big enough,
+	   fall back to Multi-packet eager to try sending this in smaller chunks. */
+	if (OFI_LIKELY(rc == FI_SUCCESS) || (rc == -FI_ENOBUFS && mp_eager_fallback)) {
 		return rc;
-#endif
 	}
 
-	if (rc == -FI_ENOBUFS) {
-		/* Insufficient credits. Try forcing a credit return and retry. */
-		fi_opx_force_credit_return(ep, addr.fi, addr.hfi1_subctxt_rx, caps, hfi1_type, ctx_sharing);
-	} else {
-		/* Likely full replay buffers or waiting for reliability handshake init.
-		   A poll might help */
-		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
-	}
-
-	/* Note that we'll only iterate this loop more than once if we got here
-	   due to insufficient credits. */
+	/* Note that we'll only potentially iterate this loop more than once if
+	   we got here due to insufficient credits. */
 	uint64_t loop = 0;
 	do {
+		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
+
 		if (is_contiguous) {
 			rc = OPX_FABRIC_TX_SEND_EGR(ep, buf, len, addr.fi, tag, context, data, lock_required,
 						    override_flags, tx_op_flags, caps, reliability, do_cq_completion,
@@ -3769,7 +3713,6 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 						     do_cq_completion, hmem_iface, hmem_device, hmem_handle, hfi1_type,
 						     ctx_sharing);
 		}
-		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
 	} while (rc == -FI_ENOBUFS && loop++ < FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES);
 
 	return rc;
@@ -3875,9 +3818,13 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 	const uint64_t do_cq_completion = fi_opx_ep_tx_do_cq_completion(opx_ep, override_flags, tx_op_flags);
 
 	if (total_len < opx_ep->tx->rzv_min_payload_bytes) {
-		const bool mp_eager_fallback = (total_len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type) &&
-						total_len <= opx_ep->tx->mp_eager_max_payload_bytes);
-		if (total_len <= opx_ep->tx->pio_max_eager_tx_bytes) {
+		const bool mp_eager_fallback =
+#ifndef FI_OPX_MP_EGR_DISABLE
+			(total_len > OPX_MP_EGR_MIN_BYTES && total_len <= opx_ep->tx->mp_eager_max_payload_bytes);
+#else
+			false;
+#endif
+		if (total_len <= opx_ep->tx->pio_flow_eager_tx_bytes) {
 			rc = opx_ep_tx_send_try_eager(ep, buf, len, addr, tag, context, local_iov, niov, total_len,
 						      data, lock_required, is_contiguous, override_flags, tx_op_flags,
 						      caps, reliability, do_cq_completion, hmem_iface, hmem_device,
@@ -3886,12 +3833,14 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					     "===================================== SEND (end)\n");
-				return rc;
+				return FI_SUCCESS;
 			}
 			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
-			FI_DBG_TRACE(
-				fi_opx_global.prov, FI_LOG_EP_DATA,
-				"===================================== SEND -- Eager send failed, trying next method\n");
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				     "===================================== SEND -- FI_EAGAIN (Eager) len=%lu\n",
+				     total_len);
+
+			return -FI_EAGAIN;
 		}
 
 #ifndef FI_OPX_MP_EGR_DISABLE
@@ -3906,23 +3855,16 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					     "===================================== SEND (end)\n");
-				return rc;
+				return FI_SUCCESS;
 			}
 			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
-			FI_DBG_TRACE(
-				fi_opx_global.prov, FI_LOG_EP_DATA,
-				"===================================== SEND -- MP-Eager send failed, trying next method\n");
-		}
-#endif
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				     "===================================== SEND -- FI_EAGAIN (MP Eager) len=%lu\n",
+				     total_len);
 
-		if (OFI_UNLIKELY(total_len < FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES)) {
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
-			FI_DBG_TRACE(
-				fi_opx_global.prov, FI_LOG_EP_DATA,
-				"===================================== SEND -- FI_EAGAIN Can't do RZV with payload length = %ld\n",
-				len);
 			return -FI_EAGAIN;
 		}
+#endif
 	}
 
 	rc = opx_ep_tx_send_rzv(ep, buf, len, addr, tag, context, local_iov, niov, total_len, data, lock_required,
