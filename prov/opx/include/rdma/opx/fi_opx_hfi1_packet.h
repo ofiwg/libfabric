@@ -791,18 +791,14 @@ union opx_hfi1_packet_hdr {
 		uint8_t	 reserved_2;
 
 		/* QW[3] BTH/KDETH (offset_ver_tid) */
-		uint32_t reserved3 : 24;
-		uint32_t payload_bytes_total_msb : 8; /* Total length of payload across all mp-eager packets higher
-							 byte*/
-		uint16_t reserved1;
-		uint8_t	 payload_bytes_total_lsb; /* Total length of payload across all mp-eager packets lower byte*/
-		uint8_t	 reserved4;
+		uint64_t reserved_3;
 
 		/* QW[4] KDETH */
 		uint64_t reserved_4;
 
 		/* QW[5-6] SW */
-		uint64_t xfer_tail[2];
+		uint16_t payload_bytes_total;
+		uint16_t unused[3];
 
 		uint64_t reserved_n[8]; /* QW[7-14] SW */
 
@@ -820,8 +816,11 @@ union opx_hfi1_packet_hdr {
 		/* QW[3-4] BTH/KDETH */
 		uint64_t reserved_3[2];
 
-		/* QW[5-6] SW */
-		uint64_t xfer_tail[2];
+		/* QW[5] SW */
+		uint64_t xfer_tail;
+
+		/* QW[6] SW */
+		uint64_t reserved_4;
 
 		/* QW[7] SW last 9B quadword */
 		uint32_t payload_offset;
@@ -1085,8 +1084,7 @@ static inline size_t fi_opx_hfi1_packet_hdr_message_length(const union opx_hfi1_
 	case FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST:
 	case FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ:
-		message_length = ((size_t) hdr->mp_eager_first.payload_bytes_total_msb << 8) |
-				 hdr->mp_eager_first.payload_bytes_total_lsb;
+		message_length = (size_t) hdr->mp_eager_first.payload_bytes_total;
 		break;
 	case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:

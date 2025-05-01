@@ -113,6 +113,17 @@
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MIN (FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min value */
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MAX (OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX + 1) /* Max value */
 
+/**
+ * @brief The minimum length required to use multi-packet eager.
+ */
+#ifndef OPX_MP_EGR_MIN_BYTES
+#ifndef OPX_JKR_SUPPORT
+#define OPX_MP_EGR_MIN_BYTES (4160)
+#else
+#define OPX_MP_EGR_MIN_BYTES (OPX_HFI1_PKT_SIZE + 1)
+#endif
+#endif
+
 /* The PBC length to use for a single packet in a multi-packet eager send.
 
    This is packet payload plus the PBC plus the packet header plus
@@ -121,37 +132,26 @@
    All packets in a multi-packet eager send will be this size, except
    possibly the last one, which may be smaller.
 
+   This value is derived by rounding OPX_MP_EGR_MIN_BYTES down to the
+   previous multiple of 64, then adding 64 back for the PBC & packet header
+
    NOTE: This value MUST be a multiple of 64!
    */
+#define FI_OPX_MP_EGR_CHUNK_SIZE ((OPX_MP_EGR_MIN_BYTES & -64) + 64)
 
-#ifndef FI_OPX_MP_EGR_CHUNK_SIZE
-#ifndef OPX_JKR_SUPPORT
-#define FI_OPX_MP_EGR_CHUNK_SIZE (4160)
-#else
-#define FI_OPX_MP_EGR_CHUNK_SIZE (OPX_HFI1_PKT_SIZE)
-#endif
-#endif
-/* For full MP-Eager chunks, we pack 16 bytes of payload data in the
-   packet header.
-
-   So the actual user payload __consumed__ for a full chunk is the
+/* The actual user payload __consumed__ for a full chunk is the
    FI_OPX_MP_EGR_CHUNK_SIZE minus the PBC minus the header minus
-   the tail (16B only) plus 16 bytes payload packed in the header.
-
-   The payload itself will be FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE - 16
+   the tail (16B only).
    */
 
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)                                                              \
-	((hfi1_type & OPX_HFI1_JKR) ?                                                                            \
-		 (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 64 /* hdr */ + 8 /* tail */) - 16 /* payload */)) : \
-		 (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 56 /* hdr */) - 16 /* payload */)))
+	((hfi1_type & OPX_HFI1_JKR) ? (FI_OPX_MP_EGR_CHUNK_SIZE - (8 /* PBC */ + 64 /* hdr */ + 8 /* tail */)) : \
+				      (FI_OPX_MP_EGR_CHUNK_SIZE - (8 /* PBC */ + 56 /* hdr */)))
 
 #define FI_OPX_MP_EGR_CHUNK_CREDITS (FI_OPX_MP_EGR_CHUNK_SIZE >> 6) /* PACKET CREDITS TOTAL */
 #define FI_OPX_MP_EGR_CHUNK_DWS	    (FI_OPX_MP_EGR_CHUNK_SIZE >> 2) /* PBC DWS */
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS(hfi1_type) \
 	((FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) >> 3) /* PAYLOAD QWS CONSUMED */
-#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL 16
-#define FI_OPX_MP_EGR_XFER_BYTES_TAIL	 0x0080000000000000ull
 
 /* SDMA tuning constants */
 
