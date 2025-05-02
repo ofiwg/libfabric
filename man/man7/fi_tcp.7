@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_tcp" "7" "2024\-12\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_tcp" "7" "2025\-05\-02" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -113,6 +113,18 @@ Must be paired with FI_LOG_LEVEL=trace to print the message details.
 Uses io_uring for socket operations if available, rather than going
 through the standard socket APIs (i.e.\ connect, accept, send, recv).
 Default: disabled.
+.SH CONTROL OPERATIONS
+.PP
+The tcp provider supports the following control operations (see
+\f[V]fi_control\f[R](3)):
+.TP
+\f[I]FI_GET_FD\f[R]
+Retrieve the underlying socket file descriptor associated with an active
+endpoint.
+The argument must point to an integer where the descriptor will be
+stored.
+This allows applications to tune socket options not exposed through the
+libfabric API (SO_SNDBUF, SO_RCVBUF, SO_BUSY_POLL, etc).
 .SH NOTES
 .PP
 The tcp provider supports both msg and rdm endpoints directly.
