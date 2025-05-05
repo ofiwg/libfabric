@@ -323,6 +323,12 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_LINK_DOWN_WAIT_TIME_MAX_SEC*
 : Integer. The maximum time in seconds to wait for a link to come back up. Default is 70 seconds.
 
+*FI_OPX_MMAP_GUARD*
+: Boolean (0/1, on/off, true/false, yes/no). Enable guards around OPX/HFI mmaps. When enabled,
+this will cause a segfault when mmapped memory is illegally accessed through buffer overruns
+or underruns.  Default is false.
+
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
