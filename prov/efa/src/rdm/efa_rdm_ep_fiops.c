@@ -691,6 +691,8 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	struct dlist_entry *entry, *tmp;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ope *txe;
+
+	ofi_genlock_lock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
 #if ENABLE_DEBUG
 	struct efa_rdm_pke *pkt_entry;
 
@@ -732,6 +734,8 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 			txe);
 		efa_rdm_txe_release(txe);
 	}
+
+	ofi_genlock_unlock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
 
 	if (efa_rdm_ep->ope_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->ope_pool);
