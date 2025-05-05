@@ -134,6 +134,14 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 
 	dlist_remove(&txe->ep_entry);
 
+	/**
+	 * Make sure the entry is removed
+	 * from ope_longcts_list when the ope
+	 * is released for whatever reasons.
+	 */
+	if (txe->state == EFA_RDM_OPE_SEND)
+		dlist_remove(&txe->entry);
+
 	dlist_foreach_container_safe(&txe->queued_pkts,
 				     struct efa_rdm_pke,
 				     pkt_entry, entry, tmp) {
@@ -166,6 +174,14 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 		dlist_remove(&rxe->peer_entry);
 
 	dlist_remove(&rxe->ep_entry);
+
+	/**
+	 * Make sure the entry is removed
+	 * from ope_longcts_list when the ope
+	 * is released for whatever reasons.
+	 */
+	if (rxe->state == EFA_RDM_OPE_SEND)
+		dlist_remove(&rxe->entry);
 
 	if (rxe->rxe_map)
 		efa_rdm_rxe_map_remove(rxe->rxe_map, rxe->msg_id, rxe->addr, rxe);
@@ -696,7 +712,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	switch (txe->state) {
 	case EFA_RDM_TXE_REQ:
 		break;
-	case EFA_RDM_TXE_SEND:
+	case EFA_RDM_OPE_SEND:
 		dlist_remove(&txe->entry);
 		break;
 	default:
@@ -988,9 +1004,6 @@ void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
-
-	if (ope->state == EFA_RDM_TXE_SEND)
-		dlist_remove(&ope->entry);
 
 	ep = ope->ep;
 
