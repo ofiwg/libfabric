@@ -847,6 +847,15 @@ OPX_INI
 		opx_valid_pkt_sizes[0], opx_valid_pkt_sizes[1], opx_valid_pkt_sizes[2], opx_valid_pkt_sizes[3],
 		OPX_HFI1_DEFAULT_PKT_SIZE);
 
+	/* Not exposing all the details on the description of the guard.
+	 * Device mmaps are always guarded - no user control.
+	 * Other mmaps are only guarded with this enabled.
+	 * Both guards are segfault protected with this enabled. */
+
+	fi_param_define(
+		&fi_opx_provider, "mmap_guard", FI_PARAM_BOOL,
+		"Enable guards around OPX/HFI mmaps. When enabled, this will cause a segfault when mmapped memory is illegally accessed through buffer overruns or underruns.  Default is false.");
+
 	/* Track TID and HMEM domains so caches can be cleared on exit */
 	dlist_init(&fi_opx_global.tid_domain_list);
 #ifdef OPX_HMEM
