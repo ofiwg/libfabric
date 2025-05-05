@@ -22,7 +22,7 @@ enum efa_rdm_ope_type {
 enum efa_rdm_ope_state {
 	EFA_RDM_OPE_FREE = 0,	/**< txe/rxe free state */
 	EFA_RDM_TXE_REQ,	/**< txe sending REQ packet */
-	EFA_RDM_TXE_SEND,	/**< txe sending data in progress */
+	EFA_RDM_OPE_SEND,	/**< ope sending data in progress */
 	EFA_RDM_RXE_INIT,	/**< rxe ready to recv RTM */
 	EFA_RDM_RXE_UNEXP,	/**< rxe unexp msg waiting for post recv */
 	EFA_RDM_RXE_MATCHED,	/**< rxe matched with RTM */
@@ -117,9 +117,7 @@ struct efa_rdm_ope {
 
 	struct fi_cq_tagged_entry cq_entry;
 
-	/* For txe, entry is linked with tx_pending_list, ope_longcts_send_list in efa_rdm_ep.
-	 * For rxe, entry is linked with ope_longcts_send_list.
-	 */
+	/* entry is linked with ope_longcts_send_list in efa_domain */
 	struct dlist_entry entry;
 
 	/* ep_entry is linked to tx/rxe_list in efa_rdm_ep */
