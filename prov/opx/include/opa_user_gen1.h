@@ -184,8 +184,9 @@ typedef enum mapsize {
  */
 #define U64_TO_OFF64_PGMASK(off) ((__off64_t) ((off) & HFI_MMAP_PGMASK))
 
-#define HFI_MMAP_ALIGNOFF(fd, off, size, prot) \
-	opx_hfi_mmap64(0, (size), (prot), HFI_MMAP_FLAGS, (fd), U64_TO_OFF64_PGMASK((off)))
+#define HFI_MMAP_ALIGNOFF(_hint, _fd, _off, _size, _prot, _flags) \
+	opx_hfi_mmap64(_hint, (_size), (_prot), _flags, (_fd), U64_TO_OFF64_PGMASK((_off)))
+
 /* complementary */
 #define HFI_MUNMAP(addr, size) munmap((addr), (size))
 
@@ -194,38 +195,95 @@ typedef enum mapsize {
 #error We cannot safely multiply unsigned integers on this platform
 #endif
 
-/* @member assumed to be of type u64 and validated to be so */
-#define HFI_MMAP_ERRCHECK(fd, binfo, member, size, prot)                                                     \
-	({                                                                                                   \
-		typeof((binfo)->member) *__tptr = (__u64 *) NULL;                                            \
-		(void) __tptr;                                                                               \
-		void *__maddr = HFI_MMAP_ALIGNOFF((fd), (binfo)->member, (size), (prot));                    \
-		do {                                                                                         \
-			if (OFI_UNLIKELY(__maddr == MAP_FAILED)) {                                           \
-				uintmax_t outval = (uintmax_t) ((binfo)->member);                            \
-				_HFI_INFO("mmap of " #member " (0x%jx) size %zu failed: %s\n", outval, size, \
-					  strerror(errno));                                                  \
-				goto err_mmap_##member;                                                      \
-			}                                                                                    \
-			(binfo)->member = (__u64) __maddr;                                                   \
-			_HFI_VDBG(#member "mmap %jx successful\n", (uintmax_t) ((binfo)->member));           \
-		} while (0);                                                                                 \
-		__maddr;                                                                                     \
+#define HFI_MMAP_ERRCHECK(_enable_guard, _enable_segfault, _fd, _binfo, _member, _sz, _prot, _pad_sz)                \
+	({                                                                                                           \
+		typeof((_binfo)->_member) *__tptr = (__u64 *) NULL;                                                  \
+		(void) __tptr;                                                                                       \
+		void *__hint   = NULL;                                                                               \
+		bool  __enable = HFI_MMAP_GUARD_SETUP(_enable_guard, __hint, _binfo, _member, _pad_sz, _sz);         \
+		HFI_MMAP_GUARD(__enable, _enable_segfault, __hint, _binfo, _member, _pad_sz);                        \
+		void *__maddr = HFI_MMAP_ALIGNOFF(__hint, (_fd), (_binfo)->_member, (_sz), (_prot), HFI_MMAP_FLAGS); \
+		do {                                                                                                 \
+			if (OFI_UNLIKELY(__maddr == MAP_FAILED)) {                                                   \
+				_HFI_ERROR(" MMAP of " #_member " size %zu failed: %s\n", _sz, strerror(errno));     \
+				goto err_mmap_##_member;                                                             \
+			}                                                                                            \
+			(_binfo)->_member = (__u64) __maddr;                                                         \
+			_HFI_INFO(" MMAP of " #_member " at %jx - %jx\n", (uintmax_t) ((_binfo)->_member),           \
+				  (uintmax_t) ((_binfo)->_member) + _sz);                                            \
+			if (__hint && (__hint != __maddr)) {                                                         \
+				_HFI_ERROR(" MMAP hint (%jx) failed. " #_member " mapped at %jx - %jx\n",            \
+					   (uintmax_t) __hint, (uintmax_t) ((_binfo)->_member),                      \
+					   (uintmax_t) ((_binfo)->_member) + _sz);                                   \
+			}                                                                                            \
+			if (__hint) {                                                                                \
+				__hint = (void *) ((uintptr_t) __hint +                                              \
+						   U64_TO_OFF64_PGMASK((__off64_t) (_sz + HFI_MMAP_PGSIZE - 1)));    \
+			}                                                                                            \
+			HFI_MMAP_GUARD(__enable, _enable_segfault, __hint, _binfo, _member, _pad_sz);                \
+		} while (0);                                                                                         \
+		__maddr;                                                                                             \
 	})
 
-/* assigns 0 to the member after unmapping */
-#define HFI_MUNMAP_ERRCHECK(binfo, member, size)                                                      \
-	do {                                                                                          \
-		typeof((binfo)->member) *__tptr = (__u64 *) NULL;                                     \
-		(void) __tptr;                                                                        \
-		void *__addr = ALIGNDOWN_PTR((binfo)->member, HFI_MMAP_PGSIZE);                       \
-		if (OFI_UNLIKELY(__addr == NULL || (munmap(__addr, (size)) == -1))) {                 \
-			_HFI_INFO("unmap of " #member " (%p) failed: %s\n", __addr, strerror(errno)); \
-		} else {                                                                              \
-			_HFI_VDBG("unmap of " #member "(%p) succeeded\n", __addr);                    \
-			(binfo)->member = 0;                                                          \
-		}                                                                                     \
+#define HFI_MUNMAP_ERRCHECK(_binfo, _member, _size)                                                    \
+	do {                                                                                           \
+		typeof((_binfo)->_member) *__tptr = (__u64 *) NULL;                                    \
+		(void) __tptr;                                                                         \
+		void *__addr = ALIGNDOWN_PTR((_binfo)->_member, HFI_MMAP_PGSIZE);                      \
+		if (OFI_UNLIKELY(__addr == NULL || (HFI_MUNMAP(__addr, (_size)) == -1))) {             \
+			_HFI_INFO("unmap of " #_member " (%p) failed: %s\n", __addr, strerror(errno)); \
+		} else {                                                                               \
+			_HFI_VDBG("unmap of " #_member "(%p) succeeded\n", __addr);                    \
+			(_binfo)->_member = 0;                                                         \
+		}                                                                                      \
 	} while (0)
+
+#define HFI_MMAP_GUARD_SETUP(_enable, _hint, _binfo, _member, _pad_sz, _member_sz)                 \
+	({                                                                                         \
+		bool __enabled = _enable;                                                          \
+		if (_enable) {                                                                     \
+			_HFI_INFO(" Guard setup of " #_member " enabled\n");                       \
+			_hint = HFI_MMAP_ALIGNOFF(NULL, -1, 0UL, (_pad_sz + _pad_sz + _member_sz), \
+						  (PROT_READ | PROT_WRITE),                        \
+						  (MAP_ANONYMOUS | MAP_SHARED | MAP_LOCKED));      \
+			if (_hint == MAP_FAILED) {                                                 \
+				_HFI_ERROR(" Guard setup (mmap64) of " #_member " failed\n");      \
+				__enabled = false;                                                 \
+				_hint	  = NULL;                                                  \
+			}                                                                          \
+			if (HFI_MUNMAP(_hint, (_pad_sz + _pad_sz + _member_sz)) == -1) {           \
+				_HFI_ERROR(" Guard setup (munmap) of " #_member " failed\n");      \
+				__enabled = false;                                                 \
+				_hint	  = NULL;                                                  \
+			}                                                                          \
+		} else {                                                                           \
+			_HFI_INFO(" Guard setup of " #_member " disabled\n");                      \
+		}                                                                                  \
+		__enabled;                                                                         \
+	})
+
+#define HFI_MMAP_GUARD(_enable, _enable_segfault, _hint, _binfo, _member, _pad_sz)                                 \
+	({                                                                                                         \
+		void *__pad = NULL;                                                                                \
+		if (_enable) {                                                                                     \
+			_HFI_INFO(" Guard of " #_member " enabled\n");                                             \
+			assert(_hint);                                                                             \
+			__pad = HFI_MMAP_ALIGNOFF(_hint, -1, 0UL, _pad_sz,                                         \
+						  (_enable_segfault ? PROT_NONE : (PROT_READ | PROT_WRITE)),       \
+						  (_enable_segfault ? (MAP_ANONYMOUS | MAP_PRIVATE) :              \
+								      (MAP_ANONYMOUS | MAP_SHARED | MAP_LOCKED))); \
+			if ((__pad != _hint) || (__pad == MAP_FAILED)) {                                           \
+				_HFI_ERROR(" Guard of " #_member " failed (%p/%p)\n", __pad, _hint);               \
+			} else {                                                                                   \
+				_HFI_INFO(" Guard of " #_member " mmap64 at %lx - %lx.\n", (uintptr_t) __pad,      \
+					  (uintptr_t) __pad + (_pad_sz));                                          \
+			}                                                                                          \
+			_hint = (void *) ((uintptr_t) __pad + (_pad_sz));                                          \
+		} else {                                                                                           \
+			_HFI_INFO(" Guard of " #_member " disabled\n");                                            \
+		}                                                                                                  \
+		__pad;                                                                                             \
+	})
 
 #define HFI_PCB_SIZE_IN_BYTES 8
 

@@ -86,6 +86,29 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	__u64		       off;
 	void		      *maddr;
 
+#ifndef OPX_GUARD_SZ
+#define OPX_GUARD_SZ HFI_MMAP_PGSIZE
+#endif
+	const size_t pad_sz = OPX_GUARD_SZ;
+
+	/* Device mmap guards are always enabled.
+	 * This enables guards on non-device mmaps.
+	 * It also enable segfaulting on all guards.
+	 * Note some mmaps are not whole pages so there's an
+	 * built-in pad that will not * segfault until
+	 * access crosses into post_pad. Not perfect guards */
+	bool mmap_guard_enable = false;
+
+	int guard;
+
+	if (fi_param_get_bool(fi_opx_global.prov, "mmap_guard", &guard) == FI_SUCCESS) {
+		if (guard) {
+			mmap_guard_enable = true;
+		}
+		_HFI_INFO("User selected (%u) FI_OPX_MMAP_GUARDE=%s\n", guard, mmap_guard_enable ? "TRUE" : "FALSE");
+	} else {
+		_HFI_INFO("FI_OPX_MMAP_GUARD=%s\n", mmap_guard_enable ? "TRUE" : "FALSE");
+	}
 	/* 1. Map the PIO credits address */
 	off = binfo->sc_credits_addr & ~HFI_MMAP_PGMASK;
 
@@ -93,8 +116,10 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	if (sz < 0) {
 		return -1;
 	}
-	maddr = HFI_MMAP_ERRCHECK(fd, binfo, sc_credits_addr, sz, PROT_READ);
+	maddr = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, sc_credits_addr, sz, PROT_READ,
+				  pad_sz);
 	opx_hfi_touch_mmap(maddr, sz);
+
 	arrsz[SC_CREDITS] = sz;
 
 	binfo->sc_credits_addr |= off;
@@ -106,19 +131,22 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	 * adequate error report. TODO: Consider sanitizing the credits value explicitly
 	 */
 	sz = cinfo->credits * CREDITS_NUM;
-	HFI_MMAP_ERRCHECK(fd, binfo, pio_bufbase_sop, sz, PROT_WRITE);
+
+	HFI_MMAP_ERRCHECK(true, mmap_guard_enable, fd, binfo, pio_bufbase_sop, sz, PROT_WRITE, pad_sz);
 	arrsz[PIO_BUFBASE_SOP] = sz;
 
 	/* 3. Map the PIO buffer address */
 	sz = cinfo->credits * CREDITS_NUM;
-	HFI_MMAP_ERRCHECK(fd, binfo, pio_bufbase, sz, PROT_WRITE);
+
+	HFI_MMAP_ERRCHECK(true, mmap_guard_enable, fd, binfo, pio_bufbase, sz, PROT_WRITE, pad_sz);
 	arrsz[PIO_BUFBASE] = sz;
 
 	/* 4. Map the receive header queue
 	 * (u16 * u16 -> max value 0xfffe0001)
 	 */
 	sz    = (size_t) cinfo->rcvhdrq_cnt * cinfo->rcvhdrq_entsize;
-	maddr = HFI_MMAP_ERRCHECK(fd, binfo, rcvhdr_bufbase, sz, PROT_READ);
+	maddr = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, rcvhdr_bufbase, sz, PROT_READ,
+				  pad_sz);
 	opx_hfi_touch_mmap(maddr, sz);
 	arrsz[RCVHDR_BUFBASE] = sz;
 
@@ -126,14 +154,16 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	 * (u16 * u32. Assuming size_t's precision is 64 bits - no overflow)
 	 */
 	sz    = (size_t) cinfo->egrtids * cinfo->rcvegr_size;
-	maddr = HFI_MMAP_ERRCHECK(fd, binfo, rcvegr_bufbase, sz, PROT_READ);
+	maddr = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, rcvegr_bufbase, sz, PROT_READ,
+				  pad_sz);
 	opx_hfi_touch_mmap(maddr, sz);
 	arrsz[RCVEGR_BUFBASE] = sz;
 
 	/* 6. Map the sdma completion queue */
 	if (cinfo->runtime_flags & HFI1_CAP_SDMA) {
 		sz = cinfo->sdma_ring_size * sizeof(struct hfi1_sdma_comp_entry);
-		HFI_MMAP_ERRCHECK(fd, binfo, sdma_comp_bufbase, sz, PROT_READ);
+		HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, sdma_comp_bufbase, sz, PROT_READ,
+				  pad_sz);
 	} else {
 		sz			 = 0;
 		binfo->sdma_comp_bufbase = (__u64) 0;
@@ -149,7 +179,8 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 		   future work with 8K virtual memory pages */
 		sz = 2 * HFI_MMAP_PGSIZE;
 	}
-	HFI_MMAP_ERRCHECK(fd, binfo, user_regbase, sz, PROT_WRITE | PROT_READ);
+
+	HFI_MMAP_ERRCHECK(true, mmap_guard_enable, fd, binfo, user_regbase, sz, PROT_WRITE | PROT_READ, pad_sz);
 	arrsz[USER_REGBASE] = sz;
 	/* Set up addresses for optimized register writeback routines.
 	 * This is for the real onchip registers, shared context or not
@@ -172,7 +203,8 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	/* 8. Map the rcvhdrq tail register address */
 	if (cinfo->runtime_flags & HFI1_CAP_DMA_RTAIL) {
 		sz = HFI_MMAP_PGSIZE;
-		HFI_MMAP_ERRCHECK(fd, binfo, rcvhdrtail_base, sz, PROT_READ);
+		HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, rcvhdrtail_base, sz, PROT_READ,
+				  pad_sz);
 	} else {
 		/* We don't use receive header queue tail register to detect new packets,
 		 * but here we save the address for false-eager-full recovery
@@ -188,14 +220,14 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	off = binfo->events_bufbase & ~HFI_MMAP_PGMASK;
 
 	sz = HFI_MMAP_PGSIZE;
-	HFI_MMAP_ERRCHECK(fd, binfo, events_bufbase, sz, PROT_READ);
+	HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, events_bufbase, sz, PROT_READ, pad_sz);
 	arrsz[EVENTS_BUFBASE] = sz;
 	/* keep the offset in the address */
 	binfo->events_bufbase |= off;
 
 	/* 10. Map the status page */
 	sz = HFI_MMAP_PGSIZE;
-	HFI_MMAP_ERRCHECK(fd, binfo, status_bufbase, sz, PROT_READ);
+	HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, status_bufbase, sz, PROT_READ, pad_sz);
 	arrsz[STATUS_BUFBASE] = sz;
 
 	/* 10. Map the RHEQ page (JKR only) */
@@ -207,7 +239,8 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 		  sz, (size_t) cinfo->rcvhdrq_cnt);
 	errno = 0;
 	if (hfi1_type != OPX_HFI1_WFR) {
-		maddr = HFI_MMAP_ALIGNOFF(fd, *rheq, sz, PROT_READ);
+		/* no guards for RHEQ */
+		maddr = HFI_MMAP_ALIGNOFF(NULL, fd, *rheq, sz, PROT_READ, HFI_MMAP_FLAGS);
 		if (OFI_UNLIKELY(maddr == MAP_FAILED)) {
 			_HFI_PDBG("mmap of RHEQ size %zu failed: %s\n", sz, strerror(errno));
 			goto err_mmap_subctxt_rheq;
@@ -278,7 +311,8 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	if (sz <= 0) {
 		goto err_mmap_subctxt_uregbase;
 	}
-	maddr = HFI_MMAP_ERRCHECK(fd, binfo, subctxt_uregbase, sz, PROT_READ | PROT_WRITE);
+	maddr = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, subctxt_uregbase, sz,
+				  PROT_WRITE | PROT_READ, pad_sz);
 	opx_hfi_touch_mmap(maddr, sz);
 	arrsz[SUBCTXT_UREGBASE] = sz;
 
@@ -288,7 +322,8 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	factor = (size_t) cinfo->rcvhdrq_cnt * cinfo->rcvhdrq_entsize;
 	factor = ALIGN(factor, HFI_MMAP_PGSIZE);
 	sz     = factor * subctxt_cnt;
-	maddr  = HFI_MMAP_ERRCHECK(fd, binfo, subctxt_rcvhdrbuf, sz, PROT_READ | PROT_WRITE);
+	maddr  = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, subctxt_rcvhdrbuf, sz,
+				   PROT_WRITE | PROT_READ, pad_sz);
 	opx_hfi_touch_mmap(maddr, sz);
 	arrsz[SUBCTXT_RCVHDRBUF] = sz;
 
@@ -302,7 +337,8 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 		_HFI_INFO("%s (rcvegrbuf)\n", errstr);
 		goto err_int_overflow_subctxt_rcvegrbuf;
 	}
-	maddr = HFI_MMAP_ERRCHECK(fd, binfo, subctxt_rcvegrbuf, sz, PROT_READ | PROT_WRITE);
+	maddr = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, subctxt_rcvegrbuf, sz,
+				  PROT_WRITE | PROT_READ, pad_sz);
 	opx_hfi_touch_mmap(maddr, sz);
 	arrsz[SUBCTXT_RCVEGRBUF] = sz;
 
@@ -407,15 +443,14 @@ err_mmap_pio_bufbase_sop:
 err_mmap_sc_credits_addr:
 	return -1;
 }
-
 /* It is allowed to have multiple devices (and of different types)
-   simultaneously opened and initialized, although this (still! Oct 07)
-   unimplemented.  This routine is used by the low level hfi protocol code (and
-   any other code that has similar low level functionality).
-   This is the only routine that takes a file descriptor, rather than an
-   struct _hfi_ctrl *.  The struct _hfi_ctrl * used for everything
-   else is returned as part of hfi1_base_info.
-*/
+	   simultaneously opened and initialized, although this (still! Oct 07)
+	   unimplemented.  This routine is used by the low level hfi protocol code (and
+	   any other code that has similar low level functionality).
+	   This is the only routine that takes a file descriptor, rather than an
+	   struct _hfi_ctrl *.  The struct _hfi_ctrl * used for everything
+	   else is returned as part of hfi1_base_info.
+	*/
 static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 						   struct fi_opx_hfi1_context_internal *internal, int unit, int port)
 {
@@ -454,13 +489,13 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 
 #ifdef PSM2_SUPPORT_IW_CMD_API
 	/* If psm is communicating with a MAJOR version 6 driver, we need
-	   to pass in an actual struct hfi1_user_info not a hfi1_user_info_dep.
-	   Else if psm is communicating with a MAJOR version 5 driver, we can
-	   just continue to pass a hfi1_user_info_dep as struct hfi1_user_info_dep
-	   is identical to the MAJOR version 5 struct hfi1_user_info. */
+		   to pass in an actual struct hfi1_user_info not a hfi1_user_info_dep.
+		   Else if psm is communicating with a MAJOR version 5 driver, we can
+		   just continue to pass a hfi1_user_info_dep as struct hfi1_user_info_dep
+		   is identical to the MAJOR version 5 struct hfi1_user_info. */
 	if (opx_hfi_get_user_major_version() == IOCTL_CMD_API_MODULE_MAJOR) {
 		/* If psm is communicating with a MAJOR version 6 driver,
-		   we copy uinfo into uinfo_new and pass uinfo_new to the driver. */
+			   we copy uinfo into uinfo_new and pass uinfo_new to the driver. */
 		c.len  = sizeof(uinfo_new);
 		c.addr = (__u64) (&uinfo_new);
 
@@ -473,7 +508,7 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 			  uinfo_new.pad, uinfo_new.subctxt_cnt, uinfo_new.subctxt_id);
 	} else {
 		/* If psm is working with an old driver, we continue to use
-		   the struct hfi1_user_info_dep version of the struct: */
+			   the struct hfi1_user_info_dep version of the struct: */
 		c.len  = sizeof(*uinfo);
 		c.addr = (__u64) uinfo;
 	}
@@ -496,7 +531,7 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 #ifdef PSM2_SUPPORT_IW_CMD_API
 	if (opx_hfi_get_user_major_version() == IOCTL_CMD_API_MODULE_MAJOR) {
 		/* for the new driver, we copy the results of the call back to uinfo from
-		   uinfo_new. */
+			   uinfo_new. */
 		uinfo->userversion = uinfo_new.userversion;
 		uinfo->pad	   = uinfo_new.pad;
 		uinfo->subctxt_cnt = uinfo_new.subctxt_cnt;
@@ -697,12 +732,12 @@ err_hfi_cmd_ctxt_info:
 	// calls are going to fail
 	_HFI_ERROR("An unrecoverable error occurred while communicating with the driver\n");
 	abort(); /* TODO: or do we want to include psm_user.h to use psmi_handle_error()? */
-		 // no recovery here
+// no recovery here
 
-	/* if we failed to allocate memory or to assign the context, we might still recover from this.
-	 * Returning NULL will cause the function to be reinvoked n times. Do we really want this
-	 * behavior?
-	 */
+/* if we failed to allocate memory or to assign the context, we might still recover from this.
+ * Returning NULL will cause the function to be reinvoked n times. Do we really want this
+ * behavior?
+ */
 err_hfi_cmd_assign_ctxt:
 	free(spctrl);
 	spctrl = NULL;
