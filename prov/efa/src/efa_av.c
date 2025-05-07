@@ -239,9 +239,6 @@ void efa_ah_release(struct efa_av *av, struct efa_ah *ah)
 	}
 }
 
-static
-void efa_conn_release(struct efa_av *av, struct efa_conn *conn);
-
 /**
  * @brief initialize the rdm related resources of an efa_conn object
  *
