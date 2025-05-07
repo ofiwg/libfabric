@@ -22,6 +22,7 @@
 #include "efa.h"
 #include "efa_device.h"
 #include "efa_prov_info.h"
+#include "efa_av.h"
 
 #ifdef _WIN32
 #include "efawin.h"
@@ -119,6 +120,8 @@ int efa_device_construct_pd(struct efa_device *efa_device,
 		goto err_close;
 	}
 
+	efa_device->ah_map = NULL;
+	ofi_genlock_init(&efa_device->lock, OFI_LOCK_MUTEX);
 #if HAVE_RDMA_SIZE
 	efa_device->max_rdma_size = efa_device->efa_attr.max_rdma_size;
 	efa_device->device_caps = efa_device->efa_attr.device_caps;
@@ -182,6 +185,9 @@ static void efa_device_destruct(struct efa_device *device)
 		if (err)
 			EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd",
 			               err);
+
+		/* this lock is only initiated after allocating pd */
+		ofi_genlock_destroy(&device->lock);
 	}
 
 	device->ibv_pd = NULL;

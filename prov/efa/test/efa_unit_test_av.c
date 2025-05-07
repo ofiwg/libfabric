@@ -87,19 +87,18 @@ void test_efa_ah_cnt_one_av(struct efa_resource **state)
 	size_t raw_addr_len = sizeof(struct efa_ep_addr);
 	fi_addr_t addr1, addr2;
 	int err, num_addr;
-	struct efa_domain *efa_domain;
 	struct efa_ah *efa_ah = NULL;
+	struct efa_device *device = &g_efa_selected_device_list[0];
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
-	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
 
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(err, 0);
 
 	/* So far we should only have 1 ah from ep self ah, and its refcnt is 1 */
-	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
-	HASH_FIND(hh, efa_domain->ah_map, raw_addr.raw, EFA_GID_LEN, efa_ah);
+	assert_int_equal(HASH_CNT(hh, device->ah_map), 1);
+	HASH_FIND(hh, device->ah_map, raw_addr.raw, EFA_GID_LEN, efa_ah);
 	assert_non_null(efa_ah);
 	assert_int_equal(efa_ah->refcnt, 1);
 
@@ -116,19 +115,19 @@ void test_efa_ah_cnt_one_av(struct efa_resource **state)
 	assert_int_not_equal(addr1, addr2);
 
 	/* So far we should still have 1 ah, and its refcnt is 3 (plus the 2 av entries) */
-	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
+	assert_int_equal(HASH_CNT(hh, device->ah_map), 1);
 	assert_int_equal(efa_ah->refcnt, 3);
 
 	/* ah refcnt should be decremented to 1 after av entry removals */
 	assert_int_equal(fi_av_remove(resource->av, &addr1, 1, 0), 0);
 	assert_int_equal(fi_av_remove(resource->av, &addr2, 1, 0), 0);
 
-	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
+	assert_int_equal(HASH_CNT(hh, device->ah_map), 1);
 	assert_int_equal(efa_ah->refcnt, 1);
 
 	/* ah map should be empty now after closing ep which destroys the self ah */
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
-	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 0);
+	assert_int_equal(HASH_CNT(hh, device->ah_map), 0);
 	/* Reset to NULL to avoid test reaper closing again */
 	resource->ep = NULL;
 }
@@ -140,22 +139,20 @@ void test_efa_ah_cnt_multi_av(struct efa_resource **state)
 	size_t raw_addr_len = sizeof(struct efa_ep_addr);
 	fi_addr_t addr1, addr2;
 	int err, num_addr;
-	struct efa_domain *efa_domain;
 	struct efa_ah *efa_ah = NULL;
 	struct fi_av_attr av_attr = {0};
 	struct fid_av *av1, *av2;
 	struct fid_ep *ep1, *ep2;
+	struct efa_device *device = &g_efa_selected_device_list[0];
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-
-	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
 
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(err, 0);
 
 	/* So far we should only have 1 ah from ep self ah, and its refcnt is 1 */
-	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
-	HASH_FIND(hh, efa_domain->ah_map, raw_addr.raw, EFA_GID_LEN, efa_ah);
+	assert_int_equal(HASH_CNT(hh, device->ah_map), 1);
+	HASH_FIND(hh, device->ah_map, raw_addr.raw, EFA_GID_LEN, efa_ah);
 	assert_non_null(efa_ah);
 	assert_int_equal(efa_ah->refcnt, 1);
 
@@ -186,7 +183,7 @@ void test_efa_ah_cnt_multi_av(struct efa_resource **state)
 	assert_int_equal(addr1, addr2);
 
 	/* So far we should still have 1 ah, and its refcnt is 3 (plus the 2 av entries) */
-	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
+	assert_int_equal(HASH_CNT(hh, device->ah_map), 1);
 	assert_int_equal(efa_ah->refcnt, 3);
 
 	/* ah refcnt should be decremented to 1 after av close */
@@ -195,12 +192,12 @@ void test_efa_ah_cnt_multi_av(struct efa_resource **state)
 	assert_int_equal(fi_close(&av1->fid), 0);
 	assert_int_equal(fi_close(&av2->fid), 0);
 
-	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
+	assert_int_equal(HASH_CNT(hh, device->ah_map), 1);
 	assert_int_equal(efa_ah->refcnt, 1);
 
 	/* ah map should be empty now after closing ep which destroys the self ah */
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
-	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 0);
+	assert_int_equal(HASH_CNT(hh, device->ah_map), 0);
 	/* Reset to NULL to avoid test reaper closing again */
 	resource->ep = NULL;
 }

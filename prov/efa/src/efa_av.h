@@ -8,6 +8,7 @@
 #include "ofi_util.h"
 #include "rdm/efa_rdm_protocol.h"
 #include "rdm/efa_rdm_peer.h"
+#include "efa_device.h"
 
 #define EFA_MIN_AV_SIZE (16384)
 #define EFA_SHM_MAX_AV_COUNT       (256)
@@ -29,7 +30,7 @@ struct efa_ah {
 	struct ibv_ah	*ibv_ah; /* created by ibv_create_ah() using GID */
 	uint16_t	ahn; /* adress handle number */
 	int		refcnt; /* reference counter. Multiple efa_conn can share an efa_ah */
-	UT_hash_handle	hh; /* hash map handle, link all efa_ah with efa_ep->ah_map */
+	UT_hash_handle	hh; /* hash map handle, link all efa_ah with efa_device->ah_map */
 };
 
 struct efa_conn {
@@ -118,8 +119,8 @@ int efa_av_reverse_av_add(struct efa_av *av,
 			  struct efa_prv_reverse_av **prv_reverse_av,
 			  struct efa_conn *conn);
 
-struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid);
+struct efa_ah *efa_ah_alloc(struct efa_device *device, const uint8_t *gid);
 
-void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah);
+void efa_ah_release(struct efa_device *device, struct efa_ah *ah);
 
 #endif
