@@ -15,7 +15,7 @@ void test_efa_domain_info_type_efa_rdm(struct efa_resource **state)
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
-	assert(efa_domain->info_type == EFA_INFO_RDM);
+	assert_true(efa_domain->info_type == EFA_INFO_RDM);
 }
 
 /**
@@ -30,7 +30,7 @@ void test_efa_domain_info_type_efa_direct(struct efa_resource **state)
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
-	assert(efa_domain->info_type == EFA_INFO_DIRECT);
+	assert_true(efa_domain->info_type == EFA_INFO_DIRECT);
 }
 
 /* test fi_open_ops with a wrong name */
@@ -169,7 +169,7 @@ void test_efa_domain_rdm_attr_mr_allocated(struct efa_resource **state)
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
-	assert(efa_domain->device->rdm_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
+	assert_true(efa_domain->device->rdm_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
 }
 
 /**
@@ -185,7 +185,7 @@ void test_efa_domain_dgram_attr_mr_allocated(struct efa_resource **state)
 	efa_unit_test_resource_construct(resource, FI_EP_DGRAM, EFA_FABRIC_NAME);
 
 	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
-	assert(efa_domain->device->dgram_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
+	assert_true(efa_domain->device->dgram_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
 }
 
 /**
@@ -200,5 +200,5 @@ void test_efa_domain_direct_attr_mr_allocated(struct efa_resource **state)
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
-	assert(efa_domain->device->rdm_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
+	assert_true(efa_domain->device->rdm_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
 }
