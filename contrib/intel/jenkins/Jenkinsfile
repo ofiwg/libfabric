@@ -74,11 +74,23 @@ def run_ci(stage_name, config_name) {
 }
 
 def run_red(config_name) {
-  sh """PATH=${CI_LOCATION}/venv/bin/:${env.PATH} red \
-        --output ${CUSTOM_WORKSPACE} \
-        --config "${CI_LOCATION}/red_configs/${config_name}.json" \
-        -v 2
-     """
+  return sh (
+    returnStatus: true,
+    script: """PATH=${CI_LOCATION}/venv/bin/:${env.PATH} red \
+               --output ${CUSTOM_WORKSPACE} \
+               --config "${CI_LOCATION}/red_configs/${config_name}.json" \
+               -v 2
+            """
+  )
+}
+
+def send_logs(cluster, key, dest, source) {
+  def address = "${env.USER}@${cluster}"
+  try {
+    sh "scp -r -i ${key} ${source}/* ${address}:${dest}/"
+  } catch (Exception e) {
+    echo "Caught exception ${e} when transfering files to ${cluster}"
+  }
 }
 
 def gather_logs(cluster, key, dest, source) {
@@ -303,7 +315,7 @@ pipeline {
             script {
               withEnv(["TARGET=CTARGET"]) {
                 dir (CI_LOCATION) {
-                  run_red("${env.MAIN_CONFIG}")
+                  return run_red("${env.MAIN_CONFIG}")
                 }
               }
             }
@@ -315,7 +327,10 @@ pipeline {
           steps {
             script {
               dir (CI_LOCATION) {
-                run_red("${env.LEVEL_ZERO_CONFIG}")
+                def ret = run_red("${env.LEVEL_ZERO_CONFIG}")
+                send_logs("${env.CBJ_ADDR}", "${env.CBJ_KEY}",
+                          "${env.LOG_DIR}", "${env.LOG_DIR}")
+                return ret
               }
             }
           }
@@ -361,8 +376,6 @@ pipeline {
       steps {
         script {
           gather_logs("${env.DAOS_ADDR}", "${env.DAOS_KEY}", "${env.LOG_DIR}",
-                      "${env.LOG_DIR}")
-          gather_logs("${env.LZE_ADDR}", "${env.LZE_KEY}", "${env.LOG_DIR}",
                       "${env.LOG_DIR}")
 
           CI_summarize(verbose=false)
