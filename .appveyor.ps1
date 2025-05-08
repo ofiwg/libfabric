@@ -15,7 +15,7 @@ Write-Verbose "moving NetworkDirect headers.."
 move NetDirect\include\* prov\netdir\NetDirect
 Write-Verbose "done"
 
-$efaWinVersion="1.0.0"
+$efaWinVersion="1.1.0"
 Write-Verbose "downloading efawin version ${efaWinVersion} files.."
 Invoke-WebRequest -Uri "https://github.com/aws/efawin/archive/refs/tags/v${efaWinVersion}.zip" -OutFile "efawin.zip"
 Write-Verbose "done"
