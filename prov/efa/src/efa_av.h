@@ -67,7 +67,6 @@ struct efa_av {
 	 */
 	struct efa_cur_reverse_av *cur_reverse_av;
 	struct efa_prv_reverse_av *prv_reverse_av;
-	struct efa_ah *ah_map;
 	struct util_av util_av;
 	struct ofi_bufpool *rdm_peer_pool;
 };
@@ -84,5 +83,9 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
 fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qpn, struct efa_rdm_pke *pkt_entry);
 
 fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn);
+
+struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid);
+
+void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah);
 
 #endif
