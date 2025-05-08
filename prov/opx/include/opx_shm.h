@@ -180,7 +180,7 @@ static inline ssize_t opx_shm_rx_init(struct opx_shm_rx *rx, struct fi_provider 
 	FI_LOG(prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "SHM creating of %hu context Segment (%s)\n", subctxt_rx,
 	       rx->segment_key);
 	/* to ensure 64-byte alignment of fifo */
-	size_t segment_size = sizeof(struct opx_shm_fifo_segment) + 64;
+	size_t segment_size = sizeof(struct opx_shm_fifo_segment) + FI_OPX_CACHE_LINE_SIZE;
 
 	if (shm_unlink(rx->segment_key) == 0) {
 		FI_LOG(prov, FI_LOG_WARN, FI_LOG_FABRIC, "cleaned up stale shared memory object (\"%s\")\n",
@@ -213,7 +213,8 @@ static inline ssize_t opx_shm_rx_init(struct opx_shm_rx *rx, struct fi_provider 
 
 	memset(segment_ptr, 0, segment_size);
 
-	rx->fifo_segment = (struct opx_shm_fifo_segment *) (((uintptr_t) segment_ptr + 64) & (~0x03Full));
+	rx->fifo_segment = (struct opx_shm_fifo_segment *) (((uintptr_t) segment_ptr + (FI_OPX_CACHE_LINE_SIZE - 1)) &
+							    -FI_OPX_CACHE_LINE_SIZE);
 
 	ofi_atomic_initialize64(&rx->fifo_segment->initialized_, 0);
 
@@ -294,17 +295,18 @@ static inline ssize_t opx_shm_tx_connect(struct opx_shm_tx *tx, const char *cons
 
 		int segment_fd = shm_open(segment_key, O_RDWR, 0600);
 		if (segment_fd == -1) {
-			FI_DBG(tx->prov, FI_LOG_FABRIC, "Unable to create shm object '%s'; errno = '%s'\n", segment_key,
-			       strerror(errno));
+			FI_WARN(tx->prov, FI_LOG_FABRIC, "Unable to create shm object '%s'; errno = '%s'\n",
+				segment_key, strerror(errno));
 			return -FI_EAGAIN;
 		}
 
-		size_t segment_size = sizeof(struct opx_shm_fifo_segment) + 64;
+		size_t segment_size = sizeof(struct opx_shm_fifo_segment) + FI_OPX_CACHE_LINE_SIZE;
 
 		segment_ptr = mmap(NULL, segment_size, PROT_READ | PROT_WRITE, MAP_SHARED, segment_fd, 0);
 		if (segment_ptr == MAP_FAILED) {
-			FI_LOG(tx->prov, FI_LOG_WARN, FI_LOG_FABRIC, "mmap failed: '%s'\n", strerror(errno));
+			FI_WARN(tx->prov, FI_LOG_FABRIC, "mmap failed: '%s'\n", strerror(errno));
 			err = errno;
+			close(segment_fd);
 			goto error_return;
 		}
 
@@ -317,7 +319,8 @@ static inline ssize_t opx_shm_tx_connect(struct opx_shm_tx *tx, const char *cons
 	}
 
 	struct opx_shm_fifo_segment *fifo_segment =
-		(struct opx_shm_fifo_segment *) (((uintptr_t) segment_ptr + 64) & (~0x03Full));
+		(struct opx_shm_fifo_segment *) (((uintptr_t) segment_ptr + (FI_OPX_CACHE_LINE_SIZE - 1)) &
+						 -FI_OPX_CACHE_LINE_SIZE);
 	uint64_t init = atomic_load_explicit(&fifo_segment->initialized_.val, memory_order_acquire);
 	if (init == 0) {
 		FI_DBG(tx->prov, FI_LOG_FABRIC, "SHM object '%s' still initializing.\n",
@@ -336,7 +339,7 @@ static inline ssize_t opx_shm_tx_connect(struct opx_shm_tx *tx, const char *cons
 
 error_return:
 
-	FI_LOG(tx->prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "Connection failed: %s\n", strerror(err));
+	FI_WARN(tx->prov, FI_LOG_FABRIC, "Connection failed: %s\n", strerror(err));
 
 	return -FI_EINVAL;
 }
@@ -395,15 +398,15 @@ static inline void *opx_shm_tx_next(struct opx_shm_tx *tx, uint8_t peer_hfi_unit
 #ifndef NDEBUG
 	if (segment_index >= OPX_SHM_MAX_CONN_NUM) {
 		*rc = -FI_EIO;
-		FI_LOG(tx->prov, FI_LOG_WARN, FI_LOG_FABRIC, "SHM %u context exceeds maximum contexts supported.\n",
-		       segment_index);
+		FI_WARN(tx->prov, FI_LOG_FABRIC, "SHM segment index %u exceeds maximum SHM connections supported.\n",
+			segment_index);
 		return NULL;
 	}
 #endif
 
 	if (OFI_UNLIKELY(tx->fifo_segment[segment_index] == NULL)) {
 		*rc = -FI_EIO;
-		FI_LOG(tx->prov, FI_LOG_WARN, FI_LOG_FABRIC, "SHM %u context FIFO not initialized.\n", segment_index);
+		FI_WARN(tx->prov, FI_LOG_FABRIC, "SHM segment index %u FIFO not initialized.\n", segment_index);
 		return NULL;
 	}
 

@@ -328,6 +328,13 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 this will cause a segfault when mmapped memory is illegally accessed through buffer overruns
 or underruns.  Default is false.
 
+*FI_OPX_CONTEXT_SHARING*
+: Boolean (1/0, on/off, true/false, yes/no). Enables context sharing in OPX. Defaults to FALSE (1 HFI context per endpoint).
+
+*FI_OPX_ENDPOINTS_PER_HFI_CONTEXT*
+: Integer. Specify how many endpoints should share a single HFI context. Valid values are from 2 to 8.
+  Default is to determine optimal value based on the number of contexts available on the system and number of processors online.
+  Only applicable if context sharing is enabled. Otherwise this value is ignored.
 
 # SEE ALSO
 

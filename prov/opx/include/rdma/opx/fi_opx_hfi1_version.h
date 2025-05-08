@@ -100,8 +100,8 @@
 #define OPX_BTH_SUBCTXT_RX_SHIFT 48
 #define OPX_BTH_SUBCTXT_RX_MASK	 0xFF07
 
-#define OPX_BTH_INJECT_MSG_LENGTH(_val)	   (_val >> 3)
-#define OPX_BTH_SEND_XFER_BYTES_TAIL(_val) (_val >> 3)
+#define OPX_BTH_INJECT_MSG_LENGTH(_val)	   ((_val >> 3) & 0x1F)
+#define OPX_BTH_SEND_XFER_BYTES_TAIL(_val) ((_val >> 3) & 0x1F)
 
 /* Common RHF defines */
 
@@ -114,6 +114,9 @@
 #define OPX_IS_ERRORED_RHF(_rhf, _hfi1_type)                                      \
 	((_hfi1_type & OPX_HFI1_WFR) ? OPX_WFR_IS_ERRORED_RHF(_rhf, _hfi1_type) : \
 				       OPX_JKR_IS_ERRORED_RHF(_rhf, _hfi1_type))
+
+#define OPX_RHF_SEQ_UPDATE(_rhf, _seq, _hfi1_type) \
+	((_hfi1_type & OPX_HFI1_WFR) ? OPX_WFR_RHF_SEQ_UPDATE(_seq, _rhf) : OPX_JKR_RHF_SEQ_UPDATE(_seq, _rhf))
 
 #define OPX_RHF_SEQ_MATCH(_seq, _rhf, _hfi1_type)                                      \
 	((_hfi1_type & OPX_HFI1_WFR) ? OPX_WFR_RHF_SEQ_MATCH(_seq, _rhf, _hfi1_type) : \
@@ -129,18 +132,27 @@
 #define OPX_RHF_EGR_INDEX(_rhf, _hfi1_type) \
 	((_hfi1_type & OPX_HFI1_WFR) ? OPX_WFR_RHF_EGR_INDEX(_rhf) : OPX_JKR_RHF_EGR_INDEX(_rhf))
 
+#define OPX_RHF_EGR_INDEX_UPDATE(_rhf, index, _hfi1_type)                          \
+	((_hfi1_type & OPX_HFI1_WFR) ? OPX_WFR_RHF_EGR_INDEX_UPDATE(_rhf, index) : \
+				       OPX_JKR_RHF_EGR_INDEX_UPDATE(_rhf, index))
+
+#define OPX_RHF_EGR_OFFSET_UPDATE(_rhf, offset, _hfi1_type)                          \
+	((_hfi1_type & OPX_HFI1_WFR) ? OPX_WFR_RHF_EGR_OFFSET_UPDATE(_rhf, offset) : \
+				       OPX_JKR_RHF_EGR_OFFSET_UPDATE(_rhf, offset))
+
 #define OPX_RHF_EGR_OFFSET(_rhf, _hfi1_type) \
 	((_hfi1_type & OPX_HFI1_WFR) ? OPX_WFR_RHF_EGR_OFFSET(_rhf) : OPX_JKR_RHF_EGR_OFFSET(_rhf))
 
 #define OPX_RHF_HDRQ_OFFSET(_rhf, _hfi1_type) \
 	((_hfi1_type & OPX_HFI1_WFR) ? OPX_WFR_RHF_HDRQ_OFFSET(_rhf) : OPX_JKR_RHF_HDRQ_OFFSET(_rhf))
 
-#define OPX_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr,     \
-		      _hfi1_type)                                                                                   \
-	((_hfi1_type & OPX_HFI1_WFR) ? OPX_WFR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, \
-							 _hdrq_offset, _rhf_rcvd, _hdr, _hfi1_type) :               \
-				       OPX_JKR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, \
-							 _hdrq_offset, _rhf_rcvd, _hdr, _hfi1_type))
+#define OPX_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr,        \
+		      _hfi1_type, last_egrbfr_index)                                                                   \
+	((_hfi1_type & OPX_HFI1_WFR) ?                                                                                 \
+		 OPX_WFR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, \
+				   _hdr, _hfi1_type, last_egrbfr_index) :                                              \
+		 OPX_JKR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, \
+				   _hdr, _hfi1_type, last_egrbfr_index))
 
 #define OPX_RHF_CHECK_HEADER(_rhf_rcvd, _pktlen, _hfi1_type)                                      \
 	((_hfi1_type & OPX_HFI1_WFR) ? OPX_WFR_RHF_CHECK_HEADER(_rhf_rcvd, _pktlen, _hfi1_type) : \

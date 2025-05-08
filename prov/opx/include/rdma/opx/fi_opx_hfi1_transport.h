@@ -309,8 +309,8 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 			    const void *const payload, const uint16_t origin_rx, const uint64_t niov,
 			    uintptr_t origin_byte_counter_vaddr, struct opx_context *const target_context,
 			    const uintptr_t dst_vaddr, const enum fi_hmem_iface dst_iface, const uint64_t dst_device,
-			    const uint64_t immediate_data, const uint64_t immediate_end_block_count,
-			    const struct fi_opx_hmem_iov *src_iov, uint8_t opcode, const unsigned is_intranode,
+			    const uint64_t immediate_data, const uint64_t immediate_end_bytes,
+			    const struct fi_opx_hmem_iov *src_iovs, uint8_t opcode, const unsigned is_intranode,
 			    const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
 			    const enum opx_hfi1_type hfi1_type);
 
@@ -660,7 +660,6 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, fi
 			hdr->qw_9B[4] = 0;
 			hdr->qw_9B[5] = 0;
 			fi_opx_hfi1_memcpy8((void *) &hdr->qw_9B[4], buf, len);
-
 			hdr->qw_9B[6] = tag;
 		} else {
 			hdr->qw_16B[0] = opx_ep->tx->inject_16B.hdr.qw_16B[0] |
@@ -699,6 +698,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, fi
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-INJECT-HFI");
 
 	/* first check for sufficient credits to inject the entire packet */
+	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
 
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
@@ -706,10 +706,11 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, fi
 	if (OFI_UNLIKELY(FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, credits_needed) <
 			 credits_needed)) {
 		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
-		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 		if (FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, credits_needed) <
 		    credits_needed) {
+			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+			OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 			return -FI_EAGAIN;
 		}
 	}
@@ -723,6 +724,8 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, fi
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-INJECT-HFI");
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
+		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
 
@@ -772,6 +775,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, fi
 					  opx_ep->tx->inject_9B.hdr.qw_9B[2] | psn,
 					  opx_ep->tx->inject_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32), local_temp[0],
 					  local_temp[1], tag);
+
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 	} else {
 		// 1st cacheline
@@ -818,6 +822,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, fi
 	/* save the updated txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
+	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
 							     hfi1_type);
 
@@ -1078,10 +1083,13 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	// Even though we're using the reliability service to pack this buffer
 	// we still want to make sure it will have enough credits available to send
 	// and allow the user to poll and quiesce the fabric some
+	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
+
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_ENOBUFS;
 	}
 
@@ -1092,6 +1100,7 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, addr.lid, addr.hfi1_subctxt_rx, &psn_ptr, &replay,
 					    reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
 
@@ -1167,6 +1176,8 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+
+	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 
 	ssize_t rc;
 	if (OFI_LIKELY(do_cq_completion)) {
@@ -1359,6 +1370,8 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 		     "===================================== SENDV 16B, HFI -- EAGER (begin)\n");
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-EAGER-HFI");
 
+	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
+
 	// Even though we're using the reliability service to pack this buffer
 	// we still want to make sure it will have enough credits available to send
 	// and allow the user to poll and quiesce the fabric some
@@ -1366,6 +1379,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_ENOBUFS;
 	}
 
@@ -1376,6 +1390,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, addr.lid, addr.hfi1_subctxt_rx, &psn_ptr, &replay,
 					    reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
 
@@ -1457,6 +1472,8 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+
+	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 
 	ssize_t rc;
 	if (OFI_LIKELY(do_cq_completion)) {
@@ -1728,7 +1745,6 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(
 						   ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 							    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ :
 							    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)),
-
 			opx_ep->tx->send_9B.hdr.qw_9B[2] | psn,
 			opx_ep->tx->send_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32),
 			opx_ep->tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48), tail_bytes, tag);
@@ -1956,7 +1972,7 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, fi_
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-EAGER-HFI");
 
 	/* first check for sufficient credits to inject the entire packet */
-
+	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
 	uint16_t total_credits_needed = 1 +			    /* PIO SOP -- 1 credit */
@@ -1965,6 +1981,8 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, fi_
 
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SEND, HFI -- EAGER FI_ENOBUFS (end)\n");
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_ENOBUFS;
 	}
 
@@ -1975,6 +1993,8 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, fi_
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.lid, addr.hfi1_subctxt_rx,
 					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SEND, HFI -- EAGER FI_EAGAIN (end)\n");
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
 
@@ -2022,6 +2042,7 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, fi_
 
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr, xfer_bytes_tail, buf,
 						  payload_qws_total, reliability, hfi1_type);
@@ -2100,6 +2121,8 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 		     "===================================== SEND 16B, HFI -- EAGER (begin)\n");
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-EAGER-HFI");
 
+	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
+
 	/* first check for sufficient credits to inject the entire packet */
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
@@ -2109,6 +2132,7 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_ENOBUFS;
 	}
 
@@ -2119,6 +2143,7 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.lid, addr.hfi1_subctxt_rx,
 					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
 
@@ -2188,6 +2213,8 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+
+	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr, xfer_bytes_tail, buf,
 						  payload_qws_total, reliability, hfi1_type);
@@ -2428,10 +2455,12 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep, void **bu
 		     "===================================== SEND, HFI -- MULTI-PACKET EAGER FIRST (begin)\n");
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-MP-EAGER-FIRST-HFI");
 
+	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, FI_OPX_MP_EGR_CHUNK_CREDITS);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_ENOBUFS;
 	}
 
@@ -2442,6 +2471,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep, void **bu
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.lid, addr.hfi1_subctxt_rx,
 					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
 
@@ -2517,6 +2547,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep, void **bu
 
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr, 0, buf_ptr,
 						  FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS(hfi1_type), reliability, hfi1_type);
@@ -2558,11 +2589,13 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, const void *buf
 	const uint16_t lrh_dws = __cpu_to_be16(
 		pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 
+	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ENOBUFS, "SEND-MP-EAGER-NTH-LAST");
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_ENOBUFS;
 	}
 
@@ -2574,6 +2607,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, const void *buf
 					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-MP-EAGER-NTH-LAST");
+		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
 
@@ -2647,7 +2682,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, const void *buf
 
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-
+	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
 							     hfi1_type);
 
@@ -2703,10 +2738,13 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, const void 
 					full_block_credits_needed +   /* PIO full blocks -- kdeth9/payload/tail */
 					(tail_partial_block_qws > 0); /* PIO partial block -- 1 credit */
 
+	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
+
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	ssize_t total_credits_available	      = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ENOBUFS, "SEND-MP-EAGER-NTH-LAST");
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_ENOBUFS;
 	}
 
@@ -2718,6 +2756,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, const void 
 					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-MP-EAGER-NTH-LAST");
+		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
 
@@ -2815,6 +2855,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, const void 
 
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+
+	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
 							     hfi1_type);

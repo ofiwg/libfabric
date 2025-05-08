@@ -527,6 +527,57 @@ struct fi_opx_hfi1_rxe_static {
 	uint8_t unused[7];
 };
 
+/*
+ * This is the shared PIO state structure that sits in shared memory. It is only used for context sharing
+ * and allows all of the endpoints in a context sharing group to synchronize over the HFI context's PIO
+ * resources. Any endpoint wishing to send over PIO must hold the spio_ctrl_lock before reading/updating the available
+ * credits. This structure is placed in the page of shared memory setup by the driver and pointed to
+ * by hfi1_base_info.subctxt_uregbase.
+ */
+struct opx_spio_ctrl {
+	union fi_opx_hfi1_pio_state pio;	    // 1 qw
+	pthread_spinlock_t	    spio_ctrl_lock; // 4 bytes
+	uint32_t		    unused;
+	uint64_t		    unused1[6];
+} __attribute__((aligned(64)));
+
+/* Up to HFI1_MAX_SHARED_CTXTS of these strucutres are placed in the page of shared memory
+pointed to by hfi1_base_info.subctxt_uregbase. There is one for each subctxt in a context sharing group and
+describes the subctxt's software rx queue. An endpoint wishing to forward a packet to a subctxt's software rx
+queue must hold the opx_hwcontext_ctrl.context_lock and then use the hdrq_rhf_seq for determining the next
+sequence number to write into the software RHQ entry. uregbase contains head and tail pointers to positions in
+the software rx queue's RHQ and eager buffer queue respectively.*/
+struct opx_subcontext_ureg {
+	/* head/eager head/tail register storage, one per cacheline */
+	uint64_t uregbase[40 /* i.e. ur_maxreg * 8 */];
+	uint64_t hdrq_rhf_seq; /* Next sequence number to be written from the writer's perspective */
+	uint64_t last_offset;  /* Last offset into the software rx q's eager buffer index.*/
+} __attribute__((aligned(64)));
+
+/*
+ * Describes the shared hardware RHQ state for when context sharing is in use.
+ * This structure is placed in shared memory that can be accessed by all processes
+ * sharing a single HFI context. The context_lock must be held before reading or writing
+ * to this structure. Only one process is allowed to make progress on the hardware RHQ for
+ * a single HFI context being shared.
+ */
+struct opx_hwcontext_ctrl {
+	pthread_spinlock_t context_lock; /* lock shared by all subctxts */
+	uint32_t	   last_egrbrf_index;
+	uint64_t	   rx_hdrq_rhf_seq; /* rhf seq for the hw hdrq shared by all subctxts */
+	uint64_t	   hdrq_head;	    /* software copy of head */
+} __attribute__((aligned(64)));
+
+/* Locking macros for shared PIO state when context sharing is in use. */
+#define OPX_SHD_CTX_PIO_LOCK(ctx_sharing_enabled, ep_tx)              \
+	if (ctx_sharing_enabled) {                                    \
+		pthread_spin_lock(&ep_tx->spio_ctrl->spio_ctrl_lock); \
+	}
+#define OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing_enabled, ep_tx)              \
+	if (ctx_sharing_enabled) {                                      \
+		pthread_spin_unlock(&ep_tx->spio_ctrl->spio_ctrl_lock); \
+	}
+
 struct fi_opx_hfi1_context {
 	struct {
 		union fi_opx_hfi1_pio_state  pio;
@@ -547,7 +598,8 @@ struct fi_opx_hfi1_context {
 	enum opx_hfi1_type hfi1_type;
 	uint32_t	   hfi_unit;
 	uint32_t	   hfi_port;
-	uint32_t	   unused;
+	uint16_t	   subctxt_cnt;
+	uint16_t	   unused;
 
 	uint64_t gid_hi;
 	uint64_t gid_lo;
@@ -585,6 +637,11 @@ struct fi_opx_hfi1_context {
 
 	/* struct ibv_context * for hfi1 direct/rdma-core only */
 	void *ibv_context;
+
+	/* Pointers to context sharing structures in shared memory */
+	struct opx_hwcontext_ctrl  *hwcontext_ctrl;
+	struct opx_subcontext_ureg *subcontext_ureg[HFI1_MAX_SHARED_CTXTS];
+	struct opx_spio_ctrl	   *spio_ctrl;
 };
 
 struct fi_opx_hfi1_context_internal {
@@ -874,6 +931,9 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context daos_info.rank_inst           %#X  \n",
 	       context->daos_info.rank_inst);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ref_cnt                       %#lX \n", context->ref_cnt);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context subctxt_cnt                   %#X  \n",
+	       context->subctxt_cnt);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context subctxt                  	  %#X  \n", context->subctxt);
 }
 
 void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx_hfi1_type hfi1_type);

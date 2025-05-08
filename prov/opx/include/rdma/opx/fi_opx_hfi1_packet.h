@@ -266,18 +266,20 @@ static inline const char *opx_hfi1_ud_opcode_to_string(uint8_t opcode)
 	return FI_OPX_HFI_UD_OPCODE_STRINGS[FI_OPX_HFI_UD_OPCODE_FIRST_INVALID];
 }
 
-#define FI_OPX_HFI_DPUT_OPCODE_RZV		    (0x00)
-#define FI_OPX_HFI_DPUT_OPCODE_PUT		    (0x01)
-#define FI_OPX_HFI_DPUT_OPCODE_GET		    (0x02)
-#define FI_OPX_HFI_DPUT_OPCODE_FENCE		    (0x03)
-#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH	    (0x04)
-#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH (0x05)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG	    (0x06)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC	    (0x07)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_TID		    (0x08)
-#define FI_OPX_HFI_DPUT_OPCODE_PUT_CQ		    (0x09)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV		    (0x0)
+#define FI_OPX_HFI_DPUT_OPCODE_PUT		    (0x1)
+#define FI_OPX_HFI_DPUT_OPCODE_GET		    (0x2)
+#define FI_OPX_HFI_DPUT_OPCODE_FENCE		    (0x3)
+#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH	    (0x4)
+#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH (0x5)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG	    (0x6)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC	    (0x7)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_TID		    (0x8)
+#define FI_OPX_HFI_DPUT_OPCODE_PUT_CQ		    (0x9)
 /* Add new DPUT Opcodes here, and increment LAST_INVALID accordingly */
-#define FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID (0x0A)
+#define FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID (0xA)
+
+#define FI_OPX_HFI_DPUT_GET_OPCODE(_opcode) ((_opcode & 0x00F0) >> 4)
 
 static const char *FI_OPX_HFI_DPUT_OPCODE_STRINGS[] = {
 	[FI_OPX_HFI_DPUT_OPCODE_RZV]		      = "FI_OPX_HFI_DPUT_OPCODE_RZV",
@@ -346,13 +348,14 @@ struct fi_opx_hfi1_stl_packet_hdr_9B {
 		uint16_t w[6];
 		uint8_t	 hw[12];
 		struct {
-			uint8_t	 opcode; /* bth.hw[0] */
-			uint8_t	 bth_1;	 /* bth.hw[1] */
-			uint16_t pkey;	 /* bth.w[1]  - big-endian! */
-			uint8_t	 ecn;	 /* bth.hw[4] (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
-			uint8_t	 qp;	 /* bth.hw[5] */
-			uint8_t	 unused; /* bth.hw[6] -----> inject::message_length, send::xfer_bytes_tail */
-			uint8_t	 rx;	 /* bth.hw[7] */
+			uint8_t	 opcode;  /* bth.hw[0] */
+			uint8_t	 bth_1;	  /* bth.hw[1] */
+			uint16_t pkey;	  /* bth.w[1]  - big-endian! */
+			uint8_t	 ecn;	  /* bth.hw[4] (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
+			uint8_t	 qp;	  /* bth.hw[5] */
+			uint8_t	 subctxt; /* bth.hw[6] -----> subctxt: higher 3 bits, inject::message_length,
+					     send::xfer_bytes_tail */
+			uint8_t rx;	  /* bth.hw[7] */
 
 			/* == quadword 2 == */
 			uint32_t psn; /* bth.dw[2] ..... the 'psn' field is unused for 'eager' packets ----->
@@ -423,13 +426,14 @@ struct fi_opx_hfi1_stl_packet_hdr_16B {
 		uint16_t w[6];
 		uint8_t	 hw[12];
 		struct {
-			uint8_t	 opcode; /* bth.hw[0] */
-			uint8_t	 bth_1;	 /* bth.hw[1] */
-			uint16_t pkey;	 /* bth.w[1]  - big-endian! */
-			uint8_t	 ecn;	 /* bth.hw[4] (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
-			uint8_t	 qp;	 /* bth.hw[5] */
-			uint8_t	 unused; /* bth.hw[6] -----> inject::message_length, send::xfer_bytes_tail */
-			uint8_t	 rx;	 /* bth.hw[7] */
+			uint8_t	 opcode;  /* bth.hw[0] */
+			uint8_t	 bth_1;	  /* bth.hw[1] */
+			uint16_t pkey;	  /* bth.w[1]  - big-endian! */
+			uint8_t	 ecn;	  /* bth.hw[4] (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
+			uint8_t	 qp;	  /* bth.hw[5] */
+			uint8_t	 subctxt; /* bth.hw[6] -----> subctxt: higher 3 bits, inject::message_length,
+					     send::xfer_bytes_tail */
+			uint8_t rx;	  /* bth.hw[7] */
 
 			/* == quadword 3 == */
 			uint32_t psn; /* bth.dw[2] ..... the 'psn' field is unused for 'eager' packets ----->
@@ -580,7 +584,7 @@ QW[4]   KDETH      KDETH            |       |
 QW[5]   USER/SW    USER/SW          |       |
 QW[6]   USER/SW    USER/SW          |       |
 QW[7]   USER/SW    USER/SW          |       |
-				   RHF     RHF
+		RHF        RHF
 
   (*) HDRQ entries are 128 bytes (16 quadwords) and include HEADER + RHF
 
@@ -955,7 +959,8 @@ union opx_hfi1_packet_hdr {
 		uint64_t reserved_3;
 
 		/* QW[4] KDETH/SW */
-		uint64_t reserved_4;
+		uint32_t reserved_4;
+		uint8_t	 unused1[4];
 
 		/* QW[5,6,7] KDETH/SW */
 		union {
@@ -1030,7 +1035,7 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[2] BTH (unused)*/
 		uint16_t reserved_1[3];
-		uint8_t	 opcode;
+		uint8_t	 opcode; // lower bits reserved for subctxt
 		uint8_t	 reserved_2;
 
 		uint64_t reserved_n[12]; /* QW[3-14] SW */
@@ -1255,8 +1260,8 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 		     ln, hdr->match.ofi_tag);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u\n", pid, fn, ln);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .inject.message_length     0x%04x \n", pid, fn,
-		     ln, hdr->inject.subctxt_message_length);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .inject.subctxt_message_length     0x%04x \n",
+		     pid, fn, ln, hdr->inject.subctxt_message_length);
 
 	switch (hdr->bth.opcode) {
 	case FI_OPX_HFI_BTH_OPCODE_UD:
@@ -1268,7 +1273,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 	case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			     "(%d) %s():%u .inject.message_length ...     0x%02x \n", pid, fn, ln,
+			     "(%d) %s():%u .inject.subctxt_message_length ...     0x%02x \n", pid, fn, ln,
 			     hdr->inject.subctxt_message_length);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "(%d) %s():%u .inject.app_data_u64[0] ..     0x%016lx \n", pid, fn, ln,
@@ -1282,7 +1287,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 	case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ:
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			     "(%d) %s():%u .send.xfer_bytes_tail ....     0x%02x \n", pid, fn, ln,
+			     "(%d) %s():%u .send.subctxt_xfer_bytes_tail ....     0x%02x \n", pid, fn, ln,
 			     hdr->send.subctxt_xfer_bytes_tail);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "(%d) %s():%u .send.payload_qws_total ..     0x%04x \n", pid, fn, ln,
@@ -1761,8 +1766,8 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
 		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
-			fprintf(stderr, "(%d) %s():%u .inject.message_length .............. 0x%02x\n",
-				pid, fn, ln, hdr->inject.message_length);
+			fprintf(stderr, "(%d) %s():%u .inject.subctxt_message_length .............. 0x%02x\n",
+				pid, fn, ln, hdr->inject.subctxt_message_length);
 			fprintf(stderr, "(%d) %s():%u .inject.app_data_u64[0]               0x%016lx\n",
 				pid, fn, ln, hdr->inject.app_data_u64[0]);
 			fprintf(stderr, "(%d) %s():%u .inject.app_data_u64[1] ............. 0x%016lx\n",

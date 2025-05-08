@@ -334,7 +334,7 @@ static const uint64_t FI_OPX_HDRQ_MASK_8192    = 0X000000000003FFE0UL;
 static inline void always_assert(bool val, char *msg)
 {
 	if (!val) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "%s\n", msg);
+		FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "%s\n", msg);
 		exit(EXIT_FAILURE);
 	}
 }
@@ -342,7 +342,7 @@ static inline void always_assert(bool val, char *msg)
 static inline void fi_opx_ref_init(int64_t *ref, char *name)
 {
 	*ref = 0;
-	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "initializing ref count for (%s) to (%d)\n", name, 0);
+	FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "initializing ref count for (%s) to (%d)\n", name, 0);
 
 	return;
 }
@@ -350,6 +350,8 @@ static inline void fi_opx_ref_init(int64_t *ref, char *name)
 static inline void fi_opx_ref_inc(int64_t *ref, char *name)
 {
 	(*ref) += 1;
+	FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "Incrementing ref count for (%s). New value is (%ld)\n", name,
+	       (*ref));
 	return;
 }
 
@@ -379,13 +381,13 @@ static inline int fi_opx_ref_finalize(int64_t *ref, char *name)
 static inline int fi_opx_fid_check(fid_t fid, int fid_class, char *name)
 {
 	if (!fid) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "NULL %s object", name);
+		FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "NULL %s object", name);
 		errno = FI_EINVAL;
 		return -errno;
 	}
 	if (fid->fclass != fid_class) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-		       "wrong type of object (%s) expected (%d), got (%zu)\n", name, fid_class, fid->fclass);
+		FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "wrong type of object (%s) expected (%d), got (%zu)\n", name,
+		       fid_class, fid->fclass);
 		errno = FI_EINVAL;
 		return -errno;
 	}

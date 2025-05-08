@@ -730,6 +730,7 @@ err_hfi_cmd_ctxt_info:
 	/* TODO: ioctl de-assign context here? */
 	// without de-assigning the context, all subsequent opx_hfi_userinit_internal()
 	// calls are going to fail
+	fprintf(stderr, "An unrecoverable error occurred while communicating with the driver\n");
 	_HFI_ERROR("An unrecoverable error occurred while communicating with the driver\n");
 	abort(); /* TODO: or do we want to include psm_user.h to use psmi_handle_error()? */
 // no recovery here

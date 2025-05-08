@@ -352,12 +352,12 @@ static const char *fi_opx_av_straddr(struct fid_av *av, const void *addr, char *
 	if (opx_av->ep_tx[0] == NULL || !opx_av->ep_tx[0]->daos_info.hfi_rank_enabled) {
 		union fi_opx_addr *opx_addr = (union fi_opx_addr *) addr;
 		/* Parse address with standard address format */
-		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%02x.%02x", opx_addr->lid, opx_addr->hfi1_subctxt_rx,
+		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%04x.%02x", opx_addr->lid, opx_addr->hfi1_subctxt_rx,
 				 opx_addr->hfi1_unit);
 	} else {
 		struct fi_opx_extended_addr *opx_addr = (struct fi_opx_extended_addr *) addr;
 		/* Parse address with extended address format - FI_ADDRESS.inst:rank*/
-		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%02x.%02x.%04x:%d", opx_addr->addr.lid,
+		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%04x.%02x.%04x:%d", opx_addr->addr.lid,
 				 opx_addr->addr.hfi1_subctxt_rx, opx_addr->addr.hfi1_unit, opx_addr->rank_inst,
 				 opx_addr->rank);
 	}

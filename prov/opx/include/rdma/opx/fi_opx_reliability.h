@@ -299,6 +299,7 @@ struct fi_opx_reliability_tx_replay {
 		uint64_t     *payload;
 		struct iovec *iov;
 	};
+
 	uint16_t unused1;
 	uint16_t nack_count;
 	bool	 acked;
@@ -890,7 +891,7 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 
 	/*
 	 * We can leverage the fact that every packet needs a packet sequence
-	 * number before it can be sent to implement some simply throttling.
+	 * number before it can be sent to implement some simple throttling.
 	 *
 	 * If the throttle is on, or if the # of bytes outstanding exceeds
 	 * a threshold, return an error.
@@ -915,7 +916,7 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 		return -1;
 	}
 
-	uint32_t bytes_avail = max_outstanding - (*psn_ptr)->psn.bytes_outstanding;
+	const uint32_t bytes_avail = max_outstanding - (*psn_ptr)->psn.bytes_outstanding;
 	OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "GET_PSNS");
 	return MIN(bytes_avail / bytes_per_packet, psns_to_get);
 }
@@ -946,8 +947,8 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
 		union fi_opx_reliability_tx_psn psn_value = **psn_ptr;
 
 		/*
-		 * We can leverage the fact athat every packet needs a packet sequence
-		 * number before it can be sent to implement some simply throttling.
+		 * We can leverage the fact that every packet needs a packet sequence
+		 * number before it can be sent to implement some simple throttling.
 		 *
 		 * If the throttle is on, or if the # of bytes outstanding exceeds
 		 * a threshold, return an error.
@@ -1058,8 +1059,7 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 		return -1;
 	}
 
-	uint32_t psn;
-	psn		    = psn_value.psn.psn;
+	const uint32_t psn  = psn_value.psn.psn;
 	(*psn_ptr)->psn.psn = (psn_value.psn.psn + 1) & MAX_PSN;
 
 	return psn;

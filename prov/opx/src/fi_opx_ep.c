@@ -175,7 +175,7 @@ void fi_opx_ep_tx_model_init(struct fi_opx_hfi1_context *hfi, struct fi_opx_hfi1
 	 * fi_inject() model
 	 */
 	const uint32_t inject_pbc_dws = 2 + /* pbc */
-					2 + /* lhr */
+					2 + /* lrh */
 					3 + /* bth */
 					9;  /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 
@@ -774,9 +774,40 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	 * The 'state' fields will change after every tx operation and
 	 * need to have a consistent view of the buffers shared with the OPA
 	 * HFI. Therefore we share them between the EPs and the reliability
-	 * service to keep them in sync.
+	 * service to keep them in sync. When context sharing is enabled the state
+	 * resides in shared memory, and when context sharing is not enabled this state
+	 * is kept in the struct fi_opx_hfi1_context memory.
 	 */
-	opx_ep->tx->pio_state = &hfi->state.pio;
+	if (OPX_IS_CTX_SHARING_ENABLED) {
+		opx_ep->tx->spio_ctrl		= opx_ep->hfi->spio_ctrl;
+		struct opx_spio_ctrl *spio_ctrl = opx_ep->tx->spio_ctrl;
+
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Setting up shared PIO state for context sharing.\n");
+
+		/*
+		 * Subctxt 0 in context sharing group is responsible for initializing the shared
+		 * PIO state and synchronization spin lock.
+		 */
+		if (opx_ep->hfi->subctxt == 0) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Initializing context sharing PIO lock.\n");
+			if (pthread_spin_init(&spio_ctrl->spio_ctrl_lock, PTHREAD_PROCESS_SHARED) != 0) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"Failed to initialize context sharing PIO spin lock.\n");
+				return -FI_EINVAL;
+			}
+
+			/*
+			 * The pio state memory for when context sharing is not enabled is initialized in
+			 * fi_opx_hfi1_context_open() copy the contents from that as the initialized values should both
+			 * be the same. The only difference is where the memory actually resides.
+			 */
+			spio_ctrl->pio = hfi->state.pio;
+		}
+
+		opx_ep->tx->pio_state = &spio_ctrl->pio;
+	} else {
+		opx_ep->tx->pio_state = &hfi->state.pio;
+	}
 
 	/* the 'info' fields do not change; the values can be safely copied */
 	opx_ep->tx->pio_scb_sop_first = hfi->info.pio.scb_sop_first;
@@ -1018,17 +1049,20 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 				   opx_ep->tx->tid_min_payload_bytes);
 	}
 
-	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_SHM]);
-	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_PIO]);
-	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_SDMA]);
-	slist_init(&opx_ep->tx->work_pending[OPX_WORK_TYPE_TID_SETUP]);
+	for (unsigned int i = OPX_WORK_TYPE_SDMA; i < OPX_WORK_TYPE_LAST; i++) {
+		slist_init(&opx_ep->tx->work_pending[i]);
+	}
+
 	slist_init(&opx_ep->tx->work_pending_completion);
+
+	// Initialize the SDMA request queue
 	slist_init(&opx_ep->tx->sdma_request_queue.list);
 	opx_ep->tx->sdma_request_queue.num_reqs = 0;
 	opx_ep->tx->sdma_request_queue.num_iovs = 0;
 	opx_ep->tx->sdma_request_queue.max_iovs =
 		opx_ep->tx->sdma_max_iovs_per_writev * opx_ep->tx->sdma_max_writevs_per_cycle;
 	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
+
 	slist_init(&opx_ep->tx->sdma_pending_queue);
 	ofi_bufpool_create(&opx_ep->tx->work_pending_pool, sizeof(union fi_opx_hfi1_deferred_work), L2_CACHE_LINE_SIZE,
 			   UINT_MAX, 2048, OFI_BUFPOOL_NO_ZERO);
@@ -1049,6 +1083,7 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 		opx_ep->tx->sdma_work_pool    = NULL;
 		opx_ep->tx->sdma_request_pool = NULL;
 	}
+
 	OPX_LOG(FI_LOG_INFO, FI_LOG_EP_DATA, "==== TX init finished\n");
 	return 0;
 }
@@ -1096,16 +1131,151 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 				      __cpu_to_be16(hfi1->subctxt << 8 | hfi1->info.rxe.id) :
 				      __cpu_to_be16(hfi1->subctxt << 9 | hfi1->info.rxe.id);
 
+	// Initialize this endpoint's fi_opx_addr
 	opx_ep->rx->self.raw64b		 = 0;
 	opx_ep->rx->self.lid		 = hfi1->lid;
 	opx_ep->rx->self.hfi1_subctxt_rx = subctxt_rx;
 	opx_ep->rx->self.hfi1_unit	 = (uint8_t) hfi1->hfi_unit;
+	opx_ep->rx->shd_ctx.subctxt	 = hfi1->subctxt;
 
 	/* Initialize hash table used to lookup info on any HFI units on the node */
 	fi_opx_global.hfi_local_info.hfi_unit = (uint8_t) hfi1->hfi_unit;
 	fi_opx_global.hfi_local_info.lid      = hfi1->lid;
 
 	fi_opx_init_hfi_lookup();
+
+	// Initialize context sharing structures if context sharing is in use
+	if (OPX_IS_CTX_SHARING_ENABLED) {
+		opx_ep->rx->shd_ctx.hwcontext_ctrl     = opx_ep->hfi->hwcontext_ctrl;
+		const uint8_t		   subctxt_cnt = hfi1->subctxt_cnt;
+		const uint8_t		   subcxt      = hfi1->subctxt;
+		struct opx_hwcontext_ctrl *hwctxt_ctrl = opx_ep->rx->shd_ctx.hwcontext_ctrl;
+
+		/*
+		 * Sub context 0 of the context sharing group is responsible for
+		 * initializing the hardware receive header queue state.
+		 */
+		if (subcxt == 0) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Initializing the hardware RHQ shared state.\n");
+
+			if (pthread_spin_init(&hwctxt_ctrl->context_lock, PTHREAD_PROCESS_SHARED) != 0) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"Failed to initialize the context sharing hardware RHQ spin lock.\n");
+				goto err;
+			}
+
+			hwctxt_ctrl->hdrq_head	       = 0;
+			hwctxt_ctrl->rx_hdrq_rhf_seq   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
+			hwctxt_ctrl->last_egrbrf_index = 0;
+
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			       "Hardware RHQ shared state: hdrq_head=%lu, rx_hdrq_rhf_seq=%lx, last_egrbrf_index=%u\n",
+			       hwctxt_ctrl->hdrq_head, hwctxt_ctrl->rx_hdrq_rhf_seq, hwctxt_ctrl->last_egrbrf_index);
+		}
+
+		const size_t software_rhdrq_size =
+			hfi1->ctrl->ctxt_info.rcvhdrq_cnt * hfi1->ctrl->ctxt_info.rcvhdrq_entsize;
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Software RHQ memory size %ld\n", software_rhdrq_size);
+
+		const size_t software_ergq_size = hfi1->ctrl->ctxt_info.egrtids * hfi1->ctrl->ctxt_info.rcvegr_size;
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Software Eager buffer memory size %ld\n",
+		       software_ergq_size);
+
+		for (uint8_t i = 0; i < subctxt_cnt; i++) {
+			opx_ep->rx->shd_ctx.subcontext_ureg[i] = opx_ep->hfi->subcontext_ureg[i];
+			struct opx_subcontext_ureg *ureg_p     = opx_ep->rx->shd_ctx.subcontext_ureg[i];
+
+			// Determine the start of this subcontext's sw RHQ and eager buffer memory
+			uint32_t *rcvhdr_base =
+				(uint32_t *) (hfi1->ctrl->base_info.subctxt_rcvhdrbuf + software_rhdrq_size * i);
+			uint32_t *rcvegr_base =
+				(uint32_t *) (hfi1->ctrl->base_info.subctxt_rcvegrbuf + software_ergq_size * i);
+
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			       "Subctxt %u RHQ base memory %p, receive eager buffer base memory %p\n", i, rcvhdr_base,
+			       rcvegr_base);
+
+			if (i == subcxt) {
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				       "==========Subctxt %u configuring its own opx_subcontext_ureg[%u]=%p structure.\n",
+				       i, i, ureg_p);
+				memset(ureg_p, 0, sizeof(struct opx_subcontext_ureg));
+				ureg_p->hdrq_rhf_seq = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				       "opx_subcontext_ureg[%u]->hdrq_rhf_seq=%lx\n", i, ureg_p->hdrq_rhf_seq);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				       "opx_subcontext_ureg[%u]->uregbase[ur_rcvhdrhead]=%lu\n", i,
+				       ureg_p->uregbase[ur_rcvhdrhead * 8]);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				       "opx_subcontext_ureg[%u]->uregbase[ur_rcvhdrtail]=%lu\n", i,
+				       ureg_p->uregbase[ur_rcvhdrtail]);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				       "opx_subcontext_ureg[%u]->uregbase[ur_rcvegrindexhead]=%lu\n", i,
+				       ureg_p->uregbase[ur_rcvegrindexhead]);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				       "opx_subcontext_ureg[%u]->uregbase[ur_rcvegrindextail]=%lu\n", i,
+				       ureg_p->uregbase[ur_rcvegrindextail]);
+
+				/* No need to setup a software rx queue for this endpoint's subctxt.
+				 * This endpoint will never forward a packet to itself and will only read
+				 * from it's own software rx queue. Instead, initialize state for processing
+				 * own software rx queue.
+				 */
+
+				opx_ep->rx->shd_ctx.last_egrbfr_index = 0;
+				opx_ep->rx->shd_ctx.head	      = 0;
+				opx_ep->rx->shd_ctx.rhf_base	      = rcvhdr_base + hfi1->info.rxe.hdrq.rhf_off;
+				opx_ep->rx->shd_ctx.eager_buf_base    = rcvegr_base;
+				opx_ep->rx->shd_ctx.rhf_seq	      = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
+				opx_ep->rx->shd_ctx.rhq_head_reg      = &ureg_p->uregbase[ur_rcvhdrhead * 8];
+				opx_ep->rx->shd_ctx.eager_head_reg    = &ureg_p->uregbase[ur_rcvegrindexhead * 8];
+
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				       "========Subctxt %u state for processing own rx queue initialized: \n", i);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "rhq_head_reg val %lx\n",
+				       *(opx_ep->rx->shd_ctx.rhq_head_reg));
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "eager_head_reg val %lx\n",
+				       *(opx_ep->rx->shd_ctx.eager_head_reg));
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "last_egrbfr_index %x\n",
+				       opx_ep->rx->shd_ctx.last_egrbfr_index);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "head %lx\n", opx_ep->rx->shd_ctx.head);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "rhf_base %p\n",
+				       opx_ep->rx->shd_ctx.rhf_base);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "rhf_seq %lx\n",
+				       opx_ep->rx->shd_ctx.rhf_seq);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "eager_buffer_base %p\n",
+				       opx_ep->rx->shd_ctx.eager_buf_base);
+
+			} else {
+				// Initialize information about this subcontext's software rx queue
+				struct opx_software_rx_q *soft_rx_q = &opx_ep->rx->shd_ctx.soft_rx_qs[i];
+				soft_rx_q->rhq_head_reg		    = &ureg_p->uregbase[ur_rcvhdrhead * 8];
+				soft_rx_q->rhq_tail_reg		    = &ureg_p->uregbase[ur_rcvhdrtail * 8];
+				soft_rx_q->hdrq_base_addr	    = rcvhdr_base;
+				soft_rx_q->rhf_base		    = rcvhdr_base + hfi1->info.rxe.hdrq.rhf_off;
+				soft_rx_q->egrq_head		    = &ureg_p->uregbase[ur_rcvegrindexhead * 8];
+				soft_rx_q->egrq_tail		    = &ureg_p->uregbase[ur_rcvegrindextail * 8];
+				soft_rx_q->egr_buf_base		    = (uint32_t *) rcvegr_base;
+				soft_rx_q->unused		    = 0;
+
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				       "========Subctxt %u software rx queue initialized: \n", i);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "RHQ head register val %lu\n",
+				       *(soft_rx_q->rhq_head_reg));
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "RHQ tail register val %lu\n",
+				       *(soft_rx_q->rhq_tail_reg));
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "hdrq_base_addr %p\n",
+				       soft_rx_q->hdrq_base_addr);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "rhf_base %p\n", soft_rx_q->rhf_base);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Eager head register val %lu\n",
+				       *(soft_rx_q->egrq_head));
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Eager tail register val %lu\n",
+				       *(soft_rx_q->egrq_tail));
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "egr_buf_base %p\n",
+				       soft_rx_q->egr_buf_base);
+			}
+		}
+	}
 
 	/*
 	 * initialize tx for acks, etc
@@ -1395,14 +1565,11 @@ static int fi_opx_apply_info_and_init_ops(struct fi_opx_ep *opx_ep)
 	}
 	return 0;
 err:
-	// Placeholder functions to be uncommented when they do more than return 0
-	/*
 	fi_opx_finalize_cm_ops(&opx_ep->ep_fid.fid);
 	fi_opx_finalize_msg_ops(&opx_ep->ep_fid);
 	fi_opx_finalize_rma_ops(&opx_ep->ep_fid);
 	fi_opx_finalize_tagged_ops(&opx_ep->ep_fid);
 	fi_opx_finalize_atomic_ops(&opx_ep->ep_fid);
-	*/
 	return -1;
 }
 
@@ -1559,10 +1726,11 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			     OPX_HFI_TYPE_STRING(fi_opx_global.hfi_local_info.type));
 	}
 
-	FI_INFO(fi_opx_global.prov, FI_LOG_FABRIC,
-		"Opened hfi %p, HFI type %s, unit %#X, port %#X, ref_cnt %#lX, rcv ctxt %#X, send ctxt %#X, \n",
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"Opened hfi %p, HFI type %s, unit %#X, port %#X, ref_cnt %#lX, rcv ctxt %#X, send ctxt %#X, subctxt %u, subctxt_cnt %u\n",
 		opx_ep->hfi, OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE), opx_ep->hfi->hfi_unit, opx_ep->hfi->hfi_port,
-		opx_ep->hfi->ref_cnt, opx_ep->hfi->ctrl->ctxt_info.ctxt, opx_ep->hfi->ctrl->ctxt_info.send_ctxt);
+		opx_ep->hfi->ref_cnt, opx_ep->hfi->ctrl->ctxt_info.ctxt, opx_ep->hfi->ctrl->ctxt_info.send_ctxt,
+		opx_ep->hfi->ctrl->ctxt_info.subctxt, opx_ep->hfi->subctxt_cnt);
 
 	if (OPX_HFI1_TYPE & OPX_HFI1_JKR || OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is CN5000\n");
@@ -1693,16 +1861,6 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	opx_ep->tx->cq_bind_flags    = 0;
 	opx_ep->tx->do_cq_completion = 0;
 
-	if (opx_ep->ep_fid.fid.fclass == FI_CLASS_TX_CTX || opx_ep->ep_fid.fid.fclass == FI_CLASS_RX_CTX) {
-		struct fi_opx_av *opx_av    = opx_ep->sep->av;
-		const unsigned	  ep_tx_max = sizeof(opx_av->ep_tx) / sizeof(struct fi_opx_ep *);
-		if (opx_av->ep_tx_count < ep_tx_max) {
-			opx_av->ep_tx[opx_av->ep_tx_count++] = opx_ep;
-		} else {
-			FI_WARN(fi_opx_global.prov, FI_LOG_AV, "Too many ep tx contexts (max = %u)\n", ep_tx_max);
-			abort();
-		}
-	}
 #ifdef OPX_HMEM
 #if HAVE_CUDA
 	opx_ep->hmem_copy_buf = NULL;
@@ -1733,7 +1891,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	}
 
 	// Apply the saved info objects from the fi_getinfo call
-	if (-1 == fi_opx_apply_info_and_init_ops(opx_ep)) {
+	if (fi_opx_apply_info_and_init_ops(opx_ep) == -1) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_CORE, "fi_opx_apply_info_and_init_ops failed.\n");
 		errno = FI_EPERM;
 		goto err;
@@ -1795,7 +1953,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
 		       "Force enabling TX contexts for communication despite caps not being set\n");
 		if (fi_opx_ep_tx_init(opx_ep, opx_domain)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Too many tx contexts\n");
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Error during tx context initialization.\n");
 			errno = FI_ENOENT;
 			goto unlock;
 		}
@@ -2589,7 +2747,7 @@ int fi_opx_ep_tx_check(struct fi_opx_ep_tx *tx, enum fi_av_type av_type)
  *
  * See `fi_opx_ep_rx_process_context()`
  */
-__attribute__((noinline)) void
+__attribute__((noinline)) int
 fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t static_flags,
 				      struct opx_context *context, const uint64_t rx_op_flags, const uint64_t is_hmem,
 				      const int lock_required, const enum fi_av_type av_type,
@@ -2633,7 +2791,10 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 				/* remove this item from the list, but don't free it.
 				   It will be freed on a subsequent FI_CLAIM that's
 				   not combined with FI_PEEK. */
-				context->claim = uepkt;
+				context->claim		      = uepkt;
+				struct fi_context *op_context = (struct fi_context *) context->err_entry.op_context;
+				op_context->internal[0]	      = uepkt;
+
 #ifndef FI_OPX_MATCH_HASH_DISABLE
 				if (!from_hash_queue) {
 					fi_opx_hfi1_ue_packet_slist_pop_item(uepkt, &opx_ep->rx->queue[kind].ue);
@@ -2647,7 +2808,7 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 
 			fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context, lock_required);
 
-			return;
+			return 0;
 		}
 
 		/*
@@ -2668,6 +2829,7 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "no match found on unexpected queue posting error\n");
 
 		fi_opx_cq_enqueue_err(opx_ep->rx->cq, context, lock_required);
+		return -FI_ENOMSG;
 
 	} else if (rx_op_flags & FI_CLAIM) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "rx_op_flags & FI_CLAIM complete receive operation\n");
@@ -2680,7 +2842,8 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 		 *
 		 * complete the receive for this "claimed" message ... */
 
-		struct fi_opx_hfi1_ue_packet *claimed_pkt = context->claim;
+		struct fi_context	     *op_context  = (struct fi_context *) context->err_entry.op_context;
+		struct fi_opx_hfi1_ue_packet *claimed_pkt = op_context->internal[0];
 
 		const unsigned is_intranode = claimed_pkt->is_intranode;
 
@@ -2770,7 +2933,7 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 									  opx_ep->rx->cq_completed_ptr);
 						}
 
-						return;
+						return 0;
 					}
 				}
 			} else {
@@ -2789,6 +2952,7 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
+	return 0;
 }
 
 void fi_opx_ep_rx_process_header_tag(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
