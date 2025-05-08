@@ -620,7 +620,7 @@ void opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdm
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.nontid_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "===================================== Enqueuing non-tid request for SDMA Send\n");
+		     "===================================== Enqueuing non-tid request for SDMA Send.\n");
 	opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state, &we->packets[0].replay->scb, &payload_iov,
 				      OPX_SDMA_NONTID_DATA_IOV_COUNT, we->num_packets, fragsize,
 				      FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, we->hmem.iface, we->hmem.device,

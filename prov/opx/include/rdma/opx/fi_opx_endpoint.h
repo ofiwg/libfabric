@@ -169,6 +169,24 @@ static const char *const OPX_WORK_TYPE_STR[] = {[OPX_WORK_TYPE_SDMA]	  = "SDMA",
 						[OPX_WORK_TYPE_LAST]	  = "LAST"};
 
 /*
+ * Describes state for an endpoint's software RHQ and software eager buffer queue.
+ * Software will both read and write to this memory.
+ */
+struct opx_software_rx_q {
+	// Software RHQ info
+	volatile uint64_t *rhq_head_reg;   // Pointer to RHQ head register
+	volatile uint64_t *rhq_tail_reg;   // Pointer to RHQ tail register
+	uint32_t	  *hdrq_base_addr; // base address of the subcontext's SW RHQ
+	uint32_t	  *rhf_base;	   // Base address for SW RHQ RHF
+
+	// Software Eager queue info
+	volatile uint64_t *egrq_head;	 // Pointer to eager buffer head register
+	volatile uint64_t *egrq_tail;	 // Pointer to eager buffer tail register
+	uint32_t	  *egr_buf_base; // Base of this subcontext's eager buffer memory
+	uint64_t	   unused;
+} __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
+
+/*
  * This structure layout ensures that the 'fi_tinject()' function will only
  * touch 2 cachelines - one from this structure and one to obtain the pio
  * state information.
@@ -262,7 +280,8 @@ struct fi_opx_ep_tx {
 	uint64_t	      unused_cacheline7[1];
 
 	/* == CACHE LINE 21, ... == */
-	int64_t ref_cnt;
+	int64_t		      ref_cnt;
+	struct opx_spio_ctrl *spio_ctrl;
 	// struct opx_shm_tx is very large and should go last!
 	struct opx_shm_tx shm;
 	void		 *mem;
@@ -355,7 +374,7 @@ struct fi_opx_ep_rx {
 		volatile uint64_t *head_register;
 	} egrq __attribute__((__packed__));
 
-	/* == CACHE LINE 5,6,7,8,9,10,11,12 == */
+	/* == CACHE LINE 5 - 20 == */
 
 	/*
 	 * NOTE: These cachelines are shared between the application-facing
@@ -375,12 +394,34 @@ struct fi_opx_ep_rx {
 		struct fi_opx_hfi1_txe_scb_16B rma_rts_16B;
 	} tx;
 
+	/* == CACHE LINE 21 == */
+	struct {
+		struct opx_hwcontext_ctrl *hwcontext_ctrl;
+		// Head index into endpoint's software rx RHQ
+		uint64_t head;
+		// Next expected sequence number in endpoint's software rx RHQ
+		uint64_t	   rhf_seq;
+		uint32_t	  *rhf_base;
+		uint32_t	  *eager_buf_base;
+		volatile uint64_t *rhq_head_reg;
+		volatile uint64_t *eager_head_reg;
+		uint32_t	   last_egrbfr_index;
+		uint8_t		   subctxt;
+		uint8_t		   unused[3];
+		/* == CACHE LINE 22 == */
+		struct opx_subcontext_ureg *subcontext_ureg[HFI1_MAX_SHARED_CTXTS];
+		/* == CACHE LINE 23 == */
+		struct opx_software_rx_q soft_rx_qs[HFI1_MAX_SHARED_CTXTS];
+	} shd_ctx;
+
 	/* -- non-critical -- */
+	/* == CACHE LINE 31 == */
 	uint64_t	      min_multi_recv;
 	struct fi_opx_domain *domain;
 
-	uint64_t	  caps;
-	uint64_t	  mode;
+	uint64_t caps;
+	uint64_t mode;
+	// This is the endpoint's fabric address
 	union fi_opx_addr self;
 
 	struct slist	 *cq_err_ptr;
@@ -389,8 +430,6 @@ struct fi_opx_ep_rx {
 	struct opx_shm_rx shm;
 	void		 *mem;
 	int64_t		  ref_cnt;
-	// ofi_spin_t			lock;
-
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, queue) == FI_OPX_CACHE_LINE_SIZE,
@@ -401,6 +440,10 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, state) == (FI_OPX_CACHE_LI
 			"Offset of fi_opx_ep_rx->queue should start at cacheline 4!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, tx) == (FI_OPX_CACHE_LINE_SIZE * 5),
 			"Offset of fi_opx_ep_rx->tx should start at cacheline 5!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, shd_ctx) == (FI_OPX_CACHE_LINE_SIZE * 21),
+			"Offset of fi_opx_ep_rx->shd_ctx should start at cacheline 21!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, min_multi_recv) == (FI_OPX_CACHE_LINE_SIZE * 31),
+			"Offset of fi_opx_ep_rx->min_multi_recv should start at cacheline 31!");
 
 struct fi_opx_daos_av_rank_key {
 	uint32_t rank;
@@ -565,7 +608,7 @@ struct fi_opx_rma_request {
  * =========================== begin: no-inline functions ===========================
  */
 
-__attribute__((noinline)) void
+__attribute__((noinline)) int
 fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t static_flags,
 				      struct opx_context *context, const uint64_t rx_op_flags, const uint64_t is_hmem,
 				      const int lock_required, const enum fi_av_type av_type,
@@ -796,22 +839,22 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 
 #ifdef IS_MATCH_DEBUG
 	fprintf(stderr,
-		"%s:%s():%d context = %p, context->src_addr = 0x%016lx, context->ignore = 0x%016lx, context->tag = 0x%016lx, src_addr.uid.fi = 0x%08x\n",
-		__FILE__, __func__, __LINE__, context, context->src_addr, context->ignore, context->tag,
-		src_addr.uid.fi);
+		"%s:%s():%d context = %p, context->src_addr = 0x%016lx, context->ignore = 0x%016lx, context->tag = 0x%016lx, src_addr.fi = 0x%08lx\n",
+		__FILE__, __func__, __LINE__, context, context->src_addr, context->ignore, context->tag, src_addr.fi);
 	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		fprintf(stderr,
-			"%s:%s():%d hdr->match.slid = 0x%04x (%u), hdr->match.origin_rx = 0x%02x (%u), origin_lid = 0x%08x, reliability.origin_rx = 0x%x\n",
+			"%s:%s():%d hdr->match.slid = 0x%04x (%u), hdr->match.origin_subctxt_rx = 0x%x (%u), origin_lid = 0x%08x, reliability.origin_subctxt_rx = 0x%x\n",
 			__FILE__, __func__, __LINE__, __be16_to_cpu24((__be16) hdr->lrh_9B.slid),
-			__be16_to_cpu24((__be16) hdr->lrh_9B.slid), hdr->match.origin_rx, hdr->match.origin_rx, slid,
-			hdr->reliability.origin_rx);
+			__be16_to_cpu24((__be16) hdr->lrh_9B.slid), hdr->match.origin_subctxt_rx,
+			hdr->match.origin_subctxt_rx, slid, hdr->reliability.origin_subctxt_rx);
 	} else {
 		fprintf(stderr,
-			"%s:%s():%d hdr->match.slid = 0x%lx (%u), hdr->match.origin_rx = 0x%02x (%u), origin_lid = 0x%08x, reliability.origin_rx = 0x%x\n",
+			"%s:%s():%d hdr->match.slid = 0x%lx (%u), hdr->match.origin_subctxt_rx = 0x%x (%u), origin_lid = 0x%08x, reliability.origin_subctxt_rx = 0x%x\n",
 			__FILE__, __func__, __LINE__,
 			__le24_to_cpu((opx_lid_t) ((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid))),
 			__le24_to_cpu((opx_lid_t) ((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid))),
-			hdr->match.origin_rx, hdr->match.origin_rx, slid, hdr->reliability.origin_rx);
+			hdr->match.origin_subctxt_rx, hdr->match.origin_subctxt_rx, slid,
+			hdr->reliability.origin_subctxt_rx);
 	}
 	fprintf(stderr,
 		"%s:%s():%d hdr->match.ofi_tag = 0x%016lx, target_tag_and_not_ignore = 0x%016lx, origin_tag_and_not_ignore = 0x%016lx, FI_ADDR_UNSPEC = 0x%08lx\n",
@@ -919,6 +962,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 		fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV -- RENDEZVOUS RTS (%X) (begin) context %p is_multi_recv (%lu)\n",
 		opcode, context, is_multi_receive);
+
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS");
 
 	const uint64_t		   ofi_data	= hdr->match.ofi_data;
@@ -1629,7 +1673,6 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			context->byte_counter -= send_len;
 			return;
 		}
-
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "hdr->mp_eager_nth.subctxt_xfer_bytes_tail = %u, hdr->mp_eager_nth.payload_offset = %u, send_len = %lu, xfer_len = %lu\n",
 		       OPX_BTH_SEND_XFER_BYTES_TAIL(hdr->mp_eager_nth.subctxt_xfer_bytes_tail),
@@ -3167,11 +3210,9 @@ int fi_opx_ep_rx_process_context(struct fi_opx_ep *opx_ep, const uint64_t static
 		 */
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "process peek, claim, or multi-receive context\n");
 
-		fi_opx_ep_rx_process_context_noinline(opx_ep, static_flags, context, rx_op_flags, is_hmem,
-						      lock_required, av_type, reliability, hfi1_type);
+		return fi_opx_ep_rx_process_context_noinline(opx_ep, static_flags, context, rx_op_flags, is_hmem,
+							     lock_required, av_type, reliability, hfi1_type);
 	}
-
-	return 0;
 }
 
 __OPX_FORCE_INLINE__
@@ -3943,7 +3984,7 @@ ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t 
 	const ssize_t rc = FI_OPX_FABRIC_TX_INJECT(ep, buf, len, addr.fi, tag, data, lock_required, tx_op_flags, caps,
 						   reliability, hfi1_type, ctx_sharing);
 
-	if (OFI_UNLIKELY(rc == -EAGAIN)) {
+	if (OFI_UNLIKELY(rc == -FI_EAGAIN)) {
 		// In this case we are probably out of replay buffers. To deal
 		// with this, we do a poll which may send a ping and will
 		// process any incoming ACKs, hopefully releasing a buffer for

@@ -60,6 +60,7 @@ union fi_opx_addr opx_default_addr = {
 	.hfi1_subctxt_rx = 0xffff,
 	.hfi1_unit	 = 0xff,
 	.lid		 = 0xffffff,
+	.unused		 = 0xff,
 };
 
 static int fi_opx_init;
@@ -839,6 +840,11 @@ OPX_INI
 	fi_param_define(
 		&fi_opx_provider, "mixed_network", FI_PARAM_INT,
 		"Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when a mixed network is used. Default is 0.");
+	fi_param_define(&fi_opx_provider, "context_sharing", FI_PARAM_BOOL,
+			"Enables context sharing in OPX. Defaults to FALSE (1 HFI context per endpoint).");
+	fi_param_define(
+		&fi_opx_provider, "endpoints_per_hfi_context", FI_PARAM_INT,
+		"Specify how many endpoints should share a single HFI context. Valid values are from 2 to 8. Default is to determine optimal value based on the number of contexts available on the system and number of processors online. Only applicable if context sharing is enabled. Otherwise this value is ignored.");
 
 	assert(OPX_HFI1_N_PKT_SIZES == 4);
 	fi_param_define(

@@ -472,6 +472,23 @@ int opx_hfi_get_num_free_contexts(int unit_id)
 	return 0;
 }
 
+/* Get the number of contexts from the unit id. */
+/* Returns 0 if no unit or no match. */
+int opx_hfi_get_num_contexts(int unit_id)
+{
+	int64_t	 val;
+	uint32_t p = OPX_MIN_PORT;
+	for (; p <= OPX_MAX_PORT; p++) {
+		if (opx_hfi_get_port_lid(unit_id, p) > 0) {
+			break;
+		}
+	}
+	if (p <= OPX_MAX_PORT && !opx_sysfs_unit_read_s64(unit_id, "nctxts", &val, 0)) {
+		return (uint32_t) val;
+	}
+	return 0;
+}
+
 /* Given a unit number and port number, returns 1 if the unit and port are active.
    returns 0 if the unit and port are not active.
    returns -1 when an error occurred. */
