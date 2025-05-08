@@ -91,8 +91,13 @@ static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
 	if (i == g_efa_selected_device_cnt)
 		return -FI_ENODEV;
 
+	efa_domain->ibv_pd = ibv_alloc_pd(efa_domain->device->ibv_ctx);
+	if (!efa_domain->ibv_pd) {
+		EFA_WARN(FI_LOG_DOMAIN, "Failed to allocated ibv_pd: %d\n", errno);
+		return -FI_ENOMEM;
+	}
+
 	EFA_INFO(FI_LOG_DOMAIN, "Domain %s selected device %s\n", domain_name, device_name);
-	efa_domain->ibv_pd = efa_domain->device->ibv_pd;
 	return 0;
 }
 
@@ -347,6 +352,9 @@ static int efa_domain_close(fid_t fid)
 	}
 
 	if (efa_domain->ibv_pd) {
+		ret = ibv_dealloc_pd(efa_domain->ibv_pd);
+		if (ret)
+			EFA_WARN(FI_LOG_DOMAIN, "Failed to dealloc ibv_pd: %d\n", ret);
 		efa_domain->ibv_pd = NULL;
 	}
 
