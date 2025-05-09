@@ -1,0 +1,154 @@
+properties([disableConcurrentBuilds(abortPrevious: true)])
+
+def checkout_ci_resources() {
+  sh """
+    rm -rf ${env.CUSTOM_WORKSPACE}/ci_resources
+    mkdir ${env.CUSTOM_WORKSPACE}/ci_resources
+    git clone ${env.CI_RESOURCES} ${env.CUSTOM_WORKSPACE}/ci_resources
+
+  """
+}
+
+def checkout_ci() {
+  sh """
+    rm -rf ${env.CUSTOM_WORKSPACE}/ci
+    mkdir ${env.CUSTOM_WORKSPACE}/ci
+    git clone -b main --recurse-submodules ${env.ZDWORKIN_CI} ${env.CUSTOM_WORKSPACE}/ci
+  """
+}
+
+def initialize() {
+  checkout_tar("source")
+  dir (CUSTOM_WORKSPACE) {
+    checkout_ci_resources()
+    checkout_ci()
+    sh "mkdir -p ${CUSTOM_WORKSPACE}/log_dir"
+    sh "${CI_LOCATION}/bootstrap.sh"
+  }
+}
+
+def build_ci(config_name) {
+  sh """${CI_LOCATION}/venv/bin/python run.py \
+        --output=${env.CUSTOM_WORKSPACE}/pre-build \
+        --job=${config_name}
+     """
+}
+
+def run_ci(stage_name, config_name) {
+  sh """${CI_LOCATION}/venv/bin/python run.py \
+        --output=${env.LOG_DIR}/${stage_name} \
+        --job=${config_name}
+     """
+}
+
+def summarize(item, verbose=false, send_email=false) {
+  def cmd = "${RUN_LOCATION}/summary.py --summary_item=all"
+  if (verbose) {
+    cmd = "${cmd} -v "
+  }
+
+  if (send_email) {
+    cmd = "${cmd} --send_mail"
+  }
+
+  sh "python3.9 ${cmd}"
+}
+
+def checkout_tar(name) {
+  dir ("${env.CUSTOM_WORKSPACE}/${name}/libfabric") {
+    checkout scm
+  }
+  dir ("${env.CUSTOM_WORKSPACE}/${name}/") {
+    sh "tar -cvf libfabric.tar.gz libfabric/*"
+  }
+}
+
+pipeline {
+  agent {
+    node {
+      label 'daos_head'
+      customWorkspace "workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+    }
+  }
+  options {
+      timestamps()
+      timeout(activity: true, time: 6, unit: 'HOURS')
+      skipDefaultCheckout()
+  }
+  environment {
+      JOB_CADENCE = 'NIGHTLY'
+      CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+      SLURM_JOB_NAME="${env.JOB_NAME}_${env.BUILD_NUMBER}"
+      RUN_LOCATION="${env.CUSTOM_WORKSPACE}/ci_resources/legacy_pipeline_scripts/"
+      CI_LOCATION="${env.CUSTOM_WORKSPACE}/ci"
+      LOG_DIR = "${env.CUSTOM_WORKSPACE}/log_dir"
+      TARGET="main"
+  }
+  stages {
+    stage ('init') {
+      steps {
+        script {
+          initialize()
+        }
+      }
+    }
+    stage ('build') {
+      steps {
+        script {
+          dir (CI_LOCATION) {
+            build_ci("pr_build_daos.json")
+          }
+        }
+      }
+    }
+    stage ('run') {
+      parallel {
+        stage('tcp') {
+          agent { node { label 'daos_tcp' } }
+          options { skipDefaultCheckout() }
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                sh """python3.9 runtests.py \
+                  --prov='tcp' \
+                  --util='rxm' \
+                  --test=daos \
+                  --build_hw=daos \
+                  --log_file=${env.LOG_DIR}/daos_tcp-rxm_reg
+                """
+              }
+            }
+          }
+        }
+        stage('verbs') {
+          agent { node { label 'daos_verbs' } }
+          options { skipDefaultCheckout() }
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                sh """python3.9 runtests.py \
+                  --prov='verbs' \
+                  --util='rxm' \
+                  --test=daos \
+                  --build_hw=daos \
+                  --log_file=${env.LOG_DIR}/daos_verbs-rxm_reg
+                """
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      script {
+        summarize("all", verbose=true, send_email=true)
+        summarize("all")
+      }
+      dir("${env.WORKSPACE}") { deleteDir() }
+      dir("${env.WORKSPACE}@tmp") { deleteDir() }
+    }
+  }
+}
