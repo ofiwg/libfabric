@@ -157,22 +157,24 @@ static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
  * This function use a hash map to store GID to ibv_ah map,
  * and re-use ibv_ah for same GID
  *
- * @param[in]	av	address vector
+ * @param[in]	domain	efa_domain
  * @param[in]	gid	GID
  */
-static
-struct efa_ah *efa_ah_alloc(struct efa_av *av, const uint8_t *gid)
+struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid)
 {
-	struct ibv_pd *ibv_pd = av->domain->ibv_pd;
+	struct ibv_pd *ibv_pd = domain->ibv_pd;
 	struct efa_ah *efa_ah;
 	struct ibv_ah_attr ibv_ah_attr = { 0 };
 	struct efadv_ah_attr efa_ah_attr = { 0 };
 	int err;
 
 	efa_ah = NULL;
-	HASH_FIND(hh, av->ah_map, gid, EFA_GID_LEN, efa_ah);
+
+	ofi_genlock_lock(&domain->util_domain.lock);
+	HASH_FIND(hh, domain->ah_map, gid, EFA_GID_LEN, efa_ah);
 	if (efa_ah) {
 		efa_ah->refcnt += 1;
+		ofi_genlock_unlock(&domain->util_domain.lock);
 		return efa_ah;
 	}
 
@@ -202,41 +204,45 @@ struct efa_ah *efa_ah_alloc(struct efa_av *av, const uint8_t *gid)
 	efa_ah->refcnt = 1;
 	efa_ah->ahn = efa_ah_attr.ahn;
 	memcpy(efa_ah->gid, gid, EFA_GID_LEN);
-	HASH_ADD(hh, av->ah_map, gid, EFA_GID_LEN, efa_ah);
+	HASH_ADD(hh, domain->ah_map, gid, EFA_GID_LEN, efa_ah);
+	ofi_genlock_unlock(&domain->util_domain.lock);
 	return efa_ah;
 
 err_destroy_ibv_ah:
 	ibv_destroy_ah(efa_ah->ibv_ah);
 err_free_efa_ah:
 	free(efa_ah);
+	ofi_genlock_unlock(&domain->util_domain.lock);
 	return NULL;
 }
 
 /**
  * @brief release an efa_ah object
  *
- * @param[in]	av	address vector
+ * @param[in]	domain	efa_domain
  * @param[in]	ah	efa_ah object pointer
  */
-static
-void efa_ah_release(struct efa_av *av, struct efa_ah *ah)
+void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah)
 {
 	int err;
+
+	ofi_genlock_lock(&domain->util_domain.lock);
 #if ENABLE_DEBUG
 	struct efa_ah *tmp;
 
-	HASH_FIND(hh, av->ah_map, ah->gid, EFA_GID_LEN, tmp);
+	HASH_FIND(hh, domain->ah_map, ah->gid, EFA_GID_LEN, tmp);
 	assert(tmp == ah);
 #endif
 	assert(ah->refcnt > 0);
 	ah->refcnt -= 1;
 	if (ah->refcnt == 0) {
-		HASH_DEL(av->ah_map, ah);
+		HASH_DEL(domain->ah_map, ah);
 		err = ibv_destroy_ah(ah->ibv_ah);
 		if (err)
 			EFA_WARN(FI_LOG_AV, "ibv_destroy_ah failed! err=%d\n", err);
 		free(ah);
 	}
+	ofi_genlock_unlock(&domain->util_domain.lock);
 }
 
 static
@@ -480,7 +486,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	assert(av->type == FI_AV_TABLE);
 	conn->fi_addr = fi_addr;
 
-	conn->ah = efa_ah_alloc(av, raw_addr->raw);
+	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw);
 	if (!conn->ah)
 		goto err_release;
 
@@ -504,7 +510,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 
 err_release:
 	if (conn->ah)
-		efa_ah_release(av, conn->ah);
+		efa_ah_release(av->domain, conn->ah);
 
 	conn->ep_addr = NULL;
 	err = ofi_av_remove_addr(&av->util_av, fi_addr);
@@ -555,7 +561,7 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 	if (av->domain->info_type == EFA_INFO_RDM)
 		efa_conn_rdm_deinit(av, conn);
 
-	efa_ah_release(av, conn->ah);
+	efa_ah_release(av->domain, conn->ah);
 
 	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, conn->fi_addr);
 	assert(util_av_entry);

@@ -89,7 +89,7 @@ struct efa_unit_test_handshake_pkt_attr {
 int efa_device_construct_gid(struct efa_device *efa_device,
 			 struct ibv_device *ibv_device);
 
-int efa_device_construct_pd(struct efa_device *efa_device,
+int efa_device_construct_data(struct efa_device *efa_device,
 			 struct ibv_device *ibv_device);
 
 void efa_unit_test_buff_construct(struct efa_unit_test_buff *buff, struct efa_resource *resource, size_t buff_size);
@@ -109,6 +109,8 @@ struct efa_rdm_ope *efa_unit_test_alloc_rxe(struct efa_resource *resource, uint3
 /* begin efa_unit_test_av.c */
 void test_av_insert_duplicate_raw_addr();
 void test_av_insert_duplicate_gid();
+void test_efa_ah_cnt_one_av();
+void test_efa_ah_cnt_multi_av();
 /* end efa_unit_test_av.c */
 
 void test_efa_device_construct_error_handling();

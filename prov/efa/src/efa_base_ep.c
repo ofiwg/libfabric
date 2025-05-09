@@ -113,7 +113,7 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 	fi_freeinfo(base_ep->info);
 
 	if (base_ep->self_ah)
-		ibv_destroy_ah(base_ep->self_ah);
+		efa_ah_release(base_ep->domain, base_ep->self_ah);
 
 	err = efa_base_ep_destruct_qp(base_ep);
 
@@ -306,13 +306,9 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 static inline
 int efa_base_ep_create_self_ah(struct efa_base_ep *base_ep, struct ibv_pd *ibv_pd)
 {
-	struct ibv_ah_attr ah_attr;
 
-	memset(&ah_attr, 0, sizeof(ah_attr));
-	ah_attr.port_num = 1;
-	ah_attr.is_global = 1;
-	memcpy(ah_attr.grh.dgid.raw, base_ep->src_addr.raw, EFA_GID_LEN);
-	base_ep->self_ah = ibv_create_ah(ibv_pd, &ah_attr);
+	base_ep->self_ah = efa_ah_alloc(base_ep->domain, base_ep->src_addr.raw);
+
 	return base_ep->self_ah ? 0 : -FI_EINVAL;
 }
 

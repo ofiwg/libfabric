@@ -521,7 +521,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 
 	ibv_wr_set_sge_list(qp->ibv_qp_ex, 1, &sge);
 	if (txe->peer == NULL) {
-		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah,
+		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah->ibv_ah,
 				   qp->qp_num, qp->qkey);
 	} else {
 		conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->addr);
@@ -613,7 +613,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 		   For now, each WR contains only one sge. */
 	ibv_wr_set_sge_list(qp->ibv_qp_ex, 1, &sge);
 	if (self_comm) {
-		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah,
+		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah->ibv_ah,
 				   qp->qp_num, qp->qkey);
 	} else {
 		conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->addr);
