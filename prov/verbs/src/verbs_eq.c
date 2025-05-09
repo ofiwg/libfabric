@@ -1291,9 +1291,42 @@ out:
 	return ret;
 }
 
+static int
+vrb_eq_process_async_events(struct vrb_eq *eq, int timeout)
+{
+	int ret;
+	struct vrb_pep *pep;
+	struct ofi_epollfds_event events;
+	struct ibv_async_event async_event;
+
+	ret = ofi_epoll_wait(eq->epollfd, &events, 1, timeout);
+	if (ret == 0)
+		return -FI_EAGAIN;
+	else if (ret < 0)
+		return -errno;
+
+	if (!events.data.ptr)
+		return -FI_EAVAIL;
+
+	pep = container_of(events.data.ptr, struct vrb_pep, pep_fid.fid);
+	assert(pep->pep_fid.fid.fclass == FI_CLASS_PEP);
+
+	while (ret >= 0) {
+		ret = ibv_get_async_event(pep->id->verbs, &async_event);
+		if (!ret) {
+			VRB_WARN(FI_LOG_DOMAIN, "Async event for %s: %s\n",
+				 eq->fab->info->domain_attr->name,
+				 ibv_event_type_str(async_event.event_type));
+			ibv_ack_async_event(&async_event);
+		}
+	}
+
+	return ret ? -FI_EAVAIL : 0;
+}
+
 static ssize_t
-vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
-	       void *buf, size_t len, uint64_t flags)
+vrb_eq_read_internal(struct fid_eq *eq_fid, int timeout, uint32_t *event,
+		     void *buf, size_t len, uint64_t flags)
 {
 	struct vrb_eq *eq;
 	struct rdma_cm_event *cma_event;
@@ -1319,6 +1352,8 @@ vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 		vrb_prof_func_end("rdma_get_cm_event");
 		if (ret) {
 			ofi_mutex_unlock(&eq->event_lock);
+			if (-errno == -FI_EAGAIN)
+				return vrb_eq_process_async_events(eq, timeout);
 			return -errno;
 		}
 		vrb_prof_func_start("vrb_eq_cm_process_event");
@@ -1336,6 +1371,13 @@ vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 }
 
 static ssize_t
+vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
+	    void *buf, size_t len, uint64_t flags)
+{
+	return vrb_eq_read_internal(eq_fid, 0, event, buf, len, flags);
+}
+
+static ssize_t
 vrb_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 		void *buf, size_t len, int timeout, uint64_t flags)
 {
@@ -1346,7 +1388,7 @@ vrb_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 	eq = container_of(eq_fid, struct vrb_eq, eq_fid.fid);
 
 	while (1) {
-		ret = vrb_eq_read(eq_fid, event, buf, len, flags);
+		ret = vrb_eq_read_internal(eq_fid, timeout, event, buf, len, flags);
 		if (ret && (ret != -FI_EAGAIN))
 			return ret;
 
