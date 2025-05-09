@@ -431,9 +431,6 @@ int efa_get_user_info(uint32_t version, const char *node,
 		if (ret)
 			continue;
 
-		if (!efa_env_allows_nic(prov_info->nic->device_attr->name))
-			continue;
-
 		ret = efa_prov_info_compare_src_addr(node, flags, hints, prov_info);
 		if (ret)
 			continue;
