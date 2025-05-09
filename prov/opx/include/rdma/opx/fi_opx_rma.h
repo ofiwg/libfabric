@@ -258,6 +258,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->lrh_dlid		    = lrh_dlid;
 		params->pbc_dlid		    = pbc_dlid;
 		params->slid			    = slid;
+		params->origin_rx		    = opx_dst_addr.hfi1_subctxt_rx;
 		params->dt			    = dt == FI_VOID ? FI_VOID - 1 : dt;
 		params->op			    = op == FI_NOOP ? FI_NOOP - 1 : op;
 		params->key			    = key;
@@ -285,7 +286,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->payload_bytes_for_iovec	    = 0;
 		params->target_hfi_unit		    = opx_dst_addr.hfi1_unit;
 
-		fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov->len, 0, 0, NULL, is_hmem);
+		fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov->len, 0, 0, NULL, is_hmem, hfi1_type);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_intranode,
 					       opx_ep->debug_counters.hmem.rma_write_intranode);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !is_intranode, opx_ep->debug_counters.hmem.rma_write_hfi);

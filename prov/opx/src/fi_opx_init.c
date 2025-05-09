@@ -60,6 +60,7 @@ union fi_opx_addr opx_default_addr = {
 	.hfi1_subctxt_rx = 0xffff,
 	.hfi1_unit	 = 0xff,
 	.lid		 = 0xffffff,
+	.unused		 = 0xff,
 };
 
 static int fi_opx_init;
@@ -72,6 +73,7 @@ int fi_opx_check_info(const struct fi_info *info)
 
 	/* Checking the general capabilities. OPX will bow out if it cannot support any requested primary or secondary
 	 * caps */
+
 	if (info->caps == 0) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
 		       "The application's capability hints are null. OPX is allowed to specify whatever capabilities it wishes\n");
@@ -95,11 +97,29 @@ int fi_opx_check_info(const struct fi_info *info)
 		 * because OPX provider's HMEM support performance relies on
 		 * application to provide descriptor for device buffer.
 		 */
-		if (info->domain_attr && !(info->domain_attr->mr_mode & FI_MR_HMEM)) {
+
+		/* IntelMPI is not properly setting their capabilities. They always request
+			FI_HMEM support in their caps even when you try to disable HMEM using
+			their environment variable I_MPI_OFFLOAD. Because of this, OPX is adding
+			a workaround that will disable checking for FI_MR_HMEM, which is a hard
+			requirement for OPX when FI_HMEM is requested.
+		*/
+
+		char *hmem_str		= NULL;
+		bool  enforce_hmem_caps = true;
+
+		if (fi_param_get_str(NULL, "hmem", &hmem_str) == FI_SUCCESS && hmem_str) {
+			if (strlen(hmem_str) == 5 && strncmp(hmem_str, "system", 5) == 0) { // if string matches system
+				enforce_hmem_caps = false;				    // disable FI_MR_HMEM check
+			}
+		}
+
+		if (enforce_hmem_caps && info->domain_attr && !(info->domain_attr->mr_mode & FI_MR_HMEM)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 				"FI_HMEM capability requires device registrations (FI_MR_HMEM)\n");
 			goto err;
 		}
+
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "FI_HMEM capability has been successfully enforced by OPX\n");
 	}
@@ -466,11 +486,16 @@ err:
 }
 
 struct fi_opx_global_data fi_opx_global = {.hfi_local_info.type	  = OPX_HFI1_UNDEF,
+					   .pkt_size		  = OPX_HFI1_DEFAULT_PKT_SIZE,
 					   .opx_hfi1_type_strings = {[OPX_HFI1_UNDEF]  = "OPX_HFI1_UNDEF",
-								     [OPX_HFI1_JKR_9B] = "OPX_HFI1_JKR_9B",
-								     [OPX_HFI1_WFR]    = "OPX_HFI1_WFR",
+								     [OPX_HFI1_JKR_9B] = "CN5000-mixed",
+								     [OPX_HFI1_WFR]    = "OPA100",
 								     [3]	       = "ERROR",
-								     [OPX_HFI1_JKR]    = "OPX_HFI1_JKR"}};
+								     [OPX_HFI1_JKR]    = "CN5000",
+								     [5]	       = "ERROR",
+								     [6]	       = "ERROR",
+								     [7]	       = "ERROR",
+								     [OPX_HFI1_CYR]    = "CN6000"}};
 /* ROUTE CONTROL table for each packet type */
 int opx_route_control[OPX_HFI1_NUM_PACKET_TYPES];
 
@@ -814,7 +839,28 @@ OPX_INI
 		OPX_RC_OUT_OF_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0);
 	fi_param_define(
 		&fi_opx_provider, "mixed_network", FI_PARAM_INT,
-		"Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when mixed network is used. Default is 0.");
+		"Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when a mixed network is used. Default is 0.");
+	fi_param_define(&fi_opx_provider, "context_sharing", FI_PARAM_BOOL,
+			"Enables context sharing in OPX. Defaults to FALSE (1 HFI context per endpoint).");
+	fi_param_define(
+		&fi_opx_provider, "endpoints_per_hfi_context", FI_PARAM_INT,
+		"Specify how many endpoints should share a single HFI context. Valid values are from 2 to 8. Default is to determine optimal value based on the number of contexts available on the system and number of processors online. Only applicable if context sharing is enabled. Otherwise this value is ignored.");
+
+	assert(OPX_HFI1_N_PKT_SIZES == 4);
+	fi_param_define(
+		&fi_opx_provider, "max_pkt_size", FI_PARAM_INT,
+		"Set the maximum packet size which must be less than or equal to the driver's MTU (Maximum Transmission Unit) size.  Valid values: %u, %u, %u, %u. Default is %u.",
+		opx_valid_pkt_sizes[0], opx_valid_pkt_sizes[1], opx_valid_pkt_sizes[2], opx_valid_pkt_sizes[3],
+		OPX_HFI1_DEFAULT_PKT_SIZE);
+
+	/* Not exposing all the details on the description of the guard.
+	 * Device mmaps are always guarded - no user control.
+	 * Other mmaps are only guarded with this enabled.
+	 * Both guards are segfault protected with this enabled. */
+
+	fi_param_define(
+		&fi_opx_provider, "mmap_guard", FI_PARAM_BOOL,
+		"Enable guards around OPX/HFI mmaps. When enabled, this will cause a segfault when mmapped memory is illegally accessed through buffer overruns or underruns.  Default is false.");
 
 	/* Track TID and HMEM domains so caches can be cleared on exit */
 	dlist_init(&fi_opx_global.tid_domain_list);

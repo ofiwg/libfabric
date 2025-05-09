@@ -145,12 +145,15 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_ep		   *opx_ep    = params->opx_ep;
 	const enum opx_hfi1_type	    hfi1_type = OPX_HFI1_TYPE;
 
+	OPX_SHD_CTX_PIO_LOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
+
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
 	const int credits_needed    = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ? 2 : 3;
 	ssize_t	  credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, credits_needed);
 	if (OFI_UNLIKELY(credits_available < 0)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "DO_READV");
+		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
 
@@ -165,6 +168,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "DO_READV");
+		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
 
@@ -235,6 +239,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
 							     OPX_HFI1_TYPE);

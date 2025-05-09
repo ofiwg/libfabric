@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -42,6 +42,7 @@
 #include <stdio.h>
 
 #include "rdma/opx/opx_tracer.h"
+#include "rdma/opx/fi_opx_hfi1.h"
 
 #define FI_OPX_CACHE_LINE_SIZE (64)
 
@@ -154,6 +155,19 @@ static inline void fi_opx_unlock_if_required(ofi_spin_t *lock, const int require
 static inline void fi_opx_unlock(ofi_spin_t *lock)
 {
 	ofi_spin_unlock(lock);
+}
+
+/* These try_lock() and unlock functions below are used for synchronizing around the hardware RHQ resources when
+context sharing is in use.*/
+
+static inline int opx_shared_rx_context_try_lock(struct opx_hwcontext_ctrl *hw_ctxt_ctrl)
+{
+	return pthread_spin_trylock(&hw_ctxt_ctrl->context_lock);
+}
+
+static inline void opx_shared_rx_context_unlock(struct opx_hwcontext_ctrl *hw_ctxt_ctrl)
+{
+	pthread_spin_unlock(&hw_ctxt_ctrl->context_lock);
 }
 
 #endif /* _FI_PROV_OPX_INTERNAL_H_ */

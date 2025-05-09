@@ -312,7 +312,7 @@ static const unsigned OPX_HMEM_OFI_MEM_TYPE[4] = {
 		if (dst_iface == FI_HMEM_SYSTEM) {                                                        \
 			fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);                                 \
 		} else {                                                                                  \
-			uint8_t hmem_buf[FI_OPX_HFI1_PACKET_MTU];                                         \
+			uint8_t hmem_buf[OPX_HFI1_MAX_PKT_SIZE];                                          \
 			opx_copy_from_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE, hmem_buf, dst, len, \
 					   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);                           \
 			fi_opx_rx_atomic_dispatch(src, hmem_buf, len, dt, op);                            \

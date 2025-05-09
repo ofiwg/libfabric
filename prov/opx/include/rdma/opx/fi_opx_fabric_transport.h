@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021,2024 Cornelis Networks.
+ * Copyright (C) 2021,2024-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -46,7 +46,6 @@
 #define FI_OPX_FABRIC_RX_RZV_RTS	fi_opx_hfi1_rx_rzv_rts
 #define FI_OPX_FABRIC_RX_RZV_RTS_ETRUNC fi_opx_hfi1_rx_rzv_rts_etrunc
 #define FI_OPX_FABRIC_RX_RZV_CTS	fi_opx_hfi1_rx_rzv_cts
-#define FI_OPX_FABRIC_TX_DO_PUT		fi_opx_hfi1_do_dput
 
 #endif
 

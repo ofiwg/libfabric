@@ -73,7 +73,7 @@ OPX_COMPILE_TIME_ASSERT((OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE + 1) <= OPX_SDMA_HF
 /*
  * Length of bounce buffer in a single SDMA Work Entry.
  */
-#define FI_OPX_HFI1_SDMA_WE_BUF_LEN (OPX_SDMA_MAX_PKTS_BOUNCE_BUF * FI_OPX_HFI1_PACKET_MTU)
+#define FI_OPX_HFI1_SDMA_WE_BUF_LEN (OPX_SDMA_MAX_PKTS_BOUNCE_BUF * OPX_HFI1_MAX_PKT_SIZE)
 
 #define OPX_SDMA_MEMINFO_SIZE	  (136)
 #define OPX_SDMA_MEMINFO_SIZE_QWS (OPX_SDMA_MEMINFO_SIZE >> 3)
@@ -258,10 +258,16 @@ void fi_opx_hfi1_sdma_init_cc(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dput_
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dput_params *params, const uint64_t length,
 				const uint32_t tidoffset, const uint32_t ntidpairs, const uint32_t *const tidpairs,
-				const uint64_t is_hmem)
+				const uint64_t is_hmem, const enum opx_hfi1_type hfi1_type)
 {
 	if (!fi_opx_hfi1_sdma_use_sdma(opx_ep, length, params->opcode, is_hmem, params->is_intranode)) {
-		params->work_elem.work_fn   = fi_opx_hfi1_do_dput;
+		if (hfi1_type == OPX_HFI1_JKR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_jkr;
+		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_jkr_9B;
+		} else if (hfi1_type == OPX_HFI1_WFR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_wfr;
+		}
 		params->work_elem.work_type = params->is_intranode ? OPX_WORK_TYPE_SHM : OPX_WORK_TYPE_PIO;
 		return;
 	}
@@ -294,9 +300,21 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dpu
 		}
 		OPX_DEBUG_TIDS("CTS tid_iov", ntidpairs, params->tidpairs);
 
-		params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid;
+		if (hfi1_type == OPX_HFI1_JKR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid_jkr;
+		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid_jkr_9B;
+		} else if (hfi1_type == OPX_HFI1_WFR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid_wfr;
+		}
 	} else {
-		params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma;
+		if (hfi1_type == OPX_HFI1_JKR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_jkr;
+		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_jkr_9B;
+		} else if (hfi1_type == OPX_HFI1_WFR) {
+			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_wfr;
+		}
 	}
 	params->work_elem.work_type = OPX_WORK_TYPE_SDMA;
 }
@@ -405,7 +423,7 @@ __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_add_packet(struct fi_opx_hfi1_sdma_work_entry *we, struct fi_opx_reliability_tx_replay *replay,
 				 uint64_t payload_bytes)
 {
-	assert(payload_bytes <= FI_OPX_HFI1_PACKET_MTU);
+	assert(payload_bytes <= OPX_HFI1_PKT_SIZE);
 	assert(we->num_packets < OPX_HFI1_SDMA_MAX_PKTS_TID);
 
 	we->packets[we->num_packets].replay = replay;
@@ -602,7 +620,7 @@ void opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdm
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.nontid_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "===================================== Enqueuing non-tid request for SDMA Send\n");
+		     "===================================== Enqueuing non-tid request for SDMA Send.\n");
 	opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state, &we->packets[0].replay->scb, &payload_iov,
 				      OPX_SDMA_NONTID_DATA_IOV_COUNT, we->num_packets, fragsize,
 				      FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, we->hmem.iface, we->hmem.device,

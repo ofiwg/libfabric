@@ -89,42 +89,19 @@ OPX_COMPILE_TIME_ASSERT((FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE
 			"or FI_OPX_HFI1_HDRQ_UPDATE_MASK_1024");
 
 unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, volatile uint32_t *rhf_ptr,
+				       uint64_t *p_rhf_seq, uint64_t *p_hdrq_head, uint32_t *p_last_egrbfr_index,
+				       volatile uint64_t *hdrq_head_reg, volatile uint64_t *egrq_head_reg,
 				       const uint32_t rhf_msb, const uint32_t rhf_lsb, const uint64_t rhf_seq,
 				       const uint64_t hdrq_offset, const uint64_t rhf_rcvd,
 				       const union opx_hfi1_packet_hdr *const hdr, const enum opx_hfi1_type hfi1_type);
 
 __OPX_FORCE_INLINE__
-void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint64_t hdrq_offset)
+void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint64_t hdrq_offset,
+					   volatile uint64_t *head_reg)
 {
 	if (OFI_UNLIKELY((hdrq_offset & FI_OPX_HFI1_HDRQ_UPDATE_MASK) == FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS)) {
-		OPX_HFI1_BAR_STORE(opx_ep->rx->hdrq.head_register,
-				   (const uint64_t)(hdrq_offset - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS));
+		OPX_HFI1_BAR_STORE(head_reg, (const uint64_t)(hdrq_offset - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS));
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "================== > Set HFI head register\n");
-	}
-}
-
-__OPX_FORCE_INLINE__
-void fi_opx_hfi1_handle_ud_eager_packet(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
-					const uint64_t rhf, const opx_lid_t slid, const opx_lid_t dlid,
-					const enum opx_hfi1_type hfi1_type)
-{
-	/* "eager" packet - has payload */
-	const uint32_t				     egrbfr_index  = OPX_RHF_EGR_INDEX(rhf, hfi1_type);
-	const uint32_t				     egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf, hfi1_type);
-	const uint8_t *const __attribute__((unused)) payload =
-		(uint8_t *) ((uintptr_t) opx_ep->rx->egrq.base_addr +
-			     (uintptr_t) egrbfr_index * (uintptr_t) opx_ep->rx->egrq.elemsz + egrbfr_offset * 64);
-
-	assert(payload != NULL);
-
-	/* currently no eager UD packets are defined */
-	fprintf(stderr, "%s:%s():%d bad ud eager packet; abort.\n", __FILE__, __func__, __LINE__);
-	abort();
-
-	const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
-	if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-		OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register, (const uint64_t) last_egrbfr_index);
-		opx_ep->rx->egrq.last_egrbfr_index = egrbfr_index;
 	}
 }
 
@@ -194,7 +171,8 @@ void fi_opx_hfi1_handle_ud_nack(struct fi_opx_ep *opx_ep, const union opx_hfi1_p
 }
 
 __OPX_FORCE_INLINE__
-unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
+unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, uint64_t *p_hdrq_head,
+				      volatile uint64_t *hdrq_head_reg, const union opx_hfi1_packet_hdr *const hdr,
 				      const uint64_t rhf_seq, const uint64_t hdrq_offset, const uint64_t rhf,
 				      const opx_lid_t slid, const opx_lid_t dlid, const enum opx_hfi1_type hfi1_type)
 {
@@ -229,19 +207,23 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep, const union opx_
 			abort();
 		}
 	} else {
-		fi_opx_hfi1_handle_ud_eager_packet(opx_ep, hdr, rhf, slid, dlid, hfi1_type);
+		/* No eager UD packets are defined */
+		fprintf(stderr, "%s:%s():%d bad ud eager packet; abort.\n", __FILE__, __func__, __LINE__);
+		abort();
 	}
 
-	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq, hfi1_type);
-	opx_ep->rx->state.hdrq.head    = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
+	*p_rhf_seq   = OPX_RHF_SEQ_INCREMENT(rhf_seq, hfi1_type);
+	*p_hdrq_head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
+	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset, hdrq_head_reg);
 
 	return 1; /* one packet was processed */
 }
 
 __OPX_FORCE_INLINE__
-unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
+unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, uint64_t *p_hdrq_head,
+				  uint32_t *p_last_egrbfr_index, volatile uint64_t *hdrq_head_reg,
+				  volatile uint64_t *egrq_head_reg, const union opx_hfi1_packet_hdr *const hdr,
 				  const uint64_t rhf_seq, const uint64_t hdrq_offset, const uint64_t rhf)
 {
 #ifdef OPX_RELIABILITY_TEST
@@ -249,19 +231,19 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep, const union opx_hfi1
 	 * Error injection .. purposefully drop packet
 	 */
 	if (OFI_UNLIKELY(FI_OPX_RELIABILITY_RX_DROP_PACKET(opx_ep->reli_service, hdr))) {
-		opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq, OPX_HFI1_TYPE);
-		opx_ep->rx->state.hdrq.head    = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
+		*p_rhf_seq   = OPX_RHF_SEQ_INCREMENT(rhf_seq, OPX_HFI1_TYPE);
+		*p_hdrq_head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
 		if (OPX_RHF_IS_USE_EGR_BUF(rhf, OPX_HFI1_TYPE)) { /* eager */
 			const uint32_t egrbfr_index	 = OPX_RHF_EGR_INDEX(rhf, OPX_HFI1_TYPE);
-			const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
+			const uint32_t last_egrbfr_index = *p_last_egrbfr_index;
 			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-				OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register, (const uint64_t) last_egrbfr_index);
-				opx_ep->rx->egrq.last_egrbfr_index = egrbfr_index;
+				OPX_HFI1_BAR_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
+				*p_last_egrbfr_index = egrbfr_index;
 			}
 		}
 
-		fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
+		fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset, hdrq_head_reg);
 
 		return 0;
 	}
@@ -270,15 +252,18 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep, const union opx_hfi1
 }
 
 __OPX_FORCE_INLINE__
-unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, const uint8_t opcode,
-					const union opx_hfi1_packet_hdr *const hdr, const uint64_t rhf_seq,
-					const uint64_t hdrq_offset, const uint64_t rhf, const opx_lid_t slid,
-					const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, uint64_t *p_hdrq_head,
+					uint32_t *p_last_egrbfr_index, volatile uint64_t *hdrq_head_reg,
+					volatile uint64_t *egrq_head_reg, uint32_t *eager_base_addr,
+					const uint8_t opcode, const union opx_hfi1_packet_hdr *const hdr,
+					const uint64_t rhf_seq, const uint64_t hdrq_offset, const uint64_t rhf,
+					const opx_lid_t slid, const enum opx_hfi1_type hfi1_type,
+					const bool ctx_sharing)
 {
 	/*
 	 * Check for 'reliability' exceptions
 	 */
-	const uint64_t pkt_origin_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
+	const uint16_t pkt_origin_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
 	const uint64_t psn	     = FI_OPX_HFI1_PACKET_PSN(hdr);
 
 	struct fi_opx_reliability_rx_flow *flow;
@@ -306,7 +291,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, const uint8_t 
 		const uint32_t	     egrbfr_index  = OPX_RHF_EGR_INDEX(rhf, hfi1_type);
 		const uint32_t	     egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf, hfi1_type);
 		const uint8_t *const payload =
-			(uint8_t *) ((uintptr_t) opx_ep->rx->egrq.base_addr +
+			(uint8_t *) ((uintptr_t) eager_base_addr +
 				     (uintptr_t) egrbfr_index * (uintptr_t) opx_ep->rx->egrq.elemsz +
 				     egrbfr_offset * 64);
 
@@ -315,29 +300,33 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, const uint8_t 
 		fi_opx_reliability_rx_exception(opx_ep->reli_service, flow, slid, pkt_origin_rx, psn, &opx_ep->ep_fid,
 						hdr, payload, hfi1_type, opcode, ctx_sharing);
 
-		const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
+		uint32_t last_egrbfr_index = *p_last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-			OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register, (const uint64_t) last_egrbfr_index);
-			opx_ep->rx->egrq.last_egrbfr_index = egrbfr_index;
+			OPX_HFI1_BAR_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
+			*p_last_egrbfr_index = egrbfr_index;
 		}
 	}
 
-	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq, hfi1_type);
-	opx_ep->rx->state.hdrq.head    = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
+	*p_rhf_seq   = OPX_RHF_SEQ_INCREMENT(rhf_seq, hfi1_type);
+	*p_hdrq_head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
+	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset, hdrq_head_reg);
 
 	return 1; /* one packet was processed - even though it was a "reliability event" packet */
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
+void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, uint64_t *p_hdrq_head,
+			       uint32_t *p_last_egrbfr_index, volatile uint64_t *hdrq_head_reg,
+			       volatile uint64_t *egrq_head_reg, uint32_t *eager_base_addr, const uint8_t opcode,
 			       const union opx_hfi1_packet_hdr *const hdr, const uint64_t rhf_seq,
 			       const uint64_t hdrq_offset, const int lock_required,
 			       const enum ofi_reliability_kind reliability, const uint64_t rhf,
-			       const enum opx_hfi1_type hfi1_type, const opx_lid_t slid, const bool ctx_sharing)
+			       const enum opx_hfi1_type hfi1_type, const opx_lid_t slid, const bool fabric,
+			       const bool ctx_sharing)
 {
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "================ received a packet from the fabric\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "================ received a packet from the %s\n",
+		     fabric ? "fabric" : "sw rx queue");
 
 	if (!OPX_RHF_IS_USE_EGR_BUF(rhf, hfi1_type)) {
 		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA ||
@@ -359,7 +348,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 		const uint32_t	     egrbfr_index  = OPX_RHF_EGR_INDEX(rhf, hfi1_type);
 		const uint32_t	     egrbfr_offset = OPX_RHF_EGR_OFFSET(rhf, hfi1_type);
 		const uint8_t *const payload =
-			(uint8_t *) ((uintptr_t) opx_ep->rx->egrq.base_addr +
+			(uint8_t *) ((uintptr_t) eager_base_addr +
 				     (uintptr_t) egrbfr_index * (uintptr_t) opx_ep->rx->egrq.elemsz +
 				     egrbfr_offset * 64);
 
@@ -382,19 +371,19 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 							OPX_INTRANODE_FALSE, lock_required, reliability, hfi1_type,
 							slid);
 		}
-		const uint32_t last_egrbfr_index = opx_ep->rx->egrq.last_egrbfr_index;
+		uint32_t last_egrbfr_index = *p_last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-			OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register, (const uint64_t) last_egrbfr_index);
-			opx_ep->rx->egrq.last_egrbfr_index = egrbfr_index;
+			OPX_HFI1_BAR_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
+			*p_last_egrbfr_index = egrbfr_index;
 		}
 
 		FLIGHT_RECORDER_PACKET_HDR(opx_ep->fr, FR_EVENT_HFI1_POLL_ONCE, hdr);
 	}
 
-	opx_ep->rx->state.hdrq.rhf_seq = OPX_RHF_SEQ_INCREMENT(rhf_seq, hfi1_type);
-	opx_ep->rx->state.hdrq.head    = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
+	*p_rhf_seq   = OPX_RHF_SEQ_INCREMENT(rhf_seq, hfi1_type);
+	*p_hdrq_head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
+	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset, hdrq_head_reg);
 
 	/* Send preemptive ACKs at regular intervals to improve performance (when enabled).
 	 *
@@ -429,6 +418,160 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 	}
 }
 
+__OPX_FORCE_INLINE__
+void opx_write_header_to_subctxt(struct opx_software_rx_q *soft_rx_q, const uint64_t rhf_rcvd,
+				 volatile uint32_t *rhf_ptr_dest, const union opx_hfi1_packet_hdr *const hdr,
+				 const uint32_t rhq_tail, const enum opx_hfi1_type hfi1_type)
+{
+	const uint32_t rhf_msb	       = rhf_rcvd >> 32;
+	const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
+
+	uint32_t *pu32;
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		assert(hdrq_offset_dws); /* need padding before this header */
+		pu32 = (uint32_t *) rhf_ptr_dest - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS + 2 /* rhf field size in dw */
+		       - 2 /* sizeof(uint64_t) in dw, offset back to align
+			       for the 9B padding in the header union */
+		       + hdrq_offset_dws;
+	} else {
+		assert(((union opx_jkr_rhf) rhf_rcvd).L2Type == 0x2);
+		pu32 = (uint32_t *) rhf_ptr_dest - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS + 2 /* rhf field size in dw */
+		       + hdrq_offset_dws;
+		assert(!(((union opx_jkr_rhf) rhf_rcvd).KHdrLenErr));
+	}
+
+	/* For the 9B case just copy the 1 QW of padding even though it isn't used. This is to avoid a branch for the
+	 * 9B/16B case.*/
+	union opx_hfi1_packet_hdr *hdr_dest = (union opx_hfi1_packet_hdr *) pu32;
+	opx_cacheline_store_block(&hdr_dest->qw_16B[0], &hdr->qw_16B[0]);
+}
+
+__OPX_FORCE_INLINE__
+int opx_write_eager_pkt_to_subctxt(struct fi_opx_ep *opx_ep, struct opx_subcontext_ureg *sub_ureg,
+				   const uint64_t rhf_rcvd, volatile uint32_t *rhf_ptr_dest, uint64_t *rhf_new,
+				   uint8_t subctxt, uint32_t *p_last_egrbfr_index,
+				   const union opx_hfi1_packet_hdr *const hdr, const enum opx_hfi1_type hfi1_type)
+{
+	const uint32_t	     last_egrbfr_index = *p_last_egrbfr_index;
+	const uint32_t	     egrbfr_index      = OPX_RHF_EGR_INDEX(rhf_rcvd, hfi1_type);
+	const uint32_t	     egrbfr_offset     = OPX_RHF_EGR_OFFSET(rhf_rcvd, hfi1_type);
+	const uint8_t *const payload_src =
+		(uint8_t *) ((uintptr_t) opx_ep->rx->egrq.base_addr +
+			     (uintptr_t) egrbfr_index * (uintptr_t) opx_ep->rx->egrq.elemsz + egrbfr_offset * 64);
+	assert(payload_src != NULL);
+	struct opx_software_rx_q *s_rx_q		= &opx_ep->rx->shd_ctx.soft_rx_qs[subctxt];
+	const uint64_t		  rhq_tail		= *(s_rx_q->rhq_tail_reg);
+	uint64_t		  eager_tail		= *(s_rx_q->egrq_tail);
+	uint64_t		  eager_next_tail	= eager_tail;
+	size_t			  payload_bytes_to_copy = opx_hfi1_packet_hdr_payload_bytes(hdr, hfi1_type);
+	uint32_t		  egr_elemcnt		= opx_ep->hfi->ctrl->ctxt_info.egrtids;
+	uint32_t		  egr_elemsz		= opx_ep->rx->egrq.elemsz;
+
+	while (1) {
+		eager_next_tail++;
+		if (eager_next_tail >= egr_elemcnt) {
+			eager_next_tail = 0;
+		}
+
+		uint32_t eager_head = *(s_rx_q->egrq_head);
+
+		// If the eager buffer is full then just return and don't attempt to process the packet.
+		if (eager_next_tail == eager_head) {
+			break;
+		}
+
+		// If left over space in eager buffer is not enough
+		if (((sub_ureg->last_offset << 6) + payload_bytes_to_copy) > egr_elemsz) {
+			sub_ureg->last_offset = 0;
+			eager_tail	      = eager_next_tail;
+			*(s_rx_q->egrq_tail)  = eager_next_tail;
+
+		} else {
+			uint8_t *payload_dest =
+				(uint8_t *) ((uintptr_t) s_rx_q->egr_buf_base +
+					     (uintptr_t) eager_tail * (uintptr_t) opx_ep->rx->egrq.elemsz +
+					     sub_ureg->last_offset * 64);
+			memcpy(payload_dest, payload_src, payload_bytes_to_copy);
+
+			*rhf_new = OPX_RHF_EGR_INDEX_UPDATE(*rhf_new, eager_tail, hfi1_type);
+			*rhf_new = OPX_RHF_EGR_OFFSET_UPDATE(*rhf_new, sub_ureg->last_offset, hfi1_type);
+
+			assert(OPX_RHF_EGR_OFFSET(*rhf_new, hfi1_type) == sub_ureg->last_offset);
+			assert(OPX_RHF_EGR_INDEX(*rhf_new, hfi1_type) == eager_tail);
+
+			const uint64_t payload_blocks = (payload_bytes_to_copy + 63) >> 6;
+			sub_ureg->last_offset	      = sub_ureg->last_offset + payload_blocks;
+
+			opx_write_header_to_subctxt(s_rx_q, rhf_rcvd, rhf_ptr_dest, hdr, rhq_tail, hfi1_type);
+
+			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
+				OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register, (const uint64_t) last_egrbfr_index);
+				*p_last_egrbfr_index = egrbfr_index;
+			}
+			return 1;
+		}
+	}
+
+	if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
+		OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register, (const uint64_t) last_egrbfr_index);
+		*p_last_egrbfr_index = egrbfr_index;
+	}
+
+	return 0;
+}
+
+__OPX_FORCE_INLINE__
+void opx_write_rhf_to_subctxt(struct opx_subcontext_ureg *sub_ureg, uint64_t *rhf, volatile uint32_t *rhf_ptr_dest,
+			      const enum opx_hfi1_type hfi1_type)
+{
+	*rhf				      = OPX_RHF_SEQ_UPDATE(*rhf, sub_ureg->hdrq_rhf_seq, hfi1_type);
+	sub_ureg->hdrq_rhf_seq		      = OPX_RHF_SEQ_INCREMENT(sub_ureg->hdrq_rhf_seq, hfi1_type);
+	*((volatile uint64_t *) rhf_ptr_dest) = *rhf;
+}
+
+__OPX_FORCE_INLINE__
+int opx_forward_shared_context(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, uint64_t *p_hdrq_head,
+			       uint32_t *p_last_egrbfr_index, const uint64_t hw_hdrq_offset, const uint64_t hw_rhf_seq,
+			       const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr, uint8_t subctxt,
+			       const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
+{
+	struct opx_subcontext_ureg *sub_ureg = opx_ep->rx->shd_ctx.subcontext_ureg[subctxt];
+	struct opx_software_rx_q   *s_rx_q   = &opx_ep->rx->shd_ctx.soft_rx_qs[subctxt];
+
+	const uint64_t	   rhq_head	 = *(s_rx_q->rhq_head_reg);
+	const uint64_t	   rhq_tail	 = *(s_rx_q->rhq_tail_reg);
+	const uint64_t	   next_rhq_tail = (rhq_tail + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS) & hdrq_mask;
+	volatile uint32_t *rhf_ptr_dest	 = s_rx_q->rhf_base + rhq_tail;
+	uint64_t	   rhf_new	 = rhf_rcvd;
+
+	// Drop packet if RHQ is full
+	if (next_rhq_tail == rhq_head) {
+		return 0;
+	}
+
+	if (OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd, hfi1_type)) {
+		int retVal = opx_write_eager_pkt_to_subctxt(opx_ep, sub_ureg, rhf_rcvd, rhf_ptr_dest, &rhf_new, subctxt,
+							    p_last_egrbfr_index, hdr, hfi1_type);
+		if (OFI_UNLIKELY(retVal == 0)) {
+			return 0;
+		}
+	} else {
+		opx_write_header_to_subctxt(s_rx_q, rhf_rcvd, rhf_ptr_dest, hdr, rhq_tail, hfi1_type);
+	}
+
+	// Ensure memory writes are visible before writing rhf seq and tail
+	fi_opx_compiler_msync_writes();
+
+	opx_write_rhf_to_subctxt(sub_ureg, &rhf_new, rhf_ptr_dest, hfi1_type);
+
+	*(s_rx_q->rhq_tail_reg) = next_rhq_tail;
+	*p_rhf_seq		= OPX_RHF_SEQ_INCREMENT(hw_rhf_seq, hfi1_type);
+	*p_hdrq_head		= hw_hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
+	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hw_hdrq_offset, opx_ep->rx->hdrq.head_register);
+
+	return 1;
+}
+
 /*
  * ============================================================================
  *                      THIS IS THE HFI POLL FUNCTION
@@ -438,10 +581,20 @@ __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const enum ofi_reliability_kind reliability,
 			       const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
-	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+	struct fi_opx_ep *opx_ep       = container_of(ep, struct fi_opx_ep, ep_fid);
+	const uint8_t	  subctxt_self = opx_ep->rx->shd_ctx.subctxt;
 	const uint64_t	  local_hdrq_mask =
 		   (hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME) ? opx_ep->hfi->info.rxe.hdrq.rx_poll_mask : hdrq_mask;
-	const uint64_t hdrq_offset = opx_ep->rx->state.hdrq.head & local_hdrq_mask;
+	uint64_t hdrq_offset;
+	uint64_t rhf_seq;
+
+	if (ctx_sharing) {
+		hdrq_offset = opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head & local_hdrq_mask;
+		rhf_seq	    = opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq;
+	} else {
+		hdrq_offset = opx_ep->rx->state.hdrq.head & local_hdrq_mask;
+		rhf_seq	    = opx_ep->rx->state.hdrq.rhf_seq;
+	}
 
 	assert(local_hdrq_mask % FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS == 0);
 	volatile uint32_t *rhf_ptr = opx_ep->rx->hdrq.rhf_base + hdrq_offset;
@@ -450,7 +603,6 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 	opx_lid_t      slid;
 	opx_lid_t      dlid;
 
-	const uint64_t rhf_seq = opx_ep->rx->state.hdrq.rhf_seq;
 	/* The software must look at the RHF.RcvSeq.
 	 * If it detects the next sequence number in the entry, the new header
 	 * was written into memory.  Otherwise, do not process RHF - no packet.
@@ -465,7 +617,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 			assert(hdrq_offset_dws); /* need padding before this header */
 			pkt = (uint32_t *) rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS + 2 /* rhf field size in dw */
 			      - 2 /* sizeof(uint64_t) in dw, offset back to align
-				     for the 9B padding in the header union */
+				      for the 9B padding in the header union */
 			      + hdrq_offset_dws;
 		} else {
 			assert(((union opx_jkr_rhf) rhf_rcvd).L2Type == 0x2);
@@ -480,13 +632,56 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 		const union opx_hfi1_packet_hdr *const hdr    = (union opx_hfi1_packet_hdr *) pkt;
 		const uint8_t			       opcode = hdr->bth.opcode;
 
+		/* CYR only has 2 bits available in BTH.QP[15:8] for storing the subctxt value, while WFR/JKR uses 3
+		 * bits.*/
+		const uint8_t subctxt_dest = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ?
+						     (hdr->bth.subctxt_rx & 0x7) :
+						     ((hdr->bth.subctxt_rx >> 1) & 0x3);
+
+		uint64_t  hdrq_head_local;
+		uint32_t *p_last_egrbfr_index;
+		if (ctx_sharing) {
+			hdrq_head_local	    = opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head;
+			p_last_egrbfr_index = &opx_ep->rx->shd_ctx.hwcontext_ctrl->last_egrbrf_index;
+		} else {
+			hdrq_head_local	    = opx_ep->rx->state.hdrq.head;
+			p_last_egrbfr_index = &opx_ep->rx->egrq.last_egrbfr_index;
+		}
+
 		/* If there's an RHF/RHE error or a bad header detected,
-		   handle the error and return */
+			handle the error and return */
 		if (OPX_RHF_CHECK_HEADER(rhf_rcvd, hdr, hfi1_type)) {
 			const uint32_t	   rhf_lsb = rhf_rcvd & 0xFFFFFFFF;
 			volatile uint64_t *rhe_ptr = opx_ep->rx->hdrq.rhe_base;
-			return fi_opx_hfi1_handle_poll_error(opx_ep, rhe_ptr, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq,
-							     hdrq_offset, rhf_rcvd, hdr, hfi1_type);
+			unsigned int	   ret_val = fi_opx_hfi1_handle_poll_error(
+				      opx_ep, rhe_ptr, rhf_ptr, &rhf_seq, &hdrq_head_local, p_last_egrbfr_index,
+				      opx_ep->rx->hdrq.head_register, opx_ep->rx->egrq.head_register, rhf_msb, rhf_lsb,
+				      rhf_seq, hdrq_offset, rhf_rcvd, hdr, hfi1_type);
+			if (ctx_sharing) {
+				opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq = rhf_seq;
+				opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head	    = hdrq_head_local;
+			} else {
+				opx_ep->rx->state.hdrq.rhf_seq = rhf_seq;
+				opx_ep->rx->state.hdrq.head    = hdrq_head_local;
+			}
+			return ret_val;
+		}
+
+		if (ctx_sharing) {
+			/*
+			 * If this packet is for another subctxt in context sharing group,
+			 * then forward the packet to corresponding process's software receive
+			 * header queue.
+			 */
+
+			if (subctxt_self != subctxt_dest) {
+				unsigned int ret_val = opx_forward_shared_context(
+					opx_ep, &rhf_seq, &hdrq_head_local, p_last_egrbfr_index, hdrq_offset, rhf_seq,
+					rhf_rcvd, hdr, subctxt_dest, local_hdrq_mask, hfi1_type);
+				opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq = rhf_seq;
+				opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head	    = hdrq_head_local;
+				return ret_val;
+			}
 		}
 
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
@@ -503,27 +698,65 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 			 * process "unreliable datagram" packets first - before all the
 			 * software reliability protocol checks.
 			 */
-			return fi_opx_hfi1_handle_ud_packet(opx_ep, hdr, rhf_seq, hdrq_offset, rhf_rcvd, slid, dlid,
-							    hfi1_type);
+			unsigned int ret_val = fi_opx_hfi1_handle_ud_packet(
+				opx_ep, &rhf_seq, &hdrq_head_local, opx_ep->rx->hdrq.head_register, hdr, rhf_seq,
+				hdrq_offset, rhf_rcvd, slid, dlid, hfi1_type);
+			if (ctx_sharing) {
+				opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq = rhf_seq;
+				opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head	    = hdrq_head_local;
+			} else {
+				opx_ep->rx->state.hdrq.rhf_seq = rhf_seq;
+				opx_ep->rx->state.hdrq.head    = hdrq_head_local;
+			}
+			return ret_val;
 		}
 
 		/*
 		 * check for software reliability events
 		 */
 		/* This error inject call will compile out in optimized builds */
-		unsigned rc = fi_opx_hfi1_error_inject(opx_ep, hdr, rhf_seq, hdrq_offset, rhf_rcvd);
+		unsigned rc = fi_opx_hfi1_error_inject(opx_ep, &rhf_seq, &hdrq_head_local, p_last_egrbfr_index,
+						       opx_ep->rx->hdrq.head_register, opx_ep->rx->egrq.head_register,
+						       hdr, rhf_seq, hdrq_offset, rhf_rcvd);
+
 		if (OFI_UNLIKELY(rc != -1)) {
+			if (ctx_sharing) {
+				opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq = rhf_seq;
+				opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head	    = hdrq_head_local;
+			} else {
+				opx_ep->rx->state.hdrq.rhf_seq = rhf_seq;
+				opx_ep->rx->state.hdrq.head    = hdrq_head_local;
+			}
 			return rc;
 		}
 
-		rc = fi_opx_hfi1_handle_reliability(opx_ep, opcode, hdr, rhf_seq, hdrq_offset, rhf_rcvd, slid,
-						    hfi1_type, ctx_sharing);
+		rc = fi_opx_hfi1_handle_reliability(opx_ep, &rhf_seq, &hdrq_head_local, p_last_egrbfr_index,
+						    opx_ep->rx->hdrq.head_register, opx_ep->rx->egrq.head_register,
+						    opx_ep->rx->egrq.base_addr, opcode, hdr, rhf_seq, hdrq_offset,
+						    rhf_rcvd, slid, hfi1_type, ctx_sharing);
+
 		if (OFI_UNLIKELY(rc != -1)) {
+			if (ctx_sharing) {
+				opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq = rhf_seq;
+				opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head	    = hdrq_head_local;
+			} else {
+				opx_ep->rx->state.hdrq.rhf_seq = rhf_seq;
+				opx_ep->rx->state.hdrq.head    = hdrq_head_local;
+			}
 			return rc;
 		}
 
-		fi_opx_hfi1_handle_packet(opx_ep, opcode, hdr, rhf_seq, hdrq_offset, lock_required, reliability,
-					  rhf_rcvd, hfi1_type, slid, ctx_sharing);
+		fi_opx_hfi1_handle_packet(opx_ep, &rhf_seq, &hdrq_head_local, p_last_egrbfr_index,
+					  opx_ep->rx->hdrq.head_register, opx_ep->rx->egrq.head_register,
+					  opx_ep->rx->egrq.base_addr, opcode, hdr, rhf_seq, hdrq_offset, lock_required,
+					  reliability, rhf_rcvd, hfi1_type, slid, true, ctx_sharing);
+		if (ctx_sharing) {
+			opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq = rhf_seq;
+			opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head	    = hdrq_head_local;
+		} else {
+			opx_ep->rx->state.hdrq.rhf_seq = rhf_seq;
+			opx_ep->rx->state.hdrq.head    = hdrq_head_local;
+		}
 		return 1; /* one packet was processed */
 	}
 	return 0;
@@ -546,13 +779,12 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 		const uint8_t opcode = hdr->bth.opcode;
 
 #ifndef NDEBUG
-		opx_lid_t dlid;
+		opx_lid_t dlid __attribute__((unused));
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			dlid = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.dlid);
 		} else {
-			dlid = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.dlid20 << 20 | hdr->lrh_16B.dlid);
+			dlid = (opx_lid_t) __le24_to_cpu((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid));
 		}
-
 		assert(dlid == opx_ep->rx->self.lid);
 #endif
 
@@ -565,7 +797,7 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 #ifndef OPX_DAOS
 		assert((hdr->bth.subctxt_rx & OPX_BTH_SUBCTXT_RX_MASK) == opx_ep->rx->self.hfi1_subctxt_rx);
 #else
-		uint32_t origin_reliability_rx;
+		uint32_t origin_reliability_subctxt_rx;
 
 		/* DAOS HFI Rank Support: */
 		if (opx_ep->daos_info.hfi_rank_enabled) {
@@ -588,7 +820,7 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 			 */
 
 			/* origin_reliability_rx is HFI rank instead of HFI rx */
-			origin_reliability_rx = packet->origin_rank;
+			origin_reliability_subctxt_rx = packet->origin_rank;
 
 			/* Settings used for possible response patcket(s) */
 			opx_ep->daos_info.rank	    = packet->origin_rank;
@@ -628,23 +860,7 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 		} else {
 			const uint8_t *const payload = (uint8_t *) (hdr + 1);
 
-			/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
-			uint16_t lrh_pktlen_le;
-			size_t	 total_bytes_to_copy;
-			size_t	 payload_bytes_to_copy;
-
-			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-				lrh_pktlen_le	    = ntohs(hdr->lrh_9B.pktlen);
-				total_bytes_to_copy = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
-				payload_bytes_to_copy =
-					total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B);
-			} else {
-				lrh_pktlen_le = hdr->lrh_16B.pktlen;
-				total_bytes_to_copy =
-					(lrh_pktlen_le - 1) * 8; /* do not copy the trailing tail/icrc QW*/
-				payload_bytes_to_copy =
-					total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B);
-			}
+			size_t payload_bytes_to_copy = opx_hfi1_packet_hdr_payload_bytes(hdr, hfi1_type);
 
 			if (FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)) {
 				fi_opx_ep_rx_process_header_tag(ep, hdr, payload, payload_bytes_to_copy, opcode,
@@ -683,7 +899,8 @@ void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
 
 		// Update the status/errcode of the work entry who was using this index
 		assert(hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]);
-		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->status  = entry->status;
+		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->status = entry->status;
+
 		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->errcode = entry->errcode;
 		OPX_COUNTERS_STORE_VAL(hfi->info.sdma.queued_entries[hfi->info.sdma.done_index]->end_time_ns,
 				       sdma_end_ns);
@@ -725,10 +942,10 @@ __OPX_FORCE_INLINE__
 bool opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
 {
 	uint64_t events = *(uint64_t *) (opx_ep->hfi->ctrl->base_info.events_bufbase);
-	/* In WFR, on a link down, driver/HW always enters a SPC freeze state. It always triggers a HFI1_EVENT_FROZEN.
-		Hence, HFI1_EVENT_LINKDOWN can be ignored
-	   In JKR, there is no freeze event because there are two ports. If one port is down, the other still functions.
-	    Hence, handle HFI1_EVENT_LINKDOWN. */
+	/* In WFR, on a link down, driver/HW always enters a SPC freeze state. It always triggers a
+		HFI1_EVENT_FROZEN. Hence, HFI1_EVENT_LINKDOWN can be ignored In JKR, there is no freeze event because
+		there are two ports. If one port is down, the other still functions. Hence, handle
+		HFI1_EVENT_LINKDOWN. */
 	if (events & HFI1_EVENT_FROZEN || (events & HFI1_EVENT_LINKDOWN && !(hfi1_type & OPX_HFI1_WFR))) {
 		/* reset context only if RHF queue is empty */
 		if (opx_is_rhf_empty(opx_ep, hdrq_mask, hfi1_type)) {
@@ -747,6 +964,151 @@ bool opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const
 	return false;
 }
 
+/* This function mirrors fi_opx_hfi1_poll_once() but instead will process packets from a subctxt's
+software rx queue instead of the actual HFI RHQ and eager buffers.*/
+__OPX_FORCE_INLINE__
+unsigned opx_process_soft_rx_q(struct fi_opx_ep *opx_ep, uint8_t subctxt, const int lock_required,
+			       const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask,
+			       const enum opx_hfi1_type hfi1_type)
+{
+	const uint64_t local_hdrq_mask =
+		(hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME) ? opx_ep->hfi->info.rxe.hdrq.rx_poll_mask : hdrq_mask;
+	assert(local_hdrq_mask % FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS == 0);
+
+	const uint64_t		 hdrq_offset = opx_ep->rx->shd_ctx.head & local_hdrq_mask;
+	const volatile uint32_t *rhf_ptr     = opx_ep->rx->shd_ctx.rhf_base + hdrq_offset;
+	const uint64_t		 rhf_rcvd    = *((volatile uint64_t *) rhf_ptr);
+	const uint64_t		 rhf_seq     = opx_ep->rx->shd_ctx.rhf_seq;
+
+	if (OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type)) {
+		const uint32_t rhf_msb	       = rhf_rcvd >> 32;
+		const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
+
+		uint32_t *pkt;
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			assert(hdrq_offset_dws); /* need padding before this header */
+			pkt = (uint32_t *) rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS + 2 /* rhf field size in dw */
+			      - 2 /* sizeof(uint64_t) in dw, offset back to align
+				      for the 9B padding in the header union */
+			      + hdrq_offset_dws;
+		} else {
+			assert(((union opx_jkr_rhf) rhf_rcvd).L2Type == 0x2);
+			pkt = (uint32_t *) rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS + 2 /* rhf field size in dw */
+			      + hdrq_offset_dws;
+			/* Assert we got full expected kdeth split header.
+			 * In the future, we may handle this so this is
+			 *  not part of OPX_RHF_CHECK_HEADER */
+			assert(!(((union opx_jkr_rhf) rhf_rcvd).KHdrLenErr));
+		}
+
+		/* Header errors were already checked in fi_opx_hfi1_poll_once(), so no need to do that here.
+		fi_opx_hfi1_poll_once() will forward packets to software RX queues if the packet is not for the endpoint
+		procesing the HFI RHQ.*/
+
+		opx_lid_t			       slid, dlid;
+		const union opx_hfi1_packet_hdr *const hdr    = (union opx_hfi1_packet_hdr *) pkt;
+		const uint8_t			       opcode = hdr->bth.opcode;
+
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			slid = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
+			dlid = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.dlid);
+		} else {
+			slid = (opx_lid_t) __le24_to_cpu((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid));
+			dlid = (opx_lid_t) __le24_to_cpu(((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid)));
+		}
+
+		assert(opx_ep->hfi->lid == dlid);
+
+		if (OFI_UNLIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_UD)) {
+			assert(reliability == OFI_RELIABILITY_KIND_ONLOAD);
+			/*
+			 * process "unreliable datagram" packets first - before all the
+			 * software reliability protocol checks.
+			 */
+			return fi_opx_hfi1_handle_ud_packet(opx_ep, &opx_ep->rx->shd_ctx.rhf_seq,
+							    &opx_ep->rx->shd_ctx.head, opx_ep->rx->shd_ctx.rhq_head_reg,
+							    hdr, rhf_seq, hdrq_offset, rhf_rcvd, slid, dlid, hfi1_type);
+		}
+
+		/*
+		 * check for software reliability events
+		 */
+		/* This error inject call will compile out in optimized builds */
+		unsigned rc = fi_opx_hfi1_error_inject(
+			opx_ep, &opx_ep->rx->shd_ctx.rhf_seq, &opx_ep->rx->shd_ctx.head,
+			&opx_ep->rx->shd_ctx.last_egrbfr_index, opx_ep->rx->shd_ctx.rhq_head_reg,
+			opx_ep->rx->shd_ctx.eager_head_reg, hdr, rhf_seq, hdrq_offset, rhf_rcvd);
+		if (OFI_UNLIKELY(rc != -1)) {
+			return rc;
+		}
+
+		rc = fi_opx_hfi1_handle_reliability(
+			opx_ep, &opx_ep->rx->shd_ctx.rhf_seq, &opx_ep->rx->shd_ctx.head,
+			&opx_ep->rx->shd_ctx.last_egrbfr_index, opx_ep->rx->shd_ctx.rhq_head_reg,
+			opx_ep->rx->shd_ctx.eager_head_reg, opx_ep->rx->shd_ctx.eager_buf_base, opcode, hdr, rhf_seq,
+			hdrq_offset, rhf_rcvd, slid, hfi1_type, OPX_CTX_SHARING_ON);
+		if (OFI_UNLIKELY(rc != -1)) {
+			return rc;
+		}
+
+		fi_opx_hfi1_handle_packet(opx_ep, &opx_ep->rx->shd_ctx.rhf_seq, &opx_ep->rx->shd_ctx.head,
+					  &opx_ep->rx->shd_ctx.last_egrbfr_index, opx_ep->rx->shd_ctx.rhq_head_reg,
+					  opx_ep->rx->shd_ctx.eager_head_reg, opx_ep->rx->shd_ctx.eager_buf_base,
+					  opcode, hdr, rhf_seq, hdrq_offset, lock_required, reliability, rhf_rcvd,
+					  hfi1_type, slid, false, OPX_CTX_SHARING_ON);
+
+		return 1; // One packet was processed
+	}
+
+	return 0; /* zero packets were processed */
+}
+
+__OPX_FORCE_INLINE__
+void opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask,
+		       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+{
+	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+
+	static const unsigned hfi1_poll_max   = 256;
+	unsigned	      hfi1_poll_count = 0;
+	unsigned	      packets	      = 0;
+
+	if (ctx_sharing) {
+		const uint8_t subctxt_self = opx_ep->rx->shd_ctx.subctxt;
+
+		/* Process any packets that came into this subctxt's software rx q.*/
+		do {
+			packets = opx_process_soft_rx_q(opx_ep, subctxt_self, FI_OPX_LOCK_NOT_REQUIRED, reliability,
+							hdrq_mask, hfi1_type);
+		} while (packets > 0);
+
+		/* Attempt to gain access to the RHQ hardware context lock. Only one endpoint in a
+		context sharing group may process the hardware RHQ at a time.*/
+		if (opx_shared_rx_context_try_lock(opx_ep->rx->shd_ctx.hwcontext_ctrl) == 0) {
+			/* Process software rx queue again after acquiring the hardware RHQ lock in
+			case any new packets arrived in between the time of last process_soft_rx_q call and
+			attempting to acquire the lock. This is to reduce processing packets out of
+			order and doing a memory copy for reliability.*/
+			do {
+				packets = opx_process_soft_rx_q(opx_ep, subctxt_self, FI_OPX_LOCK_NOT_REQUIRED,
+								reliability, hdrq_mask, hfi1_type);
+			} while (packets > 0);
+
+			// Now process the actual hardware RHQ
+			do {
+				packets = fi_opx_hfi1_poll_once(ep, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask,
+								hfi1_type, OPX_CTX_SHARING_ON);
+			} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
+			opx_shared_rx_context_unlock(opx_ep->rx->shd_ctx.hwcontext_ctrl);
+		}
+	} else {
+		do {
+			packets = fi_opx_hfi1_poll_once(ep, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, hfi1_type,
+							ctx_sharing);
+		} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
+	}
+}
+
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uint64_t caps,
 			   const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask,
@@ -757,19 +1119,12 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
-	static const unsigned hfi1_poll_max   = 256;
-	unsigned	      hfi1_poll_count = 0;
-	unsigned	      packets	      = 0;
-
 	if ((caps & FI_LOCAL_COMM) || (caps == 0)) {
-		fi_opx_shm_poll_many(ep, 0, hfi1_type);
+		fi_opx_shm_poll_many(ep, FI_OPX_LOCK_NOT_REQUIRED, hfi1_type);
 	}
 
 	if ((caps & FI_REMOTE_COMM) || (caps == 0)) {
-		do {
-			packets = fi_opx_hfi1_poll_once(ep, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, hfi1_type,
-							ctx_sharing);
-		} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
+		opx_hfi1_poll_hfi(ep, reliability, hdrq_mask, hfi1_type, ctx_sharing);
 
 		struct fi_opx_reliability_service *service   = opx_ep->reli_service;
 		union fi_opx_timer_state	  *timer     = &service->timer;

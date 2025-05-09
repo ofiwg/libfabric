@@ -52,13 +52,27 @@
 
 #define FI_OPX_ADDR_SEP_RX_MAX (4)
 
-#ifndef FI_OPX_HFI1_PACKET_MTU
+/* OPX runtime default packet size. Runtime checked against driver MTU */
+#ifndef OPX_HFI1_DEFAULT_PKT_SIZE
 #ifndef OPX_JKR_SUPPORT
-#define FI_OPX_HFI1_PACKET_MTU (8192)
+#define OPX_HFI1_DEFAULT_PKT_SIZE (8192)
 #else
-#define FI_OPX_HFI1_PACKET_MTU (10240)
+#define OPX_HFI1_DEFAULT_PKT_SIZE (10240)
 #endif
 #endif
+
+/* OPX absolute max for storage allocation/structs. Driver MTU can vary. */
+#define OPX_HFI1_MAX_PKT_SIZE (10240)
+
+#define OPX_HFI1_N_PKT_SIZES 4 /* num of valid packet sizes */
+
+static const uint16_t opx_valid_pkt_sizes[OPX_HFI1_N_PKT_SIZES] = {2048, 4096, 8192, 10240};
+
+static_assert(((OPX_HFI1_DEFAULT_PKT_SIZE == 2048) || (OPX_HFI1_DEFAULT_PKT_SIZE == 4096) ||
+	       (OPX_HFI1_DEFAULT_PKT_SIZE == 8192) || (OPX_HFI1_DEFAULT_PKT_SIZE == 10240)),
+	      "OPX_HFI1_DEFAULT_PKT_SIZE must be one of 2048, 4096, 8192, or 10240");
+
+#define OPX_HFI1_PKT_SIZE (fi_opx_global.pkt_size) /* Runtime checked against driver MTU. */
 
 #define OPX_HFI1_TID_PAGESIZE (PAGE_SIZE) /* assume 4K, no hugepages*/
 
@@ -252,18 +266,20 @@ static inline const char *opx_hfi1_ud_opcode_to_string(uint8_t opcode)
 	return FI_OPX_HFI_UD_OPCODE_STRINGS[FI_OPX_HFI_UD_OPCODE_FIRST_INVALID];
 }
 
-#define FI_OPX_HFI_DPUT_OPCODE_RZV		    (0x00)
-#define FI_OPX_HFI_DPUT_OPCODE_PUT		    (0x01)
-#define FI_OPX_HFI_DPUT_OPCODE_GET		    (0x02)
-#define FI_OPX_HFI_DPUT_OPCODE_FENCE		    (0x03)
-#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH	    (0x04)
-#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH (0x05)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG	    (0x06)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC	    (0x07)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_TID		    (0x08)
-#define FI_OPX_HFI_DPUT_OPCODE_PUT_CQ		    (0x09)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV		    (0x0)
+#define FI_OPX_HFI_DPUT_OPCODE_PUT		    (0x1)
+#define FI_OPX_HFI_DPUT_OPCODE_GET		    (0x2)
+#define FI_OPX_HFI_DPUT_OPCODE_FENCE		    (0x3)
+#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH	    (0x4)
+#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH (0x5)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG	    (0x6)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC	    (0x7)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_TID		    (0x8)
+#define FI_OPX_HFI_DPUT_OPCODE_PUT_CQ		    (0x9)
 /* Add new DPUT Opcodes here, and increment LAST_INVALID accordingly */
-#define FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID (0x0A)
+#define FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID (0xA)
+
+#define FI_OPX_HFI_DPUT_GET_OPCODE(_opcode) ((_opcode & 0x00F0) >> 4)
 
 static const char *FI_OPX_HFI_DPUT_OPCODE_STRINGS[] = {
 	[FI_OPX_HFI_DPUT_OPCODE_RZV]		      = "FI_OPX_HFI_DPUT_OPCODE_RZV",
@@ -332,13 +348,14 @@ struct fi_opx_hfi1_stl_packet_hdr_9B {
 		uint16_t w[6];
 		uint8_t	 hw[12];
 		struct {
-			uint8_t	 opcode; /* bth.hw[0] */
-			uint8_t	 bth_1;	 /* bth.hw[1] */
-			uint16_t pkey;	 /* bth.w[1]  - big-endian! */
-			uint8_t	 ecn;	 /* bth.hw[4] (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
-			uint8_t	 qp;	 /* bth.hw[5] */
-			uint8_t	 unused; /* bth.hw[6] -----> inject::message_length, send::xfer_bytes_tail */
-			uint8_t	 rx;	 /* bth.hw[7] */
+			uint8_t	 opcode;  /* bth.hw[0] */
+			uint8_t	 bth_1;	  /* bth.hw[1] */
+			uint16_t pkey;	  /* bth.w[1]  - big-endian! */
+			uint8_t	 ecn;	  /* bth.hw[4] (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
+			uint8_t	 qp;	  /* bth.hw[5] */
+			uint8_t	 subctxt; /* bth.hw[6] -----> subctxt: higher 3 bits, inject::message_length,
+					     send::xfer_bytes_tail */
+			uint8_t rx;	  /* bth.hw[7] */
 
 			/* == quadword 2 == */
 			uint32_t psn; /* bth.dw[2] ..... the 'psn' field is unused for 'eager' packets ----->
@@ -409,13 +426,14 @@ struct fi_opx_hfi1_stl_packet_hdr_16B {
 		uint16_t w[6];
 		uint8_t	 hw[12];
 		struct {
-			uint8_t	 opcode; /* bth.hw[0] */
-			uint8_t	 bth_1;	 /* bth.hw[1] */
-			uint16_t pkey;	 /* bth.w[1]  - big-endian! */
-			uint8_t	 ecn;	 /* bth.hw[4] (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
-			uint8_t	 qp;	 /* bth.hw[5] */
-			uint8_t	 unused; /* bth.hw[6] -----> inject::message_length, send::xfer_bytes_tail */
-			uint8_t	 rx;	 /* bth.hw[7] */
+			uint8_t	 opcode;  /* bth.hw[0] */
+			uint8_t	 bth_1;	  /* bth.hw[1] */
+			uint16_t pkey;	  /* bth.w[1]  - big-endian! */
+			uint8_t	 ecn;	  /* bth.hw[4] (FECN, BECN, (CSPEC and RC2 for JKR) and reserved) */
+			uint8_t	 qp;	  /* bth.hw[5] */
+			uint8_t	 subctxt; /* bth.hw[6] -----> subctxt: higher 3 bits, inject::message_length,
+					     send::xfer_bytes_tail */
+			uint8_t rx;	  /* bth.hw[7] */
 
 			/* == quadword 3 == */
 			uint32_t psn; /* bth.dw[2] ..... the 'psn' field is unused for 'eager' packets ----->
@@ -566,7 +584,7 @@ QW[4]   KDETH      KDETH            |       |
 QW[5]   USER/SW    USER/SW          |       |
 QW[6]   USER/SW    USER/SW          |       |
 QW[7]   USER/SW    USER/SW          |       |
-				   RHF     RHF
+		RHF        RHF
 
   (*) HDRQ entries are 128 bytes (16 quadwords) and include HEADER + RHF
 
@@ -777,18 +795,14 @@ union opx_hfi1_packet_hdr {
 		uint8_t	 reserved_2;
 
 		/* QW[3] BTH/KDETH (offset_ver_tid) */
-		uint32_t reserved3 : 24;
-		uint32_t payload_bytes_total_msb : 8; /* Total length of payload across all mp-eager packets higher
-							 byte*/
-		uint16_t reserved1;
-		uint8_t	 payload_bytes_total_lsb; /* Total length of payload across all mp-eager packets lower byte*/
-		uint8_t	 reserved4;
+		uint64_t reserved_3;
 
 		/* QW[4] KDETH */
 		uint64_t reserved_4;
 
 		/* QW[5-6] SW */
-		uint64_t xfer_tail[2];
+		uint16_t payload_bytes_total;
+		uint16_t unused[3];
 
 		uint64_t reserved_n[8]; /* QW[7-14] SW */
 
@@ -806,8 +820,11 @@ union opx_hfi1_packet_hdr {
 		/* QW[3-4] BTH/KDETH */
 		uint64_t reserved_3[2];
 
-		/* QW[5-6] SW */
-		uint64_t xfer_tail[2];
+		/* QW[5] SW */
+		uint64_t xfer_tail;
+
+		/* QW[6] SW */
+		uint64_t reserved_4;
 
 		/* QW[7] SW last 9B quadword */
 		uint32_t payload_offset;
@@ -942,7 +959,8 @@ union opx_hfi1_packet_hdr {
 		uint64_t reserved_3;
 
 		/* QW[4] KDETH/SW */
-		uint64_t reserved_4;
+		uint32_t reserved_4;
+		uint8_t	 unused1[4];
 
 		/* QW[5,6,7] KDETH/SW */
 		union {
@@ -1017,7 +1035,7 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[2] BTH (unused)*/
 		uint16_t reserved_1[3];
-		uint8_t	 opcode;
+		uint8_t	 opcode; // lower bits reserved for subctxt
 		uint8_t	 reserved_2;
 
 		uint64_t reserved_n[12]; /* QW[3-14] SW */
@@ -1071,8 +1089,7 @@ static inline size_t fi_opx_hfi1_packet_hdr_message_length(const union opx_hfi1_
 	case FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST:
 	case FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ:
-		message_length = ((size_t) hdr->mp_eager_first.payload_bytes_total_msb << 8) |
-				 hdr->mp_eager_first.payload_bytes_total_lsb;
+		message_length = (size_t) hdr->mp_eager_first.payload_bytes_total;
 		break;
 	case FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS:
@@ -1243,8 +1260,8 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 		     ln, hdr->match.ofi_tag);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u\n", pid, fn, ln);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .inject.message_length     0x%04x \n", pid, fn,
-		     ln, hdr->inject.subctxt_message_length);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .inject.subctxt_message_length     0x%04x \n",
+		     pid, fn, ln, hdr->inject.subctxt_message_length);
 
 	switch (hdr->bth.opcode) {
 	case FI_OPX_HFI_BTH_OPCODE_UD:
@@ -1256,7 +1273,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 	case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			     "(%d) %s():%u .inject.message_length ...     0x%02x \n", pid, fn, ln,
+			     "(%d) %s():%u .inject.subctxt_message_length ...     0x%02x \n", pid, fn, ln,
 			     hdr->inject.subctxt_message_length);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "(%d) %s():%u .inject.app_data_u64[0] ..     0x%016lx \n", pid, fn, ln,
@@ -1270,7 +1287,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 	case FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ:
 	case FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ:
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			     "(%d) %s():%u .send.xfer_bytes_tail ....     0x%02x \n", pid, fn, ln,
+			     "(%d) %s():%u .send.subctxt_xfer_bytes_tail ....     0x%02x \n", pid, fn, ln,
 			     hdr->send.subctxt_xfer_bytes_tail);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "(%d) %s():%u .send.payload_qws_total ..     0x%04x \n", pid, fn, ln,
@@ -1410,12 +1427,12 @@ struct fi_opx_hmem_iov {
 	enum fi_hmem_iface iface;
 } __attribute__((__packed__));
 
-#define FI_OPX_MAX_HMEM_IOV	    ((FI_OPX_HFI1_PACKET_MTU - sizeof(uintptr_t)) / sizeof(struct fi_opx_hmem_iov))
-#define FI_OPX_RZV_NONCONTIG_UNUSED (FI_OPX_HFI1_PACKET_MTU - 8 - (((FI_OPX_HFI1_PACKET_MTU - 8) / 28) * 28))
-#define FI_OPX_MAX_DPUT_IOV	    ((FI_OPX_HFI1_PACKET_MTU / sizeof(union opx_hfi1_dput_iov) - 4) + 3)
+#define FI_OPX_MAX_HMEM_IOV	    ((OPX_HFI1_MAX_PKT_SIZE - sizeof(uintptr_t)) / sizeof(struct fi_opx_hmem_iov))
+#define FI_OPX_RZV_NONCONTIG_UNUSED (OPX_HFI1_MAX_PKT_SIZE - 8 - (((OPX_HFI1_MAX_PKT_SIZE - 8) / 28) * 28))
+#define FI_OPX_MAX_DPUT_IOV	    ((OPX_HFI1_MAX_PKT_SIZE / sizeof(union opx_hfi1_dput_iov) - 4) + 3)
 
 #define FI_OPX_MAX_DPUT_TIDPAIRS \
-	((FI_OPX_HFI1_PACKET_MTU - sizeof(union opx_hfi1_dput_iov) - (4 * sizeof(uint32_t))) / sizeof(uint32_t))
+	((OPX_HFI1_MAX_PKT_SIZE - sizeof(union opx_hfi1_dput_iov) - (4 * sizeof(uint32_t))) / sizeof(uint32_t))
 
 #define OPX_IMMEDIATE_BYTE_COUNT_SHIFT (5)
 #define OPX_IMMEDIATE_BYTE_COUNT_MASK  (0xE0)
@@ -1478,13 +1495,13 @@ struct opx_payload_rzv_contig {
 
 	/* ==== CACHE LINE 2-127 ==== */
 
-	union cacheline immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
+	union cacheline immediate_block[OPX_HFI1_MAX_PKT_SIZE / sizeof(union cacheline) - 2];
 };
 
 /* 9B and common payload structure */
 union fi_opx_hfi1_packet_payload {
-	uint8_t	 byte[FI_OPX_HFI1_PACKET_MTU];
-	uint64_t qw[FI_OPX_HFI1_PACKET_MTU >> 3];
+	uint8_t	 byte[OPX_HFI1_MAX_PKT_SIZE];
+	uint64_t qw[OPX_HFI1_MAX_PKT_SIZE >> 3];
 	union {
 		struct {
 			uint64_t		      contig_9B_padding;
@@ -1498,7 +1515,7 @@ union fi_opx_hfi1_packet_payload {
 			uintptr_t	       origin_byte_counter_vaddr;
 			struct fi_opx_hmem_iov iov[2];
 
-			/* ==== CACHE LINE 1-127 (for 8k mtu) ==== */
+			/* ==== CACHE LINE 1-127 (for max pkt size) ==== */
 			struct fi_opx_hmem_iov iov_ext[FI_OPX_MAX_HMEM_IOV - 2];
 #if FI_OPX_RZV_NONCONTIG_UNUSED
 			uint8_t unused[FI_OPX_RZV_NONCONTIG_UNUSED];
@@ -1529,8 +1546,8 @@ union fi_opx_hfi1_packet_payload {
 	} tid_cts;
 } __attribute__((__aligned__(32)));
 
-static_assert(sizeof(union fi_opx_hfi1_packet_payload) <= FI_OPX_HFI1_PACKET_MTU,
-	      "sizeof(union fi_opx_hfi1_packet_payload) must be <= FI_OPX_HFI1_PACKET_MTU!");
+static_assert(sizeof(union fi_opx_hfi1_packet_payload) <= OPX_HFI1_MAX_PKT_SIZE,
+	      "sizeof(union fi_opx_hfi1_packet_payload) must be <= OPX_HFI1_MAX_PKT_SIZE!");
 static_assert(
 	offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_byte) == FI_OPX_CACHE_LINE_SIZE,
 	"struct fi_opx_hfi1_packet_payload.rendezvous.contiguous.immediate_byte should be aligned on cacheline 1!");
@@ -1542,20 +1559,20 @@ static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguou
 static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.iov_ext) == FI_OPX_CACHE_LINE_SIZE,
 	      "struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.iov_ext should be aligned on cacheline 1!");
 static_assert(
-	FI_OPX_HFI1_PACKET_MTU - sizeof(uintptr_t) - ((FI_OPX_MAX_HMEM_IOV) * sizeof(struct fi_opx_hmem_iov)) ==
+	OPX_HFI1_MAX_PKT_SIZE - sizeof(uintptr_t) - ((FI_OPX_MAX_HMEM_IOV) * sizeof(struct fi_opx_hmem_iov)) ==
 		FI_OPX_RZV_NONCONTIG_UNUSED,
 	"FI_OPX_RZV_NONCONTIG_UNUSED should be based on struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous!");
 #if FI_OPX_RZV_NONCONTIG_UNUSED
 static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.unused) +
 			      FI_OPX_RZV_NONCONTIG_UNUSED ==
-		      FI_OPX_HFI1_PACKET_MTU,
+		      OPX_HFI1_MAX_PKT_SIZE,
 	      "struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.unused should end at packet MTU!");
 #endif
 static_assert(
 	(offsetof(union fi_opx_hfi1_packet_payload, tid_cts.tidpairs) +
-	 sizeof(((union fi_opx_hfi1_packet_payload *) 0)->tid_cts.tidpairs)) == FI_OPX_HFI1_PACKET_MTU,
+	 sizeof(((union fi_opx_hfi1_packet_payload *) 0)->tid_cts.tidpairs)) == OPX_HFI1_MAX_PKT_SIZE,
 	"offsetof(fi_opx_hfi1_packet_payload.tid_cts.tidpairs) + sizeof(...tid_cts.tidpairs) should equal packet MTU! "
-	"If you added/removed fields in struct tid_cts, you need to adjust FI_OPX_MAX_DPUT_TIDPAIRS!");
+	"If you added/removed fields in struct tid_cts, you need to adjust OPX_HFI1_MAX_PKT_SIZE!");
 
 struct fi_opx_hfi1_ue_packet_slist;
 struct fi_opx_hfi1_ue_packet {
@@ -1749,8 +1766,8 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT:
 		case FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ:
 		case FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ:
-			fprintf(stderr, "(%d) %s():%u .inject.message_length .............. 0x%02x\n",
-				pid, fn, ln, hdr->inject.message_length);
+			fprintf(stderr, "(%d) %s():%u .inject.subctxt_message_length .............. 0x%02x\n",
+				pid, fn, ln, hdr->inject.subctxt_message_length);
 			fprintf(stderr, "(%d) %s():%u .inject.app_data_u64[0]               0x%016lx\n",
 				pid, fn, ln, hdr->inject.app_data_u64[0]);
 			fprintf(stderr, "(%d) %s():%u .inject.app_data_u64[1] ............. 0x%016lx\n",
