@@ -338,7 +338,9 @@ static int efa_domain_close(fid_t fid)
 	efa_domain = container_of(fid, struct efa_domain,
 				  util_domain.domain_fid.fid);
 
+	ofi_mutex_lock(&g_efa_domain_list_lock);
 	dlist_remove(&efa_domain->list_entry);
+	ofi_mutex_unlock(&g_efa_domain_list_lock);
 
 	if (efa_domain->cache) {
 		ofi_mr_cache_cleanup(efa_domain->cache);
