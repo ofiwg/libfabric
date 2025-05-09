@@ -250,15 +250,6 @@ pipeline {
             }
           }
         }
-        stage ('daos') {
-          agent { node { label 'daos_head' } }
-          options { skipDefaultCheckout() }
-          steps {
-            script {
-              initialize()
-            }
-          }
-        }
       }
     }
     stage ('opt_out') {
@@ -267,43 +258,6 @@ pipeline {
           git_diffs()
           RELEASE = release()
           DO_RUN = skip() && !weekly ? false : true
-        }
-      }
-    }
-    stage('auth_check') {
-      when { equals expected: true, actual: DO_RUN }
-      steps {
-        script {
-          sh """source ${CI_LOCATION}/venv/bin/activate;\
-                python ${CI_LOCATION}/authorize.py \
-                --author=${env.CHANGE_AUTHOR}
-          """
-        }
-      }
-    }
-    stage ('health_check') {
-      when { equals expected: true, actual: DO_RUN }
-      steps {
-        script {
-          dir (CI_LOCATION) {
-            sh "./temperature.sh"
-          }
-        }
-      }
-    }
-    stage ('build_daos') {
-      agent {
-        node {
-          label 'daos_head'
-          customWorkspace CUSTOM_WORKSPACE
-        }
-      }
-      options { skipDefaultCheckout() }
-      steps {
-        script {
-          dir (CI_LOCATION) {
-            build_ci("pr_build_daos.json")
-          }
         }
       }
     }
@@ -335,52 +289,13 @@ pipeline {
             }
           }
         }
-        stage('daos_tcp') {
-          agent { node { label 'daos_tcp' } }
-          options { skipDefaultCheckout() }
-          steps {
-            script {
-              dir (RUN_LOCATION) {
-                sh """python3.9 runtests.py \
-                  --prov='tcp' \
-                  --util='rxm' \
-                  --test=daos \
-                  --build_hw=daos \
-                  --log_file=${env.LOG_DIR}/daos_tcp-rxm_reg
-                """
-              }
-            }
-          }
-        }
-        stage('daos_verbs') {
-          agent { node { label 'daos_verbs' } }
-          options { skipDefaultCheckout() }
-          steps {
-            script {
-              dir (RUN_LOCATION) {
-                sh """python3.9 runtests.py \
-                  --prov='verbs' \
-                  --util='rxm' \
-                  --test=daos \
-                  --build_hw=daos \
-                  --log_file=${env.LOG_DIR}/daos_verbs-rxm_reg
-                """
-              }
-            }
-          }
-        }
       }
     }
     stage ('Summary') {
       when { equals expected: true, actual: DO_RUN }
       steps {
         script {
-          gather_logs("${env.DAOS_ADDR}", "${env.DAOS_KEY}", "${env.LOG_DIR}",
-                      "${env.LOG_DIR}")
-
           CI_summarize(verbose=false)
-          summarize("all", verbose=false, release=RELEASE,
-                    send_mail=env.WEEKLY.toBoolean())
         }
       }
     }
@@ -392,13 +307,7 @@ pipeline {
         if (DO_RUN) {
           CI_summarize(verbose=true)
           CI_summarize()
-          summarize("all", verbose=true)
-          summarize("all")
         }
-      }
-      node ('daos_head') {
-        dir("${env.WORKSPACE}") { deleteDir() }
-        dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
       node ('level-zero') {
         dir("${env.WORKSPACE}") { deleteDir() }
