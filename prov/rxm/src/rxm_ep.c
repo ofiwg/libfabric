@@ -1772,6 +1772,9 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (rxm_ep->rxm_info->caps & FI_ATOMIC)
 		(*ep_fid)->atomic = &rxm_ops_atomic;
 
+	if (rxm_ep->rxm_info->caps & FI_RPC)
+		(*ep_fid)->rpc = &rxm_rpc_ops;
+
 	dlist_init(&rxm_ep->loopback_list);
 
 	return 0;
