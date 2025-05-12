@@ -1364,6 +1364,11 @@ ssize_t util_srx_generic_trecv(struct fid_ep *ep_fid, const struct iovec *iov,
 			       void **desc, size_t iov_count, fi_addr_t addr,
 			       void *context, uint64_t tag, uint64_t ignore,
 			       uint64_t flags);
+ssize_t util_srx_generic_trecv_no_lock(
+			       struct fid_ep *ep_fid, const struct iovec *iov,
+			       void **desc, size_t iov_count, fi_addr_t addr,
+			       void *context, uint64_t tag, uint64_t ignore,
+			       uint64_t flags);
 
 static inline void ofi_cq_err_memcpy(uint32_t api_version,
 				     struct fi_cq_err_entry *user_buf,
