@@ -13,7 +13,17 @@ fi_efa \- The Amazon Elastic Fabric Adapter (EFA) Provider
 
 The EFA provider supports the Elastic Fabric Adapter (EFA) device on
 Amazon EC2.  EFA provides reliable and unreliable datagram send/receive
-with direct hardware access from userspace (OS bypass).
+with direct hardware access from userspace (OS bypass). For reliable
+datagram (RDM) EP type, it supports two fabric names: `efa` and `efa-direct`.
+The `efa` fabric implements a set of
+[wire protocols](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md)
+to support more capabilities and features beyond the EFA device capabilities.
+The `efa-direct` fabric, on the contrary, offloads all libfabric data plane calls to
+the device directly without wire protocols. Compared to the `efa` fabric, the `efa-direct`
+fabric supports fewer capabilities and has more mode requirements for applications.
+But it provides a fast path to hand off application requests to the device.
+More details and difference between the two fabrics will be presented below.
+
 
 # SUPPORTED FEATURES
 
@@ -23,16 +33,23 @@ The following features are supported:
 : The provider supports endpoint type *FI_EP_DGRAM*, and *FI_EP_RDM* on a new
   Scalable (unordered) Reliable Datagram protocol (SRD). SRD provides support
   for reliable datagrams and more complete error handling than typically seen
-  with other Reliable Datagram (RD) implementations. The EFA provider provides
-  segmentation, reassembly of out-of-order packets to provide send-after-send
-  ordering guarantees to applications via its *FI_EP_RDM* endpoint.
+  with other Reliable Datagram (RD) implementations.
 
 *RDM Endpoint capabilities*
-: The following data transfer interfaces are supported via the *FI_EP_RDM*
-  endpoint: *FI_MSG*, *FI_TAGGED*, and *FI_RMA*. *FI_SEND*, *FI_RECV*,
-  *FI_DIRECTED_RECV*, *FI_MULTI_RECV*, and *FI_SOURCE* capabilities are supported.
-  The endpoint provides send-after-send guarantees for data operations. The
-  *FI_EP_RDM* endpoint does not have a maximum message size.
+: 
+  For the `efa` fabric, the following data transfer interfaces are supported:
+  *FI_MSG*, *FI_TAGGED*, *FI_SEND*, *FI_RECV*,  *FI_RMA*, *FI_WRITE*, *FI_READ*,
+  *FI_ATOMIC*, *FI_DIRECTED_RECV*, *FI_MULTI_RECV*, and *FI_SOURCE*.
+  It provides SAS guarantees for data operations, and
+  does not have a maximum message size (for all operations).
+  For the `efa-direct` fabric, it supports *FI_MSG*, *FI_SEND*, *FI_RECV*, *FI_RMA*,
+  *FI_WRITE*, *FI_READ*, and *FI_SOURCE*. As mentioned earlier, it doesn't provide
+  SAS guarantees, and has different maximum message sizes for different operations.
+  For MSG operations, the maximum message size is the MTU size of the efa device
+  (approximately 8KiB). For RMA operations, the maximum message size is the maximum
+  RDMA size of the EFA device. The exact values of these sizes can be queried by the
+  `fi_getopt` API with option names `FI_OPT_MAX_MSG_SIZE` and `FI_OPT_MAX_RMA_SIZE`
+
 
 *DGRAM Endpoint capabilities*
 : The DGRAM endpoint only supports *FI_MSG* capability with a maximum
@@ -46,19 +63,20 @@ The following features are supported:
 
 *Completion events*
 : The provider supports *FI_CQ_FORMAT_CONTEXT*, *FI_CQ_FORMAT_MSG*, and
-  *FI_CQ_FORMAT_DATA*. *FI_CQ_FORMAT_TAGGED* is supported on the RDM
-  endpoint. Wait objects are not currently supported.
+  *FI_CQ_FORMAT_DATA*. *FI_CQ_FORMAT_TAGGED* is supported on the `efa` fabric
+  of RDM endpoint. Wait objects are not currently supported.
 
 *Modes*
 : The provider requires the use of *FI_MSG_PREFIX* when running over
-  the DGRAM endpoint, and requires *FI_MR_LOCAL* for all memory
-  registrations on the DGRAM endpoint.
+  the DGRAM endpoint. And it requires the use of *FI_CONTEXT2* mode
+  for DGRAM endpoint and the `efa-direct` fabric of RDM endpoint.
+  The `efa` fabric of RDM endpoint doesn't have these requirements.
 
 *Memory registration modes*
-: The RDM endpoint does not require memory registration for send and receive
+: The `efa` fabric of RDM endpoint does not require memory registration for send and receive
   operations, i.e. it does not require *FI_MR_LOCAL*. Applications may specify
   *FI_MR_LOCAL* in the MR mode flags in order to use descriptors provided by the
-  application. The *FI_EP_DGRAM* endpoint only supports *FI_MR_LOCAL*.
+  application. The `efa-direct` fabric of *FI_EP_RDM* endpint and the *FI_EP_DGRAM* endpoint only supports *FI_MR_LOCAL*.
 
 *Progress*
 : RDM and DGRAM endpoints support *FI_PROGRESS_MANUAL*.
@@ -69,31 +87,32 @@ The following features are supported:
   of the EFA provider by adding proper support for *FI_PROGRESS_AUTO*.
 
 *Threading*
-: The RDM endpoint supports *FI_THREAD_SAFE*, the DGRAM endpoint supports
-  *FI_THREAD_DOMAIN*, i.e. the provider is not thread safe when using the DGRAM
-  endpoint.
+: Both RDM and DGRAM endpoints supports *FI_THREAD_SAFE*.
 
 # LIMITATIONS
 
-The DGRAM endpoint does not support *FI_ATOMIC* interfaces. For RMA operations,
-completion events for RMA targets (*FI_RMA_EVENT*) is not supported. The DGRAM
-endpoint does not fully protect against resource overruns, so resource
-management is disabled for this endpoint (*FI_RM_DISABLED*).
+## Completion events
+- Synchronous CQ read is not supported.
+- Wait objects are not currently supported.
 
-No support for selective completions.
+## RMA operations
+- Completion events for RMA targets (*FI_RMA_EVENT*) is not supported.
+- For the `efa-direct` fabric, the target side of RMA operation must
+  insert the initiator side's address into AV before the RMA operation
+  is kicked off, due to a current device limitation. The same limitation
+  applies to the `efa` fabric when the `FI_OPT_EFA_HOMOGENEOUS_PEERS` option
+  is set as `true`.
 
-No support for counters for the DGRAM endpoint.
-
-No support for inject.
-
-## Zero-copy receive mode
-- The receive operation cannot be cancelled via `fi_cancel()`.
-- Zero-copy receive mode can be enabled only if SHM transfer is disabled.
-- Unless the application explicitly disables P2P, e.g. via FI_HMEM_P2P_DISABLED,
+## [Zero-copy receive mode](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#48-user-receive-qp-feature--request-and-zero-copy-receive)
+ - Zero-copy receive mode can be enabled only if SHM transfer is disabled.
+ - Unless the application explicitly disables P2P, e.g. via FI_HMEM_P2P_DISABLED,
   zero-copy receive can be enabled only if available FI_HMEM devices all have
   P2P support.
   
-
+## `fi_cancel` support
+ - `fi_cancel` is only supported in the non-zero-copy-receive mode of the `efa` fabric.
+ It's not supported in `efa-direct`, DGRAM endpoint, and the zero-copy receive mode of
+ the `efa` fabric in RDM endpoint.
 
 When using FI_HMEM for AWS Neuron or Habana SynapseAI buffers, the provider
 requires peer to peer transaction support between the EFA and the FI_HMEM
@@ -154,7 +173,9 @@ provider for AWS Neuron or Habana SynapseAI.
   When set to true, it indicates all peers are homogeneous, meaning they run on the 
   same platform, use the same software versions, and share identical capabilities.
   It accelerates the initial communication setup as interoperability between peers
-  is guaranteed. 
+  is guaranteed. When set to true, the target side of a RMA operation must
+  insert the initiator side's address into AV before the RMA operation
+  is kicked off, due to a current device limitation.
   The default value is false.
 
 # PROVIDER SPECIFIC DOMAIN OPS
