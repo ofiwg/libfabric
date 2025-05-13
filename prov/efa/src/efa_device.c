@@ -253,6 +253,8 @@ int efa_device_list_initialize(void)
 	}
 
 	for (device_idx = 0; device_idx < total_device_cnt; device_idx++) {
+		memset(&cur_device, 0, sizeof(struct efa_device));
+
 		err = efa_device_construct_gid(&cur_device,
 					   ibv_device_list[device_idx]);
 
