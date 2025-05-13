@@ -1325,8 +1325,8 @@ CXI_INI
 	 */
 	ret = cxip_curl_init();
 	if(ret != FI_SUCCESS) {
-		CXIP_WARN("cxip_curl_init() failed! in %s()\n", __func__);
-		CXIP_WARN("removing collective support from CXI prov fi_getinfo()", __func__);
+		CXIP_WARN("cxip_curl_init() failed!\n");
+		CXIP_WARN("removing collective support from CXI prov fi_getinfo()\n");
 		cxip_collectives_supported = false;
 	}
 
