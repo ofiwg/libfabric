@@ -488,14 +488,18 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	c.type = OPX_HFI_CMD_ASSIGN_CTXT;
 
 #ifdef PSM2_SUPPORT_IW_CMD_API
-	/* If psm is communicating with a MAJOR version 6 driver, we need
-		   to pass in an actual struct hfi1_user_info not a hfi1_user_info_dep.
-		   Else if psm is communicating with a MAJOR version 5 driver, we can
-		   just continue to pass a hfi1_user_info_dep as struct hfi1_user_info_dep
-		   is identical to the MAJOR version 5 struct hfi1_user_info. */
+	/*
+	 * If psm is communicating with a MAJOR version 6 driver, we need
+	 * to pass in an actual struct hfi1_user_info not a hfi1_user_info_dep.
+	 * Else if psm is communicating with a MAJOR version 5 driver, we can
+	 * just continue to pass a hfi1_user_info_dep as struct hfi1_user_info_dep
+	 * is identical to the MAJOR version 5 struct hfi1_user_info.
+	 */
 	if (opx_hfi_get_user_major_version() == IOCTL_CMD_API_MODULE_MAJOR) {
-		/* If psm is communicating with a MAJOR version 6 driver,
-			   we copy uinfo into uinfo_new and pass uinfo_new to the driver. */
+		/*
+		 * If psm is communicating with a MAJOR version 6 driver,
+		 * we copy uinfo into uinfo_new and pass uinfo_new to the driver.
+		 */
 		c.len  = sizeof(uinfo_new);
 		c.addr = (__u64) (&uinfo_new);
 
@@ -507,8 +511,10 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 		_HFI_PDBG("CONTEXT INIT uinfo_new: ver %#x, pad %d, subc_cnt %d, subc_id %d\n", uinfo_new.userversion,
 			  uinfo_new.pad, uinfo_new.subctxt_cnt, uinfo_new.subctxt_id);
 	} else {
-		/* If psm is working with an old driver, we continue to use
-			   the struct hfi1_user_info_dep version of the struct: */
+		/*
+		 * If psm is working with an old driver, we continue to use
+		 * the struct hfi1_user_info_dep version of the struct:
+		 */
 		c.len  = sizeof(*uinfo);
 		c.addr = (__u64) uinfo;
 	}
@@ -530,8 +536,10 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 
 #ifdef PSM2_SUPPORT_IW_CMD_API
 	if (opx_hfi_get_user_major_version() == IOCTL_CMD_API_MODULE_MAJOR) {
-		/* for the new driver, we copy the results of the call back to uinfo from
-			   uinfo_new. */
+		/*
+		 * For the new driver, we copy the results of the call back to uinfo from
+		 * uinfo_new.
+		 */
 		uinfo->userversion = uinfo_new.userversion;
 		uinfo->pad	   = uinfo_new.pad;
 		uinfo->subctxt_cnt = uinfo_new.subctxt_cnt;
