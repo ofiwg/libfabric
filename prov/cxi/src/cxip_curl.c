@@ -15,8 +15,12 @@
 #include <ofi.h>
 #include "cxip.h"
 
+#if ENABLE_CXI_CURL_DLOPEN
 static void *cxip_curlhandle;
+#endif
+#if ENABLE_CXI_JSON_DLOPEN
 static void *cxip_jsonhandle;
+#endif
 static CURLM *cxip_curlm;
 static int cxip_curl_count;
 static int cxip_json_dl_init(void);
@@ -699,7 +703,7 @@ struct jsondl_ops {
         double  (*dl_json_object_get_double)(const struct json_object *);
         const char * (*dl_json_object_get_string)(struct json_object *);
 	struct json_object * (*dl_json_tokener_parse)(const char *);
-	void (*dl_json_object_put)(struct json_object *);
+	int (*dl_json_object_put)(struct json_object *);
 };
 
 /* dynamic bind of symbols with dlopen()/dlsym() */
@@ -985,7 +989,7 @@ struct json_object *cxip_json_tokener_parse(const char *str)
 	return jsondl_ops.dl_json_tokener_parse(str);
 }
 
-void cxip_json_object_put(struct json_object *obj)
+int cxip_json_object_put(struct json_object *obj)
 {
-	jsondl_ops.dl_json_object_put(obj);
+	return jsondl_ops.dl_json_object_put(obj);
 }

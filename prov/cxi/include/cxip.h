@@ -3034,7 +3034,7 @@ int cxip_json_double(const char *desc, struct json_object *jobj, double *val);
 int cxip_json_string(const char *desc, struct json_object *jobj,
 		     const char **val);
 struct json_object *cxip_json_tokener_parse(const char *str);
-void cxip_json_object_put(struct json_object *obj);
+int cxip_json_object_put(struct json_object *obj);
 
 /* Perform zero-buffer collectives */
 void cxip_tree_rowcol(int radix, int nodeidx, int *row, int *col, int *siz);
