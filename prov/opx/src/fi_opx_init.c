@@ -93,17 +93,19 @@ int fi_opx_check_info(const struct fi_info *info)
 	}
 
 	if (info->caps & FI_HMEM) {
-		/* Add FI_MR_HMEM to mr_mode when claiming support of FI_HMEM
+		/*
+		 * Add FI_MR_HMEM to mr_mode when claiming support of FI_HMEM
 		 * because OPX provider's HMEM support performance relies on
 		 * application to provide descriptor for device buffer.
 		 */
 
-		/* IntelMPI is not properly setting their capabilities. They always request
-			FI_HMEM support in their caps even when you try to disable HMEM using
-			their environment variable I_MPI_OFFLOAD. Because of this, OPX is adding
-			a workaround that will disable checking for FI_MR_HMEM, which is a hard
-			requirement for OPX when FI_HMEM is requested.
-		*/
+		/*
+		 * IntelMPI is not properly setting their capabilities. They always request
+		 * FI_HMEM support in their caps even when you try to disable HMEM using
+		 * their environment variable I_MPI_OFFLOAD. Because of this, OPX is adding
+		 * a workaround that will disable checking for FI_MR_HMEM, which is a hard
+		 * requirement for OPX when FI_HMEM is requested.
+		 */
 
 		char *hmem_str		= NULL;
 		bool  enforce_hmem_caps = true;
