@@ -74,11 +74,26 @@ class CmdlineArgs:
         if self.server_interface is None:
             self.server_interface = self.server_id
 
+        self.additional_server_environments = None
+        self.additional_client_environments = None
+
     def append_environ(self, environ):
         if self.environments:
             self.environments += " " + environ
         else:
             self.environments = environ[:]
+
+    def append_server_environ(self, environ):
+        if self.additional_server_environments:
+            self.additional_server_environments += " " + environ
+        else:
+            self.additional_server_environments = environ[:]
+
+    def append_client_environ(self, environ):
+        if self.additional_client_environments:
+            self.additional_client_environments += " " + environ
+        else:
+            self.additional_client_environments = environ[:]
 
     def populate_command(self, base_command, host_type, timeout=None, additional_environment=None):
         '''
@@ -100,6 +115,12 @@ class CmdlineArgs:
 
         if additional_environment:
             command = additional_environment + " " + command
+
+        if host_type == "server" and self.additional_server_environments:
+            command = self.additional_server_environments + " " + command
+
+        if host_type == "client" and self.additional_client_environments:
+            command = self.additional_client_environments + " " + command
 
         if command.find("fi_ubertest") != -1:
             command = self._populate_ubertest_command(command, host_type)
