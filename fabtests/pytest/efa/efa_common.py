@@ -148,7 +148,7 @@ def get_efa_device_names(server_id):
     process_timed_out = False
 
     # This command returns a list of EFA devices names
-    command = "ssh {} ibv_devices".format(server_id)
+    command = "ssh {} /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM -f efa | grep domain".format(server_id)
     proc = subprocess.run(command, shell=True,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8", timeout=timeout)
@@ -159,15 +159,14 @@ def get_efa_device_names(server_id):
     devices = []
     stdouts = proc.stdout.strip().split("\n")
     #
-    # Example out of ibv_devices are like the following:
-    #     device                 node GUID
-    #     ------              ----------------
-    #     rdmap16s27          0000000000000000
+    # Example out of fi_info -p efa -t FI_EP_RDM -f efa | grep domain are like the following:
+    #     domain: rdmap0s31-rdm
     #     ...
     #
-    # The first 2 lines are headers, and is ignored.
-    for line in stdouts[2:]:
-        devices.append(line.split()[0])
+    # Extract the device name from the second column of the stdout
+    # by removing the -rdm suffix
+    for line in stdouts:
+        devices.append(line.split()[1].replace("-rdm", ""))
     return devices
 
 
