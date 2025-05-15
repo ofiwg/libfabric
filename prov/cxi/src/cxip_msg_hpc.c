@@ -3468,6 +3468,7 @@ static int cxip_process_srx_ux_matcher(struct cxip_rxc *rxc,
 	vni = ux->put_ev.tgt_long.vni;
 
 	match.addr = cxip_recv_req_src_addr(rxc, ux_init, vni, true);
+	match.msg_size = ux->put_ev.tgt_long.rlength;
 
 	ux_mb.raw = ux->put_ev.tgt_long.match_bits;
 
@@ -3484,6 +3485,10 @@ static int cxip_process_srx_ux_matcher(struct cxip_rxc *rxc,
 	if (ret == -FI_ENOENT) {
 		/* this is used when the owner calls start_msg */
 		rx_entry->peer_context = ux;
+		if (ux_mb.cq_data) {
+			rx_entry->flags |= FI_REMOTE_CQ_DATA;
+			rx_entry->cq_data = ux->put_ev.tgt_long.header_data;
+		}
 		return -FI_ENOMSG;
 	} else if (ret) {
 		return ret;
