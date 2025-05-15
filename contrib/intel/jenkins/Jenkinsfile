@@ -7,70 +7,29 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def CTARGET="main"
 
 def checkout_upstream() {
-  def loc = "${env.WORKSPACE}/upstream/libfabric"
   sh """
-    if [[ ! -d ${env.WORKSPACE}/upstream ]]; then
-      mkdir -p ${loc}
-    else
-      rm -rf ${env.WORKSPACE}/upstream && mkdir -p ${loc}
-    fi
-
-    git clone --branch ${CTARGET} ${env.UPSTREAM} ${loc}
-  """
-}
-
-def checkout_ci_resources() {
-  sh """
-    if [[ ! -d ${env.WORKSPACE}/upstream ]]; then
-      mkdir ${env.WORKSPACE}/ci_resources
-    else
-      rm -rf ${env.WORKSPACE}/ci_resources && mkdir ${env.WORKSPACE}/ci_resources
-    fi
-
-    git clone ${env.CI_RESOURCES} ${env.WORKSPACE}/ci_resources
-
+    rm -rf ${env.CUSTOM_WORKSPACE}/upstream
+    mkdir -p ${env.CUSTOM_WORKSPACE}/upstream
+    git clone --branch ${CTARGET} ${env.UPSTREAM} ${env.CUSTOM_WORKSPACE}/upstream
   """
 }
 
 def checkout_ci() {
   sh """
-   if [[ ! -d ${env.WORKSPACE}/ci ]]; then
-      mkdir ${env.WORKSPACE}/ci
-    else
-      rm -rf ${env.WORKSPACE}/ci && mkdir ${env.WORKSPACE}/ci
-    fi
-
-    git clone --recurse-submodules ${env.CI} ${env.WORKSPACE}/ci
+    rm -rf ${env.CUSTOM_WORKSPACE}/ci
+    mkdir ${env.CUSTOM_WORKSPACE}/ci
+    git clone --recurse-submodules ${env.CI} ${env.CUSTOM_WORKSPACE}/ci
   """
-}
-
-def checkout_external_resources() {
-  checkout_ci_resources()
-  checkout_upstream()
-  checkout_ci()
 }
 
 def initialize() {
   checkout_tar("source")
   dir (CUSTOM_WORKSPACE) {
-    checkout_external_resources()
+    checkout_upstream()
+    checkout_ci()
     sh "mkdir -p ${CUSTOM_WORKSPACE}/log_dir"
     sh "${CI_LOCATION}/bootstrap.sh"
   }
-}
-
-def build_ci(config_name) {
-  sh """${CI_LOCATION}/venv/bin/python run.py \
-        --output=${env.CUSTOM_WORKSPACE}/pre-build \
-        --job=${config_name}
-     """
-}
-
-def run_ci(stage_name, config_name) {
-  sh """${CI_LOCATION}/venv/bin/python run.py \
-        --output=${env.LOG_DIR}/${stage_name} \
-        --job=${config_name}
-     """
 }
 
 def run_red(config_name) {
@@ -93,15 +52,6 @@ def send_logs(cluster, key, dest, source) {
   }
 }
 
-def gather_logs(cluster, key, dest, source) {
-  def address = "${env.USER}@${cluster}"
-  try {
-    sh "scp -r -i ${key} ${address}:${source}/* ${dest}/"
-  } catch (Exception e) {
-    echo "Caught exception ${e} when transfering files from ${cluster}"
-  }
-}
-
 def CI_summarize(verbose=false) {
   def options = ""
   if (verbose) {
@@ -117,21 +67,6 @@ def CI_summarize(verbose=false) {
         --log_directory=${env.LOG_DIR} \
         ${options}
      """
-}
-
-def summarize(item, verbose=false, release=false, send_mail=false) {
-  def cmd = "${RUN_LOCATION}/summary.py --summary_item=all"
-  if (verbose) {
-    cmd = "${cmd} -v "
-  }
-  if (release) {
-    cmd = "${cmd} --release "
-  }
-  if (send_mail.toBoolean()) {
-    cmd = "${cmd} --send_mail "
-  }
-
-  sh "python3.9 ${cmd}"
 }
 
 def checkout_tar(name) {
