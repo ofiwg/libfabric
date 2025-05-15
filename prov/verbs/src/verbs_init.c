@@ -369,14 +369,13 @@ static int vrb_param_define(const char *param_name, const char *param_str,
 	if (param_default != NULL) {
 		switch (type) {
 		case FI_PARAM_STRING:
-			if (*(char **)param_default != NULL) {
-				param_default_sz =
-					MIN(strlen(*(char **)param_default),
-					    254);
-				strncpy(param_default_str, *(char **)param_default,
-					param_default_sz);
-				param_default_str[param_default_sz + 1] = '\0';
-			}
+			const char *src = *(char **)param_default;
+			snprintf(param_default_str,
+				sizeof(param_default_str),
+				"%.*s",
+				(int)(sizeof(param_default_str) - 1),
+				src);
+			param_default_sz = strlen(param_default_str);
 			break;
 		case FI_PARAM_INT:
 		case FI_PARAM_BOOL:
@@ -635,112 +634,124 @@ static int vrb_get_param_str(const char *param_name,
 	return 0;
 }
 
+static int vrb_read_param_bool(const char *name, const char *desc, int *field)
+{
+	int tmp = *field;
+	int ret;
+	ret = vrb_get_param_bool(name, desc, &tmp);
+	if (ret)
+		return ret;
+	if (tmp != 0 && tmp != 1)
+		return -FI_EINVAL;
+	*field = tmp;
+	return 0;
+}
+
 static int vrb_read_params(void)
 {
 	/* Common parameters */
 	if (vrb_get_param_int("tx_size", "Default maximum tx context size",
-			      &vrb_gl_data.def_tx_size) ||
-	    (vrb_gl_data.def_tx_size < 0)) {
+			&vrb_gl_data.def_tx_size) ||
+			vrb_gl_data.def_tx_size < 0) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of tx_size\n");
 		return -FI_EINVAL;
 	}
+
 	if (vrb_get_param_int("rx_size", "Default maximum rx context size",
-			      &vrb_gl_data.def_rx_size) ||
-	    (vrb_gl_data.def_rx_size < 0)) {
+			&vrb_gl_data.def_rx_size) ||
+			vrb_gl_data.def_rx_size < 0) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of rx_size\n");
 		return -FI_EINVAL;
 	}
+
 	if (vrb_get_param_int("tx_iov_limit", "Default maximum tx iov_limit",
-			      &vrb_gl_data.def_tx_iov_limit) ||
-	    (vrb_gl_data.def_tx_iov_limit < 0)) {
+			&vrb_gl_data.def_tx_iov_limit) ||
+			vrb_gl_data.def_tx_iov_limit < 0) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of tx_iov_limit\n");
 		return -FI_EINVAL;
 	}
+
 	if (vrb_get_param_int("rx_iov_limit", "Default maximum rx iov_limit",
-			      &vrb_gl_data.def_rx_iov_limit) ||
-	    (vrb_gl_data.def_rx_iov_limit < 0)) {
+			&vrb_gl_data.def_rx_iov_limit) ||
+			vrb_gl_data.def_rx_iov_limit < 0) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of rx_iov_limit\n");
 		return -FI_EINVAL;
 	}
-	if (vrb_get_param_int("inline_size", "Maximum inline size for the "
-			      "verbs device. Actual inline size returned may "
-			      "be different depending on device capability. "
-			      "This value will be returned by fi_info as the "
-			      "inject size for the application to use. Set to "
-			      "0 for the maximum device inline size to be "
-			      "used. (default: 256).",
-			      &vrb_gl_data.def_inline_size) ||
-	    (vrb_gl_data.def_inline_size < 0)) {
+
+	if (vrb_get_param_int("inline_size",
+			"Maximum inline size for the verbs device…",
+			&vrb_gl_data.def_inline_size) ||
+			vrb_gl_data.def_inline_size < 0) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of inline_size\n");
 		return -FI_EINVAL;
 	}
-	if (vrb_get_param_int("min_rnr_timer", "Set min_rnr_timer QP "
-			      "attribute (0 - 31)",
-			      &vrb_gl_data.min_rnr_timer) ||
-	    ((vrb_gl_data.min_rnr_timer < 0) ||
-	     (vrb_gl_data.min_rnr_timer > 31))) {
+
+	if (vrb_get_param_int("min_rnr_timer", "Set min_rnr_timer QP attribute (0 - 31)",
+			&vrb_gl_data.min_rnr_timer) ||
+			vrb_gl_data.min_rnr_timer < 0 ||
+			vrb_gl_data.min_rnr_timer > 31) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of min_rnr_timer\n");
 		return -FI_EINVAL;
 	}
 
-	if (vrb_get_param_bool("use_odp", "Enable on-demand paging memory "
-			       "registrations, if supported.  This is "
-			       "currently required to register DAX file system "
-			       "mmapped memory.", &vrb_gl_data.use_odp)) {
+	if (vrb_read_param_bool("use_odp",
+			"Enable on-demand paging memory registrations…",
+			&vrb_gl_data.use_odp)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of use_odp\n");
 		return -FI_EINVAL;
 	}
 
-	if (vrb_get_param_bool("prefer_xrc", "Order XRC transport fi_infos "
-			       "ahead of RC.  Default orders RC first.  This "
-			       "setting must usually be combined with setting "
-			       "FI_OFI_RXM_USE_SRX.  See fi_verbs.7 man page.",
-				&vrb_gl_data.msg.prefer_xrc)) {
+	if (vrb_read_param_bool("prefer_xrc",
+			"Order XRC transport fi_infos ahead of RC…",
+			&vrb_gl_data.msg.prefer_xrc)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of prefer_xrc\n");
 		return -FI_EINVAL;
 	}
 
-	if (vrb_get_param_str("xrcd_filename", "A file to "
-			      "associate with the XRC domain.",
-			      &vrb_gl_data.msg.xrcd_filename)) {
+	if (vrb_get_param_str("xrcd_filename", "A file to associate with the XRC domain",
+			&vrb_gl_data.msg.xrcd_filename)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of xrcd_filename\n");
 		return -FI_EINVAL;
 	}
-	if (vrb_get_param_int("cqread_bunch_size", "The number of entries to "
-			      "be read from the verbs completion queue at a time",
-			      &vrb_gl_data.cqread_bunch_size) ||
-	    (vrb_gl_data.cqread_bunch_size <= 0)) {
+
+	if (vrb_get_param_int("cqread_bunch_size",
+			"The number of entries to read from the verbs CQ at a time",
+			&vrb_gl_data.cqread_bunch_size) ||
+			vrb_gl_data.cqread_bunch_size <= 0) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of cqread_bunch_size\n");
 		return -FI_EINVAL;
 	}
-	if (vrb_get_param_int("gid_idx", "Set which gid index to use "
-			      "attribute (0 - 255)", &vrb_gl_data.gid_idx) ||
-	    (vrb_gl_data.gid_idx < 0 || vrb_gl_data.gid_idx > 255)) {
-		VRB_WARN(FI_LOG_CORE, "Invalid value of gid index\n");
+
+	if (vrb_get_param_int("gid_idx", "Set which gid index to use (0 - 255)",
+			&vrb_gl_data.gid_idx) ||
+			vrb_gl_data.gid_idx < 0 ||
+			vrb_gl_data.gid_idx > 255) {
+		VRB_WARN(FI_LOG_CORE, "Invalid value of gid_idx\n");
 		return -FI_EINVAL;
 	}
 
-	if (vrb_get_param_str("device_name", "The prefix or the full name of the "
-			      "verbs device to use", &vrb_gl_data.device_name)) {
+	if (vrb_get_param_str("device_name",
+			"The prefix or full name of the verbs device to use",
+			&vrb_gl_data.device_name)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of device_name\n");
 		return -FI_EINVAL;
 	}
 
 	if (vrb_gl_data.dmabuf_support) {
-		if (vrb_get_param_bool("use_dmabuf", "Enable dmabuf based memory "
-				       "registrations, if supported. Yes by default.",
-				       (int *)&vrb_gl_data.dmabuf_support)) {
+		if (vrb_read_param_bool("use_dmabuf",
+				"Enable dmabuf based memory registrations, if supported",
+				(int *)&vrb_gl_data.dmabuf_support)) {
 			VRB_WARN(FI_LOG_CORE, "Invalid value of use_dmabuf\n");
 			return -FI_EINVAL;
 		}
 	}
 	VRB_INFO(FI_LOG_CORE, "dmabuf support is %s\n",
-		 vrb_gl_data.dmabuf_support ? "enabled" : "disabled");
+			vrb_gl_data.dmabuf_support ? "enabled" : "disabled");
 
 	/* MSG-specific parameter */
-	if (vrb_get_param_str("iface", "The prefix or the full name of the "
-			      "network interface associated with the verbs "
-			      "device", &vrb_gl_data.iface)) {
+	if (vrb_get_param_str("iface",
+			"Network interface prefix or full name",
+			&vrb_gl_data.iface)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of iface\n");
 		return -FI_EINVAL;
 	}
@@ -748,19 +759,19 @@ static int vrb_read_params(void)
 	/* DGRAM-specific parameters */
 	if (getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK"))
 		vrb_gl_data.dgram.use_name_server = 0;
-	if (vrb_get_param_bool("dgram_use_name_server", "The option that "
-			       "enables/disables OFI Name Server thread used "
-			       "to resolve IP-addresses to provider specific "
-			       "addresses. If MPI is used, the NS is disabled "
-			       "by default.", &vrb_gl_data.dgram.use_name_server)) {
+
+	if (vrb_read_param_bool("dgram_use_name_server",
+			"Enable/disable OFI Name Server thread",
+			&vrb_gl_data.dgram.use_name_server)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid dgram_use_name_server\n");
 		return -FI_EINVAL;
 	}
-	if (vrb_get_param_int("dgram_name_server_port", "The port on which "
-			      "the name server thread listens incoming "
-			      "requests.", &vrb_gl_data.dgram.name_server_port) ||
-	    (vrb_gl_data.dgram.name_server_port < 0 ||
-	     vrb_gl_data.dgram.name_server_port > 65535)) {
+
+	if (vrb_get_param_int("dgram_name_server_port",
+			"Port for name server thread",
+			&vrb_gl_data.dgram.name_server_port) ||
+			vrb_gl_data.dgram.name_server_port < 0 ||
+			vrb_gl_data.dgram.name_server_port > 65535) {
 		VRB_WARN(FI_LOG_CORE, "Invalid dgram_name_server_port\n");
 		return -FI_EINVAL;
 	}

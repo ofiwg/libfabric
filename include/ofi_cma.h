@@ -64,8 +64,14 @@ static inline int cma_copy(struct iovec *local, unsigned long local_cnt,
 		if (!total)
 			return FI_SUCCESS;
 
-		ofi_consume_iov(local, &local_cnt, (size_t) ret);
-		ofi_consume_iov(remote, &remote_cnt, (size_t) ret);
+		size_t local_size = local_cnt;
+		size_t remote_size = remote_cnt;
+
+		ofi_consume_iov(local, &local_size, (size_t)ret);
+		ofi_consume_iov(remote, &remote_size, (size_t)ret);
+
+		local_cnt = local_size;
+		remote_cnt = remote_size;
 	}
 }
 

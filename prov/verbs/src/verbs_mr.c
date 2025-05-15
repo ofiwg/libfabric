@@ -84,8 +84,13 @@ static struct ibv_mr *vrb_reg_hmem_dmabuf(enum fi_hmem_iface iface,
 	if (err)
 		goto failover;
 
-	mr = ibv_reg_dmabuf_mr(pd, offset, len, (uint64_t)buf/* iova */,
-			       fd, vrb_access);
+	{
+		uintptr_t buf_addr = (uintptr_t)buf;
+		uint64_t iova = (uint64_t)buf_addr;
+		mr = ibv_reg_dmabuf_mr(pd, offset, len, iova,
+								fd, vrb_access);
+	}
+
 	if (!mr && failover_policy[iface] == TRY &&
 	    vrb_gl_data.peer_mem_support) {
 		saved_errno = errno;
