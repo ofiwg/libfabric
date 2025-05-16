@@ -67,25 +67,29 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 	struct efa_domain *domain;
 	struct efa_qp *qp = base_ep->qp;
 	struct efa_qp *user_recv_qp = base_ep->user_recv_qp;
+	uint32_t qp_num;
 
+	/*
+	 * Acquire the lock to prevent race conditions when CQ polling accesses the qp_table
+	 * and the qp resource
+	 */
+	efa_base_ep_lock_cq(base_ep);
 	if (qp) {
 		domain = qp->base_ep->domain;
-		/* Acquire the lock to prevent race conditions when CQ polling accesses the qp_table */
-		efa_base_ep_lock_cq(base_ep);
-		domain->qp_table[qp->qp_num & domain->qp_table_sz_m1] = NULL;
-		efa_base_ep_unlock_cq(base_ep);
+		qp_num = qp->qp_num;
 		efa_qp_destruct(qp);
+		domain->qp_table[qp_num & domain->qp_table_sz_m1] = NULL;
 		base_ep->qp = NULL;
 	}
 
 	if (user_recv_qp) {
 		domain = user_recv_qp->base_ep->domain;
-		efa_base_ep_lock_cq(base_ep);
-		domain->qp_table[user_recv_qp->qp_num & domain->qp_table_sz_m1] = NULL;
-		efa_base_ep_unlock_cq(base_ep);
+		qp_num = user_recv_qp->qp_num;
 		efa_qp_destruct(user_recv_qp);
+		domain->qp_table[qp_num & domain->qp_table_sz_m1] = NULL;
 		base_ep->user_recv_qp = NULL;
 	}
+	efa_base_ep_unlock_cq(base_ep);
 
 	return 0;
 }
