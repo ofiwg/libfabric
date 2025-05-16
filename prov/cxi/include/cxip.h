@@ -1063,8 +1063,11 @@ struct cxip_eq {
 	ofi_mutex_t list_lock;
 };
 
-#define CXIP_EQ_MAP_FLAGS \
-	(CXI_MAP_WRITE | CXI_MAP_PIN | CXI_MAP_IOVA_ALLOC)
+#ifdef CXI_MAP_IOVA_ALLOC
+#define CXIP_EQ_MAP_FLAGS (CXI_MAP_WRITE | CXI_MAP_PIN | CXI_MAP_IOVA_ALLOC)
+#else
+#define CXIP_EQ_MAP_FLAGS (CXI_MAP_WRITE | CXI_MAP_PIN)
+#endif
 
 /*
  * RMA request
