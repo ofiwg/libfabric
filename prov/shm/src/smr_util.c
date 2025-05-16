@@ -281,7 +281,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->name_offset = name_offset;
 	(*smr)->max_sar_buf_per_peer = SMR_BUF_BATCH_MAX;
 
-	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size);
+	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size, NULL);
 	smr_resp_queue_init(smr_resp_queue(*smr), tx_size);
 	smr_freestack_init(smr_inject_pool(*smr), rx_size,
 			sizeof(struct smr_inject_buf));
