@@ -113,6 +113,17 @@
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MIN (FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min value */
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MAX (OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX + 1) /* Max value */
 
+/**
+ * @brief The minimum length required to use multi-packet eager.
+ */
+#ifndef OPX_MP_EGR_MIN_BYTES
+#ifndef OPX_JKR_SUPPORT
+#define OPX_MP_EGR_MIN_BYTES (4160)
+#else
+#define OPX_MP_EGR_MIN_BYTES (OPX_HFI1_PKT_SIZE + 1)
+#endif
+#endif
+
 /* The PBC length to use for a single packet in a multi-packet eager send.
 
    This is packet payload plus the PBC plus the packet header plus
@@ -121,46 +132,26 @@
    All packets in a multi-packet eager send will be this size, except
    possibly the last one, which may be smaller.
 
+   This value is derived by rounding OPX_MP_EGR_MIN_BYTES down to the
+   previous multiple of 64, then adding 64 back for the PBC & packet header
+
    NOTE: This value MUST be a multiple of 64!
    */
+#define FI_OPX_MP_EGR_CHUNK_SIZE ((OPX_MP_EGR_MIN_BYTES & -64) + 64)
 
-#ifndef FI_OPX_MP_EGR_CHUNK_SIZE
-#ifndef OPX_JKR_SUPPORT
-#define FI_OPX_MP_EGR_CHUNK_SIZE (4160)
-#else
-#define FI_OPX_MP_EGR_CHUNK_SIZE (FI_OPX_HFI1_PACKET_MTU)
-#endif
-#endif
-/* For full MP-Eager chunks, we pack 16 bytes of payload data in the
-   packet header.
-
-   So the actual user payload __consumed__ for a full chunk is the
+/* The actual user payload __consumed__ for a full chunk is the
    FI_OPX_MP_EGR_CHUNK_SIZE minus the PBC minus the header minus
-   the tail (16B only) plus 16 bytes payload packed in the header.
-
-   The payload itself will be FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE - 16
+   the tail (16B only).
    */
 
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)                                                              \
-	((hfi1_type & OPX_HFI1_JKR) ?                                                                            \
-		 (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 64 /* hdr */ + 8 /* tail */) - 16 /* payload */)) : \
-		 (FI_OPX_MP_EGR_CHUNK_SIZE - ((8 /* PBC */ + 56 /* hdr */) - 16 /* payload */)))
+	((hfi1_type & OPX_HFI1_JKR) ? (FI_OPX_MP_EGR_CHUNK_SIZE - (8 /* PBC */ + 64 /* hdr */ + 8 /* tail */)) : \
+				      (FI_OPX_MP_EGR_CHUNK_SIZE - (8 /* PBC */ + 56 /* hdr */)))
 
 #define FI_OPX_MP_EGR_CHUNK_CREDITS (FI_OPX_MP_EGR_CHUNK_SIZE >> 6) /* PACKET CREDITS TOTAL */
 #define FI_OPX_MP_EGR_CHUNK_DWS	    (FI_OPX_MP_EGR_CHUNK_SIZE >> 2) /* PBC DWS */
 #define FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS(hfi1_type) \
 	((FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type)) >> 3) /* PAYLOAD QWS CONSUMED */
-#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL 16
-#define FI_OPX_MP_EGR_XFER_BYTES_TAIL	 0x0080000000000000ull
-
-static_assert(!(FI_OPX_MP_EGR_CHUNK_SIZE & 0x3F), "FI_OPX_MP_EGR_CHUNK_SIZE Must be a multiple of 64!");
-static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT > FI_OPX_MP_EGR_CHUNK_SIZE,
-	      "OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT must be greater than FI_OPX_MP_EGR_CHUNK_SIZE!");
-static_assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX > FI_OPX_MP_EGR_CHUNK_SIZE,
-	      "OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX must be greater than FI_OPX_MP_EGR_CHUNK_SIZE!");
-static_assert(
-	OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX >= OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT,
-	"OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX must be greater than or equal to OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT!");
 
 /* SDMA tuning constants */
 
@@ -536,6 +527,57 @@ struct fi_opx_hfi1_rxe_static {
 	uint8_t unused[7];
 };
 
+/*
+ * This is the shared PIO state structure that sits in shared memory. It is only used for context sharing
+ * and allows all of the endpoints in a context sharing group to synchronize over the HFI context's PIO
+ * resources. Any endpoint wishing to send over PIO must hold the spio_ctrl_lock before reading/updating the available
+ * credits. This structure is placed in the page of shared memory setup by the driver and pointed to
+ * by hfi1_base_info.subctxt_uregbase.
+ */
+struct opx_spio_ctrl {
+	union fi_opx_hfi1_pio_state pio;	    // 1 qw
+	pthread_spinlock_t	    spio_ctrl_lock; // 4 bytes
+	uint32_t		    unused;
+	uint64_t		    unused1[6];
+} __attribute__((aligned(64)));
+
+/* Up to HFI1_MAX_SHARED_CTXTS of these strucutres are placed in the page of shared memory
+pointed to by hfi1_base_info.subctxt_uregbase. There is one for each subctxt in a context sharing group and
+describes the subctxt's software rx queue. An endpoint wishing to forward a packet to a subctxt's software rx
+queue must hold the opx_hwcontext_ctrl.context_lock and then use the hdrq_rhf_seq for determining the next
+sequence number to write into the software RHQ entry. uregbase contains head and tail pointers to positions in
+the software rx queue's RHQ and eager buffer queue respectively.*/
+struct opx_subcontext_ureg {
+	/* head/eager head/tail register storage, one per cacheline */
+	uint64_t uregbase[40 /* i.e. ur_maxreg * 8 */];
+	uint64_t hdrq_rhf_seq; /* Next sequence number to be written from the writer's perspective */
+	uint64_t last_offset;  /* Last offset into the software rx q's eager buffer index.*/
+} __attribute__((aligned(64)));
+
+/*
+ * Describes the shared hardware RHQ state for when context sharing is in use.
+ * This structure is placed in shared memory that can be accessed by all processes
+ * sharing a single HFI context. The context_lock must be held before reading or writing
+ * to this structure. Only one process is allowed to make progress on the hardware RHQ for
+ * a single HFI context being shared.
+ */
+struct opx_hwcontext_ctrl {
+	pthread_spinlock_t context_lock; /* lock shared by all subctxts */
+	uint32_t	   last_egrbrf_index;
+	uint64_t	   rx_hdrq_rhf_seq; /* rhf seq for the hw hdrq shared by all subctxts */
+	uint64_t	   hdrq_head;	    /* software copy of head */
+} __attribute__((aligned(64)));
+
+/* Locking macros for shared PIO state when context sharing is in use. */
+#define OPX_SHD_CTX_PIO_LOCK(ctx_sharing_enabled, ep_tx)              \
+	if (ctx_sharing_enabled) {                                    \
+		pthread_spin_lock(&ep_tx->spio_ctrl->spio_ctrl_lock); \
+	}
+#define OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing_enabled, ep_tx)              \
+	if (ctx_sharing_enabled) {                                      \
+		pthread_spin_unlock(&ep_tx->spio_ctrl->spio_ctrl_lock); \
+	}
+
 struct fi_opx_hfi1_context {
 	struct {
 		union fi_opx_hfi1_pio_state  pio;
@@ -556,7 +598,8 @@ struct fi_opx_hfi1_context {
 	enum opx_hfi1_type hfi1_type;
 	uint32_t	   hfi_unit;
 	uint32_t	   hfi_port;
-	uint32_t	   unused;
+	uint16_t	   subctxt_cnt;
+	uint16_t	   unused;
 
 	uint64_t gid_hi;
 	uint64_t gid_lo;
@@ -594,6 +637,11 @@ struct fi_opx_hfi1_context {
 
 	/* struct ibv_context * for hfi1 direct/rdma-core only */
 	void *ibv_context;
+
+	/* Pointers to context sharing structures in shared memory */
+	struct opx_hwcontext_ctrl  *hwcontext_ctrl;
+	struct opx_subcontext_ureg *subcontext_ureg[HFI1_MAX_SHARED_CTXTS];
+	struct opx_spio_ctrl	   *spio_ctrl;
 };
 
 struct fi_opx_hfi1_context_internal {
@@ -768,7 +816,7 @@ void fi_opx_init_hfi_lookup();
 #define FI_OPX_SHM_FIFO_SIZE   (1024)
 #define FI_OPX_SHM_BUFFER_MASK (FI_OPX_SHM_FIFO_SIZE - 1)
 
-#define FI_OPX_SHM_PACKET_SIZE (FI_OPX_HFI1_PACKET_MTU + sizeof(union opx_hfi1_packet_hdr))
+#define FI_OPX_SHM_PACKET_SIZE (OPX_HFI1_MAX_PKT_SIZE + sizeof(union opx_hfi1_packet_hdr))
 
 #ifndef NDEBUG
 #define OPX_BUF_FREE(x)                                \
@@ -883,6 +931,9 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context daos_info.rank_inst           %#X  \n",
 	       context->daos_info.rank_inst);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ref_cnt                       %#lX \n", context->ref_cnt);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context subctxt_cnt                   %#X  \n",
+	       context->subctxt_cnt);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context subctxt                  	  %#X  \n", context->subctxt);
 }
 
 void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx_hfi1_type hfi1_type);

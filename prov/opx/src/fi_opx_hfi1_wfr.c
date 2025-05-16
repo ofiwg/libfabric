@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 Cornelis Networks.
+ * Copyright (C) 2024-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,7 +36,7 @@
 void opx_wfr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, volatile uint32_t *rhf_ptr,
 		       const uint32_t rhf_msb, const uint32_t rhf_lsb, const uint64_t rhf_seq,
 		       const uint64_t hdrq_offset, const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
-		       const enum opx_hfi1_type hfi1_type)
+		       const enum opx_hfi1_type hfi1_type, uint16_t last_egrbfr_index)
 {
 #ifdef OPX_VERBOSE_TRIGGER // verbose output
 	fprintf(stderr,
@@ -47,7 +47,7 @@ void opx_wfr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, vol
 		"RHF(%#16.16lX) RHE %#8.8X is ERRORED %u, UseEgrBuf %u, EgrIndex %#X/%#X, EgrOffset %#X, %s%s%s %s%s%s%s%s%s%s%s \n",
 		rhf_rcvd, rhf_msb & 0xBFE00000u, OPX_IS_ERRORED_RHF(rhf_rcvd, hfi1_type) != 0UL,
 		OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd, hfi1_type), (uint32_t) OPX_RHF_EGR_INDEX(rhf_rcvd, hfi1_type),
-		opx_ep->rx->egrq.last_egrbfr_index, (uint32_t) OPX_RHF_EGR_OFFSET(rhf_rcvd, hfi1_type),
+		last_egrbfr_index, (uint32_t) OPX_RHF_EGR_OFFSET(rhf_rcvd, hfi1_type),
 		OPX_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd, hfi1_type) ? "EXPECTED_RCV" : "",
 		OPX_RHF_RCV_TYPE_EAGER_RCV(rhf_rcvd, hfi1_type) ? "EAGER_RCV" : "",
 		OPX_RHF_RCV_TYPE_OTHER(rhf_rcvd, hfi1_type) ? "OTHER RCV" : "",

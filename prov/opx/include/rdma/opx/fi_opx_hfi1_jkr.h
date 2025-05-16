@@ -295,13 +295,22 @@ static inline void opx_set_route_control_value(const bool disabled)
 #define OPX_JKR_IS_ERRORED_RHF(_rhf, _hfi1_type)      (_rhf & 0x8000000000000000ul) /* does not check RHF.KHdrLenErr */
 #define OPX_JKR_RHF_SEQ_MATCH(_seq, _rhf, _hfi1_type) (_seq == (_rhf & 0x0F00000000000000ul))
 #define OPX_JKR_RHF_SEQ_INIT_VAL		      (0x0100000000000000ul)
+#define OPX_JKR_RHF_SEQ_UPDATE(_seq, _rhf)	      (_seq | (_rhf & ~0x0F00000000000000ul))
 
 #define OPX_JKR_RHF_IS_USE_EGR_BUF(_rhf) ((_rhf & 0x00008000ul) == 0x00008000ul)
 #define OPX_JKR_RHF_EGRBFR_INDEX_MASK	 (0x3FFF)
 #define OPX_JKR_RHF_EGRBFR_INDEX_SHIFT	 (16)
+#define OPX_JKR_RHF_EGRBFR_OFFSET_MASK	 (0x0000000000000FFFul)
+#define OPX_JKR_RHF_EGRBFR_OFFSET_SHIFT	 (32)
 #define OPX_JKR_RHF_EGR_INDEX(_rhf)	 ((_rhf >> OPX_JKR_RHF_EGRBFR_INDEX_SHIFT) & OPX_JKR_RHF_EGRBFR_INDEX_MASK)
-#define OPX_JKR_RHF_EGR_OFFSET(_rhf)	 ((_rhf >> 32) & 0x0FFFul)
-#define OPX_JKR_RHF_HDRQ_OFFSET(_rhf)	 ((_rhf >> (32 + 12)) & 0x01FFul)
+#define OPX_JKR_RHF_EGR_INDEX_UPDATE(_rhf, index)                                      \
+	(((index & OPX_JKR_RHF_EGRBFR_INDEX_MASK) << OPX_JKR_RHF_EGRBFR_INDEX_SHIFT) | \
+	 (_rhf & ~(OPX_JKR_RHF_EGRBFR_INDEX_MASK << OPX_JKR_RHF_EGRBFR_INDEX_SHIFT)))
+#define OPX_JKR_RHF_EGR_OFFSET_UPDATE(_rhf, offset)                                        \
+	((((offset & OPX_JKR_RHF_EGRBFR_OFFSET_MASK) << OPX_JKR_RHF_EGRBFR_OFFSET_SHIFT) | \
+	  (_rhf & ~(OPX_JKR_RHF_EGRBFR_OFFSET_MASK << OPX_JKR_RHF_EGRBFR_OFFSET_SHIFT))))
+#define OPX_JKR_RHF_EGR_OFFSET(_rhf)  ((_rhf >> OPX_JKR_RHF_EGRBFR_OFFSET_SHIFT) & OPX_JKR_RHF_EGRBFR_OFFSET_MASK)
+#define OPX_JKR_RHF_HDRQ_OFFSET(_rhf) ((_rhf >> (32 + 12)) & 0x01FFul)
 
 #define OPX_JKR_RHE_ICRCERR	 (0x8000000000000000ul)
 #define OPX_JKR_RHE_TIDBYPASSERR (0x4000000000000000ul)
@@ -321,12 +330,12 @@ struct fi_opx_ep;
 void opx_jkr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, volatile uint32_t *rhf_ptr,
 		       const uint32_t rhf_msb, const uint32_t rhf_lsb, const uint64_t rhf_seq,
 		       const uint64_t hdrq_offset, const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
-		       const enum opx_hfi1_type hfi1_type);
+		       const enum opx_hfi1_type hfi1_type, uint16_t last_egrbfr_index);
 
 #define OPX_JKR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr, \
-			  _hfi1_type)                                                                               \
+			  _hfi1_type, last_egrbfr_index)                                                            \
 	opx_jkr_rhe_debug(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr, \
-			  _hfi1_type)
+			  _hfi1_type, last_egrbfr_index)
 
 // Common to both JKR/WFR
 

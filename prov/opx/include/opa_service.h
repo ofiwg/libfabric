@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2024 Cornelis Networks.
+  Copyright(c) 2021-2025 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -20,7 +20,7 @@
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2024 Cornelis Networks.
+  Copyright(c) 2021-2025 Cornelis Networks.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -193,7 +193,11 @@ int opx_hfi_get_unit_active(int unit);
 
 /* Get the number of free contexts from the unit id. */
 /* Returns 0 if no unit or no match. */
-int opx_hfi_get_num_free_contexts(int unit);
+int opx_hfi_get_num_free_contexts(int unit_id);
+
+/* Get the number of contexts from the unit id. */
+/* Returns 0 if no unit or no match. */
+int opx_hfi_get_num_contexts(int unit_id);
 
 /* Open hfi device file, return -1 on error. */
 int opx_hfi_context_open(int unit, int port, uint64_t open_timeout, unsigned int *user_version);

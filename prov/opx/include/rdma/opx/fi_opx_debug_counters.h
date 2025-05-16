@@ -200,11 +200,12 @@ struct fi_opx_debug_counters {
 
 	struct {
 		uint64_t send_first_packets;
+		uint64_t send_first_eagain_credits;
+		uint64_t send_first_eagain_reliability;
 		uint64_t send_nth_packets;
-		uint64_t send_first_force_cr;
-		uint64_t send_nth_force_cr;
+		uint64_t send_nth_eagain_credits;
+		uint64_t send_nth_eagain_reliability;
 		uint64_t send_fall_back_to_rzv;
-		uint64_t send_full_replay_buffer_rx_poll;
 
 		uint64_t recv_max_ue_queue_length;
 		uint64_t recv_max_mq_queue_length;
@@ -456,11 +457,13 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 
 #ifdef OPX_DEBUG_COUNTERS_MP_EAGER
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_first_packets);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_first_eagain_credits);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_first_eagain_reliability);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_nth_packets);
-	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_first_force_cr);
-	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_nth_force_cr);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_nth_eagain_credits);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_nth_eagain_reliability);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_fall_back_to_rzv);
-	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_full_replay_buffer_rx_poll);
+
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.recv_max_ue_queue_length);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.recv_max_mq_queue_length);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.recv_first_packets);

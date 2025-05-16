@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 Cornelis Networks.
+ * Copyright (C) 2024-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -79,18 +79,26 @@ uint32_t opx_pbc_wfr_l2type(unsigned _type)
  * In this scheme the expected sequence number is incremented by
  * 0x10000000 instead of 0x1.
  */
-
+#define OPX_WFR_RHF_SEQ_UPDATE(_seq, _rhf)	      (_seq | (_rhf & ~0x00000000F0000000ul))
 #define OPX_WFR_RHF_SEQ_NOT_MATCH(_seq, _rhf)	      (_seq != (_rhf & 0xF0000000ul))
 #define OPX_WFR_RHF_SEQ_INCREMENT(_seq)		      ((_seq < 0xD0000000ul) * _seq + 0x10000000ul)
 #define OPX_WFR_IS_ERRORED_RHF(_rhf, _hfi1_type)      (_rhf & 0xBFE0000000000000ul)
 #define OPX_WFR_RHF_SEQ_MATCH(_seq, _rhf, _hfi1_type) (_seq == (_rhf & 0xF0000000ul))
 #define OPX_WFR_RHF_SEQ_INIT_VAL		      (0x10000000ul)
 #define OPX_WFR_RHF_IS_USE_EGR_BUF(_rhf)	      ((_rhf & 0x00008000ul) == 0x00008000ul)
-#define OPX_WFR_RHF_EGRBFR_INDEX_MASK		      (0x7FF)
+#define OPX_WFR_RHF_EGRBFR_INDEX_MASK		      (0xFFF)
 #define OPX_WFR_RHF_EGRBFR_INDEX_SHIFT		      (16)
+#define OPX_WFR_RHF_EGRBFR_OFFSET_SHIFT		      (32)
+#define OPX_WFR_RHF_EGRBFR_OFFSET_MASK		      (0x0000000000000FFFul)
 #define OPX_WFR_RHF_EGR_INDEX(_rhf)		      ((_rhf >> OPX_WFR_RHF_EGRBFR_INDEX_SHIFT) & OPX_WFR_RHF_EGRBFR_INDEX_MASK)
-#define OPX_WFR_RHF_EGR_OFFSET(_rhf)		      ((_rhf >> 32) & 0x0FFFul)
-#define OPX_WFR_RHF_HDRQ_OFFSET(_rhf)		      ((_rhf >> (32 + 12)) & 0x01FFul)
+#define OPX_WFR_RHF_EGR_INDEX_UPDATE(_rhf, index)                                      \
+	(((index & OPX_WFR_RHF_EGRBFR_INDEX_MASK) << OPX_WFR_RHF_EGRBFR_INDEX_SHIFT) | \
+	 (_rhf & ~(OPX_WFR_RHF_EGRBFR_INDEX_MASK << OPX_WFR_RHF_EGRBFR_INDEX_SHIFT)))
+#define OPX_WFR_RHF_EGR_OFFSET_UPDATE(_rhf, offset)                                       \
+	(((offset & OPX_WFR_RHF_EGRBFR_OFFSET_MASK) << OPX_WFR_RHF_EGRBFR_OFFSET_SHIFT) | \
+	 (_rhf & ~(OPX_WFR_RHF_EGRBFR_OFFSET_MASK << OPX_WFR_RHF_EGRBFR_OFFSET_SHIFT)))
+#define OPX_WFR_RHF_EGR_OFFSET(_rhf)  ((_rhf >> OPX_WFR_RHF_EGRBFR_OFFSET_SHIFT) & OPX_WFR_RHF_EGRBFR_OFFSET_MASK)
+#define OPX_WFR_RHF_HDRQ_OFFSET(_rhf) ((_rhf >> (32 + 12)) & 0x01FFul)
 
 #define OPX_WFR_RHF_ICRCERR    (0x80000000u)
 #define OPX_WFR_RHF_ECCERR     (0x20000000u)
@@ -106,12 +114,12 @@ struct fi_opx_ep;
 void opx_wfr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, volatile uint32_t *rhf_ptr,
 		       const uint32_t rhf_msb, const uint32_t rhf_lsb, const uint64_t rhf_seq,
 		       const uint64_t hdrq_offset, const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr,
-		       const enum opx_hfi1_type hfi1_type);
+		       const enum opx_hfi1_type hfi1_type, uint16_t last_egrbfr_index);
 
 #define OPX_WFR_RHE_DEBUG(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr, \
-			  _hfi1_type)                                                                               \
+			  _hfi1_type, last_egrbfr_index)                                                            \
 	opx_wfr_rhe_debug(_opx_ep, _rhe_ptr, _rhf_ptr, _rhf_msb, _rhf_lsb, _rhf_seq, _hdrq_offset, _rhf_rcvd, _hdr, \
-			  _hfi1_type)
+			  _hfi1_type, last_egrbfr_index)
 
 // Common to both JKR/WFR
 

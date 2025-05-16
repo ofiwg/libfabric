@@ -128,7 +128,8 @@ enum opx_hfi1_type {
 	OPX_HFI1_UNDEF	= 0, // undefined
 	OPX_HFI1_JKR_9B = 1, // CN5000 built for mixed network. Internal use
 	OPX_HFI1_WFR	= 2, // Omni-path (all generations)
-	OPX_HFI1_JKR	= 4  // CN5000 (initial generation)
+	OPX_HFI1_JKR	= 4, // CN5000 (initial generation)
+	OPX_HFI1_CYR	= 8  // CN6000 (initial generation)
 };
 
 /* Arbitrary packet "types" that can be differentiated as needed (route control) */
@@ -148,14 +149,14 @@ static const char *const OPX_HFI1_PACKET_STR[] = {
 	[OPX_HFI1_RZV_CTRL] = "OPX_HFI1_RZV_CTRL", [OPX_HFI1_RZV_DATA] = "OPX_HFI1_RZV_DATA"};
 
 /* Will remove after 16B SDMA support is finished */
-#define OPX_NO_9B_SUPPORT(_hfi1_type)                                                                                \
-	do {                                                                                                         \
-		if (!(_hfi1_type & OPX_HFI1_JKR)) {                                                                  \
-			fprintf(stderr, "%s NO JKR 9B SUPPORT for %s\n", __func__, OPX_HFI_TYPE_STRING(_hfi1_type)); \
-			if (getenv("OPX_9B_ABORT"))                                                                  \
-				abort();                                                                             \
-		}                                                                                                    \
-		assert(_hfi1_type != OPX_HFI1_UNDEF);                                                                \
+#define OPX_NO_9B_SUPPORT(_hfi1_type)                                                                            \
+	do {                                                                                                     \
+		if (!(_hfi1_type & OPX_HFI1_JKR)) {                                                              \
+			fprintf(stderr, "%s NO 9B SUPPORT for %s\n", __func__, OPX_HFI_TYPE_STRING(_hfi1_type)); \
+			if (getenv("OPX_9B_ABORT"))                                                              \
+				abort();                                                                         \
+		}                                                                                                \
+		assert(_hfi1_type != OPX_HFI1_UNDEF);                                                            \
 	} while (0)
 
 #define OPX_NO_16B_SUPPORT(_hfi1_type)                                                                            \
@@ -227,7 +228,8 @@ struct fi_opx_global_data {
 	struct fi_opx_daos_hfi_rank *daos_hfi_rank_hashmap;
 	enum fi_progress	     progress;
 	bool			     ctx_sharing_enabled;
-	uint8_t			     unused[3];
+	uint16_t		     pkt_size;
+	uint8_t			     unused[1];
 	uint64_t		     unused_qw[4];
 
 	/* == CACHE LINE 2+ == */
@@ -240,10 +242,10 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_global_data, hmem_domain_list) ==
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_global_data, hfi_local_info) == (FI_OPX_CACHE_LINE_SIZE * 2),
 			"Offset of fi_opx_global_data->hfi_local_info should start at cacheline 2!");
 
-#define OPX_HFI_TYPE_STRING(_hfi_type)                                                       \
-	({                                                                                   \
-		assert((_hfi_type >= 0) && (_hfi_type <= OPX_HFI1_JKR) && (_hfi_type != 3)); \
-		fi_opx_global.opx_hfi1_type_strings[_hfi_type];                              \
+#define OPX_HFI_TYPE_STRING(_hfi_type)                                   \
+	({                                                               \
+		assert((_hfi_type >= 0) && (_hfi_type <= OPX_HFI1_CYR)); \
+		fi_opx_global.opx_hfi1_type_strings[_hfi_type];          \
 	})
 
 extern struct fi_opx_global_data fi_opx_global;
@@ -332,7 +334,7 @@ static const uint64_t FI_OPX_HDRQ_MASK_8192    = 0X000000000003FFE0UL;
 static inline void always_assert(bool val, char *msg)
 {
 	if (!val) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "%s\n", msg);
+		FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "%s\n", msg);
 		exit(EXIT_FAILURE);
 	}
 }
@@ -340,7 +342,7 @@ static inline void always_assert(bool val, char *msg)
 static inline void fi_opx_ref_init(int64_t *ref, char *name)
 {
 	*ref = 0;
-	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "initializing ref count for (%s) to (%d)\n", name, 0);
+	FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "initializing ref count for (%s) to (%d)\n", name, 0);
 
 	return;
 }
@@ -348,6 +350,8 @@ static inline void fi_opx_ref_init(int64_t *ref, char *name)
 static inline void fi_opx_ref_inc(int64_t *ref, char *name)
 {
 	(*ref) += 1;
+	FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "Incrementing ref count for (%s). New value is (%ld)\n", name,
+	       (*ref));
 	return;
 }
 
@@ -377,13 +381,13 @@ static inline int fi_opx_ref_finalize(int64_t *ref, char *name)
 static inline int fi_opx_fid_check(fid_t fid, int fid_class, char *name)
 {
 	if (!fid) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "NULL %s object", name);
+		FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "NULL %s object", name);
 		errno = FI_EINVAL;
 		return -errno;
 	}
 	if (fid->fclass != fid_class) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-		       "wrong type of object (%s) expected (%d), got (%zu)\n", name, fid_class, fid->fclass);
+		FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "wrong type of object (%s) expected (%d), got (%zu)\n", name,
+		       fid_class, fid->fclass);
 		errno = FI_EINVAL;
 		return -errno;
 	}

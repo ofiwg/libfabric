@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2023 Cornelis Networks.
+  Copyright(c) 2021-2025 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -20,7 +20,7 @@
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2023 Cornelis Networks.
+  Copyright(c) 2021-2025 Cornelis Networks.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -49,9 +49,6 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
-
-/* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
-/* Copyright (C) 2021-2024 by Cornelis Networks.                    */
 
 #ifndef OPA_UDEBUG_H
 #define OPA_UDEBUG_H
@@ -223,17 +220,6 @@
 #define OPX_LOG_PKT(level, subsystem, ...) FI_LOG(fi_opx_global.prov, level, subsystem, __VA_ARGS__)
 #else
 #define OPX_LOG_PKT(level, subsystem, ...)
-#endif
-
-/*
- * OPX_LOG_REL() will by default be a nop/no code on optimzed builds and not affect performance.
- * Use OPX_LOG_REL() to safely handle message logging on critical/high use paths.
- * This log class is for tracing issues with reliability
- */
-#ifdef OPX_ENABLE_LOG_REL
-#define OPX_LOG_REL(level, subsystem, ...) FI_LOG(fi_opx_global.prov, level, subsystem, __VA_ARGS__)
-#else
-#define OPX_LOG_REL(level, subsystem, ...)
 #endif
 
 #endif /* OPA_UDEBUG_H */

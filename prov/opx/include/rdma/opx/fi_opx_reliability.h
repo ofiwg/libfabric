@@ -202,11 +202,7 @@ struct fi_opx_reliability_service {
 		struct ofi_bufpool *replay_pool;
 		RbtHandle	    tx_flow_outstanding_pkts_rbtree;
 		RbtHandle	    tx_flow_rbtree;
-
-		union fi_opx_hfi1_pio_state *pio_state;
-		volatile uint64_t	    *pio_scb_sop_first;
-		volatile uint64_t	    *pio_credits_addr;
-		volatile uint64_t	    *pio_scb_first;
+		uint64_t	    unused[4];
 	} tx;
 
 	/* == CACHE LINE 2 == */
@@ -303,6 +299,7 @@ struct fi_opx_reliability_tx_replay {
 		uint64_t     *payload;
 		struct iovec *iov;
 	};
+
 	uint16_t unused1;
 	uint16_t nack_count;
 	bool	 acked;
@@ -464,7 +461,7 @@ struct fi_opx_reliability_rx_uepkt {
 	union opx_hfi1_packet_hdr hdr; /* 56 bytes */
 
 	/* == CACHE LINE == */
-	uint8_t payload[FI_OPX_HFI1_PACKET_MTU];
+	uint8_t payload[OPX_HFI1_MAX_PKT_SIZE];
 
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 
@@ -498,7 +495,7 @@ union fi_opx_reliability_tx_psn {
 
 #define OPX_REPLAY_BASE_SIZE		   (sizeof(struct fi_opx_reliability_tx_replay))
 #define OPX_REPLAY_IOV_SIZE		   (sizeof(struct iovec) << 1)
-#define OPX_REPLAY_PAYLOAD_SIZE		   (FI_OPX_HFI1_PACKET_MTU + 64)
+#define OPX_REPLAY_PAYLOAD_SIZE		   (OPX_HFI1_MAX_PKT_SIZE + 64)
 #define OPX_RELIABILITY_TX_REPLAY_SIZE	   (OPX_REPLAY_BASE_SIZE + OPX_REPLAY_PAYLOAD_SIZE)
 #define OPX_RELIABILITY_TX_REPLAY_IOV_SIZE (OPX_REPLAY_BASE_SIZE + OPX_REPLAY_IOV_SIZE)
 
@@ -894,7 +891,7 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 
 	/*
 	 * We can leverage the fact that every packet needs a packet sequence
-	 * number before it can be sent to implement some simply throttling.
+	 * number before it can be sent to implement some simple throttling.
 	 *
 	 * If the throttle is on, or if the # of bytes outstanding exceeds
 	 * a threshold, return an error.
@@ -919,7 +916,7 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 		return -1;
 	}
 
-	uint32_t bytes_avail = max_outstanding - (*psn_ptr)->psn.bytes_outstanding;
+	const uint32_t bytes_avail = max_outstanding - (*psn_ptr)->psn.bytes_outstanding;
 	OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "GET_PSNS");
 	return MIN(bytes_avail / bytes_per_packet, psns_to_get);
 }
@@ -950,8 +947,8 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
 		union fi_opx_reliability_tx_psn psn_value = **psn_ptr;
 
 		/*
-		 * We can leverage the fact athat every packet needs a packet sequence
-		 * number before it can be sent to implement some simply throttling.
+		 * We can leverage the fact that every packet needs a packet sequence
+		 * number before it can be sent to implement some simple throttling.
 		 *
 		 * If the throttle is on, or if the # of bytes outstanding exceeds
 		 * a threshold, return an error.
@@ -1062,8 +1059,7 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 		return -1;
 	}
 
-	uint32_t psn;
-	psn		    = psn_value.psn.psn;
+	const uint32_t psn  = psn_value.psn.psn;
 	(*psn_ptr)->psn.psn = (psn_value.psn.psn + 1) & MAX_PSN;
 
 	return psn;
@@ -1148,7 +1144,7 @@ ssize_t fi_opx_reliability_service_do_replay_sdma(struct fid_ep *ep, struct fi_o
 						  struct fi_opx_reliability_tx_replay *end_replay, uint32_t num_replays,
 						  const union fi_opx_reliability_service_flow_key *flow_key);
 
-ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_reliability_service	 *service,
+ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_service *service,
 					     struct fi_opx_reliability_tx_replay *replay);
 
 void fi_opx_hfi_rx_reliablity_process_requests(struct fid_ep *ep, int max_to_send);
