@@ -113,6 +113,9 @@ efa_rdm_pke_post_remote_read_or_nack(struct efa_rdm_ep  *ep,
 	int err = 0;
 	int pkt_type;
 	int p2p_avail;
+	struct efa_rdm_peer *peer;
+
+	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 
 	pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 	err = efa_rdm_ep_use_p2p(ep, rxe->desc[0]);
@@ -161,7 +164,7 @@ send_nack:
 	}
 
 	if (efa_rdm_pkt_type_is_rtm(pkt_type)) {
-		efa_rdm_rxe_map_insert(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry), pkt_entry->addr, rxe);
+		efa_rdm_rxe_map_insert(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry), rxe);
 	}
 
 	return efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_READ_NACK_PKT);
