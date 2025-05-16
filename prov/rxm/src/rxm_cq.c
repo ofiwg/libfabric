@@ -806,6 +806,11 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got TAGGED op\n");
 		ret = srx->owner_ops->get_tag(srx, &match, &rx_entry);
 		if (ret == -FI_ENOENT) {
+			if (rx_buf->pkt.hdr.flags & FI_RPC) {
+				FI_DBG(&rxm_prov, FI_LOG_CQ, "Drop stale RPC response\n");
+				rxm_free_rx_buf(rx_buf);
+				return 0;
+			}
 			rxm_entry_prep_for_queue(rx_entry, rx_buf);
 			return srx->owner_ops->queue_tag(rx_entry);
 		}
