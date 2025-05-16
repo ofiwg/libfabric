@@ -1216,6 +1216,12 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx,
 		if (!rx_buffered->is_complete || rx_buffered->is_claimed)
 			continue;
 
+		if (rx_buffered->addr == FI_ADDR_NOTAVAIL) {
+			rx_buffered->addr = sock_av_get_addr_index(rx_ctx->av, &rx_buffered->sock_addr);
+			if (rx_buffered->addr == FI_ADDR_NOTAVAIL) {
+				continue;
+			}
+		}
 		rx_posted = sock_rx_get_entry(rx_ctx, rx_buffered->addr,
 						rx_buffered->tag,
 						rx_buffered->is_tagged);
@@ -1375,6 +1381,9 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 			}
 
 			rx_entry->addr = pe_entry->addr;
+			if (rx_entry->addr == FI_ADDR_NOTAVAIL) {
+				rx_entry->sock_addr = pe_entry->conn->addr;
+			}
 			rx_entry->tag = pe_entry->tag;
 			rx_entry->data = pe_entry->data;
 			rx_entry->ignore = 0;

@@ -611,6 +611,7 @@ struct sock_rx_entry {
 	uint64_t flags;
 	uint64_t context;
 	uint64_t addr;
+	union ofi_sock_ip sock_addr;
 	uint64_t data;
 	uint64_t tag;
 	uint64_t ignore;
