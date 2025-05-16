@@ -204,18 +204,21 @@ struct fi_opx_ep_tx {
 
 	volatile union fi_opx_hfi1_pio_state *pio_state; /* 1 qw = 8 bytes */
 	volatile uint64_t		     *pio_scb_sop_first;
-	uint32_t			      sdma_bounce_buf_threshold;
-	uint16_t			      pio_max_eager_tx_bytes;
-	uint16_t			      pio_flow_eager_tx_bytes;
 
 	volatile uint64_t *pio_credits_addr; /* const; only used to infrequently "refresh" credit information */
 	volatile uint64_t *pio_scb_first;    /* const; only eager and rendezvous */
-	uint64_t	   cq_bind_flags;
 	struct slist	  *cq_completed_ptr;
-	uint32_t	   do_cq_completion;
-	uint16_t	   unused_cacheline1;
+	uint32_t	   rzv_min_payload_bytes;
+	uint32_t	   mp_eager_max_payload_bytes;
+	uint16_t	   mp_eager_min_payload_bytes;
+	uint16_t	   mp_eager_chunk_size;
+	uint16_t	   pio_max_eager_tx_bytes;
+	uint16_t	   pio_flow_eager_tx_bytes;
+	uint32_t	   unused_cacheline1;
+	uint8_t		   do_cq_completion;
 	uint8_t		   force_credit_return;
 	uint8_t		   use_sdma;
+	uint8_t		   unused_cacheline1_1;
 
 	/* == CACHE LINE 1,2 == */
 	struct fi_opx_hfi1_txe_scb_9B inject_9B; /* qws 5,6, and 7 specified at runtime */
@@ -243,11 +246,11 @@ struct fi_opx_ep_tx {
 
 	/* == CACHE LINE 17 == */
 
-	union fi_opx_addr *av_addr;  /* only FI_ADDR_TABLE */
-	uint64_t	   av_count; /* only FI_ADDR_TABLE */
+	union fi_opx_addr *av_addr; /* only FI_ADDR_TABLE */
 	uint64_t	   op_flags;
 	uint64_t	   caps;
 	uint64_t	   mode;
+	uint64_t	   cq_bind_flags;
 	struct slist	  *cq_err_ptr;
 	struct fi_opx_cq  *cq;
 	struct slist	  *cq_pending_ptr; /* only rendezvous (typically) */
@@ -265,9 +268,7 @@ struct fi_opx_ep_tx {
 	struct ofi_bufpool *sdma_work_pool;
 	uint32_t	    sdma_min_payload_bytes;
 	uint32_t	    tid_min_payload_bytes;
-	uint32_t	    rzv_min_payload_bytes;
-	uint16_t	    mp_eager_max_payload_bytes;
-	uint16_t	    unused_cacheline6;
+	uint64_t	    unused_cacheline6_1;
 
 	/* == CACHE LINE 20 == */
 	struct opx_sdma_queue sdma_request_queue;
@@ -277,7 +278,8 @@ struct fi_opx_ep_tx {
 	uint16_t	      sdma_max_iovs_per_writev;
 	uint16_t	      sdma_max_pkts_tid;
 	uint16_t	      sdma_max_pkts;
-	uint64_t	      unused_cacheline7[1];
+	uint32_t	      sdma_bounce_buf_threshold;
+	uint32_t	      unused_cacheline7;
 
 	/* == CACHE LINE 21, ... == */
 	int64_t		      ref_cnt;
@@ -322,9 +324,8 @@ struct fi_opx_ep_rx {
 	 * receive operations
 	 */
 	uint64_t	   op_flags;
-	uint64_t	   unused_cacheline_0[5];
-	uint64_t	   av_count;
 	union fi_opx_addr *av_addr;
+	uint64_t	   unused_cacheline_0[6];
 
 	/*
 	 * NOTE: The following 2 cachelines are shared between the application-facing
@@ -3635,7 +3636,7 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	const union fi_opx_addr addr   = {.fi = dest_addr};
 
 	assert(!fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps));
-	assert(len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type));
+	assert(len > opx_ep->tx->mp_eager_chunk_size);
 
 	const uint64_t bth_subctxt_rx = ((uint64_t) addr.hfi1_subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	const uint64_t lrh_dlid =
@@ -3660,7 +3661,6 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 					       opx_ep->debug_counters.mp_eager.send_first_eagain_credits);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(rc != -FI_ENOBUFS,
 					       opx_ep->debug_counters.mp_eager.send_first_eagain_reliability);
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_fall_back_to_rzv);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== SEND, HFI -- MULTI-PACKET EAGER EAGAIN (%s)\n",
 			     (rc == -FI_ENOBUFS) ? "credits" : "reliability");
@@ -3671,7 +3671,7 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_first_packets);
 
 	/* The first packet was successful. We're now committed to finishing this */
-	const size_t chunk_size	       = FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE(hfi1_type);
+	const size_t chunk_size	       = opx_ep->tx->mp_eager_chunk_size;
 	ssize_t	     payload_remaining = len - payload_bytes_sent;
 	uint32_t     payload_offset    = payload_bytes_sent;
 	buf_bytes_ptr += payload_bytes_sent;
@@ -3691,6 +3691,9 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 					       opx_ep->debug_counters.mp_eager.send_nth_eagain_reliability);
 
 		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
+		union fi_opx_hfi1_pio_state pio_state = {.qw0 = opx_ep->tx->pio_state->qw0};
+		fi_opx_update_credits(&pio_state, opx_ep->tx->pio_credits_addr);
+		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 		rc = opx_hfi1_tx_send_mp_egr_remaining(opx_ep, &buf_bytes_ptr, &payload_offset, &payload_remaining,
 						       first_packet_psn, chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid,
@@ -3718,8 +3721,7 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 				 const uint64_t tx_op_flags, const uint64_t caps,
 				 const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 				 const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
-				 const uint64_t hmem_handle, const bool mp_eager_fallback,
-				 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+				 const uint64_t hmem_handle, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	ssize_t rc;
 	if (is_contiguous) {
@@ -3732,9 +3734,7 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 					     hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
 	}
 
-	/* Success or insufficient credits. If the payload is big enough,
-	   fall back to Multi-packet eager to try sending this in smaller chunks. */
-	if (OFI_LIKELY(rc == FI_SUCCESS) || (rc == -FI_ENOBUFS && mp_eager_fallback)) {
+	if (OFI_LIKELY(rc == FI_SUCCESS)) {
 		return rc;
 	}
 
@@ -3859,17 +3859,11 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 	const uint64_t do_cq_completion = fi_opx_ep_tx_do_cq_completion(opx_ep, override_flags, tx_op_flags);
 
 	if (total_len < opx_ep->tx->rzv_min_payload_bytes) {
-		const bool mp_eager_fallback =
-#ifndef FI_OPX_MP_EGR_DISABLE
-			(total_len > OPX_MP_EGR_MIN_BYTES && total_len <= opx_ep->tx->mp_eager_max_payload_bytes);
-#else
-			false;
-#endif
 		if (total_len <= opx_ep->tx->pio_flow_eager_tx_bytes) {
 			rc = opx_ep_tx_send_try_eager(ep, buf, len, addr, tag, context, local_iov, niov, total_len,
 						      data, lock_required, is_contiguous, override_flags, tx_op_flags,
 						      caps, reliability, do_cq_completion, hmem_iface, hmem_device,
-						      hmem_handle, mp_eager_fallback, hfi1_type, ctx_sharing);
+						      hmem_handle, hfi1_type, ctx_sharing);
 			if (OFI_LIKELY(rc == FI_SUCCESS)) {
 				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -3884,10 +3878,11 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			return -FI_EAGAIN;
 		}
 
-#ifndef FI_OPX_MP_EGR_DISABLE
 		/* If hmem_iface != FI_HMEM_SYSTEM, we skip MP EGR because RZV yields better performance for devices */
-		if (is_contiguous && mp_eager_fallback && !fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps) &&
-		    (caps & FI_TAGGED) && hmem_iface == FI_HMEM_SYSTEM) {
+		if (total_len <= opx_ep->tx->mp_eager_max_payload_bytes && is_contiguous &&
+		    !fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps) && (caps & FI_TAGGED) &&
+		    hmem_iface == FI_HMEM_SYSTEM) {
+			assert(total_len >= opx_ep->tx->mp_eager_min_payload_bytes);
 			rc = opx_hfi1_tx_send_try_mp_egr(ep, buf, len, addr.fi, tag, context, data, lock_required,
 							 override_flags, tx_op_flags, caps, reliability,
 							 do_cq_completion, FI_HMEM_SYSTEM, 0ul, OPX_HMEM_NO_HANDLE,
@@ -3905,7 +3900,6 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 			return -FI_EAGAIN;
 		}
-#endif
 	}
 
 	rc = opx_ep_tx_send_rzv(ep, buf, len, addr, tag, context, local_iov, niov, total_len, data, lock_required,

@@ -888,13 +888,34 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 				   l_mp_eager_disable);
 	}
 
-	if (l_mp_eager_disable == OPX_MP_EGR_DISABLE_SET) {
-		opx_ep->tx->mp_eager_max_payload_bytes = 0;
-	} else {
-		opx_ep->tx->mp_eager_max_payload_bytes = l_rzv_min_payload_bytes - 1;
+	if (l_rzv_min_payload_bytes <= l_pio_flow_eager_tx_bytes) {
+		OPX_LOG_OBSERVABLE(
+			FI_LOG_EP_DATA,
+			"Rendezvous min payload bytes (%d) <= Eager flow bytes (%lu), effectively disabling MP Eager.\n",
+			l_rzv_min_payload_bytes, l_pio_flow_eager_tx_bytes);
+		l_mp_eager_disable = OPX_MP_EGR_DISABLE_SET;
 	}
-	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Using MP eager threshold of %d\n", opx_ep->tx->mp_eager_max_payload_bytes);
-	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager chunk-size is %d.\n", FI_OPX_MP_EGR_CHUNK_SIZE);
+
+	if (l_mp_eager_disable == OPX_MP_EGR_DISABLE_SET) {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager is disabled.\n");
+		opx_ep->tx->mp_eager_max_payload_bytes = 0;
+		opx_ep->tx->mp_eager_min_payload_bytes = UINT16_MAX;
+		opx_ep->tx->mp_eager_chunk_size	       = UINT16_MAX;
+	} else {
+		uint16_t max_chunk_size =
+			(OPX_HFI1_TYPE & OPX_HFI1_WFR) ? OPX_MP_EGR_MAX_CHUNK_SIZE_WFR : OPX_MP_EGR_MAX_CHUNK_SIZE_CN5K;
+
+		opx_ep->tx->mp_eager_max_payload_bytes = l_rzv_min_payload_bytes - 1;
+		opx_ep->tx->mp_eager_min_payload_bytes = l_pio_flow_eager_tx_bytes + 1;
+		opx_ep->tx->mp_eager_chunk_size	       = MIN(l_pio_flow_eager_tx_bytes, max_chunk_size);
+
+		// Chunk size needs to be a multiple of 64
+		assert((opx_ep->tx->mp_eager_chunk_size & 0x3F) == 0);
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager range is %hu-%u.\n",
+				   opx_ep->tx->mp_eager_min_payload_bytes, opx_ep->tx->mp_eager_max_payload_bytes);
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager chunk-size is %hu.\n",
+				   opx_ep->tx->mp_eager_chunk_size);
+	}
 
 	/* Set SDMA bounce buffer threshold.  Any messages larger than this value in bytes will not be copied to
 	 * replay bounce buffers.  Instead, hold the sender's large message buffer until we get all ACKs back from the
@@ -1688,11 +1709,6 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		OPX_HFI1_PKT_SIZE = opx_ep->hfi->mtu;
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Global OPX packet size %u\n", OPX_HFI1_PKT_SIZE);
-
-	assert(!(FI_OPX_MP_EGR_CHUNK_SIZE & 0x3F));
-	assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT > FI_OPX_MP_EGR_CHUNK_SIZE);
-	assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX > FI_OPX_MP_EGR_CHUNK_SIZE);
-	assert(OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX >= OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT);
 
 	/* The global was set early (userinit), may be changed now on mixed networks */
 	int mixed_network = 0;
@@ -3191,11 +3207,9 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_op
 			     struct fi_opx_extended_addr *peers_ext)
 {
 	int	n;
-	ssize_t rc	     = FI_SUCCESS;
-	opx_ep->rx->av_addr  = opx_ep->av->table_addr;
-	opx_ep->tx->av_addr  = opx_ep->av->table_addr;
-	opx_ep->rx->av_count = opx_ep->av->addr_count;
-	opx_ep->tx->av_count = opx_ep->av->addr_count;
+	ssize_t rc	    = FI_SUCCESS;
+	opx_ep->rx->av_addr = opx_ep->av->table_addr;
+	opx_ep->tx->av_addr = opx_ep->av->table_addr;
 	for (n = 0; n < count; ++n) {
 		FI_INFO(fi_opx_global.prov, FI_LOG_AV, "opx_ep %p, opx_ep->tx %p, peer %#lX\n", opx_ep, opx_ep->tx,
 			peers[n].fi);
