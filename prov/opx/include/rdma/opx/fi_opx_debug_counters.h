@@ -205,7 +205,6 @@ struct fi_opx_debug_counters {
 		uint64_t send_nth_packets;
 		uint64_t send_nth_eagain_credits;
 		uint64_t send_nth_eagain_reliability;
-		uint64_t send_fall_back_to_rzv;
 
 		uint64_t recv_max_ue_queue_length;
 		uint64_t recv_max_mq_queue_length;
@@ -462,7 +461,6 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_nth_packets);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_nth_eagain_credits);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_nth_eagain_reliability);
-	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.send_fall_back_to_rzv);
 
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.recv_max_ue_queue_length);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, mp_eager.recv_max_mq_queue_length);
