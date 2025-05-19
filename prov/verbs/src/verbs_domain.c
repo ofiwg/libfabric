@@ -308,21 +308,23 @@ static struct fi_ops_domain vrb_dgram_domain_ops = {
 	.query_collective = fi_no_query_collective,
 };
 
-static struct fi_info *
-vrb_get_verbs_info(const char *domain_name)
+static int
+vrb_check_verbs_info(struct fid_fabric *fabric, struct fi_info *info)
 {
 	const struct fi_info *fi;
+	int ret = -FI_ENODATA;
 
 	ofi_mutex_lock(&vrb_info_mutex);
 	for (fi = vrb_util_prov.info; fi; fi = fi->next) {
-		if (!strcmp(fi->domain_attr->name, domain_name)) {
-			ofi_mutex_unlock(&vrb_info_mutex);
-			return fi_dupinfo(fi);
+		if (!strcmp(fi->domain_attr->name, info->domain_attr->name)) {
+			ret = ofi_check_domain_attr(&vrb_prov, fabric->api_version,
+						    fi->domain_attr, info);
+			break;
 		}
 	}
 	ofi_mutex_unlock(&vrb_info_mutex);
 
-	return NULL;
+	return ret;
 }
 
 static int
@@ -341,20 +343,13 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct vrb_fabric *fab =
 		 container_of(fabric, struct vrb_fabric,
 			      util_fabric.fabric_fid);
-	struct fi_info *fi = vrb_get_verbs_info(info->domain_attr->name);
-	if (!fi)
-		return -FI_EINVAL;
-
-	ret = ofi_check_domain_attr(&vrb_prov, fabric->api_version,
-				    fi->domain_attr, info);
+	ret = vrb_check_verbs_info(fabric, info);
 	if (ret)
-		goto err0;
+		return ret;
 
 	_domain = calloc(1, sizeof *_domain);
-	if (!_domain) {
-		ret = -FI_ENOMEM;
-		goto err0;
-	}
+	if (!_domain)
+		return -FI_ENOMEM;
 
 	ret = ofi_domain_init(fabric, info, &_domain->util_domain, context,
 			      OFI_LOCK_MUTEX);
@@ -455,8 +450,6 @@ err2:
 		VRB_WARN(FI_LOG_DOMAIN, "ofi_domain_close fails");
 err1:
 	free(_domain);
-err0:
-	fi_freeinfo(fi);
 	return ret;
 }
 
