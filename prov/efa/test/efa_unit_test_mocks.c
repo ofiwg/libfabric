@@ -275,6 +275,12 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 #if HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES
 	.ibv_query_qp_data_in_order = __real_ibv_query_qp_data_in_order,
 #endif
+#if HAVE_EFADV_QUERY_QP_WQS
+	.efadv_query_qp_wqs = __real_efadv_query_qp_wqs,
+#endif
+#if HAVE_EFADV_QUERY_CQ
+	.efadv_query_cq = __real_efadv_query_cq,
+#endif
 };
 
 struct ibv_ah *__wrap_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
@@ -485,3 +491,43 @@ int efa_mock_ibv_query_qp_data_in_order_return_in_order_aligned_128_bytes(struct
 	return IBV_QUERY_QP_DATA_IN_ORDER_ALIGNED_128_BYTES;
 }
 #endif
+
+#if HAVE_EFADV_QUERY_QP_WQS
+int __wrap_efadv_query_qp_wqs(struct ibv_qp *ibvqp, struct efadv_wq_attr *sq_attr,
+			      struct efadv_wq_attr *rq_attr, uint32_t inlen)
+{
+	return g_efa_unit_test_mocks.efadv_query_qp_wqs(ibvqp, sq_attr, rq_attr, inlen);
+}
+
+int efa_mock_efadv_query_qp_wqs(struct ibv_qp *ibvqp, struct efadv_wq_attr *sq_attr,
+				struct efadv_wq_attr *rq_attr, uint32_t inlen)
+{
+	sq_attr->buffer = (uint8_t *) 0x12345678;
+	sq_attr->doorbell = (uint32_t *) 0x87654321;
+	sq_attr->entry_size = 64;
+	sq_attr->num_entries = 128;
+	sq_attr->max_batch = 16;
+
+	rq_attr->buffer = (uint8_t *) 0x12345678;
+	rq_attr->doorbell = (uint32_t *) 0x87654321;
+	rq_attr->entry_size = 64;
+	rq_attr->num_entries = 128;
+	rq_attr->max_batch = 16;
+	return 0;
+}
+#endif /* HAVE_EFADV_QUERY_QP_WQS */
+
+#if HAVE_EFADV_QUERY_CQ
+int __wrap_efadv_query_cq(struct ibv_cq *ibvcq, struct efadv_cq_attr *attr, uint32_t inlen)
+{
+	return g_efa_unit_test_mocks.efadv_query_cq(ibvcq, attr, inlen);
+}
+
+int efa_mock_efadv_query_cq(struct ibv_cq *ibvcq, struct efadv_cq_attr *attr, uint32_t inlen)
+{
+	attr->buffer = (uint8_t *) 0x12345678;
+	attr->entry_size = 64;
+	attr->num_entries = 128;
+	return 0;
+}
+#endif /* HAVE_EFADV_QUERY_CQ */
