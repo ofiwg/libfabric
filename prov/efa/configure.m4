@@ -78,6 +78,8 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_efa_dmabuf_mr=0
 	have_efadv_query_mr=0
 	have_efadv_sl=0
+	have_efadv_query_qp_wqs=0
+	have_efadv_query_cq=0
 
 	dnl $have_neuron is defined at top-level configure.ac
 	AM_CONDITIONAL([HAVE_NEURON], [ test x"$have_neuron" = x1 ])
@@ -165,6 +167,18 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[have_efadv_sl=1],
 			[have_efadv_sl=0],
 			[[#include <infiniband/efadv.h>]])
+		
+		have_efadv_query_qp_wqs=1
+		AC_CHECK_DECL([efadv_query_qp_wqs],
+			[],
+			[have_efadv_query_qp_wqs=0],
+			[[#include <infiniband/efadv.h>]])
+	
+		have_efadv_query_cq=1
+		AC_CHECK_DECL([efadv_query_cq],
+			[],
+			[have_efadv_query_cq=0],
+			[[#include <infiniband/efadv.h>]])
 	])
 
 	AC_DEFINE_UNQUOTED([HAVE_RDMA_SIZE],
@@ -197,6 +211,12 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_EFADV_SL],
 		[$have_efadv_sl],
 		[Indicates if efadv_qp_init_attr has sl])
+	AC_DEFINE_UNQUOTED([HAVE_EFADV_QUERY_QP_WQS],
+		[$have_efadv_query_qp_wqs],
+		[Indicates if efadv_query_qp_wqs is available])
+	AC_DEFINE_UNQUOTED([HAVE_EFADV_QUERY_CQ],
+		[$have_efadv_query_cq],
+		[Indicates if efadv_query_cq is available])
 
 
 	CPPFLAGS=$save_CPPFLAGS
@@ -242,6 +262,8 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 
 	AM_CONDITIONAL([HAVE_EFADV_CQ_EX], [ test $efadv_support_extended_cq = 1])
 	AM_CONDITIONAL([HAVE_EFADV_QUERY_MR], [ test $have_efadv_query_mr = 1])
+	AM_CONDITIONAL([HAVE_EFADV_QUERY_QP_WQS], [ test $have_efadv_query_qp_wqs = 1])
+	AM_CONDITIONAL([HAVE_EFADV_QUERY_CQ], [ test $have_efadv_query_cq = 1])
 	AM_CONDITIONAL([HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES], [ test $efa_support_data_in_order_aligned_128_byte = 1])
 	AM_CONDITIONAL([ENABLE_EFA_UNIT_TEST], [ test x"$enable_efa_unit_test" != xno])
 
