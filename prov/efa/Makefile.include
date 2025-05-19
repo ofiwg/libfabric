@@ -182,6 +182,14 @@ if HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES
 prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=ibv_query_qp_data_in_order
 endif
 
+if HAVE_EFADV_QUERY_QP_WQS
+prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=efadv_query_qp_wqs
+endif HAVE_EFADV_QUERY_QP_WQS
+
+if HAVE_EFADV_QUERY_CQ
+prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=efadv_query_cq
+endif HAVE_EFADV_QUERY_CQ
+
 prov_efa_test_efa_unit_test_LIBS = $(efa_LIBS) $(linkback)
 
 endif ENABLE_EFA_UNIT_TEST
