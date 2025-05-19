@@ -193,6 +193,10 @@ pipeline {
           git_diffs()
           RELEASE = release()
           DO_RUN = skip() && !weekly ? false : true
+          sh """PATH=${CI_LOCATION}/venv/bin/:${env.PATH} \
+                python ${CI_LOCATION}/authorize.py \
+                --author=${env.CHANGE_AUTHOR}
+          """
         }
       }
     }
