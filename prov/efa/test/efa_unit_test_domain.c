@@ -157,6 +157,73 @@ void test_efa_domain_open_ops_mr_query(struct efa_resource **state)
 
 #endif /* HAVE_EFADV_QUERY_MR */
 
+
+void test_efa_domain_open_ops_query_qp_wqs(struct efa_resource **state)
+{
+    struct efa_resource *resource = *state;
+    int ret;
+    struct fi_efa_ops_domain *efa_domain_ops;
+    struct fi_efa_wq_attr sq_attr = {0};
+    struct fi_efa_wq_attr rq_attr = {0};
+
+    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+    ret = fi_open_ops(&resource->domain->fid, FI_EFA_DOMAIN_OPS, 0, (void **)&efa_domain_ops, NULL);
+    assert_int_equal(ret, 0);
+
+#if HAVE_EFADV_QUERY_QP_WQS
+    g_efa_unit_test_mocks.efadv_query_qp_wqs = &efa_mock_efadv_query_qp_wqs;
+#endif
+    ret = efa_domain_ops->query_qp_wqs(resource->ep, &sq_attr, &rq_attr);
+
+#if HAVE_EFADV_QUERY_QP_WQS
+    assert_int_equal(ret, FI_SUCCESS);
+
+    assert_non_null(sq_attr.buffer);
+    assert_non_null(sq_attr.doorbell);
+    assert_true(sq_attr.entry_size > 0);
+    assert_true(sq_attr.num_entries > 0);
+    assert_true(sq_attr.max_batch > 0);
+
+    assert_non_null(rq_attr.buffer);
+    assert_non_null(rq_attr.doorbell);
+    assert_true(rq_attr.entry_size > 0);
+    assert_true(rq_attr.num_entries > 0);
+    assert_true(rq_attr.max_batch > 0);
+#else
+    assert_int_equal(ret, -FI_ENOSYS);
+#endif /* HAVE_EFADV_QUERY_QP_WQS */
+}
+
+
+void test_efa_domain_open_ops_query_cq(struct efa_resource **state)
+{
+    struct efa_resource *resource = *state;
+    int ret;
+    struct fi_efa_ops_domain *efa_domain_ops;
+    struct fi_efa_cq_attr cq_attr = {0};
+
+    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+    ret = fi_open_ops(&resource->domain->fid, FI_EFA_DOMAIN_OPS, 0, (void **)&efa_domain_ops, NULL);
+    assert_int_equal(ret, 0);
+
+#if HAVE_EFADV_QUERY_CQ
+    g_efa_unit_test_mocks.efadv_query_cq = &efa_mock_efadv_query_cq;
+#endif
+    ret = efa_domain_ops->query_cq(resource->cq, &cq_attr);
+
+#if HAVE_EFADV_QUERY_CQ
+    assert_int_equal(ret, FI_SUCCESS);
+    assert_non_null(cq_attr.buffer);
+    assert_true(cq_attr.entry_size > 0);
+    assert_true(cq_attr.num_entries > 0);
+#else
+    assert_int_equal(ret, -FI_ENOSYS);
+#endif /* HAVE_EFADV_QUERY_CQ */
+}
+
+
 /**
  * @brief Verify FI_MR_ALLOCATED is set for efa rdm path
  *

@@ -480,9 +480,117 @@ static int efa_domain_query_addr(struct fid_ep *ep_fid, fi_addr_t addr,
 	return FI_SUCCESS;
 }
 
+#if HAVE_EFADV_QUERY_QP_WQS
+/**
+ * @brief Query EFA specific Queue Pair work queue attributes
+ *
+ * @param ep_fid  pointer to endpoint fid
+ * @param sq_attr pointer to send queue attributes
+ * @param rq_attr pointer to receive queue attributes
+ * @return 0 on success, negative integer on failure
+ */
+static int efa_domain_query_qp_wqs(struct fid_ep *ep_fid,
+				   struct fi_efa_wq_attr *sq_attr,
+				   struct fi_efa_wq_attr *rq_attr)
+{
+	struct efa_base_ep *base_ep;
+	struct efadv_wq_attr qp_sq_attr = {0};
+	struct efadv_wq_attr qp_rq_attr = {0};
+	int ret;
+
+	memset(sq_attr, 0, sizeof(*sq_attr));
+	memset(rq_attr, 0, sizeof(*rq_attr));
+
+	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+	ret = efadv_query_qp_wqs(base_ep->qp->ibv_qp, &qp_sq_attr, &qp_rq_attr, sizeof(qp_sq_attr));
+	if (ret) {
+		EFA_WARN(FI_LOG_DOMAIN, "efadv_query_qp_wqs failed. err: %d\n", ret);
+		return (ret == EOPNOTSUPP) ? -FI_EOPNOTSUPP : -FI_EINVAL;
+	}
+	if (OFI_UNLIKELY(qp_sq_attr.comp_mask)) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efadv_query_qp_wqs returned invalid sq comp_mask value: %lu\n",
+			 qp_sq_attr.comp_mask);
+		return -FI_EINVAL;
+	}
+	if (OFI_UNLIKELY(qp_rq_attr.comp_mask)) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efadv_query_qp_wqs returned invalid rq comp_mask value: %lu\n",
+			 qp_rq_attr.comp_mask);
+		return -FI_EINVAL;
+	}
+
+	sq_attr->buffer = qp_sq_attr.buffer;
+	sq_attr->entry_size = qp_sq_attr.entry_size;
+	sq_attr->num_entries = qp_sq_attr.num_entries;
+	sq_attr->doorbell = qp_sq_attr.doorbell;
+	sq_attr->max_batch = qp_sq_attr.max_batch;
+
+	rq_attr->buffer = qp_rq_attr.buffer;
+	rq_attr->entry_size = qp_rq_attr.entry_size;
+	rq_attr->num_entries = qp_rq_attr.num_entries;
+	rq_attr->doorbell = qp_rq_attr.doorbell;
+	rq_attr->max_batch = qp_rq_attr.max_batch;
+
+	return FI_SUCCESS;
+}
+#else
+static int efa_domain_query_qp_wqs(struct fid_ep *ep_fid,
+				   struct fi_efa_wq_attr *sq_attr,
+				   struct fi_efa_wq_attr *rq_attr)
+{
+	return -FI_ENOSYS;
+}
+#endif /* HAVE_EFADV_QUERY_QP_WQS */
+
+
+#if HAVE_EFADV_QUERY_CQ
+/**
+ * @brief Query EFA specific Completion Queue attributes
+ *
+ * @param cq_fid pointer to completion queue fid
+ * @param cq_attr pointer to fi_efa_cq_attr
+ * @return 0 on success, negative integer on failure
+ */
+static int efa_domain_query_cq(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr)
+{
+	struct efa_cq *efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
+	struct efadv_cq_attr attr = {0};
+	int ret;
+
+	memset(cq_attr, 0, sizeof(*cq_attr));
+
+	ret = efadv_query_cq(ibv_cq_ex_to_cq(efa_cq->ibv_cq.ibv_cq_ex), &attr, sizeof(attr));
+	if (ret) {
+		EFA_WARN(FI_LOG_DOMAIN, "efadv_query_cq failed. err: %d\n", ret);
+		return (ret == EOPNOTSUPP) ? -FI_EOPNOTSUPP : -FI_EINVAL;
+	}
+	if (OFI_UNLIKELY(attr.comp_mask)) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efadv_query_cq returned invalid comp_mask value: "
+			 "%lu\n", attr.comp_mask);
+		return -FI_EINVAL;
+	}
+
+	cq_attr->buffer = attr.buffer;
+	cq_attr->entry_size = attr.entry_size;
+	cq_attr->num_entries = attr.num_entries;
+
+	return FI_SUCCESS;
+}
+#else
+static int efa_domain_query_cq(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr)
+{
+	return -FI_ENOSYS;
+}
+#endif /* HAVE_EFADV_QUERY_CQ */
+
+
 static struct fi_efa_ops_domain efa_ops_domain = {
 	.query_mr = efa_domain_query_mr,
 	.query_addr = efa_domain_query_addr,
+	.query_qp_wqs = efa_domain_query_qp_wqs,
+	.query_cq = efa_domain_query_cq,
 };
 
 static int

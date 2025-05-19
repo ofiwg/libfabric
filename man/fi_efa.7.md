@@ -199,13 +199,15 @@ struct fi_efa_ops_domain {
 	int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
 	int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
 			  uint16_t *remote_qpn, uint32_t *remote_qkey);
+	int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
+	int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
 };
 ```
 
 It contains the following operations
 
 ### query_mr
-This op query an existing memory registration as input, and outputs the efa
+This op queries an existing memory registration as input, and outputs the efa
 specific mr attribute which is defined as follows
 
 ```c
@@ -256,6 +258,63 @@ This op queries the following address information for a given endpoint and desti
 
 #### Return value
 **query_addr()** returns FI_SUCCESS on success, or -FI_EINVAL on failure.
+
+### query_qp_wqs
+This op queries EFA specific Queue Pair work queue attributes for a given endpoint.
+It retrieves the send queue attributes in sq_attr and receive queue attributes in rq_attr, which is defined as follows.
+
+```c
+struct fi_efa_wq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+    uint32_t *doorbell;
+    uint32_t max_batch;
+};
+```
+
+*buffer*
+:	Queue buffer.
+
+*entry_size*
+:	Size of each entry in the queue.
+
+*num_entries*
+:	Maximal number of entries in the queue.
+
+*doorbell*
+:	Queue doorbell.
+
+*max_batch*
+:	Maximum batch size for queue submissions.
+
+#### Return value
+**query_qp_wqs()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+### query_cq
+This op queries EFA specific Completion Queue attributes for a given cq.
+
+```c
+struct fi_efa_cq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+};
+```
+
+*buffer*
+:	Completion queue buffer.
+
+*entry_size*
+:	Size of each completion queue entry.
+
+*num_entries*
+:	Maximal number of entries in the completion queue.
+
+#### Return value
+**query_cq()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
 
 # Traffic Class (tclass) in EFA
 To prioritize the messages from a given endpoint, user can specify `fi_info->tx_attr->tclass = FI_TC_LOW_LATENCY` in the fi_endpoint() call to set the service level in rdma-core. All other tclass values will be ignored.
