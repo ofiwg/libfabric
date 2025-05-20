@@ -2444,7 +2444,8 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 		hdr->qw_16B[2] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[2] | bth_rx;
 		hdr->qw_16B[3] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[3];
 		hdr->qw_16B[4] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[4];
-		hdr->qw_16B[5] = opx_ep->rx->tx.dput_16B.hdr.qw_16B[5] | FI_OPX_HFI_DPUT_OPCODE_FENCE | (0ULL << 32);
+		hdr->qw_16B[5] =
+			opx_ep->rx->tx.dput_16B.hdr.qw_16B[5] | (FI_OPX_HFI_DPUT_OPCODE_FENCE << 4) | (0ULL << 32);
 		hdr->qw_16B[6] = (uintptr_t) params->cc;
 		hdr->qw_16B[7] = params->bytes_to_fence;
 	}
