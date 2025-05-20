@@ -199,7 +199,7 @@ static inline void opx_set_route_control_value(const bool disabled)
 	assert(OPX_HFI1_TYPE != OPX_HFI1_UNDEF);
 
 	/* HFI specific default (except OPX_HFI1_RZV_CTRL which always defaults to OPX_RC_IN_ORDER_0) */
-	const int default_route_control = ((OPX_HFI1_TYPE & (OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ?
+	const int default_route_control = ((OPX_HFI1_TYPE & (OPX_HFI1_CNX000 | OPX_HFI1_JKR_9B)) ?
 						   OPX_CHECK_OUT_OF_ORDER(disabled, OPX_RC_OUT_OF_ORDER_0) :
 						   OPX_RC_IN_ORDER_0);
 	char	 *env_route_control;
@@ -244,7 +244,7 @@ static inline void opx_set_route_control_value(const bool disabled)
 		}
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "All packet types using %s default route control values.\n",
-			 OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE));
+			 OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE));
 	}
 }
 /* The bit shifts here are for the half word indicating the ECN field */
@@ -273,7 +273,7 @@ static inline void opx_set_route_control_value(const bool disabled)
 #define OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B (OPX_BTH_SUBCTXT_RX_SHIFT - OPX_LRH_JKR_ENTROPY_SHIFT_16B)
 
 /* Full RC (3 bits) is in the 16B header */
-#define OPX_LRH_JKR_16B_RC(_pkt_type) OPX_ROUTE_CONTROL_VALUE(OPX_HFI1_JKR, _pkt_type)
+#define OPX_LRH_JKR_16B_RC(_pkt_type) OPX_ROUTE_CONTROL_VALUE(OPX_HFI1_CYR, _pkt_type)
 
 /* RHF */
 /* JKR
@@ -355,7 +355,7 @@ __OPX_FORCE_INLINE__ int opx_jkr_9B_rhf_check_header(const uint64_t			    rhf_rc
 	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type))) {
 		/* Warn later */
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HEADER ERROR %s %#lX\n",
-			     OPX_HFI_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
+			     OPX_HFI1_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
 		return 1; /* error */
 	}
 
@@ -364,7 +364,7 @@ __OPX_FORCE_INLINE__ int opx_jkr_9B_rhf_check_header(const uint64_t			    rhf_rc
 			 !(OPX_JKR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd)))) {
 		/* Warn later */
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HEADER ERROR MISSING PAYLOAD %s %#lX\n",
-			     OPX_HFI_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
+			     OPX_HFI1_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
 		return opx_rhf_missing_payload_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
 	} else {
 		return 0; /* no error*/
@@ -379,7 +379,7 @@ __OPX_FORCE_INLINE__ int opx_jkr_16B_rhf_check_header(const uint64_t			     rhf_
 	if (OFI_UNLIKELY(OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type))) {
 		/* Warn later */
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HEADER ERROR %s %#lX\n",
-			     OPX_HFI_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
+			     OPX_HFI1_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
 		return 1; /* error */
 	}
 
@@ -388,7 +388,7 @@ __OPX_FORCE_INLINE__ int opx_jkr_16B_rhf_check_header(const uint64_t			     rhf_
 			 !(OPX_JKR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd)))) {
 		/* Warn later */
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HEADER ERROR MISSING PAYLOAD %s %#lX\n",
-			     OPX_HFI_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
+			     OPX_HFI1_TYPE_STRING(hfi1_type), OPX_JKR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
 		return opx_rhf_missing_payload_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
 	} else {
 		return 0; /* no error*/

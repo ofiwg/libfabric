@@ -48,7 +48,7 @@ void opx_jkr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, vol
 		fi_opx_global.prov, FI_LOG_EP_DATA,
 #endif
 		"ERROR %s RHF(%#16.16lX) RHE(%p)[%u]=%p RHE %#16.16lX is ERRORED %u, UseEgrBuf %u, EgrIndex %#X/%#X, EgrOffset %#X, %s%s%s %s %#16.16lX  %s%s%s%s%s%s%s%s%s%s%s \n",
-		OPX_HFI_TYPE_STRING(OPX_HFI1_TYPE), rhf_rcvd, rhe_ptr, rhe_index, rhe, *rhe,
+		OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE), rhf_rcvd, rhe_ptr, rhe_index, rhe, *rhe,
 		OPX_IS_ERRORED_RHF(rhf_rcvd, hfi1_type) != 0UL, OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd, hfi1_type),
 		(uint32_t) OPX_RHF_EGR_INDEX(rhf_rcvd, hfi1_type), last_egrbfr_index,
 		(uint32_t) OPX_RHF_EGR_OFFSET(rhf_rcvd, hfi1_type),
@@ -70,7 +70,7 @@ void opx_jkr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, vol
 
 	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"%s HEADER ERROR RHF(%#16.16lX) RHE(%#16.16lX) %s%s%s  %s%s%s%s%s%s%s%s%s%s%s \n",
-		OPX_HFI_TYPE_STRING(hfi1_type), rhf_rcvd, *rhe,
+		OPX_HFI1_TYPE_STRING(hfi1_type), rhf_rcvd, *rhe,
 		OPX_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd, hfi1_type) ? "EXPECTED_RCV" : "",
 		OPX_RHF_RCV_TYPE_EAGER_RCV(rhf_rcvd, hfi1_type) ? "EAGER_RCV" : "",
 		OPX_RHF_RCV_TYPE_OTHER(rhf_rcvd, hfi1_type) ? "OTHER RCV" : "",
@@ -129,7 +129,7 @@ int opx_rhf_missing_payload_error_handler(const uint64_t rhf_rcvd, const union o
 #endif
 		"MISSING PAYLOAD opcode %#X, UseEgrBuf %u, pktlen %#X, type: %s%s%s\n", opcode,
 		OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd, hfi1_type),
-		hfi1_type == OPX_HFI1_WFR ? (hdr->lrh_16B.pktlen > 0x9) : ntohs(hdr->lrh_9B.pktlen),
+		hfi1_type & OPX_HFI1_WFR ? (hdr->lrh_16B.pktlen > 0x9) : ntohs(hdr->lrh_9B.pktlen),
 		OPX_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd, hfi1_type) ? "EXPECTED_RCV" : "",
 		OPX_RHF_RCV_TYPE_EAGER_RCV(rhf_rcvd, hfi1_type) ? "EAGER_RCV" : "",
 		OPX_RHF_RCV_TYPE_OTHER(rhf_rcvd, hfi1_type) ? "OTHER RCV" : "");

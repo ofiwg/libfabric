@@ -138,7 +138,7 @@ __OPX_FORCE_INLINE__ int opx_wfr_rhf_check_header(const uint64_t rhf_rcvd, const
 	if (OFI_UNLIKELY(OPX_WFR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type))) {
 		/* Warn later */
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HEADER ERROR %s %#lX\n",
-			     OPX_HFI_TYPE_STRING(hfi1_type), OPX_WFR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
+			     OPX_HFI1_TYPE_STRING(hfi1_type), OPX_WFR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
 		return 1; /* error */
 	}
 
@@ -147,7 +147,7 @@ __OPX_FORCE_INLINE__ int opx_wfr_rhf_check_header(const uint64_t rhf_rcvd, const
 			 !(OPX_WFR_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd)))) {
 		/* Warn later */
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HEADER ERROR MISSING PAYLOAD %s %#lX\n",
-			     OPX_HFI_TYPE_STRING(hfi1_type), OPX_WFR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
+			     OPX_HFI1_TYPE_STRING(hfi1_type), OPX_WFR_IS_ERRORED_RHF(rhf_rcvd, hfi1_type));
 		return opx_rhf_missing_payload_error_handler(rhf_rcvd, hdr, hfi1_type); /* error */
 	} else {
 		return 0; /* no error*/

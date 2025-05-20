@@ -547,14 +547,17 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 
 int fi_opx_hfi1_do_dput_wfr(union fi_opx_hfi1_deferred_work *work);
 int fi_opx_hfi1_do_dput_jkr(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_hfi1_do_dput_cyr(union fi_opx_hfi1_deferred_work *work);
 int fi_opx_hfi1_do_dput_jkr_9B(union fi_opx_hfi1_deferred_work *work);
 
 int fi_opx_hfi1_do_dput_sdma_wfr(union fi_opx_hfi1_deferred_work *work);
 int fi_opx_hfi1_do_dput_sdma_jkr(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_hfi1_do_dput_sdma_cyr(union fi_opx_hfi1_deferred_work *work);
 int fi_opx_hfi1_do_dput_sdma_jkr_9B(union fi_opx_hfi1_deferred_work *work);
 
 int fi_opx_hfi1_do_dput_sdma_tid_wfr(union fi_opx_hfi1_deferred_work *work);
 int fi_opx_hfi1_do_dput_sdma_tid_jkr(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_hfi1_do_dput_sdma_tid_cyr(union fi_opx_hfi1_deferred_work *work);
 int fi_opx_hfi1_do_dput_sdma_tid_jkr_9B(union fi_opx_hfi1_deferred_work *work);
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_memcpy8(void *restrict dest, const void *restrict src, size_t n)
@@ -1506,6 +1509,10 @@ ssize_t opx_hfi1_tx_sendv_egr_select(struct fid_ep *ep, const struct iovec *iov,
 		return opx_hfi1_tx_sendv_egr_16B(ep, iov, niov, total_len, dest_addr, tag, context, data, lock_required,
 						 override_flags, tx_op_flags, caps, reliability, do_cq_completion,
 						 iface, hmem_device, hmem_handle, OPX_HFI1_JKR, ctx_sharing);
+	} else if (hfi1_type & OPX_HFI1_CYR) {
+		return opx_hfi1_tx_sendv_egr_16B(ep, iov, niov, total_len, dest_addr, tag, context, data, lock_required,
+						 override_flags, tx_op_flags, caps, reliability, do_cq_completion,
+						 iface, hmem_device, hmem_handle, OPX_HFI1_CYR, ctx_sharing);
 	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
 		return opx_hfi1_tx_sendv_egr(ep, iov, niov, total_len, dest_addr, tag, context, data, lock_required,
 					     override_flags, tx_op_flags, caps, reliability, do_cq_completion, iface,
@@ -1949,7 +1956,7 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, fi_
 	const uint64_t lrh_dlid_9B = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(addr.lid);
 	const uint64_t pbc_dlid	   = OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type);
 
-	assert(hfi1_type != OPX_HFI1_JKR);
+	assert(!(hfi1_type & OPX_HFI1_CNX000));
 	/* 9B PBC is dws */
 	const uint64_t pbc_dws =
 		/* PIO SOP is 16 DWS/8 QWS*/
@@ -2096,7 +2103,7 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 	const uint64_t lrh_dlid_16B = addr.lid;
 	const uint64_t pbc_dlid	    = OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type);
 
-	assert(hfi1_type & OPX_HFI1_JKR);
+	assert(hfi1_type & OPX_HFI1_CNX000);
 	/* 16B PBC is dws */
 	const uint64_t pbc_dws =
 		/* PIO SOP is 16 DWS/8 QWS*/
@@ -2167,7 +2174,7 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	uint64_t *buf_qws = (uint64_t *) ((uintptr_t) buf + xfer_bytes_tail);
 
-	assert(hfi1_type & OPX_HFI1_JKR);
+	assert(hfi1_type & OPX_HFI1_CNX000);
 
 	/* write one block of PIO non-SOP, either one full block (8 qws) or the partial qws/block */
 	const size_t first_block_qws =
@@ -2250,12 +2257,16 @@ ssize_t opx_hfi1_tx_send_egr_select(struct fid_ep *ep, const void *buf, size_t l
 		return opx_hfi1_tx_send_egr(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,
 					    tx_op_flags, caps, reliability, do_cq_completion, iface, hmem_device,
 					    hmem_handle, OPX_HFI1_JKR_9B, ctx_sharing);
+	} else if (hfi1_type & OPX_HFI1_JKR) {
+		return opx_hfi1_tx_send_egr_16B(ep, buf, len, dest_addr, tag, context, data, lock_required,
+						override_flags, tx_op_flags, caps, reliability, do_cq_completion, iface,
+						hmem_device, hmem_handle, OPX_HFI1_JKR, ctx_sharing);
 	}
 
-	assert(hfi1_type == OPX_HFI1_JKR);
+	assert(hfi1_type & OPX_HFI1_CYR);
 	return opx_hfi1_tx_send_egr_16B(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,
 					tx_op_flags, caps, reliability, do_cq_completion, iface, hmem_device,
-					hmem_handle, OPX_HFI1_JKR, ctx_sharing);
+					hmem_handle, OPX_HFI1_CYR, ctx_sharing);
 }
 
 /*
@@ -2529,7 +2540,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep, void **bu
 
 	uint64_t *buf_qws = (uint64_t *) buf_ptr;
 
-	if (hfi1_type & OPX_HFI1_JKR) {
+	if (hfi1_type & OPX_HFI1_CNX000) {
 		/* write header and payload */
 
 #ifndef NDEBUG
@@ -2994,6 +3005,11 @@ ssize_t opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_t l
 		return opx_hfi1_tx_send_rzv_16B(ep, buf, len, dest_addr, tag, context, data, lock_required,
 						override_flags, tx_op_flags, dest_rx, caps, reliability,
 						do_cq_completion, hmem_iface, hmem_device, hmem_handle, OPX_HFI1_JKR,
+						ctx_sharing);
+	} else if (hfi1_type & OPX_HFI1_CYR) {
+		return opx_hfi1_tx_send_rzv_16B(ep, buf, len, dest_addr, tag, context, data, lock_required,
+						override_flags, tx_op_flags, dest_rx, caps, reliability,
+						do_cq_completion, hmem_iface, hmem_device, hmem_handle, OPX_HFI1_CYR,
 						ctx_sharing);
 	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
 		return opx_hfi1_tx_send_rzv(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,

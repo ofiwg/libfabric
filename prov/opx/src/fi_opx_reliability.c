@@ -1548,7 +1548,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 	unsigned consumed_credits = 1;
 #endif
 
-	if (hfi1_type & OPX_HFI1_JKR) {
+	if (hfi1_type & OPX_HFI1_CNX000) {
 		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
 		// spill from 1st cacheline (SOP)
@@ -1615,7 +1615,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 
 		/* LRH packets are dword (9B) or qword (16b) aligned */
 		assert((payload_tail_bytes == 4) || (payload_tail_bytes == 0));
-		if (hfi1_type != OPX_HFI1_JKR) {
+		if (!(hfi1_type & OPX_HFI1_CNX000)) {
 			if (payload_tail_bytes) {
 				OPX_HFI1_BAR_STORE(scb_payload, ((*buf_qws)));
 				scb_payload += 1;
@@ -2165,7 +2165,7 @@ void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service *servic
 				 2;  /* ICRC/tail */
 
 	/* Setup the 16B models whether or not they'll be used */
-	enum opx_hfi1_type __attribute__((unused)) hfi1_type = OPX_HFI1_JKR;
+	enum opx_hfi1_type __attribute__((unused)) hfi1_type = OPX_HFI1_CYR;
 
 	service->ping_model_16B.qw0 = OPX_PBC_LEN(pbc_dws, hfi1_type) | OPX_PBC_VL(hfi1->vl, hfi1_type) |
 				      OPX_PBC_SC(hfi1->sc, hfi1_type) |

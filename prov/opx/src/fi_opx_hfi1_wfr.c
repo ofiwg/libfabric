@@ -61,8 +61,8 @@ void opx_wfr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, vol
 		rhf_msb & OPX_WFR_RHF_RCVTYPEERR ? "OPX_WFR_RHF_RCVTYPEERR" : "");
 
 	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"%s HEADER ERROR RHF(%#16.16lX) RHE(%#8.8X) %s%s%s %s%s%s%s%s%s%s%s \n", OPX_HFI_TYPE_STRING(hfi1_type),
-		rhf_rcvd, rhf_msb & 0xBFE00000u,
+		"%s HEADER ERROR RHF(%#16.16lX) RHE(%#8.8X) %s%s%s %s%s%s%s%s%s%s%s \n",
+		OPX_HFI1_TYPE_STRING(hfi1_type), rhf_rcvd, rhf_msb & 0xBFE00000u,
 		OPX_RHF_RCV_TYPE_EXPECTED_RCV(rhf_rcvd, hfi1_type) ? "EXPECTED_RCV" : "",
 		OPX_RHF_RCV_TYPE_EAGER_RCV(rhf_rcvd, hfi1_type) ? "EAGER_RCV" : "",
 		OPX_RHF_RCV_TYPE_OTHER(rhf_rcvd, hfi1_type) ? "OTHER RCV" : "",
