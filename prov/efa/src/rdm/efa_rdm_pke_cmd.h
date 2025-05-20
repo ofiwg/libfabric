@@ -14,7 +14,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pke,
 			  int64_t data_offset,
 			  int data_size);
 
-void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pke, int pkt_type);
+void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pke, int pkt_type, struct efa_rdm_peer *peer);
 
 fi_addr_t efa_rdm_pke_determine_addr(struct efa_rdm_pke *pkt_entry);
 
