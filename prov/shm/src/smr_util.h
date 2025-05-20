@@ -49,6 +49,7 @@ struct smr_env {
 	int	use_dsa_sar;
 	size_t	max_gdrcopy_size;
 	int	use_xpmem;
+	size_t	buffer_threshold;
 };
 
 extern struct smr_env smr_env;
@@ -72,6 +73,7 @@ extern struct smr_env smr_env;
 #define SMR_OP_MAX (1 << 4)
 
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
+#define SMR_BUFFER_RECV		(1 << 1)
 
 enum {
 	smr_proto_inline,	/* inline payload */
