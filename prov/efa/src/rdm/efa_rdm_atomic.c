@@ -141,12 +141,11 @@ ssize_t efa_rdm_atomic_post_atomic(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm
 
 static
 ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
-			       const struct fi_msg_atomic *msg,
+			       const struct fi_msg_atomic *msg, struct efa_rdm_peer *peer,
 			       const struct efa_rdm_atomic_ex *atomic_ex,
 			       uint32_t op, uint64_t flags)
 {
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_peer *peer;
 	ssize_t err;
 	struct util_srx_ctx *srx_ctx;
 
@@ -157,7 +156,6 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 
 	ofi_genlock_lock(srx_ctx->lock);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
 
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
@@ -233,7 +231,7 @@ efa_rdm_atomic_inject(struct fid_ep *ep,
 	msg.context = NULL;
 	msg.data = 0;
 
-	return efa_rdm_atomic_generic_efa(efa_rdm_ep, &msg, NULL, ofi_op_atomic,
+	return efa_rdm_atomic_generic_efa(efa_rdm_ep, &msg, peer, NULL, ofi_op_atomic,
 				      FI_INJECT | EFA_RDM_TXE_NO_COMPLETION);
 }
 
@@ -269,7 +267,7 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 		return fi_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg, flags);
 	}
 
-	return efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, NULL, ofi_op_atomic, flags);
+	return efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, peer, NULL, ofi_op_atomic, flags);
 }
 
 static ssize_t
@@ -370,7 +368,7 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	ofi_ioc_to_iov(resultv, atomic_ex.resp_iov, result_count, datatype_size);
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
 
-	return efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_fetch, flags);
+	return efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, peer, &atomic_ex, ofi_op_atomic_fetch, flags);
 }
 
 static ssize_t
@@ -485,7 +483,7 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	ofi_ioc_to_iov(comparev, atomic_ex.comp_iov, compare_count, datatype_size);
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
 
-	return efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_compare, flags);
+	return efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, peer, &atomic_ex, ofi_op_atomic_compare, flags);
 }
 
 static ssize_t
