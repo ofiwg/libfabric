@@ -1,5 +1,6 @@
 import copy
 import pytest
+import subprocess
 from efa.efa_common import efa_retrieve_hw_counter_value, get_efa_device_names
 from common import ClientServerTest
 
@@ -63,3 +64,52 @@ def test_efa_device_selection(cmdline_args, fabric, selection_approach):
             # Verify EFA traffic
             assert server_tx_bytes_before_test < server_tx_bytes_after_test
             assert client_tx_bytes_before_test < client_tx_bytes_after_test
+
+# Verify that fi_getinfo does not return any info objects when FI_EFA_IFACE is set to an invalid value
+@pytest.mark.functional
+def test_efa_device_selection_negative(cmdline_args, fabric):
+    invalid_iface = "r"
+
+    command = f"ssh {cmdline_args.server_id} FI_EFA_IFACE={invalid_iface} /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM -f {fabric}"
+    proc = subprocess.run(command, shell=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8", timeout=60)
+    assert proc.returncode == 61
+
+# Verify that fi_getinfo returns all NICs when FI_EFA_IFACE is set to all
+@pytest.mark.functional
+def test_efa_device_selection_all(cmdline_args, fabric):
+    num_devices = len(get_efa_device_names(cmdline_args.server_id))
+
+    command = f"ssh {cmdline_args.server_id} FI_EFA_IFACE=all /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM -f {fabric} | grep domain"
+    proc = subprocess.run(command, shell=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8", timeout=60)
+    assert proc.returncode == 0
+
+    domains = proc.stdout.strip().split("\n")
+
+    assert len(domains) == num_devices
+
+# Verify that fi_getinfo returns two NICs when FI_EFA_IFACE is set to two NICs separated by a comma
+@pytest.mark.functional
+def test_efa_device_selection_comma(cmdline_args, fabric):
+    devices = get_efa_device_names(cmdline_args.server_id)
+
+    if len(devices) > 1:
+        iface_str = f"{devices[0]},{devices[1]}"
+    else:
+        iface_str = f"{devices[0]},{devices[0]}"
+
+    command = f"ssh {cmdline_args.server_id} FI_EFA_IFACE={iface_str} /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM -f {fabric} | grep domain"
+    proc = subprocess.run(command, shell=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8", timeout=60)
+    assert proc.returncode == 0
+
+    domains = proc.stdout.strip().split("\n")
+
+    if len(devices) > 1:
+        assert len(domains) == 2
+    else:
+        assert len(domains) == 1
