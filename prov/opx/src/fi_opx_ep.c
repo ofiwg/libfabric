@@ -2646,8 +2646,8 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 	bool  enforce_gdrcopy_check = true;
 
 	if (fi_param_get_str(NULL, "hmem", &hmem_str) == FI_SUCCESS && hmem_str) {
-		if (strlen(hmem_str) == 5 && strncmp(hmem_str, "system", 5) == 0) { // if string matches system
-			enforce_gdrcopy_check = false;				    // disable GDRCopy check
+		if (strcmp(hmem_str, "system") == 0) {	// if string matches system
+			enforce_gdrcopy_check = false;	// disable GDRCopy check
 		}
 	}
 

@@ -111,8 +111,8 @@ int fi_opx_check_info(const struct fi_info *info)
 		bool  enforce_hmem_caps = true;
 
 		if (fi_param_get_str(NULL, "hmem", &hmem_str) == FI_SUCCESS && hmem_str) {
-			if (strlen(hmem_str) == 5 && strncmp(hmem_str, "system", 5) == 0) { // if string matches system
-				enforce_hmem_caps = false;				    // disable FI_MR_HMEM check
+			if (strcmp(hmem_str, "system") == 0) {	// if string matches system
+				enforce_hmem_caps = false;	// disable FI_MR_HMEM check
 			}
 		}
 
