@@ -63,6 +63,7 @@ extern "C" {
 #define SMR_OP_MAX (1 << 4)
 
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
+#define SMR_BUFFER_RECV		(1 << 1)
 
 enum {
 	smr_proto_inline,	/* inline payload */
