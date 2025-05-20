@@ -1313,15 +1313,11 @@ ssize_t efa_rdm_pke_init_runtread_tagrtm(struct efa_rdm_pke *pkt_entry,
  *
  * @param[in,out]	pkt_entry	packet entry
  */
-void efa_rdm_pke_handle_runtread_rtm_sent(struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_handle_runtread_rtm_sent(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
 {
-	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_peer *peer;
 	size_t pkt_data_size = pkt_entry->payload_size;
 
-	ep = pkt_entry->ep;
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 
 	txe = pkt_entry->ope;
@@ -1353,7 +1349,7 @@ void efa_rdm_pke_handle_runtread_rtm_send_completion(struct efa_rdm_pke *pkt_ent
 	pkt_data_size = pkt_entry->payload_size;
 	txe->bytes_acked += pkt_data_size;
 
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+	peer = efa_rdm_ep_get_peer(ep, txe->addr);
 	assert(peer);
 	assert(peer->num_runt_bytes_in_flight >= pkt_data_size);
 	peer->num_runt_bytes_in_flight -= pkt_data_size;

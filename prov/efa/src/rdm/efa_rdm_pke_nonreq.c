@@ -216,7 +216,6 @@ int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 			     int data_size)
 {
 	struct efa_rdm_ctsdata_hdr *data_hdr;
-	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *ep;
 	size_t hdr_size;
 	int ret;
@@ -242,9 +241,8 @@ int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 	}
 
 	hdr_size = sizeof(struct efa_rdm_ctsdata_hdr);
-	peer = efa_rdm_ep_get_peer(ep, ope->addr);
-	assert(peer);
-	if (efa_rdm_peer_need_connid(peer)) {
+	assert(ope->peer);
+	if (efa_rdm_peer_need_connid(ope->peer)) {
 		data_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
 		data_hdr->connid_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
 		hdr_size += sizeof(struct efa_rdm_ctsdata_opt_connid_hdr);
