@@ -477,6 +477,10 @@ static ssize_t smr_do_inject(struct smr_ep *ep, struct smr_region *peer_smr,
 	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, op_flags);
 	smr_format_inject(ep, cmd, pend);
 
+	if (smr_freestack_avail(smr_cmd_stack(ep->region)) <=
+	    smr_env.buffer_threshold)
+		cmd->hdr.op_flags |= SMR_BUFFER_RECV;
+
 	return FI_SUCCESS;
 }
 
@@ -497,6 +501,10 @@ static ssize_t smr_do_iov(struct smr_ep *ep, struct smr_region *peer_smr,
 
 	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, op_flags);
 	smr_format_iov(cmd, pend);
+
+	if (smr_freestack_avail(smr_cmd_stack(ep->region)) <=
+	    smr_env.buffer_threshold)
+		cmd->hdr.op_flags |= SMR_BUFFER_RECV;
 
 	return FI_SUCCESS;
 }
@@ -564,6 +572,10 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr,
 	}
 
 	smr_format_tx_pend(pend, cmd, context, desc, iov, iov_count, op_flags);
+
+	if (smr_freestack_avail(smr_cmd_stack(ep->region)) <=
+	    smr_env.buffer_threshold)
+		cmd->hdr.op_flags |= SMR_BUFFER_RECV;
 
 	return FI_SUCCESS;
 }

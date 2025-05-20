@@ -170,6 +170,14 @@ The *shm* provider checks for the following environment variables:
     chunks. This environment variable is provided to fine tune performance
     on different systems. Default 262144
 
+*FI_SHM_BUFFER_THRESHOLD*
+ :  When to start requesting forced unexpected messaging buffering. When this
+    threshold is reached, the sender will notify the receiver to force buffering
+    of the entire message if it is unexpected. If the message is matched when
+    received, it has no effect. Requesting unexpected message buffering allows
+    shm to support unlimited unexpected messaging (memory permitting).
+    Default: 1
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

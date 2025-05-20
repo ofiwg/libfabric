@@ -42,6 +42,7 @@ struct smr_env smr_env = {
 	.use_dsa_sar = false,
 	.max_gdrcopy_size = 3072,
 	.use_xpmem = false,
+	.buffer_threshold = 1,
 };
 
 static void smr_init_env(void)
@@ -51,6 +52,8 @@ static void smr_init_env(void)
 	fi_param_get_bool(&smr_prov, "disable_cma", &smr_env.disable_cma);
 	fi_param_get_bool(&smr_prov, "use_dsa_sar", &smr_env.use_dsa_sar);
 	fi_param_get_bool(&smr_prov, "use_xpmem", &smr_env.use_xpmem);
+	fi_param_get_size_t(&smr_prov, "buffer_threshold",
+			    &smr_env.buffer_threshold);
 }
 
 static void smr_resolve_addr(const char *node, const char *service,
@@ -215,6 +218,9 @@ SHM_INI
 	fi_param_define(&smr_prov, "use_xpmem", FI_PARAM_BOOL,
 			"Enable XPMEM over CMA when possible "
 			"(default: false)");
+	fi_param_define(&smr_prov, "buffer_threshold", FI_PARAM_SIZE_T,
+			"When to start requesting forced unexpected messaging "
+			"buffering. (default: 1)");
 
 	smr_init_env();
 

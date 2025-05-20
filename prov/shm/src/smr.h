@@ -149,6 +149,7 @@ struct smr_env {
 	int	use_dsa_sar;
 	size_t	max_gdrcopy_size;
 	int	use_xpmem;
+	size_t	buffer_threshold;
 };
 
 extern struct smr_env smr_env;
