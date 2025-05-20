@@ -497,7 +497,11 @@ struct fi_opx_global_data fi_opx_global = {.hfi_local_info.type	  = OPX_HFI1_UND
 								     [5]	       = "ERROR",
 								     [6]	       = "ERROR",
 								     [7]	       = "ERROR",
-								     [OPX_HFI1_CYR]    = "CN6000"}};
+								     [OPX_HFI1_CYR]    = "CN6000",
+								     [9]	       = "ERROR",
+								     [10]	       = "ERROR",
+								     [11]	       = "ERROR",
+								     [OPX_HFI1_CNX000] = "CN5000|CN6000"}};
 /* ROUTE CONTROL table for each packet type */
 int opx_route_control[OPX_HFI1_NUM_PACKET_TYPES];
 

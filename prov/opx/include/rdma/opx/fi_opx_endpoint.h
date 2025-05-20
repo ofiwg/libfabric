@@ -3017,6 +3017,8 @@ static inline void fi_opx_ep_rx_poll(struct fid_ep *ep, const uint64_t caps,
 			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_WFR, OPX_CTX_SHARING_ON);
 		} else if (hfi1_type & OPX_HFI1_JKR) {
 			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR, OPX_CTX_SHARING_ON);
+		} else if (hfi1_type & OPX_HFI1_CYR) {
+			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_CYR, OPX_CTX_SHARING_ON);
 		} else {
 			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR_9B,
 						   OPX_CTX_SHARING_ON);
@@ -3026,6 +3028,8 @@ static inline void fi_opx_ep_rx_poll(struct fid_ep *ep, const uint64_t caps,
 			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF);
 		} else if (hfi1_type & OPX_HFI1_JKR) {
 			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF);
+		} else if (hfi1_type & OPX_HFI1_CYR) {
+			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_CYR, OPX_CTX_SHARING_OFF);
 		} else {
 			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR_9B,
 						   OPX_CTX_SHARING_OFF);

@@ -403,14 +403,13 @@ static struct _hfi_ctrl *opx_hfi1_rdma_userinit(int fd, struct fi_opx_hfi1_conte
 	       (OPX_HFI1_CYR | OPX_HFI1_JKR | OPX_HFI1_WFR)); /* OPX_HFI1_JKR_9B is determined later */
 
 	/* Need the global set early, may be changed later on mixed networks */
-	if (fi_opx_global.hfi_local_info.type == OPX_HFI1_UNDEF) {
-		fi_opx_global.hfi_local_info.type = context->hfi1_type;
+	if (OPX_HFI1_TYPE == OPX_HFI1_UNDEF) {
+		OPX_HFI1_TYPE = context->hfi1_type;
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "[HFI1-DIRECT] global type %d, opx_hfi1_check_hwversion base_info->hw_version %#X, %s\n",
-		     fi_opx_global.hfi_local_info.type, user_info_rsp.hw_version,
-		     OPX_HFI_TYPE_STRING(context->hfi1_type));
+		     OPX_HFI1_TYPE, user_info_rsp.hw_version, OPX_HFI1_TYPE_STRING(context->hfi1_type));
 
 	/* Copy the the new 'hfi1_user_info_rsp' to the  old 'hfi1_base_info'
 	 * struct */
@@ -866,8 +865,7 @@ int opx_hfi1_wrapper_context_open(struct fi_opx_hfi1_context_internal *internal,
 		int   fd	  = opx_hfi1_rdma_context_open(unit, port, open_timeout, user_version, &ibv_context);
 		if (fd != -1) {
 			internal->context.ibv_context = ibv_context;
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n",
-				     fi_opx_global.hfi_local_info.type);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n", OPX_HFI1_TYPE);
 			return fd;
 		}
 		/* fallback to cdev APIs */
@@ -877,8 +875,7 @@ int opx_hfi1_wrapper_context_open(struct fi_opx_hfi1_context_internal *internal,
 	internal->context.ibv_context = NULL;
 
 	int fd = opx_hfi_context_open(unit, port, open_timeout, user_version);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n",
-		     fi_opx_global.hfi_local_info.type);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n", OPX_HFI1_TYPE);
 	return fd;
 }
 

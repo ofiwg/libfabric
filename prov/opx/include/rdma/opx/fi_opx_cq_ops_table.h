@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2024 by Cornelis Networks.
+ * Copyright (C) 2021-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,7 +47,7 @@
 #define FI_CQ_FORMAT_COUNT 5
 
 /* Number of types in enum opx_hfi1_type */
-#define OPX_HFI1_TYPE_COUNT 3
+#define OPX_HFI1_TYPE_COUNT 4
 
 typedef struct fi_ops_cq op_matrix_t[FI_CQ_FORMAT_COUNT][1 /* OFI_RELIABILITY_KIND_ONLOAD */][FI_OPX_COMMS_COUNT]
 				    [OPX_HFI1_TYPE_COUNT][2 /* CTX_SHARING ON or OFF */];

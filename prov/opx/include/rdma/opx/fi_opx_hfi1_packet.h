@@ -1115,7 +1115,7 @@ static inline size_t opx_hfi1_packet_hdr_payload_bytes(const union opx_hfi1_pack
 	uint16_t lrh_pktlen_le;
 	size_t	 total_bytes_to_copy;
 
-	if (hfi1_type == OPX_HFI1_JKR) {
+	if (hfi1_type & OPX_HFI1_CNX000) {
 		lrh_pktlen_le	    = (uint16_t) hdr->lrh_16B.pktlen;
 		total_bytes_to_copy = (lrh_pktlen_le - 1) * 8; /* do not copy the trailing tail/icrc QW*/
 		return total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_16B);
@@ -1352,7 +1352,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 
 /* Defined but unused.  Add as needed for debug */
 #define OPX_DEBUG_PRINT_HDR(__hdr, __hfi1_type)                                      \
-	if (__hfi1_type & OPX_HFI1_JKR) {                                            \
+	if (__hfi1_type & OPX_HFI1_CNX000) {                                         \
 		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0], __hdr->qw_16B[1]);           \
 		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2], __hdr->qw_16B[3]);           \
 	} else {                                                                     \
@@ -1360,7 +1360,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 	}
 
 #define OPX_DEBUG_PRINT_PBC_HDR(__pbc, __hdr, __hfi1_type)                           \
-	if (__hfi1_type & OPX_HFI1_JKR) {                                            \
+	if (__hfi1_type & OPX_HFI1_CNX000) {                                         \
 		OPX_JKR_PRINT_16B_PBC(__pbc);                                        \
 		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0], __hdr->qw_16B[1]);           \
 		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2], __hdr->qw_16B[3]);           \
@@ -1369,7 +1369,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 	}
 
 #define OPX_DEBUG_PRINT_PBC_HDR_QW(q0, q1, q2, q3, q4, __hfi1_type) \
-	if (__hfi1_type & OPX_HFI1_JKR) {                           \
+	if (__hfi1_type & OPX_HFI1_CNX000) {                        \
 		OPX_JKR_PRINT_16B_PBC(q0);                          \
 		OPX_JKR_PRINT_16B_LRH(q1, q2);                      \
 		OPX_JKR_PRINT_16B_BTH(q3, q4);                      \

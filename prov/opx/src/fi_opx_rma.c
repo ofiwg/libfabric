@@ -1109,10 +1109,13 @@ static inline ssize_t fi_opx_rma_read(struct fid_ep *ep, void *buf, size_t len, 
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
 		rc = fi_opx_read_internal(ep, buf, len, desc, src_addr, addr_offset, key, context,
 					  FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
-	} else {
-		assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
 		rc = fi_opx_read_internal(ep, buf, len, desc, src_addr, addr_offset, key, context,
 					  FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_JKR);
+	} else {
+		assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
+		rc = fi_opx_read_internal(ep, buf, len, desc, src_addr, addr_offset, key, context,
+					  FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_CYR);
 	}
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
@@ -1136,10 +1139,13 @@ static inline ssize_t fi_opx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
 		rc = fi_opx_readmsg_internal(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY,
 					     OPX_HFI1_JKR_9B);
-	} else {
-		assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
 		rc = fi_opx_readmsg_internal(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY,
 					     OPX_HFI1_JKR);
+	} else {
+		assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
+		rc = fi_opx_readmsg_internal(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY,
+					     OPX_HFI1_CYR);
 	}
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== RMA READMSG (end)\n");
@@ -1164,10 +1170,13 @@ static inline ssize_t fi_opx_rma_inject_write(struct fid_ep *ep, const void *buf
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
 		rc = fi_opx_inject_write_internal(ep, buf, len, dst_addr, addr_offset, key, FI_OPX_LOCK_NOT_REQUIRED,
 						  OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
-	} else {
-		assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
 		rc = fi_opx_inject_write_internal(ep, buf, len, dst_addr, addr_offset, key, FI_OPX_LOCK_NOT_REQUIRED,
 						  OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_JKR);
+	} else {
+		assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
+		rc = fi_opx_inject_write_internal(ep, buf, len, dst_addr, addr_offset, key, FI_OPX_LOCK_NOT_REQUIRED,
+						  OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_CYR);
 	}
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1192,10 +1201,13 @@ static inline ssize_t fi_opx_rma_write(struct fid_ep *ep, const void *buf, size_
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
 		rc = fi_opx_write(ep, buf, len, desc, OPX_NO_REMOTE_CQ_DATA, dst_addr, addr_offset, key, context,
 				  FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0, caps, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
-	} else {
-		assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
 		rc = fi_opx_write(ep, buf, len, desc, OPX_NO_REMOTE_CQ_DATA, dst_addr, addr_offset, key, context,
 				  FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0, caps, OPX_RELIABILITY, OPX_HFI1_JKR);
+	} else {
+		assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
+		rc = fi_opx_write(ep, buf, len, desc, OPX_NO_REMOTE_CQ_DATA, dst_addr, addr_offset, key, context,
+				  FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0, caps, OPX_RELIABILITY, OPX_HFI1_CYR);
 	}
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== RMA WRITE (end)\n");
@@ -1219,10 +1231,13 @@ static inline ssize_t fi_opx_rma_writev(struct fid_ep *ep, const struct iovec *i
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
 		rc = fi_opx_writev_internal(ep, iov, desc, count, dest_addr, addr_offset, key, context,
 					    FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
-	} else {
-		assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
 		rc = fi_opx_writev_internal(ep, iov, desc, count, dest_addr, addr_offset, key, context,
 					    FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_JKR);
+	} else {
+		assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
+		rc = fi_opx_writev_internal(ep, iov, desc, count, dest_addr, addr_offset, key, context,
+					    FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY, OPX_HFI1_CYR);
 	}
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
@@ -1247,10 +1262,13 @@ static inline ssize_t fi_opx_rma_writemsg(struct fid_ep *ep, const struct fi_msg
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
 		rc = fi_opx_writemsg_internal(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY,
 					      OPX_HFI1_JKR_9B);
-	} else {
-		assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
 		rc = fi_opx_writemsg_internal(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY,
 					      OPX_HFI1_JKR);
+	} else {
+		assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
+		rc = fi_opx_writemsg_internal(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, caps, OPX_RELIABILITY,
+					      OPX_HFI1_CYR);
 	}
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== RMA WRITEMSG (end)\n");
@@ -1279,11 +1297,15 @@ static inline ssize_t fi_opx_rma_writedata(struct fid_ep *ep, const void *buf, s
 		rc = fi_opx_write(ep, buf, len, desc, data, dst_addr, addr_offset, key, context,
 				  FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, FI_REMOTE_CQ_DATA, caps, OPX_RELIABILITY,
 				  OPX_HFI1_JKR_9B);
-	} else {
-		assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
 		rc = fi_opx_write(ep, buf, len, desc, data, dst_addr, addr_offset, key, context,
 				  FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, FI_REMOTE_CQ_DATA, caps, OPX_RELIABILITY,
 				  OPX_HFI1_JKR);
+	} else {
+		assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
+		rc = fi_opx_write(ep, buf, len, desc, data, dst_addr, addr_offset, key, context,
+				  FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, FI_REMOTE_CQ_DATA, caps, OPX_RELIABILITY,
+				  OPX_HFI1_CYR);
 	}
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== RMA WRITEDATA (end)\n");
@@ -1326,6 +1348,9 @@ FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_REQUIRED, OPX_AV, 0x0018000000000000ull,
 FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR)
 FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR)
 
+FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR)
+FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR)
+
 #define FI_OPX_RMA_OPS_STRUCT_NAME(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE) \
 	FI_OPX_RMA_OPS_STRUCT_NAME_(LOCK, AV, CAPS, RELIABILITY, HFI1_TYPE)
 
@@ -1353,6 +1378,9 @@ FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_R
 
 FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR);
 FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR);
+
+FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR);
+FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR);
 
 #pragma GCC diagnostic pop
 
@@ -1401,14 +1429,22 @@ int fi_opx_enable_rma_ops(struct fid_ep *ep)
 			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(
 				FI_OPX_LOCK_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR_9B);
 		}
-	} else {
-		assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
 		if (!lock_required) {
 			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(
 				FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR);
 		} else {
 			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(
 				FI_OPX_LOCK_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR);
+		}
+	} else {
+		assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
+		if (!lock_required) {
+			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(
+				FI_OPX_LOCK_NOT_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR);
+		} else {
+			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(
+				FI_OPX_LOCK_REQUIRED, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR);
 		}
 	}
 
@@ -1434,11 +1470,15 @@ ssize_t fi_opx_write_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t le
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY,
 							OPX_HFI1_JKR_9B)(ep, buf, len, desc, dest_addr, addr_offset,
 									 key, context);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY,
+							OPX_HFI1_JKR)(ep, buf, len, desc, dest_addr, addr_offset, key,
+								      context);
 	}
 
-	assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
 	return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY,
-						OPX_HFI1_JKR)(ep, buf, len, desc, dest_addr, addr_offset, key, context);
+						OPX_HFI1_CYR)(ep, buf, len, desc, dest_addr, addr_offset, key, context);
 }
 
 ssize_t fi_opx_inject_write_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr,
@@ -1453,10 +1493,14 @@ ssize_t fi_opx_inject_write_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, si
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, OPX_LOCK, OPX_AV, 0x0018000000000000ull,
 							OPX_RELIABILITY,
 							OPX_HFI1_JKR_9B)(ep, buf, len, dest_addr, addr_offset, key);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, OPX_LOCK, OPX_AV, 0x0018000000000000ull,
+							OPX_RELIABILITY,
+							OPX_HFI1_JKR)(ep, buf, len, dest_addr, addr_offset, key);
 	}
-	assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
 	return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY,
-						OPX_HFI1_JKR)(ep, buf, len, dest_addr, addr_offset, key);
+						OPX_HFI1_CYR)(ep, buf, len, dest_addr, addr_offset, key);
 }
 
 ssize_t fi_opx_read_FABRIC_DIRECT(struct fid_ep *ep, void *buf, size_t len, void *desc, fi_addr_t src_addr,
@@ -1471,10 +1515,14 @@ ssize_t fi_opx_read_FABRIC_DIRECT(struct fid_ep *ep, void *buf, size_t len, void
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY,
 							OPX_HFI1_JKR_9B)(ep, buf, len, desc, src_addr, addr_offset, key,
 									 context);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY,
+							OPX_HFI1_JKR)(ep, buf, len, desc, src_addr, addr_offset, key,
+								      context);
 	}
-	assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
 	return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY,
-						OPX_HFI1_JKR)(ep, buf, len, desc, src_addr, addr_offset, key, context);
+						OPX_HFI1_CYR)(ep, buf, len, desc, src_addr, addr_offset, key, context);
 }
 
 ssize_t fi_opx_readmsg_FABRIC_DIRECT(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
@@ -1486,8 +1534,11 @@ ssize_t fi_opx_readmsg_FABRIC_DIRECT(struct fid_ep *ep, const struct fi_msg_rma 
 	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR_9B) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, OPX_LOCK, OPX_AV, 0x0018000000000000ull,
 							OPX_RELIABILITY, OPX_HFI1_JKR_9B)(ep, msg, flags);
+	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, OPX_LOCK, OPX_AV, 0x0018000000000000ull,
+							OPX_RELIABILITY, OPX_HFI1_JKR)(ep, msg, flags);
 	}
-	assert(OPX_HFI1_TYPE == OPX_HFI1_JKR);
+	assert(OPX_HFI1_TYPE & OPX_HFI1_CYR);
 	return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, OPX_LOCK, OPX_AV, 0x0018000000000000ull, OPX_RELIABILITY,
-						OPX_HFI1_JKR)(ep, msg, flags);
+						OPX_HFI1_CYR)(ep, msg, flags);
 }
