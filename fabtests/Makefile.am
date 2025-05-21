@@ -54,6 +54,7 @@ bin_PROGRAMS = \
 	benchmarks/fi_rdm_bw \
 	benchmarks/fi_rdm_bw_mt \
 	benchmarks/fi_rdm_tagged_bw \
+	benchmarks/fi_rma_tx_completion \
 	unit/fi_eq_test \
 	unit/fi_cq_test \
 	unit/fi_mr_test \
@@ -428,6 +429,11 @@ benchmarks_fi_rdm_bw_mt_SOURCES = \
 	benchmarks/rdm_bw_mt.c \
 	$(benchmarks_srcs)
 benchmarks_fi_rdm_bw_mt_LDADD = libfabtests.la
+
+benchmarks_fi_rma_tx_completion_SOURCES = \
+	benchmarks/rma_tx_completion.c \
+	$(benchmarks_srcs)
+benchmarks_fi_rma_tx_completion_LDADD = libfabtests.la
 
 
 unit_fi_eq_test_SOURCES = \

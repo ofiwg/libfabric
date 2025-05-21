@@ -381,6 +381,79 @@ int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	return 0;
 }
 
+int rma_tx_completion(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
+{
+	int ret, i;
+	size_t inject_size = fi->tx_attr->inject_size;
+
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
+			&inject_size, &(size_t){sizeof inject_size});
+	if (ret && ret != -FI_ENOPROTOOPT) {
+		FT_PRINTERR("fi_getopt(FI_OPT_INJECT_RMA_SIZE)", ret);
+		return ret;
+	}
+
+	if (inject_size_set)
+		inject_size = opts.inject_size;
+
+	if (ft_check_opts(FT_OPT_ENABLE_HMEM))
+		inject_size = 0;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		FT_ERR("Verify Data Is Not Supported");
+		return EXIT_FAILURE;
+	}
+
+	ret = ft_sync();
+	if (ret)
+		return ret;
+
+	if (opts.dst_addr) {
+		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+			if (i == opts.warmup_iterations)
+				ft_start();
+
+			if (opts.transfer_size <= inject_size)
+				ret = ft_inject_rma(rma_op, remote, ep,
+						    remote_fi_addr,
+						    opts.transfer_size);
+			else
+				ret = ft_tx_rma(rma_op, remote, ep, remote_fi_addr,
+						opts.transfer_size, &tx_ctx);
+			if (ret)
+				return ret;
+		}
+
+		ft_stop();
+		if (opts.machr)
+			show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 1,
+				opts.argc, opts.argv);
+		else
+			show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 1);
+
+		/* Inform RMA target that the test has ended */
+		ret = ft_sync();
+		if (ret)
+			return ret;
+	} else {
+		if (rma_op == FT_RMA_WRITEDATA) {
+			/* Drain fi_writedata CQEs on the receiver side */
+			for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+				ret = ft_rx_rma(i, rma_op, ep, opts.transfer_size);
+				if (ret)
+					return ret;
+			}
+		}
+
+		/* Wait for writer to complete */
+		ret = ft_sync();
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int bw_tx_comp()
 {
 	int ret;
