@@ -113,18 +113,22 @@ static inline int efa_cq_ibv_cq_ex_open_with_ibv_create_cq_ex(
 /**
  * @brief Create ibv_cq_ex by calling efadv_create_cq or ibv_create_cq_ex
  *
- * @param[in] ibv_cq_init_attr_ex Pointer to ibv_cq_init_attr_ex
- * @param[in] efadv_cq_init_attr_ex Pointer to efadv_cq_init_attr_ex
+ * @param[in] attr Completion queue attributes
  * @param[in] ibv_ctx Pointer to ibv_context
  * @param[in,out] ibv_cq_ex Pointer to newly created ibv_cq_ex
  * @param[in,out] ibv_cq_ex_type enum indicating if efadv_create_cq or ibv_create_cq_ex was used
+ * @param[in] flags Flags for creating CQ. Currently only EFADV_CQ_INIT_FLAGS_EXT_MEM_DMABUF is supported.
+ * @param[in] ext_mem_dmabuf Pointer to structure containing information about
+ * external memory when using EFADV_CQ_INIT_FLAGS_EXT_MEM_DMABUF flag.
  * @return Return 0 on success, error code otherwise
  */
 #if HAVE_EFADV_CQ_EX
 static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 					struct ibv_context *ibv_ctx,
 					struct ibv_cq_ex **ibv_cq_ex,
-					enum ibv_cq_ex_type *ibv_cq_ex_type)
+					enum ibv_cq_ex_type *ibv_cq_ex_type,
+					uint64_t flags,
+					struct fi_efa_ext_mem_dmabuf *ext_mem_dmabuf)
 {
 	struct ibv_cq_init_attr_ex init_attr_ex = {
 		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
@@ -148,11 +152,24 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 		efadv_cq_init_attr.wc_flags |= EFADV_WC_EX_WITH_IS_UNSOLICITED;
 #endif
 
+#if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF
+	if (efa_device_support_cq_with_ext_mem_dmabuf() &&
+	    (flags & EFADV_CQ_INIT_FLAGS_EXT_MEM_DMABUF)) {
+		efadv_cq_init_attr.flags = flags;
+		efadv_cq_init_attr.ext_mem_dmabuf = ext_mem_dmabuf;
+	}
+#endif
+
 	*ibv_cq_ex = efadv_create_cq(ibv_ctx, &init_attr_ex,
 				     &efadv_cq_init_attr,
 				     sizeof(efadv_cq_init_attr));
 
 	if (!*ibv_cq_ex) {
+#if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF
+		if (efa_device_support_cq_with_ext_mem_dmabuf() &&
+		    (flags & EFADV_CQ_INIT_FLAGS_EXT_MEM_DMABUF))
+			return -FI_EINVAL;
+#endif
 		/* This could be due to old EFA kernel module versions */
 		/* Fallback to ibv_create_cq_ex */
 		return efa_cq_ibv_cq_ex_open_with_ibv_create_cq_ex(
@@ -166,7 +183,9 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 					struct ibv_context *ibv_ctx,
 					struct ibv_cq_ex **ibv_cq_ex,
-					enum ibv_cq_ex_type *ibv_cq_ex_type)
+					enum ibv_cq_ex_type *ibv_cq_ex_type,
+					uint64_t flags,
+					struct fi_efa_ext_mem_dmabuf *ext_mem_dmabuf)
 {
 	struct ibv_cq_init_attr_ex init_attr_ex = {
 		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
@@ -189,6 +208,11 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
 
 void efa_cq_progress(struct util_cq *cq);
+
+int efa_cq_close(fid_t fid);
+
+const char *efa_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
+			    const void *err_data, char *buf, size_t len);
 
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 /**

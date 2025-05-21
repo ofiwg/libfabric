@@ -269,3 +269,43 @@ void test_efa_domain_direct_attr_mr_allocated(struct efa_resource **state)
 	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
 	assert_true(efa_domain->device->rdm_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
 }
+
+void test_efa_domain_open_ops_cq_open_ext(struct efa_resource **state)
+{
+    struct efa_resource *resource = *state;
+    struct fi_efa_ops_domain *efa_domain_ops;
+    struct fi_cq_attr attr = {0};
+    struct fi_efa_ext_mem_dmabuf ext_mem_dmabuf = {
+	    .buffer = NULL,
+	    .length = 64,
+	    .offset = 0,
+	    .fd = 1,
+    };
+    struct fid_cq *cq_fid;
+    int ret;
+
+    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+    ret = fi_open_ops(&resource->domain->fid, FI_EFA_DOMAIN_OPS, 0, (void **)&efa_domain_ops, NULL);
+    assert_int_equal(ret, 0);
+
+#if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF && HAVE_EFADV_CQ_EX
+    g_efa_unit_test_mocks.efadv_create_cq = &efa_mock_efadv_create_cq_with_ibv_create_cq_ex;
+    expect_function_call(efa_mock_efadv_create_cq_with_ibv_create_cq_ex);
+    ret = efa_domain_ops->cq_open_ext(resource->domain, &attr,
+				      EFADV_CQ_INIT_FLAGS_EXT_MEM_DMABUF,
+				      &ext_mem_dmabuf, &cq_fid, NULL);
+#else
+    ret = efa_domain_ops->cq_open_ext(resource->domain, &attr, 0,
+				      &ext_mem_dmabuf, &cq_fid, NULL);
+#endif
+
+#if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF && HAVE_EFADV_CQ_EX
+    assert_int_equal(ret, FI_SUCCESS);
+    struct efa_cq *efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
+    assert_non_null(efa_cq->ibv_cq.ibv_cq_ex);
+    assert_int_equal(efa_cq->ibv_cq.ibv_cq_ex_type, EFADV_CQ);
+#else
+    assert_int_equal(ret, -FI_ENOSYS);
+#endif
+}
