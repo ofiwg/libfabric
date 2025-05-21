@@ -4,12 +4,7 @@
 #include "efa_unit_tests.h"
 #include "efa_rdm_pke_cmd.h"
 
-/**
- * @brief this test validate that during RNR queuing and resending,
- * the "rnr_queued_pkt_cnt" in endpoint and peer were properly updated,
- * so is the EFA_RDM_PKE_RNR_RETRANSMIT flag.
- */
-void test_efa_rnr_queue_and_resend(struct efa_resource **state)
+void test_efa_rnr_queue_and_resend_impl(struct efa_resource **state, uint32_t op)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -41,7 +36,10 @@ void test_efa_rnr_queue_and_resend(struct efa_resource **state)
 	efa_rdm_ep->base_ep.qp->ibv_qp_ex->wr_complete = &efa_mock_ibv_wr_complete_no_op;
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 
-	ret = fi_send(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), peer_addr, NULL /* context */);
+	if (op == ofi_op_msg)
+		ret = fi_send(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), peer_addr, NULL /* context */);
+	else
+		ret = fi_tsend(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), peer_addr, 1234, NULL /* context */);
 	assert_int_equal(ret, 0);
 	assert_false(dlist_empty(&efa_rdm_ep->txe_list));
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
@@ -64,4 +62,24 @@ void test_efa_rnr_queue_and_resend(struct efa_resource **state)
 	efa_rdm_pke_handle_send_completion(pkt_entry);
 
 	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief this test validate that during RNR queuing and resending,
+ * the "rnr_queued_pkt_cnt" in endpoint and peer were properly updated,
+ * so is the EFA_RDM_PKE_RNR_RETRANSMIT flag.
+ */
+void test_efa_rnr_queue_and_resend_msg(struct efa_resource **state)
+{
+	return test_efa_rnr_queue_and_resend_impl(state, ofi_op_msg);
+}
+
+/**
+ * @brief this test validate that during RNR queuing and resending,
+ * the "rnr_queued_pkt_cnt" in endpoint and peer were properly updated,
+ * so is the EFA_RDM_PKE_RNR_RETRANSMIT flag for tagged messages
+ */
+void test_efa_rnr_queue_and_resend_tagged(struct efa_resource **state)
+{
+	return test_efa_rnr_queue_and_resend_impl(state, ofi_op_tagged);
 }

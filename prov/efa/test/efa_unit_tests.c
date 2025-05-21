@@ -195,7 +195,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_srx_cq, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_lock, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_unexp_pkt, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_rnr_queue_and_resend, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rnr_queue_and_resend_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rnr_queue_and_resend_tagged, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 
 		/* begin of efa_unit_test_ope.c */
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_with_no_enough_tx_pkts, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
