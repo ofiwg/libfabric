@@ -67,10 +67,11 @@ def has_gdrcopy(hostname):
     process = subprocess.run(command, shell=True, check=False, stdout=subprocess.PIPE)
     return process.returncode == 0
 
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def has_rdma(cmdline_args, operation):
     """
-    determine whether a host has rdma <operation> enabled in efa device
-    hostname: a host
+    determine whether both client/server sides have rdma <operation> enabled in efa device
+    cmdline_args: command line argument object, including server/client id, and timeout
     operation: rdma operation name, allowed values are read and write
     return: a boolean
     """
@@ -80,15 +81,23 @@ def has_rdma(cmdline_args, operation):
           + " " + os.path.join(binpath, f"fi_efa_rdma_checker -o {operation}")
     if cmdline_args.environments:
         cmd = cmdline_args.environments + " " + cmd
-    proc = subprocess.run("ssh {} {}".format(cmdline_args.server_id, cmd),
+    server_proc = subprocess.run("ssh {} {}".format(cmdline_args.server_id, cmd),
                stdout=subprocess.PIPE,
                stderr=subprocess.STDOUT,
                shell=True,
                universal_newlines=True)
-    if has_ssh_connection_err_msg(proc.stdout):
+    if has_ssh_connection_err_msg(server_proc.stdout):
         raise SshConnectionError()
 
-    return proc.returncode == 0
+    client_proc = subprocess.run("ssh {} {}".format(cmdline_args.client_id, cmd),
+               stdout=subprocess.PIPE,
+               stderr=subprocess.STDOUT,
+               shell=True,
+               universal_newlines=True)
+    if has_ssh_connection_err_msg(client_proc.stdout):
+        raise SshConnectionError()
+
+    return (server_proc.returncode == 0 and client_proc.returncode == 0)
 
 def efa_retrieve_gid(hostname):
     """
