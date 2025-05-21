@@ -2,7 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
-
+#include "efa_cq.h"
 /**
  * @brief Verify the info type in struct efa_domain for efa RDM path
  *
@@ -367,4 +367,56 @@ void test_efa_domain_open_ops_query_addr(struct efa_resource **state)
 	assert_int_equal(ret, FI_SUCCESS);
 	assert_int_equal(remote_qpn, 1);
 	assert_int_equal(remote_qkey, 0x1234);
+}
+
+void test_efa_domain_open_ops_cq_open_ext(struct efa_resource **state)
+{
+    struct efa_resource *resource = *state;
+    struct fi_efa_ops_domain *efa_domain_ops;
+    struct fi_cq_attr attr = {0};
+    struct fi_efa_cq_init_attr efa_cq_init_attr = {
+	    .flags = FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF,
+	    .ext_mem_dmabuf =
+		    {
+			    .buffer = NULL,
+			    .length = 64,
+			    .offset = 0,
+			    .fd = 1,
+		    },
+    };
+    struct fid_cq *cq_fid;
+    int ret;
+
+    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+    ret = fi_open_ops(&resource->domain->fid, FI_EFA_DOMAIN_OPS, 0,
+		      (void **) &efa_domain_ops, NULL);
+    assert_int_equal(ret, 0);
+
+#if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF && HAVE_EFADV_CQ_EX
+    if (efa_device_support_cq_with_ext_mem_dmabuf()) {
+        g_efa_unit_test_mocks.efadv_create_cq = &efa_mock_efadv_create_cq_with_ibv_create_cq_ex;
+        expect_function_call(efa_mock_efadv_create_cq_with_ibv_create_cq_ex);
+    }
+    ret = efa_domain_ops->cq_open_ext(resource->domain, &attr,
+				      &efa_cq_init_attr, &cq_fid, NULL);
+#else
+    ret = efa_domain_ops->cq_open_ext(resource->domain, &attr,
+				      &efa_cq_init_attr, &cq_fid, NULL);
+#endif
+
+#if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF && HAVE_EFADV_CQ_EX
+    if (!efa_device_support_cq_with_ext_mem_dmabuf()) {
+	    assert_int_equal(ret, -FI_EOPNOTSUPP);
+	    return;
+    }
+    assert_int_equal(ret, FI_SUCCESS);
+    struct efa_cq *efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
+    assert_non_null(efa_cq->ibv_cq.ibv_cq_ex);
+    assert_int_equal(efa_cq->ibv_cq.ibv_cq_ex_type, EFADV_CQ);
+    if (cq_fid)
+	    fi_close(&cq_fid->fid);
+#else
+    assert_int_equal(ret, -FI_ENOSYS);
+#endif
 }

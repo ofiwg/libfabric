@@ -74,6 +74,18 @@ static int efa_unit_test_mocks_teardown(void **state)
 		.efa_rdm_ope_post_send = __real_efa_rdm_ope_post_send,
 		.efa_device_support_unsolicited_write_recv = __real_efa_device_support_unsolicited_write_recv,
 		.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,
+#if HAVE_EFADV_QUERY_MR
+		.efadv_query_mr = __real_efadv_query_mr,
+#endif
+#if HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES
+		.ibv_query_qp_data_in_order = __real_ibv_query_qp_data_in_order,
+#endif
+#if HAVE_EFADV_QUERY_QP_WQS
+		.efadv_query_qp_wqs = __real_efadv_query_qp_wqs,
+#endif
+#if HAVE_EFADV_QUERY_CQ
+		.efadv_query_cq = __real_efadv_query_cq,
+#endif
 	};
 
 	/* Reset environment */
@@ -258,6 +270,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_domain_open_ops_query_addr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_open_ops_query_qp_wqs, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_open_ops_query_cq, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_open_ops_cq_open_ext, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_domain.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
