@@ -879,8 +879,6 @@ int opx_hfi1_wrapper_context_open(struct fi_opx_hfi1_context_internal *internal,
 	return fd;
 }
 
-#ifndef NDEBUG
-
 static int opx_get_current_proc_core()
 {
 	int core_id;
@@ -909,18 +907,31 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 	const int hw_version = binfo->hw_version; /* version of hardware, for feature checking. */
 	const int sw_version = binfo->sw_version; /* version of software, for feature checking. */
 
-	const int unit	    = ctrl->__hfi_unit;
-	const int port	    = ctrl->__hfi_port;
-	const int num_ports = opx_hfi_get_num_ports(unit);
+	const int	unit	  = ctrl->__hfi_unit;
+	const int	port	  = ctrl->__hfi_port;
+	const int	num_ports = opx_hfi_get_num_ports(unit);
+	const opx_lid_t lid	  = opx_hfi_get_port_lid(unit, port);
+
+	// too early for env to have been checked
+	int mixed_network = OPX_HFI1_TYPE;
+	if (OPX_HFI1_TYPE > OPX_HFI1_WFR) {
+		if (fi_param_get_bool(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
+			if (mixed_network) {
+				mixed_network = OPX_HFI1_JKR_9B;
+			}
+		} else { // default is mixed
+			mixed_network = OPX_HFI1_JKR_9B;
+		}
+	}
 
 	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "SW/HW version %#X/%#X. API version %#X. Core %d(%d). \n", sw_version,
 		hw_version, internal->user_info.userversion, rec_cpu, core_id);
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Selected HFI unit %d (%d units) and port %d (%d ports); \n", unit,
-		hfi_count, port, num_ports);
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Selected %s unit %d (%d units) and port %d (%d ports); \n",
+		OPX_HFI1_TYPE_STRING(mixed_network), unit, hfi_count, port, num_ports);
 	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Core %d(%d). NUMA domain is %d; HFI NUMA domain is %ld. \n", rec_cpu,
 		core_id, numa_node, opx_hfi_sysfs_unit_read_node_s64(unit));
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Receive context %d, sub-context %d, Send context %d\n", ctxt, subctxt,
-		send_ctxt);
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "LID %d, Receive context %d, sub-context %d, Send context %d\n", lid,
+		ctxt, subctxt, send_ctxt);
 }
 
 /* Environment variable is not published */
@@ -928,12 +939,6 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 	if (getenv("FI_OPX_VERBOSE_SELECTION")) {        \
 		opx_verbose_selection(_internal, _ctrl); \
 	}
-
-#else
-
-#define OPX_VERBOSE_SELECTION(_internal, _ctrl)
-
-#endif
 
 struct _hfi_ctrl *opx_hfi1_wrapper_userinit(int fd, struct fi_opx_hfi1_context_internal *internal, int unit, int port)
 {

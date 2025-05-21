@@ -844,8 +844,8 @@ OPX_INI
 		OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0, OPX_RC_OUT_OF_ORDER_0, OPX_RC_OUT_OF_ORDER_0,
 		OPX_RC_OUT_OF_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0);
 	fi_param_define(
-		&fi_opx_provider, "mixed_network", FI_PARAM_INT,
-		"Indicates a mixed network of OPA100 and CN5000. Needs to be set to 1 when a mixed network is used. Default is 0.");
+		&fi_opx_provider, "mixed_network", FI_PARAM_BOOL,
+		"Indicates that the network requires OPA100 support. Set to 0 if OPA100 support is not needed. Default is 1.");
 	fi_param_define(&fi_opx_provider, "context_sharing", FI_PARAM_BOOL,
 			"Enables context sharing in OPX. Defaults to FALSE (1 HFI context per endpoint).");
 	fi_param_define(

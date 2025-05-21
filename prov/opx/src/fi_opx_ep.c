@@ -954,8 +954,8 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	int sdma_disable;
 	if (fi_param_get_bool(fi_opx_global.prov, "sdma_disable", &sdma_disable) == FI_SUCCESS) {
 		opx_ep->tx->use_sdma = !sdma_disable;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "sdma_disable parm specified as %s.\n",
-				   sdma_disable ? "TRUE" : "FALSE");
+		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA, "sdma_disable parm specified as %s.\n",
+			sdma_disable ? "TRUE" : "FALSE");
 	} else {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_DISABLE not specified; using SDMA\n");
 		opx_ep->tx->use_sdma = 1;
@@ -1710,37 +1710,23 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Global OPX packet size %u\n", OPX_HFI1_PKT_SIZE);
 
+	assert((OPX_HFI1_WFR > OPX_HFI1_JKR_9B) && (OPX_HFI1_JKR > OPX_HFI1_WFR) &&
+	       (OPX_HFI1_CYR > OPX_HFI1_WFR)); // don't change the enum assumptions
+
 	/* The global was set early (userinit), may be changed now on mixed networks */
-	int mixed_network = 0;
-	if (fi_param_get_int(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
-		/* Only JKR supports OPA100 "mixed" network */
-		if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-			if (mixed_network == 1) {
-				OPX_HFI1_TYPE	       = OPX_HFI1_JKR_9B;
-				opx_ep->hfi->hfi1_type = OPX_HFI1_JKR_9B;
-				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Mixed network: Set HFI type to %s.\n",
-					     OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE));
-			} else if (mixed_network == 0) {
-				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,
-					     "Not mixed network: Set HFI type to %s.\n",
-					     OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE));
-			} else {
-				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-					"Unsupported value (%d) for FI_OPX_MIXED_NETWORK, using default HFI type %s.\n",
-					mixed_network, OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE));
+	if (OPX_HFI1_TYPE > OPX_HFI1_WFR) {
+		int mixed_network;
+		if (fi_param_get_bool(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
+			if (mixed_network) {
+				OPX_HFI1_TYPE = OPX_HFI1_JKR_9B;
 			}
-		} else if (OPX_HFI1_TYPE != OPX_HFI1_WFR) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-				"%s does not support a mixed networks with OPA100.\n",
-				OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE));
+		} else { // default is mixed
+			OPX_HFI1_TYPE = OPX_HFI1_JKR_9B;
 		}
-	} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
-		// Default to 9B unless the environment variable was set.
-		OPX_HFI1_TYPE	       = OPX_HFI1_JKR_9B;
-		opx_ep->hfi->hfi1_type = OPX_HFI1_JKR_9B;
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Defaulting to mixed network: Set HFI type to %s.\n",
-			     OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE));
 	}
+	opx_ep->hfi->hfi1_type = OPX_HFI1_TYPE;
+	FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "Mixed OPA100 network %s with local HFI type %s.\n",
+		(OPX_HFI1_TYPE > OPX_HFI1_WFR) ? "disabled" : "enabled", OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE));
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"Opened hfi %p, HFI type %s, unit %#X, port %#X, ref_cnt %#lX, rcv ctxt %#X, send ctxt %#X, subctxt %u, subctxt_cnt %u\n",
