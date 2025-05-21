@@ -302,8 +302,8 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
 
 *FI_OPX_MIXED_NETWORK*
-: Integer. Indicates that the network is a mix of OPA100 and CN5000. Needs to be set to 1
-  in case of mixed network. Default is 0.
+: Boolean (1/0, on/off, true/false, yes/no). Indicates that the network requires OPA100
+  support. Set to 0 if OPA100 support is not needed. Default is 1.
 
 *FI_OPX_ROUTE_CONTROL*
 : Integer. Specify the route control for each packet type. The format is

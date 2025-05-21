@@ -126,7 +126,7 @@ typedef uint32_t opx_lid_t; /* only 3 bytes of lid is used */
 /* hfi1 type for bit logic */
 enum opx_hfi1_type {
 	OPX_HFI1_UNDEF	= 0, // undefined
-	OPX_HFI1_JKR_9B = 1, // CN5000 (CN6000? TBD) built for mixed network. Internal use
+	OPX_HFI1_JKR_9B = 1, // CN5000+ built for mixed network. Internal use
 	OPX_HFI1_WFR	= 2, // Omni-path (all generations)
 	OPX_HFI1_JKR	= 4, // CN5000 (initial generation)
 	OPX_HFI1_CYR	= 8  // CN6000 (initial generation)
