@@ -227,6 +227,12 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_SDMA_DISABLE*
 : Boolean (1/0, on/off, true/false, yes/no). Disables SDMA offload hardware. Default is 0.
 
+*FI_OPX_MAX_PKT_SIZE*
+: Integer. Set the maximum packet size which must be less than or equal to the driver's
+  MTU (Maximum Transmission Unit) size.  Valid values: 2048, 4096, 8192, 10240.
+  Default is set to 10240 for libraries built on CN5000 systems and set to 8192 for
+  libraries built on OPA100 systems.
+
 *FI_OPX_SDMA_MIN_PAYLOAD_BYTES*
 : Integer. The minimum length in bytes where SDMA will be used.
   For messages smaller than this threshold, the send will be completed using PIO.
@@ -316,6 +322,19 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 
 *FI_OPX_LINK_DOWN_WAIT_TIME_MAX_SEC*
 : Integer. The maximum time in seconds to wait for a link to come back up. Default is 70 seconds.
+
+*FI_OPX_MMAP_GUARD*
+: Boolean (0/1, on/off, true/false, yes/no). Enable guards around OPX/HFI mmaps. When enabled,
+this will cause a segfault when mmapped memory is illegally accessed through buffer overruns
+or underruns.  Default is false.
+
+*FI_OPX_CONTEXT_SHARING*
+: Boolean (1/0, on/off, true/false, yes/no). Enables context sharing in OPX. Defaults to FALSE (1 HFI context per endpoint).
+
+*FI_OPX_ENDPOINTS_PER_HFI_CONTEXT*
+: Integer. Specify how many endpoints should share a single HFI context. Valid values are from 2 to 8.
+  Default is to determine optimal value based on the number of contexts available on the system and number of processors online.
+  Only applicable if context sharing is enabled. Otherwise this value is ignored.
 
 # SEE ALSO
 
