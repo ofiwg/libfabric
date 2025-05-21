@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_opx" "7" "2025\-04\-24" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_opx" "7" "2025\-05\-21" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .PP
 {%include JB/setup %}
@@ -293,6 +293,14 @@ Boolean (1/0, on/off, true/false, yes/no).
 Disables SDMA offload hardware.
 Default is 0.
 .TP
+\f[I]FI_OPX_MAX_PKT_SIZE\f[R]
+Integer.
+Set the maximum packet size which must be less than or equal to the
+driver\[cq]s MTU (Maximum Transmission Unit) size.
+Valid values: 2048, 4096, 8192, 10240.
+Default is set to 10240 for libraries built on CN5000 systems and set to
+8192 for libraries built on OPA100 systems.
+.TP
 \f[I]FI_OPX_SDMA_MIN_PAYLOAD_BYTES\f[R]
 Integer.
 The minimum length in bytes where SDMA will be used.
@@ -431,6 +439,27 @@ Defaults to: \[lq]YES\[rq]
 Integer.
 The maximum time in seconds to wait for a link to come back up.
 Default is 70 seconds.
+.TP
+\f[I]FI_OPX_MMAP_GUARD\f[R]
+Boolean (0/1, on/off, true/false, yes/no).
+Enable guards around OPX/HFI mmaps.
+When enabled, this will cause a segfault when mmapped memory is
+illegally accessed through buffer overruns or underruns.
+Default is false.
+.TP
+\f[I]FI_OPX_CONTEXT_SHARING\f[R]
+Boolean (1/0, on/off, true/false, yes/no).
+Enables context sharing in OPX.
+Defaults to FALSE (1 HFI context per endpoint).
+.TP
+\f[I]FI_OPX_ENDPOINTS_PER_HFI_CONTEXT\f[R]
+Integer.
+Specify how many endpoints should share a single HFI context.
+Valid values are from 2 to 8.
+Default is to determine optimal value based on the number of contexts
+available on the system and number of processors online.
+Only applicable if context sharing is enabled.
+Otherwise this value is ignored.
 .SH SEE ALSO
 .PP
 \f[V]fabric\f[R](7), \f[V]fi_provider\f[R](7), \f[V]fi_getinfo\f[R](7),
