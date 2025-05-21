@@ -586,11 +586,122 @@ static int efa_domain_query_cq(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_
 #endif /* HAVE_EFADV_QUERY_CQ */
 
 
+#if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF && HAVE_EFADV_CQ_EX
+static struct fi_ops_cq efa_cq_ext_ops = {
+	.size = sizeof(struct fi_ops_cq),
+	.read = fi_no_cq_read,
+	.readfrom = fi_no_cq_readfrom,
+	.readerr = fi_no_cq_readerr,
+	.sread = fi_no_cq_sread,
+	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,
+	.strerror = efa_cq_strerror,
+};
+
+static void efa_cq_ext_progress_no_op(struct util_cq *cq)
+{
+	return;
+}
+
+/**
+ * @brief Create a completion queue with external memory provided via dmabuf.
+ *
+ * @param domain_fid Open resource domain
+ * @param attr Completion queue attributes
+ * @param efa_cq_init_attr Structure containing attributes for creating cq on external memory
+ * @param cq_fid pointer to the created completion queue fid
+ * @param context User specified context associated with the completion queue.
+ * @return 0 on success, negative integer on failure
+ */
+static int efa_domain_cq_open_ext(struct fid_domain *domain_fid,
+				  struct fi_cq_attr *attr,
+				  struct fi_efa_cq_init_attr *efa_cq_init_attr,
+				  struct fid_cq **cq_fid, void *context)
+{
+	struct efa_cq *cq;
+	struct efa_domain *efa_domain;
+	int err, retv;
+
+	if (attr->wait_obj != FI_WAIT_NONE)
+		return -FI_ENOSYS;
+
+	if (!(efa_cq_init_attr->flags & FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF)) {
+		EFA_WARN(FI_LOG_DOMAIN, "FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF flag is not set\n");
+		return -FI_EINVAL;
+	}
+
+	if (!efa_cq_init_attr->ext_mem_dmabuf.length) {
+		EFA_WARN(FI_LOG_DOMAIN, "struct ext_mem_dmabuf is invalid\n");
+		return -FI_EINVAL;
+	}
+
+	if (!efa_device_support_cq_with_ext_mem_dmabuf()) {
+		EFA_WARN(FI_LOG_DOMAIN, "External memory CQ requested but not supported by device\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	cq = calloc(1, sizeof(*cq));
+	if (!cq)
+		return -FI_ENOMEM;
+
+	/* 
+	 * CQ polling is safe when CPU virtual address is provided in buffer.
+	 * Otherwise, the memory is on GPU and the use of CQ poll interfaces should be avoided.
+	 */
+	err = ofi_cq_init(&efa_prov, domain_fid, attr, &cq->util_cq,
+			  efa_cq_init_attr->ext_mem_dmabuf.buffer ?
+				  &efa_cq_progress :
+				  &efa_cq_ext_progress_no_op,
+			  context);
+	if (err) {
+		EFA_WARN(FI_LOG_CQ, "Unable to create UTIL_CQ\n");
+		goto err_free_cq;
+	}
+
+	efa_domain = container_of(cq->util_cq.domain, struct efa_domain,
+				  util_domain);
+	err = efa_cq_ibv_cq_ex_open(attr, efa_domain->device->ibv_ctx,
+				    &cq->ibv_cq.ibv_cq_ex,
+				    &cq->ibv_cq.ibv_cq_ex_type,
+				    efa_cq_init_attr);
+	if (err) {
+		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ with external memory: %s\n", fi_strerror(err));
+		goto err_free_util_cq;
+	}
+
+	*cq_fid = &cq->util_cq.cq_fid;
+	(*cq_fid)->fid.fclass = FI_CLASS_CQ;
+	(*cq_fid)->fid.context = context;
+	(*cq_fid)->fid.ops = &efa_cq_fi_ops;
+	(*cq_fid)->ops = efa_cq_init_attr->ext_mem_dmabuf.buffer ? &efa_cq_ops : &efa_cq_ext_ops;
+
+	return 0;
+
+err_free_util_cq:
+	retv = ofi_cq_cleanup(&cq->util_cq);
+	if (retv)
+		EFA_WARN(FI_LOG_CQ, "Unable to close util cq: %s\n",
+			 fi_strerror(-retv));
+err_free_cq:
+	free(cq);
+	return err;
+}
+#else
+static int efa_domain_cq_open_ext(struct fid_domain *domain_fid,
+				  struct fi_cq_attr *attr,
+				  struct fi_efa_cq_init_attr *efa_cq_init_attr,
+				  struct fid_cq **cq_fid, void *context)
+{
+	return -FI_ENOSYS;
+}
+#endif
+
 static struct fi_efa_ops_domain efa_ops_domain = {
 	.query_mr = efa_domain_query_mr,
 	.query_addr = efa_domain_query_addr,
 	.query_qp_wqs = efa_domain_query_qp_wqs,
 	.query_cq = efa_domain_query_cq,
+	.cq_open_ext = efa_domain_cq_open_ext,
 };
 
 static int
