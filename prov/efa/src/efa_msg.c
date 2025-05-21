@@ -14,22 +14,6 @@
 
 #include "efa_tp.h"
 
-#define EFA_SETUP_IOV(iov, buf, len)           \
-	do {                                   \
-		iov.iov_base = (void *)buf;    \
-		iov.iov_len = (size_t)len;     \
-	} while (0)
-
-#define EFA_SETUP_MSG(msg, iov, _desc, count, _addr, _context, _data)    \
-	do {                                                             \
-		msg.msg_iov = (const struct iovec *)iov;                 \
-		msg.desc = (void **)_desc;                               \
-		msg.iov_count = (size_t)count;                           \
-		msg.addr = (fi_addr_t)_addr;                             \
-		msg.context = (void *)_context;                          \
-		msg.data = (uint32_t)_data;                              \
-	} while (0)
-
 #ifndef EFA_MSG_DUMP
 static inline void dump_msg(const struct fi_msg *msg, const char *context) {}
 #else

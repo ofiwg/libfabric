@@ -129,6 +129,42 @@ static_assert(sizeof(struct efa_context) <= sizeof(struct fi_context2),
 	      "efa_context must not be larger than fi_context2");
 #endif
 
+#define EFA_SETUP_IOV(iov, buf, len)           \
+	do {                                   \
+		iov.iov_base = (void *)buf;    \
+		iov.iov_len = (size_t)len;     \
+	} while (0)
+
+#define EFA_SETUP_MSG(msg, iov, _desc, count, _addr, _context, _data)    \
+	do {                                                             \
+		msg.msg_iov = (const struct iovec *)iov;                 \
+		msg.desc = (void **)_desc;                               \
+		msg.iov_count = (size_t)count;                           \
+		msg.addr = (fi_addr_t)_addr;                             \
+		msg.context = (void *)_context;                          \
+		msg.data = (uint32_t)_data;                              \
+	} while (0)
+
+#define EFA_SETUP_RMA_IOV(rma_iov, _addr, _len, _key) \
+    do {                                          \
+        rma_iov.addr = (uint64_t) _addr;      \
+        rma_iov.len = (size_t) _len;          \
+        rma_iov.key = (uint64_t) _key;        \
+    } while (0)
+
+#define EFA_SETUP_MSG_RMA(msg, iov, _desc, count, _addr, _rma_iov,  \
+              _rma_iov_count, _context, _data)          \
+    do {                                                        \
+        msg.msg_iov = (const struct iovec *) iov;           \
+        msg.desc = (void **) _desc;                         \
+        msg.iov_count = (size_t) count;                     \
+        msg.addr = (fi_addr_t) _addr;                       \
+        msg.rma_iov = (const struct fi_rma_iov *) _rma_iov; \
+        msg.rma_iov_count = (size_t) _rma_iov_count;        \
+        msg.context = (void *) _context;                    \
+        msg.data = (uint32_t) _data;                        \
+    } while (0)
+
 /**
  * Prepare and return a pointer to an EFA context structure.
  *
