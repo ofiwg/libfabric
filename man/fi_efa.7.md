@@ -201,6 +201,10 @@ struct fi_efa_ops_domain {
 			  uint16_t *remote_qpn, uint32_t *remote_qkey);
 	int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
 	int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
+	int (*cq_open_ext)(struct fid_domain *domain_fid,
+			   struct fi_cq_attr *attr,
+			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
+			   struct fid_cq **cq_fid, void *context);
 };
 ```
 
@@ -314,6 +318,49 @@ struct fi_efa_cq_attr {
 
 #### Return value
 **query_cq()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+### cq_open_ext
+This op creates a completion queue with external memory provided via dmabuf.
+The memory can be passed by supplying the following struct.
+
+```c
+struct fi_efa_cq_init_attr {
+	uint64_t flags;
+	struct {
+		uint8_t *buffer;
+		uint64_t length;
+		uint64_t offset;
+		uint32_t fd;
+	} ext_mem_dmabuf;
+};
+```
+
+*flags*
+:	A bitwise OR of the various values described below.
+
+	FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF:
+		create CQ with external memory provided via dmabuf.
+
+*ext_mem_dmabuf*
+:	Structure containing information about external memory when using
+	FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF flag.
+
+	*buffer*
+	:	Pointer to the memory mapped in the process's virtual address space. 
+		The field is optional, but if not provided, the use of CQ poll interfaces should be avoided.
+
+	*length*
+	:	Length of the memory region to use.
+
+	*offset*
+	:	Offset within the dmabuf.
+
+	*fd*
+	:	File descriptor of the dmabuf.
+
+#### Return value
+**cq_open_ext()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
 
 # Traffic Class (tclass) in EFA
