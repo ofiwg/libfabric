@@ -228,4 +228,5 @@ ofi_recvv_socket(SOCKET fd, const struct iovec *iov, size_t cnt, int flags)
        return ofi_recvmsg_tcp(fd, &msg, flags);
 }
 
+#define OFI_KEEPALIVE	TCP_KEEPIDLE
 #endif /* _LINUX_OSD_H_ */

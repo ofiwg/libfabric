@@ -790,4 +790,5 @@ int xnet_rdm_ops_open(struct fid *fid, const char *name,
 	FI_WARN(&xnet_prov, subsystem, log_str "%s (%d)\n", \
 		fi_strerror((int) -(err)), (int) err)
 
+void xnet_disable_keepalive(struct xnet_ep *ep);
 #endif //_XNET_H_

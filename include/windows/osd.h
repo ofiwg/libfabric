@@ -1115,7 +1115,7 @@ static inline int ofi_set_thread_affinity(const char *s)
 	return -FI_ENOSYS;
 }
 
-
+#define OFI_KEEPALIVE	TCP_KEEPIDLE
 #if defined(_M_X64) || defined(_M_AMD64)
 
 #include <intrin.h>
