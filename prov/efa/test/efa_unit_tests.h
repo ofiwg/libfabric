@@ -221,6 +221,8 @@ void test_efa_srx_lock();
 void test_efa_srx_unexp_pkt();
 void test_efa_rnr_queue_and_resend_msg();
 void test_efa_rnr_queue_and_resend_tagged();
+
+/* begin of efa_unit_test_ope.c */
 void test_efa_rdm_ope_prepare_to_post_send_with_no_enough_tx_pkts();
 void test_efa_rdm_ope_prepare_to_post_send_host_memory();
 void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128();
@@ -236,6 +238,8 @@ void test_efa_rdm_rxe_handle_error_not_write_cq();
 void test_efa_rdm_rxe_map();
 void test_efa_rdm_rxe_list_removal();
 void test_efa_rdm_txe_list_removal();
+void test_efa_rdm_txe_prepare_local_read_pkt_entry();
+/* end of efa_unit_test_ope.c */
 void test_efa_rdm_msg_send_to_local_peer_with_null_desc();
 void test_efa_fork_support_request_initialize_when_ibv_fork_support_is_needed();
 void test_efa_fork_support_request_initialize_when_ibv_fork_support_is_unneeded();
@@ -271,6 +275,7 @@ void test_efa_rdm_cq_post_initial_rx_pkts();
 void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_post_initial_rx_pkts();
+/* begin of efa_unit_test_rdm_peer.c */
 void test_efa_rdm_peer_reorder_expected_msg_id();
 void test_efa_rdm_peer_reorder_smaller_msg_id();
 void test_efa_rdm_peer_reorder_larger_msg_id();
@@ -278,11 +283,18 @@ void test_efa_rdm_peer_reorder_overflow_msg_id();
 void test_efa_rdm_peer_move_overflow_pke_to_recvwin();
 void test_efa_rdm_peer_keep_pke_in_overflow_list();
 void test_efa_rdm_peer_append_overflow_pke_to_recvwin();
+void test_efa_rdm_peer_recvwin_queue_or_append_pke();
+/* end of efa_unit_test_rdm_peer.c */
+
+/* begin of efa_unit_test_pke.c */
 void test_efa_rdm_pke_handle_longcts_rtm_send_completion();
 void test_efa_rdm_pke_release_rx_list();
 void test_efa_rdm_pke_alloc_rta_rxe();
 void test_efa_rdm_pke_alloc_rtw_rxe();
 void test_efa_rdm_pke_alloc_rtr_rxe();
+void test_efa_rdm_pke_get_unexp();
+/* end of efa_unit_test_pke.c */
+
 void test_efa_msg_fi_recv();
 void test_efa_msg_fi_recvv();
 void test_efa_msg_fi_recvmsg();

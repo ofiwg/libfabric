@@ -306,3 +306,53 @@ void test_efa_rdm_peer_append_overflow_pke_to_recvwin(struct efa_resource **stat
 	pkt_entry1->next = NULL;
 	efa_rdm_pke_release_rx(pkt_entry1);
 }
+
+void test_efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_ep *efa_rdm_ep;
+	int ret;
+	fi_addr_t addr;
+	struct efa_unit_test_eager_rtm_pkt_attr pkt_attr = {0};
+	uint32_t msg_id;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Create and register a fake peer */
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
+	assert_int_equal(ret, 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	assert_non_null(peer);
+
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+
+	/* Not the expected msg id is 0, use 3 as a valid ooo msg id */
+	msg_id = 3;
+	pkt_attr.msg_id = msg_id;
+	pkt_attr.connid = raw_addr.qkey;
+	efa_unit_test_eager_msgrtm_pkt_construct(pkt_entry, &pkt_attr);
+
+	ret = efa_rdm_peer_recvwin_queue_or_append_pke(pkt_entry, msg_id, (&peer->robuf));
+	assert_int_equal(ret, 1);
+
+#if ENABLE_DEBUG
+	/* The ooo pkt entry should be inserted to the rx_pkt_list */
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->rx_pkt_list), 1);
+#endif
+}
