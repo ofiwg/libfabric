@@ -31,6 +31,11 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	dlist_init(&peer->txe_list);
 	dlist_init(&peer->rxe_list);
 	dlist_init(&peer->overflow_pke_list);
+
+	if (conn->shm_fi_addr != FI_ADDR_NOTAVAIL) {
+		peer->shm_fiaddr = conn->shm_fi_addr;
+		peer->is_local = 1;
+	}
 }
 
 /**
