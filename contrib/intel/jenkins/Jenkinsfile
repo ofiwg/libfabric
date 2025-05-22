@@ -34,7 +34,7 @@ def initialize() {
 
 def run_red(config_name) {
   return sh (
-    returnStatus: true,
+    returnStatus: false,
     script: """PATH=${CI_LOCATION}/venv/bin/:${env.PATH} red \
                --output ${CUSTOM_WORKSPACE} \
                --config "${CI_LOCATION}/red_configs/${config_name}.json" \
