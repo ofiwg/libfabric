@@ -163,16 +163,10 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	return ret;
 }
 
-ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
+ssize_t efa_rdm_generic_readmsg(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_peer *peer, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	ssize_t err;
-	struct efa_rdm_ep *efa_rdm_ep;
-	struct efa_rdm_peer *peer;
 	struct efa_rdm_ope *txe = NULL;
-	fi_addr_t tmp_addr;
-	struct fi_msg_rma *msg_clone;
-	void *shm_desc[EFA_RDM_IOV_LIMIT];
-	void **tmp_desc;
 	struct util_srx_ctx *srx_ctx;
 
 	efa_rdm_tracepoint(read_begin_msg_context,
@@ -183,43 +177,15 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	       ofi_total_iov_len(msg->msg_iov, msg->iov_count),
 	       flags);
 
-	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
-	err = efa_rdm_ep_cap_check_rma(efa_rdm_ep);
-	if (err)
-		return err;
-
-	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
-	if (err)
-		return err;
-
-	assert(msg->iov_count <= efa_rdm_ep->base_ep.info->tx_attr->iov_limit);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
 	ofi_genlock_lock(srx_ctx->lock);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
 
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
-		goto out;
-	}
-
-	if (peer->is_local && efa_rdm_ep->shm_ep) {
-		tmp_addr = msg->addr;
-		tmp_desc = msg->desc;
-		msg_clone = (struct fi_msg_rma *)msg;
-		msg_clone->addr = peer->shm_fiaddr;
-		if (msg->desc) {
-			efa_rdm_get_desc_for_shm(msg->iov_count, msg->desc, shm_desc);
-			msg_clone->desc = shm_desc;
-		} else {
-			msg_clone->desc = NULL;
-		}
-		err = fi_readmsg(efa_rdm_ep->shm_ep, msg_clone, flags);
-		msg_clone->addr = tmp_addr;
-		msg_clone->desc = tmp_desc;
 		goto out;
 	}
 
@@ -238,6 +204,51 @@ out:
 	ofi_genlock_unlock(srx_ctx->lock);
 	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
 	return err;
+}
+
+ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
+{
+	ssize_t err;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	fi_addr_t tmp_addr;
+	struct fi_msg_rma *msg_clone;
+	void *shm_desc[EFA_RDM_IOV_LIMIT];
+	void **tmp_desc;
+
+	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	err = efa_rdm_ep_cap_check_rma(efa_rdm_ep);
+	if (err)
+		return err;
+
+	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
+	if (err)
+		return err;
+
+	assert(msg->iov_count <= efa_rdm_ep->base_ep.info->tx_attr->iov_limit);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
+	assert(peer);
+
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
+		tmp_addr = msg->addr;
+		tmp_desc = msg->desc;
+		msg_clone = (struct fi_msg_rma *)msg;
+		msg_clone->addr = peer->shm_fiaddr;
+		if (msg->desc) {
+			efa_rdm_get_desc_for_shm(msg->iov_count, msg->desc, shm_desc);
+			msg_clone->desc = shm_desc;
+		} else {
+			msg_clone->desc = NULL;
+		}
+		err = fi_readmsg(efa_rdm_ep->shm_ep, msg_clone, flags);
+		msg_clone->addr = tmp_addr;
+		msg_clone->desc = tmp_desc;
+		return err;
+	}
+
+	return efa_rdm_generic_readmsg(efa_rdm_ep, peer, msg, flags);
+
 }
 
 ssize_t efa_rdm_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
@@ -282,7 +293,7 @@ ssize_t efa_rdm_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **des
 	msg.rma_iov = &rma_iov;
 	msg.rma_iov_count = 1;
 
-	return efa_rdm_rma_readmsg(ep, &msg, 0);
+	return efa_rdm_generic_readmsg(efa_rdm_ep, peer, &msg, 0);
 }
 
 ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
@@ -292,6 +303,8 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	struct iovec iov;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
+	struct fi_msg_rma msg;
+	struct fi_rma_iov rma_iov;
 	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	int err;
 
@@ -316,7 +329,21 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
-	return efa_rdm_rma_readv(ep, &iov, &desc, 1, src_addr, addr, key, context);
+
+	rma_iov.addr = addr;
+	rma_iov.len = ofi_total_iov_len(&iov, 1);
+	rma_iov.key = key;
+
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_iov = &iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = src_addr;
+	msg.context = context;
+	msg.rma_iov = &rma_iov;
+	msg.rma_iov_count = 1;
+
+	return efa_rdm_generic_readmsg(efa_rdm_ep, peer, &msg, 0);
 }
 
 /**
@@ -580,6 +607,8 @@ ssize_t efa_rdm_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *
 		      void *context)
 {
 	struct iovec iov;
+	struct fi_rma_iov rma_iov;
+	struct fi_msg_rma msg;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
 	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
@@ -605,7 +634,20 @@ ssize_t efa_rdm_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
-	return efa_rdm_rma_writev(ep, &iov, &desc, 1, dest_addr, addr, key, context);
+	rma_iov.addr = addr;
+	rma_iov.len = ofi_total_iov_len(&iov, 1);
+	rma_iov.key = key;
+
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_iov = &iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	msg.context = context;
+	msg.rma_iov = &rma_iov;
+	msg.rma_iov_count = 1;
+
+	return efa_rdm_generic_writemsg(efa_rdm_ep, peer, &msg, 0);
 }
 
 ssize_t efa_rdm_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,

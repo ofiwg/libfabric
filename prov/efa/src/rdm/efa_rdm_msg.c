@@ -277,7 +277,7 @@ ssize_t efa_rdm_msg_sendv(struct fid_ep *ep, const struct iovec *iov,
 	}
 
 	efa_rdm_msg_construct(&msg, iov, desc, count, dest_addr, context, 0);
-	return efa_rdm_msg_sendmsg(ep, &msg, efa_rdm_tx_flags(efa_rdm_ep));
+	return efa_rdm_msg_generic_send(efa_rdm_ep, peer, &msg, 0, ofi_op_msg, efa_rdm_tx_flags(efa_rdm_ep));
 }
 
 static
@@ -288,6 +288,7 @@ ssize_t efa_rdm_msg_send(struct fid_ep *ep, const void *buf, size_t len,
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
 	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
+	struct fi_msg msg = {0};
 	int ret;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
@@ -307,7 +308,8 @@ ssize_t efa_rdm_msg_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
-	return efa_rdm_msg_sendv(ep, &iov, &desc, 1, dest_addr, context);
+	efa_rdm_msg_construct(&msg, &iov, &desc, 1, dest_addr, context, 0);
+	return efa_rdm_msg_generic_send(efa_rdm_ep, peer, &msg, 0, ofi_op_msg, efa_rdm_tx_flags(efa_rdm_ep));
 }
 
 static
@@ -452,7 +454,7 @@ ssize_t efa_rdm_msg_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 		       uint64_t tag, void *context)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
-	struct fi_msg_tagged msg = {0};
+	struct fi_msg msg = {0};
 	struct efa_rdm_peer *peer;
 	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	int ret;
@@ -471,14 +473,8 @@ ssize_t efa_rdm_msg_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 		return fi_tsendv(efa_rdm_ep->shm_ep, iov, desc? shm_desc : NULL, count, peer->shm_fiaddr, tag, context);
 	}
 
-	msg.msg_iov = iov;
-	msg.desc = desc;
-	msg.iov_count = count;
-	msg.addr = dest_addr;
-	msg.context = context;
-	msg.tag = tag;
-
-	return efa_rdm_msg_tsendmsg(ep_fid, &msg, efa_rdm_tx_flags(efa_rdm_ep));
+	efa_rdm_msg_construct(&msg, iov, desc, count, dest_addr, context, 0);
+	return efa_rdm_msg_generic_send(efa_rdm_ep, peer, &msg, tag, ofi_op_tagged, efa_rdm_tx_flags(efa_rdm_ep));
 }
 
 static
@@ -487,6 +483,7 @@ ssize_t efa_rdm_msg_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 		      void *context)
 {
 	struct iovec msg_iov;
+	struct fi_msg msg = {0};
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
 	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
@@ -509,8 +506,8 @@ ssize_t efa_rdm_msg_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	msg_iov.iov_base = (void *)buf;
 	msg_iov.iov_len = len;
-	return efa_rdm_msg_tsendv(ep_fid, &msg_iov, &desc, 1, dest_addr, tag,
-			      context);
+	efa_rdm_msg_construct(&msg, &msg_iov, &desc, 1, dest_addr, context, 0);
+	return efa_rdm_msg_generic_send(efa_rdm_ep, peer, &msg, tag, ofi_op_tagged, efa_rdm_tx_flags(efa_rdm_ep));
 }
 
 static

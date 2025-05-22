@@ -4,12 +4,7 @@
 #include "efa_unit_tests.h"
 #include "efa_rdm_pke_cmd.h"
 
-/**
- * @brief this test validate that during RNR queuing and resending,
- * the "rnr_queued_pkt_cnt" in endpoint and peer were properly updated,
- * so is the EFA_RDM_PKE_RNR_RETRANSMIT flag.
- */
-void test_efa_rnr_queue_and_resend(struct efa_resource **state)
+void test_efa_rnr_queue_and_resend_impl(struct efa_resource **state, uint32_t op)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -17,6 +12,7 @@ void test_efa_rnr_queue_and_resend(struct efa_resource **state)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer *peer;
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t peer_addr;
 	int ret;
@@ -41,16 +37,21 @@ void test_efa_rnr_queue_and_resend(struct efa_resource **state)
 	efa_rdm_ep->base_ep.qp->ibv_qp_ex->wr_complete = &efa_mock_ibv_wr_complete_no_op;
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 
-	ret = fi_send(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), peer_addr, NULL /* context */);
+	if (op == ofi_op_msg)
+		ret = fi_send(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), peer_addr, NULL /* context */);
+	else
+		ret = fi_tsend(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), peer_addr, 1234, NULL /* context */);
 	assert_int_equal(ret, 0);
 	assert_false(dlist_empty(&efa_rdm_ep->txe_list));
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
 	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
 	pkt_entry = (struct efa_rdm_pke *)g_ibv_submitted_wr_id_vec[0];
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, pkt_entry->addr);
 
-	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry);
-	efa_rdm_ep_queue_rnr_pkt(efa_rdm_ep, &txe->queued_pkts, pkt_entry);
+	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry, peer);
+
+	efa_rdm_ep_queue_rnr_pkt(efa_rdm_ep, &txe->queued_pkts, pkt_entry, peer);
 	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT, EFA_RDM_PKE_RNR_RETRANSMIT);
 	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 1);
 	assert_int_equal(efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr)->rnr_queued_pkt_cnt, 1);
@@ -61,7 +62,27 @@ void test_efa_rnr_queue_and_resend(struct efa_resource **state)
 	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 0);
 	assert_int_equal(efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr)->rnr_queued_pkt_cnt, 0);
 
-	efa_rdm_pke_handle_send_completion(pkt_entry);
+	efa_rdm_pke_handle_send_completion(pkt_entry, peer);
 
 	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief this test validate that during RNR queuing and resending,
+ * the "rnr_queued_pkt_cnt" in endpoint and peer were properly updated,
+ * so is the EFA_RDM_PKE_RNR_RETRANSMIT flag.
+ */
+void test_efa_rnr_queue_and_resend_msg(struct efa_resource **state)
+{
+	return test_efa_rnr_queue_and_resend_impl(state, ofi_op_msg);
+}
+
+/**
+ * @brief this test validate that during RNR queuing and resending,
+ * the "rnr_queued_pkt_cnt" in endpoint and peer were properly updated,
+ * so is the EFA_RDM_PKE_RNR_RETRANSMIT flag for tagged messages
+ */
+void test_efa_rnr_queue_and_resend_tagged(struct efa_resource **state)
+{
+	return test_efa_rnr_queue_and_resend_impl(state, ofi_op_tagged);
 }

@@ -359,7 +359,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 		return;
 	}
 
-	efa_rdm_pke_proc_received(pkt_entry);
+	efa_rdm_pke_proc_received(pkt_entry, peer);
 }
 
 
@@ -371,6 +371,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
  * provider error code.
  *
  * @param[in]	ibv_cq_ex	IBV CQ
+ * @param[in]	peer	efa_rdm_peer struct of sender
  * @return	EFA-specific error code
  * @sa		#EFA_PROV_ERRNOS
  *
@@ -382,16 +383,10 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
  * RDMA Core error codes (#EFA_IO_COMP_STATUSES) for the sake of more accurate
  * error reporting
  */
-static int efa_rdm_cq_get_prov_errno(struct ibv_cq_ex *ibv_cq_ex) {
+static int efa_rdm_cq_get_prov_errno(struct ibv_cq_ex *ibv_cq_ex, struct efa_rdm_peer *peer) {
 	uint32_t vendor_err = ibv_wc_read_vendor_err(ibv_cq_ex);
-	struct efa_rdm_pke *pkt_entry = (void *) (uintptr_t) ibv_cq_ex->wr_id;
-	struct efa_rdm_peer *peer;
-	struct efa_rdm_ep *ep;
 
-	if (OFI_LIKELY(pkt_entry && pkt_entry->addr)) {
-		ep = pkt_entry->ep;
-		peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-	} else {
+	if (OFI_UNLIKELY(!peer)) {
 		return vendor_err;
 	}
 
@@ -438,6 +433,7 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	struct efa_cq *efa_cq;
 	struct efa_domain *efa_domain;
 	struct efa_qp *qp;
+	struct efa_rdm_peer *peer = NULL;
 	struct dlist_entry rx_progressed_ep_list, *tmp;
 
 	efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
@@ -462,12 +458,14 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 #endif
 		opcode = ibv_wc_read_opcode(ibv_cq->ibv_cq_ex);
 		if (ibv_cq->ibv_cq_ex->status) {
-			prov_errno = efa_rdm_cq_get_prov_errno(ibv_cq->ibv_cq_ex);
+			if (pkt_entry)
+				peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+			prov_errno = efa_rdm_cq_get_prov_errno(ibv_cq->ibv_cq_ex, peer);
 			switch (opcode) {
 			case IBV_WC_SEND: /* fall through */
 			case IBV_WC_RDMA_WRITE: /* fall through */
 			case IBV_WC_RDMA_READ:
-				efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno);
+				efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno, peer);
 				break;
 			case IBV_WC_RECV: /* fall through */
 			case IBV_WC_RECV_RDMA_WITH_IMM:
@@ -490,9 +488,12 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 #if ENABLE_DEBUG
 			ep->send_comps++;
 #endif
-			efa_rdm_pke_handle_send_completion(pkt_entry);
+			peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+			efa_rdm_pke_handle_send_completion(pkt_entry, peer);
 			break;
 		case IBV_WC_RECV:
+			/* efa_rdm_cq_handle_recv_completion does additional work to determine the source
+			 * address and the peer struct. So do not try to identify the peer here. */
 			efa_rdm_cq_handle_recv_completion(ibv_cq, pkt_entry, ep);
 #if ENABLE_DEBUG
 			ep->recv_comps++;
@@ -500,7 +501,8 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			break;
 		case IBV_WC_RDMA_READ:
 		case IBV_WC_RDMA_WRITE:
-			efa_rdm_pke_handle_rma_completion(pkt_entry);
+			peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+			efa_rdm_pke_handle_rma_completion(pkt_entry, peer);
 			break;
 		case IBV_WC_RECV_RDMA_WITH_IMM:
 			efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(

@@ -90,9 +90,8 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	return 0;
 }
 
-void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
 {
-	struct efa_rdm_peer *peer;
 	struct efa_rdm_handshake_hdr *handshake_pkt;
 	uint64_t *host_id_ptr;
 
@@ -100,7 +99,6 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 	EFA_DBG(FI_LOG_CQ,
 		"HANDSHAKE received from %" PRIu64 "\n", pkt_entry->addr);
 
-	peer = efa_rdm_ep_get_peer(pkt_entry->ep, pkt_entry->addr);
 	assert(peer);
 
 	handshake_pkt = (struct efa_rdm_handshake_hdr *)pkt_entry->wiredata;
@@ -216,7 +214,6 @@ int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 			     int data_size)
 {
 	struct efa_rdm_ctsdata_hdr *data_hdr;
-	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *ep;
 	size_t hdr_size;
 	int ret;
@@ -242,9 +239,8 @@ int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 	}
 
 	hdr_size = sizeof(struct efa_rdm_ctsdata_hdr);
-	peer = efa_rdm_ep_get_peer(ep, ope->addr);
-	assert(peer);
-	if (efa_rdm_peer_need_connid(peer)) {
+	assert(ope->peer);
+	if (efa_rdm_peer_need_connid(ope->peer)) {
 		data_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
 		data_hdr->connid_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
 		hdr_size += sizeof(struct efa_rdm_ctsdata_opt_connid_hdr);
@@ -570,8 +566,9 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
  *
  * @param ep[in,out]			Endpoint
  * @param context_pkt_entry[in,out]	The "Packet" which serves as context
+ * @param peer[in]			struct efa_rdm_peer of peer
  */
-void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
+void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry, struct efa_rdm_peer *peer)
 {
 	struct efa_rdm_ope *txe = NULL;
 	struct efa_rdm_rma_context_pkt *rma_context_pkt;
@@ -601,7 +598,7 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 		assert(0 && "invalid EFA_RDM_RMA_CONTEXT_PKT rma_context_type\n");
 	}
 
-	efa_rdm_ep_record_tx_op_completed(context_pkt_entry->ep, context_pkt_entry);
+	efa_rdm_ep_record_tx_op_completed(context_pkt_entry->ep, context_pkt_entry, peer);
 	efa_rdm_pke_release_tx(context_pkt_entry);
 }
 
