@@ -268,6 +268,10 @@ struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_pke **pkt_entry_ptr)
 				"Unable to allocate rx_pkt_entry for unexp msg\n");
 			return NULL;
 		}
+#if ENABLE_DEBUG
+		/* unexp pkt is also rx pkt, insert it to rx pkt list so we can track it and clean up during ep close */
+		dlist_insert_tail(&unexp_pkt_entry->dbg_entry, &ep->rx_pkt_list);
+#endif
 		efa_rdm_pke_release_rx(*pkt_entry_ptr);
 		*pkt_entry_ptr = unexp_pkt_entry;
 	} else {
