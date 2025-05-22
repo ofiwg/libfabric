@@ -202,3 +202,62 @@ void test_efa_ah_cnt_multi_av(struct efa_resource **state)
 	/* Reset to NULL to avoid test reaper closing again */
 	resource->ep = NULL;
 }
+
+/**
+ * @brief This test verifies that multiple endpoints can bind to the same AV
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_av_multiple_ep_impl(struct efa_resource **state, char *fabric_name)
+{
+	struct efa_resource *resource = *state;
+	struct fid_ep *ep1, *ep2;
+	int ret;
+
+	/* Resource construct function creates and binds 1 EP to the AV */
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, fabric_name);
+
+	/* Create and bind two new endpoints to the same AV */
+	fi_endpoint(resource->domain, resource->info, &ep1, NULL);
+	ret = fi_ep_bind(ep1, &resource->av->fid, 0);
+	assert_int_equal(ret, 0);
+
+	fi_endpoint(resource->domain, resource->info, &ep2, NULL);
+	ret = fi_ep_bind(ep2, &resource->av->fid, 0);
+	assert_int_equal(ret, 0);
+
+	/* Bind the two new endpoints to the same CQ and enable them */
+	fi_ep_bind(ep1, &resource->cq->fid, FI_SEND | FI_RECV);
+	ret = fi_enable(ep1);
+	assert_int_equal(ret, 0);
+
+	fi_ep_bind(ep2, &resource->cq->fid, FI_SEND | FI_RECV);
+	ret = fi_enable(ep2);
+	assert_int_equal(ret, 0);
+
+	fi_close(&ep1->fid);
+	fi_close(&ep2->fid);
+}
+
+
+/**
+ * @brief This test verifies that multiple endpoints can bind to the same AV
+ * for the efa fabric
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_av_multiple_ep_efa(struct efa_resource **state)
+{
+	return test_av_multiple_ep_impl(state, EFA_FABRIC_NAME);
+}
+
+/**
+ * @brief This test verifies that multiple endpoints can bind to the same AV
+ * for the efa-direct fabric
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_av_multiple_ep_efa_direct(struct efa_resource **state)
+{
+	return test_av_multiple_ep_impl(state, EFA_DIRECT_FABRIC_NAME);
+}

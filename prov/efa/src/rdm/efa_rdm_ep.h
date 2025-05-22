@@ -115,6 +115,12 @@ struct efa_rdm_ep {
 	struct ofi_bufpool *rx_atomrsp_pool;
 	/* list of pre-posted recv buffers */
 	struct dlist_entry rx_posted_buf_list;
+
+	/* Hashmap between fi_addr and efa_rdm_peer structs */
+	struct efa_rdm_ep_peer_map_entry *fi_addr_to_peer_map;
+	/* bufpool to hold the fi_addr->peer hashmap entries */
+	struct ofi_bufpool *peer_map_entry_pool;
+
 #if ENABLE_DEBUG
 	/* tx/rx_entries waiting to receive data in
          * long CTS msg/read/write protocols */
@@ -447,4 +453,13 @@ bool efa_rdm_ep_support_unsolicited_write_recv(struct efa_rdm_ep *ep)
 	return ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
 }
 
+struct efa_rdm_ep_peer_map_entry {
+	fi_addr_t addr;
+	struct efa_rdm_peer *peer;
+	UT_hash_handle hh;
+};
+
+int efa_rdm_ep_peer_map_insert(struct efa_rdm_ep *ep, fi_addr_t addr, struct efa_rdm_peer *peer);
+struct efa_rdm_peer *efa_rdm_ep_peer_map_lookup(struct efa_rdm_ep *ep, fi_addr_t addr);
+void efa_rdm_ep_peer_map_remove(struct efa_rdm_ep *ep, fi_addr_t addr);
 #endif

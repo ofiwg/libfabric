@@ -44,6 +44,41 @@ int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr)
 	return efa_conn ? efa_conn->ah->ahn : -1;
 }
 
+inline
+int efa_rdm_ep_peer_map_insert(struct efa_rdm_ep *ep, fi_addr_t addr, struct efa_rdm_peer *peer) {
+	struct efa_rdm_ep_peer_map_entry  *map_entry;
+
+	map_entry = ofi_buf_alloc(ep->peer_map_entry_pool);
+	if (OFI_UNLIKELY(!map_entry)) {
+		EFA_WARN(FI_LOG_CQ,
+			"Map entries for fi_addr to peer mapping exhausted.\n");
+		return -FI_ENOMEM;
+	}
+
+	map_entry->addr = addr;
+	map_entry->peer = peer;
+
+	HASH_ADD(hh, ep->fi_addr_to_peer_map, addr, sizeof(addr), map_entry);
+
+	return FI_SUCCESS;
+}
+
+inline
+struct efa_rdm_peer *efa_rdm_ep_peer_map_lookup(struct efa_rdm_ep *ep, fi_addr_t addr) {
+	struct efa_rdm_ep_peer_map_entry  *map_entry;
+
+	HASH_FIND(hh, ep->fi_addr_to_peer_map, &addr, sizeof(addr), map_entry);
+	return map_entry ? map_entry->peer : NULL;
+}
+
+void efa_rdm_ep_peer_map_remove(struct efa_rdm_ep *ep, fi_addr_t addr) {
+	struct efa_rdm_ep_peer_map_entry  *map_entry;
+
+	HASH_FIND(hh, ep->fi_addr_to_peer_map, &addr, sizeof(addr), map_entry);
+	HASH_DEL(ep->fi_addr_to_peer_map, map_entry);
+	ofi_buf_free(map_entry);
+}
+
 /**
  * @brief get pointer to efa_rdm_peer structure for a given libfabric address
  *
@@ -56,14 +91,38 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *av_entry;
+	struct efa_rdm_peer *peer;
+	struct efa_av *av;
+	int err;
 
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
+	peer = efa_rdm_ep_peer_map_lookup(ep, addr);
+	if (peer)
+		return peer;
+
 	util_av_entry = ofi_bufpool_get_ibuf(ep->base_ep.util_ep.av->av_entry_pool,
 	                                     addr);
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
-	return av_entry->conn.ep_addr ? av_entry->conn.rdm_peer : NULL;
+
+	if (av_entry->conn.ep_addr) {
+		av = ep->base_ep.av;
+		peer = (struct efa_rdm_peer *) ofi_buf_alloc(av->rdm_peer_pool);
+		if (!peer) {
+			EFA_WARN(FI_LOG_EP_DATA, "Failed to allocate peer struct\n");
+			return NULL;
+		}
+
+		efa_rdm_peer_construct(peer, ep, &av_entry->conn);
+
+		err = efa_rdm_ep_peer_map_insert(ep, addr, peer);
+		if (err)
+			return NULL;
+
+		return peer;
+	}
+	return NULL;
 }
 
 /**
