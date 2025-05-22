@@ -1234,7 +1234,6 @@ int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope)
  *     On success, return 0
  *     On pack entry allocation failure, return -FI_EAGAIN
  */
-static
 ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe)
 {
 	struct efa_rdm_pke *pkt_entry;
@@ -1259,6 +1258,11 @@ ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe)
 			"readcopy pkt pool exhausted! Set FI_EFA_READCOPY_POOL_SIZE to a higher value!");
 		return -FI_EAGAIN;
 	}
+
+#if ENABLE_DEBUG
+	/* readcopy pkt is also rx pkt, insert it to rx pkt list so we can track it and clean up during ep close */
+	dlist_insert_tail(&pkt_entry_copy->dbg_entry, &pkt_entry_copy->ep->rx_pkt_list);
+#endif
 
 	efa_rdm_pke_release_rx(pkt_entry);
 

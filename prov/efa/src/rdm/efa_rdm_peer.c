@@ -211,6 +211,11 @@ int efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_rdm_pke *pkt_entry,
 	if (OFI_LIKELY(efa_env.rx_copy_ooo)) {
 		assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		ooo_entry = efa_rdm_pke_clone(pkt_entry, pkt_entry->ep->rx_ooo_pkt_pool, EFA_RDM_PKE_FROM_OOO_POOL);
+#if ENABLE_DEBUG
+		/* ooo pkt is also rx pkt, insert it to rx pkt list so we can track it and clean up during ep close */
+		dlist_insert_tail(&ooo_entry->dbg_entry, &ooo_entry->ep->rx_pkt_list);
+#endif
+
 		if (OFI_UNLIKELY(!ooo_entry)) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for OOO msg\n");
