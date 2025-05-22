@@ -565,3 +565,50 @@ void test_efa_rdm_txe_list_removal(struct efa_resource **state)
 	assert_true(dlist_empty(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list));
 	assert_true(dlist_empty(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list));
 }
+
+void test_efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct fid_ep *ep;
+	struct efa_domain *efa_domain;
+	struct fi_msg msg = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	/* rx_readcopy_pkt_pool is only created when application requested FI_HMEM */
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+	efa_domain->util_domain.mr_mode |= FI_MR_HMEM;
+
+	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep, NULL), 0);
+	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	txe = efa_rdm_ep_alloc_txe(efa_rdm_ep, NULL, &msg, ofi_op_msg, 0, 0);
+	assert_non_null(txe);
+
+	/* Use ooo rx pkt because it doesn't have mr so a read_copy pkt clone is enforced. */
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->rx_ooo_pkt_pool, EFA_RDM_PKE_FROM_OOO_POOL);
+	pkt_entry->payload_size = 4;
+	pkt_entry->payload = pkt_entry->wiredata + 16;
+	pkt_entry->pkt_size = 32;
+	assert_non_null(pkt_entry);
+	txe->local_read_pkt_entry = pkt_entry;
+	txe->rma_iov_count = 1;
+
+	assert_int_equal(efa_rdm_txe_prepare_local_read_pkt_entry(txe), 0);
+
+#if ENABLE_DEBUG
+	/* The read copy pkt entry should be inserted to the rx_pkt_list */
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->rx_pkt_list), 1);
+#endif
+
+	/**
+	 * When we close the ep, the read copy pkt entry should be
+	 * released. The buffer pool destroy should succeed without
+	 * assertion errors.
+	 */
+	assert_int_equal(fi_close(&ep->fid), 0);
+}
