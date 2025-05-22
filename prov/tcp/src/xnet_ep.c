@@ -156,6 +156,75 @@ static void xnet_set_no_port(SOCKET sock)
 #define xnet_set_no_port(sock)
 #endif
 
+void
+xnet_disable_keepalive(struct xnet_ep *ep)
+{
+	int optval = 0;
+	int ret;
+
+	ret = setsockopt(ep->bsock.sock, SOL_SOCKET, SO_KEEPALIVE, (char *)&optval,
+			 sizeof(optval));
+	if (ret) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "set SO_KEEPALIVE failed %d", ret);
+		return;
+	}
+
+	FI_INFO(&xnet_prov, FI_LOG_EP_CTRL, "ep %p KEEPALIVE is disabled.\n", ep);
+}
+
+static int
+xnet_enable_keepalive(struct xnet_ep *ep)
+{
+	int optval = 1;
+	int idle_time = 5;
+	int keep_intvl = 2;
+	int keep_cnt = 2;
+	int ret;
+
+	ret = setsockopt(ep->bsock.sock, SOL_SOCKET, SO_KEEPALIVE, (const void *)&optval,
+			 sizeof(optval));
+	if (ret) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "set SO_KEEPALIVE failed %d", ret);
+		return -ofi_sockerr();
+	}
+
+	ret = setsockopt(ep->bsock.sock, IPPROTO_TCP, OFI_KEEPALIVE, (const void *)&idle_time,
+			 sizeof(idle_time));
+	if (ret) {
+		ret = -ofi_sockerr();
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "set TCP_KEEPIDLE failed %d", ret);
+		goto out;
+	}
+
+	ret = setsockopt(ep->bsock.sock, IPPROTO_TCP, TCP_KEEPINTVL, (const void *)&keep_intvl,
+			 sizeof(keep_intvl));
+	if (ret) {
+		ret = -ofi_sockerr();
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "set TCP_KEEPINTVL failed %d", ret);
+		goto out;
+	}
+
+	ret = setsockopt(ep->bsock.sock, IPPROTO_TCP, TCP_KEEPCNT, (const void *)&keep_cnt,
+			 sizeof(keep_cnt));
+	if (ret) {
+		ret = -ofi_sockerr();
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "set SO_KEEPALIVE failed %d", ret);
+		goto out;
+	}
+
+	FI_INFO(&xnet_prov, FI_LOG_EP_CTRL, "%p KEEPALIVE idle %d intvl %d cnt %d\n",
+		ep, idle_time, keep_intvl, keep_cnt);
+
+out:
+	if (ret) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "%p KEEPALIVE set keepalive failed %d\n",
+			ep, ret);
+		xnet_disable_keepalive(ep);
+	}
+
+	return ret;
+}
+
 int xnet_setup_socket(SOCKET sock, struct fi_info *info)
 {
 	int ret, optval = 1;
@@ -292,6 +361,16 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 	if (paramlen) {
 		memcpy(ep->cm_msg->data, param, paramlen);
 		ep->cm_msg->hdr.seg_size = htons((uint16_t) paramlen);
+	}
+
+	/* Enable keepalive to make sure the socket status can be reset in time
+	 * if the remote peer is restarted after it gets connreq but not replies.
+	 */
+	ret = xnet_enable_keepalive(ep);
+	if (ret) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "%p set tcp keepalive failure:%d\n",
+			ep, ret);
+		return ret;
 	}
 
 	ret = xnet_send_cm_msg(ep);

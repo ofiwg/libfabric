@@ -186,6 +186,7 @@ void xnet_req_done(struct xnet_ep *ep)
 	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "connect request done\n");
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 
+	xnet_disable_keepalive(ep);
 	ret = xnet_recv_cm_msg(ep->bsock.sock, ep->cm_msg);
 	if (ret == 0)
 		ret = xnet_handle_cm_msg(ep->bsock.sock, ep->cm_msg, ofi_ctrl_connresp);
