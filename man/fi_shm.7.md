@@ -18,14 +18,13 @@ between processes on the same system.
 
 # SUPPORTED FEATURES
 
-This release contains an initial implementation of the SHM provider that
-offers the following support:
+The SHM provider offers the following support:
 
 *Endpoint types*
 : The provider supports only endpoint type *FI_EP_RDM*.
 
 *Endpoint capabilities*
-: Endpoints cna support any combinations of the following data transfer
+: Endpoints can support any combination of the following data transfer
 capabilities: *FI_MSG*, *FI_TAGGED*, *FI_RMA*, amd *FI_ATOMICS*.  These
 capabilities can be further defined by *FI_SEND*, *FI_RECV*, *FI_READ*,
 *FI_WRITE*, *FI_REMOTE_READ*, and *FI_REMOTE_WRITE* to limit the direction
@@ -69,7 +68,7 @@ of operations.
   not need an extra endpoint name identifier appended in order to make it
   unique.  For the shared memory provider, we assume that the service
   (with or without a node) is enough to make it unique, but a node alone is
-  not sufficient.  If only a node is provided, the "fi_shm://" prefix  is used
+  not sufficient.  If only a node is provided, the "fi_shm://" prefix is used
   to signify that it is not a unique address.  If no node or service are
   provided (and in the case of setting the src address without FI_SOURCE and
   no hints), the process ID will be used as a default address.
@@ -88,10 +87,20 @@ of operations.
   endpoint using setname() without any address format restrictions.
 
 *Msg flags*
-  The provider currently only supports the FI_REMOTE_CQ_DATA msg flag.
+  The provider supports the following msg flags:
+    - FI_CLAIM
+    - FI_COMPLETION
+    - FI_DELIVERY_COMPLETE
+    - FI_DISCARD
+    - FI_INJECT
+    - FI_MULTI_RECV
+    - FI_PEEK
+    - FI_REMOTE_CQ_DATA
 
 *MR registration mode*
-  The provider implements FI_MR_VIRT_ADDR memory mode.
+  The provider can optimize RMA calls if the application supports
+  FI_MR_VIRT_ADDR. Otherwise, no extra MR modes are required.  If FI_HMEM
+  support is requested, the provider will require FI_MR_HMEM.
 
 *Atomic operations*
   The provider supports all combinations of datatype and operations as long
@@ -99,48 +108,45 @@ of operations.
 
 # DSA
 Intel Data Streaming Accelerator (DSA) is an integrated accelerator in Intel
-Xeon processors starting with Sapphire Rapids generation. One of the
+Xeon processors starting with the Sapphire Rapids generation.  One of the
 capabilities of DSA is to offload memory copy operations from the CPU.  A
-system may have one or more DSA devices. Each DSA device may have one or more
-work queues. The DSA specification can be found
+system may have one or more DSA devices.  Each DSA device may have one or more
+work queues.  The DSA specification can be found
 [here](https://www.intel.com/content/www/us/en/develop/articles/intel-data-streaming-accelerator-architecture-specification.html).
 
-The SAR protocol of SHM provider is enabled to take advantage of DSA to offload
-memory copy operations into and out of SAR buffers in shared memory regions. To
-fully take advantage of the DSA offload capability, memory copy operations are
-performed asynchronously. Copy initiator thread constructs the DSA commands and
-submits to work queues. A copy operation may consists of more than one DSA
-commands. In such case, commands are spread across all available work queues in
-round robin fashion. The progress thread checks for DSA command completions. If
-the copy command successfully completes, it then notifies the peer to consume
-the data. If DSA encountered a page fault during command execution, the page
-fault is reported via completion records. In such case, the progress thread
-accesses the page to resolve the page fault and resubmits the command after
-adjusting for partial completions. One of the benefits of making memory copy
-operations asynchronous is that now data transfers between different target
-endpoints can be initiated in parallel. Use of Intel DSA in SAR protocol is
-disabled by default and can be enabled using an environment variable. Note that
-CMA must be disabled, e.g. FI_SHM_DISABLE_CMA=0, in order for DSA to be used.
-See the RUNTIME PARAMETERS section.
+The SAR protocol of the SHM provider is enabled to take advantage of DSA to
+offload memory copy operations into and out of SAR buffers in shared memory
+regions.  To fully take advantage of the DSA offload capability, memory copy
+operations are performed asynchronously.  The copy initiator thread constructs
+the DSA commands and submits to work queues.  A copy operation may consist of
+more than one DSA command.  In such a case, commands are spread across all
+available work queues in round robin fashion.  The progress thread checks for
+DSA command completions.  If the copy command successfully completes, it then
+notifies the peer to consume the data.  If DSA encounters a page fault during
+command execution, the page fault is reported via completion records.  In such a
+case, the progress thread accesses the page to resolve the page fault and
+resubmits the command after adjusting for partial completions.  One of the
+benefits of making memory copy operations asynchronous is that now data
+transfers between different target endpoints can be initiated in parallel.  Use
+of Intel DSA in SAR protocol is disabled by default and can be enabled using an
+environment variable.  Note that CMA must be disabled, e.g.
+FI_SHM_DISABLE_CMA=0, in order for DSA to be used.  See the RUNTIME PARAMETERS
+section.
 
 Compiling with DSA capabilities depends on the accel-config library which can
-be found [here](https://github.com/intel/idxd-config). Running with DSA
+be found [here](https://github.com/intel/idxd-config).  Running with DSA
 requires using Linux Kernel 5.19.0-rc3 or later.
 
 DSA devices need to be setup just once before runtime.  [This configuration
 file](https://github.com/intel/idxd-config/blob/stable/contrib/configs/os_profile.conf)
-can be used as a template with accel-config utility to configure the DSA
+can be used as a template with the accel-config utility to configure the DSA
 devices.
 
 # LIMITATIONS
 
 The SHM provider has hard-coded maximums for supported queue sizes and data
 transfers.  These values are reflected in the related fabric attribute
-structures
-
-EPs must be bound to both RX and TX CQs.
-
-No support for counters.
+structures.
 
 # RUNTIME PARAMETERS
 
@@ -148,32 +154,32 @@ The *shm* provider checks for the following environment variables:
 
 *FI_SHM_SAR_THRESHOLD*
 : Maximum message size to use segmentation protocol before switching
-  to mmap (only valid when CMA is not available). Default: SIZE_MAX
+  to mmap (only valid when CMA is not available).  Default: SIZE_MAX
   (18446744073709551615)
 
 *FI_SHM_TX_SIZE*
-: Maximum number of outstanding tx operations. Default 1024
+: Maximum number of outstanding tx operations.  Default 1024
 
 *FI_SHM_RX_SIZE*
-: Maximum number of outstanding rx operations. Default 1024
+: Maximum number of outstanding rx operations.  Default 1024
 
 *FI_SHM_DISABLE_CMA*
-: Manually disables CMA. Default false
+: Manually disables CMA.  Default false
 
 *FI_SHM_USE_DSA_SAR*
-: Enables memory copy offload to Intel DSA in SAR protocol. Default false
+: Enables memory copy offload to Intel DSA SAR protocol.  Default false
 
 *FI_SHM_USE_XPMEM*
- : SHM can use SAR, CMA or XPMEM for host memory transfer. If
+ : SHM can use SAR, CMA or XPMEM for host memory transfers. If
    FI_SHM_USE_XPMEM is set to 1, the provider will select XPMEM over CMA if
    XPMEM is available.  Otherwise, if neither CMA nor XPMEM are available
-   SHM shall default to the SAR protocol. Default 0
+   SHM shall default to the SAR protocol.  Default 0
 
 *FI_XPMEM_MEMCPY_CHUNKSIZE*
- :  The maximum size which will be used with a single memcpy call. XPMEM
+ :  The maximum size which will be used with a single memcpy call.  XPMEM
     copy performance improves when buffers are divided into smaller
-    chunks. This environment variable is provided to fine tune performance
-    on different systems. Default 262144
+    chunks.  This environment variable is provided to fine tune performance
+    on different systems.  Default 262144
 
 # SEE ALSO
 
