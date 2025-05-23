@@ -5,6 +5,7 @@ dnl Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates. All rights reser
 dnl (C) Copyright 2020,2024 Hewlett Packard Enterprise Development LP
 dnl Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
 dnl Copyright (c) 2023 Tactical Computing Labs, LLC. All rights reserved.
+dnl Copyright (c) 2025 VDURA, Inc. All rights reserved.
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
@@ -238,6 +239,20 @@ fi
 
 AC_DEFINE_UNQUOTED([PT_LOCK_SPIN], [$have_spinlock],
 	[Define to 1 if pthread_spin_init is available.])
+
+AC_ARG_ENABLE([kqueue],
+    [AS_HELP_STRING([--disable-kqueue],
+        [Disable kqueue if available@<:@default=no@:>@])],
+    [],
+    [enable_kqueue=auto]
+)
+
+AS_IF([test x"$enable_kqueue" != x"no"],
+    [AC_CHECK_FUNCS([kqueue])
+     if test "$ac_cv_func_e" = yes; then
+        AC_DEFINE([HAVE_KQUEUE], [1], [Define if you have kqueue support.])
+     fi]
+)
 
 AC_ARG_ENABLE([epoll],
     [AS_HELP_STRING([--disable-epoll],
