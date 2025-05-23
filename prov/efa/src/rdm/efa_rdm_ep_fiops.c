@@ -905,11 +905,13 @@ static int efa_rdm_ep_close(struct fid *fid)
 {
 	int ret, retv = 0;
 	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_domain *domain;
 	struct dlist_entry *entry, *tmp;
 	struct efa_rdm_ope *rxe;
-	struct util_srx_ctx *srx_ctx;
+	struct efa_rdm_peer *peer;
 
 	efa_rdm_ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	domain = efa_rdm_ep_domain(efa_rdm_ep);
 
 	if (efa_rdm_ep->base_ep.efa_qp_enabled)
 		efa_rdm_ep_wait_send(efa_rdm_ep);
@@ -921,15 +923,14 @@ static int efa_rdm_ep_close(struct fid *fid)
 		* in the srx->rx_pool during util_srx_close, which will cause an
 		* assertion error when the rx_pool is destroyed.
 		*/
-		srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
-		ofi_genlock_lock(srx_ctx->lock);
+		ofi_genlock_lock(&domain->srx_lock);
 		dlist_foreach_safe (&efa_rdm_ep->rxe_list, entry, tmp) {
 			rxe = container_of(entry, struct efa_rdm_ope, ep_entry);
 			EFA_INFO(FI_LOG_EP_CTRL, "Closing ep with unreleased rxe\n");
 			if (rxe->state != EFA_RDM_RXE_UNEXP)
 				efa_rdm_rxe_release(rxe);
 		}
-		ofi_genlock_unlock(srx_ctx->lock);
+		ofi_genlock_unlock(&domain->srx_lock);
 		/*
 		* util_srx_close will clean all efa_rdm_rxes that are
 		* associated with peer_rx_entries in unexp msg/tag lists.
@@ -940,6 +941,23 @@ static int efa_rdm_ep_close(struct fid *fid)
 		util_srx_close(&efa_rdm_ep->peer_srx_ep->fid);
 		efa_rdm_ep->peer_srx_ep = NULL;
 	}
+
+	/* Remove all peers associated with this endpoint in domain level peer lists */
+	ofi_genlock_lock(&domain->srx_lock);
+	dlist_foreach_container_safe(&domain->peer_backoff_list, struct efa_rdm_peer,
+				     peer, rnr_backoff_entry, tmp) {
+		if (peer->ep == efa_rdm_ep) {
+			dlist_remove(&peer->rnr_backoff_entry);
+		}
+	}
+
+	dlist_foreach_container_safe(&domain->handshake_queued_peer_list, struct efa_rdm_peer,
+				     peer, handshake_queued_entry, tmp) {
+		if (peer->ep == efa_rdm_ep) {
+			dlist_remove(&peer->handshake_queued_entry);
+		}
+	}
+	ofi_genlock_unlock(&domain->srx_lock);
 
 	/* We need to free the util_ep first to avoid race conditions
 	 * with other threads progressing the cq. */
