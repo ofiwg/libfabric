@@ -54,8 +54,8 @@ int smr_write_err_comp(struct util_cq *cq, void *context,
 	err_entry.op_context = context;
 	err_entry.flags = flags;
 	err_entry.tag = tag;
-	err_entry.err = err;
-	err_entry.prov_errno = -err;
+	err_entry.err = -err;
+	err_entry.prov_errno = err;
 	return ofi_peer_cq_write_error(cq, &err_entry);
 }
 
@@ -72,5 +72,5 @@ int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
 
 	return ofi_peer_cq_write(ep->util_ep.rx_cq, context,
 				 ofi_rx_cq_flags(op) | flags, len, buf, data,
-				 tag, ep->region->map->peers[id].fiaddr);
+				 tag, ep->map->peers[id].fiaddr);
 }
