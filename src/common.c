@@ -5,6 +5,7 @@
  * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  * Copyright (c) 2020 Amazon.com, Inc. or its affiliates.
  * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
+ * Copyright (c) 2025 VDURA, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1742,8 +1743,8 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 			if (pfds->fds[i].revents) {
 				ctx = ofi_pollfds_get_ctx(pfds, pfds->fds[i].fd);
 				if (ctx) {
-					events[ret].events = pfds->fds[i].revents;
-					events[ret++].data.ptr = ctx->context;
+					OFI_EPOLL_EVT_EVENTS(events[ret]) = pfds->fds[i].revents;
+					OFI_EPOLL_EVT_DATA(events[ret++]) = ctx->context;
 				}
 				cnt--;
 			}
