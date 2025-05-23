@@ -146,11 +146,6 @@ No support for counters.
 
 The *shm* provider checks for the following environment variables:
 
-*FI_SHM_SAR_THRESHOLD*
-: Maximum message size to use segmentation protocol before switching
-  to mmap (only valid when CMA is not available). Default: SIZE_MAX
-  (18446744073709551615)
-
 *FI_SHM_TX_SIZE*
 : Maximum number of outstanding tx operations. Default 1024
 

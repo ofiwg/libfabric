@@ -38,7 +38,6 @@
 struct sigaction *old_action = NULL;
 
 struct smr_env smr_env = {
-	.sar_threshold = SIZE_MAX,
 	.disable_cma = false,
 	.use_dsa_sar = false,
 	.max_gdrcopy_size = 3072,
@@ -47,7 +46,6 @@ struct smr_env smr_env = {
 
 static void smr_init_env(void)
 {
-	fi_param_get_size_t(&smr_prov, "sar_threshold", &smr_env.sar_threshold);
 	fi_param_get_size_t(&smr_prov, "tx_size", &smr_info.tx_attr->size);
 	fi_param_get_size_t(&smr_prov, "rx_size", &smr_info.rx_attr->size);
 	fi_param_get_bool(&smr_prov, "disable_cma", &smr_env.disable_cma);
@@ -104,7 +102,7 @@ static int smr_shm_space_check(size_t tx_count, size_t rx_count)
 	}
 	shm_size_needed = num_of_core *
 			  smr_calculate_size_offsets(tx_count, rx_count,
-						     NULL, NULL, NULL,
+						     NULL, NULL, NULL, NULL,
 						     NULL, NULL, NULL);
 	err = statvfs(shm_fs, &stat);
 	if (err) {
@@ -128,8 +126,7 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 {
 	struct fi_info *cur;
 	uint64_t mr_mode, msg_order;
-	int fast_rma;
-	int ret;
+	int fast_rma, ret;
 
 	mr_mode = hints && hints->domain_attr ? hints->domain_attr->mr_mode :
 						FI_MR_VIRT_ADDR;
@@ -141,7 +138,8 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
-	ret = smr_shm_space_check((*info)->tx_attr->size, (*info)->rx_attr->size);
+	ret = smr_shm_space_check((*info)->tx_attr->size,
+				  (*info)->rx_attr->size);
 	if (ret) {
 		fi_freeinfo(*info);
 		return ret;
@@ -149,15 +147,18 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 
 	for (cur = *info; cur; cur = cur->next) {
 		if (!(flags & FI_SOURCE) && !cur->dest_addr)
-			smr_resolve_addr(node, service, (char **) &cur->dest_addr,
+			smr_resolve_addr(node, service,
+					 (char **) &cur->dest_addr,
 					 &cur->dest_addrlen);
 
 		if (!cur->src_addr) {
 			if (flags & FI_SOURCE)
-				smr_resolve_addr(node, service, (char **) &cur->src_addr,
+				smr_resolve_addr(node, service,
+						 (char **) &cur->src_addr,
 						 &cur->src_addrlen);
 			else
-				smr_resolve_addr(NULL, NULL, (char **) &cur->src_addr,
+				smr_resolve_addr(NULL, NULL,
+						 (char **) &cur->src_addr,
 						 &cur->src_addrlen);
 		}
 		if (fast_rma) {
@@ -201,10 +202,6 @@ SHM_INI
 #if HAVE_SHM_DL
 	ofi_hmem_init();
 #endif
-	fi_param_define(&smr_prov, "sar_threshold", FI_PARAM_SIZE_T,
-			"Max size to use for alternate SAR protocol if CMA \
-			 is not available before switching to mmap protocol \
-			 Default: SIZE_MAX (18446744073709551615)");
 	fi_param_define(&smr_prov, "tx_size", FI_PARAM_SIZE_T,
 			"Max number of outstanding tx operations \
 			 Default: 1024");
