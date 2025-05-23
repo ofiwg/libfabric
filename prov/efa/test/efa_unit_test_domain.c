@@ -202,3 +202,69 @@ void test_efa_domain_direct_attr_mr_allocated(struct efa_resource **state)
 	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
 	assert_true(efa_domain->device->rdm_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
 }
+
+/**
+ * @brief Verify that the domain level peer lists get cleared when an endpoint is closed
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_peer_list_cleared(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+	struct fid_ep *ep1, *ep2;
+	struct efa_rdm_ep *efa_rdm_ep1, *efa_rdm_ep2;
+	struct efa_rdm_peer peer1 = {0}, peer2 = {0}, peer3 = {0}, peer4 = {0},
+			    *peer;
+	int i = 0, err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+
+	// Create two endpoints
+	err = fi_endpoint(resource->domain, resource->info, &ep1, NULL);
+	assert_int_equal(err, 0);
+	err = fi_endpoint(resource->domain, resource->info, &ep2, NULL);
+	assert_int_equal(err, 0);
+
+	efa_rdm_ep1 =
+		container_of(ep1, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_ep2 =
+		container_of(ep2, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	// Associate the peers with the endpoints
+	peer1.ep = efa_rdm_ep1;
+	peer2.ep = efa_rdm_ep1;
+	peer3.ep = efa_rdm_ep2;
+	peer4.ep = efa_rdm_ep2;
+
+	dlist_insert_tail(&peer1.handshake_queued_entry,
+			  &efa_domain->handshake_queued_peer_list);
+	dlist_insert_tail(&peer2.rnr_backoff_entry,
+			  &efa_domain->peer_backoff_list);
+	dlist_insert_tail(&peer3.handshake_queued_entry,
+			  &efa_domain->handshake_queued_peer_list);
+	dlist_insert_tail(&peer4.rnr_backoff_entry,
+			  &efa_domain->peer_backoff_list);
+
+	fi_close(&ep1->fid);
+	dlist_foreach_container (&efa_domain->peer_backoff_list,
+				 struct efa_rdm_peer, peer, rnr_backoff_entry) {
+		assert_true(peer->ep == efa_rdm_ep2);
+		i++;
+	}
+	assert_int_equal(i, 1);
+
+	dlist_foreach_container (&efa_domain->handshake_queued_peer_list,
+				 struct efa_rdm_peer, peer,
+				 handshake_queued_entry) {
+		assert_true(peer->ep == efa_rdm_ep2);
+		i++;
+	}
+	assert_int_equal(i, 2);
+
+	fi_close(&ep2->fid);
+	assert_true(dlist_empty(&efa_domain->peer_backoff_list));
+	assert_true(dlist_empty(&efa_domain->handshake_queued_peer_list));
+}
