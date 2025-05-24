@@ -93,8 +93,8 @@ int klpp_getdevice(int klpp_fd, struct klppioc_lf *klpp_devinfo)
 int klpp_av_resolve(struct lpp_av *lpp_avp, uint32_t host_index, uint16_t port,
 		    struct lpp_fi_addr *lpp_fi_addr)
 {
-	uint64_t		status = -FI_EINVAL;
-	struct klppioc_av	klppioc = { 0 };
+	int status = -FI_EINVAL;
+	struct klppioc_av klppioc = { 0 };
 
 	klppioc.host_index = host_index;
 	klppioc.port = port;
