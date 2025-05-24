@@ -201,8 +201,10 @@ vrb_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
 		hints->fabric_attr->name = NULL;
 	}
 
+	ofi_mutex_lock(&vrb_info_mutex);
 	ret = vrb_get_matching_info(hints->fabric_attr->api_version, hints,
 				    info, vrb_util_prov.info, 0);
+	ofi_mutex_unlock(&vrb_info_mutex);
 	if (ret)
 		goto err1;
 
