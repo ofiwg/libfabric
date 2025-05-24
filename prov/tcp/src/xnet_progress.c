@@ -1142,7 +1142,6 @@ void xnet_progress_rx(struct xnet_ep *ep)
 			xnet_complete_rx(ep, ret);
 		else if (ret)
 			xnet_ep_disable(ep, 0, NULL, 0);
-
 	} while (!ret && ofi_bsock_readable(&ep->bsock));
 
 	if (xnet_io_uring) {
