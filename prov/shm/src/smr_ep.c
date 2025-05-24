@@ -308,6 +308,7 @@ static int smr_format_ipc(struct smr_cmd *cmd, void *ptr, size_t len,
 {
 	int ret;
 	void *base;
+	size_t tmp_base_length;
 
 	cmd->msg.hdr.op_src = smr_src_ipc;
 	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
@@ -317,9 +318,11 @@ static int smr_format_ipc(struct smr_cmd *cmd, void *ptr, size_t len,
 
 	ret = ofi_hmem_get_base_addr(cmd->msg.data.ipc_info.iface, ptr,
 				     len, &base,
-				     &cmd->msg.data.ipc_info.base_length);
+				     &tmp_base_length);
 	if (ret)
 		return ret;
+	
+	cmd->msg.data.ipc_info.base_length = (uint64_t)tmp_base_length;
 
 	ret = ofi_hmem_get_handle(cmd->msg.data.ipc_info.iface, base,
 				  cmd->msg.data.ipc_info.base_length,
