@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
+ * Copyright (c) 2025 VDURA, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1199,7 +1200,7 @@ static void *sock_ep_cm_thread(void *arg)
 			goto skip;
 		}
 		for (i = 0; i < num_fds; i++) {
-			handle = events[i].data.ptr;
+			handle = OFI_EPOLL_EVT_DATA(events[i]);
 
 			if (handle == NULL) { /* Signal event */
 				fd_signal_reset(&cm_head->signal);

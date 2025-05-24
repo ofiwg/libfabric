@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2025 VDURA, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -2408,7 +2409,7 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe,
 
 	ofi_mutex_lock(&map->lock);
 	for (i = 0; i < num_fds; i++) {
-		conn = map->epoll_events[i].data.ptr;
+		conn = OFI_EPOLL_EVT_DATA(map->epoll_events[i]);
 		if (!conn)
 			SOCK_LOG_ERROR("ofi_idm_lookup failed\n");
 

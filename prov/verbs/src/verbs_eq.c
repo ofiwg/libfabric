@@ -2,6 +2,7 @@
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2018-2019 Cray Inc. All rights reserved.
  * Copyright (c) 2018-2019 System Fabric Works, Inc. All rights reserved.
+ * Copyright (c) 2025 VDURA, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1385,10 +1386,7 @@ static int vrb_eq_control(fid_t fid, int command, void *arg)
 	eq = container_of(fid, struct vrb_eq, eq_fid.fid);
 	switch (command) {
 	case FI_GETWAIT:
-#ifndef HAVE_EPOLL
-		/* We expect verbs to only run on systems with epoll */
-		return -FI_ENOSYS;
-#else
+#if defined (HAVE_EPOLL) || defined(HAVE_KQUEUE)
 		if (eq->wait_obj == FI_WAIT_FD) {
 			*(int *) arg = eq->epollfd;
 			return 0;
@@ -1404,6 +1402,9 @@ static int vrb_eq_control(fid_t fid, int command, void *arg)
 		}
 		pollfd->change_index = 1;
 		pollfd->nfds = 1;
+#else
+		/* We expect verbs to only run on systems with epoll/kqueue */
+		return -FI_ENOSYS;
 #endif
 		break;
 	case FI_GETWAITOBJ:
