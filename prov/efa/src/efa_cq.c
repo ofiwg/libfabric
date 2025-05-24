@@ -352,10 +352,8 @@ void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		ibv_end_poll(cq->ibv_cq.ibv_cq_ex);
 }
 
-static const char *efa_cq_strerror(struct fid_cq *cq_fid,
-				   int prov_errno,
-				   const void *err_data,
-				   char *buf, size_t len)
+const char *efa_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
+			    const void *err_data, char *buf, size_t len)
 {
 	return err_data
 		? (const char *) err_data
@@ -383,7 +381,7 @@ void efa_cq_progress(struct util_cq *cq)
 	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 
-static int efa_cq_close(fid_t fid)
+int efa_cq_close(fid_t fid)
 {
 	struct efa_cq *cq;
 	int ret;
@@ -423,6 +421,7 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 {
 	struct efa_cq *cq;
 	struct efa_domain *efa_domain;
+	struct fi_efa_ext_mem_dmabuf ext_mem_dmabuf = {0};
 	int err, retv;
 
 	if (attr->wait_obj != FI_WAIT_NONE)
@@ -443,7 +442,8 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 				  util_domain);
 	err = efa_cq_ibv_cq_ex_open(attr, efa_domain->device->ibv_ctx,
 				    &cq->ibv_cq.ibv_cq_ex,
-				    &cq->ibv_cq.ibv_cq_ex_type);
+				    &cq->ibv_cq.ibv_cq_ex_type,
+				    0, &ext_mem_dmabuf);
 	if (err) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", fi_strerror(err));
 		goto err_free_util_cq;

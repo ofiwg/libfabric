@@ -21,8 +21,36 @@ enum {
     FI_EFA_MR_ATTR_RDMA_RECV_IC_ID = 1 << 2,
 };
 
+struct fi_efa_wq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+    uint32_t *doorbell;
+    uint32_t max_batch;
+};
+
+struct fi_efa_cq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+};
+
+struct fi_efa_ext_mem_dmabuf {
+    uint8_t  *buffer;
+    uint64_t length;
+    uint64_t offset;
+    uint32_t fd;
+};
+
 struct fi_efa_ops_domain {
-	int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
+    int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
+    int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr,
+			struct fi_efa_wq_attr *rq_attr);
+    int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
+    int (*cq_open_ext)(struct fid_domain *domain_fid,
+        struct fi_cq_attr *attr, uint64_t flags,
+        struct fi_efa_ext_mem_dmabuf *ext_mem_dmabuf,
+        struct fid_cq **cq_fid, void *context);
 };
 
 #endif /* _FI_EXT_EFA_H_ */

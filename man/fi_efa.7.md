@@ -197,13 +197,19 @@ the pointer to the function table `fi_efa_ops_domain` defined as follows:
 ```c
 struct fi_efa_ops_domain {
 	int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
+	int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
+	int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
+	int (*cq_open_ext)(struct fid_domain *domain_fid,
+			   struct fi_cq_attr *attr, uint64_t flags,
+			   struct fi_efa_ext_mem_dmabuf *ext_mem_dmabuf,
+			   struct fid_cq **cq_fid, void *context);
 };
 ```
 
 It contains the following operations
 
 ### query_mr
-This op query an existing memory registration as input, and outputs the efa
+This op queries an existing memory registration as input, and outputs the efa
 specific mr attribute which is defined as follows
 
 ```c
@@ -238,6 +244,93 @@ struct fi_efa_mr_attr {
 
 #### Return value
 **query_mr()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+### query_qp_wqs
+This op queries EFA specific Queue Pair work queue attributes for a given endpoint.
+It retrieves the send queue attributes in sq_attr and receive queue attributes in rq_attr, which is defined as follows.
+
+```c
+struct fi_efa_wq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+    uint32_t *doorbell;
+    uint32_t max_batch;
+};
+```
+
+*buffer*
+:	Queue buffer.
+
+*entry_size*
+:	Size of each entry in the queue.
+
+*num_entries*
+:	Maximal number of entries in the queue.
+
+*doorbell*
+:	Queue doorbell.
+
+*max_batch*
+:	Maximum batch size for queue submissions.
+
+#### Return value
+**query_qp_wqs()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+### query_cq
+This op queries EFA specific Completion Queue attributes for a given cq.
+
+```c
+struct fi_efa_cq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+};
+```
+
+*buffer*
+:	Completion queue buffer.
+
+*entry_size*
+:	Size of each completion queue entry.
+
+*num_entries*
+:	Maximal number of entries in the completion queue.
+
+#### Return value
+**query_cq()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+### cq_open_ext
+This op creates a completion queue with external memory provided via dmabuf.
+The memory can be passed by supplying the following struct with EFADV_CQ_INIT_FLAGS_EXT_MEM_DMABUF flag.
+
+```c
+struct fi_efa_ext_mem_dmabuf {
+    uint8_t  *buffer;
+    uint64_t length;
+    uint64_t offset;
+    uint32_t fd;
+};
+```
+
+*buffer*
+:	Pointer to the memory mapped in the process's virtual address space. 
+  The field is optional, but if not provided, the use of CQ poll interfaces should be avoided.
+
+*length*
+:	Length of the memory region to use.
+
+*fd*
+:	File descriptor of the dmabuf.
+
+*offset*
+:	Offset within the dmabuf.
+
+#### Return value
+**cq_open_ext()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
 
 # Traffic Class (tclass) in EFA
