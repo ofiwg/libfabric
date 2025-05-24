@@ -1441,6 +1441,23 @@ static int vrb_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return -errno;
 	}
+
+	if (vrb_gl_data.log_async_events) {
+		ret = fi_fd_nonblock(pep->id->verbs->async_fd);
+		if (ret)
+			goto async_err;
+		ret = ofi_epoll_add(pep->eq->epollfd, pep->id->verbs->async_fd,
+				    OFI_EPOLL_IN, &pep->pep_fid.fid);
+		if (ret) {
+async_err:
+			VRB_WARN(FI_LOG_DOMAIN, "Failed to enable async events for %s: %s\n",
+				 pep->info->domain_attr->name, strerror(ret));
+			pep->log_async_events = false;
+		} else {
+			pep->log_async_events = true;
+		}
+	}
+
 	return FI_SUCCESS;
 }
 
@@ -1474,8 +1491,14 @@ static int vrb_pep_control(struct fid *fid, int command, void *arg)
 static int vrb_pep_close(fid_t fid)
 {
 	struct vrb_pep *pep;
+	int ret;
 
 	pep = container_of(fid, struct vrb_pep, pep_fid.fid);
+	if (pep->log_async_events && pep->eq && pep->id) {
+		ret = ofi_epoll_del(pep->eq->epollfd, pep->id->verbs->async_fd);
+		if (ret)
+			return ret;
+	}
 	if (pep->id)
 		rdma_destroy_ep(pep->id);
 	if (pep->xrc_ps_udp_id)
