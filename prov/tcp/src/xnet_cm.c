@@ -195,9 +195,12 @@ void xnet_req_done(struct xnet_ep *ep)
 	ret = xnet_req_done_internal(ep);
 	if (ret)
 		goto disable;
+
+	xnet_disable_keepalive(ep);
 	return;
 
 disable:
+	xnet_disable_keepalive(ep);
 	xnet_ep_disable(ep, -ret, ep->cm_msg->data,
 			ntohs(ep->cm_msg->hdr.seg_size));
 }
