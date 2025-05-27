@@ -2486,6 +2486,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep, void **bu
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.lid, addr.hfi1_subctxt_rx,
 					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
+		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-MP-EAGER-FIRST-HFI");
 		return -FI_EAGAIN;
