@@ -3695,9 +3695,12 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 					       opx_ep->debug_counters.mp_eager.send_nth_eagain_reliability);
 
 		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
+
+		OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
 		union fi_opx_hfi1_pio_state pio_state = {.qw0 = opx_ep->tx->pio_state->qw0};
 		fi_opx_update_credits(&pio_state, opx_ep->tx->pio_credits_addr);
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 
 		rc = opx_hfi1_tx_send_mp_egr_remaining(opx_ep, &buf_bytes_ptr, &payload_offset, &payload_remaining,
 						       first_packet_psn, chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid,
