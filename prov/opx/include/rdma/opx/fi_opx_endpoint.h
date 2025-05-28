@@ -51,6 +51,7 @@
 #include "rdma/opx/fi_opx_flight_recorder.h"
 #include "opx_shm.h"
 #include "fi_opx_tid_cache.h"
+#include "rdma/opx/opx_ipc.h"
 
 void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 
@@ -536,7 +537,8 @@ struct fi_opx_ep {
 	bool			   is_tx_cq_bound;
 	bool			   is_rx_cq_bound;
 	bool			   use_expected_tid_rzv;
-	uint8_t			   unused_cacheline5[3];
+	bool			   use_gpu_ipc;
+	uint8_t			   unused_cacheline5[2];
 	uint32_t		   unused_cacheline5_u32;
 	ofi_spin_t		   lock; /* lock size varies based on ENABLE_DEBUG*/
 
@@ -966,14 +968,17 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS");
 
-	const uint64_t		   ofi_data	= hdr->match.ofi_data;
-	const uint64_t		   niov		= hdr->rendezvous.niov;
-	const uint64_t		   xfer_len	= hdr->rendezvous.message_length;
-	const uint64_t		   is_noncontig = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_NONCONTIG;
-	void			  *recv_buf	= context->buf;
-	struct fi_opx_ep_rx *const rx		= opx_ep->rx;
-	const uint64_t		   recv_len	= context->len;
-	const uint16_t		   origin_rx	= FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
+	const uint64_t ofi_data	    = hdr->match.ofi_data;
+	const uint64_t niov	    = hdr->rendezvous.niov;
+	const uint64_t xfer_len	    = hdr->rendezvous.message_length;
+	const uint64_t is_noncontig = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_NONCONTIG;
+#ifdef OPX_HMEM
+	const uint64_t is_ipc = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_IPC;
+#endif
+	void			  *recv_buf  = context->buf;
+	struct fi_opx_ep_rx *const rx	     = opx_ep->rx;
+	const uint64_t		   recv_len  = context->len;
+	const uint16_t		   origin_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
 
 	if (is_multi_receive) { /* compile-time constant expression */
 		assert(FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode) == FI_MSG);
@@ -1079,6 +1084,22 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 
 		if (OFI_LIKELY(niov == 1)) {
 			assert(!is_noncontig);
+
+#ifdef OPX_HMEM
+			/* is_ipc will never be true here when FI_HMEM is type ROCR because we do not
+			 * enable IPC for AMD */
+			if (is_intranode && is_hmem && is_ipc) {
+				opx_hfi1_rx_ipc_rts(opx_ep, hdr, payload, origin_rx, niov,
+						    payload->rendezvous.ipc.origin_byte_counter_vaddr, context,
+						    xfer_len, u32_ext_rx, hfi1_type);
+				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS");
+				FI_DBG_TRACE(
+					fi_opx_global.prov, FI_LOG_EP_DATA,
+					"===================================== RECV -- RENDEZVOUS RTS (end) context %p\n",
+					context);
+				return;
+			}
+#endif
 
 			uint64_t	   rbuf_device;
 			enum fi_hmem_iface rbuf_iface;
@@ -1923,6 +1944,13 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 	case FI_OPX_HFI_DPUT_OPCODE_FENCE: {
 		opx_hfi1_dput_fence(opx_ep, hdr, origin_rx, u32_ext_rx, hfi1_type);
 	} break;
+#ifdef OPX_HMEM
+	case FI_OPX_HFI_DPUT_OPCODE_IPC: {
+		uint64_t *origin_byte_counter = (uint64_t *) hdr->cts.target.vaddr.origin_byte_counter_vaddr;
+		*origin_byte_counter	      = 0;
+		OPX_TRACER_TRACE(OPX_TRACER_INSTANT, "IPC-SEND-PROCESS-CTS");
+	} break;
+#endif
 	default:
 		abort();
 		break;
