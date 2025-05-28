@@ -2610,6 +2610,31 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 		}
 	}
 
+#ifdef OPX_HMEM
+	int use_ipc;
+	/* fi_param_get_bool will reject non boolean values. If user input is bad, default will used */
+	if (fi_param_get_bool(fi_opx_global.prov, "gpu_ipc_intranode", &use_ipc) == FI_SUCCESS) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FI_OPX_GPU_IPC_INTRANODE is specified by user: Value is %d\n", use_ipc);
+	} else {
+		use_ipc = 1; /* Default ON */
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FI_OPX_GPU_IPC_INTRANODE was not specified: Using default value of 1 (on).\n");
+	}
+	if (use_ipc) {
+#if HAVE_CUDA
+		use_ipc = ofi_hmem_is_ipc_enabled(FI_HMEM_CUDA);
+#endif
+		/* TODO When ROCR support is added, need to determine if the enabled check can be done here, or needs to
+		 * be done at the time of the send */
+		if (!use_ipc) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FI_OPX_GPU_IPC_INTRANODE was enabled, but ofi_hmem_is_ipc_enabled indicated that IPC is disabled.\n");
+		}
+	}
+	opx_ep->use_gpu_ipc = use_ipc;
+#endif
+
 #ifndef OPX_DEV_OVERRIDE
 	if (opx_ep->use_expected_tid_rzv == OPX_TID_ENABLE_ON && !opx_is_tid_allowed()) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,

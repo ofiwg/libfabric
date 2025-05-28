@@ -314,6 +314,13 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 			    const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
 			    const enum opx_hfi1_type hfi1_type);
 
+#ifdef OPX_HMEM
+void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
+			 const union fi_opx_hfi1_packet_payload *const payload, const uint16_t origin_rx,
+			 const uint64_t niov, uintptr_t origin_byte_counter_vaddr, struct opx_context *const context,
+			 const uint64_t xfer_len, const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type);
+#endif
+
 union fi_opx_hfi1_deferred_work *
 fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr, const void *const payload,
 		       size_t payload_bytes_to_copy, const uint16_t origin_rx, const uint32_t niov,
@@ -497,6 +504,24 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi1_rx_rma_rts_params, dput_iov) ==
 OPX_COMPILE_TIME_ASSERT(sizeof(((struct opx_hfi1_rx_rma_rts_params *) 0)->dput_iov) < OPX_HFI1_MAX_PKT_SIZE,
 			"sizeof(opx_hfi1_rx_rma_rts_params->dput_iov) should be < MAX PACKET MTU!");
 
+struct opx_hfi1_rx_ipc_rts_params {
+	/* == CACHE LINE 0 == */
+	struct fi_opx_work_elem work_elem; // 40 bytes
+	struct fi_opx_ep       *opx_ep;
+	uintptr_t		origin_byte_counter_vaddr;
+	uint64_t		niov;
+
+	/* == CACHE LINE 1 == */
+	uint64_t lrh_dlid;
+	uint32_t u32_extended_rx;
+	uint16_t origin_rx;
+	uint8_t	 target_hfi_unit;
+	uint8_t	 unused[1];
+
+} __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
+OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi1_rx_ipc_rts_params, lrh_dlid) == FI_OPX_CACHE_LINE_SIZE * 1,
+			"opx_hfi1_rx_rma_rts_params->lrh_dlid should start on cacheline 1!");
+
 struct fi_opx_hfi1_rx_dput_fence_params {
 	struct fi_opx_work_elem		  work_elem;
 	struct fi_opx_ep		 *opx_ep;
@@ -539,6 +564,7 @@ union fi_opx_hfi1_deferred_work {
 	struct fi_opx_hfi1_rx_dput_fence_params fence;
 	struct fi_opx_hfi1_rx_readv_params	readv;
 	struct opx_hfi1_rx_rma_rts_params	rx_rma_rts;
+	struct opx_hfi1_rx_ipc_rts_params	rx_ipc_rts;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
 int  opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work);

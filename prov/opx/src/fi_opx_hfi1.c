@@ -78,6 +78,7 @@
 #define FI_OPX_TID_MSG_MISALIGNED_THRESHOLD (15 * OPX_HFI1_TID_PAGESIZE)
 #endif
 
+#define OPX_GPU_IPC_MIN_THRESHOLD 4194304
 /*
  * Return the NUMA node id where the process is currently running.
  */
@@ -2387,6 +2388,95 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 }
 
+#ifdef OPX_HMEM
+void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
+			 const union fi_opx_hfi1_packet_payload *const payload, const uint16_t origin_rx,
+			 const uint64_t niov, uintptr_t origin_byte_counter_vaddr, struct opx_context *const context,
+			 const uint64_t xfer_len, const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type)
+{
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-IPC-RTS-HFI");
+
+	assert(payload->rendezvous.ipc.src_iface == FI_HMEM_CUDA); // AMD support not added yet
+
+	uint64_t *device_ptr;
+
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-RECV-OPEN-HANDLE");
+	int ret = ofi_hmem_open_handle(payload->rendezvous.ipc.src_iface, (void **) &payload->rendezvous.ipc.ipc_handle,
+				       xfer_len, payload->rendezvous.ipc.src_device_id, (void **) &device_ptr);
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FATAL ERROR, Failed to open IPC handle for Device. Error code: %d, abort\n", ret);
+		if (ret == -FI_EALREADY) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FATAL ERROR, OPX does not use IPC cache so we should never be running into ErrorAlreadyMapped, abort\n");
+		}
+		abort();
+	}
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-RECV-OPEN-HANDLE");
+
+	/* Most modern GPUs have support for Unified Virtual Addressing (UVA).
+		This allows us to use generic cudaMemcpy for DtoH and DtoD */
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-P2P-DIRECT-COPY");
+	ret = ofi_copy_to_hmem(payload->rendezvous.ipc.src_iface, payload->rendezvous.ipc.src_device_id, context->buf,
+			       device_ptr, xfer_len);
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "FATAL ERROR, cudaMemcpy with IPC handle failed. Abort\n");
+		abort();
+	}
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-P2P-DIRECT-COPY");
+
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-DESTROY-HANDLE");
+	ofi_hmem_close_handle(payload->rendezvous.ipc.src_iface, device_ptr,
+			      (void **) &payload->rendezvous.ipc.ipc_handle);
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-DESTROY-HANDLE");
+
+	context->byte_counter = 0;
+	context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
+	slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_completed_ptr);
+
+	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
+	assert(work != NULL);
+	struct opx_hfi1_rx_ipc_rts_params *params = &work->rx_ipc_rts;
+
+	params->work_elem.work_fn	    = opx_ipc_send_cts;
+	params->work_elem.work_type	    = OPX_WORK_TYPE_SHM;
+	params->work_elem.completion_action = NULL;
+	params->work_elem.payload_copy	    = NULL;
+	params->work_elem.complete	    = false;
+	params->work_elem.slist_entry.next  = NULL;
+	params->opx_ep			    = opx_ep;
+	params->origin_byte_counter_vaddr   = origin_byte_counter_vaddr;
+	params->niov			    = niov;
+
+	opx_lid_t lid;
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
+		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
+	} else {
+		lid		 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
+		params->lrh_dlid = lid; // Send CTS to the SLID that sent RTS
+	}
+
+	params->u32_extended_rx = u32_extended_rx;
+	params->origin_rx	= origin_rx;
+	params->target_hfi_unit = fi_opx_hfi1_get_lid_local_unit(lid);
+
+	int rc = params->work_elem.work_fn(work);
+	if (rc == FI_SUCCESS) {
+		OPX_BUF_FREE(work);
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-IPC-RTS-HFI");
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_SUCCESS\n");
+		return;
+	}
+	assert(rc == -FI_EAGAIN);
+	/* Try again later*/
+	assert(work->work_elem.slist_entry.next == NULL);
+	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-IPC-RTS-HFI");
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
+}
+#endif
+
 int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_dput_fence_params *params = &work->fence;
@@ -4236,6 +4326,7 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 			}
 		}
 	}
+
 	assert((ntidpairs == 0) || (niov == 1));
 	assert(origin_byte_counter == NULL || iov_total_bytes <= *origin_byte_counter);
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, tidoffset, ntidpairs, tidpairs, is_hmem, hfi1_type);
@@ -4695,6 +4786,8 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 	const uint64_t bth_rx	   = ((uint64_t) dest_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	const uint64_t lrh_dlid_9B = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(addr.lid);
 
+	/* TODO - IPC does not need any of the immediate block calculations.  Determine if moving helps performance or
+	 * if the compiler already optimizes this. */
 	const bool send_immed_data = (src_iface == FI_HMEM_SYSTEM);
 
 #ifndef NDEBUG
@@ -4744,9 +4837,6 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 				 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 				 (payload_blocks_total << 4);
 
-	const uint16_t lrh_dws = htons(
-		pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
-
 	if (is_intranode) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== SEND, SHM -- RENDEZVOUS RTS (begin) context %p\n",
@@ -4793,6 +4883,76 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 					    ((tx_op_flags & FI_REMOTE_CQ_DATA) ? FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ :
 										 FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS));
 
+		union fi_opx_hfi1_packet_payload *const payload = (union fi_opx_hfi1_packet_payload *) (hdr + 1);
+		FI_DBG_TRACE(
+			fi_opx_global.prov, FI_LOG_EP_DATA,
+			"hdr %p, payload %p, sbuf %p, sbuf+immediate_total %p, immediate_total %#lX, adj len %#lX\n",
+			hdr, payload, buf, ((char *) buf + immediate_total), immediate_total, (len - immediate_total));
+
+		/* When adding AMD support, this check will change to (src_iface != FI_HMEM_SYSTEM)
+		   We can optimize by disabling/enabling ipc at endpoint creation. We could
+		   check the FI_HMEM env to see if iface list includes things beyond system.
+		   We would then need to iterate over the list of all non-system ifaces and
+		   determine whether p2p is supported for each of those hmem ifaces
+		*/
+
+		/* IPC Threshold hardcoded at 4MiB until IPC Cache support is implemented*/
+#ifdef OPX_HMEM
+		if (src_iface == FI_HMEM_CUDA && opx_ep->use_gpu_ipc && len >= OPX_GPU_IPC_MIN_THRESHOLD) {
+			int ret = 0;
+
+			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-SENDER-CREATE-HANDLE");
+			ret = ofi_hmem_get_handle(src_iface, (void *) buf, len,
+						  (void **) &payload->rendezvous.ipc.ipc_handle);
+			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-SENDER-CREATE-HANDLE");
+
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"Failed to create IPC handle for Device. Falling back to non-IPC case."
+					"Error code: %d\n",
+					ret);
+			} else {
+				const uint16_t lrh_dws = __cpu_to_be16(2 + /* lhr */
+								       3 + /* bth */
+								       9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+								       (sizeof(payload->rendezvous.ipc) / 4) +
+								       1 /* icrc */); /* (BE: LRH DW) */
+
+				hdr->qw_9B[0] =
+					opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32);
+				hdr->qw_9B[1] = opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx | opcode;
+				hdr->qw_9B[2] = opx_ep->tx->rzv_9B.hdr.qw_9B[2];
+				hdr->qw_9B[3] = opx_ep->tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32);
+				hdr->qw_9B[4] = opx_ep->tx->rzv_9B.hdr.qw_9B[4] | (1ull << 48); /* effectively 1 iov */
+				hdr->qw_9B[5] = len;
+				hdr->qw_9B[6] = tag;
+
+				payload->rendezvous.ipc.origin_byte_counter_vaddr = origin_byte_counter_vaddr;
+				payload->rendezvous.ipc.src_iface		  = src_iface;
+				payload->rendezvous.ipc.src_device_id		  = src_device_id;
+				hdr->qw_9B[4] = hdr->qw_9B[4] | (FI_OPX_PKT_RZV_FLAGS_IPC_MASK);
+
+				opx_shm_tx_advance(&opx_ep->tx->shm, (void *) hdr, pos);
+
+				if (OFI_LIKELY(do_cq_completion)) {
+					fi_opx_ep_tx_cq_completion_rzv(ep, context, len, lock_required, tag, caps);
+				}
+
+				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-SHM");
+				FI_DBG_TRACE(
+					fi_opx_global.prov, FI_LOG_EP_DATA,
+					"===================================== SEND, SHM -- RENDEZVOUS RTS (end) context %p\n",
+					user_context);
+				return FI_SUCCESS;
+			}
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"IPC/p2p support requested but no support exists for FI_HMEM_CUDA. "
+				"Intranode GPU transfers speeds will be severely slower\n");
+		}
+#endif
+		const uint16_t lrh_dws = __cpu_to_be16(
+			pbc_dws - 2 +
+			1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 		hdr->qw_9B[0] = opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32);
 		hdr->qw_9B[1] = opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx | opcode;
 		hdr->qw_9B[2] = opx_ep->tx->rzv_9B.hdr.qw_9B[2];
@@ -4800,12 +4960,6 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 		hdr->qw_9B[4] = opx_ep->tx->rzv_9B.hdr.qw_9B[4] | (1ull << 48); /* effectively 1 iov */
 		hdr->qw_9B[5] = len;
 		hdr->qw_9B[6] = tag;
-
-		union fi_opx_hfi1_packet_payload *const payload = (union fi_opx_hfi1_packet_payload *) (hdr + 1);
-		FI_DBG_TRACE(
-			fi_opx_global.prov, FI_LOG_EP_DATA,
-			"hdr %p, payload %p, sbuf %p, sbuf+immediate_total %p, immediate_total %#lX, adj len %#lX\n",
-			hdr, payload, buf, ((char *) buf + immediate_total), immediate_total, (len - immediate_total));
 
 		struct opx_payload_rzv_contig *contiguous = &payload->rendezvous.contiguous;
 		payload->rendezvous.contig_9B_padding	  = 0;
@@ -4956,6 +5110,8 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
+	const uint16_t lrh_dws = __cpu_to_be16(
+		pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 	opx_cacheline_copy_qw_vol(scb, replay->scb.qws,
 				  opx_ep->tx->rzv_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
 					  OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type),

@@ -289,6 +289,13 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_SL*
 : Integer. Service Level. This will also determine Service Class and Virtual Lane.  Default is 0
 
+*FI_OPX_GPU_IPC_INTRANODE*
+: Boolean (0/1, on/off, true/false, yes/no). This setting controls whether IPC will be used
+  to facilitate GPU to GPU intranode copies over PCIe, NVLINK, or xGMI. When this is turned off,
+  GPU data will be copied to the host before being copied to another GPU which is slower than using IPC.
+  This only has an effect with HMEM enabled builds of OPX.
+  Defaults to on.
+
 *FI_OPX_DEV_REG_SEND_THRESHOLD*
 : Integer. The individual packet threshold where lengths above do not use a device
   registered copy when sending data from GPU.
@@ -307,7 +314,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 
 *FI_OPX_ROUTE_CONTROL*
 : Integer. Specify the route control for each packet type. The format is
-  - `<inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>`. 
+  - `<inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>`.
 
   Each value can range from 0-7. 0-3 is used for in-order and
   4-7 is used for out-of-order. If Token ID (TID) is enabled

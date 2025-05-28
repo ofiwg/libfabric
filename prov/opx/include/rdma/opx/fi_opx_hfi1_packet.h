@@ -266,18 +266,19 @@ static inline const char *opx_hfi1_ud_opcode_to_string(uint8_t opcode)
 	return FI_OPX_HFI_UD_OPCODE_STRINGS[FI_OPX_HFI_UD_OPCODE_FIRST_INVALID];
 }
 
-#define FI_OPX_HFI_DPUT_OPCODE_RZV		    (0x0)
-#define FI_OPX_HFI_DPUT_OPCODE_PUT		    (0x1)
-#define FI_OPX_HFI_DPUT_OPCODE_GET		    (0x2)
-#define FI_OPX_HFI_DPUT_OPCODE_FENCE		    (0x3)
-#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH	    (0x4)
-#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH (0x5)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG	    (0x6)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC	    (0x7)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_TID		    (0x8)
-#define FI_OPX_HFI_DPUT_OPCODE_PUT_CQ		    (0x9)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV		    (0x00)
+#define FI_OPX_HFI_DPUT_OPCODE_PUT		    (0x01)
+#define FI_OPX_HFI_DPUT_OPCODE_GET		    (0x02)
+#define FI_OPX_HFI_DPUT_OPCODE_FENCE		    (0x03)
+#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH	    (0x04)
+#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH (0x05)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG	    (0x06)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC	    (0x07)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_TID		    (0x08)
+#define FI_OPX_HFI_DPUT_OPCODE_PUT_CQ		    (0x09)
+#define FI_OPX_HFI_DPUT_OPCODE_IPC		    (0x0A)
 /* Add new DPUT Opcodes here, and increment LAST_INVALID accordingly */
-#define FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID (0xA)
+#define FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID (0x0B)
 
 #define FI_OPX_HFI_DPUT_GET_OPCODE(_opcode) ((_opcode & 0x00F0) >> 4)
 
@@ -292,6 +293,7 @@ static const char *FI_OPX_HFI_DPUT_OPCODE_STRINGS[] = {
 	[FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC]	      = "FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC",
 	[FI_OPX_HFI_DPUT_OPCODE_RZV_TID]	      = "FI_OPX_HFI_DPUT_OPCODE_RZV_TID",
 	[FI_OPX_HFI_DPUT_OPCODE_PUT_CQ]		      = "FI_OPX_HFI_DPUT_OPCODE_PUT_CQ",
+	[FI_OPX_HFI_DPUT_OPCODE_IPC]		      = "FI_OPX_HFI_DPUT_OPCODE_IPC",
 	[FI_OPX_HFI_DPUT_OPCODE_LAST_INVALID]	      = "INVALID DPUT OPCODE"};
 
 static inline const char *opx_hfi1_dput_opcode_to_string(uint8_t opcode)
@@ -530,7 +532,8 @@ struct fi_opx_hfi1_stl_packet_hdr_16B {
 #define FI_OPX_PKT_RZV_FLAGS_SHIFT	    (16)
 #define FI_OPX_PKT_RZV_FLAGS_NONCONTIG	    (1ul)
 #define FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK (FI_OPX_PKT_RZV_FLAGS_NONCONTIG << FI_OPX_PKT_RZV_FLAGS_SHIFT)
-
+#define FI_OPX_PKT_RZV_FLAGS_IPC	    (2ul)
+#define FI_OPX_PKT_RZV_FLAGS_IPC_MASK	    (FI_OPX_PKT_RZV_FLAGS_IPC << FI_OPX_PKT_RZV_FLAGS_SHIFT)
 #if 0
 #ifndef NDEBUG
 static inline
@@ -1522,6 +1525,14 @@ union fi_opx_hfi1_packet_payload {
 #endif
 
 		} noncontiguous;
+
+		struct {
+			uint64_t  ipc_handle[8];	     // Both AMD and NVIDIA handles are 64 bytes
+			uint64_t  src_device_id;	     // Needed on receiver for opening handle
+			uintptr_t origin_byte_counter_vaddr; // copy this value into cts packet that will be sent by
+							     // rank 1
+			enum fi_hmem_iface src_iface;	     // Needed on receiver for opening handle
+		} ipc;
 	} rendezvous;
 
 	struct {

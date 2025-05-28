@@ -47,6 +47,7 @@ opx_files =									\
 		prov/opx/src/fi_opx_tid_domain.c				\
 		prov/opx/src/opx_hmem_domain.c					\
 		prov/opx/src/opx_tracer.c					\
+		prov/opx/src/opx_ipc.c						\
 		prov/opx/src/fi_opx_ep.c					\
 		prov/opx/src/fi_opx_eq.c					\
 		prov/opx/src/fi_opx_fabric.c					\
@@ -160,6 +161,7 @@ noinst_HEADERS = \
 	$(top_srcdir)/prov/opx/include/fi_opx_tid.h \
 	$(top_srcdir)/prov/opx/include/fi_opx_tid_cache.h \
 	$(top_srcdir)/prov/opx/include/opx_hmem_cache.h \
+	$(top_srcdir)/prov/opx/include/rdma/opx/opx_ipc.h \
 	$(top_srcdir)/prov/opx/include/opa_user_gen1.h \
 	$(top_srcdir)/prov/opx/include/opa_intf.h \
 	$(top_srcdir)/prov/opx/include/hfi1_deprecated_gen1.h \

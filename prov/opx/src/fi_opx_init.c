@@ -836,6 +836,9 @@ OPX_INI
 		&fi_opx_provider, "dev_reg_recv_threshold", FI_PARAM_INT,
 		"The individual packet threshold where lengths above do not use a device registered copy when receiving data into GPU. Default is %d.",
 		OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT);
+	fi_param_define(
+		&fi_opx_provider, "gpu_ipc_intranode", FI_PARAM_BOOL,
+		"Controls whether IPC will be used to facilitate GPU to GPU intranode copies over PCIe, NVLINK, or xGMI. If support is available, it is enabled by default.");
 #endif
 	fi_param_define(
 		&fi_opx_provider, "route_control", FI_PARAM_STRING,
