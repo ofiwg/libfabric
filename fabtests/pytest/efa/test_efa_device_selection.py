@@ -70,7 +70,7 @@ def test_efa_device_selection(cmdline_args, fabric, selection_approach):
 def test_efa_device_selection_negative(cmdline_args, fabric):
     invalid_iface = "r"
 
-    command = f"ssh {cmdline_args.server_id} FI_EFA_IFACE={invalid_iface} /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM -f {fabric}"
+    command = cmdline_args.populate_command(f"fi_efa_info_test -f {fabric}", "host", additional_environment=f"FI_EFA_IFACE={invalid_iface}")
     proc = subprocess.run(command, shell=True,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8", timeout=60)
@@ -81,15 +81,19 @@ def test_efa_device_selection_negative(cmdline_args, fabric):
 def test_efa_device_selection_all(cmdline_args, fabric):
     num_devices = len(get_efa_device_names(cmdline_args.server_id))
 
-    command = f"ssh {cmdline_args.server_id} FI_EFA_IFACE=all /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM -f {fabric} | grep domain"
+    command = cmdline_args.populate_command(f"fi_efa_info_test -f {fabric}", "host", additional_environment="FI_EFA_IFACE=all")
     proc = subprocess.run(command, shell=True,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8", timeout=60)
     assert proc.returncode == 0
 
-    domains = proc.stdout.strip().split("\n")
+    num_domains = 0
+    info_out = proc.stdout.strip().split("\n")
+    for info in info_out:
+        if "domain" in info:
+            num_domains += 1
 
-    assert len(domains) == num_devices
+    assert num_domains == num_devices
 
 # Verify that fi_getinfo returns two NICs when FI_EFA_IFACE is set to two NICs separated by a comma
 @pytest.mark.functional
@@ -101,15 +105,19 @@ def test_efa_device_selection_comma(cmdline_args, fabric):
     else:
         iface_str = f"{devices[0]},{devices[0]}"
 
-    command = f"ssh {cmdline_args.server_id} FI_EFA_IFACE={iface_str} /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM -f {fabric} | grep domain"
+    command = cmdline_args.populate_command(f"fi_efa_info_test -f {fabric}", "host", additional_environment=f"FI_EFA_IFACE={iface_str}")
     proc = subprocess.run(command, shell=True,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8", timeout=60)
     assert proc.returncode == 0
 
-    domains = proc.stdout.strip().split("\n")
+    num_domains = 0
+    info_out = proc.stdout.strip().split("\n")
+    for info in info_out:
+        if "domain" in info:
+            num_domains += 1
 
     if len(devices) > 1:
-        assert len(domains) == 2
+        assert num_domains == 2
     else:
-        assert len(domains) == 1
+        assert num_domains == 1
