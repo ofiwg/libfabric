@@ -37,13 +37,33 @@
 
 int main(int argc, char **argv)
 {
-	int ret;
+	int ret = 0, op;
 	struct fi_info *info;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
-	hints->fabric_attr->prov_name=strdup("efa");
+
+
+	while ((op = getopt(argc, argv, "f:p:")) != -1) {
+		switch (op) {
+		case 'f':
+			hints->fabric_attr->name = strdup(optarg);
+			break;
+		case 'p':
+			hints->fabric_attr->prov_name = strdup(optarg);
+			break;
+		default:
+			printf("Unknown option");
+			return EXIT_FAILURE;
+		}
+	}
+
+	/* Set all mode bits to enable all providers and fabrics */
+	hints->mode = ~0;
+	hints->domain_attr->mode = ~0;
+	hints->domain_attr->mr_mode = ~3; /* deprecated: (FI_MR_BASIC | FI_MR_SCALABLE) */
+
 	ret = ft_init();
 	if (ret) {
 		FT_PRINTERR("ft_init", -ret);
@@ -57,9 +77,18 @@ int main(int argc, char **argv)
 
 	info = fi;
 	while (NULL != info) {
-		if (0 != strcmp(info->fabric_attr->name, "efa")) {
-			ret = EXIT_FAILURE;
-			goto out;
+		/* If a fabric name is explicitly provided, only info objects with that fabric must be returned */
+		if (hints->fabric_attr->name) {
+			if (0 != strcmp(info->fabric_attr->name, hints->fabric_attr->name)) {
+				ret = EXIT_FAILURE;
+				goto out;
+			}
+		} else {
+			/* If no fabric name is provided, both efa and efa-direct info objects can be returned */
+			if (0 != strcmp(info->fabric_attr->name, "efa") && 0 != strcmp(info->fabric_attr->name, "efa-direct")) {
+				ret = EXIT_FAILURE;
+				goto out;
+			}
 		}
 		info = info->next;
 	}
