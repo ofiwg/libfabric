@@ -207,7 +207,7 @@ static ssize_t vrb_msg_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf
 	ep->wrs->sge.length = (uint32_t) len;
 
 	ret = vrb_post_send(ep, &ep->wrs->msg_wr, 0);
-	ep->wrs->msg_wr.opcode = IBV_WR_SEND;
+
 	return ret;
 }
 
