@@ -1414,6 +1414,12 @@ static int vrb_init_info(struct dlist_entry *verbs_devs,
 			continue;
 		}
 
+		if (vrb_gl_data.device_name &&
+		    strncasecmp(ctx_list[i]->device->name,
+				vrb_gl_data.device_name,
+				strlen(vrb_gl_data.device_name)))
+			continue;
+
 		for (j = 0; j < dom_count; j++) {
 			if (ep_type[j]->type == FI_EP_MSG &&
 			    !vrb_device_has_ipoib_addr(verbs_devs, ctx_list[i]->device->name)) {
@@ -1425,11 +1431,6 @@ static int vrb_init_info(struct dlist_entry *verbs_devs,
 					ctx_list[i]->device->name);
 				continue;
 			}
-			if (vrb_gl_data.device_name &&
-			    strncasecmp(ctx_list[i]->device->name,
-					vrb_gl_data.device_name,
-					strlen(vrb_gl_data.device_name)))
-				continue;
 
 			ret = vrb_alloc_info(ctx_list[i], &fi, ep_type[j]);
 			if (ret)
