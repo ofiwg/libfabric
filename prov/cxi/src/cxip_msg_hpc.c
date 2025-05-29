@@ -379,6 +379,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	union cxip_match_bits mb = {};
 	int ret;
 	union c_fab_addr dfa;
+	enum cxi_traffic_class_type tc_type;
 
 	if (req->recv.rdzv_proto == CXIP_RDZV_PROTO_ALT_WRITE)
 		RXC_WARN_ONCE(rxc, "Rendezvous protocol: %s not implemented\n",
@@ -396,11 +397,13 @@ static int issue_rdzv_get(struct cxip_req *req)
 		pid_idx = CXIP_PTL_IDX_RDZV_RESTRICTED(req->recv.rdzv_lac);
 		cmd.restricted = 1;
 		req->recv.done_notify = true;
+		tc_type = CXI_TC_TYPE_RESTRICTED;
 	} else {
 		pid_idx = rxc->base.domain->iface->dev->info.rdzv_get_idx;
 		mb.rdzv_lac = req->recv.rdzv_lac;
 		mb.rdzv_id_lo = req->recv.rdzv_id;
 		mb.rdzv_id_hi = req->recv.rdzv_id >> CXIP_RDZV_ID_CMD_WIDTH;
+		tc_type = CXI_TC_TYPE_DEFAULT;
 	}
 	cmd.match_bits = mb.raw;
 
@@ -446,7 +449,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 
 	ret = cxip_rxc_emit_dma(rxc, req->recv.vni,
 				cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
-				CXI_TC_TYPE_DEFAULT, &cmd, 0);
+				tc_type, &cmd, 0);
 	if (ret)
 		RXC_WARN(rxc, "Failed to issue rendezvous get: %d\n", ret);
 
