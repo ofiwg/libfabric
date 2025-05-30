@@ -128,6 +128,7 @@ extern size_t rxm_packet_size;
 #define RXM_IOV_LIMIT 4
 
 #define RXM_PEER_XFER_TAG_FLAG	(1ULL << 63)
+#define RXM_RPC_TAG_FLAG	(1ULL << 62)
 
 #define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
 
@@ -190,6 +191,7 @@ extern struct fi_ops_tagged rxm_tagged_thru_ops;
 extern struct fi_ops_rma rxm_rma_ops;
 extern struct fi_ops_rma rxm_rma_thru_ops;
 extern struct fi_ops_atomic rxm_ops_atomic;
+extern struct fi_ops_rpc rxm_rpc_ops;
 
 enum {
 	RXM_MSG_RXTX_SIZE = 128,
@@ -861,7 +863,7 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 	pkt->hdr.size = len;
 	pkt->hdr.op = op;
 	pkt->hdr.tag = tag;
-	pkt->hdr.flags = (flags & FI_REMOTE_CQ_DATA);
+	pkt->hdr.flags = (flags & (FI_REMOTE_CQ_DATA | FI_RPC));
 	pkt->hdr.data = data;
 }
 
@@ -914,4 +916,7 @@ rxm_multi_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		   void **desc, size_t count, fi_addr_t src_addr,
 		   uint64_t tag, uint64_t ignore, void *context,
 		   uint64_t flags);
+
+void rxm_rpc_init(void);
+
 #endif
