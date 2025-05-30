@@ -773,6 +773,48 @@ static struct fi_ops_ep xnet_srx_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+static int
+xnet_srx_cancel_rxs(struct ofi_dyn_arr *arr, void *list, void *context)
+{
+	struct xnet_srx *srx;
+	struct slist *queue = list;
+	struct xnet_ep *ep = context;
+	struct slist tmp = { 0 };
+	struct xnet_xfer_entry *xfer_entry;
+	struct slist_entry *entry;
+
+	srx = container_of(arr, struct xnet_srx, src_tag_queues);
+	while (!slist_empty(queue)) {
+		entry = slist_remove_head(queue);
+		xfer_entry = container_of(entry, struct xnet_xfer_entry, entry);
+
+		if (ep->peer->fi_addr != xfer_entry->src_addr ||
+		    xfer_entry->cq == NULL ||
+		    (xfer_entry->cq_flags & xnet_rx_completion_flag(ep))) {
+			slist_insert_head(entry, &tmp);
+			continue;
+		}
+
+		xnet_report_error(xfer_entry, FI_ECANCELED);
+		xnet_free_xfer(xnet_srx2_progress(srx), xfer_entry);
+	}
+
+	while (!slist_empty(&tmp)) {
+		entry = slist_remove_head(&tmp);
+		slist_insert_head(entry, queue);
+
+		xfer_entry = container_of(entry, struct xnet_xfer_entry, entry);
+	}
+
+	return 0;
+}
+
+ssize_t xnet_srx_cancel_tag_queue(struct xnet_ep *ep)
+{
+	ofi_array_iter(&ep->srx->src_tag_queues, ep, xnet_srx_cancel_rxs);
+	return 0;
+}
+
 static int xnet_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct xnet_srx *srx;
