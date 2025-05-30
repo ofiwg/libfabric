@@ -165,7 +165,8 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 		dlist_foreach(&cntr->ep_list, item) {
 			fid_entry = container_of(item, struct fid_list_entry, entry);
 			efa_rdm_ep = container_of(fid_entry->fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-			efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
+			if (efa_rdm_ep->base_ep.efa_qp_enabled)
+				efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
 		}
 		efa_cntr->need_to_scan_ep_list = false;
 	}

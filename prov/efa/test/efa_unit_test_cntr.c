@@ -169,3 +169,35 @@ void test_efa_rdm_cntr_post_initial_rx_pkts(struct efa_resource **state)
 
 	fi_close(&cntr->fid);
 }
+
+void test_efa_rdm_cntr_read_before_ep_enable(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_ep *ep;
+	struct fid_cntr *cntr;
+	struct fi_cntr_attr cntr_attr = {0};
+	uint64_t cnt;
+
+	/* TODO: allow shm when shm fixed its bug that
+	 cq read cannot be called before ep enable */
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep, NULL), 0);
+
+	assert_int_equal(fi_cntr_open(resource->domain, &cntr_attr, &cntr, NULL), 0);
+
+	assert_int_equal(fi_ep_bind(resource->ep, &cntr->fid, FI_TRANSMIT), 0);
+
+	cnt = fi_cntr_read(cntr);
+	/* No completion should be read */
+	assert_int_equal(cnt, 0);
+
+	/* eps must be closed before cq/av/eq... */
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+
+	assert_int_equal(fi_close(&ep->fid), 0);
+
+	assert_int_equal(fi_close(&cntr->fid), 0);
+}

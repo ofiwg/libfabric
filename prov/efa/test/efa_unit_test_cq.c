@@ -614,6 +614,26 @@ void test_efa_rdm_cq_post_initial_rx_pkts(struct efa_resource **state)
 	/* scan is done */
 	assert_false(efa_rdm_cq->need_to_scan_ep_list);
 }
+
+void test_efa_rdm_cq_before_ep_enable(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_ep *ep;
+
+	/* TODO: allow shm when shm fixed its bug that
+	 cq read cannot be called before ep enable */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep, NULL), 0);
+
+	assert_int_equal(fi_ep_bind(ep, &resource->cq->fid, FI_SEND | FI_RECV), 0);
+
+	/* cq read should return EAGAIN as its empty */
+	assert_int_equal(fi_cq_read(resource->cq, NULL, 0), -FI_EAGAIN);
+
+	assert_int_equal(fi_close(&ep->fid), 0);
+}
+
 #if HAVE_EFADV_CQ_EX
 /**
  * @brief Construct an RDM endpoint and receive an eager MSG RTM packet.
