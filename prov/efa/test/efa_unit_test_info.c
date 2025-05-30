@@ -760,39 +760,6 @@ void test_use_device_rdma( const int env_val,
 	return;
 }
 
-/**
- * Get the name of the "first"(random order) NIC
- *
- * @param[out]	name	The returned name string.
- * 			It should be free'd after use.
- * @returns	FI_SUCCESS on success or a non-zero error code
- */
-static int get_first_nic_name(char **name) {
-	int ret;
-	char *nic_name = NULL;
-	struct fi_info *hints, *info;
-
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
-	ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, hints, &info);
-	fi_freeinfo(hints);
-	if (ret)
-		return ret;
-
-	nic_name = info->nic->device_attr->name;
-	assert_non_null(nic_name);
-	assert_int_not_equal(strlen(nic_name), 0);
-
-	*name = malloc(strlen(nic_name) + 1);
-	if (!name)
-		return FI_ENOMEM;
-
-	strcpy(*name, nic_name);
-
-	fi_freeinfo(info);
-
-	return FI_SUCCESS;
-}
-
 /* indicates the test shouldn't set the setopt or environment
    variable during setup. */
 const int VALUE_NOT_SET = -1;
