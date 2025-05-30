@@ -360,6 +360,27 @@ bool efa_device_support_unsolicited_write_recv(void)
 }
 #endif
 
+/**
+ * @brief check whether efa device has support for creating CQ with external memory
+ *
+ * @return a boolean indicating that creating CQs with external memory buffers
+ * by passing dmabuf is supported.
+ */
+#if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF
+bool efa_device_support_cq_with_ext_mem_dmabuf(void)
+{
+	assert(g_efa_selected_device_cnt > 0);
+
+	return !!(g_efa_selected_device_list[0].device_caps &
+		  EFADV_DEVICE_ATTR_CAPS_CQ_WITH_EXT_MEM_DMABUF);
+}
+#else
+bool efa_device_support_cq_with_ext_mem_dmabuf(void)
+{
+	return false;
+}
+#endif
+
 #ifndef _WIN32
 
 static char *get_sysfs_path(void)
