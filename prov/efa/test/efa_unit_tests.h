@@ -171,6 +171,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_solicited_recv();
 void test_ibv_cq_ex_read_recover_forgotten_peer_ah();
 void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer();
 void test_ibv_cq_ex_read_ignore_removed_peer();
+void test_efa_rdm_cq_before_ep_enable();
 
 /* begin efa_unit_test_info.c */
 void test_info_open_ep_with_wrong_info();
@@ -275,6 +276,7 @@ void test_efa_rdm_cq_post_initial_rx_pkts();
 void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_post_initial_rx_pkts();
+void test_efa_rdm_cntr_read_before_ep_enable();
 /* begin of efa_unit_test_rdm_peer.c */
 void test_efa_rdm_peer_reorder_expected_msg_id();
 void test_efa_rdm_peer_reorder_smaller_msg_id();
