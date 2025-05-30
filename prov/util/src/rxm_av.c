@@ -184,18 +184,17 @@ static int rxm_av_add_peers(struct rxm_av *av, const void *addr, size_t count,
 		if (!peer)
 			goto err;
 
-		if (user_ids) {
+		cur_fi_addr = (fi_addr) ? fi_addr[i] :
+			ofi_av_lookup_fi_addr(&av->util_av, cur_addr);
+
+		if (user_ids)
 			peer->fi_addr = user_ids[i];
-		} else {
-			peer->fi_addr =
-				fi_addr ? fi_addr[i] :
-					  ofi_av_lookup_fi_addr(&av->util_av,
-								cur_addr);
-		}
+		else
+			peer->fi_addr = cur_fi_addr;
 
 		/* lookup can fail if prior AV insertion failed */
 		if (peer->fi_addr != FI_ADDR_NOTAVAIL)
-			rxm_set_av_context(av, peer->fi_addr, peer);
+			rxm_set_av_context(av, cur_fi_addr, peer);
 	}
 	return 0;
 

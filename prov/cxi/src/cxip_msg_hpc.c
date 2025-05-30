@@ -3376,9 +3376,7 @@ cxip_recv_req_init(struct cxip_rxc *rxc, void *buf, size_t len, fi_addr_t addr,
 		goto err;
 	}
 
-	ofi_genlock_lock(&rxc->ep_obj->lock);
 	ret = cxip_recv_req_alloc(rxc, buf, len, NULL, &req, cxip_recv_cb);
-	ofi_genlock_unlock(&rxc->ep_obj->lock);
 	if (ret)
 		return ret;
 
@@ -3421,18 +3419,19 @@ int cxip_unexp_start(struct fi_peer_rx_entry *rx_entry)
 	ux_mb.raw = ux->put_ev.tgt_long.match_bits;
 	rxc = ux->rxc;
 
+	ofi_genlock_lock(&rxc->ep_obj->lock);
 	ret = cxip_recv_req_init(rxc, rx_entry->iov[0].iov_base,
 				rx_entry->iov[0].iov_len, rx_entry->addr,
 				rx_entry->tag, 0, rx_entry->flags,
 				ux_mb.tagged, rx_entry->context, NULL, &req);
 	if (ret)
-		return ret;
+		goto out;
 
 	req->rx_entry = rx_entry;
 
 	ret = cxip_recv_sw_matched(req, ux);
 	if (ret == -FI_EAGAIN)
-		return ret;
+		goto out;
 
 	/* FI_EINPROGRESS is return for a multi-recv match. */
 	assert(ret == FI_SUCCESS || ret == -FI_EINPROGRESS);
@@ -3445,6 +3444,8 @@ int cxip_unexp_start(struct fi_peer_rx_entry *rx_entry)
 	RXC_DBG(rxc,
 		"Software match, req: %p ux_send: %p\n", req, ux);
 
+out:
+	ofi_genlock_unlock(&rxc->ep_obj->lock);
 	return ret;
 }
 
@@ -3467,6 +3468,7 @@ static int cxip_process_srx_ux_matcher(struct cxip_rxc *rxc,
 	vni = ux->put_ev.tgt_long.vni;
 
 	match.addr = cxip_recv_req_src_addr(rxc, ux_init, vni, true);
+	match.msg_size = ux->put_ev.tgt_long.rlength;
 
 	ux_mb.raw = ux->put_ev.tgt_long.match_bits;
 
@@ -3483,6 +3485,10 @@ static int cxip_process_srx_ux_matcher(struct cxip_rxc *rxc,
 	if (ret == -FI_ENOENT) {
 		/* this is used when the owner calls start_msg */
 		rx_entry->peer_context = ux;
+		if (ux_mb.cq_data) {
+			rx_entry->flags |= FI_REMOTE_CQ_DATA;
+			rx_entry->cq_data = ux->put_ev.tgt_long.header_data;
+		}
 		return -FI_ENOMSG;
 	} else if (ret) {
 		return ret;
@@ -4196,8 +4202,10 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 
 	assert(rxc_hpc->base.protocol == FI_PROTO_CXI);
 
+	ofi_genlock_lock(&rxc->ep_obj->lock);
 	ret = cxip_recv_req_init(rxc, buf, len, src_addr, tag, ignore, flags,
 				 tagged, context, comp_cntr, &req);
+	ofi_genlock_unlock(&rxc->ep_obj->lock);
 	if (ret)
 		goto err;
 
