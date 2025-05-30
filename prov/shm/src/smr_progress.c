@@ -1457,6 +1457,9 @@ void smr_ep_progress(struct util_ep *util_ep)
 
 	ep = container_of(util_ep, struct smr_ep, util_ep);
 
+	if (!ep->region)
+		return;
+
 	if (smr_env.use_dsa_sar)
 		smr_dsa_progress(ep);
 	smr_progress_resp(ep);
