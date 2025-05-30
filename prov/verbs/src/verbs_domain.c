@@ -159,8 +159,8 @@ static int vrb_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		switch (domain->ep_type) {
 		case FI_EP_MSG:
 			eq = container_of(bfid, struct vrb_eq, eq_fid);
-			domain->eq = eq;
 			domain->eq_flags = flags;
+			vrb_eq_attach_domain(eq, domain);
 			break;
 		case FI_EP_DGRAM:
 			return -FI_EINVAL;
@@ -222,6 +222,12 @@ static int vrb_domain_close(fid_t fid)
 		if (ret)
 			return -ret;
 		domain->pd = NULL;
+	}
+
+	if (domain->eq) {
+		ret = vrb_eq_detach_domain(domain);
+		if (ret)
+			return -ret;
 	}
 
 	ret = ofi_domain_close(&domain->util_domain);
@@ -430,6 +436,10 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 		ret = -FI_EINVAL;
 		goto err4;
 	}
+
+	ret = fi_fd_nonblock(_domain->verbs->async_fd);
+	if (ret)
+		goto err4;
 
 	ret = vrb_init_progress(&_domain->progress, _domain->info);
 	if (ret)
