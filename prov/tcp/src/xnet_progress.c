@@ -1331,7 +1331,7 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 	struct xnet_pep *pep;
 
 	assert(xnet_io_uring);
-	sockctx = (struct ofi_sockctx *) cqe->user_data;
+	sockctx = (struct ofi_sockctx *)(uintptr_t) cqe->user_data;
 	assert(sockctx);
 	assert(sockctx->uring_sqe_inuse);
 	if (!(cqe ->flags & IORING_CQE_F_MORE))

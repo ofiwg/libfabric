@@ -901,7 +901,7 @@ static void lnx_close_ep_ctx(struct local_prov_ep *ep, size_t fclass)
 		rc = fi_close(&ep_ctx[i]->fid);
 		if (rc)
 			FI_WARN(&lnx_prov, FI_LOG_CORE,
-				"Failed to close ep context %lu with %d\n",
+				"Failed to close ep context %zu with %d\n",
 				fclass, rc);
 	}
 }

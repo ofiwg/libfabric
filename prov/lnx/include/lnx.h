@@ -358,7 +358,7 @@ int lnx_create_mr(const struct iovec *iov, fi_addr_t addr,
 
 	rc = ofi_mr_cache_search(&lnx_dom->ld_mr_cache, &info, mre);
 	if (rc) {
-		ofi_hmem_dev_unregister(attr.iface, (uint64_t)attr.hmem_data);
+		ofi_hmem_dev_unregister(attr.iface, (uint64_t)(uintptr_t)attr.hmem_data);
 		return rc;
 	}
 
