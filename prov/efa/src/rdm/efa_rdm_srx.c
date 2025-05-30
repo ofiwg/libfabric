@@ -52,6 +52,7 @@ static int efa_rdm_srx_start(struct fi_peer_rx_entry *peer_rxe)
 	int ret;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_ope *rxe;
+	struct efa_rdm_peer *peer;
 
 	assert(ofi_genlock_held(efa_rdm_srx_get_srx_ctx(peer_rxe)->lock));
 
@@ -68,7 +69,8 @@ static int efa_rdm_srx_start(struct fi_peer_rx_entry *peer_rxe)
 	 */
 	rxe->unexp_pkt = NULL;
 
-	ret = efa_rdm_pke_proc_matched_rtm(pkt_entry);
+	peer = efa_rdm_ep_get_peer(pkt_entry->ep, rxe->addr);
+	ret = efa_rdm_pke_proc_matched_rtm(pkt_entry, peer);
 	if (OFI_UNLIKELY(ret)) {
 		/* If we run out of memory registrations, we fall back to
 		 * emulated protocols */

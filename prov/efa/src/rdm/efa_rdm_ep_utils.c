@@ -394,11 +394,11 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
  * @param[in,out]	ep		endpoint
  * @param[in]		pkt_entry	TX pkt_entry, which contains
  * 					the info of the TX op
+ * @param[in]	peer		efa_rdm_peer struct for the receiver
  */
-void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
+void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
 {
 	struct efa_rdm_ope *ope = NULL;
-	struct efa_rdm_peer *peer;
 
 	ope = pkt_entry->ope;
 	/*
@@ -410,7 +410,6 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke
 	 *    a new peer has the same GID+QPN was inserted to address, or because
 	 *    application removed the peer from address vector.
 	 */
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	if (peer)
 		dlist_remove(&pkt_entry->entry);
 
@@ -467,12 +466,12 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke
  * @param[in]	ep		endpoint
  * @param[in]	list		queued RNR packet list
  * @param[in]	pkt_entry	packet entry that encounter RNR
+ * @param[in]	peer	efa_rdm_peer struct of the receiver
  */
-void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
-			  struct dlist_entry *list,
-			  struct efa_rdm_pke *pkt_entry)
+void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct dlist_entry *list,
+			      struct efa_rdm_pke *pkt_entry,
+			      struct efa_rdm_peer *peer)
 {
-	struct efa_rdm_peer *peer;
 	static const int random_min_timeout = 40;
 	static const int random_max_timeout = 120;
 
@@ -481,7 +480,6 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 #endif
 	dlist_insert_tail(&pkt_entry->entry, list);
 	ep->efa_rnr_queued_pkt_cnt += 1;
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 	if (!(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT)) {
 		/* This is the first time this packet encountered RNR,
