@@ -618,12 +618,29 @@ static ssize_t rxm_rndv_handle_wr_data(struct rxm_rx_buf *rx_buf)
 		}
 	}
 
-	/* BUG: This is forcing a state change without knowing what state
-	 * we're currently in.  This loses whether we processed the completion
-	 * for the original send request.  Valid states here are
-	 * RXM_RNDV_TX or RXM_RNDV_WRITE_DATA_WAIT.
+	/* Valid states here depends on whether the completion of the original
+	 * send has been processed:
+	 *
+	 *	RXM_RNDV_TX: not processed yet
+	 *	RXM_RNDV_WRITE_DATA_WAIT: processed
+	 *
+	 * We should only transition to RXM_RNDV_WRITE after the completion
+	 * of the original send has been processed, otherwise the send
+	 * completion could be misinterpreted as a write completion and thus
+	 * cause rxm_rndv_send_wr_done() being called prematurely, resulting
+	 * incorrect data being accessed at the receive side.
+	 *
+	 * The RXM_RNDV_WRITE_TX_WAIT state is used to indicate that the
+	 * next completion should be the completion of the original send
+	 * even though the write operation has been posted.
 	 */
-	RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_WRITE);
+	assert(tx_buf->hdr.state == RXM_RNDV_TX ||
+	       tx_buf->hdr.state == RXM_RNDV_WRITE_DATA_WAIT);
+
+	if (tx_buf->hdr.state == RXM_RNDV_WRITE_DATA_WAIT)
+		RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_WRITE);
+	else
+		RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_WRITE_TX_WAIT);
 
 	ret = rxm_rndv_xfer(rx_buf->ep, tx_buf->write_rndv.conn->msg_ep, rx_hdr,
 			    tx_buf->write_rndv.iov, tx_buf->write_rndv.desc,
@@ -1477,6 +1494,11 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 
 		rxm_rndv_send_wr_done(rxm_ep, tx_buf);
 		return 0;
+	case RXM_RNDV_WRITE_TX_WAIT:
+		tx_buf = comp->op_context;
+		assert(comp->flags & FI_SEND);
+		RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_WRITE);
+		return 0;
 	case RXM_RNDV_READ_DONE_SENT:
 		assert(comp->flags & FI_SEND);
 		rxm_rndv_rx_finish(comp->op_context);
@@ -1653,6 +1675,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 			return;
 		break;
 	case RXM_RNDV_WRITE:
+	case RXM_RNDV_WRITE_TX_WAIT:
 		tx_buf = err_entry.op_context;
 		err_entry.op_context = tx_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(tx_buf->pkt.hdr.op);
