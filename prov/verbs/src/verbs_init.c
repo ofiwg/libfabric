@@ -87,16 +87,18 @@ struct fi_provider vrb_prov = {
 	.cleanup = vrb_fini
 };
 
+ofi_mutex_t vrb_info_mutex;
+
 struct util_prov vrb_util_prov = {
 	.prov = &vrb_prov,
 	.info = NULL,
+	.info_lock = &vrb_info_mutex,
 	/* The support of the shared recieve contexts
 	 * is dynamically calculated */
 	.flags = 0,
 };
 
 /* mutex for guarding the initialization of vrb_util_prov.info */
-ofi_mutex_t vrb_info_mutex;
 DEFINE_LIST(vrb_devs);
 
 int vrb_sockaddr_len(struct sockaddr *addr)
