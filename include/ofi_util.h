@@ -160,6 +160,7 @@ typedef void (*ofi_alter_info_t)(uint32_t version,
 struct util_prov {
 	const struct fi_provider	*prov;
 	struct fi_info			*info;
+	ofi_mutex_t			*info_lock;
 	ofi_alter_info_t		alter_defaults;
 	const int			flags;
 };

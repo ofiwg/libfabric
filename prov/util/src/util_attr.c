@@ -1019,19 +1019,25 @@ int ofi_prov_check_info(const struct util_prov *util_prov,
 			uint32_t api_version,
 			const struct fi_info *user_info)
 {
-	const struct fi_info *prov_info = util_prov->info;
+	const struct fi_info *prov_info;
 	size_t success_info = 0;
 	int ret;
 
 	if (!user_info)
 		return FI_SUCCESS;
 
-	for ( ; prov_info; prov_info = prov_info->next) {
+	if (util_prov->info_lock)
+	    ofi_mutex_lock(util_prov->info_lock);
+
+	for (prov_info = util_prov->info; prov_info; prov_info = prov_info->next) {
 		ret = ofi_check_info(util_prov, prov_info,
 				     api_version, user_info);
 		if (!ret)
 			success_info++;
 	}
+
+	if (util_prov->info_lock)
+	    ofi_mutex_unlock(util_prov->info_lock);
 
 	return (!success_info ? -FI_ENODATA : FI_SUCCESS);
 }
@@ -1043,7 +1049,7 @@ int ofi_prov_check_dup_info(const struct util_prov *util_prov,
 			    const struct fi_info *user_info,
 			    struct fi_info **info)
 {
-	const struct fi_info *prov_info = util_prov->info;
+	const struct fi_info *prov_info;
 	const struct fi_provider *prov = util_prov->prov;
 	struct fi_info *fi, *tail;
 	int ret;
@@ -1051,9 +1057,12 @@ int ofi_prov_check_dup_info(const struct util_prov *util_prov,
 	if (!info)
 		return -FI_EINVAL;
 
+	if (util_prov->info_lock)
+	    ofi_mutex_lock(util_prov->info_lock);
+
 	*info = tail = NULL;
 
-	for ( ; prov_info; prov_info = prov_info->next) {
+	for (prov_info = util_prov->info; prov_info; prov_info = prov_info->next) {
 		ret = ofi_check_info(util_prov, prov_info,
 				     api_version, user_info);
 	    	if (ret)
@@ -1077,8 +1086,13 @@ int ofi_prov_check_dup_info(const struct util_prov *util_prov,
 		tail = fi;
 	}
 
+	if (util_prov->info_lock)
+	    ofi_mutex_unlock(util_prov->info_lock);
+
 	return !*info ? -FI_ENODATA : FI_SUCCESS;
 err:
+	if (util_prov->info_lock)
+	    ofi_mutex_unlock(util_prov->info_lock);
 	fi_freeinfo(*info);
 	FI_INFO(prov, FI_LOG_CORE,
 		"cannot copy info\n");
