@@ -1750,7 +1750,7 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 				 fc_drops->vni, cxip_env.fc_retry_usec_delay,
 				 fc_drops->retry_count);
 			usleep(cxip_env.fc_retry_usec_delay);
-			ret = cxip_ctrl_msg_send(req);
+			ret = cxip_ctrl_msg_send(req, 0);
 			break;
 		default:
 			RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT_STS,
@@ -1901,7 +1901,7 @@ int cxip_recv_resume(struct cxip_rxc_hpc *rxc)
 	dlist_foreach_container_safe(&rxc->fc_drops,
 				     struct cxip_fc_drops, fc_drops,
 				     rxc_entry, tmp) {
-		ret = cxip_ctrl_msg_send(&fc_drops->req);
+		ret = cxip_ctrl_msg_send(&fc_drops->req, 0);
 		if (ret)
 			return ret;
 
@@ -4863,7 +4863,7 @@ static int cxip_fc_peer_put(struct cxip_fc_peer *peer)
 	if (!--peer->pending) {
 		peer->req.send.mb.drops = peer->dropped;
 
-		ret = cxip_ctrl_msg_send(&peer->req);
+		ret = cxip_ctrl_msg_send(&peer->req, 0);
 		if (ret != FI_SUCCESS) {
 			peer->pending++;
 			return ret;
@@ -4931,7 +4931,7 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 				 peer->caddr.vni, cxip_env.fc_retry_usec_delay,
 				 peer->retry_count);
 			usleep(cxip_env.fc_retry_usec_delay);
-			return cxip_ctrl_msg_send(req);
+			return cxip_ctrl_msg_send(req, 0);
 		default:
 			TXC_FATAL(txc, CXIP_UNEXPECTED_EVENT_STS,
 				  cxi_event_to_str(event),
