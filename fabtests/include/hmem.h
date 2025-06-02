@@ -184,6 +184,8 @@ int ft_cuda_copy_from_hmem(uint64_t device, void *dst, const void *src,
 			   size_t size);
 int ft_cuda_get_dmabuf_fd(void *buf, size_t len,
 			  int *fd, uint64_t *offset);
+int ft_cuda_put_dmabuf_fd(int fd);
+
 int ft_rocr_init(void);
 int ft_rocr_cleanup(void);
 int ft_rocr_alloc(uint64_t device, void **buf, size_t size);
@@ -228,5 +230,7 @@ int ft_hmem_get_dmabuf_fd(enum fi_hmem_iface iface,
 			  int *fd, uint64_t *offset);
 int ft_hmem_no_get_dmabuf_fd(void *buf, size_t len,
 			     int *fd, uint64_t *offset);
+int ft_hmem_put_dmabuf_fd(enum fi_hmem_iface iface, int fd);
+int ft_hmem_no_put_dmabuf_fd(int fd);
 
 #endif /* _HMEM_H_ */
