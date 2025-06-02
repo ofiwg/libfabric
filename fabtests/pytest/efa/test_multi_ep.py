@@ -13,3 +13,4 @@ def test_multi_ep(cmdline_args, shared_cq, shared_av, rma_fabric):
         cmd += " -A"
     test = ClientServerTest(cmdline_args, cmd, message_size=256, fabric=rma_fabric)
     test.run()
+
