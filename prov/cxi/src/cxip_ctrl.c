@@ -28,6 +28,7 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 	union cxip_match_bits mb = {
 		.raw = event->tgt_long.match_bits,
 	};
+	uint64_t data = event->tgt_long.header_data;
 	uint32_t init = event->tgt_long.initiator.initiator.process;
 	int ret;
 
@@ -51,7 +52,7 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		/* Messages not handled by the protocol */
 		if (mb.ctrl_msg_type == CXIP_CTRL_MSG_ZB_DATA) {
 			ret = cxip_zbcoll_recv_cb(req->ep_obj, nic_addr, pid,
-						  mb.raw);
+						  mb.raw, data);
 			assert(ret == FI_SUCCESS);
 		} else {
 			CXIP_FATAL("Unexpected msg type: %d\n",
@@ -78,7 +79,7 @@ done:
  *
  * Caller should hold req->ep_obj->lock.
  */
-int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
+int cxip_ctrl_msg_send(struct cxip_ctrl_req *req, uint64_t data)
 {
 	struct cxip_cmdq *txq;
 	union c_fab_addr dfa;
@@ -111,6 +112,7 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	idc_msg.dfa = dfa;
 	idc_msg.match_bits = req->send.mb.raw;
 	idc_msg.user_ptr = (uint64_t)req;
+	idc_msg.header_data = data;
 
 	if (req->ep_obj->av_auth_key) {
 		ret = cxip_domain_emit_idc_msg(req->ep_obj->domain,

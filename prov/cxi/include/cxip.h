@@ -3045,7 +3045,7 @@ void cxip_tree_nodeidx(int radix, int row, int col, int *nodeidx);
 int cxip_tree_relatives(int radix, int nodeidx, int maxnodes, int *rels);
 
 int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
-			uint32_t init_pid, uint64_t mbv);
+			uint32_t init_pid, uint64_t mbv, uint64_t data);
 void cxip_zbcoll_send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx,
 		      uint64_t payload);
 void cxip_zbcoll_free(struct cxip_zbcoll_obj *zb);
@@ -3275,7 +3275,7 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	     uint64_t access, uint64_t flags, struct cxip_md **md);
 void cxip_unmap(struct cxip_md *md);
 
-int cxip_ctrl_msg_send(struct cxip_ctrl_req *req);
+int cxip_ctrl_msg_send(struct cxip_ctrl_req *req, uint64_t data);
 void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_progress_locked(struct cxip_ep_obj *ep_obj);
 void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj);

@@ -790,7 +790,7 @@ static void zbsend(struct cxip_ep_obj *ep_obj, uint32_t dstnic, uint32_t dstpid,
 
 	/* If we can't send, collective cannot complete, just spin */
 	do {
-		ret =  cxip_ctrl_msg_send(req);
+		ret =  cxip_ctrl_msg_send(req, 0);
 		if (ret == -FI_EAGAIN)
 			cxip_ep_ctrl_progress_locked(ep_obj);
 	} while (ret == -FI_EAGAIN);
@@ -1052,10 +1052,11 @@ static void discard_msg(uint32_t inic, uint32_t ipid, char *msg)
  * @param init_nic  : received (actual) initiator NIC
  * @param init_pid  : received (actual) initiator PID
  * @param mbv       : received match bits
+ * @param data      : received ctrl msg user defined data
  * @return int : FI_SUCCESS (formal return)
  */
 int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
-			uint32_t init_pid, uint64_t mbv)
+			uint32_t init_pid, uint64_t mbv, uint64_t data)
 {
 	struct cxip_ep_zbcoll_obj *zbcoll;
 	struct cxip_zbcoll_obj *zb;
@@ -1254,13 +1255,13 @@ static int zbdata_send_cb(struct cxip_ctrl_req *req, const union c_event *event)
 			/* likely a target queue is full, retry */
 			CXIP_WARN("Target dropped packet, retry\n");
 			usleep(cxip_env.fc_retry_usec_delay);
-			ret = cxip_ctrl_msg_send(req);
+			ret = cxip_ctrl_msg_send(req, 0);
 			break;
 		case C_RC_PTLTE_NOT_FOUND:
 			/* could be a race during setup, retry */
 			CXIP_WARN("Target connection failed, retry\n");
 			usleep(cxip_env.fc_retry_usec_delay);
-			ret = cxip_ctrl_msg_send(req);
+			ret = cxip_ctrl_msg_send(req, 0);
 			break;
 		default:
 			CXIP_WARN("ACK return code = %d, failed\n",
