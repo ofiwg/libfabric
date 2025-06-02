@@ -606,8 +606,12 @@ static ssize_t rxm_rndv_handle_wr_data(struct rxm_rx_buf *rx_buf)
 	total_len = tx_buf->pkt.hdr.size;
 
 	tx_buf->write_rndv.remote_hdr.count = rx_hdr->count;
+	tx_buf->write_rndv.rndv_rma_index = 0;
+	tx_buf->write_rndv.rndv_rma_count = 0;
+
 	memcpy(tx_buf->write_rndv.remote_hdr.iov, rx_hdr->iov,
 	       rx_hdr->count * sizeof(rx_hdr->iov[0]));
+
 	// calculate number of RMA writes required to complete the transfer.
 	// there me be less than iov count RMA writes required,
 	// depending on differences between remote and local IOV sizes.
