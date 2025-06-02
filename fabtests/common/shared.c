@@ -474,6 +474,8 @@ int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 
 	ft_fill_mr_attr(&iov, &dmabuf, 1, access, key, iface, device, &attr, flags);
 	ret = fi_mr_regattr(domain, &attr, flags, mr);
+	if (opts.options & FT_OPT_REG_DMABUF_MR)
+		ft_hmem_put_dmabuf_fd(iface, dmabuf_fd);
 	if (ret)
 		return ret;
 
