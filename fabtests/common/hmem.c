@@ -50,6 +50,7 @@ struct ft_hmem_ops {
 			      size_t size);
 	int (*get_dmabuf_fd)(void *buf, size_t len,
 			     int *fd, uint64_t *offset);
+	int (*put_dmabuf_fd)(int fd);
 };
 
 static struct ft_hmem_ops hmem_ops[] = {
@@ -64,6 +65,7 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = ft_host_memcpy,
 		.copy_from_hmem = ft_host_memcpy,
 		.get_dmabuf_fd = ft_hmem_no_get_dmabuf_fd,
+		.put_dmabuf_fd = ft_hmem_no_put_dmabuf_fd,
 	},
 	[FI_HMEM_SYNAPSEAI] = {
 		.init = ft_synapseai_init,
@@ -76,6 +78,7 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = ft_synapseai_copy_to_hmem,
 		.copy_from_hmem = ft_synapseai_copy_from_hmem,
 		.get_dmabuf_fd = ft_synapseai_get_dmabuf_fd,
+		.put_dmabuf_fd = ft_hmem_no_put_dmabuf_fd,
 	},
 	[FI_HMEM_CUDA] = {
 		.init = ft_cuda_init,
@@ -88,6 +91,7 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = ft_cuda_copy_to_hmem,
 		.copy_from_hmem = ft_cuda_copy_from_hmem,
 		.get_dmabuf_fd = ft_cuda_get_dmabuf_fd,
+		.put_dmabuf_fd = ft_cuda_put_dmabuf_fd,
 	},
 	[FI_HMEM_ROCR] = {
 		.init = ft_rocr_init,
@@ -100,6 +104,7 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = ft_rocr_memcpy,
 		.copy_from_hmem = ft_rocr_memcpy,
 		.get_dmabuf_fd = ft_hmem_no_get_dmabuf_fd,
+		.put_dmabuf_fd = ft_hmem_no_put_dmabuf_fd,
 	},
 	[FI_HMEM_ZE] = {
 		.init = ft_ze_init,
@@ -112,6 +117,7 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = ft_ze_copy,
 		.copy_from_hmem = ft_ze_copy,
 		.get_dmabuf_fd = ft_hmem_no_get_dmabuf_fd,
+		.put_dmabuf_fd = ft_hmem_no_put_dmabuf_fd,
 	},
 	[FI_HMEM_NEURON] = {
 		.init = ft_neuron_init,
@@ -124,6 +130,7 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = ft_neuron_memcpy_to_hmem,
 		.copy_from_hmem = ft_neuron_memcpy_from_hmem,
 		.get_dmabuf_fd = ft_hmem_no_get_dmabuf_fd,
+		.put_dmabuf_fd = ft_hmem_no_put_dmabuf_fd,
 	},
 };
 
@@ -216,6 +223,16 @@ int ft_hmem_get_dmabuf_fd(enum fi_hmem_iface iface,
 
 int ft_hmem_no_get_dmabuf_fd(void *buf, size_t len,
 			      int *fd, uint64_t *offset)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_hmem_put_dmabuf_fd(enum fi_hmem_iface iface, int fd)
+{
+	return hmem_ops[iface].put_dmabuf_fd(fd);
+}
+
+int ft_hmem_no_put_dmabuf_fd(int fd)
 {
 	return -FI_ENOSYS;
 }
