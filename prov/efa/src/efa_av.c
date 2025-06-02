@@ -57,8 +57,10 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
 		return NULL;
 
 	assert(av->type == FI_AV_TABLE);
-	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, fi_addr);
-	if (!util_av_entry)
+
+	if (OFI_LIKELY(ofi_bufpool_ibuf_is_valid(av->util_av.av_entry_pool, fi_addr)))
+		util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, fi_addr);
+	else
 		return NULL;
 
 	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
