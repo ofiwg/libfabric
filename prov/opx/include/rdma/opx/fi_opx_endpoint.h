@@ -537,9 +537,8 @@ struct fi_opx_ep {
 	bool			   is_tx_cq_bound;
 	bool			   is_rx_cq_bound;
 	bool			   use_expected_tid_rzv;
-	bool			   use_gpu_ipc;
-	uint8_t			   unused_cacheline5[2];
-	uint32_t		   unused_cacheline5_u32;
+	uint8_t			   unused_cacheline5[3];
+	enum fi_hmem_iface	   use_gpu_ipc;
 	ofi_spin_t		   lock; /* lock size varies based on ENABLE_DEBUG*/
 
 	/* == CACHE LINE 6 (if ENABLE_DEBUG) == */
@@ -1086,8 +1085,6 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			assert(!is_noncontig);
 
 #ifdef OPX_HMEM
-			/* is_ipc will never be true here when FI_HMEM is type ROCR because we do not
-			 * enable IPC for AMD */
 			if (is_intranode && is_hmem && is_ipc) {
 				opx_hfi1_rx_ipc_rts(opx_ep, hdr, payload, origin_rx, niov,
 						    payload->rendezvous.ipc.origin_byte_counter_vaddr, context,

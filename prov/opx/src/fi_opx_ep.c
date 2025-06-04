@@ -2623,13 +2623,28 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 	}
 	if (use_ipc) {
 #if HAVE_CUDA
-		use_ipc = ofi_hmem_is_ipc_enabled(FI_HMEM_CUDA);
+		if (hmem_ops[FI_HMEM_CUDA].initialized && ofi_hmem_is_ipc_enabled(FI_HMEM_CUDA)) {
+			use_ipc = FI_HMEM_CUDA;
+		} else {
+			use_ipc = 0;
+		}
+#else
+		use_ipc = 0;
 #endif
-		/* TODO When ROCR support is added, need to determine if the enabled check can be done here, or needs to
-		 * be done at the time of the send */
+#if HAVE_ROCR
+		if (hmem_ops[FI_HMEM_ROCR].initialized && ofi_hmem_is_ipc_enabled(FI_HMEM_ROCR)) {
+			if (use_ipc) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"IPC is enabled for both CUDA and ROCR, so IPC is being disabled.\n");
+				use_ipc = 0;
+			} else {
+				use_ipc = FI_HMEM_ROCR;
+			}
+		}
+#endif
 		if (!use_ipc) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_GPU_IPC_INTRANODE was enabled, but ofi_hmem_is_ipc_enabled indicated that IPC is disabled.\n");
+				"FI_OPX_GPU_IPC_INTRANODE was enabled, but ofi_hmem_is_ipc_enabled resulted in IPC being disabled.\n");
 		}
 	}
 	opx_ep->use_gpu_ipc = use_ipc;
