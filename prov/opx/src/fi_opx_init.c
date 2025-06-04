@@ -111,8 +111,8 @@ int fi_opx_check_info(const struct fi_info *info)
 		bool  enforce_hmem_caps = true;
 
 		if (fi_param_get_str(NULL, "hmem", &hmem_str) == FI_SUCCESS && hmem_str) {
-			if (strcmp(hmem_str, "system") == 0) {	// if string matches system
-				enforce_hmem_caps = false;	// disable FI_MR_HMEM check
+			if (strcmp(hmem_str, "system") == 0) { // if string matches system
+				enforce_hmem_caps = false;     // disable FI_MR_HMEM check
 			}
 		}
 
@@ -442,7 +442,7 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node, const char *ser
 	fi->nic			    = ofi_nic_dup(NULL);
 	fi->nic->bus_attr->bus_type = FI_BUS_PCI;
 
-	return 0;
+	return FI_SUCCESS;
 
 err:
 	if (fi) {
@@ -505,85 +505,166 @@ struct fi_opx_global_data fi_opx_global = {.hfi_local_info.type	  = OPX_HFI1_UND
 /* ROUTE CONTROL table for each packet type */
 int opx_route_control[OPX_HFI1_NUM_PACKET_TYPES];
 
-static int fi_opx_getinfo_hfi(int hfi, uint32_t version, const char *node, const char *service, uint64_t flags,
+static int opx_getinfo_set_domain_name(const int hfi, struct fi_info *info)
+{
+	assert(info);
+	assert(hfi >= 0 && hfi < OPX_MAX_HFIS);
+
+	/* Set the appropriate domain name associated with the HFI.
+	   16 characters following the prefix is more than enough to
+	   accommodate any 4-byte (decimal) value */
+	char domain_name[sizeof(FI_OPX_DOMAIN_NAME_PREFIX) + 16];
+
+	sprintf(domain_name, "%s%d", FI_OPX_DOMAIN_NAME_PREFIX, hfi);
+	free(info->domain_attr->name);
+	if ((info->domain_attr->name = strdup(domain_name)) == NULL) {
+		return -FI_ENOMEM;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int opx_getinfo_dup_global(int hfi, struct fi_info **info, struct fi_info **info_tail)
+{
+	struct fi_info *global_info = fi_opx_global.info;
+	struct fi_info *result_head = NULL;
+	struct fi_info *result_tail = NULL;
+	while (global_info) {
+		struct fi_info *global_dup = fi_dupinfo(global_info);
+		if (!global_dup) {
+			goto err_no_mem;
+		}
+		if (opx_getinfo_set_domain_name(hfi, global_dup) != FI_SUCCESS) {
+			// Free global_dup here because it is not yet in the result list
+			fi_freeinfo(global_dup);
+			goto err_no_mem;
+		}
+
+		if (!result_head) {
+			result_head = global_dup;
+			result_tail = global_dup;
+		} else {
+			result_tail->next = global_dup;
+			result_tail	  = result_tail->next;
+		}
+
+		global_info = global_info->next;
+	}
+
+	(*info)	     = result_head;
+	(*info_tail) = result_tail;
+
+	return FI_SUCCESS;
+
+err_no_mem:
+	while (result_head) {
+		struct fi_info *next = result_head->next;
+		fi_freeinfo(result_head);
+		result_head = next;
+	}
+
+	(*info)	     = NULL;
+	(*info_tail) = NULL;
+
+	return -FI_ENOMEM;
+}
+
+static int opx_getinfo_alloc_and_fill(const int hfi, const char *node, const char *service, const uint64_t flags,
+				      const enum fi_progress progress, const struct fi_info *hints,
+				      struct fi_info **info)
+{
+	struct fi_info *result_info = fi_allocinfo();
+	if (!result_info) {
+		return -FI_ENOMEM;
+	}
+
+	int ret = fi_opx_fillinfo(result_info, node, service, hints, flags, progress);
+	if (ret != FI_SUCCESS) {
+		goto err;
+	}
+
+	ret = opx_getinfo_set_domain_name(hfi, result_info);
+	if (ret != FI_SUCCESS) {
+		goto err;
+	}
+
+	result_info->next = NULL;
+
+	(*info) = result_info;
+
+	return FI_SUCCESS;
+err:
+	fi_freeinfo(result_info);
+	return ret;
+}
+
+static int fi_opx_getinfo_hfi(int hfi, const char *node, const char *service, uint64_t flags,
 			      const struct fi_info *hints, struct fi_info **info, struct fi_info **info_tail)
 {
-	int		ret, ret_auto;
-	struct fi_info *fi	= NULL;
-	struct fi_info *fi_auto = NULL;
+	if (!hints && !node && !service) {
+		return opx_getinfo_dup_global(hfi, info, info_tail);
+	}
 
 	*info	   = NULL;
 	*info_tail = NULL;
 
+	enum fi_progress progress_mode = FI_PROGRESS_UNSPEC;
+
+	int ret = FI_SUCCESS;
+
+	struct fi_info *result_head = NULL;
+	struct fi_info *result_tail = NULL;
+
 	if (hints) {
 		ret = fi_opx_check_info(hints);
 		if (ret) {
-			return ret;
-		}
-		if (!(fi = fi_allocinfo()) || !(fi_auto = fi_allocinfo())) {
-			ret = -FI_ENOMEM;
 			goto err;
 		}
-		ret	 = fi_opx_fillinfo(fi, node, service, hints, flags, FI_PROGRESS_MANUAL);
-		ret_auto = fi_opx_fillinfo(fi_auto, node, service, hints, flags, FI_PROGRESS_AUTO);
+
 		if (hints->domain_attr->data_progress != FI_PROGRESS_UNSPEC) {
+			progress_mode	       = hints->domain_attr->data_progress;
 			fi_opx_global.progress = hints->domain_attr->data_progress;
 			if (hints->domain_attr->data_progress == FI_PROGRESS_AUTO) {
 				FI_INFO(fi_opx_global.prov, FI_LOG_FABRIC, "Locking is forced in FI_PROGRESS_AUTO\n");
 			}
 		}
-		if (ret || ret_auto) {
-			ret = ret ? ret : ret_auto;
+	}
+
+	/* If a progress mode was specified, only return a single fi_info with the requested progress mode.
+	   Otherwise, return two fi_infos, one for manual progress and one for auto progress. Manual should
+	   be first, since it's our preferred/fastest. */
+	if (progress_mode != FI_PROGRESS_UNSPEC) {
+		ret = opx_getinfo_alloc_and_fill(hfi, node, service, flags, progress_mode, hints, &result_head);
+		if (ret != FI_SUCCESS) {
 			goto err;
 		}
-
-	} else if (node || service) {
-		if (!(fi = fi_allocinfo()) || !(fi_auto = fi_allocinfo())) {
-			ret = -FI_ENOMEM;
-			goto err;
-		}
-
-		ret	 = fi_opx_fillinfo(fi, node, service, hints, flags, FI_PROGRESS_MANUAL);
-		ret_auto = fi_opx_fillinfo(fi_auto, node, service, hints, flags, FI_PROGRESS_AUTO);
-		if (ret || ret_auto) {
-			ret = ret ? ret : ret_auto;
-			goto err;
-		}
-
+		result_tail = result_head;
 	} else {
-		if (!(fi = fi_dupinfo(fi_opx_global.info)) ||
-		    !(fi_opx_global.info->next != NULL && (fi_auto = fi_dupinfo(fi_opx_global.info->next)))) {
-			ret = -FI_ENOMEM;
+		ret = opx_getinfo_alloc_and_fill(hfi, node, service, flags, FI_PROGRESS_MANUAL, hints, &result_head);
+		if (ret != FI_SUCCESS) {
 			goto err;
 		}
+
+		ret = opx_getinfo_alloc_and_fill(hfi, node, service, flags, FI_PROGRESS_AUTO, hints, &result_tail);
+		if (ret != FI_SUCCESS) {
+			goto err;
+		}
+		result_head->next = result_tail;
 	}
 
-	/* Set the appropriate domain name associated with the HFI */
-	char domain_name[128];
+	(*info)	     = result_head;
+	(*info_tail) = result_tail;
 
-	sprintf(domain_name, "%s%d", FI_OPX_DOMAIN_NAME_PREFIX, hfi);
-	free(fi->domain_attr->name);
-	fi->domain_attr->name = strdup(domain_name);
-
-	if (fi_auto) {
-		free(fi_auto->domain_attr->name);
-		fi_auto->domain_attr->name = strdup(fi->domain_attr->name);
-	}
-
-	fi->next = fi_auto;
-
-	*info	   = fi;
-	*info_tail = (fi->next) ? fi->next : fi;
-
-	return 0;
+	return FI_SUCCESS;
 
 err:
-	if (fi) {
-		fi_freeinfo(fi);
+	if (result_tail && result_tail != result_head) {
+		fi_freeinfo(result_tail);
 	}
-	if (fi_auto) {
-		fi_freeinfo(fi_auto);
+	if (result_head) {
+		fi_freeinfo(result_head);
 	}
+
 	return ret;
 }
 
@@ -603,7 +684,7 @@ static int fi_opx_getinfo(uint32_t version, const char *node, const char *servic
 	}
 
 	for (i = 0; i < fi_opx_count; i++) {
-		ret = fi_opx_getinfo_hfi(i, version, node, service, flags, hints, &cur, &cur_tail);
+		ret = fi_opx_getinfo_hfi(i, node, service, flags, hints, &cur, &cur_tail);
 		if (ret) {
 			continue;
 		}
