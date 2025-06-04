@@ -353,28 +353,34 @@ static void rxm_rndv_handle_rd_done(struct rxm_ep *rxm_ep,
 static int rxm_rndv_rx_match(struct dlist_entry *item, const void *arg)
 {
 	uint64_t msg_id = *((uint64_t *) arg);
+	uint64_t conn_id = *((uint64_t *) arg + 1);
 	struct rxm_rx_buf *rx_buf;
 
 	rx_buf = container_of(item, struct rxm_rx_buf, rndv_wait_entry);
-	return (msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
+	return (msg_id == rx_buf->pkt.ctrl_hdr.msg_id &&
+		conn_id == rx_buf->pkt.ctrl_hdr.conn_id);
 }
 
 static int rxm_rndv_handle_wr_done(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
 	struct dlist_entry *rx_buf_entry;
 	struct rxm_rx_buf *rndv_rx_buf;
+	uint64_t arg[2];
 	int ret = 0;
 
-	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got DONE for msg_id: 0x%" PRIx64 "\n",
-	       rx_buf->pkt.ctrl_hdr.msg_id);
+	FI_DBG(&rxm_prov, FI_LOG_CQ,
+	       "Got DONE for msg_id: 0x%" PRIx64 ", conn_id: 0x%" PRIx64 "\n",
+	       rx_buf->pkt.ctrl_hdr.msg_id, rx_buf->pkt.ctrl_hdr.conn_id);
 
+	arg[0] = rx_buf->pkt.ctrl_hdr.msg_id;
+	arg[1] = rx_buf->pkt.ctrl_hdr.conn_id;
 	rx_buf_entry = dlist_remove_first_match(&rx_buf->ep->rndv_wait_list,
-						rxm_rndv_rx_match,
-						&rx_buf->pkt.ctrl_hdr.msg_id);
+						rxm_rndv_rx_match, arg);
 	if (!rx_buf_entry) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
-			"Failed to find rndv wait entry for msg_id: 0x%" PRIx64 "\n",
-			rx_buf->pkt.ctrl_hdr.msg_id);
+			"Failed to find rndv wait entry for msg_id: 0x%" PRIx64 ", conn_id: 0x%" PRIx64 "\n",
+			rx_buf->pkt.ctrl_hdr.msg_id,
+			rx_buf->pkt.ctrl_hdr.conn_id);
 		ret = -FI_EINVAL;
 		goto out;
 	}
@@ -674,8 +680,8 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 	assert(rx_buf->conn);
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ,
-	       "Got incoming rndv req with msg_id: 0x%" PRIx64 "\n",
-	       rx_buf->pkt.ctrl_hdr.msg_id);
+	       "Got incoming rndv req with msg_id: 0x%" PRIx64 ", conn_id: 0x%" PRIx64 "\n",
+	       rx_buf->pkt.ctrl_hdr.msg_id, rx_buf->pkt.ctrl_hdr.conn_id);
 
 	rx_buf->remote_rndv_hdr = (struct rxm_rndv_hdr *) rx_buf->pkt.data;
 	rx_buf->rndv_rma_index = 0;
