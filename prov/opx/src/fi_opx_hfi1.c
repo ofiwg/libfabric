@@ -2396,7 +2396,7 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 {
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-IPC-RTS-HFI");
 
-	assert(payload->rendezvous.ipc.src_iface == FI_HMEM_CUDA); // AMD support not added yet
+	assert(payload->rendezvous.ipc.src_iface != FI_HMEM_SYSTEM);
 
 	uint64_t *device_ptr;
 
@@ -4889,8 +4889,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 			"hdr %p, payload %p, sbuf %p, sbuf+immediate_total %p, immediate_total %#lX, adj len %#lX\n",
 			hdr, payload, buf, ((char *) buf + immediate_total), immediate_total, (len - immediate_total));
 
-		/* When adding AMD support, this check will change to (src_iface != FI_HMEM_SYSTEM)
-		   We can optimize by disabling/enabling ipc at endpoint creation. We could
+		/* We can optimize by disabling/enabling ipc at endpoint creation. We could
 		   check the FI_HMEM env to see if iface list includes things beyond system.
 		   We would then need to iterate over the list of all non-system ifaces and
 		   determine whether p2p is supported for each of those hmem ifaces
@@ -4898,7 +4897,8 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 
 		/* IPC Threshold hardcoded at 4MiB until IPC Cache support is implemented*/
 #ifdef OPX_HMEM
-		if (src_iface == FI_HMEM_CUDA && opx_ep->use_gpu_ipc && len >= OPX_GPU_IPC_MIN_THRESHOLD) {
+		if (opx_ep->use_gpu_ipc == src_iface && src_iface != FI_HMEM_SYSTEM &&
+		    len >= OPX_GPU_IPC_MIN_THRESHOLD) {
 			int ret = 0;
 
 			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-SENDER-CREATE-HANDLE");
@@ -4945,9 +4945,6 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 					user_context);
 				return FI_SUCCESS;
 			}
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"IPC/p2p support requested but no support exists for FI_HMEM_CUDA. "
-				"Intranode GPU transfers speeds will be severely slower\n");
 		}
 #endif
 		const uint16_t lrh_dws = __cpu_to_be16(
