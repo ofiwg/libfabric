@@ -30,8 +30,8 @@ Endpoint types
 
 Capabilities
 : Supported capabilities include *FI_MSG*, *FI_RMA, *FI_TAGGED*, *FI_ATOMIC*,
-  *FI_NAMED_RX_CTX*, *FI_SOURCE*, *FI_SEND*, *FI_RECV*, *FI_MULTI_RECV*,
-  *FI_DIRECTED_RECV*, *FI_SOURCE*.
+  *FI_SOURCE*, *FI_SEND*, *FI_RECV*, *FI_MULTI_RECV*, *FI_DIRECTED_RECV*,
+  *FI_SOURCE*.
 
   Notes on *FI_DIRECTED_RECV* capability: The immediate data which is sent
   within the "senddata" call to support *FI_DIRECTED_RECV* for OPX
@@ -46,8 +46,7 @@ Modes
   The OPX provider requires *FI_CONTEXT2*.
 
 Additional features
-: Supported additional features include *FABRIC_DIRECT*, *scalable endpoints*,
-  and *counters*.
+: Supported additional features include *FABRIC_DIRECT* and *counters*.
 
 Progress
 : *FI_PROGRESS_MANUAL* and *FI_PROGRESS_AUTO* are supported, for best performance, use

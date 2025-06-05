@@ -2789,7 +2789,7 @@ int fi_opx_ep_tx_check(struct fi_opx_ep_tx *tx, enum fi_av_type av_type)
  *
  * See `fi_opx_ep_rx_process_context()`
  */
-__attribute__((noinline)) int
+__attribute__((noinline)) void
 fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t static_flags,
 				      struct opx_context *context, const uint64_t rx_op_flags, const uint64_t is_hmem,
 				      const int lock_required, const enum fi_av_type av_type,
@@ -2849,8 +2849,8 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 			}
 
 			fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context, lock_required);
-
-			return 0;
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
+			return;
 		}
 
 		/*
@@ -2871,7 +2871,6 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "no match found on unexpected queue posting error\n");
 
 		fi_opx_cq_enqueue_err(opx_ep->rx->cq, context, lock_required);
-		return -FI_ENOMSG;
 
 	} else if (rx_op_flags & FI_CLAIM) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "rx_op_flags & FI_CLAIM complete receive operation\n");
@@ -2974,8 +2973,8 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 							slist_insert_tail((struct slist_entry *) context,
 									  opx_ep->rx->cq_completed_ptr);
 						}
-
-						return 0;
+						FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
+						return;
 					}
 				}
 			} else {
@@ -2994,7 +2993,6 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
-	return 0;
 }
 
 void fi_opx_ep_rx_process_header_tag(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
