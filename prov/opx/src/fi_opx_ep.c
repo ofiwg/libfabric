@@ -1899,7 +1899,22 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		goto err;
 	}
 
+	bool tx_cq_lock_held = false;
+	bool rx_cq_lock_held = false;
+
 	/* Lock before enqueing on cq */
+	/* We obtain locks in order of CQ, then endpoint. */
+	if (opx_ep->tx_cq_bflags & FI_TRANSMIT) {
+		assert(opx_ep->init_tx_cq);
+		fi_opx_lock(&opx_ep->init_tx_cq->lock);
+		tx_cq_lock_held = true;
+	}
+	if (opx_ep->rx_cq_bflags & FI_RECV && opx_ep->init_rx_cq != opx_ep->init_tx_cq) {
+		assert(opx_ep->init_rx_cq);
+		fi_opx_lock(&opx_ep->init_rx_cq->lock);
+		rx_cq_lock_held = true;
+	}
+
 	fi_opx_lock(&opx_ep->lock);
 	// Apply the bind flags that were captured during object bind
 	fi_opx_apply_bind_flags(opx_ep);
@@ -1963,10 +1978,22 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 
 	/* Unlock */
 	fi_opx_unlock(&opx_ep->lock);
+	if (rx_cq_lock_held) {
+		fi_opx_unlock(&opx_ep->init_rx_cq->lock);
+	}
+	if (tx_cq_lock_held) {
+		fi_opx_unlock(&opx_ep->init_tx_cq->lock);
+	}
 	return 0;
 unlock:
 	/* Unlock */
 	fi_opx_unlock(&opx_ep->lock);
+	if (rx_cq_lock_held) {
+		fi_opx_unlock(&opx_ep->init_rx_cq->lock);
+	}
+	if (tx_cq_lock_held) {
+		fi_opx_unlock(&opx_ep->init_tx_cq->lock);
+	}
 err:
 	// Placeholder functions to be uncommented when they do more than return 0
 	/*
