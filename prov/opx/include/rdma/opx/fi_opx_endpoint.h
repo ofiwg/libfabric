@@ -610,7 +610,7 @@ struct fi_opx_rma_request {
  * =========================== begin: no-inline functions ===========================
  */
 
-__attribute__((noinline)) int
+__attribute__((noinline)) void
 fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t static_flags,
 				      struct opx_context *context, const uint64_t rx_op_flags, const uint64_t is_hmem,
 				      const int lock_required, const enum fi_av_type av_type,
@@ -3240,8 +3240,9 @@ int fi_opx_ep_rx_process_context(struct fi_opx_ep *opx_ep, const uint64_t static
 		 */
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "process peek, claim, or multi-receive context\n");
 
-		return fi_opx_ep_rx_process_context_noinline(opx_ep, static_flags, context, rx_op_flags, is_hmem,
-							     lock_required, av_type, reliability, hfi1_type);
+		fi_opx_ep_rx_process_context_noinline(opx_ep, static_flags, context, rx_op_flags, is_hmem,
+						      lock_required, av_type, reliability, hfi1_type);
+		return 0;
 	}
 }
 
