@@ -115,23 +115,23 @@ int opx_progress_set_poll_fds(struct fi_opx_cq *cq, int event_fd, struct pollfd 
 	fi_opx_lock(&cq->lock);
 
 	int i;
-	for (i = 0; i < (cq->progress.ep_count << 1); i += 2) {
-		poll_fd[i].fd	   = cq->progress.ep[i]->hfi->fd;
-		poll_fd[i].events  = POLLIN;
-		poll_fd[i].revents = 0;
+	for (i = 0; i < cq->progress.ep_count; i++) {
+		poll_fd[(i << 1)].fd	  = cq->progress.ep[i]->hfi->fd;
+		poll_fd[(i << 1)].events  = POLLIN;
+		poll_fd[(i << 1)].revents = 0;
 
-		poll_fd[i + 1].fd      = cq->progress.ep[i]->rx->shm.segment_fd;
-		poll_fd[i + 1].events  = POLLIN;
-		poll_fd[i + 1].revents = 0;
+		poll_fd[(i << 1) + 1].fd      = cq->progress.ep[i]->rx->shm.segment_fd;
+		poll_fd[(i << 1) + 1].events  = POLLIN;
+		poll_fd[(i << 1) + 1].revents = 0;
 	}
 
 	fi_opx_unlock(&cq->lock);
 
-	poll_fd[i].fd	   = event_fd;
-	poll_fd[i].events  = POLLIN;
-	poll_fd[i].revents = 0;
+	poll_fd[i << 1].fd	= event_fd;
+	poll_fd[i << 1].events	= POLLIN;
+	poll_fd[i << 1].revents = 0;
 
-	return i + 1;
+	return (i << 1) + 1;
 }
 
 void *opx_progress_func(void *args)
