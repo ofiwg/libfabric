@@ -485,6 +485,16 @@ int ft_cuda_get_dmabuf_fd(void *buf, size_t len,
 #endif /* HAVE_CUDA_DMABUF */
 }
 
+int ft_cuda_put_dmabuf_fd(int fd)
+{
+#if HAVE_CUDA_DMABUF
+	(void)close(fd);
+	return FI_SUCCESS;
+#else
+	return -FI_EOPNOTSUPP;
+#endif /* HAVE_CUDA_DMABUF */
+}
+
 #else
 
 int ft_cuda_init(void)
@@ -540,4 +550,8 @@ int ft_cuda_get_dmabuf_fd(void *buf, size_t len,
 	return -FI_ENOSYS;
 }
 
+int ft_cuda_put_dmabuf_fd(int fd)
+{
+	return -FI_ENOSYS;
+}
 #endif /* HAVE_CUDA_RUNTIME_H */
