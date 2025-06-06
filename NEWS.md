@@ -6,6 +6,186 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v2.2.0, Mon June 30, 2025
+========================
+
+## Core
+
+- rdma/fabric.h: Add new FI_RESCAN flag to fi_getinfo()
+- hmem/cuda: Add fallback for dmabuf flag with CUDA_ERROR_NOT_SUPPORTED
+- hmem/cuda: Add runtime fallback for unsupported dmabuf flag
+- hmem/cuda: Add a flag for exporting dmabuf fd on GB200
+- man: Clarify fi_close behavior on FI_ENDPOINT
+- av: introduce FI_FIREWALL_ADDR flag for insert operations
+- common: ofi_ifname_toaddr check ifa->ifa_addr for null
+- man/fi_mr: Add note that requested_key may be ignored w/o remote access
+
+## CXI
+
+- Set cq_data in peer unexpected message
+- Fix locking on the SRX path
+- Allow for passing opaque 64-bit data in ctrl_msg
+- Fix cxi driver paths for CI
+- Fix use of alt_read rget restricted TC type
+- Fix compile warnings associated with new dlopen of curl/json
+- Fix curl CXIP_WARN that included extra parameter
+- Decouple existence CXI_MAP_IOVA_ALLOC for build
+- New conf opt for binding of json symbols
+- New conf opt for binding of curl symbols
+- Pad struct to address hash mismatch bug
+- Consistency for initialization of cxip_addr structure
+- Fix uninitialized padding in cxip_addr structure causing hash mismatches
+- Mem reg test with READ/WRITE access
+- Support read-only cached MRs
+- Remove cached mem reg -FI_EAGAIN comment
+- Add access ctrl bits to internal mem reg
+- Fix broken tests
+- Added collective logical operators to cxip_query_collective()
+- Log rc from cxi_eq_get_event() failure
+- Add nanosecond timestamp to tracing
+- Stuff the sending rank into the reduction packet
+- Increase the reduction engine timeout to the max
+- Increase RX buffer size for collectives
+
+## EFA
+
+- Minimize calls to efa_rdm_ep_get_peer in the CQ read path
+- Remove unused function get_first_nic_name
+- Post initial rx pkt when qp is enabled.
+- Update qp table after qp destroy
+- Track cloned rx pkts
+- Clear domain level peer lists when closing endpoints
+- Allow multiple EPs to bind to a single AV
+- Minimize calls to efa_rdm_ep_get_peer in the RMA path
+- Minimize efa_rdm_ep_get_peer calls in the atomic path
+- Add RNR test with fi_tsend
+- Minimize efa_rdm_ep_get_peer calls in the send path
+- Remove duplicate filtering on FI_EFA_IFACE
+- Update man page
+- Clear cur_device when filtering EFA devices with FI_EFA_IFACE
+- Move address handle to domain level.
+- Make 1:1 relationship between efa domain and pd
+- Delete unused efa_conn_release prototype
+- Fix unit test build warning
+- Use Mutex when removing from g_efa_domain_list
+- Add missing lock in list iteration
+- Remove ope from ope_longcts_list during release
+- Use mutex locks for FI_THREAD_COMPLETE
+- Do not try to initialize non-EFA devices
+- Only initialize devices that match FI_EFA_IFACE filter
+- Rename g_efa_device_list and g_efa_device_cnt
+- Remove efa_device->device_idx
+- Initialize EFA environment variables before devices
+- Add lock around g_efa_domain_list
+- Improve debug logging
+- Do copy for inline send
+- Enforce FI_MR_LOCAL in efa-direct
+- Add lock to ensure efa direct cq poll is thread safe
+- Require FI_MR_ALLOCATED in domain_attr
+- Introduce setopt flag for homogeneous peers
+- Change FI_AV_MAP logs to info
+- Check if the util_av entry is valid before fetching
+
+## HOOK
+
+- Add monitor hook provider
+
+## LNX
+
+- Dump statistics
+- Refactor LNX to follow libfabric semantics
+
+## OPX
+
+- Cornelis Networks OPX provider upstream June 5, 2025
+- Cornelis Networks OPX provider upstream May 9, 2025
+- Cornelis Networks OPX provider upstream April 19, 2025
+- Make room for new RPC field in fid_ep
+
+## RXD
+
+- Add an environment variable to control FI_RESCAN
+
+## RXM
+
+- Fix user id case
+- Fix potential completion mismatch for the rndv_write protocol
+- Fix potential premature recv completion with rndv_write protocol
+- Fix rndv_write state machine issue that may cause premature completion
+- Fix the flow control enabling checking
+- Add an environment variable to control FI_RESCAN
+- fix auto progress
+- Add a new error code for firewall
+
+## SHM
+
+- Don't run smr progress if region isn't initialized
+- Update shm man page to be accurate and fix typos/formatting
+
+## TCP
+
+- Enable keepalive during CM exchange
+- Add FI_GET_FD support to tcp provider
+- Add firewall flags into verify flag set
+- Fix memory out of bound access in RDM
+- Add a new error code for firewall
+- Add firewall support for RDM
+- Process EPOLLERR properly
+- Handle the error correctly
+
+## UTIL
+
+- Add fi_mon_sampler
+- poll: Add `kqueue` support
+- Move/Rename fi_thread_level() to header
+- ofi_util.h: Make util_prov::info non const
+- Only allocate MR key when needed
+- bufpool: Add new flag to skip zeroing new memory allocations
+
+## USNIC
+
+- Fix memory leak in usd_ib_get_devlist()
+
+## Verbs
+
+- Code clean up.
+- Optimize init info.
+- Enable logging of ibv_async_events
+- Fix unprotected access to vrb_util_prov.info
+- Fix memory leak of fi_info structure in vrb_domain()
+- Fix the flow control enabling checking
+- Reload the list of interfaces on each call to fi_getinfo()
+- Use single pointer instead of double pointer
+- Always protect vrb_util_prov.info accesses with the mutex
+- Make vrb_get_verbs_info() static
+- Make a copy of the provider info in the fabric object
+- Rename vrb_init_mutex to vrb_info_mutex
+- Clarify little endian limitation for verbs atomics
+- Fix atomic work request fields
+- Memory leak for address formats different than FI_ADDR_IB_UD
+
+## Fabtests
+
+- Fix leak of dmabuf fd
+- Define ft_hmem_put_dmabuf_fd
+- efa: Make FI_EFA_IFACE tests check the Libfabric build
+- Extend efa_info_test to accept fabric argument
+- efa: Check rdma capability for both sides
+- efa: Add FI_EFA_IFACE tests
+- Add FI_EFA_IFACE tests
+- efa: Fix get_efa_device_names
+- Use yaml safe_load
+- Add MR mode and descriptor to resource mgmt test
+- Fix rdm_bw_mt unchecked fi_close return
+- Support rdm_bw_mt in runfabtests.py
+- Add rdm_bw_mt test to runfabtests on windows
+- Add threaded_tests support to runfabtests.sh
+- Add multi-threaded bandwidth test
+- Add pthread_barrier support to windows
+- Add pthread_barrier support to osx
+- efa: Do not set multinode marker for test_efa_shm_addr
+
+
 v2.1.0, Sat Mar 15, 2025
 ========================
 
