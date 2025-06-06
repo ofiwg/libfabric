@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_opx" "7" "2025\-05\-21" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_opx" "7" "2025\-06\-06" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .PP
 {%include JB/setup %}
@@ -41,9 +41,9 @@ The OPX provider only supports the \f[I]FI_EP_RDM\f[R] endpoint type.
 .TP
 Capabilities
 Supported capabilities include \f[I]FI_MSG\f[R], \f[I]FI_RMA,
-\f[R]FI_TAGGED\f[I], \f[R]FI_ATOMIC\f[I], \f[R]FI_NAMED_RX_CTX\f[I],
-\f[R]FI_SOURCE\f[I], \f[R]FI_SEND\f[I], \f[R]FI_RECV\f[I],
-\f[R]FI_MULTI_RECV\f[I], \f[R]FI_DIRECTED_RECV\f[I], \f[R]FI_SOURCE*.
+\f[R]FI_TAGGED\f[I], \f[R]FI_ATOMIC\f[I], \f[R]FI_SOURCE\f[I],
+\f[R]FI_SEND\f[I], \f[R]FI_RECV\f[I], \f[R]FI_MULTI_RECV\f[I],
+\f[R]FI_DIRECTED_RECV\f[I], \f[R]FI_SOURCE*.
 .PP
 Notes on \f[I]FI_DIRECTED_RECV\f[R] capability: The immediate data which
 is sent within the \[lq]senddata\[rq] call to support
@@ -59,8 +59,8 @@ Two modes are defined: \f[I]FI_CONTEXT2\f[R] and \f[I]FI_ASYNC_IOV\f[R].
 The OPX provider requires \f[I]FI_CONTEXT2\f[R].
 .TP
 Additional features
-Supported additional features include \f[I]FABRIC_DIRECT\f[R],
-\f[I]scalable endpoints\f[R], and \f[I]counters\f[R].
+Supported additional features include \f[I]FABRIC_DIRECT\f[R] and
+\f[I]counters\f[R].
 .TP
 Progress
 \f[I]FI_PROGRESS_MANUAL\f[R] and \f[I]FI_PROGRESS_AUTO\f[R] are
@@ -392,6 +392,15 @@ Service Level.
 This will also determine Service Class and Virtual Lane.
 Default is 0
 .TP
+\f[I]FI_OPX_GPU_IPC_INTRANODE\f[R]
+Boolean (0/1, on/off, true/false, yes/no).
+This setting controls whether IPC will be used to facilitate GPU to GPU
+intranode copies over PCIe, NVLINK, or xGMI.
+When this is turned off, GPU data will be copied to the host before
+being copied to another GPU which is slower than using IPC.
+This only has an effect with HMEM enabled builds of OPX.
+Defaults to on.
+.TP
 \f[I]FI_OPX_DEV_REG_SEND_THRESHOLD\f[R]
 Integer.
 The individual packet threshold where lengths above do not use a device
@@ -409,10 +418,10 @@ This has no meaning if Libfabric was not configured with GDRCopy or ROCR
 support.
 .TP
 \f[I]FI_OPX_MIXED_NETWORK\f[R]
-Integer.
-Indicates that the network is a mix of OPA100 and CN5000.
-Needs to be set to 1 in case of mixed network.
-Default is 0.
+Boolean (1/0, on/off, true/false, yes/no).
+Indicates that the network requires OPA100 support.
+Set to 0 if OPA100 support is not needed.
+Default is 1.
 .TP
 \f[I]FI_OPX_ROUTE_CONTROL\f[R]
 Integer.
