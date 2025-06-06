@@ -194,6 +194,7 @@ nobase_dist_config_DATA = \
 	pytest/efa/test_efa_shm_addr.py \
 	pytest/efa/test_env.py \
 	pytest/efa/test_multi_ep.py \
+	pytest/efa/test_gda.py \
 	pytest/shm/conftest.py \
 	pytest/shm/shm_common.py \
 	pytest/shm/test_av.py \
@@ -691,3 +692,9 @@ dist-hook: fabtests.spec
 test:
 	./scripts/runfabtests.sh -vvv -S $(os_excludes) -f ./test_configs/sockets/sockets.exclude sockets
 	./scripts/runfabtests.sh -vvv -S $(os_excludes) -f ./test_configs/udp/udp.exclude udp
+
+if EFAGDA
+export prefix
+install-efagda:
+	$(MAKE) -C prov/efa/src/efagda install prefix=$(prefix)
+endif
