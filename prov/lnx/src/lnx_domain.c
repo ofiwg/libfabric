@@ -497,7 +497,7 @@ static void lnx_addr_del_region(struct ofi_mr_cache *cache,
 {
 	struct ofi_mr *mr = (struct ofi_mr *)entry->data;
 
-	ofi_hmem_dev_unregister(mr->iface, (uint64_t) mr->hmem_data);
+	ofi_hmem_dev_unregister(mr->iface, (uint64_t)(uintptr_t)mr->hmem_data);
 }
 
 /*
