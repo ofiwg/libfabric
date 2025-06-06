@@ -30,8 +30,8 @@ Endpoint types
 
 Capabilities
 : Supported capabilities include *FI_MSG*, *FI_RMA, *FI_TAGGED*, *FI_ATOMIC*,
-  *FI_NAMED_RX_CTX*, *FI_SOURCE*, *FI_SEND*, *FI_RECV*, *FI_MULTI_RECV*,
-  *FI_DIRECTED_RECV*, *FI_SOURCE*.
+  *FI_SOURCE*, *FI_SEND*, *FI_RECV*, *FI_MULTI_RECV*, *FI_DIRECTED_RECV*,
+  *FI_SOURCE*.
 
   Notes on *FI_DIRECTED_RECV* capability: The immediate data which is sent
   within the "senddata" call to support *FI_DIRECTED_RECV* for OPX
@@ -46,8 +46,7 @@ Modes
   The OPX provider requires *FI_CONTEXT2*.
 
 Additional features
-: Supported additional features include *FABRIC_DIRECT*, *scalable endpoints*,
-  and *counters*.
+: Supported additional features include *FABRIC_DIRECT* and *counters*.
 
 Progress
 : *FI_PROGRESS_MANUAL* and *FI_PROGRESS_AUTO* are supported, for best performance, use
@@ -289,6 +288,13 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_SL*
 : Integer. Service Level. This will also determine Service Class and Virtual Lane.  Default is 0
 
+*FI_OPX_GPU_IPC_INTRANODE*
+: Boolean (0/1, on/off, true/false, yes/no). This setting controls whether IPC will be used
+  to facilitate GPU to GPU intranode copies over PCIe, NVLINK, or xGMI. When this is turned off,
+  GPU data will be copied to the host before being copied to another GPU which is slower than using IPC.
+  This only has an effect with HMEM enabled builds of OPX.
+  Defaults to on.
+
 *FI_OPX_DEV_REG_SEND_THRESHOLD*
 : Integer. The individual packet threshold where lengths above do not use a device
   registered copy when sending data from GPU.
@@ -302,12 +308,12 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
 
 *FI_OPX_MIXED_NETWORK*
-: Integer. Indicates that the network is a mix of OPA100 and CN5000. Needs to be set to 1
-  in case of mixed network. Default is 0.
+: Boolean (1/0, on/off, true/false, yes/no). Indicates that the network requires OPA100
+  support. Set to 0 if OPA100 support is not needed. Default is 1.
 
 *FI_OPX_ROUTE_CONTROL*
 : Integer. Specify the route control for each packet type. The format is
-  - `<inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>`. 
+  - `<inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>`.
 
   Each value can range from 0-7. 0-3 is used for in-order and
   4-7 is used for out-of-order. If Token ID (TID) is enabled
