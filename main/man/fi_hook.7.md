@@ -46,6 +46,12 @@ Known hooking providers include the following:
   in a workload execution. See the PROFILE HOOKS section for the report in
   the detail.
 
+*ofi_hook_monitor*
+: Similar to *ofi_hook_profile*, this hooks data operation calls, cq operation
+  calls and mr registration calls. The API calls and the amount of data being
+  operated are accumulated and made available for export via an external sampler 
+  through a shared communication file. See the MONITOR HOOKS section for more details.
+
 # PERFORMANCE HOOKS
 
 The hook provider allows capturing inline performance data by accessing the
@@ -143,6 +149,59 @@ contain the following fields:
   of data operated in the same data operation group.
 
 The report is logged using the FI_LOG_LEVEL trace level.
+
+# MONITOR HOOKS
+
+This hook provider builds on the "profile" hook provider and provides continuous readout
+capabilities useful for monitoring libfabric applications. It is enabled by setting
+FI_HOOK to "monitor".
+
+Similar to the "profile" hook provider, this provider counts the number of invoked API calls
+and accumulates the amount of data handled by each API call. Refer to the documentation
+on the "profile" hook for more information.
+
+Data export is facilitated using a communication file on the filesystem, which is created for
+each hooked libfabric provider. The monitor hook expects to be run on a tmpfs.
+If available and unless otherwise specified, files will be created under the tmpfs `/dev/shm`.
+
+A sampler can periodically read this file to extract the gathered data.
+Every N intercepted API calls or "ticks", the provider will check
+whether data export has been requested by the sampler. If so, the currently gathered
+counter data is copied to the file and the sampler informed about the new data. The provider-local
+counter data is then cleared. 
+Each sample contains the counter delta to the previous sample.
+
+Communication files will be created at path `$FI_OFI_HOOK_MONITOR_BASEPATH/<uid>/<hostname>` and 
+will have the name: `<ppid>_<pid>_<sequential id>_<job id>_<provider name>`.
+`ppid` and `pid` are taken from the perspective of the monitored application.
+In a batched environment running SLURM, `job id` is set to the SLURM job ID, otherwise it is set to 0.
+
+See [`fi_mon_sampler`(1)](fi_mon_sampler.1.html) for documentation on how to use the monitor provider sampler.
+
+## CONFIGURATION
+
+The "monitor" hook provider exposes several runtime options via environment variables:
+
+*FI_OFI_HOOK_MONITOR_BASEPATH*
+:   String to basepath for communication files. (default: /dev/shm/ofi)
+
+*FI_OFI_HOOK_MONITOR_DIR_MODE*
+:   POSIX mode/permission for directories in basepath. (default: 01700)
+
+*FI_OFI_HOOK_MONITOR_FILE_MODE*
+:   POSIX mode/permission for communication files. (default: 0600)
+
+*FI_OFI_HOOK_MONITOR_TICK_MAX*
+:   Number of API calls before communication files are checked for data request.
+    (default: 1024)
+
+*FI_OFI_HOOK_MONITOR_LINGER*
+:   Whether communication files should linger after termination. (default: 0)
+    This is useful to allow the sampler to read the last counter data even if the libfabric
+    application has already terminated.
+    Note: Using this option without a sampler results in files cluttering
+    FI_OFI_HOOK_MONITOR_BASEPATH. Make sure to either run a sampler or clean
+    these files manually.
 
 # LIMITATIONS
 
