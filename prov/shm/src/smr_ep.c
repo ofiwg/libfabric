@@ -807,6 +807,7 @@ static int smr_ep_close(struct fid *fid)
 		smr_free_sock_info(ep);
 	}
 
+	ofi_genlock_lock(&ep->util_ep.lock);
 	while (!dlist_empty(&ep->sar_list)) {
 		dlist_pop_front(&ep->sar_list, struct smr_pend_entry, pend,
 				entry);
@@ -821,6 +822,7 @@ static int smr_ep_close(struct fid *fid)
 		ep->srx->owner_ops->free_entry(cmd_ctx->rx_entry);
 		ofi_buf_free(cmd_ctx);
 	}
+	ofi_genlock_unlock(&ep->util_ep.lock);
 
 	if (ep->srx) {
 		/* shm is an owner provider */
