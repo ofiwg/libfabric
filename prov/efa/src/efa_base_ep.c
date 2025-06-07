@@ -614,8 +614,11 @@ int efa_base_ep_check_qp_in_order_aligned_128_bytes(struct efa_base_ep *ep,
 	struct ibv_cq_ex *ibv_cq_ex = NULL;
 	enum ibv_cq_ex_type ibv_cq_ex_type;
 	struct fi_cq_attr cq_attr = {0};
+	struct fi_efa_cq_init_attr efa_cq_init_attr = {0};
 
-	ret = efa_cq_ibv_cq_ex_open(&cq_attr, ep->domain->device->ibv_ctx, &ibv_cq_ex, &ibv_cq_ex_type);
+	ret = efa_cq_ibv_cq_ex_open(&cq_attr, ep->domain->device->ibv_ctx,
+				    &ibv_cq_ex, &ibv_cq_ex_type,
+				    &efa_cq_init_attr);
 	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %d\n", ret);
 		ret = -FI_EINVAL;

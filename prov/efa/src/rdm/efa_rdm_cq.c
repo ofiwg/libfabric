@@ -659,6 +659,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct efa_domain *efa_domain;
 	struct fi_cq_attr shm_cq_attr = {0};
 	struct fi_peer_cq_context peer_cq_context = {0};
+	struct fi_efa_cq_init_attr efa_cq_init_attr = {0};
 
 	if (attr->wait_obj != FI_WAIT_NONE)
 		return -FI_ENOSYS;
@@ -680,7 +681,9 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto free;
 
-	ret = efa_cq_ibv_cq_ex_open(attr, efa_domain->device->ibv_ctx, &cq->efa_cq.ibv_cq.ibv_cq_ex, &cq->efa_cq.ibv_cq.ibv_cq_ex_type);
+	ret = efa_cq_ibv_cq_ex_open(
+		attr, efa_domain->device->ibv_ctx, &cq->efa_cq.ibv_cq.ibv_cq_ex,
+		&cq->efa_cq.ibv_cq.ibv_cq_ex_type, &efa_cq_init_attr);
 	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", fi_strerror(ret));
 		goto close_util_cq;
