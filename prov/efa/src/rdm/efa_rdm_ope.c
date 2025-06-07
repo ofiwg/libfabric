@@ -155,7 +155,6 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	efa_rdm_poison_mem_region(txe,
 			      sizeof(struct efa_rdm_ope));
 #endif
-	txe->state = EFA_RDM_OPE_FREE;
 	ofi_buf_free(txe);
 }
 
@@ -210,7 +209,6 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 	efa_rdm_poison_mem_region(rxe,
 			      sizeof(struct efa_rdm_ope));
 #endif
-	rxe->state = EFA_RDM_OPE_FREE;
 	ofi_buf_free(rxe);
 }
 
