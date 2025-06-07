@@ -160,16 +160,13 @@ An offload provider is intended to accelerate specific types of communication,
 generally by taking advantage of network services that have been offloaded
 into hardware, though actual hardware offload support is not a requirement.
 
-# LINKx (LNX) provider (Technology Preview)
+# LINKx (LNX) provider
 
 The LNX provider is designed to link two or more providers, allowing
-applications to seamlessly use multiple providers or NICs. This provider uses
-the libfabric peer infrastructure to aid in the use of the underlying providers.
-This version of the provider currently supports linking the libfabric
-shared memory provider for intra-node traffic and another provider for
-inter-node traffic. Future releases of the provider will allow linking any
-number of providers and provide the users with the ability to influence
-the way the providers are utilized for traffic load.
+applications to seamlessly use multiple providers or NICs. This provider
+uses the libfabric peer infrastructure to aid in the use of the underlying
+providers.  This version of the provider is able to link any libfabric
+provider which supports the FI_PEER capability.
 
 See [`fi_lnx`(7)](fi_lnx.7.html) for more information.
 

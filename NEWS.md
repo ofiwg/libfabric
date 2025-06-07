@@ -119,6 +119,7 @@ v2.2.0, Mon June 30, 2025
 
 ## SHM
 
+- Acquire ep lock when freeing entries
 - Don't run smr progress if region isn't initialized
 - Update shm man page to be accurate and fix typos/formatting
 
@@ -148,6 +149,7 @@ v2.2.0, Mon June 30, 2025
 
 ## Verbs
 
+- Register vrb_info_mutex in util_prov
 - Code clean up.
 - Optimize init info.
 - Enable logging of ibv_async_events
