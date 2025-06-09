@@ -140,16 +140,9 @@ static void efa_cq_handle_tx_completion(struct efa_base_ep *base_ep,
 	if (!ibv_cq_ex->wr_id)
 		return;
 
-	/* TX completions should not send peer address to util_cq */
-	if (base_ep->util_ep.caps & FI_SOURCE)
-		ret = ofi_cq_write_src(tx_cq, cq_entry->op_context,
-				       cq_entry->flags, cq_entry->len,
-				       cq_entry->buf, cq_entry->data,
-				       cq_entry->tag, FI_ADDR_NOTAVAIL);
-	else
-		ret = ofi_cq_write(tx_cq, cq_entry->op_context, cq_entry->flags,
-				   cq_entry->len, cq_entry->buf, cq_entry->data,
-				   cq_entry->tag);
+	ret = ofi_cq_write(tx_cq, cq_entry->op_context, cq_entry->flags,
+			   cq_entry->len, cq_entry->buf, cq_entry->data,
+			   cq_entry->tag);
 
 	if (OFI_UNLIKELY(ret)) {
 		EFA_WARN(FI_LOG_CQ, "Unable to write send completion: %s\n",
