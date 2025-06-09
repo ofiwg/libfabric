@@ -851,13 +851,14 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 					       rxe->cq_entry.tag,
 					       rxe->addr);
 		else
-			ret = ofi_cq_write(rx_cq,
-					   rxe->cq_entry.op_context,
-					   rxe->cq_entry.flags,
-					   rxe->cq_entry.len,
-					   rxe->cq_entry.buf,
-					   rxe->cq_entry.data,
-					   rxe->cq_entry.tag);
+			ret = ofi_cq_write_src(rx_cq,
+					       rxe->cq_entry.op_context,
+					       rxe->cq_entry.flags,
+					       rxe->cq_entry.len,
+					       rxe->cq_entry.buf,
+					       rxe->cq_entry.data,
+					       rxe->cq_entry.tag,
+					       FI_ADDR_NOTAVAIL);
 
 		if (OFI_UNLIKELY(ret)) {
 			EFA_WARN(FI_LOG_CQ,

@@ -180,9 +180,10 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 				       cq_entry->buf, cq_entry->data,
 				       cq_entry->tag, src_addr);
 	} else {
-		ret = ofi_cq_write(rx_cq, cq_entry->op_context, cq_entry->flags,
-				   cq_entry->len, cq_entry->buf, cq_entry->data,
-				   cq_entry->tag);
+		ret = ofi_cq_write_src(rx_cq, cq_entry->op_context,
+				       cq_entry->flags, cq_entry->len,
+				       cq_entry->buf, cq_entry->data,
+				       cq_entry->tag, FI_ADDR_NOTAVAIL);
 	}
 
 	if (OFI_UNLIKELY(ret)) {
@@ -219,7 +220,8 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
 		ret = ofi_cq_write_src(rx_cq, cq_entry->op_context, cq_entry->flags, cq_entry->len, NULL, cq_entry->data,
 				       0, src_addr);
 	} else {
-		ret = ofi_cq_write(rx_cq, cq_entry->op_context, cq_entry->flags, cq_entry->len, NULL, cq_entry->data, 0);
+		ret = ofi_cq_write_src(rx_cq, cq_entry->op_context, cq_entry->flags, cq_entry->len, NULL, cq_entry->data,
+				       0, FI_ADDR_NOTAVAIL);
 	}
 
 	if (OFI_UNLIKELY(ret)) {
