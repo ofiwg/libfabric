@@ -178,7 +178,7 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 	if (!ibv_cq_ex->wr_id)
 		return;
 
-	if (base_ep->util_ep.caps & FI_SOURCE) {
+	if (base_ep->util_ep.caps & FI_SOURCE || base_ep->util_ep.rx_caps & FI_SOURCE) {
 		src_addr = efa_av_reverse_lookup(base_ep->av,
 						 ibv_wc_read_slid(ibv_cq_ex),
 						 ibv_wc_read_src_qp(ibv_cq_ex));
@@ -206,7 +206,7 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
  * This function handles hardware-assisted RDMA writes with immediate data at
  * remote endpoint.  These do not have a packet context, nor do they have a
  * connid available.
- * 
+ *
  * @param[in]		base_ep     efa_base_ep
  * @param[in]		ibv_cq_ex   extended ibv cq
  */
@@ -219,7 +219,7 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
 	int ret;
 	fi_addr_t src_addr;
 
-	if (base_ep->util_ep.caps & FI_SOURCE) {
+	if (base_ep->util_ep.caps & FI_SOURCE || base_ep->util_ep.rx_caps & FI_SOURCE) {
 		src_addr = efa_av_reverse_lookup(base_ep->av,
 						 ibv_wc_read_slid(ibv_cq_ex),
 						 ibv_wc_read_src_qp(ibv_cq_ex));
@@ -242,7 +242,7 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
 /**
  * @brief poll rdma-core cq and process the cq entry
  *
- * @param[in]	cqe_to_process    Max number of cq entry to poll and process. 
+ * @param[in]	cqe_to_process    Max number of cq entry to poll and process.
  * A negative number means to poll until cq empty.
  * @param[in]   util_cq           util_cq
  */

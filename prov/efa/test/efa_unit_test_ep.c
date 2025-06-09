@@ -309,7 +309,7 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 /**
  * @brief When using LL128 protocol, test the packet allocated from read_copy_pkt_pool
  *  is 128 byte aligned.
- * 
+ *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
 void test_efa_rdm_read_copy_pkt_pool_128_alignment(struct efa_resource **state)
@@ -346,7 +346,7 @@ void test_efa_rdm_read_copy_pkt_pool_128_alignment(struct efa_resource **state)
 }
 
 /**
- * @brief When using LL128 protocol, the copy method is local read. 
+ * @brief When using LL128 protocol, the copy method is local read.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
@@ -363,7 +363,7 @@ void test_efa_rdm_pke_get_available_copy_methods_align128(struct efa_resource **
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
-	
+
 	/* p2p is available */
 	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
 	efa_rdm_ep->hmem_p2p_opt = FI_HMEM_P2P_ENABLED;
@@ -1000,7 +1000,7 @@ void test_efa_rdm_ep_setopt_homogeneous_peers(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
 	bool optval = true;
-	
+
 	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	ep = container_of(resource->ep, struct efa_rdm_ep,
@@ -1315,7 +1315,7 @@ void test_efa_rdm_ep_zcpy_recv_eagain(struct efa_resource **state)
 }
 
 /**
- * @brief when efa_rdm_ep_post_handshake_error failed due to pkt pool exhaustion, 
+ * @brief when efa_rdm_ep_post_handshake_error failed due to pkt pool exhaustion,
  * make sure both txe is cleaned
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
@@ -1508,7 +1508,7 @@ void test_efa_rdm_ep_default_sizes(struct efa_resource **state)
  * @brief Test the fi_endpoint API for efa_ep
  * for rdm ep type (because the dgram ep type should
  * have the same logic)
- * @param state 
+ * @param state
  */
 void test_efa_ep_open(struct efa_resource **state)
 {
@@ -1536,7 +1536,7 @@ void test_efa_ep_open(struct efa_resource **state)
  * @brief Test the fi_cancel API for efa_ep
  * (for rdm ep type because dgram logic should be the same)
  * It should return -FI_ENOSYS as device doesn't support it;
- * @param state 
+ * @param state
  */
 void test_efa_ep_cancel(struct efa_resource **state)
 {
@@ -1734,4 +1734,110 @@ void test_efa_ep_bind_and_enable(struct efa_resource **state)
 	assert_true(efa_ep->efa_qp_enabled);
 	/* we shouldn't have user recv qp for efa-direct */
 	assert_true(efa_ep->user_recv_qp == NULL);
+}
+
+/**
+ * @brief Test endpoint creation properly sets FI_SOURCE on util_ep with efa-rdm
+ * 	  for hints->caps
+ *
+ * @param state
+ */
+void test_efa_rdm_ep_fi_source_from_info_caps(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_ep;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	resource->hints->caps |= FI_SOURCE;
+	if (!resource->hints) {
+		efa_unit_test_resource_destruct(resource);
+		assert_int_equal(1, 0);
+	}
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+						    resource->hints, true, true);
+
+	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+
+	assert_true(efa_ep->util_ep.caps & FI_SOURCE);
+}
+
+
+/**
+ * @brief Test endpoint creation properly sets FI_SOURCE on util_ep with efa-rdm
+ * 	  for hints->rx_attr.caps
+ *
+ * @param state
+ */
+void test_efa_rdm_ep_fi_source_from_info_rx_attr_caps(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_ep;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	resource->hints->rx_attr->caps |= FI_SOURCE;
+	if (!resource->hints) {
+		efa_unit_test_resource_destruct(resource);
+		assert_int_equal(1, 0);
+	}
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+						    resource->hints, true, true);
+
+	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+
+	assert_true(efa_ep->util_ep.rx_caps & FI_SOURCE);
+}
+
+/**
+ * @brief Test endpoint creation properly sets FI_SOURCE on util_ep with efa-direct
+ * 	  for hints->caps
+ *
+ * @param state
+ */
+void test_efa_direct_ep_fi_source_from_info_caps(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_ep;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	resource->hints->caps |= FI_SOURCE;
+	if (!resource->hints) {
+		efa_unit_test_resource_destruct(resource);
+		assert_int_equal(1, 0);
+	}
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+						    resource->hints, true, true);
+
+	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+
+	assert_true(efa_ep->util_ep.caps & FI_SOURCE);
+}
+
+
+/**
+ * @brief Test endpoint creation properly sets FI_SOURCE on util_ep with efa-direct
+ * 	  for hints->rx_attr.caps
+ *
+ * @param state
+ */
+void test_efa_direct_ep_fi_source_from_info_rx_attr_caps(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_ep;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	resource->hints->rx_attr->caps |= FI_SOURCE;
+	if (!resource->hints) {
+		efa_unit_test_resource_destruct(resource);
+		assert_int_equal(1, 0);
+	}
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+						    resource->hints, true, true);
+
+	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+
+	assert_true(efa_ep->util_ep.rx_caps & FI_SOURCE);
 }
