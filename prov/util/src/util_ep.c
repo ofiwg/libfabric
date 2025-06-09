@@ -228,6 +228,8 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	ep->ep_fid.fid.context = context;
 	ep->domain = util_domain;
 	ep->caps = info->caps;
+	ep->tx_caps = info->tx_attr->caps;
+	ep->rx_caps = info->rx_attr->caps;
 	ep->flags = 0;
 	ep->progress = progress;
 	ep->tx_op_flags = info->tx_attr->op_flags;
