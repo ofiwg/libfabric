@@ -841,7 +841,7 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 			    rxe->total_len, rxe->cq_entry.tag, rxe->addr);
 
 
-		if (ep->base_ep.util_ep.caps & FI_SOURCE)
+		if (ep->base_ep.util_ep.caps & FI_SOURCE || ep->base_ep.util_ep.rx_caps & FI_SOURCE)
 			ret = ofi_cq_write_src(rx_cq,
 					       rxe->cq_entry.op_context,
 					       rxe->cq_entry.flags,

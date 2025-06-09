@@ -102,7 +102,7 @@ void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 	target_cq = ep->base_ep.util_ep.rx_cq;
 	efa_av = ep->base_ep.av;
 
-	if (ep->base_ep.util_ep.caps & FI_SOURCE) {
+	if (ep->base_ep.util_ep.caps & FI_SOURCE || ep->base_ep.util_ep.rx_caps & FI_SOURCE) {
 		src_addr = efa_av_reverse_lookup_rdm(efa_av,
 						ibv_wc_read_slid(ibv_cq_ex),
 						ibv_wc_read_src_qp(ibv_cq_ex),
@@ -378,7 +378,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
  * @todo Currently, this only checks for unresponsive receiver
  * (#EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE) and attempts to promote it to
  * #FI_EFA_ERR_ESTABLISHED_RECV_UNRESP if a handshake was made, or
- * #FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP if the handshake failed. 
+ * #FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP if the handshake failed.
  * This should be expanded to handle other
  * RDMA Core error codes (#EFA_IO_COMP_STATUSES) for the sake of more accurate
  * error reporting
@@ -570,7 +570,7 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 	if (cq->shm_cq) {
 		fi_cq_read(cq->shm_cq, NULL, 0);
 
-		/* 
+		/*
 		 * fi_cq_read(cq->shm_cq, NULL, 0) will progress shm ep and write
 		 * completion to efa. Use ofi_cq_read_entries to get the number of
 		 * shm completions without progressing efa ep again.

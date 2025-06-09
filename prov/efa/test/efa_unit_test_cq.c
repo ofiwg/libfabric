@@ -1205,4 +1205,3 @@ void test_efa_cq_recv_rdma_with_imm_failure(struct efa_resource **state)
 	efa_cq_check_cq_err_entry(resource,
 				  EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 }
-
