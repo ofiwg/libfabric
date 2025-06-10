@@ -503,20 +503,26 @@ fi_mr_attr (defined below).
 .PP
 Fi_close is used to release all resources associated with a registering
 a memory region.
-Once unregistered, further access to the registered memory is not
+Once deregistered, further access to the registered memory is not
 guaranteed.
 Active or queued operations that reference a memory region being closed
-may fail or result in accesses to invalid memory.
+may attempt to access an invalid memory region and fail.
+After an MR is closed, any new operations targeting the closed MR will
+also fail.
 Applications are responsible for ensuring that a MR is no longer needed
 prior to closing it.
 Note that accesses to a closed MR from a remote peer will result in an
 error at the peer.
 The state of the local endpoint will be unaffected.
 .PP
-When closing the MR, there must be no opened endpoints or counters
-associated with the MR.
+For MRs that are associated with an endpoint (FI_MR_ENDPOINT flag
+is set), the MR must be closed before the endpoint.
 If resources are still associated with the MR when attempting to close,
 the call will return -FI_EBUSY.
+.PP
+If a memory registration cache is used, the behavior of fi_close may be
+affected. More information on the memory registration cache is in the
+MEMORY REGISTRATION CACHE section.
 .SS fi_mr_desc
 .PP
 Obtains the local memory descriptor associated with a MR.
