@@ -226,7 +226,7 @@ static int test_filtered(const char *test_name)
 
 static void *worker_thread(void *arg)
 {
-	uint64_t rank = (uint64_t)arg;
+	uint64_t rank = (uint64_t)(uintptr_t)arg;
 
 	while (1) {
 		// First barrier: begin testing for this iteration.
@@ -326,7 +326,7 @@ static void run_tests(int parallel)
 	assert(threads);
 	for (uint64_t rank = 0; rank < nthreads; rank++) {
 		if (pthread_create(&threads[rank], NULL, worker_thread,
-				   (void *)rank) != 0) {
+				   (void *)(uintptr_t)rank) != 0) {
 			errorx("pthread_create() failed");
 		}
 	}
@@ -354,13 +354,13 @@ static void run_tests(int parallel)
 	printf("============================================\n");
 	printf("            S U C C E S S\n");
 	printf("============================================\n");
-	printf("%d/%ld tests done, %d filtered, %d iterations each, parallelism of %d at a time \n",
+	printf("%d/%zu tests done, %d filtered, %d iterations each, parallelism of %d at a time \n",
 	       n_include_tests, TOTAL_TESTS, n_exclude_tests, iterations,
 	       nthreads);
 	if (!run_cuda_tests)
-		printf("skipped %lu cuda tests\n", NUM_CUDA_TESTS);
+		printf("skipped %zu cuda tests\n", NUM_CUDA_TESTS);
 	if (!run_rocm_tests)
-		printf("skipped %lu rocm tests\n", NUM_ROCM_TESTS);
+		printf("skipped %zu rocm tests\n", NUM_ROCM_TESTS);
 }
 
 void usage()

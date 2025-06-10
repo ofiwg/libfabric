@@ -288,7 +288,7 @@ static int mt_reg_mr(struct fi_info *fi, void *buf, size_t size,
 		dmabuf.fd = dmabuf_fd;
 		dmabuf.offset = dmabuf_offset;
 		dmabuf.len = size;
-		dmabuf.base_addr = (void *)((uintptr_t) buf - dmabuf_offset);
+		dmabuf.base_addr = (void *)((char *) buf - dmabuf_offset);
 		flags |= FI_MR_DMABUF;
 	}
 
