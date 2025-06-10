@@ -87,6 +87,7 @@ struct fi_provider vrb_prov = {
 	.cleanup = vrb_fini
 };
 
+/* mutex for guarding the initialization of vrb_util_prov.info */
 ofi_mutex_t vrb_info_mutex;
 
 struct util_prov vrb_util_prov = {
@@ -98,7 +99,8 @@ struct util_prov vrb_util_prov = {
 	.flags = 0,
 };
 
-/* mutex for guarding the initialization of vrb_util_prov.info */
+/* mutex for guarding concurrent calls to protect provider initialization */
+ofi_mutex_t vrb_init_mutex;
 DEFINE_LIST(vrb_devs);
 
 int vrb_sockaddr_len(struct sockaddr *addr)
@@ -799,6 +801,7 @@ static void vrb_fini(void)
 	ofi_mem_fini();
 #endif
 	ofi_mutex_destroy(&vrb_info_mutex);
+	ofi_mutex_destroy(&vrb_init_mutex);
 	fi_freeinfo(vrb_util_prov.info);
 	vrb_os_fini();
 	vrb_util_prov.info = NULL;
@@ -812,6 +815,7 @@ VERBS_INI
 	ofi_monitors_init();
 #endif
 	ofi_mutex_init(&vrb_info_mutex);
+	ofi_mutex_init(&vrb_init_mutex);
 
 	vrb_prof_init();
 
