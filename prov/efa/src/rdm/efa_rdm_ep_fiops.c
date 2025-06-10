@@ -229,7 +229,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	ret = ofi_bufpool_create(&ep->peer_map_entry_pool,
 				 sizeof(struct efa_rdm_ep_peer_map_entry),
 				 EFA_RDM_BUFPOOL_ALIGNMENT, 0, /* no limit to max_cnt */
-				 EFA_MIN_AV_SIZE,
+				 EFA_RDM_EP_MIN_PEER_POOL_SIZE,
 				 /* Don't track usage, because endpoint can be closed without removing entries from AV */
 				 OFI_BUFPOOL_NO_TRACK);
 	if (ret)
