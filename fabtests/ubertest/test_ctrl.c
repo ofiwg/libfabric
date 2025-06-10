@@ -1040,7 +1040,7 @@ static int ft_exchange_mr_addr_key(void)
 		return 0;
 
 	if (test_info.mr_mode & FI_MR_VIRT_ADDR)
-		rma_iov->addr = (uint64_t) ft_mr_ctrl.buf;
+		rma_iov->addr = (uint64_t)(uintptr_t) ft_mr_ctrl.buf;
 	else
 		rma_iov->addr = 0;
 

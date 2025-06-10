@@ -245,8 +245,8 @@ struct smr_ep {
 static inline int smr_mmap_name(char *shm_name, const char *ep_name,
 				uint64_t msg_id)
 {
-	return snprintf(shm_name, SMR_NAME_MAX - 1, "%s_%ld",
-			ep_name, msg_id);
+	return snprintf(shm_name, SMR_NAME_MAX - 1, "%s_%" PRIu64,
+			ep_name, (uint64_t)(msg_id));
 }
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,

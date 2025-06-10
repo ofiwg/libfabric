@@ -434,7 +434,7 @@ int ft_get_dmabuf_from_iov(struct fi_mr_dmabuf *dmabuf,
 		dmabuf[i].fd = dmabuf_fd;
 		dmabuf[i].offset = dmabuf_offset;
 		dmabuf[i].len = iov[i].iov_len;
-		dmabuf[i].base_addr = (void *)(
+		dmabuf[i].base_addr = (void *)(uintptr_t)(
 			(uintptr_t) iov[i].iov_base - dmabuf_offset);
 	}
 	return FI_SUCCESS;
@@ -469,7 +469,7 @@ int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 		dmabuf.fd = dmabuf_fd;
 		dmabuf.offset = dmabuf_offset;
 		dmabuf.len = size;
-		dmabuf.base_addr = (void *)((uintptr_t) buf - dmabuf_offset);
+		dmabuf.base_addr = (void *)((char *) buf - dmabuf_offset);
 		flags |= FI_MR_DMABUF;
 	}
 

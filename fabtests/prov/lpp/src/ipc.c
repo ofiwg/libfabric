@@ -246,7 +246,7 @@ static void *info_server_thread(void *arg)
 			error("recv IPC_HELLO failed: %d\n", ret);
 		}
 		if (hello.rank >= MAX_RANK) {
-			errorx("rank %lu too large", hello.rank);
+			errorx("rank %" PRIu64 " too large", (uint64_t)hello.rank);
 		}
 
 		struct rank_info *ri = &rank_info[hello.rank];
@@ -254,7 +254,7 @@ static void *info_server_thread(void *arg)
 		if (ri->valid != 1 || ri->iteration != hello.iteration ||
 		    ri->peer_comm_sock >= 0) {
 			if (verbose) {
-				debug("close() valid %d iteration %ld %ld peer_comm_sock %d\n",
+				debug("close() valid %d iteration %" PRId64 " %" PRId64 " peer_comm_sock %d\n",
 				      ri->valid, ri->iteration, hello.iteration,
 				      ri->peer_comm_sock);
 			}
@@ -310,14 +310,14 @@ static void clear_rank_info(struct rank_info *ri)
 struct rank_info *get_rank_info(uint64_t rank, int64_t iteration)
 {
 	if (rank >= MAX_RANK) {
-		errorx("rank %ld out of range", rank);
+		errorx("rank %" PRId64 " out of range", (int64_t)rank);
 	}
 
 	struct rank_info *ri = &rank_info[rank];
 
 	pthread_mutex_lock(&ri->lock);
 	if (ri->valid == 1) {
-		errorx("duplicate get for rank %ld", rank);
+		errorx("duplicate get for rank %" PRId64, (int64_t)rank);
 	}
 	clear_rank_info(ri);
 	ri->iteration = iteration;
