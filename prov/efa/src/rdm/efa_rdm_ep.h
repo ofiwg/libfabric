@@ -41,6 +41,8 @@ struct efa_rdm_ep_queued_copy {
 #define EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND (4096)
 #define EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV (8192)
 
+#define EFA_RDM_EP_MIN_PEER_POOL_SIZE (1024)
+
 struct efa_rdm_ep {
 	struct efa_base_ep base_ep;
 
@@ -543,11 +545,11 @@ bool efa_rdm_ep_support_unsolicited_write_recv(struct efa_rdm_ep *ep)
 
 struct efa_rdm_ep_peer_map_entry {
 	fi_addr_t addr;
-	struct efa_rdm_peer *peer;
+	struct efa_rdm_peer peer;
 	UT_hash_handle hh;
 };
 
-int efa_rdm_ep_peer_map_insert(struct efa_rdm_ep *ep, fi_addr_t addr, struct efa_rdm_peer *peer);
+int efa_rdm_ep_peer_map_insert(struct efa_rdm_ep *ep, fi_addr_t addr, struct efa_rdm_ep_peer_map_entry *map_entry);
 struct efa_rdm_peer *efa_rdm_ep_peer_map_lookup(struct efa_rdm_ep *ep, fi_addr_t addr);
 void efa_rdm_ep_peer_map_remove(struct efa_rdm_ep *ep, fi_addr_t addr);
 #endif
