@@ -1917,6 +1917,8 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   struct fi_info **info)
 {
 	static bool init_done = false;
+	struct dlist_entry tmp_devs;
+	struct fi_info *tmp_info = NULL;
 	int ret;
 
 	vrb_prof_func_start(__func__);
@@ -1940,13 +1942,25 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 	}
 	ofi_mutex_unlock(&vrb_init_mutex);
 
-	ofi_mutex_lock(&vrb_info_mutex);
 	if (flags & FI_RESCAN) {
-		ret = vrb_init_info(&vrb_devs, &vrb_util_prov.info);
-		if (ret)
+		dlist_init(&tmp_devs);
+		ret = vrb_init_info(&tmp_devs, &tmp_info);
+		if (ret) {
+			vrb_devs_free(&tmp_devs);
+			fi_freeinfo(tmp_info);
 			goto out;
+		}
 	}
 
+	ofi_mutex_lock(&vrb_info_mutex);
+	if (flags & FI_RESCAN) {
+		/* Swap the lists while holding the lock */
+		vrb_devs_free(&vrb_devs);
+		dlist_splice_tail(&vrb_devs, &tmp_devs);
+
+		fi_freeinfo(vrb_util_prov.info);
+		vrb_util_prov.info = tmp_info;
+	}
 	ret = vrb_get_match_infos(&vrb_devs, version, node, service,
 				     flags, hints,
 				     vrb_util_prov.info, info);
