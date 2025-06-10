@@ -1920,22 +1920,31 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 	int ret;
 
 	vrb_prof_func_start(__func__);
-	ofi_mutex_lock(&vrb_info_mutex);
-	if (!init_done || flags & FI_RESCAN) {
-		if (!init_done) {
-			ret = vrb_init();
-			if (ret) {
-				ofi_mutex_unlock(&vrb_info_mutex);
-				goto out;
-			}
-			init_done = true;
-		}
-
-		ret = vrb_init_info(&vrb_devs, &vrb_util_prov.info);
+	ofi_mutex_lock(&vrb_init_mutex);
+	if (!init_done) {
+		ret = vrb_init();
 		if (ret) {
-			ofi_mutex_unlock(&vrb_info_mutex);
+			ofi_mutex_unlock(&vrb_init_mutex);
 			goto out;
 		}
+		init_done = true;
+
+		ofi_mutex_lock(&vrb_info_mutex);
+		ret = vrb_init_info(&vrb_devs, &vrb_util_prov.info);
+		ofi_mutex_unlock(&vrb_info_mutex);
+		if (ret) {
+			ofi_mutex_unlock(&vrb_init_mutex);
+			goto out;
+		}
+		flags &= ~FI_RESCAN; /* No rescan needed */
+	}
+	ofi_mutex_unlock(&vrb_init_mutex);
+
+	ofi_mutex_lock(&vrb_info_mutex);
+	if (flags & FI_RESCAN) {
+		ret = vrb_init_info(&vrb_devs, &vrb_util_prov.info);
+		if (ret)
+			goto out;
 	}
 
 	ret = vrb_get_match_infos(&vrb_devs, version, node, service,
