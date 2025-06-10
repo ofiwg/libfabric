@@ -434,7 +434,7 @@ static void rxd_handle_rts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	node = ofi_rbmap_find(&rxd_av->rbmap, pkt->source);
 
 	if (node) {
-		rxd_addr = (fi_addr_t) node->data;
+		rxd_addr = (fi_addr_t)(uintptr_t) node->data;
 	} else {
 		ret = rxd_av_insert_dg_addr(rxd_av, (void *) pkt->source,
 					    &rxd_addr, 0, NULL);
@@ -563,7 +563,7 @@ static int rxd_verify_iov(struct rxd_ep *ep, struct ofi_rma_iov *rma,
 		ret = ofi_mr_verify(&util_domain->mr_map, rma[i].len,
 			(uintptr_t *)(&rma[i].addr), rma[i].key,
 			ofi_rx_mr_reg_flags(type, 0));
-		iov[i].iov_base = (void *) rma[i].addr;
+		iov[i].iov_base = (void *)(uintptr_t) rma[i].addr;
 		iov[i].iov_len = rma[i].len;
 		if (ret) {
 			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not verify MR\n");

@@ -74,7 +74,7 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 
 	memcpy(vma_iovec, iov, sizeof(*iov) * iov_count);
 	for (i = 0; i < rma_count; i++) {
-		rma_iovec[i].iov_base = (void *) rma_iov[i].addr;
+		rma_iovec[i].iov_base = (void *)(uintptr_t) rma_iov[i].addr;
 		rma_iovec[i].iov_len = rma_iov[i].len;
 	}
 

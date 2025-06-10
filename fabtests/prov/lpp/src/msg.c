@@ -923,7 +923,7 @@ int run_selective_completion(struct rank_info *ri)
 		INSIST_FI_EQ(ri,
 			     fi_write(ri->ep_info[0].fid, ri->mr_info[0].uaddr,
 				      buffer_len, NULL, pri->ep_info[0].fi_addr,
-				      (uint64_t)pri->mr_info[0].uaddr,
+				      (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 				      pri->mr_info[0].key,
 				      get_ctx_simple(ri, context)),
 			     0);
@@ -963,7 +963,7 @@ int run_selective_completion(struct rank_info *ri)
 
 		// Do a write with FI_COMPLETION.
 		struct fi_rma_iov rma_iov = {
-			.addr = (uint64_t)pri->mr_info[0].uaddr,
+			.addr = (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 			.len = buffer_len,
 			.key = pri->mr_info[0].key,
 		};
@@ -1081,7 +1081,7 @@ int run_selective_completion2(struct rank_info *ri)
 		INSIST_FI_EQ(ri,
 			     fi_write(ri->ep_info[0].fid, ri->mr_info[0].uaddr,
 				      buffer_len, NULL, pri->ep_info[0].fi_addr,
-				      (uint64_t)pri->mr_info[0].uaddr,
+				      (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 				      pri->mr_info[0].key,
 				      get_ctx_simple(ri, context)),
 			     0);
@@ -1116,7 +1116,7 @@ int run_selective_completion2(struct rank_info *ri)
 
 		// Do a write with FI_COMPLETION.
 		struct fi_rma_iov rma_iov = {
-			.addr = (uint64_t)pri->mr_info[0].uaddr,
+			.addr = (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 			.len = buffer_len,
 			.key = pri->mr_info[0].key,
 		};
@@ -1266,7 +1266,7 @@ int run_selective_completion_error(struct rank_info *ri)
 			     fi_write(ri->ep_info[0].fid, ri->mr_info[0].uaddr,
 				      buffer_len * 2, NULL,
 				      pri->ep_info[0].fi_addr,
-				      (uint64_t)pri->mr_info[0].uaddr,
+				      (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 				      pri->mr_info[0].key,
 				      get_ctx_simple(ri, context)),
 			     0);
@@ -1693,7 +1693,7 @@ int run_cq_sread(struct rank_info *ri)
 		util_get_time(&end);
 		uint64_t delta_ms = util_time_delta_ms(&start, &end);
 		if (delta_ms < cq_timeout_ms * 0.75 || delta_ms > cq_timeout_ms * 1.25) {
-			ERRORX(ri, "fi_cq_sread took %lu ms, expected %lu\n",
+			ERRORX(ri, "fi_cq_sread took %" PRIu64 " ms, expected %" PRIu64 "\n",
 			       delta_ms, cq_timeout_ms);
 		}
 

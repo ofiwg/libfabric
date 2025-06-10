@@ -96,8 +96,8 @@ void xnet_hdr_trace(struct xnet_ep *ep, struct xnet_base_hdr *hdr)
 
 	dir = (hdr == &ep->cur_rx.hdr.base_hdr) ? "Rx" : "Tx";
 
-	FI_TRACE(&xnet_prov, FI_LOG_EP_DATA, "%s op:%s tag:0x%zx flags:0x%x "
-		 "op_data:0x%x hdr_size:%d data_size:%zu\n", dir,
+	FI_TRACE(&xnet_prov, FI_LOG_EP_DATA, "%s op:%s tag:0x%" PRIu64 " flags:0x%x "
+		 "op_data:0x%x hdr_size:%d data_size:%" PRIu64 "\n", dir,
 		 xnet_op_str(hdr->op), tag, hdr->flags, hdr->op_data,
 		 hdr->hdr_size, hdr->size - hdr->hdr_size);
 }

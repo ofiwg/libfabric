@@ -278,9 +278,9 @@ static inline void smr_freestack_init(struct smr_freestack *fs, size_t elem_coun
 	fs->entry_base_offset =
 		((char*) &fs->entry_next[0] - (char*) fs) +
 		fs->size * sizeof(fs->top);
-	next_aligned_addr = ofi_get_aligned_size((( (uint64_t) fs) +
+	next_aligned_addr = ofi_get_aligned_size((( (uintptr_t) fs) +
 			fs->entry_base_offset), SMR_ALIGN_BOUNDARY);
-	fs->entry_base_offset = next_aligned_addr - ((uint64_t) fs);
+	fs->entry_base_offset = next_aligned_addr - ((uintptr_t) fs);
 	for (i = elem_count - 1; i >= 0; i--)
 		smr_freestack_push_by_index(fs, i);
 }

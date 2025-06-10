@@ -1265,7 +1265,7 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 							atomic_op));
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Atomic RMA MR verify error %ld\n", ret);
+				"Atomic RMA MR verify error %zd\n", ret);
 			return rxm_atomic_send_resp(rxm_ep, rx_buf, resp_buf, 0,
 						    (uint32_t) -FI_EACCES);
 		}
@@ -1283,7 +1283,8 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 		void *src_buf = req_hdr->data + offset;
 		void *cmp_buf = req_hdr->data + len + offset;
 		void *res_buf = resp_hdr->data + offset;
-		void *dst_buf = (void *) req_hdr->rma_ioc[i].addr;
+
+		void *dst_buf = (void *)(uintptr_t) req_hdr->rma_ioc[i].addr;
 
 		if (mr->iface != FI_HMEM_SYSTEM) {
 			ret = rxm_do_device_mem_atomic(mr, op, dst_buf, src_buf,
@@ -1292,7 +1293,7 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 						       atomic_op, amo_op_size);
 			if (ret) {
 				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-					"Atomic operation failed %ld\n", ret);
+					"Atomic operation failed %zd\n", ret);
 
 				return rxm_atomic_send_resp(rxm_ep, rx_buf,
 							    resp_buf, 0,
