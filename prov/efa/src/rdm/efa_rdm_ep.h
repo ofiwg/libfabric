@@ -7,6 +7,7 @@
 #include <ctype.h>
 #include "efa.h"
 #include "efa_tp.h"
+#include "efa_rdm_peer.h"
 #include "efa_base_ep.h"
 #include "efa_rdm_rxe_map.h"
 
@@ -331,6 +332,60 @@ bool efa_rdm_ep_support_rdma_read(struct efa_rdm_ep *ep)
 	return efa_rdm_ep_domain(ep)->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
 }
 
+/**
+ * @brief determine if both peers support RDMA read
+ *
+ * This function can only return true if peers are homogeneous,
+ * or a handshake packet has already been exchanged and the peer
+ * set the EFA_RDM_EXTRA_FEATURE_RDMA_READ flag.
+ * @params[in]		ep		Endpoint for communication with peer
+ * @params[in]		peer		An EFA peer
+ * @return		boolean		both self and peer support RDMA read
+ */
+static inline
+bool efa_both_support_rdma_read(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
+{
+	return efa_rdm_ep_support_rdma_read(ep) &&
+	       (ep->homogeneous_peers || peer->is_self || efa_rdm_peer_support_rdma_read(peer));
+}
+
+/**
+ * @brief Determine interoperability for RDMA read between peers
+ *
+ * RDMA read is currently not interoperable between all EFA platforms; older
+ * platforms cannot fully interoperate with newer platforms. The platform
+ * version can be inferred from ibv_device_attr.vendor_part_id (see
+ * ibv_query_device(3)).
+ *
+ * In this context, version 0xEFA0 is considered "older", while versions 0xEFA1+
+ * are considered "newer"
+ *
+ * @todo Either:
+ * - Refactor this logic if the interoperability is ever reported
+ *   directly via firmware or rdma-core
+ * - Remove altogether if RDMA read becomes interoperable between all EFA
+ *   platforms
+ *
+ * @param[in]	ep	Endpoint for communication with peer
+ * @param[in]	peer	An EFA peer
+ *
+ * @return true if peers can interoperate via RDMA read; false otherwise
+ */
+static inline
+bool efa_rdm_interop_rdma_read(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
+{
+	bool rdma_read_support = efa_both_support_rdma_read(ep, peer);
+	uint32_t ep_dev_ver, peer_dev_ver;
+
+	if (!rdma_read_support)
+		return false;
+
+	ep_dev_ver = efa_rdm_ep_domain(ep)->device->ibv_attr.vendor_part_id;
+	peer_dev_ver = peer->device_version;
+
+	return (ep_dev_ver == 0xEFA0) ? (peer_dev_ver == 0xEFA0) : (peer_dev_ver != 0xEFA0);
+}
+
 /*
  * @brief: check whether the endpoint supports rdma write
  *
@@ -349,6 +404,39 @@ bool efa_rdm_ep_support_rdma_write(struct efa_rdm_ep *ep)
 #else
 	return false;
 #endif
+}
+
+/**
+ * @brief determine if both peers support RDMA write
+ *
+ * This function can only return true if peers are homogeneous, or
+ * a handshake packet has already been exchanged and the peer set
+ * the EFA_RDM_EXTRA_FEATURE_RDMA_WRITE flag.
+ * @params[in]		ep		Endpoint for communication with peer
+ * @params[in]		peer		An EFA peer
+ * @return		boolean		both self and peer support RDMA write
+ */
+static inline
+bool efa_both_support_rdma_write(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
+{
+	return efa_rdm_ep_support_rdma_write(ep) &&
+	       (ep->homogeneous_peers || peer->is_self || efa_rdm_peer_support_rdma_write(peer));
+}
+
+/**
+ * @brief determine if both peers support zero hdr data transfer
+ *
+ * This function can only return true if a handshake packet has already been
+ * exchanged, and the peer set the EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP flag.
+ * @params[in]		ep		Endpoint for communication with peer
+ * @params[in]		peer		An EFA peer
+ * @return		boolean		both self and peer support RDMA read
+ */
+static inline
+bool efa_both_support_zero_hdr_data_transfer(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
+{
+	return ((ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) &&
+		(peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP));
 }
 
 /**
