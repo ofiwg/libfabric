@@ -476,7 +476,7 @@ static int rxm_mr_close(fid_t fid)
 
 	if (rxm_mr->hmem_handle) {
 		ofi_hmem_dev_unregister(rxm_mr->iface,
-					(uint64_t) rxm_mr->hmem_handle);
+					(uint64_t)(uintptr_t) rxm_mr->hmem_handle);
 	}
 
 	ret = fi_close(&rxm_mr->msg_mr->fid);

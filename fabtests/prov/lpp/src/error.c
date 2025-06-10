@@ -61,7 +61,7 @@ void debug_trace_push(struct rank_info *ri, int line, const char *func,
 	} else {
 		strcat(newstr, "\n");
 	}
-	debugln(file, line, "[rank:%ld node:%c iter:%ld test:%s] %s",
+	debugln(file, line, "[rank:%" PRIu64 " node:%c iter:%" PRId64 " test:%s] %s",
 		(ri)->rank, my_node_name, (ri)->iteration, (ri)->cur_test_name,
 		newstr);
 }
@@ -76,7 +76,7 @@ void debug_dump_trace(struct rank_info *ri)
 	for (int i = 0; i < ri->tracei; i++) {
 		fprintf(stderr,
 			RED_CODE
-			"trace: %s():%s:%d [rank:%ld node:%c iter:%ld]" RESET_CODE
+			"trace: %s():%s:%d [rank:%" PRIu64 " node:%c iter:%" PRId64 "]" RESET_CODE
 			"\n",
 			ri->trace_funcs[i], ri->trace_files[i],
 			ri->trace_lines[i], ri->rank, my_node_name,

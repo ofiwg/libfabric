@@ -47,7 +47,7 @@ static int simple_rma_write_common(struct rank_info *ri, size_t buffer_len)
 		INSIST_FI_EQ(ri,
 			     fi_write(ri->ep_info[0].fid, ri->mr_info[0].uaddr,
 				      buffer_len, NULL, pri->ep_info[0].fi_addr,
-				      (uint64_t)pri->mr_info[0].uaddr,
+				      (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 				      pri->mr_info[0].key,
 				      get_ctx_simple(ri, context)),
 			     0);
@@ -85,7 +85,7 @@ static int simple_rma_read_common(struct rank_info *ri, size_t buffer_len)
 		INSIST_FI_EQ(ri,
 			     fi_read(ri->ep_info[0].fid, ri->mr_info[0].uaddr,
 				     buffer_len, NULL, pri->ep_info[0].fi_addr,
-				     (uint64_t)pri->mr_info[0].uaddr,
+				     (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 				     pri->mr_info[0].key,
 				     get_ctx_simple(ri, context)),
 			     0);
@@ -130,7 +130,7 @@ int run_offset_rma_write(struct rank_info *ri)
 			     fi_write(ri->ep_info[0].fid,
 				      (uint8_t *)ri->mr_info[0].uaddr + offset, write_len,
 				      NULL, pri->ep_info[0].fi_addr,
-				      (uint64_t)pri->mr_info[0].uaddr + offset,
+				      (uint64_t)(uintptr_t)pri->mr_info[0].uaddr + offset,
 				      pri->mr_info[0].key,
 				      get_ctx_simple(ri, context)),
 			     0);
@@ -173,7 +173,7 @@ int run_inject_rma_write(struct rank_info *ri)
 			     fi_inject_write(ri->ep_info[0].fid,
 					     ri->mr_info[0].uaddr, buffer_len,
 					     pri->ep_info[0].fi_addr,
-					     (uint64_t)pri->mr_info[0].uaddr,
+					     (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 					     pri->mr_info[0].key),
 			     0);
 
@@ -268,7 +268,7 @@ int run_os_bypass_rma(struct rank_info *ri)
 		INSIST_FI_EQ(ri,
 			     fi_write(ri->ep_info[0].fid, &write_buf[0], 8,
 				      NULL, pri->ep_info[0].fi_addr,
-				      (uint64_t)&peer_buf[0],
+				      (uint64_t)(uintptr_t)&peer_buf[0],
 				      pri->mr_info[0].key,
 				      get_ctx_simple(ri, context)),
 			     0);
@@ -302,7 +302,7 @@ int run_os_bypass_rma(struct rank_info *ri)
 		INSIST_FI_EQ(ri,
 			     fi_write(ri->ep_info[0].fid, &write_buf[8], 8,
 				      NULL, pri->ep_info[0].fi_addr,
-				      (uint64_t)&peer_buf[8],
+				      (uint64_t)(uintptr_t)&peer_buf[8],
 				      pri->mr_info[0].key,
 				      get_ctx_simple(ri, context)),
 			     0);
@@ -336,7 +336,7 @@ int run_os_bypass_rma(struct rank_info *ri)
 		INSIST_FI_EQ(ri,
 			     fi_write(ri->ep_info[0].fid, &write_buf[16], 8,
 				      NULL, pri->ep_info[0].fi_addr,
-				      (uint64_t)&peer_buf[16],
+				      (uint64_t)(uintptr_t)&peer_buf[16],
 				      pri->mr_info[0].key,
 				      get_ctx_simple(ri, context)),
 			     0);
@@ -373,7 +373,7 @@ int run_os_bypass_rma(struct rank_info *ri)
 		INSIST_FI_EQ(ri,
 			     fi_read(ri->ep_info[0].fid, ri->mr_info[1].uaddr,
 				     32, NULL, pri->ep_info[0].fi_addr,
-				     (uint64_t)&peer_buf[32],
+				     (uint64_t)(uintptr_t)&peer_buf[32],
 				     pri->mr_info[0].key,
 				     get_ctx_simple(ri, context)),
 			     0);
@@ -443,7 +443,7 @@ int run_os_bypass_offset_rma(struct rank_info *ri)
 				     fi_write(ri->ep_info[0].fid,
 					      &write_buf[offsets[i]], 8, NULL,
 					      pri->ep_info[0].fi_addr,
-					      (uint64_t)&peer_buf[offsets[i]],
+					      (uint64_t)(uintptr_t)&peer_buf[offsets[i]],
 					      pri->mr_info[0].key,
 					      get_ctx_simple(ri, context)),
 				     0);
@@ -527,7 +527,7 @@ int run_os_bypass_outofbounds_rma(struct rank_info *ri)
 				     fi_write(ri->ep_info[0].fid,
 					      &write_buf[offsets[i]], 8, NULL,
 					      pri->ep_info[0].fi_addr,
-					      (uint64_t)&peer_buf[offsets[i]],
+					      (uint64_t)(uintptr_t)&peer_buf[offsets[i]],
 					      pri->mr_info[0].key,
 					      get_ctx_simple(ri, context)),
 				     0);
@@ -606,7 +606,7 @@ int run_selective_completion_osbypass_error(struct rank_info *ri)
 				.iov_len = 16,
 			};
 			struct fi_rma_iov rma_iov = {
-				.addr = (uint64_t)pri->mr_info[0].uaddr,
+				.addr = (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 				.len = buffer_len,
 				.key = pri->mr_info[0].key,
 			};
@@ -648,7 +648,7 @@ int run_selective_completion_osbypass_error(struct rank_info *ri)
 		INSIST_FI_EQ(ri,
 			     fi_write(ri->ep_info[0].fid, ri->mr_info[0].uaddr,
 				      16, NULL, pri->ep_info[0].fi_addr,
-				      (uint64_t)pri->mr_info[0].uaddr +
+				      (uint64_t)(uintptr_t)pri->mr_info[0].uaddr +
 					      buffer_len - 2,
 				      pri->mr_info[0].key,
 				      get_ctx_simple(ri, context)),
@@ -700,7 +700,7 @@ int run_rma_write_auto_reg_mr(struct rank_info *ri)
 		INSIST_FI_EQ(ri,
 			     fi_write(ri->ep_info[0].fid, ri->mr_info[0].uaddr,
 				      buffer_len, NULL, pri->ep_info[0].fi_addr,
-				      (uint64_t)pri->mr_info[0].uaddr,
+				      (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 				      pri->mr_info[0].key,
 				      get_ctx_simple(ri, context)),
 			     0);
@@ -761,7 +761,7 @@ int run_rma_read_auto_reg_mr(struct rank_info *ri)
 		INSIST_FI_EQ(ri,
 			     fi_read(ri->ep_info[0].fid, ri->mr_info[0].uaddr,
 				     buffer_len, NULL, pri->ep_info[0].fi_addr,
-				     (uint64_t)pri->mr_info[0].uaddr,
+				     (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 				     pri->mr_info[0].key,
 				     get_ctx_simple(ri, context)),
 			     0);
@@ -812,7 +812,7 @@ static int loopback_write_common(struct rank_info *ri, size_t buffer_len)
 		INSIST_FI_EQ(ri,
 			     fi_write(ri->ep_info[0].fid, ri->mr_info[0].uaddr,
 				      buffer_len, NULL, ri->ep_info[1].fi_addr,
-				      (uint64_t)ri->mr_info[1].uaddr,
+				      (uint64_t)(uintptr_t)ri->mr_info[1].uaddr,
 				      ri->mr_info[1].key,
 				      get_ctx_simple(ri, context)),
 			     0);
@@ -871,7 +871,7 @@ static int loopback_read_common(struct rank_info *ri, size_t buffer_len)
 		INSIST_FI_EQ(ri,
 			     fi_read(ri->ep_info[0].fid, ri->mr_info[0].uaddr,
 				      buffer_len, NULL, ri->ep_info[1].fi_addr,
-				      (uint64_t)ri->mr_info[1].uaddr,
+				      (uint64_t)(uintptr_t)ri->mr_info[1].uaddr,
 				      ri->mr_info[1].key,
 				      get_ctx_simple(ri, context)),
 			     0);
