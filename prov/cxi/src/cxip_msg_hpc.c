@@ -5170,6 +5170,7 @@ static int cxip_send_req_dequeue(struct cxip_txc_hpc *txc, struct cxip_req *req)
 
 static void cxip_txc_hpc_progress(struct cxip_txc *txc)
 {
+	cxip_coll_progress_cq_poll(txc->ep_obj);
 	cxip_evtq_progress(&txc->tx_evtq);
 }
 

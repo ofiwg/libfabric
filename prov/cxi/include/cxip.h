@@ -1580,6 +1580,7 @@ struct cxip_ep_zbcoll_obj {
  */
 struct cxip_ep_coll_obj {
 	struct index_map mcast_map;	// mc address -> object
+	struct dlist_entry root_retry_list;
 	struct dlist_entry mc_list;	// list of mcast addresses
 	struct cxip_coll_pte *coll_pte;	// PTE extensions
 	struct dlist_ts sched_list;	// scheduled actions
@@ -2938,6 +2939,7 @@ struct cxip_coll_reduction {
 	struct cxip_req *op_inject_req;		// active operation request
 	enum cxip_coll_state coll_state;	// reduction state on node
 	struct cxip_coll_data accum;		// reduction accumulator
+	struct cxip_coll_data backup;		// copy of above
 	void *op_rslt_data;			// user recv buffer (or NULL)
 	int op_data_bytcnt;			// bytes in send/recv buffers
 	void *op_context;			// caller's context
@@ -2948,6 +2950,7 @@ struct cxip_coll_reduction {
 	bool drop_recv;				// drop the next recv operation
 	enum cxip_coll_rc red_rc;		// set by first error
 	struct timespec tv_expires;		// reduction expiration time
+	struct dlist_entry tmout_link;		// link to timeout list
 	uint8_t tx_msg[64];			// static packet memory
 };
 
@@ -2958,7 +2961,7 @@ struct cxip_coll_mc {
 	struct cxip_av_set *av_set_obj;		// associated AV set
 	struct cxip_zbcoll_obj *zb;		// zb object for zbcol
 	struct cxip_coll_pte *coll_pte;		// collective PTE
-	struct timespec timeout;		// state machine timeout
+	struct timespec rootexpires;		// root wait expiration timeout
 	struct timespec curlexpires;		// CURL delete expiration timeout
 	fi_addr_t mynode_fiaddr;		// fi_addr of this node
 	int mynode_idx;				// av_set index of this node
@@ -3321,6 +3324,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 			 const struct fid_av_set *coll_av_set,
 			 uint64_t flags, struct fid_mc **mc, void *context);
 void cxip_coll_progress_join(struct cxip_ep_obj *ep_obj);
+void cxip_coll_progress_cq_poll(struct cxip_ep_obj *ep_obj);
 
 int cxip_coll_arm_disable(struct fid_mc *mc, bool disable);
 void cxip_coll_limit_red_id(struct fid_mc *mc, int max_red_id);
