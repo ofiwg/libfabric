@@ -990,7 +990,7 @@ The CXI provider checks for the following environment variables:
     physical memory.  Ignored when ODP is disabled.
 
 *FI_CXI_RDZV_THRESHOLD*
-:   Message size threshold for rendezvous protocol.
+:   Message size threshold for rendezvous protocol. The default is 16384.
 
 *FI_CXI_RDZV_GET_MIN*
 :   Minimum rendezvous Get payload size. A Send with length less than or equal
@@ -1029,7 +1029,7 @@ The CXI provider checks for the following environment variables:
 *FI_CXI_OFLOW_BUF_SIZE*
 :   Size of overflow buffers. Increasing the overflow buffer size allows for
     more unexpected message eager data to be held in single overflow buffer.
-    The default size is 2MB.
+    The default size is 12MB.
 
 *FI_CXI_OFLOW_BUF_MIN_POSTED/FI_CXI_OFLOW_BUF_COUNT*
 :   The minimum number of overflow buffers that should be posted. The default
@@ -1154,11 +1154,11 @@ The CXI provider checks for the following environment variables:
 *FI_CXI_REQ_BUF_SIZE*
 :   Size of request buffers. Increasing the request buffer size allows for more
     unmatched messages to be sent into a single request buffer. The default
-    size is 2MB.
+    size is 12MB.
 
 *FI_CXI_REQ_BUF_MIN_POSTED*
 :   The minimum number of request buffers that should be posted. The default
-    minimum posted count is 4. The number of buffers will grow unbounded to
+    minimum posted count is 6. The number of buffers will grow unbounded to
     support outstanding unexpected messages. Care should be taken to size
     appropriately based on job scale and the size of eager data to reduce
     the need for flow control.
@@ -1207,16 +1207,17 @@ The CXI provider checks for the following environment variables:
 
 *FI_CXI_DEFAULT_TX_SIZE*
 :   Set the default tx_attr.size field to be used by the provider if the size
-    is not specified in the user provided fi_info hints.
+    is not specified in the user provided fi_info hints. The default is 1024.
 
 *FI_CXI_DEFAULT_RX_SIZE*
 :   Set the default rx_attr.size field to be used by the provider if the size
-    is not specified in the user provided fi_info hints.
+    is not specified in the user provided fi_info hints. The default is 1024.
 
 *FI_CXI_SW_RX_TX_INIT_MAX*
-:   Debug control to override the number of TX operations that can be
-    outstanding that are initiated by software RX processing. It has no impact
-    on hardware initiated RX rendezvous gets.
+:   Override the number of TX operations that can be outstanding that are initiated
+    by software RX processing. It may be useful to increase this value from the default
+    of 1024 if running in software EP match mode at scale or utilizing the alternate
+    read rendezvous protocol. It has no impact on hardware initiated RX rendezvous gets.
 
 *FI_CXI_DEVICE_NAME*
 :   Restrict CXI provider to specific CXI devices. Format is a comma separated
@@ -1238,16 +1239,6 @@ The CXI provider checks for the following environment variables:
     completion queue is saturated. A saturated completion queue results in the
     provider returning -FI_EAGAIN for data transfer and other related libfabric
     operations.
-
-*FI_CXI_COMPAT*
-:   Temporary compatibility to allow use of pre-upstream values for FI_ADDR_CXI and
-    FI_PROTO_CXI. Compatibility can be disabled to verify operation with upstream
-    constant values and to enable access to conflicting provider values. The default
-    setting of 1 specifies both old and new constants are supported. A setting of 0
-    disables support for old constants and can be used to test that an application is
-    compatible with the upstream values. A setting of 2 is a safety fallback that if
-    used the provider will only export fi_info with old constants and will be incompatible
-    with libfabric clients that been recompiled.
 
 *FI_CXI_COLL_FABRIC_MGR_URL*
 :   **accelerated collectives:** Specify the HTTPS address of the fabric manager REST API
@@ -1298,6 +1289,9 @@ The CXI provider checks for the following environment variables:
 
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
+
+If the environment does not explicitly set FI_MR_CACHE_MAX_COUNT or FI_MR_CACHE_MAX_SIZE,
+the cxi provider will increase the defaults to 4096 and -1 (no limit) respectively.
 
 # CXI EXTENSIONS
 

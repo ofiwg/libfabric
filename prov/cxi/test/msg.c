@@ -1949,13 +1949,13 @@ static void test_fc_multi_recv(size_t xfer_len, bool progress_before_post)
 Test(msg, fc_multi_recv_rdzv, .timeout = 10)
 {
 	/* Transfer size needs to be large enough to trigger rendezvous. */
-	test_fc_multi_recv(16384, false);
+	test_fc_multi_recv(20480, false);
 }
 
 Test(msg, fc_multi_recv_rdzv_onload_ules, .timeout = 10)
 {
 	/* Transfer size needs to be large enough to trigger rendezvous. */
-	test_fc_multi_recv(16384, true);
+	test_fc_multi_recv(20480, true);
 }
 
 Test(msg, fc_no_eq_space_expected_multi_recv, .timeout = 10)
