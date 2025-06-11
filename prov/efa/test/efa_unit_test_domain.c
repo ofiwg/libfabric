@@ -268,3 +268,36 @@ void test_efa_domain_peer_list_cleared(struct efa_resource **state)
 	assert_true(dlist_empty(&efa_domain->peer_backoff_list));
 	assert_true(dlist_empty(&efa_domain->handshake_queued_peer_list));
 }
+
+void test_efa_domain_open_ops_query_addr(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	int ret;
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	struct efa_ep_addr raw_addr;
+	fi_addr_t addr;
+	struct fi_efa_ops_domain *efa_domain_ops;
+	uint16_t ahn;
+	uint16_t remote_qpn;
+	uint32_t remote_qkey;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM,
+					 EFA_DIRECT_FABRIC_NAME);
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	ret = fi_open_ops(&resource->domain->fid, FI_EFA_DOMAIN_OPS, 0,
+			  (void **) &efa_domain_ops, NULL);
+	assert_int_equal(ret, 0);
+
+	ret = efa_domain_ops->query_addr(resource->ep, addr, &ahn,
+					    &remote_qpn, &remote_qkey);
+
+	assert_int_equal(ret, FI_SUCCESS);
+	assert_int_equal(remote_qpn, 1);
+	assert_int_equal(remote_qkey, 0x1234);
+}

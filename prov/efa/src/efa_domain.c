@@ -453,8 +453,36 @@ efa_domain_query_mr(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr)
 
 #endif /* HAVE_EFADV_QUERY_MR */
 
+/**
+ * @brief Query address information for a given endpoint and address.
+ *
+ * @param[in]  ep_fid Endpoint fid
+ * @param[in]  addr Destination address
+ * @param[out] ahn Pointer to store the address handle number
+ * @param[out] remote_qpn Pointer to store the remote QP number
+ * @param[out] remote_qkey Pointer to store the remote qkey
+ * @return 0 on success, negative integer on failure
+ */
+static int efa_domain_query_addr(struct fid_ep *ep_fid, fi_addr_t addr,
+				 uint16_t *ahn, uint16_t *remote_qpn,
+				 uint32_t *remote_qkey)
+{
+	struct efa_base_ep *base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+	struct efa_conn *conn = efa_av_addr_to_conn(base_ep->av, addr);
+	if (!conn || !conn->ah || !conn->ep_addr) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Failed to find connection for addr %lu\n", addr);
+		return -FI_EINVAL;
+	}
+	*ahn = conn->ah->ahn;
+	*remote_qpn = conn->ep_addr->qpn;
+	*remote_qkey = conn->ep_addr->qkey;
+
+	return FI_SUCCESS;
+}
+
 static struct fi_efa_ops_domain efa_ops_domain = {
 	.query_mr = efa_domain_query_mr,
+	.query_addr = efa_domain_query_addr,
 };
 
 static int
