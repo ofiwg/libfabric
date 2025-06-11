@@ -4260,8 +4260,9 @@ Test(tagged, recv_more)
 	uint8_t *recv_buf,
 		*recv_buf2,
 		*send_buf;
-	int recv_len = 0x2000;
-	int send_len = 0x2000;
+	/* Must be rendezvous to avoid unexpected eager completion */
+	int recv_len = 0x5000;
+	int send_len = 0x5000;
 	struct fi_cq_tagged_entry tx_cqe,
 				  rx_cqe;
 	int err = 0;
@@ -4833,12 +4834,13 @@ Test(tagged, NC2192)
 	int i, ret;
 	uint8_t *recv_buf,
 		*send_buf;
-	int send_len = CXIP_RDZV_THRESHOLD - 1;
+	int send_len = cxip_env.rdzv_threshold - 1;
 	int recv_len = send_len;
 	struct fi_cq_tagged_entry tx_cqe,
 				  rx_cqe;
 	fi_addr_t from;
-	int sends = (CXIP_OFLOW_BUF_SIZE - CXIP_RDZV_THRESHOLD) / send_len + 1;
+	int sends = (cxip_env.oflow_buf_size - cxip_env.rdzv_threshold) /
+			send_len + 1;
 
 	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);

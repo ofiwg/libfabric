@@ -347,6 +347,21 @@ int cxip_iomm_init(struct cxip_domain *dom)
 	}
 
 	if (!scalable || dom->hmem) {
+		/* Override MR cache default settings unless explicitly set in
+		 * the environment.
+		 */
+		if (!getenv("FI_MR_CACHE_MAX_COUNT")) {
+			cache_params.max_cnt = CXIP_DEFAULT_MR_CACHE_MAX_CNT;
+			CXIP_INFO("MR cache max count overridden to %ld\n",
+				  cache_params.max_cnt);
+		}
+
+		if (!getenv("FI_MR_CACHE_MAX_SIZE")) {
+			cache_params.max_size = CXIP_DEFAULT_MR_CACHE_MAX_SIZE;
+			CXIP_INFO("MR cache max size overridden to %ld\n",
+				  cache_params.max_size);
+		}
+
 		dom->iomm.entry_data_size = sizeof(struct cxip_md);
 		dom->iomm.add_region = cxip_do_map;
 		dom->iomm.delete_region = cxip_do_unmap;
@@ -356,6 +371,9 @@ int cxip_iomm_init(struct cxip_domain *dom)
 			CXIP_INFO("MR cache init failed: %s. MR caching disabled.\n",
 				  fi_strerror(-ret));
 		} else {
+			CXIP_INFO("MR cache using max_size %ld and max_cnt %ld\n",
+				  cache_params.max_size,cache_params.max_cnt);
+
 			for (iface = 0; iface < OFI_HMEM_MAX; iface++) {
 				if (dom->iomm.monitors[iface])
 					CXIP_INFO("MR cache enabled for %s memory\n",
