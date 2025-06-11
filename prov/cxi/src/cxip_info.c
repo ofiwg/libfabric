@@ -833,7 +833,8 @@ static void cxip_env_init(void)
 	cxip_set_env_rx_match_mode();
 
 	fi_param_define(&cxip_prov, "rdzv_threshold", FI_PARAM_SIZE_T,
-			"Message size threshold for rendezvous protocol.");
+			"Message size threshold for rendezvous protocol (default %lu).",
+			cxip_env.rdzv_threshold);
 	fi_param_get_size_t(&cxip_prov, "rdzv_threshold",
 			    &cxip_env.rdzv_threshold);
 
@@ -873,7 +874,8 @@ static void cxip_env_init(void)
 	}
 
 	fi_param_define(&cxip_prov, "oflow_buf_size", FI_PARAM_SIZE_T,
-			"Overflow buffer size.");
+			"Overflow buffer size (default %lu).",
+			cxip_env.oflow_buf_size);
 	fi_param_get_size_t(&cxip_prov, "oflow_buf_size",
 			    &cxip_env.oflow_buf_size);
 
@@ -892,11 +894,13 @@ static void cxip_env_init(void)
 
 	/* Allow either FI_CXI_OFLOW_BUF_COUNT or FI_CXI_FLOW_BUF_MIN_POSTED */
 	fi_param_define(&cxip_prov, "oflow_buf_count", FI_PARAM_SIZE_T,
-			"Overflow buffer count/min posted.");
+			"Overflow buffer count/min posted (default %lu).",
+			cxip_env.oflow_buf_min_posted);
 	fi_param_get_size_t(&cxip_prov, "oflow_buf_count",
 			    &cxip_env.oflow_buf_min_posted);
 	fi_param_define(&cxip_prov, "oflow_buf_min_posted", FI_PARAM_SIZE_T,
-			"Overflow buffer count/min posted.");
+			"Overflow buffer count/min posted (default %lu).",
+			cxip_env.oflow_buf_min_posted);
 	fi_param_get_size_t(&cxip_prov, "oflow_buf_min_posted",
 			    &cxip_env.oflow_buf_min_posted);
 	cxip_env.oflow_buf_max_cached = cxip_env.oflow_buf_min_posted * 3;
@@ -1000,11 +1004,13 @@ static void cxip_env_init(void)
 	fi_param_get_bool(&cxip_prov, "msg_lossless", &cxip_env.msg_lossless);
 
 	fi_param_define(&cxip_prov, "req_buf_size", FI_PARAM_SIZE_T,
-			"Size of request buffer.");
+			"Size of request buffer (default %lu).",
+			cxip_env.req_buf_size);
 	fi_param_get_size_t(&cxip_prov, "req_buf_size", &cxip_env.req_buf_size);
 
 	fi_param_define(&cxip_prov, "req_buf_min_posted", FI_PARAM_SIZE_T,
-			"Minimum number of request buffer posted.");
+			"Minimum number of request buffer posted (default %lu).",
+			cxip_env.req_buf_min_posted);
 	fi_param_get_size_t(&cxip_prov, "req_buf_min_posted",
 			    &cxip_env.req_buf_min_posted);
 
