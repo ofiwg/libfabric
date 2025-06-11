@@ -23,6 +23,8 @@ enum {
 
 struct fi_efa_ops_domain {
 	int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
+	int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
+			  uint16_t *remote_qpn, uint32_t *remote_qkey);
 };
 
 #endif /* _FI_EXT_EFA_H_ */
