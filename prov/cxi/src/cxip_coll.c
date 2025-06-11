@@ -41,12 +41,19 @@
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-/* must all be 0 in production code */
+#if ENABLE_DEBUG
 #define __chk_pkts	1
 #define __trc_pkts	1
 #define __trc_data	1
+#else
+#define __chk_pkts	0
+#define __trc_pkts	0
+#define __trc_data	0
+#endif
 
 #define	MAGIC		0x677d
+#define	TIMER_UNSET	-1
+#define	TIMER_NULL	0
 
 /****************************************************************************
  * Metrics for evaluating collectives
@@ -96,6 +103,31 @@ static inline void _measure_completions(int red_cnt, size_t total)
 		ofi_atomic_inc64(&_coll_metrics.red_count_unreduced);
 	else
 		ofi_atomic_inc64(&_coll_metrics.red_count_bad);
+}
+
+
+void dump_reduction_table(int red_id, struct cxip_coll_reduction *r)
+{
+#if ENABLE_DEBUG
+	int i;
+	char idx[4];
+
+	TRACE_DEBUG("+----------------------------------------------------------------+\n");
+	TRACE_DEBUG("| red_id | seqno | resno | in_use | pktsent | completed | red_rc |\n");
+
+	for (i = 0; i < CXIP_COLL_MAX_CONCUR; i++) {
+		if (i == red_id)
+			snprintf(idx, sizeof(idx), "*%d*", i);
+		else
+			snprintf(idx, sizeof(idx), " %d ", i);
+		TRACE_DEBUG(
+		"|----------------------------------------------------------------|\n");
+		TRACE_DEBUG("|   %s  | %5d | %5d | %6d | %7d | %9d | %6d |\n",
+		idx, r[i].seqno, r[i].resno, r[i].in_use, r[i].pktsent, r[i].completed,
+		r[i].red_rc);
+	}
+	TRACE_DEBUG("+----------------------------------------------------------------+\n");
+#endif
 }
 
 /****************************************************************************
@@ -960,6 +992,8 @@ static void _coll_rx_progress(struct cxip_req *req,
 	struct cxip_coll_reduction *reduction;
 	struct red_pkt *pkt;
 
+	TRACE_DEBUG("_coll_rx_progress entry\n");
+
 	/* Raw packet of some sort received */
 	ofi_atomic_inc32(&req->coll.coll_pte->recv_cnt);
 
@@ -974,6 +1008,7 @@ static void _coll_rx_progress(struct cxip_req *req,
 	_swappkt(pkt);
 	if (pkt->hdr.cookie.magic != MAGIC)
 	{
+		TRACE_DEBUG("Bad coll MAGIC: %x\n", pkt->hdr.cookie.magic);
 		CXIP_INFO("Bad coll MAGIC: %x\n", pkt->hdr.cookie.magic);
 		_swappkt(pkt);
 		return;
@@ -1005,6 +1040,7 @@ static void _coll_rx_progress(struct cxip_req *req,
 #endif
 	// A re-arm of an armed switch port drop this packet
 	if (pkt->hdr.seqno == CXIP_COLL_MOD_SEQNO) {
+		TRACE_PKT("pre-rearm pkt dropped\n");
 		CXIP_INFO("pre-rearm pkt dropped\n");
 		return;
 	}
@@ -1015,6 +1051,7 @@ static void _coll_rx_progress(struct cxip_req *req,
 	_dump_red_pkt(pkt, "recv");
 	ofi_atomic_inc32(&mc_obj->pkt_cnt);
 	_progress_coll(reduction, pkt);
+	TRACE_DEBUG("_coll_rx_progress return\n");
 }
 
 /* Event-handling callback for posted receive buffers */
@@ -1414,7 +1451,7 @@ void _dump_coll_data(const char *tag, const struct cxip_coll_data *coll_data)
 	TRACE_PKT("=== Coll data: %s\n", tag);
 	TRACE_PKT("  init    = %d\n", coll_data->initialized);
 	TRACE_PKT("  red_op  = %d\n", coll_data->red_op);
-	TRACE_PKT("  rec_rc  = %d\n", coll_data->red_rc);
+	TRACE_PKT("  red_rc  = %d\n", coll_data->red_rc);
 	TRACE_PKT("  red_cnt = %d\n", coll_data->red_cnt);
 	TRACE_PKT("  data:\n");
 	for (i = 0; i < 4; i++)
@@ -1490,6 +1527,7 @@ static void _reduce(struct cxip_coll_data *accum,
 	TRACE_DEBUG("%s entry\n", __func__);
 	/* Initialize with new data */
 	if (!accum->initialized) {
+		TRACE_DEBUG("!accum->initialize\n");
 		memcpy(accum, coll_data, sizeof(*accum));
 		return;
 	}
@@ -1499,11 +1537,14 @@ static void _reduce(struct cxip_coll_data *accum,
 
 	/* Real reduction (send or receive) must count contributions.
 	 */
-	if (!pre_reduce)
+	if (!pre_reduce) {
+		TRACE_DEBUG("%d += %d\n", accum->red_cnt, coll_data->red_cnt);
 		accum->red_cnt += coll_data->red_cnt;
+	}
 
 	/* ops must always match, else don't apply data */
 	if (accum->red_op != coll_data->red_op) {
+		TRACE_DEBUG("OP MISMATCH, %d vs %d\n", accum->red_op, coll_data->red_op);
 		SET_RED_RC(accum->red_rc, CXIP_COLL_RC_OP_MISMATCH);
 		return;
 	}
@@ -1847,8 +1888,10 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 	}
 
 	/* any other error is a serious config/hardware issue */
-	if (ret)
+	if (ret) {
+		TRACE_DEBUG("Fatal send error = %d\n", ret);
 		CXIP_WARN("Fatal send error = %d\n", ret);
+	}
 
 	return ret;
 }
@@ -1861,8 +1904,10 @@ static void _post_coll_complete(struct cxip_coll_reduction *reduction)
 
 	/* Indicates collective completion by writing to the endpoint TX CQ */
 	req = reduction->op_inject_req;
-	if (!req)
+	if (!req) {
+		TRACE_DEBUG("!req\n");
 		return;
+	}
 
 	/* convert Rosetta return codes to CXIP return codes */
 	if (reduction->accum.red_rc == CXIP_COLL_RC_SUCCESS ||
@@ -1901,14 +1946,19 @@ static void _post_coll_complete(struct cxip_coll_reduction *reduction)
 		ret = cxip_cq_req_error(req, 0, -FI_EOTHER, prov,
 					NULL, 0, FI_ADDR_UNSPEC);
 	}
-	if (ret)
+	if (ret) {
+		TRACE_DEBUG("Attempt to post completion failed %s\n",
+			   fi_strerror(-ret));
 		CXIP_FATAL("Attempt to post completion failed %s\n",
 			   fi_strerror(-ret));
+	}
 
 	/* req structure no longer needed */
 	cxip_evtq_req_free(req);
 
 	/* restore reduction object to usable state */
+	dlist_init(&reduction->tmout_link);
+	memset(&reduction->backup, 0, sizeof(reduction->backup));
 	reduction->accum.initialized = false;
 	reduction->in_use = false;
 	reduction->completed = false;
@@ -2025,9 +2075,8 @@ bool _tsexp(struct timespec *ts)
 	struct timespec tsnow;
 
 	_tsget(&tsnow);
-	TRACE_JOIN("now=%ld.%ld exp=%ld.%ld\n",
-		   tsnow.tv_sec, tsnow.tv_nsec,
-		   ts->tv_sec, ts->tv_nsec);
+	if (ts->tv_sec == TIMER_UNSET)
+		return false;
 	if (tsnow.tv_sec < ts->tv_sec)
 		return false;
 	if (tsnow.tv_sec > ts->tv_sec)
@@ -2037,23 +2086,38 @@ bool _tsexp(struct timespec *ts)
 
 /* test for {0,0} timestamp */
 static inline
-bool _tsnul(struct timespec *ts)
+bool _tsnull(struct timespec *ts)
 {
 	return !(ts->tv_sec | ts->tv_nsec);
 }
 
+/* Clear reduction expiration time */
+static inline
+void _ts_red_clr(struct cxip_coll_reduction *reduction)
+{
+	TRACE_DEBUG("clearing timer on red_id %d, seqno %d\n", reduction->red_id,
+		    reduction->seqno);
+	dlist_remove(&reduction->tmout_link);
+	reduction->tv_expires.tv_sec = TIMER_UNSET;
+	reduction->tv_expires.tv_nsec = TIMER_UNSET;
+}
+
 /* Set reduction expiration time (future) */
 static inline
-void _ts_red_set(struct cxip_coll_reduction *reduction)
+void _ts_red_set(struct cxip_coll_reduction *reduction,
+		 struct timespec *expires, struct dlist_entry *retry_list)
 {
-	_tsset(&reduction->tv_expires, &reduction->mc_obj->timeout);
+	TRACE_DEBUG("setting timer on red_id %d, seqno %d\n", reduction->red_id,
+		    reduction->seqno);
+	_tsset(&reduction->tv_expires, expires);
+	dlist_insert_tail(&reduction->tmout_link, retry_list);
 }
 
 /* Used to prevent first-use incast */
 static inline
 bool _is_red_first_time(struct cxip_coll_reduction *reduction)
 {
-	return _tsnul(&reduction->tv_expires);
+	return _tsnull(&reduction->tv_expires);
 }
 
 /* Used to reduce incast congestion during run */
@@ -2063,42 +2127,51 @@ bool _is_red_timed_out(struct cxip_coll_reduction *reduction)
 	if (reduction->mc_obj->retry_disable)
 		return false;
 	if (_is_red_first_time(reduction)) {
-		TRACE_DEBUG("=== root redid=%d first time, retry\n",
+		TRACE_DEBUG("=== root red_id=%d first time, retry\n",
 			    reduction->red_id);
 		return true;
 	}
 
-	/* disable timeout logic for now */
-	return false;
+	return _tsexp(&reduction->tv_expires);
 }
 
-/* Root node state machine progress.
- * !pkt means this is progressing from injection call (e.g. fi_reduce())
- *  pkt means this is progressing from event callback (leaf packet)
+/* Root node state machine progress
+ * - force_root_retry indicates retry from cxip_coll_progress_cq_poll(),
+ *   pkt == NULL
+ * - !pkt means this is progressing from injection call (e.g. fi_reduce())
+ *   or from cxip_coll_progress_cq_poll()
+ * - pkt means this is progressing from event callback _coll_recv_cb()
+ *   (incoming leaf packet)
  */
 static void _progress_root(struct cxip_coll_reduction *reduction,
-			   struct red_pkt *pkt)
+			   struct red_pkt *pkt, bool force_root_retry)
 {
 	struct cxip_coll_mc *mc_obj = reduction->mc_obj;
-	struct cxip_coll_data coll_data;
+	struct cxip_coll_data coll_data = {0} ;
 	ssize_t ret;
 
 	/* State machine disabled for testing */
 	if (reduction->coll_state != CXIP_COLL_STATE_READY)
 		return;
 
-	/* Injection or packet arrival after root timeout initiates a retry */
-	if (_is_red_timed_out(reduction)) {
+	/* Retry pre-empts partial collective (pkt == NULL) */
+	if (force_root_retry || _is_red_timed_out(reduction)) {
 		/* reset reduction for retry send */
 		reduction->seqno = mc_obj->seqno;
-		TRACE_PKT("root T/O reduction seqno = %d\n", reduction->seqno);
 		INCMOD(mc_obj->seqno, CXIP_COLL_MOD_SEQNO);
-		TRACE_PKT("root T/O mc_obj seqno = %d\n", mc_obj->seqno);
+		TRACE_PKT("progress_root retry reduction seqno %d red_id %d\n",
+			  reduction->seqno, reduction->red_id);
 		ofi_atomic_inc32(&mc_obj->tmout_cnt);
+
+		/* restore data for retry */
+		memcpy(&reduction->accum, &reduction->backup, sizeof(reduction->backup));
+
+		_ts_red_clr(reduction);
+		_ts_red_set(reduction, &reduction->mc_obj->rootexpires,
+			    &mc_obj->ep_obj->coll.root_retry_list);
 
 		ret = cxip_coll_send_red_pkt(reduction, NULL,
 					     !mc_obj->arm_disable, true);
-		_ts_red_set(reduction);
 		if (ret) {
 			SET_RED_RC(reduction->accum.red_rc,
 				   CXIP_COLL_RC_TX_FAILURE);
@@ -2128,6 +2201,12 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 		/* perform the reduction */
 		_reduce(&reduction->accum, &coll_data, false);
 		_dump_coll_data("after leaf contrib to root", &reduction->accum);
+	} else {
+		/* After the first 8 sends, we let the leaves lead, but we still need
+		 * to set the timer in case we don't hear from all of them.
+		 */
+		_ts_red_set(reduction, &reduction->mc_obj->rootexpires,
+			    &mc_obj->ep_obj->coll.root_retry_list);
 	}
 
 	/* check for reduction complete */
@@ -2143,17 +2222,22 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 		reduction->seqno = mc_obj->seqno;
 		INCMOD(mc_obj->seqno, CXIP_COLL_MOD_SEQNO);
 		reduction->completed = true;
+		_ts_red_clr(reduction);
 
-		TRACE_DEBUG("root send seqno = %d\n", reduction->seqno);
+		TRACE_DEBUG("root sending result, seqno %d red_id %d\n",
+			    reduction->seqno, reduction->red_id);
 		ret = cxip_coll_send_red_pkt(reduction, &reduction->accum,
 					     !mc_obj->arm_disable, false);
-		_ts_red_set(reduction);
+
 		if (ret)
 			SET_RED_RC(reduction->accum.red_rc,
 				   CXIP_COLL_RC_TX_FAILURE);
 	} else {
-		TRACE_DEBUG("incomplete reduction (recvd: %d, expected: %lu)\n",
-			    reduction->accum.red_cnt, mc_obj->av_set_obj->fi_addr_cnt);
+		if (pkt) {
+			TRACE_DEBUG("incomplete reduction (recvd: %d, expected: %lu)\n",
+				    reduction->accum.red_cnt, mc_obj->av_set_obj->fi_addr_cnt);
+			assert(reduction->accum.red_cnt <= mc_obj->av_set_obj->fi_addr_cnt);
+		}
 	}
 
 post_complete:
@@ -2161,7 +2245,9 @@ post_complete:
 	reduction = &mc_obj->reduction[mc_obj->tail_red_id];
 	while (reduction->in_use && reduction->completed) {
 		/* Reduction completed on root */
+		TRACE_DEBUG("posting root completion\n");
 		_post_coll_complete(reduction);
+		dump_reduction_table(mc_obj->tail_red_id,  &mc_obj->reduction[0]);
 
 		/* Advance to the next reduction */
 		INCMOD(mc_obj->tail_red_id, mc_obj->max_red_id);
@@ -2171,13 +2257,14 @@ post_complete:
 
 /* Leaf node state machine progress.
  * !pkt means this is progressing from injection call (e.g. fi_reduce())
- *  pkt means this is progressing from event callback (receipt of packet)
+ * pkt means this is progressing from event callback (receipt of packet)
+ * force_leaf_retry indicates this has been triggered from retry poll
  */
 static void _progress_leaf(struct cxip_coll_reduction *reduction,
 			   struct red_pkt *pkt)
 {
 	struct cxip_coll_mc *mc_obj = reduction->mc_obj;
-	struct cxip_coll_data coll_data;
+	struct cxip_coll_data coll_data = {0};
 	int ret;
 
 	/* state machine disabled for testing */
@@ -2186,21 +2273,25 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 
 	/* if reduction packet, reset timer, seqno, honor retry */
 	if (pkt) {
-		TRACE_DEBUG("%s: packet seen\n", __func__);
-		_ts_red_set(reduction);
+		TRACE_DEBUG("_progress_leaf: packet seen, seqno %d\n", pkt->hdr.seqno);
 		reduction->seqno = pkt->hdr.seqno;
 		reduction->resno = pkt->hdr.seqno;
-		if (pkt->hdr.retry)
+		if (pkt->hdr.retry) {
+			TRACE_PKT("leaf honoring retry\n");
 			reduction->pktsent = false;
+		}
 		TRACE_PKT("leaf rcv seqno = %d\n", reduction->seqno);
 	}
 
 	/* leaves lead with sending a packet */
 	if (!reduction->pktsent) {
+		TRACE_PKT("leaf preparing to send seqno %d\n", reduction->seqno);
 		/* Avoid first-use incast, retry guaranteed */
 		if (_is_red_first_time(reduction)) {
-			TRACE_DEBUG("=== leaf redid=%d first time, wait\n",
+			TRACE_DEBUG("=== leaf red_id=%d first time, wait\n",
 				    reduction->red_id);
+			reduction->tv_expires.tv_sec = TIMER_UNSET;
+			reduction->tv_expires.tv_nsec = TIMER_UNSET;
 			return;
 		}
 
@@ -2243,6 +2334,8 @@ post_complete:
 	/* Post completions in injection order */
 	reduction = &mc_obj->reduction[mc_obj->tail_red_id];
 	while (reduction->in_use && reduction->completed) {
+		TRACE_DEBUG("posting leaf completion\n");
+		dump_reduction_table(mc_obj->tail_red_id,  &mc_obj->reduction[0]);
 		_post_coll_complete(reduction);
 		INCMOD(mc_obj->tail_red_id, mc_obj->max_red_id);
 		reduction = &mc_obj->reduction[mc_obj->tail_red_id];
@@ -2255,9 +2348,30 @@ static void _progress_coll(struct cxip_coll_reduction *reduction,
 			   struct red_pkt *pkt)
 {
 	if (is_hw_root(reduction->mc_obj))
-		_progress_root(reduction, pkt);
+		_progress_root(reduction, pkt, false);
 	else
 		_progress_leaf(reduction, pkt);
+}
+
+/* Root or leaf CQ poll timeout progress state machine.
+ * Called on every CQ poll, so must be fast.
+ * Must be exported, call is in cxip_txc_hpc_progress().
+ */
+void cxip_coll_progress_cq_poll(struct cxip_ep_obj *ep_obj)
+{
+	struct cxip_coll_reduction *reduction;
+
+	if (!ep_obj->coll.enabled)
+		return;
+
+	reduction = dlist_first_entry_or_null(&ep_obj->coll.root_retry_list,
+					      struct cxip_coll_reduction,
+					      tmout_link);
+	if (reduction && _tsexp(&reduction->tv_expires)) {
+		TRACE_DEBUG("progressing root red_id %d, seqno %d from hpc_progress\n",
+			    reduction->red_id, reduction->seqno);
+		_progress_root(reduction, NULL, true);
+	}
 }
 
 /* Debugging only */
@@ -2273,7 +2387,7 @@ _cxip_coll_prereduce(int cxi_opcode, const void *op_send_data,
 		     void *accum, size_t sendcnt, uint64_t flags)
 {
 	const struct cxip_coll_data *coll_data_ptr;
-	struct cxip_coll_data coll_data;
+	struct cxip_coll_data coll_data = {0};
 
 	/* Convert user data to local coll_data structure */
 	if (flags & FI_CXI_PRE_REDUCED) {
@@ -2311,7 +2425,7 @@ _cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 		  size_t bytcnt, uint64_t flags, void *context)
 {
 	struct cxip_coll_reduction *reduction;
-	struct cxip_coll_data coll_data;
+	struct cxip_coll_data coll_data = {0};
 	struct cxip_req *req;
 	int ret;
 
@@ -2319,12 +2433,17 @@ _cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 	TRACE_DEBUG("%s bytecnt=%ld\n", __func__, bytcnt);
 	ofi_genlock_lock(&mc_obj->ep_obj->lock);
 
+	TRACE_DEBUG("attempting to use red_id %d\n", mc_obj->next_red_id);
+
 	/* must observe strict round-robin across all nodes */
 	reduction = &mc_obj->reduction[mc_obj->next_red_id];
 	if (reduction->in_use) {
+		dump_reduction_table(mc_obj->next_red_id,  &mc_obj->reduction[0]);
 		ret = -FI_EAGAIN;
 		goto quit;
 	}
+
+	TRACE_DEBUG("using red_id %d\n", mc_obj->next_red_id);
 
 	/* acquire a request structure */
 	req = cxip_evtq_req_alloc(mc_obj->ep_obj->coll.tx_evtq, 1, NULL);
@@ -2358,6 +2477,8 @@ _cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 
 	/* reduce data into accumulator */
 	_reduce(&reduction->accum, &coll_data, false);
+	/* make a copy for retries */
+	memcpy(&reduction->backup, &reduction->accum, sizeof(reduction->backup));
 	_dump_coll_data("coll_data initialized inj", &coll_data);
 
 	/* Progress the collective */
@@ -2536,7 +2657,7 @@ ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count,
 
 	/* result required in all cases */
 	if (!result) {
-		CXIP_WARN("result required with FI_MORE\n");
+		CXIP_WARN("result required\n");
 		return -FI_EINVAL;
 	}
 
@@ -2757,11 +2878,18 @@ static void _cxip_delete_mcast_cb(struct cxip_curl_handle *handle);
 /* Close multicast collective object */
 static void _close_mc(struct cxip_coll_mc *mc_obj, bool delete, bool has_error)
 {
+	struct cxip_coll_reduction *reduction;
 	int count;
+	int red_id;
 
 	if (!mc_obj)
 		return;
 	TRACE_JOIN("%s starting MC cleanup\n", __func__);
+
+	for (red_id = 0; red_id < CXIP_COLL_MAX_CONCUR; red_id++) {
+		reduction = &mc_obj->reduction[red_id];
+		_ts_red_clr(reduction);
+	}
 
 	mc_obj->has_closed = true;
 	mc_obj->has_error = has_error;
@@ -2983,10 +3111,9 @@ static int _initialize_mc(void *ptr)
 	mc_obj->max_red_id = CXIP_COLL_MAX_CONCUR;
 	mc_obj->arm_disable = false;
 	mc_obj->rx_discard = jstate->rx_discard;
-	mc_obj->timeout.tv_sec =
-		cxip_env.coll_retry_usec/1000000L;
-	mc_obj->timeout.tv_nsec =
-		(cxip_env.coll_retry_usec%1000000L)*1000L;
+	mc_obj->rootexpires.tv_sec = cxip_env.coll_retry_usec / 1000000L;
+	mc_obj->rootexpires.tv_nsec =
+		(cxip_env.coll_retry_usec % 1000000L) * 1000L;
 	for (red_id = 0; red_id < CXIP_COLL_MAX_CONCUR; red_id++) {
 		struct cxip_coll_reduction *reduction;
 
@@ -2996,7 +3123,10 @@ static int _initialize_mc(void *ptr)
 		reduction->red_id = red_id;
 		reduction->in_use = false;
 		reduction->completed = false;
+		dlist_init(&reduction->tmout_link);
 	}
+	TRACE_DEBUG("reduction table initialized\n");
+	dump_reduction_table(0, &mc_obj->reduction[0]);
 	TRACE_DEBUG("Initializing mc_obj=%p counters\n", mc_obj);
 	ofi_spin_init(&mc_obj->lock);
 	ofi_atomic_initialize32(&mc_obj->send_cnt, 0);
@@ -4397,6 +4527,8 @@ int cxip_coll_enable(struct cxip_ep *ep)
 
 	ep->ep.collective = &cxip_collective_ops;
 	ep_obj->coll.enabled = true;
+
+	dlist_init(&ep_obj->coll.root_retry_list);
 
 	cxip_coll_init_metrics();
 	cxip_coll_trace_init();
