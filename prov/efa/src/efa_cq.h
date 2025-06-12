@@ -16,10 +16,11 @@ struct efa_ibv_cq {
 	struct ibv_cq_ex *ibv_cq_ex;
 	enum ibv_cq_ex_type ibv_cq_ex_type;
 	bool data_path_direct_enabled;
+	bool poll_active;
+	int poll_err;
 #if HAVE_EFADV_QUERY_CQ
 	struct efa_data_path_direct_cq data_path_direct;
 #endif
-
 };
 
 struct efa_ibv_cq_poll_list_entry {
