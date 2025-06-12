@@ -3352,7 +3352,8 @@ cxip_recv_req_init(struct cxip_rxc *rxc, void *buf, size_t len, fi_addr_t addr,
 
 	/* HW to SW PtlTE transition, ensure progress is made */
 	if (rxc->state != RXC_ENABLED && rxc->state != RXC_ENABLED_SOFTWARE) {
-		cxip_cq_progress(rxc->recv_cq);
+		/* EP lock is held */
+		rxc->ops.progress(rxc);
 		ret = -FI_EAGAIN;
 		goto err;
 	}
