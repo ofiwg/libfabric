@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2025\-05\-15" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2025\-06\-12" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -254,6 +254,8 @@ function table \f[V]fi_efa_ops_domain\f[R] defined as follows:
 \f[C]
 struct fi_efa_ops_domain {
     int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
+    int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
+              uint16_t *remote_qpn, uint32_t *remote_qkey);
 };
 \f[R]
 .fi
@@ -308,6 +310,23 @@ It is only valid when \f[V]ic_id_validity\f[R] has the
 .PP
 \f[B]query_mr()\f[R] returns 0 on success, or the value of errno on
 failure (which indicates the failure reason).
+.SS query_addr
+.PP
+This op queries the following address information for a given endpoint
+and destination address.
+.TP
+\f[I]ahn\f[R]
+Address handle number.
+.TP
+\f[I]remote_qpn\f[R]
+Remote queue pair Number.
+.TP
+\f[I]remote_qkey\f[R]
+qkey for the remote queue pair.
+.SS Return value
+.PP
+\f[B]query_addr()\f[R] returns FI_SUCCESS on success, or -FI_EINVAL on
+failure.
 .SH Traffic Class (tclass) in EFA
 .PP
 To prioritize the messages from a given endpoint, user can specify
