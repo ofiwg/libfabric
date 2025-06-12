@@ -336,6 +336,8 @@ int main(void)
 
 		/* begin efa_unit_test_mr.c */
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_reg_host_memory, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_reg_host_memory_no_mr_local, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_reg_host_memory_overlapping_buffers, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_reg_cuda_memory, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_direct_mr_reg_no_gdrcopy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_mr.c */

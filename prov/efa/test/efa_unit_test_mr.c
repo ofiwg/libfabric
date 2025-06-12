@@ -54,6 +54,82 @@ void test_efa_rdm_mr_reg_host_memory(struct efa_resource **state)
 	free(buf);
 }
 
+void test_efa_rdm_mr_reg_host_memory_no_mr_local(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_info *hints;
+	struct efa_domain *efa_domain;
+	size_t mr_size = 64;
+	void *buf;
+	struct fid_mr *mr = NULL;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	hints->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						 FI_VERSION(2, 0), hints, true, true);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+
+	buf = malloc(mr_size);
+	assert_non_null(buf);
+
+	test_efa_mr_impl(efa_domain, mr, 0, 0, false);
+
+	assert_int_equal(fi_mr_reg(resource->domain, buf, mr_size,
+				   FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL),
+			 0);
+
+	/* No GDRCopy registration for host memory */
+	test_efa_mr_impl(efa_domain, mr, 1, mr_size, false);
+
+	assert_int_equal(fi_close(&mr->fid), 0);
+	test_efa_mr_impl(efa_domain, NULL, 0, 0, false);
+	free(buf);
+}
+
+void test_efa_rdm_mr_reg_host_memory_overlapping_buffers(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+	size_t mr_size = 1024;
+	void *buf;
+	struct fid_mr *mr_1 = NULL, *mr_2 = NULL;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+
+	buf = malloc(mr_size);
+	assert_non_null(buf);
+
+	test_efa_mr_impl(efa_domain, mr_1, 0, 0, false);
+	test_efa_mr_impl(efa_domain, mr_2, 0, 0, false);
+
+	assert_int_equal(fi_mr_reg(resource->domain, buf, mr_size,
+				   FI_SEND | FI_RECV, 0, 0, 0, &mr_1, NULL),
+			 0);
+
+	/* No GDRCopy registration for host memory */
+	test_efa_mr_impl(efa_domain, mr_1, 1, mr_size, false);
+
+	assert_int_equal(fi_mr_reg(resource->domain, buf, mr_size,
+				   FI_SEND | FI_RECV, 0, 0, 0, &mr_2, NULL),
+			 0);
+
+	test_efa_mr_impl(efa_domain, mr_2, 2, mr_size * 2, false);
+
+	assert_int_equal(fi_close(&mr_1->fid), 0);
+	test_efa_mr_impl(efa_domain, mr_2, 1, mr_size, false);
+
+	assert_int_equal(fi_close(&mr_2->fid), 0);
+	test_efa_mr_impl(efa_domain, NULL, 0, 0, false);
+
+	free(buf);
+}
+
 #if HAVE_CUDA
 void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
 {
