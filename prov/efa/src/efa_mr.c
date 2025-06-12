@@ -349,10 +349,25 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	return 0;
 }
 
-static int efa_mr_cache_regv(struct fid *fid, const struct iovec *iov,
-			     size_t count, uint64_t access, uint64_t offset,
-			     uint64_t requested_key, uint64_t flags,
-			     struct fid_mr **mr_fid, void *context)
+/**
+ * @brief Register a memory region and add it to the MR cache
+ *
+ * This function is only used internally by the EFA provider to register
+ * a memory region containing application memory and add it to the MR cache
+ * It is only used when FI_MR_LOCAL is not set and the MR cache is enabled
+ *
+ * @param[in]	fid		domain fid
+ * @param[in]	iov		iovec to be registered
+ * @param[in]	access		access flags for MR
+ * @param[in]	flags		MR flags
+ * @param[out]	mr_fid		MR descriptor fids
+ *
+ * @return FI_SUCCESS or negative FI error code
+ */
+int efa_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
+		      size_t count, uint64_t access, uint64_t offset,
+		      uint64_t requested_key, uint64_t flags,
+		      struct fid_mr **mr, void *context)
 {
 	struct fi_mr_attr attr = {0};
 
@@ -365,28 +380,8 @@ static int efa_mr_cache_regv(struct fid *fid, const struct iovec *iov,
 	attr.iface = FI_HMEM_SYSTEM;
 	attr.hmem_data = NULL;
 
-	return efa_mr_cache_regattr(fid, &attr, flags, mr_fid);
+	return efa_mr_cache_regattr(&domain_fid->fid, &attr, flags, mr);
 }
-
-static int efa_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
-			    uint64_t access, uint64_t offset,
-			    uint64_t requested_key, uint64_t flags,
-			    struct fid_mr **mr_fid, void *context)
-{
-	struct iovec iov;
-
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
-	return efa_mr_cache_regv(fid, &iov, 1, access, offset, requested_key,
-				 flags, mr_fid, context);
-}
-
-struct fi_ops_mr efa_domain_mr_cache_ops = {
-	.size = sizeof(struct fi_ops_mr),
-	.reg = efa_mr_cache_reg,
-	.regv = efa_mr_cache_regv,
-	.regattr = efa_mr_cache_regattr,
-};
 
 static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 {

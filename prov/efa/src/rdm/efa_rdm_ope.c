@@ -289,6 +289,7 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rxe)
  */
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access)
 {
+	struct efa_domain *domain;
 	int i, err;
 
 	for (i = mr_iov_start; i < ope->iov_count; ++i) {
@@ -301,16 +302,17 @@ void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64
 				 "buf: %p len: %ld access: %#lx\n",
 				 ope->iov[i].iov_base, ope->iov[i].iov_len, access);
 
-		err = fi_mr_regv(
-			&efa_rdm_ep_domain(ope->ep)->util_domain.domain_fid,
-			ope->iov + i, 1, access, 0, 0, 0, &ope->mr[i],
-			NULL);
+		domain = efa_rdm_ep_domain(ope->ep);
+		err = domain->internal_buf_mr_regv(
+			&domain->util_domain.domain_fid, ope->iov + i, 1,
+			access, 0, 0, 0, &ope->mr[i], NULL);
 
 		if (err) {
 			EFA_WARN(FI_LOG_EP_CTRL,
-				"fi_mr_reg failed! buf: %p len: %ld access: %#lx\n",
-				ope->iov[i].iov_base, ope->iov[i].iov_len,
-				access);
+				 "Failed to register internal buffer! buf: %p "
+				 "len: %ld access: %#lx\n",
+				 ope->iov[i].iov_base, ope->iov[i].iov_len,
+				 access);
 
 			ope->mr[i] = NULL;
 		} else {
