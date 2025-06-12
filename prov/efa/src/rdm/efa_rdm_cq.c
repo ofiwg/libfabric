@@ -419,18 +419,12 @@ static int efa_rdm_cq_match_ep(struct dlist_entry *item, const void *ep)
  */
 int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 {
-	bool should_end_poll = false;
-	/* Initialize an empty ibv_poll_cq_attr struct for ibv_start_poll.
-	 * EFA expects .comp_mask = 0, or otherwise returns EINVAL.
-	 */
-	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 	struct efa_rdm_pke *pkt_entry;
 	int err;
 	int opcode;
 	size_t i = 0;
 	int prov_errno;
 	struct efa_rdm_ep *ep = NULL;
-	struct fi_cq_err_entry err_entry;
 	struct efa_cq *efa_cq;
 	struct efa_domain *efa_domain;
 	struct efa_qp *qp;
@@ -442,10 +436,9 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	dlist_init(&rx_progressed_ep_list);
 
 	/* Call ibv_start_poll only once */
-	err = ibv_start_poll(ibv_cq->ibv_cq_ex, &poll_cq_attr);
-	should_end_poll = !err;
+	efa_cq_start_poll(ibv_cq);
 
-	while (!err) {
+	while (efa_cq_wc_available(ibv_cq)) {
 		pkt_entry = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
 		qp = efa_domain->qp_table[ibv_wc_read_qp_num(ibv_cq->ibv_cq_ex) & efa_domain->qp_table_sz_m1];
 		ep = container_of(qp->base_ep, struct efa_rdm_ep, base_ep);
@@ -528,24 +521,11 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		 * ibv_next_poll MUST be call after the current WC is fully processed,
 		 * which prevents later calls on ibv_cq_ex from reading the wrong WC.
 		 */
-		err = ibv_next_poll(ibv_cq->ibv_cq_ex);
+		efa_cq_next_poll(ibv_cq);
 	}
 
-	if (err && err != ENOENT) {
-		err = err > 0 ? err : -err;
-		prov_errno = ibv_wc_read_vendor_err(ibv_cq->ibv_cq_ex);
-		EFA_WARN(FI_LOG_CQ, "Unexpected error when polling ibv cq, err: %s (%d) prov_errno: %s (%d)\n", fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
-		efa_show_help(prov_errno);
-		err_entry = (struct fi_cq_err_entry) {
-			.err = err,
-			.prov_errno = prov_errno,
-			.op_context = NULL
-		};
-		ofi_cq_write_error(&efa_cq->util_cq, &err_entry);
-	}
-
-	if (should_end_poll)
-		ibv_end_poll(ibv_cq->ibv_cq_ex);
+	err = ibv_cq->poll_err;
+	efa_cq_end_poll(ibv_cq);
 
 	dlist_foreach_container_safe(
 		&rx_progressed_ep_list, struct efa_rdm_ep, ep, entry, tmp) {
