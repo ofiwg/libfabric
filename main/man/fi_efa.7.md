@@ -197,6 +197,8 @@ the pointer to the function table `fi_efa_ops_domain` defined as follows:
 ```c
 struct fi_efa_ops_domain {
 	int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
+	int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
+			  uint16_t *remote_qpn, uint32_t *remote_qkey);
 };
 ```
 
@@ -239,6 +241,21 @@ struct fi_efa_mr_attr {
 #### Return value
 **query_mr()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
+
+### query_addr
+This op queries the following address information for a given endpoint and destination address.
+
+*ahn*
+:	Address handle number.
+
+*remote_qpn*
+:	Remote queue pair Number.
+
+*remote_qkey*
+:	qkey for the remote queue pair.
+
+#### Return value
+**query_addr()** returns FI_SUCCESS on success, or -FI_EINVAL on failure.
 
 # Traffic Class (tclass) in EFA
 To prioritize the messages from a given endpoint, user can specify `fi_info->tx_attr->tclass = FI_TC_LOW_LATENCY` in the fi_endpoint() call to set the service level in rdma-core. All other tclass values will be ignored.
