@@ -267,8 +267,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 
 	/*
-	 * FI_MR_LOCAL means application will handle memory registration by itself.
-	 * Therefore when FI_MR_LOCAL is on, MR cache is not necessary.
+	 * Open the MR cache if application did not set FI_MR_LOCAL
+	 * and the cache is enabled
+	 * 
+	 * Explicit memory registrations from external application
+	 * should never go in the MR cache
 	 */
 	if (!efa_domain->mr_local && efa_mr_cache_enable) {
 		err = efa_mr_cache_open(&efa_domain->cache, efa_domain);
@@ -276,11 +279,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 			ret = err;
 			goto err_free;
 		}
-
-		efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_cache_ops;
+		efa_domain->internal_buf_mr_regv = efa_mr_cache_regv;
 	} else {
-		efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
+		efa_domain->internal_buf_mr_regv = fi_mr_regv;
 	}
+	efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
 
 	if (EFA_INFO_TYPE_IS_RDM(info)) {
 		efa_domain->info_type = EFA_INFO_RDM;
