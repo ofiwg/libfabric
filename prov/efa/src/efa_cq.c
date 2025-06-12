@@ -256,30 +256,21 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
  */
 int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 {
-	bool should_end_poll = false;
 	struct efa_base_ep *base_ep;
 	struct efa_cq *cq;
 	struct efa_domain *efa_domain;
 	struct fi_cq_tagged_entry cq_entry = {0};
-	struct fi_cq_err_entry err_entry;
 	int err = 0;
 	size_t num_cqe = 0; /* Count of read entries */
 	int prov_errno, opcode;
-
-	/* Initialize an empty ibv_poll_cq_attr struct for ibv_start_poll.
-	 * EFA expects .comp_mask = 0, or otherwise returns EINVAL.
-	 */
-	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 
 	cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
 	efa_domain = container_of(cq->util_cq.domain, struct efa_domain, util_domain);
 
 	/* Call ibv_start_poll only once */
-	err = efa_ibv_cq_start_poll(ibv_cq, &poll_cq_attr);
+	efa_cq_start_poll(ibv_cq);
 
-	should_end_poll = !err;
-
-	while (!err) {
+	while (efa_cq_wc_available(ibv_cq)) {
 		base_ep = efa_domain->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->qp_table_sz_m1]->base_ep;
 		opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
 		if (ibv_cq->ibv_cq_ex->status) {
@@ -337,29 +328,10 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			break;
 		}
 
-		err = efa_ibv_cq_next_poll(ibv_cq);
+		efa_cq_next_poll(ibv_cq);
 	}
-
-	if (err && err != ENOENT) {
-		err = err > 0 ? err : -err;
-		prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
-		EFA_WARN(FI_LOG_CQ,
-			 "Unexpected error when polling ibv cq, err: %s (%d) "
-			 "prov_errno: %s (%d)\n",
-			 fi_strerror(err), err, efa_strerror(prov_errno),
-			 prov_errno);
-		efa_show_help(prov_errno);
-		err_entry = (struct fi_cq_err_entry) {
-			.err = err,
-			.prov_errno = prov_errno,
-			.op_context = NULL,
-		};
-		ofi_cq_write_error(&cq->util_cq, &err_entry);
-	}
-
-	if (should_end_poll)
-		efa_ibv_cq_end_poll(ibv_cq);
-
+	err = ibv_cq->poll_err;
+	efa_cq_end_poll(ibv_cq);
 	return err;
 }
 

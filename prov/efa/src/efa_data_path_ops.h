@@ -323,4 +323,56 @@ static inline bool efa_cq_wc_is_unsolicited(struct efa_ibv_cq *ibv_cq)
 	return efa_use_unsolicited_write_recv() && efa_ibv_cq_wc_is_unsolicited(ibv_cq);
 }
 
+static inline bool efa_cq_wc_available(struct efa_ibv_cq *cq)
+{
+	return cq->poll_active && !cq->poll_err;
+}
+
+static inline void efa_cq_report_poll_err(struct efa_ibv_cq *cq)
+{
+	int err = cq->poll_err;
+	int prov_errno;
+
+	if (err && err != ENOENT) {
+		err = err > 0 ? err : -err;
+		prov_errno = efa_ibv_cq_wc_read_vendor_err(cq);
+		EFA_WARN(FI_LOG_CQ, "Encountered error during CQ polling. err: %s (%d), prov_errno: %s (%d)\n",
+				fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
+		efa_show_help(prov_errno);
+		ofi_cq_write_error(&container_of(cq, struct efa_cq, ibv_cq)->util_cq , &(struct fi_cq_err_entry) {
+			.err = err,
+			.prov_errno = prov_errno,
+		});
+	}
+}
+
+static inline void efa_cq_start_poll(struct efa_ibv_cq *cq)
+{
+	/* Pass an empty ibv_poll_cq_attr struct (zero-initialized) for
+	 * ibv_start_poll. EFA expects .comp_mask = 0, or otherwise returns EINVAL.
+	 */
+	assert(!cq->poll_active);
+	cq->poll_err = efa_ibv_cq_start_poll(cq, &(struct ibv_poll_cq_attr){0});
+	if (OFI_LIKELY(!cq->poll_err))
+		cq->poll_active = true;
+	else
+		efa_cq_report_poll_err(cq);
+}
+
+static inline void efa_cq_next_poll(struct efa_ibv_cq *cq)
+{
+	assert(cq->poll_active);
+	cq->poll_err = efa_ibv_cq_next_poll(cq);
+	if (OFI_UNLIKELY(cq->poll_err))
+		efa_cq_report_poll_err(cq);
+}
+
+static inline void efa_cq_end_poll(struct efa_ibv_cq *cq)
+{
+	if (OFI_LIKELY(cq->poll_active))
+		efa_ibv_cq_end_poll(cq);
+	cq->poll_active = false;
+	cq->poll_err = 0;
+}
+
 #endif /* EFA_DATA_PATH_OPS_H */
