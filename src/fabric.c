@@ -53,6 +53,7 @@
 #include "ofi_mr.h"
 #include <ofi_shm_p2p.h>
 #include <rdma/fi_ext.h>
+#include "fi_version_gen.h"
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
@@ -1009,6 +1010,10 @@ void fi_ini(void)
 	ofi_register_provider(COLL_INIT, NULL);
 
 	pthread_atfork(NULL, NULL, ofi_memhooks_atfork_handler);
+
+	FI_INFO(&core_prov, FI_LOG_CORE,
+		"Initialized libfabric %s - built from commit %s\n",
+		FI_VERSION_STRING, FI_GIT_COMMIT_SHORT);
 
 	ofi_init = 1;
 

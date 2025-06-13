@@ -770,7 +770,7 @@ AS_IF([test x"$with_cuda" != x"no"],
 			[],
 			[have_cuda_dmabuf=0],
 			[[#include <cuda.h>]])
-	
+
 	have_cuda_dmabuf_mapping_type_pcie=1
 	AC_CHECK_DECL([CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE],
 			[],
@@ -1112,6 +1112,9 @@ AS_IF([test "$have_rocr" = "1" && test x"$with_rocr" != x"yes"],
 AC_DEFINE_UNQUOTED([HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF],[$have_hsa_amd_portable_export_dmabuf],[dmabuf handle support])
 
 AC_CHECK_SIZEOF([void *])
+
+AC_CHECK_FILE([src/fi_version_gen.h], [have_version_header=yes], [have_version_header=no])
+AM_CONDITIONAL([NEED_VERSION_GEN], [test -d "$srcdir/.git" -o "x$have_version_header" = "xno"])
 
 dnl patching ${archive_cmds} to affect generation of file "libtool" to fix linking with clang
 dnl allows for building with clang lto and fast linking with non gnu ld

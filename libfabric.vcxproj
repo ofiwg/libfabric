@@ -1028,6 +1028,29 @@
   <ItemGroup>
     <None Include="libfabric.def" />
   </ItemGroup>
+  <Target Name="GenerateVersionHeader" BeforeTargets="ClCompile">
+    <PropertyGroup>
+      <VersionHeaderFile>$(SolutionDir)src\fi_version_gen.h</VersionHeaderFile>
+    </PropertyGroup>
+    <WriteLinesToFile
+      File="$(VersionHeaderFile)"
+      Lines='/* Auto-generated version file for Windows build */;
+#ifndef FI_VERSION_GEN_H;
+#define FI_VERSION_GEN_H;
+;
+#define FI_GIT_COMMIT_HASH "unknown";
+#define FI_GIT_COMMIT_SHORT "unknown";
+#define FI_VERSION_STRING "unknown";
+;
+#endif /* FI_VERSION_GEN_H */;'
+      Overwrite="true"/>
+  </Target>
+
+  <ItemGroup>
+    <ClInclude Include="src\fi_version_gen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

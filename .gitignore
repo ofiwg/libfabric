@@ -61,8 +61,11 @@ config/test-driver
 util/fi_info
 util/fi_strerror
 util/fi_pingpong
+util/fi_mon_sampler
 
 prov/*/*.spec
+
+src/fi_version_gen.h
 
 .vs
 fabtests.spec

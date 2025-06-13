@@ -1,0 +1,9 @@
+/* Auto-generated from configure - do not edit */
+#ifndef FI_VERSION_GEN_H
+#define FI_VERSION_GEN_H
+
+#define FI_GIT_COMMIT_HASH "%%GIT_COMMIT_HASH%%"
+#define FI_GIT_COMMIT_SHORT "%%GIT_COMMIT_SHORT%%"
+#define FI_VERSION_STRING "%%PACKAGE_VERSION%%"
+
+#endif /* FI_VERSION_GEN_H */

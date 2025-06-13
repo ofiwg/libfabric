@@ -303,7 +303,7 @@ chksum_srcs += \
 
 _psm3_LIBS = prov/psm3/psm3/libpsm3i.la
 
-BUILT_SOURCES = prov/psm3/src/psm3_src_chksum.h
+BUILT_SOURCES += prov/psm3/src/psm3_src_chksum.h
 CLEANFILES = prov/psm3/src/psm3_src_chksum.h
 DATE_FMT = +%Y-%m-%dT%H:%M:%S
 prov/psm3/src/psm3_src_chksum.h: Makefile $(chksum_srcs)
