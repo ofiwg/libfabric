@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2025\-06\-12" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2025\-06\-13" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -256,6 +256,12 @@ struct fi_efa_ops_domain {
     int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
     int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
               uint16_t *remote_qpn, uint32_t *remote_qkey);
+    int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
+    int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
+    int (*cq_open_ext)(struct fid_domain *domain_fid,
+               struct fi_cq_attr *attr,
+               struct fi_efa_cq_init_attr *efa_cq_init_attr,
+               struct fid_cq **cq_fid, void *context);
 };
 \f[R]
 .fi
@@ -263,8 +269,8 @@ struct fi_efa_ops_domain {
 It contains the following operations
 .SS query_mr
 .PP
-This op query an existing memory registration as input, and outputs the
-efa specific mr attribute which is defined as follows
+This op queries an existing memory registration as input, and outputs
+the efa specific mr attribute which is defined as follows
 .IP
 .nf
 \f[C]
@@ -327,6 +333,120 @@ qkey for the remote queue pair.
 .PP
 \f[B]query_addr()\f[R] returns FI_SUCCESS on success, or -FI_EINVAL on
 failure.
+.SS query_qp_wqs
+.PP
+This op queries EFA specific Queue Pair work queue attributes for a
+given endpoint.
+It retrieves the send queue attributes in sq_attr and receive queue
+attributes in rq_attr, which is defined as follows.
+.IP
+.nf
+\f[C]
+struct fi_efa_wq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+    uint32_t *doorbell;
+    uint32_t max_batch;
+};
+\f[R]
+.fi
+.TP
+\f[I]buffer\f[R]
+Queue buffer.
+.TP
+\f[I]entry_size\f[R]
+Size of each entry in the queue.
+.TP
+\f[I]num_entries\f[R]
+Maximal number of entries in the queue.
+.TP
+\f[I]doorbell\f[R]
+Queue doorbell.
+.TP
+\f[I]max_batch\f[R]
+Maximum batch size for queue submissions.
+.SS Return value
+.PP
+\f[B]query_qp_wqs()\f[R] returns 0 on success, or the value of errno on
+failure (which indicates the failure reason).
+.SS query_cq
+.PP
+This op queries EFA specific Completion Queue attributes for a given cq.
+.IP
+.nf
+\f[C]
+struct fi_efa_cq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+};
+\f[R]
+.fi
+.TP
+\f[I]buffer\f[R]
+Completion queue buffer.
+.TP
+\f[I]entry_size\f[R]
+Size of each completion queue entry.
+.TP
+\f[I]num_entries\f[R]
+Maximal number of entries in the completion queue.
+.SS Return value
+.PP
+\f[B]query_cq()\f[R] returns 0 on success, or the value of errno on
+failure (which indicates the failure reason).
+.SS cq_open_ext
+.PP
+This op creates a completion queue with external memory provided via
+dmabuf.
+The memory can be passed by supplying the following struct.
+.IP
+.nf
+\f[C]
+struct fi_efa_cq_init_attr {
+    uint64_t flags;
+    struct {
+        uint8_t *buffer;
+        uint64_t length;
+        uint64_t offset;
+        uint32_t fd;
+    } ext_mem_dmabuf;
+};
+\f[R]
+.fi
+.TP
+\f[I]flags\f[R]
+A bitwise OR of the various values described below.
+.RS
+.PP
+FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF: create CQ with external memory
+provided via dmabuf.
+.RE
+.TP
+\f[I]ext_mem_dmabuf\f[R]
+Structure containing information about external memory when using
+FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF flag.
+.RS
+.TP
+\f[I]buffer\f[R]
+Pointer to the memory mapped in the process\[cq]s virtual address space.
+The field is optional, but if not provided, the use of CQ poll
+interfaces should be avoided.
+.TP
+\f[I]length\f[R]
+Length of the memory region to use.
+.TP
+\f[I]offset\f[R]
+Offset within the dmabuf.
+.TP
+\f[I]fd\f[R]
+File descriptor of the dmabuf.
+.RE
+.SS Return value
+.PP
+\f[B]cq_open_ext()\f[R] returns 0 on success, or the value of errno on
+failure (which indicates the failure reason).
 .SH Traffic Class (tclass) in EFA
 .PP
 To prioritize the messages from a given endpoint, user can specify
