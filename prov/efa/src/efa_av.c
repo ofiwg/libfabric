@@ -425,7 +425,7 @@ int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
 
 /**
  * @brief allocate an efa_conn object
- * caller of this function must obtain av->util_av.lock
+ * caller of this function must obtain av->domain->srx_lock
  *
  * @param[in]	av		efa address vector
  * @param[in]	raw_addr	raw efa address
@@ -454,13 +454,17 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		return NULL;
 	}
 
+	/* ofi_av_insert_addr expects the util_av.lock to be held */
+	ofi_genlock_lock(&av->util_av.lock);
 	err = ofi_av_insert_addr(&av->util_av, raw_addr, &fi_addr);
+	ofi_genlock_unlock(&av->util_av.lock);
 	if (err) {
 		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n",
 			 fi_strerror(err));
 		return NULL;
 	}
 
+	assert(ofi_genlock_held(&av->domain->srx_lock));
 	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool,
 					     fi_addr);
 	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
@@ -499,7 +503,11 @@ err_release:
 		efa_ah_release(av->domain, conn->ah);
 
 	conn->ep_addr = NULL;
+
+	/* ofi_av_insert_addr expects the util_av.lock to be held */
+	ofi_genlock_lock(&av->util_av.lock);
 	err = ofi_av_remove_addr(&av->util_av, fi_addr);
+	ofi_genlock_unlock(&av->util_av.lock);
 	if (err)
 		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed! err=%d\n",
 			 err);
@@ -509,7 +517,7 @@ err_release:
 
 /**
  * @brief release an efa conn object
- * Caller of this function must obtain av->util_av.lock
+ * Caller of this function must obtain av->domain->srx_lock
  *
  * @param[in]	av	address vector
  * @param[in]	conn	efa_conn object pointer
@@ -549,11 +557,15 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 
 	efa_ah_release(av->domain, conn->ah);
 
+	assert(ofi_genlock_held(&av->domain->srx_lock));
 	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, conn->fi_addr);
 	assert(util_av_entry);
 	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
 
+	/* ofi_av_remove_addr expects the util_av.lock to be held */
+	ofi_genlock_lock(&av->util_av.lock);
 	err = ofi_av_remove_addr(&av->util_av, conn->fi_addr);
+	ofi_genlock_unlock(&av->util_av.lock);
 	if (err) {
 		EFA_WARN(FI_LOG_AV, "ofi_av_remove_addr failed! err=%d\n", err);
 	}
@@ -591,7 +603,7 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 	if (av->domain->info_type == EFA_INFO_DGRAM)
 		addr->qkey = EFA_DGRAM_CONNID;
 
-	ofi_genlock_lock(&av->util_av.lock);
+	ofi_genlock_lock(&av->domain->srx_lock);
 	memset(raw_gid_str, 0, sizeof(raw_gid_str));
 	if (!inet_ntop(AF_INET6, addr->raw, raw_gid_str, INET6_ADDRSTRLEN)) {
 		EFA_WARN(FI_LOG_AV, "cannot convert address to string. errno: %d\n", errno);
@@ -627,7 +639,7 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 		 raw_gid_str, addr->qpn, addr->qkey, *fi_addr);
 	ret = 0;
 out:
-	ofi_genlock_unlock(&av->util_av.lock);
+	ofi_genlock_unlock(&av->domain->srx_lock);
 	return ret;
 }
 
@@ -740,7 +752,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	if (av->type != FI_AV_TABLE)
 		return -FI_EINVAL;
 
-	ofi_genlock_lock(&av->util_av.lock);
+	ofi_genlock_lock(&av->domain->srx_lock);
 	for (i = 0; i < count; i++) {
 		conn = efa_av_addr_to_conn(av, fi_addr[i]);
 		if (!conn) {
@@ -756,7 +768,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		assert(err);
 	}
 
-	ofi_genlock_unlock(&av->util_av.lock);
+	ofi_genlock_unlock(&av->domain->srx_lock);
 	return err;
 }
 
@@ -781,7 +793,7 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	struct efa_cur_reverse_av *cur_entry, *curtmp;
 	struct efa_prv_reverse_av *prv_entry, *prvtmp;
 
-	ofi_genlock_lock(&av->util_av.lock);
+	ofi_genlock_lock(&av->domain->srx_lock);
 
 	HASH_ITER(hh, av->cur_reverse_av, cur_entry, curtmp) {
 		efa_conn_release(av, cur_entry->conn);
@@ -791,7 +803,7 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 		efa_conn_release(av, prv_entry->conn);
 	}
 
-	ofi_genlock_unlock(&av->util_av.lock);
+	ofi_genlock_unlock(&av->domain->srx_lock);
 }
 
 static int efa_av_close(struct fid *fid)
