@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_cxi" "7" "2025\-01\-08" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_cxi" "7" "2025\-06\-13" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -1197,6 +1197,7 @@ Ignored when ODP is disabled.
 .TP
 \f[I]FI_CXI_RDZV_THRESHOLD\f[R]
 Message size threshold for rendezvous protocol.
+The default is 16384.
 .TP
 \f[I]FI_CXI_RDZV_GET_MIN\f[R]
 Minimum rendezvous Get payload size.
@@ -1244,7 +1245,7 @@ The default is to register buffers with the GPU.
 Size of overflow buffers.
 Increasing the overflow buffer size allows for more unexpected message
 eager data to be held in single overflow buffer.
-The default size is 2MB.
+The default size is 12MB.
 .TP
 \f[I]FI_CXI_OFLOW_BUF_MIN_POSTED/FI_CXI_OFLOW_BUF_COUNT\f[R]
 The minimum number of overflow buffers that should be posted.
@@ -1393,11 +1394,11 @@ Default is 0, disabled.
 Size of request buffers.
 Increasing the request buffer size allows for more unmatched messages to
 be sent into a single request buffer.
-The default size is 2MB.
+The default size is 12MB.
 .TP
 \f[I]FI_CXI_REQ_BUF_MIN_POSTED\f[R]
 The minimum number of request buffers that should be posted.
-The default minimum posted count is 4.
+The default minimum posted count is 6.
 The number of buffers will grow unbounded to support outstanding
 unexpected messages.
 Care should be taken to size appropriately based on job scale and the
@@ -1453,14 +1454,19 @@ use of either is still supported.
 \f[I]FI_CXI_DEFAULT_TX_SIZE\f[R]
 Set the default tx_attr.size field to be used by the provider if the
 size is not specified in the user provided fi_info hints.
+The default is 1024.
 .TP
 \f[I]FI_CXI_DEFAULT_RX_SIZE\f[R]
 Set the default rx_attr.size field to be used by the provider if the
 size is not specified in the user provided fi_info hints.
+The default is 1024.
 .TP
 \f[I]FI_CXI_SW_RX_TX_INIT_MAX\f[R]
-Debug control to override the number of TX operations that can be
-outstanding that are initiated by software RX processing.
+Override the number of TX operations that can be outstanding that are
+initiated by software RX processing.
+It may be useful to increase this value from the default of 1024 if
+running in software EP match mode at scale or utilizing the alternate
+read rendezvous protocol.
 It has no impact on hardware initiated RX rendezvous gets.
 .TP
 \f[I]FI_CXI_DEVICE_NAME\f[R]
@@ -1484,19 +1490,6 @@ Fill percent of underlying hardware event queue used to determine when
 completion queue is saturated.
 A saturated completion queue results in the provider returning
 -FI_EAGAIN for data transfer and other related libfabric operations.
-.TP
-\f[I]FI_CXI_COMPAT\f[R]
-Temporary compatibility to allow use of pre-upstream values for
-FI_ADDR_CXI and FI_PROTO_CXI.
-Compatibility can be disabled to verify operation with upstream constant
-values and to enable access to conflicting provider values.
-The default setting of 1 specifies both old and new constants are
-supported.
-A setting of 0 disables support for old constants and can be used to
-test that an application is compatible with the upstream values.
-A setting of 2 is a safety fallback that if used the provider will only
-export fi_info with old constants and will be incompatible with
-libfabric clients that been recompiled.
 .TP
 \f[I]FI_CXI_COLL_FABRIC_MGR_URL\f[R]
 \f[B]accelerated collectives:\f[R] Specify the HTTPS address of the
@@ -1559,6 +1552,10 @@ If not supported, RDMA operations or memory registration will fail.
 .PP
 Note: Use the fi_info utility to query provider environment variables:
 fi_info -p cxi -e
+.PP
+If the environment does not explicitly set FI_MR_CACHE_MAX_COUNT or
+FI_MR_CACHE_MAX_SIZE, the cxi provider will increase the defaults to
+4096 and -1 (no limit) respectively.
 .SH CXI EXTENSIONS
 .PP
 The CXI provider supports various fabric-specific extensions.
