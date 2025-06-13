@@ -344,6 +344,8 @@ void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 
 /* begin efa_unit_test_mr.c */
 void test_efa_rdm_mr_reg_host_memory();
+void test_efa_rdm_mr_reg_host_memory_no_mr_local();
+void test_efa_rdm_mr_reg_host_memory_overlapping_buffers();
 void test_efa_rdm_mr_reg_cuda_memory();
 void test_efa_direct_mr_reg_no_gdrcopy();
 /* end efa_unit_test_mr.c */
