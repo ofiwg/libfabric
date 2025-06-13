@@ -540,11 +540,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->efa_rx_pkts_held = 0;
 	efa_rdm_ep->efa_outstanding_tx_ops = 0;
 
-	if (ret) {
-		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", strerror(errno));
-		goto err_close_shm_ep;
-	}
-
 	ret = efa_rdm_ep_create_buffer_pools(efa_rdm_ep);
 	if (ret)
 		goto err_close_shm_ep;
