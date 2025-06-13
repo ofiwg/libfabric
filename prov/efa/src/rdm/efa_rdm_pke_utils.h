@@ -4,6 +4,7 @@
 #ifndef _EFA_RDM_PKE_UTILS_H
 #define _EFA_RDM_PKE_UTILS_H
 
+#include "efa_rdm_ep.h"
 #include "efa_rdm_pke.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pkt_type.h"

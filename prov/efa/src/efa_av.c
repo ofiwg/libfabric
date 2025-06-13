@@ -817,8 +817,6 @@ static int efa_av_close(struct fid *fid)
 					fi_strerror(err));
 			}
 		}
-		if (av->rdm_peer_pool)
-			ofi_bufpool_destroy(av->rdm_peer_pool);
 	}
 	free(av);
 	return err;
@@ -904,48 +902,32 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err;
 
-	if (efa_domain->info_type == EFA_INFO_RDM) {
+	if (efa_domain->info_type == EFA_INFO_RDM && efa_domain->fabric &&
+	    efa_domain->fabric->shm_fabric) {
+		/*
+		 * shm av supports maximum 256 entries
+		 * Reset the count to 128 to reduce memory footprint and satisfy
+		 * the need of the instances with more CPUs.
+		 */
 		av_attr = *attr;
-		/* In the rdm path, we need a bufpool for the rdm peer entries */
-		struct ofi_bufpool_attr rdm_peer_pool_attr = {
-			.size = sizeof(struct efa_rdm_peer),
-			.alignment = 16,
-			.chunk_cnt = attr->count,
-			.max_cnt = 0,
-			/* Don't track buffer use because user can close
-			 * the AV without removing addresses */
-			.flags = OFI_BUFPOOL_NO_TRACK,
-		};
-
-		ret = ofi_bufpool_create_attr(&rdm_peer_pool_attr,
-					      &av->rdm_peer_pool);
+		if (efa_env.shm_av_size > EFA_SHM_MAX_AV_COUNT) {
+			ret = -FI_ENOSYS;
+			EFA_WARN(FI_LOG_AV,
+				 "The requested av size is beyond"
+				 " shm supported maximum av size: %s\n",
+				 fi_strerror(-ret));
+			goto err_close_util_av;
+		}
+		av_attr.count = efa_env.shm_av_size;
+		assert(av_attr.type == FI_AV_TABLE);
+		ret = fi_av_open(efa_domain->shm_domain, &av_attr,
+				 &av->shm_rdm_av, context);
 		if (ret)
 			goto err_close_util_av;
-
-		if (efa_domain->fabric && efa_domain->fabric->shm_fabric) {
-			/*
-			 * shm av supports maximum 256 entries
-			 * Reset the count to 128 to reduce memory footprint and satisfy
-			 * the need of the instances with more CPUs.
-			 */
-			if (efa_env.shm_av_size > EFA_SHM_MAX_AV_COUNT) {
-				ret = -FI_ENOSYS;
-				EFA_WARN(FI_LOG_AV, "The requested av size is beyond"
-					 " shm supported maximum av size: %s\n",
-					 fi_strerror(-ret));
-				goto err_destroy_peer_bufpool;
-			}
-			av_attr.count = efa_env.shm_av_size;
-			assert(av_attr.type == FI_AV_TABLE);
-			ret = fi_av_open(efa_domain->shm_domain, &av_attr,
-					&av->shm_rdm_av, context);
-			if (ret)
-				goto err_destroy_peer_bufpool;
-		}
 	}
 
 	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 "\n",
-			av_attr.flags);
+			attr->flags);
 
 	av->domain = efa_domain;
 	av->type = attr->type;
@@ -959,10 +941,6 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	(*av_fid)->ops = &efa_av_ops;
 
 	return 0;
-
-err_destroy_peer_bufpool:
-	if (av->rdm_peer_pool)
-		ofi_bufpool_destroy(av->rdm_peer_pool);
 
 err_close_util_av:
 	retv = ofi_av_close(&av->util_av);
