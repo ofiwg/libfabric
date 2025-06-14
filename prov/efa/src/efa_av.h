@@ -67,7 +67,6 @@ struct efa_av {
 	struct efa_cur_reverse_av *cur_reverse_av;
 	struct efa_prv_reverse_av *prv_reverse_av;
 	struct util_av util_av;
-	struct ofi_bufpool *rdm_peer_pool;
 };
 
 int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
