@@ -43,6 +43,7 @@ bin_PROGRAMS = \
 	functional/fi_flood \
 	functional/fi_rdm_multi_client \
 	functional/fi_loopback \
+	functional/fi_rdm_rpc \
 	benchmarks/fi_msg_pingpong \
 	benchmarks/fi_msg_bw \
 	benchmarks/fi_rma_bw \
@@ -373,6 +374,10 @@ functional_fi_rdm_multi_client_LDADD = libfabtests.la
 functional_fi_loopback_SOURCES = \
 	functional/loopback.c
 functional_fi_loopback_LDADD = libfabtests.la
+
+functional_fi_rdm_rpc_SOURCES = \
+	functional/rdm_rpc.c
+functional_fi_rdm_rpc_LDADD = libfabtests.la
 
 benchmarks_fi_msg_pingpong_SOURCES = \
 	benchmarks/msg_pingpong.c \
