@@ -839,7 +839,7 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 			    rxe->total_len, rxe->cq_entry.tag, rxe->addr);
 
 
-		if (ep->base_ep.util_ep.caps & FI_SOURCE)
+		if (ep->base_ep.util_ep.caps & FI_SOURCE || ep->base_ep.util_ep.rx_caps & FI_SOURCE)
 			ret = ofi_cq_write_src(rx_cq,
 					       rxe->cq_entry.op_context,
 					       rxe->cq_entry.flags,
@@ -849,13 +849,14 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 					       rxe->cq_entry.tag,
 					       rxe->addr);
 		else
-			ret = ofi_cq_write(rx_cq,
-					   rxe->cq_entry.op_context,
-					   rxe->cq_entry.flags,
-					   rxe->cq_entry.len,
-					   rxe->cq_entry.buf,
-					   rxe->cq_entry.data,
-					   rxe->cq_entry.tag);
+			ret = ofi_cq_write_src(rx_cq,
+					       rxe->cq_entry.op_context,
+					       rxe->cq_entry.flags,
+					       rxe->cq_entry.len,
+					       rxe->cq_entry.buf,
+					       rxe->cq_entry.data,
+					       rxe->cq_entry.tag,
+					       FI_ADDR_NOTAVAIL);
 
 		if (OFI_UNLIKELY(ret)) {
 			EFA_WARN(FI_LOG_CQ,
@@ -935,28 +936,17 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
 		       txe->cq_entry.tag, txe->total_len);
 
 
-	efa_rdm_tracepoint(send_end,
-		    txe->msg_id, (size_t) txe->cq_entry.op_context,
-		    txe->total_len, txe->cq_entry.tag, txe->addr);
+		efa_rdm_tracepoint(send_end,
+		    		   txe->msg_id, (size_t) txe->cq_entry.op_context,
+		    		   txe->total_len, txe->cq_entry.tag, txe->addr);
 
-		/* TX completions should not send peer address to util_cq */
-		if (txe->ep->base_ep.util_ep.caps & FI_SOURCE)
-			ret = ofi_cq_write_src(tx_cq,
-					       txe->cq_entry.op_context,
-					       txe->cq_entry.flags,
-					       txe->cq_entry.len,
-					       txe->cq_entry.buf,
-					       txe->cq_entry.data,
-					       txe->cq_entry.tag,
-					       FI_ADDR_NOTAVAIL);
-		else
-			ret = ofi_cq_write(tx_cq,
-					   txe->cq_entry.op_context,
-					   txe->cq_entry.flags,
-					   txe->cq_entry.len,
-					   txe->cq_entry.buf,
-					   txe->cq_entry.data,
-					   txe->cq_entry.tag);
+		ret = ofi_cq_write(tx_cq,
+				   txe->cq_entry.op_context,
+				   txe->cq_entry.flags,
+				   txe->cq_entry.len,
+				   txe->cq_entry.buf,
+				   txe->cq_entry.data,
+				   txe->cq_entry.tag);
 
 		if (OFI_UNLIKELY(ret)) {
 			EFA_WARN(FI_LOG_CQ,

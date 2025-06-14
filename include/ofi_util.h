@@ -302,6 +302,8 @@ struct util_ep {
 
 	enum fi_ep_type		type;
 	uint64_t		caps;
+	uint64_t                rx_caps;
+	uint64_t                tx_caps;
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;
 	struct ofi_genlock	lock;

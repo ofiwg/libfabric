@@ -140,16 +140,9 @@ static void efa_cq_handle_tx_completion(struct efa_base_ep *base_ep,
 	if (!ibv_cq_ex->wr_id)
 		return;
 
-	/* TX completions should not send peer address to util_cq */
-	if (base_ep->util_ep.caps & FI_SOURCE)
-		ret = ofi_cq_write_src(tx_cq, cq_entry->op_context,
-				       cq_entry->flags, cq_entry->len,
-				       cq_entry->buf, cq_entry->data,
-				       cq_entry->tag, FI_ADDR_NOTAVAIL);
-	else
-		ret = ofi_cq_write(tx_cq, cq_entry->op_context, cq_entry->flags,
-				   cq_entry->len, cq_entry->buf, cq_entry->data,
-				   cq_entry->tag);
+	ret = ofi_cq_write(tx_cq, cq_entry->op_context, cq_entry->flags,
+			   cq_entry->len, cq_entry->buf, cq_entry->data,
+			   cq_entry->tag);
 
 	if (OFI_UNLIKELY(ret)) {
 		EFA_WARN(FI_LOG_CQ, "Unable to write send completion: %s\n",
@@ -178,7 +171,7 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 	if (!ibv_cq_ex->wr_id)
 		return;
 
-	if (base_ep->util_ep.caps & FI_SOURCE) {
+	if (base_ep->util_ep.caps & FI_SOURCE || base_ep->util_ep.rx_caps & FI_SOURCE) {
 		src_addr = efa_av_reverse_lookup(base_ep->av,
 						 ibv_wc_read_slid(ibv_cq_ex),
 						 ibv_wc_read_src_qp(ibv_cq_ex));
@@ -187,9 +180,10 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 				       cq_entry->buf, cq_entry->data,
 				       cq_entry->tag, src_addr);
 	} else {
-		ret = ofi_cq_write(rx_cq, cq_entry->op_context, cq_entry->flags,
-				   cq_entry->len, cq_entry->buf, cq_entry->data,
-				   cq_entry->tag);
+		ret = ofi_cq_write_src(rx_cq, cq_entry->op_context,
+				       cq_entry->flags, cq_entry->len,
+				       cq_entry->buf, cq_entry->data,
+				       cq_entry->tag, FI_ADDR_NOTAVAIL);
 	}
 
 	if (OFI_UNLIKELY(ret)) {
@@ -206,7 +200,7 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
  * This function handles hardware-assisted RDMA writes with immediate data at
  * remote endpoint.  These do not have a packet context, nor do they have a
  * connid available.
- * 
+ *
  * @param[in]		base_ep     efa_base_ep
  * @param[in]		ibv_cq_ex   extended ibv cq
  */
@@ -219,14 +213,15 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
 	int ret;
 	fi_addr_t src_addr;
 
-	if (base_ep->util_ep.caps & FI_SOURCE) {
+	if (base_ep->util_ep.caps & FI_SOURCE || base_ep->util_ep.rx_caps & FI_SOURCE) {
 		src_addr = efa_av_reverse_lookup(base_ep->av,
 						 ibv_wc_read_slid(ibv_cq_ex),
 						 ibv_wc_read_src_qp(ibv_cq_ex));
 		ret = ofi_cq_write_src(rx_cq, cq_entry->op_context, cq_entry->flags, cq_entry->len, NULL, cq_entry->data,
 				       0, src_addr);
 	} else {
-		ret = ofi_cq_write(rx_cq, cq_entry->op_context, cq_entry->flags, cq_entry->len, NULL, cq_entry->data, 0);
+		ret = ofi_cq_write_src(rx_cq, cq_entry->op_context, cq_entry->flags, cq_entry->len, NULL, cq_entry->data,
+				       0, FI_ADDR_NOTAVAIL);
 	}
 
 	if (OFI_UNLIKELY(ret)) {
@@ -242,7 +237,7 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
 /**
  * @brief poll rdma-core cq and process the cq entry
  *
- * @param[in]	cqe_to_process    Max number of cq entry to poll and process. 
+ * @param[in]	cqe_to_process    Max number of cq entry to poll and process.
  * A negative number means to poll until cq empty.
  * @param[in]   util_cq           util_cq
  */

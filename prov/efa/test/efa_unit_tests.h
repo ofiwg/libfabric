@@ -339,6 +339,10 @@ void test_efa_ep_setopt_hmem_p2p();
 void test_efa_ep_setopt_rnr_retry();
 void test_efa_ep_setopt_sizes();
 void test_efa_ep_bind_and_enable();
+void test_efa_rdm_ep_fi_source_from_info_caps();
+void test_efa_rdm_ep_fi_source_from_info_rx_attr_caps();
+void test_efa_direct_ep_fi_source_from_info_caps();
+void test_efa_direct_ep_fi_source_from_info_rx_attr_caps();
 void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 
