@@ -106,6 +106,7 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
+	dlist_remove(&pkt_entry->entry);
 	/*
 	 * Decrement rnr_queued_pkts counter and reset backoff for this peer if
 	 * we get a send completion for a retransmitted packet.
