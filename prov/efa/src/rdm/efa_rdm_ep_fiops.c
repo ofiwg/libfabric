@@ -12,6 +12,7 @@
 #include "efa_rdm_rxe_map.h"
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_pke_req.h"
+#include "efa_rdm_pke_utils.h"
 #include "efa_cntr.h"
 
 
@@ -824,6 +825,48 @@ bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
     return false;
 }
 
+static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
+{
+	struct efa_rdm_peer *peer;
+	struct dlist_entry *tmp;
+	struct efa_rdm_ope *ope;
+	struct efa_domain *domain = efa_rdm_ep_domain(ep);
+
+	assert(domain->info->ep_attr->type == FI_EP_RDM);
+
+	/* Update timers for peers that are in backoff list*/
+	dlist_foreach_container_safe(&domain->peer_backoff_list,
+			struct efa_rdm_peer, peer, rnr_backoff_entry, tmp) {
+		if (ofi_gettime_us() >= peer->rnr_backoff_begin_ts +
+					peer->rnr_backoff_wait_time) {
+			peer->flags &= ~EFA_RDM_PEER_IN_BACKOFF;
+			dlist_remove(&peer->rnr_backoff_entry);
+		}
+	}
+
+	dlist_foreach_container_safe(&domain->ope_queued_list,
+			struct efa_rdm_ope, ope, queued_entry, tmp) {
+		if (ope->ep == ep) {
+			switch (efa_rdm_pkt_type_of(ope)) {
+			case EFA_RDM_RECEIPT_PKT:
+			case EFA_RDM_EOR_PKT:
+				if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_RNR))
+					continue;
+				if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_CTRL))
+					continue;
+				/* fall-thru */
+			default:
+				/* Release all other queued OPEs */
+				if (ope->type == EFA_RDM_TXE)
+					efa_rdm_txe_release(ope);
+				else
+					efa_rdm_rxe_release(ope);
+				break;
+			}
+		}
+	}
+}
+
 /*
  * @brief wait for send to finish
  *
@@ -846,10 +889,10 @@ void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 	while (efa_rdm_ep_has_unfinished_send(efa_rdm_ep)) {
 		/* poll cq until empty */
 		if (tx_cq)
-			(void) efa_rdm_cq_poll_ibv_cq(-1, &tx_cq->ibv_cq);
+			efa_rdm_cq_poll_ibv_cq_closing_ep(&tx_cq->ibv_cq, efa_rdm_ep);
 		if (rx_cq)
-			(void) efa_rdm_cq_poll_ibv_cq(-1, &rx_cq->ibv_cq);
-		efa_domain_progress_rdm_peers_and_queues(efa_rdm_ep_domain(efa_rdm_ep));
+			efa_rdm_cq_poll_ibv_cq_closing_ep(&rx_cq->ibv_cq, efa_rdm_ep);
+		progress_queues_closing_ep(efa_rdm_ep);
 	}
 
 	ofi_genlock_unlock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
