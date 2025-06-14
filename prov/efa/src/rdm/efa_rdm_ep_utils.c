@@ -723,6 +723,9 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 			if (ret == -FI_EAGAIN) {
 				/* add the pkt back to pkts, so it can be resent again */
 				dlist_insert_tail(&pkt_entry->entry, pkts);
+			} else {
+				EFA_WARN(FI_LOG_EP_DATA, "queued pkt entry post failed: %ld\n", ret);
+				efa_rdm_pke_release_tx(pkt_entry);
 			}
 			return ret;
 		}
