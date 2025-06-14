@@ -410,73 +410,136 @@ static int efa_rdm_cq_match_ep(struct dlist_entry *item, const void *ep)
 	return (container_of(item, struct efa_rdm_ep, entry) == ep) ;
 }
 
-/**
- * @brief poll rdma-core cq and process the cq entry
- *
- * @param[in]	ep_poll	the RDM endpoint that polls ibv cq. Note this polling endpoint can be different
- * from the endpoint that the completed packet entry was posted from (pkt_entry->ep).
- * @param[in]	cqe_to_process	Max number of cq entry to poll and process. A negative number means to poll until cq empty
- */
-int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
+static inline struct efa_rdm_ep *efa_rdm_cq_get_rdm_ep(struct efa_ibv_cq *cq, struct efa_domain *efa_domain)
 {
-	struct efa_rdm_pke *pkt_entry;
-	int err;
-	int opcode;
-	size_t i = 0;
+	struct efa_base_ep *base_ep = efa_domain->qp_table[ibv_wc_read_qp_num(cq->ibv_cq_ex) & efa_domain->qp_table_sz_m1]->base_ep;
+	return container_of(base_ep, struct efa_rdm_ep, base_ep);
+}
+
+/**
+ * @brief Process work completions for a closing endpoint
+ *
+ * This is a lighter-weight counterpart to #efa_rdm_cq_process_wc(); avoiding
+ * unnecessary overhead for processing completions for an endpoint that's
+ * closing anyway by simply releasing the packet entries. Exceptions include
+ * RECEIPT and EOR packets when a completion fails due to RNR and resource
+ * management is enabled by the user (FI_RM_ENABLED). In this case, packets are
+ * queued to be reposted.
+ *
+ * @param[in]	cq	IBV CQ
+ * @param[in]	ep	EFA RDM endpoint (to be closed)
+ * @return	Status code for the work completion
+ */
+static inline
+enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struct efa_rdm_ep *ep)
+{
+	uint64_t wr_id = cq->ibv_cq_ex->wr_id;
+	enum ibv_wc_status status = cq->ibv_cq_ex->status;
+	enum ibv_wc_opcode opcode = ibv_wc_read_opcode(cq->ibv_cq_ex);
+	struct efa_rdm_pke *pkt_entry = (struct efa_rdm_pke *) wr_id;
 	int prov_errno;
-	struct efa_rdm_ep *ep = NULL;
-	struct efa_cq *efa_cq;
-	struct efa_domain *efa_domain;
-	struct efa_qp *qp;
 	struct efa_rdm_peer *peer = NULL;
-	struct dlist_entry rx_progressed_ep_list, *tmp;
 
-	efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
-	efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
-	dlist_init(&rx_progressed_ep_list);
-
-	/* Call ibv_start_poll only once */
-	efa_cq_start_poll(ibv_cq);
-
-	while (efa_cq_wc_available(ibv_cq)) {
-		pkt_entry = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
-		qp = efa_domain->qp_table[ibv_wc_read_qp_num(ibv_cq->ibv_cq_ex) & efa_domain->qp_table_sz_m1];
-		ep = container_of(qp->base_ep, struct efa_rdm_ep, base_ep);
 #if HAVE_LTTNG
-		efa_rdm_tracepoint(poll_cq, (size_t) ibv_cq->ibv_cq_ex->wr_id);
+		efa_rdm_tracepoint(poll_cq, (size_t) wr_id);
 		if (pkt_entry && pkt_entry->ope)
 			efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 					   (size_t) pkt_entry->ope->cq_entry.op_context,
 					   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
 					   pkt_entry->ope->addr);
 #endif
-		opcode = ibv_wc_read_opcode(ibv_cq->ibv_cq_ex);
-		if (ibv_cq->ibv_cq_ex->status) {
+	if (!efa_cq_wc_is_unsolicited(cq->ibv_cq_ex)) {
+		if (OFI_UNLIKELY(status != IBV_WC_SUCCESS)) {
 			if (pkt_entry)
 				peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-			prov_errno = efa_rdm_cq_get_prov_errno(ibv_cq->ibv_cq_ex, peer);
-			switch (opcode) {
-			case IBV_WC_SEND: /* fall through */
-			case IBV_WC_RDMA_WRITE: /* fall through */
-			case IBV_WC_RDMA_READ:
-				efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno, peer);
-				break;
-			case IBV_WC_RECV: /* fall through */
-			case IBV_WC_RECV_RDMA_WITH_IMM:
-				if (efa_cq_wc_is_unsolicited(ibv_cq->ibv_cq_ex)) {
-					EFA_WARN(FI_LOG_CQ, "Receive error %s (%d) for unsolicited write recv",
-						efa_strerror(prov_errno), prov_errno);
-					efa_base_ep_write_eq_error(&ep->base_ep, to_fi_errno(prov_errno), prov_errno);
+			prov_errno = efa_rdm_cq_get_prov_errno(cq->ibv_cq_ex, peer);
+			if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR &&
+				ep->handle_resource_management == FI_RM_ENABLED) {
+				switch(efa_rdm_pkt_type_of(pkt_entry)) {
+				case EFA_RDM_RECEIPT_PKT:
+				case EFA_RDM_EOR_PKT:
+					efa_rdm_ep_record_tx_op_completed(ep, pkt_entry, peer);
+					efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
+					return status;
+				default:
 					break;
 				}
-				efa_rdm_pke_handle_rx_error(pkt_entry, prov_errno);
-				break;
-			default:
-				EFA_WARN(FI_LOG_EP_CTRL, "Unhandled op code %d\n", opcode);
-				assert(0 && "Unhandled op code");
 			}
-			break;
 		}
+		switch (opcode) {
+		case IBV_WC_SEND: /* fall through */
+		case IBV_WC_RDMA_WRITE: /* fall through */
+		case IBV_WC_RDMA_READ:
+			if (pkt_entry)
+				peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+			efa_rdm_ep_record_tx_op_completed(ep, pkt_entry, peer);
+			efa_rdm_pke_release_tx(pkt_entry);
+			break;
+		case IBV_WC_RECV: /* fall through */
+		case IBV_WC_RECV_RDMA_WITH_IMM:
+			efa_rdm_pke_release_rx(pkt_entry);
+			break;
+		default:
+			EFA_WARN(FI_LOG_EP_CTRL, "Unhandled opcode: %d\n", opcode);
+			assert(0 && "Unhandled opcode");
+		}
+	}
+	return status;
+}
+
+/**
+ * @brief Process work completions
+ *
+ * @param[in]	cq	IBV CQ
+ * @param[in]	ep	EFA RDM endpoint
+ * @return	Status code for the work completion
+ */
+static inline
+enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_ep *ep)
+{
+	uint64_t wr_id = cq->ibv_cq_ex->wr_id;
+	enum ibv_wc_status status = cq->ibv_cq_ex->status;
+	enum ibv_wc_opcode opcode = ibv_wc_read_opcode(cq->ibv_cq_ex);
+	struct efa_rdm_pke *pkt_entry = (struct efa_rdm_pke *) wr_id;
+	int prov_errno;
+	struct efa_rdm_peer *peer = NULL;
+
+#if HAVE_LTTNG
+	efa_rdm_tracepoint(poll_cq, (size_t) wr_id);
+	if (pkt_entry && pkt_entry->ope)
+		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
+				   (size_t) pkt_entry->ope->cq_entry.op_context,
+				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
+				   pkt_entry->ope->addr);
+#endif
+
+	if (OFI_UNLIKELY(status != IBV_WC_SUCCESS)) {
+		if (pkt_entry)
+			peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+		prov_errno = efa_rdm_cq_get_prov_errno(cq->ibv_cq_ex, peer);
+		switch (opcode) {
+		case IBV_WC_SEND: /* fall through */
+		case IBV_WC_RDMA_WRITE: /* fall through */
+		case IBV_WC_RDMA_READ:
+			assert(pkt_entry);
+			efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno, peer);
+			break;
+		case IBV_WC_RECV: /* fall through */
+		case IBV_WC_RECV_RDMA_WITH_IMM:
+			if (efa_cq_wc_is_unsolicited(cq->ibv_cq_ex)) {
+				EFA_WARN(FI_LOG_CQ, "Receive error %s (%d) for unsolicited write recv",
+					efa_strerror(prov_errno), prov_errno);
+				efa_base_ep_write_eq_error(&ep->base_ep, to_fi_errno(prov_errno), prov_errno);
+				break;
+			}
+			assert(pkt_entry);
+			efa_rdm_pke_handle_rx_error(pkt_entry, prov_errno);
+			break;
+		default:
+			EFA_WARN(FI_LOG_EP_CTRL, "Unhandled opcode: %d\n", opcode);
+			assert(0 && "Unhandled opcode");
+		}
+	} else {
 		switch (opcode) {
 		case IBV_WC_SEND:
 #if ENABLE_DEBUG
@@ -488,7 +551,7 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		case IBV_WC_RECV:
 			/* efa_rdm_cq_handle_recv_completion does additional work to determine the source
 			 * address and the peer struct. So do not try to identify the peer here. */
-			efa_rdm_cq_handle_recv_completion(ibv_cq, pkt_entry, ep);
+			efa_rdm_cq_handle_recv_completion(cq, pkt_entry, ep);
 #if ENABLE_DEBUG
 			ep->recv_comps++;
 #endif
@@ -500,7 +563,7 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			break;
 		case IBV_WC_RECV_RDMA_WITH_IMM:
 			efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
-				ibv_cq->ibv_cq_ex,
+				cq->ibv_cq_ex,
 				FI_REMOTE_CQ_DATA | FI_RMA | FI_REMOTE_WRITE,
 				ep, pkt_entry);
 			break;
@@ -509,13 +572,73 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 				"Unhandled cq type\n");
 			assert(0 && "Unhandled cq type");
 		}
+	}
+	return status;
+}
 
+void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm_ep *closing_ep)
+{
+
+	struct efa_rdm_ep *ep = NULL;
+	struct efa_cq *efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
+	struct efa_domain *efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
+	struct dlist_entry rx_progressed_ep_list, *tmp;
+
+	dlist_init(&rx_progressed_ep_list);
+
+	efa_cq_start_poll(ibv_cq);
+	while (efa_cq_wc_available(ibv_cq)) {
+		ep = efa_rdm_cq_get_rdm_ep(ibv_cq, efa_domain);
+		if (ep == closing_ep) {
+			if (OFI_UNLIKELY(efa_rdm_cq_process_wc_closing_ep(ibv_cq, ep) != IBV_WC_SUCCESS))
+				break;
+		} else {
+			if (OFI_UNLIKELY(efa_rdm_cq_process_wc(ibv_cq, ep) != IBV_WC_SUCCESS))
+				break;
+			if (ep->efa_rx_pkts_to_post > 0 && !dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
+				dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
+		}
+		efa_cq_next_poll(ibv_cq);
+	}
+	efa_cq_end_poll(ibv_cq);
+	dlist_foreach_container_safe(
+		&rx_progressed_ep_list, struct efa_rdm_ep, ep, entry, tmp) {
+		efa_rdm_ep_post_internal_rx_pkts(ep);
+		dlist_remove(&ep->entry);
+	}
+	assert(dlist_empty(&rx_progressed_ep_list));
+}
+
+/**
+ * @brief poll rdma-core cq and process the cq entry
+ *
+ * @param[in]	ep_poll	the RDM endpoint that polls ibv cq. Note this polling endpoint can be different
+ * from the endpoint that the completed packet entry was posted from (pkt_entry->ep).
+ * @param[in]	cqe_to_process	Max number of cq entry to poll and process. A negative number means to poll until cq empty
+ */
+int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
+{
+	int err;
+	size_t i = 0;
+	struct efa_rdm_ep *ep = NULL;
+	struct efa_cq *efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
+	struct efa_domain *efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
+
+	struct dlist_entry rx_progressed_ep_list, *tmp;
+
+	dlist_init(&rx_progressed_ep_list);
+
+	/* Call ibv_start_poll only once */
+	efa_cq_start_poll(ibv_cq);
+
+	while (efa_cq_wc_available(ibv_cq)) {
+		ep = efa_rdm_cq_get_rdm_ep(ibv_cq, efa_domain);
+		if (OFI_UNLIKELY(efa_rdm_cq_process_wc(ibv_cq, ep) != IBV_WC_SUCCESS))
+			break;
 		if (ep->efa_rx_pkts_to_post > 0 && !dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
 			dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
-		i++;
-		if (i == cqe_to_process) {
+		if (++i >= cqe_to_process)
 			break;
-		}
 
 		/*
 		 * ibv_next_poll MUST be call after the current WC is fully processed,
@@ -526,7 +649,6 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 
 	err = ibv_cq->poll_err;
 	efa_cq_end_poll(ibv_cq);
-
 	dlist_foreach_container_safe(
 		&rx_progressed_ep_list, struct efa_rdm_ep, ep, entry, tmp) {
 		efa_rdm_ep_post_internal_rx_pkts(ep);
