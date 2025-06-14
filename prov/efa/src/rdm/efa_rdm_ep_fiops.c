@@ -34,6 +34,13 @@ int efa_rdm_pke_pool_mr_reg_handler(struct ofi_bufpool_region *region)
 	struct fid_mr *mr;
 	struct efa_domain *domain = region->pool->attr.context;
 
+	/* The fi_mr_reg call here bypasses the MR cache
+	 * While this memory is internal to the EFA provider and can be put in
+	 * the MR cache, there is no need to do that. The packet entry pools
+	 * that need MR are allocated once and the MR is stored in the bufpool
+	 * region's context. We don't register the same memory region twice. So
+	 * it does not help to put these MRs in the cache.
+	 */
 	ret = fi_mr_reg(&domain->util_domain.domain_fid, region->alloc_region,
 			region->pool->alloc_size, FI_SEND | FI_RECV, 0, 0, 0,
 			&mr, NULL);

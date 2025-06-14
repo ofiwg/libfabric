@@ -343,7 +343,8 @@ class ClientServerTest:
                  timeout=None,
                  warmup_iteration_type=None,
                  completion_type="queue",
-                 fabric=None):
+                 fabric=None,
+                 additional_env=''):
 
         self._cmdline_args = cmdline_args
         self._timeout = timeout or cmdline_args.timeout
@@ -351,12 +352,12 @@ class ClientServerTest:
                                                               completion_semantic, prefix_type,
                                                               datacheck_type, message_size,
                                                               memory_type, warmup_iteration_type,
-                                                              completion_type, fabric)
+                                                              completion_type, fabric, additional_env)
         self._client_base_command, client_additonal_environment = self.prepare_base_command("client", executable, iteration_type,
                                                               completion_semantic, prefix_type,
                                                               datacheck_type, message_size,
                                                               memory_type, warmup_iteration_type,
-                                                              completion_type, fabric)
+                                                              completion_type, fabric, additional_env)
 
 
         self._server_command = self._cmdline_args.populate_command(self._server_base_command, "server", self._timeout, server_additonal_environment)
@@ -371,7 +372,8 @@ class ClientServerTest:
                              memory_type="host_to_host",
                              warmup_iteration_type=None,
                              completion_type="queue",
-                             fabric=None):
+                             fabric=None,
+                             additional_env=''):
         if executable == "fi_ubertest":
             return "fi_ubertest", None
 
@@ -456,8 +458,6 @@ class ClientServerTest:
         if self._cmdline_args.do_dmabuf_reg_for_hmem:
             command += " -R"
 
-        additional_environment = None
-
         if "PYTEST_XDIST_WORKER" in os.environ:
             worker_id = int(os.environ["PYTEST_XDIST_WORKER"].replace("gw", ""))
             hmem_device_id = worker_id % num_hmem
@@ -470,11 +470,9 @@ class ClientServerTest:
             assert host_memory_type == "neuron"
             num_cores = num_neuron_cores_on_device(host_ip, hmem_device_id)
             if command_type == "server":
-                additional_environment = "NEURON_RT_VISIBLE_CORES={}".format(
-                    hmem_device_id * num_cores)
+                additional_env = f"{additional_env} NEURON_RT_VISIBLE_CORES={hmem_device_id * num_cores}"
             else:
-                additional_environment = "NEURON_RT_VISIBLE_CORES={}".format(
-                    hmem_device_id * num_cores + 1)
+                additional_env = f"{additional_env} NEURON_RT_VISIBLE_CORES={hmem_device_id * num_cores + 1}"
             wait_until_neuron_device_available(host_ip, hmem_device_id)
 
         if self._cmdline_args.provider == "efa":
@@ -482,7 +480,7 @@ class ClientServerTest:
             efa_device = efa.efa_common.get_efa_device_name_for_cuda_device(host_ip, hmem_device_id, num_hmem)
             command += " -d {}-rdm".format(efa_device)
 
-        return command, additional_environment
+        return command, additional_env
 
     def _run_client_command(self, server_process, client_command, output_filename=None,
                             run_client_asynchronously=False):
