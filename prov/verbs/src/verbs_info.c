@@ -1917,27 +1917,50 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   struct fi_info **info)
 {
 	static bool init_done = false;
+	struct dlist_entry tmp_devs;
+	struct fi_info *tmp_info = NULL;
 	int ret;
 
 	vrb_prof_func_start(__func__);
-	ofi_mutex_lock(&vrb_info_mutex);
-	if (!init_done || flags & FI_RESCAN) {
-		if (!init_done) {
-			ret = vrb_init();
-			if (ret) {
-				ofi_mutex_unlock(&vrb_info_mutex);
-				goto out;
-			}
-			init_done = true;
-		}
-
-		ret = vrb_init_info(&vrb_devs, &vrb_util_prov.info);
+	ofi_mutex_lock(&vrb_init_mutex);
+	if (!init_done) {
+		ret = vrb_init();
 		if (ret) {
-			ofi_mutex_unlock(&vrb_info_mutex);
+			ofi_mutex_unlock(&vrb_init_mutex);
+			goto out;
+		}
+		init_done = true;
+
+		ofi_mutex_lock(&vrb_info_mutex);
+		ret = vrb_init_info(&vrb_devs, &vrb_util_prov.info);
+		ofi_mutex_unlock(&vrb_info_mutex);
+		if (ret) {
+			ofi_mutex_unlock(&vrb_init_mutex);
+			goto out;
+		}
+		flags &= ~FI_RESCAN; /* No rescan needed */
+	}
+	ofi_mutex_unlock(&vrb_init_mutex);
+
+	if (flags & FI_RESCAN) {
+		dlist_init(&tmp_devs);
+		ret = vrb_init_info(&tmp_devs, &tmp_info);
+		if (ret) {
+			vrb_devs_free(&tmp_devs);
+			fi_freeinfo(tmp_info);
 			goto out;
 		}
 	}
 
+	ofi_mutex_lock(&vrb_info_mutex);
+	if (flags & FI_RESCAN) {
+		/* Swap the lists while holding the lock */
+		vrb_devs_free(&vrb_devs);
+		dlist_splice_tail(&vrb_devs, &tmp_devs);
+
+		fi_freeinfo(vrb_util_prov.info);
+		vrb_util_prov.info = tmp_info;
+	}
 	ret = vrb_get_match_infos(&vrb_devs, version, node, service,
 				     flags, hints,
 				     vrb_util_prov.info, info);
