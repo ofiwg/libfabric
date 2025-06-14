@@ -304,6 +304,11 @@ static inline int efa_write_error_msg(struct efa_base_ep *ep, fi_addr_t addr,
 	return 0;
 }
 
+static inline uint32_t efa_cq_wc_read_qp_num(struct efa_ibv_cq *cq)
+{
+	return ibv_wc_read_qp_num(cq->ibv_cq_ex);
+}
+
 static inline bool efa_cq_wc_available(struct efa_ibv_cq *cq)
 {
 	return cq->poll_active && !cq->poll_err;
