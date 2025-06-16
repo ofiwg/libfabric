@@ -913,8 +913,8 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 	const opx_lid_t lid	  = opx_hfi_get_port_lid(unit, port);
 
 	// too early for env to have been checked
-	int mixed_network = OPX_SW_HFI1_TYPE;
-	if (!(OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {
+	int mixed_network = OPX_HFI1_TYPE;
+	if (!(OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {
 		if (fi_param_get_bool(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
 			if (mixed_network) {
 				mixed_network = OPX_HFI1_MIXED_9B;
