@@ -460,13 +460,19 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 static int efa_mr_close(fid_t fid)
 {
 	struct efa_mr *efa_mr;
-	int ret;
+	int ret = 0;
 
 	efa_mr = container_of(fid, struct efa_mr, mr_fid.fid);
-	ret = efa_mr_dereg_impl(efa_mr);
-	if (ret)
-		EFA_WARN(FI_LOG_MR, "Unable to close MR\n");
-	free(efa_mr);
+	if (ofi_atomic_get32(&efa_mr->active)) {
+		ofi_atomic_set32(&efa_mr->active, 0);
+		ret = efa_mr_dereg_impl(efa_mr);
+		if (ret)
+			EFA_WARN(FI_LOG_MR, "Unable to close MR\n");
+	}
+
+	if (!ofi_atomic_get32(&efa_mr->active) && !ofi_atomic_get32(&efa_mr->ref))
+		free(efa_mr);
+
 	return ret;
 }
 
@@ -776,6 +782,8 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	efa_mr->mr_fid.mem_desc = NULL;
 	efa_mr->mr_fid.key = FI_KEY_NOTAVAIL;
 	efa_mr->needs_sync = false;
+	ofi_atomic_initialize32(&efa_mr->active, 1);
+	ofi_atomic_initialize32(&efa_mr->ref, 0);
 
 	ofi_mr_update_attr(
 		efa_mr->domain->util_domain.fabric->fabric_fid.api_version,

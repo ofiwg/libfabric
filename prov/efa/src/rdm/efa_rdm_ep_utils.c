@@ -250,14 +250,6 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	assert(rx_iov_offset < rxe->iov[rx_iov_index].iov_len);
 	assert(ep->base_ep.domain->mr_local);
 
-	if (!rxe->desc[rx_iov_index]) {
-		err = -FI_EINVAL;
-		EFA_WARN(FI_LOG_EP_CTRL,
-			 "No valid desc is provided, not complied with FI_MR_LOCAL: %s (%d)\n",
-			 fi_strerror(-err), -err);
-		goto err_free;
-	}
-
 	pkt_entry->payload = (char *) rxe->iov[rx_iov_index].iov_base + rx_iov_offset;
 	pkt_entry->payload_mr = rxe->desc[rx_iov_index];
 	pkt_entry->payload_size = ofi_total_iov_len(&rxe->iov[rx_iov_index], rxe->iov_count - rx_iov_index) - rx_iov_offset;
@@ -732,7 +724,6 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 				/* add the pkt back to pkts, so it can be resent again */
 				dlist_insert_tail(&pkt_entry->entry, pkts);
 			}
-
 			return ret;
 		}
 

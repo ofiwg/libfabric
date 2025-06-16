@@ -624,6 +624,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 {
 	struct efa_rdm_ope *rxe;
 	fi_addr_t addr;
+	int i;
 
 	if (ep->base_ep.util_ep.caps & FI_DIRECTED_RECV)
 		addr = msg->addr;
@@ -650,10 +651,17 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 		rxe->cq_entry.buf = msg->msg_iov[0].iov_base;
 	}
 
-	if (msg->desc)
+	if (msg->desc) {
 		memcpy(&rxe->desc[0], msg->desc, sizeof(*msg->desc) * msg->iov_count);
-	else
+		for (i = 0; i < msg->iov_count; i++) {
+			if (msg->desc[i]) {
+				ofi_atomic_inc32(&((struct efa_mr *)msg->desc[i])->ref);
+				EFA_DBG(FI_LOG_EP_DATA, "mr %p ref cnt inc to %u\n", (struct efa_mr *)msg->desc[i], ofi_atomic_get32(&((struct efa_mr *)msg->desc[i])->ref));
+			}
+		}
+	} else {
 		memset(&rxe->desc[0], 0, sizeof(rxe->desc));
+	}
 
 	rxe->cq_entry.op_context = msg->context;
 
@@ -906,6 +914,12 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		return ret;
 
 	if (ep->use_zcpy_rx) {
+		if (!msg->desc || !efa_desc_is_valid(msg->desc, msg->iov_count)) {
+			EFA_WARN(FI_LOG_EP_DATA, "No valid desc is provided\n");
+			ret = -FI_EINVAL;
+			goto out;
+		}
+
 		srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
 		ofi_genlock_lock(srx_ctx->lock);
 		rxe = efa_rdm_msg_alloc_rxe(ep, msg, op, flags, tag, ignore);

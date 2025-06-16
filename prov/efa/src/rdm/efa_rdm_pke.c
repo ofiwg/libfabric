@@ -399,6 +399,14 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
 
+	for (pkt_idx = 0; pkt_idx < pkt_entry_cnt; pkt_idx++) {
+		pkt_entry = pkt_entry_vec[pkt_idx];
+		if (pkt_entry->payload && !efa_mr_is_active((struct efa_mr *)pkt_entry->payload_mr)) {
+			EFA_WARN(FI_LOG_EP_DATA, "Invalid mr, this is usually due to mr is closed, pke %p type %d\n", pkt_entry, efa_rdm_pke_get_base_hdr(pkt_entry)->type);
+			return -FI_EINVAL;
+		}
+	}
+
 	conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry_vec[0]->addr);
 	assert(conn && conn->ep_addr);
 
@@ -511,6 +519,11 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 	assert(ep);
 	txe = pkt_entry->ope;
 
+	if (!efa_mr_is_active((struct efa_mr *)desc)) {
+		EFA_WARN(FI_LOG_EP_DATA, "Invalid mr, this is usually due to mr is closed\n");
+		return -FI_EINVAL;
+	}
+
 	if (txe->peer == NULL)
 		pkt_entry->flags |= EFA_RDM_PKE_LOCAL_READ;
 
@@ -584,6 +597,11 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 	desc = rma_context_pkt->desc;
 	remote_buf = rma_context_pkt->remote_buf;
 	remote_key = rma_context_pkt->remote_key;
+
+	if (!efa_mr_is_active((struct efa_mr *)desc)) {
+		EFA_WARN(FI_LOG_EP_DATA, "Invalid mr, this is usually due to mr is closed\n");
+		return -FI_EINVAL;
+	}
 
 	assert(((struct efa_mr *)desc)->ibv_mr);
 
