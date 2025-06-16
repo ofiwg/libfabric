@@ -1552,16 +1552,16 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
 		// spill from 1st cacheline (SOP)
-		OPX_HFI1_BAR_STORE(&scb_payload[0], replay->scb.scb_16B.hdr.qw_16B[7]); // header
+		OPX_HFI1_BAR_PIO_STORE(&scb_payload[0], replay->scb.scb_16B.hdr.qw_16B[7]); // header
 
 		int i;
 
 		for (i = 1; i <= payload_qw_to_copy_with_header; ++i) {
-			OPX_HFI1_BAR_STORE(&scb_payload[i], *buf_qws);
+			OPX_HFI1_BAR_PIO_STORE(&scb_payload[i], *buf_qws);
 			buf_qws += 1;
 		}
 		for (i = payload_qw_to_copy_with_header + 1; i <= 7; ++i) {
-			OPX_HFI1_BAR_STORE(&scb_payload[i], OPX_JKR_16B_PAD_QWORD);
+			OPX_HFI1_BAR_PIO_STORE(&scb_payload[i], OPX_JKR_16B_PAD_QWORD);
 		}
 
 		/* consume one credit for the packet header+payload */
@@ -1607,7 +1607,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 
 		uint16_t i = 0;
 		for (; payload_tail_bytes >= 8; payload_tail_bytes -= 8) {
-			OPX_HFI1_BAR_STORE(scb_payload, *buf_qws);
+			OPX_HFI1_BAR_PIO_STORE(scb_payload, *buf_qws);
 			scb_payload += 1;
 			buf_qws += 1;
 			i++;
@@ -1617,7 +1617,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 		assert((payload_tail_bytes == 4) || (payload_tail_bytes == 0));
 		if (!(hfi1_type & OPX_HFI1_CNX000)) {
 			if (payload_tail_bytes) {
-				OPX_HFI1_BAR_STORE(scb_payload, ((*buf_qws)));
+				OPX_HFI1_BAR_PIO_STORE(scb_payload, ((*buf_qws)));
 				scb_payload += 1;
 				i++;
 			}
@@ -1629,7 +1629,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 		}
 		/* Pad out the cacheline/block */
 		for (; i < 8; i++) {
-			OPX_HFI1_BAR_STORE(scb_payload, OPX_JKR_16B_PAD_QWORD);
+			OPX_HFI1_BAR_PIO_STORE(scb_payload, OPX_JKR_16B_PAD_QWORD);
 			scb_payload += 1;
 		}
 
