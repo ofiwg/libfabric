@@ -184,10 +184,11 @@ struct opx_hfi_local_info {
 	/* == CACHE LINE 0 == */
 	uint32_t	   local_lids_size;
 	enum opx_hfi1_type type;
-	int		   sim_fd; // simulator fd
+	int		   sim_sctxt_fd; // simulator send context BAR resource fd
+	int		   sim_rctxt_fd; // simulator recv context BAR resource fd
 	opx_lid_t	   lid;
 	uint8_t		   hfi_unit;
-	uint8_t		   unused_bytes[7];
+	uint8_t		   unused_bytes[3];
 	uint64_t	   unused_qws[5];
 
 	/* == CACHE LINE 1 == */

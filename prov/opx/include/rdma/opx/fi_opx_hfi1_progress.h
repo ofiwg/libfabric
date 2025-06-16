@@ -100,7 +100,7 @@ void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint6
 					   volatile uint64_t *head_reg)
 {
 	if (OFI_UNLIKELY((hdrq_offset & FI_OPX_HFI1_HDRQ_UPDATE_MASK) == FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS)) {
-		OPX_HFI1_BAR_STORE(head_reg, (const uint64_t)(hdrq_offset - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS));
+		OPX_HFI1_BAR_UREG_STORE(head_reg, (const uint64_t)(hdrq_offset - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS));
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "================== > Set HFI head register\n");
 	}
 }
@@ -238,7 +238,7 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq,
 			const uint32_t egrbfr_index	 = OPX_RHF_EGR_INDEX(rhf, OPX_HFI1_TYPE);
 			const uint32_t last_egrbfr_index = *p_last_egrbfr_index;
 			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-				OPX_HFI1_BAR_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
+				OPX_HFI1_BAR_UREG_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
 				*p_last_egrbfr_index = egrbfr_index;
 			}
 		}
@@ -302,7 +302,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, uint64_t *p_rh
 
 		uint32_t last_egrbfr_index = *p_last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-			OPX_HFI1_BAR_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
+			OPX_HFI1_BAR_UREG_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
 			*p_last_egrbfr_index = egrbfr_index;
 		}
 	}
@@ -373,7 +373,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, ui
 		}
 		uint32_t last_egrbfr_index = *p_last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-			OPX_HFI1_BAR_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
+			OPX_HFI1_BAR_UREG_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
 			*p_last_egrbfr_index = egrbfr_index;
 		}
 
@@ -505,7 +505,8 @@ int opx_write_eager_pkt_to_subctxt(struct fi_opx_ep *opx_ep, struct opx_subconte
 			opx_write_header_to_subctxt(s_rx_q, rhf_rcvd, rhf_ptr_dest, hdr, rhq_tail, hfi1_type);
 
 			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-				OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register, (const uint64_t) last_egrbfr_index);
+				OPX_HFI1_BAR_UREG_STORE(opx_ep->rx->egrq.head_register,
+							(const uint64_t) last_egrbfr_index);
 				*p_last_egrbfr_index = egrbfr_index;
 			}
 			return 1;
@@ -513,7 +514,7 @@ int opx_write_eager_pkt_to_subctxt(struct fi_opx_ep *opx_ep, struct opx_subconte
 	}
 
 	if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-		OPX_HFI1_BAR_STORE(opx_ep->rx->egrq.head_register, (const uint64_t) last_egrbfr_index);
+		OPX_HFI1_BAR_UREG_STORE(opx_ep->rx->egrq.head_register, (const uint64_t) last_egrbfr_index);
 		*p_last_egrbfr_index = egrbfr_index;
 	}
 

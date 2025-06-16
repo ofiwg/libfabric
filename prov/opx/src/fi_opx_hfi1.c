@@ -964,7 +964,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	// Define the layout of context sharing shared memory regions
 	opx_define_ctx_sharing_shared_memory(context);
 
-	OPX_OPEN_BAR(context->hfi_unit);
+	OPX_OPEN_BAR(context->hfi_unit, ctrl->ctxt_info.ctxt, ctxt_info->send_ctxt);
 	context->info.pio.scb_sop_first =
 		OPX_HFI1_INIT_PIO_SOP(context->send_ctxt, (volatile uint64_t *) (ptrdiff_t) base_info->pio_bufbase_sop);
 	context->info.pio.scb_first =
@@ -1023,30 +1023,30 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	volatile uint64_t *tidflowtable	     = (volatile uint64_t *) &uregbase[ur_rcvtidflowtable];
 
 #ifndef NDEBUG
-	uint64_t debug_value = OPX_HFI1_BAR_LOAD(&uregbase[ur_rcvhdrtail]);
+	uint64_t debug_value = OPX_HFI1_BAR_UREG_LOAD(&uregbase[ur_rcvhdrtail]);
 	FI_DBG(fi_opx_global.prov, FI_LOG_CORE, "&uregbase[ur_rcvhdrtail]       %p = %#16.16lX \n",
 	       &uregbase[ur_rcvhdrtail], debug_value);
-	debug_value = OPX_HFI1_BAR_LOAD(&uregbase[ur_rcvhdrhead]);
+	debug_value = OPX_HFI1_BAR_UREG_LOAD(&uregbase[ur_rcvhdrhead]);
 	FI_DBG(fi_opx_global.prov, FI_LOG_CORE, "&uregbase[ur_rcvhdrhead]       %p = %#16.16lX \n",
 	       &uregbase[ur_rcvhdrhead], debug_value);
-	debug_value = OPX_HFI1_BAR_LOAD(&uregbase[ur_rcvegrindextail]);
+	debug_value = OPX_HFI1_BAR_UREG_LOAD(&uregbase[ur_rcvegrindextail]);
 	FI_DBG(fi_opx_global.prov, FI_LOG_CORE, "&uregbase[ur_rcvegrindextail]  %p = %#16.16lX \n",
 	       &uregbase[ur_rcvegrindextail], debug_value);
-	debug_value = OPX_HFI1_BAR_LOAD(&uregbase[ur_rcvegrindexhead]);
+	debug_value = OPX_HFI1_BAR_UREG_LOAD(&uregbase[ur_rcvegrindexhead]);
 	FI_DBG(fi_opx_global.prov, FI_LOG_CORE, "&uregbase[ur_rcvegrindexhead]  %p = %#16.16lX \n",
 	       &uregbase[ur_rcvegrindexhead], debug_value);
-	debug_value = OPX_HFI1_BAR_LOAD(&uregbase[ur_rcvegroffsettail]);
+	debug_value = OPX_HFI1_BAR_UREG_LOAD(&uregbase[ur_rcvegroffsettail]);
 	FI_DBG(fi_opx_global.prov, FI_LOG_CORE, "&uregbase[ur_rcvegroffsettail] %p = %#16.16lX \n",
 	       &uregbase[ur_rcvegroffsettail], debug_value);
 	for (int i = 0; i < 32; ++i) {
-		debug_value = OPX_HFI1_BAR_LOAD(&tidflowtable[i]);
+		debug_value = OPX_HFI1_BAR_UREG_LOAD(&tidflowtable[i]);
 		FI_DBG(fi_opx_global.prov, FI_LOG_CORE, "uregbase[ur_rcvtidflowtable][%u] = %#16.16lX \n", i,
 		       debug_value);
 	}
 #endif
 	/* TID flows aren't cleared between jobs, do it now. */
 	for (int i = 0; i < 32; ++i) {
-		OPX_HFI1_BAR_STORE(&tidflowtable[i], 0UL);
+		OPX_HFI1_BAR_UREG_STORE(&tidflowtable[i], 0UL);
 	}
 	assert(ctrl->__hfi_tidexpcnt <= OPX_MAX_TID_COUNT);
 	context->runtime_flags = ctxt_info->runtime_flags;
@@ -5742,7 +5742,7 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep *opx_ep, volatile uint64
 		const uint32_t egrbfr_index	 = OPX_RHF_EGR_INDEX(rhf_rcvd, hfi1_type);
 		uint32_t       last_egrbfr_index = *p_last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-			OPX_HFI1_BAR_STORE(egrq_head_reg, ((const uint64_t) last_egrbfr_index));
+			OPX_HFI1_BAR_UREG_STORE(egrq_head_reg, ((const uint64_t) last_egrbfr_index));
 			*p_last_egrbfr_index = egrbfr_index;
 		}
 	}

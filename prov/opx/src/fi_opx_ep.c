@@ -1710,11 +1710,8 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Global OPX packet size %u\n", OPX_HFI1_PKT_SIZE);
 
-	assert((OPX_HFI1_WFR > OPX_HFI1_JKR_9B) && (OPX_HFI1_JKR > OPX_HFI1_WFR) &&
-	       (OPX_HFI1_CYR > OPX_HFI1_WFR)); // don't change the enum assumptions
-
 	/* The global was set early (userinit), may be changed now on mixed networks */
-	if (OPX_HFI1_TYPE > OPX_HFI1_WFR) {
+	if (!(OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {
 		int mixed_network;
 		if (fi_param_get_bool(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
 			if (mixed_network) {
