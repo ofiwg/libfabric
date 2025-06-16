@@ -357,8 +357,8 @@ static void simple_rdzv(bool check_invalid_length)
 	int i, ret;
 	uint8_t *recv_buf,
 		*send_buf;
-	int recv_len = 8192;
-	int send_len = 8192;
+	int recv_len = cxip_env.rdzv_threshold + 4096;
+	int send_len = cxip_env.rdzv_threshold + 4096;
 	struct fi_cq_tagged_entry tx_cqe,
 				  rx_cqe;
 	int err = 0;
