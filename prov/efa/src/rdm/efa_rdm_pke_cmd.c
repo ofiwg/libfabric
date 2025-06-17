@@ -400,7 +400,6 @@ void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry)
 void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 {
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ep *ep;
 
 	int err = to_fi_errno(prov_errno);
@@ -501,12 +500,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 				 * packets include all REQ, DATA) thus shoud be queued for RNR
 				 * only if application wants EFA to manager resource.
 				 */
-				efa_rdm_ep_queue_rnr_pkt(ep, &txe->queued_pkts, pkt_entry);
-				if (!(txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
-					txe->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
-					dlist_insert_tail(&txe->queued_entry,
-							  &efa_rdm_ep_domain(ep)->ope_queued_list);
-				}
+				efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
 			}
 		} else {
 			efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
@@ -514,7 +508,6 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 		}
 		break;
 	case EFA_RDM_RXE:
-		rxe = pkt_entry->ope;
 		if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
 			/*
 			 * This packet is associated with a recv operation, (such packets
@@ -522,12 +515,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			 * is regardless value of ep->handle_resource_management, because
 			 * resource management is only applied to send operation.
 			 */
-			efa_rdm_ep_queue_rnr_pkt(ep, &rxe->queued_pkts, pkt_entry);
-			if (!(rxe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
-				rxe->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
-				dlist_insert_tail(&rxe->queued_entry,
-						  &efa_rdm_ep_domain(ep)->ope_queued_list);
-			}
+			efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
 		} else {
 			efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);

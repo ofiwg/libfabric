@@ -46,10 +46,11 @@ void test_efa_rnr_queue_and_resend_impl(struct efa_resource **state, uint32_t op
 
 	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
 	pkt_entry = (struct efa_rdm_pke *)g_ibv_submitted_wr_id_vec[0];
+	pkt_entry->ope = txe;
 
 	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry);
 
-	efa_rdm_ep_queue_rnr_pkt(efa_rdm_ep, &txe->queued_pkts, pkt_entry);
+	efa_rdm_ep_queue_rnr_pkt(efa_rdm_ep, pkt_entry);
 	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT, EFA_RDM_PKE_RNR_RETRANSMIT);
 	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 1);
 	assert_int_equal(efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr)->rnr_queued_pkt_cnt, 1);
