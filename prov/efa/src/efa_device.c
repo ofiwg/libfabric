@@ -217,6 +217,9 @@ int efa_device_list_initialize(void)
 		return -FI_ENODEV;
 	}
 
+	EFA_INFO(FI_LOG_FABRIC, "ibv_get_device_list returns total_device_cnt=%d\n",
+                 total_device_cnt);
+
 	g_efa_selected_device_list = calloc(total_device_cnt, sizeof(struct efa_device));
 	if (!g_efa_selected_device_list) {
 		ret = -FI_ENOMEM;
@@ -236,6 +239,9 @@ int efa_device_list_initialize(void)
 					   ibv_device_list[device_idx]);
 
 		if (err) {
+			EFA_WARN(FI_LOG_FABRIC,
+				 "efa_device_construct_gid failed for device_idx %d, err=%d\n",
+				 device_idx, err);
 
 			/* efa_device_construct returns -EOPNOTSUPP for non-EFA devices */
 			if (err == -EOPNOTSUPP)
@@ -254,6 +260,9 @@ int efa_device_list_initialize(void)
 		 * match the FI_EFA_IFACE filter
 		 */
 		if (!efa_env_allows_nic(ibv_device_list[device_idx]->name)) {
+			EFA_INFO(FI_LOG_FABRIC,
+				 "Device %s filtered out by FI_EFA_IFACE\n",
+				 ibv_device_list[device_idx]->name);
 			efa_device_destruct(&cur_device);
 			continue;
 
@@ -261,6 +270,9 @@ int efa_device_list_initialize(void)
 
 		err = efa_device_construct_data(&cur_device, ibv_device_list[device_idx]);
 		if (err) {
+			EFA_WARN(FI_LOG_FABRIC,
+				 "efa_device_construct_data failed for device %s, err=%d\n",
+				 ibv_device_list[device_idx]->name, err);
 			ret = err;
 			goto err_free;
 		}
@@ -268,6 +280,9 @@ int efa_device_list_initialize(void)
 		memcpy(&g_efa_selected_device_list[g_efa_selected_device_cnt], &cur_device, sizeof(struct efa_device));
 		g_efa_selected_device_cnt++;
 	}
+
+	EFA_INFO(FI_LOG_FABRIC, "g_efa_selected_device_cnt=%d, g_efa_ibv_gid_cnt=%d\n",
+		 g_efa_selected_device_cnt, g_efa_ibv_gid_cnt);
 
 	if (g_efa_selected_device_cnt == 0) {
 		ret = -FI_ENODEV;
