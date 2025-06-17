@@ -452,19 +452,26 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke
  * @param[in]	pkt_entry	packet entry that encounter RNR
  * @param[in]	peer	efa_rdm_peer struct of the receiver
  */
-void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct dlist_entry *list,
-			      struct efa_rdm_pke *pkt_entry,
-			      struct efa_rdm_peer *peer)
+void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	static const int random_min_timeout = 40;
 	static const int random_max_timeout = 120;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *ope = pkt_entry->ope;
 
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
-	dlist_insert_tail(&pkt_entry->entry, list);
+	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+
+	assert(ope);
+	dlist_insert_tail(&pkt_entry->entry, &ope->queued_pkts);
 	ep->efa_rnr_queued_pkt_cnt += 1;
 	assert(peer);
+	if (!(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
+		ope->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
+		dlist_insert_tail(&ope->queued_entry, &efa_rdm_ep_domain(ep)->ope_queued_list);
+	}
 	if (!(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT)) {
 		/* This is the first time this packet encountered RNR,
 		 * we are NOT going to put the peer in backoff mode just yet.
