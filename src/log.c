@@ -100,7 +100,7 @@ static int fi_convert_log_str(const char *value)
 	if (!value)
 		return -1;
 
-	for (i = 0; log_levels[i]; i++) {
+	for (i = 0; i < OFI_LOG_MAX; i++) {
 		if (!strcasecmp(value, log_levels[i]))
 			return i;
 	}
