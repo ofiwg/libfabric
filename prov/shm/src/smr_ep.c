@@ -52,9 +52,8 @@ DEFINE_LIST(sock_name_list);
 pthread_mutex_t sock_list_lock = PTHREAD_MUTEX_INITIALIZER;
 int smr_global_ep_idx = 0;
 
-int smr_setname(fid_t fid, void *addr, size_t addrlen)
+static int smr_setname_internal(struct smr_ep *ep, void *addr, size_t addrlen)
 {
-	struct smr_ep *ep;
 	char *name;
 
 	if (addrlen > SMR_NAME_MAX) {
@@ -63,7 +62,6 @@ int smr_setname(fid_t fid, void *addr, size_t addrlen)
 		return -FI_EINVAL;
 	}
 
-	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
 	if (ep->region) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"Cannot set name after EP has been enabled\n");
@@ -78,6 +76,16 @@ int smr_setname(fid_t fid, void *addr, size_t addrlen)
 		free((void *) ep->name);
 	ep->name = name;
 	return 0;
+}
+
+int smr_setname(fid_t fid, void *addr, size_t addrlen)
+{
+	struct smr_ep *ep;
+
+	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
+	ep->user_setname = true;
+
+	return smr_setname_internal(ep, addr, addrlen);
 }
 
 int smr_getname(fid_t fid, void *addr, size_t *addrlen)
@@ -1125,6 +1133,7 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 	struct smr_ep *ep;
 	struct smr_av *av;
 	struct fid_ep *srx;
+	char tmp_name[SMR_NAME_MAX];
 	int ret;
 
 	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
@@ -1138,15 +1147,25 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (!ep->util_ep.av)
 			return -FI_ENOAV;
 
-		attr.name = smr_no_prefix(ep->name);
 		attr.rx_count = ep->rx_size;
 		attr.tx_count = ep->tx_size;
 		attr.flags = ep->util_ep.caps & FI_HMEM ?
 				SMR_FLAG_HMEM_ENABLED : 0;
 
+create_shm:
+		attr.name = smr_no_prefix(ep->name);
 		ret = smr_create(&smr_prov, &av->smr_map, &attr, &ep->region);
-		if (ret)
-			return ret;
+		if (ret == -FI_EBUSY && !ep->user_setname) {
+			snprintf(tmp_name, SMR_NAME_MAX - 1, "%s:%u",
+				 ep->name, ofi_generate_seed());
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"SMR %s busy, retry with name %s\n",
+				ep->name, tmp_name);
+
+			if (strcmp(tmp_name, ep->name) &&
+			    !smr_setname_internal(ep, tmp_name, SMR_NAME_MAX))
+				goto create_shm;
+		}
 
 		if (ep->util_ep.caps & FI_HMEM || smr_env.disable_cma) {
 			ep->region->cma_cap_peer = SMR_VMA_CAP_OFF;
@@ -1303,7 +1322,8 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ret = smr_endpoint_name(ep, name, info->src_addr, info->src_addrlen);
 	if (ret)
 		goto free;
-	ret = smr_setname(&ep->util_ep.ep_fid.fid, name, SMR_NAME_MAX);
+
+	ret = smr_setname_internal(ep, name, SMR_NAME_MAX);
 	if (ret)
 		goto free;
 
