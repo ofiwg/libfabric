@@ -7,6 +7,7 @@
 #include "ofi_recvwin.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_protocol.h"
+#include "efa_rdm_rxe_map.h"
 
 #define EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE	(16384)
 
@@ -61,7 +62,7 @@ struct efa_rdm_peer {
 	struct dlist_entry rnr_backoff_entry;	/**< linked to efa_domain->peer_backoff_list */
 	struct dlist_entry handshake_queued_entry; /**< linked with efa_domain->handshake_queued_peer_list */
 	struct dlist_entry txe_list; /**< a list of txe related to this peer */
-	struct dlist_entry rxe_list; /**< a list of rxe relased to this peer */
+	struct dlist_entry rxe_list; /**< a list of rxe related to this peer */
 	struct dlist_entry overflow_pke_list; /**< a list of out-of-order pke that overflow the current recvwin */
 
 	/**
@@ -73,6 +74,7 @@ struct efa_rdm_peer {
 	 * only valid when (extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) is non-zero
 	 */
 	struct efa_rdm_peer_user_recv_qp user_recv_qp;
+	struct efa_rdm_rxe_map rxe_map; 	/**< Hashmap used to match received mulreq packets with RX entries */
 };
 
 /**

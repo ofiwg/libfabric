@@ -220,7 +220,8 @@ ssize_t efa_rdm_pke_init_longread_msgrtm(struct efa_rdm_pke *pkt_entry,
 ssize_t efa_rdm_pke_init_longread_tagrtm(struct efa_rdm_pke *pkt_entry,
 					 struct efa_rdm_ope *txe);
 
-ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry);
+ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry,
+					      struct efa_rdm_peer *peer);
 
 void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry);
 
