@@ -5,6 +5,7 @@
 #include "ofi_util.h"
 #include "efa_rdm_ep.h"
 #include "efa_rdm_msg.h"
+#include "efa_av.h"
 
 /**
  * @brief This test validates whether the default min_multi_recv size is correctly
@@ -80,6 +81,10 @@ void test_efa_srx_unexp_pkt(struct efa_resource **state)
         struct util_srx_ctx *srx_ctx;
         struct efa_rdm_ope *rxe;
         struct efa_rdm_pke *pke;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+        struct efa_conn conn = {0};
+        struct efa_rdm_peer peer;
         struct efa_unit_test_eager_rtm_pkt_attr pke_attr = {
                 .msg_id = 0,
                 .connid = 0x1234
@@ -98,13 +103,21 @@ void test_efa_srx_unexp_pkt(struct efa_resource **state)
         efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
         pke->addr = FI_ADDR_UNSPEC;
 
+        /* Create a fake peer */
+        /* TODO: peer must be constructed by CQ read path */
+        assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+        raw_addr.qpn = 0;
+        raw_addr.qkey = 0x1234;
+        conn.ep_addr = &raw_addr;
+        efa_rdm_peer_construct(&peer, efa_rdm_ep, &conn);
+
         efa_unit_test_eager_msgrtm_pkt_construct(pke, &pke_attr);
         /**
          * Allocate an rxe with the rx pkt.
          * Since there is no recv posted, the rxe must be unexpected
          */
         ofi_genlock_lock(srx_ctx->lock);
-        rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(efa_rdm_ep, &pke);
+        rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(efa_rdm_ep, &peer, &pke);
         assert_true(rxe->state == EFA_RDM_RXE_UNEXP);
         assert_true(rxe->unexp_pkt == pke);
 

@@ -520,7 +520,7 @@ ssize_t efa_rdm_pke_init_longread_rtw(struct efa_rdm_pke *pkt_entry,
  *
  * @param[in]		pkt_entry	received EFA_RDM_LONGREAD_RTA_PKT packet entry
  */
-void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
@@ -567,7 +567,7 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	memcpy(rxe->rma_iov, read_iov,
 	       rxe->rma_iov_count * sizeof(struct fi_rma_iov));
 
-	err = efa_rdm_pke_post_remote_read_or_nack(rxe->ep, pkt_entry, rxe);
+	err = efa_rdm_pke_post_remote_read_or_nack(rxe->ep, peer, pkt_entry, rxe);
 
 	efa_rdm_pke_release_rx(pkt_entry);
 

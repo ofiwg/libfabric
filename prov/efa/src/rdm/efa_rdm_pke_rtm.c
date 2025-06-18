@@ -236,7 +236,7 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry, struct efa_r
 	rxe->msg_id = efa_rdm_pke_get_rtm_base_hdr(pkt_entry)->msg_id;
 
 	if (pkt_type == EFA_RDM_LONGREAD_MSGRTM_PKT || pkt_type == EFA_RDM_LONGREAD_TAGRTM_PKT)
-		return efa_rdm_pke_proc_matched_longread_rtm(pkt_entry);
+		return efa_rdm_pke_proc_matched_longread_rtm(pkt_entry, peer);
 
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
 		return efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry, peer);
@@ -287,10 +287,10 @@ static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry,
 
 	rtm_hdr = (struct efa_rdm_rtm_base_hdr *)pkt_entry->wiredata;
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
-		rxe = efa_rdm_rxe_map_lookup(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry), pkt_entry->addr);
+		rxe = efa_rdm_rxe_map_lookup(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
 		rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 	} else {
-		rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
+		rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, peer, &pkt_entry);
 		if (OFI_UNLIKELY(!rxe)) {
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
@@ -337,10 +337,10 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry,
 
 	rtm_hdr = (struct efa_rdm_rtm_base_hdr *) pkt_entry->wiredata;
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
-		rxe = efa_rdm_rxe_map_lookup(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry), pkt_entry->addr);
+		rxe = efa_rdm_rxe_map_lookup(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
 		rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 	} else {
-		rxe = efa_rdm_msg_alloc_rxe_for_tagrtm(ep, &pkt_entry);
+		rxe = efa_rdm_msg_alloc_rxe_for_tagrtm(ep, peer, &pkt_entry);
 		if (OFI_UNLIKELY(!rxe)) {
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
@@ -457,7 +457,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry, struct efa_r
 		struct efa_rdm_ope *rxe;
 		struct efa_rdm_pke *unexp_pkt_entry;
 
-		rxe = efa_rdm_rxe_map_lookup(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry), pkt_entry->addr);
+		rxe = efa_rdm_rxe_map_lookup(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
 		if (rxe) {
 			if (rxe->state == EFA_RDM_RXE_MATCHED) {
 				pkt_entry->ope = rxe;
@@ -890,7 +890,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry, struc
 			efa_rdm_tracepoint(runtread_read_posted, rxe->msg_id,
 				    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
-			err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
+			err = efa_rdm_pke_post_remote_read_or_nack(ep, peer, pkt_entry, rxe);
 			if (err)
 				return err;
 		}
@@ -918,8 +918,8 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry, struc
 					return err;
 			} else {
 				msg_id = efa_rdm_pke_get_rtm_msg_id(cur);
-				efa_rdm_rxe_map_remove(&ep->rxe_map, msg_id,
-						       cur->addr, rxe);
+				efa_rdm_rxe_map_remove(&peer->rxe_map, msg_id,
+						       rxe);
 			}
 		}
 
@@ -1187,8 +1187,10 @@ void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry)
  * longread RTM
  *
  * @param[in,out]	pkt_entry	packet entry
+ * @param[in]		peer		efa_rdm_peer struct of the sender
  */
-ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry,
+					      struct efa_rdm_peer *peer)
 {
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
@@ -1210,7 +1212,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 	efa_rdm_tracepoint(longread_read_posted, rxe->msg_id,
 		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
-	err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
+	err = efa_rdm_pke_post_remote_read_or_nack(ep, peer, pkt_entry, rxe);
 
 	efa_rdm_pke_release_rx(pkt_entry);
 	return err;

@@ -36,6 +36,8 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 		peer->shm_fiaddr = conn->shm_fi_addr;
 		peer->is_local = 1;
 	}
+
+	efa_rdm_rxe_map_construct(&peer->rxe_map);
 }
 
 /**

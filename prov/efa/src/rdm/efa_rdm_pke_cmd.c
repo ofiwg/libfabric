@@ -891,7 +891,7 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry, struct efa_rdm_pee
 		efa_rdm_pke_handle_longcts_rtw_recv(pkt_entry);
 		return;
 	case EFA_RDM_LONGREAD_RTW_PKT:
-		efa_rdm_pke_handle_longread_rtw_recv(pkt_entry);
+		efa_rdm_pke_handle_longread_rtw_recv(pkt_entry, peer);
 		return;
 	case EFA_RDM_SHORT_RTR_PKT:
 	case EFA_RDM_LONGCTS_RTR_PKT:
