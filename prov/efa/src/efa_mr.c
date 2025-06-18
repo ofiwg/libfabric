@@ -827,8 +827,12 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 		}
 		efa_mr->domain->ibv_mr_reg_ct++;
 		efa_mr->domain->ibv_mr_reg_sz += efa_mr->ibv_mr->length;
-		EFA_INFO(FI_LOG_MR, "Registered memory of size %zu for ibv pd %p, total mr reg size %zu, mr reg count %zu\n",
-			 efa_mr->ibv_mr->length, efa_mr->domain->ibv_pd, efa_mr->domain->ibv_mr_reg_sz, efa_mr->domain->ibv_mr_reg_ct);
+		EFA_INFO(FI_LOG_MR,
+			 "Registered memory at %p of size %zu for ibv pd %p, "
+			 "total mr reg size %zu, mr reg count %zu\n",
+			 efa_mr->ibv_mr->addr, efa_mr->ibv_mr->length,
+			 efa_mr->domain->ibv_pd, efa_mr->domain->ibv_mr_reg_sz,
+			 efa_mr->domain->ibv_mr_reg_ct);
 		efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	}
 	efa_mr->mr_fid.mem_desc = efa_mr;

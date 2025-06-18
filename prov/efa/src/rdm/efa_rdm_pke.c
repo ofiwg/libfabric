@@ -20,6 +20,7 @@
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_tracepoint.h"
+#include "efa_rdm_pke_print.h"
 
 /**
  * @brief allocate a packet entry
@@ -458,7 +459,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 
 #if ENABLE_DEBUG
 		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
-#ifdef ENABLE_EFA_RDM_PKT_DUMP
+#ifdef ENABLE_EFA_RDM_PKE_DUMP
 		efa_rdm_pke_print(pkt_entry, "Sent");
 #endif
 #endif
@@ -533,6 +534,16 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
 	}
+
+#if ENABLE_DEBUG
+#ifdef ENABLE_EFA_RDM_PKE_DUMP
+	EFA_DBG(FI_LOG_EP_DATA,
+		"Posted RDMA read length: %ld local buf: %ld local key: %d "
+		"remote buf: %ld remote key: %ld\n",
+		len, (uint64_t) local_buf,
+		((struct efa_mr *) desc)->ibv_mr->lkey, remote_buf, remote_key);
+#endif
+#endif
 
 #if HAVE_LTTNG
 	efa_rdm_tracepoint_wr_id_post_read((void *)pkt_entry);
