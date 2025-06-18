@@ -291,10 +291,12 @@ ssize_t efa_rdm_msg_send(struct fid_ep *ep, const void *buf, size_t len,
 	struct fi_msg msg = {0};
 	int ret;
 
+	iov.iov_base = (void *)buf;
+	iov.iov_len = len;
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	assert(len <= efa_rdm_ep->base_ep.max_msg_size);
 
-	ret = efa_rdm_attempt_to_sync_memops(efa_rdm_ep, (void *)buf, desc);
+	ret = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, &iov, &desc, 1);
 	if (ret)
 		return ret;
 
@@ -306,8 +308,6 @@ ssize_t efa_rdm_msg_send(struct fid_ep *ep, const void *buf, size_t len,
 		return fi_send(efa_rdm_ep->shm_ep, buf, len, desc? shm_desc[0] : NULL, peer->shm_fiaddr, context);
 	}
 
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, dest_addr, context, 0);
 	return efa_rdm_msg_generic_send(efa_rdm_ep, peer, &msg, 0, ofi_op_msg, efa_rdm_tx_flags(efa_rdm_ep));
 }
@@ -327,7 +327,10 @@ ssize_t efa_rdm_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	assert(len <= efa_rdm_ep->base_ep.max_msg_size);
 
-	ret = efa_rdm_attempt_to_sync_memops(efa_rdm_ep, (void *)buf, desc);
+	iov.iov_base = (void *)buf;
+	iov.iov_len = len;
+
+	ret = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, &iov, &desc, 1);
 	if (ret)
 		return ret;
 
@@ -338,9 +341,6 @@ ssize_t efa_rdm_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
 			efa_rdm_get_desc_for_shm(1, &desc, shm_desc);
 		return fi_senddata(efa_rdm_ep->shm_ep, buf, len, desc? shm_desc[0] : NULL, data, peer->shm_fiaddr, context);
 	}
-
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, dest_addr, context, data);
 	return efa_rdm_msg_generic_send(efa_rdm_ep, peer, &msg, 0, ofi_op_msg,
@@ -492,7 +492,9 @@ ssize_t efa_rdm_msg_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 	efa_rdm_ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	assert(len <= efa_rdm_ep->base_ep.max_msg_size);
 
-	ret = efa_rdm_attempt_to_sync_memops(efa_rdm_ep, (void *)buf, desc);
+	msg_iov.iov_base = (void *)buf;
+	msg_iov.iov_len = len;
+	ret = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, &msg_iov, &desc, 1);
 	if (ret)
 		return ret;
 
@@ -504,8 +506,6 @@ ssize_t efa_rdm_msg_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 		return fi_tsend(efa_rdm_ep->shm_ep, buf, len, desc? shm_desc[0] : NULL, peer->shm_fiaddr, tag, context);
 	}
 
-	msg_iov.iov_base = (void *)buf;
-	msg_iov.iov_len = len;
 	efa_rdm_msg_construct(&msg, &msg_iov, &desc, 1, dest_addr, context, 0);
 	return efa_rdm_msg_generic_send(efa_rdm_ep, peer, &msg, tag, ofi_op_tagged, efa_rdm_tx_flags(efa_rdm_ep));
 }
@@ -525,7 +525,9 @@ ssize_t efa_rdm_msg_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len
 	efa_rdm_ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	assert(len <= efa_rdm_ep->base_ep.max_msg_size);
 
-	ret = efa_rdm_attempt_to_sync_memops(efa_rdm_ep, (void *)buf, desc);
+	iov.iov_base = (void *)buf;
+	iov.iov_len = len;
+	ret = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, &iov, &desc, 1);
 	if (ret)
 		return ret;
 
@@ -536,9 +538,6 @@ ssize_t efa_rdm_msg_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len
 			efa_rdm_get_desc_for_shm(1, &desc, shm_desc);
 		return fi_tsenddata(efa_rdm_ep->shm_ep, buf, len, desc? shm_desc[0] : NULL, data, peer->shm_fiaddr, tag, context);
 	}
-
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, dest_addr, context, data);
 	return efa_rdm_msg_generic_send(efa_rdm_ep, peer, &msg, tag, ofi_op_tagged,
