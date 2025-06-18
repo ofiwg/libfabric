@@ -306,7 +306,9 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	if (err)
 		return err;
 
-	err = efa_rdm_attempt_to_sync_memops(efa_rdm_ep, (void *)buf, desc);
+	iov.iov_base = (void *)buf;
+	iov.iov_len = len;
+	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, &iov, &desc, 1);
 	if (err)
 		return err;
 
@@ -318,9 +320,6 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 		return fi_read(efa_rdm_ep->shm_ep, buf, len, desc? shm_desc[0] : NULL, peer->shm_fiaddr, addr, key, context);
 	}
-
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
 
 	EFA_SETUP_RMA_IOV(rma_iov, addr, ofi_total_iov_len(&iov, 1), key);
 
@@ -596,7 +595,9 @@ ssize_t efa_rdm_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *
 	if (err)
 		return err;
 
-	err = efa_rdm_attempt_to_sync_memops(efa_rdm_ep, (void *)buf, desc);
+	iov.iov_base = (void *)buf;
+	iov.iov_len = len;
+	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, &iov, &desc, 1);
 	if (err)
 		return err;
 
@@ -607,9 +608,6 @@ ssize_t efa_rdm_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *
 			efa_rdm_get_desc_for_shm(1, &desc, shm_desc);
 		return fi_write(efa_rdm_ep->shm_ep, buf, len, desc? shm_desc[0] : NULL, peer->shm_fiaddr, addr, key, context);
 	}
-
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
 
 	EFA_SETUP_RMA_IOV(rma_iov, addr, ofi_total_iov_len(&iov, 1), key);
 
@@ -637,7 +635,9 @@ ssize_t efa_rdm_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	if (err)
 		return err;
 
-	err = efa_rdm_attempt_to_sync_memops(efa_rdm_ep, (void *)buf, desc);
+	iov.iov_base = (void *)buf;
+	iov.iov_len = len;
+	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, &iov, &desc, 1);
 	if (err)
 		return err;
 
@@ -648,9 +648,6 @@ ssize_t efa_rdm_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 			efa_rdm_get_desc_for_shm(1, &desc, shm_desc);
 		return fi_writedata(efa_rdm_ep->shm_ep, buf, len, desc? shm_desc[0] : NULL, data, peer->shm_fiaddr, addr, key, context);
 	}
-
-	iov.iov_base = (void *)buf;
-	iov.iov_len = len;
 
 	EFA_SETUP_RMA_IOV(rma_iov, addr, len, key);
 
