@@ -228,6 +228,8 @@ struct smr_region {
 	uint8_t		resv;
 	uint16_t	flags;
 	int		pid;
+	/* Do not touch above fields. It might break backwards compatibility */
+
 	uint8_t		cma_cap_peer;
 	uint8_t		cma_cap_self;
 	uint8_t		xpmem_cap_self;

@@ -232,6 +232,7 @@ struct smr_ep {
 	size_t			min_multi_recv_size;
 
 	int			ep_idx;
+	bool			user_setname;
 	enum ofi_shm_p2p_type	p2p_type;
 	struct smr_sock_info	*sock_info;
 	void			*dsa_context;
