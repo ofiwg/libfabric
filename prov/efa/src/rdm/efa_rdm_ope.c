@@ -53,7 +53,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 		for (i = 0; i < msg->iov_count; i++) {
 			if (msg->desc[i]) {
 				ofi_atomic_inc32(&((struct efa_mr *)msg->desc[i])->ref);
-				EFA_DBG(FI_LOG_EP_DATA, "mr %p ref cnt inc to %u\n", (struct efa_mr *)msg->desc[i], ofi_atomic_get32(&((struct efa_mr *)msg->desc[i])->ref));
+				EFA_WARN(FI_LOG_EP_DATA, "txe %p used mr %p, ref cnt inc to %u\n", txe, (struct efa_mr *)msg->desc[i], ofi_atomic_get32(&((struct efa_mr *)msg->desc[i])->ref));
 			}
 		}
 	} else {
@@ -143,7 +143,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 			struct efa_mr *efa_mr = (struct efa_mr *)txe->desc[i];
 			assert(ofi_atomic_get32(&efa_mr->ref));
 			ofi_atomic_dec32(&efa_mr->ref);
-			EFA_DBG(FI_LOG_EP_DATA, "mr %p ref cnt dec to %u\n", efa_mr, ofi_atomic_get32(&efa_mr->ref));
+			EFA_WARN(FI_LOG_EP_DATA, "txe %p is released, mr %p ref cnt dec to %u\n", txe, efa_mr, ofi_atomic_get32(&efa_mr->ref));
 			/* This means the underlying mr is closed and the efa_mr is not used by any ope any more */
 			if (!ofi_atomic_get32(&efa_mr->active) && !ofi_atomic_get32(&efa_mr->ref))
 				free(efa_mr);
@@ -216,9 +216,10 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 
 		if (rxe->desc[i]) {
 			struct efa_mr *efa_mr = (struct efa_mr *)rxe->desc[i];
+			EFA_WARN(FI_LOG_EP_DATA, "rxe %p is to be released, mr %p ref is %u\n", rxe, efa_mr, ofi_atomic_get32(&efa_mr->ref));
 			assert(ofi_atomic_get32(&efa_mr->ref));
 			ofi_atomic_dec32(&efa_mr->ref);
-			EFA_DBG(FI_LOG_EP_DATA, "mr %p ref cnt dec to %u\n", efa_mr, ofi_atomic_get32(&efa_mr->ref));
+			EFA_WARN(FI_LOG_EP_DATA, "rxe %p is released, mr %p ref cnt dec to %u\n", rxe, efa_mr, ofi_atomic_get32(&efa_mr->ref));
 			/* This means the underlying mr is closed and the efa_mr is not used by any ope any more */
 			if (!ofi_atomic_get32(&efa_mr->active) && !ofi_atomic_get32(&efa_mr->ref))
 				free(efa_mr);
@@ -321,8 +322,7 @@ void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64
 
 	for (i = mr_iov_start; i < ope->iov_count; ++i) {
 		if (ope->desc[i]) {
-			ofi_atomic_inc32(&((struct efa_mr *)ope->desc[i])->ref);
-			EFA_DBG(FI_LOG_EP_DATA, "mr %p ref cnt inc to %u\n", (struct efa_mr *)ope->desc[i], ofi_atomic_get32(&((struct efa_mr *)ope->desc[i])->ref));
+			EFA_WARN(FI_LOG_EP_DATA, "ope %p reused mr %p\n", ope, ope->desc[i]);
 			continue;
 		}
 
@@ -348,7 +348,7 @@ void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64
 			ope->desc[i] = fi_mr_desc(ope->mr[i]);
 			assert(ope->desc[i]);
 			ofi_atomic_inc32(&((struct efa_mr *)ope->desc[i])->ref);
-			EFA_DBG(FI_LOG_EP_DATA, "mr %p ref cnt inc to %u\n", (struct efa_mr *)ope->desc[i], ofi_atomic_get32(&((struct efa_mr *)ope->desc[i])->ref));
+			EFA_WARN(FI_LOG_EP_DATA, "ope %p used mr %p, ref cnt inc to %u\n", ope, (struct efa_mr *)ope->desc[i], ofi_atomic_get32(&((struct efa_mr *)ope->desc[i])->ref));
 		}
 	}
 }
@@ -357,6 +357,7 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe, struct fi_rma_iov *r
 {
 	int i;
 
+	EFA_WARN(FI_LOG_EP_DATA, "efa_rdm_ope_try_fill_desc for txe %p\n", txe);
 	efa_rdm_ope_try_fill_desc(txe, 0, FI_REMOTE_READ);
 
 	for (i = 0; i < txe->iov_count; ++i) {
@@ -1399,6 +1400,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 			return err;
 	}
 
+	EFA_WARN(FI_LOG_EP_DATA, "efa_rdm_ope_try_fill_desc for ope %p\n", ope);
 	efa_rdm_ope_try_fill_desc(ope, 0, FI_RECV);
 
 	max_read_once_len = MIN(efa_env.efa_read_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
@@ -1642,6 +1644,7 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 		return err;
 	}
 
+	EFA_WARN(FI_LOG_EP_DATA, "efa_rdm_ope_post_read for ope %p\n", ope);
 	err = efa_rdm_ope_post_read(ope);
 	switch (err) {
 	case -FI_EAGAIN:

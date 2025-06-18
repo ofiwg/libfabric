@@ -37,7 +37,7 @@ void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
 		for (i = 0; i < peer_rxe->count; i++) {
 			if (rxe->desc[i]) {
 				ofi_atomic_inc32(&((struct efa_mr *)rxe->desc[i])->ref);
-				EFA_DBG(FI_LOG_EP_DATA, "mr %p ref cnt inc to %u\n", (struct efa_mr *)rxe->desc[i], ofi_atomic_get32(&((struct efa_mr *)rxe->desc[i])->ref));
+				EFA_WARN(FI_LOG_EP_DATA, "rxe %p used mr %p, ref cnt inc to %u\n", rxe, (struct efa_mr *)rxe->desc[i], ofi_atomic_get32(&((struct efa_mr *)rxe->desc[i])->ref));
 			}
 		}
 	}

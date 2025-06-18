@@ -87,6 +87,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rtr_rxe(struct efa_rdm_pke *pkt_entry)
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
+	EFA_WARN(FI_LOG_EP_DATA, "allocated rxe %p\n", rxe);
 	rtr_hdr = (struct efa_rdm_rtr_hdr *)pkt_entry->wiredata;
 	rxe->tx_id = rtr_hdr->recv_id;
 	rxe->window = rtr_hdr->recv_length;

@@ -635,6 +635,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 	if (!rxe)
 		return NULL;
 
+	EFA_WARN(FI_LOG_EP_DATA, "allocated rxe %p\n", rxe);
 	rxe->fi_flags = flags;
 	if (op == ofi_op_tagged) {
 		rxe->tag = tag;
@@ -656,7 +657,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 		for (i = 0; i < msg->iov_count; i++) {
 			if (msg->desc[i]) {
 				ofi_atomic_inc32(&((struct efa_mr *)msg->desc[i])->ref);
-				EFA_DBG(FI_LOG_EP_DATA, "mr %p ref cnt inc to %u\n", (struct efa_mr *)msg->desc[i], ofi_atomic_get32(&((struct efa_mr *)msg->desc[i])->ref));
+				EFA_WARN(FI_LOG_EP_DATA, "zcpy rxe %p used mr %p, ref cnt inc to %u\n", rxe, (struct efa_mr *)msg->desc[i], ofi_atomic_get32(&((struct efa_mr *)msg->desc[i])->ref));
 			}
 		}
 	} else {
@@ -698,6 +699,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
 	}
 
 	rxe = efa_rdm_ep_alloc_rxe(ep, unexp_pkt_entry->addr, op);
+	EFA_WARN(FI_LOG_EP_DATA, "allocated unexp rxe %p\n", rxe);
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
@@ -728,6 +730,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_matched_rxe_for_rtm(struct efa_rdm_ep *ep,
 	struct efa_rdm_ope *rxe;
 
 	rxe = efa_rdm_ep_alloc_rxe(ep, pkt_entry->addr, op);
+	EFA_WARN(FI_LOG_EP_DATA, "allocated matched rxe %p\n", rxe);
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 

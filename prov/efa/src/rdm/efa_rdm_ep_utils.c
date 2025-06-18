@@ -144,6 +144,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
 		return NULL;
 	}
 
+	EFA_WARN(FI_LOG_EP_DATA, "allocated rxe %p\n", rxe);
 	rxe->ep = ep;
 	dlist_insert_tail(&rxe->ep_entry, &ep->rxe_list);
 	rxe->type = EFA_RDM_RXE;

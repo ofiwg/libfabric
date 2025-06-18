@@ -66,6 +66,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rtw_rxe(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_base_hdr *base_hdr;
 
 	rxe = efa_rdm_ep_alloc_rxe(pkt_entry->ep, pkt_entry->addr, ofi_op_write);
+	EFA_WARN(FI_LOG_EP_DATA, "allocated rxe %p\n", rxe);
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 

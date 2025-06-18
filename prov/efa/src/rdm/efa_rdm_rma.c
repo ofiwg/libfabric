@@ -29,6 +29,10 @@ int efa_rdm_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma
 					&context);
 		efa_mr = context;
 		desc[i] = fi_mr_desc(&efa_mr->mr_fid);
+		if (desc[i]) {
+			ofi_atomic_inc32(&efa_mr->ref);
+		}
+
 		ofi_genlock_unlock(&efa_rdm_ep_domain(ep)->util_domain.lock);
 		if (ret) {
 			EFA_WARN(FI_LOG_EP_CTRL,
