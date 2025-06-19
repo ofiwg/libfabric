@@ -753,13 +753,13 @@ static uint64_t efa_mr_cuda_non_p2p_keygen(void) {
 }
 
 /*
- * Set core_access to FI_SEND | FI_RECV if not already set,
+ * Set ofi_access to FI_SEND | FI_RECV if not already set,
  * set the fi_ibv_access modes and do real registration (ibv_mr_reg)
  * Insert the key returned by ibv_mr_reg into efa mr_map and shm mr_map
  */
 static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *attr)
 {
-	uint64_t core_access, original_access;
+	uint64_t ofi_access, original_access;
 	struct fi_mr_attr mr_attr = {0};
 	int fi_ibv_access = 0;
 	uint64_t shm_flags;
@@ -784,12 +784,17 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	/* To support Emulated RMA path, if the access is not supported
 	 * by EFA, modify it to FI_SEND | FI_RECV
 	 */
-	core_access = mr_attr.access;
-	if (!core_access || (core_access & ~EFA_MR_SUPPORTED_PERMISSIONS))
-		core_access = FI_SEND | FI_RECV;
+	ofi_access = mr_attr.access;
+	if (!ofi_access || (ofi_access & ~EFA_MR_SUPPORTED_PERMISSIONS))
+		ofi_access = FI_SEND | FI_RECV;
 
-	/* Local read access to an MR is enabled by default in verbs */
-	if (core_access & FI_RECV)
+	/* Local read access to an MR is enabled by default in verbs
+	 *
+	 * We need IBV_ACCESS_LOCAL_WRITE for two emulated cases
+	 * 1. When emulating fi_send with RMA read - ofi_access is set to FI_RECV
+	 * 2. When emulating fi_write with RMA read - ofi_access is set to FI_REMOTE_WRITE
+	 */
+	if (ofi_access & (FI_RECV | FI_REMOTE_WRITE))
 		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
 
 	if (efa_mr->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
