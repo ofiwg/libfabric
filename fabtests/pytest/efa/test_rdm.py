@@ -55,6 +55,23 @@ def test_rdm_pingpong_no_mr_local(cmdline_args, iteration_type, completion_seman
                                completion_type=completion_type, fabric="efa",
                                additional_env=additional_env)
 
+@pytest.mark.parametrize("mr_cache", [True, False])
+@pytest.mark.parametrize("iteration_type",
+                         [pytest.param("short", marks=pytest.mark.short),
+                          pytest.param("standard", marks=pytest.mark.standard)])
+def test_rma_pingpong_no_mr_local(cmdline_args, iteration_type, completion_semantic,
+                      memory_type_bi_dir, mr_cache):
+    command = "fi_rma_pingpong -o writedata -M mr_local"  + " " + perf_progress_model_cli
+
+    additional_env = ''
+    if not mr_cache:
+        additional_env = 'FI_EFA_MR_CACHE_ENABLE=0'
+
+    efa_run_client_server_test(cmdline_args, command, iteration_type,
+                               completion_semantic, memory_type_bi_dir, "all",
+                               completion_type="queue", fabric="efa",
+                               additional_env=additional_env)
+
 @pytest.mark.functional
 def test_rdm_pingpong_range(cmdline_args, completion_semantic, memory_type_bi_dir, message_size, direct_message_size, fabric):
     efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong", "short",
