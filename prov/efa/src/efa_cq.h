@@ -24,6 +24,7 @@ struct efa_ibv_cq_poll_list_entry {
 struct efa_cq {
 	struct util_cq		util_cq;
 	struct efa_ibv_cq	ibv_cq;
+	int	(*poll_ibv_cq)(ssize_t cqe_to_progress, struct efa_ibv_cq *ibv_cq);
 };
 
 /*
@@ -273,6 +274,6 @@ static inline int efa_write_error_msg(struct efa_base_ep *ep, fi_addr_t addr,
 	return 0;
 }
 
-void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
+int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
 
 #endif /* end of _EFA_CQ_H*/

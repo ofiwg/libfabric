@@ -208,6 +208,8 @@ static int efa_ep_close(fid_t fid)
 		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
 	}
 
+	efa_base_ep_flush_cq(ep);
+
 	free(ep);
 
 	return 0;

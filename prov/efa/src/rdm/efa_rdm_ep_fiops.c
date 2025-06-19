@@ -824,9 +824,9 @@ void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 	while (efa_rdm_ep_has_unfinished_send(efa_rdm_ep)) {
 		/* poll cq until empty */
 		if (tx_cq)
-			efa_rdm_cq_poll_ibv_cq(-1, &tx_cq->ibv_cq);
+			(void) efa_rdm_cq_poll_ibv_cq(-1, &tx_cq->ibv_cq);
 		if (rx_cq)
-			efa_rdm_cq_poll_ibv_cq(-1, &rx_cq->ibv_cq);
+			(void) efa_rdm_cq_poll_ibv_cq(-1, &rx_cq->ibv_cq);
 		efa_domain_progress_rdm_peers_and_queues(efa_rdm_ep_domain(efa_rdm_ep));
 	}
 
@@ -974,6 +974,8 @@ static int efa_rdm_ep_close(struct fid *fid)
 		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
 		retv = ret;
 	}
+
+	efa_base_ep_flush_cq(&efa_rdm_ep->base_ep);
 
 	ret = efa_rdm_ep_close_shm_ep_resources(efa_rdm_ep);
 	if (ret)

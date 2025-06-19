@@ -780,3 +780,28 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_re
 
 	return efa_base_ep_enable(ep);
 }
+
+void efa_base_ep_flush_cq(struct efa_base_ep *base_ep)
+{
+	struct efa_cq *tx_cq, *rx_cq;
+	int err;
+
+	efa_base_ep_lock_cq(base_ep);
+	tx_cq = efa_base_ep_get_tx_cq(base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(base_ep);
+
+	if (tx_cq) {
+		err = 0;
+		while (err != ENOENT) {
+			err = tx_cq->poll_ibv_cq(-1, &tx_cq->ibv_cq);
+		}
+	}
+
+	if (rx_cq && rx_cq != tx_cq) {
+		err = 0;
+		while (err != ENOENT) {
+			err = rx_cq->poll_ibv_cq(-1, &rx_cq->ibv_cq);
+		}
+	}
+	efa_base_ep_unlock_cq(base_ep);
+}
