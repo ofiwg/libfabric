@@ -132,9 +132,20 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	/* data validation on read and write ops requires delivery_complete semantics. */
-	if (opts.rma_op != FT_RMA_WRITEDATA && ft_check_opts(FT_OPT_VERIFY_DATA))
-		hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
+	if (opts.rma_op != FT_RMA_WRITEDATA &&
+	    ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		FT_ERR("This test polls the last byte of an RMA buffer to "
+		       "check for fi_write completion on the RX side. Which "
+		       "doesn't guarantee that all of the data has arrived. "
+		       "Therefore, it can only support data verification for "
+		       "fi_writedata operations.");
+		return EXIT_FAILURE;
+	}
+
+	if (opts.options & FT_OPT_RX_CNTR || opts.options & FT_OPT_TX_CNTR) {
+		FT_ERR("This test does not support counters");
+		return EXIT_FAILURE;
+	}
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
