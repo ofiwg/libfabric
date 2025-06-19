@@ -33,6 +33,11 @@ void test_impl_cq_read_empty_cq(struct efa_resource *resource, enum fi_ep_type e
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 
 	assert_int_equal(ret, -FI_EAGAIN);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -180,6 +185,11 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	/* Look for peer host id */
 	assert_non_null(strstr(strerror, host_id_str));
 	efa_unit_test_buff_destruct(&send_buff);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_always(efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -353,6 +363,11 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	assert_int_equal(ret, sizeof(eq_err_entry));
 	assert_int_not_equal(eq_err_entry.err, FI_SUCCESS);
 	assert_int_equal(eq_err_entry.prov_errno, FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_always(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -448,6 +463,11 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	assert_int_equal(ret, sizeof(eq_err_entry));
 	assert_int_not_equal(eq_err_entry.err, FI_SUCCESS);
 	assert_int_equal(eq_err_entry.prov_errno, EFA_IO_COMP_STATUS_FLUSHED);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_always(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_unsolicited_recv(struct efa_resource **state)
@@ -495,6 +515,11 @@ void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
 	assert_int_equal(ret, 1);
 	assert_int_not_equal(cq_err_entry.err, FI_ENOENT);
 	assert_int_equal(cq_err_entry.prov_errno, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_always(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -772,6 +797,11 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	}
 
 	efa_unit_test_buff_destruct(&recv_buff);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_always(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -911,6 +941,11 @@ void test_efa_cq_read_no_completion(struct efa_resource **state)
 
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 	assert_int_equal(ret, -FI_EAGAIN);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -936,6 +971,11 @@ void test_efa_cq_read_send_success(struct efa_resource **state)
 
 	assert_true(efa_context == cq_entry.op_context);
 	assert_true(cq_entry.flags == efa_context->completion_flags);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -961,6 +1001,11 @@ void test_efa_cq_read_senddata_success(struct efa_resource **state)
 
 	assert_true(efa_context == cq_entry.op_context);
 	assert_true(cq_entry.flags == efa_context->completion_flags);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -986,6 +1031,11 @@ void test_efa_cq_read_recv_success(struct efa_resource **state)
 
 	assert_true(efa_context == cq_entry.op_context);
 	assert_true(efa_context->completion_flags == cq_entry.flags);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -1011,6 +1061,11 @@ void test_efa_cq_read_write_success(struct efa_resource **state)
 
 	assert_true(efa_context == cq_entry.op_context);
 	assert_true(cq_entry.flags == efa_context->completion_flags);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -1036,6 +1091,11 @@ void test_efa_cq_read_writedata_success(struct efa_resource **state)
 
 	assert_true(efa_context == cq_entry.op_context);
 	assert_true(cq_entry.flags == efa_context->completion_flags);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -1061,6 +1121,11 @@ void test_efa_cq_read_read_success(struct efa_resource **state)
 
 	assert_true(efa_context == cq_entry.op_context);
 	assert_true(cq_entry.flags == efa_context->completion_flags);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -1081,6 +1146,11 @@ void test_efa_cq_read_recv_rdma_with_imm_success(struct efa_resource **state)
 
 	assert_true(cq_entry.op_context == NULL);
 	assert_true(cq_entry.flags == (FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA | FI_RMA));
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 static void efa_cq_check_cq_err_entry(struct efa_resource *resource, int vendor_error) {
@@ -1131,6 +1201,11 @@ void test_efa_cq_read_send_failure(struct efa_resource **state)
 
 	efa_cq_check_cq_err_entry(resource,
 				  EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -1160,6 +1235,11 @@ void test_efa_cq_read_recv_failure(struct efa_resource **state)
 
 	efa_cq_check_cq_err_entry(resource,
 				  EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 
 /**
@@ -1184,5 +1264,10 @@ void test_efa_cq_recv_rdma_with_imm_failure(struct efa_resource **state)
 
 	efa_cq_check_cq_err_entry(resource,
 				  EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_maybe(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 

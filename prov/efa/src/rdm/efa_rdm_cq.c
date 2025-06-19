@@ -416,7 +416,7 @@ static int efa_rdm_cq_match_ep(struct dlist_entry *item, const void *ep)
  * from the endpoint that the completed packet entry was posted from (pkt_entry->ep).
  * @param[in]	cqe_to_process	Max number of cq entry to poll and process. A negative number means to poll until cq empty
  */
-void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
+int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 {
 	bool should_end_poll = false;
 	/* Initialize an empty ibv_poll_cq_attr struct for ibv_start_poll.
@@ -424,7 +424,7 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	 */
 	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 	struct efa_rdm_pke *pkt_entry;
-	ssize_t err;
+	int err;
 	int opcode;
 	size_t i = 0;
 	int prov_errno;
@@ -533,7 +533,7 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	if (err && err != ENOENT) {
 		err = err > 0 ? err : -err;
 		prov_errno = ibv_wc_read_vendor_err(ibv_cq->ibv_cq_ex);
-		EFA_WARN(FI_LOG_CQ, "Unexpected error when polling ibv cq, err: %s (%zd) prov_errno: %s (%d)\n", fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
+		EFA_WARN(FI_LOG_CQ, "Unexpected error when polling ibv cq, err: %s (%d) prov_errno: %s (%d)\n", fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
 		efa_show_help(prov_errno);
 		err_entry = (struct fi_cq_err_entry) {
 			.err = err,
@@ -553,6 +553,7 @@ void efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	}
 	assert(dlist_empty(&rx_progressed_ep_list));
 
+	return err;
 }
 
 static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr)
@@ -631,7 +632,7 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 
 	dlist_foreach(&efa_rdm_cq->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
-		efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
+		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 	}
 	efa_domain_progress_rdm_peers_and_queues(efa_domain);
 	ofi_genlock_unlock(&cq->ep_list_lock);
@@ -684,6 +685,8 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", fi_strerror(ret));
 		goto close_util_cq;
 	}
+
+	cq->efa_cq.poll_ibv_cq = efa_rdm_cq_poll_ibv_cq;
 
 	*cq_fid = &cq->efa_cq.util_cq.cq_fid;
 	(*cq_fid)->fid.ops = &efa_rdm_cq_fi_ops;

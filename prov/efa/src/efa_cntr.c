@@ -172,7 +172,7 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 
 	dlist_foreach(&efa_cntr->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
-		efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
+		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 	}
 	efa_domain_progress_rdm_peers_and_queues(efa_domain);
 	ofi_genlock_unlock(&cntr->ep_list_lock);
@@ -189,7 +189,7 @@ static void efa_cntr_progress(struct util_cntr *cntr)
 	ofi_genlock_lock(&cntr->ep_list_lock);
 	dlist_foreach(&efa_cntr->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
-		efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
+		(void) efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 	}
 	ofi_genlock_unlock(&cntr->ep_list_lock);
 }
