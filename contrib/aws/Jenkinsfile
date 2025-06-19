@@ -62,7 +62,7 @@ def get_random_string(len) {
 }
 
 def get_cluster_name_prefix(build_tag) {
-    prefix = sh(
+    def prefix = sh(
                 script: "echo ${build_tag} | sed \"s/^jenkins-//g\" | sed \"s/ //g\" | tr -d '.\\n'",
                 returnStdout: true
             )
@@ -76,7 +76,7 @@ def get_cluster_name(build_tag, os, instance_type) {
      * Jenkins does not allow groovy to use the replace() method
      * of string. Therefore we used shell command sed to replace "." with ""
      */
-    build_tag = get_cluster_name_prefix(build_tag)
+    def build_tag = get_cluster_name_prefix(build_tag)
 
     def cluster_name = sh(
                         script: "echo '${build_tag}-${os.take(10)}-${instance_type.take(10)}-'${get_random_string(8)} | tr -d '.\\n'",
@@ -273,7 +273,7 @@ pipeline {
             script {
                 // Try To Cleanup Resources
                 def regions = ["us-east-1", "eu-north-1", "us-west-2"]
-                cluster_name_prefix = get_cluster_name_prefix(env.BUILD_TAG)
+                def cluster_name_prefix = get_cluster_name_prefix(env.BUILD_TAG)
                 regions.each { region ->
                     sh ". venv/bin/activate; ./PortaFiducia/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
                 }
