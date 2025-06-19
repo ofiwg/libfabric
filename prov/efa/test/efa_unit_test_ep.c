@@ -226,7 +226,12 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	assert_true(actual_peer_host_id == g_efa_unit_test_mocks.peer_host_id);
 
 	/* Device version should be stored after handshake */
-        assert_int_equal(peer->device_version, 0xefa0);
+	assert_int_equal(peer->device_version, 0xefa0);
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_always(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
 #else
 void test_efa_rdm_ep_handshake_exchange_host_id() {
