@@ -1044,8 +1044,8 @@ struct fi_tx_attr {
 ## caps - Capabilities
 
 The requested capabilities of the context.  The capabilities must be
-a subset of those requested of the associated endpoint.  See the
-CAPABILITIES section of fi_getinfo(3) for capability details.  If
+a subset of those requested of the associated endpoint in fi_info->caps.
+See the CAPABILITIES section of fi_getinfo(3) for capability details.  If
 the caps field is 0 on input to fi_getinfo(3), the applicable
 capability bits from the fi_info structure will be used.
 
@@ -1336,8 +1336,8 @@ struct fi_rx_attr {
 ## caps - Capabilities
 
 The requested capabilities of the context.  The capabilities must be
-a subset of those requested of the associated endpoint.  See the
-CAPABILITIES section if fi_getinfo(3) for capability details.  If
+a subset of those requested of the associated endpoint in fi_info->caps.
+See the CAPABILITIES section of fi_getinfo(3) for capability details.  If
 the caps field is 0 on input to fi_getinfo(3), the applicable
 capability bits from the fi_info structure will be used.
 
