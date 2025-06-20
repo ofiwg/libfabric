@@ -503,7 +503,9 @@ struct opx_spio_ctrl {
 	union fi_opx_hfi1_pio_state pio;	    // 1 qw
 	pthread_spinlock_t	    spio_ctrl_lock; // 4 bytes
 	uint32_t		    unused;
-	uint64_t		    unused1[6];
+	volatile uint64_t	   *credits_addr_copy;
+	uint64_t		    dummy_free_credits;
+	uint64_t		    unused1[4];
 } __attribute__((aligned(64)));
 
 /* Up to HFI1_MAX_SHARED_CTXTS of these strucutres are placed in the page of shared memory
@@ -528,9 +530,10 @@ struct opx_subcontext_ureg {
  */
 struct opx_hwcontext_ctrl {
 	pthread_spinlock_t context_lock; /* lock shared by all subctxts */
-	uint32_t	   last_egrbrf_index;
+	uint32_t	   last_egrbfr_index;
 	uint64_t	   rx_hdrq_rhf_seq; /* rhf seq for the hw hdrq shared by all subctxts */
 	uint64_t	   hdrq_head;	    /* software copy of head */
+	uint64_t	   hfi_frozen_count;
 } __attribute__((aligned(64)));
 
 /* Locking macros for shared PIO state when context sharing is in use. */
@@ -588,17 +591,16 @@ struct fi_opx_hfi1_context {
 		int rank_inst;
 	} daos_info;
 
-	int64_t	 ref_cnt;
-	size_t	 status_lasterr;
-	time_t	 network_lost_time;
-	uint64_t status_check_next_usec;
-	uint64_t link_down_wait_time_max_sec;
-	union {
-		volatile uint64_t		       *credits_addr;
-		volatile union fi_opx_hfi1_txe_credits *credits;
-	} credits_addr_copy;
+	int64_t		   ref_cnt;
+	size_t		   status_lasterr;
+	time_t		   network_lost_time;
+	uint64_t	   status_check_next_usec;
+	uint64_t	   link_down_wait_time_max_sec;
+	volatile uint64_t *credits_addr_copy;
 
-	uint64_t dummy_free_credits;
+	uint64_t		    dummy_free_credits;
+	uint64_t		    hfi1_frozen_count; /* local copy */
+	union fi_opx_hfi1_pio_state dummy_pio_state;
 
 	/* struct ibv_context * for hfi1 direct/rdma-core only */
 	void *ibv_context;
@@ -901,11 +903,14 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context subctxt                  	  %#X  \n", context->subctxt);
 }
 
-void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx_hfi1_type hfi1_type);
+void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx_hfi1_type hfi1_type,
+		       const bool ctx_sharing);
 
-void opx_link_down_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep);
+void opx_link_down_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep,
+					  const bool ctx_sharing);
 
-void opx_link_up_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep);
+void opx_link_up_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep,
+					const bool ctx_sharing);
 
 #define OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC 250000 /* 250 ms*/
 
@@ -948,7 +953,7 @@ uint64_t opx_get_hw_status_jkr(struct fi_opx_hfi1_context *context)
 
 __OPX_FORCE_INLINE__
 size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context, const enum opx_hfi1_type hfi1_type,
-				   struct fi_opx_ep *opx_ep)
+				   struct fi_opx_ep *opx_ep, const bool ctx_sharing)
 {
 	size_t	 err	= FI_SUCCESS;
 	uint64_t status = (hfi1_type & OPX_HFI1_WFR) ? opx_get_hw_status_wfr(context) : opx_get_hw_status_jkr(context);
@@ -964,7 +969,7 @@ size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context, const en
 		if (err != context->status_lasterr) {
 			context->network_lost_time = time(NULL);
 			/* Point the pio credit addr to a dummy pointer */
-			opx_link_down_update_pio_credit_addr(context, opx_ep);
+			opx_link_down_update_pio_credit_addr(context, opx_ep, ctx_sharing);
 		} else {
 			time_t now = time(NULL);
 
