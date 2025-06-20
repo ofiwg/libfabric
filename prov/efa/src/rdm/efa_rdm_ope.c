@@ -177,6 +177,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
  */
 void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 {
+	//EFA_WARN(FI_LOG_EP_DATA, "releasing rxe %p \n", rxe);
 	struct efa_rdm_pke *pkt_entry;
 	struct dlist_entry *tmp;
 	int i, err;
@@ -215,8 +216,10 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 			ofi_atomic_dec32(&efa_mr->ref);
 			EFA_WARN(FI_LOG_EP_DATA, "rxe %p is released, mr %p ref cnt dec to %u\n", rxe, efa_mr, ofi_atomic_get32(&efa_mr->ref));
 			/* This means the underlying mr is closed and the efa_mr is not used by any ope any more */
-			if (!ofi_atomic_get32(&efa_mr->active) && !ofi_atomic_get32(&efa_mr->ref))
+			if (!ofi_atomic_get32(&efa_mr->active) && !ofi_atomic_get32(&efa_mr->ref)) {
+				EFA_WARN(FI_LOG_EP_DATA, "freed mr %p\n", efa_mr);
 				free(efa_mr);
+			}
 		}
 	}
 

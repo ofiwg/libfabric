@@ -470,8 +470,10 @@ static int efa_mr_close(fid_t fid)
 			EFA_WARN(FI_LOG_MR, "Unable to close MR\n");
 	}
 
-	if (!ofi_atomic_get32(&efa_mr->active) && !ofi_atomic_get32(&efa_mr->ref))
+	if (!ofi_atomic_get32(&efa_mr->active) && !ofi_atomic_get32(&efa_mr->ref)) {
+		EFA_WARN(FI_LOG_MR, "freed mr %p\n", efa_mr);
 		free(efa_mr);
+	}
 
 	return ret;
 }
@@ -785,6 +787,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	ofi_atomic_initialize32(&efa_mr->active, 1);
 	ofi_atomic_initialize32(&efa_mr->ref, 0);
 
+	EFA_WARN(FI_LOG_MR, "created new mr %p\n", efa_mr);
 	ofi_mr_update_attr(
 		efa_mr->domain->util_domain.fabric->fabric_fid.api_version,
 		efa_mr->domain->util_domain.info_domain_caps,
