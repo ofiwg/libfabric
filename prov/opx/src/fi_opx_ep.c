@@ -1187,11 +1187,12 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 
 			hwctxt_ctrl->hdrq_head	       = 0;
 			hwctxt_ctrl->rx_hdrq_rhf_seq   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
-			hwctxt_ctrl->last_egrbrf_index = 0;
+			hwctxt_ctrl->last_egrbfr_index = 0;
+			hwctxt_ctrl->hfi_frozen_count  = 0;
 
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-			       "Hardware RHQ shared state: hdrq_head=%lu, rx_hdrq_rhf_seq=%lx, last_egrbrf_index=%u\n",
-			       hwctxt_ctrl->hdrq_head, hwctxt_ctrl->rx_hdrq_rhf_seq, hwctxt_ctrl->last_egrbrf_index);
+			       "Hardware RHQ shared state: hdrq_head=%lu, rx_hdrq_rhf_seq=%lx, last_egrbfr_index=%u\n",
+			       hwctxt_ctrl->hdrq_head, hwctxt_ctrl->rx_hdrq_rhf_seq, hwctxt_ctrl->last_egrbfr_index);
 		}
 
 		const size_t software_rhdrq_size =

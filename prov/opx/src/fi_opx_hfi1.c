@@ -244,7 +244,8 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 	return fd;
 }
 
-void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx_hfi1_type hfi1_type)
+void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx_hfi1_type hfi1_type,
+		       const bool ctx_sharing)
 {
 	fi_opx_compiler_msync_writes();
 
@@ -252,9 +253,15 @@ void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx
 	   However, for a HFI1_EVENT_LINK_DOWN, only the Tx is halted, Rx continues without changes.
 	   Hence there is no need to reset the Rx related variables */
 	if (events & HFI1_EVENT_FROZEN) {
-		opx_ep->rx->state.hdrq.rhf_seq	   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
-		opx_ep->rx->state.hdrq.head	   = 0;
-		opx_ep->rx->egrq.last_egrbfr_index = 0;
+		if (ctx_sharing) {
+			opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
+			opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head	      = 0;
+			opx_ep->rx->shd_ctx.hwcontext_ctrl->last_egrbfr_index = 0;
+		} else {
+			opx_ep->rx->state.hdrq.rhf_seq	   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
+			opx_ep->rx->state.hdrq.head	   = 0;
+			opx_ep->rx->egrq.last_egrbfr_index = 0;
+		}
 	}
 
 	if (opx_hfi1_wrapper_reset_context(opx_ep->hfi)) {
@@ -263,10 +270,9 @@ void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx
 	}
 	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Send context reset successfully.\n");
 
+	opx_link_up_update_pio_credit_addr(opx_ep->hfi, opx_ep, ctx_sharing);
 	opx_ep->tx->pio_state->fill_counter   = 0;
 	opx_ep->tx->pio_state->scb_head_index = 0;
-
-	opx_link_up_update_pio_credit_addr(opx_ep->hfi, opx_ep);
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
@@ -277,25 +283,60 @@ void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx
 
 /* When the link is down, prevent reading the mmaped free_counters because the value is not reliable.
    Hence point the addr to a dummy location which always creates a credit full condition */
-void opx_link_down_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep)
+void opx_link_down_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep,
+					  const bool ctx_sharing)
 {
-	context->credits_addr_copy.credits_addr = context->info.pio.credits_addr;
+	if (ctx_sharing) {
+		OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
+		/* pio_credit_addr is unique for every process in the context sharing group. Hence use a local copy */
+		context->credits_addr_copy     = context->info.pio.credits_addr;
+		context->dummy_free_credits    = context->spio_ctrl->pio.free_counter_shadow;
+		context->info.pio.credits_addr = &(context->dummy_free_credits);
+		opx_ep->tx->pio_credits_addr   = context->info.pio.credits_addr;
 
-	context->dummy_free_credits    = context->state.pio.free_counter_shadow;
-	context->info.pio.credits_addr = &(context->dummy_free_credits);
-	opx_ep->tx->pio_credits_addr   = context->info.pio.credits_addr;
+		/* Since pio_state is shared, point to a dummy field until the pio_credits_addr is restored */
+		context->dummy_pio_state.qw0 = context->spio_ctrl->pio.qw0;
+		opx_ep->tx->pio_state	     = &(context->dummy_pio_state);
 
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Pointing credit addr to dummy field dummy_free_counter = %ld\n",
-	       context->dummy_free_credits);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Pointing credit addr to %p from %p\n",
+		       opx_ep->tx->pio_credits_addr, context->credits_addr_copy);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Pointing pio state to %p from %p\n", opx_ep->tx->pio_state,
+		       &(context->spio_ctrl->pio));
+
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
+	} else {
+		context->credits_addr_copy = context->info.pio.credits_addr;
+
+		context->dummy_free_credits    = context->state.pio.free_counter_shadow;
+		context->info.pio.credits_addr = &(context->dummy_free_credits);
+		opx_ep->tx->pio_credits_addr   = context->info.pio.credits_addr;
+
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		       "Pointing credit addr to dummy field dummy_free_counter = %ld\n", context->dummy_free_credits);
+	}
 }
 
-/* When the link comes back up, reset the credits pointer to the valid mmaped location */
-void opx_link_up_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep)
+/* When the link comes back up, reset the credits pointer to the valid mmaped location
+	In case of context sharing, the lock is already held by the caller */
+void opx_link_up_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep,
+					const bool ctx_sharing)
 {
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Pointing credit addr back to actual addr %p\n",
-	       context->credits_addr_copy.credits_addr);
-	context->info.pio.credits_addr = context->credits_addr_copy.credits_addr;
-	opx_ep->tx->pio_credits_addr   = context->info.pio.credits_addr;
+	if (ctx_sharing) {
+		context->info.pio.credits_addr = context->credits_addr_copy;
+		opx_ep->tx->pio_credits_addr   = context->info.pio.credits_addr;
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		       "Pointing credit addr back to actual addr %p send_ctxt %d subctxt %d\n",
+		       opx_ep->tx->pio_credits_addr, context->send_ctxt, context->subctxt);
+		opx_ep->tx->pio_state = &(context->spio_ctrl->pio);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Pointing pio state to %p from %p\n", opx_ep->tx->pio_state,
+		       &(context->spio_ctrl->pio));
+
+	} else {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Pointing credit addr back to actual addr %p\n",
+		       context->credits_addr_copy);
+		context->info.pio.credits_addr = context->credits_addr_copy;
+		opx_ep->tx->pio_credits_addr   = context->info.pio.credits_addr;
+	}
 }
 
 static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const uint32_t rank)
@@ -957,6 +998,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->subctxt_cnt		  = internal->user_info.subctxt_cnt;
 	context->subctxt		  = ctxt_info->subctxt;
 	fi_opx_global.ctx_sharing_enabled = context->subctxt_cnt > 0 ? OPX_CTX_SHARING_ON : OPX_CTX_SHARING_OFF;
+	context->hfi1_frozen_count	  = 0;
 
 	FI_DBG(&fi_opx_provider, FI_LOG_FABRIC, "subctxt %u, subctxt_cnt %u, subctxt_id %u\n", context->subctxt,
 	       context->subctxt_cnt, internal->user_info.subctxt_id);
@@ -969,8 +1011,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		OPX_HFI1_INIT_PIO_SOP(context->send_ctxt, (volatile uint64_t *) (ptrdiff_t) base_info->pio_bufbase_sop);
 	context->info.pio.scb_first =
 		OPX_HFI1_INIT_PIO(context->send_ctxt, (volatile uint64_t *) (ptrdiff_t) base_info->pio_bufbase);
-	context->info.pio.credits_addr		= (volatile uint64_t *) (ptrdiff_t) base_info->sc_credits_addr;
-	context->credits_addr_copy.credits_addr = context->info.pio.credits_addr;
+	context->info.pio.credits_addr = (volatile uint64_t *) (ptrdiff_t) base_info->sc_credits_addr;
+	context->credits_addr_copy     = context->info.pio.credits_addr;
 
 	const uint64_t credit_return	       = *(context->info.pio.credits_addr);
 	context->state.pio.free_counter_shadow = (uint16_t) (credit_return & 0x00000000000007FFul);

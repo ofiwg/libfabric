@@ -643,7 +643,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 		uint32_t *p_last_egrbfr_index;
 		if (ctx_sharing) {
 			hdrq_head_local	    = opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head;
-			p_last_egrbfr_index = &opx_ep->rx->shd_ctx.hwcontext_ctrl->last_egrbrf_index;
+			p_last_egrbfr_index = &opx_ep->rx->shd_ctx.hwcontext_ctrl->last_egrbfr_index;
 		} else {
 			hdrq_head_local	    = opx_ep->rx->state.hdrq.head;
 			p_last_egrbfr_index = &opx_ep->rx->egrq.last_egrbfr_index;
@@ -924,19 +924,73 @@ void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
 }
 
 __OPX_FORCE_INLINE__
-int opx_is_rhf_empty(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
+int opx_is_rhf_empty(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type,
+		     const bool ctx_sharing)
 {
 	const uint64_t local_hdrq_mask =
 		(hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME) ? opx_ep->hfi->info.rxe.hdrq.rx_poll_mask : hdrq_mask;
-	const uint64_t	   hdrq_offset = opx_ep->rx->state.hdrq.head & local_hdrq_mask;
-	volatile uint32_t *rhf_ptr     = opx_ep->rx->hdrq.rhf_base + hdrq_offset;
-	const uint64_t	   rhf_rcvd    = *((volatile uint64_t *) rhf_ptr);
-	const uint64_t	   rhf_seq     = opx_ep->rx->state.hdrq.rhf_seq;
+	const uint64_t hdrq_offset = (ctx_sharing) ? (opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head & local_hdrq_mask) :
+						     (opx_ep->rx->state.hdrq.head & local_hdrq_mask);
+	volatile uint32_t *rhf_ptr =
+		(ctx_sharing) ? opx_ep->rx->shd_ctx.rhf_base + hdrq_offset : opx_ep->rx->hdrq.rhf_base + hdrq_offset;
+	const uint64_t rhf_rcvd = *((volatile uint64_t *) rhf_ptr);
+	const uint64_t rhf_seq =
+		(ctx_sharing) ? opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq : opx_ep->rx->state.hdrq.rhf_seq;
 
 	if (!OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type)) {
 		return 1;
 	}
 	return 0;
+}
+
+/* When a context is shared, only one process in the context sharing group needs to reset the context and
+   update the PIO related pointers.If the context has already been reset, only update the PIO related pointers. */
+__OPX_FORCE_INLINE__
+bool opx_handle_events_shared(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
+{
+	uint64_t events = *(uint64_t *) (opx_ep->hfi->ctrl->base_info.events_bufbase);
+	bool	 ret	= false;
+
+	if (opx_shared_rx_context_try_lock(opx_ep->rx->shd_ctx.hwcontext_ctrl) != 0) {
+		return false;
+	}
+	OPX_SHD_CTX_PIO_LOCK(OPX_CTX_SHARING_ON, opx_ep->tx);
+
+	/* If the local hfi1_frozen_count is same as the shared  hfi1_frozen_count, then this is the
+		first process to reach this handling. */
+	if (opx_ep->hfi->hfi1_frozen_count == opx_ep->hfi->hwcontext_ctrl->hfi_frozen_count) {
+		/* In WFR, on a link down, driver/HW always enters a SPC freeze state. It always triggers a
+		   HFI1_EVENT_FROZEN. Hence, HFI1_EVENT_LINKDOWN can be ignored. In JKR, there is no freeze event
+		   because there are two ports. If one port is down, the other still functions. Hence, handle
+		   HFI1_EVENT_LINKDOWN. */
+		if (((events & HFI1_EVENT_FROZEN) &&
+		     (opx_is_rhf_empty(opx_ep, hdrq_mask, hfi1_type, OPX_CTX_SHARING_ON))) ||
+		    ((events & HFI1_EVENT_LINKDOWN) && !(hfi1_type & OPX_HFI1_WFR))) {
+			opx_ep->hfi->hwcontext_ctrl->hfi_frozen_count++;
+			opx_ep->hfi->hfi1_frozen_count = opx_ep->hfi->hwcontext_ctrl->hfi_frozen_count;
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			       "Context frozen: Resetting context for send_ctxt %d subctxt %d\n",
+			       opx_ep->hfi->send_ctxt, opx_ep->hfi->subctxt);
+			opx_reset_context(opx_ep, events, hfi1_type, OPX_CTX_SHARING_ON);
+			int ret = opx_hfi1_wrapper_ack_events(opx_ep->hfi, events);
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ack event failed: %s\n", strerror(errno));
+			}
+			ret = true;
+		}
+	} else {
+		if ((events & HFI1_EVENT_FROZEN) || ((events & HFI1_EVENT_LINKDOWN) && !(hfi1_type & OPX_HFI1_WFR))) {
+			opx_ep->hfi->hfi1_frozen_count = opx_ep->hfi->hwcontext_ctrl->hfi_frozen_count;
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			       "Context has already been reset send_ctxt %d subctxt %d\n", opx_ep->hfi->send_ctxt,
+			       opx_ep->hfi->subctxt);
+			opx_link_up_update_pio_credit_addr(opx_ep->hfi, opx_ep, OPX_CTX_SHARING_ON);
+			ret = true;
+		}
+	}
+	opx_shared_rx_context_unlock(opx_ep->rx->shd_ctx.hwcontext_ctrl);
+	OPX_SHD_CTX_PIO_UNLOCK(OPX_CTX_SHARING_ON, opx_ep->tx);
+	return ret;
 }
 
 __OPX_FORCE_INLINE__
@@ -949,8 +1003,8 @@ bool opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const
 		HFI1_EVENT_LINKDOWN. */
 	if (events & HFI1_EVENT_FROZEN || (events & HFI1_EVENT_LINKDOWN && !(hfi1_type & OPX_HFI1_WFR))) {
 		/* reset context only if RHF queue is empty */
-		if (opx_is_rhf_empty(opx_ep, hdrq_mask, hfi1_type)) {
-			opx_reset_context(opx_ep, events, hfi1_type);
+		if (opx_is_rhf_empty(opx_ep, hdrq_mask, hfi1_type, OPX_CTX_SHARING_OFF)) {
+			opx_reset_context(opx_ep, events, hfi1_type, OPX_CTX_SHARING_OFF);
 			int ret = opx_hfi1_wrapper_ack_events(opx_ep->hfi, events);
 			if (ret) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ack event failed: %s\n", strerror(errno));
@@ -1135,11 +1189,17 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 		struct fi_opx_hfi1_context *context = opx_ep->hfi;
 
 		if (OFI_UNLIKELY(compare > context->status_check_next_usec)) {
-			int err = fi_opx_context_check_status(context, hfi1_type, opx_ep);
+			int err = fi_opx_context_check_status(context, hfi1_type, opx_ep, ctx_sharing);
 
 			if (context->status_lasterr != FI_SUCCESS && err == FI_SUCCESS) {
-				if (opx_handle_events(opx_ep, hdrq_mask, hfi1_type)) {
-					context->status_lasterr = FI_SUCCESS; /* clear error */
+				if (ctx_sharing) {
+					if (opx_handle_events_shared(opx_ep, hdrq_mask, hfi1_type)) {
+						context->status_lasterr = FI_SUCCESS; /* clear error */
+					}
+				} else {
+					if (opx_handle_events(opx_ep, hdrq_mask, hfi1_type)) {
+						context->status_lasterr = FI_SUCCESS; /* clear error */
+					}
 				}
 			}
 			compare = fi_opx_timer_now(timestamp, timer);
