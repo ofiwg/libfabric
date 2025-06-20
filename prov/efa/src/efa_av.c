@@ -248,9 +248,8 @@ void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah)
 }
 
 /**
- * @brief initialize the rdm related resources of an efa_conn object
+ * @brief Insert the address into SHM provider's AV for RDM endpoints
  *
- * This function setup rdm_peer and shm address for an efa_conn.
  * If shm transfer is enabled and the addr comes from local peer,
  *  1. convert addr to format 'gid_qpn', which will be set as shm's ep name later.
  *  2. insert gid_qpn into shm's av
@@ -258,11 +257,10 @@ void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah)
  *
  * @param[in]	av	address vector
  * @param[in]	conn	efa_conn object
- * @param[in]	insert_shm_av	whether insert address to shm av
  * @return	On success return 0, otherwise return a negative error code
  */
 static
-int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn, bool insert_shm_av)
+int efa_conn_rdm_insert_shm_av(struct efa_av *av, struct efa_conn *conn)
 {
 	int err, ret;
 	char smr_name[EFA_SHM_NAME_MAX];
@@ -271,16 +269,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn, bool insert_shm_
 	assert(av->domain->info_type == EFA_INFO_RDM);
 	assert(conn->ep_addr);
 
-	conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
-	/*
-	 * The efa_conn_rdm_init() call can be made in two situations:
-	 * 1. application calls fi_av_insert API
-	 * 2. efa progress engine get a message from unknown peer through efa device,
-	 *    which means peer is not local or shm is disabled for transmission.
-	 * For situation 1, the shm av insertion should happen when the peer is local (insert_shm_av=1)
-	 * For situation 2, the shm av insertion shouldn't happen anyway (insert_shm_av=0).
-	 */
-	if (efa_is_local_peer(av, conn->ep_addr) && av->shm_rdm_av && insert_shm_av) {
+	if (efa_is_local_peer(av, conn->ep_addr) && av->shm_rdm_av) {
 		if (av->shm_used >= efa_env.shm_av_size) {
 			EFA_WARN(FI_LOG_AV,
 				 "Max number of shm AV entry (%d) has been reached.\n",
@@ -476,8 +465,17 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	if (!conn->ah)
 		goto err_release;
 
-	if (av->domain->info_type == EFA_INFO_RDM) {
-		err = efa_conn_rdm_init(av, conn, insert_shm_av);
+	conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
+	/*
+	 * The efa_conn_alloc() call can be made in two situations:
+	 * 1. application calls fi_av_insert API
+	 * 2. efa progress engine get a message from unknown peer through efa device,
+	 *    which means peer is not local or shm is disabled for transmission.
+	 * For situation 1, the shm av insertion should happen when the peer is local (insert_shm_av=1)
+	 * For situation 2, the shm av insertion shouldn't happen anyway (insert_shm_av=0).
+	 */
+	if (av->domain->info_type == EFA_INFO_RDM && insert_shm_av) {
+		err = efa_conn_rdm_insert_shm_av(av, conn);
 		if (err) {
 			errno = -err;
 			goto err_release;
