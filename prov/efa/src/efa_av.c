@@ -356,17 +356,19 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 }
 
 /*
- * @brief update reverse_av when inserting an new address to AV
+ * @brief Add newly insert address to the reverse AVs
  *
- * @param[in,out]	av		efa AV
- * @param[in]		raw_addr	raw address
+ * @param[in]		av		EFA AV object
+ * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
+ * @param[in,out]	prv_reverse_av	Reverse AV with AHN, QPN and QKEY as key
  * @param[in]		conn		efa_conn object
  * @return		On success, return 0.
  * 			Otherwise, return a negative libfabric error code
  */
-static
-int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
-				    struct efa_conn *conn)
+static int efa_av_reverse_av_add(struct efa_av *av,
+				 struct efa_cur_reverse_av **cur_reverse_av,
+				 struct efa_prv_reverse_av **prv_reverse_av,
+				 struct efa_conn *conn)
 {
 	struct efa_cur_reverse_av *cur_entry;
 	struct efa_prv_reverse_av *prv_entry;
@@ -374,10 +376,10 @@ int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
 
 	memset(&cur_key, 0, sizeof(cur_key));
 	cur_key.ahn = conn->ah->ahn;
-	cur_key.qpn = raw_addr->qpn;
+	cur_key.qpn = conn->ep_addr->qpn;
 	cur_entry = NULL;
 
-	HASH_FIND(hh, av->cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
+	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
 	if (!cur_entry) {
 		cur_entry = malloc(sizeof(*cur_entry));
 		if (!cur_entry) {
@@ -388,7 +390,8 @@ int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		cur_entry->key.ahn = cur_key.ahn;
 		cur_entry->key.qpn = cur_key.qpn;
 		cur_entry->conn = conn;
-		HASH_ADD(hh, av->cur_reverse_av, key, sizeof(cur_key), cur_entry);
+		HASH_ADD(hh, *cur_reverse_av, key, sizeof(cur_key), cur_entry);
+
 		return 0;
 	}
 
@@ -406,10 +409,54 @@ int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	prv_entry->key.qpn = cur_key.qpn;
 	prv_entry->key.connid = cur_entry->conn->ep_addr->qkey;
 	prv_entry->conn = cur_entry->conn;
-	HASH_ADD(hh, av->prv_reverse_av, key, sizeof(prv_entry->key), prv_entry);
+	HASH_ADD(hh, *prv_reverse_av, key, sizeof(prv_entry->key), prv_entry);
 
 	cur_entry->conn = conn;
 	return 0;
+}
+
+/*
+ * @brief Remove an address from the reverse AVs during fi_av_remove
+ *
+ * The address is not removed from the prv_reverse_av if it is found in
+ * cur_reverse_av. Keeping the address in prv_reverse_av helps avoid QPN
+ * collisions.
+ *
+ * @param[in]		av		EFA AV object
+ * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
+ * @param[in,out]	prv_reverse_av	Reverse AV with AHN, QPN and QKEY as key
+ * @param[in]		conn		efa_conn object
+ * @return		On success, return 0.
+ * 			Otherwise, return a negative libfabric error code
+ */
+static void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
+				    struct efa_prv_reverse_av **prv_reverse_av,
+				    struct efa_conn *conn)
+{
+	struct efa_cur_reverse_av *cur_reverse_av_entry;
+	struct efa_prv_reverse_av *prv_reverse_av_entry;
+	struct efa_cur_reverse_av_key cur_key;
+	struct efa_prv_reverse_av_key prv_key;
+
+	memset(&cur_key, 0, sizeof(cur_key));
+	cur_key.ahn = conn->ah->ahn;
+	cur_key.qpn = conn->ep_addr->qpn;
+	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key),
+		  cur_reverse_av_entry);
+	if (cur_reverse_av_entry) {
+		HASH_DEL(*cur_reverse_av, cur_reverse_av_entry);
+		free(cur_reverse_av_entry);
+	} else {
+		memset(&prv_key, 0, sizeof(prv_key));
+		prv_key.ahn = conn->ah->ahn;
+		prv_key.qpn = conn->ep_addr->qpn;
+		prv_key.connid = conn->ep_addr->qkey;
+		HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key),
+			  prv_reverse_av_entry);
+		assert(prv_reverse_av_entry);
+		HASH_DEL(*prv_reverse_av, prv_reverse_av_entry);
+		free(prv_reverse_av_entry);
+	}
 }
 
 /**
@@ -482,7 +529,8 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		}
 	}
 
-	err = efa_av_update_reverse_av(av, raw_addr, conn);
+	err = efa_av_reverse_av_add(av, &av->cur_reverse_av, &av->prv_reverse_av,
+				    conn);
 	if (err) {
 		if (av->domain->info_type == EFA_INFO_RDM)
 			efa_conn_rdm_deinit(av, conn);
@@ -515,32 +563,13 @@ err_release:
 static
 void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 {
-	struct efa_cur_reverse_av *cur_reverse_av_entry;
-	struct efa_prv_reverse_av *prv_reverse_av_entry;
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *efa_av_entry;
-	struct efa_cur_reverse_av_key cur_key;
-	struct efa_prv_reverse_av_key prv_key;
 	char gidstr[INET6_ADDRSTRLEN];
 	int err;
 
-	memset(&cur_key, 0, sizeof(cur_key));
-	cur_key.ahn = conn->ah->ahn;
-	cur_key.qpn = conn->ep_addr->qpn;
-	HASH_FIND(hh, av->cur_reverse_av, &cur_key, sizeof(cur_key), cur_reverse_av_entry);
-	if (cur_reverse_av_entry) {
-		HASH_DEL(av->cur_reverse_av, cur_reverse_av_entry);
-		free(cur_reverse_av_entry);
-	} else {
-		memset(&prv_key, 0, sizeof(prv_key));
-		prv_key.ahn = conn->ah->ahn;
-		prv_key.qpn = conn->ep_addr->qpn;
-		prv_key.connid = conn->ep_addr->qkey;
-		HASH_FIND(hh, av->prv_reverse_av, &prv_key, sizeof(prv_key), prv_reverse_av_entry);
-		assert(prv_reverse_av_entry);
-		HASH_DEL(av->prv_reverse_av, prv_reverse_av_entry);
-		free(prv_reverse_av_entry);
-	}
+	efa_av_reverse_av_remove(&av->cur_reverse_av, &av->prv_reverse_av,
+				       conn);
 
 	if (av->domain->info_type == EFA_INFO_RDM)
 		efa_conn_rdm_deinit(av, conn);
