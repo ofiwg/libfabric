@@ -257,11 +257,11 @@ void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx
 	   Hence there is no need to reset the Rx related variables */
 	if (events & HFI1_EVENT_FROZEN) {
 		if (ctx_sharing) {
-			opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq   = OPX_RHF_SEQ_INIT_VAL(OPX_SW_HFI1_TYPE);
+			opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
 			opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head	      = 0;
 			opx_ep->rx->shd_ctx.hwcontext_ctrl->last_egrbfr_index = 0;
 		} else {
-			opx_ep->rx->state.hdrq.rhf_seq	   = OPX_RHF_SEQ_INIT_VAL(OPX_SW_HFI1_TYPE);
+			opx_ep->rx->state.hdrq.rhf_seq	   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
 			opx_ep->rx->state.hdrq.head	   = 0;
 			opx_ep->rx->egrq.last_egrbfr_index = 0;
 		}

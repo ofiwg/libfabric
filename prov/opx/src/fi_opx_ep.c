@@ -1304,7 +1304,7 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 			}
 
 			hwctxt_ctrl->hdrq_head	       = 0;
-			hwctxt_ctrl->rx_hdrq_rhf_seq   = OPX_RHF_SEQ_INIT_VAL(OPX_SW_HFI1_TYPE);
+			hwctxt_ctrl->rx_hdrq_rhf_seq   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
 			hwctxt_ctrl->last_egrbfr_index = 0;
 			hwctxt_ctrl->hfi_frozen_count  = 0;
 
