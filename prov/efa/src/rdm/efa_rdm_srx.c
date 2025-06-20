@@ -20,7 +20,6 @@ void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
 			    struct efa_rdm_ope *rxe)
 {
 	rxe->fi_flags = peer_rxe->flags;
-	int i;
 
 	/* Handle case where we're allocating an unexpected rxe */
 	rxe->iov_count = peer_rxe->count;
@@ -34,12 +33,6 @@ void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
 	if (peer_rxe->desc) {
 		memcpy(&rxe->desc[0], peer_rxe->desc,
 			sizeof(*peer_rxe->desc) * peer_rxe->count);
-		for (i = 0; i < peer_rxe->count; i++) {
-			if (rxe->desc[i]) {
-				ofi_atomic_inc32(&((struct efa_mr *)rxe->desc[i])->ref);
-				EFA_WARN(FI_LOG_EP_DATA, "rxe %p used mr %p, ref cnt inc to %u\n", rxe, (struct efa_mr *)rxe->desc[i], ofi_atomic_get32(&((struct efa_mr *)rxe->desc[i])->ref));
-			}
-		}
 	}
 	else
 		memset(&rxe->desc[0], 0, sizeof(rxe->desc));

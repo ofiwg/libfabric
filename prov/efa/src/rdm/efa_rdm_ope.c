@@ -20,7 +20,6 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			   uint32_t op, uint64_t flags)
 {
 	uint64_t tx_op_flags;
-	int i;
 
 	txe->ep = ep;
 	txe->type = EFA_RDM_TXE;
@@ -50,12 +49,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	memset(txe->mr, 0, sizeof(*txe->mr) * msg->iov_count);
 	if (msg->desc) {
 		memcpy(txe->desc, msg->desc, sizeof(*msg->desc) * msg->iov_count);
-		for (i = 0; i < msg->iov_count; i++) {
-			if (msg->desc[i]) {
-				ofi_atomic_inc32(&((struct efa_mr *)msg->desc[i])->ref);
-				EFA_WARN(FI_LOG_EP_DATA, "txe %p used mr %p, ref cnt inc to %u\n", txe, (struct efa_mr *)msg->desc[i], ofi_atomic_get32(&((struct efa_mr *)msg->desc[i])->ref));
-			}
-		}
+		efa_mr_reference(msg->desc, msg->iov_count);
 	} else {
 		memset(txe->desc, 0, sizeof(txe->desc));
 	}

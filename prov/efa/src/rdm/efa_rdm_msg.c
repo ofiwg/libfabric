@@ -624,7 +624,6 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 {
 	struct efa_rdm_ope *rxe;
 	fi_addr_t addr;
-	int i;
 
 	if (ep->base_ep.util_ep.caps & FI_DIRECTED_RECV)
 		addr = msg->addr;
@@ -654,12 +653,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 
 	if (msg->desc) {
 		memcpy(&rxe->desc[0], msg->desc, sizeof(*msg->desc) * msg->iov_count);
-		for (i = 0; i < msg->iov_count; i++) {
-			if (msg->desc[i]) {
-				ofi_atomic_inc32(&((struct efa_mr *)msg->desc[i])->ref);
-				EFA_WARN(FI_LOG_EP_DATA, "zcpy rxe %p used mr %p, ref cnt inc to %u\n", rxe, (struct efa_mr *)msg->desc[i], ofi_atomic_get32(&((struct efa_mr *)msg->desc[i])->ref));
-			}
-		}
+		efa_mr_reference(msg->desc, msg->iov_count);
 	} else {
 		memset(&rxe->desc[0], 0, sizeof(rxe->desc));
 	}
@@ -941,9 +935,13 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		ret = util_srx_generic_trecv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
 					     msg->iov_count, msg->addr, msg->context,
 					     tag, ignore, flags);
+		if (!ret)
+			efa_mr_reference(msg->desc, msg->iov_count);
 	} else {
 		ret = util_srx_generic_recv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
 				            msg->iov_count, msg->addr, msg->context, flags);
+		if (!ret)
+			efa_mr_reference(msg->desc, msg->iov_count);
 	}
 
 out:

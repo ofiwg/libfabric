@@ -269,6 +269,40 @@ bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
 int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context);
 
+
+static inline
+bool efa_desc_is_valid(void **desc, size_t count)
+{
+	int i;
+	struct efa_mr *mr;
+
+	for (i = 0; i < count; i++) {
+		mr = (struct efa_mr *)desc[i];
+		if ((!mr) || !ofi_atomic_get32(&mr->active))
+			return false;
+	}
+	return true;
+}
+
+static inline
+bool efa_mr_is_active(struct efa_mr *mr)
+{
+	return (mr && ofi_atomic_get32(&mr->active));
+}
+
+static inline
+void efa_mr_reference(void **desc, size_t count)
+{
+	int i;
+	for (i = 0; i < count; i++) {
+		if (desc[i]) {
+			struct efa_mr *mr = desc[i];
+			ofi_atomic_inc32(&mr->ref);
+			EFA_WARN(FI_LOG_EP_DATA, "used mr %p, ref cnt inc to %u\n", mr, ofi_atomic_get32(&mr->ref));
+		}
+	}
+}
+
 /* Performance counter declarations */
 #ifdef EFA_PERF_ENABLED
 #define EFA_PERF_FOREACH(DECL)	\

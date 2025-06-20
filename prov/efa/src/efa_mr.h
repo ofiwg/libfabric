@@ -84,27 +84,6 @@ static inline void *efa_mr_get_shm_desc(struct efa_mr *efa_mr)
 	return efa_mr->shm_mr ? fi_mr_desc(efa_mr->shm_mr) : NULL;
 }
 
-static inline
-bool efa_desc_is_valid(void **desc, size_t count)
-{
-	int i;
-	struct efa_mr *mr;
-
-	for (i = 0; i < count; i++) {
-		mr = (struct efa_mr *)desc[i];
-		if ((!mr) || !ofi_atomic_get32(&mr->active))
-			return false;
-	}
-	return true;
-}
-
-static inline
-bool efa_mr_is_active(struct efa_mr *mr)
-{
-	return (mr && ofi_atomic_get32(&mr->active));
-}
-
-
 #define EFA_MR_IOV_LIMIT 1
 #define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
