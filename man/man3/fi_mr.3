@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_mr" "3" "2025\-03\-22" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_mr" "3" "2025\-06\-20" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -515,14 +515,15 @@ Note that accesses to a closed MR from a remote peer will result in an
 error at the peer.
 The state of the local endpoint will be unaffected.
 .PP
-For MRs that are associated with an endpoint (FI_MR_ENDPOINT flag
-is set), the MR must be closed before the endpoint.
+For MRs that are associated with an endpoint (FI_MR_ENDPOINT flag is
+set), the MR must be closed before the endpoint.
 If resources are still associated with the MR when attempting to close,
 the call will return -FI_EBUSY.
 .PP
 If a memory registration cache is used, the behavior of fi_close may be
-affected. More information on the memory registration cache is in the
-MEMORY REGISTRATION CACHE section.
+affected.
+More information on the memory registration cache is in the MEMORY
+REGISTRATION CACHE section.
 .SS fi_mr_desc
 .PP
 Obtains the local memory descriptor associated with a MR.
