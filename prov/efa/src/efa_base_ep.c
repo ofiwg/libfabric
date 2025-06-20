@@ -772,3 +772,15 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_re
 
 	return efa_base_ep_enable(ep);
 }
+
+#if ENABLE_DEBUG
+void efa_ep_addr_print(char *prefix, struct efa_ep_addr *addr) {
+	char raw_gid_str[INET6_ADDRSTRLEN];
+
+	memset(raw_gid_str, 0, sizeof(raw_gid_str));
+	if (!inet_ntop(AF_INET6, addr->raw, raw_gid_str, INET6_ADDRSTRLEN)) {
+		EFA_DBG(FI_LOG_AV, "couldn't convert raw addr to string");
+	}
+	EFA_DBG(FI_LOG_AV, "%s raw: %s qpn: %d, qkey: %d\n", prefix, raw_gid_str, addr->qpn, addr->qkey);
+}
+#endif
