@@ -220,9 +220,11 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
 	fi_addr_t src_addr;
 
 	if (base_ep->util_ep.caps & FI_SOURCE) {
+		ofi_genlock_lock(&base_ep->domain->srx_lock);
 		src_addr = efa_av_reverse_lookup(base_ep->av,
 						 ibv_wc_read_slid(ibv_cq_ex),
 						 ibv_wc_read_src_qp(ibv_cq_ex));
+		ofi_genlock_unlock(&base_ep->domain->srx_lock);
 		ret = ofi_cq_write_src(rx_cq, cq_entry->op_context, cq_entry->flags, cq_entry->len, NULL, cq_entry->data,
 				       0, src_addr);
 	} else {
