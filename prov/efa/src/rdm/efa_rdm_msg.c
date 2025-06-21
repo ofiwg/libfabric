@@ -737,6 +737,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_matched_rxe_for_rtm(struct efa_rdm_ep *ep,
  * or #efa_rdm_msg_unexp_rxe_for_rtm().
  *
  * @param[in]		ep		endpoint
+ * @param[in]		peer		efa_rdm_peer struct of the sender
  * @param[in]		pkt_entry	RTM packet entry
  *
  * @returns
@@ -744,8 +745,10 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_matched_rxe_for_rtm(struct efa_rdm_ep *ep,
  * If endpoint's operation entry pool (ope_pool) has been exhausted,
  * return NULL
  */
-struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
-						     struct efa_rdm_pke **pkt_entry_ptr)
+struct efa_rdm_ope *
+efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
+				 struct efa_rdm_peer *peer,
+				 struct efa_rdm_pke **pkt_entry_ptr)
 {
 	struct fid_peer_srx *peer_srx;
 	struct fi_peer_match_attr attr;
@@ -793,7 +796,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 
 	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
-		efa_rdm_rxe_map_insert(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(*pkt_entry_ptr), (*pkt_entry_ptr)->addr, rxe);
+		efa_rdm_rxe_map_insert(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(*pkt_entry_ptr), rxe);
 
 	return rxe;
 }
@@ -806,6 +809,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
  * or #efa_rdm_msg_unexp_rxe_for_rtm().
  *
  * @param[in]		ep		endpoint
+ * @param[in]		peer		efa_rdm_peer struct of the sender
  * @param[in]		pkt_entry	RTM packet entry
  *
  * @returns
@@ -813,8 +817,10 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
  * If endpoint's operation entry pool (ope_pool) has been exhausted,
  * return NULL
  */
-struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
-						     struct efa_rdm_pke **pkt_entry_ptr)
+struct efa_rdm_ope *
+efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
+				 struct efa_rdm_peer *peer,
+				 struct efa_rdm_pke **pkt_entry_ptr)
 {
 	struct fid_peer_srx *peer_srx;
 	struct fi_peer_match_attr attr;
@@ -870,7 +876,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 
 	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
-		efa_rdm_rxe_map_insert(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(*pkt_entry_ptr), (*pkt_entry_ptr)->addr, rxe);
+		efa_rdm_rxe_map_insert(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(*pkt_entry_ptr), rxe);
 
 	return rxe;
 }
