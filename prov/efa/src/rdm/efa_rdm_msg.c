@@ -633,6 +633,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 	if (!rxe)
 		return NULL;
 
+	EFA_WARN(FI_LOG_EP_DATA, "allocated rxe %p\n", rxe);
 	rxe->fi_flags = flags;
 	if (op == ofi_op_tagged) {
 		rxe->tag = tag;
@@ -649,10 +650,12 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 		rxe->cq_entry.buf = msg->msg_iov[0].iov_base;
 	}
 
-	if (msg->desc)
+	if (msg->desc) {
 		memcpy(&rxe->desc[0], msg->desc, sizeof(*msg->desc) * msg->iov_count);
-	else
+		efa_mr_reference(msg->desc, msg->iov_count);
+	} else {
 		memset(&rxe->desc[0], 0, sizeof(rxe->desc));
+	}
 
 	rxe->cq_entry.op_context = msg->context;
 
@@ -689,6 +692,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
 	}
 
 	rxe = efa_rdm_ep_alloc_rxe(ep, unexp_pkt_entry->addr, op);
+	EFA_WARN(FI_LOG_EP_DATA, "allocated unexp rxe %p\n", rxe);
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
@@ -719,6 +723,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_matched_rxe_for_rtm(struct efa_rdm_ep *ep,
 	struct efa_rdm_ope *rxe;
 
 	rxe = efa_rdm_ep_alloc_rxe(ep, pkt_entry->addr, op);
+	EFA_WARN(FI_LOG_EP_DATA, "allocated matched rxe %p\n", rxe);
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
@@ -905,6 +910,12 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		return ret;
 
 	if (ep->use_zcpy_rx) {
+		if (!msg->desc || !efa_desc_is_valid(msg->desc, msg->iov_count)) {
+			EFA_WARN(FI_LOG_EP_DATA, "No valid desc is provided\n");
+			ret = -FI_EINVAL;
+			goto out;
+		}
+
 		srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
 		ofi_genlock_lock(srx_ctx->lock);
 		rxe = efa_rdm_msg_alloc_rxe(ep, msg, op, flags, tag, ignore);
@@ -923,9 +934,13 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		ret = util_srx_generic_trecv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
 					     msg->iov_count, msg->addr, msg->context,
 					     tag, ignore, flags);
+		if (!ret)
+			efa_mr_reference(msg->desc, msg->iov_count);
 	} else {
 		ret = util_srx_generic_recv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
 				            msg->iov_count, msg->addr, msg->context, flags);
+		if (!ret)
+			efa_mr_reference(msg->desc, msg->iov_count);
 	}
 
 out:
