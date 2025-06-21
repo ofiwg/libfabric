@@ -76,10 +76,8 @@ def get_cluster_name(build_tag, os, instance_type) {
      * Jenkins does not allow groovy to use the replace() method
      * of string. Therefore we used shell command sed to replace "." with ""
      */
-    def build_tag = get_cluster_name_prefix(build_tag)
-
     def cluster_name = sh(
-                        script: "echo '${build_tag}-${os.take(10)}-${instance_type.take(10)}-'${get_random_string(8)} | tr -d '.\\n'",
+                        script: "echo '${get_cluster_name_prefix(build_tag)}-${os.take(10)}-${instance_type.take(10)}-'${get_random_string(8)} | tr -d '.\\n'",
                         returnStdout: true
                      )
 
