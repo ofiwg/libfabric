@@ -267,6 +267,10 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 
+	if (OFI_UNLIKELY(src_addr && !(cq->domain->info_domain_caps & FI_SOURCE)))
+		for (int i = 0; i < count; i++)
+			src_addr[i] = FI_ADDR_NOTAVAIL;
+
 	cq->progress(cq);
 
 	return ofi_cq_read_entries(cq, buf, count, src_addr);
@@ -274,7 +278,13 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 
 ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
-	return fi_cq_readfrom(cq_fid, buf, count, NULL);
+	struct util_cq *cq;
+
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
+
+	cq->progress(cq);
+
+	return ofi_cq_read_entries(cq, buf, count, NULL);
 }
 
 ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
