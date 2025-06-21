@@ -844,13 +844,37 @@ void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 	while (efa_rdm_ep_has_unfinished_send(efa_rdm_ep)) {
 		/* poll cq until empty */
 		if (tx_cq)
-			efa_rdm_cq_poll_ibv_cq(-1, &tx_cq->ibv_cq);
+			(void) efa_rdm_cq_poll_ibv_cq(-1, &tx_cq->ibv_cq);
 		if (rx_cq)
-			efa_rdm_cq_poll_ibv_cq(-1, &rx_cq->ibv_cq);
+			(void) efa_rdm_cq_poll_ibv_cq(-1, &rx_cq->ibv_cq);
 		efa_domain_progress_rdm_peers_and_queues(efa_rdm_ep_domain(efa_rdm_ep));
 	}
 
 	ofi_genlock_unlock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
+}
+
+static inline
+void efa_rdm_ep_flush_cq(struct efa_rdm_ep *efa_rdm_ep)
+{
+	struct efa_cq *tx_cq, *rx_cq;
+	int err;
+
+	tx_cq = efa_base_ep_get_tx_cq(&efa_rdm_ep->base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(&efa_rdm_ep->base_ep);
+
+	if (tx_cq) {
+		err = 0;
+		while (err != ENOENT) {
+			err = efa_rdm_cq_poll_ibv_cq(-1, &tx_cq->ibv_cq);
+		}
+	}
+
+	if (rx_cq && rx_cq != tx_cq) {
+		err = 0;
+		while (err != ENOENT) {
+			err = efa_rdm_cq_poll_ibv_cq(-1, &rx_cq->ibv_cq);
+		}
+	}
 }
 
 static inline
@@ -989,6 +1013,10 @@ static int efa_rdm_ep_close(struct fid *fid)
 		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
 		retv = ret;
 	}
+
+	ofi_genlock_lock(&domain->srx_lock);
+	efa_rdm_ep_flush_cq(efa_rdm_ep);
+	ofi_genlock_unlock(&domain->srx_lock);
 
 	ret = efa_rdm_ep_close_shm_ep_resources(efa_rdm_ep);
 	if (ret)
