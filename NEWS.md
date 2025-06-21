@@ -11,6 +11,8 @@ v2.2.0, Mon June 30, 2025
 
 ## Core
 
+- log: Fix buffer overrun when accessing the 'log_levels' array
+- man/fi_mr: Clarify fi_close behavior
 - rdma/fabric.h: Add new FI_RESCAN flag to fi_getinfo()
 - hmem/cuda: Add fallback for dmabuf flag with CUDA_ERROR_NOT_SUPPORTED
 - hmem/cuda: Add runtime fallback for unsupported dmabuf flag
@@ -22,6 +24,10 @@ v2.2.0, Mon June 30, 2025
 
 ## CXI
 
+- Fix alt_read unit test to use rdzv_threshold
+- Adjust cxi environment variable defaults
+- Fix regression which could cause deadlock
+- Support libfabric 2.2 API
 - Set cq_data in peer unexpected message
 - Fix locking on the SRX path
 - Allow for passing opaque 64-bit data in ctrl_msg
@@ -49,6 +55,10 @@ v2.2.0, Mon June 30, 2025
 
 ## EFA
 
+- Add detailed logging of device enumeration and selection
+- Extend domain ops to open CQ with external memory
+- Extend domain ops to allow querying of QP and CQ attributes
+- Add a domain operation to query address info
 - Minimize calls to efa_rdm_ep_get_peer in the CQ read path
 - Remove unused function get_first_nic_name
 - Post initial rx pkt when qp is enabled.
@@ -119,6 +129,7 @@ v2.2.0, Mon June 30, 2025
 
 ## SHM
 
+- Fix srx entry cleanup
 - Acquire ep lock when freeing entries
 - Don't run smr progress if region isn't initialized
 - Update shm man page to be accurate and fix typos/formatting
