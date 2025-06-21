@@ -183,7 +183,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 		dlist_remove(&rxe->entry);
 
 	if (rxe->rxe_map)
-		efa_rdm_rxe_map_remove(rxe->rxe_map, rxe->msg_id, rxe->addr, rxe);
+		efa_rdm_rxe_map_remove(rxe->rxe_map, rxe->msg_id, rxe);
 
 	for (i = 0; i < rxe->iov_count; i++) {
 		if (rxe->mr[i]) {

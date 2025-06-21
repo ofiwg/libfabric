@@ -482,6 +482,7 @@ void test_efa_rdm_rxe_map(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
+	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
@@ -496,11 +497,14 @@ void test_efa_rdm_rxe_map(struct efa_resource **state)
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
 				  base_ep.util_ep.ep_fid);
 
-	efa_rdm_rxe_map_insert(&efa_rdm_ep->rxe_map, rxe->msg_id, rxe->addr,
-			       rxe);
-	assert_true(rxe->rxe_map == &efa_rdm_ep->rxe_map);
-	assert_true(rxe == efa_rdm_rxe_map_lookup(rxe->rxe_map, rxe->msg_id,
-						  rxe->addr));
+	/* efa_unit_test_alloc_rxe only inserts one address.
+	 * So fi_addr is guaranteed to be 0
+	 */
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+
+	efa_rdm_rxe_map_insert(&peer->rxe_map, rxe->msg_id, rxe);
+	assert_true(rxe->rxe_map == &peer->rxe_map);
+	assert_true(rxe == efa_rdm_rxe_map_lookup(rxe->rxe_map, rxe->msg_id));
 
 	efa_rdm_rxe_release(rxe);
 

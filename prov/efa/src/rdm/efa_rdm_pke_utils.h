@@ -100,16 +100,16 @@ efa_rdm_pke_copy_from_hmem_iov(struct efa_mr *iov_mr, struct efa_rdm_pke *pke,
  * @brief This function either posts RDMA read, or sends a NACK packet when p2p
  * is not available or memory registration limit was reached on the receiver.
  *
- * @param[in]    ep         endpoint
- * @param[in]    pkt_entry  packet entry
- * @param[in]    rxe        RX entry
+ * @param[in]	ep		endpoint
+ * @param[in]	peer		efa_rdm_peer struct of the sender
+ * @param[in]	pkt_entry	packet entry
+ * @param[in]	rxe		RX entry
  *
  * @return 0 on success, or a negative error code.
  */
-static inline int
-efa_rdm_pke_post_remote_read_or_nack(struct efa_rdm_ep  *ep,
-                                     struct efa_rdm_pke *pkt_entry,
-                                     struct efa_rdm_ope *rxe)
+static inline int efa_rdm_pke_post_remote_read_or_nack(
+	struct efa_rdm_ep *ep, struct efa_rdm_peer *peer,
+	struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe)
 {
 	int err = 0;
 	int pkt_type;
@@ -162,7 +162,7 @@ send_nack:
 	}
 
 	if (efa_rdm_pkt_type_is_rtm(pkt_type)) {
-		efa_rdm_rxe_map_insert(&ep->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry), pkt_entry->addr, rxe);
+		efa_rdm_rxe_map_insert(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry), rxe);
 	}
 
 	return efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_READ_NACK_PKT);
