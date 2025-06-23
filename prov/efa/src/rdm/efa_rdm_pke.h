@@ -15,6 +15,7 @@
 #define EFA_RDM_PKE_DC_LONGCTS_DATA	BIT_ULL(3) /**< this DATA packet entry is used by a delivery complete LONGCTS send/write protocol*/
 #define EFA_RDM_PKE_LOCAL_WRITE		BIT_ULL(4) /**< this packet entry is used as context of an RDMA Write to self */
 #define EFA_RDM_PKE_SEND_TO_USER_RECV_QP	BIT_ULL(5) /**< this packet entry is used for posting send to a dedicated QP that doesn't expect any pkt hdrs */
+#define EFA_RDM_PKE_HAS_NO_BASE_HDR	BIT_ULL(6)	/**< This packet entry's wiredata contains no base header */
 
 #define EFA_RDM_PKE_ALIGNMENT		128
 
@@ -129,9 +130,13 @@ struct efa_rdm_pke {
 	/** 
 	 * @brief flags indicating the status of the packet entry
 	 * 
-	 * @details
-	 * Possible flags include  #EFA_RDM_PKE_IN_USE #EFA_RDM_PKE_RNR_RETRANSMIT,
-	 * #EFA_RDM_PKE_LOCAL_READ, and #EFA_RDM_PKE_DC_LONGCTS_DATA
+	 * @see #EFA_RDM_PKE_IN_USE
+	 * @see #EFA_RDM_PKE_RNR_RETRANSMIT
+	 * @see #EFA_RDM_PKE_LOCAL_READ
+	 * @see #EFA_RDM_PKE_DC_LONGCTS_DATA 
+	 * @see #EFA_RDM_PKE_LOCAL_WRITE
+	 * @see #EFA_RDM_PKE_SEND_TO_USER_RECV_QP
+	 * @see #EFA_RDM_PKE_HAS_NO_BASE_HDR
 	 */
 	uint32_t flags;
 
