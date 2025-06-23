@@ -55,7 +55,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 	if (efa_both_support_zero_hdr_data_transfer(pkt_entry->ep, ope->peer)) {
 		/* zero hdr transfer only happens for eager msg (non-tagged) pkt */
 		assert(pkt_type == EFA_RDM_EAGER_MSGRTM_PKT);
-		pkt_entry->flags |= EFA_RDM_PKE_SEND_TO_USER_RECV_QP;
+		pkt_entry->flags |= EFA_RDM_PKE_SEND_TO_USER_RECV_QP | EFA_RDM_PKE_HAS_NO_BASE_HDR;
 	}
 
 	/* Only 3 categories of packets has data_size and data_offset:
@@ -426,7 +426,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 	switch (pkt_entry->ope->type) {
 	case EFA_RDM_TXE:
 		txe = pkt_entry->ope;
-		if (!(pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) && efa_rdm_pke_get_base_hdr(pkt_entry)->type == EFA_RDM_HANDSHAKE_PKT) {
+		if (efa_rdm_pkt_type_of(pkt_entry) == EFA_RDM_HANDSHAKE_PKT) {
 			switch (prov_errno) {
 				case EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR:
 					/**
@@ -573,16 +573,11 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
-	/* These pkts are eager pkts withour hdrs */
-	if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
-		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
-		efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
-		efa_rdm_pke_release_tx(pkt_entry);
-		return;
-	}
-
 	/* Start handling pkts with hdrs */
-	switch (efa_rdm_pke_get_base_hdr(pkt_entry)->type) {
+	switch (efa_rdm_pkt_type_of(pkt_entry)) {
+	case EFA_RDM_HEADERLESS_PKT:
+		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
+		break;
 	case EFA_RDM_HANDSHAKE_PKT:
 		efa_rdm_txe_release(pkt_entry->ope);
 		break;
@@ -748,7 +743,7 @@ void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_im
 {
 	struct efa_rdm_ope *rxe = pkt_entry->ope;
 
-	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL);
+	assert(pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
 	assert(rxe);
 
 	if (has_imm_data) {
