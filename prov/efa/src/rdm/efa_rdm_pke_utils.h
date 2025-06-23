@@ -11,6 +11,12 @@
 #include "efa_rdm_pke_rtm.h"
 #include "efa_mr.h"
 
+static inline
+bool efa_rdm_pke_has_base_hdr(struct efa_rdm_pke *pke)
+{
+	return !(pke->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
+}
+
 /**
  * @brief get the base header of an pke
  *
@@ -21,6 +27,32 @@ static inline
 struct efa_rdm_base_hdr *efa_rdm_pke_get_base_hdr(struct efa_rdm_pke *pke)
 {
 	return (struct efa_rdm_base_hdr *)pke->wiredata;
+}
+
+#define efa_rdm_pkt_type_of(obj) _Generic((obj), \
+		struct efa_rdm_pke *: efa_rdm_pkt_type_of_pke, \
+		struct efa_rdm_ope *: efa_rdm_pkt_type_of_ope, \
+		default: efa_rdm_pkt_type_of_base_hdr)(obj)
+
+static inline
+int efa_rdm_pkt_type_of_base_hdr(struct efa_rdm_base_hdr *base_hdr)
+{
+	return base_hdr->type;
+}
+
+static inline
+int efa_rdm_pkt_type_of_pke(struct efa_rdm_pke *pke)
+{
+	if (efa_rdm_pke_has_base_hdr(pke)) {
+		return efa_rdm_pkt_type_of_base_hdr(efa_rdm_pke_get_base_hdr(pke));
+	}
+	return EFA_RDM_HEADERLESS_PKT;
+}
+
+static inline
+int efa_rdm_pkt_type_of_ope(struct efa_rdm_ope *ope)
+{
+	return efa_rdm_pkt_type_of_pke(container_of(ope, struct efa_rdm_pke, ope));
 }
 
 /**
