@@ -558,7 +558,7 @@ ssize_t efa_rdm_pke_init_eager_msgrtm(struct efa_rdm_pke *pkt_entry,
 {
 	int ret;
 
-	if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP)
+	if (pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR)
 		ret = efa_rdm_pke_init_eager_msgrtm_zero_hdr(pkt_entry, txe);
 	else
 		ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry,
