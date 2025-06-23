@@ -71,6 +71,15 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	pkt_entry->payload = NULL;
 	pkt_entry->payload_size = 0;
 	pkt_entry->payload_mr = NULL;
+
+	switch (alloc_type) {
+	case EFA_RDM_PKE_FROM_USER_RX_POOL:
+	case EFA_RDM_PKE_FROM_READ_COPY_POOL:
+		pkt_entry->flags |= EFA_RDM_PKE_HAS_NO_BASE_HDR;
+		break;
+	default:
+		break;
+	}
 	return pkt_entry;
 }
 
