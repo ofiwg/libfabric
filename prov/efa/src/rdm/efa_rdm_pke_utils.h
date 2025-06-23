@@ -23,6 +23,29 @@ struct efa_rdm_base_hdr *efa_rdm_pke_get_base_hdr(struct efa_rdm_pke *pke)
 	return (struct efa_rdm_base_hdr *)pke->wiredata;
 }
 
+#define efa_rdm_pkt_type_of(obj) _Generic((obj), \
+		struct efa_rdm_pke *: efa_rdm_pkt_type_of_pke, \
+		struct efa_rdm_ope *: efa_rdm_pkt_type_of_ope, \
+		default: efa_rdm_pkt_type_of_base_hdr)(obj)
+
+static inline
+int efa_rdm_pkt_type_of_base_hdr(struct efa_rdm_base_hdr *base_hdr)
+{
+	return base_hdr->type;
+}
+
+static inline
+int efa_rdm_pkt_type_of_pke(struct efa_rdm_pke *pke)
+{
+	return efa_rdm_pkt_type_of_base_hdr(efa_rdm_pke_get_base_hdr(pke));
+}
+
+static inline
+int efa_rdm_pkt_type_of_ope(struct efa_rdm_ope *ope)
+{
+	return efa_rdm_pkt_type_of_pke(container_of(ope, struct efa_rdm_pke, ope));
+}
+
 /**
  * @brief return the segment offset of user data in packet entry
  *
