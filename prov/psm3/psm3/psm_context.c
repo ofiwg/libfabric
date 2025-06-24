@@ -124,7 +124,7 @@ psm3_context_open(const psm2_ep_t ep, long unit_param, long port, long addr_inde
 	}
 
 	if (timeout_ns > 0)
-		open_timeout = (long)(timeout_ns / MSEC_ULL);
+		open_timeout = (long)(timeout_ns / NSEC_PER_MSEC);
 
 	if (unit_param == PSM3_NIC_ANY) {
 		/* user did not set PSM3_NIC and not PSM3_MULTIRAIL */

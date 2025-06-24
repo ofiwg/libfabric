@@ -498,6 +498,8 @@ psm2_error_t psm3_init(int *major, int *minor)
 	}
 #endif /* #ifdef PSM_FI */
 
+	psm3_ep_init();
+
 	psm3_epid_init();
 
 	if ((err = psm3_parse_devices(devid_enabled)))	// ok to not uninit
@@ -879,6 +881,8 @@ psm2_error_t psm3_finalize(void)
 	psm3_epid_itor_fini(&itor);
 
 	psm3_epid_fini();
+
+	psm3_ep_fini();
 
 	/* unmap shared mem object for affinity */
 	if (psm3_affinity_shared_file_opened) {

@@ -55,7 +55,9 @@
 
 #include "psm_user.h"
 
-#define PSMI_MPOOL_ALIGNMENT	64
+#define PSMI_MPOOL_ALIGNMENT  64
+#define PSMI_MPOOL_FLAG_INUSE 0x80000000 // bit in me_index
+#define PSMI_MPOOL_MAX_INDEX  0x7FFFFFFF
 
 struct mpool_element {
 	union {
@@ -64,19 +66,13 @@ struct mpool_element {
 	};
 
 	uint32_t me_gen_count;
-	uint32_t me_index;
-#ifdef PSM_DEBUG
-	uint32_t me_isused;
-#endif
+	uint32_t me_index;	// upper bit is inuse flag
 } __attribute__ ((aligned(16)));
 
-#ifdef PSM_DEBUG
-#  define me_mark_used(me)    ((me)->me_isused = 1)
-#  define me_mark_unused(me)  ((me)->me_isused = 0)
-#else
-#  define me_mark_used(me)
-#  define me_mark_unused(me)
-#endif
+#define me_mark_used(me)    ((me)->me_index |= PSMI_MPOOL_FLAG_INUSE)
+#define me_mark_unused(me)  ((me)->me_index &= ~PSMI_MPOOL_FLAG_INUSE)
+#define me_used(me)         ((me)->me_index & PSMI_MPOOL_FLAG_INUSE)
+#define me_unmarked(me)     ((me)->me_index & ~PSMI_MPOOL_FLAG_INUSE)
 
 struct mpool {
 	int mp_type;
@@ -141,13 +137,16 @@ psm3_mpool_create_inner(size_t obj_size, uint32_t num_obj_per_chunk,
 	int s;
 	size_t hdr_size;
 
-	if (!PSMI_POWEROFTWO(num_obj_per_chunk) ||
-	    !PSMI_POWEROFTWO(num_obj_max_total) ||
-	    num_obj_max_total < num_obj_per_chunk) {
+	if (!PSMI_POWEROFTWO(num_obj_per_chunk)
+		|| !PSMI_POWEROFTWO(num_obj_max_total)
+		|| num_obj_max_total > PSMI_MPOOL_MAX_INDEX
+		|| num_obj_max_total < num_obj_per_chunk)
+	{
 		fprintf(stderr,
 			"Invalid memory pool parameters: values must be a "
-		        "power of 2 and num_obj_max(%u) must be greater "
-			"than num_obj_per_chunk(%u)\n",
+		        "power of 2, less than %u and num_obj_max(%u) must be "
+			"greater than num_obj_per_chunk(%u)\n",
+			PSMI_MPOOL_FLAG_INUSE,
 			num_obj_max_total, num_obj_per_chunk);
 		return NULL;
 	}
@@ -284,7 +283,7 @@ void *psm3_mpool_get(mpool_t mp)
 	me = SLIST_FIRST(&mp->mp_head);
 	SLIST_REMOVE_HEAD(&mp->mp_head, me_next);
 
-	psmi_assert(!me->me_isused);
+	psmi_assert(!me_used(me));
 	me_mark_used(me);
 
 	/* store a backpointer to the memory pool */
@@ -318,7 +317,7 @@ void psm3_mpool_put(void *obj)
 	mp = me->me_mpool;
 
 	psmi_assert(mp != NULL);
-	psmi_assert(me->me_isused);
+	psmi_assert(me_used(me));
 	me_mark_unused(me);
 
 	was_empty = mp->mp_num_obj_inuse == mp->mp_num_obj_max_total;
@@ -344,7 +343,7 @@ int psm3_mpool_get_obj_index(void *obj)
 	struct mpool_element *me = (struct mpool_element *)
 	    ((uintptr_t) obj - sizeof(struct mpool_element));
 
-	return me->me_index;
+	return me_unmarked(me);
 }
 
 /**
@@ -377,7 +376,7 @@ psm3_mpool_get_obj_index_gen_count(void *obj, uint32_t *index,
 	struct mpool_element *me = (struct mpool_element *)
 	    ((uintptr_t) obj - sizeof(struct mpool_element));
 
-	*index = me->me_index;
+	*index = me_unmarked(me);
 	*gen_count = me->me_gen_count;
 	return 0;
 }
@@ -407,7 +406,7 @@ void *psm3_mpool_find_obj_by_index(mpool_t mp, int index)
 	 * freed object */
 #ifdef PSM_DEBUG
 	if (mp->mp_flags & PSMI_MPOOL_NOGENERATION)
-		psmi_assert(!me->me_isused);
+		psmi_assert(! me_used(me));
 #endif
 
 	return (void *)((uintptr_t) me + sizeof(struct mpool_element));
@@ -525,9 +524,7 @@ static int psmi_mpool_allocate_chunk(mpool_t mp)
 					       mp->mp_elm_offset);
 		elm->me_gen_count = 0;
 		elm->me_index = mp->mp_num_obj + i;
-#ifdef PSM_DEBUG
-		elm->me_isused = 0;
-#endif
+		me_mark_unused(elm);
 		SLIST_INSERT_HEAD(&mp->mp_head, elm, me_next);
 #if 0
 		fprintf(stderr, "chunk%ld i=%d elm=%p user=%p next=%p\n",
@@ -550,6 +547,26 @@ static int psmi_mpool_allocate_chunk(mpool_t mp)
 	return PSM2_OK;
 }
 
+// code to help debug IOs in flight
+void psmi_mpool_foreach(mpool_t mp, void *context,
+		psmi_mpool_callback_func_t *func)
+{
+	int i, j;
+	struct mpool_element *me;
+
+	for (i = 0; i < mp->mp_elm_vector_size; i++) {
+		if (mp->mp_elm_vector[i] == NULL)
+			continue;
+		for (j = 0, me = mp->mp_elm_vector[i];
+			j < mp->mp_num_obj_per_chunk;
+			j++, me = (struct mpool_element *)((uintptr_t)me + mp->mp_elm_size))
+		{
+			if (me_used(me))
+				(*func)((void *)((uintptr_t)me + sizeof(struct mpool_element)), context);
+		}
+	}
+}
+
 #if 0
 void psmi_mpool_dump(mpool_t mp)
 {
@@ -568,10 +585,12 @@ void psmi_mpool_dump(mpool_t mp)
 			     j++, me = (struct mpool_element *)
 			     ((uintptr_t) me + mp->mp_elm_size)) {
 				fprintf(stderr,
-					"obj=%p index=%d gen_count=%d\n",
+					"obj=%p used=%u index=%u gen_count=%u\n",
 					(void *)((uintptr_t) me +
 						 sizeof(struct mpool_element)),
-					me->me_index, me->me_gen_count);
+					me_used(me)?1:0,
+					me_unmarked(me),
+					me->me_gen_count);
 			}
 			fprintf(stderr, "===========================\n");
 		}

@@ -89,7 +89,11 @@ common_srcs = \
 	util/src/rocr_mem_monitor.c \
 	util/src/rocr_ipc_monitor.c \
 	util/src/ze_mem_monitor.c \
+	util/src/ze_ipc_monitor.c \
 	util/src/xpmem_monitor.c \
+	util/src/kdreg2_mem_monitor.c \
+	util/src/uffd_mem_monitor.c \
+	util/src/import_mem_monitor.c \
 	shared/fabric.c \
 	shared/fi_tostr.c \
 	shared/perf.c \
@@ -211,7 +215,7 @@ src_libpsm3_fi_la_LDFLAGS =
 src_libpsm3_fi_la_LIBADD =
 
 src_libpsm3_fi_la_LDFLAGS += \
-	-export-dynamic \
+	-Wl,--exclude-libs,ALL \
 	$(libpsm3_fi_version_script)
 
 chksum_srcs = $(src_libpsm3_fi_la_SOURCES)
@@ -231,7 +235,7 @@ src_libpsm3_fi_la_LDFLAGS += -lpsm2
 endif !HAVE_PSM3_SRC
 
 if !EMBEDDED
-src_libpsm3_fi_la_LDFLAGS += -version-info 25:0:24
+src_libpsm3_fi_la_LDFLAGS += -version-info 28:0:27
 endif
 
 prov_install_man_pages = man/man7/fi_psm3.7

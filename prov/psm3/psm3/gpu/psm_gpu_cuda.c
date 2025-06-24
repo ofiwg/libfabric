@@ -1316,7 +1316,7 @@ static int psm3_cuda_cache_key_cmp(const psm3_cuda_cache_item *a, const psm3_cud
  */
 #define RBTREE_MI_PL    psm3_rbtree_cuda_memhandle_cache_mapitem_pl_t
 #define RBTREE_MAP_PL   psm3_rbtree_cuda_memhandle_cache_map_pl_t
-#define RBTREE_CMP(a,b) psm3_cuda_cache_key_cmp((a), (b))
+#define RBTREE_CMP(a, b, c) psm3_cuda_cache_key_cmp((a), (b))
 #define RBTREE_ASSERT   psmi_assert
 #define RBTREE_MAP_COUNT(PAYLOAD_PTR)   ((PAYLOAD_PTR)->nelems)
 #define RBTREE_NO_EMIT_IPS_CL_QMAP_PREDECESSOR

@@ -360,8 +360,8 @@ enum psm2_error {
 	PSM2_EPID_INVALID_PKEY = 50,
 	/*! Unable to resolve path for endpoint */
 	PSM2_EPID_PATH_RESOLUTION = 51,
-	/*! Unable to connect rv QP */
-	PSM2_EPID_RV_CONNECT_ERROR = 52,
+	/*! Unable to connect rv or user RC QP */
+	PSM2_EPID_RC_CONNECT_ERROR = 52,
 	/*! Recovering rv QP conection */
 	PSM2_EPID_RV_CONNECT_RECOVERING = 53,
 

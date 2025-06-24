@@ -143,7 +143,9 @@ void psm3_hal_register_instance(psmi_hal_instance_t *psm_hi)
 	REJECT_IMPROPER_HI(hfp_ips_ipsaddr_init_connections);
 	REJECT_IMPROPER_HI(hfp_ips_ipsaddr_free);
 	REJECT_IMPROPER_HI(hfp_ips_flow_init);
-	REJECT_IMPROPER_HI(hfp_ips_ipsaddr_disconnect);
+	REJECT_IMPROPER_HI(hfp_ips_ipsaddr_start_disconnect);
+	REJECT_IMPROPER_HI(hfp_ips_ipsaddr_done_disconnect);
+	REJECT_IMPROPER_HI(hfp_ips_ipsaddr_start_reconnect);
 	REJECT_IMPROPER_HI(hfp_ips_ibta_init);
 	REJECT_IMPROPER_HI(hfp_ips_path_rec_init);
 	REJECT_IMPROPER_HI(hfp_ips_ptl_pollintr);

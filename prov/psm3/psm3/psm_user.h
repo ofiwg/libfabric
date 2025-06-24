@@ -85,9 +85,25 @@ extern "C" {
 #define PSM_HAVE_SDMA
 #endif
 
+/* This indicates the user space RC QP reconnection protocol is enabled
+ * this should only be tested inside the verbs HAL.  Since it is only
+ * set when USE_RC is set, there is no need to also test USE_RC when
+ * testing PSM_RC_RECONNECT
+ * PSM_RC_RECONNECT_SRQ allows use of SRQ when reconnect enabled.
+ */
+#if defined(PSM_VERBS) && defined(USE_RC)
+#define PSM_RC_RECONNECT
+#define PSM_RC_RECONNECT_SRQ
+#endif
+ 
 /* This indicates at least 1 HAL in the build can perform RDMA */
-#ifdef PSM_VERBS
+#if defined(PSM_VERBS) && (defined(RNDV_MOD) || defined(USE_RC))
 #define PSM_HAVE_RDMA
+#endif
+
+/* This indicates at least 1 HAL in the build can perform RDMA err_chk */
+#if defined(PSM_VERBS) && (defined(RNDV_MOD) || defined(PSM_RC_RECONNECT))
+#define PSM_HAVE_RDMA_ERR_CHK
 #endif
 
 // psm_config.h will define PSM_HAVE_GPU as needed

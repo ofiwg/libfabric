@@ -185,6 +185,17 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 	proto->spioc = spioc;
 
 	{
+		union psmi_envvar_val env_flow_ctr;
+
+		psm3_getenv("PSM3_ADV_FLOW_CONTROL",
+			    "Enable advanced flow control. It enables psn sync based flow control for PSM3_RDMA=3\n"
+			    "mode and dynamic credit for other RDMA modes",
+			    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
+			    (union psmi_envvar_val)1, &env_flow_ctr);
+		proto->credits_allow_adv_ctrl = env_flow_ctr.e_uint;
+	}
+
+	{
 		/* Number of credits per flow */
 		union psmi_envvar_val env_flow_credits;
 #ifdef PSM_VERBS
@@ -211,8 +222,8 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 			    "Number of unacked packets (credits) per flow in <min:max:adjust>",
 			    "Specified as min:max:adjust where min and max is the range of credits,\n"
 			    "and adjust is the adjustment amount for adjusting credits. For PSM3_RDMA=3,\n"
-				"adjust is ignored. Data send pauses when number of unacked packets is beyond\n"
-				"max credits, and send resumes when the number is below min credits",
+			    "adjust is ignored. Data send pauses when number of unacked packets is beyond\n"
+			    "max credits, and send resumes when the number is below min credits",
 			    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR_TUPLES,
 			    (union psmi_envvar_val)fcredits_def,
 			    (union psmi_envvar_val)NULL, (union psmi_envvar_val)NULL,
@@ -236,9 +247,17 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		} else {
 			proto->flow_credits = (tvals[0] + tvals[1]) / 2;
 		}
-		proto->min_credits = tvals[0];
-		proto->max_credits = tvals[1];
-		proto->credits_adjust = tvals[2];
+
+		if (proto->credits_allow_adv_ctrl) {
+			proto->min_credits = tvals[0];
+			proto->max_credits = tvals[1];
+			proto->credits_adjust = tvals[2];
+		} else {
+			// fixed credits
+			proto->min_credits = proto->flow_credits;
+			proto->max_credits = proto->flow_credits;
+			proto->credits_adjust = 0;
+		}
 	}
 
 	{
@@ -247,7 +266,7 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 			    "Threshold for increasing credits", NULL,
 			    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 			    (union psmi_envvar_val)CREDITS_INC_THRESH,
-			    (union psmi_envvar_val)0, (union psmi_envvar_val)UINT16_MAX,
+			    (union psmi_envvar_val)0, (union psmi_envvar_val)IPS_MAX_CREDIT,
 			    NULL, NULL, &env_thresh);
 		proto->credits_inc_thresh = env_thresh.e_uint;
 	}
@@ -412,7 +431,7 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		proto->scb_bufsize = env_bbs.e_uint;
 	}
 
-	if ((err = psm3_ips_scbctrl_init(ep, num_of_send_desc,
+	if ((err = psm3_ips_scbctrl_init(proto, num_of_send_desc,
 				    num_of_send_bufs, imm_size,
 				    proto->scb_bufsize, NULL, NULL,
 				    &proto->scbc_egr)))
@@ -448,7 +467,7 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		 * bufs.
 		 */
 		if ((err =
-		     psm3_ips_scbctrl_init(ep, num_of_send_desc,
+		     psm3_ips_scbctrl_init(proto, num_of_send_desc,
 				      0 /* no bufs */ ,
 				      0, 0 /* bufsize==0 */ ,
 				      psm3_ips_proto_rv_scbavail_callback,
@@ -834,7 +853,7 @@ psm3_ips_proto_disconnect_all(struct ips_proto *proto, int force,
 		    "Additional grace period in seconds for closing end-point.",
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)0, &grace_intval)) {
-		t_grace_time = grace_intval.e_uint * SEC_ULL;
+		t_grace_time = grace_intval.e_uint * NSEC_PER_SEC;
 	} else if (timeout_in > 0) {
 		/* default to half of the close time-out */
 		t_grace_time = timeout_in / 2;
@@ -857,12 +876,12 @@ psm3_ips_proto_disconnect_all(struct ips_proto *proto, int force,
 		    "Grace interval in seconds for closing end-point.",
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)0, &grace_intval)) {
-		t_grace_interval = grace_intval.e_uint * SEC_ULL;
+		t_grace_interval = grace_intval.e_uint * NSEC_PER_SEC;
 	} else {
 		/* A heuristic is used to scale up the timeout linearly with
 		 * the number of endpoints, and we allow one second per 1000
 		 * endpoints. */
-		t_grace_interval = (proto->ep->connections * SEC_ULL) / 1000;
+		t_grace_interval = (proto->ep->connections * NSEC_PER_SEC) / 1000;
 	}
 
 	if (t_grace_interval < PSMI_MIN_EP_CLOSE_GRACE_INTERVAL)
@@ -936,6 +955,11 @@ psm3_ips_proto_disconnect_all(struct ips_proto *proto, int force,
 
 	t_grace_start = get_cycles();
 
+	// The grace interval is >= PSMI_MIN_EP_CLOSE_TIMEOUT (1 second)
+	// and the time wait is < 1 second, so by waiting 1 extra
+	// grace interval during which no inbound disconnect requests arrive,
+	// we can also be sure time wait for any prior inbound or outbound
+	// disconnects have also completed
 	while (psm3_cycles_left(t_grace_start, t_grace_time)) {
 		uint64_t t_grace_interval_start = get_cycles();
 		int num_disconnect_requests = proto->num_disconnect_requests;
@@ -960,8 +984,8 @@ psm3_ips_proto_disconnect_all(struct ips_proto *proto, int force,
 		_HFI_PRDBG_ALWAYS(
 			"Closing endpoint disconnect left to=%d,from=%d after %d millisec of grace (out of %d)\n",
 			proto->num_connected_outgoing, proto->num_connected_incoming,
-			(int)(cycles_to_nanosecs(t_grace_finish - t_grace_start) /
-			MSEC_ULL), (int)(t_grace_time / MSEC_ULL));
+			(int)(cycles_to_nanosecs(t_grace_finish - t_grace_start) / NSEC_PER_MSEC),
+			(int)(t_grace_time / MSEC_PER_SEC));
 	}
 #endif
 fail:
@@ -1403,15 +1427,6 @@ void MOCKABLE(psm3_ips_proto_flow_enqueue)(struct ips_flow *flow, ips_scb_t *scb
 			     ips_scb_buffer(scb), scb->payload_size, &scb->cksum[0]);
 	}
 
-	/* If this is the first scb on flow, pull in both timers. */
-	if (flow->timer_ack == NULL) {
-		psmi_assert(flow->timer_send == NULL);
-		flow->timer_ack = scb->timer_ack;
-		flow->timer_send = scb->timer_send;
-	}
-	psmi_assert(flow->timer_ack != NULL);
-	psmi_assert(flow->timer_send != NULL);
-
 	/* Every flow has a pending head that points into the unacked queue.
 	 * If sends are already pending, process those first */
 	if (SLIST_EMPTY(&flow->scb_pend))
@@ -1464,8 +1479,12 @@ psm3_ips_proto_flow_flush_pio(struct ips_flow *flow, int *nflushed)
 		) {
 		if (nflushed)
 			*nflushed = 0;
+		flow->ipsaddr->cc_count += 1;
+		if (flow->ipsaddr->cc_count > proto->stats.pio_cc_max_duration)
+			proto->stats.pio_cc_max_duration = flow->ipsaddr->cc_count;
 		return PSM2_EP_NO_RESOURCES;
 	}
+	flow->ipsaddr->cc_count = 0;
 
 	while (!SLIST_EMPTY(scb_pend) && flow->credits > 0
 #ifdef PSM_BYTE_FLOW_CREDITS
@@ -1498,14 +1517,12 @@ psm3_ips_proto_flow_flush_pio(struct ips_flow *flow, int *nflushed)
 			     ))
 		    == PSM2_OK) {
 			GENERIC_PERF_END(PSM_TX_SPEEDPATH_CTR); /* perf stats */
+			flow->ipsaddr->cc_count = 0;
 			t_cyc = get_cycles();
 			scb->scb_flags &= ~IPS_SEND_FLAG_PENDING;
-			scb->ack_timeout =
-			    scb->nfrag * proto->epinfo.ep_timeout_ack;
-			scb->abs_timeout =
-			    scb->nfrag * proto->epinfo.ep_timeout_ack + t_cyc;
-			psmi_timer_request(proto->timerq, flow->timer_ack,
-					   scb->abs_timeout);
+			scb->ack_timeout = scb->nfrag * proto->epinfo.ep_timeout_ack;
+			scb->abs_timeout = scb->ack_timeout + t_cyc;
+			psmi_timer_request(proto->timerq, &flow->timer_ack, scb->abs_timeout);
 			num_sent++;
 			/* Flow credits can temporarily go to negative for
 			 * packets tracking purpose, because we have GSO/sdma
@@ -1557,40 +1574,20 @@ psm3_ips_proto_flow_flush_pio(struct ips_flow *flow, int *nflushed)
 				(*scb->callback) (scb->cb_param, scb->nfrag > 1 ?
 						  scb->chunk_size : scb->payload_size);
 
-			if (!(scb->scb_flags & IPS_SEND_FLAG_PERSISTENT))
-				psm3_ips_scbctrl_free(scb);
+			psm3_ips_scbctrl_free(scb);
 
 			if (STAILQ_EMPTY(unackedq)) {
-				// timer_ack shall not start
-				psmi_assert(! (flow->timer_ack->flags & PSMI_TIMER_FLAG_PENDING));
-				flow->timer_ack = NULL;
-				psmi_timer_cancel(proto->timerq, flow->timer_send);
-				flow->timer_send = NULL;
+				/* even though we sent reliably, the ACK timer may still be
+				 * running if reliable SCBs were placed on queue after
+				 * unreliable SCBs.  when the unreliable SCBs get ACKed while
+				 * queue is not empty, the timers will not be terminated,
+				 * leaving behind a queue of reliable SCBs with a running timer.
+				 */
+				psmi_timer_cancel(proto->timerq, &flow->timer_ack);
+				psmi_timer_cancel(proto->timerq, &flow->timer_send);
 
 				SLIST_FIRST(scb_pend) = NULL;
 				psmi_assert(flow->scb_num_pending == 0);
-			} else if (flow->timer_ack == scb->timer_ack) {
-				/*
-				 * Exchange timers with last scb on unackedq.
-				 * timer in scb is used by flow, cancelling current
-				 * timer and then requesting a new timer takes more
-				 * time, instead, we exchange the timer between current
-				 * freeing scb and the last scb on unacked queue.
-				 */
-				psmi_timer *timer;
-				ips_scb_t *last = STAILQ_LAST(unackedq, ips_scb, nextq);
-
-				timer = scb->timer_ack;
-				scb->timer_ack = last->timer_ack;
-				last->timer_ack = timer;
-				timer = scb->timer_send;
-				scb->timer_send = last->timer_send;
-				last->timer_send = timer;
-
-				scb->timer_ack->context = scb;
-				scb->timer_send->context = scb;
-				last->timer_ack->context = last;
-				last->timer_send->context = last;
 			}
 
 			err = PSM2_OK;
@@ -1630,7 +1627,7 @@ sendfull:
 				_HFI_VDBG("Increased flow (%p) credits to %d\n", flow, flow->max_credits);
 			}
 		}
-		psmi_timer_request(proto->timerq, flow->timer_send,
+		psmi_timer_request(proto->timerq, &flow->timer_send,
 				   get_cycles() + proto->timeout_send);
 	}
 
@@ -1688,7 +1685,7 @@ psm2_error_t
 psm3_ips_proto_timer_ack_callback(struct psmi_timer *current_timer,
 			     uint64_t current)
 {
-	struct ips_flow *flow = ((ips_scb_t *)current_timer->context)->flow;
+	struct ips_flow *flow = current_timer->context;
 	struct ips_proto *proto = ((psm2_epaddr_t) (flow->ipsaddr))->proto;
 	uint64_t t_cyc_next = get_cycles();
 	psmi_seqnum_t err_chk_seq;
@@ -1789,7 +1786,7 @@ psm2_error_t
 psm3_ips_proto_timer_send_callback(struct psmi_timer *current_timer,
 			      uint64_t current)
 {
-	struct ips_flow *flow = ((ips_scb_t *)current_timer->context)->flow;
+	struct ips_flow *flow = current_timer->context;
 
 	if (!SLIST_EMPTY(&flow->scb_pend))
 		flow->flush(flow, NULL);
@@ -1818,7 +1815,40 @@ static uint64_t verbs_ep_send_rdma_outstanding(void *context)
 		return vep->send_rdma_outstanding;
 	}
 }
+
+#ifdef PSM_RC_RECONNECT
+static uint64_t verbs_ep_send_drain_outstanding(void *context)
+{
+	if (psmi_hal_get_hal_instance_index() != PSM_HAL_INDEX_VERBS) {
+		return 0;
+	} else {
+		struct psm3_verbs_ep *vep = &((struct ips_proto *)context)->ep->verbs_ep;
+		return vep->send_drain_outstanding;
+	}
+}
 #endif
+#endif
+
+static uint64_t ep_reconnect_timeout(void *context)
+{
+	psm2_ep_t ep = ((struct ips_proto *)context)->ep;
+	if (ep->allow_reconnect)
+		return ep->reconnect_timeout;
+	else
+		return 0;
+}
+
+static uint64_t proto_num_connected_outgoing(void *context)
+{
+	struct ips_proto *proto = (struct ips_proto *)context;
+	return proto->num_connected_outgoing;
+}
+
+static uint64_t proto_num_connected_incoming(void *context)
+{
+	struct ips_proto *proto = (struct ips_proto *)context;
+	return proto->num_connected_incoming;
+}
 
 static psm2_error_t
 ips_proto_register_stats(struct ips_proto *proto)
@@ -1843,6 +1873,14 @@ ips_proto_register_stats(struct ips_proto *proto)
 				   "Total bytes delayed send due to no credits from remote process",
 				   &proto->stats.pio_no_flow_credit_bytes),
 #endif
+		PSMI_STATS_DECLU64("pio_cc_max",
+				   "Max times delayed send during a congestion control for unreliable send",
+				   &proto->stats.pio_cc_max_duration),
+#ifdef USE_RC
+		PSMI_STATS_DECLU64("pio_rc_cc_max",
+				   "Max times delayed send during a congestion control for reliable send",
+				   &proto->stats.pio_rc_cc_max_duration),
+#endif
 		PSMI_STATS_DECLU64("ctrl_msg_queue_overflow",
 				   "Total times unable to queue a zero payload control message",
 				   &proto->ctrl_msg_queue_overflow),
@@ -1857,6 +1895,11 @@ ips_proto_register_stats(struct ips_proto *proto)
 		PSMI_STATS_DECL_FUNC("send_rdma_outstanding",
 				"current number of verbs outbound RDMA outstanding",
 				   verbs_ep_send_rdma_outstanding),
+#ifdef PSM_RC_RECONNECT
+		PSMI_STATS_DECL_FUNC("send_drain_outstanding",
+				"current number of verbs QPs waiting for send Q to drain",
+				   verbs_ep_send_drain_outstanding),
+#endif
 #endif
 
 #ifdef PSM_HAVE_SDMA
@@ -1921,12 +1964,10 @@ ips_proto_register_stats(struct ips_proto *proto)
 		PSMI_STATS_DECLU64("send_rexmit",
 				   "Number of PSM3 packets re-transmitted",
 				   &proto->epaddr_stats.send_rexmit),
-#if defined(PSM_VERBS)
-#ifdef PSM_HAVE_RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 		PSMI_STATS_DECLU64("rdma_rexmit_(*)",
 				   "Number of PSM3 RDMA re-transmitted",
 				   &proto->epaddr_stats.rdma_rexmit),
-#endif
 #endif
 		PSMI_STATS_DECLU64("err_chk_send",
 				   "Total PSM3 err_chk packet sent indicating out of order or lost packet receipt",
@@ -1934,8 +1975,7 @@ ips_proto_register_stats(struct ips_proto *proto)
 		PSMI_STATS_DECLU64("err_chk_recv",
 				   "Total PSM3 err_chk packet received indicating need to resend packets",
 				   &proto->epaddr_stats.err_chk_recv),
-#if defined(PSM_VERBS)
-#ifdef PSM_HAVE_RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 		PSMI_STATS_DECLU64("err_chk_rdma_send_(*)",
 				   "Total PSM3 err_chk_rdma packet sent indicating out of order or lost RDMA receipt",
 				   &proto->epaddr_stats.err_chk_rdma_send),
@@ -1949,43 +1989,162 @@ ips_proto_register_stats(struct ips_proto *proto)
 				   "Total PSM3 err_chk_rdma response packet received",
 				   &proto->epaddr_stats.err_chk_rdma_resp_recv),
 #endif
-#endif
 		PSMI_STATS_DECLU64("nak_send",
 				   "Total PSM3 NAK sent",
 				   &proto->epaddr_stats.nak_send),
 		PSMI_STATS_DECLU64("nak_recv",
 				   "Total PSM3 NAK received",
 				   &proto->epaddr_stats.nak_recv),
+		PSMI_STATS_DECLU64("rep_proc_err",
+				   "Total HAL discovered errors during connect REP processing",
+				   &proto->epaddr_stats.rep_proc_err),
+#ifdef PSM_RC_RECONNECT
+		PSMI_STATS_DECLU64("recv_wc_error",
+				   "Total RC QP Recv WCs with Non-Flush Error",
+				   &proto->epaddr_stats.recv_wc_error),
+		PSMI_STATS_DECLU64("send_wc_error",
+				   "Total RC QP Send WCs with Non-Flush Error",
+				   &proto->epaddr_stats.send_wc_error),
+		PSMI_STATS_DECLU64("rdma_wc_error",
+				   "Total RC QP RDMA Write WCs with Non-Flush Error",
+				   &proto->epaddr_stats.rdma_wc_error),
+		PSMI_STATS_DECLU64("drain_wc_error",
+				   "Total RC QP Drain send WCs with Non-Flush Error",
+				   &proto->epaddr_stats.drain_wc_error),
+#endif
 		// ---------------------------------------------------------
 		PSMI_STATS_DECL_HELP("PSM3 Connection Establishment Protocol:\n"
 			"PSM3 uses a peer-to-peer connection model, where both "
 			"sides of a connection send a connection request "
 			"and each side responds to the other with a "
-			"connection reply.\n"),
+			"connection reply.\n"
+			"Retry counters are the subset of total request "
+			"packets which were retries.\n"
+			"During disconnect some dups, unknown and other "
+			"oddities are typical.\n"
+			"When reconnect_timeout is non-zero recovery "
+			"of HAL specific connection resources is permitted, "
+			"such as user space RC QP connections\n"),
+		PSMI_STATS_DECL_FUNC("reconnect_timeout",
+				   "reconnection timeout in seconds",
+				   ep_reconnect_timeout),
+		PSMI_STATS_DECL_FUNC("num_connected_outgoing",
+				   "Current PSM3 established outgoing connections",
+				   proto_num_connected_outgoing),
+		PSMI_STATS_DECLU64("max_connected_outgoing",
+				   "Maximum PSM3 established outgoing connections",
+				   &proto->epaddr_stats.max_connected_outgoing),
+		PSMI_STATS_DECL_FUNC("num_connected_incoming",
+				   "Current PSM3 established incoming connections",
+				   proto_num_connected_incoming),
+		PSMI_STATS_DECLU64("max_connected_incoming",
+				   "Maximum PSM3 established incoming connections",
+				   &proto->epaddr_stats.max_connected_incoming),
 		PSMI_STATS_DECLU64("connect_req_send",
-				   "Total PSM3 connection request sent",
+				   "Total PSM3 (re)connection request sent",
 				   &proto->epaddr_stats.connect_req_send),
+		PSMI_STATS_DECLU64("connect_req_retry",
+				   "Total PSM3 connection request retries",
+				   &proto->epaddr_stats.connect_req_retry),
+		PSMI_STATS_DECLU64("reconnect_req_send",
+				   "Total PSM3 reconnection request send",
+				   &proto->epaddr_stats.reconnect_req_send),
+		PSMI_STATS_DECLU64("reconnect_req_retry",
+				   "Total PSM3 reconnection request retries",
+				   &proto->epaddr_stats.reconnect_req_retry),
 		PSMI_STATS_DECLU64("connect_req_recv",
-				   "Total PSM3 connection request received",
+				   "Total PSM3 (re)connection request received",
 				   &proto->epaddr_stats.connect_req_recv),
+		PSMI_STATS_DECLU64("connect_req_rej",
+				   "Total rejected PSM3 (re)connection request",
+				   &proto->epaddr_stats.connect_req_rej),
+		PSMI_STATS_DECLU64("connect_req_inconsistent",
+				   "Total inconsistent PSM3 duplicate connection request received (ignored)",
+				   &proto->epaddr_stats.connect_req_inconsistent),
+		PSMI_STATS_DECLU64("connect_req_dup",
+				   "Total duplicate PSM3 connection request received",
+				   &proto->epaddr_stats.connect_req_dup),
+		PSMI_STATS_DECLU64("connect_req_stale",
+				   "Total stale PSM3 (re)connection request (ignored)",
+				   &proto->epaddr_stats.connect_req_stale),
+		PSMI_STATS_DECLU64("connect_req_disc",
+				   "Total PSM3 (re)connection request while disconnecting (ignored)",
+				   &proto->epaddr_stats.connect_req_disc),
+		PSMI_STATS_DECLU64("reconnect_req_recv",
+				   "Total PSM3 reconnection request received",
+				   &proto->epaddr_stats.reconnect_req_recv),
+		PSMI_STATS_DECLU64("reconnect_req_inconsistent",
+				   "Total inconsistent PSM3 reconnection request received (ignored)",
+				   &proto->epaddr_stats.reconnect_req_inconsistent),
+		PSMI_STATS_DECLU64("reconnect_req_dup",
+				   "Total duplicate PSM3 reconnection request received",
+				   &proto->epaddr_stats.reconnect_req_dup),
 		PSMI_STATS_DECLU64("connect_rep_send",
-				   "Total PSM3 connection response sent",
+				   "Total PSM3 (re)connection reply sent",
 				   &proto->epaddr_stats.connect_rep_send),
 		PSMI_STATS_DECLU64("connect_rep_recv",
-				   "Total PSM3 connection response received",
+				   "Total PSM3 (re)connection reply received",
 				   &proto->epaddr_stats.connect_rep_recv),
+		PSMI_STATS_DECLU64("connect_rep_unknown",
+				   "Total PSM3 (re)connection reply receieved from unknown epid (ignored)",
+				   &proto->epaddr_stats.connect_rep_unknown),
+		PSMI_STATS_DECLU64("connect_rep_inconsistent",
+				   "Total inconsistent PSM3 (re)connection reply received (ignored)",
+				   &proto->epaddr_stats.connect_rep_inconsistent),
+		PSMI_STATS_DECLU64("connect_rep_dup",
+				   "Total duplicate or late PSM3 connection reply received (ignored)",
+				   &proto->epaddr_stats.connect_rep_dup),
+		PSMI_STATS_DECLU64("connect_rep_stale",
+				   "Total stale PSM3 connection reply (ignored)",
+				   &proto->epaddr_stats.connect_rep_stale),
+		PSMI_STATS_DECLU64("connect_rep_disc",
+				   "Total PSM3 connection reply while disconnecting (ignored)",
+				   &proto->epaddr_stats.connect_rep_disc),
+		PSMI_STATS_DECLU64("reconnect_rep_dup",
+				   "Total duplicate or late PSM3 reconnection reply received (ignored)",
+				   &proto->epaddr_stats.reconnect_rep_dup),
+		PSMI_STATS_DECLU64("reconnect_rep_stale",
+				   "Total stale PSM3 reconnection reply (ignored)",
+				   &proto->epaddr_stats.reconnect_rep_stale),
+		PSMI_STATS_DECLU64("reconnect_rep_disc",
+				   "Total PSM3 reconnection reply while disconnecting (ignored)",
+				   &proto->epaddr_stats.reconnect_rep_disc),
 		PSMI_STATS_DECLU64("disconnect_req_send",
 				   "Total PSM3 disconnect request sent",
 				   &proto->epaddr_stats.disconnect_req_send),
+		PSMI_STATS_DECLU64("disconnect_req_retry",
+				   "Total PSM3 disconnect request retries",
+				   &proto->epaddr_stats.disconnect_req_retry),
 		PSMI_STATS_DECLU64("disconnect_req_recv",
 				   "Total PSM3 disconnect request received",
 				   &proto->epaddr_stats.disconnect_req_recv),
+		PSMI_STATS_DECLU64("disconnect_req_dup",
+				   "Total duplicate PSM3 disconnection request received",
+				   &proto->epaddr_stats.disconnect_req_dup),
 		PSMI_STATS_DECLU64("disconnect_rep_send",
-				   "Total PSM3 disconnect response sent",
+				   "Total PSM3 disconnect reply sent",
 				   &proto->epaddr_stats.disconnect_rep_send),
 		PSMI_STATS_DECLU64("disconnect_rep_recv",
-				   "Total PSM3 disconnect response received",
+				   "Total PSM3 disconnect reply received",
 				   &proto->epaddr_stats.disconnect_rep_recv),
+		PSMI_STATS_DECLU64("disconnect_rep_unknown",
+				   "Total PSM3 disconnection reply received from unknown epid (ignored)",
+				   &proto->epaddr_stats.disconnect_rep_unknown),
+		PSMI_STATS_DECLU64("disconnect_rep_dup",
+				   "Total duplicate or late PSM3 disconnection reply received (ignored)",
+				   &proto->epaddr_stats.disconnect_rep_dup),
+		PSMI_STATS_DECLU64("connections_lost",
+				   "Total PSM3 HAL connections lost",
+				   &proto->epaddr_stats.connections_lost),
+		PSMI_STATS_DECLU64("reconnect_started",
+				   "Total PSM3 HAL reconnection started",
+				   &proto->epaddr_stats.reconnect_started),
+		PSMI_STATS_DECLU64("max_reconnect_count",
+				   "Largest HAL connection reconnect_count (capped at 255)",
+				   &proto->epaddr_stats.max_reconnect_count),
+		PSMI_STATS_DECLU64("max_reconnect_usec",
+				   "Largest HAL reconnection time in microseconds",
+				   &proto->epaddr_stats.max_reconnect_usec),
 		// -----------------------------------------------------------
 		PSMI_STATS_DECL_HELP("PSM3 Rendezvous Protocol Statistics:\n"
 			"The rendezvous protocol is used for large messages "
@@ -2451,6 +2610,26 @@ ips_proto_register_stats(struct ips_proto *proto)
 				   "RDMA rendezvous message bytes sent from a GPU buffer via pipelined GPU copy",
 				   &proto->strat_stats.rndv_rdma_hbuf_send_bytes),
 #endif
+		PSMI_STATS_DECL_HELP("Internal IPS SCB Pool Statisics:"),
+		PSMI_STATS_DECLU64("scb_alloc",
+				   "Number of SCB allocation events",
+				   &proto->scb_stats.alloc),
+		PSMI_STATS_DECLU64("scb_free",
+				   "Number of SCB deallocation events",
+				   &proto->scb_stats.free),
+		PSMI_STATS_DECLU64("scb_max_inuse",
+				   "Maximum number of outstanding SCBs",
+				   &proto->scb_stats.max_inuse),
+		PSMI_STATS_DECLU64("scb_dyn_alloc",
+				   "Number of dynamic SCB allocation events",
+				   &proto->scb_stats.dyn_alloc),
+		PSMI_STATS_DECLU64("scb_dyn_free",
+				   "Number of dynamic SCB deallocation events",
+				   &proto->scb_stats.dyn_free),
+		PSMI_STATS_DECLU64("scb_max_dyn_inuse",
+				   "Maximum number of outstanding dynamic SCBs",
+				   &proto->scb_stats.max_dyn_inuse),
+
 	};
 
 	return psm3_stats_register_type("PSM_low-level_protocol_stats",
@@ -2469,4 +2648,62 @@ ips_proto_register_stats(struct ips_proto *proto)
 			PSMI_STATSTYPE_IPSPROTO, entries, PSMI_HOWMANY(entries),
 			psm3_epid_fmt_internal(proto->ep->epid, 0), proto,
 			proto->ep->dev_name);
+}
+
+static void sreq_inflight_callback(void *obj, void *context)
+{
+	psm2_mq_req_t sreq = (psm2_mq_req_t)obj;
+
+	_HFI_VDBG("sreq %p state %u tidsendc %p tag %08x.%08x.%08x tagsel %08x.%08x.%08x buf %p off %u len %u\n",
+		sreq, sreq->state, sreq->ptl_req_ptr,
+		sreq->req_data.tag.tag0, sreq->req_data.tag.tag1,
+			sreq->req_data.tag.tag2,
+		sreq->req_data.tagsel.tag0, sreq->req_data.tagsel.tag1,
+			sreq->req_data.tagsel.tag2,
+		sreq->req_data.buf, sreq->send_msgoff, sreq->req_data.send_msglen);
+		// peer could be PSM2_MQ_ANY_ADDR or 
+		// could output sreq->req_data.peer->epid
+}
+
+static void rreq_inflight_callback(void *obj, void *context)
+{
+	psm2_mq_req_t rreq = (psm2_mq_req_t)obj;
+
+	_HFI_VDBG("rreq %p state %u tag %08x.%08x.%08x tagsel %08x.%08x.%08x buf %p off %u len %u"
+#ifdef PSM_VERBS
+		" mr %p rkey 0x%x"
+#endif
+		"\n",
+		rreq, rreq->state,
+		rreq->req_data.tag.tag0, rreq->req_data.tag.tag1,
+			rreq->req_data.tag.tag2,
+		rreq->req_data.tagsel.tag0, rreq->req_data.tagsel.tag1,
+			rreq->req_data.tagsel.tag2,
+		rreq->req_data.buf, rreq->recv_msgoff, rreq->req_data.recv_msglen
+#ifdef PSM_VERBS
+		, rreq->mr, rreq->mr?rreq->mr->rkey:0
+#endif
+		);
+		// peer could be PSM2_MQ_ANY_ADDR or 
+		// could output sreq->req_data.peer->epid
+}
+
+void ips_proto_report_inflight(psm2_ep_t ep)
+{
+	struct ptl_ips *ptl = (struct ptl_ips *)(ep->ptl_ips.ptl);
+
+	if (! _HFI_VDBG_ON)
+		return;
+
+	_HFI_VDBG("MQ Send Req in flight:\n");
+	psmi_mpool_foreach(ep->mq->sreq_pool, NULL, sreq_inflight_callback);
+
+	if (ptl->proto.protoexp)
+		ips_protoexp_report_send_inflight(ep, ptl->proto.protoexp);
+
+	_HFI_VDBG("MQ Recv Req in flight:\n");
+	psmi_mpool_foreach(ep->mq->rreq_pool, NULL, rreq_inflight_callback);
+
+	if (ptl->proto.protoexp)
+		ips_protoexp_report_recv_inflight(ptl->proto.protoexp);
 }

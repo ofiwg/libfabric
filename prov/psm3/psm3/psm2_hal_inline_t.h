@@ -112,9 +112,17 @@ static PSMI_HAL_INLINE void PSMI_HAL_CAT_INL_SYM(ips_ipsaddr_free)
 static PSMI_HAL_INLINE void PSMI_HAL_CAT_INL_SYM(ips_flow_init)
 				(struct ips_flow *flow,
 					struct ips_proto *proto);
-static PSMI_HAL_INLINE void PSMI_HAL_CAT_INL_SYM(ips_ipsaddr_disconnect)
+static PSMI_HAL_INLINE void PSMI_HAL_CAT_INL_SYM(ips_ipsaddr_start_disconnect)
 				(struct ips_proto *proto,
-					ips_epaddr_t *ipsaddr);
+					ips_epaddr_t *ipsaddr, uint8_t force);
+static PSMI_HAL_INLINE psm2_error_t PSMI_HAL_CAT_INL_SYM(ips_ipsaddr_start_reconnect)
+				(struct ips_proto *proto,
+					ips_epaddr_t *ipsaddr,
+					const struct ips_connect_reqrep *req,
+					unsigned flags);
+static PSMI_HAL_INLINE void PSMI_HAL_CAT_INL_SYM(ips_ipsaddr_done_disconnect)
+				(struct ips_proto *proto,
+					ips_epaddr_t *ipsaddr, uint8_t force);
 static PSMI_HAL_INLINE psm2_error_t PSMI_HAL_CAT_INL_SYM(ips_ibta_init)
 				(struct ips_proto *proto);
 static PSMI_HAL_INLINE psm2_error_t PSMI_HAL_CAT_INL_SYM(ips_path_rec_init)
