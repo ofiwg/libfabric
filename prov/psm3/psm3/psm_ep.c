@@ -80,8 +80,19 @@ int psm3_opened_endpoint_count = 0;
 // for OPA/IB this is the LID
 // for IPv4 this is the full 32 bit IPv4 address
 // for IPv6 this is the full 128 bit IPv6 address
+static psmi_lock_t nids_lock;
 static psm2_nid_t *hfi_nids;
 static uint32_t nnids;	// number of populated entries in hfi_nids array
+
+void psm3_ep_init(void)
+{
+	psmi_init_lock(&nids_lock);
+}
+
+void psm3_ep_fini(void)
+{
+	psmi_destroy_lock(&nids_lock);
+}
 
 static psm2_error_t psm3_ep_open_device(const psm2_ep_t ep,
 				       const struct psm3_ep_open_opts *opts,
@@ -253,26 +264,13 @@ psm2_error_t psm3_epaddr_to_epid(psm2_epaddr_t epaddr, psm2_epid_t *epid)
 	return err;
 }
 
-// this is used to find devices with the same address as another process,
-// implying intra-node comms.
-// we poplate hfi_nids and nnids with the set of network ids (NID) for
-// all the local NICs.
-// The caller will see if any of these NIDs match the NID of the remote process.
-// Note that NIDs are globally unique and include both subnet and NIC address
-// information, so we can compare them regardless of their subnet.
-// NIDs which are not on the same subnet will not match.
-// NIDs on the same subnet only match if they are the same NIC.
-// Two local NICs with the same subnet and same address is an unexpected
-// invalid config, and will silently match the two NICs.
-#define MAX_GID_IDX 31
-static psm2_error_t
-psm3_ep_devnids(psm2_nid_t **nids, uint32_t *num_nids_o)
+static psm2_error_t devnids_init(void)
 {
 	uint32_t num_units = 0;
 	int i;
 	psm2_error_t err = PSM2_OK;
 
-	PSMI_ERR_UNLESS_INITIALIZED(NULL);
+	PSMI_LOCK(nids_lock);
 
 	if (hfi_nids == NULL) {
 		if ((err = psm3_ep_num_devunits(&num_units)))
@@ -320,11 +318,50 @@ psm3_ep_devnids(psm2_nid_t **nids, uint32_t *num_nids_o)
 			goto fail;
 		}
 	}
+
+fail:
+	PSMI_UNLOCK(nids_lock);
+	return err;
+}
+
+static void devnids_destroy(void)
+{
+	PSMI_LOCK(nids_lock);
+
+	if (hfi_nids) {
+		psmi_free(hfi_nids);
+		hfi_nids = NULL;
+		nnids = 0;
+	}
+
+	PSMI_UNLOCK(nids_lock);
+}
+
+// This is used to find devices with the same address as another process,
+// implying intra-node comms.
+// We populate hfi_nids and nnids with the set of network ids (NID) for
+// all the local NICs.
+// The caller will see if any of these NIDs match the NID of the remote process.
+// Note that NIDs are globally unique and include both subnet and NIC address
+// information, so we can compare them regardless of their subnet.
+// NIDs which are not on the same subnet will not match.
+// NIDs on the same subnet only match if they are the same NIC.
+// Two local NICs with the same subnet and same address is an unexpected
+// invalid config, and will silently match the two NICs.
+//
+static psm2_error_t
+psm3_ep_devnids(psm2_nid_t **nids, uint32_t *num_nids_o)
+{
+	PSMI_ERR_UNLESS_INITIALIZED(NULL);
+
+	psm2_error_t err = devnids_init();
+	if (err != PSM2_OK)
+		return err;
+
 	*nids = hfi_nids;
 	*num_nids_o = nnids;
 
-fail:
-	return err;
+	return PSM2_OK;
 }
 
 // Indicate if the given epid is a local process.
@@ -1037,12 +1074,12 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 		    "End-point close timeout over-ride.",
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)0, &timeout_intval)) {
-		timeout_in = timeout_intval.e_uint * SEC_ULL;
+		timeout_in = timeout_intval.e_uint * NSEC_PER_SEC;
 	} else if (timeout_in > 0) {
 		/* The timeout parameter provides the minimum timeout. A heuristic
 		 * is used to scale up the timeout linearly with the number of
 		 * endpoints, and we allow one second per 100 endpoints. */
-		timeout_in = max(timeout_in, (ep->connections * SEC_ULL) / 100);
+		timeout_in = max(timeout_in, (ep->connections * NSEC_PER_SEC) / 100);
 	}
 
 	if (timeout_in > 0 && timeout_in < PSMI_MIN_EP_CLOSE_TIMEOUT)
@@ -1174,22 +1211,19 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 		err = psm3_mq_free(mmq);
 	}
 
-	if (hfi_nids)
-	{
-		psmi_free(hfi_nids);
-		hfi_nids = NULL;
-		nnids = 0;
-	}
-
 	PSMI_UNLOCK(psm3_creation_lock);
 
 	if (_HFI_PRDBG_ON) {
 		_HFI_PRDBG_ALWAYS("Closed endpoint in %.3f secs\n",
 				 (double)cycles_to_nanosecs(get_cycles() -
-				 t_start) / SEC_ULL);
+				 t_start) / NSEC_PER_SEC);
 	}
-	if (psm3_opened_endpoint_count == 0)
+
+	if (psm3_opened_endpoint_count == 0) {
 		PSM3_GPU_EP_CLOSE();
+		devnids_destroy();
+	}
+
 	PSM2_LOG_MSG("leaving");
 	return err;
 }

@@ -170,7 +170,9 @@ static void am_update_directory(struct am_ctl_nodeinfo *, size_t segsz);
 static
 void amsh_atexit()
 {
-	static atomic_int atexit_once = 0;
+	// one-time transition from 0/false -> 1/true.
+	// enforces that we process on-exit logic exactly once.
+	static atomic_int atexit_once;
 	int expected = 0;
 
 	psm2_ep_t ep;

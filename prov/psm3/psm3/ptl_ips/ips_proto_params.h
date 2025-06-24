@@ -156,7 +156,6 @@
 
 /* scb flags */
 #define IPS_SEND_FLAG_PENDING		0x0100
-#define IPS_SEND_FLAG_PERSISTENT	0x0200
 #define IPS_SEND_FLAG_NO_LMC		0x0400
 
 #ifdef PSM_HAVE_GPU
@@ -175,6 +174,12 @@
 #ifdef PSM_SOCKETS
 #define IPS_SEND_FLAG_TCP_REMAINDER	0x2000	/* TCP data was partially sent out */
 #endif
+
+/* indicates that the scb may be treated unreliably (dropped) at the PSM
+ * protocol level, regardless of the reliability guarantees of the downstream
+ * transport
+ */
+#define IPS_SEND_FLAG_UNRELIABLE 0x4000
 
 /* 0x10000000, interrupt when done */
 #define IPS_SEND_FLAG_INTR		(1<<HFI_KHDR_INTR_SHIFT)

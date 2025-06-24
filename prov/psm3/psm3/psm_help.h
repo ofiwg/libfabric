@@ -171,19 +171,13 @@
 /* how many entries are in a statically allocated table */
 #define PSMI_HOWMANY(table) (sizeof(table)/sizeof(table[0]))
 
-// cycles (e.g. rdtsc) to time conversions
-#define SEC_ULL	 1000000000ULL
-#define MSEC_ULL 1000000ULL
-#define USEC_ULL 1000ULL
-#define NSEC_ULL 1ULL
-
 // time units conversions
-#define NSEC_PER_SEC  1000000000
-#define NSEC_PER_MSEC 1000000
-#define NSEC_PER_USEC 1000
-#define USEC_PER_SEC  1000000
-#define USEC_PER_MSEC 1000
-#define MSEC_PER_SEC  1000
+#define NSEC_PER_SEC  1000000000ULL
+#define NSEC_PER_MSEC 1000000ULL
+#define NSEC_PER_USEC 1000ULL
+#define USEC_PER_SEC  1000000ULL
+#define USEC_PER_MSEC 1000ULL
+#define MSEC_PER_SEC  1000ULL
 
 #define PSMI_TRUE   1
 #define PSMI_FALSE  0

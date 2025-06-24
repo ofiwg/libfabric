@@ -84,6 +84,13 @@
 #define PSMI_SL_MIN	0
 #define PSMI_SL_MAX	31
 
+#ifdef PSM_FI
+#define EP_FAULTINJ_DELAYCONN 10       /* 1 every X connect calls delayed */
+#define EP_DELAYCONN_DELAY_SECS 30
+#define EP_FAULTINJ_DELAYDISC 10       /* 1 every X disconect calls delayed */
+#define EP_DELAYDISC_DELAY_SECS 30
+#endif /* PSM_FI */
+
 #define PSM_MCTXT_APPEND(head, node)	\
 	node->mctxt_prev = head->mctxt_prev; \
 	node->mctxt_next = head; \
@@ -172,6 +179,11 @@ struct psm2_ep {
 #endif
 	uint32_t hfi_imm_size;	  /** Immediate data size */
 	uint32_t connections;	    /**> Number of connections */
+	uint32_t reconnect_timeout; // max total secs to restore HAL connection
+				    // PSM3_RECONNECT_TIMEOUT
+	uint8_t allow_reconnect:1;
+	uint8_t reserved:7;
+	// 1 byte unused for alignment
 
 	/* HAL indicates send segmentation support (Send DMA or UDP GSO)
 	 * by setting max_segs>1 and max_size > 1 MTU.
@@ -271,6 +283,9 @@ struct psm2_epaddr {
 	}								\
 	PSMI_PROFILE_UNBLOCK();						\
 } while (0)
+
+void psm3_ep_init(void);
+void psm3_ep_fini(void);
 
 int psm3_ep_device_is_enabled(const psm2_ep_t ep, int devid);
 

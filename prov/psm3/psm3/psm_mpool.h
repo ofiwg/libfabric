@@ -106,4 +106,9 @@ int psm3_mpool_get_obj_index_gen_count(void *obj,
 
 void *psm3_mpool_find_obj_by_index(mpool_t mp, int index);
 
+// to help debug IOs in flight
+typedef void psmi_mpool_callback_func_t(void *obj, void *context);
+void psmi_mpool_foreach(mpool_t mp, void *context,
+			psmi_mpool_callback_func_t *func);
+
 #endif
