@@ -38,6 +38,7 @@ void efa_rdm_pke_init_rtr_common(struct efa_rdm_pke *pkt_entry,
 
 	pkt_entry->pkt_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	pkt_entry->ope = txe;
+	pkt_entry->peer = txe->peer;
 }
 
 /**
@@ -83,7 +84,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rtr_rxe(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_rtr_hdr *rtr_hdr;
 
-	rxe = efa_rdm_ep_alloc_rxe(ep, pkt_entry->addr, ofi_op_read_rsp);
+	rxe = efa_rdm_ep_alloc_rxe(ep, pkt_entry->peer, ofi_op_read_rsp);
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 

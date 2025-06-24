@@ -46,6 +46,7 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 	struct efa_mr *iov_mr;
 
 	pke->ope = ope;
+	pke->peer = ope->peer;
 	if (data_size == 0) {
 		pke->pkt_size = payload_offset;
 		return 0;
