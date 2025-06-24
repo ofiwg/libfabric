@@ -3722,17 +3722,13 @@ communication, generally by taking advantage of network services that
 have been offloaded into hardware, though actual hardware offload
 support is not a requirement.
 
-# LINKx (LNX) provider (Technology Preview)
+# LINKx (LNX) provider
 
 The LNX provider is designed to link two or more providers, allowing
 applications to seamlessly use multiple providers or NICs. This provider
 uses the libfabric peer infrastructure to aid in the use of the
-underlying providers. This version of the provider currently supports
-linking the libfabric shared memory provider for intra-node traffic and
-another provider for inter-node traffic. Future releases of the provider
-will allow linking any number of providers and provide the users with
-the ability to influence the way the providers are utilized for traffic
-load.
+underlying providers. This version of the provider is able to link any
+libfabric provider which supports the FI_PEER capability.
 
 See [`fi_lnx`(7)](fi_lnx.7.html) for more information.
 
@@ -4871,6 +4867,19 @@ when opening an AV and use fi_av_set_user_id.
         with the passed in authorization key fi_addr_t.
 
     See the user ID section below.
+
+-   
+
+    *FI_FIREWALL_ADDR*
+    :   This flag indicates that the address is behind a firewall and
+        outgoing connections are not allowed. If there is not an
+        existing connection and the provider is unable to circumvent the
+        firewall, an FI_EFIREWALLADDR error should be expected. If
+        multiple addresses are being inserted simultaneously, the flag
+        applies to all of them. Additionally, it is possible that a
+        connection is available at insertion time, but is later torn
+        down. Future reconnects triggered by operations on the ep
+        (fi_send, for example) may also fail with the same error.
 
 ## fi_av_insertsvc
 
@@ -8775,9 +8784,13 @@ attempting to close, the call will return -FI_EBUSY.
 
 Outstanding operations posted to the endpoint when fi_close is called
 will be discarded. Discarded operations will silently be dropped, with
-no completions reported. Additionally, a provider may discard previously
-completed operations from the associated completion queue(s). The
-behavior to discard completed operations is provider specific.
+no completions reported. Memory buffers that the user associated with
+the endpoint by calling libfabric's transmission interfaces must not be
+released, deregistered, or reused until either a completion is generated
+or fi_close on the respective endpoint returns. Additionally, a provider
+may discard previously completed operations from the associated
+completion queue(s). The behavior to discard completed operations is
+provider specific.
 
 ## fi_ep_bind
 
@@ -9571,9 +9584,9 @@ uint32_t tclass; }; {% endhighlight %}
 ## caps - Capabilities
 
 The requested capabilities of the context. The capabilities must be a
-subset of those requested of the associated endpoint. See the
-CAPABILITIES section of fi_getinfo(3) for capability details. If the
-caps field is 0 on input to fi_getinfo(3), the applicable capability
+subset of those requested of the associated endpoint in fi_info-\>caps.
+See the CAPABILITIES section of fi_getinfo(3) for capability details. If
+the caps field is 0 on input to fi_getinfo(3), the applicable capability
 bits from the fi_info structure will be used.
 
 The following capabilities apply to the transmit attributes: FI_MSG,
@@ -9858,9 +9871,9 @@ size_t iov_limit; }; {% endhighlight %}
 ## caps - Capabilities
 
 The requested capabilities of the context. The capabilities must be a
-subset of those requested of the associated endpoint. See the
-CAPABILITIES section if fi_getinfo(3) for capability details. If the
-caps field is 0 on input to fi_getinfo(3), the applicable capability
+subset of those requested of the associated endpoint in fi_info-\>caps.
+See the CAPABILITIES section of fi_getinfo(3) for capability details. If
+the caps field is 0 on input to fi_getinfo(3), the applicable capability
 bits from the fi_info structure will be used.
 
 The following capabilities apply to the receive attributes: FI_MSG,
@@ -10966,6 +10979,9 @@ const char *fi_strerror(int errno);
 *FI_ENOMR*
 :   Memory registration limit exceeded
 
+*FI_EFIREWALLADDR*
+:   Host address unreachable due to firewall
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html)
@@ -11926,6 +11942,10 @@ of input flags. Valid flags include the following.
     the node and/or service parameter must be non-NULL. This flag is
     often used with passive endpoints.
 
+*FI_RESCAN*
+:   Indicates that the provider should rescan available network
+    interfaces. This operation may be computationally expensive.
+
 # RETURN VALUE
 
 fi_getinfo() returns 0 on success. On error, fi_getinfo() returns a
@@ -12799,17 +12819,23 @@ fi_mr_attr (defined below).
 ## fi_close
 
 Fi_close is used to release all resources associated with a registering
-a memory region. Once unregistered, further access to the registered
+a memory region. Once deregistered, further access to the registered
 memory is not guaranteed. Active or queued operations that reference a
-memory region being closed may fail or result in accesses to invalid
-memory. Applications are responsible for ensuring that a MR is no longer
-needed prior to closing it. Note that accesses to a closed MR from a
-remote peer will result in an error at the peer. The state of the local
-endpoint will be unaffected.
+memory region being closed may attempt to access an invalid memory
+region and fail. After an MR is closed, any new operations targeting the
+closed MR will also fail. Applications are responsible for ensuring that
+a MR is no longer needed prior to closing it. Note that accesses to a
+closed MR from a remote peer will result in an error at the peer. The
+state of the local endpoint will be unaffected.
 
-When closing the MR, there must be no opened endpoints or counters
-associated with the MR. If resources are still associated with the MR
-when attempting to close, the call will return -FI_EBUSY.
+For MRs that are associated with an endpoint (FI_MR_ENDPOINT flag is
+set), the MR must be closed before the endpoint. If resources are still
+associated with the MR when attempting to close, the call will return
+-FI_EBUSY.
+
+If a memory registration cache is used, the behavior of fi_close may be
+affected. More information on the memory registration cache is in the
+MEMORY REGISTRATION CACHE section.
 
 ## fi_mr_desc
 
@@ -15921,7 +15947,18 @@ fi_efa - The Amazon Elastic Fabric Adapter (EFA) Provider
 
 The EFA provider supports the Elastic Fabric Adapter (EFA) device on
 Amazon EC2. EFA provides reliable and unreliable datagram send/receive
-with direct hardware access from userspace (OS bypass).
+with direct hardware access from userspace (OS bypass). For reliable
+datagram (RDM) EP type, it supports two fabric names: `efa` and
+`efa-direct`. The `efa` fabric implements a set of [wire
+protocols](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md)
+to support more capabilities and features beyond the EFA device
+capabilities. The `efa-direct` fabric, on the contrary, offloads all
+libfabric data plane calls to the device directly without wire
+protocols. Compared to the `efa` fabric, the `efa-direct` fabric
+supports fewer capabilities and has more mode requirements for
+applications. But it provides a fast path to hand off application
+requests to the device. More details and difference between the two
+fabrics will be presented below.
 
 # SUPPORTED FEATURES
 
@@ -15932,17 +15969,23 @@ The following features are supported:
     on a new Scalable (unordered) Reliable Datagram protocol (SRD). SRD
     provides support for reliable datagrams and more complete error
     handling than typically seen with other Reliable Datagram (RD)
-    implementations. The EFA provider provides segmentation, reassembly
-    of out-of-order packets to provide send-after-send ordering
-    guarantees to applications via its *FI_EP_RDM* endpoint.
+    implementations.
 
 *RDM Endpoint capabilities*
-:   The following data transfer interfaces are supported via the
-    *FI_EP_RDM* endpoint: *FI_MSG*, *FI_TAGGED*, and *FI_RMA*.
-    *FI_SEND*, *FI_RECV*, *FI_DIRECTED_RECV*, *FI_MULTI_RECV*, and
-    *FI_SOURCE* capabilities are supported. The endpoint provides
-    send-after-send guarantees for data operations. The *FI_EP_RDM*
-    endpoint does not have a maximum message size.
+:   For the `efa` fabric, the following data transfer interfaces are
+    supported: *FI_MSG*, *FI_TAGGED*, *FI_SEND*, *FI_RECV*, *FI_RMA*,
+    *FI_WRITE*, *FI_READ*, *FI_ATOMIC*, *FI_DIRECTED_RECV*,
+    *FI_MULTI_RECV*, and *FI_SOURCE*. It provides SAS guarantees for
+    data operations, and does not have a maximum message size (for all
+    operations). For the `efa-direct` fabric, it supports *FI_MSG*,
+    *FI_SEND*, *FI_RECV*, *FI_RMA*, *FI_WRITE*, *FI_READ*, and
+    *FI_SOURCE*. As mentioned earlier, it doesn't provide SAS
+    guarantees, and has different maximum message sizes for different
+    operations. For MSG operations, the maximum message size is the MTU
+    size of the efa device (approximately 8KiB). For RMA operations, the
+    maximum message size is the maximum RDMA size of the EFA device. The
+    exact values of these sizes can be queried by the `fi_getopt` API
+    with option names `FI_OPT_MAX_MSG_SIZE` and `FI_OPT_MAX_RMA_SIZE`
 
 *DGRAM Endpoint capabilities*
 :   The DGRAM endpoint only supports *FI_MSG* capability with a maximum
@@ -15958,19 +16001,22 @@ The following features are supported:
 *Completion events*
 :   The provider supports *FI_CQ_FORMAT_CONTEXT*, *FI_CQ_FORMAT_MSG*,
     and *FI_CQ_FORMAT_DATA*. *FI_CQ_FORMAT_TAGGED* is supported on the
-    RDM endpoint. Wait objects are not currently supported.
+    `efa` fabric of RDM endpoint. Wait objects are not currently
+    supported.
 
 *Modes*
 :   The provider requires the use of *FI_MSG_PREFIX* when running over
-    the DGRAM endpoint, and requires *FI_MR_LOCAL* for all memory
-    registrations on the DGRAM endpoint.
+    the DGRAM endpoint. And it requires the use of *FI_CONTEXT2* mode
+    for DGRAM endpoint and the `efa-direct` fabric of RDM endpoint. The
+    `efa` fabric of RDM endpoint doesn't have these requirements.
 
 *Memory registration modes*
-:   The RDM endpoint does not require memory registration for send and
-    receive operations, i.e. it does not require *FI_MR_LOCAL*.
-    Applications may specify *FI_MR_LOCAL* in the MR mode flags in order
-    to use descriptors provided by the application. The *FI_EP_DGRAM*
-    endpoint only supports *FI_MR_LOCAL*.
+:   The `efa` fabric of RDM endpoint does not require memory
+    registration for send and receive operations, i.e. it does not
+    require *FI_MR_LOCAL*. Applications may specify *FI_MR_LOCAL* in the
+    MR mode flags in order to use descriptors provided by the
+    application. The `efa-direct` fabric of *FI_EP_RDM* endpint and the
+    *FI_EP_DGRAM* endpoint only supports *FI_MR_LOCAL*.
 
 *Progress*
 :   RDM and DGRAM endpoints support *FI_PROGRESS_MANUAL*. EFA
@@ -15982,32 +16028,38 @@ The following features are supported:
     provider by adding proper support for *FI_PROGRESS_AUTO*.
 
 *Threading*
-:   The RDM endpoint supports *FI_THREAD_SAFE*, the DGRAM endpoint
-    supports *FI_THREAD_DOMAIN*, i.e. the provider is not thread safe
-    when using the DGRAM endpoint.
+:   Both RDM and DGRAM endpoints supports *FI_THREAD_SAFE*.
 
 # LIMITATIONS
 
-The DGRAM endpoint does not support *FI_ATOMIC* interfaces. For RMA
-operations, completion events for RMA targets (*FI_RMA_EVENT*) is not
-supported. The DGRAM endpoint does not fully protect against resource
-overruns, so resource management is disabled for this endpoint
-(*FI_RM_DISABLED*).
+## Completion events
 
-No support for selective completions.
+-   Synchronous CQ read is not supported.
+-   Wait objects are not currently supported.
 
-No support for counters for the DGRAM endpoint.
+## RMA operations
 
-No support for inject.
+-   Completion events for RMA targets (*FI_RMA_EVENT*) is not supported.
+-   For the `efa-direct` fabric, the target side of RMA operation must
+    insert the initiator side's address into AV before the RMA operation
+    is kicked off, due to a current device limitation. The same
+    limitation applies to the `efa` fabric when the
+    `FI_OPT_EFA_HOMOGENEOUS_PEERS` option is set as `true`.
 
-## Zero-copy receive mode
+## [Zero-copy receive mode](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#48-user-receive-qp-feature--request-and-zero-copy-receive)
 
--   The receive operation cannot be cancelled via `fi_cancel()`.
 -   Zero-copy receive mode can be enabled only if SHM transfer is
     disabled.
 -   Unless the application explicitly disables P2P, e.g. via
     FI_HMEM_P2P_DISABLED, zero-copy receive can be enabled only if
     available FI_HMEM devices all have P2P support.
+
+## `fi_cancel` support
+
+-   `fi_cancel` is only supported in the non-zero-copy-receive mode of
+    the `efa` fabric. It's not supported in `efa-direct`, DGRAM
+    endpoint, and the zero-copy receive mode of the `efa` fabric in RDM
+    endpoint.
 
 When using FI_HMEM for AWS Neuron or Habana SynapseAI buffers, the
 provider requires peer to peer transaction support between the EFA and
@@ -16071,7 +16123,10 @@ supported by the EFA provider for AWS Neuron or Habana SynapseAI.
     homogeneous, meaning they run on the same platform, use the same
     software versions, and share identical capabilities. It accelerates
     the initial communication setup as interoperability between peers is
-    guaranteed. The default value is false.
+    guaranteed. When set to true, the target side of a RMA operation
+    must insert the initiator side's address into AV before the RMA
+    operation is kicked off, due to a current device limitation. The
+    default value is false.
 
 # PROVIDER SPECIFIC DOMAIN OPS
 
@@ -16096,6 +16151,14 @@ as follows:
 ``` c
 struct fi_efa_ops_domain {
     int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
+    int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
+              uint16_t *remote_qpn, uint32_t *remote_qkey);
+    int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
+    int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
+    int (*cq_open_ext)(struct fid_domain *domain_fid,
+               struct fi_cq_attr *attr,
+               struct fi_efa_cq_init_attr *efa_cq_init_attr,
+               struct fid_cq **cq_fid, void *context);
 };
 ```
 
@@ -16103,8 +16166,8 @@ It contains the following operations
 
 ### query_mr
 
-This op query an existing memory registration as input, and outputs the
-efa specific mr attribute which is defined as follows
+This op queries an existing memory registration as input, and outputs
+the efa specific mr attribute which is defined as follows
 
 ``` c
 struct fi_efa_mr_attr {
@@ -16144,6 +16207,135 @@ struct fi_efa_mr_attr {
 #### Return value
 
 **query_mr()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+### query_addr
+
+This op queries the following address information for a given endpoint
+and destination address.
+
+*ahn*
+:   Address handle number.
+
+*remote_qpn*
+:   Remote queue pair Number.
+
+*remote_qkey*
+:   qkey for the remote queue pair.
+
+#### Return value
+
+**query_addr()** returns FI_SUCCESS on success, or -FI_EINVAL on
+failure.
+
+### query_qp_wqs
+
+This op queries EFA specific Queue Pair work queue attributes for a
+given endpoint. It retrieves the send queue attributes in sq_attr and
+receive queue attributes in rq_attr, which is defined as follows.
+
+``` c
+struct fi_efa_wq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+    uint32_t *doorbell;
+    uint32_t max_batch;
+};
+```
+
+*buffer*
+:   Queue buffer.
+
+*entry_size*
+:   Size of each entry in the queue.
+
+*num_entries*
+:   Maximal number of entries in the queue.
+
+*doorbell*
+:   Queue doorbell.
+
+*max_batch*
+:   Maximum batch size for queue submissions.
+
+#### Return value
+
+**query_qp_wqs()** returns 0 on success, or the value of errno on
+failure (which indicates the failure reason).
+
+### query_cq
+
+This op queries EFA specific Completion Queue attributes for a given cq.
+
+``` c
+struct fi_efa_cq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+};
+```
+
+*buffer*
+:   Completion queue buffer.
+
+*entry_size*
+:   Size of each completion queue entry.
+
+*num_entries*
+:   Maximal number of entries in the completion queue.
+
+#### Return value
+
+**query_cq()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+### cq_open_ext
+
+This op creates a completion queue with external memory provided via
+dmabuf. The memory can be passed by supplying the following struct.
+
+``` c
+struct fi_efa_cq_init_attr {
+    uint64_t flags;
+    struct {
+        uint8_t *buffer;
+        uint64_t length;
+        uint64_t offset;
+        uint32_t fd;
+    } ext_mem_dmabuf;
+};
+```
+
+*flags*
+
+:   A bitwise OR of the various values described below.
+
+    FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF: create CQ with external memory
+    provided via dmabuf.
+
+*ext_mem_dmabuf*
+
+:   Structure containing information about external memory when using
+    FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF flag.
+
+    *buffer*
+    :   Pointer to the memory mapped in the process's virtual address
+        space. The field is optional, but if not provided, the use of CQ
+        poll interfaces should be avoided.
+
+    *length*
+    :   Length of the memory region to use.
+
+    *offset*
+    :   Offset within the dmabuf.
+
+    *fd*
+    :   File descriptor of the dmabuf.
+
+#### Return value
+
+**cq_open_ext()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
 
 # Traffic Class (tclass) in EFA
@@ -16371,6 +16563,13 @@ Known hooking providers include the following:
     histogram of data size operated in a workload execution. See the
     PROFILE HOOKS section for the report in the detail.
 
+*ofi_hook_monitor*
+:   Similar to *ofi_hook_profile*, this hooks data operation calls, cq
+    operation calls and mr registration calls. The API calls and the
+    amount of data being operated are accumulated and made available for
+    export via an external sampler through a shared communication file.
+    See the MONITOR HOOKS section for more details.
+
 # PERFORMANCE HOOKS
 
 The hook provider allows capturing inline performance data by accessing
@@ -16473,6 +16672,65 @@ columns contain the following fields:
     of data operated in the same data operation group.
 
 The report is logged using the FI_LOG_LEVEL trace level.
+
+# MONITOR HOOKS
+
+This hook provider builds on the "profile" hook provider and provides
+continuous readout capabilities useful for monitoring libfabric
+applications. It is enabled by setting FI_HOOK to "monitor".
+
+Similar to the "profile" hook provider, this provider counts the number
+of invoked API calls and accumulates the amount of data handled by each
+API call. Refer to the documentation on the "profile" hook for more
+information.
+
+Data export is facilitated using a communication file on the filesystem,
+which is created for each hooked libfabric provider. The monitor hook
+expects to be run on a tmpfs. If available and unless otherwise
+specified, files will be created under the tmpfs `/dev/shm`.
+
+A sampler can periodically read this file to extract the gathered data.
+Every N intercepted API calls or "ticks", the provider will check
+whether data export has been requested by the sampler. If so, the
+currently gathered counter data is copied to the file and the sampler
+informed about the new data. The provider-local counter data is then
+cleared. Each sample contains the counter delta to the previous sample.
+
+Communication files will be created at path
+`$FI_OFI_HOOK_MONITOR_BASEPATH/<uid>/<hostname>` and will have the name:
+`<ppid>_<pid>_<sequential id>_<job id>_<provider name>`. `ppid` and
+`pid` are taken from the perspective of the monitored application. In a
+batched environment running SLURM, `job id` is set to the SLURM job ID,
+otherwise it is set to 0.
+
+See [`fi_mon_sampler`(1)](fi_mon_sampler.1.html) for documentation on
+how to use the monitor provider sampler.
+
+## CONFIGURATION
+
+The "monitor" hook provider exposes several runtime options via
+environment variables:
+
+*FI_OFI_HOOK_MONITOR_BASEPATH*
+:   String to basepath for communication files. (default: /dev/shm/ofi)
+
+*FI_OFI_HOOK_MONITOR_DIR_MODE*
+:   POSIX mode/permission for directories in basepath. (default: 01700)
+
+*FI_OFI_HOOK_MONITOR_FILE_MODE*
+:   POSIX mode/permission for communication files. (default: 0600)
+
+*FI_OFI_HOOK_MONITOR_TICK_MAX*
+:   Number of API calls before communication files are checked for data
+    request. (default: 1024)
+
+*FI_OFI_HOOK_MONITOR_LINGER*
+:   Whether communication files should linger after termination.
+    (default: 0) This is useful to allow the sampler to read the last
+    counter data even if the libfabric application has already
+    terminated. Note: Using this option without a sampler results in
+    files cluttering FI_OFI_HOOK_MONITOR_BASEPATH. Make sure to either
+    run a sampler or clean these files manually.
 
 # LIMITATIONS
 
@@ -16619,8 +16877,8 @@ Endpoint types
 
 Capabilities
 :   Supported capabilities include *FI_MSG*, *FI_RMA, *FI_TAGGED*,
-    *FI_ATOMIC*, *FI_NAMED_RX_CTX*, *FI_SOURCE*, *FI_SEND*, *FI_RECV*,
-    *FI_MULTI_RECV*, *FI_DIRECTED_RECV*, *FI_SOURCE\*.
+    *FI_ATOMIC*, *FI_SOURCE*, *FI_SEND*, *FI_RECV*, *FI_MULTI_RECV*,
+    *FI_DIRECTED_RECV*, *FI_SOURCE\*.
 
 Notes on *FI_DIRECTED_RECV* capability: The immediate data which is sent
 within the "senddata" call to support *FI_DIRECTED_RECV* for OPX must be
@@ -16634,8 +16892,8 @@ Modes
     provider requires *FI_CONTEXT2*.
 
 Additional features
-:   Supported additional features include *FABRIC_DIRECT*, *scalable
-    endpoints*, and *counters*.
+:   Supported additional features include *FABRIC_DIRECT* and
+    *counters*.
 
 Progress
 :   *FI_PROGRESS_MANUAL* and *FI_PROGRESS_AUTO* are supported, for best
@@ -16708,6 +16966,16 @@ in the configure, the default value is runtime.
     function will issue PING requests to a remote connection. Reducing
     this value may improve performance at the expense of increased
     traffic on the OPX fabric. Default setting is 500.
+
+*FI_OPX_RELIABILITY_SERVICE_MAX_OUTSTANDING_BYTES*
+:   Integer. This setting controls the maximum number of bytes allowed
+    to be in-flight (sent but un-ACK'd by receiver) per reliability flow
+    (one-way communication between two endpoints).
+
+Valid values are in the range of 8192-150,994,944 (8KB-144MB),
+inclusive.
+
+Default setting is 7,340,032 (7MB).
 
 *FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE*
 :   Integer. This setting controls how frequently a receiving rank will
@@ -16816,11 +17084,36 @@ HFI selection logic.
 :   Boolean (1/0, on/off, true/false, yes/no). Disables SDMA offload
     hardware. Default is 0.
 
+*FI_OPX_MAX_PKT_SIZE*
+:   Integer. Set the maximum packet size which must be less than or
+    equal to the driver's MTU (Maximum Transmission Unit) size. Valid
+    values: 2048, 4096, 8192, 10240. Default is set to 10240 for
+    libraries built on CN5000 systems and set to 8192 for libraries
+    built on OPA100 systems.
+
 *FI_OPX_SDMA_MIN_PAYLOAD_BYTES*
 :   Integer. The minimum length in bytes where SDMA will be used. For
     messages smaller than this threshold, the send will be completed
     using PIO. Value must be between 64 and 2147483646. Defaults to
     16385.
+
+*FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE*
+:   Integer. The maximum number of times writev will be called during a
+    single poll cycle. Value must be between 1 and 1024. Defaults to 1.
+
+*FI_OPX_SDMA_MAX_IOVS_PER_WRITEV*
+:   Integer. The maximum number of IOVs passed to each writev call.
+    Value must be between 3 and 128. Defaults to 64.
+
+*FI_OPX_SDMA_MAX_PKTS*
+:   Integer. The maximum number of packets transmitted per SDMA request
+    when expected receive (TID) is NOT being used. Value must be between
+    1 and 128. Defaults to 32.
+
+*FI_OPX_SDMA_MAX_PKTS_TID*
+:   Integer. The maximum number of packets transmitted per SDMA request
+    when expected receive (TID) is being used. Value must be between 1
+    and 512. Defaults to 64.
 
 *FI_OPX_TID_MIN_PAYLOAD_BYTES*
 :   Integer. The minimum length in bytes where TID (Expected Receive)
@@ -16865,6 +17158,14 @@ HFI selection logic.
 :   Integer. Service Level. This will also determine Service Class and
     Virtual Lane. Default is 0
 
+*FI_OPX_GPU_IPC_INTRANODE*
+:   Boolean (0/1, on/off, true/false, yes/no). This setting controls
+    whether IPC will be used to facilitate GPU to GPU intranode copies
+    over PCIe, NVLINK, or xGMI. When this is turned off, GPU data will
+    be copied to the host before being copied to another GPU which is
+    slower than using IPC. This only has an effect with HMEM enabled
+    builds of OPX. Defaults to on.
+
 *FI_OPX_DEV_REG_SEND_THRESHOLD*
 :   Integer. The individual packet threshold where lengths above do not
     use a device registered copy when sending data from GPU. The default
@@ -16878,8 +17179,9 @@ HFI selection logic.
     configured with GDRCopy or ROCR support.
 
 *FI_OPX_MIXED_NETWORK*
-:   Integer. Indicates that the network is a mix of OPA100 and CN5000.
-    Needs to be set to 1 in case of mixed network. Default is 0.
+:   Boolean (1/0, on/off, true/false, yes/no). Indicates that the
+    network requires OPA100 support. Set to 0 if OPA100 support is not
+    needed. Default is 1.
 
 *FI_OPX_ROUTE_CONTROL*
 :   Integer. Specify the route control for each packet type. The format
@@ -16901,6 +17203,23 @@ Default is `0:0:0:0:0:0` on OPA100 and `4:4:4:4:0:4` on CN5000.
 *FI_OPX_LINK_DOWN_WAIT_TIME_MAX_SEC*
 :   Integer. The maximum time in seconds to wait for a link to come back
     up. Default is 70 seconds.
+
+*FI_OPX_MMAP_GUARD*
+:   Boolean (0/1, on/off, true/false, yes/no). Enable guards around
+    OPX/HFI mmaps. When enabled, this will cause a segfault when mmapped
+    memory is illegally accessed through buffer overruns or underruns.
+    Default is false.
+
+*FI_OPX_CONTEXT_SHARING*
+:   Boolean (1/0, on/off, true/false, yes/no). Enables context sharing
+    in OPX. Defaults to FALSE (1 HFI context per endpoint).
+
+*FI_OPX_ENDPOINTS_PER_HFI_CONTEXT*
+:   Integer. Specify how many endpoints should share a single HFI
+    context. Valid values are from 2 to 8. Default is to determine
+    optimal value based on the number of contexts available on the
+    system and number of processors online. Only applicable if context
+    sharing is enabled. Otherwise this value is ignored.
 
 # SEE ALSO
 
@@ -17793,18 +18112,17 @@ communication between processes on the same system.
 
 # SUPPORTED FEATURES
 
-This release contains an initial implementation of the SHM provider that
-offers the following support:
+The SHM provider offers the following support:
 
 *Endpoint types*
 :   The provider supports only endpoint type *FI_EP_RDM*.
 
 *Endpoint capabilities*
-:   Endpoints cna support any combinations of the following data
-    transfer capabilities: *FI_MSG*, *FI_TAGGED*, *FI_RMA*, amd
-    *FI_ATOMICS*. These capabilities can be further defined by
-    *FI_SEND*, *FI_RECV*, *FI_READ*, *FI_WRITE*, *FI_REMOTE_READ*, and
-    *FI_REMOTE_WRITE* to limit the direction of operations.
+:   Endpoints can support any combination of the following data transfer
+    capabilities: *FI_MSG*, *FI_TAGGED*, *FI_RMA*, amd *FI_ATOMICS*.
+    These capabilities can be further defined by *FI_SEND*, *FI_RECV*,
+    *FI_READ*, *FI_WRITE*, *FI_REMOTE_READ*, and *FI_REMOTE_WRITE* to
+    limit the direction of operations.
 
 *Modes*
 :   The provider does not require the use of any mode bits.
@@ -17863,11 +18181,14 @@ of the same name. The application can also override the endpoint name
 after creating an endpoint using setname() without any address format
 restrictions.
 
-*Msg flags* The provider currently only supports the FI_REMOTE_CQ_DATA
-msg flag.
+*Msg flags* The provider supports the following msg flags: - FI_CLAIM -
+FI_COMPLETION - FI_DELIVERY_COMPLETE - FI_DISCARD - FI_INJECT -
+FI_MULTI_RECV - FI_PEEK - FI_REMOTE_CQ_DATA
 
-*MR registration mode* The provider implements FI_MR_VIRT_ADDR memory
-mode.
+*MR registration mode* The provider can optimize RMA calls if the
+application supports FI_MR_VIRT_ADDR. Otherwise, no extra MR modes are
+required. If FI_HMEM support is requested, the provider will require
+FI_MR_HMEM.
 
 *Atomic operations* The provider supports all combinations of datatype
 and operations as long as the message is less than 4096 bytes (or 2048
@@ -17876,30 +18197,30 @@ for compare operations).
 # DSA
 
 Intel Data Streaming Accelerator (DSA) is an integrated accelerator in
-Intel Xeon processors starting with Sapphire Rapids generation. One of
-the capabilities of DSA is to offload memory copy operations from the
+Intel Xeon processors starting with the Sapphire Rapids generation. One
+of the capabilities of DSA is to offload memory copy operations from the
 CPU. A system may have one or more DSA devices. Each DSA device may have
 one or more work queues. The DSA specification can be found
 [here](https://www.intel.com/content/www/us/en/develop/articles/intel-data-streaming-accelerator-architecture-specification.html).
 
-The SAR protocol of SHM provider is enabled to take advantage of DSA to
-offload memory copy operations into and out of SAR buffers in shared
+The SAR protocol of the SHM provider is enabled to take advantage of DSA
+to offload memory copy operations into and out of SAR buffers in shared
 memory regions. To fully take advantage of the DSA offload capability,
-memory copy operations are performed asynchronously. Copy initiator
+memory copy operations are performed asynchronously. The copy initiator
 thread constructs the DSA commands and submits to work queues. A copy
-operation may consists of more than one DSA commands. In such case,
+operation may consist of more than one DSA command. In such a case,
 commands are spread across all available work queues in round robin
 fashion. The progress thread checks for DSA command completions. If the
 copy command successfully completes, it then notifies the peer to
-consume the data. If DSA encountered a page fault during command
-execution, the page fault is reported via completion records. In such
+consume the data. If DSA encounters a page fault during command
+execution, the page fault is reported via completion records. In such a
 case, the progress thread accesses the page to resolve the page fault
 and resubmits the command after adjusting for partial completions. One
 of the benefits of making memory copy operations asynchronous is that
 now data transfers between different target endpoints can be initiated
 in parallel. Use of Intel DSA in SAR protocol is disabled by default and
 can be enabled using an environment variable. Note that CMA must be
-disabled, e.g. FI_SHM_DISABLE_CMA=0, in order for DSA to be used. See
+disabled, e.g. FI_SHM_DISABLE_CMA=0, in order for DSA to be used. See
 the RUNTIME PARAMETERS section.
 
 Compiling with DSA capabilities depends on the accel-config library
@@ -17909,18 +18230,14 @@ with DSA requires using Linux Kernel 5.19.0-rc3 or later.
 DSA devices need to be setup just once before runtime. [This
 configuration
 file](https://github.com/intel/idxd-config/blob/stable/contrib/configs/os_profile.conf)
-can be used as a template with accel-config utility to configure the DSA
-devices.
+can be used as a template with the accel-config utility to configure the
+DSA devices.
 
 # LIMITATIONS
 
 The SHM provider has hard-coded maximums for supported queue sizes and
 data transfers. These values are reflected in the related fabric
-attribute structures
-
-EPs must be bound to both RX and TX CQs.
-
-No support for counters.
+attribute structures.
 
 # RUNTIME PARAMETERS
 
@@ -17941,11 +18258,10 @@ The *shm* provider checks for the following environment variables:
 :   Manually disables CMA. Default false
 
 *FI_SHM_USE_DSA_SAR*
-:   Enables memory copy offload to Intel DSA in SAR protocol. Default
-    false
+:   Enables memory copy offload to Intel DSA SAR protocol. Default false
 
 *FI_SHM_USE_XPMEM*
-:   SHM can use SAR, CMA or XPMEM for host memory transfer. If
+:   SHM can use SAR, CMA or XPMEM for host memory transfers. If
     FI_SHM_USE_XPMEM is set to 1, the provider will select XPMEM over
     CMA if XPMEM is available. Otherwise, if neither CMA nor XPMEM are
     available SHM shall default to the SAR protocol. Default 0
@@ -18177,6 +18493,18 @@ all environment variables defined for the tcp provider.
 :   Uses io_uring for socket operations if available, rather than going
     through the standard socket APIs (i.e. connect, accept, send, recv).
     Default: disabled.
+
+# CONTROL OPERATIONS
+
+The tcp provider supports the following control operations (see
+[`fi_control`(3)](fi_control.3.html)):
+
+*FI_GET_FD*
+:   Retrieve the underlying socket file descriptor associated with an
+    active endpoint. The argument must point to an integer where the
+    descriptor will be stored. This allows applications to tune socket
+    options not exposed through the libfabric API (SO_SNDBUF, SO_RCVBUF,
+    SO_BUSY_POLL, etc).
 
 # NOTES
 
@@ -18807,6 +19135,16 @@ provider and requires the use of shared receive contexts. See
 [`fi_rxm`(7)](fi_rxm.7.html). To enable XRC, the following environment
 variables must usually be set: FI_VERBS_PREFER_XRC and
 FI_OFI_RXM_USE_SRX.
+
+### Atomics
+
+Mellanox hardware has limited support for atomics on little-endian
+machines as the result buffer will be delivered back to the caller in
+big-endian, requiring the caller to handle the conversion back into
+little-endian for use. This limitation is exposed in OFI as well which
+uses the verbs atomic support directly. Use of atomics on Mellanox cards
+on little-endian machines is allowed but users should make note of this
+verbs limitation and do any conversion necessary.
 
 # RUNTIME PARAMETERS
 
@@ -19804,7 +20142,7 @@ FT_FUNC_COMPARE_ATOMICV, FT_FUNC_COMPARE_ATOMICMSG
 
 (3) All the client-server tests have the following usage model:
 
-    fi\_`<testname>`{=html} [OPTIONS](#options-1) start server
+    fi\_`<testname>`{=html} [OPTIONS](#options) start server
     fi\_`<testname>`{=html} `<host>`{=html} connect to server
 
 # COMMAND LINE OPTIONS
