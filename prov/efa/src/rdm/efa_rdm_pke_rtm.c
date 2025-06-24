@@ -162,7 +162,6 @@ void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
 		rxe->cq_entry.data = efa_rdm_pke_get_req_cq_data(pkt_entry);
 	}
 
-	rxe->addr = pkt_entry->addr;
 	rxe->msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
 	rxe->total_len = efa_rdm_pke_get_rtm_msg_length(pkt_entry);
 	if (rxe->op == ofi_op_tagged) {
@@ -176,13 +175,12 @@ void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
  *
  * @param[in,out]	pkt_entry	RTM packet entry
  * @param[in,out]	rxe			RX entry that matches the RTM
- * @param[in]		peer		efa_rdm_peer struct of receiver
  *
  * @returns
  * 0 on success
  * negative libfabric error code on failure
  */
-ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
+ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
 	int pkt_type;
@@ -198,8 +196,7 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry, struct efa_r
 
 	efa_rdm_tracepoint(rx_pke_proc_matched_msg_begin, (size_t) pkt_entry, pkt_entry->payload_size, rxe->msg_id, (size_t) rxe->cq_entry.op_context, rxe->total_len);
 	if (!rxe->peer) {
-		rxe->addr = pkt_entry->addr;
-		rxe->peer = peer;
+		rxe->peer = pkt_entry->peer;
 		assert(rxe->peer);
 		dlist_insert_tail(&rxe->peer_entry, &rxe->peer->rxe_list);
 	}
@@ -236,10 +233,10 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry, struct efa_r
 	rxe->msg_id = efa_rdm_pke_get_rtm_base_hdr(pkt_entry)->msg_id;
 
 	if (pkt_type == EFA_RDM_LONGREAD_MSGRTM_PKT || pkt_type == EFA_RDM_LONGREAD_TAGRTM_PKT)
-		return efa_rdm_pke_proc_matched_longread_rtm(pkt_entry, peer);
+		return efa_rdm_pke_proc_matched_longread_rtm(pkt_entry);
 
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
-		return efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry, peer);
+		return efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
 
 	if (pkt_type == EFA_RDM_EAGER_MSGRTM_PKT ||
 	    pkt_type == EFA_RDM_EAGER_TAGRTM_PKT ||
@@ -272,10 +269,8 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry, struct efa_r
  * @brief process a received non-tagged RTM packet
  *
  * @param[in,out]	pkt_entry	non-tagged RTM packet entry
- * @param[in]		peer		efa_rdm_peer struct of sender
  */
-static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry,
-				       struct efa_rdm_peer *peer)
+static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 {
 	ssize_t err;
 	struct efa_rdm_ep *ep;
@@ -287,10 +282,10 @@ static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry,
 
 	rtm_hdr = (struct efa_rdm_rtm_base_hdr *)pkt_entry->wiredata;
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
-		rxe = efa_rdm_rxe_map_lookup(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
+		rxe = efa_rdm_rxe_map_lookup(&pkt_entry->peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
 		rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 	} else {
-		rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, peer, &pkt_entry);
+		rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
 		if (OFI_UNLIKELY(!rxe)) {
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
@@ -303,7 +298,7 @@ static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry,
 	pkt_entry->ope = rxe;
 
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
-		err = efa_rdm_pke_proc_matched_rtm(pkt_entry, peer);
+		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
 		if (OFI_UNLIKELY(err)) {
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_MSGRTM);
 			efa_rdm_pke_release_rx(pkt_entry);
@@ -322,10 +317,8 @@ static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry,
  * @brief process a received tagged RTM packet
  *
  * @param[in,out]	pkt_entry	non-tagged RTM packet entry
- * @param[in]	peer	efa_rdm_peer struct of sender
  */
-static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry,
-				       struct efa_rdm_peer *peer)
+static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 {
 	ssize_t err;
 	struct efa_rdm_ep *ep;
@@ -337,10 +330,10 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry,
 
 	rtm_hdr = (struct efa_rdm_rtm_base_hdr *) pkt_entry->wiredata;
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
-		rxe = efa_rdm_rxe_map_lookup(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
+		rxe = efa_rdm_rxe_map_lookup(&pkt_entry->peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
 		rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 	} else {
-		rxe = efa_rdm_msg_alloc_rxe_for_tagrtm(ep, peer, &pkt_entry);
+		rxe = efa_rdm_msg_alloc_rxe_for_tagrtm(ep, &pkt_entry);
 		if (OFI_UNLIKELY(!rxe)) {
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
@@ -353,7 +346,7 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry,
 	pkt_entry->ope = rxe;
 
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
-		err = efa_rdm_pke_proc_matched_rtm(pkt_entry, peer);
+		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
 		if (OFI_UNLIKELY(err)) {
 			if (err == -FI_ENOMR)
 				return err;
@@ -398,7 +391,7 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_p
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-		return efa_rdm_pke_proc_msgrtm(pkt_entry, peer);
+		return efa_rdm_pke_proc_msgrtm(pkt_entry);
 	case EFA_RDM_EAGER_TAGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
@@ -407,7 +400,7 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_p
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		return efa_rdm_pke_proc_tagrtm(pkt_entry, peer);
+		return efa_rdm_pke_proc_tagrtm(pkt_entry);
 	case EFA_RDM_WRITE_RTA_PKT:
 		return efa_rdm_pke_proc_write_rta(pkt_entry);
 	case EFA_RDM_DC_WRITE_RTA_PKT:
@@ -435,11 +428,11 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_p
  * Otherwise, process it then process packet in the re-order buffer.
  *
  * @param[in,out]	pkt_entry	received RTM or RTA packet entry
- * @param[in]	peer	efa_rdm_peer struct corresponding to the sender
  */
-void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
+void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
 	struct efa_rdm_base_hdr *base_hdr;
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	bool slide_recvwin;
@@ -448,6 +441,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry, struct efa_r
 
 	ep = pkt_entry->ep;
 
+	peer = pkt_entry->peer;
 	assert(peer);
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
@@ -461,7 +455,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry, struct efa_r
 		if (rxe) {
 			if (rxe->state == EFA_RDM_RXE_MATCHED) {
 				pkt_entry->ope = rxe;
-				efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry, peer);
+				efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
 			} else {
 				assert(rxe->unexp_pkt);
 				unexp_pkt_entry = efa_rdm_pke_get_unexp(&pkt_entry);
@@ -541,7 +535,7 @@ ssize_t efa_rdm_pke_init_eager_msgrtm_zero_hdr(struct efa_rdm_pke *pkt_entry,
 				      struct efa_rdm_ope *txe)
 {
 	pkt_entry->ope = txe;
-	pkt_entry->addr = txe->addr;
+	pkt_entry->peer = txe->peer;
 
 	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe,
 						0, 0, txe->total_len);
@@ -861,7 +855,7 @@ void efa_rdm_pke_handle_medium_rtm_send_completion(struct efa_rdm_pke *pkt_entry
  * @param[in,out]	pkt_entry	packet entry
  * @param[in]	peer	efa_rdm_peer struct of the sender
  */
-ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
+ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
@@ -890,7 +884,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry, struc
 			efa_rdm_tracepoint(runtread_read_posted, rxe->msg_id,
 				    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
-			err = efa_rdm_pke_post_remote_read_or_nack(ep, peer, pkt_entry, rxe);
+			err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
 			if (err)
 				return err;
 		}
@@ -918,7 +912,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry, struc
 					return err;
 			} else {
 				msg_id = efa_rdm_pke_get_rtm_msg_id(cur);
-				efa_rdm_rxe_map_remove(&peer->rxe_map, msg_id,
+				efa_rdm_rxe_map_remove(&cur->peer->rxe_map, msg_id,
 						       rxe);
 			}
 		}
@@ -1132,6 +1126,7 @@ ssize_t efa_rdm_pke_init_longread_rtm(struct efa_rdm_pke *pkt_entry,
 
 	pkt_entry->pkt_size = hdr_size + txe->iov_count * sizeof(struct fi_rma_iov);
 	pkt_entry->ope = txe;
+	pkt_entry->peer = txe->peer;
 	return 0;
 }
 
@@ -1187,10 +1182,8 @@ void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry)
  * longread RTM
  *
  * @param[in,out]	pkt_entry	packet entry
- * @param[in]		peer		efa_rdm_peer struct of the sender
  */
-ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry,
-					      struct efa_rdm_peer *peer)
+ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
@@ -1212,7 +1205,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry,
 	efa_rdm_tracepoint(longread_read_posted, rxe->msg_id,
 		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
-	err = efa_rdm_pke_post_remote_read_or_nack(ep, peer, pkt_entry, rxe);
+	err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
 
 	efa_rdm_pke_release_rx(pkt_entry);
 	return err;
@@ -1350,17 +1343,15 @@ void efa_rdm_pke_handle_runtread_rtm_sent(struct efa_rdm_pke *pkt_entry, struct 
  */
 void efa_rdm_pke_handle_runtread_rtm_send_completion(struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
 	size_t pkt_data_size;
 
-	ep = pkt_entry->ep;
 	txe = pkt_entry->ope;
 	pkt_data_size = pkt_entry->payload_size;
 	txe->bytes_acked += pkt_data_size;
 
-	peer = efa_rdm_ep_get_peer(ep, txe->addr);
+	peer = txe->peer;
 	assert(peer);
 	assert(peer->num_runt_bytes_in_flight >= pkt_data_size);
 	peer->num_runt_bytes_in_flight -= pkt_data_size;

@@ -89,12 +89,9 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 		opt_hdr += sizeof(*connid_hdr);
 	}
 
-	pkt_entry->addr = txe->addr;
+	pkt_entry->peer = txe->peer;
 	assert(opt_hdr - pkt_entry->wiredata == efa_rdm_pke_get_req_hdr_size(pkt_entry));
 }
-
-
-
 
 /**
  * @brief return the optional raw addr header pointer in a req packet
