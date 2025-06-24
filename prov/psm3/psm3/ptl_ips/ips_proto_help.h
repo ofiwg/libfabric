@@ -377,7 +377,7 @@ ips_proto_is_expected_or_nak(struct ips_recvhdrq_event *rcv_ev))
 	psmi_assert(flowid == EP_FLOW_GO_BACK_N_PIO);
 	flow = &ipsaddr->flows[flowid];
 
-	sequence_num.psn_val = __be32_to_cpu(p_hdr->bth[2]);
+	sequence_num.psn_val = __be32_to_cpu(p_hdr->bth[2]) & proto->psn_mask;
 	if_pf(flow->recv_seq_num.psn_num == sequence_num.psn_num) {
 		flow->flags &= ~IPS_FLOW_FLAG_NAK_SEND;
 

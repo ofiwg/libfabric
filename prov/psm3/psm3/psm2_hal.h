@@ -392,8 +392,15 @@ struct _psmi_hal_instance
 				struct ips_proto *proto);
 	void (*hfp_ips_flow_init)(struct ips_flow *flow,
 				struct ips_proto *proto);
-	void (*hfp_ips_ipsaddr_disconnect)(struct ips_proto *proto,
-				ips_epaddr_t *ipsaddr);
+	void (*hfp_ips_ipsaddr_start_disconnect)(struct ips_proto *proto,
+				ips_epaddr_t *ipsaddr, uint8_t force);
+	void (*hfp_ips_ipsaddr_done_disconnect)(struct ips_proto *proto,
+				ips_epaddr_t *ipsaddr, uint8_t force);
+	psm2_error_t (*hfp_ips_ipsaddr_start_reconnect)(
+				struct ips_proto *proto,
+				ips_epaddr_t *ipsaddr,
+				const struct ips_connect_reqrep *req,
+				unsigned flags);
 	psm2_error_t (*hfp_ips_ibta_init)(struct ips_proto *proto);
 	psm2_error_t (*hfp_ips_path_rec_init)(struct ips_proto *proto,
 				struct ips_path_rec *path_rec,
@@ -589,7 +596,9 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 #define psmi_hal_ips_ipsaddr_init_connections(...)	        PSMI_HAL_DISPATCH(ips_ipsaddr_init_connections,__VA_ARGS__)
 #define psmi_hal_ips_ipsaddr_free(...)			        PSMI_HAL_DISPATCH(ips_ipsaddr_free,__VA_ARGS__)
 #define psmi_hal_ips_flow_init(...)	                        PSMI_HAL_DISPATCH(ips_flow_init,__VA_ARGS__)
-#define psmi_hal_ips_ipsaddr_disconnect(...)                    PSMI_HAL_DISPATCH(ips_ipsaddr_disconnect,__VA_ARGS__)
+#define psmi_hal_ips_ipsaddr_start_disconnect(...)              PSMI_HAL_DISPATCH(ips_ipsaddr_start_disconnect,__VA_ARGS__)
+#define psmi_hal_ips_ipsaddr_done_disconnect(...)               PSMI_HAL_DISPATCH(ips_ipsaddr_done_disconnect,__VA_ARGS__)
+#define psmi_hal_ips_ipsaddr_start_reconnect(...)               PSMI_HAL_DISPATCH(ips_ipsaddr_start_reconnect,__VA_ARGS__)
 #define psmi_hal_ips_ibta_init(...)                             PSMI_HAL_DISPATCH(ips_ibta_init,__VA_ARGS__)
 #define psmi_hal_ips_path_rec_init(...)                         PSMI_HAL_DISPATCH(ips_path_rec_init,__VA_ARGS__)
 #define psmi_hal_ips_ptl_pollintr(...)                          PSMI_HAL_DISPATCH(ips_ptl_pollintr,__VA_ARGS__)

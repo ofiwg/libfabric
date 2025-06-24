@@ -143,7 +143,7 @@ AS_IF([test "x$enable_psm3_rc" = "xcheck"],
 AS_IF([test "x$enable_psm3_rc" = "xyes"],
       [
        AS_IF([test "x$enable_psm3_verbs" = "xyes"],
-             [CPPFLAGS="$CPPFLAGS -DUSE_RC -DUSE_RDMA_READ"],
+             [CPPFLAGS="$CPPFLAGS -DUSE_RC"],
              [AC_MSG_ERROR([User RC QPs requires Verbs HAL active])])
       ])
 AS_IF([test "x$enable_psm3_src" = "xyes"],
@@ -581,6 +581,37 @@ AS_IF([test $have_uffd -eq 1],
 AC_DEFINE_UNQUOTED([HAVE_UFFD_UNMAP], [$have_uffd],
    [Define to 1 if platform supports userfault fd unmap])
 
+dnl Check uffd thread id support
+have_uffd_thread_id=0
+AS_IF([test $have_uffd -eq 1],
+     [AC_MSG_CHECKING([for userfaultfd thread id support])
+     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+                     #include <sys/types.h>
+                     #include <linux/userfaultfd.h>
+                     #include <unistd.h>
+                     #include <sys/syscall.h>
+                     #include <fcntl.h>
+                     #include <sys/ioctl.h>
+             ]],
+             [[
+                     int fd;
+                     struct uffdio_api api_obj;
+                     api_obj.api = UFFD_API;
+                     api_obj.features = UFFD_FEATURE_THREAD_ID |
+                                     UFFD_FEATURE_EVENT_UNMAP |
+                                     UFFD_FEATURE_EVENT_REMOVE |
+                                     UFFD_FEATURE_EVENT_REMAP;
+                     fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+                     return ioctl(fd, UFFDIO_API, &api_obj);
+             ]])
+     ],
+     [AC_MSG_RESULT([yes])
+            have_uffd_thread_id=1],
+     [AC_MSG_RESULT([no])])])
+
+AC_DEFINE_UNQUOTED([HAVE_UFFD_THREAD_ID], [$have_uffd_thread_id],
+     [Define to 1 if platform supports userfault fd thread id])
+
 dnl Check support to intercept syscalls
 AC_CHECK_HEADERS_ONCE(elf.h sys/auxv.h)
 
@@ -611,6 +642,22 @@ AS_IF([test x"$with_cuda" != x"no"],
                 [$with_cuda],
                 [have_cuda=1],
                 [AC_MSG_ERROR([CUDA headers not found. Cannot enable CUDA DL])])
+
+	have_cuda_dmabuf=1
+	AC_CHECK_DECL([cuMemGetHandleForAddressRange],
+		      [],
+		      [have_cuda_dmabuf=0],
+		      [[#include <cuda.h>]])
+
+	AC_CHECK_DECL([CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED],
+		      [],
+		      [have_cuda_dmabuf=0],
+		      [[#include <cuda.h>]])
+
+	AC_CHECK_DECL([CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD],
+		      [],
+		      [have_cuda_dmabuf=0],
+		      [[#include <cuda.h>]])
       ])
 
 AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_cuda" = "0" ],
@@ -619,6 +666,7 @@ AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_cuda" 
 AC_DEFINE_UNQUOTED([ENABLE_CUDA_DLOPEN], [$have_cuda], [CUDA Support])
 AC_DEFINE_UNQUOTED([HAVE_CUDA], [$have_cuda], [CUDA support])
 AC_DEFINE_UNQUOTED([PSM3_CUDA], [$have_cuda], [CUDA support])
+AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF], [$have_cuda_dmabuf], [CUDA dmabuf support])
 
 AS_IF([test "$have_cuda" = "1" && test x"$with_cuda" != x"yes"],
       [CPPFLAGS="$CPPFLAGS -DPSM_CUDA -DNVIDIA_GPU_DIRECT $cuda_CPPFLAGS"
@@ -793,6 +841,22 @@ AS_IF([test "x$enable_psm3_dsa" != "xno"],
                     ])
               ])
       ])
+
+dnl ------------- RDMA_READ
+AC_ARG_ENABLE([psm3-rdma-read],
+        [AS_HELP_STRING([--enable-psm3-rdma-read],
+                        [Enable RDMA_READ support @<:@default=check [check means match --enable-psm3-rc]@:>@])],
+        [],[enable_psm3_rdma_read=check])
+dnl RDMA_READ requires RC, so if RC is disabled, then this should default to match RC
+AS_IF([test "x$enable_psm3_rdma_read" = "xcheck"],
+      [enable_psm3_rdma_read=$enable_psm3_rc])
+AS_IF([test "x$enable_psm3_rdma_read" = "xyes"],
+      [
+       AS_IF([test "x$enable_psm3_rc" = "xyes"],
+             [CPPFLAGS="$CPPFLAGS -DUSE_RDMA_READ"],
+             [AC_MSG_ERROR([RDMA_READ requires User RC QPs active])])
+      ])
+
 dnl ------------- UMR
 psm3_umr_happy=0
 AC_ARG_ENABLE([psm3-umr-cache],
@@ -953,6 +1017,8 @@ AC_DEFINE([HAVE_PSM2_DL], 0, [Ignore HAVE_PSM2_DL])
 dnl FI_PROVIDER_SETUP([psm3])
 AC_DEFINE([HAVE_OPX], 0, [Ignore HAVE_OPX])
 AC_DEFINE([HAVE_OPX_DL], 0, [Ignore HAVE_OPX_DL])
+AC_DEFINE([HAVE_LNX], 0, [Ignore HAVE_LNX])
+AC_DEFINE([HAVE_LNX_DL], 0, [Ignore HAVE_LNX_DL])
 AC_DEFINE([HAVE_RXD], 0, [Ignore HAVE_RXD])
 AC_DEFINE([HAVE_RXD_DL], 0, [Ignore HAVE_RXD_DL])
 AC_DEFINE([HAVE_RXM], 0, [Ignore HAVE_RXM])

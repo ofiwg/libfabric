@@ -372,23 +372,38 @@ static void psm3_verbs_umrc_event_queue_process(psm2_mr_cache_t cache);
 static void register_cache_stats(psm2_mr_cache_t cache);
 
 static int mr_cache_key_cmp(const struct psm3_verbs_mr *a,
-							const struct psm3_verbs_mr *b)
+			    const struct psm3_verbs_mr *b,
+			    bool is_search)
 {
-	// to match addr, length and access must match
-	// we require exact match to avoid the issue of a release of the larger
-	// MR while smaller overlapping MR still in use, just in case an
-	// allocator frees the extra memory not in the smaller MR
-	// this may be paranoid, TBD if should treat a smaller MR as a match
-	// of a larger superset MR.
-	// we sort by addr then length so UMR interval search for invalidate works
-	if (a->addr < b->addr)
-		return -1;
-	else if (a->addr > b->addr)
-		return 1;
-	if (a->length < b->length)
-		return -1;
-	else if (a->length > b->length)
-		return 1;
+	// In general, to match, addr, length and access must match.
+	// However, during lookup, for better performance, if the request MR
+	// ("a" here) is a subregion of an existing MR ("b" here), it should
+	// be treated as a match.
+	// we sort by addr then length so UMR interval search for invalidate
+	// works.
+	// Note: due to the nature of the RB being used, which does not track
+	// subtree bounds, the following code for search is not guaranteed to
+	// always match subsets, and could result in seemingly non-
+	// deterministic behavior. The check is constrained in search only as
+	// a simple best-effort optimization. A better solution is to adopt
+	// the interval-tree approach used in kernel (including RV module).
+	bool is_subset = false;
+
+	if (is_search)
+		is_subset = (a->addr >= b->addr) &&
+			    (((uint64_t)a->addr + a->length) <=
+			     ((uint64_t)b->addr + b->length));
+	if (!is_subset) {
+		/* Not a subregion */
+		if (a->addr < b->addr)
+			return -1;
+		else if (a->addr > b->addr)
+			return 1;
+		if (a->length < b->length)
+			return -1;
+		else if (a->length > b->length)
+			return 1;
+	}
 	if (a->access < b->access)
 		return -1;
 	else if (a->access > b->access)
@@ -404,7 +419,7 @@ static int mr_cache_key_cmp(const struct psm3_verbs_mr *a,
 // then provides all the rbtree manipulation functions
 // we want to control the compare funciton so we define RBTREE_CMP and thus
 // must define RBTREE_NO_EMIT_IPS_CL_QMAP_PREDECESSOR to avoid compiler errors
-#define RBTREE_CMP(a,b) mr_cache_key_cmp((a), (b))
+#define RBTREE_CMP(a, b, c) mr_cache_key_cmp((a), (b), (c))
 #define RBTREE_ASSERT                     psmi_assert
 #define RBTREE_MAP_COUNT(PAYLOAD_PTR)     ((PAYLOAD_PTR)->nelems)
 #define RBTREE_NO_EMIT_IPS_CL_QMAP_PREDECESSOR
@@ -1318,15 +1333,21 @@ static void dereg_mr(psm2_mr_cache_t cache, psm3_verbs_mr_t mrc)
 	ASSERT_MRC_PRE_DEREG_LOCK(cache, mrc);
 	_HFI_MMDBG("dereg MR "MRC_FMT"\n", MR_OUT_MRC(mrc));
 #ifdef PSM_HAVE_RNDV_MOD
+	// should not happen
 	if (cache->cache_mode == MR_CACHE_MODE_KERNEL
-		|| cache->cache_mode == MR_CACHE_MODE_RV)	// should not happen
+		|| cache->cache_mode == MR_CACHE_MODE_RV) {
 		ret = psm3_rv_dereg_mem(cache->rv, mrc->mr.rv_mr);
-	else
+		if (ret)
+			_HFI_ERROR("psm3_rv_dereg_mem failed: "MRC_FMT": %s\n",
+				MR_OUT_MRC(mrc), strerror(errno));
+	} else
 #endif
+	{
 		ret = ibv_dereg_mr(mrc->mr.ibv_mr);
-	if (ret)
-		_HFI_ERROR("unexpected dereg_mr failure "MRC_FMT": %s\n",
-					MR_OUT_MRC(mrc), strerror(errno));
+		if (ret)
+			_HFI_ERROR("ibv_dereg_mr failed: "MRC_FMT": %s\n",
+				MR_OUT_MRC(mrc), strerror(ret));
+	}
 	mrc->mr.mr_ptr = NULL;
 	cache->registered_bytes -= mrc->length;
 }
@@ -1370,6 +1391,15 @@ static psm3_verbs_mr_t prep_and_reg_mr(psm2_mr_cache_t cache,
 		mrc->lkey = mrc->mr.rv_mr->lkey;
 		mrc->rkey = mrc->mr.rv_mr->rkey;
 	} else if (cache->cache_mode == MR_CACHE_MODE_RV) {
+		/* For kernel MR (used by kernel QP), need to check the buffer size */
+		if ((key->access & IBV_ACCESS_RDMA) &&
+		     key->length > cache->ep->verbs_ep.max_fmr_size) {
+			if (priority)
+				_HFI_ERROR("Req MR "MRC_FMT" too large: max_fmr_size(0x%"PRIx64")\n",
+					   MR_OUT_MRC(key), cache->ep->verbs_ep.max_fmr_size);
+			save_errno = EINVAL;
+			goto failed_reg_mr;
+		}
 		// kernel QP for RDMA, user QP for send DMA
 		mrc->mr.rv_mr = psm3_rv_reg_mem(cache->rv, cache->cmd_fd,
 										(key->access&IBV_ACCESS_RDMA)?NULL
@@ -1394,10 +1424,9 @@ static psm3_verbs_mr_t prep_and_reg_mr(psm2_mr_cache_t cache,
 #endif /* PSM_HAVE_RNDV_MOD */
 	{
 		// user space QPs for everything
-		mrc->mr.ibv_mr = ibv_reg_mr(cache->pd, key->addr, key->length,
-									key->access);
+		mrc->mr.ibv_mr = ibv_reg_mr(cache->pd, key->addr, key->length, key->access);
 		if (! mrc->mr.ibv_mr) {
-			save_errno = errno;
+			save_errno = EINVAL;
 			goto failed_reg_mr;
 		}
 		mrc->iova = (uintptr_t)key->addr;
@@ -1636,10 +1665,20 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 #else
 #ifdef PSM_HAVE_GPU
 	psmi_assert(!!(access & IBV_ACCESS_IS_GPU_ADDR) == (PSM3_IS_GPU_MEM(addr)));
-	if (access & IBV_ACCESS_IS_GPU_ADDR)
+	if (access & IBV_ACCESS_IS_GPU_ADDR) {
 		PSM3_GPU_ROUNDUP_RV_REG_MR(cache->ep, &addr, &length, access);
+	} else
 #endif /* PSM_HAVE_GPU */
 #endif /* PSM_HAVE_RNDV_MOD */
+	{
+		/* Round up cpu buffers */
+		uint64_t start = (uint64_t)addr;
+		uint64_t end = ROUNDUP64P2(start + length, PSMI_PAGESIZE);
+
+		start = ROUNDDOWN64P2(start, PSMI_PAGESIZE);
+		addr = (void *)start;
+		length = end - start;
+	}
 
 	struct psm3_verbs_mr key = { // our search key
 		.addr = addr,
@@ -2100,15 +2139,17 @@ void psm3_verbs_umrc_uffd_callback(psm2_mr_cache_t cache, uint64_t addr,
 void psm3_verbs_umrc_worker_dereg(struct psm3_verbs_mr *mrc)
 {
 	psm2_mr_cache_t cache = mrc->cache;
+	int err;
 
 	// we chose to do ibv_dereg_mr outside the progress_lock to reduce
 	// jitter.  However, that means we can't use dereg_mr(), so replicate its
 	// MR_CACHE_MODE_USER code here
 	ASSERT_MRC_PRE_DEREG_LOCK(cache, mrc);
 	_HFI_MMDBG("dereg MR "MRC_FMT" ptr %p \n", MR_OUT_MRC(mrc), mrc);
-	if (ibv_dereg_mr(mrc->mr.ibv_mr))
-		_HFI_ERROR("unexpected dereg_mr failure "MRC_FMT": %s\n",
-					MR_OUT_MRC(mrc), strerror(errno));
+	err = ibv_dereg_mr(mrc->mr.ibv_mr);
+	if (err)
+		_HFI_ERROR("ibv_dereg_mr failed: "MRC_FMT": %s\n",
+			MR_OUT_MRC(mrc), strerror(err));
 	mrc->mr.mr_ptr = NULL;
 	PSMI_LOCK(cache->ep->mq->progress_lock);
 	cache->registered_bytes -= mrc->length;

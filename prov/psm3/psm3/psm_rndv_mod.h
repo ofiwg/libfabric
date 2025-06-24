@@ -100,6 +100,7 @@ struct local_info {
 	uint64_t capability;
 	uint32_t rv_index;		// unique within job on given NIC
 	uint64_t max_fmr_size;
+	uint32_t fr_page_list_len;
 };
 
 struct rv_event_ring {
@@ -115,6 +116,7 @@ struct psm2_rv {
 #endif
 	unsigned int ioctl_reg_mem;
 	struct rv_event_ring events;
+	unsigned int ioctl_attach;
 };
 typedef struct psm2_rv *psm3_rv_t;
 

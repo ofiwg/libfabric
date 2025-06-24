@@ -63,6 +63,7 @@
 /* ips_alloc_scb flags */
 #define IPS_SCB_FLAG_NONE	0x0
 #define IPS_SCB_FLAG_ADD_BUFFER 0x1
+#define IPS_SCB_FLAG_PRIORITY	0x2
 
 /* macros to update scb */
 // TBD - these accessor macros provide limited value, just use the raw fields
@@ -98,13 +99,13 @@ struct ips_scbctrl {
 	uint32_t scb_num_cur;
 	 SLIST_HEAD(scb_free, ips_scb) scb_free;
 	void *scb_base;
+	struct ips_proto *proto;
 	ips_scbctrl_avail_callback_fn_t scb_avail_callback;
 	void *scb_avail_context;
 
 	/* Immediate data for send buffers */
 	uint32_t scb_imm_size;
 	void *scb_imm_buf;
-	psmi_timer *timers;	/* ack/send timers */
 
 	/*
 	 * Send buffers (or bounce buffers) to keep user data if we need to
@@ -140,9 +141,6 @@ struct ips_scb {
 	};
 	uint64_t ack_timeout;	/* in cycles  */
 	uint64_t abs_timeout;	/* in cycles  */
-
-	psmi_timer *timer_send;	/* for sending packets */
-	psmi_timer *timer_ack;	/* for acking packets */
 
 	/* Used when composing packet */
 	psmi_seqnum_t seq_num;	// psn of last packet to xmit as part of this scb
@@ -191,6 +189,9 @@ struct ips_scb {
 	struct {
 		struct ips_message_header ips_lrh;
 	} PSMI_CACHEALIGN;
+
+	bool is_dynamic; /* true if allocated dynamically */
+	void *dyn_buf; /* buffer allocated dynamically */
 };
 
 
@@ -200,14 +201,14 @@ struct ips_scb {
 
 void psm3_ips_scbctrl_free(ips_scb_t *scb);
 int psm3_ips_scbctrl_bufalloc(ips_scb_t *scb);
-int psm3_ips_scbctrl_avail(struct ips_scbctrl *scbc);
 ips_scb_t *MOCKABLE(psm3_ips_scbctrl_alloc)(struct ips_scbctrl *scbc,
 				int scbnum, int len, uint32_t flags);
 MOCK_DCL_EPILOGUE(psm3_ips_scbctrl_alloc);
-ips_scb_t *MOCKABLE(psm3_ips_scbctrl_alloc_tiny)(struct ips_scbctrl *scbc);
+ips_scb_t *MOCKABLE(psm3_ips_scbctrl_alloc_tiny)(struct ips_scbctrl *scbc,
+						 uint32_t flags);
 MOCK_DCL_EPILOGUE(psm3_ips_scbctrl_alloc_tiny);
 
-psm2_error_t psm3_ips_scbctrl_init(psm2_ep_t ep,
+psm2_error_t psm3_ips_scbctrl_init(const struct ips_proto *proto,
 			     uint32_t numscb, uint32_t numbufs,
 			     uint32_t imm_size, uint32_t bufsize,
 			     ips_scbctrl_avail_callback_fn_t,

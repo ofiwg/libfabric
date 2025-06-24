@@ -69,6 +69,12 @@
 #include "ips_proto_help.h"
 #include "psm_mq_internal.h"
 
+#define _HFI_CONNDBG_OR_MMDBG(fmt, ...) \
+	do { \
+		if (_HFI_CONNDBG_ON || _HFI_MMDBG_ON) \
+			_HFI_DBG_ALWAYS(fmt, ##__VA_ARGS__); \
+	} while (0)
+
 /*
  * Timer callbacks.  When we need work to be done out of the receive process
  * loop, we schedule work on timers to be done at a later time.
@@ -82,10 +88,10 @@ static psm2_error_t
 ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current);
 
 // TBD explore when to use PSM_HAVE_REG_MR vs PSM_VERBS vs put in HAL
+// also code which tests RNDV_MOD or USE_RC is a candidate to move to HAL
 // any code which remains here and tests RNDV_MOD should test PSM_HAVE_RNDV_MOD
-// maybe this should be PSM_HAVE_RNDV_MOD && PSM_HAVE_RDMA
 #if defined(PSM_VERBS)
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 static void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow);
 static void ips_tid_reissue_rdma_write(struct ips_tid_send_desc *tidsendc);
 #endif
@@ -173,7 +179,7 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 	if (err != PSM2_OK)
 		goto fail;
 
-	if ((err = psm3_ips_scbctrl_init(ep, num_of_send_desc, 0,
+	if ((err = psm3_ips_scbctrl_init(proto, num_of_send_desc, 0,
 				    0, 0, ips_tid_scbavail_callback,
 				    protoexp, &protoexp->tid_scbc_rv)))
 		goto fail;
@@ -246,10 +252,8 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 	psmi_timer_entry_init(&protoexp->timer_getreqs,
 			      ips_tid_pendtids_timer_callback, protoexp);
 	STAILQ_INIT(&protoexp->pend_getreqsq);
-#if defined(PSM_VERBS)
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 	STAILQ_INIT(&protoexp->pend_err_resp);
-#endif
 #endif
 
 #ifdef PSM_HAVE_GPU
@@ -383,7 +387,7 @@ void ips_tid_scbavail_callback(struct ips_scbctrl *scbc, void *context)
 				   &protoexp->timer_send, PSMI_TIMER_PRIO_1);
 	if (!STAILQ_EMPTY(&protoexp->pend_getreqsq)
 #if defined(PSM_VERBS)
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 		|| !STAILQ_EMPTY(&protoexp->pend_err_resp)
 #endif
 #endif
@@ -392,15 +396,21 @@ void ips_tid_scbavail_callback(struct ips_scbctrl *scbc, void *context)
 				   &protoexp->timer_getreqs, PSMI_TIMER_PRIO_1);
 	return;
 }
+#endif // PSM_HAVE_RDMA
 
+#ifdef PSM_HAVE_REG_MR
 void ips_tid_mravail_callback(struct ips_proto *proto)
 {
 	// if we have Send DMA but not RDMA, no proto->protoexp
+#ifdef PSM_HAVE_RDMA
 	if (proto->protoexp)
 		ips_tid_scbavail_callback(NULL, proto->protoexp);
+#else
+	psmi_assert_always(!proto->protoexp);
+#endif
 }
+#endif
 
-#endif // PSM_HAVE_RDMA
 
 // On STL100 ips_tf was a user space control for the HW tidflow which
 // would fully process most valid inbound EXPTID packets within an RV Window.
@@ -619,7 +629,7 @@ psm3_ips_protoexp_send_tid_grant(struct ips_tid_recv_desc *tidrecvc)
 
 	ips_scb_buffer(scb) = (void *)&tidrecvc->tid_list;
 	scb->chunk_size = ips_scb_length(scb) = sizeof(tidrecvc->tid_list);
-	_HFI_MMDBG("sending CTS\n");
+	_HFI_MMDBG("sending CTS rkey 0x%x\n", tidrecvc->tid_list.tsess_rkey);
 
 	PSM2_LOG_EPM(OPCODE_LONG_CTS,PSM2_LOG_TX, proto->ep->epid,
 		    flow->ipsaddr->epaddr.epid ,"tidrecvc->getreq->tidgr_sendtoken; %d",
@@ -650,15 +660,21 @@ void psm3_ips_deallocate_send_chb(struct ips_gpu_hostbuf* chb, int reset)
 
 #ifdef PSM_HAVE_RDMA
 // indicate the given tidsendc has been completed and cleanup after it
+// This is called by the send CQE polling which might be within a send
+// so it cannot issue any sends directly, otherwise we will have a recursive
+// situation and potentially deeper recursion if more send CQEs found
+// so instead it queues callbacks and schedules timers to run the callback
 static void
 ips_protoexp_tidsendc_complete(struct ips_tid_send_desc *tidsendc)
 {
 #ifdef PSM_VERBS
 	struct ips_protoexp *protoexp = tidsendc->protoexp;
+#elif defined(PSM_HAVE_GPU)
+	struct ips_protoexp *protoexp = tidsendc->protoexp;
 #endif
 	psm2_mq_req_t req = tidsendc->mqreq;
 
-	_HFI_MMDBG("ips_protoexp_tidsendc_complete\n");
+	_HFI_MMDBG("ips_protoexp_tidsendc_complete tidsendc %p\n", tidsendc);
 	PSM2_LOG_MSG("entering");
 
 	req->send_msgoff += tidsendc->length;
@@ -691,8 +707,8 @@ ips_protoexp_tidsendc_complete(struct ips_tid_send_desc *tidsendc)
 	}
 #endif
 	/* Check if we can complete the send request. */
-	_HFI_MMDBG("ips_protoexp_tidsendc_complete off %u req len %u\n",
-		req->send_msgoff, req->req_data.send_msglen);
+	_HFI_MMDBG("ips_protoexp_tidsendc_complete tidsendc %p off %u req len %u\n",
+		tidsendc, req->send_msgoff, req->req_data.send_msglen);
 	if (req->send_msgoff >= req->req_data.send_msglen) {
 		psm3_mq_handle_rts_complete(req);
 	}
@@ -708,8 +724,8 @@ ips_protoexp_tidsendc_complete(struct ips_tid_send_desc *tidsendc)
 }
 #endif // PSM_HAVE_RDMA
 
-#ifdef PSM_HAVE_RDMA
 #if defined(PSM_VERBS)
+#ifdef PSM_HAVE_RDMA
 // our RDMA Write has completed on our send Q (RV or user space RC QP)
 // This is called by the send CQE polling which might be within a send
 // so it cannot issue any sends directly, otherwise we will have a recursive
@@ -728,25 +744,46 @@ ips_protoexp_rdma_write_completion(uint64_t wr_id)
 {
 	struct ips_tid_send_desc *tidsendc = (struct ips_tid_send_desc *)(uintptr_t)wr_id;
 
-	_HFI_MMDBG("ips_protoexp_rdma_write_completion\n");
+	_HFI_MMDBG("ips_protoexp_rdma_write_completion tidsendc %p\n", tidsendc);
 	PSM2_LOG_MSG("entering");
+#ifdef PSM_RC_RECONNECT
+	// for USER RC, expect rc_qp to be specified
+	psmi_assert(! (IPS_PROTOEXP_FLAG_USER_RC_QP(tidsendc->protoexp->proto->ep->rdmamode)) || tidsendc->rc_qp);
+	if (tidsendc->rc_qp) {
+		psm3_verbs_dec_posted(tidsendc->rc_qp);
+		psm3_verbs_free_rc_qp_if_drained("RDMA Complete", tidsendc->rc_qp);
+		tidsendc->rc_qp = NULL;
+	}
+#endif
 
 	ips_protoexp_tidsendc_complete(tidsendc);
 
 	PSM2_LOG_MSG("leaving");
 	return IPS_RECVHDRQ_CONTINUE;
 }
-#endif // defined(PSM_VERBS)
 #endif // PSM_HAVE_RDMA
+#endif // defined(PSM_VERBS)
+
+#ifdef PSM_RC_RECONNECT
+struct psm3_verbs_rc_qp *
+ips_protoexp_rdma_write_completion_rc_qp(psm2_ep_t ep, uint64_t wr_id)
+{
+	struct ips_tid_send_desc *tidsendc = (struct ips_tid_send_desc *)(uintptr_t)wr_id;
+	if (! tidsendc)
+		return NULL;
+	return tidsendc->rc_qp;
+}
+#endif /* PSM_RC_RECONNECT */
 
 #if defined(PSM_VERBS)
-#ifdef RNDV_MOD
-// our RV RDMA Write has completed with error on our send Q
+#ifdef PSM_HAVE_RDMA_ERR_CHK
+// our RV or RC RDMA Write has completed with error on our send Q
 // This is called by the send CQE polling which might be within a send
 // so it cannot issue any sends directly, otherwise we will have a recursive
 // situation and potentially deeper recursion if more send CQEs found
 // key notes in this regard:
 // if we don't return PSM2_OK, caller will consider it an unrecoverable error
+// for RC QPs, the caller will handle any necessary free of rc_qp if now drained
 int
 ips_protoexp_rdma_write_completion_error(psm2_ep_t ep, uint64_t wr_id,
 												enum ibv_wc_status wc_status)
@@ -757,17 +794,33 @@ ips_protoexp_rdma_write_completion_error(psm2_ep_t ep, uint64_t wr_id,
 	PSM2_LOG_MSG("entering");
 	if (! tidsendc) {
 		psm3_handle_error( PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-			"rv RDMA Write with invalid tidsendc: status: '%s' (%d)\n",
+			"failed RDMA Write with invalid tidsendc (wr_id) on %s port %u epid %s status: '%s' (%d)\n",
+			ep->dev_name, ep->portnum,
+			psm3_epaddr_get_name(ep->epid, 0),
 			ibv_wc_status_str(wc_status),(int)wc_status);
 		goto fail_ret;
 	}
 	protoexp = tidsendc->protoexp;
-	_HFI_MMDBG("failed rv RDMA Write on %s to %s status: '%s' (%d)\n",
-			ep->dev_name,
-			psm3_epaddr_get_name(tidsendc->ipsaddr->epaddr.epid, 0),
+#ifdef PSM_RC_RECONNECT
+	// for USER RC, expect rc_qp to be specified
+	psmi_assert(! (IPS_PROTOEXP_FLAG_USER_RC_QP(tidsendc->protoexp->proto->ep->rdmamode)) || tidsendc->rc_qp);
+	if (tidsendc->rc_qp) {
+		ips_protoexp_report_inflight_rc_qp(tidsendc->protoexp,
+			tidsendc->rc_qp);
+		tidsendc->err_chk_rdma_rcnt = tidsendc->rc_qp->reconnect_count;
+		psm3_verbs_dec_posted(tidsendc->rc_qp);
+		// caller will free_rc_qp if now drained
+		tidsendc->rc_qp = NULL;
+	}
+#endif
+	_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] failed RDMA Write tidsendc %p on %s port %u epid %s to %s status: '%s' (%d)\n",
+			tidsendc->ipsaddr, tidsendc, ep->dev_name, ep->portnum,
+			psm3_epaddr_get_name(ep->epid, 0),
+			psm3_epaddr_get_name(tidsendc->ipsaddr->epaddr.epid, 1),
 			ibv_wc_status_str(wc_status),(int)wc_status);
 
-	if (! protoexp->proto->ep->verbs_ep.rv_reconnect_timeout)
+	if (! ((IPS_PROTOEXP_FLAG_USER_RC_QP(protoexp->proto->ep->rdmamode) && tidsendc->ipsaddr->allow_reconnect)
+		|| (IPS_PROTOEXP_FLAG_KERNEL_QP(protoexp->proto->ep->rdmamode) && protoexp->proto->ep->reconnect_timeout)))
 		goto fail; /* reconnect disabled, can't recover */
 
 	// perhaps depending on wc_status
@@ -777,7 +830,7 @@ ips_protoexp_rdma_write_completion_error(psm2_ep_t ep, uint64_t wr_id,
 	// IBV_WC_RESP_TIMEOUT_ERR may be recoverable (is this applicable?)
 	// any others?  IB_WC_GENERAL_ERR?
 
-	tidsendc->rv_need_err_chk_rdma = 1;
+	tidsendc->need_err_chk_rdma = 1;
 	tidsendc->is_complete = 0;	// status of send of err_chk_rdma
 
 	/* Add as a pending op and ring up the timer */
@@ -790,19 +843,20 @@ ips_protoexp_rdma_write_completion_error(psm2_ep_t ep, uint64_t wr_id,
 
 fail:
 	psm3_handle_error( PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-			"failed rv RDMA Write on %s to %s status: '%s' (%d)\n",
-			ep->dev_name,
-			psm3_epaddr_get_name(tidsendc->ipsaddr->epaddr.epid, 0),
+			"failed RDMA Write on %s port %u epid %s to %s status: '%s' (%d)\n",
+			ep->dev_name, ep->portnum,
+			psm3_epaddr_get_name(ep->epid, 0),
+			psm3_epaddr_get_name(tidsendc->ipsaddr->epaddr.epid, 1),
 			ibv_wc_status_str(wc_status),(int)wc_status);
 fail_ret:
 	PSM2_LOG_MSG("leaving");
 	return PSM2_INTERNAL_ERR;
 }
-#endif // RNDV_MOD
+#endif /* PSM_HAVE_RDMA_ERR_CHK */
 #endif // defined(PSM_VERBS)
 
 #if defined(PSM_VERBS)
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 static psm2_error_t ips_protoexp_send_err_chk_rdma(struct ips_tid_send_desc *tidsendc)
 {
 	ips_scb_t *scb = NULL;
@@ -811,43 +865,63 @@ static psm2_error_t ips_protoexp_send_err_chk_rdma(struct ips_tid_send_desc *tid
 	ips_epaddr_t *ipsaddr = tidsendc->ipsaddr;
 	struct ips_flow *flow = &ipsaddr->flows[proto->msgflowid];
 	psm2_error_t err = PSM2_OK;
+#ifdef RNDV_MOD
 	uint32_t conn_count;
+#endif
 
 	PSM2_LOG_MSG("entering");
-	_HFI_MMDBG("ips_protoexp_send_err_chk_rdma\n");
+	_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] tidsendc %p\n", ipsaddr, tidsendc);
 
-	// we delay our sending of err chk rdma until after the connection is
-	// restored as reflected by an increment of conn_count relative to when
-	// tidsendc issued the rdma_write.  This also forms a barrier to
-	// ensure our err chk rdma does not arrive at receiver prior to the
-	// rdma completion (eg. in case we timeded out for RC QP ack but
-	// receiver got the full rdma write).
-	if (psm3_rv_get_conn_count(proto->ep->rv, ipsaddr->verbs.rv_conn,
-			tidsendc->rv_sconn_index, &conn_count)) {
-		psm3_handle_error( PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-			"send_err_chk_rdma: Connect unrecoverable on %s to %s\n",
-			proto->ep->dev_name,
-			psm3_epaddr_get_name(ipsaddr->epaddr.epid, 0));
-		err = PSM2_TIMEOUT; /* force a resend reschedule */
-		goto done;
-	}
+#ifdef RNDV_MOD
+	if (ipsaddr->verbs.rv_conn) {
+		psmi_assert(! IPS_PROTOEXP_FLAG_USER_RC_QP(proto->ep->rdmamode));
+		// we delay our sending of err chk rdma until after the connection is
+		// restored as reflected by an increment of conn_count relative to when
+		// tidsendc issued the rdma_write.  This also forms a barrier to
+		// ensure our err chk rdma does not arrive at receiver prior to the
+		// rdma completion (eg. in case we timeded out for RC QP ack but
+		// receiver got the full rdma write).
+		if (psm3_rv_get_conn_count(proto->ep->rv, ipsaddr->verbs.rv_conn,
+				tidsendc->rv_sconn_index, &conn_count)) {
+			psm3_handle_error( PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+				"send_err_chk_rdma: Connect unrecoverable on %s to %s\n",
+				proto->ep->dev_name,
+				psm3_epaddr_get_name(ipsaddr->epaddr.epid, 0));
+			err = PSM2_TIMEOUT; /* force a resend reschedule */
+			goto done;
+		}
 
-	// conn_count only advances.  Only need to test for equality.
-	// 32b reconnect_count sufficient for 13 years of constant reconnect
-	// at 100ms intervals (eg. RV_DELAY) before wrapping
-	if (conn_count == tidsendc->rv_conn_count) {
-		err = PSM2_TIMEOUT; /* force a resend reschedule */
-		goto done;
+		// conn_count only advances.  Only need to test for equality.
+		// 32b reconnect_count sufficient for 13 years of constant reconnect
+		// at 100ms intervals (eg. RV_DELAY) before wrapping
+		if (conn_count == tidsendc->rv_conn_count) {
+			err = PSM2_TIMEOUT; /* force a resend reschedule */
+			goto done;
+		}
 	}
+#endif /* RNDV_MOD */
+#ifdef USE_RC
+	if (IPS_PROTOEXP_FLAG_USER_RC_QP(proto->ep->rdmamode)) {
+#ifdef RNDV_MOD
+		psmi_assert(! ipsaddr->verbs.rv_conn);
+#endif
+		if (! (ipsaddr->verbs.rc_connected)) {
+			psmi_assert(ipsaddr->reconnecting);
+			err = PSM2_TIMEOUT; /* force a resend reschedule */
+			goto done;
+		}
+	}
+#endif /* USE_RC */
 
 	// limit to 1 outstanding per remote connection.
 	// receiver can only queue 1 response if it's low on scb's
-	if (ipsaddr->verbs.rv_err_chk_rdma_outstanding) {
+	if (ipsaddr->verbs.err_chk_rdma_outstanding) {
 		err = PSM2_TIMEOUT; /* force a resend reschedule */
 		goto done;
 	}
 
-	scb = psm3_ips_scbctrl_alloc(&protoexp->tid_scbc_rv, 1, 0, 0);
+	scb = psm3_ips_scbctrl_alloc(&protoexp->tid_scbc_rv, 1, 0,
+				     IPS_SCB_FLAG_PRIORITY);
 	if (scb == NULL) {
 		// ips_tid_scbavail_callback will trigger pend_sendq again
 		// and call ips_tid_pendsend_timer_callback
@@ -855,7 +929,7 @@ static psm2_error_t ips_protoexp_send_err_chk_rdma(struct ips_tid_send_desc *tid
 		goto done;
 	}
 
-	_HFI_MMDBG("sending ERR_CHK_RDMA\n");
+	_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] sending ERR_CHK_RDMA tidsendc %p\n", ipsaddr, tidsendc);
 	PSM2_LOG_EPM(OPCODE_ERR_CHK_RDMA,PSM2_LOG_TX, proto->ep->epid,
 			ipsaddr->epaddr.epid,
 			"psm3_mpool_get_obj_index(tidsendc->mqreq): %d, tidsendc->rdescid. _desc_genc %d _desc_idx: %d, tidsendc->sdescid._desc_idx: %d",
@@ -874,8 +948,17 @@ static psm2_error_t ips_protoexp_send_err_chk_rdma(struct ips_tid_send_desc *tid
 	/* INTR makes sure remote end works on it immediately */
 	if (proto->flags & IPS_PROTO_FLAG_RCVTHREAD)
 		scb->scb_flags |= IPS_SEND_FLAG_INTR;
+#ifdef PSM_RC_RECONNECT
+	if (ipsaddr->allow_reconnect) {
+		// include reconnect_count of affected RC QP in ERR_CHK_RDMA payload
+		// so remote can determine if recv QP's CQEs have been drained
+		// as part of determining if the send RDMA was in fact received
+		ips_scb_buffer(scb) = (void*)&tidsendc->err_chk_rdma_rcnt;
+		scb->chunk_size = ips_scb_length(scb) = 1;
+	}
+#endif
 
-	ipsaddr->verbs.rv_err_chk_rdma_outstanding = 1;
+	ipsaddr->verbs.err_chk_rdma_outstanding = 1;
 	tidsendc->is_complete = 1;	// status of send of err_chk_rdma
 
 	proto->epaddr_stats.err_chk_rdma_send++;
@@ -888,11 +971,11 @@ done:
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
-#endif // RNDV_MOD
+#endif /* PSM_HAVE_RDMA_ERR_CHK */
 #endif // defined(PSM_VERBS)
 
 #if defined(PSM_VERBS)
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 // scan all alternate addresses for "expected" (multi-QP and multi-EP)
 // to see if a match for "got" can be found
 static
@@ -908,18 +991,134 @@ int ips_protoexp_ipsaddr_match(ips_epaddr_t *expected, ips_epaddr_t *got)
 
 	return 0;
 }
-#endif // RNDV_MOD
+#endif /* PSM_HAVE_RDMA_ERR_CHK */
 #endif // defined(PSM_VERBS)
 
 #if defined(PSM_VERBS)
+#ifdef PSM_HAVE_RDMA_ERR_CHK
+// process and compose info for response to an ERR_CHK_RDMA whose info has been
+// stashed in ipsaddr->verbs.*err_chk*
+// if unable to compose response now (still waiting for CQ to drain), sets
+//	err_chk_rdma_recheck and returns PSM2_NO_PROGRESS
+// otherwise returns PSM2_OK and all info needed to compose and send packet is
+//	in ipsaddr
+psm2_error_t ips_protoexp_do_err_chk_rdma(ips_epaddr_t *ipsaddr)
+{
+	struct ips_tid_recv_desc *tidrecvc;
+	ptl_arg_t rdesc_id = ipsaddr->verbs.err_chk_rdma_resp_rdesc_id;
+	struct ips_proto *proto = ipsaddr->epaddr.proto;
+	struct ips_protoexp *protoexp = proto->protoexp;
+	tidrecvc = &protoexp->tfc.tidrecvc[rdesc_id._desc_idx];
+
+	ipsaddr->verbs.err_chk_rdma_recheck = 0;
+
+	// for the rare case that ERR_CHK_RDMA has a rdescid which we completed
+	// a while ago, we need to sanity check not only rdescid, but also
+	// the identity of the sender and the sendtoken for the senders RTS
+	// this protects us in case rdescid generation has wrapped
+	if (tidrecvc->rdescid._desc_genc != rdesc_id._desc_genc
+		|| tidrecvc->state != TIDRECVC_STATE_BUSY
+		|| ! ips_protoexp_ipsaddr_match(tidrecvc->ipsaddr, ipsaddr)
+		|| tidrecvc->getreq->tidgr_sendtoken
+			!= ipsaddr->verbs.err_chk_rdma_sendtoken
+		) {
+		/* Receive descriptor mismatch in time and space.
+		 * Must have completed recv for this RDMA
+		 * (eg. sender timeout waiting for RC QP ack)
+		 */
+		ipsaddr->verbs.err_chk_rdma_resp_need_resend = 0;
+		_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] not found: rdma was done\n",
+			ipsaddr);
 #ifdef RNDV_MOD
+	} else if (ipsaddr->verbs.rv_conn
+			   && psm3_rv_scan_cq(proto->ep->rv, RV_WC_RECV_RDMA_WITH_IMM,
+				RDMA_IMMED_DESC_MASK,
+				RDMA_PACK_IMMED(tidrecvc->rdescid._desc_genc,
+								tidrecvc->rdescid._desc_idx, 0))) {
+		// the CQ scan above solves a very rare race where the receiving QP is
+		// very slow to issue CQEs and PSM happens to poll the UD QP and
+		// find the ERR_CHK_RDMA before finding the given inbound RDMA Write
+		// was successfully received.
+		// Due to reconnection essentially being a barrier, we know the
+		// CQE must be processed in RV drain prior to the new connection and
+		// hence prior to the err chk rdma on UD QP.  So we scan the RV CQ
+		// to close the race, if we find a matching completion we can
+		// respond with resend_needed=0 and know we will process the CQE
+		// soon to fully complete the RDMA receipt.
+		// We ignore RV_IDX in this scan, it should always match us and better
+		// to not ask for a resend and fail when we process the completion
+		// than to ask for an a resend into a freed buffer
+		_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] RV CQ shows rdma was done\n",
+			ipsaddr);
+		ipsaddr->verbs.err_chk_rdma_resp_need_resend = 0;
+#endif /* RNDV_MOD */
+#ifdef PSM_RC_RECONNECT
+	} else if (IPS_PROTOEXP_FLAG_USER_RC_QP(proto->ep->rdmamode)) {
+		// this is to solve a race where the receiving QP is very slow to
+		// isssue CQEs and PSM happens to poll the UD QP and
+		// find the ERR_CHK_RDMA before finding the given inbound RDMA Write
+		// was successfully received.
+		// So we use the reconnect_count in the ERR_CHK_RDMA packet to
+		// search for the matching ipsaddr rc_qp.  If the rc_qp still exists
+		// it has not yet been drained and we need to delay processing
+		// the ERR_CHK_RDMA until the QP has been drained (and freed) so
+		// we can be certain the RDMA Write will not successfully complete.
+		// The reconnect_count forms a barrier, since the lost QP connection
+		// will have a finite amount of processing and any RC QPs created
+		// since then will have a new reconnect_count.
+
+		// if ! allow_reconnect, failed RDMA is fatal at sender
+		// and we should never get ERR_CHK_RDMA
+		psmi_assert(ipsaddr->allow_reconnect);
+
+		if (ipsaddr->verbs.err_chk_rdma_rcnt == ipsaddr->reconnect_count) {
+			// This is our 1st discovery of the QP issue.
+			// flags==1 will cause HAL to force QP to ERR in drain_rc_qp
+			// We are not processing a RC QP CQE here, so no need to
+			// explicitly psm3_verbs_free_rc_qp_if_empty() if
+			// connection_error() reports NO_PROGRESS
+			_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] call connection error\n",
+				ipsaddr);
+			(void)psm3_ips_proto_connection_error(ipsaddr,
+				"ERR_CHK_RDMA", "before new REQ", 0, 1);
+			psmi_assert(ipsaddr->verbs.err_chk_rdma_rcnt
+					!= ipsaddr->reconnect_count);
+		}
+
+		if (psm3_verbs_have_rc_qp(ipsaddr, ipsaddr->verbs.err_chk_rdma_rcnt)) {
+			_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] need recheck: still have RC QP rcnt %u\n",
+				ipsaddr, ipsaddr->verbs.err_chk_rdma_rcnt);
+			// rc_qp still exists, must delay checking for RDMA done.
+			ipsaddr->verbs.err_chk_rdma_recheck = 1;
+			return PSM2_OK_NO_PROGRESS;
+		}
+		// QP is gone and we did not yet get RDMA completion so need resend
+		tidrecvc->stats.nReXmit++;
+		ipsaddr->verbs.err_chk_rdma_resp_need_resend = 1;
+		_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] need resend\n", ipsaddr);
+#endif /* PSM_RC_RECONNECT */
+	} else {
+		tidrecvc->stats.nReXmit++;
+		ipsaddr->verbs.err_chk_rdma_resp_need_resend = 1;
+		_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] need resend\n", ipsaddr);
+	}
+
+	ipsaddr->verbs.err_chk_rdma_recheck_timeout_secs = 0;
+	return PSM2_OK;
+}
+#endif /* PSM_HAVE_RDMA_ERR_CHK */
+#endif // defined(PSM_VERBS)
+
+#if defined(PSM_VERBS)
+#ifdef PSM_HAVE_RDMA_ERR_CHK
+// parse ERR_CHK_RDMA, stash info in ipsaddr->verbs.*err_chk* and attempt to process
+// and respond now if can
 int ips_protoexp_process_err_chk_rdma(struct ips_recvhdrq_event *rcv_ev)
 {
 	struct ips_proto *proto = rcv_ev->proto;
 	struct ips_protoexp *protoexp = proto->protoexp;
 	struct ips_message_header *p_hdr = rcv_ev->p_hdr;
 	ips_epaddr_t *ipsaddr = rcv_ev->ipsaddr;
-	__u32 sendtoken = p_hdr->mdata;
 	ptl_arg_t rdesc_id = p_hdr->data[0];
 	ptl_arg_t sdesc_id = p_hdr->data[1];
 	struct ips_tid_recv_desc *tidrecvc;
@@ -936,13 +1135,15 @@ int ips_protoexp_process_err_chk_rdma(struct ips_recvhdrq_event *rcv_ev)
 	/* processing specific to err chk rdma packet */
 	proto->epaddr_stats.err_chk_rdma_recv++;
 
-	_HFI_MMDBG("received ERR_CHK_RDMA\n");
+	_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] received ERR_CHK_RDMA rdescid._desc_idx: %d tidrecvc %p\n",
+		ipsaddr, rdesc_id._desc_idx,
+		&protoexp->tfc.tidrecvc[rdesc_id._desc_idx]);
 	PSM2_LOG_EPM(OPCODE_ERR_CHK_RDMA,PSM2_LOG_RX,ipsaddr->epaddr.epid,
 			proto->ep->epid,
 			"rdescid._desc_genc %d _desc_idx: %d, sdescid._desc_idx: %d",
 			rdesc_id._desc_genc,rdesc_id._desc_idx, sdesc_id._desc_idx);
 
-	if (ipsaddr->verbs.rv_need_send_err_chk_rdma_resp) {
+	if (ipsaddr->verbs.need_send_err_chk_rdma_resp) {
 		/* sender has >1 err chk rdma outstanding: protocol violation */
 		psm3_handle_error( PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 			"process_err_chk_rdma: Protocol Violation: > 1 outstanding from remote node %s on %s\n",
@@ -958,53 +1159,64 @@ int ips_protoexp_process_err_chk_rdma(struct ips_recvhdrq_event *rcv_ev)
 	tidrecvc->stats.nErrChkReceived++;
 
 	// stash information to build resp in ipsaddr
-	psmi_assert(! ipsaddr->verbs.rv_need_send_err_chk_rdma_resp);
-	ipsaddr->verbs.rv_need_send_err_chk_rdma_resp = 1;
-	ipsaddr->verbs.rv_err_chk_rdma_resp_rdesc_id = rdesc_id;
-	ipsaddr->verbs.rv_err_chk_rdma_resp_sdesc_id = sdesc_id;
-
-	// for the rare case that err_chk_rdma has a rdescid which we completed
-	// a while ago, we need to sanity check not only rdescid, but also
-	// the identity of the sender and the sendtoken for the senders RTS
-	// this protects us in case rdescid generation has wrapped
-	if (tidrecvc->rdescid._desc_genc != rdesc_id._desc_genc
-		|| tidrecvc->state != TIDRECVC_STATE_BUSY
-		|| ! ips_protoexp_ipsaddr_match(tidrecvc->ipsaddr, ipsaddr)
-		|| tidrecvc->getreq->tidgr_sendtoken != sendtoken
-		) {
-		/* Receive descriptor mismatch in time and space.
-		 * Must have completed recv for this RDMA
-		 * (eg. sender timeout waiting for RC QP ack)
-		 */
-		ipsaddr->verbs.rv_err_chk_rdma_resp_need_resend = 0;
-	} else if (psm3_rv_scan_cq(proto->ep->rv, RV_WC_RECV_RDMA_WITH_IMM,
-				RDMA_IMMED_DESC_MASK,
-				RDMA_PACK_IMMED(tidrecvc->rdescid._desc_genc,
-								tidrecvc->rdescid._desc_idx, 0))) {
-		// the CQ scan above solves a very rare race where the receiving QP is
-		// very slow to issue CQEs and PSM happens to poll the UD QP and find
-		// the err chk rdma before finding a succesful RDMA Write received.
-		// Due to reconnection essentially being a barrier, we know the
-		// CQE must be processed in RV drain prior to the new connection and
-		// hence prior to the err chk rdma on UD QP.  So we scan the RV CQ
-		// to close the race, if we find a matching completion we can
-		// respond with resend_needed=0 and know we will process the CQE
-		// soon to fully complete the RDMA receipt.
-		// We ignore RV_IDX in this scan, it should always match us and better
-		// to not ask for a resend and fail when we process the completion
-		// than to ask for an a resend into a freed buffer
-		ipsaddr->verbs.rv_err_chk_rdma_resp_need_resend = 0;
+	psmi_assert(! ipsaddr->verbs.need_send_err_chk_rdma_resp);
+	ipsaddr->verbs.need_send_err_chk_rdma_resp = 1;
+	ipsaddr->verbs.err_chk_rdma_sendtoken = p_hdr->mdata;
+	ipsaddr->verbs.err_chk_rdma_resp_rdesc_id = rdesc_id;
+	ipsaddr->verbs.err_chk_rdma_resp_sdesc_id = sdesc_id;
+#ifdef PSM_RC_RECONNECT
+	if (ipsaddr->allow_reconnect) {
+		if (! ips_recvhdrq_event_paylen(rcv_ev)) {
+			psm3_handle_error( PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+				"process_err_chk_rdma: Protocol Violation: reconnect_count omitted from remote node %s on %s\n",
+				psm3_epaddr_get_name(ipsaddr->epaddr.epid, 0),
+				proto->ep->dev_name);
+			goto do_acks;
+		} else {
+			// for forward compatibility, ignore extra bytes
+			ipsaddr->verbs.err_chk_rdma_rcnt = *(uint8_t*)ips_recvhdrq_event_payload(rcv_ev);
+			_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] rcnt %u\n",
+				ipsaddr, ipsaddr->verbs.err_chk_rdma_rcnt);
+		}
 	} else {
-		tidrecvc->stats.nReXmit++;
-		ipsaddr->verbs.rv_err_chk_rdma_resp_need_resend = 1;
+		// for forward compatibility, ignore payload
+		ipsaddr->verbs.err_chk_rdma_rcnt = 0;
 	}
+#endif
 
-	// try to send it now, will remain "queued" until we can send
-	ips_protoexp_send_err_chk_rdma_resp(flow);
-	if (ipsaddr->verbs.rv_need_send_err_chk_rdma_resp)
-		// ips_tid_scbavail_callback will trigger pend_err_resp again
-		// and call ips_tid_pendtids_timer_callback
+	if (PSM2_OK != ips_protoexp_do_err_chk_rdma(ipsaddr)) {
+		// Need to wait for RC QP CQE to drain before know proper
+		// ERR_CHK_RDMA_RESP to compose, so we will schedule a timer
+		// to recheck in near future
+		psmi_assert(ipsaddr->verbs.err_chk_rdma_recheck);
+		// allow up to 10 seconds for QP to drain
+		// we only keep a precision of seconds to save space
+		ipsaddr->verbs.err_chk_rdma_recheck_timeout_secs =
+			(cycles_to_nanosecs(get_cycles()) / NSEC_PER_SEC) + 10;
+		// timer_request is a noop if already scheduled.
+		// Only this code schedules timer_getreqs with a delay, so
+		// no harm except we may delay timer callback if a future
+		// scb_avail tries to schedule timer for immediate execution
+		_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] schedule timer\n", ipsaddr);
+		psmi_timer_request(protoexp->timerq, &protoexp->timer_getreqs,
+			get_cycles() + nanosecs_to_cycles(VERBS_QP_DRAIN_DELAY_USEC * NSEC_PER_USEC));
 		STAILQ_INSERT_TAIL(&protoexp->pend_err_resp, ipsaddr, verbs.pend_err_resp_next);
+	} else {
+		psmi_assert(! ipsaddr->verbs.err_chk_rdma_recheck);
+		psmi_assert(! ipsaddr->verbs.err_chk_rdma_recheck_timeout_secs);
+		// try to send it now, will remain "queued" until we can send
+		ips_protoexp_send_err_chk_rdma_resp(flow);
+		if (ipsaddr->verbs.need_send_err_chk_rdma_resp) {
+			_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] queue til scb avail\n",
+				ipsaddr);
+			// ips_tid_scbavail_callback will trigger pend_err_resp
+			// again and call ips_tid_pendtids_timer_callback
+			STAILQ_INSERT_TAIL(&protoexp->pend_err_resp, ipsaddr, verbs.pend_err_resp_next);
+		} else {
+			_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] sent ERR_CHK_RESP\n",
+				ipsaddr);
+		}
+	}
 
 do_acks:
 	if (__be32_to_cpu(p_hdr->bth[2]) & IPS_SEND_FLAG_ACKREQ)
@@ -1016,12 +1228,11 @@ done:
 	PSM2_LOG_MSG("leaving");
 	return IPS_RECVHDRQ_CONTINUE;
 }
-#endif // RNDV_MOD
+#endif /* PSM_HAVE_RDMA_ERR_CHK */
 #endif // defined(PSM_VERBS)
 
-
 #if defined(PSM_VERBS)
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 static
 void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow)
 {
@@ -1032,27 +1243,32 @@ void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow)
 
 	PSM2_LOG_MSG("entering");
 	_HFI_MMDBG("ips_protoexp_send_err_chk_rdma_resp\n");
-	psmi_assert(ipsaddr->verbs.rv_need_send_err_chk_rdma_resp);
-	scb = psm3_ips_scbctrl_alloc(&protoexp->tid_scbc_rv, 1, 0, 0);
+	psmi_assert(ipsaddr->verbs.need_send_err_chk_rdma_resp);
+	scb = psm3_ips_scbctrl_alloc(&protoexp->tid_scbc_rv, 1, 0,
+				     IPS_SCB_FLAG_PRIORITY);
 	if (scb == NULL) {
 		/* ips_tid_scbavail_callback() will reschedule */
 		return;
 	}
 
-	_HFI_MMDBG("sending ERR_CHK_RDMA_RESP\n");
+	_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] sending ERR_CHK_RDMA_RESP need_resend %d rdescid. _desc_genc %d _desc_idx: %d, sdescid._desc_idx: %d\n",
+		ipsaddr, ipsaddr->verbs.err_chk_rdma_resp_need_resend,
+		ipsaddr->verbs.err_chk_rdma_resp_rdesc_id._desc_genc,
+		ipsaddr->verbs.err_chk_rdma_resp_rdesc_id._desc_idx,
+		ipsaddr->verbs.err_chk_rdma_resp_sdesc_id._desc_idx);
 	PSM2_LOG_EPM(OPCODE_ERR_CHK_RDMA,PSM2_LOG_TX, proto->ep->epid,
 			ipsaddr->epaddr.epid,
 			"need_resend %d rdescid. _desc_genc %d _desc_idx: %d, sdescid._desc_idx: %d",
-			ipsaddr->verbs.rv_err_chk_rdma_resp_need_resend,
-			ipsaddr->verbs.rv_err_chk_rdma_resp_rdesc_id._desc_genc,
-			ipsaddr->verbs.rv_err_chk_rdma_resp_rdesc_id._desc_idx,
-			ipsaddr->verbs.rv_err_chk_rdma_resp_sdesc_id._desc_idx);
+			ipsaddr->verbs.err_chk_rdma_resp_need_resend,
+			ipsaddr->verbs.err_chk_rdma_resp_rdesc_id._desc_genc,
+			ipsaddr->verbs.err_chk_rdma_resp_rdesc_id._desc_idx,
+			ipsaddr->verbs.err_chk_rdma_resp_sdesc_id._desc_idx);
 
 	ips_scb_opcode(scb) = OPCODE_ERR_CHK_RDMA_RESP;
 	scb->ips_lrh.khdr.kdeth0 = 0;
-	scb->ips_lrh.mdata = ipsaddr->verbs.rv_err_chk_rdma_resp_need_resend;
-	scb->ips_lrh.data[0] = ipsaddr->verbs.rv_err_chk_rdma_resp_rdesc_id;
-	scb->ips_lrh.data[1] = ipsaddr->verbs.rv_err_chk_rdma_resp_sdesc_id;
+	scb->ips_lrh.mdata = ipsaddr->verbs.err_chk_rdma_resp_need_resend;
+	scb->ips_lrh.data[0] = ipsaddr->verbs.err_chk_rdma_resp_rdesc_id;
+	scb->ips_lrh.data[1] = ipsaddr->verbs.err_chk_rdma_resp_sdesc_id;
 	/* path is having issue, ask for ack */
 	scb->scb_flags |= IPS_SEND_FLAG_ACKREQ;
 	/* INTR makes sure remote end works on it immediately */
@@ -1060,7 +1276,7 @@ void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow)
 		scb->scb_flags |= IPS_SEND_FLAG_INTR;
 
 	// The scb will own reliable transmission of resp, we can clear flag
-	ipsaddr->verbs.rv_need_send_err_chk_rdma_resp = 0;
+	ipsaddr->verbs.need_send_err_chk_rdma_resp = 0;
 
 	proto->epaddr_stats.err_chk_rdma_resp_send++;
 
@@ -1070,11 +1286,11 @@ void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow)
 	PSM2_LOG_MSG("leaving");
 	return;
 }
-#endif // RNDV_MOD
+#endif /* PSM_HAVE_RDMA_ERR_CHK */
 #endif // defined(PSM_VERBS)
 
 #if defined(PSM_VERBS)
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 int ips_protoexp_process_err_chk_rdma_resp(struct ips_recvhdrq_event *rcv_ev)
 {
 	struct ips_protoexp *protoexp = rcv_ev->proto->protoexp;
@@ -1096,7 +1312,6 @@ int ips_protoexp_process_err_chk_rdma_resp(struct ips_recvhdrq_event *rcv_ev)
 
 	protoexp->proto->epaddr_stats.err_chk_rdma_resp_recv++;
 
-	_HFI_MMDBG("received ERR_CHK_RDMA_RESP\n");
 	PSM2_LOG_EPM(OPCODE_ERR_CHK_RDMA,PSM2_LOG_RX,ipsaddr->epaddr.epid,
 			protoexp->proto->ep->epid,
 			"rdescid. _desc_genc %d _desc_idx: %d, sdescid._desc_idx: %d",
@@ -1109,6 +1324,8 @@ int ips_protoexp_process_err_chk_rdma_resp(struct ips_recvhdrq_event *rcv_ev)
 	tidsendc = (struct ips_tid_send_desc *)
 		psm3_mpool_find_obj_by_index(protoexp->tid_desc_send_pool,
 					sdesc_id._desc_idx);
+	_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] received ERR_CHK_RDMA_RESP tidsendc %p\n",
+		tidsendc?tidsendc->ipsaddr:NULL, tidsendc);
 	_HFI_VDBG("desc_id=%d (%p)\n", sdesc_id._desc_idx, tidsendc);
 	if (tidsendc == NULL) {
 		_HFI_ERROR("err_chk_rdma_resp: Index %d is out of range\n",
@@ -1132,8 +1349,12 @@ int ips_protoexp_process_err_chk_rdma_resp(struct ips_recvhdrq_event *rcv_ev)
 		}
 	}
 
-	ipsaddr->verbs.rv_err_chk_rdma_outstanding = 0;
-	tidsendc->rv_need_err_chk_rdma = 0;
+	ipsaddr->verbs.err_chk_rdma_outstanding = 0;
+	tidsendc->need_err_chk_rdma = 0;
+#ifdef PSM_RC_RECONNECT
+	tidsendc->err_chk_rdma_rcnt = 0;	// for sanity, clearing is optional
+	psmi_assert(! tidsendc->rc_qp);
+#endif
 	if (need_resend)
 		ips_tid_reissue_rdma_write(tidsendc);
 	else
@@ -1149,15 +1370,15 @@ done:
 	PSM2_LOG_MSG("leaving");
 	return IPS_RECVHDRQ_CONTINUE;
 }
-#endif // RNDV_MOD
+#endif /* PSM_HAVE_RDMA_ERR_CHK */
 #endif // defined(PSM_VERBS)
 
+#if defined(PSM_VERBS)
 #ifdef PSM_HAVE_RDMA
 // Upon completion of an RDMA Write, a completion is delivered with
 // immediate data.  The immediate data is used
 // to indicate the completed receive of the RDMA Write.
 // If we use RDMA Read, the local SQ Completion will indicate this.
-#if defined(PSM_VERBS)
 // could build and pass a ips_recvhdrq_event or pass struct ips_recvhdrq
 // but all we really need is proto and len
 // conn indicates where we received RDMA Write, just for quick sanity check
@@ -1169,13 +1390,12 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 	struct ips_tid_recv_desc *tidrecvc;
 	struct ips_protoexp *protoexp = proto->protoexp;
 	ptl_arg_t desc_id;
-	_HFI_MMDBG("ips_protoexp_immed_data\n");
 	PSM2_LOG_MSG("entering");
 	desc_id._desc_genc = RDMA_UNPACK_IMMED_GENC(immed);
 	desc_id._desc_idx = RDMA_UNPACK_IMMED_IDX(immed);
-#endif
 
 	tidrecvc = &protoexp->tfc.tidrecvc[desc_id._desc_idx];
+	_HFI_MMDBG("ips_protoexp_immed_data tidrecvc %p\n", tidrecvc);
 
 	if ((tidrecvc->rdescid._desc_genc & IPS_HDR_RDESCID_GENC_MASK)
 		!= desc_id._desc_genc) {
@@ -1259,12 +1479,13 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 
 		/* Mark receive as done */
 		ips_tid_recv_free(tidrecvc);
-		_HFI_MMDBG("tidrecv done\n");
+		_HFI_MMDBG("tidrecv done tidrecvc %p\n", tidrecvc);
 	PSM2_LOG_MSG("leaving");
 
 	return IPS_RECVHDRQ_CONTINUE;
 }
 #endif // PSM_HAVE_RDMA
+#endif /* PSM_VERBS */
 
 
 
@@ -1525,11 +1746,14 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 	tidsendc = (struct ips_tid_send_desc *)
 	    psm3_mpool_get(protoexp->tid_desc_send_pool);
 	if (tidsendc == NULL) {
+		_HFI_MMDBG("failed to alloc tidsendc\n");
 		PSM2_LOG_MSG("leaving");
 		ips_logevent(protoexp->proto, tid_send_reqs, ipsaddr);
 		return PSM2_EP_NO_RESOURCES;
 	}
 
+	// mpool_get does not zero memory, so we must clear or initialize all fields
+	// we care about
 	req->ptl_req_ptr = (void *)tidsendc;
 	tidsendc->protoexp = protoexp;
 
@@ -1561,8 +1785,10 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 	tidsendc->buffer = (void *)((uintptr_t)tidsendc->userbuf
 				);
 	tidsendc->length = tid_list->tsess_length;
-	_HFI_MMDBG("tidsendc created userbuf %p buffer %p length %u\n",
-			tidsendc->userbuf,  tidsendc->buffer, tidsendc->length);
+	_HFI_MMDBG("tidsendc created %p rkey 0x%x userbuf %p buffer %p length %u\n",
+			tidsendc, tid_list->tsess_rkey,
+			tidsendc->userbuf,  tidsendc->buffer,
+			tidsendc->length);
 
 #ifdef PSM_HAVE_GPU
 	/* Matching on previous prefetches and initiating next prefetch */
@@ -1645,8 +1871,15 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 
 	tidsendc->is_complete = 0;
 	tidsendc->reserved = 0;
-#ifdef PSM_HAVE_RNDV_MOD
-	tidsendc->rv_need_err_chk_rdma = 0;
+
+#ifdef PSM_HAVE_RDMA_ERR_CHK
+	tidsendc->need_err_chk_rdma = 0;
+#ifdef PSM_RC_RECONNECT
+	tidsendc->rc_qp = NULL;
+	tidsendc->err_chk_rdma_rcnt = 0;	// for sanity, clearing is optional
+#endif
+#endif
+#if defined(PSM_HAVE_RDMA) && defined(RNDV_MOD)
 	tidsendc->rv_sconn_index = 0;
 	tidsendc->rv_conn_count = 0;
 #endif
@@ -1675,6 +1908,7 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 
 
 #if defined(PSM_VERBS)
+#ifdef PSM_HAVE_RDMA
 /*
  * Returns:
  *
@@ -1692,6 +1926,7 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
  */
 
 // issue RDMA Write in response to a CTS
+static
 psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 {
 	struct ips_protoexp *protoexp = tidsendc->protoexp;
@@ -1721,12 +1956,14 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 			// separate MR cache's per EP, so this confirms we have the same EP
 		tidsendc->mqreq->mr && tidsendc->mqreq->mr->cache == proto->mr_cache) {
 		// we can use the same MR as the whole mqreq
-		_HFI_MMDBG("CTS send chunk reference send: %p %u bytes via %p %"PRIu64"\n",
-			tidsendc->buffer, tidsendc->length, tidsendc->mqreq->mr->addr, tidsendc->mqreq->mr->length);
+		_HFI_MMDBG("CTS send chunk reference send: %p buf %p %u bytes via %p %"PRIu64"\n",
+			tidsendc, tidsendc->buffer, tidsendc->length,
+			tidsendc->mqreq->mr->addr, tidsendc->mqreq->mr->length);
 		tidsendc->mr = psm3_verbs_ref_mr(tidsendc->mqreq->mr);
 	} else {
 		// we need an MR for this chunk
-		_HFI_MMDBG("CTS send chunk register send: %p %u bytes\n", tidsendc->buffer , tidsendc->length);
+		_HFI_MMDBG("CTS send chunk register send: %p buf %p %u bytes\n",
+			tidsendc, tidsendc->buffer , tidsendc->length);
 		tidsendc->mr = psm3_verbs_reg_mr(proto->mr_cache, 1,
                          tidsendc->buffer, tidsendc->length, IBV_ACCESS_RDMA
 #ifdef PSM_HAVE_GPU
@@ -1740,14 +1977,23 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 
 	// if post_send fails below, we'll try again later
 	// completion handler decides how to handle any WQE/CQE errors
-	_HFI_MMDBG("tidsendc prior to post userbuf %p buffer %p length %u err %d outstanding %u\n",
-			tidsendc->userbuf,  tidsendc->buffer, tidsendc->length,
-			err, protoexp->proto->ep->verbs_ep.send_rdma_outstanding);
+	_HFI_MMDBG("tidsendc %p prior to post userbuf %p buffer %p rkey 0x%x length %u err %d"
+#ifdef PSM_VERBS
+	" outstanding %u"
+#endif
+	"\n",
+			tidsendc, tidsendc->userbuf,  tidsendc->buffer,
+			tidsendc->tid_list.tsess_rkey,
+			tidsendc->length, err
+#ifdef PSM_VERBS
+			, protoexp->proto->ep->verbs_ep.send_rdma_outstanding
+#endif
+			);
 #ifdef RNDV_MOD
 	if (err == PSM2_OK) {
 		psmi_assert(IPS_PROTOEXP_FLAG_ENABLED & protoexp->proto->ep->rdmamode);
 
-		if (IPS_PROTOEXP_FLAG_KERNEL_QP(protoexp->proto->ep->rdmamode))
+		if (IPS_PROTOEXP_FLAG_KERNEL_QP(protoexp->proto->ep->rdmamode)) {
 			err = psm3_verbs_post_rv_rdma_write_immed(
 				protoexp->proto->ep,
 				tidsendc->ipsaddr->verbs.rv_conn,
@@ -1760,7 +2006,29 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 				(uintptr_t)tidsendc,
 				&tidsendc->rv_sconn_index, &tidsendc->rv_conn_count);
 #if defined(USE_RC) /* AND */
-		else if (IPS_PROTOEXP_FLAG_USER_RC_QP(protoexp->proto->ep->rdmamode))
+		} else if (IPS_PROTOEXP_FLAG_USER_RC_QP(protoexp->proto->ep->rdmamode)) {
+#ifdef PSM_RC_RECONNECT
+			if (! tidsendc->ipsaddr->verbs.rc_connected) {
+				err = PSM2_TIMEOUT;	/* force a resend reschedule */
+			} else {
+				struct psm3_verbs_rc_qp *rc_qp =
+				    psm3_verbs_active_rc_qp(tidsendc->ipsaddr);
+				psmi_assert(rc_qp);
+				psmi_assert(! tidsendc->rc_qp);
+				tidsendc->rc_qp = rc_qp;
+				err = psm3_verbs_post_rdma_write_immed(
+					protoexp->proto->ep, rc_qp,
+					tidsendc->buffer, tidsendc->mr,
+					tidsendc->tid_list.tsess_raddr,
+					tidsendc->tid_list.tsess_rkey,
+					tidsendc->tid_list.tsess_length,
+					RDMA_PACK_IMMED(tidsendc->rdescid._desc_genc,
+							 tidsendc->rdescid._desc_idx, 0),
+					(uintptr_t)tidsendc);
+				if (err)
+					tidsendc->rc_qp = NULL;
+			}
+#else /* PSM_RC_RECONNECT */
 			err = psm3_verbs_post_rdma_write_immed(
 				protoexp->proto->ep,
 				tidsendc->ipsaddr->verbs.rc_qp,
@@ -1770,7 +2038,9 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 				RDMA_PACK_IMMED(tidsendc->rdescid._desc_genc,
 							 tidsendc->rdescid._desc_idx, 0),
 				(uintptr_t)tidsendc);
+#endif /* PSM_RC_RECONNECT */
 #endif // defined(USE_RC)
+		}
 	}
 	if (err == PSM2_OK) {
 		if (_HFI_PDBG_ON) {
@@ -1789,7 +2059,28 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 #if defined(USE_RC)
 	if (err == PSM2_OK) {
 		psmi_assert(IPS_PROTOEXP_FLAG_ENABLED & protoexp->proto->ep->rdmamode);
-		if (IPS_PROTOEXP_FLAG_USER_RC_QP(protoexp->proto->ep->rdmamode))
+		if (IPS_PROTOEXP_FLAG_USER_RC_QP(protoexp->proto->ep->rdmamode)) {
+#ifdef PSM_RC_RECONNECT
+			if (! tidsendc->ipsaddr->verbs.rc_connected) {
+				err = PSM2_TIMEOUT;	/* force a resend reschedule */
+			} else {
+				struct psm3_verbs_rc_qp *rc_qp =
+				    psm3_verbs_active_rc_qp(tidsendc->ipsaddr);
+				psmi_assert(rc_qp);
+				psmi_assert(! tidsendc->rc_qp);
+				tidsendc->rc_qp = rc_qp;
+				err = psm3_verbs_post_rdma_write_immed(
+					protoexp->proto->ep, rc_qp,
+					tidsendc->buffer, tidsendc->mr,
+					tidsendc->tid_list.tsess_raddr, tidsendc->tid_list.tsess_rkey,
+					tidsendc->tid_list.tsess_length,
+					RDMA_PACK_IMMED(tidsendc->rdescid._desc_genc,
+							 tidsendc->rdescid._desc_idx, 0),
+					(uintptr_t)tidsendc);
+				if (err)
+					tidsendc->rc_qp = NULL;
+			}
+#else /* PSM_RC_RECONNECT */
 			err = psm3_verbs_post_rdma_write_immed(
 				protoexp->proto->ep,
 				tidsendc->ipsaddr->verbs.rc_qp,
@@ -1799,6 +2090,8 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 				RDMA_PACK_IMMED(tidsendc->rdescid._desc_genc,
 							 tidsendc->rdescid._desc_idx, 0),
 				(uintptr_t)tidsendc);
+#endif /* PSM_RC_RECONNECT */
+		}
 	}
 	if (err == PSM2_OK) {
 		if (_HFI_PDBG_ON) {
@@ -1816,6 +2109,7 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 #endif // RNDV_MOD
 	return err;
 }
+#endif /* PSM_HAVE_RDMA */
 #endif // defined(PSM_VERBS)
 
 /*
@@ -1843,7 +2137,7 @@ psm2_error_t ips_tid_send_exp(struct ips_tid_send_desc *tidsendc)
 	struct ips_protoexp *protoexp = tidsendc->protoexp;
 #endif
 
-	_HFI_MMDBG("ips_tid_send_exp\n");
+	_HFI_MMDBG("ips_tid_send_exp tidsendc %p\n", tidsendc);
 #ifdef PSM_HAVE_GPU
 	struct ips_gpu_hostbuf *chb, *chb_next;
 	uint32_t offset_in_chb, i;
@@ -1896,8 +2190,10 @@ psm2_error_t ips_tid_send_exp(struct ips_tid_send_desc *tidsendc)
 		tidsendc->gpu_hostbuf[1] = NULL;
 	}
 #endif
-#if   defined(PSM_VERBS)
+#if   defined(PSM_VERBS) && defined(PSM_HAVE_RDMA)
 	err = ips_tid_issue_rdma_write(tidsendc);
+#else
+	err = PSM2_INTERNAL_ERR;	// should not get here
 #endif
 
 	PSM2_LOG_MSG("leaving");
@@ -1905,14 +2201,14 @@ psm2_error_t ips_tid_send_exp(struct ips_tid_send_desc *tidsendc)
 }
 
 #if defined(PSM_VERBS)
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 // Used when err chk rdma resp indicates we must resend the rdma
 static
 void ips_tid_reissue_rdma_write(struct ips_tid_send_desc *tidsendc)
 {
 	struct ips_protoexp *protoexp = tidsendc->protoexp;
 
-	_HFI_MMDBG("ips_tid_reissue_rdma_write\n");
+	_HFI_MMDBG("ips_tid_reissue_rdma_write tidsendc %p\n", tidsendc);
 
 	PSM2_LOG_MSG("entering");
 	protoexp->proto->epaddr_stats.rdma_rexmit++;
@@ -1929,7 +2225,7 @@ void ips_tid_reissue_rdma_write(struct ips_tid_send_desc *tidsendc)
 
 	PSM2_LOG_MSG("leaving");
 }
-#endif // RNDV_MOD
+#endif /* PSM_HAVE_RDMA_ERR_CHK */
 #endif // defined(PSM_VERBS)
 
 #ifdef PSM_HAVE_RDMA
@@ -1948,8 +2244,8 @@ ips_tid_pendsend_timer_callback(struct psmi_timer *timer, uint64_t current)
 
 		// we have some scb's and can use them to queue some more packets
 #if defined(PSM_VERBS)
-#ifdef RNDV_MOD
-		if (tidsendc->rv_need_err_chk_rdma)
+#ifdef PSM_HAVE_RDMA_ERR_CHK
+		if (tidsendc->need_err_chk_rdma)
 			err = ips_protoexp_send_err_chk_rdma(tidsendc);
 		else
 #endif
@@ -1967,7 +2263,7 @@ ips_tid_pendsend_timer_callback(struct psmi_timer *timer, uint64_t current)
 			break;
 		} else if (err == PSM2_TIMEOUT
 				  || err == PSM2_EPID_RV_CONNECT_RECOVERING
-				  || err == PSM2_EPID_RV_CONNECT_ERROR) {
+				  || err == PSM2_EPID_RC_CONNECT_ERROR) {
 			/* Always a case of try later:
 			 * On PIO flow, means no send pio bufs available
 			 * On DMA flow, means kernel can't queue request or would have to block
@@ -2021,7 +2317,8 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 	// we do this before we issue CTS
 
 	/* 1. allocate a tid grant (CTS) scb. */
-	grantscb = psm3_ips_scbctrl_alloc(&protoexp->tid_scbc_rv, 1, 0, 0);
+	grantscb = psm3_ips_scbctrl_alloc(&protoexp->tid_scbc_rv, 1, 0,
+					  IPS_SCB_FLAG_PRIORITY);
 	if (grantscb == NULL) {
 		_HFI_MMDBG("Wait: NO GRANT SCB\n");
 		/* ips_tid_scbavail_callback() will reschedule */
@@ -2108,10 +2405,13 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 		! getreq->gpu_hostbuf_used &&
 #endif
 		req->mr && req->mr->cache == proto->mr_cache) {
-		_HFI_MMDBG("CTS chunk reference recv: %p %u bytes via %p %"PRIu64"\n", tidrecvc->buffer, nbytes_this, req->mr->addr, req->mr->length);
+		_HFI_MMDBG("CTS chunk reference recv: %p buf %p %u bytes via %p %"PRIu64" rkey 0x%x\n",
+				tidrecvc, tidrecvc->buffer, nbytes_this,
+				req->mr->addr, req->mr->length, req->mr->rkey);
 		tidrecvc->mr = psm3_verbs_ref_mr(req->mr);
 	} else {
-		_HFI_MMDBG("CTS chunk register recv: %p %u bytes\n", tidrecvc->buffer, nbytes_this);
+		_HFI_MMDBG("CTS chunk register recv: %p buf %p %u bytes\n",
+				tidrecvc, tidrecvc->buffer, nbytes_this);
 		tidrecvc->mr = psm3_verbs_reg_mr(proto->mr_cache, 1,
                         tidrecvc->buffer, nbytes_this, IBV_ACCESS_RDMA|IBV_ACCESS_REMOTE_WRITE
 #ifdef PSM_HAVE_GPU
@@ -2136,7 +2436,7 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 	}
 
 	tidrecvc->recv_msglen = nbytes_this;
-#endif
+#endif /* PSM_VERBS */
 
 	/* Initialize recv descriptor */
 	tidrecvc->ipsaddr = ipsaddr;
@@ -2194,7 +2494,7 @@ ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current)
 	ips_epaddr_t *ipsaddr;
 	uint32_t nbytes_this, count;
 #if defined(PSM_VERBS)
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 	struct ips_tid_err_resp_pend *phead_resp =
 	    &((struct ips_protoexp *)timer->context)->pend_err_resp;
 #endif
@@ -2205,19 +2505,47 @@ ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current)
 	_HFI_MMDBG("ips_tid_pendtids_timer_callback\n");
 
 #if defined(PSM_VERBS)
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RDMA_ERR_CHK
 	while (!STAILQ_EMPTY(phead_resp)) {
 		ipsaddr = STAILQ_FIRST(phead_resp);
 		protoexp = ipsaddr->epaddr.proto->protoexp;
-		psmi_assert(ipsaddr->verbs.rv_need_send_err_chk_rdma_resp);
+		psmi_assert(ipsaddr->verbs.need_send_err_chk_rdma_resp);
+		if (ipsaddr->verbs.err_chk_rdma_recheck) {
+			psmi_assert(ipsaddr->verbs.err_chk_rdma_recheck_timeout_secs);
+			if (PSM2_OK != ips_protoexp_do_err_chk_rdma(ipsaddr)) {
+				// not yet ready to compose ERR_CHK_RDMA_RESP
+				if ((cycles_to_nanosecs(get_cycles()) / NSEC_PER_SEC) >
+					ipsaddr->verbs.err_chk_rdma_recheck_timeout_secs)
+				{
+					// fatal error, QP not draining
+					psm3_handle_error(PSMI_EP_NORETURN,
+						PSM2_INTERNAL_ERR,
+			      			"Timeout waiting for QP to drain after QP error");
+				}
+				// schedule timer again in near future to recheck
+				psmi_assert(ipsaddr->verbs.err_chk_rdma_recheck);
+				_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] schedule recheck timer\n",
+					ipsaddr);
+				psmi_timer_request(protoexp->timerq, &protoexp->timer_getreqs,
+					get_cycles() + nanosecs_to_cycles(VERBS_QP_DRAIN_DELAY_USEC * NSEC_PER_USEC));
+				break;
+			}
+			psmi_assert(! ipsaddr->verbs.err_chk_rdma_recheck);
+			psmi_assert(! ipsaddr->verbs.err_chk_rdma_recheck_timeout_secs);
+		}
 		ips_protoexp_send_err_chk_rdma_resp(&ipsaddr->flows[protoexp->proto->msgflowid]);
-		if (! ipsaddr->verbs.rv_need_send_err_chk_rdma_resp)
+		if (! ipsaddr->verbs.need_send_err_chk_rdma_resp) {
 			STAILQ_REMOVE_HEAD(phead_resp, verbs.pend_err_resp_next);
-		else
+			_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] sent ERR_CHK_RESP from timer callback\n",
+				ipsaddr);
+		} else {
+			_HFI_CONNDBG_OR_MMDBG("[ipsaddr %p] retry when scb avail\n",
+				ipsaddr);
 			break; // ips_tid_scbavail_callback will trigger us again
+		}
 	}
-#endif
-#endif
+#endif /* PSM_HAVE_RDMA */
+#endif /* PSM_VERBS */
 
 #ifdef PSM_HAVE_GPU
 	/* due to unaligned recv using hostbuf, must always do this */
@@ -2483,11 +2811,14 @@ psm2_error_t ips_tid_recv_free(struct ips_tid_recv_desc *tidrecvc)
 		psmi_cudamemcpy_tid_to_device(tidrecvc);
 #endif
 
+#ifdef PSM_VERBS
 	if (tidrecvc->mr) {
-		_HFI_MMDBG("CTS recv chunk complete, releasing MR: rkey: 0x%x\n", tidrecvc->mr->rkey);
+		_HFI_MMDBG("CTS recv chunk complete %p, releasing MR: rkey: 0x%x\n",
+			tidrecvc, tidrecvc->mr->rkey);
         psm3_verbs_release_mr(tidrecvc->mr);
         tidrecvc->mr = NULL;
     }
+#endif /* PSM_VERBS */
 
 	getreq->tidgr_bytesdone += tidrecvc->recv_msglen;
 
@@ -2533,3 +2864,94 @@ psm2_error_t ips_tid_recv_free(struct ips_tid_recv_desc *tidrecvc)
 	return err;
 }
 #endif // PSM_HAVE_RDMA
+
+#ifdef PSM_RC_RECONNECT
+static void match_rc_qp_callback(void *obj, void *context)
+{
+	struct ips_tid_send_desc *tidsendc = (struct ips_tid_send_desc *)obj;
+
+	if (tidsendc->rc_qp == (struct psm3_verbs_rc_qp *)context) {
+		_HFI_VDBG("tidsendc %p req %p userbuf %p buffer %p length %u rkey 0x%x\n",
+			tidsendc, tidsendc->mqreq, tidsendc->userbuf,  tidsendc->buffer,
+			tidsendc->length, tidsendc->tid_list.tsess_rkey);
+	}
+}
+
+void ips_protoexp_report_inflight_rc_qp(struct ips_protoexp *protoexp,
+				struct psm3_verbs_rc_qp *rc_qp)
+{
+	if (! _HFI_VDBG_ON)
+		return;
+	_HFI_VDBG("send RDMA in flight: for rc_qp %p RC QP %u\n",
+			rc_qp, rc_qp->qp->qp_num);
+	psmi_mpool_foreach(protoexp->tid_desc_send_pool, rc_qp,
+			match_rc_qp_callback);
+}
+#endif /* PSM_RC_RECONNECT */
+
+static void send_rdma_inflight_callback(void *obj, void *context)
+{
+	struct ips_tid_send_desc *tidsendc = (struct ips_tid_send_desc *)obj;
+
+#ifdef PSM_RC_RECONNECT
+	_HFI_VDBG("tidsendc %p req %p rkey 0x%x for rc_qp %p, QP %u draining %u posted %u + %u\n",
+		tidsendc, tidsendc->mqreq, tidsendc->tid_list.tsess_rkey,
+		tidsendc->rc_qp, tidsendc->rc_qp?tidsendc->rc_qp->qp->qp_num:0,
+		tidsendc->rc_qp?tidsendc->rc_qp->draining:0,
+		tidsendc->rc_qp?tidsendc->rc_qp->send_posted:0,
+		tidsendc->rc_qp?tidsendc->rc_qp->recv_pool.posted:0);
+#else
+	_HFI_VDBG("tidsendc %p req %p\n",
+		tidsendc, tidsendc->mqreq);
+#endif
+}
+
+void ips_protoexp_report_send_inflight(psm2_ep_t ep,
+				struct ips_protoexp *protoexp)
+{
+	if (! _HFI_VDBG_ON)
+		return;
+#ifdef PSM_RC_RECONNECT
+	_HFI_VDBG("send RDMA in flight: (%u QPs draining)\n",
+		ep->verbs_ep.send_drain_outstanding);
+#else
+	_HFI_VDBG("send RDMA in flight:\n");
+#endif
+	psmi_mpool_foreach(protoexp->tid_desc_send_pool, NULL,
+			send_rdma_inflight_callback);
+}
+
+static void recv_inflight_callback(void *obj, void *context)
+{
+	struct ips_tid_get_request *getreq = (struct ips_tid_get_request *)obj;
+	ips_epaddr_t *ipsaddr = (ips_epaddr_t *) (getreq->tidgr_epaddr);
+
+	_HFI_VDBG("getreq %p for ipsaddr %p req %p\n",
+		getreq, ipsaddr, getreq->tidgr_req);
+}
+
+void ips_protoexp_report_recv_inflight(struct ips_protoexp *protoexp)
+{
+	int i;
+
+	_HFI_VDBG("recv RDMA in flight:\n");
+	psmi_mpool_foreach(protoexp->tid_getreq_pool, NULL,
+			recv_inflight_callback);
+
+	_HFI_VDBG("recv tidflows in flight:\n");
+	struct ips_tf *tfc = &protoexp->tfc;
+	for (i = 0; i < HFI_TF_NFLOWS; i++) {
+		if (tfc->tidrecvc[i].state == TF_STATE_ALLOCATED) {
+			struct ips_tid_recv_desc *tidrecvc = &tfc->tidrecvc[i];
+#ifdef PSM_VERBS
+			_HFI_VDBG("tidrecvc %p mr %p rkey 0x%x getreq %p\n",
+				tidrecvc, tidrecvc->mr,
+				tidrecvc->mr?tidrecvc->mr->rkey:0,
+				tidrecvc->getreq);
+#else
+			_HFI_VDBG("tidrecvc %p getreq %p\n",
+				tidrecvc, tidrecvc->getreq);
+#endif
+		}
+	}
+}

@@ -56,7 +56,7 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
         AS_IF([test "x$enable_psm3_rc" = "xyes"],
               [
             AS_IF([test "x$enable_psm3_verbs" = "xyes"],
-                  [psm3_CPPFLAGS="$psm3_CPPFLAGS -DUSE_RC -DUSE_RDMA_READ"],
+                  [psm3_CPPFLAGS="$psm3_CPPFLAGS -DUSE_RC"],
                   [AC_MSG_ERROR([User RC QPs requires Verbs HAL active])])
               ])
 
@@ -336,6 +336,15 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
                     ])
                   ])
               ])
+        dnl RDMA_READ requires RC, so if RC is disabled, then this should default to match RC
+        AS_IF([test "x$enable_psm3_rdma_read" = "xcheck"],
+              [enable_psm3_rdma_read=$enable_psm3_rc])
+        AS_IF([test "x$enable_psm3_rdma_read" = "xyes"],
+              [
+            AS_IF([test "x$enable_psm3_rc" = "xyes"],
+                  [psm3_CPPFLAGS="$psm3_CPPFLAGS -DUSE_RDMA_READ"],
+                  [AC_MSG_ERROR([RDMA_READ requires User RC QPs active])])
+              ])
         AS_IF([test "x$enable_psm3_umr_cache" != "xno"],
               [
             # have_uffd is set in configure.ac
@@ -442,6 +451,11 @@ AC_ARG_ENABLE([psm3-dsa],
         [Enable support for Intel Data Streaming Accelerator (DSA) @<:@default=check@:>@])],
     [],
     [enable_psm3_dsa=check])
+AC_ARG_ENABLE([psm3-rdma-read],
+    [AS_HELP_STRING([--enable-psm3-rdma-read],
+        [Enable RDMA_READ support @<:@default=check [check means match --enable-psm3-rc]@:>@])],
+    [],
+    [enable_psm3_rdma_read=check])
 AC_ARG_ENABLE([psm3-umr-cache],
     [AS_HELP_STRING([--enable-psm3-umr-cache],
         [Enable support for Userspace Memory Region (UMR) Caching @<:@default=check@:>@])],

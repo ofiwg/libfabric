@@ -395,16 +395,13 @@ psm3_ips_proto_process_ack(struct ips_recvhdrq_event *rcv_ev)
 			(*scb->callback) (scb->cb_param, scb->nfrag > 1 ?
 					  scb->chunk_size : scb->payload_size);
 
-		if (!(scb->scb_flags & IPS_SEND_FLAG_PERSISTENT))
-			psm3_ips_scbctrl_free(scb);
+		psm3_ips_scbctrl_free(scb);
 
 		/* set all index pointer to NULL if all frames have been
 		 * acked */
 		if (STAILQ_EMPTY(unackedq)) {
-			psmi_timer_cancel(proto->timerq, flow->timer_ack);
-			flow->timer_ack = NULL;
-			psmi_timer_cancel(proto->timerq, flow->timer_send);
-			flow->timer_send = NULL;
+			psmi_timer_cancel(proto->timerq, &flow->timer_ack);
+			psmi_timer_cancel(proto->timerq, &flow->timer_send);
 
 			SLIST_FIRST(scb_pend) = NULL;
 			psmi_assert(flow->scb_num_pending == 0);
@@ -421,28 +418,6 @@ psm3_ips_proto_process_ack(struct ips_recvhdrq_event *rcv_ev)
 				flow->credits);
 #endif
 			goto ret;
-		} else if (flow->timer_ack == scb->timer_ack) {
-			/*
-			 * Exchange timers with last scb on unackedq.
-			 * timer in scb is used by flow, cancelling current
-			 * timer and then requesting a new timer takes more
-			 * time, instead, we exchange the timer between current
-			 * freeing scb and the last scb on unacked queue.
-			 */
-			psmi_timer *timer;
-			ips_scb_t *last = STAILQ_LAST(unackedq, ips_scb, nextq);
-
-			timer = scb->timer_ack;
-			scb->timer_ack = last->timer_ack;
-			last->timer_ack = timer;
-			timer = scb->timer_send;
-			scb->timer_send = last->timer_send;
-			last->timer_send = timer;
-
-			scb->timer_ack->context = scb;
-			scb->timer_send->context = scb;
-			last->timer_ack->context = last;
-			last->timer_send->context = last;
 		}
 	}
 
@@ -458,7 +433,7 @@ psm3_ips_proto_process_ack(struct ips_recvhdrq_event *rcv_ev)
 	 * has self-acked all those packets, we may get here with unackedq empty.
 	 */
 	if ((scb = STAILQ_FIRST(unackedq)) && scb->abs_timeout == TIMEOUT_INFINITE)
-		psmi_timer_cancel(proto->timerq, flow->timer_ack);
+		psmi_timer_cancel(proto->timerq, &flow->timer_ack);
 
 ret:
 	return IPS_RECVHDRQ_CONTINUE;
@@ -482,6 +457,10 @@ int psm3_ips_proto_process_nak(struct ips_recvhdrq_event *rcv_ev)
 	INC_TIME_SPEND(TIME_SPEND_USER3);
 
 	ack_seq_num.psn_num = p_hdr->ack_seq_num;
+#ifdef USE_RC
+	ipsaddr->verbs.remote_recv_psn = ack_seq_num.psn_num;
+#endif
+
 	// we are likely to get a previous ack_seq_num in NAK, in which case
 	// we need to resend unacked packets starting with ack_seq_num.  So check
 	// psn of 1st NAK would like us to retransmit (e.g. don't -1 before check)
@@ -556,15 +535,12 @@ int psm3_ips_proto_process_nak(struct ips_recvhdrq_event *rcv_ev)
 			(*scb->callback) (scb->cb_param, scb->nfrag > 1 ?
 					  scb->chunk_size : scb->payload_size);
 
-		if (!(scb->scb_flags & IPS_SEND_FLAG_PERSISTENT))
-			psm3_ips_scbctrl_free(scb);
+		psm3_ips_scbctrl_free(scb);
 
 		/* set all index pointer to NULL if all frames has been acked */
 		if (STAILQ_EMPTY(unackedq)) {
-			psmi_timer_cancel(proto->timerq, flow->timer_ack);
-			flow->timer_ack = NULL;
-			psmi_timer_cancel(proto->timerq, flow->timer_send);
-			flow->timer_send = NULL;
+			psmi_timer_cancel(proto->timerq, &flow->timer_ack);
+			psmi_timer_cancel(proto->timerq, &flow->timer_send);
 
 			SLIST_FIRST(scb_pend) = NULL;
 			psmi_assert(flow->scb_num_pending == 0);
@@ -581,28 +557,6 @@ int psm3_ips_proto_process_nak(struct ips_recvhdrq_event *rcv_ev)
 				flow->credits);
 #endif
 			goto ret;
-		} else if (flow->timer_ack == scb->timer_ack) {
-			/*
-			 * Exchange timers with last scb on unackedq.
-			 * timer in scb is used by flow, cancelling current
-			 * timer and then requesting a new timer takes more
-			 * time, instead, we exchange the timer between current
-			 * freeing scb and the last scb on unacked queue.
-			 */
-			psmi_timer *timer;
-			ips_scb_t *last = STAILQ_LAST(unackedq, ips_scb, nextq);
-
-			timer = scb->timer_ack;
-			scb->timer_ack = last->timer_ack;
-			last->timer_ack = timer;
-			timer = scb->timer_send;
-			scb->timer_send = last->timer_send;
-			last->timer_send = timer;
-
-			scb->timer_ack->context = scb;
-			scb->timer_send->context = scb;
-			last->timer_ack->context = last;
-			last->timer_send->context = last;
 		}
 	}
 
@@ -612,7 +566,7 @@ int psm3_ips_proto_process_nak(struct ips_recvhdrq_event *rcv_ev)
 		psm3_ips_segmentation_nak_post_process(proto, flow);
 
 	/* Always cancel ACK timer as we are going to restart the flow */
-	psmi_timer_cancel(proto->timerq, flow->timer_ack);
+	psmi_timer_cancel(proto->timerq, &flow->timer_ack);
 
 	/* What's now pending is all that was unacked */
 	SLIST_FIRST(scb_pend) = scb;
@@ -750,8 +704,9 @@ psm3_ips_proto_connect_disconnect(struct ips_recvhdrq_event *rcv_ev)
 					paylen);
 	if (err != PSM2_OK)
 		psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-			"Process connect/disconnect error: %d, opcode %x\n",
-			err, _get_proto_hfi_opcode(rcv_ev->p_hdr));
+			"Process connect/disconnect error: %s (%d), opcode %x\n",
+			psm3_error_get_string(err), err,
+			_get_proto_hfi_opcode(rcv_ev->p_hdr));
 
 	return IPS_RECVHDRQ_CONTINUE;
 }
