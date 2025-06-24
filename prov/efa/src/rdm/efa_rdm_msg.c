@@ -622,14 +622,14 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_zcpy(struct efa_rdm_ep *ep,
 					    uint64_t tag, uint64_t ignore)
 {
 	struct efa_rdm_ope *rxe;
-	fi_addr_t addr;
+	struct efa_rdm_peer *peer;
 
 	if (ep->base_ep.util_ep.caps & FI_DIRECTED_RECV)
-		addr = msg->addr;
+		peer = efa_rdm_ep_get_peer(ep, msg->addr);
 	else
-		addr = FI_ADDR_UNSPEC;
+		peer = NULL;
 
-	rxe = efa_rdm_ep_alloc_rxe(ep, addr, op);
+	rxe = efa_rdm_ep_alloc_rxe(ep, peer, op);
 	if (!rxe)
 		return NULL;
 
@@ -688,7 +688,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
 		return NULL;
 	}
 
-	rxe = efa_rdm_ep_alloc_rxe(ep, unexp_pkt_entry->addr, op);
+	rxe = efa_rdm_ep_alloc_rxe(ep, unexp_pkt_entry->peer, op);
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
@@ -718,7 +718,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_matched_rxe_for_rtm(struct efa_rdm_ep *ep,
 {
 	struct efa_rdm_ope *rxe;
 
-	rxe = efa_rdm_ep_alloc_rxe(ep, pkt_entry->addr, op);
+	rxe = efa_rdm_ep_alloc_rxe(ep, pkt_entry->peer, op);
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
@@ -737,7 +737,6 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_matched_rxe_for_rtm(struct efa_rdm_ep *ep,
  * or #efa_rdm_msg_unexp_rxe_for_rtm().
  *
  * @param[in]		ep		endpoint
- * @param[in]		peer		efa_rdm_peer struct of the sender
  * @param[in]		pkt_entry	RTM packet entry
  *
  * @returns
@@ -747,19 +746,20 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_matched_rxe_for_rtm(struct efa_rdm_ep *ep,
  */
 struct efa_rdm_ope *
 efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
-				 struct efa_rdm_peer *peer,
 				 struct efa_rdm_pke **pkt_entry_ptr)
 {
 	struct fid_peer_srx *peer_srx;
 	struct fi_peer_match_attr attr;
 	struct fi_peer_rx_entry *peer_rxe;
+	struct efa_rdm_peer *peer;
 	struct efa_rdm_ope *rxe;
 	int ret;
 	int pkt_type;
 
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 
-	attr.addr = (*pkt_entry_ptr)->addr;
+	peer = (*pkt_entry_ptr)->peer;
+	attr.addr = peer->efa_fiaddr;
 	attr.msg_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
 	attr.tag = 0;
 	ret = peer_srx->owner_ops->get_msg(peer_srx, &attr, &peer_rxe);
@@ -809,7 +809,6 @@ efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
  * or #efa_rdm_msg_unexp_rxe_for_rtm().
  *
  * @param[in]		ep		endpoint
- * @param[in]		peer		efa_rdm_peer struct of the sender
  * @param[in]		pkt_entry	RTM packet entry
  *
  * @returns
@@ -819,18 +818,20 @@ efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
  */
 struct efa_rdm_ope *
 efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
-				 struct efa_rdm_peer *peer,
 				 struct efa_rdm_pke **pkt_entry_ptr)
 {
 	struct fid_peer_srx *peer_srx;
 	struct fi_peer_match_attr attr;
 	struct fi_peer_rx_entry *peer_rxe;
+	struct efa_rdm_peer *peer;
 	struct efa_rdm_ope *rxe;
 	int ret;
 	int pkt_type;
 
+	peer = (*pkt_entry_ptr)->peer;
+
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
-	attr.addr = (*pkt_entry_ptr)->addr;
+	attr.addr = peer->efa_fiaddr;
 	attr.msg_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
 	attr.tag = efa_rdm_pke_get_rtm_tag(*pkt_entry_ptr);
 
@@ -866,7 +867,7 @@ efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 		rxe->peer_rxe = peer_rxe;
 		efa_rdm_tracepoint(msg_recv_unexpected_tagged, rxe->msg_id,
 			    (size_t) rxe->cq_entry.op_context, rxe->total_len,
-			    rxe->tag, rxe->addr);
+			    rxe->tag, rxe->peer->efa_fiaddr);
 	} else { /* Unexpected errors */
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"get_tag failed, error: %d\n",

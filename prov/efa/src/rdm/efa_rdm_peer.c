@@ -77,14 +77,12 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 
 	/* we cannot release outstanding TX packets because device
 	 * will report completion of these packets later. Setting
-	 * the address to FI_ADDR_NOTAVAIL, so efa_rdm_ep_get_peer()
-	 * will return NULL for the address, so the completion will
-	 * be ignored.
+	 * pkt_entry->peer to NULL so the completion will be ignored.
 	 */
 	dlist_foreach_container(&peer->outstanding_tx_pkts,
 				struct efa_rdm_pke,
 				pkt_entry, entry) {
-		pkt_entry->addr = FI_ADDR_NOTAVAIL;
+		pkt_entry->peer = NULL;
 	}
 
 	dlist_foreach_container_safe(&peer->overflow_pke_list,
