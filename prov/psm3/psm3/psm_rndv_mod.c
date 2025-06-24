@@ -287,6 +287,14 @@ psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info)
 	    loc_info->minor_rev <= RV_ABI_VER_MINOR_4)
 		rv->ioctl_reg_mem = RV_IOCTL_REG_MEM_R4;
 #endif
+	rv->ioctl_attach = RV_IOCTL_ATTACH;
+#ifdef RV_ABI_VER_MINOR_5
+	/* For older RV (ABI <= 1.5) */
+	if (loc_info->major_rev < RV_ABI_VER_MAJOR_1 ||
+	    (loc_info->major_rev == RV_ABI_VER_MAJOR_1 &&
+	     loc_info->minor_rev <= RV_ABI_VER_MINOR_5))
+		rv->ioctl_attach = RV_IOCTL_ATTACH_R5;
+#endif
 
 	memset(&aparams, 0, sizeof(aparams));
 	snprintf(aparams.in.dev_name, RV_MAX_DEV_NAME_LEN, "%s", devname);
@@ -320,8 +328,14 @@ psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info)
 	aparams.in.q_depth = loc_info->q_depth;
 	aparams.in.reconnect_timeout = loc_info->reconnect_timeout;
 	aparams.in.hb_interval = loc_info->hb_interval;
+#ifdef RV_ABI_VER_MINOR_5
+	if (loc_info->major_rev > RV_ABI_VER_MAJOR_1 ||
+	    (loc_info->major_rev == RV_ABI_VER_MAJOR_1 &&
+	     loc_info->minor_rev > RV_ABI_VER_MINOR_5))
+		aparams.in.fr_page_list_len = loc_info->fr_page_list_len;
+#endif
 
-	if ((ret = ioctl(rv->fd, RV_IOCTL_ATTACH, &aparams)) != 0) {
+	if ((ret = ioctl(rv->fd, rv->ioctl_attach, &aparams)) != 0) {
 		save_errno = errno;
 		_HFI_ERROR("rv attach ioctl failed (mode 0x%x) ret:%s (%d)\n", loc_info->rdma_mode, strerror(errno), ret);
 		goto fail;

@@ -495,6 +495,18 @@ void psm3_parse_multi_ep();
  *		nonpri_reg_mr - non-priority register MR failure (ENOMEM)
  *		pri_reg_mr - priority register MR failure (ENOMEM)
  *		gdrmmap - GPU gdrcopy pin and mmap failure
+ *		connrecvlost - discard connect/discon packet on receive
+ *			 before processing
+ *		slowconn - slow down receive processing during connect/discon
+ *			 packet processing
+ *		delayconn - slow down connection establishment call to force
+ *			 misalignment with peer so issue connect after they have
+ *			 completed their connect
+ *		delaydisc - slow down disconnect call to force
+ *			 misalignment with peer so issue disconnect after they have
+ *			 completed their disconnect
+ *
+ *
  */
 extern int psm3_faultinj_enabled; /* use macro to test */
 extern int psm3_faultinj_verbose; /* use IS_FAULT macro to test */

@@ -72,18 +72,17 @@ PSMI_NEVER_INLINE(ips_scb_t *
 	proto->stats.scb_egr_unavail_cnt++;
 
 	PSMI_BLOCKUNTIL(proto->ep, err,
-			((scb =
-			  (istiny ?
-			   psm3_ips_scbctrl_alloc_tiny(&proto->scbc_egr) :
-			   psm3_ips_scbctrl_alloc(&proto->scbc_egr, npkts, len,
-					     flags))) != NULL));
+		(NULL != (scb = (istiny
+			? psm3_ips_scbctrl_alloc_tiny(&proto->scbc_egr, flags)
+			: psm3_ips_scbctrl_alloc(&proto->scbc_egr, npkts, len, flags)))));
+
 	psmi_assert(scb != NULL);
 	return scb;
 }
 
 PSMI_ALWAYS_INLINE(ips_scb_t *mq_alloc_tiny(struct ips_proto *proto))
 {
-	ips_scb_t *scb = psm3_ips_scbctrl_alloc_tiny(&proto->scbc_egr);
+	ips_scb_t *scb = psm3_ips_scbctrl_alloc_tiny(&proto->scbc_egr, 0);
 	/* common case should branch right through */
 	if_pt(scb != NULL)
 	    return scb;
@@ -336,8 +335,12 @@ ips_ptl_mq_eager(struct ips_proto *proto, psm2_mq_req_t req,
 			pktlen = min(chunk_size, nbytes_left);
 		}
 
-		scb = mq_alloc_pkts(proto, 1, 0, 0);
+		uint32_t alloc_flags
+			= req->flags_internal & PSMI_REQ_FLAG_FASTPATH
+			? IPS_SCB_FLAG_PRIORITY : 0;
+		scb = mq_alloc_pkts(proto, 1, 0, alloc_flags);
 		psmi_assert(scb != NULL);
+
 		ips_scb_opcode(scb) = OPCODE_EAGER;
 		ips_set_LMC_LID_choice(proto, scb, len);
 		scb->ips_lrh.khdr.kdeth0 = __cpu_to_le32(msgseq);
@@ -448,8 +451,12 @@ ips_ptl_mq_rndv(struct ips_proto *proto, psm2_mq_req_t req,
 	req->recv_msgoff = 0;
 	req->rts_peer = (psm2_epaddr_t) ipsaddr;
 
-	scb = mq_alloc_pkts(proto, 1, 0, 0);
+	uint32_t alloc_flags
+		= req->flags_internal & PSMI_REQ_FLAG_FASTPATH
+		? IPS_SCB_FLAG_PRIORITY : 0;
+	scb = mq_alloc_pkts(proto, 1, 0, alloc_flags);
 	psmi_assert(scb);
+
 	ips_scb_opcode(scb) = OPCODE_LONG_RTS;
 	ips_scb_flags(scb) |= IPS_SEND_FLAG_ACKREQ;
 	if (req->type & MQE_TYPE_WAITING)
@@ -655,7 +662,7 @@ psm3_ips_proto_mq_isend(psm2_mq_t mq, psm2_epaddr_t mepaddr, uint32_t flags_user
 	} else {
 		ipsaddr = (ips_epaddr_t *)mepaddr;
 	}
-	psmi_assert(ipsaddr->cstate_outgoing == CSTATE_ESTABLISHED);
+	psmi_assert(psm3_ips_proto_isconnected(ipsaddr));
 		// psmx3 layer never uses mq_isend for FI_INJECT
 	psmi_assert(! (flags_user & PSM2_MQ_FLAG_INJECT));
 
@@ -1004,7 +1011,7 @@ psm3_ips_proto_mq_send(psm2_mq_t mq, psm2_epaddr_t mepaddr, uint32_t flags,
 	} else {
 		ipsaddr = (ips_epaddr_t *)mepaddr;
 	}
-	psmi_assert(ipsaddr->cstate_outgoing == CSTATE_ESTABLISHED);
+	psmi_assert(psm3_ips_proto_isconnected(ipsaddr));
 
 	proto = ((psm2_epaddr_t) ipsaddr)->proto;
 
@@ -1414,6 +1421,11 @@ ips_proto_mq_rts_match_callback(psm2_mq_req_t req, int was_posted)
 
 		/* there is no order requirement, try to push CTS request
 		 * directly, if fails, then queue it for later try. */
+#ifdef PSM_HAVE_REG_MR
+		_HFI_MMDBG("receiver requesting LONG DATA rdma_connected=%d off %u len %u\n",
+			ips_epaddr_rdma_connected((ips_epaddr_t *) epaddr),
+			req->recv_msgoff, req->req_data.recv_msglen);
+#endif
 		_HFI_VDBG("pushing CTS recv off %u len %u"
 #ifdef PSM_HAVE_GPU
 			" rGPU %u sGPU %u"
@@ -1529,7 +1541,8 @@ psm3_ips_proto_mq_push_cts_req(struct ips_proto *proto, psm2_mq_req_t req)
 	PSM2_LOG_MSG("entering");
 	psmi_assert(proto->msgflowid < EP_NUM_FLOW_ENTRIES);
 	flow = &ipsaddr->flows[proto->msgflowid];
-	scb = psm3_ips_scbctrl_alloc(&proto->scbc_egr, 1, 0, 0);
+	scb = psm3_ips_scbctrl_alloc(&proto->scbc_egr, 1, 0,
+				     IPS_SCB_FLAG_PRIORITY);
 	if (scb == NULL)
 	{
 		PSM2_LOG_MSG("leaving");
@@ -1660,7 +1673,8 @@ psm3_ips_proto_mq_push_rts_data(struct ips_proto *proto, psm2_mq_req_t req)
 		 */
 
 		scb = psm3_ips_scbctrl_alloc(proto->scbc_rv ? proto->scbc_rv
-					: &proto->scbc_egr, 1, 0, 0);
+					: &proto->scbc_egr, 1, 0,
+					IPS_SCB_FLAG_PRIORITY);
 		if (scb == NULL) {
 			err = PSM2_OK_NO_PROGRESS;
 			break;
@@ -1830,7 +1844,8 @@ psm3_ips_proto_mq_handle_cts(struct ips_recvhdrq_event *rcv_ev)
 			// if we still don't have an MR, we will try again later
 		}
 #endif // PSM_HAVE_REG_MR
-		_HFI_MMDBG("ips_proto_mq_handle_cts for TID CTS\n");
+		_HFI_MMDBG("ips_proto_mq_handle_cts for TID CTS rkey 0x%x sreq=%p paylen %u\n",
+			payload->tsess_rkey, req, paylen);
 		if (psm3_ips_tid_send_handle_tidreq(proto->protoexp,
 					       rcv_ev->ipsaddr, req, p_hdr->data[0],
 					       p_hdr->mdata, payload, paylen) == 0) {
@@ -1847,6 +1862,8 @@ psm3_ips_proto_mq_handle_cts(struct ips_recvhdrq_event *rcv_ev)
 		}
 	} else {
 		// we will use LONG DATA push
+		_HFI_MMDBG("ips_proto_mq_handle_cts with LONG_DATA for TID CTS sreq=%p paylen %u\n",
+			req, paylen);
 		PSM2_LOG_EPM(OPCODE_LONG_CTS,PSM2_LOG_RX,rcv_ev->ipsaddr->epaddr.epid,
 			    mq->ep->epid, "long data");
 		proto->epaddr_stats.cts_long_data_recv++;

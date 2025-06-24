@@ -1446,7 +1446,52 @@ psm3_is_oneapi_ze_mem(const void *ptr, struct psm3_oneapi_ze_dev_ctxt **ctxt))
 					break;
 				}
 			}
-			_HFI_VDBG("check ze_device[%d-%d] for dev %p: no match\n", 0, psm3_num_oneapi_ze_devices-1, dev);
+			_HFI_VDBG("check ze_device[%d-%d] for dev %p: match %s\n",
+				  0, psm3_num_oneapi_ze_devices - 1, dev,
+				  i == psm3_num_oneapi_ze_devices ? "not found" :
+					"found");
+		}
+	}
+
+	return ret;
+}
+
+/*
+ * Determine if the memory is on the GPU device. If so, get the ctxt.
+ * Don't change psm3_oneapi_ze_cur_dev.
+ */
+static int
+psm3_is_oneapi_ze_dev_mem(const void *ptr,
+			  struct psm3_oneapi_ze_dev_ctxt **ctxt)
+{
+	ze_memory_allocation_properties_t mem_props = {
+		ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES
+	};
+	ze_device_handle_t dev;
+	ze_result_t result;
+	int ret = 0;
+
+	psm3_oneapi_ze_count_zeMemGetAllocProperties++;
+	result = psm3_oneapi_ze_zeMemGetAllocProperties(psm3_oneapi_ze_context,
+							ptr, &mem_props, &dev);
+	if (result == ZE_RESULT_SUCCESS &&
+	    (mem_props.type == ZE_MEMORY_TYPE_DEVICE)) {
+		ret = 1;
+		_HFI_VDBG("ptr %p type %d dev %p\n", ptr, mem_props.type, dev);
+		if (ctxt) {
+			int i;
+
+			*ctxt = NULL;
+			for (i = 0; i < psm3_num_oneapi_ze_devices; i++) {
+				if (psm3_oneapi_ze_devices[i].dev == dev) {
+					*ctxt = &psm3_oneapi_ze_devices[i];
+					break;
+				}
+			}
+			_HFI_VDBG("check ze_device[%d-%d] for dev %p: match %s\n",
+				  0, psm3_num_oneapi_ze_devices - 1, dev,
+				  i == psm3_num_oneapi_ze_devices ?
+					"not found" : "found");
 		}
 	}
 
@@ -1743,17 +1788,25 @@ static void psm3_oneapi_ze_hostbuf_destroy(struct ips_gpu_hostbuf *ghb)
 // synchronous GPU memcpy
 static void psm3_oneapi_ze_memcpy_internal(void *dstptr, const void *srcptr, size_t size)
 {
-	struct psm3_oneapi_ze_dev_ctxt *ctxt;
+	struct psm3_oneapi_ze_dev_ctxt *ctxt, *dst_ctxt = NULL,
+				       *src_ctxt = NULL;
 
 	psmi_assert(size > 0);
-	ctxt = psm3_oneapi_ze_dev_ctxt_get(dstptr);
+	if (!psm3_is_oneapi_ze_dev_mem(dstptr, &dst_ctxt) &&
+	    !psm3_is_oneapi_ze_dev_mem(srcptr, &src_ctxt)) {
+		/*
+		 * If both buffers are in host memory, don't use Level-zero
+		 * library call as memcpy may be faster and Level-zero copy
+		 * may leak resources at this point.
+		 */
+		memcpy(dstptr, srcptr, size);
+		return;
+	}
+	ctxt = dst_ctxt ? dst_ctxt : src_ctxt;
 	if (!ctxt) {
-		ctxt = psm3_oneapi_ze_dev_ctxt_get(srcptr);
-		if (!ctxt) {
-			_HFI_ERROR("dst %p src %p not GPU buf for copying\n",
-					dstptr, srcptr);
-			return;
-		}
+		_HFI_ERROR("dst %p src %p: no ctxt for copying\n",
+			   dstptr, srcptr);
+		return;
 	}
 	if (psm3_oneapi_ze_immed_sync_copy) {
 		PSM3_ONEAPI_ZE_CALL(zeCommandListAppendMemoryCopy, ctxt->cl,
@@ -1970,7 +2023,7 @@ static int psm3_oneapi_ze_cache_key_cmp(const psm3_oneapi_ze_cache_item *a,
  */
 #define RBTREE_MI_PL    psm3_rbtree_oneapi_ze_memhandle_cache_mapitem_pl_t
 #define RBTREE_MAP_PL   psm3_rbtree_oneapi_ze_memhandle_cache_map_pl_t
-#define RBTREE_CMP(a,b) psm3_oneapi_ze_cache_key_cmp((a), (b))
+#define RBTREE_CMP(a, b, c) psm3_oneapi_ze_cache_key_cmp((a), (b))
 #define RBTREE_ASSERT   psmi_assert
 #define RBTREE_MAP_COUNT(PAYLOAD_PTR)     ((PAYLOAD_PTR)->nelems)
 #define RBTREE_NO_EMIT_IPS_CL_QMAP_PREDECESSOR
