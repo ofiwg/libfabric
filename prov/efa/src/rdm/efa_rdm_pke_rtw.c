@@ -65,7 +65,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rtw_rxe(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_base_hdr *base_hdr;
 
-	rxe = efa_rdm_ep_alloc_rxe(pkt_entry->ep, pkt_entry->addr, ofi_op_write);
+	rxe = efa_rdm_ep_alloc_rxe(pkt_entry->ep, pkt_entry->peer, ofi_op_write);
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
@@ -520,7 +520,7 @@ ssize_t efa_rdm_pke_init_longread_rtw(struct efa_rdm_pke *pkt_entry,
  *
  * @param[in]		pkt_entry	received EFA_RDM_LONGREAD_RTA_PKT packet entry
  */
-void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
+void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
@@ -561,13 +561,13 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry, struct 
 
 	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + hdr_size);
-	rxe->addr = pkt_entry->addr;
+	rxe->peer = pkt_entry->peer;
 	rxe->tx_id = rtw_hdr->send_id;
 	rxe->rma_iov_count = rtw_hdr->read_iov_count;
 	memcpy(rxe->rma_iov, read_iov,
 	       rxe->rma_iov_count * sizeof(struct fi_rma_iov));
 
-	err = efa_rdm_pke_post_remote_read_or_nack(rxe->ep, peer, pkt_entry, rxe);
+	err = efa_rdm_pke_post_remote_read_or_nack(rxe->ep, pkt_entry, rxe);
 
 	efa_rdm_pke_release_rx(pkt_entry);
 

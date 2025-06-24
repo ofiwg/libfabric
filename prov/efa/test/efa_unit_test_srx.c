@@ -101,7 +101,6 @@ void test_efa_srx_unexp_pkt(struct efa_resource **state)
         pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
         assert_non_null(pke);
         efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
-        pke->addr = FI_ADDR_UNSPEC;
 
         /* Create a fake peer */
         /* TODO: peer must be constructed by CQ read path */
@@ -110,6 +109,7 @@ void test_efa_srx_unexp_pkt(struct efa_resource **state)
         raw_addr.qkey = 0x1234;
         conn.ep_addr = &raw_addr;
         efa_rdm_peer_construct(&peer, efa_rdm_ep, &conn);
+        pke->peer = &peer;
 
         efa_unit_test_eager_msgrtm_pkt_construct(pke, &pke_attr);
         /**
@@ -117,7 +117,7 @@ void test_efa_srx_unexp_pkt(struct efa_resource **state)
          * Since there is no recv posted, the rxe must be unexpected
          */
         ofi_genlock_lock(srx_ctx->lock);
-        rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(efa_rdm_ep, &peer, &pke);
+        rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(efa_rdm_ep, &pke);
         assert_true(rxe->state == EFA_RDM_RXE_UNEXP);
         assert_true(rxe->unexp_pkt == pke);
 

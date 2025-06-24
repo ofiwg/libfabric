@@ -71,6 +71,7 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	pkt_entry->payload = NULL;
 	pkt_entry->payload_size = 0;
 	pkt_entry->payload_mr = NULL;
+	pkt_entry->peer = NULL;
 	return pkt_entry;
 }
 
@@ -114,7 +115,7 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 	if (OFI_UNLIKELY(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT)) {
 		assert(ep->efa_rnr_queued_pkt_cnt);
 		ep->efa_rnr_queued_pkt_cnt--;
-		peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+		peer = pkt_entry->peer;
 		assert(peer);
 		peer->rnr_queued_pkt_cnt--;
 		peer->rnr_backoff_wait_time = 0;
@@ -124,7 +125,7 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 		}
 		EFA_DBG(FI_LOG_EP_DATA,
 		       "reset backoff timer for peer: %" PRIu64 "\n",
-		       pkt_entry->addr);
+		       pkt_entry->peer->efa_fiaddr);
 	}
 
 	efa_rdm_pke_release(pkt_entry);
@@ -229,7 +230,7 @@ void efa_rdm_pke_copy(struct efa_rdm_pke *dest,
 			dest->payload_mr = dest->mr;
 		}
 	}
-	dest->addr = src->addr;
+	dest->peer = src->peer;
 	dest->flags = EFA_RDM_PKE_IN_USE;
 	dest->next = NULL;
 	memcpy(dest->wiredata, src->wiredata + src_pkt_offset, dest->pkt_size);
@@ -400,7 +401,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
 
-	conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry_vec[0]->addr);
+	conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry_vec[0]->peer->efa_fiaddr);
 	assert(conn && conn->ep_addr);
 
 	qp = ep->base_ep.qp;
@@ -410,7 +411,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	}
 	for (pkt_idx = 0; pkt_idx < pkt_entry_cnt; ++pkt_idx) {
 		pkt_entry = pkt_entry_vec[pkt_idx];
-		assert(efa_rdm_ep_get_peer(ep, pkt_entry->addr) == peer);
+		assert(pkt_entry->peer == peer);
 
 		qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
 		if ((pkt_entry->ope->fi_flags & FI_REMOTE_CQ_DATA) &&
@@ -529,7 +530,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah->ibv_ah,
 				   qp->qp_num, qp->qkey);
 	} else {
-		conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->addr);
+		conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->peer->efa_fiaddr);
 		assert(conn && conn->ep_addr);
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
@@ -631,7 +632,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah->ibv_ah,
 				   qp->qp_num, qp->qkey);
 	} else {
-		conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->addr);
+		conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->peer->efa_fiaddr);
 		assert(conn && conn->ep_addr);
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);

@@ -116,9 +116,9 @@ struct efa_rdm_handshake_opt_user_recv_qp_hdr *efa_rdm_pke_get_handshake_opt_use
 
 
 ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
-				   fi_addr_t addr);
+				   struct efa_rdm_peer *peer);
 
-void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer);
+void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry);
 
 /* CTS packet related functions */
 static inline
@@ -206,11 +206,10 @@ void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry,
 
 void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_ope *ope,
-				   fi_addr_t addr,
 				   int read_id,
 				   size_t seg_size);
 
-void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer);
+void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *pkt_entry);
 
 /* EOR packet related functions */
 static inline

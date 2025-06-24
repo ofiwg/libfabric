@@ -30,14 +30,17 @@ void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
 
 	mock_mr.peer.iface = iface;
 
+	struct efa_rdm_ep *efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+
 	memset(&mock_txe, 0, sizeof(mock_txe));
 	mock_txe.total_len = total_len;
-	mock_txe.addr = addr;
+	mock_txe.peer = peer;
 	mock_txe.iov_count = 1;
 	mock_txe.iov[0].iov_base = NULL;
 	mock_txe.iov[0].iov_len = 9000;
 	mock_txe.desc[0] = &mock_mr;
-	mock_txe.ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	mock_txe.ep = efa_rdm_ep;
 	mock_txe.peer = &mock_peer;
 
 	err = efa_rdm_ope_prepare_to_post_send(&mock_txe,
@@ -254,10 +257,13 @@ void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
 	assert_int_equal(ret, 1);
 
+	struct efa_rdm_ep *efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+
 	efa_unit_test_buff_construct(&local_buff, resource, 4096 /* buff_size */);
 	memset(&mock_txe, 0, sizeof(mock_txe));
 	mock_txe.total_len = 0;
-	mock_txe.addr = addr;
+	mock_txe.peer = peer;
 	mock_txe.iov_count = 1;
 	mock_txe.iov[0].iov_base = local_buff.buff;
 	mock_txe.iov[0].iov_len = 0;
@@ -267,7 +273,7 @@ void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
 	mock_txe.rma_iov[0].key = 123456;
 	mock_txe.rma_iov[0].len = 0;
 
-	mock_txe.ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	mock_txe.ep = efa_rdm_ep;
 
 	ibv_qpx = mock_txe.ep->base_ep.qp->ibv_qp_ex;
 	ibv_qpx->wr_start = &efa_mock_ibv_wr_start_no_op;
@@ -325,7 +331,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	assert_non_null(pkt_entry);
 	pkt_entry->payload = pkt_entry->wiredata;
 
-	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, FI_ADDR_UNSPEC, ofi_op_tagged);
+	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_tagged);
 	cuda_mr.peer.iface = FI_HMEM_CUDA;
 
 	rxe->desc[0] = &cuda_mr;

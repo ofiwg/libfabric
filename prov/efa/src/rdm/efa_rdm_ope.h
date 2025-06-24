@@ -71,7 +71,6 @@ struct efa_rdm_ope {
 	enum efa_rdm_ope_type type;
 
 	struct efa_rdm_ep *ep;
-	fi_addr_t addr;
 	struct efa_rdm_peer *peer;
 
 	uint32_t tx_id;

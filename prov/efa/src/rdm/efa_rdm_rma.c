@@ -388,7 +388,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		 */
 		if (!ep->homogeneous_peers && (txe->fi_flags & FI_REMOTE_CQ_DATA) && 
 			(efa_rdm_ep_support_unsolicited_write_recv(ep) != efa_rdm_peer_support_unsolicited_write_recv(txe->peer))) {
-			(void) efa_rdm_construct_msg_with_local_and_peer_information(ep, txe->addr, err_msg, "", EFA_ERROR_MSG_BUFFER_LENGTH);
+			(void) efa_rdm_construct_msg_with_local_and_peer_information(ep, txe->peer, err_msg, "", EFA_ERROR_MSG_BUFFER_LENGTH);
 			EFA_WARN(FI_LOG_EP_DATA,
 				"Inconsistent support status detected on unsolicited write recv.\n"
 				"My support status: %d, peer support status: %d. %s.\n"

@@ -108,19 +108,18 @@ void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc)
  * @param msg_len	the length of the message
  * @return int 0 on success, negative integer on failure
  */
-int efa_rdm_construct_msg_with_local_and_peer_information(struct efa_rdm_ep *ep, fi_addr_t addr, char *msg, const char *base_msg, size_t msg_len)
+int efa_rdm_construct_msg_with_local_and_peer_information(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer, char *msg, const char *base_msg, size_t msg_len)
 {
 	char ep_addr_str[OFI_ADDRSTRLEN] = {0}, peer_addr_str[OFI_ADDRSTRLEN] = {0};
 	char peer_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
 	char local_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
 	size_t len = 0;
 	int ret;
-	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(ep, addr);
 
 	len = sizeof(ep_addr_str);
 	efa_base_ep_raw_addr_str(&ep->base_ep, ep_addr_str, &len);
 	len = sizeof(peer_addr_str);
-	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, addr, peer_addr_str, &len);
+	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, peer->efa_fiaddr, peer_addr_str, &len);
 
 	if (!ep->host_id || EFA_HOST_ID_STRING_LENGTH != snprintf(local_host_id_str, EFA_HOST_ID_STRING_LENGTH + 1, "i-%017lx", ep->host_id)) {
 		strcpy(local_host_id_str, "N/A");
@@ -153,14 +152,14 @@ int efa_rdm_construct_msg_with_local_and_peer_information(struct efa_rdm_ep *ep,
  * @param[out]   buflen      Pointer to the returned error data size
  * @return       A status code. 0 if the error data was written successfully, otherwise a negative FI error code.
  */
-int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, fi_addr_t addr, int prov_errno, char *err_msg, size_t *buflen)
+int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer, int prov_errno, char *err_msg, size_t *buflen)
 {
 	const char *base_msg = efa_strerror(prov_errno);
 	int ret;
 
     *buflen = 0;
 
-	ret = efa_rdm_construct_msg_with_local_and_peer_information(ep, addr, err_msg, base_msg, EFA_ERROR_MSG_BUFFER_LENGTH);
+	ret = efa_rdm_construct_msg_with_local_and_peer_information(ep, peer, err_msg, base_msg, EFA_ERROR_MSG_BUFFER_LENGTH);
 	if (ret)
 		return ret;
 

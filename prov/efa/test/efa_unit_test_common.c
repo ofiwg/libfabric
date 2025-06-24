@@ -417,5 +417,8 @@ struct efa_rdm_ope *efa_unit_test_alloc_rxe(struct efa_resource *resource, uint3
 
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	return efa_rdm_ep_alloc_rxe(efa_rdm_ep, peer_addr, op);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+
+	/* TODO - peer struct might need more info */
+	return efa_rdm_ep_alloc_rxe(efa_rdm_ep, peer, op);
 }

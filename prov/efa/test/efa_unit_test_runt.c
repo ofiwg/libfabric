@@ -46,7 +46,7 @@ void test_efa_rdm_peer_get_runt_size_impl(
 
 	memset(&mock_txe, 0, sizeof(mock_txe));
 	mock_txe.total_len = total_len;
-	mock_txe.addr = addr;
+	mock_txe.peer = peer;
 	mock_txe.desc[0] = &mock_mr;
 
 	runt_size = efa_rdm_peer_get_runt_size(peer, efa_rdm_ep, &mock_txe);
@@ -314,7 +314,7 @@ void test_efa_rdm_peer_select_readbase_rtm_impl(
 
 	memset(&mock_txe, 0, sizeof(mock_txe));
 	mock_txe.total_len = total_len;
-	mock_txe.addr = addr;
+	mock_txe.peer = peer;
 	mock_txe.desc[0] = &mock_mr;
 	mock_txe.op = op;
 	mock_txe.fi_flags = fi_flags;
