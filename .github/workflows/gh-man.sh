@@ -39,6 +39,7 @@ git fetch origin gh-pages
 git checkout gh-pages
 git checkout -b $branch_name
 cp tmp/*.md main/man/
+(cd main/man && ./onepage.sh)
 git add main/man/*.md
 
 set +e
