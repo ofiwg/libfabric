@@ -4,8 +4,7 @@ on:
   # UTC time, 'minute hour day-of-month month day-of-week'
   - cron: '0 5 * * *'
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
   APT_PACKAGES: >-
@@ -46,6 +45,9 @@ env:
   RDMA_CORE_VERSION: v35.0
 jobs:
   coverity:
+    permissions:
+      contents: read
+
     runs-on: ubuntu-22.04
     steps:
       - name: Install dependencies (Linux)
