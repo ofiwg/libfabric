@@ -1,5 +1,7 @@
 name: Man Page Converter
 
+permissions: {}
+
 on:
     push:
         paths:
