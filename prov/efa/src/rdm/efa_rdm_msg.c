@@ -604,7 +604,7 @@ ssize_t efa_rdm_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t l
  */
 
 /**
- * @brief allocate an rxe for a fi_msg.
+ * @brief allocate an rxe for a fi_msg in the zero-copy path.
  *        This function is used by two sided operation only.
  *
  * @param[in] ep	end point
@@ -616,7 +616,7 @@ ssize_t efa_rdm_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t l
  * @return		if allocation succeeded, return pointer to rxe
  * 			if allocation failed, return NULL
  */
-struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
+struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_zcpy(struct efa_rdm_ep *ep,
 					    const struct fi_msg *msg,
 					    uint32_t op, uint64_t flags,
 					    uint64_t tag, uint64_t ignore)
@@ -913,7 +913,7 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	if (ep->use_zcpy_rx) {
 		srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
 		ofi_genlock_lock(srx_ctx->lock);
-		rxe = efa_rdm_msg_alloc_rxe(ep, msg, op, flags, tag, ignore);
+		rxe = efa_rdm_msg_alloc_rxe_zcpy(ep, msg, op, flags, tag, ignore);
 		if (OFI_UNLIKELY(!rxe)) {
 			ret = -FI_EAGAIN;
 			ofi_genlock_unlock(srx_ctx->lock);
