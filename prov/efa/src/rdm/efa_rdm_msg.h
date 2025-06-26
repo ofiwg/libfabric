@@ -16,7 +16,7 @@ void efa_rdm_msg_construct(struct fi_msg *msg, const struct iovec *iov, void **d
 /**
  * functions to allocate rxe for two sided operations
  */
-struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
+struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_zcpy(struct efa_rdm_ep *ep,
 					    const struct fi_msg *msg,
 					    uint32_t op, uint64_t flags,
 					    uint64_t tag, uint64_t ignore);
