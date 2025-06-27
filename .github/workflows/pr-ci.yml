@@ -1,8 +1,6 @@
 name: Build Checks
 on: [push, pull_request]
-permissions:
-  contents: read
-  pull-requests: read
+permissions: {}
 env:
   APT_PACKAGES: >-
     abi-compliance-checker
@@ -42,6 +40,9 @@ env:
   RDMA_CORE_VERSION: v35.0
 jobs:
   linux:
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: '${{ matrix.os }}'
     strategy:
       matrix:
@@ -75,6 +76,9 @@ jobs:
           name: ${{ matrix.os }}-${{ matrix.cc }}-config.log
           path: config.log
   hmem:
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-22.04
     steps:
       - name: Install dependencies (Linux)
@@ -120,6 +124,9 @@ jobs:
           name: hmem-config.log
           path: config.log
   macos:
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: macos-13
     steps:
       - name: Install dependencies (Mac OS)
