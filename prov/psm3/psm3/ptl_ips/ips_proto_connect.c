@@ -949,7 +949,7 @@ ips_proto_build_connect_message(struct ips_proto *proto,
 	case OPCODE_DISCONNECT_REQUEST:
 		if (! force)
 			hdr->connidx |= IPS_DISCONNECT_NOFORCE;
-		/* FALLSTHROUGH */
+		/* FALLTHROUGH */
 	case OPCODE_DISCONNECT_REPLY:
 		paylen = sizeof(struct ips_connect_hdr);
 		// placeholder, typically ips_connect_hdr is sufficient
