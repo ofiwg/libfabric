@@ -3204,8 +3204,8 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 					opx_ep_complete_receive_operation(
 						ep, &uepkt->hdr, (union fi_opx_hfi1_packet_payload *) &uepkt->payload,
 						uepkt->hdr.match.ofi_tag, context, uepkt->hdr.bth.opcode,
-						OPX_MULTI_RECV_TRUE, is_shm, OPX_HMEM_FALSE, lock_required, reliability,
-						hfi1_type);
+						OPX_MULTI_RECV_TRUE, is_intranode, OPX_HMEM_FALSE, lock_required,
+						reliability, hfi1_type);
 
 					/* remove this item from the ue list and prepend
 					 * the (now) completed uepkt to the ue free list. */
