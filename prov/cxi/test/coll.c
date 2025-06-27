@@ -1869,6 +1869,7 @@ Test(coll_reduce_ops, bxor)
 	STDCLEANUP
 }
 
+#if 0 /* keep for future use */	
 /* Test logical OR */
 Test(coll_reduce_ops, lor)
 {
@@ -1938,7 +1939,7 @@ Test(coll_reduce_ops, lxor)
 	cr_assert(!ret, "compare failed\n");
 	STDCLEANUP
 }
-
+#endif
 /* Tests int64 minimum */
 Test(coll_reduce_ops, imin)
 {

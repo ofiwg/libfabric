@@ -1712,9 +1712,11 @@ static int cxip_query_collective(struct fid_domain *domain,
 		case FI_BOR:
 		case FI_BAND:
 		case FI_BXOR:
+#if 0 /* keep for future use */		
 		case FI_LOR:
 		case FI_LAND:
 		case FI_LXOR:
+#endif		
 			switch (attr->datatype) {
 			case FI_INT8:
 			case FI_UINT8:

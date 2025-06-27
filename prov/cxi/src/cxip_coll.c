@@ -392,9 +392,11 @@ void _dump_red_pkt(struct red_pkt *pkt, char *dir)
 #define COLL_OPCODE_BIT_AND		0x01
 #define COLL_OPCODE_BIT_OR		0x02
 #define COLL_OPCODE_BIT_XOR		0x03
+#if 0 /* keep for future use */
 #define COLL_OPCODE_LOG_AND		0x04
 #define COLL_OPCODE_LOG_OR		0x05
 #define COLL_OPCODE_LOG_XOR		0x06
+#endif
 #define COLL_OPCODE_INT_MIN		0x10
 #define COLL_OPCODE_INT_MAX		0x11
 #define COLL_OPCODE_INT_MINMAXLOC	0x12
@@ -443,17 +445,21 @@ void cxip_coll_populate_opcodes(void)
 	_int8_16_32_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
 	_int8_16_32_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
 	_int8_16_32_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
+#if 0 /* keep for future use */	
 	_int8_16_32_op_to_opcode[FI_LOR] = COLL_OPCODE_LOG_OR;
 	_int8_16_32_op_to_opcode[FI_LAND] = COLL_OPCODE_LOG_AND;
 	_int8_16_32_op_to_opcode[FI_LXOR] = COLL_OPCODE_LOG_XOR;
+#endif	
 
 	/* operations supported by 32, 16, and 8 bit unsigned int operands */
 	_uint8_16_32_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
 	_uint8_16_32_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
 	_uint8_16_32_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
+#if 0 /* keep for future use */	
 	_uint8_16_32_op_to_opcode[FI_LOR] = COLL_OPCODE_LOG_OR;
 	_uint8_16_32_op_to_opcode[FI_LAND] = COLL_OPCODE_LOG_AND;
 	_uint8_16_32_op_to_opcode[FI_LXOR] = COLL_OPCODE_LOG_XOR;
+#endif
 
 	/* operations supported by 64 bit signed int operands */
 	_int64_op_to_opcode[FI_MIN] = COLL_OPCODE_INT_MIN;
@@ -465,9 +471,11 @@ void cxip_coll_populate_opcodes(void)
 	_uint64_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
 	_uint64_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
 	_uint64_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
+#if 0 /* keep for future use */	
 	_uint64_op_to_opcode[FI_LOR] = COLL_OPCODE_LOG_OR;
 	_uint64_op_to_opcode[FI_LAND] = COLL_OPCODE_LOG_AND;
 	_uint64_op_to_opcode[FI_LXOR] = COLL_OPCODE_LOG_XOR;
+#endif
 
 	/* operations supported by 64 bit double operands */
 	_flt_op_to_opcode[FI_MIN] = COLL_OPCODE_FLT_MINNUM;
@@ -480,9 +488,12 @@ void cxip_coll_populate_opcodes(void)
 	_cxi_op_to_redtype[COLL_OPCODE_BIT_OR] = REDTYPE_INT;
 	_cxi_op_to_redtype[COLL_OPCODE_BIT_AND] = REDTYPE_INT;
 	_cxi_op_to_redtype[COLL_OPCODE_BIT_XOR] = REDTYPE_INT;
+#if 0 /* keep for future use */	
 	_cxi_op_to_redtype[COLL_OPCODE_LOG_OR] = REDTYPE_INT;
 	_cxi_op_to_redtype[COLL_OPCODE_LOG_AND] = REDTYPE_INT;
 	_cxi_op_to_redtype[COLL_OPCODE_LOG_XOR] = REDTYPE_INT;
+#endif
+
 	_cxi_op_to_redtype[COLL_OPCODE_INT_MIN] = REDTYPE_INT;
 	_cxi_op_to_redtype[COLL_OPCODE_INT_MAX] = REDTYPE_INT;
 	_cxi_op_to_redtype[COLL_OPCODE_INT_SUM] = REDTYPE_INT;
@@ -1568,6 +1579,7 @@ static void _reduce(struct cxip_coll_data *accum,
 			accum->intval.ival[i] ^= coll_data->intval.ival[i];
 		/* overflow not possible */
 		break;
+#if 0 /* keep for future use */	
 	case COLL_OPCODE_LOG_AND:
 		for (i = 0; i < 4; i++)
 			accum->intval.ival[i] =	(accum->intval.ival[i] &&
@@ -1588,6 +1600,7 @@ static void _reduce(struct cxip_coll_data *accum,
                                                   coll_data->intval.ival[i]));
 		/* overflow not possible */
 		break;
+#endif		
 	case COLL_OPCODE_INT_MIN:
 		for (i = 0; i < 4; i++)
 			if (accum->intval.ival[i] > coll_data->intval.ival[i])
