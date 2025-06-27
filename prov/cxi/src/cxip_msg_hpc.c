@@ -447,7 +447,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 		(uint64_t)cmd.local_addr, cmd.request_len,
 		(uint64_t)cmd.remote_offset);
 
-	ret = cxip_rxc_emit_dma(rxc, req->recv.vni,
+	ret = cxip_rxc_emit_dma(rxc, rxc->tx_cmdq, req->recv.vni,
 				cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
 				tc_type, &cmd, 0);
 	if (ret)
@@ -514,7 +514,7 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 
 	req->cb = cxip_notify_match_cb;
 
-	ret = cxip_rxc_emit_idc_msg(rxc, event->tgt_long.vni,
+	ret = cxip_rxc_emit_idc_msg(rxc, rxc->tx_cmdq, event->tgt_long.vni,
 				    cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
 				    CXI_TC_TYPE_DEFAULT, &c_state, &idc_msg,
 				    NULL, 0, 0);
@@ -1180,7 +1180,7 @@ static int cxip_rdzv_done_notify(struct cxip_req *req)
 	RXC_DBG(rxc, "RDZV done notify send RDZV ID: %d\n",
 		req->recv.rdzv_id);
 
-	ret = cxip_rxc_emit_dma(rxc, req->recv.vni,
+	ret = cxip_rxc_emit_dma(rxc, rxc->tx_cmdq, req->recv.vni,
 				cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
 				CXI_TC_TYPE_DEFAULT, &cmd, 0);
 	if (ret)
