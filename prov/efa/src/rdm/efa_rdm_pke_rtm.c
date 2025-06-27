@@ -306,7 +306,7 @@ static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry,
 		err = efa_rdm_pke_proc_matched_rtm(pkt_entry, peer);
 		if (OFI_UNLIKELY(err)) {
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_MSGRTM);
-			efa_rdm_pke_release_rx(pkt_entry);
+			//efa_rdm_pke_release_rx(pkt_entry);
 			efa_rdm_rxe_release(rxe);
 			return err;
 		}
@@ -358,7 +358,7 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry,
 			if (err == -FI_ENOMR)
 				return err;
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_TAGRTM);
-			efa_rdm_pke_release_rx(pkt_entry);
+			//efa_rdm_pke_release_rx(pkt_entry);
 			efa_rdm_rxe_release(rxe);
 			return err;
 		}
