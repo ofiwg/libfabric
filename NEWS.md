@@ -11,6 +11,8 @@ v2.2.0, Mon June 30, 2025
 
 ## Core
 
+- log: Fix buffer overrun when accessing the 'log_levels' array
+- man/fi_mr: Clarify fi_close behavior
 - rdma/fabric.h: Add new FI_RESCAN flag to fi_getinfo()
 - hmem/cuda: Add fallback for dmabuf flag with CUDA_ERROR_NOT_SUPPORTED
 - hmem/cuda: Add runtime fallback for unsupported dmabuf flag
@@ -22,6 +24,10 @@ v2.2.0, Mon June 30, 2025
 
 ## CXI
 
+- Fix alt_read unit test to use rdzv_threshold
+- Adjust cxi environment variable defaults
+- Fix regression which could cause deadlock
+- Support libfabric 2.2 API
 - Set cq_data in peer unexpected message
 - Fix locking on the SRX path
 - Allow for passing opaque 64-bit data in ctrl_msg
@@ -49,6 +55,17 @@ v2.2.0, Mon June 30, 2025
 
 ## EFA
 
+- Update error message for invalid MRs
+- Set IBV_ACCESS_LOCAL_WRITE for FI_REMOTE_WRITE
+- Update packet printing functions
+- Avoid iteration when cuda_api_permitted is false
+- Do not add explicit MRs from application to MR cache
+- Move peer bufpool to endpoint
+- Move RDMA check functions to efa_rdm_ep.h
+- Add detailed logging of device enumeration and selection
+- Extend domain ops to open CQ with external memory
+- Extend domain ops to allow querying of QP and CQ attributes
+- Add a domain operation to query address info
 - Minimize calls to efa_rdm_ep_get_peer in the CQ read path
 - Remove unused function get_first_nic_name
 - Post initial rx pkt when qp is enabled.
@@ -102,6 +119,10 @@ v2.2.0, Mon June 30, 2025
 - Cornelis Networks OPX provider upstream April 19, 2025
 - Make room for new RPC field in fid_ep
 
+## PSM3
+
+- Update psm3 to match IEFS 12.1.0.0 release
+
 ## RXD
 
 - Add an environment variable to control FI_RESCAN
@@ -119,6 +140,8 @@ v2.2.0, Mon June 30, 2025
 
 ## SHM
 
+- Add shm rename and retry
+- Fix srx entry cleanup
 - Acquire ep lock when freeing entries
 - Don't run smr progress if region isn't initialized
 - Update shm man page to be accurate and fix typos/formatting
@@ -149,6 +172,8 @@ v2.2.0, Mon June 30, 2025
 
 ## Verbs
 
+- Avoid holding vrb_info_mutex when reloading interfaces
+- Use a separate lock for provider initialization
 - Register vrb_info_mutex in util_prov
 - Code clean up.
 - Optimize init info.
@@ -168,6 +193,8 @@ v2.2.0, Mon June 30, 2025
 
 ## Fabtests
 
+- Document limitations of fi_rma_pinpong
+- Add additional_env to ClientServerTest
 - Fix leak of dmabuf fd
 - Define ft_hmem_put_dmabuf_fd
 - efa: Make FI_EFA_IFACE tests check the Libfabric build
