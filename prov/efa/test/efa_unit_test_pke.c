@@ -144,7 +144,8 @@ void test_efa_rdm_pke_alloc_rta_rxe(struct efa_resource **state)
 		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 		1);
 
-	pke->addr = peer_addr;
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+	pke->peer = peer;
 
 	rxe = efa_rdm_pke_alloc_rta_rxe(pke, ofi_op_atomic);
 	assert_true(rxe->internal_flags & EFA_RDM_OPE_INTERNAL);
@@ -188,7 +189,9 @@ void test_efa_rdm_pke_alloc_rtw_rxe(struct efa_resource **state)
 	base_hdr = efa_rdm_pke_get_base_hdr(pke);
 	/* Clean the flags to avoid having garbage value */
 	base_hdr->flags = 0;
-	pke->addr = peer_addr;
+
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+	pke->peer = peer;
 
 	rxe = efa_rdm_pke_alloc_rtw_rxe(pke);
 
@@ -235,7 +238,9 @@ void test_efa_rdm_pke_alloc_rtr_rxe(struct efa_resource **state)
 	base_hdr = efa_rdm_pke_get_base_hdr(pke);
 	/* Clean the flags to avoid having garbage value */
 	base_hdr->flags = 0;
-	pke->addr = peer_addr;
+
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+	pke->peer = peer;
 
 	rxe = efa_rdm_pke_alloc_rtw_rxe(pke);
 

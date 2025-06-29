@@ -20,15 +20,15 @@ fi_addr_t efa_rdm_pke_determine_addr(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno, struct efa_rdm_peer *peer);
+void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno);
 
-void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer);
+void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno);
 
 void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer);
+void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_imm_data, uint32_t imm_data);
 
