@@ -692,7 +692,6 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ope *txe;
 
-	ofi_genlock_lock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
 #if ENABLE_DEBUG
 	struct efa_rdm_pke *pkt_entry;
 
@@ -734,8 +733,6 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 			txe);
 		efa_rdm_txe_release(txe);
 	}
-
-	ofi_genlock_unlock(&efa_rdm_ep_domain(efa_rdm_ep)->srx_lock);
 
 	if (efa_rdm_ep->ope_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->ope_pool);
@@ -942,8 +939,14 @@ static int efa_rdm_ep_close(struct fid *fid)
 		efa_rdm_ep->peer_srx_ep = NULL;
 	}
 
-	/* Remove all peers associated with this endpoint in domain level peer lists */
+	/**
+	 * The QP destroy and op entries clean up must be in the same lock,
+	 * otherwise there can be race condition that efa_domain_progress_rdm_peers_and_queues
+	 * (part of fi_cq_read) can access entries that are from a closed QP.
+	 */
 	ofi_genlock_lock(&domain->srx_lock);
+
+	/* Remove all peers associated with this endpoint in domain level peer lists */
 	dlist_foreach_container_safe(&domain->peer_backoff_list, struct efa_rdm_peer,
 				     peer, rnr_backoff_entry, tmp) {
 		if (peer->ep == efa_rdm_ep) {
@@ -957,7 +960,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 			dlist_remove(&peer->handshake_queued_entry);
 		}
 	}
-	ofi_genlock_unlock(&domain->srx_lock);
 
 	/* We need to free the util_ep first to avoid race conditions
 	 * with other threads progressing the cq. */
@@ -981,6 +983,8 @@ static int efa_rdm_ep_close(struct fid *fid)
 
 	if (efa_rdm_ep->pke_vec)
 		free(efa_rdm_ep->pke_vec);
+
+	ofi_genlock_unlock(&domain->srx_lock);
 
 	free(efa_rdm_ep);
 	return retv;
