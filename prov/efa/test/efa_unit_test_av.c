@@ -261,3 +261,68 @@ void test_av_multiple_ep_efa_direct(struct efa_resource **state)
 {
 	return test_av_multiple_ep_impl(state, EFA_DIRECT_FABRIC_NAME);
 }
+
+static void test_av_verify_av_hash_cnt(struct efa_av *av, int cur_av_count, int prv_av_count) {
+	assert_int_equal(HASH_CNT(hh, av->util_av.hash), cur_av_count + prv_av_count);
+	assert_int_equal(HASH_CNT(hh, av->cur_reverse_av), cur_av_count);
+	assert_int_equal(HASH_CNT(hh, av->prv_reverse_av), prv_av_count);
+}
+
+/**
+ * @brief This test removes a peer and inserts it again
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_av_reinsertion(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr, raw_addr_2;
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t fi_addr;
+	struct efa_av *av;
+	struct efa_rdm_ep *efa_rdm_ep;
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 174;
+	raw_addr.qkey = 0x1234;
+
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	err = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr, 0, NULL);
+	assert_int_equal(err, 1);
+	assert_int_equal(fi_addr, 0);
+	test_av_verify_av_hash_cnt(av, 1, 0);
+
+	err = fi_av_lookup(resource->av, fi_addr, &raw_addr_2, &raw_addr_len);
+	assert_int_equal(err, 0);
+	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_2), 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, fi_addr);
+	assert_int_equal(peer->efa_fiaddr, fi_addr);
+
+	err = fi_av_remove(resource->av, &fi_addr, 1, 0);
+	assert_int_equal(err, 0);
+	test_av_verify_av_hash_cnt(av, 0, 0);
+
+	err = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr, 0, NULL);
+	assert_int_equal(err, 1);
+	assert_int_equal(fi_addr, 0);
+	test_av_verify_av_hash_cnt(av, 1, 0);
+
+	err = fi_av_lookup(resource->av, fi_addr, &raw_addr_2, &raw_addr_len);
+	assert_int_equal(err, 0);
+	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_2), 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, fi_addr);
+	assert_int_equal(peer->efa_fiaddr, fi_addr);
+
+	err = fi_av_remove(resource->av, &fi_addr, 1, 0);
+	assert_int_equal(err, 0);
+	test_av_verify_av_hash_cnt(av, 0, 0);
+}
