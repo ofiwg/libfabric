@@ -113,6 +113,7 @@ void test_efa_ah_cnt_one_av();
 void test_efa_ah_cnt_multi_av();
 void test_av_multiple_ep_efa();
 void test_av_multiple_ep_efa_direct();
+void test_av_reinsertion();
 /* end efa_unit_test_av.c */
 
 void test_efa_device_construct_error_handling();
