@@ -665,6 +665,7 @@ struct cxip_environment cxip_env = {
 	.disable_hmem_dev_register = 0,
 	.ze_hmem_supported = 0,
 	.rdzv_proto = CXIP_RDZV_PROTO_DEFAULT,
+	.disable_alt_read_cmdq = false,
 	.enable_trig_op_limit = false,
 	.mr_cache_events_disable_poll_nsecs =
 		CXIP_MR_CACHE_EVENTS_DISABLE_POLL_NSECS,
@@ -1278,6 +1279,12 @@ static void cxip_env_init(void)
 
 		param_str = NULL;
 	}
+
+	fi_param_define(&cxip_prov, "disable_alt_read_cmdq", FI_PARAM_BOOL,
+			"Disables use of alt_read dedicated cmdq (%d).",
+			cxip_env.disable_alt_read_cmdq);
+	fi_param_get_bool(&cxip_prov, "disable_alt_read_cmdq",
+			  &cxip_env.disable_alt_read_cmdq);
 
 	fi_param_define(&cxip_prov, "mr_cache_events_disable_poll_nsecs", FI_PARAM_SIZE_T,
 			"Max amount of time to poll when disabling an MR configured with MR match events (default: %lu).",

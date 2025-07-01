@@ -447,7 +447,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 		(uint64_t)cmd.local_addr, cmd.request_len,
 		(uint64_t)cmd.remote_offset);
 
-	ret = cxip_rxc_emit_dma(rxc, rxc->tx_cmdq, req->recv.vni,
+	ret = cxip_rxc_emit_dma(rxc, rxc->tx_rget_cmdq, req->recv.vni,
 				cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
 				tc_type, &cmd, 0);
 	if (ret)
@@ -3860,24 +3860,19 @@ static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
 	};
 	struct cxi_cq_alloc_opts cq_opts = {};
 	enum c_ptlte_state state;
+	bool alt_read = cxip_env.rdzv_proto == CXIP_RDZV_PROTO_ALT_READ &&
+			!cxip_env.disable_alt_read_cmdq;
+	bool tc_unspec = cxip_env.rget_tc == FI_TC_UNSPEC;
 	int ret;
 
 	assert(rxc->base.protocol == FI_PROTO_CXI);
 	dlist_init(&rxc->replay_queue);
 
-	/* For FI_TC_UNSPEC, reuse the TX context command queue if possible. If
-	 * a specific traffic class is requested, allocate a new command queue.
-	 * This is done to prevent performance issues with reusing the TX
-	 * context command queue and changing the communication profile.
+	/* Create a unique rendezvous command queue if a specific traffic
+	 * class is specified gets or the alternate read rendezvous where
+	 * restricted transfers will be used is active.
 	 */
-	if (cxip_env.rget_tc == FI_TC_UNSPEC) {
-		ret = cxip_ep_cmdq(rxc->base.ep_obj, true, FI_TC_UNSPEC,
-				   rxc->base.rx_evtq.eq, &rxc->tx_cmdq);
-		if (ret != FI_SUCCESS) {
-			CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
-			return -FI_EDOMAIN;
-		}
-	} else {
+	if (!tc_unspec || alt_read) {
 		cq_opts.count = rxc->base.ep_obj->txq_size * 4;
 		cq_opts.flags = CXI_CQ_IS_TX;
 		cq_opts.policy = cxip_env.cq_policy;
@@ -3886,11 +3881,43 @@ static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
 				      rxc->base.rx_evtq.eq, &cq_opts,
 				      rxc->base.ep_obj->auth_key.vni,
 				      cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
-				      CXI_TC_TYPE_DEFAULT, &rxc->tx_cmdq);
+				      alt_read ? CXI_TC_TYPE_RESTRICTED :
+				      CXI_TC_TYPE_DEFAULT, &rxc->tx_rget_cmdq);
 		if (ret != FI_SUCCESS) {
-			CXIP_WARN("Unable to allocate CMDQ, ret: %d\n", ret);
+			CXIP_WARN("Allocate rget CMDQ failed, ret: %d %s %s\n",
+				  ret,
+				  !tc_unspec ? "unset FI_CXI_RGET_TC\n" : "",
+				  alt_read ?
+				  "set FI_CXI_DISABLE_ALT_READ_CMDQ\n" : "");
 			return -FI_ENOSPC;
 		}
+
+		/* A single distinct command queue is sufficient for the
+		 * default rendezvous protocol with a TC specified.
+		 */
+		if (!alt_read)
+			rxc->tx_cmdq = rxc->tx_rget_cmdq;
+	}
+
+	/* If a specific rendezvous TC is not requested it is possible to
+	 * share an existing TX command queue. The alternate read protocol
+	 * prefers to use the shared TX queue for notify operations to
+	 * avoid communication profile changes.
+	 */
+	if (tc_unspec || alt_read) {
+		ret = cxip_ep_cmdq(rxc->base.ep_obj, true, FI_TC_UNSPEC,
+				   rxc->base.rx_evtq.eq, &rxc->tx_cmdq);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
+			ret = -FI_EDOMAIN;
+			goto put_tx_rget_cmdq;
+		}
+
+		/* One command queue is sufficient for the default rendezvous
+		 * protocol.
+		 */
+		if (!alt_read)
+			rxc->tx_rget_cmdq = rxc->tx_cmdq;
 	}
 
 	/* If applications AVs are symmetric, use logical FI addresses for
@@ -3971,10 +3998,12 @@ free_pte:
 	cxip_pte_free(rxc->base.rx_pte);
 
 put_tx_cmdq:
-	if (cxip_env.rget_tc == FI_TC_UNSPEC)
+	if (tc_unspec || alt_read)
 		cxip_ep_cmdq_put(rxc->base.ep_obj, true);
-	else
-		cxip_cmdq_free(rxc->tx_cmdq);
+
+put_tx_rget_cmdq:
+	if (!tc_unspec || alt_read)
+		cxip_cmdq_free(rxc->tx_rget_cmdq);
 
 	return ret;
 }
@@ -3983,13 +4012,16 @@ static int cxip_rxc_hpc_msg_fini(struct cxip_rxc *rxc_base)
 {
 	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
 						base);
+	bool alt_read = cxip_env.rdzv_proto == CXIP_RDZV_PROTO_ALT_READ &&
+			!cxip_env.disable_alt_read_cmdq;
 
 	assert(rxc->base.protocol == FI_PROTO_CXI);
 
-	if (cxip_env.rget_tc == FI_TC_UNSPEC)
+	if (cxip_env.rget_tc == FI_TC_UNSPEC || alt_read)
 		cxip_ep_cmdq_put(rxc->base.ep_obj, true);
-	else
-		cxip_cmdq_free(rxc->tx_cmdq);
+
+	if (cxip_env.rget_tc != FI_TC_UNSPEC || alt_read)
+		cxip_cmdq_free(rxc->tx_rget_cmdq);
 
 	cxip_evtq_adjust_reserved_fc_event_slots(&rxc->base.rx_evtq,
 						 -1 * RXC_RESERVED_FC_SLOTS);
