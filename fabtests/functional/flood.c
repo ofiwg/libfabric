@@ -144,7 +144,7 @@ static int run_seq_mr_send(void) {
 			if (ret)
 				goto out;
 
-			ret = ft_post_rx_buf(ep, opts.transfer_size,
+			ret = ft_post_rx_buf(ep, remote_fi_addr, opts.transfer_size,
 				             &(rx_ctx_arr[i].context),
 					     rx_ctx_arr[i].buf,
 					     rx_ctx_arr[i].desc, ft_tag);
@@ -191,7 +191,7 @@ static int run_batch_mr_send(void)
 			goto out;
 	} else {
 		for (i = 0; i < opts.window_size; i++) {
-			ret = ft_post_rx_buf(ep, opts.transfer_size,
+			ret = ft_post_rx_buf(ep, remote_fi_addr, opts.transfer_size,
 					     &rx_ctx_arr[i].context,
 					     rx_ctx_arr[i].buf,
 					     rx_ctx_arr[i].desc, 0);

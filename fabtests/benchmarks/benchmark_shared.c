@@ -594,7 +594,7 @@ int bandwidth(void)
 							 ft_rx_prefix_size(),
 						 &rx_ctx_arr[j].context, flags);
 			} else {
-				ret = ft_post_rx_buf(ep, opts.transfer_size,
+				ret = ft_post_rx_buf(ep, remote_fi_addr, opts.transfer_size,
 						     &rx_ctx_arr[j].context,
 						     rx_ctx_arr[j].buf, mr_desc,
 						     ft_tag);
