@@ -584,7 +584,7 @@ size_t ft_tx_prefix_size(void);
 void ft_force_progress(void);
 int ft_progress(struct fid_cq *cq, uint64_t total, uint64_t *cq_cntr);
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, void *ctx);
-ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, void *ctx,
+ssize_t ft_post_rx_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx,
 		       void *op_buf, void *op_mr_desc, uint64_t op_tag);
 ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
 		uint64_t data, void *ctx);

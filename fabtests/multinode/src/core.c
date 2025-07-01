@@ -224,7 +224,7 @@ int multi_msg_recv(void)
 		assert(rx_ctx_arr[offset].state == OP_DONE);
 
 		remote_fi_addr = pm_job.fi_addrs[state.cur_source];
-		ret = ft_post_rx_buf(ep, opts.transfer_size,
+		ret = ft_post_rx_buf(ep, remote_fi_addr, opts.transfer_size,
 				     &rx_ctx_arr[offset].context,
 				     rx_ctx_arr[offset].buf,
 				     rx_ctx_arr[offset].desc, 1);

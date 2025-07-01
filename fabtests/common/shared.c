@@ -2564,7 +2564,7 @@ int check_compare_atomic_op(struct fid_ep *endpoint, enum fi_op op,
 	return check_atomic_attr(op, datatype, FI_COMPARE_ATOMIC);
 }
 
-ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, void *ctx,
+ssize_t ft_post_rx_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx,
 		       void *op_buf, void *op_mr_desc, uint64_t op_tag)
 {
 	size = MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size();
@@ -2572,17 +2572,17 @@ ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, void *ctx,
 		op_tag = op_tag ? op_tag : rx_seq;
 		FT_POST(fi_trecv, ft_progress, rxcq, rx_seq, &rx_cq_cntr,
 			"receive", ep, op_buf, size, op_mr_desc,
-			remote_fi_addr, op_tag, 0, ctx);
+			fi_addr, op_tag, 0, ctx);
 	} else {
 		FT_POST(fi_recv, ft_progress, rxcq, rx_seq, &rx_cq_cntr,
-			"receive", ep, op_buf, size, op_mr_desc, remote_fi_addr, ctx);
+			"receive", ep, op_buf, size, op_mr_desc, fi_addr, ctx);
 	}
 	return 0;
 }
 
 ssize_t ft_post_rx(struct fid_ep *ep, size_t size, void *ctx)
 {
-	return ft_post_rx_buf(ep, size, ctx, rx_buf, mr_desc, ft_tag);
+	return ft_post_rx_buf(ep, remote_fi_addr, size, ctx, rx_buf, mr_desc, ft_tag);
 }
 
 ssize_t ft_rx(struct fid_ep *ep, size_t size)
