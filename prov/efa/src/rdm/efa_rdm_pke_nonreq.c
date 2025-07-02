@@ -96,9 +96,9 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_peer *peer;
 	uint64_t *host_id_ptr;
 
-	assert(pkt_entry->peer->efa_fiaddr != FI_ADDR_NOTAVAIL);
+	assert(pkt_entry->peer->conn->fi_addr != FI_ADDR_NOTAVAIL);
 	EFA_DBG(FI_LOG_CQ,
-		"HANDSHAKE received from %" PRIu64 "\n", pkt_entry->peer->efa_fiaddr);
+		"HANDSHAKE received from %" PRIu64 "\n", pkt_entry->peer->conn->fi_addr);
 
 	peer = pkt_entry->peer;
 	assert(peer);

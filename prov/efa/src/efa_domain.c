@@ -760,7 +760,7 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 		if (OFI_UNLIKELY(ret)) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"Failed to post HANDSHAKE to peer %ld: %s\n",
-				peer->efa_fiaddr, fi_strerror(-ret));
+				peer->conn->fi_addr, fi_strerror(-ret));
 			efa_base_ep_write_eq_error(&peer->ep->base_ep, -ret, FI_EFA_ERR_PEER_HANDSHAKE);
 			continue;
 		}

@@ -304,7 +304,7 @@ void test_av_reinsertion(struct efa_resource **state)
 	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_2), 1);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, fi_addr);
-	assert_int_equal(peer->efa_fiaddr, fi_addr);
+	assert_int_equal(peer->conn->fi_addr, fi_addr);
 
 	err = fi_av_remove(resource->av, &fi_addr, 1, 0);
 	assert_int_equal(err, 0);
@@ -320,7 +320,7 @@ void test_av_reinsertion(struct efa_resource **state)
 	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_2), 1);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, fi_addr);
-	assert_int_equal(peer->efa_fiaddr, fi_addr);
+	assert_int_equal(peer->conn->fi_addr, fi_addr);
 
 	err = fi_av_remove(resource->av, &fi_addr, 1, 0);
 	assert_int_equal(err, 0);

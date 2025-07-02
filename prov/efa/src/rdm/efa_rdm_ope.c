@@ -800,7 +800,7 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 			 " rx_id: %" PRIu32 " msg_id: %" PRIu32 " tag: %" PRIu64
 			 " incoming message size: %" PRIu64
 			 " receiving buffer size: %zu\n",
-			 rxe->peer->efa_fiaddr, rxe->rx_id, rxe->msg_id, rxe->cq_entry.tag,
+			 rxe->peer->conn->fi_addr, rxe->rx_id, rxe->msg_id, rxe->cq_entry.tag,
 			 rxe->total_len, rxe->cq_entry.len);
 
 		ret = ofi_cq_write_error_trunc(ep->base_ep.util_ep.rx_cq,
@@ -832,12 +832,12 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 		       "Writing recv completion for rxe from peer: %"
 		       PRIu64 " rx_id: %" PRIu32 " msg_id: %" PRIu32
 		       " tag: %lx total_len: %" PRIu64 "\n",
-		       rxe->peer->efa_fiaddr, rxe->rx_id, rxe->msg_id,
+		       rxe->peer->conn->fi_addr, rxe->rx_id, rxe->msg_id,
 		       rxe->cq_entry.tag, rxe->total_len);
 
 		efa_rdm_tracepoint(recv_end,
 			    rxe->msg_id, (size_t) rxe->cq_entry.op_context,
-			    rxe->total_len, rxe->cq_entry.tag, rxe->peer->efa_fiaddr);
+			    rxe->total_len, rxe->cq_entry.tag, rxe->peer->conn->fi_addr);
 
 
 		if (ep->base_ep.util_ep.caps & FI_SOURCE)
@@ -848,7 +848,7 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 					       rxe->cq_entry.buf,
 					       rxe->cq_entry.data,
 					       rxe->cq_entry.tag,
-					       rxe->peer->efa_fiaddr);
+					       rxe->peer->conn->fi_addr);
 		else
 			ret = ofi_cq_write(rx_cq,
 					   rxe->cq_entry.op_context,
@@ -932,13 +932,13 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
 		       "Writing send completion for txe to peer: %" PRIu64
 		       " tx_id: %" PRIu32 " msg_id: %" PRIu32 " tag: %lx len: %"
 		       PRIu64 "\n",
-		       txe->peer->efa_fiaddr, txe->tx_id, txe->msg_id,
+		       txe->peer->conn->fi_addr, txe->tx_id, txe->msg_id,
 		       txe->cq_entry.tag, txe->total_len);
 
 
 	efa_rdm_tracepoint(send_end,
 		    txe->msg_id, (size_t) txe->cq_entry.op_context,
-		    txe->total_len, txe->cq_entry.tag, txe->peer->efa_fiaddr);
+		    txe->total_len, txe->cq_entry.tag, txe->peer->conn->fi_addr);
 
 		/* TX completions should not send peer address to util_cq */
 		if (txe->ep->base_ep.util_ep.caps & FI_SOURCE)

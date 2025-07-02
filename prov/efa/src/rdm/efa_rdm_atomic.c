@@ -209,7 +209,7 @@ efa_rdm_atomic_inject(struct fid_ep *ep,
 		if (!(efa_rdm_ep_domain(efa_rdm_ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR))
 			remote_addr = 0;
 
-		return fi_inject_atomic(efa_rdm_ep->shm_ep, buf, count, peer->shm_fiaddr,
+		return fi_inject_atomic(efa_rdm_ep->shm_ep, buf, count, peer->conn->shm_fi_addr,
 					remote_addr, remote_key, datatype, op);
 	}
 
@@ -263,7 +263,7 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, rma_iov, shm_desc);
-		shm_msg.addr = peer->shm_fiaddr;
+		shm_msg.addr = peer->conn->shm_fi_addr;
 		return fi_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg, flags);
 	}
 
@@ -358,7 +358,7 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
-		shm_msg.addr = peer->shm_fiaddr;
+		shm_msg.addr = peer->conn->shm_fi_addr;
 		efa_rdm_get_desc_for_shm(result_count, result_desc, shm_res_desc);
 		return fi_fetch_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg,
 					  resultv, shm_res_desc, result_count,
@@ -470,7 +470,7 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
-		shm_msg.addr = peer->shm_fiaddr;
+		shm_msg.addr = peer->conn->shm_fi_addr;
 		efa_rdm_get_desc_for_shm(result_count, result_desc, shm_res_desc);
 		efa_rdm_get_desc_for_shm(compare_count, compare_desc, shm_comp_desc);
 		return fi_compare_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg,

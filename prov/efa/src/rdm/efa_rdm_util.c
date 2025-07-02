@@ -119,7 +119,7 @@ int efa_rdm_construct_msg_with_local_and_peer_information(struct efa_rdm_ep *ep,
 	len = sizeof(ep_addr_str);
 	efa_base_ep_raw_addr_str(&ep->base_ep, ep_addr_str, &len);
 	len = sizeof(peer_addr_str);
-	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, peer->efa_fiaddr, peer_addr_str, &len);
+	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, peer->conn->fi_addr, peer_addr_str, &len);
 
 	if (!ep->host_id || EFA_HOST_ID_STRING_LENGTH != snprintf(local_host_id_str, EFA_HOST_ID_STRING_LENGTH + 1, "i-%017lx", ep->host_id)) {
 		strcpy(local_host_id_str, "N/A");

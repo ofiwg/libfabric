@@ -5,11 +5,24 @@
 #define EFA_AV_H
 
 #include <infiniband/verbs.h>
+#include "ofi_util.h"
 #include "rdm/efa_rdm_protocol.h"
 #include "rdm/efa_rdm_peer.h"
 
 #define EFA_MIN_AV_SIZE (16384)
 #define EFA_SHM_MAX_AV_COUNT       (256)
+
+#define EFA_GID_LEN	16
+
+struct efa_ep_addr {
+	uint8_t			raw[EFA_GID_LEN];
+	uint16_t		qpn;
+	uint16_t		pad;
+	uint32_t		qkey;
+	struct efa_ep_addr	*next;
+};
+
+#define EFA_EP_ADDR_LEN sizeof(struct efa_ep_addr)
 
 struct efa_ah {
 	uint8_t		gid[EFA_GID_LEN]; /* efa device GID */

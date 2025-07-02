@@ -22,7 +22,7 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	memset(peer, 0, sizeof(struct efa_rdm_peer));
 
 	peer->ep = ep;
-	peer->efa_fiaddr = conn->fi_addr;
+	peer->conn = conn;
 	peer->is_self = efa_is_same_addr(&ep->base_ep.src_addr, conn->ep_addr);
 	peer->host_id = peer->is_self ? ep->host_id : 0;	/* Peer host id is exchanged via handshake */
 	peer->num_runt_bytes_in_flight = 0;
@@ -33,7 +33,6 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	dlist_init(&peer->overflow_pke_list);
 
 	if (conn->shm_fi_addr != FI_ADDR_NOTAVAIL) {
-		peer->shm_fiaddr = conn->shm_fi_addr;
 		peer->is_local = 1;
 	}
 

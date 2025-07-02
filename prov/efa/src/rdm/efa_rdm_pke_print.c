@@ -157,7 +157,7 @@ static void efa_rdm_pke_print_eager_tag_rtm(char *prefix,
 		" flags: %x peer: %" PRIu64 " msg_id: %" PRIu32 " tag: %" PRIu64
 		"\n",
 		prefix, base_hdr->type, base_hdr->version, base_hdr->flags,
-		pkt_entry->peer->efa_fiaddr, base_hdr->msg_id, tag_rtm_hdr->tag);
+		pkt_entry->peer->conn->fi_addr, base_hdr->msg_id, tag_rtm_hdr->tag);
 
     efa_rdm_pke_print_req_hdr(pkt_entry, base_hdr, &opt_hdr);
 
@@ -191,7 +191,7 @@ static void efa_rdm_pke_print_longread_rtw(char *prefix,
 		" msg_length: %" PRIu64 " send_id: %" PRIu32
 		" read_iov_count: %" PRIu32 "\n",
 		prefix, base_hdr->type, base_hdr->version, base_hdr->flags,
-		pkt_entry->peer->efa_fiaddr, base_hdr->msg_id, rtw_hdr->rma_iov_count,
+		pkt_entry->peer->conn->fi_addr, base_hdr->msg_id, rtw_hdr->rma_iov_count,
 		rtw_hdr->msg_length, rtw_hdr->send_id, rtw_hdr->read_iov_count);
 
 	efa_rdm_pke_print_fi_rma_iov("rma_iov", rtw_hdr->rma_iov_count,
