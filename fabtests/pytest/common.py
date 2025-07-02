@@ -375,7 +375,7 @@ class ClientServerTest:
                              fabric=None,
                              additional_env=''):
         if executable == "fi_ubertest":
-            return "fi_ubertest", None
+            return "fi_ubertest", additional_env
 
         '''
             all execuables in fabtests (except fi_ubertest) accept a common set of arguments:
@@ -442,7 +442,7 @@ class ClientServerTest:
             client_memory_type, self._cmdline_args.client_id)
 
         if host_memory_type == "host":
-            return command, None    # no addtional environment variable
+            return command, additional_env    # default addtional environment variable
 
         assert host_memory_type == "cuda" or host_memory_type == "neuron"
 
