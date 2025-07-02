@@ -289,12 +289,12 @@ int efa_conn_rdm_insert_shm_av(struct efa_av *av, struct efa_conn *conn)
 		 * The shm provider supports FI_AV_USER_ID flag. This flag
 		 * associates a user-assigned identifier with each av entry that is
 		 * returned with any completion entry in place of the AV's address.
-		 * In the fi_av_insert call below, the &peer->shm_fiaddr is both an input
-		 * and an output. peer->shm_fiaddr is passed in the function with value as
+		 * In the fi_av_insert call below, the &conn->shm_fi_addr is both an input
+		 * and an output. conn->shm_fi_addr is passed in the function with value as
 		 * conn->fi_addr, which is the address of peer in efa provider's av. shm
 		 * records this value as user id in its internal hashmap for the use of cq
-		 * write, and then overwrite peer->shm_fiaddr as the actual fi_addr in shm's
-		 * av. The efa provider should still use peer->shm_fiaddr for transmissions
+		 * write, and then overwrite conn->shm_fi_addr as the actual fi_addr in shm's
+		 * av. The efa provider should still use conn->shm_fi_addr for transmissions
 		 * through shm ep.
 		 */
 		conn->shm_fi_addr = conn->fi_addr;

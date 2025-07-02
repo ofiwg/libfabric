@@ -125,7 +125,7 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 		}
 		EFA_DBG(FI_LOG_EP_DATA,
 		       "reset backoff timer for peer: %" PRIu64 "\n",
-		       pkt_entry->peer->efa_fiaddr);
+		       pkt_entry->peer->conn->fi_addr);
 	}
 
 	efa_rdm_pke_release(pkt_entry);
@@ -401,7 +401,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
 
-	conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry_vec[0]->peer->efa_fiaddr);
+	conn = pkt_entry_vec[0]->peer->conn;
 	assert(conn && conn->ep_addr);
 
 	qp = ep->base_ep.qp;
@@ -530,7 +530,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah->ibv_ah,
 				   qp->qp_num, qp->qkey);
 	} else {
-		conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->peer->efa_fiaddr);
+		conn = pkt_entry->peer->conn;
 		assert(conn && conn->ep_addr);
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
@@ -632,7 +632,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah->ibv_ah,
 				   qp->qp_num, qp->qkey);
 	} else {
-		conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->peer->efa_fiaddr);
+		conn = pkt_entry->peer->conn;
 		assert(conn && conn->ep_addr);
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);

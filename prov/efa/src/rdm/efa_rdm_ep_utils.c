@@ -504,7 +504,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct dlist_entry *list,
 		EFA_DBG(FI_LOG_EP_DATA,
 		       "initializing backoff timeout for peer: %" PRIu64
 		       " timeout: %ld rnr_queued_pkts: %d\n",
-		       pkt_entry->peer->efa_fiaddr, peer->rnr_backoff_wait_time,
+		       pkt_entry->peer->conn->fi_addr, peer->rnr_backoff_wait_time,
 		       peer->rnr_queued_pkt_cnt);
 	} else {
 		peer->rnr_backoff_wait_time = MIN(peer->rnr_backoff_wait_time * 2,
@@ -512,7 +512,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct dlist_entry *list,
 		EFA_DBG(FI_LOG_EP_DATA,
 		       "increasing backoff timeout for peer: %" PRIu64
 		       " to %ld rnr_queued_pkts: %d\n",
-		       pkt_entry->peer->efa_fiaddr, peer->rnr_backoff_wait_time,
+		       pkt_entry->peer->conn->fi_addr, peer->rnr_backoff_wait_time,
 		       peer->rnr_queued_pkt_cnt);
 	}
 }
@@ -549,7 +549,7 @@ ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer 
 	    (peer->flags & EFA_RDM_PEER_REQ_SENT))
 		return 0;
 
-	msg.addr = peer->efa_fiaddr;
+	msg.addr = peer->conn->fi_addr;
 
 	txe = efa_rdm_ep_alloc_txe(ep, peer, &msg, ofi_op_write, 0, 0);
 
@@ -587,7 +587,7 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	fi_addr_t addr;
 	ssize_t ret;
 
-	addr = peer->efa_fiaddr;
+	addr = peer->conn->fi_addr;
 	msg.addr = addr;
 
 	/* ofi_op_write is ignored in handshake path */
@@ -667,7 +667,7 @@ void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_pe
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Failed to post HANDSHAKE to peer %ld: %s\n",
-			peer->efa_fiaddr, fi_strerror(-err));
+			peer->conn->fi_addr, fi_strerror(-err));
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_PEER_HANDSHAKE);
 		return;
 	}

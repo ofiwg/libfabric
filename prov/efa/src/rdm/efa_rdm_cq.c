@@ -248,7 +248,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	if (OFI_UNLIKELY(pkt_type >= EFA_RDM_EXTRA_REQ_PKT_END)) {
 		EFA_WARN(FI_LOG_CQ,
 			"Peer %d is requesting feature %d, which this EP does not support.\n",
-			(int)pkt_entry->peer->efa_fiaddr, base_hdr->type);
+			(int)pkt_entry->peer->conn->fi_addr, base_hdr->type);
 
 		assert(0 && "invalid REQ packet type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
@@ -369,7 +369,7 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 					   (size_t) pkt_entry->ope->cq_entry.op_context,
 					   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
-					   pkt_entry->ope->peer->efa_fiaddr);
+					   pkt_entry->ope->peer->conn->fi_addr);
 #endif
 		opcode = ibv_wc_read_opcode(ibv_cq->ibv_cq_ex);
 		if (ibv_cq->ibv_cq_ex->status) {
