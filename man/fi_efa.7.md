@@ -220,6 +220,7 @@ struct fi_efa_mr_attr {
     uint16_t recv_ic_id;
     uint16_t rdma_read_ic_id;
     uint16_t rdma_recv_ic_id;
+    uint32_t lkey;
 };
 ```
 
@@ -243,6 +244,9 @@ struct fi_efa_mr_attr {
 
 *rdma_recv_ic_id*
 :	Physical interconnect used by the device to reach the MR for RDMA write receive. It is only valid when `ic_id_validity` has the `FI_EFA_MR_ATTR_RDMA_RECV_IC_ID` bit.
+
+*lkey*
+:	local memory translation key used by TX/RX buffer descriptor.
 
 #### Return value
 **query_mr()** returns 0 on success, or the value of errno on failure

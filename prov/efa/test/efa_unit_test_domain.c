@@ -60,9 +60,11 @@ void test_efa_domain_open_ops_mr_query_common(
     struct fi_efa_mr_attr efa_mr_attr = {0};
     struct efa_mr mr = {0};
     struct fid_mr mr_fid = {0};
+    struct ibv_mr ibv_mr = {0};
 
     mr.mr_fid = mr_fid;
-    mr.ibv_mr = NULL;
+    ibv_mr.lkey = 1234567;
+    mr.ibv_mr = &ibv_mr;
 
     ret = fi_open_ops(&resource->domain->fid, FI_EFA_DOMAIN_OPS, 0, (void **)&efa_domain_ops, NULL);
     assert_int_equal(ret, 0);
@@ -83,6 +85,8 @@ void test_efa_domain_open_ops_mr_query_common(
 
     if (efa_mr_attr.ic_id_validity & FI_EFA_MR_ATTR_RDMA_RECV_IC_ID)
         assert_true(efa_mr_attr.rdma_recv_ic_id == expected_rdma_recv_ic_id);
+
+    assert_true(efa_mr_attr.lkey == mr.ibv_mr->lkey);
 }
 
 #if HAVE_EFADV_QUERY_MR

@@ -13,6 +13,7 @@ struct fi_efa_mr_attr {
     uint16_t recv_ic_id;
     uint16_t rdma_read_ic_id;
     uint16_t rdma_recv_ic_id;
+    uint32_t lkey;
 };
 
 enum {

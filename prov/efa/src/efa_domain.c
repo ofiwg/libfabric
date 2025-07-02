@@ -443,6 +443,8 @@ efa_domain_query_mr(struct fid_mr *mr_fid, struct fi_efa_mr_attr *mr_attr)
 		mr_attr->ic_id_validity |= FI_EFA_MR_ATTR_RDMA_RECV_IC_ID;
 	}
 
+	mr_attr->lkey = efa_mr->ibv_mr->lkey;
+
 	return FI_SUCCESS;
 }
 
