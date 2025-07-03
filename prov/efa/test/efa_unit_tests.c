@@ -20,6 +20,9 @@ static int efa_unit_test_mocks_group_setup(void **state)
 	fi_getinfo(FI_VERSION(2, 0), NULL, NULL, 0, NULL, &info);
 	memcpy(g_efa_hmem_info_backup, g_efa_hmem_info, sizeof(g_efa_hmem_info));
 
+	/* Initialize the random number generator */
+	srand(time(NULL));
+
 	return 0;
 }
 
@@ -140,6 +143,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_av_reinsertion, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_implicit, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_implicit_to_explicit, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_av_implicit_av_lru_insertion, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_av_implicit_av_lru_eviction, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_av.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_device_construct_error_handling, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
