@@ -13,6 +13,9 @@
 #include "efa_av.h"
 #include "rdm/efa_rdm_pke_utils.h"
 
+static void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
+			     bool release_from_implicit_av);
+
 /*
  * Local/remote peer detection by comparing peer GID with stored local GIDs
  */
@@ -207,8 +210,10 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 					      &av->prv_reverse_av_implicit, ahn,
 					      qpn, pkt_entry);
 
-	if (OFI_LIKELY(!!conn))
+	if (OFI_LIKELY(!!conn)) {
+		efa_av_implicit_av_lru_move(av, conn);
 		return conn->implicit_fi_addr;
+	}
 
 	return FI_ADDR_NOTAVAIL;
 }
@@ -543,6 +548,53 @@ static void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 }
 
 /**
+ * @brief Add the conn to the LRU list. If the list is full, evict the least
+ * recently used entry at the front of the LRU list and add the latest one
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	conn	efa conn to be added to the LRU list
+ */
+static inline void efa_av_implicit_av_lru_insert(struct efa_av *av,
+						 struct efa_conn *conn)
+{
+	size_t cur_size;
+	struct efa_conn *conn_to_release;
+
+	cur_size = HASH_CNT(hh, av->util_av_implicit.hash);
+	if (cur_size <= av->implicit_av_size)
+		goto out;
+
+	dlist_pop_front(&av->implicit_av_lru_list, struct efa_conn,
+			conn_to_release, implicit_av_lru_entry);
+	efa_conn_release(av, conn_to_release, true);
+
+	assert(HASH_CNT(hh, av->util_av_implicit.hash) == av->implicit_av_size);
+
+out:
+	dlist_insert_tail(&conn->implicit_av_lru_entry,
+			  &av->implicit_av_lru_list);
+}
+
+/**
+ * @brief Move the conn to the end of the LRU list to indicate that it is the
+ * most recently used entry
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	conn	efa conn to be added to the LRU list
+ */
+void efa_av_implicit_av_lru_move(struct efa_av *av,
+					struct efa_conn *conn)
+{
+	assert(HASH_CNT(hh, av->util_av_implicit.hash) <= av->implicit_av_size);
+	assert(dlist_entry_in_list(&av->implicit_av_lru_list,
+				   &conn->implicit_av_lru_entry));
+
+	dlist_remove(&conn->implicit_av_lru_entry);
+	dlist_insert_tail(&conn->implicit_av_lru_entry,
+			  &av->implicit_av_lru_list);
+}
+
+/**
  * @brief allocate an efa_conn object
  * caller of this function must obtain av->util_av.lock or av->util_av_implicit.lock
  *
@@ -603,6 +655,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	if (insert_implicit_av) {
 		conn->fi_addr = FI_ADDR_NOTAVAIL;
 		conn->implicit_fi_addr = fi_addr;
+		efa_av_implicit_av_lru_insert(av, conn);
 	} else {
 		conn->fi_addr = fi_addr;
 		conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
@@ -774,6 +827,8 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 		return err;
 	}
 
+	dlist_remove(&implicit_av_entry->conn.implicit_av_lru_entry);
+
 	av->used_implicit--;
 
 	err = ofi_av_insert_addr(&av->util_av, raw_addr, fi_addr);
@@ -909,6 +964,11 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 			 implicit_fi_addr);
 
 		if (insert_implicit_av) {
+			/* Move to the end of the LRU list */
+			conn = efa_av_addr_to_conn_implicit(av,
+							    implicit_fi_addr);
+			efa_av_implicit_av_lru_move(av, conn);
+
 			*fi_addr = implicit_fi_addr;
 			goto out;
 		}
@@ -1275,6 +1335,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	av->domain = efa_domain;
 	av->type = attr->type;
+	av->implicit_av_size = efa_env.implicit_av_size;
 	av->used_implicit = 0;
 	av->used_explicit = 0;
 	av->shm_used = 0;
@@ -1284,6 +1345,8 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	(*av_fid)->fid.context = context;
 	(*av_fid)->fid.ops = &efa_av_fi_ops;
 	(*av_fid)->ops = &efa_av_ops;
+
+	dlist_init(&av->implicit_av_lru_list);
 
 	return 0;
 
