@@ -744,52 +744,6 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 	efa_rdm_pke_release_rx(pkt_entry);
 }
 
-static
-fi_addr_t efa_rdm_pke_insert_addr(struct efa_rdm_pke *pkt_entry, void *raw_addr)
-{
-	int ret;
-	fi_addr_t rdm_addr;
-	struct efa_rdm_ep *ep;
-	struct efa_rdm_base_hdr *base_hdr;
-
-	ep = pkt_entry->ep;
-
-	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	if (base_hdr->version < EFA_RDM_PROTOCOL_VERSION) {
-		char self_raw_addr_str[OFI_ADDRSTRLEN];
-		size_t buflen = OFI_ADDRSTRLEN;
-
-		efa_base_ep_raw_addr_str(&ep->base_ep, self_raw_addr_str, &buflen);
-		EFA_WARN(FI_LOG_CQ,
-			"Host %s received a packet with invalid protocol version %d.\n"
-			"This host can only support protocol version %d and above.\n",
-			self_raw_addr_str, base_hdr->version, EFA_RDM_PROTOCOL_VERSION);
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
-		fprintf(stderr, "Host %s received a packet with invalid protocol version %d.\n"
-			"This host can only support protocol version %d and above. %s:%d\n",
-			self_raw_addr_str, base_hdr->version, EFA_RDM_PROTOCOL_VERSION, __FILE__, __LINE__);
-		abort();
-	}
-
-	assert(base_hdr->type >= EFA_RDM_REQ_PKT_BEGIN);
-
-	/*
-	 * The message is from a peer through efa device, which means peer is not local
-	 * or shm is disabled for transmission.
-	 * We shouldn't insert shm av anyway in this case.
-	 * Also, calling fi_av_insert internally inside progress engine is violating
-	 * Libfabric standard for FI_AV_TABLE.
-	 */
-	ret = efa_av_insert_one(ep->base_ep.av, (struct efa_ep_addr *)raw_addr,
-	                        &rdm_addr, 0, NULL, false);
-	if (OFI_UNLIKELY(ret != 0)) {
-		efa_base_ep_write_eq_error(&ep->base_ep, ret, FI_EFA_ERR_AV_INSERT);
-		return -1;
-	}
-
-	return rdm_addr;
-}
-
 void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_imm_data, uint32_t imm_data)
 {
 	struct efa_rdm_ope *rxe = pkt_entry->ope;
@@ -921,25 +875,4 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
-}
-
-/**
- * @brief Read peer raw address from packet header and insert the peer in AV.
- * @param ep Pointer to RDM endpoint
- * @param pkt_entry Pointer to packet entry
- * @returns Peer address, or FI_ADDR_NOTAVIL if the packet header does not include raw address
- */
-fi_addr_t efa_rdm_pke_determine_addr(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_base_hdr *base_hdr;
-
-	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	if (base_hdr->type >= EFA_RDM_REQ_PKT_BEGIN && efa_rdm_pke_get_req_raw_addr(pkt_entry)) {
-		void *raw_addr;
-		raw_addr = efa_rdm_pke_get_req_raw_addr(pkt_entry);
-		assert(raw_addr);
-		return efa_rdm_pke_insert_addr(pkt_entry, raw_addr);
-	}
-
-	return FI_ADDR_NOTAVAIL;
 }

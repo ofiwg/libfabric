@@ -145,6 +145,7 @@ static void efa_rdm_pke_print_eager_tag_rtm(char *prefix,
 	size_t str_len = EFA_RDM_PKE_DUMP_DATA_LEN * 4, l;
 	char *opt_hdr;
 	uint8_t *data;
+	fi_addr_t fi_addr = FI_ADDR_NOTAVAIL;
 	int i;
 
 	str[str_len - 1] = '\0';
@@ -152,12 +153,15 @@ static void efa_rdm_pke_print_eager_tag_rtm(char *prefix,
 	base_hdr = (struct efa_rdm_rtm_base_hdr *) pkt_entry->wiredata;
 	tag_rtm_hdr = (struct efa_rdm_eager_tagrtm_hdr *) pkt_entry->wiredata;
 
+	if (pkt_entry->peer)
+		fi_addr = pkt_entry->peer->conn->fi_addr;
+
 	EFA_DBG(FI_LOG_EP_DATA,
 		"%s EFA RDM RTM packet - type: %" PRIu32 "  version: %" PRIu8
 		" flags: %x peer: %" PRIu64 " msg_id: %" PRIu32 " tag: %" PRIu64
 		"\n",
 		prefix, base_hdr->type, base_hdr->version, base_hdr->flags,
-		pkt_entry->peer->conn->fi_addr, base_hdr->msg_id, tag_rtm_hdr->tag);
+		fi_addr, base_hdr->msg_id, tag_rtm_hdr->tag);
 
     efa_rdm_pke_print_req_hdr(pkt_entry, base_hdr, &opt_hdr);
 
