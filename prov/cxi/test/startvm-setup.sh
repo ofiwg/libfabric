@@ -13,6 +13,8 @@ export LC_ALL=en_US.UTF-8
 ulimit -s unlimited
 ulimit -l unlimited
 
+modprobe configfs
+mount -t configfs none /sys/kernel/config
 modprobe ptp
 modprobe iommu_v2 || modprobe amd_iommu_v2
 insmod $DBS_DIR/slingshot_base_link/cxi-sbl.ko
