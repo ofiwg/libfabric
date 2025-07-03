@@ -796,7 +796,6 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
  * @param[in]  efa_rdm_ep      endpoint
  * @return     a boolean
  */
-static
 bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
 {
 	struct dlist_entry *entry, *tmp;

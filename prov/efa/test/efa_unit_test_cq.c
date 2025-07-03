@@ -1090,4 +1090,3 @@ void test_efa_cq_recv_rdma_with_imm_failure(struct efa_resource **state)
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
 	resource->ep = NULL;
 }
-

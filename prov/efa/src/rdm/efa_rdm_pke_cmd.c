@@ -767,11 +767,9 @@ fi_addr_t efa_rdm_pke_insert_addr(struct efa_rdm_pke *pkt_entry, void *raw_addr)
 	 * The message is from a peer through efa device, which means peer is not local
 	 * or shm is disabled for transmission.
 	 * We shouldn't insert shm av anyway in this case.
-	 * Also, calling fi_av_insert internally inside progress engine is violating
-	 * Libfabric standard for FI_AV_TABLE.
 	 */
 	ret = efa_av_insert_one(ep->base_ep.av, (struct efa_ep_addr *)raw_addr,
-	                        &rdm_addr, 0, NULL, false);
+	                        &rdm_addr, 0, NULL, false, true);
 	if (OFI_UNLIKELY(ret != 0)) {
 		efa_base_ep_write_eq_error(&ep->base_ep, ret, FI_EFA_ERR_AV_INSERT);
 		return -1;
