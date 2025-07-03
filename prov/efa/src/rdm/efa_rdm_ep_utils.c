@@ -75,17 +75,27 @@ void efa_rdm_ep_peer_map_remove(struct efa_rdm_ep_peer_map_entry **peer_map,
 	ofi_buf_free(map_entry);
 }
 
-static inline struct efa_rdm_peer *
-efa_rdm_ep_get_peer_impl(struct efa_rdm_ep *ep, struct efa_rdm_ep_peer_map_entry **peer_map, fi_addr_t addr, struct efa_conn *conn)
+/**
+ * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
+ * the explicit AV
+ *
+ * @param[in]		ep		endpoint
+ * @param[in]		addr 		libfabric address
+ * @returns pointer to #efa_rdm_peer
+ */
+struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
+	struct efa_conn *conn;
 	struct efa_rdm_ep_peer_map_entry *map_entry;
 	struct efa_rdm_peer *peer;
 	int err;
 
+	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
+
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
-	peer = efa_rdm_ep_peer_map_lookup(peer_map, addr);
+	peer = efa_rdm_ep_peer_map_lookup(&ep->fi_addr_to_peer_map, addr);
 	if (peer)
 		return peer;
 
@@ -103,27 +113,11 @@ efa_rdm_ep_get_peer_impl(struct efa_rdm_ep *ep, struct efa_rdm_ep_peer_map_entry
 
 	efa_rdm_peer_construct(&map_entry->peer, ep, conn);
 
-	err = efa_rdm_ep_peer_map_insert(peer_map, addr, map_entry);
+	err = efa_rdm_ep_peer_map_insert(&ep->fi_addr_to_peer_map, addr, map_entry);
 	if (err)
 		return NULL;
 
 	return &map_entry->peer;
-}
-
-/**
- * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
- * the explicit AV
- *
- * @param[in]		ep		endpoint
- * @param[in]		addr 		libfabric address
- * @returns pointer to #efa_rdm_peer
- */
-struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
-{
-	struct efa_conn *conn;
-
-	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
-	return efa_rdm_ep_get_peer_impl(ep, &ep->fi_addr_to_peer_map, addr, conn);
 }
 
 /**
@@ -137,9 +131,42 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
 	struct efa_conn *conn;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ep_peer_map_entry *map_entry;
+	int err;
 
 	conn = efa_av_addr_to_conn_implicit(ep->base_ep.av, addr);
-	return efa_rdm_ep_get_peer_impl(ep, &ep->fi_addr_to_peer_map_implicit, addr, conn);
+
+	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
+		return NULL;
+
+	peer = efa_rdm_ep_peer_map_lookup(&ep->fi_addr_to_peer_map_implicit, addr);
+	if (peer)
+		goto out;
+
+	EFA_INFO(FI_LOG_EP_DATA, "Creating peer for addr %lu\n", addr);
+	map_entry = ofi_buf_alloc(ep->peer_map_entry_pool);
+	if (OFI_UNLIKELY(!map_entry)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			"Map entries for fi_addr to peer mapping exhausted.\n");
+		return NULL;
+	}
+
+	memset(map_entry, 0, sizeof(*map_entry));
+	map_entry->addr = addr;
+
+	efa_rdm_peer_construct(&map_entry->peer, ep, conn);
+	peer = &map_entry->peer;
+
+	err = efa_rdm_ep_peer_map_insert(&ep->fi_addr_to_peer_map_implicit, addr, map_entry);
+	if (err)
+		return NULL;
+
+out:
+	assert(peer);
+	/* Move to the front of the LRU list */
+	efa_av_implicit_av_lru_move(ep->base_ep.av, peer->conn);
+	return peer;
 }
 
 void efa_rdm_ep_peer_map_implicit_to_explicit(struct efa_rdm_ep *ep,
