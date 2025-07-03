@@ -116,6 +116,8 @@ void test_av_multiple_ep_efa_direct();
 void test_av_reinsertion();
 void test_av_implicit();
 void test_av_implicit_to_explicit();
+void test_av_implicit_av_lru_insertion();
+void test_av_implicit_av_lru_eviction();
 /* end efa_unit_test_av.c */
 
 void test_efa_device_construct_error_handling();
