@@ -68,6 +68,11 @@ struct efa_env {
 	 * the refill will be skipped.
 	 */
 	size_t internal_rx_refill_threshold;
+	/**
+	 * The maximum size of the implicit AV used to store AV entries of peers
+	 * that were not explicitly inserted into the AV by the application
+	 */
+	size_t implicit_av_size;
 };
 
 extern struct efa_env efa_env;
