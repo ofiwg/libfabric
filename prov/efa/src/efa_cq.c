@@ -246,7 +246,7 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
  * A negative number means to poll until cq empty.
  * @param[in]   util_cq           util_cq
  */
-void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
+int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 {
 	bool should_end_poll = false;
 	struct efa_base_ep *base_ep;
@@ -254,7 +254,7 @@ void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	struct efa_domain *efa_domain;
 	struct fi_cq_tagged_entry cq_entry = {0};
 	struct fi_cq_err_entry err_entry;
-	ssize_t err = 0;
+	int err = 0;
 	size_t num_cqe = 0; /* Count of read entries */
 	int prov_errno, opcode;
 
@@ -335,7 +335,7 @@ void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		err = err > 0 ? err : -err;
 		prov_errno = ibv_wc_read_vendor_err(cq->ibv_cq.ibv_cq_ex);
 		EFA_WARN(FI_LOG_CQ,
-			 "Unexpected error when polling ibv cq, err: %s (%zd) "
+			 "Unexpected error when polling ibv cq, err: %s (%d) "
 			 "prov_errno: %s (%d)\n",
 			 fi_strerror(err), err, efa_strerror(prov_errno),
 			 prov_errno);
@@ -350,6 +350,8 @@ void efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 
 	if (should_end_poll)
 		ibv_end_poll(cq->ibv_cq.ibv_cq_ex);
+
+	return err;
 }
 
 const char *efa_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
@@ -377,7 +379,7 @@ void efa_cq_progress(struct util_cq *cq)
 
 	/* Acquire the lock to prevent race conditions when qp_table is being updated */
 	ofi_genlock_lock(&cq->ep_list_lock);
-	efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, &efa_cq->ibv_cq);
+	(void) efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, &efa_cq->ibv_cq);
 	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 
@@ -430,6 +432,8 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	cq = calloc(1, sizeof(*cq));
 	if (!cq)
 		return -FI_ENOMEM;
+
+	cq->poll_ibv_cq = efa_cq_poll_ibv_cq;
 
 	err = ofi_cq_init(&efa_prov, domain_fid, attr, &cq->util_cq,
 			  &efa_cq_progress, context);
