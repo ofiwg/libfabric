@@ -797,10 +797,10 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 	if (OFI_UNLIKELY(rxe->cq_entry.len < rxe->total_len)) {
 		EFA_WARN(FI_LOG_CQ,
 			 "Message truncated! from peer %" PRIu64
-			 " rx_id: %" PRIu32 " msg_id: %" PRIu32 " tag: %" PRIu64
+			 " implicit fi_addr: %" PRIu64 " rx_id: %" PRIu32 " msg_id: %" PRIu32 " tag: %" PRIu64
 			 " incoming message size: %" PRIu64
 			 " receiving buffer size: %zu\n",
-			 rxe->peer->conn->fi_addr, rxe->rx_id, rxe->msg_id, rxe->cq_entry.tag,
+			 rxe->peer->conn->fi_addr, rxe->peer->conn->implicit_fi_addr, rxe->rx_id, rxe->msg_id, rxe->cq_entry.tag,
 			 rxe->total_len, rxe->cq_entry.len);
 
 		ret = ofi_cq_write_error_trunc(ep->base_ep.util_ep.rx_cq,
@@ -829,11 +829,13 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 	    (ofi_need_completion(cq_flags, rxe->fi_flags) ||
 	     (rxe->cq_entry.flags & FI_MULTI_RECV))) {
 		EFA_DBG(FI_LOG_CQ,
-		       "Writing recv completion for rxe from peer: %"
-		       PRIu64 " rx_id: %" PRIu32 " msg_id: %" PRIu32
-		       " tag: %lx total_len: %" PRIu64 "\n",
-		       rxe->peer->conn->fi_addr, rxe->rx_id, rxe->msg_id,
-		       rxe->cq_entry.tag, rxe->total_len);
+			"Writing recv completion for rxe from peer: %" PRIu64
+			" implicit fi_addr: %" PRIu64 " rx_id: %" PRIu32
+			" msg_id: %" PRIu32 " tag: %lx total_len: %" PRIu64
+			"\n",
+			rxe->peer->conn->fi_addr,
+			rxe->peer->conn->implicit_fi_addr, rxe->rx_id,
+			rxe->msg_id, rxe->cq_entry.tag, rxe->total_len);
 
 		efa_rdm_tracepoint(recv_end,
 			    rxe->msg_id, (size_t) rxe->cq_entry.op_context,

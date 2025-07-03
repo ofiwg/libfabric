@@ -943,6 +943,12 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 
 	/* reset the mocked cq before it's polled by ep close */
 	will_return_always(efa_mock_ibv_start_poll_return_mock, ENOENT);
+
+	/* When the peer is removed, we add it implicitly and try to send a
+	 * handshake packet. So we need to reset efa_outstanding_tx_ops before
+	 * closing the endpoint. */
+	if (remove_peer)
+		efa_rdm_ep->efa_outstanding_tx_ops = 0;
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
 	resource->ep = NULL;
 }
@@ -1413,4 +1419,3 @@ void test_efa_cq_recv_rdma_with_imm_failure(struct efa_resource **state)
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
 	resource->ep = NULL;
 }
-

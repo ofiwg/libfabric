@@ -124,8 +124,10 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 			peer->flags &= ~EFA_RDM_PEER_IN_BACKOFF;
 		}
 		EFA_DBG(FI_LOG_EP_DATA,
-		       "reset backoff timer for peer: %" PRIu64 "\n",
-		       pkt_entry->peer->conn->fi_addr);
+			"reset backoff timer for peer fi_addr: %" PRIu64
+			" implicit fi_addr: %" PRIu64 "\n",
+			pkt_entry->peer->conn->fi_addr,
+			pkt_entry->peer->conn->implicit_fi_addr);
 	}
 
 	efa_rdm_pke_release(pkt_entry);

@@ -327,6 +327,7 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, str
 	struct efa_rdm_req_opt_connid_hdr opt_connid_hdr = {0};
 	uint32_t *connid = NULL;
 
+	base_hdr.hdr.version = EFA_RDM_PROTOCOL_VERSION;
 	base_hdr.hdr.type = EFA_RDM_EAGER_MSGRTM_PKT;
 	base_hdr.hdr.flags |= EFA_RDM_PKT_CONNID_HDR | EFA_RDM_REQ_MSG;
 	base_hdr.hdr.msg_id = attr->msg_id;

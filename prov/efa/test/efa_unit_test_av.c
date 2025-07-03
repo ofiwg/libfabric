@@ -2,6 +2,8 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "efa_rdm_cq.h"
+#include "efa_rdm_pke_req.h"
 #include "efa_av.h"
 
 /**
@@ -262,16 +264,31 @@ void test_av_multiple_ep_efa_direct(struct efa_resource **state)
 	return test_av_multiple_ep_impl(state, EFA_DIRECT_FABRIC_NAME);
 }
 
-static void test_av_verify_av_hash_cnt(struct efa_av *av, int cur_av_count, int prv_av_count) {
-	assert_int_equal(HASH_CNT(hh, av->util_av.hash), cur_av_count + prv_av_count);
-	assert_int_equal(HASH_CNT(hh, av->cur_reverse_av), cur_av_count);
-	assert_int_equal(HASH_CNT(hh, av->prv_reverse_av), prv_av_count);
+static void test_av_verify_av_hash_cnt(struct efa_av *av,
+				       int explicit_cur_av_count,
+				       int explicit_prv_av_count,
+				       int implicit_cur_av_count,
+				       int implicit_prv_av_count)
+{
+	assert_int_equal(HASH_CNT(hh, av->util_av.hash),
+			 explicit_cur_av_count + explicit_prv_av_count);
+	assert_int_equal(HASH_CNT(hh, av->cur_reverse_av),
+			 explicit_cur_av_count);
+	assert_int_equal(HASH_CNT(hh, av->prv_reverse_av),
+			 explicit_prv_av_count);
+
+	assert_int_equal(HASH_CNT(hh, av->util_av_implicit.hash),
+			 implicit_cur_av_count + implicit_prv_av_count);
+	assert_int_equal(HASH_CNT(hh, av->cur_reverse_av_implicit),
+			 implicit_cur_av_count);
+	assert_int_equal(HASH_CNT(hh, av->prv_reverse_av_implicit),
+			 implicit_prv_av_count);
 }
 
 /**
  * @brief This test removes a peer and inserts it again
  *
- * @param[in]	state		struct efa_resource that is managed by the framework
+ * @param[in]	state	struct efa_resource that is managed by the framework
  */
 void test_av_reinsertion(struct efa_resource **state)
 {
@@ -297,7 +314,7 @@ void test_av_reinsertion(struct efa_resource **state)
 	err = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr, 0, NULL);
 	assert_int_equal(err, 1);
 	assert_int_equal(fi_addr, 0);
-	test_av_verify_av_hash_cnt(av, 1, 0);
+	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
 
 	err = fi_av_lookup(resource->av, fi_addr, &raw_addr_2, &raw_addr_len);
 	assert_int_equal(err, 0);
@@ -305,15 +322,16 @@ void test_av_reinsertion(struct efa_resource **state)
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, fi_addr);
 	assert_int_equal(peer->conn->fi_addr, fi_addr);
+	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
 
 	err = fi_av_remove(resource->av, &fi_addr, 1, 0);
 	assert_int_equal(err, 0);
-	test_av_verify_av_hash_cnt(av, 0, 0);
+	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
 
 	err = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr, 0, NULL);
 	assert_int_equal(err, 1);
 	assert_int_equal(fi_addr, 0);
-	test_av_verify_av_hash_cnt(av, 1, 0);
+	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
 
 	err = fi_av_lookup(resource->av, fi_addr, &raw_addr_2, &raw_addr_len);
 	assert_int_equal(err, 0);
@@ -321,8 +339,121 @@ void test_av_reinsertion(struct efa_resource **state)
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, fi_addr);
 	assert_int_equal(peer->conn->fi_addr, fi_addr);
+	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
 
 	err = fi_av_remove(resource->av, &fi_addr, 1, 0);
 	assert_int_equal(err, 0);
-	test_av_verify_av_hash_cnt(av, 0, 0);
+	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
+}
+
+static struct efa_rdm_peer *test_av_get_peer_from_implicit_av(struct efa_resource *resource)
+{
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	fi_addr_t implicit_fi_addr, test_addr;
+	struct efa_av *av;
+	uint32_t ahn;
+	int err;
+
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ahn = efa_rdm_ep->base_ep.self_ah->ahn;
+
+	/* Manually insert into implicit AV */
+	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	err = efa_av_insert_one(av, &raw_addr, &implicit_fi_addr, 0, NULL, true, true);
+	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	test_av_verify_av_hash_cnt(av, 0, 0, 1, 0);
+
+	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep, implicit_fi_addr);
+	assert_int_equal(peer->conn->implicit_fi_addr, implicit_fi_addr);
+	assert_int_equal(peer->conn->fi_addr, FI_ADDR_NOTAVAIL);
+	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
+
+	test_addr = efa_av_reverse_lookup_rdm_implicit(av, ahn, raw_addr.qpn, NULL);
+	assert_int_equal(test_addr, implicit_fi_addr);
+
+	return peer;
+}
+
+/**
+ * @brief This test fakes a peer in the implicit AV and closes the AV with an
+ * implicit peer in it
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_implicit(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	test_av_get_peer_from_implicit_av(resource);
+}
+
+/**
+ * @brief This test fakes a peer in the implicit AV and verifies that the peer
+ * is moved to the explicit AV when fi_av_insert is called
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_implicit_to_explicit(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr, raw_addr_2;
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	fi_addr_t explicit_fi_addr, test_addr;
+	struct efa_av *av;
+	uint32_t ahn;
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	peer = test_av_get_peer_from_implicit_av(resource);
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ahn = efa_rdm_ep->base_ep.self_ah->ahn;
+
+	/* Modify the peer and verify that the peer is moved as-is */
+	peer->next_msg_id = 355;
+	peer->flags |= EFA_RDM_PEER_IN_BACKOFF;
+
+	/* Insert explicitly */
+	err = fi_av_insert(resource->av, &raw_addr, 1, &explicit_fi_addr, 0, NULL);
+	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
+
+	err = fi_av_lookup(resource->av, explicit_fi_addr, &raw_addr_2, &raw_addr_len);
+	assert_int_equal(err, 0);
+	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_2), 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, explicit_fi_addr);
+	assert_int_equal(peer->conn->fi_addr, explicit_fi_addr);
+	assert_int_equal(peer->conn->implicit_fi_addr, FI_ADDR_NOTAVAIL);
+	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
+
+	test_addr = efa_av_reverse_lookup_rdm(av, ahn, raw_addr.qpn, NULL);
+	assert_int_equal(test_addr, explicit_fi_addr);
+
+	/* Verify the manually set peer properties above */
+	assert_int_equal(peer->next_msg_id, 355);
+	assert_true(peer->flags & EFA_RDM_PEER_IN_BACKOFF);
+
+	peer->flags &= ~EFA_RDM_PEER_IN_BACKOFF;
+
+	err = fi_av_remove(resource->av, &explicit_fi_addr, 1, 0);
+	assert_int_equal(err, 0);
+	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
 }
