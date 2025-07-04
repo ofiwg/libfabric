@@ -699,6 +699,20 @@ static int efa_domain_cq_open_ext(struct fid_domain *domain_fid,
 }
 #endif
 
+static int efa_domain_query_lkey(struct fid_mr *mr, uint32_t *lkey)
+{
+	struct efa_mr *efa_mr;
+
+	efa_mr = container_of(mr, struct efa_mr, mr_fid);
+	if (!efa_mr->ibv_mr) {
+		EFA_WARN(FI_LOG_DOMAIN, "MR not registered\n");
+		return -FI_EINVAL;
+	}
+
+	*lkey = efa_mr->ibv_mr->lkey;
+	return FI_SUCCESS;
+}
+
 static struct fi_efa_ops_domain efa_ops_domain = {
 	.query_mr = efa_domain_query_mr,
 };
@@ -708,6 +722,7 @@ static struct fi_efa_ops_gda efa_ops_gda = {
 	.query_qp_wqs = efa_domain_query_qp_wqs,
 	.query_cq = efa_domain_query_cq,
 	.cq_open_ext = efa_domain_cq_open_ext,
+	.query_lkey = efa_domain_query_lkey,
 };
 
 static int
