@@ -580,8 +580,9 @@ ssize_t ofi_cq_read_entries(struct util_cq *cq, void *buf, size_t count,
 	for (i = 0; i < (ssize_t) count; i++) {
 		entry = ofi_cirque_head(cq->cirq);
 		if (!(entry->flags & UTIL_FLAG_AUX)) {
-			if (src_addr && cq->src)
-				src_addr[i] = cq->src[ofi_cirque_rindex(cq->cirq)];
+			if (src_addr)
+				src_addr[i] = cq->src ? cq->src[ofi_cirque_rindex(cq->cirq)] :
+							FI_ADDR_NOTAVAIL;
 			cq->read_entry(&buf, entry);
 			ofi_cirque_discard(cq->cirq);
 		} else {
@@ -596,8 +597,9 @@ ssize_t ofi_cq_read_entries(struct util_cq *cq, void *buf, size_t count,
 				break;
 			}
 
-			if (src_addr && cq->src)
-				src_addr[i] = aux_entry->src;
+			if (src_addr)
+				src_addr[i] = cq->src ? aux_entry->src :
+							FI_ADDR_NOTAVAIL;
 			cq->read_entry(&buf, &aux_entry->comp);
 			slist_remove_head(&cq->aux_queue);
 			free(aux_entry);
