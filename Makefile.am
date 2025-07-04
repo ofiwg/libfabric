@@ -30,6 +30,33 @@ pkglib_LTLIBRARIES = $(DL_PROVIDERS)
 ACLOCAL_AMFLAGS = -I config
 AM_CFLAGS = -Wall
 
+if NEED_VERSION_GEN
+BUILT_SOURCES = src/fi_version_gen.h
+# Force regeneration every time
+.PHONY: FORCE
+FORCE:
+
+src/fi_version_gen.h: $(srcdir)/src/fi_version_gen.h.in FORCE
+	@echo "Generating fi_version_gen.h..."
+	@{ \
+		COMMIT_HASH=$$(cd $(srcdir) && git rev-parse HEAD 2>/dev/null || echo "unknown"); \
+		COMMIT_SHORT=$$(cd $(srcdir) && git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
+		MAKE_VERSION="$(PACKAGE_VERSION)"; \
+		sed -e "s|%%GIT_COMMIT_HASH%%|$$COMMIT_HASH|g" \
+			-e "s|%%GIT_COMMIT_SHORT%%|$$COMMIT_SHORT|g" \
+			-e "s|%%PACKAGE_VERSION%%|$$MAKE_VERSION|g" \
+			$(srcdir)/src/fi_version_gen.h.in > $@; \
+	}
+
+clean-local:
+	@if test -d "$(srcdir)/.git"; then \
+		echo "Cleaning generated version file in git repo"; \
+		rm -f src/fi_version_gen.h; \
+	fi
+else
+BUILT_SOURCES =
+endif
+
 if HAVE_LD_VERSION_SCRIPT
     libfabric_version_script = -Wl,--version-script=$(builddir)/libfabric.map
 else !HAVE_LD_VERSION_SCRIPT
@@ -221,6 +248,7 @@ src_libfabric_la_SOURCES =			\
 	src/log.c				\
 	src/var.c				\
 	src/abi_1_0.c				\
+	src/fi_version_gen.h			\
 	$(common_hook_srcs)			\
 	$(common_srcs)
 
