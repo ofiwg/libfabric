@@ -420,3 +420,26 @@ void test_efa_domain_open_ops_cq_open_ext(struct efa_resource **state)
     assert_int_equal(ret, -FI_ENOSYS);
 #endif
 }
+
+void test_efa_domain_open_ops_get_mr_lkey(struct efa_resource **state)
+{
+    int ret;
+    struct efa_resource *resource = *state;
+    struct fi_efa_ops_gda *efa_gda_ops;
+    struct efa_mr mr = {0};
+    struct fid_mr mr_fid = {0};
+    struct ibv_mr ibv_mr = {0};
+    uint64_t lkey;
+
+    mr.mr_fid = mr_fid;
+    ibv_mr.lkey = 1234567;
+    mr.ibv_mr = &ibv_mr;
+
+    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+    ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0, (void **)&efa_gda_ops, NULL);
+    assert_int_equal(ret, 0);
+
+    lkey = efa_gda_ops->get_mr_lkey(&mr.mr_fid);
+    assert_int_equal(ret, FI_SUCCESS);
+    assert_true(lkey == mr.ibv_mr->lkey);
+}
