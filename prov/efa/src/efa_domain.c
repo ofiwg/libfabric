@@ -583,15 +583,6 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 				continue;
 			}
 
-			/* it can happen that efa_rdm_ope_post_send() released ope
-			 * (if the ope is rxe and packet type is EOR and inject is used). In
-			 * that case rxe's state has been set to EFA_RDM_OPE_FREE and
-			 * it has been removed from ep->op_queued_entry_list, so nothing
-			 * is left to do.
-			 */
-			if (ope->state == EFA_RDM_OPE_FREE)
-				continue;
-
 			ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_CTRL;
 			dlist_remove(&ope->queued_entry);
 		}

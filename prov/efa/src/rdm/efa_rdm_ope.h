@@ -20,8 +20,7 @@ enum efa_rdm_ope_type {
  * @brief EFA RDM operation entry (ope)'s state
  */
 enum efa_rdm_ope_state {
-	EFA_RDM_OPE_FREE = 0,	/**< txe/rxe free state */
-	EFA_RDM_TXE_REQ,	/**< txe sending REQ packet */
+	EFA_RDM_TXE_REQ = 1,	/**< txe sending REQ packet */
 	EFA_RDM_OPE_SEND,	/**< ope sending data in progress */
 	EFA_RDM_RXE_INIT,	/**< rxe ready to recv RTM */
 	EFA_RDM_RXE_UNEXP,	/**< rxe unexp msg waiting for post recv */
