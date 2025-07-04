@@ -104,10 +104,10 @@ void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 	efa_av = ep->base_ep.av;
 
 	if (ep->base_ep.util_ep.caps & FI_SOURCE) {
-		src_addr = efa_av_reverse_lookup_rdm(efa_av,
-						ibv_wc_read_slid(ibv_cq_ex),
-						ibv_wc_read_src_qp(ibv_cq_ex),
-						NULL);
+		/* Only check the explicit AV when writing completions */
+		src_addr = efa_av_reverse_lookup_rdm(
+			efa_av, ibv_wc_read_slid(ibv_cq_ex),
+			ibv_wc_read_src_qp(ibv_cq_ex), NULL);
 		ret = ofi_cq_write_src(target_cq, NULL, flags, len, NULL, imm_data, 0, src_addr);
 	} else {
 		ret = ofi_cq_write(target_cq, NULL, flags, len, NULL, imm_data, 0);
@@ -139,23 +139,56 @@ void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 }
 
 /**
- * @brief Determine peer address from ibv_cq_ex
- * Attempt to inject peer address if not available. This usually
+ * @brief Determine peer struct from ibv_cq and packet entry
+ * Insert the peer into the implicit AV if not found. This
  * happens when the endpoint receives the first packet from a new peer.
- * Note: This function introduces addtional overhead. It should only be called if
- * efa_av_lookup_address_rdm fails to find the peer address.
  * @param ep Pointer to RDM endpoint
- * @param ibv_cqx Pointer to CQ
+ * @param ibv_cq Pointer to CQ
+ * @param pkt_entry packet entry
  * @returns Peer address, or FI_ADDR_NOTAVAIL if unsuccessful.
  */
-static inline
-fi_addr_t efa_rdm_cq_determine_addr_from_ibv_cq(struct ibv_cq_ex *ibv_cqx, enum ibv_cq_ex_type ibv_cq_ex_type)
+static inline struct efa_rdm_peer *
+efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep, struct ibv_cq_ex *ibv_cq_ex, struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_rdm_pke *pkt_entry;
+	struct efa_av *efa_av = ep->base_ep.av;
+	fi_addr_t explicit_fi_addr, implicit_fi_addr;
+	struct efa_rdm_peer *peer;
+	uint32_t gid;
+	uint32_t qpn;
 
-	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
+	gid = ibv_wc_read_slid(ibv_cq_ex);
+	qpn = ibv_wc_read_src_qp(ibv_cq_ex);
 
-	return efa_rdm_pke_determine_addr(pkt_entry);
+	/* To determine the source peer struct, the workflow is the following
+	 * 1. Check the explicit AV
+	 * 2. If not found, check the implicit AV
+	 * 3. If not found, insert into the implicit AV
+	 */
+	explicit_fi_addr =
+		efa_av_reverse_lookup_rdm(efa_av, gid, qpn, pkt_entry);
+
+	if (explicit_fi_addr != FI_ADDR_NOTAVAIL) {
+		peer = efa_rdm_ep_get_peer(ep, explicit_fi_addr);
+		assert(peer);
+			return peer;
+	}
+
+	implicit_fi_addr =
+		efa_av_reverse_lookup_rdm_implicit(efa_av, gid, qpn, pkt_entry);
+
+	if (implicit_fi_addr == FI_ADDR_NOTAVAIL) {
+		implicit_fi_addr = efa_rdm_pke_determine_addr(pkt_entry);
+	}
+
+	peer = efa_rdm_ep_get_peer_implicit(ep, implicit_fi_addr);
+
+	assert(peer);
+	assert((peer->conn->fi_addr != FI_ADDR_NOTAVAIL &&
+		peer->conn->implicit_fi_addr == FI_ADDR_NOTAVAIL) ||
+	       (peer->conn->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
+		peer->conn->fi_addr == FI_ADDR_NOTAVAIL));
+
+	return peer;
 }
 
 /**
@@ -167,9 +200,7 @@ fi_addr_t efa_rdm_cq_determine_addr_from_ibv_cq(struct ibv_cq_ex *ibv_cqx, enum 
 static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct efa_rdm_pke *pkt_entry, struct efa_rdm_ep *ep)
 {
 	int pkt_type;
-	struct efa_rdm_peer *peer;
 	struct efa_rdm_base_hdr *base_hdr;
-	struct efa_av *efa_av = ep->base_ep.av;
 	uint32_t imm_data = 0;
 	bool has_imm_data = false;
 	struct ibv_cq_ex *ibv_cq_ex = ibv_cq->ibv_cq_ex;
@@ -182,18 +213,13 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 		ep->efa_rx_pkts_posted--;
 	}
 
-	pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(ibv_cq_ex),
-					ibv_wc_read_src_qp(ibv_cq_ex), pkt_entry);
-
-	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
-		pkt_entry->addr = efa_rdm_cq_determine_addr_from_ibv_cq(ibv_cq_ex, ibv_cq->ibv_cq_ex_type);
-	}
-
 	pkt_entry->pkt_size = ibv_wc_read_byte_len(ibv_cq_ex);
 	if (ibv_wc_read_wc_flags(ibv_cq_ex) & IBV_WC_WITH_IMM) {
 		has_imm_data = true;
 		imm_data = ibv_wc_read_imm_data(ibv_cq_ex);
 	}
+
+	pkt_entry->peer = efa_rdm_cq_get_peer_for_pkt_entry(ep, ibv_cq_ex, pkt_entry);
 
 	/*
 	 * Ignore packet if peer address cannot be determined. This ususally happens if
@@ -201,7 +227,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	 * application called fi_av_remove() to remove the address
 	 * from address vector.
 	 */
-	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
+	if (!pkt_entry->peer) {
 		EFA_WARN(FI_LOG_CQ,
 			"Warning: ignoring a received packet from a removed address. packet type: %" PRIu8
 			", packet flags: %x\n",
@@ -218,19 +244,17 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	efa_rdm_pke_print(pkt_entry, "Received");
 #endif
 #endif
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-	assert(peer);
-	if (peer->is_local) {
+	if (pkt_entry->peer->is_local) {
 		/*
 		 * This happens when the peer is on same instance, but chose to
 		 * use EFA device to communicate with me. In this case, we respect
 		 * that and will not use shm with the peer.
 		 * TODO: decide whether to use shm through handshake packet.
 		 */
-		peer->is_local = 0;
+		pkt_entry->peer->is_local = 0;
 	}
 
-	efa_rdm_ep_post_handshake_or_queue(ep, peer);
+	efa_rdm_ep_post_handshake_or_queue(ep, pkt_entry->peer);
 
 	/**
 	 * Data is already delivered to user posted pkt without pkt hdrs.
@@ -247,8 +271,11 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	pkt_type = base_hdr->type;
 	if (OFI_UNLIKELY(pkt_type >= EFA_RDM_EXTRA_REQ_PKT_END)) {
 		EFA_WARN(FI_LOG_CQ,
-			"Peer %d is requesting feature %d, which this EP does not support.\n",
-			(int)pkt_entry->addr, base_hdr->type);
+			 "Peer fi_addr: %ld implicit fi_addr %ld is requesting "
+			 "feature %d, which this EP does not support.\n",
+			 pkt_entry->peer->conn->fi_addr,
+			 pkt_entry->peer->conn->implicit_fi_addr,
+			 base_hdr->type);
 
 		assert(0 && "invalid REQ packet type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
@@ -267,14 +294,14 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 		size_t errbuf_len;
 
 		/* local & peer host-id & ep address will be logged by efa_rdm_write_error_msg */
-		if (!efa_rdm_write_error_msg(ep, pkt_entry->addr, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX, errbuf, &errbuf_len))
+		if (!efa_rdm_write_error_msg(ep, pkt_entry->peer, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX, errbuf, &errbuf_len))
 			EFA_WARN(FI_LOG_CQ, "Error: %s\n", (const char *) errbuf);
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
-	efa_rdm_pke_proc_received(pkt_entry, peer);
+	efa_rdm_pke_proc_received(pkt_entry);
 }
 
 
@@ -369,18 +396,18 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 					   (size_t) pkt_entry->ope->cq_entry.op_context,
 					   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
-					   pkt_entry->ope->addr);
+					   pkt_entry->ope->peer->conn->fi_addr);
 #endif
 		opcode = ibv_wc_read_opcode(ibv_cq->ibv_cq_ex);
 		if (ibv_cq->ibv_cq_ex->status) {
 			if (pkt_entry)
-				peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+				peer = pkt_entry->peer;
 			prov_errno = efa_rdm_cq_get_prov_errno(ibv_cq->ibv_cq_ex, peer);
 			switch (opcode) {
 			case IBV_WC_SEND: /* fall through */
 			case IBV_WC_RDMA_WRITE: /* fall through */
 			case IBV_WC_RDMA_READ:
-				efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno, peer);
+				efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno);
 				break;
 			case IBV_WC_RECV: /* fall through */
 			case IBV_WC_RECV_RDMA_WITH_IMM:
@@ -403,8 +430,7 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 #if ENABLE_DEBUG
 			ep->send_comps++;
 #endif
-			peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-			efa_rdm_pke_handle_send_completion(pkt_entry, peer);
+			efa_rdm_pke_handle_send_completion(pkt_entry);
 			break;
 		case IBV_WC_RECV:
 			/* efa_rdm_cq_handle_recv_completion does additional work to determine the source
@@ -416,8 +442,7 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			break;
 		case IBV_WC_RDMA_READ:
 		case IBV_WC_RDMA_WRITE:
-			peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-			efa_rdm_pke_handle_rma_completion(pkt_entry, peer);
+			efa_rdm_pke_handle_rma_completion(pkt_entry);
 			break;
 		case IBV_WC_RECV_RDMA_WITH_IMM:
 			efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(

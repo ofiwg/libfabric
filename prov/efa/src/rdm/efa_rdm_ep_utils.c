@@ -44,48 +44,48 @@ int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr)
 	return efa_conn ? efa_conn->ah->ahn : -1;
 }
 
-inline
-int efa_rdm_ep_peer_map_insert(struct efa_rdm_ep *ep, fi_addr_t addr, struct efa_rdm_ep_peer_map_entry *map_entry) {
-	HASH_ADD(hh, ep->fi_addr_to_peer_map, addr, sizeof(addr), map_entry);
-
+inline int
+efa_rdm_ep_peer_map_insert(struct efa_rdm_ep_peer_map_entry **peer_map,
+			   fi_addr_t addr,
+			   struct efa_rdm_ep_peer_map_entry *map_entry)
+{
+	HASH_ADD(hndl, *peer_map, addr, sizeof(addr), map_entry);
 	return FI_SUCCESS;
 }
 
-inline
-struct efa_rdm_peer *efa_rdm_ep_peer_map_lookup(struct efa_rdm_ep *ep, fi_addr_t addr) {
-	struct efa_rdm_ep_peer_map_entry  *map_entry;
+inline struct efa_rdm_peer *
+efa_rdm_ep_peer_map_lookup(struct efa_rdm_ep_peer_map_entry **peer_map,
+			   fi_addr_t addr)
+{
+	struct efa_rdm_ep_peer_map_entry *map_entry;
 
-	HASH_FIND(hh, ep->fi_addr_to_peer_map, &addr, sizeof(addr), map_entry);
+	HASH_FIND(hndl, *peer_map, &addr, sizeof(addr), map_entry);
+
 	return map_entry ? &map_entry->peer : NULL;
 }
 
-void efa_rdm_ep_peer_map_remove(struct efa_rdm_ep *ep, fi_addr_t addr) {
-	struct efa_rdm_ep_peer_map_entry  *map_entry;
+void efa_rdm_ep_peer_map_remove(struct efa_rdm_ep_peer_map_entry **peer_map,
+				fi_addr_t addr)
+{
+	struct efa_rdm_ep_peer_map_entry *map_entry = NULL;
 
-	HASH_FIND(hh, ep->fi_addr_to_peer_map, &addr, sizeof(addr), map_entry);
-	HASH_DEL(ep->fi_addr_to_peer_map, map_entry);
+	HASH_FIND(hndl, *peer_map, &addr, sizeof(addr), map_entry);
+	assert(map_entry);
+	HASH_DELETE(hndl, *peer_map, map_entry);
 	ofi_buf_free(map_entry);
 }
 
-/**
- * @brief get pointer to efa_rdm_peer structure for a given libfabric address
- *
- * @param[in]		ep		endpoint
- * @param[in]		addr 		libfabric address
- * @returns if peer exists, return pointer to #efa_rdm_peer;
- *          otherwise, return NULL.
- */
-struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
+static inline struct efa_rdm_peer *
+efa_rdm_ep_get_peer_impl(struct efa_rdm_ep *ep, struct efa_rdm_ep_peer_map_entry **peer_map, fi_addr_t addr, struct efa_conn *conn)
 {
-	struct efa_rdm_ep_peer_map_entry  *map_entry;
+	struct efa_rdm_ep_peer_map_entry *map_entry;
 	struct efa_rdm_peer *peer;
-	struct efa_conn *conn;
 	int err;
 
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
-	peer = efa_rdm_ep_peer_map_lookup(ep, addr);
+	peer = efa_rdm_ep_peer_map_lookup(peer_map, addr);
 	if (peer)
 		return peer;
 
@@ -97,12 +97,13 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 		return NULL;
 	}
 
+	memset(map_entry, 0, sizeof(*map_entry));
+
 	map_entry->addr = addr;
 
-	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
 	efa_rdm_peer_construct(&map_entry->peer, ep, conn);
 
-	err = efa_rdm_ep_peer_map_insert(ep, addr, map_entry);
+	err = efa_rdm_ep_peer_map_insert(peer_map, addr, map_entry);
 	if (err)
 		return NULL;
 
@@ -110,15 +111,66 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 }
 
 /**
+ * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
+ * the explicit AV
+ *
+ * @param[in]		ep		endpoint
+ * @param[in]		addr 		libfabric address
+ * @returns pointer to #efa_rdm_peer
+ */
+struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
+{
+	struct efa_conn *conn;
+
+	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
+	return efa_rdm_ep_get_peer_impl(ep, &ep->fi_addr_to_peer_map, addr, conn);
+}
+
+/**
+ * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
+ * the implicit AV
+ *
+ * @param[in]		ep		endpoint
+ * @param[in]		addr 		libfabric address
+ * @returns pointer to #efa_rdm_peer
+ */
+struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr_t addr)
+{
+	struct efa_conn *conn;
+
+	conn = efa_av_addr_to_conn_implicit(ep->base_ep.av, addr);
+	return efa_rdm_ep_get_peer_impl(ep, &ep->fi_addr_to_peer_map_implicit, addr, conn);
+}
+
+void efa_rdm_ep_peer_map_implicit_to_explicit(struct efa_rdm_ep *ep,
+					      struct efa_rdm_peer *peer,
+					      fi_addr_t implicit_fi_addr,
+					      fi_addr_t explicit_fi_addr)
+{
+	struct efa_rdm_ep_peer_map_entry *map_entry;
+
+	HASH_FIND(hndl, ep->fi_addr_to_peer_map_implicit, &implicit_fi_addr, sizeof(implicit_fi_addr), map_entry);
+	assert(map_entry);
+	assert(peer == &map_entry->peer);
+	assert(implicit_fi_addr == map_entry->addr);
+
+	HASH_DELETE(hndl, ep->fi_addr_to_peer_map_implicit, map_entry);
+	assert(map_entry);
+	map_entry->addr = explicit_fi_addr;
+
+	HASH_ADD(hndl, ep->fi_addr_to_peer_map, addr, sizeof(explicit_fi_addr), map_entry);
+}
+
+/**
  * @brief allocate an rxe for an operation
  *
  * @param ep[in]	end point
- * @param addr[in]	fi address of the sender/requester.
+ * @param peer[in]	peer struct of the sender/requester.
  * @param op[in]	operation type (ofi_op_msg/ofi_op_tagged/ofi_op_read/ofi_op_write/ofi_op_atomic_xxx)
  * @return		if allocation succeeded, return pointer to rxe
  * 			if allocation failed, return NULL
  */
-struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, uint32_t op)
+struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer, uint32_t op)
 {
 	struct efa_rdm_ope *rxe;
 
@@ -140,14 +192,12 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
 	dlist_init(&rxe->queued_pkts);
 
 	rxe->state = EFA_RDM_RXE_INIT;
-	rxe->addr = addr;
-	if (addr != FI_ADDR_UNSPEC) {
-		rxe->peer = efa_rdm_ep_get_peer(ep, addr);
-		assert(rxe->peer);
+	if (peer) {
+		rxe->peer = peer;
 		dlist_insert_tail(&rxe->peer_entry, &rxe->peer->rxe_list);
 	} else {
 		/*
-		 * If msg->addr is not provided, rxe->peer will be set
+		 * If peer is not provided, rxe->peer will be set
 		 * after it is matched with a message.
 		 */
 		assert(op == ofi_op_msg || op == ofi_op_tagged);
@@ -222,6 +272,7 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 		return -FI_EAGAIN;
 
 	pkt_entry->ope = rxe;
+	pkt_entry->peer = rxe->peer;
 	rxe->state = EFA_RDM_RXE_MATCHED;
 
 	err = ofi_iov_locate(rxe->iov, rxe->iov_count, ep->msg_prefix_size, &rx_iov_index, &rx_iov_offset);
@@ -378,9 +429,8 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
  * @param[in,out]	ep		endpoint
  * @param[in]		pkt_entry	TX pkt_entry, which contains
  * 					the info of the TX op
- * @param[in]	peer		efa_rdm_peer struct for the receiver
  */
-void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
+void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *ope = NULL;
 
@@ -394,13 +444,13 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke
 	 *    a new peer has the same GID+QPN was inserted to address, or because
 	 *    application removed the peer from address vector.
 	 */
-	if (peer)
+	if (pkt_entry->peer)
 		dlist_remove(&pkt_entry->entry);
 
 	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	ep->efa_outstanding_tx_ops--;
-	if (peer)
-		peer->efa_outstanding_tx_ops--;
+	if (pkt_entry->peer)
+		pkt_entry->peer->efa_outstanding_tx_ops--;
 
 	if (ope)
 		ope->efa_outstanding_tx_ops--;
@@ -453,15 +503,17 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke
  * @param[in]	peer	efa_rdm_peer struct of the receiver
  */
 void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct dlist_entry *list,
-			      struct efa_rdm_pke *pkt_entry,
-			      struct efa_rdm_peer *peer)
+			      struct efa_rdm_pke *pkt_entry)
 {
 	static const int random_min_timeout = 40;
 	static const int random_max_timeout = 120;
+	struct efa_rdm_peer *peer;
 
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
+	peer = pkt_entry->peer;
+
 	dlist_insert_tail(&pkt_entry->entry, list);
 	ep->efa_rnr_queued_pkt_cnt += 1;
 	assert(peer);
@@ -502,18 +554,20 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct dlist_entry *list,
 							  random_max_timeout);
 
 		EFA_DBG(FI_LOG_EP_DATA,
-		       "initializing backoff timeout for peer: %" PRIu64
-		       " timeout: %ld rnr_queued_pkts: %d\n",
-		       pkt_entry->addr, peer->rnr_backoff_wait_time,
-		       peer->rnr_queued_pkt_cnt);
+			"initializing backoff timeout for peer fi_addr: "
+			"%" PRIu64 " implicit fi_addr: %" PRIu64
+			" timeout: %ld rnr_queued_pkts: %d\n",
+			peer->conn->fi_addr, peer->conn->implicit_fi_addr,
+			peer->rnr_backoff_wait_time, peer->rnr_queued_pkt_cnt);
 	} else {
 		peer->rnr_backoff_wait_time = MIN(peer->rnr_backoff_wait_time * 2,
 						  efa_env.rnr_backoff_wait_time_cap);
 		EFA_DBG(FI_LOG_EP_DATA,
-		       "increasing backoff timeout for peer: %" PRIu64
-		       " to %ld rnr_queued_pkts: %d\n",
-		       pkt_entry->addr, peer->rnr_backoff_wait_time,
-		       peer->rnr_queued_pkt_cnt);
+			"increasing backoff timeout for peer fi_addr: %" PRIu64
+			" implicit fi_addr %" PRIu64
+			" to %ld rnr_queued_pkts: %d\n",
+			peer->conn->fi_addr, peer->conn->implicit_fi_addr,
+			peer->rnr_backoff_wait_time, peer->rnr_queued_pkt_cnt);
 	}
 }
 
@@ -549,7 +603,7 @@ ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer 
 	    (peer->flags & EFA_RDM_PEER_REQ_SENT))
 		return 0;
 
-	msg.addr = peer->efa_fiaddr;
+	msg.addr = peer->conn->fi_addr;
 
 	txe = efa_rdm_ep_alloc_txe(ep, peer, &msg, ofi_op_write, 0, 0);
 
@@ -587,7 +641,7 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	fi_addr_t addr;
 	ssize_t ret;
 
-	addr = peer->efa_fiaddr;
+	addr = peer->conn->fi_addr;
 	msg.addr = addr;
 
 	/* ofi_op_write is ignored in handshake path */
@@ -612,8 +666,9 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	}
 
 	pkt_entry->ope = txe;
+	pkt_entry->peer = peer;
 
-	efa_rdm_pke_init_handshake(pkt_entry, addr);
+	efa_rdm_pke_init_handshake(pkt_entry, peer);
 
 	ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
 	if (OFI_UNLIKELY(ret)) {
@@ -665,8 +720,8 @@ void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_pe
 
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
-			"Failed to post HANDSHAKE to peer %ld: %s\n",
-			peer->efa_fiaddr, fi_strerror(-err));
+			"Failed to post HANDSHAKE to peer fi_addr: %ld implicit fi_addr %ld. %s\n",
+			peer->conn->fi_addr, peer->conn->implicit_fi_addr, fi_strerror(-err));
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_PEER_HANDSHAKE);
 		return;
 	}
@@ -685,7 +740,6 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 				    struct dlist_entry *pkts)
 {
 	struct dlist_entry *tmp;
-	struct efa_rdm_peer *peer;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_base_hdr *base_hdr;
 	ssize_t ret;
@@ -721,10 +775,9 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 		}
 
 		pkt_entry->flags &= ~EFA_RDM_PKE_RNR_RETRANSMIT;
-		peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
-		assert(peer);
 		ep->efa_rnr_queued_pkt_cnt--;
-		peer->rnr_queued_pkt_cnt--;
+		assert(pkt_entry->peer);
+		pkt_entry->peer->rnr_queued_pkt_cnt--;
 	}
 
 	return 0;

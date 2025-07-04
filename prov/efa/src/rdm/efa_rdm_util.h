@@ -19,9 +19,9 @@ bool efa_rdm_get_use_device_rdma(uint32_t fabric_api_version);
 
 void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc);
 
-int efa_rdm_construct_msg_with_local_and_peer_information(struct efa_rdm_ep *ep, fi_addr_t addr, char *msg, const char *base_msg, size_t msg_len);
+int efa_rdm_construct_msg_with_local_and_peer_information(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer, char *msg, const char *base_msg, size_t msg_len);
 
-int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, fi_addr_t addr, int prov_errno, char *err_msg, size_t *buflen);
+int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer, int prov_errno, char *err_msg, size_t *buflen);
 
 #ifdef ENABLE_EFA_POISONING
 static inline void efa_rdm_poison_mem_region(void *ptr, size_t size)

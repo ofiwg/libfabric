@@ -759,8 +759,11 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 
 		if (OFI_UNLIKELY(ret)) {
 			EFA_WARN(FI_LOG_EP_CTRL,
-				"Failed to post HANDSHAKE to peer %ld: %s\n",
-				peer->efa_fiaddr, fi_strerror(-ret));
+				 "Failed to post HANDSHAKE to peer fi_addr: "
+				 "%ld implicit fi_addr: %ld. %s\n",
+				 peer->conn->fi_addr,
+				 peer->conn->implicit_fi_addr,
+				 fi_strerror(-ret));
 			efa_base_ep_write_eq_error(&peer->ep->base_ep, -ret, FI_EFA_ERR_PEER_HANDSHAKE);
 			continue;
 		}
@@ -776,8 +779,8 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 	dlist_foreach_container_safe(&domain->ope_queued_list,
 				     struct efa_rdm_ope,
 				     ope, queued_entry, tmp) {
-		peer = efa_rdm_ep_get_peer(ope->ep, ope->addr);
 
+		peer = ope->peer;
 		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
 			continue;
 
@@ -860,7 +863,7 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 	 */
 	dlist_foreach_container(&domain->ope_longcts_send_list, struct efa_rdm_ope,
 				ope, entry) {
-		peer = efa_rdm_ep_get_peer(ope->ep, ope->addr);
+		peer = ope->peer;
 		assert(peer);
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;

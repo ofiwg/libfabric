@@ -26,7 +26,6 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->op = op;
 	txe->tx_id = ofi_buf_index(txe);
 	txe->state = EFA_RDM_TXE_REQ;
-	txe->addr = msg->addr;
 	txe->peer = peer;
 	/* peer would be NULL for local read operation */
 	if (txe->peer) {
@@ -628,7 +627,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	err_entry.buf = rxe->cq_entry.buf;
 	err_entry.data = rxe->cq_entry.data;
 	err_entry.tag = rxe->cq_entry.tag;
-	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, rxe->addr, prov_errno,
+	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, rxe->peer, prov_errno,
 	                                         err_msg, &err_entry.err_data_size))) {
 		err_entry.err_data_size = 0;
 	} else {
@@ -730,7 +729,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	err_entry.buf = txe->cq_entry.buf;
 	err_entry.data = txe->cq_entry.data;
 	err_entry.tag = txe->cq_entry.tag;
-	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, txe->addr, prov_errno,
+	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, txe->peer, prov_errno,
 	                                         err_msg, &err_entry.err_data_size))) {
 		err_entry.err_data_size = 0;
 	} else {
@@ -798,10 +797,10 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 	if (OFI_UNLIKELY(rxe->cq_entry.len < rxe->total_len)) {
 		EFA_WARN(FI_LOG_CQ,
 			 "Message truncated! from peer %" PRIu64
-			 " rx_id: %" PRIu32 " msg_id: %" PRIu32 " tag: %" PRIu64
+			 " implicit fi_addr: %" PRIu64 " rx_id: %" PRIu32 " msg_id: %" PRIu32 " tag: %" PRIu64
 			 " incoming message size: %" PRIu64
 			 " receiving buffer size: %zu\n",
-			 rxe->addr, rxe->rx_id, rxe->msg_id, rxe->cq_entry.tag,
+			 rxe->peer->conn->fi_addr, rxe->peer->conn->implicit_fi_addr, rxe->rx_id, rxe->msg_id, rxe->cq_entry.tag,
 			 rxe->total_len, rxe->cq_entry.len);
 
 		ret = ofi_cq_write_error_trunc(ep->base_ep.util_ep.rx_cq,
@@ -830,15 +829,17 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 	    (ofi_need_completion(cq_flags, rxe->fi_flags) ||
 	     (rxe->cq_entry.flags & FI_MULTI_RECV))) {
 		EFA_DBG(FI_LOG_CQ,
-		       "Writing recv completion for rxe from peer: %"
-		       PRIu64 " rx_id: %" PRIu32 " msg_id: %" PRIu32
-		       " tag: %lx total_len: %" PRIu64 "\n",
-		       rxe->addr, rxe->rx_id, rxe->msg_id,
-		       rxe->cq_entry.tag, rxe->total_len);
+			"Writing recv completion for rxe from peer: %" PRIu64
+			" implicit fi_addr: %" PRIu64 " rx_id: %" PRIu32
+			" msg_id: %" PRIu32 " tag: %lx total_len: %" PRIu64
+			"\n",
+			rxe->peer->conn->fi_addr,
+			rxe->peer->conn->implicit_fi_addr, rxe->rx_id,
+			rxe->msg_id, rxe->cq_entry.tag, rxe->total_len);
 
 		efa_rdm_tracepoint(recv_end,
 			    rxe->msg_id, (size_t) rxe->cq_entry.op_context,
-			    rxe->total_len, rxe->cq_entry.tag, rxe->addr);
+			    rxe->total_len, rxe->cq_entry.tag, rxe->peer->conn->fi_addr);
 
 
 		if (ep->base_ep.util_ep.caps & FI_SOURCE)
@@ -849,7 +850,7 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 					       rxe->cq_entry.buf,
 					       rxe->cq_entry.data,
 					       rxe->cq_entry.tag,
-					       rxe->addr);
+					       rxe->peer->conn->fi_addr);
 		else
 			ret = ofi_cq_write(rx_cq,
 					   rxe->cq_entry.op_context,
@@ -933,13 +934,13 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
 		       "Writing send completion for txe to peer: %" PRIu64
 		       " tx_id: %" PRIu32 " msg_id: %" PRIu32 " tag: %lx len: %"
 		       PRIu64 "\n",
-		       txe->addr, txe->tx_id, txe->msg_id,
+		       txe->peer->conn->fi_addr, txe->tx_id, txe->msg_id,
 		       txe->cq_entry.tag, txe->total_len);
 
 
 	efa_rdm_tracepoint(send_end,
 		    txe->msg_id, (size_t) txe->cq_entry.op_context,
-		    txe->total_len, txe->cq_entry.tag, txe->addr);
+		    txe->total_len, txe->cq_entry.tag, txe->peer->conn->fi_addr);
 
 		/* TX completions should not send peer address to util_cq */
 		if (txe->ep->base_ep.util_ep.caps & FI_SOURCE)
@@ -1345,7 +1346,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		efa_rdm_pke_init_read_context(pkt_entry, ope, ope->addr, ofi_buf_index(ope), 0);
+		efa_rdm_pke_init_read_context(pkt_entry, ope, ofi_buf_index(ope), 0);
 		err = efa_rdm_pke_read(pkt_entry,
 					 ope->iov[0].iov_base,
 					 0,
@@ -1361,7 +1362,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 
 	if (ope->type == EFA_RDM_TXE &&
 	    ope->op == ofi_op_read_req &&
-	    ope->addr == FI_ADDR_NOTAVAIL) {
+	    ope->peer == NULL) {
 		err = efa_rdm_txe_prepare_local_read_pkt_entry(ope);
 		if (err)
 			return err;
@@ -1415,7 +1416,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 				    ope->rma_iov[rma_iov_idx].len - rma_iov_offset);
 		read_once_len = MIN(read_once_len, max_read_once_len);
 
-		efa_rdm_pke_init_read_context(pkt_entry, ope, ope->addr, ofi_buf_index(ope), read_once_len);
+		efa_rdm_pke_init_read_context(pkt_entry, ope, ofi_buf_index(ope), read_once_len);
 		err = efa_rdm_pke_read(pkt_entry,
 					 (char *)ope->iov[iov_idx].iov_base + iov_offset,
 					 read_once_len,
@@ -1698,10 +1699,7 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 	msg_rma.rma_iov = &rma_iov;
 	msg_rma.rma_iov_count = 1;
 
-	txe = efa_rdm_rma_alloc_txe(rxe->ep,
-				    efa_rdm_ep_get_peer(rxe->ep, msg_rma.addr),
-				    &msg_rma,
-				    ofi_op_read_req,
+	txe = efa_rdm_rma_alloc_txe(rxe->ep, NULL, &msg_rma, ofi_op_read_req,
 				    0 /* flags*/);
 	if (!txe) {
 		return -FI_ENOBUFS;

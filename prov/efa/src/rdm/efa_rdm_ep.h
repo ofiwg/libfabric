@@ -119,6 +119,10 @@ struct efa_rdm_ep {
 
 	/* Hashmap between fi_addr and efa_rdm_peer structs */
 	struct efa_rdm_ep_peer_map_entry *fi_addr_to_peer_map;
+
+	/* Hashmap between implicit peer id and efa_rdm_peer structs */
+	struct efa_rdm_ep_peer_map_entry *fi_addr_to_peer_map_implicit;
+
 	/* bufpool to hold the fi_addr->peer hashmap entries */
 	struct ofi_bufpool *peer_map_entry_pool;
 
@@ -205,6 +209,7 @@ struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep);
 struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr);
 
 int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr);
+struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr_t addr);
 
 struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 					 struct efa_rdm_peer *peer,
@@ -214,11 +219,11 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 					 uint64_t flags);
 
 struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
-					   fi_addr_t addr, uint32_t op);
+					   struct efa_rdm_peer *peer, uint32_t op);
 
 void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer);
+void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
 static inline size_t efa_rdm_ep_get_rx_pool_size(struct efa_rdm_ep *ep)
 {
@@ -247,8 +252,7 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 struct efa_rdm_peer;
 
 void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct dlist_entry *list,
-			      struct efa_rdm_pke *pkt_entry,
-			      struct efa_rdm_peer *peer);
+			      struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 				    struct dlist_entry *pkts);
@@ -551,10 +555,24 @@ bool efa_rdm_ep_support_unsolicited_write_recv(struct efa_rdm_ep *ep)
 struct efa_rdm_ep_peer_map_entry {
 	fi_addr_t addr;
 	struct efa_rdm_peer peer;
-	UT_hash_handle hh;
+	UT_hash_handle hndl;
 };
 
-int efa_rdm_ep_peer_map_insert(struct efa_rdm_ep *ep, fi_addr_t addr, struct efa_rdm_ep_peer_map_entry *map_entry);
-struct efa_rdm_peer *efa_rdm_ep_peer_map_lookup(struct efa_rdm_ep *ep, fi_addr_t addr);
-void efa_rdm_ep_peer_map_remove(struct efa_rdm_ep *ep, fi_addr_t addr);
+int
+efa_rdm_ep_peer_map_insert(struct efa_rdm_ep_peer_map_entry **peer_map,
+			   fi_addr_t addr,
+			   struct efa_rdm_ep_peer_map_entry *map_entry);
+struct efa_rdm_peer *
+efa_rdm_ep_peer_map_lookup(struct efa_rdm_ep_peer_map_entry **peer_map,
+			   fi_addr_t addr);
+void efa_rdm_ep_peer_map_remove(struct efa_rdm_ep_peer_map_entry **peer_map,
+				fi_addr_t addr);
+
+void efa_rdm_ep_peer_map_implicit_to_explicit(struct efa_rdm_ep *ep,
+					      struct efa_rdm_peer *peer,
+					      fi_addr_t implicit_fi_addr,
+					      fi_addr_t explicit_fi_addr);
+
+bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep);
+
 #endif
