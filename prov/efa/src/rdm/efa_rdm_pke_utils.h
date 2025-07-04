@@ -122,6 +122,7 @@ static inline int efa_rdm_pke_post_remote_read_or_nack(
 
 	p2p_avail = err;
 	if (p2p_avail) {
+		EFA_WARN(FI_LOG_EP_DATA, "efa_rdm_ope_post_remote_read_or_queue for rxe %p\n", rxe);
 		err = efa_rdm_ope_post_remote_read_or_queue(rxe);
 	} else if (ep->homogeneous_peers || efa_rdm_peer_support_read_nack(rxe->peer)) {
 		EFA_INFO(FI_LOG_EP_CTRL,

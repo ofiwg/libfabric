@@ -98,6 +98,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rta_rxe(struct efa_rdm_pke *pkt_entry, int
 		return NULL;
 	}
 
+	EFA_WARN(FI_LOG_EP_DATA, "allocated rxe %p\n", rxe);
 	rxe->internal_flags |= EFA_RDM_OPE_INTERNAL;
 
 	if (op == ofi_op_atomic)
