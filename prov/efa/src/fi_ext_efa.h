@@ -7,6 +7,7 @@
 #include <rdma/fi_domain.h>
 
 #define FI_EFA_DOMAIN_OPS "efa domain ops"
+#define FI_EFA_GDA_OPS "efa gda ops"
 
 struct fi_efa_mr_attr {
     uint16_t ic_id_validity;
@@ -51,6 +52,9 @@ struct fi_efa_cq_init_attr {
 
 struct fi_efa_ops_domain {
 	int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
+};
+
+struct fi_efa_ops_gda {
 	int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
 			  uint16_t *remote_qpn, uint32_t *remote_qkey);
 	int (*query_qp_wqs)(struct fid_ep *ep_fid,
