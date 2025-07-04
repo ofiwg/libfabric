@@ -95,9 +95,9 @@ bool __real_efa_device_support_unsolicited_write_recv();
 
 int efa_mock_efa_rdm_pke_read_return_mock(struct efa_rdm_ope *ope);
 
-ssize_t __real_efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer);
+ssize_t __real_efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry);
 
-ssize_t efa_mock_efa_rdm_pke_proc_matched_rtm_no_op(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer);
+ssize_t efa_mock_efa_rdm_pke_proc_matched_rtm_no_op(struct efa_rdm_pke *pkt_entry);
 
 ssize_t __real_efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type);
 
@@ -146,7 +146,7 @@ struct efa_unit_test_mocks
 
 	int (*efa_rdm_pke_read)(struct efa_rdm_ope *ope);
 
-	ssize_t (*efa_rdm_pke_proc_matched_rtm)(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer);
+	ssize_t (*efa_rdm_pke_proc_matched_rtm)(struct efa_rdm_pke *pkt_entry);
 
 	ssize_t (*efa_rdm_ope_post_send)(struct efa_rdm_ope *ope, int pkt_type);
 

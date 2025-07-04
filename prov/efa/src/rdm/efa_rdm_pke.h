@@ -106,26 +106,22 @@ struct efa_rdm_pke {
 	 */
 	struct fid_mr *mr;
 	/**
-	 * @brief peer address
+	 * @brief pointer to peer struct
 	 *
 	 * @details
-	 * When sending a packet, `addr` will be provided by application and it cannot be FI_ADDR_NOTAVAIL.
-	 * However, after a packet is sent, application can remove a peer by calling fi_av_remove().
-	 * When removing the peering, `addr` will be set to FI_ADDR_NOTAVAIL. Later, when device report
-	 * completion for such a TX packet, the TX completion will be ignored.
-	 *
-	 * When receiving a packet, lower device will set `addr`. If the sender's address is not in
-	 * address vector (AV), `lower device will set `addr` to FI_ADDR_NOTAVAIL. This can happen in
-	 * two scenarios:
-	 *
-	 * 1. There has been no prior communication with the peer. In this case, the packet should have
-	 *    peer's raw address in the header, and progress engine will insert the raw address into
-	 *    address vector, and update `addr`.
-	 *
-	 * 2. This packet is from a peer whose address has been removed from AV. In this case, the
-	 *    recived packet will be ignored because all resources associated with peer has been released.
+	 * In the TX path, peer cannot be null. It is inferred from the
+	 * destination address in the TX operation set by the application. In
+	 * the CQ read path, the peer in inferred from the packet source
+	 * information from rdma-core. It can be NULL in two cases
+	 * 1. There has been no prior communication with the peer. In this case,
+	 * the packet should have peer's raw address in the header, and progress
+	 * engine will insert the raw address into address vector, and set
+	 * `peer`
+	 * 2. The packet is from a peer whose address has been removed from AV.
+	 * In this case, the recived packet will be ignored because all
+	 * resources associated with peer has been released.
 	 */
-	fi_addr_t addr;
+	struct efa_rdm_peer *peer;
 
 	/** @brief indicate where the memory of this packet entry reside */
 	enum efa_rdm_pke_alloc_type alloc_type;

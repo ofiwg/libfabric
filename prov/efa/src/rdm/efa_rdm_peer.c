@@ -22,7 +22,7 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	memset(peer, 0, sizeof(struct efa_rdm_peer));
 
 	peer->ep = ep;
-	peer->efa_fiaddr = conn->fi_addr;
+	peer->conn = conn;
 	peer->is_self = efa_is_same_addr(&ep->base_ep.src_addr, conn->ep_addr);
 	peer->host_id = peer->is_self ? ep->host_id : 0;	/* Peer host id is exchanged via handshake */
 	peer->num_runt_bytes_in_flight = 0;
@@ -33,7 +33,6 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	dlist_init(&peer->overflow_pke_list);
 
 	if (conn->shm_fi_addr != FI_ADDR_NOTAVAIL) {
-		peer->shm_fiaddr = conn->shm_fi_addr;
 		peer->is_local = 1;
 	}
 
@@ -77,14 +76,12 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 
 	/* we cannot release outstanding TX packets because device
 	 * will report completion of these packets later. Setting
-	 * the address to FI_ADDR_NOTAVAIL, so efa_rdm_ep_get_peer()
-	 * will return NULL for the address, so the completion will
-	 * be ignored.
+	 * pkt_entry->peer to NULL so the completion will be ignored.
 	 */
 	dlist_foreach_container(&peer->outstanding_tx_pkts,
 				struct efa_rdm_pke,
 				pkt_entry, entry) {
-		pkt_entry->addr = FI_ADDR_NOTAVAIL;
+		pkt_entry->peer = NULL;
 	}
 
 	dlist_foreach_container_safe(&peer->overflow_pke_list,

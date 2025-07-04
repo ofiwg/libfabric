@@ -10,6 +10,7 @@
 
 #include "ofi.h"
 #include "ofi_util.h"
+#include "efa_av.h"
 #include "rdm/efa_rdm_protocol.h"
 
 #define EFA_QP_DEFAULT_SERVICE_LEVEL 0
@@ -47,17 +48,6 @@ struct efa_qp {
 	uint32_t qkey;
 };
 
-#define EFA_GID_LEN	16
-
-struct efa_ep_addr {
-	uint8_t			raw[EFA_GID_LEN];
-	uint16_t		qpn;
-	uint16_t		pad;
-	uint32_t		qkey;
-	struct efa_ep_addr	*next;
-};
-
-#define EFA_EP_ADDR_LEN sizeof(struct efa_ep_addr)
 
 struct efa_av;
 
@@ -159,5 +149,9 @@ void efa_base_ep_remove_cntr_ibv_cq_poll_list(struct efa_base_ep *ep);
 int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_recv_qp);
 
 void efa_base_ep_flush_cq(struct efa_base_ep *base_ep);
+
+#if ENABLE_DEBUG
+void efa_ep_addr_print(char *prefix, struct efa_ep_addr *addr);
+#endif
 
 #endif

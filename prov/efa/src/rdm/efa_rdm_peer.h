@@ -5,6 +5,7 @@
 #define EFA_RDM_PEER_H
 
 #include "ofi_recvwin.h"
+#include "efa_av.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_rxe_map.h"
@@ -41,8 +42,7 @@ struct efa_rdm_peer {
 	bool is_self;			/**< flag indicating whether the peer is the endpoint itself */
 	bool is_local;			/**< flag indicating wehther the peer is local (on the same instance) */
 	uint32_t device_version;	/**< EFA device version */
-	fi_addr_t efa_fiaddr;		/**< libfabric addr from efa provider's perspective */
-	fi_addr_t shm_fiaddr;		/**< libfabric addr from shm provider's perspective */
+	struct efa_conn *conn;		/**< pointer to efa_conn struct in the av entry */
 	uint64_t host_id; 		/* Optional peer host id. Default 0 */
 	/**
 	 * @brief reorder buffer
