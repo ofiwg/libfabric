@@ -191,24 +191,15 @@ Domain operation extension is obtained by calling `fi_open_ops`
 int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
     void **ops, void *context);
 ```
-and requesting `FI_EFA_DOMAIN_OPS` in `name`. `fi_open_ops` returns `ops` as
+
+Requesting `FI_EFA_DOMAIN_OPS` in `name` returns `ops` as
 the pointer to the function table `fi_efa_ops_domain` defined as follows:
 
 ```c
 struct fi_efa_ops_domain {
 	int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
-	int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
-			  uint16_t *remote_qpn, uint32_t *remote_qkey);
-	int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
-	int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
-	int (*cq_open_ext)(struct fid_domain *domain_fid,
-			   struct fi_cq_attr *attr,
-			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
-			   struct fid_cq **cq_fid, void *context);
 };
 ```
-
-It contains the following operations
 
 ### query_mr
 This op queries an existing memory registration as input, and outputs the efa
@@ -247,6 +238,24 @@ struct fi_efa_mr_attr {
 #### Return value
 **query_mr()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
+
+
+Requesting `FI_EFA_GDA_OPS` in `name` returns `ops` as
+the pointer to the function table `fi_efa_ops_gda` defined as follows:
+
+```c
+struct fi_efa_ops_gda {
+	int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
+			  uint16_t *remote_qpn, uint32_t *remote_qkey);
+	int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
+	int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
+	int (*cq_open_ext)(struct fid_domain *domain_fid,
+			   struct fi_cq_attr *attr,
+			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
+			   struct fid_cq **cq_fid, void *context);
+	int (*query_lkey)(struct fid_mr *mr, uint32_t *lkey);
+};
+```
 
 ### query_addr
 This op queries the following address information for a given endpoint and destination address.
@@ -362,6 +371,16 @@ struct fi_efa_cq_init_attr {
 #### Return value
 **cq_open_ext()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
+
+### query_lkey
+This op queries the lkey for a given mr.
+
+*lkey*
+:	local memory translation key used by TX/RX buffer descriptor.
+
+#### Return value
+**query_lkey()** returns FI_SUCCESS on success, or -FI_EINVAL on failure.
+
 
 # Traffic Class (tclass) in EFA
 To prioritize the messages from a given endpoint, user can specify `fi_info->tx_attr->tclass = FI_TC_LOW_LATENCY` in the fi_endpoint() call to set the service level in rdma-core. All other tclass values will be ignored.

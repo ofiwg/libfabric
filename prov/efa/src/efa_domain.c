@@ -699,12 +699,30 @@ static int efa_domain_cq_open_ext(struct fid_domain *domain_fid,
 }
 #endif
 
+static int efa_domain_query_lkey(struct fid_mr *mr, uint32_t *lkey)
+{
+	struct efa_mr *efa_mr;
+
+	efa_mr = container_of(mr, struct efa_mr, mr_fid);
+	if (!efa_mr->ibv_mr) {
+		EFA_WARN(FI_LOG_DOMAIN, "MR not registered\n");
+		return -FI_EINVAL;
+	}
+
+	*lkey = efa_mr->ibv_mr->lkey;
+	return FI_SUCCESS;
+}
+
 static struct fi_efa_ops_domain efa_ops_domain = {
 	.query_mr = efa_domain_query_mr,
+};
+
+static struct fi_efa_ops_gda efa_ops_gda = {
 	.query_addr = efa_domain_query_addr,
 	.query_qp_wqs = efa_domain_query_qp_wqs,
 	.query_cq = efa_domain_query_cq,
 	.cq_open_ext = efa_domain_cq_open_ext,
+	.query_lkey = efa_domain_query_lkey,
 };
 
 static int
@@ -715,11 +733,15 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 
 	if (strcmp(ops_name, FI_EFA_DOMAIN_OPS) == 0) {
 		*ops = &efa_ops_domain;
-	} else {
-		EFA_WARN(FI_LOG_DOMAIN,
-			"Unknown ops name: %s\n", ops_name);
-		ret = -FI_EINVAL;
+		return ret;
 	}
+	if (strcmp(ops_name, FI_EFA_GDA_OPS) == 0) {
+		*ops = &efa_ops_gda;
+		return ret;
+	}
+
+	EFA_WARN(FI_LOG_DOMAIN, "Unknown ops name: %s\n", ops_name);
+	ret = -FI_EINVAL;
 
 	return ret;
 }
