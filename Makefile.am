@@ -153,8 +153,11 @@ linkback = src/libfabric.la
 bin_PROGRAMS = \
 	util/fi_info \
 	util/fi_strerror \
-	util/fi_pingpong \
-	util/fi_mon_sampler
+	util/fi_pingpong
+
+if HAVE_MONITOR
+bin_PROGRAMS += util/fi_mon_sampler
+endif
 
 bin_SCRIPTS =
 
@@ -170,9 +173,11 @@ util_fi_pingpong_SOURCES = \
 	util/pingpong.c
 util_fi_pingpong_LDADD = $(linkback)
 
+if HAVE_MONITOR
 util_fi_mon_sampler_SOURCES = \
 	util/mon_sampler.c
 util_fi_mon_sampler_LDADD = $(linkback)
+endif
 
 nodist_src_libfabric_la_SOURCES =
 src_libfabric_la_SOURCES =			\
@@ -274,7 +279,6 @@ endif HAVE_DIRECT
 real_man_pages = \
         man/man1/fi_info.1 \
         man/man1/fi_pingpong.1 \
-        man/man1/fi_mon_sampler.1 \
         man/man1/fi_strerror.1 \
         man/man3/fi_atomic.3 \
         man/man3/fi_av.3 \
@@ -310,6 +314,9 @@ real_man_pages = \
         man/man7/fi_provider.7 \
         man/man7/fi_setup.7
 
+if HAVE_MONITOR
+real_man_pages += man/man1/fi_mon_sampler.1
+endif
 
 dummy_man_pages = \
         man/man3/fi_accept.3 \
