@@ -162,19 +162,19 @@ void test_efa_domain_open_ops_query_qp_wqs(struct efa_resource **state)
 {
     struct efa_resource *resource = *state;
     int ret;
-    struct fi_efa_ops_domain *efa_domain_ops;
+    struct fi_efa_ops_gda *efa_gda_ops;
     struct fi_efa_wq_attr sq_attr = {0};
     struct fi_efa_wq_attr rq_attr = {0};
 
     efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
-    ret = fi_open_ops(&resource->domain->fid, FI_EFA_DOMAIN_OPS, 0, (void **)&efa_domain_ops, NULL);
+    ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0, (void **)&efa_gda_ops, NULL);
     assert_int_equal(ret, 0);
 
 #if HAVE_EFADV_QUERY_QP_WQS
     g_efa_unit_test_mocks.efadv_query_qp_wqs = &efa_mock_efadv_query_qp_wqs;
 #endif
-    ret = efa_domain_ops->query_qp_wqs(resource->ep, &sq_attr, &rq_attr);
+    ret = efa_gda_ops->query_qp_wqs(resource->ep, &sq_attr, &rq_attr);
 
 #if HAVE_EFADV_QUERY_QP_WQS
     assert_int_equal(ret, FI_SUCCESS);
@@ -200,18 +200,18 @@ void test_efa_domain_open_ops_query_cq(struct efa_resource **state)
 {
     struct efa_resource *resource = *state;
     int ret;
-    struct fi_efa_ops_domain *efa_domain_ops;
+    struct fi_efa_ops_gda *efa_gda_ops;
     struct fi_efa_cq_attr cq_attr = {0};
 
     efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
-    ret = fi_open_ops(&resource->domain->fid, FI_EFA_DOMAIN_OPS, 0, (void **)&efa_domain_ops, NULL);
+    ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0, (void **)&efa_gda_ops, NULL);
     assert_int_equal(ret, 0);
 
 #if HAVE_EFADV_QUERY_CQ
     g_efa_unit_test_mocks.efadv_query_cq = &efa_mock_efadv_query_cq;
 #endif
-    ret = efa_domain_ops->query_cq(resource->cq, &cq_attr);
+    ret = efa_gda_ops->query_cq(resource->cq, &cq_attr);
 
 #if HAVE_EFADV_QUERY_CQ
     assert_int_equal(ret, FI_SUCCESS);
@@ -343,7 +343,7 @@ void test_efa_domain_open_ops_query_addr(struct efa_resource **state)
 	size_t raw_addr_len = sizeof(struct efa_ep_addr);
 	struct efa_ep_addr raw_addr;
 	fi_addr_t addr;
-	struct fi_efa_ops_domain *efa_domain_ops;
+	struct fi_efa_ops_gda *efa_gda_ops;
 	uint16_t ahn;
 	uint16_t remote_qpn;
 	uint32_t remote_qkey;
@@ -357,11 +357,11 @@ void test_efa_domain_open_ops_query_addr(struct efa_resource **state)
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
 	assert_int_equal(ret, 1);
 
-	ret = fi_open_ops(&resource->domain->fid, FI_EFA_DOMAIN_OPS, 0,
-			  (void **) &efa_domain_ops, NULL);
+	ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0,
+			  (void **) &efa_gda_ops, NULL);
 	assert_int_equal(ret, 0);
 
-	ret = efa_domain_ops->query_addr(resource->ep, addr, &ahn,
+	ret = efa_gda_ops->query_addr(resource->ep, addr, &ahn,
 					    &remote_qpn, &remote_qkey);
 
 	assert_int_equal(ret, FI_SUCCESS);
@@ -372,7 +372,7 @@ void test_efa_domain_open_ops_query_addr(struct efa_resource **state)
 void test_efa_domain_open_ops_cq_open_ext(struct efa_resource **state)
 {
     struct efa_resource *resource = *state;
-    struct fi_efa_ops_domain *efa_domain_ops;
+    struct fi_efa_ops_gda *efa_gda_ops;
     struct fi_cq_attr attr = {0};
     struct fi_efa_cq_init_attr efa_cq_init_attr = {
 	    .flags = FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF,
@@ -389,8 +389,8 @@ void test_efa_domain_open_ops_cq_open_ext(struct efa_resource **state)
 
     efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
-    ret = fi_open_ops(&resource->domain->fid, FI_EFA_DOMAIN_OPS, 0,
-		      (void **) &efa_domain_ops, NULL);
+    ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0,
+		      (void **) &efa_gda_ops, NULL);
     assert_int_equal(ret, 0);
 
 #if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF && HAVE_EFADV_CQ_EX
@@ -398,10 +398,10 @@ void test_efa_domain_open_ops_cq_open_ext(struct efa_resource **state)
         g_efa_unit_test_mocks.efadv_create_cq = &efa_mock_efadv_create_cq_with_ibv_create_cq_ex;
         expect_function_call(efa_mock_efadv_create_cq_with_ibv_create_cq_ex);
     }
-    ret = efa_domain_ops->cq_open_ext(resource->domain, &attr,
+    ret = efa_gda_ops->cq_open_ext(resource->domain, &attr,
 				      &efa_cq_init_attr, &cq_fid, NULL);
 #else
-    ret = efa_domain_ops->cq_open_ext(resource->domain, &attr,
+    ret = efa_gda_ops->cq_open_ext(resource->domain, &attr,
 				      &efa_cq_init_attr, &cq_fid, NULL);
 #endif
 

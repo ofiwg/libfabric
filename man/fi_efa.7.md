@@ -191,24 +191,15 @@ Domain operation extension is obtained by calling `fi_open_ops`
 int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
     void **ops, void *context);
 ```
-and requesting `FI_EFA_DOMAIN_OPS` in `name`. `fi_open_ops` returns `ops` as
+
+Requesting `FI_EFA_DOMAIN_OPS` in `name` returns `ops` as
 the pointer to the function table `fi_efa_ops_domain` defined as follows:
 
 ```c
 struct fi_efa_ops_domain {
 	int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
-	int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
-			  uint16_t *remote_qpn, uint32_t *remote_qkey);
-	int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
-	int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
-	int (*cq_open_ext)(struct fid_domain *domain_fid,
-			   struct fi_cq_attr *attr,
-			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
-			   struct fid_cq **cq_fid, void *context);
 };
 ```
-
-It contains the following operations
 
 ### query_mr
 This op queries an existing memory registration as input, and outputs the efa
@@ -247,6 +238,24 @@ struct fi_efa_mr_attr {
 #### Return value
 **query_mr()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
+
+
+To enable GPU Direct Async (GDA), which allows the GPU to interact directly with the NIC, 
+request `FI_EFA_GDA_OPS` in the `name` parameter. This returns `ops` as a pointer to the 
+function table `fi_efa_ops_gda` defined as follows:
+
+```c
+struct fi_efa_ops_gda {
+	int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
+			  uint16_t *remote_qpn, uint32_t *remote_qkey);
+	int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
+	int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
+	int (*cq_open_ext)(struct fid_domain *domain_fid,
+			   struct fi_cq_attr *attr,
+			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
+			   struct fid_cq **cq_fid, void *context);
+};
+```
 
 ### query_addr
 This op queries the following address information for a given endpoint and destination address.
