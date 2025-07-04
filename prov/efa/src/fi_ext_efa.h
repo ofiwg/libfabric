@@ -65,6 +65,7 @@ struct fi_efa_ops_gda {
 			   struct fi_cq_attr *attr,
 			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
 			   struct fid_cq **cq_fid, void *context);
+	uint64_t (*get_mr_lkey)(struct fid_mr *mr);
 };
 
 #endif /* _FI_EXT_EFA_H_ */
