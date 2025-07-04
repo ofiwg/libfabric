@@ -333,6 +333,7 @@ struct cxip_environment {
 	int disable_hmem_dev_register;
 	int ze_hmem_supported;
 	enum cxip_rdzv_proto  rdzv_proto;
+	int disable_alt_read_cmdq;
 	int enable_trig_op_limit;
 	int hybrid_posted_recv_preemptive;
 	int hybrid_unexpected_msg_preemptive;
@@ -1924,9 +1925,13 @@ struct cxip_rxc_hpc {
 	/* Number of unexpected list entries in HW. */
 	ofi_atomic32_t orx_hw_ule_cnt;
 
-	/* RX context transmit queue, required for rendezvous
-	 * gets.
+	/* RX context transmit queue is separated into two logical
+	 * queues, one used for rendezvous get initiation and one
+	 * used for notifications. Depending on the messaging protocols
+	 * and traffic classes in use, the two logical queues could
+	 * point to the same hardware queue or be distinct.
 	 */
+	struct cxip_cmdq *tx_rget_cmdq;
 	struct cxip_cmdq *tx_cmdq;
 	ofi_atomic32_t orx_tx_reqs;
 
@@ -3220,12 +3225,12 @@ void cxip_rxc_struct_init(struct cxip_rxc *rxc, const struct fi_rx_attr *attr,
 			  void *context);
 void cxip_rxc_recv_req_cleanup(struct cxip_rxc *rxc);
 
-int cxip_rxc_emit_dma(struct cxip_rxc_hpc *rxc, uint16_t vni,
-		      enum cxi_traffic_class tc,
+int cxip_rxc_emit_dma(struct cxip_rxc_hpc *rxc, struct cxip_cmdq *cmdq,
+		      uint16_t vni, enum cxi_traffic_class tc,
 		      enum cxi_traffic_class_type tc_type,
 		      struct c_full_dma_cmd *dma, uint64_t flags);
-int cxip_rxc_emit_idc_msg(struct cxip_rxc_hpc *rxc, uint16_t vni,
-			  enum cxi_traffic_class tc,
+int cxip_rxc_emit_idc_msg(struct cxip_rxc_hpc *rxc, struct cxip_cmdq *cmdq,
+			  uint16_t vni, enum cxi_traffic_class tc,
 			  enum cxi_traffic_class_type tc_type,
 			  const struct c_cstate_cmd *c_state,
 			  const struct c_idc_msg_hdr *msg, const void *buf,

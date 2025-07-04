@@ -1014,6 +1014,12 @@ The CXI provider checks for the following environment variables:
     operation performance. Note that all rendezvous protocol use RDMA to transfer
     eager and non-eager rendezvous data.
 
+*FI_CXI_DISABLE_ALT_READ_CMDQ*
+:   This variable is only valid if the alt_read rendezvous protocol has been
+    enabled with FI_CXI_RDZV_PROTO=alt_read. If set, it will disable the alt_read
+    dedicated rendezvous get command queue, conserving command queue resources
+    with a cost in performance.
+
 *FI_CXI_DISABLE_NON_INJECT_MSG_IDC*
 :   Experimental option to disable favoring IDC for transmit of small messages
     when FI_INJECT is not specified. This can be useful with GPU source buffers

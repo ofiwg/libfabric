@@ -324,8 +324,8 @@ void cxip_rxc_disable(struct cxip_rxc *rxc)
 	}
 }
 
-int cxip_rxc_emit_dma(struct cxip_rxc_hpc *rxc, uint16_t vni,
-		      enum cxi_traffic_class tc,
+int cxip_rxc_emit_dma(struct cxip_rxc_hpc *rxc, struct cxip_cmdq *cmdq,
+		      uint16_t vni, enum cxi_traffic_class tc,
 		      enum cxi_traffic_class_type tc_type,
 		      struct c_full_dma_cmd *dma, uint64_t flags)
 {
@@ -341,27 +341,27 @@ int cxip_rxc_emit_dma(struct cxip_rxc_hpc *rxc, uint16_t vni,
 	}
 
 	/* Ensure correct traffic class is used. */
-	ret = cxip_cmdq_cp_set(rxc->tx_cmdq, vni, tc, tc_type);
+	ret = cxip_cmdq_cp_set(cmdq, vni, tc, tc_type);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to set traffic class: %d:%s\n", ret,
 			 fi_strerror(-ret));
 		return ret;
 	}
 
-	ret = cxip_cmdq_emit_dma(rxc->tx_cmdq, dma, flags);
+	ret = cxip_cmdq_emit_dma(cmdq, dma, flags);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to emit dma command: %d:%s\n", ret,
 			 fi_strerror(-ret));
 		return ret;
 	}
 
-	cxip_txq_ring(rxc->tx_cmdq, 0, 1);
+	cxip_txq_ring(cmdq, 0, 1);
 
 	return FI_SUCCESS;
 }
 
-int cxip_rxc_emit_idc_msg(struct cxip_rxc_hpc *rxc, uint16_t vni,
-			  enum cxi_traffic_class tc,
+int cxip_rxc_emit_idc_msg(struct cxip_rxc_hpc *rxc, struct cxip_cmdq *cmdq,
+			  uint16_t vni, enum cxi_traffic_class tc,
 			  enum cxi_traffic_class_type tc_type,
 			  const struct c_cstate_cmd *c_state,
 			  const struct c_idc_msg_hdr *msg, const void *buf,
@@ -379,22 +379,21 @@ int cxip_rxc_emit_idc_msg(struct cxip_rxc_hpc *rxc, uint16_t vni,
 	}
 
 	/* Ensure correct traffic class is used. */
-	ret = cxip_cmdq_cp_set(rxc->tx_cmdq, vni, tc, tc_type);
+	ret = cxip_cmdq_cp_set(cmdq, vni, tc, tc_type);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to set traffic class: %d:%s\n", ret,
 			 fi_strerror(-ret));
 		return ret;
 	}
 
-	ret = cxip_cmdq_emit_idc_msg(rxc->tx_cmdq, c_state, msg, buf, len,
-				     flags);
+	ret = cxip_cmdq_emit_idc_msg(cmdq, c_state, msg, buf, len, flags);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to emit idc_msg command: %d:%s\n", ret,
 			 fi_strerror(-ret));
 		return ret;
 	}
 
-	cxip_txq_ring(rxc->tx_cmdq, 0, 1);
+	cxip_txq_ring(cmdq, 0, 1);
 
 	return FI_SUCCESS;
 }
