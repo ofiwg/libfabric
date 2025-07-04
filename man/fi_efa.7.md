@@ -254,6 +254,7 @@ struct fi_efa_ops_gda {
 			   struct fi_cq_attr *attr,
 			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
 			   struct fid_cq **cq_fid, void *context);
+	uint64_t (*get_mr_lkey)(struct fid_mr *mr);
 };
 ```
 
@@ -371,6 +372,16 @@ struct fi_efa_cq_init_attr {
 #### Return value
 **cq_open_ext()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
+
+### get_mr_lkey
+Returns the local memory translation key associated with a MR. The memory registration must have completed successfully before invoking this.
+
+*lkey*
+:	local memory translation key used by TX/RX buffer descriptor.
+
+#### Return value
+**get_mr_lkey()** returns lkey on success, or FI_KEY_NOTAVAIL if the registration has not completed.
+
 
 # Traffic Class (tclass) in EFA
 To prioritize the messages from a given endpoint, user can specify `fi_info->tx_attr->tclass = FI_TC_LOW_LATENCY` in the fi_endpoint() call to set the service level in rdma-core. All other tclass values will be ignored.
