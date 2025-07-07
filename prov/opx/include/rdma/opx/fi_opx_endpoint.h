@@ -1085,10 +1085,9 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			assert(!is_noncontig);
 
 #ifdef OPX_HMEM
-			if (is_intranode && is_hmem && is_ipc) {
-				opx_hfi1_rx_ipc_rts(opx_ep, hdr, payload, origin_rx, niov,
-						    payload->rendezvous.ipc.origin_byte_counter_vaddr, context,
-						    xfer_len, u32_ext_rx, hfi1_type);
+			if (is_intranode && is_ipc) {
+				opx_hfi1_rx_ipc_rts(opx_ep, hdr, payload, origin_rx, niov, is_hmem, context, xfer_len,
+						    u32_ext_rx, hfi1_type);
 				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS");
 				FI_DBG_TRACE(
 					fi_opx_global.prov, FI_LOG_EP_DATA,
