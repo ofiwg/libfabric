@@ -317,7 +317,7 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 #ifdef OPX_HMEM
 void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
 			 const union fi_opx_hfi1_packet_payload *const payload, const uint16_t origin_rx,
-			 const uint64_t niov, uintptr_t origin_byte_counter_vaddr, struct opx_context *const context,
+			 const uint64_t niov, const uint64_t is_hmem, struct opx_context *const context,
 			 const uint64_t xfer_len, const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type);
 #endif
 
