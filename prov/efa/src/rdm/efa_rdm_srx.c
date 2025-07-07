@@ -30,9 +30,10 @@ void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
 		rxe->cq_entry.buf = peer_rxe->iov[0].iov_base;
 	}
 
-	if (peer_rxe->desc)
+	if (peer_rxe->desc) {
 		memcpy(&rxe->desc[0], peer_rxe->desc,
 			sizeof(*peer_rxe->desc) * peer_rxe->count);
+	}
 	else
 		memset(&rxe->desc[0], 0, sizeof(rxe->desc));
 

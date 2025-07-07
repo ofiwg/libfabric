@@ -33,6 +33,8 @@ struct efa_mr {
 	struct efa_mr_peer	peer;
 	bool			inserted_to_mr_map;
 	bool 			needs_sync;
+	ofi_atomic32_t		active;
+	ofi_atomic32_t		ref;
 };
 
 extern int efa_mr_cache_enable;
@@ -86,6 +88,7 @@ static inline void *efa_mr_get_shm_desc(struct efa_mr *efa_mr)
 
 	return efa_mr->shm_mr ? fi_mr_desc(efa_mr->shm_mr) : NULL;
 }
+
 #define EFA_MR_IOV_LIMIT 1
 #define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
