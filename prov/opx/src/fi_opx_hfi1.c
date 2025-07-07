@@ -2542,26 +2542,16 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	/* Most modern GPUs have support for Unified Virtual Addressing (UVA).
 	   This allows us to use generic cudaMemcpy for DtoH and DtoD */
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-P2P-DIRECT-COPY");
-	union opx_hmem_event *event = NULL;
 	if (!is_hmem) {
-		ret = ofi_copy_from_hmem(ipc_info->iface, ipc_info->device, context->buf, device_ptr, xfer_len);
-		if (ret) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FATAL ERROR, cudaMemcpy with IPC handle failed. Abort\n");
-			abort();
-		}
+		ret = ofi_copy_from_hmem(payload->rendezvous.ipc.src_iface, payload->rendezvous.ipc.src_device_id,
+					 context->buf, device_ptr, xfer_len);
 	} else {
-		if (ipc_info->iface == FI_HMEM_CUDA) {
-			opx_hmem_memcpy_async(FI_HMEM_CUDA, ipc_info->device, context->buf, device_ptr, xfer_len,
-					      opx_ep->domain->hmem_domain, &event, OPX_HMEM_MEMCPY_ASYNC_DTOD);
-		} else if (ipc_info->iface == FI_HMEM_ROCR) {
-			opx_hmem_memcpy_async(FI_HMEM_ROCR, ipc_info->device, context->buf, device_ptr, xfer_len,
-					      opx_ep->domain->hmem_domain, &event, OPX_HMEM_MEMCPY_ASYNC_DTOD);
-		} else {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FATAL ERROR, memcpy with IPC handle unexpected iface=%lu. Abort\n", ipc_info->iface);
-			abort();
-		}
+		ret = ofi_copy_to_hmem(payload->rendezvous.ipc.src_iface, payload->rendezvous.ipc.src_device_id,
+				       context->buf, device_ptr, xfer_len);
+	}
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "FATAL ERROR, cudaMemcpy with IPC handle failed. Abort\n");
+		abort();
 	}
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-P2P-DIRECT-COPY");
 	if (event == NULL) {
