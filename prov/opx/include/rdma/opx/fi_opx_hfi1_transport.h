@@ -1358,7 +1358,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 	const size_t		payload_qws_total = total_len >> 3;
 
 	const uint32_t lrh_dlid_16B = addr.lid;
-	const uint64_t pbc_dlid	    = addr.lid;
+	const uint64_t pbc_dlid	    = OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type);
 	/* 16B PBC is dws */
 	const uint64_t pbc_dws =
 		/* PIO SOP is 16 DWS/8 QWS*/
