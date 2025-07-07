@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_cxi" "7" "2025\-06\-12" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_cxi" "7" "2025\-07\-07" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -1226,6 +1226,12 @@ operation performance.
 Note that all rendezvous protocol use RDMA to transfer eager and
 non-eager rendezvous data.
 .RE
+.TP
+\f[I]FI_CXI_DISABLE_ALT_READ_CMDQ\f[R]
+This variable is only valid if the alt_read rendezvous protocol has been
+enabled with FI_CXI_RDZV_PROTO=alt_read.
+If set, it will disable the alt_read dedicated rendezvous get command
+queue, conserving command queue resources with a cost in performance.
 .TP
 \f[I]FI_CXI_DISABLE_NON_INJECT_MSG_IDC\f[R]
 Experimental option to disable favoring IDC for transmit of small
