@@ -412,7 +412,8 @@ static void util_foreach_unspec(struct fid_peer_srx *srx,
 
 	srx_ctx = srx->ep_fid.fid.context;
 
-	ofi_genlock_lock(srx_ctx->lock);
+	assert(ofi_genlock_held(srx_ctx->lock));
+
 	dlist_foreach_safe(&srx_ctx->unspec_unexp_msg_queue, item, tmp) {
 		rx_entry = (struct fi_peer_rx_entry *) item;
 		rx_entry->addr = get_addr(rx_entry);
@@ -446,7 +447,6 @@ static void util_foreach_unspec(struct fid_peer_srx *srx,
 			dlist_insert_tail(&unexp_peer->entry,
 					  &srx_ctx->unexp_peers);
 	}
-	ofi_genlock_unlock(srx_ctx->lock);
 }
 
 static struct fi_ops_srx_owner util_srx_owner_ops = {

@@ -684,7 +684,10 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	for (i = 0; i < count; i++) {
 		addr_i = (struct efa_ep_addr *) ((uint8_t *)addr + i * EFA_EP_ADDR_LEN);
 
+		ofi_genlock_lock(&av->domain->srx_lock);
 		ret = efa_av_insert_one(av, addr_i, &fi_addr_res, flags, context, true);
+		ofi_genlock_unlock(&av->domain->srx_lock);
+
 		if (ret) {
 			EFA_WARN(FI_LOG_AV, "insert raw_addr to av failed! ret=%d\n",
 				 ret);

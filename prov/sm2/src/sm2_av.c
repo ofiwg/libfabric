@@ -120,7 +120,9 @@ static int sm2_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		util_ep = container_of(av_entry, struct util_ep, av_entry);
 		sm2_ep = container_of(util_ep, struct sm2_ep, util_ep);
 		srx = sm2_get_peer_srx(sm2_ep);
+		ofi_genlock_lock(&sm2_ep->util_ep.lock);
 		srx->owner_ops->foreach_unspec_addr(srx, &sm2_get_addr);
+		ofi_genlock_unlock(&sm2_ep->util_ep.lock);
 	}
 
 	return succ_count;
