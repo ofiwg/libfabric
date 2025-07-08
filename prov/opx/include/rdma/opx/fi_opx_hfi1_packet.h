@@ -930,8 +930,7 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[2] BTH (unused)*/
 		uint16_t reserved_1[3];
-		uint8_t	 origin_rx;
-		uint8_t	 reserved_2;
+		uint16_t origin_rx;
 
 		/* QW[3-4] BTH/KDETH */
 		uint64_t reserved_3[2];
