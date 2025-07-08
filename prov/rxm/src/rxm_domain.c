@@ -235,8 +235,11 @@ static void rxm_foreach_ep(struct util_av *av, struct util_ep *ep)
 
 	rxm_ep = container_of(ep, struct rxm_ep, util_ep);
 	peer_srx = container_of(rxm_ep->srx, struct fid_peer_srx, ep_fid);
-	if (peer_srx)
+	if (peer_srx) {
+		ofi_genlock_lock(&rxm_ep->util_ep.lock);
 		peer_srx->owner_ops->foreach_unspec_addr(peer_srx, &rxm_get_addr);
+		ofi_genlock_unlock(&rxm_ep->util_ep.lock);
+	}
 }
 
 
