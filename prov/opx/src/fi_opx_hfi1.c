@@ -1257,7 +1257,8 @@ ssize_t fi_opx_hfi1_tx_connect(struct fi_opx_ep *opx_ep, fi_addr_t peer)
 			uint8_t	 hfi_unit	 = addr.hfi1_unit;
 			uint16_t hfi1_subctxt_rx = addr.hfi1_subctxt_rx;
 			int	 inst		 = 0;
-			uint32_t segment_index	 = OPX_SHM_SEGMENT_INDEX(hfi_unit, hfi1_subctxt_rx);
+
+			uint32_t segment_index = OPX_SHM_SEGMENT_INDEX(hfi_unit, hfi1_subctxt_rx);
 
 #ifdef OPX_DAOS
 			/* HFI Rank Support:  Rank and PID included in the SHM file name */
