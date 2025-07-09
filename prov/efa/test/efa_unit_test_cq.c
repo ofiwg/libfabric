@@ -279,6 +279,127 @@ void test_rdm_cq_read_bad_send_status_message_too_long(struct efa_resource **sta
 }
 
 /**
+ * @brief Test the error handling for a handshake tx completion err
+ * TODO: Cover the RNR case test where the handshake packet should be queued
+ * @param state test resource
+ * @param prov_errno rdma core vendor error
+ * @param expect_eq_err whether an eq error is expected
+ */
+static
+void test_rdm_cq_handshake_bad_send_status_impl(struct efa_resource **state, int prov_errno, bool expect_eq_err)
+{
+	fi_addr_t peer_addr = 0;
+	int ret;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_peer *peer;
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_handshake_pkt_attr pkt_attr = {0};
+	struct fi_cq_data_entry cq_entry;
+	struct fi_eq_err_entry eq_err_entry;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_cq *efa_rdm_cq;
+	struct ibv_cq_ex *ibv_cqx;
+	struct efa_rdm_ope *txe;
+
+	/* disable shm to force using efa device to send */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	ibv_cqx = efa_rdm_cq->efa_cq.ibv_cq.ibv_cq_ex;
+
+	/* Create and register a fake peer */
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+	/* Peer host id is uninitialized before handshake */
+	assert_int_equal(peer->host_id, 0);
+	assert_int_not_equal(peer->flags & EFA_RDM_PEER_HANDSHAKE_SENT, EFA_RDM_PEER_HANDSHAKE_SENT);
+
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
+	pkt_entry->ope = txe;
+	pkt_entry->peer = peer;
+
+	pkt_attr.connid = raw_addr.qkey;
+	pkt_attr.host_id = 0x8765432187654321;
+	pkt_attr.device_version = 0xefa0;
+	efa_unit_test_handshake_pkt_construct(pkt_entry, &pkt_attr);
+
+	/* Setup CQ */
+	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	ibv_cqx->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	ibv_cqx->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
+	ibv_cqx->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	ibv_cqx->wr_id = (uintptr_t)pkt_entry;
+
+	/* Mock cq to simulate the send comp error */
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
+	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
+	will_return(efa_mock_ibv_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
+	will_return(efa_mock_ibv_read_vendor_err_return_mock, prov_errno);
+	will_return(efa_mock_ibv_start_poll_return_mock, IBV_WC_SUCCESS);
+
+	efa_rdm_ep->efa_outstanding_tx_ops = 1;
+	ibv_cqx->status = IBV_WC_GENERAL_ERR;
+	ibv_cqx->wr_id = (uintptr_t)pkt_entry;
+
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	/* HANDSHAKE packet does not generate completion entry or error*/
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	ret = fi_eq_readerr(resource->eq, &eq_err_entry, 0);
+	if (expect_eq_err) {
+		assert_int_equal(ret, sizeof(eq_err_entry));
+		assert_int_equal(eq_err_entry.prov_errno, prov_errno);
+	} else {
+		assert_int_equal(ret, -FI_EAGAIN);
+	}
+
+	/* reset the mocked cq before it's polled by ep close */
+	will_return_always(efa_mock_ibv_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+}
+
+void test_rdm_cq_handshake_bad_send_status_bad_qpn(struct efa_resource **state)
+{
+	test_rdm_cq_handshake_bad_send_status_impl(state, EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN, false);
+}
+
+void test_rdm_cq_handshake_bad_send_status_unresp_remote(struct efa_resource **state)
+{
+	test_rdm_cq_handshake_bad_send_status_impl(state, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, false);
+}
+
+void test_rdm_cq_handshake_bad_send_status_unreach_remote(struct efa_resource **state)
+{
+	test_rdm_cq_handshake_bad_send_status_impl(state, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE, false);
+}
+
+void test_rdm_cq_handshake_bad_send_status_remote_abort(struct efa_resource **state)
+{
+	test_rdm_cq_handshake_bad_send_status_impl(state, EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT, false);
+}
+
+void test_rdm_cq_handshake_bad_send_status_unsupported_op(struct efa_resource **state)
+{
+	test_rdm_cq_handshake_bad_send_status_impl(state, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNSUPPORTED_OP, true);
+}
+
+/**
  * @brief verify that fi_cq_read/fi_cq_readerr works properly when rdma-core return bad status for recv.
  *
  * When an ibv_post_recv() operation failed, no data was received. Therefore libfabric cannot
