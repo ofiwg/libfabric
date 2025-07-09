@@ -197,6 +197,7 @@ struct lnx_address {
 };
 
 struct lnx_rx_entry {
+	struct dlist_entry entry;
 	struct fi_peer_rx_entry rx_entry;
 	struct iovec rx_iov[LNX_IOV_LIMIT];
 	void *rx_desc[LNX_IOV_LIMIT];
