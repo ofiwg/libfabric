@@ -427,40 +427,50 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 	case EFA_RDM_TXE:
 		txe = pkt_entry->ope;
 		if (!(pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) && efa_rdm_pke_get_base_hdr(pkt_entry)->type == EFA_RDM_HANDSHAKE_PKT) {
-			if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
-				/*
-				 * handshake should always be queued for RNR
-				 */
-				assert(!(pkt_entry->peer->flags & EFA_RDM_PEER_HANDSHAKE_QUEUED));
-				pkt_entry->peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
-				dlist_insert_tail(&pkt_entry->peer->handshake_queued_entry,
+			switch (prov_errno) {
+				case EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR:
+					/**
+					 * handshake should always be queued for RNR
+					 */
+					assert(!(pkt_entry->peer->flags & EFA_RDM_PEER_HANDSHAKE_QUEUED));
+					pkt_entry->peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
+					dlist_insert_tail(&pkt_entry->peer->handshake_queued_entry,
 						  &efa_rdm_ep_domain(ep)->handshake_queued_peer_list);
-			} else if (prov_errno != EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN) {
-				/*
-				 * If prov_errno is EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN
-				 * the peer has been destroyed. Which is normal, as peer does not
-				 * always need a handshake packet to perform its duty. (For example,
-				 * if a peer just want to sent 1 message to the ep, it does not need
-				 * handshake.) In this case, it is safe to ignore this error
-				 * completion. In all other cases, we write an eq entry because
-				 * there is no application operation associated with handshake.
-				 */
-				char ep_addr_str[OFI_ADDRSTRLEN], peer_addr_str[OFI_ADDRSTRLEN];
-				size_t buflen=0;
+					break;
+				case EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN: /* fall through */
+				case FI_EFA_ERR_ESTABLISHED_RECV_UNRESP: /* fall through */
+				case FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP: /* fall through */
+				case EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT: /* fall through */
+				case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE: /* fall through */
+				case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE:
+					/**
+					 * This means the peer has been destroyed. Which is normal, as peer does not
+					 * always need a handshake packet to perform its duty. (For example,
+					 * if a peer just want to sent 1 message to the ep, it does not need
+					 * handshake.) In this case, it is safe to ignore this error
+					 * completion. In all other cases, we write an eq entry because
+					 * there is no application operation associated with handshake.
+					 */
+					break;
+				default:
+				{
+					char ep_addr_str[OFI_ADDRSTRLEN], peer_addr_str[OFI_ADDRSTRLEN];
+					size_t buflen=0;
 
-				memset(&ep_addr_str, 0, sizeof(ep_addr_str));
-				memset(&peer_addr_str, 0, sizeof(peer_addr_str));
-				buflen = sizeof(ep_addr_str);
-				efa_base_ep_raw_addr_str(&ep->base_ep, ep_addr_str, &buflen);
-				buflen = sizeof(peer_addr_str);
-				efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, pkt_entry->peer->conn->fi_addr, peer_addr_str, &buflen);
-				EFA_WARN(FI_LOG_CQ,
-					"While sending a handshake packet, an error occurred."
-					"  Our address: %s, peer address: %s\n",
+					memset(&ep_addr_str, 0, sizeof(ep_addr_str));
+					memset(&peer_addr_str, 0, sizeof(peer_addr_str));
+					buflen = sizeof(ep_addr_str);
+					efa_base_ep_raw_addr_str(&ep->base_ep, ep_addr_str, &buflen);
+					buflen = sizeof(peer_addr_str);
+					efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, pkt_entry->peer->conn->fi_addr, peer_addr_str, &buflen);
+					EFA_WARN(FI_LOG_CQ,
+						"While sending a handshake packet, an error occurred."
+						"  Our address: %s, peer address: %s\n",
 					ep_addr_str, peer_addr_str);
-				efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
+					efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
+					break;
+				}
 			}
-
 			efa_rdm_pke_release_tx(pkt_entry);
 			efa_rdm_txe_release(txe);
 
