@@ -175,16 +175,16 @@ lnx_remove_first_match(struct lnx_queue *q, struct lnx_match_attr *match)
 static inline void
 lnx_insert_rx_entry(struct lnx_queue *q, struct lnx_rx_entry *entry)
 {
-	dlist_insert_tail((struct dlist_entry *)(&entry->rx_entry),
-			  &q->lq_queue);
+	dlist_insert_tail(&entry->entry, &q->lq_queue);
 	lnx_update_queue_stats(q, false);
 }
 
 int lnx_queue_tag(struct fi_peer_rx_entry *entry)
 {
-	struct lnx_rx_entry *rx_entry = (struct lnx_rx_entry *)entry;
+	struct lnx_rx_entry *rx_entry;
 	struct lnx_peer_srq *lnx_srq = (struct lnx_peer_srq*)entry->owner_context;
 
+	rx_entry = container_of(entry, struct lnx_rx_entry, rx_entry);
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
 		"addr = %lx tag = %lx ignore = 0 found\n",
 		entry->addr, entry->tag);
