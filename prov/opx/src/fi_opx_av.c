@@ -193,12 +193,12 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 				rc = fi_opx_ep_tx_connect(opx_av->ep_tx[i], count, output, output_ext);
 				if (OFI_UNLIKELY(rc)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_EAGAIN\n");
-					errno = FI_EAGAIN;
+					errno = -rc;
 					if (output_ext) {
 						free(output_ext);
 						output_ext = NULL;
 					}
-					return -errno;
+					return rc;
 				}
 			}
 

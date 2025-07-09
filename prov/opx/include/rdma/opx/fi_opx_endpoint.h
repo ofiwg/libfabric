@@ -1814,7 +1814,9 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode, struct fi_opx
 	uint32_t segment_index = OPX_SHM_SEGMENT_INDEX(hfi1_unit, rx_id);
 #endif
 
-	if (OFI_LIKELY(opx_ep->tx->shm.fifo_segment[segment_index] != NULL)) {
+	struct opx_shm_info *shm_info = opx_shm_rbt_get_shm_info(&(opx_ep->tx->shm), segment_index);
+
+	if (OFI_LIKELY((shm_info != NULL) && (shm_info->fifo_segment != NULL))) {
 		/* Connection already established */
 		return FI_SUCCESS;
 	}
