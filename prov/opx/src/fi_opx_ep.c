@@ -2051,9 +2051,9 @@ static int fi_opx_enable_ep(struct fid_ep *ep)
 		ssize_t rc = fi_opx_ep_tx_connect(opx_ep, opx_ep->av->addr_count, opx_ep->av->table_addr, NULL);
 
 		if (OFI_UNLIKELY(rc)) {
-			errno = FI_EAGAIN;
+			errno = -rc;
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "failed to connect to av addresses\n");
-			return -errno;
+			return rc;
 		}
 	}
 

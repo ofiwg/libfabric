@@ -60,6 +60,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <signal.h>
+#include "rbtree.h"
 
 #ifdef OPX_DAOS
 #define OPX_SHM_MAX_CONN_NUM 0xffff
@@ -86,13 +87,18 @@ struct opx_shm_connection {
 	char   segment_key[OPX_SHM_SEGMENT_NAME_MAX_LENGTH];
 };
 
+struct opx_shm_info {
+	struct opx_shm_connection    connection;
+	struct opx_shm_fifo_segment *fifo_segment;
+};
+
 struct opx_shm_tx {
-	struct dlist_entry	     list_entry; // for signal handler
-	struct fi_provider	    *prov;
-	struct opx_shm_fifo_segment *fifo_segment[OPX_SHM_MAX_CONN_NUM];
-	struct opx_shm_connection    connection[OPX_SHM_MAX_CONN_NUM];
-	uint32_t		     rank;
-	uint32_t		     rank_inst;
+	struct dlist_entry  list_entry; // for signal handler
+	struct fi_provider *prov;
+	RbtHandle	    shm_info_rbtree;
+	struct ofi_bufpool *shm_info_bufpool;
+	uint32_t	    rank;
+	uint32_t	    rank_inst;
 };
 
 struct opx_shm_resynch {
@@ -260,16 +266,35 @@ static inline ssize_t opx_shm_rx_fini(struct opx_shm_rx *rx)
 	return -FI_EINVAL;
 }
 
+__OPX_FORCE_INLINE__
+int opx_shm_rbtree_compare(void *a, void *b)
+{
+	return (a > b) - (a < b);
+}
+
+__OPX_FORCE_INLINE__
+struct opx_shm_info *opx_shm_rbt_get_shm_info(struct opx_shm_tx *tx, const uint32_t segment_index)
+{
+	struct opx_shm_info *shm_info = NULL;
+
+	RbtIterator it = rbtFind(tx->shm_info_rbtree, (void *) ((uintptr_t) segment_index));
+	if (OFI_LIKELY((uint64_t) it)) {
+		shm_info = *(rbtValuePtr(tx->shm_info_rbtree, it));
+	}
+	return shm_info;
+}
+
 static inline ssize_t opx_shm_tx_init(struct opx_shm_tx *tx, struct fi_provider *prov, uint32_t hfi_rank,
 				      uint32_t hfi_rank_inst)
 {
-	int i = 0;
-	for (i = 0; i < OPX_SHM_MAX_CONN_NUM; ++i) {
-		tx->connection[i].segment_ptr  = NULL;
-		tx->connection[i].segment_size = 0;
-		tx->connection[i].inuse	       = false;
-		tx->fifo_segment[i]	       = NULL;
-	}
+	tx->shm_info_rbtree = rbtNew(opx_shm_rbtree_compare);
+
+	(void) ofi_bufpool_create(&(tx->shm_info_bufpool),
+				  sizeof(struct opx_shm_info),		       // element size
+				  sizeof(void *),			       // byte alignment
+				  UINT_MAX,				       // max # of elements
+				  320,					       // # of elements to allocate at once
+				  OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_NO_ZERO); // flags
 
 	tx->prov      = prov;
 	tx->rank      = hfi_rank;
@@ -284,10 +309,27 @@ static inline ssize_t opx_shm_tx_connect(struct opx_shm_tx *tx, const char *cons
 					 const uint32_t segment_index, const uint16_t rx_id, const unsigned fifo_size,
 					 const unsigned packet_size)
 {
-	assert(segment_index < OPX_SHM_MAX_CONN_NUM);
 	int err = 0;
 
-	void *segment_ptr = tx->connection[segment_index].segment_ptr;
+	struct opx_shm_info *shm_info = opx_shm_rbt_get_shm_info(tx, segment_index);
+
+	if (shm_info == NULL) {
+		shm_info = (struct opx_shm_info *) ofi_buf_alloc(tx->shm_info_bufpool);
+		if (OFI_UNLIKELY(shm_info == NULL)) {
+			FI_WARN(tx->prov, FI_LOG_FABRIC, "Unable to allocate connection for segment index %u\n",
+				segment_index);
+			return -FI_ENOMEM;
+		}
+		shm_info->connection.segment_ptr    = NULL;
+		shm_info->connection.segment_size   = 0;
+		shm_info->connection.inuse	    = false;
+		shm_info->connection.segment_key[0] = 0;
+		rbtInsert(tx->shm_info_rbtree, (void *) ((uintptr_t) segment_index), (void *) shm_info);
+	}
+
+	void			  *segment_ptr = shm_info->connection.segment_ptr;
+	struct opx_shm_connection *connection  = &shm_info->connection;
+
 	if (segment_ptr == NULL) {
 		char segment_key[OPX_SHM_SEGMENT_NAME_MAX_LENGTH];
 		snprintf(segment_key, OPX_SHM_SEGMENT_NAME_MAX_LENGTH, OPX_SHM_SEGMENT_NAME_PREFIX "%s.%hu",
@@ -312,10 +354,10 @@ static inline ssize_t opx_shm_tx_connect(struct opx_shm_tx *tx, const char *cons
 
 		close(segment_fd); /* safe to close now */
 
-		tx->connection[segment_index].segment_ptr  = segment_ptr;
-		tx->connection[segment_index].segment_size = segment_size;
-		tx->connection[segment_index].inuse	   = false;
-		strcpy(tx->connection[segment_index].segment_key, segment_key);
+		connection->segment_ptr	 = segment_ptr;
+		connection->segment_size = segment_size;
+		connection->inuse	 = false;
+		strcpy(connection->segment_key, segment_key);
 	}
 
 	struct opx_shm_fifo_segment *fifo_segment =
@@ -323,17 +365,16 @@ static inline ssize_t opx_shm_tx_connect(struct opx_shm_tx *tx, const char *cons
 						 -FI_OPX_CACHE_LINE_SIZE);
 	uint64_t init = atomic_load_explicit(&fifo_segment->initialized_.val, memory_order_acquire);
 	if (init == 0) {
-		FI_DBG(tx->prov, FI_LOG_FABRIC, "SHM object '%s' still initializing.\n",
-		       tx->connection[segment_index].segment_key);
+		FI_DBG(tx->prov, FI_LOG_FABRIC, "SHM object '%s' still initializing.\n", connection->segment_key);
 		return -FI_EAGAIN;
 	}
 
-	tx->fifo_segment[segment_index] = fifo_segment;
+	shm_info->fifo_segment = fifo_segment;
 
 	FI_LOG(tx->prov, FI_LOG_INFO, FI_LOG_FABRIC,
-	       "SHM connection to %hu context passed. Segment (%s), segment (%p) size %zu segment_index %u\n", rx_id,
-	       tx->connection[segment_index].segment_key, segment_ptr, tx->connection[segment_index].segment_size,
-	       segment_index);
+	       "SHM connection to %hu context passed. Segment (%s), segment (%p) size %zu segment_index %u fifo_segment = %p\n",
+	       rx_id, connection->segment_key, segment_ptr, connection->segment_size, segment_index,
+	       shm_info->fifo_segment);
 
 	return FI_SUCCESS;
 
@@ -344,33 +385,44 @@ error_return:
 	return -FI_EINVAL;
 }
 
-static inline ssize_t opx_shm_tx_close(struct opx_shm_tx *tx, const uint16_t segment_index)
+static inline ssize_t opx_shm_tx_close(struct opx_shm_tx *tx, const uint32_t segment_index)
 {
-	assert(segment_index < OPX_SHM_MAX_CONN_NUM);
-	if (tx->connection[segment_index].segment_ptr != NULL) {
-		munmap(tx->connection[segment_index].segment_ptr, tx->connection[segment_index].segment_size);
-		tx->connection[segment_index].segment_ptr  = NULL;
-		tx->connection[segment_index].segment_size = 0;
-		tx->fifo_segment[segment_index]		   = NULL;
-		tx->connection[segment_index].inuse	   = false;
+	struct opx_shm_info *shm_info = opx_shm_rbt_get_shm_info(tx, segment_index);
+	if (shm_info == NULL) {
+		FI_WARN(tx->prov, FI_LOG_FABRIC, "Connection for segment index %u not found.\n", segment_index);
+		return -FI_ENOENT;
 	}
+
+	if (shm_info->connection.segment_ptr != NULL) {
+		munmap(shm_info->connection.segment_ptr, shm_info->connection.segment_size);
+	}
+
+	RbtIterator it = rbtFind(tx->shm_info_rbtree, (void *) ((uintptr_t) segment_index));
+	rbtErase(tx->shm_info_rbtree, it);
+
+	OPX_BUF_FREE(shm_info);
 
 	return FI_SUCCESS;
 }
 
 static inline ssize_t opx_shm_tx_fini(struct opx_shm_tx *tx)
 {
-	unsigned i = 0;
+	RbtIterator	     itr;
+	uint32_t	     segment_index;
+	struct opx_shm_info *shm_info;
 
-	for (i = 0; i < OPX_SHM_MAX_CONN_NUM; ++i) {
-		if (tx->connection[i].segment_ptr != NULL) {
-			munmap(tx->connection[i].segment_ptr, tx->connection[i].segment_size);
-			tx->connection[i].segment_ptr  = NULL;
-			tx->connection[i].segment_size = 0;
-			tx->connection[i].inuse	       = false;
-			tx->fifo_segment[i]	       = NULL;
+	itr = rbtBegin(tx->shm_info_rbtree);
+	while (itr) {
+		rbtKeyValue(tx->shm_info_rbtree, itr, (void **) &segment_index, (void **) &shm_info);
+		if (shm_info->connection.segment_ptr != NULL) {
+			munmap(shm_info->connection.segment_ptr, shm_info->connection.segment_size);
 		}
+		itr = rbtNext(tx->shm_info_rbtree, itr);
 	}
+
+	rbtDelete(tx->shm_info_rbtree);
+
+	ofi_bufpool_destroy(tx->shm_info_bufpool);
 
 	return FI_SUCCESS;
 }
@@ -393,7 +445,6 @@ static inline void *opx_shm_tx_next(struct opx_shm_tx *tx, uint8_t peer_hfi_unit
 #else
 	unsigned segment_index = OPX_SHM_SEGMENT_INDEX(peer_hfi_unit, peer_rx_index);
 #endif
-	assert(segment_index < OPX_SHM_MAX_CONN_NUM);
 
 #ifndef NDEBUG
 	if (segment_index >= OPX_SHM_MAX_CONN_NUM) {
@@ -404,17 +455,19 @@ static inline void *opx_shm_tx_next(struct opx_shm_tx *tx, uint8_t peer_hfi_unit
 	}
 #endif
 
-	if (OFI_UNLIKELY(tx->fifo_segment[segment_index] == NULL)) {
+	struct opx_shm_info *shm_info = opx_shm_rbt_get_shm_info(tx, segment_index);
+
+	if (OFI_UNLIKELY(shm_info == NULL || shm_info->fifo_segment == NULL)) {
 		*rc = -FI_EIO;
 		FI_WARN(tx->prov, FI_LOG_FABRIC, "SHM segment index %u FIFO not initialized.\n", segment_index);
 		return NULL;
 	}
 
-	struct opx_shm_fifo_segment *tx_fifo_segment = tx->fifo_segment[segment_index];
+	struct opx_shm_fifo_segment *tx_fifo_segment = shm_info->fifo_segment;
 	struct opx_shm_fifo	    *tx_fifo	     = &tx_fifo_segment->fifo;
 
 	FI_LOG(tx->prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "SHM sending to %u context. Segment (%s)\n", segment_index,
-	       tx->connection[segment_index].segment_key);
+	       shm_info->connection.segment_key);
 
 	struct opx_shm_packet *packet;
 	*pos = atomic_load_explicit(&tx_fifo->enqueue_pos_.val, memory_order_acquire);
@@ -437,10 +490,10 @@ static inline void *opx_shm_tx_next(struct opx_shm_tx *tx, uint8_t peer_hfi_unit
 		}
 	}
 
-	tx->connection[segment_index].inuse = true;
-	*rc				    = FI_SUCCESS;
+	shm_info->connection.inuse = true;
+	*rc			   = FI_SUCCESS;
 	FI_LOG(tx->prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "SHM sent to %u context. Segment (%s)\n", segment_index,
-	       tx->connection[segment_index].segment_key);
+	       shm_info->connection.segment_key);
 
 	return (void *) packet->data;
 }
