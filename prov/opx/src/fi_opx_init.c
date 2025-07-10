@@ -962,8 +962,8 @@ OPX_INI
 
 	if (fi_log_enabled(fi_opx_global.prov, FI_LOG_TRACE, FI_LOG_FABRIC)) {
 		Dl_info dl_info;
-		if (dladdr((void *) fi_opx_ini,
-			   &dl_info)) { // Use the OPX_INI function as the symbol to get runtime info
+		if (dladdr((void *) fi_opx_check_info,
+			   &dl_info)) { // Use the fi_opx_check_info function as the symbol to get runtime info
 			FI_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,
 				 "Using opx Provider: Library file location is %s.\n", dl_info.dli_fname);
 		} else {
