@@ -74,7 +74,8 @@ progress modes.
 
 ## Multi-threading
 
-The CXI provider supports FI_THREAD_SAFE and FI_THREAD_DOMAIN threading models.
+The CXI provider supports FI_THREAD_SAFE, FI_THREAD_COMPLETION, and
+FI_THREAD_DOMAIN threading models.
 
 ## Wait Objects
 
@@ -1029,6 +1030,12 @@ The CXI provider checks for the following environment variables:
     enabled with FI_CXI_RDZV_PROTO=alt_read. If set, it will disable the alt_read
     dedicated rendezvous get command queue, conserving command queue resources
     with a cost in performance.
+
+*FI_CXI_CNTR_TRIG_CMDQ*
+:   Enables dedicated triggered command queue for bound counters when using
+    FI_THREAD_SAFE or FI_THREAD_COMPLETION. This can improve the performance
+    multithreaded counter operations at the cost of command queue resources.
+    This option is disabled by default.
 
 *FI_CXI_DISABLE_NON_INJECT_MSG_IDC*
 :   Experimental option to disable favoring IDC for transmit of small messages

@@ -250,6 +250,37 @@ const struct fi_cntr_attr cxip_cntr_attr = {
 };
 
 /*
+ * cxip_trig_cmdq_lock() - acquire lock for triggered cmdq
+ *
+ * Acquire trig cmdq. If cntr has a dedicated cmdq use it, otherwise grab the
+ * domain trigger_cmdq_lock and use the domain trig_cmdq.
+ *
+ * Caller must hold cntr->lock between this and cxip_trig_cmdq_unlock
+ */
+static void cxip_trig_cmdq_lock(struct cxip_cntr *cntr,
+				struct cxip_cmdq **cmdq)
+{
+	if (cntr->trig_cmdq) {
+		*cmdq = cntr->trig_cmdq;
+	} else {
+		ofi_genlock_lock(&cntr->domain->trig_cmdq_lock);
+		*cmdq = cntr->domain->trig_cmdq;
+	}
+}
+
+/*
+ * cxip_trig_cmdq_unlock() - release lock for triggered cmdq
+ *
+ * Release domain trig cmdq lock if it was used.
+ */
+static void cxip_trig_cmdq_unlock(struct cxip_cntr *cntr)
+{
+	if (!cntr->trig_cmdq) {
+		ofi_genlock_unlock(&cntr->domain->trig_cmdq_lock);
+	}
+}
+
+/*
  * cxip_cntr_mod() - Modify counter value.
  *
  * Set or increment the success or failure value of a counter by 'value'.
@@ -276,7 +307,6 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 				cxi_ct_reset_success(cxi_cntr->ct);
 		} else {
 			memset(&cmd, 0, sizeof(cmd));
-			cmdq = cxi_cntr->domain->trig_cmdq;
 
 			/* Use CQ to set a specific counter value */
 			cmd.ct = cxi_cntr->ct->ctn;
@@ -287,16 +317,20 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 				cmd.set_ct_success = 1;
 				cmd.ct_success = value;
 			}
-			ofi_genlock_lock(&cxi_cntr->domain->trig_cmdq_lock);
+
+			ofi_genlock_lock(&cxi_cntr->lock);
+			cxip_trig_cmdq_lock(cxi_cntr, &cmdq);
 
 			ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_SET,
 					     &cmd);
 			if (ret) {
-				ofi_genlock_unlock(&cxi_cntr->domain->trig_cmdq_lock);
+				cxip_trig_cmdq_unlock(cxi_cntr);
+				ofi_genlock_unlock(&cxi_cntr->lock);
 				return -FI_EAGAIN;
 			}
 			cxi_cq_ring(cmdq->dev_cmdq);
-			ofi_genlock_unlock(&cxi_cntr->domain->trig_cmdq_lock);
+			cxip_trig_cmdq_unlock(cxi_cntr);
+			ofi_genlock_unlock(&cxi_cntr->lock);
 		}
 	}
 
@@ -368,19 +402,19 @@ static int cxip_cntr_get(struct cxip_cntr *cxi_cntr, bool force)
 	}
 
 	memset(&cmd, 0, sizeof(cmd));
-	cmdq = cxi_cntr->domain->trig_cmdq;
 
 	/* Request a write-back */
 	cmd.ct = cxi_cntr->ct->ctn;
 
-	ofi_genlock_lock(&cxi_cntr->domain->trig_cmdq_lock);
+	cxip_trig_cmdq_lock(cxi_cntr, &cmdq);
+
 	ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_GET, &cmd);
 	if (ret) {
-		ofi_genlock_unlock(&cxi_cntr->domain->trig_cmdq_lock);
+		cxip_trig_cmdq_unlock(cxi_cntr);
 		return -FI_EAGAIN;
 	}
 	cxi_cq_ring(cmdq->dev_cmdq);
-	ofi_genlock_unlock(&cxi_cntr->domain->trig_cmdq_lock);
+	cxip_trig_cmdq_unlock(cxi_cntr);
 
 	return FI_SUCCESS;
 }
@@ -543,15 +577,19 @@ static int cxip_cntr_emit_trig_event_cmd(struct cxip_cntr *cntr,
 		.threshold = threshold,
 		.eq = C_EQ_NONE,
 	};
-	struct cxip_cmdq *cmdq = cntr->domain->trig_cmdq;
+	struct cxip_cmdq *cmdq;
 	int ret;
 
 	/* TODO: Need to handle TLE exhaustion. */
-	ofi_genlock_lock(&cntr->domain->trig_cmdq_lock);
+
+	ofi_genlock_lock(&cntr->lock);
+	cxip_trig_cmdq_lock(cntr, &cmdq);
+
 	ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_TRIG_EVENT, &cmd);
 	if (!ret)
 		cxi_cq_ring(cmdq->dev_cmdq);
-	ofi_genlock_unlock(&cntr->domain->trig_cmdq_lock);
+	cxip_trig_cmdq_unlock(cntr);
+	ofi_genlock_unlock(&cntr->lock);
 
 	if (ret)
 		return -FI_EAGAIN;
@@ -731,6 +769,12 @@ static int cxip_cntr_close(struct fid *fid)
 		CXIP_WARN("Failed to free CT, ret: %d\n", ret);
 	else
 		CXIP_DBG("Counter disabled: %p\n", cntr);
+
+	if (cntr->trig_cmdq != NULL) {
+		assert(cxip_cmdq_empty(&cntr->trig_cmdq));
+		cxip_cmdq_free(cntr->trig_cmdq);
+		cntr->trig_cmdq = NULL;
+	}
 
 	ofi_genlock_destroy(&cntr->lock);
 	ofi_genlock_destroy(&cntr->progress_count_lock);
