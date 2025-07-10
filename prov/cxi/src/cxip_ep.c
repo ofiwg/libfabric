@@ -983,6 +983,31 @@ static int cxip_ep_bind_cntr(struct cxip_ep *ep, struct cxip_cntr *cntr,
 		return -FI_EINVAL;
 	}
 
+	bool use_ded_trig_cmdq = cxip_env.cntr_trig_cmdq &&
+		cntr->domain->util_domain.threading != FI_THREAD_DOMAIN;
+
+	if (use_ded_trig_cmdq) {
+		ofi_genlock_lock(&cntr->lock);
+		if (!cntr->trig_cmdq) {
+			struct cxip_domain *dom = cntr->domain;
+			struct cxi_cq_alloc_opts cq_opts = {
+				.policy = CXI_CQ_UPDATE_ALWAYS,
+			};
+			cq_opts.count = MAX(dom->max_trig_op_in_use, 64);
+			cq_opts.flags = CXI_CQ_IS_TX | CXI_CQ_TX_WITH_TRIG_CMDS;
+			cq_opts.policy = CXI_CQ_UPDATE_ALWAYS;
+			cxip_cmdq_alloc(dom->lni, NULL, &cq_opts,
+					dom->auth_key.vni,
+					cxip_ofi_to_cxi_tc(dom->tclass),
+					CXI_TC_TYPE_DEFAULT,
+					&cntr->trig_cmdq);
+			if (cntr->trig_cmdq == NULL) {
+				CXIP_WARN("Alloc of cntr trig_cmdq failed\n");
+			}
+		}
+		ofi_genlock_unlock(&cntr->lock);
+	}
+
 	ret = fid_list_insert2(&cntr->ctx_list, &cntr->lock, &ep->ep.fid);
 	if (ret) {
 		CXIP_WARN("Add of EP to cntr EP list failed: %d:%s\n",

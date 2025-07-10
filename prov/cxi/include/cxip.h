@@ -349,6 +349,7 @@ struct cxip_environment {
 	int ze_hmem_supported;
 	enum cxip_rdzv_proto  rdzv_proto;
 	int disable_alt_read_cmdq;
+	int cntr_trig_cmdq;
 	int enable_trig_op_limit;
 	int hybrid_posted_recv_preemptive;
 	int hybrid_unexpected_msg_preemptive;
@@ -1481,6 +1482,9 @@ struct cxip_cntr {
 	struct fid_wait *wait;
 	/* Contexts to which counter is bound */
 	struct dlist_entry ctx_list;
+
+        /* Triggered cmdq for bound counters */
+	struct cxip_cmdq *trig_cmdq;
 
 	struct ofi_genlock lock;
 
