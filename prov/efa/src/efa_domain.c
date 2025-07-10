@@ -606,6 +606,12 @@ static void efa_cq_ext_progress_no_op(struct util_cq *cq)
 	return;
 }
 
+// Avoid flushing cq when it is created with external memory
+static int efa_cq_ext_no_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
+{
+	return ENOENT;
+}
+
 /**
  * @brief Create a completion queue with external memory provided via dmabuf.
  *
@@ -651,6 +657,7 @@ static int efa_domain_cq_open_ext(struct fid_domain *domain_fid,
 	 * CQ polling is safe when CPU virtual address is provided in buffer.
 	 * Otherwise, the memory is on GPU and the use of CQ poll interfaces should be avoided.
 	 */
+	cq->poll_ibv_cq = efa_cq_init_attr->ext_mem_dmabuf.buffer ? efa_cq_poll_ibv_cq: efa_cq_ext_no_poll_ibv_cq;
 	err = ofi_cq_init(&efa_prov, domain_fid, attr, &cq->util_cq,
 			  efa_cq_init_attr->ext_mem_dmabuf.buffer ?
 				  &efa_cq_progress :
