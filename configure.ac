@@ -1117,7 +1117,7 @@ dnl patching ${archive_cmds} to affect generation of file "libtool" to fix linki
 dnl allows for building with clang lto and fast linking with non gnu ld
 dnl --> checking if the linker (clang) is GNU ld... no
 AS_CASE(["$LD"],
-    [*clang*],
+    [*clang[^/]*],
         [AS_CASE(["${host_os}"],
             [*linux*],
             [archive_cmds='$CC -shared $pic_flag $libobjs $deplibs $compiler_flags $wl-soname $wl$soname $wl-version-script $wl$libname.map -o $lib'])])
