@@ -16144,25 +16144,14 @@ int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
     void **ops, void *context);
 ```
 
-and requesting `FI_EFA_DOMAIN_OPS` in `name`. `fi_open_ops` returns
-`ops` as the pointer to the function table `fi_efa_ops_domain` defined
-as follows:
+Requesting `FI_EFA_DOMAIN_OPS` in `name` returns `ops` as the pointer to
+the function table `fi_efa_ops_domain` defined as follows:
 
 ``` c
 struct fi_efa_ops_domain {
     int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
-    int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
-              uint16_t *remote_qpn, uint32_t *remote_qkey);
-    int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
-    int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
-    int (*cq_open_ext)(struct fid_domain *domain_fid,
-               struct fi_cq_attr *attr,
-               struct fi_efa_cq_init_attr *efa_cq_init_attr,
-               struct fid_cq **cq_fid, void *context);
 };
 ```
-
-It contains the following operations
 
 ### query_mr
 
@@ -16208,6 +16197,25 @@ struct fi_efa_mr_attr {
 
 **query_mr()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
+
+To enable GPU Direct Async (GDA), which allows the GPU to interact
+directly with the NIC, request `FI_EFA_GDA_OPS` in the `name` parameter.
+This returns `ops` as a pointer to the function table `fi_efa_ops_gda`
+defined as follows:
+
+``` c
+struct fi_efa_ops_gda {
+    int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
+              uint16_t *remote_qpn, uint32_t *remote_qkey);
+    int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
+    int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
+    int (*cq_open_ext)(struct fid_domain *domain_fid,
+               struct fi_cq_attr *attr,
+               struct fi_efa_cq_init_attr *efa_cq_init_attr,
+               struct fid_cq **cq_fid, void *context);
+    uint64_t (*get_mr_lkey)(struct fid_mr *mr);
+};
+```
 
 ### query_addr
 
@@ -16337,6 +16345,20 @@ struct fi_efa_cq_init_attr {
 
 **cq_open_ext()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
+
+### get_mr_lkey
+
+Returns the local memory translation key associated with a MR. The
+memory registration must have completed successfully before invoking
+this.
+
+*lkey*
+:   local memory translation key used by TX/RX buffer descriptor.
+
+#### Return value
+
+**get_mr_lkey()** returns lkey on success, or FI_KEY_NOTAVAIL if the
+registration has not completed.
 
 # Traffic Class (tclass) in EFA
 
