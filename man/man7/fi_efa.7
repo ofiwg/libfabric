@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2025\-06\-13" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2025\-07\-12" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -246,27 +246,17 @@ int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
 \f[R]
 .fi
 .PP
-and requesting \f[V]FI_EFA_DOMAIN_OPS\f[R] in \f[V]name\f[R].
-\f[V]fi_open_ops\f[R] returns \f[V]ops\f[R] as the pointer to the
-function table \f[V]fi_efa_ops_domain\f[R] defined as follows:
+Requesting \f[V]FI_EFA_DOMAIN_OPS\f[R] in \f[V]name\f[R] returns
+\f[V]ops\f[R] as the pointer to the function table
+\f[V]fi_efa_ops_domain\f[R] defined as follows:
 .IP
 .nf
 \f[C]
 struct fi_efa_ops_domain {
     int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
-    int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
-              uint16_t *remote_qpn, uint32_t *remote_qkey);
-    int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
-    int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
-    int (*cq_open_ext)(struct fid_domain *domain_fid,
-               struct fi_cq_attr *attr,
-               struct fi_efa_cq_init_attr *efa_cq_init_attr,
-               struct fid_cq **cq_fid, void *context);
 };
 \f[R]
 .fi
-.PP
-It contains the following operations
 .SS query_mr
 .PP
 This op queries an existing memory registration as input, and outputs
@@ -316,6 +306,28 @@ It is only valid when \f[V]ic_id_validity\f[R] has the
 .PP
 \f[B]query_mr()\f[R] returns 0 on success, or the value of errno on
 failure (which indicates the failure reason).
+.PP
+To enable GPU Direct Async (GDA), which allows the GPU to interact
+directly with the NIC, request \f[V]FI_EFA_GDA_OPS\f[R] in the
+\f[V]name\f[R] parameter.
+This returns \f[V]ops\f[R] as a pointer to the function table
+\f[V]fi_efa_ops_gda\f[R] defined as follows:
+.IP
+.nf
+\f[C]
+struct fi_efa_ops_gda {
+    int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
+              uint16_t *remote_qpn, uint32_t *remote_qkey);
+    int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
+    int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
+    int (*cq_open_ext)(struct fid_domain *domain_fid,
+               struct fi_cq_attr *attr,
+               struct fi_efa_cq_init_attr *efa_cq_init_attr,
+               struct fid_cq **cq_fid, void *context);
+    uint64_t (*get_mr_lkey)(struct fid_mr *mr);
+};
+\f[R]
+.fi
 .SS query_addr
 .PP
 This op queries the following address information for a given endpoint
@@ -447,6 +459,18 @@ File descriptor of the dmabuf.
 .PP
 \f[B]cq_open_ext()\f[R] returns 0 on success, or the value of errno on
 failure (which indicates the failure reason).
+.SS get_mr_lkey
+.PP
+Returns the local memory translation key associated with a MR.
+The memory registration must have completed successfully before invoking
+this.
+.TP
+\f[I]lkey\f[R]
+local memory translation key used by TX/RX buffer descriptor.
+.SS Return value
+.PP
+\f[B]get_mr_lkey()\f[R] returns lkey on success, or FI_KEY_NOTAVAIL if
+the registration has not completed.
 .SH Traffic Class (tclass) in EFA
 .PP
 To prioritize the messages from a given endpoint, user can specify
