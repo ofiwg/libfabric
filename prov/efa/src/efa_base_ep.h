@@ -12,6 +12,7 @@
 #include "ofi_util.h"
 #include "efa_av.h"
 #include "rdm/efa_rdm_protocol.h"
+#include "efa_data_path_direct_structs.h"
 
 #define EFA_QP_DEFAULT_SERVICE_LEVEL 0
 #define EFA_QP_LOW_LATENCY_SERVICE_LEVEL 8
@@ -46,8 +47,11 @@ struct efa_qp {
 	struct efa_base_ep *base_ep;
 	uint32_t qp_num;
 	uint32_t qkey;
+	bool data_path_direct_enabled;
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_data_path_direct_qp data_path_direct_qp;
+#endif
 };
-
 
 struct efa_av;
 
@@ -110,9 +114,6 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, uint32_t tclass);
 
 void efa_qp_destruct(struct efa_qp *qp);
-
-int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
-			  struct ibv_qp_init_attr_ex *init_attr_ex);
 
 void efa_base_ep_close_util_ep(struct efa_base_ep *base_ep);
 

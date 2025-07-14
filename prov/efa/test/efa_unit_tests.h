@@ -340,6 +340,11 @@ void test_efa_cq_read_recv_rdma_with_imm_success();
 void test_efa_cq_read_send_failure();
 void test_efa_cq_read_recv_failure();
 void test_efa_cq_recv_rdma_with_imm_failure();
+void test_efa_cq_data_path_direct_disabled_by_env();
+void test_efa_cq_data_path_direct_disabled_with_old_device();
+void test_efa_cq_data_path_direct_enabled_with_new_device();
+void test_efa_rdm_cq_data_path_direct_disabled();
+
 void test_efa_ep_open();
 void test_efa_ep_cancel();
 void test_efa_ep_getopt();
@@ -348,6 +353,11 @@ void test_efa_ep_setopt_hmem_p2p();
 void test_efa_ep_setopt_rnr_retry();
 void test_efa_ep_setopt_sizes();
 void test_efa_ep_bind_and_enable();
+void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_happy();
+void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy();
+void test_efa_rdm_ep_data_path_direct_disabled();
+
+
 void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 
