@@ -68,6 +68,7 @@ struct efa_env {
 	 * the refill will be skipped.
 	 */
 	size_t internal_rx_refill_threshold;
+	int use_data_path_direct;
 };
 
 extern struct efa_env efa_env;
