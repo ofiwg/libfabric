@@ -256,6 +256,7 @@ void *neuron_alloc(void **handle, size_t size);
 void neuron_free(void **handle);
 int neuron_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 			 uint64_t *offset);
+int neuron_put_dmabuf_fd(int fd);
 
 int synapseai_init(void);
 int synapseai_cleanup(void);
