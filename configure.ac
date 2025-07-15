@@ -755,6 +755,9 @@ AS_IF([test x"$with_cuda" != x"no"],
 				 [have_cuda=1])
 	      ])
 
+	AS_IF([test "$have_cuda" = "1" && test x"$with_cuda" != x"yes"],
+	      [CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
+	       LDFLAGS="$LDFLAGS $cuda_LDFLAGS"])
 	have_cuda_dmabuf=1
 	AC_CHECK_DECL([cuMemGetHandleForAddressRange],
 			[],
@@ -770,7 +773,7 @@ AS_IF([test x"$with_cuda" != x"no"],
 			[],
 			[have_cuda_dmabuf=0],
 			[[#include <cuda.h>]])
-	
+
 	have_cuda_dmabuf_mapping_type_pcie=1
 	AC_CHECK_DECL([CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE],
 			[],
@@ -790,9 +793,6 @@ AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF], [$have_cuda_dmabuf], [CUDA dmabuf support
 AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF_MAPPING_TYPE_PCIE], [$have_cuda_dmabuf_mapping_type_pcie], [CUDA dmabuf PCIe BAR1 support])
 
 AS_IF([test "$cuda_dlopen" != "1"], [LIBS="$LIBS $cuda_LIBS"])
-AS_IF([test "$have_cuda" = "1" && test x"$with_cuda" != x"yes"],
-      [CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
-       LDFLAGS="$LDFLAGS $cuda_LDFLAGS"])
 
 AC_ARG_WITH([ze],
 	[AS_HELP_STRING([--with-ze=DIR], [Enable ZE build and fail if not found.
