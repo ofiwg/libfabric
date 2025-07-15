@@ -156,7 +156,6 @@ def get_efa_domain_names(server_id):
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def get_efa_device_names(server_id):
     timeout = 60
-    process_timed_out = False
 
     # This command returns a list of EFA devices names
     command = "ssh {} /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM -f efa | grep domain".format(server_id)
@@ -177,7 +176,9 @@ def get_efa_device_names(server_id):
     # Extract the device name from the second column of the stdout
     # by removing the -rdm suffix
     for line in stdouts:
-        devices.append(line.split()[1].replace("-rdm", ""))
+        parts = line.split()
+        if len(parts) > 1 and "rdm" in parts[1]:
+            devices.append(parts[1].replace("-rdm", ""))
     return devices
 
 

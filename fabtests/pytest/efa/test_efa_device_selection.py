@@ -18,7 +18,9 @@ def test_efa_device_selection(cmdline_args, fabric, selection_approach):
     client_device_names = get_efa_device_names(cmdline_args.client_id)
 
     server_num_devices = len(server_device_names)
-    client_num_devices = len(server_device_names)
+    client_num_devices = len(client_device_names)
+    assert server_num_devices > 0, "No EFA devices found on server"
+    assert client_num_devices > 0, "No EFA devices found on client"
 
     for i in range(max(server_num_devices, client_num_devices)):
         server_device_idx = i % server_num_devices
@@ -79,7 +81,8 @@ def test_efa_device_selection_negative(cmdline_args, fabric):
 # Verify that fi_getinfo returns all NICs when FI_EFA_IFACE is set to all
 @pytest.mark.functional
 def test_efa_device_selection_all(cmdline_args, fabric):
-    num_devices = len(get_efa_device_names(cmdline_args.server_id))
+    devices = get_efa_device_names(cmdline_args.server_id)
+    assert len(devices) > 0, "No EFA devices found on server"
 
     command = cmdline_args.populate_command(f"fi_efa_info_test -f {fabric}", "host", additional_environment="FI_EFA_IFACE=all")
     proc = subprocess.run(command, shell=True,
@@ -93,12 +96,13 @@ def test_efa_device_selection_all(cmdline_args, fabric):
         if "domain" in info:
             num_domains += 1
 
-    assert num_domains == num_devices
+    assert num_domains == len(devices)
 
 # Verify that fi_getinfo returns two NICs when FI_EFA_IFACE is set to two NICs separated by a comma
 @pytest.mark.functional
 def test_efa_device_selection_comma(cmdline_args, fabric):
     devices = get_efa_device_names(cmdline_args.server_id)
+    assert len(devices) > 0, "No EFA devices found on server"
 
     if len(devices) > 1:
         iface_str = f"{devices[0]},{devices[1]}"
