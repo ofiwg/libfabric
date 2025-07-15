@@ -35,7 +35,7 @@ def test_rma_bw_range(cmdline_args, rma_operation_type, rma_bw_completion_semant
     command = "fi_rma_bw -e rdm"
     command = command + " -o " + rma_operation_type
     # rma_bw test with data verification takes longer to finish
-    timeout = max(540, cmdline_args.timeout)
+    timeout = max(1080, cmdline_args.timeout)
     efa_run_client_server_test(cmdline_args, command, "short", rma_bw_completion_semantic,
                                rma_bw_memory_type, direct_rma_size if rma_fabric == "efa-direct" else message_size,
                                timeout=timeout, fabric=rma_fabric)
