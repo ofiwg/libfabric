@@ -156,6 +156,12 @@ static inline void dlist_remove_init(struct dlist_entry *item)
 
 typedef int dlist_func_t(struct dlist_entry *item, const void *arg);
 
+static inline int dlist_match_func_same_entry(struct dlist_entry *item,
+					      const void *arg)
+{
+	return item == arg;
+}
+
 static inline struct dlist_entry *
 dlist_find_first_match(struct dlist_entry *head, dlist_func_t *match,
 		       const void *arg)
@@ -193,6 +199,16 @@ static inline void dlist_insert_order(struct dlist_entry *head, dlist_func_t *or
 		dlist_insert_before(entry, item);
 	else
 		dlist_insert_tail(entry, head);
+}
+
+static inline bool dlist_entry_in_list(struct dlist_entry *head,
+				       struct dlist_entry *entry)
+{
+	if (dlist_find_first_match(head, &dlist_match_func_same_entry,
+				   (void *) entry))
+		return true;
+
+	return false;
 }
 
 /* splices list at the front of the list 'head'
