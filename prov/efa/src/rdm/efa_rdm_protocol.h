@@ -38,6 +38,8 @@
  */
 #define EFA_RDM_MAX_NUM_EXINFO				(4)
 
+#define EFA_RDM_HEADERLESS_PKT 0 /**< Sentinel value for headerless packets */
+
 /*
  * Packet type ID of each packet type (section 1.3)
  *
