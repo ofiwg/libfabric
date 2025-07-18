@@ -1286,6 +1286,10 @@ struct ofi_ops_flow_ctrl {
 };
 
 struct util_rx_entry {
+	union {
+		struct dlist_entry	d_entry;
+		struct slist_entry	s_entry;
+	};
 	struct fi_peer_rx_entry	peer_entry;
 	uint64_t		seq_no;
 	uint64_t		ignore;
