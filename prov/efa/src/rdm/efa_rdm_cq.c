@@ -306,6 +306,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	struct efa_av *efa_av = ep->base_ep.av;
 	fi_addr_t explicit_fi_addr, implicit_fi_addr;
 	struct efa_ep_addr efa_ep_addr = {0};
+	struct efa_ep_addr_hashable *efa_ep_addr_hashable = NULL;
 	struct efa_rdm_peer *peer = NULL;
 	int ret;
 	uint32_t gid;
@@ -363,6 +364,22 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	if (ret) {
 		/* Failed to read raw address from packet entry and
 		 * efadv_wc_read_sgid */
+		return NULL;
+	}
+
+	/* If the packet is from a peer that we evicted from the implicit AV,
+	 * print a warning and ignore the packet. We do this because we lose
+	 * information about previous communication from the peer when we evict
+	 * the peer from the implicit AV
+	 *
+	 * TODO: continue communication with peer by saving the previous state
+	 * and restoring it
+	 */
+	HASH_FIND(hh, ep->base_ep.av->evicted_peers_hashset, &efa_ep_addr,
+		  sizeof(struct efa_ep_addr), efa_ep_addr_hashable);
+	if (OFI_UNLIKELY(!!efa_ep_addr_hashable)) {
+		EFA_WARN(FI_LOG_CQ, "Received packet from peer already evicted "
+				    "from the implicit AV\n");
 		return NULL;
 	}
 
