@@ -469,9 +469,9 @@ OPX_COMPILE_TIME_ASSERT(
 		(OPX_HFI1_MAX_PKT_SIZE - sizeof(union opx_hfi1_dput_iov)),
 	"sizeof(fi_opx_hfi1_rx_rzv_rts_params->tidpairs) should be < (MAX PACKET MTU - sizeof(dput iov)!");
 OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_hfi1_rx_rzv_rts_params, tidpairs) & 0xF) == 0,
-			"offsetof(opx_hfi1_rx_rma_rts_params->tidpairs) should be 16-byte aligned!");
+			"offsetof(fi_opx_hfi1_rx_rzv_rts_params->tidpairs) should be 16-byte aligned!");
 
-struct opx_hfi1_rx_rma_rts_params {
+struct opx_hfi1_rma_rts_params {
 	/* == CACHE LINE 0 == */
 	struct fi_opx_work_elem work_elem; // 40 bytes
 	struct fi_opx_ep       *opx_ep;
@@ -488,21 +488,24 @@ struct opx_hfi1_rx_rma_rts_params {
 	uint32_t		   u32_extended_rx;
 	enum ofi_reliability_kind  reliability;
 
-	uint16_t origin_rx;
-	bool	 is_intranode;
-	uint8_t	 opcode;
-	uint8_t	 dt;
-	uint8_t	 op;
-	uint8_t	 target_hfi_unit;
-	uint8_t	 unused[5];
+	union {
+		uint16_t origin_rx;
+		uint16_t dest_rx;
+	};
+	bool	is_intranode;
+	uint8_t opcode;
+	uint8_t dt;
+	uint8_t op;
+	uint8_t target_hfi_unit;
+	uint8_t unused[5];
 
 	/* == CACHE LINE 2 == */
 	union opx_hfi1_dput_iov dput_iov[FI_OPX_MAX_DPUT_IOV];
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
-OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi1_rx_rma_rts_params, dput_iov) == FI_OPX_CACHE_LINE_SIZE * 2,
-			"opx_hfi1_rx_rma_rts_params->dput_iov should start on cacheline 2!");
-OPX_COMPILE_TIME_ASSERT(sizeof(((struct opx_hfi1_rx_rma_rts_params *) 0)->dput_iov) < OPX_HFI1_MAX_PKT_SIZE,
-			"sizeof(opx_hfi1_rx_rma_rts_params->dput_iov) should be < MAX PACKET MTU!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi1_rma_rts_params, dput_iov) == FI_OPX_CACHE_LINE_SIZE * 2,
+			"opx_hfi1_rma_rts_params->dput_iov should start on cacheline 2!");
+OPX_COMPILE_TIME_ASSERT(sizeof(((struct opx_hfi1_rma_rts_params *) 0)->dput_iov) < OPX_HFI1_MAX_PKT_SIZE,
+			"sizeof(opx_hfi1_rma_rts_params->dput_iov) should be < MAX PACKET MTU!");
 
 struct opx_hfi1_rx_ipc_rts_params {
 	/* == CACHE LINE 0 == */
@@ -520,7 +523,7 @@ struct opx_hfi1_rx_ipc_rts_params {
 
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi1_rx_ipc_rts_params, lrh_dlid) == FI_OPX_CACHE_LINE_SIZE * 1,
-			"opx_hfi1_rx_rma_rts_params->lrh_dlid should start on cacheline 1!");
+			"opx_hfi1_rx_ipc_rts_params->lrh_dlid should start on cacheline 1!");
 
 struct fi_opx_hfi1_rx_dput_fence_params {
 	struct fi_opx_work_elem		  work_elem;
@@ -563,7 +566,7 @@ union fi_opx_hfi1_deferred_work {
 	struct fi_opx_hfi1_rx_rzv_rts_params	rx_rzv_rts;
 	struct fi_opx_hfi1_rx_dput_fence_params fence;
 	struct fi_opx_hfi1_rx_readv_params	readv;
-	struct opx_hfi1_rx_rma_rts_params	rx_rma_rts;
+	struct opx_hfi1_rma_rts_params		rma_rts;
 	struct opx_hfi1_rx_ipc_rts_params	rx_ipc_rts;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 

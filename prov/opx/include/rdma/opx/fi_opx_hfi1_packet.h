@@ -926,14 +926,7 @@ union opx_hfi1_packet_hdr {
 
 	/*    OPX RMA RTS HEADER                   */
 	struct {
-		uint64_t reserved[2]; /* QW[0-1] */
-
-		/* QW[2] BTH (unused)*/
-		uint16_t reserved_1[3];
-		uint16_t origin_rx;
-
-		/* QW[3-4] BTH/KDETH */
-		uint64_t reserved_3[2];
+		uint64_t reserved[5]; /* QW[0-4] */
 
 		/* QW[5] SW */
 		uint8_t	 opcode;
