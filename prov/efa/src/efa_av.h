@@ -22,6 +22,11 @@ struct efa_ep_addr {
 	struct efa_ep_addr	*next;
 };
 
+struct efa_ep_addr_hashable {
+	struct efa_ep_addr addr;
+	UT_hash_handle	hh;
+};
+
 #define EFA_EP_ADDR_LEN sizeof(struct efa_ep_addr)
 
 struct efa_ah {
@@ -95,6 +100,7 @@ struct efa_av {
 
 	size_t implicit_av_size;
 	struct dlist_entry implicit_av_lru_list;
+	struct efa_ep_addr_hashable *evicted_peers_hashset;
 };
 
 int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
