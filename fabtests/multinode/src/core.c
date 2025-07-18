@@ -378,9 +378,14 @@ static int multi_barrier(void)
 
 	if (pm_job.my_rank == 0) {
 		for (i = 1; i < pm_job.num_ranks; i++) {
-			ret = fi_recvmsg(ep, &msg, 0);
-			if (ret)
+			do {
+				ret = fi_recvmsg(ep, &msg, 0);
+				(void) fi_cq_read(rxcq, NULL, 0);
+			} while (ret == -FI_EAGAIN);
+			if (ret) {
+				printf("multi_barrier fi_recvmsg failed\n");
 				return ret;
+			}
 		}
 
 		ret = ft_get_cq_comp(rxcq, &count, pm_job.num_ranks - 1, 10000);
@@ -388,9 +393,14 @@ static int multi_barrier(void)
 			return ret;
 	} else {
 		msg.addr = pm_job.fi_addrs[0];
-		ret = fi_sendmsg(ep, &msg, FI_DELIVERY_COMPLETE);
-		if (ret)
+		do {
+			ret = fi_sendmsg(ep, &msg, FI_DELIVERY_COMPLETE);
+			(void) fi_cq_read(txcq, NULL, 0);
+		} while (ret == -FI_EAGAIN);
+		if (ret) {
+			printf("multi_barrier fi_sendmsg failed\n");
 			return ret;
+		}
 
 		ret = ft_get_cq_comp(txcq, &count, 1, 10000);
 		if (ret)
@@ -402,22 +412,29 @@ static int multi_barrier(void)
 
 	if (pm_job.my_rank == 0) {
 		for (i = 1; i < pm_job.num_ranks; i++) {
+			msg.addr = pm_job.fi_addrs[i];
 			do {
-				(void) fi_cq_read(txcq, NULL, 0);
-				msg.addr = pm_job.fi_addrs[i];
 				ret = fi_sendmsg(ep, &msg, FI_DELIVERY_COMPLETE);
+				(void) fi_cq_read(txcq, NULL, 0);
 			} while (ret == -FI_EAGAIN);
-			if (ret)
+			if (ret) {
+				printf("multi_barrier fi_sendmsg failed\n");
 				return ret;
+			}
 		}
 
 		ret = ft_get_cq_comp(txcq, &count, pm_job.num_ranks - 1, 10000);
 		if (ret)
 			return ret;
 	} else {
-		ret = fi_recvmsg(ep, &msg, 0);
-		if (ret)
+		do {
+			ret = fi_recvmsg(ep, &msg, 0);
+			(void) fi_cq_read(rxcq, NULL, 0);
+		} while (ret == -FI_EAGAIN);
+		if (ret) {
+			printf("multi_barrier fi_recvmsg failed\n");
 			return ret;
+		}
 
 		ret = ft_get_cq_comp(rxcq, &count, 1, 10000);
 		if (ret)
