@@ -65,6 +65,8 @@ util/fi_mon_sampler
 
 prov/*/*.spec
 
+src/fi_version_gen.h
+
 .vs
 fabtests.spec
 
