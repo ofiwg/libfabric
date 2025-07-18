@@ -341,6 +341,7 @@ struct cxip_environment {
 	size_t mr_cache_events_disable_le_poll_nsecs;
 	int force_dev_reg_copy;
 	enum cxip_mr_target_ordering mr_target_ordering;
+	int disable_cuda_sync_memops;
 };
 
 extern struct cxip_environment cxip_env;

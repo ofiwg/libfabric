@@ -1293,6 +1293,12 @@ The CXI provider checks for the following environment variables:
 :   Force the CXI provider to use the HMEM device register copy routines. If not
     supported, RDMA operations or memory registration will fail.
 
+*FI_CXI_DISABLE_CUDA_SYNC_MEMOPS*
+:   By default the CXI provider sets the CU_POINTER_ATTRIBUTE_SYNC_MEMOPS on
+    registered memory to ensure synchronous copies and RDMA do not overlap.
+    Setting this value can be used to disable this behavior if for instance
+    the application is managing syncing of buffers.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 
