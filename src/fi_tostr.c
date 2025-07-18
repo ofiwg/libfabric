@@ -189,6 +189,7 @@ static void ofi_tostr_caps(char *buf, size_t len, uint64_t caps)
 	IFFLAGSTRN(caps, FI_ATOMIC, len);
 	IFFLAGSTRN(caps, FI_MULTICAST, len);
 	IFFLAGSTRN(caps, FI_COLLECTIVE, len);
+	IFFLAGSTRN(caps, FI_RPC, len);
 
 	IFFLAGSTRN(caps, FI_READ, len);
 	IFFLAGSTRN(caps, FI_WRITE, len);
@@ -733,6 +734,7 @@ ofi_tostr_cq_format(char *buf, size_t len, enum fi_cq_format cq_format)
 	CASEENUMSTRN(FI_CQ_FORMAT_MSG, len);
 	CASEENUMSTRN(FI_CQ_FORMAT_DATA, len);
 	CASEENUMSTRN(FI_CQ_FORMAT_TAGGED, len);
+	CASEENUMSTRN(FI_CQ_FORMAT_RPC, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;

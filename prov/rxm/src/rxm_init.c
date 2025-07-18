@@ -746,5 +746,7 @@ RXM_INI
 	ofi_hmem_init();
 #endif
 
+	rxm_rpc_init();
+
 	return &rxm_prov;
 }

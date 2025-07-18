@@ -671,10 +671,10 @@ static ssize_t util_srx_peek(struct util_srx_ctx *srx, const struct iovec *iov,
 			    rx_entry->peer_entry.tag);
 }
 
-ssize_t util_srx_generic_trecv(struct fid_ep *ep_fid, const struct iovec *iov,
-			       void **desc, size_t iov_count, fi_addr_t addr,
-			       void *context, uint64_t tag, uint64_t ignore,
-			       uint64_t flags)
+ssize_t util_srx_generic_trecv_no_lock(
+		struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+		size_t iov_count, fi_addr_t addr, void *context, uint64_t tag,
+		uint64_t ignore, uint64_t flags)
 {
 	struct util_srx_ctx *srx;
 	struct util_rx_entry *rx_entry;
@@ -682,10 +682,10 @@ ssize_t util_srx_generic_trecv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ssize_t ret = FI_SUCCESS;
 
 	srx = container_of(ep_fid, struct util_srx_ctx, peer_srx.ep_fid);
+	assert(ofi_genlock_held(srx->lock));
 	assert(iov_count <= srx->iov_limit);
 	addr = srx->dir_recv ? addr : FI_ADDR_UNSPEC;
 
-	ofi_genlock_lock(srx->lock);
 	if (flags & FI_PEEK) {
 		ret = util_srx_peek(srx, iov, desc, iov_count, addr,
 				    context, tag, ignore, flags);
@@ -738,6 +738,22 @@ ssize_t util_srx_generic_trecv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ret = rx_entry->peer_entry.srx->peer_ops->start_tag(
 					&rx_entry->peer_entry);
 out:
+	return ret;
+}
+
+ssize_t util_srx_generic_trecv(struct fid_ep *ep_fid, const struct iovec *iov,
+			       void **desc, size_t iov_count, fi_addr_t addr,
+			       void *context, uint64_t tag, uint64_t ignore,
+			       uint64_t flags)
+{
+	struct util_srx_ctx *srx;
+	int ret;
+
+	srx = container_of(ep_fid, struct util_srx_ctx, peer_srx.ep_fid);
+
+	ofi_genlock_lock(srx->lock);
+	ret = util_srx_generic_trecv_no_lock(ep_fid, iov, desc, iov_count,
+					     addr, context, tag, ignore, flags);
 	ofi_genlock_unlock(srx->lock);
 	return ret;
 }
