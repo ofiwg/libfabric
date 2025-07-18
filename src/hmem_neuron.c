@@ -249,6 +249,12 @@ int neuron_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 	}
 }
 
+int neuron_put_dmabuf_fd(int fd)
+{
+	close(fd);
+	return FI_SUCCESS;
+}
+
 #else
 
 int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -293,6 +299,11 @@ void neuron_free(void **handle)
 
 int neuron_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 			 uint64_t *offset)
+{
+	return -FI_ENOSYS;
+}
+
+int neuron_put_dmabuf_fd(int fd)
 {
 	return -FI_ENOSYS;
 }
