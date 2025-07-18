@@ -248,7 +248,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_reg_copy_to_hmem = ofi_hmem_no_dev_reg_copy_to_hmem,
 		.dev_reg_copy_from_hmem = ofi_hmem_no_dev_reg_copy_from_hmem,
 		.get_dmabuf_fd = neuron_get_dmabuf_fd,
-		.put_dmabuf_fd = ofi_hmem_no_put_dmabuf_fd,
+		.put_dmabuf_fd = neuron_put_dmabuf_fd,
 	},
 	[FI_HMEM_SYNAPSEAI] = {
 		.initialized = false,
