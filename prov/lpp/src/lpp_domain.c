@@ -415,7 +415,7 @@ int lpp_fi_domain(struct fid_fabric *fabric_fid, struct fi_info *info,
 	// Allocate space for the domain struct.
 	if (lpp_domainp = calloc(1, sizeof(struct lpp_domain)), lpp_domainp == NULL) {
 		FI_WARN(&lpp_prov, FI_LOG_DOMAIN, "failed to alloc domain\n");
-		return -FI_ENODATA;
+		return -FI_ENOMEM;
 	}
 
 	fd = klpp_open(dev_index);
@@ -427,14 +427,16 @@ int lpp_fi_domain(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	if (klpp_getdevice(lpp_domainp->fd, &lpp_domainp->devinfo) != 0) {
 		FI_WARN(&lpp_prov, FI_LOG_DOMAIN, "failed to get KLPP device\n");
-		return -FI_ENODATA;
+		status = -FI_ENODATA;
+		goto err;
 	}
 
 	// Verify the domain attributes.
 	if ((info != NULL) && (info->domain_attr != NULL)) {
 		if (lpp_domain_verify_attrs(&lpp_domainp->devinfo,
-					info->domain_attr, OFI_VERSION_DEF_PROV) != 0) {
-			return -FI_ENODATA;
+					    info->domain_attr, OFI_VERSION_DEF_PROV) != 0) {
+			status = -FI_ENODATA;
+			goto err;
 		}
 		lpp_domain_attrs_pop_unspec(NULL, info->domain_attr);
 
