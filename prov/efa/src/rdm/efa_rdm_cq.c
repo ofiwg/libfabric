@@ -600,7 +600,7 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 					   (size_t) pkt_entry->ope->cq_entry.op_context,
 					   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
-					   pkt_entry->ope->peer->conn->fi_addr);
+					   pkt_entry->ope->peer ? pkt_entry->ope->peer->conn->fi_addr : FI_ADDR_NOTAVAIL);
 #endif
 		opcode = ibv_wc_read_opcode(ibv_cq->ibv_cq_ex);
 		if (ibv_cq->ibv_cq_ex->status) {
