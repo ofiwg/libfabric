@@ -554,10 +554,11 @@ static void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
  * @param[in]	av	efa address vector
  * @param[in]	conn	efa conn to be added to the LRU list
  */
-static inline void efa_av_implicit_av_lru_insert(struct efa_av *av,
+static inline int efa_av_implicit_av_lru_insert(struct efa_av *av,
 						 struct efa_conn *conn)
 {
 	size_t cur_size;
+	struct efa_ep_addr_hashable *ep_addr_hashable;
 	struct efa_conn *conn_to_release;
 
 	cur_size = HASH_CNT(hh, av->util_av_implicit.hash);
@@ -566,6 +567,22 @@ static inline void efa_av_implicit_av_lru_insert(struct efa_av *av,
 
 	dlist_pop_front(&av->implicit_av_lru_list, struct efa_conn,
 			conn_to_release, implicit_av_lru_entry);
+	EFA_INFO(FI_LOG_AV,
+		 "Evicting AV entry for peer AHN %" PRIu16 " QPN %" PRIu16
+		 " QKEY %" PRIu32 " from "
+		 "implicit AV\n",
+		 conn_to_release->ah->ahn, conn_to_release->ep_addr->qpn,
+		 conn_to_release->ep_addr->qkey);
+
+	/* Add to hashset with list of evicted peers */
+	ep_addr_hashable = malloc(sizeof(struct efa_ep_addr_hashable));
+	if (!ep_addr_hashable) {
+		EFA_WARN(FI_LOG_AV, "Could not allocate memory for LRU AV entry hashset entry\n");
+		return FI_ENOMEM;
+	}
+	memcpy(ep_addr_hashable, conn->ep_addr, sizeof(struct efa_ep_addr));
+	HASH_ADD(hh, av->evicted_peers_hashset, addr, sizeof(struct efa_ep_addr), ep_addr_hashable);
+
 	efa_conn_release(av, conn_to_release, true);
 
 	assert(HASH_CNT(hh, av->util_av_implicit.hash) == av->implicit_av_size);
@@ -573,6 +590,7 @@ static inline void efa_av_implicit_av_lru_insert(struct efa_av *av,
 out:
 	dlist_insert_tail(&conn->implicit_av_lru_entry,
 			  &av->implicit_av_lru_list);
+	return FI_SUCCESS;
 }
 
 /**
@@ -655,7 +673,9 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	if (insert_implicit_av) {
 		conn->fi_addr = FI_ADDR_NOTAVAIL;
 		conn->implicit_fi_addr = fi_addr;
-		efa_av_implicit_av_lru_insert(av, conn);
+		err = efa_av_implicit_av_lru_insert(av, conn);
+		if (err)
+			return NULL;
 	} else {
 		conn->fi_addr = fi_addr;
 		conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
@@ -1192,6 +1212,7 @@ static int efa_av_close(struct fid *fid)
 {
 	struct efa_av *av;
 	int err = 0;
+	struct efa_ep_addr_hashable *ep_addr_hashable, *tmp;
 
 	av = container_of(fid, struct efa_av, util_av.av_fid.fid);
 
@@ -1218,6 +1239,12 @@ static int efa_av_close(struct fid *fid)
 			}
 		}
 	}
+
+	HASH_ITER(hh, av->evicted_peers_hashset, ep_addr_hashable, tmp) {
+		HASH_DEL(av->evicted_peers_hashset, ep_addr_hashable);
+		free(ep_addr_hashable);
+	}
+
 	free(av);
 	return err;
 }
