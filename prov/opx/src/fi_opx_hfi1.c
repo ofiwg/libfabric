@@ -2730,7 +2730,7 @@ int opx_hfi1_rx_rma_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_ep	       *opx_ep	  = params->opx_ep;
 	const uint64_t			lrh_dlid  = params->lrh_dlid;
 	const uint64_t			bth_rx	  = ((uint64_t) params->origin_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
-	const enum opx_hfi1_type	hfi1_type = OPX_SW_HFI1_TYPE;
+	const enum opx_hfi1_type	hfi1_type = OPX_HFI1_TYPE;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, SHM -- RMA RTS (begin)\n");
@@ -2990,8 +2990,8 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	}
 	target_context->len = target_context->byte_counter = rbuf_offset;
 
-	if (is_shm) {
-		params->work_elem.work_fn   = opx_hfi1_rx_rma_rts_send_cts_shm;
+	if (is_intranode) {
+		params->work_elem.work_fn   = opx_hfi1_rx_rma_rts_send_cts_intranode;
 		params->work_elem.work_type = OPX_WORK_TYPE_SHM;
 		params->target_hfi_unit	    = fi_opx_hfi1_get_lid_local_unit(params->slid);
 	} else {
@@ -3004,9 +3004,9 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	params->work_elem.complete	    = false;
 
 	params->origin_rx	= FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
-	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_shm, params->origin_rx);
+	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, params->origin_rx);
 	params->reliability	= reliability;
-	params->is_shm		= is_shm;
+	params->is_intranode	= is_intranode;
 	params->opcode		= FI_OPX_HFI_DPUT_OPCODE_PUT_CQ;
 	params->dt		= hdr->rma_rts.dt;
 	params->op		= hdr->rma_rts.op;
@@ -3018,7 +3018,8 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	params->rma_req->hmem_iface  = dst_iface;
 	params->rma_req->hmem_handle = dst_handle;
 
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_shm=%u niov=%lu opcode=%u\n", is_shm, niov, params->opcode);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_intranode=%u niov=%lu opcode=%u\n", is_intranode, niov,
+	       params->opcode);
 
 	int rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {
@@ -3080,7 +3081,7 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 	int64_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, params->slid, params->dest_rx,
-					    &psn_ptr, &replay, params->reliability, OPX_SW_HFI1_TYPE);
+					    &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== SEND, HFI -- RMA RTS (EAGAIN psn/replay) (params=%p origin_rma_req=%p cc=%p) opcode=%d\n",

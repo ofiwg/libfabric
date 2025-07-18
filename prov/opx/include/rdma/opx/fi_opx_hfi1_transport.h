@@ -494,7 +494,7 @@ struct opx_hfi1_rma_rts_params {
 		uint16_t origin_rx;
 		uint16_t dest_rx;
 	};
-	bool	is_shm;
+	bool	is_intranode;
 	uint8_t opcode;
 	uint8_t dt;
 	uint8_t op;
