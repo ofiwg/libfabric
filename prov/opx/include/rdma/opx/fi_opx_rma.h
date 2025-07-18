@@ -202,15 +202,15 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		struct fi_opx_rma_request *rma_req = ofi_buf_alloc(opx_ep->tx->rma_request_pool);
 		assert(rma_req != NULL);
 
-		struct opx_hfi1_rx_rma_rts_params *params = &work->rx_rma_rts;
-		params->work_elem.slist_entry.next	  = NULL;
-		params->work_elem.completion_action	  = NULL;
-		params->work_elem.payload_copy		  = NULL;
-		params->work_elem.complete		  = false;
-		params->opx_ep				  = opx_ep;
-		params->lrh_dlid			  = lrh_dlid;
-		params->slid				  = slid;
-		params->pbc_dlid			  = pbc_dlid;
+		struct opx_hfi1_rma_rts_params *params = &work->rma_rts;
+		params->work_elem.slist_entry.next     = NULL;
+		params->work_elem.completion_action    = NULL;
+		params->work_elem.payload_copy	       = NULL;
+		params->work_elem.complete	       = false;
+		params->opx_ep			       = opx_ep;
+		params->lrh_dlid		       = lrh_dlid;
+		params->slid			       = slid;
+		params->pbc_dlid		       = pbc_dlid;
 
 		params->niov	       = niov;
 		rma_req->cc	       = cc;
@@ -239,7 +239,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 
 		params->u32_extended_rx = u32_extended_rx;
 		params->reliability	= reliability;
-		params->origin_rx	= opx_dst_addr.hfi1_subctxt_rx;
+		params->dest_rx		= opx_dst_addr.hfi1_subctxt_rx;
 		params->is_intranode	= is_intranode;
 		params->opcode		= FI_OPX_HFI_BTH_OPCODE_RMA_RTS;
 		params->dt		= dt == FI_VOID ? FI_VOID - 1 : dt;
