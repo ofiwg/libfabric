@@ -558,6 +558,7 @@ static inline void efa_av_implicit_av_lru_insert(struct efa_av *av,
 						 struct efa_conn *conn)
 {
 	size_t cur_size;
+	struct efa_ep_addr_hashable *ep_addr_hashable;
 	struct efa_conn *conn_to_release;
 
 	cur_size = HASH_CNT(hh, av->util_av_implicit.hash);
@@ -566,6 +567,18 @@ static inline void efa_av_implicit_av_lru_insert(struct efa_av *av,
 
 	dlist_pop_front(&av->implicit_av_lru_list, struct efa_conn,
 			conn_to_release, implicit_av_lru_entry);
+	EFA_INFO(FI_LOG_AV,
+		 "Evicting AV entry for peer AHN %" PRIu16 " QPN %" PRIu16
+		 " QKEY %" PRIu32 " from "
+		 "implicit AV\n",
+		 conn_to_release->ah->ahn, conn_to_release->ep_addr->qpn,
+		 conn_to_release->ep_addr->qkey);
+
+	/* Add to hashmap with list of evicted peers */
+	ep_addr_hashable = malloc(sizeof(struct efa_ep_addr_hashable));
+	memcpy(ep_addr_hashable, conn->ep_addr, sizeof(struct efa_ep_addr));
+	HASH_ADD(hh, av->evicted_peers_hashset, addr, sizeof(struct efa_ep_addr), ep_addr_hashable);
+
 	efa_conn_release(av, conn_to_release, true);
 
 	cur_size = HASH_CNT(hh, av->util_av_implicit.hash);
