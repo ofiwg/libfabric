@@ -11,6 +11,7 @@
 #include "efa_cntr.h"
 #include "efa_cq.h"
 #include <infiniband/verbs.h>
+#include "efa_cqdirect.h"
 
 
 static inline uint64_t efa_cq_opcode_to_fi_flags(enum ibv_wc_opcode opcode) {
@@ -31,10 +32,12 @@ static inline uint64_t efa_cq_opcode_to_fi_flags(enum ibv_wc_opcode opcode) {
 	}
 }
 
-static void efa_cq_construct_cq_entry(struct ibv_cq_ex *ibv_cqx,
+static void efa_cq_construct_cq_entry(struct efa_ibv_cq* cq,
 				      struct fi_cq_tagged_entry *entry, int opcode)
 {
-	if (!efa_cq_wc_is_unsolicited(ibv_cqx) && ibv_cqx->wr_id) {
+	struct ibv_cq_ex *ibv_cqx = cq->ibv_cq_ex;
+
+	if (!efa_cq_wc_is_unsolicited(cq) && ibv_cqx->wr_id) {
 		entry->op_context = (void *)ibv_cqx->wr_id;
 		entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode): ((struct efa_context *) ibv_cqx->wr_id)->completion_flags;
 	} else {
@@ -42,14 +45,14 @@ static void efa_cq_construct_cq_entry(struct ibv_cq_ex *ibv_cqx,
 		entry->flags = efa_cq_opcode_to_fi_flags(opcode);
 	}
 
-	entry->len = ibv_wc_read_byte_len(ibv_cqx);
+	entry->len = cq->read_byte_len(cq);
 	entry->buf = NULL;
 	entry->data = 0;
 	entry->tag = 0;
 
-	if (ibv_wc_read_wc_flags(ibv_cqx) & IBV_WC_WITH_IMM) {
+	if (cq->read_wc_flags(cq) & IBV_WC_WITH_IMM) {
 		entry->flags |= FI_REMOTE_CQ_DATA;
-		entry->data = ibv_wc_read_imm_data(ibv_cqx);
+		entry->data = cq->read_imm_data(cq);
 	}
 }
 
@@ -66,22 +69,23 @@ static void efa_cq_construct_cq_entry(struct ibv_cq_ex *ibv_cqx,
  * 3. print warning message with self and peer's raw address
  *
  * @param[in]	base_ep     efa_base_ep
- * @param[in]	ibv_cq_ex   extended ibv cq
+ * @param[in]	efa_cq      EFA CQ containing the extended ibv cq
  * @param[in]	err         positive libfabric error code
  * @param[in]	prov_errno  positive EFA provider specific error code
  * @param[in]	is_tx       if the error is for TX or RX operation
  */
 static void efa_cq_handle_error(struct efa_base_ep *base_ep,
-				struct ibv_cq_ex *ibv_cq_ex, int err,
+				struct efa_ibv_cq *cq, int err,
 				int prov_errno, bool is_tx)
 {
 	struct fi_cq_err_entry err_entry;
 	fi_addr_t addr;
 	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 	int write_cq_err;
+	struct ibv_cq_ex *ibv_cq_ex = cq->ibv_cq_ex;
 
 	memset(&err_entry, 0, sizeof(err_entry));
-	efa_cq_construct_cq_entry(ibv_cq_ex, (struct fi_cq_tagged_entry *) &err_entry, ibv_wc_read_opcode(ibv_cq_ex));
+	efa_cq_construct_cq_entry(cq, (struct fi_cq_tagged_entry *) &err_entry, cq->read_opcode(cq));
 	err_entry.err = err;
 	err_entry.prov_errno = prov_errno;
 
@@ -89,8 +93,8 @@ static void efa_cq_handle_error(struct efa_base_ep *base_ep,
 		addr = ibv_cq_ex->wr_id ? ((struct efa_context *)ibv_cq_ex->wr_id)->addr : FI_ADDR_NOTAVAIL;
 	else
 		addr = efa_av_reverse_lookup(base_ep->av,
-					     ibv_wc_read_slid(ibv_cq_ex),
-					     ibv_wc_read_src_qp(ibv_cq_ex));
+					     cq->read_slid(cq),
+					     cq->read_src_qp(cq));
 
 	if (OFI_UNLIKELY(efa_write_error_msg(base_ep, addr, prov_errno,
 					     err_msg,
@@ -130,11 +134,12 @@ static void efa_cq_handle_error(struct efa_base_ep *base_ep,
  * @param[in]		cq_entry    fi_cq_tagged_entry
  */
 static void efa_cq_handle_tx_completion(struct efa_base_ep *base_ep,
-					struct ibv_cq_ex *ibv_cq_ex,
+					struct efa_ibv_cq *ibv_cq,
 					struct fi_cq_tagged_entry *cq_entry)
 {
 	struct util_cq *tx_cq = base_ep->util_ep.tx_cq;
 	int ret = 0;
+	struct ibv_cq_ex *ibv_cq_ex = ibv_cq->ibv_cq_ex;
 
 	/* NULL wr_id means no FI_COMPLETION flag */
 	if (!ibv_cq_ex->wr_id)
@@ -154,7 +159,7 @@ static void efa_cq_handle_tx_completion(struct efa_base_ep *base_ep,
 	if (OFI_UNLIKELY(ret)) {
 		EFA_WARN(FI_LOG_CQ, "Unable to write send completion: %s\n",
 			 fi_strerror(-ret));
-		efa_cq_handle_error(base_ep, ibv_cq_ex, -ret,
+		efa_cq_handle_error(base_ep, ibv_cq, -ret,
 				    FI_EFA_ERR_WRITE_SEND_COMP, true);
 	}
 }
@@ -167,10 +172,12 @@ static void efa_cq_handle_tx_completion(struct efa_base_ep *base_ep,
  * @param[in]		cq_entry    fi_cq_tagged_entry
  */
 static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
-					struct ibv_cq_ex *ibv_cq_ex,
+					struct efa_ibv_cq *ibv_cq,
 					struct fi_cq_tagged_entry *cq_entry)
 {
 	struct util_cq *rx_cq = base_ep->util_ep.rx_cq;
+	struct ibv_cq_ex *ibv_cq_ex = ibv_cq->ibv_cq_ex;
+
 	fi_addr_t src_addr;
 	int ret = 0;
 
@@ -180,8 +187,8 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 
 	if (base_ep->util_ep.caps & FI_SOURCE) {
 		src_addr = efa_av_reverse_lookup(base_ep->av,
-						 ibv_wc_read_slid(ibv_cq_ex),
-						 ibv_wc_read_src_qp(ibv_cq_ex));
+						 ibv_cq->read_slid(ibv_cq),
+						 ibv_cq->read_src_qp(ibv_cq));
 		ret = ofi_cq_write_src(rx_cq, cq_entry->op_context,
 				       cq_entry->flags, cq_entry->len,
 				       cq_entry->buf, cq_entry->data,
@@ -195,7 +202,7 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 	if (OFI_UNLIKELY(ret)) {
 		EFA_WARN(FI_LOG_CQ, "Unable to write recv completion: %s\n",
 			 fi_strerror(-ret));
-		efa_cq_handle_error(base_ep, ibv_cq_ex, -ret,
+		efa_cq_handle_error(base_ep, ibv_cq, -ret,
 				    FI_EFA_ERR_WRITE_RECV_COMP, false);
 	}
 }
@@ -212,7 +219,7 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
  */
 static void
 efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
-					      struct ibv_cq_ex *ibv_cq_ex,
+					      struct efa_ibv_cq *ibv_cq,
 					      struct fi_cq_tagged_entry *cq_entry)
 {
 	struct util_cq *rx_cq = base_ep->util_ep.rx_cq;
@@ -221,8 +228,8 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
 
 	if (base_ep->util_ep.caps & FI_SOURCE) {
 		src_addr = efa_av_reverse_lookup(base_ep->av,
-						 ibv_wc_read_slid(ibv_cq_ex),
-						 ibv_wc_read_src_qp(ibv_cq_ex));
+						 ibv_cq->read_slid(ibv_cq),
+						 ibv_cq->read_src_qp(ibv_cq));
 		ret = ofi_cq_write_src(rx_cq, cq_entry->op_context, cq_entry->flags, cq_entry->len, NULL, cq_entry->data,
 				       0, src_addr);
 	} else {
@@ -257,35 +264,37 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	int err = 0;
 	size_t num_cqe = 0; /* Count of read entries */
 	int prov_errno, opcode;
+	uint32_t qpnum;
+
+	cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
+	efa_domain = container_of(cq->util_cq.domain, struct efa_domain, util_domain);
 
 	/* Initialize an empty ibv_poll_cq_attr struct for ibv_start_poll.
 	 * EFA expects .comp_mask = 0, or otherwise returns EINVAL.
 	 */
 	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 
-	cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
-	efa_domain = container_of(cq->util_cq.domain, struct efa_domain, util_domain);
-
 	/* Call ibv_start_poll only once */
-	err = ibv_start_poll(cq->ibv_cq.ibv_cq_ex, &poll_cq_attr);
+	err = ibv_cq->start_poll(ibv_cq, &poll_cq_attr);
 	should_end_poll = !err;
 
 	while (!err) {
-		base_ep = efa_domain->qp_table[ibv_wc_read_qp_num(cq->ibv_cq.ibv_cq_ex) & efa_domain->qp_table_sz_m1]->base_ep;
-		opcode = ibv_wc_read_opcode(cq->ibv_cq.ibv_cq_ex);
-		if (cq->ibv_cq.ibv_cq_ex->status) {
-			prov_errno = ibv_wc_read_vendor_err(cq->ibv_cq.ibv_cq_ex);
+		qpnum = ibv_cq->read_qp_num(ibv_cq) & efa_domain->qp_table_sz_m1;
+		base_ep = efa_domain->qp_table[qpnum]->base_ep;
+		opcode = ibv_cq->read_opcode(ibv_cq);
+		if (ibv_cq->ibv_cq_ex->status) {
+			prov_errno = ibv_cq->read_vendor_err(ibv_cq);
 			switch (opcode) {
 			case IBV_WC_SEND: /* fall through */
 			case IBV_WC_RDMA_WRITE: /* fall through */
 			case IBV_WC_RDMA_READ:
-				efa_cq_handle_error(base_ep, cq->ibv_cq.ibv_cq_ex,
+				efa_cq_handle_error(base_ep, ibv_cq,
 						    to_fi_errno(prov_errno),
 						    prov_errno, true);
 				break;
 			case IBV_WC_RECV: /* fall through */
 			case IBV_WC_RECV_RDMA_WITH_IMM:
-				efa_cq_handle_error(base_ep, cq->ibv_cq.ibv_cq_ex,
+				efa_cq_handle_error(base_ep, ibv_cq,
 						    to_fi_errno(prov_errno),
 						    prov_errno, false);
 				break;
@@ -296,7 +305,7 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			break;
 		}
 
-		efa_cq_construct_cq_entry(cq->ibv_cq.ibv_cq_ex, &cq_entry, opcode);
+		efa_cq_construct_cq_entry(ibv_cq, &cq_entry, opcode);
 		EFA_DBG(FI_LOG_CQ,
 			"Write cq entry of context: %lx, flags: %lx\n",
 			(size_t) cq_entry.op_context, cq_entry.flags);
@@ -305,16 +314,16 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		case IBV_WC_SEND: /* fall through */
 		case IBV_WC_RDMA_WRITE: /* fall through */
 		case IBV_WC_RDMA_READ:
-			efa_cq_handle_tx_completion(base_ep, cq->ibv_cq.ibv_cq_ex, &cq_entry);
+			efa_cq_handle_tx_completion(base_ep, ibv_cq, &cq_entry);
 			efa_cntr_report_tx_completion(&base_ep->util_ep, cq_entry.flags);
 			break;
 		case IBV_WC_RECV:
-			efa_cq_handle_rx_completion(base_ep, cq->ibv_cq.ibv_cq_ex, &cq_entry);
+			efa_cq_handle_rx_completion(base_ep, ibv_cq, &cq_entry);
 			efa_cntr_report_rx_completion(&base_ep->util_ep, cq_entry.flags);
 			break;
 		case IBV_WC_RECV_RDMA_WITH_IMM:
 			efa_cq_proc_ibv_recv_rdma_with_imm_completion(
-				base_ep, cq->ibv_cq.ibv_cq_ex, &cq_entry);
+				base_ep, ibv_cq, &cq_entry);
 			efa_cntr_report_rx_completion(&base_ep->util_ep, cq_entry.flags);
 			break;
 		default:
@@ -328,12 +337,12 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			break;
 		}
 
-		err = ibv_next_poll(cq->ibv_cq.ibv_cq_ex);
+		err = ibv_cq->next_poll(ibv_cq);
 	}
 
 	if (err && err != ENOENT) {
 		err = err > 0 ? err : -err;
-		prov_errno = ibv_wc_read_vendor_err(cq->ibv_cq.ibv_cq_ex);
+		prov_errno = ibv_cq->read_vendor_err(ibv_cq);
 		EFA_WARN(FI_LOG_CQ,
 			 "Unexpected error when polling ibv cq, err: %s (%d) "
 			 "prov_errno: %s (%d)\n",
@@ -349,7 +358,7 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	}
 
 	if (should_end_poll)
-		ibv_end_poll(cq->ibv_cq.ibv_cq_ex);
+		ibv_cq->end_poll(ibv_cq);
 
 	return err;
 }
@@ -372,6 +381,119 @@ struct fi_ops_cq efa_cq_ops = {
 	.signal = fi_no_cq_signal,
 	.strerror = efa_cq_strerror
 };
+
+static void efa_cq_fill_ibv_pfns(struct efa_ibv_cq *ibv_cq)
+{
+	ibv_cq->start_poll = efa_ibv_start_poll;
+	ibv_cq->next_poll = efa_ibv_next_poll;
+	ibv_cq->end_poll = efa_ibv_end_poll;
+	ibv_cq->wc_is_unsolicited = efa_ibv_wc_is_unsolicited;
+	ibv_cq->read_byte_len = efa_ibv_wc_read_byte_len;
+	ibv_cq->read_imm_data = efa_ibv_wc_read_imm_data;
+	ibv_cq->read_opcode = efa_ibv_wc_read_opcode;
+	ibv_cq->read_slid = efa_ibv_wc_read_slid;
+	ibv_cq->read_src_qp = efa_ibv_wc_read_src_qp;
+	ibv_cq->read_qp_num = efa_ibv_wc_read_qp_num;
+	ibv_cq->read_vendor_err = efa_ibv_wc_read_vendor_err;
+	ibv_cq->read_wc_flags = efa_ibv_wc_read_wc_flags;
+	ibv_cq->read_sgid = efa_ibv_read_sgid;
+};
+
+/**
+ * @brief Create ibv_cq_ex by calling efadv_create_cq or ibv_create_cq_ex
+ *
+ * @param[in] attr Completion queue attributes
+ * @param[in] ibv_ctx Pointer to ibv_context
+ * @param[in,out] ibv_cq_ex Pointer to newly created ibv_cq_ex
+ * @param[in,out] ibv_cq_ex_type enum indicating if efadv_create_cq or ibv_create_cq_ex was used
+ * @param[in] efa_cq_init_attr Pointer to fi_efa_cq_init_attr containing attributes for efadv_create_cq
+ * @return Return 0 on success, error code otherwise
+ */
+#if HAVE_EFADV_CQ_EX
+int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
+			struct ibv_context *ibv_ctx,
+			struct efa_ibv_cq *ibv_cq,
+			struct fi_efa_cq_init_attr *efa_cq_init_attr)
+{
+	struct ibv_cq_init_attr_ex init_attr_ex = {
+		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
+		.cq_context = NULL,
+		.channel = NULL,
+		.comp_vector = 0,
+		/* EFA requires these values for wc_flags and comp_mask.
+		 * See `efa_create_cq_ex` in rdma-core.
+		 */
+		.wc_flags = IBV_WC_STANDARD_FLAGS,
+		.comp_mask = 0,
+	};
+
+	struct efadv_cq_init_attr efadv_cq_init_attr = {
+		.comp_mask = 0,
+		.wc_flags = EFADV_WC_EX_WITH_SGID,
+	};
+
+#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
+	if (efa_use_unsolicited_write_recv())
+		efadv_cq_init_attr.wc_flags |= EFADV_WC_EX_WITH_IS_UNSOLICITED;
+#endif
+
+#if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF
+	efadv_cq_init_attr.flags = efa_cq_init_attr->flags;
+	efadv_cq_init_attr.ext_mem_dmabuf.buffer = efa_cq_init_attr->ext_mem_dmabuf.buffer;
+	efadv_cq_init_attr.ext_mem_dmabuf.length = efa_cq_init_attr->ext_mem_dmabuf.length;
+	efadv_cq_init_attr.ext_mem_dmabuf.offset = efa_cq_init_attr->ext_mem_dmabuf.offset;
+	efadv_cq_init_attr.ext_mem_dmabuf.fd = efa_cq_init_attr->ext_mem_dmabuf.fd;
+#endif
+
+	ibv_cq->cqdirect_enabled = 0;
+	efa_cq_fill_ibv_pfns(ibv_cq);
+	ibv_cq->ibv_cq_ex = efadv_create_cq(ibv_ctx, &init_attr_ex,
+				     &efadv_cq_init_attr,
+				     sizeof(efadv_cq_init_attr));
+
+	if (!ibv_cq->ibv_cq_ex) {
+#if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF
+		if (efa_cq_init_attr->flags & FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF) {
+			EFA_WARN(FI_LOG_CQ,
+				 "efadv_create_cq failed on external memory. "
+				 "errno: %s\n", strerror(errno));
+			return (errno == EOPNOTSUPP) ? -FI_EOPNOTSUPP : -FI_EINVAL;
+		}
+#endif
+		/* This could be due to old EFA kernel module versions */
+		/* Fallback to ibv_create_cq_ex */
+		return efa_cq_open_ibv_cq_with_ibv_create_cq_ex(
+			&init_attr_ex, ibv_ctx, &ibv_cq->ibv_cq_ex, &ibv_cq->ibv_cq_ex_type);
+	}
+
+	ibv_cq->ibv_cq_ex_type = EFADV_CQ;
+	return 0;
+}
+#else
+int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
+			struct ibv_context *ibv_ctx,
+			struct efa_ibv_cq *ibv_cq,
+			struct fi_efa_cq_init_attr *efa_cq_init_attr)
+{
+	struct ibv_cq_init_attr_ex init_attr_ex = {
+		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
+		.cq_context = NULL,
+		.channel = NULL,
+		.comp_vector = 0,
+		/* EFA requires these values for wc_flags and comp_mask.
+		 * See `efa_create_cq_ex` in rdma-core.
+		 */
+		.wc_flags = IBV_WC_STANDARD_FLAGS,
+		.comp_mask = 0,
+	};
+
+	ibv_cq->cqdirect_enabled = 0;
+	efa_cq_fill_ibv_pfns(ibv_cq);
+
+	return efa_cq_open_ibv_cq_with_ibv_create_cq_ex(
+		&init_attr_ex, ibv_ctx, &ibv_cq->ibv_cq_ex, &ibv_cq->ibv_cq_ex_type);
+}
+#endif
 
 void efa_cq_progress(struct util_cq *cq)
 {
@@ -444,10 +566,9 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	efa_domain = container_of(cq->util_cq.domain, struct efa_domain,
 				  util_domain);
-	err = efa_cq_ibv_cq_ex_open(attr, efa_domain->device->ibv_ctx,
-				    &cq->ibv_cq.ibv_cq_ex,
-				    &cq->ibv_cq.ibv_cq_ex_type,
-				    &efa_cq_init_attr);
+	err = efa_cq_open_ibv_cq(attr, efa_domain->device->ibv_ctx,
+				 &cq->ibv_cq,
+				 &efa_cq_init_attr);
 	if (err) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", fi_strerror(err));
 		goto err_free_util_cq;
@@ -458,6 +579,10 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	(*cq_fid)->fid.context = context;
 	(*cq_fid)->fid.ops = &efa_cq_fi_ops;
 	(*cq_fid)->ops = &efa_cq_ops;
+
+#if HAVE_EFA_CQ_DIRECT
+	efa_cqdirect_cq_initialize( cq );
+#endif
 
 	return 0;
 

@@ -408,7 +408,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 
 	qp = ep->base_ep.qp;
 	if (!ep->base_ep.is_wr_started) {
-		ibv_wr_start(qp->ibv_qp_ex);
+		qp->wr_start(qp);
 		ep->base_ep.is_wr_started = true;
 	}
 	for (pkt_idx = 0; pkt_idx < pkt_entry_cnt; ++pkt_idx) {
@@ -420,9 +420,9 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 		    (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP)) {
 			/* Currently this is only expected for eager pkts */
 			assert(pkt_entry_cnt == 1);
-			ibv_wr_send_imm(qp->ibv_qp_ex, pkt_entry->ope->cq_entry.data);
+			qp->wr_send_imm(qp, pkt_entry->ope->cq_entry.data);
 		} else {
-			ibv_wr_send(qp->ibv_qp_ex);
+			qp->wr_send(qp);
 		}
 		if (pkt_entry->pkt_size <= efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size &&
 	            !efa_mr_is_hmem((struct efa_mr *)pkt_entry->payload_mr)) {
@@ -435,7 +435,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 				inline_data_list[1].length = pkt_entry->payload_size;
 			}
 
-			ibv_wr_set_inline_data_list(qp->ibv_qp_ex, iov_cnt, inline_data_list);
+			qp->wr_set_inline_data_list(qp, iov_cnt, inline_data_list);
 		} else {
 			iov_cnt = 1;
 			sg_list[0].addr = (uintptr_t)pkt_entry->wiredata;
@@ -448,15 +448,15 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 				sg_list[1].lkey = ((struct efa_mr *)pkt_entry->payload_mr)->ibv_mr->lkey;
 			}
 
-			ibv_wr_set_sge_list(ep->base_ep.qp->ibv_qp_ex, iov_cnt, sg_list);
+			qp->wr_set_sge_list(qp, iov_cnt, sg_list);
 		}
 
 		if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
 			assert(peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP);
-			ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
+			qp->wr_set_ud_addr(qp, conn->ah->ibv_ah,
 				   peer->user_recv_qp.qpn, peer->user_recv_qp.qkey);
 		} else {
-			ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
+			qp->wr_set_ud_addr(qp, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
 		}
 
@@ -473,7 +473,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	}
 
 	if (!(flags & FI_MORE)) {
-		ret = ibv_wr_complete(qp->ibv_qp_ex);
+		ret = qp->wr_complete(qp);
 		ep->base_ep.is_wr_started = false;
 	}
 
@@ -519,22 +519,22 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 		pkt_entry->flags |= EFA_RDM_PKE_LOCAL_READ;
 
 	qp = ep->base_ep.qp;
-	ibv_wr_start(qp->ibv_qp_ex);
+	qp->wr_start(qp);
 	qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
-	ibv_wr_rdma_read(qp->ibv_qp_ex, remote_key, remote_buf);
+	qp->wr_rdma_read(qp, remote_key, remote_buf);
 
 	sge.addr = (uint64_t)local_buf;
 	sge.length = len;
 	sge.lkey = ((struct efa_mr *)desc)->ibv_mr->lkey;
 
-	ibv_wr_set_sge_list(qp->ibv_qp_ex, 1, &sge);
+	qp->wr_set_sge_list(qp, 1, &sge);
 	if (txe->peer == NULL) {
-		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah->ibv_ah,
+		qp->wr_set_ud_addr(qp, ep->base_ep.self_ah->ibv_ah,
 				   qp->qp_num, qp->qkey);
 	} else {
 		conn = pkt_entry->peer->conn;
 		assert(conn && conn->ep_addr);
-		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
+		qp->wr_set_ud_addr(qp, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
 	}
 
@@ -552,7 +552,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 	efa_rdm_tracepoint_wr_id_post_read((void *)pkt_entry);
 #endif
 
-	err = ibv_wr_complete(qp->ibv_qp_ex);
+	err = qp->wr_complete(qp);
 
 	if (OFI_UNLIKELY(err))
 		return (err == ENOMEM) ? -FI_EAGAIN : -err;
@@ -607,7 +607,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 
 	qp = ep->base_ep.qp;
 	if (!ep->base_ep.is_wr_started) {
-		ibv_wr_start(qp->ibv_qp_ex);
+		qp->wr_start(qp);
 		ep->base_ep.is_wr_started = true;
 	}
 	qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
@@ -616,10 +616,10 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 		/* assert that we are sending the entire buffer as a
 			   single IOV when immediate data is also included. */
 		assert(len == txe->bytes_write_total_len);
-		ibv_wr_rdma_write_imm(qp->ibv_qp_ex, remote_key, remote_buf,
+		qp->wr_rdma_write_imm(qp, remote_key, remote_buf,
 				      txe->cq_entry.data);
 	} else {
-		ibv_wr_rdma_write(qp->ibv_qp_ex, remote_key, remote_buf);
+		qp->wr_rdma_write(qp, remote_key, remote_buf);
 	}
 
 	sge.addr = (uint64_t)local_buf;
@@ -629,14 +629,14 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 	/* As an optimization, we should consider implementing multiple-
 		   iov writes using an IBV wr with multiple sge entries.
 		   For now, each WR contains only one sge. */
-	ibv_wr_set_sge_list(qp->ibv_qp_ex, 1, &sge);
+	qp->wr_set_sge_list(qp, 1, &sge);
 	if (self_comm) {
-		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah->ibv_ah,
+		qp->wr_set_ud_addr(qp, ep->base_ep.self_ah->ibv_ah,
 				   qp->qp_num, qp->qkey);
 	} else {
 		conn = pkt_entry->peer->conn;
 		assert(conn && conn->ep_addr);
-		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
+		qp->wr_set_ud_addr(qp, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
 	}
 
@@ -645,7 +645,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 #endif
 
 	if (!(txe->fi_flags & FI_MORE)) {
-		err = ibv_wr_complete(qp->ibv_qp_ex);
+		err = qp->wr_complete(qp);
 		ep->base_ep.is_wr_started = false;
 	}
 
