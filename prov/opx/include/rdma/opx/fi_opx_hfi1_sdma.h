@@ -349,6 +349,7 @@ struct fi_opx_hfi1_sdma_work_entry *fi_opx_hfi1_sdma_get_idle_we(struct fi_opx_e
 	entry->psn_ptr		    = NULL;
 	entry->in_use		    = true;
 	entry->pending_bounce_buf   = false;
+	entry->first_ack_time_ns    = 0;
 	entry->bounce_buf.use_count = 0;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
