@@ -5,6 +5,8 @@
 int ft_efa_open_ibv_device(struct ibv_context **ctx) {
 	int num_dev = 0;
 	struct ibv_device **dev_list;
+	struct efadv_device_attr efadv_attr = {0};
+	int ret;
 
 	dev_list = ibv_get_device_list(&num_dev);
 	if (num_dev < 1) {
@@ -15,9 +17,34 @@ int ft_efa_open_ibv_device(struct ibv_context **ctx) {
 		FT_WARN("More than 1 ibv devices found! This test will only "
 			"exhaust MRs on the first device");
 	}
-	*ctx = ibv_open_device(dev_list[0]);
+
+	/* Loop through devices and find the first EFA device */
+	for (int i = 0; i < num_dev; i++) {
+		*ctx = ibv_open_device(dev_list[i]);
+		if (!*ctx) {
+			FT_WARN("cannot open device %d", i);
+			continue;
+		}
+
+		ret = efadv_query_device(*ctx, &efadv_attr, sizeof(efadv_attr));
+		if (ret) {
+			if (ret == EOPNOTSUPP) {
+				FT_WARN("Not an EFA device. Continue to check the next device.\n");
+			} else {
+				FT_WARN("cannot query device %d: %s, err: %d\n", i, ibv_get_device_name(dev_list[i]), -ret);
+			}
+			ibv_close_device(*ctx);
+			*ctx = NULL;
+			continue;
+		}
+
+		ibv_free_device_list(dev_list);
+		return 0;
+	}
+
+	FT_ERR("No EFA device found");
 	ibv_free_device_list(dev_list);
-	return 0;
+	return -1;
 }
 
 int ft_efa_close_ibv_device(struct ibv_context *ctx) {
