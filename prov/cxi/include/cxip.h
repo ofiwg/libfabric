@@ -2958,7 +2958,8 @@ struct cxip_coll_reduction {
 	bool drop_send;				// drop the next send operation
 	bool drop_recv;				// drop the next recv operation
 	enum cxip_coll_rc red_rc;		// set by first error
-	struct timespec tv_expires;		// reduction expiration time
+	struct timespec tv_expires;		// need to retry?
+	struct timespec arm_expires;		// RE expiration time for this red_id
 	struct dlist_entry tmout_link;		// link to timeout list
 	uint8_t tx_msg[64];			// static packet memory
 };
