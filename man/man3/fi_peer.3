@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_peer" "3" "2024\-12\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_peer" "3" "2025\-07\-22" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .TP
@@ -480,10 +480,7 @@ The data structures to support peer SRXs are defined as follows:
 \f[C]
 struct fid_peer_srx;
 
-/* Castable to dlist_entry */
 struct fi_peer_rx_entry {
-    struct fi_peer_rx_entry *next;
-    struct fi_peer_rx_entry *prev;
     struct fi_peer_srx *srx;
     fi_addr_t addr;
     size_t msg_size;
