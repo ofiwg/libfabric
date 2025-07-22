@@ -34,9 +34,13 @@ def test_rdm_pingpong(cmdline_args, iteration_type, completion_semantic,
 @pytest.mark.functional
 @pytest.mark.serial
 def test_mr_exhaustion_rdm_pingpong(cmdline_args, completion_semantic):
+    import os
+    binpath = cmdline_args.binpath or ""
+    if not os.path.exists(os.path.join(binpath, "fi_efa_exhaust_mr_reg_rdm_pingpong")):
+        pytest.skip("fi_efa_exhaust_mr_reg_rdm_pingpong requires efadv")
     efa_run_client_server_test(cmdline_args, "fi_efa_exhaust_mr_reg_rdm_pingpong", "short",
-                                completion_semantic, "host_to_host", "all", timeout=1000,
-                                fabric="efa")
+                               completion_semantic, "host_to_host", "all", timeout=1000,
+                               fabric="efa")
 
 @pytest.mark.functional
 def test_rdm_pingpong_range(cmdline_args, completion_semantic, memory_type_bi_dir, message_size, direct_message_size, fabric):
