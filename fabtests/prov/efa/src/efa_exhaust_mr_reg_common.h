@@ -1,6 +1,7 @@
 /* Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include <shared.h>
+#include <infiniband/efadv.h>
 #include <infiniband/verbs.h>
 
 #ifndef _EFA_EXHAUST_MR_REG_COMMON_H
