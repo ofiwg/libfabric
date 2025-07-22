@@ -1909,3 +1909,48 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 		return -FI_EINVAL;
 	}
 }
+
+int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint16_t flag)
+{
+	int ret = 0;
+
+	assert(flag & EFA_RDM_OPE_QUEUED_FLAGS);
+
+	if (!(ope->internal_flags & flag))
+		return 0;
+
+	switch (flag) {
+	case EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE:
+		ret = efa_rdm_ope_repost_ope_queued_before_handshake(ope);
+		--ope->ep->ope_queued_before_handshake_cnt;
+		break;
+	case EFA_RDM_OPE_QUEUED_RNR:
+		assert(!dlist_empty(&ope->queued_pkts));
+		ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
+		break;
+	case EFA_RDM_OPE_QUEUED_CTRL:
+		ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
+		break;
+	case EFA_RDM_OPE_QUEUED_READ:
+		ret = efa_rdm_ope_post_read(ope);
+		break;
+	default:
+		break;
+	}
+
+	if (OFI_UNLIKELY(ret)) {
+		if (ret == -FI_EAGAIN)
+			return ret;
+
+		assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
+		if (ope->type == EFA_RDM_TXE)
+			efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
+		else
+			efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
+		return ret;
+	}
+
+	ope->internal_flags &= ~flag;
+	dlist_remove(&ope->queued_entry);
+	return ret;
+}
