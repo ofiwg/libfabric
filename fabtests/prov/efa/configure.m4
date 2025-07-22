@@ -10,6 +10,7 @@ have_efadv=0
 AC_CHECK_HEADER([infiniband/efadv.h],
 		[AC_CHECK_LIB(efa, efadv_query_device,
                           [have_efadv=1])])
+AM_CONDITIONAL([HAVE_EFA_DV], [test $have_efadv -eq 1])
 
 efa_rdma_checker_happy=0
 AS_IF([test x"$have_efadv" = x"1"], [

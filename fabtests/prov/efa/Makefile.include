@@ -38,7 +38,9 @@ bin_PROGRAMS += prov/efa/src/fi_efa_rnr_read_cq_error \
 		prov/efa/src/fi_efa_multi_ep_mt
 
 if HAVE_VERBS_DEVEL
+if HAVE_EFA_DV
 bin_PROGRAMS += prov/efa/src/fi_efa_exhaust_mr_reg_rdm_pingpong
+endif HAVE_EFA_DV
 if BUILD_EFA_RDMA_CHECKER
 bin_PROGRAMS += prov/efa/src/fi_efa_rdma_checker
 endif BUILD_EFA_RDMA_CHECKER
@@ -77,6 +79,7 @@ prov_efa_src_fi_efa_multi_ep_mt_SOURCES = \
 prov_efa_src_fi_efa_multi_ep_mt_LDADD = libfabtests.la
 
 if HAVE_VERBS_DEVEL
+if HAVE_EFA_DV
 efa_exhaust_mr_reg_srcs = \
 	prov/efa/src/efa_exhaust_mr_reg_common.h \
 	prov/efa/src/efa_exhaust_mr_reg_common.c
@@ -86,6 +89,8 @@ prov_efa_src_fi_efa_exhaust_mr_reg_rdm_pingpong_SOURCES = \
 	$(efa_exhaust_mr_reg_srcs) \
 	$(benchmarks_srcs)
 prov_efa_src_fi_efa_exhaust_mr_reg_rdm_pingpong_LDADD = libfabtests.la
+prov_efa_src_fi_efa_exhaust_mr_reg_rdm_pingpong_LDFLAGS = -lefa
+endif HAVE_EFA_DV
 
 if BUILD_EFA_RDMA_CHECKER
 prov_efa_src_fi_efa_rdma_checker_SOURCES = \
