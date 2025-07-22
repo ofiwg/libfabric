@@ -818,79 +818,14 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
 			continue;
 
-		if (ope->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE) {
-			ret = efa_rdm_ope_repost_ope_queued_before_handshake(ope);
-			if (ret == -FI_EAGAIN)
-				continue;
-
-			if (OFI_UNLIKELY(ret)) {
-				assert(ope->type == EFA_RDM_TXE);
-				/* efa_rdm_txe_handle_error will remove ope from the queued_list */
-				ope->ep->ope_queued_before_handshake_cnt--;
-				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
-				continue;
-			}
-
-			dlist_remove(&ope->queued_entry);
-			ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE;
-			ope->ep->ope_queued_before_handshake_cnt--;
-		}
-
-		if (ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR) {
-			assert(!dlist_empty(&ope->queued_pkts));
-			ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
-
-			if (ret == -FI_EAGAIN)
-				continue;
-
-			if (OFI_UNLIKELY(ret)) {
-				assert(ope->type == EFA_RDM_RXE || ope->type == EFA_RDM_TXE);
-				if (ope->type == EFA_RDM_RXE)
-					efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_SEND);
-				else
-					efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_SEND);
-				continue;
-			}
-
-			dlist_remove(&ope->queued_entry);
-			ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_RNR;
-		}
-
-		if (ope->internal_flags & EFA_RDM_OPE_QUEUED_CTRL) {
-			ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
-			if (ret == -FI_EAGAIN)
-				continue;
-
-			if (OFI_UNLIKELY(ret)) {
-				assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
-				if (ope->type == EFA_RDM_TXE)
-					efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
-				else
-					efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
-				continue;
-			}
-
-			ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_CTRL;
-			dlist_remove(&ope->queued_entry);
-		}
-
-		if (ope->internal_flags & EFA_RDM_OPE_QUEUED_READ) {
-			ret = efa_rdm_ope_post_read(ope);
-			if (ret == -FI_EAGAIN)
-				continue;
-
-			if (OFI_UNLIKELY(ret)) {
-				assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
-				if (ope->type == EFA_RDM_TXE)
-					efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
-				else
-					efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
-				continue;
-			}
-
-			ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_READ;
-			dlist_remove(&ope->queued_entry);
-		}
+		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE))
+			continue;
+		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_RNR))
+			continue;
+		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_CTRL))
+			continue;
+		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_READ))
+			continue;
 	}
 	/*
 	 * Send data packets until window or data queue is exhausted.
