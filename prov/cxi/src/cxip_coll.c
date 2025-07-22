@@ -53,7 +53,6 @@
 
 #define	MAGIC		0x677d
 #define	TIMER_UNSET	-1
-#define	TIMER_NULL	0
 
 /****************************************************************************
  * Metrics for evaluating collectives
@@ -2097,19 +2096,12 @@ bool _tsexp(struct timespec *ts)
 	return (tsnow.tv_nsec >= ts->tv_nsec);
 }
 
-/* test for {0,0} timestamp */
-static inline
-bool _tsnull(struct timespec *ts)
-{
-	return !(ts->tv_sec | ts->tv_nsec);
-}
-
 /* Clear reduction expiration time */
 static inline
 void _ts_red_clr(struct cxip_coll_reduction *reduction)
 {
-	TRACE_DEBUG("clearing timer on red_id %d, seqno %d\n", reduction->red_id,
-		    reduction->seqno);
+	TRACE_DEBUG("clearing timer on red_id %d, seqno %d\n",
+		    reduction->red_id, reduction->seqno);
 	dlist_remove(&reduction->tmout_link);
 	reduction->tv_expires.tv_sec = TIMER_UNSET;
 	reduction->tv_expires.tv_nsec = TIMER_UNSET;
@@ -2120,27 +2112,52 @@ static inline
 void _ts_red_set(struct cxip_coll_reduction *reduction,
 		 struct timespec *expires, struct dlist_entry *retry_list)
 {
-	TRACE_DEBUG("setting timer on red_id %d, seqno %d\n", reduction->red_id,
-		    reduction->seqno);
+	TRACE_DEBUG("setting timer on red_id %d, seqno %d\n",
+		    reduction->red_id, reduction->seqno);
 	_tsset(&reduction->tv_expires, expires);
 	dlist_insert_tail(&reduction->tmout_link, retry_list);
 }
 
-/* Used to prevent first-use incast */
 static inline
-bool _is_red_first_time(struct cxip_coll_reduction *reduction)
-{
-	return _tsnull(&reduction->tv_expires);
+void _set_arm_expires(struct cxip_coll_reduction *reduction) {
+	struct timespec arm_expires;
+
+	arm_expires.tv_sec = cxip_env.coll_timeout_usec / 1000000;
+	arm_expires.tv_nsec = cxip_env.coll_timeout_usec % 1000000;
+
+	/* Re-arm half-way through the timeout period to ensure we
+	 * re-arm before it expires. */
+	arm_expires.tv_sec /= 2;
+	arm_expires.tv_nsec /= 2;
+
+	/* get current time */
+	_tsget(&reduction->arm_expires);
+
+	TRACE_DEBUG("arm_expires: %ld.%ld\n", arm_expires.tv_sec,
+		    arm_expires.tv_nsec);
+	_tsset(&reduction->arm_expires, &arm_expires);
 }
 
-/* Used to reduce incast congestion during run */
+/* Used to prevent incast storm */
+static inline
+bool _need_to_arm(struct cxip_coll_reduction *reduction)
+{
+	if (_tsexp(&reduction->arm_expires)) {
+		_set_arm_expires(reduction);
+		return true;
+	}
+	return false;
+}
+
+/* Used to reduce incast congestion (_need_to_arm) and
+ * detect the need to retry */
 static inline
 bool _is_red_timed_out(struct cxip_coll_reduction *reduction)
 {
 	if (reduction->mc_obj->retry_disable)
 		return false;
-	if (_is_red_first_time(reduction)) {
-		TRACE_DEBUG("=== root red_id=%d first time, retry\n",
+	if (_need_to_arm(reduction)) {
+		TRACE_DEBUG("=== root red_id=%d needs (re)arm\n",
 			    reduction->red_id);
 		return true;
 	}
@@ -2162,22 +2179,27 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 	struct cxip_coll_mc *mc_obj = reduction->mc_obj;
 	struct cxip_coll_data coll_data = {0} ;
 	ssize_t ret;
+	bool timed_out;
 
 	/* State machine disabled for testing */
 	if (reduction->coll_state != CXIP_COLL_STATE_READY)
 		return;
 
 	/* Retry pre-empts partial collective (pkt == NULL) */
-	if (force_root_retry || _is_red_timed_out(reduction)) {
+	timed_out = _is_red_timed_out(reduction);
+	if (force_root_retry || timed_out) {
 		/* reset reduction for retry send */
 		reduction->seqno = mc_obj->seqno;
 		INCMOD(mc_obj->seqno, CXIP_COLL_MOD_SEQNO);
-		TRACE_PKT("progress_root retry reduction seqno %d red_id %d\n",
-			  reduction->seqno, reduction->red_id);
+		TRACE_PKT("progress_root (retry: %d, timed out: %d) "
+			  "seqno %d red_id %d\n",
+			  force_root_retry, timed_out, reduction->seqno,
+			  reduction->red_id);
 		ofi_atomic_inc32(&mc_obj->tmout_cnt);
 
 		/* restore data for retry */
-		memcpy(&reduction->accum, &reduction->backup, sizeof(reduction->backup));
+		memcpy(&reduction->accum, &reduction->backup,
+		       sizeof(reduction->backup));
 
 		_ts_red_clr(reduction);
 		_ts_red_set(reduction, &reduction->mc_obj->rootexpires,
@@ -2241,6 +2263,7 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 			    reduction->seqno, reduction->red_id);
 		ret = cxip_coll_send_red_pkt(reduction, &reduction->accum,
 					     !mc_obj->arm_disable, false);
+		_set_arm_expires(reduction);
 
 		if (ret)
 			SET_RED_RC(reduction->accum.red_rc,
@@ -2286,25 +2309,23 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 
 	/* if reduction packet, reset timer, seqno, honor retry */
 	if (pkt) {
-		TRACE_DEBUG("_progress_leaf: packet seen, seqno %d\n", pkt->hdr.seqno);
+		TRACE_PKT("_progress_leaf: packet seen, seqno %d\n",
+			  pkt->hdr.seqno);
 		reduction->seqno = pkt->hdr.seqno;
 		reduction->resno = pkt->hdr.seqno;
 		if (pkt->hdr.retry) {
 			TRACE_PKT("leaf honoring retry\n");
 			reduction->pktsent = false;
 		}
-		TRACE_PKT("leaf rcv seqno = %d\n", reduction->seqno);
 	}
 
 	/* leaves lead with sending a packet */
 	if (!reduction->pktsent) {
 		TRACE_PKT("leaf preparing to send seqno %d\n", reduction->seqno);
-		/* Avoid first-use incast, retry guaranteed */
-		if (_is_red_first_time(reduction)) {
-			TRACE_DEBUG("=== leaf red_id=%d first time, wait\n",
+
+		if (_need_to_arm(reduction)) {
+			TRACE_DEBUG("=== leaf red_id=%d, waiting for arm\n",
 				    reduction->red_id);
-			reduction->tv_expires.tv_sec = TIMER_UNSET;
-			reduction->tv_expires.tv_nsec = TIMER_UNSET;
 			return;
 		}
 
@@ -3136,6 +3157,16 @@ static int _initialize_mc(void *ptr)
 		reduction->red_id = red_id;
 		reduction->in_use = false;
 		reduction->completed = false;
+		/* _tsexp() is used for both the retry timer (tv_expires)
+		 * and the RE timer (arm_expires).  _tsexp() checks for
+		 * TIMER_UNSET to ensure we don't unnecessarily retry when
+		 * the reduction doesn't have a timer set on it yet.
+		 */
+		reduction->tv_expires.tv_sec = TIMER_UNSET;
+		reduction->tv_expires.tv_nsec = TIMER_UNSET;
+		/* set to 0 to insure we arm for the first operation */
+		reduction->arm_expires.tv_sec = 0;
+		reduction->arm_expires.tv_nsec = 0;
 		dlist_init(&reduction->tmout_link);
 	}
 	TRACE_DEBUG("reduction table initialized\n");
