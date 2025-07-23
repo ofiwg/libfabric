@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_cxi" "7" "2025\-07\-21" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_cxi" "7" "2025\-07\-23" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -853,7 +853,8 @@ to meaningful CXI addresses in the endpoint \f[I]fi_av\f[R] structure.
 \f[B]fi_join_collective\f[R]() must be called for every address in the
 \f[I]set\f[R] list, and must be progressed until the join operation is
 complete.
-There is no inherent limit on join concurrency.
+Joins are non-concurrent and return FI_EAGAIN until any active join
+completes.
 .PP
 The join will create a multicast tree in the fabric to manage the
 collective operations.
