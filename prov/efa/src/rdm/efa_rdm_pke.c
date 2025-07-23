@@ -549,6 +549,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 	}
 
 #if ENABLE_DEBUG
+	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
 #ifdef ENABLE_EFA_RDM_PKE_DUMP
 	EFA_DBG(FI_LOG_EP_DATA,
 		"Posted RDMA read length: %ld local buf: %ld local key: %d "
@@ -650,6 +651,9 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
 	}
 
+#if ENABLE_DEBUG
+	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
+#endif
 #if HAVE_LTTNG
 	efa_rdm_tracepoint_wr_id_post_write((void *)pkt_entry);
 #endif
