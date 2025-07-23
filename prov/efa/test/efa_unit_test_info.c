@@ -171,6 +171,7 @@ void test_info_direct_hmem_support_p2p()
 	bool hmem_ops_cuda_init;
 
 	info = fi_allocinfo();
+	info->ep_attr->type = FI_EP_RDM;
 
 	memset(g_efa_hmem_info, 0, OFI_HMEM_MAX * sizeof(struct efa_hmem_info));
 
@@ -190,17 +191,18 @@ void test_info_direct_hmem_support_p2p()
 	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
 	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
 
-	efa_prov_info_set_hmem_flags(info, FI_EP_RDM);
+	efa_prov_info_direct_set_hmem_flags(info);
 	assert_true(info->caps & FI_HMEM);
 	assert_true(info->tx_attr->caps & FI_HMEM);
 	assert_true(info->rx_attr->caps & FI_HMEM);
 	fi_freeinfo(info);
 
 	info = fi_allocinfo();
+	info->ep_attr->type = FI_EP_RDM;
 	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
 	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = false;
 
-	efa_prov_info_set_hmem_flags(info, FI_EP_RDM);
+	efa_prov_info_direct_set_hmem_flags(info);
 	assert_false(info->caps & FI_HMEM);
 	assert_false(info->tx_attr->caps & FI_HMEM);
 	assert_false(info->rx_attr->caps & FI_HMEM);
