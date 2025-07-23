@@ -207,8 +207,8 @@ src_libfabric_la_LIBADD += $(cxi_LIBS)
 src_libfabric_la_LDFLAGS += $(cxi_LDFLAGS)
 endif !HAVE_CXI_DL
 
-prov_install_man_pages += man/man7/fi_cxi.7
+prov_install_man_pages += man/man7/fi_cxi.7 man/man7/cxi_collectives.7
 
 endif HAVE_CXI
 
-prov_dist_man_pages += man/man7/fi_cxi.7
+prov_dist_man_pages += man/man7/fi_cxi.7 man/man7/cxi_collectives.7
