@@ -64,8 +64,10 @@ int lnx_queue_msg(struct fi_peer_rx_entry *entry)
 
 void lnx_free_entry(struct fi_peer_rx_entry *entry)
 {
-	struct lnx_rx_entry *rx_entry = (struct lnx_rx_entry *) entry;
+	struct lnx_rx_entry *rx_entry;
 	ofi_spin_t *bplock;
+
+	rx_entry = container_of(entry, struct lnx_rx_entry, rx_entry);
 
 	if (rx_entry->rx_global)
 		bplock = &global_bplock;
