@@ -389,14 +389,13 @@ err_free:
 }
 
 #if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
-void efa_prov_info_set_hmem_flags(struct fi_info *prov_info, enum fi_ep_type ep_type)
+void efa_prov_info_direct_set_hmem_flags(struct fi_info *prov_info)
 {
 	int i;
 	enum fi_hmem_iface iface;
 	struct efa_hmem_info *hmem_info;
 
-	if (ep_type != FI_EP_RDM)
-		return;
+	assert(prov_info->ep_attr->type == FI_EP_RDM);
 
 	/* Check if FI_HMEM_P2P_DISABLED is set */
 	if (ofi_hmem_p2p_disabled()) {
@@ -434,7 +433,7 @@ void efa_prov_info_set_hmem_flags(struct fi_info *prov_info, enum fi_ep_type ep_
 	prov_info->domain_attr->mr_mode	|= FI_MR_HMEM;
 }
 #else
-void efa_prov_info_set_hmem_flags(struct fi_info *prov_info, enum fi_ep_type ep_type)
+void efa_prov_info_direct_set_hmem_flags(struct fi_info *prov_info, enum fi_ep_type ep_type)
 {
 }
 #endif
@@ -522,8 +521,6 @@ int efa_prov_info_alloc(struct fi_info **prov_info_ptr,
 	if (err) {
 		goto err_free;
 	}
-
-	efa_prov_info_set_hmem_flags(prov_info, ep_type);
 
 	*prov_info_ptr = prov_info;
 	return 0;
