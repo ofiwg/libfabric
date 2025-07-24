@@ -319,6 +319,7 @@ int vrb_set_rai(uint32_t addr_format, void *src_addr, size_t src_addrlen,
 		rai->ai_flags |= RAI_FAMILY;
 		break;
 	case FI_SOCKADDR:
+	case FI_SOCKADDR_IP:
 		rai->ai_port_space = RDMA_PS_TCP;
 		if (src_addr && src_addrlen) {
 			rai->ai_family = ((struct sockaddr *)src_addr)->sa_family;
@@ -767,7 +768,7 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		fi->caps = VERBS_MSG_CAPS;
 		*(fi->tx_attr) = verbs_tx_attr;
 		*(fi->rx_attr) = verbs_rx_attr;
-		fi->addr_format = FI_SOCKADDR_IB;
+		fi->addr_format = FI_SOCKADDR;
 		break;
 	case FI_EP_DGRAM:
 		fi->caps = VERBS_DGRAM_CAPS;

@@ -83,7 +83,7 @@ struct fi_fabric_attr udpx_fabric_attr = {
 
 struct fi_info udpx_info = {
 	.caps = UDPX_DOMAIN_CAPS | UDPX_TX_CAPS | UDPX_RX_CAPS,
-	.addr_format = FI_SOCKADDR,
+	.addr_format = FI_SOCKADDR_IP,
 	.tx_attr = &udpx_tx_attr,
 	.rx_attr = &udpx_rx_attr,
 	.ep_attr = &udpx_ep_attr,
