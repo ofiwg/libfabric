@@ -215,6 +215,8 @@ enum {
 	FI_ADDR_OPX,
 	FI_ADDR_CXI,
 	FI_ADDR_UCX,
+
+	FI_SOCKADDR_IP,		/* FI_SOCKADDR_IN and FI_SOCKADDR_IN6 */
 };
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)

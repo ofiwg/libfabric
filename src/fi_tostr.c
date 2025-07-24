@@ -113,6 +113,7 @@ static void ofi_tostr_addr_format(char *buf, size_t len, uint32_t addr_format)
 	switch (addr_format) {
 	CASEENUMSTRN(FI_FORMAT_UNSPEC, len);
 	CASEENUMSTRN(FI_SOCKADDR, len);
+	CASEENUMSTRN(FI_SOCKADDR_IP, len);
 	CASEENUMSTRN(FI_SOCKADDR_IN, len);
 	CASEENUMSTRN(FI_SOCKADDR_IN6, len);
 	CASEENUMSTRN(FI_SOCKADDR_IB, len);
