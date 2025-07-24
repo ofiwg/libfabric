@@ -159,11 +159,15 @@ int cxip_cmdq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
 	if (cxip_cmdq_match(cmdq, vni, tc, tc_type))
 		return FI_SUCCESS;
 
-	ret = cxip_cp_get(cmdq->lni, vni, tc, tc_type, &cp);
-	if (ret != FI_SUCCESS) {
-		CXIP_DBG("Failed to get CP: %d\n", ret);
-		return -FI_EOTHER;
-	}
+	if (cxip_cmdq_prev_match(cmdq, vni, tc, tc_type)) {
+		cp = cmdq->prev_cp;
+        } else {
+		ret = cxip_cp_get(cmdq->lni, vni, tc, tc_type, &cp);
+		if (ret != FI_SUCCESS) {
+			CXIP_DBG("Failed to get CP: %d\n", ret);
+			return -FI_EOTHER;
+		}
+        }
 
 	ret = cxi_cq_emit_cq_lcid(cmdq->dev_cmdq, cp->lcid);
 	if (ret) {
@@ -172,6 +176,7 @@ int cxip_cmdq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
 		ret = -FI_EAGAIN;
 	} else {
 		ret = FI_SUCCESS;
+		cmdq->prev_cp = cmdq->cur_cp;
 		cmdq->cur_cp = cp;
 
 		CXIP_DBG("Updated CMDQ(%p) CP: %d VNI: %u TC: %s TYPE: %s\n",
@@ -211,6 +216,7 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 		cq_opts->lcid = cp->lcid;
 
 		new_cmdq->cur_cp = cp;
+		new_cmdq->prev_cp = cp;
 
 		/* Trig command queue can never use LL ring. */
 		if (cq_opts->flags & CXI_CQ_TX_WITH_TRIG_CMDS ||

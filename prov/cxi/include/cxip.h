@@ -791,6 +791,7 @@ struct cxip_cmdq {
 	enum cxip_llring_mode llring_mode;
 
 	struct cxi_cp *cur_cp;
+	struct cxi_cp *prev_cp;
 	struct cxip_lni *lni;
 };
 
@@ -3178,6 +3179,15 @@ static inline bool cxip_cmdq_match(struct cxip_cmdq *cmdq, uint16_t vni,
 	return (cmdq->cur_cp->vni == vni) && (cmdq->cur_cp->tc == tc) &&
 		(cmdq->cur_cp->tc_type == tc_type);
 }
+
+static inline bool cxip_cmdq_prev_match(struct cxip_cmdq *cmdq, uint16_t vni,
+					enum cxi_traffic_class tc,
+					enum cxi_traffic_class_type tc_type)
+{
+	return (cmdq->prev_cp->vni == vni) && (cmdq->prev_cp->tc == tc) &&
+		(cmdq->prev_cp->tc_type == tc_type);
+}
+
 
 int cxip_evtq_init(struct cxip_evtq *evtq, struct cxip_cq *cq,
 		   size_t num_events, size_t num_fc_events,
