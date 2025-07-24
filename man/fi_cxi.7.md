@@ -733,8 +733,8 @@ The **fi_join_collective**() implementation is provider-managed. However, the
 specified as FI_ADDR_NOTAVAIL. The *set* parameter must contain fi_addr_t
 values that resolve to meaningful CXI addresses in the endpoint *fi_av*
 structure. **fi_join_collective**() must be called for every address in the
-*set* list, and must be progressed until the join operation is complete. There
-is no inherent limit on join concurrency.
+*set* list, and must be progressed until the join operation is complete. Joins
+are non-concurrent and return FI_EAGAIN until any active join completes.
 
 The join will create a multicast tree in the fabric to manage the collective
 operations. This operation requires access to a secure Fabric Manager REST API
