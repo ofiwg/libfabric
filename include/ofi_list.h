@@ -57,15 +57,23 @@ enum ofi_list_end {
 struct dlist_entry {
 	struct dlist_entry	*next;
 	struct dlist_entry	*prev;
+	OFI_DBG_VAR(ssize_t, size)
+	OFI_DBG_VAR(struct dlist_entry *, list)
 };
 
+#if ENABLE_DEBUG
+#define DLIST_INIT(addr) { addr, addr, 0, addr }
+#else
 #define DLIST_INIT(addr) { addr, addr }
+#endif
 #define DEFINE_LIST(name) struct dlist_entry name = DLIST_INIT(&name)
 
 static inline void dlist_init(struct dlist_entry *head)
 {
 	head->next = head;
 	head->prev = head;
+	OFI_DBG_SET(head->list, head);
+	OFI_DBG_SET(head->list->size, 0);
 }
 
 static inline int dlist_empty(struct dlist_entry *head)
@@ -80,6 +88,10 @@ dlist_insert_after(struct dlist_entry *item, struct dlist_entry *head)
 	item->prev = head;
 	head->next->prev = item;
 	head->next = item;
+
+	OFI_DBG_SET(item->list, head->list);
+	assert(item->list);
+	OFI_DBG_ADD(item->list->size, 0);
 }
 
 static inline void
@@ -95,6 +107,17 @@ static inline void dlist_remove(struct dlist_entry *item)
 {
 	item->prev->next = item->next;
 	item->next->prev = item->prev;
+
+#if ENABLE_DEBUG
+	/* TODO: Fix usage by some providers that remove dlist entries that have
+	 * not been inserted in to any list */
+	if (item->list) {
+		/* Make sure the list is empty when removing the head */
+		assert(item != item->list || item->list->size == 0);
+		OFI_DBG_ADD(item->list->size, -1);
+		OFI_DBG_SET(item->list, NULL);
+	}
+#endif
 }
 
 static inline void dlist_remove_init(struct dlist_entry *item)
@@ -155,6 +178,19 @@ static inline void dlist_remove_init(struct dlist_entry *item)
 	     (tmp) = (container)->member.prev)
 
 typedef int dlist_func_t(struct dlist_entry *item, const void *arg);
+
+#if ENABLE_DEBUG
+static inline ssize_t dlist_size(struct dlist_entry *item)
+{
+	assert(item->list);
+	return item->list->size;
+}
+#else
+static inline ssize_t dlist_size(struct dlist_entry *item)
+{
+	return -1;
+}
+#endif
 
 static inline struct dlist_entry *
 dlist_find_first_match(struct dlist_entry *head, dlist_func_t *match,
@@ -218,6 +254,14 @@ static inline void dlist_splice_head(struct dlist_entry *head,
 	/* put first element of 'to_splice' as first element of 'head' */
 	head->next = to_splice->next;
 	head->next->prev = head;
+
+	OFI_DBG_ADD(head->list->size, to_splice->size);
+#if ENABLE_DEBUG
+	struct dlist_entry *item;
+	dlist_foreach(head, item) {
+		item->list = head->list;
+	}
+#endif
 
 	/* set list to empty */
 	dlist_init(to_splice);
