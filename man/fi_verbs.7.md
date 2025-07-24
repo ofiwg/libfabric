@@ -66,7 +66,7 @@ Verbs provider requires applications to support the following modes:
 ### Addressing Formats
 Supported addressing formats include
   * MSG and RDM (internal - deprecated) EPs support:
-    FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6, FI_SOCKADDR_IB
+    FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6, FI_SOCKADDR_IB, FI_SOCKADDR_IP
   * DGRAM supports:
     FI_ADDR_IB_UD
 

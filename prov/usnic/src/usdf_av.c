@@ -829,6 +829,7 @@ struct sockaddr_in *usdf_format_to_sin(const struct fi_info *info, const void *a
 	switch (info->addr_format) {
 	case FI_FORMAT_UNSPEC:
 	case FI_SOCKADDR:
+	case FI_SOCKADDR_IP:
 	case FI_SOCKADDR_IN:
 		return (struct sockaddr_in *)addr;
 	case FI_ADDR_STR:
@@ -861,6 +862,7 @@ void *usdf_sin_to_format(const struct fi_info *info, void *addr, size_t *len)
 	switch (info->addr_format) {
 	case FI_FORMAT_UNSPEC:
 	case FI_SOCKADDR:
+	case FI_SOCKADDR_IP:
 	case FI_SOCKADDR_IN:
 		if (len)
 			*len = sizeof(struct sockaddr_in);
