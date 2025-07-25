@@ -158,6 +158,7 @@ int ofi_get_src_addr(uint32_t addr_format,
 {
 	switch (addr_format) {
 	case FI_SOCKADDR:
+	case FI_SOCKADDR_IP:
 	case FI_SOCKADDR_IN:
 	case FI_SOCKADDR_IN6:
 		return fi_get_src_sockaddr(dest_addr, dest_addrlen,
@@ -216,6 +217,7 @@ int ofi_get_addr(uint32_t *addr_format, uint64_t flags,
 
 	switch (*addr_format) {
 	case FI_SOCKADDR:
+	case FI_SOCKADDR_IP:
 		sa_family = 0;
 		ret = fi_get_sockaddr(&sa_family, flags, node, service,
 				      (struct sockaddr **) addr, addrlen);

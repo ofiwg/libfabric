@@ -224,7 +224,7 @@ static struct fi_info rxm_base_info = {
 
 static struct fi_info rxm_tcp_info = {
 	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS,
-	.addr_format = FI_SOCKADDR,
+	.addr_format = FI_SOCKADDR_IP,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,
 	.ep_attr = &rxm_ep_attr,

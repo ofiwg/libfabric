@@ -569,6 +569,7 @@ static int usdf_pep_setname(fid_t fid, void *addr, size_t addrlen)
 
 	switch (info->addr_format) {
 	case FI_SOCKADDR:
+	case FI_SOCKADDR_IP:
 	case FI_SOCKADDR_IN:
 		/* It is possible for passive endpoint to not have src_addr. */
 		if (info->src_addr) {
@@ -690,6 +691,7 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	switch (info->addr_format) {
 	case FI_SOCKADDR:
+	case FI_SOCKADDR_IP:
 	case FI_SOCKADDR_IN:
 		/* It is possible for passive endpoint to not have src_addr. */
 		if (info->src_addr) {

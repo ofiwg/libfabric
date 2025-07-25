@@ -332,7 +332,8 @@ static int ucx_getinfo(uint32_t version, const char *node,
 		    hints->addr_format == FI_ADDR_UCX ||
 		    hints->addr_format == FI_FORMAT_UNSPEC) {
 			ucx_info.addr_format = FI_ADDR_UCX;
-		} else if (hints->addr_format <= FI_SOCKADDR_IN) {
+		} else if (hints->addr_format <= FI_SOCKADDR_IN ||
+			   hints->addr_format == FI_SOCKADDR_IP) {
 			ucx_descriptor.use_ns = 1;
 			ucx_info.addr_format = FI_SOCKADDR_IN;
 		} else {

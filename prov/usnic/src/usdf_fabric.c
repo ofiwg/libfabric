@@ -152,6 +152,7 @@ static int usdf_validate_hints(uint32_t version, const struct fi_info *hints)
 		size = sizeof(struct sockaddr_in);
 		break;
 	case FI_SOCKADDR:
+	case FI_SOCKADDR_IP:
 		size = sizeof(struct sockaddr);
 		break;
 	case FI_ADDR_STR:
@@ -294,6 +295,7 @@ usdf_fill_addr_info(struct fi_info *fi, uint32_t addr_format,
 
 	switch (fi->addr_format) {
 	case FI_SOCKADDR:
+	case FI_SOCKADDR_IP:
 	case FI_SOCKADDR_IN:
 		ret = usdf_fill_sockaddr_info(fi, src, dest, dap);
 		if (ret != FI_SUCCESS)

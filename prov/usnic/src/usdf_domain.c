@@ -193,6 +193,7 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	 */
 	switch (info->addr_format) {
 	case FI_SOCKADDR:
+	case FI_SOCKADDR_IP:
 		addrlen = sizeof(struct sockaddr);
 		sin = info->src_addr;
 		break;

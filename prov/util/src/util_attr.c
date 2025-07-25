@@ -40,6 +40,40 @@
 #define OFI_RMA_DIRECTION_CAPS	(FI_READ | FI_WRITE | \
 				 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
+static inline bool is_sockaddr(uint32_t format)
+{
+	return format == FI_SOCKADDR || format == FI_SOCKADDR_IP ||
+	       format == FI_SOCKADDR_IN || format == FI_SOCKADDR_IN6 ||
+	       format == FI_SOCKADDR_IB;
+}
+
+static inline bool is_ipaddr(uint32_t format)
+{
+	return format == FI_SOCKADDR || format == FI_SOCKADDR_IP ||
+	       format == FI_SOCKADDR_IN || format == FI_SOCKADDR_IN6;
+}
+
+static inline bool is_ipv4addr(uint32_t format)
+{
+	return format == FI_SOCKADDR || format == FI_SOCKADDR_IP ||
+	       format == FI_SOCKADDR_IN;
+}
+
+static inline bool is_ipv6addr(uint32_t format)
+{
+	return format == FI_SOCKADDR || format == FI_SOCKADDR_IP ||
+	       format == FI_SOCKADDR_IN6;
+}
+
+static inline bool is_ibaddr(uint32_t format)
+{
+	return format == FI_SOCKADDR || format == FI_SOCKADDR_IB;
+}
+
+/*
+ * Used for filtering provider instances based on the address format. Expect
+ * exact match for formats that are not FI_SOCKADDR or FI_SOCKADDR_IP.
+ */
 int ofi_match_addr_format(uint32_t if_format, uint32_t user_format)
 {
 	if (user_format == FI_FORMAT_UNSPEC || if_format == FI_FORMAT_UNSPEC)
@@ -47,8 +81,9 @@ int ofi_match_addr_format(uint32_t if_format, uint32_t user_format)
 
 	switch (user_format) {
 	case FI_SOCKADDR:
-		/* Provider supports INET and INET6 */
-		return if_format <= FI_SOCKADDR_IN6;
+		return is_sockaddr(if_format);
+	case FI_SOCKADDR_IP:
+		return is_ipaddr(if_format);
 	default:
 		return if_format == user_format;
 	}
@@ -61,17 +96,15 @@ int ofi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 
 	switch (prov_format) {
 	case FI_SOCKADDR:
-		/* Provider supports INET and INET6 */
-		return user_format <= FI_SOCKADDR_IN6;
+		return is_sockaddr(user_format);
+	case FI_SOCKADDR_IP:
+		return is_ipaddr(user_format);
 	case FI_SOCKADDR_IN:
-		/* Provider supports INET only */
-		return user_format <= FI_SOCKADDR_IN;
+		return is_ipv4addr(user_format);
 	case FI_SOCKADDR_IN6:
-		/* Provider supports INET6 only */
-		return user_format <= FI_SOCKADDR_IN6;
+		return is_ipv6addr(user_format);
 	case FI_SOCKADDR_IB:
-		/* Provider must support IB, INET, and INET6 */
-		return user_format <= FI_SOCKADDR_IB;
+		return is_ibaddr(user_format);
 	default:
 		return prov_format == user_format;
 	}

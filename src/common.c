@@ -354,6 +354,7 @@ uint16_t ofi_get_sa_family(const struct fi_info *info)
 	case FI_SOCKADDR_IB:
 		return AF_IB;
 	case FI_SOCKADDR:
+	case FI_SOCKADDR_IP:
 	case FI_FORMAT_UNSPEC:
 		if (info->src_addr)
 			return ((struct sockaddr *) info->src_addr)->sa_family;
@@ -381,6 +382,19 @@ const char *ofi_straddr(char *buf, size_t *len,
 
 	switch (addr_format) {
 	case FI_SOCKADDR:
+		sock_addr = addr;
+		switch (sock_addr->sa_family) {
+		case AF_INET:
+			goto sa_sin;
+		case AF_INET6:
+			goto sa_sin6;
+		case AF_IB:
+			goto sa_ib;
+		default:
+			return NULL;
+		}
+		break;
+	case FI_SOCKADDR_IP:
 		sock_addr = addr;
 		switch (sock_addr->sa_family) {
 		case AF_INET:
@@ -419,6 +433,7 @@ sa_sin6:
 				str, *((uint16_t *)addr + 8), *((uint32_t *)addr + 5));
 		break;
 	case FI_SOCKADDR_IB:
+sa_ib:
 		sib = addr;
 		memset(str, 0, sizeof(str));
 		if (!inet_ntop(AF_INET6, sib->sib_addr, str, INET6_ADDRSTRLEN))
@@ -990,6 +1005,7 @@ bool ofi_is_wildcard_listen_addr(const char *node, const char *service,
 
 	if (hints && hints->addr_format != FI_FORMAT_UNSPEC &&
 	    hints->addr_format != FI_SOCKADDR &&
+	    hints->addr_format != FI_SOCKADDR_IP &&
 	    hints->addr_format != FI_SOCKADDR_IN &&
 	    hints->addr_format != FI_SOCKADDR_IN6)
 		return false;
