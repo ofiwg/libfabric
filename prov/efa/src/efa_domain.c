@@ -736,12 +736,19 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 		     void **ops, void *context)
 {
 	int ret = FI_SUCCESS;
+	struct efa_domain *efa_domain;
 
 	if (strcmp(ops_name, FI_EFA_DOMAIN_OPS) == 0) {
 		*ops = &efa_ops_domain;
 		return ret;
 	}
 	if (strcmp(ops_name, FI_EFA_GDA_OPS) == 0) {
+		efa_domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
+		if (efa_domain->info_type != EFA_INFO_DIRECT) {
+			EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_GDA_OPS\n");
+			return -FI_EOPNOTSUPP;
+		}
+
 		*ops = &efa_ops_gda;
 		return ret;
 	}
