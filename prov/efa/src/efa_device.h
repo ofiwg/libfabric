@@ -41,6 +41,8 @@ bool efa_device_support_unsolicited_write_recv(void);
 
 bool efa_device_support_cq_with_ext_mem_dmabuf(void);
 
+bool efa_device_use_sub_cq(void);
+
 int efa_device_get_driver(struct efa_device *efa_device,
 			  char **efa_driver);
 

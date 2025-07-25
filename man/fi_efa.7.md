@@ -521,6 +521,11 @@ Setting this environment variable to 0 can disable this feature.
 When the number of internal rx pkts to post is lower than this threshold,
 the refill will be skipped.
 
+*FI_EFA_USE_DIRECT_CQ_OPS*
+
+: Use the direct CQ implementation that bypasses rdma-core on data path, when it's available.
+Setting this variable as 0 will disable this feature (Default: true).
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
