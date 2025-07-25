@@ -74,7 +74,7 @@
 #define BUFFER_SIZE 1024
 static char oob_buffer[BUFFER_SIZE];
 
-static int num_eps = 1;
+static size_t num_eps = 1;
 static bool bidir = false;
 static ssize_t xfer_size = 1;
 pthread_barrier_t barrier;

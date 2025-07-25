@@ -48,7 +48,7 @@ static struct fi_context2 *recv_ctx;
 static struct fi_context2 *send_ctx;
 static struct fid_av **avs;
 static fi_addr_t *remote_fiaddr;
-int num_eps = 3;
+static size_t num_eps = 3;
 char remote_raw_addr[FT_MAX_CTRL_MSG];
 
 void close_client(int i);
