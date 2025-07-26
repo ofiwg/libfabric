@@ -657,14 +657,22 @@ void test_rdm_cq_create_error_handling(struct efa_resource **state)
 	struct efa_domain *efa_domain = NULL;
 	struct verbs_context *vctx = NULL;
 	struct fi_cq_attr cq_attr = {0};
+	int ret, total_device_cnt, i;
 
-	ibv_device_list = ibv_get_device_list(&g_efa_selected_device_cnt);
+	ibv_device_list = ibv_get_device_list(&total_device_cnt);
 	if (ibv_device_list == NULL) {
 		skip();
 		return;
 	}
-	efa_device_construct_gid(&efa_device, ibv_device_list[0]);
-	efa_device_construct_data(&efa_device, ibv_device_list[0]);
+
+	for (i = 0; i < total_device_cnt; i++) {
+		ret = efa_device_construct_gid(&efa_device, ibv_device_list[i]);
+		if (ret)
+			continue;
+		ret = efa_device_construct_data(&efa_device, ibv_device_list[i]);
+		if (!ret)
+			break;
+	}
 
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);
@@ -687,6 +695,8 @@ void test_rdm_cq_create_error_handling(struct efa_resource **state)
 	assert_int_not_equal(fi_cq_open(resource->domain, &cq_attr, &resource->cq, NULL), 0);
 	/* set cq as NULL to avoid double free by fi_close in cleanup stage */
 	resource->cq = NULL;
+	ibv_close_device(efa_device.ibv_ctx);
+	ibv_free_device_list(ibv_device_list);
 }
 
 /**
