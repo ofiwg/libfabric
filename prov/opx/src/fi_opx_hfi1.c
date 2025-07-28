@@ -78,7 +78,7 @@
 #define FI_OPX_TID_MSG_MISALIGNED_THRESHOLD (15 * OPX_HFI1_TID_PAGESIZE)
 #endif
 
-#define OPX_GPU_IPC_MIN_THRESHOLD 2048
+#define OPX_GPU_IPC_MIN_THRESHOLD 16384
 /*
  * Return the NUMA node id where the process is currently running.
  */
@@ -2544,25 +2544,23 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	   This allows us to use generic cudaMemcpy for DtoH and DtoD */
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-P2P-DIRECT-COPY");
 	if (!is_hmem) {
-		ret = ofi_copy_from_hmem(payload->rendezvous.ipc.src_iface, payload->rendezvous.ipc.src_device_id,
-					 context->buf, device_ptr, xfer_len);
+		ret = ofi_copy_from_hmem(ipc_info->iface, ipc_info->device, context->buf, device_ptr, xfer_len);
 	} else {
-		ret = ofi_copy_to_hmem(payload->rendezvous.ipc.src_iface, payload->rendezvous.ipc.src_device_id,
-				       context->buf, device_ptr, xfer_len);
+		ret = ofi_copy_to_hmem(ipc_info->iface, ipc_info->device, context->buf, device_ptr, xfer_len);
 	}
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "FATAL ERROR, cudaMemcpy with IPC handle failed. Abort\n");
 		abort();
 	}
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-P2P-DIRECT-COPY");
-	if (event == NULL) {
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-DESTROY-HANDLE");
-		ofi_mr_cache_delete(opx_ep->domain->hmem_domain->ipc_cache, entry);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-DESTROY-HANDLE");
-		context->byte_counter = 0;
-		context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
-		slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_completed_ptr);
-	}
+
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-DESTROY-HANDLE");
+	ofi_mr_cache_delete(opx_ep->domain->hmem_domain->ipc_cache, entry);
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-DESTROY-HANDLE");
+
+	context->byte_counter = 0;
+	context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
+	slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_completed_ptr);
 
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work != NULL);
@@ -5049,6 +5047,12 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 			"hdr %p, payload %p, sbuf %p, sbuf+immediate_total %p, immediate_total %#lX, adj len %#lX\n",
 			hdr, payload, buf, ((char *) buf + immediate_total), immediate_total, (len - immediate_total));
 
+		/* We can optimize by disabling/enabling ipc at endpoint creation. We could
+		   check the FI_HMEM env to see if iface list includes things beyond system.
+		   We would then need to iterate over the list of all non-system ifaces and
+		   determine whether p2p is supported for each of those hmem ifaces
+		*/
+
 #ifdef OPX_HMEM
 		if (opx_ep->use_gpu_ipc == src_iface && src_iface != FI_HMEM_SYSTEM &&
 		    len >= OPX_GPU_IPC_MIN_THRESHOLD) {
@@ -5070,7 +5074,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 				(uint64_t) buf - (uint64_t) payload->rendezvous.ipc.ipc_info.base_addr;
 
 			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-SENDER-CREATE-HANDLE");
-			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr, len,
+			ret = ofi_hmem_get_handle(src_iface, (void *) buf, len,
 						  (void **) &payload->rendezvous.ipc.ipc_info.ipc_handle);
 			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-SENDER-CREATE-HANDLE");
 
@@ -5110,7 +5114,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 				user_context);
 			return FI_SUCCESS;
 		}
-	non_ipc:;
+	non_ipc:
 #endif
 		const uint16_t lrh_dws = __cpu_to_be16(
 			pbc_dws - 2 +
