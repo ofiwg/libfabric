@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2025\-07\-12" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2025\-07\-28" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -36,6 +36,8 @@ supports fewer capabilities and has more mode requirements for
 applications.
 But it provides a fast path to hand off application requests to the
 device.
+To use \f[V]efa-direct\f[R], set the name field in
+\f[V]fi_fabric_attr\f[R] to \f[V]efa-direct\f[R].
 More details and difference between the two fabrics will be presented
 below.
 .SH SUPPORTED FEATURES
@@ -309,7 +311,7 @@ failure (which indicates the failure reason).
 .PP
 To enable GPU Direct Async (GDA), which allows the GPU to interact
 directly with the NIC, request \f[V]FI_EFA_GDA_OPS\f[R] in the
-\f[V]name\f[R] parameter.
+\f[V]name\f[R] parameter with efa-direct fabirc.
 This returns \f[V]ops\f[R] as a pointer to the function table
 \f[V]fi_efa_ops_gda\f[R] defined as follows:
 .IP
