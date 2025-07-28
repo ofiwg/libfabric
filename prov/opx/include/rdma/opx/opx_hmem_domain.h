@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024-2024 Cornelis Networks.
+ * Copyright (C) 2024-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -59,6 +59,7 @@ struct opx_hmem_domain {
 	struct ofi_mr_cache  *hmem_cache;
 	struct fi_opx_domain *opx_domain;
 	struct dlist_entry    list_entry; /* linked to hmem_domain_list */
+	struct ofi_mr_cache  *ipc_cache;
 	uint32_t	      devreg_copy_from_threshold;
 	uint32_t	      devreg_copy_to_threshold;
 };

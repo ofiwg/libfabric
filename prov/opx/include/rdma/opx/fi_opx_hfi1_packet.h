@@ -1519,11 +1519,9 @@ union fi_opx_hfi1_packet_payload {
 		} noncontiguous;
 
 		struct {
-			uint64_t  ipc_handle[8];	     // Both AMD and NVIDIA handles are 64 bytes
-			uint64_t  src_device_id;	     // Needed on receiver for opening handle
-			uintptr_t origin_byte_counter_vaddr; // copy this value into cts packet that will be sent by
-							     // rank 1
-			enum fi_hmem_iface src_iface;	     // Needed on receiver for opening handle
+			uintptr_t	origin_byte_counter_vaddr; // copy into cts packet that will be sent
+			uint64_t	alignment_unused[2];	   // Align the IPC handle on a cacheline
+			struct ipc_info ipc_info;		   // Needed on receiver for opening handle
 		} ipc;
 	} rendezvous;
 
@@ -1553,24 +1551,26 @@ static_assert(sizeof(union fi_opx_hfi1_packet_payload) <= OPX_HFI1_MAX_PKT_SIZE,
 	      "sizeof(union fi_opx_hfi1_packet_payload) must be <= OPX_HFI1_MAX_PKT_SIZE!");
 static_assert(
 	offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_byte) == FI_OPX_CACHE_LINE_SIZE,
-	"struct fi_opx_hfi1_packet_payload.rendezvous.contiguous.immediate_byte should be aligned on cacheline 1!");
+	"union fi_opx_hfi1_packet_payload.rendezvous.contiguous.immediate_byte should be aligned on cacheline 1!");
 static_assert(
 	offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_block) == 2 * FI_OPX_CACHE_LINE_SIZE,
-	"struct fi_opx_hfi1_packet_payload.rendezvous.contiguous.immediate_block should be aligned on cacheline 2!");
+	"union fi_opx_hfi1_packet_payload.rendezvous.contiguous.immediate_block should be aligned on cacheline 2!");
 static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.iov) == 8,
-	      "struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.iov should be 8 bytes into cacheline 0!");
+	      "union fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.iov should be 8 bytes into cacheline 0!");
 static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.iov_ext) == FI_OPX_CACHE_LINE_SIZE,
-	      "struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.iov_ext should be aligned on cacheline 1!");
+	      "union fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.iov_ext should be aligned on cacheline 1!");
 static_assert(
 	OPX_HFI1_MAX_PKT_SIZE - sizeof(uintptr_t) - ((FI_OPX_MAX_HMEM_IOV) * sizeof(struct fi_opx_hmem_iov)) ==
 		FI_OPX_RZV_NONCONTIG_UNUSED,
-	"FI_OPX_RZV_NONCONTIG_UNUSED should be based on struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous!");
+	"FI_OPX_RZV_NONCONTIG_UNUSED should be based on union fi_opx_hfi1_packet_payload.rendezvous.noncontiguous!");
 #if FI_OPX_RZV_NONCONTIG_UNUSED
 static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.unused) +
 			      FI_OPX_RZV_NONCONTIG_UNUSED ==
 		      OPX_HFI1_MAX_PKT_SIZE,
-	      "struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.unused should end at packet MTU!");
+	      "union fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.unused should end at packet MTU!");
 #endif
+static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.ipc.ipc_info.ipc_handle) == FI_OPX_CACHE_LINE_SIZE,
+	      "union fi_opx_hfi1_packet_payload.rendezvous.ipc.ipc_info.ipc_handle should be aligned on cacheline 1!");
 static_assert(
 	(offsetof(union fi_opx_hfi1_packet_payload, tid_cts.tidpairs) +
 	 sizeof(((union fi_opx_hfi1_packet_payload *) 0)->tid_cts.tidpairs)) == OPX_HFI1_MAX_PKT_SIZE,

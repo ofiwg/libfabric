@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024-2024 by Cornelis Networks.
+ * Copyright (C) 2024-2025 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -142,6 +142,12 @@ int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked)
 	}
 
 	dlist_remove(&hmem_domain->list_entry);
+
+	if (hmem_domain->ipc_cache) {
+		ofi_ipc_cache_destroy(hmem_domain->ipc_cache);
+		hmem_domain->ipc_cache = NULL;
+	}
+
 	ofi_domain_close(&hmem_domain->util_domain);
 	free(hmem_domain);
 
@@ -174,8 +180,15 @@ int opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric, struct fi_info *in
 	dlist_insert_tail(&new_hmem_domain->list_entry, &(fi_opx_global.hmem_domain_list));
 
 	if (ret) {
-		free(new_hmem_domain);
+		opx_hmem_close_domain(new_hmem_domain, 0);
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "init util domain failed %d (%s)\n", ret, strerror(ret));
+		return ret;
+	}
+
+	ret = ofi_ipc_cache_open(&new_hmem_domain->ipc_cache, &new_hmem_domain->util_domain);
+	if (ret) {
+		opx_hmem_close_domain(new_hmem_domain, 0);
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error opening IPC Cache ret=%d (%s)\n", ret, strerror(ret));
 		return ret;
 	}
 
