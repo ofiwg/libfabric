@@ -15954,8 +15954,9 @@ libfabric data plane calls to the device directly without wire
 protocols. Compared to the `efa` fabric, the `efa-direct` fabric
 supports fewer capabilities and has more mode requirements for
 applications. But it provides a fast path to hand off application
-requests to the device. More details and difference between the two
-fabrics will be presented below.
+requests to the device. To use `efa-direct`, set the name field in
+`fi_fabric_attr` to `efa-direct`. More details and difference between
+the two fabrics will be presented below.
 
 # SUPPORTED FEATURES
 
@@ -16196,9 +16197,9 @@ struct fi_efa_mr_attr {
 (which indicates the failure reason).
 
 To enable GPU Direct Async (GDA), which allows the GPU to interact
-directly with the NIC, request `FI_EFA_GDA_OPS` in the `name` parameter.
-This returns `ops` as a pointer to the function table `fi_efa_ops_gda`
-defined as follows:
+directly with the NIC, request `FI_EFA_GDA_OPS` in the `name` parameter
+with efa-direct fabirc. This returns `ops` as a pointer to the function
+table `fi_efa_ops_gda` defined as follows:
 
 ``` c
 struct fi_efa_ops_gda {
