@@ -666,6 +666,13 @@ address_format[://[node][:[service][/[field3]...][?[key=value][&k2=v2]...]]]
 *FI_SOCKADDR_IN6*
 : Address is of type sockaddr_in6 (IPv6).
 
+*FI_SOCKADDR_IP*
+: Address is of type sockaddr_in (IPv4) or sockaddr_in6 (IPv6).  The specific
+  socket address format will be determined at run time by interfaces
+  examining the sa_family field.  This format is different from FI_SOCKADDR
+  in that the address can only be IPv4 or IPv6, not any other socket address
+  such as sockaddr_ib.
+
 # FLAGS
 
 The operation of the fi_getinfo call may be controlled through the use of

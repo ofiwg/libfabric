@@ -11917,6 +11917,13 @@ should be used to filter by provider if necessary.
 *FI_SOCKADDR_IN6*
 :   Address is of type sockaddr_in6 (IPv6).
 
+*FI_SOCKADDR_IP*
+:   Address is of type sockaddr_in (IPv4) or sockaddr_in6 (IPv6). The
+    specific socket address format will be determined at run time by
+    interfaces examining the sa_family field. This format is different
+    from FI_SOCKADDR in that the address can only be IPv4 or IPv6, not
+    any other socket address such as sockaddr_ib.
+
 # FLAGS
 
 The operation of the fi_getinfo call may be controlled through the use
@@ -19056,7 +19063,7 @@ Verbs provider requires applications to support the following modes:
 
 Supported addressing formats include \* MSG and RDM (internal -
 deprecated) EPs support: FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6,
-FI_SOCKADDR_IB \* DGRAM supports: FI_ADDR_IB_UD
+FI_SOCKADDR_IB, FI_SOCKADDR_IP \* DGRAM supports: FI_ADDR_IB_UD
 
 ### Progress
 
