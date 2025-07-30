@@ -43,11 +43,23 @@ def install_porta_fiducia() {
     '''
 }
 
+def kill_all_clusters(instance_type, region) {
+    def instance_type_without_period = sh(
+        script: "echo ${instance_type} | tr -d '.\\n'",
+        returnStdout: true
+    )
+    sh ". venv/bin/activate; ./PortaFiducia/scripts/delete_manual_cluster.py --cluster-name \'*${instance_type_without_period}*\' --region ${region} || true"
+}
+
 def run_test_orchestrator_once(run_name, build_tag, os, instance_type, instance_count, region, addl_args) {
     /*
      * Run PortaFiducia/tests/test_orchestrator.py with given command line arguments
      * param@ args: str, the command line arguments
      */
+    if (instance_type == "trn1.32xlarge") {
+        kill_all_clusters(instance_type, region)
+    }
+
     def cluster_name = get_cluster_name(build_tag, os, instance_type)
     def args = "--os ${os} --instance-type ${instance_type} --instance-count ${instance_count} --region ${region} --cluster-name ${cluster_name} ${addl_args} --junit-xml outputs/${cluster_name}.xml"
     sh ". venv/bin/activate; cd PortaFiducia/tests && ./test_orchestrator.py ${args}"
@@ -179,7 +191,7 @@ pipeline {
                     def addl_args_efa_libfabric_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${mpi_collective_tests} ${libfabric_and_onesided_tests}"
                     def addl_args_efa_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${mpi_collective_tests}"
                     def addl_args_efa_libfabric_and_onesided_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${libfabric_and_onesided_tests}"
-                    def addl_args_efa_direct = "${timeout} ${generic_pf} ${efa_provider} --test-list ${efa_direct_tests}" 
+                    def addl_args_efa_direct = "${timeout} ${generic_pf} ${efa_provider} --test-list ${efa_direct_tests}"
 
                     def shm_provider = "--test-libfabric-provider shm"
                     def addl_args_shm = "${timeout} ${generic_pf} ${shm_provider} --test-list ${mpi_collective_tests} ${libfabric_and_onesided_tests}"
