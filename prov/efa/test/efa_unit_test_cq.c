@@ -671,7 +671,7 @@ void test_rdm_cq_create_error_handling(struct efa_resource **state)
 		ret = efa_device_construct_gid(&efa_device, ibv_device_list[i]);
 		if (ret)
 			continue;
-		ret = efa_device_construct_data(&efa_device, ibv_device_list[i]);
+		ret = efa_device_construct_pd(&efa_device, ibv_device_list[i]);
 		if (!ret)
 			break;
 	}
