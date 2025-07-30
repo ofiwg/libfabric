@@ -618,6 +618,8 @@ struct cxip_environment cxip_env = {
 	.rdzv_aligned_sw_rget = 1,
 	.rnr_max_timeout_us = CXIP_RNR_TIMEOUT_US,
 	.disable_non_inject_msg_idc = 0,
+	.disable_non_inject_rma_idc = 0,
+	.disable_non_inject_amo_idc = 0,
 	.disable_host_register = 0,
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
 	.oflow_buf_min_posted = CXIP_OFLOW_BUF_MIN_POSTED,
@@ -739,6 +741,18 @@ static void cxip_env_init(void)
 			cxip_env.disable_non_inject_msg_idc);
 	fi_param_get_bool(&cxip_prov, "disable_non_inject_msg_idc",
 			  &cxip_env.disable_non_inject_msg_idc);
+
+	fi_param_define(&cxip_prov, "disable_non_inject_rma_idc", FI_PARAM_BOOL,
+			"Disables IDC for non-inject RMA (default: %d).",
+			cxip_env.disable_non_inject_rma_idc);
+	fi_param_get_bool(&cxip_prov, "disable_non_inject_rma_idc",
+			  &cxip_env.disable_non_inject_rma_idc);
+
+	fi_param_define(&cxip_prov, "disable_non_inject_amo_idc", FI_PARAM_BOOL,
+			"Disables IDC for non-inject atomics (default: %d).",
+			cxip_env.disable_non_inject_amo_idc);
+	fi_param_get_bool(&cxip_prov, "disable_non_inject_amo_idc",
+			  &cxip_env.disable_non_inject_amo_idc);
 
 	fi_param_define(&cxip_prov, "disable_host_register", FI_PARAM_BOOL,
 			"Disables host buffer GPU registration (default: %d).",

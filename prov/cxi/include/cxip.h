@@ -283,6 +283,8 @@ struct cxip_environment {
 	int rdzv_aligned_sw_rget;
 	int rnr_max_timeout_us;
 	int disable_non_inject_msg_idc;
+	int disable_non_inject_rma_idc;
+	int disable_non_inject_amo_idc;
 	int disable_host_register;
 	size_t oflow_buf_size;
 	size_t oflow_buf_min_posted;
