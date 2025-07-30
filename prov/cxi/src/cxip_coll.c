@@ -736,7 +736,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		*is_mcast = false;
 		break;
 	default:
-		CXIP_WARN("unexpected comm_key type: %d\n",
+		CXIP_WARN("Unexpected comm_key type: %d\n",
 			  av_set_obj->comm_key.keytype);
 		return -FI_EINVAL;
 	}
@@ -765,7 +765,7 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 	int ret;
 
 	if (!buffer) {
-		CXIP_INFO("no buffer\n");
+		CXIP_WARN("No buffer\n");
 		return -FI_EINVAL;
 	}
 
@@ -774,11 +774,15 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 	cmdq = ep_obj->coll.tx_cmdq;
 
 	ret = _gen_tx_dfa(reduction, av_set_idx, &dfa, &index_ext, &is_mcast);
-	if (ret)
+	if (ret) {
+		CXIP_INFO("Failed to generate TX destination fabric address "
+			  "(ret=%d, av_set_idx=%d, red_id=%d)\n",
+			  ret, av_set_idx, reduction->red_id);
 		return ret;
+	}
 
 	if (cxip_evtq_saturated(ep_obj->coll.tx_evtq)) {
-		CXIP_DBG("TX HW EQ saturated\n");
+		CXIP_INFO("TX HW EQ saturated\n");
 		return -FI_EAGAIN;
 	}
 
@@ -1033,6 +1037,7 @@ static void _coll_rx_progress(struct cxip_req *req,
 				pkt->hdr.cookie.mcast_id);
 	if (!mc_obj) {
 		TRACE_PKT("Bad coll lookup: %x\n", pkt->hdr.cookie.mcast_id);
+		CXIP_INFO("Bad coll lookup: %x\n", pkt->hdr.cookie.mcast_id);
 		return;
 	}
 	/* This is a valid reduction packet */
@@ -1175,7 +1180,7 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 	int ret;
 
 	if (buf->bufsiz && !buf->buffer) {
-		CXIP_INFO("no buffer\n");
+		CXIP_WARN("No buffer\n");
 		return -FI_EINVAL;
 	}
 
@@ -1189,6 +1194,9 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 	 */
 	req = cxip_evtq_req_alloc(coll_pte->ep_obj->coll.rx_evtq, 1, buf);
 	if (!req) {
+		CXIP_WARN("Failed to allocate event queue request for "
+			  "collective buffer (bufsiz=%zu)\n",
+			  buf->bufsiz);
 		ret = -FI_ENOMEM;
 		goto recv_unmap;
 	}
@@ -1299,13 +1307,13 @@ static int _coll_add_buffers(struct cxip_coll_pte *coll_pte, size_t size,
 	int ret, i;
 
 	if (count < CXIP_COLL_MIN_RX_BUFS) {
-		CXIP_INFO("Buffer count %ld < minimum (%d)\n",
+		CXIP_WARN("Buffer count %ld < minimum (%d)\n",
 			  count, CXIP_COLL_MIN_RX_BUFS);
 		return -FI_EINVAL;
 	}
 
 	if (size < CXIP_COLL_MIN_RX_SIZE) {
-		CXIP_INFO("Buffer size %ld < minimum (%d)\n",
+		CXIP_WARN("Buffer size %ld < minimum (%d)\n",
 			  size, CXIP_COLL_MIN_RX_SIZE);
 		return -FI_EINVAL;
 	}
@@ -1314,14 +1322,21 @@ static int _coll_add_buffers(struct cxip_coll_pte *coll_pte, size_t size,
 	for (i = 0; i < count; i++) {
 		buf = calloc(1, sizeof(*buf) + size);
 		if (!buf) {
+			CXIP_WARN("Failed to allocate collective buffer %d of "
+				  "%zu (size=%zu)\n",
+				  i, count, sizeof(*buf) + size);
 			ret = -FI_ENOMEM;
 			goto out;
 		}
 		ret = cxip_ep_obj_map(coll_pte->ep_obj, (void *)buf->buffer,
 				      size, CXI_MAP_READ | CXI_MAP_WRITE, 0,
 				      &buf->cxi_md);
-		if (ret)
+		if (ret) {
+			CXIP_WARN("Failed to map collective buffer %d of %zu "
+				  "(ret=%d, size=%zu)\n",
+				  i, count, ret, size);
 			goto del_msg;
+		}
 		buf->bufsiz = size;
 		dlist_insert_tail(&buf->buf_entry, &coll_pte->buf_list);
 
@@ -1928,13 +1943,13 @@ static void _post_coll_complete(struct cxip_coll_reduction *reduction)
 	    reduction->accum.red_rc == CXIP_COLL_RC_FLT_OVERFLOW) {
 		switch (reduction->accum.red_rc) {
 		case CXIP_COLL_RC_FLT_INEXACT:
-			CXIP_WARN("coll reduce FLT result was rounded\n");
+			CXIP_WARN("Coll reduce FLT result was rounded\n");
 			break;
 		case CXIP_COLL_RC_FLT_INVALID:
-			CXIP_WARN("coll reduce FLT invalid\n");
+			CXIP_WARN("Coll reduce FLT invalid\n");
 			break;
 		case CXIP_COLL_RC_FLT_OVERFLOW:
-			CXIP_WARN("coll reduce FLT overflow\n");
+			CXIP_WARN("Coll reduce FLT overflow\n");
 			break;
 		default:
 			break;
@@ -2566,18 +2581,18 @@ ssize_t _get_bytcnt(int cxi_opcode, enum fi_datatype datatype,
 	ssize_t bytcnt;
 
 	if (cxi_opcode < 0) {
-		CXIP_WARN("opcode not supported\n");
+		CXIP_WARN("Opcode not supported\n");
 		return -FI_EINVAL;
 	}
 
 	if (!buf || count <= 0L) {
-		CXIP_WARN("buffer required\n");
+		CXIP_WARN("Buffer required\n");
 		return -FI_EINVAL;
 	}
 
 	bytcnt = _get_cxi_data_bytcnt(cxi_opcode, datatype, count);
 	if (bytcnt < 0)
-		CXIP_WARN("opcode does not support datatype\n");
+		CXIP_WARN("Opcode does not support datatype\n");
 
 	return bytcnt;
 }
@@ -2590,8 +2605,12 @@ ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
 
 	/* barrier requires mc_obj */
 	ret = _get_mc_obj(ep, coll_addr, &mc_obj);
-	if (ret)
+	if (ret) {
+		CXIP_WARN("Failed to get multicast object for barrier "
+			  "(ret=%zd, coll_addr=%lu, ep=%p)\n",
+			  ret, coll_addr, ep);
 		return ret;
+	}
 
 	cxi_opcode = COLL_OPCODE_BARRIER;
 
@@ -2608,19 +2627,30 @@ ssize_t cxip_broadcast(struct fid_ep *ep, void *buf, size_t count,
 	ssize_t ret;
 
 	if (flags & (FI_MORE|FI_CXI_PRE_REDUCED)) {
-		CXIP_WARN("Illegal flags for broadcast\n");
+		CXIP_WARN("Unsupported flags for broadcast operation "
+			  "(flags=0x%lx, FI_MORE=%s, FI_CXI_PRE_REDUCED=%s)\n",
+			  flags, (flags & FI_MORE) ? "true" : "false",
+			  (flags & FI_CXI_PRE_REDUCED) ? "true" : "false");
 		return -FI_EINVAL;
 	}
 
 	cxi_opcode = COLL_OPCODE_BIT_OR;
 	bytcnt = _get_bytcnt(cxi_opcode, datatype, buf, count);
-	if (bytcnt < 0)
+	if (bytcnt < 0) {
+		CXIP_WARN("Invalid byte count for broadcast operation (ret=%d, "
+			  "count=%zu, datatype=%d, cxi_opcode=%d)\n",
+			  bytcnt, count, datatype, cxi_opcode);
 		return -FI_EINVAL;
+	}
 
 	/* broadcast requires mc_obj */
 	ret = _get_mc_obj(ep, coll_addr, &mc_obj);
-	if (ret)
+	if (ret) {
+		CXIP_WARN("Failed to get multicast object for broadcast "
+			  "(ret=%zd, coll_addr=%lu, ep=%p)\n",
+			  ret, coll_addr, ep);
 		return ret;
+	}
 
 	/* only root node contributes data, others contribute 0 */
 	if (root_addr != mc_obj->mynode_fiaddr)
@@ -2650,7 +2680,10 @@ ssize_t cxip_reduce(struct fid_ep *ep, const void *buf, size_t count,
 	/* FI_MORE requires result buffer, succeeds immediately */
 	if (flags & FI_MORE) {
 		if (!result) {
-			CXIP_WARN("result required with FI_MORE\n");
+			CXIP_WARN("Result buffer cannot be NULL with FI_MORE "
+				  "flag for reduce (buf=%p, count=%zu, "
+				  "root_addr=%lu)\n",
+				  buf, count, root_addr);
 			return -FI_EINVAL;
 		}
 		_cxip_coll_prereduce(cxi_opcode, buf, result, bytcnt, flags);
@@ -2659,12 +2692,19 @@ ssize_t cxip_reduce(struct fid_ep *ep, const void *buf, size_t count,
 
 	/* otherwise reduce requires mc_obj */
 	ret = _get_mc_obj(ep, coll_addr, &mc_obj);
-	if (ret)
+	if (ret) {
+		CXIP_WARN("Failed to get multicast object for reduce (ret=%zd, "
+			  "coll_addr=%lu, ep=%p)\n",
+			  ret, coll_addr, ep);
 		return ret;
+	}
 
 	/* root requires a result buffer */
 	if (!result && (mc_obj->mynode_fiaddr == root_addr)) {
-		CXIP_WARN("reduce root result required\n");
+		CXIP_WARN(
+			"Root node requires result buffer for reduce operation "
+			"(mynode_fiaddr=%lu, root_addr=%lu, coll_addr=%lu)\n",
+			mc_obj->mynode_fiaddr, root_addr, coll_addr);
 		return -FI_EINVAL;
 	}
 
@@ -2691,7 +2731,9 @@ ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count,
 
 	/* result required in all cases */
 	if (!result) {
-		CXIP_WARN("result required\n");
+		CXIP_WARN("Result buffer cannot be NULL for allreduce "
+			  "operation (buf=%p, count=%zu)\n",
+			  buf, count);
 		return -FI_EINVAL;
 	}
 
@@ -2703,8 +2745,12 @@ ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count,
 
 	/* otherwise reduce requires mc_obj */
 	ret = _get_mc_obj(ep, coll_addr, &mc_obj);
-	if (ret)
+	if (ret) {
+		CXIP_WARN("Failed to get multicast object for allreduce "
+			  "(ret=%zd, coll_addr=%lu, ep=%p)\n",
+			  ret, coll_addr, ep);
 		return ret;
+	}
 
 	return _cxip_coll_inject(mc_obj, cxi_opcode, buf, result, bytcnt,
 				 flags, context);
@@ -2859,6 +2905,9 @@ static int _acquire_pte(struct cxip_ep_obj *ep_obj, int pid_idx,
 	coll_pte = calloc(1, sizeof(*coll_pte));
 	if (!coll_pte) {
 		TRACE_JOIN("out of memory\n");
+		CXIP_WARN("Failed to allocate collective PTE structure "
+			  "(size=%zu, pid_idx=%d)\n",
+			  sizeof(*coll_pte), pid_idx);
 		return -FI_ENOMEM;
 	}
 
@@ -2875,6 +2924,9 @@ static int _acquire_pte(struct cxip_ep_obj *ep_obj, int pid_idx,
 			     coll_pte, &coll_pte->pte);
 	if (ret) {
 		TRACE_JOIN("cxip_pte_alloc failed=%d\n", ret);
+		CXIP_WARN("Failed to allocate PTE resource (ret=%d, "
+			  "pid_idx=%d, is_mcast=%s)\n",
+			  ret, pid_idx, is_mcast ? "true" : "false");
 		free(coll_pte);
 		return ret;
 	}
@@ -2883,6 +2935,9 @@ static int _acquire_pte(struct cxip_ep_obj *ep_obj, int pid_idx,
 	ret = _coll_pte_enable(coll_pte, CXIP_PTE_IGNORE_DROPS);
 	if (ret) {
 		TRACE_JOIN("_coll_pte_enable failed=%d\n", ret);
+		CXIP_WARN("Failed to enable collective PTE (ret=%d, "
+			  "pid_idx=%d, pte=%p)\n",
+			  ret, pid_idx, coll_pte->pte);
 		goto fail;
 	}
 
@@ -2892,6 +2947,10 @@ static int _acquire_pte(struct cxip_ep_obj *ep_obj, int pid_idx,
 				ep_obj->coll.buffer_count);
 	if (ret) {
 		TRACE_JOIN("_coll_add_buffers failed=%d\n", ret);
+		CXIP_WARN("Failed to add buffers to collective PTE (ret=%d, "
+			  "buffer_size=%zu, buffer_count=%ld, pid_idx=%d)\n",
+			  ret, ep_obj->coll.buffer_size,
+			  ep_obj->coll.buffer_count, pid_idx);
 		goto fail;
 	}
 
@@ -3000,6 +3059,8 @@ static int _fi_close_mc(struct fid *fid)
 			continue;
 		}
 		if (ret < 0 && ret != -FI_ENODATA) {
+			CXIP_INFO("%s: Curl progress failed, error=%d\n",
+				  __func__, ret);
 			TRACE_JOIN("%s: Curl progress failed, error=%d\n", __func__, ret);
 			break;
 		}
@@ -3075,8 +3136,11 @@ static int _initialize_mc(void *ptr)
 	TRACE_JOIN("%s entry\n", __func__);
 
 	mc_obj = calloc(1, sizeof(*mc_obj));
-	if (!mc_obj)
+	if (!mc_obj) {
+		CXIP_WARN("Failed to allocate multicast object (size=%zu)\n",
+			  sizeof(*mc_obj));
 		return -FI_ENOMEM;
+	}
 
 	TRACE_JOIN("acquiring PTE\n");
 	if (jstate->is_rank) {
@@ -3105,6 +3169,9 @@ static int _initialize_mc(void *ptr)
 	}
 	if (ret) {
 		TRACE_DEBUG("acquiring PTE failed %d\n", ret);
+		CXIP_WARN("Failed to acquire PTE (ret=%d, pid_idx=%d, "
+			  "is_mcast=%s)\n",
+			  ret, pid_idx, jstate->is_mcast ? "true" : "false");
 		free(mc_obj);
 		return ret;
 	}
@@ -3187,8 +3254,12 @@ static int _initialize_mc(void *ptr)
 			       sizeof(mc_obj->reduction),
 			       CXI_MAP_PIN  | CXI_MAP_READ | CXI_MAP_WRITE,
 			       NULL, &mc_obj->reduction_md);
-		if (ret)
+		if (ret) {
+			CXIP_WARN("Failed to map reduction buffer for DMA "
+				  "(ret=%d, size=%zu)\n",
+				  ret, sizeof(mc_obj->reduction));
 			goto fail;
+		}
 	}
 
 	/* define the traffic class */
@@ -3215,6 +3286,10 @@ static int _initialize_mc(void *ptr)
 			       mc_obj->tc, mc_obj->tc_type);
 	if (ret) {
 		TRACE_JOIN("%s: cxip_txq_cp_set() = %d\n", __func__, ret);
+		CXIP_WARN("Failed to set command queue control path (ret=%d, "
+			  "vni=%d, tc=%d, tc_type=%d)\n",
+			  ret, ep_obj->auth_key.vni, mc_obj->tc,
+			  mc_obj->tc_type);
 		goto fail;
 	}
 
@@ -3224,6 +3299,9 @@ static int _initialize_mc(void *ptr)
 			   mc_obj->mcast_addr, mc_obj);
 	if (ret < 0) {
 		TRACE_JOIN("%s: idm set failed %d\n", __func__, ret);
+		CXIP_WARN("Failed to index multicast object in mcast_map "
+			  "(ret=%d, mcast_addr=%d, mc_obj=%p)\n",
+			  ret, mc_obj->mcast_addr, mc_obj);
 		goto fail;
 	}
 	/* lock out reuse of this endpoint as hw_root for any multicast addr */
@@ -3318,12 +3396,22 @@ static void _curl_delete_mc_obj(struct cxip_coll_mc *mc_obj)
 		       mc_obj->mcast_addr);
 	if (ret < 0) {
 		TRACE_JOIN("Failed to construct CURL address\n");
+		CXIP_WARN("Failed to construct CURL delete URL (ret=%d, "
+			  "fm_url='%s', mcast_addr=%d)\n",
+			  ret,
+			  cxip_env.coll_fabric_mgr_url ?
+				  cxip_env.coll_fabric_mgr_url :
+				  "NULL",
+			  mc_obj->mcast_addr);
 		goto quit;
 	}
 	/* create the return pointer */
 	curl_usrptr = calloc(1, sizeof(*curl_usrptr));
 	if (!curl_usrptr) {
 		TRACE_JOIN("curl_usrptr calloc() error\n");
+		CXIP_WARN("Failed to allocate CURL user pointer for multicast "
+			  "delete (size=%zu, mcast_addr=%d)\n",
+			  sizeof(*curl_usrptr), mc_obj->mcast_addr);
 		ret = -FI_ENOMEM;
 		goto quit;
 	}
@@ -3334,6 +3422,9 @@ static void _curl_delete_mc_obj(struct cxip_coll_mc *mc_obj)
 	if (ret < 0) {
 		TRACE_JOIN("CURL delete mcast %d dispatch failed %d\n",
 			   mc_obj->mcast_addr, ret);
+		CXIP_WARN("CURL multicast delete dispatch failed (ret=%d, "
+			  "mcast_addr=%d, url='%s')\n",
+			  ret, mc_obj->mcast_addr, url ? url : "NULL");
 		goto quit;
 	}
 	TRACE_JOIN("CURL delete mcast %d dispatch successful\n",
@@ -3442,14 +3533,17 @@ static void _create_mcast_addr(struct cxip_join_state *jstate)
 	ret = 0;
 	if (!cxip_env.coll_job_id) {
 		TRACE_JOIN("missing job id\n");
+		CXIP_WARN("Missing collective job ID\n");
 		ret = -FI_EINVAL;
 	}
 	if (!cxip_env.coll_fabric_mgr_url) {
 		TRACE_JOIN("missing FM url\n");
+		CXIP_WARN("Missing fabric manager URL\n");
 		ret = -FI_EINVAL;
 	}
 	if (!cxip_env.coll_mcast_token) {
 		TRACE_JOIN("missing FM token\n");
+		CXIP_WARN("Missing fabric manager authentication token\n");
 		ret = -FI_EINVAL;
 	}
 	if (ret < 0)
@@ -3461,6 +3555,7 @@ static void _create_mcast_addr(struct cxip_join_state *jstate)
 		ret = asprintf(&url, "%s", cxip_env.coll_fabric_mgr_url);
 	if (ret < 0) {
 		TRACE_JOIN("failed to construct CURL address\n");
+		CXIP_WARN("Failed to construct CURL address (ret=%d)\n", ret);
 		ret = -FI_ENOMEM;
 		goto quit;
 	}
@@ -3471,6 +3566,7 @@ static void _create_mcast_addr(struct cxip_join_state *jstate)
 		ret = asprintf(&tok, "%s", cxip_env.coll_mcast_token);
 	if (ret < 0) {
 		TRACE_JOIN("failed to construct CURL token\n");
+		CXIP_WARN("Failed to construct CURL token (ret=%d)\n", ret);
 		ret = -FI_ENOMEM;
 		goto quit;
 	}
@@ -3480,6 +3576,8 @@ static void _create_mcast_addr(struct cxip_join_state *jstate)
 	p = mac = malloc(10*jstate->av_set_obj->fi_addr_cnt + 1);
 	if (!mac) {
 		TRACE_JOIN("failed to allocate mac list\n");
+		CXIP_WARN("Failed to allocate MAC list for %ld addresses\n",
+			  jstate->av_set_obj->fi_addr_cnt);
 		ret = -FI_ENOMEM;
 		goto quit;
 	}
@@ -3490,6 +3588,9 @@ static void _create_mcast_addr(struct cxip_join_state *jstate)
 		if (ret < 0) {
 			TRACE_JOIN("failed to find address[%d]=%ld\n",
 				   i, jstate->av_set_obj->fi_addr_ary[i]);
+			CXIP_WARN("Failed to lookup address[%d]=%ld in AV set "
+				  "(ret=%d)\n",
+				  i, jstate->av_set_obj->fi_addr_ary[i], ret);
 			goto quit;
 		}
 		p += sprintf(p, "'%01X:%02X:%02X',",
@@ -3511,6 +3612,13 @@ static void _create_mcast_addr(struct cxip_join_state *jstate)
 			cxip_env.coll_job_step_id);
 	if (ret < 0) {
 		TRACE_JOIN("failed to create jsonreq= %d\n", ret);
+		CXIP_WARN("Failed to create JSON request string (ret=%d, "
+			  "vni=%d, job_id='%s', step_id='%s')\n",
+			  ret, jstate->ep_obj->auth_key.vni,
+			  cxip_env.coll_job_id ? cxip_env.coll_job_id : "NULL",
+			  cxip_env.coll_job_step_id ?
+				  cxip_env.coll_job_step_id :
+				  "NULL");
 		ret = -FI_ENOMEM;
 		goto quit;
 	}
@@ -3520,6 +3628,9 @@ static void _create_mcast_addr(struct cxip_join_state *jstate)
 	curl_usrptr = calloc(1, sizeof(*curl_usrptr));
 	if (!curl_usrptr) {
 		TRACE_JOIN("failed to calloc() curl_usrptr\n");
+		CXIP_WARN("Failed to allocate CURL user pointer structure "
+			  "(size=%zu)\n",
+			  sizeof(*curl_usrptr));
 		ret = -FI_ENOMEM;
 		goto quit;
 	}
@@ -3529,6 +3640,9 @@ static void _create_mcast_addr(struct cxip_join_state *jstate)
 				_cxip_create_mcast_cb, curl_usrptr);
 	if (ret < 0) {
 		TRACE_JOIN("CURL create mcast dispatch failed %d\n", ret);
+		CXIP_WARN("CURL multicast creation dispatch failed (ret=%d, "
+			  "url='%s')\n",
+			  ret, url ? url : "NULL");
 		goto quit;
 	}
 	TRACE_JOIN("CURL create mcast dispatch successful\n");
@@ -3879,6 +3993,10 @@ static void _finish_bcast(void *ptr)
 	TRACE_JOIN("check hwroot\n");
 	if (jstate->bcast_data.hwroot_idx >=
 	    jstate->av_set_obj->fi_addr_cnt) {
+		CXIP_INFO("Invalid hwroot index: hwroot_idx=%d, "
+			  "max_addr_cnt=%zu\n",
+			  jstate->bcast_data.hwroot_idx,
+			  jstate->av_set_obj->fi_addr_cnt);
 		TRACE_JOIN("%s: reject invalid hwroot_idx\n", __func__);
 		jstate->prov_errno = FI_CXI_ERRNO_JOIN_HWROOT_INVALID;
 		ret = -FI_EINVAL;
@@ -3888,6 +4006,9 @@ static void _finish_bcast(void *ptr)
 	/* check for hwroot overlap on this node */
 	is_hwroot = (jstate->bcast_data.hwroot_idx == jstate->mynode_idx);
 	if (is_hwroot && jstate->ep_obj->coll.is_hwroot) {
+		CXIP_INFO("Hardware root already in use on this node: "
+			  "hwroot_idx=%d, mynode_idx=%d\n",
+			  jstate->bcast_data.hwroot_idx, jstate->mynode_idx);
 		TRACE_JOIN("%s: reject join, hwroot in use\n", __func__);
 		jstate->prov_errno = FI_CXI_ERRNO_JOIN_HWROOT_INUSE;
 		ret = -FI_EINVAL;
@@ -3899,6 +4020,8 @@ static void _finish_bcast(void *ptr)
 	if (!jstate->is_rank &&
 	    ofi_idm_lookup(&jstate->ep_obj->coll.mcast_map,
 			   jstate->bcast_data.mcast_addr)) {
+		CXIP_INFO("Multicast address already in use: mcast_addr=%d\n",
+			  jstate->bcast_data.mcast_addr);
 		TRACE_JOIN("%s: reject join, mcast %d in use\n", __func__,
 			   jstate->bcast_data.mcast_addr);
 		jstate->prov_errno = FI_CXI_ERRNO_JOIN_MCAST_INUSE;
@@ -4107,11 +4230,18 @@ static unsigned int _caddr_to_idx(struct cxip_av_set *av_set_obj,
 		ret = fi_av_lookup(&av_set_obj->cxi_av->av_fid,
 				   av_set_obj->fi_addr_ary[i],
 				   &addr, &size);
-		if (ret)
+		if (ret) {
+			CXIP_INFO("AV lookup failed during address search: "
+				  "index=%d, fi_addr=%lu, ret=%d\n",
+				  i, av_set_obj->fi_addr_ary[i], ret);
 			return ret;
+		}
 		if (CXIP_ADDR_EQUAL(addr, caddr))
 			return i;
 	}
+	CXIP_INFO("Address not found in AV set: target_nic=0x%x, "
+		  "target_pid=0x%x, searched_count=%ld\n",
+		  caddr.nic, caddr.pid, av_set_obj->fi_addr_cnt);
 	return -FI_EADDRNOTAVAIL;
 }
 
@@ -4201,6 +4331,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		TRACE_JOIN("%s: CXI Collectives are supported\n", __func__);
 	}
 	else {
+		CXIP_WARN("CXI Collectives are not supported on this system\n");
 		TRACE_JOIN("%s: CXI Collectives are not supported\n", __func__);
 		return -FI_EOPNOTSUPP;
 	}
@@ -4209,8 +4340,12 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 
 	TRACE_JOIN("%s: entry\n", __func__);
 	/* Validate arguments */
-	if (!ep || !coll_av_set || !mc || coll_addr != FI_ADDR_NOTAVAIL)
+	if (!ep || !coll_av_set || !mc || coll_addr != FI_ADDR_NOTAVAIL) {
+		CXIP_WARN("Invalid parameters: ep=%p, coll_av_set=%p, mc=%p, "
+			  "coll_addr=%lu\n",
+			  ep, coll_av_set, mc, coll_addr);
 		return -FI_EINVAL;
+	}
 	/* flags are ignored, per util_coll.c example code
 	 * Only FI_SCATTER is documented, and applies to fi_query_collective().
 	 */
@@ -4226,6 +4361,8 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	/* join must be serialized through to completion */
 	ofi_genlock_lock(&ep_obj->lock);
 	if (ep_obj->coll.join_busy) {
+		CXIP_INFO("Collective join already in progress for this "
+			  "endpoint\n");
 		ofi_genlock_unlock(&ep_obj->lock);
 		return -FI_EAGAIN;
 	}
@@ -4237,6 +4374,8 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	/* allocate state to pass arguments through callbacks */
 	jstate = calloc(1, sizeof(*jstate));
 	if (!jstate) {
+		CXIP_WARN("Failed to allocate join state: size=%zu\n",
+			  sizeof(*jstate));
 		ret = -FI_ENOMEM;
 		goto fail;
 	}
@@ -4258,7 +4397,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	case COMM_KEY_NONE:
 		/* Production case, acquire multicast from FM */
 		if (is_netsim(ep_obj)) {
-			CXIP_INFO("NETSIM COMM_KEY_NONE not supported\n");
+			CXIP_WARN("NETSIM COMM_KEY_NONE not supported\n");
 			goto fail;
 		}
 		TRACE_JOIN("%s: MULTICAST CURL model setup\n", __func__);
@@ -4279,7 +4418,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	case COMM_KEY_MULTICAST:
 		/* Real network test with predefined multicast address */
 		if (is_netsim(ep_obj)) {
-			CXIP_INFO("NETSIM COMM_KEY_MULTICAST not supported\n");
+			CXIP_WARN("NETSIM COMM_KEY_MULTICAST not supported\n");
 			goto fail;
 		}
 		TRACE_JOIN("%s: MULTICAST prefab model setup\n", __func__);
@@ -4302,7 +4441,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	case COMM_KEY_UNICAST:
 		/* Real network test without multicast address */
 		if (is_netsim(ep_obj)) {
-			CXIP_INFO("NETSIM COMM_KEY_UNICAST not supported\n");
+			CXIP_WARN("NETSIM COMM_KEY_UNICAST not supported\n");
 			goto fail;
 		}
 		TRACE_JOIN("%s: UNICAST model setup\n", __func__);
@@ -4338,7 +4477,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		link_zb = true;
 		break;
 	default:
-		CXIP_INFO("unexpected comm_key keytype: %d\n",
+		CXIP_WARN("Unexpected comm_key keytype: %d\n",
 			  av_set_obj->comm_key.keytype);
 		goto fail;
 	}
@@ -4346,6 +4485,8 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	/* Reject if a rank tries to join a group it doesn't belong to */
 	ret = jstate->mynode_idx;
 	if (ret < 0) {
+		CXIP_WARN("Node not found in collective group: mynode_idx=%d\n",
+			  ret);
 		TRACE_JOIN("May not participate\n");
 		goto fail;
 	}
@@ -4357,8 +4498,13 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 				jstate->av_set_obj->fi_addr_ary,
 				jstate->simrank, &zb);
 	TRACE_JOIN("%s: returned=%d\n", __func__, ret);
-	if (ret)
+	if (ret) {
+		CXIP_WARN("ZB collective allocation failed: addr_cnt=%zu, "
+			  "simrank=%d, ret=%d\n",
+			  jstate->av_set_obj->fi_addr_cnt, jstate->simrank,
+			  ret);
 		goto fail;
+	}
 
 	/* Install the callback function for zb collectives */
 	TRACE_JOIN("%s: cxip_zbcoll_set_user_cb\n", __func__);
@@ -4375,6 +4521,9 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		if (!zb0_count++) {
 			/* first must be rank 0 */
 			if (rank != 0) {
+				CXIP_WARN("First COMM_KEY_RANK join must be "
+					  "rank 0: actual_rank=%d\n",
+					  rank);
 				TRACE_JOIN("%s: rank %d not 0\n", __func__, rank);
 				ret = -FI_EINVAL;
 				goto fail;
@@ -4385,6 +4534,9 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		/* link this zb to zb0 */
 		ret = cxip_zbcoll_simlink(zb0, zb);
 		if (ret) {
+			CXIP_WARN("ZB collective simulation link failed: "
+				  "zb0=%p, zb=%p, ret=%d\n",
+				  zb0, zb, ret);
 			TRACE_JOIN("%s: return=%d\n", __func__, ret);
 			return ret;
 		}
@@ -4551,14 +4703,25 @@ int cxip_coll_enable(struct cxip_ep *ep)
 	}
 
 	/* Sanity checks */
-	if (ep_obj->coll.buffer_size == 0)
+	if (ep_obj->coll.buffer_size == 0) {
+		CXIP_WARN("Invalid configuration: buffer_size is 0\n");
 		return -FI_EINVAL;
-	if (ep_obj->coll.buffer_count == 0)
+	}
+	if (ep_obj->coll.buffer_count == 0) {
+		CXIP_WARN("Invalid configuration: buffer_count is 0\n");
 		return -FI_EINVAL;
-	if (ep_obj->coll.min_multi_recv == 0)
+	}
+	if (ep_obj->coll.min_multi_recv == 0) {
+		CXIP_WARN("Invalid configuration: min_multi_recv is 0\n");
 		return -FI_EINVAL;
-	if (ep_obj->coll.min_multi_recv >= ep_obj->coll.buffer_size)
+	}
+	if (ep_obj->coll.min_multi_recv >= ep_obj->coll.buffer_size) {
+		CXIP_WARN("Invalid configuration: min_multi_recv(%zu) >= "
+			  "buffer_size(%zu)\n",
+			  ep_obj->coll.min_multi_recv,
+			  ep_obj->coll.buffer_size);
 		return -FI_EINVAL;
+	}
 
 	/* Bind all STD EP objects to the coll object */
 	ep_obj->coll.rx_cmdq = ep_obj->rxc->rx_cmdq;
