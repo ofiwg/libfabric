@@ -530,7 +530,7 @@ static bool cxip_rma_is_unrestricted(struct cxip_txc *txc, uint64_t key,
 }
 
 static bool cxip_rma_is_idc(struct cxip_txc *txc, uint64_t key, size_t len,
-			    bool write, bool triggered, bool unr)
+			    bool write, bool triggered, bool unr, uint64_t flags)
 {
 	size_t max_idc_size = unr ? CXIP_INJECT_SIZE : C_MAX_IDC_PAYLOAD_RES;
 
@@ -552,6 +552,10 @@ static bool cxip_rma_is_idc(struct cxip_txc *txc, uint64_t key, size_t len,
 	/* Triggered operations never can be issued with an IDC. */
 	if (triggered)
 		return false;
+
+	/* Don't issue non-inject operation as IDC if disabled by env */
+	if (!(flags & FI_INJECT) && cxip_env.disable_non_inject_rma_idc)
+	       return false;
 
 	return true;
 }
@@ -613,7 +617,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	}
 
 	unr = cxip_rma_is_unrestricted(txc, key, msg_order, write);
-	idc = cxip_rma_is_idc(txc, key, len, write, triggered, unr);
+	idc = cxip_rma_is_idc(txc, key, len, write, triggered, unr, flags);
 
 	/* Build target network address. */
 	ret = cxip_av_lookup_addr(txc->ep_obj->av, tgt_addr, &caddr);

@@ -1182,10 +1182,15 @@ err:
 	return ret;
 }
 
-static bool cxip_amo_is_idc(struct cxip_txc *txc, uint64_t key, bool triggered)
+static bool cxip_amo_is_idc(struct cxip_txc *txc, uint64_t key, bool triggered,
+			    uint64_t flags)
 {
 	/* Triggered AMOs can never be IDCs. */
 	if (triggered)
+		return false;
+
+	/* Don't issue non-inject operation as IDC if disabled by env */
+	if (!(flags & FI_INJECT) && cxip_env.disable_non_inject_amo_idc)
 		return false;
 
 	/* Only optimized MR can be used for IDCs. */
@@ -1290,7 +1295,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		return -FI_EKEYREJECTED;
 	}
 
-	idc = cxip_amo_is_idc(txc, key, triggered);
+	idc = cxip_amo_is_idc(txc, key, triggered, flags);
 
 	/* Convert FI to CXI codes, fail if operation not supported */
 	ret = _cxip_atomic_opcode(req_type, msg->datatype, msg->op,
