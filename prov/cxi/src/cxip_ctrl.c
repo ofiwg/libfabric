@@ -16,6 +16,7 @@
 
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define	TRACE(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_ZBCOLL, fmt, ##__VA_ARGS__)
 
 /*
  * cxip_ctrl_msg_cb() - Process control message target events.
@@ -50,7 +51,13 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		pid = CXI_MATCH_ID_PID(pid_bits, init);
 
 		/* Messages not handled by the protocol */
-		if (mb.ctrl_msg_type == CXIP_CTRL_MSG_ZB_DATA) {
+		if (mb.ctrl_msg_type == CXIP_CTRL_MSG_ZB_DATA_RDMA_LAC) {
+			TRACE("%s - ctrl msg is CXIP_CTRL_MSG_ZB_DATA_RDMA_LAC\n", __func__);
+			TRACE("%s - leaf rdma lac %016lx\n", __func__, data);
+			req->ep_obj->coll.rdma_get_lac_va_rx = data;
+			goto done;
+		}
+		else if (mb.ctrl_msg_type == CXIP_CTRL_MSG_ZB_DATA) {
 			ret = cxip_zbcoll_recv_cb(req->ep_obj, nic_addr, pid,
 						  mb.raw, data);
 			assert(ret == FI_SUCCESS);

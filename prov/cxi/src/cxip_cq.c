@@ -150,6 +150,8 @@ const char *cxip_strerror(int prov_errno)
 		return "coll join PTE setup failed";
 	case FI_CXI_ERRNO_JOIN_OTHER:
 		return "coll join unknown error";
+	case FI_CXI_ERRNO_JOIN_FAIL_RDMA:
+		return "coll rdma setup error";
 
 	/* CQ REDUCE error codes */
 	case FI_CXI_ERRNO_RED_FLT_OVERFLOW:
@@ -164,6 +166,10 @@ const char *cxip_strerror(int prov_errno)
 		return "coll reduce opcode mismatch";
 	case FI_CXI_ERRNO_RED_MC_FAILURE:
 		return "coll reduce multicast timeout";
+	case FI_CXI_COLL_RC_RDMA_FAILURE:
+		return "coll leaf rdma read failure";
+	case FI_CXI_COLL_RC_RDMA_DATA_FAILURE:
+		return "coll leaf rdma read unexpected packet failure";
 
 	/* Unknown error */
 	default:

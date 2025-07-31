@@ -4434,6 +4434,15 @@ int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event)
 
 	case C_EVENT_GET:
 		mb.raw = event->tgt_long.match_bits;
+		if (mb.coll_get) {
+			if (event_rc != C_RC_OK)
+				CXIP_DBG("%s: Collectives rdma get had a failure\n", __func__);
+			else
+				CXIP_DBG("%s: Collectives rdma get was ok\n", __func__);
+
+			return FI_SUCCESS;
+		}
+
 		rdzv_id = (mb.rdzv_id_hi << CXIP_RDZV_ID_CMD_WIDTH) |
 			  mb.rdzv_id_lo;
 		get_req = cxip_rdzv_id_lookup(txc, rdzv_id);
