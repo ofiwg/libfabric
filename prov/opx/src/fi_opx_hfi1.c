@@ -1250,7 +1250,7 @@ ssize_t fi_opx_hfi1_tx_connect(struct fi_opx_ep *opx_ep, fi_addr_t peer)
 	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
 		const union fi_opx_addr taddr = {.fi = peer};
 
-		if (opx_lid_is_shm(taddr.lid)) {
+		if (opx_lid_is_shm(addr.lid)) {
 			char		  buffer[128];
 			union fi_opx_addr addr;
 			addr.raw64b		 = (uint64_t) peer;
@@ -2340,7 +2340,7 @@ void fi_opx_hfi1_rx_rzv_rts_etrunc(struct fi_opx_ep *opx_ep, const union opx_hfi
 	}
 
 	if (is_shm) {
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_shm;
 		} else {
 			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_shm_16B;
@@ -2439,7 +2439,7 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 
 	if (is_shm) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_shm %u\n", is_shm);
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_shm;
 		} else {
 			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_shm_16B;
@@ -2988,8 +2988,8 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	}
 	target_context->len = target_context->byte_counter = rbuf_offset;
 
-	if (is_intranode) {
-		params->work_elem.work_fn   = opx_hfi1_rx_rma_rts_send_cts_intranode;
+	if (is_shm) {
+		params->work_elem.work_fn   = opx_hfi1_rx_rma_rts_send_cts_shm;
 		params->work_elem.work_type = OPX_WORK_TYPE_SHM;
 		params->target_hfi_unit	    = fi_opx_hfi1_get_lid_local_unit(params->slid);
 	} else {
@@ -3002,9 +3002,9 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	params->work_elem.complete	    = false;
 
 	params->origin_rx	= FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
-	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, params->origin_rx);
+	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_shm, params->origin_rx);
 	params->reliability	= reliability;
-	params->is_intranode	= is_intranode;
+	params->is_shm		= is_shm;
 	params->opcode		= FI_OPX_HFI_DPUT_OPCODE_PUT_CQ;
 	params->dt		= hdr->rma_rts.dt;
 	params->op		= hdr->rma_rts.op;
@@ -3016,8 +3016,7 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	params->rma_req->hmem_iface  = dst_iface;
 	params->rma_req->hmem_handle = dst_handle;
 
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_intranode=%u niov=%lu opcode=%u\n", is_intranode, niov,
-	       params->opcode);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_shm=%u niov=%lu opcode=%u\n", is_shm, niov, params->opcode);
 
 	int rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {
@@ -5725,6 +5724,8 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				 7 +			       /* kdeth */
 				 (payload_blocks_total << 4) + /* includes last kdeth + metadata + immediate data */
 				 ((icrc_end_block | icrc_fragment_block) << 1); /* 1 QW of any added tail block */
+
+	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 
 	if (is_shm) {
 		FI_DBG_TRACE(

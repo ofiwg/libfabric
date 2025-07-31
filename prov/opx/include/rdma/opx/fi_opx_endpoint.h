@@ -1424,7 +1424,13 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 		fi_opx_handle_recv_rts_truncation(rx, context, xfer_len, ofi_data, origin_tag, opcode, recv_len,
 						  recv_buf);
 
-		// clear the send-side rendezvous state
+		context->len	      = xfer_len;
+		context->data	      = ofi_data;
+		context->tag	      = origin_tag;
+		context->next	      = NULL;
+		context->byte_counter = 0;
+		context->flags	      = FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
+				 FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
 		const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_shm, origin_rx);
 
 		assert(payload != NULL);

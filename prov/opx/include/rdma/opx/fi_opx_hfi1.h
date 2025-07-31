@@ -767,7 +767,7 @@ bool opx_lid_is_shm(opx_lid_t lid)
 }
 
 __OPX_FORCE_INLINE__
-int fi_opx_hfi1_get_lid_local_unit(opx_lid_t lid)
+bool opx_lid_is_shm(opx_lid_t lid)
 {
 	return ((fi_opx_global.hfi_local_info.lid == lid) ? fi_opx_global.hfi_local_info.hfi_unit :
 							    fi_opx_hfi1_get_lid_local(lid)->hfi_unit);

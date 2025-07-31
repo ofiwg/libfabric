@@ -494,7 +494,7 @@ struct opx_hfi1_rma_rts_params {
 		uint16_t origin_rx;
 		uint16_t dest_rx;
 	};
-	bool	is_intranode;
+	bool	is_shm;
 	uint8_t opcode;
 	uint8_t dt;
 	uint8_t op;
@@ -563,19 +563,6 @@ struct fi_opx_hfi1_rx_readv_params {
 	uint64_t			  pbc_dlid;
 	enum ofi_reliability_kind	  reliability;
 	bool				  is_shm;
-} __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
-
-struct opx_hfisvc_recv_rts_params {
-	struct fi_opx_work_elem work_elem;
-	struct fi_opx_ep       *opx_ep;
-	struct opx_context     *context;
-	void		       *recv_buf;
-	uint32_t		niov;
-	uint32_t		cur_iov;
-	uint32_t		sbuf_client_key;
-	uint32_t		sbuf_lid;
-
-	union opx_hfisvc_iov iovs[OPX_MAX_HFISVC_IOVS];
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
 union fi_opx_hfi1_deferred_work {
@@ -648,9 +635,9 @@ uint64_t fi_opx_hfi1_tx_is_shm(struct fi_opx_ep *opx_ep, const union fi_opx_addr
 {
 	/* If (exclusively FI_LOCAL_COMM) OR (FI_LOCAL_COMM is on AND
 	   the destination lid selected SHM) */
-	return (((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) ||
-		(((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM)) &&
-		 (opx_lid_is_shm(addr.lid))));
+	return ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) ||
+	       (((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM)) &&
+		(opx_lid_is_shm(addr.lid)));
 }
 
 __OPX_FORCE_INLINE__

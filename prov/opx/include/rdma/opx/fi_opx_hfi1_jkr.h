@@ -57,7 +57,7 @@
 
 /* Jackal River has 2+2,
      2 physical ports and 2 loopback ports.
-   The loopback port is the PBC egress port for sr-iov
+   The loopback port is the PBC egress port for sriov
    which will be used to loopback to the same lid (self)
    when not using shm
 

@@ -240,7 +240,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->u32_extended_rx = u32_extended_rx;
 		params->reliability	= reliability;
 		params->dest_rx		= opx_dst_addr.hfi1_subctxt_rx;
-		params->is_intranode	= is_intranode;
+		params->is_shm		= is_shm;
 		params->opcode		= FI_OPX_HFI_BTH_OPCODE_RMA_RTS;
 		params->dt		= dt == FI_VOID ? FI_VOID - 1 : dt;
 		params->op		= op == FI_NOOP ? FI_NOOP - 1 : op;

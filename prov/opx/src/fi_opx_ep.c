@@ -3204,8 +3204,8 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 					opx_ep_complete_receive_operation(
 						ep, &uepkt->hdr, (union fi_opx_hfi1_packet_payload *) &uepkt->payload,
 						uepkt->hdr.match.ofi_tag, context, uepkt->hdr.bth.opcode,
-						OPX_MULTI_RECV_TRUE, is_intranode, OPX_HMEM_FALSE, lock_required,
-						reliability, hfi1_type);
+						OPX_MULTI_RECV_TRUE, is_shm, OPX_HMEM_FALSE, lock_required, reliability,
+						hfi1_type);
 
 					/* remove this item from the ue list and prepend
 					 * the (now) completed uepkt to the ue free list. */
@@ -3302,11 +3302,11 @@ void fi_opx_ep_rx_reliability_process_packet(struct fid_ep *ep, const union opx_
 	if (OFI_LIKELY(opcode & FI_OPX_HFI_BTH_OPCODE_TAG_BIT)) {
 		fi_opx_ep_rx_process_header(ep, hdr, (const union fi_opx_hfi1_packet_payload *const) payload,
 					    payload_bytes, FI_TAGGED, opcode, OPX_SHM_FALSE, FI_OPX_LOCK_NOT_REQUIRED,
-					    OFI_RELIABILITY_KIND_ONLOAD, OPX_SW_HFI1_TYPE, slid);
+					    OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_TYPE, slid);
 	} else {
 		fi_opx_ep_rx_process_header(ep, hdr, (const union fi_opx_hfi1_packet_payload *const) payload,
 					    payload_bytes, FI_MSG, opcode, OPX_SHM_FALSE, FI_OPX_LOCK_NOT_REQUIRED,
-					    OFI_RELIABILITY_KIND_ONLOAD, OPX_SW_HFI1_TYPE, slid);
+					    OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_TYPE, slid);
 	}
 }
 
