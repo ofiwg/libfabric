@@ -57,9 +57,9 @@ int fi_opx_check_rma(struct fi_opx_ep *opx_ep)
 void fi_opx_hit_zero(struct fi_opx_completion_counter *cc);
 
 int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work);
-int fi_opx_do_readv_internal_intranode(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_do_readv_internal_shm(union fi_opx_hfi1_deferred_work *work);
 int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work);
-int opx_hfi1_tx_rma_rts_intranode(union fi_opx_hfi1_deferred_work *work);
+int opx_hfi1_tx_rma_rts_shm(union fi_opx_hfi1_deferred_work *work);
 
 __OPX_FORCE_INLINE__
 void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *iov, const size_t niov,
@@ -108,9 +108,9 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->lrh_dws	 = (params->pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 		params->lrh_dlid = opx_target_addr.lid;
 	}
-	params->is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_target_addr, caps);
-	params->reliability  = reliability;
-	params->opcode	     = opcode;
+	params->is_shm	    = fi_opx_hfi1_tx_is_shm(opx_ep, opx_target_addr, caps);
+	params->reliability = reliability;
+	params->opcode	    = opcode;
 
 	assert(op == FI_NOOP || op < OFI_ATOMIC_OP_LAST);
 	assert(dt == FI_VOID || dt < OFI_DATATYPE_LAST);
@@ -135,17 +135,17 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	params->rma_request->hmem_device = iov->device;
 	params->rma_request->hmem_handle = hmem_handle[0];
 
-	if (params->is_intranode) {
-		params->work_elem.work_fn   = fi_opx_do_readv_internal_intranode;
+	if (params->is_shm) {
+		params->work_elem.work_fn   = fi_opx_do_readv_internal_shm;
 		params->work_elem.work_type = OPX_WORK_TYPE_SHM;
 	} else {
 		params->work_elem.work_fn   = fi_opx_do_readv_internal;
 		params->work_elem.work_type = OPX_WORK_TYPE_PIO;
 	}
 
-	FI_OPX_DEBUG_COUNTERS_INC_COND((iov->iface != FI_HMEM_SYSTEM) && params->is_intranode,
+	FI_OPX_DEBUG_COUNTERS_INC_COND((iov->iface != FI_HMEM_SYSTEM) && params->is_shm,
 				       opx_ep->debug_counters.hmem.rma_read_intranode);
-	FI_OPX_DEBUG_COUNTERS_INC_COND((iov->iface != FI_HMEM_SYSTEM) && !params->is_intranode,
+	FI_OPX_DEBUG_COUNTERS_INC_COND((iov->iface != FI_HMEM_SYSTEM) && !params->is_shm,
 				       opx_ep->debug_counters.hmem.rma_read_hfi);
 
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
@@ -153,7 +153,7 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	 * can support the larger values, in order to maintain consistency with other
 	 * deferred work operations, continue to use the u32_extended_rx field.
 	 */
-	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, params->dest_subctxt_rx);
+	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_shm, params->dest_subctxt_rx);
 
 	int rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {
@@ -186,8 +186,8 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	union fi_opx_hfi1_deferred_work *work =
 		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work != NULL);
-	const uint64_t is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_dst_addr, caps);
-	uint32_t u32_extended_rx    = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, opx_dst_addr.hfi1_subctxt_rx);
+	const uint64_t is_shm	       = fi_opx_hfi1_tx_is_shm(opx_ep, opx_dst_addr, caps);
+	uint32_t       u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_shm, opx_dst_addr.hfi1_subctxt_rx);
 
 	uint64_t lrh_dlid;
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
@@ -227,10 +227,10 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->dput_iov[0].sbuf	= iov[0].buf;
 		params->dput_iov[0].bytes	= iov[0].len;
 
-		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_intranode %lu, opcode=%u\n", is_intranode,
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_shm %lu, opcode=%u\n", is_shm,
 		       FI_OPX_HFI_BTH_OPCODE_RMA_RTS);
-		if (is_intranode) {
-			params->work_elem.work_fn   = opx_hfi1_tx_rma_rts_intranode;
+		if (is_shm) {
+			params->work_elem.work_fn   = opx_hfi1_tx_rma_rts_shm;
 			params->work_elem.work_type = OPX_WORK_TYPE_SHM;
 		} else {
 			params->work_elem.work_fn   = opx_hfi1_tx_rma_rts;
@@ -240,7 +240,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->u32_extended_rx = u32_extended_rx;
 		params->reliability	= reliability;
 		params->dest_rx		= opx_dst_addr.hfi1_subctxt_rx;
-		params->is_intranode	= is_intranode;
+		params->is_shm		= is_shm;
 		params->opcode		= FI_OPX_HFI_BTH_OPCODE_RMA_RTS;
 		params->dt		= dt == FI_VOID ? FI_VOID - 1 : dt;
 		params->op		= op == FI_NOOP ? FI_NOOP - 1 : op;
@@ -275,7 +275,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->iov[0].rbuf_device	    = 0;	      // TBD on remote node
 		params->dput_iov		    = &params->iov[0];
 		params->opcode			    = FI_OPX_HFI_DPUT_OPCODE_PUT;
-		params->is_intranode		    = is_intranode;
+		params->is_shm			    = is_shm;
 		params->origin_rx		    = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
 		params->u32_extended_rx		    = u32_extended_rx;		    // dest_rx, also used for bth_rx
 		params->reliability		    = reliability;
@@ -287,9 +287,8 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->target_hfi_unit		    = opx_dst_addr.hfi1_unit;
 
 		fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov->len, 0, 0, NULL, is_hmem, hfi1_type);
-		FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_intranode,
-					       opx_ep->debug_counters.hmem.rma_write_intranode);
-		FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !is_intranode, opx_ep->debug_counters.hmem.rma_write_hfi);
+		FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_shm, opx_ep->debug_counters.hmem.rma_write_intranode);
+		FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !is_shm, opx_ep->debug_counters.hmem.rma_write_hfi);
 	}
 
 	ssize_t rc = work->work_elem.work_fn(work);

@@ -753,7 +753,7 @@ struct opx_hfi_local_entry *fi_opx_hfi1_get_lid_local(opx_lid_t lid)
 {
 	int lid_index = opx_local_lid_index(lid);
 
-	// We should only ever be calling this function for lids that are intranode
+	// We should only ever be calling this function for lids that are shm
 	assert(lid_index != -1);
 
 	return &fi_opx_global.hfi_local_info.local_lid_entries[lid_index];
@@ -766,7 +766,7 @@ int fi_opx_hfi1_get_lid_local_unit(opx_lid_t lid)
 }
 
 __OPX_FORCE_INLINE__
-bool opx_lid_is_intranode(opx_lid_t lid)
+bool opx_lid_is_shm(opx_lid_t lid)
 {
 	return (fi_opx_global.hfi_local_info.lid == lid) || (opx_local_lid_index(lid) != -1);
 }

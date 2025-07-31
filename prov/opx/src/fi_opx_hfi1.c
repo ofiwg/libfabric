@@ -1167,7 +1167,7 @@ ssize_t fi_opx_hfi1_tx_connect(struct fi_opx_ep *opx_ep, fi_addr_t peer)
 	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
 		const union fi_opx_addr addr = {.fi = peer};
 
-		if (opx_lid_is_intranode(addr.lid)) {
+		if (opx_lid_is_shm(addr.lid)) {
 			char		  buffer[128];
 			union fi_opx_addr addr;
 			addr.raw64b		 = (uint64_t) peer;
@@ -1197,7 +1197,7 @@ ssize_t fi_opx_hfi1_tx_connect(struct fi_opx_ep *opx_ep, fi_addr_t peer)
 	return rc;
 }
 
-int opx_hfi1_rx_rzv_rts_send_cts_intranode(union fi_opx_hfi1_deferred_work *work)
+int opx_hfi1_rx_rzv_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_rzv_rts_params *params	  = &work->rx_rzv_rts;
 	struct fi_opx_ep		     *opx_ep	  = params->opx_ep;
@@ -1211,8 +1211,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_intranode(union fi_opx_hfi1_deferred_work *work
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy origin_subctxt_rx field.  Use u32_extended field.
 	 */
-	ssize_t rc =
-		fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
+	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
@@ -1227,7 +1226,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_intranode(union fi_opx_hfi1_deferred_work *work
 	}
 
 	/* Note that we do not set stl.hdr.lrh.pktlen here (usually lrh_dws << 32),
-	   because this is intranode and since it's a CTS packet, lrh.pktlen
+	   because this is shm and since it's a CTS packet, lrh.pktlen
 	   isn't used/needed */
 	hdr->qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid_9B;
 	hdr->qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_subctxt_rx;
@@ -1253,7 +1252,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_intranode(union fi_opx_hfi1_deferred_work *work
 	return FI_SUCCESS;
 }
 
-int opx_hfi1_rx_rzv_rts_send_cts_intranode_16B(union fi_opx_hfi1_deferred_work *work)
+int opx_hfi1_rx_rzv_rts_send_cts_shm_16B(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_rzv_rts_params *params	   = &work->rx_rzv_rts;
 	struct fi_opx_ep		     *opx_ep	   = params->opx_ep;
@@ -1267,8 +1266,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_intranode_16B(union fi_opx_hfi1_deferred_work *
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy origin_subctxt_rx field.  Use u32_extended field.
 	 */
-	ssize_t rc =
-		fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
+	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
@@ -1283,7 +1281,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_intranode_16B(union fi_opx_hfi1_deferred_work *
 	}
 
 	/* Note that we do not set stl.hdr.lrh.pktlen here (usually lrh_dws << 32),
-	   because this is intranode and since it's a CTS packet, lrh.pktlen
+	   because this is shm and since it's a CTS packet, lrh.pktlen
 	   isn't used/needed */
 	hdr->qw_16B[0] =
 		opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
@@ -1562,14 +1560,14 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 __OPX_FORCE_INLINE__
 int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_rx_rzv_rts_params *params,
 				     const uint64_t niov, const uint64_t immediate_data, const uint64_t immediate_tail,
-				     const uint64_t is_hmem, const uint64_t is_hmem_unified,
-				     const uint64_t is_intranode, const enum fi_hmem_iface iface, uint8_t opcode)
+				     const uint64_t is_hmem, const uint64_t is_hmem_unified, const uint64_t is_shm,
+				     const enum fi_hmem_iface iface, uint8_t opcode)
 {
-	if (is_intranode || !opx_ep->use_expected_tid_rzv || (niov != 1) ||
+	if (is_shm || !opx_ep->use_expected_tid_rzv || (niov != 1) ||
 	    (params->dput_iov[0].bytes < opx_ep->tx->tid_min_payload_bytes) ||
 	    (opcode != FI_OPX_HFI_DPUT_OPCODE_RZV && opcode != FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG) ||
 	    is_hmem_unified ||
-	    !fi_opx_hfi1_sdma_use_sdma(opx_ep, params->dput_iov[0].bytes, opcode, is_hmem, OPX_INTRANODE_FALSE)) {
+	    !fi_opx_hfi1_sdma_use_sdma(opx_ep, params->dput_iov[0].bytes, opcode, is_hmem, OPX_SHM_FALSE)) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.rts_tid_ineligible);
 		return 0;
 	}
@@ -1893,7 +1891,7 @@ int opx_hfi1_rx_rzv_rts_elided(struct fi_opx_ep *opx_ep, union fi_opx_hfi1_defer
 			       struct fi_opx_hfi1_rx_rzv_rts_params *params)
 {
 	assert(params->elided_head.bytes || params->elided_tail.bytes);
-	assert(!params->is_intranode); // We should never be doing this function for intranode
+	assert(!params->is_shm); // We should never be doing this function for shm
 
 	union fi_opx_hfi1_deferred_work	     *cts_work;
 	struct fi_opx_hfi1_rx_rzv_rts_params *cts_params;
@@ -1957,7 +1955,7 @@ int opx_hfi1_rx_rzv_rts_elided(struct fi_opx_ep *opx_ep, union fi_opx_hfi1_defer
 	return FI_SUCCESS;
 }
 
-int opx_hfi1_rx_rzv_rts_send_etrunc_intranode(union fi_opx_hfi1_deferred_work *work)
+int opx_hfi1_rx_rzv_rts_send_etrunc_shm(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
 
@@ -1971,8 +1969,8 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_intranode(union fi_opx_hfi1_deferred_work *w
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy origin_subctxt_rx field.  Use u32_extended field.
 	 */
-	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, params->u32_extended_rx,
-						   params->target_hfi_unit);
+	ssize_t rc =
+		fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->u32_extended_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
@@ -1987,7 +1985,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_intranode(union fi_opx_hfi1_deferred_work *w
 	}
 
 	/* Note that we do not set stl.hdr.lrh.pktlen here (usually lrh_dws << 32),
-	   because this is intranode and since it's a CTS packet, lrh.pktlen
+	   because this is shm and since it's a CTS packet, lrh.pktlen
 	   isn't used/needed */
 	tx_hdr->qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid_9B;
 	tx_hdr->qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx;
@@ -2004,7 +2002,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_intranode(union fi_opx_hfi1_deferred_work *w
 	return FI_SUCCESS;
 }
 
-int opx_hfi1_rx_rzv_rts_send_etrunc_intranode_16B(union fi_opx_hfi1_deferred_work *work)
+int opx_hfi1_rx_rzv_rts_send_etrunc_shm_16B(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_rzv_rts_params *params	   = &work->rx_rzv_rts;
 	struct fi_opx_ep		     *opx_ep	   = params->opx_ep;
@@ -2017,8 +2015,8 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_intranode_16B(union fi_opx_hfi1_deferred_wor
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy origin_subctxt_rx field.  Use u32_extended field.
 	 */
-	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, params->u32_extended_rx,
-						   params->target_hfi_unit);
+	ssize_t rc =
+		fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->u32_extended_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
@@ -2033,7 +2031,7 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_intranode_16B(union fi_opx_hfi1_deferred_wor
 	}
 
 	/* Note that we do not set stl.hdr.lrh.pktlen here (usually lrh_dws << 32),
-	   because this is intranode and since it's a CTS packet, lrh.pktlen
+	   because this is shm and since it's a CTS packet, lrh.pktlen
 	   isn't used/needed */
 	tx_hdr->qw_16B[0] =
 		opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
@@ -2215,9 +2213,9 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 }
 
 void fi_opx_hfi1_rx_rzv_rts_etrunc(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
-				   const uint16_t origin_rx, uintptr_t origin_byte_counter_vaddr,
-				   const unsigned is_intranode, const enum ofi_reliability_kind reliability,
-				   const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type)
+				   const uint16_t origin_rx, uintptr_t origin_byte_counter_vaddr, const unsigned is_shm,
+				   const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
+				   const enum opx_hfi1_type hfi1_type)
 {
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work != NULL);
@@ -2225,8 +2223,7 @@ void fi_opx_hfi1_rx_rzv_rts_etrunc(struct fi_opx_ep *opx_ep, const union opx_hfi
 	params->opx_ep				     = opx_ep;
 	params->work_elem.slist_entry.next	     = NULL;
 
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_intranode %u, opcode=%u\n", is_intranode,
-	       FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_shm %u, opcode=%u\n", is_shm, FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC);
 
 	opx_lid_t lid;
 	if (hfi1_type & OPX_HFI1_WFR) {
@@ -2252,11 +2249,11 @@ void fi_opx_hfi1_rx_rzv_rts_etrunc(struct fi_opx_ep *opx_ep, const union opx_hfi
 		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_CYR);
 	}
 
-	if (is_intranode) {
+	if (is_shm) {
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_intranode;
+			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_shm;
 		} else {
-			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_intranode_16B;
+			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_shm_16B;
 		}
 		params->work_elem.work_type = OPX_WORK_TYPE_SHM;
 		params->target_hfi_unit	    = fi_opx_hfi1_get_lid_local_unit(lid);
@@ -2273,7 +2270,7 @@ void fi_opx_hfi1_rx_rzv_rts_etrunc(struct fi_opx_ep *opx_ep, const union opx_hfi
 	params->origin_rx		  = origin_rx;
 	params->u32_extended_rx		  = u32_extended_rx;
 	params->origin_byte_counter_vaddr = origin_byte_counter_vaddr;
-	params->is_intranode		  = is_intranode;
+	params->is_shm			  = is_shm;
 	params->reliability		  = reliability;
 	params->opcode			  = FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC;
 
@@ -2295,7 +2292,7 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 			    uintptr_t origin_byte_counter_vaddr, struct opx_context *const target_context,
 			    const uintptr_t dst_vaddr, const enum fi_hmem_iface dst_iface, const uint64_t dst_device,
 			    const uint64_t immediate_data, const uint64_t immediate_end_bytes,
-			    const struct fi_opx_hmem_iov *src_iovs, uint8_t opcode, const unsigned is_intranode,
+			    const struct fi_opx_hmem_iov *src_iovs, uint8_t opcode, const unsigned is_shm,
 			    const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
 			    const enum opx_hfi1_type hfi1_type)
 {
@@ -2350,12 +2347,12 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_CYR);
 	}
 
-	if (is_intranode) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_intranode %u\n", is_intranode);
+	if (is_shm) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_shm %u\n", is_shm);
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_intranode;
+			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_shm;
 		} else {
-			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_intranode_16B;
+			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_shm_16B;
 		}
 		params->work_elem.work_type = OPX_WORK_TYPE_SHM;
 		params->target_hfi_unit	    = fi_opx_hfi1_get_lid_local_unit(lid);
@@ -2387,7 +2384,7 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 	params->rzv_comp->bytes_accumulated	 = 0UL;
 	params->rzv_comp->context		 = target_context;
 	params->dst_vaddr			 = dst_vaddr;
-	params->is_intranode			 = is_intranode;
+	params->is_shm				 = is_shm;
 	params->reliability			 = reliability;
 	params->tid_info.npairs			 = 0;
 	params->tid_info.offset			 = 0;
@@ -2398,7 +2395,7 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 
 	if (opx_hfi1_rx_rzv_rts_tid_eligible(opx_ep, params, niov, immediate_data, immediate_end_bytes, is_hmem,
 					     ((struct fi_opx_hmem_info *) target_context->hmem_info_qws)->is_unified,
-					     is_intranode, dst_iface, opcode)) {
+					     is_shm, dst_iface, opcode)) {
 		if (params->elided_head.bytes || params->elided_tail.bytes) {
 			opx_hfi1_rx_rzv_rts_elided(opx_ep, work, params);
 		}
@@ -2527,8 +2524,7 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy origin_subctxt_rx field.  Use u32_extended field.
 	 */
-	ssize_t rc =
-		fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
+	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
 	}
@@ -2628,7 +2624,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[OPX_WORK_TYPE_SHM]);
 }
 
-int opx_hfi1_rx_rma_rts_send_cts_intranode(union fi_opx_hfi1_deferred_work *work)
+int opx_hfi1_rx_rma_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 {
 	struct opx_hfi1_rma_rts_params *params	  = &work->rma_rts;
 	struct fi_opx_ep	       *opx_ep	  = params->opx_ep;
@@ -2643,8 +2639,8 @@ int opx_hfi1_rx_rma_rts_send_cts_intranode(union fi_opx_hfi1_deferred_work *work
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy origin_subctxt_rx field.  Use u32_extended field.
 	 */
-	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, params->u32_extended_rx,
-						   params->target_hfi_unit);
+	ssize_t rc =
+		fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->u32_extended_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
@@ -2660,7 +2656,7 @@ int opx_hfi1_rx_rma_rts_send_cts_intranode(union fi_opx_hfi1_deferred_work *work
 	}
 
 	/* Note that we do not set stl.hdr.lrh.pktlen here (usually lrh_dws << 32),
-	   because this is intranode and since it's a CTS packet, lrh.pktlen
+	   because this is shm and since it's a CTS packet, lrh.pktlen
 	   isn't used/needed */
 	uint64_t niov = params->niov << 48;
 	uint64_t op64 = ((uint64_t) params->op) << 40;
@@ -2844,7 +2840,7 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 			 const void *const payload, const uint64_t niov, uintptr_t origin_rma_req,
 			 struct opx_context *const target_context, const uintptr_t dst_vaddr,
 			 const enum fi_hmem_iface dst_iface, const uint64_t dst_device, const uint64_t dst_handle,
-			 const union opx_hfi1_dput_iov *src_iovs, const unsigned is_intranode,
+			 const union opx_hfi1_dput_iov *src_iovs, const unsigned is_shm,
 			 const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
 {
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RMA-RTS-HFI:%ld", hdr->qw_9B[6]);
@@ -2892,8 +2888,8 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	}
 	target_context->len = target_context->byte_counter = rbuf_offset;
 
-	if (is_intranode) {
-		params->work_elem.work_fn   = opx_hfi1_rx_rma_rts_send_cts_intranode;
+	if (is_shm) {
+		params->work_elem.work_fn   = opx_hfi1_rx_rma_rts_send_cts_shm;
 		params->work_elem.work_type = OPX_WORK_TYPE_SHM;
 		params->target_hfi_unit	    = fi_opx_hfi1_get_lid_local_unit(params->slid);
 	} else {
@@ -2906,9 +2902,9 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	params->work_elem.complete	    = false;
 
 	params->origin_rx	= FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
-	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, params->origin_rx);
+	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_shm, params->origin_rx);
 	params->reliability	= reliability;
-	params->is_intranode	= is_intranode;
+	params->is_shm		= is_shm;
 	params->opcode		= FI_OPX_HFI_DPUT_OPCODE_PUT_CQ;
 	params->dt		= hdr->rma_rts.dt;
 	params->op		= hdr->rma_rts.op;
@@ -2920,8 +2916,7 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	params->rma_req->hmem_iface  = dst_iface;
 	params->rma_req->hmem_handle = dst_handle;
 
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_intranode=%u niov=%lu opcode=%u\n", is_intranode, niov,
-	       params->opcode);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_shm=%u niov=%lu opcode=%u\n", is_shm, niov, params->opcode);
 
 	int rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {
@@ -3094,7 +3089,7 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 	return FI_SUCCESS;
 }
 
-int opx_hfi1_tx_rma_rts_intranode(union fi_opx_hfi1_deferred_work *work)
+int opx_hfi1_tx_rma_rts_shm(union fi_opx_hfi1_deferred_work *work)
 {
 	struct opx_hfi1_rma_rts_params *params	 = &work->rma_rts;
 	struct fi_opx_ep	       *opx_ep	 = params->opx_ep;
@@ -3110,8 +3105,8 @@ int opx_hfi1_tx_rma_rts_intranode(union fi_opx_hfi1_deferred_work *work)
 	 * exceeds the max value of the legacy origin_subctxt_rx field.  Use u32_extended field.
 	 */
 	// TODO: Pass in subctxt
-	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, params->u32_extended_rx,
-						   params->target_hfi_unit);
+	ssize_t rc =
+		fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->u32_extended_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
@@ -3127,7 +3122,7 @@ int opx_hfi1_tx_rma_rts_intranode(union fi_opx_hfi1_deferred_work *work)
 	}
 
 	/* Note that we do not set stl.hdr.lrh.pktlen here (usually lrh_dws << 32),
-	   because this is intranode and since it's a RTS packet, lrh.pktlen
+	   because this is shm and since it's a RTS packet, lrh.pktlen
 	   isn't used/needed */
 
 	uint64_t cq_data = ((uint64_t) params->data) << 32;
@@ -3193,7 +3188,7 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 	uint64_t			     op64		       = params->op;
 	uint64_t			     dt64		       = params->dt;
 	uint32_t			     opcode		       = params->opcode;
-	const unsigned			     is_intranode	       = params->is_intranode;
+	const unsigned			     is_shm		       = params->is_shm;
 	const enum ofi_reliability_kind	     reliability	       = params->reliability;
 	/* use the slid from the lrh header of the incoming packet
 	 * as the dlid for the lrh header of the outgoing packet */
@@ -3218,12 +3213,11 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 	uint64_t max_bytes_per_packet;
 
 	ssize_t rc;
-	if (is_intranode) {
+	if (is_shm) {
 		/* Possible SHM connections required for certain applications (i.e., DAOS)
 		 * exceeds the max value of the legacy u8_origin_rx field.  Use u32_extended field.
 		 */
-		rc = fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->origin_rx,
-						   params->target_hfi_unit);
+		rc = fi_opx_shm_dynamic_tx_connect(params->is_shm, opx_ep, params->origin_rx, params->target_hfi_unit);
 
 		if (OFI_UNLIKELY(rc)) {
 			return -FI_EAGAIN;
@@ -3242,8 +3236,8 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND DPUT, %s opcode %d -- (begin)\n",
-		     is_intranode ? "SHM" : "HFI", opcode);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-DPUT-%s", is_intranode ? "SHM" : "HFI");
+		     is_shm ? "SHM" : "HFI", opcode);
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-DPUT-%s", is_shm ? "SHM" : "HFI");
 
 	for (i = params->cur_iov; i < niov; ++i) {
 		uint8_t *sbuf =
@@ -3293,7 +3287,7 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 			}
 
 			uint64_t bytes_sent;
-			if (is_intranode) {
+			if (is_shm) {
 				uint64_t		   pos;
 				union opx_hfi1_packet_hdr *hdr =
 					opx_shm_tx_next(&opx_ep->tx->shm, params->target_hfi_unit, subctxt_rx, &pos,
@@ -3480,16 +3474,16 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 		} /* while bytes_to_send */
 
 		if ((opcode == FI_OPX_HFI_DPUT_OPCODE_PUT || opcode == FI_OPX_HFI_DPUT_OPCODE_PUT_CQ) &&
-		    is_intranode) { // RMA-type put, so send a ping/fence to better latency
+		    is_shm) { // RMA-type put, so send a ping/fence to better latency
 			fi_opx_shm_write_fence(opx_ep, params->target_hfi_unit, subctxt_rx, lrh_dlid, cc,
 					       params->bytes_sent, params->u32_extended_rx, hfi1_type);
 		}
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-DPUT-%s", is_intranode ? "SHM" : "HFI");
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-DPUT-%s", is_shm ? "SHM" : "HFI");
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND DPUT, %s finished IOV=%d bytes_sent=%ld -- (end)\n",
-			is_intranode ? "SHM" : "HFI", params->cur_iov, params->bytes_sent);
+			is_shm ? "SHM" : "HFI", params->cur_iov, params->bytes_sent);
 
 		params->bytes_sent = 0;
 		params->cur_iov++;
@@ -3598,8 +3592,8 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 		assert(params->slid == lrh_dlid);
 	}
 
-	// We should never be in this function for intranode ops
-	assert(!params->is_intranode);
+	// We should never be in this function for shm ops
+	assert(!params->is_shm);
 
 	assert(((opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
 		 opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH) &&
@@ -3918,8 +3912,8 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 		assert(params->slid == lrh_dlid);
 	}
 
-	// We should never be in this function for intranode ops
-	assert(!params->is_intranode);
+	// We should never be in this function for shm ops
+	assert(!params->is_shm);
 
 	assert((opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) && (params->payload_bytes_for_iovec == 0));
 
@@ -4286,9 +4280,9 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 		       const union opx_hfi1_dput_iov *const dput_iov, uint8_t *src_base_addr, const uint8_t op,
 		       const uint8_t dt, const uintptr_t rma_request_vaddr, const uintptr_t target_byte_counter_vaddr,
 		       uint64_t *origin_byte_counter, uint32_t dput_opcode,
-		       void (*completion_action)(union fi_opx_hfi1_deferred_work *work_state),
-		       const unsigned is_intranode, const enum ofi_reliability_kind reliability,
-		       const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type)
+		       void (*completion_action)(union fi_opx_hfi1_deferred_work *work_state), const unsigned is_shm,
+		       const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
+		       const enum opx_hfi1_type hfi1_type)
 {
 	union fi_opx_hfi1_deferred_work *work	= ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	struct fi_opx_hfi1_dput_params	*params = &work->dput;
@@ -4337,9 +4331,9 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 	params->opcode			  = dput_opcode;
 	params->op			  = op;
 	params->dt			  = dt;
-	params->is_intranode		  = is_intranode;
+	params->is_shm			  = is_shm;
 	params->reliability		  = reliability;
-	params->target_hfi_unit		  = is_intranode ? fi_opx_hfi1_get_lid_local_unit(params->slid) : 0xFF;
+	params->target_hfi_unit		  = is_shm ? fi_opx_hfi1_get_lid_local_unit(params->slid) : 0xFF;
 
 	uint64_t is_hmem	 = 0;
 	uint64_t iov_total_bytes = 0;
@@ -4373,8 +4367,8 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 	assert(origin_byte_counter == NULL || iov_total_bytes <= *origin_byte_counter);
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, tidoffset, ntidpairs, tidpairs, is_hmem, hfi1_type);
 
-	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_intranode, opx_ep->debug_counters.hmem.dput_rzv_intranode);
-	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !is_intranode &&
+	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_shm, opx_ep->debug_counters.hmem.dput_rzv_intranode);
+	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !is_shm &&
 					       (params->work_elem.work_fn == fi_opx_hfi1_do_dput_wfr ||
 						params->work_elem.work_fn == fi_opx_hfi1_do_dput_jkr ||
 						params->work_elem.work_fn == fi_opx_hfi1_do_dput_cyr ||
@@ -4489,7 +4483,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 		lrh_dws = (pbc_dws - 2) >> 1;	       /* (LRH QW) does not include pbc (8 bytes) */
 	}
 
-	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps)) {
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SENDV, SHM -- RENDEZVOUS RTS Noncontig (begin) context %p\n",
@@ -4823,7 +4817,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 	struct fi_opx_ep       *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const union fi_opx_addr addr   = {.fi = dest_addr};
 
-	const uint64_t is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps);
+	const uint64_t is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps);
 
 	const uint64_t bth_rx	   = ((uint64_t) dest_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	const uint64_t lrh_dlid_9B = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(addr.lid);
@@ -4843,7 +4837,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 	 * or a QW (JKR), so send the last 7 bytes of the source data immediately
 	 * so we can adjust the length after proper alignment has been achieved. */
 	const uint8_t immediate_block =
-		(send_immed_data && !is_intranode && opx_ep->use_expected_tid_rzv &&
+		(send_immed_data && !is_shm && opx_ep->use_expected_tid_rzv &&
 		 len >= opx_ep->tx->sdma_min_payload_bytes && len >= opx_ep->tx->tid_min_payload_bytes) ?
 			1 :
 			0;
@@ -4879,7 +4873,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 				 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 				 (payload_blocks_total << 4);
 
-	if (is_intranode) {
+	if (is_shm) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== SEND, SHM -- RENDEZVOUS RTS (begin) context %p\n",
 			     user_context);
@@ -5302,7 +5296,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	struct fi_opx_ep       *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const union fi_opx_addr addr   = {.fi = dest_addr};
 
-	const uint64_t is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps);
+	const uint64_t is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps);
 
 	const uint64_t bth_rx	    = ((uint64_t) dest_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	const uint64_t lrh_dlid_16B = addr.lid;
@@ -5320,7 +5314,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	 * or a QW (JKR), so send the last 7 bytes of the source data immediately
 	 * so we can adjust the length after proper alignment has been achieved. */
 	const uint8_t immediate_block =
-		(send_immed_data && !is_intranode && opx_ep->use_expected_tid_rzv &&
+		(send_immed_data && !is_shm && opx_ep->use_expected_tid_rzv &&
 		 len >= opx_ep->tx->sdma_min_payload_bytes && len >= opx_ep->tx->tid_min_payload_bytes) ?
 			1 :
 			0;
@@ -5378,7 +5372,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 
-	if (is_intranode) {
+	if (is_shm) {
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND 16B, SHM -- RENDEZVOUS RTS (begin) context %p\n",

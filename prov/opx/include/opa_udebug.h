@@ -176,7 +176,7 @@
  ************************************************************************************/
 
 // #define OPX_ENABLE_LOG			//Enable verbose logs for general Opx
-// #define OPX_ENABLE_LOG_SHM		//Enable verbose logs for Shared-memory (Intranode)
+// #define OPX_ENABLE_LOG_SHM		//Enable verbose logs for Shared-memory
 // #define OPX_ENABLE_LOG_PKT		//Enable verbose logs for Packet processing/packet headers
 // #define OPX_ENABLE_LOG_REL		//Enable verbose logs for Reliablity
 
@@ -203,7 +203,7 @@
 /*
  * OPX_LOG_SHM() will by default be a nop/no code on optimzed builds and not affect performance.
  * Use OPX_LOG_SHM() to safely handle message logging on critical/high use paths.
- * This log class is for shared memory/intranode tracing
+ * This log class is for shared memory tracing
  */
 #ifdef OPX_ENABLE_LOG_SHM
 #define OPX_LOG_SHM(level, subsystem, ...) FI_LOG(fi_opx_global.prov, level, subsystem, __VA_ARGS__)
