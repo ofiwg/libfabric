@@ -75,7 +75,7 @@ void fi_opx_hit_zero(struct fi_opx_completion_counter *cc)
 	OPX_BUF_FREE(cc);
 }
 
-int fi_opx_do_readv_internal_intranode(union fi_opx_hfi1_deferred_work *work)
+int fi_opx_do_readv_internal_shm(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_readv_params *params = &work->readv;
 	struct fi_opx_ep		   *opx_ep = params->opx_ep;
@@ -84,7 +84,7 @@ int fi_opx_do_readv_internal_intranode(union fi_opx_hfi1_deferred_work *work)
 	 * exceeds the max value of the legacy u8_rx field.  Use the dest_rx field
 	 * which can support the larger values.
 	 */
-	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, params->dest_subctxt_rx,
+	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->dest_subctxt_rx,
 						   params->opx_target_addr.hfi1_unit);
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;

@@ -2975,7 +2975,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_shm(struct fid_ep *ep, union fi_opx_re
 #endif
 
 	/* Make sure the connection to remote EP exists. */
-	rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, (unsigned) u32_reliability_rx, hfi1_unit);
+	rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, (unsigned) u32_reliability_rx, hfi1_unit);
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
 	}
@@ -3165,7 +3165,7 @@ void fi_opx_hfi1_rx_reliability_resynch(struct fid_ep *ep, struct fi_opx_reliabi
 	 * Reset all SHM related reliability protocol data retained by this
 	 * Server EP about the remote Client EP.
 	 */
-	if (opx_lid_is_intranode(rx_key.slid)) {
+	if (opx_lid_is_shm(rx_key.slid)) {
 		/* Record completion of the resynch request for the remote Client EP */
 		opx_ep->rx->shm.resynch_connection[origin_reliability_rx].completed = true;
 		opx_ep->rx->shm.resynch_connection[origin_reliability_rx].counter++;
@@ -3290,7 +3290,7 @@ void fi_opx_hfi1_rx_reliability_ack_resynch(struct fid_ep *ep, struct fi_opx_rel
 		     rx_key.dw_suffix);
 
 	OPX_RELIABILITY_DEBUG_LOG(&rx_key, "(rx) %s Client rcv resynch ack\n",
-				  (opx_lid_is_intranode(rx_key.dlid)) ? "SHM -" : "");
+				  (opx_lid_is_shm(rx_key.dlid)) ? "SHM -" : "");
 
 	/* No complicated linked list or queue mechanism required at this time.
 	 * A simple flag to indicate reception of the ack resynch response is
@@ -3309,7 +3309,7 @@ void fi_opx_hfi1_rx_reliability_ack_resynch(struct fid_ep *ep, struct fi_opx_rel
 #ifdef OPX_RELIABILITY_DEBUG
 	else {
 		fprintf(stderr, "Warning, (rx) %s Client flow__ %016lx %08x rcv resynch ack; not found.\n",
-			(opx_lid_is_intranode(rx_key.dlid)) ? "SHM -" : "", rx_key.qw_prefix, rx_key.dw_suffix);
+			(opx_lid_is_shm(rx_key.dlid)) ? "SHM -" : "", rx_key.qw_prefix, rx_key.dw_suffix);
 	}
 #endif
 }
@@ -3341,8 +3341,8 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, union fi_opx_
 		return FI_SUCCESS;
 	}
 
-	if (fi_opx_hfi1_tx_is_intranode(opx_ep, dest_addr, caps)) {
-		/* INTRA-NODE */
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps)) {
+		/* INTRA-NODE or SHM?  Will we use DAOS in sriov */
 
 		/* HFI Rank Support: Retreive extended addressing data
 		 */
@@ -3430,7 +3430,7 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, union fi_opx_
 		struct opx_shm_info *shm_info = opx_shm_rbt_get_shm_info(&(opx_ep->tx->shm), segment_index);
 
 		if (!resynch_rcvd || !shm_info || !shm_info->fifo_segment || !shm_info->connection.inuse) {
-			rc = fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, rx_index, dest_addr.hfi1_unit);
+			rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, rx_index, dest_addr.hfi1_unit);
 			if (OFI_UNLIKELY(rc)) {
 				return -FI_EAGAIN;
 			}

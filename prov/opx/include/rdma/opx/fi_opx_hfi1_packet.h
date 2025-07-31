@@ -1600,7 +1600,7 @@ struct fi_opx_hfi1_ue_packet {
 	uint64_t  tag;
 	opx_lid_t lid;
 	uint16_t  subctxt_rx;
-	uint8_t	  is_intranode;
+	uint8_t	  is_shm;
 
 	uint8_t unused;
 

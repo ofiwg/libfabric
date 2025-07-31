@@ -57,11 +57,9 @@
 
 /* Jackal River has 2+2,
      2 physical ports and 2 loopback ports.
-   Opx will have to know 2 new things to use these ports.
-   The first is which physical port should this packet ingress
-   the fabric on?  The second is, if this is  an SR-iov type of
-   send (a new type of intranode), use the loopback port
-   instead of that physical port to save some fabric traffic
+   The loopback port is the PBC egress port for sriov
+   which will be used to loopback to the same lid (self)
+   when not using shm
 
    0 = port 1
    1 = port 2

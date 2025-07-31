@@ -43,8 +43,7 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work)
 
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-RECV-SEND-CTS");
 	uint64_t pos;
-	ssize_t	 rc =
-		fi_opx_shm_dynamic_tx_connect(OPX_INTRANODE_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
+	ssize_t	 rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "IPC-RECV-SEND-CTS");

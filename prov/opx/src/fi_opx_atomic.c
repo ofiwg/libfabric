@@ -114,7 +114,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 			       const struct fi_opx_cntr *opx_cntr, struct fi_opx_completion_counter *cc,
 			       enum fi_datatype dt, enum fi_op op, const int lock_required, const uint64_t caps,
 			       const enum ofi_reliability_kind reliability, const uint64_t is_hmem,
-			       const uint64_t is_intranode, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+			       const uint64_t is_shm, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	if (tx_op_flags & FI_INJECT) {
 		assert((tx_op_flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)) !=
@@ -158,7 +158,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	params->iov[0].sbuf_handle = 0; // This will change to a valid gdrcopy when we implement gdrcopy in atomic paths
 	params->dput_iov	   = &params->iov[0];
 	params->opcode		   = opcode;
-	params->is_intranode	   = is_intranode;
+	params->is_shm		   = is_shm;
 	params->reliability	   = reliability;
 	params->cur_iov		   = 0;
 	params->bytes_sent	   = 0;
@@ -170,8 +170,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	params->fetch_vaddr		  = (void *) fetch_iov->buf;
 	params->target_byte_counter_vaddr = (const uintptr_t) cc;
 	params->target_hfi_unit		  = opx_dst_addr.hfi1_unit;
-	params->u32_extended_rx =
-		fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, opx_dst_addr.hfi1_subctxt_rx);
+	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_shm, opx_dst_addr.hfi1_subctxt_rx);
 
 	if (compare_iov) {
 		params->compare_vaddr = (void *) compare_iov->buf;
@@ -275,7 +274,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 			 "===================================== ATOMIC %s (begin)\n", is_compare ? "CAS" : "FETCH");
 		cc->cntr = opx_ep->read_cntr;
 
-		const uint64_t	       is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_dst_addr, caps);
+		const uint64_t	       is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, opx_dst_addr, caps);
 		struct fi_opx_hmem_iov fetch_iov;
 		uint64_t	       fetch_handle;
 		opx_hmem_iov_init(fetch_vaddr, buf_len, NULL, &fetch_iov, &fetch_handle);
@@ -289,15 +288,15 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 		uint64_t	       is_hmem = opx_hmem_iov_init(buf, buf_len, NULL, &buf_iov, &handle);
 
 		if (!is_compare) {
-			FI_OPX_DEBUG_COUNTERS_INC_COND((is_hmem || fetch_iov.iface != FI_HMEM_SYSTEM) && is_intranode,
+			FI_OPX_DEBUG_COUNTERS_INC_COND((is_hmem || fetch_iov.iface != FI_HMEM_SYSTEM) && is_shm,
 						       opx_ep->debug_counters.hmem.rma_atomic_fetch_intranode);
-			FI_OPX_DEBUG_COUNTERS_INC_COND((is_hmem || fetch_iov.iface != FI_HMEM_SYSTEM) && !is_intranode,
+			FI_OPX_DEBUG_COUNTERS_INC_COND((is_hmem || fetch_iov.iface != FI_HMEM_SYSTEM) && !is_shm,
 						       opx_ep->debug_counters.hmem.rma_atomic_fetch_hfi);
 
 			fi_opx_atomic_op_internal(opx_ep, FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH, &buf_iov, opx_dst_addr,
 						  addr, key, &fetch_iov, NULL, opx_ep->tx->op_flags, opx_ep->rx->cq,
 						  opx_ep->read_cntr, cc, datatype, op, lock_required, caps, reliability,
-						  is_hmem, is_intranode, hfi1_type, ctx_sharing);
+						  is_hmem, is_shm, hfi1_type, ctx_sharing);
 
 		} else {
 			struct fi_opx_hmem_iov compare_iov;
@@ -305,16 +304,16 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 			is_hmem |= opx_hmem_iov_init(compare_vaddr, buf_len, NULL, &compare_iov, &handle);
 			buf_iov.len <<= 1;
 
-			FI_OPX_DEBUG_COUNTERS_INC_COND((is_hmem || fetch_iov.iface != FI_HMEM_SYSTEM) && is_intranode,
+			FI_OPX_DEBUG_COUNTERS_INC_COND((is_hmem || fetch_iov.iface != FI_HMEM_SYSTEM) && is_shm,
 						       opx_ep->debug_counters.hmem.rma_atomic_cmp_fetch_intranode);
-			FI_OPX_DEBUG_COUNTERS_INC_COND((is_hmem || fetch_iov.iface != FI_HMEM_SYSTEM) && !is_intranode,
+			FI_OPX_DEBUG_COUNTERS_INC_COND((is_hmem || fetch_iov.iface != FI_HMEM_SYSTEM) && !is_shm,
 						       opx_ep->debug_counters.hmem.rma_atomic_cmp_fetch_hfi);
 
 			fi_opx_atomic_op_internal(opx_ep, FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH, &buf_iov,
 						  opx_dst_addr, addr, key, &fetch_iov, &compare_iov,
 						  opx_ep->tx->op_flags, opx_ep->rx->cq, opx_ep->read_cntr, cc, datatype,
-						  op, lock_required, caps, reliability, is_hmem, is_intranode,
-						  hfi1_type, ctx_sharing);
+						  op, lock_required, caps, reliability, is_hmem, is_shm, hfi1_type,
+						  ctx_sharing);
 		}
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC %s (end)\n",
 			 is_compare ? "CAS" : "FETCH");

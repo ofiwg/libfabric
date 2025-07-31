@@ -301,16 +301,16 @@ void opx_copy_double_qw(uint64_t *restrict target, const uint8_t *restrict buf, 
 }
 
 void fi_opx_hfi1_rx_rzv_rts_etrunc(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
-				   const uint16_t origin_rx, uintptr_t origin_byte_counter_vaddr,
-				   const unsigned is_intranode, const enum ofi_reliability_kind reliability,
-				   const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type);
+				   const uint16_t origin_rx, uintptr_t origin_byte_counter_vaddr, const unsigned is_shm,
+				   const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
+				   const enum opx_hfi1_type hfi1_type);
 
 void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
 			    const void *const payload, const uint16_t origin_rx, const uint64_t niov,
 			    uintptr_t origin_byte_counter_vaddr, struct opx_context *const target_context,
 			    const uintptr_t dst_vaddr, const enum fi_hmem_iface dst_iface, const uint64_t dst_device,
 			    const uint64_t immediate_data, const uint64_t immediate_end_bytes,
-			    const struct fi_opx_hmem_iov *src_iovs, uint8_t opcode, const unsigned is_intranode,
+			    const struct fi_opx_hmem_iov *src_iovs, uint8_t opcode, const unsigned is_shm,
 			    const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
 			    const enum opx_hfi1_type hfi1_type);
 
@@ -326,10 +326,10 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 		       size_t payload_bytes_to_copy, const uint16_t origin_rx, const uint32_t niov,
 		       const union opx_hfi1_dput_iov *const dput_iov, uint8_t *src_base_addr, const uint8_t op,
 		       const uint8_t dt, const uintptr_t rma_request_vaddr, const uintptr_t target_byte_counter_vaddr,
-		       uint64_t *origin_byte_counter, uint32_t op_kind,
-		       void (*completion_action)(union fi_opx_hfi1_deferred_work *work_state),
-		       const unsigned is_intranode, const enum ofi_reliability_kind reliability,
-		       const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type);
+		       uint64_t *origin_byte_counter, uint32_t						      op_kind,
+		       void (*completion_action)(union fi_opx_hfi1_deferred_work *work_state), const unsigned is_shm,
+		       const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
+		       const enum opx_hfi1_type hfi1_type);
 
 union fi_opx_hfi1_deferred_work;
 struct fi_opx_work_elem {
@@ -382,7 +382,7 @@ struct fi_opx_hfi1_dput_params {
 	uint16_t		  origin_rx; // rx of sender of CTS ( Where packets should be sent to during dput)
 	uint16_t		  padding;
 
-	bool	is_intranode;
+	bool	is_shm;
 	bool	sdma_no_bounce_buf;
 	bool	use_expected_opcode;
 	uint8_t dt;
@@ -422,7 +422,7 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	opx_lid_t		  slid;
 	uint32_t		  cur_iov;
 	uint32_t		  u32_extended_rx;
-	unsigned		  is_intranode;
+	unsigned		  is_shm;
 	enum ofi_reliability_kind reliability;
 	uint32_t		  unused;
 
@@ -492,7 +492,7 @@ struct opx_hfi1_rma_rts_params {
 		uint16_t origin_rx;
 		uint16_t dest_rx;
 	};
-	bool	is_intranode;
+	bool	is_shm;
 	uint8_t opcode;
 	uint8_t dt;
 	uint8_t op;
@@ -557,7 +557,7 @@ struct fi_opx_hfi1_rx_readv_params {
 	uint64_t			  dt;
 	uint64_t			  pbc_dlid;
 	enum ofi_reliability_kind	  reliability;
-	bool				  is_intranode;
+	bool				  is_shm;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
 union fi_opx_hfi1_deferred_work {
@@ -620,13 +620,13 @@ void fi_opx_hfi1_memcpy8(void *restrict dest, const void *restrict src, size_t n
 }
 
 __OPX_FORCE_INLINE__
-uint64_t fi_opx_hfi1_tx_is_intranode(struct fi_opx_ep *opx_ep, const union fi_opx_addr addr, const uint64_t caps)
+uint64_t fi_opx_hfi1_tx_is_shm(struct fi_opx_ep *opx_ep, const union fi_opx_addr addr, const uint64_t caps)
 {
-	/* Intranode if (exclusively FI_LOCAL_COMM) OR (FI_LOCAL_COMM is on AND
-	   the source lid is the same as the destination lid) */
+	/* If (exclusively FI_LOCAL_COMM) OR (FI_LOCAL_COMM is on AND
+	   the destination lid selected SHM) */
 	return ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) ||
 	       (((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM)) &&
-		(opx_lid_is_intranode(addr.lid)));
+		(opx_lid_is_shm(addr.lid)));
 }
 
 __OPX_FORCE_INLINE__
@@ -642,7 +642,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, fi
 	const uint64_t lrh_dlid_9B    = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(addr.lid);
 	const uint32_t lrh_dlid_16B   = addr.lid;
 
-	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps)) {
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== INJECT, SHM (begin)\n");
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-INJECT-SHM");
@@ -951,14 +951,13 @@ ssize_t fi_opx_hfi1_tx_check_credits(struct fi_opx_ep *opx_ep, union fi_opx_hfi1
 }
 
 __OPX_FORCE_INLINE__
-ssize_t opx_hfi1_tx_sendv_egr_intranode(struct fid_ep *ep, const struct iovec *iov, size_t niov, const uint16_t lrh_dws,
-					const uint64_t lrh_dlid_9B, size_t total_len, const size_t payload_qws_total,
-					const size_t xfer_bytes_tail, const union fi_opx_addr *addr, uint64_t tag,
-					void *context, const uint32_t data, int lock_required,
-					const uint64_t tx_op_flags, const uint64_t caps,
-					const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
-					const uint64_t hmem_device, const uint64_t hmem_handle,
-					const enum opx_hfi1_type hfi1_type)
+ssize_t opx_hfi1_tx_sendv_egr_shm(struct fid_ep *ep, const struct iovec *iov, size_t niov, const uint16_t lrh_dws,
+				  const uint64_t lrh_dlid_9B, size_t total_len, const size_t payload_qws_total,
+				  const size_t xfer_bytes_tail, const union fi_opx_addr *addr, uint64_t tag,
+				  void *context, const uint32_t data, int lock_required, const uint64_t tx_op_flags,
+				  const uint64_t caps, const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
+				  const uint64_t hmem_device, const uint64_t hmem_handle,
+				  const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -1099,11 +1098,10 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	struct iovec *iov_ptr  = (struct iovec *) iov;
 	size_t	     *niov_ptr = &niov;
 
-	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
-		return opx_hfi1_tx_sendv_egr_intranode(ep, iov, niov, lrh_dws, lrh_dlid_9B, total_len,
-						       payload_qws_total, xfer_bytes_tail, &addr, tag, context, data,
-						       lock_required, tx_op_flags, caps, do_cq_completion, iface,
-						       hmem_device, hmem_handle, hfi1_type);
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps)) {
+		return opx_hfi1_tx_sendv_egr_shm(ep, iov, niov, lrh_dws, lrh_dlid_9B, total_len, payload_qws_total,
+						 xfer_bytes_tail, &addr, tag, context, data, lock_required, tx_op_flags,
+						 caps, do_cq_completion, iface, hmem_device, hmem_handle, hfi1_type);
 	}
 
 	const uint64_t bth_subctxt_rx = ((uint64_t) addr.hfi1_subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
@@ -1226,14 +1224,13 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 }
 
 __OPX_FORCE_INLINE__
-ssize_t opx_hfi1_tx_sendv_egr_intranode_16B(struct fid_ep *ep, const struct iovec *iov, size_t niov,
-					    const uint16_t lrh_qws, const uint64_t lrh_dlid_16B, size_t total_len,
-					    const size_t payload_qws_total, const size_t xfer_bytes_tail,
-					    const union fi_opx_addr *addr, uint64_t tag, void *context,
-					    const uint32_t data, int lock_required, const uint64_t tx_op_flags,
-					    const uint64_t caps, const uint64_t do_cq_completion,
-					    const enum fi_hmem_iface iface, const uint64_t hmem_device,
-					    const uint64_t hmem_handle, const enum opx_hfi1_type hfi1_type)
+ssize_t opx_hfi1_tx_sendv_egr_shm_16B(struct fid_ep *ep, const struct iovec *iov, size_t niov, const uint16_t lrh_qws,
+				      const uint64_t lrh_dlid_16B, size_t total_len, const size_t payload_qws_total,
+				      const size_t xfer_bytes_tail, const union fi_opx_addr *addr, uint64_t tag,
+				      void *context, const uint32_t data, int lock_required, const uint64_t tx_op_flags,
+				      const uint64_t caps, const uint64_t do_cq_completion,
+				      const enum fi_hmem_iface iface, const uint64_t hmem_device,
+				      const uint64_t hmem_handle, const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -1389,11 +1386,11 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 	struct iovec *iov_ptr  = (struct iovec *) iov;
 	size_t	     *niov_ptr = &niov;
 
-	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
-		return opx_hfi1_tx_sendv_egr_intranode_16B(ep, iov, niov, lrh_qws, lrh_dlid_16B, total_len,
-							   payload_qws_total, xfer_bytes_tail, &addr, tag, context,
-							   data, lock_required, tx_op_flags, caps, do_cq_completion,
-							   iface, hmem_device, hmem_handle, hfi1_type);
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps)) {
+		return opx_hfi1_tx_sendv_egr_shm_16B(ep, iov, niov, lrh_qws, lrh_dlid_16B, total_len, payload_qws_total,
+						     xfer_bytes_tail, &addr, tag, context, data, lock_required,
+						     tx_op_flags, caps, do_cq_completion, iface, hmem_device,
+						     hmem_handle, hfi1_type);
 	}
 
 	const uint64_t bth_subctxt_rx = ((uint64_t) addr.hfi1_subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
@@ -1552,11 +1549,10 @@ ssize_t opx_hfi1_tx_sendv_egr_select(struct fid_ep *ep, const struct iovec *iov,
 }
 
 __OPX_FORCE_INLINE__
-ssize_t opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr,
-				       uint64_t tag, void *context, const uint32_t data, int lock_required,
-				       const uint64_t tx_op_flags, const uint64_t caps, const uint64_t do_cq_completion,
-				       const enum fi_hmem_iface iface, const uint64_t hmem_device,
-				       const uint64_t hmem_handle)
+ssize_t opx_hfi1_tx_send_egr_shm(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr, uint64_t tag,
+				 void *context, const uint32_t data, int lock_required, const uint64_t tx_op_flags,
+				 const uint64_t caps, const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
+				 const uint64_t hmem_device, const uint64_t hmem_handle)
 {
 	struct fi_opx_ep       *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const union fi_opx_addr addr   = {.fi = dest_addr};
@@ -1645,11 +1641,11 @@ ssize_t opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep, const void *buf, size_
 }
 
 __OPX_FORCE_INLINE__
-ssize_t opx_hfi1_tx_send_egr_intranode_16B(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr,
-					   uint64_t tag, void *context, const uint32_t data, int lock_required,
-					   const uint64_t tx_op_flags, const uint64_t caps,
-					   const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
-					   const uint64_t hmem_device, const uint64_t hmem_handle)
+ssize_t opx_hfi1_tx_send_egr_shm_16B(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr, uint64_t tag,
+				     void *context, const uint32_t data, int lock_required, const uint64_t tx_op_flags,
+				     const uint64_t caps, const uint64_t do_cq_completion,
+				     const enum fi_hmem_iface iface, const uint64_t hmem_device,
+				     const uint64_t hmem_handle)
 {
 	struct fi_opx_ep       *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const union fi_opx_addr addr   = {.fi = dest_addr};
@@ -1968,10 +1964,9 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, fi_
 
 	OPX_NO_16B_SUPPORT(hfi1_type);
 
-	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
-		return opx_hfi1_tx_send_egr_intranode(ep, buf, len, dest_addr, tag, context, data, lock_required,
-						      tx_op_flags, caps, do_cq_completion, iface, hmem_device,
-						      hmem_handle);
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps)) {
+		return opx_hfi1_tx_send_egr_shm(ep, buf, len, dest_addr, tag, context, data, lock_required, tx_op_flags,
+						caps, do_cq_completion, iface, hmem_device, hmem_handle);
 	}
 
 	const uint64_t bth_subctxt_rx	 = ((uint64_t) addr.hfi1_subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
@@ -2110,10 +2105,10 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	OPX_NO_9B_SUPPORT(hfi1_type);
 
-	if (fi_opx_hfi1_tx_is_intranode(opx_ep, addr, caps)) {
-		return opx_hfi1_tx_send_egr_intranode_16B(ep, buf, len, dest_addr, tag, context, data, lock_required,
-							  tx_op_flags, caps, do_cq_completion, iface, hmem_device,
-							  hmem_handle);
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps)) {
+		return opx_hfi1_tx_send_egr_shm_16B(ep, buf, len, dest_addr, tag, context, data, lock_required,
+						    tx_op_flags, caps, do_cq_completion, iface, hmem_device,
+						    hmem_handle);
 	}
 
 	const size_t   xfer_bytes_tail	 = len & 0x07ul;
@@ -3054,7 +3049,7 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 			 const void *const payload, const uint64_t niov, uintptr_t origin_rma_req,
 			 struct opx_context *const target_context, const uintptr_t dst_vaddr,
 			 const enum fi_hmem_iface dst_iface, const uint64_t dst_device, const uint64_t dst_handle,
-			 const union opx_hfi1_dput_iov *src_iovs, const unsigned is_intranode,
+			 const union opx_hfi1_dput_iov *src_iovs, const unsigned is_shm,
 			 const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type);
 
 #endif /* _FI_PROV_OPX_HFI1_TRANSPORT_H_ */
