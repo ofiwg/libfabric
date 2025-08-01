@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_cxi" "7" "2025\-07\-31" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_cxi" "7" "2025\-08\-01" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -1251,6 +1251,22 @@ messages when FI_INJECT is not specified.
 This can be useful with GPU source buffers to avoid the host copy in
 cases a performant copy can not be used.
 The default is to use IDC for all messages less than IDC size.
+.TP
+\f[I]FI_CXI_DISABLE_NON_INJECT_RMA_IDC\f[R]
+Experimental option to disable favoring IDC for transmit of small RMA
+when FI_INJECT is not specified.
+This can be useful with GPU source buffers to avoid the host copy in
+cases a performant copy can not be used.
+The default is to use IDC for non-triggered RMA writes that are less
+than IDC size and target an optimized MR.
+.TP
+\f[I]FI_CXI_DISABLE_NON_INJECT_AMO_IDC\f[R]
+Experimental option to disable favoring IDC for transmit of atomics when
+FI_INJECT is not specified.
+This can be useful with GPU source buffers to avoid the host copy in
+cases a performant copy can not be used.
+The default is to use IDC for non-triggered AMOs that target an
+optimized MR.
 .TP
 \f[I]FI_CXI_DISABLE_HOST_REGISTER\f[R]
 Disable registration of host buffers (overflow and request) with GPU.
