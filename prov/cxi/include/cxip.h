@@ -211,6 +211,15 @@
 #define CXIP_REQ_BUF_HEADER_MIN_SIZE (sizeof(struct c_port_fab_hdr) + \
 	sizeof(struct c_port_small_msg_hdr))
 
+// Hints for spinloops
+#if defined(__aarch64__)
+#define CXIP_PAUSE() __asm__ __volatile__ ("YIELD" ::: "memory")
+#elif defined(__x86_64__)
+#define CXIP_PAUSE() __asm__ __volatile__ ("pause" ::: "memory")
+#else
+#define CXIP_PAUSE()
+#endif
+
 extern int sc_page_size;
 extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
@@ -319,6 +328,7 @@ struct cxip_environment {
 
 	size_t eq_ack_batch_size;
 	int fc_retry_usec_delay;
+	int cntr_spin_before_yield;
 	size_t ctrl_rx_eq_max_size;
 	char *device_name;
 	size_t cq_fill_percent;

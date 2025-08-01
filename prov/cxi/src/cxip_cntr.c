@@ -423,6 +423,7 @@ static void cxip_cntr_read_wb(struct cxip_cntr *cntr, struct c_ct_writeback *wb)
 	ofi_genlock_lock(&cntr->lock);
 	cxip_cntr_get(cntr, false);
 
+	int spin_before_yield = cxip_env.cntr_spin_before_yield;
 	do {
 		ret = cxip_cntr_get_wb(cntr, wb);
 		if (ret != FI_SUCCESS) {
@@ -432,8 +433,13 @@ static void cxip_cntr_read_wb(struct cxip_cntr *cntr, struct c_ct_writeback *wb)
 
 		if (wb->ct_writeback || (cntr->attr.flags & FI_CXI_CNTR_CACHED))
 			break;
-
-		sched_yield();
+		if (spin_before_yield == 0) {
+			sched_yield();
+			spin_before_yield = cxip_env.cntr_spin_before_yield;
+		} else {
+			CXIP_PAUSE();
+			spin_before_yield--;
+		}
 	} while (true);
 
 	ofi_genlock_unlock(&cntr->lock);
@@ -594,6 +600,7 @@ static int cxip_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 	/* Spin until the trigger list entry fires which updates the CT success
 	 * field.
 	 */
+	int spin_before_yield = cxip_env.cntr_spin_before_yield;
 	do {
 		ret = cxip_cntr_get_ct_success(cntr, &success);
 		if (ret) {
@@ -615,8 +622,13 @@ static int cxip_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 		if (ofi_adjust_timeout(endtime, &timeout))
 			return -FI_ETIMEDOUT;
 
-		/* Only FI_WAIT_YIELD is supported. */
-		sched_yield();
+		if (spin_before_yield == 0) {
+			sched_yield();
+			spin_before_yield = cxip_env.cntr_spin_before_yield;
+		} else {
+			CXIP_PAUSE();
+			spin_before_yield--;
+		}
 
 		cxip_cntr_progress(cntr);
 
