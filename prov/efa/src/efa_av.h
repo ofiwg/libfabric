@@ -22,6 +22,11 @@ struct efa_ep_addr {
 	struct efa_ep_addr	*next;
 };
 
+struct efa_ep_addr_hashable {
+	struct efa_ep_addr addr;
+	UT_hash_handle	hh;
+};
+
 #define EFA_EP_ADDR_LEN sizeof(struct efa_ep_addr)
 
 struct efa_ah {
@@ -38,6 +43,7 @@ struct efa_conn {
 	fi_addr_t		implicit_fi_addr;
 	fi_addr_t		fi_addr;
 	fi_addr_t		shm_fi_addr;
+	struct dlist_entry	implicit_av_lru_entry;
 };
 
 /* util_av implementation requires the first element of efa_av_entry to be
@@ -91,6 +97,10 @@ struct efa_av {
 	struct util_av util_av_implicit;
 	struct efa_cur_reverse_av *cur_reverse_av_implicit;
 	struct efa_prv_reverse_av *prv_reverse_av_implicit;
+
+	size_t implicit_av_size;
+	struct dlist_entry implicit_av_lru_list;
+	struct efa_ep_addr_hashable *evicted_peers_hashset;
 };
 
 int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
@@ -121,5 +131,8 @@ int efa_av_reverse_av_add(struct efa_av *av,
 struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid);
 
 void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah);
+
+void efa_av_implicit_av_lru_move(struct efa_av *av,
+					struct efa_conn *conn);
 
 #endif
