@@ -110,7 +110,7 @@ def release() {
     changeStrings.add(line)
   }
 
-  if ((changeStrings.toArray().any { it =~ /(Makefile\.am)\b/ }) ||
+  if ((changeStrings.toArray().any { it =~ /(Makefile\.am)\b/ }) &&
       (changeStrings.toArray().any { it =~ /(configure\.ac)\b/ })) {
         echo "This is probably a release"
         return true
