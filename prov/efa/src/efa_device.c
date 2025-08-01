@@ -22,6 +22,7 @@
 #include "efa.h"
 #include "efa_device.h"
 #include "efa_prov_info.h"
+#include "efa_av.h"
 
 #ifdef _WIN32
 #include "efawin.h"
@@ -96,7 +97,7 @@ err_close:
 
 /**
  * @brief initialize data members of a struct of efa_device after the gid
- * including the prov info
+ * including the protection domain and prov info
  *
  * @param	efa_device[in,out]	pointer to a struct efa_device
  * @param	ibv_device[in]		pointer to a struct ibv_device, which is
@@ -104,13 +105,23 @@ err_close:
  * @return	0 on success
  * 		a negative libfabric error code on failure.
  */
-int efa_device_construct_data(struct efa_device *efa_device,
+int efa_device_construct_pd(struct efa_device *efa_device,
 			 struct ibv_device *ibv_device)
 {
 	int err;
 
 	assert(efa_device->ibv_ctx);
 
+	efa_device->ibv_pd = ibv_alloc_pd(efa_device->ibv_ctx);
+	if (!efa_device->ibv_pd) {
+		EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_alloc_pd",
+		               errno);
+		err = -errno;
+		goto err_close;
+	}
+
+	efa_device->ah_map = NULL;
+	ofi_genlock_init(&efa_device->lock, OFI_LOCK_MUTEX);
 #if HAVE_RDMA_SIZE
 	efa_device->max_rdma_size = efa_device->efa_attr.max_rdma_size;
 	efa_device->device_caps = efa_device->efa_attr.device_caps;
@@ -137,6 +148,12 @@ int efa_device_construct_data(struct efa_device *efa_device,
 	return 0;
 
 err_close:
+	if (efa_device->ibv_pd) {
+		err = ibv_dealloc_pd(efa_device->ibv_pd);
+		if (err)
+			EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd",
+			               err);
+	}
 
 	ibv_close_device(efa_device->ibv_ctx);
 	efa_device->ibv_ctx = NULL;
@@ -162,6 +179,18 @@ err_close:
 static void efa_device_destruct(struct efa_device *device)
 {
 	int err;
+
+	if (device->ibv_pd) {
+		err = ibv_dealloc_pd(device->ibv_pd);
+		if (err)
+			EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd",
+			               err);
+
+		/* this lock is only initiated after allocating pd */
+		ofi_genlock_destroy(&device->lock);
+	}
+
+	device->ibv_pd = NULL;
 
 	if (device->ibv_ctx) {
 		err = ibv_close_device(device->ibv_ctx);
@@ -268,7 +297,7 @@ int efa_device_list_initialize(void)
 
 		}
 
-		err = efa_device_construct_data(&cur_device, ibv_device_list[device_idx]);
+		err = efa_device_construct_pd(&cur_device, ibv_device_list[device_idx]);
 		if (err) {
 			EFA_WARN(FI_LOG_FABRIC,
 				 "efa_device_construct_data failed for device %s, err=%d\n",

@@ -111,7 +111,6 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 	cudaError_t cuda_ret;
 	void *ptr = NULL;
 	struct ibv_mr *ibv_mr;
-	struct ibv_pd *ibv_pd;
 	int ibv_access = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
 	size_t len = ofi_get_page_size() * 2;
 	int ret;
@@ -125,34 +124,26 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 			 ofi_cudaGetErrorString(cuda_ret));
 		return;
 	}
-
-	ibv_pd = ibv_alloc_pd(g_efa_selected_device_list[0].ibv_ctx);
-	if (!ibv_pd) {
-		EFA_WARN(FI_LOG_CORE, "failed to allocate ibv_pd: %d", errno);
-		ofi_cudaFree(ptr);
-		return;
-	}
-
 #if HAVE_EFA_DMABUF_MR
 	ret = cuda_get_dmabuf_fd(ptr, len, &dmabuf_fd, &dmabuf_offset);
 	if (ret == FI_SUCCESS) {
-		ibv_mr = ibv_reg_dmabuf_mr(ibv_pd, dmabuf_offset,
+		ibv_mr = ibv_reg_dmabuf_mr(g_efa_selected_device_list[0].ibv_pd, dmabuf_offset,
 					   len, (uint64_t)ptr, dmabuf_fd, ibv_access);
 		(void)cuda_put_dmabuf_fd(dmabuf_fd);
 		if (!ibv_mr) {
 			EFA_INFO(FI_LOG_CORE,
 				"Unable to register CUDA device buffer via dmabuf: %s. "
 				"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
-			ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
+			ibv_mr = ibv_reg_mr(g_efa_selected_device_list[0].ibv_pd, ptr, len, ibv_access);
 		}
 	} else {
 		EFA_INFO(FI_LOG_CORE,
 			"Unable to retrieve dmabuf fd of CUDA device buffer: %d. "
 			"Fall back to ibv_reg_mr\n", ret);
-		ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
+		ibv_mr = ibv_reg_mr(g_efa_selected_device_list[0].ibv_pd, ptr, len, ibv_access);
 	}
 #else
-	ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
+	ibv_mr = ibv_reg_mr(g_efa_selected_device_list[0].ibv_pd, ptr, len, ibv_access);
 #endif
 
 	if (!ibv_mr) {
@@ -160,13 +151,11 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 		EFA_WARN(FI_LOG_CORE,
 			 "Failed to register CUDA buffer with the EFA device, FI_HMEM transfers that require peer to peer support will fail.\n");
 		ofi_cudaFree(ptr);
-		(void) ibv_dealloc_pd(ibv_pd);
 		return;
 	}
 
 	ret = ibv_dereg_mr(ibv_mr);
 	ofi_cudaFree(ptr);
-	(void) ibv_dealloc_pd(ibv_pd);
 	if (ret) {
 		EFA_WARN(FI_LOG_CORE,
 			 "Failed to deregister CUDA buffer: %s\n",
@@ -184,7 +173,6 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 static inline void efa_hmem_info_check_p2p_support_neuron(struct efa_hmem_info *info) {
 #if HAVE_NEURON
 	struct ibv_mr *ibv_mr = NULL;
-	struct ibv_pd *ibv_pd;
 	int ibv_access = IBV_ACCESS_LOCAL_WRITE;
 	void *handle;
 	void *ptr = NULL;
@@ -209,27 +197,20 @@ static inline void efa_hmem_info_check_p2p_support_neuron(struct efa_hmem_info *
 		return;
 	}
 
-	ibv_pd = ibv_alloc_pd(g_efa_selected_device_list[0].ibv_ctx);
-	if (!ibv_pd) {
-		EFA_WARN(FI_LOG_CORE, "failed to allocate ibv_pd: %d", errno);
-		neuron_free(&handle);
-		return;
-	}
-
 #if HAVE_EFA_DMABUF_MR
 	ret = neuron_get_dmabuf_fd(ptr, (uint64_t)len, &dmabuf_fd, &offset);
 	if (ret == FI_SUCCESS) {
 		ibv_mr = ibv_reg_dmabuf_mr(
-					ibv_pd, offset,
+					g_efa_selected_device_list[0].ibv_pd, offset,
 					len, (uint64_t)ptr, dmabuf_fd, ibv_access);
 	} else if (ret == -FI_EOPNOTSUPP) {
 		EFA_INFO(FI_LOG_MR,
 			"Unable to retrieve dmabuf fd of Neuron device buffer, "
 			"Fall back to ibv_reg_mr\n");
-		ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
+		ibv_mr = ibv_reg_mr(g_efa_selected_device_list[0].ibv_pd, ptr, len, ibv_access);
 	}
 #else
-	ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
+	ibv_mr = ibv_reg_mr(g_efa_selected_device_list[0].ibv_pd, ptr, len, ibv_access);
 #endif
 
 	if (!ibv_mr) {
@@ -239,13 +220,11 @@ static inline void efa_hmem_info_check_p2p_support_neuron(struct efa_hmem_info *
 		         "Failed to register Neuron buffer with the EFA device, "
 		         "FI_HMEM transfers that require peer to peer support will fail.\n");
 		neuron_free(&handle);
-		(void) ibv_dealloc_pd(ibv_pd);
 		return;
 	}
 
 	ret = ibv_dereg_mr(ibv_mr);
 	neuron_free(&handle);
-	(void) ibv_dealloc_pd(ibv_pd);
 	if (ret) {
 		EFA_WARN(FI_LOG_CORE,
 			 "Failed to deregister Neuron buffer: %s\n",

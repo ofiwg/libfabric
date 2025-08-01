@@ -8,6 +8,7 @@
 #include <infiniband/verbs.h>
 #include <infiniband/efadv.h>
 #include <stdbool.h>
+#include <ofi_lock.h>
 
 struct efa_device {
 	struct ibv_context	*ibv_ctx;
@@ -17,6 +18,9 @@ struct efa_device {
 	union ibv_gid		ibv_gid;
 	uint32_t		device_caps;
 	uint32_t		max_rdma_size;
+	struct ibv_pd		*ibv_pd;
+	struct efa_ah		*ah_map;
+	struct ofi_genlock	lock;
 	struct fi_info		*rdm_info;
 	struct fi_info		*dgram_info;
 };
