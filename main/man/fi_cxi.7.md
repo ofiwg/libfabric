@@ -1036,6 +1036,19 @@ The CXI provider checks for the following environment variables:
     to avoid the host copy in cases a performant copy can not be used. The default
     is to use IDC for all messages less than IDC size.
 
+*FI_CXI_DISABLE_NON_INJECT_RMA_IDC*
+:   Experimental option to disable favoring IDC for transmit of small RMA
+    when FI_INJECT is not specified. This can be useful with GPU source buffers
+    to avoid the host copy in cases a performant copy can not be used. The default
+    is to use IDC for non-triggered RMA writes that are less than IDC size and
+    target an optimized MR.
+
+*FI_CXI_DISABLE_NON_INJECT_AMO_IDC*
+:   Experimental option to disable favoring IDC for transmit of atomics
+    when FI_INJECT is not specified. This can be useful with GPU source buffers
+    to avoid the host copy in cases a performant copy can not be used. The default
+    is to use IDC for non-triggered AMOs that target an optimized MR.
+
 *FI_CXI_DISABLE_HOST_REGISTER*
 :   Disable registration of host buffers (overflow and request) with GPU. There
     are scenarios where using a large number of processes per GPU results in page
