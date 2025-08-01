@@ -146,7 +146,7 @@ ofi_poll_del(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
 
 #define OFI_PRIMARY_TX_CAPS \
 	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMIC | FI_MULTICAST | \
-	 FI_READ | FI_WRITE | FI_SEND | \
+	 FI_READ | FI_WRITE | FI_SEND | FI_RPC | \
 	 FI_COLLECTIVE | FI_NAMED_RX_CTX | FI_HMEM)
 
 #define OFI_SECONDARY_TX_CAPS \
