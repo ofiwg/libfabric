@@ -644,6 +644,7 @@ struct cxip_environment cxip_env = {
 	.hybrid_posted_recv_preemptive = 0,
 	.hybrid_unexpected_msg_preemptive = 0,
 	.fc_retry_usec_delay = 1000,
+	.cntr_spin_before_yield = 1000,
 	.ctrl_rx_eq_max_size = 67108864,
 	.default_cq_size = CXIP_CQ_DEF_SZ,
 	.default_tx_size = CXIP_DEFAULT_TX_SIZE,
@@ -1076,6 +1077,12 @@ static void cxip_env_init(void)
 		CXIP_WARN("FC retry delay invalid. Setting to %d usecs\n",
 			  cxip_env.fc_retry_usec_delay);
 	}
+
+	fi_param_define(&cxip_prov, "cntr_spin_before_yield", FI_PARAM_INT,
+			"Number of times to spin in counter operations before yielding. Default: %d",
+			cxip_env.cntr_spin_before_yield);
+	fi_param_get_int(&cxip_prov, "cntr_spin_before_yield",
+			 &cxip_env.cntr_spin_before_yield);
 
 	fi_param_define(&cxip_prov, "sw_rx_tx_init_max", FI_PARAM_INT,
 			"Max TX S/W RX processing will initiate. Default: %d",
