@@ -12,6 +12,7 @@
 #include "ofi_util.h"
 #include "efa_av.h"
 #include "rdm/efa_rdm_protocol.h"
+#include "efa_cqdirect_structs.h"
 
 #define EFA_QP_DEFAULT_SERVICE_LEVEL 0
 #define EFA_QP_LOW_LATENCY_SERVICE_LEVEL 8
@@ -46,8 +47,76 @@ struct efa_qp {
 	struct efa_base_ep *base_ep;
 	uint32_t qp_num;
 	uint32_t qkey;
+
+	bool cqdirect_enabled;
+#if HAVE_EFA_CQ_DIRECT
+	struct efa_cqdirect_qp cqdirect_qp;
+#endif
+	int (*post_recv)(struct efa_qp *efaqp, struct ibv_recv_wr *wr,
+			 struct ibv_recv_wr **bad_wr);
+	int (*wr_complete)(struct efa_qp *efaqp);
+	void (*wr_rdma_read)(struct efa_qp *efaqp, uint32_t rkey,
+			     uint64_t remote_addr);
+	void (*wr_rdma_write)(struct efa_qp *efaqp, uint32_t rkey,
+			      uint64_t remote_addr);
+	void (*wr_rdma_write_imm)(struct efa_qp *efaqp, uint32_t rkey,
+				  uint64_t remote_addr, __be32 imm_data);
+	void (*wr_send)(struct efa_qp *efaqp);
+	void (*wr_send_imm)(struct efa_qp *efaqp, __be32 imm_data);
+	void (*wr_set_inline_data_list)(struct efa_qp *efaqp, size_t num_buf,
+					const struct ibv_data_buf *buf_list);
+	void (*wr_set_sge_list)(struct efa_qp *efaqp, size_t num_sge,
+				const struct ibv_sge *sg_list);
+	void (*wr_set_ud_addr)(struct efa_qp *efaqp, struct ibv_ah *ah,
+			       uint32_t remote_qpn, uint32_t remote_qkey);
+	void (*wr_start)(struct efa_qp *efaqp);
 };
 
+static inline
+int efa_ibv_post_recv(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad)
+{
+	return ibv_post_recv(qp->ibv_qp, wr, bad);
+}
+
+static inline int efa_ibv_wr_complete(struct efa_qp *efaqp) {
+    return ibv_wr_complete(efaqp->ibv_qp_ex);
+}
+
+static inline void efa_ibv_wr_rdma_read(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr) {
+    ibv_wr_rdma_read(efaqp->ibv_qp_ex, rkey, remote_addr);
+}
+
+static inline void efa_ibv_wr_rdma_write(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr) {
+    ibv_wr_rdma_write(efaqp->ibv_qp_ex, rkey, remote_addr);
+}
+
+static inline void efa_ibv_wr_rdma_write_imm(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr, __be32 imm_data) {
+    ibv_wr_rdma_write_imm(efaqp->ibv_qp_ex, rkey, remote_addr, imm_data);
+}
+
+static inline void efa_ibv_wr_send(struct efa_qp *efaqp) {
+    ibv_wr_send(efaqp->ibv_qp_ex);
+}
+
+static inline void efa_ibv_wr_send_imm(struct efa_qp *efaqp, __be32 imm_data) {
+    ibv_wr_send_imm(efaqp->ibv_qp_ex, imm_data);
+}
+
+static inline void efa_ibv_wr_set_inline_data_list(struct efa_qp *efaqp, size_t num_buf, const struct ibv_data_buf *buf_list) {
+    ibv_wr_set_inline_data_list(efaqp->ibv_qp_ex, num_buf, buf_list);
+}
+
+static inline void efa_ibv_wr_set_sge_list(struct efa_qp *efaqp, size_t num_sge, const struct ibv_sge *sg_list) {
+    ibv_wr_set_sge_list(efaqp->ibv_qp_ex, num_sge, sg_list);
+}
+
+static inline void efa_ibv_wr_set_ud_addr(struct efa_qp *efaqp, struct ibv_ah *ah, uint32_t remote_qpn, uint32_t remote_qkey) {
+    ibv_wr_set_ud_addr(efaqp->ibv_qp_ex, ah, remote_qpn, remote_qkey);
+}
+
+static inline void efa_ibv_wr_start(struct efa_qp *efaqp) {
+    ibv_wr_start(efaqp->ibv_qp_ex);
+}
 
 struct efa_av;
 
@@ -110,9 +179,6 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, uint32_t tclass);
 
 void efa_qp_destruct(struct efa_qp *qp);
-
-int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
-			  struct ibv_qp_init_attr_ex *init_attr_ex);
 
 void efa_base_ep_close_util_ep(struct efa_base_ep *base_ep);
 

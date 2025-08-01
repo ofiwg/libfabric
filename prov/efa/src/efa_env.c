@@ -39,6 +39,7 @@ struct efa_env efa_env = {
 	.huge_page_setting = EFA_ENV_HUGE_PAGE_UNSPEC,
 	.use_unsolicited_write_recv = 1,
 	.internal_rx_refill_threshold = 8,
+	.use_direct_cq_ops = 1,
 };
 
 /* @brief Read and store the FI_EFA_* environment variables.
@@ -136,6 +137,8 @@ void efa_env_param_get(void)
 	if (fi_param_get_bool(&efa_prov, "use_huge_page", &use_huge_page) ==0) {
 		efa_env.huge_page_setting = use_huge_page ? EFA_ENV_HUGE_PAGE_ENABLED : EFA_ENV_HUGE_PAGE_DISABLED;
 	}
+	fi_param_get_size_t(&efa_prov, "internal_rx_refill_threshold", &efa_env.internal_rx_refill_threshold);
+	fi_param_get_bool(&efa_prov, "use_direct_cq_ops", &efa_env.use_direct_cq_ops);
 
 	efa_fork_support_request_initialize();
 }
@@ -215,6 +218,12 @@ void efa_env_define()
 			"Use device's unsolicited write recv functionality when it's available. (Default: true)");
 	fi_param_define(&efa_prov, "internal_rx_refill_threshold", FI_PARAM_SIZE_T,
 			"The threshold that EFA provider will refill the internal rx pkt pool. (Default: %zu)", efa_env.internal_rx_refill_threshold);
+	fi_param_define(
+		&efa_prov, "use_direct_cq_ops", FI_PARAM_BOOL,
+		"Use the direct CQ implementation that bypasses rdma-core on "
+		"data path, when it's available. Setting this variable as 0 "
+		"will disable this feature(Default: %d)",
+		efa_env.use_direct_cq_ops);
 }
 
 

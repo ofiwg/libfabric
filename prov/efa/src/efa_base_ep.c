@@ -7,6 +7,22 @@
 #include "efa_cq.h"
 #include "efa_cntr.h"
 #include "rdm/efa_rdm_protocol.h"
+#include "efa_cqdirect.h"
+
+static void efa_qp_fill_ibv_pfns(struct efa_qp *qp)
+{
+	qp->post_recv = efa_ibv_post_recv;
+	qp->wr_complete = efa_ibv_wr_complete;
+	qp->wr_rdma_read = efa_ibv_wr_rdma_read;
+	qp->wr_rdma_write = efa_ibv_wr_rdma_write;
+	qp->wr_rdma_write_imm = efa_ibv_wr_rdma_write_imm;
+	qp->wr_send = efa_ibv_wr_send;
+	qp->wr_send_imm = efa_ibv_wr_send_imm;
+	qp->wr_set_inline_data_list = efa_ibv_wr_set_inline_data_list;
+	qp->wr_set_sge_list = efa_ibv_wr_set_sge_list;
+	qp->wr_set_ud_addr = efa_ibv_wr_set_ud_addr;
+	qp->wr_start = efa_ibv_wr_start;
+};
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av)
 {
@@ -251,9 +267,13 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, 
 	}
 
 	(*qp)->ibv_qp_ex = ibv_qp_to_qp_ex((*qp)->ibv_qp);
+	/* Initialize it explicitly for safety */
+	(*qp)->cqdirect_enabled = false;
+	efa_qp_fill_ibv_pfns(*qp);
 	return FI_SUCCESS;
 }
 
+static
 int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 			  struct ibv_qp_init_attr_ex *init_attr_ex)
 {
@@ -312,6 +332,10 @@ void efa_qp_destruct(struct efa_qp *qp)
 	err = -ibv_destroy_qp(qp->ibv_qp);
 	if (err)
 		EFA_INFO(FI_LOG_CORE, "destroy qp[%u] failed, err: %s\n", qp->qp_num, fi_strerror(-err));
+#if HAVE_EFA_CQ_DIRECT
+	if (qp->cqdirect_enabled)
+		efa_cqdirect_qp_finalize(qp);
+#endif
 	free(qp);
 }
 
@@ -611,13 +635,12 @@ int efa_base_ep_check_qp_in_order_aligned_128_bytes(struct efa_base_ep *ep,
 	struct efa_qp *qp = NULL;
 	struct ibv_qp_init_attr_ex attr_ex = {0};
 	int ret, retv;
-	struct ibv_cq_ex *ibv_cq_ex = NULL;
-	enum ibv_cq_ex_type ibv_cq_ex_type;
+	struct efa_ibv_cq ibv_cq = {0};
 	struct fi_cq_attr cq_attr = {0};
 	struct fi_efa_cq_init_attr efa_cq_init_attr = {0};
 
-	ret = efa_cq_ibv_cq_ex_open(&cq_attr, ep->domain->device->ibv_ctx,
-				    &ibv_cq_ex, &ibv_cq_ex_type,
+	ret = efa_cq_open_ibv_cq(&cq_attr, ep->domain->device->ibv_ctx,
+				    &ibv_cq,
 				    &efa_cq_init_attr);
 	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %d\n", ret);
@@ -626,7 +649,7 @@ int efa_base_ep_check_qp_in_order_aligned_128_bytes(struct efa_base_ep *ep,
 	}
 
 	/* Create a dummy qp for query only */
-	efa_base_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, ibv_cq_ex, ibv_cq_ex);
+	efa_base_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, ibv_cq.ibv_cq_ex, ibv_cq.ibv_cq_ex);
 
 	ret = efa_qp_create(&qp, &attr_ex, FI_TC_UNSPEC);
 	if (ret)
@@ -639,8 +662,8 @@ out:
 	if (qp)
 		efa_qp_destruct(qp);
 
-	if (ibv_cq_ex) {
-		retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(ibv_cq_ex));
+	if (ibv_cq.ibv_cq_ex) {
+		retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(ibv_cq.ibv_cq_ex));
 		if (retv)
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close ibv cq: %s\n",
 				fi_strerror(-retv));
@@ -727,39 +750,50 @@ void efa_base_ep_remove_cntr_ibv_cq_poll_list(struct efa_base_ep *ep)
 int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_recv_qp)
 {
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
-	struct efa_cq *scq, *rcq;
-	struct ibv_cq_ex *tx_ibv_cq, *rx_ibv_cq;
+	struct efa_cq *scq, *rcq, *txcq, *rxcq;
 	int err;
 
-	scq = efa_base_ep_get_tx_cq(ep);
-	rcq = efa_base_ep_get_rx_cq(ep);
+	txcq = efa_base_ep_get_tx_cq(ep);
+	rxcq = efa_base_ep_get_rx_cq(ep);
 
-	if (!scq && !rcq) {
+	if (!txcq && !rxcq) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Endpoint is not bound to a send or receive completion queue\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!scq && ofi_needs_tx(ep->info->caps)) {
+	if (!txcq && ofi_needs_tx(ep->info->caps)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Endpoint is not bound to a send completion queue when it has transmit capabilities enabled (FI_SEND).\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!rcq && ofi_needs_rx(ep->info->caps)) {
+	if (!rxcq && ofi_needs_rx(ep->info->caps)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Endpoint is not bound to a receive completion queue when it has receive capabilities enabled. (FI_RECV)\n");
 		return -FI_ENOCQ;
 	}
 
-	tx_ibv_cq = scq ? scq->ibv_cq.ibv_cq_ex : rcq->ibv_cq.ibv_cq_ex;
-	rx_ibv_cq = rcq ? rcq->ibv_cq.ibv_cq_ex : scq->ibv_cq.ibv_cq_ex;
+	scq = txcq ? txcq : rxcq;
+	rcq = rxcq ? rxcq : txcq;
 
-	efa_base_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, tx_ibv_cq, rx_ibv_cq);
+	efa_base_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, scq->ibv_cq.ibv_cq_ex, rcq->ibv_cq.ibv_cq_ex);
 
 	err = efa_base_ep_create_qp(ep, &attr_ex);
 	if (err)
 		return err;
+
+#if HAVE_EFA_CQ_DIRECT
+	/* Only enable direct QP when direct CQ is enabled */
+	assert(scq->ibv_cq.cqdirect_enabled == rcq->ibv_cq.cqdirect_enabled);
+	if (scq->ibv_cq.cqdirect_enabled) {
+		err = efa_cqdirect_qp_initialize(ep->qp);
+		if (err) {
+			efa_base_ep_destruct_qp(ep);
+			return err;
+		}
+	}
+#endif
 
 	if (create_user_recv_qp) {
 		err = efa_qp_create(&ep->user_recv_qp, &attr_ex, ep->info->tx_attr->tclass);

@@ -4,6 +4,7 @@
 #include "efa_unit_tests.h"
 #include "rdm/efa_rdm_cq.h"
 #include "efa_rdm_pke_utils.h"
+#include "efa_cqdirect_entry.h"
 
 /**
  * @brief Verify the EFA RDM endpoint correctly parses the host id string
@@ -105,12 +106,12 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_handshake_pkt_attr pkt_attr = {0};
 	struct fi_cq_data_entry cq_entry;
-	struct ibv_qp_ex *ibv_qp;
+	struct efa_qp *efa_qp;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_pke *pkt_entry;
 	uint64_t actual_peer_host_id = UINT64_MAX;
 	struct efa_rdm_cq *efa_rdm_cq;
-	struct ibv_cq_ex *ibv_cqx;
+	struct efa_ibv_cq *ibv_cq;
 
 	g_efa_unit_test_mocks.local_host_id = local_host_id;
 	g_efa_unit_test_mocks.peer_host_id = peer_host_id;
@@ -122,7 +123,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
-	ibv_cqx = efa_rdm_cq->efa_cq.ibv_cq.ibv_cq_ex;
+	ibv_cq = &(efa_rdm_cq->efa_cq.ibv_cq);
 
 	efa_rdm_ep->host_id = g_efa_unit_test_mocks.local_host_id;
 
@@ -157,29 +158,29 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	pkt_attr.device_version = 0xefa0;
 	efa_unit_test_handshake_pkt_construct(pkt_entry, &pkt_attr);
 
-	ibv_qp = efa_rdm_ep->base_ep.qp->ibv_qp_ex;
-	ibv_qp->wr_start = &efa_mock_ibv_wr_start_no_op;
+	efa_qp = efa_rdm_ep->base_ep.qp;
+	efa_qp->wr_start = &efa_mock_ibv_wr_start_no_op;
 	/* this mock will save the send work request (wr) in a global array */
-	ibv_qp->wr_send = &efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr;
-	ibv_qp->wr_set_inline_data_list = &efa_mock_ibv_wr_set_inline_data_list_no_op;
-	ibv_qp->wr_set_sge_list = &efa_mock_ibv_wr_set_sge_list_no_op;
-	ibv_qp->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
-	ibv_qp->wr_complete = &efa_mock_ibv_wr_complete_no_op;
+	efa_qp->wr_send = &efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr;
+	efa_qp->wr_set_inline_data_list = &efa_mock_ibv_wr_set_inline_data_list_no_op;
+	efa_qp->wr_set_sge_list = &efa_mock_ibv_wr_set_sge_list_no_op;
+	efa_qp->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
+	efa_qp->wr_complete = &efa_mock_ibv_wr_complete_no_op;
 	expect_function_call(efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr);
 
 	/* Setup CQ */
-	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	ibv_cqx->next_poll = &efa_mock_ibv_next_poll_check_function_called_and_return_mock;
-	ibv_cqx->read_byte_len = &efa_mock_ibv_read_byte_len_return_mock;
-	ibv_cqx->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
-	ibv_cqx->read_slid = &efa_mock_ibv_read_slid_return_mock;
-	ibv_cqx->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
-	ibv_cqx->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
-	ibv_cqx->read_wc_flags = &efa_mock_ibv_read_wc_flags_return_mock;
-	ibv_cqx->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
-	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
-	ibv_cqx->status = IBV_WC_SUCCESS;
-	ibv_cqx->wr_id = (uintptr_t)pkt_entry;
+	ibv_cq->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	ibv_cq->next_poll = &efa_mock_ibv_next_poll_check_function_called_and_return_mock;
+	ibv_cq->read_byte_len = &efa_mock_ibv_read_byte_len_return_mock;
+	ibv_cq->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	ibv_cq->read_slid = &efa_mock_ibv_read_slid_return_mock;
+	ibv_cq->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
+	ibv_cq->read_qp_num = &efa_mock_ibv_read_qp_num_return_mock;
+	ibv_cq->read_wc_flags = &efa_mock_ibv_read_wc_flags_return_mock;
+	ibv_cq->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	ibv_cq->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	ibv_cq->ibv_cq_ex->status = IBV_WC_SUCCESS;
+	ibv_cq->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
 	expect_function_call(efa_mock_ibv_next_poll_check_function_called_and_return_mock);
 
 	/* Receive handshake packet */
@@ -212,8 +213,8 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	 * We need to poll the CQ twice explicitly to point the CQE
 	 * to the saved send wr in handshake
 	 */
-	ibv_cqx->status = IBV_WC_GENERAL_ERR;
-	ibv_cqx->wr_id = (uintptr_t)g_ibv_submitted_wr_id_vec[0];
+	ibv_cq->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
+	ibv_cq->ibv_cq_ex->wr_id = (uintptr_t)g_ibv_submitted_wr_id_vec[0];
 
 	/* Progress the send wr to clean up outstanding tx ops */
 	cq_read_send_ret = fi_cq_read(resource->cq, &cq_entry, 1);
@@ -1739,4 +1740,88 @@ void test_efa_ep_bind_and_enable(struct efa_resource **state)
 	assert_true(efa_ep->efa_qp_enabled);
 	/* we shouldn't have user recv qp for efa-direct */
 	assert_true(efa_ep->user_recv_qp == NULL);
+}
+
+#if HAVE_EFA_CQ_DIRECT
+
+/**
+ * @brief qp's cqdirect status should be consistent
+ * with cq's status
+ *
+ * This test is against efa-direct fabric
+ *
+ * @param state unit test resources
+ */
+static
+void test_efa_ep_cqdirect_equal_to_cq_cqdirect_impl(struct efa_resource **state, bool cqdirect_enabled)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	bool cqdirect_enabled_orig;
+	struct fid_ep *ep;
+	struct efa_base_ep *efa_ep;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
+
+	/* recover the cq boolean */
+	cqdirect_enabled_orig = efa_cq->ibv_cq.cqdirect_enabled;
+	efa_cq->ibv_cq.cqdirect_enabled = cqdirect_enabled;
+
+	/* open a test ep */
+	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep, NULL), 0);
+	efa_ep = container_of(ep, struct efa_base_ep, util_ep.ep_fid);
+	assert_int_equal(fi_ep_bind(ep, &resource->cq->fid, FI_SEND | FI_RECV), 0);
+	assert_int_equal(fi_enable(ep), 0);
+
+	assert_true(efa_ep->qp->cqdirect_enabled == cqdirect_enabled);
+
+	assert_int_equal(fi_close(&ep->fid), 0);
+
+	/* recover the mocked boolean */
+	efa_cq->ibv_cq.cqdirect_enabled = cqdirect_enabled_orig;
+}
+
+void test_efa_ep_cqdirect_equal_to_cq_cqdirect_happy(struct efa_resource **state)
+{
+	test_efa_ep_cqdirect_equal_to_cq_cqdirect_impl(state, true);
+}
+
+void test_efa_ep_cqdirect_equal_to_cq_cqdirect_unhappy(struct efa_resource **state)
+{
+	test_efa_ep_cqdirect_equal_to_cq_cqdirect_impl(state, false);
+}
+#else
+
+/* No value to test this, already covered by test_efa_rdm_ep_cqdirect_ops */
+void test_efa_ep_cqdirect_equal_to_cq_cqdirect_happy(struct efa_resource **state)
+{
+	skip();
+}
+
+/* No value to test this, already covered by test_efa_rdm_ep_cqdirect_ops */
+void test_efa_ep_cqdirect_equal_to_cq_cqdirect_unhappy(struct efa_resource **state)
+{
+	skip();
+}
+
+#endif /* HAVE_EFA_DIRECT_CQ */
+
+
+/**
+ * @brief Test qp's cqdirect status for efa-rdm ep
+ * Currently, cqdirect should always be disabled by efa-rdm.
+ *
+ * @param state pointer of efa_resource
+ */
+void test_efa_rdm_ep_cqdirect_disabled(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_ep;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+
+	assert_false(efa_ep->qp->cqdirect_enabled);
 }
