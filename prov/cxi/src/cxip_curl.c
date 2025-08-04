@@ -747,9 +747,9 @@ static int cxip_json_dl_init(void)
         json_libpath = strdup(lib_name);
         TRACE_CURL("libjson-c path set to %s\n", json_libpath);
 #endif
-	cxip_jsonhandle = dlopen(lib_name, RTLD_NOW);
+	cxip_jsonhandle = dlopen(json_libpath, RTLD_NOW);
 	if (!cxip_jsonhandle) {
-		TRACE_CURL("Unable to dlopen libjson - lib_name = %s\n", lib_name);
+		TRACE_CURL("Unable to dlopen libjson - file path = %s\n", json_libpath);
 		free(json_libpath);
 		return -FI_ENOSYS;
 	}
