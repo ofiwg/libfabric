@@ -793,6 +793,12 @@ static void do_static_assert_tests()
 
 OPX_INI
 {
+#if HAVE_OPX_DL
+	ofi_mem_init();
+	ofi_hmem_init();
+	ofi_monitors_init();
+#endif
+
 	fi_opx_count	       = 1;
 	fi_opx_global.progress = FI_PROGRESS_MANUAL;
 	fi_opx_set_default_info(); // TODO: fold into fi_opx_set_defaults
