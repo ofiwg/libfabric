@@ -200,7 +200,7 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			opx_hfi_srcversion=$(/sbin/modinfo hfi1 -F srcversion)
 			opx_hfi_sys_srcversion=$(cat /sys/module/hfi1/srcversion)
 			AS_IF([ test -z $opx_hfi_version || test -z $opx_hfi_sys_srcversion ||
-				test $opx_hfi_srcversion != $opx_hfi_sys_srcversion ||
+			        test $opx_hfi_srcversion != $opx_hfi_sys_srcversion ||
 				test $opx_hfi_version != $opx_hfi_version_sorted],[
 
 				opx_hfi_dev_override=$(echo $CPPFLAGS | grep -w "DOPX_DEV_OVERRIDE")
