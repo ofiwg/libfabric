@@ -188,16 +188,15 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			opx_hfi_version_sorted=$(echo -e "10.14.0.0\n$opx_hfi_version" | sort -V | tail -n 1)
 			opx_hfi_srcversion=$(/sbin/modinfo hfi1 -F srcversion)
 			opx_hfi_sys_srcversion=$(cat /sys/module/hfi1/srcversion)
-			AS_IF([test $opx_hfi_srcversion != $opx_hfi_sys_srcversion ||
-				test -z $opx_hfi_version ||
+			AS_IF([ test -z $opx_hfi_version || test -z $opx_hfi_sys_srcversion ||
+			        test $opx_hfi_srcversion != $opx_hfi_sys_srcversion ||
 				test $opx_hfi_version != $opx_hfi_version_sorted],[
 
 				opx_hfi_dev_override=$(echo $CPPFLAGS | grep -w "DOPX_DEV_OVERRIDE")
 				AS_IF([test "x$opx_hfi_dev_override" != "x" -o "x$OPX_PRODUCTION_BUILD_OVERRIDE" != "x"],[
 					AC_MSG_NOTICE([hfi1 driver version is GPU-compatible... no, overridden])
 				],[
-					AC_MSG_NOTICE([hfi1 driver version is GPU-compatible... no])
-					opx_happy=0
+					AC_MSG_WARN([hfi1 driver version is not GPU-compatible, the OPX provider could fail at runtime.])
 				])
 
 			],
