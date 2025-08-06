@@ -146,6 +146,7 @@
 #define CXIP_MSG_ORDER			(FI_ORDER_SAS | \
 					 FI_ORDER_WAW | \
 					 FI_ORDER_RMA_WAW | \
+					 FI_ORDER_RMA_RAR | \
 					 FI_ORDER_ATOMIC_WAW | \
 					 FI_ORDER_ATOMIC_WAR | \
 					 FI_ORDER_ATOMIC_RAW | \
