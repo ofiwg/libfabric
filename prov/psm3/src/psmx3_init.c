@@ -678,7 +678,6 @@ static int psmx3_getinfo(uint32_t api_version, const char *node,
 	struct fi_info *prov_info = NULL;
 	struct psmx3_ep_name *dest_addr = NULL;
 	struct psmx3_ep_name *src_addr = NULL;
-	int svc0, svc = PSMX3_ANY_SERVICE;
 	size_t len;
 	void *addr;
 	uint32_t fmt;
@@ -790,32 +789,9 @@ static int psmx3_getinfo(uint32_t api_version, const char *node,
 
 	/* Resovle dest address using "node", "service" pair */
 	if (!dest_addr && node && !(flags & FI_SOURCE)) {
-		psm2_uuid_t uuid;
-
-		psmx3_get_uuid(uuid);
-		struct util_ns ns = {
-			.port = psmx3_uuid_to_port(uuid),
-			.name_len = sizeof(*dest_addr),
-			.service_len = sizeof(svc),
-			.service_cmp = psmx3_ns_service_cmp,
-			.is_service_wildcard = psmx3_ns_is_service_wildcard,
-		};
-		ofi_ns_init(&ns);
-
-		if (service)
-			svc = atoi(service);
-		svc0 = svc;
-		dest_addr = (struct psmx3_ep_name *)
-			ofi_ns_resolve_name(&ns, node, &svc);
-		if (dest_addr) {
-			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
-				"'%s:%u' resolved to <epid=%s>:%d\n",
-				node, svc0, psm3_epid_fmt(dest_addr->epid, 0), svc);
-		} else {
-			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
-				"failed to resolve '%s:%u'.\n", node, svc);
+		dest_addr = psmx3_lookup(node, service);
+		if (!dest_addr)
 			goto err_out;
-		}
 	}
 
 	/* Update prov info with resovled addresses and hfi info */
