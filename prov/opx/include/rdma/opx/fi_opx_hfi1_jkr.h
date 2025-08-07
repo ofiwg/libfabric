@@ -267,8 +267,8 @@ static inline void opx_set_route_control_value(const bool disabled)
 
 #define OPX_LRH_JKR_ENTROPY_SHIFT_16B (OPX_MSB_SHIFT + 8) // rx is top 8 bits of entropy
 
-/* shift 8 bit bth.subctxt_rx directly into lrh entropy top bits */
-#define OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B (OPX_BTH_SUBCTXT_RX_SHIFT - OPX_LRH_JKR_ENTROPY_SHIFT_16B)
+/* shift 8 bit bth.subctxt_rx (remove the subctxt fields) directly into lrh entropy top bits */
+#define OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B ((OPX_BTH_SUBCTXT_RX_SHIFT + 8) - OPX_LRH_JKR_ENTROPY_SHIFT_16B)
 
 /* Full RC (3 bits) is in the 16B header */
 #define OPX_LRH_JKR_16B_RC(_pkt_type) OPX_ROUTE_CONTROL_VALUE(OPX_HFI1_CYR, _pkt_type)
