@@ -42,6 +42,7 @@
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/fi_opx_hfi1_sdma.h"
 #include "rdma/opx/fi_opx_match.h"
+#include "rdma/opx/opx_debug.h"
 
 #include <ofi_enosys.h>
 
@@ -660,6 +661,9 @@ static int fi_opx_close_ep(fid_t fid)
 #endif
 		opx_ep->hmem_copy_buf = NULL;
 	}
+
+	opx_debug_ep_list_free(opx_ep);
+
 	void *mem = opx_ep->mem;
 	free(mem);
 	// opx_ep (the object passed in as fid) is now unusable
@@ -2747,6 +2751,9 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 #endif
 
 	*ep = &opx_ep->ep_fid;
+
+	opx_debug_ep_list_append(opx_ep);
+	opx_debug_install_handler();
 
 	FI_OPX_DEBUG_COUNTERS_INIT(opx_ep->debug_counters);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
