@@ -826,9 +826,9 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto free;
 
-	ret = efa_cq_ibv_cq_ex_open(
-		attr, efa_domain->device->ibv_ctx, &cq->efa_cq.ibv_cq.ibv_cq_ex,
-		&cq->efa_cq.ibv_cq.ibv_cq_ex_type, &efa_cq_init_attr);
+	ret = efa_cq_open_ibv_cq(
+		attr, efa_domain->device->ibv_ctx, &cq->efa_cq.ibv_cq,
+		&efa_cq_init_attr);
 	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", fi_strerror(ret));
 		goto close_util_cq;

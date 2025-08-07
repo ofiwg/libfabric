@@ -611,14 +611,12 @@ int efa_base_ep_check_qp_in_order_aligned_128_bytes(struct efa_base_ep *ep,
 	struct efa_qp *qp = NULL;
 	struct ibv_qp_init_attr_ex attr_ex = {0};
 	int ret, retv;
-	struct ibv_cq_ex *ibv_cq_ex = NULL;
-	enum ibv_cq_ex_type ibv_cq_ex_type;
+	struct efa_ibv_cq ibv_cq = {0};
 	struct fi_cq_attr cq_attr = {0};
 	struct fi_efa_cq_init_attr efa_cq_init_attr = {0};
 
-	ret = efa_cq_ibv_cq_ex_open(&cq_attr, ep->domain->device->ibv_ctx,
-				    &ibv_cq_ex, &ibv_cq_ex_type,
-				    &efa_cq_init_attr);
+	ret = efa_cq_open_ibv_cq(&cq_attr, ep->domain->device->ibv_ctx, &ibv_cq,
+				 &efa_cq_init_attr);
 	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %d\n", ret);
 		ret = -FI_EINVAL;
@@ -626,7 +624,7 @@ int efa_base_ep_check_qp_in_order_aligned_128_bytes(struct efa_base_ep *ep,
 	}
 
 	/* Create a dummy qp for query only */
-	efa_base_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, ibv_cq_ex, ibv_cq_ex);
+	efa_base_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, ibv_cq.ibv_cq_ex, ibv_cq.ibv_cq_ex);
 
 	ret = efa_qp_create(&qp, &attr_ex, FI_TC_UNSPEC);
 	if (ret)
@@ -639,8 +637,8 @@ out:
 	if (qp)
 		efa_qp_destruct(qp);
 
-	if (ibv_cq_ex) {
-		retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(ibv_cq_ex));
+	if (ibv_cq.ibv_cq_ex) {
+		retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(ibv_cq.ibv_cq_ex));
 		if (retv)
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close ibv cq: %s\n",
 				fi_strerror(-retv));
