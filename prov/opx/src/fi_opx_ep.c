@@ -42,7 +42,6 @@
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/fi_opx_hfi1_sdma.h"
 #include "rdma/opx/fi_opx_match.h"
-#include "rdma/opx/opx_hfisvc.h"
 #include "rdma/opx/opx_debug.h"
 
 #include <ofi_enosys.h>
@@ -681,21 +680,6 @@ static int fi_opx_close_ep(fid_t fid)
 #endif
 		opx_ep->hmem_copy_buf = NULL;
 	}
-
-#if HAVE_HFISVC
-	if (opx_ep->use_hfisvc) {
-		ret = (*opx_ep->domain->hfisvc.completion_queue_close)(&opx_ep->hfisvc.internal_completion_queue);
-		if (ret) {
-			errno = -ret;
-			goto err_unlock;
-		}
-		ret = (*opx_ep->domain->hfisvc.command_queue_close)(&opx_ep->hfisvc.command_queue);
-		if (ret) {
-			errno = -ret;
-			goto err_unlock;
-		}
-	}
-#endif
 
 	opx_debug_ep_list_free(opx_ep);
 

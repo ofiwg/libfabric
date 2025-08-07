@@ -43,8 +43,6 @@
 
 static struct slist ep_list = {.head = NULL};
 
-static void (*prev_sig_handler)(int) = NULL;
-
 static inline size_t opx_debug_slist_len(struct slist_entry *head)
 {
 	size_t		    count = 0;
@@ -61,8 +59,8 @@ static inline size_t opx_debug_slist_len(struct slist_entry *head)
 static inline uint8_t opx_debug_get_replay_bth_opcode(struct fi_opx_reliability_tx_replay *replay,
 						      enum opx_hfi1_type		   hfi1_type)
 {
-	return (hfi1_type & (OPX_HFI1_MIXED_9B | OPX_HFI1_WFR)) ? replay->scb.scb_9B.hdr.bth.opcode :
-								  replay->scb.scb_16B.hdr.bth.opcode;
+	return (hfi1_type & (OPX_HFI1_JKR_9B | OPX_HFI1_WFR)) ? replay->scb.scb_9B.hdr.bth.opcode :
+								replay->scb.scb_16B.hdr.bth.opcode;
 }
 
 static inline uint32_t opx_debug_get_replay_psn(struct fi_opx_reliability_tx_replay *replay,
@@ -71,12 +69,12 @@ static inline uint32_t opx_debug_get_replay_psn(struct fi_opx_reliability_tx_rep
 	uint8_t opcode = opx_debug_get_replay_bth_opcode(replay, hfi1_type);
 
 	if (opcode == 0xC2) {
-		return (hfi1_type & (OPX_HFI1_MIXED_9B | OPX_HFI1_WFR)) ?
+		return (hfi1_type & (OPX_HFI1_JKR_9B | OPX_HFI1_WFR)) ?
 			       ((uint32_t) ntohl(replay->scb.scb_9B.hdr.bth.psn)) & 0x00FFFFFF :
 			       ((uint32_t) ntohl(replay->scb.scb_16B.hdr.bth.psn)) & 0x00FFFFFF;
 	} else {
-		return (hfi1_type & (OPX_HFI1_MIXED_9B | OPX_HFI1_WFR)) ? replay->scb.scb_9B.hdr.bth.psn & 0x00FFFFFF :
-									  replay->scb.scb_16B.hdr.bth.psn & 0x00FFFFFF;
+		return (hfi1_type & (OPX_HFI1_JKR_9B | OPX_HFI1_WFR)) ? replay->scb.scb_9B.hdr.bth.psn & 0x00FFFFFF :
+									replay->scb.scb_16B.hdr.bth.psn & 0x00FFFFFF;
 	}
 }
 
@@ -164,13 +162,13 @@ static void opx_debug_dump_tx_flow(struct fi_opx_ep *opx_ep, pid_t my_pid, FILE 
 
 			struct fi_opx_reliability_tx_replay *replay =
 				(struct fi_opx_reliability_tx_replay *) node_type->val;
-			int32_t psn	  = opx_debug_get_replay_psn(replay, OPX_SW_HFI1_TYPE);
+			int32_t psn	  = opx_debug_get_replay_psn(replay, OPX_HFI1_TYPE);
 			int32_t first_psn = psn;
 
 			struct fi_opx_reliability_tx_replay *first_replay = NULL;
 			while (replay != first_replay) {
 				++replay_count;
-				psn	 = opx_debug_get_replay_psn(replay, OPX_SW_HFI1_TYPE);
+				psn	 = opx_debug_get_replay_psn(replay, OPX_HFI1_TYPE);
 				last_psn = psn;
 
 				if (!first_replay) {
@@ -228,7 +226,7 @@ static void opx_debug_dump_backtrace(FILE *output)
 static void opx_debug_dump_endpoint(struct fi_opx_ep *opx_ep)
 {
 	char  hostname[HOST_NAME_MAX + 1];
-	pid_t my_pid = getpid();
+	pid_t my_pid = gettid();
 
 	int rc = gethostname(hostname, HOST_NAME_MAX);
 	if (rc != 0) {
@@ -271,10 +269,6 @@ static void opx_debug_dump_endpoint(struct fi_opx_ep *opx_ep)
 	fprintf(output, "(%d) work_pending[TID_SETUP].head           : %p (%lu)\n", my_pid,
 		opx_ep->tx->work_pending[OPX_WORK_TYPE_TID_SETUP].head,
 		opx_debug_slist_len(opx_ep->tx->work_pending[OPX_WORK_TYPE_TID_SETUP].head));
-
-	fprintf(output, "(%d) work_pending[HFISVC].head              : %p (%lu)\n", my_pid,
-		opx_ep->tx->work_pending[OPX_WORK_TYPE_HFISVC].head,
-		opx_debug_slist_len(opx_ep->tx->work_pending[OPX_WORK_TYPE_HFISVC].head));
 
 	fprintf(output, "(%d) sdma_request_queue.list.head           : %p (%lu)\n", my_pid,
 		opx_ep->tx->sdma_request_queue.list.head,
@@ -428,22 +422,15 @@ void opx_debug_ep_list_free(void *opx_ep)
 	}
 }
 
-void opx_debug_ep_list_dump()
+static void opx_debug_signal_handler(int signum, siginfo_t *info, void *ucontext)
 {
 	struct opx_debug_ep_entry *entry = (struct opx_debug_ep_entry *) ep_list.head;
 	while (entry) {
 		opx_debug_dump_endpoint((struct fi_opx_ep *) entry->ep);
 		entry = entry->next;
 	}
-}
 
-static void opx_debug_signal_handler(int signum, siginfo_t *info, void *ucontext)
-{
-	opx_debug_ep_list_dump();
-
-	if (prev_sig_handler && prev_sig_handler != SIG_DFL && prev_sig_handler != SIG_IGN) {
-		prev_sig_handler(signum);
-	}
+	raise(signum);
 }
 
 static int sig_handler_installed = 0;
@@ -454,7 +441,6 @@ void opx_debug_install_handler()
 		return;
 	}
 
-	struct sigaction old_sa;
 	struct sigaction act;
 
 	memset(&act, 0, sizeof(act));
@@ -462,9 +448,7 @@ void opx_debug_install_handler()
 	act.sa_sigaction = opx_debug_signal_handler;
 	act.sa_flags	 = SA_SIGINFO;
 
-	sigaction(SIGUSR2, &act, &old_sa);
-
-	prev_sig_handler = old_sa.sa_handler;
+	sigaction(SIGUSR2, &act, NULL);
 
 	sig_handler_installed = 1;
 }
