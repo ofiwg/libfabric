@@ -63,8 +63,9 @@
 #include "rdma/opx/fi_opx_flight_recorder.h"
 #include "rdma/opx/opx_tracer.h"
 
-#define FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS (0x20ul)
-#define FI_OPX_HFI1_HDRQ_INDEX_SHIFT	(5) /* index FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS entries */
+#define FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS	    (fi_opx_global.rcvhdrq_entry_dws)
+#define FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN (0x20ul)
+#define FI_OPX_HFI1_HDRQ_INDEX_SHIFT	    (5) /* index FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS entries */
 
 #define FI_OPX_HFI1_HDRQ_UPDATE_MASK_1024 (0x7FFFul)
 #define FI_OPX_HFI1_HDRQ_UPDATE_MASK_512  (0x3FFFul)

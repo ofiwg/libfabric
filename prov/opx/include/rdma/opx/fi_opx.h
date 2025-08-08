@@ -233,7 +233,9 @@ struct fi_opx_global_data {
 	bool			     ctx_sharing_enabled;
 	uint16_t		     pkt_size;
 	uint8_t			     unused[1];
-	uint64_t		     unused_qw[4];
+	uint32_t		     rcvhdrq_entry_dws;
+	uint32_t		     unused_dw;
+	uint64_t		     unused_qw[3];
 
 	/* == CACHE LINE 2+ == */
 	struct opx_hfi_local_info hfi_local_info;
