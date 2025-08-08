@@ -4439,6 +4439,15 @@ int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event)
 
 	case C_EVENT_GET:
 		mb.raw = event->tgt_long.match_bits;
+		if (mb.coll_get) {
+			if (event_rc != C_RC_OK)
+				CXIP_DBG("%s: Collectives rdma get had a failure\n", __func__);
+			else
+				CXIP_DBG("%s: Collectives rdma get was ok\n", __func__);
+
+			return FI_SUCCESS;
+		}
+
 		rdzv_id = (mb.rdzv_id_hi << CXIP_RDZV_ID_CMD_WIDTH) |
 			  mb.rdzv_id_lo;
 		get_req = cxip_rdzv_id_lookup(txc, rdzv_id);
@@ -5208,8 +5217,8 @@ static int cxip_send_req_dequeue(struct cxip_txc_hpc *txc, struct cxip_req *req)
 
 static void cxip_txc_hpc_progress(struct cxip_txc *txc, bool internal)
 {
-	cxip_coll_progress_cq_poll(txc->ep_obj);
 	cxip_evtq_progress(&txc->tx_evtq, internal);
+	cxip_coll_progress_cq_poll(txc->ep_obj);
 }
 
 static int cxip_txc_hpc_cancel_msg_send(struct cxip_req *req)
