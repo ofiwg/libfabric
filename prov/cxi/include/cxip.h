@@ -195,6 +195,11 @@
 // TODO adjust based on performance testing
 #define CXIP_COLL_MIN_RETRY_USEC	1
 #define CXIP_COLL_MAX_RETRY_USEC	32000
+/* multiplier used to calc leaf rdma get trigger
+ * this allows the trigger to scale with
+ * CXIP_COLL_MAX_RETRY_USEC
+ */
+#define CXIP_COLL_MAX_LEAF_TIMEOUT_MULT	50
 #define CXIP_COLL_MIN_TIMEOUT_USEC	1
 #define CXIP_COLL_MAX_TIMEOUT_USEC	20000000
 #define CXIP_COLL_MIN_FM_TIMEOUT_MSEC	1
@@ -604,6 +609,7 @@ enum cxip_ctrl_msg_type {
 	CXIP_CTRL_MSG_FC_NOTIFY = 0,
 	CXIP_CTRL_MSG_FC_RESUME,
 	CXIP_CTRL_MSG_ZB_DATA,
+	CXIP_CTRL_MSG_ZB_DATA_RDMA_LAC,
 };
 
 union cxip_match_bits {
@@ -626,7 +632,8 @@ union cxip_match_bits {
 	};
 	/* Split TX ID for rendezvous operations. */
 	struct {
-		uint64_t pad2       : CXIP_TAG_WIDTH; /* User tag value */
+		uint64_t pad2       : (CXIP_TAG_WIDTH - 1); /* User tag value */
+		uint64_t coll_get   : 1; /* leaf rdma get */
 		uint64_t rdzv_id_hi : CXIP_RDZV_ID_HIGH_WIDTH;
 		uint64_t rdzv_lac   : 4;  /* Rendezvous Get LAC */
 	};
@@ -1105,6 +1112,8 @@ struct cxip_req_rma {
 	struct cxip_md *local_md;	// RMA target buffer
 	void *ibuf;
 	struct cxip_cntr *cntr;
+	/* collectives leaf_rdma_get_callback context data */
+	struct cxip_coll_reduction *reduction;
 };
 
 struct cxip_req_amo {
@@ -1646,6 +1655,22 @@ struct cxip_ep_coll_obj {
 	bool join_busy;			// serialize joins on a node
 	bool is_hwroot;			// set if ep is hw_root
 	bool enabled;			// enabled
+	/* needed for progress after leaf sends its contribution */
+	struct dlist_entry leaf_rdma_get_list;
+	/* Logical address context for leaf rdma get */
+	uint64_t rdma_get_lac_va_tx;
+	/* Logical address context recieved by the leaf */
+	uint64_t rdma_get_lac_va_rx;
+	/* pointer to the source buffer base used in the RDMA */
+	uint8_t *root_rdma_get_data_p;
+	/* pointer to the dest buffer base used in the RDMA */
+	uint8_t *leaf_rdma_get_data_p;
+	/* root rdma get memory descriptor, for entire root src buffer */
+	struct cxip_md *root_rdma_get_md;
+	/* leaf rdma get memory descriptor, for entire leaf dest buffer */
+	struct cxip_md *leaf_rdma_get_md;
+	/* used to change ctrl_msg_type to CXIP_CTRL_MSG_ZB_DATA_RDMA_LAC */
+	bool leaf_save_root_lac;
 };
 
 /* Receive context state machine.
@@ -2906,14 +2931,16 @@ typedef enum cxip_coll_rc {
 	CXIP_COLL_RC_SUCCESS = 0,		// good
 	CXIP_COLL_RC_FLT_INEXACT = 1,		// result was rounded
 	CXIP_COLL_RC_FLT_OVERFLOW = 3,		// result too large to represent
-	CXIP_COLL_RC_FLT_INVALID = 4,           // operand was signalling NaN,
-						//   or infinities subtracted
+	CXIP_COLL_RC_FLT_INVALID = 4,		// op was signalling NaN, or
+						// infinities subtracted
 	CXIP_COLL_RC_REP_INEXACT = 5,		// reproducible sum was rounded
 	CXIP_COLL_RC_INT_OVERFLOW = 6,		// reproducible sum overflow
 	CXIP_COLL_RC_CONTR_OVERFLOW = 7,	// too many contributions seen
 	CXIP_COLL_RC_OP_MISMATCH = 8,		// conflicting opcodes
 	CXIP_COLL_RC_TX_FAILURE = 9,		// internal send error
-	CXIP_COLL_RC_MAX = 10
+	CXIP_COLL_RC_RDMA_FAILURE = 10,		// leaf rdma read error
+	CXIP_COLL_RC_RDMA_DATA_FAILURE = 11,	// leaf rdma read data misc
+	CXIP_COLL_RC_MAX = 12
 } cxip_coll_rc_t;
 
 struct cxip_coll_buf {
@@ -2997,6 +3024,10 @@ struct cxip_coll_reduction {
 	bool in_use;				// reduction is in-use
 	bool pktsent;				// reduction packet sent
 	bool completed;				// reduction is completed
+	bool rdma_get_sent;			// rdma get from leaf to root
+	bool rdma_get_completed;		// rdma get completed
+	int rdma_get_cb_rc;			// rdma get status
+	uint64_t leaf_contrib_start_us;		// leaf ts after contrib send
 	bool drop_send;				// drop the next send operation
 	bool drop_recv;				// drop the next recv operation
 	enum cxip_coll_rc red_rc;		// set by first error
@@ -3014,6 +3045,7 @@ struct cxip_coll_mc {
 	struct cxip_zbcoll_obj *zb;		// zb object for zbcol
 	struct cxip_coll_pte *coll_pte;		// collective PTE
 	struct timespec rootexpires;		// root wait expiration timeout
+	struct timespec leafexpires;		// leaf wait expiration timeout
 	struct timespec curlexpires;		// CURL delete expiration timeout
 	fi_addr_t mynode_fiaddr;		// fi_addr of this node
 	int mynode_idx;				// av_set index of this node
@@ -3365,7 +3397,7 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 		   struct cxi_md *md);
 int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 			   const struct cxip_coll_data *coll_data,
-			   bool arm, bool retry);
+			   bool arm, bool retry, bool root_result_pkt);
 
 void cxip_capture_red_id(int *red_id_buf);
 ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);

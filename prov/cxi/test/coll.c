@@ -675,7 +675,7 @@ void _put_red_pkt(int count)
 	reduction->coll_state = CXIP_COLL_STATE_NONE;
 	for (i = 0; i < count; i++) {
 		ret = cxip_coll_send_red_pkt(reduction, &coll_data,
-					     false, false);
+					     false, false, false);
 		cr_assert(ret == FI_SUCCESS,
 			  "Packet send from root failed: %d\n", ret);
 
@@ -739,7 +739,7 @@ Test(coll_put, put_red_pkt_distrib)
 	coll_data.intval.ival[0] = 0;
 	reduction = &mc_obj[0]->reduction[0];
 	ret = cxip_coll_send_red_pkt(reduction, &coll_data,
-				     false, false);
+				     false, false, false);
 	cr_assert(ret == FI_SUCCESS,
 		  "Packet send from root failed: %d\n", ret);
 	cnt = ofi_atomic_get32(&mc_obj[0]->send_cnt);
@@ -762,7 +762,7 @@ Test(coll_put, put_red_pkt_distrib)
 		coll_data.intval.ival[0] = i;
 		reduction = &mc_obj[i]->reduction[0];
 		ret = cxip_coll_send_red_pkt(reduction, &coll_data,
-					     false, false);
+					     false, false, false);
 		cr_assert(ret == FI_SUCCESS,
 			  "Packet send from leaf[%d] failed: %d\n", i, ret);
 		cnt = ofi_atomic_get32(&mc_obj[i]->send_cnt);

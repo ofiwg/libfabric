@@ -425,9 +425,13 @@ enum cxip_coll_prov_errno {
 		/* reduction opcode mismatch */
 	FI_CXI_ERRNO_RED_MC_FAILURE = 1029,
 		/* unused */
-	FI_CXI_ERRNO_RED_OTHER = 1030,
+	FI_CXI_COLL_RC_RDMA_FAILURE = 1030,
+		/* leaf rdma read error */
+	FI_CXI_COLL_RC_RDMA_DATA_FAILURE = 1031,
+		/* leaf rdma read data miscompare, unexpected packet data */
+	FI_CXI_ERRNO_RED_OTHER = 1032,
 		/* non-specific reduction error, fatal */
-	FI_CXI_ERRNO_RED_LAST = 1031,
+	FI_CXI_ERRNO_RED_LAST = 1033,
 
 	/* collectives EQ join error codes
 	 * highest number error predominates
@@ -451,6 +455,8 @@ enum cxip_coll_prov_errno {
 		/* libfabric PTE allocation failed */
 	FI_CXI_ERRNO_JOIN_OTHER = 2056,
 		/* non-specific JOIN error, fatal */
+	FI_CXI_ERRNO_JOIN_FAIL_RDMA = 2057,
+		/* root or leaf rdma init failure */
 	FI_CXI_ERRNO_JOIN_LAST = FI_CXI_ERRNO_JOIN_FIRST + 43,
 		/* LAST is determined by the 43-bit error mask .
 		 * Result is the OR of all bits set by different endpoints.
