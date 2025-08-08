@@ -179,6 +179,13 @@ static inline void dlist_remove_init(struct dlist_entry *item)
 
 typedef int dlist_func_t(struct dlist_entry *item, const void *arg);
 
+static inline int
+dlist_match_func_same_entry(struct dlist_entry *item,
+                            const void *arg)
+{
+	return item == arg;
+}
+
 #if ENABLE_DEBUG
 static inline ssize_t dlist_size(struct dlist_entry *item)
 {
@@ -205,6 +212,26 @@ dlist_find_first_match(struct dlist_entry *head, dlist_func_t *match,
 
 	return NULL;
 }
+
+#if ENABLE_DEBUG
+static inline bool
+dlist_entry_in_list(struct dlist_entry *head,
+		     struct dlist_entry *entry)
+{
+	return entry->list == head;
+}
+#else
+static inline bool
+dlist_entry_in_list(struct dlist_entry *head,
+		     struct dlist_entry *entry)
+{
+	if (dlist_find_first_match(head, &dlist_match_func_same_entry,
+                               (void *) entry))
+		return true;
+
+	return false;
+}
+#endif
 
 static inline struct dlist_entry *
 dlist_remove_first_match(struct dlist_entry *head, dlist_func_t *match,
