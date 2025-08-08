@@ -828,7 +828,7 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "reliability_service_usec_max", FI_PARAM_INT,
 			"The number of microseconds between pings for un-acknowledged packets. Defaults to 500 usec.");
 	fi_param_define(
-		&fi_opx_provider, "reliability_service_max_oustanding_bytes", FI_PARAM_INT,
+		&fi_opx_provider, "reliability_service_max_outstanding_bytes", FI_PARAM_INT,
 		"This setting controls the maximum number of bytes allowed to be in-flight (sent but un-ACK'd by receiver) per reliability flow (one-way communication between two endpoints). Valid values are in the range of 8192-150,994,944 (8KB-144MB), inclusive. Default setting is 7,340,032 (7MB).");
 	fi_param_define(
 		&fi_opx_provider, "reliability_max_uncongested_pings", FI_PARAM_INT,
