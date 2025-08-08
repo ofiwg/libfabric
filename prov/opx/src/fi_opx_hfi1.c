@@ -1097,11 +1097,13 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	assert(!(context->runtime_flags & HFI1_CAP_DMA_RTAIL));
 
 	context->info.rxe.hdrq.elemsz = ctxt_info->rcvhdrq_entsize >> BYTE2DWORD_SHIFT;
-	if (context->info.rxe.hdrq.elemsz != FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_CORE, "Invalid hdrq_entsize %u (only %lu is supported)\n",
-			context->info.rxe.hdrq.elemsz, FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS);
+	if (context->info.rxe.hdrq.elemsz < FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_CORE, "Invalid hdrq_entsize %u (%lu is min)\n",
+			context->info.rxe.hdrq.elemsz, FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN);
 		abort();
 	}
+	fi_opx_global.rcvhdrq_entry_dws = context->info.rxe.hdrq.elemsz;
+
 	context->info.rxe.hdrq.elemcnt	    = ctxt_info->rcvhdrq_cnt;
 	context->info.rxe.hdrq.elemlast	    = ((context->info.rxe.hdrq.elemcnt - 1) * context->info.rxe.hdrq.elemsz);
 	context->info.rxe.hdrq.rx_poll_mask = fi_opx_hfi1_header_count_to_poll_mask(ctxt_info->rcvhdrq_cnt);
