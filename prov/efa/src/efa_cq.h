@@ -6,6 +6,7 @@
 
 #include "efa.h"
 
+#include "efa_data_path_direct_structs.h"
 enum ibv_cq_ex_type {
 	IBV_CQ,
 	EFADV_CQ
@@ -14,6 +15,11 @@ enum ibv_cq_ex_type {
 struct efa_ibv_cq {
 	struct ibv_cq_ex *ibv_cq_ex;
 	enum ibv_cq_ex_type ibv_cq_ex_type;
+	bool data_path_direct_enabled;
+#if HAVE_EFADV_QUERY_CQ
+	struct efa_data_path_direct_cq data_path_direct;
+#endif
+
 };
 
 struct efa_ibv_cq_poll_list_entry {
@@ -99,7 +105,7 @@ void efa_ibv_cq_poll_list_remove(struct dlist_entry *poll_list, struct ofi_genlo
  * @param[in,out] ibv_cq_ex_type enum indicating if efadv_create_cq or ibv_create_cq_ex was used
  * @return Return 0 on success, error code otherwise
  */
-static inline int efa_cq_ibv_cq_ex_open_with_ibv_create_cq_ex(
+static inline int efa_cq_open_ibv_cq_with_ibv_create_cq_ex(
 	struct ibv_cq_init_attr_ex *ibv_cq_init_attr_ex,
 	struct ibv_context *ibv_ctx, struct ibv_cq_ex **ibv_cq_ex,
 	enum ibv_cq_ex_type *ibv_cq_ex_type)
@@ -126,11 +132,11 @@ static inline int efa_cq_ibv_cq_ex_open_with_ibv_create_cq_ex(
  * @return Return 0 on success, error code otherwise
  */
 #if HAVE_EFADV_CQ_EX
-static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
-					struct ibv_context *ibv_ctx,
-					struct ibv_cq_ex **ibv_cq_ex,
-					enum ibv_cq_ex_type *ibv_cq_ex_type,
-					struct fi_efa_cq_init_attr *efa_cq_init_attr)
+static inline
+int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
+			struct ibv_context *ibv_ctx,
+			struct efa_ibv_cq *ibv_cq,
+			struct fi_efa_cq_init_attr *efa_cq_init_attr)
 {
 	struct ibv_cq_init_attr_ex init_attr_ex = {
 		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
@@ -164,11 +170,12 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 	}
 #endif
 
-	*ibv_cq_ex = efadv_create_cq(ibv_ctx, &init_attr_ex,
+	ibv_cq->data_path_direct_enabled = false;
+	ibv_cq->ibv_cq_ex = efadv_create_cq(ibv_ctx, &init_attr_ex,
 				     &efadv_cq_init_attr,
 				     sizeof(efadv_cq_init_attr));
 
-	if (!*ibv_cq_ex) {
+	if (!ibv_cq->ibv_cq_ex) {
 #if HAVE_CAPS_CQ_WITH_EXT_MEM_DMABUF
 		if (efa_cq_init_attr->flags & FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF) {
 			EFA_WARN(FI_LOG_CQ,
@@ -179,19 +186,19 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 #endif
 		/* This could be due to old EFA kernel module versions */
 		/* Fallback to ibv_create_cq_ex */
-		return efa_cq_ibv_cq_ex_open_with_ibv_create_cq_ex(
-			&init_attr_ex, ibv_ctx, ibv_cq_ex, ibv_cq_ex_type);
+		return efa_cq_open_ibv_cq_with_ibv_create_cq_ex(
+			&init_attr_ex, ibv_ctx, &ibv_cq->ibv_cq_ex, &ibv_cq->ibv_cq_ex_type);
 	}
 
-	*ibv_cq_ex_type = EFADV_CQ;
+	ibv_cq->ibv_cq_ex_type = EFADV_CQ;
 	return 0;
 }
 #else
-static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
-					struct ibv_context *ibv_ctx,
-					struct ibv_cq_ex **ibv_cq_ex,
-					enum ibv_cq_ex_type *ibv_cq_ex_type,
-					struct fi_efa_cq_init_attr *efa_cq_init_attr)
+static inline
+int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
+			struct ibv_context *ibv_ctx,
+			struct efa_ibv_cq *ibv_cq,
+			struct fi_efa_cq_init_attr *efa_cq_init_attr)
 {
 	struct ibv_cq_init_attr_ex init_attr_ex = {
 		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
@@ -205,8 +212,9 @@ static inline int efa_cq_ibv_cq_ex_open(struct fi_cq_attr *attr,
 		.comp_mask = 0,
 	};
 
-	return efa_cq_ibv_cq_ex_open_with_ibv_create_cq_ex(
-		&init_attr_ex, ibv_ctx, ibv_cq_ex, ibv_cq_ex_type);
+	ibv_cq->data_path_direct_enabled = false;
+	return efa_cq_open_ibv_cq_with_ibv_create_cq_ex(
+		&init_attr_ex, ibv_ctx, &ibv_cq->ibv_cq_ex, &ibv_cq->ibv_cq_ex_type);
 }
 #endif
 
@@ -219,30 +227,6 @@ int efa_cq_close(fid_t fid);
 
 const char *efa_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 			    const void *err_data, char *buf, size_t len);
-
-#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-/**
- * @brief Check whether a completion consumes recv buffer
- *
- * @param ibv_cq_ex extended ibv cq
- * @return true the wc consumes a recv buffer
- * @return false the wc doesn't consume a recv buffer
- */
-static inline
-bool efa_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
-{
-	return efa_use_unsolicited_write_recv() && efadv_wc_is_unsolicited(efadv_cq_from_ibv_cq_ex(ibv_cq_ex));
-}
-
-#else
-
-static inline
-bool efa_cq_wc_is_unsolicited(struct ibv_cq_ex *ibv_cq_ex)
-{
-	return false;
-}
-
-#endif
 
 /**
  * @brief Write the error message and return its byte length

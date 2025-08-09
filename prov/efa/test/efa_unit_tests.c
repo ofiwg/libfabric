@@ -74,6 +74,33 @@ static int efa_unit_test_mocks_teardown(void **state)
 		.efa_rdm_ope_post_send = __real_efa_rdm_ope_post_send,
 		.efa_device_support_unsolicited_write_recv = __real_efa_device_support_unsolicited_write_recv,
 		.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,
+
+		/* EFA data path ops real function assignments */
+		.efa_qp_post_recv = __real_efa_qp_post_recv,
+		.efa_qp_wr_complete = __real_efa_qp_wr_complete,
+		.efa_qp_wr_rdma_read = __real_efa_qp_wr_rdma_read,
+		.efa_qp_wr_rdma_write = __real_efa_qp_wr_rdma_write,
+		.efa_qp_wr_rdma_write_imm = __real_efa_qp_wr_rdma_write_imm,
+		.efa_qp_wr_send = __real_efa_qp_wr_send,
+		.efa_qp_wr_send_imm = __real_efa_qp_wr_send_imm,
+		.efa_qp_wr_set_inline_data_list = __real_efa_qp_wr_set_inline_data_list,
+		.efa_qp_wr_set_sge_list = __real_efa_qp_wr_set_sge_list,
+		.efa_qp_wr_set_ud_addr = __real_efa_qp_wr_set_ud_addr,
+		.efa_qp_wr_start = __real_efa_qp_wr_start,
+		.efa_ibv_cq_start_poll = __real_efa_ibv_cq_start_poll,
+		.efa_ibv_cq_next_poll = __real_efa_ibv_cq_next_poll,
+		.efa_ibv_cq_wc_read_opcode = __real_efa_ibv_cq_wc_read_opcode,
+		.efa_ibv_cq_end_poll = __real_efa_ibv_cq_end_poll,
+		.efa_ibv_cq_wc_read_qp_num = __real_efa_ibv_cq_wc_read_qp_num,
+		.efa_ibv_cq_wc_read_vendor_err = __real_efa_ibv_cq_wc_read_vendor_err,
+		.efa_ibv_cq_wc_read_src_qp = __real_efa_ibv_cq_wc_read_src_qp,
+		.efa_ibv_cq_wc_read_slid = __real_efa_ibv_cq_wc_read_slid,
+		.efa_ibv_cq_wc_read_byte_len = __real_efa_ibv_cq_wc_read_byte_len,
+		.efa_ibv_cq_wc_read_wc_flags = __real_efa_ibv_cq_wc_read_wc_flags,
+		.efa_ibv_cq_wc_read_imm_data = __real_efa_ibv_cq_wc_read_imm_data,
+		.efa_ibv_cq_wc_is_unsolicited = __real_efa_ibv_cq_wc_is_unsolicited,
+		.efa_ibv_cq_wc_read_sgid = __real_efa_ibv_cq_wc_read_sgid,
+
 #if HAVE_EFADV_QUERY_MR
 		.efadv_query_mr = __real_efadv_query_mr,
 #endif
@@ -154,6 +181,9 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_rma_inconsistent_unsolicited_write_recv, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_support_unsolicited_write_recv, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_default_sizes, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_happy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_data_path_direct_disabled, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 
 		/* begin efa_unit_test_cq.c */
 		cmocka_unit_test_setup_teardown(test_dgram_cq_read_empty_cq, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -177,6 +207,10 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_ibv_cq_ex_read_ignore_removed_peer, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_before_ep_enable, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_cq_data_path_direct_disabled_by_env, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_cq_data_path_direct_disabled_with_old_device, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_cq_data_path_direct_enabled_with_new_device, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_data_path_direct_disabled, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_cq.c */
 
 		/* begin efa_unit_test_info.c */

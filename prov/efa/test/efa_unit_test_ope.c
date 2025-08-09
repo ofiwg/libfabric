@@ -240,7 +240,6 @@ void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128(struct efa_resou
 void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
-	struct ibv_qp_ex *ibv_qpx;
 	struct efa_unit_test_buff local_buff;
 	struct efa_ep_addr raw_addr;
 	struct efa_rdm_ope mock_txe;
@@ -275,12 +274,11 @@ void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
 
 	mock_txe.ep = efa_rdm_ep;
 
-	ibv_qpx = mock_txe.ep->base_ep.qp->ibv_qp_ex;
-	ibv_qpx->wr_start = &efa_mock_ibv_wr_start_no_op;
-	ibv_qpx->wr_rdma_write = &efa_mock_ibv_wr_rdma_write_save_wr;
-	ibv_qpx->wr_set_sge_list = &efa_mock_ibv_wr_set_sge_list_no_op;
-	ibv_qpx->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
-	ibv_qpx->wr_complete = &efa_mock_ibv_wr_complete_no_op;
+	g_efa_unit_test_mocks.efa_qp_wr_start = &efa_mock_efa_qp_wr_start_no_op;
+	g_efa_unit_test_mocks.efa_qp_wr_rdma_write = &efa_mock_efa_qp_wr_rdma_write_save_wr;
+	g_efa_unit_test_mocks.efa_qp_wr_set_sge_list = &efa_mock_efa_qp_wr_set_sge_list_no_op;
+	g_efa_unit_test_mocks.efa_qp_wr_set_ud_addr = &efa_mock_efa_qp_wr_set_ud_addr_no_op;
+	g_efa_unit_test_mocks.efa_qp_wr_complete = &efa_mock_efa_qp_wr_complete_no_op;
 
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	err = efa_rdm_ope_post_remote_write(&mock_txe);

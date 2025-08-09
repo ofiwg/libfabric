@@ -396,6 +396,14 @@ bool efa_device_support_cq_with_ext_mem_dmabuf(void)
 }
 #endif
 
+/* Check whether the efa device uses a sub cq implementation */
+bool efa_device_use_sub_cq(void)
+{
+	uint32_t vendor_part_id;
+	vendor_part_id = g_efa_selected_device_list[0].ibv_attr.vendor_part_id;
+	return vendor_part_id == 0xefa0;
+}
+
 #ifndef _WIN32
 
 static char *get_sysfs_path(void)

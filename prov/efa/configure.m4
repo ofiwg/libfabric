@@ -226,6 +226,12 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_EFADV_QUERY_CQ],
 		[$have_efadv_query_cq],
 		[Indicates if efadv_query_cq is available])
+	AS_IF([test "$have_efadv_query_qp_wqs" = "1" -a "$have_efadv_query_cq" = "1"],
+		[have_efa_data_path_direct=1],
+		[have_efa_data_path_direct=0])
+	AC_DEFINE_UNQUOTED([HAVE_EFA_DATA_PATH_DIRECT],
+		[$have_efa_data_path_direct],
+		[Indicates if data path direct is available (requires both QUERY_QP_WQS and QUERY_CQ)])
 
 
 	CPPFLAGS=$save_CPPFLAGS

@@ -11,8 +11,10 @@
 
 #include "efa.h"
 #include "efa_av.h"
+#include "efa_data_path_ops.h"
 
 #include "efa_tp.h"
+#include "efa_data_path_direct.h"
 
 #ifndef EFA_MSG_DUMP
 static inline void dump_msg(const struct fi_msg *msg, const char *context) {}
@@ -123,7 +125,7 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 
 	efa_tracepoint(post_recv, wr->wr_id, (uintptr_t)msg->context);
 
-	err = ibv_post_recv(qp->ibv_qp, &base_ep->efa_recv_wr_vec[0].wr, &bad_wr);
+	err = efa_qp_post_recv(qp, &base_ep->efa_recv_wr_vec[0].wr, &bad_wr);
 	if (OFI_UNLIKELY(err)) {
 		/* On failure, ibv_post_recv() return positive errno.
 		 * Meanwhile, this function return a negative errno.
@@ -141,7 +143,7 @@ out:
 
 out_err:
 	if (base_ep->recv_wr_index > 0) {
-		post_recv_err = ibv_post_recv(qp->ibv_qp, &base_ep->efa_recv_wr_vec[0].wr, &bad_wr);
+		post_recv_err = efa_qp_post_recv(qp, &base_ep->efa_recv_wr_vec[0].wr, &bad_wr);
 		if (OFI_UNLIKELY(post_recv_err)) {
 			EFA_WARN(FI_LOG_EP_DATA,
 				 "Encountered error %ld when ibv_post_recv on error handling path\n",
@@ -221,7 +223,7 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 	if (!base_ep->is_wr_started) {
-		ibv_wr_start(qp->ibv_qp_ex);
+		efa_qp_wr_start(qp);
 		base_ep->is_wr_started = true;
 	}
 
@@ -229,9 +231,9 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		msg->context, msg->addr, flags, FI_SEND | FI_MSG);
 
 	if (flags & FI_REMOTE_CQ_DATA) {
-		ibv_wr_send_imm(qp->ibv_qp_ex, msg->data);
+		efa_qp_wr_send_imm(qp, msg->data);
 	} else {
-		ibv_wr_send(qp->ibv_qp_ex);
+		efa_qp_wr_send(qp);
 	}
 
 	if (len <= base_ep->domain->device->efa_attr.inline_buf_size &&
@@ -246,7 +248,7 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 				inline_data_list[i].length -= base_ep->info->ep_attr->msg_prefix_size;
 			}
 		}
-		ibv_wr_set_inline_data_list(qp->ibv_qp_ex, msg->iov_count, inline_data_list);
+		efa_qp_wr_set_inline_data_list(qp, msg->iov_count, inline_data_list);
 	} else {
 		for (i = 0; i < msg->iov_count; i++) {
 			/* Set TX buffer desc from SGE */
@@ -267,16 +269,16 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 				sg_list[i].length -= base_ep->info->ep_attr->msg_prefix_size;
 			}
 		}
-		ibv_wr_set_sge_list(qp->ibv_qp_ex, msg->iov_count, sg_list);
+		efa_qp_wr_set_sge_list(qp, msg->iov_count, sg_list);
 	}
 
-	ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah, conn->ep_addr->qpn,
+	efa_qp_wr_set_ud_addr(qp, conn->ah, conn->ep_addr->qpn,
 			   conn->ep_addr->qkey);
 
 	efa_tracepoint(post_send, qp->ibv_qp_ex->wr_id, (uintptr_t)msg->context);
 
 	if (!(flags & FI_MORE)) {
-		ret = ibv_wr_complete(qp->ibv_qp_ex);
+		ret = efa_qp_wr_complete(qp);
 		if (OFI_UNLIKELY(ret))
 			ret = (ret == ENOMEM) ? -FI_EAGAIN : -ret;
 		base_ep->is_wr_started = false;
