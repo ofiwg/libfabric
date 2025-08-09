@@ -17,6 +17,7 @@ struct efa_rdm_cq {
 int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		    struct fid_cq **cq_fid, void *context);
 
+void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm_ep *closing_ep);
 int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
 
 void efa_rdm_cq_progress_peers_and_queues(struct efa_rdm_cq *efa_rdm_cq);

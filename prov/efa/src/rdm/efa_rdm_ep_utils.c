@@ -502,21 +502,26 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke
  * @param[in]	pkt_entry	packet entry that encounter RNR
  * @param[in]	peer	efa_rdm_peer struct of the receiver
  */
-void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct dlist_entry *list,
-			      struct efa_rdm_pke *pkt_entry)
+void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	static const int random_min_timeout = 40;
 	static const int random_max_timeout = 120;
 	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *ope = pkt_entry->ope;
 
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
 	peer = pkt_entry->peer;
 
-	dlist_insert_tail(&pkt_entry->entry, list);
+	assert(ope);
+	dlist_insert_tail(&pkt_entry->entry, &ope->queued_pkts);
 	ep->efa_rnr_queued_pkt_cnt += 1;
 	assert(peer);
+	if (!(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
+		ope->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
+		dlist_insert_tail(&ope->queued_entry, &efa_rdm_ep_domain(ep)->ope_queued_list);
+	}
 	if (!(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT)) {
 		/* This is the first time this packet encountered RNR,
 		 * we are NOT going to put the peer in backoff mode just yet.
@@ -741,7 +746,6 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 {
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
-	struct efa_rdm_base_hdr *base_hdr;
 	ssize_t ret;
 
 	dlist_foreach_container_safe(pkts, struct efa_rdm_pke,
@@ -753,16 +757,14 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 		 */
 		dlist_remove(&pkt_entry->entry);
 
-		if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
+		switch (efa_rdm_pkt_type_of(pkt_entry)) {
+		case EFA_RDM_RMA_CONTEXT_PKT:
+			assert(((struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata)->context_type == EFA_RDM_RDMA_WRITE_CONTEXT);
+			ret = efa_rdm_pke_write(pkt_entry);
+			break;
+		default:
 			ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
-		} else {
-			base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-			if (base_hdr->type == EFA_RDM_RMA_CONTEXT_PKT) {
-				assert(((struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata)->context_type == EFA_RDM_RDMA_WRITE_CONTEXT);
-				ret = efa_rdm_pke_write(pkt_entry);
-			} else {
-				ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
-			}
+			break;
 		}
 
 		if (ret) {
