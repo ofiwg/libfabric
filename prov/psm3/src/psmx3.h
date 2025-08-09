@@ -996,6 +996,11 @@ int	psmx3_query_atomic(struct fid_domain *doamin, enum fi_datatype datatype,
 			   enum fi_op op, struct fi_atomic_attr *attr,
 			   uint64_t flags);
 
+struct psmx3_ep_name *psmx3_lookup(const char *node, const char *service);
+
+int psmx3_av_insertsvc(struct fid_av *av, const char *node, const char *service,
+				       fi_addr_t *fi_addr, uint64_t flags,	void *context);
+
 static inline void psmx3_fabric_acquire(struct psmx3_fid_fabric *fabric)
 {
 	ofi_atomic_inc32(&fabric->util_fabric.ref);
