@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_cxi" "7" "2025\-08\-01" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_cxi" "7" "2025\-08\-11" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -1457,6 +1457,9 @@ This is considered experimental and defaults to disabled.
 Number of micro-seconds to sleep before retrying a dropped side-band,
 flow control message.
 Setting to zero will disable any sleep.
+.TP
+\f[I]FI_CXI_CNTR_SPIN_BEFORE_YIELD\f[R]
+Number of times to spin before yielding on counter operations.
 .TP
 \f[I]FI_UNIVERSE_SIZE\f[R]
 Defines the maximum number of processes that will be used by distribute
