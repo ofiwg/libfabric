@@ -1210,6 +1210,9 @@ The CXI provider checks for the following environment variables:
 :   Number of micro-seconds to sleep before retrying a dropped side-band, flow
     control message. Setting to zero will disable any sleep.
 
+*FI_CXI_CNTR_SPIN_BEFORE_YIELD*
+:   Number of times to spin before yielding on counter operations.
+
 *FI_UNIVERSE_SIZE*
 :   Defines the maximum number of processes that will be used by distribute
     OFI application. Note that this value is used in setting the default
