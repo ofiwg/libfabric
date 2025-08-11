@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2025\-07\-28" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2025\-08\-11" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -658,6 +658,12 @@ The threshold that EFA provider will refill the internal rx pkt pool.
 (Default: 8).
 When the number of internal rx pkts to post is lower than this
 threshold, the refill will be skipped.
+.TP
+\f[I]FI_EFA_USE_DATA_PATH_DIRECT\f[R]
+Use the direct data path implementation that bypasses rdma-core on data
+path, including the CQ polling and TX/RX submissions, when it\[cq]s
+available.
+Setting this variable as 1 will enable this feature (Default: false).
 .SH SEE ALSO
 .PP
 \f[V]fabric\f[R](7), \f[V]fi_provider\f[R](7), \f[V]fi_getinfo\f[R](3)
