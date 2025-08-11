@@ -388,11 +388,29 @@ void process_hfi_lookup(const int hfi_unit, const opx_lid_t lid)
 		fi_opx_global.hfi_local_info.local_lid_entries[new_index].instance = 0;
 		fi_opx_global.hfi_local_info.local_lid_ids[new_index]		   = lid;
 
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI %hhu LID 0x%hx entry created.\n", hfi_unit, lid);
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI %u LID 0x%x entry created.\n", hfi_unit, lid);
 	}
 }
 
-void fi_opx_init_hfi_lookup()
+void opx_remove_self_lid(const int hfi_unit, const opx_lid_t lid)
+{
+	assert(fi_opx_global.hfi_local_info.local_lids_size <= 1);
+	int lid_index = opx_local_lid_index(lid);
+	/* Currently only used in sr-iov(alpha) which only had one (my) lid */
+	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI %u LID[%d] 0x%x entry removed.\n", hfi_unit, lid_index, lid);
+	assert(lid_index <= 0);
+	if (lid_index == -1) {
+		/* Duplicate calls, already removed */
+		return;
+	}
+	assert(fi_opx_global.hfi_local_info.local_lid_entries[lid_index].hfi_unit == hfi_unit);
+	fi_opx_global.hfi_local_info.local_lids_size--;
+	fi_opx_global.hfi_local_info.local_lid_entries[lid_index].hfi_unit = 0;
+	fi_opx_global.hfi_local_info.local_lid_entries[lid_index].instance = 0;
+	fi_opx_global.hfi_local_info.local_lid_ids[lid_index]		   = 0;
+}
+
+void fi_opx_init_hfi_lookup(bool sriov)
 {
 	int hfi_unit  = 0;
 	int hfi_units = MIN(opx_hfi_get_num_units(), OPX_MAX_HFIS);
@@ -406,6 +424,13 @@ void fi_opx_init_hfi_lookup()
 	if (fi_param_get_bool(fi_opx_global.prov, "shm_enable", &shm_enable_env) != FI_SUCCESS) {
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "shm_enable param not specified\n");
 		shm_enable_env = OPX_SHM_ENABLE_DEFAULT;
+	}
+	if (sriov) {
+		/* sr-iov(alpha) will initially enable shm for "my" lid only as-if the
+		 * env was set, so fake it here.
+		 * later checks may completely disable shm and enable loopback later */
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "SR-IOV overrides FI_OPX_SHM_ENABLE always disables SHM\n");
+		shm_enable_env = OPX_SHM_ENABLE_OFF;
 	}
 
 	/* Always insert an entry for self */
@@ -1162,22 +1187,73 @@ int init_hfi1_rxe_state(struct fi_opx_hfi1_context *context, struct fi_opx_hfi1_
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_reliability.h"
 
+ssize_t fi_opx_check_tx_rctxt(struct fi_opx_ep *opx_ep, fi_addr_t peer)
+{
+	ssize_t rc = FI_SUCCESS;
+
+	assert(fi_opx_global.hfi_local_info.sriov);
+
+	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
+		const union fi_opx_addr addr = {.fi = peer};
+
+		if ((addr.lid != fi_opx_global.hfi_local_info.lid)) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "multi-lid %u != %u, rx %u:%u, %u-%u\n",
+			       fi_opx_global.hfi_local_info.lid, addr.lid,
+			       OPX_HFI1_SUBCTXT(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE),
+			       OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE), fi_opx_global.hfi_local_info.min_rctxt,
+			       fi_opx_global.hfi_local_info.max_rctxt);
+			fi_opx_global.hfi_local_info.multi_lid = true;
+		} else {
+			if ((OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE) >
+			     fi_opx_global.hfi_local_info.max_rctxt) ||
+			    (OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE) <
+			     fi_opx_global.hfi_local_info.min_rctxt)) {
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "multi-vm lid %u == %u, rx %u:%u, %u-%u\n",
+				       fi_opx_global.hfi_local_info.lid, addr.lid,
+				       OPX_HFI1_SUBCTXT(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE),
+				       OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE),
+				       fi_opx_global.hfi_local_info.min_rctxt, fi_opx_global.hfi_local_info.max_rctxt);
+				fi_opx_global.hfi_local_info.multi_vm = true;
+			}
+		}
+		if (fi_opx_global.hfi_local_info.multi_vm && fi_opx_global.hfi_local_info.multi_lid) {
+			/* For simplicity (and no runtime rx context checks) and mitigation issues:
+
+			   - Loopback to self (no SHM) if a single lid jobs, <n> VMs
+			   - SHM self any multi-lid
+			   - Fail (abort?) if self (rctxt check) is multi-VM and multi-lid
+
+			   - Fabric port other lids (perf vs SHM scenarios?
+			 */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Shared lids across VMs with other lids are not supported. \n");
+			rc = -FI_EINVAL;
+		}
+	} else {
+		__attribute__((__unused__)) const union fi_opx_addr addr = {.fi = peer};
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		       "NO CONNECT: FI_LOCAL_COMM %llu, FI_REMOTE_COMM %llu, lid %u\n",
+		       (opx_ep->tx->caps & FI_LOCAL_COMM), (opx_ep->tx->caps & FI_REMOTE_COMM), addr.lid);
+	}
+
+	return rc;
+}
+
 ssize_t fi_opx_hfi1_tx_connect(struct fi_opx_ep *opx_ep, fi_addr_t peer)
 {
 	ssize_t rc = FI_SUCCESS;
 
 	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
-		const union fi_opx_addr addr = {.fi = peer};
+		const union fi_opx_addr taddr = {.fi = peer};
 
-		if (opx_lid_is_shm(addr.lid)) {
+		if (opx_lid_is_shm(taddr.lid)) {
 			char		  buffer[128];
 			union fi_opx_addr addr;
 			addr.raw64b		 = (uint64_t) peer;
 			uint8_t	 hfi_unit	 = addr.hfi1_unit;
 			uint16_t hfi1_subctxt_rx = addr.hfi1_subctxt_rx;
 			int	 inst		 = 0;
-
-			uint32_t segment_index = OPX_SHM_SEGMENT_INDEX(hfi_unit, hfi1_subctxt_rx);
+			uint32_t segment_index	 = OPX_SHM_SEGMENT_INDEX(hfi_unit, hfi1_subctxt_rx);
 
 #ifdef OPX_DAOS
 			/* HFI Rank Support:  Rank and PID included in the SHM file name */
@@ -1381,7 +1457,8 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 
 	// The "memcopy first" code is here as an alternative to the more complicated
 	// direct write to pio followed by memory copy of the reliability buffer
-	replay->scb.scb_9B.qw0 = opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid;
+	replay->scb.scb_9B.qw0 = opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid |
+				 OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, OPX_HFI1_TYPE), OPX_HFI1_TYPE);
 	replay->scb.scb_9B.hdr.qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32);
 	replay->scb.scb_9B.hdr.qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx;
 	replay->scb.scb_9B.hdr.qw_9B[2] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn;
@@ -1498,7 +1575,9 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 
 	// The "memcopy first" code is here as an alternative to the more complicated
 	// direct write to pio followed by memory copy of the reliability buffer
-	replay->scb.scb_16B.qw0 = opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid;
+	assert(~(OPX_HFI1_TYPE & OPX_HFI1_WFR));
+	replay->scb.scb_16B.qw0 = opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_JKR) | params->pbc_dlid |
+				  OPX_PBC_LOOPBACK(lrh_dlid_16B, OPX_HFI1_JKR);
 	replay->scb.scb_16B.hdr.qw_16B[0] =
 		opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 		((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -1551,7 +1630,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
-							     OPX_HFI1_TYPE);
+							     OPX_HFI1_JKR);
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (end) (params=%p rzv_comp=%p context=%p)\n",
@@ -2103,7 +2182,9 @@ int opx_hfi1_rx_rzv_rts_send_etrunc(union fi_opx_hfi1_deferred_work *work)
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
 	opx_cacheline_copy_qw_vol(
-		scb, replay->scb.qws, opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid,
+		scb, replay->scb.qws,
+		opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) | params->pbc_dlid |
+			OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, OPX_HFI1_TYPE), OPX_HFI1_TYPE),
 		opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32),
 		opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx, opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn,
 		opx_ep->rx->tx.cts_9B.hdr.qw_9B[3], opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode,
@@ -2178,7 +2259,9 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
 	opx_cacheline_copy_qw_vol(
-		scb, replay->scb.qws, opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid,
+		scb, replay->scb.qws,
+		opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) | params->pbc_dlid |
+			OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, OPX_HFI1_TYPE), OPX_HFI1_TYPE),
 		opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 			((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 			((uint64_t) lrh_qws << 20),
@@ -2232,23 +2315,23 @@ void fi_opx_hfi1_rx_rzv_rts_etrunc(struct fi_opx_ep *opx_ep, const union opx_hfi
 		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->slid	 = lid;
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_WFR);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_WFR);
 
 	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
 		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->slid	 = lid;
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_JKR_9B);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_JKR_9B);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		lid		 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->slid	 = lid;
 		params->lrh_dlid = lid; // Send CTS to the SLID that sent RTS
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_JKR);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_JKR);
 	} else {
 		lid		 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->slid	 = lid;
 		params->lrh_dlid = lid; // Send CTS to the SLID that sent RTS
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_CYR);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_CYR);
 	}
 
 	if (is_shm) {
@@ -2331,22 +2414,22 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->slid	 = lid;
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_WFR);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_WFR);
 	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
 		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->slid	 = lid;
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_JKR_9B);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_JKR_9B);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		lid		 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->slid	 = lid;
 		params->lrh_dlid = lid; // Send CTS to the SLID that sent RTS
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_JKR);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_JKR);
 	} else {
 		lid		 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->slid	 = lid;
 		params->lrh_dlid = lid; // Send CTS to the SLID that sent RTS
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_CYR);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_CYR);
 	}
 
 	if (is_shm) {
@@ -2499,6 +2582,8 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 
 	params->u32_extended_rx = u32_extended_rx;
 	params->origin_rx	= origin_rx;
+	// Assumes shm
+	assert(opx_lid_is_shm(lid));
 	params->target_hfi_unit = fi_opx_hfi1_get_lid_local_unit(lid);
 
 	int rc = params->work_elem.work_fn(work);
@@ -2612,6 +2697,8 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	params->u32_extended_rx = u32_extended_rx;
 	params->bytes_to_fence	= hdr->dput.target.fence.bytes_to_fence;
 	params->cc		= (struct fi_opx_completion_counter *) hdr->dput.target.fence.completion_counter;
+	// Assumes shm but will need loopback/shm for sriov.  Both slid/dlid == my lid?
+	assert(opx_lid_is_shm(slid));
 	params->target_hfi_unit = fi_opx_hfi1_get_lid_local_unit(slid);
 
 	int rc = opx_hfi1_do_dput_fence(work);
@@ -2774,8 +2861,9 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		const uint16_t lrh_dws =
 			htons(pbc_dws - 2 +
 			      1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
-		replay->scb.scb_9B.qw0 =
-			opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_WFR) | params->pbc_dlid;
+		replay->scb.scb_9B.qw0 = opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+					 params->pbc_dlid |
+					 OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, hfi1_type), hfi1_type);
 		replay->scb.scb_9B.hdr.qw_9B[0] =
 			opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32);
 		replay->scb.scb_9B.hdr.qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx;
@@ -2798,7 +2886,8 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 					 2;				     /* ICRC/tail */
 		const uint16_t lrh_qws	= (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 		replay->scb.scb_16B.qw0 = opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_CYR) |
-					  OPX_PBC_DLID_TO_PBC_DLID(lrh_dlid, OPX_HFI1_CYR);
+					  OPX_PBC_DLID(lrh_dlid, OPX_HFI1_CYR) |
+					  OPX_PBC_LOOPBACK(lrh_dlid, OPX_HFI1_CYR);
 		replay->scb.scb_16B.hdr.qw_16B[0] =
 			opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 			((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -2856,19 +2945,19 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	if (hfi1_type & OPX_HFI1_WFR) {
 		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_WFR);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_WFR);
 	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
 		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_JKR_9B);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_JKR_9B);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		lid		 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->lrh_dlid = lid; // Send CTS to the SLID that sent RTS
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_JKR);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_JKR);
 	} else {
 		lid		 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->lrh_dlid = lid; // Send CTS to the SLID that sent RTS
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(lid, OPX_HFI1_CYR);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_CYR);
 	}
 	params->slid = lid;
 
@@ -3013,8 +3102,9 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 			htons(pbc_dws - 2 +
 			      1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 
-		replay->scb.scb_9B.qw0 =
-			opx_ep->rx->tx.rma_rts_9B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_WFR) | params->pbc_dlid;
+		replay->scb.scb_9B.qw0 = opx_ep->rx->tx.rma_rts_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+					 params->pbc_dlid |
+					 OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, hfi1_type), hfi1_type);
 		replay->scb.scb_9B.hdr.qw_9B[0] =
 			opx_ep->rx->tx.rma_rts_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32);
 		replay->scb.scb_9B.hdr.qw_9B[1] = opx_ep->rx->tx.rma_rts_9B.hdr.qw_9B[1] | bth_rx;
@@ -3036,7 +3126,8 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 					 2;				     /* ICRC/tail */
 		const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 		replay->scb.scb_16B.qw0 =
-			opx_ep->rx->tx.rma_rts_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_CYR) | params->pbc_dlid;
+			opx_ep->rx->tx.rma_rts_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_CYR) | params->pbc_dlid |
+			OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, OPX_HFI1_CYR), OPX_HFI1_CYR);
 		replay->scb.scb_16B.hdr.qw_16B[0] = opx_ep->rx->tx.rma_rts_16B.hdr.qw_16B[0] |
 						    ((uint64_t) (params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 						     << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -3373,7 +3464,9 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 					replay->scb.scb_16B.qw0 =
 						opx_ep->rx->tx.dput_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_JKR) |
 						OPX_PBC_CR(opx_ep->tx->force_credit_return, OPX_HFI1_JKR) |
-						params->pbc_dlid;
+						params->pbc_dlid |
+						OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, OPX_HFI1_JKR),
+								 OPX_HFI1_JKR);
 					bytes_sent = opx_hfi1_dput_write_header_and_payload(
 						opx_ep, &replay->scb.scb_16B.hdr, replay_payload, opcode, psn, lrh_dws,
 						op64, dt64, lrh_dlid, bth_subctxt_rx, bytes_to_send_this_packet, key,
@@ -3385,7 +3478,9 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 					replay->scb.scb_16B.qw0 =
 						opx_ep->rx->tx.dput_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_CYR) |
 						OPX_PBC_CR(opx_ep->tx->force_credit_return, OPX_HFI1_CYR) |
-						params->pbc_dlid;
+						params->pbc_dlid |
+						OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, OPX_HFI1_CYR),
+								 OPX_HFI1_CYR);
 					bytes_sent = opx_hfi1_dput_write_header_and_payload(
 						opx_ep, &replay->scb.scb_16B.hdr, replay_payload, opcode, psn, lrh_dws,
 						op64, dt64, lrh_dlid, bth_subctxt_rx, bytes_to_send_this_packet, key,
@@ -3395,9 +3490,11 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 						cbuf_iface, cbuf_device, &rbuf, OPX_HFI1_CYR);
 				} else {
 					replay->scb.scb_9B.qw0 =
-						opx_ep->rx->tx.dput_9B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_WFR) |
-						OPX_PBC_CR(opx_ep->tx->force_credit_return, OPX_HFI1_WFR) |
-						params->pbc_dlid;
+						opx_ep->rx->tx.dput_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+						OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) |
+						params->pbc_dlid |
+						OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, hfi1_type),
+								 hfi1_type);
 					bytes_sent = opx_hfi1_dput_write_header_and_payload(
 						opx_ep, &replay->scb.scb_9B.hdr, replay_payload, opcode, psn, lrh_dws,
 						op64, dt64, lrh_dlid, bth_subctxt_rx, bytes_to_send_this_packet, key,
@@ -3751,8 +3848,11 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 						  payload_dws;
 					lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8
 									     bytes), but does include icrc (4 bytes) */
-					replay->scb.scb_9B.qw0 = opx_ep->rx->tx.rzv_dput_9B.qw0 |
-								 OPX_PBC_LEN(pbc_dws, OPX_HFI1_WFR) | params->pbc_dlid;
+					replay->scb.scb_9B.qw0 =
+						opx_ep->rx->tx.rzv_dput_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+						params->pbc_dlid |
+						OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, hfi1_type),
+								 hfi1_type);
 					bytes_sent = opx_hfi1_dput_write_header_and_iov(
 						opx_ep, &replay->scb.scb_9B.hdr, replay->iov, opcode, lrh_dws, op64,
 						dt64, lrh_dlid, bth_subctxt_rx, packet_bytes, key,
@@ -3767,8 +3867,11 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 						  2 + /* ICRC/tail */
 						  payload_dws;
 					lrh_dws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
-					replay->scb.scb_16B.qw0 = opx_ep->rx->tx.rzv_dput_16B.qw0 |
-								  OPX_PBC_LEN(pbc_dws, OPX_HFI1_JKR) | params->pbc_dlid;
+					replay->scb.scb_16B.qw0 =
+						opx_ep->rx->tx.rzv_dput_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_JKR) |
+						params->pbc_dlid |
+						OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, OPX_HFI1_JKR),
+								 OPX_HFI1_JKR);
 					bytes_sent = opx_hfi1_dput_write_header_and_iov(
 						opx_ep, &replay->scb.scb_16B.hdr, replay->iov, opcode, lrh_dws, op64,
 						dt64, lrh_dlid, bth_subctxt_rx, packet_bytes, key,
@@ -3783,8 +3886,11 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 						  2 + /* ICRC/tail */
 						  payload_dws;
 					lrh_dws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
-					replay->scb.scb_16B.qw0 = opx_ep->rx->tx.rzv_dput_16B.qw0 |
-								  OPX_PBC_LEN(pbc_dws, OPX_HFI1_CYR) | params->pbc_dlid;
+					replay->scb.scb_16B.qw0 =
+						opx_ep->rx->tx.rzv_dput_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_CYR) |
+						params->pbc_dlid |
+						OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, OPX_HFI1_CYR),
+								 OPX_HFI1_CYR);
 					bytes_sent = opx_hfi1_dput_write_header_and_iov(
 						opx_ep, &replay->scb.scb_16B.hdr, replay->iov, opcode, lrh_dws, op64,
 						dt64, lrh_dlid, bth_subctxt_rx, packet_bytes, key,
@@ -4154,8 +4260,11 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 						  payload_dws;
 					lrh_dws = htons(pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8
 									     bytes), but does include icrc (4 bytes) */
-					replay->scb.scb_9B.qw0 = opx_ep->rx->tx.rzv_dput_9B.qw0 |
-								 OPX_PBC_LEN(pbc_dws, OPX_HFI1_WFR) | params->pbc_dlid;
+					replay->scb.scb_9B.qw0 =
+						opx_ep->rx->tx.rzv_dput_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+						params->pbc_dlid |
+						OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, hfi1_type),
+								 hfi1_type);
 					/* The fetch_vaddr and cbuf arguments are only used
 					for atomic fetch operations, which by their one-
 					sided nature will never use TID, so they are
@@ -4175,8 +4284,11 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 						  2 + /* ICRC/tail */
 						  payload_dws;
 					lrh_dws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
-					replay->scb.scb_16B.qw0 = opx_ep->rx->tx.rzv_dput_16B.qw0 |
-								  OPX_PBC_LEN(pbc_dws, OPX_HFI1_CYR) | params->pbc_dlid;
+					replay->scb.scb_16B.qw0 =
+						opx_ep->rx->tx.rzv_dput_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_CYR) |
+						params->pbc_dlid |
+						OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, OPX_HFI1_CYR),
+								 OPX_HFI1_CYR);
 					/* The fetch_vaddr and cbuf arguments are only used
 					for atomic fetch operations, which by their one-
 					sided nature will never use TID, so they are
@@ -4298,15 +4410,15 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 	if (hfi1_type & OPX_HFI1_WFR) {
 		params->slid	 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(params->slid, OPX_HFI1_WFR);
+		params->pbc_dlid = OPX_PBC_DLID(params->slid, OPX_HFI1_WFR);
 	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
 		params->slid	 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(params->slid, OPX_HFI1_JKR_9B);
+		params->pbc_dlid = OPX_PBC_DLID(params->slid, OPX_HFI1_JKR_9B);
 	} else {
 		params->slid	 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->lrh_dlid = params->slid; // Send dput to the SLID that sent CTS
-		params->pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(params->slid, OPX_HFI1_CYR);
+		params->pbc_dlid = OPX_PBC_DLID(params->slid, OPX_HFI1_CYR);
 	}
 	params->origin_rx	  = origin_rx;
 	params->u32_extended_rx	  = u32_extended_rx;
@@ -4690,7 +4802,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 		opx_cacheline_copy_qw_vol(
 			scb, replay->scb.qws,
 			opx_ep->tx->rzv_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
-				OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type),
+				OPX_PBC_DLID(addr.lid, hfi1_type) | OPX_PBC_LOOPBACK(addr.lid, hfi1_type),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32),
 			opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx |
 				((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
@@ -4708,7 +4820,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 		opx_cacheline_copy_qw_vol(
 			scb, replay->scb.qws,
 			opx_ep->tx->rzv_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
-				OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type),
+				OPX_PBC_DLID(addr.lid, hfi1_type) | OPX_PBC_LOOPBACK(addr.lid, hfi1_type),
 			opx_ep->tx->rzv_16B.hdr.qw_16B[0] |
 				((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
 				 << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -5160,7 +5272,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 		pbc_dws - 2 + 1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
 	opx_cacheline_copy_qw_vol(scb, replay->scb.qws,
 				  opx_ep->tx->rzv_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
-					  OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type),
+					  OPX_PBC_DLID(addr.lid, hfi1_type) | OPX_PBC_LOOPBACK(addr.lid, hfi1_type),
 				  opx_ep->tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32),
 				  opx_ep->tx->rzv_9B.hdr.qw_9B[1] | bth_rx | opcode,
 				  opx_ep->tx->rzv_9B.hdr.qw_9B[2] | psn,
@@ -5585,7 +5697,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	opx_cacheline_copy_qw_vol(
 		scb, replay->scb.qws,
 		opx_ep->tx->rzv_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | force_credit_return |
-			OPX_PBC_DLID_TO_PBC_DLID(addr.lid, hfi1_type),
+			OPX_PBC_DLID(addr.lid, hfi1_type) | OPX_PBC_LOOPBACK(addr.lid, hfi1_type),
 		opx_ep->tx->rzv_16B.hdr.qw_16B[0] |
 			((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 			((uint64_t) lrh_qws << 20),

@@ -487,23 +487,31 @@ err:
 	return -errno;
 }
 
-struct fi_opx_global_data fi_opx_global = {.hfi_local_info.type		= OPX_HFI1_UNDEF,
-					   .hfi_local_info.sim_rctxt_fd = -1,
-					   .hfi_local_info.sim_sctxt_fd = -1,
-					   .pkt_size			= OPX_HFI1_DEFAULT_PKT_SIZE,
-					   .opx_hfi1_type_strings	= {[OPX_HFI1_UNDEF]  = "OPX_HFI1_UNDEF",
-									   [OPX_HFI1_JKR_9B] = "CN5000-mixed",
-									   [OPX_HFI1_WFR]    = "OPA100",
-									   [3]		     = "ERROR",
-									   [OPX_HFI1_JKR]    = "CN5000",
-									   [5]		     = "ERROR",
-									   [6]		     = "ERROR",
-									   [7]		     = "ERROR",
-									   [OPX_HFI1_CYR]    = "CN6000",
-									   [9]		     = "ERROR",
-									   [10]		     = "ERROR",
-									   [11]		     = "ERROR",
-									   [OPX_HFI1_CNX000] = "CN5000|CN6000"}};
+struct fi_opx_global_data fi_opx_global = {.hfi_local_info.local_lids_size = -1U,
+					   .hfi_local_info.type		   = OPX_HFI1_UNDEF,
+					   .hfi_local_info.sim_rctxt_fd	   = -1,
+					   .hfi_local_info.sim_sctxt_fd	   = -1,
+					   .hfi_local_info.lid		   = (opx_lid_t) 0,
+					   .hfi_local_info.hfi_unit	   = (uint8_t) -1U,
+					   .hfi_local_info.sriov	   = false,
+					   .hfi_local_info.multi_vm	   = false,
+					   .hfi_local_info.multi_lid	   = false,
+					   .hfi_local_info.min_rctxt	   = 0,
+					   .hfi_local_info.max_rctxt	   = INT_MAX,
+					   .pkt_size			   = OPX_HFI1_DEFAULT_PKT_SIZE,
+					   .opx_hfi1_type_strings	   = {[OPX_HFI1_UNDEF]	= "OPX_HFI1_UNDEF",
+									      [OPX_HFI1_JKR_9B] = "CN5000-mixed",
+									      [OPX_HFI1_WFR]	= "OPA100",
+									      [3]		= "ERROR",
+									      [OPX_HFI1_JKR]	= "CN5000",
+									      [5]		= "ERROR",
+									      [6]		= "ERROR",
+									      [7]		= "ERROR",
+									      [OPX_HFI1_CYR]	= "CN6000",
+									      [9]		= "ERROR",
+									      [10]		= "ERROR",
+									      [11]		= "ERROR",
+									      [OPX_HFI1_CNX000] = "CN5000|CN6000"}};
 /* ROUTE CONTROL table for each packet type */
 int opx_route_control[OPX_HFI1_NUM_PACKET_TYPES];
 

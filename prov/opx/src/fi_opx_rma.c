@@ -181,16 +181,17 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	assert(FI_OPX_HFI_DPUT_OPCODE_GET == params->opcode); // double check packet type
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
-		opx_cacheline_copy_qw_vol(scb, replay->scb.qws,
-					  opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) |
-						  credit_return | params->pbc_dlid,
-					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | params->lrh_dlid |
-						  (params->lrh_dws << 32),
-					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | params->bth_subctxt_rx,
-					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn, opx_ep->rx->tx.cts_9B.hdr.qw_9B[3],
-					  opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode | dt64 | op64 | niov,
-					  (uintptr_t) params->rma_request,
-					  params->key); // key
+		opx_cacheline_copy_qw_vol(
+			scb, replay->scb.qws,
+			opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) | credit_return |
+				params->pbc_dlid |
+				OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, hfi1_type), hfi1_type),
+			opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | params->lrh_dlid | (params->lrh_dws << 32),
+			opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | params->bth_subctxt_rx,
+			opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn, opx_ep->rx->tx.cts_9B.hdr.qw_9B[3],
+			opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode | dt64 | op64 | niov,
+			(uintptr_t) params->rma_request,
+			params->key); // key
 		/* consume one credit for the packet header */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
@@ -207,7 +208,8 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 		opx_cacheline_copy_qw_vol(
 			scb, replay->scb.qws,
 			opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) | credit_return |
-				params->pbc_dlid,
+				params->pbc_dlid |
+				OPX_PBC_LOOPBACK(OPX_PBC_GET_DLID(params->pbc_dlid, hfi1_type), hfi1_type),
 			opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 				((uint64_t) (params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 				 << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |

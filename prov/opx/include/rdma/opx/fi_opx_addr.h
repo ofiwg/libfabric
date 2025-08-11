@@ -39,6 +39,15 @@
 
 #include "rdma/fabric.h" /* only for 'fi_addr_t' ... which is a typedef to uint64_t */
 
+/* Get macro for subctxt/rx from combined field.
+ * WFR and JKR: bits 10:8 is subctxt and 7:0 is rx id
+ * CYR: bits 10:9 is subctxt and 8:0 is rx id */
+#define OPX_HFI1_SUBCTXT(_subctxt_rx, _hfi1_type) \
+	((_hfi1_type == OPX_HFI1_CYR) ? (0x600 & __be16_to_cpu(_subctxt_rx)) : (0x700 & __be16_to_cpu(_subctxt_rx)))
+
+#define OPX_HFI1_RX(_subctxt_rx, _hfi1_type) \
+	((_hfi1_type == OPX_HFI1_CYR) ? (0x1ff & __be16_to_cpu(_subctxt_rx)) : (0xff & __be16_to_cpu(_subctxt_rx)))
+
 union fi_opx_addr {
 	fi_addr_t fi;
 	uint64_t  raw64b;
@@ -47,8 +56,9 @@ union fi_opx_addr {
 	struct {
 		uint8_t	 hfi1_unit;
 		uint8_t	 unused;
-		uint16_t hfi1_subctxt_rx; /* WFR and JKR: bits 10:8 is subctxt and 7:0 is rx id
-					       CYR: bits 10:9 is subctxt and 8:0 is rx id */
+		uint16_t hfi1_subctxt_rx; /* (Stored big endian)
+					   * WFR and JKR: bits 10:8 is subctxt and 7:0 is rx id
+					   * CYR: bits 10:9 is subctxt and 8:0 is rx id */
 		opx_lid_t lid;		  /* fabric-scoped node identifier */
 	} __attribute__((__packed__));
 } __attribute__((__packed__));

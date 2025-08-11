@@ -188,19 +188,25 @@ struct opx_hfi_local_info {
 	int		   sim_rctxt_fd; // simulator recv context BAR resource fd
 	opx_lid_t	   lid;
 	uint8_t		   hfi_unit;
-	uint8_t		   unused_bytes[3];
-	uint64_t	   unused_qws[5];
+	bool		   sriov;
+	bool		   multi_vm;  // self lid is used across VMs
+	bool		   multi_lid; // job has multiple lids
+	int32_t		   min_rctxt;
+	int32_t		   max_rctxt;
+	uint64_t	   unused_qws[4];
 
 	/* == CACHE LINE 1 == */
 	opx_lid_t local_lid_ids[OPX_MAX_HFIS];
 
-	/* == CACHE LINE 2 == */
+	/* == CACHE LINE 2 & 3 == */
 	struct opx_hfi_local_entry local_lid_entries[OPX_MAX_HFIS];
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi_local_info, local_lid_ids) == (FI_OPX_CACHE_LINE_SIZE * 1),
 			"Offset of opx_hfi_local_info->local_lid_ids should start at cacheline 1!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi_local_info, local_lid_entries) == (FI_OPX_CACHE_LINE_SIZE * 2),
 			"Offset of opx_hfi_local_info->local_lid_entries should start at cacheline 2!");
+OPX_COMPILE_TIME_ASSERT(sizeof(struct opx_hfi_local_info) == (FI_OPX_CACHE_LINE_SIZE * 4),
+			"Size of opx_hfi_local_info should be 4 cachelines!");
 
 #ifdef OPX_SIM
 /* Build L8SIM support */

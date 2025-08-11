@@ -57,7 +57,7 @@
 
 /* Jackal River has 2+2,
      2 physical ports and 2 loopback ports.
-   The loopback port is the PBC egress port for sriov
+   The loopback port is the PBC egress port for sr-iov
    which will be used to loopback to the same lid (self)
    when not using shm
 
@@ -79,6 +79,10 @@
 /* Loop back ports are not supported */
 #define OPX_JKR_LOOP_PORT_TO_INDEX(_port)  (_port + 1)
 #define OPX_JKR_INDEX_TO_LOOP_PORT(_index) (_index - 1)
+
+#ifndef OPX_PBC_JKR_PORT_LOOPBACK_MASK
+#define OPX_PBC_JKR_PORT_LOOPBACK_MASK 0b10
+#endif
 
 #define OPX_PBC_JKR_PORT_SHIFT 16
 #define OPX_PBC_JKR_PORT_MASK  0b11
@@ -105,13 +109,16 @@
 
 #define OPX_PBC_JKR_DLID(_dlid) \
 	(((unsigned long long) (_dlid & OPX_PBC_JKR_DLID_MASK) << OPX_PBC_JKR_DLID_SHIFT) << OPX_MSB_SHIFT)
+#define OPX_PBC_JKR_GET_DLID(_dlid) \
+	((((unsigned long long) (_dlid) >> OPX_PBC_JKR_DLID_SHIFT) >> OPX_MSB_SHIFT) & OPX_PBC_JKR_DLID_MASK)
 #define OPX_PBC_JKR_SCTXT(_ctx) \
 	(((unsigned long long) (_ctx & OPX_PBC_JKR_SCTXT_MASK) << OPX_PBC_JKR_SCTXT_SHIFT) << OPX_MSB_SHIFT)
 #define OPX_PBC_JKR_L2COMPRESSED(_c) OPX_PBC_JKR_UNUSED /* unused until 16B headers are optimized */
 #define OPX_PBC_JKR_PORTIDX(_pidx) \
 	(((OPX_JKR_PHYS_PORT_TO_INDEX(_pidx)) & OPX_PBC_JKR_PORT_MASK) << OPX_PBC_JKR_PORT_SHIFT)
-#define OPX_PBC_JKR_DLID_TO_PBC_DLID(_dlid) OPX_PBC_JKR_DLID((uint64_t) _dlid)
-#define OPX_PBC_JKR_INSERT_NON9B_ICRC	    (1 << 24)
+#define OPX_PBC_JKR_LOOPBACK_PORTIDX(_lid) \
+	((_lid == fi_opx_global.hfi_local_info.lid) ? (OPX_PBC_JKR_PORT_LOOPBACK_MASK << OPX_PBC_JKR_PORT_SHIFT) : 0)
+#define OPX_PBC_JKR_INSERT_NON9B_ICRC (1 << 24)
 
 #ifndef NDEBUG
 __OPX_FORCE_INLINE__
@@ -171,8 +178,8 @@ uint32_t opx_pbc_jkr_l2type(unsigned _type)
 extern int opx_route_control[OPX_HFI1_NUM_PACKET_TYPES];
 
 /* Convert route_control to "in order" if "out of order" is disabled */
-#define OPX_CHECK_OUT_OF_ORDER(ooo_disabled, rc) \
-	(((rc >= OPX_RC_OUT_OF_ORDER_0) && ooo_disabled) ? OPX_RC_IN_ORDER_0 : rc)
+#define OPX_CHECK_OUT_OF_ORDER(_ooo_disabled, _rc) \
+	(((_rc >= OPX_RC_OUT_OF_ORDER_0) && _ooo_disabled) ? OPX_RC_IN_ORDER_0 : _rc)
 
 /* RC (3 bits) route control value for different packet types */
 #ifndef NDEBUG
@@ -301,11 +308,11 @@ static inline void opx_set_route_control_value(const bool disabled)
 #define OPX_JKR_RHF_EGRBFR_OFFSET_MASK	 (0x0000000000000FFFul)
 #define OPX_JKR_RHF_EGRBFR_OFFSET_SHIFT	 (32)
 #define OPX_JKR_RHF_EGR_INDEX(_rhf)	 ((_rhf >> OPX_JKR_RHF_EGRBFR_INDEX_SHIFT) & OPX_JKR_RHF_EGRBFR_INDEX_MASK)
-#define OPX_JKR_RHF_EGR_INDEX_UPDATE(_rhf, index)                                      \
-	(((index & OPX_JKR_RHF_EGRBFR_INDEX_MASK) << OPX_JKR_RHF_EGRBFR_INDEX_SHIFT) | \
+#define OPX_JKR_RHF_EGR_INDEX_UPDATE(_rhf, _index)                                      \
+	(((_index & OPX_JKR_RHF_EGRBFR_INDEX_MASK) << OPX_JKR_RHF_EGRBFR_INDEX_SHIFT) | \
 	 (_rhf & ~(OPX_JKR_RHF_EGRBFR_INDEX_MASK << OPX_JKR_RHF_EGRBFR_INDEX_SHIFT)))
-#define OPX_JKR_RHF_EGR_OFFSET_UPDATE(_rhf, offset)                                        \
-	((((offset & OPX_JKR_RHF_EGRBFR_OFFSET_MASK) << OPX_JKR_RHF_EGRBFR_OFFSET_SHIFT) | \
+#define OPX_JKR_RHF_EGR_OFFSET_UPDATE(_rhf, _offset)                                        \
+	((((_offset & OPX_JKR_RHF_EGRBFR_OFFSET_MASK) << OPX_JKR_RHF_EGRBFR_OFFSET_SHIFT) | \
 	  (_rhf & ~(OPX_JKR_RHF_EGRBFR_OFFSET_MASK << OPX_JKR_RHF_EGRBFR_OFFSET_SHIFT))))
 #define OPX_JKR_RHF_EGR_OFFSET(_rhf)  ((_rhf >> OPX_JKR_RHF_EGRBFR_OFFSET_SHIFT) & OPX_JKR_RHF_EGRBFR_OFFSET_MASK)
 #define OPX_JKR_RHF_HDRQ_OFFSET(_rhf) ((_rhf >> (32 + 12)) & 0x01FFul)
@@ -426,10 +433,36 @@ union opx_jkr_pbc {
 	};
 };
 
+union opx_wfr_pbc {
+	uint64_t raw64b;
+	uint32_t raw32b[2];
+
+	__le64 qw;
+	__le32 dw[2];
+	__le16 w[4];
+
+	struct {
+		__le64 LengthDWs : 12;
+		__le64 Vl : 4;
+		__le64 Reserved_2 : 6;
+		__le64 Fecn : 1;
+		__le64 TestBadLcrc : 1;
+		__le64 InsertNon9bIcrc : 1;
+		__le64 CreditReturn : 1;
+		__le64 InsertHcrc : 2;
+		__le64 PacketBypass : 1;
+		__le64 TestEbp : 1;
+		__le64 Sc4 : 1;
+		__le64 Intr : 1;
+		__le64 StaticRateControl : 16;
+		__le64 Reserved_1 : 16;
+	};
+};
+
 #ifndef NDEBUG
-#define OPX_PRINT_RHF(a) opx_print_rhf((opx_jkr_rhf) (a), __func__, __LINE__)
+#define OPX_PRINT_RHF(_a) opx_print_rhf((opx_jkr_rhf) (_a), __func__, __LINE__)
 #else
-#define OPX_PRINT_RHF(a)
+#define OPX_PRINT_RHF(_a)
 #endif
 
 union opx_jkr_rhf {

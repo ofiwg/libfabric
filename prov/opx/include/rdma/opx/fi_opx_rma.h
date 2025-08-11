@@ -87,7 +87,7 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	params->cc		= cc;
 	params->dest_subctxt_rx = opx_target_addr.hfi1_subctxt_rx;
 	params->bth_subctxt_rx	= params->dest_subctxt_rx << OPX_BTH_SUBCTXT_RX_SHIFT;
-	params->pbc_dlid	= OPX_PBC_DLID_TO_PBC_DLID(opx_target_addr.lid, hfi1_type);
+	params->pbc_dlid	= OPX_PBC_DLID(opx_target_addr.lid, hfi1_type);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
 		params->pbc_dws = 2 + /* pbc */
 				  2 + /* lrh */
@@ -196,7 +196,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		lrh_dlid = opx_dst_addr.lid;
 	}
 	uint64_t slid	  = opx_dst_addr.lid;
-	uint64_t pbc_dlid = OPX_PBC_DLID_TO_PBC_DLID(opx_dst_addr.lid, hfi1_type);
+	uint64_t pbc_dlid = OPX_PBC_DLID(opx_dst_addr.lid, hfi1_type);
 
 	if (tx_op_flags & FI_REMOTE_CQ_DATA) {
 		struct fi_opx_rma_request *rma_req = ofi_buf_alloc(opx_ep->tx->rma_request_pool);
