@@ -16541,6 +16541,13 @@ FI_OPT_SHARED_MEMORY_PERMITTED setopt call will fail with -FI_EINVAL.
     pool. (Default: 8). When the number of internal rx pkts to post is
     lower than this threshold, the refill will be skipped.
 
+*FI_EFA_USE_DATA_PATH_DIRECT*
+
+:   Use the direct data path implementation that bypasses rdma-core on
+    data path, including the CQ polling and TX/RX submissions, when it's
+    available. Setting this variable as 1 will enable this feature
+    (Default: false).
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html), [`fi_provider`(7)](fi_provider.7.html),
