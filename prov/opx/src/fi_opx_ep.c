@@ -1157,8 +1157,8 @@ static inline bool opx_check_sriov(int unit, int port_index, int *min_rctxt, int
 
 	fd = fopen(filename, "r");
 	if (!fd) {
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "No hw_resources(%s), unit %d, port %d\n", strerror(errno),
-			 unit, port_index);
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "no hw_resources(%s), unit %d, port %d\n", strerror(errno),
+			unit, port_index);
 		return false;
 	}
 	char port_rctxt[FI_OPX_MAX_STRLEN];
@@ -1172,12 +1172,20 @@ static inline bool opx_check_sriov(int unit, int port_index, int *min_rctxt, int
 		if (!strncmp(label, "numvfs", 6)) {
 			if (val1 > 0) {
 				is_sriov = true;
-				assert(!(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR));
 			}
 			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "sr-iov true: %s %d : unit %d, port %d\n", label,
 				val1, unit, port_index);
 			continue;
-		} else if (!strncmp(label, "rctxt", 5) || !strncmp(label, port_rctxt, strlen(port_rctxt))) {
+		}
+		if (!strncmp(label, "rctxt", 5)) {
+			*min_rctxt = val1;
+			*max_rctxt = -val2;
+			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "%s %u-%u : unit %d, port %d\n", label, *min_rctxt,
+				*max_rctxt, unit, port_index);
+			assert(*max_rctxt > *min_rctxt);
+			continue;
+		}
+		if (!strncmp(label, port_rctxt, strlen(port_rctxt))) {
 			*min_rctxt = val1;
 			*max_rctxt = -val2;
 			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "%s %u-%u : unit %d, port %d\n", label, *min_rctxt,
@@ -1251,20 +1259,14 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 
 	fi_opx_global.hfi_local_info.hfi_unit = (uint8_t) hfi1->hfi_unit;
 	fi_opx_global.hfi_local_info.lid      = hfi1->lid;
-	/* pbc_lid is only used for loopback and is OPX_PBC_WFR_UNUSED (0) for *any* lid
-	 * in the pbc/header processing, but for the loopback check we need it to be
-	 invalid (-1UL) lid for WFR and not match */
-	fi_opx_global.hfi_local_info.pbc_lid = (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) ? -1UL : OPX_PBC_JKR_DLID(hfi1->lid);
-	/* Check if JKR/sr-iov(alpha) is enabled (or forced for unsupported testing)*/
+	/* Check if sr-iov(alpha) is enabled (or forced for unsupported testing)*/
 	fi_opx_global.hfi_local_info.min_rctxt = -1;
 	fi_opx_global.hfi_local_info.max_rctxt = -1;
 	fi_opx_global.hfi_local_info.sriov =
 		opx_check_sriov(hfi1->hfi_unit, (hfi1->hfi_port - 1), &fi_opx_global.hfi_local_info.min_rctxt,
 				&fi_opx_global.hfi_local_info.max_rctxt);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "sr-iov %u, lid %#x (PBC %#lX) rctxt %d-%d\n",
-	       fi_opx_global.hfi_local_info.sriov, fi_opx_global.hfi_local_info.lid,
-	       fi_opx_global.hfi_local_info.pbc_lid, fi_opx_global.hfi_local_info.min_rctxt,
-	       fi_opx_global.hfi_local_info.max_rctxt);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "sr-iov %u, rctxt %d-%d\n", fi_opx_global.hfi_local_info.sriov,
+	       fi_opx_global.hfi_local_info.min_rctxt, fi_opx_global.hfi_local_info.max_rctxt);
 	fi_opx_init_hfi_lookup(fi_opx_global.hfi_local_info.sriov);
 
 	// Initialize context sharing structures if context sharing is in use
@@ -1836,7 +1838,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"Opened hfi %p, HFI type %s, unit %u, port %u, ref_cnt %#lX, rcv ctxt %u, send ctxt %u, subctxt %u, subctxt_cnt %u\n",
-		opx_ep->hfi, OPX_HFI1_TYPE_STRING(OPX_SW_HFI1_TYPE), opx_ep->hfi->hfi_unit, opx_ep->hfi->hfi_port,
+		opx_ep->hfi, OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE), opx_ep->hfi->hfi_unit, opx_ep->hfi->hfi_port,
 		opx_ep->hfi->ref_cnt, opx_ep->hfi->ctrl->ctxt_info.ctxt, opx_ep->hfi->ctrl->ctxt_info.send_ctxt,
 		opx_ep->hfi->ctrl->ctxt_info.subctxt, opx_ep->hfi->subctxt_cnt);
 
@@ -3486,12 +3488,9 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_op
 				return rc;
 			}
 		}
-		if (fi_opx_global.hfi_local_info.multi_vm) {
-			/* Multi-vm (self) jobs will need loopback to self so disable SHM */
+		if (!fi_opx_global.hfi_local_info.multi_lid) {
+			/* sr-iov Loopback to self (no SHM) if a single lid jobs, <n> VMs */
 			opx_remove_self_lid(fi_opx_global.hfi_local_info.hfi_unit, fi_opx_global.hfi_local_info.lid);
-			/* assert JKR/sr-iov(alpha) can't mix loopback and other lids across vms */
-			assert(!(OPX_HW_HFI1_TYPE & OPX_HFI1_JKR) || !fi_opx_global.hfi_local_info.multi_lid);
-			assert(!(OPX_HW_HFI1_TYPE & OPX_HFI1_WFR)); /* not supported */
 		}
 		FI_INFO(fi_opx_global.prov, FI_LOG_AV, "multi-vm %u, multi-lid %u, SHM %u\n",
 			fi_opx_global.hfi_local_info.multi_vm, fi_opx_global.hfi_local_info.multi_lid,

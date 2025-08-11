@@ -188,8 +188,12 @@ struct opx_hfi_local_info {
 	int		   sim_rctxt_fd; // simulator recv context BAR resource fd
 	opx_lid_t	   lid;
 	uint8_t		   hfi_unit;
-	uint8_t		   unused_bytes[3];
-	uint64_t	   unused_qws[5];
+	bool		   sriov;
+	bool		   multi_vm;  // self lid is used across VMs
+	bool		   multi_lid; // job has multiple lids
+	int32_t		   min_rctxt;
+	int32_t		   max_rctxt;
+	uint64_t	   unused_qws[4];
 
 	/* == CACHE LINE 1 == */
 	opx_lid_t local_lid_ids[OPX_MAX_HFIS];
