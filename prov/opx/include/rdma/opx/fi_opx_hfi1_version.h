@@ -45,13 +45,13 @@
 #define OPX_RHF_RCV_TYPE_EAGER_RCV(_rhf, _noop)	   ((_rhf & 0x00001000ul) == 0x00001000ul)
 #define OPX_RHF_RCV_TYPE_OTHER(_rhf, _noop)	   ((_rhf & 0x00006000ul) != 0x00000000ul)
 
-#define OPX_PBC_CR(cr, _noop)	((cr & FI_OPX_HFI1_PBC_CR_MASK) << FI_OPX_HFI1_PBC_CR_SHIFT)
-#define OPX_PBC_LEN(len, _noop) (len)
-#define OPX_PBC_VL(vl, _noop)	((vl & FI_OPX_HFI1_PBC_VL_MASK) << FI_OPX_HFI1_PBC_VL_SHIFT)
+#define OPX_PBC_CR(_cr, _noop)	 ((_cr & FI_OPX_HFI1_PBC_CR_MASK) << FI_OPX_HFI1_PBC_CR_SHIFT)
+#define OPX_PBC_LEN(_len, _noop) (_len)
+#define OPX_PBC_VL(_vl, _noop)	 ((_vl & FI_OPX_HFI1_PBC_VL_MASK) << FI_OPX_HFI1_PBC_VL_SHIFT)
 
 /* Note: double check JKR sc bits */
-#define OPX_PBC_SC(sc, _noop) \
-	(((sc >> FI_OPX_HFI1_PBC_SC4_SHIFT) & FI_OPX_HFI1_PBC_SC4_MASK) << FI_OPX_HFI1_PBC_DCINFO_SHIFT)
+#define OPX_PBC_SC(_sc, _noop) \
+	(((_sc >> FI_OPX_HFI1_PBC_SC4_SHIFT) & FI_OPX_HFI1_PBC_SC4_MASK) << FI_OPX_HFI1_PBC_DCINFO_SHIFT)
 
 /* PBC most significant bits shift (32 bits) defines */
 #define OPX_MSB_SHIFT 32
@@ -66,21 +66,38 @@
 /*  function tables.                                           */
 /***************************************************************/
 
-#define OPX_PBC_DLID(dlid, _hfi1_type) ((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_DLID(dlid) : OPX_PBC_JKR_DLID(dlid))
+#define OPX_PBC_DLID(_lid, _hfi1_type) ((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_DLID(_lid) : OPX_PBC_JKR_DLID(_lid))
+#define OPX_PBC_GET_DLID(_lid, _hfi1_type) \
+	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_GET_DLID(_lid) : OPX_PBC_JKR_GET_DLID(_lid))
 
-#define OPX_PBC_SCTXT(ctx, _hfi1_type) ((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_SCTXT(ctx) : OPX_PBC_JKR_SCTXT(ctx))
+#define OPX_PBC_SCTXT(_ctx, _hfi1_type) \
+	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_SCTXT(_ctx) : OPX_PBC_JKR_SCTXT(_ctx))
 
-#define OPX_PBC_L2COMPRESSED(c, _hfi1_type) \
-	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_L2COMPRESSED(c) : OPX_PBC_JKR_L2COMPRESSED(c))
+#define OPX_PBC_L2COMPRESSED(_c, _hfi1_type) \
+	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_L2COMPRESSED(_c) : OPX_PBC_JKR_L2COMPRESSED(_c))
 
-#define OPX_PBC_PORTIDX(pidx, _hfi1_type) \
-	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(pidx) : OPX_PBC_JKR_PORTIDX(pidx))
+#ifndef NDEBUG
+#define OPX_PBC_LOOPBACK(_lid, _hfi1_type)                                                                            \
+	({                                                                                                            \
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,                                                            \
+		       "OPX_PBC_LOOPBACK %s:%u:%s dlid %#llX == slid %#llX LOOPBACK MASK %#llX\n", __func__,          \
+		       fi_opx_global.hfi_local_info.sriov, OPX_HFI1_TYPE_STRING(_hfi1_type), (long long int) _lid,    \
+		       (long long int) fi_opx_global.hfi_local_info.lid,                                              \
+		       (long long int) ((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) :               \
+								      OPX_PBC_JKR_LOOPBACK_PORTIDX(_lid)));           \
+		assert((_lid != fi_opx_global.hfi_local_info.lid) || fi_opx_global.hfi_local_info.sriov);             \
+		((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) : OPX_PBC_JKR_LOOPBACK_PORTIDX(_lid)); \
+	})
+#else
+#define OPX_PBC_LOOPBACK(_lid, _hfi1_type) \
+	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) : OPX_PBC_JKR_LOOPBACK_PORTIDX(_lid))
+#endif
 
-#define OPX_PBC_DLID_TO_PBC_DLID(dlid, _hfi1_type) \
-	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_DLID_TO_PBC_DLID(dlid) : OPX_PBC_JKR_DLID_TO_PBC_DLID(dlid))
+#define OPX_PBC_PORTIDX(_pidx, _hfi1_type) \
+	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_pidx) : OPX_PBC_JKR_PORTIDX(_pidx))
 
-#define OPX_PBC_L2TYPE(type, _hfi1_type) \
-	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_L2TYPE(type) : OPX_PBC_JKR_L2TYPE(type))
+#define OPX_PBC_L2TYPE(_type, _hfi1_type) \
+	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_L2TYPE(_type) : OPX_PBC_JKR_L2TYPE(_type))
 
 /* One runtime check for mutiple fields - DLID, PORT, L2TYPE */
 #define OPX_PBC_RUNTIME(_dlid, _pidx, _hfi1_type)                                               \

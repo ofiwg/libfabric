@@ -760,22 +760,25 @@ struct opx_hfi_local_entry *fi_opx_hfi1_get_lid_local(opx_lid_t lid)
 }
 
 __OPX_FORCE_INLINE__
-int fi_opx_hfi1_get_lid_local_unit(opx_lid_t lid)
+bool opx_lid_is_shm(opx_lid_t lid)
 {
-	return fi_opx_hfi1_get_lid_local(lid)->hfi_unit;
+	return (opx_local_lid_index(lid) != -1);
 }
 
 __OPX_FORCE_INLINE__
-bool opx_lid_is_shm(opx_lid_t lid)
+int fi_opx_hfi1_get_lid_local_unit(opx_lid_t lid)
 {
-	return (fi_opx_global.hfi_local_info.lid == lid) || (opx_local_lid_index(lid) != -1);
+	return ((fi_opx_global.hfi_local_info.lid == lid) ? fi_opx_global.hfi_local_info.hfi_unit :
+							    fi_opx_hfi1_get_lid_local(lid)->hfi_unit);
 }
 
 struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t unique_job_key);
 
 int init_hfi1_rxe_state(struct fi_opx_hfi1_context *context, struct fi_opx_hfi1_rxe_state *rxe_state);
 
-void fi_opx_init_hfi_lookup();
+void opx_remove_self_lid(const int hfi_unit, const opx_lid_t lid);
+
+void fi_opx_init_hfi_lookup(bool sriov);
 
 /*
  * Shared memory transport

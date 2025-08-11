@@ -141,7 +141,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	} else {
 		params->lrh_dlid = opx_dst_addr.lid;
 	}
-	params->pbc_dlid	   = OPX_PBC_DLID_TO_PBC_DLID(opx_dst_addr.lid, hfi1_type);
+	params->pbc_dlid	   = OPX_PBC_DLID(opx_dst_addr.lid, hfi1_type);
 	params->slid		   = opx_dst_addr.lid;
 	params->dt		   = dt == FI_VOID ? FI_VOID - 1 : dt;
 	params->op		   = op == FI_NOOP ? FI_NOOP - 1 : op;

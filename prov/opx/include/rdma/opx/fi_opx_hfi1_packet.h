@@ -601,6 +601,7 @@ QW[7]   USER/SW    USER/SW          |       |
  * The HFI1 packet header is consumed in many places and sometimes overloaded
  * for cache and memory allocation reasons.
  */
+
 union opx_hfi1_packet_hdr {
 	/* STL UNION */
 	union opx_hfi1_stl_packet_hdr {
@@ -1060,6 +1061,11 @@ union opx_hfi1_packet_hdr {
 	} __attribute__((__packed__)) service; /* "reliability service" */
 } __attribute__((__packed__)) __attribute__((__aligned__(8)));
 
+#define OPX_HDR_SLID_9B(_hdr) ((union opx_hfi1_packet_hdr *) _hdr)->lrh_9b.slid
+#define OPX_HDR_SLID_16B(_hdr)                                        \
+	(((union opx_hfi1_packet_hdr *) _hdr)->lrh_16b.slid20 << 20 | \
+	 ((union opx_hfi1_packet_hdr *) _hdr)->lrh_16b.slid)
+
 static_assert(sizeof(union opx_hfi1_packet_hdr) == sizeof(uint64_t[15]),
 	      "sizeof(union opx_hfi1_packet_hdr) must be 15 qwords!");
 
@@ -1127,11 +1133,13 @@ static inline size_t opx_hfi1_packet_hdr_payload_bytes(const union opx_hfi1_pack
 #define OPX_RC2_MASK 0b100
 #endif
 
-#define OPX_JKR_PRINT_16B_PBC(a)    opx_jkr_print_16B_pbc((a), __func__)
+#define OPX_JKR_PRINT_16B_PBC(a)    opx_jkr_print_pbc((a), __func__)
+#define OPX_JKR_PRINT_9B_PBC(a, b)  opx_jkr_print_9B_pbc((a), b, __func__)
 #define OPX_JKR_PRINT_16B_LRH(a, b) opx_jkr_print_16B_lrh((a), (b), __func__)
 #define OPX_JKR_PRINT_16B_BTH(a, b) opx_jkr_print_16B_bth((a), (b), __func__)
 
-void opx_jkr_print_16B_pbc(uint64_t pbc1, const char *func);
+void opx_jkr_print_pbc(uint64_t pbc1, const char *func);
+void opx_jkr_print_9B_pbc(uint64_t pbc1, const enum opx_hfi1_type hfi1_type, const char *func);
 void opx_jkr_print_16B_lrh(uint64_t lrh1, uint64_t lrh2, const char *func);
 void opx_jkr_print_16B_bth(uint64_t bth1, uint64_t bth2, const char *func);
 
@@ -1330,10 +1338,12 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 #else
 // Disable the macros
 #define OPX_JKR_PRINT_16B_PBC(a)
+#define OPX_JKR_PRINT_9B_PBC(a, b)
 #define OPX_JKR_PRINT_16B_LRH(a, b)
 #define OPX_JKR_PRINT_16B_BTH(a, b)
 
-void opx_jkr_print_16B_pbc(uint64_t pbc1, const char *func);
+void opx_jkr_print_pbc(uint64_t pbc1, const char *func);
+void opx_jkr_print_9B_pbc(uint64_t pbc1, const enum opx_hfi1_type hfi1_type, const char *func);
 void opx_jkr_print_16B_lrh(uint64_t lrh1, uint64_t lrh2, const char *func);
 void opx_jkr_print_16B_bth(uint64_t bth1, uint64_t bth2, const char *func);
 
@@ -1354,12 +1364,20 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type, __func__, __LINE__); \
 	}
 
+#define OPX_DEBUG_PRINT_PBC(__pbc, __hfi1_type)            \
+	if (__hfi1_type & OPX_HFI1_CNX000) {               \
+		OPX_JKR_PRINT_16B_PBC(__pbc, __hfi1_type); \
+	} else {                                           \
+		OPX_JKR_PRINT_9B_PBC(__pbc, __hfi1_type);  \
+	}
+
 #define OPX_DEBUG_PRINT_PBC_HDR(__pbc, __hdr, __hfi1_type)                           \
 	if (__hfi1_type & OPX_HFI1_CNX000) {                                         \
 		OPX_JKR_PRINT_16B_PBC(__pbc);                                        \
 		OPX_JKR_PRINT_16B_LRH(__hdr->qw_16B[0], __hdr->qw_16B[1]);           \
 		OPX_JKR_PRINT_16B_BTH(__hdr->qw_16B[2], __hdr->qw_16B[3]);           \
 	} else {                                                                     \
+		OPX_JKR_PRINT_9B_PBC(__pbc, __hfi1_type);                            \
 		fi_opx_hfi1_dump_packet_hdr(__hdr, __hfi1_type, __func__, __LINE__); \
 	}
 

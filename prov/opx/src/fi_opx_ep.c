@@ -1113,6 +1113,66 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	return 0;
 }
 
+static inline bool opx_check_sriov(int unit, int port_index, int *min_rctxt, int *max_rctxt)
+{
+	bool is_sriov = false;
+
+	const char *filename = NULL;
+	static char filename_storage[256];
+
+	snprintf(filename_storage, sizeof(filename_storage), "%s_%d/hw_resources", OPX_CLASS_PATH, unit);
+	filename = filename_storage;
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "filename \"%s\", unit %d, port %d\n", filename, unit, port_index);
+	char   *line	  = NULL;
+	size_t	line_size = 0;
+	ssize_t bytes;
+	FILE   *fd;
+
+	fd = fopen(filename, "r");
+	if (!fd) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "no hw_resources(%s), unit %d, port %d\n", strerror(errno),
+			unit, port_index);
+		return false;
+	}
+	char port_rctxt[FI_OPX_MAX_STRLEN];
+	sprintf(port_rctxt, "p%u.rctxt", port_index);
+
+	while ((bytes = getline(&line, &line_size, fd)) != -1) {
+		int  val1 = -2, val2 = -3;
+		char label[64] = {0x00};
+		sscanf(line, "%s %d %d", label, &val1, &val2);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "%s %d %d\n", label, val1, val2);
+		if (!strncmp(label, "numvfs", 6)) {
+			if (val1 > 0) {
+				is_sriov = true;
+			}
+			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "sr-iov true: %s %d : unit %d, port %d\n", label,
+				val1, unit, port_index);
+			continue;
+		}
+		if (!strncmp(label, "rctxt", 5)) {
+			*min_rctxt = val1;
+			*max_rctxt = -val2;
+			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "%s %u-%u : unit %d, port %d\n", label, *min_rctxt,
+				*max_rctxt, unit, port_index);
+			assert(*max_rctxt > *min_rctxt);
+			continue;
+		}
+		if (!strncmp(label, port_rctxt, strlen(port_rctxt))) {
+			*min_rctxt = val1;
+			*max_rctxt = -val2;
+			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "%s %u-%u : unit %d, port %d\n", label, *min_rctxt,
+				*max_rctxt, unit, port_index);
+			assert(*max_rctxt > *min_rctxt);
+			continue;
+		}
+	}
+
+	free(line);
+	fclose(fd);
+	return is_sriov;
+}
+
 static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "rx init\n");
@@ -1164,10 +1224,23 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 	opx_ep->rx->shd_ctx.subctxt	 = hfi1->subctxt;
 
 	/* Initialize hash table used to lookup info on any HFI units on the node */
+	/* Assert multi-endpoint globally uses the same hfi/lid */
+	assert(fi_opx_global.hfi_local_info.hfi_unit == (uint8_t) -1U ||
+	       fi_opx_global.hfi_local_info.hfi_unit == (uint8_t) hfi1->hfi_unit);
+	assert(fi_opx_global.hfi_local_info.lid == (opx_lid_t) 0 ||
+	       fi_opx_global.hfi_local_info.lid == (opx_lid_t) hfi1->lid);
+
 	fi_opx_global.hfi_local_info.hfi_unit = (uint8_t) hfi1->hfi_unit;
 	fi_opx_global.hfi_local_info.lid      = hfi1->lid;
-
-	fi_opx_init_hfi_lookup();
+	/* Check if sr-iov(alpha) is enabled (or forced for unsupported testing)*/
+	fi_opx_global.hfi_local_info.min_rctxt = -1;
+	fi_opx_global.hfi_local_info.max_rctxt = -1;
+	fi_opx_global.hfi_local_info.sriov =
+		opx_check_sriov(hfi1->hfi_unit, (hfi1->hfi_port - 1), &fi_opx_global.hfi_local_info.min_rctxt,
+				&fi_opx_global.hfi_local_info.max_rctxt);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "sr-iov %u, rctxt %d-%d\n", fi_opx_global.hfi_local_info.sriov,
+	       fi_opx_global.hfi_local_info.min_rctxt, fi_opx_global.hfi_local_info.max_rctxt);
+	fi_opx_init_hfi_lookup(fi_opx_global.hfi_local_info.sriov);
 
 	// Initialize context sharing structures if context sharing is in use
 	if (OPX_IS_CTX_SHARING_ENABLED) {
@@ -1731,7 +1804,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		(OPX_HFI1_TYPE > OPX_HFI1_WFR) ? "disabled" : "enabled", OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE));
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"Opened hfi %p, HFI type %s, unit %#X, port %#X, ref_cnt %#lX, rcv ctxt %#X, send ctxt %#X, subctxt %u, subctxt_cnt %u\n",
+		"Opened hfi %p, HFI type %s, unit %u, port %u, ref_cnt %#lX, rcv ctxt %u, send ctxt %u, subctxt %u, subctxt_cnt %u\n",
 		opx_ep->hfi, OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE), opx_ep->hfi->hfi_unit, opx_ep->hfi->hfi_port,
 		opx_ep->hfi->ref_cnt, opx_ep->hfi->ctrl->ctxt_info.ctxt, opx_ep->hfi->ctrl->ctxt_info.send_ctxt,
 		opx_ep->hfi->ctrl->ctxt_info.subctxt, opx_ep->hfi->subctxt_cnt);
@@ -3264,9 +3337,29 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_op
 	ssize_t rc	    = FI_SUCCESS;
 	opx_ep->rx->av_addr = opx_ep->av->table_addr;
 	opx_ep->tx->av_addr = opx_ep->av->table_addr;
+	if (fi_opx_global.hfi_local_info.sriov) {
+		/* Check rctxt ranges for sr-iov*/
+		for (n = 0; n < count; ++n) {
+			rc = fi_opx_check_tx_rctxt(opx_ep, peers[n].fi);
+			FI_INFO(fi_opx_global.prov, FI_LOG_AV, "lid:%u multi-vm %u, multi-lid %u, SHM %u\n",
+				fi_opx_global.hfi_local_info.lid, fi_opx_global.hfi_local_info.multi_vm,
+				fi_opx_global.hfi_local_info.multi_lid,
+				opx_lid_is_shm(fi_opx_global.hfi_local_info.lid));
+			if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
+				return rc;
+			}
+		}
+		if (!fi_opx_global.hfi_local_info.multi_lid) {
+			/* sr-iov Loopback to self (no SHM) if a single lid jobs, <n> VMs */
+			opx_remove_self_lid(fi_opx_global.hfi_local_info.hfi_unit, fi_opx_global.hfi_local_info.lid);
+		}
+		FI_INFO(fi_opx_global.prov, FI_LOG_AV, "multi-vm %u, multi-lid %u, SHM %u\n",
+			fi_opx_global.hfi_local_info.multi_vm, fi_opx_global.hfi_local_info.multi_lid,
+			opx_lid_is_shm(fi_opx_global.hfi_local_info.lid));
+	}
 	for (n = 0; n < count; ++n) {
-		FI_INFO(fi_opx_global.prov, FI_LOG_AV, "opx_ep %p, opx_ep->tx %p, peer %#lX\n", opx_ep, opx_ep->tx,
-			peers[n].fi);
+		FI_DBG(fi_opx_global.prov, FI_LOG_AV, "opx_ep %p, opx_ep->tx %p, peer %#lX\n", opx_ep, opx_ep->tx,
+		       peers[n].fi);
 		/*
 		 * DAOS Persistent Address Support:
 		 * No Context Resource Management Framework is supported by OPX to enable

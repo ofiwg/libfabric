@@ -412,8 +412,8 @@ struct fi_opx_debug_counters {
 	struct {
 		struct fi_opx_debug_counters_typed_txr hfi;
 		struct fi_opx_debug_counters_typed_txr intranode;
-		// hmem - leaving "intranode" until we design hmem sriov
-		// and understand sriov+hmem/shm/intranode/gdrcopy/ipc
+		// hmem - leaving "intranode" until we design hmem sr-iov
+		// and understand sr-iov+hmem/shm/intranode/gdrcopy/ipc
 
 		uint64_t dput_rzv_intranode;
 		uint64_t dput_rzv_pio;
