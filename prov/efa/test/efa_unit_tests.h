@@ -337,6 +337,12 @@ void test_efa_cq_read_recv_rdma_with_imm_success();
 void test_efa_cq_read_send_failure();
 void test_efa_cq_read_recv_failure();
 void test_efa_cq_recv_rdma_with_imm_failure();
+void test_efa_cq_trywait_no_channel();
+void test_efa_cq_trywait_completions_available();
+void test_efa_cq_trywait_success();
+void test_efa_cq_sread_einval();
+void test_efa_cq_sread_eagain();
+
 void test_efa_ep_open();
 void test_efa_ep_cancel();
 void test_efa_ep_getopt();
