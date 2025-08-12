@@ -193,3 +193,47 @@ def get_efa_device_name_for_cuda_device(ip, cuda_device_id, num_cuda_devices):
     efa_devices = get_efa_device_names(ip)
     num_efa = len(efa_devices)
     return efa_devices[(cuda_device_id * num_efa) // num_cuda_devices]
+
+
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def support_cq_interrupts(hostname):
+    """
+    determine whether an EFA device supports fi_cq_sread
+    This is based on checking if the device has more than 1 completion vector,
+    which indicates support for CQ interrupts
+    hostname: a host that has efa
+    return: True if sread is supported, False otherwise, None if unable to determine
+    """
+    try:
+        efa_devices = get_efa_device_names(hostname)
+        if not efa_devices:
+            return None
+        efa_device_name = efa_devices[0]
+    except Exception:
+        return None
+
+    command = 'ssh {} ibv_devinfo -d {} -v | grep "num_comp_vectors"'.format(hostname, efa_device_name)
+    process = subprocess.run(command, shell=True, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+
+    if process.returncode != 0:
+        if process.stderr and has_ssh_connection_err_msg(process.stderr):
+            print("encountered ssh connection issue")
+            raise SshConnectionError()
+        return None
+
+    # Example output of ibv_devinfo -d rdmap85s0 -v | grep "num_comp_vectors"
+    # num_comp_vectors:		32
+    lines = process.stdout.split('\n')
+    for line in lines:
+        line = line.strip()
+        if 'num_comp_vectors' in line:
+            parts = line.split(':')
+            if len(parts) >= 2:
+                try:
+                    comp_vectors = int(parts[1].strip())
+                    # Support sread if num_comp_vectors > 1
+                    return comp_vectors > 1
+                except ValueError:
+                    continue
+
+    return None
