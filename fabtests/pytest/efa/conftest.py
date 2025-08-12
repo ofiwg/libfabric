@@ -1,5 +1,5 @@
 import pytest
-from efa_common import has_rdma
+from efa_common import has_rdma, support_cq_interrupts
 
 # The memory types for bi-directional tests.
 memory_type_list_bi_dir = [
@@ -111,3 +111,10 @@ def pytest_collection_modifyitems(session, config, items):
             other_tests.append(item)
 
     yield other_tests + mr_exhaustion_tests
+
+
+@pytest.fixture(scope="function")
+def support_sread(cmdline_args):
+    """Check if both server and client support cq interrupts."""
+    return (support_cq_interrupts(cmdline_args.server_id) and
+            support_cq_interrupts(cmdline_args.client_id))
