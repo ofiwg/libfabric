@@ -123,7 +123,7 @@ def get_efa_domain_names(server_id):
     process_timed_out = False
 
     # This command returns a list of EFA domain names and its related info
-    command = "ssh {} fi_info -p efa".format(server_id)
+    command = "ssh {} 'fi_info -p efa || /opt/amazon/efa/bin/fi_info -p efa'".format(server_id)
     p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
  
     try:
@@ -158,7 +158,7 @@ def get_efa_device_names(server_id):
     timeout = 60
 
     # This command returns a list of EFA devices names
-    command = "ssh {} /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM -f efa | grep domain".format(server_id)
+    command = "ssh {} 'fi_info -p efa -t FI_EP_RDM -f efa || /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM -f efa' | grep domain".format(server_id)
     proc = subprocess.run(command, shell=True,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8", timeout=timeout)
