@@ -156,4 +156,32 @@ __OPX_FORCE_INLINE__ int opx_wfr_rhf_check_header(const uint64_t rhf_rcvd, const
 
 #define OPX_WFR_RHF_CHECK_HEADER(_rhf_rcvd, _hdr, _hfi1_type) opx_wfr_rhf_check_header(_rhf_rcvd, _hdr, _hfi1_type)
 
+union opx_wfr_pbc {
+	uint64_t raw64b;
+	uint32_t raw32b[2];
+
+	__le64 qw;
+	__le32 dw[2];
+	__le16 w[4];
+
+	struct {
+		__le64 LengthDWs : 12;
+		__le64 Vl : 4;
+		__le64 Reserved_2 : 6;
+		__le64 Fecn : 1;
+		__le64 TestBadLcrc : 1;
+		__le64 InsertNon9bIcrc : 1;
+		__le64 CreditReturn : 1;
+		__le64 InsertHcrc : 2;
+		__le64 PacketBypass : 1;
+		__le64 TestEbp : 1;
+		__le64 Sc4 : 1;
+		__le64 Intr : 1;
+		__le64 StaticRateControl : 16;
+		__le64 Reserved_1 : 16;
+	};
+};
+
+void opx_wfr_print_9B_pbc(uint64_t pbc1, const char *func);
+
 #endif

@@ -186,6 +186,7 @@ struct opx_hfi_local_info {
 	enum opx_hfi1_type type;
 	int		   sim_sctxt_fd; // simulator send context BAR resource fd
 	int		   sim_rctxt_fd; // simulator recv context BAR resource fd
+	uint64_t	   pbc_lid;
 	opx_lid_t	   lid;
 	uint8_t		   hfi_unit;
 	bool		   sriov;
@@ -193,7 +194,7 @@ struct opx_hfi_local_info {
 	bool		   multi_lid; // job has multiple lids
 	int32_t		   min_rctxt;
 	int32_t		   max_rctxt;
-	uint64_t	   unused_qws[4];
+	uint64_t	   unused_qws[3];
 
 	/* == CACHE LINE 1 == */
 	opx_lid_t local_lid_ids[OPX_MAX_HFIS];
