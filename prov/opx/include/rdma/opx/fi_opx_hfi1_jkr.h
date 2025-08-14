@@ -116,8 +116,10 @@
 #define OPX_PBC_JKR_L2COMPRESSED(_c) OPX_PBC_JKR_UNUSED /* unused until 16B headers are optimized */
 #define OPX_PBC_JKR_PORTIDX(_pidx) \
 	(((OPX_JKR_PHYS_PORT_TO_INDEX(_pidx)) & OPX_PBC_JKR_PORT_MASK) << OPX_PBC_JKR_PORT_SHIFT)
-#define OPX_PBC_JKR_LOOPBACK_PORTIDX(_lid) \
-	((_lid == fi_opx_global.hfi_local_info.lid) ? (OPX_PBC_JKR_PORT_LOOPBACK_MASK << OPX_PBC_JKR_PORT_SHIFT) : 0)
+#define OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid)                                \
+	((_pbc_lid == fi_opx_global.hfi_local_info.pbc_lid) ?                 \
+		 (OPX_PBC_JKR_PORT_LOOPBACK_MASK << OPX_PBC_JKR_PORT_SHIFT) : \
+		 0)
 #define OPX_PBC_JKR_INSERT_NON9B_ICRC (1 << 24)
 
 #ifndef NDEBUG
@@ -430,32 +432,6 @@ union opx_jkr_pbc {
 		__le64 Intr : 1;
 		__le64 Dlid : 24;
 		__le64 SendCtxt : 8;
-	};
-};
-
-union opx_wfr_pbc {
-	uint64_t raw64b;
-	uint32_t raw32b[2];
-
-	__le64 qw;
-	__le32 dw[2];
-	__le16 w[4];
-
-	struct {
-		__le64 LengthDWs : 12;
-		__le64 Vl : 4;
-		__le64 Reserved_2 : 6;
-		__le64 Fecn : 1;
-		__le64 TestBadLcrc : 1;
-		__le64 InsertNon9bIcrc : 1;
-		__le64 CreditReturn : 1;
-		__le64 InsertHcrc : 2;
-		__le64 PacketBypass : 1;
-		__le64 TestEbp : 1;
-		__le64 Sc4 : 1;
-		__le64 Intr : 1;
-		__le64 StaticRateControl : 16;
-		__le64 Reserved_1 : 16;
 	};
 };
 

@@ -140,7 +140,7 @@ int opx_rhf_missing_payload_error_handler(const uint64_t rhf_rcvd, const union o
 	return 1;
 }
 
-void opx_jkr_print_pbc(uint64_t pbc1, const char *func)
+void opx_print_16B_pbc(uint64_t pbc1, const char *func)
 {
 	__attribute__((__unused__)) union opx_jkr_pbc pbc;
 	pbc.raw64b = pbc1;
@@ -167,35 +167,16 @@ void opx_jkr_print_pbc(uint64_t pbc1, const char *func)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.SendCtxt = %#x\n", func, pbc.SendCtxt);
 }
 
-void opx_jkr_print_9B_pbc(uint64_t pbc1, const enum opx_hfi1_type hfi1_type, const char *func)
+void opx_print_9B_pbc(uint64_t pbc1, const enum opx_hfi1_type hfi1_type, const char *func)
 {
 	/* WFR 9B is different */
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s %s %s\n", func, OPX_HFI1_TYPE_STRING(hfi1_type),
 		     OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE));
-	if (!(hfi1_type & OPX_HFI1_WFR)) {
-		return opx_jkr_print_pbc(pbc1, func);
+	if (hfi1_type & OPX_HFI1_WFR) {
+		return opx_wfr_print_9B_pbc(pbc1, func);
 	}
-
-	__attribute__((__unused__)) union opx_wfr_pbc pbc;
-	pbc.raw64b = pbc1;
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc = %#16.16lX\n", func, pbc1);
-
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.LengthDWs = %#x %zu\n", func, pbc.LengthDWs,
-		     pbc.LengthDWs * sizeof(uint32_t));
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Vl = %#x\n", func, pbc.Vl);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Reserved_2 = %#x\n", func, pbc.Reserved_2);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Fecn = %#x\n", func, pbc.Fecn);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.TestBadLcrc = %#x\n", func, pbc.TestBadLcrc);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.InsertNon9bIcrc = %#x\n", func, pbc.InsertNon9bIcrc);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.CreditReturn = %#x\n", func, pbc.CreditReturn);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.InsertHcrc = %#x\n", func, pbc.InsertHcrc);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.PacketBypass = %#x\n", func, pbc.PacketBypass);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.TestEbp = %#x\n", func, pbc.TestEbp);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Sc4 = %#x\n", func, pbc.Sc4);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Intr = %#x\n", func, pbc.Intr);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.StaticRateControl = %#x\n", func,
-		     pbc.StaticRateControl);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Reserved_1 = %#x\n", func, pbc.Reserved_1);
+	/* JKR 9B is same as JKR 16B */
+	return opx_print_16B_pbc(pbc1, func);
 }
 
 void opx_jkr_print_16B_lrh(uint64_t lrh1, uint64_t lrh2, const char *func)

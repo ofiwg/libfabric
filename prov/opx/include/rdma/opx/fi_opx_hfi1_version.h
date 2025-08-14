@@ -77,20 +77,22 @@
 	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_L2COMPRESSED(_c) : OPX_PBC_JKR_L2COMPRESSED(_c))
 
 #ifndef NDEBUG
-#define OPX_PBC_LOOPBACK(_lid, _hfi1_type)                                                                            \
-	({                                                                                                            \
-		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,                                                            \
-		       "OPX_PBC_LOOPBACK %s:%u:%s dlid %#llX == slid %#llX LOOPBACK MASK %#llX\n", __func__,          \
-		       fi_opx_global.hfi_local_info.sriov, OPX_HFI1_TYPE_STRING(_hfi1_type), (long long int) _lid,    \
-		       (long long int) fi_opx_global.hfi_local_info.lid,                                              \
-		       (long long int) ((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) :               \
-								      OPX_PBC_JKR_LOOPBACK_PORTIDX(_lid)));           \
-		assert((_lid != fi_opx_global.hfi_local_info.lid) || fi_opx_global.hfi_local_info.sriov);             \
-		((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) : OPX_PBC_JKR_LOOPBACK_PORTIDX(_lid)); \
+#define OPX_PBC_LOOPBACK(_pbc_lid, _hfi1_type)                                                                         \
+	({                                                                                                             \
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,                                                             \
+		       "OPX_PBC_LOOPBACK %s:%u:%s pbc_lid %#llX/%#llX == slid %#llX LOOPBACK MASK %#llX\n", __func__,  \
+		       fi_opx_global.hfi_local_info.sriov, OPX_HFI1_TYPE_STRING(_hfi1_type), (long long int) _pbc_lid, \
+		       (long long int) fi_opx_global.hfi_local_info.pbc_lid,                                           \
+		       (long long int) fi_opx_global.hfi_local_info.lid,                                               \
+		       (long long int) ((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) :                \
+								      OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid)));        \
+		assert((_pbc_lid != fi_opx_global.hfi_local_info.pbc_lid) || fi_opx_global.hfi_local_info.sriov);      \
+		((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) :                                       \
+					       OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid));                                \
 	})
 #else
-#define OPX_PBC_LOOPBACK(_lid, _hfi1_type) \
-	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) : OPX_PBC_JKR_LOOPBACK_PORTIDX(_lid))
+#define OPX_PBC_LOOPBACK(_pbc_lid, _hfi1_type) \
+	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) : OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid))
 #endif
 
 #define OPX_PBC_PORTIDX(_pidx, _hfi1_type) \
