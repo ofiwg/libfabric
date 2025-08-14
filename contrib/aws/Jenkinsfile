@@ -45,7 +45,7 @@ def install_porta_fiducia() {
 
 def kill_all_clusters(instance_type, region) {
     def instance_type_without_period = sh(
-        script: "echo ${instance_type} | tr -d '.\\n'",
+        script: "echo ${instance_type.take(10)} | tr -d '.\\n'",
         returnStdout: true
     )
     sh ". venv/bin/activate; ./PortaFiducia/scripts/delete_manual_cluster.py --cluster-name \'*${instance_type_without_period}*\' --region ${region} || true"
