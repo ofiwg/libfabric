@@ -34,7 +34,7 @@
 #include "rxm.h"
 
 #define RXM_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | \
-		     FI_ATOMICS)
+		     FI_ATOMICS | FI_RPC)
 
 #define RXM_RX_CAPS (FI_SOURCE | OFI_RX_MSG_CAPS | FI_TAGGED | \
 		     OFI_RX_RMA_CAPS | FI_ATOMICS | FI_DIRECTED_RECV | \
