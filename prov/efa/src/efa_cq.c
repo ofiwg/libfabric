@@ -146,6 +146,8 @@ static void efa_cq_handle_tx_completion(struct efa_base_ep *base_ep,
 	if (!ibv_cq_ex->wr_id)
 		return;
 
+	efa_tracepoint(handle_tx_completion, ibv_cq_ex->wr_id);
+
 	/* TX completions should not send peer address to util_cq */
 	if (base_ep->util_ep.caps & FI_SOURCE)
 		ret = ofi_cq_write_src(tx_cq, cq_entry->op_context,
@@ -185,6 +187,8 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 	/* NULL wr_id means no FI_COMPLETION flag */
 	if (!ibv_cq_ex->wr_id)
 		return;
+
+	efa_tracepoint(handle_rx_completion, ibv_cq_ex->wr_id);
 
 	if (base_ep->util_ep.caps & FI_SOURCE) {
 		src_addr = efa_av_reverse_lookup(base_ep->av,
