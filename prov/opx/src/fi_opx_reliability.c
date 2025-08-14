@@ -449,10 +449,11 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode(struct fid_ep				    *ep,
 		struct fi_opx_hfi1_txe_scb_9B model_9B = opx_ep->reli_service->ping_model_9B;
 		model_9B.hdr.ud.opcode		       = opcode;
 		model_9B.hdr.service.key_dw_suffix     = key->dw_suffix;
+		const uint64_t pbc_dlid		       = OPX_PBC_DLID(dlid, hfi1_type);
 
 		opx_cacheline_store_qw_vol(scb,
-					   model_9B.qw0 | OPX_PBC_CR(0x1, hfi1_type) | OPX_PBC_DLID(dlid, hfi1_type) |
-						   OPX_PBC_LOOPBACK(dlid, hfi1_type),
+					   model_9B.qw0 | OPX_PBC_CR(0x1, hfi1_type) | pbc_dlid |
+						   OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
 					   model_9B.hdr.qw_9B[0] | lrh_dlid_9B, model_9B.hdr.qw_9B[1] | bth_rx,
 					   model_9B.hdr.qw_9B[2], model_9B.hdr.qw_9B[3], 0UL, 0UL, key->qw_prefix);
 
@@ -462,19 +463,19 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode(struct fid_ep				    *ep,
 		struct fi_opx_hfi1_txe_scb_16B model_16B = opx_ep->reli_service->ping_model_16B;
 		model_16B.hdr.ud.opcode			 = opcode;
 		model_16B.hdr.service.key_dw_suffix	 = key->dw_suffix;
+		const uint64_t pbc_dlid			 = OPX_PBC_DLID(dlid, hfi1_type);
 
-		opx_cacheline_store_qw_vol(scb,
-					   model_16B.qw0 | OPX_PBC_CR(1, hfi1_type) | OPX_PBC_DLID(dlid, hfi1_type) |
-						   OPX_PBC_LOOPBACK(dlid, hfi1_type),
-					   model_16B.hdr.qw_16B[0] |
-						   ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
-						    << OPX_LRH_JKR_16B_DLID_SHIFT_16B),
-					   model_16B.hdr.qw_16B[1] |
-						   ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
-						    OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
-						   bth_subctxt_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B,
-					   model_16B.hdr.qw_16B[2] | bth_subctxt_rx, model_16B.hdr.qw_16B[3],
-					   model_16B.hdr.qw_16B[4], 0UL, 0UL);
+		opx_cacheline_store_qw_vol(
+			scb,
+			model_16B.qw0 | OPX_PBC_CR(1, hfi1_type) | pbc_dlid | OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+			model_16B.hdr.qw_16B[0] | ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
+						   << OPX_LRH_JKR_16B_DLID_SHIFT_16B),
+			model_16B.hdr.qw_16B[1] |
+				((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
+				 OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
+				bth_subctxt_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B,
+			model_16B.hdr.qw_16B[2] | bth_subctxt_rx, model_16B.hdr.qw_16B[3], model_16B.hdr.qw_16B[4], 0UL,
+			0UL);
 
 		/* consume one credit for the packet header first cacheline */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -637,13 +638,13 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 				&opx_ep->reli_service->ping_model_9B :
 				(opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK ? &opx_ep->reli_service->ack_model_9B :
 										  &opx_ep->reli_service->nack_model_9B);
+		const uint64_t pbc_dlid = OPX_PBC_DLID(dlid, hfi1_type);
 
-		opx_cacheline_store_qw_vol(scb,
-					   model->qw0 | OPX_PBC_CR(0x1, hfi1_type) | OPX_PBC_DLID(dlid, hfi1_type) |
-						   OPX_PBC_LOOPBACK(dlid, hfi1_type),
-					   model->hdr.qw_9B[0] | lrh_dlid_9B, model->hdr.qw_9B[1] | bth_rx,
-					   model->hdr.qw_9B[2], model->hdr.qw_9B[3] | key_dw_suffix, psn_count_24,
-					   psn_start_24, key->qw_prefix); /* service.key */
+		opx_cacheline_store_qw_vol(
+			scb, model->qw0 | OPX_PBC_CR(0x1, hfi1_type) | pbc_dlid | OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+			model->hdr.qw_9B[0] | lrh_dlid_9B, model->hdr.qw_9B[1] | bth_rx, model->hdr.qw_9B[2],
+			model->hdr.qw_9B[3] | key_dw_suffix, psn_count_24, psn_start_24,
+			key->qw_prefix); /* service.key */
 
 		// fi_opx_hfi1_dump_stl_packet_hdr((struct fi_opx_hfi1_stl_packet_hdr_9B *)&tmp[1], __func__, __LINE__);
 
@@ -657,19 +658,19 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 				(opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK ?
 					 &opx_ep->reli_service->ack_model_16B :
 					 &opx_ep->reli_service->nack_model_16B);
+		const uint64_t pbc_dlid = OPX_PBC_DLID(dlid, hfi1_type);
 
-		opx_cacheline_store_qw_vol(scb,
-					   model_16B->qw0 | OPX_PBC_CR(1, hfi1_type) | OPX_PBC_DLID(dlid, hfi1_type) |
-						   OPX_PBC_LOOPBACK(dlid, hfi1_type),
-					   model_16B->hdr.qw_16B[0] |
-						   ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
+		opx_cacheline_store_qw_vol(
+			scb,
+			model_16B->qw0 | OPX_PBC_CR(1, hfi1_type) | pbc_dlid | OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+			model_16B->hdr.qw_16B[0] | ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
 						    << OPX_LRH_JKR_16B_DLID_SHIFT_16B),
-					   model_16B->hdr.qw_16B[1] |
-						   ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
-						    OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
-						   (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
-					   model_16B->hdr.qw_16B[2] | bth_rx, model_16B->hdr.qw_16B[3],
-					   model_16B->hdr.qw_16B[4] | key_dw_suffix, psn_count_24, psn_start_24);
+			model_16B->hdr.qw_16B[1] |
+				((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
+				 OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
+				(uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
+			model_16B->hdr.qw_16B[2] | bth_rx, model_16B->hdr.qw_16B[3],
+			model_16B->hdr.qw_16B[4] | key_dw_suffix, psn_count_24, psn_start_24);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 

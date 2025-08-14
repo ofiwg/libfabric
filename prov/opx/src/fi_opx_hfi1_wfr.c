@@ -98,3 +98,27 @@ void opx_wfr_rhe_debug(struct fi_opx_ep *opx_ep, volatile uint64_t *rhe_ptr, vol
 
 	return;
 }
+
+void opx_wfr_print_9B_pbc(uint64_t pbc1, const char *func)
+{
+	__attribute__((__unused__)) union opx_wfr_pbc pbc;
+	pbc.raw64b = pbc1;
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc = %#16.16lX\n", func, pbc1);
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.LengthDWs = %#x %zu\n", func, pbc.LengthDWs,
+		     pbc.LengthDWs * sizeof(uint32_t));
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Vl = %#x\n", func, pbc.Vl);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Reserved_2 = %#x\n", func, pbc.Reserved_2);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Fecn = %#x\n", func, pbc.Fecn);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.TestBadLcrc = %#x\n", func, pbc.TestBadLcrc);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.InsertNon9bIcrc = %#x\n", func, pbc.InsertNon9bIcrc);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.CreditReturn = %#x\n", func, pbc.CreditReturn);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.InsertHcrc = %#x\n", func, pbc.InsertHcrc);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.PacketBypass = %#x\n", func, pbc.PacketBypass);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.TestEbp = %#x\n", func, pbc.TestEbp);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Sc4 = %#x\n", func, pbc.Sc4);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Intr = %#x\n", func, pbc.Intr);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.StaticRateControl = %#x\n", func,
+		     pbc.StaticRateControl);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s: Pbc.Reserved_1 = %#x\n", func, pbc.Reserved_1);
+}

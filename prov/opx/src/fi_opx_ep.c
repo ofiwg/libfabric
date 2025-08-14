@@ -1149,16 +1149,7 @@ static inline bool opx_check_sriov(int unit, int port_index, int *min_rctxt, int
 			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "sr-iov true: %s %d : unit %d, port %d\n", label,
 				val1, unit, port_index);
 			continue;
-		}
-		if (!strncmp(label, "rctxt", 5)) {
-			*min_rctxt = val1;
-			*max_rctxt = -val2;
-			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "%s %u-%u : unit %d, port %d\n", label, *min_rctxt,
-				*max_rctxt, unit, port_index);
-			assert(*max_rctxt > *min_rctxt);
-			continue;
-		}
-		if (!strncmp(label, port_rctxt, strlen(port_rctxt))) {
+		} else if (!strncmp(label, "rctxt", 5) || !strncmp(label, port_rctxt, strlen(port_rctxt))) {
 			*min_rctxt = val1;
 			*max_rctxt = -val2;
 			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "%s %u-%u : unit %d, port %d\n", label, *min_rctxt,
@@ -1232,14 +1223,20 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 
 	fi_opx_global.hfi_local_info.hfi_unit = (uint8_t) hfi1->hfi_unit;
 	fi_opx_global.hfi_local_info.lid      = hfi1->lid;
+	/* pbc_lid is only used for loopback and is OPX_PBC_WFR_UNUSED (0) for *any* lid
+	 * in the pbc/header processing, but for the loopback check we need it to be
+	 invalid (-1UL) lid for WFR and not match */
+	fi_opx_global.hfi_local_info.pbc_lid = (OPX_HFI1_TYPE == OPX_HFI1_WFR) ? -1UL : OPX_PBC_JKR_DLID(hfi1->lid);
 	/* Check if sr-iov(alpha) is enabled (or forced for unsupported testing)*/
 	fi_opx_global.hfi_local_info.min_rctxt = -1;
 	fi_opx_global.hfi_local_info.max_rctxt = -1;
 	fi_opx_global.hfi_local_info.sriov =
 		opx_check_sriov(hfi1->hfi_unit, (hfi1->hfi_port - 1), &fi_opx_global.hfi_local_info.min_rctxt,
 				&fi_opx_global.hfi_local_info.max_rctxt);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "sr-iov %u, rctxt %d-%d\n", fi_opx_global.hfi_local_info.sriov,
-	       fi_opx_global.hfi_local_info.min_rctxt, fi_opx_global.hfi_local_info.max_rctxt);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "sr-iov %u, lid %#x (PBC %#lX) rctxt %d-%d\n",
+	       fi_opx_global.hfi_local_info.sriov, fi_opx_global.hfi_local_info.lid,
+	       fi_opx_global.hfi_local_info.pbc_lid, fi_opx_global.hfi_local_info.min_rctxt,
+	       fi_opx_global.hfi_local_info.max_rctxt);
 	fi_opx_init_hfi_lookup(fi_opx_global.hfi_local_info.sriov);
 
 	// Initialize context sharing structures if context sharing is in use
