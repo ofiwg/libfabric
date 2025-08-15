@@ -349,6 +349,10 @@ void test_efa_cq_trywait_completions_available();
 void test_efa_cq_trywait_success();
 void test_efa_cq_sread_einval();
 void test_efa_cq_sread_eagain();
+void test_efa_cq_control_getwait_with_channel();
+void test_efa_cq_control_getwait_no_channel();
+void test_efa_cq_control_getwaitobj();
+void test_efa_cq_control_invalid_command();
 
 void test_efa_ep_open();
 void test_efa_ep_cancel();
