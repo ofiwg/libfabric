@@ -376,5 +376,6 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
 int efa_cq_trywait(struct efa_cq *cq);
 int efa_cq_signal(struct fid_cq *cq_fid);
 int efa_poll_events(struct efa_cq *cq, int timeout);
+int efa_cq_control(struct fid *cq, int command, void *arg);
 
 #endif /* end of _EFA_CQ_H*/
