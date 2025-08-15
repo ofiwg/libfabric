@@ -79,3 +79,17 @@ def test_rma_bw_use_fi_more(cmdline_args, operation_type, rma_bw_completion_sema
     efa_run_client_server_test(cmdline_args, command, "short", rma_bw_completion_semantic,
                                "host_to_host", direct_rma_size if rma_fabric == "efa-direct" else inject_message_size,
                                timeout=timeout, fabric=rma_fabric)
+
+
+@pytest.mark.functional
+def test_rma_bw_sread(cmdline_args, rma_operation_type, rma_bw_completion_semantic,
+                      direct_rma_size, rma_bw_memory_type, support_sread):
+    if not support_sread:
+        pytest.skip("sread not supported by efa device.")
+    command = "fi_rma_bw -e rdm -c sread"
+    command = command + " -o " + rma_operation_type
+    # rma_bw test with data verification takes longer to finish
+    timeout = max(1080, cmdline_args.timeout)
+    efa_run_client_server_test(cmdline_args, command, "short", rma_bw_completion_semantic,
+                               rma_bw_memory_type, direct_rma_size,
+                               timeout=timeout, fabric="efa-direct")

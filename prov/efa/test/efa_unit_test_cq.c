@@ -1535,3 +1535,152 @@ void test_efa_rdm_cq_data_path_direct_disabled(struct efa_resource **state)
 
 	assert_false(efa_cq->ibv_cq.data_path_direct_enabled);
 }
+
+/**
+ * @brief test efa_cq_trywait() returns -FI_EINVAL when no completion channel is present
+ *
+ * When there is no ibv_comp_channel associated with the CQ, efa_cq_trywait() should return -FI_EINVAL.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_cq_trywait_no_channel(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	int ret;
+
+	/* Construct CQ without wait object (no completion channel) */
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
+
+	assert_null(efa_cq->ibv_cq.channel);
+
+	ret = efa_cq_trywait(efa_cq);
+	assert_int_equal(ret, -FI_EINVAL);
+}
+
+static int test_efa_cq_sread_prep(struct efa_resource *resource)
+{
+	struct fid_cq *cq;
+	struct fi_cq_attr cq_attr = {
+		.format = FI_CQ_FORMAT_DATA,
+		.wait_obj = FI_WAIT_UNSPEC,
+	};
+	int ret;
+
+	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	ret = fi_cq_open(resource->domain, &cq_attr, &cq, NULL);
+	if (ret)
+		/* EFA device doesn't support cq notification. Don't test sread. */
+		return ret;
+
+	assert_int_equal(ret, 0);
+	assert_int_equal(fi_ep_bind(resource->ep, &cq->fid, FI_SEND | FI_RECV), 0);
+	assert_int_equal(fi_enable(resource->ep), 0);
+
+	resource->cq = cq;
+	return ret;
+}
+
+/**
+ * @brief test efa_cq_trywait() returns -FI_EAGAIN when completions are available
+ *
+ * When there are completions available in the util_cq circular queue, efa_cq_trywait() should return -FI_EAGAIN.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_cq_trywait_completions_available(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	struct fi_cq_tagged_entry cq_entry = {
+		.flags = FI_SEND | FI_MSG,
+		.len = 1024,
+		.data = 0x12345678,
+		.tag = 0,
+	};
+	int ret;
+
+	ret = test_efa_cq_sread_prep(resource);
+	if (ret)
+		return;
+
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
+	assert_non_null(efa_cq->ibv_cq.channel);
+
+	/* Add a completion to the util_cq circular queue */
+	ret = ofi_cq_write(&efa_cq->util_cq, cq_entry.op_context, cq_entry.flags,
+			   cq_entry.len, cq_entry.buf, cq_entry.data, cq_entry.tag);
+	assert_int_equal(ret, 0);
+
+	/* trywait should return -FI_EAGAIN since completions are available */
+	ret = efa_cq_trywait(efa_cq);
+	assert_int_equal(ret, -FI_EAGAIN);
+}
+
+/**
+ * @brief test efa_cq_trywait() succeeds when CQ is empty and ready to wait
+ *
+ * When the CQ is empty and there are no pending events, efa_cq_trywait() should return FI_SUCCESS.
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_efa_cq_trywait_success(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	int ret;
+
+	ret = test_efa_cq_sread_prep(resource);
+	if (ret)
+		return;
+
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
+	assert_non_null(efa_cq->ibv_cq.channel);
+
+	assert_int_equal(efa_cq_trywait(efa_cq), FI_SUCCESS);
+}
+
+/**
+ * @brief test fi_cq_sread() returns -FI_EINVAL when no completion channel is present
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_cq_sread_einval(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	struct fi_cq_data_entry cq_entry = {0};
+	int ret;
+
+	/* Construct CQ without wait object */
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
+
+	assert_null(efa_cq->wait_obj);
+	assert_null(efa_cq->ibv_cq.channel);
+
+	ret = fi_cq_sread(resource->cq, &cq_entry, 1, NULL, 1);
+	assert_int_equal(ret, -FI_EINVAL);
+}
+
+/**
+ * @brief test EFA CQ's fi_cq_sread() returns -FI_EAGAIN when CQ is empty
+ *
+ * @param[in]  state	struct efa_resource that is managed by the framework
+ */
+void test_efa_cq_sread_eagain(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cq_data_entry cq_entry = {0};
+	int ret;
+
+	ret = test_efa_cq_sread_prep(resource);
+	if (ret)
+		return;
+
+	/* poll timeout because there is no cq */
+	ret = fi_cq_sread(resource->cq, &cq_entry, 1, NULL, 1);
+	assert_int_equal(ret, -FI_EAGAIN);
+}

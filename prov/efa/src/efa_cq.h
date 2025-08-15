@@ -21,6 +21,7 @@ struct efa_ibv_cq {
 #if HAVE_EFADV_QUERY_CQ
 	struct efa_data_path_direct_cq data_path_direct;
 #endif
+	struct ibv_comp_channel	*channel;
 };
 
 struct efa_ibv_cq_poll_list_entry {
@@ -29,9 +30,14 @@ struct efa_ibv_cq_poll_list_entry {
 };
 
 struct efa_cq {
-	struct util_cq		util_cq;
-	struct efa_ibv_cq	ibv_cq;
+	struct util_cq			util_cq;
+	struct efa_ibv_cq		ibv_cq;
 	int	(*poll_ibv_cq)(ssize_t cqe_to_progress, struct efa_ibv_cq *ibv_cq);
+	struct fd_signal		signal;
+	size_t					entry_size;
+	ofi_atomic32_t			nevents;
+	enum fi_wait_obj		wait_obj;
+	enum fi_cq_wait_cond	wait_cond;
 };
 
 extern struct fi_ops_cq efa_cq_ops;
@@ -98,6 +104,52 @@ void efa_ibv_cq_poll_list_remove(struct dlist_entry *poll_list, struct ofi_genlo
 }
 
 /**
+ * @brief Create completion channel for efa_ibv_cq
+ *
+ * @param[in,out] ibv_cq Pointer to efa_ibv_cq
+ * @param[in] ibv_ctx Pointer to ibv_context
+ * @return Return 0 on success, error code otherwise
+ */
+#if HAVE_EFA_CQ_NOTIFICATION
+static inline int efa_cq_create_comp_channel(struct efa_ibv_cq *ibv_cq,
+					     struct ibv_context *ibv_ctx)
+{
+	int ret;
+
+	if (ibv_ctx->num_comp_vectors <= 1) {
+		ibv_cq->channel = NULL;
+		EFA_WARN(FI_LOG_CQ, "EFA device does not support CQ interrupts\n");
+		return -FI_ENOSYS;
+	}
+
+	ibv_cq->channel = ibv_create_comp_channel(ibv_ctx);
+	if (!ibv_cq->channel) {
+		ret = -errno;
+		EFA_WARN(FI_LOG_CQ, "Failed to create completion channel: %s\n",
+				 fi_strerror(ret));
+		return ret;
+	}
+
+	ret = fi_fd_nonblock(ibv_cq->channel->fd);
+	if (ret) {
+		EFA_WARN(FI_LOG_CQ, "Failed to set non-blocking mode: %s\n",
+				 fi_strerror(-ret));
+		ibv_destroy_comp_channel(ibv_cq->channel);
+		ibv_cq->channel = NULL;
+		return ret;
+	}
+
+	return FI_SUCCESS;
+}
+#else
+static inline int efa_cq_create_comp_channel(struct efa_ibv_cq *ibv_cq,
+					     struct ibv_context *ibv_ctx)
+{
+	return -FI_ENOSYS;
+}
+#endif
+
+/**
  * @brief Create ibv_cq_ex by calling ibv_create_cq_ex
  *
  * @param[in] ibv_cq_init_attr_ex Pointer to ibv_cq_init_attr_ex
@@ -127,8 +179,7 @@ static inline int efa_cq_open_ibv_cq_with_ibv_create_cq_ex(
  *
  * @param[in] attr Completion queue attributes
  * @param[in] ibv_ctx Pointer to ibv_context
- * @param[in,out] ibv_cq_ex Pointer to newly created ibv_cq_ex
- * @param[in,out] ibv_cq_ex_type enum indicating if efadv_create_cq or ibv_create_cq_ex was used
+ * @param[in,out] ibv_cq Pointer to efa_ibv_cq to be initialized
  * @param[in] efa_cq_init_attr Pointer to fi_efa_cq_init_attr containing attributes for efadv_create_cq
  * @return Return 0 on success, error code otherwise
  */
@@ -139,10 +190,19 @@ int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
 			struct efa_ibv_cq *ibv_cq,
 			struct fi_efa_cq_init_attr *efa_cq_init_attr)
 {
+	int ret;
+
+	ibv_cq->channel = NULL;
+	if (attr->wait_obj != FI_WAIT_NONE) {
+		ret = efa_cq_create_comp_channel(ibv_cq, ibv_ctx);
+		if (ret)
+			return ret;
+	}
+
 	struct ibv_cq_init_attr_ex init_attr_ex = {
 		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
 		.cq_context = NULL,
-		.channel = NULL,
+		.channel = ibv_cq->channel,
 		.comp_vector = 0,
 		/* EFA requires these values for wc_flags and comp_mask.
 		 * See `efa_create_cq_ex` in rdma-core.
@@ -201,10 +261,19 @@ int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
 			struct efa_ibv_cq *ibv_cq,
 			struct fi_efa_cq_init_attr *efa_cq_init_attr)
 {
+	int ret;
+
+	ibv_cq->channel = NULL;
+	if (attr->wait_obj != FI_WAIT_NONE) {
+		ret = efa_cq_create_comp_channel(ibv_cq, ibv_ctx);
+		if (ret)
+			return ret;
+	}
+
 	struct ibv_cq_init_attr_ex init_attr_ex = {
 		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
 		.cq_context = NULL,
-		.channel = NULL,
+		.channel = ibv_cq->channel,
 		.comp_vector = 0,
 		/* EFA requires these values for wc_flags and comp_mask.
 		 * See `efa_create_cq_ex` in rdma-core.
@@ -289,5 +358,8 @@ static inline int efa_write_error_msg(struct efa_base_ep *ep, fi_addr_t addr,
 }
 
 int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
+int efa_cq_trywait(struct efa_cq *cq);
+int efa_cq_signal(struct fid_cq *cq_fid);
+int efa_poll_events(struct efa_cq *cq, int timeout);
 
 #endif /* end of _EFA_CQ_H*/
