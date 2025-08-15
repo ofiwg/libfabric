@@ -795,7 +795,6 @@ void efa_base_ep_flush_cq(struct efa_base_ep *base_ep)
 	struct efa_cq *tx_cq, *rx_cq;
 	int err;
 
-	efa_base_ep_lock_cq(base_ep);
 	tx_cq = efa_base_ep_get_tx_cq(base_ep);
 	rx_cq = efa_base_ep_get_rx_cq(base_ep);
 
@@ -812,7 +811,6 @@ void efa_base_ep_flush_cq(struct efa_base_ep *base_ep)
 			err = rx_cq->poll_ibv_cq(-1, &rx_cq->ibv_cq);
 		}
 	}
-	efa_base_ep_unlock_cq(base_ep);
 }
 #if ENABLE_DEBUG
 void efa_ep_addr_print(char *prefix, struct efa_ep_addr *addr) {

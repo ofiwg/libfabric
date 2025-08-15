@@ -270,6 +270,10 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	/* Call ibv_start_poll only once */
 	efa_cq_start_poll(ibv_cq);
 
+	/* Acquire the lock to prevent race conditions when qp_table is being updated */
+	if(ibv_cq->poll_active)
+		ofi_genlock_lock(&cq->util_cq.ep_list_lock);
+
 	while (efa_cq_wc_available(ibv_cq)) {
 		base_ep = efa_domain->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->qp_table_sz_m1]->base_ep;
 		opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
@@ -331,6 +335,10 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		efa_cq_next_poll(ibv_cq);
 	}
 	err = ibv_cq->poll_err;
+
+	if(ibv_cq->poll_active)
+		ofi_genlock_unlock(&cq->util_cq.ep_list_lock);
+
 	efa_cq_end_poll(ibv_cq);
 	return err;
 }
@@ -358,10 +366,7 @@ void efa_cq_progress(struct util_cq *cq)
 {
 	struct efa_cq *efa_cq = container_of(cq, struct efa_cq, util_cq);
 
-	/* Acquire the lock to prevent race conditions when qp_table is being updated */
-	ofi_genlock_lock(&cq->ep_list_lock);
 	(void) efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, &efa_cq->ibv_cq);
-	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 
 int efa_cq_close(fid_t fid)
