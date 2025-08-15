@@ -1570,3 +1570,91 @@ void test_efa_cq_sread_eagain(struct efa_resource **state)
 	ret = fi_cq_sread(resource->cq, &cq_entry, 1, NULL, 1);
 	assert_int_equal(ret, -FI_EAGAIN);
 }
+
+/**
+ * @brief test efa_cq_control() with FI_GETWAIT command when completion channel is available
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_cq_control_getwait_with_channel(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	int fd = -1;
+	int ret;
+
+	ret = test_efa_cq_sread_prep(resource);
+	if (ret)
+		return;
+
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
+	assert_non_null(efa_cq->ibv_cq.channel);
+
+	ret = fi_control(&resource->cq->fid, FI_GETWAIT, &fd);
+	assert_int_equal(ret, 0);
+	assert_true(fd >= 0);
+	assert_int_equal(fd, efa_cq->ibv_cq.channel->fd);
+}
+
+/**
+ * @brief test efa_cq_control() with FI_GETWAIT command when no completion channel is present
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_cq_control_getwait_no_channel(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	int fd = -1;
+	int ret;
+
+	/* Construct CQ without wait object (no completion channel) */
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
+
+	assert_null(efa_cq->ibv_cq.channel);
+
+	ret = fi_control(&resource->cq->fid, FI_GETWAIT, &fd);
+	assert_int_equal(ret, -FI_ENODATA);
+}
+
+/**
+ * @brief test efa_cq_control() with FI_GETWAITOBJ command
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_cq_control_getwaitobj(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	enum fi_wait_obj wait_obj;
+	int ret;
+
+	ret = test_efa_cq_sread_prep(resource);
+	if (ret)
+		return;
+
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
+
+	ret = fi_control(&resource->cq->fid, FI_GETWAITOBJ, &wait_obj);
+	assert_int_equal(ret, 0);
+	assert_int_equal(wait_obj, efa_cq->wait_obj);
+	assert_int_equal(wait_obj, FI_WAIT_FD);
+}
+
+/**
+ * @brief test efa_cq_control() with invalid command
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_cq_control_invalid_command(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	int dummy_arg = 0;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	ret = fi_control(&resource->cq->fid, 999 /* invalid command */, &dummy_arg);
+	assert_int_equal(ret, -FI_ENOSYS);
+}
