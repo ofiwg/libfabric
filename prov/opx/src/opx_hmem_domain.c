@@ -212,6 +212,15 @@ int opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric, struct fi_info *in
 		return ret;
 	}
 
+	ret = ofi_bufpool_create(&new_hmem_domain->hmem_stream.event_pool, sizeof(union opx_hmem_event), 0, UINT_MAX,
+				 16, OFI_BUFPOOL_NO_ZERO);
+	if (ret) {
+		opx_hmem_close_domain(new_hmem_domain, 0);
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error creating HMEM event pool ret=%d (%s)\n", ret,
+			strerror(ret));
+		return ret;
+	}
+
 	new_hmem_domain->util_domain.domain_fid.fid.fclass  = FI_CLASS_DOMAIN;
 	new_hmem_domain->util_domain.domain_fid.fid.context = NULL;
 
