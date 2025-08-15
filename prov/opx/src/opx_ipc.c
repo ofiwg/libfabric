@@ -42,6 +42,35 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work)
 	const uint64_t			   bth_rx = ((uint64_t) params->origin_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-RECV-SEND-CTS");
+
+	//  If we have an asynchrous HMEM Copy, see if it is complete first
+	if (params->context->byte_counter != 0) {
+		int status;
+		if (opx_ep->domain->hmem_domain->hmem_stream.type == FI_HMEM_CUDA) {
+			status = opx_hmem_event_query(FI_HMEM_CUDA, params->hmem_event);
+		} else if (opx_ep->domain->hmem_domain->hmem_stream.type == FI_HMEM_ROCR) {
+			status = opx_hmem_event_query(FI_HMEM_ROCR, params->hmem_event);
+		} else {
+			abort();
+		}
+		if (status == OPX_HMEM_SUCCESS) {
+			opx_hmem_event_destroy(opx_ep->domain->hmem_domain->hmem_stream.type, &params->hmem_event);
+			ofi_mr_cache_delete(opx_ep->domain->hmem_domain->ipc_cache, params->cache_entry);
+			params->context->byte_counter = 0;
+			params->context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
+			slist_insert_tail((struct slist_entry *) params->context, opx_ep->rx->cq_completed_ptr);
+		} else if (status == OPX_HMEM_ERROR_NOT_READY) {
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "IPC-RECV-SEND-CTS");
+			return -FI_EAGAIN;
+		} else {
+			OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "IPC-RECV-SEND-CTS");
+			opx_hmem_event_destroy(opx_ep->domain->hmem_domain->hmem_stream.type, &params->hmem_event);
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FATAL ERROR, opx_hmem_event_query failed. Abort\n");
+			abort();
+		}
+	}
+
 	uint64_t pos;
 	ssize_t	 rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
 
