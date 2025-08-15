@@ -148,6 +148,13 @@ int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked)
 		hmem_domain->ipc_cache = NULL;
 	}
 
+	opx_hmem_stream_destroy(hmem_domain->hmem_stream.type, hmem_domain->hmem_stream.stream);
+
+	if (hmem_domain->hmem_stream.event_pool) {
+		ofi_bufpool_destroy(hmem_domain->hmem_stream.event_pool);
+		hmem_domain->hmem_stream.event_pool = NULL;
+	}
+
 	ofi_domain_close(&hmem_domain->util_domain);
 	free(hmem_domain);
 
@@ -189,6 +196,15 @@ int opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric, struct fi_info *in
 	if (ret) {
 		opx_hmem_close_domain(new_hmem_domain, 0);
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error opening IPC Cache ret=%d (%s)\n", ret, strerror(ret));
+		return ret;
+	}
+
+	ret = ofi_bufpool_create(&new_hmem_domain->hmem_stream.event_pool, sizeof(union opx_hmem_event), 0, UINT_MAX,
+				 16, OFI_BUFPOOL_NO_ZERO);
+	if (ret) {
+		opx_hmem_close_domain(new_hmem_domain, 0);
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error creating HMEM event pool ret=%d (%s)\n", ret,
+			strerror(ret));
 		return ret;
 	}
 
