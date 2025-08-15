@@ -353,7 +353,7 @@ static inline void efa_cq_start_poll(struct efa_ibv_cq *cq)
 	 */
 	assert(!cq->poll_active);
 	cq->poll_err = efa_ibv_cq_start_poll(cq, &(struct ibv_poll_cq_attr){0});
-	if (OFI_LIKELY(!cq->poll_err))
+	if (!cq->poll_err)
 		cq->poll_active = true;
 	else
 		efa_cq_report_poll_err(cq);
@@ -363,13 +363,13 @@ static inline void efa_cq_next_poll(struct efa_ibv_cq *cq)
 {
 	assert(cq->poll_active);
 	cq->poll_err = efa_ibv_cq_next_poll(cq);
-	if (OFI_UNLIKELY(cq->poll_err))
+	if (cq->poll_err)
 		efa_cq_report_poll_err(cq);
 }
 
 static inline void efa_cq_end_poll(struct efa_ibv_cq *cq)
 {
-	if (OFI_LIKELY(cq->poll_active))
+	if (cq->poll_active)
 		efa_ibv_cq_end_poll(cq);
 	cq->poll_active = false;
 	cq->poll_err = 0;
