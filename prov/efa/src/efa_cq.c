@@ -639,11 +639,61 @@ int efa_cq_close(fid_t fid)
 	return 0;
 }
 
+/**
+ * @brief
+ * The fi_control call is used to access provider or implementation specific
+ * details of the completion queue. Users may use fi_control to retrieve the 
+ * underlying wait object associated with a CQ, in order to use it in other 
+ * system calls. The following control commands are usable with a CQ.
+ * 
+ * FI_GETWAIT
+ * This command allows the user to retrieve the low-level wait object associated
+ * with the CQ. 
+ * 
+ * FI_GETWAITOBJ
+ * This command allows the user to retrieve the type of wait object specified 
+ * during CQ creation, through the CQ attributes.
+ *
+ * @param[in]	fid		Completion queue fid
+ * @param[in]	command	Command of control operation to perform on CQ.
+ * @param[out]	arg		Optional control argument. An address where a
+ * pointer to the returned wait object will be written. This should be an 
+ * ‘int *’ for FI_WAIT_FD.
+ *
+ * @return Returns 0 on success. On error, returns a negative fabric errno.
+ */
+int efa_cq_control(struct fid *fid, int command, void *arg)
+{
+	struct efa_cq *cq;
+	int ret;
+
+	cq = container_of(fid, struct efa_cq, util_cq.cq_fid.fid);
+	switch(command) {
+	case FI_GETWAIT:
+		if (!cq->ibv_cq.channel || cq->wait_obj != FI_WAIT_FD) {
+			ret = -FI_ENODATA;
+			break;
+		}
+		*(int *) arg = cq->ibv_cq.channel->fd;
+		ret = 0;
+		break;
+	case FI_GETWAITOBJ:
+		*(enum fi_wait_obj *) arg = cq->wait_obj;
+		ret = 0;
+		break;
+	default:
+		ret = -FI_ENOSYS;
+		break;
+	}
+
+	return ret;
+}
+
 struct fi_ops efa_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = efa_cq_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = efa_cq_control,
 	.ops_open = fi_no_ops_open,
 };
 
@@ -680,6 +730,7 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
+	case FI_WAIT_FD:
 		cq->wait_obj = FI_WAIT_FD;
 		break;
 	case FI_WAIT_NONE:
