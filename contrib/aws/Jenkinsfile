@@ -186,10 +186,12 @@ pipeline {
                     def one_sided_tests = "'test_imb and not collective'"
                     def libfabric_and_onesided_tests = "${libfabric_tests} ${one_sided_tests}"
                     def efa_direct_tests = "'test_fabtests_functional and efa-direct'"
+                    def nccl_functional_tests = "test_ofi_nccl_functional_tests"
 
                     def efa_provider = "--test-libfabric-provider efa"
                     def addl_args_efa_libfabric_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${mpi_collective_tests} ${libfabric_and_onesided_tests}"
                     def addl_args_efa_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${mpi_collective_tests}"
+                    def addl_args_efa_libfabric_mpi_nccl = "${timeout} ${generic_pf} ${efa_provider} --test-list ${mpi_collective_tests} ${libfabric_and_onesided_tests} ${nccl_functional_tests}"
                     def addl_args_efa_libfabric_and_onesided_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${libfabric_and_onesided_tests}"
                     def addl_args_efa_direct = "${timeout} ${generic_pf} ${efa_provider} --test-list ${efa_direct_tests}"
 
@@ -210,9 +212,9 @@ pipeline {
                     def trn132x_lock_label  = "trn132x"
 
                     // Single Node Tests - EFA
-                    stages["1_g4dn_alinux2-efa"] = get_test_stage_with_lock("1_g4dn_alinux2_efa", env.BUILD_TAG, "alinux2", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_efa_libfabric_mpi)
-                    stages["1_g4dn_alinux2023-efa"] = get_test_stage_with_lock("1_g4dn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_efa_libfabric_mpi)
-                    stages["1_g4dn_ubuntu2204-efa"] = get_test_stage_with_lock("1_g4dn_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_efa_libfabric_mpi)
+                    stages["1_g4dn_alinux2-efa"] = get_test_stage_with_lock("1_g4dn_alinux2_efa", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa_libfabric_mpi_nccl)
+                    stages["1_g4dn_alinux2023-efa"] = get_test_stage_with_lock("1_g4dn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa_libfabric_mpi_nccl)
+                    stages["1_g4dn_ubuntu2204-efa"] = get_test_stage_with_lock("1_g4dn_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa_libfabric_mpi_nccl)
                     stages["1_g4dn_rhel8-efa"] = get_test_stage_with_lock("1_g4dn_rhel8_efa", env.BUILD_TAG, "rhel8", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_efa_libfabric_mpi)
 
                     // Single Node Tests - SHM
