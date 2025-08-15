@@ -82,11 +82,12 @@ def test_rma_bw_use_fi_more(cmdline_args, operation_type, rma_bw_completion_sema
 
 
 @pytest.mark.functional
+@pytest.mark.parametrize("comp_method", ["sread", "fd"])
 def test_rma_bw_sread(cmdline_args, rma_operation_type, rma_bw_completion_semantic,
-                      direct_rma_size, rma_bw_memory_type, support_sread):
+                      direct_rma_size, rma_bw_memory_type, support_sread, comp_method):
     if not support_sread:
         pytest.skip("sread not supported by efa device.")
-    command = "fi_rma_bw -e rdm -c sread"
+    command = f"fi_rma_bw -e rdm -c {comp_method}"
     command = command + " -o " + rma_operation_type
     # rma_bw test with data verification takes longer to finish
     timeout = max(1080, cmdline_args.timeout)

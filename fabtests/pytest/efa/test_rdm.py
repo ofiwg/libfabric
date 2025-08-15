@@ -208,9 +208,10 @@ def test_rdm_bw_zcpy_recv_use_fi_more(cmdline_args, memory_type, zcpy_recv_max_m
                                "short", "transmit_complete", memory_type, zcpy_recv_message_size, fabric="efa")
 
 @pytest.mark.functional
-def test_rdm_pingpong_sread(cmdline_args, completion_semantic, memory_type_bi_dir, direct_message_size, support_sread):
+@pytest.mark.parametrize("comp_method", ["sread", "fd"])
+def test_rdm_pingpong_sread(cmdline_args, completion_semantic, memory_type_bi_dir, direct_message_size, support_sread, comp_method):
     if not support_sread:
         pytest.skip("sread not supported by efa device.")
-    efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong -c sread", "short",
+    efa_run_client_server_test(cmdline_args, f"fi_rdm_pingpong -c {comp_method}", "short",
                                completion_semantic, memory_type_bi_dir,
                                direct_message_size, fabric="efa-direct")
