@@ -78,7 +78,7 @@
 #define FI_OPX_TID_MSG_MISALIGNED_THRESHOLD (15 * OPX_HFI1_TID_PAGESIZE)
 #endif
 
-#define OPX_GPU_IPC_MIN_THRESHOLD 16384
+#define OPX_GPU_IPC_MIN_THRESHOLD 2048
 /*
  * Return the NUMA node id where the process is currently running.
  */
@@ -2536,26 +2536,38 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-RECV-OPEN-HANDLE");
 
 	/* Most modern GPUs have support for Unified Virtual Addressing (UVA).
-		This allows us to use generic cudaMemcpy for DtoH and DtoD */
+	   This allows us to use generic cudaMemcpy for DtoH and DtoD */
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-P2P-DIRECT-COPY");
+	union opx_hmem_event *event = NULL;
 	if (!is_hmem) {
 		ret = ofi_copy_from_hmem(ipc_info->iface, ipc_info->device, context->buf, device_ptr, xfer_len);
+		if (ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FATAL ERROR, cudaMemcpy with IPC handle failed. Abort\n");
+			abort();
+		}
 	} else {
-		ret = ofi_copy_to_hmem(ipc_info->iface, ipc_info->device, context->buf, device_ptr, xfer_len);
-	}
-	if (ret) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "FATAL ERROR, cudaMemcpy with IPC handle failed. Abort\n");
-		abort();
+		if (ipc_info->iface == FI_HMEM_CUDA) {
+			opx_hmem_memcpy_async(FI_HMEM_CUDA, ipc_info->device, context->buf, device_ptr, xfer_len,
+					      opx_ep->domain->hmem_domain, &event, OPX_HMEM_MEMCPY_ASYNC_DTOD);
+		} else if (ipc_info->iface == FI_HMEM_ROCR) {
+			opx_hmem_memcpy_async(FI_HMEM_ROCR, ipc_info->device, context->buf, device_ptr, xfer_len,
+					      opx_ep->domain->hmem_domain, &event, OPX_HMEM_MEMCPY_ASYNC_DTOD);
+		} else {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FATAL ERROR, memcpy with IPC handle unexpected iface=%lu. Abort\n", ipc_info->iface);
+			abort();
+		}
 	}
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-P2P-DIRECT-COPY");
-
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-DESTROY-HANDLE");
-	ofi_mr_cache_delete(opx_ep->domain->hmem_domain->ipc_cache, entry);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-DESTROY-HANDLE");
-
-	context->byte_counter = 0;
-	context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
-	slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_completed_ptr);
+	if (event == NULL) {
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-DESTROY-HANDLE");
+		ofi_mr_cache_delete(opx_ep->domain->hmem_domain->ipc_cache, entry);
+		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-DESTROY-HANDLE");
+		context->byte_counter = 0;
+		context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
+		slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_completed_ptr);
+	}
 
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work != NULL);
@@ -2570,6 +2582,9 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	params->opx_ep			    = opx_ep;
 	params->origin_byte_counter_vaddr   = payload->rendezvous.ipc.origin_byte_counter_vaddr;
 	params->niov			    = niov;
+	params->context			    = context;
+	params->cache_entry		    = entry;
+	params->hmem_event		    = event;
 
 	opx_lid_t lid;
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
