@@ -75,6 +75,12 @@ static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
 	if (ret == FI_SUCCESS)
 		goto success_unlock;
 
+	if (lni->n_cps >= MAX_HW_CPS) {
+		CXIP_WARN("No room to allocate CP for VNI:%u\n", vni);
+		ret = -FI_ENOSPC;
+		goto err_unlock;
+	}
+
 	/* Allocate a new SW remapped CP entry and attempt to allocate the
 	 * user requested HW CP.
 	 */
@@ -211,7 +217,7 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 		ret = cxip_cp_get(lni, vni, tc, tc_type, &cp);
 		if (ret != FI_SUCCESS) {
 			CXIP_WARN("Failed to allocate CP: %d\n", ret);
-			return ret;
+			goto free_cmdq;
 		}
 		cq_opts->lcid = cp->lcid;
 
