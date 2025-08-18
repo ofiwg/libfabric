@@ -708,6 +708,7 @@ union cxip_match_bits {
 #define CXI_PLATFORM_Z1 2
 #define CXI_PLATFORM_FPGA 3
 
+#define MAX_HW_CPS 16
 /*
  * CXI Device wrapper
  *
@@ -752,7 +753,7 @@ struct cxip_lni {
 	struct cxil_lni *lni;
 
 	/* Hardware communication profiles */
-	struct cxi_cp *hw_cps[16];
+	struct cxi_cp *hw_cps[MAX_HW_CPS];
 	int n_cps;
 
 	/* Software remapped communication profiles. */
