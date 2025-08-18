@@ -569,10 +569,26 @@ int efa_cq_signal(struct fid_cq *cq_fid)
 	return 0;
 }
 
+static
+ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+			fi_addr_t *src_addr)
+{
+	struct efa_cq *efa_cq;
+
+	efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
+
+	/* Acquire the lock to prevent race conditions when qp_table is being updated */
+	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
+	(void) efa_cq_poll_ibv_cq(count, &efa_cq->ibv_cq);
+	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
+
+	return ofi_cq_read_entries(&efa_cq->util_cq, buf, count, src_addr);
+}
+
 struct fi_ops_cq efa_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = ofi_cq_read,
-	.readfrom = ofi_cq_readfrom,
+	.readfrom = efa_cq_readfrom,
 	.readerr = ofi_cq_readerr,
 	.sread = efa_cq_sread,
 	.sreadfrom = efa_cq_sreadfrom,
