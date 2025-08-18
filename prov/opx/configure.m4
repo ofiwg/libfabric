@@ -246,8 +246,43 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			    AC_MSG_NOTICE([hfi1_status_v2 defined... no, no support for CN5000])
 			])
 		])
-	])
 
+		AS_IF([test $opx_happy -eq 1], [
+		    AC_MSG_CHECKING([for hfisvc support])
+		    AC_ARG_WITH([opx-hfisvc],
+		    	AS_HELP_STRING([--with-opx-hfisvc],
+		    		[Build with hfisvc client support (default=no)]),
+		    		[],[with_opx_hfisvc=no])
+		    AS_IF([test "x$with_opx_hfisvc" != "xno"], [
+		    	AC_MSG_RESULT([yes])
+		    	opx_CPPFLAGS="$opx_CPPFLAGS -DHFISVC"
+			opx_hfisvc=yes
+		    ], [
+		    AC_MSG_RESULT([no])
+			opx_hfisvc=no
+		    ])
+		])
+
+		AM_CONDITIONAL([OPX_HFISVC], [test "x$opx_hfisvc" = "xyes"])
+		AC_SUBST([OPX_HFISVC])
+
+		AS_IF([test $opx_happy -eq 1 && test "x$opx_hfisvc" = "xyes"], [
+                    AC_CONFIG_COMMANDS([check-module-dir], [
+                        hfisvc_dir="$srcdir/prov/opx/modules/hfisvc_client"
+                        opx_abs_srcdir=$(cd "$srcdir/prov/opx" && pwd)
+                        if test ! -d $hfisvc_dir; then
+                            AC_MSG_ERROR([hfisvc_client does not exist, please run the following from the top libfabric source directory:
+                                git submodule add ../../cornelisnetworks/hfisvc_client ./prov/opx/modules/hfisvc_client
+                                git submodule update --init])
+                        fi
+                        mkdir -p $hfisvc_dir/build
+                        cd $hfisvc_dir/build
+                        echo "Installing hfisvc_client to $opx_abs_srcdir"
+                        cmake .. -DCMAKE_INSTALL_PREFIX=$opx_abs_srcdir -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=OFF
+                        make install -j
+                    ])
+		])
+	])
 	AC_SUBST(opx_CPPFLAGS)
 	AS_IF([test $opx_happy -eq 1], [$1], [$2])
 ])

@@ -5010,6 +5010,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 
 		if (!hdr) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "return %zd\n", rc);
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-SHM");
 			return rc;
 		}
 
@@ -5019,6 +5020,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 			context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 			if (OFI_UNLIKELY(context == NULL)) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-SHM");
 				return -FI_ENOMEM;
 			}
 			context->err_entry.err	      = 0;
@@ -5205,6 +5207,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 									total_credits_needed);
 		if (total_credits_available < total_credits_needed) {
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 			return -FI_EAGAIN;
 		}
@@ -5217,6 +5220,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 		if (OFI_UNLIKELY(context == NULL)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 			return -FI_ENOMEM;
 		}
@@ -5242,6 +5246,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 		}
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
@@ -5404,6 +5409,215 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 	return FI_SUCCESS;
 }
 
+ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, const size_t xfer_len, const uint64_t tag,
+				   const uint32_t data, uint64_t bth_rx, uint64_t lrh_dlid_16B,
+				   const uint64_t do_cq_completion, void *user_context, union fi_opx_addr addr,
+				   const uint64_t caps, const enum fi_hmem_iface src_iface,
+				   const uint64_t src_device_id, uint64_t tx_op_flags)
+{
+#ifdef HFISVC
+	FI_DBG_TRACE(
+		fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== SEND 16B, HFI -- RENDEZVOUS RTS HFISVC (begin) context %p\n",
+		user_context);
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-RTS-HFI:%ld", tag);
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.attempt);
+	struct fi_opx_ep_tx *tx = opx_ep->tx;
+
+	uint32_t		      access_key = (uint32_t) -1;
+	struct fi_opx_rzv_completion *rzv_comp	 = NULL;
+	struct opx_context	     *context	 = NULL;
+	ssize_t			      rc	 = FI_SUCCESS;
+	union fi_opx_hfi1_pio_state   pio_state	 = *tx->pio_state;
+
+	if (opx_hfisvc_keyset_alloc_key(opx_ep->domain->hfisvc.access_key_set, &access_key,
+					FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
+		OPX_HFISVC_DEBUG_LOG("EAGAIN (No free keys)\n");
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_access_key);
+		rc = -FI_EAGAIN;
+		goto err;
+	}
+
+	rzv_comp = (struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
+	if (OFI_UNLIKELY(rzv_comp == NULL)) {
+		OPX_HFISVC_DEBUG_LOG("ENOMEM (rzv_comp)\n");
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.enomem_completion);
+		rc = -FI_ENOMEM;
+		goto err;
+	}
+
+	const uint16_t credits_needed = 2;
+
+	uint16_t credits_available =
+		FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, credits_needed);
+	if (OFI_UNLIKELY(credits_available < credits_needed)) {
+		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
+
+		credits_available =
+			FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, credits_needed);
+		if (credits_available < credits_needed) {
+			OPX_HFISVC_DEBUG_LOG("EAGAIN (credits)\n");
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_credits);
+			rc = -FI_EAGAIN;
+			goto err;
+		}
+	}
+
+	if (OFI_LIKELY(do_cq_completion)) {
+		context = (struct opx_context *) ofi_buf_alloc(
+			opx_ep->rx->ctx_pool); // What the heck!? why do we allocate contexts from the rx side for tx
+					       // side completions?
+					       // Because that's just where the context buf pool lives. The buf pool
+					       // could be moved to the top level endpoint struct instead...
+		if (OFI_UNLIKELY(context == NULL)) {
+			OPX_HFISVC_DEBUG_LOG("ENOMEM (context)\n");
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.enomem_context);
+			rc = -FI_ENOMEM;
+			goto err;
+		}
+		context->err_entry.err	      = 0;
+		context->err_entry.op_context = user_context;
+		context->next		      = NULL;
+		context->byte_counter	      = xfer_len;
+	} else {
+		context = NULL;
+	}
+
+	rzv_comp->context = context;
+
+	struct fi_opx_reliability_tx_replay *replay;
+	union fi_opx_reliability_tx_psn	    *psn_ptr;
+	int64_t				     psn =
+		fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.lid, addr.hfi1_subctxt_rx,
+					      &psn_ptr, &replay, OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_JKR);
+	if (OFI_UNLIKELY(psn == -1)) {
+		OPX_HFISVC_DEBUG_LOG("EAGAIN (PSN)\n");
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_psn);
+		rc = -FI_EAGAIN;
+		goto err;
+	}
+
+	rzv_comp->access_key = access_key;
+
+	OPX_HFISVC_DEBUG_LOG("HFISVC RZV Completion: Registering completion entry %p with access_key %u\n", rzv_comp,
+			     rzv_comp->access_key);
+
+	struct hfisvc_client_completion completion = {
+		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+		.cq.handle	= opx_ep->hfisvc.internal_completion_queue,
+		.cq.app_context = (uint64_t) rzv_comp,
+	};
+	rc = hfisvc_client_cmd_dma_access_once_va(opx_ep->hfisvc.command_queue, completion, 0UL /* flags */, access_key,
+						  xfer_len, (void *) buf);
+
+	while (rc) {
+		if (rc != -FI_EAGAIN && rc != FI_EAGAIN) {
+			fprintf(stderr, "(%d) %s:%s():%d Error: Register DMA Buffer returned %ld\n", getpid(), __FILE__,
+				__func__, __LINE__, rc);
+			abort();
+		}
+		rc = hfisvc_client_cmd_dma_access_once_va(opx_ep->hfisvc.command_queue, completion, 0UL /* flags */,
+							  access_key, xfer_len, (void *) buf);
+	}
+	OPX_HFISVC_DEBUG_LOG("HFISVC RZV Send RTS: Successfully registered DMA buf %p %lu with access_key %u\n", buf,
+			     xfer_len, access_key);
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.reg_dma_buf);
+
+	rc = hfisvc_client_doorbell(opx_ep->domain->hfisvc.handle);
+
+	assert(rc == 0);
+
+	// Put the context on the pending queue before we send out the RTS packet to ensure it's
+	// queued before the remote rdma_read completes.
+	if (OFI_LIKELY(do_cq_completion)) {
+		OPX_HFISVC_DEBUG_LOG("CQ Pending context=%p byte_counter=%lu rzv_comp=%p access_key=%u\n", context,
+				     context->byte_counter, rzv_comp, access_key);
+
+		fi_opx_ep_tx_cq_completion_rzv(&opx_ep->ep_fid, context, xfer_len, FI_OPX_LOCK_NOT_REQUIRED, tag, caps);
+	}
+
+	union opx_hfisvc_iov hfisvc_iov = {
+		.access_key  = access_key,
+		.len	     = xfer_len,
+		.hmem_iface  = src_iface,
+		.hmem_device = src_device_id,
+		.offset	     = 0UL,
+	};
+
+	const uint32_t niov    = 1;
+	const uint64_t pbc_dws = 2 /* pbc */ + 30;   /* rzv_rts */
+	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
+	const uint64_t opcode =
+		(uint64_t) ((caps & FI_MSG) ?
+				    ((tx_op_flags & FI_REMOTE_CQ_DATA) ? FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC_CQ :
+									 FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC) :
+				    ((tx_op_flags & FI_REMOTE_CQ_DATA) ? FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC_CQ :
+									 FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC));
+	const uint64_t niov_client_key = ((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.client_key;
+
+	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_sop_first, pio_state);
+
+	opx_cacheline_copy_qw_vol(
+		scb, replay->scb.qws,
+		tx->rzv_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_JKR) |
+			OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) | OPX_PBC_DLID(addr.lid, OPX_HFI1_JKR) |
+			OPX_PBC_LOOPBACK(addr.lid, OPX_HFI1_JKR),
+		tx->rzv_16B.hdr.qw_16B[0] |
+			((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
+			((uint64_t) lrh_qws << 20),
+		tx->rzv_16B.hdr.qw_16B[1] |
+			((uint64_t) ((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
+				     OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+			(uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
+		tx->rzv_16B.hdr.qw_16B[2] | bth_rx | opcode, tx->rzv_16B.hdr.qw_16B[3] | psn,
+		tx->rzv_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32), niov_client_key, xfer_len);
+
+	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
+	volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_first, pio_state);
+
+	opx_cacheline_copy_qw_vol(scb_payload, &replay->scb.qws[8], tag, hfisvc_iov.qws[0], hfisvc_iov.qws[1],
+				  hfisvc_iov.qws[2], hfisvc_iov.qws[3], OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
+				  OPX_JKR_16B_PAD_QWORD);
+
+	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
+	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay,
+							     OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_JKR);
+
+	tx->pio_state->qw0 = pio_state.qw0;
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(tx->pio_credits_addr);
+	OPX_HFISVC_DEBUG_LOG("Send RZV RTS SUCCESS\n");
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.success);
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-HFI:%ld", tag);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SEND 16B, HFI -- RENDEZVOUS RTS HFISVC (end) context %p\n",
+		     user_context);
+
+	return FI_SUCCESS;
+
+err:
+	tx->pio_state->qw0 = pio_state.qw0;
+	if (context) {
+		OPX_BUF_FREE(context);
+	}
+	if (rzv_comp) {
+		OPX_BUF_FREE(rzv_comp);
+	}
+	if ((int32_t) access_key >= 0) {
+		opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.access_key_set, access_key,
+					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+	}
+	OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
+	return rc;
+#else
+	return FI_SUCCESS;
+#endif
+}
+
 ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr, uint64_t tag,
 				 void *user_context, const uint32_t data, int lock_required,
 				 const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t dest_rx,
@@ -5425,6 +5639,16 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	const uint64_t bth_rx	    = ((uint64_t) dest_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	const uint64_t lrh_dlid_16B = addr.lid;
+
+#ifdef HFISVC
+	if (!is_shm && (src_iface == FI_HMEM_SYSTEM) && !OPX_IS_CTX_SHARING_ENABLED && (hfi1_type & OPX_HFI1_JKR) &&
+	    !(caps & FI_MSG)) { // or .. it *is* FI_TAGGED?
+		OPX_HFISVC_DEBUG_LOG("Sending RZV RTS HFI SVC\n");
+		return opx_hfi1_tx_rzv_rts_hfisvc(opx_ep, buf, len, tag, data, bth_rx, lrh_dlid_16B, do_cq_completion,
+						  user_context, addr, caps, src_iface, src_device_id, tx_op_flags);
+	}
+#endif
+	OPX_HFISVC_DEBUG_LOG("Sending RZV RTS NORMAL\n");
 
 	const bool send_immed_data = (src_iface == FI_HMEM_SYSTEM);
 
@@ -5511,6 +5735,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 		if (!hdr) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "return %zd\n", rc);
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-SHM");
 			return rc;
 		}
 
@@ -5520,6 +5745,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 			context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 			if (OFI_UNLIKELY(context == NULL)) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-SHM");
 				return -FI_ENOMEM;
 			}
 			context->err_entry.err	      = 0;
@@ -5633,6 +5859,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 									total_credits_needed);
 		if (total_credits_available < total_credits_needed) {
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 			return -FI_EAGAIN;
 		}
@@ -5644,6 +5871,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 		context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 		if (OFI_UNLIKELY(context == NULL)) {
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
 			return -FI_ENOMEM;
@@ -5669,6 +5897,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 			OPX_BUF_FREE(context);
 		}
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 		return -FI_EAGAIN;
 	}

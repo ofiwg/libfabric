@@ -40,6 +40,7 @@
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_hfi1.h"
+#include "rdma/opx/opx_hfisvc.h"
 
 /* Macro indirection in order to support other macros as arguments
  * C requires another indirection for expanding macros since
@@ -147,6 +148,12 @@ struct fi_opx_cq {
 	struct fi_opx_ep *ep[OPX_CQ_MAX_ENDPOINTS]; /* TODO - check this array size */
 
 	uint64_t ep_comm_caps;
+
+#ifdef HFISVC
+	struct {
+		hfisvc_client_completion_queue_t completion_queue;
+	} hfisvc;
+#endif
 
 	int64_t	   ref_cnt;
 	ofi_spin_t lock;
@@ -280,6 +287,49 @@ static inline size_t fi_opx_cq_fill(uintptr_t output, struct opx_context *contex
 	return return_size;
 }
 
+__OPX_FORCE_INLINE__
+void opx_cq_poll_hfi_service(struct fi_opx_cq *opx_cq)
+{
+#ifdef HFISVC
+	struct hfisvc_client_cq_entry hfisvc_out[64];
+
+	size_t n = hfisvc_client_cq_read(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out, 64);
+	while (n > 0) {
+		for (size_t i = 0; i < n; ++i) {
+			if (OFI_UNLIKELY(hfisvc_out[i].status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS)) {
+				fprintf(stderr,
+					"(%d) %s:%s():%d Error: HFISVC CQ completion status is %d (was expecting 0/success)\n",
+					getpid(), __FILE__, __func__, __LINE__, hfisvc_out[i].status);
+				// TODO: FI_WARN
+				// TODO: Enqueue error
+				abort();
+			}
+			struct opx_context *context = (struct opx_context *) hfisvc_out[i].app_context;
+			if (hfisvc_out[i].type == HFISVC_CLIENT_CQ_ENTRY_TYPE_DEFAULT) {
+				// TODO: Once hfisvc_client provides xfer_len in completion, we'll know how much to
+				//       decrement from the context->byte_counter. Until then, just zero out
+				//       context->byte_counter
+				// uint64_t completed_len = hfisvc_out[i].type_default.xfer_len;
+				uint64_t completed_len = context->byte_counter;
+				assert(completed_len >= context->byte_counter);
+				OPX_HFISVC_DEBUG_LOG(
+					"Got completion entry %lu/%lu for context=%p completed_len=%lu byte_counter=%lu -> %lu\n",
+					i, n, context, completed_len, context->byte_counter,
+					context->byte_counter - completed_len);
+
+				context->byte_counter -= completed_len;
+			} else {
+				OPX_HFISVC_DEBUG_LOG("Got completion entry %lu/%lu for context=%p, type was %d\n", i, n,
+						     context, hfisvc_out[i].type);
+				// TODO: FI_WARN
+				abort();
+			}
+		}
+		n = hfisvc_client_cq_read(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out, 64);
+	}
+#endif
+}
+
 static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size_t count,
 				       const enum fi_cq_format format)
 {
@@ -299,12 +349,16 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 	struct opx_context *pending_tail = (struct opx_context *) opx_cq->pending.tail;
 
 	if (NULL != pending_head) {
+		opx_cq_poll_hfi_service(opx_cq);
 		struct opx_context *context = pending_head;
 		struct opx_context *prev    = NULL;
 		while ((count - num_entries) > 0 && context != NULL) {
 			const uint64_t byte_counter = context->byte_counter;
 
 			if (byte_counter == 0) {
+				OPX_HFISVC_DEBUG_LOG(
+					"Processing pending context=%p context->byte_counter=%lu count=%lu num_entries=%ld\n",
+					context, context->byte_counter, count, num_entries);
 				bool free_context;
 				if (context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV) {
 					assert(!(context->flags & FI_OPX_CQ_CONTEXT_HMEM));
@@ -449,6 +503,8 @@ __attribute__((flatten)) ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *
 			}
 		}
 	}
+
+	// opx_cq_poll_hfi_service(opx_cq);
 
 	// This is meant for auto progress to just access the rx_polls and exit
 	if (count == 0 && buf == NULL) {

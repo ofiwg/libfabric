@@ -150,6 +150,12 @@ static int fi_opx_close_cq(fid_t fid)
 		fi_opx_lock(&opx_cq->lock);
 	}
 
+#ifdef HFISVC
+	if (hfisvc_client_completion_queue_close(&opx_cq->hfisvc.completion_queue)) {
+		abort();
+	}
+#endif
+
 	ret = fi_opx_fid_check(fid, FI_CLASS_CQ, "completion queue");
 	if (ret) {
 		goto fail;
@@ -380,7 +386,6 @@ int fi_opx_cq_open(struct fid_domain *dom, struct fi_cq_attr *attr, struct fid_c
 		opx_cq->progress.ep[i] = NULL;
 	}
 
-	// fi_opx_ref_init(&opx_cq->domain->fabric->node, &opx_cq->ref_cnt, "completion queue");
 	fi_opx_ref_inc(&opx_cq->domain->ref_cnt, "domain");
 
 	ofi_spin_init(&opx_cq->lock);

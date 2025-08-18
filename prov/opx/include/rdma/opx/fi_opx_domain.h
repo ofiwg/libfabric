@@ -46,6 +46,11 @@
 #include "rdma/opx/fi_opx_tid_domain.h"
 
 #include "rdma/opx/opx_hmem_domain.h"
+#include "rdma/opx/opx_hfisvc_keyset.h"
+
+#ifdef HFISVC
+#include "hfisvc_client/hfisvc_client.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -102,6 +107,17 @@ struct fi_opx_domain {
 #ifdef OPX_HMEM
 	struct opx_hmem_domain *hmem_domain;
 #endif
+
+#ifdef HFISVC
+	struct {
+		hfisvc_client_t	    handle;
+		opx_hfisvc_keyset_t access_key_set;
+		int64_t		    ref_cnt;
+		hfisvc_client_key_t client_key;
+		uint32_t	    padding;
+	} hfisvc;
+#endif
+
 	int64_t ref_cnt;
 };
 
@@ -152,6 +168,10 @@ static inline uint32_t fi_opx_domain_get_rx_max(struct fid_domain *domain)
 {
 	return 160;
 }
+
+#ifdef HFISVC
+int opx_domain_hfisvc_init(struct fi_opx_domain *domain, const enum hfisvc_client_connect_type type, const int fd);
+#endif
 
 #ifdef __cplusplus
 }
