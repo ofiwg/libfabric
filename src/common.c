@@ -85,10 +85,20 @@ struct ofi_common_locks common_locks = {
 	.util_fabric_lock = PTHREAD_MUTEX_INITIALIZER,
 };
 
+int ofi_fork_unsafe;
 size_t ofi_universe_size = 1024;
 int ofi_av_remove_cleanup;
 char *ofi_offload_coll_prov_name = NULL;
 
+
+void ofi_params_init(void)
+{
+	fi_param_get_bool(NULL, "fork_unsafe", &ofi_fork_unsafe);
+	fi_param_get_size_t(NULL, "universe_size", &ofi_universe_size);
+	fi_param_get_bool(NULL, "av_remove_cleanup", &ofi_av_remove_cleanup);
+	fi_param_get_str(NULL, "offload_coll_provider",
+			 &ofi_offload_coll_prov_name);
+}
 
 int ofi_genlock_init(struct ofi_genlock *lock,
 		     enum ofi_lock_type lock_type)

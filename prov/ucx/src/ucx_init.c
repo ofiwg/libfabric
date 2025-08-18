@@ -399,7 +399,8 @@ struct fi_provider ucx_prov = {
 UCX_INI
 {
 #if HAVE_UCX_DL
-        ofi_hmem_init();
+	ofi_hmem_init();
+	ofi_params_init();
 #endif
 
 	ucx_init_errcodes();

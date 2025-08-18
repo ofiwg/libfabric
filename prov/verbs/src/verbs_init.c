@@ -813,6 +813,7 @@ VERBS_INI
 	ofi_mem_init();
 	ofi_hmem_init();
 	ofi_monitors_init();
+	ofi_params_init();
 #endif
 	ofi_mutex_init(&vrb_info_mutex);
 	ofi_mutex_init(&vrb_init_mutex);

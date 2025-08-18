@@ -171,6 +171,7 @@ struct fi_provider *lpp_initialization(void)
 {
 	#if HAVE_LPP_DL
 	ofi_hmem_init();
+	ofi_params_init();
 	#endif
 	lpp_init_params();
 	lpp_init_memcpy();
