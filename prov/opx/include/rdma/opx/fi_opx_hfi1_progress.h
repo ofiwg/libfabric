@@ -1127,6 +1127,10 @@ void opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliab
 	unsigned	      hfi1_poll_count = 0;
 	unsigned	      packets	      = 0;
 
+#ifdef HFISVC
+	uint32_t start_rdma_read_count = opx_ep->hfisvc.rdma_read_count;
+#endif
+
 	if (ctx_sharing) {
 		const uint8_t subctxt_self = opx_ep->rx->shd_ctx.subctxt;
 
@@ -1161,6 +1165,18 @@ void opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliab
 							ctx_sharing);
 		} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
 	}
+
+#ifdef HFISVC
+	if (opx_ep->hfisvc.rdma_read_count != start_rdma_read_count) {
+		OPX_HFISVC_DEBUG_LOG(
+			"Rang doorbell because start_rdma_read_count=%u and opx_ep->hfisvc.rdma_read_count=%u\n",
+			start_rdma_read_count, opx_ep->hfisvc.rdma_read_count);
+		int rc __attribute__((unused));
+		rc = hfisvc_client_doorbell(opx_ep->domain->hfisvc.handle);
+
+		assert(rc == 0);
+	}
+#endif
 }
 
 __OPX_FORCE_INLINE__
