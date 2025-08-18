@@ -569,20 +569,122 @@ int efa_cq_signal(struct fid_cq *cq_fid)
 	return 0;
 }
 
+static void efa_cq_read_context_entry(struct efa_ibv_cq *ibv_cq, void *buf)
+{
+	struct fi_cq_entry *entry = buf;
+
+	entry->op_context = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
+}
+
+static void efa_cq_read_msg_entry(struct efa_ibv_cq *cq, void *buf)
+{
+	struct fi_cq_msg_entry *entry = buf;
+	int opcode = efa_ibv_cq_wc_read_opcode(cq);
+	struct ibv_cq_ex *ibv_cqx = cq->ibv_cq_ex;
+
+	if (!efa_cq_wc_is_unsolicited(cq) && ibv_cqx->wr_id) {
+		entry->op_context = (void *)ibv_cqx->wr_id;
+		entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode): ((struct efa_context *) ibv_cqx->wr_id)->completion_flags;
+	} else {
+		entry->op_context = NULL;
+		entry->flags = efa_cq_opcode_to_fi_flags(opcode);
+	}
+	entry->len = efa_ibv_cq_wc_read_byte_len(cq);
+}
+
+static void efa_cq_read_data_entry(struct efa_ibv_cq *cq, void *buf)
+{
+	struct fi_cq_data_entry *entry = buf;
+	int opcode = efa_ibv_cq_wc_read_opcode(cq);
+	struct ibv_cq_ex *ibv_cqx = cq->ibv_cq_ex;
+
+	if (!efa_cq_wc_is_unsolicited(cq) && ibv_cqx->wr_id) {
+		entry->op_context = (void *)ibv_cqx->wr_id;
+		entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode): ((struct efa_context *) ibv_cqx->wr_id)->completion_flags;
+	} else {
+		entry->op_context = NULL;
+		entry->flags = efa_cq_opcode_to_fi_flags(opcode);
+	}
+	entry->len = efa_ibv_cq_wc_read_byte_len(cq);
+	entry->data = 0;
+	if (efa_ibv_cq_wc_read_wc_flags(cq) & IBV_WC_WITH_IMM) {
+		entry->flags |= FI_REMOTE_CQ_DATA;
+		entry->data = efa_ibv_cq_wc_read_imm_data(cq);
+	}
+}
+
 static
 ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			fi_addr_t *src_addr)
 {
 	struct efa_cq *efa_cq;
+	struct efa_ibv_cq *ibv_cq;
+	struct efa_base_ep *base_ep;
+	struct efa_domain *efa_domain;
+	int err = 0;
+	size_t num_cqe = 0; /* Count of read entries */
+	int prov_errno, opcode;
 
 	efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
 	/* Acquire the lock to prevent race conditions when qp_table is being updated */
 	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
-	(void) efa_cq_poll_ibv_cq(count, &efa_cq->ibv_cq);
+
+	efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
+	ibv_cq = &efa_cq->ibv_cq;
+
+	/* Call ibv_start_poll only once */
+	efa_cq_start_poll(ibv_cq);
+
+	while (efa_cq_wc_available(ibv_cq)) {
+		base_ep = efa_domain->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->qp_table_sz_m1]->base_ep;
+		opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
+		if (ibv_cq->ibv_cq_ex->status) {
+			prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
+			switch (opcode) {
+			case IBV_WC_SEND: /* fall through */
+			case IBV_WC_RDMA_WRITE: /* fall through */
+			case IBV_WC_RDMA_READ:
+				efa_cq_handle_error(base_ep, ibv_cq,
+						    to_fi_errno(prov_errno),
+						    prov_errno, true);
+				break;
+			case IBV_WC_RECV: /* fall through */
+			case IBV_WC_RECV_RDMA_WITH_IMM:
+				efa_cq_handle_error(base_ep, ibv_cq,
+						    to_fi_errno(prov_errno),
+						    prov_errno, false);
+				break;
+			default:
+				EFA_WARN(FI_LOG_EP_CTRL, "Unhandled op code %d\n", opcode);
+				assert(0 && "Unhandled op code");
+			}
+			err = -FI_EAVAIL;
+			break;
+		}
+
+		if (!efa_cq_wc_is_unsolicited(ibv_cq)) {
+			if (ibv_cq->ibv_cq_ex->wr_id) {
+				efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size));
+				num_cqe++;
+			}
+		} else {
+			assert (opcode == IBV_WC_RECV_RDMA_WITH_IMM);
+			efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size));
+			num_cqe++;
+		}
+
+		if (num_cqe == count) {
+			break;
+		}
+
+		efa_cq_next_poll(ibv_cq);
+	}
+	efa_cq_end_poll(ibv_cq);
 	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 
-	return ofi_cq_read_entries(&efa_cq->util_cq, buf, count, src_addr);
+	num_cqe = num_cqe ? num_cqe : -FI_EAGAIN;
+	return err ? err : num_cqe;
 }
 
 struct fi_ops_cq efa_cq_ops = {
@@ -761,16 +863,20 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	case FI_CQ_FORMAT_UNSPEC:
 	case FI_CQ_FORMAT_CONTEXT:
 		cq->entry_size = sizeof(struct fi_cq_entry);
+		cq->read_entry = efa_cq_read_context_entry;
 		break;
 	case FI_CQ_FORMAT_MSG:
 		cq->entry_size = sizeof(struct fi_cq_msg_entry);
+		cq->read_entry = efa_cq_read_msg_entry;
 		break;
 	case FI_CQ_FORMAT_DATA:
 		cq->entry_size = sizeof(struct fi_cq_data_entry);
+		cq->read_entry = efa_cq_read_data_entry;
 		break;
 	case FI_CQ_FORMAT_TAGGED:
-		cq->entry_size = sizeof(struct fi_cq_tagged_entry);
-		break;
+	default:
+		err = -FI_ENOSYS;
+		goto err_free_util_cq;
 	}
 
 	cq->wait_cond = attr->wait_cond;
