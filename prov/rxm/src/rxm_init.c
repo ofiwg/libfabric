@@ -744,6 +744,7 @@ RXM_INI
 #if HAVE_RXM_DL
 	ofi_mem_init();
 	ofi_hmem_init();
+	ofi_params_init();
 #endif
 
 	return &rxm_prov;

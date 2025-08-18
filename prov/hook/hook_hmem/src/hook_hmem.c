@@ -1916,6 +1916,7 @@ HOOK_HMEM_INI
 {
 #if HAVE_HOOK_HMEM_DL
 	ofi_hmem_init();
+	ofi_params_init();
 #endif
 	hook_hmem_fabric_ops = hook_fabric_ops;
 	hook_hmem_fabric_ops.domain = hook_hmem_domain;

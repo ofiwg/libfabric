@@ -336,6 +336,7 @@ void fi_param_fini(void);
 void fi_param_undefine(const struct fi_provider *provider);
 void ofi_remove_comma(char *buffer);
 void ofi_dump_sysconfig(void);
+void ofi_params_init(void);
 
 const char *ofi_hex_str(const uint8_t *data, size_t len);
 
@@ -432,6 +433,7 @@ uint64_t ofi_tag_format(uint64_t max_tag);
 uint8_t ofi_msb(uint64_t num);
 uint8_t ofi_lsb(uint64_t num);
 
+extern int ofi_fork_unsafe;
 extern size_t ofi_universe_size;
 extern int ofi_av_remove_cleanup;
 extern char *ofi_offload_coll_prov_name;

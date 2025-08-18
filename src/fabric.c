@@ -952,12 +952,12 @@ void fi_ini(void)
 			"(default: no). Setting this to yes could improve "
 			"performance at the expense of making fork() potentially "
 			"unsafe");
+
 	fi_param_define(NULL, "universe_size", FI_PARAM_SIZE_T,
 			"Defines the maximum number of processes that will be "
 			"used by distribute OFI application. The provider uses "
 			"this to optimize resource allocations "
 			"(default: provider specific)");
-	fi_param_get_size_t(NULL, "universe_size", &ofi_universe_size);
 
 	fi_param_define(NULL, "av_remove_cleanup", FI_PARAM_BOOL,
 			"When true, release any underlying resources, such as "
@@ -968,13 +968,12 @@ void fi_ini(void)
 			"from peers that are active at the time their "
 			"address is removed from the local AV.  "
 			"(default: false)");
-	fi_param_get_bool(NULL, "av_remove_cleanup", &ofi_av_remove_cleanup);
 
 	fi_param_define(NULL, "offload_coll_provider", FI_PARAM_STRING,
 			"The name of a colective offload provider (default: \
 			empty - no provider)");
-	fi_param_get_str(NULL, "offload_coll_provider",
-			    &ofi_offload_coll_prov_name);
+
+	ofi_params_init();
 
 	ofi_load_dl_prov();
 

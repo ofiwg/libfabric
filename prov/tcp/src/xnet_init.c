@@ -211,6 +211,7 @@ TCP_INI
 #if HAVE_TCP_DL
 	ofi_pmem_init();
 	ofi_mem_init();
+	ofi_params_init();
 #endif
 	xnet_init_env();
 	xnet_init_infos();

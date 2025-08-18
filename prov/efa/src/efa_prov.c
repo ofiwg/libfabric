@@ -192,6 +192,7 @@ EFA_INI
 	ofi_mem_init();
 	ofi_hmem_init();
 	ofi_monitors_init();
+	ofi_params_init();
 #endif
 	int err;
 

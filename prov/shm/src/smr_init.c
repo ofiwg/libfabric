@@ -204,6 +204,7 @@ SHM_INI
 {
 #if HAVE_SHM_DL
 	ofi_hmem_init();
+	ofi_params_init();
 #endif
 	fi_param_define(&smr_prov, "sar_threshold", FI_PARAM_SIZE_T,
 			"Max size to use for alternate SAR protocol if CMA \
