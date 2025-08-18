@@ -46,6 +46,7 @@
 #include "rdma/opx/fi_opx_rma_ops.h"
 #include "rdma/opx/fi_opx_match.h"
 #include "rdma/opx/fi_opx_addr.h"
+#include "rdma/opx/opx_hfisvc.h"
 #include "rdma/opx/opx_tracer.h"
 #include "rdma/opx/fi_opx_debug_counters.h"
 #include "rdma/opx/fi_opx_flight_recorder.h"
@@ -282,7 +283,13 @@ struct fi_opx_ep_tx {
 	uint32_t	      sdma_bounce_buf_threshold;
 	uint32_t	      unused_cacheline7;
 
-	/* == CACHE LINE 21, ... == */
+	/* == CACHE LINE 21 == */
+	struct {
+		/* == CACHE LINE 21,22 == */
+		struct fi_opx_hfi1_txe_scb_16B rzv_rts_pio_model;
+	} hfisvc;
+
+	/* == CACHE LINE 24, ... == */
 	int64_t		      ref_cnt;
 	struct opx_spio_ctrl *spio_ctrl;
 	// struct opx_shm_tx is very large and should go last!
@@ -314,8 +321,10 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) =
 			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 19!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, sdma_request_queue) == (FI_OPX_CACHE_LINE_SIZE * 20),
 			"Offset of fi_opx_ep_tx->sdma_request_queue should start at cacheline 20!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, ref_cnt) == (FI_OPX_CACHE_LINE_SIZE * 21),
-			"Offset of fi_opx_ep_tx->ref_cnt should start at cacheline 21!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, hfisvc.rzv_rts_pio_model) == (FI_OPX_CACHE_LINE_SIZE * 21),
+			"Offset of fi_opx_ep_tx->hfisvc.rzv_rts_pio_model should start at cacheline 21!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, ref_cnt) == (FI_OPX_CACHE_LINE_SIZE * 23),
+			"Offset of fi_opx_ep_tx->ref_cnt should start at cacheline 23!");
 
 struct fi_opx_ep_rx {
 	/* == CACHE LINE 0 == */
@@ -541,8 +550,36 @@ struct fi_opx_ep {
 	enum fi_hmem_iface	   use_gpu_ipc;
 	ofi_spin_t		   lock; /* lock size varies based on ENABLE_DEBUG*/
 
-	/* == CACHE LINE 6 (if ENABLE_DEBUG) == */
+	/* == CACHE LINE 6 == */
+#ifdef HFISVC
+	struct {
+		/**
+		 * @brief Command queue used by this endpoint to submit commands to the hfisvc
+		 */
+		hfisvc_client_command_queue_t command_queue;
 
+		/**
+		 * @brief Completion queue used by the endpoint for handling completions from the
+		 * hfisvc where we need to do additional work. For example, we may need to free certain
+		 * resources before sending a completion up to the user/middleware.
+		 */
+		hfisvc_client_completion_queue_t internal_completion_queue;
+
+		/**
+		 * @brief Pointer to the CQ's hfisvc completion queue. Use this completion queue
+		 * when no further action is needed before bubbling up the completion to
+		 * the user/middleware.
+		 */
+		hfisvc_client_completion_queue_t *cq_completion_queue;
+
+		uint32_t rdma_read_count;
+		uint32_t unused_dw;
+
+		uint64_t unused_qws[2];
+	} hfisvc;
+#endif
+
+	/* == CACHE LINE 7 (if ENABLE_DEBUG) == */
 #ifdef FLIGHT_RECORDER_ENABLE
 	struct flight_recorder *fr;
 #endif
@@ -589,10 +626,20 @@ struct fi_opx_sep {
 
 struct fi_opx_rzv_completion {
 	struct opx_context *context;
-	uint64_t	    tid_length;
-	uint64_t	    tid_vaddr;
-	uint64_t	    byte_counter;
-	uint64_t	    bytes_accumulated;
+	union {
+		struct {
+			uint64_t tid_length;
+			uint64_t tid_vaddr;
+		};
+		struct {
+			// uintptr_t app_context;
+			uint64_t unused;
+			uint32_t access_key;
+			uint32_t unused_also;
+		};
+	};
+	uint64_t byte_counter;
+	uint64_t bytes_accumulated;
 };
 
 struct fi_opx_rma_request {
@@ -948,6 +995,154 @@ void opx_ep_copy_immediate_data(struct fi_opx_ep *opx_ep, const union fi_opx_hfi
 	}
 }
 
+__OPX_FORCE_NOINLINE__
+void fi_opx_handle_recv_rts_truncation(struct fi_opx_ep_rx *rx, struct opx_context *context, const uint64_t xfer_len,
+				       const uint64_t ofi_data, const uint64_t origin_tag, const uint8_t opcode,
+				       const uint64_t recv_len, void *recv_buf)
+{
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "RENDEZVOUS truncation - xfer_len %lu > recv_len %lu posting error\n", xfer_len, recv_len);
+
+	/* Post a CTS Truncation error (FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC) to unblock the Tx of RTS */
+
+	context->len	      = xfer_len;
+	context->data	      = ofi_data;
+	context->tag	      = origin_tag;
+	context->next	      = NULL;
+	context->byte_counter = 0;
+	context->flags =
+		FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) | FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
+
+	/* Post a E_TRUNC to our local RX error queue because a client called receive
+	with too small a buffer.  Tell them about it via the error cq */
+
+	context->err_entry.flags	 = context->flags;
+	context->err_entry.len		 = recv_len;
+	context->err_entry.buf		 = recv_buf;
+	context->err_entry.data		 = ofi_data;
+	context->err_entry.tag		 = origin_tag;
+	context->err_entry.olen		 = xfer_len - recv_len;
+	context->err_entry.err		 = FI_ETRUNC;
+	context->err_entry.prov_errno	 = 0;
+	context->err_entry.err_data	 = NULL;
+	context->err_entry.err_data_size = 0;
+
+	context->byte_counter = 0;
+	context->next	      = NULL;
+
+	/* post an 'error' completion event */
+	slist_insert_tail((struct slist_entry *) context, rx->cq_err_ptr);
+}
+
+__OPX_FORCE_INLINE__
+void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
+				   const union fi_opx_hfi1_packet_payload *const payload, struct fi_opx_ep *opx_ep,
+				   const uint64_t origin_tag, const uint8_t opcode, struct opx_context *context,
+				   const uint64_t is_multi_receive, const unsigned is_intranode, const uint64_t is_hmem,
+				   const int lock_required, const enum ofi_reliability_kind reliability,
+				   const enum opx_hfi1_type hfi1_type)
+{
+#ifdef HFISVC
+	assert(hfi1_type & OPX_HFI1_JKR);
+	assert(FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC);
+	assert(!lock_required);
+	assert(!is_multi_receive); // Multi recv not supported with HFISVC yet
+	assert(!is_hmem);	   // HMEM not supported with HFISVC yet
+
+	FI_DBG_TRACE(
+		fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== RECV -- RENDEZVOUS RTS HFISVC (%X) (begin) context %p is_multi_recv (%lu)\n",
+		opcode, context, is_multi_receive);
+
+	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS-HFISVC");
+
+	const uint64_t		   ofi_data = hdr->match.ofi_data;
+	uint64_t		   recv_len = context->len;
+	void			  *recv_buf = context->buf;
+	struct fi_opx_ep_rx *const rx	    = opx_ep->rx;
+
+	const hfisvc_client_key_t sbuf_key = (hfisvc_client_key_t) hdr->rzv_rts.sbuf_client_key;
+	const uint32_t		  niov	   = hdr->rzv_rts.niov;
+	const uint32_t		  lid	   = (uint32_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
+
+	uint64_t xfer_len = hdr->rzv_rts.message_length;
+
+	OPX_HFISVC_DEBUG_LOG("Matched HFISVC RTS packet, recv context=%p sbuf_client_key=%u xfer_len=%lu niov=%u\n",
+			     context, sbuf_key, xfer_len, niov);
+
+	struct hfisvc_client_completion completion = {
+		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+		.cq.app_context = (uint64_t) context,
+		.cq.handle	= *opx_ep->hfisvc.cq_completion_queue,
+	};
+
+	if (OFI_LIKELY(xfer_len <= recv_len)) {
+		context->byte_counter = xfer_len;
+		context->len	      = xfer_len;
+		context->data	      = ofi_data;
+		context->tag	      = origin_tag;
+		context->next	      = NULL;
+		context->flags |= FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
+				  FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
+
+		for (int i = 0; i < niov; ++i) {
+			const uint32_t sbuf_access_key = payload->rendezvous.hfisvc.iovs[i].access_key;
+			const uint64_t sbuf_len	       = payload->rendezvous.hfisvc.iovs[i].len;
+			const uint64_t sbuf_offset     = payload->rendezvous.hfisvc.iovs[i].offset;
+			int	       rc	       = hfisvc_client_cmd_rdma_read_va(
+				opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key, sbuf_len,
+				0ul /* immediate data */, sbuf_access_key, sbuf_offset, recv_buf);
+
+			/* TODO: Be smarter about how we handle EAGAIN from an rdma_read_va() */
+			while (rc != FI_SUCCESS) {
+				if (rc != -FI_EAGAIN) {
+					fprintf(stderr,
+						"(%d) %s:%s():%d opx_hfisvc_cmd_request_rdma_read() returned %d, abort!\n",
+						getpid(), __FILE__, __func__, __LINE__, rc);
+					abort();
+				}
+				rc = hfisvc_client_cmd_rdma_read_va(
+					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
+					sbuf_len, 0ul /* immediate data */, sbuf_access_key, sbuf_offset, recv_buf);
+			}
+			OPX_HFISVC_DEBUG_LOG(
+				"[%d/%d] Successfully issued rdma_read context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
+				i + 1, niov, context, recv_buf, sbuf_key, sbuf_access_key, sbuf_len);
+			recv_buf = (void *) ((uintptr_t) recv_buf + sbuf_len);
+		}
+
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.rdma_read);
+		slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
+	} else { /* truncation - unlikely */
+		OPX_HFISVC_DEBUG_LOG("Truncation for client_key %u! xfer_len=%lu recv_len=%lu\n", sbuf_key, xfer_len,
+				     recv_len);
+
+		for (int i = 0; i < niov; ++i) {
+			const uint32_t sbuf_access_key = payload->rendezvous.hfisvc.iovs[i].access_key;
+			int	       rc = hfisvc_client_cmd_rdma_read_va(opx_ep->hfisvc.command_queue, completion,
+									   0ul /* flags */, lid, sbuf_key, 0ul /* length */,
+									   0ul /* immediate data */, sbuf_access_key,
+									   0ul /* remote offset */, recv_buf);
+			if (rc != FI_SUCCESS) {
+				fprintf(stderr,
+					"(%d) %s:%s():%d opx_hfisvc_cmd_request_rdma_read() returned %d, abort!\n",
+					getpid(), __FILE__, __func__, __LINE__, rc);
+				abort();
+			}
+		}
+
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.truncation_rdma_read);
+		fi_opx_handle_recv_rts_truncation(rx, context, xfer_len, ofi_data, origin_tag, opcode, recv_len,
+						  recv_buf);
+	}
+
+	++opx_ep->hfisvc.rdma_read_count;
+	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS-HFISVC");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== RECV -- RENDEZVOUS RTS HFISVC (end) context %p\n", context);
+#endif
+}
+
 __OPX_FORCE_INLINE__
 void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			    const union fi_opx_hfi1_packet_payload *const payload, struct fi_opx_ep *opx_ep,
@@ -957,6 +1152,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			    const enum opx_hfi1_type hfi1_type)
 {
 	assert(FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS);
+	assert(!lock_required);
 
 	FI_DBG_TRACE(
 		fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -965,17 +1161,18 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS");
 
-	const uint64_t ofi_data	    = hdr->match.ofi_data;
-	const uint64_t niov	    = hdr->rendezvous.niov;
-	const uint64_t xfer_len	    = hdr->rendezvous.message_length;
-	const uint64_t is_noncontig = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_NONCONTIG;
+	const uint64_t		   ofi_data	= hdr->match.ofi_data;
+	const uint64_t		   recv_len	= context->len;
+	void			  *recv_buf	= context->buf;
+	struct fi_opx_ep_rx *const rx		= opx_ep->rx;
+	const uint64_t		   xfer_len	= hdr->rendezvous.message_length;
+	const uint64_t		   niov		= hdr->rendezvous.niov;
+	const uint64_t		   is_noncontig = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_NONCONTIG;
+
 #ifdef OPX_HMEM
 	const uint64_t is_ipc = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_IPC;
 #endif
-	void			  *recv_buf  = context->buf;
-	struct fi_opx_ep_rx *const rx	     = opx_ep->rx;
-	const uint64_t		   recv_len  = context->len;
-	const uint16_t		   origin_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
+	const uint16_t origin_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
 
 	if (is_multi_receive) { /* compile-time constant expression */
 		assert(FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode) == FI_MSG);
@@ -1176,18 +1373,11 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 		slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
 
 	} else { /* truncation - unlikely */
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			     "RENDEZVOUS truncation - xfer_len %lu > recv_len %lu posting error\n", xfer_len, recv_len);
 
-		/* Post a CTS Truncation error (FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC) to unblock the Tx of RTS */
+		fi_opx_handle_recv_rts_truncation(rx, context, xfer_len, ofi_data, origin_tag, opcode, recv_len,
+						  recv_buf);
 
-		context->len	      = xfer_len;
-		context->data	      = ofi_data;
-		context->tag	      = origin_tag;
-		context->next	      = NULL;
-		context->byte_counter = 0;
-		context->flags	      = FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
-				 FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
+		// clear the send-side rendezvous state
 		const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_shm, origin_rx);
 
 		assert(payload != NULL);
@@ -1200,30 +1390,6 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 		FI_OPX_FABRIC_RX_RZV_RTS_ETRUNC(opx_ep, (const void *const) hdr, origin_rx, origin_byte_counter_vaddr,
 						is_shm, reliability, /* compile-time constant expression */
 						u32_ext_rx, hfi1_type);
-
-		/* Post a E_TRUNC to our local RX error queue because a client called receive
-		with too small a buffer.  Tell them about it via the error cq */
-
-		context->err_entry.flags	 = context->flags;
-		context->err_entry.len		 = recv_len;
-		context->err_entry.buf		 = recv_buf;
-		context->err_entry.data		 = ofi_data;
-		context->err_entry.tag		 = origin_tag;
-		context->err_entry.olen		 = xfer_len - recv_len;
-		context->err_entry.err		 = FI_ETRUNC;
-		context->err_entry.prov_errno	 = 0;
-		context->err_entry.err_data	 = NULL;
-		context->err_entry.err_data_size = 0;
-
-		context->byte_counter = 0;
-		context->next	      = NULL;
-
-		/* post an 'error' completion event */
-		if (lock_required) {
-			fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
-			abort();
-		}
-		slist_insert_tail((struct slist_entry *) context, rx->cq_err_ptr);
 	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS");
@@ -1782,6 +1948,11 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- MULTI PACKET EAGER NTH byte counter %lu (end)\n",
 			context->byte_counter);
+
+	} else if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_HFISVC_RZV_RTS) {
+		fi_opx_handle_recv_rts_hfisvc(hdr, payload, opx_ep, origin_tag, opcode, context, is_multi_receive,
+					      is_shm, is_hmem, lock_required, reliability, hfi1_type);
+
 	} else {
 		fi_opx_handle_recv_rts(hdr, payload, opx_ep, origin_tag, opcode, context, is_multi_receive, is_shm,
 				       is_hmem, lock_required, reliability, hfi1_type);
@@ -3003,6 +3174,52 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 }
 
 __OPX_FORCE_INLINE__
+void opx_ep_tx_hfisvc_poll_internal_queue(struct fi_opx_ep *opx_ep)
+{
+#ifdef HFISVC
+	struct hfisvc_client_cq_entry hfisvc_out[64];
+	size_t n = hfisvc_client_cq_read(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */, hfisvc_out, 64);
+	while (n > 0) {
+		for (size_t i = 0; i < n; ++i) {
+			if (hfisvc_out[i].status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS) {
+				fprintf(stderr, "Completion error: status was %d\n", hfisvc_out[i].status);
+				// TODO: FI_WARN, figure out how to handle this
+				abort();
+			}
+			assert(hfisvc_out[i].status == HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS);
+			struct fi_opx_rzv_completion *rzv_comp =
+				(struct fi_opx_rzv_completion *) hfisvc_out[i].app_context;
+
+			// TODO: Use the completion's xfer_len when that becomes available
+			// const uint64_t completion_len = hfisvc_out[i].xfer_len;
+			uint64_t completion_len = 0;
+
+			if (rzv_comp->context) {
+				completion_len = rzv_comp->context->byte_counter;
+				OPX_HFISVC_DEBUG_LOG(
+					"HFISVC Internal completion with context: rzv_comp=%p access_key=%u xfer_len=%lu context=%p byte_counter=%lu -> %lu\n",
+					rzv_comp, rzv_comp->access_key, completion_len, rzv_comp->context,
+					rzv_comp->context->byte_counter,
+					rzv_comp->context->byte_counter - completion_len);
+
+				assert(completion_len <= rzv_comp->context->byte_counter);
+				rzv_comp->context->byte_counter -= completion_len;
+			} else {
+				OPX_HFISVC_DEBUG_LOG(
+					"HFISVC Internal completion without context: rzv_comp=%p access_key=%u xfer_len=%lu\n",
+					rzv_comp, rzv_comp->access_key, completion_len);
+			}
+
+			opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.access_key_set, rzv_comp->access_key,
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+			OPX_BUF_FREE(rzv_comp);
+		}
+		n = hfisvc_client_cq_read(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */, hfisvc_out, 64);
+	}
+#endif
+}
+
+__OPX_FORCE_INLINE__
 void fi_opx_ep_rx_poll_internal(struct fid_ep *ep, const uint64_t caps, const enum ofi_reliability_kind reliability,
 				const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
@@ -3024,6 +3241,8 @@ void fi_opx_ep_rx_poll_internal(struct fid_ep *ep, const uint64_t caps, const en
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps, OFI_RELIABILITY_KIND_ONLOAD, hdrq_mask,
 					hfi1_type, ctx_sharing);
 	}
+
+	opx_ep_tx_hfisvc_poll_internal_queue(opx_ep);
 
 	fi_opx_ep_do_pending_work(opx_ep);
 
@@ -3226,14 +3445,19 @@ int fi_opx_ep_rx_process_context(struct fi_opx_ep *opx_ep, const uint64_t static
 				 const enum fi_av_type av_type, const enum ofi_reliability_kind reliability,
 				 const enum opx_hfi1_type hfi1_type)
 {
+#ifdef HFISVC
+	uint32_t start_rdma_read_count = opx_ep->hfisvc.rdma_read_count;
+#endif
+	int rc;
+
 	if (OFI_LIKELY((rx_op_flags & (FI_PEEK | FI_CLAIM | FI_MULTI_RECV)) == 0)) {
 		if (is_hmem) { /* branch should compile out */
-			return fi_opx_ep_process_context_match_ue_packets(opx_ep, static_flags, context, OPX_HMEM_TRUE,
-									  lock_required, reliability, hfi1_type);
+			rc = fi_opx_ep_process_context_match_ue_packets(opx_ep, static_flags, context, OPX_HMEM_TRUE,
+									lock_required, reliability, hfi1_type);
+		} else {
+			rc = fi_opx_ep_process_context_match_ue_packets(opx_ep, static_flags, context, OPX_HMEM_FALSE,
+									lock_required, reliability, hfi1_type);
 		}
-
-		return fi_opx_ep_process_context_match_ue_packets(opx_ep, static_flags, context, OPX_HMEM_FALSE,
-								  lock_required, reliability, hfi1_type);
 	} else {
 		/*
 		 * Not for critical path: peek, or claim, or multi-receive
@@ -3243,8 +3467,22 @@ int fi_opx_ep_rx_process_context(struct fi_opx_ep *opx_ep, const uint64_t static
 
 		fi_opx_ep_rx_process_context_noinline(opx_ep, static_flags, context, rx_op_flags, is_hmem,
 						      lock_required, av_type, reliability, hfi1_type);
-		return 0;
+		rc = 0;
 	}
+
+#ifdef HFISVC
+	if (opx_ep->hfisvc.rdma_read_count != start_rdma_read_count) {
+		OPX_HFISVC_DEBUG_LOG(
+			"Rang doorbell because start_rdma_read_count=%u and opx_ep->hfisvc.rdma_read_count=%u\n",
+			start_rdma_read_count, opx_ep->hfisvc.rdma_read_count);
+		int doorbell_rc __attribute__((unused));
+		doorbell_rc = hfisvc_client_doorbell(opx_ep->domain->hfisvc.handle);
+
+		assert(doorbell_rc == 0);
+	}
+#endif
+
+	return rc;
 }
 
 __OPX_FORCE_INLINE__
@@ -3583,6 +3821,11 @@ void fi_opx_ep_tx_cq_completion_rzv(struct fid_ep *ep, void *context, const size
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		abort();
 	}
+
+	OPX_HFISVC_DEBUG_LOG(
+		"cq_pending context=%p context->err_entry.op_context=%p context->tag=%016lX context->data=%016lX context->len=%lu\n",
+		opx_context, opx_context->err_entry.op_context, opx_context->tag, opx_context->data, opx_context->len);
+
 	slist_insert_tail((struct slist_entry *) opx_context, opx_ep->tx->cq_pending_ptr);
 }
 
