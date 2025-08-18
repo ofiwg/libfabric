@@ -51,6 +51,9 @@
 #include <ofi_enosys.h>
 
 #include "rdma/opx/fi_opx.h"
+#include "rdma/opx/opx_hfisvc.h"
+
+#define OPX_DOMAIN_HFISVC_NOT_INITIALIZED (0x7FFFFFFFFFFFFFFEll)
 
 static int fi_opx_close_domain(fid_t fid)
 {
@@ -74,6 +77,20 @@ static int fi_opx_close_domain(fid_t fid)
 #ifdef OPX_HMEM
 	opx_hmem_close_domain(opx_domain->hmem_domain, OPX_HMEM_NO_LOCK_ON_CLEANUP);
 	opx_domain->hmem_domain = NULL;
+#endif
+
+#ifdef HFISVC
+	ret = fi_opx_ref_finalize(&opx_domain->hfisvc.ref_cnt, "hfisvc");
+	if (ret) {
+		return ret;
+	}
+
+	opx_hfisvc_keyset_free(opx_domain->hfisvc.access_key_set);
+
+	ret = hfisvc_client_finalize(opx_domain->hfisvc.handle);
+	if (ret) {
+		return ret;
+	}
 #endif
 
 	ret = fi_opx_ref_finalize(&opx_domain->ref_cnt, "domain");
@@ -526,6 +543,10 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "Domain unique job key set to %s\n", opx_domain->unique_job_key_str);
 	// TODO: Print out a summary of all domain settings wtih FI_INFO
 
+#ifdef HFISVC
+	opx_domain->hfisvc.ref_cnt = OPX_DOMAIN_HFISVC_NOT_INITIALIZED;
+#endif
+
 	opx_domain->rx_count = 0;
 	opx_domain->tx_count = 0;
 	opx_domain->ep_count = 0;
@@ -560,3 +581,49 @@ err:
 	}
 	return -errno;
 }
+
+#ifdef HFISVC
+int opx_domain_hfisvc_init(struct fi_opx_domain *domain, const enum hfisvc_client_connect_type type, const int fd)
+{
+	if (domain->hfisvc.ref_cnt == OPX_DOMAIN_HFISVC_NOT_INITIALIZED) {
+		if (getenv("OPX_HFISVC_LOG_DISABLE")) {
+			opx_hfisvc_log_enabled = 0;
+		}
+		struct hfisvc_client_connect_params params;
+
+		params.type = type;
+
+		if (type == HFISVC_CLIENT_IOCTL) {
+			params.p.ioctl.fd = fd;
+		} else {
+			char *admin_socket_path = getenv("HFISVC_ADMIN_PATH");
+			if (!admin_socket_path) {
+				admin_socket_path = "/tmp/hfisvc_admin.sock";
+			} else {
+				// TODO: Use default?
+				abort();
+			}
+
+			params.p.debugfs.admin_socket_path = admin_socket_path;
+		}
+
+		int ret = hfisvc_client_initialize(&domain->hfisvc.handle, &params);
+		if (ret) {
+			abort();
+		}
+		ret = hfisvc_client_key(domain->hfisvc.handle, &domain->hfisvc.client_key);
+		if (ret) {
+			abort();
+		}
+		if (opx_hfisvc_keyset_init(0, &domain->hfisvc.access_key_set)) {
+			abort();
+		}
+		fi_opx_ref_init(&domain->hfisvc.ref_cnt, "hfisvc");
+		OPX_HFISVC_DEBUG_LOG("Initialized HFI service with client key %u\n", domain->hfisvc.client_key);
+	}
+
+	fi_opx_ref_inc(&domain->hfisvc.ref_cnt, "hfisvc");
+
+	return 0;
+}
+#endif

@@ -97,7 +97,14 @@ static_assert(((OPX_HFI1_DEFAULT_PKT_SIZE == 2048) || (OPX_HFI1_DEFAULT_PKT_SIZE
 #define FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode) ((opcode & FI_OPX_HFI_BTH_OPCODE_TAG_BIT) ? FI_TAGGED : FI_MSG)
 #define FI_OPX_HFI_BTH_OPCODE_IS_TAGGED(opcode)	   ((opcode & FI_OPX_HFI_BTH_OPCODE_TAG_BIT) ? 1 : 0)
 
-#define FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH  (0xEF)
+#define FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH	 (0xEB)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST (0xEC)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ \
+	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST \
+	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ \
+	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
 #define FI_OPX_HFI_BTH_OPCODE_MSG_INJECT    (0xF0)
 #define FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ (FI_OPX_HFI_BTH_OPCODE_MSG_INJECT | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
 #define FI_OPX_HFI_BTH_OPCODE_TAG_INJECT    (FI_OPX_HFI_BTH_OPCODE_MSG_INJECT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
@@ -108,18 +115,25 @@ static_assert(((OPX_HFI1_DEFAULT_PKT_SIZE == 2048) || (OPX_HFI1_DEFAULT_PKT_SIZE
 #define FI_OPX_HFI_BTH_OPCODE_TAG_EAGER	   (FI_OPX_HFI_BTH_OPCODE_MSG_EAGER | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
 #define FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ \
 	(FI_OPX_HFI_BTH_OPCODE_MSG_EAGER | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
-#define FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST (0xF8)
-#define FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST_CQ \
-	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
-#define FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST \
-	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
-#define FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ \
-	(FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
-#define FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS    (0xFC)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS    (0xF8)
 #define FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_CQ (FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
 #define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS    (FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
 #define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ \
 	(FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS | FI_OPX_HFI_BTH_OPCODE_CQ_BIT | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+
+#define FI_OPX_HFI_BTH_OPCODE_HFISVC_RZV_RTS	 (0xFC)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC (FI_OPX_HFI_BTH_OPCODE_HFISVC_RZV_RTS)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC (FI_OPX_HFI_BTH_OPCODE_HFISVC_RZV_RTS | FI_OPX_HFI_BTH_OPCODE_TAG_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC_CQ \
+	(FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
+#define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC_CQ \
+	(FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
+#ifdef HFISVC
+#define FI_OPX_HFI_BTH_OPCODE_IS_HFISVC(opcode) \
+	((opcode & FI_OPX_HFI_BTH_OPCODE_HFISVC_RZV_RTS) == FI_OPX_HFI_BTH_OPCODE_HFISVC_RZV_RTS)
+#else
+#define FI_OPX_HFI_BTH_OPCODE_IS_HFISVC(opcode) (0)
+#endif
 
 #define FI_OPX_HFI_DPUT_GET_OPCODE(_opcode) ((_opcode & 0x00F0) >> 4)
 
@@ -147,8 +161,8 @@ OPX_COMPILE_TIME_ASSERT(
 	 (FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ - sizeof(FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS) / sizeof(char *) + 2)),
 	"FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH must be first in the high opcode array, or dependent code conditionals need updated");
 OPX_COMPILE_TIME_ASSERT(
-	(FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ == 0xFF),
-	"FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ must be last in the high opcode array, or dependent code conditionals need updated");
+	(FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC_CQ == 0xFF),
+	"FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC_CQ must be last in the high opcode array, or dependent code conditionals need updated");
 
 OPX_COMPILE_TIME_ASSERT(
 	((FI_OPX_HFI_BTH_OPCODE_MSG_INJECT ^ FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ) == FI_OPX_HFI_BTH_OPCODE_CQ_BIT),
@@ -861,6 +875,30 @@ union opx_hfi1_packet_hdr {
 
 	} __attribute__((__packed__)) rendezvous;
 
+	/*    OPX RENDEZVOUS HEADER (HFISVC)          */
+	struct {
+		/* QW[0-4] PBC/LRH/BTH/KDETH */
+		uint64_t reserved[5];
+
+		/* QW[5] SW */
+		uint32_t sbuf_client_key;
+		uint32_t niov;
+
+		/* QW[6] SW */
+		uint64_t message_length; /* total length in bytes of all non-contiguous buffers and immediate data */
+
+		/* QW[7] SW */
+		/* The tag must be located here to be the same as the match header.
+		 * When sending, the tag will be the first QW in the second SCB, due
+		 * to the presence of the PBC. On the receive side, the tag will be
+		 * the last QW in the packet header.
+		 */
+		uint64_t tag;
+
+		uint64_t reserved_n[7]; /* QW[8-14] SW */
+
+	} __attribute__((__packed__)) rzv_rts;
+
 	/*    OPX CTS HEADER                   */
 	struct {
 		uint64_t reserved[5]; /* QW[0-4] */
@@ -1434,6 +1472,17 @@ static inline uintptr_t fi_opx_dput_rbuf_in(const uintptr_t rbuf_out)
 	return ntohll(rbuf_in.ptr);
 }
 
+union opx_hfisvc_iov {
+	uint64_t qws[4];
+	struct {
+		uint64_t	   len;
+		uint64_t	   offset;
+		uint64_t	   hmem_device;
+		enum fi_hmem_iface hmem_iface;
+		uint32_t	   access_key;
+	};
+} __attribute__((__packed__));
+
 struct fi_opx_hmem_iov {
 	uintptr_t	   buf;
 	uint64_t	   len;
@@ -1542,6 +1591,10 @@ union fi_opx_hfi1_packet_payload {
 			uint64_t	alignment_unused[2];	   // Align the IPC handle on a cacheline
 			struct ipc_info ipc_info;		   // Needed on receiver for opening handle
 		} ipc;
+
+		struct {
+			union opx_hfisvc_iov iovs[(OPX_HFI1_MAX_PKT_SIZE - 16) / sizeof(union opx_hfisvc_iov)];
+		} hfisvc;
 	} rendezvous;
 
 	struct {
