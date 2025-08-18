@@ -128,7 +128,7 @@ static_assert(((OPX_HFI1_DEFAULT_PKT_SIZE == 2048) || (OPX_HFI1_DEFAULT_PKT_SIZE
 	(FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
 #define FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC_CQ \
 	(FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC | FI_OPX_HFI_BTH_OPCODE_CQ_BIT)
-#if HAVE_HFISVC
+#ifdef HFISVC
 #define FI_OPX_HFI_BTH_OPCODE_IS_HFISVC(opcode) \
 	((opcode & FI_OPX_HFI_BTH_OPCODE_HFISVC_RZV_RTS) == FI_OPX_HFI_BTH_OPCODE_HFISVC_RZV_RTS)
 #else
@@ -1518,8 +1518,6 @@ union opx_hfisvc_iov {
 	};
 } __attribute__((__packed__));
 
-#define OPX_MAX_HFISVC_IOVS (OPX_HFI1_MAX_PKT_SIZE / sizeof(union opx_hfisvc_iov))
-
 struct fi_opx_hmem_iov {
 	uintptr_t	   buf;
 	uint64_t	   len;
@@ -1630,7 +1628,7 @@ union fi_opx_hfi1_packet_payload {
 		} ipc;
 
 		struct {
-			union opx_hfisvc_iov iovs[OPX_MAX_HFISVC_IOVS];
+			union opx_hfisvc_iov iovs[(OPX_HFI1_MAX_PKT_SIZE - 16) / sizeof(union opx_hfisvc_iov)];
 		} hfisvc;
 	} rendezvous;
 

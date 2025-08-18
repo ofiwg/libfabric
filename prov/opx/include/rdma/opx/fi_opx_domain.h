@@ -48,10 +48,8 @@
 #include "rdma/opx/opx_hmem_domain.h"
 #include "rdma/opx/opx_hfisvc_keyset.h"
 
-#if HAVE_HFISVC
-#include <infiniband/hfi1dv.h>
-#include <infiniband/verbs.h>
-#include <infiniband/hfisvc_client.h>
+#ifdef HFISVC
+#include "hfisvc_client/hfisvc_client.h"
 #endif
 
 #ifdef __cplusplus
@@ -110,69 +108,16 @@ struct fi_opx_domain {
 	struct opx_hmem_domain *hmem_domain;
 #endif
 
-#if HAVE_HFISVC
+#ifdef HFISVC
 	struct {
-		struct ibv_context *ctx;
-		/**
-		 * @brief Command queue used by the domain for issuing commands to the
-		 * hfisvc where we are opening/closing hfisvc memory regions.
-		 */
-		hfisvc_client_command_queue_t mr_command_queue;
-
-		/**
-		 * @brief Completion queue used by the domain for handling completions from the
-		 * hfisvc where we are opening/closing hfisvc memory regions.
-		 */
-		hfisvc_client_completion_queue_t mr_completion_queue;
-		opx_hfisvc_keyset_t		 access_key_set;
-		int64_t				 ref_cnt;
-		hfisvc_client_key_t		 key;
-		uint32_t			 padding;
-		void				*libhfi1verbs;
-		int (*initialize)(struct ibv_context *ctx);
-		int (*client_key)(struct ibv_context *ctx, hfisvc_client_key_t *key);
-		int (*command_queue_open)(hfisvc_client_command_queue_t *command_queue, struct ibv_context *ctx);
-		int (*command_queue_close)(hfisvc_client_command_queue_t *command_queue);
-		int (*completion_queue_open)(hfisvc_client_completion_queue_t *completion_queue,
-					     struct ibv_context		      *ctx);
-		int (*completion_queue_close)(hfisvc_client_completion_queue_t *completion_queue);
-		size_t (*cq_read)(hfisvc_client_completion_queue_t completion_queue, uint64_t flags,
-				  struct hfisvc_client_cq_entry *buf, size_t buf_size_bytes, size_t count);
-		int (*cmd_dma_access_once)(hfisvc_client_command_queue_t   command_queue,
-					   struct hfisvc_client_completion completion, uint64_t flags,
-					   uint32_t access_key, uint32_t len, hfisvc_client_mr_t mr, uint64_t offset);
-		int (*cmd_dma_access_once_va)(hfisvc_client_command_queue_t   command_queue,
-					      struct hfisvc_client_completion completion, uint64_t flags,
-					      uint32_t access_key, uint32_t len, void *vaddr);
-		int (*cmd_rdma_read)(hfisvc_client_command_queue_t   command_queue,
-				     struct hfisvc_client_completion completion, uint64_t flags, uint32_t lid,
-				     hfisvc_client_key_t client, uint32_t len, uint64_t imm_data, uint32_t access_key,
-				     uint64_t remote_offset, hfisvc_client_mr_t mr, uint64_t offset);
-		int (*cmd_rdma_read_va)(hfisvc_client_command_queue_t	command_queue,
-					struct hfisvc_client_completion completion, uint64_t flags, uint32_t lid,
-					hfisvc_client_key_t client, uint32_t len, uint64_t imm_data,
-					uint32_t access_key, uint64_t remote_offset, void *vaddr);
-		int (*cmd_rdma_write)(hfisvc_client_command_queue_t   command_queue,
-				      struct hfisvc_client_completion completion, uint64_t flags, uint32_t lid,
-				      hfisvc_client_key_t client, uint32_t len, uint64_t imm_data, uint32_t access_key,
-				      uint64_t remote_offset, hfisvc_client_mr_t mr, uint64_t offset);
-		int (*cmd_mr_open)(hfisvc_client_command_queue_t   command_queue,
-				   struct hfisvc_client_completion completion, uint64_t flags, uint32_t len,
-				   void *vaddr, struct hfisvc_client_hmem hmem);
-		int (*cmd_mr_close)(hfisvc_client_command_queue_t   command_queue,
-				    struct hfisvc_client_completion completion, uint64_t flags, hfisvc_client_mr_t mr);
-		int (*cmd_dma_access_enable)(hfisvc_client_command_queue_t   command_queue,
-					     struct hfisvc_client_completion completion, uint64_t flags,
-					     uint32_t access_key, uint32_t len, hfisvc_client_mr_t mr, uint64_t offset,
-					     struct hfisvc_client_completion notification);
-		int (*cmd_dma_access_disable)(hfisvc_client_command_queue_t   command_queue,
-					      struct hfisvc_client_completion completion, uint64_t flags,
-					      uint32_t access_key);
-		int (*doorbell)(struct ibv_context *ctx);
+		hfisvc_client_t	    handle;
+		opx_hfisvc_keyset_t access_key_set;
+		int64_t		    ref_cnt;
+		hfisvc_client_key_t client_key;
+		uint32_t	    padding;
 	} hfisvc;
 #endif
-	uint8_t use_hfisvc;
-	uint8_t padding[7];
+
 	int64_t ref_cnt;
 };
 
@@ -256,49 +201,8 @@ static inline uint32_t fi_opx_domain_get_rx_max(struct fid_domain *domain)
 	return 160;
 }
 
-#if HAVE_HFISVC
-__OPX_FORCE_INLINE__
-void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
-{
-	struct hfisvc_client_cq_entry hfisvc_out[64];
-	size_t n = (*opx_domain->hfisvc.cq_read)(opx_domain->hfisvc.mr_completion_queue, 0ul /* flags */, hfisvc_out,
-						 sizeof(struct hfisvc_client_cq_entry) * 64, 64);
-	while (n > 0) {
-		OPX_HFISVC_DEBUG_LOG("HFIService: Polled %lu completions from mr_completion_queue!\n", n);
-		for (size_t i = 0; i < n; ++i) {
-			if (hfisvc_out[i].status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS) {
-				// TODO: FI_WARN, post some kind of error to the error queue
-				fprintf(stderr, "Completion error: status was %d\n", hfisvc_out[i].status);
-				abort();
-			}
-			assert(hfisvc_out[i].status == HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS);
-			assert(hfisvc_out[i].type == HFI1_HFISVC_CQ_ENTRY_TYPE_MR);
-
-			struct fi_opx_mr  *opx_mr    = (struct fi_opx_mr *) hfisvc_out[i].app_context;
-			hfisvc_client_mr_t mr_handle = hfisvc_out[i].type_mr.mr;
-
-			if (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_OPEN) {
-				OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_OPEN -> OPENED\n",
-						     opx_mr);
-				opx_mr->hfisvc.mr_handle = mr_handle;
-				opx_mr->hfisvc.state	 = OPX_MR_HFISVC_OPENED;
-			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_CLOSE) {
-				OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_CLOSE -> CLOSED\n",
-						     opx_mr);
-				assert(opx_mr->hfisvc.mr_handle == mr_handle);
-				opx_mr->hfisvc.state = OPX_MR_HFISVC_CLOSED;
-			} else {
-				// TODO: FI_WARN, post some kind of error to the error queue
-				fprintf(stderr, "(%d) %s:%s():%d Got unexpected completion for opx_mr=%p state=%d\n",
-					getpid(), __FILE__, __func__, __LINE__, opx_mr, opx_mr->hfisvc.state);
-				abort();
-			}
-		}
-		n = (*opx_domain->hfisvc.cq_read)(opx_domain->hfisvc.mr_completion_queue, 0ul /* flags */, hfisvc_out,
-						  sizeof(struct hfisvc_client_cq_entry) * 64, 64);
-	}
-}
-int opx_domain_hfisvc_init(struct fi_opx_domain *domain);
+#ifdef HFISVC
+int opx_domain_hfisvc_init(struct fi_opx_domain *domain, const enum hfisvc_client_connect_type type, const int fd);
 #endif
 
 #ifdef __cplusplus
