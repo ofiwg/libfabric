@@ -39,6 +39,7 @@ struct efa_cq {
 	ofi_atomic32_t			nevents;
 	enum fi_wait_obj		wait_obj;
 	enum fi_cq_wait_cond	wait_cond;
+	void	(*read_entry)(struct efa_ibv_cq *ibv_cq, void *buf);
 };
 
 extern struct fi_ops_cq efa_cq_ops;
