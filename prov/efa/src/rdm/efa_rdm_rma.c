@@ -395,7 +395,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 				"This is usually caused by inconsistent efa driver, libfabric, or rdma-core versions.\n"
 				"Please use consistent software versions on both hosts, or disable the unsolicited write "
 				"recv feature by setting environment variable FI_EFA_USE_UNSOLICITED_WRITE_RECV=0\n",
-				efa_use_unsolicited_write_recv(), efa_rdm_peer_support_unsolicited_write_recv(txe->peer),
+				ep->base_ep.qp->unsolicited_write_recv_enabled, efa_rdm_peer_support_unsolicited_write_recv(txe->peer),
 				err_msg);
 			return -FI_EOPNOTSUPP;
 		}

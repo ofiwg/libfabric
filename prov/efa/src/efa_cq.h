@@ -22,6 +22,7 @@ struct efa_ibv_cq {
 	struct efa_data_path_direct_cq data_path_direct;
 #endif
 	struct ibv_comp_channel	*channel;
+	bool unsolicited_write_recv_enabled;
 };
 
 struct efa_ibv_cq_poll_list_entry {
@@ -216,6 +217,7 @@ int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
 		.wc_flags = EFADV_WC_EX_WITH_SGID,
 	};
 
+	ibv_cq->unsolicited_write_recv_enabled = false;
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 	if (efa_use_unsolicited_write_recv())
 		efadv_cq_init_attr.wc_flags |= EFADV_WC_EX_WITH_IS_UNSOLICITED;
@@ -251,6 +253,11 @@ int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
 			&init_attr_ex, ibv_ctx, &ibv_cq->ibv_cq_ex, &ibv_cq->ibv_cq_ex_type);
 	}
 
+#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
+	if (efadv_cq_init_attr.wc_flags & EFADV_WC_EX_WITH_IS_UNSOLICITED)
+		ibv_cq->unsolicited_write_recv_enabled = true;
+#endif
+
 	ibv_cq->ibv_cq_ex_type = EFADV_CQ;
 	return 0;
 }
@@ -283,6 +290,7 @@ int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
 	};
 
 	ibv_cq->data_path_direct_enabled = false;
+	ibv_cq->unsolicited_write_recv_enabled = false;
 	return efa_cq_open_ibv_cq_with_ibv_create_cq_ex(
 		&init_attr_ex, ibv_ctx, &ibv_cq->ibv_cq_ex, &ibv_cq->ibv_cq_ex_type);
 }

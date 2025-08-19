@@ -51,6 +51,7 @@ struct efa_qp {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	struct efa_data_path_direct_qp data_path_direct_qp;
 #endif
+	bool unsolicited_write_recv_enabled;
 };
 
 struct efa_av;
@@ -111,7 +112,8 @@ int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
 int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		struct fid_ep **ep_fid, void *context);
 
-int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, uint32_t tclass);
+int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
+		   uint32_t tclass, bool enable_unsolicited_write_recv);
 
 void efa_qp_destruct(struct efa_qp *qp);
 

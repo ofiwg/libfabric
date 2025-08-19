@@ -1461,7 +1461,7 @@ void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size(struct efa_resource
 }
 
 /**
- * @brief when unsolicited write recv is supported (by device + env),
+ * @brief when unsolicited write recv is supported (checked by cq),
  * efa_rdm_ep_support_unsolicited_write_recv
  * should return true, otherwise it should return false
  *
@@ -1471,13 +1471,15 @@ void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size(struct efa_resource
 void test_efa_rdm_ep_support_unsolicited_write_recv(struct efa_resource **state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_cq *efa_cq;
 	struct efa_resource *resource = *state;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
 
-	assert_int_equal(efa_use_unsolicited_write_recv(),
+	assert_int_equal(efa_cq->ibv_cq.unsolicited_write_recv_enabled,
 			 efa_rdm_ep_support_unsolicited_write_recv(efa_rdm_ep));
 }
 

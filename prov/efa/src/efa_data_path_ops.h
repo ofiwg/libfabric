@@ -320,7 +320,7 @@ static inline int efa_ibv_cq_wc_read_sgid(struct efa_ibv_cq *ibv_cq, union ibv_g
  */
 static inline bool efa_cq_wc_is_unsolicited(struct efa_ibv_cq *ibv_cq)
 {
-	return efa_use_unsolicited_write_recv() && efa_ibv_cq_wc_is_unsolicited(ibv_cq);
+	return ibv_cq->unsolicited_write_recv_enabled && efa_ibv_cq_wc_is_unsolicited(ibv_cq);
 }
 
 static inline bool efa_cq_wc_available(struct efa_ibv_cq *cq)

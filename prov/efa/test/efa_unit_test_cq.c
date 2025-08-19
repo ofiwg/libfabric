@@ -388,6 +388,24 @@ void test_rdm_cq_handshake_bad_send_status_unsupported_op(struct efa_resource **
 	test_rdm_cq_handshake_bad_send_status_impl(state, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNSUPPORTED_OP, true);
 }
 
+
+/**
+ * @brief Verify that unsolicited write recv status is tracked in efa_ibv_cq correctly
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_ibv_cq_unsolicited_write_recv_status(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
+
+	assert_true(efa_use_unsolicited_write_recv() == efa_cq->ibv_cq.unsolicited_write_recv_enabled);
+}
+
 /**
  * @brief verify that fi_cq_read/fi_cq_readerr works properly when rdma-core return bad status for recv.
  *
@@ -460,7 +478,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	ibv_cq->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
 
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-	if (efa_use_unsolicited_write_recv()) {
+	if (ibv_cq->unsolicited_write_recv_enabled) {
 		g_efa_unit_test_mocks.efa_ibv_cq_wc_is_unsolicited = &efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock;
 		will_return(efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock, false);
 	}
@@ -536,19 +554,18 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	will_return_always(efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
 	will_return(efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock, EFA_IO_COMP_STATUS_FLUSHED);
 
-	g_efa_unit_test_mocks.efa_device_support_unsolicited_write_recv = &efa_mock_efa_device_support_unsolicited_write_recv;
 
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 	if (use_unsolicited_recv) {
 		g_efa_unit_test_mocks.efa_ibv_cq_wc_is_unsolicited = &efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock;
-		will_return(efa_mock_efa_device_support_unsolicited_write_recv, true);
+		ibv_cq->unsolicited_write_recv_enabled = true;
 		will_return(efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock, true);
 		ibv_cq->ibv_cq_ex->wr_id = 0;
 	} else {
 		/*
 		 * For solicited write recv, it will consume an internal rx pkt
 		 */
-		will_return(efa_mock_efa_device_support_unsolicited_write_recv, false);
+		ibv_cq->unsolicited_write_recv_enabled = false;
 		struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert_non_null(pkt_entry);
 		efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
@@ -558,7 +575,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	/*
 	 * Always test with solicited recv
 	 */
-	will_return(efa_mock_efa_device_support_unsolicited_write_recv, false);
+	ibv_cq->unsolicited_write_recv_enabled = false;
 	struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
@@ -1065,7 +1082,7 @@ static void test_efa_cq_read_prep(struct efa_resource *resource,
 
 
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-    if (efa_use_unsolicited_write_recv()) {
+    if (ibv_cq->unsolicited_write_recv_enabled) {
         g_efa_unit_test_mocks.efa_ibv_cq_wc_is_unsolicited = &efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock;
         will_return_maybe(efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock, is_unsolicited_write_recv);
     }
