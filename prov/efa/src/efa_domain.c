@@ -631,6 +631,8 @@ static int efa_domain_cq_open_ext(struct fid_domain *domain_fid,
 	struct efa_domain *efa_domain;
 	int err, retv;
 
+	/* GPU cannot do a blocking wait on CQ entries because 
+	 * system FDs are only accessible to CPU. */
 	if (attr->wait_obj != FI_WAIT_NONE)
 		return -FI_ENOSYS;
 
@@ -677,6 +679,8 @@ static int efa_domain_cq_open_ext(struct fid_domain *domain_fid,
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ with external memory: %s\n", fi_strerror(err));
 		goto err_free_util_cq;
 	}
+
+	ofi_atomic_initialize32(&cq->nevents, 0);
 
 	*cq_fid = &cq->util_cq.cq_fid;
 	(*cq_fid)->fid.fclass = FI_CLASS_CQ;
