@@ -90,6 +90,8 @@ unsigned int __real_efa_ibv_cq_wc_read_wc_flags(struct efa_ibv_cq *ibv_cq);
 __be32 __real_efa_ibv_cq_wc_read_imm_data(struct efa_ibv_cq *ibv_cq);
 bool __real_efa_ibv_cq_wc_is_unsolicited(struct efa_ibv_cq *ibv_cq);
 int __real_efa_ibv_cq_wc_read_sgid(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid);
+int __real_efa_ibv_get_cq_event(struct efa_ibv_cq *ibv_cq, void **cq_context);
+int __real_efa_ibv_req_notify_cq(struct efa_ibv_cq *ibv_cq, int solicited_only);
 
 bool efa_mock_efa_device_support_unsolicited_write_recv(void);
 
@@ -121,6 +123,9 @@ uint32_t efa_mock_efa_ibv_cq_wc_read_byte_len_return_mock(struct efa_ibv_cq *ibv
 unsigned int efa_mock_efa_ibv_cq_wc_read_wc_flags_return_mock(struct efa_ibv_cq *ibv_cq);
 __be32 efa_mock_efa_ibv_cq_wc_read_imm_data_return_mock(struct efa_ibv_cq *ibv_cq);
 bool efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock(struct efa_ibv_cq *ibv_cq);
+
+int efa_mock_ibv_req_notify_cq_return_mock(struct efa_ibv_cq *ibv_cq, int solicited_only);
+int efa_mock_ibv_get_cq_event_return_mock(struct efa_ibv_cq *ibv_cq, void **cq_context);
 
 void efa_mock_ibv_wr_rdma_read_save_wr(struct ibv_qp_ex *qp, uint32_t rkey,
 				       uint64_t remote_addr);
@@ -194,6 +199,8 @@ struct efa_unit_test_mocks
 	bool (*efa_ibv_cq_wc_is_unsolicited)(struct efa_ibv_cq *ibv_cq);
 
 	int (*efa_ibv_cq_wc_read_sgid)(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid);
+	int (*efa_ibv_get_cq_event)(struct efa_ibv_cq *ibv_cq, void **cq_context);
+	int (*efa_ibv_req_notify_cq)(struct efa_ibv_cq *ibv_cq, int solicited_only);
 
 #if HAVE_EFADV_QUERY_MR
 	int (*efadv_query_mr)(struct ibv_mr *ibv_mr, struct efadv_mr_attr *attr, uint32_t inlen);

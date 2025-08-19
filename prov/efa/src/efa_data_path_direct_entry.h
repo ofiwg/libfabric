@@ -37,6 +37,8 @@
 
 #if HAVE_EFA_DATA_PATH_DIRECT
 
+#include <rdma/ib_user_verbs.h>
+
 #include "efa_data_path_direct_internal.h"
 #include "efa_data_path_direct_structs.h"
 
@@ -410,6 +412,7 @@ static inline int efa_data_path_direct_start_poll(struct efa_ibv_cq *ibv_cq,
 	}
 
 	efa_data_path_direct_process_ex_cqe(ibv_cq, data_path_direct->cur_qp);
+	data_path_direct->cc++;
 	return 0;
 }
 
@@ -449,6 +452,21 @@ static inline int efa_data_path_direct_next_poll(struct efa_ibv_cq *ibv_cq)
 	return efa_data_path_direct_start_poll(ibv_cq, NULL);
 }
 
+#if HAVE_EFADV_CQ_ATTR_DB
+static inline void
+efa_update_cq_doorbell(struct efa_data_path_direct_cq *data_path_direct,
+		       bool arm)
+{
+	uint32_t db = 0;
+
+	EFA_SET(&db, EFA_IO_REGS_CQ_DB_CONSUMER_INDEX, data_path_direct->cc);
+	EFA_SET(&db, EFA_IO_REGS_CQ_DB_CMD_SN, data_path_direct->cmd_sn & 0x3);
+	EFA_SET(&db, EFA_IO_REGS_CQ_DB_ARM, arm);
+
+	mmio_write32(data_path_direct->db, db);
+}
+#endif /* HAVE_EFADV_CQ_ATTR_DB */
+
 static inline void efa_data_path_direct_end_poll(struct efa_ibv_cq *ibv_cq)
 {
 	struct efa_io_cdesc_common *cqe = ibv_cq->data_path_direct.cur_cqe;
@@ -457,6 +475,10 @@ static inline void efa_data_path_direct_end_poll(struct efa_ibv_cq *ibv_cq)
 		if (ibv_cq->data_path_direct.cur_wq)
 			efa_wq_put_wrid_idx(ibv_cq->data_path_direct.cur_wq,
 				    cqe->req_id);
+#if HAVE_EFADV_CQ_ATTR_DB
+		if (ibv_cq->data_path_direct.db)
+			efa_update_cq_doorbell(&ibv_cq->data_path_direct, false);
+#endif
 	}
 }
 
@@ -550,6 +572,36 @@ static inline bool efa_data_path_direct_wc_is_unsolicited(struct efa_ibv_cq *ibv
 		       EFA_IO_CDESC_COMMON_UNSOLICITED);
 }
 
+static inline int efa_data_path_direct_get_cq_event(struct efa_ibv_cq *ibv_cq,
+						    struct ibv_cq **cq,
+						    void **cq_context)
+{
+	struct ib_uverbs_comp_event_desc ev;
+
+	if (read(ibv_cq->channel->fd, &ev, sizeof ev) != sizeof ev)
+		return -1;
+
+	*cq = (struct ibv_cq *) (uintptr_t) ev.cq_handle;
+	*cq_context = (*cq)->cq_context;
+
+	ibv_cq->data_path_direct.cmd_sn++;
+
+	return 0;
+}
+
+static inline int efa_data_path_direct_req_notify_cq(struct efa_ibv_cq *ibv_cq,
+						     int solicited_only)
+{
+	if (OFI_UNLIKELY(solicited_only))
+		return EOPNOTSUPP;
+
+#if HAVE_EFADV_CQ_ATTR_DB
+	if (ibv_cq->data_path_direct.db)
+		efa_update_cq_doorbell(&ibv_cq->data_path_direct, true);
+#endif
+
+	return 0;
+}
 
 #endif /* HAVE_EFA_DATA_PATH_DIRECT */
 #endif /* _EFA_DATA_PATH_DIRECT_ENTRY_H */

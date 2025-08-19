@@ -127,3 +127,13 @@ int efa_ibv_cq_wc_read_sgid(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid)
 {
 	return ENOSYS;
 }
+
+int efa_ibv_get_cq_event(struct efa_ibv_cq *ibv_cq, void **cq_context)
+{
+	return 0;
+}
+
+int efa_ibv_req_notify_cq(struct efa_ibv_cq *ibv_cq, int solicited_only)
+{
+	return 0;
+}

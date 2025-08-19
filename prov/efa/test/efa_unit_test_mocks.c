@@ -295,6 +295,8 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.efa_ibv_cq_wc_read_imm_data = __real_efa_ibv_cq_wc_read_imm_data,
 	.efa_ibv_cq_wc_is_unsolicited = __real_efa_ibv_cq_wc_is_unsolicited,
 	.efa_ibv_cq_wc_read_sgid = __real_efa_ibv_cq_wc_read_sgid,
+	.efa_ibv_get_cq_event = __real_efa_ibv_get_cq_event,
+	.efa_ibv_req_notify_cq = __real_efa_ibv_req_notify_cq,
 
 #if HAVE_EFADV_QUERY_MR
 	.efadv_query_mr = __real_efadv_query_mr,
@@ -429,6 +431,16 @@ bool __wrap_efa_ibv_cq_wc_is_unsolicited(struct efa_ibv_cq *ibv_cq)
 int __wrap_efa_ibv_cq_wc_read_sgid(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid)
 {
 	return g_efa_unit_test_mocks.efa_ibv_cq_wc_read_sgid(ibv_cq, sgid);
+}
+
+int __wrap_efa_ibv_get_cq_event(struct efa_ibv_cq *ibv_cq, void **cq_context)
+{
+	return g_efa_unit_test_mocks.efa_ibv_get_cq_event(ibv_cq, cq_context);
+}
+
+int __wrap_efa_ibv_req_notify_cq(struct efa_ibv_cq *ibv_cq, int solicited_only)
+{
+	return g_efa_unit_test_mocks.efa_ibv_req_notify_cq(ibv_cq, solicited_only);
 }
 
 struct ibv_ah *__wrap_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
@@ -679,3 +691,13 @@ int efa_mock_efadv_query_cq(struct ibv_cq *ibvcq, struct efadv_cq_attr *attr, ui
 	return 0;
 }
 #endif /* HAVE_EFADV_QUERY_CQ */
+ 
+int efa_mock_ibv_req_notify_cq_return_mock(struct efa_ibv_cq *ibv_cq, int solicited_only)
+{
+	return 0;
+}
+
+int efa_mock_ibv_get_cq_event_return_mock(struct efa_ibv_cq *ibv_cq, void **cq_context)
+{
+	return mock();
+}

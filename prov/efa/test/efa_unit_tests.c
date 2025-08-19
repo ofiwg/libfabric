@@ -100,6 +100,8 @@ static int efa_unit_test_mocks_teardown(void **state)
 		.efa_ibv_cq_wc_read_imm_data = __real_efa_ibv_cq_wc_read_imm_data,
 		.efa_ibv_cq_wc_is_unsolicited = __real_efa_ibv_cq_wc_is_unsolicited,
 		.efa_ibv_cq_wc_read_sgid = __real_efa_ibv_cq_wc_read_sgid,
+		.efa_ibv_get_cq_event = __real_efa_ibv_get_cq_event,
+		.efa_ibv_req_notify_cq = __real_efa_ibv_req_notify_cq,
 
 #if HAVE_EFADV_QUERY_MR
 		.efadv_query_mr = __real_efadv_query_mr,
@@ -212,6 +214,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_cq_data_path_direct_disabled_with_old_device, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_data_path_direct_enabled_with_new_device, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_data_path_direct_disabled, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_cq_data_path_direct_with_wait_obj, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		
 		/* end efa_unit_test_cq.c */
 
 		/* begin efa_unit_test_info.c */

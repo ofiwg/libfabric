@@ -81,6 +81,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_efadv_sl=0
 	have_efadv_query_qp_wqs=0
 	have_efadv_query_cq=0
+	have_efadv_cq_attr_db=0
 	have_ibv_create_comp_channel=0
 	have_ibv_get_cq_event=0
 
@@ -188,6 +189,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[have_efadv_query_cq=0],
 			[[#include <infiniband/efadv.h>]])
 
+		AC_CHECK_MEMBER([struct efadv_cq_attr.db],
+			[have_efadv_cq_attr_db=1],
+			[have_efadv_cq_attr_db=0],
+			[[#include <infiniband/efadv.h>]])
+
 		dnl Check for CQ notification functions
 		AC_CHECK_DECL([ibv_create_comp_channel],
 			[have_ibv_create_comp_channel=1],
@@ -239,6 +245,9 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_EFADV_QUERY_CQ],
 		[$have_efadv_query_cq],
 		[Indicates if efadv_query_cq is available])
+	AC_DEFINE_UNQUOTED([HAVE_EFADV_CQ_ATTR_DB],
+		[$have_efadv_cq_attr_db],
+		[Indicates if efadv_cq_attr struct has db field])
 	AS_IF([test "$have_efadv_query_qp_wqs" = "1" -a "$have_efadv_query_cq" = "1"],
 		[have_efa_data_path_direct=1],
 		[have_efa_data_path_direct=0])
