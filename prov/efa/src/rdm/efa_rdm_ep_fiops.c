@@ -849,11 +849,11 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 					continue;
 				/* fall-thru */
 			default:
-				/* Release all other queued OPEs */
-				if (ope->type == EFA_RDM_TXE)
-					efa_rdm_txe_release(ope);
-				else
+				/* Release all other queued OPEs, except for in-flight EOR RXEs */
+				if (ope->type == EFA_RDM_RXE && !(ope->internal_flags & EFA_RDM_RXE_EOR_IN_FLIGHT))
 					efa_rdm_rxe_release(ope);
+				else
+					efa_rdm_txe_release(ope);
 				break;
 			}
 		}
