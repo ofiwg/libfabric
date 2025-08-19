@@ -501,9 +501,13 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)handle);
 	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_VERBOSE, (long)verbose);
 	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, cxip_curl_opname(op));
+	/* allow 5s for connection + operation in case of slow DNS */
+	curldl_ops.dl_curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
 
-	/* Value of fm_cacert variable in slurmctld configuration */
-	/* If set to 'yes' or a path, the CACERT will be validated and used for the connection */
+	/* Value of fm_cacert variable in slurmctld configuration.
+	 * If set to 'yes' or a path, the CACERT will be validated
+	 * and used for the connection
+	 */
 	cert_env_var = getenv("FI_CXI_COLL_FABRIC_MGR_CACERT");
 
 	if (!cert_env_var || !strcmp(cert_env_var, "no"))
@@ -544,6 +548,8 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	curldl_ops.dl_curl_multi_add_handle(cxip_curlm, curl);
 	mres = curldl_ops.dl_curl_multi_perform(cxip_curlm, &running);
 	if (mres != CURLM_OK) {
+		TRACE_CURL("curldl_ops.dl_curl_multi_perform)() failed: %s\n",
+			   curldl_ops.dl_curl_multi_strerror(mres));
 		CXIP_WARN("curldl_ops.dl_curl_multi_perform)() failed: %s\n",
 			  curldl_ops.dl_curl_multi_strerror(mres));
 		ret = -FI_ECONNREFUSED;
@@ -553,6 +559,7 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	return FI_SUCCESS;
 
 fail:
+	TRACE_CURL("%s failed %d (%s)\n", __func__, ret, fi_strerror(ret));
 	CXIP_WARN("%s failed %d (%s)\n", __func__, ret, fi_strerror(ret));
 	cxip_curl_free(handle);
 	return ret;

@@ -2990,7 +2990,6 @@ struct cxip_join_state {
 	struct cxip_av_set *av_set_obj;	// av set for this collective
 	struct cxip_coll_mc *mc_obj;	// mc object for this collective
 	struct cxip_zbcoll_obj *zb;	// zb object associated with state
-	struct timespec curlexpires;	// multicast creation expiration timeout
 	struct fid_mc **mc;		// user pointer to return mc_obj
 	void *context;			// user context for concurrent joins
 	uint64_t join_flags;		// user-supplied libfabric join flags
@@ -3247,16 +3246,12 @@ static void _close_mc(struct cxip_coll_mc *mc_obj, bool delete, bool has_error)
 		_close_pte(mc_obj->ep_obj->coll.coll_pte);
 		mc_obj->ep_obj->coll.coll_pte = NULL;
 	}
+
 	/* index zero deletes the multicast address */
 	if (delete && mc_obj->is_multicast && !mc_obj->mynode_idx) {
-		struct timespec expires = {
-			cxip_env.coll_fm_timeout_msec/1000,
-			(cxip_env.coll_fm_timeout_msec%1000)*1000000};
-
 		if (!mc_obj->has_error)
 			mc_obj->close_state = -FI_EAGAIN;
 
-		_tsset(&mc_obj->curlexpires, &expires);
 		_curl_delete_mc_obj(mc_obj);
 	} else {
 		if (mc_obj->has_error) {
@@ -3724,16 +3719,8 @@ static void _cxip_delete_mcast_cb(struct cxip_curl_handle *handle)
 		TRACE_JOIN("callback: delete mcast failed: %ld '%s'\n",
 			   handle->status, errmsg);
 
-		if (_tsexp(&mc_obj->curlexpires)) {
-			TRACE_JOIN("callback: FM expired\n");
-			if (mc_obj->has_error) {
-				free(mc_obj);
-			} else {
-				mc_obj->close_state = FI_CXI_ERRNO_JOIN_CURL_TIMEOUT;
-			}
-			break;
-		}
-		/* try again */
+		/* retry, but don't DOS the fabric manager */
+		usleep(100000);
 		_curl_delete_mc_obj(mc_obj);
 		break;
 	default:
@@ -3776,7 +3763,6 @@ static void _create_mcast_addr(struct cxip_join_state *jstate)
 	TRACE_JOIN("ENV minnodes= %ld\n", cxip_env.hwcoll_min_nodes);
 	TRACE_JOIN("ENV retry   = %ld\n", cxip_env.coll_retry_usec);
 	TRACE_JOIN("ENV tmout   = %ld\n", cxip_env.coll_timeout_usec);
-	TRACE_JOIN("ENV fmtmout = %ld\n", cxip_env.coll_fm_timeout_msec);
 
 	/* Generic error for any preliminary failures */
 	ret = 0;
@@ -4007,13 +3993,8 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 		TRACE_JOIN("callback: create mcast failed: %ld '%s'\n",
 		           handle->status, message);
 
-		if (_tsexp(&jstate->curlexpires)) {
-			TRACE_JOIN("callback: FM expired\n");
-			jstate->prov_errno = FI_CXI_ERRNO_JOIN_CURL_TIMEOUT;
-			jstate->finished_mcast = true;
-			break;
-		}
-		/* retry */
+		/* retry, but don't DOS the fabric manager */
+		usleep(100000);
 		_create_mcast_addr(jstate);
 		break;
 	case 507:
@@ -4181,14 +4162,9 @@ static void _start_bcast(void *ptr)
 		if (jstate->create_mcast) {
 			/* first call (only) initiates CURL request */
 			if (!jstate->creating_mcast) {
-				struct timespec expires = {
-					cxip_env.coll_fm_timeout_msec/1000,
-					(cxip_env.coll_fm_timeout_msec%1000)*1000000};
-
 				TRACE_JOIN("%s create mcast\n", __func__);
 				jstate->creating_mcast = true;
 
-				_tsset(&jstate->curlexpires, &expires);
 				_create_mcast_addr(jstate);
 				TRACE_JOIN("%s create mcast initiated\n", __func__);
 			}

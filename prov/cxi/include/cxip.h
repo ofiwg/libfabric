@@ -202,9 +202,6 @@
 #define CXIP_COLL_MAX_LEAF_TIMEOUT_MULT	50
 #define CXIP_COLL_MIN_TIMEOUT_USEC	1
 #define CXIP_COLL_MAX_TIMEOUT_USEC	20000000
-#define CXIP_COLL_MIN_FM_TIMEOUT_MSEC	1
-#define CXIP_COLL_DFL_FM_TIMEOUT_MSEC	100
-#define CXIP_COLL_MAX_FM_TIMEOUT_MSEC	1000000
 
 #define CXIP_REQ_BUF_HEADER_MAX_SIZE (sizeof(struct c_port_fab_hdr) + \
 	sizeof(struct c_port_unrestricted_hdr))
@@ -339,7 +336,6 @@ struct cxip_environment {
 	char *coll_job_step_id;
 	size_t coll_retry_usec;
 	size_t coll_timeout_usec;
-	size_t coll_fm_timeout_msec;
 	char *coll_fabric_mgr_url;
 	char *coll_mcast_token;
 	size_t hwcoll_addrs_per_job;
