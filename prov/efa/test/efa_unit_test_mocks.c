@@ -168,7 +168,7 @@ void efa_mock_efa_ibv_cq_end_poll_check_mock(struct efa_ibv_cq *ibv_cq)
 	mock();
 }
 
-uint32_t efa_mock_efa_ibv_cq_wc_read_opcode_return_mock(struct efa_ibv_cq *current)
+enum ibv_wc_opcode efa_mock_efa_ibv_cq_wc_read_opcode_return_mock(struct efa_ibv_cq *current)
 {
 	return mock();
 }
