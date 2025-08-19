@@ -173,6 +173,7 @@ void test_rdm_cq_handshake_bad_send_status_unresp_remote();
 void test_rdm_cq_handshake_bad_send_status_unreach_remote();
 void test_rdm_cq_handshake_bad_send_status_remote_abort();
 void test_rdm_cq_handshake_bad_send_status_unsupported_op();
+void test_ibv_cq_unsolicited_write_recv_status();
 void test_ibv_cq_ex_read_bad_recv_status();
 void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_unsolicited_recv();
 void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_solicited_recv();

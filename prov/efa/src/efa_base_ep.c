@@ -195,9 +195,12 @@ static int efa_base_ep_modify_qp_rst2rts(struct efa_base_ep *base_ep,
  *
  * @param qp double pointer of struct efa_qp
  * @param init_attr_ex ibv_qp_init_attr_ex
+ * @param tclass traffic class (QoS) of the qp
+ * @param use_unsolicited_write_recv whether to use unsolicited write recv in the qp
  * @return int 0 on success, negative integer on failure
  */
-int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, uint32_t tclass)
+int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
+		   uint32_t tclass, bool use_unsolicited_write_recv)
 {
 	struct efadv_qp_init_attr efa_attr = { 0 };
 
@@ -219,8 +222,9 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, 
 			init_attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
 			init_attr_ex->send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
 		}
+		(*qp)->unsolicited_write_recv_enabled = use_unsolicited_write_recv;
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
-		if (efa_use_unsolicited_write_recv())
+		if (use_unsolicited_write_recv)
 			efa_attr.flags |= EFADV_QP_FLAGS_UNSOLICITED_WRITE_RECV;
 #endif
 		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
@@ -313,7 +317,10 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 
 	efa_base_ep_construct_ibv_qp_init_attr_ex(base_ep, &attr_ex, tx_cq->ibv_cq_ex, rx_cq->ibv_cq_ex);
 
-	ret = efa_qp_create(&base_ep->qp, &attr_ex, base_ep->info->tx_attr->tclass);
+	assert(tx_cq->unsolicited_write_recv_enabled == rx_cq->unsolicited_write_recv_enabled);
+
+	ret = efa_qp_create(&base_ep->qp, &attr_ex, base_ep->info->tx_attr->tclass,
+			    tx_cq->unsolicited_write_recv_enabled);
 	if (ret)
 		return ret;
 
@@ -332,7 +339,7 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 #endif
 
 	if (create_user_recv_qp) {
-		ret = efa_qp_create(&base_ep->user_recv_qp, &attr_ex, base_ep->info->tx_attr->tclass);
+		ret = efa_qp_create(&base_ep->user_recv_qp, &attr_ex, base_ep->info->tx_attr->tclass, tx_cq->unsolicited_write_recv_enabled);
 		if (ret) {
 			efa_base_ep_destruct_qp(base_ep);
 			return ret;
@@ -669,7 +676,7 @@ int efa_base_ep_check_qp_in_order_aligned_128_bytes(struct efa_base_ep *ep,
 	/* Create a dummy qp for query only */
 	efa_base_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, ibv_cq.ibv_cq_ex, ibv_cq.ibv_cq_ex);
 
-	ret = efa_qp_create(&qp, &attr_ex, FI_TC_UNSPEC);
+	ret = efa_qp_create(&qp, &attr_ex, FI_TC_UNSPEC, ibv_cq.unsolicited_write_recv_enabled);
 	if (ret)
 		goto out;
 
