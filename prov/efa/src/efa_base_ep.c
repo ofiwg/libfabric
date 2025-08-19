@@ -257,17 +257,89 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex, 
 	return FI_SUCCESS;
 }
 
-static
-int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
-			  struct ibv_qp_init_attr_ex *init_attr_ex)
+/**
+ * @brief Construct the ibv qp init attr for given ep and cq
+ *
+ * @param ep a ptr to the efa_base_ep
+ * @param attr_ex the constructed qp attr
+ * @param tx_cq tx cq
+ * @param rx_cq rx cq
+ */
+static inline
+void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
+						struct ibv_qp_init_attr_ex *attr_ex,
+						struct ibv_cq_ex *tx_cq,
+						struct ibv_cq_ex *rx_cq)
+{
+	struct fi_info *info;
+
+	if (ep->info->ep_attr->type == FI_EP_RDM) {
+		attr_ex->qp_type = IBV_QPT_DRIVER;
+		info = ep->domain->device->rdm_info;
+	} else {
+		assert(ep->info->ep_attr->type == FI_EP_DGRAM);
+		attr_ex->qp_type = IBV_QPT_UD;
+		info = ep->domain->device->dgram_info;
+	}
+	attr_ex->cap.max_send_wr = info->tx_attr->size;
+	attr_ex->cap.max_send_sge = info->tx_attr->iov_limit;
+	attr_ex->cap.max_recv_wr = info->rx_attr->size;
+	attr_ex->cap.max_recv_sge = info->rx_attr->iov_limit;
+	attr_ex->cap.max_inline_data = ep->domain->device->efa_attr.inline_buf_size;
+	attr_ex->pd = ep->domain->ibv_pd;
+	attr_ex->qp_context = ep;
+	attr_ex->sq_sig_all = 1;
+
+	attr_ex->send_cq = ibv_cq_ex_to_cq(tx_cq);
+	attr_ex->recv_cq = ibv_cq_ex_to_cq(rx_cq);
+}
+
+/**
+ * @brief Create the IBV QP that backs the base ep
+ *
+ * @param base_ep efa_base_ep
+ * @param create_user_recv_qp whether to create the user_recv_qp. This boolean
+ * is only true for the zero copy recv mode in the efa-rdm endpoint
+ *
+ * @return int 0 on success, negative integer on failure
+ */
+static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
+				  struct efa_ibv_cq *tx_cq,
+				  struct efa_ibv_cq *rx_cq,
+				  bool create_user_recv_qp)
 {
 	int ret;
+	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 
-	ret = efa_qp_create(&base_ep->qp, init_attr_ex, base_ep->info->tx_attr->tclass);
+	efa_base_ep_construct_ibv_qp_init_attr_ex(base_ep, &attr_ex, tx_cq->ibv_cq_ex, rx_cq->ibv_cq_ex);
+
+	ret = efa_qp_create(&base_ep->qp, &attr_ex, base_ep->info->tx_attr->tclass);
 	if (ret)
 		return ret;
 
 	base_ep->qp->base_ep = base_ep;
+
+#if HAVE_EFA_DATA_PATH_DIRECT
+	/* Only enable direct QP when direct CQ is enabled */
+	assert(tx_cq->data_path_direct_enabled == rx_cq->data_path_direct_enabled);
+	if (tx_cq->data_path_direct_enabled) {
+		ret = efa_data_path_direct_qp_initialize(base_ep->qp);
+		if (ret) {
+			efa_base_ep_destruct_qp(base_ep);
+			return ret;
+		}
+	}
+#endif
+
+	if (create_user_recv_qp) {
+		ret = efa_qp_create(&base_ep->user_recv_qp, &attr_ex, base_ep->info->tx_attr->tclass);
+		if (ret) {
+			efa_base_ep_destruct_qp(base_ep);
+			return ret;
+		}
+		base_ep->user_recv_qp->base_ep = base_ep;
+	}
+
 	return 0;
 }
 
@@ -569,43 +641,6 @@ struct efa_cq *efa_base_ep_get_rx_cq(struct efa_base_ep *ep)
 }
 
 /**
- * @brief Construct the ibv qp init attr for given ep and cq
- *
- * @param ep a ptr to the efa_base_ep
- * @param attr_ex the constructed qp attr
- * @param tx_cq tx cq
- * @param rx_cq rx cq
- */
-static inline
-void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
-					struct ibv_qp_init_attr_ex *attr_ex,
-					struct ibv_cq_ex *tx_cq,
-					struct ibv_cq_ex *rx_cq)
-{
-	struct fi_info *info;
-
-	if (ep->info->ep_attr->type == FI_EP_RDM) {
-		attr_ex->qp_type = IBV_QPT_DRIVER;
-		info = ep->domain->device->rdm_info;
-	} else {
-		assert(ep->info->ep_attr->type == FI_EP_DGRAM);
-		attr_ex->qp_type = IBV_QPT_UD;
-		info = ep->domain->device->dgram_info;
-	}
-	attr_ex->cap.max_send_wr = info->tx_attr->size;
-	attr_ex->cap.max_send_sge = info->tx_attr->iov_limit;
-	attr_ex->cap.max_recv_wr = info->rx_attr->size;
-	attr_ex->cap.max_recv_sge = info->rx_attr->iov_limit;
-	attr_ex->cap.max_inline_data = ep->domain->device->efa_attr.inline_buf_size;
-	attr_ex->pd = ep->domain->ibv_pd;
-	attr_ex->qp_context = ep;
-	attr_ex->sq_sig_all = 1;
-
-	attr_ex->send_cq = ibv_cq_ex_to_cq(tx_cq);
-	attr_ex->recv_cq = ibv_cq_ex_to_cq(rx_cq);
-}
-
-/**
  * @brief check the in order aligned 128 bytes support for a given ibv_wr_op code
  *
  * @param ep efa_base_ep
@@ -732,7 +767,6 @@ void efa_base_ep_remove_cntr_ibv_cq_poll_list(struct efa_base_ep *ep)
  */
 int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_recv_qp)
 {
-	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 	struct efa_cq *scq, *rcq, *txcq, *rxcq;
 	int err;
 
@@ -760,32 +794,9 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_re
 	scq = txcq ? txcq : rxcq;
 	rcq = rxcq ? rxcq : txcq;
 
-	efa_base_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, scq->ibv_cq.ibv_cq_ex, rcq->ibv_cq.ibv_cq_ex);
-
-	err = efa_base_ep_create_qp(ep, &attr_ex);
+	err = efa_base_ep_create_qp(ep, &scq->ibv_cq, &rcq->ibv_cq, create_user_recv_qp);
 	if (err)
 		return err;
-
-#if HAVE_EFA_DATA_PATH_DIRECT
-	/* Only enable direct QP when direct CQ is enabled */
-	assert(scq->ibv_cq.data_path_direct_enabled == rcq->ibv_cq.data_path_direct_enabled);
-	if (scq->ibv_cq.data_path_direct_enabled) {
-		err = efa_data_path_direct_qp_initialize(ep->qp);
-		if (err) {
-			efa_base_ep_destruct_qp(ep);
-			return err;
-		}
-	}
-#endif
-
-	if (create_user_recv_qp) {
-		err = efa_qp_create(&ep->user_recv_qp, &attr_ex, ep->info->tx_attr->tclass);
-		if (err) {
-			efa_base_ep_destruct_qp(ep);
-			return err;
-		}
-		ep->user_recv_qp->base_ep = ep;
-	}
 
 	return efa_base_ep_enable(ep);
 }
