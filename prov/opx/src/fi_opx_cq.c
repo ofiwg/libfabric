@@ -151,8 +151,11 @@ static int fi_opx_close_cq(fid_t fid)
 	}
 
 #ifdef HFISVC
-	if (hfisvc_client_completion_queue_close(&opx_cq->hfisvc.completion_queue)) {
-		abort();
+	if (opx_cq->use_hfisvc) {
+		ret = hfisvc_client_completion_queue_close(&opx_cq->hfisvc.completion_queue);
+		if (ret) {
+			goto fail;
+		}
 	}
 #endif
 
@@ -380,6 +383,7 @@ int fi_opx_cq_open(struct fid_domain *dom, struct fi_cq_attr *attr, struct fid_c
 
 	opx_cq->ep_bind_count	  = 0;
 	opx_cq->progress.ep_count = 0;
+	opx_cq->use_hfisvc	  = 0;
 	unsigned i;
 	for (i = 0; i < OPX_CQ_MAX_ENDPOINTS; ++i) {
 		opx_cq->ep[i]	       = NULL;

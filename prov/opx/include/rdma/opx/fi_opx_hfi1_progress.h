@@ -1168,6 +1168,7 @@ void opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliab
 
 #ifdef HFISVC
 	if (opx_ep->hfisvc.rdma_read_count != start_rdma_read_count) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.doorbell_ring.poll_many);
 		OPX_HFISVC_DEBUG_LOG(
 			"Rang doorbell because start_rdma_read_count=%u and opx_ep->hfisvc.rdma_read_count=%u\n",
 			start_rdma_read_count, opx_ep->hfisvc.rdma_read_count);
@@ -1229,6 +1230,19 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 			// Drain all coalesced pings
 			fi_opx_hfi_rx_reliablity_process_requests(ep, PENDING_RX_RELIABLITY_COUNT_MAX);
 			fi_reliability_service_ping_remote(ep, service);
+
+#ifdef HFISVC
+#ifdef OPX_HFISVC_RELIABILITY_DOORBELL
+			if (opx_ep->use_hfisvc && (opx_ep->tx->cq_pending_ptr || opx_ep->rx->cq_pending_ptr)) {
+				FI_OPX_DEBUG_COUNTERS_INC(
+					opx_ep->debug_counters.hfisvc.doorbell_ring.reliability_timer_pop);
+				int rc __attribute__((unused));
+				rc = hfisvc_client_doorbell(opx_ep->domain->hfisvc.handle);
+				assert(rc == 0);
+			}
+#endif
+#endif
+
 			// Fetch the timer again as it could have taken us a while to get through reliability
 			compare		   = fi_opx_timer_now(timestamp, timer);
 			service->usec_next = fi_opx_timer_next_event_usec(timer, timestamp, service->usec_max);

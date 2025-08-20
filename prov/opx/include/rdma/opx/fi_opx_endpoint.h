@@ -159,16 +159,15 @@ enum opx_work_type {
 	OPX_WORK_TYPE_PIO,
 	OPX_WORK_TYPE_SHM,
 	OPX_WORK_TYPE_TID_SETUP,
+	OPX_WORK_TYPE_HFISVC,
 	OPX_WORK_TYPE_LAST
 };
 
 OPX_COMPILE_TIME_ASSERT(OPX_WORK_TYPE_SDMA == 0, "OPX_WORK_TYPE_SDMA needs to be 0/first value in the enum!");
 
-static const char *const OPX_WORK_TYPE_STR[] = {[OPX_WORK_TYPE_SDMA]	  = "SDMA",
-						[OPX_WORK_TYPE_PIO]	  = "PIO",
-						[OPX_WORK_TYPE_SHM]	  = "SHM",
-						[OPX_WORK_TYPE_TID_SETUP] = "TID_SETUP",
-						[OPX_WORK_TYPE_LAST]	  = "LAST"};
+static const char *const OPX_WORK_TYPE_STR[] = {
+	[OPX_WORK_TYPE_SDMA] = "SDMA",		 [OPX_WORK_TYPE_PIO] = "PIO",	    [OPX_WORK_TYPE_SHM] = "SHM",
+	[OPX_WORK_TYPE_TID_SETUP] = "TID_SETUP", [OPX_WORK_TYPE_HFISVC] = "HFISVC", [OPX_WORK_TYPE_LAST] = "LAST"};
 
 /*
  * Describes state for an endpoint's software RHQ and software eager buffer queue.
@@ -259,10 +258,6 @@ struct fi_opx_ep_tx {
 
 	/* == CACHE LINE 18 == */
 
-	struct slist work_pending[OPX_WORK_TYPE_LAST];
-
-	/* == CACHE LINE 19 == */
-
 	struct slist	    work_pending_completion;
 	struct ofi_bufpool *work_pending_pool;
 	struct ofi_bufpool *rma_payload_pool;
@@ -272,7 +267,7 @@ struct fi_opx_ep_tx {
 	uint32_t	    tid_min_payload_bytes;
 	uint64_t	    unused_cacheline6_1;
 
-	/* == CACHE LINE 20 == */
+	/* == CACHE LINE 19 == */
 	struct opx_sdma_queue sdma_request_queue;
 	struct slist	      sdma_pending_queue;
 	struct ofi_bufpool   *sdma_request_pool;
@@ -283,13 +278,9 @@ struct fi_opx_ep_tx {
 	uint32_t	      sdma_bounce_buf_threshold;
 	uint32_t	      unused_cacheline7;
 
-	/* == CACHE LINE 21 == */
-	struct {
-		/* == CACHE LINE 21,22 == */
-		struct fi_opx_hfi1_txe_scb_16B rzv_rts_pio_model;
-	} hfisvc;
+	/* == CACHE LINE 20, 21+ == */
 
-	/* == CACHE LINE 24, ... == */
+	struct slist	      work_pending[OPX_WORK_TYPE_LAST];
 	int64_t		      ref_cnt;
 	struct opx_spio_ctrl *spio_ctrl;
 	// struct opx_shm_tx is very large and should go last!
@@ -315,16 +306,12 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv_16B) == (FI_OPX_CACHE_
 			"Offset of fi_opx_ep_tx->rzv_16B should start at cacheline 15!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, av_addr) == (FI_OPX_CACHE_LINE_SIZE * 17),
 			"Offset of fi_opx_ep_tx->av_addr should start at cacheline 17!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_CACHE_LINE_SIZE * 18),
-			"Offset of fi_opx_ep_tx->work_pending should start at cacheline 18!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) == (FI_OPX_CACHE_LINE_SIZE * 19),
-			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 19!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, sdma_request_queue) == (FI_OPX_CACHE_LINE_SIZE * 20),
-			"Offset of fi_opx_ep_tx->sdma_request_queue should start at cacheline 20!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, hfisvc.rzv_rts_pio_model) == (FI_OPX_CACHE_LINE_SIZE * 21),
-			"Offset of fi_opx_ep_tx->hfisvc.rzv_rts_pio_model should start at cacheline 21!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, ref_cnt) == (FI_OPX_CACHE_LINE_SIZE * 23),
-			"Offset of fi_opx_ep_tx->ref_cnt should start at cacheline 23!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) == (FI_OPX_CACHE_LINE_SIZE * 18),
+			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 18!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, sdma_request_queue) == (FI_OPX_CACHE_LINE_SIZE * 19),
+			"Offset of fi_opx_ep_tx->sdma_request_queue should start at cacheline 19!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_CACHE_LINE_SIZE * 20),
+			"Offset of fi_opx_ep_tx->work_pending should start at cacheline 20!");
 
 struct fi_opx_ep_rx {
 	/* == CACHE LINE 0 == */
@@ -546,7 +533,8 @@ struct fi_opx_ep {
 	bool			   is_tx_cq_bound;
 	bool			   is_rx_cq_bound;
 	bool			   use_expected_tid_rzv;
-	uint8_t			   unused_cacheline5[3];
+	bool			   use_hfisvc;
+	uint8_t			   unused_cacheline5[2];
 	enum fi_hmem_iface	   use_gpu_ipc;
 	ofi_spin_t		   lock; /* lock size varies based on ENABLE_DEBUG*/
 
@@ -575,7 +563,7 @@ struct fi_opx_ep {
 		uint32_t rdma_read_count;
 		uint32_t unused_dw;
 
-		uint64_t unused_qws[2];
+		uint64_t unused_qws[4];
 	} hfisvc;
 #endif
 
@@ -1034,6 +1022,10 @@ void fi_opx_handle_recv_rts_truncation(struct fi_opx_ep_rx *rx, struct opx_conte
 	slist_insert_tail((struct slist_entry *) context, rx->cq_err_ptr);
 }
 
+#ifdef HFISVC
+static uint64_t opx_trunc_scratch_buf;
+#endif
+
 __OPX_FORCE_INLINE__
 void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				   const union fi_opx_hfi1_packet_payload *const payload, struct fi_opx_ep *opx_ep,
@@ -1093,41 +1085,64 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key, sbuf_len,
 				0ul /* immediate data */, sbuf_access_key, sbuf_offset, recv_buf);
 
-			/* TODO: Be smarter about how we handle EAGAIN from an rdma_read_va() */
-			while (rc != FI_SUCCESS) {
-				if (rc != -FI_EAGAIN) {
+			if (rc) {
+				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
+					opx_ep, context, niov - i, sbuf_key, lid, recv_buf,
+					&payload->rendezvous.hfisvc.iovs[i]);
+				if (OFI_UNLIKELY(deferred_rc)) {
 					fprintf(stderr,
-						"(%d) %s:%s():%d opx_hfisvc_cmd_request_rdma_read() returned %d, abort!\n",
-						getpid(), __FILE__, __func__, __LINE__, rc);
+						"(%d) %s:%s():%d Error: Couldn't create deferred work to handle rendezvous receive (%d), aborting.\n",
+						getpid(), __FILE__, __func__, __LINE__, deferred_rc);
 					abort();
 				}
-				rc = hfisvc_client_cmd_rdma_read_va(
-					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
-					sbuf_len, 0ul /* immediate data */, sbuf_access_key, sbuf_offset, recv_buf);
+				OPX_HFISVC_DEBUG_LOG(
+					"[%d/%d] rdma_read failed with rc=%d context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
+					i + 1, niov, rc, context, recv_buf, sbuf_key, sbuf_access_key, sbuf_len);
+
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.deferred);
+
+				opx_ep->hfisvc.rdma_read_count += i;
+				slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
+
+				goto recv_rts_hfisvc_finish;
 			}
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.rdma_read);
 			OPX_HFISVC_DEBUG_LOG(
 				"[%d/%d] Successfully issued rdma_read context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
 				i + 1, niov, context, recv_buf, sbuf_key, sbuf_access_key, sbuf_len);
+
 			recv_buf = (void *) ((uintptr_t) recv_buf + sbuf_len);
 		}
 
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.rdma_read);
 		slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
 	} else { /* truncation - unlikely */
 		OPX_HFISVC_DEBUG_LOG("Truncation for client_key %u! xfer_len=%lu recv_len=%lu\n", sbuf_key, xfer_len,
 				     recv_len);
 
+		/* Iterate through the IOVs, issuing a 1-byte rdma_read of each
+		   sbuf info a scratch buffer so that the sender will receive a
+		   completion for each and free the access key. If the rdma_read
+		   fails, create a deferred work item to keep retrying. */
 		for (int i = 0; i < niov; ++i) {
 			const uint32_t sbuf_access_key = payload->rendezvous.hfisvc.iovs[i].access_key;
 			int	       rc = hfisvc_client_cmd_rdma_read_va(opx_ep->hfisvc.command_queue, completion,
-									   0ul /* flags */, lid, sbuf_key, 0ul /* length */,
+									   0ul /* flags */, lid, sbuf_key, 1ul /* length */,
 									   0ul /* immediate data */, sbuf_access_key,
-									   0ul /* remote offset */, recv_buf);
-			if (rc != FI_SUCCESS) {
-				fprintf(stderr,
-					"(%d) %s:%s():%d opx_hfisvc_cmd_request_rdma_read() returned %d, abort!\n",
-					getpid(), __FILE__, __func__, __LINE__, rc);
-				abort();
+									   0ul /* remote offset */, &opx_trunc_scratch_buf);
+			if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
+				union opx_hfisvc_iov trunc_iov = payload->rendezvous.hfisvc.iovs[i];
+				trunc_iov.len		       = 1;
+
+				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
+					opx_ep, context, 1 /* niov */, sbuf_key, lid, &opx_trunc_scratch_buf,
+					(const union opx_hfisvc_iov *) &trunc_iov);
+
+				if (OFI_UNLIKELY(deferred_rc)) {
+					fprintf(stderr,
+						"(%d) %s:%s():%d Error: Couldn't create deferred work to handle truncated rendezvous receive (%d), aborting.\n",
+						getpid(), __FILE__, __func__, __LINE__, deferred_rc);
+					abort();
+				}
 			}
 		}
 
@@ -1137,6 +1152,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 	}
 
 	++opx_ep->hfisvc.rdma_read_count;
+recv_rts_hfisvc_finish:
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS-HFISVC");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== RECV -- RENDEZVOUS RTS HFISVC (end) context %p\n", context);
@@ -3181,8 +3197,10 @@ void opx_ep_tx_hfisvc_poll_internal_queue(struct fi_opx_ep *opx_ep)
 	size_t n = hfisvc_client_cq_read(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */, hfisvc_out, 64);
 	while (n > 0) {
 		for (size_t i = 0; i < n; ++i) {
-			if (hfisvc_out[i].status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS) {
-				fprintf(stderr, "Completion error: status was %d\n", hfisvc_out[i].status);
+			if (OFI_UNLIKELY(hfisvc_out[i].status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS)) {
+				fprintf(stderr,
+					"(%d) %s:%s():%d Error: HFISVC CQ completion status is %d (was expecting 0/success)\n",
+					getpid(), __FILE__, __func__, __LINE__, hfisvc_out[i].status);
 				// TODO: FI_WARN, figure out how to handle this
 				abort();
 			}
@@ -3190,6 +3208,7 @@ void opx_ep_tx_hfisvc_poll_internal_queue(struct fi_opx_ep *opx_ep)
 			struct fi_opx_rzv_completion *rzv_comp =
 				(struct fi_opx_rzv_completion *) hfisvc_out[i].app_context;
 
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.completed);
 			// TODO: Use the completion's xfer_len when that becomes available
 			// const uint64_t completion_len = hfisvc_out[i].xfer_len;
 			uint64_t completion_len = 0;

@@ -565,6 +565,19 @@ struct fi_opx_hfi1_rx_readv_params {
 	bool				  is_shm;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
+struct opx_hfisvc_recv_rts_params {
+	struct fi_opx_work_elem work_elem;
+	struct fi_opx_ep       *opx_ep;
+	struct opx_context     *context;
+	void		       *recv_buf;
+	uint32_t		niov;
+	uint32_t		cur_iov;
+	uint32_t		sbuf_client_key;
+	uint32_t		sbuf_lid;
+
+	union opx_hfisvc_iov iovs[OPX_MAX_HFISVC_IOVS];
+} __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
+
 union fi_opx_hfi1_deferred_work {
 	struct fi_opx_work_elem			work_elem;
 	struct fi_opx_hfi1_dput_params		dput;
@@ -573,8 +586,13 @@ union fi_opx_hfi1_deferred_work {
 	struct fi_opx_hfi1_rx_readv_params	readv;
 	struct opx_hfi1_rma_rts_params		rma_rts;
 	struct opx_hfi1_rx_ipc_rts_params	rx_ipc_rts;
+	struct opx_hfisvc_recv_rts_params	hfisvc_rts_params;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
+int  opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work);
+int  opx_hfisvc_deferred_recv_rts_enqueue(struct fi_opx_ep *opx_ep, struct opx_context *context, const uint32_t niov,
+					  const uint32_t sbuf_client_key, const uint32_t sbuf_lid, const void *recv_buf,
+					  const union opx_hfisvc_iov *iovs);
 int  opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work);
 void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr, const uint16_t origin_rx,
 			 const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type);
@@ -593,6 +611,7 @@ int fi_opx_hfi1_do_dput_sdma_tid_wfr(union fi_opx_hfi1_deferred_work *work);
 int fi_opx_hfi1_do_dput_sdma_tid_jkr(union fi_opx_hfi1_deferred_work *work);
 int fi_opx_hfi1_do_dput_sdma_tid_cyr(union fi_opx_hfi1_deferred_work *work);
 int fi_opx_hfi1_do_dput_sdma_tid_jkr_9B(union fi_opx_hfi1_deferred_work *work);
+
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_memcpy8(void *restrict dest, const void *restrict src, size_t n)
 {

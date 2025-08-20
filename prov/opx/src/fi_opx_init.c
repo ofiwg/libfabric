@@ -968,6 +968,10 @@ OPX_INI
 		&fi_opx_provider, "mmap_guard", FI_PARAM_BOOL,
 		"Enable guards around OPX/HFI mmaps. When enabled, this will cause a segfault when mmapped memory is illegally accessed through buffer overruns or underruns.  Default is false.");
 
+	fi_param_define(&fi_opx_provider, "hfisvc", FI_PARAM_BOOL,
+			"Indicates that HFI Service should be used for bulk transfers if available. Default is %s.",
+			OPX_HFISVC_ENABLED_DEFAULT ? "true" : "false");
+
 	/* Track TID and HMEM domains so caches can be cleared on exit */
 	dlist_init(&fi_opx_global.tid_domain_list);
 #ifdef OPX_HMEM
