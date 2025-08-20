@@ -202,8 +202,7 @@ void fi_opx_ep_tx_model_init(struct fi_opx_hfi1_context *hfi, struct fi_opx_hfi1
 
 void fi_opx_ep_tx_model_init_16B(struct fi_opx_hfi1_context *hfi, struct fi_opx_hfi1_txe_scb_16B *inject_16B,
 				 struct fi_opx_hfi1_txe_scb_16B *send_16B, struct fi_opx_hfi1_txe_scb_16B *send_mp_16B,
-				 struct fi_opx_hfi1_txe_scb_16B *rendezvous_16B,
-				 struct fi_opx_hfi1_txe_scb_16B *hfisvc_rzv_rts_16B)
+				 struct fi_opx_hfi1_txe_scb_16B *rendezvous_16B)
 {
 	/*
 	 * fi_send*() model - eager
@@ -220,7 +219,6 @@ void fi_opx_ep_tx_model_init_16B(struct fi_opx_hfi1_context *hfi, struct fi_opx_
 	memset(send_mp_16B, 0, sizeof(*send_mp_16B));
 	memset(inject_16B, 0, sizeof(*inject_16B));
 	memset(rendezvous_16B, 0, sizeof(*rendezvous_16B));
-	memset(hfisvc_rzv_rts_16B, 0, sizeof(*hfisvc_rzv_rts_16B));
 
 	/* Eager model */
 	send_16B->qw0 = OPX_PBC_LEN(0, hfi1_type) /* length_dws */ | OPX_PBC_VL(hfi->vl, hfi1_type) |
@@ -290,14 +288,6 @@ void fi_opx_ep_tx_model_init_16B(struct fi_opx_hfi1_context *hfi, struct fi_opx_
 						    OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
 
 	OPX_DEBUG_PRINT_HDR((&(rendezvous_16B->hdr)), hfi1_type);
-
-	/*
-	 * fi_send*() model - rendezvous rts (hfisvc)
-	 */
-	*hfisvc_rzv_rts_16B		   = *send_16B;
-	hfisvc_rzv_rts_16B->hdr.lrh_16B.rc = OPX_LRH_JKR_16B_RC(OPX_HFI1_RZV_CTRL);
-	hfisvc_rzv_rts_16B->hdr.bth.ecn	   = (uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_RZV_CTRL)) |
-							OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
 
 	/*
 	 * fi_inject() model
@@ -460,10 +450,12 @@ static int fi_opx_close_ep(fid_t fid)
 
 	if (opx_ep->domain) {
 #ifdef HFISVC
-		ret = fi_opx_ref_dec(&opx_ep->domain->hfisvc.ref_cnt, "hfisvc");
-		if (ret) {
-			errno = -ret;
-			goto err_unlock;
+		if (opx_ep->domain->use_hfisvc) {
+			ret = fi_opx_ref_dec(&opx_ep->domain->hfisvc.ref_cnt, "hfisvc");
+			if (ret) {
+				errno = -ret;
+				goto err_unlock;
+			}
 		}
 #endif
 		ret = fi_opx_ref_dec(&opx_ep->domain->ref_cnt, "domain");
@@ -682,12 +674,18 @@ static int fi_opx_close_ep(fid_t fid)
 	}
 
 #ifdef HFISVC
-	ret = hfisvc_client_completion_queue_close(&opx_ep->hfisvc.internal_completion_queue);
-	if (ret) {
-		errno = -ret;
-		goto err_unlock;
+	if (opx_ep->use_hfisvc) {
+		ret = hfisvc_client_completion_queue_close(&opx_ep->hfisvc.internal_completion_queue);
+		if (ret) {
+			errno = -ret;
+			goto err_unlock;
+		}
+		ret = hfisvc_client_command_queue_close(&opx_ep->hfisvc.command_queue);
+		if (ret) {
+			errno = -ret;
+			goto err_unlock;
+		}
 	}
-	hfisvc_client_command_queue_close(&opx_ep->hfisvc.command_queue);
 #endif
 
 	opx_debug_ep_list_free(opx_ep);
@@ -851,7 +849,7 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 				&opx_ep->tx->rzv_9B);
 
 	fi_opx_ep_tx_model_init_16B(hfi, &opx_ep->tx->inject_16B, &opx_ep->tx->send_16B, &opx_ep->tx->send_mp_16B,
-				    &opx_ep->tx->rzv_16B, &opx_ep->tx->hfisvc.rzv_rts_pio_model);
+				    &opx_ep->tx->rzv_16B);
 
 	// Retrieve the parameter for RZV min message length
 	int	l_rzv_min_payload_bytes;
@@ -1746,7 +1744,9 @@ static void fi_opx_apply_bind_flags(struct fi_opx_ep *opx_ep)
 	}
 
 #ifdef HFISVC
-	opx_ep->hfisvc.cq_completion_queue = &opx_ep->init_rx_cq->hfisvc.completion_queue;
+	if (opx_ep->use_hfisvc) {
+		opx_ep->hfisvc.cq_completion_queue = &opx_ep->init_rx_cq->hfisvc.completion_queue;
+	}
 #endif
 
 	fi_opx_update_counter(opx_ep->init_read_cntr);
@@ -2082,28 +2082,37 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	}
 
 #ifdef HFISVC
-	if (opx_domain_hfisvc_init(opx_domain, HFISVC_CLIENT_IOCTL, opx_ep->hfi->fd)) {
-		abort();
+	// Check this env. var even when HFI service isn't being used, since there may be places we
+	// use OPX_HFISVC_DEBUG_LOG that are not in an HFISVC-specific code path.
+	if (getenv("OPX_HFISVC_LOG_DISABLE")) {
+		opx_hfisvc_log_enabled = 0;
 	}
+	if (opx_ep->use_hfisvc) {
+		if (opx_domain_hfisvc_init(opx_domain, HFISVC_CLIENT_IOCTL, opx_ep->hfi->fd)) {
+			abort();
+		}
 
-	OPX_HFISVC_DEBUG_LOG("Attempting to create new command queue...\n");
-	if (hfisvc_client_command_queue_open(&opx_ep->hfisvc.command_queue, opx_domain->hfisvc.handle)) {
-		abort();
-	}
+		OPX_HFISVC_DEBUG_LOG("Attempting to create new command queue...\n");
+		if (hfisvc_client_command_queue_open(&opx_ep->hfisvc.command_queue, opx_domain->hfisvc.handle)) {
+			abort();
+		}
 
-	OPX_HFISVC_DEBUG_LOG("Attempting to create new completion queue...\n");
-	if (hfisvc_client_completion_queue_open(&opx_ep->hfisvc.internal_completion_queue, opx_domain->hfisvc.handle)) {
-		fprintf(stderr, "(%d) %s:%s():%d Failed creating TX completion queue!\n", getpid(), __FILE__, __func__,
-			__LINE__);
-		abort();
-	}
+		OPX_HFISVC_DEBUG_LOG("Attempting to create new completion queue...\n");
+		if (hfisvc_client_completion_queue_open(&opx_ep->hfisvc.internal_completion_queue,
+							opx_domain->hfisvc.handle)) {
+			fprintf(stderr, "(%d) %s:%s():%d Failed creating TX completion queue!\n", getpid(), __FILE__,
+				__func__, __LINE__);
+			abort();
+		}
 
-	int rc = hfisvc_client_completion_queue_open(&opx_ep->init_tx_cq->hfisvc.completion_queue,
-						     opx_domain->hfisvc.handle);
-	if (rc) {
-		fprintf(stderr, "(%d) %s:%s():%d Failed creating CQ completion queue, rc=%d\n", getpid(), __FILE__,
-			__func__, __LINE__, rc);
-		abort();
+		int rc = hfisvc_client_completion_queue_open(&opx_ep->init_tx_cq->hfisvc.completion_queue,
+							     opx_domain->hfisvc.handle);
+		if (rc) {
+			fprintf(stderr, "(%d) %s:%s():%d Failed creating CQ completion queue, rc=%d\n", getpid(),
+				__FILE__, __func__, __LINE__, rc);
+			abort();
+		}
+		opx_ep->init_tx_cq->use_hfisvc = 1;
 	}
 #endif
 
@@ -2878,6 +2887,25 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 		}
 	}
 #endif
+
+#ifdef HFISVC
+	int use_hfisvc;
+	if (fi_param_get_bool(fi_opx_global.prov, "hfisvc", &use_hfisvc) == FI_SUCCESS) {
+		if (use_hfisvc) {
+			opx_ep->use_hfisvc = true;
+		} else {
+			opx_ep->use_hfisvc = false;
+		}
+	} else if (OPX_HFISVC_ENABLED_DEFAULT) {
+		opx_ep->use_hfisvc = true;
+	} else {
+		opx_ep->use_hfisvc = false;
+	}
+#else
+	opx_ep->use_hfisvc = false;
+#endif
+	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI Service is %s for bulk transfers.\n",
+		opx_ep->use_hfisvc ? "enabled" : "disabled");
 
 	*ep = &opx_ep->ep_fid;
 
