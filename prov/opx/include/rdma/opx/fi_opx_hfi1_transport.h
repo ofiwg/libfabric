@@ -565,6 +565,19 @@ struct fi_opx_hfi1_rx_readv_params {
 	bool				  is_shm;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
+struct opx_hfisvc_recv_rts_params {
+	struct fi_opx_work_elem work_elem;
+	struct fi_opx_ep       *opx_ep;
+	struct opx_context     *context;
+	void		       *recv_buf;
+	uint32_t		niov;
+	uint32_t		cur_iov;
+	uint32_t		sbuf_client_key;
+	uint32_t		sbuf_lid;
+
+	union opx_hfisvc_iov iovs[OPX_MAX_HFISVC_IOVS];
+} __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
+
 union fi_opx_hfi1_deferred_work {
 	struct fi_opx_work_elem			work_elem;
 	struct fi_opx_hfi1_dput_params		dput;

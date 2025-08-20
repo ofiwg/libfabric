@@ -144,7 +144,7 @@ void opx_hfisvc_keyset_free_key(opx_hfisvc_keyset_t keyset, opx_hfisvc_key_t key
 	uint64_t key_index = key & OPX_HFISVC_KEY_INDEX_MASK;
 
 	OPX_HFISVC_DEBUG_LOG("Freeing key %u, key_index=%016lX, _keyset->bitmap[%lX]=%016lX\n", key, key_index,
-			     key_index, _keyset->bitmap[key_index >> 6]);
+			     key_index >> 6, _keyset->bitmap[key_index >> 6]);
 
 	// Assert that the key being freed is currently marked as being used.
 	assert(_keyset->bitmap[key_index >> 6] & (1ul << (key_index & 0x3Ful)));

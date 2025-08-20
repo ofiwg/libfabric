@@ -151,8 +151,11 @@ static int fi_opx_close_cq(fid_t fid)
 	}
 
 #ifdef HFISVC
-	if (hfisvc_client_completion_queue_close(&opx_cq->hfisvc.completion_queue)) {
-		abort();
+	if (opx_cq->use_hfisvc) {
+		ret = hfisvc_client_completion_queue_close(&opx_cq->hfisvc.completion_queue);
+		if (ret) {
+			goto fail;
+		}
 	}
 #endif
 

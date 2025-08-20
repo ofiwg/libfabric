@@ -292,6 +292,9 @@ __OPX_FORCE_INLINE__
 void opx_cq_poll_hfi_service(struct fi_opx_cq *opx_cq)
 {
 #ifdef HFISVC
+	if (!opx_cq->use_hfisvc) {
+		return;
+	}
 	struct hfisvc_client_cq_entry hfisvc_out[64];
 
 	size_t n = hfisvc_client_cq_read(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out, 64);
@@ -312,7 +315,7 @@ void opx_cq_poll_hfi_service(struct fi_opx_cq *opx_cq)
 				//       context->byte_counter
 				// uint64_t completed_len = hfisvc_out[i].type_default.xfer_len;
 				uint64_t completed_len = context->byte_counter;
-				assert(completed_len >= context->byte_counter);
+				assert(completed_len <= context->byte_counter);
 				OPX_HFISVC_DEBUG_LOG(
 					"Got completion entry %lu/%lu for context=%p completed_len=%lu byte_counter=%lu -> %lu\n",
 					i, n, context, completed_len, context->byte_counter,
@@ -361,9 +364,6 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 			const uint64_t byte_counter = context->byte_counter;
 
 			if (byte_counter == 0) {
-				OPX_HFISVC_DEBUG_LOG(
-					"Processing pending context=%p context->byte_counter=%lu count=%lu num_entries=%ld\n",
-					context, context->byte_counter, count, num_entries);
 				bool free_context;
 				if (context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV) {
 					assert(!(context->flags & FI_OPX_CQ_CONTEXT_HMEM));
@@ -508,8 +508,6 @@ __attribute__((flatten)) ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *
 			}
 		}
 	}
-
-	// opx_cq_poll_hfi_service(opx_cq);
 
 	// This is meant for auto progress to just access the rx_polls and exit
 	if (count == 0 && buf == NULL) {
