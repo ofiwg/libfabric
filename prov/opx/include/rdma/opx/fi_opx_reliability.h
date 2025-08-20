@@ -975,6 +975,20 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
 
 	return psn;
 }
+
+/**
+ * @brief Return an unused PSN.
+ *
+ * If a PSN was allocated, but then we were unable to proceed with using it,
+ * return it so that we don't end up with a gap in PSNs.
+ */
+__OPX_FORCE_INLINE__
+void fi_opx_reliability_tx_return_psn(union fi_opx_reliability_tx_psn *psn_ptr, uint32_t return_psn)
+{
+	assert(((psn_ptr->psn.psn - 1) & MAX_PSN) == return_psn);
+	psn_ptr->psn.psn = (psn_ptr->psn.psn - 1) & MAX_PSN;
+}
+
 __OPX_FORCE_INLINE__
 struct fi_opx_reliability_tx_replay *
 fi_opx_reliability_service_replay_allocate(struct fi_opx_reliability_service *service, const bool use_iov)

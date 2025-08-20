@@ -33,10 +33,13 @@
 #define _FI_PROV_OPX_HFISVC_H_
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
 #include <assert.h>
+
+#define OPX_HFISVC_ENABLED_DEFAULT (1)
 
 extern int opx_hfisvc_log_enabled;
 

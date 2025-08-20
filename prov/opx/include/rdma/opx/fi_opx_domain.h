@@ -117,7 +117,8 @@ struct fi_opx_domain {
 		uint32_t	    padding;
 	} hfisvc;
 #endif
-
+	uint8_t use_hfisvc;
+	uint8_t padding[7];
 	int64_t ref_cnt;
 };
 

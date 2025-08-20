@@ -272,6 +272,10 @@ static void opx_debug_dump_endpoint(struct fi_opx_ep *opx_ep)
 		opx_ep->tx->work_pending[OPX_WORK_TYPE_TID_SETUP].head,
 		opx_debug_slist_len(opx_ep->tx->work_pending[OPX_WORK_TYPE_TID_SETUP].head));
 
+	fprintf(output, "(%d) work_pending[HFISVC].head              : %p (%lu)\n", my_pid,
+		opx_ep->tx->work_pending[OPX_WORK_TYPE_HFISVC].head,
+		opx_debug_slist_len(opx_ep->tx->work_pending[OPX_WORK_TYPE_HFISVC].head));
+
 	fprintf(output, "(%d) sdma_request_queue.list.head           : %p (%lu)\n", my_pid,
 		opx_ep->tx->sdma_request_queue.list.head,
 		opx_debug_slist_len(opx_ep->tx->sdma_request_queue.list.head));
