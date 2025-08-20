@@ -5424,11 +5424,13 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.attempt);
 	struct fi_opx_ep_tx *tx = opx_ep->tx;
 
-	uint32_t		      access_key = (uint32_t) -1;
-	struct fi_opx_rzv_completion *rzv_comp	 = NULL;
-	struct opx_context	     *context	 = NULL;
-	ssize_t			      rc	 = FI_SUCCESS;
-	union fi_opx_hfi1_pio_state   pio_state	 = *tx->pio_state;
+	uint32_t			     access_key = (uint32_t) -1;
+	struct fi_opx_rzv_completion	    *rzv_comp	= NULL;
+	struct opx_context		    *context	= NULL;
+	struct fi_opx_reliability_tx_replay *replay	= NULL;
+	union fi_opx_reliability_tx_psn	    *psn_ptr	= NULL;
+	ssize_t				     rc		= FI_SUCCESS;
+	union fi_opx_hfi1_pio_state	     pio_state	= *tx->pio_state;
 
 	if (opx_hfisvc_keyset_alloc_key(opx_ep->domain->hfisvc.access_key_set, &access_key,
 					FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
@@ -5486,9 +5488,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 
 	rzv_comp->context = context;
 
-	struct fi_opx_reliability_tx_replay *replay;
-	union fi_opx_reliability_tx_psn	    *psn_ptr;
-	int64_t				     psn =
+	int64_t psn =
 		fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.lid, addr.hfi1_subctxt_rx,
 					      &psn_ptr, &replay, OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_JKR);
 	if (OFI_UNLIKELY(psn == -1)) {
@@ -5500,9 +5500,6 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 
 	rzv_comp->access_key = access_key;
 
-	OPX_HFISVC_DEBUG_LOG("HFISVC RZV Completion: Registering completion entry %p with access_key %u\n", rzv_comp,
-			     rzv_comp->access_key);
-
 	struct hfisvc_client_completion completion = {
 		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
 		.cq.handle	= opx_ep->hfisvc.internal_completion_queue,
@@ -5511,17 +5508,16 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	rc = hfisvc_client_cmd_dma_access_once_va(opx_ep->hfisvc.command_queue, completion, 0UL /* flags */, access_key,
 						  xfer_len, (void *) buf);
 
-	while (rc) {
-		if (rc != -FI_EAGAIN && rc != FI_EAGAIN) {
-			fprintf(stderr, "(%d) %s:%s():%d Error: Register DMA Buffer returned %ld\n", getpid(), __FILE__,
-				__func__, __LINE__, rc);
-			abort();
-		}
-		rc = hfisvc_client_cmd_dma_access_once_va(opx_ep->hfisvc.command_queue, completion, 0UL /* flags */,
-							  access_key, xfer_len, (void *) buf);
+	if (OFI_UNLIKELY(rc != 0)) {
+		OPX_HFISVC_DEBUG_LOG("EAGAIN (hfisvc_client queue returned %ld)\n", rc);
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_hfisvc);
+		rc = -FI_EAGAIN;
+		goto err;
 	}
-	OPX_HFISVC_DEBUG_LOG("HFISVC RZV Send RTS: Successfully registered DMA buf %p %lu with access_key %u\n", buf,
-			     xfer_len, access_key);
+
+	OPX_HFISVC_DEBUG_LOG(
+		"HFISVC RZV Send RTS: Successfully registered DMA buf=%p len=%lu access_key=%u rzv_comp=%p context=%p\n",
+		buf, xfer_len, access_key, rzv_comp, context);
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.reg_dma_buf);
 
 	rc = hfisvc_client_doorbell(opx_ep->domain->hfisvc.handle);
@@ -5531,9 +5527,6 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	// Put the context on the pending queue before we send out the RTS packet to ensure it's
 	// queued before the remote rdma_read completes.
 	if (OFI_LIKELY(do_cq_completion)) {
-		OPX_HFISVC_DEBUG_LOG("CQ Pending context=%p byte_counter=%lu rzv_comp=%p access_key=%u\n", context,
-				     context->byte_counter, rzv_comp, access_key);
-
 		fi_opx_ep_tx_cq_completion_rzv(&opx_ep->ep_fid, context, xfer_len, FI_OPX_LOCK_NOT_REQUIRED, tag, caps);
 	}
 
@@ -5556,13 +5549,14 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 									 FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC));
 	const uint64_t niov_client_key = ((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.client_key;
 
-	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_sop_first, pio_state);
+	const uint64_t		 pbc_dlid = OPX_PBC_DLID(addr.lid, OPX_HFI1_JKR);
+	volatile uint64_t *const scb	  = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_sop_first, pio_state);
 
 	opx_cacheline_copy_qw_vol(
 		scb, replay->scb.qws,
 		tx->rzv_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_JKR) |
-			OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) | OPX_PBC_DLID(addr.lid, OPX_HFI1_JKR) |
-			OPX_PBC_LOOPBACK(addr.lid, OPX_HFI1_JKR),
+			OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type) | pbc_dlid |
+			OPX_PBC_LOOPBACK(pbc_dlid, OPX_HFI1_JKR),
 		tx->rzv_16B.hdr.qw_16B[0] |
 			((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 			((uint64_t) lrh_qws << 20),
@@ -5601,6 +5595,13 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 
 err:
 	tx->pio_state->qw0 = pio_state.qw0;
+	if (replay) {
+		// If we successfully allocated a replay, we should also have a PSN
+		assert(psn_ptr != NULL);
+		assert(psn >= 0 && psn <= MAX_PSN);
+		fi_opx_reliability_tx_return_psn(psn_ptr, (uint32_t) psn);
+		fi_opx_reliability_service_replay_deallocate(opx_ep->reli_service, replay);
+	}
 	if (context) {
 		OPX_BUF_FREE(context);
 	}
@@ -5641,8 +5642,8 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	const uint64_t lrh_dlid_16B = addr.lid;
 
 #ifdef HFISVC
-	if (!is_shm && (src_iface == FI_HMEM_SYSTEM) && !OPX_IS_CTX_SHARING_ENABLED && (hfi1_type & OPX_HFI1_JKR) &&
-	    !(caps & FI_MSG)) { // or .. it *is* FI_TAGGED?
+	if (opx_ep->use_hfisvc && !is_shm && (src_iface == FI_HMEM_SYSTEM) && !OPX_IS_CTX_SHARING_ENABLED &&
+	    (hfi1_type & OPX_HFI1_JKR) && !(caps & FI_MSG)) {
 		OPX_HFISVC_DEBUG_LOG("Sending RZV RTS HFI SVC\n");
 		return opx_hfi1_tx_rzv_rts_hfisvc(opx_ep, buf, len, tag, data, bth_rx, lrh_dlid_16B, do_cq_completion,
 						  user_context, addr, caps, src_iface, src_device_id, tx_op_flags);
