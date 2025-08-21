@@ -77,9 +77,9 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		const uint64_t sbuf_len	       = params->iovs[i].len;
 		const uint64_t sbuf_offset     = params->iovs[i].offset;
 
-		int rc = hfisvc_client_cmd_rdma_read_va(opx_ep->hfisvc.command_queue, completion, 0ul /* flags */,
-							sbuf_lid, sbuf_client_key, sbuf_len, 0ul /* immediate data */,
-							sbuf_access_key, sbuf_offset, recv_buf);
+		rc = hfisvc_client_cmd_rdma_read_va(opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, sbuf_lid,
+						    sbuf_client_key, sbuf_len, 0ul /* immediate data */,
+						    sbuf_access_key, sbuf_offset, recv_buf);
 
 		if (rc != FI_SUCCESS) {
 			params->cur_iov	 = i;
@@ -111,6 +111,8 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV -- RENDEZVOUS RTS HFISVC (deferred) (end) context %p\n",
 		params->context);
+
+	OPX_TRACER_TRACE(rc ? OPX_TRACER_END_EAGAIN : OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS-HFISVC");
 
 	return rc;
 #else
