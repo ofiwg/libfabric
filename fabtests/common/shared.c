@@ -3236,17 +3236,25 @@ int ft_finalize_ep(struct fid_ep *ep)
 	int ret;
 	struct fi_context2 ctx;
 
-	ret = ft_sendmsg(ep, remote_fi_addr, tx_buf, 4, &ctx, FI_TRANSMIT_COMPLETE);
-	if (ret)
-		return ret;
+	if (opts.dst_addr) {
+		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 4, &ctx,
+				FI_TRANSMIT_COMPLETE);
+		if (ret)
+			return ret;
 
-	ret = ft_get_tx_comp(tx_seq);
-	if (ret)
-		return ret;
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
+	} else {
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
 
-	ret = ft_get_rx_comp(rx_seq);
-	if (ret)
-		return ret;
+		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 4, &ctx,
+				FI_TRANSMIT_COMPLETE);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
