@@ -1101,6 +1101,11 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.deferred);
 
+				// rdma_read_count only needs to be incremented by a non-zero value if/when we
+				// successfully issued an rdma_read. The reason for incrementing it by 'i' here,
+				// but only by 1 down below right before recv_rts_hfisvc_finish is that for the
+				// case of i=0, we don't want to actually increment the count. Always incrementing
+				// by 'i' here is just more performant/less branchy than doing '+= i ? 1 : 0'
 				opx_ep->hfisvc.rdma_read_count += i;
 				slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
 
