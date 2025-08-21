@@ -55,7 +55,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 	if (efa_both_support_zero_hdr_data_transfer(pkt_entry->ep, ope->peer)) {
 		/* zero hdr transfer only happens for eager msg (non-tagged) pkt */
 		assert(pkt_type == EFA_RDM_EAGER_MSGRTM_PKT);
-		pkt_entry->flags |= EFA_RDM_PKE_SEND_TO_USER_RECV_QP;
+		pkt_entry->flags |= EFA_RDM_PKE_SEND_TO_USER_RECV_QP | EFA_RDM_PKE_HAS_NO_BASE_HDR;
 	}
 
 	/* Only 3 categories of packets has data_size and data_offset:
@@ -401,7 +401,6 @@ void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry)
 void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno, struct efa_rdm_peer *peer)
 {
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ep *ep;
 
 	int err = to_fi_errno(prov_errno);
@@ -427,7 +426,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno, 
 	switch (pkt_entry->ope->type) {
 	case EFA_RDM_TXE:
 		txe = pkt_entry->ope;
-		if (!(pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) && efa_rdm_pke_get_base_hdr(pkt_entry)->type == EFA_RDM_HANDSHAKE_PKT) {
+		if (efa_rdm_pkt_type_of(pkt_entry) == EFA_RDM_HANDSHAKE_PKT) {
 			switch (prov_errno) {
 				case EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR:
 				/*
@@ -502,12 +501,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno, 
 				 * packets include all REQ, DATA) thus shoud be queued for RNR
 				 * only if application wants EFA to manager resource.
 				 */
-				efa_rdm_ep_queue_rnr_pkt(ep, &txe->queued_pkts, pkt_entry, peer);
-				if (!(txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
-					txe->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
-					dlist_insert_tail(&txe->queued_entry,
-							  &efa_rdm_ep_domain(ep)->ope_queued_list);
-				}
+				efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
 			}
 		} else {
 			efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
@@ -515,7 +509,6 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno, 
 		}
 		break;
 	case EFA_RDM_RXE:
-		rxe = pkt_entry->ope;
 		if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
 			/*
 			 * This packet is associated with a recv operation, (such packets
@@ -523,12 +516,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno, 
 			 * is regardless value of ep->handle_resource_management, because
 			 * resource management is only applied to send operation.
 			 */
-			efa_rdm_ep_queue_rnr_pkt(ep, &rxe->queued_pkts, pkt_entry, peer);
-			if (!(rxe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
-				rxe->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
-				dlist_insert_tail(&rxe->queued_entry,
-						  &efa_rdm_ep_domain(ep)->ope_queued_list);
-			}
+			efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
 		} else {
 			efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
@@ -584,7 +572,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry, struct ef
 	}
 
 	/* Start handling pkts with hdrs */
-	switch (efa_rdm_pke_get_base_hdr(pkt_entry)->type) {
+	switch (efa_rdm_pkt_type_of(pkt_entry)) {
 	case EFA_RDM_HANDSHAKE_PKT:
 		efa_rdm_txe_release(pkt_entry->ope);
 		break;
@@ -796,7 +784,7 @@ void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_im
 {
 	struct efa_rdm_ope *rxe = pkt_entry->ope;
 
-	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL);
+	assert(pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
 	assert(rxe);
 
 	if (has_imm_data) {
