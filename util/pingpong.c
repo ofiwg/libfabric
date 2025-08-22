@@ -1565,21 +1565,19 @@ static int pp_init_ep(struct ct_pingpong *ct)
 	return 0;
 }
 
-static int pp_av_insert(struct fid_av *av, void *addr, size_t count,
-			fi_addr_t *fi_addr, uint64_t flags, void *context)
+static int pp_av_insert(struct fid_av *av, void *addr, fi_addr_t *fi_addr,
+			uint64_t flags, void *context)
 {
 	int ret;
 
 	PP_DEBUG("Connection-less endpoint: inserting new address in vector\n");
 
-	ret = fi_av_insert(av, addr, count, fi_addr, flags, context);
+	ret = fi_av_insert(av, addr, 1, fi_addr, flags, context);
 	if (ret < 0) {
 		PP_PRINTERR("fi_av_insert", ret);
 		return ret;
-	} else if (ret != count) {
-		PP_ERR("fi_av_insert: number of addresses inserted = %d;"
-		       " number of addresses given = %zd\n",
-		       ret, count);
+	} else if (ret != 1) {
+		PP_ERR("fi_av_insert: cannot insert address");
 		return -EXIT_FAILURE;
 	}
 
@@ -1777,6 +1775,7 @@ static int pp_client_connect(struct ct_pingpong *ct)
 static int pp_init_fabric(struct ct_pingpong *ct)
 {
 	int ret;
+	void *addrs;
 
 	ret = pp_ctrl_init(ct);
 	if (ret)
@@ -1841,21 +1840,29 @@ static int pp_init_fabric(struct ct_pingpong *ct)
 
 	if (ct->opts.dst_addr) {
 		/* Set */
-		ret = pp_av_insert(ct->av, ct->rem_name, 1, &(ct->remote_fi_addr), 0,
+		addrs = ct->hints->addr_format == FI_ADDR_STR ?
+				&ct->rem_name : ct->rem_name;
+		ret = pp_av_insert(ct->av, addrs, &(ct->remote_fi_addr), 0,
 				   NULL);
 		if (ret)
 			return ret;
+		addrs = ct->hints->addr_format == FI_ADDR_STR ?
+				&ct->local_name : ct->local_name;
 		if (ct->fi->domain_attr->caps & FI_LOCAL_COMM)
-			ret = pp_av_insert(ct->av, ct->local_name, 1,
+			ret = pp_av_insert(ct->av, addrs,
 					&(ct->local_fi_addr), 0, NULL);
 	} else {
 		if (ct->fi->domain_attr->caps & FI_LOCAL_COMM) {
-			ret = pp_av_insert(ct->av, ct->local_name, 1,
+			addrs = ct->hints->addr_format == FI_ADDR_STR ?
+					&ct->local_name : ct->local_name;
+			ret = pp_av_insert(ct->av, addrs,
 					&(ct->local_fi_addr), 0, NULL);
 			if (ret)
 				return ret;
 		}
-		ret = pp_av_insert(ct->av, ct->rem_name, 1, &(ct->remote_fi_addr), 0,
+		addrs = ct->hints->addr_format == FI_ADDR_STR ?
+				&ct->rem_name : ct->rem_name;
+		ret = pp_av_insert(ct->av, addrs, &(ct->remote_fi_addr), 0,
 				   NULL);
 	}
 	if (ret)
