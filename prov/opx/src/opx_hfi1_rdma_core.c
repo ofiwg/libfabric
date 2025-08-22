@@ -400,11 +400,12 @@ static struct _hfi_ctrl *opx_hfi1_rdma_userinit(int fd, struct fi_opx_hfi1_conte
 
 	context->hfi1_type = opx_hfi1_check_hwversion(user_info_rsp.hw_version);
 	assert(context->hfi1_type &
-	       (OPX_HFI1_CYR | OPX_HFI1_JKR | OPX_HFI1_WFR)); /* OPX_HFI1_JKR_9B is determined later */
+	       (OPX_HFI1_CYR | OPX_HFI1_JKR | OPX_HFI1_WFR)); /* OPX_HFI1_MIXED_9B is determined later */
 
 	/* Need the global set early, may be changed later on mixed networks */
 	if (OPX_HFI1_TYPE == OPX_HFI1_UNDEF) {
-		OPX_HFI1_TYPE = context->hfi1_type;
+		OPX_HFI1_TYPE			      = context->hfi1_type;
+		fi_opx_global.hfi_local_info.original = context->hfi1_type;
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -914,13 +915,13 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 
 	// too early for env to have been checked
 	int mixed_network = OPX_HFI1_TYPE;
-	if (!(OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {
+	if (!(OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {
 		if (fi_param_get_bool(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
 			if (mixed_network) {
-				mixed_network = OPX_HFI1_JKR_9B;
+				mixed_network = OPX_HFI1_MIXED_9B;
 			}
 		} else { // default is mixed
-			mixed_network = OPX_HFI1_JKR_9B;
+			mixed_network = OPX_HFI1_MIXED_9B;
 		}
 	}
 
@@ -932,6 +933,10 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 		core_id, numa_node, opx_hfi_sysfs_unit_read_node_s64(unit));
 	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "LID %d, Receive context %d, sub-context %d, Send context %d\n", lid,
 		ctxt, subctxt, send_ctxt);
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+		"credits %u, rcvegr_size %u, rcvtids %u, egrtids %u, rcvhdrq_cnt %u, rcvhdrq_entsize  %u\n",
+		cinfo->credits, cinfo->rcvegr_size, cinfo->rcvtids, cinfo->egrtids, cinfo->rcvhdrq_cnt,
+		cinfo->rcvhdrq_entsize);
 }
 
 /* Environment variable is not published */
