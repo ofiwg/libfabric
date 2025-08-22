@@ -81,7 +81,8 @@
 #define EFA_DEF_POOL_ALIGNMENT (8)
 #define EFA_MEM_ALIGNMENT (64)
 
-#define EFA_DEF_CQ_SIZE 1024
+/* 4k tx_attr.size + 8k rx_attr.size */
+#define EFA_DEF_CQ_SIZE 12288
 
 
 #define EFA_DEFAULT_RUNT_SIZE (307200)
