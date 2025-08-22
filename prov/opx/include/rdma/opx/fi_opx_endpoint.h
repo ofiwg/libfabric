@@ -3220,7 +3220,7 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 	fi_opx_ep_do_pending_sdma_work(opx_ep);
 }
 
-#if HAVE_HFISVC
+#ifdef HFISVC
 __OPX_FORCE_INLINE__
 void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struct hfisvc_client_cq_entry *hfisvc_entry)
 {
@@ -3280,68 +3280,12 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 __OPX_FORCE_INLINE__
 void opx_ep_hfisvc_poll_internal_queue(struct fi_opx_ep *opx_ep)
 {
-#if HAVE_HFISVC
-	if (!opx_ep->use_hfisvc) {
-		return;
-	}
-
-	struct hfisvc_client_cq_entry hfisvc_out[64];
-
-	size_t n = (*opx_ep->domain->hfisvc.cq_read)(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */,
-						     hfisvc_out, sizeof(*hfisvc_out), 64);
-	while (n > 0) {
-		for (size_t i = 0; i < n; ++i) {
-			opx_ep_hfisvc_poll_proc_internal_completion(opx_ep, &hfisvc_out[i]);
-		}
-		n = (*opx_ep->domain->hfisvc.cq_read)(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */,
-						      hfisvc_out, sizeof(*hfisvc_out), 64);
-	}
-#endif
-}
-
-__OPX_FORCE_INLINE__
-void opx_ep_tx_hfisvc_poll_internal_queue(struct fi_opx_ep *opx_ep)
-{
 #ifdef HFISVC
 	struct hfisvc_client_cq_entry hfisvc_out[64];
 	size_t n = hfisvc_client_cq_read(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */, hfisvc_out, 64);
 	while (n > 0) {
 		for (size_t i = 0; i < n; ++i) {
-			if (OFI_UNLIKELY(hfisvc_out[i].status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS)) {
-				fprintf(stderr,
-					"(%d) %s:%s():%d Error: HFISVC CQ completion status is %d (was expecting 0/success)\n",
-					getpid(), __FILE__, __func__, __LINE__, hfisvc_out[i].status);
-				// TODO: FI_WARN, figure out how to handle this
-				abort();
-			}
-			assert(hfisvc_out[i].status == HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS);
-			struct fi_opx_rzv_completion *rzv_comp =
-				(struct fi_opx_rzv_completion *) hfisvc_out[i].app_context;
-
-			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.completed);
-			// TODO: Use the completion's xfer_len when that becomes available
-			// const uint64_t completion_len = hfisvc_out[i].xfer_len;
-			uint64_t completion_len = 0;
-
-			if (rzv_comp->context) {
-				completion_len = rzv_comp->context->byte_counter;
-				OPX_HFISVC_DEBUG_LOG(
-					"HFISVC Internal completion with context: rzv_comp=%p access_key=%u xfer_len=%lu context=%p byte_counter=%lu -> %lu\n",
-					rzv_comp, rzv_comp->access_key, completion_len, rzv_comp->context,
-					rzv_comp->context->byte_counter,
-					rzv_comp->context->byte_counter - completion_len);
-
-				assert(completion_len <= rzv_comp->context->byte_counter);
-				rzv_comp->context->byte_counter -= completion_len;
-			} else {
-				OPX_HFISVC_DEBUG_LOG(
-					"HFISVC Internal completion without context: rzv_comp=%p access_key=%u xfer_len=%lu\n",
-					rzv_comp, rzv_comp->access_key, completion_len);
-			}
-
-			opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.access_key_set, rzv_comp->access_key,
-						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
-			OPX_BUF_FREE(rzv_comp);
+			opx_ep_hfisvc_poll_proc_internal_completion(opx_ep, &hfisvc_out[i]);
 		}
 		n = hfisvc_client_cq_read(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */, hfisvc_out, 64);
 	}
@@ -3371,7 +3315,7 @@ void fi_opx_ep_rx_poll_internal(struct fid_ep *ep, const uint64_t caps, const en
 					hfi1_type, ctx_sharing);
 	}
 
-	opx_ep_tx_hfisvc_poll_internal_queue(opx_ep);
+	opx_ep_hfisvc_poll_internal_queue(opx_ep);
 
 	fi_opx_ep_do_pending_work(opx_ep);
 
