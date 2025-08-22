@@ -268,18 +268,12 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 
 		AS_IF([test $opx_happy -eq 1 && test "x$opx_hfisvc" = "xyes"], [
                     AC_CONFIG_COMMANDS([check-module-dir], [
-                        hfisvc_dir="$srcdir/prov/opx/modules/hfisvc_client"
+                        hfisvc_dir="$srcdir/prov/opx/modules/hfisvc_client/include"
                         opx_abs_srcdir=$(cd "$srcdir/prov/opx" && pwd)
                         if test ! -d $hfisvc_dir; then
                             AC_MSG_ERROR([hfisvc_client does not exist, please run the following from the top libfabric source directory:
-                                git submodule add ../../cornelisnetworks/hfisvc_client ./prov/opx/modules/hfisvc_client
                                 git submodule update --init])
                         fi
-                        mkdir -p $hfisvc_dir/build
-                        cd $hfisvc_dir/build
-                        echo "Installing hfisvc_client to $opx_abs_srcdir"
-                        cmake .. -DCMAKE_INSTALL_PREFIX=$opx_abs_srcdir -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=OFF
-                        make install -j
                     ])
 		])
 	])
