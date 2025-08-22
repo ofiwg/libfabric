@@ -81,11 +81,11 @@ opx_CPPFLAGS +=									\
 		-I$(srcdir)/prov/opx/include					\
 		-I$(srcdir)/prov/opx/include/linux-i386
 
-if OPX_HFISVC
-opx_LIBS = -luuid -lnuma -lhfisvc_client
-opx_LDFLAGS = -L$(srcdir)/prov/opx/lib64
-else
 opx_LIBS = -luuid -lnuma
+
+if OPX_HFISVC
+opx_files += prov/opx/modules/hfisvc_client/source/hfisvc_client.c
+opx_CPPFLAGS += -I$(srcdir)/prov/opx/modules/hfisvc_client/include
 endif
 
 if HAVE_OPX_DL
