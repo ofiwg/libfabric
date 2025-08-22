@@ -288,8 +288,55 @@ static inline size_t fi_opx_cq_fill(uintptr_t output, struct opx_context *contex
 	return return_size;
 }
 
+#ifdef HFISVC
 __OPX_FORCE_INLINE__
-void opx_cq_poll_hfi_service(struct fi_opx_cq *opx_cq)
+void opx_cq_hfisvc_poll_process_completion(struct fi_opx_cq *opx_cq, struct hfisvc_client_cq_entry *hfisvc_entry)
+{
+	struct opx_context *context = (struct opx_context *) hfisvc_entry->app_context;
+
+	if (OFI_UNLIKELY(hfisvc_entry->status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS)) {
+		OPX_HFISVC_DEBUG_LOG(
+			"Error: HFISVC CQ completion status is %d for context=%p (was expecting 0/success)\n",
+			hfisvc_entry->status, context);
+		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "Enqueuing completion error from HFI Service with status %d\n",
+			hfisvc_entry->status);
+		context->err_entry.flags	 = context->flags;
+		context->err_entry.len		 = context->byte_counter;
+		context->err_entry.buf		 = context->buf;
+		context->err_entry.data		 = context->data;
+		context->err_entry.tag		 = context->tag;
+		context->err_entry.olen		 = 0;
+		context->err_entry.err		 = hfisvc_entry->status;
+		context->err_entry.prov_errno	 = hfisvc_entry->status;
+		context->err_entry.err_data	 = NULL;
+		context->err_entry.err_data_size = 0;
+		context->byte_counter		 = 0;
+		opx_enqueue_err_from_pending(&opx_cq->pending, &opx_cq->err, context);
+	} else if (hfisvc_entry->type == HFISVC_CLIENT_CQ_ENTRY_TYPE_DEFAULT) {
+		// TODO: Once hfisvc_client provides xfer_len in completion, we'll know how much to
+		//       decrement from the context->byte_counter. Until then, just zero out
+		//       context->byte_counter
+		// uint64_t completed_len = hfisvc_out[i].type_default.xfer_len;
+		uint64_t completed_len = context->byte_counter;
+		assert(completed_len <= context->byte_counter);
+		OPX_HFISVC_DEBUG_LOG("Got completion entry for context=%p completed_len=%lu byte_counter=%lu -> %lu\n",
+				     context, completed_len, context->byte_counter,
+				     context->byte_counter - completed_len);
+
+		context->byte_counter -= completed_len;
+	} else {
+		OPX_HFISVC_DEBUG_LOG("Got invalid/unkown completion entry for context=%p, type was %d\n", context,
+				     hfisvc_entry->type);
+		FI_WARN(fi_opx_global.prov, FI_LOG_CQ,
+			"Got invalid/unkown completion entry for context=%p, type was %d\n", context,
+			hfisvc_entry->type);
+		abort();
+	}
+}
+#endif
+
+__OPX_FORCE_INLINE__
+void opx_cq_hfisvc_poll(struct fi_opx_cq *opx_cq)
 {
 #ifdef HFISVC
 	if (!opx_cq->use_hfisvc) {
@@ -300,34 +347,7 @@ void opx_cq_poll_hfi_service(struct fi_opx_cq *opx_cq)
 	size_t n = hfisvc_client_cq_read(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out, 64);
 	while (n > 0) {
 		for (size_t i = 0; i < n; ++i) {
-			if (OFI_UNLIKELY(hfisvc_out[i].status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS)) {
-				fprintf(stderr,
-					"(%d) %s:%s():%d Error: HFISVC CQ completion status is %d (was expecting 0/success)\n",
-					getpid(), __FILE__, __func__, __LINE__, hfisvc_out[i].status);
-				// TODO: FI_WARN
-				// TODO: Enqueue error
-				abort();
-			}
-			struct opx_context *context = (struct opx_context *) hfisvc_out[i].app_context;
-			if (hfisvc_out[i].type == HFISVC_CLIENT_CQ_ENTRY_TYPE_DEFAULT) {
-				// TODO: Once hfisvc_client provides xfer_len in completion, we'll know how much to
-				//       decrement from the context->byte_counter. Until then, just zero out
-				//       context->byte_counter
-				// uint64_t completed_len = hfisvc_out[i].type_default.xfer_len;
-				uint64_t completed_len = context->byte_counter;
-				assert(completed_len <= context->byte_counter);
-				OPX_HFISVC_DEBUG_LOG(
-					"Got completion entry %lu/%lu for context=%p completed_len=%lu byte_counter=%lu -> %lu\n",
-					i, n, context, completed_len, context->byte_counter,
-					context->byte_counter - completed_len);
-
-				context->byte_counter -= completed_len;
-			} else {
-				OPX_HFISVC_DEBUG_LOG("Got completion entry %lu/%lu for context=%p, type was %d\n", i, n,
-						     context, hfisvc_out[i].type);
-				// TODO: FI_WARN
-				abort();
-			}
+			opx_cq_hfisvc_poll_process_completion(opx_cq, &hfisvc_out[i]);
 		}
 		n = hfisvc_client_cq_read(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out, 64);
 	}
@@ -346,6 +366,10 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 	ssize_t	  num_entries = 0;
 	uintptr_t output      = (uintptr_t) buf;
 
+	if (opx_cq->pending.head) {
+		opx_cq_hfisvc_poll(opx_cq);
+	}
+
 	/* examine each context in the pending completion queue and, if the
 	 * operation is complete, initialize the cq entry in the application
 	 * buffer and remove the context from the queue. */
@@ -353,7 +377,6 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 	struct opx_context *pending_tail = (struct opx_context *) opx_cq->pending.tail;
 
 	if (NULL != pending_head) {
-		opx_cq_poll_hfi_service(opx_cq);
 		struct opx_context *context = pending_head;
 		struct opx_context *prev    = NULL;
 		while ((count - num_entries) > 0 && context != NULL) {
