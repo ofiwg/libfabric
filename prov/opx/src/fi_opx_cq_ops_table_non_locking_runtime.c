@@ -801,7 +801,7 @@ ssize_t fi_opx_cq_read_FABRIC_DIRECT(struct fid_cq *cq, void *buf, size_t count)
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_WFR,
 							       OPX_CTX_SHARING_ON)(cq, buf, count);
-		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_MIXED_9B,
 							       OPX_CTX_SHARING_ON)(cq, buf, count);
@@ -823,7 +823,7 @@ ssize_t fi_opx_cq_read_FABRIC_DIRECT(struct fid_cq *cq, void *buf, size_t count)
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_WFR,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count);
-		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_MIXED_9B,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count);
@@ -852,7 +852,7 @@ ssize_t fi_opx_cq_readfrom_FABRIC_DIRECT(struct fid_cq *cq, void *buf, size_t co
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_WFR,
 							       OPX_CTX_SHARING_ON)(cq, buf, count, src_addr);
-		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_MIXED_9B,
 							       OPX_CTX_SHARING_ON)(cq, buf, count, src_addr);
@@ -874,7 +874,7 @@ ssize_t fi_opx_cq_readfrom_FABRIC_DIRECT(struct fid_cq *cq, void *buf, size_t co
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_WFR,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count, src_addr);
-		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_MIXED_9B,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count, src_addr);

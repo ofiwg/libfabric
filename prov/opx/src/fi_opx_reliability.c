@@ -1114,7 +1114,7 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 			size_t	 total_bytes;
 
 			/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
-			if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+			if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 				lrh_pktlen_le = ntohs(tmp->scb.scb_9B.hdr.lrh_9B.pktlen);
 				total_bytes   = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
 			} else {
@@ -1275,7 +1275,7 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 		uint16_t lrh_pktlen_le;
 		size_t	 total_bytes;
 		/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
-		if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			lrh_pktlen_le = ntohs(tmp->scb.scb_9B.hdr.lrh_9B.pktlen);
 			total_bytes   = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
 		} else {
@@ -1447,7 +1447,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 {
 #if defined(OPX_RELIABILITY_DEBUG) || !defined(NDEBUG)
 	union fi_opx_reliability_service_flow_key key;
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		key.slid = (opx_lid_t) __be16_to_cpu24((__be16) replay->scb.scb_9B.hdr.lrh_9B.slid);
 		key.dlid = (opx_lid_t) __be16_to_cpu24((__be16) replay->scb.scb_9B.hdr.lrh_9B.dlid);
 	} else {
@@ -1945,7 +1945,7 @@ ssize_t fi_opx_reliability_send_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 
 	opx_lid_t dlid;
 	/* Inlined but called from non-inlined functions with no const hfi1 type, so just use the runtime check */
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		dlid = (opx_lid_t) __be16_to_cpu24((__be16) head->scb.scb_9B.hdr.lrh_9B.dlid);
 	} else {
 		dlid = (opx_lid_t) __le24_to_cpu(head->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 |
@@ -2110,7 +2110,7 @@ void fi_opx_reliability_model_init_9B(struct fi_opx_reliability_service *service
 
 		/* Setup the 9B models whether or not they'll be used */
 		enum opx_hfi1_type __attribute__((unused)) hfi1_type =
-			(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) ? OPX_HFI1_WFR : OPX_HFI1_MIXED_9B;
+			(OPX_HFI1_TYPE & OPX_HFI1_WFR) ? OPX_HFI1_WFR : OPX_HFI1_MIXED_9B;
 
 		service->ping_model_9B.qw0 =
 			OPX_PBC_LEN(pbc_dws, hfi1_type) | OPX_PBC_VL(hfi1->vl, hfi1_type) |
@@ -2266,7 +2266,7 @@ void fi_opx_reliability_service_init(struct fi_opx_reliability_service *service,
 	service->kind	    = reliability_kind;
 	service->process_fn = process_fn;
 
-	service->subctxt_rx = (!(OPX_IS_EXTENDED_RX(OPX_SW_HFI1_TYPE))) ?
+	service->subctxt_rx = (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR | OPX_HFI1_MIXED_9B)) ?
 				      __cpu_to_be16(hfi1->subctxt << 8 | hfi1->info.rxe.id) :
 				      __cpu_to_be16(hfi1->subctxt << 9 | hfi1->info.rxe.id);
 
@@ -2608,7 +2608,7 @@ struct fi_opx_reliability_rx_uepkt *fi_opx_reliability_allocate_uepkt(struct fi_
 {
 	struct fi_opx_reliability_rx_uepkt *tmp = ofi_buf_alloc(service->rx.uepkt_pool);
 	assert(tmp);
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		tmp->hdr.qw_9B[0] = hdr->qw_9B[0];
 		tmp->hdr.qw_9B[1] = hdr->qw_9B[1];
 		tmp->hdr.qw_9B[2] = hdr->qw_9B[2];
@@ -3017,7 +3017,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_shm(struct fid_ep *ep, union fi_opx_re
 	const uint64_t bth_rx	   = u8_reliability_rx << OPX_BTH_SUBCTXT_RX_SHIFT;
 
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		struct fi_opx_hfi1_txe_scb_9B model = opx_ep->reliability->service.ping_model_9B;
 		model.hdr.ud.opcode		    = opcode;
 		hdr->qw_9B[0]			    = model.hdr.qw_9B[0] | lrh_dlid_9B;
@@ -3341,7 +3341,7 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, union fi_opx_
 	opx_lid_t	  slid;
 
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		slid = (opx_lid_t) __be16_to_cpu24((__be16) opx_ep->tx->send_9B.hdr.lrh_9B.slid);
 	} else {
 		slid = (opx_lid_t) __le24_to_cpu(opx_ep->tx->send_9B.hdr.lrh_16B.slid20 << 20 |

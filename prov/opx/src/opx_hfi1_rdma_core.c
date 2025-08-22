@@ -378,9 +378,9 @@ static struct _hfi_ctrl *opx_hfi1_rdma_userinit(int fd, struct fi_opx_hfi1_conte
 	       (OPX_HFI1_CYR | OPX_HFI1_JKR | OPX_HFI1_WFR)); /* OPX_HFI1_MIXED_9B is determined later */
 
 	/* Need the global set early, may be changed later on mixed networks */
-	if (OPX_SW_HFI1_TYPE == OPX_HFI1_UNDEF) {
-		OPX_SW_HFI1_TYPE = context->hfi1_type;
-		OPX_HW_HFI1_TYPE = context->hfi1_type;
+	if (OPX_HFI1_TYPE == OPX_HFI1_UNDEF) {
+		OPX_HFI1_TYPE			      = context->hfi1_type;
+		fi_opx_global.hfi_local_info.original = context->hfi1_type;
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -914,7 +914,7 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 
 	// too early for env to have been checked
 	int mixed_network = OPX_HFI1_TYPE;
-	if (!(OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {
+	if (!(OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {
 		if (fi_param_get_bool(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
 			if (mixed_network) {
 				mixed_network = OPX_HFI1_MIXED_9B;
@@ -924,18 +924,19 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 		}
 	}
 
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "SW/HW version %#X/%#X. API version %#X. Core %d(%d). \n", sw_version,
-		 hw_version, internal->user_info.userversion, rec_cpu, core_id);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "Selected %s unit %d (%d units) and port %d (%d ports); \n",
-		 OPX_HFI1_TYPE_STRING(mixed_network), unit, hfi_count, port, num_ports);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "Core %d(%d). NUMA domain is %d; HFI NUMA domain is %ld. \n", rec_cpu,
-		 core_id, numa_node, opx_hfi_sysfs_unit_read_node_s64(unit));
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "LID %d, Receive context %d, sub-context %d, Send context %d\n", lid,
-		 ctxt, subctxt, send_ctxt);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC,
-		 "credits %u, rcvegr_size %u, rcvtids %u, egrtids %u, rcvhdrq_cnt %u, rcvhdrq_entsize  %u\n",
-		 cinfo->credits, cinfo->rcvegr_size, cinfo->rcvtids, cinfo->egrtids, cinfo->rcvhdrq_cnt,
-		 cinfo->rcvhdrq_entsize);
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "SW/HW version %#X/%#X. API version %#X. Core %d(%d). \n", sw_version,
+		hw_version, internal->user_info.userversion, rec_cpu, core_id);
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Selected %s unit %d (%d units) and port %d (%d ports); \n",
+		OPX_HFI1_TYPE_STRING(mixed_network), unit, hfi_count, port, num_ports);
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Core %d(%d). NUMA domain is %d; HFI NUMA domain is %ld. \n", rec_cpu,
+		core_id, numa_node, opx_hfi_sysfs_unit_read_node_s64(unit));
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "LID %d, Receive context %d, sub-context %d, Send context %d\n", lid,
+		ctxt, subctxt, send_ctxt);
+	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+		"credits %u, rcvegr_size %u, rcvtids %u, egrtids %u, rcvhdrq_cnt %u, rcvhdrq_entsize  %u\n",
+		cinfo->credits, cinfo->rcvegr_size, cinfo->rcvtids, cinfo->egrtids, cinfo->rcvhdrq_cnt,
+		cinfo->rcvhdrq_entsize);
+}
 
 	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.local_lids_size         = %d\n",
 		 fi_opx_global.hfi_local_info.local_lids_size);

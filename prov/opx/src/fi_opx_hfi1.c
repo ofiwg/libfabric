@@ -395,11 +395,13 @@ void process_hfi_lookup(const int hfi_unit, const opx_lid_t lid)
 	}
 }
 
+/* Remove "self" lid from shm and therefore use loopback */
 void opx_remove_self_lid(const int hfi_unit, const opx_lid_t lid)
 {
+	assert(fi_opx_global.hfi_local_info.sriov);
 	assert(fi_opx_global.hfi_local_info.local_lids_size <= 1);
 	int lid_index = opx_local_lid_index(lid);
-	/* Currently only used in sr-iov(alpha) which only had one (my) lid */
+	/* Only used in sr-iov which only had one (self/my) lid */
 	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI %u LID[%d] 0x%x entry removed.\n", hfi_unit, lid_index, lid);
 	assert(lid_index <= 0);
 	if (lid_index == -1) {
@@ -429,9 +431,8 @@ void fi_opx_init_hfi_lookup(bool sriov)
 		shm_enable_env = OPX_SHM_ENABLE_DEFAULT;
 	}
 	if (sriov) {
-		/* sr-iov(alpha) will initially enable shm for "my" lid only as-if the
-		 * env was set, so fake it here.
-		 * later checks may completely disable shm and enable loopback later */
+		/* sr-iov will initially enable shm for "my" lid only, as-if the env was set, so fake it here.
+		 * later checks may completely disable shm and thus enable self loopback later */
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "SR-IOV overrides FI_OPX_SHM_ENABLE always disables SHM\n");
 		shm_enable_env = OPX_SHM_ENABLE_OFF;
 	}
@@ -1222,19 +1223,14 @@ ssize_t fi_opx_check_tx_rctxt(struct fi_opx_ep *opx_ep, fi_addr_t peer)
 				       OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE),
 				       fi_opx_global.hfi_local_info.min_rctxt, fi_opx_global.hfi_local_info.max_rctxt);
 				fi_opx_global.hfi_local_info.multi_vm = true;
+				assert(fi_opx_global.hfi_local_info.sriov);
 			}
 		}
-		if (fi_opx_global.hfi_local_info.multi_vm && fi_opx_global.hfi_local_info.multi_lid) {
-			/* For simplicity (and no runtime rx context checks) and mitigation issues:
-
-			   - Loopback to self (no SHM) if a single lid jobs, <n> VMs
-			   - SHM self any multi-lid
-			   - Fail (abort?) if self (rctxt check) is multi-VM and multi-lid
-
-			   - Fabric port other lids (perf vs SHM scenarios?
-			 */
+		if ((fi_opx_global.hfi_local_info.original & OPX_HFI1_JKR) && fi_opx_global.hfi_local_info.multi_vm &&
+		    fi_opx_global.hfi_local_info.multi_lid) {
+			/* JKR/sr-iov(alpha) limitation: Fail if self (rctxt check) is multi-VM and multi-lid */
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"Shared lids across VMs with other lids are not supported. \n");
+				"Shared lids across VMs with other lids are not supported on CN5000. \n");
 			rc = -FI_EINVAL;
 		}
 	} else {
@@ -1830,7 +1826,7 @@ union fi_opx_hfi1_deferred_work *opx_hfi1_rx_rzv_rts_tid_prep_cts(union fi_opx_h
 
 	assert(cur_addr_range_tid_len <= cts_params->rzv_comp->context->byte_counter);
 
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
 	} else {
 		cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_16B;
@@ -1860,7 +1856,7 @@ int opx_hfi1_rx_rzv_rts_tid_fallback(union fi_opx_hfi1_deferred_work	  *work,
 
 	params->tid_info.npairs = 0;
 
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
 	} else {
 		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_16B;
@@ -1924,7 +1920,7 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 	if (last_cts) {
 		assert(cts_work == work);
 
-		if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			assert(work->work_elem.work_fn == opx_hfi1_rx_rzv_rts_send_cts);
 		} else {
 			assert(work->work_elem.work_fn == opx_hfi1_rx_rzv_rts_send_cts_16B);
@@ -2025,7 +2021,7 @@ int opx_hfi1_rx_rzv_rts_elided(struct fi_opx_ep *opx_ep, union fi_opx_hfi1_defer
 	rzv_comp->byte_counter	    = params->elided_head.bytes + params->elided_tail.bytes;
 	rzv_comp->bytes_accumulated = 0;
 
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
 	} else {
 		cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_16B;
@@ -2329,7 +2325,7 @@ void fi_opx_hfi1_rx_rzv_rts_etrunc(struct fi_opx_ep *opx_ep, const union opx_hfi
 		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->slid	 = lid;
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_JKR_9B);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_MIXED_9B);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		lid		 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->slid	 = lid;
@@ -2343,7 +2339,7 @@ void fi_opx_hfi1_rx_rzv_rts_etrunc(struct fi_opx_ep *opx_ep, const union opx_hfi
 	}
 
 	if (is_shm) {
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_shm;
 		} else {
 			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_etrunc_shm_16B;
@@ -2423,11 +2419,11 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 		params->slid	 = lid;
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
 		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_WFR);
-	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
+	} else if (hfi1_type & OPX_HFI1_MIXED_9B) {
 		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->slid	 = lid;
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_JKR_9B);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_MIXED_9B);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		lid		 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->slid	 = lid;
@@ -2442,7 +2438,7 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 
 	if (is_shm) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_shm %u\n", is_shm);
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_shm;
 		} else {
 			params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_shm_16B;
@@ -2595,9 +2591,8 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 
 	opx_lid_t lid;
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		lid			  = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
-		params->lrh_dlid	  = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->work_elem.work_fn = opx_ipc_send_cts_9B;
+		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
+		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
 	} else {
 		lid			  = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->lrh_dlid	  = lid; // Send CTS to the SLID that sent RTS
@@ -2647,7 +2642,7 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 		return rc;
 	}
 
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		const uint64_t pbc_dws = 2 + /* pbc */
 					 2 + /* lrh */
 					 3 + /* bth */
@@ -2970,10 +2965,10 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
 		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_WFR);
-	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
+	} else if (hfi1_type & OPX_HFI1_MIXED_9B) {
 		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_JKR_9B);
+		params->pbc_dlid = OPX_PBC_DLID(lid, OPX_HFI1_MIXED_9B);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		lid		 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->lrh_dlid = lid; // Send CTS to the SLID that sent RTS
@@ -3246,7 +3241,7 @@ int opx_hfi1_tx_rma_rts_shm(union fi_opx_hfi1_deferred_work *work)
 	uint64_t dt64	 = ((uint64_t) params->dt) << 32;
 	assert(params->dt == (FI_VOID - 1) || params->dt < FI_DATATYPE_LAST);
 
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		hdr->qw_9B[0] = opx_ep->rx->tx.rma_rts_9B.hdr.qw_9B[0] | lrh_dlid;
 		hdr->qw_9B[1] = opx_ep->rx->tx.rma_rts_9B.hdr.qw_9B[1] | bth_rx;
 		hdr->qw_9B[2] = opx_ep->rx->tx.rma_rts_9B.hdr.qw_9B[2];
@@ -4429,10 +4424,10 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 		params->slid	 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
 		params->pbc_dlid = OPX_PBC_DLID(params->slid, OPX_HFI1_WFR);
-	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
+	} else if (hfi1_type & OPX_HFI1_MIXED_9B) {
 		params->slid	 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
-		params->pbc_dlid = OPX_PBC_DLID(params->slid, OPX_HFI1_JKR_9B);
+		params->pbc_dlid = OPX_PBC_DLID(params->slid, OPX_HFI1_MIXED_9B);
 	} else {
 		params->slid	 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->lrh_dlid = params->slid; // Send dput to the SLID that sent CTS

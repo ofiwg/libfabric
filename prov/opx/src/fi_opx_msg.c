@@ -882,7 +882,7 @@ int fi_opx_enable_msg_ops(struct fid_ep *ep)
 					assert((opx_ep->av->type == FI_AV_TABLE) || (opx_ep->av->type == FI_AV_MAP));
 				}
 			}
-		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
 			if (!lock_required) {
 				if (opx_ep->av->type == FI_AV_TABLE) {
 					if (comm_caps == FI_LOCAL_COMM) {
@@ -1176,7 +1176,7 @@ int fi_opx_enable_msg_ops(struct fid_ep *ep)
 					assert((opx_ep->av->type == FI_AV_TABLE) || (opx_ep->av->type == FI_AV_MAP));
 				}
 			}
-		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
 			if (!lock_required) {
 				if (opx_ep->av->type == FI_AV_TABLE) {
 					if (comm_caps == FI_LOCAL_COMM) {

@@ -886,7 +886,7 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 	fprintf(stderr,
 		"%s:%s():%d context = %p, context->src_addr = 0x%016lx, context->ignore = 0x%016lx, context->tag = 0x%016lx, src_addr.fi = 0x%08lx\n",
 		__FILE__, __func__, __LINE__, context, context->src_addr, context->ignore, context->tag, src_addr.fi);
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		fprintf(stderr,
 			"%s:%s():%d hdr->match.slid = 0x%04x (%u), hdr->match.origin_subctxt_rx = 0x%x (%u), origin_lid = 0x%08x, reliability.origin_subctxt_rx = 0x%x\n",
 			__FILE__, __func__, __LINE__, __be16_to_cpu24((__be16) hdr->lrh_9B.slid),
@@ -3987,7 +3987,7 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 
 	const uint64_t bth_subctxt_rx = ((uint64_t) addr.hfi1_subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	const uint64_t lrh_dlid =
-		hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B) ? FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(addr.lid) : addr.lid;
+		hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B) ? FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(addr.lid) : addr.lid;
 	const uint64_t pbc_dlid = OPX_PBC_DLID(addr.lid, hfi1_type);
 
 	/* Write the first packet */

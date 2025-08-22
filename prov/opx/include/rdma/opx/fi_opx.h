@@ -194,7 +194,9 @@ struct opx_hfi_local_info {
 	bool		   multi_lid; // job has multiple lids
 	int32_t		   min_rctxt;
 	int32_t		   max_rctxt;
-	uint64_t	   unused_qws[3];
+	enum opx_hfi1_type original; // before "mixed_network" changes
+	uint32_t	   unused_dws[1];
+	uint64_t	   unused_qws[2];
 
 	/* == CACHE LINE 1 == */
 	opx_lid_t local_lid_ids[OPX_MAX_HFIS];
