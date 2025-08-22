@@ -1564,8 +1564,17 @@ int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr
 		uint64_t flags, void *context)
 {
 	int ret;
+	void *addr_ptr;
 
-	ret = fi_av_insert(av, addr, count, fi_addr, flags, context);
+	/*
+	 * When using the FI_ADDR_STR format, the addr parameter should reference
+	 * an array of strings (char **).
+	 * Ensure we try to insert only one addrress in such format
+	 */
+	assert((fi->addr_format == FI_ADDR_STR && count == 1) ||
+		   fi->addr_format != FI_ADDR_STR);
+	addr_ptr = (fi->addr_format == FI_ADDR_STR) ? &addr : addr;
+	ret = fi_av_insert(av, addr_ptr, count, fi_addr, flags, context);
 	if (ret < 0) {
 		FT_PRINTERR("fi_av_insert", ret);
 		return ret;

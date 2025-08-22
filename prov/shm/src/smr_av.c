@@ -121,17 +121,18 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	int64_t shm_id = -1;
 	int i, ret;
 	int succ_count = 0;
+	const char **string_names = (void *)addr;
 
 	util_av = container_of(av_fid, struct util_av, av_fid);
 	smr_av = container_of(util_av, struct smr_av, util_av);
 
-	for (i = 0; i < count; i++, addr = (char *) addr + strlen(addr) + 1) {
-		FI_INFO(&smr_prov, FI_LOG_AV, "%s\n", (const char *) addr);
+	for (i = 0; i < count; i++) {
+		FI_INFO(&smr_prov, FI_LOG_AV, "%s\n", (const char *) string_names[i]);
 
 		util_addr = FI_ADDR_NOTAVAIL;
 		if (smr_av->used < SMR_MAX_PEERS) {
 			ret = smr_map_add(&smr_prov, &smr_av->smr_map,
-					  addr, &shm_id);
+					  string_names[i], &shm_id);
 			if (!ret) {
 				ofi_genlock_lock(&util_av->lock);
 				ret = ofi_av_insert_addr(util_av, &shm_id,

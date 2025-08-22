@@ -5,6 +5,7 @@ inject_test
 -e msg
 ^fi_dgram
 -e dgram
+^fi_rdm g00n13s
 
 # Exclude tests that use sread/polling
 rdm_cntr_pingpong
