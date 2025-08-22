@@ -876,7 +876,7 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 	fprintf(stderr,
 		"%s:%s():%d context = %p, context->src_addr = 0x%016lx, context->ignore = 0x%016lx, context->tag = 0x%016lx, src_addr.fi = 0x%08lx\n",
 		__FILE__, __func__, __LINE__, context, context->src_addr, context->ignore, context->tag, src_addr.fi);
-	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		fprintf(stderr,
 			"%s:%s():%d hdr->match.slid = 0x%04x (%u), hdr->match.origin_subctxt_rx = 0x%x (%u), origin_lid = 0x%08x, reliability.origin_subctxt_rx = 0x%x\n",
 			__FILE__, __func__, __LINE__, __be16_to_cpu24((__be16) hdr->lrh_9B.slid),
@@ -1246,7 +1246,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.recv.multi_recv_rzv_contig);
 			assert(niov == 1);
 			struct opx_payload_rzv_contig *contiguous =
-				(hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ?
+				(hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ?
 					(struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous :
 					(struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous_16B;
 			const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
@@ -1357,7 +1357,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			uint8_t *rbuf = (uint8_t *) recv_buf;
 
 			struct opx_payload_rzv_contig *contiguous =
-				(hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ?
+				(hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ?
 					(struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous :
 					(struct opx_payload_rzv_contig *) &payload->rendezvous.contiguous_16B;
 			const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
@@ -1421,7 +1421,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 
 		uintptr_t origin_byte_counter_vaddr =
 			is_noncontig ? payload->rendezvous.noncontiguous.origin_byte_counter_vaddr :
-			(hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) ?
+			(hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ?
 				       payload->rendezvous.contiguous.origin_byte_counter_vaddr :
 				       payload->rendezvous.contiguous_16B.origin_byte_counter_vaddr;
 		FI_OPX_FABRIC_RX_RZV_RTS_ETRUNC(opx_ep, (const void *const) hdr, origin_rx, origin_byte_counter_vaddr,
@@ -1780,7 +1780,7 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 		const uint64_t ofi_data = hdr->match.ofi_data;
 
 		uint64_t payload_qws_total;
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			payload_qws_total = (((uint64_t) __be16_to_cpu(hdr->lrh_9B.pktlen)) - 15) >> 1;
 		} else {
 			payload_qws_total = (uint64_t) (hdr->lrh_16B.pktlen - 9);
@@ -1875,7 +1875,7 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-MP-EAGER-NTH");
 
 		uint64_t payload_qws_total;
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			payload_qws_total = (((uint64_t) __be16_to_cpu(hdr->lrh_9B.pktlen)) - 15) >> 1;
 		} else {
 			payload_qws_total = (uint64_t) hdr->lrh_16B.pktlen - 9;
@@ -2317,7 +2317,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		size_t	 total_bytes_to_copy;
 		uint16_t bytes;
 
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			lrh_pktlen_le	    = __be16_to_cpu(hdr->lrh_9B.pktlen);
 			total_bytes_to_copy = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
 			bytes = (uint16_t) (total_bytes_to_copy - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B));
@@ -2748,7 +2748,7 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep, struct opx_cont
 
 	while (uepkt && context->byte_counter) {
 		opx_lid_t slid;
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			slid = (opx_lid_t) __be16_to_cpu24(((__be16) (uepkt->hdr.lrh_9B.slid)));
 		} else {
 			slid = (opx_lid_t) __le24_to_cpu((uepkt->hdr.lrh_16B.slid20 << 20) | (uepkt->hdr.lrh_16B.slid));
@@ -3328,7 +3328,7 @@ static inline void fi_opx_ep_rx_poll(struct fid_ep *ep, const uint64_t caps,
 		} else if (hfi1_type & OPX_HFI1_CYR) {
 			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_CYR, OPX_CTX_SHARING_ON);
 		} else {
-			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR_9B,
+			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_MIXED_9B,
 						   OPX_CTX_SHARING_ON);
 		}
 	} else {
@@ -3339,7 +3339,7 @@ static inline void fi_opx_ep_rx_poll(struct fid_ep *ep, const uint64_t caps,
 		} else if (hfi1_type & OPX_HFI1_CYR) {
 			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_CYR, OPX_CTX_SHARING_OFF);
 		} else {
-			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_JKR_9B,
+			fi_opx_ep_rx_poll_internal(ep, caps, reliability, hdrq_mask, OPX_HFI1_MIXED_9B,
 						   OPX_CTX_SHARING_OFF);
 		}
 	}
@@ -3430,7 +3430,7 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep *opx_ep, const u
 			/* Since this is the first multi-packet eager packet,
 			   the uid portion of the mp_egr_id will be this packet's PSN */
 			opx_lid_t slid;
-			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 				slid = (opx_lid_t) __be16_to_cpu24((__be16) uepkt->hdr.lrh_9B.slid);
 			} else {
 				slid = (opx_lid_t) __le24_to_cpu((__le24) (uepkt->hdr.lrh_16B.slid20 << 20) |
@@ -3909,10 +3909,10 @@ ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, uint8_t **bu
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, chunk_size, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
 							    reliability, OPX_HFI1_WFR, ctx_sharing);
-		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+		} else if (hfi1_type == OPX_HFI1_MIXED_9B) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, chunk_size, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
-							    reliability, OPX_HFI1_JKR_9B, ctx_sharing);
+							    reliability, OPX_HFI1_MIXED_9B, ctx_sharing);
 		} else {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
 				opx_ep, (void *) buf, offset, chunk_size, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid, addr,
@@ -3934,10 +3934,10 @@ ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, uint8_t **bu
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, remaining, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
 							    reliability, OPX_HFI1_WFR, ctx_sharing);
-		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+		} else if (hfi1_type == OPX_HFI1_MIXED_9B) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, remaining, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
-							    reliability, OPX_HFI1_JKR_9B, ctx_sharing);
+							    reliability, OPX_HFI1_MIXED_9B, ctx_sharing);
 		} else {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
 				opx_ep, (void *) buf, offset, remaining, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid, addr,
@@ -3977,7 +3977,7 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 
 	const uint64_t bth_subctxt_rx = ((uint64_t) addr.hfi1_subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	const uint64_t lrh_dlid =
-		hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B) ? FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(addr.lid) : addr.lid;
+		hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B) ? FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(addr.lid) : addr.lid;
 	const uint64_t pbc_dlid = OPX_PBC_DLID(addr.lid, hfi1_type);
 
 	/* Write the first packet */

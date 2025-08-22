@@ -278,7 +278,7 @@ struct fi_ops_cq *fi_opx_cq_select_ops(const enum fi_cq_format format, const enu
 					       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps,
 											0, ctx_sharing);
 		}
-	} else if (hfi1_type & OPX_HFI1_JKR_9B) {
+	} else if (hfi1_type & OPX_HFI1_MIXED_9B) {
 		switch (rcvhdrcnt) {
 		case 2048:
 			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 1,

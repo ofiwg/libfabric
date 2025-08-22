@@ -426,7 +426,7 @@ void opx_write_header_to_subctxt(struct opx_software_rx_q *soft_rx_q, const uint
 	const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
 	uint32_t *pu32;
-	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		assert(hdrq_offset_dws); /* need padding before this header */
 		pu32 = (uint32_t *) rhf_ptr_dest - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS + 2 /* rhf field size in dw */
 		       - 2 /* sizeof(uint64_t) in dw, offset back to align
@@ -613,7 +613,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 		const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
 		uint32_t *pkt;
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			assert(hdrq_offset_dws); /* need padding before this header */
 			pkt = (uint32_t *) rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS + 2 /* rhf field size in dw */
 			      - 2 /* sizeof(uint64_t) in dw, offset back to align
@@ -634,7 +634,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 
 		/* CYR only has 2 bits available in BTH.QP[15:8] for storing the subctxt value, while WFR/JKR uses 3
 		 * bits.*/
-		const uint8_t subctxt_dest = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR | OPX_HFI1_JKR_9B)) ?
+		const uint8_t subctxt_dest = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR | OPX_HFI1_MIXED_9B)) ?
 						     (hdr->bth.subctxt_rx & 0x7) :
 						     ((hdr->bth.subctxt_rx >> 1) & 0x3);
 
@@ -684,7 +684,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 			}
 		}
 
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			slid = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 			dlid = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.dlid);
 		} else {
@@ -780,7 +780,7 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 
 #ifndef NDEBUG
 		opx_lid_t dlid __attribute__((unused));
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			dlid = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.dlid);
 		} else {
 			dlid = (opx_lid_t) __le24_to_cpu((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid));
@@ -788,7 +788,7 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 		assert(dlid == opx_ep->rx->self.lid);
 #endif
 
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			slid = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 		} else {
 			slid = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
@@ -1039,7 +1039,7 @@ unsigned opx_process_soft_rx_q(struct fi_opx_ep *opx_ep, uint8_t subctxt, const 
 		const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
 		uint32_t *pkt;
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			assert(hdrq_offset_dws); /* need padding before this header */
 			pkt = (uint32_t *) rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS + 2 /* rhf field size in dw */
 			      - 2 /* sizeof(uint64_t) in dw, offset back to align
@@ -1063,7 +1063,7 @@ unsigned opx_process_soft_rx_q(struct fi_opx_ep *opx_ep, uint8_t subctxt, const 
 		const union opx_hfi1_packet_hdr *const hdr    = (union opx_hfi1_packet_hdr *) pkt;
 		const uint8_t			       opcode = hdr->bth.opcode;
 
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			slid = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
 			dlid = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.dlid);
 		} else {
