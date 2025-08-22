@@ -207,7 +207,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, int writev_rc, str
 #endif
 		fprintf(stderr, "(%d) [%d] PBC: %#16.16lX\n", pid, req_num, header_vec->scb.scb_9B.qw0);
 
-		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_9B.hdr, OPX_HFI1_TYPE, func, line);
 		} else {
 			fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_16B.hdr, OPX_HFI1_TYPE, func, line);

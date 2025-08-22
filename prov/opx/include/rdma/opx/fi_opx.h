@@ -125,11 +125,11 @@ typedef uint32_t opx_lid_t; /* only 3 bytes of lid is used */
 
 /* hfi1 type for bit logic */
 enum opx_hfi1_type {
-	OPX_HFI1_UNDEF	= 0, // undefined
-	OPX_HFI1_JKR_9B = 1, // CN5000+ built for mixed network. Internal use
-	OPX_HFI1_WFR	= 2, // Omni-path (all generations)
-	OPX_HFI1_JKR	= 4, // CN5000 (initial generation)
-	OPX_HFI1_CYR	= 8  // CN6000 (initial generation)
+	OPX_HFI1_UNDEF	  = 0, // undefined
+	OPX_HFI1_MIXED_9B = 1, // CN5000+ built for mixed network. Internal use
+	OPX_HFI1_WFR	  = 2, // Omni-path (all generations)
+	OPX_HFI1_JKR	  = 4, // CN5000 (initial generation)
+	OPX_HFI1_CYR	  = 8  // CN6000 (initial generation)
 };
 /* Post WFR 16B support - CN5000, CN6000 - unless they need to be differentiated */
 #define OPX_HFI1_CNX000 (OPX_HFI1_JKR | OPX_HFI1_CYR)
@@ -163,7 +163,7 @@ static const char *const OPX_HFI1_PACKET_STR[] = {
 
 #define OPX_NO_16B_SUPPORT(_hfi1_type)                                                                             \
 	do {                                                                                                       \
-		if (!(_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {                                            \
+		if (!(_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {                                          \
 			fprintf(stderr, "%s NO 16B SUPPORT for %s\n", __func__, OPX_HFI1_TYPE_STRING(_hfi1_type)); \
 			if (getenv("OPX_16B_ABORT"))                                                               \
 				abort();                                                                           \
@@ -194,7 +194,9 @@ struct opx_hfi_local_info {
 	bool		   multi_lid; // job has multiple lids
 	int32_t		   min_rctxt;
 	int32_t		   max_rctxt;
-	uint64_t	   unused_qws[3];
+	enum opx_hfi1_type original; // before "mixed_network" changes
+	uint32_t	   unused_dws[1];
+	uint64_t	   unused_qws[2];
 
 	/* == CACHE LINE 1 == */
 	opx_lid_t local_lid_ids[OPX_MAX_HFIS];
