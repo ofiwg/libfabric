@@ -365,6 +365,12 @@ struct fi_opx_debug_counters {
 			uint64_t reliability_timer_pop;
 			uint64_t deferred_work;
 		} doorbell_ring;
+
+		struct {
+			uint64_t success;
+			uint64_t error;
+		} internal_completion;
+
 	} hfisvc;
 
 	struct {
@@ -750,6 +756,9 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.doorbell_ring.poll_many);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.doorbell_ring.reliability_timer_pop);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.doorbell_ring.deferred_work);
+
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.internal_completion.success);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.internal_completion.error);
 #endif
 }
 
