@@ -265,7 +265,7 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dpu
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_jkr;
 		} else if (hfi1_type == OPX_HFI1_CYR) {
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_cyr;
-		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+		} else if (hfi1_type == OPX_HFI1_MIXED_9B) {
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_jkr_9B;
 		} else if (hfi1_type == OPX_HFI1_WFR) {
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_wfr;
@@ -306,7 +306,7 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dpu
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid_jkr;
 		} else if (hfi1_type == OPX_HFI1_CYR) {
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid_cyr;
-		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+		} else if (hfi1_type == OPX_HFI1_MIXED_9B) {
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid_jkr_9B;
 		} else if (hfi1_type == OPX_HFI1_WFR) {
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid_wfr;
@@ -316,7 +316,7 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dpu
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_jkr;
 		} else if (hfi1_type == OPX_HFI1_CYR) {
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_cyr;
-		} else if (hfi1_type == OPX_HFI1_JKR_9B) {
+		} else if (hfi1_type == OPX_HFI1_MIXED_9B) {
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_jkr_9B;
 		} else if (hfi1_type == OPX_HFI1_WFR) {
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_wfr;
@@ -520,7 +520,7 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
 
 	request->iovecs[0].iov_base = req_info;
 
-	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		request->header_vec.scb.scb_9B = (source_scb->scb_9B);
 		request->header_vec.scb.scb_9B.hdr.qw_9B[2] |= ((uint64_t) kdeth << 32) | set_ack_bit;
 		request->header_vec.scb.scb_9B.hdr.qw_9B[4] |= (last_packet_bytes << 32);
@@ -596,7 +596,7 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 	uint32_t fragsize = 0;
 	for (int i = 0; i < we->num_packets; ++i) {
 		fragsize = MAX(fragsize, we->packets[i].length);
-		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			we->packets[i].replay->scb.scb_9B.hdr.qw_9B[2] |= (uint64_t) htonl((uint32_t) psn);
 		} else {
 			we->packets[i].replay->scb.scb_16B.hdr.qw_16B[3] |= (uint64_t) htonl((uint32_t) psn);

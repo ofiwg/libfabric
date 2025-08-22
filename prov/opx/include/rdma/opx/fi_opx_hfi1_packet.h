@@ -1270,7 +1270,7 @@ static inline void fi_opx_hfi1_dump_packet_hdr(const union opx_hfi1_packet_hdr *
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "(%d) %s():%u ==== dump packet header @ %p [%016lx %016lx %016lx %016lx]\n", pid, fn, ln, hdr,
 		     qw[0], qw[1], qw[2], qw[3]);
-	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B)) {
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(%d) %s():%u .lrh.flags ...........     0x%04hx\n",
 			     pid, fn, ln, hdr->lrh_9B.flags);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,

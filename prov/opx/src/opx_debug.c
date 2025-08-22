@@ -61,8 +61,8 @@ static inline size_t opx_debug_slist_len(struct slist_entry *head)
 static inline uint8_t opx_debug_get_replay_bth_opcode(struct fi_opx_reliability_tx_replay *replay,
 						      enum opx_hfi1_type		   hfi1_type)
 {
-	return (hfi1_type & (OPX_HFI1_JKR_9B | OPX_HFI1_WFR)) ? replay->scb.scb_9B.hdr.bth.opcode :
-								replay->scb.scb_16B.hdr.bth.opcode;
+	return (hfi1_type & (OPX_HFI1_MIXED_9B | OPX_HFI1_WFR)) ? replay->scb.scb_9B.hdr.bth.opcode :
+								  replay->scb.scb_16B.hdr.bth.opcode;
 }
 
 static inline uint32_t opx_debug_get_replay_psn(struct fi_opx_reliability_tx_replay *replay,
@@ -71,12 +71,12 @@ static inline uint32_t opx_debug_get_replay_psn(struct fi_opx_reliability_tx_rep
 	uint8_t opcode = opx_debug_get_replay_bth_opcode(replay, hfi1_type);
 
 	if (opcode == 0xC2) {
-		return (hfi1_type & (OPX_HFI1_JKR_9B | OPX_HFI1_WFR)) ?
+		return (hfi1_type & (OPX_HFI1_MIXED_9B | OPX_HFI1_WFR)) ?
 			       ((uint32_t) ntohl(replay->scb.scb_9B.hdr.bth.psn)) & 0x00FFFFFF :
 			       ((uint32_t) ntohl(replay->scb.scb_16B.hdr.bth.psn)) & 0x00FFFFFF;
 	} else {
-		return (hfi1_type & (OPX_HFI1_JKR_9B | OPX_HFI1_WFR)) ? replay->scb.scb_9B.hdr.bth.psn & 0x00FFFFFF :
-									replay->scb.scb_16B.hdr.bth.psn & 0x00FFFFFF;
+		return (hfi1_type & (OPX_HFI1_MIXED_9B | OPX_HFI1_WFR)) ? replay->scb.scb_9B.hdr.bth.psn & 0x00FFFFFF :
+									  replay->scb.scb_16B.hdr.bth.psn & 0x00FFFFFF;
 	}
 }
 

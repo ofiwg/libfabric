@@ -283,7 +283,7 @@ static inline void fi_opx_store_scb_qw(volatile uint64_t dest[8], const uint64_t
 	volatile uint64_t * const scb =
 		FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
-	if ((hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR_9B))) {
+	if ((hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {
 		OPX_HFI1_BAR_STORE(&scb[0], (model_9B.qw0 | OPX_PBC_CR(0x1, hfi1_type) |
 OPX_PBC_LRH_DLID_TO_PBC_DLID(lrh_dlid, hfi1_type))); OPX_HFI1_BAR_STORE(&scb[1], (model_9B.hdr.qw_9B[0] | lrh_dlid));
 		OPX_HFI1_BAR_STORE(&scb[2], (model_9B.hdr.qw_9B[1] | bth_rx));

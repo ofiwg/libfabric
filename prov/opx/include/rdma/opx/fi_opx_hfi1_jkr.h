@@ -206,7 +206,7 @@ static inline void opx_set_route_control_value(const bool disabled)
 	assert(OPX_HFI1_TYPE != OPX_HFI1_UNDEF);
 
 	/* HFI specific default (except OPX_HFI1_RZV_CTRL which always defaults to OPX_RC_IN_ORDER_0) */
-	const int default_route_control = ((OPX_HFI1_TYPE & (OPX_HFI1_CNX000 | OPX_HFI1_JKR_9B)) ?
+	const int default_route_control = ((OPX_HFI1_TYPE & (OPX_HFI1_CNX000 | OPX_HFI1_MIXED_9B)) ?
 						   OPX_CHECK_OUT_OF_ORDER(disabled, OPX_RC_OUT_OF_ORDER_0) :
 						   OPX_RC_IN_ORDER_0);
 	char	 *env_route_control;
@@ -402,9 +402,9 @@ __OPX_FORCE_INLINE__ int opx_jkr_16B_rhf_check_header(const uint64_t			     rhf_
 	}
 }
 
-#define OPX_JKR_RHF_CHECK_HEADER(_rhf_rcvd, _hdr, _hfi1_type)                                        \
-	((_hfi1_type & OPX_HFI1_JKR_9B) ? opx_jkr_9B_rhf_check_header(_rhf_rcvd, _hdr, _hfi1_type) : \
-					  opx_jkr_16B_rhf_check_header(_rhf_rcvd, _hdr, _hfi1_type))
+#define OPX_JKR_RHF_CHECK_HEADER(_rhf_rcvd, _hdr, _hfi1_type)                                          \
+	((_hfi1_type & OPX_HFI1_MIXED_9B) ? opx_jkr_9B_rhf_check_header(_rhf_rcvd, _hdr, _hfi1_type) : \
+					    opx_jkr_16B_rhf_check_header(_rhf_rcvd, _hdr, _hfi1_type))
 
 union opx_jkr_pbc {
 	uint64_t raw64b;
