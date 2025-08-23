@@ -2786,7 +2786,8 @@ Test(rnr_msg_hybrid_mr_desc, sizes_comp)
 
 static void msg_hybrid_append_test_runner(bool recv_truncation,
 					  bool byte_counts,
-					  bool cq_events)
+					  bool cq_events,
+					  bool mr_desc)
 {
 	struct cxip_ep *cxip_ep = container_of(&cxit_ep->fid, struct cxip_ep,
 					       ep.fid);
@@ -2822,7 +2823,6 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 	ret = mr_create(send_win_len, FI_READ | FI_WRITE, 0xa, &send_key,
 			&send_window);
 	cr_assert(ret == FI_SUCCESS);
-
 	send_desc[0] = fi_mr_desc(send_window.mr);
 	cr_assert(send_desc[0] != NULL);
 
@@ -2840,7 +2840,7 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 	msg.iov_count = 1;
 	msg.addr = FI_ADDR_UNSPEC;
 	msg.context = &ctxt[0];
-	msg.desc = recv_desc;
+	msg.desc = mr_desc ? recv_desc : NULL;
 	msg.msg_iov = &riovec;
 	riovec.iov_base = recv_window.mem;
 	riovec.iov_len = recv_win_len;
@@ -2954,6 +2954,13 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 	ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
 	cr_assert(ret == -FI_EAGAIN);
 
+	/* Verfiy that after additional progress, RX counts have not
+	 * incremented.
+	 */
+	recv_cnt = fi_cntr_read(cxit_recv_cntr);
+	cr_assert(recv_cnt == byte_counts ? trunc_byte_len : iters,
+		  "RX receive count %ld updated by software", recv_cnt);
+
 	/* Cancel append FI_MULIT_RECV buffer */
 	ret = fi_cancel(&cxit_ep->fid, &ctxt[0]);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_cancel failed %d", ret);
@@ -2980,6 +2987,11 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 	ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
 	cr_assert(ret == -FI_EAGAIN);
 
+	/* Make sure unlink of FI_MULTI_RECV did not update counter */
+	recv_cnt = fi_cntr_read(cxit_recv_cntr);
+	cr_assert(recv_cnt == byte_counts ? trunc_byte_len : iters,
+		  "Unlink updated RX recieve count %ld by software", recv_cnt);
+
 	for (i = 0; i < recv_win_len; i++)
 		cr_assert_eq(send_window.mem[i], recv_window.mem[i],
 			     "data mismatch, element: (%d) %02x != %02x\n", i,
@@ -2995,17 +3007,17 @@ TestSuite(rnr_msg_append_hybrid_mr_desc,
 
 Test(rnr_msg_append_hybrid_mr_desc, no_trunc_count_events_non_comp)
 {
-	msg_hybrid_append_test_runner(false, false, false);
+	msg_hybrid_append_test_runner(false, false, false, true);
 }
 
 Test(rnr_msg_append_hybrid_mr_desc, no_trunc_count_events_comp)
 {
-	msg_hybrid_append_test_runner(false, false, true);
+	msg_hybrid_append_test_runner(false, false, true, true);
 }
 
 Test(rnr_msg_append_hybrid_mr_desc, trunc_count_events_non_comp)
 {
-	msg_hybrid_append_test_runner(true, false, false);
+	msg_hybrid_append_test_runner(true, false, false, true);
 }
 
 Test(rnr_msg_append_hybrid_mr_desc, trunc_count_events_comp)
@@ -3018,7 +3030,35 @@ Test(rnr_msg_append_hybrid_mr_desc, trunc_count_events_comp)
 	 */
 	cxip_ep->ep_obj->rxc->trunc_ok = true;
 
-	msg_hybrid_append_test_runner(true, false, true);
+	msg_hybrid_append_test_runner(true, false, true, true);
+}
+
+Test(rnr_msg_append_hybrid_mr_desc, no_desc_no_trunc_count_events_non_comp)
+{
+	msg_hybrid_append_test_runner(false, false, false, false);
+}
+
+Test(rnr_msg_append_hybrid_mr_desc, no_desc_no_trunc_count_events_comp)
+{
+	msg_hybrid_append_test_runner(false, false, true, false);
+}
+
+Test(rnr_msg_append_hybrid_mr_desc, no_desc_trunc_count_events_non_comp)
+{
+	msg_hybrid_append_test_runner(true, false, false, false);
+}
+
+Test(rnr_msg_append_hybrid_mr_desc, no_desc_trunc_count_events_comp)
+{
+	struct cxip_ep *cxip_ep = container_of(&cxit_ep->fid, struct cxip_ep,
+					       ep.fid);
+
+	/* This test requires that experimental truncation a success
+	 * is enabled.
+	 */
+	cxip_ep->ep_obj->rxc->trunc_ok = true;
+
+	msg_hybrid_append_test_runner(true, false, true, false);
 }
 
 TestSuite(rnr_msg_append_hybrid_mr_desc_byte_cntr,
@@ -3027,17 +3067,17 @@ TestSuite(rnr_msg_append_hybrid_mr_desc_byte_cntr,
 
 Test(rnr_msg_append_hybrid_mr_desc_byte_cntr, no_trunc_count_bytes_non_comp)
 {
-	msg_hybrid_append_test_runner(false, true, false);
+	msg_hybrid_append_test_runner(false, true, false, true);
 }
 
 Test(rnr_msg_append_hybrid_mr_desc_byte_cntr, no_trunc_count_bytes_comp)
 {
-	msg_hybrid_append_test_runner(false, true, true);
+	msg_hybrid_append_test_runner(false, true, true, true);
 }
 
 Test(rnr_msg_append_hybrid_mr_desc_byte_cntr, trunc_count_bytes_non_comp)
 {
-	msg_hybrid_append_test_runner(true, true, false);
+	msg_hybrid_append_test_runner(true, true, false, true);
 }
 
 Test(rnr_msg_append_hybrid_mr_desc_byte_cntr, trunc_count_bytes_comp)
@@ -3050,5 +3090,37 @@ Test(rnr_msg_append_hybrid_mr_desc_byte_cntr, trunc_count_bytes_comp)
 	 */
 	cxip_ep->ep_obj->rxc->trunc_ok = true;
 
-	msg_hybrid_append_test_runner(true, true, true);
+	msg_hybrid_append_test_runner(true, true, true, true);
+}
+
+TestSuite(rnr_msg_append_byte_cntr,
+	  .init = cxit_setup_rma_rnr_hybrid_mr_desc_byte_cntr,
+	  .fini = cxit_teardown_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(rnr_msg_append_byte_cntr, no_desc_no_trunc_count_bytes_non_comp)
+{
+	msg_hybrid_append_test_runner(false, true, false, false);
+}
+
+Test(rnr_msg_append_byte_cntr, no_desc_no_trunc_count_bytes_comp)
+{
+	msg_hybrid_append_test_runner(false, true, true, false);
+}
+
+Test(rnr_msg_append_byte_cntr, no_desc_trunc_count_bytes_non_comp)
+{
+	msg_hybrid_append_test_runner(true, true, false, false);
+}
+
+Test(rnr_msg_append_byte_cntr, no_desc_trunc_count_bytes_comp)
+{
+	struct cxip_ep *cxip_ep = container_of(&cxit_ep->fid, struct cxip_ep,
+					       ep.fid);
+
+	/* This test requires that experimental truncation a success
+	 * is enabled.
+	 */
+	cxip_ep->ep_obj->rxc->trunc_ok = true;
+
+	msg_hybrid_append_test_runner(true, true, true, false);
 }

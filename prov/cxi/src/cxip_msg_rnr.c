@@ -511,11 +511,6 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 		if (ret)
 			goto err;
 
-		if (cntr) {
-			req->recv.cntr = cntr;
-			cxip_cntr_progress_inc(req->recv.cntr);
-		}
-
 		recv_req = req;
 		recv_req->context = (uint64_t)context;
 		recv_req->flags = ((tagged ? FI_TAGGED : FI_MSG) | FI_RECV |
@@ -524,15 +519,20 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 
 		/* Can still disable success events if multi-recv and
 		 * completions are not requested since final mandatory unlink
-		 * will cleanup resources. However, if buffer will be auto-
-		 * unlinked take internal completions to handle the
-		 * accounting to ensure all data has landed.
+		 * will cleanup resources. If the buffer is mutli-recv auto
+		 * unlink or completion events are requested we will still
+		 * generate success events.
 		 */
 		if (flags & FI_MULTI_RECV && !(flags & FI_COMPLETION) &&
-		    !rxc->min_multi_recv)
+		    !rxc->min_multi_recv) {
 			recv_req->recv.success_disable = true;
-		else
+		} else {
 			recv_req->recv.success_disable = false;
+			if (cntr) {
+				req->recv.cntr = cntr;
+				cxip_cntr_progress_inc(req->recv.cntr);
+			}
+		}
 	}
 
 	recv_req->recv.match_id = match_id;

@@ -196,6 +196,7 @@ void cxip_recv_req_report(struct cxip_req *req)
 			     !(req->flags & FI_COMPLETION));
 	struct cxip_rxc *rxc = req->recv.rxc;
 	ssize_t truncated = req->recv.rlen - req->data_len;
+	bool sw_cntr_update = rxc->protocol != FI_PROTO_CXI_RNR;
 
 	/* data_len (i.e. mlength) should NEVER be greater than rlength. */
 	assert(truncated >= 0);
@@ -258,7 +259,7 @@ void cxip_recv_req_report(struct cxip_req *req)
 					 ret);
 		}
 
-		if (req->recv.cntr) {
+		if (req->recv.cntr && sw_cntr_update) {
 			ret = cxip_cntr_mod(req->recv.cntr, 1, false, false);
 			if (ret)
 				RXC_WARN(rxc, "cxip_cntr_mod returned: %d\n",
@@ -292,7 +293,7 @@ void cxip_recv_req_report(struct cxip_req *req)
 		if (ret != FI_SUCCESS)
 			RXC_WARN(rxc, "Failed to report error: %d\n", ret);
 
-		if (req->recv.cntr) {
+		if (req->recv.cntr && sw_cntr_update) {
 			ret = cxip_cntr_mod(req->recv.cntr, 1, false, true);
 			if (ret)
 				RXC_WARN(rxc, "cxip_cntr_mod returned: %d\n",
