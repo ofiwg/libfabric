@@ -17213,9 +17213,9 @@ HFI selection logic.
     configured with GDRCopy or ROCR support.
 
 *FI_OPX_MIXED_NETWORK*
-:   Boolean (1/0, on/off, true/false, yes/no). Indicates that the
-    network requires OPA100 support. Set to 0 if OPA100 support is not
-    needed. Default is 1.
+:   Boolean (1/0, on/off, true/false, yes/no). Indicates that the job
+    requires OPA100 support. Set to 0 if OPA100 support is not needed.
+    Default is 1.
 
 *FI_OPX_ROUTE_CONTROL*
 :   Integer. Specify the route control for each packet type. The format
