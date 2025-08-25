@@ -14,7 +14,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  opx-ci:
-    name: CI
+  prechecks:
+    name: Prechecks
     if: ${{ github.repository == 'cornelisnetworks/libfabric-internal' }}
-    uses: cornelisnetworks/libfabric-devel/.github/workflows/cn.yml@master
+    uses: cornelisnetworks/libfabric-devel/.github/workflows/ci-prechecks.yml@master
+  opa100:
+    name: OPA100
+    needs: [prechecks]
+    if: ${{ github.repository == 'cornelisnetworks/libfabric-internal' }}
+    uses: cornelisnetworks/libfabric-devel/.github/workflows/ci-opa100.yml@master
+    secrets:
+      OPXR_ELASTICSEARCH_CREDENTIALS: ${{ secrets.OPXR_ELASTICSEARCH_CREDENTIALS }}
+  cn5000:
+    name: CN5000
+    needs: [prechecks]
+    if: ${{ github.repository == 'cornelisnetworks/libfabric-internal' }}
+    uses: cornelisnetworks/libfabric-devel/.github/workflows/ci-cn5000.yml@master
+    secrets:
+      OPXR_ELASTICSEARCH_CREDENTIALS: ${{ secrets.OPXR_ELASTICSEARCH_CREDENTIALS }}
+  cleanup:
+    name: Clean Up
+    needs: [opa100, cn5000]
+    if: ${{ github.repository == 'cornelisnetworks/libfabric-internal' }}
+    uses: cornelisnetworks/libfabric-devel/.github/workflows/ci-cleanup.yml@master
