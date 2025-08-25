@@ -283,6 +283,13 @@ int run_pingpong(void)
 			return ret;
 	}
 
+	/* ft_finalize() needs RX buffer to be posted for proper sync */
+	if (ft_check_opts(FT_OPT_NO_PRE_POSTED_RX)) {
+		ret = ft_post_rx(ep, rx_size, &rx_ctx);
+		if (ret)
+			return ret;
+	}
+
 	return ft_finalize();
 }
 
