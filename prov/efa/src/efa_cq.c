@@ -352,7 +352,6 @@ const char *efa_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 #if HAVE_EFA_CQ_NOTIFICATION
 int efa_cq_trywait(struct efa_cq *cq)
 {
-	struct ibv_cq *ibv_cq;
 	void *context;
 	int ret;
 
@@ -367,8 +366,7 @@ int efa_cq_trywait(struct efa_cq *cq)
 		return -FI_EAGAIN;
 	}
 
-	ibv_cq = ibv_cq_ex_to_cq(cq->ibv_cq.ibv_cq_ex);
-	while (!ibv_get_cq_event(cq->ibv_cq.channel, &ibv_cq, &context)) {
+	while (!efa_ibv_get_cq_event(&cq->ibv_cq, &context)) {
 		ofi_atomic_inc32(&cq->nevents);
 		EFA_DBG(FI_LOG_CQ,
 				"efa_cq_trywait: drained pending event, nevents=%d\n",
@@ -376,7 +374,7 @@ int efa_cq_trywait(struct efa_cq *cq)
 	}
 
 	/* Arm the completion notification for next completion */
-	ret = ibv_req_notify_cq(ibv_cq, 0);
+	ret = efa_ibv_req_notify_cq(&cq->ibv_cq, 0);
 	if (ret) {
 		ret = -errno;
 		EFA_WARN(FI_LOG_CQ,
@@ -413,7 +411,6 @@ int efa_poll_events(struct efa_cq *cq, int timeout)
 	int ret, rc;
 	void *context;
 	struct pollfd fds[2];
-	struct ibv_cq *ibv_cq;
 
 	fds[0].fd = cq->ibv_cq.channel->fd;
 	/* A signal FD for interrupting the wait operation */
@@ -436,8 +433,7 @@ int efa_poll_events(struct efa_cq *cq, int timeout)
 	ret = 0;
 	if (fds[0].revents & POLLIN) {
 		/* Data is available for reading on completion channel */
-		ibv_cq = ibv_cq_ex_to_cq(cq->ibv_cq.ibv_cq_ex);
-		ret = ibv_get_cq_event(cq->ibv_cq.channel, &ibv_cq, &context);
+		ret = efa_ibv_get_cq_event(&cq->ibv_cq, &context);
 		if (ret) {
 			EFA_WARN(FI_LOG_CQ, "ibv_get_cq_event failed with ret=%d\n", ret);
 			return ret;
@@ -776,7 +772,7 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 			goto err_destroy_ibv_cq;
 		}
 
-		err = ibv_req_notify_cq(ibv_cq_ex_to_cq(cq->ibv_cq.ibv_cq_ex), 0);
+		err = efa_ibv_req_notify_cq(&cq->ibv_cq, 0);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ,
 					 "ibv_req_notify_cq failed with %s\n", fi_strerror(-err));
@@ -793,7 +789,17 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	(*cq_fid)->ops = &efa_cq_ops;
 
 #if HAVE_EFA_DATA_PATH_DIRECT
-	efa_data_path_direct_cq_initialize(cq);
+	#if HAVE_EFADV_CQ_ATTR_DB
+		efa_data_path_direct_cq_initialize(cq);
+	#else
+		if (attr->wait_obj == FI_WAIT_NONE) {
+			efa_data_path_direct_cq_initialize(cq);
+		} else {
+			cq->ibv_cq.data_path_direct_enabled = false;
+			EFA_INFO(FI_LOG_CQ, "Direct CQ data path is not "
+					    "enabled with wait object.\n");
+		}
+	#endif
 #endif
 
 	return 0;

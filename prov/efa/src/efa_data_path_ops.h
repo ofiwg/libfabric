@@ -58,6 +58,9 @@ bool efa_ibv_cq_wc_is_unsolicited(struct efa_ibv_cq *ibv_cq);
 
 int efa_ibv_cq_wc_read_sgid(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid);
 
+int efa_ibv_get_cq_event(struct efa_ibv_cq *ibv_cq, void **cq_context);
+int efa_ibv_req_notify_cq(struct efa_ibv_cq *ibv_cq, int solicited_only);
+
 #else
 /* For production, define static inline functions */
 
@@ -308,6 +311,34 @@ static inline int efa_ibv_cq_wc_read_sgid(struct efa_ibv_cq *ibv_cq, union ibv_g
 	return false;
 #endif
 }
+
+static inline int efa_ibv_get_cq_event(struct efa_ibv_cq *ibv_cq, void **cq_context)
+{
+	struct ibv_cq *cq = ibv_cq_ex_to_cq(ibv_cq->ibv_cq_ex);
+#if HAVE_EFA_DATA_PATH_DIRECT && HAVE_EFADV_CQ_ATTR_DB
+	if (ibv_cq->data_path_direct_enabled)
+		return efa_data_path_direct_get_cq_event(ibv_cq, &cq, cq_context);
+#endif
+#if HAVE_EFA_CQ_NOTIFICATION
+	return ibv_get_cq_event(ibv_cq->channel, &cq, cq_context);
+#else
+	return -FI_ENOSYS;
+#endif
+}
+
+static inline int efa_ibv_req_notify_cq(struct efa_ibv_cq *ibv_cq, int solicited_only)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT && HAVE_EFADV_CQ_ATTR_DB
+	if (ibv_cq->data_path_direct_enabled)
+		return efa_data_path_direct_req_notify_cq(ibv_cq, solicited_only);
+#endif
+#if HAVE_EFA_CQ_NOTIFICATION
+	return ibv_req_notify_cq(ibv_cq_ex_to_cq(ibv_cq->ibv_cq_ex), solicited_only);
+#else
+	return -FI_ENOSYS;
+#endif
+}
+
 
 #endif /* EFA_UNIT_TEST */
 

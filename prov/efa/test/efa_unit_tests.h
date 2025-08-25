@@ -344,6 +344,7 @@ void test_efa_cq_recv_rdma_with_imm_failure();
 void test_efa_cq_data_path_direct_disabled_by_env();
 void test_efa_cq_data_path_direct_disabled_with_old_device();
 void test_efa_cq_data_path_direct_enabled_with_new_device();
+void test_efa_cq_data_path_direct_with_wait_obj();
 void test_efa_rdm_cq_data_path_direct_disabled();
 void test_efa_cq_trywait_no_channel();
 void test_efa_cq_trywait_completions_available();

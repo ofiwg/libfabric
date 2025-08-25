@@ -32,6 +32,7 @@
 #if HAVE_EFA_DATA_PATH_DIRECT
 
 #include "efa_io_defs.h"
+#include "efa_io_regs_defs.h"
 
 /**
  * The contents of this file only make sense if we can query rdma-core for QP
@@ -104,6 +105,10 @@ struct efa_data_path_direct_cq {
 	int phase;                                /**< Current phase bit for queue wrapping */
 	int qmask;                                /**< Mask for queue index wrapping */
 	uint16_t consumed_cnt;                    /**< Number of completions consumed */
+
+	uint32_t *db; /**< Doorbell */
+	uint16_t cc; /**< Consumer Counter */
+	uint8_t cmd_sn;
 };
 
 /**
