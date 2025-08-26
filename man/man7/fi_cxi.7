@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_cxi" "7" "2025\-08\-11" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_cxi" "7" "2025\-08\-26" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -88,8 +88,8 @@ The CXI provider currently supports \f[I]FI_PROGRESS_MANUAL\f[R] data
 and control progress modes.
 .SS Multi-threading
 .PP
-The CXI provider supports FI_THREAD_SAFE and FI_THREAD_DOMAIN threading
-models.
+The CXI provider supports FI_THREAD_SAFE, FI_THREAD_COMPLETION, and
+FI_THREAD_DOMAIN threading models.
 .SS Wait Objects
 .PP
 The CXI provider supports FI_WAIT_FD and FI_WAIT_POLLFD CQ wait object
@@ -1244,6 +1244,13 @@ This variable is only valid if the alt_read rendezvous protocol has been
 enabled with FI_CXI_RDZV_PROTO=alt_read.
 If set, it will disable the alt_read dedicated rendezvous get command
 queue, conserving command queue resources with a cost in performance.
+.TP
+\f[I]FI_CXI_CNTR_TRIG_CMDQ\f[R]
+Enables dedicated triggered command queue for bound counters when using
+FI_THREAD_SAFE or FI_THREAD_COMPLETION.
+This can improve the performance multithreaded counter operations at the
+cost of command queue resources.
+This option is disabled by default.
 .TP
 \f[I]FI_CXI_DISABLE_NON_INJECT_MSG_IDC\f[R]
 Experimental option to disable favoring IDC for transmit of small
