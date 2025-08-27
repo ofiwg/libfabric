@@ -64,6 +64,7 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	 * should be adjusted according to the actual data size.
 	 */
 	pkt_entry->pkt_size = pkt_pool->attr.size - sizeof(struct efa_rdm_pke);
+	pkt_entry->addr = FI_ADDR_NOTAVAIL;
 	pkt_entry->alloc_type = alloc_type;
 	pkt_entry->flags = EFA_RDM_PKE_IN_USE;
 	pkt_entry->next = NULL;
