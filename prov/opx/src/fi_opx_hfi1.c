@@ -2569,7 +2569,6 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	assert(work != NULL);
 	struct opx_hfi1_rx_ipc_rts_params *params = &work->rx_ipc_rts;
 
-	params->work_elem.work_fn	    = opx_ipc_send_cts;
 	params->work_elem.work_type	    = OPX_WORK_TYPE_SHM;
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy	    = NULL;
@@ -2584,11 +2583,13 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 
 	opx_lid_t lid;
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
-		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
+		lid			  = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
+		params->lrh_dlid	  = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
+		params->work_elem.work_fn = opx_ipc_send_cts_9B;
 	} else {
-		lid		 = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
-		params->lrh_dlid = lid; // Send CTS to the SLID that sent RTS
+		lid			  = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
+		params->lrh_dlid	  = lid; // Send CTS to the SLID that sent RTS
+		params->work_elem.work_fn = opx_ipc_send_cts_16B;
 	}
 
 	params->u32_extended_rx = u32_extended_rx;
@@ -5047,12 +5048,6 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 			"hdr %p, payload %p, sbuf %p, sbuf+immediate_total %p, immediate_total %#lX, adj len %#lX\n",
 			hdr, payload, buf, ((char *) buf + immediate_total), immediate_total, (len - immediate_total));
 
-		/* We can optimize by disabling/enabling ipc at endpoint creation. We could
-		   check the FI_HMEM env to see if iface list includes things beyond system.
-		   We would then need to iterate over the list of all non-system ifaces and
-		   determine whether p2p is supported for each of those hmem ifaces
-		*/
-
 #ifdef OPX_HMEM
 		if (opx_ep->use_gpu_ipc == src_iface && src_iface != FI_HMEM_SYSTEM &&
 		    len >= OPX_GPU_IPC_MIN_THRESHOLD) {
@@ -5074,7 +5069,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 				(uint64_t) buf - (uint64_t) payload->rendezvous.ipc.ipc_info.base_addr;
 
 			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-SENDER-CREATE-HANDLE");
-			ret = ofi_hmem_get_handle(src_iface, (void *) buf, len,
+			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr, len,
 						  (void **) &payload->rendezvous.ipc.ipc_info.ipc_handle);
 			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-SENDER-CREATE-HANDLE");
 
@@ -5716,8 +5711,6 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				 (payload_blocks_total << 4) + /* includes last kdeth + metadata + immediate data */
 				 ((icrc_end_block | icrc_fragment_block) << 1); /* 1 QW of any added tail block */
 
-	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
-
 	if (is_shm) {
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -5766,6 +5759,81 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 										 FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS) :
 					    ((tx_op_flags & FI_REMOTE_CQ_DATA) ? FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_CQ :
 										 FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS));
+
+		union fi_opx_hfi1_packet_payload *const payload = (union fi_opx_hfi1_packet_payload *) (hdr + 1);
+
+#ifdef OPX_HMEM
+		if (opx_ep->use_gpu_ipc == src_iface && src_iface != FI_HMEM_SYSTEM &&
+		    len >= OPX_GPU_IPC_MIN_THRESHOLD) {
+			int ret = ofi_hmem_get_base_addr(src_iface, buf, len,
+							 (void **) &payload->rendezvous.ipc.ipc_info.base_addr,
+							 &payload->rendezvous.ipc.ipc_info.base_length);
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"Failed to get base addr for IPC handle. Falling back to non-IPC case."
+					"Error code: %d\n",
+					ret);
+				goto non_ipc;
+			}
+
+			payload->rendezvous.ipc.origin_byte_counter_vaddr = origin_byte_counter_vaddr;
+			payload->rendezvous.ipc.ipc_info.iface		  = src_iface;
+			payload->rendezvous.ipc.ipc_info.device		  = src_device_id;
+			payload->rendezvous.ipc.ipc_info.offset =
+				(uint64_t) buf - (uint64_t) payload->rendezvous.ipc.ipc_info.base_addr;
+
+			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-SENDER-CREATE-HANDLE");
+			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr, len,
+						  (void **) &payload->rendezvous.ipc.ipc_info.ipc_handle);
+			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-SENDER-CREATE-HANDLE");
+
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"Failed to create IPC handle for Device. Falling back to non-IPC case."
+					"Error code: %d\n",
+					ret);
+				goto non_ipc;
+			}
+
+			const uint16_t lrh_qws =
+				8 + /* 2 lhr + 1.5 bth + 4.5 kdeth from "RcvHdrSize[i].HdrSize" CSR*/
+				(sizeof(payload->rendezvous.ipc) / 8); /* (LRH QW) does not include pbc (8 bytes) */
+			hdr->qw_16B[0] = opx_ep->tx->rzv_16B.hdr.qw_16B[0] |
+					 ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
+					  << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
+					 ((uint64_t) lrh_qws << 20);
+
+			hdr->qw_16B[1] = opx_ep->tx->rzv_16B.hdr.qw_16B[1] |
+					 ((uint64_t) ((lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
+						      OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
+					 (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
+
+			hdr->qw_16B[2] = opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx | opcode;
+			hdr->qw_16B[3] = opx_ep->tx->rzv_16B.hdr.qw_16B[3];
+			hdr->qw_16B[4] = opx_ep->tx->rzv_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32);
+			hdr->qw_16B[5] = opx_ep->tx->rzv_16B.hdr.qw_16B[5] | (1ull << 48) /* effectively 1 iov */
+					 | (FI_OPX_PKT_RZV_FLAGS_IPC_MASK);
+			hdr->qw_16B[6] = len;
+			hdr->qw_16B[7] = tag;
+
+			opx_shm_tx_advance(&opx_ep->tx->shm, (void *) hdr, pos);
+
+			if (OFI_LIKELY(do_cq_completion)) {
+				fi_opx_ep_tx_cq_completion_rzv(ep, context, len, lock_required, tag, caps);
+			}
+
+			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-SHM");
+			FI_DBG_TRACE(
+				fi_opx_global.prov, FI_LOG_EP_DATA,
+				"===================================== SEND, SHM -- RENDEZVOUS RTS (end) context %p\n",
+				user_context);
+			return FI_SUCCESS;
+		}
+
+	non_ipc:
+#endif
+
+		const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 		hdr->qw_16B[0] =
 			opx_ep->tx->rzv_16B.hdr.qw_16B[0] |
 			((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -5779,11 +5847,9 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 		hdr->qw_16B[2] = opx_ep->tx->rzv_16B.hdr.qw_16B[2] | bth_rx | opcode;
 		hdr->qw_16B[3] = opx_ep->tx->rzv_16B.hdr.qw_16B[3];
 		hdr->qw_16B[4] = opx_ep->tx->rzv_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32);
-		hdr->qw_16B[5] = opx_ep->tx->rzv_16B.hdr.qw_16B[4] | (1ull << 48); /* effectively 1 iov */
+		hdr->qw_16B[5] = opx_ep->tx->rzv_16B.hdr.qw_16B[5] | (1ull << 48); /* effectively 1 iov */
 		hdr->qw_16B[6] = len;
 		hdr->qw_16B[7] = tag;
-
-		union fi_opx_hfi1_packet_payload *const payload = (union fi_opx_hfi1_packet_payload *) (hdr + 1);
 
 		struct opx_payload_rzv_contig *contiguous = &payload->rendezvous.contiguous_16B;
 		contiguous->src_vaddr			  = (uintptr_t) buf + immediate_total;
@@ -5846,6 +5912,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	OPX_SHD_CTX_PIO_LOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 
+	const uint16_t lrh_qws		    = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 	const uint16_t total_credits_needed = (lrh_qws + 1 /* pbc */ + 7) >> 3;
 
 	uint64_t total_credits_available =
