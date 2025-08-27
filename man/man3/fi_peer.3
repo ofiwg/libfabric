@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_peer" "3" "2025\-07\-23" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_peer" "3" "2025\-08\-27" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .TP
@@ -576,7 +576,7 @@ buffer(s) where an incoming message should be placed.
 The peer provider will pass in the relevant fields to request a matching
 rx_entry from the owner.
 If source addressing is required, the addr will be passed in; otherwise,
-the address will be set to FI_ADDR_NOT_AVAIL.
+the address will be set to FI_ADDR_NOTAVAIL.
 The msg_size field indicates the received message size.
 This field may be needed by the owner when handling FI_MULTI_RECV or
 FI_PEEK.
