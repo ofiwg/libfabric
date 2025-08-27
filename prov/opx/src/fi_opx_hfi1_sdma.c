@@ -141,7 +141,8 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, int writev_rc, str
 	const pid_t pid = getpid();
 
 	if (errno == ECOMM || errno == EINTR || errno == EFAULT) {
-		int err = fi_opx_context_check_status(opx_ep->hfi, OPX_HFI1_TYPE, opx_ep, OPX_IS_CTX_SHARING_ENABLED);
+		int err =
+			fi_opx_context_check_status(opx_ep->hfi, OPX_SW_HFI1_TYPE, opx_ep, OPX_IS_CTX_SHARING_ENABLED);
 		if (err != FI_SUCCESS) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Link down detected\n");
 			return;
@@ -207,10 +208,10 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, int writev_rc, str
 #endif
 		fprintf(stderr, "(%d) [%d] PBC: %#16.16lX\n", pid, req_num, header_vec->scb.scb_9B.qw0);
 
-		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-			fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_9B.hdr, OPX_HFI1_TYPE, func, line);
+		if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+			fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_9B.hdr, OPX_SW_HFI1_TYPE, func, line);
 		} else {
-			fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_16B.hdr, OPX_HFI1_TYPE, func, line);
+			fi_opx_hfi1_dump_packet_hdr(&header_vec->scb.scb_16B.hdr, OPX_SW_HFI1_TYPE, func, line);
 		}
 
 		fprintf(stderr, "(%d) [%d] req data iov=%p len=%lu\n", pid, req_num, iov_ptr[1].iov_base,

@@ -232,11 +232,11 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq,
 	 * Error injection .. purposefully drop packet
 	 */
 	if (OFI_UNLIKELY(FI_OPX_RELIABILITY_RX_DROP_PACKET(opx_ep->reli_service, hdr))) {
-		*p_rhf_seq   = OPX_RHF_SEQ_INCREMENT(rhf_seq, OPX_HFI1_TYPE);
+		*p_rhf_seq   = OPX_RHF_SEQ_INCREMENT(rhf_seq, OPX_SW_HFI1_TYPE);
 		*p_hdrq_head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-		if (OPX_RHF_IS_USE_EGR_BUF(rhf, OPX_HFI1_TYPE)) { /* eager */
-			const uint32_t egrbfr_index	 = OPX_RHF_EGR_INDEX(rhf, OPX_HFI1_TYPE);
+		if (OPX_RHF_IS_USE_EGR_BUF(rhf, OPX_SW_HFI1_TYPE)) { /* eager */
+			const uint32_t egrbfr_index	 = OPX_RHF_EGR_INDEX(rhf, OPX_SW_HFI1_TYPE);
 			const uint32_t last_egrbfr_index = *p_last_egrbfr_index;
 			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
 				OPX_HFI1_BAR_UREG_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
@@ -634,9 +634,8 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 
 		/* CYR only has 2 bits available in BTH.QP[15:8] for storing the subctxt value, while WFR/JKR uses 3
 		 * bits.*/
-		const uint8_t subctxt_dest = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR | OPX_HFI1_MIXED_9B)) ?
-						     (hdr->bth.subctxt_rx & 0x7) :
-						     ((hdr->bth.subctxt_rx >> 1) & 0x3);
+		const uint8_t subctxt_dest = (!(OPX_IS_EXTENDED_RX(hfi1_type))) ? (hdr->bth.subctxt_rx & 0x7) :
+										  ((hdr->bth.subctxt_rx >> 1) & 0x3);
 
 		uint64_t  hdrq_head_local;
 		uint32_t *p_last_egrbfr_index;
