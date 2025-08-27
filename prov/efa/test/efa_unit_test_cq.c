@@ -449,6 +449,8 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
 	assert_int_equal(numaddr, 1);
 
+	pkt_entry->addr = peer_addr;
+
 	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
 	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
 	ibv_cqx->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
