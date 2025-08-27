@@ -513,7 +513,7 @@ These calls are invoked by the peer provider to obtain the receive buffer(s)
 where an incoming message should be placed.  The peer provider will pass in
 the relevant fields to request a matching rx_entry from the owner.  If source
 addressing is required, the addr will be passed in; otherwise, the address will
-be set to FI_ADDR_NOT_AVAIL.
+be set to FI_ADDR_NOTAVAIL.
 The msg_size field indicates the received message size.
 This field may be needed by the owner when handling FI_MULTI_RECV or FI_PEEK.
 The owner will set the peer_entry->msg_size field on get_msg/tag() for the owner
