@@ -171,7 +171,7 @@ void opx_print_9B_pbc(uint64_t pbc1, const enum opx_hfi1_type hfi1_type, const c
 {
 	/* WFR 9B is different */
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s %s %s\n", func, OPX_HFI1_TYPE_STRING(hfi1_type),
-		     OPX_HFI1_TYPE_STRING(OPX_HFI1_TYPE));
+		     OPX_HFI1_TYPE_STRING(OPX_SW_HFI1_TYPE));
 	if (hfi1_type & OPX_HFI1_WFR) {
 		return opx_wfr_print_9B_pbc(pbc1, func);
 	}

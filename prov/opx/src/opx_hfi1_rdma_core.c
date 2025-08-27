@@ -378,9 +378,9 @@ static struct _hfi_ctrl *opx_hfi1_rdma_userinit(int fd, struct fi_opx_hfi1_conte
 	       (OPX_HFI1_CYR | OPX_HFI1_JKR | OPX_HFI1_WFR)); /* OPX_HFI1_MIXED_9B is determined later */
 
 	/* Need the global set early, may be changed later on mixed networks */
-	if (OPX_HFI1_TYPE == OPX_HFI1_UNDEF) {
-		OPX_HFI1_TYPE			      = context->hfi1_type;
-		fi_opx_global.hfi_local_info.original = context->hfi1_type;
+	if (OPX_SW_HFI1_TYPE == OPX_HFI1_UNDEF) {
+		OPX_SW_HFI1_TYPE = context->hfi1_type;
+		OPX_HW_HFI1_TYPE = context->hfi1_type;
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -845,12 +845,16 @@ int opx_hfi1_wrapper_context_open(const int unit, const int port, const uint64_t
 				  const enum opx_hfi1_type hfi1_type, void **ibv_context, unsigned int *user_version,
 				  int *fd_cdev, int *fd_verbs)
 {
-	if (!OPX_HFI1_VERBS_CONTEXTS_ONLY) {
-		int fd = opx_hfi_context_open(unit, port, open_timeout, user_version);
-		if (fd < 0) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"Failed to open cdev context for HFI unit %d port %d type %u\n", unit, port, hfi1_type);
-			return -1;
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] Attempt OPX_HFI1_DIRECT_VERBS\n");
+
+	if (opx_hfi1_rdma_op_initialize()) {
+		void *ibv_context = NULL;
+		int   fd	  = opx_hfi1_rdma_context_open(unit, port, open_timeout, user_version, &ibv_context);
+		if (fd != -1) {
+			internal->context.ibv_context = ibv_context;
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n",
+				     OPX_SW_HFI1_TYPE);
+			return fd;
 		}
 
 		(*fd_cdev) = fd;
@@ -858,26 +862,9 @@ int opx_hfi1_wrapper_context_open(const int unit, const int port, const uint64_t
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] Attempt HAVE_HFI1_DIRECT_VERBS\n");
 
-	/* TODO: verbs contexts: Until we switch over to using verbs contexts exclusively, we need to avoid using the
-	 * new TID functions and setting the user_version. */
-	void *tmp_ibv_context = NULL;
-	int   verbs_fd	      = -1;
-	if (opx_hfi1_rdma_op_initialize(OPX_HFI1_VERBS_CONTEXTS_ONLY)) {
-		verbs_fd = opx_hfi1_rdma_context_open(unit, port, open_timeout, OPX_HFI1_VERBS_CONTEXTS_ONLY,
-						      user_version, &tmp_ibv_context);
-	}
-
-	(*fd_verbs)    = verbs_fd;
-	(*ibv_context) = (verbs_fd != -1) ? tmp_ibv_context : NULL;
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u %s\n", hfi1_type,
-		     (verbs_fd != -1) ? "ENABLED" : "DISABLED");
-
-	/* If we failed to open a verbs context, and we didn't already open a cdev context, fall back to cdev */
-	if (verbs_fd == -1 && OPX_HFI1_VERBS_CONTEXTS_ONLY) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS fallback\n");
-		(*fd_cdev) = opx_hfi_context_open(unit, port, open_timeout, user_version);
-	}
-	return ((*fd_cdev) < 0);
+	int fd = opx_hfi_context_open(unit, port, open_timeout, user_version);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n", OPX_SW_HFI1_TYPE);
+	return fd;
 }
 
 static int opx_get_current_proc_core()
@@ -913,8 +900,8 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 	const opx_lid_t lid	  = opx_hfi_get_port_lid(unit, port);
 
 	// too early for env to have been checked
-	int mixed_network = OPX_HFI1_TYPE;
-	if (!(OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {
+	int mixed_network = OPX_SW_HFI1_TYPE;
+	if (!(OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {
 		if (fi_param_get_bool(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
 			if (mixed_network) {
 				mixed_network = OPX_HFI1_MIXED_9B;
@@ -924,19 +911,18 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 		}
 	}
 
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "SW/HW version %#X/%#X. API version %#X. Core %d(%d). \n", sw_version,
-		hw_version, internal->user_info.userversion, rec_cpu, core_id);
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Selected %s unit %d (%d units) and port %d (%d ports); \n",
-		OPX_HFI1_TYPE_STRING(mixed_network), unit, hfi_count, port, num_ports);
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Core %d(%d). NUMA domain is %d; HFI NUMA domain is %ld. \n", rec_cpu,
-		core_id, numa_node, opx_hfi_sysfs_unit_read_node_s64(unit));
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "LID %d, Receive context %d, sub-context %d, Send context %d\n", lid,
-		ctxt, subctxt, send_ctxt);
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-		"credits %u, rcvegr_size %u, rcvtids %u, egrtids %u, rcvhdrq_cnt %u, rcvhdrq_entsize  %u\n",
-		cinfo->credits, cinfo->rcvegr_size, cinfo->rcvtids, cinfo->egrtids, cinfo->rcvhdrq_cnt,
-		cinfo->rcvhdrq_entsize);
-}
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "SW/HW version %#X/%#X. API version %#X. Core %d(%d). \n", sw_version,
+		 hw_version, internal->user_info.userversion, rec_cpu, core_id);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "Selected %s unit %d (%d units) and port %d (%d ports); \n",
+		 OPX_HFI1_TYPE_STRING(mixed_network), unit, hfi_count, port, num_ports);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "Core %d(%d). NUMA domain is %d; HFI NUMA domain is %ld. \n", rec_cpu,
+		 core_id, numa_node, opx_hfi_sysfs_unit_read_node_s64(unit));
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "LID %d, Receive context %d, sub-context %d, Send context %d\n", lid,
+		 ctxt, subctxt, send_ctxt);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC,
+		 "credits %u, rcvegr_size %u, rcvtids %u, egrtids %u, rcvhdrq_cnt %u, rcvhdrq_entsize  %u\n",
+		 cinfo->credits, cinfo->rcvegr_size, cinfo->rcvtids, cinfo->egrtids, cinfo->rcvhdrq_cnt,
+		 cinfo->rcvhdrq_entsize);
 
 	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.local_lids_size         = %d\n",
 		 fi_opx_global.hfi_local_info.local_lids_size);

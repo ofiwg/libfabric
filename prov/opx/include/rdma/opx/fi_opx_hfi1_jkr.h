@@ -206,7 +206,7 @@ static inline void opx_set_route_control_value(const bool disabled)
 	assert(OPX_SW_HFI1_TYPE != OPX_HFI1_UNDEF);
 
 	/* HFI specific default (except OPX_HFI1_RZV_CTRL which always defaults to OPX_RC_IN_ORDER_0) */
-	const int default_route_control = ((OPX_HFI1_TYPE & (OPX_HFI1_CNX000 | OPX_HFI1_MIXED_9B)) ?
+	const int default_route_control = ((OPX_SW_HFI1_TYPE & (OPX_HFI1_CNX000 | OPX_HFI1_MIXED_9B)) ?
 						   OPX_CHECK_OUT_OF_ORDER(disabled, OPX_RC_OUT_OF_ORDER_0) :
 						   OPX_RC_IN_ORDER_0);
 	char	 *env_route_control;

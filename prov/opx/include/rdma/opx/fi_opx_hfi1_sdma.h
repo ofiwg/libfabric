@@ -520,7 +520,7 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
 
 	request->iovecs[0].iov_base = req_info;
 
-	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		request->header_vec.scb.scb_9B = (source_scb->scb_9B);
 		request->header_vec.scb.scb_9B.hdr.qw_9B[2] |= ((uint64_t) kdeth << 32) | set_ack_bit;
 		request->header_vec.scb.scb_9B.hdr.qw_9B[4] |= (last_packet_bytes << 32);

@@ -257,11 +257,11 @@ void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx
 	   Hence there is no need to reset the Rx related variables */
 	if (events & HFI1_EVENT_FROZEN) {
 		if (ctx_sharing) {
-			opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
+			opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq   = OPX_RHF_SEQ_INIT_VAL(OPX_SW_HFI1_TYPE);
 			opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head	      = 0;
 			opx_ep->rx->shd_ctx.hwcontext_ctrl->last_egrbfr_index = 0;
 		} else {
-			opx_ep->rx->state.hdrq.rhf_seq	   = OPX_RHF_SEQ_INIT_VAL(OPX_HFI1_TYPE);
+			opx_ep->rx->state.hdrq.rhf_seq	   = OPX_RHF_SEQ_INIT_VAL(OPX_SW_HFI1_TYPE);
 			opx_ep->rx->state.hdrq.head	   = 0;
 			opx_ep->rx->egrq.last_egrbfr_index = 0;
 		}
@@ -1208,27 +1208,27 @@ ssize_t fi_opx_check_tx_rctxt(struct fi_opx_ep *opx_ep, fi_addr_t peer)
 		if ((addr.lid != fi_opx_global.hfi_local_info.lid)) {
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "multi-lid %u != %u, rx %u:%u, %u-%u\n",
 			       fi_opx_global.hfi_local_info.lid, addr.lid,
-			       OPX_HFI1_SUBCTXT(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE),
-			       OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE), fi_opx_global.hfi_local_info.min_rctxt,
-			       fi_opx_global.hfi_local_info.max_rctxt);
+			       OPX_HFI1_SUBCTXT(addr.hfi1_subctxt_rx, OPX_SW_HFI1_TYPE),
+			       OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_SW_HFI1_TYPE),
+			       fi_opx_global.hfi_local_info.min_rctxt, fi_opx_global.hfi_local_info.max_rctxt);
 			fi_opx_global.hfi_local_info.multi_lid = true;
 		} else {
-			if ((OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE) >
+			if ((OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_SW_HFI1_TYPE) >
 			     fi_opx_global.hfi_local_info.max_rctxt) ||
-			    (OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE) <
+			    (OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_SW_HFI1_TYPE) <
 			     fi_opx_global.hfi_local_info.min_rctxt)) {
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "multi-vm lid %u == %u, rx %u:%u, %u-%u\n",
 				       fi_opx_global.hfi_local_info.lid, addr.lid,
-				       OPX_HFI1_SUBCTXT(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE),
-				       OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_HFI1_TYPE),
+				       OPX_HFI1_SUBCTXT(addr.hfi1_subctxt_rx, OPX_SW_HFI1_TYPE),
+				       OPX_HFI1_RX(addr.hfi1_subctxt_rx, OPX_SW_HFI1_TYPE),
 				       fi_opx_global.hfi_local_info.min_rctxt, fi_opx_global.hfi_local_info.max_rctxt);
 				fi_opx_global.hfi_local_info.multi_vm = true;
 				assert(fi_opx_global.hfi_local_info.sriov);
 			}
 		}
-		if ((fi_opx_global.hfi_local_info.original & OPX_HFI1_JKR) && fi_opx_global.hfi_local_info.multi_vm &&
+		/* JKR/sr-iov(alpha) limitation: Fail if self (rctxt check) is multi-VM and multi-lid */
+		if ((OPX_HW_HFI1_TYPE & OPX_HFI1_JKR) && fi_opx_global.hfi_local_info.multi_vm &&
 		    fi_opx_global.hfi_local_info.multi_lid) {
-			/* JKR/sr-iov(alpha) limitation: Fail if self (rctxt check) is multi-VM and multi-lid */
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"Shared lids across VMs with other lids are not supported on CN5000. \n");
 			rc = -FI_EINVAL;
@@ -1462,7 +1462,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	// The "memcopy first" code is here as an alternative to the more complicated
 	// direct write to pio followed by memory copy of the reliability buffer
 	replay->scb.scb_9B.qw0 = opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid |
-				 OPX_PBC_LOOPBACK(params->pbc_dlid, OPX_HFI1_TYPE);
+				 OPX_PBC_LOOPBACK(params->pbc_dlid, OPX_SW_HFI1_TYPE);
 	replay->scb.scb_9B.hdr.qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32);
 	replay->scb.scb_9B.hdr.qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx;
 	replay->scb.scb_9B.hdr.qw_9B[2] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn;
@@ -1579,7 +1579,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 
 	// The "memcopy first" code is here as an alternative to the more complicated
 	// direct write to pio followed by memory copy of the reliability buffer
-	assert(~(OPX_HFI1_TYPE & OPX_HFI1_WFR));
+	assert(~(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR));
 	replay->scb.scb_16B.qw0 = opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_JKR) | params->pbc_dlid |
 				  OPX_PBC_LOOPBACK(params->pbc_dlid, OPX_HFI1_JKR);
 	replay->scb.scb_16B.hdr.qw_16B[0] =
@@ -1826,7 +1826,7 @@ union fi_opx_hfi1_deferred_work *opx_hfi1_rx_rzv_rts_tid_prep_cts(union fi_opx_h
 
 	assert(cur_addr_range_tid_len <= cts_params->rzv_comp->context->byte_counter);
 
-	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
 	} else {
 		cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_16B;
@@ -1856,7 +1856,7 @@ int opx_hfi1_rx_rzv_rts_tid_fallback(union fi_opx_hfi1_deferred_work	  *work,
 
 	params->tid_info.npairs = 0;
 
-	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
 	} else {
 		params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_16B;
@@ -1920,7 +1920,7 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 	if (last_cts) {
 		assert(cts_work == work);
 
-		if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+		if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 			assert(work->work_elem.work_fn == opx_hfi1_rx_rzv_rts_send_cts);
 		} else {
 			assert(work->work_elem.work_fn == opx_hfi1_rx_rzv_rts_send_cts_16B);
@@ -2021,7 +2021,7 @@ int opx_hfi1_rx_rzv_rts_elided(struct fi_opx_ep *opx_ep, union fi_opx_hfi1_defer
 	rzv_comp->byte_counter	    = params->elided_head.bytes + params->elided_tail.bytes;
 	rzv_comp->bytes_accumulated = 0;
 
-	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
 	} else {
 		cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts_16B;
@@ -2186,8 +2186,8 @@ int opx_hfi1_rx_rzv_rts_send_etrunc(union fi_opx_hfi1_deferred_work *work)
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
 
 	opx_cacheline_copy_qw_vol(scb, replay->scb.qws,
-				  opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) | params->pbc_dlid |
-					  OPX_PBC_LOOPBACK(params->pbc_dlid, OPX_HFI1_TYPE),
+				  opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_SW_HFI1_TYPE) |
+					  params->pbc_dlid | OPX_PBC_LOOPBACK(params->pbc_dlid, OPX_SW_HFI1_TYPE),
 				  opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32),
 				  opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx, opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn,
 				  opx_ep->rx->tx.cts_9B.hdr.qw_9B[3],
@@ -2264,8 +2264,8 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 
 	opx_cacheline_copy_qw_vol(
 		scb, replay->scb.qws,
-		opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_HFI1_TYPE) | params->pbc_dlid |
-			OPX_PBC_LOOPBACK(params->pbc_dlid, OPX_HFI1_TYPE),
+		opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(pbc_dws, OPX_SW_HFI1_TYPE) | params->pbc_dlid |
+			OPX_PBC_LOOPBACK(params->pbc_dlid, OPX_SW_HFI1_TYPE),
 		opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
 			((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 			((uint64_t) lrh_qws << 20),
@@ -2643,7 +2643,7 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 		return rc;
 	}
 
-	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		const uint64_t pbc_dws = 2 + /* pbc */
 					 2 + /* lrh */
 					 3 + /* bth */
@@ -2739,7 +2739,7 @@ int opx_hfi1_rx_rma_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_ep	       *opx_ep	  = params->opx_ep;
 	const uint64_t			lrh_dlid  = params->lrh_dlid;
 	const uint64_t			bth_rx	  = ((uint64_t) params->origin_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
-	const enum opx_hfi1_type	hfi1_type = OPX_HFI1_TYPE;
+	const enum opx_hfi1_type	hfi1_type = OPX_SW_HFI1_TYPE;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, SHM -- RMA RTS (begin)\n");
@@ -3089,7 +3089,7 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 	int64_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, params->slid, params->dest_rx,
-					    &psn_ptr, &replay, params->reliability, OPX_HFI1_TYPE);
+					    &psn_ptr, &replay, params->reliability, OPX_SW_HFI1_TYPE);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== SEND, HFI -- RMA RTS (EAGAIN psn/replay) (params=%p origin_rma_req=%p cc=%p) opcode=%d\n",
@@ -3242,7 +3242,7 @@ int opx_hfi1_tx_rma_rts_shm(union fi_opx_hfi1_deferred_work *work)
 	uint64_t dt64	 = ((uint64_t) params->dt) << 32;
 	assert(params->dt == (FI_VOID - 1) || params->dt < FI_DATATYPE_LAST);
 
-	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		hdr->qw_9B[0] = opx_ep->rx->tx.rma_rts_9B.hdr.qw_9B[0] | lrh_dlid;
 		hdr->qw_9B[1] = opx_ep->rx->tx.rma_rts_9B.hdr.qw_9B[1] | bth_rx;
 		hdr->qw_9B[2] = opx_ep->rx->tx.rma_rts_9B.hdr.qw_9B[2];

@@ -634,9 +634,8 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 
 		/* CYR only has 2 bits available in BTH.QP[15:8] for storing the subctxt value, while WFR/JKR uses 3
 		 * bits.*/
-		const uint8_t subctxt_dest = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_JKR | OPX_HFI1_MIXED_9B)) ?
-						     (hdr->bth.subctxt_rx & 0x7) :
-						     ((hdr->bth.subctxt_rx >> 1) & 0x3);
+		const uint8_t subctxt_dest = (!(OPX_IS_EXTENDED_RX(hfi1_type))) ? (hdr->bth.subctxt_rx & 0x7) :
+										  ((hdr->bth.subctxt_rx >> 1) & 0x3);
 
 		uint64_t  hdrq_head_local;
 		uint32_t *p_last_egrbfr_index;

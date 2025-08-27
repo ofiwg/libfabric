@@ -183,7 +183,7 @@ struct opx_hfi_local_entry {
 struct opx_hfi_local_info {
 	/* == CACHE LINE 0 == */
 	uint32_t	   local_lids_size;
-	enum opx_hfi1_type type;
+	enum opx_hfi1_type sw_type;	 // SW defined hfi1 type, including "mixed networks"
 	int		   sim_sctxt_fd; // simulator send context BAR resource fd
 	int		   sim_rctxt_fd; // simulator recv context BAR resource fd
 	uint64_t	   pbc_lid;
@@ -194,7 +194,7 @@ struct opx_hfi_local_info {
 	bool		   multi_lid; // job has multiple lids
 	int32_t		   min_rctxt;
 	int32_t		   max_rctxt;
-	enum opx_hfi1_type original; // before "mixed_network" changes
+	enum opx_hfi1_type hw_type; // HW hfi1 type before "mixed_network" changes
 	uint32_t	   unused_dws[1];
 	uint64_t	   unused_qws[2];
 
