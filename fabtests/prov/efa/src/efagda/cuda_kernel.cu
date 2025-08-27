@@ -39,7 +39,8 @@ __device__ uint32_t efa_sub_cq_get_current_index(const efa_sub_cq *sub_cq)
 __device__ int efa_cqe_is_pending(const efa_io_cdesc_common *cqe_common,
 				  int phase)
 {
-	return EFA_GET(&cqe_common->flags, EFA_IO_CDESC_COMMON_PHASE) == phase;
+	volatile uint8_t *cqe_flag = (volatile uint8_t *)(&cqe_common->flags);
+	return EFA_GET(cqe_flag, EFA_IO_CDESC_COMMON_PHASE) == phase;
 }
 
 __device__ efa_io_cdesc_common *efa_sub_cq_get_cqe(efa_sub_cq *sub_cq,
