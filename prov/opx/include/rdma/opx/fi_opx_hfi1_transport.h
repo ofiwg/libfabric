@@ -2977,7 +2977,7 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep, const uint8_
 							 opx_ep->daos_info.hfi_rank_enabled, dest_extended_rx, 0, &rc);
 	/* Potential infinite loop, unable to return result to application */
 	while (OFI_UNLIKELY(hdr == NULL)) { // TODO: Verify that all callers of this function can tolderate a NULL rc
-		fi_opx_shm_poll_many(&opx_ep->ep_fid, FI_OPX_LOCK_NOT_REQUIRED, OPX_HFI1_TYPE);
+		fi_opx_shm_poll_many(&opx_ep->ep_fid, FI_OPX_LOCK_NOT_REQUIRED, OPX_SW_HFI1_TYPE);
 		hdr = opx_shm_tx_next(&opx_ep->tx->shm, dest_hfi_unit, dest_rx, &pos,
 				      opx_ep->daos_info.hfi_rank_enabled, dest_extended_rx, 0, &rc);
 	}

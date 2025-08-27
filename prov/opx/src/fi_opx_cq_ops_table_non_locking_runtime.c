@@ -797,19 +797,19 @@ ssize_t fi_opx_cq_read_FABRIC_DIRECT(struct fid_cq *cq, void *buf, size_t count)
 {
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_IS_CTX_SHARING_ENABLED) {
-		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_WFR,
 							       OPX_CTX_SHARING_ON)(cq, buf, count);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_MIXED_9B,
 							       OPX_CTX_SHARING_ON)(cq, buf, count);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_JKR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_JKR,
 							       OPX_CTX_SHARING_ON)(cq, buf, count);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_CYR) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_CYR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_CYR,
 							       OPX_CTX_SHARING_ON)(cq, buf, count);
@@ -819,19 +819,19 @@ ssize_t fi_opx_cq_read_FABRIC_DIRECT(struct fid_cq *cq, void *buf, size_t count)
 			abort();
 		}
 	} else {
-		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_WFR,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_MIXED_9B,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_JKR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_JKR,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_CYR) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_CYR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_CYR,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count);
@@ -848,19 +848,19 @@ ssize_t fi_opx_cq_readfrom_FABRIC_DIRECT(struct fid_cq *cq, void *buf, size_t co
 {
 	/* Non-inlined functions should just use the runtime HFI1 and ctx_sharing type check, no optimizations */
 	if (OPX_IS_CTX_SHARING_ENABLED) {
-		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_WFR,
 							       OPX_CTX_SHARING_ON)(cq, buf, count, src_addr);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_MIXED_9B,
 							       OPX_CTX_SHARING_ON)(cq, buf, count, src_addr);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_JKR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_JKR,
 							       OPX_CTX_SHARING_ON)(cq, buf, count, src_addr);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_CYR) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_CYR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_CYR,
 							       OPX_CTX_SHARING_ON)(cq, buf, count, src_addr);
@@ -870,19 +870,19 @@ ssize_t fi_opx_cq_readfrom_FABRIC_DIRECT(struct fid_cq *cq, void *buf, size_t co
 			abort();
 		}
 	} else {
-		if (OPX_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_WFR,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count, src_addr);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_MIXED_9B,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count, src_addr);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_JKR) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_JKR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_JKR,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count, src_addr);
-		} else if (OPX_HFI1_TYPE & OPX_HFI1_CYR) {
+		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_CYR) {
 			return FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, OPX_CQ_FORMAT, OPX_LOCK, OPX_RELIABILITY,
 							       OPX_MASK, OPX_CQ_CAPS, OPX_HFI1_CYR,
 							       OPX_CTX_SHARING_OFF)(cq, buf, count, src_addr);

@@ -327,7 +327,7 @@ struct fi_opx_reliability_tx_replay {
 	uint8_t data[];
 } __attribute__((__aligned__(64)));
 
-#define OPX_REPLAY_HDR(_replay) OPX_REPLAY_HDR_TYPE(_replay, OPX_HFI1_TYPE)
+#define OPX_REPLAY_HDR(_replay) OPX_REPLAY_HDR_TYPE(_replay, OPX_SW_HFI1_TYPE)
 
 #define OPX_REPLAY_HDR_TYPE(_replay, _hfi1_type)                                              \
 	((_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ? (&((_replay)->scb.scb_9B.hdr)) : \
@@ -682,7 +682,7 @@ size_t fi_opx_reliability_replay_get_payload_size(struct fi_opx_reliability_tx_r
 
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	/* Inlined but called from non-inlined functions with no const hfi1 type, so just use the runtime check */
-	if (OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		const uint16_t lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
 		const size_t   total_bytes   = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
 		return (total_bytes - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B));

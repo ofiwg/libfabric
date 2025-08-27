@@ -403,14 +403,14 @@ static struct _hfi_ctrl *opx_hfi1_rdma_userinit(int fd, struct fi_opx_hfi1_conte
 	       (OPX_HFI1_CYR | OPX_HFI1_JKR | OPX_HFI1_WFR)); /* OPX_HFI1_MIXED_9B is determined later */
 
 	/* Need the global set early, may be changed later on mixed networks */
-	if (OPX_HFI1_TYPE == OPX_HFI1_UNDEF) {
-		OPX_HFI1_TYPE			      = context->hfi1_type;
-		fi_opx_global.hfi_local_info.original = context->hfi1_type;
+	if (OPX_SW_HFI1_TYPE == OPX_HFI1_UNDEF) {
+		OPX_SW_HFI1_TYPE = context->hfi1_type;
+		OPX_HW_HFI1_TYPE = context->hfi1_type;
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "[HFI1-DIRECT] global type %d, opx_hfi1_check_hwversion base_info->hw_version %#X, %s\n",
-		     OPX_HFI1_TYPE, user_info_rsp.hw_version, OPX_HFI1_TYPE_STRING(context->hfi1_type));
+		     OPX_SW_HFI1_TYPE, user_info_rsp.hw_version, OPX_HFI1_TYPE_STRING(context->hfi1_type));
 
 	/* Copy the the new 'hfi1_user_info_rsp' to the  old 'hfi1_base_info'
 	 * struct */
@@ -866,7 +866,8 @@ int opx_hfi1_wrapper_context_open(struct fi_opx_hfi1_context_internal *internal,
 		int   fd	  = opx_hfi1_rdma_context_open(unit, port, open_timeout, user_version, &ibv_context);
 		if (fd != -1) {
 			internal->context.ibv_context = ibv_context;
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n", OPX_HFI1_TYPE);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n",
+				     OPX_SW_HFI1_TYPE);
 			return fd;
 		}
 		/* fallback to cdev APIs */
@@ -876,7 +877,7 @@ int opx_hfi1_wrapper_context_open(struct fi_opx_hfi1_context_internal *internal,
 	internal->context.ibv_context = NULL;
 
 	int fd = opx_hfi_context_open(unit, port, open_timeout, user_version);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n", OPX_HFI1_TYPE);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n", OPX_SW_HFI1_TYPE);
 	return fd;
 }
 
@@ -889,7 +890,6 @@ static int opx_get_current_proc_core()
 	}
 	return core_id;
 }
-
 void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct _hfi_ctrl *ctrl)
 {
 	const int core_id   = opx_get_current_proc_core();
@@ -914,8 +914,8 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 	const opx_lid_t lid	  = opx_hfi_get_port_lid(unit, port);
 
 	// too early for env to have been checked
-	int mixed_network = OPX_HFI1_TYPE;
-	if (!(OPX_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {
+	int mixed_network = OPX_SW_HFI1_TYPE;
+	if (!(OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {
 		if (fi_param_get_bool(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
 			if (mixed_network) {
 				mixed_network = OPX_HFI1_MIXED_9B;
@@ -925,20 +925,62 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 		}
 	}
 
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "SW/HW version %#X/%#X. API version %#X. Core %d(%d). \n", sw_version,
-		hw_version, internal->user_info.userversion, rec_cpu, core_id);
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Selected %s unit %d (%d units) and port %d (%d ports); \n",
-		OPX_HFI1_TYPE_STRING(mixed_network), unit, hfi_count, port, num_ports);
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Core %d(%d). NUMA domain is %d; HFI NUMA domain is %ld. \n", rec_cpu,
-		core_id, numa_node, opx_hfi_sysfs_unit_read_node_s64(unit));
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "LID %d, Receive context %d, sub-context %d, Send context %d\n", lid,
-		ctxt, subctxt, send_ctxt);
-	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-		"credits %u, rcvegr_size %u, rcvtids %u, egrtids %u, rcvhdrq_cnt %u, rcvhdrq_entsize  %u\n",
-		cinfo->credits, cinfo->rcvegr_size, cinfo->rcvtids, cinfo->egrtids, cinfo->rcvhdrq_cnt,
-		cinfo->rcvhdrq_entsize);
-}
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "SW/HW version %#X/%#X. API version %#X. Core %d(%d). \n", sw_version,
+		 hw_version, internal->user_info.userversion, rec_cpu, core_id);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "Selected %s unit %d (%d units) and port %d (%d ports); \n",
+		 OPX_HFI1_TYPE_STRING(mixed_network), unit, hfi_count, port, num_ports);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "Core %d(%d). NUMA domain is %d; HFI NUMA domain is %ld. \n", rec_cpu,
+		 core_id, numa_node, opx_hfi_sysfs_unit_read_node_s64(unit));
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "LID %d, Receive context %d, sub-context %d, Send context %d\n", lid,
+		 ctxt, subctxt, send_ctxt);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC,
+		 "credits %u, rcvegr_size %u, rcvtids %u, egrtids %u, rcvhdrq_cnt %u, rcvhdrq_entsize  %u\n",
+		 cinfo->credits, cinfo->rcvegr_size, cinfo->rcvtids, cinfo->egrtids, cinfo->rcvhdrq_cnt,
+		 cinfo->rcvhdrq_entsize);
 
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.local_lids_size         = %d\n",
+		 fi_opx_global.hfi_local_info.local_lids_size);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.sw_type                 = %d\n",
+		 fi_opx_global.hfi_local_info.sw_type);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.hw_type                 = %d\n",
+		 fi_opx_global.hfi_local_info.hw_type);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.sim_rctxt_fd            = %d\n",
+		 fi_opx_global.hfi_local_info.sim_rctxt_fd);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.sim_sctxt_fd            = %d\n",
+		 fi_opx_global.hfi_local_info.sim_sctxt_fd);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.lid                     = %d\n",
+		 fi_opx_global.hfi_local_info.lid);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.hfi_unit                = %d\n",
+		 fi_opx_global.hfi_local_info.hfi_unit);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.sriov                   = %d\n",
+		 fi_opx_global.hfi_local_info.sriov);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.multi_vm                = %d\n",
+		 fi_opx_global.hfi_local_info.multi_vm);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.multi_lid               = %d\n",
+		 fi_opx_global.hfi_local_info.multi_lid);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.min_rctxt               = %d\n",
+		 fi_opx_global.hfi_local_info.min_rctxt);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.max_rctxt               = %d\n",
+		 fi_opx_global.hfi_local_info.max_rctxt);
+
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.progress                               = %s\n",
+		 fi_tostr(&fi_opx_global.progress, FI_TYPE_PROGRESS));
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.rcvhdrq_entry_dws                      = %d\n",
+		 fi_opx_global.rcvhdrq_entry_dws);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.pkt_size                               = %d\n",
+		 fi_opx_global.pkt_size);
+
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.opx_hfi1_type_strings[OPX_HFI1_UNDEF]  = %s\n",
+		 fi_opx_global.opx_hfi1_type_strings[OPX_HFI1_UNDEF]);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.opx_hfi1_type_strings[OPX_HFI1_WFR]    = %s\n",
+		 fi_opx_global.opx_hfi1_type_strings[OPX_HFI1_WFR]);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.opx_hfi1_type_strings[OPX_HFI1_JKR]    = %s\n",
+		 fi_opx_global.opx_hfi1_type_strings[OPX_HFI1_JKR]);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.opx_hfi1_type_strings[OPX_HFI1_CYR]    = %s\n",
+		 fi_opx_global.opx_hfi1_type_strings[OPX_HFI1_CYR]);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.opx_hfi1_type_strings[OPX_HFI1_CNX000] = %s\n",
+		 fi_opx_global.opx_hfi1_type_strings[OPX_HFI1_CNX000]);
+}
 /* Environment variable is not published */
 #define OPX_VERBOSE_SELECTION(_internal, _ctrl)          \
 	if (getenv("FI_OPX_VERBOSE_SELECTION")) {        \
