@@ -164,13 +164,13 @@ static void opx_debug_dump_tx_flow(struct fi_opx_ep *opx_ep, pid_t my_pid, FILE 
 
 			struct fi_opx_reliability_tx_replay *replay =
 				(struct fi_opx_reliability_tx_replay *) node_type->val;
-			int32_t psn	  = opx_debug_get_replay_psn(replay, OPX_HFI1_TYPE);
+			int32_t psn	  = opx_debug_get_replay_psn(replay, OPX_SW_HFI1_TYPE);
 			int32_t first_psn = psn;
 
 			struct fi_opx_reliability_tx_replay *first_replay = NULL;
 			while (replay != first_replay) {
 				++replay_count;
-				psn	 = opx_debug_get_replay_psn(replay, OPX_HFI1_TYPE);
+				psn	 = opx_debug_get_replay_psn(replay, OPX_SW_HFI1_TYPE);
 				last_psn = psn;
 
 				if (!first_replay) {
