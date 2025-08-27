@@ -214,7 +214,7 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			])
 			AS_IF([test $opx_happy -eq 1],[
 				AC_MSG_NOTICE([Appending OPX_HMEM to opx_CPPFLAGS])
-				opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_HMEM"
+				opx_CPPFLAGS="-DOPX_HMEM -I/usr/include/uapi"
 
 				AS_IF([test $have_rocr -eq 1], [
 					AC_MSG_NOTICE([Appending -L/opt/rocm/lib -lamdhip64 to opx_LDFLAGS])

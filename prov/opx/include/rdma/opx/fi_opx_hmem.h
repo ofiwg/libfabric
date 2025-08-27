@@ -644,7 +644,7 @@ enum opx_hmem_return_code opx_hmem_event_query(enum fi_hmem_iface iface, union o
 #endif
 #if HAVE_ROCR
 	if (iface == FI_HMEM_ROCR) {
-		hipError_t r = hipEventQuery(event->hip_event);
+		hipError_t result = hipEventQuery(event->hip_event);
 		if (result == hipSuccess) {
 			return OPX_HMEM_SUCCESS;
 		} else if (result == hipErrorNotReady) {
