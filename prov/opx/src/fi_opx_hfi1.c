@@ -2591,8 +2591,9 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 
 	opx_lid_t lid;
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		lid		 = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
-		params->lrh_dlid = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
+		lid			  = (opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid);
+		params->lrh_dlid	  = (hdr->lrh_9B.qw[0] & 0xFFFF000000000000ul) >> 32;
+		params->work_elem.work_fn = opx_ipc_send_cts_9B;
 	} else {
 		lid			  = (opx_lid_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 		params->lrh_dlid	  = lid; // Send CTS to the SLID that sent RTS
@@ -5056,12 +5057,6 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 			"hdr %p, payload %p, sbuf %p, sbuf+immediate_total %p, immediate_total %#lX, adj len %#lX\n",
 			hdr, payload, buf, ((char *) buf + immediate_total), immediate_total, (len - immediate_total));
 
-		/* We can optimize by disabling/enabling ipc at endpoint creation. We could
-		   check the FI_HMEM env to see if iface list includes things beyond system.
-		   We would then need to iterate over the list of all non-system ifaces and
-		   determine whether p2p is supported for each of those hmem ifaces
-		*/
-
 #ifdef OPX_HMEM
 		if (opx_ep->use_gpu_ipc == src_iface && src_iface != FI_HMEM_SYSTEM &&
 		    len >= OPX_GPU_IPC_MIN_THRESHOLD) {
@@ -5083,7 +5078,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, fi_
 				(uint64_t) buf - (uint64_t) payload->rendezvous.ipc.ipc_info.base_addr;
 
 			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-SENDER-CREATE-HANDLE");
-			ret = ofi_hmem_get_handle(src_iface, (void *) buf, len,
+			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr, len,
 						  (void **) &payload->rendezvous.ipc.ipc_info.ipc_handle);
 			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-SENDER-CREATE-HANDLE");
 
@@ -5725,8 +5720,6 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				 (payload_blocks_total << 4) + /* includes last kdeth + metadata + immediate data */
 				 ((icrc_end_block | icrc_fragment_block) << 1); /* 1 QW of any added tail block */
 
-	const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
-
 	if (is_shm) {
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -5846,7 +5839,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 			return FI_SUCCESS;
 		}
 
-	non_ipc:;
+	non_ipc:
 #endif
 
 		const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
