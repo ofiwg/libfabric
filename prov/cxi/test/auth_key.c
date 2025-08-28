@@ -1287,7 +1287,11 @@ Test(auth_key, default_service_id_disabled)
 	cxil_close_device(dev);
 }
 
-#define DEFAULT_MAX_EP_AUTH_KEY 4
+#ifdef CXI_HAVE_SVC_GET_VNI_RANGE
+#define DEFAULT_MAX_EP_AUTH_KEY (32768)
+#else
+#define DEFAULT_MAX_EP_AUTH_KEY (4)
+#endif
 
 Test(auth_key, max_ep_auth_key_null_hints)
 {

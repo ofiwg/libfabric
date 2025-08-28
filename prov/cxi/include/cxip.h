@@ -3205,6 +3205,8 @@ enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass);
 int cxip_cmdq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
 		     enum cxi_traffic_class tc,
 		     enum cxi_traffic_class_type tc_type);
+int cxip_cmdq_cp_modify(struct cxip_cmdq *cmdq, uint16_t vni,
+			enum cxi_traffic_class tc);
 void cxip_if_init(void);
 void cxip_if_fini(void);
 
