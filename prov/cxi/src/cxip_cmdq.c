@@ -193,6 +193,48 @@ int cxip_cmdq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
 	return ret;
 }
 
+int cxip_cmdq_cp_modify(struct cxip_cmdq *cmdq, uint16_t vni,
+			enum cxi_traffic_class tc)
+{
+	int ret;
+#if defined(CXI_HAVE_MODIFY_CP)
+	int i;
+	struct cxi_cp *hw_cp = NULL;
+	struct cxip_lni *lni = cmdq->lni;
+
+	pthread_rwlock_wrlock(&lni->cp_lock);
+
+	/* find the hw CP that matches the sw CP */
+	for (i = 0; i < lni->n_cps; i++) {
+		if (lni->hw_cps[i]->vni == cmdq->cur_cp->vni_pcp  &&
+		    lni->hw_cps[i]->tc == cmdq->cur_cp->tc &&
+		    lni->hw_cps[i]->tc_type == cmdq->cur_cp->tc_type) {
+			hw_cp = lni->hw_cps[i];
+			break;
+		}
+	}
+
+	if (hw_cp) {
+		ret = cxil_modify_cp(cmdq->lni->lni, hw_cp, vni);
+		if (!ret) {
+			hw_cp->vni_pcp = vni;
+			cmdq->cur_cp->vni_pcp = vni;
+			pthread_rwlock_unlock(&lni->cp_lock);
+
+			return FI_SUCCESS;
+		}
+	}
+
+	pthread_rwlock_unlock(&lni->cp_lock);
+#endif /* CXI_HAVE_MODIFY_CP */
+
+	ret = cxip_cmdq_cp_set(cmdq, vni, tc, CXI_TC_TYPE_DEFAULT);
+	if (ret)
+		CXIP_WARN("Failed to change communication profile: %d\n", ret);
+
+	return ret;
+}
+
 /*
  * cxip_cmdq_alloc() - Allocate a command queue.
  */
