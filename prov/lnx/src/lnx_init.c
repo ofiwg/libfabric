@@ -147,6 +147,22 @@ static struct fi_ops lnx_fabric_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static int lnx_wait_open(struct fid_fabric *fabric_fid,
+			 struct fi_wait_attr *attr,
+			 struct fid_wait **waitset)
+{
+	switch (attr->wait_obj) {
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_YIELD:
+		return ofi_wait_yield_open(fabric_fid, attr, waitset);
+	case FI_WAIT_FD:
+		return ofi_wait_fd_open(fabric_fid, attr, waitset);
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+
 static struct fi_ops_fabric lnx_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = lnx_domain_open,
@@ -155,7 +171,7 @@ static struct fi_ops_fabric lnx_fabric_ops = {
 	 * to how the CQ is supported.
 	 */
 	.eq_open = ofi_eq_create,
-	.wait_open = fi_no_wait_open,
+	.wait_open = lnx_wait_open,
 	.trywait = fi_no_trywait
 };
 
