@@ -607,7 +607,7 @@ dnl restricted DL open
 restricted_dl=0
 AC_ARG_ENABLE([restricted_dl],
               [AC_HELP_STRING([--enable-restricted-dl],
-                              [only look for dl providers under default location if FI_PROVIDER_PATH is not set])],
+                              [only look for dl providers under default location if FI_PROVIDER_PATH is not set.  Enable this for large systems to reduce dlopen() traffic during job startup.])],
               [restricted_dl=1],
               [])
 AC_DEFINE_UNQUOTED([HAVE_RESTRICTED_DL], [$restricted_dl],
