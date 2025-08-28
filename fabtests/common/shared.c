@@ -110,7 +110,7 @@ int sock = -1;
 int oob_sock = -1;
 
 struct fi_av_attr av_attr = {
-	.type = FI_AV_MAP,
+	.type = FI_AV_TABLE,
 	.count = 1
 };
 struct fi_eq_attr eq_attr = {
