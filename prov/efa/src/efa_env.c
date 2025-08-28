@@ -39,7 +39,7 @@ struct efa_env efa_env = {
 	.huge_page_setting = EFA_ENV_HUGE_PAGE_UNSPEC,
 	.use_unsolicited_write_recv = 1,
 	.internal_rx_refill_threshold = 8,
-	.use_data_path_direct = false,
+	.use_data_path_direct = true,
 };
 
 /* @brief Read and store the FI_EFA_* environment variables.
@@ -220,8 +220,8 @@ void efa_env_define()
 	fi_param_define(
 		&efa_prov, "use_data_path_direct", FI_PARAM_BOOL,
 		"Use the direct data path implementation that bypasses rdma-core on data path, including"
-		"the CQ polling and TX/RX submissions, when it's available. Setting this variable as 1"
-		"will enable this feature (Default: %d)",
+		"the CQ polling and TX/RX submissions, when it's available. Setting this variable as 0"
+		"will disable this feature (Default: %d)",
 		efa_env.use_data_path_direct);
 }
 
