@@ -31,7 +31,8 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 	};
 	uint64_t data = event->tgt_long.header_data;
 	uint32_t init = event->tgt_long.initiator.initiator.process;
-	int ret;
+	int ret, mcast_id;
+	struct cxip_coll_mc *mc_obj;
 
 	/* Check to see if event processing is implemented or overridden
 	 * int the protocol. A return of -FI_ENOSYS indicated the event
@@ -52,9 +53,23 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 
 		/* Messages not handled by the protocol */
 		if (mb.ctrl_msg_type == CXIP_CTRL_MSG_ZB_DATA_RDMA_LAC) {
+			mcast_id = (0x00000000ffffffff & mb.raw);
 			TRACE("%s - ctrl msg is CXIP_CTRL_MSG_ZB_DATA_RDMA_LAC\n", __func__);
+			TRACE("%s - leaf rdma mcast_id %x\n", __func__, mcast_id);
 			TRACE("%s - leaf rdma lac %016lx\n", __func__, data);
-			req->ep_obj->coll.rdma_get_lac_va_rx = data;
+			/* get the mc_obj based on the inbound mcast_id */
+			mc_obj = ofi_idm_lookup(&req->ep_obj->coll.mcast_map, mcast_id);
+			if(mc_obj) {
+				if(mc_obj->mcast_addr == mcast_id) {
+					TRACE("%s - leaf rdma mc_obj found %x\n",
+						__func__, mc_obj->mcast_addr);
+					mc_obj->rdma_get_lac_va_rx = data;
+				} else
+					TRACE("%s - leaf rdma mcast_id mismatch %x %x\n",
+						__func__, mc_obj->mcast_addr, mcast_id);
+			} else
+				TRACE("%s - mc_obj not found\n", __func__);
+
 			goto done;
 		}
 		else if (mb.ctrl_msg_type == CXIP_CTRL_MSG_ZB_DATA) {

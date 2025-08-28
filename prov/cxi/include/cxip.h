@@ -1667,18 +1667,6 @@ struct cxip_ep_coll_obj {
 	bool enabled;			// enabled
 	/* needed for progress after leaf sends its contribution */
 	struct dlist_entry leaf_rdma_get_list;
-	/* Logical address context for leaf rdma get */
-	uint64_t rdma_get_lac_va_tx;
-	/* Logical address context recieved by the leaf */
-	uint64_t rdma_get_lac_va_rx;
-	/* pointer to the source buffer base used in the RDMA */
-	uint8_t *root_rdma_get_data_p;
-	/* pointer to the dest buffer base used in the RDMA */
-	uint8_t *leaf_rdma_get_data_p;
-	/* root rdma get memory descriptor, for entire root src buffer */
-	struct cxip_md *root_rdma_get_md;
-	/* leaf rdma get memory descriptor, for entire leaf dest buffer */
-	struct cxip_md *leaf_rdma_get_md;
 	/* used to change ctrl_msg_type to CXIP_CTRL_MSG_ZB_DATA_RDMA_LAC */
 	bool leaf_save_root_lac;
 };
@@ -3084,6 +3072,18 @@ struct cxip_coll_mc {
 
 	struct cxi_md *reduction_md;		// memory descriptor for DMA
 	struct cxip_coll_reduction reduction[CXIP_COLL_MAX_CONCUR];
+	/* Logical address context for leaf rdma get */
+	uint64_t rdma_get_lac_va_tx;
+	/* Logical address context recieved by the leaf */
+	uint64_t rdma_get_lac_va_rx;
+	/* pointer to the source buffer base used in the RDMA */
+	uint8_t *root_rdma_get_data_p;
+	/* pointer to the dest buffer base used in the RDMA */
+	uint8_t *leaf_rdma_get_data_p;
+	/* root rdma get memory descriptor, for entire root src buffer */
+	struct cxip_md *root_rdma_get_md;
+	/* leaf rdma get memory descriptor, for entire leaf dest buffer */
+	struct cxip_md *leaf_rdma_get_md;
 };
 
 struct cxip_curl_handle;

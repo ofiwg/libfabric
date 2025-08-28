@@ -768,8 +768,9 @@ static void zbsend(struct cxip_ep_obj *ep_obj, uint32_t dstnic, uint32_t dstpid,
 {
 	struct cxip_ep_zbcoll_obj *zbcoll;
 	struct cxip_ctrl_req *req;
-	int ret;
+	int ret, mcast_id;
 	uint64_t rdma_lac=0, user_data=0;
+	struct cxip_coll_mc *mc_obj;
 
 	zbcoll = &ep_obj->zbcoll;
 
@@ -788,11 +789,29 @@ static void zbsend(struct cxip_ep_obj *ep_obj, uint32_t dstnic, uint32_t dstpid,
 	req->send.mb.raw = mbv;
 	req->send.mb.ctrl_le_type = CXIP_CTRL_LE_TYPE_CTRL_MSG;
 	if(ep_obj->coll.leaf_save_root_lac) {
-		TRACE("%s: rdma get save lac %016lx is set\n",
-			__func__, ep_obj->coll.rdma_get_lac_va_tx);
-		req->send.mb.ctrl_msg_type = CXIP_CTRL_MSG_ZB_DATA_RDMA_LAC;
-		rdma_lac = ep_obj->coll.rdma_get_lac_va_tx;
-		user_data = rdma_lac;
+		mcast_id = (0x00000000ffffffff & mbv);
+		TRACE("%s: root rdma mcast_id %x\n", __func__, mcast_id);
+		/* get the mc_obj based on the outbound mcast_id */
+		mc_obj = ofi_idm_lookup(&ep_obj->coll.mcast_map, mcast_id);
+		if(mc_obj) {
+
+			if(mc_obj->mcast_addr == mcast_id) {
+				TRACE("%s: rdma get save lac %016lx is set\n",
+					__func__, mc_obj->rdma_get_lac_va_tx);
+				req->send.mb.ctrl_msg_type = CXIP_CTRL_MSG_ZB_DATA_RDMA_LAC;
+				rdma_lac = mc_obj->rdma_get_lac_va_tx;
+				user_data = rdma_lac;
+			} else {
+				TRACE("%s - leaf rdma mcast_id mismatch %x %x\n",
+					__func__, mc_obj->mcast_addr, mcast_id);
+				return;
+			}
+
+		} else {
+			TRACE("%s - mc_obj not found\n", __func__);
+			return;
+		}
+
 	} else
 		req->send.mb.ctrl_msg_type = CXIP_CTRL_MSG_ZB_DATA;
 	/* If we can't send, collective cannot complete, just spin */
