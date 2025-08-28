@@ -145,6 +145,7 @@ nobase_dist_config_DATA = \
 	test_configs/ucx/all.test \
 	test_configs/ucx/quick.test \
 	test_configs/ucx/ucx.exclude \
+	test_configs/lnx/lnx.exclude \
 	pytest/pytest.ini \
 	pytest/options.yaml \
 	pytest/conftest.py \
