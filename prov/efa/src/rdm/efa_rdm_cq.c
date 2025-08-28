@@ -620,6 +620,13 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 			break;
 		case IBV_WC_RECV: /* fall through */
 		case IBV_WC_RECV_RDMA_WITH_IMM:
+			if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL) {
+				assert(ep->user_rx_pkts_posted > 0);
+				ep->user_rx_pkts_posted--;
+			} else {
+				assert(ep->efa_rx_pkts_posted > 0);
+				ep->efa_rx_pkts_posted--;
+			}
 			efa_rdm_pke_release_rx(pkt_entry);
 			break;
 		default:
