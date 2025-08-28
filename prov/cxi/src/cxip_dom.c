@@ -111,13 +111,7 @@ static int cxip_domain_find_cmdq(struct cxip_domain *dom,
 	dlist_foreach_container(&dom->cmdq_list, struct cxip_domain_cmdq, cmdq,
 				entry) {
 		if (cxip_cmdq_empty(cmdq->cmdq)) {
-
-			/* TODO: This needs to use new direct CP profile feature
-			 * which disables sharing of communication profile
-			 * across TX command queues.
-			 */
-			ret = cxip_cmdq_cp_set(cmdq->cmdq, vni, tc,
-					       CXI_TC_TYPE_DEFAULT);
+			ret = cxip_cmdq_cp_modify(cmdq->cmdq, vni, tc);
 			if (ret) {
 				CXIP_WARN("Failed to change communication profile: %d\n",
 					  ret);
@@ -433,7 +427,7 @@ void cxip_domain_prov_mr_id_free(struct cxip_domain *dom,
 static int cxip_domain_enable(struct cxip_domain *dom)
 {
 	int ret = FI_SUCCESS;
-	struct cxi_svc_desc svc_desc;
+	struct cxi_svc_desc svc_desc = {};
 
 	ofi_spin_lock(&dom->lock);
 
@@ -458,11 +452,6 @@ static int cxip_domain_enable(struct cxip_domain *dom)
 
 	if (!svc_desc.restricted_members)
 		CXIP_WARN("Security Issue: Using unrestricted service ID %d for %s. "
-			  "Please provide a service ID via auth_key fields.\n",
-			  dom->auth_key.svc_id,
-			  dom->iface->dev->info.device_name);
-	if (!svc_desc.restricted_vnis)
-		CXIP_WARN("Security Issue: Using service ID %d with unrestricted VNI access %s. "
 			  "Please provide a service ID via auth_key fields.\n",
 			  dom->auth_key.svc_id,
 			  dom->iface->dev->info.device_name);

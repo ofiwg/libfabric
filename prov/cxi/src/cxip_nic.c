@@ -227,7 +227,17 @@ static int cxip_nic_get_best_rgroup_vni(struct cxip_if *nic_if,
 
 		*vni = (uint16_t)desc->vnis[0];
 	} else {
-		*vni = (uint16_t)cxip_env.default_vni;
+#ifdef CXI_HAVE_SVC_GET_VNI_RANGE
+		uint16_t vni_min;
+		uint16_t vni_max;
+
+		ret = cxil_svc_get_vni_range(nic_if->dev, desc->svc_id,
+					     &vni_min, &vni_max);
+		if (!ret)
+			*vni = vni_min;
+		else
+#endif /* CXI_HAVE_SVC_GET_VNI_RANGE */
+			*vni = (uint16_t)cxip_env.default_vni;
 	}
 
 	*rgroup = desc->svc_id;

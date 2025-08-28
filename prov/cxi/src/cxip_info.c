@@ -21,6 +21,12 @@ struct fi_fabric_attr cxip_fabric_attr = {
 	.name = cxip_prov_name,
 };
 
+#ifdef CXI_HAVE_SVC_GET_VNI_RANGE
+#define MAX_VNIS (32768)
+#else
+#define MAX_VNIS (4)
+#endif
+
 /* No ODP, provider specified MR keys */
 struct fi_domain_attr cxip_prov_key_domain_attr = {
 	.name = NULL,
@@ -155,7 +161,7 @@ struct fi_domain_attr cxip_prov_key_multi_auth_key_domain_attr = {
 	.auth_key_size = sizeof(struct cxi_auth_key),
 
 	/* Set to the number of VNIs supported by a single CXI service. */
-	.max_ep_auth_key = 4,
+	.max_ep_auth_key = MAX_VNIS,
 };
 
 /* ODP, provider specified MR keys */
@@ -184,7 +190,7 @@ struct fi_domain_attr cxip_odp_prov_key_multi_auth_key_domain_attr = {
 	.auth_key_size = sizeof(struct cxi_auth_key),
 
 	/* Set to the number of VNIs supported by a single CXI service. */
-	.max_ep_auth_key = 4,
+	.max_ep_auth_key = MAX_VNIS,
 };
 
 /* No ODP, client specified MR keys */
@@ -213,7 +219,7 @@ struct fi_domain_attr cxip_client_key_multi_auth_key_domain_attr = {
 	.auth_key_size = sizeof(struct cxi_auth_key),
 
 	/* Set to the number of VNIs supported by a single CXI service. */
-	.max_ep_auth_key = 4,
+	.max_ep_auth_key = MAX_VNIS,
 };
 
 /* ODP, client specified MR keys */
@@ -242,7 +248,7 @@ struct fi_domain_attr cxip_odp_client_key_multi_auth_key_domain_attr = {
 	.auth_key_size = sizeof(struct cxi_auth_key),
 
 	/* Set to the number of VNIs supported by a single CXI service. */
-	.max_ep_auth_key = 4,
+	.max_ep_auth_key = MAX_VNIS,
 };
 
 struct fi_ep_attr cxip_ep_attr = {
