@@ -650,6 +650,9 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
 	}
 
+#if ENABLE_DEBUG
+	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
+#endif
 #if HAVE_LTTNG
 	efa_rdm_tracepoint_wr_id_post_write((void *)pkt_entry);
 #endif
