@@ -16,9 +16,6 @@ struct efa_cntr {
 	bool need_to_scan_ep_list;
 };
 
-int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
-		  struct fid_cntr **cntr_fid, void *context);
-
 int efa_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		      struct fid_cntr **cntr_fid, void *context);
 
