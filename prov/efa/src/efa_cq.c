@@ -619,48 +619,30 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 {
 	struct efa_cq *efa_cq;
 	struct efa_ibv_cq *ibv_cq;
-	struct efa_base_ep *base_ep;
-	struct efa_domain *efa_domain;
 	int err = 0;
 	size_t num_cqe = 0; /* Count of read entries */
-	int prov_errno, opcode;
 
 	efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
 	/* Acquire the lock to prevent race conditions when qp_table is being updated */
 	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
 
-	efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
 	ibv_cq = &efa_cq->ibv_cq;
 
 	/* Call ibv_start_poll only once */
-	efa_cq_start_poll(ibv_cq);
+	if (!ibv_cq->poll_active) {
+		ibv_cq->poll_err = efa_ibv_cq_start_poll(ibv_cq, &(struct ibv_poll_cq_attr){0});
+		if (ibv_cq->poll_err) {
+			err = ibv_cq->poll_err == ENOENT ? -FI_EAGAIN : -FI_EAVAIL;
+			goto out;
+		}
+		ibv_cq->poll_active = true;
+	}
 
-	while (efa_cq_wc_available(ibv_cq)) {
-		base_ep = efa_domain->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->qp_table_sz_m1]->base_ep;
-		opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
+	while (!ibv_cq->poll_err) {
 		if (ibv_cq->ibv_cq_ex->status) {
-			prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
-			switch (opcode) {
-			case IBV_WC_SEND: /* fall through */
-			case IBV_WC_RDMA_WRITE: /* fall through */
-			case IBV_WC_RDMA_READ:
-				efa_cq_handle_error(base_ep, ibv_cq,
-						    to_fi_errno(prov_errno),
-						    prov_errno, true);
-				break;
-			case IBV_WC_RECV: /* fall through */
-			case IBV_WC_RECV_RDMA_WITH_IMM:
-				efa_cq_handle_error(base_ep, ibv_cq,
-						    to_fi_errno(prov_errno),
-						    prov_errno, false);
-				break;
-			default:
-				EFA_WARN(FI_LOG_EP_CTRL, "Unhandled op code %d\n", opcode);
-				assert(0 && "Unhandled op code");
-			}
 			err = -FI_EAVAIL;
-			break;
+			goto out;
 		}
 
 		if (!efa_cq_wc_is_unsolicited(ibv_cq)) {
@@ -669,7 +651,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 				num_cqe++;
 			}
 		} else {
-			assert (opcode == IBV_WC_RECV_RDMA_WITH_IMM);
+			assert (efa_ibv_cq_wc_read_opcode(ibv_cq) == IBV_WC_RECV_RDMA_WITH_IMM);
 			efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size));
 			num_cqe++;
 		}
@@ -678,13 +660,24 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			break;
 		}
 
-		efa_cq_next_poll(ibv_cq);
+		ibv_cq->poll_err = efa_ibv_cq_next_poll(ibv_cq);
 	}
-	efa_cq_end_poll(ibv_cq);
-	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
+	/**
+	 * Only end poll when both conditions are met:
+	 * 1. the cq is in active poll
+	 * 2. active poll has no error: poll_err is either 0 or ENOENT
+	 */
+	if (ibv_cq->poll_active && 
+		(ibv_cq->poll_err == 0 || ibv_cq->poll_err == ENOENT)) {
+		efa_ibv_cq_end_poll(ibv_cq);
+		ibv_cq->poll_active = false;
+		ibv_cq->poll_err = 0;
+	}
 
-	num_cqe = num_cqe ? num_cqe : -FI_EAGAIN;
-	return err ? err : num_cqe;
+out:
+	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
+	return num_cqe ? num_cqe : err;
+	
 }
 
 struct fi_ops_cq efa_cq_ops = {
