@@ -203,7 +203,7 @@ static void *post_sends(void *context)
 	size_t len;
 	// the range of the sleep time (in nanoseconds)
 	int sleep_time;
-	struct timespec ts;
+	struct timespec ts = {0};
 	int num_transient_eps = 10;
 
 	srand(time(NULL));
