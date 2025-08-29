@@ -6,6 +6,168 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v2.3.0, Mon September 15, 2025
+==============================
+
+## Core ##
+
+- configure: Improve the restricted-dl help text
+- ofi_list: Introduce dlist_entry_in_list
+- man/fi_peer: Fix `FI_ADDR_NOTAVAIL` typo
+- common: Make common runtime parameters working for DL providers
+- configure.ac: Move cuda cppflag set before DMABUF check
+- Add address format FI_SOCKADDR_IP
+- include/fi_peer.h: remove fi_peer_rx_entry dlist fields
+- configure: Fix clang checking
+- hmem/neuron: Implement put_dmabuf_fd op
+- man/fi_endpoint: Clarify rx_attr->caps usage
+
+## CXI ##
+
+- Fix bug related concurrent mcast's
+- Fix memory leak
+- Improve multithreaded performance of bound counter operations
+- Fix RNR counter logic for new counter progress
+- Use native curl timeout
+- Improve counter performance by spin waiting
+- RDMA get logic on a collective root/leaf
+- Conditionally progress EPs bound to cntr
+- Optimize counter thread locking
+- Redo FI_CXI_CNTR_CACHED implementation
+- Add support for FI_ORDER_RMA_RAR
+- Revert "prov/cxi: Fix RMA/AMO network ordering"
+- Fix dlopen using default value for json-c library
+- Cache the last cmdq CP to reduce lock acquisition
+- Add env vars to disable non-inject IDC for RMA/AMO
+- Regularize collectives error logging
+- Include wait FD support for RNR protocol
+- Fix multi-threaded CQ WAIT_FD implementation
+- Update fi_cxi, add cxi_collectives man pages
+- Correct RE arming behavior
+- Support cuda sync_memops pointer attribute
+- Isolate alt_read gets to restricted only cmdq
+- Allow RX context to specify command queue on s/w DMA
+- Update unit test vm startup to load configfs
+- Disable collective logical operators
+- Retry root->leaf send after timeout
+
+## EFA ##
+
+- Decrement rx_pkts_posted before efa_rdm_pke_release_rx
+- Enable direct data path by default
+- Bypass rdma-core in blocking cq read path
+- Add traces for RX/TX completions
+- Fix the unsolicited write recv check
+- Refactor efa_base_ep_create_qp
+- Add generic function to process queued op entries
+- Deduce queued packet list from op entry
+- Add generic utility for fetching RDM packet type
+- Create abstraction for IBV CQ polling sequence
+- Bypass rdma-core in data path.
+- Refactor ibv_cq_ex open call
+- Fix stale links in docs/overview.md
+- Initialize nevents in efa_domain_cq_open_ext
+- Fix conflicting types for efa_mock_efa_ibv_cq_wc_read_opcode_return_mock
+- Remove duplicate mock function declarations
+- Use efa specific cq trywait
+- Implement fi_control for efa direct cq
+- Support blocking cq read in efa-direct
+- Remove cq status prediction
+- Fix wait_send procedure
+- Restrict GDA domain ops to efa-direct
+- Fix efa device selection in test_rdm_cq_create_error_handling
+- Fix the hmem flags setting
+- Fix segfault in LTTNG tracing when peer is NULL
+- Revert "prov/efa: Only do dmabuf reg when FI_MR_DMABUF is set"
+- Add implicit AV and logic to move entries to explicit AV
+- Add get_mr_lkey to GDA ops
+- Move gda operations to FI_EFA_GDA_OPS
+- Improve the handshake tx error handling
+- Avoid flushing cq during ep close for external cq
+- Replace the address members of peer struct with conn
+- Add test_av_reinsertion unit test
+- Skip call to efa_rdm_ep_get_peer with FI_ADDR_NOTAVAIL
+- Replace pke->addr with pke->peer and remove ope->addr
+- Rename efa_rdm_msg_alloc_rxe to efa_rdm_msg_alloc_rxe_zcpy
+- Add efa_ep_addr_print debug function
+- Refactor reverse AV addition and deletion
+- Rename efa_conn_rdm_init to efa_conn_rdm_insert_shm_av
+- Drain cq after qp destroy
+- Fix the locking procedure in ep close.
+- Move rxe_map to peer struct
+- Clean stale error handling
+- Remove illegal ope state
+
+## LNX ##
+
+- Fix missing peer_entry field updates
+
+## OPX ##
+
+- Asynchronous HMEM memcopy for IPC
+- Fix infinite loop/crash in SIGUSR2 handler
+- CN5000 SR-IOV pbc lid update
+- CN5000 alpha SR-IOV loopback support
+- Fixing typo in reliability_service_max_outstanding_bytes parameter.
+- CYR: Support 256B rcvhdr size
+- Fix overwrite of entropy field in 16-byte packet headers
+- Add debug dump of endpoint upon receiving SIGUSR2
+- GPU/driver configure check only warns
+- Adding initialization requirements for when opx is built as a dl
+- Rename intranode as needed for clarity
+- Use fi_opx_check_info function for library location lookup
+- Add IPC cache to OPX
+- Initialize SDMA work entry field
+- Fix RMA with CQ Data Bug
+- Change shm tx connection table from array to RBT
+- Fix FI_REMOTE_CQ_DATA write
+- Fix bug in setting pbc dlid for 16B sendv_egr
+- Resolve IPC HMEM D to H Segfault
+- Parameter mismatch fix for opx_ep_complete_receive_operation()
+- Link bounce support for context sharing
+- CN6000 simulator support
+
+## PSM3 ##
+
+- Support fi_av_insertsvc()
+
+## Util ##
+
+- Handle the new address format FI_SOCKADDR_IP
+- Add example directory with first example
+- Get srx lock in the caller of util_foreach_unspec
+- ofi_util.h: Fix bug in fi_cq_readfrom with no FI_SOURCE
+- mon_sampler: Disable the sampler together with the monitor provider
+
+## Verbs ##
+
+- Add peer mem support for Broadcom Devices
+
+## Fabtests ##
+
+- Fix `make distcheck` error caused by SUBDIRS
+- efa: Initialize timespec as 0
+- ft_finalize: Serialized sync in ft_finalize.
+- pingpong: Post recv before ep finalize
+- efa: Add volatile to prevent compiler optimization of CQE flag
+- efa: fix missing rdma check in test_rma_bw_sread
+- efa: Add FT_COMP_WAIT_FD tests
+- efa: Add fi_cq_sread tests
+- efa: Allow shared AV in multi_ep_mt test
+- efa: Add pytest marker and fixture to GDA fabtest
+- Fix type mismatch build warning
+- efa: Fix EFA device query
+- efa: Add GPU Direct Async test
+- multinode: Fix multi_barrier EAGAIN path
+- efa: Check device number in efa_device_selection
+- efa: Increase the timeout for test_rma_bw_range
+- efa: Add multi_ep_mt into pytest suites
+- efa: Introduce multi_ep_mt test
+- pytest: Fix the additional environment return
+- Support customized fi_addr for ft_post_rx_buf
+- Add New Benchmark rma_tx_completion
+
+
 v2.2.0, Mon June 30, 2025
 ========================
 
