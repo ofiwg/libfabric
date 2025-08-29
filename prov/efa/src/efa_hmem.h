@@ -7,11 +7,15 @@
 #include "ofi_hmem.h"
 #include "efa_mr.h"
 
-#define EFA_HMEM_IFACE_FOREACH(var) \
-	for ((var) = 0; (var) < ((sizeof efa_hmem_ifaces) / (sizeof (enum fi_hmem_iface))); ++(var))
+#define EFA_HMEM_IFACE_FOREACH_FROM(var, start) \
+	for ( \
+		const enum fi_hmem_iface *_p = &efa_hmem_ifaces[start]; \
+		_p < &efa_hmem_ifaces[sizeof efa_hmem_ifaces / sizeof (enum fi_hmem_iface)] && ((var) = *_p, 1); \
+		_p++ \
+	)
 
-#define EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(var) \
-	for ((var) = 1; (var) < ((sizeof efa_hmem_ifaces) / (sizeof (enum fi_hmem_iface))); ++(var))
+#define EFA_HMEM_IFACE_FOREACH(var) EFA_HMEM_IFACE_FOREACH_FROM(var, 0)
+#define EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(var) EFA_HMEM_IFACE_FOREACH_FROM(var, 1)
 
 /* Order matters */
 static const enum fi_hmem_iface efa_hmem_ifaces[] = {

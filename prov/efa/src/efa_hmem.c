@@ -365,7 +365,8 @@ int efa_hmem_validate_p2p_opt(enum fi_hmem_iface iface, int p2p_opt, uint32_t ap
  */
 int efa_hmem_info_initialize()
 {
-	int ret = 0, i = 0;
+	int ret = 0;
+	enum fi_hmem_iface iface;
 
 	if(g_efa_selected_device_cnt <= 0) {
 		return -FI_ENODEV;
@@ -373,8 +374,8 @@ int efa_hmem_info_initialize()
 
 	memset(g_efa_hmem_info, 0, OFI_HMEM_MAX * sizeof(struct efa_hmem_info));
 
-	EFA_HMEM_IFACE_FOREACH(i) {
-		efa_hmem_info_init_iface(efa_hmem_ifaces[i]);
+	EFA_HMEM_IFACE_FOREACH(iface) {
+		efa_hmem_info_init_iface(iface);
 	}
 
 	return ret;
