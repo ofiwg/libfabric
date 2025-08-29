@@ -510,7 +510,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 {
 	struct efa_domain *efa_domain = NULL;
 	struct efa_rdm_ep *efa_rdm_ep = NULL;
-	int ret, retv, i;
+	int ret, retv;
 	enum fi_hmem_iface iface;
 
 	efa_rdm_ep = calloc(1, sizeof(*efa_rdm_ep));
@@ -615,8 +615,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	 * time. Refactor to handle multiple initialized interfaces to impose
 	 * tighter requirements for the default p2p opt
 	 */
-	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
-		iface = efa_hmem_ifaces[i];
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
 		if (g_efa_hmem_info[iface].initialized &&
 		    g_efa_hmem_info[iface].p2p_supported_by_device) {
 			/* If user is using libfabric API 1.18 or later, by default EFA
@@ -1460,7 +1459,8 @@ ssize_t efa_rdm_ep_cancel(fid_t fid_ep, void *context)
  */
 static int efa_rdm_ep_set_fi_hmem_p2p_opt(struct efa_rdm_ep *efa_rdm_ep, int opt)
 {
-	int i, err;
+	int err;
+	enum fi_hmem_iface iface;
 
 	/*
 	 * Check the opt's validity against the first initialized non-system FI_HMEM
@@ -1471,9 +1471,9 @@ static int efa_rdm_ep_set_fi_hmem_p2p_opt(struct efa_rdm_ep *efa_rdm_ep, int opt
 	 * time. Refactor to handle multiple initialized interfaces to impose
 	 * tighter restrictions on valid p2p options.
 	 */
-	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
 		err = efa_hmem_validate_p2p_opt(
-			efa_hmem_ifaces[i], opt,
+			iface, opt,
 			efa_rdm_ep->base_ep.info->fabric_attr->api_version);
 		if (err == -FI_ENODATA)
 			continue;
