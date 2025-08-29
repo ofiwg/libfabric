@@ -29,7 +29,7 @@ static size_t efa_max_eager_msg_size_with_largest_header() {
  *
  * @return  0
  */
-static int efa_domain_hmem_info_init_protocol_thresholds(enum fi_hmem_iface iface)
+static int efa_hmem_info_init_protocol_thresholds(enum fi_hmem_iface iface)
 {
 	struct efa_hmem_info *info = &g_efa_hmem_info[iface];
 	size_t tmp_value;
@@ -298,7 +298,7 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 			EFA_INFO(FI_LOG_CORE, "%s P2P support is not available.\n", fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
 	}
 
-	efa_domain_hmem_info_init_protocol_thresholds(iface);
+	efa_hmem_info_init_protocol_thresholds(iface);
 }
 
 /**
