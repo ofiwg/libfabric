@@ -16545,8 +16545,8 @@ FI_OPT_SHARED_MEMORY_PERMITTED setopt call will fail with -FI_EINVAL.
 
 :   Use the direct data path implementation that bypasses rdma-core on
     data path, including the CQ polling and TX/RX submissions, when it's
-    available. Setting this variable as 1 will enable this feature
-    (Default: false).
+    available. Setting this variable as 0 will disable this feature
+    (Default: true).
 
 # SEE ALSO
 
