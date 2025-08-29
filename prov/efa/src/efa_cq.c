@@ -680,11 +680,77 @@ out:
 	
 }
 
+ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
+		       uint64_t flags)
+{
+	struct efa_cq *efa_cq;
+	struct efa_ibv_cq *ibv_cq;
+	int err;
+	ssize_t ret;
+	int prov_errno;
+	int opcode;
+
+	efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
+
+	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
+
+	ibv_cq = &efa_cq->ibv_cq;
+
+	if (ibv_cq->poll_active) {
+		/* No error, return EAGAIN */
+		if(!ibv_cq->ibv_cq_ex->status) {
+			ret = -FI_EAGAIN;
+			goto out;
+		}
+		opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
+		prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
+		switch (opcode) {
+		case IBV_WC_SEND: /* fall through */
+		case IBV_WC_RDMA_WRITE: /* fall through */
+		case IBV_WC_RDMA_READ:
+			/* TODO: implement */
+			break;
+		case IBV_WC_RECV: /* fall through */
+		case IBV_WC_RECV_RDMA_WITH_IMM:
+			/* TODO: implement */
+			break;
+		default:
+			EFA_WARN(FI_LOG_EP_CTRL, "Unhandled op code %d\n",
+				 opcode);
+			assert(0 && "Unhandled op code");
+		}
+		efa_ibv_cq_end_poll(ibv_cq);
+		ibv_cq->poll_active = false;
+		ibv_cq->poll_err = 0;
+	} else {
+		assert(ibv_cq->poll_err);
+		/* Empty CQ */
+		if (ibv_cq->poll_err == ENOENT) {
+			ret = -FI_EAGAIN;
+			goto out;
+		}
+		/* This currently means the CQE belongs a QP that is destroyed */
+		prov_errno = EFA_IO_COMP_STATUS_FLUSHED;
+		err = to_fi_errno(prov_errno);
+
+		EFA_WARN(FI_LOG_CQ, "Encountered error during CQ polling. err: %s (%d), prov_errno: %s (%d)\n",
+				fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
+		efa_show_help(prov_errno);
+		buf->err = err;
+		buf->prov_errno = prov_errno;
+	}
+	ret = sizeof(*buf);
+out:
+
+	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
+	return ret;
+}
+
 struct fi_ops_cq efa_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = ofi_cq_read,
 	.readfrom = efa_cq_readfrom,
-	.readerr = ofi_cq_readerr,
+	.readerr = efa_cq_readerr,
 	.sread = efa_cq_sread,
 	.sreadfrom = efa_cq_sreadfrom,
 	.signal = efa_cq_signal,
