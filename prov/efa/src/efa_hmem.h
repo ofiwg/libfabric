@@ -33,8 +33,6 @@ struct efa_hmem_info {
 
 extern struct efa_hmem_info	g_efa_hmem_info[OFI_HMEM_MAX];
 
-struct efa_domain;
-
 int efa_hmem_validate_p2p_opt(enum fi_hmem_iface iface, int p2p_opt, uint32_t api_version);
 int efa_hmem_info_initialize();
 
