@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2025\-08\-11" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2025\-08\-29" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -663,7 +663,7 @@ threshold, the refill will be skipped.
 Use the direct data path implementation that bypasses rdma-core on data
 path, including the CQ polling and TX/RX submissions, when it\[cq]s
 available.
-Setting this variable as 1 will enable this feature (Default: false).
+Setting this variable as 0 will disable this feature (Default: true).
 .SH SEE ALSO
 .PP
 \f[V]fabric\f[R](7), \f[V]fi_provider\f[R](7), \f[V]fi_getinfo\f[R](3)
