@@ -100,7 +100,7 @@ prov_efa_src_fi_efa_rdma_checker_LDFLAGS = -lefa
 endif BUILD_EFA_RDMA_CHECKER
 
 if EFAGDA
-SUBDIRS = prov/efa/src/efagda
+SUBDIRS += prov/efa/src/efagda
 prov_efa_src_fi_efa_gda_SOURCES = prov/efa/src/efa_gda.c
 prov_efa_src_fi_efa_gda_LDFLAGS = -Wl,-rpath=$(libdir)
 prov_efa_src_fi_efa_gda_LDADD = -L$(libdir) -L/usr/local/cuda/lib64 -lefagda -lcudart -lcuda libfabtests.la
@@ -108,6 +108,8 @@ export prefix
 install-efagda:
 	$(MAKE) -C prov/efa/src/efagda install prefix=$(prefix)
 endif EFAGDA
+
+EXTRA_DIST += prov/efa/src/efagda
 
 endif HAVE_VERBS_DEVEL
 endif ENABLE_EFA

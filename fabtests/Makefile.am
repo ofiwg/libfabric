@@ -676,6 +676,10 @@ nroff:
             perl $(top_srcdir)/config/md2nroff.pl --source=$(top_srcdir)/$$source.md; \
         done
 
+SUBDIRS =
+DIST_SUBDIRS =
+EXTRA_DIST =
+
 include prov/efa/Makefile.include
 if !MACOS
 include prov/lpp/Makefile.include
@@ -683,7 +687,7 @@ endif
 
 man_MANS = $(real_man_pages) $(dummy_man_pages)
 
-EXTRA_DIST = \
+EXTRA_DIST += \
 	fabtests.spec.in $(real_man_pages) $(dummy_man_pages)
 
 dist-hook: fabtests.spec
