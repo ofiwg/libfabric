@@ -3,6 +3,8 @@
 
 #include "efa.h"
 #include "efa_hmem.h"
+#include "efa_mr.h"
+#include "efa_tp.h"
 #include "rdm/efa_rdm_pkt_type.h"
 
 struct efa_hmem_info g_efa_hmem_info[OFI_HMEM_MAX];
@@ -385,6 +387,72 @@ int efa_hmem_info_initialize()
 
 	return ret;
 }
+
+/**
+ * @brief Copy data from a hmem device to a system buffer
+ *
+ * @param[in]    desc            Pointer to a memory registration descriptor
+ * @param[out]   dest            Destination system memory buffer
+ * @param[in]    src             Source hmem device memory
+ * @param[in]    size            Data size in bytes to copy
+ * @return       FI_SUCCESS status code on success, or an error code.
+ */
+int efa_copy_from_hmem(void *desc, void *dest, const void *src, size_t size)
+{
+	struct efa_mr_peer peer = { .iface = FI_HMEM_SYSTEM };
+
+	if (desc)
+		peer = ((struct efa_mr *) desc)->peer;
+
+	if (peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
+		assert(peer.hmem_data);
+		switch (peer.iface) {
+		/* TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy */
+		case FI_HMEM_CUDA:
+		case FI_HMEM_ROCR:
+			efa_tracepoint(dev_reg_copy_from_hmem, &peer, dest, src, size);
+			return ofi_hmem_dev_reg_copy_from_hmem(peer.iface, (uint64_t) peer.hmem_data, dest, src, size);
+		default:
+			break;
+		}
+	}
+
+	efa_tracepoint(copy_from_hmem, &peer, dest, src, size);
+	return ofi_copy_from_hmem(peer.iface, peer.device, dest, src, size);
+};
+
+/**
+ * @brief Copy data from a system buffer to a hmem device
+ *
+ * @param[in]    desc            Pointer to a memory registration descriptor
+ * @param[out]   dest            Destination hmem device memory
+ * @param[in]    src			 Source system memory buffer
+ * @param[in]    size            Data size in bytes to copy
+ * @return       FI_SUCCESS status code on success, or an error code.
+ */
+int efa_copy_to_hmem(void *desc, void *dest, const void *src, size_t size)
+{
+	struct efa_mr_peer peer = { .iface = FI_HMEM_SYSTEM };
+
+	if (desc)
+		peer = ((struct efa_mr *) desc)->peer;
+
+	if (peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
+		assert(peer.hmem_data);
+		switch (peer.iface) {
+		/* TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy */
+		case FI_HMEM_CUDA:
+		case FI_HMEM_ROCR:
+			efa_tracepoint(dev_reg_copy_to_hmem, &peer, dest, src, size);
+			return ofi_hmem_dev_reg_copy_to_hmem(peer.iface, (uint64_t) peer.hmem_data, dest, src, size);
+		default:
+			break;
+		}
+	}
+
+	efa_tracepoint(copy_to_hmem, &peer, dest, src, size);
+	return ofi_copy_to_hmem(peer.iface, peer.device, dest, src, size);
+};
 
 /**
  * @brief Copy data from a hmem IOV to a system buffer
