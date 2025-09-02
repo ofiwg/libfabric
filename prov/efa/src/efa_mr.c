@@ -213,13 +213,12 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		efa_mr->peer.iface = FI_HMEM_SYSTEM;
 	}
 
-	/* efa_mr->peer.device is an union. Setting reserved to 0 cleared everything in it (cuda, neuron, synapseai etc) */
-	efa_mr->peer.device.reserved = 0;
+	efa_mr->peer.device = 0;
 	efa_mr->peer.flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
 	efa_mr->peer.hmem_data = NULL;
 	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
 		efa_mr->needs_sync = true;
-		efa_mr->peer.device.cuda = attr->device.cuda;
+		efa_mr->peer.device = attr->device.cuda;
 
 		/* Only attempt GDRCopy registrations for efa rdm path */
 		if (efa_mr->domain->info_type == EFA_INFO_RDM && !(flags & FI_MR_DMABUF) && cuda_is_gdrcopy_enabled()) {
@@ -237,9 +236,9 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 			}
 		}
 	} else if (attr->iface == FI_HMEM_NEURON) {
-		efa_mr->peer.device.neuron = attr->device.neuron;
+		efa_mr->peer.device = attr->device.neuron;
 	} else if (attr->iface == FI_HMEM_SYNAPSEAI) {
-		efa_mr->peer.device.synapseai = attr->device.synapseai;
+		efa_mr->peer.device = attr->device.synapseai;
 	}
 
 	return FI_SUCCESS;
