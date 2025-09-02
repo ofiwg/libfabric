@@ -569,17 +569,16 @@ int efa_cq_signal(struct fid_cq *cq_fid)
 	return 0;
 }
 
-static void efa_cq_read_context_entry(struct efa_ibv_cq *ibv_cq, void *buf)
+static void efa_cq_read_context_entry(struct efa_ibv_cq *ibv_cq, void *buf, int opcode)
 {
 	struct fi_cq_entry *entry = buf;
 
 	entry->op_context = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
 }
 
-static void efa_cq_read_msg_entry(struct efa_ibv_cq *cq, void *buf)
+static void efa_cq_read_msg_entry(struct efa_ibv_cq *cq, void *buf, int opcode)
 {
 	struct fi_cq_msg_entry *entry = buf;
-	int opcode = efa_ibv_cq_wc_read_opcode(cq);
 	struct ibv_cq_ex *ibv_cqx = cq->ibv_cq_ex;
 
 	if (!efa_cq_wc_is_unsolicited(cq) && ibv_cqx->wr_id) {
@@ -592,10 +591,9 @@ static void efa_cq_read_msg_entry(struct efa_ibv_cq *cq, void *buf)
 	entry->len = efa_ibv_cq_wc_read_byte_len(cq);
 }
 
-static void efa_cq_read_data_entry(struct efa_ibv_cq *cq, void *buf)
+static void efa_cq_read_data_entry(struct efa_ibv_cq *cq, void *buf, int opcode)
 {
 	struct fi_cq_data_entry *entry = buf;
-	int opcode = efa_ibv_cq_wc_read_opcode(cq);
 	struct ibv_cq_ex *ibv_cqx = cq->ibv_cq_ex;
 
 	if (!efa_cq_wc_is_unsolicited(cq) && ibv_cqx->wr_id) {
@@ -621,6 +619,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	struct efa_ibv_cq *ibv_cq;
 	int err = 0;
 	size_t num_cqe = 0; /* Count of read entries */
+	int opcode;
 
 	efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
@@ -645,14 +644,15 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			goto out;
 		}
 
+		opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
 		if (!efa_cq_wc_is_unsolicited(ibv_cq)) {
 			if (ibv_cq->ibv_cq_ex->wr_id) {
-				efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size));
+				efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size), opcode);
 				num_cqe++;
 			}
 		} else {
 			assert (efa_ibv_cq_wc_read_opcode(ibv_cq) == IBV_WC_RECV_RDMA_WITH_IMM);
-			efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size));
+			efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size), opcode);
 			num_cqe++;
 		}
 
