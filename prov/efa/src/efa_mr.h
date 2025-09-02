@@ -12,12 +12,7 @@
  */
 struct efa_mr_peer {
 	enum fi_hmem_iface  iface;
-	union {
-	    uint64_t        reserved;
-	    uint64_t        cuda;
-	    int             neuron;
-	    int             synapseai;
-	} device;
+	uint64_t			device;
 	uint64_t            flags;
 	void                *hmem_data;
 };
