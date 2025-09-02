@@ -6,6 +6,7 @@
 
 #include "ofi_hmem.h"
 #include "efa_mr.h"
+#include "efa_tp.h"
 
 #if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
 #  define EFA_HAVE_NON_SYSTEM_HMEM 1
@@ -50,32 +51,32 @@ int efa_hmem_info_initialize();
  * @brief Copy data from a hmem device to a system buffer
  *
  * @param[in]    desc            Pointer to a memory registration descriptor
- * @param[out]   buff            Destination system memory buffer
+ * @param[out]   dest            Destination system memory buffer
  * @param[in]    src             Source hmem device memory
  * @param[in]    size            Data size in bytes to copy
  * @return       FI_SUCCESS status code on success, or an error code.
  */
-static inline int efa_copy_from_hmem(void *desc, void *buff, const void *src, size_t size)
+static inline int efa_copy_from_hmem(void *desc, void *dest, const void *src, size_t size)
 {
-	uint64_t device = 0, flags = 0;
-	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
-	void *hmem_data = NULL;
+	struct efa_mr_peer peer = { .iface = FI_HMEM_SYSTEM };
 
-	if (desc) {
-		iface = ((struct efa_mr *)desc)->peer.iface;
-		device = ((struct efa_mr *)desc)->peer.device.reserved;
-		flags = ((struct efa_mr *)desc)->peer.flags;
-		hmem_data = ((struct efa_mr *)desc)->peer.hmem_data;
-	}
+	if (desc)
+		peer = ((struct efa_mr *) desc)->peer;
 
-	if (FI_HMEM_CUDA == iface && (flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
-		assert(hmem_data);
+	if (peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
+		assert(peer.hmem_data);
+		switch (peer.iface) {
 		/* TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy */
-		cuda_gdrcopy_from_dev((uint64_t)hmem_data, buff, src, size);
-		return FI_SUCCESS;
+		case FI_HMEM_CUDA:
+			efa_tracepoint(dev_reg_copy_from_hmem, &peer, dest, src, size);
+			return ofi_hmem_dev_reg_copy_from_hmem(peer.iface, (uint64_t) peer.hmem_data, dest, src, size);
+		default:
+			break;
+		}
 	}
 
-	return ofi_copy_from_hmem(iface, device, buff, src, size);
+	efa_tracepoint(copy_from_hmem, &peer, dest, src, size);
+	return ofi_copy_from_hmem(peer.iface, peer.device, dest, src, size);
 };
 
 /**
@@ -83,31 +84,31 @@ static inline int efa_copy_from_hmem(void *desc, void *buff, const void *src, si
  *
  * @param[in]    desc            Pointer to a memory registration descriptor
  * @param[out]   dest            Destination hmem device memory
- * @param[in]    buff            Source system memory buffer
+ * @param[in]    src			 Source system memory buffer
  * @param[in]    size            Data size in bytes to copy
  * @return       FI_SUCCESS status code on success, or an error code.
  */
-static inline int efa_copy_to_hmem(void *desc, void *dest, const void *buff, size_t size)
+static inline int efa_copy_to_hmem(void *desc, void *dest, const void *src, size_t size)
 {
-	uint64_t device = 0, flags = 0;
-	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
-	void *hmem_data = NULL;
+	struct efa_mr_peer peer = { .iface = FI_HMEM_SYSTEM };
 
-	if (desc) {
-		iface = ((struct efa_mr *)desc)->peer.iface;
-		device = ((struct efa_mr *)desc)->peer.device.reserved;
-		flags = ((struct efa_mr *)desc)->peer.flags;
-		hmem_data = ((struct efa_mr *)desc)->peer.hmem_data;
-	}
+	if (desc)
+		peer = ((struct efa_mr *) desc)->peer;
 
-	if (FI_HMEM_CUDA == iface && (flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
-		assert(hmem_data);
+	if (peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
+		assert(peer.hmem_data);
+		switch (peer.iface) {
 		/* TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy */
-		cuda_gdrcopy_to_dev((uint64_t)hmem_data, dest, buff, size);
-		return FI_SUCCESS;
+		case FI_HMEM_CUDA:
+			efa_tracepoint(dev_reg_copy_to_hmem, &peer, dest, src, size);
+			return ofi_hmem_dev_reg_copy_to_hmem(peer.iface, (uint64_t) peer.hmem_data, dest, src, size);
+		default:
+			break;
+		}
 	}
 
-	return ofi_copy_to_hmem(iface, device, dest, buff, size);
+	efa_tracepoint(copy_to_hmem, &peer, dest, src, size);
+	return ofi_copy_to_hmem(peer.iface, peer.device, dest, src, size);
 };
 
 ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, size_t buff_size, const struct iovec *hmem_iov, size_t iov_count);
