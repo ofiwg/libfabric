@@ -196,8 +196,8 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 			efa_mr->peer.iface = attr->iface;
 		} else {
 			EFA_WARN(FI_LOG_MR,
-				 "FI_HMEM is not initialized for device type %d\n",
-				 attr->iface);
+				"%s is not initialized\n",
+				fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
 			return -FI_ENOSYS;
 		}
 	} else {
@@ -208,8 +208,8 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		 * whatever reason.
 		 */
 		EFA_WARN_ONCE(FI_LOG_MR,
-		             "FI_HMEM support is disabled, assuming FI_HMEM_SYSTEM not type: %d.\n",
-		             attr->iface);
+		             "FI_HMEM support is disabled, assuming FI_HMEM_SYSTEM instead of %s\n",
+		             fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
 		efa_mr->peer.iface = FI_HMEM_SYSTEM;
 	}
 
@@ -327,7 +327,8 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	if (!ofi_hmem_is_initialized(attr->iface)) {
 		EFA_WARN(FI_LOG_MR,
-			 "Cannot register memory for uninitialized iface\n");
+			"Cannot register memory for uninitialized iface (%s)\n",
+			fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
 		return -FI_ENOSYS;
 	}
 
@@ -990,7 +991,8 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	if (!ofi_hmem_is_initialized(attr->iface)) {
 		EFA_WARN(FI_LOG_MR,
-			 "Cannot register memory for uninitialized iface\n");
+			"Cannot register memory for uninitialized iface (%s)\n",
+			fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
 		return -FI_ENOSYS;
 	}
 
