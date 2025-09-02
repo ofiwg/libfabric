@@ -149,7 +149,7 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 								data, pkt_entry->payload_size);
 		} else {
 			bytes_copied[i] = ofi_copy_to_hmem_iov(desc->peer.iface,
-			                                       desc->peer.device.reserved,
+			                                       desc->peer.device,
 			                                       rxe->iov, rxe->iov_count,
 			                                       segment_offset + ep->msg_prefix_size,
 			                                       data, pkt_entry->payload_size);
