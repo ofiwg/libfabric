@@ -1,0 +1,48 @@
+{
+	prov_name: lnx,
+	test_type: [
+		FT_TEST_LATENCY,
+		FT_TEST_BANDWIDTH,
+	],
+	class_function: [
+		FT_FUNC_SEND,
+		FT_FUNC_SENDV,
+		FT_FUNC_SENDMSG,
+		FT_FUNC_SENDDATA,
+		FT_FUNC_INJECT,
+		FT_FUNC_INJECTDATA,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	test_class: [
+		FT_CAP_TAGGED,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+	]
+},
+{
+	prov_name: lnx,
+	test_type: [
+		FT_TEST_UNIT
+	],
+	class_function: [
+		FT_FUNC_SEND,
+		FT_FUNC_SENDV,
+		FT_FUNC_SENDMSG,
+		FT_FUNC_SENDDATA,
+		FT_FUNC_INJECT,
+		FT_FUNC_INJECTDATA,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	test_class: [
+		FT_CAP_TAGGED,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+	],
+	test_flags: FT_FLAG_QUICKTEST
+}
