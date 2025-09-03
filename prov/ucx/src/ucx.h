@@ -176,7 +176,10 @@ struct ucx_av {
 	struct ofi_dyn_arr addr_array;
 };
 
-#define UCX_GET_UCP_EP(EP, ADDR) (((struct ucx_ave*)(ADDR))->uep)
+#define UCX_GET_UCP_EP(EP, ADDR) 					\
+		(((struct ucx_ave *)					\
+		ofi_array_at_max(&(EP)->av->ave_array, (ADDR),		\
+				 (EP)->av->count))->uep)
 
 enum ucx_comm_mode {
 	UCX_MSG,
