@@ -492,6 +492,7 @@ int lnx_getinfo_helper(uint32_t version, char *prov, char *domain,
 
 	lnx_hints->fabric_attr->prov_name = prov;
 	lnx_hints->domain_attr->name = domain;
+	lnx_hints->ep_attr->protocol = FI_PROTO_UNSPEC;
 
 	if (!strncmp(prov, "shm", 3)) {
 		shm = true;
