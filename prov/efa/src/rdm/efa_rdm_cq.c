@@ -247,7 +247,6 @@ efa_rdm_cq_lookup_raw_addr(struct efa_rdm_pke *pke,
 {
 	struct efa_rdm_ep *ep;
 	fi_addr_t addr;
-	union ibv_gid gid = {0};
 	struct efa_rdm_peer *peer = NULL;
 	bool implicit = false;
 	char gid_str_cdesc[INET6_ADDRSTRLEN];
@@ -278,7 +277,7 @@ efa_rdm_cq_lookup_raw_addr(struct efa_rdm_pke *pke,
 	return NULL;
 
 out:
-	inet_ntop(AF_INET6, gid.raw, gid_str_cdesc, INET6_ADDRSTRLEN);
+	inet_ntop(AF_INET6, efa_ep_addr->raw, gid_str_cdesc, INET6_ADDRSTRLEN);
 	EFA_WARN(FI_LOG_AV,
 		 "Recovered fi_addr for peer:[QPN]:[QKey] = "
 		 "[%s]:[%" PRIu16 "]:[%" PRIu32 "] fi_addr: %" PRIu64
