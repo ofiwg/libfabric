@@ -611,6 +611,28 @@ static void efa_cq_read_data_entry(struct efa_ibv_cq *cq, void *buf, int opcode)
 	}
 }
 
+static inline fi_addr_t efa_cq_get_src_addr(struct efa_ibv_cq *ibv_cq, int opcode)
+{
+	struct efa_cq *efa_cq;
+	struct efa_domain *efa_domain;
+	struct efa_base_ep *base_ep;
+
+	switch (opcode) {
+	case IBV_WC_RECV:
+	case IBV_WC_RECV_RDMA_WITH_IMM:
+		efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
+		efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
+		base_ep = efa_domain->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->qp_table_sz_m1]->base_ep;
+		if (!(base_ep->util_ep.caps & FI_SOURCE))
+			return FI_ADDR_NOTAVAIL;
+		return efa_av_reverse_lookup(base_ep->av,
+					     efa_ibv_cq_wc_read_slid(ibv_cq),
+					     efa_ibv_cq_wc_read_src_qp(ibv_cq));
+	default:
+		return FI_ADDR_NOTAVAIL;
+	}
+}
+
 static
 ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			fi_addr_t *src_addr)
@@ -648,11 +670,15 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		if (!efa_cq_wc_is_unsolicited(ibv_cq)) {
 			if (ibv_cq->ibv_cq_ex->wr_id) {
 				efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size), opcode);
+				if (src_addr)
+					src_addr[num_cqe] = efa_cq_get_src_addr(ibv_cq, opcode);
 				num_cqe++;
 			}
 		} else {
 			assert (efa_ibv_cq_wc_read_opcode(ibv_cq) == IBV_WC_RECV_RDMA_WITH_IMM);
 			efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size), opcode);
+			if (src_addr)
+				src_addr[num_cqe] = efa_cq_get_src_addr(ibv_cq, opcode);
 			num_cqe++;
 		}
 
