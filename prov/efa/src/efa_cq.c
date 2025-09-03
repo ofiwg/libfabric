@@ -525,7 +525,7 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 				break;
 		} 
 		
-		ret = ofi_cq_readfrom(&cq->util_cq.cq_fid, buffer, count - num_completions, src_addr);
+		ret = ofi_cq_readfrom(&cq->util_cq.cq_fid, buffer, count - num_completions, src_addr ? src_addr + num_completions : NULL);
 		if (ret > 0) {
 			buffer += ret * cq->entry_size;
 			num_completions += ret;
