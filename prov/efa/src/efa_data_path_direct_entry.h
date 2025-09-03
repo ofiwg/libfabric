@@ -67,6 +67,8 @@ static inline int efa_data_path_direct_post_recv(struct efa_qp *qp,
 	struct efa_data_path_direct_wq *wq = &qp->data_path_direct_qp.rq.wq;
 	uint32_t rq_desc_offset;
 	uint32_t i;
+	uint16_t req_id;
+	uint32_t lkey_ctrl = 0;
 	int err = 0;
 
 	while (wr) {
@@ -76,24 +78,19 @@ static inline int efa_data_path_direct_post_recv(struct efa_qp *qp,
 			goto ring_db;
 		}
 
-		rq_desc_offset = (wq->pc & wq->desc_mask) * sizeof(*rx_buf);
-		rx_buf = (struct efa_io_rx_desc *)(qp->data_path_direct_qp.rq.buf +
-					   rq_desc_offset);
-		memset(rx_buf, 0, sizeof(*rx_buf));
-
-		/* Wrap rx descriptor index */
-		wq->pc++;
-		if (!(wq->pc & wq->desc_mask))
-			wq->phase++;
-
-		rx_buf->req_id = efa_wq_get_next_wrid_idx(wq, wr->wr_id);
+		req_id = efa_wq_get_next_wrid_idx(wq, wr->wr_id);
 		wq->wqe_posted++;
 
 		/* Default init of the rx buffer */
-		EFA_SET(&rx_buf->lkey_ctrl, EFA_IO_RX_DESC_FIRST, 1);
-		EFA_SET(&rx_buf->lkey_ctrl, EFA_IO_RX_DESC_LAST, 0);
+		EFA_SET(&lkey_ctrl, EFA_IO_RX_DESC_FIRST, 1);
+		EFA_SET(&lkey_ctrl, EFA_IO_RX_DESC_LAST, 0);
 
 		for (i = 0; i < wr->num_sge; i++) {
+			rq_desc_offset = (wq->pc & wq->desc_mask) * sizeof(*rx_buf);
+			rx_buf = (struct efa_io_rx_desc *)(qp->data_path_direct_qp.rq.buf +
+							   rq_desc_offset);
+			rx_buf->req_id = req_id;
+			rx_buf->lkey_ctrl = lkey_ctrl;
 			/* Set last indication if need) */
 			if (i == wr->num_sge - 1)
 				EFA_SET(&rx_buf->lkey_ctrl, EFA_IO_RX_DESC_LAST, 1);
@@ -106,6 +103,10 @@ static inline int efa_data_path_direct_post_recv(struct efa_qp *qp,
 			wr->sg_list[i].lkey);
 			rx_buf->buf_addr_lo = addr;
 			rx_buf->buf_addr_hi = (uint64_t)addr >> 32;
+			/* Wrap rx descriptor index */
+			wq->pc++;
+			if (!(wq->pc & wq->desc_mask))
+				wq->phase++;
 		}
 		wr = wr->next;
 	}
