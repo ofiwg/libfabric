@@ -192,11 +192,15 @@ int opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric, struct fi_info *in
 		return ret;
 	}
 
-	ret = ofi_ipc_cache_open(&new_hmem_domain->ipc_cache, &new_hmem_domain->util_domain);
-	if (ret) {
-		opx_hmem_close_domain(new_hmem_domain, 0);
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error opening IPC Cache ret=%d (%s)\n", ret, strerror(ret));
-		return ret;
+	if ((hmem_ops[FI_HMEM_CUDA].initialized && ofi_hmem_is_ipc_enabled(FI_HMEM_CUDA)) ||
+	    (hmem_ops[FI_HMEM_ROCR].initialized && ofi_hmem_is_ipc_enabled(FI_HMEM_ROCR))) {
+		ret = ofi_ipc_cache_open(&new_hmem_domain->ipc_cache, &new_hmem_domain->util_domain);
+		if (ret) {
+			opx_hmem_close_domain(new_hmem_domain, 0);
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error opening IPC Cache ret=%d (%s)\n", ret,
+				strerror(ret));
+			return ret;
+		}
 	}
 
 	ret = ofi_bufpool_create(&new_hmem_domain->hmem_stream.event_pool, sizeof(union opx_hmem_event), 0, UINT_MAX,
