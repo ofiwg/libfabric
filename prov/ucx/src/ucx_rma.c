@@ -220,7 +220,10 @@ static struct ucx_mr_rkey *ucx_get_rkey(struct ucx_ep *ep,
 	HASH_FIND(hh, domain->remote_keys, &tmp_rkey.id, sizeof(tmp_rkey.id),
 		  rkey);
 	if (!rkey) {
-		struct ucx_ave *ep_ave = (struct ucx_ave *)owner_addr;
+		struct ucx_ave *ep_ave = (struct ucx_ave *)
+			ofi_array_at_max(&ep->av->ave_array, owner_addr,
+					 ep->av->count);
+		assert(ep_ave);
 
 		pkey = (struct ucx_mr_pkey *)tmp_rkey.id.key;
 		if (!pkey || pkey->signature != FI_UCX_PKEY_SIGNATURE) {
@@ -267,6 +270,8 @@ static ssize_t ucx_proc_rma_msg(struct fid_ep *ep,
 
 	u_ep = container_of(ep, struct ucx_ep, ep.ep_fid);
 	dst_ep = UCX_GET_UCP_EP(u_ep, msg->addr);
+	if (!dst_ep)
+		return -FI_EINVAL;
 
 	if (msg->rma_iov_count > 1 || msg->iov_count > 1) {
 		FI_DBG(&ucx_prov,FI_LOG_CORE,
@@ -333,6 +338,8 @@ ssize_t ucx_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 
 	u_ep = container_of(ep, struct ucx_ep, ep.ep_fid);
 	dst_ep = UCX_GET_UCP_EP(u_ep, dest_addr);
+	if (!dst_ep)
+		return -FI_EINVAL;
 
 	rkey = ucx_get_rkey(u_ep, dest_addr, key);
 	if (!rkey)
