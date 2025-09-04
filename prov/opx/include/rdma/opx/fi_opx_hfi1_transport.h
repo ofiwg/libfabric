@@ -2210,7 +2210,7 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	/* write one block of PIO non-SOP, either one full block (8 qws) or the partial qws/block */
 	const size_t first_block_qws =
-		full_block_credits_needed ? OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS : tail_partial_block_qws;
+		full_block_credits_needed ? OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS : payload_qws_total;
 
 #ifndef NDEBUG
 	credits_consumed +=
