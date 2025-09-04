@@ -24,6 +24,8 @@ def test_rdm_bw_functional_efa(cmdline_args, completion_semantic):
 def test_rdm_pingpong(cmdline_args, iteration_type, completion_semantic,
                       memory_type_bi_dir, completion_type, direct_message_size, fabric):
     command = "fi_rdm_pingpong"  + " " + perf_progress_model_cli
+    if completion_type == "counter" and fabric == "efa-direct":
+        pytest.skip("counter is not supported by efa-direct")
     efa_run_client_server_test(cmdline_args, command, iteration_type,
                                completion_semantic, memory_type_bi_dir,
                                direct_message_size if fabric == "efa-direct" else "all",
