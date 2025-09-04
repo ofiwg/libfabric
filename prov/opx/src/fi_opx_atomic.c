@@ -165,11 +165,10 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	params->cc		   = NULL;
 	params->user_cc		   = NULL;
 	params->src_base_addr	   = NULL;
-	params->origin_byte_counter	  = NULL;
-	params->payload_bytes_for_iovec	  = sizeof(struct fi_opx_hfi1_dput_fetch);
-	params->fetch_vaddr		  = (void *) fetch_iov->buf;
-	params->target_byte_counter_vaddr = (const uintptr_t) cc;
-	params->target_hfi_unit		  = opx_dst_addr.hfi1_unit;
+	params->origin_byte_counter	= NULL;
+	params->payload_bytes_for_iovec = sizeof(struct fi_opx_hfi1_dput_fetch);
+	params->fetch_vaddr		= (void *) fetch_iov->buf;
+	params->target_hfi_unit		= opx_dst_addr.hfi1_unit;
 	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_shm, opx_dst_addr.hfi1_subctxt_rx);
 
 	if (compare_iov) {
@@ -184,10 +183,11 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 
 	struct fi_opx_rma_request *rma_request = ofi_buf_alloc(opx_ep->tx->rma_request_pool);
 	assert(rma_request != NULL);
-	rma_request->cc		  = cc;
-	rma_request->hmem_iface	  = fetch_iov->iface;
-	rma_request->hmem_device  = fetch_iov->device;
-	params->rma_request_vaddr = (uintptr_t) rma_request;
+	rma_request->cc			  = cc;
+	rma_request->hmem_iface		  = fetch_iov->iface;
+	rma_request->hmem_device	  = fetch_iov->device;
+	params->rma_request_vaddr	  = (uintptr_t) rma_request;
+	params->target_byte_counter_vaddr = params->rma_request_vaddr;
 
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
 

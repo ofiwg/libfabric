@@ -3789,9 +3789,10 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 				(!sdma_no_bounce_buf || opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
 				 opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH || need_padding);
 
-			const uint64_t max_pkts_per_req =
-				params->sdma_we->use_bounce_buf ? OPX_HFI1_SDMA_MAX_PKTS : opx_ep->tx->sdma_max_pkts;
-			packet_count = MIN(packet_count, max_pkts_per_req);
+			const uint64_t max_pkts_per_req = params->sdma_we->use_bounce_buf ?
+								  OPX_SDMA_MAX_PKTS_BOUNCE_BUF :
+								  opx_ep->tx->sdma_max_pkts;
+			packet_count			= MIN(packet_count, max_pkts_per_req);
 
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(
 				&opx_ep->ep_fid, opx_ep->reli_service, params->slid, params->origin_rx,
@@ -4007,7 +4008,8 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 	unsigned       i;
 	const void    *sbuf_start	  = params->src_base_addr;
 	const bool     sdma_no_bounce_buf = params->sdma_no_bounce_buf;
-	const uint64_t max_pkts_per_req = sdma_no_bounce_buf ? opx_ep->tx->sdma_max_pkts_tid : OPX_SDMA_BOUNCE_BUF_MAX;
+	const uint64_t max_pkts_per_req =
+		sdma_no_bounce_buf ? opx_ep->tx->sdma_max_pkts_tid : OPX_SDMA_MAX_PKTS_BOUNCE_BUF;
 
 	assert(params->ntidpairs != 0);
 	assert(niov == 1);
