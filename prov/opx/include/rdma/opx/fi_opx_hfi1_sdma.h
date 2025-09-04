@@ -181,7 +181,7 @@ struct fi_opx_hfi1_sdma_work_entry {
 	uint64_t first_ack_time_ns;
 
 	/* ==== CACHELINE 1 ==== */
-	struct fi_opx_hfi1_sdma_packet packets[OPX_SDMA_MAX_PKTS_BOUNCE_BUF];
+	struct fi_opx_hfi1_sdma_packet packets[OPX_HFI1_SDMA_MAX_PKTS_TID];
 
 	struct {
 		struct fi_opx_completion_counter cc;
