@@ -2367,7 +2367,7 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 {
 	struct cxip_coll_mc *mc_obj = reduction->mc_obj;
 	struct cxip_coll_data coll_data = {0};
-	int ret, red_id, rdma_read_stat;
+	int ret, red_id, rdma_read_stat, next_rdma_exp_seqn;
 	struct red_pkt_64 *get_pkt_64_p = NULL;
 	uint64_t leaf_contrib_ts_delta __attribute__((unused));
 	struct red_pkt *root_pkt = NULL;
@@ -2411,7 +2411,9 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 				TRACE_DEBUG("%s leaf_rdma_get pkt red_id %d red_op %d seqn %d\n",
 					__func__, root_pkt->hdr.cookie.red_id, root_pkt->hdr.op, root_pkt->hdr.seqno);
 				/* verify packet and make sure it is what we expected */
-				if (reduction->seqno != root_pkt->hdr.seqno) {
+				next_rdma_exp_seqn = reduction->seqno;
+				INCMOD(next_rdma_exp_seqn, CXIP_COLL_MOD_SEQNO);
+				if (next_rdma_exp_seqn != root_pkt->hdr.seqno) {
 					/* dont touch user data, make sure we have the correct seqn
 					 * log event only
 					 */
@@ -2476,11 +2478,11 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 				 * and prevent leaf hangs
 				 */
 				_ts_red_clr(reduction);
-				TRACE_DEBUG("%s leaf ok after rget! red_id %d red_op %d seqn %d ts %016lx\n",
+				TRACE_DEBUG("%s leaf ok after rdma! red_id %d red_op %d seqn %d ts %016lx\n",
 					__func__, red_id, reduction->accum.red_op, reduction->seqno, ofi_gettime_us());
 				goto post_complete;
 			} else {
-				TRACE_DEBUG("%s leaf rget bad status %d red_id %d red_op %d seqn %d ts %016lx\n",
+				TRACE_DEBUG("%s leaf rdma bad status %d red_id %d red_op %d seqn %d ts %016lx\n",
 					__func__, reduction->rdma_get_cb_rc, reduction->red_id,
 					reduction->accum.red_op, reduction->seqno, ofi_gettime_us());
 				/* read attempt failed, we are done. Should we attempt retries? */
