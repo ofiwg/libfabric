@@ -364,12 +364,6 @@ int efa_cq_trywait(struct efa_cq *cq)
 		return -FI_EINVAL;
 	}
 
-	if (!ofi_cirque_isempty(cq->util_cq.cirq)) {
-		EFA_INFO(FI_LOG_CQ, "efa_cq_trywait: completions available in "
-				 "util_cq, return -FI_EAGAIN\n");
-		return -FI_EAGAIN;
-	}
-
 	while (!efa_ibv_get_cq_event(&cq->ibv_cq, &context)) {
 		ofi_atomic_inc32(&cq->nevents);
 		EFA_DBG(FI_LOG_CQ,
@@ -387,10 +381,7 @@ int efa_cq_trywait(struct efa_cq *cq)
 		return ret;
 	}
 
-	/* Fetch any completions that we might have missed while rearming */
-	efa_cq_progress(&cq->util_cq);
-
-	return ofi_cirque_isempty(cq->util_cq.cirq) ? FI_SUCCESS : -FI_EAGAIN;
+	return FI_SUCCESS;
 }
 #else
 int efa_cq_trywait(struct efa_cq *cq) {
@@ -518,14 +509,7 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			    MIN((ssize_t) cond, count) : 1;
 
 	for (num_completions = 0; num_completions < threshold; ) {
-		if (efa_cq_trywait(cq) == FI_SUCCESS) {
-			/* CQ is empty, wait for events */
-			ret = efa_poll_events(cq, timeout);
-			if (ret)
-				break;
-		} 
-		
-		ret = ofi_cq_readfrom(&cq->util_cq.cq_fid, buffer, count - num_completions, src_addr ? src_addr + num_completions : NULL);
+		ret = cq->util_cq.cq_fid.ops->readfrom(&cq->util_cq.cq_fid, buffer, count - num_completions, src_addr ? src_addr + num_completions : NULL);
 		if (ret > 0) {
 			buffer += ret * cq->entry_size;
 			num_completions += ret;
@@ -533,6 +517,12 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 				break;
 		} else if (ret != -FI_EAGAIN) {
 			break;
+		} else { /* CQ is empty, wait for events */
+			if (efa_cq_trywait(cq) == FI_SUCCESS) {
+				ret = efa_poll_events(cq, timeout);
+				if (ret)
+					break;
+			}
 		}
 	}
 
