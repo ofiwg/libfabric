@@ -16,6 +16,8 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
+#define VNI 8
+
 static void poll_counter_assert(struct fid_cntr *cntr, uint64_t expected_value,
 				unsigned int timeout)
 {
@@ -960,6 +962,9 @@ static int alloc_service(struct cxil_dev *dev, unsigned int tle_count)
 	struct cxi_svc_fail_info fail_info = {};
 	struct cxi_svc_desc svc_desc = {
 		.enable = 1,
+		.restricted_vnis = 1,
+		.num_vld_vnis = 1,
+		.vnis[0] = VNI,
 		.resource_limits = 1,
 		.limits = {
 			.type[CXI_RSRC_TYPE_PTE] = {
@@ -1080,7 +1085,7 @@ static void deferred_work_resources_init(struct deferred_work_resources *res,
 {
 	int ret;
 	struct cxi_auth_key auth_key = {
-		.vni = 1,
+		.vni = VNI,
 	};
 	struct fi_av_attr av_attr = {};
 
