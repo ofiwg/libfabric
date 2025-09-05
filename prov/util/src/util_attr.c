@@ -1264,6 +1264,8 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 
 	if (hints->threading)
 		attr->threading = hints->threading;
+	if (hints->control_progress)
+		attr->control_progress = hints->control_progress;
 	if (hints->progress)
 		attr->progress = hints->progress;
 	if (hints->av_type)
