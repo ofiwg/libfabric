@@ -273,6 +273,7 @@ struct ofi_dyn_arr
 {
 	char *chunk[OFI_IDX_MAX_CHUNKS];
 	size_t item_size;
+	size_t max_index;
 	void (*init)(struct ofi_dyn_arr *arr, void *item);
 };
 
@@ -282,6 +283,7 @@ ofi_array_init(struct ofi_dyn_arr *arr, size_t item_size,
 {
 	memset(arr, 0, sizeof(*arr));
 	arr->item_size = item_size;
+	arr->max_index = 0;
 	arr->init = init;
 }
 
@@ -312,6 +314,18 @@ static inline void *ofi_array_at(struct ofi_dyn_arr *arr, int index)
 		if (ofi_array_grow(arr, index) < 0)
 			return NULL;
 	}
+
+	if (index > arr->max_index)
+		arr->max_index = index;
+
+	return ofi_array_item(arr, ofi_array_chunk(arr, index),
+			      ofi_idx_offset(index));
+}
+
+static inline void *ofi_array_at_max(struct ofi_dyn_arr *arr, int index)
+{
+	if (index > arr->max_index)
+		return NULL;
 
 	return ofi_array_item(arr, ofi_array_chunk(arr, index),
 			      ofi_idx_offset(index));
