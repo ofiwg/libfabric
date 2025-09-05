@@ -374,6 +374,8 @@ static inline int ft_use_size(int index, int enable_flags)
 		errno = saved_errno;					\
 	} while (0)
 
+
+#define FT_INFO(fmt, ...) FT_LOG("info", fmt, ##__VA_ARGS__)
 #define FT_ERR(fmt, ...) FT_LOG("error", fmt, ##__VA_ARGS__)
 #define FT_WARN(fmt, ...) FT_LOG("warn", fmt, ##__VA_ARGS__)
 
