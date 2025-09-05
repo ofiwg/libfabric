@@ -840,7 +840,7 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 	dlist_foreach_container_safe(&domain->ope_queued_list,
 			struct efa_rdm_ope, ope, queued_entry, tmp) {
 		if (ope->ep == ep) {
-			switch (efa_rdm_pkt_type_of(ope)) {
+			switch (efa_rdm_pke_get_ctrl_pkt_type_from_queued_ope(ope)) {
 			case EFA_RDM_RECEIPT_PKT:
 			case EFA_RDM_EOR_PKT:
 				if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_RNR))

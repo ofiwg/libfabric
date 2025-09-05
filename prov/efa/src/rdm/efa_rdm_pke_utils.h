@@ -31,7 +31,6 @@ struct efa_rdm_base_hdr *efa_rdm_pke_get_base_hdr(struct efa_rdm_pke *pke)
 
 #define efa_rdm_pkt_type_of(obj) _Generic((obj), \
 		struct efa_rdm_pke *: efa_rdm_pkt_type_of_pke, \
-		struct efa_rdm_ope *: efa_rdm_pkt_type_of_ope, \
 		default: efa_rdm_pkt_type_of_base_hdr)(obj)
 
 static inline
@@ -49,10 +48,40 @@ int efa_rdm_pkt_type_of_pke(struct efa_rdm_pke *pke)
 	return EFA_RDM_HEADERLESS_PKT;
 }
 
+/**
+ * @brief Get the packet type from a queued operation entry
+ *
+ * This function determines the packet type for control packets (like RECEIPT, EOR)
+ * that are queued in an operation entry. For RNR-queued operations, it examines
+ * the first packet in the queued_pkts list. For CTRL-queued operations, it
+ * returns the stored queued_ctrl_type.
+ *
+ * @param[in] ope Operation entry with queued packets
+ * @return Packet type constant (e.g., EFA_RDM_RECEIPT_PKT, EFA_RDM_EOR_PKT),
+ *         or 0 if no valid packet type is found
+ */
 static inline
-int efa_rdm_pkt_type_of_ope(struct efa_rdm_ope *ope)
+int efa_rdm_pke_get_ctrl_pkt_type_from_queued_ope(struct efa_rdm_ope *ope)
 {
-	return efa_rdm_pkt_type_of_pke(container_of(ope, struct efa_rdm_pke, ope));
+	struct efa_rdm_pke *pke;
+
+	if (ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR) {
+		assert(!dlist_empty(&ope->queued_pkts));
+		/**
+		 * It should be safe to check the first
+		 * pke in the queued_pkts, as for the
+		 * ctrl pkt we care about,
+		 * they are the only tx pkt posted
+		 * from the ope
+		 */
+		pke = container_of(ope->queued_pkts.next, struct efa_rdm_pke,
+				   entry);
+		return efa_rdm_pkt_type_of_pke(pke);
+	} else if (ope->internal_flags & EFA_RDM_OPE_QUEUED_CTRL) {
+		return ope->queued_ctrl_type;
+	} else { /* No valid ctrl pkt type */
+		return 0;
+	}
 }
 
 /**
