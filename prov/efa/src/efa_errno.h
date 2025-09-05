@@ -107,7 +107,8 @@
 	_(4123,	WRITE_SHM_CQ_ENTRY,		Failure to write CQ entry for SHM operation)	\
 	_(4124, ESTABLISHED_RECV_UNRESP,	Unresponsive receiver (connection previously established))	\
 	_(4125,	INVALID_PKT_TYPE_ZCPY_RX,	Invalid packet type received when zero copy recv mode is ON)	\
-	_(4126, UNESTABLISHED_RECV_UNRESP,	Unresponsive receiver (reachable by EFA device but handshake failed))
+	_(4126, UNESTABLISHED_RECV_UNRESP,	Unresponsive receiver (reachable by EFA device but handshake failed))	\
+	_(4127,	CQ_POLL_QP_DESTROYED,		QP associated with CQE is destroyed)
 
 /** @} */
 
@@ -151,6 +152,7 @@ static inline int to_fi_errno(enum efa_errno err) {
 	case EFA_IO_COMP_STATUS_OK:
 		return FI_SUCCESS;
 	case EFA_IO_COMP_STATUS_FLUSHED:
+	case FI_EFA_ERR_CQ_POLL_QP_DESTROYED:
 		return FI_ECANCELED;
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_QP_INTERNAL_ERROR:
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_AH:

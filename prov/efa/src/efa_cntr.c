@@ -179,52 +179,6 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 	ofi_genlock_unlock(&cntr->ep_list_lock);
 }
 
-static void efa_cntr_progress(struct util_cntr *cntr)
-{
-	struct dlist_entry *item;
-	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
-	struct efa_cntr *efa_cntr;
-
-	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
-
-	ofi_genlock_lock(&cntr->ep_list_lock);
-	dlist_foreach(&efa_cntr->ibv_cq_poll_list, item) {
-		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
-		(void) efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
-	}
-	ofi_genlock_unlock(&cntr->ep_list_lock);
-}
-
-int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
-		  struct fid_cntr **cntr_fid, void *context)
-{
-	int ret;
-	struct efa_cntr *cntr;
-
-	cntr = calloc(1, sizeof(*cntr));
-	if (!cntr)
-		return -FI_ENOMEM;
-
-	dlist_init(&cntr->ibv_cq_poll_list);
-	cntr->need_to_scan_ep_list = false;
-
-	ret = ofi_cntr_init(&efa_prov, domain, attr, &cntr->util_cntr,
-			    efa_cntr_progress, context);
-
-	if (ret)
-		goto free;
-
-	*cntr_fid = &cntr->util_cntr.cntr_fid;
-	cntr->util_cntr.cntr_fid.ops = &efa_cntr_ops;
-	cntr->util_cntr.cntr_fid.fid.ops = &efa_cntr_fi_ops;
-
-	return FI_SUCCESS;
-
-free:
-	free(cntr);
-	return ret;
-}
-
 
 int efa_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		      struct fid_cntr **cntr_fid, void *context)

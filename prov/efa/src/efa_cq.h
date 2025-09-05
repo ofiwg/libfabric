@@ -39,6 +39,8 @@ struct efa_cq {
 	ofi_atomic32_t			nevents;
 	enum fi_wait_obj		wait_obj;
 	enum fi_cq_wait_cond	wait_cond;
+	void	(*read_entry)(struct efa_ibv_cq *ibv_cq, void *buf, int opcode);
+	char						err_buf[EFA_ERROR_MSG_BUFFER_LENGTH];
 };
 
 extern struct fi_ops_cq efa_cq_ops;
@@ -327,8 +329,17 @@ static inline int efa_write_error_msg(struct efa_base_ep *ep, fi_addr_t addr,
 	const char *base_msg = efa_strerror(prov_errno);
 	size_t len = 0;
 	uint64_t local_host_id;
+	int ret;
 
 	*buflen = 0;
+
+	if (!ep) {
+		ret = snprintf(err_msg, EFA_ERROR_MSG_BUFFER_LENGTH, "%s", base_msg);
+		if (ret < 0 || ret >= EFA_ERROR_MSG_BUFFER_LENGTH) {
+			return -FI_EINVAL;
+		}
+		goto out;
+	}
 
 	len = sizeof(ep_addr_str);
 	efa_base_ep_raw_addr_str(ep, ep_addr_str, &len);
@@ -346,7 +357,7 @@ static inline int efa_write_error_msg(struct efa_base_ep *ep, fi_addr_t addr,
 	/* efa-raw cannot get peer host id without a handshake */
 	strcpy(peer_host_id_str, "N/A");
 
-	int ret = snprintf(err_msg, EFA_ERROR_MSG_BUFFER_LENGTH,
+	ret = snprintf(err_msg, EFA_ERROR_MSG_BUFFER_LENGTH,
 			   "%s My EFA addr: %s My host id: %s Peer EFA addr: "
 			   "%s Peer host id: %s",
 			   base_msg, ep_addr_str, local_host_id_str,
@@ -360,8 +371,8 @@ static inline int efa_write_error_msg(struct efa_base_ep *ep, fi_addr_t addr,
 		return -FI_ENOBUFS;
 	}
 
+out:
 	*buflen = EFA_ERROR_MSG_BUFFER_LENGTH;
-
 	return 0;
 }
 
