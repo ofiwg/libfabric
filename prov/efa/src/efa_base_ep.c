@@ -716,15 +716,24 @@ int efa_base_ep_insert_cntr_ibv_cq_poll_list(struct efa_base_ep *ep)
 		util_cntr = ep->util_ep.cntrs[i];
 		if (util_cntr) {
 			efa_cntr = container_of(util_cntr, struct efa_cntr, util_cntr);
+			/* Switch CQ to bypass OFF mode when cntr is bound */
 			if (tx_cq) {
 				ret = efa_ibv_cq_poll_list_insert(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &tx_cq->ibv_cq);
 				if (ret)
 					return ret;
+				ofi_genlock_lock(&tx_cq->util_cq.ep_list_lock);
+				tx_cq->util_cq.cq_fid.ops->readfrom = ofi_cq_readfrom;
+				tx_cq->util_cq.cq_fid.ops->readerr = ofi_cq_readerr;
+				ofi_genlock_unlock(&tx_cq->util_cq.ep_list_lock);
 			}
-			if (rx_cq) {
+			if (rx_cq && rx_cq != tx_cq) {
 				ret = efa_ibv_cq_poll_list_insert(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &rx_cq->ibv_cq);
 				if (ret)
 					return ret;
+				ofi_genlock_lock(&rx_cq->util_cq.ep_list_lock);
+				rx_cq->util_cq.cq_fid.ops->readfrom = ofi_cq_readfrom;
+				rx_cq->util_cq.cq_fid.ops->readerr = ofi_cq_readerr;
+				ofi_genlock_unlock(&rx_cq->util_cq.ep_list_lock);
 			}
 			ofi_genlock_lock(&efa_cntr->util_cntr.ep_list_lock);
 			efa_cntr->need_to_scan_ep_list = true;
