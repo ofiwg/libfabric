@@ -347,6 +347,7 @@ static int run(int req_pkt, enum fi_op atomic_op)
 	}
 
 out:
+	ft_finalize();
 	free_atomic_res();
 	ft_free_res();
 	return ret;
