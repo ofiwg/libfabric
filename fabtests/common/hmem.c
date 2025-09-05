@@ -129,8 +129,8 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.mem_set = ft_neuron_memset,
 		.copy_to_hmem = ft_neuron_memcpy_to_hmem,
 		.copy_from_hmem = ft_neuron_memcpy_from_hmem,
-		.get_dmabuf_fd = ft_hmem_no_get_dmabuf_fd,
-		.put_dmabuf_fd = ft_hmem_no_put_dmabuf_fd,
+		.get_dmabuf_fd = ft_neuron_get_dmabuf_fd,
+		.put_dmabuf_fd = ft_neuron_put_dmabuf_fd,
 	},
 };
 
