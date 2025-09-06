@@ -53,6 +53,7 @@ struct neuron_ops {
 	void *(*nrt_tensor_get_va)(const nrt_tensor_t *tensor);
 	NRT_STATUS (*nrt_tensor_read)(const nrt_tensor_t *tensor, void *buf, size_t offset, size_t size);
 	NRT_STATUS (*nrt_tensor_write)(nrt_tensor_t *tensor, const void *buf, size_t offset, size_t size);
+	NRT_STATUS (*nrt_get_dmabuf_fd)(uint64_t va, uint64_t size, int* fd);
 	NRT_STATUS (*nrt_init)(nrt_framework_type_t framework, const char *fw_version, const char *fal_version);
 };
 
@@ -120,6 +121,12 @@ int ft_neuron_init(void)
 	if (!neuron_ops.nrt_init) {
 		FT_ERR("Failed to find nrt_init\n");
 		goto err;
+	}
+
+	neuron_ops.nrt_get_dmabuf_fd = dlsym(neuron_handle, "nrt_get_dmabuf_fd");
+	if (!neuron_ops.nrt_get_dmabuf_fd) {
+		FT_INFO("Failed to find nrt_get_dmabuf_fd, "
+			"dmabuf feature will not be used for Neuron devices\n");
 	}
 
 	dlist_init(&neuron_alloc_list);
@@ -325,6 +332,49 @@ int ft_neuron_memcpy_from_hmem(uint64_t device, void *dst, const void *src,
 	return 0;
 }
 
+/**
+ * @brief Get the dma-buf fd and offset for neuron memory region
+ *
+ * @param addr[in] the device buffer address
+ * @param size[in] the device buffer size (in bytes)
+ * @param fd[out] the dma-buf fd
+ * @param offset[out] the offset within the dma-buf object
+ * @return int On success, return 0. On failure, return a negative error code
+ */
+int ft_neuron_get_dmabuf_fd(void *addr, size_t size, int *fd,
+			 uint64_t *offset)
+{
+	int ret = NRT_SUCCESS;
+	struct neuron_allocation *region;
+
+	/*
+	 * The assumption is that nrt_get_dmabuf_fd() would fail for
+	 * any addr that is not the starting address of the dma-buf
+	 * object. Otherwise we need a low level op to get the base
+	 * address of the dma-buf object.
+	 */
+	*offset = ft_neuron_find_region(addr, &region);
+
+	if (neuron_ops.nrt_get_dmabuf_fd) {
+		ret = neuron_ops.nrt_get_dmabuf_fd((uintptr_t)region->ptr, size, fd);
+		if (ret != NRT_SUCCESS) {
+			FT_WARN("failed to get dmabuf fd\n");
+			return -FI_EIO;
+		}
+	} else {
+		FT_ERR("nrt_get_dmabuf_fd not found\n");
+		return -FI_EIO;
+	}
+
+	return FI_SUCCESS;
+}
+
+int ft_neuron_put_dmabuf_fd(int fd)
+{
+	close(fd);
+	return FI_SUCCESS;
+}
+
 #else
 
 int ft_neuron_init(void)
@@ -360,6 +410,17 @@ int ft_neuron_memcpy_to_hmem(uint64_t device, void *dst, const void *src,
 
 int ft_neuron_memcpy_from_hmem(uint64_t device, void *dst, const void *src,
 			       size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_neuron_get_dmabuf_fd(void *addr, size_t size, int *fd,
+			 uint64_t *offset)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_neuron_put_dmabuf_fd(int fd)
 {
 	return -FI_ENOSYS;
 }

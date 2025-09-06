@@ -200,6 +200,8 @@ int ft_neuron_free(void *buf);
 int ft_neuron_memset(uint64_t device, void *buf, int value, size_t size);
 int ft_neuron_memcpy_to_hmem(uint64_t device, void *dst, const void *src, size_t size);
 int ft_neuron_memcpy_from_hmem(uint64_t device, void *dst, const void *src, size_t size);
+int ft_neuron_get_dmabuf_fd(void *addr, size_t size, int *fd, uint64_t *offset);
+int ft_neuron_put_dmabuf_fd(int fd);
 
 int ft_synapseai_init(void);
 int ft_synapseai_cleanup(void);
