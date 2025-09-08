@@ -698,6 +698,8 @@ struct fi_ops efa_cq_fi_ops = {
 };
 
 
+
+
 int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context)
 {
