@@ -49,9 +49,11 @@ void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 
 static inline bool efa_mr_is_hmem(struct efa_mr *efa_mr)
 {
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA ||
-			 efa_mr->peer.iface == FI_HMEM_NEURON ||
-			 efa_mr->peer.iface == FI_HMEM_SYNAPSEAI): false;
+	return efa_mr && (
+		efa_mr->peer.iface == FI_HMEM_CUDA ||
+		efa_mr->peer.iface == FI_HMEM_ROCR ||
+		efa_mr->peer.iface == FI_HMEM_NEURON ||
+		efa_mr->peer.iface == FI_HMEM_SYNAPSEAI);
 }
 
 int efa_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
@@ -72,6 +74,11 @@ static inline bool efa_mr_is_neuron(struct efa_mr *efa_mr)
 static inline bool efa_mr_is_synapseai(struct efa_mr *efa_mr)
 {
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_SYNAPSEAI) : false;
+}
+
+static inline bool efa_mr_is_rocr(struct efa_mr *efa_mr)
+{
+	return efa_mr && efa_mr->peer.iface == FI_HMEM_ROCR;
 }
 
 static inline void *efa_mr_get_shm_desc(struct efa_mr *efa_mr)
