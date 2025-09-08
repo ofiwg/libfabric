@@ -9,7 +9,8 @@
 
 struct efa_hmem_info g_efa_hmem_info[OFI_HMEM_MAX];
 
-#if HAVE_CUDA || HAVE_NEURON
+// TODO double-check for ROCr
+#if HAVE_CUDA || HAVE_NEURON || HAVE_ROCR
 static size_t efa_max_eager_msg_size_with_largest_header() {
 	static bool computed = false;
 	static size_t size = 0;
@@ -59,6 +60,7 @@ static int efa_hmem_info_init_protocol_thresholds(enum fi_hmem_iface iface)
 		fi_param_get_size_t(&efa_prov, "inter_min_read_write_size", &info->min_read_write_size);
 		break;
 	case FI_HMEM_CUDA:
+	case FI_HMEM_ROCR:
 		info->runt_size = EFA_DEFAULT_RUNT_SIZE;
 		info->max_medium_msg_size = 0;
 		info->min_read_msg_size = efa_max_eager_msg_size_with_largest_header() + 1;
@@ -69,8 +71,8 @@ static int efa_hmem_info_init_protocol_thresholds(enum fi_hmem_iface iface)
 		if (-FI_ENODATA != fi_param_get(&efa_prov, "inter_max_medium_message_size", &tmp_value)) {
 			EFA_WARN(FI_LOG_CORE,
 			         "The environment variable FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE was set, "
-			         "but EFA HMEM via Cuda API only supports eager and runting read protocols. "
-			         "The variable will not modify CUDA memory run config.\n");
+			         "but only eager and runting read protocols are supported for %s over EFA.\n",
+					 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
 		}
 		break;
 	case FI_HMEM_NEURON:
@@ -177,6 +179,79 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 	if (ret) {
 		EFA_WARN(FI_LOG_CORE,
 			 "Failed to deregister CUDA buffer: %s\n",
+			 fi_strerror(-ret));
+		return;
+	}
+
+	info->p2p_supported_by_device = true;
+	return;
+
+#endif
+	return;
+}
+
+static inline void efa_hmem_info_check_p2p_support_rocr(struct efa_hmem_info *info) {
+#if HAVE_ROCR
+	void *ptr = NULL;
+	struct ibv_mr *ibv_mr;
+	struct ibv_pd *ibv_pd;
+	int ibv_access = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
+	size_t len = ofi_get_page_size() * 2;
+	int ret;
+	int dmabuf_fd;
+	uint64_t dmabuf_offset;
+
+	ptr = rocr_alloc(len);
+	if (!ptr) {
+		info->initialized = false;
+		EFA_WARN(FI_LOG_CORE, "Failed to allocate ROCr buffer\n");
+		return;
+	}
+
+	ibv_pd = ibv_alloc_pd(g_efa_selected_device_list[0].ibv_ctx);
+	if (!ibv_pd) {
+		EFA_WARN(FI_LOG_CORE, "Failed to allocate ibv_pd: %d\n", errno);
+		rocr_free(ptr);
+		return;
+	}
+
+#if HAVE_EFA_DMABUF_MR
+	ret = rocr_hmem_get_dmabuf_fd(ptr, len, &dmabuf_fd, &dmabuf_offset);
+	if (ret == FI_SUCCESS) {
+		ibv_mr = ibv_reg_dmabuf_mr(ibv_pd, dmabuf_offset,
+					   len, (uint64_t) ptr, dmabuf_fd, ibv_access);
+		(void) rocr_hmem_put_dmabuf_fd(dmabuf_fd);
+		if (!ibv_mr) {
+			EFA_INFO(FI_LOG_CORE,
+				"Unable to register ROCr device buffer via dmabuf: %s. "
+				"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
+			ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
+		}
+	} else {
+		EFA_INFO(FI_LOG_CORE,
+			"Unable to retrieve dmabuf fd of ROCr device buffer: %d. "
+			"Fall back to ibv_reg_mr\n", ret);
+		ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
+	}
+#else
+	ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
+#endif
+
+	if (!ibv_mr) {
+		info->p2p_supported_by_device = false;
+		EFA_WARN(FI_LOG_CORE,
+			 "Failed to register ROCr buffer with the EFA device, FI_HMEM transfers that require peer to peer support will fail.\n");
+		rocr_free(ptr);
+		(void) ibv_dealloc_pd(ibv_pd);
+		return;
+	}
+
+	ret = ibv_dereg_mr(ibv_mr);
+	rocr_free(ptr);
+	(void) ibv_dealloc_pd(ibv_pd);
+	if (ret) {
+		EFA_WARN(FI_LOG_CORE,
+			 "Failed to deregister ROCr buffer: %s\n",
 			 fi_strerror(-ret));
 		return;
 	}
@@ -297,10 +372,19 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 	} else if (ofi_hmem_p2p_disabled()) {
 		info->p2p_supported_by_device = false;
 	} else {
-		if (iface == FI_HMEM_CUDA)
+		switch (iface) {
+		case FI_HMEM_CUDA:
 			efa_hmem_info_check_p2p_support_cuda(info);
-		if (iface == FI_HMEM_NEURON)
+			break;
+		case FI_HMEM_ROCR:
+			efa_hmem_info_check_p2p_support_rocr(info);
+			break;
+		case FI_HMEM_NEURON:
 			efa_hmem_info_check_p2p_support_neuron(info);
+			break;
+		default:
+			break;
+		}
 		if (!info->p2p_supported_by_device)
 			EFA_INFO(FI_LOG_CORE, "%s P2P support is not available.\n", fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
 	}
