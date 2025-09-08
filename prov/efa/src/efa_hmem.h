@@ -8,7 +8,7 @@
 #include "efa_mr.h"
 #include "efa_tp.h"
 
-#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+#if HAVE_CUDA || HAVE_NEURON || HAVE_ROCR || HAVE_SYNAPSEAI
 #  define EFA_HAVE_NON_SYSTEM_HMEM 1
 #else
 #  define EFA_HAVE_NON_SYSTEM_HMEM 0
@@ -28,6 +28,7 @@
 static const enum fi_hmem_iface efa_hmem_ifaces[] = {
 	FI_HMEM_SYSTEM,	/* Must be first here */
 	FI_HMEM_CUDA,
+	FI_HMEM_ROCR,
 	FI_HMEM_NEURON,
 	FI_HMEM_SYNAPSEAI
 };
@@ -68,6 +69,7 @@ static inline int efa_copy_from_hmem(void *desc, void *dest, const void *src, si
 		switch (peer.iface) {
 		/* TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy */
 		case FI_HMEM_CUDA:
+		case FI_HMEM_ROCR:
 			efa_tracepoint(dev_reg_copy_from_hmem, &peer, dest, src, size);
 			return ofi_hmem_dev_reg_copy_from_hmem(peer.iface, (uint64_t) peer.hmem_data, dest, src, size);
 		default:
@@ -100,6 +102,7 @@ static inline int efa_copy_to_hmem(void *desc, void *dest, const void *src, size
 		switch (peer.iface) {
 		/* TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy */
 		case FI_HMEM_CUDA:
+		case FI_HMEM_ROCR:
 			efa_tracepoint(dev_reg_copy_to_hmem, &peer, dest, src, size);
 			return ofi_hmem_dev_reg_copy_to_hmem(peer.iface, (uint64_t) peer.hmem_data, dest, src, size);
 		default:
