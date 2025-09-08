@@ -1231,8 +1231,10 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 
 	if (hints->threading)
 		attr->threading = hints->threading;
-	if (hints->progress)
+	if (hints->progress) {
 		attr->progress = hints->progress;
+		attr->control_progress = hints->progress;
+	}
 	if (hints->av_type)
 		attr->av_type = hints->av_type;
 	if (hints->max_ep_auth_key)
