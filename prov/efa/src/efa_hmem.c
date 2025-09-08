@@ -9,11 +9,16 @@ struct efa_hmem_info g_efa_hmem_info[OFI_HMEM_MAX];
 
 #if HAVE_CUDA || HAVE_NEURON
 static size_t efa_max_eager_msg_size_with_largest_header() {
-	int mtu_size;
+	static bool computed = false;
+	static size_t size = 0;
 
-	mtu_size = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz;
+	if (!computed) {
+		assert(g_efa_selected_device_list);
+		size = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size();
+		computed = true;
+	}
 
-	return mtu_size - efa_rdm_pkt_type_get_max_hdr_size();
+	return size;
 }
 #else
 static size_t efa_max_eager_msg_size_with_largest_header() {
