@@ -6,7 +6,7 @@
 
 #include "ofi_hmem.h"
 
-#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+#if HAVE_CUDA || HAVE_NEURON || HAVE_ROCR || HAVE_SYNAPSEAI
 #  define EFA_HAVE_NON_SYSTEM_HMEM 1
 #else
 #  define EFA_HAVE_NON_SYSTEM_HMEM 0
@@ -26,6 +26,7 @@
 static const enum fi_hmem_iface efa_hmem_ifaces[] = {
 	FI_HMEM_SYSTEM,	/* Must be first here */
 	FI_HMEM_CUDA,
+	FI_HMEM_ROCR,
 	FI_HMEM_NEURON,
 	FI_HMEM_SYNAPSEAI
 };
