@@ -78,7 +78,7 @@ static int efa_hmem_info_init_protocol_thresholds(enum fi_hmem_iface iface)
 			EFA_WARN(FI_LOG_CORE,
 			         "The environment variable FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE was set, "
 			         "but EFA HMEM via Neuron API only supports eager and runting read protocols. "
-			         "The variable will not modify CUDA memory run config.\n");
+			         "The variable will not modify Neuron memory run config.\n");
 		}
 		break;
 	case FI_HMEM_SYNAPSEAI:
