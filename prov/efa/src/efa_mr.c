@@ -31,7 +31,7 @@ size_t efa_mr_max_cached_size;
  * and should be sufficiently spaced apart s.t. they don't collide with each
  * other.
  */
-#define CUDA_NON_P2P_MR_KEYGEN_INIT	(0x100000000ull)
+#define NON_P2P_MR_KEYGEN_INIT	BIT_ULL(32)
 
 /* @brief Setup the MR cache.
  *
@@ -46,6 +46,7 @@ int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain)
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
 		[FI_HMEM_SYSTEM] = default_monitor,
 		[FI_HMEM_CUDA] = cuda_monitor,
+		[FI_HMEM_ROCR] = rocr_monitor,
 	};
 	int err;
 
@@ -235,6 +236,8 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 				efa_mr->peer.flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
 			}
 		}
+	} else if (attr->iface == FI_HMEM_ROCR) {
+		efa_mr->peer.device = attr->device.rocr;
 	} else if (attr->iface == FI_HMEM_NEURON) {
 		efa_mr->peer.device = attr->device.neuron;
 	} else if (attr->iface == FI_HMEM_SYNAPSEAI) {
@@ -543,7 +546,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 	 * TODO: need such fallback for cuda as well when
 	 * FI_CUDA_API_PERMITTED is true
 	 */
-	if (efa_mr_is_neuron(efa_mr)) {
+	if (efa_mr_is_neuron(efa_mr) || efa_mr_is_rocr(efa_mr)) {
 		ret = ofi_hmem_get_dmabuf_fd(
 				efa_mr->peer.iface,
 				mr_attr->mr_iov->iov_base,
@@ -563,8 +566,9 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 		} else if (ret == -FI_EOPNOTSUPP) {
 			/* Protocol not available => fallback */
 			EFA_INFO(FI_LOG_MR,
-				"Unable to get dmabuf fd for Neuron device buffer, "
-				"Fall back to ibv_reg_mr\n");
+				"Unable to get dmabuf fd for %s device buffer, "
+				"Fall back to ibv_reg_mr\n",
+				fi_tostr(&efa_mr->peer.iface, FI_TYPE_HMEM_IFACE));
 			return ibv_reg_mr(
 				efa_mr->domain->ibv_pd,
 				(void *)mr_attr->mr_iov->iov_base,
@@ -767,15 +771,14 @@ int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_att
 #endif /* HAVE_CUDA */
 
 /*
- * Since ibv_reg_mr() will fail for CUDA buffers when p2p is unavailable (and
- * thus isn't called), generate a proprietary internal key for
- * efa_mr->mr_fid.key. The key must be larger than UINT32_MAX to avoid
- * potential collisions with keys returned by ibv_reg_mr() for standard MR
- * registrations.
+ * Since ibv_reg_mr() will fail for accelerator buffers when p2p is unavailable
+ * (and thus isn't called), generate a proprietary internal key for
+ * efa_mr->mr_fid.key. The key must be larger than UINT32_MAX to avoid potential
+ * collisions with keys returned by ibv_reg_mr() for standard MR registrations.
  */
-static uint64_t efa_mr_cuda_non_p2p_keygen(void) {
-	static uint64_t CUDA_NON_P2P_MR_KEYGEN = CUDA_NON_P2P_MR_KEYGEN_INIT;
-	return CUDA_NON_P2P_MR_KEYGEN++;
+static uint64_t efa_mr_non_p2p_keygen(void) {
+	static uint64_t NON_P2P_MR_KEYGEN = NON_P2P_MR_KEYGEN_INIT;
+	return NON_P2P_MR_KEYGEN++;
 }
 
 /*
@@ -876,8 +879,9 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	 * For FI_HMEM_CUDA iface when p2p is unavailable, skip ibv_reg_mr() and
 	 * generate proprietary mr_fid key.
 	 */
-	if (mr_attr.iface == FI_HMEM_CUDA && !g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device) {
-		efa_mr->mr_fid.key = efa_mr_cuda_non_p2p_keygen();
+	if ((mr_attr.iface == FI_HMEM_CUDA || mr_attr.iface == FI_HMEM_ROCR)
+		&& !g_efa_hmem_info[mr_attr.iface].p2p_supported_by_device) {
+		efa_mr->mr_fid.key = efa_mr_non_p2p_keygen();
 	} else {
 		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(
 			efa_mr, &mr_attr,
