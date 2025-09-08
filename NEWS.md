@@ -24,6 +24,8 @@ v2.3.0, Mon September 15, 2025
 
 ## CXI ##
 
+- Fix service allocation
+- Fix bug related exp next seqn
 - Fix bug related concurrent mcast's
 - Fix memory leak
 - Improve multithreaded performance of bound counter operations
@@ -53,6 +55,10 @@ v2.3.0, Mon September 15, 2025
 
 ## EFA ##
 
+- Fix the pkt type derivation from ope
+- Fix the rx sgl in data path direct
+- Store evicted peers in a hashset and ignore future packets
+- Implement LRU eviction for implicit AV entries
 - Decrement rx_pkts_posted before efa_rdm_pke_release_rx
 - Enable direct data path by default
 - Bypass rdma-core in blocking cq read path
@@ -145,6 +151,8 @@ v2.3.0, Mon September 15, 2025
 
 ## Fabtests ##
 
+- Add dmabuf support for Neuron memory
+- Add FT_INFO macro
 - Fix `make distcheck` error caused by SUBDIRS
 - efa: Initialize timespec as 0
 - ft_finalize: Serialized sync in ft_finalize.
