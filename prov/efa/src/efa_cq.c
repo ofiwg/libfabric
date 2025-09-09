@@ -1044,9 +1044,8 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	(*cq_fid)->fid.fclass = FI_CLASS_CQ;
 	(*cq_fid)->fid.context = context;
 	(*cq_fid)->fid.ops = &efa_cq_fi_ops;
-	/* Use bypass ops by default */
-	(*cq_fid)->ops = &efa_cq_bypass_util_cq_ops;
-
+	/* Use bypass util cq ops for non-wait cq */
+	(*cq_fid)->ops = (attr->wait_obj == FI_WAIT_NONE) ? &efa_cq_bypass_util_cq_ops : &efa_cq_ops;
 #if HAVE_EFA_DATA_PATH_DIRECT
 	#if HAVE_EFADV_CQ_ATTR_DB
 		efa_data_path_direct_cq_initialize(cq);
