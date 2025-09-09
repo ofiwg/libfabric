@@ -552,8 +552,8 @@ bool efa_rdm_ep_support_unsolicited_write_recv(struct efa_rdm_ep *ep)
 }
 
 struct efa_rdm_ep_peer_map_entry {
-	fi_addr_t addr;
 	struct efa_rdm_peer peer;
+	fi_addr_t addr;
 	UT_hash_handle hndl;
 };
 
