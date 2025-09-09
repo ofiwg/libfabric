@@ -1,0 +1,25 @@
+name: Binding Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  rust:
+    name: Rust binding check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: 
+          - ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./bindings/rust
+    steps:
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - name: Check Rust formatting
+      run: cargo fmt --check
+    - name: Build Rust binding
+      run: |
+        cargo build --features vendored
+    - name: Test Rust binding
+      run: |
+        cargo test --features vendored

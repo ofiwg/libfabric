@@ -1,0 +1,17 @@
+[package]
+name = "rust"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+vendored = []
+asan = []
+
+[build-dependencies]
+bindgen = "0.72.0"
+cc = "1.2.26"
+walkdir = "2.3.2"
+pkg-config = "0.3.32"
+
+[dependencies]
+paste = "1.0.15"
