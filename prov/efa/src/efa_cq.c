@@ -696,6 +696,9 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	size_t num_cqe = 0; /* Count of read entries */
 	int opcode;
 
+	if (OFI_UNLIKELY((!buf || !count)))
+		return -FI_EAGAIN;
+
 	efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
 	/* Acquire the lock to prevent race conditions when qp_table is being updated */
@@ -748,9 +751,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	 */
 	if (ibv_cq->poll_active && 
 		(ibv_cq->poll_err == 0 || ibv_cq->poll_err == ENOENT)) {
-		efa_ibv_cq_end_poll(ibv_cq);
-		ibv_cq->poll_active = false;
-		ibv_cq->poll_err = 0;
+		efa_cq_end_poll(ibv_cq);
 	}
 
 out:
@@ -781,9 +782,7 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 			goto out;
 		}
 		efa_cq_fill_err_entry(ibv_cq, buf);
-		efa_ibv_cq_end_poll(ibv_cq);
-		ibv_cq->poll_active = false;
-		ibv_cq->poll_err = 0;
+		efa_cq_end_poll(ibv_cq);
 	} else {
 		assert(ibv_cq->poll_err);
 		/* Empty CQ */
@@ -800,7 +799,7 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 		buf->prov_errno = prov_errno;
 		efa_cq_write_error_data(efa_cq, NULL, FI_ADDR_NOTAVAIL, prov_errno, buf);
 	}
-	ret = sizeof(*buf);
+	ret = 1;
 out:
 
 	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
