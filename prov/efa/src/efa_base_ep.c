@@ -696,6 +696,23 @@ out:
 	return ret;
 }
 
+
+
+/**
+ * @brief Set CQ ops for counter binding
+ *
+ * @param ep efa_base_ep
+ * @param cq efa_cq to configure
+ */
+static inline void efa_base_ep_set_cq_ops_for_cntr(struct efa_base_ep *ep, struct efa_cq *cq)
+{
+	if (!EFA_INFO_TYPE_IS_RDM(ep->info)) {
+		ofi_genlock_lock(&cq->util_cq.ep_list_lock);
+		cq->util_cq.cq_fid.ops = &efa_cq_ops;
+		ofi_genlock_unlock(&cq->util_cq.ep_list_lock);
+	}
+}
+
 /**
  * @brief Insert tx/rx cq into the cntrs the ep is bind to
  *
@@ -721,19 +738,13 @@ int efa_base_ep_insert_cntr_ibv_cq_poll_list(struct efa_base_ep *ep)
 				ret = efa_ibv_cq_poll_list_insert(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &tx_cq->ibv_cq);
 				if (ret)
 					return ret;
-				ofi_genlock_lock(&tx_cq->util_cq.ep_list_lock);
-				tx_cq->util_cq.cq_fid.ops->readfrom = ofi_cq_readfrom;
-				tx_cq->util_cq.cq_fid.ops->readerr = ofi_cq_readerr;
-				ofi_genlock_unlock(&tx_cq->util_cq.ep_list_lock);
+				efa_base_ep_set_cq_ops_for_cntr(ep, tx_cq);
 			}
 			if (rx_cq && rx_cq != tx_cq) {
 				ret = efa_ibv_cq_poll_list_insert(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &rx_cq->ibv_cq);
 				if (ret)
 					return ret;
-				ofi_genlock_lock(&rx_cq->util_cq.ep_list_lock);
-				rx_cq->util_cq.cq_fid.ops->readfrom = ofi_cq_readfrom;
-				rx_cq->util_cq.cq_fid.ops->readerr = ofi_cq_readerr;
-				ofi_genlock_unlock(&rx_cq->util_cq.ep_list_lock);
+				efa_base_ep_set_cq_ops_for_cntr(ep, rx_cq);
 			}
 			ofi_genlock_lock(&efa_cntr->util_cntr.ep_list_lock);
 			efa_cntr->need_to_scan_ep_list = true;

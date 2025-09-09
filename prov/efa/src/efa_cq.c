@@ -806,11 +806,24 @@ out:
 	return ret;
 }
 
-struct fi_ops_cq efa_cq_ops = {
+/* CQ ops with EFA-specific readfrom/readerr that bypass the util cq on the data path */
+struct fi_ops_cq efa_cq_bypass_util_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = ofi_cq_read,
 	.readfrom = efa_cq_readfrom,
 	.readerr = efa_cq_readerr,
+	.sread = efa_cq_sread,
+	.sreadfrom = efa_cq_sreadfrom,
+	.signal = efa_cq_signal,
+	.strerror = efa_cq_strerror
+};
+
+/* CQ ops with util readfrom/readerr that stages cqes during cq read */
+struct fi_ops_cq efa_cq_ops = {
+	.size = sizeof(struct fi_ops_cq),
+	.read = ofi_cq_read,
+	.readfrom = ofi_cq_readfrom,
+	.readerr = ofi_cq_readerr,
 	.sread = efa_cq_sread,
 	.sreadfrom = efa_cq_sreadfrom,
 	.signal = efa_cq_signal,
@@ -1031,7 +1044,8 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	(*cq_fid)->fid.fclass = FI_CLASS_CQ;
 	(*cq_fid)->fid.context = context;
 	(*cq_fid)->fid.ops = &efa_cq_fi_ops;
-	(*cq_fid)->ops = &efa_cq_ops;
+	/* Use bypass ops by default */
+	(*cq_fid)->ops = &efa_cq_bypass_util_cq_ops;
 
 #if HAVE_EFA_DATA_PATH_DIRECT
 	#if HAVE_EFADV_CQ_ATTR_DB

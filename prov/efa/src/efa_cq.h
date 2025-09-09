@@ -44,6 +44,7 @@ struct efa_cq {
 };
 
 extern struct fi_ops_cq efa_cq_ops;
+extern struct fi_ops_cq efa_cq_bypass_util_cq_ops;
 
 extern struct fi_ops efa_cq_fi_ops;
 
