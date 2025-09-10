@@ -195,7 +195,7 @@ int efa_data_path_direct_cq_initialize(struct efa_cq *efa_cq)
 	data_path_direct->entry_size = attr.entry_size;   /* Size of each CQ entry */
 	data_path_direct->num_entries = attr.num_entries; /* Total number of entries */
 #if HAVE_EFADV_CQ_ATTR_DB
-	data_path_direct->db = attr.db;
+	data_path_direct->db = attr.doorbell;
 #else
 	data_path_direct->db = NULL;
 #endif
