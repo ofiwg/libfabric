@@ -706,11 +706,8 @@ out:
  */
 static inline void efa_base_ep_set_cq_ops_for_cntr(struct efa_base_ep *ep, struct efa_cq *cq)
 {
-	if (!EFA_INFO_TYPE_IS_RDM(ep->info)) {
-		ofi_genlock_lock(&cq->util_cq.ep_list_lock);
+	if (!EFA_INFO_TYPE_IS_RDM(ep->info))
 		cq->util_cq.cq_fid.ops = &efa_cq_ops;
-		ofi_genlock_unlock(&cq->util_cq.ep_list_lock);
-	}
 }
 
 /**
