@@ -359,7 +359,12 @@ void test_efa_cq_control_getwaitobj();
 void test_efa_cq_control_invalid_command();
 void test_efa_cq_ep_list_lock_type_no_op();
 void test_efa_cq_ep_list_lock_type_mutex();
-
+void test_efa_cq_ops_selection_based_on_wait_obj();
+void test_efa_cq_ops_override_with_counter_binding();
+void test_efa_cq_readfrom_input_validation();
+void test_efa_cq_readerr_return_value_user_buffer();
+void test_efa_cq_readerr_return_value_provider_buffer();
+void test_efa_cq_readfrom_start_poll_error();
 void test_efa_ep_open();
 void test_efa_ep_cancel();
 void test_efa_ep_getopt();
