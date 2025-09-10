@@ -18,7 +18,7 @@ struct efa_ibv_cq {
 	bool data_path_direct_enabled;
 	bool poll_active;
 	int poll_err;
-#if HAVE_EFADV_QUERY_CQ
+#if HAVE_EFA_DATA_PATH_DIRECT
 	struct efa_data_path_direct_cq data_path_direct;
 #endif
 	struct ibv_comp_channel	*channel;
