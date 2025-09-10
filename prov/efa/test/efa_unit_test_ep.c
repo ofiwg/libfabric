@@ -1826,3 +1826,39 @@ void test_efa_rdm_ep_data_path_direct_disabled(struct efa_resource **state)
 
 	assert_false(efa_ep->qp->data_path_direct_enabled);
 }
+
+/**
+ * @brief Verify endpoint lock uses no-op locking with FI_THREAD_COMPLETION
+ *
+ * @param[in] state struct efa_resource managed by the framework
+ */
+void test_efa_ep_lock_type_no_op(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_base_ep;
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(resource->hints);
+	resource->hints->domain_attr->threading = FI_THREAD_COMPLETION;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(2, 0), resource->hints, false, true);
+
+	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	assert_int_equal(efa_base_ep->util_ep.lock.lock_type, OFI_LOCK_NOOP);
+}
+
+/**
+ * @brief Verify endpoint lock uses mutex locking with FI_THREAD_SAFE
+ *
+ * @param[in] state struct efa_resource managed by the framework
+ */
+void test_efa_ep_lock_type_mutex(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_base_ep;
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(resource->hints);
+	resource->hints->domain_attr->threading = FI_THREAD_SAFE;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(2, 0), resource->hints, false, true);
+
+	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	assert_int_equal(efa_base_ep->util_ep.lock.lock_type, OFI_LOCK_MUTEX);
+}
