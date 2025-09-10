@@ -692,7 +692,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 {
 	struct efa_cq *efa_cq;
 	struct efa_ibv_cq *ibv_cq;
-	int err = 0;
+	int err = -FI_EAGAIN;
 	size_t num_cqe = 0; /* Count of read entries */
 	int opcode;
 
