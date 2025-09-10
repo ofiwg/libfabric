@@ -189,7 +189,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[have_efadv_query_cq=0],
 			[[#include <infiniband/efadv.h>]])
 
-		AC_CHECK_MEMBER([struct efadv_cq_attr.db],
+		AC_CHECK_MEMBER([struct efadv_cq_attr.doorbell],
 			[have_efadv_cq_attr_db=1],
 			[have_efadv_cq_attr_db=0],
 			[[#include <infiniband/efadv.h>]])
@@ -247,7 +247,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 		[Indicates if efadv_query_cq is available])
 	AC_DEFINE_UNQUOTED([HAVE_EFADV_CQ_ATTR_DB],
 		[$have_efadv_cq_attr_db],
-		[Indicates if efadv_cq_attr struct has db field])
+		[Indicates if efadv_cq_attr struct has doorbell field])
 	AS_IF([test "$have_efadv_query_qp_wqs" = "1" -a "$have_efadv_query_cq" = "1"],
 		[have_efa_data_path_direct=1],
 		[have_efa_data_path_direct=0])
