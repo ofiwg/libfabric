@@ -3993,7 +3993,7 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 	case 400:
 		TRACE_JOIN("callback: create mcast failed: %ld '%s'\n",
 			   handle->status, message ? message : "<empty>");
-		jstate->prov_errno = FI_CXI_ERRNO_JOIN_SERVER_ERR;
+		jstate->prov_errno = FI_CXI_ERRNO_JOIN_HWROOT_INUSE;
 		jstate->finished_mcast = true;
 		break;
 	case 409:
