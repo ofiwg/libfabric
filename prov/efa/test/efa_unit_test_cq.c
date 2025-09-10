@@ -1835,3 +1835,40 @@ void test_efa_cq_control_invalid_command(struct efa_resource **state)
 	ret = fi_control(&resource->cq->fid, 999 /* invalid command */, &dummy_arg);
 	assert_int_equal(ret, -FI_ENOSYS);
 }
+
+/**
+ * @brief Verify CQ ep_list_lock uses no-op locking with FI_THREAD_COMPLETION and FI_PROGRESS_CONTROL_UNIFIED
+ *
+ * @param[in] state struct efa_resource managed by the framework
+ */
+void test_efa_cq_ep_list_lock_type_no_op(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(resource->hints);
+	resource->hints->domain_attr->progress = FI_PROGRESS_CONTROL_UNIFIED;
+	resource->hints->domain_attr->threading = FI_THREAD_COMPLETION;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(2, 0), resource->hints, false, true);
+
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
+	assert_int_equal(efa_cq->util_cq.ep_list_lock.lock_type, OFI_LOCK_NOOP);
+}
+
+/**
+ * @brief Verify CQ ep_list_lock uses mutex locking with FI_THREAD_SAFE
+ *
+ * @param[in] state struct efa_resource managed by the framework
+ */
+void test_efa_cq_ep_list_lock_type_mutex(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(resource->hints);
+	resource->hints->domain_attr->threading = FI_THREAD_SAFE;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(2, 0), resource->hints, false, true);
+
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
+	assert_int_equal(efa_cq->util_cq.ep_list_lock.lock_type, OFI_LOCK_MUTEX);
+}
