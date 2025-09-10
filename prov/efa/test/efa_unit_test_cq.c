@@ -1051,6 +1051,7 @@ static void test_efa_cq_read_prep(struct efa_resource *resource,
 
 	/* Make wr_id as 0 for unsolicited write recv as a stress test */
 	ibv_cqx->wr_id = is_unsolicited_write_recv ? 0 : (uintptr_t) ctx;
+	ibv_cq->unsolicited_write_recv_enabled = is_unsolicited_write_recv;
 	ibv_cqx->status = status;
 
     /* Set up the mock operations */
