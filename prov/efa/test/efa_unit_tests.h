@@ -357,6 +357,8 @@ void test_efa_cq_control_getwait_with_channel();
 void test_efa_cq_control_getwait_no_channel();
 void test_efa_cq_control_getwaitobj();
 void test_efa_cq_control_invalid_command();
+void test_efa_cq_ep_list_lock_type_no_op();
+void test_efa_cq_ep_list_lock_type_mutex();
 
 void test_efa_ep_open();
 void test_efa_ep_cancel();
@@ -369,6 +371,8 @@ void test_efa_ep_bind_and_enable();
 void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_happy();
 void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy();
 void test_efa_rdm_ep_data_path_direct_disabled();
+void test_efa_ep_lock_type_no_op();
+void test_efa_ep_lock_type_mutex();
 
 
 void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
