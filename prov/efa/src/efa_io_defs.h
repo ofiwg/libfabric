@@ -293,28 +293,10 @@ struct efa_io_rx_cdesc_ex {
    memory types or non-temporal stores are required to use SFENCE in their own
    code prior to calling verbs to start a DMA.
 */
-#if defined(__i386__)
+#if defined(__x86_64__)
 #define udma_to_device_barrier() asm volatile("" ::: "memory")
-#elif defined(__x86_64__)
-#define udma_to_device_barrier() asm volatile("" ::: "memory")
-#elif defined(__PPC64__)
-#define udma_to_device_barrier() asm volatile("sync" ::: "memory")
-#elif defined(__PPC__)
-#define udma_to_device_barrier() asm volatile("sync" ::: "memory")
-#elif defined(__ia64__)
-#define udma_to_device_barrier() asm volatile("mf" ::: "memory")
-#elif defined(__sparc_v9__)
-#define udma_to_device_barrier() asm volatile("membar #StoreStore" ::: "memory")
 #elif defined(__aarch64__)
 #define udma_to_device_barrier() asm volatile("dmb oshst" ::: "memory")
-#elif defined(__sparc__) || defined(__s390x__)
-#define udma_to_device_barrier() asm volatile("" ::: "memory")
-#elif defined(__loongarch__)
-#define udma_to_device_barrier() asm volatile("dbar 0" ::: "memory")
-#elif defined(__riscv)
-#define udma_to_device_barrier() asm volatile("fence ow,ow" ::: "memory")
-#elif defined(__mips__)
-#define udma_to_device_barrier() asm volatile("sync" ::: "memory")
 #else
 #error No architecture specific memory barrier defines found!
 #endif
@@ -331,29 +313,10 @@ struct efa_io_rx_cdesc_ex {
    that is a DMA target, to ensure that the following reads see the
    data written before the MemWr TLP that set the valid bit.
 */
-#if defined(__i386__)
-#define udma_from_device_barrier() \
-	asm volatile("lock; addl $0,0(%%esp) " ::: "memory")
-#elif defined(__x86_64__)
+#if defined(__x86_64__)
 #define udma_from_device_barrier() asm volatile("lfence" ::: "memory")
-#elif defined(__PPC64__)
-#define udma_from_device_barrier() asm volatile("lwsync" ::: "memory")
-#elif defined(__PPC__)
-#define udma_from_device_barrier() asm volatile("sync" ::: "memory")
-#elif defined(__ia64__)
-#define udma_from_device_barrier() asm volatile("mf" ::: "memory")
-#elif defined(__sparc_v9__)
-#define udma_from_device_barrier() asm volatile("membar #LoadLoad" ::: "memory")
 #elif defined(__aarch64__)
 #define udma_from_device_barrier() asm volatile("dmb oshld" ::: "memory")
-#elif defined(__sparc__) || defined(__s390x__)
-#define udma_from_device_barrier() asm volatile("" ::: "memory")
-#elif defined(__loongarch__)
-#define udma_from_device_barrier() asm volatile("dbar 0" ::: "memory")
-#elif defined(__riscv)
-#define udma_from_device_barrier() asm volatile("fence ir,ir" ::: "memory")
-#elif defined(__mips__)
-#define udma_from_device_barrier() asm volatile("sync" ::: "memory")
 #else
 #error No architecture specific memory barrier defines found!
 #endif
@@ -402,31 +365,11 @@ struct efa_io_rx_cdesc_ex {
    This is intended to be used in conjunction with WC memory to generate large
    PCI-E MemWr TLPs from the CPU.
 */
-#if defined(__i386__)
-#define mmio_flush_writes() asm volatile("lock; addl $0,0(%%esp) " ::: "memory")
-#elif defined(__x86_64__)
+
+#if defined(__x86_64__)
 #define mmio_flush_writes() asm volatile("sfence" ::: "memory")
-#elif defined(__PPC64__)
-#define mmio_flush_writes() asm volatile("sync" ::: "memory")
-#elif defined(__PPC__)
-#define mmio_flush_writes() asm volatile("sync" ::: "memory")
-#elif defined(__ia64__)
-#define mmio_flush_writes() asm volatile("fwb" ::: "memory")
-#elif defined(__sparc_v9__)
-#define mmio_flush_writes() asm volatile("membar #StoreStore" ::: "memory")
 #elif defined(__aarch64__)
 #define mmio_flush_writes() asm volatile("dsb st" ::: "memory");
-#elif defined(__sparc__)
-#define mmio_flush_writes() asm volatile("" ::: "memory")
-#elif defined(__loongarch__)
-#define mmio_flush_writes() asm volatile("dbar 0" ::: "memory")
-#elif defined(__riscv)
-#define mmio_flush_writes() asm volatile("fence ow,ow" ::: "memory")
-#elif defined(__s390x__)
-#include "s390_mmio_insn.h"
-#define mmio_flush_writes() s390_pciwb()
-#elif defined(__mips__)
-#define mmio_flush_writes() asm volatile("sync" ::: "memory")
 #else
 #error No architecture specific memory barrier defines found!
 #endif
