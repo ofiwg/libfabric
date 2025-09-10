@@ -191,6 +191,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_happy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_data_path_direct_disabled, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_ep_lock_type_no_op, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_ep_lock_type_mutex, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 
 		/* begin efa_unit_test_cq.c */
 		cmocka_unit_test_setup_teardown(test_dgram_cq_read_empty_cq, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -388,6 +390,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_cq_control_getwait_no_channel, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_control_getwaitobj, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_control_invalid_command, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_cq_ep_list_lock_type_no_op, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_cq_ep_list_lock_type_mutex, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_ep_open, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_ep_cancel, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_ep_getopt, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
