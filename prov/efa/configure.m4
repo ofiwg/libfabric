@@ -62,6 +62,12 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			efa_happy=0
 			AC_MSG_WARN([The EFA provider is not supported on 32-bit systems.])
 		])
+
+		dnl Check CPU architecture for EFA support
+		AS_IF([test x$host_cpu != xx86_64 && test x$host_cpu != xaarch64], [
+			efa_happy=0
+			AC_MSG_WARN([The EFA provider is only supported on x86_64 and aarch64 systems])
+		])
 	])
 
 	save_CPPFLAGS=$CPPFLAGS
