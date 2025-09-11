@@ -22,6 +22,11 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 
 	cxi_happy=1
 
+	AS_IF([test -d $srcdir/prov/cxi/test],
+			[AC_ARG_WITH([criterion], [AS_HELP_STRING([--with-criterion],
+			[Location for criterion unit testing framework])])],
+			[criterion_tests_present=false])
+
 	# Support non-standard install path for cassini headers. This is needed
 	# by libcxi.
 	AC_ARG_WITH([cassini-headers],
