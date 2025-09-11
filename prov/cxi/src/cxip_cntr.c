@@ -771,7 +771,7 @@ static int cxip_cntr_close(struct fid *fid)
 		CXIP_DBG("Counter disabled: %p\n", cntr);
 
 	if (cntr->trig_cmdq != NULL) {
-		assert(cxip_cmdq_empty(&cntr->trig_cmdq));
+		assert(cxip_cmdq_empty(cntr->trig_cmdq));
 		cxip_cmdq_free(cntr->trig_cmdq);
 		cntr->trig_cmdq = NULL;
 	}
