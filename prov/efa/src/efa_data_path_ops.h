@@ -362,19 +362,9 @@ static inline bool efa_cq_wc_available(struct efa_ibv_cq *cq)
 static inline void efa_cq_report_poll_err(struct efa_ibv_cq *cq)
 {
 	int err = cq->poll_err;
-	int prov_errno;
 
-	if (err && err != ENOENT) {
-		err = err > 0 ? err : -err;
-		prov_errno = efa_ibv_cq_wc_read_vendor_err(cq);
-		EFA_WARN(FI_LOG_CQ, "Encountered error during CQ polling. err: %s (%d), prov_errno: %s (%d)\n",
-				fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
-		efa_show_help(prov_errno);
-		ofi_cq_write_error(&container_of(cq, struct efa_cq, ibv_cq)->util_cq , &(struct fi_cq_err_entry) {
-			.err = err,
-			.prov_errno = prov_errno,
-		});
-	}
+	if (err && err != ENOENT)
+		EFA_INFO(FI_LOG_CQ, "Ignoring CQ entries from destroyed queue pair");
 }
 
 static inline void efa_cq_start_poll(struct efa_ibv_cq *cq)
