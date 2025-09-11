@@ -80,6 +80,96 @@ int efa_user_info_check_hints_addr(const char *node, const char *service,
 	return 0;
 }
 
+/**
+ * @brief check if user-provided fabric object is valid and assign it
+ *
+ * @param	hints[in]	hints from user's call to fi_getinfo()
+ * @param	dupinfo[out]	provider info object to update
+ * @param	prov_info[in]	provider info object for validation
+ * @return	0 if valid, negative libfabric error code on failure
+ */
+int efa_user_info_check_fabric_object(const struct fi_info *hints,
+				      struct fi_info *dupinfo,
+				      const struct fi_info *prov_info)
+{
+	struct util_fabric *util_fabric;
+	struct fi_fabric_attr fabric_attr;
+	int ret;
+
+	if (!hints || !hints->fabric_attr || !hints->fabric_attr->fabric)
+		return 0;
+
+	if (hints->fabric_attr->fabric->fid.fclass != FI_CLASS_FABRIC) {
+		EFA_WARN(FI_LOG_CORE, "Invalid fabric object\n");
+		return -FI_EINVAL;
+	}
+
+	util_fabric = container_of(hints->fabric_attr->fabric, struct util_fabric, fabric_fid);
+	fabric_attr.name = (char *)util_fabric->name;
+	fabric_attr.prov_name = (char *)util_fabric->prov->name;
+	fabric_attr.prov_version = util_fabric->prov->version;
+	fabric_attr.api_version = hints->fabric_attr->fabric->api_version;
+
+	ret = ofi_check_fabric_attr(efa_util_prov.prov, 
+				    prov_info->fabric_attr, 
+				    &fabric_attr);
+	if (ret) {
+		EFA_WARN(FI_LOG_CORE, "Fabric attributes validation failed\n");
+		return ret;
+	}
+
+	dupinfo->fabric_attr->fabric = hints->fabric_attr->fabric;
+	return 0;
+}
+
+/**
+ * @brief check if user-provided domain object is valid and assign it
+ *
+ * @param	hints[in]	hints from user's call to fi_getinfo()
+ * @param	dupinfo[out]	provider info object to update
+ * @return	0 if valid, negative libfabric error code on failure
+ */
+int efa_user_info_check_domain_object(const struct fi_info *hints,
+				      struct fi_info *dupinfo)
+{
+	struct util_domain *util_domain;
+	struct util_fabric *util_fabric;
+	struct dlist_entry *item;
+	bool domain_found = false;
+
+	if (!hints || !hints->domain_attr || !hints->domain_attr->domain)
+		return 0;
+
+	if (hints->domain_attr->domain->fid.fclass != FI_CLASS_DOMAIN) {
+		EFA_WARN(FI_LOG_CORE, "Invalid domain object\n");
+		return -FI_EINVAL;
+	}
+
+	util_domain = container_of(hints->domain_attr->domain, struct util_domain, domain_fid);
+	util_fabric = util_domain->fabric;
+
+	if (strcmp(util_domain->name, dupinfo->domain_attr->name))
+		return -FI_EINVAL;
+
+	ofi_mutex_lock(&util_fabric->lock);
+	dlist_foreach(&util_fabric->domain_list, item) {
+		struct util_domain *list_domain = container_of(item, struct util_domain, list_entry);
+		if (list_domain == util_domain) {
+			domain_found = true;
+			break;
+		}
+	}
+	ofi_mutex_unlock(&util_fabric->lock);
+
+	if (!domain_found) {
+		EFA_WARN(FI_LOG_CORE, "Domain object does not exist\n");
+		return -FI_EINVAL;
+	}
+
+	dupinfo->domain_attr->domain = hints->domain_attr->domain;
+	return 0;
+}
+
 #if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
 /**
  * @brief determine if EFA provider should claim support of FI_HMEM in info
@@ -397,6 +487,29 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 }
 
 /**
+ * @brief check if there is an existing open domain that matches the name, caps,
+ * mode, and mr_mode. It compares domain to prov_info instead of user_info
+ * because user_info was trimmed based on user hints. We can reuse the domain as
+ * long as the provider supports.
+ *
+ */
+static int efa_find_domain(struct dlist_entry *item, const void *arg)
+{
+	const struct util_domain *domain;
+	const struct fi_info *prov_info = arg;
+
+	domain = container_of(item, struct util_domain, list_entry);
+
+	return !strcmp(domain->name, prov_info->domain_attr->name) &&
+	       (((prov_info->caps | prov_info->domain_attr->caps) &
+		 domain->info_domain_caps) == domain->info_domain_caps) &&
+	       (((prov_info->mode | prov_info->domain_attr->mode) &
+		 domain->info_domain_mode) == domain->info_domain_mode) &&
+	       ((prov_info->domain_attr->mr_mode & domain->mr_mode) ==
+		domain->mr_mode);
+}
+
+/**
  * @brief get a list of fi_info objects the fit user's requirements
  *
  * @param	node[in]	node from user's call to fi_getinfo()
@@ -414,6 +527,9 @@ int efa_get_user_info(uint32_t version, const char *node,
 {
 	const struct fi_info *prov_info;
 	struct fi_info *dupinfo, *tail;
+	struct util_fabric *fabric;
+	struct util_domain *domain;
+	struct dlist_entry *item;
 	int ret;
 
 	ret = efa_user_info_check_hints_addr(node, service, flags, hints);
@@ -476,6 +592,38 @@ int efa_get_user_info(uint32_t version, const char *node,
 		}
 
 		ofi_alter_info(dupinfo, hints, version);
+
+		/* On input to fi_getinfo, a user may set this to an opened
+		 * fabric/domain instance to restrict output to the given fabric/domain. */
+		ret = efa_user_info_check_fabric_object(hints, dupinfo, prov_info);
+		if (ret)
+			continue;
+
+		ret = efa_user_info_check_domain_object(hints, dupinfo);
+		if (ret)
+			continue;
+
+		if (!dupinfo->fabric_attr->fabric && !dupinfo->domain_attr->domain)
+			util_lookup_existing_fabric_domain(&efa_util_prov, hints, &dupinfo);
+
+		if (hints && hints->domain_attr && hints->domain_attr->name &&
+		    dupinfo->fabric_attr->fabric && !dupinfo->domain_attr->domain) {
+			fabric = container_of(dupinfo->fabric_attr->fabric, struct util_fabric, fabric_fid);
+			EFA_INFO(FI_LOG_CORE, "Reusing open fabric %s\n", fabric->name);
+
+			/* Use efa specific efa_find_domain instead of util_find_domain */
+			ofi_mutex_lock(&fabric->lock);
+			item = dlist_find_first_match(&fabric->domain_list, efa_find_domain, prov_info);
+			if (item) {
+				domain = container_of(item, struct util_domain, list_entry);
+				dupinfo->domain_attr->domain = &domain->domain_fid;
+				EFA_INFO(FI_LOG_CORE, "Reusing open domain %s\n", domain->name);
+				domain->info_domain_caps |= dupinfo->caps | dupinfo->domain_attr->caps;
+				domain->info_domain_mode |= dupinfo->mode | dupinfo->domain_attr->mode;
+				domain->mr_mode |= dupinfo->domain_attr->mr_mode;
+			}
+			ofi_mutex_unlock(&fabric->lock);
+		}
 
 		if (!*info)
 			*info = dupinfo;
