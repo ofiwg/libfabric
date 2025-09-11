@@ -561,6 +561,11 @@ static inline int efa_av_implicit_av_lru_insert(struct efa_av *av,
 	struct efa_ep_addr_hashable *ep_addr_hashable;
 	struct efa_conn *conn_to_release;
 
+	/* Implicit AV size of 0 means we allow the implicit AV to grow without
+	 * bound */
+	if (av->implicit_av_size == 0)
+		goto out;
+
 	cur_size = HASH_CNT(hh, av->util_av_implicit.hash);
 	if (cur_size <= av->implicit_av_size)
 		goto out;
@@ -603,7 +608,8 @@ out:
 void efa_av_implicit_av_lru_move(struct efa_av *av,
 					struct efa_conn *conn)
 {
-	assert(HASH_CNT(hh, av->util_av_implicit.hash) <= av->implicit_av_size);
+	assert(av->implicit_av_size == 0 ||
+	       HASH_CNT(hh, av->util_av_implicit.hash) <= av->implicit_av_size);
 	assert(dlist_entry_in_list(&av->implicit_av_lru_list,
 				   &conn->implicit_av_lru_entry));
 
