@@ -2057,9 +2057,12 @@ void test_efa_cq_readerr_return_value_provider_buffer(struct efa_resource **stat
 }
 
 /**
- * @brief Test CQ readfrom when start_poll returns error
+ * @brief verify that fi_cq_read/fi_cq_readerr works properly when ibv_start_poll failed.
  *
- * This test verifies error handling when efa_ibv_cq_start_poll fails.
+ * When an ibv_start_poll() failed, it currently means the QP associated with the CQE is
+ * destroyed. According to libfabric man page, such cqe should be ignored and not reported
+ * to application cqs.
+ *
  */
 void test_efa_cq_readfrom_start_poll_error(struct efa_resource **state)
 {
@@ -2074,24 +2077,22 @@ void test_efa_cq_readfrom_start_poll_error(struct efa_resource **state)
 	will_return(efa_mock_efa_ibv_cq_start_poll_return_mock, EINVAL);
 
 	ret = fi_cq_readfrom(resource->cq, &cq_entry, 1, NULL);
-	assert_int_equal(ret, -FI_EAVAIL);
+	assert_int_equal(ret, -FI_EAGAIN);
 
 	struct efa_cq *efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
 	struct efa_ibv_cq *ibv_cq = &efa_cq->ibv_cq;
 
 	/* Check poll state before readerr */
 	assert_false(ibv_cq->poll_active);
-	assert_int_equal(ibv_cq->poll_err, EINVAL);
+	assert_int_equal(ibv_cq->poll_err, 0);
 
 	/* Test fi_cq_readerr after start_poll error */
 	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
-	assert_int_equal(ret, 1);
-	assert_int_equal(cq_err_entry.err, FI_ECANCELED);
-	assert_int_equal(cq_err_entry.prov_errno, FI_EFA_ERR_CQ_POLL_QP_DESTROYED);
+	assert_int_equal(ret, -FI_EAGAIN);
 
 	/* Check poll states after readerr - should be not changed */
 	assert_false(ibv_cq->poll_active);
-	assert_int_equal(ibv_cq->poll_err, EINVAL);
+	assert_int_equal(ibv_cq->poll_err, 0);
 
 	/* Reset mocks */
 	will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);

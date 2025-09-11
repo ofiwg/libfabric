@@ -707,14 +707,8 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	ibv_cq = &efa_cq->ibv_cq;
 
 	/* Call ibv_start_poll only once */
-	if (!ibv_cq->poll_active) {
-		ibv_cq->poll_err = efa_ibv_cq_start_poll(ibv_cq, &(struct ibv_poll_cq_attr){0});
-		if (ibv_cq->poll_err) {
-			err = ibv_cq->poll_err == ENOENT ? -FI_EAGAIN : -FI_EAVAIL;
-			goto out;
-		}
-		ibv_cq->poll_active = true;
-	}
+	if (!ibv_cq->poll_active)
+		efa_cq_start_poll(ibv_cq);
 
 	while (!ibv_cq->poll_err) {
 		if (ibv_cq->ibv_cq_ex->status) {
@@ -741,18 +735,9 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		if (num_cqe == count) {
 			break;
 		}
-
-		ibv_cq->poll_err = efa_ibv_cq_next_poll(ibv_cq);
+		efa_cq_next_poll(ibv_cq);
 	}
-	/**
-	 * Only end poll when both conditions are met:
-	 * 1. the cq is in active poll
-	 * 2. active poll has no error: poll_err is either 0 or ENOENT
-	 */
-	if (ibv_cq->poll_active && 
-		(ibv_cq->poll_err == 0 || ibv_cq->poll_err == ENOENT)) {
-		efa_cq_end_poll(ibv_cq);
-	}
+	efa_cq_end_poll(ibv_cq);
 
 out:
 	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
@@ -765,9 +750,7 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 {
 	struct efa_cq *efa_cq;
 	struct efa_ibv_cq *ibv_cq;
-	int err;
 	ssize_t ret;
-	int prov_errno;
 
 	efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
@@ -775,30 +758,13 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 
 	ibv_cq = &efa_cq->ibv_cq;
 
-	if (ibv_cq->poll_active) {
-		/* No error, return EAGAIN */
-		if(!ibv_cq->ibv_cq_ex->status) {
-			ret = -FI_EAGAIN;
-			goto out;
-		}
-		efa_cq_fill_err_entry(ibv_cq, buf);
-		efa_cq_end_poll(ibv_cq);
-	} else {
-		assert(ibv_cq->poll_err);
-		/* Empty CQ */
-		if (ibv_cq->poll_err == ENOENT) {
-			ret = -FI_EAGAIN;
-			goto out;
-		}
-		/* This currently means the CQE belongs a QP that is destroyed */
-		prov_errno = FI_EFA_ERR_CQ_POLL_QP_DESTROYED;
-		err = to_fi_errno(prov_errno);
-
-		memset(buf, 0, sizeof(*buf));
-		buf->err = err;
-		buf->prov_errno = prov_errno;
-		efa_cq_write_error_data(efa_cq, NULL, FI_ADDR_NOTAVAIL, prov_errno, buf);
+	/* No error, return EAGAIN */
+	if(!ibv_cq->ibv_cq_ex->status) {
+		ret = -FI_EAGAIN;
+		goto out;
 	}
+	efa_cq_fill_err_entry(ibv_cq, buf);
+	efa_cq_end_poll(ibv_cq);
 	ret = 1;
 out:
 
