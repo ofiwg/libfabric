@@ -612,7 +612,9 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_solicited_recv(struct
 /**
  * @brief verify that fi_cq_read/fi_cq_readerr works properly when ibv_start_poll failed.
  *
- * When an ibv_start_poll() failed. Libfabric should write an EQ error.
+ * When an ibv_start_poll() failed, it currently means the QP associated with the CQE is
+ * destroyed. According to libfabric man page, such cqe should be ignored and not reported
+ * to application cqs.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
@@ -627,18 +629,14 @@ void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
 
 	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_end_poll = &efa_mock_efa_ibv_cq_end_poll_check_mock;
-	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_vendor_err = &efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock;
 
-	will_return(efa_mock_efa_ibv_cq_start_poll_return_mock, EFAULT);
-	will_return(efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+	will_return(efa_mock_efa_ibv_cq_start_poll_return_mock, EINVAL);
 
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
-	assert_int_equal(ret, -FI_EAVAIL);
+	assert_int_equal(ret, -FI_EAGAIN);
 
 	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
-	assert_int_equal(ret, 1);
-	assert_int_not_equal(cq_err_entry.err, FI_ENOENT);
-	assert_int_equal(cq_err_entry.prov_errno, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+	assert_int_equal(ret, -FI_EAGAIN);
 
 	/* reset the mocked cq before it's polled by ep close */
 	will_return_always(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
