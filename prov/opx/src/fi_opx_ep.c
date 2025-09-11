@@ -2618,6 +2618,26 @@ int opx_get_srcver_sys(char *srcver_sys)
 	return FI_SUCCESS;
 }
 
+#define OPX_HFISVC_USE_BULKSVC_PARM "/sys/module/hfi1/parameters/use_bulksvc"
+
+int opx_hfi_drv_bulksvc_enabled(void)
+{
+	FILE *parm_file = fopen(OPX_HFISVC_USE_BULKSVC_PARM, "r");
+
+	if (parm_file == NULL) {
+		return 0;
+	}
+
+	int c = fgetc(parm_file);
+	fclose(parm_file);
+
+	if (c == EOF) {
+		return 0;
+	}
+
+	return (c == 'Y') || (c == 'y') || (c == '1');
+}
+
 int opx_hfi_drv_version_check(char *min_version)
 {
 	char drv_ver[FI_OPX_VER_CHECK_BUF_LEN]	      = {0};
@@ -2891,15 +2911,29 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 #endif
 
 #ifdef HFISVC
+	int drv_bulksvc_enabled = opx_hfi_drv_bulksvc_enabled();
+
 	int use_hfisvc;
 	if (fi_param_get_bool(fi_opx_global.prov, "hfisvc", &use_hfisvc) == FI_SUCCESS) {
 		if (use_hfisvc) {
+			if (!drv_bulksvc_enabled) {
+				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+					"FI_OPX_HFISVC is enabled, but the hfi1 driver module either does not support it or the use_bulksvc parameter is not enabled. Work with your system administrator to enable this performance feature, or re-run without enabling FI_OPX_HFISVC.\n");
+				errno = FI_EOPNOTSUPP;
+				goto err;
+			}
 			opx_ep->use_hfisvc = true;
 		} else {
 			opx_ep->use_hfisvc = false;
 		}
 	} else if (OPX_HFISVC_ENABLED_DEFAULT) {
-		opx_ep->use_hfisvc = true;
+		if (!drv_bulksvc_enabled) {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+				"The currently active hfi1 module does not have use_bulksvc turned on. OPX will run with degraded performance.\n");
+			opx_ep->use_hfisvc = false;
+		} else {
+			opx_ep->use_hfisvc = true;
+		}
 	} else {
 		opx_ep->use_hfisvc = false;
 	}
