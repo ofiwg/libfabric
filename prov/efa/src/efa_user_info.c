@@ -397,6 +397,29 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 }
 
 /**
+ * @brief check if there is an existing open domain that matches the name, caps,
+ * mode, and mr_mode. It compares domain to prov_info instead of user_info
+ * because user_info was trimmed based on user hints. We can reuse the domain as
+ * long as the provider supports.
+ *
+ */
+static int efa_find_domain(struct dlist_entry *item, const void *arg)
+{
+	const struct util_domain *domain;
+	const struct fi_info *prov_info = arg;
+
+	domain = container_of(item, struct util_domain, list_entry);
+
+	return !strcmp(domain->name, prov_info->domain_attr->name) &&
+	       (((prov_info->caps | prov_info->domain_attr->caps) &
+		 domain->info_domain_caps) == domain->info_domain_caps) &&
+	       (((prov_info->mode | prov_info->domain_attr->mode) &
+		 domain->info_domain_mode) == domain->info_domain_mode) &&
+	       ((prov_info->domain_attr->mr_mode & domain->mr_mode) ==
+		domain->mr_mode);
+}
+
+/**
  * @brief get a list of fi_info objects the fit user's requirements
  *
  * @param	node[in]	node from user's call to fi_getinfo()
@@ -414,6 +437,9 @@ int efa_get_user_info(uint32_t version, const char *node,
 {
 	const struct fi_info *prov_info;
 	struct fi_info *dupinfo, *tail;
+	struct util_fabric *fabric;
+	struct util_domain *domain;
+	struct dlist_entry *item;
 	int ret;
 
 	ret = efa_user_info_check_hints_addr(node, service, flags, hints);
@@ -476,6 +502,35 @@ int efa_get_user_info(uint32_t version, const char *node,
 		}
 
 		ofi_alter_info(dupinfo, hints, version);
+
+		/* On input to fi_getinfo, a user may set this to an opened
+		 * fabric instance to restrict output to the given fabric. */
+		if (hints && hints->fabric_attr)
+			dupinfo->fabric_attr->fabric = hints->fabric_attr->fabric;
+		if (hints && hints->domain_attr)
+			dupinfo->domain_attr->domain = hints->domain_attr->domain;
+
+		if (!dupinfo->fabric_attr->fabric && !dupinfo->domain_attr->domain)
+			util_lookup_existing_fabric_domain(&efa_util_prov, &dupinfo);
+
+		if (hints && hints->domain_attr && hints->domain_attr->name &&
+		    dupinfo->fabric_attr->fabric && !dupinfo->domain_attr->domain) {
+			fabric = container_of(dupinfo->fabric_attr->fabric, struct util_fabric, fabric_fid);
+			EFA_INFO(FI_LOG_CORE, "Reusing open fabric %s\n", fabric->name);
+
+			/* Use efa specific efa_find_domain instead of util_find_domain */
+			ofi_mutex_lock(&fabric->lock);
+			item = dlist_find_first_match(&fabric->domain_list, efa_find_domain, prov_info);
+			if (item) {
+				domain = container_of(item, struct util_domain, list_entry);
+				dupinfo->domain_attr->domain = &domain->domain_fid;
+				EFA_INFO(FI_LOG_CORE, "Reusing open domain %s\n", domain->name);
+				domain->info_domain_caps |= dupinfo->caps | dupinfo->domain_attr->caps;
+				domain->info_domain_mode |= dupinfo->mode | dupinfo->domain_attr->mode;
+				domain->mr_mode |= dupinfo->domain_attr->mr_mode;
+			}
+			ofi_mutex_unlock(&fabric->lock);
+		}
 
 		if (!*info)
 			*info = dupinfo;
