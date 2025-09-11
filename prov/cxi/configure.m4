@@ -30,7 +30,7 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 	# Support non-standard install path for cassini headers. This is needed
 	# by libcxi.
 	AC_ARG_WITH([cassini-headers],
-		[AS_HELP_STRING([--with-cassin-headers=DIR], [Install directory for Cassini headers])],
+		[AS_HELP_STRING([--with-cassini-headers=DIR], [Install directory for Cassini headers])],
 		[CPPFLAGS="-I$with_cassini_headers/include $CPPFLAGS"])
 
 	# Support non-standard install path for cxi kernel UAPI headers. This is
