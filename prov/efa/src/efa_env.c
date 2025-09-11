@@ -40,7 +40,7 @@ struct efa_env efa_env = {
 	.use_unsolicited_write_recv = 1,
 	.internal_rx_refill_threshold = 8,
 	.use_data_path_direct = true,
-	.implicit_av_size = 1024,
+	.implicit_av_size = 0,
 };
 
 /* @brief Read and store the FI_EFA_* environment variables.
@@ -228,7 +228,10 @@ void efa_env_define()
 	fi_param_define(&efa_prov, "implicit_av_size", FI_PARAM_SIZE_T,
 			"The maximum size of the implicit AV used to store AV "
 			"entries of peers that were not explicitly inserted "
-			"into the AV by the application",
+			"into the AV by the application. Setting this variable "
+			"to a positive value will enforce the the maximum "
+			"size. Setting this value to 0 will allow unbounded "
+			"growth of the implicit AV. (Default: 0)",
 			efa_env.implicit_av_size);
 }
 
