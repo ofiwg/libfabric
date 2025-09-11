@@ -397,6 +397,14 @@ static void util_free_entry(struct fi_peer_rx_entry *entry)
 			ofi_buf_free(owner_entry);
 		}
 	}
+
+	/* If free_entry was called but the addr is still FI_ADDR_UNSPEC, the rx
+	 * entry must be in the unspec_unexp_[msg,tag]_queue. Remove it so that
+	 * the queue does not get corrupted. */
+	if (entry->addr == FI_ADDR_UNSPEC) {
+		dlist_remove(&util_entry->d_entry);
+	}
+
 	ofi_buf_free(util_entry);
 }
 
