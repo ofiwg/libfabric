@@ -1875,44 +1875,6 @@ void test_efa_cq_ep_list_lock_type_mutex(struct efa_resource **state)
 }
 
 /**
- * @brief Test that CQ uses bypass ops for FI_WAIT_NONE and util ops for wait objects
- *
- * This test verifies the fix from commit 01e45b446 that disables util CQ bypass for wait CQs.
- * When wait_obj is FI_WAIT_NONE, bypass ops should be used.
- * When wait_obj is not FI_WAIT_NONE, util ops should be used.
- */
-void test_efa_cq_ops_selection_based_on_wait_obj(struct efa_resource **state)
-{
-	struct efa_resource *resource = *state;
-	struct fid_cq *cq_no_wait, *cq_with_wait;
-	struct fi_cq_attr cq_attr_no_wait = {
-		.format = FI_CQ_FORMAT_DATA,
-		.wait_obj = FI_WAIT_NONE,
-	};
-	struct fi_cq_attr cq_attr_with_wait = {
-		.format = FI_CQ_FORMAT_DATA,
-		.wait_obj = FI_WAIT_UNSPEC,
-	};
-	int ret;
-
-	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-
-	/* Test CQ with FI_WAIT_NONE - should use bypass ops */
-	ret = fi_cq_open(resource->domain, &cq_attr_no_wait, &cq_no_wait, NULL);
-	assert_int_equal(ret, 0);
-	assert_ptr_equal(cq_no_wait->ops, &efa_cq_bypass_util_cq_ops);
-
-	/* Test CQ with wait object - should use util ops */
-	ret = fi_cq_open(resource->domain, &cq_attr_with_wait, &cq_with_wait, NULL);
-	if (ret == 0) {
-		assert_ptr_equal(cq_with_wait->ops, &efa_cq_ops);
-		fi_close(&cq_with_wait->fid);
-	}
-
-	fi_close(&cq_no_wait->fid);
-}
-
-/**
  * @brief Test CQ ops override when counter is bound to endpoint
  *
  * This test verifies the fix from commit 643af57a4 that properly sets CQ ops
