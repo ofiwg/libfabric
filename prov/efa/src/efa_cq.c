@@ -704,6 +704,12 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	/* Acquire the lock to prevent race conditions when qp_table is being updated */
 	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
 
+	/* If there are cqes in the util cq (due to the cq flush in ep close or efa_trywait) */
+	if (!ofi_cirque_isempty(efa_cq->util_cq.cirq)) {
+		err = ofi_cq_read_entries(&efa_cq->util_cq, buf, count, src_addr);
+		goto out;
+	}
+
 	ibv_cq = &efa_cq->ibv_cq;
 
 	/* Call ibv_start_poll only once */
