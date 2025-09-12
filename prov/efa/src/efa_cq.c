@@ -525,7 +525,7 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 				break;
 		} 
 		
-		ret = ofi_cq_readfrom(&cq->util_cq.cq_fid, buffer, count - num_completions, src_addr ? src_addr + num_completions : NULL);
+		ret = cq->util_cq.cq_fid.ops->readfrom(&cq->util_cq.cq_fid, buffer, count - num_completions, src_addr ? src_addr + num_completions : NULL);
 		if (ret > 0) {
 			buffer += ret * cq->entry_size;
 			num_completions += ret;
@@ -1014,8 +1014,9 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	(*cq_fid)->fid.fclass = FI_CLASS_CQ;
 	(*cq_fid)->fid.context = context;
 	(*cq_fid)->fid.ops = &efa_cq_fi_ops;
-	/* Use bypass util cq ops for non-wait cq */
-	(*cq_fid)->ops = (attr->wait_obj == FI_WAIT_NONE) ? &efa_cq_bypass_util_cq_ops : &efa_cq_ops;
+	/* Use bypass ops by default */
+	(*cq_fid)->ops = &efa_cq_bypass_util_cq_ops;
+
 #if HAVE_EFA_DATA_PATH_DIRECT
 	#if HAVE_EFADV_CQ_ATTR_DB
 		efa_data_path_direct_cq_initialize(cq);
