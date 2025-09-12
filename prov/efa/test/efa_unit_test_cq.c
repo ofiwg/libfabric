@@ -2061,3 +2061,92 @@ void test_efa_cq_readfrom_start_poll_error(struct efa_resource **state)
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
 	resource->ep = NULL;
 }
+/**
+ * @brief Test that efa_cq_readfrom reads from util_cq when entries are available
+ *
+ * This test verifies the fix from commits 8bf9b5127 and a1e06896a that ensures
+ * efa_cq_readfrom reads from util_cq when there are CQEs available.
+ */
+void test_efa_cq_readfrom_util_cq_entries(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	struct fi_cq_data_entry cq_entry = {0};
+	struct fi_cq_tagged_entry util_entry = {
+		.op_context = (void *)0x12345678,
+		.flags = FI_SEND | FI_MSG,
+		.len = 1024,
+		.data = 0xdeadbeef,
+		.tag = 0,
+	};
+	ssize_t ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
+
+	/* Add entry to util_cq */
+	ret = ofi_cq_write(&efa_cq->util_cq, util_entry.op_context, util_entry.flags,
+			   util_entry.len, util_entry.buf, util_entry.data, util_entry.tag);
+	assert_int_equal(ret, 0);
+
+	/* Mock empty device CQ */
+	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
+	will_return(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+
+	/* Read should get entry from util_cq */
+	ret = fi_cq_readfrom(resource->cq, &cq_entry, 1, NULL);
+	assert_int_equal(ret, 1);
+	assert_ptr_equal(cq_entry.op_context, util_entry.op_context);
+	assert_int_equal(cq_entry.flags, util_entry.flags);
+
+	will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+}
+
+/**
+ * @brief Test that efa_cq_readerr reads from util_cq when error entries are available
+ *
+ * This test verifies the fix from commits 8bf9b5127 and a1e06896a that ensures
+ * efa_cq_readerr reads from util_cq when there are error entries available.
+ */
+void test_efa_cq_readerr_util_cq_error(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	struct fi_cq_data_entry cq_entry = {0};
+	struct fi_cq_err_entry cq_err_entry = {0};
+	struct fi_cq_err_entry util_err = {
+		.op_context = (void *)0x87654321,
+		.flags = FI_RECV | FI_MSG,
+		.err = FI_ETRUNC,
+		.prov_errno = -FI_ETRUNC,
+	};
+	ssize_t ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
+
+	/* Add error to util_cq */
+	ret = ofi_cq_write_error(&efa_cq->util_cq, &util_err);
+	assert_int_equal(ret, 0);
+
+	/* Mock empty device CQ */
+	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
+	will_return(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+
+	/* Read should return error available */
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, -FI_EAVAIL);
+
+	/* Read error should get entry from util_cq */
+	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_ptr_equal(cq_err_entry.op_context, util_err.op_context);
+	assert_int_equal(cq_err_entry.flags, util_err.flags);
+	assert_int_equal(cq_err_entry.err, util_err.err);
+
+	will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+}

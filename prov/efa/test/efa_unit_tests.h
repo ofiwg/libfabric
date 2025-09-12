@@ -364,6 +364,8 @@ void test_efa_cq_readfrom_input_validation();
 void test_efa_cq_readerr_return_value_user_buffer();
 void test_efa_cq_readerr_return_value_provider_buffer();
 void test_efa_cq_readfrom_start_poll_error();
+void test_efa_cq_readfrom_util_cq_entries();
+void test_efa_cq_readerr_util_cq_error();
 void test_efa_ep_open();
 void test_efa_ep_cancel();
 void test_efa_ep_getopt();
