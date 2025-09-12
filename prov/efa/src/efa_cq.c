@@ -764,6 +764,11 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 
 	ibv_cq = &efa_cq->ibv_cq;
 
+	/* If there are error in util cq already, just return it */
+	ret = ofi_cq_readerr(cq_fid, buf, flags);
+	if (ret > 0)
+		goto out;
+
 	/* No error, return EAGAIN */
 	if(!ibv_cq->ibv_cq_ex->status) {
 		ret = -FI_EAGAIN;
