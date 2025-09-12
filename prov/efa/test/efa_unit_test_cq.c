@@ -1051,6 +1051,7 @@ static void test_efa_cq_read_prep(struct efa_resource *resource,
 
 	/* Make wr_id as 0 for unsolicited write recv as a stress test */
 	ibv_cqx->wr_id = is_unsolicited_write_recv ? 0 : (uintptr_t) ctx;
+	ibv_cq->unsolicited_write_recv_enabled = is_unsolicited_write_recv;
 	ibv_cqx->status = status;
 
     /* Set up the mock operations */
@@ -1871,4 +1872,192 @@ void test_efa_cq_ep_list_lock_type_mutex(struct efa_resource **state)
 
 	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
 	assert_int_equal(efa_cq->util_cq.ep_list_lock.lock_type, OFI_LOCK_MUTEX);
+}
+
+/**
+ * @brief Test CQ ops override when counter is bound to endpoint
+ *
+ * This test verifies the fix from commit 643af57a4 that properly sets CQ ops
+ * when counters are bound to endpoints.
+ */
+void test_efa_cq_ops_override_with_counter_binding(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr;
+	struct fi_cntr_attr cntr_attr = {0};
+	int ret;
+
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	/* Initially CQ should use bypass ops */
+	assert_ptr_equal(resource->cq->ops, &efa_cq_bypass_util_cq_ops);
+
+	/* Create counter */
+	ret = fi_cntr_open(resource->domain, &cntr_attr, &cntr, NULL);
+	assert_int_equal(ret, 0);
+
+	/* Bind counter to endpoint - this should trigger CQ ops override */
+	ret = fi_ep_bind(resource->ep, &cntr->fid, FI_SEND);
+	assert_int_equal(ret, 0);
+
+	ret = fi_enable(resource->ep);
+	assert_int_equal(ret, 0);
+
+	/* CQ ops should be set to util ops when counter is bound */
+	assert_ptr_equal(resource->cq->ops, &efa_cq_ops);
+
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+	fi_close(&cntr->fid);
+}
+
+/**
+ * @brief Test CQ readfrom input validation
+ *
+ * This test verifies the fix from commit 14f8cd478 that adds input validation
+ * to efa_cq_readfrom to return -FI_EAGAIN for invalid parameters.
+ */
+void test_efa_cq_readfrom_input_validation(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cq_data_entry cq_entry;
+	fi_addr_t src_addr;
+	ssize_t ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	/* Test with NULL buffer */
+	ret = fi_cq_readfrom(resource->cq, NULL, 1, &src_addr);
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	/* Test with zero count */
+	ret = fi_cq_readfrom(resource->cq, &cq_entry, 0, &src_addr);
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	/* Test with valid parameters but empty CQ */
+	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
+	will_return(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+
+	ret = fi_cq_readfrom(resource->cq, &cq_entry, 1, &src_addr);
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	/* Reset mocks */
+	will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+}
+
+static void test_efa_cq_readerr_common(struct efa_resource *resource, bool user_owned_buffer)
+{
+	struct efa_context *efa_context;
+	struct fi_context2 ctx;
+	struct fi_cq_data_entry cq_entry;
+	struct fi_cq_err_entry cq_err_entry = {0};
+	struct efa_cq *efa_cq;
+	struct efa_ibv_cq *ibv_cq;
+	ssize_t ret;
+
+	efa_context = (struct efa_context *) &ctx;
+	efa_context->completion_flags = FI_SEND | FI_MSG;
+
+	test_efa_cq_read_prep(resource, IBV_WC_SEND, IBV_WC_GENERAL_ERR,
+				 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, efa_context, 0, false);
+
+	/* Trigger error condition */
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, -FI_EAVAIL);
+
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
+	ibv_cq = &efa_cq->ibv_cq;
+
+	/* Check poll state before readerr */
+	assert_true(ibv_cq->poll_active);
+	assert_int_equal(ibv_cq->poll_err, 0);
+
+	if (user_owned_buffer) {
+		cq_err_entry.err_data_size = EFA_ERROR_MSG_BUFFER_LENGTH;
+		cq_err_entry.err_data = malloc(cq_err_entry.err_data_size);
+		assert_non_null(cq_err_entry.err_data);
+	}
+
+	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_int_not_equal(cq_err_entry.err, FI_SUCCESS);
+	assert_int_equal(cq_err_entry.prov_errno, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+	assert_non_null(cq_err_entry.err_data);
+	assert_true(cq_err_entry.err_data_size > 0);
+
+	/* Check poll state after readerr - should be reset */
+	assert_false(ibv_cq->poll_active);
+	assert_int_equal(ibv_cq->poll_err, 0);
+
+	if (user_owned_buffer)
+		free(cq_err_entry.err_data);
+
+	/* Reset mocks */
+	will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+}
+
+/**
+ * @brief Test CQ readerr return value with user-owned buffer
+ */
+void test_efa_cq_readerr_return_value_user_buffer(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	test_efa_cq_readerr_common(resource, true);
+}
+
+/**
+ * @brief Test CQ readerr return value with provider-owned buffer
+ */
+void test_efa_cq_readerr_return_value_provider_buffer(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	test_efa_cq_readerr_common(resource, false);
+}
+
+/**
+ * @brief verify that fi_cq_read/fi_cq_readerr works properly when ibv_start_poll failed.
+ *
+ * When an ibv_start_poll() failed, it currently means the QP associated with the CQE is
+ * destroyed. According to libfabric man page, such cqe should be ignored and not reported
+ * to application cqs.
+ *
+ */
+void test_efa_cq_readfrom_start_poll_error(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cq_data_entry cq_entry;
+	struct fi_cq_err_entry cq_err_entry = {0};
+	ssize_t ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
+	will_return(efa_mock_efa_ibv_cq_start_poll_return_mock, EINVAL);
+
+	ret = fi_cq_readfrom(resource->cq, &cq_entry, 1, NULL);
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	struct efa_cq *efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
+	struct efa_ibv_cq *ibv_cq = &efa_cq->ibv_cq;
+
+	/* Check poll state before readerr */
+	assert_false(ibv_cq->poll_active);
+	assert_int_equal(ibv_cq->poll_err, 0);
+
+	/* Test fi_cq_readerr after start_poll error */
+	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	/* Check poll states after readerr - should be not changed */
+	assert_false(ibv_cq->poll_active);
+	assert_int_equal(ibv_cq->poll_err, 0);
+
+	/* Reset mocks */
+	will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
 }
