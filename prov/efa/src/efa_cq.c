@@ -714,7 +714,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	if (!ibv_cq->poll_active)
 		efa_cq_start_poll(ibv_cq);
 
-	while (!ibv_cq->poll_err) {
+	while (efa_cq_wc_available(ibv_cq)) {
 		if (ibv_cq->ibv_cq_ex->status) {
 			err = -FI_EAVAIL;
 			goto out;
