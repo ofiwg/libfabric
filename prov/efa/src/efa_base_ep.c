@@ -542,9 +542,13 @@ int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen)
 bool efa_qp_support_op_in_order_aligned_128_bytes(struct efa_qp *qp, enum ibv_wr_opcode op)
 {
 	int caps;
+	uint32_t flags = IBV_QUERY_QP_DATA_IN_ORDER_RETURN_CAPS;
 
-	caps = ibv_query_qp_data_in_order(qp->ibv_qp, op,
-					  IBV_QUERY_QP_DATA_IN_ORDER_RETURN_CAPS);
+#if HAVE_IBV_QUERY_QP_DATA_IN_ORDER_DEVICE_ONLY
+	flags |= IBV_QUERY_QP_DATA_IN_ORDER_DEVICE_ONLY;
+#endif
+
+	caps = ibv_query_qp_data_in_order(qp->ibv_qp, op, flags);
 
 	return !!(caps & IBV_QUERY_QP_DATA_IN_ORDER_ALIGNED_128_BYTES);
 }
