@@ -75,6 +75,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_caps_cq_with_ext_mem_dmabuf=0
 	have_ibv_is_fork_initialized=0
 	efa_support_data_in_order_aligned_128_byte=0
+	have_ibv_query_qp_data_in_order_device_only=0
 	efadv_support_extended_cq=0
 	have_efa_dmabuf_mr=0
 	have_efadv_query_mr=0
@@ -121,6 +122,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 		AC_CHECK_DECL([IBV_QUERY_QP_DATA_IN_ORDER_ALIGNED_128_BYTES],
 			[efa_support_data_in_order_aligned_128_byte=1],
 			[efa_support_data_in_order_aligned_128_byte=0],
+			[[#include <infiniband/verbs.h>]])
+
+		AC_CHECK_DECL([IBV_QUERY_QP_DATA_IN_ORDER_DEVICE_ONLY],
+			[have_ibv_query_qp_data_in_order_device_only=1],
+			[have_ibv_query_qp_data_in_order_device_only=0],
 			[[#include <infiniband/verbs.h>]])
 
 		AC_CHECK_DECL([ibv_reg_dmabuf_mr],
@@ -224,6 +230,9 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES],
 		[$efa_support_data_in_order_aligned_128_byte],
 		[Indicates if EFA supports 128 bytes in-order in writing.])
+	AC_DEFINE_UNQUOTED([HAVE_IBV_QUERY_QP_DATA_IN_ORDER_DEVICE_ONLY],
+		[$have_ibv_query_qp_data_in_order_device_only],
+		[Indicates if IBV_QUERY_QP_DATA_IN_ORDER_DEVICE_ONLY flag is available.])
 	AC_DEFINE_UNQUOTED([HAVE_EFA_DMABUF_MR],
 		[$have_efa_dmabuf_mr],
 		[Indicates if ibv_reg_dmabuf_mr verbs is available])
