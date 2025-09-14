@@ -24,6 +24,12 @@ v2.3.0, Mon September 15, 2025
 
 ## CXI ##
 
+- Fix debug assert in fi_close of counter
+- Fix configure typo
+- Add criterion test flag to configure
+- Return correct error for HTTP 400
+- Fix service allocation
+- Fix bug related exp next seqn
 - Fix bug related concurrent mcast's
 - Fix memory leak
 - Improve multithreaded performance of bound counter operations
@@ -53,6 +59,15 @@ v2.3.0, Mon September 15, 2025
 
 ## EFA ##
 
+- Make implicit AV unbounded by default
+- Increase default efa-direct ibvcq size
+- Fix logging of GID in efa_rdm_cq_lookup_raw_addr
+- Rename efadv_cq_attr db to doorbell
+- Only build EFA provider on applicable linux platforms
+- Fix the pkt type derivation from ope
+- Fix the rx sgl in data path direct
+- Store evicted peers in a hashset and ignore future packets
+- Implement LRU eviction for implicit AV entries
 - Decrement rx_pkts_posted before efa_rdm_pke_release_rx
 - Enable direct data path by default
 - Bypass rdma-core in blocking cq read path
@@ -133,6 +148,7 @@ v2.3.0, Mon September 15, 2025
 
 ## Util ##
 
+- Configure `control_progress` with the user provided progress mode
 - Handle the new address format FI_SOCKADDR_IP
 - Add example directory with first example
 - Get srx lock in the caller of util_foreach_unspec
@@ -145,6 +161,8 @@ v2.3.0, Mon September 15, 2025
 
 ## Fabtests ##
 
+- Add dmabuf support for Neuron memory
+- Add FT_INFO macro
 - Fix `make distcheck` error caused by SUBDIRS
 - efa: Initialize timespec as 0
 - ft_finalize: Serialized sync in ft_finalize.
