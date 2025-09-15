@@ -718,6 +718,20 @@ out:
 	return ret;
 }
 
+
+
+/**
+ * @brief Set CQ ops for counter binding
+ *
+ * @param ep efa_base_ep
+ * @param cq efa_cq to configure
+ */
+static inline void efa_base_ep_set_cq_ops_for_cntr(struct efa_base_ep *ep, struct efa_cq *cq)
+{
+	if (!EFA_INFO_TYPE_IS_RDM(ep->info))
+		cq->util_cq.cq_fid.ops = &efa_cq_ops;
+}
+
 /**
  * @brief Insert tx/rx cq into the cntrs the ep is bind to
  *
@@ -738,15 +752,18 @@ int efa_base_ep_insert_cntr_ibv_cq_poll_list(struct efa_base_ep *ep)
 		util_cntr = ep->util_ep.cntrs[i];
 		if (util_cntr) {
 			efa_cntr = container_of(util_cntr, struct efa_cntr, util_cntr);
+			/* Switch CQ to bypass OFF mode when cntr is bound */
 			if (tx_cq) {
 				ret = efa_ibv_cq_poll_list_insert(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &tx_cq->ibv_cq);
 				if (ret)
 					return ret;
+				efa_base_ep_set_cq_ops_for_cntr(ep, tx_cq);
 			}
 			if (rx_cq) {
 				ret = efa_ibv_cq_poll_list_insert(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &rx_cq->ibv_cq);
 				if (ret)
 					return ret;
+				efa_base_ep_set_cq_ops_for_cntr(ep, rx_cq);
 			}
 			ofi_genlock_lock(&efa_cntr->util_cntr.ep_list_lock);
 			efa_cntr->need_to_scan_ep_list = true;
