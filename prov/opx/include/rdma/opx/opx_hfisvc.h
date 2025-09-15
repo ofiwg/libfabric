@@ -39,7 +39,9 @@
 #include <errno.h>
 #include <assert.h>
 
-#define OPX_HFISVC_ENABLED_DEFAULT (1)
+#ifndef OPX_HFISVC_ENABLED_DEFAULT
+#define OPX_HFISVC_ENABLED_DEFAULT (0)
+#endif
 
 extern int opx_hfisvc_log_enabled;
 
