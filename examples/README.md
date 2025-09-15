@@ -78,3 +78,17 @@ FI_PROVIDER=<prov> ./fi_example_rdm_rma
 ```bash
 FI_PROVIDER=<prov> ./fi_example_rdm_rma <server_addr>
 ```
+
+### fi_example_tcp_socket (tcp_socket.c)
+
+This example uses tcp sockets with a simple server and client to showcase send and receive messages.
+
+#### Server
+```bash
+./fi_example_tcp_socket -s <server_addr>
+```
+
+#### Client
+```bash
+./fi_example_tcp_socket -s <server_addr> -c
+```
