@@ -48,3 +48,18 @@ FI_PROVIDER=<prov> ./fi_example_msg <server_addr>
 address provided to the client must match the provider/interface being used.
 Specifying `FI_PROVIDER` is optional; libfabric will select the fastest
 interface available.
+
+### fi_example_rdm_tagged (rdm_tagged.c)
+
+This example uses `FI_EP_RDM` (reliable, unconnected) with a simple server and
+client to showcase tagged messages.
+
+#### Server
+```bash
+FI_PROVIDER=<prov> ./fi_example_rdm_tagged
+```
+
+#### Client
+```bash
+FI_PROVIDER=<prov> ./fi_example_rdm_tagged <server_addr>
+```
