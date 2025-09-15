@@ -5,7 +5,7 @@ CFLAGS		= -g -O0 $(INCLUDES) $(LIBS)
 LDFLAGS		= -lfabric
 EXEC_PREFIX	= fi_example_
 
-PROGRAMS = rdm msg
+PROGRAMS = rdm msg rdm_tagged
 
 EXECUTABLES = $(addprefix $(EXEC_PREFIX), $(PROGRAMS))
 
