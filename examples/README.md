@@ -28,3 +28,24 @@ FI_PROVIDER=<prov> ./fi_example_rdm <server_addr>
 address provided to the client must match the provider/interface being used.
 Specifying `FI_PROVIDER` is optional; libfabric will select the fastest
 interface available.
+
+### fi_example_msg (msg.c)
+
+This example uses `FI_EP_MSG` (reliable, connected) with a simple server and
+client to execute send and receive.
+
+#### Server
+```bash
+FI_PROVIDER=<prov> ./fi_example_msg
+```
+
+#### Client
+```bash
+FI_PROVIDER=<prov> ./fi_example_msg <server_addr>
+```
+
+> **Note:** The server and client must use the same provider.  The server
+address provided to the client must match the provider/interface being used.
+Specifying `FI_PROVIDER` is optional; libfabric will select the interface
+that is expected to be the most performant. Test only supports providers that
+use FI_SOCKADDR_IN (tcp, verbs)
