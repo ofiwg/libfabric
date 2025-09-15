@@ -64,3 +64,17 @@ FI_PROVIDER=<prov> ./fi_example_rdm_tagged
 ```bash
 FI_PROVIDER=<prov> ./fi_example_rdm_tagged <server_addr>
 ```
+### fi_example_rdm_rma (rdm_rma.c)
+
+This example uses `FI_EP_RDM` (reliable, unconnected) with a simple server and
+client to showcase remote memory access.
+
+#### Server
+```bash
+FI_PROVIDER=<prov> ./fi_example_rdm_rma
+```
+
+#### Client
+```bash
+FI_PROVIDER=<prov> ./fi_example_rdm_rma <server_addr>
+```
