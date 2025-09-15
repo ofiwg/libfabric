@@ -369,10 +369,21 @@ static inline void efa_cq_report_poll_err(struct efa_ibv_cq *cq)
 
 static inline void efa_cq_start_poll(struct efa_ibv_cq *cq)
 {
+	/**
+	 * It is possible that the last efa_cq_readfrom
+	 * is leaving the device cq in a poll active status
+	 * when polling a failed cqe and leave it for the efa_cq_readfrom, efa_cq_readerr
+	 * or efa_cq_poll_ibv_cq to consume it. And efa_cq_poll_ibv_cq
+	 * will call this wrapper at the beginning.
+	 * We shouldn't start poll in this stuation as it will make the
+	 * cqe index shifted and the entry lost.
+	 */
+	if (cq->poll_active)
+		return;
+
 	/* Pass an empty ibv_poll_cq_attr struct (zero-initialized) for
 	 * ibv_start_poll. EFA expects .comp_mask = 0, or otherwise returns EINVAL.
 	 */
-	assert(!cq->poll_active);
 	cq->poll_err = efa_ibv_cq_start_poll(cq, &(struct ibv_poll_cq_attr){0});
 	if (!cq->poll_err)
 		cq->poll_active = true;
