@@ -40,6 +40,11 @@
 static DEFINE_LIST(fabric_list);
 extern struct ofi_common_locks common_locks;
 
+struct util_domain_match_arg {
+	const struct fi_info *info;
+	const struct fi_info *hints;
+};
+
 void ofi_fabric_insert(struct util_fabric *fabric)
 {
 	pthread_mutex_lock(&common_locks.util_fabric_lock);
@@ -154,11 +159,17 @@ void fid_list_remove2(struct dlist_entry *fid_list, struct ofi_genlock *lock,
 static int util_find_domain(struct dlist_entry *item, const void *arg)
 {
 	const struct util_domain *domain;
-	const struct fi_info *info = arg;
+	const struct util_domain_match_arg *match_arg = arg;
+	const struct fi_info *info = match_arg->info;
+	const struct fi_info *hints = match_arg->hints;
+	const char *domain_name;
 
 	domain = container_of(item, struct util_domain, list_entry);
+	domain_name =
+		(hints && hints->domain_attr && hints->domain_attr->name) ?
+			hints->domain_attr->name : info->domain_attr->name;
 
-	return !strcmp(domain->name, info->domain_attr->name) &&
+	return !strcmp(domain->name, domain_name) &&
 		!((info->caps | info->domain_attr->caps) & ~domain->info_domain_caps) &&
 		 (((info->mode | info->domain_attr->mode) &
 		   domain->info_domain_mode) == domain->info_domain_mode) &&
@@ -230,7 +241,10 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 
 	for (; *info; *info = (*info)->next) {
 
-		fabric_info.name = (*info)->fabric_attr->name;
+		fabric_info.name = (hints && hints->fabric_attr &&
+				    hints->fabric_attr->name) ?
+					   hints->fabric_attr->name :
+					   (*info)->fabric_attr->name;
 		fabric_info.prov = util_prov->prov;
 
 		pthread_mutex_lock(&common_locks.util_fabric_lock);
@@ -241,9 +255,10 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 			FI_DBG(prov, FI_LOG_CORE, "Found opened fabric\n");
 			(*info)->fabric_attr->fabric = &fabric->fabric_fid;
 
+			struct util_domain_match_arg match_arg = { *info, hints };
 			ofi_mutex_lock(&fabric->lock);
 			item = dlist_find_first_match(&fabric->domain_list,
-						      util_find_domain, *info);
+						      util_find_domain, &match_arg);
 			if (item) {
 				FI_DBG(prov, FI_LOG_CORE,
 				       "Found open domain\n");
