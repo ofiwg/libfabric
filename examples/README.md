@@ -49,3 +49,18 @@ address provided to the client must match the provider/interface being used.
 Specifying `FI_PROVIDER` is optional; libfabric will select the interface
 that is expected to be the most performant. Test only supports providers that
 use FI_SOCKADDR_IN (tcp, verbs)
+
+### fi_example_rdm_tagged (rdm_tagged.c)
+
+This example uses `FI_EP_RDM` (reliable, unconnected) with a simple server and
+client to showcase tagged messages.
+
+#### Server
+```bash
+FI_PROVIDER=<prov> ./fi_example_rdm_tagged
+```
+
+#### Client
+```bash
+FI_PROVIDER=<prov> ./fi_example_rdm_tagged <server_addr>
+```
