@@ -1538,7 +1538,68 @@ Test(av_auth_key, lookup_without_av_auth_key_set)
 }
 
 /* Insert multiple auth_keys. */
+#ifdef CXI_HAVE_SVC_GET_VNI_RANGE
+#define NUM_VNIS 32U
+#else
 #define NUM_VNIS 4U
+#endif
+#define VNI 64
+
+void service_setup(struct cxil_dev *dev, struct cxi_svc_desc *svc_desc)
+{
+	int ret;
+	struct cxi_svc_fail_info fail_info = {};
+#ifndef CXI_HAVE_SVC_GET_VNI_RANGE
+	int i;
+
+	svc_desc->restricted_vnis = 1;
+	svc_desc->num_vld_vnis = NUM_VNIS;
+
+	for (i = 0; i < NUM_VNIS; i++)
+		svc_desc->vnis[i] = VNI + i;
+#endif
+
+	svc_desc->restricted_members = 1;
+	svc_desc->members[0].type = CXI_SVC_MEMBER_UID;
+	svc_desc->members[0].svc_member.uid = geteuid();
+
+
+	ret = cxil_alloc_svc(dev, svc_desc, &fail_info);
+	cr_assert_gt(ret, 0, "cxil_alloc_svc failed:%d", ret);
+	svc_desc->svc_id = ret;
+
+#ifdef CXI_HAVE_SVC_GET_VNI_RANGE
+	ret = cxil_svc_set_vni_range(dev,
+				    svc_desc->svc_id,
+				    VNI, VNI + NUM_VNIS - 1);
+	if (ret) {
+		int rc;
+		cr_log_info("cxil_svc_set_vni_range failed: %d-%d %d",
+			  VNI, VNI + NUM_VNIS - 1, ret);
+		rc = cxil_destroy_svc(dev, svc_desc->svc_id);
+		cr_assert(rc, "cxil_destroy_svc failed:%d", rc);
+		cr_assert(ret, "cxil_svc_set_vni_range failed: %d-%d %d",
+			  VNI, VNI + NUM_VNIS - 1, ret);
+	}
+
+	ret = cxil_svc_enable(dev, svc_desc->svc_id, false);
+	cr_assert(!ret, "cxil_svc_enable failed disable:%d", ret);
+
+	ret = cxil_svc_set_exclusive_cp(dev, svc_desc->svc_id, true);
+	cr_assert(!ret, "cxil_svc_set_exclusive_cp failed:%d", ret);
+
+	ret = cxil_svc_enable(dev, svc_desc->svc_id, true);
+	cr_assert(!ret, "cxil_svc_enable failed enable:%d", ret);
+#endif
+}
+
+void service_cleanup(struct cxil_dev *dev, struct cxi_svc_desc *svc_desc)
+{
+	int ret;
+	ret = cxil_destroy_svc(dev, svc_desc->svc_id);
+	cr_assert(ret, "cxil_destroy_svc failed:%d", ret);
+}
+
 Test(av_auth_key, insert_lookup_valid_auth_key)
 {
 	struct fi_info *hints;
@@ -1552,23 +1613,13 @@ Test(av_auth_key, insert_lookup_valid_auth_key)
 	size_t auth_key_size;
 	fi_addr_t addr_key;
 	struct cxil_dev *dev;
-	struct cxi_svc_fail_info fail_info = {};
 	struct cxi_svc_desc svc_desc = {};
 	int i;
 
 	ret = cxil_open_device(0, &dev);
 	cr_assert_eq(ret, 0, "cxil_open_device failed: %d", ret);
 
-	svc_desc.restricted_vnis = 1;
-	svc_desc.enable = 1;
-	svc_desc.num_vld_vnis = NUM_VNIS;
-
-	for (i = 0; i < NUM_VNIS; i++)
-		svc_desc.vnis[i] = 123 + i;
-
-	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
-	cr_assert_gt(ret, 0, "cxil_alloc_svc failed: %d", ret);
-	svc_desc.svc_id = ret;
+	service_setup(dev, &svc_desc);
 
 	hints = fi_allocinfo();
 	cr_assert_not_null(hints, "fi_allocinfo failed");
@@ -1587,7 +1638,7 @@ Test(av_auth_key, insert_lookup_valid_auth_key)
 	open_av_auth_key(info, &fab, &dom, &av);
 
 	for (i = 0; i < NUM_VNIS; i++) {
-		auth_key.vni = svc_desc.vnis[i];
+		auth_key.vni = VNI + i;
 
 		ret = fi_av_insert_auth_key(av, &auth_key, sizeof(auth_key),
 					    &addr_key, 0);
@@ -2226,16 +2277,10 @@ Test(av_auth_key, invalid_multiple_auth_keys_per_ep_with_directed_recv_rx_cap)
 	fi_freeinfo(hints);
 }
 
-#define NUM_VNIS 4U
 #define NUM_TX_EPS NUM_VNIS
 
 static struct cxil_dev *dev;
-static struct cxi_svc_desc svc_desc = {
-	.restricted_vnis = 1,
-	.enable = 1,
-	.num_vld_vnis = NUM_VNIS,
-	.vnis = {1234, 1235, 1236, 1237},
-};
+static struct cxi_svc_desc svc_desc = {};
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -2248,12 +2293,11 @@ static fi_addr_t auth_keys[NUM_VNIS];
 static fi_addr_t init_addrs[NUM_TX_EPS];
 
 static char *rx_ep_pid = "0";
-static char *tx_ep_pids[] = {"128", "129", "130", "131"};
 static unsigned int nic_addr;
 
-static struct fid_domain *tx_dom;
-static struct fid_cq *tx_cq;
-static struct fid_av *tx_av;
+static struct fid_domain *tx_dom[NUM_TX_EPS];
+static struct fid_cq *tx_cq[NUM_TX_EPS];
+static struct fid_av *tx_av[NUM_TX_EPS];
 static struct fid_ep *tx_ep[NUM_TX_EPS];
 static volatile uint64_t tx_mr_buf[NUM_TX_EPS];
 static struct fid_mr *tx_mr[NUM_TX_EPS];
@@ -2273,6 +2317,7 @@ static void av_auth_key_test_tx_ep_init(unsigned int num_vnis)
 	int i;
 	struct cxi_auth_key key = {};
 	char node[64];
+	char service[10];
 
 	hints = fi_allocinfo();
 	cr_assert_not_null(hints, "fi_allocinfo failed");
@@ -2284,50 +2329,52 @@ static void av_auth_key_test_tx_ep_init(unsigned int num_vnis)
 	hints->fabric_attr->prov_name = strdup("cxi");
 	cr_assert_not_null(hints->fabric_attr->prov_name, "strdup failed");
 
-	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
-			 NULL, FI_SOURCE, hints, &info);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
-
-	ret = fi_domain(fab, info, &tx_dom, NULL);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_domain failed: %d", ret);
-
-	fi_freeinfo(info);
-
-	ret = fi_cq_open(tx_dom, &cq_attr, &tx_cq, NULL);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_cq_open failed: %d", ret);
-
-	ret = fi_av_open(tx_dom, &av_attr, &tx_av, NULL);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_av_open failed: %d", ret);
-
-	sprintf(node, "%u", nic_addr);
-	ret = fi_av_insertsvc(tx_av, node, rx_ep_pid, &target_addr, 0, NULL);
-	cr_assert_eq(ret, 1, "fi_av_insertsvc failed: %d", ret);
-
 	for (i = 0; i < num_vnis; i++) {
-		key.vni = svc_desc.vnis[i];
+		ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+				 NULL, FI_SOURCE, hints, &info);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+		ret = fi_domain(fab, info, &tx_dom[i], NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_domain failed: %d", ret);
+
+		fi_freeinfo(info);
+
+		ret = fi_cq_open(tx_dom[i], &cq_attr, &tx_cq[i], NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_cq_open failed: %d", ret);
+
+		ret = fi_av_open(tx_dom[i], &av_attr, &tx_av[i], NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_av_open failed: %d", ret);
+
+		sprintf(node, "%u", nic_addr);
+		ret = fi_av_insertsvc(tx_av[i], node, rx_ep_pid, &target_addr, 0,
+				      NULL);
+		cr_assert_eq(ret, 1, "fi_av_insertsvc failed: %d", ret);
+
+		key.vni = VNI + i;
 		key.svc_id = svc_desc.svc_id;
 
 		hints->ep_attr->auth_key = (void *)&key;
 		hints->ep_attr->auth_key_size = sizeof(key);
 
+		sprintf(service, "%d", 128 + i);
 		ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
-				 "cxi0", tx_ep_pids[i], FI_SOURCE, hints,
+				 "cxi0", service, FI_SOURCE, hints,
 				 &info);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
 
-		ret = fi_endpoint(tx_dom, info, &tx_ep[i], NULL);
+		ret = fi_endpoint(tx_dom[i], info, &tx_ep[i], NULL);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_endpoint failed: %d", ret);
 
-		ret = fi_ep_bind(tx_ep[i], &tx_cq->fid, FI_TRANSMIT | FI_RECV);
+		ret = fi_ep_bind(tx_ep[i], &tx_cq[i]->fid, FI_TRANSMIT | FI_RECV);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_ep_bind CQ failed: %d", ret);
 
-		ret = fi_ep_bind(tx_ep[i], &tx_av->fid, 0);
+		ret = fi_ep_bind(tx_ep[i], &tx_av[i]->fid, 0);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_ep_bind AV failed: %d", ret);
 
 		ret = fi_enable(tx_ep[i]);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_enable failed: %d", ret);
 
-		ret = fi_mr_reg(tx_dom, (void *)&tx_mr_buf[i],
+		ret = fi_mr_reg(tx_dom[i], (void *)&tx_mr_buf[i],
 				sizeof(tx_mr_buf[i]),
 				FI_WRITE | FI_READ | FI_REMOTE_WRITE | FI_REMOTE_READ,
 				0, 0, 0, &tx_mr[i], NULL);
@@ -2351,7 +2398,6 @@ static void av_auth_key_test_rx_ep_init(bool source_err, unsigned int num_vnis,
 {
 	struct fi_info *hints;
 	static struct fi_info *info;
-	struct cxi_svc_fail_info fail_info = {};
 	int ret;
 	struct fi_cq_attr cq_attr = {
 		.format = FI_CQ_FORMAT_TAGGED,
@@ -2363,6 +2409,7 @@ static void av_auth_key_test_rx_ep_init(bool source_err, unsigned int num_vnis,
 	struct cxi_auth_key key = {};
 	size_t key_size;
 	char node[64];
+	char service[10];
 
 	/* Need to allocate a service to be used by libfabric. */
 	ret = cxil_open_device(0, &dev);
@@ -2370,9 +2417,7 @@ static void av_auth_key_test_rx_ep_init(bool source_err, unsigned int num_vnis,
 
 	nic_addr = dev->info.nic_addr;
 
-	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
-	cr_assert_gt(ret, 0, "cxil_alloc_svc failed: %d", ret);
-	svc_desc.svc_id = ret;
+	service_setup(dev, &svc_desc);
 
 	hints = fi_allocinfo();
 	cr_assert_not_null(hints, "fi_allocinfo failed");
@@ -2422,7 +2467,7 @@ static void av_auth_key_test_rx_ep_init(bool source_err, unsigned int num_vnis,
 	cr_assert_eq(ret, FI_SUCCESS, "fi_ep_bind AV failed: %d", ret);
 
 	for (i = 0; i < num_vnis; i++) {
-		key.vni = svc_desc.vnis[i];
+		key.vni = VNI + i;
 		key_size = sizeof(key);
 
 		ret = fi_av_insert_auth_key(av, &key, key_size, &auth_keys[i],
@@ -2434,8 +2479,9 @@ static void av_auth_key_test_rx_ep_init(bool source_err, unsigned int num_vnis,
 			continue;
 
 		sprintf(node, "%u", nic_addr);
+		sprintf(service, "%d", 128 + i);
 		init_addrs[i] = auth_keys[i];
-		ret = fi_av_insertsvc(av, node, tx_ep_pids[i], &init_addrs[i],
+		ret = fi_av_insertsvc(av, node, service, &init_addrs[i],
 				      FI_AUTH_KEY, NULL);
 		cr_assert_eq(ret, 1, "fi_av_insertsvc failed: %d", ret);
 	}
@@ -2468,16 +2514,16 @@ static void av_auth_key_tx_ep_fini(unsigned int num_vnis)
 
 		ret = fi_close(&tx_ep[i]->fid);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_close EP failed: %d", ret);
+
+		ret = fi_close(&tx_av[i]->fid);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_close AV failed: %d", ret);
+
+		ret = fi_close(&tx_cq[i]->fid);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_close CQ failed: %d", ret);
+
+		ret = fi_close(&tx_dom[i]->fid);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_close dom failed: %d", ret);
 	}
-
-	ret = fi_close(&tx_av->fid);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_close AV failed: %d", ret);
-
-	ret = fi_close(&tx_cq->fid);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_close CQ failed: %d", ret);
-
-	ret = fi_close(&tx_dom->fid);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_close dom failed: %d", ret);
 }
 
 static void av_auth_key_test_rx_ep_fini(void)
@@ -2542,7 +2588,7 @@ Test(data_transfer_av_auth_key, successful_inject_transfer_source)
 		cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed: %d", ret);
 
 		do {
-			ret = fi_cq_readfrom(tx_cq, &event, 1, &src_addr);
+			ret = fi_cq_readfrom(tx_cq[i], &event, 1, &src_addr);
 		} while (ret == -FI_EAGAIN);
 		cr_assert_eq(ret, 1, "fi_cq_readfrom failed: %d", ret);
 		cr_assert_eq(src_addr, target_addr, "Bad source addr");
@@ -2585,7 +2631,7 @@ Test(data_transfer_av_auth_key, successful_rdzv_transfer_source)
 		cr_assert_eq(src_addr, init_addrs[i], "Bad source addr");
 
 		do {
-			ret = fi_cq_read(tx_cq, &event, 1);
+			ret = fi_cq_read(tx_cq[i], &event, 1);
 		} while (ret == -FI_EAGAIN);
 		cr_assert_eq(ret, 1, "fi_cq_read failed: %d", ret);
 
@@ -2597,7 +2643,7 @@ Test(data_transfer_av_auth_key, successful_rdzv_transfer_source)
 		cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed: %d", ret);
 
 		do {
-			ret = fi_cq_readfrom(tx_cq, &event, 1, &src_addr);
+			ret = fi_cq_readfrom(tx_cq[i], &event, 1, &src_addr);
 		} while (ret == -FI_EAGAIN);
 		cr_assert_eq(ret, 1, "fi_cq_readfrom failed: %d", ret);
 		cr_assert_eq(src_addr, target_addr, "Bad source addr");
@@ -2648,7 +2694,7 @@ Test(data_transfer_av_auth_key, successful_transfer_source_err)
 			     error.src_addr, auth_keys[i]);
 
 		do {
-			ret = fi_cq_read(tx_cq, &event, 1);
+			ret = fi_cq_read(tx_cq[i], &event, 1);
 		} while (ret == -FI_EAGAIN);
 		cr_assert_eq(ret, 1, "fi_cq_read failed: %d", ret);
 	}
@@ -2746,7 +2792,7 @@ Test(data_transfer_av_auth_key, av_user_id_source_err_missing_auth_key_user_id)
 			     error.src_addr, FI_ADDR_UNSPEC);
 
 		do {
-			ret = fi_cq_read(tx_cq, &event, 1);
+			ret = fi_cq_read(tx_cq[i], &event, 1);
 		} while (ret == -FI_EAGAIN);
 		cr_assert_eq(ret, 1, "fi_cq_read failed: %d", ret);
 	}
@@ -2797,7 +2843,7 @@ Test(data_transfer_av_auth_key, av_user_id_source_err_auth_key_user_id)
 			     error.src_addr, user_id[i]);
 
 		do {
-			ret = fi_cq_read(tx_cq, &event, 1);
+			ret = fi_cq_read(tx_cq[i], &event, 1);
 		} while (ret == -FI_EAGAIN);
 		cr_assert_eq(ret, 1, "fi_cq_read failed: %d", ret);
 	}
