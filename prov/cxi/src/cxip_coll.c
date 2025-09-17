@@ -3013,6 +3013,7 @@ struct cxip_join_state {
 
 static int _root_rdma_get_setup(struct cxip_join_state *jstate);
 static int _leaf_rdma_get_setup(struct cxip_join_state *jstate);
+static void free_root_rdma_buffers(struct cxip_ep_obj *ep_obj);
 
 /* State structure for recovering data from CURL response */
 struct cxip_curl_mcast_create_usrptr {
@@ -3179,45 +3180,24 @@ static void _close_mc(struct cxip_coll_mc *mc_obj, bool delete, bool has_error)
 	struct cxip_coll_reduction *reduction;
 	int count;
 	int red_id;
-	bool is_hwroot = false;
 
 	if (!mc_obj)
 		return;
 	TRACE_JOIN("%s starting MC cleanup\n", __func__);
 
-	is_hwroot = is_hw_root(mc_obj);
 	if (!is_netsim(mc_obj->ep_obj)) {
-
-		if(is_hwroot) {
-			/* revisit this, maybe do a barrier instead
-			 * sleep before we cleanup incase we have a rdma read
-			 * in progress at the leaf
-			 */
-			usleep(CXIP_COLL_MAX_RETRY_USEC * CXIP_COLL_MAX_LEAF_TIMEOUT_MULT);
-			TRACE_JOIN("%s root mcast_addr %x %p\n", __func__, mc_obj->mcast_addr, mc_obj);
-			if(mc_obj->root_rdma_get_md) {
-				TRACE_JOIN("%s unmap/free root rdma_get_md %p\n", __func__, mc_obj->root_rdma_get_md);
-				cxip_unmap(mc_obj->root_rdma_get_md);
-			}
-			if(mc_obj->root_rdma_get_data_p) {
-				TRACE_JOIN("%s unmap/free root rdma_get_data_p %p\n", __func__, mc_obj->root_rdma_get_data_p);
-				free(mc_obj->root_rdma_get_data_p);
-			}
-
-		} else {
-
-			TRACE_JOIN("%s leaf mcast_addr %x %p\n", __func__, mc_obj->mcast_addr, mc_obj);
-			if(mc_obj->leaf_rdma_get_md) {
-				TRACE_JOIN("%s unmap/free leaf rdma_get_md %p\n", __func__, mc_obj->leaf_rdma_get_md);
-				cxip_unmap(mc_obj->leaf_rdma_get_md);
-			}
-			if(mc_obj->leaf_rdma_get_data_p) {
-				TRACE_JOIN("%s unmap/free leaf rdma_get_data_p %p\n", __func__, mc_obj->leaf_rdma_get_data_p);
-				free(mc_obj->leaf_rdma_get_data_p);
-			}
-
+		TRACE_JOIN("%s leaf mcast_addr %x %p\n",
+			__func__, mc_obj->mcast_addr, mc_obj);
+		if(mc_obj->leaf_rdma_get_md) {
+			TRACE_JOIN("%s unmap/free leaf rdma_get_md %p\n",
+				__func__, mc_obj->leaf_rdma_get_md);
+			cxip_unmap(mc_obj->leaf_rdma_get_md);
 		}
-
+		if(mc_obj->leaf_rdma_get_data_p) {
+			TRACE_JOIN("%s unmap/free leaf rdma_get_data_p %p\n",
+				__func__, mc_obj->leaf_rdma_get_data_p);
+			free(mc_obj->leaf_rdma_get_data_p);
+		}
 	}
 	for (red_id = 0; red_id < CXIP_COLL_MAX_CONCUR; red_id++) {
 		reduction = &mc_obj->reduction[red_id];
@@ -4296,8 +4276,12 @@ static void _start_rdma_init(void *ptr) {
 
 	/* if mc_obj is NULL, _finish_bcast did not complete normally */
 	if(mc_obj) {
-		TRACE_JOIN("%s num_mc %d\n", __func__, ofi_atomic_get32(&ep_obj->coll.num_mc));
-		TRACE_JOIN("%s mcast_id %x %p\n", __func__, mc_obj->mcast_addr, mc_obj);
+		TRACE_JOIN("%s num_mc %d\n", __func__,
+			ofi_atomic_get32(&ep_obj->coll.num_mc));
+		TRACE_JOIN("%s num_joins %d\n", __func__,
+			ofi_atomic_get32(&ep_obj->coll.join_cnt));
+		TRACE_JOIN("%s mcast_id %x %p\n", __func__,
+			mc_obj->mcast_addr, mc_obj);
 		is_hwroot = is_hw_root(mc_obj);
 		data = mc_obj->mcast_addr;
 	} else {
@@ -5003,11 +4987,14 @@ void cxip_coll_close(struct cxip_ep_obj *ep_obj)
 {
 	struct cxip_coll_mc *mc_obj;
 
+	TRACE_JOIN("%s Entering\n", __func__);
 	while (!dlist_empty(&ep_obj->coll.mc_list)) {
+		TRACE_JOIN("%s Calling _close_mc\n", __func__);
 		dlist_pop_front(&ep_obj->coll.mc_list,
 				struct cxip_coll_mc, mc_obj, entry);
 		_close_mc(mc_obj, false, true);
 	}
+	free_root_rdma_buffers(ep_obj);
 }
 
 /**
@@ -5115,6 +5102,24 @@ int cxip_coll_disable(struct cxip_ep_obj *ep_obj)
 	return FI_SUCCESS;
 }
 
+static void free_root_rdma_buffers(struct cxip_ep_obj *ep_obj)
+{
+	/* safely free collectives rdma root buffers, pay 1 time wait penalty */
+	if(ep_obj->coll.root_rdma_get_data_p) {
+		usleep(CXIP_COLL_MAX_RETRY_USEC * CXIP_COLL_MAX_LEAF_TIMEOUT_MULT);
+		/* safe to free buffer */
+		TRACE_JOIN("%s unmap/free root rdma_get_data_p %p\n",
+			__func__, ep_obj->coll.root_rdma_get_data_p);
+		free(ep_obj->coll.root_rdma_get_data_p);
+		if(ep_obj->coll.root_rdma_get_md) {
+			TRACE_JOIN("%s unmap/free root rdma_get_md %p\n",
+				__func__, ep_obj->coll.root_rdma_get_md);
+			cxip_unmap(ep_obj->coll.root_rdma_get_md);
+		}
+
+	}
+
+}
 static int _root_rdma_get_setup(struct cxip_join_state *jstate)
 {
 	struct cxip_ep_obj *ep_obj;
@@ -5136,11 +5141,24 @@ static int _root_rdma_get_setup(struct cxip_join_state *jstate)
 	ep_obj = jstate->ep_obj;
 	mc_obj = jstate->mc_obj;
 	dom = ep_obj->domain;
-	mc_obj->rdma_get_lac_va_tx = 0;
-	mc_obj->root_rdma_get_data_p = calloc(1, len);
-	buf = mc_obj->root_rdma_get_data_p;
+	if(ep_obj->coll.root_rdma_get_data_p) {
+		TRACE_DEBUG("%s Copy rdma get base pntr mcast_id %x\n",
+			__func__, mc_obj->mcast_addr);
+		mc_obj->root_rdma_get_data_p = ep_obj->coll.root_rdma_get_data_p;
+		mc_obj->root_rdma_get_md = ep_obj->coll.root_rdma_get_md;
+		mc_obj->rdma_get_lac_va_tx = ep_obj->coll.rdma_get_lac_va_tx;
+		TRACE_DEBUG("%s: rdma get base pntr %p\n", __func__,
+			mc_obj->root_rdma_get_data_p);
+		TRACE_DEBUG("%s: final lac|va %16lx\n", __func__,
+			mc_obj->rdma_get_lac_va_tx);
+		return FI_SUCCESS;
+	}
+	ep_obj->coll.rdma_get_lac_va_tx = 0;
+	ep_obj->coll.root_rdma_get_data_p = calloc(1, len);
+	mc_obj->root_rdma_get_data_p = ep_obj->coll.root_rdma_get_data_p;
+	buf = ep_obj->coll.root_rdma_get_data_p;
 	if(!buf) {
-		TRACE_DEBUG("%s: Unable to calloc RDMA get base pointer\n", __func__);
+		TRACE_DEBUG("%s: Unable to calloc rdma get base pointer\n", __func__);
 		return FI_ENOMEM;
 	}
 	pkt_p = (struct red_pkt_64 *)buf;
@@ -5149,16 +5167,18 @@ static int _root_rdma_get_setup(struct cxip_join_state *jstate)
 		data = (uint32_t *)&pkt_p[index];
 		data[0] = (tag<<16);
 		data[0] |= index;
-		TRACE_DEBUG("%s: pkt addr %p index %d data[0] - %08x\n", __func__, data, index, data[0]);
+		TRACE_DEBUG("%s: pkt addr %p index %d data[0] - %08x\n",
+			__func__, data, index, data[0]);
 	}
-	TRACE_DEBUG("%s: RDMA get base pointer %p\n", __func__, ((void *)buf));
+	TRACE_DEBUG("%s: rdma get base pntr %p mcast_id %x\n",
+		__func__, ((void *)buf), mc_obj->mcast_addr);
 	/* setup code needs to be envoked holding the endpoint lock */
 	lock_held = ofi_genlock_held(&ep_obj->lock);
 	TRACE_DEBUG("%s: ep lock held status %d\n", __func__, lock_held);
 	if(!lock_held)
 		ofi_genlock_lock(&ep_obj->lock);
 
-	ret = cxip_map(dom, buf, len, CXI_MAP_READ, 0, &mc_obj->root_rdma_get_md);
+	ret = cxip_map(dom, buf, len, CXI_MAP_READ, 0, &ep_obj->coll.root_rdma_get_md);
 	if (ret != FI_SUCCESS) {
 		TRACE_DEBUG("%s: cxip_map() failed! %d\n", __func__, ret);
 		if(!lock_held)
@@ -5168,25 +5188,29 @@ static int _root_rdma_get_setup(struct cxip_join_state *jstate)
 		TRACE_DEBUG("%s: cxip_map() success! %d\n", __func__, ret);
 
 	/* we unmap it in _close_mc */
-	cxip_md = mc_obj->root_rdma_get_md;
+	cxip_md = ep_obj->coll.root_rdma_get_md;
+	mc_obj->root_rdma_get_md = cxip_md;
 	iova = CXI_VA_TO_IOVA(cxip_md->md, buf);
 	/* Build the LAC used by the leafs, first save the virtual address */
-	mc_obj->rdma_get_lac_va_tx = iova;
+	ep_obj->coll.rdma_get_lac_va_tx = iova;
 	TRACE_DEBUG("%s: virtual address %16lx\n", __func__, iova);
 	/* we use default protocol, so all we need is the LAC, stuff that in the upper 3 bits,0-7 ordinal */
 	lac = cxip_md->md->lac;
 	TRACE_DEBUG("%s: LAC %16lx\n", __func__, lac);
-	mc_obj->rdma_get_lac_va_tx |= (lac<<61);
-	TRACE_DEBUG("%s: final lac|va %16lx\n", __func__, mc_obj->rdma_get_lac_va_tx);
+	ep_obj->coll.rdma_get_lac_va_tx |= (lac<<61);
+	mc_obj->rdma_get_lac_va_tx = ep_obj->coll.rdma_get_lac_va_tx;
+	TRACE_DEBUG("%s: final lac|va %16lx\n", __func__, ep_obj->coll.rdma_get_lac_va_tx);
 	txc = container_of(ep_obj->txc, struct cxip_txc_hpc, base);
 	ret = cxip_rdzv_pte_src_req_alloc(txc->rdzv_pte, cxip_md->md->lac);
 	if (ret != FI_SUCCESS) {
-		TRACE_DEBUG("%s: cxip_rdzv_pte_src_req_alloc() failed! %d\n", __func__, ret);
+		TRACE_DEBUG("%s: cxip_rdzv_pte_src_req_alloc() failed! %d\n",
+			__func__, ret);
 		if(!lock_held)
 			ofi_genlock_unlock(&ep_obj->lock);
 		return ret;
 	} else
-		TRACE_DEBUG("%s: cxip_rdzv_pte_src_req_alloc() success! %d\n", __func__, ret);
+		TRACE_DEBUG("%s: cxip_rdzv_pte_src_req_alloc() success! %d\n",
+			__func__, ret);
 
 	if(!lock_held)
 		ofi_genlock_unlock(&ep_obj->lock);
@@ -5214,7 +5238,8 @@ static int _leaf_rdma_get_setup(struct cxip_join_state *jstate)
 		TRACE_DEBUG("%s: Unable to calloc RDMA get base pointer\n", __func__);
 		return FI_ENOMEM;
 	}
-	TRACE_DEBUG("%s: leaf rdma get dest buffers allocated\n", __func__);
+	TRACE_DEBUG("%s: leaf rdma get dest buffers allocated mcast_id %x\n",
+		__func__, mc_obj->mcast_addr);
 	/* map the local buffer for the read */
 	ret = cxip_map(dom, buf, len, CXI_MAP_WRITE, 0, &mc_obj->leaf_rdma_get_md);
 	if (ret != FI_SUCCESS)
