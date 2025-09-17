@@ -5569,6 +5569,10 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+	uint64_t *payload = replay->payload;
+	for (int i = 0; i < (sizeof(union opx_hfisvc_iov) >> 3); i++) {
+		payload[i] = hfisvc_iov.qws[i];
+	}
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay,
 							     OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_JKR);
