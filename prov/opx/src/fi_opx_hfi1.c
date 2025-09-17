@@ -4397,6 +4397,15 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 		       const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
 		       const enum opx_hfi1_type hfi1_type)
 {
+	if (dput_opcode == FI_OPX_HFI_DPUT_OPCODE_PUT_CQ) {
+		struct fi_opx_completion_counter *cc = ((struct fi_opx_rma_request *) rma_request_vaddr)->cc;
+		if (cc->byte_counter == 0) {
+			OPX_BUF_FREE((struct fi_opx_rma_request *) rma_request_vaddr);
+			cc->hit_zero(cc);
+			return NULL;
+		}
+	}
+
 	union fi_opx_hfi1_deferred_work *work	= ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	struct fi_opx_hfi1_dput_params	*params = &work->dput;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021,2024 Cornelis Networks.
+ * Copyright (C) 2021,2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -139,7 +139,7 @@ static inline void flight_recorder_dump_packet_payload(struct flight_recorder_en
 	}
 }
 
-static inline void flight_recorder_dump(struct flight_recorder *fr)
+static inline void flight_recorder_dump(struct fi_opx_ep *opx_ep, struct flight_recorder *fr)
 {
 	const unsigned	count = fr->count;
 	struct timespec current_time;
@@ -147,11 +147,12 @@ static inline void flight_recorder_dump(struct flight_recorder *fr)
 	if (!fr->timer->cycle_timer.use_cycle_timer) {
 		current_time = fr->now->tp;
 		fprintf(stderr,
+			"#FLIGHT_RECORDER t%d |EP: %p\n"
 			"#FLIGHT_RECORDER t%d |Last Dump Time: %ld.%ld\n"
 			"#FLIGHT_RECORDER t%d |Current   Time: %ld.%ld\n"
 			"#FLIGHT_RECORDER t%d |Entry Count   : %u\n",
-			fr->tid, fr->last_dump.tv_sec, fr->last_dump.tv_nsec, fr->tid, current_time.tv_sec,
-			current_time.tv_nsec, fr->tid, count);
+			fr->tid, opx_ep, fr->tid, fr->last_dump.tv_sec, fr->last_dump.tv_nsec, fr->tid,
+			current_time.tv_sec, current_time.tv_nsec, fr->tid, count);
 		fr->last_dump = current_time;
 		if (count == 0) {
 			fr->last_dump = current_time;
@@ -159,11 +160,13 @@ static inline void flight_recorder_dump(struct flight_recorder *fr)
 		}
 	} else {
 		fprintf(stderr,
+			"#FLIGHT_RECORDER t%d |EP: %p\n"
 			"#FLIGHT_RECORDER t%d |Last Dump Time: %0.9lf\n"
 			"#FLIGHT_RECORDER t%d |Current   Time: %0.9lf\n"
 			"#FLIGHT_RECORDER t%d |Entry Count   : %u\n",
-			fr->tid, fr->last_dump_cycles * fr->timer->cycle_timer.picos_per_cycle / 1e12, fr->tid,
-			fr->now->cycle_timer.cycles * fr->timer->cycle_timer.picos_per_cycle / 1e12, fr->tid, count);
+			fr->tid, opx_ep, fr->tid, fr->last_dump_cycles * fr->timer->cycle_timer.picos_per_cycle / 1e12,
+			fr->tid, fr->now->cycle_timer.cycles * fr->timer->cycle_timer.picos_per_cycle / 1e12, fr->tid,
+			count);
 		fr->last_dump_cycles = fr->now->cycle_timer.cycles;
 		if (count == 0) {
 			fr->last_dump_cycles = fr->now->cycle_timer.cycles;
@@ -199,7 +202,7 @@ static inline void flight_recorder_dump(struct flight_recorder *fr)
 	fr->count = 0;
 }
 
-#define FLIGHT_RECORDER_STRING(fr, event_id, format, ...)                                                              \
+#define FLIGHT_RECORDER_STRING(ep, fr, event_id, format, ...)                                                          \
 	{                                                                                                              \
 		struct flight_recorder_entry *next =                                                                   \
 			flight_recorder_init_next_entry((fr), (event_id), FR_ENTRY_TYPE_STRING);                       \
@@ -207,25 +210,25 @@ static inline void flight_recorder_dump(struct flight_recorder *fr)
 		int end_of_string	  = MIN(actual_len, FLIGHT_RECORDER_ENTRY_DATA_LEN - 1);                       \
 		next->data[end_of_string] = 0;                                                                         \
 		if ((fr)->count + 1 == FLIGHT_RECORDER_ENTRY_COUNT)                                                    \
-			flight_recorder_dump((fr));                                                                    \
+			flight_recorder_dump(ep, fr);                                                                  \
 	}
 
-#define FLIGHT_RECORDER_PACKET_HDR(fr, event_id, packet_hdr)                                                       \
+#define FLIGHT_RECORDER_PACKET_HDR(ep, fr, event_id, packet_hdr)                                                   \
 	{                                                                                                          \
 		struct flight_recorder_entry *next =                                                               \
 			flight_recorder_init_next_entry((fr), (event_id), FR_ENTRY_TYPE_PACKET_HDR);               \
 		memcpy((void *) next->data, (void *) &(packet_hdr), sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B)); \
 		if ((fr)->count + 1 == FLIGHT_RECORDER_ENTRY_COUNT)                                                \
-			flight_recorder_dump((fr));                                                                \
+			flight_recorder_dump(ep, fr);                                                              \
 	}
 
-#define FLIGHT_RECORDER_PACKET(fr, event_id, packet)                                                       \
+#define FLIGHT_RECORDER_PACKET(ep, fr, event_id, packet)                                                   \
 	{                                                                                                  \
 		struct flight_recorder_entry *next =                                                       \
 			flight_recorder_init_next_entry((fr), (event_id), FR_ENTRY_TYPE_PACKET);           \
 		memcpy((void *) next->data, (void *) &(packet), sizeof(union fi_opx_hfi1_packet_payload)); \
 		if ((fr)->count + 1 == FLIGHT_RECORDER_ENTRY_COUNT)                                        \
-			flight_recorder_dump((fr));                                                        \
+			flight_recorder_dump(ep, fr);                                                      \
 	}
 
 #define FLIGHT_RECORDER_INIT(fr)          \
@@ -235,9 +238,9 @@ static inline void flight_recorder_dump(struct flight_recorder *fr)
 
 #else /* !FLIGHT_RECORDER_ENABLE */
 
-#define FLIGHT_RECORDER_STRING(fr, event_id, format, ...)
-#define FLIGHT_RECORDER_PACKET_HDR(fr, event_id, packet_hdr)
-#define FLIGHT_RECORDER_PACKET(fr, event_id, packet)
+#define FLIGHT_RECORDER_STRING(ep, fr, event_id, format, ...)
+#define FLIGHT_RECORDER_PACKET_HDR(ep, fr, event_id, packet_hdr)
+#define FLIGHT_RECORDER_PACKET(ep, fr, event_id, packet)
 
 #endif /* #ifdef FLIGHT_RECORDER_ENABLE */
 

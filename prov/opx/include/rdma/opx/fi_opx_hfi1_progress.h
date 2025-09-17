@@ -376,7 +376,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, ui
 			*p_last_egrbfr_index = egrbfr_index;
 		}
 
-		FLIGHT_RECORDER_PACKET_HDR(opx_ep->fr, FR_EVENT_HFI1_POLL_ONCE, hdr);
+		FLIGHT_RECORDER_PACKET_HDR(opx_ep, opx_ep->fr, FR_EVENT_HFI1_POLL_ONCE, hdr);
 	}
 
 	*p_rhf_seq   = OPX_RHF_SEQ_INCREMENT(rhf_seq, hfi1_type);
