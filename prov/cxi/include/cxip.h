@@ -1670,6 +1670,12 @@ struct cxip_ep_coll_obj {
 	struct dlist_entry leaf_rdma_get_list;
 	/* used to change ctrl_msg_type to CXIP_CTRL_MSG_ZB_DATA_RDMA_LAC */
 	bool leaf_save_root_lac;
+	/* Logical address context for leaf rdma get */
+	uint64_t rdma_get_lac_va_tx;
+	/* pointer to the source buffer base used in the RDMA */
+	uint8_t *root_rdma_get_data_p;
+	/* root rdma get memory descriptor, for entire root src buffer */
+	struct cxip_md *root_rdma_get_md;
 };
 
 /* Receive context state machine.
