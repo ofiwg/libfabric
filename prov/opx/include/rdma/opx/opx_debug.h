@@ -45,6 +45,7 @@ struct opx_debug_ep_entry {
 
 void opx_debug_ep_list_append(void *opx_ep);
 void opx_debug_ep_list_free(void *opx_ep);
+void opx_debug_ep_list_dump();
 void opx_debug_install_handler();
 
 #endif
