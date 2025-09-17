@@ -2007,7 +2007,11 @@ void fi_opx_ep_rx_process_header_rma_rts(struct fi_opx_ep *opx_ep, const union o
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		abort();
 	}
-	slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
+	if (context->len) {
+		slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
+	} else { /* length is 0, there will be no RZV data sent, so post now */
+		slist_insert_tail((struct slist_entry *) context, rx->cq_completed_ptr);
+	}
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RMA-RTS");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2831,11 +2835,13 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 			if (prev) {
 				prev->next = context->next;
 			} else {
+				assert(opx_ep->rx->queue[kind].mq.head == (struct slist_entry *) context);
 				opx_ep->rx->queue[kind].mq.head = (struct slist_entry *) context->next;
 			}
 
 			if (context->next == NULL) {
-				opx_ep->rx->queue[kind].mq.tail = NULL;
+				assert(opx_ep->rx->queue[kind].mq.tail == (struct slist_entry *) context);
+				opx_ep->rx->queue[kind].mq.tail = (struct slist_entry *) prev;
 			}
 
 			context->next = NULL;
