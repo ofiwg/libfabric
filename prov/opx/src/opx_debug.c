@@ -424,13 +424,18 @@ void opx_debug_ep_list_free(void *opx_ep)
 	}
 }
 
-static void opx_debug_signal_handler(int signum, siginfo_t *info, void *ucontext)
+void opx_debug_ep_list_dump()
 {
 	struct opx_debug_ep_entry *entry = (struct opx_debug_ep_entry *) ep_list.head;
 	while (entry) {
 		opx_debug_dump_endpoint((struct fi_opx_ep *) entry->ep);
 		entry = entry->next;
 	}
+}
+
+static void opx_debug_signal_handler(int signum, siginfo_t *info, void *ucontext)
+{
+	opx_debug_ep_list_dump();
 
 	if (prev_sig_handler && prev_sig_handler != SIG_DFL && prev_sig_handler != SIG_IGN) {
 		prev_sig_handler(signum);
