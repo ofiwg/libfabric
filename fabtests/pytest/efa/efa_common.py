@@ -158,7 +158,7 @@ def get_efa_device_names(server_id):
     timeout = 60
 
     # This command returns a list of EFA devices names
-    command = "ssh {} /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM -f efa | grep domain".format(server_id)
+    command = "ssh {} fi_info -p efa -t FI_EP_RDM -f efa | grep domain".format(server_id)
     proc = subprocess.run(command, shell=True,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8", timeout=timeout)
