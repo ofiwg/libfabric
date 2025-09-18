@@ -28,3 +28,19 @@ FI_PROVIDER=<prov> ./fi_example_rdm <server_addr>
 address provided to the client must match the provider/interface being used.
 Specifying `FI_PROVIDER` is optional; libfabric will select the fastest
 interface available.
+
+### fi_example_tcp_socket (tcp_socket.c)
+
+This example shows a simple tcp socket client and server communication. 
+This is not a libfabric example, but simple client-server communication
+with sockets.
+
+### fi_example_msg (msg.c)
+
+This example uses FI_EP_MSG endpoint and does send/receive between client
+and server
+
+### fi_example_rdm_rma (rdm_rma.c)
+
+This example uses FI_EP_RDM endpoint to do rma write and read. 
+OOB (Out of Band) socket connection is established to exchange keys
