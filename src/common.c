@@ -470,7 +470,7 @@ sa_ib:
 			     *((uint64_t *)addr + 2), *((uint64_t *)addr + 3));
 		break;
 	case FI_ADDR_OPX:
-		size = snprintf(buf, *len, "fi_addr_opx://%016lx", *(uint64_t *)addr);
+		size = snprintf(buf, *len, "fi_addr_opx://%016" PRIx64, *(uint64_t *)addr);
 		break;
 	case FI_ADDR_MLX:
 		size = snprintf(buf, *len, "fi_addr_mlx://%p", addr);
