@@ -332,6 +332,8 @@ void test_efa_rma_writedata();
 void test_efa_rma_inject_write();
 void test_efa_rma_inject_writedata();
 void test_efa_rma_writemsg_with_inject();
+void test_efa_rma_readv_multiple_iov_einval();
+void test_efa_rma_writev_multiple_iov_einval();
 void test_efa_cq_read_no_completion();
 void test_efa_cq_read_send_success();
 void test_efa_cq_read_senddata_success();
