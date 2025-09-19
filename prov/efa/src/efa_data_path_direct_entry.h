@@ -318,6 +318,11 @@ static inline void efa_data_path_direct_wr_set_sge_list(struct efa_qp *efa_qp,
 		break;
 	case EFA_IO_RDMA_READ:
 	case EFA_IO_RDMA_WRITE:
+		if (OFI_UNLIKELY(num_sge > EFA_DEVICE_MAX_RDMA_SGE)) {
+			EFA_WARN(FI_LOG_EP_DATA, "EFA device doesn't support > %d iov for rdma operations\n", EFA_DEVICE_MAX_RDMA_SGE);
+			qp->wr_session_err = EINVAL;
+			return;
+		}
 		rdma_req = &tx_wqe->data.rdma_req;
 		rdma_req->remote_mem.length =
 			efa_sge_total_bytes(sg_list, num_sge);
