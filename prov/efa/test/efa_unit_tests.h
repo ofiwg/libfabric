@@ -374,6 +374,11 @@ void test_efa_rdm_ep_data_path_direct_disabled();
 void test_efa_ep_lock_type_no_op();
 void test_efa_ep_lock_type_mutex();
 
+/* begin efa_unit_test_data_path_direct.c */
+void test_efa_data_path_direct_rdma_read_multiple_sge_fail();
+void test_efa_data_path_direct_rdma_write_multiple_sge_fail();
+/* end efa_unit_test_data_path_direct.c */
+
 
 void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
