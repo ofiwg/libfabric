@@ -56,8 +56,10 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 		ofi_total_iov_len(msg->msg_iov, msg->iov_count),
 		msg->addr, (size_t) msg->context, flags);
 
-	assert(msg->iov_count > 0 &&
-	       msg->iov_count <= base_ep->domain->info->tx_attr->iov_limit);
+	if (OFI_UNLIKELY(msg->iov_count > base_ep->domain->device->ibv_attr.max_sge_rd)) {
+		EFA_WARN(FI_LOG_EP_DATA, "EFA device currently doesn't support > %d iov for rdma work request\n", base_ep->domain->device->ibv_attr.max_sge_rd);
+		return -FI_EINVAL;
+	}
 	assert(msg->rma_iov_count > 0 &&
 	       msg->rma_iov_count <= base_ep->domain->info->tx_attr->rma_iov_limit);
 	assert(ofi_total_iov_len(msg->msg_iov, msg->iov_count) <=
@@ -205,6 +207,11 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		EFA_WARN(FI_LOG_EP_DATA,
 			 "FI_INJECT is not supported by efa rma yet.\n");
 		return -FI_ENOSYS;
+	}
+
+	if (OFI_UNLIKELY(msg->iov_count > base_ep->domain->device->ibv_attr.max_sge_rd)) {
+		EFA_WARN(FI_LOG_EP_DATA, "EFA device currently doesn't support > %d iov for rdma work request\n", base_ep->domain->device->ibv_attr.max_sge_rd);
+		return -FI_EINVAL;
 	}
 
 	efa_tracepoint(write_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
