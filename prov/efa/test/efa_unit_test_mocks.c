@@ -163,6 +163,17 @@ int efa_mock_efa_ibv_cq_next_poll_use_saved_send_wr_with_mock_status(struct efa_
 	return efa_mock_use_saved_send_wr(ibv_cq->ibv_cq_ex, mock());
 }
 
+int efa_mock_efa_ibv_cq_next_poll_simulate_status_change(struct efa_ibv_cq *ibv_cq)
+{
+	struct ibv_cq_ex *ibv_cqx = ibv_cq->ibv_cq_ex;
+
+	/* Get status and context from mock parameters */
+	ibv_cqx->status = mock();
+	ibv_cqx->wr_id = (uintptr_t)mock();
+
+	return mock();
+}
+
 void efa_mock_efa_ibv_cq_end_poll_check_mock(struct efa_ibv_cq *ibv_cq)
 {
 	mock();
