@@ -21,6 +21,24 @@ static inline int efa_rma_check_cap(struct efa_base_ep *base_ep) {
 	return -FI_EOPNOTSUPP;
 }
 
+/**
+ * @brief Check whether the device supports the given iov_count for rdma work request
+ *
+ * @param base_ep pointer of efa_base_ep
+ * @param count the iov count of the msg
+ * @return int 0 on success, -FI_EOPNOTSUPP on failure
+ */
+static inline int efa_rma_check_iov_count(struct efa_base_ep *base_ep, size_t count)
+{
+	size_t max_sge = MIN(EFA_DEVICE_MAX_RDMA_SGE, base_ep->domain->device->ibv_attr.max_sge_rd);
+
+	if (OFI_UNLIKELY(count > max_sge)) {
+		EFA_WARN(FI_LOG_EP_DATA, "EFA device currently doesn't support > %zu iov for rdma work request\n", max_sge);
+		return -FI_EOPNOTSUPP;
+	}
+	return 0;
+}
+
 /*
  * efa_rma_post_read() will post a read request.
  *
@@ -56,8 +74,6 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 		ofi_total_iov_len(msg->msg_iov, msg->iov_count),
 		msg->addr, (size_t) msg->context, flags);
 
-	assert(msg->iov_count > 0 &&
-	       msg->iov_count <= base_ep->domain->info->tx_attr->iov_limit);
 	assert(msg->rma_iov_count > 0 &&
 	       msg->rma_iov_count <= base_ep->domain->info->tx_attr->rma_iov_limit);
 	assert(ofi_total_iov_len(msg->msg_iov, msg->iov_count) <=
@@ -124,6 +140,10 @@ ssize_t efa_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg, uin
 	if (err)
 		return err;
 
+	err = efa_rma_check_iov_count(base_ep, msg->iov_count);
+	if (err)
+		return err;
+
 	return efa_rma_post_read(base_ep, msg, flags | base_ep->util_ep.tx_msg_flags);
 }
 
@@ -140,6 +160,10 @@ ssize_t efa_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **des
 
 	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	err = efa_rma_check_cap(base_ep);
+	if (err)
+		return err;
+
+	err = efa_rma_check_iov_count(base_ep, iov_count);
 	if (err)
 		return err;
 
@@ -277,6 +301,10 @@ ssize_t efa_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	if (err)
 		return err;
 
+	err = efa_rma_check_iov_count(base_ep, msg->iov_count);
+	if (err)
+		return err;
+
 	return efa_rma_post_write(base_ep, msg, flags | base_ep->util_ep.tx_msg_flags);
 }
 
@@ -292,6 +320,10 @@ ssize_t efa_rma_writev(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	err = efa_rma_check_cap(base_ep);
+	if (err)
+		return err;
+
+	err = efa_rma_check_iov_count(base_ep, iov_count);
 	if (err)
 		return err;
 
