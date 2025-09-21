@@ -54,6 +54,8 @@
 #define	MAGIC		0x677d
 #define	TIMER_UNSET	-1
 
+static inline void _set_arm_expires(struct cxip_coll_reduction *reduction);
+
 /****************************************************************************
  * Metrics for evaluating collectives
  */
@@ -1061,6 +1063,7 @@ static void _coll_rx_progress(struct cxip_req *req,
 	if (pkt->hdr.seqno == CXIP_COLL_MOD_SEQNO) {
 		TRACE_PKT("pre-rearm pkt dropped\n");
 		CXIP_INFO("pre-rearm pkt dropped\n");
+		_set_arm_expires(reduction);
 		return;
 	}
 
