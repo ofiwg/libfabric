@@ -65,6 +65,8 @@ struct cuda_ops {
 	CUresult (*cuDeviceGetAttribute)(int* pi,
 					 CUdevice_attribute attrib, CUdevice dev);
 	CUresult (*cuDeviceGet)(CUdevice* device, int ordinal);
+	CUresult (*cuDeviceGetName)(char* name, int len, CUdevice dev);
+	CUresult (*cuDriverGetVersion)(int* driverVersion);
 	CUresult (*cuMemGetAddressRange)( CUdeviceptr* pbase,
 					  size_t* psize, CUdeviceptr dptr);
 };
@@ -73,6 +75,8 @@ static struct cuda_ops cuda_ops;
 static void *cudart_handle;
 static void *cuda_handle;
 static bool dmabuf_supported;
+static bool p2p_supported;
+static cuda_memory_support_e cuda_memory_support = CUDA_MEMORY_SUPPORT__NOT_INITIALIZED;
 
 /**
  * Since function names can get redefined in cuda.h/cuda_runtime.h files,
@@ -113,43 +117,134 @@ static int ft_cuda_pointer_set_attribute(void *buf)
 }
 
 /**
- * @brief detect dmabuf support in the current platform
- * This checks the dmabuf support in the current platform
- * by querying the property of cuda device 0
+ * @brief Detect CUDA memory transport support (dma-buf vs P2P)
  *
- * @return  FI_SUCCESS if dmabuf support check is successful
- *         -FI_EIO upon CUDA API error
+ * This routine queries device 0 for:
+ *   - CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED
+ *   - CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_SUPPORTED
+ *   - CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR
+ *
+ * Logic is derived from CUDA 13.0 release notes and Blackwell compatibility guide:
+ *   - https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TYPES.html
+ *   - https://docs.nvidia.com/cuda/blackwell-compatibility-guide/
+ *   - https://developer.nvidia.com/blog/cuda-toolkit-12-8-delivers-nvidia-blackwell-support/
+ *
+ * NVIDIA deprecated GPUDirect RDMA (nv-p2p APIs) starting with Blackwell
+ * (compute capability >= 10). Applications must migrate to dma-buf.
+ *
+ * Truth table for effective support (device memory only):
+ *
+ *  DMA_BUF   GPU_DIRECT_RDMA   Result
+ *  -------   ----------------  ------------------------
+ *     0            0           UNKNOWN
+ *     0            1           P2P_ONLY
+ *     1            0           DMA_BUF_ONLY
+ *     1            1           DMA_P2P_BOTH
+ *
+ * Note:
+ *  - CU_DEVICE_ATTRIBUTE_HOST_ALLOC_DMA_BUF_SUPPORTED is orthogonal and
+ *    indicates whether cudaHostAlloc() memory can be exported as dma-buf.
+ *  - On compute capability >= 10 (Blackwell), we force GPU_DIRECT_RDMA=0
+ *    regardless of attribute value to align with the deprecation notice.
+ *
+ * @return FI_SUCCESS on success
+ *        -FI_EIO on CUDA API error
+ *        Sets global flags dmabuf_supported, p2p_supported, and cuda_memory_support.
  */
-static int ft_cuda_hmem_detect_dmabuf_support(void)
+static int ft_cuda_detect_memory_support(void)
 {
-	dmabuf_supported = false;
 #if HAVE_CUDA_DMABUF
-	CUresult cuda_ret;
-	CUdevice dev;
-	int is_supported = 0;
+    CUresult cuda_ret;
+    CUdevice dev;
+    int cc_major = 0, cc_minor = 0;
+    int dma_buf_attr = 0;
+    int p2p_attr = 0;
+    cuda_memory_support = CUDA_MEMORY_SUPPORT__NOT_INITIALIZED;
+    
 
-	cuda_ret = cuda_ops.cuDeviceGet(&dev, 0);
-	if (cuda_ret != CUDA_SUCCESS) {
-		ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGet");
-		return -FI_EIO;
-	}
+    FT_INFO("ft_cuda_detect_memory_support() called");
 
-	cuda_ret = cuda_ops.cuDeviceGetAttribute(&is_supported,
-				CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, dev);
-	if (cuda_ret != CUDA_SUCCESS) {
-		ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute");
-		return -FI_EIO;
-	}
+    cuda_ret = cuda_ops.cuDeviceGet(&dev, 0);
+    if (cuda_ret != CUDA_SUCCESS) {
+        ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGet");
+        cuda_memory_support = CUDA_MEMORY_SUPPORT__UNKNOWN;
+        return -FI_EIO;
+    }
 
-	dmabuf_supported = (is_supported == 1);
+    cuda_ret = cuda_ops.cuDeviceGetAttribute(&cc_major,
+        CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev);
+    if (cuda_ret != CUDA_SUCCESS) {
+        ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(CC_MAJOR)");
+        cuda_memory_support = CUDA_MEMORY_SUPPORT__UNKNOWN;
+        return -FI_EIO;
+    }
+
+    cuda_ret = cuda_ops.cuDeviceGetAttribute(&cc_minor,
+        CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, dev);
+    if (cuda_ret != CUDA_SUCCESS) {
+        ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(CC_MINOR)");
+        cuda_memory_support = CUDA_MEMORY_SUPPORT__UNKNOWN;
+        return -FI_EIO;
+    }
+
+    cuda_ret = cuda_ops.cuDeviceGetAttribute(&dma_buf_attr,
+        CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, dev);
+    if (cuda_ret != CUDA_SUCCESS) {
+        ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(DMA_BUF_SUPPORTED)");
+        cuda_memory_support = CUDA_MEMORY_SUPPORT__UNKNOWN;
+        return -FI_EIO;
+    }
+
+    cuda_ret = cuda_ops.cuDeviceGetAttribute(&p2p_attr,
+        CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_SUPPORTED, dev);
+    if (cuda_ret != CUDA_SUCCESS) {
+        ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(GPU_DIRECT_RDMA_SUPPORTED)");
+        cuda_memory_support = CUDA_MEMORY_SUPPORT__UNKNOWN;
+        return -FI_EIO;
+    }
+
+    dmabuf_supported = (dma_buf_attr == 1);
+
+    if (cc_major >= 10) {
+        // Blackwell or newer: nv-p2p deprecated
+        FT_INFO("Compute capability %d.%d: forcing p2p_supported=false due to Blackwell deprecation", cc_major, cc_minor);
+        p2p_supported = false;
+    } else {
+        p2p_supported = (p2p_attr == 1);
+    }
+
+    FT_INFO("Compute capability %d.%d", cc_major, cc_minor);
+    FT_INFO("dmabuf_supported=%s", dmabuf_supported ? "true" : "false");
+    FT_INFO("GPU_DIRECT_RDMA_SUPPORTED raw=%d -> p2p_supported=%s",
+            p2p_attr, p2p_supported ? "true" : "false");
+
+    // Final truth table
+    if (!p2p_supported && !dmabuf_supported) {
+        cuda_memory_support = CUDA_MEMORY_SUPPORT__UNKNOWN;
+    } else if (p2p_supported && dmabuf_supported) {
+        cuda_memory_support = CUDA_MEMORY_SUPPORT__DMA_P2P_BOTH;
+    } else if (dmabuf_supported) {
+        cuda_memory_support = CUDA_MEMORY_SUPPORT__DMA_BUF_ONLY;
+    } else {
+        cuda_memory_support = CUDA_MEMORY_SUPPORT__P2P_ONLY;
+    }
+
+    FT_INFO("cuda_memory_support=%d", cuda_memory_support);
+    return FI_SUCCESS;
+
+#else
+    FT_INFO("HAVE_CUDA_DMABUF not enabled, returning CUDA_MEMORY_SUPPORT__NOT_INITIALIZED");
+    cuda_memory_support = CUDA_MEMORY_SUPPORT__NOT_INITIALIZED;
+    return FI_SUCCESS;
 #endif
-	return FI_SUCCESS;
 }
+
 
 int ft_cuda_init(void)
 {
 	cudaError_t cuda_ret;
 	int ret;
+    cuda_memory_support = CUDA_MEMORY_SUPPORT__NOT_INITIALIZED;
 
 	cudart_handle = dlopen("libcudart.so", RTLD_NOW);
 	if (!cudart_handle) {
@@ -261,6 +356,20 @@ int ft_cuda_init(void)
 		goto err_dlclose_cuda;
 	}
 
+	cuda_ops.cuDeviceGetName = dlsym(cuda_handle,
+					 STRINGIFY(cuDeviceGetName));
+	if (!cuda_ops.cuDeviceGetName) {
+		FT_ERR("Failed to find cuDeviceGetName\n");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cuDriverGetVersion = dlsym(cuda_handle,
+					    STRINGIFY(cuDriverGetVersion));
+	if (!cuda_ops.cuDriverGetVersion) {
+		FT_ERR("Failed to find cuDriverGetVersion\n");
+		goto err_dlclose_cuda;
+	}
+
 	cuda_ops.cuMemGetAddressRange = dlsym(cuda_handle,
 				     STRINGIFY(cuMemGetAddressRange));
 	if (!cuda_ops.cuMemGetAddressRange) {
@@ -274,9 +383,11 @@ int ft_cuda_init(void)
 		goto err_dlclose_cuda;
 	}
 
-	ret = ft_cuda_hmem_detect_dmabuf_support();
-	if (ret != FI_SUCCESS)
+    ret = ft_cuda_detect_memory_support();
+    if (ret != FI_SUCCESS) {
 		goto err_dlclose_cuda;
+	}
+    
 
 	return FI_SUCCESS;
 
@@ -495,6 +606,14 @@ int ft_cuda_put_dmabuf_fd(int fd)
 #endif /* HAVE_CUDA_DMABUF */
 }
 
+cuda_memory_support_e ft_cuda_memory_support(void)
+{
+    if (cuda_memory_support == CUDA_MEMORY_SUPPORT__NOT_INITIALIZED) {
+        FT_INFO("ft_cuda_memory_support() not called yet!");
+    }
+    return cuda_memory_support;
+}
+
 #else
 
 int ft_cuda_init(void)
@@ -553,5 +672,10 @@ int ft_cuda_get_dmabuf_fd(void *buf, size_t len,
 int ft_cuda_put_dmabuf_fd(int fd)
 {
 	return -FI_ENOSYS;
+}
+
+cuda_memory_support_e ft_cuda_memory_support(void)
+{
+	return CUDA_MEMORY_SUPPORT__UNKNOWN;
 }
 #endif /* HAVE_CUDA_RUNTIME_H */
