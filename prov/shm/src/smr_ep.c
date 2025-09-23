@@ -1265,7 +1265,7 @@ static int smr_create_pools(struct smr_ep *ep, struct fi_info *info)
 	int ret;
 
 	ret = ofi_bufpool_create(&ep->cmd_ctx_pool, sizeof(struct smr_cmd_ctx),
-				 16, 0, info->rx_attr->size,
+				 SHM_SMR_BUFPOOL_ALIGNMENT, 0, info->rx_attr->size,
 				 OFI_BUFPOOL_NO_TRACK);
 	if (ret)
 		goto err;
@@ -1276,13 +1276,13 @@ static int smr_create_pools(struct smr_ep *ep, struct fi_info *info)
 
 	ret = ofi_bufpool_create(&ep->unexp_buf_pool,
 				 sizeof(struct smr_unexp_buf),
-				 16, 0, 4, OFI_BUFPOOL_NO_TRACK);
+				 SHM_SMR_BUFPOOL_ALIGNMENT, 0, 4, OFI_BUFPOOL_NO_TRACK);
 	if (ret)
 		goto free2;
 
 	ret = ofi_bufpool_create(&ep->pend_buf_pool,
 				 sizeof(struct smr_pend_entry),
-				 16, 0, 4, OFI_BUFPOOL_NO_TRACK);
+				 SHM_SMR_BUFPOOL_ALIGNMENT, 0, 4, OFI_BUFPOOL_NO_TRACK);
 	if (ret)
 		goto free1;
 
