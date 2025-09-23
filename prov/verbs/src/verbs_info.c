@@ -533,6 +533,56 @@ static const char *vrb_link_layer_str(uint8_t link_layer)
 	}
 }
 
+static void vrb_get_device_bus_attr(const char *dev_name, struct fi_bus_attr *bus_attr)
+{
+	char *path = NULL;
+	char *real_path;
+	char *pci;
+	int n;
+	uint32_t a = 0, b = 0, c = 0, d = 0;
+
+	if (asprintf(&path, "/sys/class/infiniband/%s/device", dev_name) < 0 ||
+	    !path) {
+		VRB_WARN(FI_LOG_FABRIC,
+			 "Unable to allocate memory for PCI device path\n");
+		return;
+	}
+
+	real_path = realpath(path, NULL);
+	if (!real_path) {
+		VRB_WARN_ERRNO(FI_LOG_FABRIC, "realpath");
+		goto free_path;
+	}
+
+	pci = strrchr(real_path, '/');
+	if (!pci) {
+		VRB_WARN(FI_LOG_FABRIC,
+			 "Unable to find PCI device for %s\n", dev_name);
+		goto free_real_path;
+	}
+
+	pci++; /* skip '/' */
+
+	n = sscanf(pci, "%x:%x:%x.%x", &a, &b, &c, &d);
+	if (n != 4) {
+		VRB_WARN(FI_LOG_FABRIC,
+			 "Failed to parse pci bus address: %s\n", pci);
+		goto free_real_path;
+	}
+
+	bus_attr->attr.pci.domain_id = a;
+	bus_attr->attr.pci.bus_id = b;
+	bus_attr->attr.pci.device_id = c;
+	bus_attr->attr.pci.function_id = d;
+	bus_attr->bus_type = FI_BUS_PCI;
+
+free_real_path:
+	free(real_path);
+
+free_path:
+	free(path);
+}
+
 static int vrb_get_device_attrs(struct ibv_context *ctx,
 				   struct fi_info *info, uint32_t protocol)
 {
@@ -676,6 +726,8 @@ static int vrb_get_device_attrs(struct ibv_context *ctx,
 			   "Unable to allocate memory for link_attr::network_type\n");
 		return -FI_ENOMEM;
 	}
+
+	vrb_get_device_bus_attr(dev_name, info->nic->bus_attr);
 
 	return 0;
 }
