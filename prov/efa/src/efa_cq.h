@@ -39,8 +39,9 @@ struct efa_cq {
 	ofi_atomic32_t			nevents;
 	enum fi_wait_obj		wait_obj;
 	enum fi_cq_wait_cond	wait_cond;
+	/* Only used by efa-direct cq on util cq bypass path */
 	void (*read_entry)(struct efa_ibv_cq *ibv_cq, void *buf, int opcode);
-	char err_buf[EFA_ERROR_MSG_BUFFER_LENGTH];
+	char *err_buf;
 };
 
 extern struct fi_ops_cq efa_cq_ops;
