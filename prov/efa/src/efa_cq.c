@@ -860,6 +860,9 @@ int efa_cq_close(fid_t fid)
 	}
 #endif
 
+	if (cq->err_buf)
+		free(cq->err_buf);
+
 	free(cq);
 
 	return 0;
@@ -987,6 +990,14 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	}
 
 	cq->wait_cond = attr->wait_cond;
+
+	/* This buffer is only used by efa-direct cq on the util cq bypass path */
+	cq->err_buf = malloc(EFA_ERROR_MSG_BUFFER_LENGTH);
+	if (!cq->err_buf) {
+		EFA_WARN(FI_LOG_CQ, "Failed to allocate memory for err_data buf in CQ\n");
+		err = -FI_ENOMEM;
+		goto err_free_util_cq;
+	}
 
 	err = efa_cq_open_ibv_cq(attr, efa_domain->device->ibv_ctx,
 				 &cq->ibv_cq,
