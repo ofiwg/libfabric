@@ -3644,11 +3644,19 @@ extern bool cxip_coll_trace_linebuf;		// set line buffering for trace
 extern int cxip_coll_trace_rank;		// tracing rank
 extern int cxip_coll_trace_numranks;		// tracing number of ranks
 extern FILE *cxip_coll_trace_fid;		// trace output file descriptor
+extern bool cxip_coll_prod_trace_initialized;	// turn on tracing in non-debug
+						// build
+extern char **cxip_coll_prod_trace_buffer;	// production trace buffer
+extern int cxip_coll_prod_trace_current;	// current index in trace buffer
+extern int cxip_coll_prod_trace_max_idx;	// max lines in trace buffer
+extern int cxip_coll_prod_trace_ln_max;		// max trace line length
 
 int cxip_coll_trace_attr cxip_coll_trace(const char *fmt, ...);
+int cxip_coll_trace_attr cxip_coll_prod_trace(const char *fmt, ...);
 void cxip_coll_trace_flush(void);
 void cxip_coll_trace_close(void);
-void cxip_coll_trace_init(void);
+void cxip_coll_trace_init(struct cxip_ep_obj *ep_obj);
+void cxip_coll_print_prod_trace(void);
 
 /* debugging TRACE filtering control */
 enum cxip_coll_trace_module {
@@ -3678,12 +3686,19 @@ static inline bool cxip_coll_trace_true(int mod)
 	return (!cxip_coll_trace_muted) && (cxip_coll_trace_mask & (1L << mod));
 }
 
+static inline bool cxip_coll_prod_trace_true(void)
+{
+	return cxip_coll_prod_trace_initialized;
+}
+
 #if ENABLE_DEBUG
 #define CXIP_COLL_TRACE(mod, fmt, ...) \
 	do {if (cxip_coll_trace_true(mod)) \
 	    cxip_coll_trace(fmt, ##__VA_ARGS__);} while (0)
 #else
-#define	CXIP_COLL_TRACE(mod, fmt, ...) do {} while (0)
+#define	CXIP_COLL_TRACE(mod, fmt, ...) \
+	do {if (cxip_coll_prod_trace_true()) \
+	    cxip_coll_prod_trace(fmt, ##__VA_ARGS__); } while (0)
 #endif
 
 /* fabric logging implementation functions */
