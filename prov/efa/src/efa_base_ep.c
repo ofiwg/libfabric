@@ -58,6 +58,8 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 	struct efa_qp *qp = base_ep->qp;
 	struct efa_qp *user_recv_qp = base_ep->user_recv_qp;
 	uint32_t qp_num;
+	struct efa_cq *tx_cq, *rx_cq;
+	int err;
 
 	/*
 	 * Acquire the lock to prevent race conditions when CQ polling accesses the qp_table
@@ -79,6 +81,25 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 		domain->qp_table[qp_num & domain->qp_table_sz_m1] = NULL;
 		base_ep->user_recv_qp = NULL;
 	}
+
+	/* Flush the cq to poll out all stale cqes for the destroyed qp */
+	tx_cq = efa_base_ep_get_tx_cq(base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(base_ep);
+
+	if (tx_cq) {
+		err = 0;
+		while (err != ENOENT) {
+			err = tx_cq->poll_ibv_cq(-1, &tx_cq->ibv_cq);
+		}
+	}
+
+	if (rx_cq && rx_cq != tx_cq) {
+		err = 0;
+		while (err != ENOENT) {
+			err = rx_cq->poll_ibv_cq(-1, &rx_cq->ibv_cq);
+		}
+	}
+
 	efa_base_ep_unlock_cq(base_ep);
 
 	return 0;
@@ -364,10 +385,7 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 
 	qp->qp_num = qp->ibv_qp->qp_num;
 
-	/* Acquire the lock to prevent race conditions when CQ polling accesses the qp_table */
-	efa_base_ep_lock_cq(base_ep);
 	base_ep->domain->qp_table[qp->qp_num & base_ep->domain->qp_table_sz_m1] = qp;
-	efa_base_ep_unlock_cq(base_ep);
 	
 	EFA_INFO(FI_LOG_EP_CTRL, "QP enabled! qp_n: %d qkey: %d\n", qp->qp_num, qp->qkey);
 
@@ -805,37 +823,19 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_re
 	scq = txcq ? txcq : rxcq;
 	rcq = rxcq ? rxcq : txcq;
 
+	/* Acquire the lock to prevent race conditions when CQ polling accesses the qp_table */
+	efa_base_ep_lock_cq(ep);
 	err = efa_base_ep_create_qp(ep, &scq->ibv_cq, &rcq->ibv_cq, create_user_recv_qp);
 	if (err)
-		return err;
+		goto out;
 
-	return efa_base_ep_enable(ep);
+	err = efa_base_ep_enable(ep);
+
+out:
+	efa_base_ep_unlock_cq(ep);
+	return err;
 }
 
-void efa_base_ep_flush_cq(struct efa_base_ep *base_ep)
-{
-	struct efa_cq *tx_cq, *rx_cq;
-	int err;
-
-	efa_base_ep_lock_cq(base_ep);
-	tx_cq = efa_base_ep_get_tx_cq(base_ep);
-	rx_cq = efa_base_ep_get_rx_cq(base_ep);
-
-	if (tx_cq) {
-		err = 0;
-		while (err != ENOENT) {
-			err = tx_cq->poll_ibv_cq(-1, &tx_cq->ibv_cq);
-		}
-	}
-
-	if (rx_cq && rx_cq != tx_cq) {
-		err = 0;
-		while (err != ENOENT) {
-			err = rx_cq->poll_ibv_cq(-1, &rx_cq->ibv_cq);
-		}
-	}
-	efa_base_ep_unlock_cq(base_ep);
-}
 #if ENABLE_DEBUG
 void efa_ep_addr_print(char *prefix, struct efa_ep_addr *addr) {
 	char raw_gid_str[INET6_ADDRSTRLEN];
