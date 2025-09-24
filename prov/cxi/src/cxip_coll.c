@@ -36,7 +36,6 @@
 #define	TRACE_DEBUG(fmt, ...)	CXIP_COLL_TRACE(CXIP_TRC_COLL_DEBUG, fmt, \
 					   ##__VA_ARGS__)
 
-// TODO regularize usage of these
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
@@ -3202,10 +3201,12 @@ static void _close_mc(struct cxip_coll_mc *mc_obj, bool delete, bool has_error)
 			free(mc_obj->leaf_rdma_get_data_p);
 		}
 	}
+
 	for (red_id = 0; red_id < CXIP_COLL_MAX_CONCUR; red_id++) {
 		reduction = &mc_obj->reduction[red_id];
 		_ts_red_clr(reduction);
 	}
+
 	mc_obj->has_closed = true;
 	mc_obj->has_error = has_error;
 
@@ -4998,6 +4999,7 @@ void cxip_coll_close(struct cxip_ep_obj *ep_obj)
 		_close_mc(mc_obj, false, true);
 	}
 	free_root_rdma_buffers(ep_obj);
+	cxip_coll_print_prod_trace();
 }
 
 /**
@@ -5082,7 +5084,7 @@ int cxip_coll_enable(struct cxip_ep *ep)
 	dlist_init(&ep_obj->coll.leaf_rdma_get_list);
 
 	cxip_coll_init_metrics();
-	cxip_coll_trace_init();
+	cxip_coll_trace_init(ep_obj);
 	return FI_SUCCESS;
 }
 
