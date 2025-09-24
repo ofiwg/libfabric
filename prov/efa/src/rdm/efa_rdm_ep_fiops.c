@@ -1033,8 +1033,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 		retv = ret;
 	}
 
-	efa_base_ep_flush_cq(&efa_rdm_ep->base_ep);
-
 	ret = efa_rdm_ep_close_shm_ep_resources(efa_rdm_ep);
 	if (ret)
 		retv = ret;

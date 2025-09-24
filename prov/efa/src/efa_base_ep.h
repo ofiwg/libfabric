@@ -151,8 +151,6 @@ void efa_base_ep_remove_cntr_ibv_cq_poll_list(struct efa_base_ep *ep);
 
 int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_recv_qp);
 
-void efa_base_ep_flush_cq(struct efa_base_ep *base_ep);
-
 #if ENABLE_DEBUG
 void efa_ep_addr_print(char *prefix, struct efa_ep_addr *addr);
 #endif
