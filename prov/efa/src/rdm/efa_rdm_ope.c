@@ -601,16 +601,24 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	case EFA_RDM_RXE_UNEXP:
 	case EFA_RDM_RXE_MATCHED:
 		break;
+	case EFA_RDM_OPE_SEND:
+		dlist_remove(&rxe->entry);
+		break;
 	case EFA_RDM_RXE_RECV:
 #if ENABLE_DEBUG
 		dlist_remove(&rxe->pending_recv_entry);
 #endif
 		break;
+	case EFA_RDM_OPE_ERR:
+		/* Already progressed, no-op */
+		return;
 	default:
 		EFA_WARN(FI_LOG_CQ, "rxe unknown state %d\n",
 			rxe->state);
 		assert(0 && "rxe unknown state");
 	}
+
+	rxe->state = EFA_RDM_OPE_ERR;
 
 	dlist_foreach_container_safe(&rxe->queued_pkts,
 				     struct efa_rdm_pke,
@@ -716,11 +724,16 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	case EFA_RDM_OPE_SEND:
 		dlist_remove(&txe->entry);
 		break;
+	case EFA_RDM_OPE_ERR:
+		/* Already progressed, no-op */
+		return;
 	default:
 		EFA_WARN(FI_LOG_CQ, "txe unknown state %d\n",
 			txe->state);
 		assert(0 && "txe unknown state");
 	}
+
+	txe->state = EFA_RDM_OPE_ERR;
 
 	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
 		dlist_remove(&txe->queued_entry);
