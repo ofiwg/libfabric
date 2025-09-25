@@ -10,6 +10,7 @@ jobs:
       matrix:
         path:
           - 'prov/sm2'
+          - 'bindings/rust'
     steps:
     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
     - name: Run clang-format style check for C/C++/Protobuf programs.
