@@ -369,8 +369,9 @@ static inline int ft_use_size(int index, int enable_flags)
 #define FT_LOG(level, fmt, ...)						\
 	do {								\
 		int saved_errno = errno;				\
-		fprintf(stderr, "[%s] fabtests:%s:%d: " fmt "\n",	\
-			level, __FILE__, __LINE__, ##__VA_ARGS__);	\
+		int64_t ns = ft_gettime_ns();				\
+		fprintf(stderr, "[%s] %lu.%06lu fabtests:%s:%d: " fmt "\n",	\
+			level, ns/1000000000UL, (ns%1000000000UL)/1000UL, __FILE__, __LINE__, ##__VA_ARGS__);	\
 		errno = saved_errno;					\
 	} while (0)
 
