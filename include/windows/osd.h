@@ -27,6 +27,7 @@
 #include <io.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <malloc.h>
 #include <errno.h>
 #include <complex.h>
@@ -283,6 +284,7 @@ do						\
 #define ntohll _byteswap_uint64
 #define be64toh ntohll
 #define strncasecmp _strnicmp
+#define realpath(p,rp) _fullpath((rp),(p),_MAX_PATH)
 
 #define access(path, mode) _access(path, mode)
 #define F_OK 0
