@@ -8,6 +8,8 @@
 
 #define MR_MODE_BITS FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_LOCAL
 
+#define EFA_UNIT_TEST_MAX_RDMA_SGE 1
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdarg.h>
@@ -332,6 +334,8 @@ void test_efa_rma_writedata();
 void test_efa_rma_inject_write();
 void test_efa_rma_inject_writedata();
 void test_efa_rma_writemsg_with_inject();
+void test_efa_rma_readv_multiple_iov_einval();
+void test_efa_rma_writev_multiple_iov_einval();
 void test_efa_cq_read_no_completion();
 void test_efa_cq_read_send_success();
 void test_efa_cq_read_senddata_success();

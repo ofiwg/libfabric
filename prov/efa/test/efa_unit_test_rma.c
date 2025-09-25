@@ -19,6 +19,8 @@ static void test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr)
 	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 	/* Add rma caps explicitly to ep->info to allow local test */
 	base_ep->info->caps |= FI_RMA;
+	/* Mock the max rdma sge to allow local test */
+	base_ep->domain->device->ibv_attr.max_sge_rd = EFA_UNIT_TEST_MAX_RDMA_SGE;
 	/* Set up the mock operations */
 	g_efa_unit_test_mocks.efa_qp_post_recv = &efa_mock_efa_qp_post_recv_return_mock;
 	g_efa_unit_test_mocks.efa_qp_wr_complete = &efa_mock_efa_qp_wr_complete_no_op;
@@ -298,4 +300,64 @@ void test_efa_rma_writemsg_with_inject(struct efa_resource **state)
 	assert_int_equal(ret, -FI_ENOSYS);
 
 	efa_unit_test_buff_destruct(&local_buff);
+}
+
+void test_efa_rma_readv_multiple_iov_einval(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff local_buff1, local_buff2;
+	struct iovec iov[2];
+	fi_addr_t src_addr;
+	void *desc[2];
+	int ret;
+	uint64_t remote_addr = 0x87654321;
+	uint64_t remote_key = 123456;
+
+	test_efa_rma_prep(resource, &src_addr);
+	efa_unit_test_buff_construct(&local_buff1, resource, 2048);
+	efa_unit_test_buff_construct(&local_buff2, resource, 2048);
+
+	iov[0].iov_base = local_buff1.buff;
+	iov[0].iov_len = local_buff1.size;
+	iov[1].iov_base = local_buff2.buff;
+	iov[1].iov_len = local_buff2.size;
+	desc[0] = fi_mr_desc(local_buff1.mr);
+	desc[1] = fi_mr_desc(local_buff2.mr);
+
+	ret = fi_readv(resource->ep, iov, desc, 2, src_addr, remote_addr,
+		       remote_key, NULL);
+	assert_int_equal(ret, -FI_EINVAL);
+
+	efa_unit_test_buff_destruct(&local_buff1);
+	efa_unit_test_buff_destruct(&local_buff2);
+}
+
+void test_efa_rma_writev_multiple_iov_einval(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff local_buff1, local_buff2;
+	struct iovec iov[2];
+	fi_addr_t dest_addr;
+	void *desc[2];
+	int ret;
+	uint64_t remote_addr = 0x87654321;
+	uint64_t remote_key = 123456;
+
+	test_efa_rma_prep(resource, &dest_addr);
+	efa_unit_test_buff_construct(&local_buff1, resource, 2048);
+	efa_unit_test_buff_construct(&local_buff2, resource, 2048);
+
+	iov[0].iov_base = local_buff1.buff;
+	iov[0].iov_len = local_buff1.size;
+	iov[1].iov_base = local_buff2.buff;
+	iov[1].iov_len = local_buff2.size;
+	desc[0] = fi_mr_desc(local_buff1.mr);
+	desc[1] = fi_mr_desc(local_buff2.mr);
+
+	ret = fi_writev(resource->ep, iov, desc, 2, dest_addr, remote_addr,
+			remote_key, NULL);
+	assert_int_equal(ret, -FI_EINVAL);
+
+	efa_unit_test_buff_destruct(&local_buff1);
+	efa_unit_test_buff_destruct(&local_buff2);
 }
