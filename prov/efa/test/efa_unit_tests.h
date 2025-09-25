@@ -251,6 +251,9 @@ void test_efa_rdm_rxe_map();
 void test_efa_rdm_rxe_list_removal();
 void test_efa_rdm_txe_list_removal();
 void test_efa_rdm_txe_prepare_local_read_pkt_entry();
+void test_efa_rdm_txe_handle_error_queue_flags_cleanup();
+void test_efa_rdm_rxe_handle_error_queue_flags_cleanup();
+
 /* end of efa_unit_test_ope.c */
 void test_efa_rdm_msg_send_to_local_peer_with_null_desc();
 void test_efa_fork_support_request_initialize_when_ibv_fork_support_is_needed();

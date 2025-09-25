@@ -147,8 +147,10 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
 
-	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
 		dlist_remove(&txe->queued_entry);
+		txe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
+	}
 
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(txe,
@@ -201,8 +203,10 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 				     pkt_entry, entry, tmp)
 		efa_rdm_pke_release_tx(pkt_entry);
 
-	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
 		dlist_remove(&rxe->queued_entry);
+		rxe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
+	}
 
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(rxe,
@@ -613,8 +617,10 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 				     pkt_entry, entry, tmp)
 		efa_rdm_pke_release_tx(pkt_entry);
 
-	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
 		dlist_remove(&rxe->queued_entry);
+		rxe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
+	}
 
 	if (rxe->unexp_pkt) {
 		efa_rdm_pke_release_rx_list(rxe->unexp_pkt);
@@ -716,8 +722,10 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		assert(0 && "txe unknown state");
 	}
 
-	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
 		dlist_remove(&txe->queued_entry);
+		txe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
+	}
 
 	dlist_foreach_container_safe(&txe->queued_pkts,
 				     struct efa_rdm_pke,
