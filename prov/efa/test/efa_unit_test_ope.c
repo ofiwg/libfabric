@@ -693,4 +693,83 @@ void test_efa_rdm_rxe_handle_error_queue_flags_cleanup(struct efa_resource **sta
 	efa_rdm_rxe_release(rxe);
 }
 
+/**
+ * @brief Test error state prevents duplicate error handling for txe
+ *
+ * This test verifies that a new error state prevents duplicate error handling.
+ */
+void test_efa_rdm_txe_handle_error_duplicate_prevention(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_ep *efa_rdm_ep;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_write);
+	assert_non_null(txe);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Set txe to EFA_RDM_OPE_SEND state and add to longcts_send_list */
+	txe->state = EFA_RDM_OPE_SEND;
+	dlist_insert_tail(&txe->entry, &efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list);
+
+	/* Verify txe is in the list */
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
+
+	/* First error handling call */
+	efa_rdm_txe_handle_error(txe, FI_ENOTCONN, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+
+	/* Verify txe is removed from list and in error state */
+	assert_true(dlist_empty(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list));
+	assert_int_equal(txe->state, EFA_RDM_OPE_ERR);
+
+	/* Second error handling call should be a no-op */
+	efa_rdm_txe_handle_error(txe, FI_EAGAIN, EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH);
+
+	/* State should remain EFA_RDM_OPE_ERR */
+	assert_int_equal(txe->state, EFA_RDM_OPE_ERR);
+
+	efa_rdm_txe_release(txe);
+}
+
+/**
+ * @brief Test error state prevents duplicate error handling for rxe
+ */
+void test_efa_rdm_rxe_handle_error_duplicate_prevention(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_ep *efa_rdm_ep;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_tagged);
+	assert_non_null(rxe);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Set rxe to EFA_RDM_OPE_SEND state and add to longcts_send_list */
+	rxe->state = EFA_RDM_OPE_SEND;
+	dlist_insert_tail(&rxe->entry, &efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list);
+
+	/* Verify rxe is in the list */
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
+
+	/* First error handling call */
+	efa_rdm_rxe_handle_error(rxe, FI_ENOTCONN, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+
+	/* Verify rxe is removed from list and in error state */
+	assert_true(dlist_empty(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list));
+	assert_int_equal(rxe->state, EFA_RDM_OPE_ERR);
+
+	/* Second error handling call should be a no-op */
+	efa_rdm_rxe_handle_error(rxe, FI_EAGAIN, EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH);
+
+	/* State should remain EFA_RDM_OPE_ERR */
+	assert_int_equal(rxe->state, EFA_RDM_OPE_ERR);
+
+	efa_rdm_rxe_release(rxe);
+}
 
