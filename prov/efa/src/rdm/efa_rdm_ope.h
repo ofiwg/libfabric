@@ -26,6 +26,7 @@ enum efa_rdm_ope_state {
 	EFA_RDM_RXE_UNEXP,	/**< rxe unexp msg waiting for post recv */
 	EFA_RDM_RXE_MATCHED,	/**< rxe matched with RTM */
 	EFA_RDM_RXE_RECV,	/**< rxe large msg recv data pkts */
+	EFA_RDM_OPE_ERR, /*< ope is in error state */
 };
 
 /**

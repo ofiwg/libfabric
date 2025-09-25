@@ -253,6 +253,8 @@ void test_efa_rdm_txe_list_removal();
 void test_efa_rdm_txe_prepare_local_read_pkt_entry();
 void test_efa_rdm_txe_handle_error_queue_flags_cleanup();
 void test_efa_rdm_rxe_handle_error_queue_flags_cleanup();
+void test_efa_rdm_txe_handle_error_duplicate_prevention();
+void test_efa_rdm_rxe_handle_error_duplicate_prevention();
 
 /* end of efa_unit_test_ope.c */
 void test_efa_rdm_msg_send_to_local_peer_with_null_desc();
