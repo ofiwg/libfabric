@@ -147,8 +147,10 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
 
-	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
 		dlist_remove(&txe->queued_entry);
+		txe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
+	}
 
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(txe,
@@ -201,8 +203,10 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 				     pkt_entry, entry, tmp)
 		efa_rdm_pke_release_tx(pkt_entry);
 
-	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
 		dlist_remove(&rxe->queued_entry);
+		rxe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
+	}
 
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(rxe,
@@ -597,24 +601,34 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	case EFA_RDM_RXE_UNEXP:
 	case EFA_RDM_RXE_MATCHED:
 		break;
+	case EFA_RDM_OPE_SEND:
+		dlist_remove(&rxe->entry);
+		break;
 	case EFA_RDM_RXE_RECV:
 #if ENABLE_DEBUG
 		dlist_remove(&rxe->pending_recv_entry);
 #endif
 		break;
+	case EFA_RDM_OPE_ERR:
+		/* Already progressed, no-op */
+		return;
 	default:
 		EFA_WARN(FI_LOG_CQ, "rxe unknown state %d\n",
 			rxe->state);
 		assert(0 && "rxe unknown state");
 	}
 
+	rxe->state = EFA_RDM_OPE_ERR;
+
 	dlist_foreach_container_safe(&rxe->queued_pkts,
 				     struct efa_rdm_pke,
 				     pkt_entry, entry, tmp)
 		efa_rdm_pke_release_tx(pkt_entry);
 
-	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
 		dlist_remove(&rxe->queued_entry);
+		rxe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
+	}
 
 	if (rxe->unexp_pkt) {
 		efa_rdm_pke_release_rx_list(rxe->unexp_pkt);
@@ -710,14 +724,21 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	case EFA_RDM_OPE_SEND:
 		dlist_remove(&txe->entry);
 		break;
+	case EFA_RDM_OPE_ERR:
+		/* Already progressed, no-op */
+		return;
 	default:
 		EFA_WARN(FI_LOG_CQ, "txe unknown state %d\n",
 			txe->state);
 		assert(0 && "txe unknown state");
 	}
 
-	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+	txe->state = EFA_RDM_OPE_ERR;
+
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
 		dlist_remove(&txe->queued_entry);
+		txe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
+	}
 
 	dlist_foreach_container_safe(&txe->queued_pkts,
 				     struct efa_rdm_pke,
