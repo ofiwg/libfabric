@@ -803,3 +803,127 @@ void test_efa_use_device_rdma_opt_old() {
 	test_use_device_rdma(1, 1, 1, FI_VERSION(1,17));
 	test_use_device_rdma(0, 0, 0, FI_VERSION(1,17));
 }
+
+typedef void (*setup_hints_func_t)(struct fi_info *hints, struct fid_fabric *fabric, 
+				   struct fid_domain *domain, struct fi_info *info1);
+
+static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func, 
+				   bool expect_fabric_reuse, 
+				   bool expect_domain_reuse)
+{
+	struct fi_info *hints, *info1, *info2;
+	struct fid_fabric *fabric = NULL;
+	struct fid_domain *domain = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->caps |= FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM | FI_DIRECTED_RECV;
+	hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info1);
+	assert_int_equal(err, 0);
+	assert_non_null(info1);
+
+	err = fi_fabric(info1->fabric_attr, &fabric, NULL);
+	assert_int_equal(err, 0);
+	assert_non_null(fabric);
+
+	err = fi_domain(fabric, info1, &domain, NULL);
+	assert_int_equal(err, 0);
+	assert_non_null(domain);
+
+	fi_freeinfo(hints);
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, NULL);
+	assert_non_null(hints);
+	hints->caps = FI_MSG | FI_RMA | FI_ATOMIC;
+	setup_func(hints, fabric, domain, info1);
+	hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info2);
+	assert_int_equal(err, 0);
+	assert_non_null(info2);
+
+	if (expect_fabric_reuse) {
+		assert_ptr_equal(info2->fabric_attr->fabric, fabric);
+	} else {
+		assert_null(info2->fabric_attr->fabric);
+	}
+	
+	if (expect_domain_reuse) {
+		assert_ptr_equal(info2->domain_attr->domain, domain);
+	} else {
+		assert_null(info2->domain_attr->domain);
+	}
+
+	fi_freeinfo(hints);
+	fi_freeinfo(info1);
+	fi_freeinfo(info2);
+
+	err = fi_close(&domain->fid);
+	assert_int_equal(err, 0);
+
+	err = fi_close(&fabric->fid);
+	assert_int_equal(err, 0);
+}
+
+static void setup_fabric_attr_hints(struct fi_info *hints, struct fid_fabric *fabric, 
+				     struct fid_domain *domain, struct fi_info *info1)
+{
+	hints->fabric_attr->fabric = fabric;
+}
+
+static void setup_domain_attr_hints(struct fi_info *hints, struct fid_fabric *fabric, 
+				     struct fid_domain *domain, struct fi_info *info1)
+{
+	hints->domain_attr->domain = domain;
+}
+
+static void setup_fabric_name_hints(struct fi_info *hints, struct fid_fabric *fabric, 
+				     struct fid_domain *domain, struct fi_info *info1)
+{
+	hints->fabric_attr->name = strdup(info1->fabric_attr->name);
+}
+
+static void setup_domain_name_hints(struct fi_info *hints, struct fid_fabric *fabric, 
+				     struct fid_domain *domain, struct fi_info *info1)
+{
+	hints->domain_attr->name = strdup(info1->domain_attr->name);
+}
+
+/**
+ * @brief Test that fi_getinfo can reuse fabric object
+ * when provided in hints via fabric_attr->fabric
+ */
+void test_info_reuse_fabric_via_fabric_attr()
+{
+	test_info_reuse_fabric_domain(setup_fabric_attr_hints, true, false);
+}
+
+/**
+ * @brief Test that fi_getinfo can reuse domain object
+ * when provided in hints via domain_attr->domain
+ */
+void test_info_reuse_domain_via_domain_attr()
+{
+	test_info_reuse_fabric_domain(setup_domain_attr_hints, false, true);
+}
+
+/**
+ * @brief Test that fi_getinfo can reuse fabric
+ * when provided in hints via fabric_attr->name
+ */
+void test_info_reuse_fabric_via_name()
+{
+	test_info_reuse_fabric_domain(setup_fabric_name_hints, true, false);
+}
+
+/**
+ * @brief Test that fi_getinfo can reuse domain
+ * when provided in hints via domain_attr->name
+ */
+void test_info_reuse_domain_via_name()
+{
+	test_info_reuse_fabric_domain(setup_domain_name_hints, true, true);
+}
