@@ -43,7 +43,7 @@ void efa_rdm_rxe_map_insert(struct efa_rdm_rxe_map *rxe_map,
 	if (OFI_UNLIKELY(!entry)) {
 		EFA_WARN(FI_LOG_CQ,
 			"Map entries for medium size message exhausted.\n");
-		efa_base_ep_write_eq_error(&rxe->ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+		efa_base_ep_write_eq_error(&rxe->ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED, true);
 		return;
 	}
 

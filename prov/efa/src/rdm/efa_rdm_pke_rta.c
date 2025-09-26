@@ -282,7 +282,7 @@ int efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
 
 	rxe = efa_rdm_pke_alloc_rta_rxe(pkt_entry, ofi_op_atomic);
 	if (OFI_UNLIKELY(!rxe)) {
-		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED, true);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return -FI_ENOBUFS;
 	}
@@ -381,7 +381,7 @@ int efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
 	rxe = efa_rdm_pke_alloc_rta_rxe(pkt_entry, ofi_op_atomic_fetch);
 	if(OFI_UNLIKELY(!rxe)) {
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, FI_ENOBUFS,
-					   FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+					   FI_EFA_ERR_RXE_POOL_EXHAUSTED, true);
 		return -FI_ENOBUFS;
 	}
 
@@ -511,7 +511,7 @@ int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 
 	rxe = efa_rdm_pke_alloc_rta_rxe(pkt_entry, ofi_op_atomic_compare);
 	if(OFI_UNLIKELY(!rxe)) {
-		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED, true);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return -FI_ENOBUFS;
 	}
@@ -521,7 +521,7 @@ int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 	dt = rxe->atomic_hdr.datatype;
 	dtsize = ofi_datatype_size(rxe->atomic_hdr.datatype);
 	if (OFI_UNLIKELY(!dtsize)) {
-		efa_base_ep_write_eq_error(&ep->base_ep, errno, FI_EFA_ERR_INVALID_DATATYPE);
+		efa_base_ep_write_eq_error(&ep->base_ep, errno, FI_EFA_ERR_INVALID_DATATYPE, true);
 		efa_rdm_rxe_release(rxe);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return -errno;
@@ -552,7 +552,7 @@ int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 
 	err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_ATOMRSP_PKT);
 	if (OFI_UNLIKELY(err)) {
-		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_PKT_POST);
+		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_PKT_POST, true);
 		ofi_buf_free(rxe->atomrsp_data);
 		efa_rdm_rxe_release(rxe);
 		efa_rdm_pke_release_rx(pkt_entry);

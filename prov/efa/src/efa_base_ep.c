@@ -134,7 +134,7 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 
 	if (base_ep->efa_recv_wr_vec)
 		free(base_ep->efa_recv_wr_vec);
-	
+
 	if (base_ep->user_recv_wr_vec)
 		free(base_ep->user_recv_wr_vec);
 
@@ -386,7 +386,7 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 	qp->qp_num = qp->ibv_qp->qp_num;
 
 	base_ep->domain->qp_table[qp->qp_num & base_ep->domain->qp_table_sz_m1] = qp;
-	
+
 	EFA_INFO(FI_LOG_EP_CTRL, "QP enabled! qp_n: %d qkey: %d\n", qp->qp_num, qp->qkey);
 
 	return err;
@@ -586,11 +586,12 @@ bool efa_qp_support_op_in_order_aligned_128_bytes(struct efa_qp *qp, enum ibv_wr
  * If the base_ep is not binded to an EQ, or write to EQ failed,
  * this function will print the error message to console, then abort()
  *
- * @param[in,out] ep	base endpoint
- * @param[in] err	OFI error code
+ * @param[in,out] ep		base endpoint
+ * @param[in] err			OFI error code
  * @param[in] prov_errno	provider error code
+ * @param[in] should_abort 	If true, aborts when no EQ is available
  */
-void efa_base_ep_write_eq_error(struct efa_base_ep *ep, ssize_t err, ssize_t prov_errno)
+void efa_base_ep_write_eq_error(struct efa_base_ep *ep, ssize_t err, ssize_t prov_errno, bool should_abort)
 {
 	struct fi_eq_err_entry err_entry;
 	int ret = -FI_ENOEQ;
@@ -614,11 +615,13 @@ void efa_base_ep_write_eq_error(struct efa_base_ep *ep, ssize_t err, ssize_t pro
 	fprintf(stderr,
 		"Libfabric EFA provider has encountered an internal error:\n\n"
 		"Libfabric error: (%zd) %s\n"
-		"EFA internal error: (%zd) %s\n\n"
-		"Your application will now abort().\n",
+		"EFA internal error: (%zd) %s\n\n",
 		err, fi_strerror(err),
 		prov_errno, efa_strerror(prov_errno));
-	abort();
+	if (should_abort) {
+		fprintf(stderr, "Your application will now abort().\n");
+		abort();
+	}
 }
 
 const char *efa_base_ep_raw_addr_str(struct efa_base_ep *base_ep, char *buf, size_t *buflen)

@@ -275,7 +275,7 @@ void efa_rdm_peer_move_overflow_pke_to_recvwin(struct efa_rdm_peer *peer)
 				/* running out of memory while copy packet */
 				efa_base_ep_write_eq_error(
 					&(overflow_pkt_entry->ep->base_ep),
-					FI_ENOBUFS, FI_EFA_ERR_OOM);
+					FI_ENOBUFS, FI_EFA_ERR_OOM, true);
 				return;
 			}
 			dlist_remove(&overflow_pke_list_entry->entry);

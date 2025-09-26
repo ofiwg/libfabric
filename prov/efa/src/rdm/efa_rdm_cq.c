@@ -120,7 +120,7 @@ void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 		EFA_WARN(FI_LOG_CQ,
 			"Unable to write a cq entry for remote for RECV_RDMA operation: %s\n",
 			fi_strerror(-ret));
-		efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_WRITE_RECV_COMP);
+		efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_WRITE_RECV_COMP, true);
 	}
 
 	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, flags);
@@ -189,7 +189,7 @@ static inline int efa_rdm_cq_populate_src_efa_ep_addr(
 			 self_raw_addr_str, base_hdr->version,
 			 EFA_RDM_PROTOCOL_VERSION);
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO,
-					   FI_EFA_ERR_INVALID_PKT_TYPE);
+					   FI_EFA_ERR_INVALID_PKT_TYPE, true);
 		fprintf(stderr,
 			"Host %s received a packet with invalid protocol "
 			"version %d.\n"
@@ -399,7 +399,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 				0, NULL, false, true);
 	if (OFI_UNLIKELY(ret != 0)) {
 		efa_base_ep_write_eq_error(&ep->base_ep, ret,
-					   FI_EFA_ERR_AV_INSERT);
+					   FI_EFA_ERR_AV_INSERT, true);
 		return NULL;
 	}
 	assert(implicit_fi_addr != FI_ADDR_NOTAVAIL);
@@ -500,7 +500,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 			 base_hdr->type);
 
 		assert(0 && "invalid REQ packet type");
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE, true);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
@@ -518,7 +518,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 		/* local & peer host-id & ep address will be logged by efa_rdm_write_error_msg */
 		if (!efa_rdm_write_error_msg(ep, pkt_entry->peer, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX, errbuf, &errbuf_len))
 			EFA_WARN(FI_LOG_CQ, "Error: %s\n", (const char *) errbuf);
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX, true);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
@@ -692,7 +692,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 			if (efa_cq_wc_is_unsolicited(cq)) {
 				EFA_WARN(FI_LOG_CQ, "Receive error %s (%d) for unsolicited write recv",
 					efa_strerror(prov_errno), prov_errno);
-				efa_base_ep_write_eq_error(&ep->base_ep, to_fi_errno(prov_errno), prov_errno);
+				efa_base_ep_write_eq_error(&ep->base_ep, to_fi_errno(prov_errno), prov_errno, true);
 				break;
 			}
 			assert(pkt_entry);

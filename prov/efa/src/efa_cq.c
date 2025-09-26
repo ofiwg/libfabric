@@ -123,7 +123,7 @@ static void efa_cq_handle_error(struct efa_base_ep *base_ep,
 			FI_LOG_CQ,
 			"Error writing error cq entry when handling %s error\n",
 			is_tx ? "TX" : "RX");
-		efa_base_ep_write_eq_error(base_ep, err, prov_errno);
+		efa_base_ep_write_eq_error(base_ep, err, prov_errno, true);
 	}
 }
 
@@ -247,7 +247,7 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
 			 "operation: %s\n",
 			 fi_strerror(-ret));
 		efa_base_ep_write_eq_error(base_ep, -ret,
-					   FI_EFA_ERR_WRITE_RECV_COMP);
+					   FI_EFA_ERR_WRITE_RECV_COMP, true);
 	}
 }
 
