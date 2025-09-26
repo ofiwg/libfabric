@@ -150,6 +150,7 @@ enum {
 	FT_OPT_REG_DMABUF_MR		= 1 << 27,
 	FT_OPT_NO_PRE_POSTED_RX		= 1 << 28,
 	FT_OPT_OOB_CTRL			= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
+	FT_OPT_NO_PREPOSTED_AUX_RX = 1 << 29,
 };
 
 /* for RMA tests --- we want to be able to select fi_writedata, but there is no
