@@ -516,9 +516,9 @@ ssize_t efa_rdm_pke_init_longread_rtw(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief handle the event that a EFA_RDM_LONGREAD_RTA_PKE has been received
+ * @brief handle the event that a EFA_RDM_LONGREAD_RTW_PKT has been received
  *
- * @param[in]		pkt_entry	received EFA_RDM_LONGREAD_RTA_PKT packet entry
+ * @param[in]		pkt_entry	received EFA_RDM_LONGREAD_RTW_PKT packet entry
  */
 void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 {
