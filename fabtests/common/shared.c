@@ -3414,7 +3414,7 @@ void ft_usage(char *name, char *desc)
 void ft_hmem_usage()
 {
 	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: "
-			    "e.g. cuda, ze, neuron, synapseai (default: None). "
+			    "e.g. cuda, ze, neuron, synapseai, rocr (default: None). "
 			    "Automatically enables FI_HMEM (-H)");
 	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
 	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
@@ -3576,6 +3576,8 @@ void ft_parse_hmem_opts(int op, char *optarg, struct ft_opts *opts)
 			opts->iface = FI_HMEM_CUDA;
 		else if (!strncasecmp("neuron", optarg, 6))
 			opts->iface = FI_HMEM_NEURON;
+		else if (!strncasecmp("rocr", optarg, 4))
+			opts->iface = FI_HMEM_ROCR;
 		else if (!strncasecmp("synapseai", optarg, 9)) {
 			opts->iface = FI_HMEM_SYNAPSEAI;
 			opts->options |= FT_OPT_REG_DMABUF_MR;
