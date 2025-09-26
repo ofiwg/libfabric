@@ -1519,8 +1519,9 @@ int ft_enable_ep_recv(void)
 	if (ret)
 		return ret;
 
-	if (!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) &&
-	    (fi->caps & (FI_MSG | FI_TAGGED))) {
+	if ((!(opts.options & FT_OPT_OOB_ADDR_EXCH)) &&
+		 	(!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) &&
+	    	(fi->caps & (FI_MSG | FI_TAGGED)))) {
 		/* Initial receive will get remote address for unconnected EPs */
 		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 		if (ret)
