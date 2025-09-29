@@ -455,7 +455,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 			", packet flags: %x\n",
 			efa_rdm_pke_get_base_hdr(pkt_entry)->type,
 			efa_rdm_pke_get_base_hdr(pkt_entry)->flags);
-		efa_rdm_pke_release_rx(pkt_entry);
+		efa_rdm_pke_release_rx_list(pkt_entry);
 		return;
 	}
 
@@ -501,7 +501,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 
 		assert(0 && "invalid REQ packet type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
-		efa_rdm_pke_release_rx(pkt_entry);
+		efa_rdm_pke_release_rx_list(pkt_entry);
 		return;
 	}
 
@@ -519,7 +519,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 		if (!efa_rdm_write_error_msg(ep, pkt_entry->peer, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX, errbuf, &errbuf_len))
 			EFA_WARN(FI_LOG_CQ, "Error: %s\n", (const char *) errbuf);
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_INVALID_PKT_TYPE_ZCPY_RX);
-		efa_rdm_pke_release_rx(pkt_entry);
+		efa_rdm_pke_release_rx_list(pkt_entry);
 		return;
 	}
 
