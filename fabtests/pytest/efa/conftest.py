@@ -14,12 +14,15 @@ memory_type_list_bi_dir = [
     pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
     pytest.param("host_to_neuron", marks=pytest.mark.neuron_memory),
     pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
+    pytest.param("host_to_rocr", marks=pytest.mark.rocr_memory),
+    pytest.param("rocr_to_rocr", marks=pytest.mark.rocr_memory),
 ]
 
 # Add more memory types that are useful for uni-directional tests.
 memory_type_list_all = memory_type_list_bi_dir + [
     pytest.param("cuda_to_host", marks=pytest.mark.cuda_memory),
     pytest.param("neuron_to_host", marks=pytest.mark.neuron_memory),
+    pytest.param("rocr_to_host", marks=pytest.mark.rocr_memory),
 ]
 
 @pytest.fixture(scope="module", params=memory_type_list_all)
