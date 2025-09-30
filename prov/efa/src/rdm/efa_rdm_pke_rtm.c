@@ -507,11 +507,12 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 
 	/*
 	 * efa_rdm_pke_proc_rtm_rta() will write error cq entry if needed,
-	 * thus we do not write error cq entry
+	 * thus we do not write error cq entry.
+	 *
+	 * Even if we hit an error processing the packets contents, we still
+	 * need to slide the recv window so we can continue to do work.
 	 */
-	ret = efa_rdm_pke_proc_rtm_rta(pkt_entry, peer);
-	if (OFI_UNLIKELY(ret))
-		return;
+	(void) efa_rdm_pke_proc_rtm_rta(pkt_entry, peer);
 
 	if (slide_recvwin) {
 		ofi_recvwin_slide((&peer->robuf));
