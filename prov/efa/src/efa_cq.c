@@ -33,8 +33,15 @@ static inline uint64_t efa_cq_opcode_to_fi_flags(enum ibv_wc_opcode opcode) {
 	}
 }
 
-static void efa_cq_construct_cq_entry(struct efa_ibv_cq* cq,
-				      struct fi_cq_tagged_entry *entry, int opcode)
+static void efa_cq_read_context_entry(struct efa_ibv_cq *ibv_cq, void *buf, int opcode)
+{
+	struct fi_cq_entry *entry = buf;
+
+	entry->op_context = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
+}
+
+static inline
+void efa_cq_read_entry_common(struct efa_ibv_cq *cq, struct fi_cq_msg_entry *entry, int opcode)
 {
 	struct ibv_cq_ex *ibv_cqx = cq->ibv_cq_ex;
 
@@ -45,12 +52,21 @@ static void efa_cq_construct_cq_entry(struct efa_ibv_cq* cq,
 		entry->op_context = NULL;
 		entry->flags = efa_cq_opcode_to_fi_flags(opcode);
 	}
-
 	entry->len = efa_ibv_cq_wc_read_byte_len(cq);
+}
+
+static void efa_cq_read_msg_entry(struct efa_ibv_cq *cq, void *buf, int opcode)
+{
+	efa_cq_read_entry_common(cq, (struct fi_cq_msg_entry *)buf, opcode);
+}
+
+static void efa_cq_read_data_entry(struct efa_ibv_cq *cq, void *buf, int opcode)
+{
+	struct fi_cq_data_entry *entry = buf;
+
+	efa_cq_read_entry_common(cq, (struct fi_cq_msg_entry *)buf, opcode);
 	entry->buf = NULL;
 	entry->data = 0;
-	entry->tag = 0;
-
 	if (efa_ibv_cq_wc_read_wc_flags(cq) & IBV_WC_WITH_IMM) {
 		entry->flags |= FI_REMOTE_CQ_DATA;
 		entry->data = efa_ibv_cq_wc_read_imm_data(cq);
@@ -86,7 +102,8 @@ static void efa_cq_handle_error(struct efa_base_ep *base_ep,
 	struct ibv_cq_ex *ibv_cq_ex = cq->ibv_cq_ex;
 
 	memset(&err_entry, 0, sizeof(err_entry));
-	efa_cq_construct_cq_entry(cq, (struct fi_cq_tagged_entry *) &err_entry, efa_ibv_cq_wc_read_opcode(cq));
+	/* Use the most informative entry that efa-direct support to construct cq entry for general usage */
+	efa_cq_read_data_entry(cq, &err_entry, efa_ibv_cq_wc_read_opcode(cq));
 	err_entry.err = err;
 	err_entry.prov_errno = prov_errno;
 
@@ -300,7 +317,8 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			break;
 		}
 
-		efa_cq_construct_cq_entry(ibv_cq, &cq_entry, opcode);
+		/* Use the most informative entry that efa-direct support to construct cq entry for general usage */
+		efa_cq_read_data_entry(ibv_cq, &cq_entry, opcode);
 		EFA_DBG(FI_LOG_CQ,
 			"Write cq entry of context: %lx, flags: %lx\n",
 			(size_t) cq_entry.op_context, cq_entry.flags);
@@ -569,45 +587,6 @@ int efa_cq_signal(struct fid_cq *cq_fid)
 	return 0;
 }
 
-static void efa_cq_read_context_entry(struct efa_ibv_cq *ibv_cq, void *buf, int opcode)
-{
-	struct fi_cq_entry *entry = buf;
-
-	entry->op_context = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
-}
-
-static inline
-void efa_cq_read_entry_common(struct efa_ibv_cq *cq, struct fi_cq_msg_entry *entry, int opcode)
-{
-	struct ibv_cq_ex *ibv_cqx = cq->ibv_cq_ex;
-
-	if (!efa_cq_wc_is_unsolicited(cq) && ibv_cqx->wr_id) {
-		entry->op_context = (void *)ibv_cqx->wr_id;
-		entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode): ((struct efa_context *) ibv_cqx->wr_id)->completion_flags;
-	} else {
-		entry->op_context = NULL;
-		entry->flags = efa_cq_opcode_to_fi_flags(opcode);
-	}
-	entry->len = efa_ibv_cq_wc_read_byte_len(cq);
-}
-
-static void efa_cq_read_msg_entry(struct efa_ibv_cq *cq, void *buf, int opcode)
-{
-	efa_cq_read_entry_common(cq, (struct fi_cq_msg_entry *)buf, opcode);
-}
-
-static void efa_cq_read_data_entry(struct efa_ibv_cq *cq, void *buf, int opcode)
-{
-	struct fi_cq_data_entry *entry = buf;
-
-	efa_cq_read_entry_common(cq, (struct fi_cq_msg_entry *)buf, opcode);
-	entry->data = 0;
-	if (efa_ibv_cq_wc_read_wc_flags(cq) & IBV_WC_WITH_IMM) {
-		entry->flags |= FI_REMOTE_CQ_DATA;
-		entry->data = efa_ibv_cq_wc_read_imm_data(cq);
-	}
-}
-
 static inline fi_addr_t efa_cq_get_src_addr(struct efa_ibv_cq *ibv_cq, int opcode)
 {
 	struct efa_cq *efa_cq;
@@ -661,7 +640,8 @@ static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq
 	int prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
 	fi_addr_t addr;
 
-	efa_cq_construct_cq_entry(ibv_cq, (struct fi_cq_tagged_entry *) buf, opcode);
+	/* Use the most informative entry that efa-direct support to construct cq entry for general usage */
+	efa_cq_read_data_entry(ibv_cq, buf, opcode);
 	buf->err = to_fi_errno(prov_errno);
 	buf->prov_errno = prov_errno;
 
