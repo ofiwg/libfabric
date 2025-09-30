@@ -713,7 +713,13 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			"Packet receive error from non TX/RX packet.  Our address: %s\n",
 			ep_addr_str);
 
-		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno, true);
+		if (efa_rdm_pkt_type_of(pkt_entry) == EFA_RDM_WRITE_RTA_PKT ||
+		    efa_rdm_pkt_type_of(pkt_entry) == EFA_RDM_FETCH_RTA_PKT ||
+		    efa_rdm_pkt_type_of(pkt_entry) == EFA_RDM_COMPARE_RTA_PKT)
+			/* TODO Send NACK */
+			efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno, false);
+		else
+			efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno, true);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}

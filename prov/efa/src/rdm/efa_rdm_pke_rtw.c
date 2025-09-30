@@ -534,6 +534,10 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	if (!rxe) {
 		EFA_WARN(FI_LOG_CQ,
 			"RX entries exhausted.\n");
+		/*
+		 * The RXE pool grows until we run OOM, and if we are OOM, we
+		 * cannot send a NACK, so force a hard failure here.
+		 */
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep,
 					   FI_ENOBUFS,
 					   FI_EFA_ERR_RXE_POOL_EXHAUSTED, true);
@@ -548,8 +552,9 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 					    rtw_hdr->rma_iov_count,
 					    FI_REMOTE_WRITE, rxe->iov, rxe->desc);
 	if (OFI_UNLIKELY(err)) {
+		/* TODO Add NACK */
 		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
-		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RMA_ADDR, true);
+		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RMA_ADDR, false);
 		efa_rdm_rxe_release(rxe);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
@@ -574,7 +579,12 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ,
 			"RDMA post read or queue failed.\n");
-		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RDMA_READ_POST, true);
+
+		/*
+		 * The READ/QUEUE/NACK failed, in this case log EQ message
+		 * and do not abort.
+		 */
+		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RDMA_READ_POST, false);
 		efa_rdm_rxe_release(rxe);
 	}
 }

@@ -649,9 +649,25 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	//efa_rdm_rxe_release(rxe);
 
 	if (rxe->internal_flags & EFA_RDM_OPE_INTERNAL) {
-		EFA_WARN(FI_LOG_CQ,
-			"Writing eq error for rxe from internal operations\n");
-		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno, true);
+		/*
+		 * Catch all errors from emulated one-sided operations, and ignore the
+		 * error on the RX side, which shouldn't be involved in a one sided
+		 * operation anyways.
+		 *
+		 * Emulated eager write
+		 * Emulated long-CTS write
+		 * Emulated long-read write
+		 * Emulated DC eager write
+		 * Emulated DC long-CTS write
+		 * Emulated short read
+		 * Emulated long-CTS read
+		 * Emulated atomic (for DC)
+		 * Emulated fetch atomic
+		 * Emulated compare atomic
+		 */
+		EFA_WARN(FI_LOG_CQ, "Emulated one-sided operation error on RX side\n");
+		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno, false);
+		/* TODO Add NACK here */
 		return;
 	}
 
