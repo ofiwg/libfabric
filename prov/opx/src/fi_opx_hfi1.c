@@ -3767,8 +3767,8 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 
 			assert(packet_count > 0);
 
-			/* In the unlikely event that we'll be sending a single
-			 * packet who's payload size is not a multiple of 4,
+			/* In the unlikely event that we'll be sending any
+			 * packet who's payload size is not a multiple of 8,
 			 * we'll need to add padding, in which case we'll need
 			 * to use a bounce buffer, regardless if we're
 			 * doing delivery completion. This is because the
@@ -3781,7 +3781,7 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 			 * since it uses the byte count in the DPUT header
 			 * which will still be set correctly.
 			 */
-			bool need_padding = (packet_count == 1 && (sdma_we_bytes & 0x3ul));
+			bool need_padding = (sdma_we_bytes & 0x7ul) != 0;
 			params->sdma_we->use_bounce_buf =
 				(!sdma_no_bounce_buf || opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
 				 opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH || need_padding);
@@ -3839,9 +3839,10 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 				}
 				replay->use_sdma = replay_use_sdma;
 
-				// Round packet_bytes up to the next multiple of 4,
+				// Round packet_bytes up to the next multiple of 8,
 				// then divide by 4 to get the correct number of dws.
-				uint64_t payload_dws = ((packet_bytes + 3) & -4) >> 2;
+				uint64_t payload_dws = ((packet_bytes + 7) & -8) >> 2;
+				assert((payload_dws << 2) == packet_bytes || need_padding);
 				uint64_t pbc_dws;
 				uint16_t lrh_dws;
 				uint64_t bytes_sent;
