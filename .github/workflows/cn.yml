@@ -8,6 +8,7 @@ on:
       - reopened
       - synchronize
       - closed
+      - labeled
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -18,22 +19,28 @@ jobs:
     name: Prechecks
     if: ${{ github.repository == 'cornelisnetworks/libfabric-internal' }}
     uses: cornelisnetworks/libfabric-devel/.github/workflows/ci-prechecks.yml@master
+  smoke-test:
+    name: Smoke Test
+    if:  ${{ github.repository == 'cornelisnetworks/libfabric-internal' }}
+    uses: cornelisnetworks/libfabric-devel/.github/workflows/smoke-test.yml@master
+    secrets:
+      OPXR_ELASTICSEARCH_CREDENTIALS: ${{ secrets.OPXR_ELASTICSEARCH_CREDENTIALS }}
   opa100:
     name: OPA100
-    needs: [prechecks]
-    if: ${{ github.repository == 'cornelisnetworks/libfabric-internal' }}
+    needs: [smoke-test, prechecks]
+    if: "${{ github.repository == 'cornelisnetworks/libfabric-internal' && contains(github.event.pull_request.labels.*.name, 'CI: Full Suite') }}"
     uses: cornelisnetworks/libfabric-devel/.github/workflows/ci-opa100.yml@master
     secrets:
       OPXR_ELASTICSEARCH_CREDENTIALS: ${{ secrets.OPXR_ELASTICSEARCH_CREDENTIALS }}
   cn5000:
     name: CN5000
-    needs: [prechecks]
-    if: ${{ github.repository == 'cornelisnetworks/libfabric-internal' }}
+    needs: [smoke-test, prechecks]
+    if: "${{ github.repository == 'cornelisnetworks/libfabric-internal' && contains(github.event.pull_request.labels.*.name, 'CI: Full Suite') }}"
     uses: cornelisnetworks/libfabric-devel/.github/workflows/ci-cn5000.yml@master
     secrets:
       OPXR_ELASTICSEARCH_CREDENTIALS: ${{ secrets.OPXR_ELASTICSEARCH_CREDENTIALS }}
   cleanup:
     name: Clean Up
     needs: [opa100, cn5000]
-    if: ${{ github.repository == 'cornelisnetworks/libfabric-internal' }}
+    if: "${{ github.repository == 'cornelisnetworks/libfabric-internal' && contains(github.event.pull_request.labels.*.name, 'CI: Full Suite') }}"
     uses: cornelisnetworks/libfabric-devel/.github/workflows/ci-cleanup.yml@master
