@@ -74,6 +74,8 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 		return;
 	}
 
+	ofi_genlock_lock(&ep->base_ep.domain->srx_lock);
+
 	/* we cannot release outstanding TX packets because device
 	 * will report completion of these packets later. Setting
 	 * pkt_entry->peer to NULL so the completion will be ignored.
@@ -109,6 +111,8 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 		dlist_remove(&peer->rnr_backoff_entry);
+
+	ofi_genlock_unlock(&ep->base_ep.domain->srx_lock);
 
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(peer, sizeof(struct efa_rdm_peer));
