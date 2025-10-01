@@ -4,7 +4,7 @@
 SCRIPT=$(basename ${BASH_SOURCE[0]:-$0})
 FI_INFO="../../../util/fi_info"
 ENODATA=61
-DEVICE="cxi1"
+DEVICE="cxi99"
 
 usage() {
 cat <<EOF1
