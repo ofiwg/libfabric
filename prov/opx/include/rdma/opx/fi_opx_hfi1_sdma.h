@@ -623,7 +623,7 @@ void opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdm
 				uint64_t last_packet_bytes)
 {
 	struct iovec payload_iov = {.iov_base = we->packets[0].replay->iov->iov_base,
-				    .iov_len  = (we->total_payload + 3) & -4};
+				    .iov_len  = (we->total_payload + 7) & -8};
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.nontid_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -665,7 +665,7 @@ void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 
 	size_t	     tid_iov_len	 = ((end_tid_idx - start_tid_idx) + 1) * sizeof(uint32_t);
 	struct iovec payload_tid_iovs[2] = {
-		{.iov_base = we->packets[0].replay->iov->iov_base, .iov_len = (we->total_payload + 3) & -4},
+		{.iov_base = we->packets[0].replay->iov->iov_base, .iov_len = (we->total_payload + 7) & -8},
 		{.iov_base = &tidpairs[start_tid_idx], .iov_len = tid_iov_len}};
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.tid_requests);
