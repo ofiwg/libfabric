@@ -616,11 +616,13 @@ int efa_get_user_info(uint32_t version, const char *node,
 			item = dlist_find_first_match(&fabric->domain_list, efa_find_domain, prov_info);
 			if (item) {
 				domain = container_of(item, struct util_domain, list_entry);
+				ofi_genlock_lock(&domain->lock);
 				dupinfo->domain_attr->domain = &domain->domain_fid;
 				EFA_INFO(FI_LOG_CORE, "Reusing open domain %s\n", domain->name);
 				domain->info_domain_caps |= dupinfo->caps | dupinfo->domain_attr->caps;
 				domain->info_domain_mode |= dupinfo->mode | dupinfo->domain_attr->mode;
 				domain->mr_mode |= dupinfo->domain_attr->mr_mode;
+				ofi_genlock_unlock(&domain->lock);
 			}
 			ofi_mutex_unlock(&fabric->lock);
 		}
