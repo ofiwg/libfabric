@@ -110,7 +110,7 @@ static int cxip_domain_find_cmdq(struct cxip_domain *dom,
 	 */
 	dlist_foreach_container(&dom->cmdq_list, struct cxip_domain_cmdq, cmdq,
 				entry) {
-		if (cxip_cmdq_empty(cmdq->cmdq)) {
+		if (!cxip_cmdq_active(cmdq->cmdq)) {
 			ret = cxip_cmdq_cp_modify(cmdq->cmdq, vni, tc);
 			if (ret) {
 				CXIP_WARN("Failed to change communication profile: %d\n",

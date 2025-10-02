@@ -193,6 +193,21 @@ int cxip_cmdq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
 	return ret;
 }
 
+bool cxip_cmdq_active(struct cxip_cmdq *cmdq)
+{
+	int ret;
+	unsigned int ack_counter;
+
+	if (!cxip_cmdq_empty(cmdq))
+		return true;
+
+	ret = cxil_cmdq_ack_counter(cmdq->dev_cmdq, &ack_counter);
+	if (ret)
+		return true;
+
+	return !!ack_counter;
+}
+
 int cxip_cmdq_cp_modify(struct cxip_cmdq *cmdq, uint16_t vni,
 			enum cxi_traffic_class tc)
 {
