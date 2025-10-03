@@ -290,7 +290,7 @@ static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
 				FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-			efa_rdm_pke_release_rx(pkt_entry);
+			efa_rdm_pke_release_rx_list(pkt_entry);
 			return -FI_ENOBUFS;
 		}
 	}
@@ -301,7 +301,7 @@ static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
 		if (OFI_UNLIKELY(err)) {
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_MSGRTM);
-			efa_rdm_pke_release_rx(pkt_entry);
+			efa_rdm_pke_release_rx_list(pkt_entry);
 			efa_rdm_rxe_release(rxe);
 			return err;
 		}
@@ -338,7 +338,7 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
 				FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-			efa_rdm_pke_release_rx(pkt_entry);
+			efa_rdm_pke_release_rx_list(pkt_entry);
 			return -FI_ENOBUFS;
 		}
 	}
@@ -351,7 +351,7 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 			if (err == -FI_ENOMR)
 				return err;
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_TAGRTM);
-			efa_rdm_pke_release_rx(pkt_entry);
+			efa_rdm_pke_release_rx_list(pkt_entry);
 			efa_rdm_rxe_release(rxe);
 			return err;
 		}
@@ -414,7 +414,7 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_p
 			"Unknown packet type ID: %d\n",
 		       base_hdr->type);
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_UNKNOWN_PKT_TYPE);
-		efa_rdm_pke_release_rx(pkt_entry);
+		efa_rdm_pke_release_rx_list(pkt_entry);
 	}
 
 	return -FI_EINVAL;
@@ -480,7 +480,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 				" robuf->exp_msg_id: %" PRIu32 "\n",
 			       msg_id, peer->robuf.exp_msg_id);
 			efa_base_ep_write_eq_error(&ep->base_ep, ret, FI_EFA_ERR_PKT_ALREADY_PROCESSED);
-			efa_rdm_pke_release_rx(pkt_entry);
+			efa_rdm_pke_release_rx_list(pkt_entry);
 			return;
 		}
 
@@ -1207,7 +1207,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 
 	err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
 
-	efa_rdm_pke_release_rx(pkt_entry);
+	efa_rdm_pke_release_rx_list(pkt_entry);
 	return err;
 }
 

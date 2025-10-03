@@ -286,7 +286,7 @@ struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_pke **pkt_entry_ptr)
 		/* unexp pkt is also rx pkt, insert it to rx pkt list so we can track it and clean up during ep close */
 		dlist_insert_tail(&unexp_pkt_entry->dbg_entry, &ep->rx_pkt_list);
 #endif
-		efa_rdm_pke_release_rx(*pkt_entry_ptr);
+		efa_rdm_pke_release_rx_list(*pkt_entry_ptr);
 		*pkt_entry_ptr = unexp_pkt_entry;
 	} else {
 		unexp_pkt_entry = *pkt_entry_ptr;
