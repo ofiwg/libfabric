@@ -368,7 +368,7 @@ int open_client(int idx)
 {
 	int ret;
 	struct fi_av_attr av_attr = {0};
-	struct fid_av *av;
+	int av_idx = idx;
 
 	if (opts.av_name) {
 		av_attr.name = opts.av_name;
@@ -383,11 +383,9 @@ int open_client(int idx)
 
 	/* ft_enable_ep bind the ep with cq and av before enabling */
 	if (shared_av) {
-		av = avs[0];
+		av_idx = 0;
 	} else {
-		av = avs[idx];
-
-		ret = fi_av_open(domain, &av_attr, &av, NULL);
+		ret = fi_av_open(domain, &av_attr, &avs[av_idx], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_av_open", ret);
 			return ret;
@@ -399,7 +397,7 @@ int open_client(int idx)
 		return ret;
 
 	/* Use the same remote addr we got from the persistent receiver ep */
-	ret = ft_av_insert(av, (void *)remote_raw_addr, 1, &remote_fiaddr[idx], 0, NULL);
+	ret = ft_av_insert(avs[av_idx], (void *)remote_raw_addr, 1, &remote_fiaddr[idx], 0, NULL);
 	if (ret)
 		return ret;
 
