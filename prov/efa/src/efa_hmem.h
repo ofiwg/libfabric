@@ -24,6 +24,7 @@ static const enum fi_hmem_iface efa_hmem_ifaces[] = {
 struct efa_hmem_info {
 	bool initialized; 	/* do we support it at all */
 	bool p2p_supported_by_device;	/* do we support p2p with this device */
+	bool dmabuf_supported_by_device_b;	/* do we support dmabuf with this device */
 
 	size_t max_medium_msg_size;
 	size_t runt_size;
