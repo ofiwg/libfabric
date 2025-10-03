@@ -754,7 +754,7 @@ void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_pe
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Failed to post HANDSHAKE to peer fi_addr: %ld implicit fi_addr %ld. %s\n",
 			peer->conn->fi_addr, peer->conn->implicit_fi_addr, fi_strerror(-err));
-		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_PEER_HANDSHAKE);
+		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_PEER_HANDSHAKE, true);
 		return;
 	}
 
@@ -1009,7 +1009,7 @@ void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 
 err_exit:
 
-	efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_INTERNAL_RX_BUF_POST);
+	efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_INTERNAL_RX_BUF_POST, true);
 }
 
 /**

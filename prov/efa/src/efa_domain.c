@@ -802,7 +802,7 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 				 peer->conn->fi_addr,
 				 peer->conn->implicit_fi_addr,
 				 fi_strerror(-ret));
-			efa_base_ep_write_eq_error(&peer->ep->base_ep, -ret, FI_EFA_ERR_PEER_HANDSHAKE);
+			efa_base_ep_write_eq_error(&peer->ep->base_ep, -ret, FI_EFA_ERR_PEER_HANDSHAKE, true);
 			continue;
 		}
 
