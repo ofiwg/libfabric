@@ -118,6 +118,8 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 	int dmabuf_fd;
 	uint64_t dmabuf_offset;
 
+	info->dmabuf_supported_by_device_b = false;
+
 	cuda_ret = ofi_cudaMalloc(&ptr, len);
 	if (cuda_ret != cudaSuccess) {
 		info->initialized = false;
@@ -145,6 +147,7 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 				"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
 			ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
 		}
+		info->dmabuf_supported_by_device_b = true;
 	} else {
 		EFA_INFO(FI_LOG_CORE,
 			"Unable to retrieve dmabuf fd of CUDA device buffer: %d. "
@@ -193,6 +196,8 @@ static inline void efa_hmem_info_check_p2p_support_neuron(struct efa_hmem_info *
 	uint64_t offset;
 	int ret;
 
+	info->dmabuf_supported_by_device_b = false;
+
 	if (g_efa_selected_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
 		ibv_access |= IBV_ACCESS_REMOTE_READ;
 	}
@@ -222,6 +227,7 @@ static inline void efa_hmem_info_check_p2p_support_neuron(struct efa_hmem_info *
 		ibv_mr = ibv_reg_dmabuf_mr(
 					ibv_pd, offset,
 					len, (uint64_t)ptr, dmabuf_fd, ibv_access);
+		info->dmabuf_supported_by_device_b = true;
 	} else if (ret == -FI_EOPNOTSUPP) {
 		EFA_INFO(FI_LOG_MR,
 			"Unable to retrieve dmabuf fd of Neuron device buffer, "
@@ -284,9 +290,14 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 	}
 
 	info->initialized = true;
+	info->max_medium_msg_size = 0;
+	info->runt_size = 0;
+	info->min_read_msg_size = 0;
+	info->min_read_write_size = 0;
 
 	if (iface == FI_HMEM_SYNAPSEAI || iface == FI_HMEM_SYSTEM) {
 		info->p2p_supported_by_device = true;
+		info->dmabuf_supported_by_device_b = true;
 	} else if (ofi_hmem_p2p_disabled()) {
 		info->p2p_supported_by_device = false;
 	} else {
