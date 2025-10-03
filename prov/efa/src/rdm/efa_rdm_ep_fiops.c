@@ -238,8 +238,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				 sizeof(struct efa_rdm_ep_peer_map_entry),
 				 EFA_RDM_BUFPOOL_ALIGNMENT, 0, /* no limit to max_cnt */
 				 EFA_RDM_EP_MIN_PEER_POOL_SIZE,
-				 /* Don't track usage, because endpoint can be closed without removing entries from AV */
-				 OFI_BUFPOOL_NO_TRACK);
+				 0);
 	if (ret)
 		goto err_free;
 
@@ -752,6 +751,25 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 			"Closing ep with unreleased txe: %p\n",
 			txe);
 		efa_rdm_txe_release(txe);
+	}
+
+	/* Clean up any remaining peers in the hashmap before destroying buffer pools */
+	if (efa_rdm_ep->fi_addr_to_peer_map) {
+		struct efa_rdm_ep_peer_map_entry *map_entry, *map_tmp;
+		HASH_ITER(hndl, efa_rdm_ep->fi_addr_to_peer_map, map_entry, map_tmp) {
+			efa_rdm_peer_destruct(&map_entry->peer, efa_rdm_ep);
+			HASH_DELETE(hndl, efa_rdm_ep->fi_addr_to_peer_map, map_entry);
+			ofi_buf_free(map_entry);
+		}
+	}
+
+	if (efa_rdm_ep->fi_addr_to_peer_map_implicit) {
+		struct efa_rdm_ep_peer_map_entry *map_entry, *map_tmp;
+		HASH_ITER(hndl, efa_rdm_ep->fi_addr_to_peer_map_implicit, map_entry, map_tmp) {
+			efa_rdm_peer_destruct(&map_entry->peer, efa_rdm_ep);
+			HASH_DELETE(hndl, efa_rdm_ep->fi_addr_to_peer_map_implicit, map_entry);
+			ofi_buf_free(map_entry);
+		}
 	}
 
 	if (efa_rdm_ep->ope_pool)
