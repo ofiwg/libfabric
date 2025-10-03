@@ -607,22 +607,24 @@ int efa_get_user_info(uint32_t version, const char *node,
 			util_lookup_existing_fabric_domain(&efa_util_prov, hints, &dupinfo);
 
 		if (hints && hints->domain_attr && hints->domain_attr->name &&
-		    dupinfo->fabric_attr->fabric && !dupinfo->domain_attr->domain) {
+		    dupinfo->fabric_attr->fabric) {
 			fabric = container_of(dupinfo->fabric_attr->fabric, struct util_fabric, fabric_fid);
 			EFA_INFO(FI_LOG_CORE, "Reusing open fabric %s\n", fabric->name);
 
 			/* Use efa specific efa_find_domain instead of util_find_domain */
 			ofi_mutex_lock(&fabric->lock);
-			item = dlist_find_first_match(&fabric->domain_list, efa_find_domain, prov_info);
-			if (item) {
-				domain = container_of(item, struct util_domain, list_entry);
-				ofi_genlock_lock(&domain->lock);
-				dupinfo->domain_attr->domain = &domain->domain_fid;
-				EFA_INFO(FI_LOG_CORE, "Reusing open domain %s\n", domain->name);
-				domain->info_domain_caps |= dupinfo->caps | dupinfo->domain_attr->caps;
-				domain->info_domain_mode |= dupinfo->mode | dupinfo->domain_attr->mode;
-				domain->mr_mode |= dupinfo->domain_attr->mr_mode;
-				ofi_genlock_unlock(&domain->lock);
+			if (!dupinfo->domain_attr->domain) {
+				item = dlist_find_first_match(&fabric->domain_list, efa_find_domain, prov_info);
+				if (item) {
+					domain = container_of(item, struct util_domain, list_entry);
+					ofi_genlock_lock(&domain->lock);
+					dupinfo->domain_attr->domain = &domain->domain_fid;
+					EFA_INFO(FI_LOG_CORE, "Reusing open domain %s\n", domain->name);
+					domain->info_domain_caps |= dupinfo->caps | dupinfo->domain_attr->caps;
+					domain->info_domain_mode |= dupinfo->mode | dupinfo->domain_attr->mode;
+					domain->mr_mode |= dupinfo->domain_attr->mr_mode;
+					ofi_genlock_unlock(&domain->lock);
+				}
 			}
 			ofi_mutex_unlock(&fabric->lock);
 		}
