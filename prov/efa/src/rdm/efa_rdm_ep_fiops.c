@@ -242,6 +242,10 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (ret)
 		goto err_free;
 
+	ret = ofi_bufpool_grow(ep->peer_map_entry_pool);
+	if (ret)
+		goto err_free;
+
 	return 0;
 
 err_free:
