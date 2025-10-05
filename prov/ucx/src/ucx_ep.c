@@ -233,6 +233,10 @@ struct fi_ops_ep ucx_ep_ops = {
 	.cancel = ucx_ep_cancel,
 	.getopt = ucx_ep_getopt,
 	.setopt = ucx_ep_setopt,
+	.tx_ctx = fi_no_tx_ctx,
+	.rx_ctx = fi_no_rx_ctx,
+	.rx_size_left = fi_no_rx_size_left,
+	.tx_size_left = fi_no_tx_size_left,
 };
 
 static struct fi_ops ucx_fi_ops = {
@@ -240,6 +244,9 @@ static struct fi_ops ucx_fi_ops = {
 	.close = ucx_ep_close,
 	.bind = ucx_ep_bind,
 	.control = ucx_ep_control,
+	.ops_open = fi_no_ops_open,
+	.tostr = fi_no_tostr,
+	.ops_set = fi_no_ops_set,
 };
 
 extern struct fi_ops_cm ucx_cm_ops;

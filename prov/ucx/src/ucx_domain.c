@@ -105,7 +105,11 @@ static int ucx_dom_control(struct fid *fid, int command, void *arg)
 static struct fi_ops ucx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = ucx_domain_close,
+	.bind = fi_no_bind,
 	.control = ucx_dom_control,
+	.ops_open = fi_no_ops_open,
+	.tostr = fi_no_tostr,
+	.ops_set = fi_no_ops_set,
 };
 
 struct fi_ops_domain ucx_domain_ops = {
@@ -119,6 +123,7 @@ struct fi_ops_domain ucx_domain_ops = {
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = fi_no_query_atomic,
+	.query_collective = fi_no_query_collective,
 };
 
 
