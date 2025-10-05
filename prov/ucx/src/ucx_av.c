@@ -245,6 +245,10 @@ static struct fi_ops ucx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = ucx_av_close,
 	.bind = ucx_av_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+	.tostr = fi_no_tostr,
+	.ops_set = fi_no_ops_set
 };
 
 static struct fi_ops_av ucx_av_ops = {
@@ -252,6 +256,10 @@ static struct fi_ops_av ucx_av_ops = {
 	.insert = ucx_av_insert,
 	.remove = ucx_av_remove,
 	.lookup = ucx_av_lookup,
+	.insertsvc = fi_no_av_insertsvc,
+	.insertsym = fi_no_av_insertsym,
+	.straddr = fi_no_av_straddr,
+	.av_set = fi_no_av_set,
 };
 
 int ucx_av_open(struct fid_domain *fi_domain, struct fi_av_attr *attr,
