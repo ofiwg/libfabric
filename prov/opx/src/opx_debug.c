@@ -228,7 +228,7 @@ static void opx_debug_dump_backtrace(FILE *output)
 static void opx_debug_dump_endpoint(struct fi_opx_ep *opx_ep)
 {
 	char  hostname[HOST_NAME_MAX + 1];
-	pid_t my_pid = gettid();
+	pid_t my_pid = getpid();
 
 	int rc = gethostname(hostname, HOST_NAME_MAX);
 	if (rc != 0) {
