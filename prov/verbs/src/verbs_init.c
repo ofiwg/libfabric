@@ -374,12 +374,9 @@ static int vrb_param_define(const char *param_name, const char *param_str,
 		switch (type) {
 		case FI_PARAM_STRING:
 			if (*(char **)param_default != NULL) {
-				param_default_sz =
-					MIN(strlen(*(char **)param_default),
-					    254);
-				strncpy(param_default_str, *(char **)param_default,
-					param_default_sz);
-				param_default_str[param_default_sz + 1] = '\0';
+				strncpy(param_default_str, *(char **)param_default, 255);
+				param_default_str[255] = '\0';
+				param_default_sz = strlen(param_default_str);
 			}
 			break;
 		case FI_PARAM_INT:
