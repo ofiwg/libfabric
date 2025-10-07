@@ -118,7 +118,7 @@ static inline ssize_t ucx_do_inject(struct fid_ep *ep, const void *buf,
 
 	status = ucp_tag_send_nb(dst_ep, buf, len,
 				 ucp_dt_make_contig(1),
-				 tag, ucx_send_callback_no_compl);
+				 tag, ucx_callback_noop);
 
 	if (status == NULL) {
 		ofi_ep_cntr_inc(&u_ep->ep, CNTR_TX);
@@ -134,6 +134,8 @@ static inline ssize_t ucx_do_inject(struct fid_ep *ep, const void *buf,
 
 	while ((ret = ucp_request_check_status(status)) == UCS_INPROGRESS)
 		ucp_worker_progress(u_ep->worker);
+
+	ucx_req_release(status);
 
 	return -ucx_translate_errcode(ret);
 }
