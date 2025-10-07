@@ -110,7 +110,20 @@ struct fi_opx_domain {
 
 #ifdef HFISVC
 	struct {
-		hfisvc_client_t	    handle;
+		hfisvc_client_t handle;
+
+		/**
+		 * @brief Command queue used by the domain for issuing commands to the
+		 * hfisvc where we are opening/closing hfisvc memory regions.
+		 */
+		hfisvc_client_command_queue_t mr_command_queue;
+
+		/**
+		 * @brief Completion queue used by the domain for handling completions from the
+		 * hfisvc where we are opening/closing hfisvc memory regions.
+		 */
+		hfisvc_client_completion_queue_t mr_completion_queue;
+
 		opx_hfisvc_keyset_t access_key_set;
 		int64_t		    ref_cnt;
 		hfisvc_client_key_t client_key;
@@ -168,7 +181,7 @@ struct fi_opx_mr {
 	struct {
 		union {
 			uint32_t reserved;
-#if HAVE_HFISVC
+#ifdef HFISVC
 			hfisvc_client_mr_t mr_handle;
 #endif
 		};
@@ -203,6 +216,42 @@ static inline uint32_t fi_opx_domain_get_rx_max(struct fid_domain *domain)
 }
 
 #ifdef HFISVC
+
+__OPX_FORCE_INLINE__
+void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
+{
+	struct hfisvc_client_cq_entry hfisvc_out[64];
+	size_t n = hfisvc_client_cq_read(opx_domain->hfisvc.mr_completion_queue, 0ul /* flags */, hfisvc_out, 64);
+	while (n > 0) {
+		for (size_t i = 0; i < n; ++i) {
+			if (hfisvc_out[i].status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS) {
+				// TODO: FI_WARN, post some kind of error to the error queue
+				fprintf(stderr, "Completion error: status was %d\n", hfisvc_out[i].status);
+				abort();
+			}
+			assert(hfisvc_out[i].status == HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS);
+			assert(hfisvc_out[i].type == HFISVC_CLIENT_CQ_ENTRY_TYPE_MR);
+
+			struct fi_opx_mr  *opx_mr    = (struct fi_opx_mr *) hfisvc_out[i].app_context;
+			hfisvc_client_mr_t mr_handle = hfisvc_out[i].type_mr.mr;
+
+			if (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_OPEN) {
+				opx_mr->hfisvc.mr_handle = mr_handle;
+				opx_mr->hfisvc.state	 = OPX_MR_HFISVC_OPENED;
+			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_CLOSE) {
+				assert(opx_mr->hfisvc.mr_handle == mr_handle);
+				opx_mr->hfisvc.state = OPX_MR_HFISVC_CLOSED;
+			} else {
+				// TODO: FI_WARN, post some kind of error to the error queue
+				fprintf(stderr, "(%d) %s:%s():%d Got unexpected completion for opx_mr=%p state=%d\n",
+					getpid(), __FILE__, __func__, __LINE__, opx_mr, opx_mr->hfisvc.state);
+				abort();
+			}
+		}
+		n = hfisvc_client_cq_read(opx_domain->hfisvc.mr_completion_queue, 0ul /* flags */, hfisvc_out, 64);
+	}
+}
+
 int opx_domain_hfisvc_init(struct fi_opx_domain *domain, const enum hfisvc_client_connect_type type, const int fd);
 #endif
 
