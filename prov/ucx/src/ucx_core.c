@@ -43,6 +43,7 @@ ssize_t ucx_do_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	struct util_cq *cq;
 	ucs_status_t cstatus = UCS_OK;
 	int no_completion;
+	int using_inject = 0;
 
 	u_ep = container_of(ep, struct ucx_ep, ep.ep_fid);
 	dst_ep = UCX_GET_UCP_EP(u_ep, msg->addr);
@@ -53,8 +54,11 @@ ssize_t ucx_do_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 
 	no_completion = (u_ep->ep.tx_op_flags & FI_SELECTIVE_COMPLETION) &&
 			!(flags & FI_COMPLETION);
+	using_inject = (flags & FI_INJECT);
 
-	cbf = no_completion ? ucx_send_callback_no_compl : ucx_send_callback;
+	cbf = no_completion ?
+			(using_inject ? ucx_callback_noop : ucx_send_callback_no_compl) :
+			ucx_send_callback;
 
 	if (OFI_UNLIKELY(flags & FI_MATCH_COMPLETE)) {
 		if (msg->iov_count < 2) {
@@ -116,12 +120,13 @@ ssize_t ucx_do_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 		}
 	}
 
-	if (flags & FI_INJECT) {
+	if (using_inject) {
 		if(UCS_PTR_STATUS(status) != UCS_OK) {
 			while ((cstatus = ucp_request_check_status(status))
 					== UCS_INPROGRESS)
 				ucp_worker_progress(u_ep->worker);
 
+			ucx_req_release(status);
 			/*
 			 * The callback function should have already taken
 			 * care of cntr and cq update.
