@@ -981,7 +981,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 	struct efa_domain *domain;
 	struct dlist_entry *entry, *tmp;
 	struct efa_rdm_ope *rxe;
-	struct efa_rdm_peer *peer;
 
 	efa_rdm_ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	domain = efa_rdm_ep_domain(efa_rdm_ep);
@@ -1021,21 +1020,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 	 * (part of fi_cq_read) can access entries that are from a closed QP.
 	 */
 	ofi_genlock_lock(&domain->srx_lock);
-
-	/* Remove all peers associated with this endpoint in domain level peer lists */
-	dlist_foreach_container_safe(&domain->peer_backoff_list, struct efa_rdm_peer,
-				     peer, rnr_backoff_entry, tmp) {
-		if (peer->ep == efa_rdm_ep) {
-			dlist_remove(&peer->rnr_backoff_entry);
-		}
-	}
-
-	dlist_foreach_container_safe(&domain->handshake_queued_peer_list, struct efa_rdm_peer,
-				     peer, handshake_queued_entry, tmp) {
-		if (peer->ep == efa_rdm_ep) {
-			dlist_remove(&peer->handshake_queued_entry);
-		}
-	}
 
 	/* We need to free the util_ep first to avoid race conditions
 	 * with other threads progressing the cq. */
