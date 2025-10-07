@@ -75,6 +75,38 @@ jobs:
         with:
           name: ${{ matrix.os }}-${{ matrix.cc }}-config.log
           path: config.log
+  gcc15:
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.APT_PACKAGES }}
+          sudo add-apt-repository -y ppa:puni070/gcc-noble
+          sudo apt-get update
+          sudo apt-get install -y gcc-15 g++-15
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 60 --slave /usr/bin/g++ g++ /usr/bin/g++-15
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Build Check
+        run: |
+          set -x
+          git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
+          pushd rdma-core; bash build.sh; popd
+          export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
+          ./autogen.sh
+          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} --with-lttng
+          make -j 2 AM_CFLAGS="-Wall -Werror"; make install
+          DISTCHECK_CONFIGURE_FLAGS="${{ env.OFI_PROVIDER_FLAGS }}" make -j 2 distcheck
+          $PWD/install/bin/fi_info -l
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gcc15-config.log
+          path: config.log
   hmem:
     permissions:
       contents: read
