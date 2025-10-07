@@ -1,5 +1,11 @@
 import pytest
-from efa_common import has_rdma, support_cq_interrupts
+import time
+from efa_common import (
+    has_rdma, 
+    support_cq_interrupts,
+    CudaMemorySupport,
+    get_cuda_memory_support,
+)
 
 # The memory types for bi-directional tests.
 memory_type_list_bi_dir = [
@@ -98,6 +104,56 @@ def rma_fabric(cmdline_args, fabric):
     ):
         pytest.skip("FI_RMA is not supported. Skip rma tests on efa-direct.")
     return fabric
+
+
+def cuda_memory_type_validation(cmdline_args):
+    """
+    Validate CUDA memory type configuration against hardware capabilities at session startup.
+    
+    Args:
+        cmdline_args: Command line arguments containing dmabuf configuration.
+        
+    Returns:
+        None
+        
+    Notes:
+        - Skips tests if user specified non-dmabuf but hardware only supports DMA_BUF_ONLY
+        - Only validates if CUDA tests are being run
+    """
+    # Check if CUDA tests are being run via expression
+    print("Running cuda_memory_type_validation() validation checks!")
+    
+    cuda_support: CudaMemorySupport = get_cuda_memory_support(
+                                            cmdline_args=cmdline_args, 
+                                            ip=cmdline_args.server_id
+                                        )
+
+    if cuda_support == CudaMemorySupport.NOT_INITIALIZED:
+        pytest.fail("CUDA memory support never initialized")
+    
+    do_dmabuf = cmdline_args.do_dmabuf_reg_for_hmem
+    if (do_dmabuf is None and 
+        cuda_support == CudaMemorySupport.DMA_BUF_ONLY):
+        error = "User specified CUDA without dmabuf but hardware only supports DMA_BUF_ONLY"
+        print(f"CUDA validation failed: {error}")
+        pytest.skip(error)
+    
+    print(f"Correctly defined dma buf mode {do_dmabuf} and return {cuda_support}!")
+    
+    return
+
+
+@pytest.fixture(scope="function", autouse=True)
+def cuda_validation_fixture(request, cmdline_args):
+    """Auto-run CUDA validation if CUDA tests are present."""
+    # Check if the current test has cuda_memory mark
+    has_cuda_mark = any(mark.name == 'cuda_memory' for mark in request.node.iter_markers())
+    
+    if has_cuda_mark:
+        cuda_memory_type_validation(cmdline_args)
+    else:
+        print("No CUDA memory mark, skipping validation")
+
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_collection_modifyitems(session, config, items):

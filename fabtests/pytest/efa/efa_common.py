@@ -1,8 +1,69 @@
 import os
 import subprocess
 import functools
+import pytest
+from enum import IntEnum
 from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg, ClientServerTest
 from retrying import retry
+
+
+class CudaMemorySupport(IntEnum):
+    NOT_INITIALIZED = -1
+    NOT_SUPPORTED = 0
+    DMA_BUF_ONLY = 1
+    GDR_ONLY = 2
+    DMABUF_GDR_BOTH = 3
+
+    def __str__(self):
+        return self.name
+
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def get_cuda_memory_support(cmdline_args, ip):
+    """
+    Execute check_dmabuf binary to determine CUDA memory support capabilities.
+    
+    Args:
+        cmdline_args: Command line arguments containing binpath, timeout, provider, and environments.
+        ip: IP address or hostname of the target machine.
+        
+    Returns:
+        CudaMemorySupport: Enum value indicating hardware CUDA memory support type.
+        
+    Notes:
+        - Executes check_dmabuf binary remotely via SSH with timeout
+        - Maps return code directly to CudaMemorySupport enum values
+        - Returns UNKNOWN for negative return codes indicating errors
+        - Retries on SSH connection errors up to 3 times
+    """
+    binpath = cmdline_args.binpath or ""
+    cmd = "timeout " + str(cmdline_args.timeout) \
+          + " " + os.path.join(binpath, "check_cuda_dmabuf") \
+          + " -p " + cmdline_args.provider
+    if cmdline_args.environments:
+        cmd = cmdline_args.environments + " " + cmd
+    
+    proc = subprocess.run("ssh {} {}".format(ip, cmd),
+               stdout=subprocess.PIPE,
+               stderr=subprocess.STDOUT,
+               shell=True,
+               universal_newlines=True)
+    
+    if has_ssh_connection_err_msg(proc.stdout):
+        raise SshConnectionError()
+    
+    if proc.returncode < 0:
+        return CudaMemorySupport.NOT_SUPPORTED
+    
+    print(f"The ssh return is {proc}")
+    rc = proc.returncode
+    if rc not in (CudaMemorySupport.NOT_SUPPORTED,
+                  CudaMemorySupport.DMA_BUF_ONLY,
+                  CudaMemorySupport.GDR_ONLY,
+                  CudaMemorySupport.DMABUF_GDR_BOTH):
+        print(f"[warn] check_dmabuf returned unexpected code {rc}, treating as NOT_INITIALIZED")
+        return CudaMemorySupport.NOT_INITIALIZED
+
+    return CudaMemorySupport(rc)
 
 def efa_run_client_server_test(cmdline_args, executable, iteration_type,
                                completion_semantic, memory_type, message_size,
