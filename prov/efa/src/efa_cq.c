@@ -705,6 +705,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		 * 2. It is a solicited wc and having wr_id (efa_context) which means it needs a completion.
 		 */
 		if ((!efa_cq_wc_is_unsolicited(ibv_cq) && ibv_cq->ibv_cq_ex->wr_id ) || opcode == IBV_WC_RECV_RDMA_WITH_IMM) {
+			efa_tracepoint(handle_completion, ibv_cq->ibv_cq_ex->wr_id, opcode);
 			efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size), opcode);
 			if (src_addr)
 				src_addr[num_cqe] = efa_cq_get_src_addr(ibv_cq, opcode);
