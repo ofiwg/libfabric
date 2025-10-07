@@ -603,7 +603,26 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain, const enum hfisvc_clien
 		if (ret) {
 			abort();
 		}
-		if (opx_hfisvc_keyset_init(0, &domain->hfisvc.access_key_set)) {
+		OPX_HFISVC_DEBUG_LOG("Creating new domain mr command queue\n");
+		ret = hfisvc_client_command_queue_open(&domain->hfisvc.mr_command_queue, domain->hfisvc.handle);
+		if (ret) {
+			fprintf(stderr, "(%d) %s:%s():%d Failed creating domain mr command queue! rc=%d\n", getpid(),
+				__FILE__, __func__, __LINE__, ret);
+			abort();
+		}
+
+		OPX_HFISVC_DEBUG_LOG("Creating new domain mr completion queue\n");
+		ret = hfisvc_client_completion_queue_open(&domain->hfisvc.mr_completion_queue, domain->hfisvc.handle);
+		if (ret) {
+			fprintf(stderr, "(%d) %s:%s():%d Failed creating domain mr completion queue! rc=%d\n", getpid(),
+				__FILE__, __func__, __LINE__, ret);
+			abort();
+		}
+		OPX_HFISVC_DEBUG_LOG("Initializing hfisvc keyset\n");
+		ret = opx_hfisvc_keyset_init(0, &domain->hfisvc.access_key_set);
+		if (ret) {
+			fprintf(stderr, "(%d) %s:%s():%d Failed initializing hfisvc keyset! rc=%d\n", getpid(),
+				__FILE__, __func__, __LINE__, ret);
 			abort();
 		}
 		fi_opx_ref_init(&domain->hfisvc.ref_cnt, "hfisvc");
