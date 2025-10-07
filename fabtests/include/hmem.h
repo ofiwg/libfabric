@@ -35,6 +35,14 @@
 #include <rdma/fi_domain.h>
 #include <rdma/fi_errno.h>
 
+enum ft_cuda_memory_support {
+	FT_CUDA_NOT_INITIALIZED = -1,
+	FT_CUDA_NOT_SUPPORTED = 0,
+	FT_CUDA_DMA_BUF_ONLY = 1,
+	FT_CUDA_GDR_ONLY = 2, 
+	FT_CUDA_DMABUF_GDR_BOTH  = 3,
+};
+
 #if HAVE_ZE
 #include <level_zero/ze_api.h>
 extern struct libze_ops {
@@ -185,6 +193,7 @@ int ft_cuda_copy_from_hmem(uint64_t device, void *dst, const void *src,
 int ft_cuda_get_dmabuf_fd(void *buf, size_t len,
 			  int *fd, uint64_t *offset);
 int ft_cuda_put_dmabuf_fd(int fd);
+enum ft_cuda_memory_support ft_cuda_memory_support(void);
 
 int ft_rocr_init(void);
 int ft_rocr_cleanup(void);

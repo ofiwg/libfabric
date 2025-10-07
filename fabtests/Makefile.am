@@ -69,7 +69,8 @@ bin_PROGRAMS = \
 	multinode/fi_multinode_coll \
 	component/sock_test \
 	regression/sighandler_test \
-	common/check_hmem
+	common/check_hmem \
+	common/check_cuda_dmabuf
 
 if HAVE_ZE_DEVEL
 if HAVE_VERBS_DEVEL
@@ -617,6 +618,14 @@ common_check_hmem_SOURCES = \
 common_check_hmem_LDADD = libfabtests.la
 
 common_checK_hmem_CFLAGS = \
+	$(AM_CFLAGS)
+
+common_check_cuda_dmabuf_SOURCES = \
+	common/check_cuda_dmabuf.c
+
+common_check_cuda_dmabuf_LDADD = libfabtests.la
+
+common_check_cuda_dmabuf_CFLAGS = \
 	$(AM_CFLAGS)
 
 real_man_pages = \
