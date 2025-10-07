@@ -1026,14 +1026,19 @@ static int efa_rdm_ep_close(struct fid *fid)
 	dlist_foreach_container_safe(&domain->peer_backoff_list, struct efa_rdm_peer,
 				     peer, rnr_backoff_entry, tmp) {
 		if (peer->ep == efa_rdm_ep) {
+			assert(peer->flags & EFA_RDM_PEER_IN_BACKOFF);
 			dlist_remove(&peer->rnr_backoff_entry);
+			peer->flags &= ~EFA_RDM_PEER_IN_BACKOFF;
 		}
 	}
 
 	dlist_foreach_container_safe(&domain->handshake_queued_peer_list, struct efa_rdm_peer,
 				     peer, handshake_queued_entry, tmp) {
 		if (peer->ep == efa_rdm_ep) {
+			assert(peer->flags & EFA_RDM_PEER_HANDSHAKE_QUEUED);
 			dlist_remove(&peer->handshake_queued_entry);
+			peer->flags &= ~EFA_RDM_PEER_HANDSHAKE_QUEUED;
+
 		}
 	}
 
