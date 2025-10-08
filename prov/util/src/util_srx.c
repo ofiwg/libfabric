@@ -390,6 +390,9 @@ static int util_queue_tag(struct fi_peer_rx_entry *rx_entry)
 static void util_free_entry(struct fi_peer_rx_entry *entry)
 {
 	struct util_srx_ctx *srx;
+	struct util_unexp_peer *unexp_peer;
+	struct slist *queue;
+	struct slist_entry *item, *prev;
 	struct util_rx_entry *util_entry, *owner_entry;
 
 	srx = (struct util_srx_ctx *) entry->srx->ep_fid.fid.context;
@@ -410,6 +413,30 @@ static void util_free_entry(struct fi_peer_rx_entry *entry)
 			ofi_buf_free(owner_entry);
 		}
 	}
+
+	if (util_entry->status == RX_ENTRY_UNEXP) {
+		if (util_entry->peer_entry.addr == FI_ADDR_UNSPEC) {
+			dlist_remove(&util_entry->d_entry);
+		} else {
+			unexp_peer = ofi_array_at(&srx->src_unexp_peers,
+						  util_entry->peer_entry.addr);
+			queue = util_entry->peer_entry.flags & FI_TAGGED ?
+					&unexp_peer->tag_queue :
+					&unexp_peer->msg_queue;
+
+			slist_foreach(queue, item, prev) {
+				if ((struct util_rx_entry *) item == util_entry)
+					slist_remove(queue, item, prev);
+			}
+
+			if (!--unexp_peer->cnt) {
+				assert(slist_empty(&unexp_peer->msg_queue) &&
+				       slist_empty(&unexp_peer->tag_queue));
+				dlist_remove(&unexp_peer->entry);
+			}
+		}
+	}
+
 	ofi_buf_free(util_entry);
 }
 
