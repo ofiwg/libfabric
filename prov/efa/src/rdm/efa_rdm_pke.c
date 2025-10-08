@@ -119,6 +119,14 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
 	/*
+	 * Remove packet from double linked lists if it was inserted
+	 */
+	if (pkt_entry->flags & (EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS | EFA_RDM_PKE_IN_OPE_QUEUED_PKTS)) {
+		dlist_remove(&pkt_entry->entry);
+		pkt_entry->flags &= ~(EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS | EFA_RDM_PKE_IN_OPE_QUEUED_PKTS);
+	}
+
+	/*
 	 * Decrement rnr_queued_pkts counter and reset backoff for this peer if
 	 * we get a send completion for a retransmitted packet.
 	 */

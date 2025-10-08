@@ -16,6 +16,8 @@
 #define EFA_RDM_PKE_LOCAL_WRITE		BIT_ULL(4) /**< this packet entry is used as context of an RDMA Write to self */
 #define EFA_RDM_PKE_SEND_TO_USER_RECV_QP	BIT_ULL(5) /**< this packet entry is used for posting send to a dedicated QP that doesn't expect any pkt hdrs */
 #define EFA_RDM_PKE_HAS_NO_BASE_HDR	BIT_ULL(6)	/**< This packet entry's wiredata contains no base header */
+#define EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS	BIT_ULL(7) /**< this packet entry is in peer->outstanding_tx_pkts list */
+#define EFA_RDM_PKE_IN_OPE_QUEUED_PKTS	BIT_ULL(8) /**< this packet entry is in ope->queued_pkts list */
 
 #define EFA_RDM_PKE_ALIGNMENT		128
 
@@ -137,6 +139,8 @@ struct efa_rdm_pke {
 	 * @see #EFA_RDM_PKE_LOCAL_WRITE
 	 * @see #EFA_RDM_PKE_SEND_TO_USER_RECV_QP
 	 * @see #EFA_RDM_PKE_HAS_NO_BASE_HDR
+	 * @see #EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS
+	 * @see #EFA_RDM_PKE_IN_OPE_QUEUED_PKTS
 	 */
 	uint32_t flags;
 
