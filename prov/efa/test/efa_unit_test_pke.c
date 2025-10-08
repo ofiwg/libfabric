@@ -275,3 +275,96 @@ void test_efa_rdm_pke_get_unexp(struct efa_resource **state)
 	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->rx_pkt_list), 1);
 #endif
 }
+
+/**
+ * @brief Test packet entry flag tracking for double linked list insertion/removal
+ *
+ * This test verifies that packet entries correctly track their insertion status
+ * in outstanding_tx_pkts and queued_pkts lists using internal flags, and that
+ * the release function properly removes them from the appropriate lists.
+ *
+ * @param state
+ */
+void test_efa_rdm_pke_flag_tracking(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct fi_msg msg = {0};
+	char buf[16];
+	struct iovec iov = {
+		.iov_base = buf,
+		.iov_len = sizeof(buf)
+	};
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t peer_addr;
+	int err, numaddr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Create a fake peer */
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(numaddr, 1);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+
+	/* Create a txe */
+	msg.addr = peer_addr;
+	msg.iov_count = 1;
+	msg.msg_iov = &iov;
+	msg.desc = NULL;
+	txe = efa_rdm_ep_alloc_txe(efa_rdm_ep, peer, &msg, ofi_op_msg, 0, 0);
+	assert_non_null(txe);
+
+	/* Allocate a packet entry */
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	pkt_entry->ope = txe;
+	pkt_entry->peer = peer;
+
+	/* Initially, packet should not be in any list */
+	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS, 0);
+	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_IN_OPE_QUEUED_PKTS, 0);
+	assert_true(dlist_empty(&peer->outstanding_tx_pkts));
+	assert_true(dlist_empty(&txe->queued_pkts));
+
+	/* Test insertion into outstanding_tx_pkts */
+	efa_rdm_ep_record_tx_op_submitted(efa_rdm_ep, pkt_entry);
+	assert_int_not_equal(pkt_entry->flags & EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS, 0);
+	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_IN_OPE_QUEUED_PKTS, 0);
+	assert_false(dlist_empty(&peer->outstanding_tx_pkts));
+	assert_true(dlist_empty(&txe->queued_pkts));
+
+	/* Test removal from outstanding_tx_pkts */
+	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry);
+	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS, 0);
+	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_IN_OPE_QUEUED_PKTS, 0);
+	assert_true(dlist_empty(&peer->outstanding_tx_pkts));
+	assert_true(dlist_empty(&txe->queued_pkts));
+
+	/* Test insertion into queued_pkts */
+	efa_rdm_ep_queue_rnr_pkt(efa_rdm_ep, pkt_entry);
+	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS, 0);
+	assert_int_not_equal(pkt_entry->flags & EFA_RDM_PKE_IN_OPE_QUEUED_PKTS, 0);
+	assert_true(dlist_empty(&peer->outstanding_tx_pkts));
+	assert_false(dlist_empty(&txe->queued_pkts));
+
+	/* Test that release_tx removes from queued_pkts */
+	efa_rdm_pke_release_tx(pkt_entry);
+	assert_true(dlist_empty(&peer->outstanding_tx_pkts));
+	assert_true(dlist_empty(&txe->queued_pkts));
+
+	/* Clean up */
+	efa_rdm_txe_release(txe);
+}
+
+
