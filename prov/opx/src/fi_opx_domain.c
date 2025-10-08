@@ -176,8 +176,8 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	attr->max_ep_tx_ctx = FI_OPX_ADDR_SEP_RX_MAX;
 	attr->max_ep_rx_ctx = FI_OPX_ADDR_SEP_RX_MAX;
 
-	attr->max_ep_stx_ctx = SIZE_MAX;
-	attr->max_ep_srx_ctx = SIZE_MAX;
+	attr->max_ep_stx_ctx = 0;
+	attr->max_ep_srx_ctx = 0;
 	attr->mr_iov_limit   = 1;
 
 	*domain_attr = attr;
@@ -227,13 +227,12 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 			struct fi_opx_domain *opx_domain =
 				container_of(hints->domain, struct fi_opx_domain, domain_fid);
 
-			domain_attr->threading	    = opx_domain->threading;
-			domain_attr->resource_mgmt  = opx_domain->resource_mgmt;
-			domain_attr->tx_ctx_cnt	    = fi_opx_domain_get_tx_max(hints->domain);
-			domain_attr->rx_ctx_cnt	    = fi_opx_domain_get_rx_max(hints->domain);
-			domain_attr->max_ep_tx_ctx  = fi_opx_domain_get_tx_max(hints->domain);
-			domain_attr->max_ep_rx_ctx  = fi_opx_domain_get_rx_max(hints->domain);
-			domain_attr->max_ep_stx_ctx = fi_opx_domain_get_tx_max(hints->domain);
+			domain_attr->threading	   = opx_domain->threading;
+			domain_attr->resource_mgmt = opx_domain->resource_mgmt;
+			domain_attr->tx_ctx_cnt	   = fi_opx_domain_get_tx_max(hints->domain);
+			domain_attr->rx_ctx_cnt	   = fi_opx_domain_get_rx_max(hints->domain);
+			domain_attr->max_ep_tx_ctx = fi_opx_domain_get_tx_max(hints->domain);
+			domain_attr->max_ep_rx_ctx = fi_opx_domain_get_rx_max(hints->domain);
 
 		} else {
 			if (hints->threading) {
@@ -268,12 +267,6 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 			}
 			if (hints->max_ep_rx_ctx) {
 				domain_attr->max_ep_rx_ctx = hints->max_ep_rx_ctx;
-			}
-			if (hints->max_ep_stx_ctx) {
-				domain_attr->max_ep_stx_ctx = hints->max_ep_stx_ctx;
-			}
-			if (hints->max_ep_srx_ctx) {
-				domain_attr->max_ep_srx_ctx = hints->max_ep_srx_ctx;
 			}
 			if (hints->mr_iov_limit) {
 				domain_attr->mr_iov_limit = hints->mr_iov_limit;
