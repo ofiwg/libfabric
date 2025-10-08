@@ -322,6 +322,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_alloc_rtw_rxe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_alloc_rtr_rxe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_get_unexp, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_flag_tracking, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_flag_tracking, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end of efa_unit_test_pke.c */
 
 		/* begin efa_unit_test_domain.c */

@@ -320,6 +320,7 @@ void test_efa_rdm_pke_alloc_rta_rxe();
 void test_efa_rdm_pke_alloc_rtw_rxe();
 void test_efa_rdm_pke_alloc_rtr_rxe();
 void test_efa_rdm_pke_get_unexp();
+void test_efa_rdm_pke_flag_tracking();
 /* end of efa_unit_test_pke.c */
 
 void test_efa_msg_fi_recv();
