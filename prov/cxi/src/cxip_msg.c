@@ -648,6 +648,7 @@ void cxip_report_send_completion(struct cxip_req *req, bool sw_cntr)
 	int ret_err;
 	int success_event = (req->flags & FI_COMPLETION);
 	struct cxip_txc *txc = req->send.txc;
+	uint64_t count;
 
 	req->flags &= (FI_MSG | FI_TAGGED | FI_SEND | FI_CXI_TRUNC);
 
@@ -663,7 +664,15 @@ void cxip_report_send_completion(struct cxip_req *req, bool sw_cntr)
 		}
 
 		if (sw_cntr && req->send.cntr) {
-			ret = cxip_cntr_mod(req->send.cntr, 1, false, false);
+			if (req->send.cntr->attr.events ==
+			    FI_CXI_CNTR_EVENTS_BYTES)
+				count = txc->trunc_ok ? req->data_len :
+					req->send.len;
+			else
+				count = 1;
+
+			ret = cxip_cntr_mod(req->send.cntr, count, false,
+					    false);
 			if (ret)
 				TXC_WARN(txc, "cxip_cntr_mod returned: %d\n",
 					 ret);

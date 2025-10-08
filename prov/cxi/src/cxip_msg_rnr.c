@@ -659,7 +659,7 @@ static inline ssize_t cxip_rnr_send_dma(struct cxip_req *req,
 		cmd.request_len = req->send.len;
 	}
 
-	if (req->send.cntr) {
+	if (req->send.cntr && req->send.success_disable) {
 		if (req->send.cntr->attr.events == FI_CXI_CNTR_EVENTS_BYTES)
 			cmd.event_ct_bytes = 1;
 
@@ -691,7 +691,7 @@ static inline ssize_t cxip_rnr_send_idc(struct cxip_req *req,
 	cstate_cmd.initiator = cxip_msg_match_id(txc);
 	cstate_cmd.event_success_disable = req->send.success_disable;
 
-	if (req->send.cntr) {
+	if (req->send.cntr && req->send.success_disable) {
 		if (req->send.cntr->attr.events == FI_CXI_CNTR_EVENTS_BYTES)
 			cstate_cmd.event_ct_bytes = 1;
 
@@ -1041,8 +1041,9 @@ static int cxip_rnr_send_cb(struct cxip_req *req, const union c_event *event)
 	cxip_send_buf_fini(req);
 
 	/* If status is good, then the request completed before it could
-	 * be canceled. If canceled, indicate software update of the
-	 * error count is required.
+	 * be canceled. Reflect data length actually sent (for byte counting)
+	 * and include a truncation indicator if requested. If canceled, the
+	 * error count will be incremented.
 	 */
 	if (rc == C_RC_OK) {
 		req->send.canceled = false;
@@ -1050,12 +1051,13 @@ static int cxip_rnr_send_cb(struct cxip_req *req, const union c_event *event)
 		/* Report truncation if requested */
 		if (txc->base.trunc_ok) {
 			req->data_len = event->init_short.mlength;
+
 			if (req->send.len > req->data_len)
 				req->flags |= FI_CXI_TRUNC;
 		}
 	}
 
-	cxip_report_send_completion(req, req->send.canceled);
+	cxip_report_send_completion(req, !req->send.success_disable);
 
 	cxip_txc_otx_reqs_dec(&txc->base);
 	cxip_evtq_req_free(req);
