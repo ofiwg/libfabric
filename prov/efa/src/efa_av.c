@@ -573,11 +573,11 @@ static inline int efa_av_implicit_av_lru_insert(struct efa_av *av,
 	dlist_pop_front(&av->implicit_av_lru_list, struct efa_conn,
 			conn_to_release, implicit_av_lru_entry);
 	EFA_INFO(FI_LOG_AV,
-		 "Evicting AV entry for peer AHN %" PRIu16 " QPN %" PRIu16
-		 " QKEY %" PRIu32 " from "
+		 "Evicting AV entry for peer implicit fi_addr %" PRIu64
+		 " AHN %" PRIu16 " QPN %" PRIu16 " QKEY %" PRIu32 " from "
 		 "implicit AV\n",
-		 conn_to_release->ah->ahn, conn_to_release->ep_addr->qpn,
-		 conn_to_release->ep_addr->qkey);
+		 conn_to_release->implicit_fi_addr, conn_to_release->ah->ahn,
+		 conn_to_release->ep_addr->qpn, conn_to_release->ep_addr->qkey);
 
 	/* Add to hashset with list of evicted peers */
 	ep_addr_hashable = malloc(sizeof(struct efa_ep_addr_hashable));
