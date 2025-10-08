@@ -61,7 +61,7 @@ static void hsa_test_init(void)
 	hsa_status_t hsa_ret;
 	hsa_region_t *ptr_reg = regions;
 	int i;
-	size_t size_r;
+	hsa_region_global_flag_t global_flag;
 
 	enable_cxi_hmem_ops = 0;
 	seed = time(NULL);
@@ -85,16 +85,17 @@ static void hsa_test_init(void)
 	for (i = 0; i < num_regions; i++) {
 		hsa_ret = hsa_region_get_info(regions[i],
 					      HSA_REGION_INFO_GLOBAL_FLAGS,
-					      &size_r);
+					      &global_flag);
 		cr_assert_eq(hsa_ret, HSA_STATUS_SUCCESS);
 
-		if (size_r & HSA_REGION_GLOBAL_FLAG_FINE_GRAINED &&
+		if (global_flag & (HSA_REGION_GLOBAL_FLAG_FINE_GRAINED |
+				   HSA_REGION_GLOBAL_FLAG_EXTENDED_SCOPE_FINE_GRAINED) &&
 		    !fine_grain_valid) {
 			fine_grain = regions[i];
 			fine_grain_valid = true;
 		}
 
-		if (size_r & HSA_REGION_GLOBAL_FLAG_COARSE_GRAINED &&
+		if (global_flag & HSA_REGION_GLOBAL_FLAG_COARSE_GRAINED &&
 		    !coarse_grain_valid) {
 			coarse_grain = regions[i];
 			coarse_grain_valid = true;
