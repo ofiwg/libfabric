@@ -270,7 +270,7 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
  *
  * @param[in,out]	pkt_entry	non-tagged RTM packet entry
  */
-static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 {
 	ssize_t err;
 	struct efa_rdm_ep *ep;
