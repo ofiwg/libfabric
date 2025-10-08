@@ -409,9 +409,11 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
 	 * and the RMA is a local read toward the endpoint itself
 	 */
 	peer = ope->peer;
-	if (peer)
+	if (peer) {
 		dlist_insert_tail(&pkt_entry->entry,
 				  &peer->outstanding_tx_pkts);
+		pkt_entry->flags |= EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS;
+	}
 
 	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	ep->efa_outstanding_tx_ops++;
@@ -471,8 +473,10 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke
 	 *    a new peer has the same GID+QPN was inserted to address, or because
 	 *    application removed the peer from address vector.
 	 */
-	if (pkt_entry->peer)
+	if (pkt_entry->peer) {
 		dlist_remove(&pkt_entry->entry);
+		pkt_entry->flags &= ~EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS;
+	}
 
 	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	ep->efa_outstanding_tx_ops--;
@@ -543,6 +547,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 
 	assert(ope);
 	dlist_insert_tail(&pkt_entry->entry, &ope->queued_pkts);
+	pkt_entry->flags |= EFA_RDM_PKE_IN_OPE_QUEUED_PKTS;
 	ep->efa_rnr_queued_pkt_cnt += 1;
 	assert(peer);
 	if (!(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
@@ -783,6 +788,7 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 		 * be removed from the list before send.
 		 */
 		dlist_remove(&pkt_entry->entry);
+		pkt_entry->flags &= ~EFA_RDM_PKE_IN_OPE_QUEUED_PKTS;
 
 		switch (efa_rdm_pkt_type_of(pkt_entry)) {
 		case EFA_RDM_RMA_CONTEXT_PKT:
@@ -798,6 +804,7 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 			if (ret == -FI_EAGAIN) {
 				/* add the pkt back to pkts, so it can be resent again */
 				dlist_insert_tail(&pkt_entry->entry, pkts);
+				pkt_entry->flags |= EFA_RDM_PKE_IN_OPE_QUEUED_PKTS;
 			}
 
 			return ret;
