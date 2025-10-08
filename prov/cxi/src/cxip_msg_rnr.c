@@ -834,21 +834,14 @@ static int cxip_process_rnr_time_wait(struct cxip_txc_rnr *txc)
 					ofi_atomic_dec32(&txc->time_wait_reqs);
 					cxip_send_buf_fini(req);
 					cxip_report_send_completion(req, true);
-					cxip_txc_otx_reqs_dec(&txc->base);
 					cxip_evtq_req_free(req);
 
 					continue;
 				}
 
-				/* Must TX return credit, will take it back if
-				 * we could not send.
-				 */
-				cxip_txc_otx_reqs_dec(&txc->base);
 				ret = cxip_rnr_msg_send(req);
-				if (ret != FI_SUCCESS) {
-					cxip_txc_otx_reqs_inc(&txc->base);
+				if (ret != FI_SUCCESS)
 					goto reset_min_time_wait;
-				}
 
 				txc->total_retries++;
 				dlist_remove_init(&req->send.rnr_entry);
@@ -1028,8 +1021,11 @@ static int cxip_rnr_send_cb(struct cxip_req *req, const union c_event *event)
 		txc->total_rnr_nacks++;
 		ret  = cxip_rnr_queue_retry(txc, req);
 
-		if (ret == FI_SUCCESS)
+		if (ret == FI_SUCCESS) {
+			/* Release TX credit while pending retry */
+			cxip_txc_otx_reqs_dec(&txc->base);
 			return ret;
+		}
 
 		TXC_WARN(&txc->base, "req %p RNR max timeout buf: %p len: %lu, "
 			 "dest_addr: 0x%lX nic: %#x pid: %d tag(%c) 0x%lx "
