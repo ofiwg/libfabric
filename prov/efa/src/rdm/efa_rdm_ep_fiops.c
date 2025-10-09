@@ -246,6 +246,20 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (ret)
 		goto err_free;
 
+	ret = ofi_bufpool_create(&ep->peer_robuf_pool,
+				(sizeof(struct efa_rdm_pke*) * (roundup_power_of_two(efa_env.recvwin_size)) +
+				sizeof(struct recvwin_cirq)),
+				EFA_RDM_BUFPOOL_ALIGNMENT, 0, /* no limit to max_cnt */
+				EFA_RDM_EP_MIN_PEER_POOL_SIZE,
+				0);
+
+	if (ret)
+		goto err_free;
+
+	ret = ofi_bufpool_grow(ep->peer_robuf_pool);
+	if (ret)
+		goto err_free;
+
 	return 0;
 
 err_free:
@@ -281,6 +295,9 @@ err_free:
 
 	if (ep->peer_map_entry_pool)
 		ofi_bufpool_destroy(ep->peer_map_entry_pool);
+
+	if (ep->peer_robuf_pool)
+		ofi_bufpool_destroy(ep->peer_robuf_pool);
 
 	return ret;
 }
@@ -814,6 +831,9 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 
 	if (efa_rdm_ep->peer_map_entry_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->peer_map_entry_pool);
+
+	if (efa_rdm_ep->peer_robuf_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->peer_robuf_pool);
 }
 
 /*

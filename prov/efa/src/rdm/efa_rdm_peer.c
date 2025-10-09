@@ -19,6 +19,7 @@
  */
 void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn)
 {
+	int ret;
 	memset(peer, 0, sizeof(struct efa_rdm_peer));
 
 	peer->ep = ep;
@@ -26,7 +27,13 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	peer->is_self = efa_is_same_addr(&ep->base_ep.src_addr, conn->ep_addr);
 	peer->host_id = peer->is_self ? ep->host_id : 0;	/* Peer host id is exchanged via handshake */
 	peer->num_runt_bytes_in_flight = 0;
-	ofi_recvwin_buf_alloc(&peer->robuf, efa_env.recvwin_size);
+	/* allocate the robuf circular queue from the pre-allocated buffer pool */
+	ret = efa_recvwin_buf_alloc(&peer->robuf, efa_env.recvwin_size, true, ep->peer_robuf_pool);
+	if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
+		/* ran out of memory while creating the peer reorder buffer */
+		EFA_WARN(FI_LOG_EP_CTRL, "Unable to allocate peer->robuf\n");
+		return;
+	}
 	dlist_init(&peer->outstanding_tx_pkts);
 	dlist_init(&peer->txe_list);
 	dlist_init(&peer->rxe_list);
@@ -64,7 +71,7 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 		EFA_WARN_ONCE(FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
 
 	if (peer->robuf.pending)
-		ofi_recvwin_free(&peer->robuf);
+		efa_recvwin_free(&peer->robuf, true);
 
 	if (!ep) {
 		/* ep is NULL means the endpoint has been closed.
