@@ -579,7 +579,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
-	ibv_cqx->wr_id = (uintptr_t)pkt_entry;
+	ibv_cq->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
 #endif
 	/* the recv rdma with imm will not populate to application cq because it's an EFA internal error and
 	 * and not related to any application operations. Currently we can only read the error from eq.
