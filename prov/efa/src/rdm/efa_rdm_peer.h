@@ -12,8 +12,6 @@
 
 #define EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE	(16384)
 
-OFI_DECL_RECVWIN_BUF(struct efa_rdm_pke*, efa_rdm_robuf, uint32_t);
-
 #define EFA_RDM_PEER_REQ_SENT BIT_ULL(0) /**< A REQ packet has been sent to the peer (peer should send a handshake back) */
 #define EFA_RDM_PEER_HANDSHAKE_SENT BIT_ULL(1) /**< a handshake packet has been sent to the peer */
 #define EFA_RDM_PEER_HANDSHAKE_RECEIVED BIT_ULL(2) /**< a handshaked packet has been received from this peer */
@@ -25,6 +23,56 @@ OFI_DECL_RECVWIN_BUF(struct efa_rdm_pke*, efa_rdm_robuf, uint32_t);
  * Progress engine will retry sending handshake.
  */
 #define EFA_RDM_PEER_HANDSHAKE_QUEUED      BIT_ULL(5)
+
+
+OFI_DECL_RECVWIN_BUF(struct efa_rdm_pke*, efa_rdm_robuf, uint32_t);
+
+/*
+ * recvwindow macro covers only the initilization and
+ * the alloc/free are required to be implemented by the provider
+ */
+
+/**
+ * @details
+ *
+ * @param[in] recvq			circular buffer object to be created
+ * @param[in] size			size of the queue
+ * @param[in] alloc_from_bufpool 	true means allocate from the buffer pool provided, false means do calloc
+ * @param[in] pool			buffer pool to be used for allocating the queue from when alloc_from_bufpool is true
+ * @return 0 on success or error otherwise
+ *
+ */
+static inline
+int efa_recvwin_buf_alloc(struct efa_rdm_robuf *recvq,
+                unsigned int size,  bool alloc_from_bufpool, struct ofi_bufpool *pool)
+{
+	assert(size == roundup_power_of_two(size));
+	recvq->exp_msg_id = 0;
+	recvq->win_size = size;
+	if (alloc_from_bufpool) {
+		assert(pool != NULL);
+		assert(size <= pool->entry_size);
+		recvq->pending = (struct recvwin_cirq*) ofi_buf_alloc(pool);
+	} else {
+		recvq->pending = (struct recvwin_cirq*) calloc(1, sizeof(struct recvwin_cirq) +
+					sizeof(struct efa_rdm_pke*) * size);
+	}
+	if (recvq->pending) {
+		recvwin_cirq_init(recvq->pending, size);
+		return 0;
+	} else {
+	       return -FI_ENOMEM;
+	}
+}
+
+static inline
+void efa_recvwin_free(struct efa_rdm_robuf *recvq, bool free_to_bufpool)
+{
+	if (free_to_bufpool)
+		ofi_buf_free(recvq->pending);
+	else
+		free(recvq->pending);
+}
 
 struct efa_rdm_peer_user_recv_qp
 {

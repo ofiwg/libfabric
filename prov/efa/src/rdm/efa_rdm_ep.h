@@ -126,6 +126,9 @@ struct efa_rdm_ep {
 	/* bufpool to hold the fi_addr->peer hashmap entries */
 	struct ofi_bufpool *peer_map_entry_pool;
 
+	/* buffer pool for peer reorder circular buffer */
+	struct ofi_bufpool *peer_robuf_pool;
+
 #if ENABLE_DEBUG
 	/* tx/rx_entries waiting to receive data in
          * long CTS msg/read/write protocols */
