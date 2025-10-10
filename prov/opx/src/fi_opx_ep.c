@@ -450,7 +450,7 @@ static int fi_opx_close_ep(fid_t fid)
 	opx_tid_cache_purge_ep(opx_ep->tid_domain->tid_cache, opx_ep);
 
 	if (opx_ep->domain) {
-#ifdef HFISVC
+#if HAVE_HFISVC
 		if (opx_ep->domain->use_hfisvc) {
 			ret = fi_opx_ref_dec(&opx_ep->domain->hfisvc.ref_cnt, "hfisvc");
 			if (ret) {
@@ -650,8 +650,16 @@ static int fi_opx_close_ep(fid_t fid)
 			return ret; // Error
 		}
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI context not in use\n");
-		/* Close HFI1 Direct Verbs lib/context */
+
+		/* Close HFI1 Direct Verbs lib/context, but HFISVC shares ONE endpoint context
+		   with the domain.  Let the domain close it */
+#if HAVE_HFISVC
+		if (opx_ep->domain->hfisvc.ctx != opx_ep->hfi->ibv_context) {
+			opx_hfi1_rdma_context_close(opx_ep->hfi->ibv_context);
+		}
+#else
 		opx_hfi1_rdma_context_close(opx_ep->hfi->ibv_context);
+#endif
 
 		if (opx_ep->hfi->ref_cnt == 0) {
 			// free memory allocated for _hfi_ctrl struct in opx_hfi_userinit_internal function in
@@ -674,14 +682,14 @@ static int fi_opx_close_ep(fid_t fid)
 		opx_ep->hmem_copy_buf = NULL;
 	}
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 	if (opx_ep->use_hfisvc) {
-		ret = hfisvc_client_completion_queue_close(&opx_ep->hfisvc.internal_completion_queue);
+		ret = (*opx_ep->domain->hfisvc.completion_queue_close)(&opx_ep->hfisvc.internal_completion_queue);
 		if (ret) {
 			errno = -ret;
 			goto err_unlock;
 		}
-		ret = hfisvc_client_command_queue_close(&opx_ep->hfisvc.command_queue);
+		ret = (*opx_ep->domain->hfisvc.command_queue_close)(&opx_ep->hfisvc.command_queue);
 		if (ret) {
 			errno = -ret;
 			goto err_unlock;
@@ -1745,7 +1753,7 @@ static void fi_opx_apply_bind_flags(struct fi_opx_ep *opx_ep)
 		}
 	}
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 	if (opx_ep->use_hfisvc) {
 		opx_ep->hfisvc.cq_completion_queue = &opx_ep->init_rx_cq->hfisvc.completion_queue;
 	}
@@ -2083,32 +2091,44 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		}
 	}
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 	// Check this env. var even when HFI service isn't being used, since there may be places we
 	// use OPX_HFISVC_DEBUG_LOG that are not in an HFISVC-specific code path.
 	if (getenv("OPX_HFISVC_LOG_DISABLE")) {
 		opx_hfisvc_log_enabled = 0;
 	}
 	if (opx_ep->use_hfisvc) {
-		if (opx_domain_hfisvc_init(opx_domain, HFISVC_CLIENT_IOCTL, opx_ep->hfi->fd)) {
-			abort();
+		if (opx_domain->hfisvc.ctx == NULL) {
+			assert(opx_ep->hfi->ibv_context != NULL);
+			opx_domain->hfisvc.ctx = opx_ep->hfi->ibv_context;
+		}
+		int ret;
+		if ((ret = opx_domain_hfisvc_init(opx_domain)) != FI_SUCCESS) {
+			if (ret == -FI_ENODEV) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFISVC] disabled hfisvc\n");
+				opx_ep->use_hfisvc = false;
+				OPX_HFISVC_DEBUG_LOG("Disabling HFISVC on FI_ENODEV\n");
+				goto done;
+			} else {
+				abort();
+			}
 		}
 
 		OPX_HFISVC_DEBUG_LOG("Attempting to create new command queue...\n");
-		if (hfisvc_client_command_queue_open(&opx_ep->hfisvc.command_queue, opx_domain->hfisvc.handle)) {
+		if ((*opx_domain->hfisvc.command_queue_open)(&opx_ep->hfisvc.command_queue, opx_domain->hfisvc.ctx)) {
 			abort();
 		}
 
 		OPX_HFISVC_DEBUG_LOG("Attempting to create new completion queue...\n");
-		if (hfisvc_client_completion_queue_open(&opx_ep->hfisvc.internal_completion_queue,
-							opx_domain->hfisvc.handle)) {
+		if ((*opx_domain->hfisvc.completion_queue_open)(&opx_ep->hfisvc.internal_completion_queue,
+								opx_domain->hfisvc.ctx)) {
 			fprintf(stderr, "(%d) %s:%s():%d Failed creating TX completion queue!\n", getpid(), __FILE__,
 				__func__, __LINE__);
 			abort();
 		}
 
-		int rc = hfisvc_client_completion_queue_open(&opx_ep->init_tx_cq->hfisvc.completion_queue,
-							     opx_domain->hfisvc.handle);
+		int rc = (*opx_domain->hfisvc.completion_queue_open)(&opx_ep->init_tx_cq->hfisvc.completion_queue,
+								     opx_domain->hfisvc.ctx);
 		if (rc) {
 			fprintf(stderr, "(%d) %s:%s():%d Failed creating CQ completion queue, rc=%d\n", getpid(),
 				__FILE__, __func__, __LINE__, rc);
@@ -2116,8 +2136,8 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		}
 		opx_ep->init_tx_cq->use_hfisvc = 1;
 	}
+done:
 #endif
-
 	/* Unlock */
 	fi_opx_unlock(&opx_ep->lock);
 	if (rx_cq_lock_held) {
@@ -2625,6 +2645,7 @@ int opx_hfi_drv_bulksvc_enabled(void)
 	FILE *parm_file = fopen(OPX_HFISVC_USE_BULKSVC_PARM, "r");
 
 	if (parm_file == NULL) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFISVC] no BULKSVC\n");
 		return 0;
 	}
 
@@ -2632,6 +2653,7 @@ int opx_hfi_drv_bulksvc_enabled(void)
 	fclose(parm_file);
 
 	if (c == EOF) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFISVC] no BULKSVC\n");
 		return 0;
 	}
 
@@ -2910,8 +2932,12 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 	}
 #endif
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 	int drv_bulksvc_enabled = opx_hfi_drv_bulksvc_enabled();
+	if ((!drv_bulksvc_enabled) && (getenv("_FI_OPX_FORCE_BULKSVC"))) {
+		drv_bulksvc_enabled = 1;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFISVC] _FI_OPX_FORCE_BULKSVC\n");
+	}
 
 	int use_hfisvc;
 	if (fi_param_get_bool(fi_opx_global.prov, "hfisvc", &use_hfisvc) == FI_SUCCESS) {
@@ -2940,7 +2966,7 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 #else
 	opx_ep->use_hfisvc = false;
 #endif
-	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI Service is %s for bulk transfers.\n",
+	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFISVC] HFI Service is %s for bulk transfers.\n",
 		opx_ep->use_hfisvc ? "enabled" : "disabled");
 
 	*ep = &opx_ep->ep_fid;

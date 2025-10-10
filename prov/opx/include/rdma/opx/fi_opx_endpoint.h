@@ -539,7 +539,7 @@ struct fi_opx_ep {
 	ofi_spin_t		   lock; /* lock size varies based on ENABLE_DEBUG*/
 
 	/* == CACHE LINE 6 == */
-#ifdef HFISVC
+#if HAVE_HFISVC
 	struct {
 		/**
 		 * @brief Command queue used by this endpoint to submit commands to the hfisvc
@@ -1038,7 +1038,7 @@ void fi_opx_handle_recv_rts_truncation(struct fi_opx_ep_rx *rx, struct opx_conte
 	slist_insert_tail((struct slist_entry *) context, rx->cq_err_ptr);
 }
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 static uint64_t opx_trunc_scratch_buf;
 #endif
 
@@ -1050,7 +1050,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				   const int lock_required, const enum ofi_reliability_kind reliability,
 				   const enum opx_hfi1_type hfi1_type)
 {
-#ifdef HFISVC
+#if HAVE_HFISVC
 	assert(hfi1_type & OPX_HFI1_JKR);
 	assert(FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC);
 	assert(!lock_required);
@@ -1097,7 +1097,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			const uint32_t sbuf_access_key = payload->rendezvous.hfisvc.iovs[i].access_key;
 			const uint64_t sbuf_len	       = payload->rendezvous.hfisvc.iovs[i].len;
 			const uint64_t sbuf_offset     = payload->rendezvous.hfisvc.iovs[i].offset;
-			int	       rc	       = hfisvc_client_cmd_rdma_read_va(
+			int	       rc	       = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
 				opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key, sbuf_len,
 				0ul /* immediate data */, sbuf_access_key, sbuf_offset, recv_buf);
 
@@ -1146,10 +1146,10 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 		   fails, create a deferred work item to keep retrying. */
 		for (int i = 0; i < niov; ++i) {
 			const uint32_t sbuf_access_key = payload->rendezvous.hfisvc.iovs[i].access_key;
-			int	       rc = hfisvc_client_cmd_rdma_read_va(opx_ep->hfisvc.command_queue, completion,
-									   0ul /* flags */, lid, sbuf_key, 1ul /* length */,
-									   0ul /* immediate data */, sbuf_access_key,
-									   0ul /* remote offset */, &opx_trunc_scratch_buf);
+			int	       rc	       = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
+				opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
+				1ul /* length */, 0ul /* immediate data */, sbuf_access_key, 0ul /* remote offset */,
+				&opx_trunc_scratch_buf);
 			if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
 				union opx_hfisvc_iov trunc_iov = payload->rendezvous.hfisvc.iovs[i];
 				trunc_iov.len		       = 1;
@@ -3210,7 +3210,7 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 	fi_opx_ep_do_pending_sdma_work(opx_ep);
 }
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 __OPX_FORCE_INLINE__
 void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struct hfisvc_client_cq_entry *hfisvc_entry)
 {
@@ -3270,14 +3270,21 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 __OPX_FORCE_INLINE__
 void opx_ep_hfisvc_poll_internal_queue(struct fi_opx_ep *opx_ep)
 {
-#ifdef HFISVC
+#if HAVE_HFISVC
+	if (!opx_ep->use_hfisvc) {
+		return;
+	}
+
 	struct hfisvc_client_cq_entry hfisvc_out[64];
-	size_t n = hfisvc_client_cq_read(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */, hfisvc_out, 64);
+
+	size_t n = (*opx_ep->domain->hfisvc.cq_read)(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */,
+						     hfisvc_out, sizeof(*hfisvc_out), 64);
 	while (n > 0) {
 		for (size_t i = 0; i < n; ++i) {
 			opx_ep_hfisvc_poll_proc_internal_completion(opx_ep, &hfisvc_out[i]);
 		}
-		n = hfisvc_client_cq_read(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */, hfisvc_out, 64);
+		n = (*opx_ep->domain->hfisvc.cq_read)(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */,
+						      hfisvc_out, sizeof(*hfisvc_out), 64);
 	}
 #endif
 }
@@ -3508,7 +3515,7 @@ int fi_opx_ep_rx_process_context(struct fi_opx_ep *opx_ep, const uint64_t static
 				 const enum fi_av_type av_type, const enum ofi_reliability_kind reliability,
 				 const enum opx_hfi1_type hfi1_type)
 {
-#ifdef HFISVC
+#if HAVE_HFISVC
 	uint32_t start_rdma_read_count = opx_ep->hfisvc.rdma_read_count;
 #endif
 	int rc;
@@ -3533,13 +3540,13 @@ int fi_opx_ep_rx_process_context(struct fi_opx_ep *opx_ep, const uint64_t static
 		rc = 0;
 	}
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 	if (opx_ep->hfisvc.rdma_read_count != start_rdma_read_count) {
 		OPX_HFISVC_DEBUG_LOG(
 			"Rang doorbell because start_rdma_read_count=%u and opx_ep->hfisvc.rdma_read_count=%u\n",
 			start_rdma_read_count, opx_ep->hfisvc.rdma_read_count);
 		int doorbell_rc __attribute__((unused));
-		doorbell_rc = hfisvc_client_doorbell(opx_ep->domain->hfisvc.handle);
+		doorbell_rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctx);
 
 		assert(doorbell_rc == 0);
 	}

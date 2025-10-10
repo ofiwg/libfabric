@@ -150,9 +150,9 @@ static int fi_opx_close_cq(fid_t fid)
 		fi_opx_lock(&opx_cq->lock);
 	}
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 	if (opx_cq->use_hfisvc) {
-		ret = hfisvc_client_completion_queue_close(&opx_cq->hfisvc.completion_queue);
+		ret = (*opx_cq->domain->hfisvc.completion_queue_close)(&opx_cq->hfisvc.completion_queue);
 		if (ret) {
 			goto fail;
 		}

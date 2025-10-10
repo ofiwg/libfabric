@@ -1,4 +1,0 @@
-[submodule "prov/opx/modules/hfisvc_client"]
-	path = prov/opx/modules/hfisvc_client
-	url = git@github.com:cornelisnetworks/hfisvc_client.git
-	branch = main

@@ -150,7 +150,7 @@ struct fi_opx_cq {
 
 	uint64_t ep_comm_caps;
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 	struct {
 		hfisvc_client_completion_queue_t completion_queue;
 	} hfisvc;
@@ -288,7 +288,7 @@ static inline size_t fi_opx_cq_fill(uintptr_t output, struct opx_context *contex
 	return return_size;
 }
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 __OPX_FORCE_INLINE__
 void opx_cq_hfisvc_poll_process_completion(struct fi_opx_cq *opx_cq, struct hfisvc_client_cq_entry *hfisvc_entry)
 {
@@ -312,7 +312,7 @@ void opx_cq_hfisvc_poll_process_completion(struct fi_opx_cq *opx_cq, struct hfis
 		context->err_entry.err_data_size = 0;
 		context->byte_counter		 = 0;
 		opx_enqueue_err_from_pending(&opx_cq->pending, &opx_cq->err, context);
-	} else if (hfisvc_entry->type == HFISVC_CLIENT_CQ_ENTRY_TYPE_DEFAULT) {
+	} else if (hfisvc_entry->type == HFI1_HFISVC_CQ_ENTRY_TYPE_DEFAULT) {
 		// TODO: Once hfisvc_client provides xfer_len in completion, we'll know how much to
 		//       decrement from the context->byte_counter. Until then, just zero out
 		//       context->byte_counter
@@ -338,18 +338,20 @@ void opx_cq_hfisvc_poll_process_completion(struct fi_opx_cq *opx_cq, struct hfis
 __OPX_FORCE_INLINE__
 void opx_cq_hfisvc_poll(struct fi_opx_cq *opx_cq)
 {
-#ifdef HFISVC
+#if HAVE_HFISVC
 	if (!opx_cq->use_hfisvc) {
 		return;
 	}
 	struct hfisvc_client_cq_entry hfisvc_out[64];
 
-	size_t n = hfisvc_client_cq_read(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out, 64);
+	size_t n = (*opx_cq->domain->hfisvc.cq_read)(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out,
+						     sizeof(*hfisvc_out), 64);
 	while (n > 0) {
 		for (size_t i = 0; i < n; ++i) {
 			opx_cq_hfisvc_poll_process_completion(opx_cq, &hfisvc_out[i]);
 		}
-		n = hfisvc_client_cq_read(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out, 64);
+		n = (*opx_cq->domain->hfisvc.cq_read)(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out,
+						      sizeof(*hfisvc_out), 64);
 	}
 #endif
 }
