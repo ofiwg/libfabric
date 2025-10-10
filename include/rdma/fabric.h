@@ -74,7 +74,7 @@ extern "C" {
 
 #define FI_MAJOR_VERSION 2
 #define FI_MINOR_VERSION 3
-#define FI_REVISION_VERSION 0
+#define FI_REVISION_VERSION 1
 
 /* Removing these breaks the build for some apps.
  * The use of FI_NAME_MAX is undefined.

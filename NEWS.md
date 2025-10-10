@@ -6,6 +6,52 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v2.3.1, Mon October 20, 2025
+============================
+
+## EFA ##
+
+- Move domain check inside the fabric lock
+- Take domain lock to protect concurrent access to domain fields
+- Return matching fabric/domain in fi_getinfo
+- Remove duplicated efa_cq_construct_cq_entry
+- Fix the memleak for efa_rdm_peer
+- Introduce error status for ope
+- Cleanup the queue flags after dlist_remove
+- Allocate cq err_buf on demand
+- Bypass util cq in the data path of efa-direct
+- Fix the unsolicited write recv support in unit-test
+- Add unit-tests for lock types
+- Shift the src_addr correctly in sreadfrom
+- Acquire the same lock for qp lifecycle
+- Ignore stale cqes from destroyed qps
+- Use IBV_QUERY_QP_DATA_IN_ORDER_DEVICE_ONLY flag when available
+
+## OPX ##
+
+- 0 byte write_data Error
+- 16B 3-nodes seg fault with openmpi
+- Atomics and bounce buffer fixes
+- Only open IPC cache if HMEM initialized and IPC enabled
+- Fix ROCR IPC build errors
+- Use getpid() instead of gettid() for POSIX compliancy.
+- Fix compilation error
+
+## Util ##
+
+- Extract helper function to lookup existing fabric/domain
+- Use hints name for fabric/domain lookup
+
+## Verbs ##
+
+- Fix compiler warning on the bound of 'strncpy' call
+
+## Fabtests ##
+
+- efa: Fix the av operation
+- efa: Improve rnr_read_cq_error test
+
+
 v2.3.0, Mon September 15, 2025
 ==============================
 
