@@ -55,6 +55,11 @@
 
 #define OPX_DOMAIN_HFISVC_NOT_INITIALIZED (0x7FFFFFFFFFFFFFFEll)
 
+#if HAVE_HFISVC
+/* OPX does not ibverbs directly, dlopen/dlsym only */
+#include <dlfcn.h>
+#endif
+
 static int fi_opx_close_domain(fid_t fid)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "close domain\n");
@@ -79,7 +84,7 @@ static int fi_opx_close_domain(fid_t fid)
 	opx_domain->hmem_domain = NULL;
 #endif
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 	if (opx_domain->use_hfisvc) {
 		ret = fi_opx_ref_finalize(&opx_domain->hfisvc.ref_cnt, "hfisvc");
 		if (ret) {
@@ -88,10 +93,9 @@ static int fi_opx_close_domain(fid_t fid)
 
 		opx_hfisvc_keyset_free(opx_domain->hfisvc.access_key_set);
 
-		ret = hfisvc_client_finalize(opx_domain->hfisvc.handle);
-		if (ret) {
-			return ret;
-		}
+		/* Close HFISVC context, the endpoint should already be closed */
+		assert(opx_domain->hfisvc.ctx != NULL);
+		opx_hfi1_rdma_context_close(opx_domain->hfisvc.ctx);
 	}
 #endif
 
@@ -539,7 +543,7 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	// TODO: Print out a summary of all domain settings wtih FI_INFO
 
 	opx_domain->use_hfisvc = 0;
-#ifdef HFISVC
+#if HAVE_HFISVC
 	opx_domain->hfisvc.ref_cnt = OPX_DOMAIN_HFISVC_NOT_INITIALIZED;
 #endif
 
@@ -578,21 +582,63 @@ err:
 	return -errno;
 }
 
-#ifdef HFISVC
-int opx_domain_hfisvc_init(struct fi_opx_domain *domain, const enum hfisvc_client_connect_type type, const int fd)
+#if HAVE_HFISVC
+
+extern struct opx_rdma_ops_struct opx_rdma_ops;
+
+int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 {
 	if (domain->hfisvc.ref_cnt == OPX_DOMAIN_HFISVC_NOT_INITIALIZED) {
-		struct hfisvc_client_connect_params params;
+		// Driver support but library/apis not found
+		// dlopen is done - once - in hfi1dv rdma-core and copied to hfisvc
 
-		assert(type == HFISVC_CLIENT_IOCTL);
-		params.type	  = type;
-		params.p.ioctl.fd = fd;
-
-		int ret = hfisvc_client_initialize(&domain->hfisvc.handle, &params);
-		if (ret) {
-			abort();
+		domain->hfisvc.libhfi1verbs = opx_rdma_ops.libhfi1verbs;
+		if (domain->hfisvc.libhfi1verbs == NULL) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] libhfi1verbs not found\n");
+			return -FI_ENODEV;
 		}
-		ret = hfisvc_client_key(domain->hfisvc.handle, &domain->hfisvc.client_key);
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] libhfi1verbs found\n");
+
+		domain->hfisvc.initialize = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_initialize");
+		if (domain->hfisvc.initialize == NULL) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] hfisvc_client_initialize not found\n");
+			return -FI_ENODEV;
+		}
+
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] hfisvc_client_initialize found\n");
+
+		domain->hfisvc.client_key = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_key");
+		domain->hfisvc.command_queue_open =
+			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_command_queue_open");
+		domain->hfisvc.command_queue_close =
+			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_command_queue_close");
+		domain->hfisvc.completion_queue_open =
+			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_completion_queue_open");
+		domain->hfisvc.completion_queue_close =
+			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_completion_queue_close");
+		domain->hfisvc.cq_read = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cq_read");
+		domain->hfisvc.cmd_dma_access_once_va =
+			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_once_va");
+		domain->hfisvc.cmd_rdma_read_va = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_read_va");
+		domain->hfisvc.doorbell		= dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_doorbell");
+
+		assert(domain->hfisvc.client_key != NULL);
+		assert(domain->hfisvc.command_queue_open != NULL);
+		assert(domain->hfisvc.command_queue_close != NULL);
+		assert(domain->hfisvc.completion_queue_open != NULL);
+		assert(domain->hfisvc.completion_queue_close != NULL);
+		assert(domain->hfisvc.cq_read != NULL);
+		assert(domain->hfisvc.cmd_dma_access_once_va != NULL);
+		assert(domain->hfisvc.cmd_rdma_read_va != NULL);
+		assert(domain->hfisvc.doorbell != NULL);
+
+		int ret = (*domain->hfisvc.initialize)(domain->hfisvc.ctx);
+		if (ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+				"[HFISVC] hfisvc_client_initialize failed, disable hfisvc\n");
+			return -FI_ENODEV;
+		}
+		ret = (*domain->hfisvc.client_key)(domain->hfisvc.ctx, &domain->hfisvc.key);
 		if (ret) {
 			abort();
 		}
@@ -619,7 +665,7 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain, const enum hfisvc_clien
 			abort();
 		}
 		fi_opx_ref_init(&domain->hfisvc.ref_cnt, "hfisvc");
-		OPX_HFISVC_DEBUG_LOG("Initialized HFI service with client key %u\n", domain->hfisvc.client_key);
+		OPX_HFISVC_DEBUG_LOG("Initialized HFI service with client key %u\n", domain->hfisvc.key);
 		domain->use_hfisvc = 1;
 	}
 
