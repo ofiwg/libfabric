@@ -1,6 +1,6 @@
 #
 # Copyright (C) 2016 by Argonne National Laboratory.
-# Copyright (C) 2021-2024 by Cornelis Networks.
+# Copyright (C) 2021-2025 by Cornelis Networks.
 #
 # This software is available to you under a choice of one of two
 # licenses.  You may choose to be licensed under the terms of the GNU
@@ -82,11 +82,6 @@ opx_CPPFLAGS +=									\
 		-I$(srcdir)/prov/opx/include/linux-i386
 
 opx_LIBS = -luuid -lnuma
-
-if OPX_HFISVC
-opx_files += prov/opx/modules/hfisvc_client/source/hfisvc_client.c
-opx_CPPFLAGS += -I$(srcdir)/prov/opx/modules/hfisvc_client/include
-endif
 
 if HAVE_OPX_DL
 pkglib_LTLIBRARIES += libopx-fi.la
