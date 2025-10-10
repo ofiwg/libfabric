@@ -1011,7 +1011,9 @@ ssize_t efa_rdm_msg_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *de
 	iov.iov_len = len;
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, src_addr, context, 0);
-	return efa_rdm_msg_generic_recv(ep, &msg, tag, ignore, ofi_op_tagged, efa_rdm_rx_flags(ep));
+	return efa_rdm_msg_generic_recv(
+		ep, &msg, tag, ignore, ofi_op_tagged,
+		efa_rdm_rx_flags(ep) | ep->base_ep.util_ep.rx_msg_flags);
 }
 
 static
@@ -1025,7 +1027,9 @@ ssize_t efa_rdm_msg_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
 	efa_rdm_msg_construct(&msg, iov, desc, count, src_addr, context, 0);
-	return efa_rdm_msg_generic_recv(ep, &msg, tag, ignore, ofi_op_tagged, efa_rdm_rx_flags(ep));
+	return efa_rdm_msg_generic_recv(
+		ep, &msg, tag, ignore, ofi_op_tagged,
+		efa_rdm_rx_flags(ep) | ep->base_ep.util_ep.rx_msg_flags);
 }
 
 static
