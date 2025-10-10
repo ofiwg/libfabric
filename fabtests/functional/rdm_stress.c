@@ -28,6 +28,7 @@
  */
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -650,7 +651,7 @@ static bool get_uint64_val(const char *js, jsmntok_t *t, uint64_t *val)
 {
 	if (t->type != JSMN_PRIMITIVE)
 		return false;
-	return (sscanf(&js[t->start], "%lu", val) == 1);
+	return (sscanf(&js[t->start], "%" SCNu64, val) == 1);
 }
 
 static bool get_op_enum(const char *js, jsmntok_t *t, uint32_t *op)
