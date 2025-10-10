@@ -5407,7 +5407,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 				   const uint64_t caps, const enum fi_hmem_iface src_iface,
 				   const uint64_t src_device_id, uint64_t tx_op_flags)
 {
-#ifdef HFISVC
+#if HAVE_HFISVC
 	FI_DBG_TRACE(
 		fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND 16B, HFI -- RENDEZVOUS RTS HFISVC (begin) context %p\n",
@@ -5497,8 +5497,8 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		.cq.handle	= opx_ep->hfisvc.internal_completion_queue,
 		.cq.app_context = (uint64_t) rzv_comp,
 	};
-	rc = hfisvc_client_cmd_dma_access_once_va(opx_ep->hfisvc.command_queue, completion, 0UL /* flags */, access_key,
-						  xfer_len, (void *) buf);
+	rc = (*opx_ep->domain->hfisvc.cmd_dma_access_once_va)(opx_ep->hfisvc.command_queue, completion, 0UL /* flags */,
+							      access_key, xfer_len, (void *) buf);
 
 	if (OFI_UNLIKELY(rc != 0)) {
 		OPX_HFISVC_DEBUG_LOG("EAGAIN (hfisvc_client queue returned %ld)\n", rc);
@@ -5512,7 +5512,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		buf, xfer_len, access_key, rzv_comp, context);
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.reg_dma_buf);
 
-	rc = hfisvc_client_doorbell(opx_ep->domain->hfisvc.handle);
+	rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctx);
 
 	assert(rc == 0);
 
@@ -5539,7 +5539,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 									 FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC) :
 				    ((tx_op_flags & FI_REMOTE_CQ_DATA) ? FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC_CQ :
 									 FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC));
-	const uint64_t niov_client_key = ((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.client_key;
+	const uint64_t niov_client_key = ((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.key;
 
 	const uint64_t		 pbc_dlid = OPX_PBC_DLID(addr.lid, OPX_HFI1_JKR);
 	volatile uint64_t *const scb	  = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_sop_first, pio_state);
@@ -5637,7 +5637,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	const uint64_t bth_rx	    = ((uint64_t) dest_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	const uint64_t lrh_dlid_16B = addr.lid;
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 	if (opx_ep->use_hfisvc && !is_shm && (src_iface == FI_HMEM_SYSTEM) && !OPX_IS_CTX_SHARING_ENABLED &&
 	    (hfi1_type & OPX_HFI1_JKR) && !(caps & FI_MSG)) {
 		OPX_HFISVC_DEBUG_LOG("Sending RZV RTS HFI SVC\n");
