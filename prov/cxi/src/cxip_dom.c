@@ -128,7 +128,7 @@ static int cxip_domain_find_cmdq(struct cxip_domain *dom,
 	 * existing TX cmdq.
 	 */
 	if (dom->cmdq_cnt == MAX_DOM_TX_CMDQ) {
-		CXIP_WARN("At domain command queue max\n");
+		CXIP_DBG("At domain command queue max\n");
 		return -FI_EAGAIN;
 	}
 
