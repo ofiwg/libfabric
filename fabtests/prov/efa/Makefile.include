@@ -35,7 +35,8 @@ bin_PROGRAMS += prov/efa/src/fi_efa_rnr_read_cq_error \
 		prov/efa/src/fi_efa_rnr_queue_resend \
 		prov/efa/src/fi_efa_info_test \
 		prov/efa/src/fi_efa_rdm_remote_exit_early \
-		prov/efa/src/fi_efa_multi_ep_mt
+		prov/efa/src/fi_efa_multi_ep_mt \
+		prov/efa/src/fi_efa_implicit_av_test
 
 if HAVE_VERBS_DEVEL
 if HAVE_EFA_DV
@@ -77,6 +78,11 @@ prov_efa_src_fi_efa_multi_ep_mt_SOURCES = \
 	prov/efa/src/multi_ep_mt.c \
 	$(efa_rnr_srcs)
 prov_efa_src_fi_efa_multi_ep_mt_LDADD = libfabtests.la
+
+prov_efa_src_fi_efa_implicit_av_test_SOURCES = \
+	prov/efa/src/efa_shared.h \
+	prov/efa/src/efa_implicit_av_test.c
+prov_efa_src_fi_efa_implicit_av_test_LDADD = libfabtests.la
 
 if HAVE_VERBS_DEVEL
 if HAVE_EFA_DV
