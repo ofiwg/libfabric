@@ -3213,7 +3213,6 @@ int cxip_cmdq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
 		     enum cxi_traffic_class_type tc_type);
 int cxip_cmdq_cp_modify(struct cxip_cmdq *cmdq, uint16_t vni,
 			enum cxi_traffic_class tc);
-bool cxip_cmdq_active(struct cxip_cmdq *cmdq);
 void cxip_if_init(void);
 void cxip_if_fini(void);
 
