@@ -113,14 +113,6 @@
 #define EFA_RDM_BUFPOOL_ALIGNMENT	(64)
 
 
-/**
- * The hard-coded rdma sge num limit
- * due to the structs layout rdma wqes.
- * See `struct efa_io_rdma_req` in efa_io_defs.h
- */
-#define EFA_DEVICE_MAX_RDMA_SGE 1
-
-
 struct efa_fabric {
 	struct util_fabric	util_fabric;
 	struct fid_fabric *shm_fabric;
