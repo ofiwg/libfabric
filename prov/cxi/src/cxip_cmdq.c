@@ -208,7 +208,8 @@ int cxip_cmdq_cp_modify(struct cxip_cmdq *cmdq, uint16_t vni,
 	for (i = 0; i < lni->n_cps; i++) {
 		if (lni->hw_cps[i]->vni == cmdq->cur_cp->vni_pcp  &&
 		    lni->hw_cps[i]->tc == cmdq->cur_cp->tc &&
-		    lni->hw_cps[i]->tc_type == cmdq->cur_cp->tc_type) {
+		    lni->hw_cps[i]->tc_type == cmdq->cur_cp->tc_type &&
+		    lni->hw_cps[i]->lcid == cmdq->cur_cp->lcid) {
 			hw_cp = lni->hw_cps[i];
 			break;
 		}
@@ -223,9 +224,13 @@ int cxip_cmdq_cp_modify(struct cxip_cmdq *cmdq, uint16_t vni,
 
 			return FI_SUCCESS;
 		}
+
+		CXIP_WARN("cxil_modify_cp failed:%d\n", ret);
 	}
 
 	pthread_rwlock_unlock(&lni->cp_lock);
+
+	return -FI_ENOENT;
 #endif /* CXI_HAVE_MODIFY_CP */
 
 	ret = cxip_cmdq_cp_set(cmdq, vni, tc, CXI_TC_TYPE_DEFAULT);
