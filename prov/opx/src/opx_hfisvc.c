@@ -34,6 +34,16 @@
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/opx_tracer.h"
 
+#if HAVE_HFISVC
+
+#include <infiniband/hfi1dv.h>
+#include <infiniband/verbs.h>
+#include <infiniband/hfisvc_client.h>
+
+#include "rdma/opx/opx_hfi1_rdma_core.h"
+
+#endif
+
 /**
  * @brief When OPX_HFISVC_DEBUG is defined in the build, we'll put out lots of
  * logs via the OPX_HFISVC_DEBUG_LOG macro. The logging can be turned off
@@ -45,7 +55,7 @@ int opx_hfisvc_log_enabled = 1;
 
 int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 {
-#ifdef HFISVC
+#if HAVE_HFISVC
 	struct opx_hfisvc_recv_rts_params *params = &work->hfisvc_rts_params;
 
 	FI_DBG_TRACE(
@@ -77,9 +87,9 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		const uint64_t sbuf_len	       = params->iovs[i].len;
 		const uint64_t sbuf_offset     = params->iovs[i].offset;
 
-		rc = hfisvc_client_cmd_rdma_read_va(opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, sbuf_lid,
-						    sbuf_client_key, sbuf_len, 0ul /* immediate data */,
-						    sbuf_access_key, sbuf_offset, recv_buf);
+		rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
+			opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, sbuf_lid, sbuf_client_key, sbuf_len,
+			0ul /* immediate data */, sbuf_access_key, sbuf_offset, recv_buf);
 
 		if (rc != FI_SUCCESS) {
 			params->cur_iov	 = i;
@@ -103,7 +113,8 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 
 	if (read_count) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.doorbell_ring.deferred_work);
-		__attribute__((unused)) int doorbell_rc = hfisvc_client_doorbell(opx_ep->domain->hfisvc.handle);
+		__attribute__((unused)) int doorbell_rc =
+			(*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctx);
 		assert(doorbell_rc == 0);
 	}
 

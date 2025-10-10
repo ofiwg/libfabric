@@ -809,11 +809,6 @@ void opx_hfi1_rdma_context_close(void *ibv_context)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS\n");
 }
 
-void opx_hfi1_rdma_lib_close()
-{
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS\n");
-}
-
 #endif /* HAVE_HFI1_DIRECT_VERBS */
 
 /* clang-format off
@@ -845,7 +840,7 @@ int opx_hfi1_wrapper_context_open(const int unit, const int port, const uint64_t
 				  const enum opx_hfi1_type hfi1_type, void **ibv_context, unsigned int *user_version,
 				  int *fd_cdev, int *fd_verbs)
 {
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] Attempt OPX_HFI1_DIRECT_VERBS\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] Attempt HAVE_HFI1_DIRECT_VERBS\n");
 
 	if (opx_hfi1_rdma_op_initialize()) {
 		void *ibv_context = NULL;
@@ -856,6 +851,9 @@ int opx_hfi1_wrapper_context_open(const int unit, const int port, const uint64_t
 				     OPX_SW_HFI1_TYPE);
 			return fd;
 		}
+		/* fallback to cdev APIs */
+	}
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS fallback\n");
 
 		(*fd_cdev) = fd;
 	}

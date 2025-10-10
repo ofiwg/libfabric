@@ -44,10 +44,8 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 	opx_happy=0
 	opx_direct=0
 	hfi1dv_happy=0
-	hfisvc_happy=0
-	opx_CPPFLAGS="-I/usr/include/uapi"
-	save_CPPFLAGS=$CPPFLAGS
-	CPPFLAGS="$CPPFLAGS $opx_CPPFLAGS"
+	sys_hfisvc_happy=0
+	user_hfisvc_happy=0
 
 	dnl OPX hardware is not supported for MacOS or FreeBSD,
 	dnl and is not supported for non-x86 processors.
@@ -132,18 +130,32 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			[opx_happy=0]
 		)
 
-		dnl Look for new HFI1 Direct Verbs header which comes with rdma-core
+		dnl Seems sufficient to look for new HFI1 Direct Verbs header
+		dnl which comes with newer rdma-core
 		_FI_CHECK_PACKAGE_HEADER([hfi1dv],
-			[infiniband/hfi1dv.h],
-			[],
-			[
-				hfi1dv_happy=1
-				AC_MSG_NOTICE([Detected system rdma-core support for hfi1 direct verbs.])
-			],
-			[
-				AC_MSG_WARN([Did not detect system hfi1 direct verbs rdma-core support.])
-			]
-		)
+		    [infiniband/hfi1dv.h],
+		    [],
+		    [
+			hfi1dv_happy=1
+			AC_MSG_NOTICE([Detected system rdma-core support for hfi1 direct verbs.])
+		    ],
+	 	    [
+			AC_MSG_WARN([Did not detect system hfi1 direct verbs rdma-core support.])
+	 	    ])
+
+		dnl Seems sufficient to look for new HFI service header
+		dnl which comes with newer rdma-core
+		_FI_CHECK_PACKAGE_HEADER([sys_hfisvc],
+		    [infiniband/hfisvc_client.h],
+		    [],
+		    [
+			sys_hfisvc_happy=1
+			AC_MSG_NOTICE([Detected system rdma-core support for hfisvc.])
+	 	    ],
+	 	    [
+			sys_hfisvc_happy=0
+			AC_MSG_NOTICE([Did not detect system rdma-core support for hfisvc.])
+	 	    ])
 
 		dnl Look for new HFI service header which comes with rdma-core
 		_FI_CHECK_PACKAGE_HEADER([hfisvc],
@@ -159,13 +171,11 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			]
 		)
 		AC_CHECK_DECL([HAVE_ATOMICS],
-			[],
-			[
-				cc_version=`$CC --version | head -n1`
-				AC_MSG_WARN(["$cc_version" does not support native atomics.  Disabling OPX provider.])
-				opx_happy=0
-			]
-		)
+                             [],
+                             [cc_version=`$CC --version | head -n1`
+                              AC_MSG_WARN(["$cc_version" does not support native atomics.  Disabling OPX provider.])
+                              opx_happy=0])
+
 		AS_IF([test $opx_happy -eq 1],[
 			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
 				[[#include <rdma/hfi/hfi1_user.h>]],
@@ -306,41 +316,80 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			AC_DEFINE_UNQUOTED([HAVE_HFISVC], [$hfisvc_happy], [hfisvc support availability])
 		])
 
-		AS_IF([test $opx_happy -eq 1], [
-		    AC_MSG_CHECKING([for hfisvc support])
-		    AC_ARG_WITH([opx-hfisvc],
-		    	AS_HELP_STRING([--with-opx-hfisvc],
-		    		[Build with hfisvc client support (default=no)]),
-		    		[],[with_opx_hfisvc=no])
-		    AS_IF([test "x$with_opx_hfisvc" != "xno"], [
-		    	AC_MSG_RESULT([yes])
-		    	opx_CPPFLAGS="$opx_CPPFLAGS -DHFISVC"
-			opx_hfisvc=yes
-		    ], [
-		    AC_MSG_RESULT([no])
-			opx_hfisvc=no
+        AS_IF([test $opx_happy -eq 1], [
+                    AC_ARG_ENABLE([hfisvc],
+                    	      [AS_HELP_STRING([--enable-hfisvc@<:@=yes|no|PATH@:>@],
+                    			      [Enable hfisvc @<:@default=yes@:>@
+                    			      (yes: enable hfisvc; no: disable hfisvc;
+                    			      PATH: enable hfisvc and use rdma-core installed under PATH)])],
+                    	      )
+
+                    AS_IF([test x"$enable_hfisvc" != x"no"],
+                        [AC_MSG_NOTICE([Requested hfisvc - $enable_hfisvc])
+
+			dnl if system wide hfisvc was found do not recheck
+                        AS_IF([test x"$enable_hfisvc" != x"yes" && test x"$sys_hfisvc_happy" != x"1" ],
+                    	    [
+			        _FI_CHECK_PACKAGE_HEADER([user_hfisvc],
+				     [infiniband/hfisvc_client.h],
+				     [$enable_hfisvc],
+				     [
+				         user_hfisvc_happy=1
+				         AC_MSG_NOTICE([Detected rdma-core support for hfisvc in $enable_hfisvc.])
+				     ],
+				     [
+				        AC_MSG_NOTICE([Did not detect rdma-core support for hfisvc in $enable_hfisvc.])
+	 	                ])
+
+				dnl happy with the specified input path
+				AS_IF([test "$user_hfisvc_happy" = "1" ],
+				[
+				    opx_CPPFLAGS="$opx_CPPFLAGS $user_hfisvc_CPPFLAGS"
+				])
+			])
+
+			dnl happy without a path
+                        AS_IF([test x"$sys_hfisvc_happy" = x"1" ],
+                    	    [user_hfisvc_happy=1])
+
+                        AS_IF([test x"$enable_hfisvc" != x"no" && test "$user_hfisvc_happy" = "0" ],
+                    	    [AC_MSG_WARN([hfisvc support requested but hfisvc runtime not available.])])
+
+                        AC_DEFINE_UNQUOTED([HAVE_HFISVC], [$user_hfisvc_happy],
+                    	  	   [hfisvc support availability])
+
+			dnl hfi1 direct verbs should be happy if hfisvc is happy
+			_FI_CHECK_PACKAGE_HEADER([user_hfi1dv],
+				[infiniband/hfi1dv.h],
+				[],
+				[
+				    hfi1dv_happy=1
+				    AC_MSG_NOTICE([Detected user rdma-core support for hfi1 direct verbs.])
+				],
+				[
+				    dnl Should not happen
+				    hfi1dv_happy=0
+				    AC_MSG_WARN([Did not detect hfi1 direct verbs with hfisvc.])
+				])
+			AC_CHECK_HEADERS(infiniband/verbs.h, [],
+			    [
+			        AC_MSG_WARN([Did not detect hfi1 direct verbs with hfisvc.])
+			    ], [])
+
 		    ])
-		])
+		    AS_CASE([x$hfi1dv_happy],
+		    	[x0], [
+		    		HFI1DV_ENABLED=0
+		    		AC_MSG_WARN([OPX override will build without hfi1 direct verbs rdma-core support.])
+		    		],
+		    	[ HFI1DV_ENABLED=$hfi1dv_happy ])
 
-		AM_CONDITIONAL([OPX_HFISVC], [test "x$opx_hfisvc" = "xyes"])
-		AC_SUBST([OPX_HFISVC])
+		    AC_DEFINE_UNQUOTED(HAVE_HFI1_DIRECT_VERBS, [$HFI1DV_ENABLED], [hfi1 direct verbs enabled])
 
-		AS_IF([test $opx_happy -eq 1 && test "x$opx_hfisvc" = "xyes"], [
-                    AC_CONFIG_COMMANDS([check-module-dir], [
-                        hfisvc_dir="$srcdir/prov/opx/modules/hfisvc_client"
-                        opx_abs_srcdir=$(cd "$srcdir/prov/opx" && pwd)
-                        if test ! -d $hfisvc_dir; then
-                            AC_MSG_ERROR([hfisvc_client does not exist, please run the following from the top libfabric source directory:
-                                git submodule add ../../cornelisnetworks/hfisvc_client ./prov/opx/modules/hfisvc_client
-                                git submodule update --init])
-                        fi
-                        mkdir -p $hfisvc_dir/build
-                        cd $hfisvc_dir/build
-                        echo "Installing hfisvc_client to $opx_abs_srcdir"
-                        cmake .. -DCMAKE_INSTALL_PREFIX=$opx_abs_srcdir -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=OFF
-                        make install -j
-                    ])
-		])
+                    AC_DEFINE_UNQUOTED([HAVE_HFISVC], [$user_hfisvc_happy], [hfisvc support availability])
+
+	    ])
+
 	])
 	AC_SUBST(opx_CPPFLAGS)
 	AS_IF([test $opx_happy -eq 1], [$1], [$2])
