@@ -132,6 +132,9 @@ out:
 	return ret;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 /* Sbrk/brk allocations are only intended to support a single outstanding
  * allocation at a time. Extra handling of the program break is needed to make
  * sbrk/brk allocations more flexible including making allocations thread safe.
@@ -192,7 +195,11 @@ static void brk_free(void *ptr)
 	int ret;
 
 	FT_DEBUG("Resetting program break from %p to %p", cur_brk, rewind_brk);
+#ifndef __GLIBC__
+	ret = (brk(rewind_brk) == (void*)-1) ? -1 : 0;
+#else
 	ret = brk(rewind_brk);
+#endif
 	if (ret) {
 		FT_UNIT_STRERR(err_buf, "brk failed", -errno);
 		return;
@@ -226,7 +233,11 @@ static void *brk_alloc(void)
 	}
 
 	cur_brk = (void *) ((intptr_t) prev_brk + mr_buf_size);
+#ifndef __GLIBC__
+	ret = (brk(cur_brk) == (void*)-1) ? -1 : 0;
+#else
 	ret = brk(cur_brk);
+#endif
 	if (ret) {
 		FT_UNIT_STRERR(err_buf, "brk failed", -errno);
 		return NULL;
@@ -245,6 +256,8 @@ static void *brk_alloc(void)
 
 	return prev_brk;
 }
+
+#pragma GCC diagnostic pop //-Wdeprecated-declarations
 
 /* Mmap allocations are only intended to support a single outstanding
  * allocation at a time. Extra handling of the mmap reuse address needs to occur
