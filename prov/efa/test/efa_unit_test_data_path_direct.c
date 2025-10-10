@@ -32,7 +32,7 @@ static void test_efa_data_path_direct_multiple_sge_fail_impl(struct efa_resource
 	efa_unit_test_buff_construct(&local_buff1, resource, 2048);
 	efa_unit_test_buff_construct(&local_buff2, resource, 2048);
 
-	/* Setup SGE list with 2 elements (exceeds EFA_DEVICE_MAX_RDMA_SGE=1) */
+	/* Setup SGE list with 2 elements (exceeds EFA_IO_TX_DESC_NUM_RDMA_BUFS=1) */
 	sge_list[0].addr = (uintptr_t)local_buff1.buff;
 	sge_list[0].length = local_buff1.size;
 	sge_list[0].lkey = ((struct efa_mr *)fi_mr_desc(local_buff1.mr))->ibv_mr->lkey;
