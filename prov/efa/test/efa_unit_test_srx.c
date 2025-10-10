@@ -131,4 +131,7 @@ void test_efa_srx_unexp_pkt(struct efa_resource **state)
         efa_rdm_pke_release_rx(pke);
         efa_rdm_rxe_release(rxe);
         ofi_genlock_unlock(srx_ctx->lock);
+
+        /* Destroy the fake peer constructed above */
+        efa_rdm_peer_destruct(&peer, efa_rdm_ep);
 }
