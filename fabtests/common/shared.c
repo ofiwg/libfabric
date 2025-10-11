@@ -1586,6 +1586,18 @@ int ft_init_av(void)
 int ft_exchange_addresses_oob(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		fi_addr_t *remote_addr)
 {
+	int ret;
+
+	ret = ft_send_addr_oob(ep_ptr);
+	if (ret)
+		return ret;
+
+	return ft_recv_addr_oob(av_ptr, remote_addr);
+}
+
+/* Only send local address out-of-band */
+int ft_send_addr_oob(struct fid_ep *ep_ptr)
+{
 	char buf[FT_MAX_CTRL_MSG];
 	int ret;
 	size_t addrlen = FT_MAX_CTRL_MSG;
@@ -1596,19 +1608,20 @@ int ft_exchange_addresses_oob(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		return ret;
 	}
 
-	ret = ft_sock_send(oob_sock, buf, FT_MAX_CTRL_MSG);
-	if (ret)
-		return ret;
+	return ft_sock_send(oob_sock, buf, FT_MAX_CTRL_MSG);
+}
+
+/* Receive and insert peer address out-of-band */
+int ft_recv_addr_oob(struct fid_av *av_ptr, fi_addr_t *remote_addr)
+{
+	char buf[FT_MAX_CTRL_MSG];
+	int ret;
 
 	ret = ft_sock_recv(oob_sock, buf, FT_MAX_CTRL_MSG);
 	if (ret)
 		return ret;
 
-	ret = ft_av_insert(av_ptr, buf, 1, remote_addr, 0, NULL);
-	if (ret)
-		return ret;
-
-	return 0;
+	return ft_av_insert(av_ptr, buf, 1, remote_addr, 0, NULL);
 }
 
 /* TODO: retry send for unreliable endpoints */

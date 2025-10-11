@@ -475,6 +475,8 @@ int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr
 		uint64_t flags, void *context);
 int ft_init_av(void);
 int ft_join_mc(void);
+int ft_send_addr_oob(struct fid_ep *ep_ptr);
+int ft_recv_addr_oob(struct fid_av *av_ptr, fi_addr_t *remote_addr);
 int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		fi_addr_t *remote_addr);
 int ft_init_av_addr(struct fid_av *av, struct fid_ep *ep,
