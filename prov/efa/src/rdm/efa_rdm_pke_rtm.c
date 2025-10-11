@@ -289,7 +289,7 @@ static ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 		if (OFI_UNLIKELY(!rxe)) {
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
-				FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+				FI_EFA_ERR_RXE_POOL_EXHAUSTED, true);
 			efa_rdm_pke_release_rx(pkt_entry);
 			return -FI_ENOBUFS;
 		}
@@ -337,7 +337,7 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 		if (OFI_UNLIKELY(!rxe)) {
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
-				FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+				FI_EFA_ERR_RXE_POOL_EXHAUSTED, true);
 			efa_rdm_pke_release_rx(pkt_entry);
 			return -FI_ENOBUFS;
 		}
@@ -413,7 +413,7 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_p
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unknown packet type ID: %d\n",
 		       base_hdr->type);
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_UNKNOWN_PKT_TYPE);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_UNKNOWN_PKT_TYPE, true);
 		efa_rdm_pke_release_rx(pkt_entry);
 	}
 
@@ -479,21 +479,21 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 				"Invalid msg_id: %" PRIu32
 				" robuf->exp_msg_id: %" PRIu32 "\n",
 			       msg_id, peer->robuf.exp_msg_id);
-			efa_base_ep_write_eq_error(&ep->base_ep, ret, FI_EFA_ERR_PKT_ALREADY_PROCESSED);
+			efa_base_ep_write_eq_error(&ep->base_ep, ret, FI_EFA_ERR_PKT_ALREADY_PROCESSED, true);
 			efa_rdm_pke_release_rx(pkt_entry);
 			return;
 		}
 
 		if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
 			/* running out of memory while copy packet */
-			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_OOM);
+			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_OOM, true);
 			return;
 		}
 
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unknown error %d processing REQ packet msg_id: %"
 			PRIu32 "\n", ret, msg_id);
-		efa_base_ep_write_eq_error(&ep->base_ep, ret, FI_EFA_ERR_OTHER);
+		efa_base_ep_write_eq_error(&ep->base_ep, ret, FI_EFA_ERR_OTHER, true);
 		return;
 	}
 
