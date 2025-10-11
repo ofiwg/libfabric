@@ -844,7 +844,7 @@ int efa_cq_close(fid_t fid)
 	if (cq->err_buf)
 		free(cq->err_buf);
 
-	free(cq);
+	ofi_freealign(cq);
 
 	return 0;
 }
@@ -917,11 +917,12 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	struct fi_cq_attr tmp_attr;
 	int err, retv;
 
-	cq = calloc(1, sizeof(*cq));
+	ofi_memalign((void **)&cq, EFA_MEM_ALIGNMENT, sizeof(*cq));
 	if (!cq) {
 		EFA_WARN(FI_LOG_CQ, "Failed to allocate memory for CQ\n");
 		return -FI_ENOMEM;
 	}
+	memset(cq, 0x0, sizeof(*cq));
 
 	cq->poll_ibv_cq = efa_cq_poll_ibv_cq;
 
@@ -1049,6 +1050,6 @@ err_free_util_cq:
 		EFA_WARN(FI_LOG_CQ, "Unable to close util cq: %s\n",
 			 fi_strerror(-retv));
 err_free_cq:
-	free(cq);
+	ofi_freealign(cq);
 	return err;
 }
