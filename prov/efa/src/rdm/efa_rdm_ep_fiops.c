@@ -889,7 +889,7 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 					continue;
 				if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_CTRL))
 					continue;
-				/* fall-thru */
+				break;
 			default:
 				/* Release all other queued OPEs */
 				if (ope->type == EFA_RDM_TXE)
