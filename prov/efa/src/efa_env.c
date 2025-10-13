@@ -41,6 +41,13 @@ struct efa_env efa_env = {
 	.internal_rx_refill_threshold = 8,
 	.use_data_path_direct = true,
 	.implicit_av_size = 0,
+
+	/* HMEM DMABUF defaults */
+	.hmem_system_use_dmabuf = 0,
+	.hmem_cuda_use_dmabuf = 1,
+	.hmem_neuron_use_dmabuf = 1,
+	.hmem_synapseai_use_dmabuf = 1,
+	.hmem_rocr_use_dmabuf = 1,
 };
 
 /* @brief Read and store the FI_EFA_* environment variables.
@@ -141,6 +148,14 @@ void efa_env_param_get(void)
 	}
 	fi_param_get_bool(&efa_prov, "use_data_path_direct", &efa_env.use_data_path_direct);
 
+	/* HMEM DMABUF parameters */
+	fi_param_get_bool(&efa_prov, "hmem_system_use_dmabuf", &efa_env.hmem_system_use_dmabuf);
+	fi_param_get_bool(&efa_prov, "hmem_neuron_use_dmabuf", &efa_env.hmem_neuron_use_dmabuf);
+	fi_param_get_bool(&efa_prov, "hmem_synapseai_use_dmabuf", &efa_env.hmem_synapseai_use_dmabuf);
+	/* Use core libfabric parameters for CUDA and ROCR */
+	fi_param_get_bool(NULL, "hmem_cuda_use_dmabuf", &efa_env.hmem_cuda_use_dmabuf);
+	fi_param_get_bool(NULL, "hmem_rocr_use_dmabuf", &efa_env.hmem_rocr_use_dmabuf);
+
 	efa_fork_support_request_initialize();
 }
 
@@ -184,6 +199,15 @@ void efa_env_define()
 			"Set the maximum number of receive operations before the provider returns -FI_EAGAIN.");
 	fi_param_define(&efa_prov, "rx_copy_unexp", FI_PARAM_BOOL,
 			"Enables the use of a separate pool of bounce-buffers to copy unexpected messages out of the pre-posted receive buffers. (Default: 1)");
+
+	/* HMEM DMABUF environment variables */
+	fi_param_define(&efa_prov, "hmem_system_use_dmabuf", FI_PARAM_BOOL,
+			"Use DMABUF for system memory registration. (Default: 0)");
+	fi_param_define(&efa_prov, "hmem_neuron_use_dmabuf", FI_PARAM_BOOL,
+			"Use DMABUF for Neuron device memory registration. (Default: 1)");
+	fi_param_define(&efa_prov, "hmem_synapseai_use_dmabuf", FI_PARAM_BOOL,
+			"Use DMABUF for SynapseAI device memory registration. (Default: 1)");
+
 	fi_param_define(&efa_prov, "rx_copy_ooo", FI_PARAM_BOOL,
 			"Enables the use of a separate pool of bounce-buffers to copy out-of-order RTM packets out of the pre-posted receive buffers. (Default: 1)");
 	fi_param_define(&efa_prov, "max_timeout", FI_PARAM_INT,
