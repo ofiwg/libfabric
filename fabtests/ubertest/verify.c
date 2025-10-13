@@ -32,7 +32,6 @@
 #include <string.h>
 #include <float.h>
 
-#include "ofi_atomic.h"
 #include "fabtest.h"
 
 int ft_sync_fill_bufs(size_t size)

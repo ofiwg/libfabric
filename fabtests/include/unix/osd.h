@@ -95,35 +95,35 @@ OFI_COMPLEX_TYPE_DECL(double, double)
 OFI_COMPLEX_TYPE_DECL(long_double, long double)
 
 #define OFI_COMPLEX_OPS(name)									      \
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, sum)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
+inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, sum)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
 {												      \
 	return v1 + v2;										      \
 }												      \
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, prod)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
+inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, prod)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
 {												      \
 	return v1 * v2;										      \
 }												      \
-static inline int OFI_COMPLEX_OP(name, eq)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)		      \
+inline int OFI_COMPLEX_OP(name, eq)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)		      \
 {												      \
 	return v1 == v2;                                                                	      \
 }												      \
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, land)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)\
+inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, land)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)\
 {												      \
 	return v1 && v2;      									      \
 }												      \
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lor)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
+inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lor)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2) \
 {												      \
 	return v1 || v2;									      \
 }												      \
-static inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lxor)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)\
+inline OFI_COMPLEX(name) OFI_COMPLEX_OP(name, lxor)(OFI_COMPLEX(name) v1, OFI_COMPLEX(name) v2)\
 {												      \
 	return (v1 && !v2) || (!v1 && v2);      						      \
 }												      \
-static inline void OFI_COMPLEX_OP(name, set)(OFI_COMPLEX(name) *v1, OFI_COMPLEX(name) v2)	      \
+inline void OFI_COMPLEX_OP(name, set)(OFI_COMPLEX(name) *v1, OFI_COMPLEX(name) v2)	      \
 {												      \
 	*v1 = v2;										      \
 }												      \
-static inline void OFI_COMPLEX_OP(name, fill)(OFI_COMPLEX(name) *v1, name v2)			      \
+inline void OFI_COMPLEX_OP(name, fill)(OFI_COMPLEX(name) *v1, name v2)			      \
 {												      \
 	*v1 = (OFI_COMPLEX(name))((name)(v2) + I * (name)(v2));			  		      \
 }
