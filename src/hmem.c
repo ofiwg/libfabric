@@ -42,6 +42,13 @@
 
 bool ofi_hmem_disable_p2p = false;
 
+/* HMEM DMABUF settings */
+bool ofi_hmem_system_use_dmabuf = false;
+bool ofi_hmem_cuda_use_dmabuf = true;
+bool ofi_hmem_neuron_use_dmabuf = true;
+bool ofi_hmem_synapseai_use_dmabuf = true;
+bool ofi_hmem_rocr_use_dmabuf = true;
+
 static int ofi_hmem_system_base_addr(const void *addr, size_t len,
 				     void **base_addr, size_t *base_length)
 {
@@ -636,6 +643,7 @@ void ofi_hmem_set_iface_filter(const char* iface_filter_str, bool* filter)
 void ofi_hmem_init(void)
 {
 	int iface, ret;
+	int system_dmabuf, cuda_dmabuf, neuron_dmabuf, synapseai_dmabuf, rocr_dmabuf;
 	int disable_p2p = 0;
 	char* hmem_filter = NULL;
 	bool filter_hmem_ifaces = false;
@@ -679,10 +687,36 @@ void ofi_hmem_init(void)
 			"Disable peer to peer support between device memory and"
 			" network devices. (default: no).");
 
+	/* HMEM DMABUF environment variables */
+	fi_param_define(NULL, "hmem_system_use_dmabuf", FI_PARAM_BOOL,
+			"Use DMABUF for system memory registration. (Default: 0)");
+	fi_param_define(NULL, "hmem_cuda_use_dmabuf", FI_PARAM_BOOL,
+			"Use DMABUF for CUDA device memory registration. (Default: 1)");
+	fi_param_define(NULL, "hmem_neuron_use_dmabuf", FI_PARAM_BOOL,
+			"Use DMABUF for Neuron device memory registration. (Default: 1)");
+	fi_param_define(NULL, "hmem_synapseai_use_dmabuf", FI_PARAM_BOOL,
+			"Use DMABUF for SynapseAI device memory registration. (Default: 1)");
+	fi_param_define(NULL, "hmem_rocr_use_dmabuf", FI_PARAM_BOOL,
+			"Use DMABUF for ROCR device memory registration. (Default: 1)");
+
 	if (!fi_param_get_bool(NULL, "hmem_disable_p2p", &disable_p2p)) {
 		if (disable_p2p == 1)
 			ofi_hmem_disable_p2p = true;
 	}
+
+	/* Get DMABUF parameters */
+	if (!fi_param_get_bool(NULL, "hmem_system_use_dmabuf", &system_dmabuf))
+		ofi_hmem_system_use_dmabuf = (system_dmabuf != 0);
+	if (!fi_param_get_bool(NULL, "hmem_cuda_use_dmabuf", &cuda_dmabuf))
+		ofi_hmem_cuda_use_dmabuf = (cuda_dmabuf != 0);
+	if (!fi_param_get_bool(NULL, "hmem_neuron_use_dmabuf", &neuron_dmabuf))
+		ofi_hmem_neuron_use_dmabuf = (neuron_dmabuf != 0);
+	if (!fi_param_get_bool(NULL, "hmem_synapseai_use_dmabuf", &synapseai_dmabuf))
+		ofi_hmem_synapseai_use_dmabuf = (synapseai_dmabuf != 0);
+	if (!fi_param_get_bool(NULL, "hmem_rocr_use_dmabuf", &rocr_dmabuf))
+		ofi_hmem_rocr_use_dmabuf = (rocr_dmabuf != 0);
+
+
 }
 
 void ofi_hmem_cleanup(void)

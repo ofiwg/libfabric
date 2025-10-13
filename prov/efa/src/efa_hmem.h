@@ -24,6 +24,7 @@ static const enum fi_hmem_iface efa_hmem_ifaces[] = {
 struct efa_hmem_info {
 	bool initialized; 	/* do we support it at all */
 	bool p2p_supported_by_device;	/* do we support p2p with this device */
+	bool dmabuf_supported_by_device_b;	/* do we support dmabuf with this device */
 
 	size_t max_medium_msg_size;
 	size_t runt_size;
@@ -104,4 +105,5 @@ static inline int efa_copy_to_hmem(void *desc, void *dest, const void *buff, siz
 
 ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, size_t buff_size, const struct iovec *hmem_iov, size_t iov_count);
 ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov, size_t iov_count, char *buff, size_t buff_size);
+bool efa_hmem_is_dmabuf_env_var_enabled(enum fi_hmem_iface iface);
 #endif
