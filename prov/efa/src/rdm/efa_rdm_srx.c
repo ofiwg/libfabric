@@ -7,6 +7,7 @@
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_ope.h"
+#include "efa_rdm_tracepoint.h"
 
 /**
  * @brief update an rxe for a peer rx entry.
@@ -59,6 +60,10 @@ static int efa_rdm_srx_start(struct fi_peer_rx_entry *peer_rxe)
 	assert(pkt_entry);
 	rxe = pkt_entry->ope;
 	efa_rdm_srx_update_rxe(peer_rxe, rxe);
+
+	efa_rdm_tracepoint(recv_unexp_match_found, (size_t) pkt_entry,
+			   pkt_entry->payload_size, rxe->msg_id,
+			   (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
 	rxe->state = EFA_RDM_RXE_MATCHED;
 
