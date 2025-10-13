@@ -988,6 +988,7 @@ void fi_ini(void)
 	ofi_register_provider(VERBS_INIT, NULL);
 	ofi_register_provider(MRAIL_INIT, NULL);
 	ofi_register_provider(RXD_INIT, NULL);
+	ofi_register_provider(UET_RXD_INIT, NULL);
 	ofi_register_provider(EFA_INIT, NULL);
 	ofi_register_provider(OPX_INIT, NULL);
 	ofi_register_provider(UCX_INIT, NULL);

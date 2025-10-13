@@ -1,0 +1,33 @@
+if HAVE_UET_RXD
+_uet_rxd_files = \
+	prov/uet_rxd/src/uet_attr.c		\
+	prov/uet_rxd/src/uet_init.c		\
+	prov/uet_rxd/src/uet_fabric.c		\
+	prov/uet_rxd/src/uet_domain.c		\
+	prov/uet_rxd/src/uet_av.c		\
+	prov/uet_rxd/src/uet_cq.c		\
+	prov/uet_rxd/src/uet_cntr.c		\
+	prov/uet_rxd/src/uet_ep.c		\
+	prov/uet_rxd/src/uet_msg.c		\
+	prov/uet_rxd/src/uet_tagged.c		\
+	prov/uet_rxd/src/uet_rma.c		\
+	prov/uet_rxd/src/uet_atomic.c		\
+	prov/uet_rxd/src/uet.h			\
+	prov/uet_rxd/src/uet_proto.h
+
+if HAVE_UET_RXD_DL
+pkglib_LTLIBRARIES += libuet_rxd-fi.la
+libuet_rxd_fi_la_SOURCES = $(_uet_rxd_files) $(common_srcs)
+libuet_rxd_fi_la_LIBADD = $(linkback) $(uet_rxd_shm_LIBS)
+libuet_rxd_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libuet_rxd_fi_la_DEPENDENCIES = $(linkback)
+else !HAVE_UET_RXD_DL
+src_libfabric_la_SOURCES += $(_uet_rxd_files)
+src_libfabric_la_LIBADD += $(uet_rxd_shm_LIBS)
+endif !HAVE_UET_RXD_DL
+
+#prov_install_man_pages += man/man7/fi_uet_rxd.7
+
+endif HAVE_UET_RXD
+
+#prov_dist_man_pages += man/man7/fi_uet_rxd.7

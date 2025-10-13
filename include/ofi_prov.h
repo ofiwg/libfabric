@@ -178,6 +178,17 @@ RXD_INI ;
 #  define RXD_INIT NULL
 #endif
 
+#if (HAVE_UET_RXD) && (HAVE_UET_RXD_DL)
+#  define UET_RXD_INI FI_EXT_INI
+#  define UET_RXD_INIT NULL
+#elif (HAVE_UET_RXD)
+#  define UET_RXD_INI INI_SIG(fi_uet_rxd_ini)
+#  define UET_RXD_INIT fi_uet_rxd_ini()
+UET_RXD_INI ;
+#else
+#  define UET_RXD_INIT NULL
+#endif
+
 #if (HAVE_SHM) && (HAVE_SHM_DL)
 #  define SHM_INI FI_EXT_INI
 #  define SHM_INIT NULL
