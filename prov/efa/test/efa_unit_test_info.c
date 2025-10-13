@@ -811,17 +811,18 @@ static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func,
 				   bool expect_fabric_reuse, 
 				   bool expect_domain_reuse)
 {
-	struct fi_info *hints, *info1, *info2;
+	struct fi_info *hints1, *hints2, *info1, *info2;
 	struct fid_fabric *fabric = NULL;
 	struct fid_domain *domain = NULL;
+	struct util_domain *util_domain = NULL;
 	int err;
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
-	assert_non_null(hints);
-	hints->caps |= FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM | FI_DIRECTED_RECV;
-	hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
+	hints1 = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(hints1);
+	hints1->caps |= FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM | FI_DIRECTED_RECV;
+	hints1->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
 
-	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info1);
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints1, &info1);
 	assert_int_equal(err, 0);
 	assert_non_null(info1);
 
@@ -833,15 +834,13 @@ static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func,
 	assert_int_equal(err, 0);
 	assert_non_null(domain);
 
-	fi_freeinfo(hints);
+	hints2 = efa_unit_test_alloc_hints(FI_EP_RDM, NULL);
+	assert_non_null(hints2);
+	hints2->caps = FI_MSG | FI_RMA | FI_ATOMIC;
+	setup_func(hints2, fabric, domain, info1);
+	hints2->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM, NULL);
-	assert_non_null(hints);
-	hints->caps = FI_MSG | FI_RMA | FI_ATOMIC;
-	setup_func(hints, fabric, domain, info1);
-	hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
-
-	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info2);
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints2, &info2);
 	assert_int_equal(err, 0);
 	assert_non_null(info2);
 
@@ -853,11 +852,22 @@ static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func,
 	
 	if (expect_domain_reuse) {
 		assert_ptr_equal(info2->domain_attr->domain, domain);
+		util_domain = container_of(domain, struct util_domain, domain_fid);
+		assert_true((util_domain->info_domain_caps &
+			     (hints1->caps | hints2->caps)) ==
+			    (hints1->caps | hints2->caps));
+		assert_int_equal(util_domain->info_domain_mode, 0);
+		assert_true((util_domain->mr_mode &
+			     (hints1->domain_attr->mr_mode |
+			      hints2->domain_attr->mr_mode)) ==
+			    (hints1->domain_attr->mr_mode |
+			     hints2->domain_attr->mr_mode));
 	} else {
 		assert_null(info2->domain_attr->domain);
 	}
 
-	fi_freeinfo(hints);
+	fi_freeinfo(hints1);
+	fi_freeinfo(hints2);
 	fi_freeinfo(info1);
 	fi_freeinfo(info2);
 
