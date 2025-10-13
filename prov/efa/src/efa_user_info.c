@@ -167,6 +167,11 @@ int efa_user_info_check_domain_object(const struct fi_info *hints,
 	}
 
 	dupinfo->domain_attr->domain = hints->domain_attr->domain;
+
+	util_domain->info_domain_caps |= dupinfo->caps | dupinfo->domain_attr->caps;
+	util_domain->info_domain_mode |= dupinfo->mode | dupinfo->domain_attr->mode;
+	util_domain->mr_mode |= dupinfo->domain_attr->mr_mode;
+
 	return 0;
 }
 
