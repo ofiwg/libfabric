@@ -239,6 +239,8 @@ static void udpx_rx_comp(struct udpx_ep *ep, void *context, uint64_t flags,
 {
 	struct fi_cq_tagged_entry *comp;
 
+	assert(!ofi_cirque_isfull(ep->util_ep.rx_cq->cirq));
+
 	comp = ofi_cirque_next(ep->util_ep.rx_cq->cirq);
 	comp->op_context = context;
 	comp->flags = FI_RECV | flags;
@@ -286,7 +288,8 @@ static void udpx_ep_progress(struct util_ep *util_ep)
 	hdr.msg_flags = 0;
 
 	ofi_genlock_lock(&ep->util_ep.rx_cq->cq_lock);
-	if (ofi_cirque_isempty(ep->rxq))
+	if (ofi_cirque_isempty(ep->rxq) ||
+	    ofi_cirque_isfull(ep->util_ep.rx_cq->cirq))
 		goto out;
 
 	entry = ofi_cirque_head(ep->rxq);
