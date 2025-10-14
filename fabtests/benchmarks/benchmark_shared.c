@@ -94,15 +94,14 @@ void ft_benchmark_usage(void)
 }
 
 /* Pingpong latency test with pre-posted receive buffers. */
-static int pingpong_pre_posted_rx(size_t inject_size)
+static int pingpong_pre_posted_rx(size_t inject_size, union ft_timer *timer)
 {
 	int ret, i;
 
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
-				ft_start();
-
+				ft_start(timer);
 			if (opts.transfer_size <= inject_size)
 				ret = ft_inject(ep, remote_fi_addr,
 						opts.transfer_size);
@@ -119,7 +118,7 @@ static int pingpong_pre_posted_rx(size_t inject_size)
 	} else {
 		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
-				ft_start();
+				ft_start(timer);
 
 			ret = ft_rx(ep, opts.transfer_size);
 			if (ret)
@@ -135,20 +134,20 @@ static int pingpong_pre_posted_rx(size_t inject_size)
 				return ret;
 		}
 	}
-	ft_stop();
+	ft_stop(timer);
 
 	return FI_SUCCESS;
 }
 
 /* Pingpong latency test without pre-posted receive buffers. */
-static int pingpong_no_pre_posted_rx(size_t inject_size)
+static int pingpong_no_pre_posted_rx(size_t inject_size, union ft_timer *timer)
 {
 	int ret, i;
 
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
-				ft_start();
+				ft_start(timer);
 
 			if (opts.transfer_size <= inject_size)
 				ret = ft_inject(ep, remote_fi_addr,
@@ -170,7 +169,7 @@ static int pingpong_no_pre_posted_rx(size_t inject_size)
 	} else {
 		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
-				ft_start();
+				ft_start(timer);
 
 			ret = ft_post_rx(ep, opts.transfer_size, &rx_ctx);
 			if (ret)
@@ -197,7 +196,7 @@ static int pingpong_no_pre_posted_rx(size_t inject_size)
 				return ret;
 		}
 	}
-	ft_stop();
+	ft_stop(timer);
 
 	return FI_SUCCESS;
 }
@@ -205,6 +204,7 @@ static int pingpong_no_pre_posted_rx(size_t inject_size)
 int pingpong(void)
 {
 	int ret;
+	union ft_timer timer = {};
 	size_t inject_size = fi->tx_attr->inject_size;
 
 	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
@@ -236,7 +236,7 @@ int pingpong(void)
 				return ret;
 		}
 
-		ret = pingpong_no_pre_posted_rx(inject_size);
+		ret = pingpong_no_pre_posted_rx(inject_size, &timer);
 		if (ret)
 			return ret;
 	} else {
@@ -244,16 +244,16 @@ int pingpong(void)
 		if (ret)
 			return ret;
 
-		ret = pingpong_pre_posted_rx(inject_size);
+		ret = pingpong_pre_posted_rx(inject_size, &timer);
 		if (ret)
 			return ret;
 	}
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2,
+		show_perf_mr(opts.transfer_size, opts.iterations, timer, 2,
 				opts.argc, opts.argv);
 	else
-		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
+		show_perf(NULL, opts.transfer_size, opts.iterations, timer, 2);
 
 	return 0;
 }
@@ -296,6 +296,7 @@ int run_pingpong(void)
 int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 {
 	int ret, i;
+	union ft_timer timer = {};
 	size_t inject_size = fi->tx_attr->inject_size;
 
 	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
@@ -335,7 +336,7 @@ int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 
 			if (i == opts.warmup_iterations)
-				ft_start();
+				ft_start(&timer);
 
 			if (rma_op == FT_RMA_WRITE)
 				*(tx_buf + opts.transfer_size - 1) = (char)i;
@@ -357,7 +358,7 @@ int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	} else {
 		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
-				ft_start();
+				ft_start(&timer);
 
 			ret = ft_rx_rma(i, rma_op, ep, opts.transfer_size);
 			if (ret)
@@ -377,13 +378,13 @@ int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 				return ret;
 		}
 	}
-	ft_stop();
+	ft_stop(&timer);
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2,
+		show_perf_mr(opts.transfer_size, opts.iterations, timer, 2,
 				opts.argc, opts.argv);
 	else
-		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
+		show_perf(NULL, opts.transfer_size, opts.iterations, timer, 2);
 
 	return 0;
 }
@@ -391,6 +392,7 @@ int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 int rma_tx_completion(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 {
 	int ret, i;
+	union ft_timer timer = {};
 	size_t inject_size = fi->tx_attr->inject_size;
 
 	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
@@ -418,7 +420,7 @@ int rma_tx_completion(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
-				ft_start();
+				ft_start(&timer);
 
 			if (opts.transfer_size <= inject_size)
 				ret = ft_inject_rma(rma_op, remote, ep,
@@ -431,12 +433,12 @@ int rma_tx_completion(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 				return ret;
 		}
 
-		ft_stop();
+		ft_stop(&timer);
 		if (opts.machr)
-			show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 1,
+			show_perf_mr(opts.transfer_size, opts.iterations, timer, 1,
 				opts.argc, opts.argv);
 		else
-			show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 1);
+			show_perf(NULL, opts.transfer_size, opts.iterations, timer, 1);
 
 		/* Inform RMA target that the test has ended */
 		ret = ft_sync();
@@ -461,14 +463,19 @@ int rma_tx_completion(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	return 0;
 }
 
-static int bw_tx_comp()
+static int bw_tx_comp(union ft_timer *timer)
 {
 	int ret;
 
 	ret = ft_get_tx_comp(tx_seq);
 	if (ret)
 		return ret;
-	return ft_rx(ep, FT_RMA_SYNC_MSG_BYTES);
+	if (timer)
+		ft_timer_pause(timer);
+	ret = ft_rx(ep, FT_RMA_SYNC_MSG_BYTES);
+	if (timer)
+		ft_timer_resume(timer);
+	return ret;
 }
 
 static int bw_rx_comp(int window)
@@ -493,7 +500,7 @@ static int bw_rx_comp(int window)
 	return ft_tx(ep, remote_fi_addr, FT_RMA_SYNC_MSG_BYTES, &tx_ctx);
 }
 
-static int rma_bw_rx_comp()
+static int rma_bw_rx_comp(union ft_timer *timer)
 {
 	int ret;
 
@@ -501,8 +508,12 @@ static int rma_bw_rx_comp()
 	ret = ft_get_rx_comp(rx_seq - 1);
 	if (ret)
 		return ret;
-
-	return ft_tx(ep, remote_fi_addr, FT_RMA_SYNC_MSG_BYTES, &tx_ctx);
+	if (timer)
+		ft_timer_pause(timer);
+	ret = ft_tx(ep, remote_fi_addr, FT_RMA_SYNC_MSG_BYTES, &tx_ctx);
+	if (timer)
+		ft_timer_resume(timer);
+	return ret;
 }
 
 static uint64_t set_fi_more_flag(int i, int j, uint64_t flags)
@@ -520,6 +531,7 @@ int bandwidth(void)
 {
 	int ret, i, j;
 	uint64_t flags = 0;
+	union ft_timer timer = {};
 	size_t inject_size = fi->tx_attr->inject_size;
 
 	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
@@ -549,7 +561,7 @@ int bandwidth(void)
 	if (opts.dst_addr) {
 		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
-				ft_start();
+				ft_start(&timer);
 
 			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
 				ret = ft_fill_buf(tx_ctx_arr[j].buf,
@@ -578,19 +590,19 @@ int bandwidth(void)
 				return ret;
 
 			if (++j == opts.window_size) {
-				ret = bw_tx_comp();
+				ret = bw_tx_comp(NULL);
 				if (ret)
 					return ret;
 				j = 0;
 			}
 		}
-		ret = bw_tx_comp();
+		ret = bw_tx_comp(NULL);
 		if (ret)
 			return ret;
 	} else {
 		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
-				ft_start();
+				ft_start(&timer);
 
 			if (opts.use_fi_more) {
 				flags = set_fi_more_flag(i, j, flags);
@@ -620,18 +632,18 @@ int bandwidth(void)
 		if (ret)
 			return ret;
 	}
-	ft_stop();
+	ft_stop(&timer);
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 1,
+		show_perf_mr(opts.transfer_size, opts.iterations, timer, 1,
 				opts.argc, opts.argv);
 	else
-		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 1);
+		show_perf(NULL, opts.transfer_size, opts.iterations, timer, 1);
 
 	return 0;
 }
 
-static int bw_rma_comp(enum ft_rma_opcodes rma_op, int num_completions)
+static int bw_rma_comp(enum ft_rma_opcodes rma_op, int num_completions, union ft_timer *timer)
 {
 	int ret;
 
@@ -639,8 +651,8 @@ static int bw_rma_comp(enum ft_rma_opcodes rma_op, int num_completions)
 		/* for writedata, only the client sends,
 		 * and only the server verifies. */
 		if (opts.dst_addr)
-			return bw_tx_comp();
-		ret = rma_bw_rx_comp();
+			return bw_tx_comp(timer);
+		ret = rma_bw_rx_comp(timer);
 	} else {
 		ret = ft_get_tx_comp(tx_seq);
 	}
@@ -662,6 +674,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 {
 	int ret, i, j;
 	uint64_t flags = 0;
+	union ft_timer timer = {};
 	size_t offset, inject_size = fi->tx_attr->inject_size;
 
 	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
@@ -690,7 +703,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 			   MAX(ft_tx_prefix_size(), ft_rx_prefix_size());
 	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 		if (i == opts.warmup_iterations)
-			ft_start();
+			ft_start(&timer);
 		if (j == 0) {
 			offset = offset_rma_start;
 			if (ft_check_opts(FT_OPT_VERIFY_DATA) && opts.transfer_size > 0) {
@@ -768,22 +781,22 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 			return ret;
 
 		if (++j == opts.window_size) {
-			ret = bw_rma_comp(rma_op, j);
+			ret = bw_rma_comp(rma_op, j, &timer);
 			if (ret)
 				return ret;
 			j = 0;
 		}
 		offset += opts.transfer_size;
 	}
-	ret = bw_rma_comp(rma_op, j);
+	ret = bw_rma_comp(rma_op, j, &timer);
 	if (ret)
 		return ret;
-	ft_stop();
+	ft_stop(&timer);
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,	1,
+		show_perf_mr(opts.transfer_size, opts.iterations, timer,	1,
 				opts.argc, opts.argv);
 	else
-		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 1);
+		show_perf(NULL, opts.transfer_size, opts.iterations, timer, 1);
 	return 0;
 }

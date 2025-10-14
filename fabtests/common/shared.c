@@ -103,7 +103,6 @@ const char *greeting = "Hello from Client!";
 
 char test_name[50] = "custom";
 int timeout = -1;
-struct timespec start, end;
 
 int listen_sock = -1;
 int sock = -1;
@@ -2704,25 +2703,23 @@ static int ft_spin_for_comp(struct fid_cq *cq, uint64_t *cur,
 			    uint64_t tag)
 {
 	struct fi_cq_err_entry comp;
-	struct timespec a, b;
+	union ft_timer timer;
 	int ret;
 
-	if (timeout >= 0)
-		clock_gettime(CLOCK_MONOTONIC, &a);
+	ft_timer_start(&timer);
 
 	do {
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
 			if (timeout >= 0)
-				clock_gettime(CLOCK_MONOTONIC, &a);
+				ft_timer_start(&timer);
 			if (!ft_tag_is_valid(cq, &comp, tag ? tag : rx_cq_cntr))
 				return -FI_EOTHER;
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			return ret;
 		} else if (timeout >= 0) {
-			clock_gettime(CLOCK_MONOTONIC, &b);
-			if ((b.tv_sec - a.tv_sec) > timeout) {
+			if (ft_timer_is_elapsed(timer, timeout, SECOND)) {
 				fprintf(stderr, "%ds timeout expired\n", timeout);
 				return -FI_ENODATA;
 			}
@@ -2832,11 +2829,11 @@ int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
 
 static int ft_spin_for_cntr(struct fid_cntr *cntr, uint64_t total, int timeout)
 {
-	struct timespec a, b;
+	union ft_timer timer;
 	uint64_t cur;
 
 	if (timeout >= 0)
-		clock_gettime(CLOCK_MONOTONIC, &a);
+		ft_timer_start(&timer);
 
 	for (;;) {
 		cur = fi_cntr_read(cntr);
@@ -2844,8 +2841,7 @@ static int ft_spin_for_cntr(struct fid_cntr *cntr, uint64_t total, int timeout)
 			return 0;
 
 		if (timeout >= 0) {
-			clock_gettime(CLOCK_MONOTONIC, &b);
-			if ((b.tv_sec - a.tv_sec) > timeout)
+			if (ft_timer_is_elapsed(timer, timeout, SECOND))
 				break;
 		}
 	}
@@ -3285,22 +3281,12 @@ int ft_finalize(void)
 	return ft_finalize_ep(ep);
 }
 
-int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
-		    enum precision p)
-{
-	int64_t elapsed;
-
-	elapsed = difftime(a->tv_sec, b->tv_sec) * 1000 * 1000 * 1000;
-	elapsed += a->tv_nsec - b->tv_nsec;
-	return elapsed / p;
-}
-
-void show_perf(char *name, size_t tsize, int iters, struct timespec *start,
-		struct timespec *end, int xfers_per_iter)
+void show_perf(char *name, size_t tsize, int iters, union ft_timer timer,
+		int xfers_per_iter)
 {
 	static int header = 1;
 	char str[FT_STR_LEN];
-	int64_t elapsed = get_elapsed(start, end, MICRO);
+	uint64_t elapsed = ft_timer_get_elapsed(timer, MICRO);
 	long long bytes = (long long) iters * tsize * xfers_per_iter;
 	float usec_per_xfer;
 
@@ -3336,11 +3322,11 @@ void show_perf(char *name, size_t tsize, int iters, struct timespec *start,
 		usec_per_xfer, 1.0/usec_per_xfer);
 }
 
-void show_perf_mr(size_t tsize, int iters, struct timespec *start,
-		  struct timespec *end, int xfers_per_iter, int argc, char *argv[])
+void show_perf_mr(size_t tsize, int iters, union ft_timer timer,
+		  int xfers_per_iter, int argc, char *argv[])
 {
 	static int header = 1;
-	int64_t elapsed = get_elapsed(start, end, MICRO);
+	uint64_t elapsed = ft_timer_get_elapsed(timer, MICRO);
 	long long total = (long long) iters * tsize * xfers_per_iter;
 	int i;
 	float usec_per_xfer;
@@ -4016,7 +4002,7 @@ int ft_check_buf(void *buf, size_t size)
 int ft_rma_poll_buf(void *buf, int iter, size_t size)
 {
 	volatile char *recv_data;
-	struct timespec a, b;
+	union ft_timer timer;
 
 	if (opts.iface != FI_HMEM_SYSTEM) {
 		FT_ERR("FI_HMEM not supported for write latency test");
@@ -4025,8 +4011,7 @@ int ft_rma_poll_buf(void *buf, int iter, size_t size)
 
 	recv_data = (char *)buf + size - 1;
 
-	if (timeout >= 0)
-		clock_gettime(CLOCK_MONOTONIC, &a);
+	ft_timer_start(&timer);
 
 	char expected_val = (char)iter;
 	while (*recv_data != expected_val) {
@@ -4034,8 +4019,7 @@ int ft_rma_poll_buf(void *buf, int iter, size_t size)
 		ft_force_progress();
 
 		if (timeout >= 0) {
-			clock_gettime(CLOCK_MONOTONIC, &b);
-			if ((b.tv_sec - a.tv_sec) > timeout) {
+			if (ft_timer_is_elapsed(timer, timeout, SECOND)) {
 				fprintf(stderr, "%ds timeout expired\n", timeout);
 				return -FI_ENODATA;
 			}

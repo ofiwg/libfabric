@@ -94,6 +94,7 @@ struct thread_args {
 	struct fi_context2 recv_ctx;
 	char *tx_buf;
 	char *rx_buf;
+	union ft_timer *timer;
 	int id;
 	int ret;
 };
@@ -440,6 +441,8 @@ static int bw_recv(void *context)
 static void *uni_bandwidth(void *context)
 {
 	int i, ret;
+	struct thread_args *targs = context;
+	union ft_timer *timer = targs->timer;
 
 	pthread_barrier_wait(&barrier);
 	for (i = 0; i < opts.warmup_iterations; i++) {
@@ -452,8 +455,8 @@ static void *uni_bandwidth(void *context)
 	}
 
 	pthread_barrier_wait(&barrier);
-	if (targs->id == 0)
-		ft_start();
+	if (timer)
+		ft_timer_start(timer);
 	for (i = 0; i < opts.iterations; i++) {
 		ret = opts.dst_addr ? bw_send(context) : bw_recv(context);
 		if (ret) {
@@ -462,8 +465,8 @@ static void *uni_bandwidth(void *context)
 		}
 	}
 	pthread_barrier_wait(&barrier);
-	if (targs->id == 0)
-		ft_stop();
+	if (timer)
+		ft_timer_stop(timer);
 
 	return  NULL;
 }
@@ -472,6 +475,7 @@ static void *bi_bandwidth(void *context)
 {
 	int i, ret;
 	struct thread_args *targs = context;
+	union ft_timer *timer = targs->timer;
 
 	pthread_barrier_wait(&barrier);
 	for (i = 0; i < opts.warmup_iterations; i++) {
@@ -490,8 +494,8 @@ static void *bi_bandwidth(void *context)
 	}
 
 	pthread_barrier_wait(&barrier);
-	if (targs->id == 0)
-		ft_start();
+	if (timer)
+		ft_timer_start(timer);
 
 	for (i = 0; i < opts.iterations; i++) {
 		ret = opts.dst_addr ? bw_send(context) : bw_recv(context);
@@ -508,8 +512,8 @@ static void *bi_bandwidth(void *context)
 		}
 	}
 	pthread_barrier_wait(&barrier);
-	if (targs->id == 0)
-		ft_stop();
+	if (timer)
+		ft_timer_stop(timer);
 
 	return NULL;
 }
@@ -517,6 +521,7 @@ static void *bi_bandwidth(void *context)
 static int run_size(void)
 {
 	int i, err, ret = FI_SUCCESS;
+	union ft_timer timer;
 
 	for (i = 0; i < num_eps; i++) {
 		targs[i].id = i;
@@ -525,6 +530,7 @@ static int run_size(void)
 		if (ret)
 			goto out;
 	}
+	targs[0].timer = &timer;
 
 	for (i = 0; i < num_eps; i++) {
 		ret = pthread_create(&targs[i].thread, NULL,
@@ -543,7 +549,7 @@ static int run_size(void)
 		}
 	}
 
-	show_perf(NULL, xfer_size, opts.iterations, &start, &end, num_eps);
+	show_perf(NULL, xfer_size, opts.iterations, timer, num_eps);
 
 out:
 	for (i = 0; i < num_eps; i++) {
