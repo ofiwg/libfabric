@@ -81,68 +81,83 @@ static pthread_spinlock_t global_gdr_lock;
 static void *gdrapi_handle;
 static struct gdrcopy_ops global_gdrcopy_ops;
 
-static int cuda_gdrcopy_dl_hmem_init(void)
+static int cuda_gdrcopy_load_symbol(void **func_ptr, const char *symbol_name)
 {
-	gdrapi_handle = dlopen("libgdrapi.so", RTLD_NOW);
+	dlerror();
+	*func_ptr = dlsym(gdrapi_handle, symbol_name);
+	if (!*func_ptr) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find %s: %s\n", symbol_name, dlerror());
+		return -FI_ENODATA;
+	}
+	return FI_SUCCESS;
+}
+
+static int cuda_gdrcopy_dl_hmem_init(void)
+{	
+	const char *lib_paths[] = {
+		"libgdrapi.so.2", // BEST: stable major version
+		"libgdrapi.so", // Fallback: development version
+		NULL
+	};
+
+	const char *required_symbols[] = {
+		"gdr_open", "gdr_close", "gdr_pin_buffer", "gdr_unpin_buffer",
+		"gdr_map", "gdr_unmap", "gdr_copy_to_mapping", "gdr_copy_from_mapping",
+		NULL
+	};
+	Dl_info info;
+
+	for (int idx_1 = 0; lib_paths[idx_1]; idx_1++) {
+		FI_INFO(&core_prov, FI_LOG_CORE, "Trying to load: %s\n", lib_paths[idx_1]);
+		void *handle = dlopen(lib_paths[idx_1], RTLD_NOW);
+		if (!handle) continue;
+		
+		/* Validate all required symbols */
+		bool all_symbols_found = true;
+		for (int idx_2 = 0; required_symbols[idx_2]; idx_2++) {
+			dlerror(); /* Clear previous errors */
+			if (!dlsym(handle, required_symbols[idx_2])) {
+				all_symbols_found = false;
+				break;
+			}
+		}
+		
+		if (all_symbols_found) {
+			gdrapi_handle = handle;
+			FI_INFO(&core_prov, FI_LOG_CORE, "About to call dladdr\n");
+			void *gdr_open_ptr = dlsym(handle, "gdr_open");
+			if (gdr_open_ptr && dladdr(gdr_open_ptr, &info)) {
+				FI_INFO(&core_prov, FI_LOG_CORE,
+					"Loaded GDRCopy library: %s\n", info.dli_fname);
+			}
+			break;
+		}
+		else {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"Failed to Loaded GDRCopy library even with all_symbols_found!\n");
+		}
+		dlclose(handle);
+	}
+	
 	if (!gdrapi_handle) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
-			"Failed to dlopen libgdrapi.so\n");
+			"Failed to find usable libgdrapi.so\n");
 		return -FI_ENOSYS;
 	}
 
-	global_gdrcopy_ops.gdr_open = dlsym(gdrapi_handle, "gdr_open");
-	if (!global_gdrcopy_ops.gdr_open) {
-		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find gdr_open\n");
+	if (cuda_gdrcopy_load_symbol((void**)&global_gdrcopy_ops.gdr_open, required_symbols[0]) ||
+	    cuda_gdrcopy_load_symbol((void**)&global_gdrcopy_ops.gdr_close, required_symbols[1]) ||
+	    cuda_gdrcopy_load_symbol((void**)&global_gdrcopy_ops.gdr_pin_buffer, required_symbols[2]) ||
+	    cuda_gdrcopy_load_symbol((void**)&global_gdrcopy_ops.gdr_unpin_buffer, required_symbols[3]) ||
+	    cuda_gdrcopy_load_symbol((void**)&global_gdrcopy_ops.gdr_map, required_symbols[4]) ||
+	    cuda_gdrcopy_load_symbol((void**)&global_gdrcopy_ops.gdr_unmap, required_symbols[5]) ||
+	    cuda_gdrcopy_load_symbol((void**)&global_gdrcopy_ops.gdr_copy_to_mapping, required_symbols[6]) ||
+	    cuda_gdrcopy_load_symbol((void**)&global_gdrcopy_ops.gdr_copy_from_mapping, required_symbols[7])) {
 		goto err_dlclose_gdrapi;
 	}
 
-	global_gdrcopy_ops.gdr_close = dlsym(gdrapi_handle, "gdr_close");
-	if (!global_gdrcopy_ops.gdr_close) {
-		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find gdr_close\n");
-		goto err_dlclose_gdrapi;
-	}
-
-	global_gdrcopy_ops.gdr_pin_buffer = dlsym(gdrapi_handle, "gdr_pin_buffer");
-	if (!global_gdrcopy_ops.gdr_pin_buffer) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to find gdr_pin_buffer\n");
-		goto err_dlclose_gdrapi;
-	}
-
-	global_gdrcopy_ops.gdr_unpin_buffer = dlsym(gdrapi_handle, "gdr_unpin_buffer");
-	if (!global_gdrcopy_ops.gdr_unpin_buffer) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to find gdr_unpin_buffer\n");
-		goto err_dlclose_gdrapi;
-	}
-
-	global_gdrcopy_ops.gdr_map = dlsym(gdrapi_handle, "gdr_map");
-	if (!global_gdrcopy_ops.gdr_map) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to find gdr_map\n");
-		goto err_dlclose_gdrapi;
-	}
-
-	global_gdrcopy_ops.gdr_unmap = dlsym(gdrapi_handle, "gdr_unmap");
-	if (!global_gdrcopy_ops.gdr_unmap) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to find gdr_unmap\n");
-		goto err_dlclose_gdrapi;
-	}
-
-	global_gdrcopy_ops.gdr_copy_to_mapping = dlsym(gdrapi_handle, "gdr_copy_to_mapping");
-	if (!global_gdrcopy_ops.gdr_copy_to_mapping) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to find gdr_copy_to_mapping\n");
-		goto err_dlclose_gdrapi;
-	}
-
-	global_gdrcopy_ops.gdr_copy_from_mapping = dlsym(gdrapi_handle, "gdr_copy_from_mapping");
-	if (!global_gdrcopy_ops.gdr_copy_from_mapping) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to find gdr_copy_from_mapping\n");
-		goto err_dlclose_gdrapi;
-	}
+	FI_INFO(&core_prov, FI_LOG_CORE,
+			"Successfully loaded gdrcopy!\n");
 
 	return FI_SUCCESS;
 
