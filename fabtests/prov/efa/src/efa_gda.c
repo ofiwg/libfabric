@@ -205,6 +205,7 @@ static int run()
 	uint32_t remote_qkey;
 	struct ibv_wc wc;
 	uint64_t lkey;
+	union ft_timer timer;
 
 	ret = ft_sync();
 	if (ret) {
@@ -234,7 +235,7 @@ static int run()
 				return ret;
 		}
 
-		ft_start();
+		ft_start(&timer);
 		for (int i = 0; i < opts.iterations; i++) {
 			ret = efagda_post_send(gda_qp, ah, remote_qpn,
 					       remote_qkey, (uintptr_t) tx_buf,
@@ -263,8 +264,7 @@ static int run()
 					return ret;
 				}
 
-				ft_stop();
-				if ((end.tv_sec - start.tv_sec) > timeout) {
+				if (ft_timer_is_elapsed(timer, timeout, SECOND)) {
 					fprintf(stderr,
 						"client %ds timeout expired\n",
 						timeout);
@@ -272,9 +272,8 @@ static int run()
 				}
 			} while (ret == 0);
 		}
-		ft_stop();
 	} else {
-		ft_start();
+		ft_timer_start(&timer);
 		for (int i = 0; i < opts.iterations; i++) {
 			ret = efagda_post_recv(gda_qp, (uintptr_t) rx_buf,
 					       opts.transfer_size, lkey, stream);
@@ -300,8 +299,7 @@ static int run()
 					return ret;
 				}
 
-				ft_stop();
-				if ((end.tv_sec - start.tv_sec) > timeout) {
+				if (ft_timer_is_elapsed(timer, timeout, SECOND)) {
 					fprintf(stderr,
 						"server %ds timeout expired\n",
 						timeout);
@@ -317,10 +315,10 @@ static int run()
 					return ret;
 			}
 		}
-		ft_stop();
 	}
+	ft_stop(&timer);
 
-	show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
+	show_perf(NULL, opts.transfer_size, opts.iterations, timer, 2);
 
 	return ret;
 }
@@ -348,7 +346,7 @@ int main(int argc, char **argv)
 			ft_parse_api_opts(op, optarg, hints, &opts);
 			break;
 		case 'v':
-			opts.options |= FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE;
+			opts.options |= FT_OPT_VERIFY_DATA;
 			break;
 		case '?':
 		case 'h':

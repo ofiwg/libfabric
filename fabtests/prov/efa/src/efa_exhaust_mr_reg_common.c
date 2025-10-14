@@ -151,6 +151,7 @@ void ft_efa_free_bufs(void **buffers, size_t count) {
 int ft_efa_unexpected_pingpong(void)
 {
 	int ret, i;
+	union ft_timer timer;
 
 	opts.options |= FT_OPT_OOB_CTRL;
 
@@ -160,7 +161,7 @@ int ft_efa_unexpected_pingpong(void)
 
 	for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 		if (i == opts.warmup_iterations)
-			ft_start();
+			ft_start(&timer);
 
 		ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, NO_CQ_DATA, &tx_ctx);
 		if (ret)
@@ -181,14 +182,13 @@ int ft_efa_unexpected_pingpong(void)
 			return ret;
 	}
 
-	ft_stop();
+	ft_stop(&timer);
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
+		show_perf_mr(opts.transfer_size, opts.iterations, timer,
 			     2, opts.argc, opts.argv);
 	else
-		show_perf(NULL, opts.transfer_size, opts.iterations, &start,
-			  &end, 2);
+		show_perf(NULL, opts.transfer_size, opts.iterations, timer, 2);
 
 	return 0;
 }

@@ -160,7 +160,7 @@ cq_signal()
 {
 	struct fid_cq *cq;
 	struct fi_cq_tagged_entry entry;
-	int64_t elapsed;
+	union ft_timer timer;
 	int testret;
 	int ret;
 
@@ -180,16 +180,15 @@ cq_signal()
 		goto fail2;
 	}
 
-	ft_start();
+	ft_timer_start(&timer);
 	ret = fi_cq_sread(cq, &entry, 1, NULL, 2000);
-	ft_stop();
-	elapsed = get_elapsed(&start, &end, MILLI);
+	ft_timer_stop(&timer);
 	if (ret != -FI_EAGAIN && ret != -FI_ECANCELED) {
 		sprintf(err_buf, "fi_cq_sread = %d %s", ret, fi_strerror(-ret));
 		goto fail2;
 	}
 
-	if (elapsed > 1000) {
+	if (ft_timer_get_elapsed(timer, MILLI) > 1000) {
 		sprintf(err_buf, "fi_cq_sread - signal ignored");
 		goto fail2;
 	}
