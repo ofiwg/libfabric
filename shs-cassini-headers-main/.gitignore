@@ -1,0 +1,5 @@
+*.rpm
+hpc-shs-cassini-headers/
+hpc-shs-ce-devops/
+update-repository.sh
+usr/
