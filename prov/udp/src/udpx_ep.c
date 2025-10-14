@@ -234,8 +234,8 @@ static void udpx_tx_comp_signal(struct udpx_ep *ep, void *context)
 	ep->util_ep.tx_cq->wait->signal(ep->util_ep.tx_cq->wait);
 }
 
-static void udpx_rx_comp(struct udpx_ep *ep, void *context, uint64_t flags,
-			 size_t len, void *buf, void *addr)
+static void udpx_rx_comp(struct udpx_ep *ep, void *context, size_t len,
+			 void *addr)
 {
 	struct fi_cq_tagged_entry *comp;
 
@@ -243,32 +243,32 @@ static void udpx_rx_comp(struct udpx_ep *ep, void *context, uint64_t flags,
 
 	comp = ofi_cirque_next(ep->util_ep.rx_cq->cirq);
 	comp->op_context = context;
-	comp->flags = FI_RECV | flags;
+	comp->flags = FI_RECV;
 	comp->len = len;
-	comp->buf = buf;
+	comp->buf = NULL;
 	comp->data = 0;
 	ofi_cirque_commit(ep->util_ep.rx_cq->cirq);
 }
 
-static void udpx_rx_src_comp(struct udpx_ep *ep, void *context, uint64_t flags,
-			     size_t len, void *buf, void *addr)
+static void udpx_rx_src_comp(struct udpx_ep *ep, void *context, size_t len,
+			     void *addr)
 {
 	ep->util_ep.rx_cq->src[ofi_cirque_windex(ep->util_ep.rx_cq->cirq)] =
 			ofi_ip_av_get_fi_addr(ep->util_ep.av, addr);
-	udpx_rx_comp(ep, context, flags, len, buf, addr);
+	udpx_rx_comp(ep, context, len, addr);
 }
 
-static void udpx_rx_comp_signal(struct udpx_ep *ep, void *context,
-			uint64_t flags, size_t len, void *buf, void *addr)
+static void udpx_rx_comp_signal(struct udpx_ep *ep, void *context, size_t len,
+				void *addr)
 {
-	udpx_rx_comp(ep, context, flags, len, buf, addr);
+	udpx_rx_comp(ep, context, len, addr);
 	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
 }
 
 static void udpx_rx_src_comp_signal(struct udpx_ep *ep, void *context,
-			uint64_t flags, size_t len, void *buf, void *addr)
+				    size_t len, void *addr)
 {
-	udpx_rx_src_comp(ep, context, flags, len, buf, addr);
+	udpx_rx_src_comp(ep, context, len, addr);
 	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
 }
 
@@ -298,7 +298,7 @@ static void udpx_ep_progress(struct util_ep *util_ep)
 
 	ret = ofi_recvmsg_udp(ep->sock, &hdr, 0);
 	if (ret >= 0) {
-		ep->rx_comp(ep, entry->context, 0, ret, NULL, &addr);
+		ep->rx_comp(ep, entry->context, ret, &addr);
 		ofi_cirque_discard(ep->rxq);
 	}
 out:
