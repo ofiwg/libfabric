@@ -250,6 +250,7 @@ extern char **tx_mr_bufs, **rx_mr_bufs;
 extern size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
 extern int tx_fd, rx_fd;
 extern int timeout;
+extern bool allow_rx_cq_data;
 
 extern struct fi_context2 tx_ctx, rx_ctx;
 extern uint64_t remote_cq_data;
@@ -677,6 +678,7 @@ enum {
 	LONG_OPT_MAX_MSG_SIZE,
 	LONG_OPT_USE_FI_MORE,
 	LONG_OPT_THREADING,
+	LONG_OPT_NO_RX_CQ_DATA,
 };
 
 extern int debug_assert;
