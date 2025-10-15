@@ -253,28 +253,28 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		])
 
         AS_IF([test $opx_happy -eq 1], [
-                    AC_ARG_ENABLE([hfisvc],
-                    	      [AS_HELP_STRING([--enable-hfisvc@<:@=yes|no|PATH@:>@],
-                    			      [Enable hfisvc @<:@default=yes@:>@
+                    AC_ARG_ENABLE([opx-hfisvc],
+                    	      [AS_HELP_STRING([--enable-opx-hfisvc@<:@=yes|no|PATH@:>@],
+                    			      [Enable hfisvc for opx @<:@default=yes@:>@
                     			      (yes: enable hfisvc; no: disable hfisvc;
                     			      PATH: enable hfisvc and use rdma-core installed under PATH)])],
                     	      )
 
-                    AS_IF([test x"$enable_hfisvc" != x"no"],
-                        [AC_MSG_NOTICE([Requested hfisvc - $enable_hfisvc])
+                    AS_IF([test x"$enable_opx_hfisvc" != x"no"],
+                        [AC_MSG_NOTICE([Requested hfisvc - $enable_opx_hfisvc])
 
 			dnl if system wide hfisvc was found do not recheck
-                        AS_IF([test x"$enable_hfisvc" != x"yes" && test x"$sys_hfisvc_happy" != x"1" ],
+                        AS_IF([test x"$enable_opx_hfisvc" != x"yes" && test x"$sys_hfisvc_happy" != x"1" ],
                     	    [
 			        _FI_CHECK_PACKAGE_HEADER([user_hfisvc],
 				     [infiniband/hfisvc_client.h],
-				     [$enable_hfisvc],
+				     [$enable_opx_hfisvc],
 				     [
 				         user_hfisvc_happy=1
-				         AC_MSG_NOTICE([Detected rdma-core support for hfisvc in $enable_hfisvc.])
+				         AC_MSG_NOTICE([Detected rdma-core support for hfisvc in $enable_opx_hfisvc.])
 				     ],
 				     [
-				        AC_MSG_NOTICE([Did not detect rdma-core support for hfisvc in $enable_hfisvc.])
+				        AC_MSG_NOTICE([Did not detect rdma-core support for hfisvc in $enable_opx_hfisvc.])
 	 	                ])
 
 				dnl happy with the specified input path
@@ -288,7 +288,7 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
                         AS_IF([test x"$sys_hfisvc_happy" = x"1" ],
                     	    [user_hfisvc_happy=1])
 
-                        AS_IF([test x"$enable_hfisvc" != x"no" && test "$user_hfisvc_happy" = "0" ],
+                        AS_IF([test x"$enable_opx_hfisvc" != x"no" && test "$user_hfisvc_happy" = "0" ],
                     	    [AC_MSG_WARN([hfisvc support requested but hfisvc runtime not available.])])
 
                         AC_DEFINE_UNQUOTED([HAVE_HFISVC], [$user_hfisvc_happy],
