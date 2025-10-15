@@ -7,9 +7,9 @@ import copy
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
-def test_rma_bw(cmdline_args, iteration_type, rma_operation_type, rma_bw_completion_semantic, rma_bw_memory_type, direct_rma_size, rma_fabric):
+def test_rma_bw(cmdline_args, iteration_type, rma_operation_type, rma_bw_completion_semantic, rma_bw_memory_type, direct_rma_size, rma_fabric, rx_cq_data_cli):
     command = "fi_rma_bw -e rdm"
-    command = command + " -o " + rma_operation_type + " " + perf_progress_model_cli
+    command = command + " -o " + rma_operation_type + " " + perf_progress_model_cli + rx_cq_data_cli
     # rma_bw test with data verification takes longer to finish
     timeout = max(540, cmdline_args.timeout)
     efa_run_client_server_test(cmdline_args, command, iteration_type, rma_bw_completion_semantic,
