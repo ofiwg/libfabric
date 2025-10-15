@@ -74,7 +74,7 @@ cxiutil store csr le_pools[16] max_alloc=60 > /dev/null
 cxiutil store csr le_pools[32] max_alloc=60 > /dev/null  
 cxiutil store csr le_pools[48] max_alloc=60 > /dev/null
 echo "running;FI_CXI_RX_MATCH_MODE=hybrid FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=16384 ./cxitest --verbose --filter=\"tagged/hw2sw_*\" --tap=cxitest-hw2sw-eager-transition.tap -j1 >> $TEST_OUTPUT 2>&1"
-FI_CXI_RX_MATCH_MODE=hybrid FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=16384 ./cxitest --verbose --filter="tagged/hw2sw_*" --tap=cxitest-hw2sw-transition.tap -j1 >> $TEST_OUTPUT 2>&1
+FI_CXI_RX_MATCH_MODE=hybrid FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=16384 ./cxitest --verbose --filter="tagged/hw2sw_*" --tap=cxitest-hw2sw-eager-transition.tap -j1 >> $TEST_OUTPUT 2>&1
 cxitest_exit_status=$?
 cxiutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
 if [[ $cxitest_exit_status -ne 0 ]]; then
@@ -84,7 +84,7 @@ fi
 
 # Test scaling of request buffers
 echo "running; FI_CXI_RX_MATCH_MODE=software FI_CXI_REQ_BUF_MIN_POSTED=2 FI_CXI_REQ_BUF_MAX_COUNT=10 ./cxitest --verbose --filter=\"tagged/*fc_mt\" --tap=cxitest-sw-reqbuf.tap -j1 >> $TEST_OUTPUT 2>&1"
-FI_CXI_RX_MATCH_MODE=software FI_CXI_REQ_BUF_MIN_POSTED=2 FI_CXI_REQ_BUF_MAX_COUNT=10 ./cxitest --verbose --filter="tagged/*fc_mt" --tap=cxitest-sw-req_buf.tap -j1 >> $TEST_OUTPUT 2>&1
+FI_CXI_RX_MATCH_MODE=software FI_CXI_REQ_BUF_MIN_POSTED=2 FI_CXI_REQ_BUF_MAX_COUNT=10 ./cxitest --verbose --filter="tagged/*fc_mt" --tap=cxitest-sw-reqbuf.tap -j1 >> $TEST_OUTPUT 2>&1
 cxitest_exit_status=$?
 if [[ $cxitest_exit_status -ne 0 ]]; then
     echo "cxitest return non-zero exit code. Possible failures in test teardown"
