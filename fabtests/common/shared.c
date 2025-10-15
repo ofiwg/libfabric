@@ -108,6 +108,7 @@ struct timespec start, end;
 int listen_sock = -1;
 int sock = -1;
 int oob_sock = -1;
+bool allow_rx_cq_data = true;
 
 struct fi_av_attr av_attr = {
 	.type = FI_AV_MAP,
@@ -3735,13 +3736,15 @@ int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
 			opts->rma_op = FT_RMA_READ;
 		} else if (!strcasecmp(optarg, "writedata")) {
 			hints->caps |= FI_WRITE | FI_REMOTE_WRITE;
-			hints->mode |= FI_RX_CQ_DATA;
+			if (allow_rx_cq_data)
+				hints->mode |= FI_RX_CQ_DATA;
 			hints->domain_attr->cq_data_size = 4;
 			opts->rma_op = FT_RMA_WRITEDATA;
 			opts->cqdata_op = FT_CQDATA_WRITEDATA;
 			cq_attr.format = FI_CQ_FORMAT_DATA;
 		} else if (!strcasecmp(optarg, "senddata")) {
-			hints->mode |= FI_RX_CQ_DATA;
+			if (allow_rx_cq_data)
+				hints->mode |= FI_RX_CQ_DATA;
 			hints->domain_attr->cq_data_size = 4;
 			opts->cqdata_op = FT_CQDATA_SENDDATA;
 			cq_attr.format = FI_CQ_FORMAT_DATA;
@@ -4524,6 +4527,8 @@ void ft_longopts_usage()
 		"Run tests with FI_MORE");
 	FT_PRINT_OPTS_USAGE("--threading",
 		"threading model: safe|completion|domain (default:domain)");
+	FT_PRINT_OPTS_USAGE("--no-rx-cq-data",
+		"Do not request FI_RX_CQ_DATA in hints for writedata/sendata tests");
 }
 
 int debug_assert;
@@ -4538,6 +4543,7 @@ struct option long_opts[] = {
 	{"max-msg-size", required_argument, NULL, LONG_OPT_MAX_MSG_SIZE},
 	{"use-fi-more", no_argument, NULL, LONG_OPT_USE_FI_MORE},
 	{"threading", required_argument, NULL, LONG_OPT_THREADING},
+	{"no-rx-cq-data", no_argument, NULL, LONG_OPT_NO_RX_CQ_DATA},
 	{NULL, 0, NULL, 0},
 };
 
@@ -4597,6 +4603,9 @@ int ft_parse_long_opts(int op, char *optarg)
 		return 0;
 	case LONG_OPT_THREADING:
 		opts.threading = ft_parse_threading_string(optarg);
+		return 0;
+	case LONG_OPT_NO_RX_CQ_DATA:
+		allow_rx_cq_data = false;
 		return 0;
 	default:
 		return EXIT_FAILURE;
