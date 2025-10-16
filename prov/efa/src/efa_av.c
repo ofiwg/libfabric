@@ -1013,8 +1013,7 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 	if (!efa_av_is_valid_address(addr)) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert bad addr\n");
 		*fi_addr = FI_ADDR_NOTAVAIL;
-		ret = -FI_EADDRNOTAVAIL;
-		goto out;
+		return -FI_EADDRNOTAVAIL;
 	}
 
 	if (av->domain->info_type == EFA_INFO_DGRAM)
