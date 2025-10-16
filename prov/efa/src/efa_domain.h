@@ -20,7 +20,6 @@ enum efa_domain_info_type {
 
 struct efa_domain {
 	struct util_domain	util_domain;
-	struct fi_info		*shm_info;
 	struct fid_domain	*shm_domain;
 	struct efa_device	*device;
 	struct ibv_pd		*ibv_pd;

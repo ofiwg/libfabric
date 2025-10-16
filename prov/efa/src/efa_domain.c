@@ -116,24 +116,26 @@ static int efa_domain_init_qp_table(struct efa_domain *efa_domain)
 
 static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *info)
 {
+	struct fi_info *shm_info = NULL;
 	int err;
 
 	assert(EFA_INFO_TYPE_IS_RDM(info));
 
-	efa_domain->shm_info = NULL;
-	efa_shm_info_create(info, &efa_domain->shm_info);
-	if (efa_domain->shm_info) {
-		err = fi_fabric(efa_domain->shm_info->fabric_attr,
+	efa_shm_info_create(info, &shm_info);
+	if (shm_info && !efa_domain->fabric->shm_fabric) {
+		err = fi_fabric(shm_info->fabric_attr,
 				&efa_domain->fabric->shm_fabric,
 				efa_domain->fabric->util_fabric.fabric_fid.fid.context);
-		if (err)
+		if (err) {
+			EFA_WARN(FI_LOG_DOMAIN, 
+				 "Failed to create shm_fabric: %s\n",
+				 fi_strerror(-err));
 			return err;
-	} else {
-		efa_domain->fabric->shm_fabric = NULL;
+		}
 	}
 
 	if (efa_domain->fabric->shm_fabric) {
-		err = fi_domain(efa_domain->fabric->shm_fabric, efa_domain->shm_info,
+		err = fi_domain(efa_domain->fabric->shm_fabric, shm_info,
 				&efa_domain->shm_domain, NULL);
 		if (err)
 			return err;
@@ -149,6 +151,10 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	dlist_init(&efa_domain->ope_longcts_send_list);
 	dlist_init(&efa_domain->peer_backoff_list);
 	dlist_init(&efa_domain->handshake_queued_peer_list);
+
+	if (shm_info)
+		fi_freeinfo(shm_info);
+
 	return 0;
 }
 
@@ -369,9 +375,6 @@ static int efa_domain_close(fid_t fid)
 		if (ret)
 			return ret;
 	}
-
-	if (efa_domain->shm_info)
-		fi_freeinfo(efa_domain->shm_info);
 
 	if (efa_domain->info)
 		fi_freeinfo(efa_domain->info);

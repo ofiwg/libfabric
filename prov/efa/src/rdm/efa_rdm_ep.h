@@ -200,6 +200,7 @@ struct efa_rdm_ep {
 	/* the count of opes queued before handshake is made with their peers */
 	size_t ope_queued_before_handshake_cnt;
 	bool homogeneous_peers; /* peers always support the same capabilities in extra_info as this ep */
+	struct fi_info *shm_info;	/* fi_info used to create shm_ep */
 };
 
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);
