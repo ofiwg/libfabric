@@ -442,8 +442,9 @@ static void test_info_check_shm_info_from_hints(struct fi_info *hints)
 	struct fi_info *info;
 	struct fid_fabric *fabric = NULL;
 	struct fid_domain *domain = NULL;
+	struct fid_ep *ep = NULL;
 	int err;
-	struct efa_domain *efa_domain;
+	struct efa_rdm_ep *efa_rdm_ep;
 
 	err = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, hints, &info);
 	/* Do nothing if the current setup does not support FI_HMEM */
@@ -458,22 +459,27 @@ static void test_info_check_shm_info_from_hints(struct fi_info *hints)
 	err = fi_domain(fabric, info, &domain, NULL);
 	assert_int_equal(err, 0);
 
-	efa_domain = container_of(domain, struct efa_domain, util_domain.domain_fid);
-	if (efa_domain->shm_info) {
+	err = fi_endpoint(domain, info, &ep, NULL);
+	assert_int_equal(err, 0);
+
+	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	if (efa_rdm_ep->shm_info) {
 		if (hints->caps & FI_HMEM)
-			assert_true(efa_domain->shm_info->caps & FI_HMEM);
+			assert_true(efa_rdm_ep->shm_info->caps & FI_HMEM);
 		else
-			assert_false(efa_domain->shm_info->caps & FI_HMEM);
+			assert_false(efa_rdm_ep->shm_info->caps & FI_HMEM);
 
-		assert_true(efa_domain->shm_info->tx_attr->op_flags == info->tx_attr->op_flags);
+		assert_true(efa_rdm_ep->shm_info->tx_attr->op_flags == info->tx_attr->op_flags);
 
-		assert_true(efa_domain->shm_info->rx_attr->op_flags == info->rx_attr->op_flags);
+		assert_true(efa_rdm_ep->shm_info->rx_attr->op_flags == info->rx_attr->op_flags);
 
 		if (hints->domain_attr->threading) {
 			assert_true(hints->domain_attr->threading == info->domain_attr->threading);
-			assert_true(hints->domain_attr->threading == efa_domain->shm_info->domain_attr->threading);
+			assert_true(hints->domain_attr->threading == efa_rdm_ep->shm_info->domain_attr->threading);
 		}
 	}
+
+	fi_close(&ep->fid);
 
 	fi_close(&domain->fid);
 

@@ -499,10 +499,16 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		goto err_free_ep;
 
 	if (efa_domain->shm_domain) {
-		ret = fi_endpoint(efa_domain->shm_domain, efa_domain->shm_info,
-				  &efa_rdm_ep->shm_ep, efa_rdm_ep);
-		if (ret)
-			goto err_destroy_base_ep;
+		efa_rdm_ep->shm_info = NULL;
+		efa_shm_info_create(info, &efa_rdm_ep->shm_info);
+		if (efa_rdm_ep->shm_info) {
+			ret = fi_endpoint(efa_domain->shm_domain, efa_rdm_ep->shm_info,
+					  &efa_rdm_ep->shm_ep, efa_rdm_ep);
+			if (ret)
+				goto err_destroy_base_ep;
+		} else {
+			efa_rdm_ep->shm_ep = NULL;
+		}
 	} else {
 		efa_rdm_ep->shm_ep = NULL;
 	}
@@ -991,6 +997,11 @@ static int efa_rdm_ep_close_shm_ep_resources(struct efa_rdm_ep *efa_rdm_ep)
 		efa_rdm_ep->shm_ep = NULL;
 	}
 
+	if (efa_rdm_ep->shm_info) {
+		fi_freeinfo(efa_rdm_ep->shm_info);
+		efa_rdm_ep->shm_info = NULL;
+	}
+
 	return retv;
 }
 
@@ -1173,11 +1184,6 @@ static void efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 		if (ret)
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm fabric\n");
 		efa_domain->fabric->shm_fabric = NULL;
-	}
-
-	if (efa_domain->shm_info) {
-		fi_freeinfo(efa_domain->shm_info);
-		efa_domain->shm_info = NULL;
 	}
 }
 
