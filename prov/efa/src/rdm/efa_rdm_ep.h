@@ -42,6 +42,7 @@ struct efa_rdm_ep_queued_copy {
 #define EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV (8192)
 
 #define EFA_RDM_EP_MIN_PEER_POOL_SIZE (1024)
+#define EFA_RDM_EP_MIN_PEER_REORDER_BUFFER_POOL_SIZE (16)
 
 struct efa_rdm_ep {
 	struct efa_base_ep base_ep;

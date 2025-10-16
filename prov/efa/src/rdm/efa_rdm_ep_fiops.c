@@ -250,7 +250,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				(sizeof(struct efa_rdm_pke*) * (roundup_power_of_two(efa_env.recvwin_size)) +
 				sizeof(struct recvwin_cirq)),
 				EFA_RDM_BUFPOOL_ALIGNMENT, 0, /* no limit to max_cnt */
-				EFA_RDM_EP_MIN_PEER_POOL_SIZE,
+				EFA_RDM_EP_MIN_PEER_REORDER_BUFFER_POOL_SIZE,
 				0);
 
 	if (ret)

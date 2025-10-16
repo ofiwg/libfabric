@@ -127,7 +127,7 @@ void test_efa_rdm_peer_reorder_overflow_msg_id(struct efa_resource **state) {
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
-	msg_id = 16384;
+	msg_id = EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE;
 	exp_msg_id = 0;
 	expected_ret = 1;
 	/* Message id that overflows the receive window should be put in the
@@ -194,13 +194,13 @@ void test_efa_rdm_peer_move_overflow_pke_to_recvwin(struct efa_resource **state)
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
-	/* overflow_pke_list has a pkt entry with msg_id 18000.
-	 * After calling efa_rdm_peer_move_overflow_pke_to_recvwin when exp_msg_id = 16384,
-	 * 18000 will be moved to recvwin and overflow_pke_list will be empty. */
+	/* overflow_pke_list has a pkt entry with msg_id EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE + 1000.
+	 * After calling efa_rdm_peer_move_overflow_pke_to_recvwin when exp_msg_id = EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE,
+	 * EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE + 1000 will be moved to recvwin and overflow_pke_list will be empty. */
 	test_efa_rdm_peer_move_overflow_pke_to_recvwin_impl(
-		resource, 18000, &peer, &pkt_entry);
+		resource, EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE + 1000, &peer, &pkt_entry);
 
-	assert_non_null(*ofi_recvwin_get_msg((&peer->robuf), 18000));
+	assert_non_null(*ofi_recvwin_get_msg((&peer->robuf), EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE + 1000));
 	assert_int_equal(efa_unit_test_get_dlist_length(&peer->overflow_pke_list), 0);
 
 	efa_rdm_pke_release_rx(pkt_entry);
@@ -215,11 +215,11 @@ void test_efa_rdm_peer_keep_pke_in_overflow_list(struct efa_resource **state) {
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
-	/* overflow_pke_list has a pkt entry with msg_id 33000.
-	 * After calling efa_rdm_peer_move_overflow_pke_to_recvwin when exp_msg_id = 16384,
-	 * 33000 will stay in overflow_pke_list. */
+	/* overflow_pke_list has a pkt entry with msg_id (EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE * 2) + 1000.
+	 * After calling efa_rdm_peer_move_overflow_pke_to_recvwin when exp_msg_id = EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE,
+	 * (EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE * 2) + 1000 will stay in overflow_pke_list. */
 	test_efa_rdm_peer_move_overflow_pke_to_recvwin_impl(
-		resource, 33000, &peer, &pkt_entry);
+		resource, (EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE * 2) + 1000, &peer, &pkt_entry);
 
 	assert_int_equal(efa_unit_test_get_dlist_length(&peer->overflow_pke_list), 1);
 
@@ -284,19 +284,19 @@ void test_efa_rdm_peer_append_overflow_pke_to_recvwin(struct efa_resource **stat
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
-	alloc_pke_in_overflow_list(efa_rdm_ep, &pkt_entry2, peer, raw_addr, 17000);
-	alloc_pke_in_overflow_list(efa_rdm_ep, &pkt_entry1, peer, raw_addr, 17000);
+	alloc_pke_in_overflow_list(efa_rdm_ep, &pkt_entry2, peer, raw_addr, EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE + 500);
+	alloc_pke_in_overflow_list(efa_rdm_ep, &pkt_entry1, peer, raw_addr, EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE + 500);
 	assert_int_equal(efa_unit_test_get_dlist_length(&peer->overflow_pke_list), 2);
 
-	/* overflow_pke_list has two pkt entries with msg_id 17000.
-	* After calling efa_rdm_peer_move_overflow_pke_to_recvwin when exp_msg_id = 16384,
+	/* overflow_pke_list has two pkt entries with msg_id EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE + 500.
+	* After calling efa_rdm_peer_move_overflow_pke_to_recvwin when exp_msg_id = EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE,
 	* two pkt entries of same msg id will be appended to the same entry in recvwin,
 	* and overflow_pke_list will be empty. */
 	(&peer->robuf)->exp_msg_id = efa_env.recvwin_size;
 	efa_env.rx_copy_ooo = 0;
 	efa_rdm_peer_move_overflow_pke_to_recvwin(peer);
 
-	pkt_entry1 = *ofi_recvwin_get_msg((&peer->robuf), 17000);
+	pkt_entry1 = *ofi_recvwin_get_msg((&peer->robuf), EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE + 500);
 	assert_non_null(pkt_entry1);
 	assert_non_null(pkt_entry1->next);
 	assert_int_equal(efa_unit_test_get_dlist_length(&peer->overflow_pke_list), 0);
