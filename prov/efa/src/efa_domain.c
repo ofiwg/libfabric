@@ -117,31 +117,11 @@ static int efa_domain_init_qp_table(struct efa_domain *efa_domain)
 static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *info)
 {
 	int err;
-	bool enable_shm = efa_env.enable_shm_transfer;
 
 	assert(EFA_INFO_TYPE_IS_RDM(info));
 
-	/* App provided hints supercede environmental variables.
-	 *
-	 * Using the shm provider comes with some overheads, so avoid
-	 * initializing the provider if the app provides a hint that it does not
-	 * require node-local communication. We can still loopback over the EFA
-	 * device in cases where the app violates the hint and continues
-	 * communicating with node-local peers.
-	 *
-	 */
-	if ((info->caps & FI_REMOTE_COMM)
-	    /* but not local communication */
-	    && !(info->caps & FI_LOCAL_COMM)) {
-		enable_shm = false;
-	}
-
 	efa_domain->shm_info = NULL;
-	if (enable_shm)
-		efa_shm_info_create(info, &efa_domain->shm_info);
-	else
-		EFA_INFO(FI_LOG_CORE, "EFA will not use SHM for intranode communication because FI_EFA_ENABLE_SHM_TRANSFER=0\n");
-
+	efa_shm_info_create(info, &efa_domain->shm_info);
 	if (efa_domain->shm_info) {
 		err = fi_fabric(efa_domain->shm_info->fabric_attr,
 				&efa_domain->fabric->shm_fabric,
