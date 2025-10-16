@@ -88,6 +88,7 @@ int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp)
 	direct_qp->rq.buf = rq_attr.buffer;           /* Hardware RQ buffer */
 	direct_qp->rq.wq.db = rq_attr.doorbell;       /* Hardware doorbell */
 	direct_qp->rq.wq.wqe_size = rq_attr.entry_size; /* Entry size */
+	direct_qp->rq.wq.max_batch = rq_attr.max_batch;
 	/* Initialize receive work queue management structures */
 	efa_data_path_direct_wq_initialize(&direct_qp->rq.wq, rq_attr.num_entries,
 			   &base_ep->util_ep.lock);
@@ -99,6 +100,7 @@ int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp)
 	direct_qp->sq.num_wqe_pending = 0;            /* No pending WQEs initially */
 
 	direct_qp->sq.wq.wqe_size = sq_attr.entry_size; /* Entry size */
+	direct_qp->sq.wq.max_batch = sq_attr.max_batch;
 	/* Initialize send work queue management structures */
 	efa_data_path_direct_wq_initialize(&direct_qp->sq.wq, sq_attr.num_entries,
 			   &base_ep->util_ep.lock);
