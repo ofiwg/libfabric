@@ -70,6 +70,29 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 	int ret;
 	struct fi_info *shm_hints;
 
+	if (!efa_env.enable_shm_transfer) {
+		*shm_info = NULL;
+		EFA_INFO(FI_LOG_CORE, "EFA will not use SHM for intranode communication because FI_EFA_ENABLE_SHM_TRANSFER=0\n");
+		return;
+	}
+
+	/* App provided hints supercede environmental variables.
+	 *
+	 * Using the shm provider comes with some overheads, so avoid
+	 * initializing the provider if the app provides a hint that it does not
+	 * require node-local communication. We can still loopback over the EFA
+	 * device in cases where the app violates the hint and continues
+	 * communicating with node-local peers.
+	 *
+	 */
+	if ((app_info->caps & FI_REMOTE_COMM)
+	    /* but not local communication */
+	    && !(app_info->caps & FI_LOCAL_COMM)) {
+		*shm_info = NULL;
+		EFA_INFO(FI_LOG_CORE, "EFA will not use SHM for intranode communication because application does not require local communication\n");
+		return;
+	}
+
 	char *shm_provider;
 	if (efa_env.use_sm2) {
 		shm_provider = "sm2";
