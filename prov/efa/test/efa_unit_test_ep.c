@@ -1862,3 +1862,48 @@ void test_efa_ep_lock_type_mutex(struct efa_resource **state)
 	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 	assert_int_equal(efa_base_ep->util_ep.lock.lock_type, OFI_LOCK_MUTEX);
 }
+
+/**
+ * @brief Test that EFA RDM endpoints created with same domain but different info
+ * have different shm_ep atrributes
+ *
+ * @param[in] state struct efa_resource managed by the framework
+ */
+void test_efa_rdm_ep_shm_ep_different_info(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep1, *efa_rdm_ep2;
+	struct fid_ep *ep2;
+	struct util_ep *shm_util_ep1, *shm_util_ep2;
+	struct fi_info *info2;
+	int ret;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14), resource->hints, false, true);
+
+	/* Create second endpoint with different info but same domain */
+	info2 = fi_dupinfo(resource->info);
+	assert_non_null(info2);
+	info2->tx_attr->op_flags = FI_DELIVERY_COMPLETE;
+
+	ret = fi_endpoint(resource->domain, info2, &ep2, NULL);
+	assert_int_equal(ret, 0);
+
+	efa_rdm_ep1 = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_ep2 = container_of(ep2, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	if (efa_env.enable_shm_transfer) {
+		assert_non_null(efa_rdm_ep1->shm_ep);
+		assert_non_null(efa_rdm_ep2->shm_ep);
+
+		shm_util_ep1 = container_of(efa_rdm_ep1->shm_ep, struct util_ep, ep_fid);
+		shm_util_ep2 = container_of(efa_rdm_ep2->shm_ep, struct util_ep, ep_fid);
+
+		assert_int_not_equal(shm_util_ep1->tx_op_flags, shm_util_ep2->tx_op_flags);
+		assert_true(shm_util_ep1->tx_op_flags & FI_COMPLETION);
+		assert_true(shm_util_ep2->tx_op_flags & FI_DELIVERY_COMPLETE);
+	}
+
+	fi_close(&ep2->fid);
+	fi_freeinfo(info2);
+}

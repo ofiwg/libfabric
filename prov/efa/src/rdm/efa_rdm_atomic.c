@@ -18,7 +18,7 @@ static void efa_rdm_atomic_init_shm_msg(struct efa_rdm_ep *ep, struct fi_msg_ato
 
 	assert(msg->rma_iov_count <= EFA_RDM_IOV_LIMIT);
 	memcpy(shm_msg, msg, sizeof(*msg));
-	if (!(efa_rdm_ep_domain(ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+	if (!(ep->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
 		memcpy(rma_iov, msg->rma_iov,
 		       sizeof(*msg->rma_iov) * msg->rma_iov_count);
 		for (i = 0; i < msg->rma_iov_count; i++)
@@ -206,7 +206,7 @@ efa_rdm_atomic_inject(struct fid_ep *ep,
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->shm_ep) {
-		if (!(efa_rdm_ep_domain(efa_rdm_ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR))
+		if (!(efa_rdm_ep->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR))
 			remote_addr = 0;
 
 		return fi_inject_atomic(efa_rdm_ep->shm_ep, buf, count, peer->conn->shm_fi_addr,

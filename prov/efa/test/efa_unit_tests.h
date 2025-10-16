@@ -392,6 +392,7 @@ void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy();
 void test_efa_rdm_ep_data_path_direct_disabled();
 void test_efa_ep_lock_type_no_op();
 void test_efa_ep_lock_type_mutex();
+void test_efa_rdm_ep_shm_ep_different_info();
 
 /* begin efa_unit_test_data_path_direct.c */
 void test_efa_data_path_direct_rdma_read_multiple_sge_fail();
