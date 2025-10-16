@@ -89,7 +89,7 @@ static int fi_opx_close_mr(fid_t fid)
 			return ret;
 		}
 		opx_mr->hfisvc.state = OPX_MR_HFISVC_PENDING_CLOSE;
-		hfisvc_client_doorbell(opx_domain->hfisvc.handle);
+		(*opx_ep->domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
 
 		uint64_t iter_count = 0;
 		while (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_CLOSE &&
@@ -201,7 +201,7 @@ static inline int opx_mr_hfisvc_open(struct fi_opx_domain *opx_domain, struct fi
 			opx_mr->hfisvc.access_key);
 		return ret;
 	}
-	hfisvc_client_doorbell(opx_domain->hfisvc.handle);
+	(*opx_ep->domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
 
 	return 0;
 }

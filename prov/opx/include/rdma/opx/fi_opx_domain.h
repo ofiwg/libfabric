@@ -113,11 +113,22 @@ struct fi_opx_domain {
 #if HAVE_HFISVC
 	struct {
 		struct ibv_context *ctx;
-		opx_hfisvc_keyset_t access_key_set;
-		int64_t		    ref_cnt;
-		hfisvc_client_key_t key;
-		uint32_t	    padding;
-		void		   *libhfi1verbs;
+		/**
+		 * @brief Command queue used by the domain for issuing commands to the
+		 * hfisvc where we are opening/closing hfisvc memory regions.
+		 */
+		hfisvc_client_command_queue_t mr_command_queue;
+
+		/**
+		 * @brief Completion queue used by the domain for handling completions from the
+		 * hfisvc where we are opening/closing hfisvc memory regions.
+		 */
+		hfisvc_client_completion_queue_t mr_completion_queue;
+		opx_hfisvc_keyset_t		 access_key_set;
+		int64_t				 ref_cnt;
+		hfisvc_client_key_t		 key;
+		uint32_t			 padding;
+		void				*libhfi1verbs;
 		int (*initialize)(struct ibv_context *ctx);
 		int (*client_key)(struct ibv_context *ctx, hfisvc_client_key_t *key);
 		int (*command_queue_open)(hfisvc_client_command_queue_t *command_queue, struct ibv_context *ctx);

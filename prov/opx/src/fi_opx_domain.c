@@ -643,7 +643,8 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 			abort();
 		}
 		OPX_HFISVC_DEBUG_LOG("Creating new domain mr command queue\n");
-		ret = hfisvc_client_command_queue_open(&domain->hfisvc.mr_command_queue, domain->hfisvc.handle);
+		ret = (*domain->hfisvc.command_queue_open)(&domain->hfisvc.mr_command_queue, domain->hfisvc.ctx);
+
 		if (ret) {
 			fprintf(stderr, "(%d) %s:%s():%d Failed creating domain mr command queue! rc=%d\n", getpid(),
 				__FILE__, __func__, __LINE__, ret);
@@ -651,7 +652,8 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 		}
 
 		OPX_HFISVC_DEBUG_LOG("Creating new domain mr completion queue\n");
-		ret = hfisvc_client_completion_queue_open(&domain->hfisvc.mr_completion_queue, domain->hfisvc.handle);
+		ret = (*domain->hfisvc.completion_queue_open)(&domain->hfisvc.mr_completion_queue, domain->hfisvc.ctx);
+
 		if (ret) {
 			fprintf(stderr, "(%d) %s:%s():%d Failed creating domain mr completion queue! rc=%d\n", getpid(),
 				__FILE__, __func__, __LINE__, ret);
