@@ -599,7 +599,8 @@ efa_data_path_direct_send_wr_common(struct efa_qp *qp,
 
 	/* MODIFIED: if any are pending, copy out the previous one first: */
 	if (sq->num_wqe_pending) {
-		efa_data_path_direct_send_wr_post_working(sq, false);
+		/* when reaching the sq max_batch, ring the db */
+		efa_data_path_direct_send_wr_post_working(sq, sq->num_wqe_pending == sq->wq.max_batch);
 	}
 
 	memset(&sq->curr_tx_wqe, 0, sizeof(sq->curr_tx_wqe));
