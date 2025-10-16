@@ -10,7 +10,7 @@
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_rxe_map.h"
 
-#define EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE	(16384)
+#define EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE	(8192)
 
 #define EFA_RDM_PEER_REQ_SENT BIT_ULL(0) /**< A REQ packet has been sent to the peer (peer should send a handshake back) */
 #define EFA_RDM_PEER_HANDSHAKE_SENT BIT_ULL(1) /**< a handshake packet has been sent to the peer */
