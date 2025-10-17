@@ -38,6 +38,7 @@
 #if HAVE_EFA_DATA_PATH_DIRECT
 
 #include <rdma/ib_user_verbs.h>
+#include "efa_tp.h"
 
 #include "efa_data_path_direct_internal.h"
 #include "efa_data_path_direct_structs.h"
@@ -108,6 +109,9 @@ static inline int efa_data_path_direct_post_recv(struct efa_qp *qp,
 			if (!(wq->pc & wq->desc_mask))
 				wq->phase++;
 		}
+#if HAVE_LTTNG
+		efa_data_path_direct_tracepoint_post_recv(qp, wr);
+#endif
 		wr = wr->next;
 	}
 
@@ -140,7 +144,7 @@ static inline int efa_data_path_direct_wr_complete(struct efa_qp *qp)
 	/* it should not be possible to get here with sq->num_wqe_pending==0 */
 	assert(sq->num_wqe_pending);
 
-	efa_data_path_direct_send_wr_post_working(sq, true);
+	efa_data_path_direct_send_wr_post_working(qp, sq, true);
 
 out:
 	return qp->data_path_direct_qp.wr_session_err;
