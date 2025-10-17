@@ -619,8 +619,18 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 		domain->hfisvc.cq_read = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cq_read");
 		domain->hfisvc.cmd_dma_access_once_va =
 			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_once_va");
+		domain->hfisvc.cmd_dma_access_once =
+			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_once");
+		domain->hfisvc.cmd_rdma_read	= dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_read");
 		domain->hfisvc.cmd_rdma_read_va = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_read_va");
-		domain->hfisvc.doorbell		= dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_doorbell");
+		domain->hfisvc.cmd_rdma_write	= dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_write");
+		domain->hfisvc.cmd_mr_open	= dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_mr_open");
+		domain->hfisvc.cmd_mr_close	= dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_mr_close");
+		domain->hfisvc.cmd_dma_access_enable =
+			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_enable");
+		domain->hfisvc.cmd_dma_access_disable =
+			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_disable");
+		domain->hfisvc.doorbell = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_doorbell");
 
 		assert(domain->hfisvc.client_key != NULL);
 		assert(domain->hfisvc.command_queue_open != NULL);
