@@ -1945,11 +1945,16 @@ free_dom:
 	return -FI_EINVAL;
 }
 
-int cxip_domain_valid_vni(struct cxip_domain *dom, unsigned int vni)
+int cxip_domain_valid_vni(struct cxip_domain *dom, struct cxi_auth_key *key)
 {
-	/* Currently the auth_key.svc_id field contains the resource group ID.
-	*/
-	return cxip_if_valid_rgroup_vni(dom->iface, dom->auth_key.svc_id, vni);
+	unsigned int t_svc_id;
+
+	if (key->svc_id)
+		t_svc_id = key->svc_id;
+	else
+		t_svc_id = dom->auth_key.svc_id;
+
+	return cxip_if_valid_rgroup_vni(dom->iface, t_svc_id, key->vni);
 }
 
 #define SUPPORTED_DWQ_FLAGS (FI_MORE | FI_COMPLETION | FI_DELIVERY_COMPLETE | \
