@@ -138,13 +138,36 @@ struct fi_opx_domain {
 		int (*completion_queue_close)(hfisvc_client_completion_queue_t *completion_queue);
 		size_t (*cq_read)(hfisvc_client_completion_queue_t completion_queue, uint64_t flags,
 				  struct hfisvc_client_cq_entry *buf, size_t buf_size_bytes, size_t count);
+		int (*cmd_dma_access_once)(hfisvc_client_command_queue_t   command_queue,
+					   struct hfisvc_client_completion completion, uint64_t flags,
+					   uint32_t access_key, uint32_t len, hfisvc_client_mr_t mr, uint64_t offset);
 		int (*cmd_dma_access_once_va)(hfisvc_client_command_queue_t   command_queue,
 					      struct hfisvc_client_completion completion, uint64_t flags,
 					      uint32_t access_key, uint32_t len, void *vaddr);
+		int (*cmd_rdma_read)(hfisvc_client_command_queue_t   command_queue,
+				     struct hfisvc_client_completion completion, uint64_t flags, uint32_t lid,
+				     hfisvc_client_key_t client, uint32_t len, uint64_t imm_data, uint32_t access_key,
+				     uint64_t remote_offset, hfisvc_client_mr_t mr, uint64_t offset);
 		int (*cmd_rdma_read_va)(hfisvc_client_command_queue_t	command_queue,
 					struct hfisvc_client_completion completion, uint64_t flags, uint32_t lid,
 					hfisvc_client_key_t client, uint32_t len, uint64_t imm_data,
 					uint32_t access_key, uint64_t remote_offset, void *vaddr);
+		int (*cmd_rdma_write)(hfisvc_client_command_queue_t   command_queue,
+				      struct hfisvc_client_completion completion, uint64_t flags, uint32_t lid,
+				      hfisvc_client_key_t client, uint32_t len, uint64_t imm_data, uint32_t access_key,
+				      uint64_t remote_offset, hfisvc_client_mr_t mr, uint64_t offset);
+		int (*cmd_mr_open)(hfisvc_client_command_queue_t   command_queue,
+				   struct hfisvc_client_completion completion, uint64_t flags, uint32_t len,
+				   void *vaddr, struct hfisvc_client_hmem hmem);
+		int (*cmd_mr_close)(hfisvc_client_command_queue_t   command_queue,
+				    struct hfisvc_client_completion completion, uint64_t flags, hfisvc_client_mr_t mr);
+		int (*cmd_dma_access_enable)(hfisvc_client_command_queue_t   command_queue,
+					     struct hfisvc_client_completion completion, uint64_t flags,
+					     uint32_t access_key, uint32_t len, hfisvc_client_mr_t mr, uint64_t offset,
+					     struct hfisvc_client_completion notification);
+		int (*cmd_dma_access_disable)(hfisvc_client_command_queue_t   command_queue,
+					      struct hfisvc_client_completion completion, uint64_t flags,
+					      uint32_t access_key);
 		int (*doorbell)(struct ibv_context *ctx);
 	} hfisvc;
 #endif
@@ -199,7 +222,7 @@ struct fi_opx_mr {
 	struct {
 		union {
 			uint32_t reserved;
-#ifdef HFISVC
+#if HAVE_HFISVC
 			hfisvc_client_mr_t mr_handle;
 #endif
 		};

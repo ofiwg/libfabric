@@ -47,7 +47,7 @@ static int fi_opx_close_mr(fid_t fid)
 	struct fi_opx_domain *opx_domain = opx_mr->domain;
 
 	// TODO: Debug counters
-#ifdef HFISVC
+#if HAVE_HFISVC
 	/* The MR was recently opened, and we need to wait for it to reach
 	   OPENED state before we can close it. Callers to fi_close() don't
 	   gracefully handle EAGAIN to retry later, so we need to busy-wait */
@@ -78,8 +78,8 @@ static int fi_opx_close_mr(fid_t fid)
 				     (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len),
 				     opx_mr->hfisvc.access_key);
 
-		int ret = hfisvc_client_cmd_mr_close(opx_domain->hfisvc.mr_command_queue, completion, 0UL /* flags */,
-						     opx_mr->hfisvc.mr_handle);
+		int ret = (*opx_domain->hfisvc.cmd_mr_close)(opx_domain->hfisvc.mr_command_queue, completion,
+							     0UL /* flags */, opx_mr->hfisvc.mr_handle);
 		if (ret) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error closing opx_mr=%p buf=%p-%p access_key=%u\n",
 				opx_mr, opx_mr->iov.iov_base,
@@ -89,7 +89,7 @@ static int fi_opx_close_mr(fid_t fid)
 			return ret;
 		}
 		opx_mr->hfisvc.state = OPX_MR_HFISVC_PENDING_CLOSE;
-		(*opx_ep->domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
+		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
 
 		uint64_t iter_count = 0;
 		while (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_CLOSE &&
@@ -160,7 +160,7 @@ static struct fi_ops fi_opx_fi_ops = {.size	= sizeof(struct fi_ops),
 				      .control	= fi_no_control,
 				      .ops_open = fi_no_ops_open};
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 static inline int opx_mr_hfisvc_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr,
 				     const struct iovec *iov, enum fi_hmem_iface hmem_iface, uint64_t hmem_device,
 				     uint32_t access_key)
@@ -193,15 +193,15 @@ static inline int opx_mr_hfisvc_open(struct fi_opx_domain *opx_domain, struct fi
 			     iov->iov_base, (void *) ((uintptr_t) iov->iov_base + iov->iov_len), iov->iov_len,
 			     hmem_iface, access_key);
 
-	int ret = hfisvc_client_cmd_mr_open(opx_domain->hfisvc.mr_command_queue, completion, 0UL /* flags */,
-					    iov->iov_len, iov->iov_base, hmem);
+	int ret = (opx_domain->hfisvc.cmd_mr_open)(opx_domain->hfisvc.mr_command_queue, completion, 0UL /* flags */,
+						   iov->iov_len, iov->iov_base, hmem);
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error opening opx_mr=%p buf=%p-%p iface=%d access_key=%u\n",
 			opx_mr, iov->iov_base, (void *) ((uintptr_t) iov->iov_base + iov->iov_len), hmem_iface,
 			opx_mr->hfisvc.access_key);
 		return ret;
 	}
-	(*opx_ep->domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
+	(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
 
 	return 0;
 }
@@ -260,7 +260,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	}
 
 	__attribute__((__unused__)) uint32_t hfisvc_access_key = 0;
-#ifdef HFISVC
+#if HAVE_HFISVC
 	if (opx_domain->use_hfisvc) {
 		ret = opx_hfisvc_keyset_alloc_key(opx_domain->hfisvc.access_key_set, &hfisvc_access_key, NULL);
 		if (ret) {
@@ -305,7 +305,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					opx_mr->mr_fid.key = requested_key;
 				}
 				opx_mr->attr.requested_key = opx_mr->mr_fid.key;
-#ifdef HFISVC
+#if HAVE_HFISVC
 				if (opx_domain->use_hfisvc) {
 					ret = opx_mr_hfisvc_open(opx_domain, opx_mr, iov, hmem_iface, hmem_device,
 								 hfisvc_access_key);
@@ -356,7 +356,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 
 	opx_mr = calloc(1, sizeof(*opx_mr));
 	if (!opx_mr) {
-#ifdef HFISVC
+#if HAVE_HFISVC
 		if (opx_domain->use_hfisvc) {
 			opx_hfisvc_keyset_free_key(opx_domain->hfisvc.access_key_set, hfisvc_access_key, NULL);
 			OPX_HFISVC_DEBUG_LOG(
@@ -368,7 +368,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 		return -errno;
 	}
 
-#ifdef HFISVC
+#if HAVE_HFISVC
 	if (opx_domain->use_hfisvc) {
 		ret = opx_mr_hfisvc_open(opx_domain, opx_mr, iov, hmem_iface, hmem_device, hfisvc_access_key);
 		if (ret) {
