@@ -557,7 +557,7 @@ static int cxip_av_insert_auth_key_validate_args(struct cxip_av *cxi_av,
 		return -FI_ENOSPC;
 	}
 
-	return cxip_domain_valid_vni(cxi_av->domain, key->vni);
+	return cxip_domain_valid_vni(cxi_av->domain, key);
 }
 
 static int cxip_av_insert_auth_key(struct fid_av *av, const void *auth_key,
