@@ -1050,7 +1050,8 @@ static inline bool cxip_domain_mr_cache_iface_enabled(struct cxip_domain *dom,
 	return cxip_domain_mr_cache_enabled(dom) && dom->iomm.monitors[iface];
 }
 
-int cxip_domain_valid_vni(struct cxip_domain *dom, unsigned int vni);
+int cxip_domain_valid_vni(struct cxip_domain *dom, struct cxi_auth_key *key);
+
 
 /* This structure implies knowledge about the breakdown of the NIC address,
  * which is taken from the AMA, that the provider does not know in a flexible
