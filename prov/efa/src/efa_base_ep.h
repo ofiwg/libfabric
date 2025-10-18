@@ -126,7 +126,8 @@ bool efa_qp_support_op_in_order_aligned_128_bytes(struct efa_qp *qp,
 
 void efa_base_ep_write_eq_error(struct efa_base_ep *ep,
 				ssize_t err,
-				ssize_t prov_errno);
+				ssize_t prov_errno,
+				bool should_abort);
 
 const char *efa_base_ep_raw_addr_str(struct efa_base_ep *base_ep, char *buf,
 				     size_t *buflen);
