@@ -1519,8 +1519,13 @@ int ft_enable_ep_recv(void)
 	if (ret)
 		return ret;
 
-	if (!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) &&
-	    (fi->caps & (FI_MSG | FI_TAGGED))) {
+	if ((opts.options & FT_OPT_NO_PREPOSTED_AUX_RX) &&
+		(opts.options & FT_OPT_OOB_ADDR_EXCH)) {
+			return 0;
+	}
+
+	if ((!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) &&
+	    	(fi->caps & (FI_MSG | FI_TAGGED)))) {
 		/* Initial receive will get remote address for unconnected EPs */
 		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 		if (ret)
@@ -3427,7 +3432,7 @@ void ft_usage(char *name, char *desc)
 void ft_hmem_usage()
 {
 	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: "
-			    "e.g. cuda, ze, neuron, synapseai (default: None). "
+			    "e.g. cuda, ze, neuron, synapseai, rocr (default: None). "
 			    "Automatically enables FI_HMEM (-H)");
 	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
 	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
@@ -3589,6 +3594,8 @@ void ft_parse_hmem_opts(int op, char *optarg, struct ft_opts *opts)
 			opts->iface = FI_HMEM_CUDA;
 		else if (!strncasecmp("neuron", optarg, 6))
 			opts->iface = FI_HMEM_NEURON;
+		else if (!strncasecmp("rocr", optarg, 4))
+			opts->iface = FI_HMEM_ROCR;
 		else if (!strncasecmp("synapseai", optarg, 9)) {
 			opts->iface = FI_HMEM_SYNAPSEAI;
 			opts->options |= FT_OPT_REG_DMABUF_MR;
