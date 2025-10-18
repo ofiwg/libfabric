@@ -158,12 +158,13 @@ static int post_multi_recv_buffer()
 static int run_test(void)
 {
 	int ret, i;
+	union ft_timer timer;
 
 	ret = ft_sync();
 	if (ret)
 		return ret;
 
-	ft_start();
+	ft_start(&timer);
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.iterations; i++) {
 			ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
@@ -175,14 +176,14 @@ static int run_test(void)
 		if (ret)
 			return ret;
 	}
-	ft_stop();
+	ft_stop(&timer);
 
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations,
-			&start, &end, 1, opts.argc, opts.argv);
+			timer, 1, opts.argc, opts.argv);
 	else
 		show_perf(NULL, opts.transfer_size, opts.iterations,
-			&start, &end, 1);
+			timer, 1);
 
 	return ret;
 }
