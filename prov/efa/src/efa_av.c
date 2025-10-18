@@ -339,6 +339,7 @@ int efa_conn_rdm_insert_shm_av(struct efa_av *av, struct efa_conn *conn)
 	int err, ret;
 	char smr_name[EFA_SHM_NAME_MAX];
 	size_t smr_name_len;
+	void *addr_ptr;
 
 
 	assert(av->domain->info_type == EFA_INFO_RDM);
@@ -373,7 +374,11 @@ int efa_conn_rdm_insert_shm_av(struct efa_av *av, struct efa_conn *conn)
 		 * through shm ep.
 		 */
 		conn->shm_fi_addr = conn->fi_addr;
-		ret = fi_av_insert(av->shm_rdm_av, smr_name, 1, &conn->shm_fi_addr, FI_AV_USER_ID, NULL);
+		/*
+		 * shm provider uses FI_ADDR_STR address format wich must be passed as (char**)
+		 */
+		addr_ptr = &smr_name;
+		ret = fi_av_insert(av->shm_rdm_av, addr_ptr, 1, &conn->shm_fi_addr, FI_AV_USER_ID, NULL);
 		if (OFI_UNLIKELY(ret != 1)) {
 			EFA_WARN(FI_LOG_AV,
 				 "Failed to insert address to shm provider's av: %s\n",
