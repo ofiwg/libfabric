@@ -472,20 +472,17 @@ int efa_prov_info_alloc(struct fi_info **prov_info_ptr,
 		prov_info->caps	= EFA_RDM_CAPS;
 
 		/* Claim RMA support in the efa-direct path only if read, write
-		 * and unsolicited write are all available
+		 * are all available.
 		 * Older versions of rdma-core do not contain the symbol
-		 * EFADV_DEVICE_ATTR_CAPS_UNSOLICITED_WRITE_RECV, so we only
-		 * check for the unsolicited write recv cap only when the
+		 * EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE, so we only
+		 * check for the rdma write cap when the
 		 * rdma-core is new enough
 		 */
-#if HAVE_CAPS_UNSOLICITED_WRITE_RECV
+#if HAVE_CAPS_RDMA_WRITE
 		if (device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ &&
-		    device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE &&
-		    device->device_caps &
-			    EFADV_DEVICE_ATTR_CAPS_UNSOLICITED_WRITE_RECV)
+		    device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE)
 			prov_info->caps |= (OFI_TX_RMA_CAPS | OFI_RX_RMA_CAPS);
 #endif
-
 	} else {
 		if (ep_type != FI_EP_DGRAM) {
 			EFA_WARN(FI_LOG_DOMAIN, "Unsupported EFA info type: %d\n", ep_type);

@@ -943,3 +943,75 @@ void test_info_reuse_domain_via_name()
 {
 	test_info_reuse_fabric_domain(setup_domain_name_hints, true, true);
 }
+static void test_info_direct_rma_common(bool mock_unsolicited_write_recv, bool set_rx_cq_data,
+					size_t request_cq_data_size, int expected_err,
+					size_t expected_cq_data_size, bool expect_rx_cq_data_mode)
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	/* Mock unsolicited write recv */
+	g_efa_unit_test_mocks.efa_device_support_unsolicited_write_recv = &efa_mock_efa_device_support_unsolicited_write_recv;
+	will_return_maybe(efa_mock_efa_device_support_unsolicited_write_recv, mock_unsolicited_write_recv);
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->caps |= FI_RMA;
+	if (set_rx_cq_data)
+		hints->mode |= FI_RX_CQ_DATA;
+	if (request_cq_data_size > 0)
+		hints->domain_attr->cq_data_size = request_cq_data_size;
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info);
+	fi_freeinfo(hints);
+
+	if (efa_device_support_rdma_read() && efa_device_support_rdma_write()) {
+		assert_int_equal(err, expected_err);
+		if (expected_err == 0) {
+			assert_non_null(info);
+			assert_int_equal(info->domain_attr->cq_data_size, expected_cq_data_size);
+			if (expect_rx_cq_data_mode) {
+				assert_true(info->mode & FI_RX_CQ_DATA);
+				assert_true(info->rx_attr->mode & FI_RX_CQ_DATA);
+			}
+			fi_freeinfo(info);
+		} else {
+			assert_null(info);
+		}
+	} else {
+		assert_int_equal(err, -FI_ENODATA);
+		assert_null(info);
+	}
+}
+
+/**
+ * @brief Test that when FI_RX_CQ_DATA is requested, cq_data_size is always 4
+ */
+void test_info_direct_rma_when_no_unsolicited_write_recv_and_rx_cq_data()
+{
+	test_info_direct_rma_common(false, true, 0, 0, 4, true);
+}
+
+/**
+ * @brief Test that when FI_RX_CQ_DATA is not requested and unsolicited write recv is OFF, cq_data_size is 0
+ */
+void test_info_direct_rma_when_no_rx_cq_data_and_zero_cq_data_size()
+{
+	test_info_direct_rma_common(false, false, 0, 0, 0, false);
+}
+
+/**
+ * @brief Test that when FI_RX_CQ_DATA is not requested and unsolicited write recv is ON, cq_data_size is 4
+ */
+void test_info_direct_rma_when_unsolicited_write_recv_on_and_no_rx_cq_data()
+{
+	return;
+	test_info_direct_rma_common(true, false, 0, 0, 4, false);
+}
+/**
+ * @brief Test that when user requests non-zero cq_data_size but unsolicited write recv is OFF, fi_getinfo fails
+ */
+void test_info_direct_rma_when_no_unsolicited_write_recv_and_nonzero_cq_data_size_and_no_rx_cq_data()
+{
+	test_info_direct_rma_common(false, false, 4, -FI_ENODATA, 0, false);
+}

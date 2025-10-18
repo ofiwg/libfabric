@@ -461,6 +461,36 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		info->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 
+	/**
+	 * When application requests FI_RX_CQ_DATA, efa-direct
+	 * will respect it, and will finally disable unsolicited
+	 * write recv during the QP creation.
+	 */
+	if (hints && hints->mode & FI_RX_CQ_DATA) {
+		info->mode |= FI_RX_CQ_DATA;
+		info->rx_attr->mode |= FI_RX_CQ_DATA;
+	}
+
+	if ((hints && (hints->caps & FI_RMA)) &&
+	    (!efa_device_support_unsolicited_write_recv() &&
+	     !(info->mode & FI_RX_CQ_DATA))) {
+		/**
+		 * RDMA with immediate needs to consume a recv buffer
+		 * when unsolicited write recv is not supported. So
+		 * FI_RX_CQ_DATA is required when application requests
+		 * a non-zero cq data size in this situation.
+		 */
+		if (hints->domain_attr &&
+		    hints->domain_attr->cq_data_size > 0) {
+			EFA_INFO(FI_LOG_CORE,
+				 "FI_RX_CQ_DATA is required for FI_RMA + "
+				 "non-zero cq data when unsolicited write recv "
+				 "is not supported \n");
+			return -FI_ENODATA;
+		} else {
+			info->domain_attr->cq_data_size = 0;
+		}
+	}
 	/*
 	 * Handle user-provided hints and adapt the info object passed back up
 	 * based on EFA-specific constraints.
