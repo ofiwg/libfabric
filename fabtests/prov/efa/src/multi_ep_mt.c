@@ -260,14 +260,13 @@ static void *poll_tx_cq(void *context)
 {
 	int i, ret;
 	int num_cqes = 0;
-	struct timespec a, b;
+	union ft_timer timer;
 
 	i = ((struct thread_context *) context)->idx;
 
-	clock_gettime(CLOCK_MONOTONIC, &a);
+	ft_timer_start(&timer);
 	while (true) {
-		clock_gettime(CLOCK_MONOTONIC, &b);
-		if ((b.tv_sec - a.tv_sec) > timeout) {
+		if (ft_timer_is_elapsed(timer, timeout, SECOND)) {
 			printf("%ds timeout expired, exiting \n", timeout);
 			break;
 		}
@@ -302,12 +301,11 @@ static int run_server(void)
 	}
 
 	printf("Server: wait for completions\n");
-	struct timespec a, b;
+	union ft_timer timer;
 
-	clock_gettime(CLOCK_MONOTONIC, &a);
+	ft_timer_start(&timer);
 	while (true) {
-		clock_gettime(CLOCK_MONOTONIC, &b);
-		if ((b.tv_sec - a.tv_sec) > timeout) {
+		if (ft_timer_is_elapsed(timer, timeout, SECOND)) {
 			printf("%ds timeout expired, exiting...\n", timeout);
 			break;
 		}

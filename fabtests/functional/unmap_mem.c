@@ -62,12 +62,13 @@ static void unmap_tx_buf(void)
 static int pingpong(void)
 {
 	int ret, i;
+	union ft_timer timer;
 
 	ret = ft_sync();
 	if (ret)
 		return ret;
 
-	ft_start();
+	ft_start(&timer);
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.iterations; i++) {
 			ret = map_tx_buf();
@@ -99,9 +100,9 @@ static int pingpong(void)
 			unmap_tx_buf();
 		}
 	}
-	ft_stop();
+	ft_stop(&timer);
 
-	show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
+	show_perf(NULL, opts.transfer_size, opts.iterations, timer, 2);
 	return 0;
 }
 

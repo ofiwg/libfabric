@@ -48,6 +48,7 @@ static int run()
 {
 	int ret;
 	bool use_emulated_read;
+	union ft_timer timer;
 
 	ret = ft_init_fabric();
 	if (ret) {
@@ -70,10 +71,10 @@ static int run()
 	 * either ft_exchange_keys() or ft_sync()
 	 */
 	if (opts.rma_op == FT_RMA_WRITEDATA) {
-		/* ft_exchange_keys finally calls ft_sync(), 
-		 * which will call ft_sync_inband(true), so it will cause the 
-		 * receiver to always post an outstanding recv buffer. 
-		 * This is ok for RMA test because the rx buffer post 
+		/* ft_exchange_keys finally calls ft_sync(),
+		 * which will call ft_sync_inband(true), so it will cause the
+		 * receiver to always post an outstanding recv buffer.
+		 * This is ok for RMA test because the rx buffer post
 		 * shouldn't matter here, unless we will support FI_RX_CQ_DATA
 		 */
 		ret = ft_exchange_keys(&remote);
@@ -124,7 +125,7 @@ static int run()
 			printf("server posts recv\n");
 		}
 
-		ft_start();
+		ft_timer_start(&timer);
 
 		do {
 			struct fi_cq_data_entry comp = {0};
@@ -137,8 +138,7 @@ static int run()
 				goto out;
 			}
 
-			ft_stop();
-			if ((end.tv_sec - start.tv_sec) > timeout) {
+			if (ft_timer_is_elapsed(timer, timeout, SECOND)) {
 				if (post_rx) {
 					if (use_emulated_read || opts.transfer_size < 1048576) {
 						/*
@@ -242,11 +242,11 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
-	
+
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps |= FI_MSG | FI_RMA;
 	hints->domain_attr->mr_mode = opts.mr_mode;
-	
+
 	ret = run();
 	if (ret)
 		FT_PRINTERR("Test failed", -ret);
