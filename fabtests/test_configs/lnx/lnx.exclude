@@ -1,0 +1,40 @@
+# Regex patterns of tests to exclude in runfabtests.sh
+
+# Unsupported EP types
+^fi_msg
+-e msg
+^fi_dgram
+-e dgram
+cm_data
+
+# Exclude tests with unsupported capabilities
+atomic
+scalable_ep
+shared_ctx
+
+# Uses SOCKADDR
+av_test
+
+# Uses FI_MSG
+multinode
+rdm_pingpong
+multi_recv
+cntr_pingpong
+multi_client
+flood
+multi_ep
+cq_data
+av_xfer
+shared_av
+fi_rdm\b
+sighandler_test
+
+# Uses FI_RMA
+multi_mr
+rma
+
+# Tests that are broken
+recv_cancel
+getinfo
+inject_test -A
+bw_mt

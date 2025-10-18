@@ -558,9 +558,6 @@ ssize_t lnx_tsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	struct lnx_core_ep *cep;
 	fi_addr_t core_addr;
 
-	if (count > 1)
-		return -FI_EINVAL;
-
 	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
 	if (!lep)
 		return -FI_ENOSYS;
@@ -596,9 +593,6 @@ ssize_t lnx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	void *core_desc = NULL;
 	struct lnx_core_ep *cep;
 	struct fi_msg_tagged core_msg;
-
-	if (msg->iov_count > 1)
-		return -FI_EINVAL;
 
 	memcpy(&core_msg, msg, sizeof(*msg));
 
