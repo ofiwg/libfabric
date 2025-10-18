@@ -177,9 +177,10 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	int ret = 0, err;
 	bool use_lock;
 
-	efa_domain = calloc(1, sizeof(struct efa_domain));
+	ofi_memalign((void **)&efa_domain, EFA_MEM_ALIGNMENT, sizeof(struct efa_domain));
 	if (!efa_domain)
 		return -FI_ENOMEM;
+	memset(efa_domain, 0x0, sizeof(struct efa_domain));
 
 	dlist_init(&efa_domain->list_entry);
 	efa_domain->fabric = container_of(fabric_fid, struct efa_fabric,
@@ -354,7 +355,7 @@ static int efa_domain_close(fid_t fid)
 			if (ret)
 				EFA_WARN(FI_LOG_DOMAIN, "ibv_destroy_ah failed during cleanup! err=%d\n", ret);
 			HASH_DEL(efa_domain->ah_map, ah_entry);
-			free(ah_entry);
+			ofi_freealign(ah_entry);
 		}
 	}
 	ofi_genlock_unlock(&efa_domain->util_domain.lock);
@@ -381,7 +382,7 @@ static int efa_domain_close(fid_t fid)
 
 	ofi_genlock_destroy(&efa_domain->srx_lock);
 	free(efa_domain->qp_table);
-	free(efa_domain);
+	ofi_freealign(efa_domain);
 	return 0;
 }
 

@@ -486,9 +486,11 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	int ret, retv, i;
 	enum fi_hmem_iface iface;
 
-	efa_rdm_ep = calloc(1, sizeof(*efa_rdm_ep));
+	ofi_memalign((void **)&efa_rdm_ep, EFA_MEM_ALIGNMENT, sizeof(*efa_rdm_ep));
 	if (!efa_rdm_ep)
 		return -FI_ENOMEM;
+
+	memset(efa_rdm_ep, 0x0, sizeof(*efa_rdm_ep));
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
@@ -608,12 +610,13 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->write_in_order_aligned_128_bytes = false;
 	efa_rdm_ep->homogeneous_peers = false;
 
-	efa_rdm_ep->pke_vec = calloc(sizeof(struct efa_rdm_pke *), EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV);
+	ofi_memalign((void **)&efa_rdm_ep->pke_vec, EFA_MEM_ALIGNMENT, sizeof(struct efa_rdm_pke *) * EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV);
 	if (!efa_rdm_ep->pke_vec) {
 		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for efa_rdm_ep->pke_vec!\n");
 		ret = -FI_ENOMEM;
 		goto err_close_shm_ep;
 	}
+	memset(efa_rdm_ep->pke_vec, 0x0, sizeof(struct efa_rdm_pke *) * EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV);
 
 	*ep = &efa_rdm_ep->base_ep.util_ep.ep_fid;
 	(*ep)->msg = &efa_rdm_msg_ops;
@@ -636,7 +639,7 @@ err_destroy_base_ep:
 	efa_base_ep_destruct(&efa_rdm_ep->base_ep);
 err_free_ep:
 	if (efa_rdm_ep)
-		free(efa_rdm_ep);
+		ofi_freealign(efa_rdm_ep);
 	return ret;
 }
 
@@ -1077,11 +1080,11 @@ static int efa_rdm_ep_close(struct fid *fid)
 	efa_rdm_ep_destroy_buffer_pools(efa_rdm_ep);
 
 	if (efa_rdm_ep->pke_vec)
-		free(efa_rdm_ep->pke_vec);
+		ofi_freealign(efa_rdm_ep->pke_vec);
 
 	ofi_genlock_unlock(&domain->srx_lock);
 
-	free(efa_rdm_ep);
+	ofi_freealign(efa_rdm_ep);
 	return retv;
 }
 
