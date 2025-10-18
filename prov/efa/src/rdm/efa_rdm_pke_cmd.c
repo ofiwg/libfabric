@@ -349,7 +349,7 @@ void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry)
 
 	ope->bytes_copied += pkt_entry->payload_size;
 	efa_rdm_tracepoint(rx_pke_proc_matched_msg_end, (size_t) pkt_entry, pkt_entry->payload_size, ope->msg_id, (size_t) ope->cq_entry.op_context, ope->total_len);
-	efa_rdm_pke_release_rx(pkt_entry);
+	efa_rdm_pke_release_rx_list(pkt_entry);
 
 	if (ope->total_len == ope->bytes_copied) {
 		if (ope->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING) {
@@ -714,7 +714,7 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			ep_addr_str);
 
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
-		efa_rdm_pke_release_rx(pkt_entry);
+		efa_rdm_pke_release_rx_list(pkt_entry);
 		return;
 	}
 
@@ -729,7 +729,7 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 	}
 
-	efa_rdm_pke_release_rx(pkt_entry);
+	efa_rdm_pke_release_rx_list(pkt_entry);
 }
 
 void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_imm_data, uint32_t imm_data)
@@ -860,7 +860,7 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 			efa_rdm_pke_get_base_hdr(pkt_entry)->type);
 		assert(0 && "invalid control pkt type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
-		efa_rdm_pke_release_rx(pkt_entry);
+		efa_rdm_pke_release_rx_list(pkt_entry);
 		return;
 	}
 }
