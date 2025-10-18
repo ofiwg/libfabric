@@ -75,6 +75,13 @@ struct efa_env {
 	 * Value of 0 means there is no limit on the size.
 	 */
 	size_t implicit_av_size;
+
+	/* HMEM DMABUF settings */
+	int hmem_system_use_dmabuf;
+	int hmem_cuda_use_dmabuf;
+	int hmem_neuron_use_dmabuf;
+	int hmem_synapseai_use_dmabuf;
+	int hmem_rocr_use_dmabuf;
 };
 
 extern struct efa_env efa_env;
