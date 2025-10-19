@@ -9,8 +9,29 @@ releases with earlier release dates.
 v2.3.1, Mon October 20, 2025
 ============================
 
+## Core ##
+
+- include/windows: Add definition for realpath()
+
 ## EFA ##
 
+- Tune recvwindow and peer reorder buffer pool sizes
+- Allocate peer reorder buffers from a pre-allocated pool
+- Allocate peer map entry pool during the rdm ep create
+- Create shm info on demand for efa_rdm_ep_open
+- Check whether to enable shm inside efa_shm_info_create
+- Ring doorbell when reaching the max batch wqe cnt
+- Fix the queued ope progress in ep close
+- Logging improvements and unit test fix
+- Grab srx lock when releasing rx entries in AV close
+- Remove duplicate macro for rdma sge limit
+- Fix memory leak from efa_srx_unexp_pkt unit test
+- Fix unit test build error for rdma-core without HAVE_CAPS_UNSOLICITED_WRITE_RECV
+- Check rdma iov limit in data path direct
+- Add packet entry flag tracking for double linked list management
+- Remove the extra dlist remove for peers in ep close
+- Add traces for completions bypassing util-cq
+- Update shared domain caps and modes
 - Move domain check inside the fabric lock
 - Take domain lock to protect concurrent access to domain fields
 - Return matching fabric/domain in fi_getinfo
@@ -37,17 +58,37 @@ v2.3.1, Mon October 20, 2025
 - Use getpid() instead of gettid() for POSIX compliancy.
 - Fix compilation error
 
+## RXD ##
+
+- Fix return of EAGAIN when not enough tx entries
+
+## UCX ##
+
+- Use noop callback in ucx_inject_write
+- Add a noop callback function for inject send path
+
+## UDP ##
+
+- Cleanup CQ parameters
+- Fix CQ overflow case
+
 ## Util ##
 
+- Remove unmatched rx entry from unspec unexpected queue
+- Add status enum to util rx entry
 - Extract helper function to lookup existing fabric/domain
 - Use hints name for fabric/domain lookup
 
 ## Verbs ##
 
+- Return PCI bus information with fi_getinfo()
 - Fix compiler warning on the bound of 'strncpy' call
 
 ## Fabtests ##
 
+- efa: Run FI_MORE test with more iterations
+- efa: Add implicit AV test
+- Split OOB address exchange function
 - efa: Fix the av operation
 - efa: Improve rnr_read_cq_error test
 
