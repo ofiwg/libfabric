@@ -16,7 +16,7 @@ data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_orange_
 Latest releases
 ===============
 
-* The libfabric library, unit tests, and documentation: [libfabric v2.3.0](https://github.com/ofiwg/libfabric/releases/tag/v2.3.0) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
+* The libfabric library, unit tests, and documentation: [libfabric v2.3.1](https://github.com/ofiwg/libfabric/releases/tag/v2.3.1) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
 
 Since 2025, libfabric follows a quarterly release schedule, with major releases in March, June, September, and December (Previously there were three major releases per year: March, July, and November).  The timing of a specific release may be adjusted based on the readiness of the underlying providers, but current guideline is to have RC1 out on the 1st of the month, and the GA release on the 15th of the month.
 
@@ -40,7 +40,8 @@ A comprehensive developer's guide is included with the man pages.
 
 A set of man pages have been carefully written to specify the libfabric API.
 
-* [Man pages for v2.3.0](v2.3.0/man/)
+* [Man pages for v2.3.1](v2.3.1/man/)
+  * Older: [Man pages for v2.3.0](v2.3.0/man/)
   * Older: [Man pages for v2.2.0](v2.2.0/man/)
   * Older: [Man pages for v2.1.0](v2.1.0/man/)
   * Older: [Man pages for v2.0.0](v2.0.0/man/)
