@@ -257,6 +257,47 @@ static inline uint32_t fi_opx_domain_get_rx_max(struct fid_domain *domain)
 }
 
 #if HAVE_HFISVC
+__OPX_FORCE_INLINE__
+void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
+{
+	struct hfisvc_client_cq_entry hfisvc_out[64];
+	size_t n = (*opx_domain->hfisvc.cq_read)(opx_domain->hfisvc.mr_completion_queue, 0ul /* flags */, hfisvc_out,
+						 sizeof(struct hfisvc_client_cq_entry) * 64, 64);
+	while (n > 0) {
+		OPX_HFISVC_DEBUG_LOG("HFIService: Polled %lu completions from mr_completion_queue!\n", n);
+		for (size_t i = 0; i < n; ++i) {
+			if (hfisvc_out[i].status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS) {
+				// TODO: FI_WARN, post some kind of error to the error queue
+				fprintf(stderr, "Completion error: status was %d\n", hfisvc_out[i].status);
+				abort();
+			}
+			assert(hfisvc_out[i].status == HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS);
+			assert(hfisvc_out[i].type == HFISVC_CLIENT_CQ_ENTRY_TYPE_MR);
+
+			struct fi_opx_mr  *opx_mr    = (struct fi_opx_mr *) hfisvc_out[i].app_context;
+			hfisvc_client_mr_t mr_handle = hfisvc_out[i].type_mr.mr;
+
+			if (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_OPEN) {
+				OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_OPEN -> OPENED\n",
+						     opx_mr);
+				opx_mr->hfisvc.mr_handle = mr_handle;
+				opx_mr->hfisvc.state	 = OPX_MR_HFISVC_OPENED;
+			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_CLOSE) {
+				OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_CLOSE -> CLOSED\n",
+						     opx_mr);
+				assert(opx_mr->hfisvc.mr_handle == mr_handle);
+				opx_mr->hfisvc.state = OPX_MR_HFISVC_CLOSED;
+			} else {
+				// TODO: FI_WARN, post some kind of error to the error queue
+				fprintf(stderr, "(%d) %s:%s():%d Got unexpected completion for opx_mr=%p state=%d\n",
+					getpid(), __FILE__, __func__, __LINE__, opx_mr, opx_mr->hfisvc.state);
+				abort();
+			}
+		}
+		n = (*opx_domain->hfisvc.cq_read)(opx_domain->hfisvc.mr_completion_queue, 0ul /* flags */, hfisvc_out,
+						  sizeof(struct hfisvc_client_cq_entry) * 64, 64);
+	}
+}
 int opx_domain_hfisvc_init(struct fi_opx_domain *domain);
 #endif
 
