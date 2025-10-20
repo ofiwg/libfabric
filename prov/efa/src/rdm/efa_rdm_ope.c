@@ -648,13 +648,6 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		err_entry.err_data = err_msg;
 	}
 
-	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n",
-		err_entry.err,
-		err_entry.err_data
-			? (const char *) err_entry.err_data
-			: efa_strerror(err_entry.prov_errno),
-		 err_entry.prov_errno);
-	efa_show_help(err_entry.prov_errno);
 	/*
 	 * TODO: We can't free the rxe as we may receive additional
 	 * packets for this entry. Add ref counting so the rxe can safely
@@ -663,6 +656,14 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	//efa_rdm_rxe_release(rxe);
 
 	if (rxe->internal_flags & EFA_RDM_OPE_INTERNAL) {
+		EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n",
+			err_entry.err,
+			err_entry.err_data
+				? (const char *) err_entry.err_data
+				: efa_strerror(err_entry.prov_errno),
+		 	err_entry.prov_errno);
+		efa_show_help(err_entry.prov_errno);
+
 		EFA_WARN(FI_LOG_CQ,
 			"Writing eq error for rxe from internal operations\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
@@ -672,6 +673,14 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	efa_cntr_report_error(&ep->base_ep.util_ep, err_entry.flags);
 	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
 	if (write_cq_err) {
+		EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n",
+			err_entry.err,
+			err_entry.err_data
+				? (const char *) err_entry.err_data
+				: efa_strerror(err_entry.prov_errno),
+		 	err_entry.prov_errno);
+		efa_show_help(err_entry.prov_errno);
+
 		EFA_WARN(FI_LOG_CQ,
 			"Error writing error cq entry when handling RX error\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
@@ -757,15 +766,6 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		err_entry.err_data = err_msg;
 	}
 
-	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n",
-		err_entry.err,
-		err_entry.err_data
-			? (const char *) err_entry.err_data
-			: efa_strerror(err_entry.prov_errno),
-		err_entry.prov_errno);
-
-	efa_show_help(err_entry.prov_errno);
-
 	/*
 	 * TODO: We can't free the txe as we may receive a control packet
 	 * for this entry. Add ref counting so the txe can safely
@@ -774,6 +774,15 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	//efa_rdm_txe_release(txe);
 
 	if (txe->internal_flags & EFA_RDM_OPE_INTERNAL) {
+		EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n",
+			err_entry.err,
+			err_entry.err_data
+				? (const char *) err_entry.err_data
+				: efa_strerror(err_entry.prov_errno),
+			err_entry.prov_errno);
+
+		efa_show_help(err_entry.prov_errno);
+
 		EFA_WARN(FI_LOG_CQ,
 			"Writing eq error for txe from internal operations\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
@@ -783,6 +792,15 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	efa_cntr_report_error(&ep->base_ep.util_ep, txe->cq_entry.flags);
 	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
 	if (write_cq_err) {
+		EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n",
+			err_entry.err,
+			err_entry.err_data
+				? (const char *) err_entry.err_data
+				: efa_strerror(err_entry.prov_errno),
+			err_entry.prov_errno);
+
+		efa_show_help(err_entry.prov_errno);
+
 		EFA_WARN(FI_LOG_CQ,
 			"Error writing error cq entry when handling TX error\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
