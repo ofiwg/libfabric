@@ -206,6 +206,8 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 {
 	struct efa_conn *conn;
 
+	assert(ofi_genlock_held(&av->domain->srx_lock));
+
 	conn = efa_av_reverse_lookup_rdm_conn(&av->cur_reverse_av_implicit,
 					      &av->prv_reverse_av_implicit, ahn,
 					      qpn, pkt_entry);
@@ -576,6 +578,8 @@ static inline int efa_av_implicit_av_lru_insert(struct efa_av *av,
 	cur_size = HASH_CNT(hh, av->util_av_implicit.hash);
 	if (cur_size <= av->implicit_av_size)
 		goto out;
+
+	assert(ofi_genlock_held(&av->domain->srx_lock));
 
 	dlist_pop_front(&av->implicit_av_lru_list, struct efa_conn,
 			conn_to_release, implicit_av_lru_entry);
