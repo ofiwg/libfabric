@@ -800,7 +800,7 @@ int cxip_free_endpoint(struct cxip_ep *ep)
 	 */
 	count = ofi_atomic_get32(&ep_obj->ref);
 	if (count) {
-		CXIP_WARN("EP refcount non-zero: %d\n", count);
+		CXIP_WARN("EP refcount non-zero:%d\n", count);
 		return -FI_EBUSY;
 	}
 
