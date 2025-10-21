@@ -135,6 +135,8 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	struct efa_rdm_ep_peer_map_entry *map_entry;
 	int err;
 
+	assert(ofi_genlock_held(&ep->base_ep.domain->srx_lock));
+
 	conn = efa_av_addr_to_conn_implicit(ep->base_ep.av, addr);
 
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
