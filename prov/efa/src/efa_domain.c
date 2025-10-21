@@ -181,7 +181,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (!efa_domain)
 		return -FI_ENOMEM;
 
-	dlist_init(&efa_domain->list_entry);
 	efa_domain->fabric = container_of(fabric_fid, struct efa_fabric,
 					  util_fabric.fabric_fid);
 
