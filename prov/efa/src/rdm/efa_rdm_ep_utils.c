@@ -167,7 +167,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 out:
 	assert(peer);
 	/* Move to the front of the LRU list */
-	efa_av_implicit_av_lru_move(ep->base_ep.av, peer->conn);
+	efa_av_implicit_av_lru_conn_move(ep->base_ep.av, peer->conn);
 	return peer;
 }
 
