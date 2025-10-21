@@ -101,7 +101,8 @@ void test_efa_ah_cnt_one_av(struct efa_resource **state)
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
 	HASH_FIND(hh, efa_domain->ah_map, raw_addr.raw, EFA_GID_LEN, efa_ah);
 	assert_non_null(efa_ah);
-	assert_int_equal(efa_ah->refcnt, 1);
+	assert_int_equal(efa_ah->explicit_refcnt, 1);
+	assert_int_equal(efa_ah->implicit_refcnt, 0);
 
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
@@ -117,14 +118,16 @@ void test_efa_ah_cnt_one_av(struct efa_resource **state)
 
 	/* So far we should still have 1 ah, and its refcnt is 3 (plus the 2 av entries) */
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
-	assert_int_equal(efa_ah->refcnt, 3);
+	assert_int_equal(efa_ah->explicit_refcnt, 3);
+	assert_int_equal(efa_ah->implicit_refcnt, 0);
 
 	/* ah refcnt should be decremented to 1 after av entry removals */
 	assert_int_equal(fi_av_remove(resource->av, &addr1, 1, 0), 0);
 	assert_int_equal(fi_av_remove(resource->av, &addr2, 1, 0), 0);
 
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
-	assert_int_equal(efa_ah->refcnt, 1);
+	assert_int_equal(efa_ah->explicit_refcnt, 1);
+	assert_int_equal(efa_ah->implicit_refcnt, 0);
 
 	/* ah map should be empty now after closing ep which destroys the self ah */
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
@@ -157,7 +160,8 @@ void test_efa_ah_cnt_multi_av(struct efa_resource **state)
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
 	HASH_FIND(hh, efa_domain->ah_map, raw_addr.raw, EFA_GID_LEN, efa_ah);
 	assert_non_null(efa_ah);
-	assert_int_equal(efa_ah->refcnt, 1);
+	assert_int_equal(efa_ah->explicit_refcnt, 1);
+	assert_int_equal(efa_ah->implicit_refcnt, 0);
 
 
 	/* We open 2 avs with the same domain (PD) so they should share same AH given the same GID */
@@ -187,7 +191,8 @@ void test_efa_ah_cnt_multi_av(struct efa_resource **state)
 
 	/* So far we should still have 1 ah, and its refcnt is 3 (plus the 2 av entries) */
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
-	assert_int_equal(efa_ah->refcnt, 3);
+	assert_int_equal(efa_ah->explicit_refcnt, 3);
+	assert_int_equal(efa_ah->implicit_refcnt, 0);
 
 	/* ah refcnt should be decremented to 1 after av close */
 	assert_int_equal(fi_close(&ep1->fid), 0);
@@ -196,7 +201,8 @@ void test_efa_ah_cnt_multi_av(struct efa_resource **state)
 	assert_int_equal(fi_close(&av2->fid), 0);
 
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
-	assert_int_equal(efa_ah->refcnt, 1);
+	assert_int_equal(efa_ah->explicit_refcnt, 1);
+	assert_int_equal(efa_ah->implicit_refcnt, 0);
 
 	/* ah map should be empty now after closing ep which destroys the self ah */
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
