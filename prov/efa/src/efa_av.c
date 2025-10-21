@@ -15,6 +15,8 @@
 
 static void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 			     bool release_from_implicit_av);
+static void efa_conn_release_ah_unsafe(struct efa_av *av, struct efa_conn *conn,
+				       bool release_from_implicit_av);
 
 /*
  * Local/remote peer detection by comparing peer GID with stored local GIDs
@@ -213,7 +215,7 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 					      qpn, pkt_entry);
 
 	if (OFI_LIKELY(!!conn)) {
-		efa_av_implicit_av_lru_move(av, conn);
+		efa_av_implicit_av_lru_conn_move(av, conn);
 		return conn->implicit_fi_addr;
 	}
 
@@ -228,6 +230,87 @@ static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
 }
 
 /**
+ * @brief Move the AH to the end of the LRU list to indicate that it is the
+ * most recently used entry
+ *
+ * This function is not called in the efa_rdm_ep_get_peer so that we don't add
+ * extra latency to the critical path with explicit AV insertion. We use the LRU
+ * list to remove AH entries with only implicit AV entries, so it is OK to do
+ * that.
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	conn	efa conn to be added to the LRU list
+ */
+void efa_av_implicit_av_lru_ah_move(struct efa_domain *domain,
+					struct efa_ah *ah)
+{
+	assert(ah->implicit_refcnt > 0 || ah->explicit_refcnt > 0);
+	assert(dlist_entry_in_list(&domain->ah_lru_list,
+				   &ah->domain_lru_ah_list_entry));
+
+	dlist_remove(&ah->domain_lru_ah_list_entry);
+	dlist_insert_tail(&ah->domain_lru_ah_list_entry,
+			  &domain->ah_lru_list);
+}
+
+/**
+ * @brief Move the conn to the end of the LRU list to indicate that it is the
+ * most recently used entry
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	conn	efa conn to be added to the LRU list
+ */
+void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
+					struct efa_conn *conn)
+{
+	assert(av->implicit_av_size == 0 ||
+	       HASH_CNT(hh, av->util_av_implicit.hash) <= av->implicit_av_size);
+	assert(dlist_entry_in_list(&av->implicit_av_lru_list,
+				   &conn->implicit_av_lru_entry));
+
+	dlist_remove(&conn->implicit_av_lru_entry);
+	dlist_insert_tail(&conn->implicit_av_lru_entry,
+			  &av->implicit_av_lru_list);
+
+	efa_av_implicit_av_lru_ah_move(av->domain, conn->ah);
+}
+
+static inline int efa_av_implicit_av_evict_ah(struct efa_domain *domain) {
+	struct efa_conn *conn_to_release;
+	struct efa_ah *ah_tmp, *ah_to_release = NULL;
+	struct dlist_entry *tmp;
+
+	dlist_foreach_container (&domain->ah_lru_list, struct efa_ah, ah_tmp,
+				 domain_lru_ah_list_entry) {
+		if (ah_tmp->explicit_refcnt == 0) {
+			ah_to_release = ah_tmp;
+			break;
+		}
+	}
+
+	if (!ah_to_release) {
+		EFA_WARN(FI_LOG_AV,
+			 "AH creation for implicit AV entry failed with ENOMEM "
+			 "but no AH entries available to evict\n");
+		return -FI_ENOMEM;
+	}
+
+	assert(ah_to_release->implicit_refcnt > 0);
+
+	dlist_foreach_container_safe(&ah_to_release->implicit_conn_list,
+				      struct efa_conn, conn_to_release,
+				      ah_implicit_conn_list_entry, tmp) {
+
+		assert(conn_to_release->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
+		       conn_to_release->fi_addr == FI_ADDR_NOTAVAIL);
+
+		efa_conn_release_ah_unsafe(conn_to_release->av, conn_to_release, true);
+	}
+
+	return FI_SUCCESS;
+}
+
+/**
  * @brief allocate an ibv_ah object from GID.
  * This function use a hash map to store GID to ibv_ah map,
  * and re-use ibv_ah for same GID
@@ -235,7 +318,8 @@ static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
  * @param[in]	domain	efa_domain
  * @param[in]	gid	GID
  */
-struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid)
+struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
+			    bool insert_implicit_av)
 {
 	struct ibv_pd *ibv_pd = domain->ibv_pd;
 	struct efa_ah *efa_ah;
@@ -248,7 +332,8 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid)
 	ofi_genlock_lock(&domain->util_domain.lock);
 	HASH_FIND(hh, domain->ah_map, gid, EFA_GID_LEN, efa_ah);
 	if (efa_ah) {
-		efa_ah->refcnt += 1;
+		insert_implicit_av ? efa_ah->implicit_refcnt++ : efa_ah->explicit_refcnt++;
+		efa_av_implicit_av_lru_ah_move(domain, efa_ah);
 		ofi_genlock_unlock(&domain->util_domain.lock);
 		return efa_ah;
 	}
@@ -265,8 +350,28 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid)
 	memcpy(ibv_ah_attr.grh.dgid.raw, gid, EFA_GID_LEN);
 	efa_ah->ibv_ah = ibv_create_ah(ibv_pd, &ibv_ah_attr);
 	if (!efa_ah->ibv_ah) {
-		EFA_WARN(FI_LOG_AV, "ibv_create_ah failed! errno: %d\n", errno);
-		goto err_free_efa_ah;
+		/* If the failure is because we have too many AH entries, try to
+		 * evict an AH entry with no explicit AV entries and try AH
+		 * creation again */
+		if (errno == FI_ENOMEM) {
+			EFA_INFO(
+				FI_LOG_AV,
+				"ibv_create_ah failed with ENOMEM for implicit "
+				"AV insertion. Attempting to evict AH entry\n");
+
+			err = efa_av_implicit_av_evict_ah(domain);
+			if (err)
+				goto err_free_efa_ah;
+
+			efa_ah->ibv_ah = ibv_create_ah(ibv_pd, &ibv_ah_attr);
+			if (!efa_ah->ibv_ah) {
+				EFA_WARN(FI_LOG_AV,
+					 "ibv_create_ah failed for implicit AV "
+					 "insertion! errno: %d\n",
+					 errno);
+				goto err_free_efa_ah;
+			}
+		}
 	}
 
 	err = efadv_query_ah(efa_ah->ibv_ah, &efa_ah_attr, sizeof(efa_ah_attr));
@@ -276,7 +381,11 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid)
 		goto err_destroy_ibv_ah;
 	}
 
-	efa_ah->refcnt = 1;
+	dlist_init(&efa_ah->implicit_conn_list);
+	dlist_insert_tail(&efa_ah->domain_lru_ah_list_entry, &domain->ah_lru_list);
+	efa_ah->implicit_refcnt = 0;
+	efa_ah->explicit_refcnt = 0;
+	insert_implicit_av ? efa_ah->implicit_refcnt++ : efa_ah->explicit_refcnt++;
 	efa_ah->ahn = efa_ah_attr.ahn;
 	memcpy(efa_ah->gid, gid, EFA_GID_LEN);
 	HASH_ADD(hh, domain->ah_map, gid, EFA_GID_LEN, efa_ah);
@@ -292,31 +401,50 @@ err_free_efa_ah:
 }
 
 /**
- * @brief release an efa_ah object
+ * @brief release an efa_ah object without acquiring the util domain lock
  *
  * @param[in]	domain	efa_domain
  * @param[in]	ah	efa_ah object pointer
  */
-void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah)
+static void efa_ah_release_unsafe(struct efa_domain *domain, struct efa_ah *ah,
+				  bool release_from_implicit_av)
 {
 	int err;
-	ofi_genlock_lock(&domain->util_domain.lock);
+	assert(ofi_genlock_held(&domain->util_domain.lock));
 #if ENABLE_DEBUG
 	struct efa_ah *tmp;
 
 	HASH_FIND(hh, domain->ah_map, ah->gid, EFA_GID_LEN, tmp);
 	assert(tmp == ah);
 #endif
-	assert(ah->refcnt > 0);
-	ah->refcnt -= 1;
-	if (ah->refcnt == 0) {
+	assert((release_from_implicit_av && ah->implicit_refcnt > 0) ||
+	       (!release_from_implicit_av && ah->explicit_refcnt > 0));
+
+	release_from_implicit_av ? ah->implicit_refcnt-- : ah->explicit_refcnt--;
+
+	if (ah->implicit_refcnt == 0 && ah->explicit_refcnt == 0) {
+		assert(dlist_empty(&ah->implicit_conn_list));
 		EFA_INFO(FI_LOG_AV, "Destroying AH for ahn %d\n", ah->ahn);
+		dlist_remove(&ah->domain_lru_ah_list_entry);
 		HASH_DEL(domain->ah_map, ah);
 		err = ibv_destroy_ah(ah->ibv_ah);
 		if (err)
 			EFA_WARN(FI_LOG_AV, "ibv_destroy_ah failed! err=%d\n", err);
 		free(ah);
 	}
+}
+
+/**
+ * @brief release an efa_ah object after acquiring the util domain lock
+ *
+ * @param[in]	domain	efa_domain
+ * @param[in]	ah	efa_ah object pointer
+ */
+void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
+		    bool release_from_implicit_av)
+{
+	ofi_genlock_lock(&domain->util_domain.lock);
+	efa_ah_release_unsafe(domain, ah, release_from_implicit_av);
 	ofi_genlock_unlock(&domain->util_domain.lock);
 }
 
@@ -611,26 +739,6 @@ out:
 }
 
 /**
- * @brief Move the conn to the end of the LRU list to indicate that it is the
- * most recently used entry
- *
- * @param[in]	av	efa address vector
- * @param[in]	conn	efa conn to be added to the LRU list
- */
-void efa_av_implicit_av_lru_move(struct efa_av *av,
-					struct efa_conn *conn)
-{
-	assert(av->implicit_av_size == 0 ||
-	       HASH_CNT(hh, av->util_av_implicit.hash) <= av->implicit_av_size);
-	assert(dlist_entry_in_list(&av->implicit_av_lru_list,
-				   &conn->implicit_av_lru_entry));
-
-	dlist_remove(&conn->implicit_av_lru_entry);
-	dlist_insert_tail(&conn->implicit_av_lru_entry,
-			  &av->implicit_av_lru_list);
-}
-
-/**
  * @brief allocate an efa_conn object
  * caller of this function must obtain av->util_av.lock or av->util_av_implicit.lock
  *
@@ -688,6 +796,8 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	conn->ep_addr = (struct efa_ep_addr *)efa_av_entry->ep_addr;
 	assert(av->type == FI_AV_TABLE);
 
+	conn->av = av;
+
 	if (insert_implicit_av) {
 		conn->fi_addr = FI_ADDR_NOTAVAIL;
 		conn->implicit_fi_addr = fi_addr;
@@ -699,9 +809,13 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
 	}
 
-	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw);
+	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, insert_implicit_av);
 	if (!conn->ah)
 		goto err_release;
+
+	if (insert_implicit_av)
+		dlist_insert_tail(&conn->ah_implicit_conn_list_entry,
+				  &conn->ah->implicit_conn_list);
 
 	conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	/*
@@ -740,7 +854,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 
 err_release:
 	if (conn->ah)
-		efa_ah_release(av->domain, conn->ah);
+		efa_ah_release(av->domain, conn->ah, insert_implicit_av);
 
 	conn->ep_addr = NULL;
 	err = ofi_av_remove_addr(util_av, fi_addr);
@@ -786,8 +900,6 @@ static inline void efa_conn_release_util_av(struct efa_av *av,
 		fi_addr = conn->fi_addr;
 	}
 
-	efa_ah_release(av->domain, conn->ah);
-
 	util_av_entry = ofi_bufpool_get_ibuf(util_av->av_entry_pool, fi_addr);
 	assert(util_av_entry);
 	efa_av_entry = (struct efa_av_entry *) util_av_entry->data;
@@ -827,6 +939,48 @@ static void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 	efa_conn_release_reverse_av(av, conn, release_from_implicit_av);
 	if (av->domain->info_type == EFA_INFO_RDM)
 		efa_conn_rdm_deinit(av, conn);
+
+	if (release_from_implicit_av)
+		dlist_remove(&conn->ah_implicit_conn_list_entry);
+
+	efa_ah_release(av->domain, conn->ah, release_from_implicit_av);
+
+	efa_conn_release_util_av(av, conn, release_from_implicit_av);
+
+	release_from_implicit_av ? av->used_implicit-- : av->used_explicit--;
+}
+
+/**
+ * @brief release an efa conn object
+ * Caller of this function must obtain av->util_av.lock or
+ * av->util_av_implicit.lock and the SRX lock. It also calls
+ * efa_ah_release_unsafe which does not acquire the util_domain lock the
+ * protects the AH map. This function is called when evicting an AH entry in the
+ * CQ read path which already has the SRX lock and the util_domain lock.
+ *
+ * @param[in]	av	address vector
+ * @param[in]	conn	efa_conn object pointer
+ * @param[in]	release_from_implicit_av		whether to release conn
+ * from implicit AV
+ * @param[in]	grab_srx_lock		whether to get the SRX lock before
+ * destroying the peer struct
+ */
+static void efa_conn_release_ah_unsafe(struct efa_av *av, struct efa_conn *conn,
+			     bool release_from_implicit_av)
+{
+	if (av->domain->info_type == EFA_INFO_RDM)
+		assert(ofi_genlock_held(&av->domain->srx_lock));
+
+	assert(ofi_genlock_held(&av->domain->util_domain.lock));
+
+	efa_conn_release_reverse_av(av, conn, release_from_implicit_av);
+	if (av->domain->info_type == EFA_INFO_RDM)
+		efa_conn_rdm_deinit(av, conn);
+
+	if (release_from_implicit_av)
+		dlist_remove(&conn->ah_implicit_conn_list_entry);
+
+	efa_ah_release_unsafe(av->domain, conn->ah, release_from_implicit_av);
 
 	efa_conn_release_util_av(av, conn, release_from_implicit_av);
 
@@ -898,7 +1052,12 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 
 	dlist_remove(&implicit_av_entry->conn.implicit_av_lru_entry);
 
+	assert(!dlist_empty(&conn->ah->implicit_conn_list));
+	dlist_remove(&conn->ah_implicit_conn_list_entry);
+	efa_av_implicit_av_lru_ah_move(av->domain, conn->ah);
+
 	av->used_implicit--;
+	conn->ah->implicit_refcnt--;
 
 	err = ofi_av_insert_addr(&av->util_av, raw_addr, fi_addr);
 	if (err) {
@@ -930,6 +1089,7 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 		return err;
 
 	av->used_explicit++;
+	conn->ah->explicit_refcnt++;
 
 	EFA_INFO(FI_LOG_AV,
 		 "Peer with implicit fi_addr %" PRIu64
@@ -1037,7 +1197,7 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 			/* Move to the end of the LRU list */
 			conn = efa_av_addr_to_conn_implicit(av,
 							    implicit_fi_addr);
-			efa_av_implicit_av_lru_move(av, conn);
+			efa_av_implicit_av_lru_conn_move(av, conn);
 
 			*fi_addr = implicit_fi_addr;
 			goto out;
