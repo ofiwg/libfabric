@@ -542,12 +542,14 @@ unlock:
 static int cxip_dom_close(struct fid *fid)
 {
 	struct cxip_domain *dom;
-
+	int count;
 	dom = container_of(fid, struct cxip_domain,
 			   util_domain.domain_fid.fid);
-	if (ofi_atomic_get32(&dom->ref))
+	count = ofi_atomic_get32(&dom->ref);
+	if (count) {
+		CXIP_DBG("Domain refcount non-zero:%d returning FI_EBUSY\n", count);
 		return -FI_EBUSY;
-
+	}
 	if (dom->telemetry) {
 		cxip_telemetry_dump_delta(dom->telemetry);
 		cxip_telemetry_free(dom->telemetry);
