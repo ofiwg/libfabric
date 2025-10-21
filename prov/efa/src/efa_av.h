@@ -33,17 +33,26 @@ struct efa_ah {
 	uint8_t		gid[EFA_GID_LEN]; /* efa device GID */
 	struct ibv_ah	*ibv_ah; /* created by ibv_create_ah() using GID */
 	uint16_t	ahn; /* adress handle number */
-	int		refcnt; /* reference counter. Multiple efa_conn can share an efa_ah */
+	/* Number of explicit AV entries associated with this AH */
+	int explicit_refcnt;
+	/* Number of implicit AV entries associated with this AH */
+	int implicit_refcnt;
+	/* dlist of all implicit AV entries associated with this AH entry */
+	struct dlist_entry implicit_conn_list;
+	/* dlist entry in domain's LRU AH list */
+	struct dlist_entry domain_lru_ah_list_entry;
 	UT_hash_handle	hh; /* hash map handle, link all efa_ah with efa_ep->ah_map */
 };
 
 struct efa_conn {
 	struct efa_ah *ah;
 	struct efa_ep_addr *ep_addr;
+	struct efa_av *av;
 	fi_addr_t		implicit_fi_addr;
 	fi_addr_t		fi_addr;
 	fi_addr_t		shm_fi_addr;
 	struct dlist_entry	implicit_av_lru_entry;
+	struct dlist_entry ah_implicit_conn_list_entry;
 };
 
 /* util_av implementation requires the first element of efa_av_entry to be
@@ -128,11 +137,13 @@ int efa_av_reverse_av_add(struct efa_av *av,
 			  struct efa_prv_reverse_av **prv_reverse_av,
 			  struct efa_conn *conn);
 
-struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid);
+struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
+			    bool insert_implicit_av);
 
-void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah);
+void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
+		    bool release_from_implicit_av);
 
-void efa_av_implicit_av_lru_move(struct efa_av *av,
+void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
 					struct efa_conn *conn);
 
 #endif

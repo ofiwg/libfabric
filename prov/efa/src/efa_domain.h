@@ -54,6 +54,8 @@ struct efa_domain {
 	struct dlist_entry peer_backoff_list;
 	/* list of #efa_rdm_peer that will retry posting handshake pkt */
 	struct dlist_entry handshake_queued_peer_list;
+	/* LRU list of AH entries in this domain */
+	struct dlist_entry ah_lru_list;
 	/* Function pointer for internal buffer memory registration */
 	int (*internal_buf_mr_regv)(struct fid_domain *domain_fid,
 				    const struct iovec *iov, size_t count,

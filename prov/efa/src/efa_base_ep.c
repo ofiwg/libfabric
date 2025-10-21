@@ -128,7 +128,7 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 	fi_freeinfo(base_ep->info);
 
 	if (base_ep->self_ah)
-		efa_ah_release(base_ep->domain, base_ep->self_ah);
+		efa_ah_release(base_ep->domain, base_ep->self_ah, false);
 
 	err = efa_base_ep_destruct_qp(base_ep);
 
@@ -401,7 +401,7 @@ static inline
 int efa_base_ep_create_self_ah(struct efa_base_ep *base_ep, struct ibv_pd *ibv_pd)
 {
 
-	base_ep->self_ah = efa_ah_alloc(base_ep->domain, base_ep->src_addr.raw);
+	base_ep->self_ah = efa_ah_alloc(base_ep->domain, base_ep->src_addr.raw, false);
 
 	return base_ep->self_ah ? 0 : -FI_EINVAL;
 }
