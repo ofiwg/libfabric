@@ -374,16 +374,19 @@ static struct efa_rdm_peer *test_av_get_peer_from_implicit_av(struct efa_resourc
 
 	/* Manually insert into implicit AV */
 	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
+
 	err = efa_av_insert_one(av, &raw_addr, &implicit_fi_addr, 0, NULL, true, true);
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 
 	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep, implicit_fi_addr);
+
 	assert_int_equal(peer->conn->implicit_fi_addr, implicit_fi_addr);
 	assert_int_equal(peer->conn->fi_addr, FI_ADDR_NOTAVAIL);
 	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
 
 	test_addr = efa_av_reverse_lookup_rdm_implicit(av, ahn, raw_addr.qpn, NULL);
 	assert_int_equal(test_addr, implicit_fi_addr);
+
+	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 
 	return peer;
 }
@@ -528,8 +531,10 @@ void test_av_implicit_av_lru_insertion(struct efa_resource **state)
 
 	/* Access peer0 through the CQ read path */
 	ahn = efa_rdm_ep->base_ep.self_ah->ahn;
+	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	implicit_fi_addr = efa_av_reverse_lookup_rdm_implicit(
 		av, ahn, peer0->conn->ep_addr->qpn, NULL);
+	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	assert_int_equal(implicit_fi_addr, 0);
 
 	/* Expected LRU list: HEAD->peer1->peer2->peer0 */
@@ -537,8 +542,10 @@ void test_av_implicit_av_lru_insertion(struct efa_resource **state)
 
 	/* Access peer2 through the CQ read path */
 	ahn = efa_rdm_ep->base_ep.self_ah->ahn;
+	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	implicit_fi_addr = efa_av_reverse_lookup_rdm_implicit(
 		av, ahn, peer2->conn->ep_addr->qpn, NULL);
+	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	assert_int_equal(implicit_fi_addr, 2);
 
 	/* Expected LRU list: HEAD->peer1->peer0->peer2 */
@@ -608,8 +615,10 @@ void test_av_implicit_av_lru_eviction(struct efa_resource **state)
 
 	/* Access peer0 through the CQ read path */
 	ahn = efa_rdm_ep->base_ep.self_ah->ahn;
+	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	implicit_fi_addr = efa_av_reverse_lookup_rdm_implicit(
 		av, ahn, peer0->conn->ep_addr->qpn, NULL);
+	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	assert_int_equal(implicit_fi_addr, 0);
 
 	/* Expected LRU list: HEAD->peer1->peer0 */
