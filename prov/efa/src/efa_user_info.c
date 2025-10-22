@@ -478,18 +478,12 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		 * RDMA with immediate needs to consume a recv buffer
 		 * when unsolicited write recv is not supported. So
 		 * FI_RX_CQ_DATA is required when application requests
-		 * a non-zero cq data size in this situation.
+		 * FI_RMA.
 		 */
-		if (hints->domain_attr &&
-		    hints->domain_attr->cq_data_size > 0) {
-			EFA_INFO(FI_LOG_CORE,
-				 "FI_RX_CQ_DATA is required for FI_RMA + "
-				 "non-zero cq data when unsolicited write recv "
-				 "is not supported \n");
-			return -FI_ENODATA;
-		} else {
-			info->domain_attr->cq_data_size = 0;
-		}
+		EFA_INFO(FI_LOG_CORE,
+			 "FI_RX_CQ_DATA is required for FI_RMA when "
+			 "unsolicited write recv is not supported.\n");
+		return -FI_ENODATA;
 	}
 	/*
 	 * Handle user-provided hints and adapt the info object passed back up
