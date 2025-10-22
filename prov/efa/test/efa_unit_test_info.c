@@ -442,8 +442,9 @@ static void test_info_check_shm_info_from_hints(struct fi_info *hints)
 	struct fi_info *info;
 	struct fid_fabric *fabric = NULL;
 	struct fid_domain *domain = NULL;
+	struct fid_ep *ep = NULL;
 	int err;
-	struct efa_domain *efa_domain;
+	struct efa_rdm_ep *efa_rdm_ep;
 
 	err = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, hints, &info);
 	/* Do nothing if the current setup does not support FI_HMEM */
@@ -458,22 +459,27 @@ static void test_info_check_shm_info_from_hints(struct fi_info *hints)
 	err = fi_domain(fabric, info, &domain, NULL);
 	assert_int_equal(err, 0);
 
-	efa_domain = container_of(domain, struct efa_domain, util_domain.domain_fid);
-	if (efa_domain->shm_info) {
+	err = fi_endpoint(domain, info, &ep, NULL);
+	assert_int_equal(err, 0);
+
+	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	if (efa_rdm_ep->shm_info) {
 		if (hints->caps & FI_HMEM)
-			assert_true(efa_domain->shm_info->caps & FI_HMEM);
+			assert_true(efa_rdm_ep->shm_info->caps & FI_HMEM);
 		else
-			assert_false(efa_domain->shm_info->caps & FI_HMEM);
+			assert_false(efa_rdm_ep->shm_info->caps & FI_HMEM);
 
-		assert_true(efa_domain->shm_info->tx_attr->op_flags == info->tx_attr->op_flags);
+		assert_true(efa_rdm_ep->shm_info->tx_attr->op_flags == info->tx_attr->op_flags);
 
-		assert_true(efa_domain->shm_info->rx_attr->op_flags == info->rx_attr->op_flags);
+		assert_true(efa_rdm_ep->shm_info->rx_attr->op_flags == info->rx_attr->op_flags);
 
 		if (hints->domain_attr->threading) {
 			assert_true(hints->domain_attr->threading == info->domain_attr->threading);
-			assert_true(hints->domain_attr->threading == efa_domain->shm_info->domain_attr->threading);
+			assert_true(hints->domain_attr->threading == efa_rdm_ep->shm_info->domain_attr->threading);
 		}
 	}
+
+	fi_close(&ep->fid);
 
 	fi_close(&domain->fid);
 
@@ -811,17 +817,18 @@ static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func,
 				   bool expect_fabric_reuse, 
 				   bool expect_domain_reuse)
 {
-	struct fi_info *hints, *info1, *info2;
+	struct fi_info *hints1, *hints2, *info1, *info2;
 	struct fid_fabric *fabric = NULL;
 	struct fid_domain *domain = NULL;
+	struct util_domain *util_domain = NULL;
 	int err;
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
-	assert_non_null(hints);
-	hints->caps |= FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM | FI_DIRECTED_RECV;
-	hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
+	hints1 = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(hints1);
+	hints1->caps |= FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM | FI_DIRECTED_RECV;
+	hints1->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
 
-	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info1);
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints1, &info1);
 	assert_int_equal(err, 0);
 	assert_non_null(info1);
 
@@ -833,15 +840,13 @@ static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func,
 	assert_int_equal(err, 0);
 	assert_non_null(domain);
 
-	fi_freeinfo(hints);
+	hints2 = efa_unit_test_alloc_hints(FI_EP_RDM, NULL);
+	assert_non_null(hints2);
+	hints2->caps = FI_MSG | FI_RMA | FI_ATOMIC;
+	setup_func(hints2, fabric, domain, info1);
+	hints2->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
 
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM, NULL);
-	assert_non_null(hints);
-	hints->caps = FI_MSG | FI_RMA | FI_ATOMIC;
-	setup_func(hints, fabric, domain, info1);
-	hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
-
-	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info2);
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints2, &info2);
 	assert_int_equal(err, 0);
 	assert_non_null(info2);
 
@@ -853,11 +858,22 @@ static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func,
 	
 	if (expect_domain_reuse) {
 		assert_ptr_equal(info2->domain_attr->domain, domain);
+		util_domain = container_of(domain, struct util_domain, domain_fid);
+		assert_true((util_domain->info_domain_caps &
+			     (hints1->caps | hints2->caps)) ==
+			    (hints1->caps | hints2->caps));
+		assert_int_equal(util_domain->info_domain_mode, 0);
+		assert_true((util_domain->mr_mode &
+			     (hints1->domain_attr->mr_mode |
+			      hints2->domain_attr->mr_mode)) ==
+			    (hints1->domain_attr->mr_mode |
+			     hints2->domain_attr->mr_mode));
 	} else {
 		assert_null(info2->domain_attr->domain);
 	}
 
-	fi_freeinfo(hints);
+	fi_freeinfo(hints1);
+	fi_freeinfo(hints2);
 	fi_freeinfo(info1);
 	fi_freeinfo(info2);
 
@@ -926,4 +942,76 @@ void test_info_reuse_fabric_via_name()
 void test_info_reuse_domain_via_name()
 {
 	test_info_reuse_fabric_domain(setup_domain_name_hints, true, true);
+}
+static void test_info_direct_rma_common(bool mock_unsolicited_write_recv, bool set_rx_cq_data,
+					size_t request_cq_data_size, int expected_err,
+					size_t expected_cq_data_size, bool expect_rx_cq_data_mode)
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	/* Mock unsolicited write recv */
+	g_efa_unit_test_mocks.efa_device_support_unsolicited_write_recv = &efa_mock_efa_device_support_unsolicited_write_recv;
+	will_return_maybe(efa_mock_efa_device_support_unsolicited_write_recv, mock_unsolicited_write_recv);
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->caps |= FI_RMA;
+	if (set_rx_cq_data)
+		hints->mode |= FI_RX_CQ_DATA;
+	if (request_cq_data_size > 0)
+		hints->domain_attr->cq_data_size = request_cq_data_size;
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info);
+	fi_freeinfo(hints);
+
+	if (efa_device_support_rdma_read() && efa_device_support_rdma_write()) {
+		assert_int_equal(err, expected_err);
+		if (expected_err == 0) {
+			assert_non_null(info);
+			assert_int_equal(info->domain_attr->cq_data_size, expected_cq_data_size);
+			if (expect_rx_cq_data_mode) {
+				assert_true(info->mode & FI_RX_CQ_DATA);
+				assert_true(info->rx_attr->mode & FI_RX_CQ_DATA);
+			}
+			fi_freeinfo(info);
+		} else {
+			assert_null(info);
+		}
+	} else {
+		assert_int_equal(err, -FI_ENODATA);
+		assert_null(info);
+	}
+}
+
+/**
+ * @brief Test that when FI_RX_CQ_DATA is requested, cq_data_size is always 4
+ */
+void test_info_direct_rma_when_no_unsolicited_write_recv_and_rx_cq_data()
+{
+	test_info_direct_rma_common(false, true, 0, 0, 4, true);
+}
+
+/**
+ * @brief Test that when FI_RX_CQ_DATA is not requested and unsolicited write recv is OFF, cq_data_size is 0
+ */
+void test_info_direct_rma_when_no_rx_cq_data_and_zero_cq_data_size()
+{
+	test_info_direct_rma_common(false, false, 0, 0, 0, false);
+}
+
+/**
+ * @brief Test that when FI_RX_CQ_DATA is not requested and unsolicited write recv is ON, cq_data_size is 4
+ */
+void test_info_direct_rma_when_unsolicited_write_recv_on_and_no_rx_cq_data()
+{
+	return;
+	test_info_direct_rma_common(true, false, 0, 0, 4, false);
+}
+/**
+ * @brief Test that when user requests non-zero cq_data_size but unsolicited write recv is OFF, fi_getinfo fails
+ */
+void test_info_direct_rma_when_no_unsolicited_write_recv_and_nonzero_cq_data_size_and_no_rx_cq_data()
+{
+	test_info_direct_rma_common(false, false, 4, -FI_ENODATA, 0, false);
 }

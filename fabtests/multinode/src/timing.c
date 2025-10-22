@@ -54,11 +54,14 @@ void multi_timer_stop(struct multi_timer *timer)
 		timer->end = ft_gettime_ns();
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 static inline void print_timer(struct multi_timer timer, char* info)
 {
 	PRINTF("rank: %i, start: %ld, end: %ld, %s\n",
 		timer.rank, timer.start, timer.end, info);
 }
+#pragma GCC diagnostic pop
 
 int multi_timer_analyze(struct multi_timer *timers, int timer_count)
 {

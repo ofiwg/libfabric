@@ -29,53 +29,6 @@ def test_rdm_pingpong(cmdline_args, iteration_type, completion_semantic,
                                direct_message_size if fabric == "efa-direct" else "all",
                                completion_type=completion_type, fabric=fabric)
 
-# These two tests skip efa-direct because efa-direct does not
-# do memory registrations on behalf of the application
-@pytest.mark.functional
-@pytest.mark.serial
-def test_mr_exhaustion_rdm_pingpong(cmdline_args, completion_semantic):
-    import os
-    binpath = cmdline_args.binpath or ""
-    if not os.path.exists(os.path.join(binpath, "fi_efa_exhaust_mr_reg_rdm_pingpong")):
-        pytest.skip("fi_efa_exhaust_mr_reg_rdm_pingpong requires efadv")
-    efa_run_client_server_test(cmdline_args, "fi_efa_exhaust_mr_reg_rdm_pingpong", "short",
-                               completion_semantic, "host_to_host", "all", timeout=1000,
-                               fabric="efa")
-
-@pytest.mark.parametrize("mr_cache", [True, False])
-@pytest.mark.parametrize("iteration_type",
-                         [pytest.param("short", marks=pytest.mark.short),
-                          pytest.param("standard", marks=pytest.mark.standard)])
-def test_rdm_pingpong_no_mr_local(cmdline_args, iteration_type, completion_semantic,
-                      memory_type_bi_dir, completion_type, mr_cache):
-    command = "fi_rdm_pingpong -M mr_local"  + " " + perf_progress_model_cli
-
-    additional_env = ''
-    if not mr_cache:
-        additional_env = 'FI_EFA_MR_CACHE_ENABLE=0'
-
-    efa_run_client_server_test(cmdline_args, command, iteration_type,
-                               completion_semantic, memory_type_bi_dir, "all",
-                               completion_type=completion_type, fabric="efa",
-                               additional_env=additional_env)
-
-@pytest.mark.parametrize("mr_cache", [True, False])
-@pytest.mark.parametrize("iteration_type",
-                         [pytest.param("short", marks=pytest.mark.short),
-                          pytest.param("standard", marks=pytest.mark.standard)])
-def test_rma_pingpong_no_mr_local(cmdline_args, iteration_type, completion_semantic,
-                      memory_type_bi_dir, mr_cache):
-    command = "fi_rma_pingpong -o writedata -M mr_local"  + " " + perf_progress_model_cli
-
-    additional_env = ''
-    if not mr_cache:
-        additional_env = 'FI_EFA_MR_CACHE_ENABLE=0'
-
-    efa_run_client_server_test(cmdline_args, command, iteration_type,
-                               completion_semantic, memory_type_bi_dir, "all",
-                               completion_type="queue", fabric="efa",
-                               additional_env=additional_env)
-
 @pytest.mark.functional
 def test_rdm_pingpong_range(cmdline_args, completion_semantic, memory_type_bi_dir, message_size, direct_message_size, fabric):
     efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong", "short",
@@ -215,3 +168,121 @@ def test_rdm_pingpong_sread(cmdline_args, completion_semantic, memory_type_bi_di
     efa_run_client_server_test(cmdline_args, f"fi_rdm_pingpong -c {comp_method}", "short",
                                completion_semantic, memory_type_bi_dir,
                                direct_message_size, fabric="efa-direct")
+
+
+# These tests skip efa-direct because efa-direct does not
+# do memory registrations on behalf of the application
+@pytest.mark.functional
+@pytest.mark.serial
+def test_mr_exhaustion_rdm_pingpong(cmdline_args, completion_semantic):
+    import os
+    binpath = cmdline_args.binpath or ""
+    if not os.path.exists(os.path.join(binpath, "fi_efa_exhaust_mr_reg_rdm_pingpong")):
+        pytest.skip("fi_efa_exhaust_mr_reg_rdm_pingpong requires efadv")
+    efa_run_client_server_test(cmdline_args, "fi_efa_exhaust_mr_reg_rdm_pingpong", "short",
+                               completion_semantic, "host_to_host", "all", timeout=1000,
+                               fabric="efa")
+
+@pytest.mark.parametrize("mr_cache", [True, False])
+@pytest.mark.parametrize("iteration_type",
+                         [pytest.param("short", marks=pytest.mark.short),
+                          pytest.param("standard", marks=pytest.mark.standard)])
+def test_rdm_pingpong_no_mr_local(cmdline_args, iteration_type, completion_semantic,
+                      memory_type_bi_dir, completion_type, mr_cache):
+    command = "fi_rdm_pingpong -M mr_local"  + " " + perf_progress_model_cli
+
+    additional_env = ''
+    if not mr_cache:
+        additional_env = 'FI_EFA_MR_CACHE_ENABLE=0'
+
+    efa_run_client_server_test(cmdline_args, command, iteration_type,
+                               completion_semantic, memory_type_bi_dir, "all",
+                               completion_type=completion_type, fabric="efa",
+                               additional_env=additional_env)
+
+@pytest.mark.parametrize("mr_cache", [True, False])
+@pytest.mark.parametrize("iteration_type",
+                         [pytest.param("short", marks=pytest.mark.short),
+                          pytest.param("standard", marks=pytest.mark.standard)])
+def test_rma_pingpong_no_mr_local(cmdline_args, iteration_type, completion_semantic,
+                      memory_type_bi_dir, mr_cache):
+    command = "fi_rma_pingpong -o writedata -M mr_local"  + " " + perf_progress_model_cli
+
+    additional_env = ''
+    if not mr_cache:
+        additional_env = 'FI_EFA_MR_CACHE_ENABLE=0'
+
+    efa_run_client_server_test(cmdline_args, command, iteration_type,
+                               completion_semantic, memory_type_bi_dir, "all",
+                               completion_type="queue", fabric="efa",
+                               additional_env=additional_env)
+
+
+@pytest.mark.functional
+@pytest.mark.serial
+@pytest.mark.parametrize("unexpected_path", [True, False])
+# TODO: Add test with (1) larger message size that uses the long read protocol
+# and (2) SHM provider with CMA protocol after fixing the test to poll CQ while
+# waiting for the server to get send completions
+@pytest.mark.parametrize("msg_size", [1, 1024, 8192, 24756])
+# @pytest.mark.parametrize("msg_count", [1, 1024, 2048]) # below and above shm's default rx size
+def test_implicit_av(cmdline_args, unexpected_path, msg_size):
+    import os
+    binpath = cmdline_args.binpath or ""
+    if not os.path.exists(os.path.join(binpath, "fi_efa_implicit_av_test")):
+        pytest.skip("implicit AV test not found")
+
+    if (cmdline_args.server_id == cmdline_args.client_id) and unexpected_path and msg_size > 1024:
+        pytest.skip("SHM provider will use CMA protocol needs test modifications")
+
+    test_cmd = f"fi_efa_implicit_av_test -L -c 5 -S {msg_size}"
+    if unexpected_path:
+        test_cmd += " -X"
+
+    efa_run_client_server_test(cmdline_args, test_cmd, "short",
+                               "transmit_complete", "host_to_host", "all", fabric="efa")
+
+@pytest.mark.functional
+@pytest.mark.serial
+# TODO: Add test with larger message size that uses the long read protocol after
+# fixing the test to poll CQ while waiting for the server to get send completions
+@pytest.mark.parametrize("msg_size", [1, 1024, 8192, 24756])
+def test_implicit_av_limited_av_size_expected_path(cmdline_args, msg_size):
+    import os
+    binpath = cmdline_args.binpath or ""
+    if not os.path.exists(os.path.join(binpath, "fi_efa_implicit_av_test")):
+        pytest.skip("implicit AV test not found")
+
+    additional_env = 'FI_EFA_IMPLICIT_AV_SIZE=3'
+
+    test_cmd = f"fi_efa_implicit_av_test -L -c 5 -S {msg_size}"
+
+    efa_run_client_server_test(cmdline_args, test_cmd, "short",
+                               "transmit_complete", "host_to_host", "all", fabric="efa",
+                               additional_env=additional_env, timeout=30)
+
+@pytest.mark.functional
+@pytest.mark.serial
+# This test is expected to fail because the implicit AV size of 3 is smaller than
+# the number of server endpoints of 5. So implicit AV entries will get evicted
+# on the client and cause the test to hang.
+@pytest.mark.xfail(strict=True)
+# TODO: Add test with larger message size that uses the long read protocol after
+# fixing the test to poll CQ while waiting for the server to get send completions
+@pytest.mark.parametrize("msg_size", [1, 1024, 8192, 24756])
+def test_implicit_av_limited_av_size_unexpected_path(cmdline_args, msg_size, node_count):
+    import os
+    binpath = cmdline_args.binpath or ""
+    if not os.path.exists(os.path.join(binpath, "fi_efa_implicit_av_test")):
+        pytest.skip("implicit AV test not found")
+
+    if cmdline_args.server_id == cmdline_args.client_id:
+        pytest.skip("This test will only fail for the EFA protocol path - which requires 2 nodes.")
+
+    additional_env = 'FI_EFA_IMPLICIT_AV_SIZE=3'
+
+    test_cmd = f"fi_efa_implicit_av_test -L -X -c 5 -S {msg_size}"
+
+    efa_run_client_server_test(cmdline_args, test_cmd, "short",
+                               "transmit_complete", "host_to_host", "all", fabric="efa",
+                               additional_env=additional_env, timeout=15)

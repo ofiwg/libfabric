@@ -1287,6 +1287,20 @@ struct ofi_ops_flow_ctrl {
 			ssize_t (*send_handler)(struct fid_ep *ep, uint64_t credits));
 };
 
+enum util_rx_entry_status {
+	/* rx entries with status RX_ENTRY_POSTED are associated with
+	   application posted fi_recv calls that have not yet been matched to
+	   packets from peer endpoints */
+	RX_ENTRY_POSTED = 0,
+	/* rx entries with status RX_ENTRY_UNEXP are associated with
+	   packets from peer endpoints that have not yet been matched to
+	   application posted fi_recv */
+	RX_ENTRY_UNEXP,
+	/* rx entries with status RX_ENTRY_MATCHED are associated with matched
+	   pairs of packets and application posted receives */
+	RX_ENTRY_MATCHED
+};
+
 struct util_rx_entry {
 	union {
 		struct dlist_entry	d_entry;
@@ -1296,6 +1310,7 @@ struct util_rx_entry {
 	uint64_t		seq_no;
 	uint64_t		ignore;
 	int			multi_recv_ref;
+	enum util_rx_entry_status	status;
 	/* extra memory allocated at the end of each entry to hold iovecs and
 	 * MR descriptors. The amount of memory is determined by the provider's
 	 * iov limit.

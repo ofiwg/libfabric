@@ -110,7 +110,7 @@ static int cxip_domain_find_cmdq(struct cxip_domain *dom,
 	 */
 	dlist_foreach_container(&dom->cmdq_list, struct cxip_domain_cmdq, cmdq,
 				entry) {
-		if (!cxip_cmdq_active(cmdq->cmdq)) {
+		if (cxip_cmdq_empty(cmdq->cmdq)) {
 			ret = cxip_cmdq_cp_modify(cmdq->cmdq, vni, tc);
 			if (ret) {
 				CXIP_WARN("Failed to change communication profile: %d\n",
@@ -128,7 +128,7 @@ static int cxip_domain_find_cmdq(struct cxip_domain *dom,
 	 * existing TX cmdq.
 	 */
 	if (dom->cmdq_cnt == MAX_DOM_TX_CMDQ) {
-		CXIP_WARN("At domain command queue max\n");
+		CXIP_DBG("At domain command queue max\n");
 		return -FI_EAGAIN;
 	}
 
@@ -1945,11 +1945,16 @@ free_dom:
 	return -FI_EINVAL;
 }
 
-int cxip_domain_valid_vni(struct cxip_domain *dom, unsigned int vni)
+int cxip_domain_valid_vni(struct cxip_domain *dom, struct cxi_auth_key *key)
 {
-	/* Currently the auth_key.svc_id field contains the resource group ID.
-	*/
-	return cxip_if_valid_rgroup_vni(dom->iface, dom->auth_key.svc_id, vni);
+	unsigned int t_svc_id;
+
+	if (key->svc_id)
+		t_svc_id = key->svc_id;
+	else
+		t_svc_id = dom->auth_key.svc_id;
+
+	return cxip_if_valid_rgroup_vni(dom->iface, t_svc_id, key->vni);
 }
 
 #define SUPPORTED_DWQ_FLAGS (FI_MORE | FI_COMPLETION | FI_DELIVERY_COMPLETE | \

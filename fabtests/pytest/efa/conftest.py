@@ -106,6 +106,18 @@ def rma_fabric(cmdline_args, fabric):
     return fabric
 
 
+@pytest.fixture(scope="function", params=["rx-cq-data", "no-rx-cq-data"])
+def rx_cq_data_cli(request, fabric, rma_operation_type):
+    if request.param == "no-rx-cq-data":
+        if rma_operation_type != "writedata":
+            pytest.skip("the rx cq data mode is only applied for writedata")
+        if fabric == "efa-direct" :
+            return " --no-rx-cq-data"
+        else:
+            pytest.skip("efa fabric ignores the rx cq data mode")
+    return " "
+
+
 def cuda_memory_type_validation(cmdline_args):
     """
     Validate CUDA memory type configuration against hardware capabilities at session startup.

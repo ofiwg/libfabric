@@ -250,6 +250,7 @@ extern char **tx_mr_bufs, **rx_mr_bufs;
 extern size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
 extern int tx_fd, rx_fd;
 extern int timeout;
+extern bool allow_rx_cq_data;
 
 extern struct fi_context2 tx_ctx, rx_ctx;
 extern uint64_t remote_cq_data;
@@ -475,6 +476,8 @@ int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr
 		uint64_t flags, void *context);
 int ft_init_av(void);
 int ft_join_mc(void);
+int ft_send_addr_oob(struct fid_ep *ep_ptr);
+int ft_recv_addr_oob(struct fid_av *av_ptr, fi_addr_t *remote_addr);
 int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		fi_addr_t *remote_addr);
 int ft_init_av_addr(struct fid_av *av, struct fid_ep *ep,
@@ -675,6 +678,7 @@ enum {
 	LONG_OPT_MAX_MSG_SIZE,
 	LONG_OPT_USE_FI_MORE,
 	LONG_OPT_THREADING,
+	LONG_OPT_NO_RX_CQ_DATA,
 };
 
 extern int debug_assert;

@@ -239,13 +239,16 @@ int efa_device_list_initialize(void)
 					   ibv_device_list[device_idx]);
 
 		if (err) {
+			/* efa_device_construct returns -EOPNOTSUPP for non-EFA devices */
+			if (err == -EOPNOTSUPP) {
+				EFA_DBG(FI_LOG_FABRIC,
+					"Ignoring non-EFA device (device_idx: %d, err: %d)\n", device_idx, err);
+				continue;
+			}
+
 			EFA_WARN(FI_LOG_FABRIC,
 				 "efa_device_construct_gid failed for device_idx %d, err=%d\n",
 				 device_idx, err);
-
-			/* efa_device_construct returns -EOPNOTSUPP for non-EFA devices */
-			if (err == -EOPNOTSUPP)
-				continue;
 
 			ret = err;
 			goto err_free;

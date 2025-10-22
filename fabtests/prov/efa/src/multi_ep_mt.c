@@ -197,21 +197,30 @@ static int get_one_comp(struct fid_cq *cq)
 	return FI_SUCCESS;
 }
 
+static inline void random_sleep()
+{
+	int sleep_time;
+	struct timespec ts = {0};
+
+	sleep_time = (rand() % (RANDOM_MAX - RANDOM_MIN + 1)) + RANDOM_MIN;
+	ts.tv_nsec = sleep_time;
+	nanosleep(&ts, NULL);
+}
+
 static void *post_sends(void *context)
 {
 	int idx, ret, i, j;
 	size_t len;
-	// the range of the sleep time (in nanoseconds)
-	int sleep_time;
-	struct timespec ts = {0};
 	int num_transient_eps = 10;
+	int av_idx = 0;
+
+	idx = ((struct thread_context *) context)->idx;
+	av_idx = shared_av ? 0 : idx;
 
 	srand(time(NULL));
-	sleep_time = (rand() % (RANDOM_MAX - RANDOM_MIN + 1)) + RANDOM_MIN;
-	idx = ((struct thread_context *) context)->idx;
-	ts.tv_nsec = sleep_time;
 
-	nanosleep(&ts, NULL);
+	random_sleep();
+
 	len = opts.transfer_size;
 	for (j = 0; j < num_transient_eps; j++) {
 		printf("Thread %d: opening client \n", idx);
@@ -230,9 +239,15 @@ static void *post_sends(void *context)
 			}
 		}
 
-		sleep_time = (rand() % (RANDOM_MAX - RANDOM_MIN + 1)) + RANDOM_MIN;
-		ts.tv_nsec = sleep_time;
-		nanosleep(&ts, NULL);
+		random_sleep();
+
+		ret = fi_av_remove(avs[av_idx], &remote_fiaddr[idx], 1, 0);
+		if (ret) {
+			FT_PRINTERR("fi_av_remove", ret);
+			return NULL;
+		}
+
+		random_sleep();
 
 		// exit
 		printf("Thread %d: closing client\n", idx);

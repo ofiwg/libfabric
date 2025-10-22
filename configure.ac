@@ -175,7 +175,18 @@ AC_DEFUN([FI_ARG_ENABLE_SANITIZER],[
                       [],
                       [enable_$1=no])
         AS_IF([test x"$enable_$1" != x"no"],
-              [CFLAGS="-fsanitize=$2 $CFLAGS"])
+              [save_CFLAGS="$CFLAGS"
+               save_LDFLAGS="$LDFLAGS"
+               CFLAGS="-fsanitize=$2 $CFLAGS"
+               LDFLAGS="-fsanitize=$2 $LDFLAGS"
+               AC_MSG_CHECKING([for $3Sanitizer support])
+               AC_LINK_IFELSE([AC_LANG_PROGRAM([[]], [[return 0;]])],
+                              [AC_MSG_RESULT([yes])],
+                              [AC_MSG_RESULT([no])
+                               CFLAGS="$save_CFLAGS"
+                               LDFLAGS="$save_LDFLAGS"
+                               AC_MSG_ERROR([$3Sanitizer requested but compiler/linker support not found.])])
+              ])
 ])
 
 m4_map([FI_ARG_ENABLE_SANITIZER],[

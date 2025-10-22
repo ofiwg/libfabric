@@ -1050,7 +1050,8 @@ static inline bool cxip_domain_mr_cache_iface_enabled(struct cxip_domain *dom,
 	return cxip_domain_mr_cache_enabled(dom) && dom->iomm.monitors[iface];
 }
 
-int cxip_domain_valid_vni(struct cxip_domain *dom, unsigned int vni);
+int cxip_domain_valid_vni(struct cxip_domain *dom, struct cxi_auth_key *key);
+
 
 /* This structure implies knowledge about the breakdown of the NIC address,
  * which is taken from the AMA, that the provider does not know in a flexible
@@ -3213,7 +3214,6 @@ int cxip_cmdq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
 		     enum cxi_traffic_class_type tc_type);
 int cxip_cmdq_cp_modify(struct cxip_cmdq *cmdq, uint16_t vni,
 			enum cxi_traffic_class tc);
-bool cxip_cmdq_active(struct cxip_cmdq *cmdq);
 void cxip_if_init(void);
 void cxip_if_fini(void);
 

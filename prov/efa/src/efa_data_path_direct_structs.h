@@ -80,6 +80,7 @@ struct efa_data_path_direct_wq {
 	int phase;                    /**< Current phase bit for queue wrapping */
 	struct ofi_genlock *wqlock;   /**< Lock for thread-safe queue operations */
 	uint32_t *db;                 /**< Hardware doorbell register pointer */
+	uint32_t max_batch;           /**< max wqe cnt that can be posted in a batch */
 };
 
 /**

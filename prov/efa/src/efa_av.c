@@ -583,11 +583,11 @@ static inline int efa_av_implicit_av_lru_insert(struct efa_av *av,
 	dlist_pop_front(&av->implicit_av_lru_list, struct efa_conn,
 			conn_to_release, implicit_av_lru_entry);
 	EFA_INFO(FI_LOG_AV,
-		 "Evicting AV entry for peer AHN %" PRIu16 " QPN %" PRIu16
-		 " QKEY %" PRIu32 " from "
+		 "Evicting AV entry for peer implicit fi_addr %" PRIu64
+		 " AHN %" PRIu16 " QPN %" PRIu16 " QKEY %" PRIu32 " from "
 		 "implicit AV\n",
-		 conn_to_release->ah->ahn, conn_to_release->ep_addr->qpn,
-		 conn_to_release->ep_addr->qkey);
+		 conn_to_release->implicit_fi_addr, conn_to_release->ah->ahn,
+		 conn_to_release->ep_addr->qpn, conn_to_release->ep_addr->qkey);
 
 	/* Add to hashset with list of evicted peers */
 	ep_addr_hashable = malloc(sizeof(struct efa_ep_addr_hashable));
@@ -820,14 +820,12 @@ static inline void efa_conn_release_util_av(struct efa_av *av,
 static void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 			     bool release_from_implicit_av)
 {
+	if (av->domain->info_type == EFA_INFO_RDM)
+		assert(ofi_genlock_held(&av->domain->srx_lock));
 
 	efa_conn_release_reverse_av(av, conn, release_from_implicit_av);
-
-	if (av->domain->info_type == EFA_INFO_RDM) {
-		ofi_genlock_lock(&av->domain->srx_lock);
+	if (av->domain->info_type == EFA_INFO_RDM)
 		efa_conn_rdm_deinit(av, conn);
-		ofi_genlock_unlock(&av->domain->srx_lock);
-	}
 
 	efa_conn_release_util_av(av, conn, release_from_implicit_av);
 
@@ -1013,13 +1011,14 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 	if (!efa_av_is_valid_address(addr)) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert bad addr\n");
 		*fi_addr = FI_ADDR_NOTAVAIL;
-		ret = -FI_EADDRNOTAVAIL;
-		goto out;
+		return -FI_EADDRNOTAVAIL;
 	}
 
 	if (av->domain->info_type == EFA_INFO_DGRAM)
 		addr->qkey = EFA_DGRAM_CONNID;
 
+	if (av->domain->info_type == EFA_INFO_RDM)
+		assert(ofi_genlock_held(&av->domain->srx_lock));
 	ofi_genlock_lock(&av->util_av_implicit.lock);
 	ofi_genlock_lock(&av->util_av.lock);
 
@@ -1128,13 +1127,15 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	if (flags)
 		return -FI_ENOSYS;
 
+	/* The order in which the util AV and SRX locks are acquired must match
+	 * in the AV insertion, removal and CQ read paths to prevent deadlocks */
+	if (av->domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_lock(&av->domain->srx_lock);
+
 	for (i = 0; i < count; i++) {
 		addr_i = (struct efa_ep_addr *) ((uint8_t *)addr + i * EFA_EP_ADDR_LEN);
 
-		ofi_genlock_lock(&av->domain->srx_lock);
 		ret = efa_av_insert_one(av, addr_i, &fi_addr_res, flags, context, true, false);
-		ofi_genlock_unlock(&av->domain->srx_lock);
-
 		if (ret) {
 			EFA_WARN(FI_LOG_AV, "insert raw_addr to av failed! ret=%d\n",
 				 ret);
@@ -1145,6 +1146,9 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 			fi_addr[i] = fi_addr_res;
 		success_cnt++;
 	}
+
+	if (av->domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_unlock(&av->domain->srx_lock);
 
 	/* cancel remaining request and log to event queue */
 	for (; i < count ; i++) {
@@ -1219,6 +1223,10 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	if (av->type != FI_AV_TABLE)
 		return -FI_EINVAL;
 
+	/* The order in which the util AV and SRX locks are acquired must match
+	 in the AV insertion, removal and CQ read paths to prevent deadlocks */
+	if (av->domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_lock(&av->domain->srx_lock);
 	ofi_genlock_lock(&av->util_av.lock);
 	for (i = 0; i < count; i++) {
 		conn = efa_av_addr_to_conn(av, fi_addr[i]);
@@ -1236,6 +1244,8 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	}
 
 	ofi_genlock_unlock(&av->util_av.lock);
+	if (av->domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_unlock(&av->domain->srx_lock);
 	return err;
 }
 
@@ -1260,6 +1270,11 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	struct efa_cur_reverse_av *cur_entry, *curtmp;
 	struct efa_prv_reverse_av *prv_entry, *prvtmp;
 
+	/* The order in which the util AV and SRX locks are acquired must match
+	 in the AV insertion, removal and CQ read paths to prevent deadlocks */
+	if (av->domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_lock(&av->domain->srx_lock);
+
 	ofi_genlock_lock(&av->util_av.lock);
 
 	HASH_ITER(hh, av->cur_reverse_av, cur_entry, curtmp) {
@@ -1283,6 +1298,9 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	}
 
 	ofi_genlock_unlock(&av->util_av_implicit.lock);
+
+	if (av->domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_unlock(&av->domain->srx_lock);
 }
 
 static int efa_av_close(struct fid *fid)
