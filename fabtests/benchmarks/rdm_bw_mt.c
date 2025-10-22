@@ -440,6 +440,7 @@ static int bw_recv(void *context)
 static void *uni_bandwidth(void *context)
 {
 	int i, ret;
+	const struct thread_args *targs = context;
 
 	pthread_barrier_wait(&barrier);
 	for (i = 0; i < opts.warmup_iterations; i++) {
