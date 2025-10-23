@@ -434,17 +434,18 @@ static int mr_register(const void *buf, struct fid_mr **mr, int64_t *elapsed,
 		.requested_key = FT_MR_KEY,
 		.iface = iface,
 	};
+	union ft_timer timer;
 
-	ft_start();
+	ft_timer_start(&timer);
 	ret = fi_mr_regattr(domain, &mr_attr, 0, mr);
-	ft_stop();
+	ft_timer_stop(&timer);
 
 	if (ret != FI_SUCCESS) {
 		FT_UNIT_STRERR(err_buf, "fi_mr_reg failed", -errno);
 		return -errno;
 	}
 
-	*elapsed = get_elapsed(&start, &end, NANO);
+	*elapsed = ft_timer_get_elapsed(timer, NANO);
 
 	return 0;
 }

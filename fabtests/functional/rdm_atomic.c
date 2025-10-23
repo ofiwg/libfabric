@@ -224,7 +224,7 @@ static int fill_data(enum ft_atomic_opcodes opcode)
 	return ret;
 }
 
-static void report_perf(void)
+static void report_perf(union ft_timer timer)
 {
 	int len;
 
@@ -234,15 +234,16 @@ static void report_perf(void)
 		 fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 1, opts.argc,
+		show_perf_mr(opts.transfer_size, opts.iterations, timer, 1, opts.argc,
 			opts.argv);
 	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 1);
+		show_perf(test_name, opts.transfer_size, opts.iterations, timer, 1);
 }
 
 static int handle_atomic_base_op(void)
 {
 	int ret = FI_SUCCESS, i;
+	union ft_timer timer;
 	size_t count = 0;
 
 	ret = check_base_atomic_op(ep, op_type, datatype, &count);
@@ -250,7 +251,7 @@ static int handle_atomic_base_op(void)
 		return ret;
 
 	opts.transfer_size = datatype_to_size(datatype);
-	ft_start();
+	ft_start(&timer);
 	for (i = 0; i < opts.iterations; i++) {
 		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
 			ret = fill_data(FT_ATOMIC_BASE);
@@ -271,14 +272,15 @@ static int handle_atomic_base_op(void)
 				return ret;
 		}
 	}
-	ft_stop();
-	report_perf();
+	ft_stop(&timer);
+	report_perf(timer);
 	return FI_SUCCESS;
 }
 
 static int handle_atomic_fetch_op(void)
 {
 	int ret = FI_SUCCESS, i;
+	union ft_timer timer;
 	size_t count = 0;
 
 	ret = check_fetch_atomic_op(ep, op_type, datatype, &count);
@@ -286,7 +288,7 @@ static int handle_atomic_fetch_op(void)
 		return ret;
 
 	opts.transfer_size = datatype_to_size(datatype);
-	ft_start();
+	ft_start(&timer);
 	for (i = 0; i < opts.iterations; i++) {
 		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
 			ret = fill_data(FT_ATOMIC_FETCH);
@@ -307,14 +309,15 @@ static int handle_atomic_fetch_op(void)
 				return ret;
 		}
 	}
-	ft_stop();
-	report_perf();
+	ft_stop(&timer);
+	report_perf(timer);
 	return FI_SUCCESS;
 }
 
 static int handle_atomic_compare_op(void)
 {
 	int ret = FI_SUCCESS, i;
+	union ft_timer timer;
 	size_t count = 0;
 
 	ret = check_compare_atomic_op(ep, op_type, datatype, &count);
@@ -322,7 +325,7 @@ static int handle_atomic_compare_op(void)
 		return ret;
 
 	opts.transfer_size = datatype_to_size(datatype);
-	ft_start();
+	ft_start(&timer);
 	for (i = 0; i < opts.iterations; i++) {
 		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
 			ret = fill_data(FT_ATOMIC_COMPARE);
@@ -343,8 +346,8 @@ static int handle_atomic_compare_op(void)
 				return ret;
 		}
 	}
-	ft_stop();
-	report_perf();
+	ft_stop(&timer);
+	report_perf(timer);
 	return FI_SUCCESS;
 }
 

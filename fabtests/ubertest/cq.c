@@ -291,26 +291,18 @@ static inline size_t ft_update_credits(void *buf,
 static size_t ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 		const char *x_str, int timeout)
 {
-	uint8_t buf[FT_COMP_BUF_SIZE], start = 0;
-	struct timespec s, e;
-	int poll_time = 0;
+	uint8_t buf[FT_COMP_BUF_SIZE];
+	union ft_timer timer;
 	int ret, verify = (test_info.test_type == FT_TEST_UNIT && cq == rxcq);
 	int completions = 0;
 
 	switch(test_info.cq_wait_obj) {
 	case FI_WAIT_NONE:
+		ft_timer_start(&timer);
 		do {
-			if (!start) {
-				clock_gettime(CLOCK_MONOTONIC, &s);
-				start = 1;
-			}
-
 			ft_cq_read(fi_cq_read, cq, buf, ft_x->cq_format, ft_x->credits,
 				   completions, x_str, ret, verify);
-
-			clock_gettime(CLOCK_MONOTONIC, &e);
-			poll_time = get_elapsed(&s, &e, MILLI);
-		} while (ret == -FI_EAGAIN && poll_time < timeout &&
+		} while (ret == -FI_EAGAIN && !ft_timer_is_elapsed(timer, timeout, MILLI) &&
 			 !completions);
 		break;
 	case FI_WAIT_UNSPEC:
@@ -337,15 +329,13 @@ static int ft_cntr_x(struct fid_cntr *cntr, struct ft_xcontrol *ft_x,
 		     int timeout)
 {
 	uint64_t cntr_val;
-	struct timespec s, e;
-	int poll_time = clock_gettime(CLOCK_MONOTONIC, &s);
+	union ft_timer timer;
 	int recvd = 0;
 
+	ft_timer_start(&timer);
 	do {
 		cntr_val = fi_cntr_read(cntr);
-		clock_gettime(CLOCK_MONOTONIC, &e);
-		poll_time = get_elapsed(&s, &e, MILLI);
-	} while (cntr_val == ft_x->total_comp && poll_time < timeout);
+	} while (cntr_val == ft_x->total_comp && !ft_timer_is_elapsed(timer, timeout, MILLI));
 
 	recvd = cntr_val - ft_x->total_comp;
 	ft_x->total_comp = cntr_val;

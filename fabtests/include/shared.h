@@ -109,6 +109,7 @@ enum precision {
 	NANO = 1,
 	MICRO = 1000,
 	MILLI = 1000000,
+	SECOND = 1000000000,
 };
 
 enum ft_comp_method {
@@ -225,6 +226,11 @@ struct ft_opts {
 	char **argv;
 };
 
+union ft_timer {
+	uint64_t elapsed;
+	uint64_t start;
+};
+
 extern struct fi_info *fi_pep, *fi, *hints;
 extern struct fid_fabric *fabric;
 extern struct fid_wait *waitset;
@@ -264,7 +270,6 @@ extern struct fi_cntr_attr cntr_attr;
 extern struct fi_rma_iov remote;
 
 extern char test_name[50];
-extern struct timespec start, end;
 extern struct ft_opts opts;
 
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
@@ -521,14 +526,43 @@ static inline uint64_t ft_gettime_ms(void)
 	return ft_gettime_ns() / 1000000;
 }
 
-static inline void ft_start(void)
+static inline void ft_timer_start(union ft_timer *timer)
+{
+	timer->start = ft_gettime_ns();
+}
+static inline void ft_timer_pause(union ft_timer *timer)
+{
+	timer->elapsed = ft_gettime_ns() - timer->start;
+}
+static inline void ft_timer_resume(union ft_timer *timer)
+{
+	timer->start = ft_gettime_ns() - timer->elapsed;
+}
+static inline void ft_timer_stop(union ft_timer *timer)
+{
+	ft_timer_pause(timer);
+}
+static inline bool ft_timer_is_elapsed(union ft_timer timer, uint64_t timeout, enum precision p)
+{
+	// assuming timer is running
+	return ft_gettime_ns() - timer.start >= timeout * p;
+}
+static inline uint64_t ft_timer_get_elapsed(union ft_timer timer, enum precision p)
+{
+	// assiming timer is stopped
+	return timer.elapsed / p;
+}
+
+static inline void ft_start(union ft_timer *timer)
 {
 	opts.options |= FT_OPT_ACTIVE;
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	if (timer)
+		ft_timer_start(timer);
 }
-static inline void ft_stop(void)
+static inline void ft_stop(union ft_timer *timer)
 {
-	clock_gettime(CLOCK_MONOTONIC, &end);
+	if (timer)
+		ft_timer_stop(timer);
 	opts.options &= ~FT_OPT_ACTIVE;
 }
 
@@ -645,12 +679,10 @@ int ft_cq_read_verify(struct fid_cq *cq, void *op_context);
 void eq_readerr(struct fid_eq *eq, const char *eq_str);
 int ft_poll_fd(int fd, int timeout);
 
-int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
-		enum precision p);
-void show_perf(char *name, size_t tsize, int iters, struct timespec *start,
-		struct timespec *end, int xfers_per_iter);
-void show_perf_mr(size_t tsize, int iters, struct timespec *start,
-		struct timespec *end, int xfers_per_iter, int argc, char *argv[]);
+void show_perf(char *name, size_t tsize, int iters, union ft_timer timer,
+		int xfers_per_iter);
+void show_perf_mr(size_t tsize, int iters, union ft_timer timer,
+		int xfers_per_iter, int argc, char *argv[]);
 void ft_parse_opts_range(char *optarg);
 int ft_send_recv_greeting(struct fid_ep *ep);
 int ft_send_greeting(struct fid_ep *ep);
