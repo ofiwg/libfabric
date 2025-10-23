@@ -55,13 +55,18 @@ static int efa_unit_test_mocks_teardown(void **state)
 
 	efa_unit_test_resource_destruct(resource);
 
+	efa_ibv_ah_limit_cnt_reset();
+
 	efa_ibv_submitted_wr_id_vec_clear();
 
 	g_efa_unit_test_mocks = (struct efa_unit_test_mocks) {
 		.local_host_id = 0,
 		.peer_host_id = 0,
 		.ibv_create_ah = __real_ibv_create_ah,
+		.ibv_destroy_ah = __real_ibv_destroy_ah,
 		.efadv_query_device = __real_efadv_query_device,
+		.efa_ah_alloc = __real_efa_ah_alloc,
+		.efa_ah_release = __real_efa_ah_release,
 #if HAVE_EFADV_CQ_EX
 		.efadv_create_cq = __real_efadv_create_cq,
 #endif
@@ -145,6 +150,9 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_av_implicit_to_explicit, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_implicit_av_lru_insertion, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_implicit_av_lru_eviction, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_ah_refcnt, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_ah_lru_eviction_explicit_av_insert, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_ah_lru_eviction_implicit_av_insert, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_av.c */
 
 		/* begin efa_unit_test_ep.c */
