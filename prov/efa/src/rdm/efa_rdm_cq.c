@@ -61,7 +61,7 @@ int efa_rdm_cq_close(struct fid *fid)
 	ret = ofi_cq_cleanup(&cq->efa_cq.util_cq);
 	if (ret)
 		return ret;
-	free(cq);
+	ofi_freealign(cq);
 	return retv;
 }
 
@@ -929,9 +929,10 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (attr->wait_obj != FI_WAIT_NONE)
 		return -FI_ENOSYS;
 
-	cq = calloc(1, sizeof(*cq));
+	ofi_memalign((void **)&cq, EFA_MEM_ALIGNMENT, sizeof(*cq));
 	if (!cq)
 		return -FI_ENOMEM;
+	memset(cq, 0x0, sizeof(*cq));
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
@@ -987,6 +988,6 @@ close_util_cq:
 		EFA_WARN(FI_LOG_CQ, "Unable to close util cq: %s\n",
 			 fi_strerror(-retv));
 free:
-	free(cq);
+	ofi_freealign(cq);
 	return ret;
 }

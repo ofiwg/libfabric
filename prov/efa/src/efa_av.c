@@ -254,7 +254,7 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid)
 		return efa_ah;
 	}
 
-	efa_ah = malloc(sizeof(struct efa_ah));
+	ofi_memalign((void **)&efa_ah, EFA_MEM_ALIGNMENT, sizeof(struct efa_ah));
 	if (!efa_ah) {
 		errno = FI_ENOMEM;
 		EFA_WARN(FI_LOG_AV, "cannot allocate memory for efa_ah\n");
@@ -287,7 +287,7 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid)
 err_destroy_ibv_ah:
 	ibv_destroy_ah(efa_ah->ibv_ah);
 err_free_efa_ah:
-	free(efa_ah);
+	ofi_freealign(efa_ah);
 	ofi_genlock_unlock(&domain->util_domain.lock);
 	return NULL;
 }
@@ -316,7 +316,7 @@ void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah)
 		err = ibv_destroy_ah(ah->ibv_ah);
 		if (err)
 			EFA_WARN(FI_LOG_AV, "ibv_destroy_ah failed! err=%d\n", err);
-		free(ah);
+		ofi_freealign(ah);
 	}
 	ofi_genlock_unlock(&domain->util_domain.lock);
 }
@@ -479,7 +479,7 @@ int efa_av_reverse_av_add(struct efa_av *av,
 
 	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
 	if (!cur_entry) {
-		cur_entry = malloc(sizeof(*cur_entry));
+		ofi_memalign((void **)&cur_entry, EFA_MEM_ALIGNMENT, sizeof(*cur_entry));
 		if (!cur_entry) {
 			EFA_WARN(FI_LOG_AV, "Cannot allocate memory for cur_reverse_av entry\n");
 			return -FI_ENOMEM;
@@ -497,7 +497,7 @@ int efa_av_reverse_av_add(struct efa_av *av,
 	 * and only RDM endpoint can reach here. hence the following assertion
 	 */
 	assert(av->domain->info_type == EFA_INFO_RDM);
-	prv_entry = malloc(sizeof(*prv_entry));
+	ofi_memalign((void **)&prv_entry, EFA_MEM_ALIGNMENT, sizeof(*prv_entry));
 	if (!prv_entry) {
 		EFA_WARN(FI_LOG_AV, "Cannot allocate memory for prv_reverse_av entry\n");
 		return -FI_ENOMEM;
@@ -543,7 +543,7 @@ static void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 		  cur_reverse_av_entry);
 	if (cur_reverse_av_entry) {
 		HASH_DEL(*cur_reverse_av, cur_reverse_av_entry);
-		free(cur_reverse_av_entry);
+		ofi_freealign(cur_reverse_av_entry);
 	} else {
 		memset(&prv_key, 0, sizeof(prv_key));
 		prv_key.ahn = conn->ah->ahn;
@@ -553,7 +553,7 @@ static void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 			  prv_reverse_av_entry);
 		assert(prv_reverse_av_entry);
 		HASH_DEL(*prv_reverse_av, prv_reverse_av_entry);
-		free(prv_reverse_av_entry);
+		ofi_freealign(prv_reverse_av_entry);
 	}
 }
 
@@ -1340,7 +1340,7 @@ static int efa_av_close(struct fid *fid)
 		free(ep_addr_hashable);
 	}
 
-	free(av);
+	ofi_freealign(av);
 	return err;
 }
 
@@ -1404,9 +1404,10 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	else
 		attr->count = MAX(attr->count, EFA_MIN_AV_SIZE);
 
-	av = calloc(1, sizeof(*av));
+	ofi_memalign((void **)&av, EFA_MEM_ALIGNMENT, sizeof(*av));
 	if (!av)
 		return -FI_ENOMEM;
+	memset(av, 0x0, sizeof(*av));
 
 	if (attr->type == FI_AV_MAP) {
 		EFA_INFO(FI_LOG_AV, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
@@ -1485,6 +1486,6 @@ err_close_util_av_implicit:
 			 "Unable to close util_av_implicit: %s\n", fi_strerror(-retv));
 
 err:
-	free(av);
+	ofi_freealign(av);
 	return ret;
 }
