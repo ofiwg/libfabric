@@ -673,3 +673,240 @@ void test_av_implicit_av_lru_eviction(struct efa_resource **state)
 	/* Expected LRU list: HEAD->peer0->peer3 */
 	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->conn, peer3->conn);
 }
+
+/**
+ * @brief This test tests the implicit_refcnt and explicit_refcnt fields of AH
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_ah_refcnt(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t fi_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_domain *efa_domain;
+	struct efa_rdm_peer *peer;
+	struct efa_av *av;
+	struct efa_ah *efa_ah = NULL;
+	int err;
+
+	int allowed_ahs = 1;
+
+	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_dont_create_self_ah;
+	g_efa_unit_test_mocks.ibv_destroy_ah = &efa_mock_ibv_destroy_ah_dont_create_self_ah;
+	g_efa_unit_test_mocks.efa_ah_alloc = &efa_mock_efa_ah_alloc_dont_create_self_ah;
+	g_efa_unit_test_mocks.efa_ah_release = &efa_mock_efa_ah_release_dont_create_self_ah;
+
+	g_self_ah_cnt = 1;
+	g_ibv_ah_limit = g_self_ah_cnt + allowed_ahs;
+	assert_int_equal(g_ibv_ah_cnt, 0);
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+
+	/* Self AH creation will update g_ibv_ah_cnt but will not actually create AH */
+	assert_int_equal(g_ibv_ah_cnt, 1);
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 0);
+
+	/* Manually insert into implicit AV */
+	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	err = efa_av_insert_one(av, &raw_addr, &fi_addr, 0, NULL, true, true);
+	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep, fi_addr);
+	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+
+	efa_ah = peer->conn->ah;
+	
+	assert_int_equal(g_ibv_ah_cnt, 2);
+
+	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
+	assert_int_equal(efa_ah->explicit_refcnt, 0);
+	assert_int_equal(efa_ah->implicit_refcnt, 1);
+
+	/* Move implicit AV entry to explicit AV entry */
+	err = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr, 0, NULL);
+	assert_int_equal(err, 1);
+	
+	assert_int_equal(g_ibv_ah_cnt, 2);
+
+	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
+	assert_int_equal(efa_ah->explicit_refcnt, 1);
+	assert_int_equal(efa_ah->implicit_refcnt, 0);
+
+	err = fi_av_remove(resource->av, &fi_addr, 1, 0);
+	assert_int_equal(err, 0);
+
+	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 0);
+
+	/* Only the self AH should be left */
+	assert_int_equal(g_ibv_ah_cnt, 1);
+}
+
+/**
+ * @brief This test inserts one implicit AV entry and verifies that the
+ * implicitly created AH is evicted when an explicit AV entry is inserted. It
+ * requires at least 2 NICs because ibv_create_ah only works for valid GIDs.
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_ah_lru_eviction_impl(bool explicit)
+{
+	fi_addr_t fi_addr;
+	struct efa_ep_addr raw_addr[2] = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	struct fid_fabric *fabric_fid[2];
+	struct fid_domain *domain_fid[2];
+	struct fid_ep *ep_fid[2];
+	struct fid_cq *cq_fid[2];
+	struct fid_av *av_fid[2];
+	struct efa_domain *efa_domain[2];
+	struct efa_rdm_ep *efa_rdm_ep[2];
+	struct efa_rdm_peer *peer;
+	struct efa_av *efa_av[2];
+	struct efa_ah *efa_ah = NULL;
+	int err;
+	struct fi_av_attr av_attr = {0};
+	struct fi_cq_attr cq_attr = {
+		.format = FI_CQ_FORMAT_DATA
+	};
+	struct fi_info *hints, *info, *cur;
+	int num_nic = 0;
+
+	int allowed_ahs = 1;
+
+	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_dont_create_self_ah;
+	g_efa_unit_test_mocks.ibv_destroy_ah = &efa_mock_ibv_destroy_ah_dont_create_self_ah;
+	g_efa_unit_test_mocks.efa_ah_alloc = &efa_mock_efa_ah_alloc_dont_create_self_ah;
+	g_efa_unit_test_mocks.efa_ah_release = &efa_mock_efa_ah_release_dont_create_self_ah;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	fi_getinfo(FI_VERSION(2, 0), NULL, NULL, 0, hints, &info);
+	for (cur = info; cur; cur = cur->next) {
+		num_nic++;
+	}
+
+	if (num_nic < 2) {
+		return;
+	}
+
+	g_self_ah_cnt = 2;
+	g_ibv_ah_limit = g_self_ah_cnt + allowed_ahs; /* 2 self AH */
+	assert_int_equal(g_ibv_ah_cnt, 0);
+
+	cur = info;
+	for (int i = 0; i < 2; i++) {
+		err = fi_fabric(cur->fabric_attr, &fabric_fid[i], NULL);
+		assert_int_equal(err, 0);
+
+		err = fi_domain(fabric_fid[i], cur, &domain_fid[i], NULL);
+		assert_int_equal(err, 0);
+
+		efa_domain[i] = container_of(domain_fid[i], struct efa_domain, util_domain.domain_fid);
+
+		err = fi_av_open(domain_fid[i], &av_attr, &av_fid[i], NULL);
+		assert_int_equal(err, 0);
+
+		efa_av[i] = container_of(av_fid[i], struct efa_av, util_av.av_fid);
+
+		err = fi_cq_open(domain_fid[i], &cq_attr, &cq_fid[i], NULL);
+		assert_int_equal(err, 0);
+
+		err = fi_endpoint(domain_fid[i], cur, &ep_fid[i], NULL);
+		assert_int_equal(err, 0);
+
+		efa_rdm_ep[i] = container_of(ep_fid[i], struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+		fi_ep_bind(ep_fid[i], &av_fid[i]->fid, 0);
+		fi_ep_bind(ep_fid[i], &cq_fid[i]->fid, FI_SEND | FI_RECV);
+
+		err = fi_enable(ep_fid[i]);
+		assert_int_equal(err, 0);
+
+		err = fi_getname(&ep_fid[i]->fid, &raw_addr[i], &raw_addr_len);
+		assert_int_equal(err, 0);
+
+		cur = cur->next;
+	}
+
+	assert_int_equal(HASH_CNT(hh, efa_domain[0]->ah_map), 0);
+
+	/* Manually insert into implicit AV in first domain */
+	ofi_genlock_lock(&efa_rdm_ep[0]->base_ep.domain->srx_lock);
+	err = efa_av_insert_one(efa_av[0], &raw_addr[0], &fi_addr, 0, NULL, true, true);
+	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep[0], fi_addr);
+	ofi_genlock_unlock(&efa_rdm_ep[0]->base_ep.domain->srx_lock);
+
+	assert_int_equal(HASH_CNT(hh, efa_domain[0]->ah_map), 1);
+	efa_ah = peer->conn->ah;
+	assert_int_equal(efa_ah->implicit_refcnt, 1);
+	assert_int_equal(efa_ah->explicit_refcnt, 0);
+
+	if (explicit) {
+		err = fi_av_insert(av_fid[0], &raw_addr[1], 1, &fi_addr, 0, NULL);
+		assert_int_equal(err, 1);
+		peer = efa_rdm_ep_get_peer(efa_rdm_ep[0], fi_addr);
+	} else {
+		ofi_genlock_lock(&efa_rdm_ep[0]->base_ep.domain->srx_lock);
+		err = efa_av_insert_one(efa_av[0], &raw_addr[1], &fi_addr, 0, NULL, true, true);
+		peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep[0], fi_addr);
+		ofi_genlock_unlock(&efa_rdm_ep[0]->base_ep.domain->srx_lock);
+	}
+
+	assert_int_equal(HASH_CNT(hh, efa_domain[0]->ah_map), 1);
+
+	efa_ah = peer->conn->ah;
+	if (explicit) {
+		assert_int_equal(efa_ah->implicit_refcnt, 0);
+		assert_int_equal(efa_ah->explicit_refcnt, 1);
+	} else {
+		assert_int_equal(efa_ah->implicit_refcnt, 1);
+		assert_int_equal(efa_ah->explicit_refcnt, 0);
+	}
+
+	if (explicit) {
+		err = fi_av_remove(av_fid[0], &fi_addr, 1, 0);
+		assert_int_equal(err, 0);
+		assert_int_equal(HASH_CNT(hh, efa_domain[0]->ah_map), 0);
+	}
+
+	for (int i = 0; i < 2; i++) {
+		efa_rdm_ep[i]->base_ep.self_ah = NULL;
+		fi_close(&ep_fid[i]->fid);
+		fi_close(&cq_fid[i]->fid);
+		fi_close(&av_fid[i]->fid);
+		fi_close(&domain_fid[i]->fid);
+		fi_close(&fabric_fid[i]->fid);
+	}
+	fi_freeinfo(hints);
+	fi_freeinfo(info);
+}
+
+/**
+ * @brief This test inserts one implicit AV entry and verifies that the
+ * implicitly created AH is evicted when an explicit AV entry is inserted. It
+ * requires at least 2 NICs because ibv_create_ah only works for valid GIDs.
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_ah_lru_eviction_explicit_av_insert(struct efa_resource **state)
+{
+	test_ah_lru_eviction_impl(true);
+}
+
+/**
+ * @brief This test inserts one implicit AV entry and verifies that the
+ * implicitly created AH is evicted when another implicit AV entry is inserted.
+ * It requires at least 2 NICs because ibv_create_ah only works for valid GIDs.
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_ah_lru_eviction_implicit_av_insert(struct efa_resource **state)
+{
+	test_ah_lru_eviction_impl(false);
+}

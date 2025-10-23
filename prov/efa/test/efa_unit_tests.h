@@ -18,6 +18,11 @@
 #include "efa.h"
 #include "efa_unit_test_mocks.h"
 
+extern int g_ibv_ah_limit;
+extern int g_ibv_ah_cnt;
+extern int g_self_ah_cnt;
+extern struct ibv_ah g_dummy_ah;
+
 extern struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list;
 extern struct efa_unit_test_mocks g_efa_unit_test_mocks;
 extern struct efa_env efa_env;
@@ -118,6 +123,9 @@ void test_av_implicit();
 void test_av_implicit_to_explicit();
 void test_av_implicit_av_lru_insertion();
 void test_av_implicit_av_lru_eviction();
+void test_ah_refcnt();
+void test_ah_lru_eviction_explicit_av_insert();
+void test_ah_lru_eviction_implicit_av_insert();
 /* end efa_unit_test_av.c */
 
 void test_efa_device_construct_error_handling();

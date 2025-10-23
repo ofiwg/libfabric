@@ -35,6 +35,8 @@ _efa_files = \
 	prov/efa/src/efa_hmem.c \
 	prov/efa/src/efa_shm.c \
 	prov/efa/src/efa_av.c \
+	prov/efa/src/efa_ah.c \
+	prov/efa/src/efa_conn.c \
 	prov/efa/src/efa_domain.c \
 	prov/efa/src/efa_fabric.c \
 	prov/efa/src/efa_mr.c \
@@ -83,6 +85,8 @@ endif ENABLE_EFA_UNIT_TEST
 _efa_headers = \
 	prov/efa/src/efa.h \
 	prov/efa/src/efa_av.h \
+	prov/efa/src/efa_ah.h \
+	prov/efa/src/efa_conn.h \
 	prov/efa/src/efa_mr.h \
 	prov/efa/src/efa_shm.h \
 	prov/efa/src/efa_hmem.h \
@@ -173,8 +177,11 @@ prov_efa_test_efa_unit_test_CPPFLAGS = $(efa_CPPFLAGS)
 prov_efa_test_efa_unit_test_LDADD = $(cmocka_LIBS) $(linkback)
 prov_efa_test_efa_unit_test_LDFLAGS = $(cmocka_rpath) $(efa_LDFLAGS) $(cmocka_LDFLAGS) \
 					-Wl,--wrap=ibv_create_ah \
+					-Wl,--wrap=ibv_destroy_ah \
 					-Wl,--wrap=ibv_is_fork_initialized \
 					-Wl,--wrap=efadv_query_device \
+					-Wl,--wrap=efa_ah_alloc \
+					-Wl,--wrap=efa_ah_release \
 					-Wl,--wrap=ofi_cudaMalloc \
 					-Wl,--wrap=ofi_copy_from_hmem_iov \
 					-Wl,--wrap=efa_rdm_pke_read \
