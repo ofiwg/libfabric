@@ -99,6 +99,19 @@ def rma_fabric(cmdline_args, fabric):
         pytest.skip("FI_RMA is not supported. Skip rma tests on efa-direct.")
     return fabric
 
+
+@pytest.fixture(scope="function", params=["rx-cq-data", "no-rx-cq-data"])
+def rx_cq_data_cli(request, fabric, rma_operation_type):
+    if request.param == "no-rx-cq-data":
+        if rma_operation_type != "writedata":
+            pytest.skip("the rx cq data mode is only applied for writedata")
+        if fabric == "efa-direct" :
+            return " --no-rx-cq-data"
+        else:
+            pytest.skip("efa fabric ignores the rx cq data mode")
+    return " "
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_collection_modifyitems(session, config, items):
     # Called after collection has been performed, may filter or re-order the items in-place

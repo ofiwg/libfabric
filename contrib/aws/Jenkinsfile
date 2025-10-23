@@ -178,7 +178,7 @@ pipeline {
             steps {
                 script {
                     def stages = [:]
-                    def timeout = "--timeout 270"
+                    def timeout = "--timeout 300"
                     def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID"
                     // onesided tests are covered by imb, collective tests are covered by omb
                     def mpi_collective_tests = "'test_omb and not onesided'"
