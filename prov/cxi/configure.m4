@@ -140,6 +140,13 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 				[#include "libcxi/libcxi.h"]
 			)
 
+			AC_CHECK_DECL([cxil_alloc_trig_cp],
+				[AC_DEFINE([CXI_HAVE_ALLOC_TRIG_CP],[1],
+				    [Whether libcxi.h has cxil_alloc_trig_cp() support])],
+				[],
+				[#include "libcxi/libcxi.h"]
+			)
+
 			CPPFLAGS=$cxi_configure_save_CPPFLAGS
 			cxi_CPPFLAGS="$cxi_CPPFLAGS $libcurl_CPPFLAGS"
 			cxi_LDFLAGS="$cxi_LDFLAGS $libcurl_LDFLAGS"
