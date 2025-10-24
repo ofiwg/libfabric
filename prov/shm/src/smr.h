@@ -72,6 +72,11 @@
 #ifndef _SMR_H_
 #define _SMR_H_
 
+/*
+ * Set alignment to aarch64 and x86 cache line size.
+ */
+#define SHM_SMR_BUFPOOL_ALIGNMENT       (64)
+
 struct smr_env {
 	size_t sar_threshold;
 	int disable_cma;
