@@ -20,10 +20,31 @@ void efa_mock_ibv_send_wr_list_destruct(struct efa_mock_ibv_send_wr_list *wr_lis
 
 struct ibv_ah *__real_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
+int __real_ibv_destroy_ah(struct ibv_ah *ibv_ah);
+
 struct ibv_ah *efa_mock_ibv_create_ah_check_mock(struct ibv_pd *pd, struct ibv_ah_attr *attr);
+
+struct ibv_ah *efa_mock_ibv_create_ah_mock_enomem(struct ibv_pd *pd, struct ibv_ah_attr *attr);
+
+struct ibv_ah *efa_mock_ibv_create_ah_dont_create_self_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr);
+
+int efa_mock_ibv_destroy_ah_dont_create_self_ah(struct ibv_ah *ibv_ah);
 
 int __real_efadv_query_device(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 			      uint32_t inlen);
+
+struct efa_ah *__real_efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
+			    bool insert_implicit_av);
+
+struct efa_ah *efa_mock_efa_ah_alloc_dont_create_self_ah(struct efa_domain *domain, const uint8_t *gid,
+			    bool insert_implicit_av);
+
+void __real_efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
+		    bool release_from_implicit_av);
+
+void efa_mock_efa_ah_release_dont_create_self_ah(struct efa_domain *domain,
+						 struct efa_ah *ah,
+						 bool release_from_implicit_av);
 
 int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 					    uint32_t inlen);
@@ -31,6 +52,8 @@ int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibvctx, struct e
 extern void *g_ibv_submitted_wr_id_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
 
 extern int g_ibv_submitted_wr_id_cnt;
+
+void efa_ibv_ah_limit_cnt_reset();
 
 void efa_ibv_submitted_wr_id_vec_clear();
 
@@ -140,9 +163,15 @@ struct efa_unit_test_mocks
 	uint64_t local_host_id;
 	uint64_t peer_host_id;
 	struct ibv_ah *(*ibv_create_ah)(struct ibv_pd *pd, struct ibv_ah_attr *attr);
+	int (*ibv_destroy_ah)(struct ibv_ah *ibv_ah);
 
 	int (*efadv_query_device)(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 							  uint32_t inlen);
+	struct efa_ah *(*efa_ah_alloc)(struct efa_domain *domain,
+				       const uint8_t *gid,
+				       bool insert_implicit_av);
+	void (*efa_ah_release)(struct efa_domain *domain, struct efa_ah *ah,
+		    bool release_from_implicit_av);
 #if HAVE_EFADV_CQ_EX
 
 	struct ibv_cq_ex *(*efadv_create_cq)(struct ibv_context *ibvctx,
