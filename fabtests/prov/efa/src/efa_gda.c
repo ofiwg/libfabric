@@ -227,7 +227,7 @@ static int run()
 			return ret;
 		}
 
-		if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
 			ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(),
 					  opts.transfer_size);
 			if (ret)
@@ -310,7 +310,7 @@ static int run()
 			} while (ret == 0);
 
 		verify_data:
-			if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
 				ret = ft_check_buf((char *) rx_buf,
 						   opts.transfer_size);
 				if (ret)
@@ -348,7 +348,7 @@ int main(int argc, char **argv)
 			ft_parse_api_opts(op, optarg, hints, &opts);
 			break;
 		case 'v':
-			opts.options |= FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE;
+			opts.options |= FT_OPT_VERIFY_DATA;
 			break;
 		case '?':
 		case 'h':
