@@ -119,6 +119,120 @@ LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_TP_PROV, completion_with_opcode, EFA_TP_
 	LTTNG_UST_TP_ARGS(X_WR_ID_OPCODE_ARGS))
 LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_TP_PROV, handle_completion, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
 
+#if HAVE_EFA_DATA_PATH_DIRECT
+
+// Direct data path tracepoints - similar to rdma-core EFA provider
+#include "efa_io_defs.h"
+#include <infiniband/verbs.h>
+
+LTTNG_UST_TRACEPOINT_ENUM(efa, efa_io_send_op_type,
+	LTTNG_UST_TP_ENUM_VALUES(
+		lttng_ust_field_enum_value("EFA_IO_SEND", EFA_IO_SEND)
+		lttng_ust_field_enum_value("EFA_IO_RDMA_READ", EFA_IO_RDMA_READ)
+		lttng_ust_field_enum_value("EFA_IO_RDMA_WRITE", EFA_IO_RDMA_WRITE)
+	)
+)
+
+
+LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_TP_PROV, data_path_direct_post_recv_class,
+	LTTNG_UST_TP_ARGS(
+		const char *, dev_name,
+		uint64_t, wr_id,
+		uint32_t, qp_num,
+		int, num_sge
+	),
+	LTTNG_UST_TP_FIELDS(
+		lttng_ust_field_string(dev_name, dev_name)
+		lttng_ust_field_integer(uint64_t, wr_id, wr_id)
+		lttng_ust_field_integer(uint32_t, qp_num, qp_num)
+		lttng_ust_field_integer(int, num_sge, num_sge)
+	)
+)
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_TP_PROV, data_path_direct_post_recv_class, EFA_TP_PROV,
+	data_path_direct_post_recv,
+	LTTNG_UST_TP_ARGS(
+		const char *, dev_name,
+		uint64_t, wr_id,
+		uint32_t, qp_num,
+		int, num_sge
+	)
+)
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_TP_PROV, data_path_direct_post_recv, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
+LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_TP_PROV, data_path_direct_post_send_class,
+	LTTNG_UST_TP_ARGS(
+		const char *, dev_name,
+		uint64_t, wr_id,
+		uint8_t, op_type,
+		uint32_t, src_qp_num,
+		uint32_t, dst_qp_num,
+		uint16_t, ah_num,
+		uint32_t, length
+	),
+	LTTNG_UST_TP_FIELDS(
+		lttng_ust_field_string(dev_name, dev_name)
+		lttng_ust_field_integer(uint64_t, wr_id, wr_id)
+		lttng_ust_field_enum(efa, efa_io_send_op_type, uint8_t, op_type, op_type)
+		lttng_ust_field_integer(uint32_t, src_qp_num, src_qp_num)
+		lttng_ust_field_integer(uint32_t, dst_qp_num, dst_qp_num)
+		lttng_ust_field_integer(uint16_t, ah_num, ah_num)
+		lttng_ust_field_integer(uint32_t, length, length)
+	)
+)
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_TP_PROV, data_path_direct_post_send_class, EFA_TP_PROV,
+	data_path_direct_post_send,
+	LTTNG_UST_TP_ARGS(
+		const char *, dev_name,
+		uint64_t, wr_id,
+		uint8_t, op_type,
+		uint32_t, src_qp_num,
+		uint32_t, dst_qp_num,
+		uint16_t, ah_num,
+		uint32_t, length
+	)
+)
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_TP_PROV, data_path_direct_post_send, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
+LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_TP_PROV, data_path_direct_process_completion_class,
+	LTTNG_UST_TP_ARGS(
+		const char *, dev_name,
+		const struct ibv_cq_ex *, ibvcqx,
+		int, opcode,
+		uint32_t, src_qp_num,
+		uint32_t, dst_qp_num,
+		uint16_t, ah_num,
+		uint32_t, length
+	),
+	LTTNG_UST_TP_FIELDS(
+		lttng_ust_field_string(dev_name, dev_name)
+		lttng_ust_field_integer(uint64_t, wr_id, ibvcqx->wr_id)
+		lttng_ust_field_integer(int, status, ibvcqx->status)
+		lttng_ust_field_integer(int, opcode, opcode)
+		lttng_ust_field_integer(uint32_t, src_qp_num, src_qp_num)
+		lttng_ust_field_integer(uint32_t, dst_qp_num, dst_qp_num)
+		lttng_ust_field_integer(uint16_t, ah_num, ah_num)
+		lttng_ust_field_integer(uint32_t, length, length)
+	)
+)
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_TP_PROV, data_path_direct_process_completion_class, EFA_TP_PROV,
+	data_path_direct_process_completion,
+	LTTNG_UST_TP_ARGS(
+		const char *, dev_name,
+		const struct ibv_cq_ex *, ibvcqx,
+		int, opcode,
+		uint32_t, src_qp_num,
+		uint32_t, dst_qp_num,
+		uint16_t, ah_num,
+		uint32_t, length
+	)
+)
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_TP_PROV, data_path_direct_process_completion, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
+#endif /* HAVE_EFA_DATA_PATH_DIRECT */
+
 #endif /* _EFA_TP_DEF_H */
 
 #include <lttng/tracepoint-event.h>

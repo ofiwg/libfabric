@@ -944,8 +944,7 @@ void test_info_reuse_domain_via_name()
 	test_info_reuse_fabric_domain(setup_domain_name_hints, true, true);
 }
 static void test_info_direct_rma_common(bool mock_unsolicited_write_recv, bool set_rx_cq_data,
-					size_t request_cq_data_size, int expected_err,
-					size_t expected_cq_data_size, bool expect_rx_cq_data_mode)
+					int expected_err, size_t expected_cq_data_size, bool expect_rx_cq_data_mode)
 {
 	struct fi_info *hints, *info;
 	int err;
@@ -959,8 +958,6 @@ static void test_info_direct_rma_common(bool mock_unsolicited_write_recv, bool s
 	hints->caps |= FI_RMA;
 	if (set_rx_cq_data)
 		hints->mode |= FI_RX_CQ_DATA;
-	if (request_cq_data_size > 0)
-		hints->domain_attr->cq_data_size = request_cq_data_size;
 
 	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info);
 	fi_freeinfo(hints);
@@ -989,15 +986,15 @@ static void test_info_direct_rma_common(bool mock_unsolicited_write_recv, bool s
  */
 void test_info_direct_rma_when_no_unsolicited_write_recv_and_rx_cq_data()
 {
-	test_info_direct_rma_common(false, true, 0, 0, 4, true);
+	test_info_direct_rma_common(false, true, 0, 4, true);
 }
 
 /**
- * @brief Test that when FI_RX_CQ_DATA is not requested and unsolicited write recv is OFF, cq_data_size is 0
+ * @brief Test that when FI_RX_CQ_DATA is not requested and unsolicited write recv is OFF, fi_getinfo fails
  */
-void test_info_direct_rma_when_no_rx_cq_data_and_zero_cq_data_size()
+void test_info_direct_rma_when_no_unsolicited_write_recv_and_no_rx_cq_data()
 {
-	test_info_direct_rma_common(false, false, 0, 0, 0, false);
+	test_info_direct_rma_common(false, false, -FI_ENODATA, 0, false);
 }
 
 /**
@@ -1006,12 +1003,5 @@ void test_info_direct_rma_when_no_rx_cq_data_and_zero_cq_data_size()
 void test_info_direct_rma_when_unsolicited_write_recv_on_and_no_rx_cq_data()
 {
 	return;
-	test_info_direct_rma_common(true, false, 0, 0, 4, false);
-}
-/**
- * @brief Test that when user requests non-zero cq_data_size but unsolicited write recv is OFF, fi_getinfo fails
- */
-void test_info_direct_rma_when_no_unsolicited_write_recv_and_nonzero_cq_data_size_and_no_rx_cq_data()
-{
-	test_info_direct_rma_common(false, false, 4, -FI_ENODATA, 0, false);
+	test_info_direct_rma_common(true, false, 0, 4, false);
 }

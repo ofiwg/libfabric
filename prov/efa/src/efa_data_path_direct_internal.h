@@ -33,6 +33,7 @@
 #include "efa_data_path_direct_structs.h"
 #include "efa_errno.h"
 #include "efa_mmio.h"
+#include "efa_tp.h"
 
 /* Compiler optimization hints for performance-critical functions */
 #define EFA_ALWAYS_INLINE __attribute__((always_inline)) static inline
@@ -283,6 +284,10 @@ efa_data_path_direct_process_ex_cqe(struct efa_ibv_cq *ibv_cq,
 				ibv_cq->data_path_direct.cur_wq->wrid[wrid_idx];
 		ibvcqx->status = to_ibv_status(cqe->status);
 	}
+
+#if HAVE_LTTNG
+	efa_data_path_direct_tracepoint_process_completion(qp, ibvcqx, cqe);
+#endif /* HAVE_LTTNG */
 }
 
 /**
@@ -561,12 +566,14 @@ EFA_ALWAYS_INLINE void efa_send_wr_set_rdma_addr(struct efa_io_tx_wqe *tx_wqe,
 }
 
 EFA_ALWAYS_INLINE void
-efa_data_path_direct_send_wr_post_working(struct efa_data_path_direct_sq *sq,
+efa_data_path_direct_send_wr_post_working(struct efa_qp *qp,
+					  struct efa_data_path_direct_sq *sq,
 					  bool force_doorbell)
 {
 	uint32_t sq_desc_idx;
 
 	sq_desc_idx = (sq->wq.pc - 1) & sq->wq.desc_mask;
+
 	mmio_memcpy_x64((struct efa_io_tx_wqe *)sq->desc + sq_desc_idx,
 			&sq->curr_tx_wqe, sizeof(struct efa_io_tx_wqe));
 	/* this routine only rings the doorbell if it must. */
@@ -576,6 +583,10 @@ efa_data_path_direct_send_wr_post_working(struct efa_data_path_direct_sq *sq,
 		mmio_wc_start();
 		sq->num_wqe_pending = 0;
 	}
+
+#if HAVE_LTTNG
+	efa_data_path_direct_tracepoint_post_send(qp,sq);
+#endif
 }
 
 EFA_ALWAYS_INLINE struct efa_io_tx_wqe *
@@ -600,7 +611,7 @@ efa_data_path_direct_send_wr_common(struct efa_qp *qp,
 	/* MODIFIED: if any are pending, copy out the previous one first: */
 	if (sq->num_wqe_pending) {
 		/* when reaching the sq max_batch, ring the db */
-		efa_data_path_direct_send_wr_post_working(sq, sq->num_wqe_pending == sq->wq.max_batch);
+		efa_data_path_direct_send_wr_post_working(qp, sq, sq->num_wqe_pending == sq->wq.max_batch);
 	}
 
 	memset(&sq->curr_tx_wqe, 0, sizeof(sq->curr_tx_wqe));
