@@ -208,7 +208,7 @@ pipeline {
         stage ('main') {
           steps {
             script {
-              withEnv(["TARGET=CTARGET"]) {
+              withEnv(["TARGET=${CTARGET}"]) {
                 dir (CI_LOCATION) {
                   return run_red("${env.MAIN_CONFIG}")
                 }
@@ -221,11 +221,13 @@ pipeline {
           options { skipDefaultCheckout() }
           steps {
             script {
-              dir (CI_LOCATION) {
-                def ret = run_red("${env.LEVEL_ZERO_CONFIG}")
-                send_logs("${env.CBJ_ADDR}", "${env.CBJ_KEY}",
-                          "${env.LOG_DIR}", "${env.LOG_DIR}")
-                return ret
+              withEnv(["TARGET=${CTARGET}"]) {
+                dir (CI_LOCATION) {
+                  def ret = run_red("${env.LEVEL_ZERO_CONFIG}")
+                  send_logs("${env.CBJ_ADDR}", "${env.CBJ_KEY}",
+                            "${env.LOG_DIR}", "${env.LOG_DIR}")
+                  return ret
+                }
               }
             }
           }
