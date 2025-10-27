@@ -229,9 +229,11 @@ void test_efa_use_device_rdma_opt0();
 void test_efa_use_device_rdma_env1();
 void test_efa_use_device_rdma_env0();
 void test_efa_use_device_rdma_opt_old();
-void test_info_direct_rma_when_no_unsolicited_write_recv_and_rx_cq_data();
-void test_info_direct_rma_when_no_unsolicited_write_recv_and_no_rx_cq_data();
-void test_info_direct_rma_when_unsolicited_write_recv_on_and_no_rx_cq_data();
+void test_info_direct_null_hints_return_rma_and_rx_cq_data();
+void test_info_direct_rma_with_rx_cq_data_when_no_unsolicited_write_recv();
+void test_info_direct_rma_without_rx_cq_data_when_no_unsolicited_write_recv();
+void test_info_direct_no_rma_no_rx_cq_data_when_no_unsolicited_write_recv();
+void test_info_direct_rma_without_rx_cq_data_when_unsolicited_write_recv_supported();
 /* end efa_unit_test_info.c */
 
 void test_efa_srx_min_multi_recv_size();
