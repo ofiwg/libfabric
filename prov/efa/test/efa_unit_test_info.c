@@ -943,8 +943,11 @@ void test_info_reuse_domain_via_name()
 {
 	test_info_reuse_fabric_domain(setup_domain_name_hints, true, true);
 }
-static void test_info_direct_rma_common(bool mock_unsolicited_write_recv, bool set_rx_cq_data,
-					int expected_err, size_t expected_cq_data_size, bool expect_rx_cq_data_mode)
+
+static void test_info_direct_rma_common(bool mock_unsolicited_write_recv, 
+					bool set_rma, bool set_rx_cq_data,
+					int expected_err, size_t expected_cq_data_size, 
+					bool expect_rx_cq_data_mode, bool expect_rma_caps)
 {
 	struct fi_info *hints, *info;
 	int err;
@@ -955,14 +958,17 @@ static void test_info_direct_rma_common(bool mock_unsolicited_write_recv, bool s
 
 	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	assert_non_null(hints);
-	hints->caps |= FI_RMA;
+
+	if (set_rma)
+		hints->caps |= FI_RMA;
 	if (set_rx_cq_data)
 		hints->mode |= FI_RX_CQ_DATA;
 
 	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info);
 	fi_freeinfo(hints);
 
-	if (efa_device_support_rdma_read() && efa_device_support_rdma_write()) {
+	if ((efa_device_support_rdma_read() && efa_device_support_rdma_write()) ||
+	    (!set_rma && !set_rx_cq_data)) {
 		assert_int_equal(err, expected_err);
 		if (expected_err == 0) {
 			assert_non_null(info);
@@ -970,6 +976,18 @@ static void test_info_direct_rma_common(bool mock_unsolicited_write_recv, bool s
 			if (expect_rx_cq_data_mode) {
 				assert_true(info->mode & FI_RX_CQ_DATA);
 				assert_true(info->rx_attr->mode & FI_RX_CQ_DATA);
+			} else {
+				assert_false(info->mode & FI_RX_CQ_DATA);
+				assert_false(info->rx_attr->mode & FI_RX_CQ_DATA);
+			}
+			if (expect_rma_caps) {
+				assert_true(info->caps & FI_RMA);
+				assert_true(info->tx_attr->caps & OFI_TX_RMA_CAPS);
+				assert_true(info->rx_attr->caps & OFI_RX_RMA_CAPS);
+			} else {
+				assert_false(info->caps & FI_RMA);
+				assert_false(info->tx_attr->caps & OFI_TX_RMA_CAPS);
+				assert_false(info->rx_attr->caps & OFI_RX_RMA_CAPS);
 			}
 			fi_freeinfo(info);
 		} else {
@@ -982,26 +1000,60 @@ static void test_info_direct_rma_common(bool mock_unsolicited_write_recv, bool s
 }
 
 /**
- * @brief Test that when FI_RX_CQ_DATA is requested, cq_data_size is always 4
+ * @brief Test NULL hints return efa-direct info object with FI_RMA and FI_RX_CQ_DATA
  */
-void test_info_direct_rma_when_no_unsolicited_write_recv_and_rx_cq_data()
+void test_info_direct_null_hints_return_rma_and_rx_cq_data()
 {
-	test_info_direct_rma_common(false, true, 0, 4, true);
+	struct fi_info *info;
+	int err;
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, NULL, &info);
+
+	if (efa_device_support_rdma_read() && efa_device_support_rdma_write()) {
+		assert_int_equal(err, 0);
+		assert_non_null(info);
+		assert_int_equal(info->domain_attr->cq_data_size, 4);
+		assert_true(info->mode & FI_RX_CQ_DATA);
+		assert_true(info->rx_attr->mode & FI_RX_CQ_DATA);
+		assert_true(info->caps & FI_RMA);
+		assert_true(info->tx_attr->caps & OFI_TX_RMA_CAPS);
+		assert_true(info->rx_attr->caps & OFI_RX_RMA_CAPS);
+		fi_freeinfo(info);
+	}
 }
 
 /**
- * @brief Test that when FI_RX_CQ_DATA is not requested and unsolicited write recv is OFF, fi_getinfo fails
+ * @brief Test hints requesting FI_RMA with FI_RX_CQ_DATA when unsolicited write recv is not supported
+ * Should succeed and return info with both FI_RMA and FI_RX_CQ_DATA
  */
-void test_info_direct_rma_when_no_unsolicited_write_recv_and_no_rx_cq_data()
+void test_info_direct_rma_with_rx_cq_data_when_no_unsolicited_write_recv()
 {
-	test_info_direct_rma_common(false, false, -FI_ENODATA, 0, false);
+	test_info_direct_rma_common(false, true, true, 0, 4, true, true);
 }
 
 /**
- * @brief Test that when FI_RX_CQ_DATA is not requested and unsolicited write recv is ON, cq_data_size is 4
+ * @brief Test hints requesting FI_RMA without FI_RX_CQ_DATA when unsolicited write recv is not supported
+ * Should fail with -FI_ENODATA
  */
-void test_info_direct_rma_when_unsolicited_write_recv_on_and_no_rx_cq_data()
+void test_info_direct_rma_without_rx_cq_data_when_no_unsolicited_write_recv()
 {
-	return;
-	test_info_direct_rma_common(true, false, 0, 4, false);
+	test_info_direct_rma_common(false, true, false, -FI_ENODATA, 0, false, false);
+}
+
+/**
+ * @brief Test hints not requesting FI_RMA and FI_RX_CQ_DATA when unsolicited write recv is not supported
+ * Should succeed without FI_RMA capabilities
+ */
+void test_info_direct_no_rma_no_rx_cq_data_when_no_unsolicited_write_recv()
+{
+	test_info_direct_rma_common(false, false, false, 0, 4, false, false);
+}
+
+/**
+ * @brief Test hints requesting FI_RMA without FI_RX_CQ_DATA when unsolicited write recv is supported
+ * Should succeed with FI_RMA but no FI_RX_CQ_DATA
+ */
+void test_info_direct_rma_without_rx_cq_data_when_unsolicited_write_recv_supported()
+{
+	test_info_direct_rma_common(true, true, false, 0, 4, false, true);
 }

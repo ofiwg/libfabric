@@ -465,25 +465,39 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 	 * When application requests FI_RX_CQ_DATA, efa-direct
 	 * will respect it, and will finally disable unsolicited
 	 * write recv during the QP creation.
+	 * 
+	 * For NULL hints, return FI_RMA and FI_RX_CQ_DATA as 
+	 * efa direct can support them.
 	 */
-	if (hints && hints->mode & FI_RX_CQ_DATA) {
+	if (!hints || (hints && hints->mode & FI_RX_CQ_DATA)) {
 		info->mode |= FI_RX_CQ_DATA;
 		info->rx_attr->mode |= FI_RX_CQ_DATA;
 	}
 
-	if ((hints && (hints->caps & FI_RMA)) &&
-	    (!efa_device_support_unsolicited_write_recv() &&
-	     !(info->mode & FI_RX_CQ_DATA))) {
-		/**
-		 * RDMA with immediate needs to consume a recv buffer
-		 * when unsolicited write recv is not supported. So
-		 * FI_RX_CQ_DATA is required when application requests
-		 * FI_RMA.
-		 */
-		EFA_INFO(FI_LOG_CORE,
-			 "FI_RX_CQ_DATA is required for FI_RMA when "
-			 "unsolicited write recv is not supported.\n");
-		return -FI_ENODATA;
+	/**
+	 * When unsolicited write recv is not supported,
+	 * For hints that request FI_RMA but not FI_RX_CQ_DATA, we don't return efa-direct.
+	 * For hints that doesn't request FI_RMA and FI_RX_CQ_DATA, we will clear FI_RMA.
+	 */
+	if (hints && !efa_device_support_unsolicited_write_recv() &&
+	    !(info->mode & FI_RX_CQ_DATA)) {
+		if (hints->caps & FI_RMA) {
+			/**
+			 * RDMA with immediate needs to consume a recv buffer
+			 * when unsolicited write recv is not supported. So
+			 * FI_RX_CQ_DATA is required when application requests
+			 * FI_RMA.
+			 */
+			EFA_INFO(FI_LOG_CORE,
+				 "FI_RX_CQ_DATA is required for FI_RMA when "
+				 "unsolicited write recv is not supported.\n");
+			return -FI_ENODATA;
+		}
+		/** Util doesn't clear FI_RMA when !hints->caps so we always
+		 * clear it when user doesn't request it */
+		info->caps &= ~(OFI_TX_RMA_CAPS | OFI_RX_RMA_CAPS);
+		info->tx_attr->caps &= ~OFI_TX_RMA_CAPS;
+		info->rx_attr->caps &= ~OFI_RX_RMA_CAPS;
 	}
 	/*
 	 * Handle user-provided hints and adapt the info object passed back up
