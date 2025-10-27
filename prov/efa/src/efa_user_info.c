@@ -601,9 +601,15 @@ int efa_get_user_info(uint32_t version, const char *node,
 		dupinfo->fabric_attr->api_version = version;
 
 		if (EFA_INFO_TYPE_IS_RDM(prov_info)) {
+			if (hints && hints->fabric_attr && hints->fabric_attr->name &&
+			    strcasecmp(hints->fabric_attr->name, EFA_FABRIC_NAME))
+				continue;
+
 			ret = efa_user_info_alter_rdm(version, dupinfo, hints);
-			if (ret)
-				goto free_info;
+			if (ret) {
+				fi_freeinfo(dupinfo);
+				continue;
+			}
 
 			/* If application asked for FI_REMOTE_COMM but not FI_LOCAL_COMM, it
 			 * does not want to use shm. In this case, we honor the request by
@@ -615,9 +621,15 @@ int efa_get_user_info(uint32_t version, const char *node,
 		}
 
 		if (EFA_INFO_TYPE_IS_DIRECT(prov_info)) {
+			if (hints && hints->fabric_attr && hints->fabric_attr->name &&
+			    strcasecmp(hints->fabric_attr->name, EFA_DIRECT_FABRIC_NAME))
+				continue;
+
 			ret = efa_user_info_alter_direct(version, dupinfo, hints);
-			if (ret)
-				goto free_info;
+			if (ret) {
+				fi_freeinfo(dupinfo);
+				continue;
+			}
 		}
 
 		ofi_alter_info(dupinfo, hints, version);
