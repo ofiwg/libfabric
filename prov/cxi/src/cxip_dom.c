@@ -82,10 +82,10 @@ err_free_mem:
 
 /* Hardware only allows for 16 different command profiles per RGID. Since each
  * domain maps to a single RGID, this means effectively limits the number of
- * TX command queue per domain to be 16. Since one TX command queue is
- * reserved for triggered commands, real number is 15.
+ * TXQs per domain to be 16. Since one TXQ is reserved for triggered commands
+ * and the endpoint uses a TXQ, the actual number is 14.
  */
-#define MAX_DOM_TX_CMDQ 15U
+#define MAX_DOM_TX_CMDQ 14U
 
 static int cxip_domain_find_cmdq(struct cxip_domain *dom,
 				 uint16_t vni,
