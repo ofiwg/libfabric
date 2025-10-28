@@ -47,7 +47,8 @@ static int fi_opx_close_mr(fid_t fid)
 	struct fi_opx_domain *opx_domain = opx_mr->domain;
 
 	// TODO: Debug counters
-#ifdef HFISVC
+#if HAVE_HFISVC
+#if 0
 	/* The MR was recently opened, and we need to wait for it to reach
 	   OPENED state before we can close it. Callers to fi_close() don't
 	   gracefully handle EAGAIN to retry later, so we need to busy-wait */
@@ -113,6 +114,7 @@ static int fi_opx_close_mr(fid_t fid)
 	}
 
 	assert(opx_mr->hfisvc.state == OPX_MR_HFISVC_NOT_REGISTERED);
+#endif
 #endif
 
 	HASH_DEL(opx_domain->mr_hashmap, opx_mr);
@@ -260,7 +262,8 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	}
 
 	__attribute__((__unused__)) uint32_t hfisvc_access_key = 0;
-#ifdef HFISVC
+#if HAVE_HFISVC
+#if 0
 	if (opx_domain->use_hfisvc) {
 		ret = opx_hfisvc_keyset_alloc_key(opx_domain->hfisvc.access_key_set, &hfisvc_access_key, NULL);
 		if (ret) {
@@ -272,7 +275,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 		OPX_HFISVC_DEBUG_LOG("Allocated access_key=%u for buf=%p-%p\n", hfisvc_access_key, iov->iov_base,
 				     (void *) ((uintptr_t) iov->iov_base + iov->iov_len));
 	}
-
+#endif
 #endif
 
 	struct fi_opx_mr			      *opx_mr;
@@ -305,7 +308,8 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					opx_mr->mr_fid.key = requested_key;
 				}
 				opx_mr->attr.requested_key = opx_mr->mr_fid.key;
-#ifdef HFISVC
+#if HAVE_HFISVC
+#if 0
 				if (opx_domain->use_hfisvc) {
 					ret = opx_mr_hfisvc_open(opx_domain, opx_mr, iov, hmem_iface, hmem_device,
 								 hfisvc_access_key);
@@ -326,6 +330,8 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 				} else {
 					opx_mr->hfisvc.access_key = (uint32_t) -1;
 				}
+#endif
+				opx_mr->hfisvc.access_key = (uint32_t) -1;
 #else
 				opx_mr->hfisvc.access_key = (uint32_t) -1;
 #endif
@@ -356,7 +362,8 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 
 	opx_mr = calloc(1, sizeof(*opx_mr));
 	if (!opx_mr) {
-#ifdef HFISVC
+#if HAVE_HFISVC
+#if 0
 		if (opx_domain->use_hfisvc) {
 			opx_hfisvc_keyset_free_key(opx_domain->hfisvc.access_key_set, hfisvc_access_key, NULL);
 			OPX_HFISVC_DEBUG_LOG(
@@ -364,11 +371,13 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 				iov->iov_base, (void *) ((uintptr_t) iov->iov_base + iov->iov_len), hfisvc_access_key);
 		}
 #endif
+#endif
 		errno = FI_ENOMEM;
 		return -errno;
 	}
 
-#ifdef HFISVC
+#if HAVE_HFISVC
+#if 0
 	if (opx_domain->use_hfisvc) {
 		ret = opx_mr_hfisvc_open(opx_domain, opx_mr, iov, hmem_iface, hmem_device, hfisvc_access_key);
 		if (ret) {
@@ -381,6 +390,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 			return -errno;
 		}
 	}
+#endif
 #endif
 
 #ifdef OPX_HMEM

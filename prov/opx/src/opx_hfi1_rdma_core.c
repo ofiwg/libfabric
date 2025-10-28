@@ -840,29 +840,39 @@ int opx_hfi1_wrapper_context_open(const int unit, const int port, const uint64_t
 				  const enum opx_hfi1_type hfi1_type, void **ibv_context, unsigned int *user_version,
 				  int *fd_cdev, int *fd_verbs)
 {
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] Attempt HAVE_HFI1_DIRECT_VERBS\n");
-
-	if (opx_hfi1_rdma_op_initialize()) {
-		void *ibv_context = NULL;
-		int   fd	  = opx_hfi1_rdma_context_open(unit, port, open_timeout, user_version, &ibv_context);
-		if (fd != -1) {
-			internal->context.ibv_context = ibv_context;
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n",
-				     OPX_SW_HFI1_TYPE);
-			return fd;
+	if (!OPX_HFI1_VERBS_CONTEXTS_ONLY) {
+		int fd = opx_hfi_context_open(unit, port, open_timeout, user_version);
+		if (fd < 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Failed to open cdev context for HFI unit %d port %d type %u\n", unit, port, hfi1_type);
+			return -1;
 		}
-		/* fallback to cdev APIs */
-	}
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS fallback\n");
 
 		(*fd_cdev) = fd;
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] Attempt HAVE_HFI1_DIRECT_VERBS\n");
 
-	int fd = opx_hfi_context_open(unit, port, open_timeout, user_version);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n", OPX_SW_HFI1_TYPE);
-	return fd;
+	/* TODO: verbs contexts: Until we switch over to using verbs contexts exclusively, we need to avoid using the
+	 * new TID functions and setting the user_version. */
+	void *tmp_ibv_context = NULL;
+	int   verbs_fd	      = -1;
+	if (opx_hfi1_rdma_op_initialize(OPX_HFI1_VERBS_CONTEXTS_ONLY)) {
+		verbs_fd = opx_hfi1_rdma_context_open(unit, port, open_timeout, OPX_HFI1_VERBS_CONTEXTS_ONLY,
+						      user_version, &tmp_ibv_context);
+	}
+
+	(*fd_verbs)    = verbs_fd;
+	(*ibv_context) = (verbs_fd != -1) ? tmp_ibv_context : NULL;
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u %s\n", hfi1_type,
+		     (verbs_fd != -1) ? "ENABLED" : "DISABLED");
+
+	/* If we failed to open a verbs context, and we didn't already open a cdev context, fall back to cdev */
+	if (verbs_fd == -1 && OPX_HFI1_VERBS_CONTEXTS_ONLY) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS fallback\n");
+		(*fd_cdev) = opx_hfi_context_open(unit, port, open_timeout, user_version);
+	}
+	return ((*fd_cdev) < 0);
 }
 
 static int opx_get_current_proc_core()
