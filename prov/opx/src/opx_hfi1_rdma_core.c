@@ -36,6 +36,8 @@
 #include <rdma/hfi/hfi1_ioctl.h>
 #include <rdma/hfi/hfi1_user.h>
 
+#define OPX_HFI1_VERBS_CONTEXTS_ONLY (false)
+
 /* Check for hfi1 verbs direct (rdma-core) interface support before including
  * new headers.
  * Configure assumed that verbs.h comes with hfi1dv.h
@@ -128,7 +130,7 @@ int opx_open_hfi1_rdma_fallback(void)
 }
 
 __OPX_FORCE_INLINE__
-bool opx_hfi1_rdma_op_initialize(void)
+bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] HAVE_HFI1_DIRECT_VERBS %u \n",
 		     opx_rdma_ops.hfi1_direct_verbs_enabled);
@@ -186,8 +188,10 @@ bool opx_hfi1_rdma_op_initialize(void)
 	}
 
 	/* Set new tid functions */
-	opx_fn_hfi1_update_tid = opx_hfi1_rdma_update_tid;
-	opx_fn_hfi1_free_tid   = opx_hfi1_rdma_free_tid;
+	if (use_new_tid_ops) {
+		opx_fn_hfi1_update_tid = opx_hfi1_rdma_update_tid;
+		opx_fn_hfi1_free_tid   = opx_hfi1_rdma_free_tid;
+	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] HAVE_HFI1_DIRECT_VERBS %u \n",
 		     opx_rdma_ops.hfi1_direct_verbs_enabled);
@@ -195,8 +199,8 @@ bool opx_hfi1_rdma_op_initialize(void)
 	return opx_rdma_ops.hfi1_direct_verbs_enabled;
 }
 
-static int opx_hfi1_rdma_context_open(int unit, int port, uint64_t open_timeout, unsigned int *user_version,
-				      void **p_ibv_context)
+static int opx_hfi1_rdma_context_open(int unit, int port, uint64_t open_timeout, const bool set_user_version,
+				      unsigned int *user_version, void **p_ibv_context)
 {
 	struct ibv_device **dev_list	= NULL;
 	struct ibv_context *ibv_context = NULL;
@@ -276,7 +280,10 @@ static int opx_hfi1_rdma_context_open(int unit, int port, uint64_t open_timeout,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "[HFI1-DIRECT] hfi_unit %d hfi1_get_vers success, version 0x%x\n", unit, get_vers_rsp.version);
 
-	*user_version  = get_vers_rsp.version;
+	if (set_user_version) {
+		*user_version = get_vers_rsp.version;
+	}
+
 	*p_ibv_context = (void *) ibv_context;
 
 	return ibv_context->cmd_fd;
@@ -732,8 +739,8 @@ bool opx_hfi1_direct_verbs_enabled(void)
 }
 
 __OPX_FORCE_INLINE__
-int opx_hfi1_rdma_context_open(int unit, int port, uint64_t open_timeout, unsigned int *user_version,
-			       void **ibv_context)
+int opx_hfi1_rdma_context_open(int unit, int port, uint64_t open_timeout, const bool set_user_version,
+			       unsigned int *user_version, void **ibv_context)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS\n");
 	return -1;
@@ -768,7 +775,7 @@ int opx_hfi1_rdma_reset_context(struct fi_opx_hfi1_context *context)
 }
 
 __OPX_FORCE_INLINE__
-bool opx_hfi1_rdma_op_initialize(void)
+bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS\n");
 
@@ -824,29 +831,43 @@ void opx_hfi1_rdma_context_close(void *ibv_context)
  */
 
 /* Context open function */
-int opx_hfi1_wrapper_context_open(struct fi_opx_hfi1_context_internal *internal, int unit, int port,
-				  uint64_t open_timeout, unsigned int *user_version)
+int opx_hfi1_wrapper_context_open(const int unit, const int port, const uint64_t open_timeout,
+				  const enum opx_hfi1_type hfi1_type, void **ibv_context, unsigned int *user_version,
+				  int *fd_cdev, int *fd_verbs)
 {
+	if (!OPX_HFI1_VERBS_CONTEXTS_ONLY) {
+		int fd = opx_hfi_context_open(unit, port, open_timeout, user_version);
+		if (fd < 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Failed to open cdev context for HFI unit %d port %d type %u\n", unit, port, hfi1_type);
+			return -1;
+		}
+
+		(*fd_cdev) = fd;
+	}
+
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] Attempt HAVE_HFI1_DIRECT_VERBS\n");
 
-	if (opx_hfi1_rdma_op_initialize()) {
-		void *ibv_context = NULL;
-		int   fd	  = opx_hfi1_rdma_context_open(unit, port, open_timeout, user_version, &ibv_context);
-		if (fd != -1) {
-			internal->context.ibv_context = ibv_context;
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n",
-				     OPX_SW_HFI1_TYPE);
-			return fd;
-		}
-		/* fallback to cdev APIs */
+	/* TODO: verbs contexts: Until we switch over to using verbs contexts exclusively, we need to avoid using the
+	 * new TID functions and setting the user_version. */
+	void *tmp_ibv_context = NULL;
+	int   verbs_fd	      = -1;
+	if (opx_hfi1_rdma_op_initialize(OPX_HFI1_VERBS_CONTEXTS_ONLY)) {
+		verbs_fd = opx_hfi1_rdma_context_open(unit, port, open_timeout, OPX_HFI1_VERBS_CONTEXTS_ONLY,
+						      user_version, &tmp_ibv_context);
 	}
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS fallback\n");
 
-	internal->context.ibv_context = NULL;
+	(*fd_verbs)    = verbs_fd;
+	(*ibv_context) = (verbs_fd != -1) ? tmp_ibv_context : NULL;
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u %s\n", hfi1_type,
+		     (verbs_fd != -1) ? "ENABLED" : "DISABLED");
 
-	int fd = opx_hfi_context_open(unit, port, open_timeout, user_version);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi1_type %u\n", OPX_SW_HFI1_TYPE);
-	return fd;
+	/* If we failed to open a verbs context, and we didn't already open a cdev context, fall back to cdev */
+	if (verbs_fd == -1 && OPX_HFI1_VERBS_CONTEXTS_ONLY) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS fallback\n");
+		(*fd_cdev) = opx_hfi_context_open(unit, port, open_timeout, user_version);
+	}
+	return ((*fd_cdev) < 0);
 }
 
 static int opx_get_current_proc_core()
@@ -958,7 +979,7 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 struct _hfi_ctrl *opx_hfi1_wrapper_userinit(int fd, struct fi_opx_hfi1_context_internal *internal, int unit, int port)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] fd %d\n", fd);
-	if (opx_hfi1_direct_verbs_enabled()) {
+	if (OPX_HFI1_VERBS_CONTEXTS_ONLY && opx_hfi1_direct_verbs_enabled()) {
 		struct _hfi_ctrl *ctrl = opx_hfi1_rdma_userinit(fd, internal, unit, port);
 		OPX_VERBOSE_SELECTION(internal, ctrl);
 		return ctrl;
@@ -973,7 +994,7 @@ int opx_hfi1_wrapper_set_pkey(struct fi_opx_hfi1_context_internal *internal, uin
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] ibv_context %p, pkkey %#X\n",
 		     internal->context.ibv_context, pkey);
-	if (!opx_hfi1_direct_verbs_enabled()) {
+	if (!OPX_HFI1_VERBS_CONTEXTS_ONLY || !opx_hfi1_direct_verbs_enabled()) {
 		struct _hfi_ctrl *ctrl = internal->ctrl;
 		return opx_hfi_set_pkey(ctrl, pkey);
 	}
@@ -984,8 +1005,8 @@ int opx_hfi1_wrapper_ack_events(struct fi_opx_hfi1_context *context, uint64_t ac
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] ibv_context %p, ackbits %#lX\n",
 		     context->ibv_context, ackbits);
-	if (!opx_hfi1_direct_verbs_enabled()) {
-		return opx_hfi_ack_events(context->fd, ackbits);
+	if (!OPX_HFI1_VERBS_CONTEXTS_ONLY || !opx_hfi1_direct_verbs_enabled()) {
+		return opx_hfi_ack_events(context->fd_cdev, ackbits);
 	}
 	return opx_hfi1_rdma_ack_events(context, ackbits);
 }
@@ -993,8 +1014,8 @@ int opx_hfi1_wrapper_ack_events(struct fi_opx_hfi1_context *context, uint64_t ac
 int opx_hfi1_wrapper_reset_context(struct fi_opx_hfi1_context *context)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] ibv_context %pX\n", context->ibv_context);
-	if (!opx_hfi1_direct_verbs_enabled()) {
-		return opx_hfi_reset_context(context->fd);
+	if (!OPX_HFI1_VERBS_CONTEXTS_ONLY || !opx_hfi1_direct_verbs_enabled()) {
+		return opx_hfi_reset_context(context->fd_cdev);
 	}
 	return opx_hfi1_rdma_reset_context(context);
 }
