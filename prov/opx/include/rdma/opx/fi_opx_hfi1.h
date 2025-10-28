@@ -560,14 +560,15 @@ struct fi_opx_hfi1_context {
 
 	} info;
 
-	int		   fd;
+	int		   fd_cdev;
+	int		   fd_verbs;
 	opx_lid_t	   lid;
-	struct _hfi_ctrl  *ctrl;
 	enum opx_hfi1_type hfi1_type;
+	struct _hfi_ctrl  *ctrl;
 	uint32_t	   hfi_unit;
 	uint32_t	   hfi_port;
 	uint16_t	   subctxt_cnt;
-	uint16_t	   unused;
+	uint16_t	   unused[3];
 
 	uint64_t gid_hi;
 	uint64_t gid_lo;
@@ -872,7 +873,8 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	/*	Not printing                                Context info.rxe.uregbase                   */
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.id                   %#X\n", context->info.rxe.id);
 
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context fd                            %#X \n", context->fd);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context fd_cdev                       %#X \n", context->fd_cdev);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context fd_verbs                      %#X \n", context->fd_verbs);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context lid                           %#X \n", context->lid);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ctrl                          %p  \n", context->ctrl);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context hfi1_type                     %#X \n", context->hfi1_type);
