@@ -155,7 +155,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, int writev_rc, str
 		"(%d) ===================================== SDMA_WE -- "
 		"called writev rc=%d Params were: "
 		"fd=%d iovecs=%p num_iovs=%d \n",
-		pid, writev_rc, opx_ep->hfi->fd, iovs, num_iovs);
+		pid, writev_rc, opx_ep->hfi->fd_cdev, iovs, num_iovs);
 	fprintf(stderr, "(%d) hfi->info.sdma.queue_size == %0hu\n", pid, opx_ep->hfi->info.sdma.queue_size);
 	fprintf(stderr, "(%d) hfi->info.sdma.fill_index == %0hu\n", pid, opx_ep->hfi->info.sdma.fill_index);
 	fprintf(stderr, "(%d) hfi->info.sdma.done_index == %0hu\n", pid, opx_ep->hfi->info.sdma.done_index);
@@ -267,7 +267,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, int writev_rc, str
 		}
 
 #ifdef OPX_SDMA_DEBUG
-		ssize_t retry_rc = writev(opx_ep->hfi->fd, iov_ptr, req_info_iovs);
+		ssize_t retry_rc = writev(opx_ep->hfi->fd_cdev, iov_ptr, req_info_iovs);
 
 		if (retry_rc > 0) {
 			fprintf(stderr, "(%d) [%d] Retry succeeded!\n", pid, req_num);
@@ -413,7 +413,7 @@ int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep, struct iovec *iovecs, int iov
 	OPX_COUNTERS_TIME_NS(writev_start_ns, &opx_ep->debug_counters);
 
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "WRITEV");
-	ssize_t writev_rc = writev(opx_ep->hfi->fd, iovecs, iovs_used);
+	ssize_t writev_rc = writev(opx_ep->hfi->fd_cdev, iovecs, iovs_used);
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITEV");
 
 	OPX_COUNTERS_TIME_NS(writev_end_ns, &opx_ep->debug_counters);

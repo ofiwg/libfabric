@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 Cornelis Networks.
+ * Copyright (C) 2024-2025 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -51,8 +51,9 @@ struct _hfi_ctrl;
 struct hfi1_user_info_dep;
 
 /* Open a context with hfi1 direct or cdev */
-int opx_hfi1_wrapper_context_open(struct fi_opx_hfi1_context_internal *internal, int unit, int port,
-				  uint64_t open_timeout, unsigned int *user_version);
+int opx_hfi1_wrapper_context_open(const int unit, const int port, const uint64_t open_timeout,
+				  const enum opx_hfi1_type hfi1_type, void **ibv_context, unsigned int *user_version,
+				  int *fd_cdev, int *fd_verbs);
 
 /* Initialize the context with hfi1 direct or cdev */
 struct _hfi_ctrl *opx_hfi1_wrapper_userinit(int fd, struct fi_opx_hfi1_context_internal *internal, int unit, int port);
