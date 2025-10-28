@@ -171,18 +171,19 @@ static void opx_hfi_setup_ctx_shring_grps(int hfi_unit_number, int *ctx_groups, 
 
 // Used by fi_opx_hfi1_context_open as a convenience.
 static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_context_internal *internal,
-				    uuid_t unique_job_key, int hfi_unit_number)
+				    uuid_t unique_job_key, int hfi_unit_number, int *fd_cdev, int *fd_verbs)
 {
-	int fd;
-
 	int	     port = opx_select_port_index(hfi_unit_number) + 1;
 	unsigned int user_version;
-	fd = opx_hfi1_wrapper_context_open(internal, hfi_unit_number, port, 0, &user_version);
-	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "opx_hfi_context_open fd %d.\n", fd);
-	if (fd < 0) {
+	void	    *ibv_context;
+	if (opx_hfi1_wrapper_context_open(hfi_unit_number, port, 0, OPX_SW_HFI1_TYPE, &ibv_context, &user_version,
+					  fd_cdev, fd_verbs) != 0) {
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to open HFI unit %d.\n", hfi_unit_number);
 		return -1;
 	}
+	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "opx_hfi_context_open fd_cdev %d fd_verbs %d.\n", *fd_cdev,
+		     *fd_verbs);
+	internal->context.ibv_context = ibv_context;
 
 	// Check whether user wants to enable context sharing or not.
 	int context_sharing_enabled = 0;
@@ -225,7 +226,7 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 		internal->user_info.userversion = user_version;
 		internal->user_info.subctxt_id	= i + group_offset;
 		internal->user_info.subctxt_cnt = ep_per_hfi_context;
-		*ctrl				= opx_hfi1_wrapper_userinit(fd, internal, hfi_unit_number, port);
+		*ctrl				= opx_hfi1_wrapper_userinit(*fd_cdev, internal, hfi_unit_number, port);
 
 		if (*ctrl) {
 			assert((*ctrl)->__hfi_pg_sz == OPX_HFI1_TID_PAGESIZE);
@@ -236,12 +237,14 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 	}
 
 	if (!*ctrl) {
-		opx_hfi_context_close(fd);
+		opx_hfi_context_close(*fd_cdev, *fd_verbs);
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to open a context on HFI unit %d.\n", hfi_unit_number);
-		fd = -1;
+		(*fd_cdev)  = -1;
+		(*fd_verbs) = -1;
+		return -1;
 	}
 
-	return fd;
+	return 0;
 }
 
 void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx_hfi1_type hfi1_type,
@@ -503,7 +506,8 @@ static void opx_define_ctx_sharing_shared_memory(struct fi_opx_hfi1_context *con
 struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t unique_job_key)
 {
 	struct fi_opx_ep *opx_ep		= (ep == NULL) ? NULL : container_of(ep, struct fi_opx_ep, ep_fid);
-	int		  fd			= -1;
+	int		  fd_cdev		= -1;
+	int		  fd_verbs		= -1;
 	int		  hfi_unit_number	= -6;
 	int		  hfi_context_rank	= -1;
 	int		  hfi_context_rank_inst = -1;
@@ -551,8 +555,9 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	/*
 	 * open the hfi1 context
 	 */
-	context->fd    = -1;
-	internal->ctrl = NULL;
+	context->fd_cdev  = -1;
+	context->fd_verbs = -1;
+	internal->ctrl	  = NULL;
 
 	// If FI_OPX_HFI_SELECT is specified, skip all this and
 	// use its value as the selected hfi unit.
@@ -657,12 +662,12 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				"User-specified HFI selection set to %d. Skipping HFI selection algorithm \n",
 				hfi_unit_number);
 
-			fd = opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number);
-			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Opened fd %u\n", fd);
-			if (fd < 0) {
+			if (opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number, &fd_cdev,
+						     &fd_verbs) != 0) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to open user-specified HFI.\n");
 				goto ctxt_open_err;
 			}
+			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Opened fd_cdev %d fd_verbs %d\n", fd_cdev, fd_verbs);
 		}
 
 	} else if (opx_ep && opx_ep->common_info->src_addr &&
@@ -707,12 +712,12 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				hfi_unit_number);
 		}
 
-		fd = opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number);
-		FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Opened fd %u\n", fd);
-		if (fd < 0) {
+		if (opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number, &fd_cdev, &fd_verbs) !=
+		    0) {
 			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to open application-specified HFI.\n");
 			goto ctxt_open_err;
 		}
+		FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Opened fd_cdev %d fd_verbs %d\n", fd_cdev, fd_verbs);
 	}
 	if (use_default_logic) {
 		/* Select the best HFI to open a context on */
@@ -803,6 +808,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		// will try HFIs that are further away.
 		int lower  = 0;
 		int higher = 0;
+		int context_open_failed;
 		do {
 			// Find the set of HFIs at this distance. Again, no attempt is
 			// made to make this fast.
@@ -818,38 +824,39 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			hfi_candidate_index = lower;
 			hfi_unit_number	    = hfi_candidates[hfi_candidate_index];
 
-			fd = opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number);
-			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Opened fd %u\n", fd);
-			int t = range;
-			while (fd < 0 && t-- > 1) {
+			context_open_failed = opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number,
+								       &fd_cdev, &fd_verbs);
+			int t		    = range;
+			while (context_open_failed && t-- > 1) {
 				hfi_candidate_index++;
 				if (hfi_candidate_index >= higher) {
 					hfi_candidate_index = lower;
 				}
-				hfi_unit_number = hfi_candidates[hfi_candidate_index];
-				fd = opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number);
-				FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Opened fd %u\n", fd);
+				hfi_unit_number	    = hfi_candidates[hfi_candidate_index];
+				context_open_failed = opx_open_hfi_and_context(&ctrl, internal, unique_job_key,
+									       hfi_unit_number, &fd_cdev, &fd_verbs);
 			}
+			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Opened fd_cdev %d fd_verbs %d\n", fd_cdev, fd_verbs);
 
 			// If we still haven't successfully chosen an HFI,
 			// try HFIs that are further away.
 			lower = higher;
-		} while (fd < 0 && lower < hfi_candidates_count);
+		} while (context_open_failed && lower < hfi_candidates_count);
 
 		if (dirfd != -1) {
 			if (flock(dirfd, LOCK_UN) == -1) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Flock unlock failure: %s\n", strerror(errno));
 				close(dirfd);
 
-				if (fd >= 0) {
-					opx_hfi_context_close(fd);
+				if (!context_open_failed) {
+					opx_hfi_context_close(fd_cdev, fd_verbs);
 				}
 				goto ctxt_open_err;
 			}
 			close(dirfd);
 		}
 
-		if (fd < 0) {
+		if (context_open_failed) {
 			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 				"FATAL: Found %d active HFI device%s, unable to open %s.\n", hfi_candidates_count,
 				(hfi_candidates_count > 1) ? "s" : "",
@@ -879,9 +886,10 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			hfi_unit_number);
 	}
 
-	context->fd    = fd;
-	internal->ctrl = ctrl; /* memory was allocated during opx_open_hfi_and_context() -> opx_hfi_userinit() */
-	context->ctrl  = ctrl; /* TODO? move required fields ctrl -> context? */
+	context->fd_cdev  = fd_cdev;
+	context->fd_verbs = fd_verbs;
+	internal->ctrl	  = ctrl; /* memory was allocated during opx_open_hfi_and_context() -> opx_hfi_userinit() */
+	context->ctrl	  = ctrl; /* TODO? move required fields ctrl -> context? */
 
 	opx_lid_t lid = 0;
 	lid	      = opx_hfi_get_port_lid(ctrl->__hfi_unit, ctrl->__hfi_port);
@@ -961,8 +969,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 				"Detected user specified FI_OPX_PKEY of %d (0x%x), which is an invalid value.\n",
 				user_pkey, user_pkey);
-			if (fd >= 0) {
-				opx_hfi_context_close(fd);
+			if (fd_cdev >= 0) {
+				opx_hfi_context_close(fd_cdev, fd_verbs);
 			}
 			goto ctxt_open_err;
 		}
@@ -971,8 +979,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			fprintf(stderr,
 				"Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set. This pkey is likely not registered/valid.\n",
 				user_pkey);
-			if (fd >= 0) {
-				opx_hfi_context_close(fd);
+			if (fd_cdev >= 0) {
+				opx_hfi_context_close(fd_cdev, fd_verbs);
 			}
 			goto ctxt_open_err;
 		} else {
@@ -985,8 +993,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		if (default_pkey < 0) {
 			fprintf(stderr,
 				"Unable to get default Pkey. Please specify a different Pkey using FI_OPX_PKEY\n");
-			if (fd >= 0) {
-				opx_hfi_context_close(fd);
+			if (fd_cdev >= 0) {
+				opx_hfi_context_close(fd_cdev, fd_verbs);
 			}
 			goto ctxt_open_err;
 		}
@@ -995,8 +1003,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			fprintf(stderr,
 				"Error in setting default Pkey %#x. Please specify a different Pkey using FI_OPX_PKEY\n",
 				default_pkey);
-			if (fd >= 0) {
-				opx_hfi_context_close(fd);
+			if (fd_cdev >= 0) {
+				opx_hfi_context_close(fd_cdev, fd_verbs);
 			}
 			goto ctxt_open_err;
 		} else {

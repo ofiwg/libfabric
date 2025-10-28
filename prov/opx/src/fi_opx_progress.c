@@ -116,7 +116,7 @@ int opx_progress_set_poll_fds(struct fi_opx_cq *cq, int event_fd, struct pollfd 
 
 	int i;
 	for (i = 0; i < cq->progress.ep_count; i++) {
-		poll_fd[(i << 1)].fd	  = cq->progress.ep[i]->hfi->fd;
+		poll_fd[(i << 1)].fd	  = cq->progress.ep[i]->hfi->fd_cdev;
 		poll_fd[(i << 1)].events  = POLLIN;
 		poll_fd[(i << 1)].revents = 0;
 

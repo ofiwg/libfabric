@@ -272,7 +272,7 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 				abort();
 			}
 			assert(hfisvc_out[i].status == HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS);
-			assert(hfisvc_out[i].type == HFISVC_CLIENT_CQ_ENTRY_TYPE_MR);
+			assert(hfisvc_out[i].type == HFI1_HFISVC_CQ_ENTRY_TYPE_MR);
 
 			struct fi_opx_mr  *opx_mr    = (struct fi_opx_mr *) hfisvc_out[i].app_context;
 			hfisvc_client_mr_t mr_handle = hfisvc_out[i].type_mr.mr;
