@@ -1039,6 +1039,12 @@ char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 	case FI_TYPE_CQ_ERR_ENTRY:
 		ofi_tostr_cq_err_entry(buf, len, data);
 		break;
+	case FI_TYPE_CQ_WAIT_COND:
+		ofi_tostr_cq_wait_cond(buf, len, *enumval);
+		break;
+	case FI_TYPE_WAIT_OBJ:
+		ofi_tostr_wait_obj(buf, len, *enumval);
+		break;
 	default:
 		ofi_strncatf(buf, len, "Unknown type");
 		break;
