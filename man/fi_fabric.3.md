@@ -195,6 +195,12 @@ datatype or field value.
 *FI_TYPE_CQ_ERR_ENTRY*
 : struct fi_cq_err_entry
 
+*FI_TYPE_WAIT_OBJ*
+: enum fi_wait_obj
+
+*FI_TYPE_CQ_WAIT_COND*
+: enum fi_cq_wait_cond
+
 fi_tostr() will return a pointer to an internal libfabric buffer that
 should not be modified, and will be overwritten the next time
 fi_tostr() is invoked.  fi_tostr() is not thread safe.
