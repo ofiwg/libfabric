@@ -322,6 +322,11 @@ commands are usable with a CQ.
   object will be written.  See fi_eq.3 for addition details using
   fi_control with FI_GETWAIT.
 
+*FI_GETWAITOBJ (enum fi_wait_obj \*)*
+: This command retrieves the type of wait object associated with the CQ.
+  The `fi_control` arg parameter should be an address where the wait object
+  type will be written.
+
 ## fi_cq_read
 
 The fi_cq_read operation performs a non-blocking
