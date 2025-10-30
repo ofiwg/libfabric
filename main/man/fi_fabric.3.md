@@ -96,8 +96,8 @@ datatype or field value.
 *FI_TYPE_EP_TYPE*
 : struct fi_info::type field
 
-*FI_TYPE_EP_CAP*
-: struct fi_info::ep_cap field
+*FI_TYPE_CAPS*
+: struct fi_info::caps field
 
 *FI_TYPE_OP_FLAGS*
 : struct fi_info::op_flags field, or general uint64_t flags
@@ -176,6 +176,24 @@ datatype or field value.
 
 *FI_TYPE_LOG_SUBSYS*
 : enum fi_log_subsys
+
+*FI_TYPE_AV_ATTR*
+: struct fi_av_attr
+
+*FI_TYPE_CQ_ATTR*
+: struct fi_cq_attr
+
+*FI_TYPE_MR_ATTR*
+: struct fi_mr_attr
+
+*FI_TYPE_CNTR_ATTR*
+: struct fi_cntr_attr
+
+*FI_TYPE_COLLECTIVE_OP*
+: enum fi_collective_op
+
+*FI_TYPE_CQ_ERR_ENTRY*
+: struct fi_cq_err_entry
 
 fi_tostr() will return a pointer to an internal libfabric buffer that
 should not be modified, and will be overwritten the next time
