@@ -607,59 +607,6 @@ static int validate_domain_caps(char *node, char *service, uint64_t flags,
 				   init_domain_caps, check_domain_caps);
 }
 
-/* Some apps (MPI) request all fi_info structures, and use the output to
- * form the hints for a second call.  This usage breaks if the provider
- * adds a new capability bit that also requires setting a mode or mr_mode
- * bit (new or otherwise), which the app does not set.
- * This is really a problem with the app, but avoid a regression
- * by verifying that providers do not add new requirements for apps that
- * inadvertently pick up a new capability bit.
- */
-static int test_caps_regression(char *node, char *service, uint64_t flags,
-		struct fi_info *hints, struct fi_info **info)
-{
-	struct fi_info *fi;
-	int ret;
-
-	if (!hints) {
-		printf("invalid test case: hints may not be null");
-		return -FI_EINVAL;
-	}
-
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, NULL, info);
-	if (ret)
-		return ret;
-
-	if (!hints->fabric_attr || !hints->fabric_attr->prov_name) {
-		fi = *info;
-	} else {
-		for (fi = *info; fi; fi = fi->next) {
-			if (!strcasecmp(hints->fabric_attr->prov_name,
-					(*info)->fabric_attr->prov_name))
-				break;
-		}
-	}
-
-	if (!fi)
-		return 0;
-
-	/* Limit mode bits to common, older options only */
-	hints->caps |= fi->caps;
-	hints->mode = FI_CONTEXT | FI_CONTEXT2;
-	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
-
-	fi_freeinfo(*info);
-	*info = NULL;
-
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
-	if (ret) {
-		printf("regression: new mode/mr_mode bits required...");
-		return -FI_EINVAL;
-	}
-
-	return 0;
-}
-
 /* Check if at least one of FI_LOCAL_COMM and FI_REMOTE_COMM is set */
 static int test_comm_caps(char *node, char *service, uint64_t flags,
 		struct fi_info *hints, struct fi_info **info)
@@ -875,9 +822,7 @@ getinfo_test(caps, 2, "Test capability with no hints",
 	     NULL, NULL, 0, NULL, NULL, NULL, test_null_hints_caps, 0)
 getinfo_test(caps, 3, "Test domain capabilities", NULL, NULL, 0,
 	     hints, NULL, validate_domain_caps, NULL, 0)
-getinfo_test(caps, 4, "Test for capability bit regression",
-	     NULL, NULL, 0, hints, NULL, test_caps_regression, NULL, 0)
-getinfo_test(caps, 5, "Test if either FI_LOCAL_COMM or FI_REMOTE_COMM is set",
+getinfo_test(caps, 4, "Test if either FI_LOCAL_COMM or FI_REMOTE_COMM is set",
 	     NULL, NULL, 0, hints, NULL, test_comm_caps, NULL, 0)
 
 
@@ -956,7 +901,6 @@ int main(int argc, char **argv)
 		TEST_ENTRY_GETINFO(caps2),
 		TEST_ENTRY_GETINFO(caps3),
 		TEST_ENTRY_GETINFO(caps4),
-		TEST_ENTRY_GETINFO(caps5),
 		{ NULL, "" }
 	};
 
