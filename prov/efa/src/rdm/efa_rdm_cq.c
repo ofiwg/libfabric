@@ -22,6 +22,60 @@ const char *efa_rdm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 		: efa_strerror(prov_errno);
 }
 
+static int efa_rdm_cq_wait_try(void *arg)
+{
+	struct efa_rdm_cq *cq = arg;
+
+	return ofi_cirque_isempty(cq->efa_cq.util_cq.cirq) ? FI_SUCCESS : -FI_EAGAIN;
+}
+
+int efa_rdm_cq_wait_add_ibv_cq(struct efa_rdm_cq *cq, struct efa_ibv_cq *ibv_cq)
+{
+	assert(cq);
+	assert(ibv_cq);
+
+	if (!cq->efa_cq.util_cq.wait || !ibv_cq->channel)
+		return FI_SUCCESS;
+
+	return ofi_wait_add_fd(cq->efa_cq.util_cq.wait, ibv_cq->channel->fd,
+			       POLLIN, efa_rdm_cq_wait_try, cq,
+			       &cq->efa_cq.util_cq.cq_fid);
+}
+
+void efa_rdm_cq_wait_del_ibv_cq(struct efa_rdm_cq *cq, struct efa_ibv_cq *ibv_cq)
+{
+	assert(cq);
+	assert(ibv_cq);
+
+	if (!cq->efa_cq.util_cq.wait || !ibv_cq->channel)
+		return;
+
+	ofi_wait_del_fd(cq->efa_cq.util_cq.wait, ibv_cq->channel->fd);
+}
+
+static int efa_rdm_cq_wait_add_signal(struct efa_rdm_cq *cq)
+{
+	assert(cq);
+
+	if (!cq->efa_cq.util_cq.wait || !cq->efa_cq.signal.fd[FI_READ_FD])
+		return FI_SUCCESS;
+
+	return ofi_wait_add_fd(cq->efa_cq.util_cq.wait,
+			       cq->efa_cq.signal.fd[FI_READ_FD],
+			       POLLIN, efa_rdm_cq_wait_try, cq,
+			       &cq->efa_cq.util_cq.cq_fid);
+}
+
+static void efa_rdm_cq_wait_del_signal(struct efa_rdm_cq *cq)
+{
+	assert(cq);
+
+	if (!cq->efa_cq.util_cq.wait || !cq->efa_cq.signal.fd[FI_READ_FD])
+		return;
+
+	ofi_wait_del_fd(cq->efa_cq.util_cq.wait, cq->efa_cq.signal.fd[FI_READ_FD]);
+}
+
 /**
  * @brief close a CQ of EFA RDM endpoint
  *
@@ -41,6 +95,7 @@ int efa_rdm_cq_close(struct fid *fid)
 	cq = container_of(fid, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 
 	if (cq->efa_cq.ibv_cq.ibv_cq_ex) {
+		efa_cq_ack_events(&cq->efa_cq);
 		ret = -ibv_destroy_cq(ibv_cq_ex_to_cq(cq->efa_cq.ibv_cq.ibv_cq_ex));
 		if (ret) {
 			EFA_WARN(FI_LOG_CQ, "Unable to close ibv cq: %s\n",
@@ -49,6 +104,9 @@ int efa_rdm_cq_close(struct fid *fid)
 		}
 		cq->efa_cq.ibv_cq.ibv_cq_ex = NULL;
 	}
+
+	efa_rdm_cq_wait_del_signal(cq);
+	efa_cq_signal_fini(&cq->efa_cq);
 
 	if (cq->shm_cq) {
 		ret = fi_close(&cq->shm_cq->fid);
@@ -61,15 +119,49 @@ int efa_rdm_cq_close(struct fid *fid)
 	ret = ofi_cq_cleanup(&cq->efa_cq.util_cq);
 	if (ret)
 		return ret;
+
+	ret = efa_cq_destroy_comp_channel(&cq->efa_cq);
+	if (ret)
+		return ret;
 	free(cq);
 	return retv;
+}
+
+static int efa_rdm_cq_control(struct fid *fid, int command, void *arg)
+{
+	struct util_cq *util_cq = container_of(fid, struct util_cq, cq_fid.fid);
+	struct efa_rdm_cq *cq = container_of(util_cq, struct efa_rdm_cq, efa_cq.util_cq);
+
+	switch (command) {
+	case FI_GETWAIT:
+		if (cq->efa_cq.wait_obj != FI_WAIT_FD || !util_cq->wait)
+			return -FI_ENODATA;
+		return fi_control(&util_cq->wait->wait_fid.fid, command, arg);
+	case FI_GETWAITOBJ:
+		*(enum fi_wait_obj *) arg = cq->efa_cq.wait_obj;
+		return 0;
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+static int efa_rdm_cq_signal(struct fid_cq *cq_fid)
+{
+	struct util_cq *util_cq = container_of(cq_fid, struct util_cq, cq_fid);
+
+	if (!util_cq->wait)
+		return -FI_EINVAL;
+
+	ofi_atomic_set32(&util_cq->wakeup, 1);
+	util_cq->wait->signal(util_cq->wait);
+	return 0;
 }
 
 static struct fi_ops efa_rdm_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = efa_rdm_cq_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = efa_rdm_cq_control,
 	.ops_open = fi_no_ops_open,
 };
 
@@ -863,14 +955,148 @@ out:
 	return ret;
 }
 
+static int efa_rdm_cq_poll_events(struct efa_rdm_cq *cq, int timeout)
+{
+	struct util_wait *wait = cq->efa_cq.util_cq.wait;
+	struct dlist_entry *item;
+	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
+	struct efa_cq *efa_cq;
+	void *context;
+	int ret;
+
+	if (!wait)
+		return -FI_EINVAL;
+
+	if (OFI_UNLIKELY(ofi_atomic_get32(&cq->efa_cq.util_cq.wakeup))) {
+		ofi_atomic_set32(&cq->efa_cq.util_cq.wakeup, 0);
+		return -FI_ECANCELED;
+	}
+
+	/*
+	 * Block on the wait object until a CQ completion event arrives
+	 * or a wakeup is signaled.
+	 */
+	ret = ofi_wait(&wait->wait_fid, timeout);
+	if (ret == -FI_ETIMEDOUT)
+		return -FI_EAGAIN;
+	if (ret)
+		return ret;
+
+	/* Drain events and re-arm notifications */
+	ofi_genlock_lock(&cq->efa_cq.util_cq.ep_list_lock);
+	dlist_foreach(&cq->ibv_cq_poll_list, item) {
+		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
+		if (!poll_list_entry->cq || !poll_list_entry->cq->channel)
+			continue;
+
+		if (efa_ibv_get_cq_event(poll_list_entry->cq, &context))
+			continue;
+
+		efa_cq = container_of(poll_list_entry->cq, struct efa_cq, ibv_cq);
+		ofi_atomic_inc32(&efa_cq->nevents);
+
+		ret = efa_ibv_req_notify_cq(poll_list_entry->cq, 0);
+		if (ret) {
+			ret = -errno;
+			break;
+		}
+	}
+	ofi_genlock_unlock(&cq->efa_cq.util_cq.ep_list_lock);
+
+	return ret;
+}
+
+/**
+ * @brief Blocking CQ read with source address
+ *
+ * @param[in]     cq_fid     CQ file descriptor
+ * @param[out]    buf        Buffer for completion entries
+ * @param[in]     count      Maximum entries to read
+ * @param[out]    src_addr   Source addresses (optional)
+ * @param[in]     cond       Wait condition (threshold)
+ * @param[in]     timeout    Timeout in milliseconds
+ * @return        Number of entries read or negative error code
+ */
+static ssize_t efa_rdm_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+				    fi_addr_t *src_addr, const void *cond, int timeout)
+{
+	struct efa_rdm_cq *efa_rdm_cq = container_of(cq_fid, struct efa_rdm_cq, efa_cq.util_cq.cq_fid);
+	struct efa_cq *efa_cq = &efa_rdm_cq->efa_cq;
+	struct util_cq *util_cq = &efa_cq->util_cq;
+	bool shm_enabled = efa_rdm_cq->shm_cq != NULL;
+	const uint64_t endtime = ofi_timeout_time(timeout);
+	ssize_t ret;
+	size_t num_completions = 0, threshold = 1;
+	uint8_t *buffer = buf;
+
+	if (OFI_UNLIKELY(efa_cq->wait_obj == FI_WAIT_NONE)) {
+		EFA_WARN(FI_LOG_CQ, "Cannot perform blocking CQ read with FI_WAIT_NONE\n");
+		return -FI_ENOSYS;
+	}
+
+	if (OFI_UNLIKELY(!efa_cq->ibv_cq.channel)) {
+		EFA_WARN(FI_LOG_CQ, "No IBV comp channel associated with CQ\n");
+		return -FI_ENOSYS;
+	}
+
+	/* Handle threshold condition */
+	if (OFI_UNLIKELY(efa_cq->wait_cond == FI_CQ_COND_THRESHOLD && cond))
+		threshold = MAX(MIN(*(const size_t *) cond, count), 1);
+
+	while (num_completions < threshold) {
+		ret = efa_rdm_cq_readfrom(cq_fid, buffer, count - num_completions,
+					  src_addr ? src_addr + num_completions : NULL);
+		if (OFI_LIKELY(ret > 0)) {
+			num_completions += ret;
+			buffer += ret * efa_rdm_cq->entry_size;
+			continue;
+		}
+		if (OFI_UNLIKELY(ret && ret != -FI_EAGAIN))
+			return num_completions ? (ssize_t) num_completions : ret;
+
+		ret = util_cq->wait->wait_try(util_cq->wait);
+		if (ret == FI_SUCCESS) {
+			/* No completions; ready to block */
+			ret = efa_rdm_cq_poll_events(efa_rdm_cq, shm_enabled
+						     ? (timeout < 0 ? 1 : MIN(timeout, 1))
+						     : timeout);
+			if (OFI_UNLIKELY(ret && ret != -FI_EAGAIN))
+				return num_completions ? (ssize_t) num_completions : ret;
+		} else if (ret != -FI_EAGAIN) {
+			return num_completions ? (ssize_t) num_completions : ret;
+		}
+
+		if (OFI_UNLIKELY(ofi_adjust_timeout(endtime, &timeout)))
+			return num_completions ? (ssize_t) num_completions : -FI_EAGAIN;
+	}
+
+	return (ssize_t) num_completions;
+}
+
+/**
+ * @brief Blocking CQ read for EFA RDM
+ *
+ * @param[in]     cq_fid     CQ file descriptor
+ * @param[out]    buf        Buffer for completion entries
+ * @param[in]     count      Maximum entries to read
+ * @param[in]     cond       Wait condition (unused)
+ * @param[in]     timeout    Timeout in milliseconds
+ * @return        Number of entries read or negative error code
+ */
+static ssize_t efa_rdm_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
+				const void *cond, int timeout)
+{
+	return efa_rdm_cq_sreadfrom(cq_fid, buf, count, NULL, cond, timeout);
+}
+
 static struct fi_ops_cq efa_rdm_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = ofi_cq_read,
 	.readfrom = efa_rdm_cq_readfrom,
 	.readerr = ofi_cq_readerr,
-	.sread = fi_no_cq_sread,
-	.sreadfrom = fi_no_cq_sreadfrom,
-	.signal = fi_no_cq_signal,
+	.sread = efa_rdm_cq_sread,
+	.sreadfrom = efa_rdm_cq_sreadfrom,
+	.signal = efa_rdm_cq_signal,
 	.strerror = efa_rdm_cq_strerror,
 };
 
@@ -913,6 +1139,95 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 }
 
 /**
+ * @brief Configure wait object for EFA RDM CQ with SHM-aware restrictions
+ *
+ * When SHM is enabled:
+ *   - Only FI_WAIT_UNSPEC is supported (no wait object retrieval)
+ * When SHM is disabled:
+ *   - FI_WAIT_FD is supported with wait object retrieval
+ *   - FI_WAIT_UNSPEC is promoted to FI_WAIT_FD
+ *
+ * @param[in,out] cq         RDM CQ to configure
+ * @param[in]     attr       CQ attributes
+ * @param[in]     efa_domain EFA domain
+ * @return 0 on success, negative errno on failure
+ */
+static int efa_rdm_cq_configure_wait(struct efa_rdm_cq *cq,
+				     const struct fi_cq_attr *attr,
+				     struct efa_domain *efa_domain)
+{
+	bool shm_enabled = efa_domain->shm_domain != NULL;
+
+	switch (attr->wait_obj) {
+	case FI_WAIT_UNSPEC:
+		/* Promote UNSPEC to FD if possible */
+		cq->efa_cq.wait_obj = shm_enabled ? FI_WAIT_UNSPEC : FI_WAIT_FD;
+		break;
+	case FI_WAIT_FD:
+		if (shm_enabled) {
+			EFA_WARN(FI_LOG_CQ,
+				 "FI_WAIT_FD not supported when SHM is enabled\n");
+			return -FI_ENOSYS;
+		}
+		cq->efa_cq.wait_obj = FI_WAIT_FD;
+		break;
+	case FI_WAIT_NONE:
+		cq->efa_cq.wait_obj = FI_WAIT_NONE;
+		break;
+	default:
+		EFA_WARN(FI_LOG_CQ, "Unsupported wait object: %s\n",
+				fi_tostr(&attr->wait_obj, FI_TYPE_WAIT_OBJ));
+		return -FI_ENOSYS;
+	}
+
+	switch (attr->wait_cond) {
+	case FI_CQ_COND_NONE:
+	case FI_CQ_COND_THRESHOLD:
+		cq->efa_cq.wait_cond = attr->wait_cond;
+		break;
+	default:
+		EFA_WARN(FI_LOG_CQ, "Unsupported wait condition: %s\n",
+				fi_tostr(&attr->wait_cond, FI_TYPE_CQ_WAIT_COND));
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+/**
+ * @brief Initialize CQ entry size based on format
+ *
+ * @param[in,out] cq     RDM CQ to configure
+ * @param[in]     format CQ format
+ * @return 0 on success, -FI_ENOSYS for unsupported formats
+ */
+static int efa_rdm_cq_init_entry_size(struct efa_rdm_cq *cq,
+				      enum fi_cq_format format)
+{
+	switch (format) {
+	case FI_CQ_FORMAT_UNSPEC:
+	case FI_CQ_FORMAT_CONTEXT:
+		cq->entry_size = sizeof (struct fi_cq_entry);
+		break;
+	case FI_CQ_FORMAT_MSG:
+		cq->entry_size = sizeof (struct fi_cq_msg_entry);
+		break;
+	case FI_CQ_FORMAT_DATA:
+		cq->entry_size = sizeof (struct fi_cq_data_entry);
+		break;
+	case FI_CQ_FORMAT_TAGGED:
+		cq->entry_size = sizeof (struct fi_cq_tagged_entry);
+		break;
+	default:
+		EFA_WARN(FI_LOG_CQ, "Unsupported CQ format: %s\n",
+			 fi_tostr(&format, FI_TYPE_CQ_FORMAT));
+		return -FI_ENOSYS;
+	}
+
+	return FI_SUCCESS;
+}
+
+/**
  * @brief create a CQ for EFA RDM provider
  *
  * Note that EFA RDM provider used the util_cq as its CQ
@@ -935,39 +1250,54 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct fi_peer_cq_context peer_cq_context = {0};
 	struct fi_efa_cq_init_attr efa_cq_init_attr = {0};
 
-	if (attr->wait_obj != FI_WAIT_NONE)
-		return -FI_ENOSYS;
-
 	cq = calloc(1, sizeof(*cq));
 	if (!cq)
 		return -FI_ENOMEM;
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
+
+	ret = efa_rdm_cq_configure_wait(cq, attr, efa_domain);
+	if (ret)
+		goto free;
 	/* Override user cq size if it's less than recommended cq size */
 	attr->size = MAX(efa_domain->rdm_cq_size, attr->size);
 
 	dlist_init(&cq->ibv_cq_poll_list);
 	cq->need_to_scan_ep_list = false;
+
 	ret = ofi_cq_init(&efa_prov, domain, attr, &cq->efa_cq.util_cq,
 			  &efa_rdm_cq_progress, context);
 
 	if (ret)
 		goto free;
 
+	ret = efa_rdm_cq_init_entry_size(cq, attr->format);
+	if (ret)
+		goto close_util_cq;
+
 	ret = efa_cq_open_ibv_cq(
 		attr, efa_domain->device->ibv_ctx, &cq->efa_cq.ibv_cq,
 		&efa_cq_init_attr);
 	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", fi_strerror(ret));
-		goto close_util_cq;
+		goto destroy_comp_channel;
 	}
 
 	cq->efa_cq.poll_ibv_cq = efa_rdm_cq_poll_ibv_cq;
 
+	ret = efa_cq_signal_init(&cq->efa_cq);
+	if (ret)
+		goto destroy_ibv_cq;
+
+	ret = efa_rdm_cq_wait_add_signal(cq);
+	if (ret)
+		goto destroy_signal;
+
 	/* open shm cq as peer cq */
 	if (efa_domain->shm_domain) {
 		memcpy(&shm_cq_attr, attr, sizeof(*attr));
+		shm_cq_attr.wait_obj = FI_WAIT_NONE;
 		/* Bind ep with shm provider's cq */
 		shm_cq_attr.flags |= FI_PEER;
 		peer_cq_context.size = sizeof(peer_cq_context);
@@ -976,7 +1306,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 				 &cq->shm_cq, &peer_cq_context);
 		if (ret) {
 			EFA_WARN(FI_LOG_CQ, "Unable to open shm cq: %s\n", fi_strerror(-ret));
-			goto destroy_ibv_cq;
+			goto destroy_signal;
 		}
 	}
 
@@ -985,11 +1315,15 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	(*cq_fid)->ops = &efa_rdm_cq_ops;
 
 	return 0;
+destroy_signal:
+	efa_cq_signal_fini(&cq->efa_cq);
 destroy_ibv_cq:
 	retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(cq->efa_cq.ibv_cq.ibv_cq_ex));
 	if (retv)
 		EFA_WARN(FI_LOG_CQ, "Unable to close ibv cq: %s\n",
 			 fi_strerror(-retv));
+destroy_comp_channel:
+	efa_cq_destroy_comp_channel(&cq->efa_cq);
 close_util_cq:
 	retv = ofi_cq_cleanup(&cq->efa_cq.util_cq);
 	if (retv)
