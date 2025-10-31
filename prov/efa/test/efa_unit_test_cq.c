@@ -1470,6 +1470,7 @@ static void test_efa_cq_data_path_direct_status(
 	efa_cq = container_of(cq, struct efa_cq, util_cq.cq_fid);
 
 	assert_true(efa_cq->ibv_cq.data_path_direct_enabled == data_path_direct_enabled);
+	
 	assert_int_equal(fi_close(&cq->fid), 0);
 
 	/* Recover the mocked vendor_id */
@@ -1722,7 +1723,7 @@ void test_efa_cq_sread_einval(struct efa_resource **state)
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
 
-	assert_null(efa_cq->wait_obj);
+	assert_int_equal(efa_cq->wait_obj, FI_WAIT_NONE);
 	assert_null(efa_cq->ibv_cq.channel);
 
 	ret = fi_cq_sread(resource->cq, &cq_entry, 1, NULL, 1);
@@ -2303,6 +2304,46 @@ void test_efa_cq_read_mixed_success_error(struct efa_resource **state)
 	free(cq_err_entry.err_data);
 
 	/* Reset mocks */
+	will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+}
+
+
+
+/**
+ * @brief Test fi_cq_sread() with count=0 returns -FI_EINVAL
+ */
+void test_efa_rdm_cq_sread_invalid_count(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cq_data_entry cq_entry;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	ret = fi_cq_sread(resource->cq, &cq_entry, 0, NULL, 0);
+	assert_int_equal(ret, -FI_EINVAL);
+
+	will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+}
+
+/**
+ * @brief Test fi_cq_sread() with no wait object returns -FI_ENOSYS
+ */
+void test_efa_rdm_cq_sread_no_wait_obj(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cq_data_entry cq_entry;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	ret = fi_cq_sread(resource->cq, &cq_entry, 1, NULL, 0);
+	assert_int_equal(ret, -FI_ENOSYS);
+
 	will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
 	resource->ep = NULL;
