@@ -393,6 +393,7 @@ void efa_prov_info_direct_set_hmem_flags(struct fi_info *prov_info)
 {
 	enum fi_hmem_iface iface;
 	struct efa_hmem_info *hmem_info;
+	bool any_hmem_initialized = false;
 
 	assert(prov_info->ep_attr->type == FI_EP_RDM);
 
@@ -406,11 +407,15 @@ void efa_prov_info_direct_set_hmem_flags(struct fi_info *prov_info)
 	}
 
 	/* Check if HMEM libraries are available at runtime */
-	if (!ofi_hmem_is_initialized(FI_HMEM_CUDA) &&
-	    !ofi_hmem_is_initialized(FI_HMEM_NEURON) &&
-	    !ofi_hmem_is_initialized(FI_HMEM_SYNAPSEAI)) {
-			return;
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
+		if (ofi_hmem_is_initialized(iface)) {
+			any_hmem_initialized = true;
+			break;
+		}
 	}
+
+	if (!any_hmem_initialized)
+		return;
 
 	/* EFA direct only supports HMEM when p2p support is available */
 	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
@@ -557,6 +562,8 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 	uint64_t efa_domain_caps = FI_LOCAL_COMM | FI_REMOTE_COMM;
 
 	struct fi_info *prov_info_rdm;
+	enum fi_hmem_iface iface;
+	bool any_hmem_initialized = false;
 
 	assert(device->rdm_info);
 
@@ -675,10 +682,14 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 			prov_info_rdm->rx_attr->size = efa_env.rx_size;
 	}
 
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
+		if (ofi_hmem_is_initialized(iface)) {
+			any_hmem_initialized = true;
+			break;
+		}
+	}
 	/* EFA RDM can support HMEM even if p2p support is not available */
-	if ((ofi_hmem_is_initialized(FI_HMEM_CUDA) ||
-	     ofi_hmem_is_initialized(FI_HMEM_NEURON) ||
-	     ofi_hmem_is_initialized(FI_HMEM_SYNAPSEAI))) {
+	if (any_hmem_initialized) {
 		prov_info_rdm->caps |= FI_HMEM;
 		prov_info_rdm->tx_attr->caps |= FI_HMEM;
 		prov_info_rdm->rx_attr->caps |= FI_HMEM;
