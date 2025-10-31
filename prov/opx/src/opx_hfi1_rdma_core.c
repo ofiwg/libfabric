@@ -809,6 +809,11 @@ void opx_hfi1_rdma_context_close(void *ibv_context)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS\n");
 }
 
+void opx_hfi1_rdma_lib_close()
+{
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS\n");
+}
+
 #endif /* HAVE_HFI1_DIRECT_VERBS */
 
 /* clang-format off
