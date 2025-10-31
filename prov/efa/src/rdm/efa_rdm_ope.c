@@ -920,6 +920,9 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 			return;
 		}
 
+		if (rx_cq->wait)
+			rx_cq->wait->signal(rx_cq->wait);
+
 		rxe->fi_flags |= EFA_RDM_TXE_NO_COMPLETION;
 	}
 
@@ -1020,6 +1023,9 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
 			efa_rdm_txe_handle_error(txe, -ret, FI_EFA_ERR_WRITE_SEND_COMP);
 			return;
 		}
+
+		if (tx_cq->wait)
+			tx_cq->wait->signal(tx_cq->wait);
 	}
 
 	efa_cntr_report_tx_completion(&txe->ep->base_ep.util_ep, txe->cq_entry.flags);

@@ -8,6 +8,7 @@
 #include "efa_av.h"
 #include "efa_cntr.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_peer.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_tracepoint.h"
@@ -69,7 +70,7 @@ static struct fi_ops efa_rdm_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = efa_rdm_cq_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = ofi_cq_control,
 	.ops_open = fi_no_ops_open,
 };
 
@@ -111,6 +112,9 @@ static void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 	} else {
 		ret = ofi_cq_write(target_cq, NULL, flags, len, NULL, imm_data, 0);
 	}
+
+	if (OFI_LIKELY(!ret && target_cq->wait))
+		target_cq->wait->signal(target_cq->wait);
 
 	if (OFI_UNLIKELY(ret)) {
 		EFA_WARN(FI_LOG_CQ,
@@ -844,7 +848,7 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 	if (cq->shm_cq) {
 		fi_cq_read(cq->shm_cq, NULL, 0);
 
-		/* 
+		/*
 		 * fi_cq_read(cq->shm_cq, NULL, 0) will progress shm ep and write
 		 * completion to efa. Use ofi_cq_read_entries to get the number of
 		 * shm completions without progressing efa ep again.
@@ -863,14 +867,114 @@ out:
 	return ret;
 }
 
+static void efa_rdm_cq_progress(struct util_cq *cq);
+
+/**
+ * @brief Blocking CQ read with source address
+ *
+ * @param[in]     cq_fid     CQ file descriptor
+ * @param[out]    buf        Buffer for completion entries
+ * @param[in]     count      Maximum entries to read
+ * @param[out]    src_addr   Source addresses (optional)
+ * @param[in]     cond       Wait condition (threshold)
+ * @param[in]     timeout    Timeout in milliseconds
+ * @return        Number of entries read or negative error code
+ */
+static ssize_t efa_rdm_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+				    fi_addr_t *src_addr, const void *cond, int timeout)
+{
+	struct efa_cq *efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
+	struct util_cq *util_cq = &efa_cq->util_cq;
+	struct efa_rdm_cq *efa_rdm_cq = container_of(efa_cq, struct efa_rdm_cq, efa_cq);
+	const uint64_t endtime = ofi_timeout_time(timeout);
+	ssize_t ret;
+	size_t num_completions = 0, threshold = 1;
+	int interval, wait_time = 1;
+	uint8_t *buffer = buf;
+
+	/* fi_cq_sread[from] calls are invalid w/ FI_WAIT_NONE */
+	if (OFI_UNLIKELY(efa_cq->wait_obj == FI_WAIT_NONE))
+		return -FI_EINVAL;
+
+	if (OFI_UNLIKELY(!count))
+		return -FI_EINVAL;
+
+	/* Require wait object for blocking operations */
+	if (OFI_UNLIKELY(!util_cq->wait))
+		return -FI_ENOSYS;
+
+	/* Handle threshold condition */
+	if (OFI_UNLIKELY(efa_cq->wait_cond == FI_CQ_COND_THRESHOLD && cond))
+		threshold = MAX(MIN(*(const size_t *) cond, count), 1);
+
+	while (num_completions < threshold) {
+		/* Try non-blocking read first */
+		ret = efa_rdm_cq_readfrom(cq_fid, buffer, count - num_completions,
+					  src_addr ? src_addr + num_completions : NULL);
+		
+		if (OFI_LIKELY(ret > 0)) {
+			num_completions += ret;
+			buffer += (ptrdiff_t) ret * efa_cq->entry_size;
+			continue;
+		}
+
+		if (OFI_UNLIKELY(ret != 0 && ret != -FI_EAGAIN))
+			return num_completions ? (ssize_t) num_completions : ret;
+
+		/* Handle timeout */
+		if (OFI_UNLIKELY(ofi_adjust_timeout(endtime, &timeout)))
+			return num_completions ? (ssize_t) num_completions : -FI_EAGAIN;
+
+		/* Check for wakeup signal */
+		if (OFI_UNLIKELY(ofi_atomic_get32(&util_cq->wakeup))) {
+			ofi_atomic_set32(&util_cq->wakeup, 0);
+			return num_completions ? (ssize_t) num_completions : -FI_EAGAIN;
+		}
+
+		/*
+		 * If user requests FI_WAIT_FD explicitly, they are expected to block on
+		 * the FD. Otherwise, applications are not guaranteed to wait on an FD
+		 * for FI_WAIT_UNSPEC, in which case we fall back to exponential
+		 * backoff. See fi_cq(3).
+		 */
+		if (efa_cq->wait_obj == FI_WAIT_FD &&
+				efa_rdm_cq->requested_wait_obj != FI_WAIT_UNSPEC) {
+			ofi_wait(&util_cq->wait->wait_fid, timeout);
+		} else {
+			interval = timeout >= 0 ? MIN(wait_time, timeout) : wait_time;
+			/* keep progress at worst every ~16ms */
+			ofi_wait(&util_cq->wait->wait_fid, MIN(interval, 16));
+			wait_time = MIN(wait_time * 2, 16);
+		}
+	}
+
+	return (ssize_t) num_completions;
+}
+
+/**
+ * @brief Blocking CQ read for EFA RDM
+ *
+ * @param[in]     cq_fid     CQ file descriptor
+ * @param[out]    buf        Buffer for completion entries
+ * @param[in]     count      Maximum entries to read
+ * @param[in]     cond       Wait condition (unused)
+ * @param[in]     timeout    Timeout in milliseconds
+ * @return        Number of entries read or negative error code
+ */
+static ssize_t efa_rdm_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
+				const void *cond, int timeout)
+{
+	return efa_rdm_cq_sreadfrom(cq_fid, buf, count, NULL, cond, timeout);
+}
+
 static struct fi_ops_cq efa_rdm_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = ofi_cq_read,
 	.readfrom = efa_rdm_cq_readfrom,
 	.readerr = ofi_cq_readerr,
-	.sread = fi_no_cq_sread,
-	.sreadfrom = fi_no_cq_sreadfrom,
-	.signal = fi_no_cq_signal,
+	.sread = efa_rdm_cq_sread,
+	.sreadfrom = efa_rdm_cq_sreadfrom,
+	.signal = ofi_cq_signal,
 	.strerror = efa_rdm_cq_strerror,
 };
 
@@ -913,6 +1017,61 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 }
 
 /**
+ * @brief Try to wait on RDM CQ - check if ready for blocking wait
+ *
+ * Called only when util_cq->wait exists
+ *
+ * @param[in]	cq	RDM CQ to check
+ * @return	FI_SUCCESS if ready to wait, -FI_EAGAIN if completions available
+ */
+int efa_rdm_cq_trywait(struct efa_rdm_cq *cq)
+{
+	struct util_cq *util_cq = &cq->efa_cq.util_cq;
+
+	/* Drive progress */
+	fi_cq_read(&util_cq->cq_fid, NULL, 0);
+	
+	/* Check if completions available */
+	if (!ofi_cirque_isempty(util_cq->cirq))
+		return -FI_EAGAIN;
+	
+	/* Use wait object's trywait (guaranteed to exist by caller) */
+	return util_cq->wait->wait_try(util_cq->wait);
+}
+
+/**
+ * @brief Verify CQ wait object attributes
+ *
+ * @param[in]	attr	CQ attributes to verify
+ * @return	FI_SUCCESS if valid, -FI_EINVAL if unsupported
+ */
+static int efa_rdm_cq_verify_wait_attr(const struct fi_cq_attr *attr)
+{
+	switch (attr->wait_obj) {
+	case FI_WAIT_NONE:
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_FD:
+		break;
+	default:
+		EFA_WARN(FI_LOG_CQ, "Unsupported wait object: %s\n",
+			 fi_tostr(&attr->wait_obj, FI_TYPE_WAIT_OBJ));
+		return -FI_EINVAL;
+	}
+	
+	switch (attr->wait_cond) {
+	case FI_CQ_COND_NONE:
+	case FI_CQ_COND_THRESHOLD:
+		break;
+	default:
+		EFA_WARN(FI_LOG_CQ, "Unsupported wait condition: %s\n",
+			 fi_tostr(&attr->wait_cond, FI_TYPE_CQ_WAIT_COND));
+		return -FI_EINVAL;
+	}
+	
+	return FI_SUCCESS;
+}
+
+/**
  * @brief create a CQ for EFA RDM provider
  *
  * Note that EFA RDM provider used the util_cq as its CQ
@@ -935,8 +1094,9 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct fi_peer_cq_context peer_cq_context = {0};
 	struct fi_efa_cq_init_attr efa_cq_init_attr = {0};
 
-	if (attr->wait_obj != FI_WAIT_NONE)
-		return -FI_ENOSYS;
+	ret = efa_rdm_cq_verify_wait_attr(attr);
+	if (ret)
+		return ret;
 
 	cq = calloc(1, sizeof(*cq));
 	if (!cq)
@@ -949,11 +1109,16 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	dlist_init(&cq->ibv_cq_poll_list);
 	cq->need_to_scan_ep_list = false;
+	cq->requested_wait_obj = attr->wait_obj;
+
 	ret = ofi_cq_init(&efa_prov, domain, attr, &cq->efa_cq.util_cq,
 			  &efa_rdm_cq_progress, context);
 
 	if (ret)
 		goto free;
+
+	cq->efa_cq.wait_obj = attr->wait_obj;
+	cq->efa_cq.wait_cond = attr->wait_cond;
 
 	ret = efa_cq_open_ibv_cq(
 		attr, efa_domain->device->ibv_ctx, &cq->efa_cq.ibv_cq,
@@ -968,6 +1133,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	/* open shm cq as peer cq */
 	if (efa_domain->shm_domain) {
 		memcpy(&shm_cq_attr, attr, sizeof(*attr));
+		shm_cq_attr.wait_obj = FI_WAIT_NONE;
 		/* Bind ep with shm provider's cq */
 		shm_cq_attr.flags |= FI_PEER;
 		peer_cq_context.size = sizeof(peer_cq_context);

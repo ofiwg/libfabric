@@ -20,6 +20,7 @@
 
 #include "efa_cq.h"
 #include "efa_prov_info.h"
+#include "rdm/efa_rdm_cq.h"
 #ifdef EFA_PERF_ENABLED
 const char *efa_perf_counters_str[] = {
 	EFA_PERF_FOREACH(OFI_STR)
@@ -63,16 +64,28 @@ static int efa_fabric_close(fid_t fid)
 static int efa_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 {
 	struct efa_cq *efa_cq;
+	struct util_cq *util_cq;
+	struct efa_rdm_cq *rdm_cq;
 	struct util_wait *wait;
 	int ret, i;
 
 	for (i = 0; i < count; i++) {
 		if (fids[i]->fclass == FI_CLASS_CQ) {
-			/* Use EFA-specific CQ trywait */
-			efa_cq = container_of(fids[i], struct efa_cq, util_cq.cq_fid.fid);
-			ret = efa_cq_trywait(efa_cq);
-			if (ret)
-				return ret;
+			util_cq = container_of(fids[i], struct util_cq, cq_fid.fid);
+			
+			/* RDM CQs use util wait objects, not hardware CQ events */
+			if (util_cq->wait) {
+				rdm_cq = container_of(util_cq, struct efa_rdm_cq, efa_cq.util_cq);
+				ret = efa_rdm_cq_trywait(rdm_cq);
+				if (ret)
+					return ret;
+			} else {
+				/* Use EFA-specific CQ trywait for non-RDM CQs */
+				efa_cq = container_of(fids[i], struct efa_cq, util_cq.cq_fid.fid);
+				ret = efa_cq_trywait(efa_cq);
+				if (ret)
+					return ret;
+			}
 		} else {
 			/* Use generic util trywait logic for non-CQ types */
 			switch (fids[i]->fclass) {
