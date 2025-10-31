@@ -7,6 +7,12 @@
 #include "ofi_hmem.h"
 #include "efa_mr.h"
 
+#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+#  define EFA_HAVE_NON_SYSTEM_HMEM 1
+#else
+#  define EFA_HAVE_NON_SYSTEM_HMEM 0
+#endif
+
 #define EFA_HMEM_IFACE_FOREACH_FROM(var, start) \
 	for ( \
 		const enum fi_hmem_iface *_p = &efa_hmem_ifaces[start]; \

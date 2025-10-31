@@ -66,7 +66,7 @@ void test_info_rdm_attributes()
 		assert_int_equal(info->ep_attr->max_msg_size, UINT64_MAX);
 		assert_int_equal(info->domain_attr->progress, FI_PROGRESS_MANUAL);
 		assert_int_equal(info->domain_attr->control_progress, FI_PROGRESS_MANUAL);
-#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+#if EFA_HAVE_NON_SYSTEM_HMEM
 		assert_true(info->caps | FI_HMEM);
 #endif
 	}
@@ -159,7 +159,7 @@ void test_info_direct_attributes_rma()
 /**
  * @brief Verify that efa direct only supports HMEM with p2p
  */
-#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+#if EFA_HAVE_NON_SYSTEM_HMEM
 void test_info_direct_hmem_support_p2p()
 {
 	struct fi_info *info;

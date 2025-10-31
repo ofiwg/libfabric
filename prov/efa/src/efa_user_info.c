@@ -175,7 +175,7 @@ int efa_user_info_check_domain_object(const struct fi_info *hints,
 	return 0;
 }
 
-#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+#if EFA_HAVE_NON_SYSTEM_HMEM
 /**
  * @brief determine if EFA provider should claim support of FI_HMEM in info
  * @param[in]	version		libfabric API version used by user

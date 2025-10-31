@@ -388,7 +388,7 @@ err_free:
 	return ret;
 }
 
-#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+#if EFA_HAVE_NON_SYSTEM_HMEM
 void efa_prov_info_direct_set_hmem_flags(struct fi_info *prov_info)
 {
 	enum fi_hmem_iface iface;
