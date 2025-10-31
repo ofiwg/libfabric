@@ -67,8 +67,11 @@ int opx_hfi1_wrapper_ack_events(struct fi_opx_hfi1_context *context, uint64_t ac
 /* Reset context (link bounce support) */
 int opx_hfi1_wrapper_reset_context(struct fi_opx_hfi1_context *context);
 
-/* Close the rdma-core lib/context */
+/* Close the rdma-core context */
 void opx_hfi1_rdma_context_close(void *ibv_context);
+
+/* Close the rdma-core lib */
+void opx_hfi1_rdma_lib_close();
 
 /* TID function pointers and wrapper */
 struct fi_opx_hfi1_context;
