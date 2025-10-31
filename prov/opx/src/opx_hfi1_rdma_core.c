@@ -715,7 +715,10 @@ void opx_hfi1_rdma_context_close(void *ibv_context)
 	if (opx_rdma_ops.libibverbs && ibv_context) {
 		OPX_HFI1_RDMA_FN(ibv_close_device)((struct ibv_context *) ibv_context);
 	}
+}
 
+void opx_hfi1_rdma_lib_close()
+{
 	if (opx_rdma_ops.libhfi1verbs) {
 		dlclose(opx_rdma_ops.libhfi1verbs);
 	}
@@ -725,6 +728,8 @@ void opx_hfi1_rdma_context_close(void *ibv_context)
 		dlclose(opx_rdma_ops.libibverbs);
 	}
 	opx_rdma_ops.libibverbs = NULL;
+
+	opx_rdma_ops.one_time_setup = false;
 }
 
 #else /* HAVE_HFI1_DIRECT_VERBS */
@@ -800,6 +805,11 @@ int32_t opx_hfi1_rdma_free_tid(struct fi_opx_hfi1_context *context, uint64_t tid
 }
 
 void opx_hfi1_rdma_context_close(void *ibv_context)
+{
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS\n");
+}
+
+void opx_hfi1_rdma_lib_close()
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS\n");
 }
