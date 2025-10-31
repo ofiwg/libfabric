@@ -12,11 +12,15 @@ struct efa_rdm_cq {
 	struct efa_cq efa_cq;
 	struct fid_cq *shm_cq;
 	struct dlist_entry ibv_cq_poll_list;
+	size_t entry_size;
 	bool need_to_scan_ep_list;
 };
 
 int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		    struct fid_cq **cq_fid, void *context);
+
+int efa_rdm_cq_wait_add_ibv_cq(struct efa_rdm_cq *cq, struct efa_ibv_cq *ibv_cq);
+void efa_rdm_cq_wait_del_ibv_cq(struct efa_rdm_cq *cq, struct efa_ibv_cq *ibv_cq);
 
 void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm_ep *closing_ep);
 int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
