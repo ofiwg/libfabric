@@ -651,7 +651,7 @@ static int fi_opx_close_ep(fid_t fid)
 		}
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI context not in use\n");
 
-		/* Close HFI1 Direct Verbs lib/context, but HFISVC shares ONE endpoint context
+		/* Close HFI1 Direct Verbs context, but HFISVC shares ONE endpoint context
 		   with the domain.  Let the domain close it */
 #if HAVE_HFISVC
 		if (opx_ep->domain->hfisvc.ctx != opx_ep->hfi->ibv_context) {

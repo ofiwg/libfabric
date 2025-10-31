@@ -99,6 +99,9 @@ static int fi_opx_close_domain(fid_t fid)
 	}
 #endif
 
+	/* Close rdma-core lib, the endpoint already closed contexts */
+	opx_hfi1_rdma_lib_close();
+
 	ret = fi_opx_ref_finalize(&opx_domain->ref_cnt, "domain");
 	if (ret) {
 		return ret;
