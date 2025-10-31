@@ -1469,6 +1469,7 @@ static void test_efa_cq_data_path_direct_status(
 	efa_cq = container_of(cq, struct efa_cq, util_cq.cq_fid);
 
 	assert_true(efa_cq->ibv_cq.data_path_direct_enabled == data_path_direct_enabled);
+	
 	assert_int_equal(fi_close(&cq->fid), 0);
 
 	/* Recover the mocked vendor_id */
@@ -1734,7 +1735,7 @@ void test_efa_cq_sread_enosys(struct efa_resource **state)
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid.fid);
 
-	assert_null(efa_cq->wait_obj);
+	assert_int_equal(efa_cq->wait_obj, FI_WAIT_NONE);
 	assert_null(efa_cq->ibv_cq.channel);
 
 	ret = fi_cq_sread(resource->cq, &cq_entry, 1, NULL, 1);
@@ -2318,4 +2319,116 @@ void test_efa_cq_read_mixed_success_error(struct efa_resource **state)
 	will_return_int_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
 	resource->ep = NULL;
+}
+
+/**
+ * @brief Helper to set up RDM CQ with wait object for sread tests
+ *
+ * @param[in,out] resource  Test resource to initialize
+ * @return 0 on success, negative error code if device doesn't support CQ notification
+ */
+static int test_efa_rdm_cq_sread_prep(struct efa_resource *resource)
+{
+	struct fi_cq_attr cq_attr = {
+		.format = FI_CQ_FORMAT_DATA,
+		.wait_obj = FI_WAIT_FD,
+	};
+	struct fid_cq *cq;
+	int ret;
+
+	g_efa_unit_test_mocks.efa_ibv_req_notify_cq = efa_mock_ibv_req_notify_cq_return_mock;
+	g_efa_unit_test_mocks.efa_ibv_get_cq_event = efa_mock_ibv_get_cq_event_return_mock;
+	will_return_maybe(efa_mock_ibv_req_notify_cq_return_mock, 0);
+	will_return_maybe(efa_mock_ibv_get_cq_event_return_mock, -1);
+
+	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	ret = fi_cq_open(resource->domain, &cq_attr, &cq, NULL);
+	if (ret)
+		/* EFA device doesn't support CQ notification */
+		return ret;
+
+	assert_int_equal(fi_ep_bind(resource->ep, &cq->fid, FI_SEND | FI_RECV), 0);
+	assert_int_equal(fi_enable(resource->ep), 0);
+
+	resource->cq = cq;
+	return 0;
+}
+
+/**
+ * @brief Test fi_cq_sread() with wait object disabled returns -FI_ENOSYS
+ */
+void test_efa_rdm_cq_sread_no_wait_obj(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cq_data_entry cq_entry;
+	int ret;
+
+	/* Open a temporary CQ with wait-none so no wait object exists */
+	struct fid_cq *waitless_cq = NULL;
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_int_equal(fi_cq_open(resource->domain,
+				   &(struct fi_cq_attr){ .wait_obj = FI_WAIT_NONE },
+				   &waitless_cq, NULL), 0);
+
+	ret = fi_cq_sread(waitless_cq, &cq_entry, 1, NULL, 0);
+	assert_int_equal(ret, -FI_ENOSYS);
+
+	assert_int_equal(fi_close(&waitless_cq->fid), 0);
+	will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+}
+
+/**
+ * @brief Test RDM CQ fi_cq_sread() returns -FI_EAGAIN when CQ is empty and timeout expires
+ */
+void test_efa_rdm_cq_sread_eagain(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cq_data_entry cq_entry = {0};
+	int ret;
+
+	ret = test_efa_rdm_cq_sread_prep(resource);
+	if (ret)
+		return;
+
+	ret = fi_cq_sread(resource->cq, &cq_entry, 1, NULL, 1);
+	assert_int_equal(ret, -FI_EAGAIN);
+}
+
+/**
+ * @brief Test RDM CQ fi_cq_sread() returns completions when available
+ */
+void test_efa_rdm_cq_sread_with_cqe(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_cq *efa_rdm_cq;
+	struct fi_cq_data_entry cq_entry = {0};
+	struct fi_cq_tagged_entry write_entry = {
+		.op_context = (void *) 0xdeadbeef,
+		.flags = FI_SEND | FI_MSG,
+		.len = 1024,
+		.data = 0x12345678,
+		.tag = 0,
+	};
+	int ret;
+
+	ret = test_efa_rdm_cq_sread_prep(resource);
+	if (ret)
+		return;
+
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid);
+
+	/* Write a completion to the util_cq */
+	ret = ofi_cq_write(&efa_rdm_cq->efa_cq.util_cq, write_entry.op_context,
+			   write_entry.flags, write_entry.len, write_entry.buf,
+			   write_entry.data, write_entry.tag);
+	assert_int_equal(ret, 0);
+
+	/* sread should return immediately with the completion */
+	ret = fi_cq_sread(resource->cq, &cq_entry, 1, NULL, 1000);
+	assert_int_equal(ret, 1);
+	assert_ptr_equal(cq_entry.op_context, write_entry.op_context);
+	assert_int_equal(cq_entry.flags, write_entry.flags);
+	assert_int_equal(cq_entry.len, write_entry.len);
+	assert_int_equal(cq_entry.data, write_entry.data);
 }
