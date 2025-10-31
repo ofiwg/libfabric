@@ -252,13 +252,17 @@ struct fi_info {
 # CAPABILITIES
 
 Interface capabilities are obtained by OR-ing the following flags
-together.  If capabilities in the hint parameter are set to 0, the
-underlying provider will return the set of capabilities which are
-supported.  Otherwise, providers will return data matching the
-specified set of capabilities.  Providers may indicate support for
-additional capabilities beyond those requested when the use of
-expanded capabilities will not adversely affect performance or expose
-the application to communication beyond that which was requested.
+together. If a NULL hints structure is provided, the underlying
+provider will return the set of capabilities which are supported.
+If a hints structure is provided but the capabilities in the hints
+structure are set to 0, the underlying provider will only return the
+set of capabilities that the provider can support with the mode bits
+set by the application in the hints structure. Otherwise, if
+capabilities are specified with non-zero values, providers will return
+data matching the specified set of capabilities. Providers may indicate
+support for additional capabilities beyond those requested when the use
+of expanded capabilities will not adversely affect performance or
+expose the application to communication beyond that which was requested.
 Applications may use this feature to request a minimal set of
 requirements, then check the returned capabilities to enable
 additional optimizations.
