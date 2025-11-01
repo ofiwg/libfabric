@@ -433,7 +433,7 @@ void efa_prov_info_direct_set_hmem_flags(struct fi_info *prov_info)
 	prov_info->domain_attr->mr_mode	|= FI_MR_HMEM;
 }
 #else
-void efa_prov_info_direct_set_hmem_flags(struct fi_info *prov_info, enum fi_ep_type ep_type)
+void efa_prov_info_direct_set_hmem_flags(struct fi_info *prov_info)
 {
 }
 #endif
