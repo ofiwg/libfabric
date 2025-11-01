@@ -767,7 +767,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 		if (ret)
 			return ret;
 
-		if (++j == opts.window_size) {
+		if (++j == opts.window_size || i < opts.warmup_iterations) {
 			ret = bw_rma_comp(rma_op, j);
 			if (ret)
 				return ret;
