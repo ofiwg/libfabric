@@ -44,6 +44,13 @@
 
 extern bool ofi_hmem_disable_p2p;
 
+/* HMEM DMABUF settings */
+extern bool ofi_hmem_system_use_dmabuf;
+extern bool ofi_hmem_cuda_use_dmabuf;
+extern bool ofi_hmem_neuron_use_dmabuf;
+extern bool ofi_hmem_synapseai_use_dmabuf;
+extern bool ofi_hmem_rocr_use_dmabuf;
+
 typedef void* ofi_hmem_async_event_t;
 
 #define MAX_NUM_ASYNC_OP	4
