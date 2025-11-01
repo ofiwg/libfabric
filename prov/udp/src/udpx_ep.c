@@ -217,7 +217,7 @@ static struct fi_ops_ep udpx_ep_ops = {
 
 static void udpx_tx_comp(struct udpx_ep *ep, void *context)
 {
-	struct fi_cq_tagged_entry *comp;
+	struct fi_cq_rpc_entry *comp;
 
 	comp = ofi_cirque_next(ep->util_ep.tx_cq->cirq);
 	comp->op_context = context;
@@ -237,7 +237,7 @@ static void udpx_tx_comp_signal(struct udpx_ep *ep, void *context)
 static void udpx_rx_comp(struct udpx_ep *ep, void *context, size_t len,
 			 void *addr)
 {
-	struct fi_cq_tagged_entry *comp;
+	struct fi_cq_rpc_entry *comp;
 
 	assert(!ofi_cirque_isfull(ep->util_ep.rx_cq->cirq));
 
