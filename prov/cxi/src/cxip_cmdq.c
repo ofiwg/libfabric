@@ -103,13 +103,6 @@ static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
 			    &lni->hw_cps[lni->n_cps]);
 #endif
 	if (ret) {
-		if (trig_cp) {
-			CXIP_WARN("Failed to allocate CP 0, ret:%d VNI:%u TC:%s TYPE:%s\n",
-				  ret, vni, cxi_tc_to_str(tc),
-				  cxi_tc_type_to_str(tc_type));
-			goto err_free_sw_cp;
-		}
-
 		/* Attempt to fall back to remap traffic class with the same
 		 * traffic class type and allocate HW CP if necessary.
 		 */
@@ -134,7 +127,7 @@ static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
 		/* Attempt to allocated a remapped HW CP. */
 #if CXI_HAVE_ALLOC_TRIG_CP
 		ret = cxil_alloc_trig_cp(lni->lni, vni, remap_tc, tc_type,
-					 NON_TRIG_LCID,
+					 trig_cp ? TRIG_LCID : NON_TRIG_LCID,
 					 &lni->hw_cps[lni->n_cps]);
 #else
 		ret = cxil_alloc_cp(lni->lni, vni, remap_tc, tc_type,
