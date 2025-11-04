@@ -36,7 +36,6 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 					const struct fi_msg_rma *msg,
 					uint64_t flags)
 {
-	struct efa_qp *qp;
 	struct efa_mr *efa_mr;
 	struct efa_conn *conn;
 #ifndef _WIN32
@@ -47,6 +46,7 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	 */
 	struct ibv_sge sge_list[EFA_DEV_ATTR_MAX_WR_SGE];
 #endif
+	uintptr_t wr_id;
 	int i, err = 0;
 
 	efa_tracepoint(read_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
@@ -63,21 +63,13 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	assert(ofi_total_iov_len(msg->msg_iov, msg->iov_count) <=
 	       base_ep->domain->device->max_rdma_size);
 
-	qp = base_ep->qp;
-
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 
-	if (!base_ep->is_wr_started) {
-		efa_qp_wr_start(qp);
-		base_ep->is_wr_started = true;
-	}
-
-	qp->ibv_qp_ex->wr_id = (uintptr_t) efa_fill_context(
+	/* Prepare work request ID */
+	wr_id = (uintptr_t) efa_fill_context(
 		msg->context, msg->addr, flags, FI_RMA | FI_READ);
 
-	/* ep->domain->info->tx_attr->rma_iov_limit is set to 1 */
-	efa_qp_wr_rdma_read(qp, msg->rma_iov[0].key, msg->rma_iov[0].addr);
-
+	/* Prepare SGE list */
 	for (i = 0; i < msg->iov_count; ++i) {
 		sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
 		sge_list[i].length = msg->msg_iov[i].iov_len;
@@ -92,21 +84,19 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 		sge_list[i].lkey = efa_mr->ibv_mr->lkey;
 	}
 
-	efa_qp_wr_set_sge_list(qp, msg->iov_count, sge_list);
-
 	conn = efa_av_addr_to_conn(base_ep->av, msg->addr);
 	assert(conn && conn->ep_addr);
-	efa_qp_wr_set_ud_addr(qp, conn->ah, conn->ep_addr->qpn,
-			   conn->ep_addr->qkey);
 
-	efa_tracepoint(post_read, qp->ibv_qp_ex->wr_id, (uintptr_t)msg->context);
+	/* Use consolidated RDMA read function */
+	/* ep->domain->info->tx_attr->rma_iov_limit is set to 1 */
+	err = efa_qp_post_read(base_ep->qp, sge_list, msg->iov_count,
+			       msg->rma_iov[0].key, msg->rma_iov[0].addr,
+			       wr_id, flags,
+			       conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
+	if (OFI_UNLIKELY(err))
+		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 
-	if (!(flags & FI_MORE)) {
-		err = efa_qp_wr_complete(qp);
-		if (OFI_UNLIKELY(err))
-			err = (err == ENOMEM) ? -FI_EAGAIN : -err;
-		base_ep->is_wr_started = false;
-	}
+	efa_tracepoint(post_read, wr_id, (uintptr_t)msg->context);
 
 out_err:
 	ofi_genlock_unlock(&base_ep->util_ep.lock);
@@ -188,7 +178,6 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 					 const struct fi_msg_rma *msg,
 					 uint64_t flags)
 {
-	struct efa_qp *qp;
 	struct efa_conn *conn;
 #ifndef _WIN32
 	struct ibv_sge sge_list[msg->iov_count];
@@ -197,8 +186,8 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	 * the expected iov_limit/max_sq_sge from the lower-level efa provider.
 	 */
 	struct ibv_sge sge_list[EFA_DEV_ATTR_MAX_WR_SGE];
-	struct ibv_data_buf inline_data_list[EFA_DEV_ATTR_MAX_WR_SGE];
 #endif
+	uintptr_t wr_id;
 	int i, err = 0;
 
 	if (flags & FI_INJECT) {
@@ -214,25 +203,13 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		ofi_total_iov_len(msg->msg_iov, msg->iov_count),
 		msg->addr, (size_t) msg->context, flags);
 
-	qp = base_ep->qp;
-
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 
-	if (!base_ep->is_wr_started) {
-		efa_qp_wr_start(qp);
-		base_ep->is_wr_started = true;
-	}
-
-	qp->ibv_qp_ex->wr_id = (uintptr_t) efa_fill_context(
+	/* Prepare work request ID */
+	wr_id = (uintptr_t) efa_fill_context(
 		msg->context, msg->addr, flags, FI_RMA | FI_WRITE);
 
-	if (flags & FI_REMOTE_CQ_DATA) {
-		efa_qp_wr_rdma_write_imm(qp, msg->rma_iov[0].key,
-				      msg->rma_iov[0].addr, msg->data);
-	} else {
-		efa_qp_wr_rdma_write(qp, msg->rma_iov[0].key, msg->rma_iov[0].addr);
-	}
-
+	/* Prepare SGE list */
 	for (i = 0; i < msg->iov_count; ++i) {
 		sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
 		sge_list[i].length = msg->msg_iov[i].iov_len;
@@ -245,21 +222,19 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		}
 		sge_list[i].lkey = ((struct efa_mr *)msg->desc[i])->ibv_mr->lkey;
 	}
-	efa_qp_wr_set_sge_list(qp, msg->iov_count, sge_list);
 
 	conn = efa_av_addr_to_conn(base_ep->av, msg->addr);
 	assert(conn && conn->ep_addr);
-	efa_qp_wr_set_ud_addr(qp, conn->ah, conn->ep_addr->qpn,
-			   conn->ep_addr->qkey);
 
-	efa_tracepoint(post_write, qp->ibv_qp_ex->wr_id, (uintptr_t)msg->context);
+	/* Use consolidated RDMA write function */
+	err = efa_qp_post_write(base_ep->qp, sge_list, msg->iov_count,
+				msg->rma_iov[0].key, msg->rma_iov[0].addr,
+				wr_id, msg->data, flags,
+				conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
+	if (OFI_UNLIKELY(err))
+		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 
-	if (!(flags & FI_MORE)) {
-		err = efa_qp_wr_complete(qp);
-		if (OFI_UNLIKELY(err))
-			err = (err == ENOMEM) ? -FI_EAGAIN : -err;
-		base_ep->is_wr_started = false;
-	}
+	efa_tracepoint(post_write, wr_id, (uintptr_t)msg->context);
 
 out_err:
 	ofi_genlock_unlock(&base_ep->util_ep.lock);

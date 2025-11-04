@@ -157,15 +157,10 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	pkt_attr.device_version = 0xefa0;
 	efa_unit_test_handshake_pkt_construct(pkt_entry, &pkt_attr);
 
-	/* Setup QP mocks */
-	g_efa_unit_test_mocks.efa_qp_wr_start = &efa_mock_efa_qp_wr_start_no_op;
-	/* this mock will save the send work request (wr) in a global array */
-	g_efa_unit_test_mocks.efa_qp_wr_send = &efa_mock_efa_qp_wr_send_verify_handshake_pkt_local_host_id_and_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_set_inline_data_list = &efa_mock_efa_qp_wr_set_inline_data_list_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_set_sge_list = &efa_mock_efa_qp_wr_set_sge_list_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_set_ud_addr = &efa_mock_efa_qp_wr_set_ud_addr_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_complete = &efa_mock_efa_qp_wr_complete_no_op;
-	expect_function_call(efa_mock_efa_qp_wr_send_verify_handshake_pkt_local_host_id_and_save_wr);
+	/* Mock general QP post send function for handshake operations */
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr;
+	expect_function_call(efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr);
+	will_return(efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr, 0);
 
 	/* Setup CQ mocks */
 	g_efa_unit_test_mocks.efa_ibv_cq_end_poll = &efa_mock_efa_ibv_cq_end_poll_check_mock;
