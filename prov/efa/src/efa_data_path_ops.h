@@ -33,16 +33,20 @@
 #if EFA_UNIT_TEST
 /* For unit tests, declare functions that are defined in efa_unit_test_data_path_ops.c */
 int efa_qp_post_recv(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad);
-int efa_qp_wr_complete(struct efa_qp *efaqp);
-void efa_qp_wr_rdma_read(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr);
-void efa_qp_wr_rdma_write(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr);
-void efa_qp_wr_rdma_write_imm(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr, __be32 imm_data);
-void efa_qp_wr_send(struct efa_qp *efaqp);
-void efa_qp_wr_send_imm(struct efa_qp *efaqp, __be32 imm_data);
-void efa_qp_wr_set_inline_data_list(struct efa_qp *efaqp, size_t num_buf, const struct ibv_data_buf *buf_list);
-void efa_qp_wr_set_sge_list(struct efa_qp *efaqp, size_t num_sge, const struct ibv_sge *sg_list);
-void efa_qp_wr_set_ud_addr(struct efa_qp *efaqp, struct efa_ah *ah, uint32_t remote_qpn, uint32_t remote_qkey);
-void efa_qp_wr_start(struct efa_qp *efaqp);
+int efa_qp_post_send(struct efa_qp *qp, const struct ibv_sge *sge_list,
+		      const struct ibv_data_buf *inline_data_list,
+		      size_t iov_count, bool use_inline, uintptr_t wr_id,
+		      uint64_t data, uint64_t flags, struct efa_ah *ah,
+		      uint32_t qpn, uint32_t qkey);
+int efa_qp_post_read(struct efa_qp *qp, const struct ibv_sge *sge_list,
+		      size_t sge_count, uint32_t remote_key,
+		      uint64_t remote_addr, uintptr_t wr_id, uint64_t flags,
+		      struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+int efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list,
+		       size_t sge_count, uint32_t remote_key,
+		       uint64_t remote_addr, uintptr_t wr_id, uint64_t data,
+		       uint64_t flags, struct efa_ah *ah, uint32_t qpn,
+		       uint32_t qkey);
 int efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
 int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq);
 enum ibv_wc_opcode efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq);
@@ -74,112 +78,211 @@ static inline int efa_qp_post_recv(struct efa_qp *qp, struct ibv_recv_wr *wr, st
 	return ibv_post_recv(qp->ibv_qp, wr, bad);
 }
 
-static inline int efa_qp_wr_complete(struct efa_qp *efaqp)
+/**
+ * @brief RDMA-core version of send operation using ibv_* APIs
+ */
+static inline int
+efa_ibv_post_send(
+		struct efa_qp *qp,
+		const struct ibv_sge *sge_list,
+		const struct ibv_data_buf *inline_data_list,
+		size_t data_count,
+		bool use_inline,
+		uintptr_t wr_id,
+		uint64_t data,
+		uint64_t flags,
+		struct efa_ah *ah,
+		uint32_t qpn,
+		uint32_t qkey)
 {
-#if HAVE_EFA_DATA_PATH_DIRECT
-	if (efaqp->data_path_direct_enabled)
-		return efa_data_path_direct_wr_complete(efaqp);
-#endif
-	return ibv_wr_complete(efaqp->ibv_qp_ex);
+	struct efa_base_ep *base_ep = qp->base_ep;
+	int ret;
+
+	if (!base_ep->is_wr_started) {
+		ibv_wr_start(qp->ibv_qp_ex);
+		base_ep->is_wr_started = true;
+	}
+
+	qp->ibv_qp_ex->wr_id = wr_id;
+
+	if (flags & FI_REMOTE_CQ_DATA) {
+		ibv_wr_send_imm(qp->ibv_qp_ex, data);
+	} else {
+		ibv_wr_send(qp->ibv_qp_ex);
+	}
+
+	if (use_inline) {
+		ibv_wr_set_inline_data_list(qp->ibv_qp_ex, data_count, inline_data_list);
+	} else {
+		ibv_wr_set_sge_list(qp->ibv_qp_ex, data_count, sge_list);
+	}
+
+	ibv_wr_set_ud_addr(qp->ibv_qp_ex, ah->ibv_ah, qpn, qkey);
+
+	if (!(flags & FI_MORE)) {
+		ret = ibv_wr_complete(qp->ibv_qp_ex);
+		base_ep->is_wr_started = false;
+		return ret;
+	}
+
+	return 0;
 }
 
-static inline void efa_qp_wr_rdma_read(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr)
+/**
+ * @brief RDMA-core version of RDMA read operation using ibv_* APIs
+ */
+static inline int
+efa_ibv_post_read(
+		struct efa_qp *qp,
+		const struct ibv_sge *sge_list,
+		size_t sge_count,
+		uint32_t remote_key,
+		uint64_t remote_addr,
+		uintptr_t wr_id,
+		uint64_t flags,
+		struct efa_ah *ah,
+		uint32_t qpn,
+		uint32_t qkey)
 {
-#if HAVE_EFA_DATA_PATH_DIRECT
-	if (efaqp->data_path_direct_enabled) {
-		efa_data_path_direct_wr_rdma_read(efaqp, rkey, remote_addr);
-		return;
+	struct efa_base_ep *base_ep = qp->base_ep;
+	int ret;
+
+	if (!base_ep->is_wr_started) {
+		ibv_wr_start(qp->ibv_qp_ex);
+		base_ep->is_wr_started = true;
 	}
-#endif
-	ibv_wr_rdma_read(efaqp->ibv_qp_ex, rkey, remote_addr);
+
+	qp->ibv_qp_ex->wr_id = wr_id;
+	ibv_wr_rdma_read(qp->ibv_qp_ex, remote_key, remote_addr);
+	ibv_wr_set_sge_list(qp->ibv_qp_ex, sge_count, sge_list);
+	ibv_wr_set_ud_addr(qp->ibv_qp_ex, ah->ibv_ah, qpn, qkey);
+
+	if (!(flags & FI_MORE)) {
+		ret = ibv_wr_complete(qp->ibv_qp_ex);
+		base_ep->is_wr_started = false;
+		return ret;
+	}
+
+	return 0;
 }
 
-static inline void efa_qp_wr_rdma_write(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr)
+/**
+ * @brief RDMA-core version of RDMA write operation using ibv_* APIs
+ */
+static inline int
+efa_ibv_post_write(
+		struct efa_qp *qp,
+		const struct ibv_sge *sge_list,
+		size_t sge_count,
+		uint32_t remote_key,
+		uint64_t remote_addr,
+		uintptr_t wr_id,
+		uint64_t data,
+		uint64_t flags,
+		struct efa_ah *ah,
+		uint32_t qpn,
+		uint32_t qkey)
 {
-#if HAVE_EFA_DATA_PATH_DIRECT
-	if (efaqp->data_path_direct_enabled) {
-		efa_data_path_direct_wr_rdma_write(efaqp, rkey, remote_addr);
-		return;
+	struct efa_base_ep *base_ep = qp->base_ep;
+	int ret;
+
+	if (!base_ep->is_wr_started) {
+		ibv_wr_start(qp->ibv_qp_ex);
+		base_ep->is_wr_started = true;
 	}
-#endif
-	ibv_wr_rdma_write(efaqp->ibv_qp_ex, rkey, remote_addr);
+
+	qp->ibv_qp_ex->wr_id = wr_id;
+
+	if (flags & FI_REMOTE_CQ_DATA) {
+		ibv_wr_rdma_write_imm(qp->ibv_qp_ex, remote_key, remote_addr, data);
+	} else {
+		ibv_wr_rdma_write(qp->ibv_qp_ex, remote_key, remote_addr);
+	}
+
+	ibv_wr_set_sge_list(qp->ibv_qp_ex, sge_count, sge_list);
+	ibv_wr_set_ud_addr(qp->ibv_qp_ex, ah->ibv_ah, qpn, qkey);
+
+	if (!(flags & FI_MORE)) {
+		ret = ibv_wr_complete(qp->ibv_qp_ex);
+		base_ep->is_wr_started = false;
+		return ret;
+	}
+
+	return 0;
 }
 
-static inline void efa_qp_wr_rdma_write_imm(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr, __be32 imm_data)
+/**
+ * @brief Wrapper for send operations - chooses between direct and IBV paths
+ */
+static inline int
+efa_qp_post_send(struct efa_qp *qp,
+                 const struct ibv_sge *sge_list,
+                 const struct ibv_data_buf *inline_data_list,
+                 size_t data_count,
+                 bool use_inline,
+                 uintptr_t wr_id,
+                 uint64_t data,
+                 uint64_t flags,
+                 struct efa_ah *ah,
+                 uint32_t qpn,
+                 uint32_t qkey)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
-	if (efaqp->data_path_direct_enabled) {
-		efa_data_path_direct_wr_rdma_write_imm(efaqp, rkey, remote_addr, imm_data);
-		return;
-	}
+	if (qp->data_path_direct_enabled)
+		return efa_data_path_direct_post_send(qp, sge_list, inline_data_list, data_count,
+					   use_inline, wr_id, data, flags, ah, qpn, qkey);
 #endif
-	ibv_wr_rdma_write_imm(efaqp->ibv_qp_ex, rkey, remote_addr, imm_data);
+	return efa_ibv_post_send(qp, sge_list, inline_data_list, data_count,
+				use_inline, wr_id, data, flags, ah, qpn, qkey);
 }
 
-static inline void efa_qp_wr_send(struct efa_qp *efaqp)
+/**
+ * @brief Wrapper for RDMA read operations - chooses between direct and IBV paths
+ */
+static inline int
+efa_qp_post_read(struct efa_qp *qp,
+                 const struct ibv_sge *sge_list,
+                 size_t sge_count,
+                 uint32_t remote_key,
+                 uint64_t remote_addr,
+                 uintptr_t wr_id,
+                 uint64_t flags,
+                 struct efa_ah *ah,
+                 uint32_t qpn,
+                 uint32_t qkey)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
-	if (efaqp->data_path_direct_enabled) {
-		efa_data_path_direct_wr_send(efaqp);
-		return;
-	}
+	if (qp->data_path_direct_enabled)
+		return efa_data_path_direct_post_read(qp, sge_list, sge_count,
+						remote_key, remote_addr, wr_id, flags, ah, qpn, qkey);
 #endif
-	ibv_wr_send(efaqp->ibv_qp_ex);
+	return efa_ibv_post_read(qp, sge_list, sge_count,
+				 remote_key, remote_addr, wr_id, flags, ah, qpn, qkey);
 }
 
-static inline void efa_qp_wr_send_imm(struct efa_qp *efaqp, __be32 imm_data)
+/**
+ * @brief Wrapper for RDMA write operations - chooses between direct and IBV paths
+ */
+static inline int
+efa_qp_post_write(struct efa_qp *qp,
+                  const struct ibv_sge *sge_list,
+                  size_t sge_count,
+                  uint32_t remote_key,
+                  uint64_t remote_addr,
+                  uintptr_t wr_id,
+                  uint64_t data,
+                  uint64_t flags,
+                  struct efa_ah *ah,
+                  uint32_t qpn,
+                  uint32_t qkey)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
-	if (efaqp->data_path_direct_enabled) {
-		efa_data_path_direct_wr_send_imm(efaqp, imm_data);
-		return;
-	}
+	if (qp->data_path_direct_enabled)
+		return efa_data_path_direct_post_write(qp, sge_list, sge_count,
+					 remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey);
 #endif
-	ibv_wr_send_imm(efaqp->ibv_qp_ex, imm_data);
-}
-
-static inline void efa_qp_wr_set_inline_data_list(struct efa_qp *efaqp, size_t num_buf, const struct ibv_data_buf *buf_list)
-{
-#if HAVE_EFA_DATA_PATH_DIRECT
-	if (efaqp->data_path_direct_enabled) {
-		efa_data_path_direct_wr_set_inline_data_list(efaqp, num_buf, buf_list);
-		return;
-	}
-#endif
-	ibv_wr_set_inline_data_list(efaqp->ibv_qp_ex, num_buf, buf_list);
-}
-
-static inline void efa_qp_wr_set_sge_list(struct efa_qp *efaqp, size_t num_sge, const struct ibv_sge *sg_list)
-{
-#if HAVE_EFA_DATA_PATH_DIRECT
-	if (efaqp->data_path_direct_enabled) {
-		efa_data_path_direct_wr_set_sge_list(efaqp, num_sge, sg_list);
-		return;
-	}
-#endif
-	ibv_wr_set_sge_list(efaqp->ibv_qp_ex, num_sge, sg_list);
-}
-
-static inline void efa_qp_wr_set_ud_addr(struct efa_qp *efaqp, struct efa_ah *ah, uint32_t remote_qpn, uint32_t remote_qkey)
-{
-#if HAVE_EFA_DATA_PATH_DIRECT
-	if (efaqp->data_path_direct_enabled) {
-		efa_data_path_direct_wr_set_ud_addr(efaqp, ah, remote_qpn, remote_qkey);
-		return;
-	}
-#endif
-	ibv_wr_set_ud_addr(efaqp->ibv_qp_ex, ah->ibv_ah, remote_qpn, remote_qkey);
-}
-
-static inline void efa_qp_wr_start(struct efa_qp *efaqp)
-{
-#if HAVE_EFA_DATA_PATH_DIRECT
-	if (efaqp->data_path_direct_enabled) {
-		efa_data_path_direct_wr_start(efaqp);
-		return;
-	}
-#endif
-	ibv_wr_start(efaqp->ibv_qp_ex);
+	return efa_ibv_post_write(qp, sge_list, sge_count,
+				  remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey);
 }
 
 /* CQ wrapper functions */
