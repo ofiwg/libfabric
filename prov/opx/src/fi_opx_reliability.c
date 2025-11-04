@@ -778,6 +778,17 @@ void fi_opx_hfi1_rx_reliability_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 
 	struct fi_opx_reliability_rx_flow *flow = *value_ptr;
 
+	if (OFI_UNLIKELY(flow->next_psn == 0)) {
+		ssize_t rc __attribute__((unused));
+		rc = fi_opx_hfi1_tx_reliability_inject(ep, key, slid, subctxt_rx, 0, /* psn_start */
+						       1,			     /* psn_count */
+						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, OPX_SW_HFI1_TYPE,
+						       OPX_IS_CTX_SHARING_ENABLED);
+		INC_PING_STAT_COND(rc == FI_SUCCESS, NACKS_SENT, *key, 0, 1);
+		OPX_TRACER_TRACE_RELI(OPX_TRACER_END_ERROR, "RX_RELI_PING");
+		return;
+	}
+
 	const uint64_t flow_next_psn	= flow->next_psn;
 	const uint64_t flow_next_psn_24 = flow_next_psn & MAX_PSN;
 	uint64_t       ping_start_psn	= psn_start;
