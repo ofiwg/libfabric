@@ -21,18 +21,11 @@ static void test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr)
 	base_ep->info->caps |= FI_RMA;
 	/* Set up the mock operations */
 	g_efa_unit_test_mocks.efa_qp_post_recv = &efa_mock_efa_qp_post_recv_return_mock;
-	g_efa_unit_test_mocks.efa_qp_wr_complete = &efa_mock_efa_qp_wr_complete_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_rdma_read = &efa_mock_efa_qp_wr_rdma_read_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_rdma_write = &efa_mock_efa_qp_wr_rdma_write_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_rdma_write_imm =
-		&efa_mock_efa_qp_wr_rdma_write_imm_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_send = &efa_mock_efa_qp_wr_send_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_send_imm = &efa_mock_efa_qp_wr_send_imm_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_set_inline_data_list =
-		&efa_mock_efa_qp_wr_set_inline_data_list_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_set_sge_list = &efa_mock_efa_qp_wr_set_sge_list_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_set_ud_addr = &efa_mock_efa_qp_wr_set_ud_addr_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_start = &efa_mock_efa_qp_wr_start_no_op;
+	/* Mock general QP post functions to save work request IDs */
+	g_efa_unit_test_mocks.efa_qp_post_read = &efa_mock_efa_qp_post_read_return_mock;
+	g_efa_unit_test_mocks.efa_qp_post_write = &efa_mock_efa_qp_post_write_return_mock;
+	will_return_maybe(efa_mock_efa_qp_post_read_return_mock, 0);
+	will_return_maybe(efa_mock_efa_qp_post_write_return_mock, 0);
 
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(ret, 0);

@@ -110,7 +110,6 @@ int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibv_ctx,
 	return mock();
 }
 
-
 /**
  * @brief a list of work requests request's WR ID
  */
@@ -122,80 +121,6 @@ void efa_ibv_submitted_wr_id_vec_clear()
 	memset(g_ibv_submitted_wr_id_vec, 0,
 	       g_ibv_submitted_wr_id_cnt * sizeof(void *));
 	g_ibv_submitted_wr_id_cnt = 0;
-}
-
-void efa_mock_efa_qp_wr_start_no_op(struct efa_qp *qp)
-{
-}
-
-/**
- * @brief save wr_id of send request in a global array
- *
- * The saved work request is then be used by efa_mock_efa_ibv_cq_start_poll_use_send_wr()
- * to make ibv_cq_ex to look like it indeed got a completion from device.
- */
-void efa_mock_efa_qp_wr_send_save_wr(struct efa_qp *qp)
-{
-	g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *)qp->ibv_qp_ex->wr_id;
-	g_ibv_submitted_wr_id_cnt++;
-}
-
-void efa_mock_efa_qp_wr_send_verify_handshake_pkt_local_host_id_and_save_wr(struct efa_qp *qp)
-{
-	struct efa_rdm_pke* pke;
-	struct efa_rdm_base_hdr *efa_rdm_base_hdr;
-	uint64_t *host_id_ptr;
-
-	pke = (struct efa_rdm_pke *)qp->ibv_qp_ex->wr_id;
-	efa_rdm_base_hdr = efa_rdm_pke_get_base_hdr(pke);
-
-	assert_int_equal(efa_rdm_base_hdr->type, EFA_RDM_HANDSHAKE_PKT);
-
-	if (g_efa_unit_test_mocks.local_host_id) {
-		assert_true(efa_rdm_base_hdr->flags & EFA_RDM_HANDSHAKE_HOST_ID_HDR);
-		host_id_ptr = efa_rdm_pke_get_handshake_opt_host_id_ptr(pke);
-		assert_true(*host_id_ptr == g_efa_unit_test_mocks.local_host_id);
-	} else {
-		assert_false(efa_rdm_base_hdr->flags & EFA_RDM_HANDSHAKE_HOST_ID_HDR);
-	}
-
-	function_called();
-	return efa_mock_efa_qp_wr_send_save_wr(qp);
-}
-
-void efa_mock_efa_qp_wr_send_imm_save_wr(struct efa_qp *qp, __be32 imm_data)
-{
-	g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *)qp->ibv_qp_ex->wr_id;
-	g_ibv_submitted_wr_id_cnt++;
-}
-
-void efa_mock_efa_qp_wr_set_inline_data_list_no_op(struct efa_qp *qp,
-						size_t num_buf,
-						const struct ibv_data_buf *buf_list)
-{
-}
-
-void efa_mock_efa_qp_wr_set_sge_list_no_op(struct efa_qp *qp,
-					size_t num_sge,
-					const struct ibv_sge *sge_list)
-{
-}
-
-void efa_mock_efa_qp_wr_set_ud_addr_no_op(struct efa_qp *qp, struct efa_ah *ah,
-				       uint32_t remote_qpn, uint32_t remote_qkey)
-{
-}
-
-int efa_mock_efa_qp_wr_complete_no_op(struct efa_qp *qp)
-{
-	return 0;
-}
-
-void efa_mock_efa_qp_wr_rdma_write_save_wr(struct efa_qp *qp, uint32_t rkey,
-					uint64_t remote_addr)
-{
-	g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *)qp->ibv_qp_ex->wr_id;
-	g_ibv_submitted_wr_id_cnt++;
 }
 
 int efa_mock_efa_ibv_cq_start_poll_return_mock(struct efa_ibv_cq *ibv_cq,
@@ -320,19 +245,55 @@ int efa_mock_efa_qp_post_recv_return_mock(struct efa_qp *qp, struct ibv_recv_wr 
 	return mock();
 }
 
-void efa_mock_efa_qp_wr_rdma_read_save_wr(struct efa_qp *qp, uint32_t rkey,
-				       uint64_t remote_addr)
+static void efa_mock_efa_qp_post_save_wr_id(uintptr_t wr_id)
 {
-	g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *)qp->ibv_qp_ex->wr_id;
-	g_ibv_submitted_wr_id_cnt++;
+	if (g_ibv_submitted_wr_id_cnt < EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND) {
+		g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *)wr_id;
+		g_ibv_submitted_wr_id_cnt++;
+	}
 }
 
-void efa_mock_efa_qp_wr_rdma_write_imm_save_wr(struct efa_qp *qp, uint32_t rkey,
-					    uint64_t remote_addr,
-					    __be32 imm_data)
+int efa_mock_efa_qp_post_send_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
 {
-	g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *) qp->ibv_qp_ex->wr_id;
-	g_ibv_submitted_wr_id_cnt++;
+	efa_mock_efa_qp_post_save_wr_id(wr_id);
+	return mock();
+}
+
+int efa_mock_efa_qp_post_read_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
+{
+	efa_mock_efa_qp_post_save_wr_id(wr_id);
+	return mock();
+}
+
+int efa_mock_efa_qp_post_write_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
+{
+	efa_mock_efa_qp_post_save_wr_id(wr_id);
+	return mock();
+}
+
+int efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
+{
+	struct efa_rdm_pke* pke;
+	struct efa_rdm_base_hdr *efa_rdm_base_hdr;
+	uint64_t *host_id_ptr;
+
+	pke = (struct efa_rdm_pke *)wr_id;
+	efa_rdm_base_hdr = efa_rdm_pke_get_base_hdr(pke);
+
+	assert_int_equal(efa_rdm_base_hdr->type, EFA_RDM_HANDSHAKE_PKT);
+
+	if (g_efa_unit_test_mocks.local_host_id) {
+		assert_true(efa_rdm_base_hdr->flags & EFA_RDM_HANDSHAKE_HOST_ID_HDR);
+		host_id_ptr = efa_rdm_pke_get_handshake_opt_host_id_ptr(pke);
+		assert_true(*host_id_ptr == g_efa_unit_test_mocks.local_host_id);
+	} else {
+		assert_false(efa_rdm_base_hdr->flags & EFA_RDM_HANDSHAKE_HOST_ID_HDR);
+	}
+
+	function_called();
+
+	efa_mock_efa_qp_post_save_wr_id(wr_id);
+	return mock();
 }
 
 struct efa_unit_test_mocks g_efa_unit_test_mocks = {
@@ -361,16 +322,9 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 
 	/* EFA data path ops real function assignments */
 	.efa_qp_post_recv = __real_efa_qp_post_recv,
-	.efa_qp_wr_complete = __real_efa_qp_wr_complete,
-	.efa_qp_wr_rdma_read = __real_efa_qp_wr_rdma_read,
-	.efa_qp_wr_rdma_write = __real_efa_qp_wr_rdma_write,
-	.efa_qp_wr_rdma_write_imm = __real_efa_qp_wr_rdma_write_imm,
-	.efa_qp_wr_send = __real_efa_qp_wr_send,
-	.efa_qp_wr_send_imm = __real_efa_qp_wr_send_imm,
-	.efa_qp_wr_set_inline_data_list = __real_efa_qp_wr_set_inline_data_list,
-	.efa_qp_wr_set_sge_list = __real_efa_qp_wr_set_sge_list,
-	.efa_qp_wr_set_ud_addr = __real_efa_qp_wr_set_ud_addr,
-	.efa_qp_wr_start = __real_efa_qp_wr_start,
+	.efa_qp_post_send = __real_efa_qp_post_send,
+	.efa_qp_post_read = __real_efa_qp_post_read,
+	.efa_qp_post_write = __real_efa_qp_post_write,
 	.efa_ibv_cq_start_poll = __real_efa_ibv_cq_start_poll,
 	.efa_ibv_cq_next_poll = __real_efa_ibv_cq_next_poll,
 	.efa_ibv_cq_wc_read_opcode = __real_efa_ibv_cq_wc_read_opcode,
@@ -407,54 +361,19 @@ int __wrap_efa_qp_post_recv(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ib
 	return g_efa_unit_test_mocks.efa_qp_post_recv(qp, wr, bad);
 }
 
-int __wrap_efa_qp_wr_complete(struct efa_qp *efaqp)
+int __wrap_efa_qp_post_send(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
 {
-	return g_efa_unit_test_mocks.efa_qp_wr_complete(efaqp);
+	return g_efa_unit_test_mocks.efa_qp_post_send(qp, sge_list, inline_data_list, iov_count, use_inline, wr_id, data, flags, ah, qpn, qkey);
 }
 
-void __wrap_efa_qp_wr_rdma_read(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr)
+int __wrap_efa_qp_post_read(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
 {
-	g_efa_unit_test_mocks.efa_qp_wr_rdma_read(efaqp, rkey, remote_addr);
+	return g_efa_unit_test_mocks.efa_qp_post_read(qp, sge_list, sge_count, remote_key, remote_addr, wr_id, flags, ah, qpn, qkey);
 }
 
-void __wrap_efa_qp_wr_rdma_write(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr)
+int __wrap_efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
 {
-	g_efa_unit_test_mocks.efa_qp_wr_rdma_write(efaqp, rkey, remote_addr);
-}
-
-void __wrap_efa_qp_wr_rdma_write_imm(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr, __be32 imm_data)
-{
-	g_efa_unit_test_mocks.efa_qp_wr_rdma_write_imm(efaqp, rkey, remote_addr, imm_data);
-}
-
-void __wrap_efa_qp_wr_send(struct efa_qp *efaqp)
-{
-	g_efa_unit_test_mocks.efa_qp_wr_send(efaqp);
-}
-
-void __wrap_efa_qp_wr_send_imm(struct efa_qp *efaqp, __be32 imm_data)
-{
-	g_efa_unit_test_mocks.efa_qp_wr_send_imm(efaqp, imm_data);
-}
-
-void __wrap_efa_qp_wr_set_inline_data_list(struct efa_qp *efaqp, size_t num_buf, const struct ibv_data_buf *buf_list)
-{
-	g_efa_unit_test_mocks.efa_qp_wr_set_inline_data_list(efaqp, num_buf, buf_list);
-}
-
-void __wrap_efa_qp_wr_set_sge_list(struct efa_qp *efaqp, size_t num_sge, const struct ibv_sge *sg_list)
-{
-	g_efa_unit_test_mocks.efa_qp_wr_set_sge_list(efaqp, num_sge, sg_list);
-}
-
-void __wrap_efa_qp_wr_set_ud_addr(struct efa_qp *efaqp, struct efa_ah *ah, uint32_t remote_qpn, uint32_t remote_qkey)
-{
-	g_efa_unit_test_mocks.efa_qp_wr_set_ud_addr(efaqp, ah, remote_qpn, remote_qkey);
-}
-
-void __wrap_efa_qp_wr_start(struct efa_qp *efaqp)
-{
-	g_efa_unit_test_mocks.efa_qp_wr_start(efaqp);
+	return g_efa_unit_test_mocks.efa_qp_post_write(qp, sge_list, sge_count, remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey);
 }
 
 int __wrap_efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr)

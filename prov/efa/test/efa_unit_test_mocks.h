@@ -90,16 +90,9 @@ ssize_t efa_mock_efa_rdm_ope_post_send_return_mock(struct efa_rdm_ope *ope, int 
 
 /* EFA data path ops real functions */
 int __real_efa_qp_post_recv(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad);
-int __real_efa_qp_wr_complete(struct efa_qp *efaqp);
-void __real_efa_qp_wr_rdma_read(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr);
-void __real_efa_qp_wr_rdma_write(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr);
-void __real_efa_qp_wr_rdma_write_imm(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr, __be32 imm_data);
-void __real_efa_qp_wr_send(struct efa_qp *efaqp);
-void __real_efa_qp_wr_send_imm(struct efa_qp *efaqp, __be32 imm_data);
-void __real_efa_qp_wr_set_inline_data_list(struct efa_qp *efaqp, size_t num_buf, const struct ibv_data_buf *buf_list);
-void __real_efa_qp_wr_set_sge_list(struct efa_qp *efaqp, size_t num_sge, const struct ibv_sge *sg_list);
-void __real_efa_qp_wr_set_ud_addr(struct efa_qp *efaqp, struct efa_ah *ah, uint32_t remote_qpn, uint32_t remote_qkey);
-void __real_efa_qp_wr_start(struct efa_qp *efaqp);
+int __real_efa_qp_post_send(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+int __real_efa_qp_post_read(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+int __real_efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
 int __real_efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
 int __real_efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq);
 enum ibv_wc_opcode __real_efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq);
@@ -123,17 +116,10 @@ int efa_mock_ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
 
 /* EFA data path ops mock helpers */
 int efa_mock_efa_qp_post_recv_return_mock(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad);
-int efa_mock_efa_qp_wr_complete_no_op(struct efa_qp *efaqp);
-void efa_mock_efa_qp_wr_rdma_read_save_wr(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr);
-void efa_mock_efa_qp_wr_rdma_write_save_wr(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr);
-void efa_mock_efa_qp_wr_rdma_write_imm_save_wr(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr, __be32 imm_data);
-void efa_mock_efa_qp_wr_send_save_wr(struct efa_qp *efaqp);
-void efa_mock_efa_qp_wr_send_verify_handshake_pkt_local_host_id_and_save_wr(struct efa_qp *efaqp);
-void efa_mock_efa_qp_wr_send_imm_save_wr(struct efa_qp *efaqp, __be32 imm_data);
-void efa_mock_efa_qp_wr_set_inline_data_list_no_op(struct efa_qp *efaqp, size_t num_buf, const struct ibv_data_buf *buf_list);
-void efa_mock_efa_qp_wr_set_sge_list_no_op(struct efa_qp *efaqp, size_t num_sge, const struct ibv_sge *sg_list);
-void efa_mock_efa_qp_wr_set_ud_addr_no_op(struct efa_qp *efaqp, struct efa_ah *ah, uint32_t remote_qpn, uint32_t remote_qkey);
-void efa_mock_efa_qp_wr_start_no_op(struct efa_qp *efaqp);
+int efa_mock_efa_qp_post_send_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+int efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+int efa_mock_efa_qp_post_read_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+int efa_mock_efa_qp_post_write_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
 int efa_mock_efa_ibv_cq_start_poll_return_mock(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
 int efa_mock_efa_ibv_cq_next_poll_return_mock(struct efa_ibv_cq *ibv_cq);
 int efa_mock_efa_ibv_cq_next_poll_simulate_status_change(struct efa_ibv_cq *ibv_cq);
@@ -205,16 +191,9 @@ struct efa_unit_test_mocks
 
 	/* EFA data path ops function pointers */
 	int (*efa_qp_post_recv)(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad);
-	int (*efa_qp_wr_complete)(struct efa_qp *efaqp);
-	void (*efa_qp_wr_rdma_read)(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr);
-	void (*efa_qp_wr_rdma_write)(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr);
-	void (*efa_qp_wr_rdma_write_imm)(struct efa_qp *efaqp, uint32_t rkey, uint64_t remote_addr, __be32 imm_data);
-	void (*efa_qp_wr_send)(struct efa_qp *efaqp);
-	void (*efa_qp_wr_send_imm)(struct efa_qp *efaqp, __be32 imm_data);
-	void (*efa_qp_wr_set_inline_data_list)(struct efa_qp *efaqp, size_t num_buf, const struct ibv_data_buf *buf_list);
-	void (*efa_qp_wr_set_sge_list)(struct efa_qp *efaqp, size_t num_sge, const struct ibv_sge *sg_list);
-	void (*efa_qp_wr_set_ud_addr)(struct efa_qp *efaqp, struct efa_ah *ah, uint32_t remote_qpn, uint32_t remote_qkey);
-	void (*efa_qp_wr_start)(struct efa_qp *efaqp);
+	int (*efa_qp_post_send)(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+	int (*efa_qp_post_read)(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+	int (*efa_qp_post_write)(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
 	int (*efa_ibv_cq_start_poll)(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
 	int (*efa_ibv_cq_next_poll)(struct efa_ibv_cq *ibv_cq);
 	enum ibv_wc_opcode (*efa_ibv_cq_wc_read_opcode)(struct efa_ibv_cq *ibv_cq);

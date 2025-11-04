@@ -421,17 +421,14 @@ EFA_ALWAYS_INLINE void efa_set_tx_buf(struct efa_io_tx_buf_desc *tx_buf,
 }
 
 /**
- * @brief Convert scatter-gather list to hardware transmit buffer descriptors
- *
- * Converts an array of IBV scatter-gather elements into hardware-specific
- * transmit buffer descriptors. Each scatter-gather element is mapped to
- * a corresponding hardware descriptor.
- *
+ * @brief Internal utility: Set SGE list and update metadata length
  * @param tx_bufs Array of hardware transmit buffer descriptors to populate
+ * @param meta_desc Pointer to WQE metadata descriptor
  * @param sg_list Array of IBV scatter-gather elements
  * @param num_sge Number of scatter-gather elements to convert
  */
-EFA_ALWAYS_INLINE void efa_post_send_sgl(struct efa_io_tx_buf_desc *tx_bufs,
+EFA_ALWAYS_INLINE void efa_data_path_direct_set_sgl(struct efa_io_tx_buf_desc *tx_bufs,
+				      struct efa_io_tx_meta_desc *meta_desc,
 				      const struct ibv_sge *sg_list,
 				      int num_sge)
 {
@@ -442,6 +439,7 @@ EFA_ALWAYS_INLINE void efa_post_send_sgl(struct efa_io_tx_buf_desc *tx_bufs,
 		sge = &sg_list[i];
 		efa_set_tx_buf(&tx_bufs[i], sge->addr, sge->lkey, sge->length);
 	}
+	meta_desc->length = num_sge;
 }
 
 /**
@@ -543,87 +541,92 @@ EFA_ALWAYS_INLINE void efa_sq_advance_post_idx(struct efa_data_path_direct_sq *s
 		wq->phase++;
 }
 
-EFA_ALWAYS_INLINE void efa_send_wr_set_imm_data(struct efa_io_tx_wqe *tx_wqe,
+EFA_ALWAYS_INLINE void efa_send_wr_set_imm_data(struct efa_io_tx_meta_desc *meta_desc,
 					     __be32 imm_data)
 {
-	struct efa_io_tx_meta_desc *meta_desc;
-
-	meta_desc = &tx_wqe->meta;
 	meta_desc->immediate_data = be32toh(imm_data);
 	EFA_SET(&meta_desc->ctrl1, EFA_IO_TX_META_DESC_HAS_IMM, 1);
 }
 
-EFA_ALWAYS_INLINE void efa_send_wr_set_rdma_addr(struct efa_io_tx_wqe *tx_wqe,
+EFA_ALWAYS_INLINE void efa_send_wr_set_rdma_addr(struct efa_io_remote_mem_addr *remote_mem,
 					      uint32_t rkey,
 					      uint64_t remote_addr)
 {
-	struct efa_io_remote_mem_addr *remote_mem;
-
-	remote_mem = &tx_wqe->data.rdma_req.remote_mem;
 	remote_mem->rkey = rkey;
 	remote_mem->buf_addr_lo = remote_addr & 0xFFFFFFFF;
 	remote_mem->buf_addr_hi = remote_addr >> 32;
 }
 
 EFA_ALWAYS_INLINE void
-efa_data_path_direct_send_wr_post_working(struct efa_qp *qp,
-					  struct efa_data_path_direct_sq *sq,
-					  bool force_doorbell)
+efa_data_path_direct_send_wr_post(
+		struct efa_qp *qp,
+		struct efa_data_path_direct_sq *sq,
+		struct efa_io_tx_wqe *wqe)
 {
 	uint32_t sq_desc_idx;
+	uint64_t *src, *dst;
 
-	sq_desc_idx = (sq->wq.pc - 1) & sq->wq.desc_mask;
+	/* Calculate target address in write-combined memory */
+	sq_desc_idx = sq->wq.pc & sq->wq.desc_mask;
+	src = (uint64_t *)wqe;
+	dst = (uint64_t *)((struct efa_io_tx_wqe *)sq->desc + sq_desc_idx);
 
-	mmio_memcpy_x64((struct efa_io_tx_wqe *)sq->desc + sq_desc_idx,
-			&sq->curr_tx_wqe, sizeof(struct efa_io_tx_wqe));
-	/* this routine only rings the doorbell if it must. */
-	if (force_doorbell) {
-		mmio_flush_writes();
-		efa_sq_ring_doorbell(sq, sq->wq.pc);
-		mmio_wc_start();
-		sq->num_wqe_pending = 0;
-	}
+	/* Copy 64-byte WQE using 8 uint64_t stores */
+	for (int i = 0; i < 8; i++)
+		dst[i] = src[i];
 
 #if HAVE_LTTNG
-	efa_data_path_direct_tracepoint_post_send(qp,sq);
+	efa_data_path_direct_tracepoint_post_send(qp, sq, &wqe->meta);
 #endif
 }
 
-EFA_ALWAYS_INLINE struct efa_io_tx_wqe *
-efa_data_path_direct_send_wr_common(struct efa_qp *qp,
-				     enum efa_io_send_op_type op_type)
+EFA_ALWAYS_INLINE void
+efa_data_path_direct_send_wr_ring_db(struct efa_data_path_direct_sq *sq)
 {
-	struct ibv_qp_ex *ibvqpx = qp->ibv_qp_ex;
-	struct efa_data_path_direct_qp *dpd_qp = &qp->data_path_direct_qp;
-	struct efa_data_path_direct_sq *sq = &qp->data_path_direct_qp.sq;
-	struct efa_io_tx_meta_desc *meta_desc;
-	int err;
+	mmio_flush_writes();
+	efa_sq_ring_doorbell(sq, sq->wq.pc);
+	mmio_wc_start();
+	sq->num_wqe_pending = 0;
+}
 
-	if (OFI_UNLIKELY(dpd_qp->wr_session_err))
-		return NULL;
+/**
+ * @brief Internal utility: Set UD addressing information in WQE metadata
+ * @param meta_desc Pointer to WQE metadata descriptor
+ * @param ah Address handle
+ * @param remote_qpn Remote queue pair number
+ * @param remote_qkey Remote queue key
+ */
+EFA_ALWAYS_INLINE void efa_data_path_direct_set_ud_addr(struct efa_io_tx_meta_desc *meta_desc,
+                                                        struct efa_ah *ah,
+                                                        uint32_t remote_qpn,
+                                                        uint32_t remote_qkey)
+{
+	meta_desc->dest_qp_num = remote_qpn;
+	meta_desc->ah = ah->ahn;
+	meta_desc->qkey = remote_qkey;
+}
 
-	err = efa_post_send_validate(qp);
-	if (OFI_UNLIKELY(err)) {
-		dpd_qp->wr_session_err = err;
-		return NULL;
+/**
+ * @brief Internal utility: Set inline data buffers in WQE inline data area
+ * @param wqe Pointer to work queue entry
+ * @param num_buf Number of data buffers
+ * @param buf_list Array of data buffers
+ */
+EFA_ALWAYS_INLINE void efa_data_path_direct_set_inline_data(struct efa_io_tx_wqe *wqe,
+                                                            size_t num_buf,
+                                                            const struct ibv_data_buf *buf_list)
+{
+	uint32_t total_length = 0;
+	size_t i;
+
+	for (i = 0; i < num_buf; i++) {
+		memcpy(wqe->data.inline_data + total_length,
+			   buf_list[i].addr, buf_list[i].length);
+		total_length += buf_list[i].length;
 	}
 
-	/* MODIFIED: if any are pending, copy out the previous one first: */
-	if (sq->num_wqe_pending) {
-		/* when reaching the sq max_batch, ring the db */
-		efa_data_path_direct_send_wr_post_working(qp, sq, sq->num_wqe_pending == sq->wq.max_batch);
-	}
-
-	memset(&sq->curr_tx_wqe, 0, sizeof(sq->curr_tx_wqe));
-
-	meta_desc = &sq->curr_tx_wqe.meta;
-	efa_set_common_ctrl_flags(meta_desc, sq, op_type);
-	meta_desc->req_id = efa_wq_get_next_wrid_idx(&sq->wq, ibvqpx->wr_id);
-
-	/* advance index and change phase */
-	efa_sq_advance_post_idx(sq);
-	sq->num_wqe_pending++;
-	return &sq->curr_tx_wqe;
+	EFA_SET(&wqe->meta.ctrl1, EFA_IO_TX_META_DESC_INLINE_MSG, 1);
+	wqe->meta.length = total_length;
 }
 
 #endif /* HAVE_EFA_DATA_PATH_DIRECT */

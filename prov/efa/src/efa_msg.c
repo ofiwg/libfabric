@@ -196,7 +196,9 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	struct ibv_sge sg_list[2];  /* efa device support up to 2 iov */
 	struct ibv_data_buf inline_data_list[2];
 	size_t len, i;
+	bool use_inline;
 	int ret = 0;
+	uintptr_t wr_id;
 
 	efa_tracepoint(send_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
@@ -222,22 +224,17 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	assert(len <= base_ep->info->ep_attr->max_msg_size);
 
 	ofi_genlock_lock(&base_ep->util_ep.lock);
-	if (!base_ep->is_wr_started) {
-		efa_qp_wr_start(qp);
-		base_ep->is_wr_started = true;
-	}
 
-	qp->ibv_qp_ex->wr_id = (uintptr_t) efa_fill_context(
+	/* Prepare work request ID */
+	wr_id = (uintptr_t) efa_fill_context(
 		msg->context, msg->addr, flags, FI_SEND | FI_MSG);
 
-	if (flags & FI_REMOTE_CQ_DATA) {
-		efa_qp_wr_send_imm(qp, msg->data);
-	} else {
-		efa_qp_wr_send(qp);
-	}
+	/* Determine if we should use inline data */
+	use_inline = (len <= base_ep->domain->device->efa_attr.inline_buf_size &&
+		      (!msg->desc || !efa_mr_is_hmem(msg->desc[0])));
 
-	if (len <= base_ep->domain->device->efa_attr.inline_buf_size &&
-	    (!msg->desc || !efa_mr_is_hmem(msg->desc[0]))) {
+	if (use_inline) {
+		/* Prepare inline data list */
 		for (i = 0; i < msg->iov_count; i++) {
 			inline_data_list[i].addr = msg->msg_iov[i].iov_base;
 			inline_data_list[i].length = msg->msg_iov[i].iov_len;
@@ -248,8 +245,8 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 				inline_data_list[i].length -= base_ep->info->ep_attr->msg_prefix_size;
 			}
 		}
-		efa_qp_wr_set_inline_data_list(qp, msg->iov_count, inline_data_list);
 	} else {
+		/* Prepare SGE list */
 		for (i = 0; i < msg->iov_count; i++) {
 			/* Set TX buffer desc from SGE */
 			if (OFI_UNLIKELY(!msg->desc || !msg->desc[i])) {
@@ -269,20 +266,14 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 				sg_list[i].length -= base_ep->info->ep_attr->msg_prefix_size;
 			}
 		}
-		efa_qp_wr_set_sge_list(qp, msg->iov_count, sg_list);
 	}
 
-	efa_qp_wr_set_ud_addr(qp, conn->ah, conn->ep_addr->qpn,
-			   conn->ep_addr->qkey);
-
-	efa_tracepoint(post_send, qp->ibv_qp_ex->wr_id, (uintptr_t)msg->context);
-
-	if (!(flags & FI_MORE)) {
-		ret = efa_qp_wr_complete(qp);
-		if (OFI_UNLIKELY(ret))
-			ret = (ret == ENOMEM) ? -FI_EAGAIN : -ret;
-		base_ep->is_wr_started = false;
-	}
+	/* Use consolidated send function */
+	ret = efa_qp_post_send(qp, sg_list, inline_data_list, msg->iov_count,
+			       use_inline, wr_id, msg->data, flags,
+			       conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
+	if (OFI_UNLIKELY(ret))
+		ret = (ret == ENOMEM) ? -FI_EAGAIN : -ret;
 
 out_err:
 	ofi_genlock_unlock(&base_ep->util_ep.lock);

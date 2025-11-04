@@ -65,16 +65,17 @@ static inline void efa_rdm_tracepoint_wr_id_post_write(const void *wr_id)
 
 static inline void efa_data_path_direct_tracepoint_post_send(
 		const struct efa_qp *qp,
-		const struct efa_data_path_direct_sq *sq)
+		const struct efa_data_path_direct_sq *sq,
+		const struct efa_io_tx_meta_desc *meta)
 {
 	efa_tracepoint(data_path_direct_post_send,
 		       qp->base_ep->domain->device->ibv_ctx->device->name,
-		       sq->wq.wrid[sq->curr_tx_wqe.meta.req_id],
-		       EFA_GET(&sq->curr_tx_wqe.meta.ctrl1, EFA_IO_TX_META_DESC_OP_TYPE),
+		       sq->wq.wrid[meta->req_id],
+		       EFA_GET(&meta->ctrl1, EFA_IO_TX_META_DESC_OP_TYPE),
 		       qp->ibv_qp->qp_num,
-		       sq->curr_tx_wqe.meta.dest_qp_num,
-		       sq->curr_tx_wqe.meta.ah,
-		       sq->curr_tx_wqe.meta.length);
+		       meta->dest_qp_num,
+		       meta->ah,
+		       meta->length);
 }
 
 static inline void efa_data_path_direct_tracepoint_post_recv(
