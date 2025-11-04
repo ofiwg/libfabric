@@ -351,6 +351,15 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 
 	base_ep->qp->base_ep = base_ep;
 
+	if (create_user_recv_qp) {
+		ret = efa_qp_create(&base_ep->user_recv_qp, &attr_ex, base_ep->info->tx_attr->tclass, tx_cq->unsolicited_write_recv_enabled);
+		if (ret) {
+			efa_base_ep_destruct_qp(base_ep);
+			return ret;
+		}
+		base_ep->user_recv_qp->base_ep = base_ep;
+	}
+
 #if HAVE_EFA_DATA_PATH_DIRECT
 	/* Only enable direct QP when direct CQ is enabled */
 	assert(tx_cq->data_path_direct_enabled == rx_cq->data_path_direct_enabled);
@@ -360,17 +369,16 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 			efa_base_ep_destruct_qp(base_ep);
 			return ret;
 		}
+		if (create_user_recv_qp) {
+			ret = efa_data_path_direct_qp_initialize(base_ep->user_recv_qp);
+			if (ret) {
+				efa_base_ep_destruct_qp(base_ep);
+				return ret;
+			}
+		}
+
 	}
 #endif
-
-	if (create_user_recv_qp) {
-		ret = efa_qp_create(&base_ep->user_recv_qp, &attr_ex, base_ep->info->tx_attr->tclass, tx_cq->unsolicited_write_recv_enabled);
-		if (ret) {
-			efa_base_ep_destruct_qp(base_ep);
-			return ret;
-		}
-		base_ep->user_recv_qp->base_ep = base_ep;
-	}
 
 	return 0;
 }
