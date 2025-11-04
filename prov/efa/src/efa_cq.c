@@ -991,6 +991,21 @@ int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
 #endif
 
 	ibv_cq->ibv_cq_ex_type = EFADV_CQ;
+
+#if HAVE_EFA_DATA_PATH_DIRECT
+	#if HAVE_EFADV_CQ_ATTR_DB
+		efa_data_path_direct_cq_initialize(ibv_cq);
+	#else
+		if (attr->wait_obj == FI_WAIT_NONE) {
+			efa_data_path_direct_cq_initialize(ibv_cq);
+		} else {
+			ibv_cq->data_path_direct_enabled = false;
+			EFA_INFO(FI_LOG_CQ, "Direct CQ data path is not "
+					    "enabled with wait object.\n");
+		}
+	#endif
+#endif
+
 	return 0;
 }
 #else
@@ -1132,20 +1147,6 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	(*cq_fid)->fid.ops = &efa_cq_fi_ops;
 	/* Use bypass ops by default */
 	(*cq_fid)->ops = &efa_cq_bypass_util_cq_ops;
-
-#if HAVE_EFA_DATA_PATH_DIRECT
-	#if HAVE_EFADV_CQ_ATTR_DB
-		efa_data_path_direct_cq_initialize(cq);
-	#else
-		if (attr->wait_obj == FI_WAIT_NONE) {
-			efa_data_path_direct_cq_initialize(cq);
-		} else {
-			cq->ibv_cq.data_path_direct_enabled = false;
-			EFA_INFO(FI_LOG_CQ, "Direct CQ data path is not "
-					    "enabled with wait object.\n");
-		}
-	#endif
-#endif
 
 	return 0;
 
