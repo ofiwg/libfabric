@@ -4115,29 +4115,15 @@ ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const
 			   const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device, const uint64_t hmem_handle,
 			   const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
-	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	ssize_t		  rc;
+	if (is_contiguous) {
+		return OPX_FABRIC_TX_SEND_RZV(ep, buf, len, addr.fi, tag, context, data, lock_required, override_flags,
+					      tx_op_flags, addr.hfi1_subctxt_rx, caps, reliability, do_cq_completion,
+					      hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
+	}
 
-	do {
-		if (is_contiguous) {
-			rc = OPX_FABRIC_TX_SEND_RZV(ep, buf, len, addr.fi, tag, context, data, lock_required,
-						    override_flags, tx_op_flags, addr.hfi1_subctxt_rx, caps,
-						    reliability, do_cq_completion, hmem_iface, hmem_device, hmem_handle,
-						    hfi1_type, ctx_sharing);
-		} else {
-			rc = OPX_FABRIC_TX_SENDV_RZV(ep, local_iov, niov, total_len, addr.fi, tag, context, data,
-						     lock_required, override_flags, tx_op_flags, addr.hfi1_subctxt_rx,
-						     caps, reliability, do_cq_completion, hmem_iface, hmem_device,
-						     hmem_handle, hfi1_type, ctx_sharing);
-		}
-
-		if (OFI_UNLIKELY(rc == -EAGAIN)) {
-			fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
-					  ctx_sharing);
-		}
-	} while (rc == -EAGAIN);
-
-	return rc;
+	return OPX_FABRIC_TX_SENDV_RZV(ep, local_iov, niov, total_len, addr.fi, tag, context, data, lock_required,
+				       override_flags, tx_op_flags, addr.hfi1_subctxt_rx, caps, reliability,
+				       do_cq_completion, hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
 }
 
 static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *buf, size_t len, void *desc,
