@@ -110,18 +110,9 @@ static void test_efa_msg_send_prep(struct efa_resource *resource,
 	assert_int_equal(ret, 1);
 
 	g_efa_unit_test_mocks.efa_qp_post_recv = &efa_mock_efa_qp_post_recv_return_mock;
-	g_efa_unit_test_mocks.efa_qp_wr_complete = &efa_mock_efa_qp_wr_complete_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_rdma_read = &efa_mock_efa_qp_wr_rdma_read_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_rdma_write = &efa_mock_efa_qp_wr_rdma_write_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_rdma_write_imm =
-		&efa_mock_efa_qp_wr_rdma_write_imm_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_send = &efa_mock_efa_qp_wr_send_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_send_imm = &efa_mock_efa_qp_wr_send_imm_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_set_inline_data_list =
-		&efa_mock_efa_qp_wr_set_inline_data_list_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_set_sge_list = &efa_mock_efa_qp_wr_set_sge_list_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_set_ud_addr = &efa_mock_efa_qp_wr_set_ud_addr_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_start = &efa_mock_efa_qp_wr_start_no_op;
+	/* Mock general QP post send function to save work request IDs */
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return_always(efa_mock_efa_qp_post_send_return_mock, 0);
 }
 
 void test_efa_msg_fi_send(struct efa_resource **state)

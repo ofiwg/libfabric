@@ -107,17 +107,14 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	assert_non_null(peer);
 	peer->host_id = peer_host_id;
 
-	g_efa_unit_test_mocks.efa_qp_wr_start = &efa_mock_efa_qp_wr_start_no_op;
-	/* this mock will save the send work request (wr) in a global list */
-	g_efa_unit_test_mocks.efa_qp_wr_send = &efa_mock_efa_qp_wr_send_save_wr;
-	g_efa_unit_test_mocks.efa_qp_wr_set_sge_list = &efa_mock_efa_qp_wr_set_sge_list_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_set_ud_addr = &efa_mock_efa_qp_wr_set_ud_addr_no_op;
-	g_efa_unit_test_mocks.efa_qp_wr_complete = &efa_mock_efa_qp_wr_complete_no_op;
+	/* Mock the general QP post send function to save work request IDs */
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return(efa_mock_efa_qp_post_send_return_mock, 0);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 
 	err = fi_send(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), addr, NULL /* context */);
 	assert_int_equal(err, 0);
-	/* fi_send() called efa_mock_efa_qp_wr_send_save_wr(), which saved one send_wr in g_ibv_submitted_wr_id_vec */
+	/* The consolidated post function should have saved the work request ID */
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
 	/* this mock will set ibv_cq_ex->wr_id to the wr_id f the head of global send_wr,

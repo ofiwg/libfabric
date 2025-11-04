@@ -144,9 +144,6 @@ struct efa_data_path_direct_sq {
 	 * built, but doorbell is deferred for batching efficiency.
 	 */
 	uint32_t num_wqe_pending;
-
-	/** Current work queue entry being constructed */
-	struct efa_io_tx_wqe curr_tx_wqe;
 };
 
 /**
@@ -160,8 +157,6 @@ struct efa_data_path_direct_sq {
 struct efa_data_path_direct_qp {
 	struct efa_data_path_direct_sq sq;        /**< Send queue structure */
 	struct efa_data_path_direct_rq rq;        /**< Receive queue structure */
-	int wr_session_err;                       /**< Error state for current WR session */
-
 };
 
 

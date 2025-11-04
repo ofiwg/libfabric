@@ -40,13 +40,14 @@ static void test_efa_data_path_direct_multiple_sge_fail_impl(struct efa_resource
 	sge_list[1].length = local_buff2.size;
 	sge_list[1].lkey = ((struct efa_mr *)fi_mr_desc(local_buff2.mr))->ibv_mr->lkey;
 
-	/* Start RDMA operation and test multiple SGE failure */
-	if (fi_opcode == FI_READ)
-		efa_data_path_direct_wr_rdma_read(qp, 123456, 0x87654321);
-	else
-		efa_data_path_direct_wr_rdma_write(qp, 123456, 0x87654321);
-	efa_data_path_direct_wr_set_sge_list(qp, 2, sge_list);
-	assert_int_equal(qp->data_path_direct_qp.wr_session_err, EINVAL);
+	/* Test multiple SGE failure with consolidated post functions */
+	int ret;
+	if (fi_opcode == FI_READ) {
+		ret = efa_data_path_direct_post_read(qp, sge_list, 2, 123456, 0x87654321, 0, 0, NULL, 0, 0);
+	} else {
+		ret = efa_data_path_direct_post_write(qp, sge_list, 2, 123456, 0x87654321, 0, 0, 0, NULL, 0, 0);
+	}
+	assert_int_equal(ret, EINVAL);
 
 	assert_int_equal(fi_close(&ep->fid), 0);
 	efa_cq->ibv_cq.data_path_direct_enabled = data_path_direct_enabled_orig;
