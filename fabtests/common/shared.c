@@ -3254,6 +3254,9 @@ int ft_finalize_ep(struct fid_ep *ep)
 	int ret;
 	struct fi_context2 ctx;
 
+	if (ft_check_opts(FT_OPT_OOB_SYNC))
+		return ft_sock_sync(oob_sock, 0);
+
 	if (opts.dst_addr) {
 		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 4, &ctx,
 					    FI_TRANSMIT_COMPLETE);
