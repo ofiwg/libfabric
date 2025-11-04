@@ -70,8 +70,19 @@ static void cxip_ep_mr_remove(struct cxip_mr *mr)
  */
 int cxip_mr_cb(struct cxip_ctrl_req *req, const union c_event *event)
 {
-	struct cxip_mr *mr = req->mr.mr;
+	struct cxip_mr *mr;
 	int evt_rc = cxi_event_rc(event);
+
+	/* During standard MR PtlTE invalidation it is possible a released
+	 * reference could generate a target event with C_RC_MST_CANCELLED;
+	 * this should be ignored.
+	 */
+	if (evt_rc == C_RC_MST_CANCELLED) {
+		CXIP_DBG("Ignoring MR LE invalidate canceled status\n");
+		return FI_SUCCESS;
+	}
+
+	mr = req->mr.mr;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
@@ -259,14 +270,8 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 		CXIP_FATAL("MR %p key 0x%016lX invalidate failed %d\n", mr,
 			   mr->key, ret);
 
-	/* For LE invalidate and MR events, need to flush event queues until
-	 * access equals match.
-	 */
-	if (mr->count_events) {
-		count_events_disabled = cxip_mr_disable_check_count_events(mr, cxip_env.mr_cache_events_disable_le_poll_nsecs);
-		if (!count_events_disabled)
-			CXIP_FATAL("Failed LE MR invalidation\n");
-	}
+	/* Flush the event queue to ensure any MR events have been read. */
+	cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
 
 disabled_success:
 	mr->enabled = false;
