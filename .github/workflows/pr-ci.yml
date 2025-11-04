@@ -159,7 +159,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - name: Install dependencies (Mac OS)
         run: |
