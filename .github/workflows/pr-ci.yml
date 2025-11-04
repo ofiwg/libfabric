@@ -120,7 +120,7 @@ jobs:
           name: hmem-config.log
           path: config.log
   macos:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - name: Install dependencies (Mac OS)
         run: |
