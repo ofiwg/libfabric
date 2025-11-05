@@ -1068,6 +1068,10 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 		hints->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 
+	/* ft_cqdata_opcodes enum start from 1, 0 means no cq data */
+	if (opts.cqdata_op && allow_rx_cq_data)
+		hints->mode |= FI_RX_CQ_DATA;
+
 	hints->domain_attr->threading = opts.threading;
 
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
@@ -3736,15 +3740,11 @@ int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
 			opts->rma_op = FT_RMA_READ;
 		} else if (!strcasecmp(optarg, "writedata")) {
 			hints->caps |= FI_WRITE | FI_REMOTE_WRITE;
-			if (allow_rx_cq_data)
-				hints->mode |= FI_RX_CQ_DATA;
 			hints->domain_attr->cq_data_size = 4;
 			opts->rma_op = FT_RMA_WRITEDATA;
 			opts->cqdata_op = FT_CQDATA_WRITEDATA;
 			cq_attr.format = FI_CQ_FORMAT_DATA;
 		} else if (!strcasecmp(optarg, "senddata")) {
-			if (allow_rx_cq_data)
-				hints->mode |= FI_RX_CQ_DATA;
 			hints->domain_attr->cq_data_size = 4;
 			opts->cqdata_op = FT_CQDATA_SENDDATA;
 			cq_attr.format = FI_CQ_FORMAT_DATA;
