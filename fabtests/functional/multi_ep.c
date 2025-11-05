@@ -72,6 +72,9 @@ static void free_ep_res()
 	int i;
 
 	for (i = 0; i < num_eps; i++) {
+		if (!fi)
+			continue;
+
 		if (fi->domain_attr->mr_mode & FI_MR_RAW)
 			(void) fi_mr_unmap_key(domain, peer_iovs[i].key);
 
@@ -473,7 +476,7 @@ static int setup_av_ep(int idx)
 	hints->src_addr = NULL;
 	hints->src_addrlen = 0;
 
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, NULL, 0, hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
