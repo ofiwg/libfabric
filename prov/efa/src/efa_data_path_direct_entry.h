@@ -424,6 +424,7 @@ static inline int efa_data_path_direct_start_poll(struct efa_ibv_cq *ibv_cq,
 
 static inline uint32_t efa_data_path_direct_wc_read_qp_num(struct efa_ibv_cq *ibv_cq)
 {
+	assert(ibv_cq->data_path_direct.cur_cqe);
 	return ibv_cq->data_path_direct.cur_cqe->qp_num;
 }
 
@@ -434,6 +435,7 @@ efa_data_path_direct_wc_read_opcode(struct efa_ibv_cq *ibv_cq)
 	struct efa_io_cdesc_common *cqe;
 
 	cqe = ibv_cq->data_path_direct.cur_cqe;
+	assert(cqe);
 	op_type = EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_OP_TYPE);
 
 	if (EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_Q_TYPE) ==
@@ -452,6 +454,7 @@ efa_data_path_direct_wc_read_opcode(struct efa_ibv_cq *ibv_cq)
 static inline int efa_data_path_direct_next_poll(struct efa_ibv_cq *ibv_cq)
 {
 	struct efa_io_cdesc_common *cqe = ibv_cq->data_path_direct.cur_cqe;
+	assert(cqe);
 
 	if (ibv_cq->data_path_direct.cur_wq)
 		efa_wq_put_wrid_idx(ibv_cq->data_path_direct.cur_wq, cqe->req_id);
@@ -490,6 +493,7 @@ static inline void efa_data_path_direct_end_poll(struct efa_ibv_cq *ibv_cq)
 
 static inline uint32_t efa_data_path_direct_wc_read_vendor_err(struct efa_ibv_cq *ibv_cq)
 {
+	assert(ibv_cq->data_path_direct.cur_cqe);
 	return ibv_cq->data_path_direct.cur_cqe->status;
 }
 
