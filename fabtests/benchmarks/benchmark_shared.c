@@ -658,8 +658,9 @@ static int bw_rma_comp(enum ft_rma_opcodes rma_op, int num_completions)
 	return ret;
 }
 
-int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
+int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote, bool is_warmup)
 {
+	const int num_iterations = is_warmup ? opts.warmup_iterations : opts.iterations;
 	int ret, i, j;
 	uint64_t flags = 0;
 	size_t offset, inject_size = fi->tx_attr->inject_size;
@@ -688,9 +689,8 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 
 	offset_rma_start = FT_RMA_SYNC_MSG_BYTES +
 			   MAX(ft_tx_prefix_size(), ft_rx_prefix_size());
-	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
-		if (i == opts.warmup_iterations)
-			ft_start();
+	ft_start();
+	for (i = j = 0; i < num_iterations; i++) {
 		if (j == 0) {
 			offset = offset_rma_start;
 			if (ft_check_opts(FT_OPT_VERIFY_DATA) && opts.transfer_size > 0) {
@@ -726,6 +726,16 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 			break;
 		case FT_RMA_WRITEDATA:
 			if (!opts.dst_addr) {
+				if (is_warmup) {
+					ret = ft_post_tx(
+						ep,
+						remote_fi_addr,
+						FT_RMA_SYNC_MSG_BYTES,
+						NO_CQ_DATA,
+						&tx_ctx);
+					if (ret)
+						return ret;
+				}
 				if (fi->rx_attr->mode & FI_RX_CQ_DATA)
 					ret = ft_post_rx(ep, 0, &rx_ctx_arr[j].context);
 				else
@@ -736,6 +746,14 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 					rx_seq++;
 
 			} else {
+				if (is_warmup) {
+					ret = ft_post_rx(
+						ep,
+						FT_RMA_SYNC_MSG_BYTES,
+						&rx_ctx);
+					if (ret)
+						return ret;
+				}
 				if (opts.transfer_size <= inject_size) {
 					ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
 							tx_buf + offset,
@@ -780,6 +798,8 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 		return ret;
 	ft_stop();
 
+	if (is_warmup)
+		return 0;
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,	1,
 				opts.argc, opts.argv);
