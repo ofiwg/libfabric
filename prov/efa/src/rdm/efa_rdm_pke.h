@@ -87,6 +87,9 @@ struct efa_rdm_pke {
 #if ENABLE_DEBUG
 	/** @brief entry to a linked list of posted buf list */
 	struct dlist_entry dbg_entry;
+
+	/**@brief Generation counter. It is incremented every time the packet is posted to rdma-core */
+	uint8_t gen;
 #endif
 	/** @brief pointer to #efa_rdm_ep */
 	struct efa_rdm_ep *ep;
