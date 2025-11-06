@@ -5,6 +5,7 @@
 #define EFA_UNIT_TEST_RDMA_CORE_MOCKS_H
 
 #include "efa_cq.h"
+#include "efa_rdm_cq.h"
 #include "efa_base_ep.h"
 
 extern struct efa_unit_test_mocks g_efa_unit_test_mocks;

@@ -5,6 +5,7 @@
 #define EFA_RDM_CQ_H
 
 #include "efa_cq.h"
+#include "efa_data_path_ops.h"
 #include <ofi_util.h>
 
 struct efa_rdm_cq {
@@ -19,5 +20,17 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm_ep *closing_ep);
 int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
+
+#if ENABLE_DEBUG
+static inline struct efa_rdm_pke *efa_rdm_cq_get_pke_from_wr_id(uint64_t wr_id)
+{
+	struct efa_rdm_pke *pkt_entry;
+	uint8_t gen = wr_id & (EFA_RDM_BUFPOOL_ALIGNMENT - 1);
+	wr_id &= ~(EFA_RDM_BUFPOOL_ALIGNMENT - 1);
+	pkt_entry = (struct efa_rdm_pke *) wr_id;
+	assert(pkt_entry->gen == gen);
+	return pkt_entry;
+}
+#endif
 
 #endif

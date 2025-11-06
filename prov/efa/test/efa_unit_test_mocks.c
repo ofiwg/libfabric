@@ -10,6 +10,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include "efa.h"
+#include "efa_rdm_cq.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_unit_test_mocks.h"
@@ -277,7 +278,11 @@ int efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr(str
 	struct efa_rdm_base_hdr *efa_rdm_base_hdr;
 	uint64_t *host_id_ptr;
 
-	pke = (struct efa_rdm_pke *)wr_id;
+	pke = (struct efa_rdm_pke *) wr_id;
+#if ENABLE_DEBUG
+	pke = efa_rdm_cq_get_pke_from_wr_id(wr_id);
+#endif
+
 	efa_rdm_base_hdr = efa_rdm_pke_get_base_hdr(pke);
 
 	assert_int_equal(efa_rdm_base_hdr->type, EFA_RDM_HANDSHAKE_PKT);

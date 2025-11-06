@@ -230,7 +230,6 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_cq_data_path_direct_with_wait_obj, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_data_path_direct_disabled_with_old_device, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_data_path_direct_enabled_with_new_device, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		
 		/* end efa_unit_test_cq.c */
 
 		/* begin efa_unit_test_info.c */
@@ -275,7 +274,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_info_direct_rma_without_rx_cq_data_when_no_unsolicited_write_recv, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_info_direct_no_rma_no_rx_cq_data_when_no_unsolicited_write_recv, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_info_direct_rma_without_rx_cq_data_when_unsolicited_write_recv_supported, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-/* end efa_unit_test_info.c */
+		/* end efa_unit_test_info.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_update_neuron, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_disable_p2p_neuron, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -293,8 +292,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_host_memory_align128, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_cuda_memory, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_post_write_0_byte,
-		efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_post_write_0_byte, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rxe_post_local_read_or_queue_unhappy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rxe_post_local_read_or_queue_happy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_txe_handle_error_write_cq, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -309,7 +307,6 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rxe_handle_error_queue_flags_cleanup, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_txe_handle_error_duplicate_prevention, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rxe_handle_error_duplicate_prevention, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-
 		/* end of efa_unit_test_ope.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_rdm_msg_send_to_local_peer_with_null_desc, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

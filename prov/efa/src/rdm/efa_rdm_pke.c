@@ -23,6 +23,14 @@
 #include "efa_rdm_tracepoint.h"
 #include "efa_rdm_pke_print.h"
 
+#if ENABLE_DEBUG
+static inline void efa_rdm_pke_increment_gen(struct efa_rdm_pke *pkt_entry)
+{
+	pkt_entry->gen++;
+	pkt_entry->gen &= (EFA_RDM_BUFPOOL_ALIGNMENT - 1);
+}
+#endif
+
 /**
  * @brief allocate a packet entry
  *
@@ -46,7 +54,11 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 		return NULL;
 
 #ifdef ENABLE_EFA_POISONING
+	/* Restore pkt_entry->gen after poisoning. Otherwise, all pkts will have
+	 * the same gen when poisoning is enabled. */
+	uint8_t gen = pkt_entry->gen;
 	efa_rdm_poison_mem_region(pkt_entry, pkt_pool->attr.size);
+	pkt_entry->gen = gen;
 #endif
 	dlist_init(&pkt_entry->entry);
 
@@ -413,6 +425,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	uint64_t flags_in_loop;
 	uint16_t cq_data = 0;
 	uint32_t qpn, qkey;
+	uint64_t wr_id;
 
 	assert(pkt_entry_cnt);
 	ep = pkt_entry_vec[0]->ep;
@@ -476,10 +489,15 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 		if (pkt_idx != pkt_entry_cnt - 1)
 			flags_in_loop |= FI_MORE;
 
-		ret = efa_qp_post_send(ep->base_ep.qp, sg_list, inline_data_list, iov_cnt, use_inline,
-				       (uintptr_t)pkt_entry,
-				       cq_data,
-				       flags_in_loop, conn->ah,
+		wr_id = (uintptr_t) pkt_entry;
+#if ENABLE_DEBUG
+		efa_rdm_pke_increment_gen(pkt_entry);
+		wr_id += pkt_entry->gen;
+#endif
+
+		ret = efa_qp_post_send(ep->base_ep.qp, sg_list,
+				       inline_data_list, iov_cnt, use_inline,
+				       wr_id, cq_data, flags_in_loop, conn->ah,
 				       qpn, qkey);
 
 		if (OFI_UNLIKELY(ret))
@@ -532,6 +550,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 	int err = 0;
 	struct efa_ah *ah;
 	uint32_t qpn, qkey;
+	uint64_t wr_id;
 
 	ep = pkt_entry->ep;
 	assert(ep);
@@ -555,8 +574,13 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 	sge.length = len;
 	sge.lkey = ((struct efa_mr *)desc)->ibv_mr->lkey;
 
-	err = efa_qp_post_read(qp, &sge, 1, remote_key, remote_buf,
-			       (uintptr_t)pkt_entry, 0,
+	wr_id = (uintptr_t) pkt_entry;
+#if ENABLE_DEBUG
+	efa_rdm_pke_increment_gen(pkt_entry);
+	wr_id += pkt_entry->gen;
+#endif
+
+	err = efa_qp_post_read(qp, &sge, 1, remote_key, remote_buf, wr_id, 0,
 			       ah, qpn, qkey);
 
 #if ENABLE_DEBUG
@@ -610,6 +634,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 	struct efa_ah *ah;
 	uint32_t qpn, qkey;
 	uint16_t cq_data = 0;
+	uint64_t wr_id;
 
 	ep = pkt_entry->ep;
 	assert(ep);
@@ -639,6 +664,12 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 		qkey = conn->ep_addr->qkey;
 	}
 
+	wr_id = (uintptr_t) pkt_entry;
+#if ENABLE_DEBUG
+	efa_rdm_pke_increment_gen(pkt_entry);
+	wr_id += pkt_entry->gen;
+#endif
+
 	if (txe->fi_flags & FI_REMOTE_CQ_DATA) {
 		/* assert that we are sending the entire buffer as a
 			   single IOV when immediate data is also included. */
@@ -650,11 +681,8 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 	sge.length = len;
 	sge.lkey = ((struct efa_mr *)desc)->ibv_mr->lkey;
 
-	err = efa_qp_post_write(qp, &sge, 1, remote_key, remote_buf,
-				(uintptr_t)pkt_entry,
-				cq_data,
-				txe->fi_flags,
-				ah, qpn, qkey);
+	err = efa_qp_post_write(qp, &sge, 1, remote_key, remote_buf, wr_id,
+				cq_data, txe->fi_flags, ah, qpn, qkey);
 
 #if ENABLE_DEBUG
 	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
@@ -693,7 +721,13 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 
 	for (i = 0; i < pke_cnt; ++i) {
 		recv_wr = &ep->base_ep.efa_recv_wr_vec[i];
-		recv_wr->wr.wr_id = (uintptr_t)pke_vec[i];
+		recv_wr->wr.wr_id = (uintptr_t) pke_vec[i];
+
+#if ENABLE_DEBUG
+		efa_rdm_pke_increment_gen(pke_vec[i]);
+		recv_wr->wr.wr_id += pke_vec[i]->gen;
+#endif
+
 		recv_wr->wr.num_sge = 1;
 		recv_wr->wr.sg_list = recv_wr->sge;
 		recv_wr->wr.sg_list[0].length = pke_vec[i]->pkt_size;
@@ -743,6 +777,12 @@ ssize_t efa_rdm_pke_user_recvv(struct efa_rdm_pke **pke_vec,
 	for (i = 0; i < pke_cnt; ++i) {
 		recv_wr = &ep->base_ep.user_recv_wr_vec[wr_index];
 		recv_wr->wr.wr_id = (uintptr_t) pke_vec[i];
+
+#if ENABLE_DEBUG
+		efa_rdm_pke_increment_gen(pke_vec[i]);
+		recv_wr->wr.wr_id += pke_vec[i]->gen;
+#endif
+
 		recv_wr->wr.num_sge = 1;
 		recv_wr->wr.sg_list = recv_wr->sge;
 		recv_wr->wr.sg_list[0].addr = (uintptr_t) pke_vec[i]->payload;
