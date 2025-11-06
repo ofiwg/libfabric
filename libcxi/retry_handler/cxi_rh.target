@@ -1,0 +1,14 @@
+# Helper target for CXI retry handler instances - each retry handler instance
+# installs a RequiredBy dependency on this target, so that this target is only
+# reached after retry handlers have been started for all CXI devices on the
+# system.
+#
+# Daemons, mountpoints etc. that depend on CXI networking should therefore
+# depend on this target, instead of individual retry handler service instances.
+
+[Unit]
+Description=CXI Retry Handlers Started
+IgnoreOnIsolate=yes
+
+[Install]
+WantedBy=default.target

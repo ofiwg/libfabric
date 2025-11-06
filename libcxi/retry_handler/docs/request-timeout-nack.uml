@@ -1,0 +1,64 @@
+@startuml
+
+title REQUEST_TIMEOUT and REQUEST_NACK PCT events state machine in the retry handler
+
+[*] --> spt_timeout : C_PCT_REQUEST_TIMEOUT event
+[*] --> spt_nack : C_PCT_REQUEST_NACK event
+
+spt_timeout --> spt_restricted_timeout : SPT is restricted
+spt_timeout --> new_status_for_spt : SPT is unrestricted
+
+spt_nack --> new_status_for_spt
+
+spt_restricted_timeout --> cancel_request : SPT cannot be retried
+spt_restricted_timeout --> schedule_retry_restricted_pkt
+
+new_status_for_spt --> get_sct
+
+get_sct --> check_sct_status
+get_sct : retrieve SCT and all its SPTs
+
+check_sct_status : check SPTs status
+check_sct_status --> add_check_sct_timer : not all SPTs status known
+check_sct_status --> cancel_spt_entries : SPTs must be cancelled
+check_sct_status --> schedule_retry_sct : retrying some SPTs
+check_sct_status --> retry_sct : SCT retry timer had expired
+
+cancel_spt_entries : cancel all remaining SPTs
+cancel_spt_entries --> free_sct
+
+add_check_sct_timer --> timeout_check_sct : check SCT timer expired
+timeout_check_sct --> check_sct_status
+
+schedule_retry_sct --> retry_sct : nb retries == 0
+schedule_retry_sct --> add_sct_retry_timer : nb retries > 0
+
+retry_sct --> retry_pkt
+
+add_sct_retry_timer --> timeout_check_sct : SCT retry timer expired
+
+add_sct_paused_timer --> timeout_check_sct : SCT paused timer expired
+
+schedule_retry_restricted_pkt --> retry_restricted_pkt : nb retries == 0
+schedule_retry_restricted_pkt --> add_retry_timer :  nb retries > 0
+
+add_retry_timer --> timeout_retry_restricted_pkt : retry timer expired
+
+timeout_retry_restricted_pkt --> cancel_request : CQ is now closed
+timeout_retry_restricted_pkt --> retry_restricted_pkt
+
+retry_restricted_pkt --> retry_pkt
+
+retry_pkt --> wait_for_event : SPT retry posted
+retry_pkt --> add_paused_timer : (restricted) PCP is paused
+retry_pkt --> add_sct_paused_timer : (unrestricted) PCP is paused
+
+add_paused_timer --> timeout_retry_restricted_pkt : paused timer expired
+
+cancel_request --> release_spt
+
+release_spt --> [*]
+
+free_sct --> [*]
+
+@enduml

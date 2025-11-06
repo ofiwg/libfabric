@@ -1,0 +1,30 @@
+# Service template for CXI Retry Handler daemon. Per-device instances are
+# enabled automatically by udev rules.
+#
+# The associated target, cxi_rh.target is a 'helper' target that is reached
+# after retry handlers have been started for all detected CXI devices. Units
+# that require CXI networking should depend on that target, rather than
+# specific instances of this service.
+
+[Unit]
+Description=CXI Retry Handler on %I
+
+IgnoreOnIsolate=yes
+DefaultDependencies=no
+
+After=dev-%i.device basic.target
+Before=cxi_rh.target final.target
+Conflicts=final.target
+
+[Install]
+RequiredBy=cxi_rh.target
+
+[Service]
+Type=@systemd_service_type@
+NotifyAccess=main
+LogLevelMax=4
+
+ExecStartPre=-/usr/bin/fusermount -u /run/cxi/%i
+ExecStartPre=/usr/bin/mkdir -p /run/cxi/%i
+ExecStart=@prefix@/bin/cxi_rh --device=%i
+Restart=no

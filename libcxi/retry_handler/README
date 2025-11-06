@@ -1,0 +1,121 @@
+CXI Retry Handler
+=================
+
+The CXI Retry Handler (cxi_rh) is a daemon monitoring the 3 PCT EQs of
+a CXI device, reading PCT events and retrying operations that
+failed. It is necessary for Cassini to properly function.
+
+The daemon is a new style daemon, intended to be run by systemD, and
+as such should follow
+https://www.freedesktop.org/software/systemd/man/daemon.html
+
+For debugging puposes it is possible to run it standalone like this:
+
+  ./libcxi/retry_handler/cxi_rh
+
+It can also be run in the background.
+
+Status
+------
+
+A systemd service named "cxi_rh" that is suitable for development
+use is installed as part of a "make install". This is a skeleton
+unit file and may need changes for production use.
+
+It is yet undetermined whether a different daemon should exist per
+device, or a single daemon should support several devices. A udev rule
+(60-cxi.rules) causes systemd to launch the daemon when a cxi device
+first appears.
+
+It currently resides in the libcxi project for ease of development,
+but should eventually be moved somewhere else.
+
+Design
+------
+
+The daemon design is rather simple and its logic follows what the CSDG
+and CIS say it should do. As the retries are event driven, it waits
+for an event to happen on its EQ, which is mapped to all 3 PCT EQ
+handles.
+
+When an event is received, it is decoded, and acted upon. For traffic,
+the request is either alone (restricted) and can be retried or
+cancelled immediately, or (if unrestricted) it has to be put on a
+queue tied to an SCT. In most cases, an spt_entry is created and added
+to the SPT tree in the device structure. If that SPT is tied to an
+SCT, an sct_entry structure is also created and added to the device
+SCT tree. If the same SPT gets retried too many times, it can be
+cancelled, and its SCT is force closed.
+
+There is a single timer queue inside the retry handler. When an
+operation needs to be executed in the future, like a retry, the RH
+inserts the operation there. The main loop takes care of executing
+these operations at the right time.
+
+Debugging / inspection
+----------------------
+
+The RH can also dump its internal state when receiving a HUP
+signal. The dump will go in the logs.
+
+    $ killall -HUP cxi_rh
+
+Example of a dump:
+
+    SCT STATE DUMP BEGIN
+    SCT 1138 state
+      closing=0, close_retries=0, cancel_spts=0, do_force_close=0
+      num_entries=2, spt_status_known=0, spt_completed=0
+      clr_head=1651, sw_recycle=0
+      SPT 1651 DUMP START
+        status=2, opcode_valid=0, opcode=0, retries=1
+        clr_nxt=1652
+      SPT 1651 DUMP END
+      SPT 1652 DUMP START
+        status=2, opcode_valid=0, opcode=0, retries=1
+        clr_nxt=0
+      SPT 1652 DUMP END
+    SCT STATE DUMP END
+    SPT STATE DUMP BEGIN
+      SPT 1654 DUMP START
+        status=1, opcode_valid=1, opcode=1, retries=0
+        clr_nxt=0
+      SPT 1654 DUMP END
+      SPT 1661 DUMP START
+        status=1, opcode_valid=1, opcode=1, retries=0
+        clr_nxt=0
+      SPT 1661 DUMP END
+    SPT STATE DUMP END
+    timeout list DUMP START. now is 2420.603847
+    timeout list DUMP END
+
+Documentation
+-------------
+
+There are two state machine diagrams in the docs/ directory. They are
+defined using plantuml (https://plantuml.com). Generate the SVG files
+with:
+
+  make rhdocs
+
+plantuml is available in ubuntu:
+
+  sudo apt install plantuml
+
+or in SLES / openSUSE at:
+
+  https://software.opensuse.org/package/plantuml
+
+Configuration
+-------------
+
+4 parameters can be set in the configuration file. See
+cxi_rh.conf. This file is normally installed in the default
+configuration directory (/etc). The location can be overridden by
+passing the --sysconfdir option to configure. When run, cxi_rh will
+print which file it loads (if present).
+
+Command line
+------------
+
+Run 'cxi_rh --help' to see which options exist.

@@ -1,0 +1,24 @@
+@startuml
+
+title SPT states in retry handler
+
+[*] -> alloc_spt
+
+alloc_spt : an SPT is allocated
+alloc_spt --> STS_PENDING : rsp_status == C_RSP_PEND && \n to_flag == false
+alloc_spt --> STS_NEED_RETRY : other cases
+
+STS_PENDING : Cassini is still working on that SPT
+STS_PENDING --> STS_NEED_RETRY : status is known
+
+STS_NEED_RETRY : awaits retrying
+STS_NEED_RETRY --> STS_RETRIED : retry successful
+STS_NEED_RETRY --> STS_NEED_RETRY : PCP paused
+
+STS_RETRIED : SPT was retried
+STS_RETRIED --> STS_NEED_RETRY : timeout or NACK event
+STS_RETRIED --> STS_COMPLETED : complete event / cancelled
+
+STS_COMPLETED -> [*]
+
+@enduml

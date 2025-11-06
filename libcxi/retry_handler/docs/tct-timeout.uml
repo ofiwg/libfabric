@@ -1,0 +1,17 @@
+@startuml
+
+title TCT_TIMEOUT PCT event state machine in the retry handler
+
+[*] --> tct_timeout : C_PCT_TCT_TIMEOUT event
+
+tct_timeout --> [*] : TCT CAM is not valid anymore
+tct_timeout --> add_tct_check_timer
+
+add_tct_check_timer --> check_tct_closing : check timer expired
+
+check_tct_closing --> add_tct_check_timer : TRS entries still pending
+check_tct_closing --> free_tct
+
+free_tct --> [*]
+
+@enduml

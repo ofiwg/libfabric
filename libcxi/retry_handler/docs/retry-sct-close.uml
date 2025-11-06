@@ -1,0 +1,28 @@
+@startuml
+
+title SCT_TIMEOUT PCT event state machine in the retry handler
+
+[*] --> sct_timeout : C_PCT_SCT_TIMEOUT event
+
+sct_timeout --> schedule_sct_close : nb retries < max
+sct_timeout --> free_sct : nb retries == max
+sct_timeout : process C_PCT_SCT_TIMEOUT event
+
+schedule_sct_close --> send_close_request : nb retries == 0
+schedule_sct_close --> add_close_timer :  nb retries > 0
+
+add_close_timer --> send_close_request : close timer expired
+
+check_sct_closed --> add_sct_check_timer : SCT still pending
+check_sct_closed --> free_sct : SCT in NOT_USED state
+check_sct_closed : check whether the SCT was silently closed
+
+add_sct_check_timer : schedule check timer
+add_sct_check_timer --> check_sct_closed : check timer expired
+
+send_close_request --> schedule_sct_close : PCP paused
+send_close_request --> add_sct_check_timer : close request issued
+
+free_sct --> [*]
+
+@enduml
