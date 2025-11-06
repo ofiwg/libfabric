@@ -286,7 +286,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AS_IF([test x"$efa_LIBDIR" != x""],
 	[
 		AC_MSG_NOTICE([Adding RUNPATH for EFA libraries: $efa_LIBDIR])
-		efa_LDFLAGS+=" -L$efa_LIBDIR -Wl,--enable-new-dtags,-rpath,$efa_LIBDIR"
+		efa_LDFLAGS+=" -L$efa_LIBDIR -Wl,--enable-new-dtags,-rpath,$efa_LIBDIR"
 	])
 	cmocka_rpath=""
 	AC_ARG_ENABLE([efa-unit-test],
