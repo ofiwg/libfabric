@@ -1572,11 +1572,20 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 		// spill from 1st cacheline (SOP)
 		OPX_HFI1_BAR_PIO_STORE(&scb_payload[0], replay->scb.scb_16B.hdr.qw_16B[7]); // header
 
-		int i;
-
-		for (i = 1; i <= payload_qw_to_copy_with_header; ++i) {
-			OPX_HFI1_BAR_PIO_STORE(&scb_payload[i], *buf_qws);
-			buf_qws += 1;
+		int  i = 1;
+		bool write_extended_hdr_qws =
+			(replay->scb.scb_16B.hdr.bth.opcode == FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH) ||
+			(FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(replay->scb.scb_16B.hdr.bth.opcode) ==
+			 FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST);
+		if (write_extended_hdr_qws) {
+			for (; i <= payload_qw_to_copy_with_header; ++i) {
+				OPX_HFI1_BAR_PIO_STORE(&scb_payload[i], replay->scb.scb_16B.hdr.qw_16B[7 + i]);
+			}
+		} else {
+			for (; i <= payload_qw_to_copy_with_header; ++i) {
+				OPX_HFI1_BAR_PIO_STORE(&scb_payload[i], *buf_qws);
+				++buf_qws;
+			}
 		}
 		for (i = payload_qw_to_copy_with_header + 1; i <= 7; ++i) {
 			OPX_HFI1_BAR_PIO_STORE(&scb_payload[i], OPX_JKR_16B_PAD_QWORD);
