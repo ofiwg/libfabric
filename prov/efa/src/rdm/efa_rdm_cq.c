@@ -86,13 +86,9 @@ static struct fi_ops efa_rdm_cq_fi_ops = {
  * @param[in]		ep	        efa_rdm_ep
  * @param[in]		pkt_entry	packet entry
  */
-static
-void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
-						       struct efa_ibv_cq *ibv_cq,
-						       uint64_t flags,
-						       struct efa_rdm_ep *ep,
-						       struct efa_rdm_pke *pkt_entry
-						       )
+static void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
+	struct efa_ibv_cq *ibv_cq, uint64_t flags, struct efa_rdm_ep *ep,
+	struct efa_rdm_pke *pkt_entry)
 {
 	struct util_cq *target_cq;
 	int ret;
@@ -602,6 +598,11 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 	struct efa_rdm_pke *pkt_entry = (struct efa_rdm_pke *) wr_id;
 	int prov_errno;
 
+#if ENABLE_DEBUG
+	if (!efa_cq_wc_is_unsolicited(cq))
+		pkt_entry = efa_rdm_cq_get_pke_from_wr_id(wr_id);
+#endif
+
 #if HAVE_LTTNG
 	efa_rdm_tracepoint(poll_cq, (size_t) wr_id);
 	if (pkt_entry && pkt_entry->ope)
@@ -667,6 +668,12 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 	enum ibv_wc_status status = cq->ibv_cq_ex->status;
 	enum ibv_wc_opcode opcode = efa_ibv_cq_wc_read_opcode(cq);
 	struct efa_rdm_pke *pkt_entry = (struct efa_rdm_pke *) wr_id;
+
+#if ENABLE_DEBUG
+	if (!efa_cq_wc_is_unsolicited(cq))
+		pkt_entry = efa_rdm_cq_get_pke_from_wr_id(wr_id);
+#endif
+
 	int prov_errno;
 
 #if HAVE_LTTNG
