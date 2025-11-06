@@ -1,0 +1,12 @@
+#!/bin/bash 
+
+DIR=$(cd $(dirname $0) && pwd)
+
+PRODUCT=slingshot-host-software \
+SHS_LOCAL_BUILD=y \
+CE_CONFIG_FILE=libcxi.yaml \
+BRANCH_NAME=${BRANCH_NAME:-$(git rev-parse --abbrev-ref HEAD)} \
+  bash -x $DIR/build.sh $@
+
+
+BRANCH_NAME=${BRANCH_NAME:-$(git rev-parse --abbrev-ref HEAD)} \

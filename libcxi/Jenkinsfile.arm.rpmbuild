@@ -1,0 +1,14 @@
+#!/usr/bin/env groovy
+
+@Library("dst-shared") _
+@Library('CrayNetworkCI@master') _x
+
+rpmBuild(
+    product: "slingshot-host-software",
+    specfile: "cray-libcxi.spec",
+    build_arch: "aarch64",
+    obs_target_os: obsTargetOs_arm("hpc-shs-libcxi"),
+    recv_triggers: ["cxi-driver-built"],
+    send_triggers: ["libcxi-arm-built"],
+    manifestGen: "true"
+)

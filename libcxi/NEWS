@@ -1,0 +1,29 @@
+1.7.0
+Added interface cxil_update_md
+
+1.6.0
+Added interface cxil_page_size
+Added interface cxil_is_copy_on_fork
+
+1.5.0
+Added interface cxil_get_svc_rsrc_list
+Added interface cxil_free_svc_rsrc_list
+Added interface cxil_get_svc_rsrc_use
+Added interface cxil_pte_transition_sm
+Added interface cxil_get_amo_remap_to_pcie_fadd
+
+1.2.1
+updated telemetry start/stop to match new method in cxi-driver
+
+1.2.0
+Added interface cxil_get_svc
+Added interface cxil_update_svc
+
+1.1.0
+Added interface to inbound_wait
+
+1.0.0
+First official release
+
+0.0.0
+Development version
