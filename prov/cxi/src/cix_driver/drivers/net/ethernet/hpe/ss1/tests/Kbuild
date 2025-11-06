@@ -1,0 +1,27 @@
+# Copyright 2018-2020,2024 Hewlett Packard Enterprise Development LP
+obj-m += test-domain.o test-atu.o test-vfpfcomm.o test-dmac.o test-dmac-api.o
+obj-m += test-eq-reserved-fc.o test-telem-api.o
+obj-m += test-eq-alloc.o test-service.o test-ptlte.o
+obj-m += test-rgroup.o test-profiles.o
+obj-m += test-exclusive-cp.o
+
+test-atu-objs := test_atu.o
+test-dmac-objs := test_dmac.o
+test-dmac-api-objs := test_dmac_api.o
+test-domain-objs := test_domain.o
+test-rgroup-objs := test_rgroup.o
+test-profiles-objs := test_profiles.o
+test-exclusive-cp-objs := test_exclusive_cp.o
+test-vfpfcomm-objs := test_vfpfcomm.o
+test-telem-api-objs := test_telem_api.o
+test-eq-reserved-fc-objs := test_eq_reserved_fc.o
+test-eq-alloc-objs := test_eq_alloc.o
+test-service-objs := test_service.o
+test-ptlte-objs := test_ptlte.o
+
+ccflags-y += -I$(src)/.. -I$(src)/../../../../../../include \
+	     -I$(src)/../../../../../../../cassini-headers/install/include \
+	     -I$(src)/../../../../../../../firmware_cassini/lib/casuc \
+	     -I$(src)/../../../../../../../firmware_cassini/lib/craypldm \
+	     -I$(src)/../../../../../../../slingshot_base_link \
+	     -I$(src)/../../../../../../../sl-driver/staging_dir/usr/include

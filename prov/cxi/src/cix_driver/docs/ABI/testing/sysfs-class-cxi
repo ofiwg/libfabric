@@ -1,0 +1,146 @@
+What:       /sys/class/cxi/<device>/device/uc/reset
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+Description:    Force a reset of the microcontroller connected to the
+                Cassini chip. Must write the value 1789 to be
+                effective. For debugging or testing purposes only.
+
+What:       /sys/class/cxi/<device>/device/uc/version
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+Description:    Returns the firmware version of the microcontroller connected
+                to the Cassini chip.
+
+What:       /sys/class/cxi/<device>/device/telemetry/*
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+Description:    Exposes Cassini Telemetry items which may be counters, unsigned
+                gauges, or signed gauges.  Each file contains an individual
+                items corresponding to its filename.  Each file returns the
+                items's value in ascii text ([0-9]+) with a timestamp suffix in
+                the form of "@secs.nano_secs" based on CLOCK_REALTIME.
+
+What:       /sys/class/cxi/<device>/device/err_flgs_irqa/<block>/mask
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+Description:    Show the current bitmask for error flags. A value of 0
+                means an interrupt will be generated for the error,
+                while 1 means no interrupt will happen, although the
+                corresponding error flag may be set. This field is
+                read-only. The format of the bitmask is a set of comma
+                separated 32-bit words in hex format, such as
+                "e0000003,00000000"
+
+What:       /sys/class/cxi/<device>/device/err_flgs_irqa/<block>/no_auto_mask
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+Description:    The Cassini driver will mask an error interrupt bit if its
+                rate becomes too high. But for some error bits, this must
+                not happen. For instance the PI UC_ATTENTION bits must never
+                be disabled because they are used to communicate with the
+                micro-controller. Most default to 0. The format of the bitmask
+                is a set of comma separated 32-bit words in hex format,
+                such as "f0018003,00000000". Only change with caution.
+
+What:       /sys/class/cxi/<device>/device/err_flgs_irqa/<block>/no_print_mask
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+Description:    Whether to emit an error message to the kernel log when a
+                specific error happen. A few error bits are normal, so
+                they are masked. A value of 1 means the error is
+                masked, The format of the bitmask is a set of comma
+                separated 32-bit words in hex format, such as
+                "e0000003,00000000"
+
+What:       /sys/class/cxi/<device>/device/fru/*
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+
+Description:    Various information on the field replaceable units
+                (FRU) connected to Cassini. The fru/ directory will
+                not be present if there are no FRU on the board.
+
+What:       /sys/class/cxi/<device>/device/link_restarts/*
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+
+Description:    History of link flap timestamps.
+
+What:       /sys/class/cxi/<device>/device/port/*
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+
+Description:    Various information on the Cassini high speed network port.
+
+What:       /sys/class/cxi/<device>/device/sensors/<sensor number>/*
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+
+Description:    Each sensor present on the board is enumerated and
+                indexed by its id.
+
+What:       /sys/class/cxi/<device>/device/uc/timings
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+
+Description:    Returns 16 space separated timings (in µs) maintained by the
+		microcontroller, as defined by 'enum cuc_timing_entries',
+		in the same order:
+		    TIMING_UC_APPLICATION_STARTED
+		    TIMING_UC_PIN_INIT_COMPLETE
+		    TIMING_UC_FW_INIT_COMPLETE
+		    TIMING_EN_CLKS_UC_ASSERTED
+		    TIMING_12V_PG
+		    TIMING_PG_CASSINI_ASSERTED
+		    TIMING_RST_PON_NIC_N_DEASSERTED
+		    TIMING_VID_STABLE_ASSERTED
+		    TIMING_PERST_NIC_0_N_DEASSERTED
+		    TIMING_PERST_NIC_1_N_DEASSERTED
+		    TIMING_JTAG_TRST_N_DEASSERTED
+		    TIMING_UC_CASSINI_RDY_NIC_0
+		    TIMING_UC_CASSINI_RDY_NIC_1
+		    TIMING_PCIE_LINK_UP_NIC_0
+		    TIMING_PCIE_LINK_UP_NIC_1
+		    TIMING_UPTIME
+
+What:       /sys/class/cxi/<device>/device/properties/pcie_uncorr_err
+	    /sys/class/cxi/<device>/device/properties/pcie_corr_err
+Date:       TODO
+KernelVersion:  TODO
+Contact:    TODO
+Description: Number of correctable and uncorrectable errors seen. This
+	     is similar to the "aer_dev_*" device properties, except
+	     these new ones will always work even if AER is disabled,
+	     or if the BIOS catches AER errors before linux gets them.
+	     These counters are refreshed at most once per minute.
+
+What: /sys/class/cxi/cxi0/device/properties/amo_remap_to_pcie_fadd
+Date: TODO
+KernelVersion: TODO
+Contact: TODO
+Description: Read/write file used to remap a specific single operand NIC
+        AMO to be used for a PCIe fetch add AMO operation. Upper layer
+        software must adapt based on this value. The following are the
+        supported values.
+            -1 - Disable remapping of NIC AMO to PCIe fetch add
+            0 - Remap AMO_OP_MIN to PCIe fetch add
+            1 - Remap AMO_OP_MAX to PCIe fetch add
+            2 - Remap AMO_OP_SUM to PCIe fetch add
+            4 - Remap AMO_OP_LOR to PCIe fetch add
+            5 - Remap AMO_OP_LAND to PCIe fetch add
+            6 - Remap AMO_OP_BOR to PCIe fetch add
+            7 - Remap AMO_OP_BAND to PCIe fetch add
+            8 - Remap AMO_OP_LXOR to PCIe fetch add
+            9 - Remap AMO_OP_BXOR to PCIe fetch add
+            10 - Remap AMO_OP_SWAP to PCIe fetch add

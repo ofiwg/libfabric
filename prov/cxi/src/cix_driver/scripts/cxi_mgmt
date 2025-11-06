@@ -1,0 +1,1358 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright 2025 Hewlett Packard Enterprise Development LP
+#
+# Command Line Utility for Configuration and Management of the resource groups
+# and RX/TX Profiles.
+#
+
+shopt -s nullglob
+CONFIG_MOUNT="/sys/kernel/config"
+
+# Function to display usage information
+usage() {
+cat << EOF
+	Usage: $0 command [--device <device>] [OPTIONS]
+
+		create --rsrc-grp <group-name>
+		create --rx-profile <profile-name>
+		create --tx-profile <profile-name>
+		get-devices
+		teardown --rsrc-grp <group-name>
+		teardown --rx-profile <profile-name>
+		teardown --tx-profile <profile-name>
+		get-in-use --rsrc-grp <group-name>
+   		get-rsrc-grp --device <device> --rsrc-grp
+   		enable  --rsrc-grp <group-name>
+   		disable --rsrc-grp <group-name>
+   		add-ac-entry --rsrc-grp <group-name> <ac-name> <data> <type>
+   		add-ac-entry --rx-profile <profile-name> <ac-name> <data> <type>
+   		add-ac-entry --tx-profile <profile-name> <ac-name> <data> <type>
+		remove-ac-entry --rsrc-grp <group-name> <ac-name>
+   		remove-ac-entry --rx-profile <profile-name> <ac-name>
+   		remove-ac-entry --tx-profile <profile-name> <ac-name>
+   		add-resource --rsrc-grp <group-name> <res-type> <max-val> <reserved-val>
+   		remove-resource --rsrc-grp <group-name> <res-type>
+		set-tc --tx-profile <profile> <dedicated|low_latency|bulk_data|best_effort> <true|false>
+		set-vni --tx-profile <profile> <vni> <ignore> <exclusive_cp>
+		set-vni --rx-profile <profile> <vni> <ignore>
+   		cleanup
+EOF
+		exit 1
+}
+
+is_configfs_path_present() {
+	if [[ ! -d "$CONFIG_MOUNT" ]]
+	then
+		echo "Path $CONFIG_MOUNT does not exit"
+		exit 1
+	fi
+}
+
+cleanup_configfs() {
+	cd $CONFIG_MOUNT/cxi
+	for dev in *
+	do
+		device=$dev
+		cd  $CONFIG_MOUNT/cxi/$device/rgroup
+		for rgp in *
+		do
+			echo 0 > $CONFIG_MOUNT/cxi/$device/rgroup/$rgp/state/enabled
+			teardown_resource_group $device $rgp
+			if [ $? -ne 0 ]
+			then
+				echo "Teardown of resource group $rgp for $device failed"
+			else
+				echo "Teardown of resource group $rgp for $device succeeded"
+			fi
+		done
+		cd $CONFIG_MOUNT/cxi
+	done
+
+	cd $CONFIG_MOUNT/cxi
+        for dev in *
+        do
+                device=$dev
+                cd  $CONFIG_MOUNT/cxi/$device/rx-profile
+                for rx_prof in *
+                do
+                        echo 0 > $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof/state/enabled
+                        teardown_rx_profile $device $rx_prof
+                        if [ $? -ne 0 ]
+                        then
+                                echo "Teardown of rx profile $rx_prof for $device failed"
+                        else
+                                echo "Teardown of rx profile $rx_prof for $device succeeded"
+                        fi
+                done
+                cd $CONFIG_MOUNT/cxi
+        done
+
+        cd $CONFIG_MOUNT/cxi
+	for dev in *
+        do
+                device=$dev
+                cd  $CONFIG_MOUNT/cxi/$device/tx-profile
+                for tx_prof in *
+                do
+                        echo 0 > $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof/state/enabled
+                        teardown_tx_profile $device $tx_prof
+                        if [ $? -ne 0 ]
+                        then
+                                echo "Teardown of tx profile $tx_prof for $device failed"
+                        else
+                                echo "Teardown of tx profile $tx_prof for $device succeeded"
+                        fi
+                done
+        done
+
+	return 0
+}
+
+# Check your environment settings
+check_setup() {
+	is_configfs_path_present
+}
+
+# Get all the in use resources
+get_in_use_resources() {
+	device=$1
+	rgroup_name=$2
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+	cd $CONFIG_MOUNT/cxi/$device/rgroup
+	if [ ! -d "$rgroup_name" ]
+	then
+		echo "Error - Resource group $rgroup_name not present for $device"
+		exit 1
+	fi
+	cd  $CONFIG_MOUNT/cxi/$device/rgroup/$rgroup_name/resources
+	for res_type in *
+	do
+		in_use=$(cat $CONFIG_MOUNT/cxi/$device/rgroup/$rgroup_name/resources/$res_type/in_use)
+		if [ "$in_use" -gt 0 ]
+		then
+			echo "Resource type $res_type has in use $in_use"
+		fi
+	done
+}
+
+set_vni_rx_profile(){
+	device=$1
+	rx_prof_name=$2
+	vni=$3
+	ignore=$4
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device/rx-profile/"$rx_prof_name" ]
+	then
+		echo "Error - RX Profile $rx_prof_name not present for $device"
+		exit 1
+	fi
+
+	echo "$ignore" > $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/attr/ignore
+	echo "$vni" > $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/attr/match
+}
+
+set_vni_tx_profile(){
+        device=$1
+        tx_prof_name=$2
+        vni=$3
+        ignore=$4
+        cp=$5
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+        then
+                echo "Error - Device $device not available"
+                exit 1
+        fi
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device/tx-profile/"$tx_prof_name" ]
+        then
+                echo "Error - TX Profile $tx_prof_name not present for $device"
+                exit 1
+        fi
+
+        echo "$ignore" > $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/attr/ignore
+        echo "$vni" > $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/attr/match
+        echo "$cp" > $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/attr/exclusive_cp
+}
+
+# Create a resource group for a device
+# Takes a device and resource group name as argument
+create_resource_group() {
+	device=$1
+	resource_group_name=$2
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+	cd $CONFIG_MOUNT/cxi/$device/rgroup
+	if [ -d "$resource_group_name" ]
+	then
+		echo "Error - Resource group $resource_group_name already present for $device"
+		exit 1
+	fi
+	mkdir $resource_group_name
+	if [ $? -ne 0 ]
+	then
+		echo "Unable to create directory $resource_group_name in configfs FS"
+		return 1
+	fi
+	cd $resource_group_name
+	if [ ! -f id ]
+	then
+		echo "File id not available for resource group $resource_group_name\n"
+		echo "and device $device"
+	fi
+	mkdir attr
+	mkdir state
+	mkdir resources
+	mkdir ac-entry
+}
+
+add_resource() {
+	device=$1
+	res_grp_name=$2
+	res_type=$3
+	max_val=$4
+	reserved_val=$5
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device/rgroup/$res_grp_name ]
+	then
+		echo "Error - Resource Group $res_grp_name not available"
+		exit 1
+	fi
+
+	mkdir $CONFIG_MOUNT/cxi/$device/rgroup/$res_grp_name/resources/$res_type
+	if [ $? -ne 0 ]
+	then
+		echo "Unable to create directory $res_type inside resources directory"
+		return 1
+	fi
+	echo $max_val > $CONFIG_MOUNT/cxi/$device/rgroup/$res_grp_name/resources/$res_type/max
+	echo $reserved_val > $CONFIG_MOUNT/cxi/$device/rgroup/$res_grp_name/resources/$res_type/reserved
+}
+
+remove_resource() {
+	device=$1
+	resource_group=$2
+	resource_type=$3
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+
+	cd $CONFIG_MOUNT/cxi/$device/rgroup
+
+	if [ ! -d  $resource_group ]
+	then
+		echo "Error - Resource group $resource_group not available for device $device"
+		exit 1
+	fi
+
+	flag=$(cat $CONFIG_MOUNT/cxi/$device/rgroup/$resource_group/state/enabled)
+
+	if (( "$flag" == 0 ))
+	then
+		rmdir $CONFIG_MOUNT/cxi/$device/rgroup/$resource_group/resources/$resource_type
+		echo "Removed resource type $resource_type from the resource group $resource_group"
+		return 0
+	fi
+
+	echo "Cannot remove resource type as resource group is still enabled"
+	return 1
+}
+
+# Remove the specified resource group for a device. Takes the device and resource
+# group name as argument.
+teardown_resource_group() {
+	device=$1
+	resource_name=$2
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+
+	cd $CONFIG_MOUNT/cxi/$device/rgroup
+
+	if [ ! -d  $resource_name ]
+	then
+		echo "Error - Resource group $resource_name not available for device $device"
+		exit 1
+	fi
+
+	echo 0 > $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name/state/enabled
+
+	if [ -d  $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name/resources ]
+	then
+		cd $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name/resources
+
+		for res_type in *
+		do
+			remove_resource $device $resource_name $res_type
+		done
+
+		rmdir $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name/resources
+	fi
+
+	if [ -d  $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name/ac-entry ]
+	then
+		cd $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name/ac-entry
+
+		for ac_ent in *
+		do
+			remove_ac_entry_resource_group $device $resource_name $ac_ent
+		done
+
+		rmdir $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name/ac-entry
+	fi
+
+	if [ -d  $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name/state ]
+	then
+		rmdir $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name/state
+	fi
+
+	if [ -d  $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name/attr ]
+	then
+		rmdir $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name/attr
+	fi
+
+	rmdir $CONFIG_MOUNT/cxi/$device/rgroup/$resource_name
+
+	return 0
+}
+
+# Resource Group name and associated resource group ID for a device
+# Takes device as argument
+get_resource_group() {
+	device=$1
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+	cd $CONFIG_MOUNT/cxi/$device/rgroup
+	for res_grp_id in *
+	do
+		if [ ! -f $res_grp_id/id ]
+		then
+			echo "Error - File id not available for resource group $res_grp_id"
+			exit 1
+		fi
+		rid=$(cat $res_grp_id/id)
+		echo "Resource group name: $res_grp_id, Resource group id: $rid"
+	done
+}
+
+create_rx_profile() {
+	device=$1
+	rx_prof_name=$2
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+
+	cd $CONFIG_MOUNT/cxi/$device/rx-profile
+        if [ -d "$rx_prof_name" ]
+        then
+                echo "Error - RX Profile $rx_prof_name already present for $device"
+                exit 1
+        fi
+
+        mkdir $rx_prof_name
+        if [ $? -ne 0 ]
+        then
+                echo "Unable to create directory $rx_prof_name in configfs FS"
+                return 1
+        else
+                echo "Created directory $rx_prof_name in configfs FS"
+        fi
+
+        cd $rx_prof_name
+        mkdir attr
+        mkdir state
+        mkdir ac-entry
+}
+
+create_tx_profile() {
+        device=$1
+        tx_prof_name=$2
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+        then
+                echo "Error - Device $device not available"
+                exit 1
+        fi
+
+        cd $CONFIG_MOUNT/cxi/$device/tx-profile
+        if [ -d "$tx_prof_name" ]
+        then
+                echo "Error - TX Profile $tx_prof_name already present for $device"
+                exit 1
+        fi
+
+        mkdir $tx_prof_name
+        if [ $? -ne 0 ]
+        then
+                echo "Unable to create directory $tx_prof_name in configfs FS"
+                return 1
+        else
+                echo "Created directory $tx_prof_name in configfs FS"
+        fi
+
+        cd $tx_prof_name
+        mkdir attr
+        mkdir state
+        mkdir tc
+        mkdir ac-entry
+}
+
+teardown_rx_profile() {
+	device=$1
+	rx_prof_name=$2
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+
+	cd $CONFIG_MOUNT/cxi/$device/rx-profile
+        if [ ! -d  $rx_prof_name ]
+        then
+                echo "Error - RX Profile $rx_prof_name not available for device $device"
+                exit 1
+        fi
+
+	echo 0 > $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/state/enabled
+
+	if [ -d  $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/ac-entry ]
+        then
+		cd $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/ac-entry
+		for ac_ent in *
+		do
+			remove_ac_entry_rx_profile $device $rx_prof_name $ac_ent
+        	done
+
+		rmdir $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/ac-entry
+	fi
+
+	if [ -d  $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/state ]
+        then
+        	rmdir $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/state
+	fi
+
+	if [ -d  $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/attr ]
+        then
+        	rmdir $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/attr
+	fi
+
+        rmdir $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name
+
+        return 0
+}
+
+teardown_tx_profile() {
+	device=$1
+	tx_prof_name=$2
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+
+        cd $CONFIG_MOUNT/cxi/$device/tx-profile
+        if [ ! -d  $tx_prof_name ]
+        then
+                echo "Error - TX Profile $tx_prof_name not available for device $device"
+                exit 1
+        fi
+
+	echo 0 > $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/state/enabled
+
+	if [ -d  $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/ac-entry ]
+        then
+		cd $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/ac-entry
+		for ac_ent in *
+		do
+			remove_ac_entry_tx_profile $device $tx_prof_name $ac_ent
+        	done
+
+		rmdir $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/ac-entry
+	fi
+
+	if [ -d  $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/state ]
+        then
+        	rmdir $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/state
+	fi
+
+	if [ -d  $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/attr ]
+        then
+        	rmdir $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/attr
+	fi
+
+	if [ -d  $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/tc ]
+        then
+        	rmdir $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/tc
+	fi
+
+	rmdir $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name
+}
+
+add_ac_entry_resource_group() {
+	device=$1
+	resource_group=$2
+	ac_name=$3
+	data_val=$4
+	type_val=$5
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device/rgroup/$resource_group ]
+	then
+		echo "Error -  Resource Group $resource_group not present"
+		exit 1
+	fi
+
+	flag=$(cat $CONFIG_MOUNT/cxi/$device/rgroup/$resource_group/state/enabled)
+
+	if (( "$flag" == 1 ))
+	then
+		echo "ac-entry $ac_name cannot be added as $resource_group"
+		exit 1
+	fi
+
+	mkdir $CONFIG_MOUNT/cxi/$device/rgroup/$resource_group/ac-entry/$ac_name
+	if [ $? -ne 0 ]
+	then
+		echo "ac-entry $ac_name entry cannot be created"
+		return 1
+	fi
+	echo $data_val > $CONFIG_MOUNT/cxi/$device/rgroup/$resource_group/ac-entry/$ac_name/data
+	echo $type_val > $CONFIG_MOUNT/cxi/$device/rgroup/$resource_group/ac-entry/$ac_name/type
+	if [ $? -ne 0 ]
+	then
+		echo "Unable to add ac entry $ac_name to resource group $resource_group"
+		return 1
+	else
+		return 0
+	fi
+}
+
+remove_ac_entry_resource_group() {
+	device=$1
+	resource_group=$2
+	ac_name=$3
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device/rgroup/$resource_group ]
+	then
+		echo "Error -  Resource Group $resource_group not present"
+		exit 1
+	fi
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device/rgroup/$resource_group/ac-entry/$ac_name ]
+	then
+		echo "Error - $ac_name ac-entry not present"
+		exit 1
+	fi
+
+	flag=$(cat $CONFIG_MOUNT/cxi/$device/rgroup/$resource_group/state/enabled)
+
+	if (( "$flag" == 0 ))
+	then
+		rmdir $CONFIG_MOUNT/cxi/$device/rgroup/$resource_group/ac-entry/$ac_name
+		return 0
+	fi
+
+	echo "Access Control entry $ac_name cannot be removed from resource group $resource_group"
+	return 1
+}
+
+add_ac_entry_rx_profile() {
+	device=$1
+	rx_prof_name=$2
+	ac_name=$3
+	data_val=$4
+	type_val=$5
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+
+	if [ ! -d $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name ]
+        then
+                echo "Error -  RX Profile $rx_prof_name not present"
+                exit 1
+        fi
+
+        flag=$(cat $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/state/enabled)
+
+	if (( "$flag" == 1 ))
+        then
+                echo "ac-entry $ac_name cannot be added"
+                exit 1
+        fi
+
+        mkdir $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/ac-entry/$ac_name
+
+        if [ $? -ne 0 ]
+        then
+                echo "ac-entry $ac_name entry cannot be created"
+                return 1
+        fi
+
+        echo $data_val > $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/ac-entry/$ac_name/data
+        echo $type_val > $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/ac-entry/$ac_name/type
+        if [ $? -ne 0 ]
+        then
+                echo "Unable to add ac entry $ac_name to RX Profile $rx_prof_name"
+                return 1
+        else
+                return 0
+        fi
+}
+
+remove_ac_entry_rx_profile() {
+	device=$1
+	rx_prof_name=$2
+	ac_name=$3
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+        then
+                echo "Error - Device $device not available"
+                exit 1
+        fi
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name ]
+        then
+                echo "Error -  RX Profile $rx_prof_name not present"
+                exit 1
+        fi
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/ac-entry/$ac_name ]
+        then
+                echo "Error - $ac_name ac-entry not present"
+                exit 1
+        fi
+
+        flag=$(cat $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/state/enabled)
+
+	if (( "$flag" == 0 ))
+        then
+                rmdir $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/ac-entry/$ac_name
+                echo "ac-entry $ac_name removed from RX Profile $rx_prof_name"
+                return 0
+        fi
+
+        echo "Access Control entry $ac_name cannot be removed from RX Profile $rx_prof_name"
+        return 1
+}
+
+add_ac_entry_tx_profile() {
+	device=$1
+	tx_prof_name=$2
+	ac_name=$3
+        data_val=$4
+        type_val=$5
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+        then
+                echo "Error - Device $device not available"
+                exit 1
+        fi
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name ]
+        then
+                echo "Error -  TX Profile $tx_prof_name not present"
+                exit 1
+        fi
+
+        flag=$(cat $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/state/enabled)
+
+	if (( "$flag" == 1 ))
+        then
+                echo "ac-entry $ac_name cannot be added"
+                exit 1
+        fi
+
+        mkdir $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/ac-entry/$ac_name
+        if [ $? -ne 0 ]
+        then
+                echo "ac-entry $ac_name entry cannot be created"
+                return 1
+        fi
+
+	echo $data_val > $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/ac-entry/$ac_name/data
+        echo $type_val > $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/ac-entry/$ac_name/type
+        if [ $? -ne 0 ]
+        then
+                echo "Unable to add ac entry $ac_name to tx profile $tx_prof_name"
+                return 1
+        else
+                echo "Added ac entry $ac_name to resource tx profile $tx_prof_name"
+                return 0
+        fi
+}
+
+set_tc_tx_profile() {
+	device=$1
+	tx_prof_name=$2
+	tc_type=$3
+	tc_bool=$4
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+        then
+                echo "Error - Device $device not available"
+                exit 1
+        fi
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name ]
+        then
+                echo "Error -  TX Profile $tx_prof_name not present"
+                exit 1
+        fi
+
+	echo "$tc_bool" > $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/tc/$tc_type
+}
+
+remove_ac_entry_tx_profile() {
+	device=$1
+	tx_prof_name=$2
+	ac_name=$3
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+        then
+                echo "Error - Device $device not available"
+                exit 1
+        fi
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name ]
+        then
+                echo "Error -  TX Profile $tx_prof_name not present"
+                exit 1
+        fi
+
+        if [ ! -d $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/ac-entry/$ac_name ]
+        then
+                echo "Error - $ac_name ac-entry not present"
+                exit 1
+        fi
+
+        flag=$(cat $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/state/enabled)
+
+	if (( "$flag" == 0 ))
+        then
+                rmdir $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/ac-entry/$ac_name
+                echo "ac-entry $ac_name removed from TX Profile $tx_prof_name"
+                return 0
+        fi
+
+        echo "Access Control entry $ac_name cannot be removed from TX Profile $tx_prof_name"
+        return 1
+}
+
+# Enable a specified resource group for a device
+# Takes device and resource group name as argument
+enable_resource_grp() {
+	device=$1
+	rgroup_name=$2
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+	if [ ! -d $CONFIG_MOUNT/cxi/$device/rgroup/$rgroup_name ]
+	then
+		echo "Error - Resource group $rgroup_name not available for device $device"
+		exit 1
+	fi
+	echo "Enabling resource group $rgroup_name on device $device"
+	echo 1 > $CONFIG_MOUNT/cxi/$device/rgroup/$rgroup_name/state/enabled
+}
+
+# Disable a specified resource group for a device
+# Takes device and resource group name as argument
+disable_resource_grp() {
+	device=$1
+	rgroup_name=$2
+	if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+	then
+		echo "Error - Device $device not available"
+		exit 1
+	fi
+	if [ ! -d $CONFIG_MOUNT/cxi/$device/rgroup/$rgroup_name ]
+	then
+		echo "Error - Resource group $rgroup_name not available for device $device"
+		exit 1
+	fi
+	echo "Disabling resource group $rgroup_name on device $device"
+	echo 0 > $CONFIG_MOUNT/cxi/$device/rgroup/$rgroup_name/state/enabled
+}
+
+enable_rx_profile() {
+        device=$1
+        rx_prof_name=$2
+        if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+        then
+                echo "Error - Device $device not available"
+                exit 1
+        fi
+        if [ ! -d $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name ]
+        then
+                echo "Error - RX Profile $rx_prof_name not available for device $device"
+                exit 1
+        fi
+        echo "Enabling RX profile $rx_prof_name on device $device"
+        echo 1 > $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/state/enabled
+}
+
+disable_rx_profile() {
+        device=$1
+        rx_prof_name=$2
+        if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+        then
+                echo "Error - Device $device not available"
+                exit 1
+        fi
+        if [ ! -d $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name ]
+        then
+                echo "Error - RX Profile $rx_prof_name not available for device $device"
+                exit 1
+        fi
+        echo "Disabling RX Profile $rx_prof_name on device $device"
+        echo 0 > $CONFIG_MOUNT/cxi/$device/rx-profile/$rx_prof_name/state/enabled
+}
+
+enable_tx_profile() {
+        device=$1
+        tx_prof_name=$2
+        if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+        then
+                echo "Error - Device $device not available"
+                exit 1
+        fi
+        if [ ! -d $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name ]
+        then
+                echo "Error - TX Profile $tx_prof_name not available for device $device"
+                exit 1
+        fi
+        echo "Enabling TX profile $tx_prof_name on device $device"
+        echo 1 > $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/state/enabled
+}
+
+disable_tx_profile() {
+        device=$1
+        tx_prof_name=$2
+        if [ ! -d $CONFIG_MOUNT/cxi/$device ]
+        then
+                echo "Error - Device $device not available"
+                exit 1
+        fi
+        if [ ! -d $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name ]
+        then
+                echo "Error - TX Profile $tx_prof_name not available for device $device"
+                exit 1
+        fi
+        echo "Disabling TX Profile $tx_prof_name on device $device"
+        echo 0 > $CONFIG_MOUNT/cxi/$device/tx-profile/$tx_prof_name/state/enabled
+}
+
+# List all the available NIC devices on the system
+get_devices() {
+	cd $CONFIG_MOUNT/cxi
+	for dev in *
+	do
+        	echo $dev
+	done
+}
+
+# Initialize all variables here
+option=""
+sub_option=""
+device="cxi0"
+rgroup_name=""
+
+# While Loop to process command line flags/options
+while true; do
+    case "$1" in
+        create)
+            option="create"
+	    shift
+            ;;
+        teardown)
+            option="teardown"
+	    shift
+            ;;
+        add-ac-entry)
+            option="add-ac-entry"
+	    shift
+            ;;
+        set-tc)
+            option="set-tc"
+	    shift
+            ;;
+        set-vni)
+            option="set-vni"
+	    shift
+            ;;
+        remove-ac-entry)
+            option="remove-ac-entry"
+	    shift
+            ;;
+        enable)
+            option="enable"
+	    shift
+            ;;
+        disable)
+            option="disable"
+	    shift
+            ;;
+        add-resource)
+            option="add-resource"
+	    shift
+            ;;
+        remove-resource)
+            option="remove-resource"
+	    shift
+	    ;;
+        get-rsrc-grp)
+	    option="get-rsrc-grp"
+	    shift
+	    ;;
+        --device)
+	    device="$2"
+	    shift 2
+            if [[ -z "$device" ]]
+	    then
+            	echo "Error: --device requires <device>."
+           	usage
+		exit 1
+            fi
+            ;;
+        --rsrc-grp)
+	    if [[ "$option" == "get-rsrc-grp" ]]
+	    then
+		check_setup
+		get_resource_group $device
+		break
+	    elif [[ "$option" == "add-resource" ]]
+	    then
+                rgroup_name="$2"
+		shift
+		res_name="$2"
+		shift
+		max_val="$2"
+		shift
+		res_val="$2"
+                if [[ -z "$rgroup_name" || -z "$res_name" || -z "$max_val" || -z "$res_val" ]]
+	        then
+                	echo "Error: add-resource --rsrc-grp requires <rgroup> <resource> <data_val> <type_val>"
+            		usage
+			exit 1
+        	fi
+		check_setup
+		add_resource $device $rgroup_name $res_name $max_val $res_val
+		break
+	    elif [[ "$option" == "remove-resource" ]]
+	    then
+                rgroup_name="$2"
+		shift
+		res_name="$2"
+                if [[ -z "$rgroup_name" || -z "$res_name" ]]
+	        then
+                	echo "Error: remove-resource --rsrc-grp requires <rgroup> <resource> <res-name>"
+            		usage
+			exit 1
+        	fi
+		check_setup
+		remove_resource $device $rgroup_name $res_name
+		break
+            elif [[ "$option" == "get-in-use" ]]
+	    then
+                rgroup_name="$2"
+		shift
+                if [[ -z "$rgroup_name" ]]
+	        then
+                	echo "Error: get-in-use --rsrc-grp requires <rgroup>."
+            		usage
+			exit 1
+        	fi
+	        check_setup
+	        get_in_use_resources $device $rgroup_name
+		break
+            elif [[ "$option" == "enable" ]]
+	    then
+                rgroup_name="$2"
+		shift
+                if [[ -z "$rgroup_name" ]]
+	        then
+                	echo "Error: enable --rsrc-grp requires <rgroup>."
+            		usage
+			exit 1
+        	fi
+		check_setup
+		enable_resource_grp $device $rgroup_name
+		break
+	    elif [[ "$option" == "disable" ]]
+	    then
+                rgroup_name="$2"
+		shift
+                if [[ -z "$rgroup_name" ]]
+	        then
+                	echo "Error: disable --rsrc-grp requires <rgroup>."
+            		usage
+			exit 1
+        	fi
+		check_setup
+		disable_resource_grp $device $rgroup_name
+		break
+	    elif [[ "$option" == "create" ]]
+	    then
+                rgroup_name="$2"
+		shift
+                if [[ -z "$rgroup_name" ]]
+	        then
+                	echo "Error: create --rsrc-grp requires <rgroup>."
+            		usage
+			exit 1
+        	fi
+		check_setup
+		create_resource_group $device $rgroup_name
+		break
+	    elif [[ "$option" == "teardown" ]]
+	    then
+                rgroup_name="$2"
+		shift
+                if [[ -z "$rgroup_name" ]]
+	        then
+                	echo "Error: teardown --rsrc-grp requires <rgroup>."
+            		usage
+			exit 1
+        	fi
+		check_setup
+		teardown_resource_group $device $rgroup_name
+		break
+	    elif [[ "$option" == "add-ac-entry" ]]
+	    then
+                rgroup_name="$2"
+		shift
+		ac_name="$2"
+		shift
+		data_val="$2"
+		shift
+		type_val="$2"
+                if [[ -z "$rgroup_name" || -z "$ac_name" || -z "$data_val" || -z "$type_val" ]]
+	        then
+                	echo "Error: add-ac-entry --rsrc-grp requires <rgroup> <ac-name> <data_val> <type_val>"
+            		usage
+			exit 1
+        	fi
+		check_setup
+		add_ac_entry_resource_group $device $rgroup_name $ac_name $data_val $type_val
+		break
+	    elif [[ "$option" == "remove-ac-entry" ]]
+	    then
+                rgroup_name="$2"
+		shift
+		ac_name="$2"
+                if [[ -z "$rgroup_name" || -z "$ac_name" ]]
+	        then
+                	echo "Error: remove-ac-entry --rsrc-grp requires <rgroup> and <ac-name>"
+            		usage
+			exit 1
+        	fi
+		check_setup
+		remove_ac_entry_resource_group $device $rgroup_name $ac_name
+		break
+            else
+                usage
+		exit 1
+            fi
+            ;;
+        --rx-profile)
+	    if [[ "$option" == "enable" ]]
+            then
+                rx_prof_name="$2"
+                shift
+                if [[ -z "$rx_prof_name" ]]
+                then
+                        echo "Error: enable --rx-profile requires <rx_prof_name>."
+                        usage
+                        exit 1
+                fi
+                check_setup
+                enable_rx_profile $device $rx_prof_name
+                break
+            elif [[ "$option" == "disable" ]]
+            then
+                rx_prof_name="$2"
+                shift
+                if [[ -z "$rx_prof_name" ]]
+                then
+                        echo "Error: disable --rx-profile requires <rx_prof_name>."
+                        usage
+                        exit 1
+                fi
+                check_setup
+                disable_rx_profile $device $rx_prof_name
+                break
+            elif [[ "$option" == "create" ]]
+	    then
+                rx_prof_name="$2"
+		shift
+                if [[ -z "$rx_prof_name" ]]
+	        then
+                	echo "Error: create --rx-profile requires <rx-profile-name>."
+            		usage
+			exit 1
+        	fi
+	        check_setup
+	        create_rx_profile $device $rx_prof_name
+		break
+            elif [[ "$option" == "teardown" ]]
+	    then
+                rx_prof_name="$2"
+		shift
+                if [[ -z "$rx_prof_name" ]]
+	        then
+                	echo "Error: teardown --rx-profile requires <rx-profile-name>."
+            		usage
+			exit 1
+        	fi
+	        check_setup
+	        teardown_rx_profile $device $rx_prof_name
+		break
+            elif [[ "$option" == "add-ac-entry" ]]
+	    then
+                rx_prof_name="$2"
+		shift
+		ac_name="$2"
+		shift
+                data_val="$2"
+                shift
+                type_val="$2"
+                if [[ -z "$rx_prof_name" || -z "$ac_name" || -z "$data_val" || -z "$type_val" ]]
+                then
+                        echo "Error: add-ac-entry --rx-profile requires <rx-profile> <ac-name> <data_val> <type_val>"
+                        usage
+                        exit 1
+                fi
+	        check_setup
+	        add_ac_entry_rx_profile $device $rx_prof_name $ac_name $data_val $type_val
+		break
+            elif [[ "$option" == "remove-ac-entry" ]]
+	    then
+                rx_prof_name="$2"
+		shift
+		ac_name="$2"
+                if [[ -z "$rx_prof_name" || -z "$ac_name" ]]
+	        then
+                	echo "Error: remove-ac-entry --rx-profile requires <rx-profile-name> and <ac-name>"
+            		usage
+			exit 1
+        	fi
+	        check_setup
+	        remove_ac_entry_rx_profile $device $rx_prof_name $ac_name
+		break
+            elif [[ "$option" == "set-vni" ]]
+	    then
+                rx_prof_name="$2"
+		shift
+		vni="$2"
+		shift
+		ignore="$2"
+                if [[ -z "$rx_prof_name" || -z "$vni" || -z "$ignore" ]]
+	        then
+                	echo "Error: set-vni --rx-profile requires <profile> <vni> <ignore>"
+            		usage
+			exit 1
+        	fi
+	        check_setup
+	        set_vni_rx_profile $device $rx_prof_name $vni $ignore
+		break
+	    else
+		usage
+		exit 1
+	    fi
+	    ;;
+        --tx-profile)
+	    if [[ "$option" == "enable" ]]
+            then
+                tx_prof_name="$2"
+                shift
+                if [[ -z "$tx_prof_name" ]]
+                then
+                        echo "Error: enable --tx-profile requires <tx_prof_name>."
+                        usage
+                        exit 1
+                fi
+                check_setup
+                enable_tx_profile $device $tx_prof_name
+                break
+            elif [[ "$option" == "disable" ]]
+            then
+                tx_prof_name="$2"
+                shift
+                if [[ -z "$tx_prof_name" ]]
+                then
+                        echo "Error: disable --tx-profile requires <tx_prof_name>."
+                        usage
+                        exit 1
+                fi
+                check_setup
+                disable_tx_profile $device $tx_prof_name
+                break
+            elif [[ "$option" == "create" ]]
+	    then
+                tx_prof_name="$2"
+		shift
+                if [[ -z "$tx_prof_name" ]]
+	        then
+                	echo "Error: create --tx-profile requires <tx-profile-name>."
+            		usage
+			exit 1
+        	fi
+	        check_setup
+	        create_tx_profile $device $tx_prof_name
+		break
+            elif [[ "$option" == "teardown" ]]
+	    then
+                tx_prof_name="$2"
+		shift
+                if [[ -z "$tx_prof_name" ]]
+	        then
+                	echo "Error: teardown --tx-profile requires <tx-profile-name>."
+            		usage
+			exit 1
+        	fi
+	        check_setup
+	        teardown_tx_profile $device $tx_prof_name
+		break
+	    elif [[ "$option" == "set-tc" ]]
+            then
+                tx_prof_name="$2"
+                shift
+                tc_type="$2"
+                shift
+                tc_bool="$2"
+                if [[ -z "$tx_prof_name" || -z "$tc_type" || -z "$tc_bool" ]]
+                then
+                        echo "Error: set-tc --tx-profile requires <tx-profile> <tc-type> <tc-bool>"
+                        usage
+                        exit 1
+                fi
+                check_setup
+                set_tc_tx_profile $device $tx_prof_name $tc_type $tc_bool
+                break
+            elif [[ "$option" == "add-ac-entry" ]]
+	    then
+		tx_prof_name="$2"
+                shift
+                ac_name="$2"
+                shift
+                data_val="$2"
+                shift
+                type_val="$2"
+                if [[ -z "$tx_prof_name" || -z "$ac_name" || -z "$data_val" || -z "$type_val" ]]
+                then
+                        echo "Error: add-ac-entry --tx-profile requires <tx-profile> <ac-name> <data_val> <type_val>"
+                        usage
+                        exit 1
+                fi
+                check_setup
+                add_ac_entry_tx_profile $device $tx_prof_name $ac_name $data_val $type_val
+                break
+            elif [[ "$option" == "remove-ac-entry" ]]
+	    then
+                tx_prof_name="$2"
+		shift
+		ac_name="$2"
+                if [[ -z "$tx_prof_name" || -z "$ac_name" ]]
+	        then
+                	echo "Error: remove-ac-entry --tx-profile requires <tx-profile-name> and <ac-name>."
+            		usage
+			exit 1
+        	fi
+	        check_setup
+	        remove_ac_entry_tx_profile $device $tx_prof_name $ac_name
+		break
+            elif [[ "$option" == "set-vni" ]]
+	    then
+                tx_prof_name="$2"
+		shift
+		vni="$2"
+		shift
+		ignore="$2"
+		shift
+		cp="$2"
+                if [[ -z "$tx_prof_name" || -z "$vni" || -z "$ignore" || -z "$cp" ]]
+	        then
+                	echo "Error: set-vni --tx-profile requires <profile> <vni> <ignore> <cp>"
+            		usage
+			exit 1
+        	fi
+	        check_setup
+	        set_vni_tx_profile $device $tx_prof_name $vni $ignore $cp
+		break
+	    else
+		usage
+		exit 1
+	    fi
+	    ;;
+        help)
+	    usage
+	    break
+	    ;;
+        cleanup)
+	    cleanup_configfs
+	    break
+	    ;;
+        get-devices)
+	    check_setup
+	    get_devices
+	    break
+            ;;
+        get-in-use)
+            option="get-in-use"
+	    shift
+            ;;
+        *)
+	    usage
+	    exit 1
+            ;;
+    esac
+done

@@ -1,0 +1,43 @@
+/*
+ * Monitor EQ allocation
+ *
+ * Print a trace whenever an EQ is allocated or freed.
+ *
+ * To run:
+ *   bpftrace -I../cxi -I../include -I../../slingshot_base_link/ -I../../cassini-headers/install/include/ -I../../firmware_cassini/lib/casuc/ -I../../firmware_cassini/lib/craypldm eq_alloc.bt
+ *
+ * Output:
+ *   Attaching 3 probes...
+ *   alloc EQ by 346 - lni 0xffffa1bd7a262418, EQ len 16384, attrs 2
+ *   alloc EQ ret 0xffffa1bd7a2620b0, eqn 1
+ *   freeing EQ - eq 0xffffa1bd7a2620b0, eqn 1
+ *   .....
+ */
+
+#include <cxi_core.h>
+#include <cass_core.h>
+
+kprobe:cxi_eq_alloc
+{
+	printf("alloc EQ by %d - lni %p, EQ len %zu, attrs %x\n",
+	       tid, arg0,
+	       ((struct cxi_eq_attr *)arg2)->queue_len,
+	       ((struct cxi_eq_attr *)arg2)->flags);
+}
+
+kretprobe:cxi_eq_alloc
+{
+	if (0xffffffffffffffff - retval > 512) {
+		printf("alloc EQ ret %p, eqn %d\n",
+		       retval, ((struct cxi_eq *)retval)->eqn);
+	} else {
+		printf("alloc EQ failed with error %d\n",
+		       0xffffffffffffffff - retval);
+	}
+}
+
+kprobe:cxi_eq_free
+{
+	printf("freeing EQ - eq %p, eqn %d\n",
+	       arg0, ((struct cxi_eq *)arg0)->eqn);
+}

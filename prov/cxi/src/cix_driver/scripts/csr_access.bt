@@ -1,0 +1,40 @@
+/*
+ * Monitor CASSINI CSRs accesses
+ *
+ * To run:
+ *   bpftrace -I../cxi -I../include -I../../slingshot_base_link/ -I../../cassini-headers/install/include/ -I../../firmware_cassini/lib/casuc/ -I../../firmware_cassini/lib/craypldm csr_access.bt
+ *
+ * Output:
+ *   Attaching 1 probe...
+ *   187 read CSR 01002528 len 8
+ *   187 read CSR 01002530 len 8
+ *   187 read CSR 01002538 len 8
+ *   187 read CSR 01002540 len 8
+ *   187 read CSR 01002548 len 8
+ *   217 write CSR 0801a000 len 8
+ *   217 write CSR 0801a008 len 8
+ *   217 read CSR 08000808 len 8
+ *   217 write CSR 08000410 len 8
+ *   217 read CSR 10004008 len 8
+ *   217 write CSR 02020000 len 8
+ *   217 write CSR 00028008 len 8
+ *   .....
+ */
+
+#include <cxi_core.h>
+#include <cass_core.h>
+
+kprobe:cass_read
+{
+	printf("%d read CSR %08x len %d\n", tid, arg1, arg3);
+}
+
+kprobe:cass_write
+{
+	printf("%d write CSR %08x len %d\n", tid, arg1, arg3);
+}
+
+kprobe:cass_clear
+{
+	printf("%d clear CSRs %08x len %d\n", tid, arg1, arg2);
+}

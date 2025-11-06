@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: GPL-2.0
+# Copyright 2020-2021,2024 Hewlett Packard Enterprise Development LP
+
+$(info Building with KERNELRELEASE = ${KERNELRELEASE})
+
+obj-m := cxi-ss1.o cxi-user.o cxi-eth.o
+
+cxi-ss1-objs := cxi_core.o cass_core.o cass_lni.o cass_rmu.o cass_eq.o \
+		 cass_cpt.o cass_cq.o cass_pt.o cass_atu.o cass_ct.o \
+		 cass_errors.o cass_sriov.o cass_nta.o cass_ptp.o \
+		 cass_hni.o cass_eth.o cass_ats.o cass_uc.o \
+		 cass_hmm.o cxi_qos_profiles.o cass_tc.o cass_svc.o cxi_config.o cass_telem.o \
+		 cxi_link.o cass_sbl.o cass_sl.o cass_sl_io.o \
+		 cass_sysfs.o cass_sbus.o cass_phy.o cass_dmac.o \
+		 cass_link.o cass_link_misc.o cass_port_misc.o cass_lmon.o \
+		 cass_ixe.o cass_irq.o cass_cable.o cass_odp_decouple.o \
+		 cass_ats_inval.o cass_pcie_mon.o \
+		 cxi_ac_entry_list.o cass_dev_info.o \
+		 cxi_rxtx_profile_list.o cass_rx_tx_profile.o \
+		 cxi_rxtx_profile.o cxi_rx_profile.o cxi_tx_profile.o \
+		 cass_rgroup.o cxi_rgroup.o cass_rgid.o
+#dma buf code
+cxi-ss1-y += cass_p2p.o cass_dma_buf.o
+cxi-ss1-$(CONFIG_DEBUG_FS) += cass_ss1_debugfs.o
+
+cxi-user-objs := cxi_user_core.o cxi_user_mmap.o
+cxi-eth-objs := cxi_eth.o cxi_eth_ops.o cxi_ethtool.o cxi_eth_ioctl.o
+cxi-eth-$(CONFIG_DEBUG_FS) += cxi_eth_debugfs.o
+
+ifeq ($(NO_BUILD_TESTS),)
+obj-m += tests/
+endif
+
+ifneq ($(NO_SRIOV),)
+        ccflags-y += -DCXI_DISABLE_SRIOV
+endif
+
+AMDGPU_DIR ?= $(shell /bin/ls -d /usr/src/amdgpu-* 2>/dev/null | tail -1)
+ifneq ($(AMDGPU_DIR),)
+        $(info Have $(AMDGPU_DIR))
+        ccflags-y += -DHAVE_AMD_RDMA -I$(AMDGPU_DIR)/include
+cxi-ss1-y += cass_amd_gpu.o
+endif
+
+# TODO: use the real install dir path
+NVIDIA_DIR ?= $(shell /bin/ls -d /usr/src/kernel-modules/nvidia-*/{.,kernel-open}/nvidia 2>/dev/null | tail -1)
+ifneq ($(NVIDIA_DIR),)
+        $(info Have $(NVIDIA_DIR))
+        ccflags-y += -DHAVE_NVIDIA_P2P -I$(NVIDIA_DIR)
+        KBUILD_EXTRA_SYMBOLS := $(NVIDIA_DIR)/kernel/Module.symvers
+cxi-ss1-y += cass_nvidia_gpu.o
+endif
+
+INTEL_DMABUF_DIR ?= $(shell /bin/ls -d /usr/src/intel-dmabuf-* 2>/dev/null | tail -1)
+ifneq ($(INTEL_DMABUF_DIR),)
+        $(info Have $(INTEL_DMABUF_DIR))
+        ccflags-y += -DHAVE_INTEL_DMA_BUF -I $(INTEL_DMABUF_DIR)/include -iquote $(INTEL_DMABUF_DIR)/include
+endif
+
+CXI_COMMIT := $(shell git --git-dir=$(src)/../../../../../.git rev-parse --short HEAD \
+                2>/dev/null || echo "[unknown]")
+
+ifeq ($(FIRMWARE_CASSINI_DIR),)
+# QUIRK: in devbootstap, casuc and craypldm headers come from different
+# directories in the firmware_cassini repo, but in an installed system they are
+# both in the same include path
+FIRMWARE_CASSINI_DIR_CASUC      ?= $(src)/../../../../../../firmware_cassini/lib/casuc
+FIRMWARE_CASSINI_DIR_CRAYPLDM   ?= $(src)/../../../../../../firmware_cassini/lib/craypldm
+else
+FIRMWARE_CASSINI_DIR_CASUC      ?= $(FIRMWARE_CASSINI_DIR)
+FIRMWARE_CASSINI_DIR_CRAYPLDM   ?= $(FIRMWARE_CASSINI_DIR)
+endif
+
+CASSINI_HEADERS_DIR     ?= $(src)/../../../../../../cassini-headers/install/include
+SLINGSHOT_BASE_LINK_DIR ?= $(src)/../../../../../../slingshot_base_link/staging_dir/usr/include
+SL_DIR                  ?= $(src)/../../../../../../sl-driver/staging_dir/usr/include
+
+INCLUDE_DIRS =  $(src) \
+                $(src)/../../../../../include \
+                $(SLINGSHOT_BASE_LINK_DIR) \
+                $(SL_DIR) \
+                $(CASSINI_HEADERS_DIR) \
+                $(FIRMWARE_CASSINI_DIR_CASUC) \
+                $(FIRMWARE_CASSINI_DIR_CRAYPLDM)
+
+ccflags-y +=    $(foreach dir, $(INCLUDE_DIRS), -I$(dir)) \
+                -DCXI_COMMIT="\"$(CXI_COMMIT)\""

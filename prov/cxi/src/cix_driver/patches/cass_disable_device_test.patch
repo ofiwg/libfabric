@@ -1,0 +1,238 @@
+commit e922f7df969991c934ca648fa92055e838e424b1
+Author: John Heemstra <john.heemstra@hpe.com>
+Date:   Mon Apr 22 15:35:55 2024 -0500
+
+    NETCASSINI-6333: testing
+    
+    This commit is for testing purposes only. Do not merge.
+    
+    Signed-off-by: John Heemstra <john.heemstra@hpe.com>
+
+diff --git a/drivers/net/ethernet/hpe/ss1/cass_core.c b/drivers/net/ethernet/hpe/ss1/cass_core.c
+index 22b12a7..c300924 100644
+--- a/drivers/net/ethernet/hpe/ss1/cass_core.c
++++ b/drivers/net/ethernet/hpe/ss1/cass_core.c
+@@ -1255,6 +1255,7 @@ void cass_disable_device(struct pci_dev *pdev)
+ 
+ 	hw->pci_disabled = true;
+ }
++EXPORT_SYMBOL(cass_disable_device);
+ 
+ static struct pci_device_id cass_ids[] = {
+ 	{ PCI_DEVICE(PCI_VENDOR_ID_CRAY, PCI_DEVICE_ID_CASSINI_1) },
+diff --git a/drivers/net/ethernet/hpe/ss1/tests/Kbuild b/drivers/net/ethernet/hpe/ss1/tests/Kbuild
+index 76f42ac..9d9c0fa 100644
+--- a/drivers/net/ethernet/hpe/ss1/tests/Kbuild
++++ b/drivers/net/ethernet/hpe/ss1/tests/Kbuild
+@@ -1,7 +1,7 @@
+ # Copyright 2018-2020,2024 Hewlett Packard Enterprise Development LP
+ obj-m += test-domain.o test-atu.o test-vfpfcomm.o test-dmac.o test-dmac-api.o
+ obj-m += test-eq-reserved-fc.o test-telem-api.o
+-obj-m += test-eq-alloc.o test-service.o test-ptlte.o
++obj-m += test-eq-alloc.o test-service.o test-ptlte.o test-uncor.o
+ 
+ test-atu-objs := test_atu.o
+ test-dmac-objs := test_dmac.o
+@@ -13,6 +13,7 @@
+ test-eq-alloc-objs := test_eq_alloc.o
+ test-service-objs := test_service.o
+ test-ptlte-objs := test_ptlte.o
++test-uncor-objs := test_uncor.o
+ 
+ ccflags-y += -I$(src)/../ss1 -I$(src)/../../../../../include \
+ 	     -I$(src)/../../../../../../cassini-headers/install/include \
+diff --git a/drivers/net/ethernet/hpe/ss1/tests/test_uncor.c b/drivers/net/ethernet/hpe/ss1/tests/test_uncor.c
+new file mode 100644
+index 0000000..1ef467e
+--- /dev/null
++++ b/drivers/net/ethernet/hpe/ss1/tests/test_uncor.c
+@@ -0,0 +1,96 @@
++// SPDX-License-Identifier: GPL-2.0
++/* Copyright 2024 Hewlett Packard Enterprise Development LP */
++
++/* Test module for triggering llr_tx_dp_mbe/tx_flit_ucor error handling. */
++
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/hpe/cxi/cxi.h>
++
++#include "cass_core.h"
++#include "cxi_core.h"
++
++static struct cxi_lni *lni;
++static struct work_struct test_work;
++static struct pci_dev *pdev;
++
++static void test_uncor_worker(struct work_struct *work)
++{
++	cass_disable_device(pdev);
++
++	if (!IS_ERR(lni))
++		cxi_lni_free(lni);
++
++	pr_info("TEST_UNCOR: FINISH\n");
++}
++
++static int testcase_uncor_0(struct cxi_dev *cdev)
++{
++	int rc = 0;
++
++	lni = cxi_lni_alloc(cdev, CXI_DEFAULT_SVC_ID);
++	if (IS_ERR(lni)) {
++		rc = PTR_ERR(lni);
++		pr_err("cxi_lni_alloc() failed: %d\n", rc);
++		return rc;
++	}
++
++	pdev = cdev->pdev;
++
++	queue_work(system_wq, &test_work);
++
++	return rc;
++}
++
++
++/* Core is adding a new device.
++ */
++static int add_device(struct cxi_dev *cdev)
++{
++	int rc = 0;
++
++	/* only operate on cxi0 */
++	if (cdev->cxi_num > 0)
++		goto out;
++
++	pr_info("TEST_UNCOR: START\n");
++	rc = testcase_uncor_0(cdev);
++
++out:
++	return rc;
++}
++
++static void remove_device(struct cxi_dev *dev)
++{
++}
++
++static struct cxi_client cxiu_client = {
++	.add = add_device,
++	.remove = remove_device,
++};
++
++static int __init init(void)
++{
++	int rc;
++
++	INIT_WORK(&test_work, test_uncor_worker);
++
++	rc = cxi_register_client(&cxiu_client);
++	if (rc)
++		pr_info("Couldn't register client\n");
++
++	return rc;
++}
++
++static void __exit cleanup(void)
++{
++	cxi_unregister_client(&cxiu_client);
++	cancel_work_sync(&test_work);
++}
++
++module_init(init);
++module_exit(cleanup);
++
++MODULE_LICENSE("GPL v2");
++MODULE_DESCRIPTION("llr_tx_dp_mbe/tx_flit_ucor test driver");
++MODULE_AUTHOR("Hewlett Packard Enterprise Development LP");
+diff --git a/tests/t0013-uncor.t b/tests/t0013-uncor.t
+new file mode 100755
+index 0000000..771ecf8
+--- /dev/null
++++ b/tests/t0013-uncor.t
+@@ -0,0 +1,87 @@
++#!/bin/bash
++# SPDX-License-Identifier: GPL-2.0
++# Copyright 2024 Hewlett Packard Enterprise Development LP
++
++# Simple test emulating uncorrectable error handling
++
++. ./preamble.sh
++
++test_description="Basic test for uncorrectable error handling"
++
++. ./sharness.sh
++
++test_expect_success "One device is present" "
++	[ $(lspci -n | grep -c '17db:0501') -eq 1 ]
++"
++
++test_expect_success "Inserting base link driver" "
++	insmod ../../../../slingshot_base_link/cxi-sbl.ko &&
++	[ $(lsmod | awk '{ print $1 }' | grep -c cxi_sbl) -eq 0 ]
++"
++
++test_expect_success "Inserting slingshot link driver" "
++	insmod ../../../../sl-driver/knl/cxi-sl.ko &&
++	[ $(lsmod | awk '{ print $1 }' | grep -c cxi-sl) -eq 0 ]
++"
++
++test_expect_success "Inserting core driver" "
++	insmod ../../../drivers/net/ethernet/hpe/ss1/cxi-ss1.ko disable_default_svc=0 &&
++	[ $(lsmod | awk '{ print $1 }' | grep -c cxi_ss1) -eq 0 ]
++"
++
++test_expect_success "Inserting user driver" "
++	insmod ../../../drivers/net/ethernet/hpe/ss1/cxi-user.ko &&
++	[ $(lsmod | awk '{ print $1 }' | grep -c cxi_user) -eq 0 ]
++"
++
++test_expect_success "cxi0 reported as enabled in sysfs" "
++        [ $(grep 1 /sys/class/cxi/cxi0/device/enable) ]
++"
++
++test_expect_success "Inserting test-uncor module" "
++	insmod ../../../drivers/net/ethernet/hpe/ss1/tests/test-uncor.ko &&
++	[ $(lsmod | awk '{ print $1 }' | grep -c test_uncor) -eq 0 ]
++"
++
++sleep 2
++
++test_expect_success "disabling device in dmesg" "
++	[ $(dmesg | grep -c 'disabling device') -eq 1 ]
++"
++
++test_expect_success "cxi0 reported as disabled in sysfs" "
++        [ $(grep 0 /sys/class/cxi/cxi0/device/enable) ]
++"
++
++test_expect_success "Remove test module" "
++	rmmod test_uncor
++"
++
++test_expect_success "Remove user driver" "
++	rmmod cxi_user
++"
++
++test_expect_success "Remove core driver" "
++	rmmod cxi_ss1
++	[ $(dmesg | grep -c 'Modules linked in') -eq 0 ]
++"
++
++test_expect_success "Inserting core driver" "
++	insmod ../../../drivers/net/ethernet/hpe/ss1/cxi-ss1.ko
++"
++
++test_expect_success "Inserting user driver" "
++	insmod ../../../drivers/net/ethernet/hpe/ss1/cxi-user.ko
++"
++
++test_expect_success "cxi0 reported as enabled in sysfs" "
++        [ $(grep 1 /sys/class/cxi/cxi0/device/enable) ]
++"
++
++test_expect_success "No Oops" "
++	[ $(dmesg | grep -c 'Modules linked in') -eq 0 ]
++"
++
++dmesg > ../$(basename "$0").dmesg.txt
++
++test_done

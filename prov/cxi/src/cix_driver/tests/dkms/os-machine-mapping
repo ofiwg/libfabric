@@ -1,0 +1,5 @@
+sle15_sp5_ncn:10.103.16.140:sshot-build-sles15sp5
+rhel_8_6_ncn:10.103.18.117:sshot-build-rhel86
+rhel_8_7_ncn:10.103.18.117:sshot-build-rhel87
+rhel_8_9_ncn:10.103.18.117:sshot-build-rhel89
+rhel_9_3_ncn:10.103.18.117:sshot-build-rhel93

@@ -1,0 +1,22 @@
+/*
+ * Count the number of skbuffs with fragments passed to cxi_eth_start_xmit.
+ *
+ * Output:
+ *   @frags[2]: 154050
+ *   @frags[1]: 434805
+ *   @frags[0]: 2013918
+ *
+ * (ie. 154050 skbuffs had 2 fragments)
+ */
+
+#include <linux/skbuff.h>
+
+kprobe:cxi_eth_start_xmit
+{
+	$skb = (struct sk_buff *)arg0;
+	$shinfo = (struct skb_shared_info *)($skb->head + $skb->end);
+
+	@frags[$shinfo->nr_frags]++;
+
+	//printf("start_xmit skb %p frags %d len %d\n", $skb, $shinfo->nr_frags, $skb->len);
+}

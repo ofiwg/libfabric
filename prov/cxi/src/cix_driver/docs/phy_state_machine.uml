@@ -1,0 +1,26 @@
+@startuml
+
+title CXI PHY states
+hide empty description
+
+[*] --> CASS_PHY_DOWN
+
+CASS_PHY_DOWN : not running at all, before init and after destroy.
+CASS_PHY_DOWN --> CASS_PHY_READY
+
+CASS_PHY_READY : PHY has been initialized
+CASS_PHY_READY --> CASS_PHY_UP
+
+CASS_PHY_UP : PHY is trying to bring the link up
+CASS_PHY_UP -> CASS_PHY_RUNNING : physical link is available
+CASS_PHY_UP -> CASS_PHY_NOLINK : link is down
+
+CASS_PHY_RUNNING -> CASS_PHY_NOLINK
+CASS_PHY_RUNNING -> CASS_PHY_HALTED : link error
+
+CASS_PHY_NOLINK -> CASS_PHY_RUNNING : link is back up
+CASS_PHY_NOLINK -> CASS_PHY_HALTED : link error
+
+CASS_PHY_HALTED -> CASS_PHY_UP : try to restart the link
+
+@enduml
